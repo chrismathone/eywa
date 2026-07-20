@@ -78,7 +78,7 @@ export function TimetableToolbarActions({
   }
 
   const btnCls =
-    "border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2 py-0.5 text-xs transition disabled:opacity-50";
+    "border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-2 py-0.5 text-xs transition disabled:opacity-50";
   const hasSheetGroup = canSync || !!sheetUrl;
 
   return (

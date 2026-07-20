@@ -53,6 +53,10 @@
   /* eywa palette */
   --color-gold: var(--gold);
   --color-gold-soft: var(--gold-soft);
+  --color-green: var(--green);
+  --color-green-soft: var(--green-soft);
+  --color-gold-bright: var(--gold-bright);
+  --color-primary-deep: var(--primary-deep);
   --color-blue: var(--blue);
   --color-blue-soft: var(--blue-soft);
   --color-purple: var(--purple);
@@ -149,6 +153,17 @@
      — 텍스트로 쓰이는 accent는 전부 4.5:1↑(2026-07-19 마디아 정합: gold 5.15 · amber 5.09 · rose 5.09) */
   --gold: #8a681c;
   --gold-soft: rgba(138, 104, 28, 0.11);
+  /* green — "성공/완료/긍정" 상태 전용(--chart-2와 같은 값·같은 의미). primary가 v3에서 그린→네이비로
+     바뀌면서 알약 팔레트가 파랑 계열 2개(primary·blue, 색상각 4.8° 차이로 구분 불가)만 갖게 돼
+     '완료 vs 진행중' 같은 상태쌍을 색으로 못 나누던 것을 해소(2026-07-20 감사). 네이비와 색상각 64°.
+     흰 배경 텍스트 5.26:1 · green-soft 위 4.65:1. ⚠️ 브랜드색 아님 — primary 자리에 쓰지 말 것. */
+  --green: #0e7c46;
+  --green-soft: rgba(14, 124, 70, 0.09);
+  /* 다크 서피스(네이비 히어로 등) 전용 변형 — 라이트용 토큰이 어두워 안 보이는 자리에만 쓴다.
+     --gold(#8a681c)는 primary 네이비 위에서 2.06:1이라 판독 불가 → gold-bright 5.53:1.
+     --primary-deep은 var(--primary) 기반이라 테넌트 brandColor 주입도 자동 추종(치환은 사용 시점). */
+  --gold-bright: #e2b45f;
+  --primary-deep: color-mix(in srgb, var(--primary) 72%, #000);
   --blue: #2d6be0;
   --blue-soft: rgba(45, 107, 224, 0.09);
   --purple: #6c50c8;

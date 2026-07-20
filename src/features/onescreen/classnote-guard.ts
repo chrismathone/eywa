@@ -50,15 +50,29 @@ export function classnoteSendWindowHint(
   endStr: string,
   minutes: number = kstMinutesOfDay(),
 ): string | null {
-  const parse = (s: string): number | null => {
-    const m = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(s.trim());
-    return m ? Number(m[1]) * 60 + Number(m[2]) : null;
-  };
-  const start = parse(startStr);
-  const end = parse(endStr);
+  const start = parseWindowHM(startStr);
+  const end = parseWindowHM(endStr);
   if (start === null || end === null || start === end) return null; // 무제한 — 안내 불필요
   const inside = start < end ? minutes >= start && minutes < end : minutes >= start || minutes < end;
   return inside ? null : `${startStr.trim()}~${endStr.trim()}`;
+}
+
+function parseWindowHM(s: string): number | null {
+  const m = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(s.trim());
+  return m ? Number(m[1]) * 60 + Number(m[2]) : null;
+}
+
+/**
+ * 발송 시간창 상시 안내 라벨 — 시간창이 **활성**(둘 다 유효 HH:MM + 시작≠종료)이면 현재 시각과 무관하게
+ * "HH:MM~HH:MM"을, 무제한(빈값/한쪽만/형식 오류/시작=종료)이면 null을 반환. 원스크린 상단의 강사 참고
+ * 안내("원장이 발송 시간대를 정해뒀다")용 — 창 밖 여부를 따지는 classnoteSendWindowHint(발송 시점 대기
+ * 안내)와 활성 판정 의미론을 공유한다(워커 send-window.mjs fail-open 규약과 동일). 순수 함수(Vitest).
+ */
+export function classnoteSendWindowLabel(startStr: string, endStr: string): string | null {
+  const start = parseWindowHM(startStr);
+  const end = parseWindowHM(endStr);
+  if (start === null || end === null || start === end) return null;
+  return `${startStr.trim()}~${endStr.trim()}`;
 }
 
 export function isClassnoteSubjectEnabled(

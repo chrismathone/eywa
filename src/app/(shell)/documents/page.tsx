@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { requireAccess } from "@/lib/auth/require-access";
 import { canAccessTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { PageStep, Pagination } from "@/components/pagination";
+import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
 import {
   getDocumentCategoryCounts,
@@ -107,22 +108,21 @@ export default async function DocumentsPage({
 
   return (
     <div className="space-y-4 p-6">
-      <header className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <p className="eyebrow">운영 · 서식 저장소</p>
-          <h1 className="text-foreground mt-1 text-xl font-bold">데이터베이스</h1>
-          <p className="text-text-dim mt-1 text-sm">
-            학원 각종 서식을 보관합니다 — 빈 양식을 내려받아 작성하거나, 앱에서 문서를 작성해 두세요.
-          </p>
-        </div>
-        <DocumentToolbar canWrite={canWrite} initialQuery={q} category={cat} catParam={activeKey} embed={embed} />
-      </header>
+      {/* 수제 헤더 → PageHeader 수렴(2026-07-19) — 창(embed)에선 컴팩트 1행(설명+툴바)으로 접힌다. */}
+      <PageHeader
+        eyebrow="운영 · 서식 저장소"
+        title="데이터베이스"
+        description="학원 각종 서식을 보관합니다 — 빈 양식을 내려받아 작성하거나, 앱에서 문서를 작성해 두세요."
+        actions={
+          <DocumentToolbar canWrite={canWrite} initialQuery={q} category={cat} catParam={activeKey} embed={embed} />
+        }
+      />
 
       {/* 탐색기 레이아웃 — 넓은 창: 좌 폴더 팬 + 우 상세 테이블 / 좁은 창: 폴더가 상단 칩으로 접힘 */}
       <div className="lg:grid lg:grid-cols-[190px_minmax(0,1fr)] lg:items-start lg:gap-4">
         <FolderNav folders={folders} linkedFolders={linkedFolders} activeKey={activeKey} hrefFor={folderHref} />
 
-        <section className="bg-card border-line rounded-md border">
+        <section className="bg-card border-line rounded-2xl border">
           <div className="border-line text-text-dim flex items-center justify-between border-b px-4 py-2 text-xs">
             <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
               <Files className="size-3.5" />

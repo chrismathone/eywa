@@ -54,13 +54,13 @@ export function HistoryBoard() {
 
   if (loading)
     return (
-      <div className="bg-card border-line shadow-card text-text-faint flex items-center justify-center rounded-md border p-10 text-sm">
+      <div className="bg-card border-line shadow-card text-text-faint flex items-center justify-center rounded-2xl border p-10 text-sm">
         지난 보고서를 불러오는 중…
       </div>
     );
   if (error)
     return (
-      <div className="bg-card border-line shadow-card text-danger flex items-center justify-center rounded-md border p-10 text-sm">
+      <div className="bg-card border-line shadow-card text-danger flex items-center justify-center rounded-2xl border p-10 text-sm">
         {error}
       </div>
     );
@@ -83,7 +83,7 @@ export function HistoryBoard() {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="학생 이름 검색"
-          className="border-line bg-card focus:border-primary w-44 rounded-md border px-2.5 py-1.5 text-[12.5px] outline-none"
+          className="border-line bg-card focus:border-primary w-44 rounded-lg border px-2.5 py-1.5 text-[12.5px] outline-none"
         />
         <span className="text-text-faint ml-auto text-[12px]">
           불러온 보고서 {rows.length}건{q ? ` · 검색 결과 ${filtered.length}건` : ""}
@@ -91,12 +91,12 @@ export function HistoryBoard() {
       </div>
 
       {byDate.size === 0 ? (
-        <div className="bg-card border-line shadow-card text-text-faint flex items-center justify-center rounded-md border p-10 text-sm">
+        <div className="bg-card border-line shadow-card text-text-faint flex items-center justify-center rounded-2xl border p-10 text-sm">
           {q ? "검색 결과가 없습니다" : "작성한 보고서가 없습니다"}
         </div>
       ) : (
         [...byDate.entries()].map(([date, list]) => (
-          <section key={date} className="bg-card border-line shadow-card rounded-md border">
+          <section key={date} className="bg-card border-line shadow-card rounded-2xl border">
             <header className="border-line flex items-baseline gap-2 border-b px-3 py-2">
               <h3 className="text-foreground text-[13px] font-bold">{dateLabel(date)}</h3>
               <span className="text-text-faint text-[11px]">
@@ -114,7 +114,7 @@ export function HistoryBoard() {
                     </span>
                     <span className="text-text-faint w-20 shrink-0 truncate text-[11px]">{r.studentLabel}</span>
                     {r.subject ? (
-                      <span className="border-line text-text-dim shrink-0 rounded-md border px-1.5 py-0.5 text-[11px]">
+                      <span className="border-line text-text-dim shrink-0 rounded-full border px-1.5 py-0.5 text-[11px]">
                         {subjects.labelOf(r.subject)}
                       </span>
                     ) : null}
@@ -155,7 +155,7 @@ export function HistoryBoard() {
           type="button"
           onClick={() => void loadMore()}
           disabled={loadingMore}
-          className="border-line text-text-dim hover:bg-bg-soft mx-auto rounded-md border px-4 py-1.5 text-[12px] font-bold disabled:opacity-50"
+          className="border-line text-text-dim hover:bg-bg-soft mx-auto rounded-lg border px-4 py-1.5 text-[12px] font-bold disabled:opacity-50"
         >
           {loadingMore ? "불러오는 중…" : "이전 보고서 더 보기"}
         </button>

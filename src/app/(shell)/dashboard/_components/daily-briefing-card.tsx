@@ -81,7 +81,7 @@ export function DailyBriefingCard({ briefing }: { briefing: DailyBriefingRow | n
                 {report.managers.map((manager) => (
                   <li key={manager.area} className="flex items-start gap-3">
                     <span
-                      className={`${AREA_TONE[manager.area] ?? AREA_TONE["운영"]} mt-px inline-flex w-12 shrink-0 justify-center rounded-lg py-1 text-[11px] font-bold ring-1 ring-inset`}
+                      className={`${AREA_TONE[manager.area] ?? AREA_TONE["운영"]} mt-px inline-flex w-12 shrink-0 justify-center rounded-full py-1 text-[11px] font-bold ring-1 ring-inset`}
                     >
                       {manager.area}
                     </span>

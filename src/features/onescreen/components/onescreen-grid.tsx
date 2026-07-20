@@ -125,7 +125,7 @@ export function OneScreenGrid({
 
   if (rows.length === 0) {
     return (
-      <div className="bg-card border-line shadow-card text-text-faint flex items-center justify-center rounded-md border p-10 text-sm">
+      <div className="bg-card border-line shadow-card text-text-faint flex items-center justify-center rounded-2xl border p-10 text-sm">
         표시할 학생이 없습니다
       </div>
     );
@@ -196,7 +196,7 @@ export function OneScreenGrid({
         )}
       </GridToolbar>
 
-      <div className="bg-card border-line shadow-card overflow-x-auto rounded-md border">
+      <div className="bg-card border-line shadow-card overflow-x-auto rounded-2xl border">
         {/* table-fixed + colgroup 고정 폭 — 헤더/본문 열 정렬 결정적, 표는 내용 폭(좌측 정렬)이라 진도가 남는 폭을 독식하지 않음. */}
         <table className="w-full min-w-[1240px] table-fixed border-collapse text-[12px]">
           <colgroup>

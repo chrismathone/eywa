@@ -105,7 +105,7 @@ export function StudentImportDialog() {
         <>
           <div className="fixed inset-0 z-40 bg-black/30" onClick={close} aria-hidden />
           <div
-            className="bg-card border-line shadow-modal fixed top-1/2 left-1/2 z-50 flex max-h-[88vh] w-full max-w-xl -translate-x-1/2 -translate-y-1/2 flex-col rounded-xl border p-5"
+            className="bg-card border-line shadow-modal fixed top-1/2 left-1/2 z-50 flex max-h-[88vh] w-full max-w-xl -translate-x-1/2 -translate-y-1/2 flex-col rounded-2xl border p-5"
             role="dialog"
             aria-label="학생 엑셀 가져오기"
           >
@@ -140,7 +140,7 @@ export function StudentImportDialog() {
                 type="button"
                 onClick={preview}
                 disabled={!file || previewing}
-                className="bg-foreground text-background inline-flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium transition disabled:opacity-40"
+                className="bg-foreground text-background inline-flex items-center gap-1.5 rounded-lg px-3 py-1 text-xs font-medium transition disabled:opacity-40"
               >
                 {previewing ? <Loader2 className="size-3 animate-spin" /> : <Upload className="size-3" />}
                 미리보기
@@ -194,7 +194,7 @@ export function StudentImportDialog() {
                   type="button"
                   onClick={runImport}
                   disabled={newRows.length === 0 || importing}
-                  className="bg-primary text-primary-foreground hover:bg-primary-hover mt-3 inline-flex w-full items-center justify-center gap-1.5 rounded-md py-2 text-[12px] font-bold transition disabled:opacity-40"
+                  className="bg-primary text-primary-foreground hover:bg-primary-hover mt-3 inline-flex w-full items-center justify-center gap-1.5 rounded-lg py-2 text-[12px] font-bold transition disabled:opacity-40"
                 >
                   {importing ? <Loader2 className="size-3 animate-spin" /> : null}
                   {newRows.length}명 가져오기

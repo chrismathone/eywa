@@ -46,7 +46,7 @@ export function GridToolbar({
   const off = bulkGen || locked;
   const noticeStudents = new Set(selectedKeys.map((k) => k.split("::")[0])).size; // 공지=학생 단위(행 아님, #23)
   return (
-    <div className="bg-card border-line shadow-card flex flex-wrap items-center gap-2 rounded-md border px-4 py-2.5">
+    <div className="bg-card border-line shadow-card flex flex-wrap items-center gap-2 rounded-2xl border px-4 py-2.5">
       <span className="text-text-dim text-[12px]">
         표시 <span className="text-foreground font-bold">{total}</span> · 발송가능{" "}
         <span className="text-foreground font-bold">{sendable}</span>

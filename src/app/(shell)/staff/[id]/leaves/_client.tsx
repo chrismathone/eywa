@@ -41,7 +41,7 @@ export function LeavesClient({
       {canManage ? (
         <form
           action={formAction}
-          className="bg-card border-border space-y-3 rounded-md border p-4"
+          className="bg-card border-border space-y-3 rounded-2xl border p-4"
         >
         <input type="hidden" name="userId" value={userId} />
         <h3 className="text-foreground text-sm font-bold">신규 휴가</h3>
@@ -99,7 +99,7 @@ export function LeavesClient({
       {leaves.length === 0 ? (
         <p className="text-muted-foreground py-8 text-center text-sm">기록된 휴가가 없습니다</p>
       ) : (
-        <ul className="bg-card border-border divide-border divide-y rounded-md border">
+        <ul className="bg-card border-border divide-border divide-y rounded-2xl border">
           {leaves.map((l) => (
             <LeaveRowItem key={l.id} leave={l} userId={userId} canManage={canManage} />
           ))}

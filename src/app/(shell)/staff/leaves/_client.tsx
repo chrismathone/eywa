@@ -23,7 +23,7 @@ export function LeavesAdminClient({
   canManage: boolean;
 }) {
   return (
-    <div className="bg-card border-line shadow-card overflow-x-auto rounded-md border">
+    <div className="bg-card border-line shadow-card overflow-x-auto rounded-2xl border">
       <table className="w-full text-sm [&_td]:whitespace-nowrap">
         <thead className="border-line text-text-dim border-b text-left text-xs [&_th]:whitespace-nowrap">
           <tr>
@@ -51,11 +51,11 @@ export function LeavesAdminClient({
               </td>
               <td className="px-4 py-2.5">
                 {l.approvedAt ? (
-                  <span className="text-chart-2 bg-chart-2/10 border-chart-2/20 inline-flex items-center rounded-md border px-2 py-0.5 text-[11px] font-medium">
+                  <span className="text-chart-2 bg-chart-2/10 border-chart-2/20 inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium">
                     승인{l.approvedByName ? ` · ${l.approvedByName}` : ""}
                   </span>
                 ) : (
-                  <span className="text-chart-3 bg-chart-3/10 border-chart-3/20 inline-flex items-center rounded-md border px-2 py-0.5 text-[11px] font-medium">
+                  <span className="text-chart-3 bg-chart-3/10 border-chart-3/20 inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium">
                     대기
                   </span>
                 )}
@@ -79,7 +79,7 @@ function ApproveBtn() {
     <button
       type="submit"
       disabled={pending}
-      className="border-line text-primary hover:bg-primary-soft inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs transition disabled:opacity-50"
+      className="border-line text-primary hover:bg-primary-soft inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs transition disabled:opacity-50"
     >
       {pending ? <Loader2 className="size-3 animate-spin" /> : <Check className="size-3" />}
       승인

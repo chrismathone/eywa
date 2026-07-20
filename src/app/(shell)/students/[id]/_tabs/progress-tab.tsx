@@ -56,7 +56,7 @@ export async function ProgressTab({ studentId }: { studentId: string }) {
       {reports.length === 0 ? (
         <p className="text-muted-foreground py-8 text-center text-sm">기록된 진도가 없습니다</p>
       ) : (
-        <div className="bg-card border-border overflow-x-auto rounded-md border">
+        <div className="bg-card border-border overflow-x-auto rounded-2xl border">
           <table className="w-full text-sm">
             <thead className="border-border bg-bg-soft/40 border-b [&_th]:whitespace-nowrap">
               <tr>

@@ -175,7 +175,7 @@ export default async function MeetingDetailPage({
 
       {/* Failed state — show the error */}
       {meeting.processingStatus === "failed" ? (
-        <section className="border-chart-4/40 bg-chart-4/5 rounded-lg border p-4">
+        <section className="border-chart-4/40 bg-chart-4/5 rounded-2xl border p-4">
           <div className="inline-flex items-center gap-2">
             <AlertCircle className="text-chart-4 size-4" />
             <h2 className="text-foreground text-sm font-bold">처리 실패</h2>
@@ -189,7 +189,7 @@ export default async function MeetingDetailPage({
 
       {/* Processing state — skeleton */}
       {isProcessing ? (
-        <section className="bg-card border-border space-y-3 rounded-lg border p-5">
+        <section className="bg-card border-border space-y-3 rounded-2xl border p-5">
           <div className="inline-flex items-center gap-2">
             <Loader2 className="text-chart-3 size-4 animate-spin" />
             <h2 className="text-foreground text-sm font-bold">
@@ -217,7 +217,7 @@ export default async function MeetingDetailPage({
 
       {/* 8-section AI report */}
       {meeting.aiReport ? (
-        <section className="bg-card border-border space-y-5 rounded-lg border p-5">
+        <section className="bg-card border-border space-y-5 rounded-2xl border p-5">
           <header className="space-y-1.5">
             <div className="flex items-start justify-between gap-3">
               <div className="flex min-w-0 items-center gap-2">
@@ -251,7 +251,7 @@ export default async function MeetingDetailPage({
 
       {/* Legacy text-only AI summary */}
       {!meeting.aiReport && meeting.aiSummary ? (
-        <section className="bg-card border-border space-y-5 rounded-lg border p-5">
+        <section className="bg-card border-border space-y-5 rounded-2xl border p-5">
           <header className="flex items-start justify-between gap-3">
             <div className="flex min-w-0 items-center gap-2">
               <Sparkles className="text-gold size-4 shrink-0" />

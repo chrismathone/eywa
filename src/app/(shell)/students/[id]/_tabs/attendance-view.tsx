@@ -74,7 +74,7 @@ export function AttendanceView({
           <h2 className="text-foreground text-sm font-bold">출결 현황</h2>
         </div>
         {/* 뷰 토글 */}
-        <div className="border-line flex items-center gap-0.5 rounded-md border p-0.5">
+        <div className="border-line flex items-center gap-0.5 rounded-full border p-0.5">
           <ViewBtn active={view === "calendar"} onClick={() => setView("calendar")} icon={<CalendarDays className="size-3.5" />}>
             달력
           </ViewBtn>
@@ -94,13 +94,13 @@ export function AttendanceView({
         {/* 월 네비 */}
         {ym ? (
           <div className="ml-auto flex items-center gap-1">
-            <button type="button" onClick={() => navMonth(-1)} className="hover:bg-bg-soft rounded p-1" aria-label="이전 달">
+            <button type="button" onClick={() => navMonth(-1)} className="hover:bg-bg-soft rounded-full p-1" aria-label="이전 달">
               <ChevronLeft className="size-4" />
             </button>
             <span className="num text-foreground min-w-[5.5rem] text-center text-sm font-medium">
               {yy}년 {mm}월
             </span>
-            <button type="button" onClick={() => navMonth(1)} className="hover:bg-bg-soft rounded p-1" aria-label="다음 달">
+            <button type="button" onClick={() => navMonth(1)} className="hover:bg-bg-soft rounded-full p-1" aria-label="다음 달">
               <ChevronRight className="size-4" />
             </button>
           </div>
@@ -126,7 +126,7 @@ export function AttendanceView({
       {/* 범례 */}
       <div className="text-text-dim flex flex-wrap gap-2 text-[11px]">
         {Object.entries(STATUS_LABEL).map(([k, label]) => (
-          <span key={k} className={`rounded-sm border px-1.5 py-0.5 ${STATUS_COLOR[k]}`}>
+          <span key={k} className={`rounded-full border px-1.5 py-0.5 ${STATUS_COLOR[k]}`}>
             {label}
           </span>
         ))}
@@ -155,7 +155,7 @@ function MonthCalendar({ year, month, records }: { year: number; month: number; 
   for (let d = 1; d <= daysInMonth; d++) cells.push(d);
 
   return (
-    <div className="bg-card border-line overflow-hidden rounded-md border">
+    <div className="bg-card border-line overflow-hidden rounded-2xl border">
       <div className="border-line grid grid-cols-7 border-b">
         {WEEKDAYS.map((w, i) => (
           <div
@@ -212,7 +212,7 @@ function AttendanceList({ records }: { records: StudentAttendanceFull[] }) {
     return <p className="text-muted-foreground py-8 text-center text-sm">이 달의 출결 기록이 없습니다</p>;
 
   return (
-    <ul className="bg-card border-line divide-line divide-y rounded-md border">
+    <ul className="bg-card border-line divide-line divide-y rounded-2xl border">
       {byDate.map(([date, rows]) => (
         <li key={date} className="flex items-center gap-3 px-4 py-2">
           <span className="num text-text-dim w-24 text-xs">{date}</span>
@@ -221,7 +221,7 @@ function AttendanceList({ records }: { records: StudentAttendanceFull[] }) {
               <span
                 key={i}
                 title={r.note ?? undefined}
-                className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] font-medium ${STATUS_COLOR[r.status] ?? ""}`}
+                className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium ${STATUS_COLOR[r.status] ?? ""}`}
               >
                 <span>{STATUS_LABEL[r.status] ?? r.status}</span>
                 <span className="opacity-60">·</span>
@@ -250,7 +250,7 @@ function ViewBtn({
     <button
       type="button"
       onClick={onClick}
-      className={`inline-flex items-center gap-1 rounded px-2 py-1 text-xs transition ${
+      className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs transition ${
         active ? "bg-primary text-primary-foreground font-medium" : "text-text-dim hover:bg-bg-soft"
       }`}
     >
@@ -262,7 +262,7 @@ function ViewBtn({
 
 function Card({ label, value, unit, highlight }: { label: string; value: string; unit?: string; highlight?: string }) {
   return (
-    <div className="bg-card border-line rounded-md border p-3">
+    <div className="bg-card border-line rounded-2xl border p-3">
       <p className="eyebrow">{label}</p>
       <p className={`num text-foreground mt-1 text-xl font-bold ${highlight ?? ""}`}>
         {value}

@@ -946,6 +946,7 @@ export const notifications = pgTable(
     link: text("link"),
     actorId: uuid("actor_id").references(() => users.id, { onDelete: "set null" }),
     readAt: timestamp("read_at", { withTimezone: true }),
+    archivedAt: timestamp("archived_at", { withTimezone: true }), // null=받은함, not null=보관함(0125a)
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   // ⚠️ 실 DB(0074a)엔 created_at DESC + 부분 인덱스 `notifications_recipient_unread_idx WHERE read_at is null`도

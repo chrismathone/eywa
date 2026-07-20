@@ -142,10 +142,10 @@ export function ReportList({
   }
 
   const selCls =
-    "border-line bg-card focus:border-primary h-8 rounded-sm border px-2 text-[12px] outline-none";
+    "border-line bg-card focus:border-primary h-8 rounded-lg border px-2 text-[12px] outline-none";
 
   return (
-    <section className="bg-card border-line shadow-card rounded-lg border px-5 py-4">
+    <section className="bg-card border-line shadow-card rounded-2xl border px-5 py-4">
       <div className="mb-3">
         <h2 className="text-foreground text-[15px] font-bold">보고서 목록</h2>
         <p className="text-text-faint text-[12px]">강사·기간·상태·과목으로 조회 · 행 클릭 시 학부모 보고서 열람</p>

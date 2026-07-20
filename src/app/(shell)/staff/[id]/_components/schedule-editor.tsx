@@ -72,7 +72,7 @@ export function ScheduleEditor({
   // 읽기 전용 뷰 (관리 권한 없음)
   if (!canManage) {
     return (
-      <div className="bg-card border-line shadow-card rounded-md border p-5">
+      <div className="bg-card border-line shadow-card rounded-2xl border p-5">
         <p className="micro mb-3">주간 근무 일정</p>
         {!hasAny ? (
           <p className="text-text-faint text-sm">등록된 근무 일정이 없습니다.</p>
@@ -104,7 +104,7 @@ export function ScheduleEditor({
   }
 
   return (
-    <form action={action} className="bg-card border-line shadow-card space-y-3 rounded-md border p-5">
+    <form action={action} className="bg-card border-line shadow-card space-y-3 rounded-2xl border p-5">
       <input type="hidden" name="id" value={staffId} />
       <input type="hidden" name="schedule" value={JSON.stringify(payload)} />
       <div className="flex items-center justify-between">

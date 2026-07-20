@@ -54,7 +54,7 @@ export default async function ConsultationStatsPage() {
       <StatsCharts byCategory={byCategory} trend={trend} />
 
       {/* 상담 필요 학생 — 30일 이상 미상담(또는 미상담 이력) 재원생 워크리스트 */}
-      <section className="bg-card border-border rounded-md border p-5">
+      <section className="bg-card border-border rounded-2xl border p-5">
         <header className="mb-3 flex items-baseline justify-between">
           <h2 className="text-foreground text-sm font-bold">
             상담 필요 학생
@@ -117,7 +117,7 @@ function Stat({
   highlight?: string;
 }) {
   return (
-    <div className="bg-card border-border rounded-md border p-4">
+    <div className="bg-card border-border rounded-2xl border p-4">
       <p className="eyebrow">{label}</p>
       <p className={`num text-foreground mt-1 text-2xl font-bold ${highlight ?? ""}`}>
         {value}

@@ -26,7 +26,7 @@ export async function ClassesTab({ staffId }: { staffId: string }) {
   }
 
   return (
-    <DragScrollArea className="bg-card border-line shadow-card rounded-md border">
+    <DragScrollArea className="bg-card border-line shadow-card rounded-2xl border">
       <table className="w-full min-w-[460px] text-sm">
         <thead>
           <tr className="border-line text-text-dim border-b text-left">

@@ -66,7 +66,7 @@ export function StatusDialog({
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center">
-      <div className="bg-background border-border w-full max-w-md rounded-lg border p-6 shadow-lg">
+      <div className="bg-background border-border w-full max-w-md rounded-2xl border p-6 shadow-lg">
         <header className="mb-4 flex items-start justify-between">
           <div>
             <p className="eyebrow">학생 상태 전환</p>
@@ -84,7 +84,7 @@ export function StatusDialog({
         </header>
 
         {/* target switcher chips */}
-        <div className="border-border mb-4 flex gap-1 rounded-md border p-1">
+        <div className="border-border mb-4 flex gap-1 rounded-full border p-1">
           <ChipButton current={target} value="withdrawn" onClick={setTarget} label="퇴원" />
           <ChipButton current={target} value="on_hold" onClick={setTarget} label="휴원" />
           <ChipButton current={target} value="enrolled" onClick={setTarget} label="재원 복구" />
@@ -103,7 +103,7 @@ export function StatusDialog({
                   type="date"
                   required
                   defaultValue={kstToday()}
-                  className="border-border bg-card text-foreground num w-full rounded-md border px-3 py-2 text-sm"
+                  className="border-border bg-card text-foreground num w-full rounded-lg border px-3 py-2 text-sm"
                 />
               </div>
               <div className="space-y-1.5">
@@ -111,7 +111,7 @@ export function StatusDialog({
                 <select
                   name="reason"
                   required
-                  className="border-border bg-card text-foreground w-full rounded-md border px-3 py-2 text-sm"
+                  className="border-border bg-card text-foreground w-full rounded-lg border px-3 py-2 text-sm"
                 >
                   {WITHDRAWAL_REASON_OPTIONS.map((o) => (
                     <option key={o.value} value={o.value}>
@@ -126,7 +126,7 @@ export function StatusDialog({
                   name="memo"
                   rows={3}
                   placeholder="배경 정보 (선택)"
-                  className="border-border bg-card text-foreground w-full rounded-md border px-3 py-2 text-sm"
+                  className="border-border bg-card text-foreground w-full rounded-lg border px-3 py-2 text-sm"
                 />
               </div>
               <p className="text-muted-foreground text-[11px]">
@@ -145,7 +145,7 @@ export function StatusDialog({
                   name="memo"
                   rows={2}
                   placeholder="휴원 사유"
-                  className="border-border bg-card text-foreground w-full rounded-md border px-3 py-2 text-sm"
+                  className="border-border bg-card text-foreground w-full rounded-lg border px-3 py-2 text-sm"
                 />
               </div>
             </>
@@ -187,7 +187,7 @@ function ChipButton({
     <button
       type="button"
       onClick={() => onClick(value)}
-      className={`flex-1 rounded-sm px-3 py-1.5 text-xs font-medium transition ${
+      className={`flex-1 rounded-full px-3 py-1.5 text-xs font-medium transition ${
         active
           ? "bg-primary text-primary-foreground"
           : "text-text-dim hover:text-foreground hover:bg-bg-soft"

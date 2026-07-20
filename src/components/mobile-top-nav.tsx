@@ -67,7 +67,7 @@ export function MobileTopNav({
             onClick={() => setOpen((o) => !o)}
             aria-label={open ? "메뉴 닫기" : "메뉴 열기"}
             aria-expanded={open}
-            className="text-text-dim hover:text-foreground hover:bg-bg-soft flex size-7 items-center justify-center rounded-sm transition"
+            className="text-text-dim hover:text-foreground hover:bg-bg-soft flex size-7 items-center justify-center rounded-md transition"
           >
             <EyIcon name={open ? "close" : "menu"} size={16} strokeWidth={1.8} />
           </button>
@@ -89,7 +89,7 @@ export function MobileTopNav({
                 href={item.href}
                 onClick={() => setOpen(false)}
                 aria-current={active ? "page" : undefined}
-                className={`flex h-8 w-full items-center justify-center gap-1.5 rounded-sm px-2 text-[12px] font-bold transition ${
+                className={`flex h-8 w-full items-center justify-center gap-1.5 rounded-lg px-2 text-[12px] font-bold transition ${
                   active
                     ? "bg-primary text-primary-foreground shadow-primary-glow"
                     : "text-text-dim hover:text-foreground hover:bg-bg-soft"

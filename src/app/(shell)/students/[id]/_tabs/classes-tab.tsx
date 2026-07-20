@@ -150,7 +150,7 @@ function Section({
   // 이미 종료일이 있는 행엔 버튼을 숨겨 "종료된 행 재클릭 시 팝업 반복" 버그를 막는다.
   const showEndCol = canEnd && kind !== "past";
   return (
-    <section className="bg-card border-border rounded-md border">
+    <section className="bg-card border-border rounded-2xl border">
       <header className="border-border flex flex-wrap items-center justify-between gap-2 border-b px-5 py-3">
         <div>
           <h2 className="text-sm font-bold tracking-tight">

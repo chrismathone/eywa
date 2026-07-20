@@ -40,7 +40,7 @@ function AddForm() {
       </label>
       <button
         type="submit"
-        className="bg-primary text-primary-foreground inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-xs font-bold"
+        className="bg-primary text-primary-foreground inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-bold"
       >
         <SubmitInner>
           <Plus className="size-4" />
@@ -79,7 +79,7 @@ function RoomRow({ room }: { room: ClassroomRow }) {
           />
           <button
             type="submit"
-            className="bg-primary text-primary-foreground inline-flex items-center rounded-md px-2.5 py-1.5 text-xs font-bold"
+            className="bg-primary text-primary-foreground inline-flex items-center rounded-lg px-2.5 py-1.5 text-xs font-bold"
           >
             <SubmitInner>저장</SubmitInner>
           </button>

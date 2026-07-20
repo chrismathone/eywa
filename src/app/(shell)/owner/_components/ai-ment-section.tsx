@@ -106,7 +106,7 @@ function PromptEditor({ row, reports }: { row: PromptRow; reports: TestReportOpt
   }
 
   return (
-    <section className="bg-card border-line shadow-card rounded-lg border px-5 py-4">
+    <section className="bg-card border-line shadow-card rounded-2xl border px-5 py-4">
       <div className="mb-2 flex items-center justify-between gap-2">
         <h2 className="text-foreground text-[14px] font-bold">
           {row.label}

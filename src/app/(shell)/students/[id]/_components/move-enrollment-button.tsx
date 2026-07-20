@@ -46,7 +46,7 @@ export function MoveEnrollmentButton({
         type="button"
         onClick={() => setOpen(true)}
         title="다른 반으로 이동 (옛 반 전출 + 새 반 전입)"
-        className="text-text-dim hover:text-blue hover:border-blue/30 hover:bg-blue/10 inline-flex items-center gap-1 rounded-md border border-transparent px-2 py-1 text-xs whitespace-nowrap transition"
+        className="text-text-dim hover:text-blue hover:border-blue/30 hover:bg-blue/10 inline-flex items-center gap-1 rounded-lg border border-transparent px-2 py-1 text-xs whitespace-nowrap transition"
       >
         <ArrowRightLeft className="size-3" />
         반 이동
@@ -145,7 +145,7 @@ function MoveDialog({
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center">
-      <div className="bg-background border-border w-full max-w-md rounded-lg border p-6 shadow-lg">
+      <div className="bg-background border-border w-full max-w-md rounded-2xl border p-6 shadow-lg">
         <header className="mb-4 flex items-start justify-between">
           <div>
             <p className="eyebrow">반 이동</p>
@@ -218,7 +218,7 @@ function MoveDialog({
                       type="button"
                       onClick={() => toggleDay(d)}
                       aria-pressed={on}
-                      className={`rounded-md border px-2.5 py-1 text-xs font-medium transition ${
+                      className={`rounded-full border px-2.5 py-1 text-xs font-medium transition ${
                         on
                           ? "border-primary bg-primary text-primary-foreground"
                           : "border-border text-muted-foreground hover:bg-muted"

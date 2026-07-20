@@ -68,10 +68,10 @@ export async function TextbooksPanel({ sp }: { sp: Sp }) {
   return (
     <div className="space-y-4">
       {/* 필터 바 */}
-      <div className="bg-card border-line shadow-card flex flex-wrap items-center gap-2 rounded-md border px-4 py-3">
+      <div className="bg-card border-line shadow-card flex flex-wrap items-center gap-2 rounded-2xl border px-4 py-3">
         <Link
           href={chipHref("all")}
-          className={`shrink-0 rounded-sm border px-2 py-0.5 text-xs transition ${
+          className={`shrink-0 rounded-full border px-2 py-0.5 text-xs transition ${
             status === "all"
               ? "border-foreground bg-foreground text-background font-medium"
               : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
@@ -84,7 +84,7 @@ export async function TextbooksPanel({ sp }: { sp: Sp }) {
             key={s.key}
             href={chipHref(s.key)}
             title={s.title}
-            className={`shrink-0 rounded-sm border px-2 py-0.5 text-xs transition ${
+            className={`shrink-0 rounded-full border px-2 py-0.5 text-xs transition ${
               status === s.key
                 ? "border-foreground bg-foreground text-background font-medium"
                 : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
@@ -160,7 +160,7 @@ function Kpi({
     danger: "bg-danger-soft text-danger",
   } as const;
   return (
-    <article className="bg-card border-line shadow-card rounded-md border p-5">
+    <article className="bg-card border-line shadow-card rounded-2xl border p-5">
       <header className="flex items-center justify-between">
         <p className="micro">{label}</p>
         <span className={`flex size-[26px] items-center justify-center rounded-sm ${ICON_BG[color]}`}>

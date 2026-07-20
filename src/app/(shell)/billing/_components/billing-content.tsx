@@ -116,15 +116,21 @@ export async function BillingContent({ sp }: { sp: Sp }) {
     return s ? `/billing?${s}` : "/billing";
   };
 
+  // 헤더 서브 라인(풀·컴팩트 공용) — 검색·페이지 상태까지 포함(헤더가 총 필터 결과 수의 유일한 표시처).
+  const periodSummary = `청구 ${summary.totalCount}건 · 수납률 ${summary.paymentRate.toFixed(1)}%${
+    q ? ` · “${q}” 검색 결과 ${total}건` : ""
+  }${totalPages > 1 ? ` · ${page}/${totalPages} 페이지` : ""}`;
+
   return (
     <div className="space-y-5">
       {/* Editorial 문법 ① — eyebrow→월 헤드라인→서브(청구·수납률 승격). 월 네비게이션은 actions 슬롯. */}
       <PageHeader
         eyebrow="수납 현황"
         title={formatPeriod(period)}
-        description={`청구 ${summary.totalCount}건 · 수납률 ${summary.paymentRate.toFixed(1)}%${
-          q ? ` · “${q}” 검색 결과 ${total}건` : ""
-        }${totalPages > 1 ? ` · ${page}/${totalPages} 페이지` : ""}`}
+        description={periodSummary}
+        // 창 컴팩트 행에선 title(월)이 접히므로 월을 라벨에 명시 — 월 네비(actions)가 옆에 있어 필수.
+        // 검색 결과 건수·페이지 접미사도 동일하게(창이 기본 경로라 빠지면 검색 피드백이 사라짐, 적대 리뷰).
+        embedLabel={`${formatPeriod(period)} · ${periodSummary}`}
         actions={
           <>
             <Link

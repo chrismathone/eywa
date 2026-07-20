@@ -100,7 +100,7 @@ export function TextbookDialog({
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center">
-      <div className="bg-background border-line max-h-[92vh] w-full max-w-5xl overflow-y-auto rounded-lg border p-6 shadow-lg">
+      <div className="bg-background border-line max-h-[92vh] w-full max-w-5xl overflow-y-auto rounded-2xl border p-6 shadow-lg">
         <header className="mb-4 flex items-start justify-between">
           <div>
             <p className="eyebrow">{editing ? "교재신청 수정" : "교재신청 등록"}</p>
@@ -268,7 +268,7 @@ export function TextbookDialog({
 }
 
 const inputCls =
-  "border-line bg-background text-foreground placeholder:text-text-faint w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary/40";
+  "border-line bg-background text-foreground placeholder:text-text-faint w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary/40";
 
 function Field({ label, error, children }: { label: string; error?: string; children: React.ReactNode }) {
   return (

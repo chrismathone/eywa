@@ -87,7 +87,7 @@ export function EdutrixUnmappedCard({ view }: { view: EdutrixMapView }) {
 
   if (!view.ok) {
     return (
-      <section className="bg-card border-line shadow-card rounded-lg border px-5 py-4">
+      <section className="bg-card border-line shadow-card rounded-2xl border px-5 py-4">
         <h2 className="text-foreground text-[15px] font-bold">Edutrix 미매핑</h2>
         <p className="text-amber mt-2 text-[13px]">{view.error ?? "목록을 불러오지 못했습니다"}</p>
       </section>
@@ -100,7 +100,7 @@ export function EdutrixUnmappedCard({ view }: { view: EdutrixMapView }) {
   const visible = showDummy ? unmapped : unmapped.filter((r) => !r.likelyDummy);
 
   return (
-    <section className="bg-card border-line shadow-card rounded-lg border px-5 py-4">
+    <section className="bg-card border-line shadow-card rounded-2xl border px-5 py-4">
       <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
         <div>
           <h2 className="text-foreground text-[15px] font-bold">Edutrix 미매핑</h2>
@@ -110,26 +110,26 @@ export function EdutrixUnmappedCard({ view }: { view: EdutrixMapView }) {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2 text-[12px]">
-          <span className="bg-bg-soft text-text-dim rounded-md px-2.5 py-1">
+          <span className="bg-bg-soft text-text-dim rounded-full px-2.5 py-1">
             매핑 <b className="text-foreground tabular">{mappedCount}</b>
             <span className="text-text-faint"> / Edutrix {edutrixStudentCount}</span>
           </span>
           <span
             className={
               realCount > 0
-                ? "bg-danger/10 text-danger rounded-md px-2.5 py-1 font-bold"
-                : "bg-primary/10 text-primary rounded-md px-2.5 py-1 font-bold"
+                ? "bg-danger/10 text-danger rounded-full px-2.5 py-1 font-bold"
+                : "bg-primary/10 text-primary rounded-full px-2.5 py-1 font-bold"
             }
           >
             실매핑 대상 <b className="tabular">{realCount}</b>
           </span>
           {dummyCount > 0 ? (
-            <span className="bg-bg-soft text-text-faint rounded-md px-2.5 py-1">
+            <span className="bg-bg-soft text-text-faint rounded-full px-2.5 py-1">
               테스트 <b className="tabular">{dummyCount}</b>
             </span>
           ) : null}
           {dummyCount > 0 ? (
-            <label className="text-text-dim flex cursor-pointer items-center gap-1.5 rounded-md border border-transparent px-2 py-1 hover:border-line">
+            <label className="text-text-dim flex cursor-pointer items-center gap-1.5 rounded-full border border-transparent px-2 py-1 hover:border-line">
               <input
                 type="checkbox"
                 className="accent-primary size-3.5"

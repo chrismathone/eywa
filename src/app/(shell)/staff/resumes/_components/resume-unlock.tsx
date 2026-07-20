@@ -26,7 +26,7 @@ export function ResumeUnlock({ id, name }: { id: string; name: string }) {
 
   return (
     <div className="mx-auto max-w-md py-10">
-      <div className="bg-card border-line rounded-md border p-6 text-center">
+      <div className="bg-card border-line rounded-2xl border p-6 text-center">
         <div className="bg-bg-soft mx-auto flex size-12 items-center justify-center rounded-full">
           <Lock className="text-text-dim size-5" />
         </div>

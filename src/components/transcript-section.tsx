@@ -39,7 +39,7 @@ export function TranscriptSection({
   return (
     <section
       className={
-        frameless ? "overflow-hidden" : "border-line bg-card overflow-hidden rounded-md border"
+        frameless ? "overflow-hidden" : "border-line bg-card overflow-hidden rounded-2xl border"
       }
     >
       <button
@@ -81,7 +81,7 @@ export function TranscriptSection({
                 <button
                   type="button"
                   onClick={() => setShowAll(true)}
-                  className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft w-full rounded-md border py-2 text-xs transition"
+                  className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft w-full rounded-lg border py-2 text-xs transition"
                 >
                   <span className="inline-flex items-center gap-1">
                     <EyIcon name="chevronDown" size={12} aria-hidden="true" />

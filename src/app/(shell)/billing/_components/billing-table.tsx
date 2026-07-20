@@ -118,7 +118,7 @@ export function BillingTable({ rows, sort, desc, period, q }: Props) {
 
   const numTh = "eyebrow num px-3 py-3 text-right font-normal";
   return (
-    <div className="bg-card border-border overflow-x-auto rounded-lg border">
+    <div className="bg-card border-border overflow-x-auto rounded-2xl border">
       <table className="w-full min-w-[1080px] text-sm [&_td]:whitespace-nowrap">
         <thead className="border-border text-muted-foreground border-b text-left text-xs [&_th]:whitespace-nowrap">
           <tr>

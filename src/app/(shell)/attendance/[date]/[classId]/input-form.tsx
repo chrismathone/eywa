@@ -167,7 +167,7 @@ export function AttendanceInputForm({
       <input type="hidden" name="date" value={date} />
 
       {/* Bulk actions */}
-      <div className="border-line bg-card flex flex-wrap items-center justify-between gap-2 rounded-lg border px-4 py-2.5">
+      <div className="border-line bg-card flex flex-wrap items-center justify-between gap-2 rounded-2xl border px-4 py-2.5">
         <div className="text-text-dim text-xs">
           입력 {filled} / {rows.length}
         </div>
@@ -175,7 +175,7 @@ export function AttendanceInputForm({
           <button
             type="button"
             onClick={() => setAll("present")}
-            className="text-primary hover:bg-primary/10 rounded-md px-2 py-1 text-xs font-medium transition"
+            className="text-primary hover:bg-primary/10 rounded-lg px-2 py-1 text-xs font-medium transition"
           >
             전체 출석
           </button>
@@ -183,7 +183,7 @@ export function AttendanceInputForm({
           <button
             type="button"
             onClick={clearAll}
-            className="text-text-dim hover:text-foreground rounded-md px-2 py-1 text-xs transition"
+            className="text-text-dim hover:text-foreground rounded-lg px-2 py-1 text-xs transition"
           >
             전체 초기화
           </button>
@@ -191,11 +191,11 @@ export function AttendanceInputForm({
       </div>
 
       {rows.length === 0 ? (
-        <div className="border-line bg-bg-soft/20 rounded-lg border border-dashed p-8 text-center">
+        <div className="border-line bg-bg-soft/20 rounded-2xl border border-dashed p-8 text-center">
           <p className="text-text-dim text-sm">이 날짜에 활성 재원생이 없습니다.</p>
         </div>
       ) : (
-        <ul className="bg-card border-line divide-border divide-y rounded-lg border">
+        <ul className="bg-card border-line divide-border divide-y rounded-2xl border">
           {rows.map((r) => {
             const cell = pending[r.studentId];
             const hasExtra = !!(cell.note || cell.homeworkRequired);
@@ -219,7 +219,7 @@ export function AttendanceInputForm({
                       <span className="text-text-dim text-[10px]">· 이전 기록 있음</span>
                     ) : null}
                     {hasExtra ? (
-                      <span className="bg-purple/10 text-purple border-purple/20 inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px]">
+                      <span className="bg-purple/10 text-purple border-purple/20 inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px]">
                         {cell.note ? <Pencil className="size-2.5" /> : null}
                         {cell.homeworkRequired ? <BookOpen className="size-2.5" /> : null}
                         {cell.units ? <span className="num font-bold">{cell.units}</span> : null}
@@ -267,7 +267,7 @@ export function AttendanceInputForm({
                           onClick={() =>
                             setOne(r.studentId, active ? null : s.value)
                           }
-                          className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium transition ${
+                          className={`inline-flex items-center gap-1 rounded-full border px-2 py-1 text-xs font-medium transition ${
                             active
                               ? s.activeClass
                               : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft/30"

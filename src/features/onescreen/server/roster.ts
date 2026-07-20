@@ -6,6 +6,7 @@ import { buildSubjectMaps } from "@/features/owner/subjects";
 import { fetchInChunks } from "@/lib/supabase/batch";
 import { addDays, resolveReportDate, weekdayIndexOf, formatKoreanDate } from "@/lib/date-kst";
 import { parseExamScores } from "../exam-info";
+import { classnoteSendWindowLabel } from "../classnote-guard";
 import { applyStudentOrder } from "../student-order";
 import { getTextbookOrdersForStudents } from "@/features/billing/server/textbook-queries";
 import type { AttendanceMark, OneScreenStudent } from "../types";
@@ -44,6 +45,9 @@ export type TeacherRoster = {
   noticeMode: "A" | "B" | null; // 강사 본인의 AI 멘트 모드 오버라이드(null=학원 기본 따름) — 0104a
   academyNoticeMode: "A" | "B"; // 학원 기본 멘트 모드(report.noticeMode) — 토글 '학원 기본' 라벨 표시용
   classnoteSendEnabled: boolean; // ClassNote 실제 발송 스위치 — 공지 컴포저 dry-run 안내용
+  // 발송 허용 시간창 라벨("HH:MM~HH:MM", 무제한=null) — 원스크린 상단 강사 참고 안내. 활성 판정은
+  // classnoteSendWindowLabel(워커 fail-open 규약 미러). 빈 로스터는 발송 표면이 없어 null 고정.
+  sendWindowLabel: string | null;
 };
 
 type OnescreenSessionRow = {
@@ -83,6 +87,7 @@ function emptyRoster(
     noticeMode,
     academyNoticeMode,
     classnoteSendEnabled: false,
+    sendWindowLabel: null,
   };
 }
 
@@ -577,5 +582,9 @@ export async function getTeacherRoster(rawDate?: string): Promise<TeacherRoster>
     noticeMode,
     academyNoticeMode,
     classnoteSendEnabled: settings.report.classnoteSendEnabled,
+    sendWindowLabel: classnoteSendWindowLabel(
+      settings.report.classnoteSendWindowStart,
+      settings.report.classnoteSendWindowEnd,
+    ),
   };
 }

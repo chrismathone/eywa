@@ -16,8 +16,8 @@ import { readableTextColor } from "@/lib/color-utils";
 const LABEL_W = 11;
 const DAY_SUB_W = 8;
 
-const THIN = { style: "thin" as const, color: { argb: "FFBFC7C2" } };
-const MEDIUM = { style: "medium" as const, color: { argb: "FF5B6B63" } };
+const THIN = { style: "thin" as const, color: { argb: "FFC4C4C9" } };
+const MEDIUM = { style: "medium" as const, color: { argb: "FF505050" } };
 
 // 강사 라벨(DB색 없을 때) 해시 폴백 팔레트 — 화면 teacherColor(tailwind)를 엑셀 hex로 대체.
 const HASH_PALETTE = ["FF3B82F6", "FF8B5CF6", "FFEC4899", "FF10B981", "FFEF4444"];
@@ -130,7 +130,7 @@ export function appendIntegratedSheet(
 
     // ── 수업명 ──
     const nameRow = cursor++;
-    setCell(nameRow, 1, "수업명", { bg: "FFEEF2F0", bold: true, size: 9 });
+    setCell(nameRow, 1, "수업명", { bg: "FFE9E9EE", bold: true, size: 9 });
     cards.forEach((c, i) => {
       const st = cardStart[i];
       if (days.length > 1) sheet.mergeCells(nameRow, st, nameRow, st + days.length - 1);
@@ -144,13 +144,13 @@ export function appendIntegratedSheet(
 
     // ── 담임 ──
     const teacherRow = cursor++;
-    setCell(teacherRow, 1, "담임", { bg: "FFEEF2F0", bold: true, size: 9 });
+    setCell(teacherRow, 1, "담임", { bg: "FFE9E9EE", bold: true, size: 9 });
     cards.forEach((c, i) => {
       const st = cardStart[i];
       if (days.length > 1) sheet.mergeCells(teacherRow, st, teacherRow, st + days.length - 1);
       const tc = c.teacherName ? teacherColors[c.teacherName] : undefined;
       setCell(teacherRow, st, c.teacherName ?? "-", {
-        bg: tc ? hexToARGB(tc.bg, "FFEEF2F0") : undefined,
+        bg: tc ? hexToARGB(tc.bg, "FFE9E9EE") : undefined,
         color: tc ? hexToARGB(tc.text, "FF1D1D1F") : undefined,
         bold: true,
         size: 10,
@@ -159,22 +159,22 @@ export function appendIntegratedSheet(
 
     // ── 강의실 ──
     const roomRow = cursor++;
-    setCell(roomRow, 1, "강의실", { bg: "FFEEF2F0", bold: true, size: 9 });
+    setCell(roomRow, 1, "강의실", { bg: "FFE9E9EE", bold: true, size: 9 });
     cards.forEach((c, i) => {
       const st = cardStart[i];
       if (days.length > 1) sheet.mergeCells(roomRow, st, roomRow, st + days.length - 1);
-      setCell(roomRow, st, c.classroomLabel, { size: 9, wrap: true, color: "FF5B6B63" });
+      setCell(roomRow, st, c.classroomLabel, { size: 9, wrap: true, color: "FF505050" });
     });
 
     // ── 요일 헤더 ──
     const dayHeadRow = cursor++;
-    setCell(dayHeadRow, 1, "교시", { bg: "FFEEF2F0", bold: true, size: 9 });
+    setCell(dayHeadRow, 1, "교시", { bg: "FFE9E9EE", bold: true, size: 9 });
     cards.forEach((_, i) => {
       const st = cardStart[i];
       days.forEach((d, di) => {
         const weekend = d === "sat" || d === "sun";
         setCell(dayHeadRow, st + di, enumDayToKo(d), {
-          bg: "FFF3F6F4", bold: true, size: 9, color: weekend ? "FFB4436C" : "FF5B6B63",
+          bg: "FFF2F2F4", bold: true, size: 9, color: weekend ? "FFB4436C" : "FF505050",
         });
       });
     });
@@ -196,7 +196,7 @@ export function appendIntegratedSheet(
             return;
           }
           const tc = teacherColors[cell.label];
-          const bg = tc ? hexToARGB(tc.bg, "FFEEF2F0") : hashColor(cell.label);
+          const bg = tc ? hexToARGB(tc.bg, "FFE9E9EE") : hashColor(cell.label);
           const color = tc ? hexToARGB(tc.text, "FFFFFFFF") : "FFFFFFFF";
           setCell(pr, st + di, abbrev(cell.label), { bg, color, bold: true, size: 9 });
         });

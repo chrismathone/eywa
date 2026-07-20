@@ -28,7 +28,7 @@ export function ProgressCard({
   const isMathSubject = (key: string | undefined) => (key ?? "math") === "math";
 
   return (
-    <div className="bg-card border-line shadow-card rounded-md border">
+    <div className="bg-card border-line shadow-card rounded-2xl border">
       <header className="border-line flex items-center justify-between border-b px-4 py-3">
         <div>
           <p className="micro text-text-faint">진도 확인</p>
@@ -84,7 +84,7 @@ export function ProgressCard({
                         onChange={(e) => onProgress(i, e.target.value)}
                         placeholder="오늘 진도 입력 (예: Unit 8 · p.90)"
                         aria-label={`${su.name} 오늘 진도 입력`}
-                        className="border-line bg-card focus:border-primary h-8 w-full min-w-0 flex-1 rounded-sm border px-2 text-[12px] outline-none transition-colors"
+                        className="border-line bg-card focus:border-primary h-8 w-full min-w-0 flex-1 rounded-lg border px-2 text-[12px] outline-none transition-colors"
                       />
                     )}
                   </div>

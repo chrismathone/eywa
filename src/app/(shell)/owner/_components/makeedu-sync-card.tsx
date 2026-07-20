@@ -95,7 +95,7 @@ export function MakeeduSyncCard({
   }
 
   return (
-    <section className="bg-card border-border space-y-4 rounded-md border p-6">
+    <section className="bg-card border-border space-y-4 rounded-2xl border p-6">
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
           <h2 className="text-foreground text-base font-bold">makeedu 자동 동기화</h2>

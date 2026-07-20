@@ -255,7 +255,7 @@ export default async function ClassDetailPage({
             </div>
             <p className="text-muted-foreground num text-xs">{students.length}명</p>
           </header>
-          <section className="bg-card border-border rounded-lg border">
+          <section className="bg-card border-border rounded-2xl border">
             {students.length === 0 ? (
               <div className="text-muted-foreground px-5 py-8 text-center text-sm">
                 활성 재원생이 없습니다
@@ -326,7 +326,7 @@ function Card({
   children: ReactNode;
 }) {
   return (
-    <section className="bg-card border-border rounded-lg border p-5">
+    <section className="bg-card border-border rounded-2xl border p-5">
       <h3 className="eyebrow mb-3 inline-flex items-center gap-1.5">
         {icon}
         {title}

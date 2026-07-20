@@ -38,7 +38,7 @@ export function SnapLayoutsBar() {
       {bar.items.map((item) => (
         <div key={item.template}>
           <div
-            className="border-line absolute overflow-hidden rounded-[5px] border"
+            className="border-line absolute overflow-hidden rounded-sm border"
             style={{ left: item.box.x - bar.x, top: item.box.y - bar.y, width: item.box.w, height: item.box.h }}
           >
             {item.cells.map((c, s) => {

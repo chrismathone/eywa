@@ -58,7 +58,7 @@ export async function TuitionPricesPanel({ sp }: { sp: Sp }) {
       </section>
 
       {/* 필터 바 */}
-      <div className="bg-card border-line shadow-card flex flex-wrap items-center gap-3 rounded-md border px-4 py-3">
+      <div className="bg-card border-line shadow-card flex flex-wrap items-center gap-3 rounded-2xl border px-4 py-3">
         <div className="flex flex-wrap items-center gap-1.5">
           <span className="micro mr-1">분류</span>
           {CATEGORY_FILTERS.map((f) => (
@@ -107,7 +107,7 @@ function Chip({ href, on, children }: { href: string; on: boolean; children: Rea
   return (
     <Link
       href={href}
-      className={`shrink-0 rounded-sm border px-2 py-0.5 text-xs transition ${
+      className={`shrink-0 rounded-full border px-2 py-0.5 text-xs transition ${
         on
           ? "border-foreground bg-foreground text-background font-medium"
           : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
@@ -131,7 +131,7 @@ function Kpi({
 }) {
   const ICON_BG = { primary: "bg-primary-soft text-primary" } as const;
   return (
-    <article className="bg-card border-line shadow-card rounded-md border p-4">
+    <article className="bg-card border-line shadow-card rounded-2xl border p-4">
       <header className="flex items-center justify-between">
         <p className="micro">{label}</p>
         <span className={`flex size-[26px] items-center justify-center rounded-sm ${ICON_BG[color]}`}>

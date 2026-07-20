@@ -78,7 +78,7 @@ export function StudentSummaryView({
         <button
           type="button"
           onClick={onOpenDetail}
-          className="bg-primary text-primary-foreground hover:bg-primary-hover mt-6 flex items-center justify-center gap-1.5 rounded-sm py-2.5 text-[13px] font-bold transition"
+          className="bg-primary text-primary-foreground hover:bg-primary-hover mt-6 flex items-center justify-center gap-1.5 rounded-lg py-2.5 text-[13px] font-bold transition"
         >
           상세 전체보기
           <EyIcon name="arrowRight" size={13} />
@@ -87,7 +87,7 @@ export function StudentSummaryView({
         <WindowLink
           href={`/students/${info.id}`}
           title={name}
-          className="bg-primary text-primary-foreground hover:bg-primary-hover mt-6 flex items-center justify-center gap-1.5 rounded-sm py-2.5 text-[13px] font-bold transition"
+          className="bg-primary text-primary-foreground hover:bg-primary-hover mt-6 flex items-center justify-center gap-1.5 rounded-lg py-2.5 text-[13px] font-bold transition"
         >
           상세 전체보기
           <EyIcon name="arrowRight" size={13} />

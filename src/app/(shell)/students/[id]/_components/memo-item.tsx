@@ -80,14 +80,14 @@ export function MemoItem({ memo, studentId }: { memo: StudentMemoRow; studentId:
 
   return (
     <li
-      className={`space-y-1.5 rounded-md border px-3 py-2.5 ${
+      className={`space-y-1.5 rounded-2xl border px-3 py-2.5 ${
         memo.pinned ? "border-gold/40 bg-gold/5" : "bg-card border-border"
       }`}
     >
       <header className="flex items-baseline justify-between gap-2">
         <div className="flex items-baseline gap-2">
           <span
-            className={`inline-flex items-center rounded-md border px-1.5 py-0.5 text-[10px] font-medium ${
+            className={`inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] font-medium ${
               CATEGORY_COLOR[memo.category] ?? CATEGORY_COLOR.other
             }`}
           >
@@ -130,7 +130,7 @@ export function MemoItem({ memo, studentId }: { memo: StudentMemoRow; studentId:
           <select
             name="category"
             defaultValue={memo.category}
-            className="border-border bg-card text-foreground rounded-md border px-2 py-1 text-xs"
+            className="border-border bg-card text-foreground rounded-lg border px-2 py-1 text-xs"
           >
             {CATEGORIES.map((c) => (
               <option key={c.value} value={c.value}>
@@ -143,7 +143,7 @@ export function MemoItem({ memo, studentId }: { memo: StudentMemoRow; studentId:
             required
             rows={3}
             defaultValue={memo.content}
-            className="border-border bg-card text-foreground w-full rounded-md border px-2 py-2 text-sm"
+            className="border-border bg-card text-foreground w-full rounded-lg border px-2 py-2 text-sm"
           />
           {state?.error ? <p className="text-chart-4 text-xs">{state.error}</p> : null}
           <div className="flex items-center justify-end gap-3">

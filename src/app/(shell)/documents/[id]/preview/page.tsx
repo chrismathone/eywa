@@ -62,18 +62,18 @@ export default async function DocumentPreviewPage({ params }: { params: Promise<
       </header>
 
       {resolveError ? (
-        <div className="bg-danger-soft border-danger/20 text-danger rounded-md border p-4 text-sm">{resolveError}</div>
+        <div className="bg-danger-soft border-danger/20 text-danger rounded-2xl border p-4 text-sm">{resolveError}</div>
       ) : mode === "image" && src ? (
-        <div className="bg-bg-soft/60 border-line flex min-h-0 flex-1 items-center justify-center overflow-auto rounded-md border p-4">
+        <div className="bg-bg-soft/60 border-line flex min-h-0 flex-1 items-center justify-center overflow-auto rounded-2xl border p-4">
           {/* eslint-disable-next-line @next/next/no-img-element -- 서명 URL 미리보기(최적화 불필요) */}
           <img src={src} alt={doc.title} className="max-h-full max-w-full object-contain" />
         </div>
       ) : (mode === "pdf" || mode === "office") && src ? (
-        <div className="border-line min-h-0 flex-1 overflow-hidden rounded-md border">
+        <div className="border-line min-h-0 flex-1 overflow-hidden rounded-2xl border">
           <iframe src={src} title={`${doc.title} 미리보기`} className="h-full min-h-[420px] w-full" />
         </div>
       ) : (
-        <div className="bg-bg-soft/60 border-line text-text-dim flex min-h-0 flex-1 flex-col items-center justify-center gap-2 rounded-md border p-8 text-center text-sm">
+        <div className="bg-bg-soft/60 border-line text-text-dim flex min-h-0 flex-1 flex-col items-center justify-center gap-2 rounded-2xl border p-8 text-center text-sm">
           <p className="text-foreground font-medium">{typeLabel} 형식은 웹 미리보기를 지원하지 않습니다</p>
           <p className="text-text-faint text-xs">위 다운로드 버튼으로 받아 프로그램에서 열어주세요.</p>
         </div>

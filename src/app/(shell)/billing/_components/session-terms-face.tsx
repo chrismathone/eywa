@@ -91,7 +91,7 @@ export async function SessionTermsFace({
         <div className="flex items-center gap-2">
           <Link
             href={`/billing?tab=sessions&period=${shiftPeriod(p, -1)}`}
-            className="border-line text-text-dim hover:text-foreground rounded-md border px-2 py-1 text-xs"
+            className="border-line text-text-dim hover:text-foreground rounded-full border px-2 py-1 text-xs"
             aria-label="이전 달"
           >
             <EyIcon name="chevronLeft" size={14} />
@@ -101,7 +101,7 @@ export async function SessionTermsFace({
           </span>
           <Link
             href={`/billing?tab=sessions&period=${shiftPeriod(p, 1)}`}
-            className="border-line text-text-dim hover:text-foreground rounded-md border px-2 py-1 text-xs"
+            className="border-line text-text-dim hover:text-foreground rounded-full border px-2 py-1 text-xs"
             aria-label="다음 달"
           >
             <EyIcon name="chevronRight" size={14} />
@@ -128,7 +128,7 @@ export async function SessionTermsFace({
         <nav className="flex flex-wrap items-center gap-1.5" aria-label="과목별 보기">
           <Link
             href={`/billing?tab=sessions&period=${p}`}
-            className={`rounded-md border px-2.5 py-1 text-xs transition ${!activeSubject ? "border-foreground bg-foreground text-background font-bold" : "border-line text-text-dim hover:text-foreground"}`}
+            className={`rounded-full border px-2.5 py-1 text-xs transition ${!activeSubject ? "border-foreground bg-foreground text-background font-bold" : "border-line text-text-dim hover:text-foreground"}`}
           >
             전체
           </Link>
@@ -136,7 +136,7 @@ export async function SessionTermsFace({
             <Link
               key={sk}
               href={`/billing?tab=sessions&period=${p}&subject=${sk}`}
-              className={`rounded-md border px-2.5 py-1 text-xs transition ${activeSubject === sk ? "border-foreground bg-foreground text-background font-bold" : "border-line text-text-dim hover:text-foreground"}`}
+              className={`rounded-full border px-2.5 py-1 text-xs transition ${activeSubject === sk ? "border-foreground bg-foreground text-background font-bold" : "border-line text-text-dim hover:text-foreground"}`}
             >
               {subjects.labelOf(sk)}
             </Link>
@@ -158,7 +158,7 @@ export async function SessionTermsFace({
       </p>
 
       {filtered.length === 0 ? (
-        <div className="border-border text-text-dim rounded-lg border border-dashed p-10 text-center text-sm">
+        <div className="border-border text-text-dim rounded-2xl border border-dashed p-10 text-center text-sm">
           {query ? (
             <>“{query}” 검색 결과가 없습니다. 검색어를 조정해 보세요.</>
           ) : (

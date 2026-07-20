@@ -187,7 +187,7 @@ export default async function EnrollmentDetailPage({
       {/* 같은 학생의 다른 등록상담(반복 접수) — 학생 연결 또는 자연키(이름+학교+학년)로 묶은 다른 상담 건.
           카드의 '상담 N건' 배지와 동일 그룹. 각 건을 창으로 열어 나머지 상담을 확인·정리. 등록상담만 대상. */}
       {siblings.length > 0 ? (
-        <section className="border-amber/30 bg-amber-soft/30 rounded-lg border p-4">
+        <section className="border-amber/30 bg-amber-soft/30 rounded-2xl border p-4">
           <div className="flex items-center gap-2">
             <ClipboardList className="text-amber size-4" />
             <h2 className="text-foreground text-sm font-bold">
@@ -229,7 +229,7 @@ export default async function EnrollmentDetailPage({
       ) : null}
 
       {consult.processingStatus === "failed" ? (
-        <section className="border-chart-4/40 bg-chart-4/5 rounded-lg border p-4">
+        <section className="border-chart-4/40 bg-chart-4/5 rounded-2xl border p-4">
           <div className="inline-flex items-center gap-2">
             <AlertCircle className="text-chart-4 size-4" />
             <h2 className="text-foreground text-sm font-bold">처리 실패</h2>
@@ -241,7 +241,7 @@ export default async function EnrollmentDetailPage({
       ) : null}
 
       {isProcessing ? (
-        <section className="bg-card border-border space-y-3 rounded-lg border p-5">
+        <section className="bg-card border-border space-y-3 rounded-2xl border p-5">
           <div className="inline-flex items-center gap-2">
             <Loader2 className="text-chart-3 size-4 animate-spin" />
             <h2 className="text-foreground text-sm font-bold">
@@ -496,7 +496,7 @@ export default async function EnrollmentDetailPage({
 // 이모지 + 굵은 라벨 헤더(이중 박스 느낌의 별도 음영 바 없이) → 섹션 구분은 또렷하되 중복돼 보이지 않게.
 function Card({ title, icon, children }: { title: string; icon?: EywaIconName; children: ReactNode }) {
   return (
-    <section className="bg-card border-line rounded-md border p-4">
+    <section className="bg-card border-line rounded-2xl border p-4">
       <h3 className="text-foreground mb-2.5 flex items-center gap-1.5 text-[13px] font-bold">
         {icon ? <EyIcon name={icon} size={15} /> : null}
         {title}
@@ -530,7 +530,7 @@ function SectionHeader({
 // 수정 폼과 동일한 카드 스타일(단일 박스 + 상단 음영 헤더바 + primary 제목) — 읽기/편집 화면 톤 통일.
 function SectionCard({ title, children, fill }: { title: string; children: ReactNode; fill?: boolean }) {
   return (
-    <section className={`bg-card border-border overflow-hidden rounded-lg border ${fill ? "flex h-full flex-col" : ""}`}>
+    <section className={`bg-card border-border overflow-hidden rounded-2xl border ${fill ? "flex h-full flex-col" : ""}`}>
       <div className="border-border bg-bg-soft/50 border-b px-3 py-1.5">
         <h3 className="text-primary text-xs font-bold">{title}</h3>
       </div>
@@ -597,7 +597,7 @@ function AiAnalysisPanel({
   const { diagnosis, learningPlan } = analysis;
   return (
     <div className="space-y-4">
-      <section className="bg-card border-border rounded-lg border p-5">
+      <section className="bg-card border-border rounded-2xl border p-5">
         <header className="flex items-center justify-between gap-3">
           <div>
             <p className="eyebrow">AI 분석 결과</p>

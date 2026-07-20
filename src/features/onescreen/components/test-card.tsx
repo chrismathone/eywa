@@ -110,7 +110,7 @@ export function TestCard({
   const prevRange = student.subjects.map((s) => displayLessons(s.prev) || s.prev).filter(Boolean).join(" / ");
   const todayRange = student.subjects.map((s) => displayLessons(s.today) || s.today).filter(Boolean).join(" / ");
   return (
-    <div className="bg-card border-line shadow-card rounded-md border">
+    <div className="bg-card border-line shadow-card rounded-2xl border">
       <header className="border-line flex items-center justify-between border-b px-4 py-3">
         <div>
           <p className="micro text-text-faint">데일리 · 확인 테스트</p>

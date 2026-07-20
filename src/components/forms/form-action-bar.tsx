@@ -28,7 +28,7 @@ export function FormActionBar({
 }) {
   return (
     <div
-      className={`border-line bg-background sticky bottom-0 z-20 flex items-center justify-end gap-2 border-t px-0.5 py-3 shadow-[0_-4px_10px_-6px_rgba(26,31,28,0.12)] ${className}`}
+      className={`border-line bg-background sticky bottom-0 z-20 flex items-center justify-end gap-2 border-t px-0.5 py-3 shadow-[0_-4px_10px_-6px_rgba(29,29,31,0.12)] ${className}`}
     >
       {children}
     </div>

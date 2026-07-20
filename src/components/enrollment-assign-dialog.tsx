@@ -143,7 +143,7 @@ export function EnrollmentAssignDialog({
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center">
-      <div className="bg-background border-border w-full max-w-md rounded-lg border p-6 shadow-lg">
+      <div className="bg-background border-border w-full max-w-md rounded-xl border p-6 shadow-lg">
         <header className="mb-4 flex items-start justify-between">
           <div>
             <p className="eyebrow">수강 배정</p>
@@ -230,7 +230,7 @@ export function EnrollmentAssignDialog({
                 type="date"
                 required
                 defaultValue={kstToday()}
-                className="border-border bg-card text-foreground num w-full rounded-md border px-2 py-1.5 text-sm"
+                className="border-border bg-card text-foreground num w-full rounded-lg border px-2 py-1.5 text-sm"
               />
             </div>
             <div className="space-y-1">
@@ -240,7 +240,7 @@ export function EnrollmentAssignDialog({
               <input
                 name="endDate"
                 type="date"
-                className="border-border bg-card text-foreground num w-full rounded-md border px-2 py-1.5 text-sm"
+                className="border-border bg-card text-foreground num w-full rounded-lg border px-2 py-1.5 text-sm"
               />
             </div>
           </div>
@@ -262,7 +262,7 @@ export function EnrollmentAssignDialog({
                       type="button"
                       onClick={() => toggleDay(d)}
                       aria-pressed={on}
-                      className={`rounded-md border px-2.5 py-1 text-xs font-medium transition ${
+                      className={`rounded-full border px-2.5 py-1 text-xs font-medium transition ${
                         on
                           ? "border-primary bg-primary text-primary-foreground"
                           : "border-border text-muted-foreground hover:bg-muted"
@@ -285,7 +285,7 @@ export function EnrollmentAssignDialog({
           ) : null}
 
           {conflicts && conflicts.length > 0 ? (
-            <div className="border-chart-4/40 bg-chart-4/5 rounded-md border px-3 py-2 text-xs">
+            <div className="border-chart-4/40 bg-chart-4/5 rounded-lg border px-3 py-2 text-xs">
               <div className="text-chart-4 inline-flex items-center gap-1.5">
                 <AlertTriangle className="size-3.5" />
                 <span className="font-bold">시간 충돌</span>

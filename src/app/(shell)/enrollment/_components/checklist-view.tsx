@@ -80,7 +80,7 @@ export function ChecklistView({ checklist }: { checklist: IntakeChecklist }) {
                     {Array.from({ length: HABIT_SCALE_MAX }, (_, i) => (
                       <span
                         key={i}
-                        className={`h-2 w-4 rounded-[2px] ${i < score ? "bg-primary" : "bg-bg-soft"}`}
+                        className={`h-2 w-4 rounded-xs ${i < score ? "bg-primary" : "bg-bg-soft"}`}
                       />
                     ))}
                   </div>

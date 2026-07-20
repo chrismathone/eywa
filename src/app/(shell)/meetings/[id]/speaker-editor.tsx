@@ -89,7 +89,7 @@ export function SpeakerEditor({
       <button
         type="button"
         onClick={openEditor}
-        className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs transition"
+        className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs transition"
       >
         <Users className="size-3.5" />
         화자 지정 ({speakers.length}명)
@@ -110,7 +110,7 @@ export function SpeakerEditor({
   }
 
   return (
-    <form action={action} className="border-line bg-card space-y-3 rounded-md border p-4">
+    <form action={action} className="border-line bg-card space-y-3 rounded-2xl border p-4">
       <input type="hidden" name="id" value={meetingId} />
       <input type="hidden" name="mapping" value={JSON.stringify(mapping)} />
       <div className="flex items-center justify-between">

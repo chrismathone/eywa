@@ -32,7 +32,7 @@ const RAIL_GROUPS: { Icon: LucideIcon; active?: boolean; dot?: boolean }[][] = [
 
 export function MockWorkspace() {
   return (
-    <div className="border-line-strong bg-bg-soft relative overflow-hidden rounded-[18px] border shadow-[0_1px_2px_rgba(11,16,13,0.05),0_50px_110px_-44px_rgba(11,16,13,0.45)]">
+    <div className="border-line-strong bg-bg-soft relative overflow-hidden rounded-[18px] border shadow-[0_1px_2px_rgba(29,29,31,0.05),0_50px_110px_-44px_rgba(29,29,31,0.45)]">
       <div className="flex" style={{ height: "clamp(360px, 44vw, 470px)" }}>
         {/* 좌측 아이콘 레일 — 실제 앱과 동일 */}
         <div className="border-line bg-sidebar flex w-[52px] shrink-0 flex-col items-center overflow-hidden border-r">
@@ -50,7 +50,7 @@ export function MockWorkspace() {
                     key={i}
                     className={`relative flex size-8 items-center justify-center rounded-[8px] ${
                       active
-                        ? "bg-primary text-primary-foreground shadow-[0_6px_14px_rgba(14,124,70,0.32)]"
+                        ? "bg-primary text-primary-foreground shadow-[0_6px_14px_rgba(21,62,117,0.32)]"
                         : "text-text-dim"
                     }`}
                   >
@@ -105,8 +105,8 @@ function Win({ title, focused, anim, style, children }: { title: string; focused
     <div
       className={`ey-ws-win ${anim} bg-card flex flex-col overflow-hidden rounded-[12px] border ${
         focused
-          ? "border-primary/35 ring-primary/15 shadow-[0_30px_70px_-24px_rgba(11,16,13,0.5)] ring-2"
-          : "border-line shadow-[0_16px_40px_-20px_rgba(11,16,13,0.35)]"
+          ? "border-primary/35 ring-primary/15 shadow-[0_30px_70px_-24px_rgba(29,29,31,0.5)] ring-2"
+          : "border-line shadow-[0_16px_40px_-20px_rgba(29,29,31,0.35)]"
       }`}
       style={style}
     >

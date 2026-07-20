@@ -51,7 +51,7 @@ export function MakeeduPushCard({ candidates }: { candidates: UnpushedIntakeCons
   }
 
   return (
-    <section className="bg-card border-border space-y-4 rounded-md border p-6">
+    <section className="bg-card border-border space-y-4 rounded-2xl border p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <h2 className="text-foreground text-base font-bold">makeedu로 상담 보내기 (역동기화)</h2>

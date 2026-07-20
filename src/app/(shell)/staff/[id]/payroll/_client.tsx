@@ -75,11 +75,11 @@ export function PayrollClient({
   return (
     <div className="space-y-6">
       {/* 월 selector */}
-      <div className="bg-card border-border flex items-center justify-between rounded-md border px-4 py-3">
+      <div className="bg-card border-border flex items-center justify-between rounded-2xl border px-4 py-3">
         <div className="flex items-center gap-2">
           <Link
             href={`?period=${shiftMonth(period, -1)}`}
-            className="text-muted-foreground hover:text-foreground inline-flex size-7 items-center justify-center rounded-md border"
+            className="text-muted-foreground hover:text-foreground inline-flex size-7 items-center justify-center rounded-lg border"
             aria-label="이전 달"
           >
             <EyIcon name="chevronLeft" size={14} />
@@ -87,7 +87,7 @@ export function PayrollClient({
           <h2 className="text-foreground num text-base font-bold">{period}</h2>
           <Link
             href={`?period=${shiftMonth(period, 1)}`}
-            className="text-muted-foreground hover:text-foreground inline-flex size-7 items-center justify-center rounded-md border"
+            className="text-muted-foreground hover:text-foreground inline-flex size-7 items-center justify-center rounded-lg border"
             aria-label="다음 달"
           >
             <EyIcon name="chevronRight" size={14} />
@@ -103,7 +103,7 @@ export function PayrollClient({
       </div>
 
       {/* 자동 계산 카드 */}
-      <section className="bg-card border-border rounded-md border p-5">
+      <section className="bg-card border-border rounded-2xl border p-5">
         <header className="mb-3 flex items-baseline justify-between">
           <div>
             <p className="eyebrow">자동 계산 (출석 × 시급)</p>
@@ -128,7 +128,7 @@ export function PayrollClient({
       </section>
 
       {/* 수동 정산 폼 */}
-      <section className="bg-card border-border rounded-md border p-5">
+      <section className="bg-card border-border rounded-2xl border p-5">
         <header className="mb-3">
           <p className="eyebrow">수동 정산</p>
           <h3 className="text-foreground mt-1 text-sm font-bold">상세 항목 입력</h3>
@@ -191,7 +191,7 @@ export function PayrollClient({
 
       {/* 히스토리 */}
       {history.length > 0 ? (
-        <section className="bg-card border-border rounded-md border">
+        <section className="bg-card border-border rounded-2xl border">
           <header className="border-border border-b px-5 py-3">
             <h3 className="text-foreground text-sm font-bold">정산 이력</h3>
           </header>

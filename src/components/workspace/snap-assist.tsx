@@ -85,7 +85,7 @@ export function SnapAssist() {
             type="button"
             aria-label="닫기"
             onClick={dismissAssist}
-            className="text-text-dim hover:bg-line-strong/30 hover:text-foreground flex size-5 items-center justify-center rounded-[3px] transition"
+            className="text-text-dim hover:bg-line-strong/30 hover:text-foreground flex size-5 items-center justify-center rounded-xs transition"
           >
             <X size={13} strokeWidth={1.8} />
           </button>
@@ -99,7 +99,7 @@ export function SnapAssist() {
               onClick={() => applyLayout(t)}
               className="hover:bg-bg-soft group flex flex-col items-center gap-1.5 rounded-lg p-1.5 transition"
             >
-              <div className="border-line bg-bg-soft/40 group-hover:border-primary/40 relative h-12 w-[72px] overflow-hidden rounded-[5px] border">
+              <div className="border-line bg-bg-soft/40 group-hover:border-primary/40 relative h-12 w-[72px] overflow-hidden rounded-sm border">
                 {diagram(t, anchorSide).map((s, i) => (
                   <div
                     key={i}

@@ -146,7 +146,7 @@ export function AttendanceCell({
           {/* 바깥 클릭 닫기 */}
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} aria-hidden />
           <div
-            className="bg-card border-line fixed z-50 flex flex-col gap-0.5 rounded-md border p-1 shadow-lg"
+            className="bg-card border-line fixed z-50 flex flex-col gap-0.5 rounded-lg border p-1 shadow-lg"
             style={{
               left: Math.min(pos.x, (typeof window !== "undefined" ? window.innerWidth : 9999) - 132),
               top: pos.top,
@@ -160,7 +160,7 @@ export function AttendanceCell({
                 // 시수 초안을 함께 커밋 — "시수 타이핑 → 상태 클릭" 순서에서 초안이 조용히 버려지는 것 방지.
                 // (초안이 잘못된 값이면 apply가 에러 표시 후 중단 — 팝오버 유지)
                 onClick={() => apply(o.value, undefined, unitsDraft)}
-                className={`flex items-center gap-2 rounded-sm px-2 py-1 text-left text-xs transition hover:bg-bg-soft ${
+                className={`flex items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition hover:bg-bg-soft ${
                   status === o.value ? "font-bold" : ""
                 }`}
               >
@@ -186,7 +186,7 @@ export function AttendanceCell({
                   }}
                   placeholder="1"
                   title="정규 수업 1회 = 1. 보강 연장 1.5·2, 부분 출석 0.5 등"
-                  className={`bg-bg-soft text-foreground placeholder:text-text-faint w-full rounded-sm border px-2 py-1 text-xs focus:outline-none ${
+                  className={`bg-bg-soft text-foreground placeholder:text-text-faint w-full rounded-md border px-2 py-1 text-xs focus:outline-none ${
                     unitsError ? "border-danger" : "border-line"
                   }`}
                 />
@@ -199,13 +199,13 @@ export function AttendanceCell({
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
                 placeholder="메모(사유)"
-                className="border-line bg-bg-soft text-foreground placeholder:text-text-faint w-40 rounded-sm border px-2 py-1 text-xs focus:outline-none"
+                className="border-line bg-bg-soft text-foreground placeholder:text-text-faint w-40 rounded-md border px-2 py-1 text-xs focus:outline-none"
               />
               <button
                 type="button"
                 onClick={() => apply(status, draft, unitsDraft)}
                 disabled={!status}
-                className="bg-foreground text-background rounded-sm px-2 py-1 text-xs font-medium transition disabled:opacity-40"
+                className="bg-foreground text-background rounded-md px-2 py-1 text-xs font-medium transition disabled:opacity-40"
                 title={status ? undefined : "상태를 먼저 선택하세요"}
               >
                 저장
@@ -215,7 +215,7 @@ export function AttendanceCell({
               <button
                 type="button"
                 onClick={() => apply(null)}
-                className="text-text-dim hover:bg-bg-soft rounded-sm border-t px-2 py-1 text-left text-xs"
+                className="text-text-dim hover:bg-bg-soft rounded-md border-t px-2 py-1 text-left text-xs"
               >
                 지우기
               </button>

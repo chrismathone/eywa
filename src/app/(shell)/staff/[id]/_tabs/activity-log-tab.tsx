@@ -63,7 +63,7 @@ function RecentAccess({ sessions, logins }: { sessions: AccessSession[]; logins:
   if (sessions.length === 0 && logins.length === 0) return null;
   const groups = groupSessions(sessions);
   return (
-    <section className="bg-card border-line space-y-2 rounded-md border p-4">
+    <section className="bg-card border-line space-y-2 rounded-2xl border p-4">
       <p className="micro flex items-center gap-1.5">
         <LogIn className="text-text-dim size-3.5" /> 최근 접속
       </p>
@@ -131,7 +131,7 @@ export async function ActivityLogTab({ userId, page }: { userId: string; page: n
             활동 <span className="text-foreground font-bold">{total}</span>건
             <span className="text-text-faint ml-2 normal-case">· 핵심 데이터 변경을 자동 기록(책임추적)</span>
           </p>
-          <ul className="bg-card border-line divide-line divide-y rounded-md border">
+          <ul className="bg-card border-line divide-line divide-y rounded-2xl border">
             {rows.map((r) => {
               const { head, changes } = activityDetail(r.table, r.op, r.targetLabel, r.changed);
               return (

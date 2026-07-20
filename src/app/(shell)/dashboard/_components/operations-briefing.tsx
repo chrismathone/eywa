@@ -146,7 +146,7 @@ export function OperationsBriefing({ briefing }: { briefing: OperationsBriefingD
             {activeSummary.map((item) => (
               <span
                 key={item.lane}
-                className={`${item.tone} inline-flex items-baseline gap-1 rounded-lg px-2.5 py-1.5 text-[11px] font-bold ring-1 ring-inset`}
+                className={`${item.tone} inline-flex items-baseline gap-1 rounded-full px-2.5 py-1.5 text-[11px] font-bold ring-1 ring-inset`}
               >
                 {item.label}
                 <span className="num text-[12px] font-bold">{briefing.counts[item.lane]}</span>

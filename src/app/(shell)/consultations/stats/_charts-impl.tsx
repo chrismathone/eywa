@@ -23,13 +23,15 @@ const CATEGORY_LABEL: Record<string, string> = {
   other: "기타",
 };
 
+// 상담 유형 색 — globals.css 토큰만 사용(리터럴 hex 금지: v3 네이비 전환 때 구 팔레트가 그대로 남아
+// 형제 차트와 색이 어긋났던 이력. 형제 차트 규약 = var(--color-*), withdrawals/grades/conversion 참조).
 const CATEGORY_COLOR: Record<string, string> = {
-  general: "#2d6be0",
-  academic: "#0e7c46",
-  emotional: "#d2447a",
-  career: "#6c50c8",
-  social: "#a97f24",
-  other: "#9aa39d",
+  general: "var(--color-blue)",
+  academic: "var(--color-chart-2)",
+  emotional: "var(--color-rose)",
+  career: "var(--color-purple)",
+  social: "var(--color-gold)",
+  other: "var(--color-text-faint)",
 };
 
 export function StatsCharts({
@@ -42,12 +44,12 @@ export function StatsCharts({
   const pieData = byCategory.map((b) => ({
     name: CATEGORY_LABEL[b.category] ?? b.category,
     value: b.count,
-    fill: CATEGORY_COLOR[b.category] ?? "#9aa39d",
+    fill: CATEGORY_COLOR[b.category] ?? "var(--color-text-faint)",
   }));
 
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-      <section className="bg-card border-border rounded-md border p-4">
+      <section className="bg-card border-border rounded-2xl border p-4">
         <header className="mb-2">
           <p className="eyebrow">사유별 분포</p>
           <h2 className="text-foreground mt-1 text-sm font-bold">학생상담 카테고리</h2>
@@ -76,7 +78,7 @@ export function StatsCharts({
         )}
       </section>
 
-      <section className="bg-card border-border rounded-md border p-4">
+      <section className="bg-card border-border rounded-2xl border p-4">
         <header className="mb-2">
           <p className="eyebrow">월별 추세</p>
           <h2 className="text-foreground mt-1 text-sm font-bold">상담 건수</h2>
@@ -87,13 +89,13 @@ export function StatsCharts({
           <div className="h-72">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={trend} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e7e3d6" />
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
                 <XAxis dataKey="month" fontSize={11} />
                 <YAxis fontSize={11} allowDecimals={false} />
                 <Tooltip />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
-                <Bar dataKey="enrollment" name="등록상담" fill="#0e7c46" />
-                <Bar dataKey="student" name="학생상담" fill="#a97f24" />
+                <Bar dataKey="enrollment" name="등록상담" fill="var(--color-chart-1)" />
+                <Bar dataKey="student" name="학생상담" fill="var(--color-gold)" />
               </BarChart>
             </ResponsiveContainer>
           </div>

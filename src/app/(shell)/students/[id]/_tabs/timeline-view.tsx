@@ -102,7 +102,7 @@ export function TimelineView({ events }: { events: TimelineEvent[] }) {
         </div>
       </header>
 
-      <ol className="border-border bg-card relative space-y-3 rounded-md border p-4 pl-8">
+      <ol className="border-border bg-card relative space-y-3 rounded-2xl border p-4 pl-8">
         {/* 타임라인 세로선 */}
         <span aria-hidden className="bg-border absolute top-4 bottom-4 left-[18px] w-px" />
         {monthEvents.map((e, i) => {
@@ -117,7 +117,7 @@ export function TimelineView({ events }: { events: TimelineEvent[] }) {
               <div className="flex flex-wrap items-center gap-2">
                 <span className="num text-muted-foreground text-xs">{e.date}</span>
                 <span
-                  className={`bg-bg-soft/40 border-border inline-flex items-center rounded-md border px-1.5 py-0.5 text-[10px] font-medium ${
+                  className={`bg-bg-soft/40 border-border inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] font-medium ${
                     meta.color.split(" ")[1]
                   }`}
                 >

@@ -84,7 +84,7 @@ export function RecordingPanel({
   }, [state, router]);
 
   return (
-    <section className="border-border bg-muted/20 space-y-3 rounded-lg border p-4">
+    <section className="border-border bg-muted/20 space-y-3 rounded-2xl border p-4">
       <header className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-foreground inline-flex items-center gap-1.5 text-sm font-bold">
           <Mic className="text-primary size-4" />

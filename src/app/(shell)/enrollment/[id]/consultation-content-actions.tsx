@@ -11,7 +11,7 @@ import { appendAiSummaryToConsultationContent } from "@/features/enrollment/serv
  * ② AI가 정리한 상담 내용 보기: AI '폼 추출기'가 뽑은 상담내용 후보를 펼쳐 보고 수정에서 반영(직접 안 씀).
  */
 const BTN =
-  "border-gold/40 text-gold hover:bg-gold-soft/40 inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium transition disabled:opacity-50";
+  "border-gold/40 text-gold hover:bg-gold-soft/40 inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium transition disabled:opacity-50";
 
 export function ConsultationContentActions({
   consultationId,

@@ -20,7 +20,7 @@ import {
 import { useSubjectMaps } from "@/features/owner/operations-context";
 
 const inputCls =
-  "border-border bg-background text-foreground placeholder:text-muted-foreground w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary/40";
+  "border-border bg-background text-foreground placeholder:text-muted-foreground w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary/40";
 
 function SubmitBtn() {
   const { pending } = useFormStatus();
@@ -53,7 +53,7 @@ function CommentDialog({
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center">
-      <div className="bg-background border-border max-h-[90vh] w-full max-w-md overflow-y-auto rounded-lg border p-6 shadow-lg">
+      <div className="bg-background border-border max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl border p-6 shadow-lg">
         <header className="mb-4 flex items-start justify-between">
           <h2 className="text-foreground text-lg font-bold">
             {editing ? "코멘트 수정" : "학습 코멘트 추가"}
@@ -193,7 +193,7 @@ export function GradeCommentsSection({
       </header>
 
       {comments.length === 0 ? (
-        <p className="text-muted-foreground border-border rounded-md border border-dashed py-6 text-center text-xs">
+        <p className="text-muted-foreground border-border rounded-2xl border border-dashed py-6 text-center text-xs">
           작성된 코멘트가 없습니다
         </p>
       ) : (
@@ -201,7 +201,7 @@ export function GradeCommentsSection({
           {comments.map((c) => {
             const meta = commentCategoryMeta(c.category);
             return (
-              <li key={c.id} className="bg-card border-border rounded-md border p-3">
+              <li key={c.id} className="bg-card border-border rounded-2xl border p-3">
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex flex-wrap items-center gap-2">
                     <Pill color={meta.color} soft>

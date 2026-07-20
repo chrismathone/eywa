@@ -41,14 +41,14 @@ export function MemoForm({ studentId }: { studentId: string }) {
     <form
       ref={formRef}
       action={formAction}
-      className="bg-bg-soft/30 border-border space-y-2 rounded-md border p-3"
+      className="bg-bg-soft/30 border-border space-y-2 rounded-2xl border p-3"
     >
       <input type="hidden" name="studentId" value={studentId} />
       <div className="flex items-center gap-2">
         <select
           name="category"
           defaultValue="general"
-          className="border-border bg-card text-foreground rounded-md border px-2 py-1 text-xs"
+          className="border-border bg-card text-foreground rounded-lg border px-2 py-1 text-xs"
         >
           {CATEGORIES.map((c) => (
             <option key={c.value} value={c.value}>
@@ -63,7 +63,7 @@ export function MemoForm({ studentId }: { studentId: string }) {
         required
         rows={3}
         placeholder="메모를 입력하세요..."
-        className="border-border bg-card text-foreground w-full rounded-md border px-2 py-2 text-sm"
+        className="border-border bg-card text-foreground w-full rounded-lg border px-2 py-2 text-sm"
       />
       {state?.error ? <p className="text-chart-4 text-xs">{state.error}</p> : null}
       <div className="flex justify-end">

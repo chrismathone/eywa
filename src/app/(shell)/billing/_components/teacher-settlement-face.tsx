@@ -31,7 +31,7 @@ export async function TeacherSettlementFace({ period }: { period?: string }) {
   // 급여 = 원장 전용 PII. master 외에는 화면 자체를 막는다.
   if (!user || user.systemRole !== "master") {
     return (
-      <div className="border-line text-text-dim rounded-lg border border-dashed p-10 text-center text-sm">
+      <div className="border-line text-text-dim rounded-2xl border border-dashed p-10 text-center text-sm">
         강사 정산(급여)은 <b>원장</b>만 열람할 수 있습니다.
       </div>
     );
@@ -48,7 +48,7 @@ export async function TeacherSettlementFace({ period }: { period?: string }) {
         <div className="flex items-center gap-2">
           <Link
             href={`/billing?tab=payroll&period=${shiftPeriod(p, -1)}`}
-            className="border-line text-text-dim hover:text-foreground rounded-md border px-2 py-1 text-xs"
+            className="border-line text-text-dim hover:text-foreground rounded-full border px-2 py-1 text-xs"
             aria-label="이전 달"
           >
             <EyIcon name="chevronLeft" size={14} />
@@ -58,7 +58,7 @@ export async function TeacherSettlementFace({ period }: { period?: string }) {
           </span>
           <Link
             href={`/billing?tab=payroll&period=${shiftPeriod(p, 1)}`}
-            className="border-line text-text-dim hover:text-foreground rounded-md border px-2 py-1 text-xs"
+            className="border-line text-text-dim hover:text-foreground rounded-full border px-2 py-1 text-xs"
             aria-label="다음 달"
           >
             <EyIcon name="chevronRight" size={14} />
@@ -86,7 +86,7 @@ export async function TeacherSettlementFace({ period }: { period?: string }) {
       </p>
 
       {view.splitCount === 0 ? (
-        <div className="border-border text-text-dim rounded-lg border border-dashed p-10 text-center text-sm">
+        <div className="border-border text-text-dim rounded-2xl border border-dashed p-10 text-center text-sm">
           이 달 저장된 분배 스냅샷이 없습니다.{" "}
           <Link href={`/billing?tab=verify&period=${p}`} className="text-primary underline-offset-2 hover:underline">
             시수 검증
@@ -98,7 +98,7 @@ export async function TeacherSettlementFace({ period }: { period?: string }) {
           이 필요합니다.)
         </div>
       ) : (
-        <div className="border-line overflow-x-auto rounded-lg border">
+        <div className="border-line overflow-x-auto rounded-2xl border">
           <table className="w-full min-w-[52rem] text-sm">
             <thead>
               <tr className="border-line text-text-dim border-b text-xs">

@@ -64,7 +64,7 @@ export function BatchScoreGrid({
       <input type="hidden" name="entries" value={entriesJson} />
 
       {/* 실시간 요약 */}
-      <div className="bg-bg-soft border-line flex flex-wrap items-center gap-4 rounded-md border px-4 py-2.5 text-xs">
+      <div className="bg-bg-soft border-line flex flex-wrap items-center gap-4 rounded-2xl border px-4 py-2.5 text-xs">
         <span className="text-text-dim">
           응시 <span className="text-foreground num font-bold">{live.count}</span>/{rows.length}명
         </span>
@@ -80,7 +80,7 @@ export function BatchScoreGrid({
         </span>
       </div>
 
-      <DragScrollArea className="bg-card border-line shadow-card rounded-md border">
+      <DragScrollArea className="bg-card border-line shadow-card rounded-2xl border">
         <table className="w-full text-sm [&_td]:whitespace-nowrap">
           <thead className="border-line border-b [&_th]:whitespace-nowrap">
             <tr>

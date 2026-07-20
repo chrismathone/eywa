@@ -48,7 +48,7 @@ export function MakeeduWorkerStatus({
 
   const onlineCount = workers.filter((w) => w.online).length;
   return (
-    <section className="bg-card border-border rounded-md border p-4">
+    <section className="bg-card border-border rounded-2xl border p-4">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         <span className="text-foreground text-sm font-bold">동기화 담당 PC</span>
         {workers.length === 0 ? (

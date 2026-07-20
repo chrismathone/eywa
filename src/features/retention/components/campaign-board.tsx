@@ -79,7 +79,7 @@ export function CampaignBoard({ board }: { board: Board }) {
                   type="button"
                   disabled={pending}
                   onClick={() => run(() => campaignAdd(c.studentId), `${c.name} — 캠페인 추가`)}
-                  className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-md px-2.5 py-1 text-[11px] font-medium transition disabled:opacity-50"
+                  className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg px-2.5 py-1 text-[11px] font-medium transition disabled:opacity-50"
                 >
                   추가
                 </button>
@@ -209,7 +209,7 @@ function Btn({
       disabled={disabled}
       onClick={onClick}
       data-no-drag-scroll
-      className={`rounded-md px-2 py-0.5 text-[11px] transition disabled:opacity-50 ${
+      className={`rounded-lg px-2 py-0.5 text-[11px] transition disabled:opacity-50 ${
         primary
           ? "bg-primary text-primary-foreground hover:bg-primary/90"
           : "border-line text-text-dim hover:bg-bg-soft border"

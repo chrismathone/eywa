@@ -41,7 +41,7 @@ export function CatalogPicker({
 }
 
 const chip = (on: boolean) =>
-  `shrink-0 rounded-sm border px-2 py-0.5 text-[11px] transition ${
+  `shrink-0 rounded-full border px-2 py-0.5 text-[11px] transition ${
     on ? "border-primary bg-primary text-primary-foreground" : "border-line text-text-dim hover:bg-bg-soft"
   }`;
 

@@ -14,15 +14,17 @@ import { subjectTone } from "@/features/onescreen/data";
 import type { SubjectTone } from "@/features/onescreen/types";
 import { pctOf, type Session } from "../history";
 
+// 과목 톤 → 차트 색. globals.css 토큰만 사용(리터럴 hex 금지 — primary만 v3 네이비로 갱신되고
+// rose/gold/neutral은 v1 값에 멈춰 마디아 정합 토큰과 어긋나 있었다, 2026-07-20 감사).
 const TONE_HEX: Record<SubjectTone, string> = {
-  primary: "#153e75",
-  blue: "#2d6be0",
-  rose: "#d2447a",
-  purple: "#6c50c8",
-  gold: "#a97f24",
-  neutral: "#9aa39d",
+  primary: "var(--color-primary)",
+  blue: "var(--color-blue)",
+  rose: "var(--color-rose)",
+  purple: "var(--color-purple)",
+  gold: "var(--color-gold)",
+  neutral: "var(--color-text-faint)",
 };
-const FAINT = "#9aa39d";
+const FAINT = "var(--color-text-faint)";
 
 /** 테스트 점수 추이 — 확인(주선) + 일일(보조). 과목 필터로 시리즈 전환. */
 export function ScoreTrendChart({ history, subjects }: { history: Session[]; subjects: string[] }) {
@@ -41,7 +43,7 @@ export function ScoreTrendChart({ history, subjects }: { history: Session[]; sub
   }));
 
   return (
-    <section className="bg-card border-line shadow-card rounded-xl border p-5">
+    <section className="bg-card border-line shadow-card rounded-2xl border p-5">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-foreground text-[15px] font-bold">테스트 점수 추이</h2>
         <div className="flex items-center gap-2.5 text-[11px]">
@@ -66,7 +68,7 @@ export function ScoreTrendChart({ history, subjects }: { history: Session[]; sub
       <div className="mt-3 h-56">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={data} margin={{ top: 8, right: 10, left: -22, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 4" stroke="#e7e3d6" vertical={false} />
+            <CartesianGrid strokeDasharray="3 4" stroke="var(--color-border)" vertical={false} />
             <XAxis dataKey="date" fontSize={11} tickLine={false} axisLine={false} />
             <YAxis
               domain={[0, 100]}

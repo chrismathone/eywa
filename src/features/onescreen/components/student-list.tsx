@@ -49,7 +49,7 @@ function StudentRow({
           <span className="text-foreground truncate text-[13px] font-bold">{st.name}</span>
           {st.attendance !== "출석" ? (
             <span
-              className={`rounded-sm px-1 py-px text-[10px] font-bold ${
+              className={`rounded-full px-1 py-px text-[10px] font-bold ${
                 st.attendance === "지각" ? "bg-amber-soft text-amber" : "bg-danger-soft text-danger"
               }`}
             >
@@ -127,7 +127,7 @@ export function StudentList({
   const allCollapsed = orderedKeys.length > 0 && orderedKeys.every((k) => collapsed.has(k));
 
   return (
-    <div className="bg-card border-line shadow-card flex flex-col rounded-md border">
+    <div className="bg-card border-line shadow-card flex flex-col rounded-2xl border">
       <header className="border-line flex items-center justify-between gap-2 border-b px-3 py-2.5">
         <p className="micro text-text-faint">학생 · 반별</p>
         <div className="flex items-center gap-2">

@@ -27,7 +27,7 @@ export function EndEnrollmentButton({
       <button
         type="submit"
         title="이 수강을 종료합니다 (반 삭제 아님)"
-        className="text-text-dim hover:text-danger hover:border-danger/30 hover:bg-danger/10 inline-flex items-center gap-1 rounded-md border border-transparent px-2 py-1 text-xs whitespace-nowrap transition"
+        className="text-text-dim hover:text-danger hover:border-danger/30 hover:bg-danger/10 inline-flex items-center gap-1 rounded-lg border border-transparent px-2 py-1 text-xs whitespace-nowrap transition"
       >
         <LogOut className="size-3" />
         수강 종료

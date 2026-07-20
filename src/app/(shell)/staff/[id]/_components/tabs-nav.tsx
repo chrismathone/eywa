@@ -28,7 +28,7 @@ export function StaffTabsNav({
   return (
     <nav
       role="tablist"
-      className="scrollbar-thin border-border bg-card overflow-x-auto rounded-md border"
+      className="scrollbar-thin border-border bg-card overflow-x-auto rounded-2xl border"
     >
       <ul className="flex gap-0.5 px-1.5 py-1.5">
         {tabs.map((t) => {
@@ -39,7 +39,7 @@ export function StaffTabsNav({
               <Link
                 href={href}
                 aria-current={isActive ? "page" : undefined}
-                className={`shrink-0 rounded-sm px-3 py-1.5 text-xs font-medium transition ${
+                className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition ${
                   isActive
                     ? "bg-primary text-primary-foreground"
                     : "text-text-dim hover:text-foreground hover:bg-bg-soft"

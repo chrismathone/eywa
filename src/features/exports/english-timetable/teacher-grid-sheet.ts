@@ -22,8 +22,8 @@ const TIME_COL_W = 7;
 const DAY_COL_W = 12;
 const LANE_COL_W = 9;
 
-const THIN = { style: "thin" as const, color: { argb: "FFBFC7C2" } };
-const MEDIUM = { style: "medium" as const, color: { argb: "FF5B6B63" } };
+const THIN = { style: "thin" as const, color: { argb: "FFC4C4C9" } };
+const MEDIUM = { style: "medium" as const, color: { argb: "FF505050" } };
 
 /** "#RRGGBB"|"#RGB" → "FFRRGGBB"(ARGB). 유효하지 않으면 fallback. */
 function hexToARGB(hex: string | null | undefined, fallback: string): string {
@@ -167,7 +167,7 @@ export function appendTeacherGridSheet(
   corner.value = "시각";
   corner.alignment = { horizontal: "center", vertical: "middle" };
   corner.font = { bold: true, size: 9 };
-  corner.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFEEF2F0" } };
+  corner.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE9E9EE" } };
   sheet.mergeCells(TEACHER_ROW, 1, DAY_ROW, 1);
   teachers.forEach((t, ti) => {
     const { start, end } = teacherRange[ti];
@@ -179,7 +179,7 @@ export function appendTeacherGridSheet(
       cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: hexToARGB(t.color.bg, "FF3B82F6") } };
       cell.font = { bold: true, size: 11, color: { argb: hexToARGB(t.color.text, "FFFFFFFF") } };
     } else {
-      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFEEF2F0" } };
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE9E9EE" } };
       cell.font = { bold: true, size: 11 };
     }
   });
@@ -193,7 +193,7 @@ export function appendTeacherGridSheet(
     cell.value = date ? `${DAY_LABEL[dr.day] ?? dr.day} ${date}` : (DAY_LABEL[dr.day] ?? dr.day);
     cell.alignment = { horizontal: "center", vertical: "middle" };
     cell.font = { bold: true, size: 9, color: { argb: "FF3A433E" } };
-    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF3F6F4" } };
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF2F2F4" } };
   }
 
   // ── 본문: 행=10분 격자. 시각열 + 강사×요일×레인 블록/빈칸/쉬는시간. ──
@@ -204,7 +204,7 @@ export function appendTeacherGridSheet(
     const timeCell = sheet.getCell(excelRow, 1);
     timeCell.value = row.key;
     timeCell.alignment = { horizontal: "right", vertical: "top" };
-    timeCell.font = row.isHour ? { bold: true, size: 8 } : { size: 8, color: { argb: "FF98A29B" } };
+    timeCell.font = row.isHour ? { bold: true, size: 8 } : { size: 8, color: { argb: "FF969699" } };
     timeCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF7F9F8" } };
 
     for (const t of teachers) {
@@ -219,7 +219,7 @@ export function appendTeacherGridSheet(
           const cell = sheet.getCell(excelRow, dayColStart);
           cell.value = "쉬는 시간";
           cell.alignment = { horizontal: "center", vertical: "middle" };
-          cell.font = { size: 8, color: { argb: "FF98A29B" } };
+          cell.font = { size: 8, color: { argb: "FF969699" } };
           cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFECEFED" } };
           continue;
         }

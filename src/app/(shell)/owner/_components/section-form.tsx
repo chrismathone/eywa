@@ -82,7 +82,7 @@ export function SectionForm({
           type="submit"
           form={formId}
           disabled={pending}
-          className="bg-primary text-primary-foreground inline-flex items-center rounded-md px-4 py-2 text-[12px] font-bold disabled:opacity-60"
+          className="bg-primary text-primary-foreground inline-flex items-center rounded-lg px-4 py-2 text-[12px] font-bold disabled:opacity-60"
         >
           {pending ? "저장 중…" : "저장"}
         </button>

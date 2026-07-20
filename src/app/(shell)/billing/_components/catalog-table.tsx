@@ -20,7 +20,7 @@ import { useSubjectMaps } from "@/features/owner/operations-context";
 
 const KRW = new Intl.NumberFormat("ko-KR");
 const inputCls =
-  "border-line bg-background text-foreground placeholder:text-text-faint w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary/40";
+  "border-line bg-background text-foreground placeholder:text-text-faint w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary/40";
 
 // 교재 학년은 초/중/고 coarse 버킷(교재 분류 축) — operations.gradeLevels(초1~고3)와 별개 고정 분류.
 // catalog-panel 필터(초/중/고)와 동일 축이라 하드코딩 유지(운영 enum 아님).
@@ -61,7 +61,7 @@ function CatalogDialog({ item, onClose }: { item?: CatalogRow; onClose: () => vo
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center">
-      <div className="bg-background border-line max-h-[90vh] w-full max-w-md overflow-y-auto rounded-lg border p-6 shadow-lg">
+      <div className="bg-background border-line max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl border p-6 shadow-lg">
         <header className="mb-4 flex items-start justify-between">
           <div>
             <p className="eyebrow">교재 단가표</p>
@@ -150,10 +150,10 @@ function CatalogDialog({ item, onClose }: { item?: CatalogRow; onClose: () => vo
           <form action={delAction} className="border-line mt-3 flex items-center justify-end gap-2 border-t pt-3">
             <input type="hidden" name="id" value={item.id} />
             <span className="text-danger mr-auto text-xs">정말 삭제할까요?</span>
-            <button type="button" onClick={() => setConfirmDel(false)} className="border-line rounded-md border px-2.5 py-1 text-xs">
+            <button type="button" onClick={() => setConfirmDel(false)} className="border-line rounded-lg border px-2.5 py-1 text-xs">
               취소
             </button>
-            <button type="submit" className="bg-danger rounded-md px-2.5 py-1 text-xs text-white">
+            <button type="submit" className="bg-danger rounded-lg px-2.5 py-1 text-xs text-white">
               예, 삭제
             </button>
           </form>
@@ -199,7 +199,7 @@ export function CatalogTable({ rows }: { rows: CatalogRow[] }) {
           description="표준 교재·단가를 등록해두면 교재 신청 시 자동으로 채워집니다."
         />
       ) : (
-        <div className="bg-card border-line shadow-card overflow-auto rounded-md border">
+        <div className="bg-card border-line shadow-card overflow-auto rounded-2xl border">
           <table className="w-full text-sm [&_td]:whitespace-nowrap">
             <thead className="border-line border-b [&_th]:whitespace-nowrap">
               <tr>
@@ -235,7 +235,7 @@ export function CatalogTable({ rows }: { rows: CatalogRow[] }) {
                     <button
                       type="button"
                       onClick={() => setOpen(r)}
-                      className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs transition"
+                      className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs transition"
                     >
                       <Pencil className="size-3.5" />
                       수정

@@ -59,7 +59,7 @@ export function MonthGridView({
   };
 
   return (
-    <DragScrollArea className="border-line bg-card rounded-md border">
+    <DragScrollArea className="border-line bg-card rounded-2xl border">
       <div className="min-w-[680px]">
         {/* 요일 헤더 */}
         <div className="border-line grid grid-cols-7 border-b">

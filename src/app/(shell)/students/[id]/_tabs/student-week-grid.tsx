@@ -41,7 +41,7 @@ export function StudentWeekGrid({
   const active = tab && subjectKeys.includes(tab) ? tab : subjectKeys[0]!;
 
   return (
-    <section className="bg-card border-border rounded-md border">
+    <section className="bg-card border-border rounded-2xl border">
       <header className="border-border flex flex-wrap items-center justify-between gap-3 border-b px-5 py-3">
         <div>
           <h2 className="text-sm font-bold tracking-tight">주간 시간표</h2>
@@ -83,7 +83,7 @@ function TabChip({
     <button
       type="button"
       onClick={onClick}
-      className={`shrink-0 rounded-md border px-2 py-0.5 text-xs transition ${
+      className={`shrink-0 rounded-full border px-2 py-0.5 text-xs transition ${
         active
           ? "border-foreground bg-foreground text-background font-medium"
           : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"

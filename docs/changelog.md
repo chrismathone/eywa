@@ -22,6 +22,109 @@
 - 실검증(dev 렌더): 로고 이미지·`INJAEWON`·`인재원 · 침산`·본문/푸터 학원명·키오스크 탭 `eywa — 인재원 학원관리` 전부 설정값.
   폴백 5조합 시뮬레이션(무테넌트·공백·이름만·지점만)에서 어색한 한국어·중복·빈 문자열 없음.
 
+### 앱 화면 v3 네이비 미통일 전수 정리 (2026-07-20) — ✅ tsc0/lint0/test1664
+"앱도 네이비로 통일됐나" 검수(5렌즈 감사 77에이전트, 탐색 36→확정 13) 후속. **토큰·brandColor 주입
+경로는 정상**이었고(injaewon 저장값 #1a5f3c는 `LEGACY_DEFAULT_BRAND_COLORS`가 억제 → globals.css
+네이비 적용, 실측 주입 0건), 결함은 전부 **토큰을 안 거치는 표면**에 몰려 있었다.
+- 🔴 **빈 데스크톱 일러스트 404** — 애셋 `-alpha` 리네임 때 `workspace-canvas.tsx`의 하드코딩 경로만
+  누락(`empty-workspace.png` 404 / `-alpha.png` 200). 앱 진입 직후 매번 보는 표면이었다.
+- 🔴 **알약 팔레트에 `green` 신설** — primary가 그린→네이비로 가면서 팔레트가 **파랑 계열 2개**
+  (primary 214.4° · blue 219.2°, **색상각 4.8°·명도비 2.17:1**)만 남아 "완료 vs 진행중" 상태쌍을 색으로
+  못 나눴다(전에는 그린 vs 파랑 68.7°). `--green`/`--green-soft`(=chart-2 값·"긍정" 시맨틱, 네이비와 64°,
+  흰 배경 5.26:1) 추가 + `PillColor`·`SUBJECT_*`·`PILL_HEX`·`SUBJECT_COLORS`(Zod) 전부 확장.
+  충돌 맵 재배정: 급여 지급완료·회의 완료·상담 완료·등록상담 '등록' → green, AI완료 → purple, 예약 → gold.
+  ⚠️ `--blue` 재조정은 **수학적으로 불가**(흰 배경 텍스트 4.5:1 ↔ 네이비 3:1이 모순) — 배정으로 푼다.
+- 🔴 **엑셀 출력이 리스킨 2회 모두 누락** — `timetable-excel.ts` `PILL_HEX.primary`가 민트그린
+  `FFCDE9D9`(=v1 primary-soft의 엑셀 판본)라 **수학 셀만 그린으로 출력**(화면 알약은 네이비). 전 항목을
+  현 토큰 기준 alpha 0.22로 재산출. 영어 시간표 시트 그린캐스트(`FFEEF2F0`·`FF5B6B63`·`FFBFC7C2`·
+  `FF98A29B`)·수납/학생 엑셀 헤더 웜크림(`FFF1EDE2`) → 뉴트럴.
+- 🔴 **/owner 브랜드 색상이 "적용 안 되는 값"을 그대로 표시** — 저장값 그린 스와치 + 화면은 네이비인데
+  아무 표시가 없었다. `isBrandColorApplied()`(판정은 `brandColorVars`에 위임 — 이중화 금지) + ColorField
+  `note`로 "현재 기본 팔레트로 표시됩니다" 안내. ⚠️ 억제 로직을 **없애서 고치면 셸 전체가 그린으로 뒤집힌다.**
+- 차트/서버 색 리터럴 → `var(--color-*)`(형제 차트 규약): 격자선 웜아이보리 `#e7e3d6`, 세이지그린
+  `#9aa39d`/`#75807a`, 골드 `#a97f24`(현 토큰 `#8a681c`와 드리프트), 상담통계 주계열 그린.
+  등록상담 도넛은 인접 조각 색상각 충돌을 피해 재배정(primary·blue 동시 사용 금지).
+- billing 시수검증·분배의 Tailwind 원색(emerald/red/amber) → 토큰. help 히어로 리터럴 → `--gold-bright`
+  (네이비 위 `--gold`는 2.06:1로 판독 불가 → 5.53:1) + `--primary-deep`(`color-mix`라 **테넌트
+  brandColor 주입도 자동 추종** — 브라우저 실측 확인).
+- 그린캐스트 그림자 잔존 4곳(`rgba(13,17,16,*)`·`rgba(26,31,28,*)`) → 뉴트럴 잉크: empty-state 드롭섀도·
+  시간표 rich-card sticky·스포트라이트 스트립·폼 액션바. (marketing만 스윕해 앱 쪽이 남아 있었다.)
+- ⏳ **빈 상태 일러스트 15장은 코드가 아니라 PNG** — 평균색 실측 결과 **쿨 0장**(웜 3·웜기운 중립 11·그린 1)이라
+  네이비 배경에서 누렇게 뜬다. 재생성 프롬프트·적용법·검수 스크립트 =
+  [`docs/empty-state-illustration-regen.md`](empty-state-illustration-regen.md).
+  ⚠️ 파일명 `-alpha` 접미사 필수(빠지면 404로 조용히 안 보임 — 이번에 고친 그 버그).
+- **기본 과목색 재배정(원장 확정 2026-07-20)**: 수학·수학(심화)=blue · **영어=rose(빨강 계열)** ·
+  과학=purple · 국어=gold(영어와의 rose 충돌 회피). **최소 색상각 34.8°**(붕괴 시 4.8°였음).
+  ⚠️ `primary`(브랜드 네이비 214.4°)는 blue(219.2°)와 4.8° 차이라 **과목색으로 쓰지 말 것** — 주석으로 명시.
+- ⚠️ **injaewon 저장 과목색은 여전히 `math=primary`·`english=blue`(충돌)** — `tenant_settings` 직접 쓰기는
+  금지(#59)라 원장이 /owner 과목 운영에서 바꿔야 해소된다(수학→파랑, 영어→빨강). `defaults.ts`는 신규 테넌트용.
+
+### 알림 보관/삭제 + 창 최대화 전체 화면 (2026-07-20) — ✅ tsc0/lint0 · 마이그 0125a 적용 · 실브라우저 검증
+- **창 최대화가 화면 전체를 안 덮던 문제**: [WorkspaceCanvas](../src/components/workspace/workspace-canvas.tsx)의
+  `HEADER = 48`(상단탭 자리 예약)이 상단탭 데스크톱 폐지 후에도 남아, 그 48px 띠로 **운영실 배경이 비쳐** 최대화해도
+  위가 안 덮였다 → `HEADER = 0`(데스크톱=캔버스 마운트 조건에서 AppHeader는 항상 hidden). 실측: 최대화 창이
+  top:0 / bottom:viewport / right:viewport로 **완전 충전**(복원↔최대화 왕복 정상).
+  · 같은 원인으로 잘못 제거했던 **운영실 인사말 날짜 줄을 복구**(운영실=데스크톱 작업면의 정상 콘텐츠였고,
+  삐져나와 보인 건 최대화 미충전 탓 — 원장 지적으로 원인 정정).
+- **알림 보관/삭제**(원장 "보관/삭제 기능 추가하자"): 마이그 **0125a** `notifications.archived_at` + 비보관 부분 인덱스.
+  액션 3종([actions.ts](../src/features/notifications/server/actions.ts) `archiveNotification`·`unarchiveNotification`·
+  `deleteNotification`, RLS recipient 정책으로 본인 것만). 벨에 **받은 알림 ↔ 보관함 토글** + 행 hover 액션
+  (받은함=보관·삭제 / 보관함=복원·삭제). **unread 배지는 비보관만 집계**(치운 알림이 계속 울리면 보관이 무의미),
+  보관함 목록으로는 OS 팝업 미발화. 실검증: 보관→보관함 이동→복원 왕복(프로덕션 데이터 원상복구).
+  · **자동 삭제 정책(기존, 불변)**: 안 읽은 알림은 **영구 보존**, 읽은 알림은 **90일 후 자동 삭제**,
+  dedup 부기(`notification_events`)는 180일 — [prune.ts](../src/features/notifications/server/prune.ts), 하루 1회 cron.
+  벨 목록은 항상 최신 20건만 노출(LIST_LIMIT).
+
+### 창(embed) 페이지 헤더 자동 컴팩트 — 제목 3중 노출·세로 잠식 해소 (2026-07-19) — ✅ tsc0/lint0/build✓/vitest1662 + 적대리뷰(13에이전트) major 1·minor 5 반영
+원장 지적: 창 안 Editorial 풀 헤더(eyebrow+21px 제목+설명)가 본문을 잠식하고, AppHeader·창 타이틀바와 제목이
+3중 노출("선택창 2중노출 무의미"). [PageHeader](../src/components/page-header.tsx)가 임베드 셸 `<main>`의
+`.embed-main` 마커 + `[.embed-main_&]` CSS 변형으로 **창 안에선 컴팩트 1행**(`embedLabel ?? description ?? title`
+13px + actions + stats)으로 접힘 — 소비처 12곳 무변경 자동 적용(~60px/창 회수). 수제 헤더 3곳(수업보고서·
+데이터베이스·학원설정)을 PageHeader로 수렴. 의도적 제외 = 도움말 히어로·성적 상세 카드·학생상담(헤더 없음).
+- **적대 리뷰 major**: 최초 구현(x-embed 요청 헤더 판정 async 컴포넌트)은 창 안 내비 대다수가 embed=1을 유실해
+  **클릭 한 번에 풀 헤더로 플립** → 지속 마커 클래스 + CSS 변형으로 재설계(soft nav 무관, 슬롯 이중 마운트 없음).
+- minor 반영: 수납 embedLabel에 검색/페이지 접미사 포함(창=기본 경로 검색 피드백 유실 방지) · 퇴원관리/등록상담
+  description 보강(title 폴백=타이틀바 중복) · 학원설정 짧은 embedLabel(110자 안내문 다중 줄 감김) · 컴팩트
+  actions 래퍼 shrink/wrap 허용(문서 툴바 좁은 창 가로 오버플로) · lesson-reports/timetable 스켈레톤을 동일
+  변형으로 컴팩트/풀 높이 정합. 규칙 = design-conventions "창(embed) 안 페이지 헤더".
+- **2차 조임(07-20 원장 "여전히 많은 공간")**: 시간표는 창에서 **헤더 줄 통째 접기** — 학생 집계(StudentTally
+  공용 추출)를 툴바 우측으로 내림(리스킨 전 배치의 창 한정 회귀). 툴바 엑셀·시트 버튼을 ml-auto 스페이서
+  **앞**으로 이동(스페이서 뒤에 있으면 넓은 창에서도 상시 둘째 줄 강제) · 임베드 <main> pt-4/5→pt-3 ·
+  임베드 페이지 gap-4→3. 실측: 창 그리드 시작 ~255px→~100px.
+- **3차: 셸 상단 헤더 데스크톱 폐지(07-20 원장 "상단탭이 알림 외엔 무쓸모")**: AppHeader = **모바일/터치
+  전용으로 강등**(`lg:pointer-fine:hidden`, 사이드바 노출과 대칭) — 데스크톱 세로 48px 추가 회수. 벨은
+  **사이드바 하단 사용자 영역에 합체**(펼침: 사용자·이름·벨 한 줄 / 접힘 레일: 벨 위·사용자 아래 스택;
+  이중 마운트 방지 위해 AppHeader·사이드바 모두 isDesktop 조건 마운트 — 벨은 폴링+OS 팝업이라 중복 발화
+  금지). 검색은 **Shift+F(타이핑 보호)·Ctrl/Cmd+K** 단축키로([palette-hotkey.ts](../src/lib/palette-hotkey.ts)
+  일반 모듈, #81) — 창(iframe) 안 keydown은 [PaletteHotkeyForward](../src/components/workspace/palette-hotkey-forward.tsx)가
+  same-origin postMessage로 부모 팰릿에 전달(keydown은 프레임 경계 못 넘음). 사이드바 하단 팁에 단축키 안내.
+  실브라우저: 데스크톱 헤더 display:none·벨 배지 사이드바 표시·메인/iframe 양 경로 팰릿 열림·dismiss 정상
+  (⚠️ 검증 중 "안 닫힘"은 전부 브라우저 창 백그라운드에서 CSS 종료 애니메이션 일시정지 = base-ui 언마운트
+  보류였음 — 환경 특성, 실사용 무관).
+### 랜딩 팔레트 네이비 통일 — Precision Pine(그린) → 앱 v3 Injaewon Navy (2026-07-20) — ✅ tsc0/lint0/test1664
+랜딩만 07-19 11:47(`07a04dee`) 잉크 그린으로 머지된 뒤, 4시간 반 뒤 확정된 앱 v3 네이비
+(`da2ae55b`, 16:12)가 `.ey-landing` 스코프 오버라이드 때문에 전파되지 않아 **앱=네이비 / 랜딩=그린**으로
+갈라져 있던 것을 해소(실측: 네이비 요소 0 · 그린 117).
+- **팔레트**: `.ey-landing`을 globals.css 앱 v3에 미러링(서피스=애플 뉴트럴 `#f5f5f7`/`#e9e9ee`,
+  잉크 `#1d1d1f`, 브랜드 `#153e75`, 보조=마디아 정합값). 앱 토큰이 바뀌면 **여기도 함께 갱신**해야 함
+  (스코프 오버라이드라 자동 추종 안 함 — 이번 분기의 원인이라 주석으로 명시).
+- **네이밍 정합**: `--pine*`→`--deep*`, `--mint`→`--azure`, tone 값 `"mint"`→`"azure"`(Eyebrow·DrawUnderline·
+  `data-tone` 셀렉터). 값만 바꾸면 `--pine: #0b1524` 같은 거짓 이름이 남아 다음 사람을 오도하므로 함께 교체.
+- **하드코딩 잔존 제거**: 브랜드 글로우 `rgba(14,124,70,*)`→네이비, 그린캐스트 그림자 `rgba(11,16,13,*)`→
+  뉴트럴 잉크 `rgba(29,29,31,*)`(18파일), 콘솔 도트 `#4ade97`→`#6fb6f5`, `ey-console`·`ey-mesh` 그라디언트.
+- ⚠️ **`--text-faint`만 앱과 의도적 불일치**(`#696969`, 앱은 `#767676`): 앱은 흰 카드(4.54:1) 위주라 통과하나
+  랜딩은 캔버스·soft 배경에 작은 글자를 얹어 4.17/3.75로 **미달**했다(옛 그린 4.50/4.18보다 악화 = 내가 만든 회귀).
+  보정 후 캔버스 5.04 · soft 4.54 · 화이트 5.42로 전부 4.5:1 상회.
+- 대비 실측: deep-text 16.7 · deep-dim 8.3 · azure 8.4(다크 패널) / azure는 다크 서피스 전용(흰 배경 2.17이라
+  라이트 사용 금지 — 현 사용처 2곳 모두 `bg-ink` 위 7.8:1 확인). 잔존 amber-on-soft 4.20은 **개선**(옛 3.17).
+
+### 원스크린 발송 시간창 상시 안내 배너 (2026-07-20, `80887799`) — ✅ tsc0/lint0/vitest16
+원장이 학원설정>보고서에 발송 허용 시간대(G1)를 정하면 원스크린 상단에 "수업 보고서 발송 시간대
+HH:MM~HH:MM — 시간 외 발송은 예약돼 자동 발송" 한 줄 상시 표시(무제한=미표시). 강사가 정책을 발송
+시점 토스트 전에 미리 인지. `classnoteSendWindowLabel`(classnote-guard, 활성 판정=hint·워커 fail-open
+규약 공유, Vitest 5) → `roster.sendWindowLabel` → 클라 배너(동시열림 경고 슬롯 아래, bg-soft 중립톤).
+반 공지는 시간창 미적용(G1 확정)이라 "수업 보고서" 한정 표기.
+
 ### 작성률 "(미지정)" 행 해소 — 반 담당 없는 반은 슬롯 강사 라벨로 귀속 (2026-07-20) — ✅ tsc0/lint0/test38
 강사별 작성률 표에 "(미지정) 0/8"이 뜨던 원인 = 영어반 RTT2(반 teacher_id 없음, 슬롯 라벨로만 운영).
 작성률 귀속을 **반 담당 → 슬롯 라벨 → "(미지정)"** 폴백 체인으로 확장(getWeeklyWritingRates 오늘·과거일 경로 +
@@ -555,6 +658,11 @@ file input 업로드), 게시=`POST /api/v1_2/reports/` + `attached_images`(스�
 - ⚠️ **배포 조건**: ① 0113a·0114a 프로덕션 적용(`pnpm db:alphas` 또는 SQL Editor) ② Vercel cron 4번째 슬롯
   (플랜 한도 확인 — 거부되면 외부 스케줄러가 CRON_SECRET로 호출) ③ `AI_PROVIDER=anthropic`·`ANTHROPIC_API_KEY`·
   `CRON_SECRET` env 확인. 비용: 테넌트당 LLM ≤1콜/일(신호 0건 날 스킵) ≈ 월 $2~3.
+
+### 직원명부 담당자 열(T) 배선 + 갱신일 신호등 행 전체 확장 (2026-07-17) — ✅ tsc0/lint0/test41/build✓
+원장이 시트에 담당자 열(T, 맨 끝)을 추가 → `ROSTER_COLUMNS`/`buildRosterRow`에 `contract.manager` 배선(20열).
+갱신일 신호등은 N열 단일 셀 → **행 전체(A2:T198)** 규칙으로 교체(시트 API, $N2 고정 수식 — 원장 요청).
+계약조건 이력은 Apps Script(K열 onEdit → 2026직원히스토리 `이름|변경일시|계약조건` 1=최신 누적)로 시트 측 처리.
 
 ### 직원명부 열 계약 19열 동기화 — '계약조건 history' 열 삭제 반영 (2026-07-17) — ✅ tsc0/lint0/test41/build✓
 원장이 시트에서 '계약조건 history' 열을 삭제(이력은 2026직원히스토리 탭으로 이관)했는데 앱이 옛 20열

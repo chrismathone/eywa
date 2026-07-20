@@ -168,7 +168,7 @@ export function EnglishImportDialog({
         onClick={() => setOpen(true)}
         disabled={disabled}
         title={disabled ? disabledTitle : undefined}
-        className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2 py-0.5 text-xs transition disabled:opacity-50"
+        className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-2 py-0.5 text-xs transition disabled:opacity-50"
       >
         <Sheet className="size-3" /> 시트에서 가져오기
       </button>
@@ -199,7 +199,7 @@ export function EnglishImportDialog({
                 type="button"
                 onClick={preview}
                 disabled={previewing}
-                className="bg-foreground text-background inline-flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium transition disabled:opacity-40"
+                className="bg-foreground text-background inline-flex items-center gap-1.5 rounded-lg px-3 py-1 text-xs font-medium transition disabled:opacity-40"
               >
                 {previewing ? <Loader2 className="size-3 animate-spin" /> : <Sheet className="size-3" />}
                 시트에서 불러오기
@@ -284,7 +284,7 @@ export function EnglishImportDialog({
                     {structRes ? <p className="text-text-dim text-[11px]">· 배치: 마감 {structRes.closed} · 삽입 {structRes.inserted} · 반 {structRes.classUpdated}</p> : null}
                     {enrollRes ? <p className="text-text-dim text-[11px]">· 반이동: 이동 {enrollRes.moved} · 삭제 {enrollRes.removed} · 추가 {enrollRes.added}{enrollRes.failed ? ` · 실패 ${enrollRes.failed}` : ""}</p> : null}
                     {snapshotId ? (
-                      <button type="button" onClick={rollback} disabled={rolling} className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-[11px] transition disabled:opacity-40">
+                      <button type="button" onClick={rollback} disabled={rolling} className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 text-[11px] transition disabled:opacity-40">
                         {rolling ? <Loader2 className="size-3 animate-spin" /> : <RotateCcw className="size-3" />} 배치 변경 되돌리기
                       </button>
                     ) : null}
@@ -297,14 +297,14 @@ export function EnglishImportDialog({
                   <div className="border-amber/40 bg-amber-soft space-y-2 rounded-sm border p-2 text-[12px]">
                     <p className="text-amber flex items-center gap-1 font-bold"><AlertTriangle className="size-3" /> 배치 {structChanges}건 · 반이동 {enrollChanges}건을 적용합니다. 계속할까요?</p>
                     <div className="flex items-center gap-2">
-                      <button type="button" onClick={apply} disabled={applying} className="bg-foreground text-background inline-flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium transition disabled:opacity-40">
+                      <button type="button" onClick={apply} disabled={applying} className="bg-foreground text-background inline-flex items-center gap-1.5 rounded-lg px-3 py-1 text-xs font-medium transition disabled:opacity-40">
                         {applying ? <Loader2 className="size-3 animate-spin" /> : <Check className="size-3" />} 적용 확정
                       </button>
                       <button type="button" onClick={() => setConfirming(false)} disabled={applying} className="text-text-dim hover:text-foreground px-2 py-1 text-xs transition">취소</button>
                     </div>
                   </div>
                 ) : (
-                  <button type="button" onClick={() => setConfirming(true)} className="bg-primary text-primary-foreground hover:bg-primary-hover inline-flex w-full items-center justify-center gap-1.5 rounded-md py-2 text-[12px] font-bold transition">
+                  <button type="button" onClick={() => setConfirming(true)} className="bg-primary text-primary-foreground hover:bg-primary-hover inline-flex w-full items-center justify-center gap-1.5 rounded-lg py-2 text-[12px] font-bold transition">
                     <Check className="size-3" /> {totalChanges}건 적용 (배치 {structChanges} · 반이동 {enrollChanges})
                   </button>
                 )}

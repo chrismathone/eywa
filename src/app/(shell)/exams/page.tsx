@@ -129,7 +129,7 @@ export default async function ExamsPage({
         <form action="/exams" method="get" className="flex flex-wrap items-center gap-2">
           {subject !== "all" ? <input type="hidden" name="subject" value={subject} /> : null}
           {examType !== "all" ? <input type="hidden" name="type" value={examType} /> : null}
-          <div className="border-line bg-bg-soft text-text-dim flex items-center gap-2 rounded-sm border px-2.5 py-1.5">
+          <div className="border-line bg-bg-soft text-text-dim flex items-center gap-2 rounded-lg border px-2.5 py-1.5">
             <EyIcon name="search" size={13} />
             <input
               type="search"
@@ -141,9 +141,9 @@ export default async function ExamsPage({
           </div>
           <label className="text-text-dim flex items-center gap-1 text-xs">
             기간
-            <input type="date" name="from" defaultValue={from} className="border-line bg-bg-soft rounded-sm border px-1.5 py-1 text-xs" />
+            <input type="date" name="from" defaultValue={from} className="border-line bg-bg-soft rounded-lg border px-1.5 py-1 text-xs" />
             <span>~</span>
-            <input type="date" name="to" defaultValue={to} className="border-line bg-bg-soft rounded-sm border px-1.5 py-1 text-xs" />
+            <input type="date" name="to" defaultValue={to} className="border-line bg-bg-soft rounded-lg border px-1.5 py-1 text-xs" />
           </label>
           <Button type="submit" variant="outline" size="sm">검색</Button>
           {q || from || to ? (

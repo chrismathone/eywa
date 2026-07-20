@@ -60,7 +60,7 @@ function Dialog({ tokens, onClose }: { tokens: IntakeTokenView[]; onClose: () =>
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4">
-      <div className="bg-background border-border my-8 w-full max-w-lg rounded-lg border p-6 shadow-lg">
+      <div className="bg-background border-border my-8 w-full max-w-lg rounded-xl border p-6 shadow-lg">
         <header className="mb-4 flex items-start justify-between">
           <div>
             <h2 className="text-foreground inline-flex items-center gap-1.5 text-lg font-bold">

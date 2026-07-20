@@ -31,6 +31,7 @@ import { EMPTY_DAYS_COOKIE, EMPTY_PERIODS_COOKIE } from "@/features/timetable/li
 import { EmptyDaysPrefSync, EmptyPeriodsPrefSync } from "./_components/prefs-sync";
 import { EmptyPeriodScope } from "./_components/empty-period-scope";
 import { TimetableColorToggle } from "./_components/color-mode-toggle";
+import { StudentTally } from "./_components/student-tally";
 import { WeekNav } from "./_components/week-nav";
 import { WeekdayGroupTables } from "./_components/weekday-group-tables";
 import { TeacherGridView } from "./_components/teacher-grid";
@@ -195,48 +196,26 @@ export default async function TimetablePage({
 
   return (
     <TimetableEditProvider effectiveDate={effectiveDate} today={today} canEdit={canEdit}>
-      <div className="flex h-full min-h-0 flex-col gap-4">
+      <div className="flex h-full min-h-0 flex-col gap-4 [.embed-main_&]:gap-3">
       {/* '미사용 요일'·'빈 교시 접기' 선호를 기기에 기억(쿠키) — 창은 깨끗한 URL로 열려 파라미터만으론 매번 초기화된다. */}
       <EmptyDaysPrefSync hide={hideEmptyDays} />
       <EmptyPeriodsPrefSync collapse={collapseEmptyPeriods} />
-      {/* Editorial 문법 ① — 헤더 위계 + 우측 학생 집계(구 툴바 font-mono 나열의 승격판).
-          시간표는 세로 공간이 가장 귀한 화면이라 BigStat 카드 대신 인라인 스탯 행(밀도 우선). */}
-      <div className="shrink-0">
+      {/* Editorial 문법 ① — 헤더 위계 + 우측 학생 집계(StudentTally). 시간표는 세로 공간이 가장
+          귀한 화면이라 **창(임베드)에선 이 줄을 통째로 접고** 집계를 툴바 우측으로 내린다(컴팩트
+          1행조차 아까움 — 2026-07-20 원장 "여전히 많은 공간"). 최상위 프레임은 풀 헤더 유지. */}
+      <div className="shrink-0 [.embed-main_&]:hidden">
         <PageHeader
           eyebrow="수업 운영"
           title="시간표"
           description={`${subjectMaps.labelOf(subject)} 주간표`}
           actions={
-            <div className="flex flex-wrap items-baseline gap-x-3.5 gap-y-1 whitespace-nowrap">
-              <span className="text-[13px]">
-                <b className="num text-primary text-[17px] font-bold">{enrolledCount}</b>{" "}
-                <span className="text-text-dim">재원</span>
-              </span>
-              {newCount > 0 ? (
-                <span className="text-[13px]">
-                  <b className="num text-danger text-[17px] font-bold">{newCount}</b>{" "}
-                  <span className="text-text-dim">신입</span>
-                </span>
-              ) : null}
-              {transferCount > 0 ? (
-                <span className="text-[13px]">
-                  <b className="num text-blue text-[17px] font-bold">{transferCount}</b>{" "}
-                  <span className="text-text-dim">전입</span>
-                </span>
-              ) : null}
-              {holdCount > 0 ? (
-                <span className="text-[13px]">
-                  <b className="num text-amber text-[17px] font-bold">{holdCount}</b>{" "}
-                  <span className="text-text-dim">대기</span>
-                </span>
-              ) : null}
-              {withdrawnCount > 0 ? (
-                <span className="text-[13px]">
-                  <b className="num text-text-faint text-[17px] font-bold">{withdrawnCount}</b>{" "}
-                  <span className="text-text-dim">퇴원</span>
-                </span>
-              ) : null}
-            </div>
+            <StudentTally
+              enrolled={enrolledCount}
+              newCount={newCount}
+              transferCount={transferCount}
+              holdCount={holdCount}
+              withdrawnCount={withdrawnCount}
+            />
           }
         />
       </div>
@@ -378,8 +357,30 @@ export default async function TimetablePage({
           </>
         ) : null}
 
-        {/* 학생 집계는 PageHeader 우측으로 승격(문법 ②) — 툴바 mono 나열 제거 */}
+        {/* 엑셀·시트 액션 — ⚠️ ml-auto 스페이서 **앞**에 둔다: 스페이서 뒤(우측 정렬 편집 옆)에 두면
+            넓은 창에서도 항상 둘째 줄로 강제 줄바꿈돼 툴바가 상시 2줄이었다(2026-07-20 세로 회수). */}
+        <span className="bg-line h-4 w-px" aria-hidden />
+        <TimetableToolbarActions
+          subject={subject}
+          canSync={canSync}
+          canManageImport={canManageImport}
+          sheetUrl={sheetUrl}
+          compact1h={compactList}
+        />
+
         <div className="ml-auto" aria-hidden />
+
+        {/* 학생 집계 — 최상위 프레임은 PageHeader 우측(문법 ②), 창(임베드)은 헤더 줄을 접으므로
+            여기 툴바 우측에 노출(StudentTally 공유, 순수 마크업이라 이중 마운트 안전). */}
+        <div className="hidden [.embed-main_&]:block">
+          <StudentTally
+            enrolled={enrolledCount}
+            newCount={newCount}
+            transferCount={transferCount}
+            holdCount={holdCount}
+            withdrawnCount={withdrawnCount}
+          />
+        </div>
 
         {/* 편집 컨트롤 — 기본뷰 + 이번/미래 주(통합뷰·강사뷰=읽기전용, 과거=조회 전용).
             미래 주 편집은 그 주에 이동 예약(Phase B). */}
@@ -392,14 +393,6 @@ export default async function TimetablePage({
             ) : null}
           </>
         ) : null}
-
-        <TimetableToolbarActions
-          subject={subject}
-          canSync={canSync}
-          canManageImport={canManageImport}
-          sheetUrl={sheetUrl}
-          compact1h={compactList}
-        />
       </div>
 
       {slots.length === 0 ? (

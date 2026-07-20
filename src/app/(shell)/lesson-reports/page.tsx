@@ -1,5 +1,6 @@
 import { requireAccess } from "@/lib/auth/require-access";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
+import { PageHeader } from "@/components/page-header";
 import { FaceTabs, type Face } from "@/components/face-tabs";
 import { getClassnoteQueue, getReportFilterOptions, getWeeklyWritingRates, getReportTeacherCandidates } from "@/features/report-admin/server/queries";
 import { getEdutrixUnmapped } from "@/features/report-admin/server/edutrix-map-queries";
@@ -110,14 +111,12 @@ export default async function LessonReportsPage({ searchParams }: { searchParams
 
   return (
     <div className="mx-auto w-full max-w-7xl space-y-6">
-      <header className="border-border border-b pb-5">
-        <p className="eyebrow">발송 관리</p>
-        <h1 className="font-bold tracking-tight text-foreground text-2xl">수업보고서</h1>
-        <p className="text-muted-foreground mt-1 text-sm">
-          발송 큐는 위에서 상시 확인. 작성률·Edutrix 미매핑·보고서 목록은 탭으로 나눕니다. 작성은 선생님
-          원스크린에서 진행합니다.
-        </p>
-      </header>
+      {/* 수제 헤더 → PageHeader 수렴(2026-07-19) — 창(embed)에선 컴팩트 1행으로 접힌다(제목은 창 타이틀바). */}
+      <PageHeader
+        eyebrow="발송 관리"
+        title="수업보고서"
+        description="발송 큐는 위에서 상시 확인. 작성률·Edutrix 미매핑·보고서 목록은 탭으로 나눕니다. 작성은 선생님 원스크린에서 진행합니다."
+      />
 
       {!isSettings ? (
         queue ? (

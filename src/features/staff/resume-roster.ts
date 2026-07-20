@@ -31,6 +31,7 @@ export const ROSTER_COLUMNS = [
   "계좌번호",
   "아동학대&성범죄조회일",
   "경력증명서제출",
+  "담당자", // T열 — 원장이 2026-07-17 추가, 폼 '담당자'(contract.manager) 배선
 ] as const;
 
 /**
@@ -85,5 +86,6 @@ export function buildRosterRow(d: StaffResumeData): string[] {
     d.contract.account, // 계좌번호
     "", // ②아동학대&성범죄조회일
     "", // ③경력증명서제출
+    d.contract.manager, // 담당자
   ];
 }

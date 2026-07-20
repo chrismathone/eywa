@@ -80,7 +80,7 @@ function MonthListView({
   if (dates.length === 0)
     return <p className="text-text-faint px-1 py-6 text-center text-[13px]">이 달에 등록된 업무가 없습니다.</p>;
   return (
-    <div className="border-line bg-card divide-line divide-y rounded-md border">
+    <div className="border-line bg-card divide-line divide-y rounded-2xl border">
       {dates.map((d) => (
         <div key={d} className="flex gap-3 px-3 py-2">
           <div className={`num w-16 shrink-0 text-[12px] ${d === today ? "text-primary font-bold" : "text-text-dim"}`}>
@@ -215,7 +215,7 @@ export function MonthlyScheduleView({
     if (mapPrep === "none" || !canManage)
       return <Panel title="Notion 계정이 연결되지 않았습니다" desc="담당자가 이 직원의 Notion 계정을 연결하면 월간 업무가 표시됩니다." />;
     return (
-      <div className="bg-card border-line shadow-card rounded-lg border px-5 py-6">
+      <div className="bg-card border-line shadow-card rounded-2xl border px-5 py-6">
         <h3 className="text-foreground text-[14px] font-bold">Notion 계정 연결</h3>
         <p className="text-text-faint mt-1 mb-3 text-[12px]">
           이메일이 같으면 자동 연결됩니다. 이메일이 달라 자동 연결되지 않았으니, Notion 담당자를 직접 골라 연결하세요.
@@ -253,7 +253,7 @@ export function MonthlyScheduleView({
   // 오류 — 한글 요약(원문은 개발용, UI 미노출). 재시도 버튼.
   if (!result.ok)
     return (
-      <div className="border-danger/40 bg-danger/5 rounded-lg border px-5 py-6 text-center">
+      <div className="border-danger/40 bg-danger/5 rounded-2xl border px-5 py-6 text-center">
         <p className="text-danger text-[13px] font-medium">{result.error}</p>
         <Button size="sm" variant="outline" className="mt-3" disabled={pending} onClick={() => goMonth(month)}>
           다시 시도
@@ -288,7 +288,7 @@ export function MonthlyScheduleView({
               <Plus className="size-3.5" /> 새 업무
             </Button>
           ) : null}
-          <div className="border-line inline-flex overflow-hidden rounded-md border">
+          <div className="border-line inline-flex overflow-hidden rounded-full border">
             <button
               type="button"
               onClick={() => pickView("grid")}

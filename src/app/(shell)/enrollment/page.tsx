@@ -98,6 +98,8 @@ export default async function EnrollmentPage({
       <PageHeader
         eyebrow="등록 상담"
         title="등록상담"
+        // 창 컴팩트 라벨 겸용 — 없으면 title 폴백이 창 타이틀바와 중복(적대 리뷰).
+        description="접수부터 배정 완료까지 상담 흐름을 관리합니다"
         actions={
           <>
             <Suspense

@@ -39,7 +39,7 @@ export function GradeForm({
     <form
       ref={formRef}
       action={formAction}
-      className="bg-bg-soft/30 border-border rounded-md border p-3"
+      className="bg-bg-soft/30 border-border rounded-2xl border p-3"
     >
       <input type="hidden" name="studentId" value={studentId} />
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-6">

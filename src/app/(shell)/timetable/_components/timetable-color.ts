@@ -11,6 +11,7 @@ import { usePrefs, type TimetableColorMode } from "@/components/workspace/use-pr
 // PillColor → globals.css 색 변수(color-mix 기준). subjects.ts 팔레트와 1:1. neutral은 회색이라 그대로 폴백.
 const COLOR_VAR: Record<PillColor, string> = {
   primary: "--primary",
+  green: "--green",
   gold: "--gold",
   blue: "--blue",
   purple: "--purple",

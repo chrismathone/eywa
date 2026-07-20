@@ -19,7 +19,7 @@ import {
 } from "../server/notice-actions";
 import type { OneScreenStudent } from "../types";
 
-const BODY = "border-line bg-card text-foreground rounded-md border px-3 py-2 text-[13px] w-full resize-y";
+const BODY = "border-line bg-card text-foreground rounded-lg border px-3 py-2 text-[13px] w-full resize-y";
 
 /** classnote_notices.status → 한글 라벨 + 색(원문 노출 금지). */
 function statusLabel(s: string): { label: string; cls: string } {
@@ -195,7 +195,7 @@ export function NoticeComposer({
     <div className="grid items-stretch gap-4 lg:grid-cols-[300px_1fr]">
       {/* 대상 선택 — 데스크톱에선 우측(작성+이력)이 길어지면 함께 늘어 목록 내부 스크롤(높이 균형), 모바일은 520px 캡. */}
       <div className="lg:relative lg:min-h-[320px]">
-        <div className="bg-card border-line shadow-card flex max-h-[520px] flex-col rounded-md border lg:absolute lg:inset-0 lg:max-h-none">
+        <div className="bg-card border-line shadow-card flex max-h-[520px] flex-col rounded-2xl border lg:absolute lg:inset-0 lg:max-h-none">
           <div className="border-line border-b px-3 py-2">
             <p className="text-foreground text-[13px] font-bold">대상 학생 <span className="text-primary">{selectedCount}</span></p>
             <p className="text-text-faint text-[11px]">보이는 반의 재원생 · 발송 과목(수학 등)만 실제 게시</p>
@@ -222,7 +222,7 @@ export function NoticeComposer({
 
       {/* 작성 + 이력 */}
       <div className="space-y-4">
-        <section className="bg-card border-line shadow-card space-y-3 rounded-md border px-4 py-3">
+        <section className="bg-card border-line shadow-card space-y-3 rounded-2xl border px-4 py-3">
           <div>
             <h2 className="text-foreground text-[15px] font-bold">학부모 공지</h2>
             <p className="text-text-faint text-[12px]">
@@ -319,7 +319,7 @@ export function NoticeComposer({
         </section>
 
         {/* 내가 보낸 공지 이력 — 대기건은 수정/삭제 */}
-        <section className="bg-card border-line shadow-card rounded-md border px-4 py-3">
+        <section className="bg-card border-line shadow-card rounded-2xl border px-4 py-3">
           <p className="text-foreground mb-2 text-[13px] font-bold">내가 보낸 공지</p>
           {rows.length === 0 ? (
             <p className="text-text-faint text-[12px]">아직 보낸 공지가 없습니다.</p>

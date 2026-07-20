@@ -19,7 +19,7 @@ const STATUS_META: Record<
 
 function Chip({ label, value, tone }: { label: string; value: number; tone: string }) {
   return (
-    <div className={`rounded-md px-3 py-1.5 ${tone}`}>
+    <div className={`rounded-full px-3 py-1.5 ${tone}`}>
       <span className="text-[18px] font-bold tabular">{value}</span>
       <span className="ml-1 text-[12px] font-bold">{label}</span>
     </div>
@@ -40,7 +40,7 @@ export function StatusBoard({
 
   if (rows.length === 0) {
     return (
-      <div className="bg-card border-line shadow-card text-text-faint flex items-center justify-center rounded-md border p-10 text-sm">
+      <div className="bg-card border-line shadow-card text-text-faint flex items-center justify-center rounded-2xl border p-10 text-sm">
         오늘 담당 학생이 없습니다
       </div>
     );
@@ -59,7 +59,7 @@ export function StatusBoard({
         </span>
       </div>
 
-      <div className="bg-card border-line shadow-card overflow-x-auto rounded-md border">
+      <div className="bg-card border-line shadow-card overflow-x-auto rounded-2xl border">
         <table className="w-full min-w-[640px] text-left text-[12px]">
           <thead>
             <tr className="border-line text-text-faint border-b">

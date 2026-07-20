@@ -9,7 +9,7 @@ import { RefreshCw } from "@/components/icons/eywa-icon-compat";
 export function MakeeduOriginTag({ className }: { className?: string }) {
   return (
     <span
-      className={`bg-blue-soft text-blue inline-flex items-center gap-0.5 whitespace-nowrap rounded-sm px-1 py-[1px] align-middle text-[10px] font-medium ${className ?? ""}`}
+      className={`bg-blue-soft text-blue inline-flex items-center gap-0.5 whitespace-nowrap rounded-full px-1 py-[1px] align-middle text-[10px] font-medium ${className ?? ""}`}
       title="지난 동기화로 새로 추가된 항목입니다 (다음 동기화가 성공하면 사라집니다)"
     >
       <RefreshCw className="size-2.5" strokeWidth={2.5} aria-hidden />

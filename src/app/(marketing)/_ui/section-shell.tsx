@@ -1,6 +1,6 @@
 /**
  * SectionShell — 랜딩 섹션 공통 셸 (수평 컨테이너 + 배경 톤 + 수직 리듬).
- * base(포슬린) ↔ soft(미스트) ↔ card(화이트) ↔ dark(파인 북엔드)로 콘트라스트 층을 만든다.
+ * base(캔버스) ↔ soft(미스트) ↔ card(화이트) ↔ dark(네이비 북엔드)로 콘트라스트 층을 만든다.
  */
 import type { ReactNode } from "react";
 
@@ -11,7 +11,7 @@ const TONE: Record<Tone, string> = {
   base: "bg-background",
   soft: "bg-bg-soft",
   card: "bg-card",
-  dark: "ey-console text-[var(--pine-text)]",
+  dark: "ey-console text-[var(--deep-text)]",
 };
 
 const PAD: Record<Pad, string> = {

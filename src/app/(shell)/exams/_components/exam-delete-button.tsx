@@ -42,7 +42,7 @@ export function ExamDeleteButton({ examId }: { examId: string }) {
       <button
         type="submit"
         disabled={pending}
-        className="bg-danger text-white inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs disabled:opacity-60"
+        className="bg-danger text-white inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs disabled:opacity-60"
       >
         {pending ? <Loader2 className="size-3.5 animate-spin" /> : null}
         예, 삭제
@@ -50,7 +50,7 @@ export function ExamDeleteButton({ examId }: { examId: string }) {
       <button
         type="button"
         onClick={() => setConfirming(false)}
-        className="border-line text-text-dim hover:bg-bg-soft rounded-md border px-2.5 py-1 text-xs"
+        className="border-line text-text-dim hover:bg-bg-soft rounded-lg border px-2.5 py-1 text-xs"
       >
         취소
       </button>

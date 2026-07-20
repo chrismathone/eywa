@@ -128,7 +128,7 @@ export function PermissionsSection({ initial }: { initial: PermissionsSettings }
   return (
     <SectionForm section="permissions" payload={{ overrides }}>
       <>
-      <section className="border-border bg-card rounded-lg border p-5">
+      <section className="border-border bg-card rounded-2xl border p-5">
         <h3 className="text-foreground text-sm font-bold">강사 &lsquo;내 메뉴&rsquo; 표시</h3>
         <p className="text-text-dim mt-1 text-[12px] leading-relaxed">
           강사 화면 우상단 <b>내 메뉴</b> 드롭다운에 보여줄 탭을 고릅니다. 끄면 그 탭이 숨겨지고 강사가 해당
@@ -162,7 +162,7 @@ export function PermissionsSection({ initial }: { initial: PermissionsSettings }
           })}
         </div>
       </section>
-      <section className="border-border bg-card rounded-lg border p-5">
+      <section className="border-border bg-card rounded-2xl border p-5">
         <h3 className="text-foreground text-sm font-bold">역할별 메뉴 권한</h3>
         <p className="text-text-dim mt-1 text-[12px] leading-relaxed">
           셀을 클릭하면 <b>전체 → 담당 → 읽기 → 없음</b> 순으로 바뀝니다. 기본값과 다른 셀만 저장됩니다

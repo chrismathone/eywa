@@ -30,7 +30,7 @@ const STATUS_META: Record<
   uploaded: { label: "대기", color: "amber" },
   transcribing: { label: "전사 중", color: "blue" },
   analyzing: { label: "분석 중", color: "primary" },
-  completed: { label: "완료", color: "primary" },
+  completed: { label: "완료", color: "green" },
   failed: { label: "실패", color: "danger" },
 };
 

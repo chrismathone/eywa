@@ -59,8 +59,8 @@ export function DailyReportView({ base, session }: { base: OneScreenStudent; ses
   return (
     <div className="space-y-4">
       {/* 헤더 (ink 다크) */}
-      <header className="bg-ink text-background relative overflow-hidden rounded-xl px-5 py-5">
-        <span className="absolute top-4 right-4 rounded-[4px] bg-white/15 px-2 py-0.5 text-[11px] font-bold">
+      <header className="bg-ink text-background relative overflow-hidden rounded-2xl px-5 py-5">
+        <span className="absolute top-4 right-4 rounded-full bg-white/15 px-2 py-0.5 text-[11px] font-bold">
           {view.attendance}
         </span>
         <p className="font-mono text-[11px] opacity-70">
@@ -73,7 +73,7 @@ export function DailyReportView({ base, session }: { base: OneScreenStudent; ses
       </header>
 
       {/* 오늘 배운 내용 */}
-      <section className="bg-card border-line shadow-card rounded-xl border p-5">
+      <section className="bg-card border-line shadow-card rounded-2xl border p-5">
         <h2 className="text-foreground text-[15px] font-bold">오늘 배운 내용</h2>
         <div className="mt-3 space-y-2.5">
           {view.subjects.map((su, i) => {
@@ -96,7 +96,7 @@ export function DailyReportView({ base, session }: { base: OneScreenStudent; ses
       </section>
 
       {/* 오늘의 테스트 */}
-      <section className="bg-card border-line shadow-card rounded-xl border p-5">
+      <section className="bg-card border-line shadow-card rounded-2xl border p-5">
         <h2 className="text-foreground text-[15px] font-bold">오늘의 테스트</h2>
         {isAbsent ? (
           <p className="text-text-faint mt-2 text-[13px]">결석한 날이라 테스트를 진행하지 않았어요.</p>
@@ -109,7 +109,7 @@ export function DailyReportView({ base, session }: { base: OneScreenStudent; ses
       </section>
 
       {/* 선생님 한마디 */}
-      <section className="bg-card border-line shadow-card rounded-xl border p-5">
+      <section className="bg-card border-line shadow-card rounded-2xl border p-5">
         <h2 className="text-foreground text-[15px] font-bold">선생님 한마디</h2>
         {isAbsent ? (
           <p className="text-text-faint mt-2 text-[13px]">

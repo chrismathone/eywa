@@ -136,7 +136,7 @@ export function ExpenseLineItems({
               <button
                 type="button"
                 onClick={() => setRow(i, { vat: !r.vat })}
-                className={`shrink-0 rounded-sm border px-2 py-1.5 text-[11px] transition ${
+                className={`shrink-0 rounded-full border px-2 py-1.5 text-[11px] transition ${
                   r.vat ? "border-primary bg-primary-soft text-primary" : "border-line text-text-faint"
                 }`}
                 title="부가세 10% 포함"
@@ -154,7 +154,7 @@ export function ExpenseLineItems({
       <button
         type="button"
         onClick={addRow}
-        className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex items-center gap-1 rounded-sm border px-2 py-1 text-xs transition"
+        className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs transition"
       >
         <Plus className="size-3" /> 항목 추가
       </button>

@@ -47,7 +47,7 @@ export function SearchForm({
 
   return (
     <form onSubmit={onSubmit} className={className}>
-      <div className="border-border bg-bg-soft text-text-dim flex items-center gap-2 rounded-sm border px-2.5 py-1.5">
+      <div className="border-border bg-bg-soft text-text-dim flex items-center gap-2 rounded-lg border px-2.5 py-1.5">
         <EyIcon name="search" size={13} />
         <input
           ref={inputRef}

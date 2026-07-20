@@ -300,7 +300,7 @@ export function ConsultationFullForm({
 
       {/* 녹음 바 — 생성·수정 공통. 저장 시 자동 전사·13섹션 AI 분석(입력값 보존).
           수정: 녹음은 여러 행으로 **누적**(0068a) — 여러 상담사가 각자 추가하고, 분석은 전체 합본으로 갱신. */}
-      <div className="border-primary/25 bg-primary/5 space-y-2.5 rounded-lg border p-3">
+      <div className="border-primary/25 bg-primary/5 space-y-2.5 rounded-2xl border p-3">
         {!isCreate && existingRecordings.length > 0 ? (
           <p className="text-text-dim flex items-center gap-1.5 text-[11px]">
             <Mic className="size-3.5" />
@@ -510,14 +510,14 @@ export function ConsultationFullForm({
                   <button
                     type="button"
                     onClick={() => applyParentRequest("replace")}
-                    className="border-gold/50 bg-gold text-white hover:bg-gold/90 rounded-sm border px-2 py-0.5 text-xs font-medium transition"
+                    className="border-gold/50 bg-gold text-white hover:bg-gold/90 rounded-lg border px-2 py-0.5 text-xs font-medium transition"
                   >
                     교체
                   </button>
                   <button
                     type="button"
                     onClick={() => applyParentRequest("append")}
-                    className="border-gold/50 text-gold hover:bg-gold-soft rounded-sm border px-2 py-0.5 text-xs font-medium transition"
+                    className="border-gold/50 text-gold hover:bg-gold-soft rounded-lg border px-2 py-0.5 text-xs font-medium transition"
                   >
                     아래에 추가
                   </button>
@@ -686,7 +686,7 @@ export function ConsultationFullForm({
         <dialog
           ref={consultedDialogRef}
           onCancel={() => resolveConsultedPrompt(null)}
-          className="bg-card border-line backdrop:bg-ink/40 m-auto w-full max-w-sm rounded-lg border p-5 shadow-lg"
+          className="bg-card border-line backdrop:bg-ink/40 m-auto w-full max-w-sm rounded-xl border p-5 shadow-lg"
         >
           <h3 className="text-foreground text-sm font-bold">상담 완료로 변경할까요?</h3>
           <p className="text-text-dim mt-2 text-xs leading-relaxed">
@@ -845,7 +845,7 @@ function GroupInputs({
 // ⚠️ 여기에 h-full(height:100%)을 주면 auto-height grid 행에서 퍼센트 높이가 content로 resolve돼 stretch가 무력화된다 → 금지.
 function Card({ title, children, fill }: { title: string; children: ReactNode; fill?: boolean }) {
   return (
-    <div className={`bg-card border-border overflow-hidden rounded-lg border ${fill ? "flex flex-col" : ""}`}>
+    <div className={`bg-card border-border overflow-hidden rounded-2xl border ${fill ? "flex flex-col" : ""}`}>
       <div className="border-border bg-bg-soft/50 border-b px-3 py-1.5">
         <h3 className="text-primary text-xs font-bold">{title}</h3>
       </div>
@@ -905,7 +905,7 @@ function Collapsible({
     purple: "border-purple/30 bg-purple/5 text-purple",
   } as const;
   return (
-    <div className={`overflow-hidden rounded-lg border ${tones[tone]}`}>
+    <div className={`overflow-hidden rounded-2xl border ${tones[tone]}`}>
       <button type="button" onClick={onToggle} className="flex w-full items-center gap-2 px-3 py-2 text-left">
         {open ? <ChevronDown className="size-4 shrink-0" /> : <ChevronRight className="size-4 shrink-0" />}
         {Icon ? <Icon className="size-3.5 shrink-0" /> : null}

@@ -67,7 +67,7 @@ export function RecordingsSection({
           r.recordedByName,
         ].filter(Boolean);
         return (
-          <div key={r.id} className="border-line bg-card overflow-hidden rounded-md border">
+          <div key={r.id} className="border-line bg-card overflow-hidden rounded-2xl border">
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5">
               <span className="text-foreground text-[12px] font-bold whitespace-nowrap">
                 녹음 {i + 1}

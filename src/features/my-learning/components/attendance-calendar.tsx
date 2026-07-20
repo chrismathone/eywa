@@ -31,7 +31,7 @@ export function AttendanceCalendar({ history }: { history: Session[] }) {
     .sort((a, b) => a - b);
 
   return (
-    <section className="bg-card border-line shadow-card rounded-xl border p-5">
+    <section className="bg-card border-line shadow-card rounded-2xl border p-5">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-foreground text-[15px] font-bold">출결 달력</h2>
         <div className="flex items-center gap-2.5 text-[11px]">
@@ -76,7 +76,7 @@ export function AttendanceCalendar({ history }: { history: Session[] }) {
 function Legend({ cls, label }: { cls: string; label: string }) {
   return (
     <span className="flex items-center gap-1">
-      <span className={`size-2.5 rounded-[3px] ${cls}`} />
+      <span className={`size-2.5 rounded-xs ${cls}`} />
       <span className="text-text-dim">{label}</span>
     </span>
   );

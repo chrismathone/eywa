@@ -26,7 +26,7 @@ const TYPE_META: Record<string, { label: string; color: PillColor }> = {
   diagnostic: { label: "진단", color: "amber" },
 };
 const inputCls =
-  "border-border bg-background text-foreground placeholder:text-muted-foreground w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary/40";
+  "border-border bg-background text-foreground placeholder:text-muted-foreground w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary/40";
 
 function SubmitBtn() {
   const { pending } = useFormStatus();
@@ -49,7 +49,7 @@ function Dialog({ studentId, onClose }: { studentId: string; onClose: () => void
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center">
-      <div className="bg-background border-border max-h-[90vh] w-full max-w-md overflow-y-auto rounded-lg border p-6 shadow-lg">
+      <div className="bg-background border-border max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl border p-6 shadow-lg">
         <header className="mb-4 flex items-start justify-between">
           <h2 className="text-foreground text-lg font-bold">레벨테스트 추가</h2>
           <button type="button" onClick={onClose} className="text-muted-foreground hover:text-foreground" aria-label="닫기">
@@ -165,7 +165,7 @@ export function LevelTests({ studentId, tests }: { studentId: string; tests: Lev
       </header>
 
       {tests.length === 0 ? (
-        <p className="text-muted-foreground border-border rounded-md border border-dashed py-6 text-center text-xs">
+        <p className="text-muted-foreground border-border rounded-2xl border border-dashed py-6 text-center text-xs">
           기록된 레벨테스트가 없습니다
         </p>
       ) : (
@@ -174,7 +174,7 @@ export function LevelTests({ studentId, tests }: { studentId: string; tests: Lev
             const meta = TYPE_META[t.testType] ?? { label: t.testType, color: "neutral" as PillColor };
             const subs = t.subscores ? Object.entries(t.subscores) : [];
             return (
-              <li key={t.id} className="bg-card border-border rounded-md border p-3">
+              <li key={t.id} className="bg-card border-border rounded-2xl border p-3">
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex flex-wrap items-center gap-2">
                     <Pill color={meta.color} soft>
@@ -191,7 +191,7 @@ export function LevelTests({ studentId, tests }: { studentId: string; tests: Lev
                 {subs.length > 0 ? (
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     {subs.map(([k, v]) => (
-                      <span key={k} className="bg-bg-soft text-text-dim num rounded-sm px-1.5 py-0.5 text-[11px]">
+                      <span key={k} className="bg-bg-soft text-text-dim num rounded-full px-1.5 py-0.5 text-[11px]">
                         {k} <span className="text-foreground font-bold">{v}</span>
                       </span>
                     ))}

@@ -22,7 +22,7 @@ export const metadata = { title: "월별 급여 — eywa" };
 const won = (n: number) => `${n.toLocaleString("ko-KR")}원`;
 
 const STATUS_META: Record<string, { label: string; color: PillColor }> = {
-  paid: { label: "지급완료", color: "primary" },
+  paid: { label: "지급완료", color: "green" },
   saved: { label: "작성됨", color: "blue" },
   draft: { label: "미작성", color: "neutral" },
 };
@@ -93,12 +93,12 @@ export default async function StaffPayrollPage({
       </section>
 
       {/* Filter bar */}
-      <div className="bg-card border-line shadow-card flex flex-wrap items-center gap-3 rounded-md border px-4 py-3">
+      <div className="bg-card border-line shadow-card flex flex-wrap items-center gap-3 rounded-2xl border px-4 py-3">
         {/* 월 이동 */}
         <div className="flex items-center gap-1">
           <Link
             href={buildHref({ period: shiftPeriod(period, -1) })}
-            className="border-line text-text-dim hover:bg-bg-soft rounded-sm border p-1 transition"
+            className="border-line text-text-dim hover:bg-bg-soft rounded-lg border p-1 transition"
             aria-label="이전 달"
           >
             <ChevronLeft className="size-4" />
@@ -106,7 +106,7 @@ export default async function StaffPayrollPage({
           <span className="text-foreground num min-w-[88px] text-center text-sm font-bold">{period}</span>
           <Link
             href={buildHref({ period: shiftPeriod(period, 1) })}
-            className="border-line text-text-dim hover:bg-bg-soft rounded-sm border p-1 transition"
+            className="border-line text-text-dim hover:bg-bg-soft rounded-lg border p-1 transition"
             aria-label="다음 달"
           >
             <ChevronRight className="size-4" />
@@ -122,7 +122,7 @@ export default async function StaffPayrollPage({
             <Link
               key={f.key}
               href={buildHref({ status: f.key })}
-              className={`shrink-0 rounded-sm border px-2 py-0.5 text-xs transition ${
+              className={`shrink-0 rounded-full border px-2 py-0.5 text-xs transition ${
                 status === f.key
                   ? "border-foreground bg-foreground text-background font-medium"
                   : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
@@ -165,7 +165,7 @@ function PayrollTable({
   totalNet: number;
 }) {
   return (
-    <DragScrollArea className="bg-card border-line shadow-card rounded-md border">
+    <DragScrollArea className="bg-card border-line shadow-card rounded-2xl border">
       <table className="w-full text-sm [&_td]:whitespace-nowrap">
         <thead className="border-line border-b [&_th]:whitespace-nowrap">
           <tr>
@@ -252,15 +252,16 @@ function Stat({
   label: string;
   value: string;
   icon: typeof Wallet;
-  color: "primary" | "blue" | "amber";
+  color: "primary" | "green" | "blue" | "amber";
 }) {
   const ICON_BG = {
     primary: "bg-primary-soft text-primary",
     blue: "bg-blue-soft text-blue",
+    green: "bg-green-soft text-green",
     amber: "bg-amber-soft text-amber",
   } as const;
   return (
-    <div className="bg-card border-line shadow-card rounded-md border p-4">
+    <div className="bg-card border-line shadow-card rounded-2xl border p-4">
       <header className="flex items-center justify-between">
         <p className="micro truncate">{label}</p>
         <span className={`flex size-[26px] shrink-0 items-center justify-center rounded-sm ${ICON_BG[color]}`}>

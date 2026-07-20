@@ -7,8 +7,8 @@ const Impl = dynamic(() => import("./_charts-impl").then((m) => m.StatsCharts), 
   ssr: false,
   loading: () => (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-      <div className="bg-bg-soft/40 h-72 animate-pulse rounded-md" />
-      <div className="bg-bg-soft/40 h-72 animate-pulse rounded-md" />
+      <div className="bg-bg-soft/40 h-72 animate-pulse rounded-2xl" />
+      <div className="bg-bg-soft/40 h-72 animate-pulse rounded-2xl" />
     </div>
   ),
 });

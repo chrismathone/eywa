@@ -19,7 +19,7 @@ import { QuoteDocument } from "./quote-document";
 
 const won = (n: number) => `${new Intl.NumberFormat("ko-KR").format(Math.round(n))}원`;
 const inputCls =
-  "border-line bg-background text-foreground placeholder:text-text-faint w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary/40";
+  "border-line bg-background text-foreground placeholder:text-text-faint w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary/40";
 const EXTRA_CATEGORY = "기타";
 
 function monthLastDay(period: string): string {
@@ -201,7 +201,7 @@ export function TuitionCalculator({
       <div className="space-y-4 print:hidden">
         <DraftBanner savedAt={draft.draftSavedAt} onRestore={restoreDraft} onDiscard={draft.discard} />
         {/* 학생 정보 */}
-        <section className="bg-card border-line shadow-card space-y-3 rounded-md border p-4">
+        <section className="bg-card border-line shadow-card space-y-3 rounded-2xl border p-4">
           <h2 className="text-foreground text-[15px] font-bold">상담 정보 (신입생)</h2>
           <div className="grid grid-cols-2 items-end gap-2">
             <label className="space-y-1">
@@ -271,7 +271,7 @@ export function TuitionCalculator({
         </Group>
 
         {/* 입금 계좌 안내 — 안내문(우측 최종 납부 금액 위)에 표시. 기본값=학원설정(수납) 계좌, 여기서 수정 가능. */}
-        <section className="bg-card border-line shadow-card space-y-2.5 rounded-md border p-4">
+        <section className="bg-card border-line shadow-card space-y-2.5 rounded-2xl border p-4">
           <label className="text-foreground inline-flex items-center gap-1.5 text-[15px] font-bold">
             <input
               type="checkbox"
@@ -313,7 +313,7 @@ export function TuitionCalculator({
         </section>
 
         {/* 저장 */}
-        <section className="bg-card border-line shadow-card space-y-3 rounded-md border p-4">
+        <section className="bg-card border-line shadow-card space-y-3 rounded-2xl border p-4">
           <div className="flex items-baseline justify-between">
             <h2 className="text-foreground text-[15px] font-bold">견적 저장</h2>
             <span className="text-primary num text-lg font-bold">{won(totals.total)}</span>
@@ -355,7 +355,7 @@ export function TuitionCalculator({
       </div>
 
       {/* 라이브 안내문 (인쇄 시 카드 크롬 제거 → A4 전폭 세로 문서) */}
-      <div className="border-line bg-card overflow-hidden rounded-md border print:overflow-visible print:rounded-none print:border-0 print:bg-white print:shadow-none">
+      <div className="border-line bg-card overflow-hidden rounded-2xl border print:overflow-visible print:rounded-none print:border-0 print:bg-white print:shadow-none">
         <QuoteDocument
           academyName={academyName}
           logoSrc={logoSrc}
@@ -387,7 +387,7 @@ function Group({
   children: React.ReactNode;
 }) {
   return (
-    <section className="bg-card border-line shadow-card space-y-2.5 rounded-md border p-4">
+    <section className="bg-card border-line shadow-card space-y-2.5 rounded-2xl border p-4">
       <h2 className="text-foreground text-[15px] font-bold">
         {title}
         {required ? <span className="text-danger"> *</span> : null}
@@ -403,7 +403,7 @@ function AddManual({ label, onAdd }: { label: string; onAdd: () => void }) {
     <button
       type="button"
       onClick={onAdd}
-      className="border-line text-text-dim hover:bg-bg-soft hover:text-foreground flex w-full items-center justify-center gap-1 rounded-md border border-dashed py-1.5 text-xs transition"
+      className="border-line text-text-dim hover:bg-bg-soft hover:text-foreground flex w-full items-center justify-center gap-1 rounded-lg border border-dashed py-1.5 text-xs transition"
     >
       <Plus className="size-3.5" />
       {label}

@@ -175,7 +175,7 @@ export function MeetingReportAccordion({
                         type="button"
                         onClick={() => setEditing(null)}
                         disabled={saving}
-                        className="border-line text-text-dim hover:bg-bg-soft inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs transition"
+                        className="border-line text-text-dim hover:bg-bg-soft inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs transition"
                       >
                         <X className="size-3.5" /> 취소
                       </button>
@@ -183,7 +183,7 @@ export function MeetingReportAccordion({
                         type="button"
                         onClick={() => save(section.key)}
                         disabled={saving}
-                        className="bg-primary text-primary-foreground inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition disabled:opacity-50"
+                        className="bg-primary text-primary-foreground inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium transition disabled:opacity-50"
                       >
                         {saving ? <Loader2 className="size-3.5 animate-spin" /> : <Check className="size-3.5" />}
                         저장

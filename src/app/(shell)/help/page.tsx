@@ -190,7 +190,7 @@ export default async function HelpPage() {
         </div>
         <Link
           href="/help/icons"
-          className="bg-primary text-primary-foreground hover:shadow-primary-glow inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-md px-3 text-[12px] font-bold transition-shadow"
+          className="bg-primary text-primary-foreground hover:shadow-primary-glow inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-lg px-3 text-[12px] font-bold transition-shadow"
         >
           아이콘 보기 <EyIcon name="arrowRight" size={12} />
         </Link>
@@ -198,8 +198,8 @@ export default async function HelpPage() {
 
       {/* 1:1 문의 */}
       <div className="lg:max-w-md">
-        <section className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary to-[#0d2b52] p-5 text-white shadow-primary-glow">
-          <p className="text-[12px] font-bold text-[#e2b45f]">1:1 문의</p>
+        <section className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary to-[var(--primary-deep)] p-5 text-white shadow-primary-glow">
+          <p className="text-[12px] font-bold text-[var(--gold-bright)]">1:1 문의</p>
           <h3 className="mt-1.5 text-[17px] font-bold leading-tight">
             도움이 필요하시면 언제든
           </h3>
@@ -208,7 +208,7 @@ export default async function HelpPage() {
           </p>
           <a
             href="tel:1670-0000"
-            className="mt-4 inline-flex items-center gap-1.5 rounded-md bg-white px-3.5 py-2 text-[12px] font-bold text-primary"
+            className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-white px-3.5 py-2 text-[12px] font-bold text-primary"
           >
             <EyIcon name="arrowRight" size={12} />
             상담 예약하기

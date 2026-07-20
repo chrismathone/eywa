@@ -48,19 +48,26 @@ export function TextField({
   );
 }
 
-/** 색상 필드 — 네이티브 스와치(색 선택) + hex 텍스트 입력 동기. 반 색상 폼과 동일 패턴. */
+/**
+ * 색상 필드 — 네이티브 스와치(색 선택) + hex 텍스트 입력 동기. 반 색상 폼과 동일 패턴.
+ * `note` = 입력 아래 한 줄 상태 문구. 저장은 됐지만 실제로는 적용되지 않는 값일 때(브랜드색이
+ * 기본색으로 간주돼 주입 생략되는 경우 등) 그 사실을 알리는 용도 — 스와치만 보여주면 사용자가
+ * "저장은 초록인데 화면은 왜 파랗지?"로 읽는다(2026-07-20 감사).
+ */
 export function ColorField({
   label,
   hint,
   value,
   onChange,
   placeholder,
+  note,
 }: {
   label: string;
   hint?: string;
   value: string;
   onChange: (v: string) => void;
   placeholder?: string;
+  note?: string;
 }) {
   const valid = /^#([0-9a-fA-F]{6}|[0-9a-fA-F]{3})$/.test(value.trim());
   return (
@@ -80,6 +87,7 @@ export function ColorField({
           onChange={(e) => onChange(e.target.value)}
         />
       </div>
+      {note ? <p className="text-text-dim mt-1.5 text-[11px] leading-snug">{note}</p> : null}
     </Field>
   );
 }

@@ -9,7 +9,7 @@ const YMD = /^\d{4}-\d{2}-\d{2}$/;
 
 // Pill/디자인 토큰 색상 — 과목 색상 선택지.
 export const SUBJECT_COLORS = [
-  "primary", "blue", "rose", "amber", "danger", "purple", "gold", "neutral",
+  "primary", "green", "blue", "rose", "amber", "danger", "purple", "gold", "neutral",
 ] as const;
 
 // 과목별 시간표 요일 병합 프리셋 — 같은 반이 묶인 요일에 걸치면 한 칸으로 병합(기본뷰).

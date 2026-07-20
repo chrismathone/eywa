@@ -62,7 +62,7 @@ export function ClassTermButton({
         defaultValue={today}
         max={today}
         aria-label="종강일"
-        className="border-line rounded-md border px-2 py-1 text-xs"
+        className="border-line rounded-lg border px-2 py-1 text-xs"
       />
       <Button type="submit" size="sm" disabled={endPending}>
         종강 확정

@@ -9,7 +9,7 @@ import { AlertTriangle } from "@/components/icons/eywa-icon-compat";
 export function DupSuspectTag({ className }: { className?: string }) {
   return (
     <span
-      className={`bg-amber/15 text-amber inline-flex items-center gap-0.5 rounded-sm px-1 py-[1px] align-middle text-[10px] font-medium whitespace-nowrap ${className ?? ""}`}
+      className={`bg-amber/15 text-amber inline-flex items-center gap-0.5 rounded-full px-1 py-[1px] align-middle text-[10px] font-medium whitespace-nowrap ${className ?? ""}`}
       title="동기화가 이름 겹침으로 자동 구분(접미사)한 학생입니다 — 실제 동명이인인지 확인이 필요합니다."
     >
       <AlertTriangle className="size-2.5" strokeWidth={2.5} aria-hidden />

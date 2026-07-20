@@ -78,6 +78,7 @@ export function subjectLabelRecord(subjects: SubjectSetting[]): Record<string, s
 // Pill 컴포넌트(atoms/pill)와 동일 토큰. client로 색만 넘기고 클래스는 여기서 해석.
 export const SUBJECT_SOFT: Record<PillColor, string> = {
   primary: "bg-primary-soft text-primary",
+  green: "bg-green-soft text-green",
   gold: "bg-gold-soft text-gold",
   blue: "bg-blue-soft text-blue",
   purple: "bg-purple-soft text-purple",
@@ -89,6 +90,7 @@ export const SUBJECT_SOFT: Record<PillColor, string> = {
 
 export const SUBJECT_SOLID: Record<PillColor, string> = {
   primary: "bg-primary",
+  green: "bg-green",
   gold: "bg-gold",
   blue: "bg-blue",
   purple: "bg-purple",
@@ -100,6 +102,7 @@ export const SUBJECT_SOLID: Record<PillColor, string> = {
 
 export const SUBJECT_BORDER: Record<PillColor, string> = {
   primary: "border-primary bg-primary-softer",
+  green: "border-green bg-green-soft",
   gold: "border-gold bg-gold-soft",
   blue: "border-blue bg-blue-soft",
   purple: "border-purple bg-purple-soft",
@@ -111,6 +114,7 @@ export const SUBJECT_BORDER: Record<PillColor, string> = {
 
 export const SUBJECT_ICON_BG: Record<PillColor, string> = {
   primary: "bg-primary-soft text-primary",
+  green: "bg-green-soft text-green",
   gold: "bg-gold-soft text-gold",
   blue: "bg-blue-soft text-blue",
   purple: "bg-purple-soft text-purple",

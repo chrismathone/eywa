@@ -22,7 +22,7 @@ import {
 
 const ATTITUDE = ["아주 좋음", "좋음", "보통", "산만함", "피곤함"];
 const HOMEWORK = ["완료", "일부 미흡", "미제출"];
-const INPUT = "border-border bg-card text-foreground rounded-md border px-2.5 py-1.5 text-sm w-full";
+const INPUT = "border-border bg-card text-foreground rounded-lg border px-2.5 py-1.5 text-sm w-full";
 const LABEL = "text-text-dim text-[11px] font-medium";
 
 export type ComposeStudent = { id: string; name: string; school: string | null; grade: string | null };
@@ -258,7 +258,7 @@ export function ComposeFace({
   }
 
   return (
-    <section className="bg-card border-line shadow-card space-y-4 rounded-lg border px-5 py-4">
+    <section className="bg-card border-line shadow-card space-y-4 rounded-2xl border px-5 py-4">
       <div>
         <h2 className="text-foreground text-[15px] font-bold">직접 작성·발송</h2>
         <p className="text-text-faint text-[12px]">

@@ -54,7 +54,7 @@ export async function OverviewTab({ student }: { student: StudentDetail }) {
   return (
     <div className="space-y-4">
       {/* 최근 30일 출결 — 전체 폭 KPI */}
-      <section className="bg-card border-border rounded-md border p-5">
+      <section className="bg-card border-border rounded-2xl border p-5">
         <header className="mb-4 flex items-baseline justify-between">
           <h2 className="text-sm font-bold tracking-tight">최근 30일 출결</h2>
           <p className="text-muted-foreground num text-xs">총 {attendance.total}건</p>
@@ -73,7 +73,7 @@ export async function OverviewTab({ student }: { student: StudentDetail }) {
 
       {/* 프로필 + 다이제스트 — CSS columns 마조너리(창 폭 따라 1/2/3열 자동 패킹, 빈칸 최소화) */}
       <div className="gap-4 sm:columns-2 xl:columns-3 [&>section]:mb-4 [&>section]:break-inside-avoid">
-        <section className="bg-card border-border space-y-3 rounded-md border p-5">
+        <section className="bg-card border-border space-y-3 rounded-2xl border p-5">
           <h2 className="text-sm font-bold tracking-tight">프로필</h2>
           <dl className="space-y-3 text-sm">
             {student.englishName ? <Field label="영문명" value={student.englishName} /> : null}
@@ -196,7 +196,7 @@ export async function OverviewTab({ student }: { student: StudentDetail }) {
       </div>
 
       {hasCareAi ? (
-        <section className="bg-card border-border space-y-4 rounded-md border p-5">
+        <section className="bg-card border-border space-y-4 rounded-2xl border p-5">
           <header className="flex items-baseline justify-between">
             <div className="inline-flex items-center gap-2">
               <Sparkles className="text-chart-4 size-4" />
@@ -224,7 +224,7 @@ export async function OverviewTab({ student }: { student: StudentDetail }) {
                     className="border-border bg-muted/30 flex items-start gap-3 rounded-md border px-3 py-2.5"
                   >
                     <span
-                      className={`shrink-0 rounded-md border px-1.5 py-0.5 text-[10px] font-medium ${PRIORITY_COLOR[f.priority]}`}
+                      className={`shrink-0 rounded-full border px-1.5 py-0.5 text-[10px] font-medium ${PRIORITY_COLOR[f.priority]}`}
                     >
                       {PRIORITY_LABEL[f.priority]}
                     </span>
@@ -264,7 +264,7 @@ function DigestCard({
   children: React.ReactNode;
 }) {
   return (
-    <section className="bg-card border-border flex flex-col rounded-md border p-4">
+    <section className="bg-card border-border flex flex-col rounded-2xl border p-4">
       <header className="mb-2 flex items-center justify-between">
         <h3 className="text-foreground text-sm font-bold">{title}</h3>
         {more}

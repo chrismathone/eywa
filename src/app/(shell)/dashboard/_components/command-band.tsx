@@ -63,7 +63,8 @@ export function CommandBand({
 
   return (
     <section aria-labelledby="assistant-home-title">
-      {/* 인사말 — 큰 타이포 위계(날짜 → 인사 → 안내) */}
+      {/* 인사말 — 큰 타이포 위계(날짜 → 인사 → 안내). 날짜는 운영실(데스크톱 작업면) 콘텐츠다 —
+          창 위로 삐져나와 보였던 건 창 최대화가 상단을 안 덮은 탓이라 최대화 쪽을 고쳤다(복구, 2026-07-20). */}
       <div className="px-1">
         <p className="text-text-dim text-[13px] font-medium">{dateLabel}</p>
         <h2

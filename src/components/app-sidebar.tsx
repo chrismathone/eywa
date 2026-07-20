@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/tooltip";
 import { ExternalLink, PanelLeftClose, PanelLeftOpen } from "@/components/icons/eywa-icon-compat";
 import { UserMenu } from "@/components/user-menu";
+import { NotificationBell } from "@/features/notifications/components/notification-bell";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import {
   NAV_GROUPS,
@@ -233,7 +234,7 @@ export function AppSidebar({
             aria-label={expanded ? "사이드바 접기" : "사이드바 펼치기"}
             title={expanded ? "사이드바 접기" : "사이드바 펼치기"}
             aria-expanded={expanded}
-            className="bg-sidebar text-text-dim hover:bg-bg-soft hover:text-foreground absolute top-1/2 right-3 flex size-7 -translate-y-1/2 items-center justify-center rounded-[5px] transition-colors"
+            className="bg-sidebar text-text-dim hover:bg-bg-soft hover:text-foreground absolute top-1/2 right-3 flex size-7 -translate-y-1/2 items-center justify-center rounded-sm transition-colors"
           >
             {expanded ? (
               <PanelLeftClose className="size-4" strokeWidth={1.8} />
@@ -340,13 +341,25 @@ export function AppSidebar({
             </div>
           ))}
 
-          {/* shift+클릭 안내 — 메뉴(관리자 도구 포함) 목록 아래. 펼침 데스크톱에서만(접힘 레일엔 공간 없음). */}
+          {/* 단축키 안내 — 메뉴(관리자 도구 포함) 목록 아래. 펼침 데스크톱에서만(접힘 레일엔 공간 없음). */}
           {isDesktop && expanded ? (
-            <p className="text-text-faint mt-1.5 px-4 pt-2 text-[10px] leading-snug">
-              <kbd className="border-line bg-bg-soft text-text-dim rounded border px-1 py-px font-mono text-[9px]">
-                Shift
-              </kbd>
-              +클릭하면 같은 화면을 새 창으로 하나 더 열 수 있어요.
+            <p className="text-text-faint mt-1.5 space-y-0.5 px-4 pt-2 text-[10px] leading-snug">
+              <span className="block">
+                <kbd className="border-line bg-bg-soft text-text-dim rounded border px-1 py-px font-mono text-[9px]">
+                  Shift
+                </kbd>
+                +
+                <kbd className="border-line bg-bg-soft text-text-dim rounded border px-1 py-px font-mono text-[9px]">
+                  F
+                </kbd>{" "}
+                검색(메뉴·학생·수업 점프)
+              </span>
+              <span className="block">
+                <kbd className="border-line bg-bg-soft text-text-dim rounded border px-1 py-px font-mono text-[9px]">
+                  Shift
+                </kbd>
+                +클릭 = 같은 화면을 새 창으로 하나 더
+              </span>
             </p>
           ) : null}
           </nav>
@@ -372,17 +385,30 @@ export function AppSidebar({
           </div>
         ) : null}
 
-        {/* user — 계정/로그아웃. 아이콘은 접힘 중앙 고정, 이름·호칭만 페이드 */}
-        <div className="border-line flex h-14 shrink-0 items-center gap-2.5 overflow-hidden border-t pl-2">
+        {/* user — 계정/로그아웃 + 알림 벨 합체(2026-07-20 상단 헤더 제거로 벨이 여기로 이관).
+            펼침: [사용자][이름·호칭][벨(우측)] 한 줄 / 접힘(52px 레일): 벨 위·사용자 아래 세로 스택.
+            벨은 데스크톱에서만 마운트 — 모바일은 AppHeader 벨이 담당(이중 마운트=폴링·팝업 중복). */}
+        <div
+          className={`border-line shrink-0 overflow-hidden border-t ${
+            expanded
+              ? "flex h-14 items-center gap-2.5 pr-2 pl-2"
+              : "flex flex-col-reverse items-center gap-0.5 py-1.5"
+          }`}
+        >
           <UserMenu email={email} displayName={name} jobTitle={title} />
           <div
-            className={`overflow-hidden whitespace-nowrap ${
-              expanded ? "max-w-[150px] opacity-100" : "max-w-0 opacity-0"
+            className={`min-w-0 flex-1 overflow-hidden whitespace-nowrap ${
+              expanded ? "max-w-[150px] opacity-100" : "hidden max-w-0 opacity-0"
             } ${motion ? `transition-[max-width,opacity] duration-200 ${EASE}` : ""}`}
           >
             <div className="text-foreground truncate text-[12px] font-bold leading-tight">{name}</div>
             <div className="text-text-dim truncate text-[11px] leading-tight">{title}</div>
           </div>
+          {isDesktop ? (
+            <div className={expanded ? "ml-auto shrink-0" : "shrink-0"}>
+              <NotificationBell />
+            </div>
+          ) : null}
         </div>
 
         {/* 너비 조절 핸들 — 오른쪽 경계선. 끌어서 조절/접기, 더블클릭=토글, ←/→ 키 지원. */}
@@ -413,7 +439,7 @@ export function AppSidebar({
               onMouseLeave={scheduleFlyoutClose}
               onClick={() => setFlyout(null)}
               style={{ top: flyout.top, left: flyout.left }}
-              className="bg-card border-line shadow-card fixed z-[46] min-w-[152px] rounded-md border p-1"
+              className="bg-card border-line shadow-card fixed z-[46] min-w-[152px] rounded-lg border p-1"
             >
               <p className="text-text-faint px-2.5 pt-1 pb-1.5 text-[11px] font-bold">
                 {flyout.label}

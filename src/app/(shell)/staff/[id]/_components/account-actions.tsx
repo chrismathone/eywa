@@ -89,7 +89,7 @@ function PasswordDialog({
               key={m}
               type="button"
               onClick={() => setMode(m)}
-              className={`rounded-sm border px-2.5 py-1 text-xs transition ${
+              className={`rounded-full border px-2.5 py-1 text-xs transition ${
                 mode === m
                   ? "border-primary bg-primary text-primary-foreground font-medium"
                   : "border-line text-text-dim hover:bg-bg-soft"
@@ -219,7 +219,7 @@ export function AccountActions({
   const canChangeRole = roleOptions.length > 0;
 
   return (
-    <div className="bg-card border-line shadow-card rounded-md border p-5">
+    <div className="bg-card border-line shadow-card rounded-2xl border p-5">
       <p className="micro mb-1">계정 관리</p>
       <p className="text-text-dim mb-3 text-xs">로그인 계정의 역할·이메일·비밀번호 변경, 완전 삭제.</p>
       <div className="flex flex-wrap gap-2">

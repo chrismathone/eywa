@@ -93,7 +93,7 @@ export async function SheetsFace({
 
       <div className="grid gap-4 lg:grid-cols-2 lg:items-stretch">
         {/* 좌 — 최초 1회 설정 안내(서비스계정은 새 시트를 못 만들어 사람이 만든 시트에 공유가 필요) */}
-        <section className="border-border bg-card flex flex-col rounded-md border p-5 text-[13px] leading-relaxed">
+        <section className="border-border bg-card flex flex-col rounded-2xl border p-5 text-[13px] leading-relaxed">
           <p className="text-foreground font-bold">처음 한 번 설정 (과목마다)</p>
           <ol className="text-text-dim mt-2 list-decimal space-y-1.5 pl-5">
             <li>

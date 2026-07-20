@@ -11,7 +11,15 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { fetchMyNotifications, markNotificationsRead } from "@/features/notifications/server/actions";
+import { Archive, RotateCcw, Trash2 } from "@/components/icons/eywa-icon-compat";
+import {
+  archiveNotification,
+  deleteNotification,
+  fetchMyNotifications,
+  markNotificationsRead,
+  unarchiveNotification,
+} from "@/features/notifications/server/actions";
+import type { NotificationView } from "@/features/notifications/server/queries";
 import { NOTIFICATION_ICON, type NotificationItem } from "@/features/notifications/types";
 import { mergeAlerted, pickAlertTargets } from "@/features/notifications/important";
 import { isTopFrame, showDesktopNotification } from "@/features/notifications/desktop-notify";
@@ -65,6 +73,9 @@ export function NotificationBell() {
   const [items, setItems] = useState<NotificationItem[]>([]);
   const [unread, setUnread] = useState(0);
   const [pendingLink, setPendingLink] = useState<string | null>(null); // 확인 대기 중인 외부 링크
+  // 받은함/보관함(0125a) — 보관은 벨에서 치우되 나중에 볼 수 있는 안전판(삭제는 영구).
+  const [view, setView] = useState<NotificationView>("active");
+  const viewRef = useRef<NotificationView>("active");
   const [, startTransition] = useTransition();
   // 요청 순번 — 모든 서버 왕복(폴링·읽음처리·모두읽음)이 공유한다. 늦게 도착한 응답이
   // 최신 요청 결과를 덮지 않게(적대리뷰: mark 응답을 느린 폴링이 되돌리던 레이스).
@@ -112,7 +123,9 @@ export function NotificationBell() {
           if (seq === reqRef.current) {
             setItems(res.items);
             setUnread(res.unread);
-            maybeAlert(res.items); // 읽음처리 응답에도 태우지만 read=true라 대상에서 걸러짐
+            // 읽음처리 응답에도 태우지만 read=true라 대상에서 걸러짐. 보관함 뷰의 목록으로는
+            // 팝업을 쏘지 않는다(치워둔 알림이 다시 울리면 보관이 무의미).
+            if (viewRef.current === "active") maybeAlert(res.items);
           }
         } catch {
           /* best-effort — 벨 갱신 실패는 조용히 무시 */
@@ -122,7 +135,11 @@ export function NotificationBell() {
     [maybeAlert],
   );
 
-  const refresh = useCallback(() => run(fetchMyNotifications), [run]);
+  // view 변경 시 refresh 정체가 바뀌어 아래 effect들이 새 뷰로 다시 당겨온다. ref는 run 내부 가드용.
+  useEffect(() => {
+    viewRef.current = view;
+  }, [view]);
+  const refresh = useCallback(() => run(() => fetchMyNotifications(view)), [run, view]);
 
   // 마운트 + 경로 변경(네비마다 신선) + 60초 폴링 + 창 포커스/가시성 복귀
   // (플로팅 창 안 작업 후 top-frame으로 돌아오면 즉시 갱신 — 60초 지연 완화, 적대리뷰).
@@ -146,6 +163,13 @@ export function NotificationBell() {
 
   function markAllRead() {
     run(() => markNotificationsRead());
+  }
+
+  // 보관/복원/삭제 — 낙관적으로 목록에서 즉시 제거하고 서버 응답(그 뷰의 최신 목록+unread)으로 동기화.
+  // run이 seq를 올려 in-flight 폴링이 옛 목록을 되돌리지 못한다(읽음처리와 동일 레이스 방어).
+  function removeThen(id: string, fn: () => Promise<{ unread: number; items: NotificationItem[] }>) {
+    setItems((prev) => prev.filter((x) => x.id !== id));
+    run(fn);
   }
 
   function openItem(n: NotificationItem) {
@@ -172,7 +196,7 @@ export function NotificationBell() {
           <button
             type="button"
             aria-label={unread > 0 ? `알림 ${unread}개` : "알림"}
-            className={`group relative flex size-9 items-center justify-center rounded-[4px] border bg-card transition-all duration-200 hover:bg-surface-hi hover:shadow-card-hover active:scale-95 ${
+            className={`group relative flex size-9 items-center justify-center rounded-lg border bg-card transition-all duration-200 hover:bg-surface-hi hover:shadow-card-hover active:scale-95 ${
               unread > 0 ? "border-danger/30 text-danger" : "border-line text-foreground"
             }`}
           />
@@ -203,21 +227,32 @@ export function NotificationBell() {
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-80 p-0">
         <div className="flex items-center justify-between px-3 py-2">
-          <DropdownMenuLabel className="p-0">알림</DropdownMenuLabel>
-          {unread > 0 ? (
+          <DropdownMenuLabel className="p-0">{view === "archived" ? "보관함" : "알림"}</DropdownMenuLabel>
+          <span className="flex items-center gap-2.5">
+            {view === "active" && unread > 0 ? (
+              <button
+                type="button"
+                onClick={markAllRead}
+                className="text-text-dim hover:text-foreground text-[11px] transition"
+              >
+                모두 읽음
+              </button>
+            ) : null}
+            {/* 받은함 ↔ 보관함 전환 — 보관은 삭제의 안전판(복원 가능). */}
             <button
               type="button"
-              onClick={markAllRead}
-              className="text-text-dim hover:text-foreground text-[11px] transition"
+              onClick={() => setView((v) => (v === "active" ? "archived" : "active"))}
+              className="text-text-dim hover:text-foreground inline-flex items-center gap-1 text-[11px] transition"
             >
-              모두 읽음
+              <Archive className="size-3" />
+              {view === "archived" ? "받은 알림" : "보관함"}
             </button>
-          ) : null}
+          </span>
         </div>
         <DropdownMenuSeparator className="my-0" />
         {/* 컴퓨터(OS) 알림 권한 — 중요 알림을 브라우저 밖에서도 확실히 받게. 권한 요청은 사용자 제스처(클릭)에서만
             가능해 여기 버튼으로 노출한다. granted면 아무것도 안 보임(조용). */}
-        {perm === "default" ? (
+        {view === "active" && perm === "default" ? (
           <button
             type="button"
             onClick={() => void enableDesktopNotify()}
@@ -227,21 +262,32 @@ export function NotificationBell() {
             <span className="text-foreground font-bold">컴퓨터 알림 켜기</span>
             <span className="text-text-faint truncate">— 창 밖에서도 받기</span>
           </button>
-        ) : perm === "denied" ? (
+        ) : view === "active" && perm === "denied" ? (
           <p className="text-text-faint border-line border-b px-3 py-2 text-[11px] leading-snug break-keep">
             컴퓨터 알림이 차단돼 있습니다 — 주소창의 자물쇠 &gt; 알림에서 &lsquo;허용&rsquo;으로 바꿔주세요.
           </p>
         ) : null}
         {items.length === 0 ? (
-          <div className="text-text-dim px-2 py-8 text-center text-xs">새 알림이 없습니다</div>
+          <div className="text-text-dim px-2 py-8 text-center text-xs">
+            {view === "archived" ? "보관한 알림이 없습니다" : "새 알림이 없습니다"}
+          </div>
         ) : (
           <div className="scrollbar-thin max-h-[360px] overflow-y-auto py-1">
             {items.map((n) => (
-              <button
+              // 행 전체=열기 클릭 영역이지만 내부에 보관/삭제 **실제 버튼**이 들어가 중첩 button이
+              // 불가(HTML) → div+role. 항목 액션은 hover(또는 키보드 포커스)에서만 노출.
+              <div
                 key={n.id}
-                type="button"
+                role="button"
+                tabIndex={0}
                 onClick={() => openItem(n)}
-                className={`hover:bg-bg-soft flex w-full items-start gap-2.5 px-3 py-2 text-left transition ${
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    openItem(n);
+                  }
+                }}
+                className={`group/item hover:bg-bg-soft flex w-full cursor-pointer items-start gap-2.5 px-3 py-2 text-left transition ${
                   n.read ? "" : "bg-primary-soft/40"
                 }`}
               >
@@ -255,12 +301,54 @@ export function NotificationBell() {
                     <span className="text-text-faint ml-auto shrink-0 text-[10px]">
                       {relTime(n.createdAt)}
                     </span>
+                    {/* 항목 액션 — 받은함: 보관·삭제 / 보관함: 복원·삭제. 클릭이 행 열기로 번지지 않게 정지. */}
+                    <span className="hidden shrink-0 items-center gap-0.5 group-focus-within/item:flex group-hover/item:flex">
+                      {view === "active" ? (
+                        <button
+                          type="button"
+                          title="보관 — 목록에서 치우고 보관함에 보관"
+                          aria-label="보관"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            removeThen(n.id, () => archiveNotification(n.id, "active"));
+                          }}
+                          className="text-text-dim hover:text-foreground hover:bg-line/60 flex size-5 items-center justify-center rounded-full transition"
+                        >
+                          <Archive className="size-3" />
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          title="받은 알림으로 복원"
+                          aria-label="복원"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            removeThen(n.id, () => unarchiveNotification(n.id, "archived"));
+                          }}
+                          className="text-text-dim hover:text-foreground hover:bg-line/60 flex size-5 items-center justify-center rounded-full transition"
+                        >
+                          <RotateCcw className="size-3" />
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        title="삭제 — 되돌릴 수 없음(치우기만 하려면 보관)"
+                        aria-label="삭제"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          removeThen(n.id, () => deleteNotification(n.id, view));
+                        }}
+                        className="text-text-dim hover:text-danger hover:bg-danger-soft flex size-5 items-center justify-center rounded-full transition"
+                      >
+                        <Trash2 className="size-3" />
+                      </button>
+                    </span>
                   </span>
                   {n.body ? (
                     <span className="text-text-dim mt-0.5 block text-[11px] leading-snug">{n.body}</span>
                   ) : null}
                 </span>
-              </button>
+              </div>
             ))}
           </div>
         )}
