@@ -46,6 +46,17 @@ export function hexToRgba(hex: string, alpha: number): string {
  * --primary와 그 파생(soft/softer)·동일 hex를 쓰는 토큰(ring, chart-2, sidebar-primary 등)을 함께 덮는다.
  * --primary-foreground / --sidebar-primary-foreground(흰색)는 대비 위해 유지(자동 대비 가드는 후속).
  */
+/**
+ * 저장된 브랜드색이 **실제로 화면에 주입되는가**. false면 globals.css 기본 팔레트(v3 네이비)가 그대로
+ * 쓰인다 — 값이 비었거나·형식이 틀렸거나·현/과거 기본색(LEGACY_DEFAULT_BRAND_COLORS)일 때.
+ * 판정은 brandColorVars에 위임한다(로직 이중화 금지 — 갈라지면 설정 화면이 거짓말을 하게 된다).
+ * 용도: /owner 브랜드 색상 필드가 "저장돼 있지만 적용되지 않는 값"을 그대로 보여주던 문제
+ * (2026-07-20 감사) — 사용자가 그린 스와치를 보면서 화면은 네이비인 상태를 설명하기 위함.
+ */
+export function isBrandColorApplied(brandColor: string | undefined | null): boolean {
+  return brandColorVars(brandColor) !== null;
+}
+
 export function brandColorVars(brandColor: string | undefined | null): CSSProperties | null {
   if (!brandColor) return null;
   const hex = brandColor.trim();

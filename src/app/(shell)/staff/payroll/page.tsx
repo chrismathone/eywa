@@ -22,7 +22,7 @@ export const metadata = { title: "월별 급여 — eywa" };
 const won = (n: number) => `${n.toLocaleString("ko-KR")}원`;
 
 const STATUS_META: Record<string, { label: string; color: PillColor }> = {
-  paid: { label: "지급완료", color: "primary" },
+  paid: { label: "지급완료", color: "green" },
   saved: { label: "작성됨", color: "blue" },
   draft: { label: "미작성", color: "neutral" },
 };
@@ -252,11 +252,12 @@ function Stat({
   label: string;
   value: string;
   icon: typeof Wallet;
-  color: "primary" | "blue" | "amber";
+  color: "primary" | "green" | "blue" | "amber";
 }) {
   const ICON_BG = {
     primary: "bg-primary-soft text-primary",
     blue: "bg-blue-soft text-blue",
+    green: "bg-green-soft text-green",
     amber: "bg-amber-soft text-amber",
   } as const;
   return (

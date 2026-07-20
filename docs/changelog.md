@@ -4,6 +4,36 @@
 
 ## 진행 상황
 
+### 앱 화면 v3 네이비 미통일 전수 정리 (2026-07-20) — ✅ tsc0/lint0/test1664
+"앱도 네이비로 통일됐나" 검수(5렌즈 감사 77에이전트, 탐색 36→확정 13) 후속. **토큰·brandColor 주입
+경로는 정상**이었고(injaewon 저장값 #1a5f3c는 `LEGACY_DEFAULT_BRAND_COLORS`가 억제 → globals.css
+네이비 적용, 실측 주입 0건), 결함은 전부 **토큰을 안 거치는 표면**에 몰려 있었다.
+- 🔴 **빈 데스크톱 일러스트 404** — 애셋 `-alpha` 리네임 때 `workspace-canvas.tsx`의 하드코딩 경로만
+  누락(`empty-workspace.png` 404 / `-alpha.png` 200). 앱 진입 직후 매번 보는 표면이었다.
+- 🔴 **알약 팔레트에 `green` 신설** — primary가 그린→네이비로 가면서 팔레트가 **파랑 계열 2개**
+  (primary 214.4° · blue 219.2°, **색상각 4.8°·명도비 2.17:1**)만 남아 "완료 vs 진행중" 상태쌍을 색으로
+  못 나눴다(전에는 그린 vs 파랑 68.7°). `--green`/`--green-soft`(=chart-2 값·"긍정" 시맨틱, 네이비와 64°,
+  흰 배경 5.26:1) 추가 + `PillColor`·`SUBJECT_*`·`PILL_HEX`·`SUBJECT_COLORS`(Zod) 전부 확장.
+  충돌 맵 재배정: 급여 지급완료·회의 완료·상담 완료·등록상담 '등록' → green, AI완료 → purple, 예약 → gold.
+  ⚠️ `--blue` 재조정은 **수학적으로 불가**(흰 배경 텍스트 4.5:1 ↔ 네이비 3:1이 모순) — 배정으로 푼다.
+- 🔴 **엑셀 출력이 리스킨 2회 모두 누락** — `timetable-excel.ts` `PILL_HEX.primary`가 민트그린
+  `FFCDE9D9`(=v1 primary-soft의 엑셀 판본)라 **수학 셀만 그린으로 출력**(화면 알약은 네이비). 전 항목을
+  현 토큰 기준 alpha 0.22로 재산출. 영어 시간표 시트 그린캐스트(`FFEEF2F0`·`FF5B6B63`·`FFBFC7C2`·
+  `FF98A29B`)·수납/학생 엑셀 헤더 웜크림(`FFF1EDE2`) → 뉴트럴.
+- 🔴 **/owner 브랜드 색상이 "적용 안 되는 값"을 그대로 표시** — 저장값 그린 스와치 + 화면은 네이비인데
+  아무 표시가 없었다. `isBrandColorApplied()`(판정은 `brandColorVars`에 위임 — 이중화 금지) + ColorField
+  `note`로 "현재 기본 팔레트로 표시됩니다" 안내. ⚠️ 억제 로직을 **없애서 고치면 셸 전체가 그린으로 뒤집힌다.**
+- 차트/서버 색 리터럴 → `var(--color-*)`(형제 차트 규약): 격자선 웜아이보리 `#e7e3d6`, 세이지그린
+  `#9aa39d`/`#75807a`, 골드 `#a97f24`(현 토큰 `#8a681c`와 드리프트), 상담통계 주계열 그린.
+  등록상담 도넛은 인접 조각 색상각 충돌을 피해 재배정(primary·blue 동시 사용 금지).
+- billing 시수검증·분배의 Tailwind 원색(emerald/red/amber) → 토큰. help 히어로 리터럴 → `--gold-bright`
+  (네이비 위 `--gold`는 2.06:1로 판독 불가 → 5.53:1) + `--primary-deep`(`color-mix`라 **테넌트
+  brandColor 주입도 자동 추종** — 브라우저 실측 확인).
+- ⏳ **빈 상태 일러스트 15장은 코드가 아니라 PNG** — 평균색 실측 결과 쿨 0장(웜 3·웜기운 중립 11·그린 1)이라
+  네이비 배경에서 누렇게 뜬다. 재생성 프롬프트 별도 전달.
+- ⚠️ **injaewon 저장 과목색은 여전히 `math=primary`·`english=blue`(충돌)** — `tenant_settings` 직접 쓰기는
+  금지(#59)라 원장이 /owner 과목 운영에서 영어를 green으로 바꿔야 해소된다. `defaults.ts`는 신규 테넌트용으로 수정됨.
+
 ### 알림 보관/삭제 + 창 최대화 전체 화면 (2026-07-20) — ✅ tsc0/lint0 · 마이그 0125a 적용 · 실브라우저 검증
 - **창 최대화가 화면 전체를 안 덮던 문제**: [WorkspaceCanvas](../src/components/workspace/workspace-canvas.tsx)의
   `HEADER = 48`(상단탭 자리 예약)이 상단탭 데스크톱 폐지 후에도 남아, 그 48px 띠로 **운영실 배경이 비쳐** 최대화해도

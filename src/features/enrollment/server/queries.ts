@@ -645,13 +645,18 @@ export const OUTCOME_LABEL: Record<OutcomeKey, string> = {
 };
 
 export const OUTCOME_COLOR: Record<OutcomeKey, string> = {
-  pending: "#c8720d",
-  scheduled: "#e0a33a",
-  consulted: "#2d6be0",
-  ai_done: "#18a05f",
-  enrolled: "#0e7c46",
-  declined: "#75807a",
-  no_show: "#d33f3f",
+  // globals.css 토큰만 사용 — 값은 브라우저에서 recharts <Cell fill>로 해석되므로 var()가 동작한다
+  // (outcome-donut-impl.tsx). 리터럴 hex 금지: amber/gold/그린캐스트가 v1 값에 멈춰 있었다(2026-07-20 감사).
+  // ⚠️ 도넛은 조각이 맞닿으므로 인접 색상각이 겹치면 안 된다 — primary(네이비 214°)와 blue(219°)를
+  // 같은 도넛에 함께 쓰지 말 것(v3에서 두 색이 4.8° 차이로 붕괴). enrolled=성공이라 "긍정=그린"
+  // 시맨틱의 chart-2를 쓴다(globals.css가 이 목적으로 그린을 남겨 둠).
+  pending: "var(--color-amber)",
+  scheduled: "var(--color-gold)",
+  consulted: "var(--color-blue)",
+  ai_done: "var(--color-purple)",
+  enrolled: "var(--color-chart-2)",
+  declined: "var(--color-text-faint)",
+  no_show: "var(--color-danger)",
 };
 
 export type OutcomeDistribution = { outcome: OutcomeKey; label: string; count: number; color: string }[];

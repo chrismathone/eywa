@@ -6,6 +6,7 @@ import type { ReactNode } from "react";
 
 export type PillColor =
   | "primary"
+  | "green"
   | "gold"
   | "blue"
   | "purple"
@@ -23,6 +24,7 @@ type Props = {
 
 const SOFT_CLASS: Record<PillColor, string> = {
   primary: "bg-primary-soft text-primary",
+  green: "bg-green-soft text-green",
   gold: "bg-gold-soft text-gold",
   blue: "bg-blue-soft text-blue",
   purple: "bg-purple-soft text-purple",
@@ -34,6 +36,7 @@ const SOFT_CLASS: Record<PillColor, string> = {
 
 const SOLID_CLASS: Record<PillColor, string> = {
   primary: "bg-primary text-primary-foreground",
+  green: "bg-green text-white",
   gold: "bg-gold text-white",
   blue: "bg-blue text-white",
   purple: "bg-purple text-white",

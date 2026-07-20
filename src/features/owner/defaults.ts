@@ -133,7 +133,7 @@ export const DEFAULT_SETTINGS: TenantSettings = {
       {
         key: "english",
         label: "영어",
-        color: "blue",
+        color: "green",
         weekdayGrouping: "mon-tue",
         weekdayPeriods: ENGLISH_WEEKDAY_PERIOD_LIST,
         teacherViewLines: DEFAULT_TEACHER_VIEW_LINES,

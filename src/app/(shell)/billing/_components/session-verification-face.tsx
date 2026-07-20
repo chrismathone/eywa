@@ -24,9 +24,9 @@ function shiftPeriod(period: string, delta: number): string {
 
 // diff 색: 일치=녹 / 부족=주황 / 초과=적 / 미확정=회색 (라이트 전용 Daylight).
 const STATUS_META: Record<VerificationStatus, { label: string; cell: string; chip: string }> = {
-  matched: { label: "일치", cell: "text-emerald-700", chip: "bg-emerald-50 text-emerald-700 border-emerald-200" },
-  short: { label: "부족", cell: "text-amber-700", chip: "bg-amber-50 text-amber-700 border-amber-200" },
-  over: { label: "초과", cell: "text-red-700", chip: "bg-red-50 text-red-700 border-red-200" },
+  matched: { label: "일치", cell: "text-green", chip: "bg-green-soft text-green border-green/30" },
+  short: { label: "부족", cell: "text-amber", chip: "bg-amber-soft text-amber border-amber/30" },
+  over: { label: "초과", cell: "text-danger", chip: "bg-danger-soft text-danger border-danger/30" },
   unconfirmed: { label: "미확정", cell: "text-text-dim", chip: "bg-surface text-text-dim border-line" },
 };
 
@@ -155,7 +155,7 @@ export async function SessionVerificationFace({
 
       <p className="text-text-dim text-xs leading-relaxed">
         <b>확정한 회차</b>(청구 기준)와 그 반의 <b>실제 소비 출석</b>(출석·지각·조퇴·보강)을 나란히 대조합니다.
-        차이는 <span className="text-amber-700">부족</span>(청구보다 적게 나옴)·<span className="text-red-700">초과</span>(더
+        차이는 <span className="text-amber">부족</span>(청구보다 적게 나옴)·<span className="text-danger">초과</span>(더
         나옴) 신호일 뿐, 어느 값도 자동으로 맞추지 않습니다. 회차를 고치려면{" "}
         <Link href={`/billing?tab=sessions&period=${p}`} className="text-primary underline-offset-2 hover:underline">
           회차 확정
@@ -164,7 +164,7 @@ export async function SessionVerificationFace({
       </p>
 
       {noAttendanceYet ? (
-        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+        <div className="rounded-2xl border border-amber/30 bg-amber-soft px-3 py-2 text-xs text-amber">
           이 달은 아직 출석 기록이 없어 실 출석이 모두 <b>0</b>으로 표시됩니다(월중이거나 출석부 미입력). 출석이 쌓이면 자동으로 대조됩니다.
         </div>
       ) : null}
@@ -220,7 +220,7 @@ export async function SessionVerificationFace({
                       <td className="num px-3 py-2 text-right">{fmtWon(t.actualAmount)}</td>
                       <td
                         className={`num px-3 py-2 text-right font-bold ${
-                          t.diffAmount === 0 ? "text-emerald-700" : t.diffAmount > 0 ? "text-red-700" : "text-amber-700"
+                          t.diffAmount === 0 ? "text-green" : t.diffAmount > 0 ? "text-danger" : "text-amber"
                         }`}
                       >
                         {t.diffAmount === 0 ? "0" : t.diffAmount > 0 ? `+${fmtWon(t.diffAmount)}` : `−${fmtWon(-t.diffAmount)}`}
@@ -238,7 +238,7 @@ export async function SessionVerificationFace({
                     <td className="num px-3 py-2 text-right font-bold">{fmtWon(allocTotal.actualAmount)}</td>
                     <td
                       className={`num px-3 py-2 text-right font-bold ${
-                        allocTotal.actualAmount - allocTotal.confirmedAmount === 0 ? "text-emerald-700" : "text-red-700"
+                        allocTotal.actualAmount - allocTotal.confirmedAmount === 0 ? "text-green" : "text-danger"
                       }`}
                     >
                       {fmtWon(allocTotal.actualAmount - allocTotal.confirmedAmount)}
