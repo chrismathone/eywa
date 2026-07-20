@@ -23,7 +23,7 @@ import {
 
 const KRW = new Intl.NumberFormat("ko-KR");
 const inputCls =
-  "border-line bg-background text-foreground placeholder:text-text-faint w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary/40";
+  "border-line bg-background text-foreground placeholder:text-text-faint w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary/40";
 
 function SubmitBtn({ label }: { label: string }) {
   const { pending } = useFormStatus();
@@ -252,7 +252,7 @@ export function TuitionPricesTable({ rows }: { rows: TuitionCatalogRow[] }) {
                     <button
                       type="button"
                       onClick={() => setOpen(r)}
-                      className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs transition"
+                      className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs transition"
                     >
                       <Pencil className="size-3.5" />
                       수정

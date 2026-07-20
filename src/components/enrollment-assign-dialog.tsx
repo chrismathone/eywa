@@ -285,7 +285,7 @@ export function EnrollmentAssignDialog({
           ) : null}
 
           {conflicts && conflicts.length > 0 ? (
-            <div className="border-chart-4/40 bg-chart-4/5 rounded-md border px-3 py-2 text-xs">
+            <div className="border-chart-4/40 bg-chart-4/5 rounded-lg border px-3 py-2 text-xs">
               <div className="text-chart-4 inline-flex items-center gap-1.5">
                 <AlertTriangle className="size-3.5" />
                 <span className="font-bold">시간 충돌</span>

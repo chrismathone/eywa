@@ -143,7 +143,7 @@ export function BillingView({ invoices }: { invoices: StudentBillingRow[] }) {
           />
         </div>
         {yearStats.pending > 0 ? (
-          <div className="border-amber/30 bg-amber/10 text-amber mt-2 flex items-center gap-1.5 rounded-md border px-3 py-2 text-xs">
+          <div className="border-amber/30 bg-amber/10 text-amber mt-2 flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs">
             <AlertTriangle className="size-3.5" />
             미납 건이 {yearStats.pending}건 ({won(yearStats.unpaid)}원) 있습니다.
           </div>
@@ -156,7 +156,7 @@ export function BillingView({ invoices }: { invoices: StudentBillingRow[] }) {
           <div className="text-muted-foreground py-8 text-center text-sm">{year}년 수납 내역이 없습니다.</div>
         ) : (
           <>
-            <div className="border-line overflow-hidden rounded-md border">
+            <div className="border-line overflow-hidden rounded-2xl border">
               <table className="w-full text-sm">
                 <thead className="bg-bg-soft text-text-dim text-xs">
                   <tr>
@@ -225,7 +225,7 @@ export function BillingView({ invoices }: { invoices: StudentBillingRow[] }) {
                   type="button"
                   disabled={safePage <= 1}
                   onClick={() => setPage(safePage - 1)}
-                  className="border-line hover:bg-bg-soft rounded border px-2 py-1 disabled:opacity-40"
+                  className="border-line hover:bg-bg-soft rounded-lg border px-2 py-1 disabled:opacity-40"
                 >
                   이전
                 </button>
@@ -236,7 +236,7 @@ export function BillingView({ invoices }: { invoices: StudentBillingRow[] }) {
                   type="button"
                   disabled={safePage >= totalPages}
                   onClick={() => setPage(safePage + 1)}
-                  className="border-line hover:bg-bg-soft rounded border px-2 py-1 disabled:opacity-40"
+                  className="border-line hover:bg-bg-soft rounded-lg border px-2 py-1 disabled:opacity-40"
                 >
                   다음
                 </button>
@@ -249,7 +249,7 @@ export function BillingView({ invoices }: { invoices: StudentBillingRow[] }) {
       {/* 전체 통계 (전 기간) */}
       {invoices.length > 0 ? (
         <Section title="전체 통계" open={showOverall} onToggle={() => setShowOverall((s) => !s)}>
-          <div className="bg-bg-soft flex flex-wrap gap-x-5 gap-y-1 rounded-md px-3 py-2.5 text-xs">
+          <div className="bg-bg-soft flex flex-wrap gap-x-5 gap-y-1 rounded-2xl px-3 py-2.5 text-xs">
             <span>
               총 <b className="text-foreground num">{overall.total}</b>건
             </span>
@@ -293,7 +293,7 @@ function Section({
 
 function StatCard({ label, value, sub, cls }: { label: string; value: string; sub?: string; cls: string }) {
   return (
-    <div className={`rounded-md border px-3 py-2 ${cls}`}>
+    <div className={`rounded-2xl border px-3 py-2 ${cls}`}>
       <p className="text-text-dim text-[11px]">{label}</p>
       <p className="num text-sm font-bold">{value}</p>
       {sub ? <p className="text-[10px] opacity-80">{sub}</p> : null}

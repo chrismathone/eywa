@@ -41,7 +41,7 @@ function ProgressChecks({ row }: { row: TextbookOrderRow }) {
           <span
             key={c.key}
             title={on ? `${c.label} 완료` : `${c.label} 대기`}
-            className={`inline-flex w-[40px] shrink-0 items-center justify-center gap-0.5 rounded-sm border py-0.5 text-[11px] font-medium ${
+            className={`inline-flex w-[40px] shrink-0 items-center justify-center gap-0.5 rounded-full border py-0.5 text-[11px] font-medium ${
               on ? c.on : "border-line text-text-faint"
             }`}
           >

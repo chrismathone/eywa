@@ -49,7 +49,7 @@ function StudentRow({
           <span className="text-foreground truncate text-[13px] font-bold">{st.name}</span>
           {st.attendance !== "출석" ? (
             <span
-              className={`rounded-sm px-1 py-px text-[10px] font-bold ${
+              className={`rounded-full px-1 py-px text-[10px] font-bold ${
                 st.attendance === "지각" ? "bg-amber-soft text-amber" : "bg-danger-soft text-danger"
               }`}
             >

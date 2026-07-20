@@ -251,7 +251,7 @@ function Dialog({
           </Field>
 
           {state?.error ? (
-            <p className="text-danger bg-danger-soft border-danger/20 inline-flex items-center gap-1.5 rounded-md border px-3 py-2 text-sm">
+            <p className="text-danger bg-danger-soft border-danger/20 inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm">
               <AlertCircle className="size-4" />
               {state.error}
             </p>

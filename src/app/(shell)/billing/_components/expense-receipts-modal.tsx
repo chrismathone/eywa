@@ -29,7 +29,7 @@ const MAX_BYTES = 10 * 1024 * 1024;
 const ACCEPT = "image/jpeg,image/png,image/webp,image/gif,application/pdf";
 
 const inputCls =
-  "border-line bg-background text-foreground w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary/40";
+  "border-line bg-background text-foreground w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary/40";
 
 export function ExpenseReceiptsModal({
   expense,

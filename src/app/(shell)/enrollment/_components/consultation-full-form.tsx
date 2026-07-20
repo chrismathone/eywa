@@ -686,7 +686,7 @@ export function ConsultationFullForm({
         <dialog
           ref={consultedDialogRef}
           onCancel={() => resolveConsultedPrompt(null)}
-          className="bg-card border-line backdrop:bg-ink/40 m-auto w-full max-w-sm rounded-lg border p-5 shadow-lg"
+          className="bg-card border-line backdrop:bg-ink/40 m-auto w-full max-w-sm rounded-xl border p-5 shadow-lg"
         >
           <h3 className="text-foreground text-sm font-bold">상담 완료로 변경할까요?</h3>
           <p className="text-text-dim mt-2 text-xs leading-relaxed">

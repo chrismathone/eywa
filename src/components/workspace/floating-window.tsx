@@ -174,7 +174,7 @@ export function FloatingWindow({
                   const target = useWindowStore.getState().backNav(win.id);
                   if (target) iframeRegistry.get(win.id)?.contentWindow?.location.replace(target);
                 }}
-                className="text-text-dim hover:bg-line-strong/30 hover:text-foreground flex h-7 w-9 items-center justify-center rounded-[6px] transition"
+                className="text-text-dim hover:bg-line-strong/30 hover:text-foreground flex h-7 w-9 items-center justify-center rounded-sm transition"
               >
                 <ArrowLeft size={14} strokeWidth={1.8} />
               </button>
@@ -187,7 +187,7 @@ export function FloatingWindow({
                 title={locked ? "녹음 중 — 정지 후 가능" : "이 창만 새로고침"}
                 onClick={() => { if (!locked) reloadWindow(win.id); }}
                 disabled={locked}
-                className="text-text-dim hover:bg-line-strong/30 hover:text-foreground flex h-7 w-9 items-center justify-center rounded-[6px] transition disabled:pointer-events-none disabled:opacity-40"
+                className="text-text-dim hover:bg-line-strong/30 hover:text-foreground flex h-7 w-9 items-center justify-center rounded-sm transition disabled:pointer-events-none disabled:opacity-40"
               >
                 <RotateCw size={13} strokeWidth={1.8} />
               </button>
@@ -198,7 +198,7 @@ export function FloatingWindow({
                 aria-label="창 복제"
                 title="이 창 복제 (같은 화면 새 창)"
                 onClick={() => duplicate(win.id)}
-                className="text-text-dim hover:bg-line-strong/30 hover:text-foreground flex h-7 w-9 items-center justify-center rounded-[6px] transition"
+                className="text-text-dim hover:bg-line-strong/30 hover:text-foreground flex h-7 w-9 items-center justify-center rounded-sm transition"
               >
                 <CopyPlus size={14} strokeWidth={1.8} />
               </button>
@@ -223,7 +223,7 @@ export function FloatingWindow({
                 aria-label="스트립으로 내리기"
                 title="앨범 스트립으로 내리기"
                 onClick={() => lowerFromSpotlight(win.id)}
-                className="text-text-dim hover:bg-line-strong/30 hover:text-foreground flex h-7 w-9 items-center justify-center rounded-[6px] transition"
+                className="text-text-dim hover:bg-line-strong/30 hover:text-foreground flex h-7 w-9 items-center justify-center rounded-sm transition"
               >
                 <ChevronDown size={15} strokeWidth={1.8} />
               </button>
@@ -233,7 +233,7 @@ export function FloatingWindow({
               aria-label="최소화"
               title="최소화"
               onClick={() => runExit(() => minimize(win.id), true)}
-              className="text-text-dim hover:bg-line-strong/30 hover:text-foreground flex h-7 w-9 items-center justify-center rounded-[6px] transition"
+              className="text-text-dim hover:bg-line-strong/30 hover:text-foreground flex h-7 w-9 items-center justify-center rounded-sm transition"
             >
               <Minus size={15} strokeWidth={1.8} />
             </button>
@@ -243,7 +243,7 @@ export function FloatingWindow({
                 aria-label={win.maximized ? "이전 크기로" : "최대화"}
                 title={win.maximized ? "이전 크기로" : "최대화"}
                 onClick={() => toggleMax(win.id)}
-                className="text-text-dim hover:bg-line-strong/30 hover:text-foreground flex h-7 w-9 items-center justify-center rounded-[6px] transition"
+                className="text-text-dim hover:bg-line-strong/30 hover:text-foreground flex h-7 w-9 items-center justify-center rounded-sm transition"
               >
                 {win.maximized ? <Copy size={13} strokeWidth={1.8} /> : <Square size={13} strokeWidth={1.8} />}
               </button>
@@ -254,7 +254,7 @@ export function FloatingWindow({
               title={locked ? "녹음 중 — 정지 후 닫기 가능" : "닫기"}
               onClick={requestClose}
               disabled={locked}
-              className="text-text-dim hover:bg-danger flex h-7 w-9 items-center justify-center rounded-[6px] transition hover:text-white disabled:pointer-events-none disabled:opacity-40"
+              className="text-text-dim hover:bg-danger flex h-7 w-9 items-center justify-center rounded-sm transition hover:text-white disabled:pointer-events-none disabled:opacity-40"
             >
               <X size={16} strokeWidth={1.8} />
             </button>

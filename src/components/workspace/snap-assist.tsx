@@ -99,7 +99,7 @@ export function SnapAssist() {
               onClick={() => applyLayout(t)}
               className="hover:bg-bg-soft group flex flex-col items-center gap-1.5 rounded-lg p-1.5 transition"
             >
-              <div className="border-line bg-bg-soft/40 group-hover:border-primary/40 relative h-12 w-[72px] overflow-hidden rounded-[5px] border">
+              <div className="border-line bg-bg-soft/40 group-hover:border-primary/40 relative h-12 w-[72px] overflow-hidden rounded-sm border">
                 {diagram(t, anchorSide).map((s, i) => (
                   <div
                     key={i}

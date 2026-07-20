@@ -66,7 +66,7 @@ export function HoverCard({
       {pos
         ? createPortal(
             <div
-              className="border-line bg-card shadow-modal pointer-events-none fixed z-[9999] overflow-y-auto rounded-md border p-3"
+              className="border-line bg-card shadow-modal pointer-events-none fixed z-[9999] overflow-y-auto rounded-lg border p-3"
               style={{ left: pos.x, top: pos.y, width, maxHeight: HOVER_MAX_H }}
             >
               {card}

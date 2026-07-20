@@ -140,7 +140,7 @@ export default async function AttendanceByDatePage({
                   </div>
                 </div>
                 {p.unprocessed > 0 ? (
-                  <span className="text-danger bg-danger/10 border-danger/20 shrink-0 rounded-md border px-2 py-0.5 text-[11px] font-medium">
+                  <span className="text-danger bg-danger/10 border-danger/20 shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-medium">
                     미처리 {p.unprocessed}
                   </span>
                 ) : (
@@ -182,7 +182,7 @@ export default async function AttendanceByDatePage({
               const gAbsent = group.rows.filter((r) => r.status === "absent").length;
               const gLate = group.rows.filter((r) => r.status === "late").length;
               return (
-                <details key={classId} className="bg-card border-line group overflow-hidden rounded-lg border">
+                <details key={classId} className="bg-card border-line group overflow-hidden rounded-2xl border">
                   <summary className="hover:bg-bg-soft/40 flex cursor-pointer list-none items-center justify-between gap-3 px-5 py-3">
                     <div>
                       <h3 className="text-sm font-bold">{group.className}</h3>
@@ -192,12 +192,12 @@ export default async function AttendanceByDatePage({
                     </div>
                     <div className="flex items-center gap-1.5">
                       {gAbsent > 0 ? (
-                        <span className={`rounded-md border px-2 py-0.5 text-[11px] font-medium ${STATUS_COLOR.absent}`}>
+                        <span className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${STATUS_COLOR.absent}`}>
                           결석 {gAbsent}
                         </span>
                       ) : null}
                       {gLate > 0 ? (
-                        <span className={`rounded-md border px-2 py-0.5 text-[11px] font-medium ${STATUS_COLOR.late}`}>
+                        <span className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${STATUS_COLOR.late}`}>
                           지각 {gLate}
                         </span>
                       ) : null}
@@ -227,7 +227,7 @@ export default async function AttendanceByDatePage({
                             ) : null}
                           </div>
                           <span
-                            className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium ${
+                            className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${
                               STATUS_COLOR[row.status] ?? "bg-bg-soft text-text-dim border-line"
                             }`}
                           >

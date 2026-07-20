@@ -22,7 +22,7 @@ export function DupSuspectNotice({ studentId, canClear }: { studentId: string; c
       else router.refresh();
     });
   return (
-    <div className="border-amber/40 bg-amber/10 flex flex-wrap items-center gap-2 rounded-md border px-3 py-1.5 text-xs">
+    <div className="border-amber/40 bg-amber/10 flex flex-wrap items-center gap-2 rounded-lg border px-3 py-1.5 text-xs">
       <AlertTriangle className="text-amber size-3.5 shrink-0" />
       <span className="text-foreground">
         동기화가 이름 겹침으로 <b>자동 구분(접미사)</b>한 학생입니다 — 실제 동명이인인지 확인해 주세요.

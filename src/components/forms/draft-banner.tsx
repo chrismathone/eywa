@@ -17,7 +17,7 @@ export function DraftBanner({
 }) {
   if (!savedAt) return null;
   return (
-    <div className="border-chart-3/40 bg-chart-3/5 flex items-start gap-3 rounded-md border px-4 py-3">
+    <div className="border-chart-3/40 bg-chart-3/5 flex items-start gap-3 rounded-lg border px-4 py-3">
       <History className="text-chart-3 mt-0.5 size-4 shrink-0" />
       <div className="min-w-0 flex-1 space-y-1">
         <p className="text-foreground text-sm font-medium">작성하던 내용이 있습니다</p>

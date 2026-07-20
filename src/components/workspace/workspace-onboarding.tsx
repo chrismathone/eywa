@@ -72,7 +72,7 @@ export function WorkspaceOnboarding() {
         <ul className="mt-5 space-y-3.5">
           {POINTS.map(({ icon: Icon, title, desc }) => (
             <li key={title} className="flex items-start gap-3">
-              <span className="bg-primary-soft text-primary mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-sm">
+              <span className="bg-primary-soft text-primary mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-xl">
                 <Icon size={17} strokeWidth={1.8} />
               </span>
               <div className="min-w-0">

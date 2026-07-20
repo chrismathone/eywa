@@ -50,7 +50,7 @@ export function NoticePopupCard({ popup }: { popup: ActivePopup }) {
             type="button"
             aria-label="닫기"
             onClick={close}
-            className="text-text-dim hover:bg-line-strong/30 hover:text-foreground flex size-6 shrink-0 items-center justify-center rounded-[3px] transition"
+            className="text-text-dim hover:bg-line-strong/30 hover:text-foreground flex size-6 shrink-0 items-center justify-center rounded-xs transition"
           >
             <X size={15} strokeWidth={1.8} />
           </button>

@@ -288,7 +288,7 @@ export function MonthlyScheduleView({
               <Plus className="size-3.5" /> 새 업무
             </Button>
           ) : null}
-          <div className="border-line inline-flex overflow-hidden rounded-md border">
+          <div className="border-line inline-flex overflow-hidden rounded-full border">
             <button
               type="button"
               onClick={() => pickView("grid")}

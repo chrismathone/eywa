@@ -50,7 +50,7 @@ export function SuperAdminSidebar({
                 <Link
                   href={item.href}
                   aria-current={isActive ? "page" : undefined}
-                  className={`flex items-center gap-2 rounded-sm px-2.5 py-2 text-[13px] font-bold transition ${
+                  className={`flex items-center gap-2 rounded-lg px-2.5 py-2 text-[13px] font-bold transition ${
                     isActive
                       ? "bg-gold text-ink shadow-[0_0_24px_-6px_rgba(184,137,58,0.6)]"
                       : "text-white/75 hover:text-white hover:bg-white/5"

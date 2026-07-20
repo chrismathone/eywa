@@ -191,7 +191,7 @@ export function LevelTests({ studentId, tests }: { studentId: string; tests: Lev
                 {subs.length > 0 ? (
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     {subs.map(([k, v]) => (
-                      <span key={k} className="bg-bg-soft text-text-dim num rounded-sm px-1.5 py-0.5 text-[11px]">
+                      <span key={k} className="bg-bg-soft text-text-dim num rounded-full px-1.5 py-0.5 text-[11px]">
                         {k} <span className="text-foreground font-bold">{v}</span>
                       </span>
                     ))}

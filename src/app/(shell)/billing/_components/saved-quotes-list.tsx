@@ -58,7 +58,7 @@ export function SavedQuotesList({
       {rows.map((r) => (
         <li
           key={r.id}
-          className="bg-card border-line shadow-card hover:bg-bg-soft/50 flex items-center gap-3 rounded-md border px-4 py-3 transition"
+          className="bg-card border-line shadow-card hover:bg-bg-soft/50 flex items-center gap-3 rounded-2xl border px-4 py-3 transition"
         >
           <Link href={href(r.id)} className="min-w-0 flex-1">
             <div className="flex items-baseline gap-2">

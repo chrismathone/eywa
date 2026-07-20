@@ -20,7 +20,7 @@ import { useSubjectMaps } from "@/features/owner/operations-context";
 
 const KRW = new Intl.NumberFormat("ko-KR");
 const inputCls =
-  "border-line bg-background text-foreground placeholder:text-text-faint w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary/40";
+  "border-line bg-background text-foreground placeholder:text-text-faint w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary/40";
 
 // 교재 학년은 초/중/고 coarse 버킷(교재 분류 축) — operations.gradeLevels(초1~고3)와 별개 고정 분류.
 // catalog-panel 필터(초/중/고)와 동일 축이라 하드코딩 유지(운영 enum 아님).
@@ -235,7 +235,7 @@ export function CatalogTable({ rows }: { rows: CatalogRow[] }) {
                     <button
                       type="button"
                       onClick={() => setOpen(r)}
-                      className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs transition"
+                      className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs transition"
                     >
                       <Pencil className="size-3.5" />
                       수정

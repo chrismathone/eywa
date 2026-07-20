@@ -230,7 +230,7 @@ export function ExpenseDialog({
 }
 
 const inputCls =
-  "border-line bg-background text-foreground placeholder:text-text-faint w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary/40";
+  "border-line bg-background text-foreground placeholder:text-text-faint w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary/40";
 
 function Field({ label, error, children }: { label: string; error?: string; children: React.ReactNode }) {
   return (

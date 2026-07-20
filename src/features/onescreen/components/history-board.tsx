@@ -114,7 +114,7 @@ export function HistoryBoard() {
                     </span>
                     <span className="text-text-faint w-20 shrink-0 truncate text-[11px]">{r.studentLabel}</span>
                     {r.subject ? (
-                      <span className="border-line text-text-dim shrink-0 rounded-md border px-1.5 py-0.5 text-[11px]">
+                      <span className="border-line text-text-dim shrink-0 rounded-full border px-1.5 py-0.5 text-[11px]">
                         {subjects.labelOf(r.subject)}
                       </span>
                     ) : null}

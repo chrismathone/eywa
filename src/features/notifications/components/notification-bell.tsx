@@ -196,7 +196,7 @@ export function NotificationBell() {
           <button
             type="button"
             aria-label={unread > 0 ? `알림 ${unread}개` : "알림"}
-            className={`group relative flex size-9 items-center justify-center rounded-[4px] border bg-card transition-all duration-200 hover:bg-surface-hi hover:shadow-card-hover active:scale-95 ${
+            className={`group relative flex size-9 items-center justify-center rounded-lg border bg-card transition-all duration-200 hover:bg-surface-hi hover:shadow-card-hover active:scale-95 ${
               unread > 0 ? "border-danger/30 text-danger" : "border-line text-foreground"
             }`}
           />

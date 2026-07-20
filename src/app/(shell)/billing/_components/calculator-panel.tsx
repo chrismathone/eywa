@@ -144,7 +144,7 @@ async function HolidayPanel({ sp }: { sp: Sp }) {
         ) : (
           <ul className="flex flex-wrap gap-1.5">
             {tenantHolidays.map((h) => (
-              <li key={h.date} className="border-line bg-bg-soft rounded-sm border px-2 py-1 text-xs">
+              <li key={h.date} className="border-line bg-bg-soft rounded-full border px-2 py-1 text-xs">
                 {h.name ? <span className="text-foreground font-medium">{h.name} </span> : null}
                 <span className="num text-text-dim">{h.date} ({dowOf(h.date)})</span>
               </li>
@@ -159,15 +159,15 @@ async function HolidayPanel({ sp }: { sp: Sp }) {
           <h2 className="text-foreground text-[15px] font-bold">대한민국 공휴일</h2>
           <div className="flex items-center gap-1.5">
             {year > HOLIDAY_MIN_YEAR ? (
-              <Link href={hrefFor(year - 1, month)} className="border-line hover:bg-bg-soft inline-flex size-7 items-center justify-center rounded-sm border" aria-label="이전 연도"><EyIcon name="chevronLeft" size={14} /></Link>
+              <Link href={hrefFor(year - 1, month)} className="border-line hover:bg-bg-soft inline-flex size-7 items-center justify-center rounded-full border" aria-label="이전 연도"><EyIcon name="chevronLeft" size={14} /></Link>
             ) : (
-              <span className="border-line text-text-faint inline-flex size-7 items-center justify-center rounded-sm border opacity-40"><EyIcon name="chevronLeft" size={14} /></span>
+              <span className="border-line text-text-faint inline-flex size-7 items-center justify-center rounded-full border opacity-40"><EyIcon name="chevronLeft" size={14} /></span>
             )}
             <span className="text-foreground num min-w-[64px] text-center text-[13px] font-bold">{year}년</span>
             {year < HOLIDAY_MAX_YEAR ? (
-              <Link href={hrefFor(year + 1, month)} className="border-line hover:bg-bg-soft inline-flex size-7 items-center justify-center rounded-sm border" aria-label="다음 연도"><EyIcon name="chevronRight" size={14} /></Link>
+              <Link href={hrefFor(year + 1, month)} className="border-line hover:bg-bg-soft inline-flex size-7 items-center justify-center rounded-full border" aria-label="다음 연도"><EyIcon name="chevronRight" size={14} /></Link>
             ) : (
-              <span className="border-line text-text-faint inline-flex size-7 items-center justify-center rounded-sm border opacity-40"><EyIcon name="chevronRight" size={14} /></span>
+              <span className="border-line text-text-faint inline-flex size-7 items-center justify-center rounded-full border opacity-40"><EyIcon name="chevronRight" size={14} /></span>
             )}
           </div>
         </header>

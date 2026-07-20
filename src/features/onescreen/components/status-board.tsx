@@ -19,7 +19,7 @@ const STATUS_META: Record<
 
 function Chip({ label, value, tone }: { label: string; value: number; tone: string }) {
   return (
-    <div className={`rounded-md px-3 py-1.5 ${tone}`}>
+    <div className={`rounded-full px-3 py-1.5 ${tone}`}>
       <span className="text-[18px] font-bold tabular">{value}</span>
       <span className="ml-1 text-[12px] font-bold">{label}</span>
     </div>

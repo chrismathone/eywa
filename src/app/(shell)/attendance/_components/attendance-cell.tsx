@@ -186,7 +186,7 @@ export function AttendanceCell({
                   }}
                   placeholder="1"
                   title="정규 수업 1회 = 1. 보강 연장 1.5·2, 부분 출석 0.5 등"
-                  className={`bg-bg-soft text-foreground placeholder:text-text-faint w-full rounded-sm border px-2 py-1 text-xs focus:outline-none ${
+                  className={`bg-bg-soft text-foreground placeholder:text-text-faint w-full rounded-md border px-2 py-1 text-xs focus:outline-none ${
                     unitsError ? "border-danger" : "border-line"
                   }`}
                 />
@@ -199,13 +199,13 @@ export function AttendanceCell({
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
                 placeholder="메모(사유)"
-                className="border-line bg-bg-soft text-foreground placeholder:text-text-faint w-40 rounded-sm border px-2 py-1 text-xs focus:outline-none"
+                className="border-line bg-bg-soft text-foreground placeholder:text-text-faint w-40 rounded-md border px-2 py-1 text-xs focus:outline-none"
               />
               <button
                 type="button"
                 onClick={() => apply(status, draft, unitsDraft)}
                 disabled={!status}
-                className="bg-foreground text-background rounded-sm px-2 py-1 text-xs font-medium transition disabled:opacity-40"
+                className="bg-foreground text-background rounded-md px-2 py-1 text-xs font-medium transition disabled:opacity-40"
                 title={status ? undefined : "상태를 먼저 선택하세요"}
               >
                 저장

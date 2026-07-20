@@ -133,7 +133,7 @@ export function OneScreenTopBar({
             {todayClasses.map((c) => (
               <span
                 key={c.id}
-                className="border-line inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[11.5px] whitespace-nowrap"
+                className="border-line inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[11.5px] whitespace-nowrap"
               >
                 <span className="text-primary font-mono text-[10px] font-bold">{c.startTime ?? "—"}</span>
                 <span className="text-foreground font-bold">{c.name}</span>
@@ -162,7 +162,7 @@ export function OneScreenTopBar({
             발송 <b className="text-gold tabular">{stats.reportDone}</b>
             <span className="text-text-faint">/{stats.students}</span>
           </span>
-          <span className="border-line rounded-md border px-1.5 py-0.5">
+          <span className="border-line rounded-full border px-1.5 py-0.5">
             마감 <b className="text-foreground tabular">{doneCount}</b>
             <span className="text-text-faint">/{total}</span>
           </span>

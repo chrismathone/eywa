@@ -30,7 +30,7 @@ export function UserMenu({
     <DropdownMenu>
       <DropdownMenuTrigger
         render={
-          <Button variant="ghost" size="icon" aria-label="사용자 메뉴" className="rounded-lg (오버라이드 제거)" />
+          <Button variant="ghost" size="icon" aria-label="사용자 메뉴" />
         }
       >
         {/* 아바타·사진 없음 — 사용자 아이콘만. */}

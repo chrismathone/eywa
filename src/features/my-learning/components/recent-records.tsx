@@ -26,7 +26,7 @@ export function RecentRecords({ history }: { history: Session[] }) {
                 className="hover:bg-bg-soft -mx-2 flex items-center gap-3 rounded-md px-2 py-2.5 transition"
               >
                 <span className="tabular text-foreground w-9 text-[13px] font-bold">{h.date}</span>
-                <span className={`rounded-[3px] px-1.5 py-0.5 text-[11px] font-bold ${ATT_CLASS[h.attendance]}`}>
+                <span className={`rounded-full px-1.5 py-0.5 text-[11px] font-bold ${ATT_CLASS[h.attendance]}`}>
                   {h.attendance}
                 </span>
                 <span className="ml-auto flex items-center gap-2.5 text-[12px]">

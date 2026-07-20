@@ -97,7 +97,7 @@ export async function RefundsFace({ sp }: { sp: { page?: string; period?: string
             <div className="flex items-center gap-1.5">
               <Link
                 href={monthHref(shiftPeriod(period, -1))}
-                className="border-line hover:bg-bg-soft inline-flex size-7 items-center justify-center rounded-sm border"
+                className="border-line hover:bg-bg-soft inline-flex size-7 items-center justify-center rounded-full border"
                 aria-label="이전 달"
               >
                 <EyIcon name="chevronLeft" size={14} />
@@ -107,7 +107,7 @@ export async function RefundsFace({ sp }: { sp: { page?: string; period?: string
               </span>
               <Link
                 href={monthHref(shiftPeriod(period, 1))}
-                className="border-line hover:bg-bg-soft inline-flex size-7 items-center justify-center rounded-sm border"
+                className="border-line hover:bg-bg-soft inline-flex size-7 items-center justify-center rounded-full border"
                 aria-label="다음 달"
               >
                 <EyIcon name="chevronRight" size={14} />

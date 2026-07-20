@@ -453,7 +453,7 @@ function DayEditPopover({
       onClick={onCancel}
     >
       <div
-        className="bg-card border-line w-[280px] rounded-lg border p-4 shadow-xl"
+        className="bg-card border-line w-[280px] rounded-xl border p-4 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
         <p className="text-foreground text-sm font-bold">
@@ -469,7 +469,7 @@ function DayEditPopover({
                 type="button"
                 onClick={() => toggle(d)}
                 aria-pressed={on}
-                className={`min-w-[44px] rounded-md border px-3 py-1.5 text-sm font-medium transition ${
+                className={`min-w-[44px] rounded-full border px-3 py-1.5 text-sm font-medium transition ${
                   on
                     ? "border-primary bg-primary text-primary-foreground"
                     : "border-line text-text-dim hover:bg-bg-soft"
@@ -552,7 +552,7 @@ function ClassPickPopover({
       onClick={onCancel}
     >
       <div
-        className="bg-card border-line w-[300px] rounded-lg border p-4 shadow-xl"
+        className="bg-card border-line w-[300px] rounded-xl border p-4 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
         <p className="text-foreground text-sm font-bold">
@@ -598,7 +598,7 @@ function ClassPickPopover({
                     type="button"
                     onClick={() => toggle(d)}
                     aria-pressed={on}
-                    className={`min-w-[44px] rounded-md border px-3 py-1.5 text-sm font-medium transition ${
+                    className={`min-w-[44px] rounded-full border px-3 py-1.5 text-sm font-medium transition ${
                       on
                         ? "border-primary bg-primary text-primary-foreground"
                         : "border-line text-text-dim hover:bg-bg-soft"
@@ -663,7 +663,7 @@ function EndEnrollmentConfirm({
       onClick={() => !ending && onCancel()}
     >
       <div
-        className="bg-card border-line w-[340px] rounded-lg border p-4 shadow-xl"
+        className="bg-card border-line w-[340px] rounded-xl border p-4 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
         <p className="text-foreground text-sm font-bold">수강 종료</p>
@@ -747,7 +747,7 @@ export function TimetableEditControls() {
               value={scheduledDate ?? anchorDate}
               onChange={(e) => setScheduledDate(e.target.value || null)}
               disabled={saving}
-              className="border-line rounded-md border px-1.5 py-0.5 text-xs disabled:opacity-50"
+              className="border-line rounded-lg border px-1.5 py-0.5 text-xs disabled:opacity-50"
             />
           </label>
           <button

@@ -60,7 +60,7 @@ export function DailyReportView({ base, session }: { base: OneScreenStudent; ses
     <div className="space-y-4">
       {/* 헤더 (ink 다크) */}
       <header className="bg-ink text-background relative overflow-hidden rounded-2xl px-5 py-5">
-        <span className="absolute top-4 right-4 rounded-[4px] bg-white/15 px-2 py-0.5 text-[11px] font-bold">
+        <span className="absolute top-4 right-4 rounded-full bg-white/15 px-2 py-0.5 text-[11px] font-bold">
           {view.attendance}
         </span>
         <p className="font-mono text-[11px] opacity-70">

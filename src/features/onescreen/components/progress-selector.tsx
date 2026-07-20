@@ -68,7 +68,7 @@ export function ProgressSelector({
   return (
     <Popover.Root open={open} onOpenChange={setOpen}>
       <Popover.Trigger
-        className={`border-line bg-card hover:border-primary/60 data-[popup-open]:border-primary flex h-8 w-full items-center gap-1 rounded-sm border px-2 text-left text-[12px] outline-none transition-colors ${
+        className={`border-line bg-card hover:border-primary/60 data-[popup-open]:border-primary flex h-8 w-full items-center gap-1 rounded-lg border px-2 text-left text-[12px] outline-none transition-colors ${
           selected.length ? "text-foreground" : "text-text-faint"
         }`}
         aria-label={ariaLabel ?? "진도 선택"}
@@ -102,7 +102,7 @@ export function ProgressSelector({
                 ))}
               </select>
               {ahead ? (
-                <span className="bg-amber-soft text-amber rounded-[3px] px-1.5 py-0.5 text-[10px] font-bold">
+                <span className="bg-amber-soft text-amber rounded-pill px-1.5 py-0.5 text-[10px] font-bold">
                   실제 {studentGrade}
                 </span>
               ) : null}

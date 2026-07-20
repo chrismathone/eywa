@@ -21,7 +21,7 @@ export function WeekNav({
   const rel = weekRelation(currentWeek, today);
   const isCurrent = rel === "current";
   const iconBtn =
-    "border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex shrink-0 items-center rounded-md border p-1 transition";
+    "border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex shrink-0 items-center rounded-full border p-1 transition";
   return (
     <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
       <span className="micro mr-0.5">주</span>
@@ -46,7 +46,7 @@ export function WeekNav({
       <span className="text-text-dim num text-[11px] whitespace-nowrap">{weekLabel(currentWeek)}</span>
       {!isCurrent ? (
         <span
-          className={`shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-bold whitespace-nowrap ${
+          className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-bold whitespace-nowrap ${
             rel === "future" ? "bg-blue-soft text-blue" : "bg-amber-soft text-amber"
           }`}
         >

@@ -9,7 +9,7 @@ import { createInvoice, type CreateInvoiceState } from "@/features/billing/serve
 import type { StudentOption } from "@/features/billing/server/textbook-queries";
 
 const inputCls =
-  "border-line bg-background text-foreground placeholder:text-text-faint w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary/40";
+  "border-line bg-background text-foreground placeholder:text-text-faint w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary/40";
 
 const CATEGORY_OPTIONS = [
   { value: "tuition", label: "수강료" },

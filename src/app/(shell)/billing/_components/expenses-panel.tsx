@@ -59,9 +59,9 @@ export async function ExpensesPanel({ sp }: { sp: Sp }) {
       {/* 월 navigator + 카테고리 필터 */}
       <div className="bg-card border-line shadow-card flex flex-wrap items-center gap-3 rounded-2xl border px-4 py-3">
         <div className="flex items-center gap-1.5">
-          <Link href={hrefFor({ period: prevPeriod })} className="border-line hover:bg-bg-soft inline-flex size-7 items-center justify-center rounded-sm border" aria-label="이전 달"><EyIcon name="chevronLeft" size={14} /></Link>
+          <Link href={hrefFor({ period: prevPeriod })} className="border-line hover:bg-bg-soft inline-flex size-7 items-center justify-center rounded-full border" aria-label="이전 달"><EyIcon name="chevronLeft" size={14} /></Link>
           <span className="text-foreground min-w-[90px] text-center text-[13px] font-bold">{formatPeriod(period)}</span>
-          <Link href={hrefFor({ period: nextPeriod })} className="border-line hover:bg-bg-soft inline-flex size-7 items-center justify-center rounded-sm border" aria-label="다음 달"><EyIcon name="chevronRight" size={14} /></Link>
+          <Link href={hrefFor({ period: nextPeriod })} className="border-line hover:bg-bg-soft inline-flex size-7 items-center justify-center rounded-full border" aria-label="다음 달"><EyIcon name="chevronRight" size={14} /></Link>
         </div>
         <div className="scrollbar-thin flex items-center gap-1 overflow-x-auto">
           <Link href={hrefFor({ cat: "all" })} className={`shrink-0 rounded-full border px-2 py-0.5 text-xs transition ${cat === "all" ? "border-foreground bg-foreground text-background font-medium" : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"}`}>전체</Link>

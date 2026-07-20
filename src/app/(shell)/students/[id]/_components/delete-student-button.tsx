@@ -46,7 +46,7 @@ export function DeleteStudentButton({ studentId, studentName }: { studentId: str
   }
 
   return (
-    <div className="border-danger/40 bg-danger-soft/40 flex flex-wrap items-center gap-1.5 rounded-md border px-2 py-1">
+    <div className="border-danger/40 bg-danger-soft/40 flex flex-wrap items-center gap-1.5 rounded-lg border px-2 py-1">
       <span className="text-danger text-xs font-medium">
         “{studentName}” 영구 삭제? <span className="text-danger/70">되돌릴 수 없습니다</span>
       </span>

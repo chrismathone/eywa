@@ -441,7 +441,7 @@ export function StudentForm({
       </Field>
 
       {state?.error ? (
-        <p className="text-chart-4 bg-chart-4/10 border-chart-4/20 inline-flex items-center gap-1.5 rounded-md border px-3 py-2 text-sm">
+        <p className="text-chart-4 bg-chart-4/10 border-chart-4/20 inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm">
           <AlertCircle className="size-4" />
           {state.error}
         </p>

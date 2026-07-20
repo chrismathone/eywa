@@ -19,7 +19,7 @@ import { QuoteDocument } from "./quote-document";
 
 const won = (n: number) => `${new Intl.NumberFormat("ko-KR").format(Math.round(n))}원`;
 const inputCls =
-  "border-line bg-background text-foreground placeholder:text-text-faint w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary/40";
+  "border-line bg-background text-foreground placeholder:text-text-faint w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary/40";
 const EXTRA_CATEGORY = "기타";
 
 function monthLastDay(period: string): string {
@@ -355,7 +355,7 @@ export function TuitionCalculator({
       </div>
 
       {/* 라이브 안내문 (인쇄 시 카드 크롬 제거 → A4 전폭 세로 문서) */}
-      <div className="border-line bg-card overflow-hidden rounded-md border print:overflow-visible print:rounded-none print:border-0 print:bg-white print:shadow-none">
+      <div className="border-line bg-card overflow-hidden rounded-2xl border print:overflow-visible print:rounded-none print:border-0 print:bg-white print:shadow-none">
         <QuoteDocument
           academyName={academyName}
           logoSrc={logoSrc}

@@ -51,11 +51,11 @@ export function LeavesAdminClient({
               </td>
               <td className="px-4 py-2.5">
                 {l.approvedAt ? (
-                  <span className="text-chart-2 bg-chart-2/10 border-chart-2/20 inline-flex items-center rounded-md border px-2 py-0.5 text-[11px] font-medium">
+                  <span className="text-chart-2 bg-chart-2/10 border-chart-2/20 inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium">
                     승인{l.approvedByName ? ` · ${l.approvedByName}` : ""}
                   </span>
                 ) : (
-                  <span className="text-chart-3 bg-chart-3/10 border-chart-3/20 inline-flex items-center rounded-md border px-2 py-0.5 text-[11px] font-medium">
+                  <span className="text-chart-3 bg-chart-3/10 border-chart-3/20 inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium">
                     대기
                   </span>
                 )}

@@ -129,7 +129,7 @@ export function EdutrixUnmappedCard({ view }: { view: EdutrixMapView }) {
             </span>
           ) : null}
           {dummyCount > 0 ? (
-            <label className="text-text-dim flex cursor-pointer items-center gap-1.5 rounded-md border border-transparent px-2 py-1 hover:border-line">
+            <label className="text-text-dim flex cursor-pointer items-center gap-1.5 rounded-full border border-transparent px-2 py-1 hover:border-line">
               <input
                 type="checkbox"
                 className="accent-primary size-3.5"

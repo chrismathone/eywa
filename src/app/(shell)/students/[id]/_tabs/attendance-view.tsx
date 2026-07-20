@@ -94,13 +94,13 @@ export function AttendanceView({
         {/* 월 네비 */}
         {ym ? (
           <div className="ml-auto flex items-center gap-1">
-            <button type="button" onClick={() => navMonth(-1)} className="hover:bg-bg-soft rounded p-1" aria-label="이전 달">
+            <button type="button" onClick={() => navMonth(-1)} className="hover:bg-bg-soft rounded-full p-1" aria-label="이전 달">
               <ChevronLeft className="size-4" />
             </button>
             <span className="num text-foreground min-w-[5.5rem] text-center text-sm font-medium">
               {yy}년 {mm}월
             </span>
-            <button type="button" onClick={() => navMonth(1)} className="hover:bg-bg-soft rounded p-1" aria-label="다음 달">
+            <button type="button" onClick={() => navMonth(1)} className="hover:bg-bg-soft rounded-full p-1" aria-label="다음 달">
               <ChevronRight className="size-4" />
             </button>
           </div>

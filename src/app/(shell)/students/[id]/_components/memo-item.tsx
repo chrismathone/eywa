@@ -130,7 +130,7 @@ export function MemoItem({ memo, studentId }: { memo: StudentMemoRow; studentId:
           <select
             name="category"
             defaultValue={memo.category}
-            className="border-border bg-card text-foreground rounded-md border px-2 py-1 text-xs"
+            className="border-border bg-card text-foreground rounded-lg border px-2 py-1 text-xs"
           >
             {CATEGORIES.map((c) => (
               <option key={c.value} value={c.value}>
@@ -143,7 +143,7 @@ export function MemoItem({ memo, studentId }: { memo: StudentMemoRow; studentId:
             required
             rows={3}
             defaultValue={memo.content}
-            className="border-border bg-card text-foreground w-full rounded-md border px-2 py-2 text-sm"
+            className="border-border bg-card text-foreground w-full rounded-lg border px-2 py-2 text-sm"
           />
           {state?.error ? <p className="text-chart-4 text-xs">{state.error}</p> : null}
           <div className="flex items-center justify-end gap-3">

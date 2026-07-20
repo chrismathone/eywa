@@ -118,7 +118,7 @@ export function ConvertToStudentDialog({
 
       {open ? (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center">
-          <div className="bg-background border-border w-full max-w-lg rounded-lg border p-6 shadow-lg">
+          <div className="bg-background border-border w-full max-w-lg rounded-xl border p-6 shadow-lg">
             <header className="mb-4 flex items-start justify-between">
               <div>
                 <p className="eyebrow">상담 → 수업 배정</p>

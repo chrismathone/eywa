@@ -103,7 +103,7 @@ export function StatusDialog({
                   type="date"
                   required
                   defaultValue={kstToday()}
-                  className="border-border bg-card text-foreground num w-full rounded-md border px-3 py-2 text-sm"
+                  className="border-border bg-card text-foreground num w-full rounded-lg border px-3 py-2 text-sm"
                 />
               </div>
               <div className="space-y-1.5">
@@ -111,7 +111,7 @@ export function StatusDialog({
                 <select
                   name="reason"
                   required
-                  className="border-border bg-card text-foreground w-full rounded-md border px-3 py-2 text-sm"
+                  className="border-border bg-card text-foreground w-full rounded-lg border px-3 py-2 text-sm"
                 >
                   {WITHDRAWAL_REASON_OPTIONS.map((o) => (
                     <option key={o.value} value={o.value}>
@@ -126,7 +126,7 @@ export function StatusDialog({
                   name="memo"
                   rows={3}
                   placeholder="배경 정보 (선택)"
-                  className="border-border bg-card text-foreground w-full rounded-md border px-3 py-2 text-sm"
+                  className="border-border bg-card text-foreground w-full rounded-lg border px-3 py-2 text-sm"
                 />
               </div>
               <p className="text-muted-foreground text-[11px]">
@@ -145,7 +145,7 @@ export function StatusDialog({
                   name="memo"
                   rows={2}
                   placeholder="휴원 사유"
-                  className="border-border bg-card text-foreground w-full rounded-md border px-3 py-2 text-sm"
+                  className="border-border bg-card text-foreground w-full rounded-lg border px-3 py-2 text-sm"
                 />
               </div>
             </>

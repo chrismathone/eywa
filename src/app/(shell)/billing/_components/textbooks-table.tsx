@@ -158,7 +158,7 @@ export function TextbooksTable({
                             disabled={isBusy}
                             onClick={() => toggleCheck(r, c.field, !checked)}
                             title={checked ? `${c.label} 완료 · ${fmtFull(date)}` : `${c.label} (미완료) — 클릭하여 체크`}
-                            className={`inline-flex shrink-0 items-center gap-0.5 rounded-sm border px-1.5 py-0.5 text-[11px] font-medium transition ${
+                            className={`inline-flex shrink-0 items-center gap-0.5 rounded-full border px-1.5 py-0.5 text-[11px] font-medium transition ${
                               checked
                                 ? c.active
                                 : "border-line text-text-faint hover:text-foreground hover:bg-bg-soft"

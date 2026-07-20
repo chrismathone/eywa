@@ -219,7 +219,7 @@ export function AttendanceInputForm({
                       <span className="text-text-dim text-[10px]">· 이전 기록 있음</span>
                     ) : null}
                     {hasExtra ? (
-                      <span className="bg-purple/10 text-purple border-purple/20 inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px]">
+                      <span className="bg-purple/10 text-purple border-purple/20 inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px]">
                         {cell.note ? <Pencil className="size-2.5" /> : null}
                         {cell.homeworkRequired ? <BookOpen className="size-2.5" /> : null}
                         {cell.units ? <span className="num font-bold">{cell.units}</span> : null}
