@@ -8,7 +8,13 @@ import { findNavItem, findNavGroup, navPresentation } from "@/lib/navigation";
 import { useIsDesktop } from "@/components/workspace/use-is-desktop";
 import { useWindowStore } from "@/components/workspace/window-store";
 
-export function AppHeader({ brand = "EYWA" }: { brand?: string }) {
+/**
+ * 상단 헤더 — **모바일/터치 전용으로 강등**(2026-07-20 원장: "상단탭이 알림 외엔 쓸모없다").
+ * 데스크톱은 layout이 `lg:pointer-fine:hidden`으로 숨긴다(사이드바 노출 조건과 대칭) — 벨은
+ * 사이드바 하단 사용자 영역으로, 검색은 Shift+F/Ctrl·Cmd+K 단축키로 이관. 벨을 isDesktop으로
+ * 조건 마운트하는 이유: 사이드바 벨과 이중 마운트되면 폴링·OS 알림 팝업이 중복 발화한다.
+ */
+export function AppHeader({ brand = "EYWA", className }: { brand?: string; className?: string }) {
   const pathname = usePathname();
   const isDesktop = useIsDesktop();
   // 데스크톱은 메뉴=창이라 pathname이 항상 /dashboard에 머문다 → 헤더는 포커스된 창을 따른다.
@@ -44,7 +50,7 @@ export function AppHeader({ brand = "EYWA" }: { brand?: string }) {
   }
 
   return (
-    <header className="bg-background border-line sticky top-0 z-30 flex h-12 shrink-0 items-center gap-4 border-b px-4 lg:px-6">
+    <header className={`bg-background border-line sticky top-0 z-30 flex h-12 shrink-0 items-center gap-4 border-b px-4 lg:px-6 ${className ?? ""}`}>
       <div className="min-w-0 shrink-0">
         <div className="text-text-faint text-[11px] leading-none font-medium">
           {breadcrumb}
@@ -67,7 +73,8 @@ export function AppHeader({ brand = "EYWA" }: { brand?: string }) {
           <span className="flex-1 truncate text-left text-[13px]">메뉴 · 학생 · 수업 어디로든 점프</span>
         </button>
 
-        <NotificationBell />
+        {/* 데스크톱 벨은 사이드바 하단(사용자 옆) — 여기(숨김 헤더)까지 마운트하면 폴링·팝업 중복. */}
+        {!isDesktop ? <NotificationBell /> : null}
       </div>
     </header>
   );

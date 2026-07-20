@@ -25,6 +25,7 @@ import { WorkspaceCanvas } from "@/components/workspace/workspace-canvas";
 import { WorkspaceEnabledProvider } from "@/components/workspace/workspace-enabled";
 import { EmbedProvider } from "@/components/workspace/embed-context";
 import { EmbedMainMarker } from "@/components/workspace/embed-main-marker";
+import { PaletteHotkeyForward } from "@/components/workspace/palette-hotkey-forward";
 import { EmbedFocusSignal } from "@/components/workspace/embed-focus-signal";
 import { HideInFrame } from "@/components/workspace/hide-in-frame";
 
@@ -51,6 +52,8 @@ export default async function ShellLayout({ children }: { children: ReactNode })
           {/* pt-3(창 전용) — 타이틀바가 바로 위에 있어 상단 여백을 조인다(2026-07-20 세로 회수). */}
           <main style={brandStyle} className="embed-main bg-background text-foreground h-screen overflow-auto px-3 pt-3 lg:px-6 [scrollbar-gutter:stable]">
             <EmbedFocusSignal />
+            {/* 창 안에서도 Shift+F/Ctrl·Cmd+K로 검색 팰릿 — keydown은 프레임을 못 넘어 postMessage 포워딩. */}
+            <PaletteHotkeyForward />
             {children}
           </main>
         </OperationsProvider></EditPresenceProvider>
@@ -177,8 +180,10 @@ export default async function ShellLayout({ children }: { children: ReactNode })
       </HideInFrame>
 
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden print:overflow-visible">
+        {/* 상단 헤더 = 모바일/터치 전용(사이드바 없는 화면의 브랜드·검색·벨). 데스크톱은 숨김 —
+            벨은 사이드바 하단 사용자 영역, 검색은 Shift+F/Ctrl·Cmd+K(2026-07-20 원장 "상단탭 무쓸모"). */}
         <HideInFrame>
-          <AppHeader brand={brand} />
+          <AppHeader brand={brand} className="lg:pointer-fine:hidden" />
         </HideInFrame>
         <main className="flex-1 overflow-auto px-3 pt-4 lg:px-6 lg:pt-5 [scrollbar-gutter:stable]">
           {/* 드릴인 등으로 embed 파라미터가 떨어진 하드 내비가 창(iframe) 안에서 풀 셸을 렌더하면

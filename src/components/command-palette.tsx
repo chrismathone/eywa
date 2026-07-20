@@ -11,6 +11,7 @@ import { useIsDesktop } from "@/components/workspace/use-is-desktop";
 import { useWindowStore } from "@/components/workspace/window-store";
 import { useShowDesktop } from "@/components/workspace/use-show-desktop";
 import { windowIdForHref } from "@/components/workspace/window-link";
+import { isPaletteHotkey, PALETTE_OPEN_MESSAGE } from "@/lib/palette-hotkey";
 import type { PaletteHit } from "@/features/search/server/queries";
 
 /** 헤더 검색 버튼 등 외부 요소가 팰릿을 여는 데 쓰는 커스텀 이벤트 이름. */
@@ -125,8 +126,26 @@ export function CommandPalette({
   const closePalette = useCallback(() => setOpen(false), []);
 
   useEffect(() => {
+    // 열기 경로 3종(2026-07-20 상단 헤더 제거로 단축키가 1차 진입): ① 커스텀 이벤트(모바일 헤더 검색 버튼)
+    // ② 전역 단축키 Shift+F(타이핑 보호)/Ctrl·Cmd+K ③ 창(iframe) 안 단축키의 postMessage 포워딩
+    // (PaletteHotkeyForward — keydown은 프레임 경계를 못 넘는다).
+    const onKey = (e: KeyboardEvent) => {
+      if (!isPaletteHotkey(e)) return;
+      e.preventDefault();
+      openPalette();
+    };
+    const onMessage = (e: MessageEvent) => {
+      if (e.origin !== window.location.origin) return;
+      if ((e.data as { type?: string } | null)?.type === PALETTE_OPEN_MESSAGE) openPalette();
+    };
     window.addEventListener(COMMAND_PALETTE_OPEN_EVENT, openPalette);
-    return () => window.removeEventListener(COMMAND_PALETTE_OPEN_EVENT, openPalette);
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("message", onMessage);
+    return () => {
+      window.removeEventListener(COMMAND_PALETTE_OPEN_EVENT, openPalette);
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("message", onMessage);
+    };
   }, [openPalette]);
 
   // 키보드 이동 시 활성 항목이 항상 보이도록.

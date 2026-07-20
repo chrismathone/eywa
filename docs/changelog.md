@@ -20,6 +20,16 @@
   공용 추출)를 툴바 우측으로 내림(리스킨 전 배치의 창 한정 회귀). 툴바 엑셀·시트 버튼을 ml-auto 스페이서
   **앞**으로 이동(스페이서 뒤에 있으면 넓은 창에서도 상시 둘째 줄 강제) · 임베드 <main> pt-4/5→pt-3 ·
   임베드 페이지 gap-4→3. 실측: 창 그리드 시작 ~255px→~100px.
+- **3차: 셸 상단 헤더 데스크톱 폐지(07-20 원장 "상단탭이 알림 외엔 무쓸모")**: AppHeader = **모바일/터치
+  전용으로 강등**(`lg:pointer-fine:hidden`, 사이드바 노출과 대칭) — 데스크톱 세로 48px 추가 회수. 벨은
+  **사이드바 하단 사용자 영역에 합체**(펼침: 사용자·이름·벨 한 줄 / 접힘 레일: 벨 위·사용자 아래 스택;
+  이중 마운트 방지 위해 AppHeader·사이드바 모두 isDesktop 조건 마운트 — 벨은 폴링+OS 팝업이라 중복 발화
+  금지). 검색은 **Shift+F(타이핑 보호)·Ctrl/Cmd+K** 단축키로([palette-hotkey.ts](../src/lib/palette-hotkey.ts)
+  일반 모듈, #81) — 창(iframe) 안 keydown은 [PaletteHotkeyForward](../src/components/workspace/palette-hotkey-forward.tsx)가
+  same-origin postMessage로 부모 팰릿에 전달(keydown은 프레임 경계 못 넘음). 사이드바 하단 팁에 단축키 안내.
+  실브라우저: 데스크톱 헤더 display:none·벨 배지 사이드바 표시·메인/iframe 양 경로 팰릿 열림·dismiss 정상
+  (⚠️ 검증 중 "안 닫힘"은 전부 브라우저 창 백그라운드에서 CSS 종료 애니메이션 일시정지 = base-ui 언마운트
+  보류였음 — 환경 특성, 실사용 무관).
 
 ### Injaewon Editorial 전면 디자인 리팩토링 (2026-07-19) — ✅ tsc0/lint0/vitest1654/build✓ · 로직 무접촉
 **골: "상용 사이트 대비 허접함" 해소** — injaewon.blog의 구성 문법(eyebrow→헤드라인 위계·빅 스탯·소프트 패널·
