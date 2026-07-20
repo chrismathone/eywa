@@ -21,7 +21,7 @@ export function BrowserFrame({
 }) {
   return (
     <div
-      className={`bg-card border-line-strong relative overflow-hidden rounded-[18px] border shadow-[0_1px_2px_rgba(11,16,13,0.05),0_36px_80px_-36px_rgba(11,16,13,0.4)] ${className ?? ""}`}
+      className={`bg-card border-line-strong relative overflow-hidden rounded-[18px] border shadow-[0_1px_2px_rgba(29,29,31,0.05),0_36px_80px_-36px_rgba(29,29,31,0.4)] ${className ?? ""}`}
     >
       <div className="border-line bg-bg-soft flex h-10 items-center gap-2.5 border-b pr-3 pl-3.5">
         <span className="bg-ink flex size-5.5 shrink-0 items-center justify-center rounded-[6px]">

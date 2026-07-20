@@ -28,7 +28,7 @@ export function MenuIndexSection() {
 
       {/* 점선 리더 목차 */}
       <Reveal variant="up" delay={120} className="mt-10">
-        <ul className="bg-card border-line rounded-[16px] border px-3 py-3 shadow-[0_1px_2px_rgba(11,16,13,0.04),0_16px_40px_-24px_rgba(11,16,13,0.12)] sm:px-5 sm:py-4">
+        <ul className="bg-card border-line rounded-[16px] border px-3 py-3 shadow-[0_1px_2px_rgba(29,29,31,0.04),0_16px_40px_-24px_rgba(29,29,31,0.12)] sm:px-5 sm:py-4">
           {MENU_INDEX.map((m, i) => {
             const showGroup = i === 0 || MENU_INDEX[i - 1].group !== m.group;
             return (
@@ -40,7 +40,7 @@ export function MenuIndexSection() {
                 ) : null}
                 <div className="ey-row group flex items-baseline gap-3 rounded-[10px] px-3 py-3">
                   <span className="text-text-faint w-6 shrink-0 font-mono text-[12px] font-bold">{m.no}</span>
-                  <span className="bg-bg-soft text-text-dim group-hover:bg-ink flex size-7 shrink-0 translate-y-[2px] items-center justify-center rounded-[8px] transition-colors group-hover:text-[var(--mint)]">
+                  <span className="bg-bg-soft text-text-dim group-hover:bg-ink flex size-7 shrink-0 translate-y-[2px] items-center justify-center rounded-[8px] transition-colors group-hover:text-[var(--azure)]">
                     <EyIcon name={m.icon} size={15} />
                   </span>
                   <span className="text-foreground flex shrink-0 items-center gap-1.5 text-[15px] font-bold">

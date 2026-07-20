@@ -1,69 +1,82 @@
 /* ──────────────────────────────────────────────────────────────
  * 랜딩 전용 스타일 — (marketing) layout에서만 import (전역 globals.css 비오염).
- * ① .ey-landing 스코프 팔레트 오버라이드 "Precision Pine" — 앱 본체 토큰은 불변.
- *    웜 아이보리/파스텔 워시 → 쿨 포슬린 + 잉크 그린 + 샤프 그린. 다크 파인 서피스는
- *    --pine* 로컬 변수(콘솔 패널·클로징·푸터 북엔드 전용, 앱과 무관).
+ * ① .ey-landing 스코프 팔레트 — **앱 본체 v3 네이비(globals.css)를 그대로 미러링**한다.
+ *    2026-07-20 통일: 랜딩만 "Precision Pine"(잉크 그린)으로 남아 앱(딥 네이비 #153e75)과
+ *    갈라져 있던 것을 해소. 서피스·잉크·라인·브랜드색은 globals.css 값과 동일하게 유지할 것
+ *    (앱 토큰이 바뀌면 여기도 함께 갱신 — 스코프 오버라이드라 자동 추종하지 않는다).
+ *    다크 서피스는 --deep* 로컬 변수(콘솔 패널·클로징·푸터 북엔드 전용, 앱과 무관).
  * ② 모션 — 무거운 라이브러리 없이 CSS 전이 + IntersectionObserver(data-in)로만 구동.
  *    모션 단일 기준은 motionDisabled()(JS) + prefers-reduced-motion(CSS 폴백).
  * ────────────────────────────────────────────────────────────── */
 
 .ey-landing {
-  /* 서피스 — 웜 크림 제거, 쿨 포슬린/미스트 */
-  --background: #f8faf8;
-  --bg-soft: #eef2ef;
-  --surface-hi: #ffffff;
+  /* 서피스 — 애플 뉴트럴(앱 v3 동일) */
+  --background: #f5f5f7;
+  --bg-soft: #e9e9ee;
+  --surface-hi: #fafafc;
   --card: #ffffff;
-  --sidebar: #eef2ef;
+  --sidebar: #ffffff;
 
-  /* 잉크 — 그린캐스트 블랙, 대비 강화 */
-  --foreground: #101613;
-  --ink: #0b100d;
-  --text-dim: #4c5751;
-  --text-faint: #6b766f;
+  /* 잉크 — 애플 뉴트럴(앱 v3 동일) */
+  --foreground: #1d1d1f;
+  --ink: #1d1d1f;
+  --text-dim: #505050;
+  /* ⚠️ text-faint만 앱(#767676)보다 한 단계 진하게 — 앱은 흰 카드(4.54:1) 위주라 통과하지만
+     랜딩은 캔버스(#f5f5f7)·soft(#e9e9ee) 배경에 작은 글자를 얹어 각각 4.17/3.75로 미달한다.
+     #696969 = 캔버스 5.04 · soft 4.54 · 화이트 5.42로 전부 4.5:1 상회(마디아 정합). */
+  --text-faint: #696969;
 
-  /* 라인 — 기존 8%보다 또렷하게 */
-  --border: rgba(11, 16, 13, 0.1);
-  --line: rgba(11, 16, 13, 0.1);
-  --line-strong: rgba(11, 16, 13, 0.2);
-  --input: rgba(11, 16, 13, 0.1);
+  /* 라인 — 뉴트럴 헤어라인(앱 v3 동일) */
+  --border: rgba(29, 29, 31, 0.09);
+  --line: rgba(29, 29, 31, 0.09);
+  --line-strong: rgba(29, 29, 31, 0.18);
+  --input: rgba(29, 29, 31, 0.12);
 
-  /* 브랜드 그린 — 더스티 포레스트(#1a5f3c)를 채도·명도 한 단계 끌어올림 */
-  --primary: #0e7c46;
+  /* 브랜드 — 딥 네이비(앱 v3 동일, 화이트 위 10.6:1) */
+  --primary: #153e75;
   --primary-foreground: #ffffff;
-  --primary-soft: rgba(14, 124, 70, 0.09);
-  --primary-softer: rgba(14, 124, 70, 0.05);
-  --ring: #0e7c46;
+  --primary-soft: rgba(21, 62, 117, 0.08);
+  --primary-softer: rgba(21, 62, 117, 0.04);
+  --ring: #153e75;
 
-  /* 보조 팔레트 — 워시 카드 금지, 도트·숫자·미세 액센트로만 */
-  --gold: #a97f24;
-  --gold-soft: rgba(169, 127, 36, 0.11);
+  /* 보조 팔레트 — 워시 카드 금지, 도트·숫자·미세 액센트로만(앱 v3 마디아 정합값) */
+  --gold: #8a681c;
+  --gold-soft: rgba(138, 104, 28, 0.11);
   --blue: #2d6be0;
   --blue-soft: rgba(45, 107, 224, 0.09);
   --purple: #6c50c8;
   --purple-soft: rgba(108, 80, 200, 0.09);
-  --rose: #d2447a;
-  --rose-soft: rgba(210, 68, 122, 0.09);
-  --amber: #c8720d;
-  --amber-soft: rgba(200, 114, 13, 0.11);
+  --rose: #c23a6e;
+  --rose-soft: rgba(194, 58, 110, 0.09);
+  --amber: #a35d0a;
+  --amber-soft: rgba(163, 93, 10, 0.11);
   --danger: #d33f3f;
   --danger-soft: rgba(211, 63, 63, 0.09);
 
-  /* 다크 파인 서피스 (랜딩 로컬 — 콘솔·클로징·푸터) */
-  --pine: #0c1712;
-  --pine-2: #122019;
-  --pine-line: rgba(255, 255, 255, 0.09);
-  --pine-text: #f2f6f3;
-  --pine-dim: #9cafa4;
-  --mint: #4ade97;
+  /* 다크 네이비 서피스 (랜딩 로컬 — 콘솔·클로징·푸터 북엔드).
+     텍스트 대비: deep-text 16.7:1 · deep-dim 8.3:1 · azure 8.4:1 (모두 4.5:1 상회). */
+  --deep: #0b1524;
+  --deep-2: #122238;
+  --deep-line: rgba(255, 255, 255, 0.09);
+  --deep-text: #f2f5f9;
+  --deep-dim: #9db0c8;
+  --azure: #6fb6f5;
 }
 
-/* ─────────────── 다크 파인 서피스 ─────────────── */
+/* ─────────────── 다크 네이비 서피스 ─────────────── */
 
-/* 콘솔/북엔드 공통 바탕 — 파인 블랙 + 상단 민트 글로우 한 방울 */
+/* 콘솔/북엔드 공통 바탕 — 네이비 블랙 + 상단 애저 글로우 한 방울 */
 .ey-console {
   background:
-    radial-gradient(72% 56% at 50% -8%, rgba(74, 222, 151, 0.07), transparent 62%),
-    var(--pine);
+    radial-gradient(72% 56% at 50% -8%, rgba(111, 182, 245, 0.08), transparent 62%),
+    var(--deep);
+}
+
+/* 다크 서피스 위 CTA 포커스 링 — ⚠️ 라이트 배경용 --primary(네이비)를 그대로 쓰면 --deep(네이비 블랙)
+   위에서 1.72:1로 묻히고, outline-offset-2라 버튼 면(--primary)과도 동색이라 키보드 포커스가 사실상
+   안 보인다(그린 시절엔 3.48:1이었으므로 네이비 전환이 만든 회귀). 다크 전용 --azure로 8.44:1 확보. */
+.ey-console .ey-cta:focus-visible {
+  outline-color: var(--azure);
 }
 
 /* 콘솔 로그 행 — data-in 시 위에서 아래로 순차 점등(delay는 인라인) */
@@ -79,7 +92,7 @@
   transform: none;
 }
 
-/* 라이브 도트 — 다크 서피스 위 민트 펄스 */
+/* 라이브 도트 — 다크 서피스 위 애저 펄스 */
 @keyframes ey-live {
   0%,
   100% {
@@ -141,8 +154,8 @@
 .ey-uline[data-tone="gold"]::after {
   background: var(--gold);
 }
-.ey-uline[data-tone="mint"]::after {
-  background: var(--mint);
+.ey-uline[data-tone="azure"]::after {
+  background: var(--azure);
 }
 [data-in="true"] .ey-uline::after,
 .ey-uline[data-in="true"]::after {
@@ -252,7 +265,7 @@
   inset: 0;
   pointer-events: none;
   background:
-    radial-gradient(56% 48% at 68% 0%, rgba(14, 124, 70, 0.05), transparent 68%),
+    radial-gradient(56% 48% at 68% 0%, rgba(21, 62, 117, 0.05), transparent 68%),
     radial-gradient(38% 38% at 4% 90%, rgba(45, 107, 224, 0.035), transparent 70%);
 }
 
