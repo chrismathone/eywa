@@ -403,7 +403,8 @@ export function ResumeSheet({
                   </span>
                   <span className="whitespace-nowrap">(연봉)</span>
                   <span className="min-w-[8rem] flex-1">
-                    <EditInput name="c_salaryAnnual" defaultValue={c.salaryAnnual} placeholder="연봉" />
+                    {/* placeholder가 "연봉"이면 라벨을 값으로 오입력하기 쉽다(실사고: 시트에 "연봉 연봉") — 예시 금액으로. */}
+                    <EditInput name="c_salaryAnnual" defaultValue={c.salaryAnnual} placeholder="예: 40,000,000원" />
                   </span>
                 </span>
               ) : (

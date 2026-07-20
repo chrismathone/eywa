@@ -673,6 +673,11 @@ file input 업로드), 게시=`POST /api/v1_2/reports/` + `attached_images`(스�
   (플랜 한도 확인 — 거부되면 외부 스케줄러가 CRON_SECRET로 호출) ③ `AI_PROVIDER=anthropic`·`ANTHROPIC_API_KEY`·
   `CRON_SECRET` env 확인. 비용: 테넌트당 LLM ≤1콜/일(신호 0건 날 스킵) ≈ 월 $2~3.
 
+### 직원명부 급여 라벨 이중 표기 가드 — "연봉 연봉" 수정 (2026-07-20) — ✅ tsc0/lint0/test45/build✓
+연봉 칸에 라벨 글자("연봉")가 입력돼 시트 계약조건이 "월급 2,900,000 / 연봉 연봉"으로 찍힌 실사고.
+`buildRosterRow`가 값 선두의 "월급"/"연봉" 라벨을 떼고 조립(라벨만 있으면 빈 값 취급) + 연봉 placeholder를
+"연봉"→"예: 40,000,000원"으로(라벨 오입력 유도 제거).
+
 ### 직원명부 담당자 열(T) 배선 + 갱신일 신호등 행 전체 확장 (2026-07-17) — ✅ tsc0/lint0/test41/build✓
 원장이 시트에 담당자 열(T, 맨 끝)을 추가 → `ROSTER_COLUMNS`/`buildRosterRow`에 `contract.manager` 배선(20열).
 갱신일 신호등은 N열 단일 셀 → **행 전체(A2:T198)** 규칙으로 교체(시트 API, $N2 고정 수식 — 원장 요청).
