@@ -38,7 +38,7 @@ export function EmptyState({
           height={640}
           sizes="(min-width: 640px) 160px, 144px"
           loading={imageLoading}
-          className="mb-1 size-36 object-contain drop-shadow-[0_8px_10px_rgba(13,17,16,0.14)] sm:size-40"
+          className="mb-1 size-36 object-contain drop-shadow-[0_8px_10px_rgba(29,29,31,0.14)] sm:size-40"
         />
       ) : Icon ? (
         <div className="bg-bg-soft text-text-dim rounded-full p-3">

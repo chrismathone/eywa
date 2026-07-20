@@ -86,7 +86,7 @@ function LabelColumn({
   const cell = "border-line text-text-dim flex items-center justify-center border-b text-[10px] font-bold";
   return (
     <div
-      className="bg-bg-soft border-line sticky left-0 z-20 flex shrink-0 flex-col self-stretch border-r shadow-[4px_0_10px_-6px_rgba(13,17,16,0.18)]"
+      className="bg-bg-soft border-line sticky left-0 z-20 flex shrink-0 flex-col self-stretch border-r shadow-[4px_0_10px_-6px_rgba(29,29,31,0.18)]"
       style={{ width: LABEL_W }}
     >
       <div className={cell} style={{ height: NAME_H }}>수업명</div>
