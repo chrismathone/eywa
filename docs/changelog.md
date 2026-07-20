@@ -4,6 +4,22 @@
 
 ## 진행 상황
 
+### 알림 보관/삭제 + 창 최대화 전체 화면 (2026-07-20) — ✅ tsc0/lint0 · 마이그 0125a 적용 · 실브라우저 검증
+- **창 최대화가 화면 전체를 안 덮던 문제**: [WorkspaceCanvas](../src/components/workspace/workspace-canvas.tsx)의
+  `HEADER = 48`(상단탭 자리 예약)이 상단탭 데스크톱 폐지 후에도 남아, 그 48px 띠로 **운영실 배경이 비쳐** 최대화해도
+  위가 안 덮였다 → `HEADER = 0`(데스크톱=캔버스 마운트 조건에서 AppHeader는 항상 hidden). 실측: 최대화 창이
+  top:0 / bottom:viewport / right:viewport로 **완전 충전**(복원↔최대화 왕복 정상).
+  · 같은 원인으로 잘못 제거했던 **운영실 인사말 날짜 줄을 복구**(운영실=데스크톱 작업면의 정상 콘텐츠였고,
+  삐져나와 보인 건 최대화 미충전 탓 — 원장 지적으로 원인 정정).
+- **알림 보관/삭제**(원장 "보관/삭제 기능 추가하자"): 마이그 **0125a** `notifications.archived_at` + 비보관 부분 인덱스.
+  액션 3종([actions.ts](../src/features/notifications/server/actions.ts) `archiveNotification`·`unarchiveNotification`·
+  `deleteNotification`, RLS recipient 정책으로 본인 것만). 벨에 **받은 알림 ↔ 보관함 토글** + 행 hover 액션
+  (받은함=보관·삭제 / 보관함=복원·삭제). **unread 배지는 비보관만 집계**(치운 알림이 계속 울리면 보관이 무의미),
+  보관함 목록으로는 OS 팝업 미발화. 실검증: 보관→보관함 이동→복원 왕복(프로덕션 데이터 원상복구).
+  · **자동 삭제 정책(기존, 불변)**: 안 읽은 알림은 **영구 보존**, 읽은 알림은 **90일 후 자동 삭제**,
+  dedup 부기(`notification_events`)는 180일 — [prune.ts](../src/features/notifications/server/prune.ts), 하루 1회 cron.
+  벨 목록은 항상 최신 20건만 노출(LIST_LIMIT).
+
 ### 창(embed) 페이지 헤더 자동 컴팩트 — 제목 3중 노출·세로 잠식 해소 (2026-07-19) — ✅ tsc0/lint0/build✓/vitest1662 + 적대리뷰(13에이전트) major 1·minor 5 반영
 원장 지적: 창 안 Editorial 풀 헤더(eyebrow+21px 제목+설명)가 본문을 잠식하고, AppHeader·창 타이틀바와 제목이
 3중 노출("선택창 2중노출 무의미"). [PageHeader](../src/components/page-header.tsx)가 임베드 셸 `<main>`의
