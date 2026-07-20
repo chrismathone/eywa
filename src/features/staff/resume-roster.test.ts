@@ -61,9 +61,9 @@ describe("firstEmptyRowIndex", () => {
 describe("buildRosterRow", () => {
   // 열 순서 계약 — 어긋나면 주민번호가 옆 열로 밀리는 식의 조용한 오기입이 된다.
   // (실사고 2026-07-17: 원장이 '계약조건 history' 열을 삭제했는데 앱이 옛 20열로 기입 → 학력이 은행 열로.)
-  it("시트 헤더(A~S)와 같은 19칸을 만든다", () => {
+  it("시트 헤더(A~T)와 같은 20칸을 만든다", () => {
     expect(buildRosterRow(sample())).toHaveLength(ROSTER_COLUMNS.length);
-    expect(ROSTER_COLUMNS).toHaveLength(19);
+    expect(ROSTER_COLUMNS).toHaveLength(20);
   });
 
   it("각 값이 제 열에 들어간다(회사명·소속부서·이름·계약구분·입사일·메일·주민번호·전화·학력·은행·계좌)", () => {
@@ -81,6 +81,7 @@ describe("buildRosterRow", () => {
     expect(col("학력")).toBe("한국대학교\n수학과"); // 기존 명부 표기: 학교명 줄바꿈 전공
     expect(col("은행")).toBe("국민은행");
     expect(col("계좌번호")).toBe("123-456-789");
+    expect(col("담당자")).toBe("김담당"); // T열 — 폼 '담당자' 배선(2026-07-17)
     // 이력서 서식에 없는 열은 빈 칸(시트 수기 관리).
     expect(col("No.")).toBe("");
     expect(col("직급")).toBe("");
@@ -94,9 +95,9 @@ describe("buildRosterRow", () => {
     expect(row[ROSTER_COLUMNS.indexOf("계약조건")]).toBe("월급 2,800,000원 / 연봉 4,000만원");
   });
 
-  it("빈 이력서도 19칸 빈 행으로 안전 변환(전공만 있고 학교명 없으면 학력도 빈 칸)", () => {
+  it("빈 이력서도 20칸 빈 행으로 안전 변환(전공만 있고 학교명 없으면 학력도 빈 칸)", () => {
     const row = buildRosterRow(emptyResume());
-    expect(row).toHaveLength(19);
+    expect(row).toHaveLength(20);
     expect(row.every((v) => v === "")).toBe(true);
   });
 });

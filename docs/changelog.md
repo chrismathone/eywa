@@ -641,6 +641,11 @@ file input 업로드), 게시=`POST /api/v1_2/reports/` + `attached_images`(스�
   (플랜 한도 확인 — 거부되면 외부 스케줄러가 CRON_SECRET로 호출) ③ `AI_PROVIDER=anthropic`·`ANTHROPIC_API_KEY`·
   `CRON_SECRET` env 확인. 비용: 테넌트당 LLM ≤1콜/일(신호 0건 날 스킵) ≈ 월 $2~3.
 
+### 직원명부 담당자 열(T) 배선 + 갱신일 신호등 행 전체 확장 (2026-07-17) — ✅ tsc0/lint0/test41/build✓
+원장이 시트에 담당자 열(T, 맨 끝)을 추가 → `ROSTER_COLUMNS`/`buildRosterRow`에 `contract.manager` 배선(20열).
+갱신일 신호등은 N열 단일 셀 → **행 전체(A2:T198)** 규칙으로 교체(시트 API, $N2 고정 수식 — 원장 요청).
+계약조건 이력은 Apps Script(K열 onEdit → 2026직원히스토리 `이름|변경일시|계약조건` 1=최신 누적)로 시트 측 처리.
+
 ### 직원명부 열 계약 19열 동기화 — '계약조건 history' 열 삭제 반영 (2026-07-17) — ✅ tsc0/lint0/test41/build✓
 원장이 시트에서 '계약조건 history' 열을 삭제(이력은 2026직원히스토리 탭으로 이관)했는데 앱이 옛 20열
 순서로 기입해 **학력이 은행 열로 밀리는 실사고** → `ROSTER_COLUMNS`/`buildRosterRow`를 현재 시트(A~S 19열)와
