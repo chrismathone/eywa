@@ -40,7 +40,7 @@ export function AiEveningSection() {
           </p>
         </Reveal>
         <Reveal variant="up" delay={220}>
-          <p className="border-line bg-card text-gold mt-7 inline-flex items-center gap-2 rounded-full border py-1.5 pr-3.5 pl-3 font-mono text-[11px] font-bold tracking-[0.1em] uppercase shadow-[0_1px_2px_rgba(11,16,13,0.04)]">
+          <p className="border-line bg-card text-gold mt-7 inline-flex items-center gap-2 rounded-full border py-1.5 pr-3.5 pl-3 font-mono text-[11px] font-bold tracking-[0.1em] uppercase shadow-[0_1px_2px_rgba(29,29,31,0.04)]">
             <EyIcon name="sparkle" size={13} className="ey-sparkle" />
             Claude · DeepSeek 엔진
           </p>
@@ -56,10 +56,10 @@ export function AiEveningSection() {
             aspect="aspect-[3/2]"
             sizes="(min-width: 1024px) 480px, 90vw"
           />
-          <div className="bg-card border-line relative z-10 mx-auto -mt-16 w-[92%] overflow-hidden rounded-[16px] border p-6 shadow-[0_1px_2px_rgba(11,16,13,0.05),0_32px_72px_-30px_rgba(11,16,13,0.42)] sm:-mt-20">
+          <div className="bg-card border-line relative z-10 mx-auto -mt-16 w-[92%] overflow-hidden rounded-[16px] border p-6 shadow-[0_1px_2px_rgba(29,29,31,0.05),0_32px_72px_-30px_rgba(29,29,31,0.42)] sm:-mt-20">
             <div
               className="pointer-events-none absolute -top-16 -right-16 size-48 rounded-full"
-              style={{ background: "radial-gradient(circle, rgba(169,127,36,0.09), transparent 70%)" }}
+              style={{ background: "radial-gradient(circle, rgba(138,104,28,0.09), transparent 70%)" }}
               aria-hidden="true"
             />
             <div className="relative flex items-center justify-between">

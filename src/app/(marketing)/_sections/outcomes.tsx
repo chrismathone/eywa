@@ -34,7 +34,7 @@ export function OutcomesSection() {
       </div>
 
       <Reveal variant="up" delay={140}>
-        <div className="border-line bg-card divide-line mt-10 grid grid-cols-2 divide-x divide-y rounded-[16px] border shadow-[0_1px_2px_rgba(11,16,13,0.04),0_16px_40px_-24px_rgba(11,16,13,0.14)] md:grid-cols-4 md:divide-y-0">
+        <div className="border-line bg-card divide-line mt-10 grid grid-cols-2 divide-x divide-y rounded-[16px] border shadow-[0_1px_2px_rgba(29,29,31,0.04),0_16px_40px_-24px_rgba(29,29,31,0.14)] md:grid-cols-4 md:divide-y-0">
           {DAY_NUMBERS.map((n) => (
             <div key={n.label} className="relative px-6 py-7">
               {n.accent ? (
@@ -100,12 +100,12 @@ export function OutcomesSection() {
               </div>
             ))}
 
-            {/* 최종 환산 — 감정 통화 (파인 잉크 카드) */}
-            <div className="ey-console border-[var(--pine-line)] mt-4 rounded-[16px] border px-6 py-7 shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_24px_56px_-28px_rgba(11,16,13,0.5)]">
-              <p className="text-[var(--mint)] font-mono text-[11px] font-bold tracking-[0.14em] uppercase">
+            {/* 최종 환산 — 감정 통화 (네이비 잉크 카드) */}
+            <div className="ey-console border-[var(--deep-line)] mt-4 rounded-[16px] border px-6 py-7 shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_24px_56px_-28px_rgba(29,29,31,0.5)]">
+              <p className="text-[var(--azure)] font-mono text-[11px] font-bold tracking-[0.14em] uppercase">
                 결국, 돌려받는 것
               </p>
-              <p className="text-[var(--pine-text)] mt-2 text-[clamp(2.2rem,4.4vw,3.4rem)] leading-[1.1] font-extrabold tracking-[-0.035em]">
+              <p className="text-[var(--deep-text)] mt-2 text-[clamp(2.2rem,4.4vw,3.4rem)] leading-[1.1] font-extrabold tracking-[-0.035em]">
                 {ROI_PAYOFF}
               </p>
             </div>

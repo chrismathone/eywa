@@ -16,7 +16,7 @@ export function HeroSection() {
       {/* 좌 — 구체적 가치 + CTA */}
       <div className="relative">
         <Reveal variant="up">
-          <p className="border-line bg-card text-text-dim inline-flex items-center gap-2 rounded-full border py-1.5 pr-3.5 pl-3 text-[12px] font-semibold shadow-[0_1px_2px_rgba(11,16,13,0.04)]">
+          <p className="border-line bg-card text-text-dim inline-flex items-center gap-2 rounded-full border py-1.5 pr-3.5 pl-3 text-[12px] font-semibold shadow-[0_1px_2px_rgba(29,29,31,0.04)]">
             <span className="bg-primary size-1.5 animate-pulse rounded-full motion-reduce:animate-none" aria-hidden="true" />
             출결 · 수납 · 상담 · 학부모 알림 올인원
           </p>

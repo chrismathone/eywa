@@ -36,7 +36,7 @@ export function FeatureSwitcher({ features }: { features: Feature[] }) {
       <div
         role="tablist"
         aria-label="기능 둘러보기"
-        className="border-line bg-card inline-flex flex-wrap gap-1 rounded-full border p-1 shadow-[0_1px_2px_rgba(11,16,13,0.04)]"
+        className="border-line bg-card inline-flex flex-wrap gap-1 rounded-full border p-1 shadow-[0_1px_2px_rgba(29,29,31,0.04)]"
       >
         {features.map((t, i) => {
           const on = i === view.idx;
@@ -51,11 +51,11 @@ export function FeatureSwitcher({ features }: { features: Feature[] }) {
               onClick={() => select(i)}
               className={`flex items-center gap-2 rounded-full px-4 py-2 text-[13px] font-bold transition-colors ${
                 on
-                  ? "bg-ink text-white shadow-[0_8px_20px_-10px_rgba(11,16,13,0.6)]"
+                  ? "bg-ink text-white shadow-[0_8px_20px_-10px_rgba(29,29,31,0.6)]"
                   : "text-text-dim hover:text-foreground hover:bg-bg-soft"
               }`}
             >
-              <EyIcon name={MENU_ICON[t.key]} size={15} className={on ? "text-[var(--mint)]" : "text-text-faint"} />
+              <EyIcon name={MENU_ICON[t.key]} size={15} className={on ? "text-[var(--azure)]" : "text-text-faint"} />
               {t.label}
             </button>
           );

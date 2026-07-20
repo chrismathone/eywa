@@ -225,10 +225,12 @@ export async function getWeeklyWritingRates(): Promise<WritingRatesView | null> 
     .filter((r) => !exempt.has(r.teacher));
 
   // 2) 오늘 시작된 반 → 강사별 classIds (예외 강사 반 제외).
+  // 귀속 = 반 담당(teacherName) 우선, 없으면 **슬롯 강사 라벨 폴백** — 반 담당 없이 슬롯 라벨로만 도는
+  // 영어반(RTT2류)이 "(미지정)"으로 뭉치지 않게. 라벨 인물이 예외면 그 슬롯도 예외로 빠진다.
   const started = schedule.filter((s) => s.status !== "upcoming");
   const teacherOfClass = new Map<string, string>();
   for (const s of started) {
-    const t = s.teacherName ?? "(미지정)";
+    const t = s.teacherName ?? s.slotTeacherLabel ?? "(미지정)";
     if (exempt.has(t)) continue;
     teacherOfClass.set(s.classId, t);
   }
@@ -288,7 +290,8 @@ export async function getWeeklyWritingRates(): Promise<WritingRatesView | null> 
       const m = new Map<string, string>();
       for (const s of weekly) {
         if (s.dayOfWeek !== key) continue;
-        const t = s.teacherName ?? "(미지정)";
+        // 오늘 로직과 동일: 반 담당 → 슬롯 라벨 폴백(반 담당 없는 영어반 "(미지정)" 방지).
+        const t = s.teacherName ?? s.slotTeacherLabel ?? "(미지정)";
         if (exempt.has(t)) continue;
         m.set(s.classId, t);
         weekClassIds.add(s.classId);

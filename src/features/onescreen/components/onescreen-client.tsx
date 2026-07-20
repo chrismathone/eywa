@@ -133,6 +133,7 @@ export function OneScreenClient({
   noticeMode: initialNoticeMode = null,
   academyNoticeMode = "A",
   classnoteSendEnabled = false,
+  sendWindowLabel = null,
   presenceScope,
 }: {
   initial: OneScreenStudent[];
@@ -146,6 +147,7 @@ export function OneScreenClient({
   noticeMode?: "A" | "B" | null; // 강사 본인 멘트 모드 오버라이드(null=학원 기본) — 0104a
   academyNoticeMode?: "A" | "B"; // 학원 기본 멘트 모드(토글 '학원 기본' 라벨)
   classnoteSendEnabled?: boolean; // ClassNote 실제 발송 스위치 — 공지 dry-run 안내
+  sendWindowLabel?: string | null; // 발송 허용 시간창 "HH:MM~HH:MM"(무제한=null) — 상단 강사 참고 안내
   presenceScope?: string; // `onescreen:{teacherId}:{date}` — 다른 창/기기 동시 열림 경고(서버가 teacherId 파생)
 }) {
   const router = useRouter();
@@ -1265,6 +1267,16 @@ export function OneScreenClient({
         onNoticeMode={changeNoticeMode}
         makeupAdder={<MakeupAdder onAdd={addMakeupStudent} />}
       />
+
+      {/* 발송 시간창 참고 안내 — 원장이 학원설정(보고서)에 시간대를 정한 경우만 표시(무제한=미표시).
+          실제 지연은 워커 게이트·발송 시점 토스트가 담당 — 이 줄은 정책 인지용 상시 안내다. */}
+      {sendWindowLabel ? (
+        <div className="border-line bg-bg-soft text-text-dim rounded-md border px-3 py-2 text-[12.5px]">
+          {/* "수업 보고서" 한정 표기 — 반 공지는 시간창 미적용(G1 확정)이라 ClassNote 전체로 말하면 과약속. */}
+          <span className="text-foreground font-bold">수업 보고서 발송 시간대 {sendWindowLabel}</span>
+          <span> — 이 시간 외에 발송하면 예약돼 시간대가 열릴 때 자동 발송됩니다.</span>
+        </div>
+      ) : null}
 
       {/* 다른 창/기기 동시 열림 경고(3-3) — 소프트(락 아님). 같은 학생을 양쪽에서 입력하면 마지막 저장이 이긴다. */}
       {sameDateEditors.length > 0 ? (

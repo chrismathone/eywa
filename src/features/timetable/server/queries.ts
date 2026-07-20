@@ -581,7 +581,7 @@ export async function getTodaySchedule(): Promise<TodaySlot[]> {
   const { data, error } = await supabase
     .from("class_schedules")
     .select(
-      `id, day_of_week, start_time, end_time, class_id,
+      `id, day_of_week, start_time, end_time, class_id, slot_teacher_label,
        class:class_id!inner (
          class_name, subject, is_active, closed_at,
          teacher:teacher_id ( display_name ),
@@ -679,8 +679,9 @@ export async function getTodaySchedule(): Promise<TodaySlot[]> {
         teacherName: teacher?.display_name ?? null,
         classroomName: room?.name ?? null,
         studentCount: counts.get(r.class_id) ?? 0,
-        // 대시보드 오늘 일정은 셀 라벨·색·인수인계 미사용 — 타입 충족용 null.
-        slotTeacherLabel: null,
+        // 슬롯 강사 라벨 — 작성률(getWeeklyWritingRates)이 반 담당 없는 반의 귀속 폴백으로 사용.
+        // 색·인수인계는 대시보드 오늘 일정 미사용 — 타입 충족용 null 유지.
+        slotTeacherLabel: (r.slot_teacher_label as string | null) ?? null,
         slotRoomLabel: null,
         classBgColor: null,
         classTextColor: null,

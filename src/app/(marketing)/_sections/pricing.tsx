@@ -45,8 +45,8 @@ export function PricingSection() {
               key={plan.name}
               className={`ey-lift bg-card relative rounded-[16px] border p-6 ${
                 plan.highlight
-                  ? "border-ink shadow-[0_1px_2px_rgba(11,16,13,0.05),0_24px_56px_-26px_rgba(11,16,13,0.3)]"
-                  : "border-line shadow-[0_1px_2px_rgba(11,16,13,0.04)]"
+                  ? "border-ink shadow-[0_1px_2px_rgba(29,29,31,0.05),0_24px_56px_-26px_rgba(29,29,31,0.3)]"
+                  : "border-line shadow-[0_1px_2px_rgba(29,29,31,0.04)]"
               }`}
             >
               <div className="flex items-start justify-between gap-4">

@@ -58,7 +58,7 @@ export function ProductShowcase() {
       </BrowserFrame>
 
       {/* 플로팅 — 학부모 알림 토스트 (우상단) */}
-      <div className="ey-float bg-card border-line absolute -top-5 -right-4 hidden w-[244px] items-center gap-3 rounded-[14px] border p-3 shadow-[0_1px_2px_rgba(11,16,13,0.05),0_20px_44px_-18px_rgba(11,16,13,0.35)] sm:flex">
+      <div className="ey-float bg-card border-line absolute -top-5 -right-4 hidden w-[244px] items-center gap-3 rounded-[14px] border p-3 shadow-[0_1px_2px_rgba(29,29,31,0.05),0_20px_44px_-18px_rgba(29,29,31,0.35)] sm:flex">
         <span className="bg-rose-soft text-rose flex size-9 shrink-0 items-center justify-center rounded-[10px]">
           <EyIcon name="messages" size={16} />
         </span>
@@ -69,7 +69,7 @@ export function ProductShowcase() {
       </div>
 
       {/* 플로팅 — 출석 체크 (좌하단) */}
-      <div className="ey-float-b bg-card border-line absolute -bottom-5 -left-4 hidden items-center gap-2.5 rounded-[14px] border py-2.5 pr-4 pl-3 shadow-[0_1px_2px_rgba(11,16,13,0.05),0_20px_44px_-18px_rgba(11,16,13,0.35)] sm:flex">
+      <div className="ey-float-b bg-card border-line absolute -bottom-5 -left-4 hidden items-center gap-2.5 rounded-[14px] border py-2.5 pr-4 pl-3 shadow-[0_1px_2px_rgba(29,29,31,0.05),0_20px_44px_-18px_rgba(29,29,31,0.35)] sm:flex">
         <span className="bg-primary text-primary-foreground flex size-8 shrink-0 items-center justify-center rounded-[9px]">
           <EyIcon name="check" size={16} />
         </span>

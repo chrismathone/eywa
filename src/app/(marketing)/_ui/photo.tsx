@@ -29,7 +29,7 @@ export function EditorialPhoto({
 }: Props) {
   const frame = bare
     ? ""
-    : "border-line rounded-xl border shadow-[0_24px_60px_-30px_rgba(13,17,16,0.28)]";
+    : "border-line rounded-xl border shadow-[0_24px_60px_-30px_rgba(29,29,31,0.28)]";
   return (
     <figure className={`bg-bg-soft relative overflow-hidden ${aspect} ${frame} ${className ?? ""}`}>
       <Image src={src} alt={alt} fill sizes={sizes} placeholder="blur" className="object-cover" />
@@ -37,7 +37,7 @@ export function EditorialPhoto({
         <>
           <span
             className="pointer-events-none absolute inset-0"
-            style={{ background: "linear-gradient(180deg, rgba(26,31,28,0) 52%, rgba(26,31,28,0.5) 100%)" }}
+            style={{ background: "linear-gradient(180deg, rgba(29,29,31,0) 52%, rgba(29,29,31,0.5) 100%)" }}
             aria-hidden="true"
           />
           <figcaption className="absolute inset-x-0 bottom-0 px-4 py-3 font-mono text-[11px] font-semibold tracking-[0.06em] text-white/90">
