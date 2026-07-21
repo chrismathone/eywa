@@ -94,6 +94,23 @@ export function reportOrderSpecs(sort?: ReportSortKey, dir: "asc" | "desc" = "as
 export const IMPORT_FILTER = "__import__";
 
 /**
+ * 목록 기본 조회 범위 = **이번 달**(원장 지시 2026-07-21).
+ *
+ * ⚠️ 왜 전체 기간이 기본이면 안 되는가(실측): lesson_reports 17,346행에 2년치가 섞여 있어 '강사' 열로
+ * 정렬하면 **1페이지 30줄이 전부 권나현/2026-05-06~07**이고 최근 30일 건은 0건이었다. 정렬을 눌러도
+ * 쓸 수 있는 화면이 안 나온다 — 범위를 달로 끊어야 "이 달 안에서 강사순"이라는 **의미 있는 정렬**이 된다.
+ * (성능은 부차적 효과: 전체 기간 12.0ms → 한 달 2.6ms.)
+ *
+ * 서버 첫 페인트(page.tsx)와 클라 초기 state가 **같은 함수**를 써야 첫 화면이 어긋나지 않는다.
+ */
+export function defaultReportFilters(todayYmd: string): ReportListFilters {
+  const month = todayYmd.slice(0, 7);
+  const [y, m] = month.split("-").map(Number);
+  const last = new Date(Date.UTC(y!, m!, 0)).getUTCDate();
+  return { page: 0, from: `${month}-01`, to: `${month}-${String(last).padStart(2, "0")}` };
+}
+
+/**
  * 관리자 최초 발송 가능 행 — **미발송(발송 이력 없음)** + 이관분 아님. 목록 체크박스 활성 판정용(순수).
  * 서버 액션(sendClassnoteForUnsent)의 하드필터와 동일 조건 — 이미 발송·큐잉된 행(queued/processing/
  * success/failed/…)은 여기서도 서버에서도 거부라 **중복발송이 구조적으로 불가**(재발송은 큐 카드의 별도 버튼).

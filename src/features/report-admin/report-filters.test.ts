@@ -1,5 +1,22 @@
 import { describe, expect, it } from "vitest";
-import { isAdminSendable, REPORT_SORT_KEYS, reportOrderSpecs } from "./report-filters";
+import { defaultReportFilters, isAdminSendable, REPORT_SORT_KEYS, reportOrderSpecs } from "./report-filters";
+
+// 기본 조회 범위 = 이번 달. 전체 기간이 기본이면 '강사' 정렬 1페이지가 두 달 전 기록으로만 채워진다(실측).
+describe("defaultReportFilters", () => {
+  it("오늘이 속한 달의 처음~끝", () => {
+    expect(defaultReportFilters("2026-07-21")).toEqual({ page: 0, from: "2026-07-01", to: "2026-07-31" });
+  });
+
+  it("말일이 다른 달·윤년도 정확히", () => {
+    expect(defaultReportFilters("2026-02-05").to).toBe("2026-02-28");
+    expect(defaultReportFilters("2028-02-05").to).toBe("2028-02-29");
+    expect(defaultReportFilters("2026-06-30").to).toBe("2026-06-30");
+  });
+
+  it("항상 1페이지부터 — 달을 바꿨는데 옛 페이지 번호가 남으면 빈 화면이 뜬다", () => {
+    expect(defaultReportFilters("2026-07-21").page).toBe(0);
+  });
+});
 
 // 헤더 클릭 정렬은 **서버 정렬**이다 — 목록이 30건씩 끊겨 오므로 화면에서 정렬하면 그 페이지 안에서만
 // 정렬되고 사용자는 전체가 정렬된 줄 안다. 아래는 그 규약(빈 값 뒤로·tiebreak 유지)을 못 박는다.

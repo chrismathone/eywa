@@ -71,30 +71,11 @@ export function summarizeSendDays(rows: readonly SendStatRow[]): Map<string, Sen
   return out;
 }
 
-/** "YYYY-MM" → 그 달의 첫날·마지막날(RPC 조회 범위). */
-export function monthRange(month: string): { from: string; to: string } {
-  const [y, m] = month.split("-").map(Number);
-  const last = new Date(Date.UTC(y!, m!, 0)).getUTCDate(); // m월 0일 = (m-1)월 말일
-  return { from: `${month}-01`, to: `${month}-${String(last).padStart(2, "0")}` };
-}
-
-/** 달 이동(-1/+1). 연 경계를 넘어간다. */
-export function shiftMonth(month: string, delta: number): string {
-  const [y, m] = month.split("-").map(Number);
-  const d = new Date(Date.UTC(y!, m! - 1 + delta, 1));
-  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
-}
-
-/** "2026-07" → "2026년 7월". */
-export function monthLabel(month: string): string {
-  const [y, m] = month.split("-").map(Number);
-  return `${y}년 ${m}월`;
-}
-
-/** "YYYY-MM-DD" → "YYYY-MM". */
-export function monthOf(ymd: string): string {
-  return ymd.slice(0, 7);
-}
+// 달 산술(monthRange·shiftMonth·monthLabel·monthOf)은 `@/lib/date-kst` 단일 소스 — 수업보고서 목록의
+// 월 단위 조회 범위와 **같은 구현**을 쓴다. 여기선 그대로 재수출해 기존 import 경로를 깨지 않는다.
+export { monthLabel, monthOf, monthRange, shiftMonth } from "@/lib/date-kst";
+// ⚠️ `export ... from`은 로컬 바인딩을 만들지 않는다 — 아래 monthGrid가 쓰려면 별도 import가 필요하다.
+import { monthRange } from "@/lib/date-kst";
 
 /**
  * 달력 격자 — 일요일 시작 주 배열. 그 달이 아닌 칸은 `null`(빈 칸)이라 앞뒤 달 날짜가 새어 들지 않는다.

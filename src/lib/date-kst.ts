@@ -85,3 +85,31 @@ export function formatKoreanDate(ymd: string): string {
   const [y, m, d] = ymd.split("-").map(Number);
   return `${y}년 ${m}월 ${d}일 (${DOW_KO[weekdayIndexOf(ymd)]})`;
 }
+
+/**
+ * "YYYY-MM" → 그 달의 첫날·마지막날. 목록/달력의 **월 단위 조회 범위**를 만드는 단일 소스.
+ * ⚠️ `new Date(ymd)`는 UTC 파싱이라 KST에서 하루 밀린다 — 말일은 `Date.UTC(y, m, 0)`으로 구한다.
+ */
+export function monthRange(month: string): { from: string; to: string } {
+  const [y, m] = month.split("-").map(Number);
+  const last = new Date(Date.UTC(y!, m!, 0)).getUTCDate(); // m월 0일 = (m-1)월 말일
+  return { from: `${month}-01`, to: `${month}-${String(last).padStart(2, "0")}` };
+}
+
+/** 달 이동(-1/+1). 연 경계를 넘어간다. */
+export function shiftMonth(month: string, delta: number): string {
+  const [y, m] = month.split("-").map(Number);
+  const d = new Date(Date.UTC(y!, m! - 1 + delta, 1));
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+/** "2026-07" → "2026년 7월". */
+export function monthLabel(month: string): string {
+  const [y, m] = month.split("-").map(Number);
+  return `${y}년 ${m}월`;
+}
+
+/** "YYYY-MM-DD" → "YYYY-MM". */
+export function monthOf(ymd: string): string {
+  return ymd.slice(0, 7);
+}
