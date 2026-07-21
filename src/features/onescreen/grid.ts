@@ -13,11 +13,14 @@ export type GridRow = {
 };
 
 /** 학생 목록 → (학생 × 과목) 행 평탄화. 과목 순서 보존, 과목 없는 학생 제외(발송 단위가 과목). */
+/** 행 키 = `${studentId}::${subjectName}` — 선택·로딩·첨부 상태를 이 키로 인덱싱한다(문자열 조립 산재 금지). */
+export const rowKey = (studentId: string, subjectName: string): string => `${studentId}::${subjectName}`;
+
 export function buildGridRows(students: OneScreenStudent[]): GridRow[] {
   const rows: GridRow[] = [];
   for (const student of students) {
     student.subjects.forEach((subject, subjectIndex) => {
-      rows.push({ student, subject, subjectIndex, key: `${student.id}::${subject.name}` });
+      rows.push({ student, subject, subjectIndex, key: rowKey(student.id, subject.name) });
     });
   }
   return rows;
