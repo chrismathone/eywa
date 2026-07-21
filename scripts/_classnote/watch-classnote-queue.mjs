@@ -18,6 +18,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import postgres from "postgres";
+import { isWorkerIssueLine } from "./worker-issue-filter.mjs";
 import { stateDirLabel, stateFile } from "./classnote-paths.mjs";
 import { closeClassnoteAdminSession, launchBrowser, processQueueOnce, resolveTenant } from "./classnote-core.mjs";
 import { processNoticesOnce } from "./classnote-notice-core.mjs";
@@ -40,7 +41,9 @@ const recentIssues = [];
 function log(msg) {
   const line = `[${new Date().toISOString()}] ${msg}`;
   console.log(line);
-  if (/실패|오류|error|⚠/i.test(msg)) {
+  // ⚠️ 단순히 /실패|오류/ 로 잡으면 **"실패 0"(정상 보고)** 이 5칸 중 2칸을 먹어 진짜 문제를 밀어낸다
+  // (2026-07-21 실측). 0건 여부까지 보는 판정은 worker-issue-filter.mjs 단일 소스.
+  if (isWorkerIssueLine(msg)) {
     recentIssues.push(line.slice(0, 300));
     if (recentIssues.length > RECENT_MAX) recentIssues.shift();
   }
