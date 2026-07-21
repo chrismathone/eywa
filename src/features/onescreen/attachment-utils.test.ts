@@ -25,14 +25,11 @@ describe("visibleAttachments", () => {
     ]);
   });
 
-  it("워커 스크린샷에선 파일이 빠지고 사진만 남는다(눌리지 않는 '받기' 오해 방지)", () => {
-    expect(visibleAttachments(list, { forScreenshot: true }).map((a) => a.name)).toEqual([
-      "풀이.jpg",
-      "칠판.png",
-    ]);
+  it("워커 스크린샷에선 첨부가 전부 빠진다(이미지=attached_images·파일=attached_files 네이티브 부착 → 스샷 중복 제거)", () => {
+    expect(visibleAttachments(list, { forScreenshot: true })).toEqual([]);
   });
 
-  it("파일만 첨부된 보고서는 스크린샷에서 첨부 영역이 통째로 사라진다", () => {
+  it("파일만 첨부된 보고서도 스크린샷에서 첨부 영역이 통째로 사라진다", () => {
     expect(visibleAttachments([A("워크시트.xlsx")], { forScreenshot: true })).toEqual([]);
   });
 });
