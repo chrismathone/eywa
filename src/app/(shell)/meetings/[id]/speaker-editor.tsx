@@ -12,6 +12,7 @@ import {
 import type { StaffOption } from "@/features/meetings/server/queries";
 import type { TranscriptUtterance } from "@/components/transcript-section";
 import { useEditPresence } from "@/features/presence/edit-presence";
+import { submitAction } from "@/components/forms/submit-action";
 
 const FREE = "__free__"; // 자유입력 옵션 sentinel
 
@@ -110,7 +111,7 @@ export function SpeakerEditor({
   }
 
   return (
-    <form action={action} className="border-line bg-card space-y-3 rounded-2xl border p-4">
+    <form onSubmit={(e) => submitAction(e, action)} className="border-line bg-card space-y-3 rounded-2xl border p-4">
       <input type="hidden" name="id" value={meetingId} />
       <input type="hidden" name="mapping" value={JSON.stringify(mapping)} />
       <div className="flex items-center justify-between">

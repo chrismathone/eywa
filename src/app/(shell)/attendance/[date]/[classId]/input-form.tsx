@@ -27,6 +27,7 @@ import type {
   AttendanceStatus,
 } from "@/features/attendance/server/queries";
 import { formatSessionUnits } from "@/features/attendance/session-units";
+import { submitAction } from "@/components/forms/submit-action";
 
 const STATUS_DEFS: {
   value: AttendanceStatus;
@@ -162,7 +163,7 @@ export function AttendanceInputForm({
   const filled = rows.filter((r) => pending[r.studentId].status != null).length;
 
   return (
-    <form action={formAction} className="space-y-4">
+    <form onSubmit={(e) => submitAction(e, formAction)} className="space-y-4">
       <input type="hidden" name="classId" value={classId} />
       <input type="hidden" name="date" value={date} />
 

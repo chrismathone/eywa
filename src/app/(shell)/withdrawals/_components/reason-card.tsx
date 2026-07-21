@@ -9,6 +9,7 @@ import {
   type WithdrawalReasonState,
 } from "@/features/withdrawals/server/actions";
 import { REASON_LABEL, type WithdrawalReason } from "@/features/withdrawals/types";
+import { submitAction } from "@/components/forms/submit-action";
 
 const REASON_OPTIONS: { value: WithdrawalReason; label: string }[] = (
   Object.keys(REASON_LABEL) as WithdrawalReason[]
@@ -39,7 +40,7 @@ export function WithdrawalReasonCard({
   );
 
   return (
-    <form action={formAction} className="space-y-4">
+    <form onSubmit={(e) => submitAction(e, formAction)} className="space-y-4">
       <input type="hidden" name="studentId" value={studentId} />
 
       <div className="space-y-1.5">
