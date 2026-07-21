@@ -15,6 +15,7 @@ const KIND_META: Record<
   memo: { label: "메모", color: "bg-chart-3 text-chart-3" },
   status_change: { label: "상태 변경", color: "bg-chart-5 text-chart-5" },
   grade: { label: "성적", color: "bg-chart-2 text-chart-2" },
+  textbook: { label: "교재", color: "bg-chart-4 text-chart-4" },
 };
 
 function ymOf(date: string): string {

@@ -22,6 +22,7 @@ const TIMELINE_KIND_LABEL: Record<string, string> = {
   memo: "메모",
   status_change: "상태 변경",
   grade: "성적",
+  textbook: "교재",
 };
 
 export const searchStudentsTool = betaZodTool({

@@ -1241,7 +1241,14 @@ export async function getStudentAttendanceFull(studentId: string): Promise<Stude
 // 등록상담 → 학생 timeline ↔ 학생상담 + 메모 + enrollment 변경 통합
 export type TimelineEvent = {
   date: string; // ISO date
-  kind: "enrollment_start" | "enrollment_end" | "consultation" | "memo" | "status_change" | "grade";
+  kind:
+    | "enrollment_start"
+    | "enrollment_end"
+    | "consultation"
+    | "memo"
+    | "status_change"
+    | "grade"
+    | "textbook";
   title: string;
   description?: string | null;
   registrant?: string | null; // 등록자(상담/메모, 임포트 텍스트에서 분리)
@@ -1263,6 +1270,7 @@ export async function getStudentTimeline(studentId: string): Promise<TimelineEve
     { data: consultations },
     { data: memos },
     { data: grades },
+    { data: textbooks },
   ] = await Promise.all([
     supabase
       .from("enrollments")
@@ -1276,6 +1284,14 @@ export async function getStudentTimeline(studentId: string): Promise<TimelineEve
     supabase
       .from("student_grades")
       .select(`taken_on, exam_name, subject, score, max_score`)
+      .eq("student_id", studentId),
+    // 교재 신청 이력(2026-07-21 원장 지시) — 시간표 hover의 '교재'가 수업보고서로 넘어가면서
+    // 교재요청서는 **이력**으로 자리를 옮겼다. 학생별로 보면 학습 진행이 그대로 드러난다
+    // (실측 김하나: 초5-2 1권→2권→3권→초6-1 1권→2권→초6-2 1권→2권, 2월~7월).
+    // ⚠️ 금액은 싣지 않는다 — 교재비는 수납 권한 영역이라 타임라인으로 새면 게이트 우회(#77).
+    supabase
+      .from("textbook_orders")
+      .select(`book_name, book_detail, request_date, created_at, registered_at, ordered_at, paid_at`)
       .eq("student_id", studentId),
   ]);
 
@@ -1344,6 +1360,23 @@ export async function getStudentTimeline(studentId: string): Promise<TimelineEve
           : g.max_score
             ? `${g.score} / ${g.max_score}점`
             : `${g.score}점`,
+    });
+  }
+
+  for (const t of textbooks ?? []) {
+    // 진행 = ijw식 3개 독립 체크(등록·납부·주문). raw enum 대신 완료된 단계만 한글로.
+    const done = [
+      t.registered_at ? "등록" : null,
+      t.paid_at ? "납부" : null,
+      t.ordered_at ? "주문" : null,
+    ].filter(Boolean) as string[];
+    events.push({
+      date: String(t.request_date ?? t.created_at ?? "").slice(0, 10),
+      kind: "textbook",
+      title: t.book_name,
+      description: [t.book_detail, done.length === 3 ? "처리 완료" : done.length ? `${done.join("·")} 완료` : "처리 대기"]
+        .filter(Boolean)
+        .join(" · "),
     });
   }
 
