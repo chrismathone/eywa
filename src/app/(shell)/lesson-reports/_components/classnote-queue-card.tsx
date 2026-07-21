@@ -92,8 +92,11 @@ export function ClassnoteQueueCard({ view: served }: { view: ClassnoteQueueView 
     let lastPollAt = 0;
     let quietSince = Date.now(); // 마지막으로 '변화'가 보인 시각(진행이 보이면 갱신)
     let lastSignature = ""; // 남은 건수·발송완료·주의 — 하나라도 움직이면 '진행 중'으로 본다
-    let attentionBefore: number | null = null; // 큐가 비기 직전의 주의 건수(새로 생긴 것만 알리려고)
+    // 큐가 비기 직전의 주의 건수(새로 생긴 것만 알리려고). **감시를 시작한 시점 값으로 시드** —
+    // 첫 조회가 곧바로 '큐 빔'이면 시드가 없어 실패가 생겼는데도 "모두 처리"라고 말하게 된다(적대 검수 확정).
+    let attentionBefore = attentionCount(served.summary);
     let fails = 0;
+    let hiddenAt = 0; // 화면이 가려진 시각 — 안 보던 시간은 '무변화' 시간으로 세지 않는다
     const tick = async () => {
       // 백그라운드 탭은 건너뛴다(창 N개 × 폴링 비용, B6). 다시 보이는 순간 즉시 1회 조회.
       if (inFlight || document.visibilityState === "hidden") return;
@@ -117,6 +120,14 @@ export function ClassnoteQueueCard({ view: served }: { view: ClassnoteQueueView 
       fails = 0;
       setFailing(false);
       setLive({ base: served, data: next });
+      // 주의 목록이 바뀌면 사라진 행의 체크는 버린다 — 안 그러면 '선택 재발송 (3)'이 화면에 없는 행까지
+      // 세어, 원장이 보고 있는 것과 실제 대상이 어긋난다(적대 검수 확정).
+      setChecked((prev) => {
+        if (prev.size === 0) return prev;
+        const alive = new Set(next.items.map((i) => i.id));
+        const kept = new Set([...prev].filter((id) => alive.has(id)));
+        return kept.size === prev.size ? prev : kept;
+      });
       // 진행이 보이면(남은 건수·발송완료·주의 중 하나라도 움직이면) 상한 타이머를 리셋한다 —
       // 100건 일괄 발송처럼 10분을 넘기는 정상 드레인을 '멈춤'으로 오판하지 않기 위해.
       const signature = `${next.pending.length}:${next.summary.success}:${attentionCount(next.summary)}`;
@@ -134,13 +145,23 @@ export function ClassnoteQueueCard({ view: served }: { view: ClassnoteQueueView 
       // 큐가 다 빠졌다 — 페이지 나머지(목록 탭 상태 열 등)도 이때 딱 한 번만 서버에서 다시 받는다.
       // ⚠️ '큐가 비었다 = 다 잘 나갔다'가 아니다(실패·동명이인도 진행 중에서 빠진다) — **이번에 새로 생긴**
       //    주의만 알린다(원래 있던 잔여까지 세면 매번 경보가 떠 아무도 안 읽는다).
-      const added = attentionBefore == null ? 0 : Math.max(0, attentionCount(next.summary) - attentionBefore);
+      const added = Math.max(0, attentionCount(next.summary) - attentionBefore);
       if (added > 0) toast.message(`발송 대기가 모두 끝났습니다 — ${added}건은 확인이 필요합니다`);
       else toast.success("발송 대기가 모두 처리되었습니다");
       router.refresh();
     };
     const onVisible = () => {
-      if (document.visibilityState === "visible") void tick();
+      if (document.visibilityState === "hidden") {
+        hiddenAt = Date.now();
+        return;
+      }
+      // 안 보던 시간만큼 '무변화' 시계를 뒤로 민다 — 가려 둔 20분 때문에 돌아오자마자 "10분째 변화 없음"으로
+      // 멈춰 버리면, 그 사이 정작 발송이 끝났는지조차 확인 못 한다(적대 검수 확정).
+      if (hiddenAt) {
+        quietSince += Date.now() - hiddenAt;
+        hiddenAt = 0;
+      }
+      void tick();
     };
     timer = window.setInterval(() => void tick(), periodMs);
     document.addEventListener("visibilitychange", onVisible);

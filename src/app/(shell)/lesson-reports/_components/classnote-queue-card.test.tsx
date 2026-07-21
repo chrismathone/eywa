@@ -292,6 +292,60 @@ describe("ClassnoteQueueCard 자동 갱신", () => {
     expect(screen.getByText("학원이")).toBeInTheDocument(); // 진행 중이 사라지지 않는다
   });
 
+  it("첫 조회에서 바로 실패로 끝나도 '모두 처리'라고 말하지 않는다", async () => {
+    // 감시 시작 시점 주의 0 → 첫 폴에서 큐가 비었는데 실패 1건. 시드가 없으면 성공 토스트가 뜬다.
+    refreshMock.mockResolvedValue(
+      drainedView({ summary: { ...emptySummary, success: 10, failed: 1, total: 11 } }),
+    );
+    render(<ClassnoteQueueCard view={waitingView()} />);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_000);
+    });
+
+    expect(toastSuccess).not.toHaveBeenCalled();
+    expect(toastMessage).toHaveBeenCalledWith("발송 대기가 모두 끝났습니다 — 1건은 확인이 필요합니다");
+  });
+
+  it("가려 둔 시간은 '무변화' 시간으로 세지 않는다 — 돌아오면 멈추지 말고 확인한다", async () => {
+    refreshMock.mockResolvedValue(waitingView()); // 변화 없음
+    render(<ClassnoteQueueCard view={waitingView()} />);
+
+    act(() => setVisibility("hidden"));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(20 * 60_000); // 20분간 안 봄
+    });
+    expect(refreshMock).not.toHaveBeenCalled();
+
+    await act(async () => {
+      setVisibility("visible");
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    expect(refreshMock).toHaveBeenCalledTimes(1); // 멈춤 대신 조회
+    expect(screen.queryByText(/자동 갱신을 멈췄습니다/)).toBeNull();
+  });
+
+  it("주의 목록에서 사라진 행의 체크는 자동으로 풀린다", async () => {
+    const withItems = waitingView({
+      items: [
+        { id: "a1", studentName: "실패학생", subject: "math", reportDate: "2026-07-21", status: "failed", error: null, processingAt: null, shareToken: null },
+      ],
+      summary: { ...emptySummary, queued: 1, failed: 1, total: 12 },
+    });
+    refreshMock.mockResolvedValue(waitingView()); // 다음 조회에선 그 행이 사라짐(해결됨)
+    render(<ClassnoteQueueCard view={withItems} />);
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "실패학생 선택" }));
+    expect(screen.getByRole("button", { name: /선택 재발송 \(1\)/ })).toBeInTheDocument();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_000);
+    });
+
+    expect(screen.getByRole("button", { name: /^선택 재발송/ })).toBeDisabled(); // 남은 체크 0 → 비활성
+  });
+
   it("조회가 계속 실패하면 '갱신 중'이라고 말하지 않는다", async () => {
     refreshMock.mockRejectedValue(new Error("network"));
     render(<ClassnoteQueueCard view={waitingView()} />);
