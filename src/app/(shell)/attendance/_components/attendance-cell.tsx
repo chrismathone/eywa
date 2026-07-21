@@ -28,6 +28,7 @@ export function AttendanceCell({
   initialUnits,
   attendDay,
   muted,
+  derived,
 }: {
   studentId: string;
   classId: string;
@@ -39,6 +40,8 @@ export function AttendanceCell({
   attendDay?: boolean;
   /** 주말·공휴일 등 수업이 없는 날(회색). */
   muted?: boolean;
+  /** 수기 기록이 아니라 수업보고서에서 파생한 값 — 툴팁에 출처 표시(derive-from-reports.ts). */
+  derived?: boolean;
 }) {
   const [status, setStatus] = useState<AttendanceStatus | null>(initialStatus);
   const [units, setUnits] = useState<number | null>(initialUnits ?? null);
@@ -90,8 +93,17 @@ export function AttendanceCell({
   };
 
   const display = cellDisplay(status, units, { attendDay, muted });
+  // 파생 칸은 **사람이 찍은 게 아니라 수업보고서에서 나온 값**이다 — 툴팁에 출처를 밝힌다(화면이 사실과
+  // 다른 말을 하지 않도록). 한 번 수기로 덮으면 `derived`가 꺼져 이 표시도 사라진다.
+  const fromReport = derived && status === initialStatus;
   const titleText =
-    [status ? STATUS_TEXT[status] : null, noteVal || null].filter(Boolean).join(" · ") || undefined;
+    [
+      status ? STATUS_TEXT[status] : null,
+      fromReport ? "수업보고서 자동 판정 (클릭해 직접 수정)" : null,
+      noteVal || null,
+    ]
+      .filter(Boolean)
+      .join(" · ") || undefined;
 
   return (
     <>

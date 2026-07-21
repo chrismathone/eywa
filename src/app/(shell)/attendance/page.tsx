@@ -303,13 +303,24 @@ export default async function AttendancePage({
               description="학생목록에서 등록 후 다시 확인하세요."
             />
           ) : (
-            <MatrixTable
-              matrix={matrix}
-              days={visibleDays}
-              selectedClassId={effectiveClassId}
-              // 공휴일은 학원설정(operations.holidays)이 단일 소스 — 헤더 빨간 날짜·셀 회색 처리에 동기화.
-              holidays={buildHolidayMap(operations.holidays)}
-            />
+            <>
+              {/* 파생 반(수학)은 표가 "누가 찍은 값인지"를 스스로 밝혀야 한다 — 셀 툴팁만으론 안 보인다. */}
+              {matrix.derivedActive ? (
+                <p className="text-text-dim bg-bg-soft/60 border-line rounded-2xl border px-4 py-2.5 text-xs break-keep">
+                  수업보고서가 있는 등원일은 <strong className="text-foreground">출석</strong>, 보고서가 없는 등원일은{" "}
+                  <strong className="text-foreground">결석</strong>으로 자동 표시됩니다. 오늘과 이후 날짜는 아직
+                  판정하지 않습니다. <strong className="text-foreground">직접 찍은 값이 항상 우선</strong>이며, 셀을
+                  클릭해 언제든 고칠 수 있습니다.
+                </p>
+              ) : null}
+              <MatrixTable
+                matrix={matrix}
+                days={visibleDays}
+                selectedClassId={effectiveClassId}
+                // 공휴일은 학원설정(operations.holidays)이 단일 소스 — 헤더 빨간 날짜·셀 회색 처리에 동기화.
+                holidays={buildHolidayMap(operations.holidays)}
+              />
+            </>
           )}
         </>
       )}
@@ -458,6 +469,7 @@ function MatrixTable({
                         initialUnits={studentUnits[d.date] ?? null}
                         attendDay={attend}
                         muted={!!holiday || (!attend && d.isWeekend)}
+                        derived={!!matrix.derived[s.id]?.[d.date]}
                       />
                     </td>
                   );
