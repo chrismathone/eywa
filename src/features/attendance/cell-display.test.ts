@@ -24,12 +24,19 @@ describe("markNumber", () => {
 });
 
 describe("cellDisplay", () => {
-  it("상태별 배경색 — 지각 주황·결석 빨강·보강 연보라·조퇴 연파랑", () => {
-    expect(cellDisplay("late", null).className).toContain("bg-amber");
-    expect(cellDisplay("absent", null).className).toContain("bg-danger");
-    expect(cellDisplay("makeup", null).className).toContain("bg-purple");
-    expect(cellDisplay("early_leave", null).className).toContain("bg-blue");
-    expect(cellDisplay("present", null).className).toContain("bg-primary-soft");
+  it("상태별 배경색 — 출석 민트·지각 주황·결석 빨강·조퇴 파랑·보강 보라(전용 att-* 팔레트)", () => {
+    expect(cellDisplay("present", null).className).toContain("bg-att-present");
+    expect(cellDisplay("late", null).className).toContain("bg-att-late");
+    expect(cellDisplay("absent", null).className).toContain("bg-att-absent");
+    expect(cellDisplay("early_leave", null).className).toContain("bg-att-leave");
+    expect(cellDisplay("makeup", null).className).toContain("bg-att-makeup");
+  });
+  it("출결(1의 배경)은 쨍한 원색, 날짜(요일) 배경은 그보다 옅다 — 둘이 헷갈리면 안 된다", () => {
+    // 쨍한 색은 STATUS_TONE만. 날짜 칸은 att-classday(옅은 민트)/att-weekend(회색)로 계열이 다르다.
+    const presentBg = cellDisplay("present", null).className;
+    const classDayBg = cellDisplay(null, null, { attendDay: true }).className;
+    expect(presentBg).not.toContain(DAY_TONE.classDay);
+    expect(classDayBg).not.toContain("bg-att-present ");
   });
   it("수업하는 요일은 민트, 주말·휴일은 회색, 수업 없는 평일은 흰색(배경 클래스 없음)", () => {
     expect(cellDisplay(null, null, { attendDay: true }).className).toContain(DAY_TONE.classDay);
@@ -40,6 +47,6 @@ describe("cellDisplay", () => {
     expect(cellDisplay(null, null).text).toBe("·");
   });
   it("공휴일(muted)이라도 기록이 있으면 상태색이 이긴다", () => {
-    expect(cellDisplay("absent", null, { muted: true }).className).toContain("bg-danger");
+    expect(cellDisplay("absent", null, { muted: true }).className).toContain("bg-att-absent");
   });
 });

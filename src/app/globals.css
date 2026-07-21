@@ -72,6 +72,20 @@
   --color-line: var(--line);
   --color-line-strong: var(--line-strong);
 
+  /* 출석부 전용 팔레트(att-*) — 아래 :root 정의 참조. 앱 표준 -soft 토큰(8~11%)보다 훨씬 쨍하다. */
+  --color-att-present: var(--att-present);
+  --color-att-present-ink: var(--att-present-ink);
+  --color-att-late: var(--att-late);
+  --color-att-late-ink: var(--att-late-ink);
+  --color-att-absent: var(--att-absent);
+  --color-att-absent-ink: var(--att-absent-ink);
+  --color-att-leave: var(--att-leave);
+  --color-att-leave-ink: var(--att-leave-ink);
+  --color-att-makeup: var(--att-makeup);
+  --color-att-makeup-ink: var(--att-makeup-ink);
+  --color-att-classday: var(--att-classday);
+  --color-att-weekend: var(--att-weekend);
+
   /* sidebar */
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
@@ -174,6 +188,23 @@
   --amber-soft: rgba(163, 93, 10, 0.11);
   --danger: #d33f3f;
   --danger-soft: rgba(211, 63, 63, 0.09);
+
+  /* ── 출석부 출결 팔레트(2026-07-21 원장: "형광색은 날짜가 아니라 학생 출결 1의 배경 · 더 쨍하게") ──
+     ⚠️ 여기만 앱 표준 -soft 토큰(8~11% 틴트)을 **의도적으로 벗어난다**. 출석부는 한 화면에 31칸 × 수십 행이라
+     연한 틴트로는 결석·지각을 훑어서 못 찾는다(구 엑셀 출석부의 원색 채움을 대체하는 파스텔 원색).
+     이 팔레트를 다른 화면에 쓰지 말 것 — 앱 톤은 -soft가 기준이다. 글자는 같은 계열 진한 잉크로 대비 확보. */
+  --att-present: #a4edcb; /* 출석 = 민트 */
+  --att-present-ink: #0a5537;
+  --att-late: #ffcf8a; /* 지각 = 주황 */
+  --att-late-ink: #7d3f00;
+  --att-absent: #ffa9a9; /* 결석 = 빨강 */
+  --att-absent-ink: #971616;
+  --att-leave: #a8cffb; /* 조퇴 = 파랑 */
+  --att-leave-ink: #123f8f;
+  --att-makeup: #cfbdfb; /* 보강 = 보라 */
+  --att-makeup-ink: #3d2596;
+  --att-classday: #e2f8ef; /* 수업요일(기록 전) — 출석 민트의 옅은 버전. 헤더·본문 공용 */
+  --att-weekend: #dfdfe6; /* 주말·공휴일 — 회색(수업 없는 평일은 흰색). 민트와 명도가 비슷해도 색상이 갈린다 */
 
   /* sidebar — 화이트 레일(그레이 캔버스 위 부양, injaewon.blog 화이트 표면) */
   --sidebar: #ffffff;
