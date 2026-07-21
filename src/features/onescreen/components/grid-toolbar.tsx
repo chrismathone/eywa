@@ -33,6 +33,9 @@ export function GridToolbar({
     saveable: number;
     selectedSendable: number;
     selectedSaveable: number;
+    // 자동작성 실대상 = 발송가능 − 이미 멘트가 있는 행(보존 대상). 버튼 라벨·비활성 판정에 그대로 쓴다.
+    autoWritable: number;
+    selectedAutoWritable: number;
   };
   selectedKeys: string[];
   prev: { has: boolean; show: boolean; onToggle: () => void };
@@ -42,7 +45,10 @@ export function GridToolbar({
   navHint?: boolean; // 점수·교재 칸 Enter/↑↓ 세로 이동 힌트 노출(#21)
   children?: ReactNode;
 }) {
-  const { total, sendable, saveable, selectedSendable, selectedSaveable } = counts;
+  const { total, sendable, saveable, selectedSendable, selectedSaveable, autoWritable, selectedAutoWritable } =
+    counts;
+  const genTarget = selectedKeys.length ? selectedAutoWritable : autoWritable; // 실제로 생성될 행 수
+  const genPreserved = (selectedKeys.length ? selectedSendable : sendable) - genTarget; // 멘트 있어 건너뛸 행 수
   const off = bulkGen || locked;
   const noticeStudents = new Set(selectedKeys.map((k) => k.split("::")[0])).size; // 공지=학생 단위(행 아님, #23)
   return (
@@ -84,9 +90,10 @@ export function GridToolbar({
             size="sm"
             onClick={() => actions.onBulkImportPrev?.(selectedKeys.length ? selectedKeys : undefined)}
             disabled={off}
-            title="선택(없으면 표시 전체) 행의 빈 칸을 이전 회차 값으로 채웁니다 — 진도·태도·과제·오늘 과제만, 특이사항 제외. 이미 입력한 칸은 건드리지 않습니다"
+            title="선택(없으면 표시 전체) 행의 빈 칸을 이전 회차 값으로 채웁니다 — 진도·태도·과제·오늘 과제만, 특이사항 제외. 멘트는 확인을 받은 뒤에만. 이미 입력한 칸은 건드리지 않습니다"
           >
-            {selectedKeys.length ? `선택 ${selectedKeys.length} 이전값 채우기` : "이전값 일괄 채우기"}
+            {/* 행별 버튼과 같은 말로 통일 — '채우기'/'가져오기' 혼용 금지(원장 지시 07-21). */}
+            {selectedKeys.length ? `선택 ${selectedKeys.length} 이전값 가져오기` : "이전값 일괄 가져오기"}
           </Button>
         ) : null}
         {actions.onClassNotice ? (
@@ -100,17 +107,24 @@ export function GridToolbar({
             {noticeStudents ? `선택 ${noticeStudents}명 공지` : "반 전체 공지"}
           </Button>
         ) : null}
+        {/* 자동작성 = **멘트 없는 행만**. 이전값 가져오기로 멘트를 깔면 대상이 줄어드는 게 라벨에 바로 보이고,
+            0이 되면 비활성 — "채운 문구를 재생성이 덮어쓰나?"를 화면에서 답해준다(보존 로직은 autoWriteAllVisible). */}
         <Button
           variant="ghost"
           size="sm"
           onClick={() => actions.onAutoWriteAll(selectedKeys)}
-          disabled={sendable === 0 || off}
+          disabled={genTarget === 0 || off}
+          title={
+            genTarget === 0
+              ? genPreserved > 0
+                ? `자동작성할 행이 없습니다 — 멘트가 있는 ${genPreserved}건은 그대로 둡니다(다시 만들려면 행별 '자동작성')`
+                : "자동작성할 행이 없습니다 — 오늘 진도를 먼저 입력하세요"
+              : genPreserved > 0
+                ? `멘트가 비어 있는 ${genTarget}건만 생성합니다 — 이미 멘트가 있는 ${genPreserved}건은 건드리지 않습니다`
+                : `${genTarget}건의 멘트를 생성합니다`
+          }
         >
-          {bulkGen
-            ? "자동작성 중…"
-            : selectedKeys.length
-              ? `선택 ${selectedSendable} 자동작성`
-              : "전체 자동작성"}
+          {bulkGen ? "자동작성 중…" : selectedKeys.length ? `선택 ${genTarget} 자동작성` : `전체 자동작성 ${genTarget}`}
         </Button>
         <Button
           variant="outline"
