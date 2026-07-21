@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { EyIcon } from "@/components/icons/eywa-icons";
@@ -63,6 +63,8 @@ import {
 } from "../class-narrative-store";
 import { applyStudentOrder } from "../student-order";
 import { saveStudentOrder } from "../server/order-actions";
+import { useClassnoteStatusSync } from "./use-classnote-status-sync";
+import { mergeClassnoteStatuses, pendingSendStudentIds, type ClassnoteStatusRow } from "../classnote-status";
 import { setAttendanceCell } from "@/features/attendance/server/actions";
 import type { BasicAttendance } from "./attendance-pills";
 import { useEditPresence, useEditingOthers } from "@/features/presence/edit-presence";
@@ -325,6 +327,22 @@ export function OneScreenClient({
     setStudents((prev) => prev.map((s) => (s.id === id ? fn(s) : s)));
     queueSave(id); // 편집 → 디바운스 서버 영속(onescreen_daily_sessions)
   }
+  // 워커가 백그라운드로 끝낸 ClassNote 발송 결과를 배지에 반영 — 새로고침 없이 '발송 대기' → '발송 완료'.
+  // ⚠️ **queueSave를 부르지 않는다**: 내 편집이 아니라 서버가 알려준 사실이라 세션을 다시 쓸 이유가 없다.
+  // 병합 규칙(빈 상태 무시·화면에 없는 과목 무시)은 순수함수 mergeClassnoteStatuses 한 곳에.
+  function applyClassnoteStatuses(rows: ClassnoteStatusRow[]) {
+    setReports((prev) =>
+      mergeClassnoteStatuses(prev, rows, (studentId, subjectKey) =>
+        studentsRef.current
+          .find((s) => s.id === studentId)
+          ?.subjects.find((su) => (su.subjectKey || su.name) === subjectKey)?.name,
+      ),
+    );
+  }
+  // 대기·처리중인 학생이 있는 동안만 감시(없으면 조회 0회, 다 끝나면 저절로 멈춘다).
+  const pendingSends = useMemo(() => pendingSendStudentIds(reports), [reports]);
+  useClassnoteStatusSync(date, pendingSends, applyClassnoteStatuses);
+
   function patchReport(
     studentId: string,
     subjectName: string,
