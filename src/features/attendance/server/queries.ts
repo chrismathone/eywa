@@ -8,7 +8,13 @@ import {
   enrollmentAttendsOnDay,
   isEnrollmentActiveOn,
 } from "@/features/enrollments/eligibility";
-import { dowsFromKeys, resolveAttendDows } from "@/features/attendance/calendar";
+import { buildHolidayMap, dowsFromKeys, resolveAttendDows } from "@/features/attendance/calendar";
+import {
+  deriveMarksFromReports,
+  isDerivedAttendanceSubject,
+  REQUIRE_SENT_REPORT,
+} from "@/features/attendance/derive-from-reports";
+import { getTenantSettings } from "@/features/owner/server/queries";
 
 const DOW_ENUM = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
 
@@ -344,6 +350,11 @@ export type AttendanceMatrix = {
   notes: Record<string, Record<string, string>>;
   // studentId → date → 시수(배수, 0115a). 기록이 없거나 기본(1)이면 키 없음 — 셀 표시·시수 합계용.
   units: Record<string, Record<string, number>>;
+  // studentId → date → true. **수기 기록이 아니라 수업보고서에서 파생한 칸**(derive-from-reports.ts).
+  // 화면이 사실과 다른 말을 하지 않도록 셀 툴팁에 출처를 밝히는 용도 — 수기로 덮으면 이 표시는 사라진다.
+  derived: Record<string, Record<string, true>>;
+  // 이 반이 파생 대상인지(수학=대상, 영어=미가동). 표에 안내 문구를 띄울지 결정.
+  derivedActive: boolean;
   stats: {
     totalStudents: number;
     presentRate: number;
@@ -433,6 +444,8 @@ export async function getMonthlyAttendanceMatrix(
       marks: {},
       notes: {},
       units: {},
+      derived: {},
+      derivedActive: false,
       stats: {
         totalStudents: 0,
         presentRate: 0,
@@ -470,6 +483,9 @@ export async function getMonthlyAttendanceMatrix(
   const classDows = dowsFromKeys((schedules ?? []).map((s) => s.day_of_week as string));
 
   const studentMap = new Map<string, MatrixStudent>();
+  // 파생 판정용 수강 구간 — 한 학생이 같은 반에 재등록해 여러 행일 수 있어 **전 구간**을 모은다
+  // (studentMap은 첫 행만 담으므로 그것만 보면 재등록 이전 기간을 통째로 결석 처리한다).
+  const rangesById = new Map<string, { start: string; end: string | null }[]>();
   for (const e of enrollments ?? []) {
     if (e.on_hold) continue;
     if (e.end_date && e.end_date < startIso) continue;
@@ -477,6 +493,9 @@ export async function getMonthlyAttendanceMatrix(
       | { id: string; name: string; grade: string | null; school: string | null }
       | undefined;
     if (!s) continue;
+    const list = rangesById.get(s.id) ?? [];
+    list.push({ start: e.start_date as string, end: (e.end_date as string | null) ?? null });
+    rangesById.set(s.id, list);
     if (!studentMap.has(s.id)) {
       studentMap.set(s.id, {
         id: s.id,
@@ -500,11 +519,7 @@ export async function getMonthlyAttendanceMatrix(
   const marks: Record<string, Record<string, AttendanceStatus>> = {};
   const notes: Record<string, Record<string, string>> = {};
   const units: Record<string, Record<string, number>> = {};
-  let presentCount = 0;
-  let absentCount = 0;
-  let lateCount = 0;
-  let makeupCount = 0;
-  let totalRecords = 0;
+  const derived: Record<string, Record<string, true>> = {};
 
   if (studentIds.length > 0) {
     const { data: records } = await supabase
@@ -535,6 +550,76 @@ export async function getMonthlyAttendanceMatrix(
         units[r.student_id] ??= {};
         units[r.student_id]![r.session_date] = u;
       }
+    }
+  }
+
+  // ── 수업보고서 파생(2026-07-21 원장 지시) — 수학 반의 **수기 기록이 없는 등원일**만 메운다.
+  // 규칙·근거는 derive-from-reports.ts. 여기선 "등원일" 판정을 화면(page.tsx)과 **똑같이** 한다:
+  // 학생 등원요일 ∩ 그 달 날짜, 공휴일 제외, 수강 구간 안. 어긋나면 화면과 파생이 서로 다른 말을 한다.
+  const selectedClass = classes.find((c) => c.id === classId);
+  const derivedActive = isDerivedAttendanceSubject(selectedClass?.subject);
+  if (derivedActive && studentIds.length > 0) {
+    const [reports, settings] = await Promise.all([
+      // 학생 수 × 최대 31일이라 청크당 1000행을 넘길 여지는 낮지만, 반 인원은 상한이 없다(B2).
+      fetchAllPagedInChunks<{ student_id: string; report_date: string }>(
+        studentIds,
+        (chunk, from, to) => {
+          let q = supabase
+            .from("lesson_reports")
+            .select("student_id, report_date")
+            .in("student_id", chunk)
+            .gte("report_date", startIso)
+            .lte("report_date", endIso);
+          // 기본은 '작성됨'. 발송 성공만 인정하려면 REQUIRE_SENT_REPORT를 켠다(근거는 그 상수 주석).
+          if (REQUIRE_SENT_REPORT) q = q.eq("classnote_status", "success");
+          return q
+            .order("report_date", { ascending: false })
+            .order("id", { ascending: false }) // OFFSET 페이지 안정용 unique tie-break
+            .range(from, to);
+        },
+      ),
+      getTenantSettings(),
+    ]);
+    const reportsByStudent = new Map<string, Set<string>>();
+    for (const r of reports) {
+      const set = reportsByStudent.get(r.student_id) ?? new Set<string>();
+      set.add(r.report_date);
+      reportsByStudent.set(r.student_id, set);
+    }
+    const holidays = buildHolidayMap(settings.operations.holidays);
+    const todayIso = kstToday();
+    const realDays = days.filter((d) => !d.placeholder && !holidays[d.date]);
+
+    for (const s of students) {
+      const dows = new Set(s.attendDows);
+      const ranges = rangesById.get(s.id) ?? [];
+      const attendDates = realDays
+        .filter((d) => dows.has(d.dow))
+        .filter((d) => ranges.some((r) => r.start <= d.date && (!r.end || r.end >= d.date)))
+        .map((d) => d.date);
+      const got = deriveMarksFromReports({
+        attendDates,
+        reportDates: reportsByStudent.get(s.id) ?? new Set(),
+        manualDates: new Set(Object.keys(marks[s.id] ?? {})),
+        today: todayIso,
+      });
+      for (const [date, mark] of Object.entries(got)) {
+        marks[s.id] ??= {};
+        marks[s.id]![date] = mark;
+        derived[s.id] ??= {};
+        derived[s.id]![date] = true;
+      }
+    }
+  }
+
+  // 통계는 수기 + 파생을 **합친 뒤** 센다 — 파생만 있는 반이 출석률 0%로 보이면 안 된다.
+  let presentCount = 0;
+  let absentCount = 0;
+  let lateCount = 0;
+  let makeupCount = 0;
+  let totalRecords = 0;
+  for (const byDate of Object.values(marks)) {
+    for (const status of Object.values(byDate)) {
       totalRecords++;
       if (status === "present") presentCount++;
       else if (status === "absent") absentCount++;
@@ -556,6 +641,8 @@ export async function getMonthlyAttendanceMatrix(
     marks,
     notes,
     units,
+    derived,
+    derivedActive,
     stats: {
       totalStudents: students.length,
       presentRate,
