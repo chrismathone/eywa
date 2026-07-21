@@ -2,7 +2,7 @@
 //
 // 2026-07-21 원장 규칙(구 출석부 표기 관행):
 //   출석·지각·조퇴·보강 = **시수 숫자**(기본 1, 배수면 1.5·2), 결석 = **0**.
-//   색은 전부 **배경색**으로 — 지각 주황 / 결석 빨강 / 보강 연보라 / 조퇴 연파랑 / 출석 기본(브랜드 연톤).
+//   색은 전부 **배경색**으로 — 출석 민트 / 지각 주황 / 결석 빨강 / 조퇴 파랑 / 보강 보라.
 // ⚠️ O·X·L 같은 글자 표기로 되돌리지 말 것(원장 지시로 폐기).
 
 import { formatSessionUnits } from "./session-units";
@@ -10,27 +10,29 @@ import { formatSessionUnits } from "./session-units";
 export type AttendanceMark = "present" | "absent" | "late" | "excused" | "makeup" | "early_leave";
 
 /**
- * 상태별 배경(+글자색). **출석(정상)이 가장 옅고, 특수 상태 4종은 채도를 올려** 훑을 때 바로 튄다.
- * ⚠️ 조퇴를 `blue-soft`(9%)로 두면 출석의 `primary-soft`(네이비 8%)와 사실상 구분이 안 된다
- * (v3에서 primary가 네이비가 되며 blue와 색상각 4.8° — globals.css 주석). 그래서 특수 상태는 20~22%.
+ * 상태별 배경(+글자색) = **쨍한 파스텔 원색**(`--att-*`, globals.css).
+ * 2026-07-21 원장 교정: *"형광색은 날짜가 아니라 학생 출결 1의 배경 · 색도 더 쨍하게"* —
+ * 앱 표준 -soft 토큰(8~22% 틴트)으로는 31칸 격자에서 결석·지각이 안 튀었다.
+ * ⚠️ 색을 다시 -soft 틴트로 낮추지 말 것. 이 팔레트는 출석부 전용이며 다른 화면에 쓰지도 말 것.
  */
 export const STATUS_TONE: Record<AttendanceMark, string> = {
-  present: "bg-primary-soft text-primary",
-  absent: "bg-danger/22 text-danger",
-  excused: "bg-danger/22 text-danger",
-  late: "bg-amber/22 text-amber",
-  early_leave: "bg-blue/22 text-blue",
-  makeup: "bg-purple/20 text-purple",
+  present: "bg-att-present text-att-present-ink",
+  absent: "bg-att-absent text-att-absent-ink",
+  excused: "bg-att-absent text-att-absent-ink",
+  late: "bg-att-late text-att-late-ink",
+  early_leave: "bg-att-leave text-att-leave-ink",
+  makeup: "bg-att-makeup text-att-makeup-ink",
 };
 
 /**
- * 날짜 성격 배경(원장 2026-07-21) — 헤더·본문이 **같은 상수**를 써야 열이 위아래로 어긋나지 않는다.
- * · 수업하는 요일 = 민트(green 계열 — 출결 5색 primary/danger/amber/blue/purple과 겹치지 않는 유일한 색상)
- * · 수업 없는 평일 = 흰색(클래스 없음)  · 주말·공휴일 = 회색
+ * 날짜 성격 배경 — 헤더·본문이 **같은 상수**를 써야 열이 위아래로 어긋나지 않는다.
+ * · 수업하는 요일(기록 전) = 아주 옅은 민트(출석 민트의 옅은 버전 — "찍어야 할 칸"이지 출결 표시가 아니다)
+ * · 수업 없는 평일 = 흰색  · 주말·공휴일 = 회색
+ * ⚠️ 여기(날짜)에 쨍한 색을 주면 출결 표시와 헷갈린다 — 쨍한 색은 STATUS_TONE(1의 배경)만.
  */
 export const DAY_TONE = {
-  classDay: "bg-green/15",
-  weekend: "bg-bg-soft/70",
+  classDay: "bg-att-classday",
+  weekend: "bg-att-weekend",
 } as const;
 
 export const STATUS_TEXT: Record<AttendanceMark, string> = {
