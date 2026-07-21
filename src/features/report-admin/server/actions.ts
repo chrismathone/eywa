@@ -11,7 +11,7 @@ import { hasClassnoteNameCollision } from "@/features/onescreen/server/scope";
 import { absenceKeyOf, getAbsenceBlockedKeys } from "@/features/onescreen/server/absence-gate";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { STUCK_MINUTES } from "../classnote-queue";
-import { IMPORT_FILTER, type ReportListFilters, type ReportListRow } from "../report-filters";
+import { IMPORT_FILTER, reportOrderSpecs, type ReportListFilters, type ReportListRow } from "../report-filters";
 import { getClassnoteQueue, type ClassnoteQueueView } from "./queries";
 
 /**
@@ -288,12 +288,12 @@ export async function listReports(
 
   let q = supabase
     .from("lesson_reports")
-    .select("id, student_id, subject, report_date, created_at, classnote_sent_at, classnote_status, classnote_read_at, teacher_name, share_token, source", { count: "exact" })
-    // 같은 수업일 내 최신 발송이 위로 — 이관분은 created_at이 cron 배치 시각으로 전부 동일(정렬 무의미)해
-    // 실제 발송시각(classnote_sent_at) 우선 정렬. 미발송(sent_at NULL)은 NULLS LAST로 아래, created_at이 최종 tiebreak.
-    .order("report_date", { ascending: false })
-    .order("classnote_sent_at", { ascending: false, nullsFirst: false })
-    .order("created_at", { ascending: false });
+    .select("id, student_id, subject, report_date, created_at, classnote_sent_at, classnote_status, classnote_read_at, teacher_name, share_token, source", { count: "exact" });
+  // 정렬은 **서버에서** — 30건씩 끊어 주는 목록이라 화면에서 정렬하면 그 페이지 안에서만 정렬된다.
+  // 기본값·헤더 클릭 모두 순수 함수(reportOrderSpecs)가 결정(동률 tiebreak 포함 — 페이징 중복/누락 방지).
+  for (const o of reportOrderSpecs(filters.sort, filters.dir)) {
+    q = q.order(o.column, { ascending: o.ascending, nullsFirst: o.nullsFirst });
+  }
   if (filters.from) q = q.gte("report_date", filters.from);
   if (filters.to) q = q.lte("report_date", filters.to);
   // "이관" 필터는 source, 그 외는 classnote_status.
