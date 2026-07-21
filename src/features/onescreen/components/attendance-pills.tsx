@@ -28,12 +28,28 @@ export function AttendancePills({
   pending,
   onSet,
   studentName,
+  readOnly,
 }: {
   value: string | null | undefined; // raw status(null=기록 없음)
   pending: boolean; // 이 (학생×반) 저장 중 — 잠금
   onSet: (status: BasicAttendance) => void;
   studentName: string;
+  /** 출결 쓰기 권한 없음(학원설정 역할·권한) — 누를 수 있는 것처럼 보이지 않게 표시만 한다. */
+  readOnly?: boolean;
 }) {
+  // ⚠️ 권한이 없으면 **버튼을 아예 내보내지 않는다**(2026-07-21 원장 제보) — 예전엔 pill이 그대로 눌려서
+  // 서버가 "출석 관리 권한이 없습니다"로 거절했고, 강사는 왜 안 되는지 모른 채 계속 눌렀다.
+  // 할 수 없는 일을 할 수 있는 것처럼 보여주지 않는다(#77의 반대 방향 사례).
+  if (readOnly) {
+    return (
+      <span
+        className="bg-bg-soft text-text-dim rounded-pill px-1.5 py-px text-[10px] font-bold"
+        title="출결 입력 권한이 없습니다 — 학원설정(역할·권한)에서 원장님이 열어줄 수 있습니다"
+      >
+        {value ? (LABEL[value] ?? value) : "출결 —"}
+      </span>
+    );
+  }
   if (value && !BASIC.includes(value as BasicAttendance)) {
     return (
       <span

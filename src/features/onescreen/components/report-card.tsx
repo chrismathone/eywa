@@ -172,7 +172,11 @@ export function ReportCard({
   /** 학원설정 '사진/파일 첨부'가 꺼짐 — 첨부는 저장되지만 /r·인쇄·ClassNote 어디에도 안 실린다는 경고 표시. */
   attachmentsHidden?: boolean;
   // 출결 인라인 입력(2-2) — 표뷰와 동일 pill. pendingKeys=(학생::반) 저장 중 잠금.
-  attendance?: { pendingKeys: ReadonlySet<string>; onSet: (classId: string, status: BasicAttendance) => void };
+  attendance?: {
+    pendingKeys: ReadonlySet<string>;
+    onSet: (classId: string, status: BasicAttendance) => void;
+    readOnly?: boolean; // 출결 쓰기 권한 없음 — pill 대신 표시 전용 배지
+  };
   // 실효 멘트 모드(강사 오버라이드 ?? 학원 기본) — 상단 토글의 하단 반영. B=수업내용·태도 2칸 분리 입력.
   noticeMode?: "A" | "B";
 }) {
@@ -296,6 +300,7 @@ export function ReportCard({
                 pending={attendance.pendingKeys.has(`${student.id}::${subject.classId}`)}
                 onSet={(s) => attendance.onSet(subject.classId!, s)}
                 studentName={student.name}
+                readOnly={attendance.readOnly}
               />
             </div>
           ) : student.attendance !== "출석" ? (
@@ -446,6 +451,13 @@ export function ReportCard({
           >
             ClassNote 발송
           </Button>
+          {/* ⚠️ 결석 사유를 **눈에 보이게** — 예전엔 버튼 title 툴팁뿐이라 왜 비활성인지 알 수 없었다
+              (2026-07-21: 이 프로젝트에서 네이티브 툴팁이 실제로 안 뜨는 사례가 확인됨). */}
+          {subject.attendanceRaw === "absent" ? (
+            <span className="border-danger/40 bg-danger-soft text-danger rounded-pill border px-2 py-0.5 text-[11px] font-bold">
+              결석 — 발송 제외
+            </span>
+          ) : null}
           {cnBadge ? <span className={`text-[11px] font-bold ${cnBadge.cls}`}>{cnBadge.label}</span> : null}
         </div>
 

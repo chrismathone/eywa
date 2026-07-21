@@ -33,6 +33,7 @@ export function OneScreenGrid({
   classFilter,
   narrative,
   attPending,
+  attReadOnly,
   genKey,
   bulkGen,
   uploadingAttKey,
@@ -50,6 +51,7 @@ export function OneScreenGrid({
   // value=현재 반 서술, onSave=저장(빈값=삭제). 키는 부모(client)가 classId로 관리.
   narrative?: { activeClass: string | null; value: string; onSave: (text: string) => void };
   attPending: ReadonlySet<string>; // 출결 저장 중 (학생::반) — pill 잠금(2-2)
+  attReadOnly?: boolean; // 출결 쓰기 권한 없음 — pill을 표시 전용으로
   genKey?: string | null; // 자동작성 중인 행 키(studentId::과목)
   bulkGen?: boolean; // 전체 자동작성 진행중
   uploadingAttKey?: string | null; // 첨부 업로드 중인 행 키(studentId::과목) — 그 행 클립만 로딩 표시
@@ -307,7 +309,13 @@ export function OneScreenGrid({
                     fields={fields}
                     actions={rowActions}
                     config={config}
-                    gen={{ rowBusy: genKey === row.key, bulk: bulkGen, attPending, uploadingKey: uploadingAttKey }}
+                    gen={{
+                      rowBusy: genKey === row.key,
+                      bulk: bulkGen,
+                      attPending,
+                      attReadOnly,
+                      uploadingKey: uploadingAttKey,
+                    }}
                     nav={{ row: i, studentRow: firstOfStudent ? meta.studentRow : undefined }}
                     orderControls={orderControls}
                   />

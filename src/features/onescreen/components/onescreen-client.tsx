@@ -143,6 +143,7 @@ export function OneScreenClient({
   classnoteSendEnabled = false,
   sendWindowLabel = null,
   showAttachments = true,
+  canEditAttendance = true,
   presenceScope,
   initialView = "card",
 }: {
@@ -159,6 +160,7 @@ export function OneScreenClient({
   classnoteSendEnabled?: boolean; // ClassNote 실제 발송 스위치 — 공지 dry-run 안내
   sendWindowLabel?: string | null; // 발송 허용 시간창 "HH:MM~HH:MM"(무제한=null) — 상단 강사 참고 안내
   showAttachments?: boolean; // 사진/파일 첨부 표시(학원 설정) — off면 첨부해도 안 실린다는 경고를 카드에 표시
+  canEditAttendance?: boolean; // 출결 쓰기 권한 — false면 pill을 표시 전용으로(서버 거절 전에 화면에서 알림)
   presenceScope?: string; // `onescreen:{teacherId}:{date}` — 다른 창/기기 동시 열림 경고(서버가 teacherId 파생)
   initialView?: OneScreenView; // URL(?view=)에서 온 초기 뷰 — 날짜 이동(재마운트) 후에도 보던 뷰 유지
 }) {
@@ -1489,6 +1491,7 @@ export function OneScreenClient({
             },
           }}
           attPending={attPending}
+          attReadOnly={!canEditAttendance}
           genKey={genKey}
           // 일괄 작업(자동작성·저장·첨부) 중엔 일괄/행 버튼을 잠근다 — 핸들러는 이미 bulkBusy에서 되돌려보내고
           // 있었으므로(화면만 눌리는 척했다) 표시를 실제 동작에 맞춘 것.
@@ -1584,6 +1587,7 @@ export function OneScreenClient({
                 }
                 attachmentsHidden={!showAttachments}
                 attendance={{
+                  readOnly: !canEditAttendance,
                   pendingKeys: attPending,
                   onSet: (classId, s) => setAttendanceFor(selected.id, classId, s),
                 }}
