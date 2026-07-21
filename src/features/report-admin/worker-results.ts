@@ -45,6 +45,16 @@ export type WorkerEnvInfo = { logDir: string | null; recent: string[] };
  * 하루 1회여야 할 작업이 15초마다 돌았다) 워커가 스스로 위치와 최근 문제를 웹으로 보낸다.
  * 구버전 워커는 이 키가 없어 `{ logDir: null, recent: [] }`(카드에 아무것도 안 뜸).
  */
+/**
+ * 워커 로그 한 줄이 **진짜 문제**인가. 워커는 "실패/오류" 단어가 들어간 줄을 모아 보내는데, 정상 요약
+ * (`처리 완료 — 성공 1 / 실패 0 / 재큐 0`)도 그 단어를 갖고 있어 **매 폴마다 "최근 경고"가 뜨는 늑대소년**이
+ * 된다(2026-07-21 첫 가동에서 실제로 발생). 숫자가 0인 실패·오류 표기는 지우고 나서 판정한다.
+ */
+function isRealIssue(line: string): boolean {
+  const probe = line.replace(/(실패|오류|error)\s*[:=]?\s*0\b/gi, "");
+  return /실패|오류|error|⚠/i.test(probe);
+}
+
 export function extractWorkerEnv(raw: unknown): WorkerEnvInfo {
   const empty: WorkerEnvInfo = { logDir: null, recent: [] };
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return empty;
@@ -53,7 +63,9 @@ export function extractWorkerEnv(raw: unknown): WorkerEnvInfo {
   const e = env as Record<string, unknown>;
   return {
     logDir: typeof e.logDir === "string" && e.logDir ? e.logDir : null,
-    recent: Array.isArray(e.recent) ? e.recent.filter((x): x is string => typeof x === "string").slice(-5) : [],
+    recent: Array.isArray(e.recent)
+      ? e.recent.filter((x): x is string => typeof x === "string").filter(isRealIssue).slice(-5)
+      : [],
   };
 }
 
