@@ -11,6 +11,7 @@ import { AttendancePills, type BasicAttendance } from "./attendance-pills";
 import { DeltaChip } from "./delta-chip";
 import { PillGroup } from "./pill-group";
 import { isImageAttachment } from "../attachment-utils";
+import { splitComment, joinComment } from "../comment-paragraphs";
 import type { OneScreenStudent, Subject, TestScore } from "../types";
 
 // shareToken: 저장 시 발급되는 학부모 공개 링크(/r/[token]) 토큰. 세션 내 저장 후에만 존재.
@@ -143,6 +144,7 @@ export function ReportCard({
   attachmentUrls,
   uploadingSubject,
   attendance,
+  noticeMode = "A",
 }: {
   student: OneScreenStudent;
   reports: Record<string, SubjectReport>;
@@ -168,6 +170,8 @@ export function ReportCard({
   uploadingSubject?: string | null; // 첨부 업로드 중인 과목
   // 출결 인라인 입력(2-2) — 표뷰와 동일 pill. pendingKeys=(학생::반) 저장 중 잠금.
   attendance?: { pendingKeys: ReadonlySet<string>; onSet: (classId: string, status: BasicAttendance) => void };
+  // 실효 멘트 모드(강사 오버라이드 ?? 학원 기본) — 상단 토글의 하단 반영. B=수업내용·태도 2칸 분리 입력.
+  noticeMode?: "A" | "B";
 }) {
   const [selIdx, setSelIdx] = useState(0);
   const idx = Math.min(selIdx, student.subjects.length - 1);
@@ -186,9 +190,13 @@ export function ReportCard({
   const unreadBadge = parentUnreadBadge(student.parentRead);
   const hasMathSubject = student.subjects.some((su) => !su.subjectKey || su.subjectKey === "math");
   const showProgressBadge = hasMathSubject && progressAnomalyBadge(student.progressSignal);
+  // 멘트 모드 B = 초안을 2문단(수업 내용 / 태도·특이사항)으로 나눠 편집. 값은 단일 문자열 그대로 저장.
+  const para = noticeMode === "B";
+  const paras = splitComment(rep.draft);
 
   return (
-    <div className="bg-card border-line shadow-card flex flex-col rounded-2xl border">
+    // @container — 아래 본문 2열 분기는 **창 폭이 아니라 이 카드 폭** 기준(3열 그리드 안이라 브레이크포인트가 안 맞음).
+    <div className="bg-card border-line shadow-card @container flex flex-col rounded-2xl border">
       <header className="border-line border-b px-4 py-3">
         <div className="flex items-center justify-between">
           <div>
@@ -247,7 +255,10 @@ export function ReportCard({
         ) : null}
       </header>
 
-      <div className="flex flex-1 flex-col gap-3 px-4 py-3">
+      {/* 넓은 카드(≥672px)는 **좌=오늘 입력 / 우=문장 작성·발송** 2열로 펼친다 — 좁으면 기존처럼 한 줄로 접힘.
+          세로로만 쌓으면 3열 레이아웃에서 보고서 열만 끝없이 길어지고 가운데 열이 텅 비었음(원장 지적 07-21). */}
+      <div className="grid flex-1 grid-cols-1 gap-3 px-4 py-3 @2xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)] @2xl:items-start @2xl:gap-x-4">
+        <div className="flex flex-col gap-3">
         <MiniSummary st={student} subject={subject} />
 
         {/* 교재명·보강·출결 — edutrix 강사 필드 패리티(0089a). 교재명은 학부모 카드에도 표시(설정 토글). */}
@@ -336,10 +347,26 @@ export function ReportCard({
             className="border-line focus:border-primary scrollbar-thin min-h-[52px] resize-none rounded-lg border bg-background px-3 py-2 text-[13px] leading-relaxed outline-none"
           />
         </div>
+        </div>
 
+        {/* 우측 열 — 문장 작성(멘트·추세) + 발송·첨부·공유링크. */}
+        <div className="flex flex-1 flex-col gap-3">
         <div className="flex flex-1 flex-col gap-1.5">
-          <div className="flex items-center justify-between">
-            <p className="micro text-text-faint">{subjectName} 보고서</p>
+          <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <p className="micro text-text-faint">{subjectName} 보고서</p>
+              {/* 상단 멘트 모드 토글의 하단 반영 — 모드가 바뀌면 이 배지와 아래 입력 구성이 함께 바뀐다. */}
+              <span
+                className="border-line text-text-dim rounded-pill border px-1.5 py-px text-[10px] font-bold"
+                title={
+                  para
+                    ? "2문단 B — 수업 내용과 태도·특이사항을 나눠 작성합니다. 상단 토글에서 바꿀 수 있습니다."
+                    : "단일 A — 모든 내용을 한 문단으로 작성합니다. 상단 토글에서 바꿀 수 있습니다."
+                }
+              >
+                {para ? "2문단 B" : "단일 A"}
+              </span>
+            </div>
             <Button
               variant="ghost"
               size="sm"
@@ -356,12 +383,36 @@ export function ReportCard({
               <EyIcon name="sparkle" size={13} /> {generating ? "생성 중…" : "자동 작성"}
             </Button>
           </div>
-          <textarea
-            value={rep.draft}
-            onChange={(e) => onSubjectDraft(subjectName, e.target.value)}
-            placeholder={`'자동 작성'을 누르면 ${subjectName} 진도·테스트·태도로 초안을 만들어 줍니다. 그대로 보내거나 수정하세요.`}
-            className="border-line focus:border-primary scrollbar-thin min-h-[110px] flex-1 resize-none rounded-lg border bg-background px-3 py-2 text-[13px] leading-relaxed outline-none"
-          />
+          {para ? (
+            // 모드 B — 저장·발송 계약은 그대로 단일 문자열, 화면만 2칸(joinComment이 빈 줄로 합침).
+            <div className="flex flex-1 flex-col gap-1.5">
+              <label className="flex flex-1 flex-col gap-1">
+                <span className="text-text-faint text-[11px] font-bold">1문단 · 수업 내용</span>
+                <textarea
+                  value={paras.p1}
+                  onChange={(e) => onSubjectDraft(subjectName, joinComment(e.target.value, paras.p2))}
+                  placeholder={`교재·진도·오늘 과제를 담은 첫 문단. '자동 작성'이 ${subjectName} 진도로 채워 줍니다.`}
+                  className="border-line focus:border-primary scrollbar-thin min-h-[84px] flex-1 resize-none rounded-lg border bg-background px-3 py-2 text-[13px] leading-relaxed outline-none"
+                />
+              </label>
+              <label className="flex flex-1 flex-col gap-1">
+                <span className="text-text-faint text-[11px] font-bold">2문단 · 태도 · 특이사항</span>
+                <textarea
+                  value={paras.p2}
+                  onChange={(e) => onSubjectDraft(subjectName, joinComment(paras.p1, e.target.value))}
+                  placeholder="수업 태도·특이사항을 담은 둘째 문단. 태도·특이사항이 비어 있으면 자동 작성에서도 생략됩니다."
+                  className="border-line focus:border-primary scrollbar-thin min-h-[84px] flex-1 resize-none rounded-lg border bg-background px-3 py-2 text-[13px] leading-relaxed outline-none"
+                />
+              </label>
+            </div>
+          ) : (
+            <textarea
+              value={rep.draft}
+              onChange={(e) => onSubjectDraft(subjectName, e.target.value)}
+              placeholder={`'자동 작성'을 누르면 ${subjectName} 진도·테스트·태도로 초안을 만들어 줍니다. 그대로 보내거나 수정하세요.`}
+              className="border-line focus:border-primary scrollbar-thin min-h-[110px] flex-1 resize-none rounded-lg border bg-background px-3 py-2 text-[13px] leading-relaxed outline-none"
+            />
+          )}
         </div>
 
         {/* 학습 추세(종합분석) — 4a. '자동 작성'이 최근 시험·과제 흐름을 요약해 채운다. 표본 부족 시 빈 채로 둠(수동 입력 가능). */}
@@ -545,6 +596,7 @@ export function ReportCard({
             )}
           </div>
         ) : null}
+        </div>
       </div>
     </div>
   );

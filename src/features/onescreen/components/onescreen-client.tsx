@@ -814,7 +814,9 @@ export function OneScreenClient({
         dailyTest,
         checkTest,
         attitude: student.attitude ?? "",
-        notes: draft,
+        // 모드 B에서 1문단만 비우면 초안이 "\n\n2문단"으로 유지된다(편집 중 글자가 위 칸으로 튀는 것 방지,
+        // comment-paragraphs.ts 불변식). 학부모에게 나가는 값은 여기서 다듬는다 — 앞 빈 줄 금지.
+        notes: draft.trim(),
         trendNote, // 학습 추세(종합분석) — 4a
         subject: su?.subjectKey || su?.name || undefined, // (student,date,subject) 과목별 1행 dedup 키
         outOfClass: student.isMakeup ?? false, // 보강(수업외) 학생 = 담당반 검사 우회(같은 학원이면 허용)
@@ -1360,7 +1362,10 @@ export function OneScreenClient({
           onSent={() => setNoticeSeed(null)}
         />
       ) : (
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[260px_minmax(0,1fr)_minmax(0,380px)] lg:items-start">
+      /* 3열 폭 배분 — 콘텐츠 양에 비례하게. 예전 `1fr` + `380px 상한`은 정반대라, 짧은 진도·테스트 카드가
+         남는 폭을 다 먹고(넓은 화면에서 1000px+ 공백) 제일 긴 보고서가 380px에 갇혀 세로로만 늘어났다(원장 지적 07-21).
+         이제 보고서 열이 더 넓고, 카드 폭 ≥672px이면 보고서 내부가 2열로 펼쳐진다(@container). */
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[240px_minmax(0,1fr)_minmax(0,1.4fr)] lg:items-start 2xl:grid-cols-[260px_minmax(0,1fr)_minmax(0,2fr)]">
         <StudentList
           students={visible}
           selId={effectiveId}
@@ -1432,6 +1437,8 @@ export function OneScreenClient({
                   pendingKeys: attPending,
                   onSet: (classId, s) => setAttendanceFor(selected.id, classId, s),
                 }}
+                // 실효 모드 = 강사 오버라이드 ?? 학원 기본 — 상단 토글이 하단 보고서 입력 구성을 실제로 바꾼다.
+                noticeMode={noticeMode ?? academyNoticeMode}
               />
             </div>
           </>
