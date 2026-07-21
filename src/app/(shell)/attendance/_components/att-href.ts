@@ -8,12 +8,19 @@
 
 export type RangeKey = "month" | "2w";
 
+/**
+ * 보기 모드 — `class`(반 하나) 기본, `teacher`(그 강사의 모든 반을 반별 그룹으로 한 표에, 급여 계산용).
+ * ⚠️ teacher 모드는 강사 선택이 있어야 성립한다(없으면 호출부가 반별로 되돌린다).
+ */
+export type ViewMode = "class" | "teacher";
+
 export function attHref(p: {
   classId: string | null;
   month: string;
   range: RangeKey;
   teacherId?: string | null;
   subjectId?: string | null;
+  mode?: ViewMode;
 }): string {
   const sp = new URLSearchParams();
   if (p.subjectId) sp.set("subject", p.subjectId);
@@ -21,5 +28,6 @@ export function attHref(p: {
   if (p.classId) sp.set("class", p.classId);
   sp.set("month", p.month);
   if (p.range === "2w") sp.set("range", "2w");
+  if (p.mode === "teacher") sp.set("mode", "teacher");
   return `/attendance?${sp.toString()}`;
 }
