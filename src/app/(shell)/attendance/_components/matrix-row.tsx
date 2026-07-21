@@ -1,7 +1,13 @@
 import type { AttendanceMatrix, AttendanceStatus, MatrixStudent } from "@/features/attendance/server/queries";
+import type { StudentMoney } from "@/features/attendance/server/teacher-money";
 import { COUNTABLE_STATUSES, formatSessionUnits } from "@/features/attendance/session-units";
 import { formatDows } from "@/features/attendance/calendar";
 import { AttendanceCell } from "./attendance-cell";
+
+/** 금액 표시 — 0원과 '자료 없음'을 구분한다(청구서가 없는 달은 "—"). */
+export function formatMoney(n: number | null | undefined): string {
+  return n === null || n === undefined ? "—" : n.toLocaleString("ko-KR");
+}
 
 /** 한 학생 행의 집계(시수 합·출석률) — 그룹 합계도 같은 계산을 써야 표와 합계가 어긋나지 않는다. */
 export function rowTotals(
@@ -40,6 +46,7 @@ export function MatrixRow({
   matrix,
   days,
   holidays,
+  money,
 }: {
   student: MatrixStudent;
   /** 이 행이 속한 반 — 셀 저장 대상. 강사 전체 보기에선 행마다 다르다. */
@@ -47,6 +54,8 @@ export function MatrixRow({
   matrix: AttendanceMatrix;
   days: AttendanceMatrix["days"];
   holidays: Record<string, string>;
+  /** 원장 전용 금액 열(강사 전체 보기). undefined = 열 자체 없음. */
+  money?: StudentMoney | null;
 }) {
   const marks = matrix.marks[student.id] ?? {};
   const units = matrix.units[student.id] ?? {};
@@ -95,6 +104,25 @@ export function MatrixRow({
           </td>
         );
       })}
+      {money !== undefined ? (
+        <>
+          {/* 청구·납입은 **학생 단위 총액**(다른 과목 포함) — 반 몫이 아니다. 여러 강사에 걸친 학생은 '공유' 표식. */}
+          <td className="border-line text-text-dim num border-b border-l px-2 py-2 text-right text-[11px] whitespace-nowrap">
+            {formatMoney(money?.billed ?? null)}
+            {money?.shared ? (
+              <span
+                className="text-text-faint ml-1 text-[10px]"
+                title="다른 과목·강사와 함께 쓰는 청구서입니다 — 반별 배분은 회차 확정(수납관리) 후에만 정확합니다"
+              >
+                공유
+              </span>
+            ) : null}
+          </td>
+          <td className="border-line text-foreground num border-b px-2 py-2 text-right text-[11px] whitespace-nowrap">
+            {formatMoney(money?.paid ?? null)}
+          </td>
+        </>
+      ) : null}
       <td className="border-line text-foreground num sticky right-[64px] z-10 w-[52px] min-w-[52px] border-b border-l bg-card px-2 py-2 text-right text-[12px] whitespace-nowrap">
         {unitsTotal > 0 ? formatSessionUnits(unitsTotal) : "—"}
       </td>

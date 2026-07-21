@@ -10,6 +10,7 @@ import { requireAccess } from "@/lib/auth/require-access";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { getMonthlyAttendanceMatrix, type AttendanceMatrix } from "@/features/attendance/server/queries";
+import { getTeacherMoney } from "@/features/attendance/server/teacher-money";
 import { buildHolidayMap } from "@/features/attendance/calendar";
 import { buildQuickOpen } from "@/features/attendance/quick-open";
 import { QuickOpenPanel } from "./_components/quick-open-panel";
@@ -56,7 +57,7 @@ export default async function AttendancePage({
     mode?: string;
   }>;
 }) {
-  await requireAccess("attendance");
+  const user = await requireAccess("attendance");
   const {
     class: classParam,
     month: monthParam,
@@ -143,6 +144,15 @@ export default async function AttendancePage({
     mode === "teacher"
       ? await Promise.all(teacherClasses.map((c) => getMonthlyAttendanceMatrix(month, c.id)))
       : [];
+  // 금액 열은 **원장 전용**(급여 PII 규율) — 강사가 자기 학생들의 청구·납입을 보게 하지 않는다.
+  const money =
+    mode === "teacher" && user.systemRole === "master" && effectiveTeacher
+      ? await getTeacherMoney(
+          month,
+          effectiveTeacher,
+          [...new Set(teacherMatrices.flatMap((m) => m.students.map((s) => s.id)))],
+        )
+      : null;
   // 매트릭스(무거운 출석 데이터)는 반을 골랐을 때만 로드. 미선택이면 base(빈 매트릭스) 재사용.
   const matrix =
     mode === "teacher"
@@ -408,6 +418,7 @@ export default async function AttendancePage({
                 groups={groups}
                 days={visibleDays}
                 showGroups={mode === "teacher"}
+                money={money}
                 // 공휴일은 학원설정(operations.holidays)이 단일 소스 — 헤더 빨간 날짜·셀 회색 처리에 동기화.
                 holidays={buildHolidayMap(operations.holidays)}
               />

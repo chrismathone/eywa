@@ -1,8 +1,9 @@
 import type { AttendanceMatrix, AttendanceStatus } from "@/features/attendance/server/queries";
+import type { TeacherMoney } from "@/features/attendance/server/teacher-money";
 import { formatSessionUnits } from "@/features/attendance/session-units";
 import { DAY_TONE, STATUS_TEXT, cellDisplay } from "@/features/attendance/cell-display";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
-import { MatrixRow, rowTotals } from "./matrix-row";
+import { MatrixRow, formatMoney, rowTotals } from "./matrix-row";
 
 /** 표에 쌓이는 한 덩어리 = 한 반. 반별 보기는 1개, 강사 전체 보기는 그 강사의 모든 반. */
 export type MatrixGroup = {
@@ -30,6 +31,7 @@ export function MatrixTable({
   days,
   holidays,
   showGroups,
+  money,
 }: {
   groups: MatrixGroup[];
   days: AttendanceMatrix["days"];
@@ -37,10 +39,12 @@ export function MatrixTable({
   holidays: Record<string, string>;
   /** 반 머리행·총합 행 표시(강사 전체 보기). */
   showGroups: boolean;
+  /** 원장 전용 금액 열. null/undefined면 열 자체를 안 그린다(강사는 못 본다). */
+  money?: TeacherMoney | null;
 }) {
   // 헤더의 수업요일 하이라이트 = 표에 담긴 반들의 수업요일 합집합(강사 전체 보기는 반마다 다르다).
   const classDows = new Set(groups.flatMap((g) => g.matrix.classDows));
-  const colSpan = days.length + 5;
+  const colSpan = days.length + 5 + (money ? 2 : 0);
   const totalUnits = Math.round(groups.reduce((acc, g) => acc + groupUnits(g.matrix), 0) * 10) / 10;
   const totalRecords = groups.reduce((acc, g) => acc + g.matrix.stats.totalRecords, 0);
 
@@ -94,6 +98,19 @@ export function MatrixTable({
                 </th>
               );
             })}
+            {money ? (
+              <>
+                <th
+                  className="bg-bg-soft border-line border-b border-l px-2 py-2 text-right whitespace-nowrap"
+                  title="그 학생의 이 달 청구서 총액(다른 과목 포함) — 반별 배분이 아닙니다"
+                >
+                  <span className="micro">청구</span>
+                </th>
+                <th className="bg-bg-soft border-line border-b px-2 py-2 text-right whitespace-nowrap">
+                  <span className="micro">납입</span>
+                </th>
+              </>
+            ) : null}
             {/* 시수 합 — 소비 상태(출석·지각·조퇴·보강) 셀의 배수 합(기본 1). 구 출석부 '합계' 관행. */}
             <th className="bg-bg-soft border-line sticky right-[64px] z-10 w-[52px] min-w-[52px] border-b border-l px-2 py-2 text-right whitespace-nowrap">
               <span className="micro">시수</span>
@@ -126,6 +143,7 @@ export function MatrixTable({
                 matrix={g.matrix}
                 days={days}
                 holidays={holidays}
+                money={money ? money.byStudent[s.id] ?? null : undefined}
               />
             ))}
           </tbody>
@@ -134,12 +152,37 @@ export function MatrixTable({
           {showGroups ? (
             <tr className="bg-bg-soft">
               <td colSpan={colSpan} className="border-line border-t p-0">
-                <div className="sticky left-0 flex w-fit items-center gap-2 px-3 py-2">
+                <div className="sticky left-0 flex w-fit flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2">
                   <span className="text-foreground text-[12px] font-bold">합계</span>
                   <span className="text-text-dim text-[11px]">{groups.length}개 반</span>
                   <span className="text-foreground num text-[12px] font-bold">
                     시수 {formatSessionUnits(totalUnits)}
                   </span>
+                  {money ? (
+                    <>
+                      {/* ⚠️ 합계는 **고유 학생 1회**만 더한다 — 한 학생이 여러 반에 나와도 청구서는 한 장이다. */}
+                      <span className="text-text-dim num text-[11px]">
+                        청구 {formatMoney(money.totals.billed)} · 납입 {formatMoney(money.totals.paid)}
+                        <span className="text-text-faint ml-1">({money.totals.students}명 기준)</span>
+                      </span>
+                      {money.totals.sharedStudents > 0 ? (
+                        <span
+                          className="text-amber text-[11px]"
+                          title="다른 과목·강사와 청구서를 함께 쓰는 학생입니다. 이 금액은 강사 몫이 아니라 학생 총액이라 그대로 급여 기준으로 쓰면 안 됩니다."
+                        >
+                          공유 {money.totals.sharedStudents}명 포함
+                        </span>
+                      ) : null}
+                      {/* 강사 몫(정산액)은 반×강사 배분(회차 확정)이 있어야 나온다 — 없으면 0을 지어내지 않는다. */}
+                      <span className="text-text-faint text-[11px]">
+                        {money.splitRows === 0
+                          ? "정산액 — 회차 확정이 없어 반별 배분을 낼 수 없습니다(수납관리 > 회차)"
+                          : money.commissionRate === null
+                            ? "정산액 — 배분율 미설정(수납관리 > 강사 정산)"
+                            : `배분율 ${money.commissionRate}% · 정산액은 수납관리 > 강사 정산에서`}
+                      </span>
+                    </>
+                  ) : null}
                 </div>
               </td>
             </tr>
