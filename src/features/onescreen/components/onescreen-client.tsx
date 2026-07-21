@@ -1213,12 +1213,17 @@ export function OneScreenClient({
 
   // 파일별 순차 업로드(register read-modify-write clobber 방지). issue→uploadToTicket→register.
   // 카드(selected)·표(행별)·일괄 첨부가 **모두 이 함수 하나**를 쓴다 — 게이트·저장보장·상태리셋이 갈라지지 않게.
-  async function addAttachmentsFor(student: OneScreenStudent, subjectName: string, files: File[]) {
+  async function addAttachmentsFor(
+    student: OneScreenStudent,
+    subjectName: string,
+    files: File[],
+    opts?: { silent?: boolean }, // 일괄 첨부 — 행마다 토스트를 띄우면 10행이면 10개가 쌓인다(요약 1개로)
+  ): Promise<number> {
     // 미저장 첨부는 buildSaveInput으로 보고서 행을 먼저 만든다 — 진도 없으면 빈 보고서가 생기므로 게이트(#15).
     const su0 = student.subjects.find((s) => s.name === subjectName);
     if (su0 && !reports[student.id]?.[subjectName]?.sent && !isRowActionable(su0, "save")) {
-      toast.message("오늘 진도를 입력한 뒤 첨부하세요");
-      return;
+      if (!opts?.silent) toast.message("오늘 진도를 입력한 뒤 첨부하세요");
+      return 0;
     }
     const studentId = student.id;
     const subject = subjectKeyFor(student, subjectName);
@@ -1231,12 +1236,12 @@ export function OneScreenClient({
         const built = buildSaveInputFor(student, subjectName);
         if (!built) {
           toast.error("저장할 보고서 정보를 찾을 수 없습니다");
-          return;
+          return 0;
         }
         const saved = await saveLessonReport(built.input);
         if (!saved.ok || !saved.id) {
           toast.error(saved.error ?? "보고서 저장에 실패했습니다");
-          return;
+          return 0;
         }
         patchReport(studentId, subjectName, (r) => ({
           ...r,
@@ -1288,12 +1293,13 @@ export function OneScreenClient({
         }));
       }
       if (added) {
-        toast.success(`${added}개 첨부 — ClassNote는 다시 발송하세요`);
+        if (!opts?.silent) toast.success(`${added}개 첨부 — ClassNote는 다시 발송하세요`);
         void ensureAttachmentUrls(student, subjectName); // 표 팝오버 썸네일(카드는 아래 서명 이펙트가 갱신)
       }
     } finally {
       setUploadingAttKey(null);
     }
+    return added;
   }
   /** 카드(선택 학생) 래퍼 — 표는 addAttachmentsFor를 행별로 직접 부른다. */
   const addAttachments = (subjectName: string, files: File[]) =>
@@ -1344,6 +1350,7 @@ export function OneScreenClient({
    */
   async function bulkAttach(keys: string[], files: File[]) {
     if (!files.length) return;
+    if (bulkBusy || bulkGen) return; // 재진입·중첩 방지(#10과 같은 규약)
     const targets = keys
       .map((k) => {
         const [studentId, subjectName] = k.split("::");
@@ -1353,10 +1360,26 @@ export function OneScreenClient({
       .filter((t): t is { student: OneScreenStudent; subjectName: string } => !!t);
     if (!targets.length) return;
     setBulkBusy("save");
+    let rows = 0;
+    let added = 0;
     try {
-      for (const t of targets) await addAttachmentsFor(t.student, t.subjectName, files);
+      for (const t of targets) {
+        const n = await addAttachmentsFor(t.student, t.subjectName, files, { silent: true });
+        if (n > 0) {
+          rows++;
+          added += n;
+        }
+      }
     } finally {
       setBulkBusy(null);
+    }
+    // 요약 1개 — 건너뛴 행(진도 미입력·상한 초과)이 있으면 숫자로 드러난다.
+    if (rows === 0) toast.message("첨부된 행이 없습니다 — 진도를 입력한 행에만 첨부됩니다");
+    else {
+      const skipped = targets.length - rows;
+      toast.success(
+        `${rows}개 행에 ${added}개 첨부${skipped ? ` · ${skipped}행 건너뜀(진도 미입력·상한)` : ""} — ClassNote는 다시 발송하세요`,
+      );
     }
   }
 
@@ -1467,7 +1490,9 @@ export function OneScreenClient({
           }}
           attPending={attPending}
           genKey={genKey}
-          bulkGen={bulkGen}
+          // 일괄 작업(자동작성·저장·첨부) 중엔 일괄/행 버튼을 잠근다 — 핸들러는 이미 bulkBusy에서 되돌려보내고
+          // 있었으므로(화면만 눌리는 척했다) 표시를 실제 동작에 맞춘 것.
+          bulkGen={bulkGen || bulkBusy === "save"}
         />
       ) : view === "status" ? (
         <StatusBoard students={visible} reports={reports} onOpenCard={openCard} />
