@@ -2,6 +2,7 @@
 
 import { Button } from "@/components/ui/button";
 import { EyIcon } from "@/components/icons/eywa-icons";
+import { joinComment, splitComment } from "../comment-paragraphs";
 import { resolveStudyGrade } from "../curriculum";
 import { subjectTone, toneSoftClass, toneSolidClass } from "../data";
 import { isRowActionable, type GridRow } from "../grid";
@@ -62,6 +63,10 @@ export type GridConfig = {
   checkEnabled: boolean; // 확인테스트 사용(off면 확인 열 숨김)
   attachmentUrls: Record<string, string>; // 첨부 path→signed 썸네일 URL(팝오버 열 때 채워진다)
   attachmentsHidden?: boolean; // 학원설정 '사진/파일 첨부' OFF — 첨부해도 학부모에게 안 실린다는 고지
+  // 멘트 모드 — 상단 토글(학원 기본 / 단일 A / 2문단 B)의 실효값. 카드 모드와 **같은 편집 계약**을 쓰려고
+  // 표 모드에도 내린다. B면 학부모 문구 칸이 2칸(수업 내용 / 태도·특이사항)으로 갈라진다.
+  // ⚠️ 없으면 "A"로 보지 말 것 — 토글을 B로 둔 강사가 표 모드에서만 한 칸을 보게 된다(2026-07-21 원장 제보).
+  noticeMode: "A" | "B";
 };
 
 /** 과목 진도 입력이 커리큘럼(math)인지. 미지정은 math로 간주(progress-card와 동일 규칙). */
@@ -152,6 +157,8 @@ export function GridBodyRow({
   const showProgressBadge = isMathRow && progressAnomalyBadge(student.progressSignal);
   const att = student.attendance;
   const genRowBusy = gen.rowBusy;
+  // 모드 B 편집용 분리값 — 라운드트립 불변식(split(join)===원본)은 comment-paragraphs가 보장.
+  const draftParas = splitComment(rep?.draft ?? "");
   const bulkGen = gen.bulk;
   const hasDraft = !!rep?.draft?.trim(); // 학부모 멘트(draft) 준비됨 — 발송 시 사용
   const canSend = isRowActionable(subject, "send"); // 진도 입력됨 + 결석 아님(2-3) — 자동작성·발송 게이트
@@ -340,13 +347,34 @@ export function GridBodyRow({
             aria-label={`${student.name} 특이사항`}
             className={`border-amber/40 focus:border-primary scrollbar-thin min-h-[40px] w-full rounded-sm border bg-amber-soft/30 px-2 py-1 text-[11px] leading-snug outline-none ${AUTOSIZE}`}
           />
-          <textarea
-            value={rep?.draft ?? ""}
-            onChange={(e) => fields.onDraft(student.id, subject.name, e.target.value)}
-            placeholder={genRowBusy ? "자동작성 중…" : "'자동작성'으로 생성 · 직접 편집·확인 후 발송"}
-            aria-label={`${student.name} ${subject.name} 학부모 문구`}
-            className={`border-line focus:border-primary scrollbar-thin min-h-[72px] w-full rounded-sm border bg-background px-2 py-1 text-[11px] leading-snug outline-none ${AUTOSIZE}`}
-          />
+          {config.noticeMode === "B" ? (
+            // 모드 B — 카드 모드와 동일 계약: 화면만 2칸, 값은 joinComment이 빈 줄로 합친 **단일 문자열**
+            // (저장·발송 경로 무변경). 표는 폭이 좁아 칸 제목을 placeholder로 겸한다.
+            <>
+              <textarea
+                value={draftParas.p1}
+                onChange={(e) => fields.onDraft(student.id, subject.name, joinComment(e.target.value, draftParas.p2))}
+                placeholder={genRowBusy ? "자동작성 중…" : "1문단 · 수업 내용(교재·진도·과제)"}
+                aria-label={`${student.name} ${subject.name} 학부모 문구 1문단 수업 내용`}
+                className={`border-line focus:border-primary scrollbar-thin min-h-[52px] w-full rounded-sm border bg-background px-2 py-1 text-[11px] leading-snug outline-none ${AUTOSIZE}`}
+              />
+              <textarea
+                value={draftParas.p2}
+                onChange={(e) => fields.onDraft(student.id, subject.name, joinComment(draftParas.p1, e.target.value))}
+                placeholder={genRowBusy ? "자동작성 중…" : "2문단 · 태도 · 특이사항"}
+                aria-label={`${student.name} ${subject.name} 학부모 문구 2문단 태도 특이사항`}
+                className={`border-line focus:border-primary scrollbar-thin min-h-[52px] w-full rounded-sm border bg-background px-2 py-1 text-[11px] leading-snug outline-none ${AUTOSIZE}`}
+              />
+            </>
+          ) : (
+            <textarea
+              value={rep?.draft ?? ""}
+              onChange={(e) => fields.onDraft(student.id, subject.name, e.target.value)}
+              placeholder={genRowBusy ? "자동작성 중…" : "'자동작성'으로 생성 · 직접 편집·확인 후 발송"}
+              aria-label={`${student.name} ${subject.name} 학부모 문구`}
+              className={`border-line focus:border-primary scrollbar-thin min-h-[72px] w-full rounded-sm border bg-background px-2 py-1 text-[11px] leading-snug outline-none ${AUTOSIZE}`}
+            />
+          )}
           <textarea
             value={rep?.trendDraft ?? ""}
             onChange={(e) => fields.onTrend(student.id, subject.name, e.target.value)}
