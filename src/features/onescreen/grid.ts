@@ -187,6 +187,35 @@ export function planPrevFill(args: {
   return out;
 }
 
+/** 멘트 일괄 채우기 대상 행 — 직전 회차 멘트(lesson_reports.notes)와 오늘 초안. */
+export type PrevCommentRow = {
+  studentId: string;
+  subjectName: string;
+  prevNote: string | null | undefined; // prevReport.note = 직전에 학부모에게 보낸 멘트 본문
+  currentDraft: string;
+};
+
+/** 멘트 일괄 채우기 계획 1건. */
+export type PrevCommentPlan = { studentId: string; subjectName: string; comment: string };
+
+/**
+ * 직전 회차 **멘트** 일괄 채우기 계획 — 초안이 비어 있고 직전 멘트가 있는 행만.
+ *
+ * ⚠️ 멘트는 planPrevFill(진도·태도·과제)과 **분리**한다 — 이건 학부모에게 이미 나간 문장을 그대로 옮기는 것이라
+ * 오늘 진도·점수와 어긋날 수 있다. 그래서 호출부가 별도 확인(ConfirmDialog)을 받은 뒤에만 적용한다.
+ * ⚠️ 채워진 초안은 절대 덮지 않는다(빈 칸만 = 이 버튼의 계약).
+ */
+export function planPrevComments(rows: readonly PrevCommentRow[]): PrevCommentPlan[] {
+  const out: PrevCommentPlan[] = [];
+  for (const r of rows) {
+    if (r.currentDraft.trim()) continue;
+    const note = r.prevNote?.trim();
+    if (!note) continue;
+    out.push({ studentId: r.studentId, subjectName: r.subjectName, comment: note });
+  }
+  return out;
+}
+
 /** 일괄 채우기 대상 행 — planPrevFill 인자 + 학생/과목 식별자. */
 export type PrevFillRow = {
   studentId: string;

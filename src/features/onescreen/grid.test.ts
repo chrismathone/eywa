@@ -7,6 +7,7 @@ import {
   planBulkApply,
   planPrevFill,
   planBulkPrevFill,
+  planPrevComments,
   rowInClass,
   summarizeSendGaps,
   type BulkTarget,
@@ -354,5 +355,37 @@ describe("planBulkPrevFill", () => {
     expect(plan[0]!.set.attitude).toBeUndefined();
     expect(plan[0]!.set.homework).toBeUndefined();
     expect(plan[0]!.set.today).toBe("1-1-1 받아올림");
+  });
+});
+
+describe("planPrevComments", () => {
+  const row = (studentId: string, subjectName: string, prevNote: string | null | undefined, currentDraft = "") => ({
+    studentId,
+    subjectName,
+    prevNote,
+    currentDraft,
+  });
+
+  it("초안이 빈 행만 — 직전 멘트를 그대로 옮긴다", () => {
+    expect(planPrevComments([row("a", "수학", "지난 시간 잘했습니다.")])).toEqual([
+      { studentId: "a", subjectName: "수학", comment: "지난 시간 잘했습니다." },
+    ]);
+  });
+
+  it("이미 쓴 초안은 절대 덮지 않는다(빈 칸만 = 버튼 계약)", () => {
+    expect(planPrevComments([row("a", "수학", "직전 멘트", "강사가 쓴 오늘 멘트")])).toEqual([]);
+  });
+
+  it("공백만 있는 초안은 빈 칸으로 본다", () => {
+    expect(planPrevComments([row("a", "수학", "직전 멘트", "   \n ")])).toHaveLength(1);
+  });
+
+  it("직전 멘트가 없거나(null/undefined) 공백뿐이면 대상 아님", () => {
+    expect(planPrevComments([row("a", "수학", null), row("b", "수학", undefined), row("c", "수학", "  ")])).toEqual([]);
+  });
+
+  it("과목별로 각각 — 다과목 학생은 과목마다 자기 직전 멘트", () => {
+    const plan = planPrevComments([row("a", "수학", "수학 멘트"), row("a", "영어", "영어 멘트")]);
+    expect(plan.map((p) => p.comment)).toEqual(["수학 멘트", "영어 멘트"]);
   });
 });

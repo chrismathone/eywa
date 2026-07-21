@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { EyIcon } from "@/components/icons/eywa-icons";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { kstToday } from "@/lib/date-kst";
 import { usePrintWindow } from "@/components/workspace/print-window";
 import { ATTITUDE, CLASS_TAGS, HOMEWORK, TODAY } from "../data";
@@ -47,9 +48,11 @@ import {
   planBulkApply,
   planPrevFill,
   planBulkPrevFill,
+  planPrevComments,
   rowInClass,
   summarizeSendGaps,
   type BulkPatch,
+  type PrevCommentPlan,
   type RowAction,
 } from "../grid";
 import {
@@ -189,6 +192,8 @@ export function OneScreenClient({
   const [view, setView] = useState<OneScreenView>(initialView);
   // 공지 컴포저 진입 시 초기 선택 학생(카드=1명, 표=선택/표시). null=진입 안 함.
   const [noticeSeed, setNoticeSeed] = useState<string[] | null>(null);
+  // '이전값 일괄 채우기' 뒤 멘트 확인 대기 계획(null=다이얼로그 닫힘) — 확인해야만 학부모 문구를 채운다.
+  const [prevCommentPlan, setPrevCommentPlan] = useState<PrevCommentPlan[] | null>(null);
   const [reports, setReports] = useState<ReportsState>(() => initReports(initial));
   const [genSubject, setGenSubject] = useState<string | null>(null); // AI 멘트 생성 중인 과목(카드 버튼 로딩)
   const [genKey, setGenKey] = useState<string | null>(null); // 표 행별 자동작성 로딩 키(studentId::과목)
@@ -732,6 +737,8 @@ export function OneScreenClient({
   // bulkApplyValues 대칭(대상 선정 규약 동일: keys 미선택=표시 전체, rowInClass 필터). 행별 importPrevFor와
   // 같은 순수 계획 함수를 쓰므로 특이사항·교재 제외(발송 본문 오염 방지·roster 자동 승계) 결정이 자동 준수된다.
   // "평소와 같음" 기본값의 얕은 구현 — 강사는 일괄로 깔고 달라진 학생만 손댄다(깊은판 provenance는 G4에서).
+  // ⚠️ 멘트(학부모 문구)만 예외로 **확인 다이얼로그**를 거친다 — 나머지 칸은 강사가 오늘 값을 고르는 입력이지만
+  // 멘트는 직전에 이미 학부모에게 나간 문장이라, 오늘 진도·점수와 어긋난 채 그대로 발송될 위험이 있다(원장 지시 07-21).
   function bulkImportPrev(keys?: string[]) {
     const all = buildGridRows(visible).filter((r) => rowInClass(r.subject, activeClassFilter));
     const keySet = new Set(keys ?? []);
@@ -761,7 +768,17 @@ export function OneScreenClient({
       ATTITUDE,
       HOMEWORK,
     );
-    if (!plan.length) {
+    // 멘트는 별도 계획 — 초안이 빈 행 중 직전 멘트가 있는 것만. 적용은 아래 확인 다이얼로그 뒤에.
+    const commentPlan = planPrevComments(
+      rows.map((r) => ({
+        studentId: r.student.id,
+        subjectName: r.subject.name,
+        prevNote: r.student.subjects.find((su) => su.name === r.subject.name)?.prevReport?.note,
+        // ⚠️ 초안은 ref에서 — 진행 중이던 자동작성이 방금 채운 멘트를 클릭 시점 스냅샷이 못 봐 덮어쓰는 것 방지(#10).
+        currentDraft: reportsRef.current[r.student.id]?.[r.subject.name]?.draft ?? "",
+      })),
+    );
+    if (!plan.length && !commentPlan.length) {
       toast.message("채울 빈 칸이 없습니다 — 이미 입력됐거나 이전 값이 없습니다");
       return;
     }
@@ -773,7 +790,18 @@ export function OneScreenClient({
       if (p.set.homeworkToday !== undefined) setHomeworkTodayFor(p.studentId, p.subjectName, p.set.homeworkToday);
       filledCells += Object.keys(p.set).length;
     }
-    toast.success(`${plan.length}행의 빈 칸 ${filledCells}개를 이전 회차 값으로 채웠습니다 (특이사항 제외)`);
+    if (plan.length) {
+      toast.success(`${plan.length}행의 빈 칸 ${filledCells}개를 이전 회차 값으로 채웠습니다 (특이사항 제외)`);
+    }
+    if (commentPlan.length) setPrevCommentPlan(commentPlan); // → 확인 다이얼로그
+  }
+  /** 확인 다이얼로그 '멘트도 채우기' — 계획대로 초안만 채운다(다른 칸은 위에서 이미 처리됨). */
+  function applyPrevComments() {
+    const plan = prevCommentPlan ?? [];
+    setPrevCommentPlan(null);
+    if (!plan.length) return;
+    for (const p of plan) setDraftFor(p.studentId, p.subjectName, p.comment);
+    toast.success(`${plan.length}행의 멘트를 직전 회차 문구로 채웠습니다 — 발송 전에 오늘 내용과 맞는지 확인하세요`);
   }
   // 학생 순서 저장(3-2) — (강사×반) 영구 저장 + 성공 시 클라 state에도 즉시 반영(다음 로드는 roster가 적용).
   async function saveOrderForClass(classId: string, studentIds: string[]): Promise<boolean> {
@@ -1468,6 +1496,18 @@ export function OneScreenClient({
         )}
       </div>
       )}
+
+      {/* '이전값 일괄 채우기' 뒤 멘트 확인 — 나머지 칸은 이미 채워졌고, 여기 확인해야 학부모 문구까지 채운다.
+          닫힘(취소)은 계획을 버리기만 한다(다른 칸 되돌리지 않음 — 그 칸들은 오늘 값 입력이라 문제 없음). */}
+      <ConfirmDialog
+        open={!!prevCommentPlan}
+        title="멘트도 일괄 채우시겠습니까?"
+        message={`학부모 문구가 비어 있는 ${prevCommentPlan?.length ?? 0}개 행에 직전 회차에 보낸 멘트를 그대로 채웁니다. 오늘 진도·점수와 다를 수 있으니 발송 전에 확인·수정하세요.`}
+        confirmLabel="멘트도 채우기"
+        cancelLabel="아니요"
+        onConfirm={applyPrevComments}
+        onCancel={() => setPrevCommentPlan(null)}
+      />
     </div>
   );
 }

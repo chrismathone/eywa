@@ -20,6 +20,12 @@
   초기값 card로 리셋됐다. → 뷰를 URL(`?view=`)로 운반: `goToDate`가 현재 뷰를 쿼리에 싣고, page가 [`parseView`](src/features/onescreen/view.ts)로
   읽어 `initialView`로 내린다(기본 card는 URL에 안 남김). ⚠️ **뷰 토글 자체는 네비 없는 클라 state 유지** — 전환마다 서버 왕복하면 체감이 느려진다.
   ⚠️ `view.ts`에 `"use client"` 금지(서버 page가 `parseView`를 import — #81).
+- **멘트 일괄 채우기 = 확인 다이얼로그 뒤에만**(원장 지시): 나머지 칸은 즉시 채우고, 학부모 문구가 빈 행이 있으면
+  "멘트도 일괄 채우시겠습니까?" [ConfirmDialog](src/components/ui/confirm-dialog.tsx)를 띄워 확인해야 직전 멘트를 옮긴다.
+  ⚠️ 멘트만 이렇게 분리한 이유 — 다른 칸은 강사가 오늘 값을 고르는 입력이지만 멘트는 **이미 학부모에게 나간 문장**이라
+  오늘 진도·점수와 어긋난 채 재발송될 위험이 있다. 계획은 순수 [`planPrevComments`](src/features/onescreen/grid.ts)(Vitest 5,
+  **채워진 초안은 절대 안 덮음**). 초안 현재값은 `reportsRef.current`에서 읽는다(진행 중 자동작성 결과 클로버 방지, #10).
+  실측: 직전 회차 중 멘트가 있는 행 11,071건이라 실제로 동작한다.
 - **표뷰 `<colgroup>` 하이드레이션 에러**: `<col /> {/* 주석 */}`처럼 주석을 같은 줄에 둬 사이 공백이 JSX 텍스트 노드로 남았고
   ("whitespace text nodes cannot be a child of `<colgroup>`") 표가 열릴 때마다 하이드레이션이 깨졌다. 주석을 각자 줄로 내려 해소
   (줄바꿈이 낀 공백만 컴파일러가 제거). 리포 내 다른 colgroup 5곳은 이 패턴 없음(전수 확인).
