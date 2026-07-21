@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cellDisplay, markNumber } from "./cell-display";
+import { DAY_TONE, cellDisplay, markNumber } from "./cell-display";
 
 describe("markNumber", () => {
   it("결석은 언제나 0(시수를 소비하지 않음)", () => {
@@ -31,9 +31,9 @@ describe("cellDisplay", () => {
     expect(cellDisplay("early_leave", null).className).toContain("bg-blue");
     expect(cellDisplay("present", null).className).toContain("bg-primary-soft");
   });
-  it("기록 없는 등원요일은 옅은 틴트, 수업 없는 날은 회색", () => {
-    expect(cellDisplay(null, null, { attendDay: true }).className).toContain("bg-primary-softer");
-    expect(cellDisplay(null, null, { muted: true }).className).toContain("bg-bg-soft");
+  it("수업하는 요일은 민트, 주말·휴일은 회색, 수업 없는 평일은 흰색(배경 클래스 없음)", () => {
+    expect(cellDisplay(null, null, { attendDay: true }).className).toContain(DAY_TONE.classDay);
+    expect(cellDisplay(null, null, { muted: true }).className).toContain(DAY_TONE.weekend);
     expect(cellDisplay(null, null).className).not.toContain("bg-");
   });
   it("기록 없는 칸은 가운뎃점", () => {

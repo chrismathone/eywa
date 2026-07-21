@@ -175,7 +175,8 @@ export function StatusBoard({
                       {className}
                     </span>
                     <span className="text-text-faint ml-2 text-[11px]">
-                      {groupRows.length}명
+                      {/* ⚠️ 행 수가 아니라 **학생 수** — 한 학생이 두 과목이면 2행이라 행 수를 쓰면 인원이 부푼다. */}
+                      {new Set(groupRows.map((r) => r.student.id)).size}명
                     </span>
                     {todo > 0 ? (
                       <span className="text-danger ml-2 text-[11px] font-bold">

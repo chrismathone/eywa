@@ -52,6 +52,13 @@ export function HistoryBoard({ date }: { date?: string }) {
         setError(res.error ?? "불러오지 못했습니다");
       }
       setLoadedKey(key);
+    }).catch(() => {
+      // ⚠️ reject되면 loadedKey가 영영 안 바뀌어 '불러오는 중…'에 갇힌다(에러도 재시도도 없음).
+      if (cancelled) return;
+      setRows([]);
+      setHasMore(false);
+      setError("보고서를 불러오지 못했습니다 — 잠시 후 다시 시도해 주세요");
+      setLoadedKey(key);
     });
     return () => {
       cancelled = true;

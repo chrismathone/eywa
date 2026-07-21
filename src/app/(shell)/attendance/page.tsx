@@ -17,7 +17,7 @@ import {
 } from "@/features/attendance/server/queries";
 import { COUNTABLE_STATUSES, formatSessionUnits } from "@/features/attendance/session-units";
 import { buildHolidayMap, formatDows } from "@/features/attendance/calendar";
-import { STATUS_TEXT, cellDisplay } from "@/features/attendance/cell-display";
+import { DAY_TONE, STATUS_TEXT, cellDisplay } from "@/features/attendance/cell-display";
 import { buildQuickOpen } from "@/features/attendance/quick-open";
 import { AttendanceCell } from "./_components/attendance-cell";
 import { QuickOpenPanel } from "./_components/quick-open-panel";
@@ -364,14 +364,15 @@ function MatrixTable({
               }
               const holiday = holidays[d.date];
               const isClassDay = classDows.has(d.dow) && !holiday;
-              // 배경 = 오늘 > 수업요일(브랜드 틴트) > 주말 > 평일. 글자색 = 일요일·공휴일이면 빨강(달력 관행).
+              // 배경 = 오늘 > 수업요일(민트) > 주말·휴일(회색) > 수업 없는 평일(흰색). 본문 셀과 같은 DAY_TONE.
+              // 글자색 = 일요일·공휴일이면 빨강(달력 관행).
               const bg = d.isToday
                 ? "bg-primary"
                 : isClassDay
-                  ? "bg-primary-soft"
+                  ? DAY_TONE.classDay
                   : d.isWeekend || holiday
-                    ? "bg-bg-soft/70"
-                    : "bg-bg-soft";
+                    ? DAY_TONE.weekend
+                    : "bg-card";
               const fg = d.isToday
                 ? "text-primary-foreground"
                 : holiday || d.dow === 0
@@ -379,8 +380,8 @@ function MatrixTable({
                   : isClassDay
                     ? "text-foreground"
                     : d.isWeekend
-                      ? "text-text-faint"
-                      : "text-text-dim";
+                      ? "text-text-dim"
+                      : "text-text-faint";
               return (
                 <th
                   key={d.date}
@@ -512,12 +513,12 @@ function MatrixTable({
                   );
                 })}
                 <span className="text-text-dim inline-flex items-center gap-1">
-                  <span className="bg-primary-softer border-line inline-block size-5 rounded-sm border" />
+                  <span className={`border-line inline-block size-5 rounded-sm border ${DAY_TONE.classDay}`} />
                   등원요일
                 </span>
                 <span className="text-text-dim inline-flex items-center gap-1">
-                  <span className="bg-bg-soft/50 border-line inline-block size-5 rounded-sm border" />
-                  휴일·수업없음
+                  <span className={`border-line inline-block size-5 rounded-sm border ${DAY_TONE.weekend}`} />
+                  주말·휴일
                 </span>
               </div>
             </td>

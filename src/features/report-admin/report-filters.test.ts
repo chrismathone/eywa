@@ -21,11 +21,12 @@ describe("defaultReportFilters", () => {
 // 헤더 클릭 정렬은 **서버 정렬**이다 — 목록이 30건씩 끊겨 오므로 화면에서 정렬하면 그 페이지 안에서만
 // 정렬되고 사용자는 전체가 정렬된 줄 안다. 아래는 그 규약(빈 값 뒤로·tiebreak 유지)을 못 박는다.
 describe("reportOrderSpecs", () => {
-  it("정렬 지정이 없으면 기본 순서(수업일 → 실제 발송시각 → 등록시각)", () => {
+  it("정렬 지정이 없으면 기본 순서(수업일 → 실제 발송시각 → 등록시각 → id)", () => {
     expect(reportOrderSpecs()).toEqual([
       { column: "report_date", ascending: false, nullsFirst: false },
       { column: "classnote_sent_at", ascending: false, nullsFirst: false },
       { column: "created_at", ascending: false, nullsFirst: false },
+      { column: "id", ascending: false, nullsFirst: false },
     ]);
   });
 
@@ -42,16 +43,18 @@ describe("reportOrderSpecs", () => {
     }
   });
 
-  it("정렬 열마다 tiebreak가 남는다 — 동률 순서가 페이지마다 뒤바뀌면 행이 중복·누락된다", () => {
-    for (const key of REPORT_SORT_KEYS) {
+  it("모든 정렬(기본 포함)이 유일값 id로 끝난다 — 없으면 서버 페이징에서 행이 중복·누락된다", () => {
+    // 이관분은 한 INSERT 배치의 created_at이 밀리초까지 같아, id가 없으면 같은 날짜 행이 30건을
+    // 넘길 때 페이지마다 순서가 달라진다(적대 검증 확정).
+    for (const key of [undefined, ...REPORT_SORT_KEYS]) {
       const specs = reportOrderSpecs(key, "asc");
       expect(specs.length).toBeGreaterThan(1);
-      expect(specs[specs.length - 1]!.column).toBe("created_at");
+      expect(specs[specs.length - 1]!.column).toBe("id");
     }
   });
 
   it("날짜 정렬은 자기 자신을 tiebreak로 중복해 넣지 않는다", () => {
-    expect(reportOrderSpecs("date", "asc").map((o) => o.column)).toEqual(["report_date", "created_at"]);
+    expect(reportOrderSpecs("date", "asc").map((o) => o.column)).toEqual(["report_date", "created_at", "id"]);
   });
 
   it("학생·과목은 서버 정렬 대상이 아니다(조인 값·내부 키라 한글 라벨 순서와 어긋남)", () => {

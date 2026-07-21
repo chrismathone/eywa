@@ -121,6 +121,9 @@ export function ReportList({
   const isMonthRange =
     !!filters.from && !!filters.to && filters.from === monthRange(activeMonth).from && filters.to === monthRange(activeMonth).to;
   const isThisMonth = isMonthRange && activeMonth === monthOf(todayYmd);
+  // ⚠️ "전체 기간"은 from/to가 **둘 다 없을 때만**이다. 사용자가 날짜를 직접 좁힌 커스텀 범위를
+  // '전체 기간'이라 말하고 칩까지 켜면, 필터가 걸린 화면을 전 기간으로 오독한다(적대 검증 확정 5건).
+  const isAllTime = !filters.from && !filters.to;
   const setMonthRange = (month: string) => set(monthRange(month));
 
   const origin = typeof window !== "undefined" ? window.location.origin : "";
@@ -181,7 +184,7 @@ export function ReportList({
             <EyIcon name="chevronLeft" size={14} />
           </button>
           <span className="text-foreground min-w-[76px] text-center text-[12px] font-bold">
-            {isMonthRange ? monthLabel(activeMonth) : "전체 기간"}
+            {isMonthRange ? monthLabel(activeMonth) : isAllTime ? "전체 기간" : "직접 지정"}
           </span>
           <button type="button" onClick={() => setMonthRange(shiftMonth(activeMonth, 1))} aria-label="다음 달" className="text-text-dim hover:bg-bg-soft rounded-full px-1.5 py-0.5">
             <EyIcon name="chevronRight" size={14} />
@@ -195,9 +198,9 @@ export function ReportList({
         <button
           type="button"
           onClick={() => set({ from: undefined, to: undefined })}
-          aria-pressed={!isMonthRange}
+          aria-pressed={isAllTime}
           className={`rounded-lg border px-2 py-1 text-[11px] font-bold ${
-            !isMonthRange ? "border-primary bg-primary-soft text-primary" : "border-line text-text-dim hover:bg-bg-soft"
+            isAllTime ? "border-primary bg-primary-soft text-primary" : "border-line text-text-dim hover:bg-bg-soft"
           }`}
           title="전체 기간에서는 정렬을 눌러도 오래된 기록이 먼저 나올 수 있습니다"
         >

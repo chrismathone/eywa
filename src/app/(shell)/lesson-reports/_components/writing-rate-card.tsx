@@ -94,7 +94,7 @@ export function WritingRateCard({ view }: { view: WritingRatesView }) {
         <div className="overflow-x-auto">
           <table className="w-full min-w-[760px] text-left text-[12px]">
             <thead>
-              <tr className="border-line text-text-faint border-b">
+              <tr className="border-line text-text-faint group border-b">
                 <SortableTh sortKey="teacher" state={sort} onSort={setSort}>
                   강사
                 </SortableTh>

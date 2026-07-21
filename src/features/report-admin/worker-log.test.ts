@@ -10,7 +10,7 @@ describe("formatWorkerLogLine", () => {
   it("실제 로그: ANSI 제거 + KST 시각 + 한글 요약", () => {
     const r = formatWorkerLogLine(REAL_FEED);
     expect(r.time).toBe("14:54"); // 05:54 UTC = 14:54 KST
-    expect(r.label).toBe("학부모 글·댓글");
+    expect(r.label).toBe("학부모 새 글"); // [feed]=새 글 폴러. 댓글은 [comment]로 분리돼 있다
     expect(r.summary).toContain("classnote.com 접속이 60초 안에 안 끝남");
     expect(r.summary).toContain("오류(다음 폴에서 재시도)"); // 맥락 보존
     expect(r.summary).not.toContain(ESC); // 제어문자 제거

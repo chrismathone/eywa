@@ -66,13 +66,17 @@ type OrderSpec = { column: string; ascending: boolean; nullsFirst: boolean };
  */
 export function reportOrderSpecs(sort?: ReportSortKey, dir: "asc" | "desc" = "asc"): OrderSpec[] {
   const asc = dir === "asc";
+  // ⚠️ 마지막은 **유일값(id)** 이어야 페이징이 결정적이다. 이관분은 한 INSERT 배치의 created_at이
+  // 밀리초까지 동일해, id가 없으면 같은 날짜·같은 시각 행이 30건을 넘을 때 페이지마다 순서가 달라져
+  // 같은 보고서가 두 번 보이거나 통째로 건너뛰어진다(적대 검증 확정).
   const tiebreak: OrderSpec[] = [
     { column: "report_date", ascending: false, nullsFirst: false },
     { column: "created_at", ascending: false, nullsFirst: false },
+    { column: "id", ascending: false, nullsFirst: false },
   ];
   switch (sort) {
     case "date":
-      return [{ column: "report_date", ascending: asc, nullsFirst: false }, tiebreak[1]!];
+      return [{ column: "report_date", ascending: asc, nullsFirst: false }, tiebreak[1]!, tiebreak[2]!];
     case "teacher":
       return [{ column: "teacher_name", ascending: asc, nullsFirst: false }, ...tiebreak];
     case "status":
@@ -86,6 +90,7 @@ export function reportOrderSpecs(sort?: ReportSortKey, dir: "asc" | "desc" = "as
         { column: "report_date", ascending: false, nullsFirst: false },
         { column: "classnote_sent_at", ascending: false, nullsFirst: false },
         { column: "created_at", ascending: false, nullsFirst: false },
+        { column: "id", ascending: false, nullsFirst: false },
       ];
   }
 }

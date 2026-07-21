@@ -20,10 +20,12 @@ describe("bucketOfStatus", () => {
     expect(bucketOfStatus("name_conflict")).toBe("problem");
   });
 
-  it("의도적 제외(결석·과목설정·오래됨)는 excluded — 미발송으로 세면 안 된다", () => {
+  it("DB에 남는 제외 상태(too_old)는 excluded", () => {
+    expect(bucketOfStatus("too_old")).toBe("excluded");
+    // ⚠️ absent·subject_off는 매핑돼 있지만 **DB에 저장되지 않는 반환 전용 상태**라 실데이터에선
+    // 도달하지 않는다. 이 매핑을 근거로 "결석은 분모에서 빠진다"고 주장하면 안 된다(sendable이 담당).
     expect(bucketOfStatus("absent")).toBe("excluded");
     expect(bucketOfStatus("subject_off")).toBe("excluded");
-    expect(bucketOfStatus("too_old")).toBe("excluded");
   });
 
   it("상태 없음·모르는 상태는 unsent — 모른다고 빨강(problem)이나 발송완료로 몰지 않는다", () => {
@@ -34,27 +36,44 @@ describe("bucketOfStatus", () => {
 });
 
 describe("summarizeSendDays", () => {
+  // ⚠️ 픽스처는 **실제 DB에 존재하는 상태값만** 쓴다. 실측(injaewon 2026-07-21): 상태는 success/null 둘뿐,
+  // 그리고 보고서 17,350건 중 17,335건이 Edutrix 이관분이다. 예전 테스트는 DB가 만들지 않는
+  // statusKey:"absent"를 주입해 "결석은 분모에서 빠진다"를 통과시키며 거짓 안심을 줬다(적대 검증 확정).
   const rows: SendStatRow[] = [
-    { reportDay: "2026-07-06", statusKey: "success", cnt: 4 },
-    { reportDay: "2026-07-06", statusKey: "failed", cnt: 1 },
-    { reportDay: "2026-07-06", statusKey: "absent", cnt: 2 },
-    { reportDay: "2026-07-07", statusKey: "", cnt: 3 },
+    { reportDay: "2026-07-06", statusKey: "success", sendable: false, cnt: 4 }, // 이관분(edutrix가 발송)
+    { reportDay: "2026-07-06", statusKey: "", sendable: false, cnt: 2 }, // 이관분·미발송(지금 못 보냄)
+    { reportDay: "2026-07-06", statusKey: "", sendable: true, cnt: 1 }, // eywa 네이티브 미발송(보낼 수 있음)
+    { reportDay: "2026-07-07", statusKey: "success", sendable: true, cnt: 3 },
   ];
 
-  it("날짜별로 버킷을 합산한다", () => {
-    const days = summarizeSendDays(rows);
-    expect(days.get("2026-07-06")).toMatchObject({ total: 7, sent: 4, problem: 1, excluded: 2, unsent: 0 });
-    expect(days.get("2026-07-07")).toMatchObject({ total: 3, sent: 0, unsent: 3 });
+  it("발송 숫자는 출처와 무관한 **사실** — 이관분 success도 학부모에겐 나갔으므로 발송으로 센다", () => {
+    // ⚠️ 이관분을 빼면 실데이터(99.9%가 이관분)에서 달력이 전 강사 "0/0"이 되어 기능이 죽는다.
+    const day = summarizeSendDays(rows).get("2026-07-06")!;
+    expect(day.sent).toBe(4);
+    expect(day.target).toBe(7); // 그날 작성분 전부(제외 상태 없음)
+    expect(day.total).toBe(7);
   });
 
-  it("target(발송 대상)은 제외분을 뺀 값 — 결석 2건이 '미발송'으로 잡히면 안 된다", () => {
-    const days = summarizeSendDays(rows);
-    expect(days.get("2026-07-06")!.target).toBe(5); // 7건 중 결석 2 제외
-    expect(days.get("2026-07-07")!.target).toBe(3);
+  it("'보낼 수 있음'은 **행동** — 미발송 중 발송 콘솔 게이트를 통과한 것만", () => {
+    const day = summarizeSendDays(rows).get("2026-07-06")!;
+    expect(day.unsent).toBe(3); // 안 나간 건 3
+    expect(day.actionable).toBe(1); // 그중 지금 누를 수 있는 건 1 (나머지는 옛 이관분)
+  });
+
+  it("이미 나간 건은 '보낼 수 있음'에 들어가지 않는다", () => {
+    expect(summarizeSendDays(rows).get("2026-07-07")!.actionable).toBe(0);
+  });
+
+  it("분자가 분모를 넘는 모순이 구조적으로 생기지 않는다", () => {
+    for (const day of summarizeSendDays(rows).values()) {
+      expect(day.sent).toBeLessThanOrEqual(day.target);
+      expect(day.target).toBeLessThanOrEqual(day.total);
+      expect(day.actionable).toBeLessThanOrEqual(day.unsent);
+    }
   });
 
   it("자료 없는 날은 map에 없다(빈 칸)", () => {
-    expect(summarizeSendDays(rows).has("2026-07-08")).toBe(false);
+    expect(summarizeSendDays(rows).has("2026-07-09")).toBe(false);
   });
 });
 
@@ -96,8 +115,8 @@ describe("monthGrid", () => {
 
 describe("defaultSelectedDay", () => {
   const days = summarizeSendDays([
-    { reportDay: "2026-07-06", statusKey: "success", cnt: 1 },
-    { reportDay: "2026-07-20", statusKey: "success", cnt: 1 },
+    { reportDay: "2026-07-06", statusKey: "success", sendable: true, cnt: 1 },
+    { reportDay: "2026-07-20", statusKey: "success", sendable: true, cnt: 1 },
   ]);
 
   it("자료 있는 날 중 가장 최근을 연다(빈 날을 열면 '쓴 게 없다'처럼 보임)", () => {

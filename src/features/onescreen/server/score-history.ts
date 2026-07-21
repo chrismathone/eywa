@@ -77,13 +77,19 @@ export async function hasLaterScoredReport(
   return (count ?? 0) > 0;
 }
 
-/** 학습 추이 그래프 조회 윈도(일) — 보고일 기준 최근 N일만(2026-07-10 원장: "너무 과거 것까지 나온다, 7일치만").
- *  풀 이력 이전(16,694행) 후 옛 이관분이 몇 달 전 점까지 끌고 오던 것 차단. 유효점 2개 미만이면 그래프 자체가 숨음. */
-const TREND_WINDOW_DAYS = 7;
+/**
+ * 학습 추이 그래프 = **최근 N'건'**(보고서 개수). 2026-07-10에 "7일치만"으로 넣었던 게 실은 날짜 7일이라
+ * 그래프에 점이 1~2개밖에 안 찍혔다(실측 2026-07-21: 최근 보고서를 받은 학생 178명 중 **73명(41%)이
+ * 점 2개 미만이라 그래프가 아예 숨음**, 중앙값 2점). 원장 의도는 "최근 7**건**"이라 개수 기준으로 바꾼다.
+ * ⚠️ 개수만 쓰면 기록이 드문 학생에서 몇 달 전 점이 딸려온다(2026-07-10 원래 불만) → **30일 안전망**을 함께 둔다.
+ * 30일은 AI 추세 텍스트 윈도(TREND_TEXT_WINDOW_DAYS)와 같은 값 — 그래프와 서술이 다른 기간을 말하지 않게.
+ */
+const TREND_POINT_LIMIT = 7;
+const TREND_WINDOW_DAYS = TREND_TEXT_WINDOW_DAYS;
 
 /**
- * 학부모 보고서 학습 추이 그래프용 이력 — 같은 학생·과목의 저장 보고서, **보고일 기준 최근 7일 윈도**
- * (reportDate−7일 ~ reportDate, 현재 회차 포함) 최근 N. fetchScoreHistory와 달리 (1) `exam_info` NOT NULL
+ * 학부모 보고서 학습 추이 그래프용 이력 — 같은 학생·과목의 저장 보고서 **최근 7건**
+ * (30일 안전망 안에서, 현재 회차 포함). fetchScoreHistory와 달리 (1) `exam_info` NOT NULL
  * 강제 없음(과제-only 행 포함) (2) 현재 보고서까지 포함(inclusive).
  * 과목 매칭은 동일(math는 legacy null 포함, 그 외 정확). tenantId를 주면 tenant 필터 추가 —
  * `/r`(admin=service_role, RLS 우회)에서 **테넌트 격리 필수**. `/print`(RLS 클라이언트)는 생략 가능.
@@ -96,9 +102,8 @@ export async function fetchReportTrendRows(
   reportDate: string,
   opts: { tenantId?: string; limit?: number } = {},
 ): Promise<TrendReportRow[]> {
-  const limit = opts.limit ?? 10;
-  // ⚠️ 양끝 포함(gte −7일 ~ lte 당일)이라 달력일로는 8일 — 이 −7일차 포함이 "지난주 같은 요일" 보고서를
-  // 살리는 끈이므로 −6으로 조이지 말 것(주1회 학생 그래프가 전부 1점→소멸함).
+  const limit = opts.limit ?? TREND_POINT_LIMIT;
+  // 안전망(30일)은 "몇 달 전 점" 차단용일 뿐 — 점 개수를 정하는 건 limit(최근 7건)다.
   const windowStart = windowStartOf(reportDate, TREND_WINDOW_DAYS);
   if (!windowStart) return []; // 비정상 reportDate 방어 — throw 대신 그래프만 숨김
   let q = supabase
