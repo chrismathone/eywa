@@ -44,17 +44,35 @@ export type TeacherSettlement = {
   salaryType: SalaryType | null;
   commissionRate: number | null;
   monthlyBase: number;
-  commissionAmount: number; // 배분액 = round(confirmedTotal × rate/100). 해당 없으면 0
+  /** 수수료 차감 후 배분 기준액 = round(confirmedTotal × NET_MULTIPLIER). 화면이 산식을 보여주기 위한 중간값. */
+  netBase: number;
+  commissionAmount: number; // 배분액 = round(confirmedTotal × 0.911 × rate/100). 해당 없으면 0
   settlement: number | null; // 산정 급여. null = 산정 불가(unset/unassigned/missing_rate)
   status: SettlementStatus;
 };
 
 const UNASSIGNED = "미배정";
 
-/** confirmedTotal × rate% (정수 반올림). rate null이면 null. */
+/**
+ * 결제 수수료 8.9% — **원장 확정 산식(2026-07-21): 급여 = 매출(청구) × 0.911 × 비율.**
+ * ⚠️ 결제수단을 가리지 않고 **전 건 일괄** 적용한다(원장 지시). 카드만 빼거나 현금을 예외 처리하지 말 것.
+ * ⚠️ 이 상수를 바꾸면 급여가 통째로 바뀐다 — 골든마스터(billing/golden)를 반드시 함께 갱신하고 사유를 남길 것.
+ */
+export const PLATFORM_FEE_RATE = 0.089;
+export const NET_MULTIPLIER = 1 - PLATFORM_FEE_RATE; // 0.911
+
+/** 청구액에서 수수료를 뗀 배분 기준액(정수 반올림). */
+export function netBaseOf(confirmedTotal: number): number {
+  return Math.round(confirmedTotal * NET_MULTIPLIER);
+}
+
+/**
+ * 배분액 = 청구 × 0.911 × rate% (정수 반올림). rate null이면 null.
+ * ⚠️ 반올림은 **마지막에 한 번만** — 수수료 단계에서 먼저 반올림하면 강사마다 원 단위가 흔들린다.
+ */
 function commissionOf(confirmedTotal: number, rate: number | null): number | null {
   if (rate === null) return null;
-  return Math.round((confirmedTotal * rate) / 100);
+  return Math.round((confirmedTotal * NET_MULTIPLIER * rate) / 100);
 }
 
 /**
@@ -131,6 +149,7 @@ export function computeTeacherSettlements(
       confirmedTotal: g.confirmedTotal,
       actualTotal: g.actualTotal,
       diffTotal: g.actualTotal - g.confirmedTotal,
+      netBase: netBaseOf(g.confirmedTotal),
       salaryType: comp.salaryType,
       commissionRate: comp.commissionRate,
       monthlyBase: comp.monthlyBase,

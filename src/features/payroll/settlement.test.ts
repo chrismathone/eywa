@@ -23,7 +23,7 @@ const comp = (over: Partial<TeacherComp>): TeacherComp => ({
 });
 
 describe("computeTeacherSettlements", () => {
-  it("비율제 — 청구 총액 × 배분율%(정수 반올림)", () => {
+  it("비율제 — 청구 총액 × 0.911(수수료) × 배분율%(정수 반올림)", () => {
     const [s] = computeTeacherSettlements(
       [row({ confirmedAmount: 100000 }), row({ classId: "cls-2", confirmedAmount: 50000 })],
       new Map([["t-park", comp({ commissionRate: 50 })]]),
@@ -32,8 +32,8 @@ describe("computeTeacherSettlements", () => {
       teacherName: "박민엽",
       classCount: 2,
       confirmedTotal: 150000,
-      commissionAmount: 75000,
-      settlement: 75000,
+      commissionAmount: 68325, // 150,000 × 0.911 × 50%
+      settlement: 68325,
       status: "computed",
     });
   });
@@ -53,8 +53,8 @@ describe("computeTeacherSettlements", () => {
       [row({ confirmedAmount: 1000000 })],
       new Map([["t-park", comp({ salaryType: "hybrid", monthlyBase: 1500000, commissionRate: 30 })]]),
     );
-    expect(s!.commissionAmount).toBe(300000);
-    expect(s!.settlement).toBe(1800000);
+    expect(s!.commissionAmount).toBe(273300); // 1,000,000 × 0.911 × 30%
+    expect(s!.settlement).toBe(1773300);
   });
 
   it("배분율 반올림 — 홀수 배분 금액", () => {
@@ -62,8 +62,8 @@ describe("computeTeacherSettlements", () => {
       [row({ confirmedAmount: 137500 })],
       new Map([["t-park", comp({ commissionRate: 45 })]]),
     );
-    expect(s!.commissionAmount).toBe(61875); // 137500 × 0.45
-    expect(s!.settlement).toBe(61875);
+    expect(s!.commissionAmount).toBe(56368); // 137,500 × 0.911 × 45% = 56,368.125 → 반올림
+    expect(s!.settlement).toBe(56368);
   });
 
   it("급여 방식 미설정 — settlement null, status unset(0으로 지어내지 않음)", () => {
@@ -96,7 +96,7 @@ describe("computeTeacherSettlements", () => {
       [row({ confirmedAmount: 100000 })],
       new Map([["t-park", comp({ salaryType: "hybrid", monthlyBase: 0, commissionRate: 40 })]]),
     );
-    expect(s!.settlement).toBe(40000);
+    expect(s!.settlement).toBe(36440); // 100,000 × 0.911 × 40%
     expect(s!.status).toBe("computed");
   });
 
@@ -125,7 +125,7 @@ describe("computeTeacherSettlements", () => {
       ]),
     );
     expect(out).toHaveLength(2);
-    expect(out.map((s) => s.settlement).sort((a, b) => (a ?? 0) - (b ?? 0))).toEqual([50000, 100000]);
+    expect(out.map((s) => s.settlement).sort((a, b) => (a ?? 0) - (b ?? 0))).toEqual([45550, 91100]);
   });
 
   it("actual/diff는 신호로만 — confirmed와 절대 합산 안 함(R3/P2)", () => {
@@ -137,7 +137,7 @@ describe("computeTeacherSettlements", () => {
     expect(s!.actualTotal).toBe(90000);
     expect(s!.diffTotal).toBe(-10000);
     // 배분은 confirmed에만 적용 — actual이 섞이지 않는다
-    expect(s!.commissionAmount).toBe(50000);
+    expect(s!.commissionAmount).toBe(45550); // 100,000 × 0.911 × 50%
   });
 });
 
@@ -153,7 +153,7 @@ describe("totalSettlements", () => {
     );
     const t = totalSettlements(rows);
     expect(t.teacherCount).toBe(1); // t-1만 산정
-    expect(t.settledTotal).toBe(50000);
+    expect(t.settledTotal).toBe(45550);
     expect(t.pendingCount).toBe(2); // t-2 unset + 미배정
     expect(t.confirmedTotal).toBe(330000);
   });

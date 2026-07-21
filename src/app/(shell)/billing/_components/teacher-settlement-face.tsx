@@ -2,7 +2,12 @@ import Link from "next/link";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { currentPeriod } from "@/features/billing/calc";
 import { getTeacherSettlementView } from "@/features/payroll/server/settlement-queries";
-import type { SettlementStatus, TeacherSettlement } from "@/features/payroll/settlement";
+import {
+  NET_MULTIPLIER,
+  PLATFORM_FEE_RATE,
+  type SettlementStatus,
+  type TeacherSettlement,
+} from "@/features/payroll/settlement";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { TeacherCompEditor } from "./teacher-comp-editor";
 
@@ -81,7 +86,8 @@ export async function TeacherSettlementFace({ period }: { period?: string }) {
 
       <p className="text-text-dim text-xs leading-relaxed">
         저장된 <b>분배 스냅샷</b>(시수 검증)을 담당 강사별로 묶어 급여 방식(비율제/급여제/혼합)을 적용합니다.
-        지급 기준은 <b>청구 금액</b>이며, 실측·차이는 검토 신호로만 표시하고 어느 값도 자동 반영하지 않습니다.
+        산식은 <b>청구 금액 × {NET_MULTIPLIER}(결제 수수료 {(PLATFORM_FEE_RATE * 100).toFixed(1)}% 차감) × 배분율</b>이며,
+        실측·차이는 검토 신호로만 표시하고 어느 값도 자동 반영하지 않습니다.
         이 화면은 <b>참고용</b>으로, 급여로 자동 기록되지 않습니다.
       </p>
 
@@ -105,6 +111,9 @@ export async function TeacherSettlementFace({ period }: { period?: string }) {
                 <th className="px-3 py-2 text-left font-medium">강사</th>
                 <th className="px-3 py-2 text-right font-medium">담당 반</th>
                 <th className="px-3 py-2 text-right font-medium">청구 총액</th>
+                <th className="px-3 py-2 text-right font-medium" title={`청구 총액 × ${NET_MULTIPLIER} — 배분율이 곱해지는 실제 기준액`}>
+                  수수료 차감
+                </th>
                 <th className="px-3 py-2 text-right font-medium">실측(신호)</th>
                 <th className="px-3 py-2 text-left font-medium">급여 방식</th>
                 <th className="px-3 py-2 text-right font-medium">산정 급여</th>
@@ -116,6 +125,7 @@ export async function TeacherSettlementFace({ period }: { period?: string }) {
                   <td className="text-foreground px-3 py-2">{r.teacherName}</td>
                   <td className="num text-text-dim px-3 py-2 text-right">{r.classCount}</td>
                   <td className="num px-3 py-2 text-right">{fmtWon(r.confirmedTotal)}</td>
+                  <td className="num text-text-dim px-3 py-2 text-right">{fmtWon(r.netBase)}</td>
                   <td className="num text-text-dim px-3 py-2 text-right">
                     {fmtWon(r.actualTotal)}
                     {r.diffTotal !== 0 ? (
@@ -152,7 +162,7 @@ export async function TeacherSettlementFace({ period }: { period?: string }) {
             </tbody>
             <tfoot>
               <tr className="border-line bg-bg-soft/50 border-t text-xs">
-                <td className="text-text-dim px-3 py-2" colSpan={5}>
+                <td className="text-text-dim px-3 py-2" colSpan={6}>
                   산정 급여 합계 (미설정·미배정 제외)
                 </td>
                 <td className="num px-3 py-2 text-right font-bold">{fmtWon(view.totals.settledTotal)}</td>
