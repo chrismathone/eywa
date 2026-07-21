@@ -8,14 +8,23 @@
  * 밀리므로, 요일 계산조차 `Date.UTC`로 만든 값에서 `getUTCDay()`로 읽는다(리포 전역 규약).
  */
 
-/** 0127a RPC 한 행 — 그 날짜에 그 상태인 보고서가 몇 건인지. */
-export type SendStatRow = { reportDay: string; statusKey: string; cnt: number };
+/**
+ * 0128a RPC 한 행 — 그 날짜·그 상태·그 대상여부인 보고서가 몇 건인지.
+ * `sendable` = 발송 콘솔과 **같은 게이트**(이관분·취소·과목 opt-in·기한)를 통과한 행인가.
+ */
+export type SendStatRow = { reportDay: string; statusKey: string; sendable: boolean; cnt: number };
 
 /**
  * 발송 상태 버킷. `classnoteBadge`의 상태값을 행동 단위로 접은 것.
  * - `sent` 발송 완료 / `pending` 워커 처리 중 / `problem` 사람이 봐야 하는 실패·차단
- * - `excluded` 의도적 제외(결석·과목 설정·오래됨) — 분모에서 빼야 "미발송"이 부풀지 않는다
+ * - `excluded` DB에 남는 제외 상태(`too_old`) — 분모에서 뺀다
  * - `unsent` 아직 안 보냄(상태 없음) **및 모르는 상태**
+ *
+ * ⚠️ **`absent`·`subject_off`는 DB에 저장되지 않는다**(서버 액션이 반환만 하고 컬럼은 null로 둔다).
+ * 그래서 그 두 값을 여기 매핑해 둬도 실데이터에선 절대 안 걸린다 — "결석은 분모에서 빠진다"고 믿으면
+ * 화면이 거짓말한다(적대 검증 2026-07-21 확정). 발송 대상 판정은 **버킷이 아니라 RPC의 `sendable`**이
+ * 담당한다. 결석만은 규칙이 앱(getAbsenceBlockedKeys)에 있어 SQL로 옮기지 않았고, 그래서 결석분은
+ * `unsent`에 남는다 — 화면이 그 사실을 밝힌다(과대 주장 금지).
  */
 export type SendBucket = "sent" | "pending" | "problem" | "excluded" | "unsent";
 
@@ -28,6 +37,9 @@ const BUCKET: Record<string, SendBucket> = {
   name_conflict: "problem",
   blocked_shared: "problem",
   too_old: "excluded",
+  // ⚠️ 아래 둘은 **DB에 저장되지 않는 반환 전용 상태**라 실데이터에선 도달하지 않는다. 남겨 둔 이유는
+  // 혹시 향후 컬럼에 기록되도록 바뀌면 즉시 올바르게 분류되게 하기 위함이며, 이 표에 의존해
+  // "결석은 분모에서 빠진다"고 주장하면 안 된다(그 역할은 RPC의 sendable).
   subject_off: "excluded",
   absent: "excluded",
 };
@@ -49,25 +61,43 @@ export type SendDay = {
   sent: number;
   pending: number;
   problem: number;
-  /** 결석·과목 설정 등으로 애초에 안 보내는 건 — 분모에서 뺀다. */
+  /** DB에 제외 상태(too_old)로 남은 건. */
   excluded: number;
   unsent: number;
-  /** 발송 대상 = total - excluded. 달력의 분모. */
+  /**
+   * **지금 발송 버튼을 누르면 실제로 나가는 건 수**(미발송 중 발송 콘솔 게이트를 통과하는 것).
+   * ⚠️ 미발송 전부가 아니다 — 옛 Edutrix 이관분은 안 나갔어도 eywa가 보낼 수 없다.
+   */
+  actionable: number;
+  /** 분모 = 그날 작성분 중 제외 상태(too_old 기록)를 뺀 것. 즉 "학부모에게 나갔어야 할 건". */
   target: number;
 };
 
-const EMPTY = { total: 0, sent: 0, pending: 0, problem: 0, excluded: 0, unsent: 0 };
+const EMPTY = { total: 0, sent: 0, pending: 0, problem: 0, excluded: 0, unsent: 0, actionable: 0 };
 
-/** RPC 행들 → 날짜별 집계. 행이 없는 날은 map에 아예 없다(빈 칸). */
+/**
+ * RPC 행들 → 날짜별 집계.
+ *
+ * ⚠️ 이 함수는 **두 가지 다른 질문**에 답한다. 섞으면 화면이 거짓말한다(적대 검증 + 실데이터로 두 번 교정).
+ *  ① "학부모에게 나갔나?" = `sent`/`target` — **출처와 무관한 역사적 사실**. eywa 보고서 17,350건 중
+ *     17,335건(99.9%)이 Edutrix 이관분이라, 이관분을 빼면 달력이 전 강사 "0/0"이 되어 기능이 죽는다.
+ *     이관분 `success`는 실제로 학부모에게 나간 건이므로 발송으로 세는 게 참이다.
+ *  ② "지금 내가 보낼 게 남았나?" = `actionable` — **발송 콘솔과 같은 게이트**(RPC `sendable`)를 통과한
+ *     미발송분만. 이관분·과목 설정 밖·기한 초과는 안 나갔어도 **누를 수 없으므로** 여기서 빠진다.
+ *     이걸 `target`에 섞으면 강사가 영원히 못 채우는 거짓 미발송이 된다(#77 "할 수 없는 일 재촉 금지").
+ */
 export function summarizeSendDays(rows: readonly SendStatRow[]): Map<string, SendDay> {
   const out = new Map<string, SendDay>();
   for (const r of rows) {
     const cur = out.get(r.reportDay) ?? { date: r.reportDay, ...EMPTY, target: 0 };
-    cur[bucketOfStatus(r.statusKey)] += r.cnt;
+    const bucket = bucketOfStatus(r.statusKey);
     cur.total += r.cnt;
+    cur[bucket] += r.cnt; // ① 역사적 사실 — 출처 무관
+    if (r.sendable && bucket === "unsent") cur.actionable += r.cnt; // ② 지금 누를 수 있는 것만
     out.set(r.reportDay, cur);
   }
-  for (const day of out.values()) day.target = day.total - day.excluded;
+  // 분모는 더해서 만든다(빼기 아님) — 각 항의 출처가 분명해 sent > target 같은 모순이 구조적으로 불가능.
+  for (const day of out.values()) day.target = day.sent + day.pending + day.problem + day.unsent;
   return out;
 }
 

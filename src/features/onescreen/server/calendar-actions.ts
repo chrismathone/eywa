@@ -2,6 +2,8 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { getTenantSettings } from "@/features/owner/server/queries";
+import { classnoteMinDate } from "../classnote-guard";
 import { monthRange, type SendStatRow } from "../send-calendar";
 
 /**
@@ -22,20 +24,25 @@ export async function getMySendCalendar(input: {
   if (!/^\d{4}-\d{2}$/.test(input.month)) return { ok: false, error: "달 형식이 올바르지 않습니다" };
 
   const { from, to } = monthRange(input.month);
-  const supabase = await createClient();
+  const [supabase, settings] = await Promise.all([createClient(), getTenantSettings()]);
+  // 발송 "대상" 판정은 발송 콘솔과 **같은 게이트**를 써야 한다(#77) — 과목 opt-in과 발송 허용 기한을
+  // RPC로 넘겨 SQL에서 함께 판정한다. 여기서 따로 규칙을 짜면 화면과 실제 발송 가능 여부가 갈라진다.
   const { data, error } = await supabase.rpc("onescreen_send_calendar", {
     p_teacher_name: teacherName,
     p_from: from,
     p_to: to,
+    p_subjects: settings.report.classnoteSubjects ?? null,
+    p_min_date: classnoteMinDate(),
   });
   if (error) return { ok: false, error: "달력을 불러오지 못했습니다" };
 
   return {
     ok: true,
-    rows: (data ?? []).map((r: { report_day: string; status_key: string | null; cnt: number }) => ({
+    rows: (data ?? []).map((r: { report_day: string; status_key: string | null; sendable: boolean; cnt: number }) => ({
       // date 컬럼은 PostgREST가 "YYYY-MM-DD"로 주지만, 시각이 붙어 오더라도 달력 키가 어긋나지 않게 자른다.
       reportDay: String(r.report_day).slice(0, 10),
       statusKey: r.status_key ?? "",
+      sendable: r.sendable !== false, // 구버전 RPC(컬럼 부재) 대비 — 없으면 대상으로 본다(과소 표시 방지)
       cnt: r.cnt,
     })),
   };
