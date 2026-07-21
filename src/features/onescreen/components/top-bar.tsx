@@ -193,7 +193,7 @@ export function OneScreenTopBar({
           })}
         </div>
         <span className="bg-line h-5 w-px" aria-hidden />
-        {/* 카드 ↔ 표(스프레드시트) ↔ 발송 현황 ↔ 지난 보고서 뷰 전환 */}
+        {/* 카드 ↔ 표(스프레드시트) ↔ 오늘 발송 현황 ↔ 월간 발송(달력) ↔ 공지 뷰 전환 */}
         <div className="border-line flex items-center rounded-full border p-0.5">
           {(["card", "grid", "status", "history", "notice"] as const).map((v) => (
             <button
@@ -212,7 +212,7 @@ export function OneScreenTopBar({
                   : v === "status"
                     ? "발송 현황"
                     : v === "history"
-                      ? "지난 보고서"
+                      ? "월간 발송"
                       : "공지"}
             </button>
           ))}

@@ -40,10 +40,11 @@ import { TestCard } from "./test-card";
 import { ReportCard, type SubjectReport } from "./report-card";
 import { OneScreenGrid } from "./onescreen-grid";
 import { StatusBoard } from "./status-board";
-import { HistoryBoard } from "./history-board";
+import { SendCalendarBoard } from "./send-calendar";
 import { NoticeComposer } from "./notice-composer";
 import {
   buildGridRows,
+  rowKey,
   isRowActionable,
   planBulkApply,
   planPrevFill,
@@ -142,6 +143,7 @@ export function OneScreenClient({
   classnoteSendEnabled = false,
   sendWindowLabel = null,
   showAttachments = true,
+  canEditAttendance = true,
   presenceScope,
   initialView = "card",
 }: {
@@ -158,6 +160,7 @@ export function OneScreenClient({
   classnoteSendEnabled?: boolean; // ClassNote 실제 발송 스위치 — 공지 dry-run 안내
   sendWindowLabel?: string | null; // 발송 허용 시간창 "HH:MM~HH:MM"(무제한=null) — 상단 강사 참고 안내
   showAttachments?: boolean; // 사진/파일 첨부 표시(학원 설정) — off면 첨부해도 안 실린다는 경고를 카드에 표시
+  canEditAttendance?: boolean; // 출결 쓰기 권한 — false면 pill을 표시 전용으로(서버 거절 전에 화면에서 알림)
   presenceScope?: string; // `onescreen:{teacherId}:{date}` — 다른 창/기기 동시 열림 경고(서버가 teacherId 파생)
   initialView?: OneScreenView; // URL(?view=)에서 온 초기 뷰 — 날짜 이동(재마운트) 후에도 보던 뷰 유지
 }) {
@@ -205,7 +208,8 @@ export function OneScreenClient({
   const [bulkBusy, setBulkBusy] = useState<"save" | "send" | null>(null); // 일괄 저장/발송 진행중 — 재진입·행발송 잠금(#9/#10)
   const [attUrls, setAttUrls] = useState<Record<string, string>>({}); // 첨부 path→signed 썸네일 URL(P2b)
   const [attPending, setAttPending] = useState<Set<string>>(new Set()); // 출결 저장 중 (학생::반) — pill 잠금(2-2)
-  const [uploadingSubject, setUploadingSubject] = useState<string | null>(null); // 첨부 업로드 중인 과목
+  // 첨부 업로드 중인 (학생::과목) 키 — 표는 행마다 첨부할 수 있어 과목명만으론 어느 행인지 못 가린다.
+  const [uploadingAttKey, setUploadingAttKey] = useState<string | null>(null);
   const openPrint = usePrintWindow(); // "PDF" = 저장된 보고서를 인쇄 문서 플로팅 창으로 연다
   // 다른 창/기기 동시 열림 경고(3-3, 락 아님) — enabled=페이지 열림. 같은 계정 다른 탭/기기도 잡힌다(presence key 기준).
   useEditPresence(presenceScope, true);
@@ -890,11 +894,6 @@ export function OneScreenClient({
       },
     };
   }
-  function buildSaveInput(subjectName: string) {
-    if (!selected) return null;
-    return buildSaveInputFor(selected, subjectName);
-  }
-
   // 보고서 저장 시 그 학생 진도를 확정 처리 — 표 모드엔 카드의 '진도 확정' 버튼이 없어 상단 진도·마감 지표가
   // 0에 고정되던 문제(#13). 이미 확정이면 no-op(불필요한 autosave 방지).
   function confirmProgressOnSave(studentId: string) {
@@ -1179,8 +1178,10 @@ export function OneScreenClient({
   }
 
   // ── 학생 사진 첨부(P2b) — 저장된 보고서에만(서버 강제). subject는 DB 저장키(subjectKey)로 넘긴다. ──
-  const subjectKeyOf = (subjectName: string): string | undefined => {
-    const su = selected?.subjects.find((s) => s.name === subjectName);
+  // ⚠️ 첨부 핸들러는 **(학생, 과목) 파라미터**가 원형이고 카드는 selected를 감싸 부른다(표=행별 직접 호출) —
+  //    진도·점수 핸들러와 같은 "로직 단일 소스" 규약. 표 첨부(클립·드롭·일괄)가 이 경로를 그대로 쓴다.
+  const subjectKeyFor = (student: OneScreenStudent, subjectName: string): string | undefined => {
+    const su = student.subjects.find((s) => s.name === subjectName);
     return su?.subjectKey || su?.name || undefined;
   };
 
@@ -1213,31 +1214,36 @@ export function OneScreenClient({
   }, [selected?.id, attSig]);
 
   // 파일별 순차 업로드(register read-modify-write clobber 방지). issue→uploadToTicket→register.
-  async function addAttachments(subjectName: string, files: File[]) {
-    if (!selected) return;
+  // 카드(selected)·표(행별)·일괄 첨부가 **모두 이 함수 하나**를 쓴다 — 게이트·저장보장·상태리셋이 갈라지지 않게.
+  async function addAttachmentsFor(
+    student: OneScreenStudent,
+    subjectName: string,
+    files: File[],
+    opts?: { silent?: boolean }, // 일괄 첨부 — 행마다 토스트를 띄우면 10행이면 10개가 쌓인다(요약 1개로)
+  ): Promise<number> {
     // 미저장 첨부는 buildSaveInput으로 보고서 행을 먼저 만든다 — 진도 없으면 빈 보고서가 생기므로 게이트(#15).
-    const su0 = selected.subjects.find((s) => s.name === subjectName);
-    if (su0 && !reports[selected.id]?.[subjectName]?.sent && !isRowActionable(su0, "save")) {
-      toast.message("오늘 진도를 입력한 뒤 첨부하세요");
-      return;
+    const su0 = student.subjects.find((s) => s.name === subjectName);
+    if (su0 && !reports[student.id]?.[subjectName]?.sent && !isRowActionable(su0, "save")) {
+      if (!opts?.silent) toast.message("오늘 진도를 입력한 뒤 첨부하세요");
+      return 0;
     }
-    const studentId = selected.id;
-    const subject = subjectKeyOf(subjectName);
-    setUploadingSubject(subjectName);
+    const studentId = student.id;
+    const subject = subjectKeyFor(student, subjectName);
+    setUploadingAttKey(rowKey(studentId, subjectName));
     let added = 0;
     try {
       // 첨부 먼저 UX — 미저장 상태면 현재 초안으로 자동저장해 보고서 행을 먼저 만든다(첨부는 저장된 행에만).
       // 수동 '저장' 클릭을 없앨 뿐 결과는 "저장 후 첨부"와 동일(진짜 저장된 행).
       if (!reports[studentId]?.[subjectName]?.sent) {
-        const built = buildSaveInput(subjectName);
+        const built = buildSaveInputFor(student, subjectName);
         if (!built) {
           toast.error("저장할 보고서 정보를 찾을 수 없습니다");
-          return;
+          return 0;
         }
         const saved = await saveLessonReport(built.input);
         if (!saved.ok || !saved.id) {
           toast.error(saved.error ?? "보고서 저장에 실패했습니다");
-          return;
+          return 0;
         }
         patchReport(studentId, subjectName, (r) => ({
           ...r,
@@ -1288,16 +1294,27 @@ export function OneScreenClient({
           classnoteStatus: undefined,
         }));
       }
-      if (added) toast.success(`${added}개 첨부 — ClassNote는 다시 발송하세요`);
+      if (added) {
+        if (!opts?.silent) toast.success(`${added}개 첨부 — ClassNote는 다시 발송하세요`);
+        void ensureAttachmentUrls(student, subjectName); // 표 팝오버 썸네일(카드는 아래 서명 이펙트가 갱신)
+      }
     } finally {
-      setUploadingSubject(null);
+      setUploadingAttKey(null);
     }
+    return added;
   }
+  /** 카드(선택 학생) 래퍼 — 표는 addAttachmentsFor를 행별로 직접 부른다. */
+  const addAttachments = (subjectName: string, files: File[]) =>
+    selected ? addAttachmentsFor(selected, subjectName, files) : Promise.resolve();
 
-  async function removeAttachment(subjectName: string, path: string) {
-    if (!selected) return;
-    const studentId = selected.id;
-    const res = await removeReportAttachment({ studentId, subject: subjectKeyOf(subjectName), reportDate: date || undefined, path });
+  async function removeAttachmentFor(student: OneScreenStudent, subjectName: string, path: string) {
+    const studentId = student.id;
+    const res = await removeReportAttachment({
+      studentId,
+      subject: subjectKeyFor(student, subjectName),
+      reportDate: date || undefined,
+      path,
+    });
     if (!res.ok) {
       toast.error(res.error ?? "첨부 삭제에 실패했습니다");
       return;
@@ -1313,6 +1330,59 @@ export function OneScreenClient({
       return n;
     });
     toast.success("첨부를 삭제했습니다");
+  }
+  const removeAttachment = (subjectName: string, path: string) =>
+    selected ? removeAttachmentFor(selected, subjectName, path) : Promise.resolve();
+
+  /** 표 팝오버용 썸네일 서명 — 카드처럼 상시 서명하지 않고 **열 때만** 1회(행 수만큼 서명하면 낭비). */
+  async function ensureAttachmentUrls(student: OneScreenStudent, subjectName: string) {
+    const atts = reportsRef.current[student.id]?.[subjectName]?.attachments ?? [];
+    if (atts.length === 0) return;
+    const res = await signReportAttachmentUrls({
+      studentId: student.id,
+      subject: subjectKeyFor(student, subjectName),
+      reportDate: date || undefined,
+    });
+    if (res.urls) setAttUrls((prev) => ({ ...prev, ...res.urls }));
+  }
+
+  /**
+   * 선택 행 일괄 첨부 — 같은 사진/파일(시험지·판서)을 여러 학생 행에 한 번에.
+   * 행마다 **순차** 처리(register가 read-modify-write라 병렬이면 서로 덮어쓴다). 게이트·저장보장은 행 단위 동일.
+   */
+  async function bulkAttach(keys: string[], files: File[]) {
+    if (!files.length) return;
+    if (bulkBusy || bulkGen) return; // 재진입·중첩 방지(#10과 같은 규약)
+    const targets = keys
+      .map((k) => {
+        const [studentId, subjectName] = k.split("::");
+        const student = studentsRef.current.find((s) => s.id === studentId);
+        return student && subjectName ? { student, subjectName } : null;
+      })
+      .filter((t): t is { student: OneScreenStudent; subjectName: string } => !!t);
+    if (!targets.length) return;
+    setBulkBusy("save");
+    let rows = 0;
+    let added = 0;
+    try {
+      for (const t of targets) {
+        const n = await addAttachmentsFor(t.student, t.subjectName, files, { silent: true });
+        if (n > 0) {
+          rows++;
+          added += n;
+        }
+      }
+    } finally {
+      setBulkBusy(null);
+    }
+    // 요약 1개 — 건너뛴 행(진도 미입력·상한 초과)이 있으면 숫자로 드러난다.
+    if (rows === 0) toast.message("첨부된 행이 없습니다 — 진도를 입력한 행에만 첨부됩니다");
+    else {
+      const skipped = targets.length - rows;
+      toast.success(
+        `${rows}개 행에 ${added}개 첨부${skipped ? ` · ${skipped}행 건너뜀(진도 미입력·상한)` : ""} — ClassNote는 다시 발송하세요`,
+      );
+    }
   }
 
   return (
@@ -1365,6 +1435,8 @@ export function OneScreenClient({
             allowTestMax: allowTeacherTestMax,
             dailyEnabled: showDailyTest,
             checkEnabled: showCheckTest,
+            attachmentUrls: attUrls,
+            attachmentsHidden: !showAttachments,
           }}
           fields={{
             onAttendance: setAttendanceFor,
@@ -1386,6 +1458,10 @@ export function OneScreenClient({
             onAutoWrite: autoWriteRow,
             onOpenCard: openCard,
             onImportPrev: importPrevFor,
+            onAttach: (student, subjectName, files) => void addAttachmentsFor(student, subjectName, files),
+            onRemoveAttachment: (student, subjectName, path) =>
+              void removeAttachmentFor(student, subjectName, path),
+            onOpenAttachments: (student, subjectName) => void ensureAttachmentUrls(student, subjectName),
           }}
           bulkActions={{
             onSaveAll: saveAllVisible,
@@ -1394,7 +1470,9 @@ export function OneScreenClient({
             onClassNotice: openNoticeForRows,
             onBulkApply: bulkApplyValues,
             onBulkImportPrev: bulkImportPrev,
+            onBulkAttach: (keys, files) => void bulkAttach(keys, files),
           }}
+          uploadingAttKey={uploadingAttKey}
           order={orderClass ? { classId: orderClass.id, onSave: saveOrderForClass } : undefined}
           classFilter={activeClassFilter}
           // 반 서술(G6) — 순서 기능과 동일한 동명 반 가드(orderClass = 이름 매칭이 유일할 때만).
@@ -1413,13 +1491,16 @@ export function OneScreenClient({
             },
           }}
           attPending={attPending}
+          attReadOnly={!canEditAttendance}
           genKey={genKey}
-          bulkGen={bulkGen}
+          // 일괄 작업(자동작성·저장·첨부) 중엔 일괄/행 버튼을 잠근다 — 핸들러는 이미 bulkBusy에서 되돌려보내고
+          // 있었으므로(화면만 눌리는 척했다) 표시를 실제 동작에 맞춘 것.
+          bulkGen={bulkGen || bulkBusy === "save"}
         />
       ) : view === "status" ? (
         <StatusBoard students={visible} reports={reports} onOpenCard={openCard} />
       ) : view === "history" ? (
-        <HistoryBoard />
+        <SendCalendarBoard todayYmd={todayYmd} />
       ) : view === "notice" ? (
         <NoticeComposer
           key={`notice-${noticeSeed?.join(",") ?? ""}`}
@@ -1499,9 +1580,14 @@ export function OneScreenClient({
                 onAddFiles={addAttachments}
                 onRemoveAttachment={removeAttachment}
                 attachmentUrls={attUrls}
-                uploadingSubject={uploadingSubject}
+                uploadingSubject={
+                  selected && uploadingAttKey?.startsWith(`${selected.id}::`)
+                    ? uploadingAttKey.slice(selected.id.length + 2)
+                    : null
+                }
                 attachmentsHidden={!showAttachments}
                 attendance={{
+                  readOnly: !canEditAttendance,
                   pendingKeys: attPending,
                   onSet: (classId, s) => setAttendanceFor(selected.id, classId, s),
                 }}

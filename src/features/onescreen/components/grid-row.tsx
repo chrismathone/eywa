@@ -8,6 +8,7 @@ import { isRowActionable, type GridRow } from "../grid";
 import { parentUnreadBadge, progressAnomalyBadge } from "../roster-signals";
 import type { OneScreenStudent } from "../types";
 import { classnoteBadge, type SubjectReport } from "./report-card";
+import { GridAttachButton, useRowFileDrop } from "./grid-attach";
 import { AttendancePills, type BasicAttendance } from "./attendance-pills";
 import { handleGridNavKey } from "./grid-nav";
 import { PillGroup } from "./pill-group";
@@ -46,6 +47,10 @@ export type GridRowActions = {
   onAutoWrite: (student: OneScreenStudent, subjectName: string) => void; // 행별 AI 멘트 자동작성
   onOpenCard: (studentId: string) => void; // 그 학생을 카드 뷰로 열기(본문·첨부·링크 편집)
   onImportPrev: (student: OneScreenStudent, subjectName: string) => void; // 이전 회차 값 → 빈 칸 채움(1-3)
+  // 첨부(표 모드) — 클립 팝오버·행 드롭이 공유. 게이트(진도 미입력)·저장보장은 부모 핸들러가 담당.
+  onAttach: (student: OneScreenStudent, subjectName: string, files: File[]) => void;
+  onRemoveAttachment: (student: OneScreenStudent, subjectName: string, path: string) => void;
+  onOpenAttachments: (student: OneScreenStudent, subjectName: string) => void; // 팝오버 열 때 썸네일 서명
 };
 
 /** 표 표시 설정(학원 설정 유래). */
@@ -55,6 +60,8 @@ export type GridConfig = {
   allowTestMax: boolean; // 강사 문항수 변경 허용
   dailyEnabled: boolean; // 일일테스트 사용(off면 일일 열 숨김)
   checkEnabled: boolean; // 확인테스트 사용(off면 확인 열 숨김)
+  attachmentUrls: Record<string, string>; // 첨부 path→signed 썸네일 URL(팝오버 열 때 채워진다)
+  attachmentsHidden?: boolean; // 학원설정 '사진/파일 첨부' OFF — 첨부해도 학부모에게 안 실린다는 고지
 };
 
 /** 과목 진도 입력이 커리큘럼(math)인지. 미지정은 math로 간주(progress-card와 동일 규칙). */
@@ -121,7 +128,13 @@ export function GridBodyRow({
   actions: GridRowActions;
   config: GridConfig;
   // 로딩·잠금 상태 묶음: rowBusy=이 행 자동작성 중, bulk=전체 자동작성 진행중, attPending=출결 저장 중 (학생::반) 키.
-  gen: { rowBusy: boolean; bulk?: boolean; attPending: ReadonlySet<string> };
+  gen: {
+    rowBusy: boolean;
+    bulk?: boolean;
+    attPending: ReadonlySet<string>;
+    attReadOnly?: boolean; // 출결 쓰기 권한 없음 — pill 비활성
+    uploadingKey?: string | null; // 첨부 업로드 중인 행 키
+  };
   // 키보드 세로 이동(3-1) 인덱스 — **표시 순서 기준**(assembler가 buildRowRenderMeta로 부여).
   // row=과목 단위 열(교재·오늘과제), studentRow=학생 단위 열(점수 — 학생 묶음 첫 행만, 중복 칸 스킵).
   nav: { row: number; studentRow?: number };
@@ -143,9 +156,20 @@ export function GridBodyRow({
   const hasDraft = !!rep?.draft?.trim(); // 학부모 멘트(draft) 준비됨 — 발송 시 사용
   const canSend = isRowActionable(subject, "send"); // 진도 입력됨 + 결석 아님(2-3) — 자동작성·발송 게이트
   const isAbsent = subject.attendanceRaw === "absent";
+  // 파일을 행 위에 놓으면 그 행에 바로 첨부(가장 빠른 경로). 진도 미입력 등 게이트는 부모 핸들러가 안내한다.
+  const drop = useRowFileDrop((files) => actions.onAttach(student, subject.name, files));
   // 결석 행은 배경 톤으로 표시(입력은 여전히 가능=기록 보존). opacity로 전체를 흐리면 활성 입력칸이 disabled로 오인된다(#20).
   return (
-    <tr className={isAbsent ? "bg-danger-soft/25 hover:bg-danger-soft/40" : "hover:bg-bg-soft/50"}>
+    <tr
+      {...drop.handlers}
+      className={
+        drop.over
+          ? "outline-primary bg-primary-soft/40 outline-2 -outline-offset-2" // 드롭 대상 강조
+          : isAbsent
+            ? "bg-danger-soft/25 hover:bg-danger-soft/40"
+            : "hover:bg-bg-soft/50"
+      }
+    >
       <td className={`${td} text-center`}>
         {orderControls !== undefined ? (
           orderControls
@@ -203,6 +227,7 @@ export function GridBodyRow({
               pending={gen.attPending.has(`${student.id}::${subject.classId}`)}
               onSet={(s) => fields.onAttendance(student.id, subject.classId!, s)}
               studentName={student.name}
+              readOnly={gen.attReadOnly}
             />
           ) : att !== "출석" ? (
             <span
@@ -359,6 +384,16 @@ export function GridBodyRow({
                 "자동작성"
               )}
             </button>
+            <GridAttachButton
+              attachments={rep?.attachments ?? []}
+              urls={config.attachmentUrls}
+              uploading={gen.uploadingKey === key}
+              hiddenFromParents={config.attachmentsHidden}
+              label={`${student.name} ${subject.name}`}
+              onAdd={(files) => actions.onAttach(student, subject.name, files)}
+              onRemove={(path) => actions.onRemoveAttachment(student, subject.name, path)}
+              onOpen={() => actions.onOpenAttachments(student, subject.name)}
+            />
             <button
               type="button"
               onClick={() => actions.onOpenCard(student.id)}
@@ -383,6 +418,11 @@ export function GridBodyRow({
           >
             발송
           </Button>
+          {/* ⚠️ 결석 사유를 **눈에 보이게** — 예전엔 버튼 title 툴팁뿐이라 강사가 왜 발송이 막혔는지 알 수
+              없었다(2026-07-21: 네이티브 툴팁이 실제로 안 뜨는 사례 확인). 행 배경 톤만으론 이유가 안 읽힌다. */}
+          {isAbsent ? (
+            <span className="text-danger text-center text-[10px] font-bold">결석 — 발송 제외</span>
+          ) : null}
           {badge ? (
             <span className={`text-center text-[10px] font-bold ${badge.cls}`}>{badge.label}</span>
           ) : null}

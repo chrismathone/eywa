@@ -49,6 +49,7 @@ export default async function OneScreenPage({
       classnoteSendEnabled={roster.classnoteSendEnabled}
       sendWindowLabel={roster.sendWindowLabel}
       showAttachments={roster.showAttachments}
+      canEditAttendance={roster.canEditAttendance}
       // 다른 창/기기 동시 열림 경고(3-3) — teacherId는 서버 파생(user.id = 담당 반 소유자, 겸직 포함).
       presenceScope={`onescreen:${user.id}:${roster.date}`}
       // 날짜 이동은 위 key로 클라를 재마운트하므로 뷰(표·발송현황 등)는 URL로 넘겨받아야 유지된다.

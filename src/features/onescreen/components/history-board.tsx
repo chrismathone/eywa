@@ -1,9 +1,13 @@
 "use client";
 
-// 원스크린 "지난 보고서" 뷰 — 강사 본인이 쓴 보고서 이력을 날짜별로 묶어 열람(읽기 전용).
+// 원스크린 "지난 보고서" 목록 — 강사 본인이 쓴 보고서 이력을 날짜별로 묶어 열람(읽기 전용).
 // 뷰 진입 시에만 서버 액션으로 로드(첫 페인트 비블로킹, B7 취지) + "더 보기" 커서 페이징.
 // 표시 규칙: 과목=labelOf(한글), 발송상태=classnoteBadge(한글), 학교·학년=schoolGradeLabel 압축.
-import { useEffect, useRef, useState } from "react";
+//
+// 두 가지 모드를 같은 렌더로 쓴다(중복 구현 금지):
+//  · `date` 없음 = 최신부터 커서 페이징(전체 이력 훑기)
+//  · `date` 지정 = 그 하루만(월간 달력에서 날짜를 눌렀을 때의 상세 패널)
+import { useEffect, useState } from "react";
 import { useSubjectMaps } from "@/features/owner/operations-context";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { getMyPastReports, type PastReportRow } from "../server/history-actions";
@@ -18,27 +22,41 @@ function dateLabel(ymd: string): string {
   return `${m}/${d} (${dow})`;
 }
 
-export function HistoryBoard() {
+export function HistoryBoard({ date }: { date?: string }) {
   const subjects = useSubjectMaps();
   const [rows, setRows] = useState<PastReportRow[]>([]);
   const [hasMore, setHasMore] = useState(false);
-  const [loading, setLoading] = useState(true); // 첫 로드
+  const [loadedKey, setLoadedKey] = useState<string | null>(null); // 지금 rows가 어느 조회분인지
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState(""); // 학생 이름 필터(로드된 범위 내)
-  const loadedRef = useRef(false);
+
+  // ⚠️ loading을 state로 두고 effect 안에서 setLoading(true)를 부르면 react-hooks/set-state-in-effect 위반(#25).
+  // "지금 화면의 rows가 지금 요청분인가"를 **파생**해서 쓴다 — 날짜를 바꾼 순간 자동으로 로딩 상태가 된다.
+  const key = date ?? "";
+  const loading = loadedKey !== key;
 
   useEffect(() => {
-    if (loadedRef.current) return; // StrictMode 이중 실행 방어
-    loadedRef.current = true;
-    void getMyPastReports().then((res) => {
+    // `date`가 바뀌면 다시 읽는다(달력에서 다른 날짜를 누른 경우).
+    // ⚠️ 늦게 도착한 이전 요청이 새 날짜 결과를 덮지 않도록 취소 플래그로 버린다(StrictMode 이중 실행도 여기서 흡수).
+    let cancelled = false;
+    void getMyPastReports(date ? { on: date } : undefined).then((res) => {
+      if (cancelled) return;
       if (res.ok) {
         setRows(res.rows ?? []);
         setHasMore(res.hasMore ?? false);
-      } else setError(res.error ?? "불러오지 못했습니다");
-      setLoading(false);
+        setError(null);
+      } else {
+        setRows([]);
+        setHasMore(false);
+        setError(res.error ?? "불러오지 못했습니다");
+      }
+      setLoadedKey(key);
     });
-  }, []);
+    return () => {
+      cancelled = true;
+    };
+  }, [date, key]);
 
   const loadMore = async () => {
     const oldest = rows[rows.length - 1]?.reportDate;
@@ -86,13 +104,13 @@ export function HistoryBoard() {
           className="border-line bg-card focus:border-primary w-44 rounded-lg border px-2.5 py-1.5 text-[12.5px] outline-none"
         />
         <span className="text-text-faint ml-auto text-[12px]">
-          불러온 보고서 {rows.length}건{q ? ` · 검색 결과 ${filtered.length}건` : ""}
+          {date ? "이 날짜" : "불러온"} 보고서 {rows.length}건{q ? ` · 검색 결과 ${filtered.length}건` : ""}
         </span>
       </div>
 
       {byDate.size === 0 ? (
         <div className="bg-card border-line shadow-card text-text-faint flex items-center justify-center rounded-2xl border p-10 text-sm">
-          {q ? "검색 결과가 없습니다" : "작성한 보고서가 없습니다"}
+          {q ? "검색 결과가 없습니다" : date ? "이 날짜에 작성한 보고서가 없습니다" : "작성한 보고서가 없습니다"}
         </div>
       ) : (
         [...byDate.entries()].map(([date, list]) => (
@@ -150,7 +168,13 @@ export function HistoryBoard() {
         ))
       )}
 
-      {hasMore ? (
+      {/* 하루만 보는 모드에선 "이전 더 보기"가 의미 없다(커서가 날짜 단위). 대신 잘렸다는 사실만 알린다. */}
+      {hasMore && date ? (
+        <p className="text-text-faint text-center text-[11px]">
+          이 날짜 보고서가 많아 최근 {rows.length}건만 표시했습니다
+        </p>
+      ) : null}
+      {hasMore && !date ? (
         <button
           type="button"
           onClick={() => void loadMore()}

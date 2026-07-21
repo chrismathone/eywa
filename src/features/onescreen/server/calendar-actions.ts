@@ -1,0 +1,42 @@
+"use server";
+
+import { createClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/auth/current-user";
+import { monthRange, type SendStatRow } from "../send-calendar";
+
+/**
+ * 원스크린 "월간 발송" 달력 데이터 — 로그인 강사 **본인이 쓴** 보고서를 (날짜 × 발송상태)로 집계.
+ * 귀속 기준은 "지난 보고서"(history-actions)와 동일한 `teacher_name`이라 달력 숫자와 날짜 상세가 일치한다.
+ *
+ * B2: 한 달치 행을 받아 JS에서 세지 않는다 — 0127a group-by RPC가 (날짜×상태) 수십 행만 돌려준다.
+ * 집계는 DB, 버킷 판정은 앱 순수 함수(send-calendar.ts). RLS + RPC 내부 tenant 조건 이중격리.
+ */
+export async function getMySendCalendar(input: {
+  /** "YYYY-MM" */
+  month: string;
+}): Promise<{ ok: boolean; rows?: SendStatRow[]; error?: string }> {
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, error: "로그인이 필요합니다" };
+  const teacherName = user.displayName?.trim();
+  if (!teacherName) return { ok: false, error: "강사 이름이 없습니다" };
+  if (!/^\d{4}-\d{2}$/.test(input.month)) return { ok: false, error: "달 형식이 올바르지 않습니다" };
+
+  const { from, to } = monthRange(input.month);
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("onescreen_send_calendar", {
+    p_teacher_name: teacherName,
+    p_from: from,
+    p_to: to,
+  });
+  if (error) return { ok: false, error: "달력을 불러오지 못했습니다" };
+
+  return {
+    ok: true,
+    rows: (data ?? []).map((r: { report_day: string; status_key: string | null; cnt: number }) => ({
+      // date 컬럼은 PostgREST가 "YYYY-MM-DD"로 주지만, 시각이 붙어 오더라도 달력 키가 어긋나지 않게 자른다.
+      reportDay: String(r.report_day).slice(0, 10),
+      statusKey: r.status_key ?? "",
+      cnt: r.cnt,
+    })),
+  };
+}

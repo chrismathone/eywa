@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { classnoteBadge } from "@/features/onescreen/components/report-card";
 import { humanizeClassnoteError } from "@/features/report-admin/classnote-error";
+import { formatWorkerLogLines } from "@/features/report-admin/worker-log";
 import { sanitizeErrorText } from "@/lib/text/sanitize-error";
 import { useSubjectMaps } from "@/features/owner/operations-context";
 import { refreshClassnoteQueue, resetStuckClassnote, retryClassnote } from "@/features/report-admin/server/actions";
@@ -57,6 +58,40 @@ function BigStatInline({
       <p className={`num mt-1 text-[26px] font-bold leading-none ${valueClass ?? "text-foreground"}`}>
         {value}
       </p>
+    </div>
+  );
+}
+
+/**
+ * 발송 PC 최근 경고 — 원문 로그를 한글로 정리해 **화면에 보이게** 편다.
+ * ⚠️ 예전엔 title 툴팁 하나에 원문을 통째로 넣었는데, ANSI 제어문자·UTC 시각·영문 스택이 뒤섞여
+ * 읽을 수가 없었고 툴팁 자체가 안 뜨기도 했다(2026-07-21 원장 제보). 변환은 formatWorkerLogLines(순수).
+ */
+function WorkerIssues({ lines }: { lines: string[] }) {
+  const [open, setOpen] = useState(false);
+  const items = formatWorkerLogLines(lines);
+  if (items.length === 0) return null;
+  return (
+    <div className="flex flex-col items-end gap-0.5">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="text-danger text-[11px] font-bold underline-offset-2 hover:underline"
+      >
+        발송 PC 알림 {items.length}건 {open ? "접기" : "보기"}
+      </button>
+      {open ? (
+        <ul className="border-line bg-card max-w-[420px] space-y-1 rounded-md border p-2 text-left">
+          {items.map((it, i) => (
+            <li key={i} className="text-text-dim text-[11px] leading-snug break-keep">
+              {it.time ? <span className="text-text-faint num mr-1">{it.time}</span> : null}
+              {it.label ? <span className="text-foreground mr-1 font-bold">{it.label}</span> : null}
+              {it.summary}
+              {it.raw ? <span className="text-text-faint block break-all opacity-70">{it.raw}</span> : null}
+            </li>
+          ))}
+        </ul>
+      ) : null}
     </div>
   );
 }
@@ -308,14 +343,7 @@ export function ClassnoteQueueCard({ view: served }: { view: ClassnoteQueueView 
                     로그 {w.env.logDir}
                   </span>
                 ) : null}
-                {w.env.recent.length > 0 ? (
-                  <span
-                    className="text-danger max-w-[300px] truncate"
-                    title={w.env.recent.join("\n")}
-                  >
-                    최근 경고 {w.env.recent.length}건 — 마우스를 올려 확인
-                  </span>
-                ) : null}
+                {w.env.recent.length > 0 ? <WorkerIssues lines={w.env.recent} /> : null}
               </div>
             ))
           )}

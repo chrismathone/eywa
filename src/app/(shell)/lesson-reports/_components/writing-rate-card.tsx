@@ -3,6 +3,8 @@
 // 수업보고서 > 강사별 주간 작성률(Part B) — 이번 주(월~일) 작성 건수 + 오늘 작성률·미작성.
 // [전체/과목] 칩으로 강사 분류(반 담당 기준 태깅, 학원설정 승인 과목만 칩 노출 — 하드코딩 금지).
 // 예외 강사(report.writingExemptTeachers)는 서버 쿼리에서 이미 제외되어 여기 안 온다.
+import { SortableTh } from "@/components/table/sortable-th";
+import { sortRows, type SortState } from "@/lib/table/sort";
 import { useMemo, useState } from "react";
 import { useSubjectMaps } from "@/features/owner/operations-context";
 import type { WritingRatesView } from "@/features/report-admin/server/queries";
@@ -37,6 +39,12 @@ export function WritingRateCard({ view }: { view: WritingRatesView }) {
   }, [rates, subjects.options]);
   const showChips = chipOptions.length >= 2;
   const filtered = sel === "all" || !showChips ? rates : rates.filter((r) => r.subjects.includes(sel));
+  // 헤더 정렬 — 기본은 서버가 준 순서(대개 과목·이름). '오늘/주간'은 낮은 작성률부터 보는 게 쓸모 있어
+  // 값 자체로 정렬한다(수업 없음=null은 규약대로 항상 뒤).
+  const [sort, setSort] = useState<SortState<"teacher" | "today" | "week">>(null);
+  const sorted = sortRows(filtered, sort, (r, k) =>
+    k === "teacher" ? r.teacher : k === "today" ? r.todayRate : r.weekRate,
+  );
 
   return (
     <section className="bg-card shadow-card rounded-2xl px-5 py-5">
@@ -80,18 +88,24 @@ export function WritingRateCard({ view }: { view: WritingRatesView }) {
           <table className="w-full min-w-[760px] text-left text-[12px]">
             <thead>
               <tr className="border-line text-text-faint border-b">
-                <th className="px-3 py-2 font-bold">강사</th>
-                <th className="px-3 py-2 text-center font-bold">오늘</th>
+                <SortableTh sortKey="teacher" state={sort} onSort={setSort}>
+                  강사
+                </SortableTh>
+                <SortableTh sortKey="today" state={sort} onSort={setSort} align="center">
+                  오늘
+                </SortableTh>
                 {dates.map((d) => (
                   <th key={d} className="px-2 py-2 text-center font-bold" title={d}>
                     {weekdayOf(d)}
                   </th>
                 ))}
-                <th className="px-3 py-2 text-center font-bold">주간</th>
+                <SortableTh sortKey="week" state={sort} onSort={setSort} align="center">
+                  주간
+                </SortableTh>
               </tr>
             </thead>
             <tbody>
-              {filtered.map((r) => (
+              {sorted.map((r) => (
                 <tr key={r.teacher} className="border-line border-b last:border-b-0 align-top">
                   <td className="px-3 py-2">
                     <span className="text-foreground font-bold">{r.teacher}</span>

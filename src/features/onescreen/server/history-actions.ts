@@ -33,6 +33,8 @@ const PAGE_ROWS = 200; // 한 페이지 최대 행(강사 하루 수십 건 기�
 export async function getMyPastReports(input?: {
   /** 이 날짜(YYYY-MM-DD) **미만**만 — "더 보기" 커서. 없으면 최신부터. */
   before?: string;
+  /** 이 날짜(YYYY-MM-DD) **하루만** — 월간 달력에서 날짜를 눌렀을 때. `before`보다 우선. */
+  on?: string;
 }): Promise<{ ok: boolean; rows?: PastReportRow[]; hasMore?: boolean; error?: string }> {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
@@ -49,7 +51,9 @@ export async function getMyPastReports(input?: {
     .order("report_date", { ascending: false })
     .order("created_at", { ascending: false })
     .limit(PAGE_ROWS + 1); // +1 = hasMore 프로브
-  if (input?.before) q = q.lt("report_date", input.before);
+  // 하루만 보기(달력 날짜 클릭)가 커서보다 우선 — 둘을 함께 걸면 서로 모순되는 조건이 된다.
+  if (input?.on) q = q.eq("report_date", input.on);
+  else if (input?.before) q = q.lt("report_date", input.before);
   const { data, error } = await q;
   if (error) return { ok: false, error: "보고서를 불러오지 못했습니다" };
 
