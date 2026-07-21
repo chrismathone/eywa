@@ -79,6 +79,12 @@ export function OneScreenGrid({
   const selectedKeys = rows.filter((r) => checked.has(r.key)).map((r) => r.key);
   const selectedSendable = sendableRows.filter((r) => checked.has(r.key)).length; // 선택 중 실제 발송될 수
   const selectedSaveable = saveableRows.filter((r) => checked.has(r.key)).length; // 선택 중 실제 저장될 수
+  // 자동작성 실대상 = 발송가능 − **이미 멘트가 있는 행**(client autoWriteAllVisible이 손댄 문구를 보존하려 건너뜀).
+  // 이 수를 버튼에 그대로 노출한다 — 이전값 가져오기로 멘트를 깔면 대상이 즉시 줄어드는 게 눈에 보여야
+  // "채웠는데 자동작성이 덮어쓰나?" 하는 불안이 없다(원장 지시 07-21).
+  const noDraft = (r: (typeof rows)[number]) => !reports[r.student.id]?.[r.subject.name]?.draft?.trim();
+  const autoWritable = sendableRows.filter(noDraft).length;
+  const selectedAutoWritable = sendableRows.filter((r) => checked.has(r.key) && noDraft(r)).length;
   const hasPrev = rows.some((r) => r.subject.prevReport); // 참고행 데이터가 있을 때만 토글 노출
   const allChecked = rows.length > 0 && selectedKeys.length === rows.length;
   const toggleRow = (k: string) =>
@@ -141,6 +147,8 @@ export function OneScreenGrid({
           saveable: saveableRows.length,
           selectedSendable,
           selectedSaveable,
+          autoWritable,
+          selectedAutoWritable,
         }}
         selectedKeys={selectedKeys}
         prev={{ has: hasPrev, show: showPrev, onToggle: () => setShowPrev((v) => !v) }}
@@ -277,15 +285,19 @@ export function OneScreenGrid({
               ) : undefined;
               return (
                 <Fragment key={row.key}>
+                  {/* 학생 구분선 — 묶음의 **첫 렌더 행**만 굵은 회색 상단선. 참고행이 켜져 있고 그 학생에
+                      참고 데이터가 있으면 참고행이 첫 행이므로 그쪽이 받는다(선이 두 번 그어지지 않게 배타). */}
                   {showPrev && !orderMode ? (
                     <PrevRow
                       subject={row.subject}
                       dailyEnabled={config.dailyEnabled}
                       checkEnabled={config.checkEnabled}
                       onImport={() => rowActions.onImportPrev(row.student, row.subject.name)}
+                      groupStart={firstOfStudent}
                     />
                   ) : null}
                   <GridBodyRow
+                    groupStart={firstOfStudent && !(showPrev && !orderMode && !!row.subject.prevReport)}
                     row={row}
                     checked={checked.has(row.key)}
                     onToggle={toggleRow}

@@ -192,7 +192,7 @@ export function OneScreenClient({
   const [view, setView] = useState<OneScreenView>(initialView);
   // 공지 컴포저 진입 시 초기 선택 학생(카드=1명, 표=선택/표시). null=진입 안 함.
   const [noticeSeed, setNoticeSeed] = useState<string[] | null>(null);
-  // '이전값 일괄 채우기' 뒤 멘트 확인 대기 계획(null=다이얼로그 닫힘) — 확인해야만 학부모 문구를 채운다.
+  // '이전값 일괄 가져오기' 뒤 멘트 확인 대기 계획(null=다이얼로그 닫힘) — 확인해야만 학부모 문구를 채운다.
   const [prevCommentPlan, setPrevCommentPlan] = useState<PrevCommentPlan[] | null>(null);
   const [reports, setReports] = useState<ReportsState>(() => initReports(initial));
   const [genSubject, setGenSubject] = useState<string | null>(null); // AI 멘트 생성 중인 과목(카드 버튼 로딩)
@@ -724,14 +724,14 @@ export function OneScreenClient({
     });
     const count = Object.keys(fill).length;
     if (!count) {
-      toast.message("채울 빈 칸이 없습니다 — 이미 입력됐거나 이전 값이 없습니다");
+      toast.message("가져올 빈 칸이 없습니다 — 이미 입력됐거나 이전 회차 값이 없습니다");
       return;
     }
     if (fill.today !== undefined) setProgressFor(student.id, idx, fill.today);
     if (fill.attitude !== undefined) setAttitudeValue(student.id, fill.attitude);
     if (fill.homework !== undefined) setHomeworkValue(student.id, fill.homework);
     if (fill.homeworkToday !== undefined) setHomeworkTodayFor(student.id, subjectName, fill.homeworkToday);
-    toast.success(`이전 회차 값으로 빈 칸 ${count}개를 채웠습니다`);
+    toast.success(`이전 회차 값으로 빈 칸 ${count}개를 가져왔습니다`);
   }
   // 이전 회차 **일괄** 가져오기(G5 얕은판) — 표시(또는 선택) 전 행에 planPrevFill을 돌려 빈 칸만 채운다.
   // bulkApplyValues 대칭(대상 선정 규약 동일: keys 미선택=표시 전체, rowInClass 필터). 행별 importPrevFor와
@@ -779,7 +779,7 @@ export function OneScreenClient({
       })),
     );
     if (!plan.length && !commentPlan.length) {
-      toast.message("채울 빈 칸이 없습니다 — 이미 입력됐거나 이전 값이 없습니다");
+      toast.message("가져올 빈 칸이 없습니다 — 이미 입력됐거나 이전 회차 값이 없습니다");
       return;
     }
     let filledCells = 0;
@@ -791,17 +791,17 @@ export function OneScreenClient({
       filledCells += Object.keys(p.set).length;
     }
     if (plan.length) {
-      toast.success(`${plan.length}행의 빈 칸 ${filledCells}개를 이전 회차 값으로 채웠습니다 (특이사항 제외)`);
+      toast.success(`${plan.length}행의 빈 칸 ${filledCells}개를 이전 회차 값으로 가져왔습니다 (특이사항 제외)`);
     }
     if (commentPlan.length) setPrevCommentPlan(commentPlan); // → 확인 다이얼로그
   }
-  /** 확인 다이얼로그 '멘트도 채우기' — 계획대로 초안만 채운다(다른 칸은 위에서 이미 처리됨). */
+  /** 확인 다이얼로그 '멘트도 가져오기' — 계획대로 초안만 채운다(다른 칸은 위에서 이미 처리됨). */
   function applyPrevComments() {
     const plan = prevCommentPlan ?? [];
     setPrevCommentPlan(null);
     if (!plan.length) return;
     for (const p of plan) setDraftFor(p.studentId, p.subjectName, p.comment);
-    toast.success(`${plan.length}행의 멘트를 직전 회차 문구로 채웠습니다 — 발송 전에 오늘 내용과 맞는지 확인하세요`);
+    toast.success(`${plan.length}행의 멘트를 직전 회차 문구로 가져왔습니다 — 발송 전에 오늘 내용과 맞는지 확인하세요`);
   }
   // 학생 순서 저장(3-2) — (강사×반) 영구 저장 + 성공 시 클라 state에도 즉시 반영(다음 로드는 roster가 적용).
   async function saveOrderForClass(classId: string, studentIds: string[]): Promise<boolean> {
@@ -1497,13 +1497,13 @@ export function OneScreenClient({
       </div>
       )}
 
-      {/* '이전값 일괄 채우기' 뒤 멘트 확인 — 나머지 칸은 이미 채워졌고, 여기 확인해야 학부모 문구까지 채운다.
+      {/* '이전값 일괄 가져오기' 뒤 멘트 확인 — 나머지 칸은 이미 채워졌고, 여기 확인해야 학부모 문구까지 채운다.
           닫힘(취소)은 계획을 버리기만 한다(다른 칸 되돌리지 않음 — 그 칸들은 오늘 값 입력이라 문제 없음). */}
       <ConfirmDialog
         open={!!prevCommentPlan}
-        title="멘트도 일괄 채우시겠습니까?"
+        title="멘트도 일괄 가져오시겠습니까?"
         message={`학부모 문구가 비어 있는 ${prevCommentPlan?.length ?? 0}개 행에 직전 회차에 보낸 멘트를 그대로 채웁니다. 오늘 진도·점수와 다를 수 있으니 발송 전에 확인·수정하세요.`}
-        confirmLabel="멘트도 채우기"
+        confirmLabel="멘트도 가져오기"
         cancelLabel="아니요"
         onConfirm={applyPrevComments}
         onCancel={() => setPrevCommentPlan(null)}
