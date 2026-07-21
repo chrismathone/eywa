@@ -71,17 +71,28 @@ function outcome(v) {
       (r) => `${L.normalizeName(r.prospect_name)}|${r.prospect_grade || ""}`,
     ]);
     const toLink = [], toInsert = [];
-    let alreadyLinked = 0, skippedOld = 0;
+    let alreadyLinked = 0, skippedOld = 0, dupInBatch = 0;
+    // ⚠️ 배치 내 자기중복 방어(2026-07-21) — `match`는 실행 **시작 시점** 스냅샷(existing)으로만 만들어져,
+    // 이번 실행에서 방금 큐에 넣은 행은 매칭 대상이 아니다. makeedu 원본에 같은 사람이 여러 번 등록돼 있으면
+    // (실측: 김연우 makeedu_id 5159~5162 4연속·내용 동일) makeedu_id가 달라 전부 신규 삽입돼 **그대로 증폭**됐다.
+    // 같은 사람(이름·학교·학년)·같은 상담일이면 이번 배치에선 1건만 넣는다.
+    // ⚠️ 상담일이 다르면 별개 상담으로 두고 합치지 않는다 — 반복 접수의 자동병합은 비채택 결정(QR 접수와 동일 규약).
+    const batchKey = (r) =>
+      `${L.normalizeName(r.prospect_name)}|${r.prospect_school || ""}|${r.prospect_grade || ""}|${(r.consulted_at || "").slice(0, 10)}`;
+    const seenInBatch = new Set();
     for (const r of rows) {
       if (byMakeedu.has(r.makeedu_id)) { alreadyLinked++; continue; }
       const id = match(r);
       if (id) { toLink.push({ id, makeedu_id: r.makeedu_id }); continue; }
       // 신규 삽입 후보만 나이 게이트 적용 — 오래된 예비상담은 스킵(백필은 위에서 이미 처리돼 무관).
       if (!isRecentEnough(r.consulted_at)) { skippedOld++; continue; }
+      const bk = batchKey(r);
+      if (seenInBatch.has(bk)) { dupInBatch++; continue; } // 원본 중복 → eywa엔 1건만
+      seenInBatch.add(bk);
       toInsert.push(r);
     }
     console.log(`\n[additive] ijw 기존 예비상담 ${existing.length} | makeedu ${rows.length}`);
-    console.log(`  이미 연결됨: ${alreadyLinked} | ijw 매칭→백필: ${toLink.length} | 신규 추가: ${toInsert.length} | 오래돼 스킵(≥${MAX_AGE_DAYS}일): ${skippedOld}`);
+    console.log(`  이미 연결됨: ${alreadyLinked} | ijw 매칭→백필: ${toLink.length} | 신규 추가: ${toInsert.length} | 오래돼 스킵(≥${MAX_AGE_DAYS}일): ${skippedOld} | 원본 중복 스킵: ${dupInBatch}`);
 
     if (!APPLY) {
       console.log("\n[DRY-RUN] --apply 없이 종료 (DB write 0).");
