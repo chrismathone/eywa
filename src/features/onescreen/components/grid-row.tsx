@@ -14,7 +14,12 @@ import { PillGroup } from "./pill-group";
 import { ProgressSelector } from "./progress-selector";
 import { ScoreInput } from "./score-input";
 
-const TD = "border-line border-t px-2 py-1.5 align-top";
+const TD_BASE = "px-2 py-1.5 align-top";
+// 학생 묶음 구분선 — 묶음 첫 행(참고행이 꺼져 있을 때는 이 행)의 위쪽만 굵고 진한 회색.
+// ⚠️ `border-t`(1px)와 `border-t-2`를 한 className에 같이 두지 말 것 — 둘 다 border-top-width라
+//    어느 쪽이 이기는지 생성 CSS 순서에 달린다. 아예 다른 상수로 갈라 충돌 자체를 없앤다.
+const TD = `border-line border-t ${TD_BASE}`;
+const TD_GROUP = `border-t-2 border-t-text-faint/50 ${TD_BASE}`;
 // 문구·특이사항 textarea — 내용에 따라 자동 확장(field-sizing, 미지원 브라우저는 min-h 고정 + resize-y 수동).
 const AUTOSIZE = "field-sizing-content max-h-[200px] resize-y"; // Tailwind v4 내장 유틸리티
 
@@ -106,6 +111,7 @@ export function GridBodyRow({
   gen,
   nav,
   orderControls,
+  groupStart = false,
 }: {
   row: GridRow;
   checked: boolean;
@@ -120,8 +126,10 @@ export function GridBodyRow({
   // row=과목 단위 열(교재·오늘과제), studentRow=학생 단위 열(점수 — 학생 묶음 첫 행만, 중복 칸 스킵).
   nav: { row: number; studentRow?: number };
   orderControls?: React.ReactNode; // 순서 모드(3-2) — 선택 체크박스 자리에 ↑↓(학생 묶음 첫 행만)
+  groupStart?: boolean; // 학생 묶음의 첫 렌더 행 — 위쪽에 굵은 구분선(참고행이 켜져 있으면 그쪽이 받는다)
 }) {
   const { student, subject, subjectIndex, key } = row;
+  const td = groupStart ? TD_GROUP : TD; // 학생 구분선(묶음 첫 행만 굵게)
   const { tone } = subjectTone(subject.name);
   const badge = classnoteBadge(rep?.classnoteStatus);
   // 로스터 신호(G2·G3) — 판정은 순수 함수(roster-signals.ts). 진도 배지는 수학 파이프라인 데이터라 math 행에만
@@ -138,7 +146,7 @@ export function GridBodyRow({
   // 결석 행은 배경 톤으로 표시(입력은 여전히 가능=기록 보존). opacity로 전체를 흐리면 활성 입력칸이 disabled로 오인된다(#20).
   return (
     <tr className={isAbsent ? "bg-danger-soft/25 hover:bg-danger-soft/40" : "hover:bg-bg-soft/50"}>
-      <td className={`${TD} text-center`}>
+      <td className={`${td} text-center`}>
         {orderControls !== undefined ? (
           orderControls
         ) : (
@@ -151,7 +159,7 @@ export function GridBodyRow({
           />
         )}
       </td>
-      <td className={TD}>
+      <td className={td}>
         <div className="flex items-center gap-1.5">
           <span className={`size-1.5 shrink-0 rounded-full ${toneSolidClass(tone)}`} aria-hidden />
           <span className="text-foreground font-bold">{student.name}</span>
@@ -207,7 +215,7 @@ export function GridBodyRow({
           ) : null}
         </div>
       </td>
-      <td className={TD}>
+      <td className={td}>
         <GridProgressCell
           student={student}
           subjectIndex={subjectIndex}
@@ -216,7 +224,7 @@ export function GridBodyRow({
         />
       </td>
       {config.dailyEnabled ? (
-        <td className={`${TD} text-center`}>
+        <td className={`${td} text-center`}>
           <ScoreInput
             value={student.tests.daily.score}
             max={student.tests.daily.max}
@@ -229,7 +237,7 @@ export function GridBodyRow({
         </td>
       ) : null}
       {config.checkEnabled ? (
-        <td className={`${TD} text-center`}>
+        <td className={`${td} text-center`}>
           <ScoreInput
             value={student.tests.check.score}
             max={student.tests.check.max}
@@ -241,7 +249,7 @@ export function GridBodyRow({
           />
         </td>
       ) : null}
-      <td className={TD}>
+      <td className={td}>
         {/* 1클릭 pill(edutrix 라디오 패리티) — 재클릭 해제. 드롭다운(2클릭) 폐기(1-1). */}
         <PillGroup
           size="sm"
@@ -251,7 +259,7 @@ export function GridBodyRow({
           ariaLabel={`${student.name} 태도`}
         />
       </td>
-      <td className={TD}>
+      <td className={td}>
         <PillGroup
           size="sm"
           options={config.homeworks}
@@ -260,7 +268,7 @@ export function GridBodyRow({
           ariaLabel={`${student.name} 과제`}
         />
       </td>
-      <td className={TD}>
+      <td className={td}>
         <div className="flex flex-col gap-1">
           <input
             type="text"
@@ -297,7 +305,7 @@ export function GridBodyRow({
           </label>
         </div>
       </td>
-      <td className={TD}>
+      <td className={td}>
         {/* 특이사항(입력) + 학부모 문구(멘트) + 학습 추세 — 자동작성이 특이사항을 문장으로 풀어 씀. 우측 남는 폭 활용. */}
         <div className="flex flex-col gap-1">
           <textarea
@@ -323,7 +331,7 @@ export function GridBodyRow({
           />
         </div>
       </td>
-      <td className={TD}>
+      <td className={td}>
         <div className="flex flex-col items-stretch gap-1">
           <div className="flex gap-1">
             <button

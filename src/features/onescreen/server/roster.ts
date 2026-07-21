@@ -462,7 +462,14 @@ export async function getTeacherRoster(rawDate?: string): Promise<TeacherRoster>
     // ①오늘 입력값(세션)은 아래 sess 블록이 최종으로 덮으므로 항상 우선. su.textbook 초기값은 ""(과목 push).
     const reqBook = bookByStudent.get(os.id);
     for (const su of os.subjects) {
-      const pbs = priorBySubject.get(subjKey(os.id, su.subjectKey ?? null));
+      // ⚠️ 과목 정확매칭 우선, 없으면 **과목 미기재(subject NULL) 직전 회차**로 폴백 — 단 학생이 단일 과목일 때만.
+      // ijw에서 이식된 lesson_reports는 대부분 subject가 비어 있어(2026-07-21 실측 17,345건 중 17,337건 NULL)
+      // 정확매칭만으론 참고행이 통째로 안 잡혔다 → 교재 자동승계도, '이전값 (일괄) 채우기'도 항상 0건이었다.
+      // 다과목 학생은 그 행이 어느 과목인지 알 수 없어 폴백하지 않는다(엉뚱한 과목 값 주입 금지 — 위
+      // 학생단위 prev 폴백이 첫 과목에만 붙는 것과 같은 보수 규약).
+      const pbs =
+        priorBySubject.get(subjKey(os.id, su.subjectKey ?? null)) ??
+        (os.subjects.length === 1 ? priorBySubject.get(subjKey(os.id, null)) : undefined);
       if (pbs) {
         const prog =
           pbs.progress && su.name && pbs.progress.startsWith(su.name)

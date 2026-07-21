@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { addDays } from "@/lib/date-kst";
+import type { OneScreenView } from "../view";
 import type { TodayClass } from "../server/roster";
 
 /**
@@ -35,8 +36,8 @@ export function OneScreenTopBar({
   onFilter: (tag: string) => void;
   doneCount: number;
   total: number;
-  view: "card" | "grid" | "status" | "history" | "notice";
-  onView: (v: "card" | "grid" | "status" | "history" | "notice") => void;
+  view: OneScreenView;
+  onView: (v: OneScreenView) => void;
   stats: { students: number; progressDone: number; testDone: number; reportDone: number };
   todayClasses: TodayClass[];
   noticeMode: "A" | "B" | null; // 강사 본인 멘트 모드(null=학원 기본)
@@ -168,8 +169,12 @@ export function OneScreenTopBar({
           </span>
         </div>
         {makeupAdder}
-        {/* AI 멘트 모드(내 계정) — 학원 기본 / 단일 A / 2문단 B. 강사별 저장(users.report_notice_mode). */}
-        <div className="border-line flex items-center rounded-full border p-0.5" title="AI 자동작성 멘트 문단 구성(내 계정)">
+        {/* AI 멘트 모드(내 계정) — 학원 기본 / 단일 A / 2문단 B. 강사별 저장(users.report_notice_mode).
+            바꾸면 아래 보고서 입력이 1칸(A) ↔ 2칸(B, 수업 내용 / 태도·특이사항)으로 함께 바뀐다. */}
+        <div
+          className="border-line flex items-center rounded-full border p-0.5"
+          title="학부모 멘트 문단 구성(내 계정) — A는 한 문단, B는 '수업 내용'과 '태도·특이사항' 2문단. 아래 보고서 입력칸과 자동 작성 결과가 함께 바뀝니다."
+        >
           {noticeOptions.map((o) => {
             const on = noticeMode === o.value;
             return (

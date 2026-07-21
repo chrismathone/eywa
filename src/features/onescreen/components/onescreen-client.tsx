@@ -4,9 +4,11 @@ import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "reac
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { EyIcon } from "@/components/icons/eywa-icons";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { kstToday } from "@/lib/date-kst";
 import { usePrintWindow } from "@/components/workspace/print-window";
 import { ATTITUDE, CLASS_TAGS, HOMEWORK, TODAY } from "../data";
+import type { OneScreenView } from "../view";
 import { buildSubjectReport, studentStatus } from "../report";
 import { buildReportCommentInput } from "../report-comment";
 import {
@@ -45,9 +47,12 @@ import {
   isRowActionable,
   planBulkApply,
   planPrevFill,
+  planBulkPrevFill,
+  planPrevComments,
   rowInClass,
   summarizeSendGaps,
   type BulkPatch,
+  type PrevCommentPlan,
   type RowAction,
 } from "../grid";
 import {
@@ -138,6 +143,7 @@ export function OneScreenClient({
   sendWindowLabel = null,
   showAttachments = true,
   presenceScope,
+  initialView = "card",
 }: {
   initial: OneScreenStudent[];
   today?: string;
@@ -153,6 +159,7 @@ export function OneScreenClient({
   sendWindowLabel?: string | null; // 발송 허용 시간창 "HH:MM~HH:MM"(무제한=null) — 상단 강사 참고 안내
   showAttachments?: boolean; // 사진/파일 첨부 표시(학원 설정) — off면 첨부해도 안 실린다는 경고를 카드에 표시
   presenceScope?: string; // `onescreen:{teacherId}:{date}` — 다른 창/기기 동시 열림 경고(서버가 teacherId 파생)
+  initialView?: OneScreenView; // URL(?view=)에서 온 초기 뷰 — 날짜 이동(재마운트) 후에도 보던 뷰 유지
 }) {
   const router = useRouter();
   const [students, setStudents] = useState<OneScreenStudent[]>(initial);
@@ -176,11 +183,21 @@ export function OneScreenClient({
   const goToDate = (ymd: string) => {
     if (!ymd || ymd > todayYmd || ymd === activeDate) return; // 미래·같은 날짜 무시
     flushSavesRef.current(); // 대기 중(디바운스 800ms) 자동저장을 이동 전 커밋 — 이동=클라 재마운트라 미커밋분 유실 방어
-    router.push(ymd === todayYmd ? "/onescreen" : `/onescreen?date=${ymd}`);
+    // ⚠️ 현재 뷰를 쿼리로 들고 이동 — 날짜 이동은 searchParam 네비라 page의 `key={roster.date}`가 클라를 재마운트하고,
+    // view가 순수 useState면 표·발송현황에서 날짜만 넘겨도 카드로 튕겼다(원장 지적 07-21). 기본값(card)은 URL에 안 남긴다.
+    const params = new URLSearchParams();
+    if (ymd !== todayYmd) params.set("date", ymd);
+    if (view !== "card") params.set("view", view);
+    const qs = params.toString();
+    router.push(qs ? `/onescreen?${qs}` : "/onescreen");
   };
-  const [view, setView] = useState<"card" | "grid" | "status" | "history" | "notice">("card"); // 카드 ↔ 표 ↔ 발송 현황 ↔ 지난 보고서 ↔ 공지
+  // 카드 ↔ 표 ↔ 발송 현황 ↔ 지난 보고서 ↔ 공지. 초기값은 URL(?view=) — 날짜 이동 후에도 보던 뷰 유지.
+  // 토글 자체는 클라 state만 바꾼다(네비 없음) — 뷰 전환마다 서버 왕복하면 체감이 느려진다.
+  const [view, setView] = useState<OneScreenView>(initialView);
   // 공지 컴포저 진입 시 초기 선택 학생(카드=1명, 표=선택/표시). null=진입 안 함.
   const [noticeSeed, setNoticeSeed] = useState<string[] | null>(null);
+  // '이전값 일괄 가져오기' 뒤 멘트 확인 대기 계획(null=다이얼로그 닫힘) — 확인해야만 학부모 문구를 채운다.
+  const [prevCommentPlan, setPrevCommentPlan] = useState<PrevCommentPlan[] | null>(null);
   const [reports, setReports] = useState<ReportsState>(() => initReports(initial));
   const [genSubject, setGenSubject] = useState<string | null>(null); // AI 멘트 생성 중인 과목(카드 버튼 로딩)
   const [genKey, setGenKey] = useState<string | null>(null); // 표 행별 자동작성 로딩 키(studentId::과목)
@@ -727,54 +744,84 @@ export function OneScreenClient({
     });
     const count = Object.keys(fill).length;
     if (!count) {
-      toast.message("채울 빈 칸이 없습니다 — 이미 입력됐거나 이전 값이 없습니다");
+      toast.message("가져올 빈 칸이 없습니다 — 이미 입력됐거나 이전 회차 값이 없습니다");
       return;
     }
     if (fill.today !== undefined) setProgressFor(student.id, idx, fill.today);
     if (fill.attitude !== undefined) setAttitudeValue(student.id, fill.attitude);
     if (fill.homework !== undefined) setHomeworkValue(student.id, fill.homework);
     if (fill.homeworkToday !== undefined) setHomeworkTodayFor(student.id, subjectName, fill.homeworkToday);
-    toast.success(`이전 회차 값으로 빈 칸 ${count}개를 채웠습니다`);
+    toast.success(`이전 회차 값으로 빈 칸 ${count}개를 가져왔습니다`);
   }
   // 이전 회차 **일괄** 가져오기(G5 얕은판) — 표시(또는 선택) 전 행에 planPrevFill을 돌려 빈 칸만 채운다.
   // bulkApplyValues 대칭(대상 선정 규약 동일: keys 미선택=표시 전체, rowInClass 필터). 행별 importPrevFor와
   // 같은 순수 계획 함수를 쓰므로 특이사항·교재 제외(발송 본문 오염 방지·roster 자동 승계) 결정이 자동 준수된다.
   // "평소와 같음" 기본값의 얕은 구현 — 강사는 일괄로 깔고 달라진 학생만 손댄다(깊은판 provenance는 G4에서).
+  // ⚠️ 멘트(학부모 문구)만 예외로 **확인 다이얼로그**를 거친다 — 나머지 칸은 강사가 오늘 값을 고르는 입력이지만
+  // 멘트는 직전에 이미 학부모에게 나간 문장이라, 오늘 진도·점수와 어긋난 채 그대로 발송될 위험이 있다(원장 지시 07-21).
   function bulkImportPrev(keys?: string[]) {
     const all = buildGridRows(visible).filter((r) => rowInClass(r.subject, activeClassFilter));
     const keySet = new Set(keys ?? []);
     const rows = keySet.size ? all.filter((r) => keySet.has(r.key)) : all;
-    let filledRows = 0;
-    let filledCells = 0;
-    for (const r of rows) {
-      const idx = r.student.subjects.findIndex((su) => su.name === r.subject.name);
-      const su = r.student.subjects[idx];
-      if (!su) continue;
-      const fill = planPrevFill({
-        prev: su.prevReport,
-        current: {
-          today: su.today,
-          attitude: r.student.attitude,
-          homework: r.student.homework,
-          homeworkToday: su.homeworkToday ?? "",
-        },
-        attitudes: ATTITUDE,
-        homeworks: HOMEWORK,
-      });
-      const count = Object.keys(fill).length;
-      if (!count) continue;
-      if (fill.today !== undefined) setProgressFor(r.student.id, idx, fill.today);
-      if (fill.attitude !== undefined) setAttitudeValue(r.student.id, fill.attitude);
-      if (fill.homework !== undefined) setHomeworkValue(r.student.id, fill.homework);
-      if (fill.homeworkToday !== undefined) setHomeworkTodayFor(r.student.id, r.subject.name, fill.homeworkToday);
-      filledRows++;
-      filledCells += count;
-    }
-    if (!filledRows) {
-      toast.message("채울 빈 칸이 없습니다 — 이미 입력됐거나 이전 값이 없습니다");
+    // 계획은 순수 함수(planBulkPrevFill)가 세운다 — 태도·과제는 **학생 단위** 값이라 다과목 학생에서
+    // 과목 행마다 덮어쓰지 않도록 학생당 1회로 dedup(자세한 배경은 grid.ts 주석).
+    const plan = planBulkPrevFill(
+      rows.flatMap((r) => {
+        const subjectIndex = r.student.subjects.findIndex((su) => su.name === r.subject.name);
+        const su = r.student.subjects[subjectIndex];
+        if (!su) return [];
+        return [
+          {
+            studentId: r.student.id,
+            subjectName: r.subject.name,
+            subjectIndex,
+            prev: su.prevReport,
+            current: {
+              today: su.today,
+              attitude: r.student.attitude,
+              homework: r.student.homework,
+              homeworkToday: su.homeworkToday ?? "",
+            },
+          },
+        ];
+      }),
+      ATTITUDE,
+      HOMEWORK,
+    );
+    // 멘트는 별도 계획 — 초안이 빈 행 중 직전 멘트가 있는 것만. 적용은 아래 확인 다이얼로그 뒤에.
+    const commentPlan = planPrevComments(
+      rows.map((r) => ({
+        studentId: r.student.id,
+        subjectName: r.subject.name,
+        prevNote: r.student.subjects.find((su) => su.name === r.subject.name)?.prevReport?.note,
+        // ⚠️ 초안은 ref에서 — 진행 중이던 자동작성이 방금 채운 멘트를 클릭 시점 스냅샷이 못 봐 덮어쓰는 것 방지(#10).
+        currentDraft: reportsRef.current[r.student.id]?.[r.subject.name]?.draft ?? "",
+      })),
+    );
+    if (!plan.length && !commentPlan.length) {
+      toast.message("가져올 빈 칸이 없습니다 — 이미 입력됐거나 이전 회차 값이 없습니다");
       return;
     }
-    toast.success(`${filledRows}행의 빈 칸 ${filledCells}개를 이전 회차 값으로 채웠습니다 (특이사항 제외)`);
+    let filledCells = 0;
+    for (const p of plan) {
+      if (p.set.today !== undefined) setProgressFor(p.studentId, p.subjectIndex, p.set.today);
+      if (p.set.attitude !== undefined) setAttitudeValue(p.studentId, p.set.attitude);
+      if (p.set.homework !== undefined) setHomeworkValue(p.studentId, p.set.homework);
+      if (p.set.homeworkToday !== undefined) setHomeworkTodayFor(p.studentId, p.subjectName, p.set.homeworkToday);
+      filledCells += Object.keys(p.set).length;
+    }
+    if (plan.length) {
+      toast.success(`${plan.length}행의 빈 칸 ${filledCells}개를 이전 회차 값으로 가져왔습니다 (특이사항 제외)`);
+    }
+    if (commentPlan.length) setPrevCommentPlan(commentPlan); // → 확인 다이얼로그
+  }
+  /** 확인 다이얼로그 '멘트도 가져오기' — 계획대로 초안만 채운다(다른 칸은 위에서 이미 처리됨). */
+  function applyPrevComments() {
+    const plan = prevCommentPlan ?? [];
+    setPrevCommentPlan(null);
+    if (!plan.length) return;
+    for (const p of plan) setDraftFor(p.studentId, p.subjectName, p.comment);
+    toast.success(`${plan.length}행의 멘트를 직전 회차 문구로 가져왔습니다 — 발송 전에 오늘 내용과 맞는지 확인하세요`);
   }
   // 학생 순서 저장(3-2) — (강사×반) 영구 저장 + 성공 시 클라 state에도 즉시 반영(다음 로드는 roster가 적용).
   async function saveOrderForClass(classId: string, studentIds: string[]): Promise<boolean> {
@@ -834,7 +881,9 @@ export function OneScreenClient({
         dailyTest,
         checkTest,
         attitude: student.attitude ?? "",
-        notes: draft,
+        // 모드 B에서 1문단만 비우면 초안이 "\n\n2문단"으로 유지된다(편집 중 글자가 위 칸으로 튀는 것 방지,
+        // comment-paragraphs.ts 불변식). 학부모에게 나가는 값은 여기서 다듬는다 — 앞 빈 줄 금지.
+        notes: draft.trim(),
         trendNote, // 학습 추세(종합분석) — 4a
         subject: su?.subjectKey || su?.name || undefined, // (student,date,subject) 과목별 1행 dedup 키
         outOfClass: student.isMakeup ?? false, // 보강(수업외) 학생 = 담당반 검사 우회(같은 학원이면 허용)
@@ -1380,7 +1429,10 @@ export function OneScreenClient({
           onSent={() => setNoticeSeed(null)}
         />
       ) : (
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[260px_minmax(0,1fr)_minmax(0,380px)] lg:items-start">
+      /* 3열 폭 배분 — 콘텐츠 양에 비례하게. 예전 `1fr` + `380px 상한`은 정반대라, 짧은 진도·테스트 카드가
+         남는 폭을 다 먹고(넓은 화면에서 1000px+ 공백) 제일 긴 보고서가 380px에 갇혀 세로로만 늘어났다(원장 지적 07-21).
+         이제 보고서 열이 더 넓고, 카드 폭 ≥672px이면 보고서 내부가 2열로 펼쳐진다(@container). */
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[240px_minmax(0,1fr)_minmax(0,1.4fr)] lg:items-start 2xl:grid-cols-[260px_minmax(0,1fr)_minmax(0,2fr)]">
         <StudentList
           students={visible}
           selId={effectiveId}
@@ -1453,6 +1505,8 @@ export function OneScreenClient({
                   pendingKeys: attPending,
                   onSet: (classId, s) => setAttendanceFor(selected.id, classId, s),
                 }}
+                // 실효 모드 = 강사 오버라이드 ?? 학원 기본 — 상단 토글이 하단 보고서 입력 구성을 실제로 바꾼다.
+                noticeMode={noticeMode ?? academyNoticeMode}
               />
             </div>
           </>
@@ -1463,6 +1517,18 @@ export function OneScreenClient({
         )}
       </div>
       )}
+
+      {/* '이전값 일괄 가져오기' 뒤 멘트 확인 — 나머지 칸은 이미 채워졌고, 여기 확인해야 학부모 문구까지 채운다.
+          닫힘(취소)은 계획을 버리기만 한다(다른 칸 되돌리지 않음 — 그 칸들은 오늘 값 입력이라 문제 없음). */}
+      <ConfirmDialog
+        open={!!prevCommentPlan}
+        title="멘트도 일괄 가져오시겠습니까?"
+        message={`학부모 문구가 비어 있는 ${prevCommentPlan?.length ?? 0}개 행에 직전 회차에 보낸 멘트를 그대로 채웁니다. 오늘 진도·점수와 다를 수 있으니 발송 전에 확인·수정하세요.`}
+        confirmLabel="멘트도 가져오기"
+        cancelLabel="아니요"
+        onConfirm={applyPrevComments}
+        onCancel={() => setPrevCommentPlan(null)}
+      />
     </div>
   );
 }

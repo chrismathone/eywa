@@ -17,6 +17,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import postgres from "postgres";
 import { closeClassnoteAdminSession, launchBrowser, processQueueOnce, resolveTenant } from "./classnote-core.mjs";
 import { processNoticesOnce } from "./classnote-notice-core.mjs";
@@ -26,16 +27,35 @@ import { pollReportReadsOnce } from "./classnote-read-core.mjs";
 
 const POLL_MS = 15_000;
 const POST = process.argv.includes("--post");
-const LOG_DIR = process.env.CLASSNOTE_OUT || "D:/tmp/classnote";
-const LOG = path.join(LOG_DIR, "watch.log");
+// 로그 폴더 — CLASSNOTE_OUT 우선, 없으면 D:/tmp/classnote, **그것도 못 만들면 스크립트 옆 폴더**.
+// ⚠️ 폴백이 필요한 이유(2026-07-21): 기본값이 D: 드라이브 고정이라 D:가 없는 PC에선 mkdir이 실패하고
+// 아래 catch가 그걸 삼켜 **로그 파일이 한 줄도 안 남았다**. 원인 추적을 사람이 로그로 해야 할 때 막다른 길.
+function resolveLogDir() {
+  const candidates = [
+    process.env.CLASSNOTE_OUT,
+    "D:/tmp/classnote",
+    path.join(path.dirname(fileURLToPath(import.meta.url)), "_logs"),
+  ].filter(Boolean);
+  for (const dir of candidates) {
+    try {
+      fs.mkdirSync(dir, { recursive: true });
+      return dir;
+    } catch {
+      /* 다음 후보로 */
+    }
+  }
+  return null; // 전부 실패 = 콘솔 출력만
+}
+const LOG_DIR = resolveLogDir();
+const LOG = LOG_DIR ? path.join(LOG_DIR, "watch.log") : null;
 const HOSTNAME = os.hostname();
 const STARTED_AT = new Date().toISOString(); // 이 데몬 프로세스 시작 시각(재시작 감지)
 
 function log(msg) {
   const line = `[${new Date().toISOString()}] ${msg}`;
   console.log(line);
+  if (!LOG) return;
   try {
-    fs.mkdirSync(LOG_DIR, { recursive: true });
     fs.appendFileSync(LOG, line + "\n");
   } catch {
     /* 로그 실패가 데몬을 죽이면 안 됨 */

@@ -4,7 +4,11 @@ import { EyIcon } from "@/components/icons/eywa-icons";
 import { displayLessons } from "../curriculum";
 import type { Subject } from "../types";
 
-const PREV_TD = "border-line/60 px-2 py-1 align-top text-[11px] text-text-faint";
+const PREV_TD_BASE = "px-2 py-1 align-top text-[11px] text-text-faint";
+const PREV_TD = `border-line/60 ${PREV_TD_BASE}`;
+// 학생 묶음 구분선 — 참고행이 묶음의 첫 행이라 여기 위쪽에 굵고 진한 회색 선을 둔다(grid-row TD_GROUP과 동일 톤).
+// ⚠️ 폭 유틸(border-t / border-t-2)을 한 className에 섞지 말 것 — 어느 쪽이 이길지 CSS 순서에 달린다.
+const PREV_TD_GROUP = `border-t-2 border-t-text-faint/50 ${PREV_TD_BASE}`;
 
 /** "2026-07-10" → "07/10". 이전 회차 참고행 날짜. */
 function shortDate(ymd: string): string {
@@ -18,44 +22,49 @@ export function PrevRow({
   dailyEnabled,
   checkEnabled,
   onImport,
+  groupStart = false,
 }: {
   subject: Subject;
   dailyEnabled: boolean;
   checkEnabled: boolean;
   onImport?: () => void; // 이전 회차 값 → 오늘 행 빈 칸 채움(1-3). 특이사항은 제외(발송 본문 오염 방지).
+  groupStart?: boolean; // 학생 묶음의 첫 렌더 행 — 위쪽에 굵은 구분선
 }) {
   const p = subject.prevReport;
   if (!p) return null;
   const prog = displayLessons(p.progress) || p.progress || "—";
   const testCols = (dailyEnabled ? 1 : 0) + (checkEnabled ? 1 : 0);
+  const td = groupStart ? PREV_TD_GROUP : PREV_TD; // 학생 구분선(묶음 첫 행만 굵게)
   return (
     <tr className="bg-bg-soft/40">
-      <td className={`${PREV_TD} text-center`} aria-hidden>
-        <EyIcon name="chevronUp" size={13} className="text-text-faint/70" />
+      {/* ⚠️ 화살표는 **아래**를 가리킨다 — 이 참고행은 바로 **아래** 학생의 지난 회차다. 위를 가리키면
+          윗 학생에 딸린 줄로 읽혀 아주 헷갈린다(원장 지적 07-21). */}
+      <td className={`${td} text-center`} aria-hidden>
+        <EyIcon name="chevronDown" size={13} className="text-text-faint/70" />
       </td>
-      <td className={PREV_TD}>
+      <td className={td}>
         <span className="whitespace-nowrap">이전 {shortDate(p.date)}</span>
       </td>
-      <td className={PREV_TD}>
+      <td className={td}>
         <span className="line-clamp-3 whitespace-pre-line">{prog}</span>
       </td>
       {testCols > 0 ? (
-        <td className={`${PREV_TD} text-center`} colSpan={testCols}>
+        <td className={`${td} text-center`} colSpan={testCols}>
           {p.examInfo || "—"}
         </td>
       ) : null}
-      <td className={PREV_TD}>{p.attitude || "—"}</td>
-      <td className={PREV_TD}>{p.homeworkScore || "—"}</td>
-      <td className={PREV_TD}>
+      <td className={td}>{p.attitude || "—"}</td>
+      <td className={td}>{p.homeworkScore || "—"}</td>
+      <td className={td}>
         <span className="line-clamp-2">{p.textbook || "—"}</span>
         {p.homeworkToday ? (
           <span className="text-text-faint/80 mt-0.5 block line-clamp-2">과제 {p.homeworkToday}</span>
         ) : null}
       </td>
-      <td className={PREV_TD}>
+      <td className={td}>
         <span className="line-clamp-2">{p.note || "—"}</span>
       </td>
-      <td className={PREV_TD}>
+      <td className={td}>
         {onImport ? (
           <button
             type="button"

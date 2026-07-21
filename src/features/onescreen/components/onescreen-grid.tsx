@@ -79,6 +79,12 @@ export function OneScreenGrid({
   const selectedKeys = rows.filter((r) => checked.has(r.key)).map((r) => r.key);
   const selectedSendable = sendableRows.filter((r) => checked.has(r.key)).length; // 선택 중 실제 발송될 수
   const selectedSaveable = saveableRows.filter((r) => checked.has(r.key)).length; // 선택 중 실제 저장될 수
+  // 자동작성 실대상 = 발송가능 − **이미 멘트가 있는 행**(client autoWriteAllVisible이 손댄 문구를 보존하려 건너뜀).
+  // 이 수를 버튼에 그대로 노출한다 — 이전값 가져오기로 멘트를 깔면 대상이 즉시 줄어드는 게 눈에 보여야
+  // "채웠는데 자동작성이 덮어쓰나?" 하는 불안이 없다(원장 지시 07-21).
+  const noDraft = (r: (typeof rows)[number]) => !reports[r.student.id]?.[r.subject.name]?.draft?.trim();
+  const autoWritable = sendableRows.filter(noDraft).length;
+  const selectedAutoWritable = sendableRows.filter((r) => checked.has(r.key) && noDraft(r)).length;
   const hasPrev = rows.some((r) => r.subject.prevReport); // 참고행 데이터가 있을 때만 토글 노출
   const allChecked = rows.length > 0 && selectedKeys.length === rows.length;
   const toggleRow = (k: string) =>
@@ -141,6 +147,8 @@ export function OneScreenGrid({
           saveable: saveableRows.length,
           selectedSendable,
           selectedSaveable,
+          autoWritable,
+          selectedAutoWritable,
         }}
         selectedKeys={selectedKeys}
         prev={{ has: hasPrev, show: showPrev, onToggle: () => setShowPrev((v) => !v) }}
@@ -199,17 +207,30 @@ export function OneScreenGrid({
       <div className="bg-card border-line shadow-card overflow-x-auto rounded-2xl border">
         {/* table-fixed + colgroup 고정 폭 — 헤더/본문 열 정렬 결정적, 표는 내용 폭(좌측 정렬)이라 진도가 남는 폭을 독식하지 않음. */}
         <table className="w-full min-w-[1240px] table-fixed border-collapse text-[12px]">
+          {/* ⚠️ 주석을 `<col />`과 **같은 줄**에 두지 말 것 — 사이의 공백이 JSX 텍스트 노드로 남아
+              "whitespace text nodes cannot be a child of <colgroup>" 하이드레이션 에러가 난다(표뷰 전체가
+              클라 재렌더로 떨어져 클릭이 먹통처럼 보임, #75류). 줄바꿈이 낀 공백만 컴파일러가 제거한다. */}
           <colgroup>
-            <col className="w-[34px]" /> {/* 선택 */}
-            <col className="w-[128px]" /> {/* 학생·반 */}
-            <col className="w-[200px]" /> {/* 진도 */}
-            {config.dailyEnabled ? <col className="w-[88px]" /> : null} {/* 일일 */}
-            {config.checkEnabled ? <col className="w-[88px]" /> : null} {/* 확인 */}
-            <col className="w-[130px]" /> {/* 태도 — 1클릭 pill(1-1) */}
-            <col className="w-[130px]" /> {/* 과제 */}
-            <col className="w-[140px]" /> {/* 교재명 · 보강 */}
-            <col /> {/* 학부모 문구(멘트) — 남는 폭 흡수(우측 공간 활용) */}
-            <col className="w-[132px]" /> {/* 자동작성 · 카드 · 발송 */}
+            {/* 선택 */}
+            <col className="w-[34px]" />
+            {/* 학생·반 */}
+            <col className="w-[128px]" />
+            {/* 진도 */}
+            <col className="w-[200px]" />
+            {/* 일일 */}
+            {config.dailyEnabled ? <col className="w-[88px]" /> : null}
+            {/* 확인 */}
+            {config.checkEnabled ? <col className="w-[88px]" /> : null}
+            {/* 태도 — 1클릭 pill(1-1) */}
+            <col className="w-[130px]" />
+            {/* 과제 */}
+            <col className="w-[130px]" />
+            {/* 교재명 · 보강 */}
+            <col className="w-[140px]" />
+            {/* 학부모 문구(멘트) — 남는 폭 흡수(우측 공간 활용) */}
+            <col />
+            {/* 자동작성 · 카드 · 발송 */}
+            <col className="w-[132px]" />
           </colgroup>
           <thead>
             <tr className="bg-bg-soft">
@@ -264,15 +285,19 @@ export function OneScreenGrid({
               ) : undefined;
               return (
                 <Fragment key={row.key}>
+                  {/* 학생 구분선 — 묶음의 **첫 렌더 행**만 굵은 회색 상단선. 참고행이 켜져 있고 그 학생에
+                      참고 데이터가 있으면 참고행이 첫 행이므로 그쪽이 받는다(선이 두 번 그어지지 않게 배타). */}
                   {showPrev && !orderMode ? (
                     <PrevRow
                       subject={row.subject}
                       dailyEnabled={config.dailyEnabled}
                       checkEnabled={config.checkEnabled}
                       onImport={() => rowActions.onImportPrev(row.student, row.subject.name)}
+                      groupStart={firstOfStudent}
                     />
                   ) : null}
                   <GridBodyRow
+                    groupStart={firstOfStudent && !(showPrev && !orderMode && !!row.subject.prevReport)}
                     row={row}
                     checked={checked.has(row.key)}
                     onToggle={toggleRow}
