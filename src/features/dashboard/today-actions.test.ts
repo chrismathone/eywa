@@ -121,10 +121,40 @@ describe("buildTodayActions", () => {
   it("어제 미기록은 어제 날짜의 일별 페이지로 링크", () => {
     const items = buildTodayActions({
       ...EMPTY,
-      unrecordedYesterday: [{ classId: "c1", className: "MS2A" }],
+      unrecordedYesterday: [{ classId: "c1", className: "MS2A", subject: "math" }],
     });
     expect(items[0].href).toBe("/attendance/2026-07-01");
     expect(items[0].severity).toBe("amber");
+  });
+
+  it("🔴 회귀 잠금: 어제 미기록 미리보기는 과목별로 고르게 뽑는다", () => {
+    // 실데이터 모양 — 신호는 이름순(ICU 한국어)이라 한글 이름 반(수학)이 앞을 독점하고
+    // 로마자 코드 반(영어)은 미기록이 아무리 많아도 뒤로 밀린다. 앞 2개를 그냥 자르면
+    // 영어 담당자는 자기 반이 걸렸는지 대시보드에서 영영 알 수 없다(gotcha #84).
+    const items = buildTodayActions({
+      ...EMPTY,
+      unrecordedYesterday: [
+        { classId: "m1", className: "고등M 고1 BS4A", subject: "math" },
+        { classId: "m2", className: "고등M 고2", subject: "math" },
+        { classId: "m3", className: "중등M 중3", subject: "math" },
+        { classId: "e1", className: "DP5", subject: "english" },
+        { classId: "e2", className: "KW1", subject: "english" },
+      ],
+    });
+    // 과목별 1개씩 + "외 N"은 전체(5) 기준.
+    expect(items[0]).toMatchObject({ count: 5, detail: "고등M 고1 BS4A·DP5 외 3" });
+  });
+
+  it("어제 미기록이 한 과목뿐이면 그 과목에서 앞 2개(빈 자리 낭비 없음)", () => {
+    const items = buildTodayActions({
+      ...EMPTY,
+      unrecordedYesterday: [
+        { classId: "m1", className: "A반", subject: "math" },
+        { classId: "m2", className: "B반", subject: "math" },
+        { classId: "m3", className: "C반", subject: "math" },
+      ],
+    });
+    expect(items[0]).toMatchObject({ detail: "A반·B반 외 1" });
   });
 
   it("분석 실패는 권한 도메인별 항목과 링크로 분리", () => {

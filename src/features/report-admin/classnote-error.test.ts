@@ -27,3 +27,23 @@ describe("humanizeClassnoteError", () => {
     expect(out).not.toContain("stack");
   });
 });
+
+describe("워커가 쓴 한글 안내문은 요약하지 않고 그대로", () => {
+  it("첨부 실패 원인 문장을 패턴표가 덮어쓰지 않는다(오진 방지)", () => {
+    const raw = "첨부 목록 조회 실패 — 인증 실패(CLASSNOTE_INTERNAL_SECRET 불일치/미설정)";
+    // '인증'이라는 단어 때문에 예전엔 "ClassNote 로그인 실패…"로 오진했다.
+    expect(humanizeClassnoteError(raw)).toBe(raw);
+  });
+
+  it("단계별 실패 문장도 그대로(정보 손실 방지)", () => {
+    const raw = '파일 첨부 실패 — 다운로드 실패("워크시트.xlsx": HTTP 403)';
+    expect(humanizeClassnoteError(raw)).toBe(raw);
+  });
+
+  it("기술 원문(영문·스택·URL)은 여전히 한글 요약으로", () => {
+    expect(humanizeClassnoteError("page.goto: net::ERR_NAME_NOT_RESOLVED at https://x/y")).toContain(
+      "발송 PC가 보고서 주소에 접속하지 못함",
+    );
+    expect(humanizeClassnoteError("Error: something exploded")).toBe("발송 실패 — 아래 ‘자세히’를 눌러 원문 확인");
+  });
+});

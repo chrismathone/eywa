@@ -13,7 +13,7 @@
  * 하루 1회 마커 = 로컬 파일(CLASSNOTE_OUT/provision-last-run.txt) — PC 재설정 시 재실행돼도 diff 기반이라 멱등.
  */
 import fs from "node:fs";
-import path from "node:path";
+import { stateFile } from "./classnote-paths.mjs";
 import {
   BOARD_GROUPS,
   loginClassnote,
@@ -38,8 +38,10 @@ export async function fetchUniverseNames(sql, tenant) {
   return [...new Set(rows.map((r) => (r.classnote_name || r.name || "").trim()).filter(Boolean))];
 }
 
-const STATE_DIR = process.env.CLASSNOTE_OUT || "D:/tmp/classnote";
-const STATE_FILE = path.join(STATE_DIR, "provision-last-run.txt");
+// ⚠️ 마커 경로는 classnote-paths 단일 진입점 경유(2026-07-21) — 예전엔 여기서 `D:/tmp/classnote`를 직접 쓰다가
+// 그 폴더를 못 만드는 PC에서 markRun이 조용히 실패 → lastRun()이 늘 빈값 → **하루 1회여야 할 프로비저닝이
+// 매 폴(15초)마다 재실행**됐다(실측). 폴더 결정은 쓰기 테스트까지 통과한 곳만 고른다.
+const STATE_FILE = stateFile("provision-last-run.txt");
 const RUN_AFTER_HOUR_KST = 5; // 새벽 5시 이후(수업 전 준비 완료, 야간 소음 회피)
 
 function kstDate() {
@@ -50,7 +52,13 @@ function kstHour() {
     new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Seoul", hour: "2-digit", hour12: false }).format(new Date()),
   );
 }
+// 메모리 마커 — 파일이 안 써지는 환경에서도 **한 프로세스 안에선 하루 1회**를 보장하는 안전망.
+// 파일은 "데몬 재시작을 넘어" 기억하기 위한 것이고, 메모리는 파일이 죽어도 폭주를 막는 최후 방어선이다.
+// (2026-07-21: 파일만 믿다가 매 폴 재실행됐다.)
+let memoryLastRun = "";
 function lastRun() {
+  if (memoryLastRun) return memoryLastRun;
+  if (!STATE_FILE) return "";
   try {
     return fs.readFileSync(STATE_FILE, "utf8").trim();
   } catch {
@@ -58,11 +66,12 @@ function lastRun() {
   }
 }
 function markRun(d) {
+  memoryLastRun = d;
+  if (!STATE_FILE) return;
   try {
-    fs.mkdirSync(STATE_DIR, { recursive: true });
-    fs.writeFileSync(STATE_FILE, d);
+    fs.writeFileSync(STATE_FILE, d); // 폴더는 stateFile()이 이미 보장(쓰기 테스트 통과)
   } catch {
-    /* 마커 실패가 데몬을 죽이면 안 됨 — 최악은 다음 폴 재시도(멱등) */
+    /* 마커 실패가 데몬을 죽이면 안 됨 — 메모리 마커가 당일 폭주는 막는다 */
   }
 }
 

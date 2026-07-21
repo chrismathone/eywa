@@ -28,7 +28,7 @@ const worker = (online: boolean) => ({
   hostname: "학원동기화-PC",
   lastSeenMinutes: online ? 0 : 12,
   online,
-  results: [],
+  results: [], env: { logDir: null, recent: [] },
 });
 
 const emptySummary = {

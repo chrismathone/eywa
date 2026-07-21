@@ -46,7 +46,7 @@ describe("buildDailyBriefingPayload", () => {
       },
       todayRaw: {
         ...EMPTY_RAW,
-        unrecordedYesterday: [{ classId: "c1", className: "MS2A" }],
+        unrecordedYesterday: [{ classId: "c1", className: "MS2A", subject: "math" }],
         leavesToday: [{ name: "박강사" }],
         leavesPending: 1,
       },
@@ -63,8 +63,8 @@ describe("buildDailyBriefingPayload", () => {
   it("어제 미기록 반은 오늘 수집분을 쓴다(asOf=어제 수집분의 그저께 데이터 무시)", () => {
     const payload = buildDailyBriefingPayload({
       ...BASE,
-      yesterdayRaw: { ...EMPTY_RAW, unrecordedYesterday: [{ classId: "old", className: "그저께반" }] },
-      todayRaw: { ...EMPTY_RAW, unrecordedYesterday: [{ classId: "c1", className: "어제반" }] },
+      yesterdayRaw: { ...EMPTY_RAW, unrecordedYesterday: [{ classId: "old", className: "그저께반", subject: "math" }] },
+      todayRaw: { ...EMPTY_RAW, unrecordedYesterday: [{ classId: "c1", className: "어제반", subject: "math" }] },
     });
     const unrecorded = payload.attention.find((item) => item.key === "unrecorded");
     expect(unrecorded?.detail).toBe("어제반");

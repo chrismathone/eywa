@@ -5,6 +5,7 @@
  * server-only 미의존(타입+순수) → Vitest로 정렬·문구·링크를 결정적으로 검증.
  */
 import type { MenuKey } from "@/lib/permissions";
+import { balancedTake } from "@/lib/collections/balanced-take";
 export {
   enrollmentAttendsOnDay,
   isEnrollmentActiveOn,
@@ -15,8 +16,12 @@ export type TodayActionAccess = "read" | "write" | "manage-staff";
 export type TodayActionsRaw = {
   /** 오늘 무단결석(absent) 학생 — 학생 단위 dedupe 후 */
   absentToday: { studentId: string; name: string }[];
-  /** 어제 출석 미기록 반 */
-  unrecordedYesterday: { classId: string; className: string }[];
+  /**
+   * 어제 출석 미기록 반. `subject`는 미리보기 이름을 **과목별로 고르게** 뽑는 데 쓴다 —
+   * 이름순 앞 2개만 뽑으면 한 과목(한글 이름 반)만 계속 노출된다(gotcha #84). 필수 필드로 둔 건
+   * 새 호출부가 빠뜨리면 그 편향이 조용히 되살아나기 때문.
+   */
+  unrecordedYesterday: { classId: string; className: string; subject: string }[];
   /** 어제 날짜(YYYY-MM-DD) — 일별 미처리 페이지 링크용 */
   yesterday: string;
   /** 최근 7일 녹음 전사/AI 분석 실패 건수(테이블별) */
@@ -70,10 +75,14 @@ export type TodayActionItem = {
   requiredAccess: TodayActionAccess;
 };
 
-/** "김A·이B·박C 외 2" — 명단 요약. */
-export function nameList(names: string[], max = 3): string {
+/**
+ * "김A·이B·박C 외 2" — 명단 요약.
+ * `total`은 이미 골라낸 미리보기만 넘길 때 전체 개수를 따로 알려주기 위한 것(기본값 = names 길이).
+ * 예: 과목별로 고르게 2개를 뽑아 넘기면서 "외 N"은 전체 기준으로 세야 할 때.
+ */
+export function nameList(names: string[], max = 3, total = names.length): string {
   const head = names.slice(0, max).join("·");
-  return names.length > max ? `${head} 외 ${names.length - max}` : head;
+  return total > max ? `${head} 외 ${total - max}` : head;
 }
 
 const SEVERITY_RANK: Record<TodayActionItem["severity"], number> = { danger: 0, amber: 1, info: 2 };
@@ -239,7 +248,15 @@ export function buildTodayActions(raw: TodayActionsRaw): TodayActionItem[] {
       severity: "amber",
       label: "어제 출석 미기록",
       count: raw.unrecordedYesterday.length,
-      detail: nameList(raw.unrecordedYesterday.map((c) => c.className), 2),
+      // ⚠️ 앞 2개를 그냥 자르지 않는다(gotcha #84). 목록이 이름순인데 ICU 한국어 정렬은 한글을
+      // 로마자보다 앞에 둬서, 한글 이름 반(수학)이 미리보기를 독점하고 로마자 코드 반(영어)은
+      // 미기록이 아무리 많아도 이름이 절대 안 뜬다 — 영어 담당자는 자기 반이 걸렸는지 알 수 없었다.
+      // 과목별로 고르게 2개를 뽑고 "외 N"은 전체 기준으로 센다.
+      detail: nameList(
+        balancedTake(raw.unrecordedYesterday, (c) => c.subject, 2).map((c) => c.className),
+        2,
+        raw.unrecordedYesterday.length,
+      ),
       href: `/attendance/${raw.yesterday}`,
       menuKey: "attendance",
       requiredAccess: "read",

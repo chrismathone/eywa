@@ -6,6 +6,7 @@ import { getTenantSettingsByTenantId } from "@/features/owner/server/queries";
 import { resolveBrandingSrc, resolveTenantReadUrls } from "@/lib/storage/media-storage";
 import { parseForwardedFor } from "@/features/attendance/kiosk/device-info";
 import { isShareExpired } from "@/features/onescreen/share-expiry";
+import { visibleAttachments } from "@/features/onescreen/attachment-utils";
 import { fetchReportTrendRows } from "@/features/onescreen/server/score-history";
 import { buildTrendPoints } from "@/features/onescreen/report-trend";
 import { ParentReportCard } from "@/features/onescreen/components/parent-report-card";
@@ -89,9 +90,11 @@ export default async function PublicLessonReportPage({
           report.tenant_id as string,
         ).catch(() => ({}))
       : {};
-  const attachmentImgs = attachments
+  const attachmentAll = attachments
     .map((a) => ({ ...a, url: attachmentUrls[a.path] }))
     .filter((a): a is { path: string; name: string; url: string } => !!a.url);
+  // 워커 스크린샷(내부 요청)에선 파일 첨부를 빼고 사진만 — 판정·사유는 visibleAttachments 주석 참조.
+  const attachmentImgs = visibleAttachments(attachmentAll, { forScreenshot: isInternal });
 
   return (
     // 뷰포트보다 짧으면 상하 중앙 정렬, 길면 자연 스크롤(min-h-screen + justify-center = 넘쳐도 클립 안 됨).
