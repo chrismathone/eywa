@@ -2,6 +2,7 @@
 
 import { useActionState, useEffect, useRef, useState } from "react";
 import { BookMarked, BookOpen, Eraser, Eye, Save, User, X } from "@/components/icons/eywa-icon-compat";
+import { EyIcon } from "@/components/icons/eywa-icons";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SearchableSelect } from "@/components/ui/searchable-select";
@@ -16,6 +17,7 @@ import {
 } from "@/app/(print)/textbook/[id]/print/textbook-request-card-body";
 import { downloadCardPng } from "@/app/(print)/textbook/[id]/print/download-card";
 import { RequestHistory } from "./request-history";
+import { TextbookSendDialog } from "./_send-dialog";
 
 // 교재 요청 — ijw TextbookRequestView 구조 그대로 이식(선생님들이 익숙한 화면):
 // 좌측 폼(기본 정보 → 교재 내용) + 우측 실시간 종이 서식 미리보기 + '이미지 저장 및 기록' 단일 버튼
@@ -62,6 +64,8 @@ export function TextbookRequestClient({
   const [price, setPrice] = useState<number | string>("");
   const [notes, setNotes] = useState("");
   const [handledId, setHandledId] = useState<string | null>(null); // 자동 다운로드 1회 가드(#67)
+  // 학부모 발송 다이얼로그 대상(교재요청 id들). null이면 미마운트 — 항상 마운트된 다이얼로그의 재오픈 함정(#67) 회피.
+  const [sendIds, setSendIds] = useState<string[] | null>(null);
   // '초기화'는 폼만 비우고 useActionState 결과는 못 지우므로, 직전 결과 메시지를 함께 숨긴다(잔존 방지).
   const [msgHiddenFor, setMsgHiddenFor] = useState<TextbookState>(undefined);
 
@@ -343,11 +347,24 @@ export function TextbookRequestClient({
             </div>
             {showMsg && state?.error ? <p className="text-danger text-[12px]">{state.error}</p> : null}
             {showMsg && state?.ok ? (
-              <p className="text-primary text-[12px]">
-                {(state.created?.length ?? 0) > 1
-                  ? `${state.created!.length}명에게 교재 요청이 기록되었습니다 — 요청서 ${state.created!.length}장이 각각 저장됩니다.`
-                  : "기록되었습니다 — 요청서 이미지가 자동 저장됩니다. (아래 내역의 ‘요청서’로 다시 받을 수 있어요)"}
-              </p>
+              <div className="space-y-2">
+                <p className="text-primary text-[12px]">
+                  {(state.created?.length ?? 0) > 1
+                    ? `${state.created!.length}명에게 교재 요청이 기록되었습니다 — 요청서 ${state.created!.length}장이 각각 저장됩니다.`
+                    : "기록되었습니다 — 요청서 이미지가 자동 저장됩니다. (아래 내역의 ‘요청서’로 다시 받을 수 있어요)"}
+                </p>
+                {/* 방금 만든 요청 그대로 학부모 알림장으로 — PNG 자동 저장 흐름은 그대로 두고 진입점만 추가. */}
+                {created && created.length > 0 ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setSendIds(created.map((c) => c.id))}
+                  >
+                    <EyIcon name="send" size={16} />
+                    학부모에게 발송
+                  </Button>
+                ) : null}
+              </div>
             ) : null}
           </section>
 
@@ -388,7 +405,14 @@ export function TextbookRequestClient({
 
       {/* 요청 내역 — 미완료/완료 탭 + 검색 + 페이지네이션 (ijw history 구조).
           사무실 rows는 최근 100건 절단이라 카운트가 전체 통계로 읽히지 않게 명시(강사=담당 전건이라 정확). */}
-      <RequestHistory rows={rows} onDownload={download} capNote={isTeacher ? undefined : "최근 100건 기준 — 전체는 수납관리 › 교재"} />
+      <RequestHistory
+        rows={rows}
+        onDownload={download}
+        onSend={(r) => setSendIds([r.id])}
+        capNote={isTeacher ? undefined : "최근 100건 기준 — 전체는 수납관리 › 교재"}
+      />
+
+      {sendIds ? <TextbookSendDialog orderIds={sendIds} onClose={() => setSendIds(null)} /> : null}
 
       {/* 바로 다운로드용 숨김 카드 — 큐의 head를 렌더(다운로드 후 다음으로). 여러 명 일괄 발행 시 순차 렌더. */}
       {dlHead ? (

@@ -175,6 +175,9 @@ export const users = pgTable(
     // 강사별 AI 멘트 공지 모드 오버라이드(0104a) — 'A'(단일 문단)|'B'(2문단 분리). null = 학원 기본(report.noticeMode) 따름.
     // 소비: generateReportComment(강사값 > 학원기본 > A). 쓰기: setMyNoticeMode(본인만, admin client).
     reportNoticeMode: text("report_notice_mode"),
+    // 교재요청 학부모 발송 멘트(0129a) — 강사가 마지막에 쓴 멘트 = 다음 발송 기본값(PC 공유라 브라우저 저장 불가).
+    // 소비: prepareTextbookNotice. 쓰기: saveMyTextbookMent(본인만, admin client). null=미설정(기본 템플릿).
+    textbookNoticeMent: text("textbook_notice_ment"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
