@@ -133,5 +133,9 @@ export function generateRetentionFixture(
     cases.push({ id, name, archetype: a.key, expect: a.expect });
   }
 
-  return { data: { students, attendance, grades, consultations, invoices, enrollments }, cases };
+  // reportHomework는 비워 둔다 — 픽스처는 출석부 폴백 경로를 검증한다(실데이터는 수업보고서 경로).
+  return {
+    data: { students, attendance, reportHomework: [], grades, consultations, invoices, enrollments },
+    cases,
+  };
 }

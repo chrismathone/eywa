@@ -73,3 +73,66 @@ describe("buildRoster — 가상 시드 통합 파이프라인", () => {
     );
   });
 });
+
+// 2026-07-21 회귀: 출석부 숙제 체크박스가 실사용 0건이라 전원 "숙제 기록 없음"이 붙고, 그게 일일 브리핑
+// 스포트라이트로 흘러 원장 화면에 사실과 반대로 보고됐다. 숙제 신호는 수업보고서가 1순위여야 한다.
+describe("buildRoster — 숙제 신호는 수업보고서(homework_score)가 1순위", () => {
+  const base = () => {
+    const { data } = generateRetentionFixture(1, TODAY);
+    // 출석부의 숙제 표시를 전부 끔 = injaewon 실데이터(homework_required=true 0건) 재현.
+    data.attendance = data.attendance.map((a) => ({ ...a, homework_required: false, homework_done: false }));
+    return data;
+  };
+  const iso = (daysAgo: number) => new Date(TODAY.getTime() - daysAgo * 86_400_000).toISOString().slice(0, 10);
+  const sid = "stu-001";
+
+  it("출석부가 비어도 수업보고서가 있으면 '숙제 기록 없음'이 붙지 않는다", () => {
+    const data = base();
+    data.reportHomework = [
+      { student_id: sid, report_date: iso(2), homework_score: "90%" },
+      { student_id: sid, report_date: iso(5), homework_score: "100%" },
+    ];
+    const r = buildRoster(data, TODAY)[0];
+    expect(r.signals.homeworkRate).toBe(95);
+    expect(r.risk.reasons).not.toContain("숙제 기록 없음");
+  });
+
+  it("원스크린 선택지(완료/미제출)도 이행률로 반영된다", () => {
+    const data = base();
+    data.reportHomework = [
+      { student_id: sid, report_date: iso(1), homework_score: "미제출" },
+      { student_id: sid, report_date: iso(3), homework_score: "미제출" },
+    ];
+    const r = buildRoster(data, TODAY)[0];
+    expect(r.signals.homeworkRate).toBe(0);
+    expect(r.risk.reasons).toContain("숙제율 0%");
+    expect(r.primaryAction).toBeTruthy();
+  });
+
+  it("보고서·출석부 둘 다 없을 때만 '숙제 기록 없음'", () => {
+    const data = base();
+    data.reportHomework = [];
+    const r = buildRoster(data, TODAY)[0];
+    expect(r.signals.homeworkRate).toBeNull();
+    expect(r.risk.reasons).toContain("숙제 기록 없음");
+  });
+
+  it("보고서가 없으면 출석부로 폴백(체크박스를 쓰기 시작해도 동작)", () => {
+    const { data } = generateRetentionFixture(1, TODAY); // 출석부 숙제 표시 살아 있음
+    data.reportHomework = [];
+    const r = buildRoster(data, TODAY)[0];
+    expect(r.signals.homeworkRate).not.toBeNull();
+  });
+
+  it("최근 절반이 이전보다 나빠지면 하락폭이 잡힌다", () => {
+    const data = base();
+    data.reportHomework = [
+      { student_id: sid, report_date: iso(2), homework_score: "50%" }, // 최근(15일 이내)
+      { student_id: sid, report_date: iso(25), homework_score: "100%" }, // 이전
+    ];
+    const r = buildRoster(data, TODAY)[0];
+    expect(r.signals.homeworkRate).toBe(50);
+    expect(r.signals.previousHomeworkRate).toBe(100);
+    expect(r.risk.homeworkDrop).toBe(50);
+  });
+});

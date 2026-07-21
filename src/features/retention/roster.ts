@@ -7,6 +7,7 @@ import {
   type RetentionSignals,
   type RiskResult,
 } from "./risk";
+import { averageHomeworkScore } from "./homework-score";
 
 export const ATTEND_WINDOW_DAYS = 30;
 
@@ -48,6 +49,12 @@ export type RawAttendanceRow = {
   homework_required: boolean;
   homework_done: boolean;
 };
+/** 수업보고서의 숙제 수행 상태 — 숙제 신호의 1순위 소스(homework-score.ts 주석 참조). */
+export type RawReportHomeworkRow = {
+  student_id: string;
+  report_date: string;
+  homework_score: string | null;
+};
 export type RawGradeRow = {
   student_id: string;
   score: number | null;
@@ -67,6 +74,8 @@ export type RawEnrollmentRow = { student_id: string; end_date: string | null; on
 export type RetentionRawData = {
   students: RawStudentRow[];
   attendance: RawAttendanceRow[];
+  /** 최근 ATTEND_WINDOW_DAYS일 수업보고서의 homework_score. 출석부 체크박스보다 우선. */
+  reportHomework: RawReportHomeworkRow[];
   grades: RawGradeRow[];
   consultations: RawConsultRow[];
   invoices: RawInvoiceRow[];
@@ -108,6 +117,16 @@ export function buildRoster(raw: RetentionRawData, today: Date): RosterStudent[]
     att.set(r.student_id, a);
   }
 
+  // 숙제 신호는 수업보고서가 1순위 — 출석부 체크박스는 실사용 0건이라 여기에만 의존하면 전원 "숙제 기록 없음"이
+  // 된다(homework-score.ts 주석). 윈도를 attMid로 반 갈라 최근/이전 이행률을 내고 하락폭 판정에 쓴다.
+  type Hw = { recent: (string | null)[]; older: (string | null)[] };
+  const hw = new Map<string, Hw>();
+  for (const r of raw.reportHomework) {
+    const h = hw.get(r.student_id) ?? { recent: [], older: [] };
+    (r.report_date >= attMid ? h.recent : h.older).push(r.homework_score);
+    hw.set(r.student_id, h);
+  }
+
   const grades = new Map<string, { last: number | null; prev: number | null }>();
   for (const r of [...raw.grades].sort((a, b) => (a.taken_on < b.taken_on ? 1 : -1))) {
     const g = grades.get(r.student_id) ?? { last: null, prev: null };
@@ -146,9 +165,15 @@ export function buildRoster(raw: RetentionRawData, today: Date): RosterStudent[]
     const a = att.get(s.id);
     const g = grades.get(s.id);
     const c = consult.get(s.id);
-    const homeworkRate =
-      a && a.recReq > 0 ? (a.recDone / a.recReq) * 100 : a && a.oldReq > 0 ? (a.oldDone / a.oldReq) * 100 : null;
-    const previousHomeworkRate = a && a.recReq > 0 && a.oldReq > 0 ? (a.oldDone / a.oldReq) * 100 : null;
+    // 수업보고서 → (없으면) 출석부 체크박스 순으로 폴백. 나중에 출석부를 쓰기 시작해도 그대로 동작한다.
+    const h = hw.get(s.id);
+    const recentRate =
+      (h ? averageHomeworkScore(h.recent) : null) ?? (a && a.recReq > 0 ? (a.recDone / a.recReq) * 100 : null);
+    const olderRate =
+      (h ? averageHomeworkScore(h.older) : null) ?? (a && a.oldReq > 0 ? (a.oldDone / a.oldReq) * 100 : null);
+    const homeworkRate = recentRate ?? olderRate;
+    // 하락폭은 최근·이전이 둘 다 있을 때만 의미가 있다(최근이 비면 olderRate가 곧 현재값이라 비교 대상 없음).
+    const previousHomeworkRate = recentRate != null ? olderRate : null;
     const daysSinceCounsel = c?.last
       ? Math.max(0, Math.round((today.getTime() - new Date(c.last).getTime()) / 86_400_000))
       : null;

@@ -1,6 +1,7 @@
 import "server-only";
 import { unstable_cache } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { fetchAllPagedInChunks } from "@/lib/supabase/batch";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import {
@@ -66,7 +67,7 @@ export async function computeRetentionRoster(tenantId: string, teacherId?: strin
 
   // 각 테이블을 student_id 청크로 병렬 조회(414·1000행 한도 회피, error throw). admin client라 RLS가
   // 없으므로 모든 쿼리에 .eq(tenant_id)를 직접 건다(방어적 — student_id는 이미 이 테넌트 학생이지만).
-  const [attendance, grades, consultations, invoices, enrollments] = await Promise.all([
+  const [attendance, reportHomework, grades, consultations, invoices, enrollments] = await Promise.all([
     fetchByStudentChunks(ids, (c) =>
       admin
         .from("attendance_records")
@@ -74,6 +75,20 @@ export async function computeRetentionRoster(tenantId: string, teacherId?: strin
         .eq("tenant_id", tenantId)
         .in("student_id", c)
         .gte("session_date", since(ATTEND_WINDOW_DAYS)),
+    ),
+    // 숙제 이행률의 1순위 소스(출석부 체크박스는 실사용 0건 — roster/homework-score.ts 주석).
+    // 재원생 전원 × 30일이면 청크당 1,000행을 넘길 수 있어(실측 30일 1,900+건) 반드시 페이지네이션(B2).
+    fetchAllPagedInChunks(ids, (c, from, to) =>
+      admin
+        .from("lesson_reports")
+        .select("student_id, report_date, homework_score")
+        .eq("tenant_id", tenantId)
+        .in("student_id", c)
+        .gte("report_date", since(ATTEND_WINDOW_DAYS))
+        .not("homework_score", "is", null)
+        .order("report_date", { ascending: false })
+        .order("id", { ascending: true }) // OFFSET 페이지가 흔들리지 않도록 unique tie-break
+        .range(from, to),
     ),
     fetchByStudentChunks(ids, (c) =>
       admin
@@ -142,6 +157,7 @@ export async function computeRetentionRoster(tenantId: string, teacherId?: strin
       teacherNames: [...(teacherNamesByStudent.get(s.id) ?? [])].sort(),
     })) as RetentionRawData["students"],
     attendance: attendance as RetentionRawData["attendance"],
+    reportHomework: reportHomework as RetentionRawData["reportHomework"],
     grades: grades as RetentionRawData["grades"],
     consultations: consultations as RetentionRawData["consultations"],
     invoices: invoices as RetentionRawData["invoices"],
