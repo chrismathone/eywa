@@ -148,11 +148,14 @@ export async function isShowAttachmentsEnabled(sql, tenant) {
 const IMG_ATTACHMENT_RE = /\.(jpe?g|png|webp|gif)(\?|$)/i;
 
 /**
- * 파일 첨부가 있는 리포트를 **내부 API로 게시**(Phase 2) — 스샷=`attached_images` + 파일=`attached_files` 한 POST.
- * ① 스샷 buffer → kage(`img`) ② eywa 내부 엔드포인트로 파일 signed URL → fetch → kage(`etc`) ③ board→child→enrollment
- * 해석 후 postClassnoteReport(이중 계정이면 전원). 반환 { ok, error? }. 리버스엔지니어링·학원이 POC 검증(2026-07-16).
+ * 첨부가 있는 리포트를 **내부 API로 게시**(Phase 2) — 스샷+이미지=`attached_images` + 파일=`attached_files` 한 POST.
+ * ① 스샷 buffer → kage(`img`) ② eywa 내부 엔드포인트로 파일/이미지 signed URL → fetch →
+ *    비이미지는 kage(`etc`)→attached_files, 이미지(교재 등)는 kage(`img`)→attached_images에 개별 부착(2026-07-22, 김경민 건)
+ * ③ board→child→enrollment 해석 후 postClassnoteReport(이중 계정이면 전원). 반환 { ok, error? }.
+ * ⚠️ 파일은 스샷에 없으므로 전건 실패 시 발송 실패(재시도), 이미지는 스샷에 이미 실려 best-effort(실패해도 게시).
+ * 리버스엔지니어링·학원이 POC 검증(2026-07-16).
  */
-export async function sendReportViaApi(adminPage, { report, studentName, boardId, screenshot, shareUrl, base, fileAtts, children, log }) {
+export async function sendReportViaApi(adminPage, { report, studentName, boardId, screenshot, shareUrl, base, fileAtts, imageAtts = [], children, log }) {
   // kage 업로드는 작성폼 네이티브 file input 경유(수동 FormData는 415) → adminPage를 add 폼으로 이동.
   // 이후 API 호출(resolve·post)은 same-origin이라 add 폼에서도 그대로 유효.
   await adminPage.goto(`${CLASSNOTE_BASE}/service/report/add`, { waitUntil: "domcontentloaded", timeout: 30000 });
@@ -178,14 +181,17 @@ export async function sendReportViaApi(adminPage, { report, studentName, boardId
   })
     .then(async (r) => {
       epStatus = r.status;
-      return r.ok ? await r.json() : { files: [] };
+      return r.ok ? await r.json() : { files: [], images: [] };
     })
     .catch((e) => {
       epStatus = -1;
       log(`  · ${studentName}: 첨부 목록 조회 네트워크 실패 — ${e.message}`);
-      return { files: [] };
+      return { files: [], images: [] };
     });
-  if (!(ep.files ?? []).length) {
+  const epFiles = ep.files ?? [];
+  const epImages = ep.images ?? []; // 2026-07-22 신설(구 앱은 미반환 → []). 이미지 개별 부착.
+  // 첨부 있는 리포트(경로 진입)인데 파일·이미지 URL을 하나도 못 받으면 서명/조회 실패.
+  if (!epFiles.length && !epImages.length) {
     const why =
       epStatus === -1
         ? "네트워크 연결 실패"
@@ -200,7 +206,7 @@ export async function sendReportViaApi(adminPage, { report, studentName, boardId
   }
   const attachedFiles = [];
   const failures = [];
-  for (const f of ep.files ?? []) {
+  for (const f of epFiles) {
     let bytes;
     try {
       const res = await fetch(f.url);
@@ -221,7 +227,36 @@ export async function sendReportViaApi(adminPage, { report, studentName, boardId
     }
   }
   if (attachedFiles.length !== fileAtts.length) log(`  · ${studentName}: 파일 ${attachedFiles.length}/${fileAtts.length} 업로드`);
-  if (!attachedFiles.length) return { ok: false, error: `파일 첨부 실패 — ${failures.join(" / ") || "원인 불명"}` };
+  // 파일(비이미지)은 스샷에 안 실리므로 개별 첨부가 유일 전달 → 있었는데 전건 실패면 발송 실패(재시도).
+  if (fileAtts.length && !attachedFiles.length) return { ok: false, error: `파일 첨부 실패 — ${failures.join(" / ") || "원인 불명"}` };
+
+  // 2b) 이미지 첨부(교재 등) → kage(img input) → attached_images에 스샷과 함께 개별 부착(2026-07-22, 김경민 건).
+  // ⚠️ best-effort: 이미지는 이미 /r 스샷(attachedImages[0])에 실려 있어 개별 부착 실패해도 정보 손실 0 →
+  //    발송을 막지 않는다(파일과 다른 정책). 실패는 로깅만.
+  const IMG_MIME = { png: "image/png", webp: "image/webp", gif: "image/gif", jpg: "image/jpeg", jpeg: "image/jpeg" };
+  for (const im of epImages) {
+    let bytes;
+    try {
+      const res = await fetch(im.url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      bytes = Buffer.from(await res.arrayBuffer());
+    } catch (e) {
+      log(`  · ${studentName}: 이미지 "${im.name}" 다운로드 실패 — ${e.message}(스샷엔 포함)`);
+      continue;
+    }
+    try {
+      const ext = (im.name.split(".").pop() ?? "").toLowerCase();
+      const ik = await uploadToKage(adminPage, "media-attachment-add-input", { name: im.name, mimeType: IMG_MIME[ext] ?? "image/jpeg", buffer: bytes });
+      if (ik?.access_key) {
+        attachedImages.push({ access_key: ik.access_key, original_file_name: im.name,
+          file_size: ik.info?.img?.length ?? bytes.length, width: ik.info?.img?.width, height: ik.info?.img?.height });
+      } else log(`  · ${studentName}: 이미지 "${im.name}" ClassNote 업로드 거부(access_key 없음, 스샷엔 포함)`);
+    } catch (e) {
+      log(`  · ${studentName}: 이미지 "${im.name}" ClassNote 업로드 실패 — ${e.message}(스샷엔 포함)`);
+    }
+  }
+  const extraImgs = attachedImages.length - 1; // 스샷 1장 제외한 개별 부착 이미지 수
+  if (imageAtts.length) log(`  · ${studentName}: 이미지 ${extraImgs}/${imageAtts.length} 개별 부착`);
 
   // 3) board → child → enrollment
   const enrolled = await resolveBoardChildEnrollments(adminPage, boardId, studentName, children);
@@ -463,18 +498,20 @@ export async function processQueueOnce(sql, browser, opts) {
         continue;
       }
 
-      // ── Phase 2: 파일 첨부(비이미지) + showAttachments ON → 내부 API 경로(스샷=attached_images + 파일=attached_files) ──
+      // ── Phase 2: 첨부(파일=비이미지 또는 이미지) + showAttachments ON → 내부 API 경로 ──
+      //    스샷=attached_images[0] + 파일=attached_files + 이미지=attached_images 개별 부착(2026-07-22, 김경민 건).
       const fileAtts = (r.attachments ?? []).filter((a) => a?.name && !IMG_ATTACHMENT_RE.test(a.name));
-      if (showAttachments && fileAtts.length && boardId) {
-        childrenCache ??= await fetchChildren(adminPage, centerId); // 파일 리포트 첫 만남에 1회
+      const imageAtts = (r.attachments ?? []).filter((a) => a?.name && IMG_ATTACHMENT_RE.test(a.name));
+      if (showAttachments && (fileAtts.length || imageAtts.length) && boardId) {
+        childrenCache ??= await fetchChildren(adminPage, centerId); // 첨부 리포트 첫 만남에 1회
         const result = await sendReportViaApi(adminPage, {
           report: r, studentName, boardId, screenshot: buf, shareUrl: `${shareBase}/r/${r.share_token}`,
-          base, fileAtts, children: childrenCache, log,
+          base, fileAtts, imageAtts, children: childrenCache, log,
         });
         if (result.ok) {
           await sql`update lesson_reports set classnote_status='success', classnote_sent_at=now(), classnote_error=null where id=${r.id}`;
           summary.success++;
-          log(`    → success (파일 ${fileAtts.length}건 네이티브 첨부, 내부 API)`);
+          log(`    → success (파일 ${fileAtts.length}건 + 이미지 ${imageAtts.length}건 네이티브 첨부, 내부 API)`);
         } else {
           await sql`update lesson_reports set
             classnote_retry_count = classnote_retry_count + 1,
