@@ -17,8 +17,8 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import postgres from "postgres";
+import { stateDirLabel, stateFile } from "./classnote-paths.mjs";
 import { closeClassnoteAdminSession, launchBrowser, processQueueOnce, resolveTenant } from "./classnote-core.mjs";
 import { processNoticesOnce } from "./classnote-notice-core.mjs";
 import { provisionDailyOnce } from "./classnote-provision-core.mjs";
@@ -27,33 +27,23 @@ import { pollReportReadsOnce } from "./classnote-read-core.mjs";
 
 const POLL_MS = 15_000;
 const POST = process.argv.includes("--post");
-// 로그 폴더 — CLASSNOTE_OUT 우선, 없으면 D:/tmp/classnote, **그것도 못 만들면 스크립트 옆 폴더**.
-// ⚠️ 폴백이 필요한 이유(2026-07-21): 기본값이 D: 드라이브 고정이라 D:가 없는 PC에선 mkdir이 실패하고
-// 아래 catch가 그걸 삼켜 **로그 파일이 한 줄도 안 남았다**. 원인 추적을 사람이 로그로 해야 할 때 막다른 길.
-function resolveLogDir() {
-  const candidates = [
-    process.env.CLASSNOTE_OUT,
-    "D:/tmp/classnote",
-    path.join(path.dirname(fileURLToPath(import.meta.url)), "_logs"),
-  ].filter(Boolean);
-  for (const dir of candidates) {
-    try {
-      fs.mkdirSync(dir, { recursive: true });
-      return dir;
-    } catch {
-      /* 다음 후보로 */
-    }
-  }
-  return null; // 전부 실패 = 콘솔 출력만
-}
-const LOG_DIR = resolveLogDir();
-const LOG = LOG_DIR ? path.join(LOG_DIR, "watch.log") : null;
+// 로그 파일 — 폴더 결정은 classnote-paths(단일 진입점, 쓰기 테스트까지 통과한 폴더).
+const LOG = stateFile("watch.log");
 const HOSTNAME = os.hostname();
 const STARTED_AT = new Date().toISOString(); // 이 데몬 프로세스 시작 시각(재시작 감지)
+
+// 최근 경고/오류 몇 줄 — 하트비트에 실어 **eywa 화면에서 바로 본다**(연동 PC 파일을 열 수 없을 때의 생명줄).
+// ⚠️ 로그 파일이 안 써지던 사고(2026-07-21) 재발 시에도 원인이 웹에 남게 하는 안전망.
+const RECENT_MAX = 5;
+const recentIssues = [];
 
 function log(msg) {
   const line = `[${new Date().toISOString()}] ${msg}`;
   console.log(line);
+  if (/실패|오류|error|⚠/i.test(msg)) {
+    recentIssues.push(line.slice(0, 300));
+    if (recentIssues.length > RECENT_MAX) recentIssues.shift();
+  }
   if (!LOG) return;
   try {
     fs.appendFileSync(LOG, line + "\n");
@@ -112,9 +102,12 @@ function noteResult(key, value) {
 // 심장박동(0084a) — 이 PC가 발송 담당·살아있음을 매 폴마다 기록. best-effort(실패해도 처리 계속).
 async function heartbeat(tenant) {
   const s = db();
+  // env 진단(logDir·recent)을 함께 실어 보낸다 — 연동 PC가 물리적으로 다른 컴퓨터라, 웹에서 못 보면
+  // 원인 추적이 불가능해진다(2026-07-21 로그 미생성 사고에서 실제로 막혔다).
+  const payload = { ...lastResults, env: { logDir: stateDirLabel(), recent: recentIssues.slice(-RECENT_MAX) } };
   await s`
     insert into classnote_workers (tenant_id, hostname, started_at, last_seen, last_results)
-    values (${tenant}, ${HOSTNAME}, ${STARTED_AT}, now(), ${s.json(lastResults)})
+    values (${tenant}, ${HOSTNAME}, ${STARTED_AT}, now(), ${s.json(payload)})
     on conflict (tenant_id, hostname) do update
       set last_seen = now(), started_at = excluded.started_at, last_results = excluded.last_results`;
 }

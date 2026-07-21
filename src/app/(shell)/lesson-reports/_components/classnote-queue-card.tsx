@@ -265,6 +265,22 @@ export function ClassnoteQueueCard({ view: served }: { view: ClassnoteQueueView 
                     ))}
                   </span>
                 ) : null}
+                {/* 실행환경(로그 위치·최근 경고) — 연동 PC는 물리적으로 다른 컴퓨터라 파일을 열어볼 수 없다.
+                    2026-07-21: 로그 폴더를 못 만들어 watch.log가 한 줄도 안 남았고, 같은 이유로 프로비저닝
+                    마커까지 죽어 하루 1회 작업이 15초마다 돌았다 — 그때 웹에 아무 단서가 없었다. */}
+                {w.env.logDir ? (
+                  <span className="text-text-faint max-w-[300px] truncate" title={`워커 로그 폴더: ${w.env.logDir}`}>
+                    로그 {w.env.logDir}
+                  </span>
+                ) : null}
+                {w.env.recent.length > 0 ? (
+                  <span
+                    className="text-danger max-w-[300px] truncate"
+                    title={w.env.recent.join("\n")}
+                  >
+                    최근 경고 {w.env.recent.length}건 — 마우스를 올려 확인
+                  </span>
+                ) : null}
               </div>
             ))
           )}

@@ -6,7 +6,12 @@ import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
 import { getTodaySchedule, getWeeklySchedule, getTeacherLabelsBySubject } from "@/features/timetable/server/queries";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { needsAttention, summarizeQueue, type QueueSummary, HUMAN_RESOLVED_STATUSES } from "../classnote-queue";
-import { formatWorkerResults, type WorkerResultRow } from "../worker-results";
+import {
+  extractWorkerEnv,
+  formatWorkerResults,
+  type WorkerEnvInfo,
+  type WorkerResultRow,
+} from "../worker-results";
 import { computeWritingRates, type TeacherRate, type TodayTarget, type DailyTarget } from "../writing-rate";
 
 // 날짜(YYYY-MM-DD) → 요일 키("mon"~"sun") — 주간 스케줄 dayOfWeek와 매칭(결정적 UTC).
@@ -65,6 +70,8 @@ export type WorkerStatus = {
   online: boolean;
   /** 폴러별 마지막 실행 요약(0123a last_results → 한글 표시행). 구워커(컬럼 미기록)는 빈 배열. */
   results: WorkerResultRow[];
+  /** 워커 실행환경(로그 폴더·최근 경고) — 연동 PC가 다른 컴퓨터라 웹에서 보이게. 구워커는 빈 값. */
+  env: WorkerEnvInfo;
 };
 
 export type ClassnoteQueueView = {
@@ -162,6 +169,7 @@ export async function getClassnoteQueue(days = 3): Promise<ClassnoteQueueView | 
       lastSeenMinutes: Math.max(0, mins),
       online: mins < WORKER_OFFLINE_MINUTES,
       results: formatWorkerResults(w.last_results),
+      env: extractWorkerEnv(w.last_results),
     };
   });
 
