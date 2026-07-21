@@ -451,6 +451,13 @@ export function ReportCard({
           >
             ClassNote 발송
           </Button>
+          {/* ⚠️ 결석 사유를 **눈에 보이게** — 예전엔 버튼 title 툴팁뿐이라 왜 비활성인지 알 수 없었다
+              (2026-07-21: 이 프로젝트에서 네이티브 툴팁이 실제로 안 뜨는 사례가 확인됨). */}
+          {subject.attendanceRaw === "absent" ? (
+            <span className="border-danger/40 bg-danger-soft text-danger rounded-pill border px-2 py-0.5 text-[11px] font-bold">
+              결석 — 발송 제외
+            </span>
+          ) : null}
           {cnBadge ? <span className={`text-[11px] font-bold ${cnBadge.cls}`}>{cnBadge.label}</span> : null}
         </div>
 

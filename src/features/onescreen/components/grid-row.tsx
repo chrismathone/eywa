@@ -384,6 +384,11 @@ export function GridBodyRow({
           >
             발송
           </Button>
+          {/* ⚠️ 결석 사유를 **눈에 보이게** — 예전엔 버튼 title 툴팁뿐이라 강사가 왜 발송이 막혔는지 알 수
+              없었다(2026-07-21: 네이티브 툴팁이 실제로 안 뜨는 사례 확인). 행 배경 톤만으론 이유가 안 읽힌다. */}
+          {isAbsent ? (
+            <span className="text-danger text-center text-[10px] font-bold">결석 — 발송 제외</span>
+          ) : null}
           {badge ? (
             <span className={`text-center text-[10px] font-bold ${badge.cls}`}>{badge.label}</span>
           ) : null}
