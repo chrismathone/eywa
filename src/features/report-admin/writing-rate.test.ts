@@ -82,3 +82,57 @@ describe("computeWritingRates — 요일별·주간 작성률(%+n/n)", () => {
     expect(rows[0]!.todayRate).toBeNull();
   });
 });
+
+// 2026-07-21 원장 제보: "오늘 수업이 이렇게 많은데 화요일 수업이 없다고 나온다".
+// 대상(분모)은 **시작된 수업**까지만이라(시작 전을 미작성으로 몰면 안 됨) 저녁 수업만 있는 강사는
+// 낮에 대상 0이 된다 — 그때 "수업 없음"이라고 쓰면 거짓말이라 '시작 전'을 따로 구분한다.
+describe("computeWritingRates — 오늘 아직 시작 전 수업(todayPending)", () => {
+  it("오늘 대상이 없어도 시작 전 수업이 있으면 pending으로 구분(수업 없음 아님)", () => {
+    const rows = computeWritingRates(DATES, [], [], [], TODAY, [
+      { teacher: "저녁쌤", classes: 3, firstStart: "18:20" },
+    ]);
+    const t = rows.find((r) => r.teacher === "저녁쌤")!;
+    expect(t.todayRate).toBeNull();
+    expect(t.todayPending).toEqual({ teacher: "저녁쌤", classes: 3, firstStart: "18:20" });
+    expect(t.daily[2]!.pending).toBe(true); // 오늘 칸 = '수업 전'
+  });
+
+  it("작성 기록도 대상도 없는 강사라도 시작 전 수업이 있으면 행이 남는다", () => {
+    const rows = computeWritingRates(DATES, [], [], [], TODAY, [
+      { teacher: "신규쌤", classes: 1, firstStart: "20:10" },
+    ]);
+    expect(rows.map((r) => r.teacher)).toContain("신규쌤");
+  });
+
+  it("시작 전 수업이 없으면 todayPending null(진짜 '수업 없음')·오늘 칸도 pending 아님", () => {
+    const rows = computeWritingRates(DATES, [{ teacher: "휴무쌤", date: "2026-07-07" }], [], [], TODAY, []);
+    const t = rows.find((r) => r.teacher === "휴무쌤")!;
+    expect(t.todayPending).toBeNull();
+    expect(t.daily[2]!.pending).toBeUndefined();
+  });
+
+  it("이미 시작된 수업이 있으면 비율은 그대로 두고 남은 수업만 덧붙인다(분모는 불변)", () => {
+    const rows = computeWritingRates(
+      DATES,
+      [],
+      [{ teacher: "종일쌤", target: 8, written: 4, missing: ["A"] }],
+      [],
+      TODAY,
+      [{ teacher: "종일쌤", classes: 2, firstStart: "19:00" }],
+    );
+    const t = rows.find((r) => r.teacher === "종일쌤")!;
+    expect(t.todayRate).toBe(50);
+    expect(t.todayTarget).toBe(8); // 시작 전 수업이 분모에 섞이지 않는다
+    expect(t.todayPending?.classes).toBe(2);
+    expect(t.daily[2]!.pending).toBeUndefined(); // 대상이 있으니 '수업 전' 표기는 아님
+  });
+
+  it("과거일 셀은 pending이 붙지 않는다(오늘 칸 전용)", () => {
+    const rows = computeWritingRates(DATES, [], [], [{ teacher: "쌤", date: "2026-07-07", target: 0 }], TODAY, [
+      { teacher: "쌤", classes: 1, firstStart: "18:20" },
+    ]);
+    const t = rows[0]!;
+    expect(t.daily[0]!.pending).toBeUndefined();
+    expect(t.daily[2]!.pending).toBe(true);
+  });
+});
