@@ -66,10 +66,14 @@ export function sortRows<T, K extends string>(
   });
 }
 
-/** 헤더에 붙일 방향 표시(정렬 중인 열만). 스크린리더용 aria-sort 값과 짝. */
-export function sortIndicator(state: SortState, key: string): "▲" | "▼" | "" {
-  if (!state || state.key !== key) return "";
-  return state.dir === "asc" ? "▲" : "▼";
+/**
+ * 헤더에 붙일 방향(정렬 중인 열만, 아니면 null). 스크린리더용 aria-sort 값과 짝.
+ * ⚠️ 여기서 "▲" 같은 **문자 글리프를 돌려주지 말 것** — 아이콘 자리에 텍스트 기호를 쓰는 건 리포 금지
+ * 규칙이고 `eywa-icon-mapping` 테스트가 잡는다. 방향만 주고 그림은 헤더가 EyIcon으로 그린다.
+ */
+export function sortIndicator(state: SortState, key: string): SortDir | null {
+  if (!state || state.key !== key) return null;
+  return state.dir;
 }
 
 export function ariaSort(state: SortState, key: string): "ascending" | "descending" | "none" {

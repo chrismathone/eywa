@@ -4,6 +4,32 @@
 
 ## 진행 상황
 
+### 강사 원스크린 "월간 발송" 달력 + 날짜 상세 (2026-07-21) - tsc0/lint0/test1825
+원장 요청("선생님도 각자 원스크린에서 발송현황을 월간 달력으로 / 누르면 해당 날짜가 상세하게").
+원스크린 `?view=history` 탭을 **"지난 보고서"(무한 목록) → "월간 발송"(달력)** 으로 바꿨다.
+- **집계는 DB**: [0127a `onescreen_send_calendar`](../supabase/migrations/0127a_onescreen_send_calendar.sql) —
+  (날짜 × 발송상태) group-by RPC(security invoker + `auth_tenant_id()`). ⚠️ **B2 이유가 실제로 있다**:
+  한 강사 한 달 보고서가 실측 255건(김은정/2026-07)이라 강사·달에 따라 1000행 절단 사정권에 들어가고,
+  달력은 "센 값"이 곧 화면이라 절단되면 **조용히 틀린 숫자**가 뜬다. RPC 반환은 최대 31일×상태(실측 24행).
+- **판정은 앱 순수함수**: [send-calendar.ts](../src/features/onescreen/send-calendar.ts) —
+  버킷(sent/pending/problem/**excluded**/unsent)·달 격자·기본 선택일. Vitest 15.
+  · `excluded`(결석·과목설정·오래됨)를 분모에서 빼 **"미발송"이 부풀지 않게** 한다(달력 표기 `발송/대상`).
+  · 모르는 상태는 `problem`(거짓 경보)도 `sent`(거짓말)도 아닌 **`unsent`** — 유일하게 항상 참인 답.
+- **날짜 상세는 기존 목록 재사용**: `HistoryBoard`에 `date` 모드 추가(`getMyPastReports({ on })`) —
+  목록 렌더를 두 벌 만들지 않는다. 달력↔**전체 목록** 토글도 남겼다(날짜를 가로지르는 학생 검색은
+  달력이 대체 못 하는 유일한 축).
+- ⚠️ 두 컴포넌트 모두 **effect 안 동기 setState 금지(#25)** 에 걸려, `loading`을 state가 아니라
+  "지금 화면 데이터가 지금 요청분인가"의 **파생값**으로 뒀다. 부수효과로 달을 넘기는 동안 지난 달 숫자가
+  새 달 머리글 밑에 남는 거짓말도 사라진다.
+
+### 정렬 화살표를 텍스트 글리프 → EyIcon (2026-07-21) - tsc0/lint0/test1825
+⚠️ **직전 커밋(6738be18)이 main에 남긴 실패 테스트 수정.** `SortableTh`가 방향 표시로 `▲`/`▼`
+**문자 글리프**를 썼는데, 리포엔 "아이콘 자리에 텍스트 기호 금지" 규칙과 그걸 잡는 가드 테스트
+(`eywa-icon-mapping` > *no visible emoji or text glyph*)가 있다. `sortIndicator`가 글리프 대신
+**방향(`"asc"|"desc"|null`)** 을 돌려주고 헤더가 `EyIcon chevronUp/Down`으로 그리도록 교체.
+- 📌 **교훈**: 커밋 전 게이트를 **부분 실행(관련 테스트만)** 하면 이런 전역 가드가 빠진다. 새 UI 문자
+  기호(화살표·별·체크)를 쓰면 전체 스위트를 돌릴 것.
+
 ### 정렬 확장 1차 — 강사별 작성률 (2026-07-21) - tsc0/lint0/test283
 [SortableTh](../src/components/table/sortable-th.tsx)를 강사별 작성률 표에 적용(강사·오늘·주간).
 '수업 없음'(null)은 규약대로 방향과 무관하게 뒤로 간다.

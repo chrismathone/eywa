@@ -40,7 +40,7 @@ import { TestCard } from "./test-card";
 import { ReportCard, type SubjectReport } from "./report-card";
 import { OneScreenGrid } from "./onescreen-grid";
 import { StatusBoard } from "./status-board";
-import { HistoryBoard } from "./history-board";
+import { SendCalendarBoard } from "./send-calendar";
 import { NoticeComposer } from "./notice-composer";
 import {
   buildGridRows,
@@ -1500,7 +1500,7 @@ export function OneScreenClient({
       ) : view === "status" ? (
         <StatusBoard students={visible} reports={reports} onOpenCard={openCard} />
       ) : view === "history" ? (
-        <HistoryBoard />
+        <SendCalendarBoard todayYmd={todayYmd} />
       ) : view === "notice" ? (
         <NoticeComposer
           key={`notice-${noticeSeed?.join(",") ?? ""}`}

@@ -95,10 +95,11 @@ describe("sortRows", () => {
 });
 
 describe("표시 보조", () => {
-  it("정렬 중인 열만 화살표·aria-sort", () => {
+  it("정렬 중인 열만 방향·aria-sort (문자 화살표 글리프를 돌려주지 않는다 — 아이콘 규칙)", () => {
     const s = { key: "name", dir: "asc" as const };
-    expect(sortIndicator(s, "name")).toBe("▲");
-    expect(sortIndicator(s, "views")).toBe("");
+    expect(sortIndicator(s, "name")).toBe("asc");
+    expect(sortIndicator({ key: "name", dir: "desc" }, "name")).toBe("desc");
+    expect(sortIndicator(s, "views")).toBeNull();
     expect(ariaSort(s, "name")).toBe("ascending");
     expect(ariaSort(s, "views")).toBe("none");
     expect(ariaSort(null, "name")).toBe("none");

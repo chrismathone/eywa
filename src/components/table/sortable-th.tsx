@@ -12,6 +12,7 @@
  * 같은 이름 목록이 화면마다 다른 순서로 나온다.
  */
 import type { ReactNode } from "react";
+import { EyIcon } from "@/components/icons/eywa-icons";
 import { ariaSort, sortIndicator, toggleSort, type SortState } from "@/lib/table/sort";
 
 export function SortableTh<K extends string>({
@@ -43,8 +44,10 @@ export function SortableTh<K extends string>({
         title={active ? "다시 누르면 방향 전환 · 한 번 더 누르면 정렬 해제" : "눌러서 이 열로 정렬"}
       >
         {children}
-        <span aria-hidden className={`text-[9px] ${active ? "" : "opacity-0 group-hover:opacity-40"}`}>
-          {sortIndicator(state, sortKey) || "▲"}
+        {/* 방향 표시는 EyIcon(텍스트 화살표 글리프 금지 규칙). 비활성 열은 hover에서만 흐리게 — 어느 열이
+            정렬 가능한지 알리되 평소엔 조용하도록. */}
+        <span aria-hidden className={active ? "" : "opacity-0 group-hover:opacity-40"}>
+          <EyIcon name={sortIndicator(state, sortKey) === "desc" ? "chevronDown" : "chevronUp"} size={11} />
         </span>
       </button>
     </th>
