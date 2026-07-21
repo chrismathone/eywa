@@ -3,24 +3,9 @@
 import { useState, useTransition } from "react";
 import { setAttendanceCell } from "@/features/attendance/server/actions";
 import type { AttendanceStatus } from "@/features/attendance/server/queries";
-import { COUNTABLE_STATUSES, formatSessionUnits, parseSessionUnits } from "@/features/attendance/session-units";
+import { parseSessionUnits } from "@/features/attendance/session-units";
+import { STATUS_TEXT, STATUS_TONE, cellDisplay } from "@/features/attendance/cell-display";
 
-const STATUS_LABEL: Record<AttendanceStatus, string> = {
-  present: "O",
-  absent: "X",
-  late: "L",
-  excused: "X",
-  makeup: "보",
-  early_leave: "조",
-};
-const STATUS_CLASS: Record<AttendanceStatus, string> = {
-  present: "bg-primary-soft text-primary",
-  absent: "bg-danger-soft text-danger",
-  late: "bg-amber-soft text-amber",
-  excused: "bg-danger-soft text-danger",
-  makeup: "bg-purple-soft text-purple",
-  early_leave: "bg-rose-soft text-rose",
-};
 const OPTIONS: { value: AttendanceStatus; name: string }[] = [
   { value: "present", name: "출석" },
   { value: "absent", name: "결석" },
@@ -32,7 +17,7 @@ const OPTIONS: { value: AttendanceStatus; name: string }[] = [
 /**
  * 출석부 매트릭스 인라인 셀 — 클릭 시 상태 팝오버, 낙관적 업데이트 후 단일 셀 저장.
  * 페이지 이동 없이 빠르게 출결을 찍는다(반응속도 1순위). 숙제 상세는 일자 입력 화면에서.
- * 시수(정규 1회 기준 배수): 기본 1은 상태 글자(O/L/보/조), 1이 아니면 숫자로 표시(구 출석부 표기 관행).
+ * 표기는 숫자 + 배경색(출석·지각·조퇴·보강 = 시수, 결석 = 0) — 규칙은 cell-display.ts 단일 소스.
  */
 export function AttendanceCell({
   studentId,
@@ -41,6 +26,8 @@ export function AttendanceCell({
   initialStatus,
   note,
   initialUnits,
+  attendDay,
+  muted,
 }: {
   studentId: string;
   classId: string;
@@ -48,6 +35,10 @@ export function AttendanceCell({
   initialStatus: AttendanceStatus | null;
   note?: string | null;
   initialUnits?: number | null;
+  /** 그 학생이 그 요일에 등원하는지 — 기록 없는 칸의 하이라이트. */
+  attendDay?: boolean;
+  /** 주말·공휴일 등 수업이 없는 날(회색). */
+  muted?: boolean;
 }) {
   const [status, setStatus] = useState<AttendanceStatus | null>(initialStatus);
   const [units, setUnits] = useState<number | null>(initialUnits ?? null);
@@ -98,13 +89,9 @@ export function AttendanceCell({
     });
   };
 
-  const cls = status ? STATUS_CLASS[status] : "";
-  // 시수 ≠ 1 이면 숫자 표기(색은 상태 유지) — 구 출석부의 "숫자 = 몇 회분" 읽기 관행.
-  const showUnits = status !== null && COUNTABLE_STATUSES.has(status) && units !== null && units !== 1;
-  const label = status ? (showUnits ? formatSessionUnits(units!) : STATUS_LABEL[status]) : "·";
+  const display = cellDisplay(status, units, { attendDay, muted });
   const titleText =
-    [showUnits ? `시수 ${formatSessionUnits(units!)}` : null, noteVal || null].filter(Boolean).join(" · ") ||
-    undefined;
+    [status ? STATUS_TEXT[status] : null, noteVal || null].filter(Boolean).join(" · ") || undefined;
 
   return (
     <>
@@ -122,17 +109,24 @@ export function AttendanceCell({
               : { x: r.left, top: r.bottom + 4 },
           );
           setDraft(noteVal);
-          setUnitsDraft(units !== null && units !== 1 ? formatSessionUnits(units) : "");
+          setUnitsDraft(units !== null && units !== 1 ? String(units) : "");
           setUnitsError(false);
           setOpen(true);
         }}
         title={titleText}
-        className={`relative mx-auto block size-7 text-center leading-7 text-[11px] font-bold ${cls} ${
-          status ? "" : "text-text-faint hover:bg-bg-soft"
+        // 셀 전체를 채우는 배경색이 곧 상태 표시 — 부모 td는 relative + p-0.
+        // ⚠️ 고정 크기 칩에 배경을 주면 셀을 못 채운다(gotcha #66).
+        className={`absolute inset-0 flex items-center justify-center text-[11px] font-bold transition ${display.className} ${
+          status ? "" : "hover:bg-bg-soft"
         }`}
-        aria-label={noteVal ? `출결 상태 변경 (메모: ${noteVal})` : "출결 상태 변경"}
+        aria-label={[
+          `출결 상태 변경 (현재: ${status ? STATUS_TEXT[status] : "미기록"})`,
+          noteVal ? `메모: ${noteVal}` : null,
+        ]
+          .filter(Boolean)
+          .join(" ")}
       >
-        {label}
+        {display.text}
         {noteVal ? (
           <span
             className="border-t-danger absolute top-0 right-0 size-0 border-t-[5px] border-l-[5px] border-l-transparent"
@@ -161,16 +155,14 @@ export function AttendanceCell({
                 // 시수 초안을 함께 커밋 — "시수 타이핑 → 상태 클릭" 순서에서 초안이 조용히 버려지는 것 방지.
                 // (초안이 잘못된 값이면 apply가 에러 표시 후 중단 — 팝오버 유지)
                 onClick={() => apply(o.value, undefined, unitsDraft)}
-                className={`flex items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition hover:bg-bg-soft ${
+                className={`flex items-center justify-between gap-3 rounded-md px-2 py-1 text-left text-xs transition hover:bg-bg-soft ${
                   status === o.value ? "font-bold" : ""
                 }`}
               >
-                <span
-                  className={`inline-flex size-5 items-center justify-center rounded-sm text-[11px] font-bold ${STATUS_CLASS[o.value]}`}
-                >
-                  {STATUS_LABEL[o.value]}
-                </span>
                 {o.name}
+                {/* 표기가 숫자·배경색이라 좌측 O/X 글자 대신 우측 색칩으로 "어떤 색이 칠해지는지"를 보여준다.
+                    셀과 같은 STATUS_TONE을 써서 칩 색이 실제 셀과 어긋날 수 없다. */}
+                <span className={`border-line size-4 shrink-0 rounded-sm border ${STATUS_TONE[o.value]}`} aria-hidden />
               </button>
             ))}
             {/* 시수(배수)·메모 — 현재 상태와 함께 저장. 상태 없으면 비활성(단독 저장 불가). */}

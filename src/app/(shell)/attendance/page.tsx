@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { ChevronLeft, ChevronRight, Clock, UserCheck, Users, UserX } from "@/components/icons/eywa-icon-compat";
-import { Pill } from "@/components/atoms/pill";
 import { BigStat } from "@/components/atoms/big-stat";
 import { PhotoCard } from "@/components/atoms/photo-card";
 import { PageHeader } from "@/components/page-header";
@@ -17,6 +16,8 @@ import {
   type AttendanceStatus,
 } from "@/features/attendance/server/queries";
 import { COUNTABLE_STATUSES, formatSessionUnits } from "@/features/attendance/session-units";
+import { buildHolidayMap, formatDows } from "@/features/attendance/calendar";
+import { STATUS_TEXT, cellDisplay } from "@/features/attendance/cell-display";
 import { buildQuickOpen } from "@/features/attendance/quick-open";
 import { AttendanceCell } from "./_components/attendance-cell";
 import { QuickOpenPanel } from "./_components/quick-open-panel";
@@ -302,7 +303,13 @@ export default async function AttendancePage({
               description="학생목록에서 등록 후 다시 확인하세요."
             />
           ) : (
-            <MatrixTable matrix={matrix} days={visibleDays} selectedClassId={effectiveClassId} />
+            <MatrixTable
+              matrix={matrix}
+              days={visibleDays}
+              selectedClassId={effectiveClassId}
+              // 공휴일은 학원설정(operations.holidays)이 단일 소스 — 헤더 빨간 날짜·셀 회색 처리에 동기화.
+              holidays={buildHolidayMap(operations.holidays)}
+            />
           )}
         </>
       )}
@@ -312,33 +319,25 @@ export default async function AttendancePage({
 
 // ─────────────────── 매트릭스 테이블 ───────────────────
 
-const STATUS_LABEL: Record<AttendanceStatus, string> = {
-  present: "O",
-  absent: "X",
-  late: "L",
-  excused: "X",
-  makeup: "보",
-  early_leave: "조",
-};
-
 function MatrixTable({
   matrix,
   days,
   selectedClassId,
+  holidays,
 }: {
   matrix: AttendanceMatrix;
   days: AttendanceMatrix["days"];
   selectedClassId: string;
+  /** "YYYY-MM-DD" → 휴일명(학원설정). 헤더는 빨간 날짜 + 툴팁, 본문은 회색(수업 없음). */
+  holidays: Record<string, string>;
 }) {
+  const classDows = new Set(matrix.classDows);
   return (
     <DragScrollArea className="bg-card shadow-card rounded-2xl">
       <table className="min-w-full border-collapse text-sm">
         <thead>
           <tr>
-            <th className="bg-bg-soft border-line sticky left-0 z-10 min-w-[40px] border-b border-r px-3 py-2 text-left whitespace-nowrap">
-              <span className="micro">#</span>
-            </th>
-            <th className="bg-bg-soft border-line sticky left-[40px] z-10 border-b border-r px-3 py-2 text-left whitespace-nowrap">
+            <th className="bg-bg-soft border-line sticky left-0 z-10 border-b border-r px-3 py-2 text-left whitespace-nowrap">
               <span className="micro">이름</span>
             </th>
             <th className="bg-bg-soft border-line border-b border-r px-2 py-2 text-left whitespace-nowrap">
@@ -347,26 +346,41 @@ function MatrixTable({
             <th className="bg-bg-soft border-line border-b border-r px-2 py-2 text-left whitespace-nowrap">
               <span className="micro">학교</span>
             </th>
-            {days.map((d) =>
-              d.placeholder ? (
-                // 그 달에 없는 날 — 빈 여백(번호·요일 없음). 폭은 다른 날 칸과 동일(min-w)로 고정.
-                <th key={d.date} className="border-line bg-bg-soft/30 min-w-[34px] border-b border-r" aria-hidden />
-              ) : (
+            {days.map((d) => {
+              // 그 달에 없는 날 — 빈 여백(번호·요일 없음). 폭은 다른 날 칸과 동일(min-w)로 고정.
+              if (d.placeholder) {
+                return <th key={d.date} className="border-line bg-bg-soft/30 min-w-[34px] border-b border-r" aria-hidden />;
+              }
+              const holiday = holidays[d.date];
+              const isClassDay = classDows.has(d.dow) && !holiday;
+              // 배경 = 오늘 > 수업요일(브랜드 틴트) > 주말 > 평일. 글자색 = 일요일·공휴일이면 빨강(달력 관행).
+              const bg = d.isToday
+                ? "bg-primary"
+                : isClassDay
+                  ? "bg-primary-soft"
+                  : d.isWeekend || holiday
+                    ? "bg-bg-soft/70"
+                    : "bg-bg-soft";
+              const fg = d.isToday
+                ? "text-primary-foreground"
+                : holiday || d.dow === 0
+                  ? "text-danger"
+                  : isClassDay
+                    ? "text-foreground"
+                    : d.isWeekend
+                      ? "text-text-faint"
+                      : "text-text-dim";
+              return (
                 <th
                   key={d.date}
-                  className={`border-line min-w-[34px] border-b border-r px-1 py-2 text-center num text-[10px] ${
-                    d.isToday
-                      ? "bg-primary text-primary-foreground"
-                      : d.isWeekend
-                        ? "bg-bg-soft/70 text-text-faint"
-                        : "bg-bg-soft text-text-dim"
-                  }`}
+                  title={holiday ?? undefined}
+                  className={`border-line num min-w-[34px] border-b border-r px-1 py-2 text-center text-[10px] ${bg} ${fg}`}
                 >
                   <div className="font-bold">{d.day}</div>
                   <div className="opacity-70">{d.label}</div>
                 </th>
-              ),
-            )}
+              );
+            })}
             {/* 시수 합 — 소비 상태(출석·지각·조퇴·보강) 셀의 배수 합(기본 1). 구 출석부 '합계' 관행. */}
             <th className="bg-bg-soft border-line sticky right-[64px] z-10 w-[52px] min-w-[52px] border-b border-l px-2 py-2 text-right whitespace-nowrap">
               <span className="micro">시수</span>
@@ -377,7 +391,7 @@ function MatrixTable({
           </tr>
         </thead>
         <tbody>
-          {matrix.students.map((s, i) => {
+          {matrix.students.map((s) => {
             const studentMarks = matrix.marks[s.id] ?? {};
             const studentUnits = matrix.units[s.id] ?? {};
             const recorded = Object.values(studentMarks);
@@ -399,13 +413,16 @@ function MatrixTable({
                   : rate >= 80
                     ? "text-amber"
                     : "text-danger";
+            const attendDows = new Set(s.attendDows);
+            const attendLabel = formatDows(s.attendDows);
             return (
               <tr key={s.id} className="hover:bg-bg-soft/40">
-                <td className="border-line text-text-dim sticky left-0 z-10 min-w-[40px] border-b border-r bg-card px-3 py-2 text-[11px] whitespace-nowrap">
-                  {i + 1}
-                </td>
-                <td className="border-line text-foreground sticky left-[40px] z-10 border-b border-r bg-card px-3 py-2 text-[12px] font-bold whitespace-nowrap">
+                {/* 이름 + 등원요일 — 같은 반이라도 학생마다 오는 요일이 다르다(분리등원). */}
+                <td className="border-line text-foreground sticky left-0 z-10 border-b border-r bg-card px-3 py-2 text-[12px] font-bold whitespace-nowrap">
                   {s.name}
+                  {attendLabel ? (
+                    <span className="text-text-faint ml-1.5 text-[10px] font-medium">{attendLabel}</span>
+                  ) : null}
                 </td>
                 <td className="border-line text-text-dim border-b border-r px-2 py-2 text-[11px] whitespace-nowrap">
                   {s.grade ?? "—"}
@@ -421,14 +438,15 @@ function MatrixTable({
                     );
                   }
                   const mark = (studentMarks[d.date] as AttendanceStatus | undefined) ?? null;
-                  // 주말 음영은 td(셀 전체)에 — 헤더(th)와 동일. 내부 칩(28px)에 주던 옛 방식은
-                  // 행 높이가 칩보다 커 위아래로 음영이 안 차는 버그가 있었다. align-middle로 칩은 중앙.
+                  const holiday = holidays[d.date];
+                  // 등원요일 = 그 학생이 실제로 오는 날(분리등원 반영) — 공휴일은 휴원이라 제외.
+                  const attend = attendDows.has(d.dow) && !holiday;
+                  // 배경(음영·틴트)은 셀을 꽉 채우는 AttendanceCell 버튼이 그린다 — td는 relative 무대만
+                  // 제공한다(고정 크기 칩에 배경을 주면 셀을 못 채운다, gotcha #66).
                   return (
                     <td
                       key={d.date}
-                      className={`border-line min-w-[34px] border-b border-r p-0 text-center align-middle ${
-                        d.isWeekend ? "bg-bg-soft/40" : ""
-                      }`}
+                      className="border-line relative min-w-[34px] border-b border-r p-0 text-center align-middle"
                     >
                       <AttendanceCell
                         studentId={s.id}
@@ -437,6 +455,8 @@ function MatrixTable({
                         initialStatus={mark}
                         note={matrix.notes[s.id]?.[d.date] ?? null}
                         initialUnits={studentUnits[d.date] ?? null}
+                        attendDay={attend}
+                        muted={!!holiday || (!attend && d.isWeekend)}
                       />
                     </td>
                   );
@@ -457,21 +477,36 @@ function MatrixTable({
           <tr>
             {/* 범례 1행: 좌측 요약 노트 + 우측(ml-auto) 범례 Pill 가로 나열(좁으면 가로 스크롤, 줄바꿈 X) */}
             <td
-              colSpan={days.length + 6}
+              colSpan={days.length + 5}
               className="bg-bg-soft border-line border-t px-3 py-2"
             >
               <div className="flex items-center gap-2 overflow-x-auto text-[11px] [&>*]:shrink-0 [&_*]:whitespace-nowrap">
                 <span className="text-text-faint text-[11px]">
-                  총 {matrix.stats.totalRecords}회 기록 · 셀 클릭 시 출결·시수 즉시 변경 (시수: 정규 1회=1, 보강 연장 1.5·2)
+                  총 {matrix.stats.totalRecords}회 기록 · 셀 클릭 시 즉시 변경 (출석·지각·조퇴·보강 = 시수, 결석 = 0)
                 </span>
                 <span className="micro ml-auto">범례</span>
-                {(["present", "absent", "late", "early_leave", "makeup"] as AttendanceStatus[]).map(
-                  (s) => (
-                    <Pill key={s} color={pillColorFor(s)}>
-                      {STATUS_LABEL[s]} {labelFor(s)}
-                    </Pill>
-                  ),
-                )}
+                {/* 범례 칩은 셀과 **같은 함수**로 그린다 — 색·숫자가 실제 셀과 어긋날 수 없게. */}
+                {(["present", "late", "early_leave", "makeup", "absent"] as AttendanceStatus[]).map((s) => {
+                  const chip = cellDisplay(s, null);
+                  return (
+                    <span key={s} className="text-text-dim inline-flex items-center gap-1">
+                      <span
+                        className={`inline-flex size-5 items-center justify-center rounded-sm text-[10px] font-bold ${chip.className}`}
+                      >
+                        {chip.text}
+                      </span>
+                      {STATUS_TEXT[s]}
+                    </span>
+                  );
+                })}
+                <span className="text-text-dim inline-flex items-center gap-1">
+                  <span className="bg-primary-softer border-line inline-block size-5 rounded-sm border" />
+                  등원요일
+                </span>
+                <span className="text-text-dim inline-flex items-center gap-1">
+                  <span className="bg-bg-soft/50 border-line inline-block size-5 rounded-sm border" />
+                  휴일·수업없음
+                </span>
               </div>
             </td>
           </tr>
@@ -481,23 +516,4 @@ function MatrixTable({
   );
 }
 
-function pillColorFor(
-  s: AttendanceStatus,
-): "primary" | "danger" | "amber" | "blue" | "purple" | "rose" {
-  if (s === "present") return "primary";
-  if (s === "absent") return "danger";
-  if (s === "late") return "amber";
-  if (s === "early_leave") return "rose";
-  if (s === "excused") return "danger";
-  return "purple";
-}
-
-function labelFor(s: AttendanceStatus): string {
-  if (s === "present") return "출석";
-  if (s === "absent") return "결석";
-  if (s === "late") return "지각";
-  if (s === "early_leave") return "조퇴";
-  if (s === "excused") return "결석";
-  return "보강";
-}
 
