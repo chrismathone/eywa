@@ -36,6 +36,7 @@ export function OneScreenGrid({
   attReadOnly,
   genKey,
   bulkGen,
+  uploadingAttKey,
 }: {
   students: OneScreenStudent[]; // 현재 필터(반)로 보이는 학생만
   reports: Record<string, Record<string, SubjectReport>>; // studentId → 과목명 → 발송상태
@@ -53,6 +54,7 @@ export function OneScreenGrid({
   attReadOnly?: boolean; // 출결 쓰기 권한 없음 — pill을 표시 전용으로
   genKey?: string | null; // 자동작성 중인 행 키(studentId::과목)
   bulkGen?: boolean; // 전체 자동작성 진행중
+  uploadingAttKey?: string | null; // 첨부 업로드 중인 행 키(studentId::과목) — 그 행 클립만 로딩 표시
 }) {
   const rows = buildGridRows(students).filter((r) => rowInClass(r.subject, classFilter));
   // 작업별 대상(2-3): 발송·자동작성=진도+결석 제외, 저장=진도만(결석 포함 — 기록 보존).
@@ -307,7 +309,13 @@ export function OneScreenGrid({
                     fields={fields}
                     actions={rowActions}
                     config={config}
-                    gen={{ rowBusy: genKey === row.key, bulk: bulkGen, attPending, attReadOnly }}
+                    gen={{
+                      rowBusy: genKey === row.key,
+                      bulk: bulkGen,
+                      attPending,
+                      attReadOnly,
+                      uploadingKey: uploadingAttKey,
+                    }}
                     nav={{ row: i, studentRow: firstOfStudent ? meta.studentRow : undefined }}
                     orderControls={orderControls}
                   />
