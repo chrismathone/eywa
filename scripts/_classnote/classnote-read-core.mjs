@@ -122,8 +122,20 @@ export async function pollReportReadsOnce(
     if (rowsUpdated.length) log(`[읽음] ${kind} 매칭 갱신 ${rowsUpdated.length}건`);
   }
   if (matched === 0 && updates.length > 0) {
-    // 후보는 있는데 한 건도 안 붙었다 = 매칭 키 미배선(edutrix-sync가 share_token을 아직 안 채웠거나 창 밖).
-    log(`[읽음] ⚠️ 후보 ${updates.length}건이 eywa 행과 매칭되지 않음 — edutrix_share_token 임포트 여부 확인 필요`);
+    // ⚠️ matched===0만으로는 경고할 수 없다(2026-07-21 실측 오경보): 창 안 후보를 **매 폴 다시 훑는** 구조라,
+    // 이미 다 반영된 정상 정상상태에서도 `classnote_read_at is null` 필터에 걸려 갱신 0건이 된다.
+    // (실측: 후보 576건 · eywa 토큰 보유 540행 중 297행 이미 읽음 채움 → 새로 채울 게 없어 0건.)
+    // 진짜 문제는 **토큰이 eywa에 아예 없을 때**(edutrix-sync 미배선)뿐이므로 그것만 구분해 경고한다.
+    const allTokens = updates.map((u) => u.token);
+    const [{ n: known }] = await sql`
+      select count(*)::int as n from lesson_reports
+      where tenant_id = ${tenant}
+        and (edutrix_share_token = any(${allTokens}::text[]) or share_token::text = any(${allTokens}::text[]))`;
+    if (known === 0) {
+      log(`[읽음] ⚠️ 후보 ${updates.length}건이 eywa 행과 매칭되지 않음 — edutrix_share_token 임포트 여부 확인 필요`);
+    } else {
+      log(`[읽음] 새로 반영할 읽음 없음 — 후보 ${updates.length}건 중 eywa 대응 ${known}행은 이미 반영됨(정상)`);
+    }
   }
   return { ran: true, ...scan, matched, dryRun: false };
 }
