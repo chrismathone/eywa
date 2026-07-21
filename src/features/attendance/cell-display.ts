@@ -23,6 +23,16 @@ export const STATUS_TONE: Record<AttendanceMark, string> = {
   makeup: "bg-purple/20 text-purple",
 };
 
+/**
+ * 날짜 성격 배경(원장 2026-07-21) — 헤더·본문이 **같은 상수**를 써야 열이 위아래로 어긋나지 않는다.
+ * · 수업하는 요일 = 민트(green 계열 — 출결 5색 primary/danger/amber/blue/purple과 겹치지 않는 유일한 색상)
+ * · 수업 없는 평일 = 흰색(클래스 없음)  · 주말·공휴일 = 회색
+ */
+export const DAY_TONE = {
+  classDay: "bg-green/15",
+  weekend: "bg-bg-soft/70",
+} as const;
+
 export const STATUS_TEXT: Record<AttendanceMark, string> = {
   present: "출석",
   absent: "결석",
@@ -42,7 +52,7 @@ export function markNumber(status: AttendanceMark, units: number | null | undefi
 export type CellDisplay = { text: string; className: string };
 
 /**
- * 셀 한 칸의 표기 — 기록이 없으면 "·"(등원요일이면 옅은 브랜드 틴트로 "찍어야 할 칸" 표시).
+ * 셀 한 칸의 배경 = 그 날의 성격(원장 규칙 2026-07-21): **수업하는 요일 민트 · 수업 없는 평일 흰색 · 주말 회색**.
  * @param attendDay 그 학생이 그 요일에 등원하는지(수업요일 하이라이트)
  * @param muted 주말·공휴일 등 수업이 없는 날(회색)
  */
@@ -52,7 +62,7 @@ export function cellDisplay(
   opts: { attendDay?: boolean; muted?: boolean } = {},
 ): CellDisplay {
   if (status) return { text: markNumber(status, units), className: STATUS_TONE[status] };
-  if (opts.muted) return { text: "·", className: "text-text-faint bg-bg-soft/50" };
-  if (opts.attendDay) return { text: "·", className: "text-text-faint bg-primary-softer" };
+  if (opts.muted) return { text: "·", className: `text-text-faint ${DAY_TONE.weekend}` };
+  if (opts.attendDay) return { text: "·", className: `text-text-faint ${DAY_TONE.classDay}` };
   return { text: "·", className: "text-text-faint" };
 }
