@@ -61,6 +61,41 @@ function BigStatInline({
   );
 }
 
+/**
+ * 실패 사유 셀 — 한 줄 요약 + (원문이 더 길면) '자세히'로 그 자리 펼침.
+ * ⚠️ 이전엔 `title` 툴팁 하나에 의존했는데 **실제로 안 보였다**(2026-07-21 원장 제보). 네이티브 툴팁은
+ * 지연·마우스 유지·터치 환경에 좌우되고 표 셀에서 특히 놓치기 쉬워, 화면에 남는 펼침으로 바꿨다.
+ * title은 보조로 남긴다(뜨면 좋고 안 떠도 무방).
+ */
+function ReasonCell({ summary, raw }: { summary: string; raw: string }) {
+  const [open, setOpen] = useState(false);
+  // 요약이 원문을 이미 다 담고 있으면(워커 한글 안내문 통과분) '자세히'는 노이즈 — 그때만 숨긴다.
+  const hasMore = !!raw && raw !== summary;
+  return (
+    <td className="text-text-faint max-w-[280px] px-3 py-2.5 align-top">
+      {/* ⚠️ **자르지 않는다** — 잘린 뒤를 볼 수단이 툴팁뿐이었고 그게 안 보였다(2026-07-21). 사유는 원장이
+          다음 행동을 정하는 정보라 몇 줄 늘어나도 다 보여주는 쪽이 맞다. 한글은 어절 단위로 끊는다. */}
+      <div className="break-keep whitespace-normal" title={raw || undefined}>
+        {summary}
+      </div>
+      {hasMore ? (
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          className="text-primary mt-0.5 text-[11px] font-bold underline-offset-2 hover:underline"
+        >
+          {open ? "접기" : "자세히"}
+        </button>
+      ) : null}
+      {open && hasMore ? (
+        <p className="text-text-dim border-line mt-1 break-keep border-t pt-1 text-[11px] whitespace-normal">
+          {raw}
+        </p>
+      ) : null}
+    </td>
+  );
+}
+
 export function ClassnoteQueueCard({ view: served }: { view: ClassnoteQueueView }) {
   const router = useRouter();
   const subjects = useSubjectMaps(); // 과목 표시는 한글 라벨(raw 키 노출 금지)
@@ -375,14 +410,18 @@ export function ClassnoteQueueCard({ view: served }: { view: ClassnoteQueueView 
                         </span>
                       )}
                     </td>
-                    {/* 사유 = 한글 요약(기술 원문은 마우스 오버 툴팁) — 원장이 바로 읽게.
-                        ⚠️ blocked_shared는 워커가 이미 한글 안내문(연결 가족 포함)을 넣어주므로 그대로 노출한다
-                        — humanizeClassnoteError를 태우면 '발송 실패…' 일반 문구로 뭉개진다. */}
-                    <td className="text-text-faint max-w-[260px] truncate px-3 py-2.5" title={sanitizeErrorText(it.error)}>
-                      {it.status === "blocked_shared"
-                        ? (it.error ?? "—")
-                        : (humanizeClassnoteError(it.error) ?? "—")}
-                    </td>
+                    {/* 사유 — ⚠️ **네이티브 title 툴팁에 의존하지 않는다**(2026-07-21 원장 제보: "마우스를 올려
+                        확인"이라 써 있는데 올려도 안 보임). 요약이 잘렸을 때만 '자세히' 버튼을 띄우고, 누르면
+                        원문을 그 자리에서 펼친다 — 마우스 유지·지연·터치 환경에 좌우되지 않는다.
+                        ⚠️ blocked_shared는 워커가 이미 한글 안내문(연결 가족 포함)을 넣어주므로 그대로 노출. */}
+                    <ReasonCell
+                      summary={
+                        it.status === "blocked_shared"
+                          ? (it.error ?? "—")
+                          : (humanizeClassnoteError(it.error) ?? "—")
+                      }
+                      raw={sanitizeErrorText(it.error)}
+                    />
                   </tr>
                 );
               })}
