@@ -51,8 +51,10 @@ CLASSNOTE_TENANT_ID=becaa316-e636-42e9-9d09-08b133e0b094
 CLASSNOTE_SCREENSHOT_BASE=https://eywa-alpha.vercel.app
 CLASSNOTE_SHARE_BASE=https://eywa-alpha.vercel.app
 
-# (선택) 스크린샷 시 /r 조회수 로깅을 건너뛰는 내부 헤더. 없으면 조회수만 1 늘 뿐 발송엔 무관.
-# CLASSNOTE_INTERNAL_SECRET=<앱과 동일한 내부 시크릿>
+# ⚠️ 파일 첨부(pdf·엑셀·hwp 등)를 쓰면 **필수**. 워커가 이 헤더로 eywa 내부 엔드포인트에서 첨부 원본을
+# 받아 ClassNote에 올린다 — 없으면 401 → "파일 첨부 업로드 실패(전건)"으로 그 보고서 발송 자체가 실패한다.
+# (사진 전용이면 선택 — 스크린샷 시 /r 조회수 로깅을 건너뛰는 용도라 없어도 조회수만 1 늘 뿐.)
+CLASSNOTE_INTERNAL_SECRET=<앱(Vercel)과 동일한 내부 시크릿>
 ```
 
 > ⚠️ 주소 두 줄은 **복사-붙여넣기**로 넣으세요. 2026-07-10 실발송 테스트에서 수기 입력 오타

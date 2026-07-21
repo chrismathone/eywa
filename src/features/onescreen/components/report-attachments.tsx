@@ -30,6 +30,7 @@ export function ReportAttachments({
   subject,
   reportDate,
   disabled,
+  hiddenFromParents,
   ensureSaved,
   onChanged,
 }: {
@@ -37,6 +38,8 @@ export function ReportAttachments({
   subject: string; // 과목키(math/english…)
   reportDate?: string; // 대상 보고서 날짜(생략=오늘)
   disabled?: boolean;
+  /** 학원설정 '사진·파일 첨부'(report.showAttachments)가 꺼짐 — 첨부해도 학부모에게 안 실린다는 경고 표시용. */
+  hiddenFromParents?: boolean;
   ensureSaved: () => Promise<boolean>; // 첫 첨부 전 보고서 행 보장(true=저장됨). false면 첨부 중단.
   onChanged?: () => void; // 첨부/삭제 후(서버가 classnote 상태 리셋 → 부모 갱신용)
 }) {
@@ -165,6 +168,14 @@ export function ReportAttachments({
           />
         </label>
       </div>
+      {/* 거짓 약속 차단(2026-07-21) — showAttachments가 꺼져 있으면 첨부는 저장되지만 /r·인쇄·ClassNote 어디에도
+          안 실린다. 워커도 파일첨부 API 경로를 안 타고 스샷만 보내 '발송 성공인데 파일 없음'이 된다. */}
+      {hiddenFromParents ? (
+        <p className="border-amber/40 bg-amber-soft text-amber mb-1.5 rounded border px-2 py-1.5 text-[11px] leading-snug">
+          학원설정 → 보고서 → 표시 항목의 <b>사진·파일 첨부</b>가 꺼져 있어, 지금 첨부해도 학부모 보고서·ClassNote에는
+          표시되지 않습니다.
+        </p>
+      ) : null}
       {atts.length ? (
         <div className="grid grid-cols-3 gap-1.5">
           {atts.map((a) => (

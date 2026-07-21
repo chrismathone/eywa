@@ -4,6 +4,22 @@
 
 ## 진행 상황
 
+### 파일 첨부가 "되는데 안 실리는" 문제 = showAttachments 게이트 (2026-07-21) — ✅ tsc0/lint0 · 마이그 0
+"학원이 계정으로 엑셀 첨부가 안 된다" 제보. **첨부 오류도 확장자 오류도 아니었다** — 업로드는 성공했고
+(`RPM 교육과정 (중등).xlsx` 10,726B가 7/21 수학 보고서에 저장, ClassNote `success`), 원인은 injaewon의
+`report.showAttachments = false`. 이 토글 하나가 ① `/r` 학부모 표시 ② 인쇄 ③ **워커의 ClassNote 파일첨부
+API 경로**(`showAttachments && fileAtts.length && boardId`, classnote-core.mjs)를 동시에 막아, 워커가 스샷 전용
+경로로 보내고 `success`로 끝나 **"발송 성공인데 파일만 없음"**이 된다.
+- **거짓 약속 차단**: 토글이 꺼져 있어도 첨부 UI는 정상 동작하고 "1개 첨부" 토스트까지 떴다(write-only-orphan).
+  [report-attachments.tsx](../src/features/onescreen/components/report-attachments.tsx)에 `hiddenFromParents`
+  경고 배너 추가 — `page.tsx → compose-tab → ComposeFace`로 `settings.report.showAttachments` 배선.
+- **라벨 정정**: /owner 표시 항목의 "학생 사진 첨부" → **"사진·파일 첨부"** + 힌트("끄면 첨부해도 학부모
+  보고서·ClassNote에 안 실립니다"). Phase 2 이후 이 토글은 사진이 아니라 pdf·엑셀·hwp·오디오 전체의 게이트다.
+- **이관 문서 정정**: [연동PC-이관-안내.md](../scripts/_classnote/연동PC-이관-안내.md)가
+  `CLASSNOTE_INTERNAL_SECRET`을 "(선택) 발송엔 무관"으로 안내하고 있었다 — Phase 2에선 **파일 첨부에 필수**
+  (없으면 내부 엔드포인트 401 → "파일 첨부 업로드 실패(전건)"으로 발송 자체가 실패). 필수로 표기 + 사유 명시.
+- ⚠️ 남은 원장 조치: `/owner` → 보고서 → 표시 항목에서 **사진·파일 첨부 켜기** → 해당 보고서 재발송.
+
 ### 저장된 브랜드색 그린 → v3 네이비 정리 (2026-07-20) — ✅ tsc0/lint0/test12 · 마이그 0(데이터 스크립트)
 injaewon `profile.brandColor`가 팔레트 v3 전환 후에도 옛 기본 그린 `#1a5f3c`로 남아 있던 것을 `#153e75`로 정리.
 `LEGACY_DEFAULT_BRAND_COLORS`가 옛 기본색 주입을 억제하고 있었으므로 **화면은 이미 네이비였고 시각 변화는 없다** —
