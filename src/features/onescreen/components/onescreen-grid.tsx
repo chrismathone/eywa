@@ -199,17 +199,30 @@ export function OneScreenGrid({
       <div className="bg-card border-line shadow-card overflow-x-auto rounded-2xl border">
         {/* table-fixed + colgroup 고정 폭 — 헤더/본문 열 정렬 결정적, 표는 내용 폭(좌측 정렬)이라 진도가 남는 폭을 독식하지 않음. */}
         <table className="w-full min-w-[1240px] table-fixed border-collapse text-[12px]">
+          {/* ⚠️ 주석을 `<col />`과 **같은 줄**에 두지 말 것 — 사이의 공백이 JSX 텍스트 노드로 남아
+              "whitespace text nodes cannot be a child of <colgroup>" 하이드레이션 에러가 난다(표뷰 전체가
+              클라 재렌더로 떨어져 클릭이 먹통처럼 보임, #75류). 줄바꿈이 낀 공백만 컴파일러가 제거한다. */}
           <colgroup>
-            <col className="w-[34px]" /> {/* 선택 */}
-            <col className="w-[128px]" /> {/* 학생·반 */}
-            <col className="w-[200px]" /> {/* 진도 */}
-            {config.dailyEnabled ? <col className="w-[88px]" /> : null} {/* 일일 */}
-            {config.checkEnabled ? <col className="w-[88px]" /> : null} {/* 확인 */}
-            <col className="w-[130px]" /> {/* 태도 — 1클릭 pill(1-1) */}
-            <col className="w-[130px]" /> {/* 과제 */}
-            <col className="w-[140px]" /> {/* 교재명 · 보강 */}
-            <col /> {/* 학부모 문구(멘트) — 남는 폭 흡수(우측 공간 활용) */}
-            <col className="w-[132px]" /> {/* 자동작성 · 카드 · 발송 */}
+            {/* 선택 */}
+            <col className="w-[34px]" />
+            {/* 학생·반 */}
+            <col className="w-[128px]" />
+            {/* 진도 */}
+            <col className="w-[200px]" />
+            {/* 일일 */}
+            {config.dailyEnabled ? <col className="w-[88px]" /> : null}
+            {/* 확인 */}
+            {config.checkEnabled ? <col className="w-[88px]" /> : null}
+            {/* 태도 — 1클릭 pill(1-1) */}
+            <col className="w-[130px]" />
+            {/* 과제 */}
+            <col className="w-[130px]" />
+            {/* 교재명 · 보강 */}
+            <col className="w-[140px]" />
+            {/* 학부모 문구(멘트) — 남는 폭 흡수(우측 공간 활용) */}
+            <col />
+            {/* 자동작성 · 카드 · 발송 */}
+            <col className="w-[132px]" />
           </colgroup>
           <thead>
             <tr className="bg-bg-soft">

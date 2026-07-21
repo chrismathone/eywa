@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { addDays } from "@/lib/date-kst";
+import type { OneScreenView } from "../view";
 import type { TodayClass } from "../server/roster";
 
 /**
@@ -35,8 +36,8 @@ export function OneScreenTopBar({
   onFilter: (tag: string) => void;
   doneCount: number;
   total: number;
-  view: "card" | "grid" | "status" | "history" | "notice";
-  onView: (v: "card" | "grid" | "status" | "history" | "notice") => void;
+  view: OneScreenView;
+  onView: (v: OneScreenView) => void;
   stats: { students: number; progressDone: number; testDone: number; reportDone: number };
   todayClasses: TodayClass[];
   noticeMode: "A" | "B" | null; // 강사 본인 멘트 모드(null=학원 기본)

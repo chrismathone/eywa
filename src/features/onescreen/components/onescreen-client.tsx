@@ -7,6 +7,7 @@ import { EyIcon } from "@/components/icons/eywa-icons";
 import { kstToday } from "@/lib/date-kst";
 import { usePrintWindow } from "@/components/workspace/print-window";
 import { ATTITUDE, CLASS_TAGS, HOMEWORK, TODAY } from "../data";
+import type { OneScreenView } from "../view";
 import { buildSubjectReport, studentStatus } from "../report";
 import { buildReportCommentInput } from "../report-comment";
 import {
@@ -45,6 +46,7 @@ import {
   isRowActionable,
   planBulkApply,
   planPrevFill,
+  planBulkPrevFill,
   rowInClass,
   summarizeSendGaps,
   type BulkPatch,
@@ -135,6 +137,7 @@ export function OneScreenClient({
   classnoteSendEnabled = false,
   sendWindowLabel = null,
   presenceScope,
+  initialView = "card",
 }: {
   initial: OneScreenStudent[];
   today?: string;
@@ -149,6 +152,7 @@ export function OneScreenClient({
   classnoteSendEnabled?: boolean; // ClassNote 실제 발송 스위치 — 공지 dry-run 안내
   sendWindowLabel?: string | null; // 발송 허용 시간창 "HH:MM~HH:MM"(무제한=null) — 상단 강사 참고 안내
   presenceScope?: string; // `onescreen:{teacherId}:{date}` — 다른 창/기기 동시 열림 경고(서버가 teacherId 파생)
+  initialView?: OneScreenView; // URL(?view=)에서 온 초기 뷰 — 날짜 이동(재마운트) 후에도 보던 뷰 유지
 }) {
   const router = useRouter();
   const [students, setStudents] = useState<OneScreenStudent[]>(initial);
@@ -172,9 +176,17 @@ export function OneScreenClient({
   const goToDate = (ymd: string) => {
     if (!ymd || ymd > todayYmd || ymd === activeDate) return; // 미래·같은 날짜 무시
     flushSavesRef.current(); // 대기 중(디바운스 800ms) 자동저장을 이동 전 커밋 — 이동=클라 재마운트라 미커밋분 유실 방어
-    router.push(ymd === todayYmd ? "/onescreen" : `/onescreen?date=${ymd}`);
+    // ⚠️ 현재 뷰를 쿼리로 들고 이동 — 날짜 이동은 searchParam 네비라 page의 `key={roster.date}`가 클라를 재마운트하고,
+    // view가 순수 useState면 표·발송현황에서 날짜만 넘겨도 카드로 튕겼다(원장 지적 07-21). 기본값(card)은 URL에 안 남긴다.
+    const params = new URLSearchParams();
+    if (ymd !== todayYmd) params.set("date", ymd);
+    if (view !== "card") params.set("view", view);
+    const qs = params.toString();
+    router.push(qs ? `/onescreen?${qs}` : "/onescreen");
   };
-  const [view, setView] = useState<"card" | "grid" | "status" | "history" | "notice">("card"); // 카드 ↔ 표 ↔ 발송 현황 ↔ 지난 보고서 ↔ 공지
+  // 카드 ↔ 표 ↔ 발송 현황 ↔ 지난 보고서 ↔ 공지. 초기값은 URL(?view=) — 날짜 이동 후에도 보던 뷰 유지.
+  // 토글 자체는 클라 state만 바꾼다(네비 없음) — 뷰 전환마다 서버 왕복하면 체감이 느려진다.
+  const [view, setView] = useState<OneScreenView>(initialView);
   // 공지 컴포저 진입 시 초기 선택 학생(카드=1명, 표=선택/표시). null=진입 안 함.
   const [noticeSeed, setNoticeSeed] = useState<string[] | null>(null);
   const [reports, setReports] = useState<ReportsState>(() => initReports(initial));
@@ -724,37 +736,44 @@ export function OneScreenClient({
     const all = buildGridRows(visible).filter((r) => rowInClass(r.subject, activeClassFilter));
     const keySet = new Set(keys ?? []);
     const rows = keySet.size ? all.filter((r) => keySet.has(r.key)) : all;
-    let filledRows = 0;
-    let filledCells = 0;
-    for (const r of rows) {
-      const idx = r.student.subjects.findIndex((su) => su.name === r.subject.name);
-      const su = r.student.subjects[idx];
-      if (!su) continue;
-      const fill = planPrevFill({
-        prev: su.prevReport,
-        current: {
-          today: su.today,
-          attitude: r.student.attitude,
-          homework: r.student.homework,
-          homeworkToday: su.homeworkToday ?? "",
-        },
-        attitudes: ATTITUDE,
-        homeworks: HOMEWORK,
-      });
-      const count = Object.keys(fill).length;
-      if (!count) continue;
-      if (fill.today !== undefined) setProgressFor(r.student.id, idx, fill.today);
-      if (fill.attitude !== undefined) setAttitudeValue(r.student.id, fill.attitude);
-      if (fill.homework !== undefined) setHomeworkValue(r.student.id, fill.homework);
-      if (fill.homeworkToday !== undefined) setHomeworkTodayFor(r.student.id, r.subject.name, fill.homeworkToday);
-      filledRows++;
-      filledCells += count;
-    }
-    if (!filledRows) {
+    // 계획은 순수 함수(planBulkPrevFill)가 세운다 — 태도·과제는 **학생 단위** 값이라 다과목 학생에서
+    // 과목 행마다 덮어쓰지 않도록 학생당 1회로 dedup(자세한 배경은 grid.ts 주석).
+    const plan = planBulkPrevFill(
+      rows.flatMap((r) => {
+        const subjectIndex = r.student.subjects.findIndex((su) => su.name === r.subject.name);
+        const su = r.student.subjects[subjectIndex];
+        if (!su) return [];
+        return [
+          {
+            studentId: r.student.id,
+            subjectName: r.subject.name,
+            subjectIndex,
+            prev: su.prevReport,
+            current: {
+              today: su.today,
+              attitude: r.student.attitude,
+              homework: r.student.homework,
+              homeworkToday: su.homeworkToday ?? "",
+            },
+          },
+        ];
+      }),
+      ATTITUDE,
+      HOMEWORK,
+    );
+    if (!plan.length) {
       toast.message("채울 빈 칸이 없습니다 — 이미 입력됐거나 이전 값이 없습니다");
       return;
     }
-    toast.success(`${filledRows}행의 빈 칸 ${filledCells}개를 이전 회차 값으로 채웠습니다 (특이사항 제외)`);
+    let filledCells = 0;
+    for (const p of plan) {
+      if (p.set.today !== undefined) setProgressFor(p.studentId, p.subjectIndex, p.set.today);
+      if (p.set.attitude !== undefined) setAttitudeValue(p.studentId, p.set.attitude);
+      if (p.set.homework !== undefined) setHomeworkValue(p.studentId, p.set.homework);
+      if (p.set.homeworkToday !== undefined) setHomeworkTodayFor(p.studentId, p.subjectName, p.set.homeworkToday);
+      filledCells += Object.keys(p.set).length;
+    }
+    toast.success(`${plan.length}행의 빈 칸 ${filledCells}개를 이전 회차 값으로 채웠습니다 (특이사항 제외)`);
   }
   // 학생 순서 저장(3-2) — (강사×반) 영구 저장 + 성공 시 클라 state에도 즉시 반영(다음 로드는 roster가 적용).
   async function saveOrderForClass(classId: string, studentIds: string[]): Promise<boolean> {

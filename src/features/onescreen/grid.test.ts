@@ -6,6 +6,7 @@ import {
   isRowActionable,
   planBulkApply,
   planPrevFill,
+  planBulkPrevFill,
   rowInClass,
   summarizeSendGaps,
   type BulkTarget,
@@ -273,5 +274,85 @@ describe("planPrevFill", () => {
       homework: "완료",
       homeworkToday: "p10~16",
     });
+  });
+});
+
+describe("planBulkPrevFill", () => {
+  const row = (
+    studentId: string,
+    subjectName: string,
+    subjectIndex: number,
+    prev: PrevReport | undefined,
+    current: Partial<{ today: string; attitude: string | null; homework: string; homeworkToday: string }> = {},
+  ) => ({
+    studentId,
+    subjectName,
+    subjectIndex,
+    prev,
+    current: { today: "", attitude: null, homework: "", homeworkToday: "", ...current },
+  });
+
+  it("단일 과목 학생은 planPrevFill과 같은 결과", () => {
+    const plan = planBulkPrevFill([row("a", "수학", 0, prevReport())], ATTITUDES, HOMEWORKS);
+    expect(plan).toEqual([
+      {
+        studentId: "a",
+        subjectName: "수학",
+        subjectIndex: 0,
+        set: { today: "1-1-1 받아올림", attitude: "좋음", homework: "완료", homeworkToday: "p10~16" },
+      },
+    ]);
+  });
+
+  it("다과목 학생 — 학생 단위(태도·과제)는 **첫 과목 행**만, 둘째 과목이 덮어쓰지 않는다", () => {
+    const plan = planBulkPrevFill(
+      [
+        row("a", "수학", 0, prevReport({ attitude: "좋음", homeworkScore: "완료", progress: "수학진도" })),
+        row("a", "영어", 1, prevReport({ attitude: "산만함", homeworkScore: "미제출", progress: "영어진도" })),
+      ],
+      ATTITUDES,
+      HOMEWORKS,
+    );
+    expect(plan[0]!.set.attitude).toBe("좋음");
+    expect(plan[0]!.set.homework).toBe("완료");
+    expect(plan[1]!.set.attitude).toBeUndefined();
+    expect(plan[1]!.set.homework).toBeUndefined();
+    // 과목 단위(진도·오늘 과제)는 과목마다 그대로 채운다.
+    expect(plan[0]!.set.today).toBe("수학진도");
+    expect(plan[1]!.set.today).toBe("영어진도");
+  });
+
+  it("학생이 달라지면 dedup이 서로 간섭하지 않는다", () => {
+    const plan = planBulkPrevFill(
+      [row("a", "수학", 0, prevReport({ attitude: "좋음" })), row("b", "수학", 0, prevReport({ attitude: "보통" }))],
+      ATTITUDES,
+      HOMEWORKS,
+    );
+    expect(plan[0]!.set.attitude).toBe("좋음");
+    expect(plan[1]!.set.attitude).toBe("보통");
+  });
+
+  it("채울 게 없는 행은 계획에서 빠진다(행 수 = 실제 채운 행 수)", () => {
+    const plan = planBulkPrevFill(
+      [
+        row("a", "수학", 0, undefined), // 이전 회차 없음
+        row("b", "수학", 0, prevReport(), { today: "입력됨", attitude: "좋음", homework: "완료", homeworkToday: "p1" }),
+        row("c", "수학", 0, prevReport()),
+      ],
+      ATTITUDES,
+      HOMEWORKS,
+    );
+    expect(plan.map((p) => p.studentId)).toEqual(["c"]);
+  });
+
+  it("현 학원 선택지에 없는 옛 태도·과제 값은 채우지 않는다(planPrevFill 규약 승계)", () => {
+    const plan = planBulkPrevFill(
+      [row("a", "수학", 0, prevReport({ attitude: "폐기된태도", homeworkScore: "폐기된과제" }))],
+      ATTITUDES,
+      HOMEWORKS,
+    );
+    expect(plan[0]!.set.attitude).toBeUndefined();
+    expect(plan[0]!.set.homework).toBeUndefined();
+    expect(plan[0]!.set.today).toBe("1-1-1 받아올림");
   });
 });

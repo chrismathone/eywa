@@ -186,3 +186,44 @@ export function planPrevFill(args: {
   if (!current.homeworkToday.trim() && prev.homeworkToday?.trim()) out.homeworkToday = prev.homeworkToday;
   return out;
 }
+
+/** 일괄 채우기 대상 행 — planPrevFill 인자 + 학생/과목 식별자. */
+export type PrevFillRow = {
+  studentId: string;
+  subjectName: string;
+  subjectIndex: number;
+  prev: PrevReport | undefined;
+  current: PrevFillCurrent;
+};
+
+/** 일괄 채우기 계획 1건 — 그 행에 실제로 적용할 필드만 담긴다(빈 fill 행은 결과에서 제외). */
+export type PrevFillPlan = { studentId: string; subjectName: string; subjectIndex: number; set: PrevFill };
+
+/**
+ * 이전 회차 **일괄** 채우기 계획 — 행 순서대로 planPrevFill을 돌리되 **학생 단위 필드(태도·과제)는 학생당 1회**만.
+ *
+ * ⚠️ 이 dedup이 핵심이다. 태도·과제는 학생 단위 값인데 행은 (학생×과목)이고, 호출부의 행 스냅샷은 루프 중
+ * 갱신되지 않는다 → dedup이 없으면 다과목 학생의 모든 과목 행이 "아직 비었다"고 보고 각자의 직전 태도로
+ * 덮어써 **마지막 과목 행이 이기는** 비결정 결과가 된다(채운 칸 수도 중복 계수). 첫 과목 행 값으로 확정한다.
+ */
+export function planBulkPrevFill(
+  rows: readonly PrevFillRow[],
+  attitudes: readonly string[],
+  homeworks: readonly string[],
+): PrevFillPlan[] {
+  const studentFieldDone = new Set<string>();
+  const out: PrevFillPlan[] = [];
+  for (const r of rows) {
+    const set = planPrevFill({ prev: r.prev, current: r.current, attitudes, homeworks });
+    for (const f of ["attitude", "homework"] as const) {
+      if (set[f] === undefined) continue;
+      const k = `${r.studentId}::${f}`;
+      if (studentFieldDone.has(k)) delete set[f];
+      else studentFieldDone.add(k);
+    }
+    if (Object.keys(set).length) {
+      out.push({ studentId: r.studentId, subjectName: r.subjectName, subjectIndex: r.subjectIndex, set });
+    }
+  }
+  return out;
+}
