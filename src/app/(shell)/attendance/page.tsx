@@ -5,23 +5,16 @@ import { PhotoCard } from "@/components/atoms/photo-card";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
 import { FilterSelect } from "@/components/filter-select";
-import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import { kstMonth } from "@/lib/date-kst";
 import { requireAccess } from "@/lib/auth/require-access";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
-import {
-  getMonthlyAttendanceMatrix,
-  type AttendanceMatrix,
-  type AttendanceStatus,
-} from "@/features/attendance/server/queries";
-import { COUNTABLE_STATUSES, formatSessionUnits } from "@/features/attendance/session-units";
-import { buildHolidayMap, formatDows } from "@/features/attendance/calendar";
-import { DAY_TONE, STATUS_TEXT, cellDisplay } from "@/features/attendance/cell-display";
+import { getMonthlyAttendanceMatrix, type AttendanceMatrix } from "@/features/attendance/server/queries";
+import { buildHolidayMap } from "@/features/attendance/calendar";
 import { buildQuickOpen } from "@/features/attendance/quick-open";
-import { AttendanceCell } from "./_components/attendance-cell";
 import { QuickOpenPanel } from "./_components/quick-open-panel";
-import { attHref, type RangeKey } from "./_components/att-href";
+import { MatrixTable, type MatrixGroup } from "./_components/matrix-table";
+import { attHref, type RangeKey, type ViewMode } from "./_components/att-href";
 
 export const metadata = { title: "출석부 — eywa" };
 
@@ -54,7 +47,14 @@ function padTo31(days: AttendanceMatrix["days"]): AttendanceMatrix["days"] {
 export default async function AttendancePage({
   searchParams,
 }: {
-  searchParams: Promise<{ class?: string; month?: string; range?: string; teacher?: string; subject?: string }>;
+  searchParams: Promise<{
+    class?: string;
+    month?: string;
+    range?: string;
+    teacher?: string;
+    subject?: string;
+    mode?: string;
+  }>;
 }) {
   await requireAccess("attendance");
   const {
@@ -63,9 +63,11 @@ export default async function AttendancePage({
     range: rangeParam,
     teacher: teacherParam,
     subject: subjectParam,
+    mode: modeParam,
   } = await searchParams;
   const month = monthParam ?? currentMonthKey();
   const range: RangeKey = rangeParam === "2w" ? "2w" : "month";
+  const requestedMode: ViewMode = modeParam === "teacher" ? "teacher" : "class";
 
   // 반 목록(경량) — classId 없이 부르면 무거운 출석 데이터는 안 불러온다(렉 방지). 과목→강사→반 계층·선택지 도출용.
   // 학원설정과는 서로 독립이라 병렬로(B4 — 독립 await는 Promise.all).
@@ -127,8 +129,64 @@ export default async function AttendancePage({
   const selectedClass = effectiveClassId
     ? allClasses.find((c) => c.id === effectiveClassId) ?? null
     : null;
+
+  // ── 보기 모드 ──
+  // class(기본) = 반 하나. teacher = 그 강사의 모든 반을 반별 그룹으로 한 표에(급여 계산용, 구 출석부 관행).
+  // ⚠️ 강사 전체 보기라도 **반별 보기와 같은 쿼리**(getMonthlyAttendanceMatrix)를 반마다 부른다 —
+  //    급여에 쓰는 숫자라 두 화면이 다른 계산을 하면 안 된다(파생 규칙·시수 합 전부 한 소스).
+  //    반 수만큼 병렬 호출이라 '전체 반'(108개)이 아니라 **한 강사분**(실측 최대 10반)일 때만 허용한다.
+  const teacherClasses = effectiveTeacher
+    ? allClasses.filter((c) => c.teacherId === effectiveTeacher)
+    : [];
+  const mode: ViewMode = requestedMode === "teacher" && teacherClasses.length > 0 ? "teacher" : "class";
+  const teacherMatrices =
+    mode === "teacher"
+      ? await Promise.all(teacherClasses.map((c) => getMonthlyAttendanceMatrix(month, c.id)))
+      : [];
   // 매트릭스(무거운 출석 데이터)는 반을 골랐을 때만 로드. 미선택이면 base(빈 매트릭스) 재사용.
-  const matrix = effectiveClassId ? await getMonthlyAttendanceMatrix(month, effectiveClassId) : base;
+  const matrix =
+    mode === "teacher"
+      ? teacherMatrices[0] ?? base
+      : effectiveClassId
+        ? await getMonthlyAttendanceMatrix(month, effectiveClassId)
+        : base;
+
+  const groups: MatrixGroup[] =
+    mode === "teacher"
+      ? teacherClasses.map((c, i) => ({
+          classId: c.id,
+          className: c.className,
+          subjectLabel: subjectMaps.labelOf(c.subject),
+          matrix: teacherMatrices[i]!,
+        }))
+      : effectiveClassId && selectedClass
+        ? [
+            {
+              classId: effectiveClassId,
+              className: selectedClass.className,
+              subjectLabel: subjectMaps.labelOf(selectedClass.subject),
+              matrix,
+            },
+          ]
+        : [];
+
+  // 상단 스탯 — 강사 전체 보기는 반들을 합산(학생은 반 중복을 제거한 실인원).
+  const stats =
+    mode === "teacher"
+      ? (() => {
+          const ids = new Set(teacherMatrices.flatMap((m) => m.students.map((s) => s.id)));
+          const sum = (pick: (s: AttendanceMatrix["stats"]) => number) =>
+            teacherMatrices.reduce((acc, m) => acc + pick(m.stats), 0);
+          const total = sum((s) => s.totalRecords);
+          const present = sum((s) => s.presentCount);
+          return {
+            totalStudents: ids.size,
+            presentRate: total > 0 ? Math.round((present / total) * 1000) / 10 : 0,
+            absentCount: sum((s) => s.absentCount),
+            lateCount: sum((s) => s.lateCount),
+          };
+        })()
+      : matrix.stats;
 
   // 드롭다운 표시값 — 반 선택 시 그 반의 과목·강사를 강제로 채운다(누구 선생님인지 바로 보이게).
   const subjectValue = selectedClass ? selectedClass.subject : effectiveSubject;
@@ -141,9 +199,13 @@ export default async function AttendancePage({
   // 그래야 셀 폭과 '출석률' 열 위치가 달마다 안 바뀐다(빈 칸은 여백). 패딩은 표시 전용(쿼리/집계 무관).
   const visibleDays = range === "2w" ? matrix.days.slice(-14) : padTo31(matrix.days);
 
-  const selectedClassLabel = effectiveClassId
-    ? classOptions.find((o) => o.value === effectiveClassId)?.label
-    : undefined;
+  const teacherLabel = teacherOptions.find((t) => t.value === effectiveTeacher)?.label;
+  const selectedClassLabel =
+    mode === "teacher"
+      ? `${teacherLabel ?? "강사"} 전체 · ${teacherClasses.length}개 반`
+      : effectiveClassId
+        ? classOptions.find((o) => o.value === effectiveClassId)?.label
+        : undefined;
 
   return (
     <div className="space-y-5">
@@ -234,7 +296,7 @@ export default async function AttendancePage({
           ] as const).map(([key, label]) => (
             <Link
               key={key}
-              href={attHref({ classId: effectiveClassId, month, range: key, teacherId: effectiveTeacher, subjectId: effectiveSubject })}
+              href={attHref({ classId: effectiveClassId, month, range: key, teacherId: effectiveTeacher, subjectId: effectiveSubject, mode })}
               className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs transition ${
                 range === key
                   ? "border-foreground bg-foreground text-background font-medium"
@@ -246,9 +308,44 @@ export default async function AttendancePage({
           ))}
         </div>
 
+        <span className="bg-line h-4 w-px" aria-hidden />
+
+        {/* 보기 토글 — '강사 전체'는 그 강사의 모든 반을 반별로 묶어 한 표에(급여 계산용).
+            강사 미선택이면 성립하지 않으므로 안내만 띄운다(렉 방지: '전체 반'은 여전히 안 연다). */}
+        <div className="flex items-center gap-1.5">
+          <span className="micro mr-1">보기</span>
+          {effectiveTeacher ? (
+            ([
+              ["class", "반별"],
+              ["teacher", "강사 전체"],
+            ] as const).map(([key, label]) => (
+              <Link
+                key={key}
+                href={attHref({
+                  classId: key === "teacher" ? null : effectiveClassId,
+                  month,
+                  range,
+                  teacherId: effectiveTeacher,
+                  subjectId: effectiveSubject,
+                  mode: key,
+                })}
+                className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs transition ${
+                  mode === key
+                    ? "border-foreground bg-foreground text-background font-medium"
+                    : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
+                }`}
+              >
+                {label}
+              </Link>
+            ))
+          ) : (
+            <span className="text-text-faint text-xs">강사를 고르면 전체 보기</span>
+          )}
+        </div>
+
       </div>
 
-      {!effectiveClassId ? (
+      {groups.length === 0 ? (
         // 반 미선택 허브(Editorial 문법 ④+⑤) — 무거운 출석 데이터를 안 불러오는 원칙은 유지하되,
         // 빈 화면 대신 사진 카드 + 반 바로가기 행 목록으로 "진입 허브"가 되게 한다.
         <section className="grid gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] lg:items-stretch">
@@ -275,37 +372,31 @@ export default async function AttendancePage({
         </section>
       ) : (
         <>
-          {/* Stat 4 — 반을 선택했을 때만 */}
+          {/* Stat 4 — 반(또는 강사 전체)을 열었을 때만 */}
           <section className="grid grid-cols-2 gap-3.5 sm:grid-cols-4">
-            <BigStat label="등록 학생" value={matrix.stats.totalStudents} unit="명" tone="primary" icon={<Users size={16} strokeWidth={1.8} />} />
+            <BigStat label="등록 학생" value={stats.totalStudents} unit="명" tone="primary" icon={<Users size={16} strokeWidth={1.8} />} />
             <BigStat
               label="출석률"
-              value={matrix.stats.presentRate}
+              value={stats.presentRate}
               unit="%"
-              tone={
-                matrix.stats.presentRate >= 90
-                  ? "primary"
-                  : matrix.stats.presentRate >= 80
-                    ? "amber"
-                    : "danger"
-              }
+              tone={stats.presentRate >= 90 ? "primary" : stats.presentRate >= 80 ? "amber" : "danger"}
               icon={<UserCheck size={16} strokeWidth={1.8} />}
             />
-            <BigStat label="결석" value={matrix.stats.absentCount} unit="회" tone="danger" icon={<UserX size={16} strokeWidth={1.8} />} />
-            <BigStat label="지각" value={matrix.stats.lateCount} unit="회" tone="amber" icon={<Clock size={16} strokeWidth={1.8} />} />
+            <BigStat label="결석" value={stats.absentCount} unit="회" tone="danger" icon={<UserX size={16} strokeWidth={1.8} />} />
+            <BigStat label="지각" value={stats.lateCount} unit="회" tone="amber" icon={<Clock size={16} strokeWidth={1.8} />} />
           </section>
 
-          {matrix.students.length === 0 ? (
+          {stats.totalStudents === 0 ? (
             <EmptyState
               image="students"
               icon={() => <Users size={32} strokeWidth={1.8} />}
-              title="이 반에 등록된 학생이 없습니다"
+              title={mode === "teacher" ? "이 강사의 반에 등록된 학생이 없습니다" : "이 반에 등록된 학생이 없습니다"}
               description="학생목록에서 등록 후 다시 확인하세요."
             />
           ) : (
             <>
               {/* 파생 반(수학)은 표가 "누가 찍은 값인지"를 스스로 밝혀야 한다 — 셀 툴팁만으론 안 보인다. */}
-              {matrix.derivedActive ? (
+              {groups.some((g) => g.matrix.derivedActive) ? (
                 <p className="text-text-dim bg-bg-soft/60 border-line rounded-2xl border px-4 py-2.5 text-xs break-keep">
                   수업보고서가 있는 등원일은 <strong className="text-foreground">출석</strong>, 보고서가 없는 등원일은{" "}
                   <strong className="text-foreground">결석</strong>으로 자동 표시됩니다. 오늘과 이후 날짜는 아직
@@ -314,9 +405,9 @@ export default async function AttendancePage({
                 </p>
               ) : null}
               <MatrixTable
-                matrix={matrix}
+                groups={groups}
                 days={visibleDays}
-                selectedClassId={effectiveClassId}
+                showGroups={mode === "teacher"}
                 // 공휴일은 학원설정(operations.holidays)이 단일 소스 — 헤더 빨간 날짜·셀 회색 처리에 동기화.
                 holidays={buildHolidayMap(operations.holidays)}
               />
@@ -327,206 +418,3 @@ export default async function AttendancePage({
     </div>
   );
 }
-
-// ─────────────────── 매트릭스 테이블 ───────────────────
-
-function MatrixTable({
-  matrix,
-  days,
-  selectedClassId,
-  holidays,
-}: {
-  matrix: AttendanceMatrix;
-  days: AttendanceMatrix["days"];
-  selectedClassId: string;
-  /** "YYYY-MM-DD" → 휴일명(학원설정). 헤더는 빨간 날짜 + 툴팁, 본문은 회색(수업 없음). */
-  holidays: Record<string, string>;
-}) {
-  const classDows = new Set(matrix.classDows);
-  return (
-    <DragScrollArea className="bg-card shadow-card rounded-2xl">
-      <table className="min-w-full border-collapse text-sm">
-        <thead>
-          <tr>
-            <th className="bg-bg-soft border-line sticky left-0 z-10 border-b border-r px-3 py-2 text-left whitespace-nowrap">
-              <span className="micro">이름</span>
-            </th>
-            <th className="bg-bg-soft border-line border-b border-r px-2 py-2 text-left whitespace-nowrap">
-              <span className="micro">학년</span>
-            </th>
-            <th className="bg-bg-soft border-line border-b border-r px-2 py-2 text-left whitespace-nowrap">
-              <span className="micro">학교</span>
-            </th>
-            {days.map((d) => {
-              // 그 달에 없는 날 — 빈 여백(번호·요일 없음). 폭은 다른 날 칸과 동일(min-w)로 고정.
-              if (d.placeholder) {
-                return <th key={d.date} className="border-line bg-bg-soft/30 min-w-[34px] border-b border-r" aria-hidden />;
-              }
-              const holiday = holidays[d.date];
-              const isClassDay = classDows.has(d.dow) && !holiday;
-              // 배경 = 오늘 > 수업요일(민트) > 주말·휴일(회색) > 수업 없는 평일(흰색). 본문 셀과 같은 DAY_TONE.
-              // 글자색 = 일요일·공휴일이면 빨강(달력 관행).
-              const bg = d.isToday
-                ? "bg-primary"
-                : isClassDay
-                  ? DAY_TONE.classDay
-                  : d.isWeekend || holiday
-                    ? DAY_TONE.weekend
-                    : "bg-card";
-              const fg = d.isToday
-                ? "text-primary-foreground"
-                : holiday || d.dow === 0
-                  ? "text-danger"
-                  : isClassDay
-                    ? "text-foreground"
-                    : d.isWeekend
-                      ? "text-text-dim"
-                      : "text-text-faint";
-              return (
-                <th
-                  key={d.date}
-                  title={holiday ?? undefined}
-                  className={`border-line num min-w-[34px] border-b border-r px-1 py-2 text-center text-[10px] ${bg} ${fg}`}
-                >
-                  <div className="font-bold">{d.day}</div>
-                  <div className="opacity-70">{d.label}</div>
-                </th>
-              );
-            })}
-            {/* 시수 합 — 소비 상태(출석·지각·조퇴·보강) 셀의 배수 합(기본 1). 구 출석부 '합계' 관행. */}
-            <th className="bg-bg-soft border-line sticky right-[64px] z-10 w-[52px] min-w-[52px] border-b border-l px-2 py-2 text-right whitespace-nowrap">
-              <span className="micro">시수</span>
-            </th>
-            <th className="bg-bg-soft border-line sticky right-0 z-10 w-[64px] min-w-[64px] border-b px-2 py-2 text-right whitespace-nowrap">
-              <span className="micro">출석률</span>
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {matrix.students.map((s) => {
-            const studentMarks = matrix.marks[s.id] ?? {};
-            const studentUnits = matrix.units[s.id] ?? {};
-            const recorded = Object.values(studentMarks);
-            const present = recorded.filter((x) => x === "present").length;
-            // 시수 합 = 소비 상태 셀의 배수 합(배수 미입력 = 1). 0.1 단위 반올림(부동소수 방어).
-            const unitsTotal =
-              Math.round(
-                Object.entries(studentMarks)
-                  .filter(([, st]) => COUNTABLE_STATUSES.has(st))
-                  .reduce((sum, [date]) => sum + (studentUnits[date] ?? 1), 0) * 10,
-              ) / 10;
-            const rate =
-              recorded.length > 0 ? Math.round((present / recorded.length) * 100) : null;
-            const rateColor =
-              rate === null
-                ? "text-text-faint"
-                : rate >= 90
-                  ? "text-primary"
-                  : rate >= 80
-                    ? "text-amber"
-                    : "text-danger";
-            const attendDows = new Set(s.attendDows);
-            const attendLabel = formatDows(s.attendDows);
-            return (
-              <tr key={s.id} className="hover:bg-bg-soft/40">
-                {/* 이름 + 등원요일 — 같은 반이라도 학생마다 오는 요일이 다르다(분리등원). */}
-                <td className="border-line text-foreground sticky left-0 z-10 border-b border-r bg-card px-3 py-2 text-[12px] font-bold whitespace-nowrap">
-                  {s.name}
-                  {attendLabel ? (
-                    <span className="text-text-faint ml-1.5 text-[10px] font-medium">{attendLabel}</span>
-                  ) : null}
-                </td>
-                <td className="border-line text-text-dim border-b border-r px-2 py-2 text-[11px] whitespace-nowrap">
-                  {s.grade ?? "—"}
-                </td>
-                <td className="border-line text-text-dim border-b border-r px-2 py-2 text-[11px] whitespace-nowrap">
-                  {s.school ?? "—"}
-                </td>
-                {days.map((d) => {
-                  // 그 달에 없는 날(placeholder) — 빈 칸(입력 불가). 폭은 다른 칸과 동일(min-w)로 고정.
-                  if (d.placeholder) {
-                    return (
-                      <td key={d.date} className="border-line bg-bg-soft/20 min-w-[34px] border-b border-r" aria-hidden />
-                    );
-                  }
-                  const mark = (studentMarks[d.date] as AttendanceStatus | undefined) ?? null;
-                  const holiday = holidays[d.date];
-                  // 등원요일 = 그 학생이 실제로 오는 날(분리등원 반영) — 공휴일은 휴원이라 제외.
-                  const attend = attendDows.has(d.dow) && !holiday;
-                  // 배경(음영·틴트)은 셀을 꽉 채우는 AttendanceCell 버튼이 그린다 — td는 relative 무대만
-                  // 제공한다(고정 크기 칩에 배경을 주면 셀을 못 채운다, gotcha #66).
-                  return (
-                    <td
-                      key={d.date}
-                      className="border-line relative min-w-[34px] border-b border-r p-0 text-center align-middle"
-                    >
-                      <AttendanceCell
-                        studentId={s.id}
-                        classId={selectedClassId}
-                        sessionDate={d.date}
-                        initialStatus={mark}
-                        note={matrix.notes[s.id]?.[d.date] ?? null}
-                        initialUnits={studentUnits[d.date] ?? null}
-                        attendDay={attend}
-                        muted={!!holiday || (!attend && d.isWeekend)}
-                        derived={!!matrix.derived[s.id]?.[d.date]}
-                      />
-                    </td>
-                  );
-                })}
-                <td className="border-line text-foreground sticky right-[64px] z-10 w-[52px] min-w-[52px] border-b border-l bg-card px-2 py-2 text-right num text-[12px] whitespace-nowrap">
-                  {unitsTotal > 0 ? formatSessionUnits(unitsTotal) : "—"}
-                </td>
-                <td
-                  className={`border-line sticky right-0 z-10 w-[64px] min-w-[64px] border-b bg-card px-2 py-2 text-right num text-[12px] font-bold whitespace-nowrap ${rateColor}`}
-                >
-                  {rate === null ? "—" : `${rate}%`}
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-        <tfoot>
-          <tr>
-            {/* 범례 1행: 좌측 요약 노트 + 우측(ml-auto) 범례 Pill 가로 나열(좁으면 가로 스크롤, 줄바꿈 X) */}
-            <td
-              colSpan={days.length + 5}
-              className="bg-bg-soft border-line border-t px-3 py-2"
-            >
-              <div className="flex items-center gap-2 overflow-x-auto text-[11px] [&>*]:shrink-0 [&_*]:whitespace-nowrap">
-                <span className="text-text-faint text-[11px]">
-                  총 {matrix.stats.totalRecords}회 기록 · 셀 클릭 시 즉시 변경 (출석·지각·조퇴·보강 = 시수, 결석 = 0)
-                </span>
-                <span className="micro ml-auto">범례</span>
-                {/* 범례 칩은 셀과 **같은 함수**로 그린다 — 색·숫자가 실제 셀과 어긋날 수 없게. */}
-                {(["present", "late", "early_leave", "makeup", "absent"] as AttendanceStatus[]).map((s) => {
-                  const chip = cellDisplay(s, null);
-                  return (
-                    <span key={s} className="text-text-dim inline-flex items-center gap-1">
-                      <span
-                        className={`inline-flex size-5 items-center justify-center rounded-sm text-[10px] font-bold ${chip.className}`}
-                      >
-                        {chip.text}
-                      </span>
-                      {STATUS_TEXT[s]}
-                    </span>
-                  );
-                })}
-                <span className="text-text-dim inline-flex items-center gap-1">
-                  <span className={`border-line inline-block size-5 rounded-sm border ${DAY_TONE.classDay}`} />
-                  등원요일
-                </span>
-                <span className="text-text-dim inline-flex items-center gap-1">
-                  <span className={`border-line inline-block size-5 rounded-sm border ${DAY_TONE.weekend}`} />
-                  주말·휴일
-                </span>
-              </div>
-            </td>
-          </tr>
-        </tfoot>
-      </table>
-    </DragScrollArea>
-  );
-}
-
-
