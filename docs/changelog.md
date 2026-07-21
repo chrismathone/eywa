@@ -4,6 +4,23 @@
 
 ## 진행 상황
 
+### /owner 저장이 "한박자 늦게" 보이던 것 = React 19 폼 자동 리셋 (2026-07-21) — ✅ tsc0/lint0 · 실브라우저 검증
+원장 제보: 보고서 설정에서 토글을 켜고 저장하면 "저장됨"은 뜨는데 **체크가 다시 꺼진 것처럼** 보이고,
+새로고침하면 켜져 있다. 저장 지연이 아니라 **화면만 옛 값으로 굳는** 문제였다.
+- **원인**: `<form action={서버액션}>` 제출 시 react-dom `startHostTransition`이 액션 실행 직전
+  `requestFormReset`을 **무조건** 건다(19.2.4 소스 확인) → `form.reset()`으로 입력이 마운트 시점 default로
+  복귀 → 컨트롤드 입력은 React prop이 안 바뀌었으니 DOM을 다시 안 써서 state와 갈라진 채 굳는다.
+- ⚠️ **더 위험했던 2차 증상**: payload hidden input도 함께 리셋 → 저장 직후 아무것도 안 고치고 **저장을 한 번
+  더 누르면 직전 저장이 되돌아간다**(조용한 데이터 손실). 이번 수정으로 같이 막혔다.
+- **수정**: [section-form.tsx](<../src/app/(shell)/owner/_components/section-form.tsx>)가 네이티브 액션 제출을
+  버리고 `onSubmit`에서 `preventDefault` + payload를 그 자리에서 FormData로 만들어
+  `startTransition(() => formAction(fd))`로 직접 디스패치. 리셋 없음 + 항상 최신 state 제출. Enter 저장 유지.
+  hidden 두 칸은 제출엔 안 쓰이지만 `useUnsavedGuard`의 dirty 캐리어라 유지(버튼→state 편집 감지).
+- **검증**(로컬 dev + 실제 마우스 클릭): 수정 전 = 토글 후 저장 시 DOM이 default로 복귀. 수정 후 = 저장 뒤에도
+  체크 유지 + "저장됨" 표시 + DB 반영 확인. 검증에 쓴 `showTextbook`은 즉시 원복(true).
+  ⚠️ 합성 클릭(`el.click()`)은 React state를 안 바꿔 이 검증엔 무용 — 실좌표 클릭 필요(#33/#39 계열).
+- 이 함정은 **/owner 전 섹션 공통**(SectionForm)이라 한 곳 수정으로 전부 해소. 규칙·재발방지 = `docs/gotchas.md` #83.
+
 ### 파일 첨부가 "되는데 안 실리는" 문제 = showAttachments 게이트 (2026-07-21) — ✅ tsc0/lint0 · 마이그 0
 "학원이 계정으로 엑셀 첨부가 안 된다" 제보. **첨부 오류도 확장자 오류도 아니었다** — 업로드는 성공했고
 (`RPM 교육과정 (중등).xlsx` 10,726B가 7/21 수학 보고서에 저장, ClassNote `success`), 원인은 injaewon의
