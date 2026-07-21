@@ -4,6 +4,26 @@
 
 ## 진행 상황
 
+### 정렬 편향으로 카테고리가 통째로 숨던 곳 3건 수리 (2026-07-21) — ✅ tsc0/lint0/test1767(+6)/build✓ · 마이그 0126a
+출석부 '바로 열기' 수리(gotcha #84) 직후 전수 스윕으로 같은 실패 모드를 5곳 더 찾아, 원장 승인분 3건을 고쳤다.
+- **AI 비서 반 조회**([tools-classes.ts](../src/features/assistant/server/tools-classes.ts)) — 가장 심각. `rows.slice(0, 25)`가
+  영어 22 : 수학 3이라 "진행 중인 반 알려줘"에 **영어반만 나열하면서 total은 108로 정확히 보고**해 전부 본 것처럼 답했다.
+  게다가 툴 스키마에 과목 인자가 없고 수학반 이름에 '수학'이 없어("고등M 고1 BS4A") 모델이 스스로 도달할 방법이 없었다.
+  → `subject` 인자 신설(한글 라벨·키 양쪽 해석, `subjectResolver`) + 과목별 라운드로빈 표본
+  ([balancedTake](../src/lib/collections/balanced-take.ts), Vitest 6) + 잘렸을 때 **좁히는 방법을 담은 note**
+  ("이 목록만 보고 전부라고 답하지 마세요") + 잘못된 과목명은 조용히 무시하지 않고 알림.
+- **보고서 강사 필터 누락**([report-admin/server/queries.ts](../src/features/report-admin/server/queries.ts)) — B2 위반.
+  `.select().limit(5000)`이 PostgREST max-rows에 걸려 최근 60일 4,010행 중 1,000행만 도달 → distinct 강사 14명 중
+  **3명이 필터 옵션에서 통째로 누락**(자유입력 없는 select라 그 강사 보고서는 어떤 경로로도 필터 불가).
+  → group-by RPC **0126a** `lesson_report_filter_options`(security invoker + `auth_tenant_id()` 이중격리)로
+  4,010행 스캔 → 17행 반환. 실측: 함수 등록·PostgREST 노출(200)·distinct 강사 14명 복원.
+- **반 선택 드롭다운 3곳**(출석부 반 필터 · 반 배정 다이얼로그 · 수강 이동) — SearchableSelect 기본 `cap=50`이
+  이름순 앞을 로마자 영어반에 내줘 훑어볼 때 수학반이 7~8개만 보였다 → cap 300. 출석부 반 필터는 옵션에
+  `hint`가 없어 **"수학"으로 검색해도 0건**이던 것도 함께 수리(과목·강사 hint 추가) — 이 드롭다운이 '바로 열기'
+  패널이 안내하는 탈출구라 여기서 막히면 갈 곳이 없었다. FilterSelect에 `cap`·`hint` 포워딩 신설.
+- 미수정(원장 판단 대기): /classes 목록의 JS `localeCompare("ko")`(콜레이션이 반대라 1페이지가 전부 수학) ·
+  대시보드 '어제 미기록' 미리보기 2개(항상 한글=수학반). 둘 다 도달 경로가 있어 심각도 낮음.
+
 ### 워커 로그·마커가 통째로 죽어 있었다 — 상태 폴더 단일화 + 웹 노출 (2026-07-21) — ✅ tsc0/lint0/test 통과
 첨부 실패 원인을 로그로 확인하려다 발견. 연동 PC에서 **`watch.log`가 한 줄도 안 남고 있었다** —
 로그 폴더 기본값이 `D:/tmp/classnote` 고정인데 그 PC에서 만들 수 없었고, mkdir 실패를 catch가 삼켰다.

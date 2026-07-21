@@ -176,7 +176,9 @@ function MoveDialog({
               value={targetId}
               onValueChange={setTargetId}
               placeholder="반 선택..."
-              searchPlaceholder="반 이름·강사 검색..."
+              searchPlaceholder="반 이름·과목·강사 검색..."
+              // ⚠️ 기본 cap 50은 이름순 앞을 로마자 영어반이 독점해 수학반을 가린다(gotcha #84).
+              cap={300}
               options={classes.map((c) => ({
                 value: c.id,
                 label: c.className,
