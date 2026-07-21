@@ -48,6 +48,9 @@ export type TeacherRoster = {
   // 발송 허용 시간창 라벨("HH:MM~HH:MM", 무제한=null) — 원스크린 상단 강사 참고 안내. 활성 판정은
   // classnoteSendWindowLabel(워커 fail-open 규약 미러). 빈 로스터는 발송 표면이 없어 null 고정.
   sendWindowLabel: string | null;
+  // 사진/파일 첨부 표시(report.showAttachments) — off면 첨부는 저장되지만 /r·인쇄·ClassNote 어디에도 안 실린다.
+  // 강사 카드가 첨부 칸에 그 사실을 경고로 띄운다(입력 시점 고지 = 거짓 약속 차단, 2026-07-21).
+  showAttachments: boolean;
 };
 
 type OnescreenSessionRow = {
@@ -88,6 +91,7 @@ function emptyRoster(
     academyNoticeMode,
     classnoteSendEnabled: false,
     sendWindowLabel: null,
+    showAttachments: true, // 빈 로스터는 첨부 표면이 없어 값 무의미 — 경고를 띄우지 않는 쪽으로 고정
   };
 }
 
@@ -593,5 +597,6 @@ export async function getTeacherRoster(rawDate?: string): Promise<TeacherRoster>
       settings.report.classnoteSendWindowStart,
       settings.report.classnoteSendWindowEnd,
     ),
+    showAttachments: settings.report.showAttachments,
   };
 }

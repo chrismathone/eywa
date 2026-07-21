@@ -12,6 +12,7 @@ import { absenceKeyOf, getAbsenceBlockedKeys } from "@/features/onescreen/server
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { STUCK_MINUTES } from "../classnote-queue";
 import { IMPORT_FILTER, type ReportListFilters, type ReportListRow } from "../report-filters";
+import { getClassnoteQueue, type ClassnoteQueueView } from "./queries";
 
 /**
  * 실패/오래됨 보고서 재발송 — queued로 되돌려 워커가 다시 잡게 한다. retry_count·error 초기화.
@@ -251,6 +252,20 @@ export async function resetStuckClassnote(): Promise<{ ok: boolean; reset?: numb
     .select("id");
   if (error) return { ok: false, error: error.message };
   return { ok: true, reset: (data ?? []).length };
+}
+
+/**
+ * 발송 큐 현황 재조회(카드 자동 갱신용) — '진행 중'(대기·처리중)이 남아 있는 동안에만 클라가 주기 호출한다.
+ * 페이지 전체 router.refresh는 활성 탭의 무거운 조회(작성률·목록)까지 다시 도니, 큐 섹션만 이 액션으로 교체한다(B7 취지).
+ * 읽기 전용 = 열람 권한(canAccessTenant)만. 실패·무권한은 null → 카드가 직전 값을 그대로 유지(화면 깜빡임·오표시 없음).
+ */
+export async function refreshClassnoteQueue(days = 3): Promise<ClassnoteQueueView | null> {
+  const user = await getCurrentUser();
+  if (!user) return null;
+  if (!(await canAccessTenant(user.systemRole, "lesson_reports"))) return null;
+  // days는 클라가 넘기는 값 — 카드가 쓰는 범위(1~14일)로 조인다(주기 호출이라 창을 넓히면 그대로 부하가 된다).
+  const window = Number.isFinite(days) ? Math.min(14, Math.max(1, Math.trunc(days))) : 3;
+  return getClassnoteQueue(window);
 }
 
 const REPORT_PAGE_SIZE = 30;

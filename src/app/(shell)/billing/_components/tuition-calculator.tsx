@@ -16,6 +16,7 @@ import type { CatalogOption } from "@/features/billing/server/catalog-queries";
 import type { AccountSetting } from "@/features/owner/settings-types";
 import { CatalogPicker, CourseEditor, ExtraEditor, DiscountEditor } from "./quote-editors";
 import { QuoteDocument } from "./quote-document";
+import { submitAction } from "@/components/forms/submit-action";
 
 const won = (n: number) => `${new Intl.NumberFormat("ko-KR").format(Math.round(n))}원`;
 const inputCls =
@@ -319,7 +320,7 @@ export function TuitionCalculator({
             <span className="text-primary num text-lg font-bold">{won(totals.total)}</span>
           </div>
           <p className="text-text-faint text-[11px]">신입생 상담 견적으로 저장됩니다(재원생 청구서와 별개). 저장 후 ‘저장된 청구서’ 탭에서 다시 열 수 있습니다.</p>
-          <form action={formAction} className="flex items-center justify-end gap-2">
+          <form onSubmit={(e) => submitAction(e, formAction)} className="flex items-center justify-end gap-2">
             <input type="hidden" name="studentName" value={student.name} />
             <input type="hidden" name="school" value={student.school} />
             <input type="hidden" name="grade" value={student.grade} />

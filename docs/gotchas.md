@@ -676,3 +676,41 @@ scope에 userId도 없었다 → **로그인조차 없이** DevTools › Applica
 - **원인**: Turbopack이 프로젝트 루트(락파일 기준) 밖을 가리키는 심링크/정션을 파일시스템 루트 위반으로 거부.
 - **결론**: **정션은 typecheck·lint까지만 유효.** 워크트리에서 dev 서버를 띄우려면 정션을 떼고(`cmd /c rmdir` — 링크만)
   `pnpm install`로 실제 설치(스토어 하드링크라 ~30초). launch.json에 `pnpm -C <워크트리> dev` 항목을 추가해 쓴다.
+
+---
+
+## #83 React 19는 액션 폼을 제출할 때마다 자동 리셋 — 컨트롤드 입력이 "저장했는데 옛 값"으로 굳는다 (2026-07-21)
+
+- **증상**: /owner 보고서 설정에서 '사진/파일 첨부'를 켜고 **저장**을 누르면 "저장됨"이 뜨는데 **체크는 다시 꺼진
+  상태**로 보인다. 새로고침하면 켜져 있다(= DB엔 제대로 저장됨). 원장 제보: "저장이 한박자 늦게 되는지?"
+- **원인**: `<form action={서버액션}>`을 제출하면 react-dom의 `startHostTransition`이 **액션 실행 직전에
+  `requestFormReset(formFiber)`을 무조건 호출**한다(react-dom 19.2.4 소스 확인). 커밋 시 `form.reset()`이 돌아
+  모든 입력이 **마운트 시점 default**로 되돌아간다. 컨트롤드 체크박스는 그 순간 `checked` 프로퍼티가
+  `defaultChecked`로 밀리는데, **React는 자기 prop(state)이 안 바뀌었으니 DOM을 다시 쓰지 않는다** →
+  DOM과 state가 갈라진 채 영영 안 맞는다(리마운트/새로고침 전까지).
+  - 실측: 체크박스를 끄면 `checked=false / defaultChecked=true`, `form.reset()` 후 `checked=true`로 복귀,
+    이후 무관한 필드를 바꿔 재렌더해도 `checked=true` 유지(React가 안 고침).
+- **⚠️ 더 위험한 2차 증상**: payload를 담은 **hidden input도 함께 리셋**된다. 저장 직후 아무것도 안 고치고
+  **저장을 한 번 더 누르면 마운트 시점 payload가 제출돼 직전 저장이 되돌아간다**(조용한 데이터 손실).
+- **수정**: 네이티브 액션 제출을 쓰지 않는다. 폼은 `onSubmit`으로 받아 `preventDefault()` 하고, payload를 그
+  자리에서 FormData로 만들어 `startTransition(() => formAction(fd))`로 **직접 디스패치**
+  ([section-form.tsx](src/app/(shell)/owner/_components/section-form.tsx)). 리셋이 안 생기고 항상 최신 state가 나간다.
+  Enter 저장도 그대로 살아 있다(폼의 submit 이벤트는 여전히 발생).
+- **규칙**: **제출 후에도 화면에 남는 폼**(설정 화면처럼 저장하고 계속 편집하는 표면)은 `action={formAction}`을
+  쓰지 말 것. 제출 후 닫히거나 이동하는 다이얼로그는 리셋이 안 보이므로 그대로 둬도 된다.
+
+### #83 후속 — 전수 스캔 결과와 "고치면 안 되는 폼" (2026-07-21)
+
+앱 전체 `action={...}` 폼 **111개**를 스캔해 세 부류로 나눴다. 판정 기준은 **"제출 후에도 화면에 남는가"** +
+**"입력이 컨트롤드(또는 payload를 hidden으로 나르는가)"**.
+
+- **① 편집 폼(제출 후 남음) = 고침(7개)**: 출석 입력·성적 일괄입력·직원 근무일정·회의 화자편집·퇴원 사유·
+  수강료 계산기·급여 입력. 공통 특징은 **React state를 hidden input으로 나른다**는 것 —
+  리셋되면 다음 저장에 마운트 시점 값이 섞여 나가 **직전 저장이 되돌아갈 수 있다**(출석부가 특히 위험:
+  저장→몇 명 더 입력→저장이 일상 패턴).
+- **② 추가(create) 폼 = 손대지 않음**: 강의실 추가·팝업 추가·회의 메모 추가 등. 여기선 자동 리셋이
+  **"입력칸 비우기"라 의도된 동작** — 없애면 저장 후에도 이전 입력이 남는 퇴행이 된다.
+- **③ 확인/삭제 버튼 폼, 제출 후 닫히는 다이얼로그 = 무해**: 리셋이 화면에 보이지 않는다(대다수).
+- 헬퍼 [`submitAction`](src/components/forms/submit-action.ts) — 네이티브 제출과 **동일한 FormData**
+  (누른 버튼 name/value 포함)를 만들어 액션에 넘긴다. `<form onSubmit={(e) => submitAction(e, formAction)}>`.
+  ⚠️ 앱에 `formAction={}`(버튼별 액션 오버라이드)은 0건이라 이 치환이 안전하다 — 생기면 재검토.

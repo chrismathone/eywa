@@ -168,21 +168,60 @@ export async function sendReportViaApi(adminPage, { report, studentName, boardId
   if (!attachedImages.length) return { ok: false, error: "스샷 kage 업로드 실패" };
 
   // 2) eywa 내부 엔드포인트 → 파일 signed URL → fetch(바이트) → kage(doc input) → attached_files
+  // ⚠️ 실패 원인을 **단계별로 구분해 error에 담는다**(2026-07-21). 이전엔 세 단계(목록조회·다운로드·kage)가
+  // 전부 "파일 첨부 업로드 실패(전건) — eywa 엔드포인트/스토리지 확인" 한 줄로 뭉개져, 원인을 보려면 연동 PC의
+  // watch.log를 사람이 열어야 했다(그 PC에 CLASSNOTE_OUT 폴더가 없으면 로그 파일 자체가 없어 추적 불가).
+  // error는 DB(lesson_reports.classnote_error)에 남아 발송 콘솔·원격에서 그대로 읽힌다 = 물리 접근 불필요.
+  let epStatus = 0;
   const ep = await fetch(`${base}/api/internal/report-attachments/${report.id}`, {
     headers: INTERNAL_SECRET ? { "x-eywa-internal": INTERNAL_SECRET } : {},
-  }).then((r) => (r.ok ? r.json() : { files: [] })).catch(() => ({ files: [] }));
+  })
+    .then(async (r) => {
+      epStatus = r.status;
+      return r.ok ? await r.json() : { files: [] };
+    })
+    .catch((e) => {
+      epStatus = -1;
+      log(`  · ${studentName}: 첨부 목록 조회 네트워크 실패 — ${e.message}`);
+      return { files: [] };
+    });
+  if (!(ep.files ?? []).length) {
+    const why =
+      epStatus === -1
+        ? "네트워크 연결 실패"
+        : epStatus === 401
+          ? "인증 실패(CLASSNOTE_INTERNAL_SECRET 불일치/미설정)"
+          : epStatus === 404
+            ? "엔드포인트 없음(앱 미배포)"
+            : epStatus === 200
+              ? "앱이 첨부 URL을 못 만듦(스토리지 서명 실패)"
+              : `HTTP ${epStatus}`;
+    return { ok: false, error: `첨부 목록 조회 실패 — ${why}` };
+  }
   const attachedFiles = [];
+  const failures = [];
   for (const f of ep.files ?? []) {
+    let bytes;
     try {
-      const bytes = Buffer.from(await fetch(f.url).then((r) => r.arrayBuffer()));
+      const res = await fetch(f.url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      bytes = Buffer.from(await res.arrayBuffer());
+    } catch (e) {
+      failures.push(`다운로드 실패("${f.name}": ${e.message})`);
+      log(`  · ${studentName}: 파일 "${f.name}" 다운로드 실패 — ${e.message}`);
+      continue;
+    }
+    try {
       const fk = await uploadToKage(adminPage, "doc-attachment-add-input", { name: f.name, mimeType: "application/octet-stream", buffer: bytes });
       if (fk?.access_key) attachedFiles.push({ access_key: fk.access_key, original_file_name: f.name, file_size: fk.info?.size ?? bytes.length });
+      else failures.push(`ClassNote 업로드 거부("${f.name}": access_key 없음)`);
     } catch (e) {
-      log(`  · ${studentName}: 파일 "${f.name}" 처리 실패 — ${e.message}`);
+      failures.push(`ClassNote 업로드 실패("${f.name}": ${e.message})`);
+      log(`  · ${studentName}: 파일 "${f.name}" ClassNote 업로드 실패 — ${e.message}`);
     }
   }
   if (attachedFiles.length !== fileAtts.length) log(`  · ${studentName}: 파일 ${attachedFiles.length}/${fileAtts.length} 업로드`);
-  if (!attachedFiles.length) return { ok: false, error: "파일 첨부 업로드 실패(전건) — eywa 엔드포인트/스토리지 확인" };
+  if (!attachedFiles.length) return { ok: false, error: `파일 첨부 실패 — ${failures.join(" / ") || "원인 불명"}` };
 
   // 3) board → child → enrollment
   const enrolled = await resolveBoardChildEnrollments(adminPage, boardId, studentName, children);

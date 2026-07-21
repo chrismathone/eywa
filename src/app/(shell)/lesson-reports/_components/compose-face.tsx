@@ -51,7 +51,7 @@ export function ComposeFace({
   sendEnabled: boolean;
   showDailyTest?: boolean; // 일일테스트 사용(보고서 '표시 항목' 설정) — off면 입력칸 숨김
   showCheckTest?: boolean; // 확인테스트 사용 — off면 입력칸 숨김
-  showAttachments?: boolean; // 사진·파일 첨부 표시 — off면 첨부해도 학부모/ClassNote에 안 실림(경고 표시)
+  showAttachments?: boolean; // 사진/파일 첨부 표시 — off면 첨부해도 학부모/ClassNote에 안 실림(경고 표시)
 }) {
   const router = useRouter();
   const [studentId, setStudentId] = useState("");
@@ -444,10 +444,10 @@ export function ComposeFace({
             <textarea value={trend} onChange={(e) => setTrend(e.target.value)} rows={2} placeholder="종합 추세 코멘트(선택)" className={`${INPUT} resize-y`} />
           </div>
 
-          {/* 사진·파일 첨부 — 저장된 행에만(첫 첨부 시 자동 저장). /r·ClassNote에 함께 실림. 과목 선택 시 노출. */}
+          {/* 사진/파일 첨부 — 저장된 행에만(첫 첨부 시 자동 저장). /r·ClassNote에 함께 실림. 과목 선택 시 노출. */}
           {subject ? (
             <div>
-              <div className={`${LABEL} mb-1`}>사진·파일 첨부</div>
+              <div className={`${LABEL} mb-1`}>사진/파일 첨부</div>
               <ReportAttachments
                 studentId={studentId}
                 subject={subject}

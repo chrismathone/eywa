@@ -6,6 +6,7 @@ import { Check, Loader2, Plus, X } from "@/components/icons/eywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { updateWorkSchedule } from "@/features/staff/server/account-actions";
 import type { WorkSchedule } from "@/features/staff/work-schedule";
+import { submitAction } from "@/components/forms/submit-action";
 
 const DAYS = [
   ["mon", "월"],
@@ -104,7 +105,7 @@ export function ScheduleEditor({
   }
 
   return (
-    <form action={action} className="bg-card border-line shadow-card space-y-3 rounded-2xl border p-5">
+    <form onSubmit={(e) => submitAction(e, action)} className="bg-card border-line shadow-card space-y-3 rounded-2xl border p-5">
       <input type="hidden" name="id" value={staffId} />
       <input type="hidden" name="schedule" value={JSON.stringify(payload)} />
       <div className="flex items-center justify-between">
