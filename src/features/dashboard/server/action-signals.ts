@@ -105,12 +105,11 @@ type ScheduleRow = {
     | null;
 };
 
+type ClassRef = { id?: string; class_name?: string; subject?: string | null; closed_at?: string | null };
+
 type ClassScheduleRow = {
   class_id: string;
-  class:
-    | { id?: string; class_name?: string; closed_at?: string | null }
-    | { id?: string; class_name?: string; closed_at?: string | null }[]
-    | null;
+  class: ClassRef | ClassRef[] | null;
 };
 
 /** 어제 출결 미기록 — 모든 쿼리 오류를 위로 올려 0개 반과 구분한다. */
@@ -125,7 +124,8 @@ async function unrecordedClassesSignal(
   const scheduleResult = await scopeTenant(
     supabase
       .from("class_schedules")
-      .select("class_id, class:class_id!inner ( id, class_name, is_active, closed_at )")
+      // subject는 미리보기 이름 2개를 과목별로 고르게 뽑는 데 쓴다(아래 반환부 주석·gotcha #84).
+      .select("class_id, class:class_id!inner ( id, class_name, subject, is_active, closed_at )")
       .eq("day_of_week", dayKey)
       .eq("class.is_active", true)
       .lte("valid_from", date)
@@ -133,11 +133,11 @@ async function unrecordedClassesSignal(
     db,
   );
   const scheduleRows = rowsOrThrow(scheduleResult, "yesterday schedules") as unknown as ClassScheduleRow[];
-  const classNames = new Map<string, string>();
+  const classNames = new Map<string, { name: string; subject: string }>();
   for (const row of scheduleRows) {
     const klass = (Array.isArray(row.class) ? row.class[0] : row.class) ?? undefined;
     if (!klass?.id || (klass.closed_at && klass.closed_at < date)) continue;
-    classNames.set(row.class_id, klass.class_name ?? "?");
+    classNames.set(row.class_id, { name: klass.class_name ?? "?", subject: klass.subject ?? "" });
   }
   const classIds = [...classNames.keys()];
   if (classIds.length === 0) return [];
@@ -203,12 +203,17 @@ async function unrecordedClassesSignal(
     recordedByClass.set(row.class_id, students);
   }
 
+  // ⚠️ 이름순 정렬을 유지하되 subject를 함께 실어 보낸다. 소비처(today-actions)가 미리보기 이름을
+  // 2개만 노출하는데, ICU 한국어 정렬은 한글을 로마자보다 앞에 둬서 그냥 앞 2개를 뽑으면 **항상
+  // 한글 이름 반(수학)**만 뜨고 영어반은 미기록이 아무리 많아도 '외 N'에 묻힌다(gotcha #84).
+  // 그래서 자르는 일은 소비처가 과목별로 고르게 한다 — 여기선 정렬만 하고 카테고리 정보를 넘긴다.
   return classIds.flatMap((classId) => {
     const expected = expectedByClass.get(classId) ?? new Set<string>();
     const recorded = recordedByClass.get(classId) ?? new Set<string>();
     const hasUnrecordedStudent = [...expected].some((studentId) => !recorded.has(studentId));
+    const klass = classNames.get(classId);
     return hasUnrecordedStudent
-      ? [{ classId, className: classNames.get(classId) ?? "?" }]
+      ? [{ classId, className: klass?.name ?? "?", subject: klass?.subject ?? "" }]
       : [];
   }).sort((a, b) => a.className.localeCompare(b.className, "ko"));
 }
