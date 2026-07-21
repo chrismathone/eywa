@@ -17,6 +17,10 @@ import { goalAchieved } from "../grades-meta";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { isShareExpired } from "@/features/onescreen/share-expiry";
+import { getCurrentUser } from "@/lib/auth/current-user";
+import { canSeeStudentEnrollment } from "./enrollment-gate";
+import { OUTCOME_LABEL, type OutcomeKey } from "@/features/enrollment/server/queries";
+import { reasonDisplay } from "@/features/withdrawals/types";
 
 /** 임포트된 상담/메모 텍스트("[제목]\n본문\n[등록자: 이름]")를 제목·본문·등록자로 분리. */
 function parseImportedNote(raw: string | null | undefined): {
@@ -1241,10 +1245,25 @@ export async function getStudentAttendanceFull(studentId: string): Promise<Stude
 // 등록상담 → 학생 timeline ↔ 학생상담 + 메모 + enrollment 변경 통합
 export type TimelineEvent = {
   date: string; // ISO date
-  kind: "enrollment_start" | "enrollment_end" | "consultation" | "memo" | "status_change" | "grade";
+  kind:
+    | "enrollment_start"
+    | "enrollment_end"
+    | "consultation"
+    | "memo"
+    | "status_change"
+    | "grade"
+    | "textbook"
+    | "enrollment_consultation";
   title: string;
   description?: string | null;
   registrant?: string | null; // 등록자(상담/메모, 임포트 텍스트에서 분리)
+};
+
+type EnrollConsultRow = {
+  consulted_at: string;
+  outcome: string | null;
+  subject: string | null;
+  parent_request: string | null;
 };
 
 export async function getStudentTimeline(studentId: string): Promise<TimelineEvent[]> {
@@ -1252,6 +1271,12 @@ export async function getStudentTimeline(studentId: string): Promise<TimelineEve
 
   // 강사 스코프: 타임라인의 상담 이벤트도 **본인이 등록한 상담**만(남이 쓴 상담 내용 미노출, 상담 목록/상세와 동일).
   const tId = await effectiveTeacherId();
+  // 입학(등록)상담 노출은 상담탭과 **같은 게이트 함수**로 판정한다(#77). 게이트를 여기서 직접 걸어야
+  // 새 호출부(비서 툴 등)가 빼먹어도 새지 않는다 — 호출부에 맡기면 그게 곧 우회 구멍이다.
+  const user = await getCurrentUser();
+  const canSeeEnrollment = user
+    ? await canSeeStudentEnrollment(user.systemRole, studentId)
+    : false;
   let consultQuery = supabase
     .from("student_consultations")
     .select(`consulted_at, category, summary`)
@@ -1263,6 +1288,9 @@ export async function getStudentTimeline(studentId: string): Promise<TimelineEve
     { data: consultations },
     { data: memos },
     { data: grades },
+    { data: textbooks },
+    { data: student },
+    { data: enrollConsults },
   ] = await Promise.all([
     supabase
       .from("enrollments")
@@ -1277,6 +1305,29 @@ export async function getStudentTimeline(studentId: string): Promise<TimelineEve
       .from("student_grades")
       .select(`taken_on, exam_name, subject, score, max_score`)
       .eq("student_id", studentId),
+    // 교재 신청 이력(2026-07-21 원장 지시) — 시간표 hover의 '교재'가 수업보고서로 넘어가면서
+    // 교재요청서는 **이력**으로 자리를 옮겼다. 학생별로 보면 학습 진행이 그대로 드러난다
+    // (실측 김하나: 초5-2 1권→2권→3권→초6-1 1권→2권→초6-2 1권→2권, 2월~7월).
+    // ⚠️ 금액은 싣지 않는다 — 교재비는 수납 권한 영역이라 타임라인으로 새면 게이트 우회(#77).
+    supabase
+      .from("textbook_orders")
+      .select(`book_name, book_detail, request_date, created_at, registered_at, ordered_at, paid_at`)
+      .eq("student_id", studentId),
+    // 상태 변경(2026-07-21) — 전용 이력 테이블이 없어 students의 두 날짜 컬럼에서 **파생**한다.
+    // ⚠️ 그래서 만들 수 있는 건 '재원 시작'·'퇴원' 둘뿐 — 휴원(on_hold)은 타임스탬프가 없어 못 만든다.
+    // (전 이력이 필요해지면 status 전이 로그 테이블이 선행돼야 한다.)
+    supabase
+      .from("students")
+      .select(`enrolled_at, withdrawn_at, withdrawal_metadata`)
+      .eq("id", studentId)
+      .maybeSingle(),
+    // 입학(등록)상담 — 재원 전 첫 접점. 게이트 없으면 아예 조회하지 않는다.
+    canSeeEnrollment
+      ? supabase
+          .from("enrollment_consultations")
+          .select(`consulted_at, outcome, subject, parent_request`)
+          .eq("student_id", studentId)
+      : Promise.resolve({ data: [] as EnrollConsultRow[] }),
   ]);
 
   const events: TimelineEvent[] = [];
@@ -1344,6 +1395,50 @@ export async function getStudentTimeline(studentId: string): Promise<TimelineEve
           : g.max_score
             ? `${g.score} / ${g.max_score}점`
             : `${g.score}점`,
+    });
+  }
+
+  for (const t of textbooks ?? []) {
+    // 진행 = ijw식 3개 독립 체크(등록·납부·주문). raw enum 대신 완료된 단계만 한글로.
+    const done = [
+      t.registered_at ? "등록" : null,
+      t.paid_at ? "납부" : null,
+      t.ordered_at ? "주문" : null,
+    ].filter(Boolean) as string[];
+    events.push({
+      date: String(t.request_date ?? t.created_at ?? "").slice(0, 10),
+      kind: "textbook",
+      title: t.book_name,
+      description: [t.book_detail, done.length === 3 ? "처리 완료" : done.length ? `${done.join("·")} 완료` : "처리 대기"]
+        .filter(Boolean)
+        .join(" · "),
+    });
+  }
+
+  // 상태 변경 — students의 두 날짜에서 파생(위 select 주석 참조). 휴원은 소스가 없어 못 만든다.
+  if (student?.enrolled_at) {
+    events.push({ date: String(student.enrolled_at).slice(0, 10), kind: "status_change", title: "재원 시작" });
+  }
+  if (student?.withdrawn_at) {
+    // 사유는 reasonDisplay — 표준 코드는 한글로, "반 이동" 같은 자유 텍스트는 그대로(reasonLabel은 '기타'로 뭉갠다).
+    const md = student.withdrawal_metadata as { reason?: string | null; memo?: string | null } | null;
+    events.push({
+      date: String(student.withdrawn_at).slice(0, 10),
+      kind: "status_change",
+      title: "퇴원",
+      description: [reasonDisplay(md?.reason), md?.memo].filter(Boolean).join(" · ") || null,
+    });
+  }
+
+  for (const ec of (enrollConsults ?? []) as EnrollConsultRow[]) {
+    const outcome = ec.outcome ? OUTCOME_LABEL[ec.outcome as OutcomeKey] : null;
+    // makeedu 목록 동기화가 채우는 안내 sentinel("ℹ️ …")은 상담 내용이 아니라 노이즈라 본문에서 뺀다.
+    const body = ec.parent_request?.startsWith("ℹ️") ? null : ec.parent_request;
+    events.push({
+      date: String(ec.consulted_at).slice(0, 10),
+      kind: "enrollment_consultation",
+      title: [ec.subject ? subjectMaps.labelOf(ec.subject) : null, "입학 상담"].filter(Boolean).join(" "),
+      description: [outcome, body].filter(Boolean).join(" · ") || null,
     });
   }
 

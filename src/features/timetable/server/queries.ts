@@ -258,7 +258,10 @@ export type StudentLine = {
   attendanceDays?: string[];
   /** 영문 이름(ijw englishName) — 통합뷰 명단에 "이름 (English)"로 표시. 없으면 미표시. */
   englishName?: string | null;
-  /** 학생별 최근 교재(ijw 학생 hover의 교재 줄) — textbook_orders 최신 1건. hover 표시용. */
+  /**
+   * 학생별 최근 교재 — **`latestReport`와 같은 수업보고서 행**에서 뽑는다(0089a `lesson_reports.textbook`).
+   * 학부모에게 나가는 수업보고서의 '교재'와 항상 같은 값 = 화면·발송물 불일치 없음.
+   */
   latestTextbook?: { name: string; date: string | null } | null;
   /** 학생별 최근 진도(ijw 학생 hover의 "[진도]" 줄) — lesson_reports 최신 1건. */
   latestReport?: {
@@ -482,12 +485,13 @@ export async function getWeeklyScheduleWithStudents(
     list.sort(compareStudentLines);
   }
 
-  // 학생별 최근 교재 — ijw 학생 hover의 "교재" 줄. textbook_orders는 학생별이며 request_date 최신 1건.
-  // (delivered_at은 폐기 컬럼이라 미사용 — 최근일 기준 = request_date.)
+  // 학생별 최근 교재·진도 — 둘 다 **같은 수업보고서 1건**에서 뽑는다(2026-07-21 원장 지시 "완전히 연동").
+  // ⚠️ 과거엔 교재만 `textbook_orders`(교재요청서)에서 왔는데, 그건 **구매 신청 이력**이라 수업에서 쓰는
+  // 교재명과 사실상 항상 다르다(실측: 둘 다 있는 148명 중 **147명 불일치**. 김하나 = 요청서 "초6-2 발전
+  // 2권(22개정)" vs 보고서 "강아 6-2-1"). 같은 hover 카드 안에서 교재와 진도의 출처·날짜가 갈라져,
+  // 학부모가 받는 수업보고서와도 어긋났다. 교재요청서는 /textbook-requests(주문·납부 관리)로 남는다.
   const studentIds = Array.from(new Set([...byClass.values()].flat().map((l) => l.studentId)));
   if (studentIds.length > 0) {
-    type TbRow = { student_id: string; book_name: string | null; request_date: string | null };
-    // 학생별 최근 진도 — ijw 학생 hover의 "[진도]" 줄. lesson_reports 최신(report_date desc) 1건.
     type RepRow = {
       student_id: string;
       report_date: string;
@@ -495,46 +499,24 @@ export async function getWeeklyScheduleWithStudents(
       exam_info: string | null;
       homework_score: string | null;
       teacher_name: string | null;
+      textbook: string | null;
     };
-    // 교재·진도는 둘 다 studentIds에만 의존하는 독립 조회 → 병렬(직렬이면 두 청크 wave가 합산됨).
-    // ⚠️ 둘 다 학생당 N행(1:N)이라 fetchInChunks면 청크당 1000행 캡에 조용히 잘린다(B2).
-    // 특히 진도는 report_date desc + '첫 행 승리'라, 잘리면 오래된 행부터 사라지는 게 아니라
-    // **정렬 뒤쪽 학생의 전 행이 통째로** 없어져 hover 진도가 아예 안 뜬다 → fetchAllPagedInChunks.
-    const [tbRows, repRows] = await Promise.all([
-      fetchAllPagedInChunks<TbRow>(studentIds, (chunk, from, to) => {
-        let q = supabase
-          .from("textbook_orders")
-          .select("student_id, book_name, request_date")
-          .in("student_id", chunk);
-        if (db) q = q.eq("tenant_id", db.tenantId); // admin(cron) 경로 — 명시 격리
-        return q.order("id").range(from, to);
-      }),
-      fetchAllPagedInChunks<RepRow>(studentIds, (chunk, from, to) => {
-        let q = supabase
-          .from("lesson_reports")
-          .select("student_id, report_date, progress, exam_info, homework_score, teacher_name")
-          .in("student_id", chunk)
-          .not("progress", "is", null) // hover는 진도 있는 최신 1건(상세 '진도' 탭은 전건)
-          .order("report_date", { ascending: false });
-        if (db) q = q.eq("tenant_id", db.tenantId); // admin(cron) 경로 — 명시 격리
-        // id desc = 페이지 안정 tie-break 겸 같은 날짜 2건일 때 '최신' 결정(옛 코드는 비결정적이었다).
-        return q.order("id", { ascending: false }).range(from, to);
-      }),
-    ]);
-    const latestTb = new Map<string, { name: string; date: string | null }>();
-    for (const r of tbRows) {
-      if (!r.book_name) continue;
-      const d = (r.request_date ?? "").slice(0, 10);
-      const cur = latestTb.get(r.student_id);
-      if (!cur || (cur.date ?? "") < d) latestTb.set(r.student_id, { name: r.book_name, date: d || null });
-    }
-    for (const list of byClass.values()) {
-      for (const l of list) {
-        const tb = latestTb.get(l.studentId);
-        if (tb) l.latestTextbook = tb;
-      }
-    }
+    // ⚠️ 학생당 N행(1:N)이라 fetchInChunks면 청크당 1000행 캡에 조용히 잘린다(B2). 특히 진도는
+    // report_date desc + '첫 행 승리'라, 잘리면 오래된 행부터 사라지는 게 아니라 **정렬 뒤쪽 학생의
+    // 전 행이 통째로** 없어져 hover 진도가 아예 안 뜬다 → fetchAllPagedInChunks.
+    const repRows = await fetchAllPagedInChunks<RepRow>(studentIds, (chunk, from, to) => {
+      let q = supabase
+        .from("lesson_reports")
+        .select("student_id, report_date, progress, exam_info, homework_score, teacher_name, textbook")
+        .in("student_id", chunk)
+        .not("progress", "is", null) // hover는 진도 있는 최신 1건(상세 '진도' 탭은 전건)
+        .order("report_date", { ascending: false });
+      if (db) q = q.eq("tenant_id", db.tenantId); // admin(cron) 경로 — 명시 격리
+      // id desc = 페이지 안정 tie-break 겸 같은 날짜 2건일 때 '최신' 결정(옛 코드는 비결정적이었다).
+      return q.order("id", { ascending: false }).range(from, to);
+    });
     const latestRep = new Map<string, StudentLine["latestReport"]>();
+    const latestTb = new Map<string, { name: string; date: string | null }>();
     for (const r of repRows) {
       if (latestRep.has(r.student_id)) continue; // 이미 최신(정렬 desc) 저장됨
       latestRep.set(r.student_id, {
@@ -544,6 +526,15 @@ export async function getWeeklyScheduleWithStudents(
         homeworkScore: r.homework_score,
         teacherName: r.teacher_name,
       });
+      // 교재는 진도와 **같은 행**에서만 — 다른 행에서 끌어오면 카드 안에서 날짜가 또 갈라진다.
+      const book = (r.textbook ?? "").trim();
+      if (book) latestTb.set(r.student_id, { name: book, date: r.report_date });
+    }
+    for (const list of byClass.values()) {
+      for (const l of list) {
+        const tb = latestTb.get(l.studentId);
+        if (tb) l.latestTextbook = tb;
+      }
     }
     for (const list of byClass.values()) {
       for (const l of list) {

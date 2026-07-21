@@ -64,7 +64,13 @@ export function reasonLabel(raw: string | null | undefined): string {
  */
 export function reasonDisplay(raw: string | null | undefined): string | null {
   if (!raw) return null;
-  return (REASON_LABEL as Record<string, string>)[raw] ?? raw;
+  const known = (REASON_LABEL as Record<string, string>)[raw];
+  if (known) return known;
+  // ⚠️ 임포트 표기 흔들림(dissatisfied·moved…)도 한글로 — 표준 키가 아니라는 이유로 **영문 raw 코드를
+  // 화면에 흘리면 안 된다**(실측 injaewon: dissatisfied 5건이 그대로 노출되고 있었다).
+  const alias = REASON_ALIAS[raw];
+  if (alias) return REASON_LABEL[alias];
+  return raw; // 자유 텍스트("반 이동")는 보존 — 여기가 reasonLabel('기타'로 뭉갬)과 갈리는 지점.
 }
 
 export const DEFAULT_WITHDRAWAL_METADATA: WithdrawalMetadata = {
