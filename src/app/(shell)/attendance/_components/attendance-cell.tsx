@@ -148,7 +148,8 @@ export function AttendanceCell({
           <div
             className="bg-card border-line fixed z-50 flex flex-col gap-0.5 rounded-lg border p-1 shadow-lg"
             style={{
-              left: Math.min(pos.x, (typeof window !== "undefined" ? window.innerWidth : 9999) - 132),
+              // 팝오버 실폭 ≈ 입력칸 w-40(160) + 패딩·테두리 — 오른쪽 끝 셀에서 잘리지 않게 클램프.
+              left: Math.min(pos.x, (typeof window !== "undefined" ? window.innerWidth : 9999) - 176),
               top: pos.top,
               bottom: pos.bottom,
             }}
@@ -173,24 +174,23 @@ export function AttendanceCell({
               </button>
             ))}
             {/* 시수(배수)·메모 — 현재 상태와 함께 저장. 상태 없으면 비활성(단독 저장 불가). */}
-            <div className="border-line mt-0.5 flex flex-col gap-1 border-t pt-1">
-              <label className="flex items-center gap-1.5">
-                <span className="text-text-dim w-7 shrink-0 text-[11px]">시수</span>
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  value={unitsDraft}
-                  onChange={(e) => {
-                    setUnitsDraft(e.target.value);
-                    setUnitsError(false);
-                  }}
-                  placeholder="1"
-                  title="정규 수업 1회 = 1. 보강 연장 1.5·2, 부분 출석 0.5 등"
-                  className={`bg-bg-soft text-foreground placeholder:text-text-faint w-full rounded-md border px-2 py-1 text-xs focus:outline-none ${
-                    unitsError ? "border-danger" : "border-line"
-                  }`}
-                />
-              </label>
+            <div className="border-line mt-0.5 flex w-40 flex-col gap-1 border-t pt-1">
+              {/* 시수·메모는 같은 폼(플레이스홀더 인풋·동일 폭) — 라벨을 왼쪽에 두면 두 칸이 좌우로 어긋난다. */}
+              <input
+                type="text"
+                inputMode="decimal"
+                value={unitsDraft}
+                onChange={(e) => {
+                  setUnitsDraft(e.target.value);
+                  setUnitsError(false);
+                }}
+                placeholder="시수(기본 1)"
+                aria-label="시수"
+                title="정규 수업 1회 = 1. 보강 연장 1.5·2, 부분 출석 0.5 등"
+                className={`bg-bg-soft text-foreground placeholder:text-text-faint w-full rounded-md border px-2 py-1 text-xs focus:outline-none ${
+                  unitsError ? "border-danger" : "border-line"
+                }`}
+              />
               {unitsError ? (
                 <p className="text-danger text-[10px] leading-tight">숫자(소수 한 자리)만 — 예: 1, 1.5, 2</p>
               ) : null}
@@ -199,7 +199,8 @@ export function AttendanceCell({
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
                 placeholder="메모(사유)"
-                className="border-line bg-bg-soft text-foreground placeholder:text-text-faint w-40 rounded-md border px-2 py-1 text-xs focus:outline-none"
+                aria-label="메모(사유)"
+                className="border-line bg-bg-soft text-foreground placeholder:text-text-faint w-full rounded-md border px-2 py-1 text-xs focus:outline-none"
               />
               <button
                 type="button"
