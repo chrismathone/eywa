@@ -10,6 +10,16 @@ import { TextField, ToggleField } from "./fields";
 import { EyIcon } from "@/components/icons/eywa-icons";
 
 /**
+ * '표시 항목' 토글 중 부연이 필요한 것만. showAttachments는 사진과 파일(pdf·엑셀·hwp·오디오)을 **한 스위치로
+ * 함께** 켜고 끈다 — 별개로 보이지만 토글은 하나뿐이라, 사진만 끌 생각으로 내리면 파일까지 막힌다. 끄면 발송
+ * 워커가 ClassNote 파일첨부 경로를 아예 안 타서 "발송은 성공인데 파일만 없음"이 된다(2026-07-21 실사례 —
+ * 엑셀을 첨부했는데 게시글에 안 실림). 라벨만으론 그 범위가 안 보여 한 줄 부연.
+ */
+const SHOW_ITEM_HINTS: Partial<Record<string, string>> = {
+  showAttachments: "사진과 파일을 함께 켜고 끕니다 · 끄면 첨부해도 학부모 보고서·ClassNote에 안 실립니다",
+};
+
+/**
  * 학원 운영 > 보고서 — 학부모 보고서(/r)·ClassNote 게시 이미지의 표시 설정.
  * notifications-section 패턴(로컬 state + SectionForm이 저장 배관 담당). /r 페이지가 이 값을 읽어 렌더.
  */
@@ -294,12 +304,15 @@ export function ReportSection({
                 ["학부모 전달 내용", "showParentNote"],
                 ["학습 추세(종합분석)", "showTrendNote"],
                 ["학습 추이 그래프", "showTrendGraph"],
-                ["학생 사진 첨부", "showAttachments"],
+                // ⚠️ 이 토글은 사진뿐 아니라 pdf·엑셀·hwp 등 **파일 첨부 전체**의 게이트다. 끄면 발송 워커가
+                // ClassNote 파일첨부 경로를 아예 안 타서 "발송은 성공인데 파일만 없음"이 된다(2026-07-21 실사례).
+                ["사진/파일 첨부", "showAttachments"],
               ] as const
             ).map(([label, key]) => (
               <div key={key} className="px-3">
                 <ToggleField
                   label={label}
+                  hint={SHOW_ITEM_HINTS[key]}
                   value={r[key]}
                   onChange={(v) => set({ [key]: v } as Partial<ReportSettings>)}
                 />

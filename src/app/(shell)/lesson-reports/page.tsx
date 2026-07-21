@@ -93,6 +93,7 @@ export default async function LessonReportsPage({ searchParams }: { searchParams
                   composeSendEnabled: settings.report.classnoteSendEnabled,
                   composeShowDailyTest: settings.report.showDailyTest,
                   composeShowCheckTest: settings.report.showCheckTest,
+                  composeShowAttachments: settings.report.showAttachments,
                 }),
               )
           : tab === "ai_ment"
@@ -153,6 +154,7 @@ export default async function LessonReportsPage({ searchParams }: { searchParams
           sendEnabled={tabData.composeSendEnabled}
           showDailyTest={tabData.composeShowDailyTest}
           showCheckTest={tabData.composeShowCheckTest}
+          showAttachments={tabData.composeShowAttachments}
         />
       ) : null}
 

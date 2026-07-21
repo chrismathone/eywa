@@ -34,6 +34,76 @@
   ⚠️ 알려진 한계: 창(iframe)은 최소화해도 `visibilityState`가 최상위 탭을 따라 '보임'이라 폴링이 계속된다
   (무변화 10분 상한이 노출을 가둔다). 강사 원스크린의 발송 배지는 아직 수동 새로고침 — 후속 후보.
 
+### /owner 저장이 "한박자 늦게" 보이던 것 = React 19 폼 자동 리셋 (2026-07-21) — ✅ tsc0/lint0 · 실브라우저 검증
+원장 제보: 보고서 설정에서 토글을 켜고 저장하면 "저장됨"은 뜨는데 **체크가 다시 꺼진 것처럼** 보이고,
+새로고침하면 켜져 있다. 저장 지연이 아니라 **화면만 옛 값으로 굳는** 문제였다.
+- **원인**: `<form action={서버액션}>` 제출 시 react-dom `startHostTransition`이 액션 실행 직전
+  `requestFormReset`을 **무조건** 건다(19.2.4 소스 확인) → `form.reset()`으로 입력이 마운트 시점 default로
+  복귀 → 컨트롤드 입력은 React prop이 안 바뀌었으니 DOM을 다시 안 써서 state와 갈라진 채 굳는다.
+- ⚠️ **더 위험했던 2차 증상**: payload hidden input도 함께 리셋 → 저장 직후 아무것도 안 고치고 **저장을 한 번
+  더 누르면 직전 저장이 되돌아간다**(조용한 데이터 손실). 이번 수정으로 같이 막혔다.
+- **수정**: [section-form.tsx](<../src/app/(shell)/owner/_components/section-form.tsx>)가 네이티브 액션 제출을
+  버리고 `onSubmit`에서 `preventDefault` + payload를 그 자리에서 FormData로 만들어
+  `startTransition(() => formAction(fd))`로 직접 디스패치. 리셋 없음 + 항상 최신 state 제출. Enter 저장 유지.
+  hidden 두 칸은 제출엔 안 쓰이지만 `useUnsavedGuard`의 dirty 캐리어라 유지(버튼→state 편집 감지).
+- **검증**(로컬 dev + 실제 마우스 클릭): 수정 전 = 토글 후 저장 시 DOM이 default로 복귀. 수정 후 = 저장 뒤에도
+  체크 유지 + "저장됨" 표시 + DB 반영 확인. 검증에 쓴 `showTextbook`은 즉시 원복(true).
+  ⚠️ 합성 클릭(`el.click()`)은 React state를 안 바꿔 이 검증엔 무용 — 실좌표 클릭 필요(#33/#39 계열).
+- 이 함정은 **/owner 전 섹션 공통**(SectionForm)이라 한 곳 수정으로 전부 해소. 규칙·재발방지 = `docs/gotchas.md` #83.
+
+### 파일 첨부가 "되는데 안 실리는" 문제 = showAttachments 게이트 (2026-07-21) — ✅ tsc0/lint0 · 마이그 0
+"학원이 계정으로 엑셀 첨부가 안 된다" 제보. **첨부 오류도 확장자 오류도 아니었다** — 업로드는 성공했고
+(`RPM 교육과정 (중등).xlsx` 10,726B가 7/21 수학 보고서에 저장, ClassNote `success`), 원인은 injaewon의
+`report.showAttachments = false`. 이 토글 하나가 ① `/r` 학부모 표시 ② 인쇄 ③ **워커의 ClassNote 파일첨부
+API 경로**(`showAttachments && fileAtts.length && boardId`, classnote-core.mjs)를 동시에 막아, 워커가 스샷 전용
+경로로 보내고 `success`로 끝나 **"발송 성공인데 파일만 없음"**이 된다.
+- **거짓 약속 차단**: 토글이 꺼져 있어도 첨부 UI는 정상 동작하고 "1개 첨부" 토스트까지 떴다(write-only-orphan).
+  [report-attachments.tsx](../src/features/onescreen/components/report-attachments.tsx)에 `hiddenFromParents`
+  경고 배너 추가 — `page.tsx → compose-tab → ComposeFace`로 `settings.report.showAttachments` 배선.
+- **라벨 정정**: /owner 표시 항목의 "학생 사진 첨부" → **"사진/파일 첨부"** + 힌트("사진과 파일을 함께 켜고
+  끕니다 · 끄면 첨부해도 학부모 보고서·ClassNote에 안 실립니다"). Phase 2 이후 이 토글은 사진이 아니라
+  pdf·엑셀·hwp·오디오 전체의 게이트다. ⚠️ 원장 지적(2026-07-21): **사진과 파일은 별개 개념인데 스위치가 하나뿐**이라,
+  사진만 끌 생각으로 내리면 파일까지 막힌다 — 라벨·힌트로 그 사실을 드러냈다(토글 분리는 미채택, 필요 시 별건).
+- **강사 화면도 동일 경고**: 첨부 UI가 두 곳(admin `ReportAttachments` + 강사 원스크린 `report-card` 인라인)에
+  따로 있어 1차 수정이 admin만 덮었다 — `roster.showAttachments` → `onescreen-client` → `ReportCard
+  attachmentsHidden`으로 배선해 **첨부하는 사람(강사)이 먼저** 경고를 본다.
+- **이관 문서 정정**: [연동PC-이관-안내.md](../scripts/_classnote/연동PC-이관-안내.md)가
+  `CLASSNOTE_INTERNAL_SECRET`을 "(선택) 발송엔 무관"으로 안내하고 있었다 — Phase 2에선 **파일 첨부에 필수**
+  (없으면 내부 엔드포인트 401 → "파일 첨부 업로드 실패(전건)"으로 발송 자체가 실패). 필수로 표기 + 사유 명시.
+- ⚠️ 남은 원장 조치: `/owner` → 보고서 → 표시 항목에서 **사진·파일 첨부 켜기** → 해당 보고서 재발송.
+
+### 저장된 브랜드색 그린 → v3 네이비 정리 (2026-07-20) — ✅ tsc0/lint0/test12 · 마이그 0(데이터 스크립트)
+injaewon `profile.brandColor`가 팔레트 v3 전환 후에도 옛 기본 그린 `#1a5f3c`로 남아 있던 것을 `#153e75`로 정리.
+`LEGACY_DEFAULT_BRAND_COLORS`가 옛 기본색 주입을 억제하고 있었으므로 **화면은 이미 네이비였고 시각 변화는 없다** —
+실익은 /owner 색상 스와치가 실제 화면과 어긋나 보이던 것(그린 스와치 ↔ 네이비 화면)의 해소.
+- [migrate-brand-color-navy.cjs](../scripts/_poc_migration/migrate-brand-color-navy.cjs) — 멱등·dry-run 기본.
+  **정확히 LEGACY 목록에 있는 값만** 교체(커스텀 브랜드색 테넌트는 건드리지 않음) + `audit_logs` 직접 기록.
+- /owner 안내문 분기 추가([profile-section.tsx](<../src/app/(shell)/owner/_components/profile-section.tsx>)):
+  저장값이 **기본색과 같으면** "기본 팔레트와 같은 색입니다"(정상), 어긋남(옛 기본색·형식오류·빈값)일 때만
+  기존 "적용되지 않습니다" 설명. 안 나누면 네이비를 저장하고도 경고가 떠 문제로 오해된다.
+- 🔴 **작업 중 밟은 함정(재발 방지)**: postgres.js에서 `${JSON.stringify(v)}::jsonb`는 **이중 인코딩**된다
+  (실측: `"#153e75"` 9자가 저장 → `isHexColor` 실패 → 설정이 조용히 무시됨). 스칼라는 `to_jsonb(${v}::text)`,
+  객체는 `sql.json(obj)`. 감사로그 metadata도 같은 실수로 `jsonb_typeof='string'`이 됐던 것 복구.
+  검증은 **길이까지** 볼 것(`length(...)=7`) — 눈으로는 따옴표가 잘 안 보인다. color-utils 테스트에 이 케이스 고정.
+
+### 로그인 화면·탭 제목을 학원설정에서 읽기 (2026-07-20) — ✅ tsc0/lint0/build✓ · 마이그 0 · 적대리뷰
+로그인 화면이 제품 기본값(`e` 배지 + "eywa")을 보여주고 "인재원"은 카피 3곳에 하드코딩돼 있던 것을
+**학원설정 단일 진입점으로 배선**. 이제 /owner에서 로고·학원명·지점을 바꾸면 로그인 화면과 탭 제목이 따라온다.
+- 신규 [public-branding.ts](../src/features/owner/server/public-branding.ts) — **비로그인(pre-auth) 표면 전용** 브랜딩 진입점.
+  로그인 전엔 세션이 없어 테넌트를 모르므로 **학원이 정확히 1개일 때만** 그 학원으로 확정(`limit(2)` + `length===1`),
+  0개·2개 이상이면 **null → 제품 중립 표기로 자동 폴백**(임의 선택 시 남의 학원 이름 노출 방지). 호스트/서브도메인
+  라우팅이 생기면 이 함수만 교체. 캐시 2겹(sole-tenant=`PUBLIC_BRANDING_TENANTS_TAG`/1h, settings=`tenantSettingsTag`/300s)
+  이라 /owner 저장 시 `updateTag`로 즉시 반영(read-your-writes). ⚠️ **signed URL은 캐시에 담지 않는다**(TTL 만료 서빙) —
+  호출부가 요청마다 `resolveBrandingSrc`((shell)/layout.tsx 동일 규약).
+- 로그인 [BrandPanel](<../src/app/(auth)/login/page.tsx>): 업로드 로고 이미지 → 없으면 building 마크(사이드바와 동일 폴백,
+  이니셜 배지 금지 규약). 워드마크=`logoText`, 학원줄=`name · branchLabel`, 본문·푸터 학원명=`profile.name`(없으면 "학원").
+- 루트 [layout.tsx](../src/app/layout.tsx): `metadata` → `generateMetadata`. 자체 metadata 없는 라우트(키오스크)의 탭 제목이
+  하드코딩 "인재원"이던 것 해소 — 키오스크 본문은 이미 테넌트 학원명을 읽고 있어 탭만 어긋나 있었다.
+- [super-admin/actions.ts](../src/features/super-admin/server/actions.ts): 학원 생성/롤백 시 `updateTag(PUBLIC_BRANDING_TENANTS_TAG)`
+  — 두 번째 학원이 생기는 순간 단일 테넌트 판정이 뒤집히므로 TTL(1h)을 기다리지 않고 즉시 무효화.
+- 실검증(dev 렌더): 로고 이미지·`INJAEWON`·`인재원 · 침산`·본문/푸터 학원명·키오스크 탭 `eywa — 인재원 학원관리` 전부 설정값.
+  폴백 5조합 시뮬레이션(무테넌트·공백·이름만·지점만)에서 어색한 한국어·중복·빈 문자열 없음.
+
 ### 앱 화면 v3 네이비 미통일 전수 정리 (2026-07-20) — ✅ tsc0/lint0/test1664
 "앱도 네이비로 통일됐나" 검수(5렌즈 감사 77에이전트, 탐색 36→확정 13) 후속. **토큰·brandColor 주입
 경로는 정상**이었고(injaewon 저장값 #1a5f3c는 `LEGACY_DEFAULT_BRAND_COLORS`가 억제 → globals.css
@@ -670,6 +740,22 @@ file input 업로드), 게시=`POST /api/v1_2/reports/` + `attached_images`(스�
 - ⚠️ **배포 조건**: ① 0113a·0114a 프로덕션 적용(`pnpm db:alphas` 또는 SQL Editor) ② Vercel cron 4번째 슬롯
   (플랜 한도 확인 — 거부되면 외부 스케줄러가 CRON_SECRET로 호출) ③ `AI_PROVIDER=anthropic`·`ANTHROPIC_API_KEY`·
   `CRON_SECRET` env 확인. 비용: 테넌트당 LLM ≤1콜/일(신호 0건 날 스킵) ≈ 월 $2~3.
+
+### 상담 텍스트 외부 AI 반출 API — 마스킹 + Bearer 토큰 (2026-07-20) — ✅ tsc0/lint0/test1680/실데이터 마스킹 검증
+원장의 외부 챗봇("AI 사무실")이 상담 텍스트를 분석용으로 읽는 **읽기 전용** 엔드포인트
+`GET /api/exports/consultations` (kind=student|enrollment, since/limit≤200/offset, include=transcript 옵션).
+- **인증**: `Authorization: Bearer <CONSULT_EXPORT_TOKEN>`(env, 미설정=503 꺼짐). 테넌트는 1개면 자동 확정,
+  2개+면 `CONSULT_EXPORT_TENANT_ID` 필수(타 학원 오노출 방지).
+- **마스킹**([export-masking.ts](../src/features/consultations/export-masking.ts) 순수·Vitest 12): 원시 PII 필드
+  (전화·주소·생년월일·주민번호)는 **SELECT 자체를 안 하고**, 본문은 ① 학생·학부모·전 직원 이름 치환(김○○)
+  ② 성 뺀 호칭("지안이가"→○○이가)·동명이인 접미사 저장명("박채원B"→채원) 커버 ③ 이관 상담일지 기록자 줄
+  휴리스틱 ④ 주민번호/휴대폰/유선/이메일 패턴 제거. 학생 식별은 안정 익명 코드 `학생#xxxxxx`(흐름 추적용).
+- 실데이터 검증: 재원생 상담 1,567건·등록상담 476건 표본 마스킹 결과 이름/연락처 잔존 0 확인.
+
+### 직원명부 급여 라벨 이중 표기 가드 — "연봉 연봉" 수정 (2026-07-20) — ✅ tsc0/lint0/test45/build✓
+연봉 칸에 라벨 글자("연봉")가 입력돼 시트 계약조건이 "월급 2,900,000 / 연봉 연봉"으로 찍힌 실사고.
+`buildRosterRow`가 값 선두의 "월급"/"연봉" 라벨을 떼고 조립(라벨만 있으면 빈 값 취급) + 연봉 placeholder를
+"연봉"→"예: 40,000,000원"으로(라벨 오입력 유도 제거).
 
 ### 직원명부 담당자 열(T) 배선 + 갱신일 신호등 행 전체 확장 (2026-07-17) — ✅ tsc0/lint0/test41/build✓
 원장이 시트에 담당자 열(T, 맨 끝)을 추가 → `ROSTER_COLUMNS`/`buildRosterRow`에 `contract.manager` 배선(20열).

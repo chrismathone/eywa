@@ -134,6 +134,7 @@ export function OneScreenClient({
   academyNoticeMode = "A",
   classnoteSendEnabled = false,
   sendWindowLabel = null,
+  showAttachments = true,
   presenceScope,
 }: {
   initial: OneScreenStudent[];
@@ -148,6 +149,7 @@ export function OneScreenClient({
   academyNoticeMode?: "A" | "B"; // 학원 기본 멘트 모드(토글 '학원 기본' 라벨)
   classnoteSendEnabled?: boolean; // ClassNote 실제 발송 스위치 — 공지 dry-run 안내
   sendWindowLabel?: string | null; // 발송 허용 시간창 "HH:MM~HH:MM"(무제한=null) — 상단 강사 참고 안내
+  showAttachments?: boolean; // 사진/파일 첨부 표시(학원 설정) — off면 첨부해도 안 실린다는 경고를 카드에 표시
   presenceScope?: string; // `onescreen:{teacherId}:{date}` — 다른 창/기기 동시 열림 경고(서버가 teacherId 파생)
 }) {
   const router = useRouter();
@@ -1428,6 +1430,7 @@ export function OneScreenClient({
                 onRemoveAttachment={removeAttachment}
                 attachmentUrls={attUrls}
                 uploadingSubject={uploadingSubject}
+                attachmentsHidden={!showAttachments}
                 attendance={{
                   pendingKeys: attPending,
                   onSet: (classId, s) => setAttendanceFor(selected.id, classId, s),

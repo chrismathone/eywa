@@ -95,6 +95,20 @@ describe("buildRosterRow", () => {
     expect(row[ROSTER_COLUMNS.indexOf("계약조건")]).toBe("월급 2,800,000원 / 연봉 4,000만원");
   });
 
+  // 실사고(2026-07-20): 연봉 칸에 "연봉"이라는 라벨 글자만 입력돼 시트에 "연봉 연봉"으로 두 번 찍힘.
+  it("값에 라벨('월급'/'연봉')이 이미 적혀 있으면 떼고 조립 — 라벨만 있으면 빈 값 취급", () => {
+    const d = sample();
+    d.contract.salaryAnnual = "연봉"; // 라벨만 → 무의미한 입력
+    expect(buildRosterRow(d)[ROSTER_COLUMNS.indexOf("계약조건")]).toBe("월급 2,800,000원");
+
+    d.contract.salaryAnnual = "연봉 4,000만원"; // 라벨+값 → 한 번만
+    expect(buildRosterRow(d)[ROSTER_COLUMNS.indexOf("계약조건")]).toBe("월급 2,800,000원 / 연봉 4,000만원");
+
+    d.contract.salaryMonthly = "월급 300만원"; // 월급도 동일 가드
+    d.contract.salaryAnnual = "";
+    expect(buildRosterRow(d)[ROSTER_COLUMNS.indexOf("계약조건")]).toBe("월급 300만원");
+  });
+
   it("빈 이력서도 20칸 빈 행으로 안전 변환(전공만 있고 학교명 없으면 학력도 빈 칸)", () => {
     const row = buildRosterRow(emptyResume());
     expect(row).toHaveLength(20);

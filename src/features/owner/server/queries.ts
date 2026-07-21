@@ -19,7 +19,7 @@ export function tenantSettingsTag(tenantId: string): string {
  * service_role 패턴, .eq(tenant_id) 격리). DEFAULT merge(resolveSettings)는 캐시 밖에서 돌려 코드
  * 변경이 즉시 반영. 저장 시 saveOwnerSection이 `revalidateTag(tenantSettingsTag(tenantId))`로 무효화.
  */
-const loadTenantSettingsRaw = (tenantId: string) =>
+export const loadTenantSettingsRaw = (tenantId: string) =>
   unstable_cache(
     async () => {
       const admin = createAdminClient();

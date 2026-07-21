@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useId, useRef, type ReactNode } from "react";
+import { startTransition, useActionState, useEffect, useId, useRef, type ReactNode } from "react";
 import { saveOwnerSection, type OwnerSaveState } from "@/features/owner/server/actions";
 import type { SectionKey } from "@/features/owner/settings-types";
 import { useConcurrentEditGuard } from "@/components/workspace/use-concurrent-edit-guard";
@@ -35,6 +35,22 @@ export function SectionForm({
   const { notifySaved } = useConcurrentEditGuard({ scope: `tenant-settings:${section}`, formRef });
   const { markSaved } = useUnsavedGuard({ formRef });
 
+  /**
+   * ⚠️ **`action={formAction}`(네이티브 제출)을 쓰지 않는다** — React 19는 액션 폼을 제출하면 액션 실행 직전에
+   * `requestFormReset`을 걸어 **폼을 자동 리셋**한다(react-dom `startHostTransition`). 컨트롤드 입력은 그 순간
+   * DOM이 *마운트 시점* 값으로 되돌아가고, React는 자기 prop이 안 바뀌었으니 DOM을 다시 쓰지 않는다 →
+   * **"저장은 됐는데 화면만 옛 값"**(새로고침하면 정상). 2026-07-21 실측: 보고서 '사진/파일 첨부'를 켜고
+   * 저장하면 체크가 다시 꺼진 것처럼 보였다. 더 위험한 2차 증상은 hidden `data`도 함께 리셋되는 것 —
+   * 아무것도 안 고치고 저장을 한 번 더 누르면 **직전 저장이 되돌아간다**.
+   * → payload를 그 자리에서 FormData로 만들어 액션을 직접 디스패치한다(리셋 없음, 항상 최신 state 제출).
+   */
+  const submit = () => {
+    const fd = new FormData();
+    fd.set("section", section);
+    fd.set("data", JSON.stringify(payload));
+    startTransition(() => formAction(fd));
+  };
+
   // 저장 성공 확정(nonce) 후 동시편집 신호 발화(in-window — 이동 없음). 연속 저장마다 1회씩.
   const handledNonce = useRef<number | undefined>(undefined);
   useEffect(() => {
@@ -67,7 +83,18 @@ export function SectionForm({
 
   return (
     <div className="space-y-4">
-      <form id={formId} action={formAction} ref={formRef} className="space-y-6">
+      {/* onSubmit 경유(액션 폼 아님) — 위 submit() 주석 참조. Enter 저장은 그대로 살고, 자동 리셋만 안 생긴다.
+          hidden 두 칸은 이제 제출에 안 쓰이지만 **useUnsavedGuard의 dirty 감지 캐리어**라 유지한다
+          (버튼→state로만 바뀌는 편집은 폼 안에 대응 input이 없어 hidden 없이는 '미저장'을 못 본다). */}
+      <form
+        id={formId}
+        ref={formRef}
+        onSubmit={(e) => {
+          e.preventDefault();
+          submit();
+        }}
+        className="space-y-6"
+      >
         <input type="hidden" name="section" value={section} />
         <input type="hidden" name="data" value={JSON.stringify(payload)} />
         {children}

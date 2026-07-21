@@ -14,12 +14,14 @@ export function ComposeTab({
   sendEnabled,
   showDailyTest,
   showCheckTest,
+  showAttachments,
 }: {
   students: ComposeStudent[];
   classes: NoticeClassOption[];
   sendEnabled: boolean;
   showDailyTest: boolean;
   showCheckTest: boolean;
+  showAttachments: boolean;
 }) {
   const [mode, setMode] = useState<Mode>("single");
 
@@ -46,7 +48,13 @@ export function ComposeTab({
       </div>
 
       {mode === "single" ? (
-        <ComposeFace students={students} sendEnabled={sendEnabled} showDailyTest={showDailyTest} showCheckTest={showCheckTest} />
+        <ComposeFace
+          students={students}
+          sendEnabled={sendEnabled}
+          showDailyTest={showDailyTest}
+          showCheckTest={showCheckTest}
+          showAttachments={showAttachments}
+        />
       ) : (
         <BulkComposeFace classes={classes} sendEnabled={sendEnabled} />
       )}

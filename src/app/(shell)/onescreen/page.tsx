@@ -47,6 +47,7 @@ export default async function OneScreenPage({
       academyNoticeMode={roster.academyNoticeMode}
       classnoteSendEnabled={roster.classnoteSendEnabled}
       sendWindowLabel={roster.sendWindowLabel}
+      showAttachments={roster.showAttachments}
       // 다른 창/기기 동시 열림 경고(3-3) — teacherId는 서버 파생(user.id = 담당 반 소유자, 겸직 포함).
       presenceScope={`onescreen:${user.id}:${roster.date}`}
     />

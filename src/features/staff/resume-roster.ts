@@ -60,12 +60,12 @@ export function buildRosterRow(d: StaffResumeData): string[] {
   const edu = topEducation(d);
   // 기존 명부 표기(예: "영남대 \n경제학/경영학")를 따라 학교명 줄바꿈 전공.
   const eduLabel = edu ? [edu.school.trim(), edu.major.trim()].filter(Boolean).join("\n") : "";
-  const salary = [
-    d.contract.salaryMonthly && `월급 ${d.contract.salaryMonthly}`,
-    d.contract.salaryAnnual && `연봉 ${d.contract.salaryAnnual}`,
-  ]
-    .filter(Boolean)
-    .join(" / ");
+  // 입력칸에 라벨("월급"/"연봉")까지 적힌 값은 라벨을 떼고 조립 — 안 떼면 "연봉 연봉"처럼 두 번 찍힌다
+  // (2026-07-20 실사고: 연봉 칸에 "연봉"만 입력돼 저장 → 시트에 "연봉 연봉"). 라벨만 있으면 빈 값 취급.
+  const stripLabel = (v: string, label: string) => v.replace(new RegExp(`^\\s*${label}\\s*`), "").trim();
+  const monthly = stripLabel(d.contract.salaryMonthly, "월급");
+  const annual = stripLabel(d.contract.salaryAnnual, "연봉");
+  const salary = [monthly && `월급 ${monthly}`, annual && `연봉 ${annual}`].filter(Boolean).join(" / ");
   return [
     "", // No.
     d.contract.company, // 회사명 = 폼 '회사 구분'

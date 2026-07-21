@@ -142,6 +142,7 @@ export function ReportCard({
   onRemoveAttachment,
   attachmentUrls,
   uploadingSubject,
+  attachmentsHidden,
   attendance,
 }: {
   student: OneScreenStudent;
@@ -166,6 +167,8 @@ export function ReportCard({
   onRemoveAttachment: (subjectName: string, path: string) => void;
   attachmentUrls?: Record<string, string>; // path→signed 썸네일 URL
   uploadingSubject?: string | null; // 첨부 업로드 중인 과목
+  /** 학원설정 '사진/파일 첨부'가 꺼짐 — 첨부는 저장되지만 /r·인쇄·ClassNote 어디에도 안 실린다는 경고 표시. */
+  attachmentsHidden?: boolean;
   // 출결 인라인 입력(2-2) — 표뷰와 동일 pill. pendingKeys=(학생::반) 저장 중 잠금.
   attendance?: { pendingKeys: ReadonlySet<string>; onSet: (classId: string, status: BasicAttendance) => void };
 }) {
@@ -440,14 +443,14 @@ export function ReportCard({
         <div className="border-line bg-bg-soft rounded-md border px-3 py-2">
             <div className="mb-1.5 flex items-center justify-between gap-2">
               <p className="text-text-faint text-[11px] font-bold">
-                사진·파일 첨부 <span className="text-text-dim">{atts.length}/{MAX_ATTACHMENTS}</span>
+                사진/파일 첨부 <span className="text-text-dim">{atts.length}/{MAX_ATTACHMENTS}</span>
               </p>
               <label
                 className={`border-line hover:bg-card cursor-pointer rounded-lg border px-2 py-1 text-[11px] font-bold ${
                   uploadingAtt || atts.length >= MAX_ATTACHMENTS ? "pointer-events-none opacity-50" : ""
                 }`}
               >
-                {uploadingAtt ? "업로드 중…" : "사진·파일 추가"}
+                {uploadingAtt ? "업로드 중…" : "사진/파일 추가"}
                 <input
                   type="file"
                   accept="image/jpeg,image/png,image/webp,application/pdf,.hwp,.hwpx,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.cell,.show,audio/mpeg,audio/mp4,.mp3,.m4a"
@@ -462,6 +465,14 @@ export function ReportCard({
                 />
               </label>
             </div>
+            {/* 거짓 약속 차단(2026-07-21) — 학원설정에서 첨부가 꺼져 있으면 저장은 되지만 /r·인쇄·ClassNote
+                어디에도 안 실린다(워커도 파일첨부 경로를 안 탐). 강사가 헛수고하지 않도록 입력 시점에 고지. */}
+            {attachmentsHidden ? (
+              <p className="border-amber/40 bg-amber-soft text-amber mb-1.5 rounded border px-2 py-1.5 text-[11px] leading-snug">
+                학원설정에서 <b>사진/파일 첨부</b>가 꺼져 있어, 첨부해도 학부모 보고서·ClassNote에는 표시되지 않습니다.
+                원장님께 문의하세요.
+              </p>
+            ) : null}
             {atts.length ? (
               <div className="grid grid-cols-3 gap-1.5">
                 {atts.map((a) => (
@@ -493,7 +504,7 @@ export function ReportCard({
               </div>
             ) : (
               <p className="text-text-faint text-[11px]">
-                사진·파일을 추가하면 학부모 링크·ClassNote 게시글에 함께 실립니다.
+                사진/파일을 추가하면 학부모 링크·ClassNote 게시글에 함께 실립니다.
               </p>
             )}
           </div>

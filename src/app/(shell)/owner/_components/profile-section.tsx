@@ -59,12 +59,16 @@ export function ProfileSection({ initial }: { initial: ProfileSettings }) {
             value={p.brandColor}
             onChange={(v) => set({ brandColor: v })}
             placeholder={DEFAULT_BRAND_COLOR}
-            // 저장은 됐는데 주입은 생략되는 값(빈값·형식오류·현/과거 기본색)이면 그 사실을 알린다 —
-            // 안 그러면 초록 스와치를 보면서 화면은 네이비인 상태가 설명되지 않는다.
+            // 주입이 생략되는 값이면 그 사실을 알린다. 단 **왜** 생략되는지에 따라 문구가 갈린다:
+            // 저장값이 기본색과 같으면 "어긋남"이 아니라 정상 상태이므로 "적용 안 됨" 경고를 띄우면
+            // 사용자가 같은 네이비 스와치를 보면서 문제로 오해한다(2026-07-20 그린→네이비 정리 후 발견).
+            // 어긋남(옛 기본색·형식오류·빈값)일 때만 설명형 안내.
             note={
               isBrandColorApplied(p.brandColor)
                 ? undefined
-                : `현재 기본 팔레트(${DEFAULT_BRAND_COLOR})로 표시됩니다 — 위 값은 기본색으로 간주되어 화면에 적용되지 않습니다. 다른 색을 넣으면 그 색이 적용됩니다.`
+                : p.brandColor?.trim().toLowerCase() === DEFAULT_BRAND_COLOR
+                  ? "기본 팔레트와 같은 색입니다 — 그대로 표시됩니다."
+                  : `현재 기본 팔레트(${DEFAULT_BRAND_COLOR})로 표시됩니다 — 위 값은 기본색으로 간주되어 화면에 적용되지 않습니다. 다른 색을 넣으면 그 색이 적용됩니다.`
             }
           />
           <BrandingField

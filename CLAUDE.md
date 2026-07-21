@@ -270,6 +270,12 @@ key(DB 식별자)는 **자동 확정**: 과목명 입력 후 blur 시 1회 — �
   `(print)/enrollment/[id]/print`), notifications `alimtalkSenderKey`(kakao `pf_id` 지연 폴백, `messaging/provider.ts`)·
   `googleSheetId`(시트 동기 폴백, `integrations/server/{actions,queries}.ts`).
   - ~~⚠️ 영어 교시는 여전히 `ENGLISH_PERIODS` 하드코딩~~ → **✅ 해소(2026-07-06)**: 과목 운영 탭 `subjects[].weekdayPeriods`로 과목별 설정 가능(미설정=english 내장→전역 폴백).
+  - **(2026-07-20) 비로그인(pre-auth) 표면도 배선 완료** — 로그인 화면·루트 탭 제목이 제품 기본값/하드코딩 "인재원"이던 것을
+    [`getPublicBranding()`](src/features/owner/server/public-branding.ts)로 전환(profile `logoUrl`·`logoText`·`name`·`branchLabel` 소비).
+    ⚠️ **로그인 전엔 세션이 없어 테넌트를 모른다** — 그래서 이 헬퍼는 **학원이 정확히 1개일 때만** 그 학원으로 확정하고,
+    0개·2개 이상이면 **null을 돌려 제품 중립 표기로 폴백**한다(임의 선택 = 남의 학원 이름 노출). 호스트/서브도메인 기반
+    테넌트 라우팅이 생기면 **이 함수만** 교체하면 전 pre-auth 표면이 따라온다. 새 비로그인 화면에서 학원 브랜드가 필요하면
+    `getTenantSettings()`(세션 필요, 여기선 빈 값)가 아니라 **이 헬퍼**를 쓸 것.
   - **(2026-06-19) operations `subjects`/`gradeLevels` 하드코딩 소비처 전수 배선 완료(20건/17파일)** — 멀티에이전트
     전수감사로 "설정 무시" 위반 20건 적발·수정. 첫 발견은 학생목록·수업목록·성적관리 과목 드롭다운에 설정에 없는
     "예술(arts)" 누출(`SUBJECT_FILTERS`/`SUBJECT_META`)이었고, 이어 과목 라벨/색/선택지/엑셀출력을 하드코딩한
@@ -458,6 +464,8 @@ key(DB 식별자)는 **자동 확정**: 과목명 입력 후 blur 시 1회 — �
 - **#80** Anthropic Claude 5 계열은 `temperature`가 deprecated(400) — 직접 호출에 넣지 말 것, generateJSON은 자가 재시도 (⚠️ 모델 교체 시 재발 주의)
 - **#81** node_modules 정션은 Turbopack dev에서 panic — 워크트리 dev 서버는 실제 `pnpm install`(정션은 typecheck/lint까지만)
 - **#81** `"use client"` 모듈의 문자열 상수를 서버가 import = 런타임 undefined — 공유 상수는 일반 모듈로 (⚠️ 타입체크 통과하는 침묵 버그)
+- **#83** React 19는 `<form action={서버액션}>`을 제출할 때마다 **자동 리셋** — 컨트롤드 입력이 "저장했는데 옛 값"으로 굳고, 재저장 시 직전 저장이 되돌아감 (⚠️ 제출 후에도 남는 폼은 `onSubmit`+직접 디스패치)
+- **#82** postgres.js에서 `${JSON.stringify(v)}::jsonb` = **이중 인코딩**(`"#153e75"` 9자 저장 → 검증 실패 → 설정 침묵 무시). 스칼라는 `to_jsonb(${v}::text)`·객체는 `sql.json(obj)`, 검증은 **길이까지** (⚠️ 눈으로 따옴표 구분 안 됨)
 
 ## 🎨 디자인 규칙 인덱스 (상세는 `docs/design-conventions.md`)
 
