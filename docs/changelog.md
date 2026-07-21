@@ -11,9 +11,15 @@
   (원스크린 표/카드 · 직접 발송 단건 · 직접 발송 대량), 그 안에서 `loadActivePrompt`(DB `ai_prompt_overrides`
   활성 1건) → 없으면 `DEFAULT_PROMPTS` 순으로 쓴다. 저장은 append-only(활성 비활성화 후 새 활성) + 자리표시자
   검증 + owner 쓰기 게이트. 0092a RLS·부분 unique 인덱스 모두 적용됨.
-- **📌 다만 실증은 0**: `ai_prompt_overrides` **0행**, `ai_usage_logs`의 `classnote_ment` **0건**
-  (계측 시작 07-16 이후 41건은 전부 daily_briefing·assistant_chat). 즉 **아직 아무도 저장·자동작성을 안 눌렀다** —
-  코드상 "저장하면 적용된다"는 참이지만 프로덕션에서 실증된 적은 없다.
+- **✅ E2E 실증 완료(원장 승인, 테스트 학생 '학원이')**: 프로덕션과 **동일한 함수**(`loadActivePrompt` →
+  `commentBody` → `assembleCombined` → `generateJSON` fast tier)로 오버라이드 전/후를 실행.
+  · 전: `loadActivePrompt`=null → 기본 프롬프트로 생성("오늘은 수학 테스트를 진행했고… 10문제 중 8개…")
+  · 후: 오버라이드(첫 문장을 `[배선확인]`으로 시작하라) 저장 → 로드 ✅ · 조립 반영 ✅ · **생성 결과가 실제로
+  `"[배선확인] 오늘은 수학 테스트를…"`** 로 나옴. 모델 `claude-haiku-4-5`(문서상 fast tier와 일치).
+  · 오버라이드는 즉시 삭제해 `ai_prompt_overrides` 0행 복원. **ClassNote 발송은 하지 않음**(생성만).
+- **📌 실사용은 아직 0**: `ai_usage_logs`의 `classnote_ment` **0건**(계측 시작 07-16 이후 41건은 전부
+  daily_briefing·assistant_chat). 로깅 버그가 아니라 **정말로 아무도 '자동작성'을 안 눌렀다** — 07-16 이후 작성된
+  eywa 보고서 5건은 전부 선생님이 **직접 타이핑**한 멘트였다(사람 말투 + `trend_note` 전부 null = 통합 호출 미경유).
 - **⚠️ 발견한 함정 = 모드에 따라 안 쓰이는 프롬프트**: 편집 화면엔 4종이 나란히 있는데 실제로는
   **모드 A면 `comment`만, 모드 B면 `comment_p1`/`comment_p2`만** 쓰인다(`trend`는 항상). 현재 injaewon은
   학원 기본 A · 강사 개인 지정도 A 1명뿐 → **P1·P2를 정성껏 고쳐도 아무 일도 안 일어난다.** 화면이 그걸
