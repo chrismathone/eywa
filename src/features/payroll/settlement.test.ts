@@ -158,3 +158,67 @@ describe("totalSettlements", () => {
     expect(t.confirmedTotal).toBe(330000);
   });
 });
+
+// 2026-07-21 원장: 과정별(초·중·고·수능·특강) 배분율 + 반별 수동 비율.
+describe("computeTeacherSettlements — 반마다 다른 배분율", () => {
+  const rates = { 초등: 45, 중등: 45, 고등: 45, 수능: 48, 특강: 50 } as const;
+  const compG = (over: Partial<TeacherComp> = {}): Map<string, TeacherComp> =>
+    new Map([
+      [
+        "t-park",
+        { salaryType: "commission" as const, commissionRate: null, monthlyBase: 0, groupRates: rates, ...over },
+      ],
+    ]);
+
+  it("반 이름으로 과정을 잡아 반마다 다른 비율을 곱한다(합계에 단일 rate 곱하기 아님)", () => {
+    const [s] = computeTeacherSettlements(
+      [
+        row({ confirmedAmount: 100000, className: "초등M 초5 BS2C" }), // 45%
+        row({ classId: "c2", confirmedAmount: 100000, className: "겨울 특강" }), // 50%
+      ],
+      compG(),
+    );
+    // 100,000×0.911×45% = 40,995 · 100,000×0.911×50% = 45,550 → 86,545
+    expect(s!.commissionAmount).toBe(86545);
+    expect(s!.status).toBe("computed");
+  });
+
+  it("반별 수동 비율이 과정별을 이긴다", () => {
+    const [s] = computeTeacherSettlements(
+      [row({ confirmedAmount: 100000, className: "초등M 초5", classRate: 60 })],
+      compG(),
+    );
+    expect(s!.commissionAmount).toBe(54660); // 100,000×0.911×60%
+  });
+
+  it("과정을 못 잡고 기본 비율도 없으면 보류 — 어느 반 때문인지 남긴다", () => {
+    const [s] = computeTeacherSettlements(
+      [row({ confirmedAmount: 100000, className: "JP1" })],
+      compG({ commissionRate: null }),
+    );
+    expect(s!.status).toBe("missing_rate");
+    expect(s!.settlement).toBeNull();
+    expect(s!.unresolvedClasses).toEqual(["JP1"]);
+  });
+
+  it("한 반만 미정이어도 전체 보류 — 일부 계산값을 급여처럼 보여주지 않는다", () => {
+    const [s] = computeTeacherSettlements(
+      [
+        row({ confirmedAmount: 100000, className: "초등M 초5" }),
+        row({ classId: "c2", confirmedAmount: 100000, className: "KW6" }),
+      ],
+      compG({ commissionRate: null }),
+    );
+    expect(s!.status).toBe("missing_rate");
+    expect(s!.unresolvedClasses).toEqual(["KW6"]);
+  });
+
+  it("과정이 미분류여도 기본 비율이 있으면 그걸로 계산", () => {
+    const [s] = computeTeacherSettlements(
+      [row({ confirmedAmount: 100000, className: "KW6" })],
+      compG({ commissionRate: 40 }),
+    );
+    expect(s!.commissionAmount).toBe(36440); // 100,000×0.911×40%
+    expect(s!.unresolvedClasses).toEqual([]);
+  });
+});

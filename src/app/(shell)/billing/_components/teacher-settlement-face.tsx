@@ -2,6 +2,8 @@ import Link from "next/link";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { currentPeriod } from "@/features/billing/calc";
 import { getTeacherSettlementView } from "@/features/payroll/server/settlement-queries";
+import { getClassSalaryRows } from "@/features/payroll/server/class-salary-queries";
+import { ClassSalaryRowForm } from "./class-salary-row";
 import {
   NET_MULTIPLIER,
   PLATFORM_FEE_RATE,
@@ -43,7 +45,7 @@ export async function TeacherSettlementFace({ period }: { period?: string }) {
   }
 
   const p = period && /^\d{4}-\d{2}$/.test(period) ? period : currentPeriod();
-  const view = await getTeacherSettlementView(p);
+  const [view, classRows] = await Promise.all([getTeacherSettlementView(p), getClassSalaryRows()]);
   const [y, m] = p.split("-");
   const isComputable = (r: TeacherSettlement) => r.status === "computed";
 
@@ -143,6 +145,7 @@ export async function TeacherSettlementFace({ period }: { period?: string }) {
                         salaryType={r.salaryType}
                         commissionRate={r.commissionRate}
                         monthlyBase={r.monthlyBase}
+                        groupRates={r.groupRates}
                       />
                     ) : (
                       <span className="text-text-faint text-xs">—</span>
@@ -171,6 +174,40 @@ export async function TeacherSettlementFace({ period }: { period?: string }) {
           </table>
         </div>
       )}
+
+      {/* 반별 과정·배분율 — 원장 전용 설정. splits가 없어도 미리 지정할 수 있게 활성 반 전체를 보여준다.
+          정렬은 '지정이 필요한 것부터'(미분류 → 반 이름). */}
+      <details className="border-line rounded-2xl border">
+        <summary className="text-foreground cursor-pointer px-4 py-3 text-sm font-bold">
+          반별 과정·배분율 설정
+          <span className="text-text-faint ml-2 text-xs font-normal">
+            {classRows.filter((c) => !c.manualGroup && !c.autoGroup).length}개 반이 미분류 · 총 {classRows.length}개 반
+          </span>
+        </summary>
+        <p className="text-text-dim px-4 pb-2 text-xs leading-relaxed">
+          비율 우선순위는 <b>반별 → 과정별 → 강사 기본</b>입니다. 과정은 반 이름으로 자동 판정하며
+          (<code className="text-[11px]">초등M…</code>·<code className="text-[11px]">수능</code>·
+          <code className="text-[11px]">특강</code>), 이름에 근거가 없는 반(<code className="text-[11px]">JP1</code> 등)은
+          <b> 추정하지 않고 미분류</b>로 두니 직접 지정해 주세요.
+        </p>
+        <div className="max-h-[28rem] overflow-y-auto">
+          <table className="w-full min-w-[40rem] text-sm">
+            <thead className="bg-bg-soft/60 sticky top-0">
+              <tr className="border-line text-text-dim border-b text-xs">
+                <th className="px-3 py-2 text-left font-medium">반</th>
+                <th className="px-3 py-2 text-left font-medium">담당</th>
+                <th className="px-3 py-2 text-left font-medium">적용 과정</th>
+                <th className="px-3 py-2 text-left font-medium">설정</th>
+              </tr>
+            </thead>
+            <tbody>
+              {classRows.map((c) => (
+                <ClassSalaryRowForm key={c.classId} row={c} />
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </details>
     </section>
   );
 }

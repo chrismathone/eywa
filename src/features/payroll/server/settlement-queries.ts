@@ -10,6 +10,7 @@ import {
   type TeacherSettlement,
   type SettlementTotals,
 } from "../settlement";
+import { parseGroupRates } from "../salary-group";
 
 export type SettlementView = {
   rows: TeacherSettlement[];
@@ -41,13 +42,45 @@ export async function getTeacherSettlementView(period: string): Promise<Settleme
       .range(from, to),
   );
 
-  const rows: SettlementRowInput[] = splits.map((s) => ({
-    teacherId: s.teacher_id,
-    teacherName: s.teacher_name,
-    classId: s.class_id,
-    confirmedAmount: Number(s.confirmed_amount) || 0,
-    actualAmount: Number(s.actual_amount) || 0,
-  }));
+  // 반 이름(과정 자동 판정) + 반별 수동 설정(과정·비율) — 둘 다 splits에 등장한 반만 청크 조회(B3).
+  // class_salary_settings는 master 전용 RLS라 비-master가 부르면 빈 배열 → 반별 override 없이 계산된다.
+  const classIds = [...new Set(splits.map((s) => s.class_id).filter(Boolean))];
+  const [classRows, classSettings] = await Promise.all([
+    classIds.length > 0
+      ? fetchInChunks<{ id: string; class_name: string | null }>(classIds, (chunk) =>
+          supabase.from("classes").select("id, class_name").in("id", chunk),
+        )
+      : Promise.resolve([]),
+    classIds.length > 0
+      ? fetchInChunks<{ class_id: string; salary_group: string | null; commission_rate: number | string | null }>(
+          classIds,
+          (chunk) =>
+            supabase
+              .from("class_salary_settings")
+              .select("class_id, salary_group, commission_rate")
+              .in("class_id", chunk),
+        )
+      : Promise.resolve([]),
+  ]);
+  const classNameById = new Map(classRows.map((c) => [c.id, c.class_name ?? null]));
+  const settingByClassId = new Map(classSettings.map((c) => [c.class_id, c]));
+
+  const rows: SettlementRowInput[] = splits.map((s) => {
+    const setting = settingByClassId.get(s.class_id);
+    return {
+      teacherId: s.teacher_id,
+      teacherName: s.teacher_name,
+      classId: s.class_id,
+      confirmedAmount: Number(s.confirmed_amount) || 0,
+      actualAmount: Number(s.actual_amount) || 0,
+      className: classNameById.get(s.class_id) ?? null,
+      manualGroup: setting?.salary_group ?? null,
+      classRate:
+        setting?.commission_rate === null || setting?.commission_rate === undefined
+          ? null
+          : Number(setting.commission_rate),
+    };
+  });
 
   // 급여 정책 — 등장한 강사만 청크 조회(B3).
   const teacherIds = [...new Set(rows.map((r) => r.teacherId).filter((id): id is string => !!id))];
@@ -57,9 +90,13 @@ export async function getTeacherSettlementView(period: string): Promise<Settleme
           id: string;
           salary_type: string | null;
           commission_rate: number | string | null;
+          commission_rates: unknown;
           monthly_base: number | string | null;
         }>(teacherIds, (chunk) =>
-          supabase.from("users").select("id, salary_type, commission_rate, monthly_base").in("id", chunk),
+          supabase
+            .from("users")
+            .select("id, salary_type, commission_rate, commission_rates, monthly_base")
+            .in("id", chunk),
         )
       : [];
   const compByTeacherId = new Map<string, TeacherComp>(
@@ -69,6 +106,7 @@ export async function getTeacherSettlementView(period: string): Promise<Settleme
         salaryType: (u.salary_type as SalaryType | null) ?? null,
         commissionRate: u.commission_rate === null || u.commission_rate === undefined ? null : Number(u.commission_rate),
         monthlyBase: Number(u.monthly_base) || 0,
+        groupRates: parseGroupRates(u.commission_rates),
       },
     ]),
   );
