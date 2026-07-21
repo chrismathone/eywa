@@ -8,6 +8,7 @@ import {
   enrollmentAttendsOnDay,
   isEnrollmentActiveOn,
 } from "@/features/enrollments/eligibility";
+import { dowsFromKeys, resolveAttendDows } from "@/features/attendance/calendar";
 
 const DOW_ENUM = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
 
@@ -317,6 +318,8 @@ export type MatrixStudent = {
   grade: string | null;
   school: string | null;
   enrolledAt: string | null;
+  // 등원요일(0=일~6=토) — 분리등원(enrollments.attendance_days)이 있으면 그 요일, 없으면 반 수업요일 전체.
+  attendDows: number[];
 };
 
 export type AttendanceMatrix = {
@@ -332,6 +335,8 @@ export type AttendanceMatrix = {
   selectedClassId: string | null;
   month: string; // "2026-05"
   days: MatrixDay[];
+  // 선택한 반의 수업요일(0=일~6=토) — 그 달에 유효한 class_schedules 기준. 헤더 하이라이트용.
+  classDows: number[];
   students: MatrixStudent[];
   // studentId → date → status
   marks: Record<string, Record<string, AttendanceStatus>>;
@@ -423,6 +428,7 @@ export async function getMonthlyAttendanceMatrix(
       selectedClassId: classId,
       month,
       days,
+      classDows: [],
       students: [],
       marks: {},
       notes: {},
@@ -442,15 +448,26 @@ export async function getMonthlyAttendanceMatrix(
   const startIso = days[0]!.date;
   const endIso = days[days.length - 1]!.date;
 
-  // 해당 반의 활성 학생 (해당 월 종료일 기준)
-  const { data: enrollments } = await supabase
-    .from("enrollments")
-    .select(
-      `id, start_date, end_date, on_hold,
+  // 해당 반의 활성 학생 + 그 반의 수업요일 — 서로 독립이라 병렬로(B4).
+  const [{ data: enrollments }, { data: schedules }] = await Promise.all([
+    supabase
+      .from("enrollments")
+      .select(
+        `id, start_date, end_date, on_hold, attendance_days,
        student:student_id ( id, name, grade, school )`,
-    )
-    .eq("class_id", classId)
-    .lte("start_date", endIso);
+      )
+      .eq("class_id", classId)
+      .lte("start_date", endIso),
+    // 그 달과 유효기간이 겹치는 스케줄만(월 중 요일이 바뀐 반은 합집합 — 표시용 하이라이트라 넉넉히).
+    supabase
+      .from("class_schedules")
+      .select("day_of_week")
+      .eq("class_id", classId)
+      .lte("valid_from", endIso)
+      .or(`valid_to.is.null,valid_to.gte.${startIso}`),
+  ]);
+
+  const classDows = dowsFromKeys((schedules ?? []).map((s) => s.day_of_week as string));
 
   const studentMap = new Map<string, MatrixStudent>();
   for (const e of enrollments ?? []) {
@@ -467,6 +484,7 @@ export async function getMonthlyAttendanceMatrix(
         grade: s.grade,
         school: s.school,
         enrolledAt: e.start_date,
+        attendDows: resolveAttendDows(e.attendance_days as string[] | null, classDows),
       });
     }
   }
@@ -533,6 +551,7 @@ export async function getMonthlyAttendanceMatrix(
     selectedClassId: classId,
     month,
     days,
+    classDows,
     students,
     marks,
     notes,
