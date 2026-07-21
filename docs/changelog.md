@@ -13,8 +13,13 @@ API 경로**(`showAttachments && fileAtts.length && boardId`, classnote-core.mjs
 - **거짓 약속 차단**: 토글이 꺼져 있어도 첨부 UI는 정상 동작하고 "1개 첨부" 토스트까지 떴다(write-only-orphan).
   [report-attachments.tsx](../src/features/onescreen/components/report-attachments.tsx)에 `hiddenFromParents`
   경고 배너 추가 — `page.tsx → compose-tab → ComposeFace`로 `settings.report.showAttachments` 배선.
-- **라벨 정정**: /owner 표시 항목의 "학생 사진 첨부" → **"사진·파일 첨부"** + 힌트("끄면 첨부해도 학부모
-  보고서·ClassNote에 안 실립니다"). Phase 2 이후 이 토글은 사진이 아니라 pdf·엑셀·hwp·오디오 전체의 게이트다.
+- **라벨 정정**: /owner 표시 항목의 "학생 사진 첨부" → **"사진/파일 첨부"** + 힌트("사진과 파일을 함께 켜고
+  끕니다 · 끄면 첨부해도 학부모 보고서·ClassNote에 안 실립니다"). Phase 2 이후 이 토글은 사진이 아니라
+  pdf·엑셀·hwp·오디오 전체의 게이트다. ⚠️ 원장 지적(2026-07-21): **사진과 파일은 별개 개념인데 스위치가 하나뿐**이라,
+  사진만 끌 생각으로 내리면 파일까지 막힌다 — 라벨·힌트로 그 사실을 드러냈다(토글 분리는 미채택, 필요 시 별건).
+- **강사 화면도 동일 경고**: 첨부 UI가 두 곳(admin `ReportAttachments` + 강사 원스크린 `report-card` 인라인)에
+  따로 있어 1차 수정이 admin만 덮었다 — `roster.showAttachments` → `onescreen-client` → `ReportCard
+  attachmentsHidden`으로 배선해 **첨부하는 사람(강사)이 먼저** 경고를 본다.
 - **이관 문서 정정**: [연동PC-이관-안내.md](../scripts/_classnote/연동PC-이관-안내.md)가
   `CLASSNOTE_INTERNAL_SECRET`을 "(선택) 발송엔 무관"으로 안내하고 있었다 — Phase 2에선 **파일 첨부에 필수**
   (없으면 내부 엔드포인트 401 → "파일 첨부 업로드 실패(전건)"으로 발송 자체가 실패). 필수로 표기 + 사유 명시.
