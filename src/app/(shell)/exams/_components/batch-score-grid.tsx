@@ -8,6 +8,7 @@ import { batchSaveScores, type ExamActionState } from "@/features/exams/server/a
 import { examStats, rankByScore } from "@/features/exams/calc";
 import { pct } from "@/lib/calc/grades";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
+import { submitAction } from "@/components/forms/submit-action";
 
 export type GridRow = {
   studentId: string;
@@ -59,7 +60,7 @@ export function BatchScoreGrid({
   );
 
   return (
-    <form action={formAction} className="space-y-3">
+    <form onSubmit={(e) => submitAction(e, formAction)} className="space-y-3">
       <input type="hidden" name="examId" value={examId} />
       <input type="hidden" name="entries" value={entriesJson} />
 

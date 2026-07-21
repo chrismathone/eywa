@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Calculator, Check, Loader2, Save } from "@/components/icons/eywa-icon-compat";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { Button } from "@/components/ui/button";
+import { submitAction } from "@/components/forms/submit-action";
 import {
   autoComputePayroll,
   markPayrollPaid,
@@ -133,7 +134,7 @@ export function PayrollClient({
           <p className="eyebrow">수동 정산</p>
           <h3 className="text-foreground mt-1 text-sm font-bold">상세 항목 입력</h3>
         </header>
-        <form action={formAction} className="space-y-3">
+        <form onSubmit={(e) => submitAction(e, formAction)} className="space-y-3">
           <input type="hidden" name="userId" value={userId} />
           <input type="hidden" name="period" value={period} />
 
