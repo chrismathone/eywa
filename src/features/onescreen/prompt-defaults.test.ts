@@ -1,5 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { interpolate, assembleSingle, assembleCombined, DEFAULT_PROMPTS } from "./prompt-defaults";
+import {
+  interpolate,
+  assembleSingle,
+  assembleCombined,
+  DEFAULT_PROMPTS,
+  promptUsedInModes,
+  isPromptInUse,
+} from "./prompt-defaults";
 
 describe("interpolate", () => {
   it("{{key}}를 값으로 치환, 없는 키는 빈 문자열", () => {
@@ -50,5 +57,38 @@ describe("DEFAULT_PROMPTS (본문)", () => {
     expect(DEFAULT_PROMPTS.trend).toContain("{{historySummary}}");
     expect(DEFAULT_PROMPTS.comment).not.toContain("[출력]");
     expect(DEFAULT_PROMPTS.trend).not.toContain("[출력]");
+  });
+});
+
+// 2026-07-21 배선 점검: 편집 화면에 4종이 나란히 있지만 모드에 따라 실제로 쓰이는 건 일부뿐이다.
+// 이걸 화면이 안 알려주면 원장이 '저장은 되는데 아무도 안 읽는' 프롬프트를 직접 만들게 된다.
+describe("promptUsedInModes / isPromptInUse", () => {
+  it("모드 A는 comment만, 모드 B는 P1·P2만", () => {
+    expect(promptUsedInModes("comment")).toEqual(["A"]);
+    expect(promptUsedInModes("comment_p1")).toEqual(["B"]);
+    expect(promptUsedInModes("comment_p2")).toEqual(["B"]);
+  });
+
+  it("학습 추세는 모드와 무관하게 항상 쓰인다", () => {
+    expect(promptUsedInModes("trend")).toBe("always");
+    expect(isPromptInUse("trend", new Set())).toBe(true);
+    expect(isPromptInUse("trend", new Set(["A"]))).toBe(true);
+  });
+
+  it("학원이 모드 A만 쓰면 P1·P2는 미사용", () => {
+    const used = new Set(["A"]);
+    expect(isPromptInUse("comment", used)).toBe(true);
+    expect(isPromptInUse("comment_p1", used)).toBe(false);
+    expect(isPromptInUse("comment_p2", used)).toBe(false);
+  });
+
+  it("강사 한 명이라도 모드 B면 P1·P2도 사용 중", () => {
+    const used = new Set(["A", "B"]);
+    expect(isPromptInUse("comment", used)).toBe(true);
+    expect(isPromptInUse("comment_p1", used)).toBe(true);
+  });
+
+  it("모드 B만 쓰면 단일 comment는 미사용", () => {
+    expect(isPromptInUse("comment", new Set(["B"]))).toBe(false);
   });
 });

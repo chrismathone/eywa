@@ -117,6 +117,13 @@ function PromptEditor({ row, reports }: { row: PromptRow; reports: TestReportOpt
           >
             {custom ? "사용자 지정" : "기본값"}
           </span>
+          {/* ⚠️ 모드에 따라 실제로 안 쓰이는 프롬프트가 있다 — 화면이 밝히지 않으면 원장이 정성껏 고쳐도
+              아무 일도 안 일어난다(저장은 되는데 아무도 안 읽는 상태를 직접 만들게 됨). */}
+          {row.inUse ? null : (
+            <span className="bg-amber/15 text-amber rounded-pill ml-1.5 px-2 py-0.5 text-[11px] font-bold">
+              현재 미사용
+            </span>
+          )}
         </h2>
         <button type="button" onClick={toggleHistory} className="text-text-dim hover:text-foreground text-[12px] underline">
           {loadingHistory ? "불러오는 중…" : history ? "이력 닫기" : "버전 이력"}
@@ -131,6 +138,16 @@ function PromptEditor({ row, reports }: { row: PromptRow; reports: TestReportOpt
           missingPlaceholder ? "border-danger" : ""
         }`}
       />
+      {row.inUse ? null : (
+        <p className="bg-amber/10 text-amber mt-1.5 rounded-md px-3 py-2 text-[12px] leading-relaxed break-keep">
+          지금 이 학원의 공지 모드에서는 <b>이 프롬프트가 쓰이지 않습니다</b> — 고쳐서 저장해도 자동작성 결과는
+          바뀌지 않습니다.{" "}
+          {row.type === "comment"
+            ? "단일 멘트는 ‘학원 기본(A)’ 모드에서만 쓰입니다."
+            : "2문단(P1·P2)은 ‘2문단 B’ 모드에서만 쓰입니다."}{" "}
+          모드는 <b>보고서 설정 → AI 멘트 공지 모드</b>(또는 선생님 화면 상단 토글)에서 바꿉니다.
+        </p>
+      )}
       <p className={`mt-1 text-[11px] ${missingPlaceholder ? "text-danger" : "text-text-faint"}`}>
         필수 자리표시자 <code className="font-mono">{placeholder}</code> — 이 자리에 실제 입력이 채워집니다.
         {missingPlaceholder ? " (현재 빠져 있어 저장할 수 없습니다)" : ""}

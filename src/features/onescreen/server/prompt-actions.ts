@@ -9,12 +9,14 @@ import { kstToday } from "@/lib/date-kst";
 import { generateJSON } from "@/lib/ai/generate";
 import {
   DEFAULT_PROMPTS,
+  isPromptInUse,
   MENT_AI_TUNING,
   PROMPT_TYPES,
   PROMPT_TYPE_LABELS,
   REQUIRED_PLACEHOLDER,
   type PromptType,
 } from "../prompt-defaults";
+import { getTenantSettings } from "@/features/owner/server/queries";
 import {
   buildReportCommentPrompt,
   buildCommentP1Prompt,
@@ -30,7 +32,35 @@ export type PromptRow = {
   text: string; // 활성 오버라이드 또는 기본값
   isCustom: boolean; // 오버라이드 존재
   updatedAt: string | null;
+  /**
+   * 지금 이 학원에서 **실제로 쓰이는 프롬프트인지**. 모드 A면 comment만, B면 P1·P2만 쓰인다.
+   * false면 편집·저장은 되지만 생성에 전혀 안 쓰인다 — 화면이 그걸 밝혀야 원장이 헛수고를 안 한다.
+   */
+  inUse: boolean;
 };
+
+/**
+ * 지금 이 학원에서 쓰이는 공지 모드 집합 — **학원 기본 + 강사 개인 지정의 합집합**.
+ * (강사가 개인 모드를 지정하면 학원 기본을 덮으므로, 둘 중 하나라도 B면 P1·P2가 실제로 쓰인다.)
+ * 조회 실패는 학원 기본만으로 폴백 — 이 값 때문에 편집 화면이 막히면 안 된다.
+ */
+async function usedNoticeModes(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  tenantId: string,
+): Promise<Set<string>> {
+  const settings = await getTenantSettings();
+  const modes = new Set<string>([settings.report.noticeMode ?? "A"]);
+  const { data } = await supabase
+    .from("users")
+    .select("report_notice_mode")
+    .eq("tenant_id", tenantId)
+    .not("report_notice_mode", "is", null);
+  for (const u of data ?? []) {
+    const m = u.report_notice_mode as string | null;
+    if (m === "A" || m === "B") modes.add(m);
+  }
+  return modes;
+}
 
 function isPromptType(t: string): t is PromptType {
   return (PROMPT_TYPES as readonly string[]).includes(t);
@@ -41,11 +71,15 @@ export async function getActivePrompts(): Promise<{ ok: boolean; prompts?: Promp
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
   const supabase = await createClient();
-  const { data } = await supabase
-    .from("ai_prompt_overrides")
-    .select("prompt_type, prompt_text, updated_at")
-    .eq("tenant_id", user.tenantId)
-    .eq("is_active", true);
+  // 오버라이드 조회와 사용 모드 판정은 서로 독립 — 직렬 await 금지(B4).
+  const [{ data }, modes] = await Promise.all([
+    supabase
+      .from("ai_prompt_overrides")
+      .select("prompt_type, prompt_text, updated_at")
+      .eq("tenant_id", user.tenantId)
+      .eq("is_active", true),
+    usedNoticeModes(supabase, user.tenantId),
+  ]);
   const active = new Map((data ?? []).map((r) => [r.prompt_type as string, r]));
   const prompts: PromptRow[] = PROMPT_TYPES.map((type) => {
     const row = active.get(type);
@@ -55,6 +89,7 @@ export async function getActivePrompts(): Promise<{ ok: boolean; prompts?: Promp
       text: (row?.prompt_text as string) || DEFAULT_PROMPTS[type],
       isCustom: !!row,
       updatedAt: (row?.updated_at as string) ?? null,
+      inUse: isPromptInUse(type, modes),
     };
   });
   return { ok: true, prompts };

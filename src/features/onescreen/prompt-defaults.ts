@@ -19,6 +19,26 @@ export type PromptType = (typeof PROMPT_TYPES)[number];
  */
 export const MENT_AI_TUNING = { temperature: 0.3, reasoningEffort: "minimal" } as const;
 
+/**
+ * 그 프롬프트가 **실제로 쓰이는 공지 모드** — 순수(Vitest).
+ *
+ * ⚠️ 왜 필요한가(2026-07-21 배선 점검): 멘트 프롬프트 4종이 편집 화면에 나란히 놓여 있는데, 실제로는
+ * **모드 A면 `comment`만, 모드 B면 `comment_p1`/`comment_p2`만** 쓰인다(server/actions.ts generateReportComment).
+ * 화면이 그걸 안 알려줘서, 학원이 모드 A인데 P1/P2를 정성껏 고쳐도 **아무 일도 안 일어난다** —
+ * 저장은 되는데 아무도 안 읽는 write-only-orphan을 원장이 직접 만들게 되는 구조였다.
+ * `trend`(학습 추세)는 모드와 무관하게 항상 쓰인다.
+ */
+export function promptUsedInModes(type: PromptType): readonly ("A" | "B")[] | "always" {
+  if (type === "trend") return "always";
+  return type === "comment" ? ["A"] : ["B"];
+}
+
+/** 지금 이 학원에서 쓰이는 모드 집합(학원 기본 + 강사 개인 지정의 합집합)에 비춰 이 프롬프트가 실제로 동작하는지. */
+export function isPromptInUse(type: PromptType, usedModes: ReadonlySet<string>): boolean {
+  const modes = promptUsedInModes(type);
+  return modes === "always" || modes.some((m) => usedModes.has(m));
+}
+
 export const PROMPT_TYPE_LABELS: Record<PromptType, string> = {
   comment: "학부모 멘트 (모드 A·단일)",
   trend: "학습 추세(종합분석)",
