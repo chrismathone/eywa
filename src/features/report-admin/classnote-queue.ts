@@ -84,6 +84,31 @@ export function needsAttention(status: string | null, processingAtIso: string | 
   );
 }
 
+/** 워커가 살아 있어 실제로 발송이 진행되는 동안 — 빠르게 따라간다(워커 데몬 폴이 15초라 그보다 촘촘할 이유 없음). */
+export const QUEUE_POLL_MS = 10_000;
+/** 발송 PC가 꺼져 있는 동안 — 큐는 안 움직이므로 "PC가 켜졌나"만 느리게 지켜본다(켜지면 자동으로 빠른 주기로 복귀). */
+export const QUEUE_WATCH_MS = 60_000;
+
+/**
+ * 큐 카드를 자동 갱신(폴링)할까 — ① 진행 중(대기·처리중)이 남아 있고 ② 상한에 안 걸렸을 때.
+ * ⚠️ 진행 중이 0이면 절대 안 돈다(다 끝난 화면을 계속 조회하지 않는다). 워커가 꺼져 있어도 **주기만 늦춰**
+ * 계속 지켜본다 — 아예 멈추면 원장이 발송 PC를 켜도 화면이 영영 안 살아나는 막다른 길이 되기 때문
+ * (사람에게 새로고침을 시키지 않는다).
+ */
+export function shouldAutoRefreshQueue(a: { pendingCount: number; stalled: boolean }): boolean {
+  return a.pendingCount > 0 && !a.stalled;
+}
+
+/** 폴링 주기 — 워커 온라인이면 빠르게(발송 추적), 오프라인이면 느리게(PC 복귀 감시). */
+export function queuePollIntervalMs(workerOnline: boolean): number {
+  return workerOnline ? QUEUE_POLL_MS : QUEUE_WATCH_MS;
+}
+
+/** '주의'(사람이 손대야 하는) 합계 — 카드의 빅스탯과 완료 알림이 같은 정의를 쓰도록 한 곳에서 센다. */
+export function attentionCount(s: QueueSummary): number {
+  return s.failed + s.tooOld + s.nameConflict + s.blockedShared + s.stuck;
+}
+
 /**
  * **사람이 조치해야만 풀리는** 상태 — 큐 조회에서 **날짜 창을 적용하지 않는다**.
  *

@@ -1,5 +1,15 @@
 import { describe, it, expect } from "vitest";
-import { isStuck, summarizeQueue, needsAttention, STUCK_MINUTES, type QueueRow } from "./classnote-queue";
+import {
+  isStuck,
+  summarizeQueue,
+  needsAttention,
+  shouldAutoRefreshQueue,
+  queuePollIntervalMs,
+  QUEUE_POLL_MS,
+  QUEUE_WATCH_MS,
+  STUCK_MINUTES,
+  type QueueRow,
+} from "./classnote-queue";
 
 const NOW = Date.parse("2026-07-09T12:00:00Z");
 const minsAgo = (m: number) => new Date(NOW - m * 60_000).toISOString();
@@ -50,5 +60,27 @@ describe("needsAttention", () => {
     expect(needsAttention("processing", minsAgo(1), NOW)).toBe(false); // 정상
     expect(needsAttention("queued", null, NOW)).toBe(false);
     expect(needsAttention("success", null, NOW)).toBe(false);
+  });
+});
+
+describe("shouldAutoRefreshQueue", () => {
+  it("진행 중(대기·처리중)이 남아 있으면 자동 갱신", () => {
+    expect(shouldAutoRefreshQueue({ pendingCount: 1, stalled: false })).toBe(true);
+  });
+  it("진행 중이 없으면 안 돈다(발송이 다 끝난 화면에서 계속 조회 금지)", () => {
+    expect(shouldAutoRefreshQueue({ pendingCount: 0, stalled: false })).toBe(false);
+  });
+  it("상한 도달 후엔 안 돈다 — 창을 열어둔 채 무한 폴링 방지", () => {
+    expect(shouldAutoRefreshQueue({ pendingCount: 3, stalled: true })).toBe(false);
+  });
+});
+
+describe("queuePollIntervalMs", () => {
+  it("워커 온라인이면 빠른 주기(발송 추적)", () => {
+    expect(queuePollIntervalMs(true)).toBe(QUEUE_POLL_MS);
+  });
+  it("워커 오프라인이면 느린 주기 — 멈추지 않고 'PC가 켜졌나'만 지켜본다(막다른 길 방지)", () => {
+    expect(queuePollIntervalMs(false)).toBe(QUEUE_WATCH_MS);
+    expect(QUEUE_WATCH_MS).toBeGreaterThan(QUEUE_POLL_MS);
   });
 });
