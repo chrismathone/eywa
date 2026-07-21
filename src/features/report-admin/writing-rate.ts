@@ -11,9 +11,11 @@
 export type DailyCell = {
   date: string;
   count: number; // 그날 작성 건수(raw, 참고·툴팁)
-  target: number | null; // 그날 대상 학생 수 (null = 미래/수업 없음 → "·")
+  target: number | null; // 그날 대상 학생 수 (null = 미래/수업 없음/오늘 아직 시작 전 → "·")
   written: number; // 대상 대비 작성(오늘=정밀, 과거=min(count,target))
   rate: number | null; // written/target*100(반올림) — target 0/null → null
+  // 오늘인데 아직 첫 수업 전 = 대상 null이지만 **"수업 없음"이 아니다**(뒤에 수업이 있다).
+  pending?: boolean;
 };
 
 export type TodayTarget = {
@@ -26,6 +28,12 @@ export type TodayTarget = {
 /** 과거일 대상 — 서버가 주간 스케줄+결석으로 계산(강사×날짜). 오늘은 TodayTarget으로 별도 전달. */
 export type DailyTarget = { teacher: string; date: string; target: number };
 
+/**
+ * 오늘 **아직 시작 안 한** 수업(강사별) — 분모(대상)에는 안 들어가지만 "수업 없음"과 구분하려고 따로 받는다.
+ * ⚠️ 시작 전 수업을 대상에 넣으면 하루 시작 시점에 전 강사가 0%·전교생 미작성으로 뜬다(분모 유지가 맞다).
+ */
+export type TodayPending = { teacher: string; classes: number; firstStart: string };
+
 export type TeacherRate = {
   teacher: string;
   daily: DailyCell[]; // dates 순서대로
@@ -36,6 +44,8 @@ export type TeacherRate = {
   todayWritten: number;
   todayMissing: string[];
   todayRate: number | null; // written/target*100(반올림), 대상 0 → null
+  // 오늘 시작 전 수업이 남아 있으면 그 요약(첫 수업 시각·반 수). 없으면 null = 진짜 "수업 없음".
+  todayPending: TodayPending | null;
 };
 
 /**
@@ -45,6 +55,7 @@ export type TeacherRate = {
  * @param todayTargets 오늘 대상/작성/미작성(정밀)
  * @param dailyTargets 과거일 대상(강사×날짜) — 주간 스케줄 기반
  * @param todayDate 오늘(YYYY-MM-DD) — 이 날짜 셀은 todayTargets(정밀)로, 그 이후는 null(미래)
+ * @param todayPendings 오늘 시작 전 수업(강사별) — 분모엔 안 들어가고 "수업 없음"과의 구분에만 쓴다
  * 정렬 = 오늘 작성률 낮은 순(worst 먼저), 동률이면 주간 작성률 낮은 순.
  */
 export function computeWritingRates(
@@ -53,11 +64,14 @@ export function computeWritingRates(
   todayTargets: TodayTarget[],
   dailyTargets: DailyTarget[],
   todayDate: string,
+  todayPendings: TodayPending[] = [],
 ): TeacherRate[] {
   const teachers = new Set<string>();
   reports.forEach((r) => teachers.add(r.teacher));
   todayTargets.forEach((t) => teachers.add(t.teacher));
   dailyTargets.forEach((t) => teachers.add(t.teacher));
+  // 오늘 수업이 아직 안 시작된 강사는 작성 기록도 대상도 없을 수 있다 — 여기서 넣어야 행이 사라지지 않는다.
+  todayPendings.forEach((t) => teachers.add(t.teacher));
 
   // (teacher,date) → 작성 건수.
   const counts = new Map<string, number>();
@@ -67,9 +81,11 @@ export function computeWritingRates(
   }
   const todayByTeacher = new Map(todayTargets.map((t) => [t.teacher, t]));
   const dailyTargetMap = new Map(dailyTargets.map((t) => [`${t.teacher} ${t.date}`, t.target]));
+  const pendingByTeacher = new Map(todayPendings.map((t) => [t.teacher, t]));
 
   const rows: TeacherRate[] = [...teachers].map((teacher) => {
     const today = todayByTeacher.get(teacher);
+    const pending = pendingByTeacher.get(teacher) ?? null;
     let weekWritten = 0;
     let weekTarget = 0;
     const daily: DailyCell[] = dates.map((date) => {
@@ -95,7 +111,9 @@ export function computeWritingRates(
         weekTarget += target;
         weekWritten += written;
       }
-      return { date, count, target, written, rate };
+      // 오늘 칸이 비었는데 뒤에 수업이 남았으면 "수업 없음"이 아니라 "수업 전"이다(거짓 표기 방지).
+      const isPending = date === todayDate && (target == null || target === 0) && pending != null;
+      return isPending ? { date, count, target, written, rate, pending: true } : { date, count, target, written, rate };
     });
     return {
       teacher,
@@ -107,6 +125,8 @@ export function computeWritingRates(
       todayWritten: today?.written ?? 0,
       todayMissing: today?.missing ?? [],
       todayRate: today && today.target > 0 ? Math.round((today.written / today.target) * 100) : null,
+      // 시작된 수업이 있어도(0/8) 뒤에 남은 수업이 있으면 그대로 넘긴다 — "아직 진행 중"을 툴팁에 쓴다.
+      todayPending: pending,
     };
   });
 

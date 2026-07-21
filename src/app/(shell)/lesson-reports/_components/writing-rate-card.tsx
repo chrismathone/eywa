@@ -28,6 +28,11 @@ function nameList(names: string[], max = 4): string {
   return names.length > max ? `${head} 외 ${names.length - max}` : head;
 }
 
+/** 오늘 남은 수업 안내 — 대상(분모)은 "시작된 수업"까지만이라 그 이유를 툴팁으로 밝힌다. */
+function pendingTitle(p: { classes: number; firstStart: string }): string {
+  return `오늘 시작 전 수업 ${p.classes}개 (첫 수업 ${p.firstStart}) — 작성률 대상에는 수업이 시작된 뒤 들어갑니다`;
+}
+
 export function WritingRateCard({ view }: { view: WritingRatesView }) {
   const { dates, rates } = view;
   const subjects = useSubjectMaps();
@@ -53,7 +58,9 @@ export function WritingRateCard({ view }: { view: WritingRatesView }) {
         <div>
           <p className="editorial-eyebrow">작성 현황</p>
           <h2 className="text-foreground mt-0.5 text-[16px] font-bold">강사별 작성률</h2>
-          <p className="text-text-faint mt-0.5 text-[12px]">이번 주(월~일) 요일별·주간 작성률 — 작성/대상(결석 제외)</p>
+          <p className="text-text-faint mt-0.5 text-[12px]">
+            이번 주(월~일) 요일별·주간 작성률 — 작성/대상(결석 제외) · 오늘은 <b className="font-medium">시작된 수업</b>까지만
+          </p>
         </div>
         {showChips ? (
           <div className="flex flex-wrap gap-1.5">
@@ -115,20 +122,41 @@ export function WritingRateCard({ view }: { view: WritingRatesView }) {
                   </td>
                   <td className="px-3 py-2 text-center">
                     {r.todayRate == null ? (
-                      <span className="text-text-faint text-[11px]">수업 없음</span>
+                      // ⚠️ 대상 0 = "수업 없음"이 아니다 — 저녁 수업만 있는 강사는 낮엔 '아직 시작 전'이다.
+                      r.todayPending ? (
+                        <span className="text-text-dim text-[11px]" title={pendingTitle(r.todayPending)}>
+                          {r.todayPending.firstStart} 수업 예정
+                        </span>
+                      ) : (
+                        <span className="text-text-faint text-[11px]">수업 없음</span>
+                      )
                     ) : (
-                      <span className={`num text-[14px] font-bold ${rateTone(r.todayRate)}`}>
+                      <span
+                        className={`num text-[14px] font-bold ${rateTone(r.todayRate)}`}
+                        title={r.todayPending ? pendingTitle(r.todayPending) : undefined}
+                      >
                         {r.todayRate}%
                         <span className="text-text-faint num ml-1 text-[11px] font-normal">
                           {r.todayWritten}/{r.todayTarget}
                         </span>
+                        {r.todayPending ? (
+                          <span className="text-text-faint ml-1 text-[11px] font-normal">
+                            +{r.todayPending.classes}
+                          </span>
+                        ) : null}
                       </span>
                     )}
                   </td>
                   {r.daily.map((d) => (
                     <td key={d.date} className="px-2 py-2 text-center align-middle">
                       {d.target == null ? (
-                        <span className="text-text-faint text-[11px]">·</span>
+                        d.pending ? (
+                          <span className="text-text-dim text-[11px]" title="오늘 수업이 아직 시작 전입니다">
+                            수업 전
+                          </span>
+                        ) : (
+                          <span className="text-text-faint text-[11px]">·</span>
+                        )
                       ) : (
                         <span className={`num text-[11px] font-bold ${rateTone(d.rate)}`} title={`${d.written}/${d.target} 작성`}>
                           {d.rate}%

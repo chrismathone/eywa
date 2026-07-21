@@ -2,9 +2,10 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { kstToday } from "@/lib/date-kst";
-import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
+import { fetchAllPaged, fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 import { getTodaySchedule, getWeeklySchedule, getTeacherLabelsBySubject } from "@/features/timetable/server/queries";
 import { getTenantSettings } from "@/features/owner/server/queries";
+import { enrollmentAttendsOnDay, isEnrollmentActiveOn } from "@/features/enrollments/eligibility";
 import { needsAttention, summarizeQueue, type QueueSummary, HUMAN_RESOLVED_STATUSES } from "../classnote-queue";
 import {
   extractWorkerEnv,
@@ -12,7 +13,40 @@ import {
   type WorkerEnvInfo,
   type WorkerResultRow,
 } from "../worker-results";
-import { computeWritingRates, type TeacherRate, type TodayTarget, type DailyTarget } from "../writing-rate";
+import {
+  computeWritingRates,
+  type TeacherRate,
+  type TodayTarget,
+  type DailyTarget,
+  type TodayPending,
+} from "../writing-rate";
+
+/**
+ * 대상(분모) 산출용 수강 행 — **그 날 실제로 오는 학생만** 세려면 기간·휴원·분리등원을 다 봐야 한다.
+ * ⚠️ 옛 구현은 `.is("end_date", null)`만 봐서 그 요일에 안 오는 분리등원 학생까지 분모에 넣었다
+ * (실측 2026-07-21 화: 김윤하 21→18, 이수진 14→11). 판정은 enrollments/eligibility 단일 소스로.
+ */
+type TargetEnrollment = {
+  student_id: string;
+  class_id: string;
+  start_date: string;
+  end_date: string | null;
+  on_hold: boolean;
+  is_transferred: boolean | null;
+  attendance_days: string[] | null;
+};
+const TARGET_ENROLLMENT_COLS =
+  "student_id, class_id, start_date, end_date, on_hold, is_transferred, attendance_days";
+
+/** 기준일에 그 반 수업을 실제로 듣는 수강인지 — 기간(반이동 규약 포함)·휴원·분리등원 요일. */
+function attendsOn(e: TargetEnrollment, date: string): boolean {
+  return (
+    isEnrollmentActiveOn(
+      { startDate: e.start_date, endDate: e.end_date, onHold: e.on_hold, isTransferred: e.is_transferred === true },
+      date,
+    ) && enrollmentAttendsOnDay(e.attendance_days, weekdayKeyOf(date))
+  );
+}
 
 // 날짜(YYYY-MM-DD) → 요일 키("mon"~"sun") — 주간 스케줄 dayOfWeek와 매칭(결정적 UTC).
 const DOW_KEY = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
@@ -244,12 +278,36 @@ export async function getWeeklyWritingRates(): Promise<WritingRatesView | null> 
   }
   const classIds = [...teacherOfClass.keys()];
 
+  // 2-b) 오늘 **아직 시작 안 한** 수업 — 분모엔 안 넣지만(시작 전을 미작성으로 몰면 안 됨) "수업 없음"과
+  // 구분해야 한다. 옛 화면은 둘 다 "수업 없음"이라 저녁 수업만 있는 강사가 낮엔 수업이 없는 것처럼 보였다.
+  const pendingByTeacher = new Map<string, { classes: number; firstStart: string }>();
+  for (const s of schedule) {
+    if (s.status !== "upcoming") continue;
+    const t = s.teacherName ?? s.slotTeacherLabel ?? "(미지정)";
+    if (exempt.has(t)) continue;
+    const cur = pendingByTeacher.get(t);
+    const start = s.startTime.slice(0, 5); // "20:10:00" → "20:10"
+    if (!cur) pendingByTeacher.set(t, { classes: 1, firstStart: start });
+    else pendingByTeacher.set(t, { classes: cur.classes + 1, firstStart: start < cur.firstStart ? start : cur.firstStart });
+  }
+  const todayPendings: TodayPending[] = [...pendingByTeacher].map(([teacher, v]) => ({ teacher, ...v }));
+
   let todayTargets: TodayTarget[] = [];
   if (classIds.length > 0) {
-    // 3) 활성 수강생(오늘 시작 반).
-    const enr = await fetchInChunks<{ student_id: string; class_id: string }>(classIds, (chunk) =>
-      supabase.from("enrollments").select("student_id, class_id").is("end_date", null).in("class_id", chunk),
-    );
+    // 3) 오늘 시작 반의 **오늘 오는** 수강생(기간·휴원·분리등원 반영).
+    const enr = (
+      await fetchAllPagedInChunks<TargetEnrollment>(classIds, (chunk, from, to) =>
+        supabase
+          .from("enrollments")
+          .select(TARGET_ENROLLMENT_COLS)
+          .in("class_id", chunk)
+          .lte("start_date", today)
+          .or(`end_date.is.null,end_date.gte.${today}`)
+          // OFFSET 페이지 안정화 — unique tie-break 포함 order(batch.ts 계약)
+          .order("id", { ascending: true })
+          .range(from, to),
+      )
+    ).filter((e) => attendsOn(e, today));
     const studentsByTeacher = new Map<string, Set<string>>();
     for (const e of enr) {
       const t = teacherOfClass.get(e.class_id);
@@ -307,14 +365,22 @@ export async function getWeeklyWritingRates(): Promise<WritingRatesView | null> 
       teacherOfClassByDate.set(d, m);
     }
     if (weekClassIds.size > 0) {
-      // 활성 수강(오늘 로직과 동일 근사: end_date null) + 주간(월~어제) 결석.
-      const wenr = await fetchInChunks<{ student_id: string; class_id: string }>([...weekClassIds], (chunk) =>
-        supabase.from("enrollments").select("student_id, class_id").is("end_date", null).in("class_id", chunk),
+      // 수강 행(오늘 로직과 동일 판정: 기간·휴원·분리등원) + 주간(월~어제) 결석.
+      // ⚠️ 날짜마다 오는 학생이 다르므로(분리등원) 반→학생 집합을 미리 굳히지 않고 **날짜별로** 판정한다.
+      const wenr = await fetchAllPagedInChunks<TargetEnrollment>([...weekClassIds], (chunk, from, to) =>
+        supabase
+          .from("enrollments")
+          .select(TARGET_ENROLLMENT_COLS)
+          .in("class_id", chunk)
+          .lte("start_date", pastDates[pastDates.length - 1]!)
+          .or(`end_date.is.null,end_date.gte.${pastDates[0]!}`)
+          .order("id", { ascending: true })
+          .range(from, to),
       );
-      const studentsByClass = new Map<string, Set<string>>();
+      const enrollmentsByClass = new Map<string, TargetEnrollment[]>();
       const weekStudentIds = new Set<string>();
       for (const e of wenr) {
-        (studentsByClass.get(e.class_id) ?? studentsByClass.set(e.class_id, new Set()).get(e.class_id)!).add(e.student_id);
+        (enrollmentsByClass.get(e.class_id) ?? enrollmentsByClass.set(e.class_id, []).get(e.class_id)!).push(e);
         weekStudentIds.add(e.student_id);
       }
       const absRows = weekStudentIds.size
@@ -331,15 +397,15 @@ export async function getWeeklyWritingRates(): Promise<WritingRatesView | null> 
       const absentByDate = new Map<string, Set<string>>();
       for (const a of absRows)
         (absentByDate.get(a.session_date) ?? absentByDate.set(a.session_date, new Set()).get(a.session_date)!).add(a.student_id);
-      // 강사×날짜 대상 = 그날 강사 반들의 활성 학생(중복 제거) − 그날 결석.
+      // 강사×날짜 대상 = 그날 강사 반들의 **그날 오는** 학생(중복 제거) − 그날 결석.
       for (const d of pastDates) {
         const absent = absentByDate.get(d) ?? new Set<string>();
         const studentsByTeacher = new Map<string, Set<string>>();
         for (const [classId, teacher] of teacherOfClassByDate.get(d)!) {
-          const set = studentsByClass.get(classId);
-          if (!set) continue;
+          const rows = enrollmentsByClass.get(classId);
+          if (!rows) continue;
           const ts = studentsByTeacher.get(teacher) ?? studentsByTeacher.set(teacher, new Set()).get(teacher)!;
-          for (const id of set) ts.add(id);
+          for (const e of rows) if (attendsOn(e, d)) ts.add(e.student_id);
         }
         for (const [teacher, ids] of studentsByTeacher) {
           const target = [...ids].filter((id) => !absent.has(id)).length;
@@ -355,7 +421,14 @@ export async function getWeeklyWritingRates(): Promise<WritingRatesView | null> 
     for (const n of names)
       (subjectsOfTeacher.get(n) ?? subjectsOfTeacher.set(n, new Set()).get(n)!).add(subj);
 
-  const rates: TeacherRateRow[] = computeWritingRates(dates, reports, todayTargets, dailyTargets, today).map((r) => ({
+  const rates: TeacherRateRow[] = computeWritingRates(
+    dates,
+    reports,
+    todayTargets,
+    dailyTargets,
+    today,
+    todayPendings,
+  ).map((r) => ({
     ...r,
     subjects: [...(subjectsOfTeacher.get(r.teacher) ?? [])],
   }));

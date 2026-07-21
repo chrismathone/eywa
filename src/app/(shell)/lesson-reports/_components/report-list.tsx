@@ -14,8 +14,11 @@ import {
   isAdminSendable,
   type ReportListFilters,
   type ReportListRow,
+  defaultReportFilters,
   type ReportSortKey,
 } from "@/features/report-admin/report-filters";
+import { monthLabel, monthOf, monthRange, shiftMonth } from "@/lib/date-kst";
+import { EyIcon } from "@/components/icons/eywa-icons";
 import { SortableTh } from "@/components/table/sortable-th";
 import type { SortState } from "@/lib/table/sort";
 import type { ReportFilterOptions } from "@/features/report-admin/server/queries";
@@ -80,14 +83,16 @@ export function ReportList({
   options,
   initial,
   canSend,
+  todayYmd,
 }: {
   options: ReportFilterOptions;
   initial: Result;
   canSend: boolean; // lesson_reports 쓰기 권한(관리자 발송 열 노출 여부) — 서버 액션이 최종 게이트
+  todayYmd: string; // KST 오늘 — 서버가 넘긴다(클라에서 new Date()로 구하면 첫 렌더가 서버와 어긋난다)
 }) {
   const router = useRouter();
   const subjects = useSubjectMaps(); // 과목 표시는 한글 라벨(raw 키 노출 금지)
-  const [filters, setFilters] = useState<ReportListFilters>({ page: 0 });
+  const [filters, setFilters] = useState<ReportListFilters>(() => defaultReportFilters(todayYmd));
   const [result, setResult] = useState<Result>(initial);
   const [checked, setChecked] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
@@ -109,6 +114,14 @@ export function ReportList({
   const sortState: SortState<ReportSortKey> = filters.sort ? { key: filters.sort, dir: filters.dir ?? "asc" } : null;
   const onSort = (next: SortState<ReportSortKey>) =>
     set({ sort: next?.key, dir: next?.dir });
+
+  // 기간 표시 — from/to가 정확히 어느 한 달의 처음~끝이면 "그 달"로 본다(사용자가 날짜를 직접 만지면
+  // 자동으로 '전체 기간' 취급이 아니라 커스텀 범위 그대로 유지되며, 월 라벨만 안 붙는다).
+  const activeMonth = filters.from ? monthOf(filters.from) : monthOf(todayYmd);
+  const isMonthRange =
+    !!filters.from && !!filters.to && filters.from === monthRange(activeMonth).from && filters.to === monthRange(activeMonth).to;
+  const isThisMonth = isMonthRange && activeMonth === monthOf(todayYmd);
+  const setMonthRange = (month: string) => set(monthRange(month));
 
   const origin = typeof window !== "undefined" ? window.location.origin : "";
   const openReport = (r: ReportListRow) => {
@@ -160,6 +173,38 @@ export function ReportList({
         <p className="text-text-faint text-[12px]">강사·기간·상태·과목으로 조회 · 행 클릭 시 학부모 보고서 열람</p>
       </div>
 
+      {/* 기간 프리셋 — 기본은 **이번 달**. 전체 기간을 기본으로 두면 '강사'로 정렬했을 때 1페이지가
+          두 달 전 기록으로만 채워져 정렬이 무의미해진다(실측). 월 단위로 끊어야 "이 달 안에서 강사순"이 된다. */}
+      <div className="mb-2 flex flex-wrap items-center gap-1.5">
+        <div className="border-line flex items-center gap-0.5 rounded-full border p-0.5">
+          <button type="button" onClick={() => setMonthRange(shiftMonth(activeMonth, -1))} aria-label="이전 달" className="text-text-dim hover:bg-bg-soft rounded-full px-1.5 py-0.5">
+            <EyIcon name="chevronLeft" size={14} />
+          </button>
+          <span className="text-foreground min-w-[76px] text-center text-[12px] font-bold">
+            {isMonthRange ? monthLabel(activeMonth) : "전체 기간"}
+          </span>
+          <button type="button" onClick={() => setMonthRange(shiftMonth(activeMonth, 1))} aria-label="다음 달" className="text-text-dim hover:bg-bg-soft rounded-full px-1.5 py-0.5">
+            <EyIcon name="chevronRight" size={14} />
+          </button>
+        </div>
+        {!isThisMonth ? (
+          <button type="button" onClick={() => setMonthRange(monthOf(todayYmd))} className="border-line text-text-dim hover:bg-bg-soft rounded-lg border px-2 py-1 text-[11px] font-bold">
+            이번 달
+          </button>
+        ) : null}
+        <button
+          type="button"
+          onClick={() => set({ from: undefined, to: undefined })}
+          aria-pressed={!isMonthRange}
+          className={`rounded-lg border px-2 py-1 text-[11px] font-bold ${
+            !isMonthRange ? "border-primary bg-primary-soft text-primary" : "border-line text-text-dim hover:bg-bg-soft"
+          }`}
+          title="전체 기간에서는 정렬을 눌러도 오래된 기록이 먼저 나올 수 있습니다"
+        >
+          전체 기간
+        </button>
+      </div>
+
       {/* 필터 바 */}
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <input type="date" value={filters.from ?? ""} onChange={(e) => set({ from: e.target.value || undefined })} className={selCls} aria-label="시작일" />
@@ -195,8 +240,10 @@ export function ReportList({
           <option value="read">읽음</option>
           <option value="unread">안읽음</option>
         </select>
-        {(filters.from || filters.to || filters.teacher || filters.subject || filters.status || filters.read) ? (
-          <Button size="sm" variant="ghost" onClick={() => run({ page: 0 })}>
+        {/* 기간은 이제 기본값이 있으므로(이번 달) '초기화' 조건에서 뺀다 — 안 그러면 항상 떠 있다.
+            초기화는 "기본 상태로" = 이번 달 + 필터 없음(전체 기간이 아니다). */}
+        {(!isThisMonth || filters.teacher || filters.subject || filters.status || filters.read || filters.sort) ? (
+          <Button size="sm" variant="ghost" onClick={() => run(defaultReportFilters(todayYmd))}>
             초기화
           </Button>
         ) : null}

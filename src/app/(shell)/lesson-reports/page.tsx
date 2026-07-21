@@ -5,6 +5,8 @@ import { FaceTabs, type Face } from "@/components/face-tabs";
 import { getClassnoteQueue, getReportFilterOptions, getWeeklyWritingRates, getReportTeacherCandidates } from "@/features/report-admin/server/queries";
 import { getEdutrixUnmapped } from "@/features/report-admin/server/edutrix-map-queries";
 import { listReports } from "@/features/report-admin/server/actions";
+import { defaultReportFilters } from "@/features/report-admin/report-filters";
+import { kstToday } from "@/lib/date-kst";
 import { getNoticeClassOptions, listClassNotices } from "@/features/report-admin/server/notice-actions";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { getStudentsList } from "@/features/students/server/queries";
@@ -98,7 +100,8 @@ export default async function LessonReportsPage({ searchParams }: { searchParams
               )
           : tab === "ai_ment"
             ? getActivePrompts().then((r) => ({ aiPrompts: r.prompts ?? [] }))
-            : Promise.all([getReportFilterOptions(), listReports({ page: 0 })]).then(([filterOptions, firstPage]) => ({
+            : // 첫 페인트도 클라 초기 state와 **같은 기본 범위**(이번 달)로 — 안 맞추면 열자마자 목록이 한 번 바뀐다.
+              Promise.all([getReportFilterOptions(), listReports(defaultReportFilters(kstToday()))]).then(([filterOptions, firstPage]) => ({
                 filterOptions,
                 initialList: {
                   rows: firstPage.rows ?? [],
@@ -140,7 +143,7 @@ export default async function LessonReportsPage({ searchParams }: { searchParams
       {tab === "unmapped" && "edutrixMap" in tabData ? <EdutrixUnmappedCard view={tabData.edutrixMap} /> : null}
 
       {tab === "list" && "filterOptions" in tabData && "initialList" in tabData ? (
-        <ReportList options={tabData.filterOptions} initial={tabData.initialList} canSend={canSendReports} />
+        <ReportList options={tabData.filterOptions} initial={tabData.initialList} canSend={canSendReports} todayYmd={kstToday()} />
       ) : null}
 
       {tab === "notice" && "noticeClasses" in tabData && "noticeRows" in tabData ? (

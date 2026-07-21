@@ -1437,6 +1437,9 @@ export function OneScreenClient({
             checkEnabled: showCheckTest,
             attachmentUrls: attUrls,
             attachmentsHidden: !showAttachments,
+            // 멘트 모드는 카드 모드와 **같은 실효값**을 쓴다(강사 오버라이드 > 학원 기본) — 표 모드만
+            // 단일 칸으로 남으면 토글을 B로 둔 강사가 "표에선 적용이 안 된다"고 느낀다(원장 제보 2026-07-21).
+            noticeMode: noticeMode ?? academyNoticeMode,
           }}
           fields={{
             onAttendance: setAttendanceFor,
