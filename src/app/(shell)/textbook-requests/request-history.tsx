@@ -67,9 +67,12 @@ function isDone(r: TextbookOrderRow): boolean {
 function RequestRow({
   row,
   onDownload,
+  onSend,
 }: {
   row: TextbookOrderRow;
   onDownload: (r: TextbookOrderRow) => void;
+  /** 학부모 알림장 발송 다이얼로그 열기(없으면 버튼 미노출). */
+  onSend?: (r: TextbookOrderRow) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [confirmDel, setConfirmDel] = useState(false);
@@ -166,6 +169,16 @@ function RequestRow({
       >
         <FileDown className="size-3.5" /> 요청서
       </button>
+      {onSend ? (
+        <button
+          type="button"
+          onClick={() => onSend(row)}
+          className="text-text-faint hover:text-primary inline-flex shrink-0 items-center gap-1 text-[12px]"
+          title="이 요청을 학부모 알림장으로 발송"
+        >
+          <EyIcon name="send" size={14} /> 발송
+        </button>
+      ) : null}
       {canManage ? (
         confirmDel ? (
           <span className="flex shrink-0 items-center gap-1 text-[12px]">
@@ -190,10 +203,13 @@ function RequestRow({
 export function RequestHistory({
   rows,
   onDownload,
+  onSend,
   capNote,
 }: {
   rows: TextbookOrderRow[];
   onDownload: (r: TextbookOrderRow) => void;
+  /** 학부모 알림장 발송 진입점(행마다). 없으면 발송 버튼 미노출. */
+  onSend?: (r: TextbookOrderRow) => void;
   /** rows가 절단본일 때(사무실=최근 100건) 카운트가 전체 통계로 읽히지 않게 붙이는 안내. */
   capNote?: string;
 }) {
@@ -278,7 +294,7 @@ export function RequestHistory({
           }`}
         >
           {pageRows.map((r) => (
-            <RequestRow key={r.id} row={r} onDownload={onDownload} />
+            <RequestRow key={r.id} row={r} onDownload={onDownload} onSend={onSend} />
           ))}
         </ul>
       )}
