@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
+import { AttachPicker } from "./grid-attach";
 import type { BulkPatch } from "../grid";
 
 /** 표 일괄 작업 핸들러 — keys(선택 행) 있으면 그 행만, 없으면 전체. */
@@ -13,6 +14,8 @@ export type GridBulkActions = {
   onBulkApply: (keys: string[], patch: BulkPatch, onlyEmpty: boolean) => void; // 값 일괄 적용(1-2) — 진도 필터 없는 raw 행 대상
   // 이전 회차 일괄 가져오기(G5 얕은판) — 선택(없으면 표시 전체) 행의 **빈 칸만** planPrevFill로 채움(특이사항·교재 제외).
   onBulkImportPrev?: (keys?: string[]) => void;
+  // 선택 행 일괄 첨부 — 같은 시험지·판서 사진을 여러 학생에게 한 번에. **선택이 있을 때만** 노출(전체 대상 오첨부 방지).
+  onBulkAttach?: (keys: string[], files: File[]) => void;
 };
 
 /** 표 상단 일괄 바 — 카운트·이전 회차 토글·일괄 버튼. children = 버튼 그룹 선두 슬롯(값 일괄 입력 팝오버). */
@@ -95,6 +98,16 @@ export function GridToolbar({
             {/* 행별 버튼과 같은 말로 통일 — '채우기'/'가져오기' 혼용 금지(원장 지시 07-21). */}
             {selectedKeys.length ? `선택 ${selectedKeys.length} 이전값 가져오기` : "이전값 일괄 가져오기"}
           </Button>
+        ) : null}
+        {/* 일괄 첨부 — 파일을 고르는 즉시 선택 행에 첨부된다(확인 다이얼로그 없음: 첨부는 되돌리기가 쉬운 편이고
+            대상이 '선택 행'으로 이미 좁혀져 있다). 선택이 없으면 대상이 모호해 아예 안 보인다. */}
+        {actions.onBulkAttach && selectedKeys.length > 0 ? (
+          <AttachPicker
+            disabled={off}
+            onFiles={(files) => actions.onBulkAttach?.(selectedKeys, files)}
+          >
+            {`선택 ${selectedKeys.length} 첨부`}
+          </AttachPicker>
         ) : null}
         {actions.onClassNotice ? (
           <Button

@@ -892,11 +892,6 @@ export function OneScreenClient({
       },
     };
   }
-  function buildSaveInput(subjectName: string) {
-    if (!selected) return null;
-    return buildSaveInputFor(selected, subjectName);
-  }
-
   // 보고서 저장 시 그 학생 진도를 확정 처리 — 표 모드엔 카드의 '진도 확정' 버튼이 없어 상단 진도·마감 지표가
   // 0에 고정되던 문제(#13). 이미 확정이면 no-op(불필요한 autosave 방지).
   function confirmProgressOnSave(studentId: string) {
@@ -1187,8 +1182,6 @@ export function OneScreenClient({
     const su = student.subjects.find((s) => s.name === subjectName);
     return su?.subjectKey || su?.name || undefined;
   };
-  const subjectKeyOf = (subjectName: string): string | undefined =>
-    selected ? subjectKeyFor(selected, subjectName) : undefined;
 
   // 선택 학생 과목별 첨부 path 시그니처 — 경로 변경 시에만 썸네일 URL 재요청(draft 편집엔 재요청 안 함).
   const attTargets = selected
@@ -1417,6 +1410,8 @@ export function OneScreenClient({
             allowTestMax: allowTeacherTestMax,
             dailyEnabled: showDailyTest,
             checkEnabled: showCheckTest,
+            attachmentUrls: attUrls,
+            attachmentsHidden: !showAttachments,
           }}
           fields={{
             onAttendance: setAttendanceFor,
@@ -1438,6 +1433,10 @@ export function OneScreenClient({
             onAutoWrite: autoWriteRow,
             onOpenCard: openCard,
             onImportPrev: importPrevFor,
+            onAttach: (student, subjectName, files) => void addAttachmentsFor(student, subjectName, files),
+            onRemoveAttachment: (student, subjectName, path) =>
+              void removeAttachmentFor(student, subjectName, path),
+            onOpenAttachments: (student, subjectName) => void ensureAttachmentUrls(student, subjectName),
           }}
           bulkActions={{
             onSaveAll: saveAllVisible,
@@ -1446,7 +1445,9 @@ export function OneScreenClient({
             onClassNotice: openNoticeForRows,
             onBulkApply: bulkApplyValues,
             onBulkImportPrev: bulkImportPrev,
+            onBulkAttach: (keys, files) => void bulkAttach(keys, files),
           }}
+          uploadingAttKey={uploadingAttKey}
           order={orderClass ? { classId: orderClass.id, onSave: saveOrderForClass } : undefined}
           classFilter={activeClassFilter}
           // 반 서술(G6) — 순서 기능과 동일한 동명 반 가드(orderClass = 이름 매칭이 유일할 때만).
