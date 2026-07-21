@@ -2,6 +2,13 @@ import "server-only";
 import { cache } from "react";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { createClient } from "@/lib/supabase/server";
+import { isPushableConsultation, pushEligibilityNote } from "../push-eligibility";
+
+/** PostgREST 임베드는 객체 또는 배열로 온다 — 연결 학생의 makeedu_id를 안전하게 꺼낸다. */
+function studentMakeeduIdOf(row: { student?: unknown }): string | null {
+  const s = Array.isArray(row.student) ? row.student[0] : row.student;
+  return ((s as { makeedu_id?: string | null } | null | undefined)?.makeedu_id ?? null) || null;
+}
 
 // makeedu → eywa 동기화 도메인(0058a makeedu_sync_state.domain).
 export type MakeeduSyncDomain =
@@ -224,33 +231,37 @@ export type UnpushedIntakeConsultation = {
   /** 진행 중 푸시 요청 상태(pending|running|error) — 있으면 큐에 있거나 실패한 것. */
   pushStatus: string | null;
   pushError: string | null;
+  /** 특수 사유 한 줄(등록됐는데 makeedu에 학생이 없는 건). 없으면 null — push-eligibility.ts. */
+  note: string | null;
 };
 
 /**
  * makeedu 미전송 QR 공개접수 상담 후보 = from_public_intake && makeedu_id 없음 && 아직 성공 푸시 안 됨
- * && 등록완료(enrolled) 아님. 각 후보에 최신 푸시 요청 상태를 붙여(대기/실패 구분) 연동 면 목록에 표시.
- * ⚠️ enrolled 제외 이유: enrolled = "학원에 등록했다"(eywa 사실) — 예비원생 단계를 지난 학생이라 makeedu
- * 예비상담으로 보내면 "이미 다니는 학생이 신규 문의로 뜨는" 군더더기(허다언 케이스, 2026-07-02 실측 — 그는
- * makeedu 원생목록에도 이미 있었음). 등록된 학생이 makeedu 원생/예비 목록 어디에도 없으면 **원생등록 푸시**가
- * 맞는 경로 — v2 후보(예비상담 폼이 아니라 /member/student/list_regist.do, 미구현). RLS로 현재 테넌트만.
+ * && **푸시 가능**(isPushableConsultation). 각 후보에 최신 푸시 요청 상태를 붙여(대기/실패 구분) 목록에 표시.
+ *
+ * ⚠️ enrolled 처리는 [push-eligibility.ts](../push-eligibility.ts) 단일 규칙 — **"등록완료면 무조건 제외"가
+ * 아니라 "등록완료 + 학생이 makeedu 원생일 때만 제외"**다(2026-07-21 권도현 케이스로 전제가 깨진 뒤 정밀화).
+ * 세 곳(이 쿼리 · enqueueConsultationPush · push-consultations.cjs)이 같은 규칙을 쓴다.
  */
 export async function getUnpushedIntakeConsultations(limit = 50): Promise<UnpushedIntakeConsultation[]> {
   const user = await getCurrentUser();
   if (!user) return [];
   const supabase = await createClient();
-  // 후보: QR 접수 + makeedu 미연결 + 미푸시 + 미등록(enrolled 제외).
+  // 후보: QR 접수 + makeedu 미연결 + 미푸시. enrolled 판정은 연결 학생의 makeedu 등록 여부가 필요해
+  // (SQL 한 줄로 못 거른다) 조인해 받아 온 뒤 순수 규칙으로 거른다 — QR 접수는 소량이라 비용 무시 가능.
   const { data: rows } = await supabase
     .from("enrollment_consultations")
     .select(
-      "id, prospect_name, prospect_school, prospect_grade, parent_name, parent_phone, subject, consultation_path, created_at, outcome",
+      "id, prospect_name, prospect_school, prospect_grade, parent_name, parent_phone, subject, consultation_path, created_at, outcome, student:student_id ( makeedu_id )",
     )
     .eq("from_public_intake", true)
     .is("makeedu_id", null)
     .is("makeedu_pushed_at", null)
-    .neq("outcome", "enrolled")
     .order("created_at", { ascending: false })
     .limit(limit);
-  const candidates = rows ?? [];
+  const candidates = (rows ?? []).filter((r) =>
+    isPushableConsultation({ outcome: r.outcome as string, studentMakeeduId: studentMakeeduIdOf(r) }),
+  );
   if (candidates.length === 0) return [];
 
   // 각 후보의 최신 푸시 요청 상태(대기/실패 배지). 소량이라 한 번에 조회.
@@ -282,6 +293,7 @@ export async function getUnpushedIntakeConsultations(limit = 50): Promise<Unpush
       // done/skipped는 후보에서 이미 빠지므로(pushed_at 세팅) pending|running|error만 의미.
       pushStatus: st && st.status !== "done" && st.status !== "skipped" ? st.status : null,
       pushError: st ? st.error : null,
+      note: pushEligibilityNote({ outcome: c.outcome as string, studentMakeeduId: studentMakeeduIdOf(c) }),
     };
   });
 }
