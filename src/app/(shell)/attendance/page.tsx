@@ -17,27 +17,12 @@ import {
   type AttendanceStatus,
 } from "@/features/attendance/server/queries";
 import { COUNTABLE_STATUSES, formatSessionUnits } from "@/features/attendance/session-units";
+import { buildQuickOpen } from "@/features/attendance/quick-open";
 import { AttendanceCell } from "./_components/attendance-cell";
+import { QuickOpenPanel } from "./_components/quick-open-panel";
+import { attHref, type RangeKey } from "./_components/att-href";
 
 export const metadata = { title: "출석부 — eywa" };
-
-type RangeKey = "month" | "2w";
-
-function attHref(p: {
-  classId: string | null;
-  month: string;
-  range: RangeKey;
-  teacherId?: string | null;
-  subjectId?: string | null;
-}): string {
-  const sp = new URLSearchParams();
-  if (p.subjectId) sp.set("subject", p.subjectId);
-  if (p.teacherId) sp.set("teacher", p.teacherId);
-  if (p.classId) sp.set("class", p.classId);
-  sp.set("month", p.month);
-  if (p.range === "2w") sp.set("range", "2w");
-  return `/attendance?${sp.toString()}`;
-}
 
 function currentMonthKey(): string {
   return kstMonth();
@@ -82,9 +67,12 @@ export default async function AttendancePage({
   const range: RangeKey = rangeParam === "2w" ? "2w" : "month";
 
   // 반 목록(경량) — classId 없이 부르면 무거운 출석 데이터는 안 불러온다(렉 방지). 과목→강사→반 계층·선택지 도출용.
-  const base = await getMonthlyAttendanceMatrix(month, null);
+  // 학원설정과는 서로 독립이라 병렬로(B4 — 독립 await는 Promise.all).
+  const [base, { operations }] = await Promise.all([
+    getMonthlyAttendanceMatrix(month, null),
+    getTenantSettings(),
+  ]);
   const allClasses = base.classes; // { id, className, subject, teacherId, teacherName }
-  const { operations } = await getTenantSettings();
   const subjectMaps = buildSubjectMaps(operations.subjects);
 
   // ── 과목 → 강사 → 반 계층(넓→좁). 위를 고르면 아래 선택지가 좁혀지는 cascade. ──
@@ -261,35 +249,17 @@ export default async function AttendancePage({
             sizes="(max-width: 1024px) 100vw, 40vw"
             className="h-full"
           />
-          <div className="bg-card shadow-card flex flex-col rounded-2xl p-5">
-            <p className="text-foreground text-[14px] font-bold">
-              바로 열기
-              <span className="text-text-faint ml-1.5 font-medium">{classesForFilters.length}개 반</span>
-            </p>
-            <ul className="mt-2 grid gap-x-2 sm:grid-cols-2">
-              {classesForFilters.slice(0, 8).map((c) => (
-                <li key={c.id}>
-                  <Link
-                    href={attHref({ classId: c.id, month, range, teacherId: effectiveTeacher, subjectId: effectiveSubject })}
-                    className="hover:bg-bg-soft -mx-2 flex items-center gap-2.5 rounded-xl px-2 py-2 transition"
-                  >
-                    <span className="text-foreground shrink-0 text-[13.5px] font-bold">{c.className}</span>
-                    <span className="text-text-dim min-w-0 flex-1 truncate text-[12.5px]">
-                      {c.teacherName ?? ""}
-                    </span>
-                    <span className="bg-primary-soft text-primary shrink-0 rounded-pill px-2.5 py-1 text-[11px] font-bold">
-                      열기
-                    </span>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-            {classesForFilters.length > 8 ? (
-              <p className="text-text-faint mt-auto pt-2 text-[12px]">
-                나머지 반은 위 과목·강사 필터로 좁혀서 선택하세요.
-              </p>
-            ) : null}
-          </div>
+          {/* ⚠️ 과목별 섹션 + 과목당 상한. 옛 코드는 `classesForFilters.slice(0, 8)`이었는데 반 목록이
+              class_name 오름차순이라 로마자 영어반이 한글 수학반보다 항상 앞서 **수학반이 하나도 안 떴다**.
+              그룹핑·상한은 `buildQuickOpen` 순수함수(Vitest)로 고정 — 어떤 과목도 0이 되지 않는다. */}
+          <QuickOpenPanel
+            {...buildQuickOpen(classesForFilters, subjectOptions)}
+            colorOf={subjectMaps.colorOf}
+            month={month}
+            range={range}
+            teacherId={effectiveTeacher}
+            subjectId={effectiveSubject}
+          />
         </section>
       ) : (
         <>
