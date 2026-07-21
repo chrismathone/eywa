@@ -4,7 +4,7 @@ import { Pencil } from "@/components/icons/eywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { requireAccess } from "@/lib/auth/require-access";
 import { accessLevelTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
-import { effectiveTeacherScope } from "@/lib/auth/view-mode";
+import { canSeeStudentEnrollment } from "@/features/students/server/enrollment-gate";
 import { BackLink } from "@/components/back-link";
 import { DupSuspectTag } from "@/components/dup-suspect-tag";
 import { getStudentById } from "@/features/students/server/queries";
@@ -69,12 +69,9 @@ export default async function StudentDetailPage({
   // ① enrollment 접근권한(원장·상담사 등) → 카드 + '상세 보기' 링크 모두.
   // ② 권한 없어도 **강사가 본인 담당 학생**이면 카드는 노출(읽기) — 단 '상세 보기'(/enrollment/[id])는
   //    여전히 enrollment 게이트라 링크는 숨김. (강사는 담당 학생의 입학 배경만 열람, 관리 상세는 불가.)
+  // ①②의 판정은 타임라인 이벤트와 **같은 게이트 함수**를 쓴다(#77 — 표면마다 다시 쓰면 한쪽만 조여진다).
   const enrollmentAccess = (await accessLevelTenant(user.systemRole, "enrollment")) !== "none";
-  let canSeeEnrollment = enrollmentAccess;
-  if (!enrollmentAccess) {
-    const scope = await effectiveTeacherScope(); // 강사(또는 겸직-강사뷰)면 담당 학생 id, 아니면 null
-    if (scope?.studentIds?.includes(student.id)) canSeeEnrollment = true;
-  }
+  const canSeeEnrollment = await canSeeStudentEnrollment(user.systemRole, student.id);
   const canOpenEnrollmentDetail = enrollmentAccess;
 
   return (

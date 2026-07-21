@@ -23,6 +23,7 @@ const TIMELINE_KIND_LABEL: Record<string, string> = {
   status_change: "상태 변경",
   grade: "성적",
   textbook: "교재",
+  enrollment_consultation: "입학 상담",
 };
 
 export const searchStudentsTool = betaZodTool({

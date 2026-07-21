@@ -16,6 +16,7 @@ const KIND_META: Record<
   status_change: { label: "상태 변경", color: "bg-chart-5 text-chart-5" },
   grade: { label: "성적", color: "bg-chart-2 text-chart-2" },
   textbook: { label: "교재", color: "bg-chart-4 text-chart-4" },
+  enrollment_consultation: { label: "입학 상담", color: "bg-chart-1 text-chart-1" },
 };
 
 function ymOf(date: string): string {
