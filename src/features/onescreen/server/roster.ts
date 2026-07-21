@@ -1,6 +1,7 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { fetchInChunks } from "@/lib/supabase/batch";
@@ -51,6 +52,9 @@ export type TeacherRoster = {
   // 사진/파일 첨부 표시(report.showAttachments) — off면 첨부는 저장되지만 /r·인쇄·ClassNote 어디에도 안 실린다.
   // 강사 카드가 첨부 칸에 그 사실을 경고로 띄운다(입력 시점 고지 = 거짓 약속 차단, 2026-07-21).
   showAttachments: boolean;
+  // 출결 쓰기 권한(학원설정 역할·권한). false면 원스크린 pill을 표시 전용으로 — 서버가 거절할 일을
+  // 화면이 눌리게 보여주지 않는다(2026-07-21: 강사 attendance=none인데 pill이 눌려 "권한 없음" 토스트만 떴다).
+  canEditAttendance: boolean;
 };
 
 type OnescreenSessionRow = {
@@ -92,6 +96,7 @@ function emptyRoster(
     classnoteSendEnabled: false,
     sendWindowLabel: null,
     showAttachments: true, // 빈 로스터는 첨부 표면이 없어 값 무의미 — 경고를 띄우지 않는 쪽으로 고정
+    canEditAttendance: false,
   };
 }
 
@@ -598,5 +603,6 @@ export async function getTeacherRoster(rawDate?: string): Promise<TeacherRoster>
       settings.report.classnoteSendWindowEnd,
     ),
     showAttachments: settings.report.showAttachments,
+    canEditAttendance: await canWriteTenant(user.systemRole, "attendance"),
   };
 }

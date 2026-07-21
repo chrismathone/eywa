@@ -121,7 +121,7 @@ export function GridBodyRow({
   actions: GridRowActions;
   config: GridConfig;
   // 로딩·잠금 상태 묶음: rowBusy=이 행 자동작성 중, bulk=전체 자동작성 진행중, attPending=출결 저장 중 (학생::반) 키.
-  gen: { rowBusy: boolean; bulk?: boolean; attPending: ReadonlySet<string> };
+  gen: { rowBusy: boolean; bulk?: boolean; attPending: ReadonlySet<string>; attReadOnly?: boolean };
   // 키보드 세로 이동(3-1) 인덱스 — **표시 순서 기준**(assembler가 buildRowRenderMeta로 부여).
   // row=과목 단위 열(교재·오늘과제), studentRow=학생 단위 열(점수 — 학생 묶음 첫 행만, 중복 칸 스킵).
   nav: { row: number; studentRow?: number };
@@ -203,6 +203,7 @@ export function GridBodyRow({
               pending={gen.attPending.has(`${student.id}::${subject.classId}`)}
               onSet={(s) => fields.onAttendance(student.id, subject.classId!, s)}
               studentName={student.name}
+              readOnly={gen.attReadOnly}
             />
           ) : att !== "출석" ? (
             <span
