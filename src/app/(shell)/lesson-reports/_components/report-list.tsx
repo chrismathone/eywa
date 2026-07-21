@@ -14,7 +14,10 @@ import {
   isAdminSendable,
   type ReportListFilters,
   type ReportListRow,
+  type ReportSortKey,
 } from "@/features/report-admin/report-filters";
+import { SortableTh } from "@/components/table/sortable-th";
+import type { SortState } from "@/lib/table/sort";
 import type { ReportFilterOptions } from "@/features/report-admin/server/queries";
 
 // 라벨은 classnoteBadge가 해석(한글) — 여기엔 상태 키만. blocked_shared = 프리플라이트 게이트 보류.
@@ -100,6 +103,12 @@ export function ReportList({
     });
   }
   const set = (patch: Partial<ReportListFilters>) => run({ ...filters, ...patch, page: 0 });
+
+  // 헤더 클릭 정렬 — **서버 정렬**이라 정렬을 바꾸면 1페이지부터 다시 받는다(현재 페이지만 뒤섞는 게 아니라
+  // 전체가 다시 줄 선다). 상태는 화면 표(SortableTh)와 같은 3단 순환(오름 → 내림 → 해제) 규약을 그대로 쓴다.
+  const sortState: SortState<ReportSortKey> = filters.sort ? { key: filters.sort, dir: filters.dir ?? "asc" } : null;
+  const onSort = (next: SortState<ReportSortKey>) =>
+    set({ sort: next?.key, dir: next?.dir });
 
   const origin = typeof window !== "undefined" ? window.location.origin : "";
   const openReport = (r: ReportListRow) => {
@@ -209,7 +218,7 @@ export function ReportList({
       <div className="border-line overflow-x-auto rounded-md border">
         <table className="w-full min-w-[600px] text-left text-[12px]">
           <thead>
-            <tr className="border-line text-text-faint border-b">
+            <tr className="border-line text-text-faint group border-b">
               {canSend ? (
                 <th className="w-8 px-2 py-2">
                   <input
@@ -221,11 +230,13 @@ export function ReportList({
                   />
                 </th>
               ) : null}
-              <th className="px-3 py-2 font-bold">날짜</th>
+              <SortableTh sortKey="date" state={sortState} onSort={onSort}>날짜</SortableTh>
+              {/* 학생·과목은 서버 정렬 대상이 아니다 — 학생 이름은 이 표에 없는 값(조인), 과목은 저장값이
+                  내부 키라 한글 라벨 순서와 어긋난다(report-filters.ts REPORT_SORT_KEYS 주석). */}
               <th className="px-3 py-2 font-bold">학생 · 과목</th>
-              <th className="px-3 py-2 font-bold">강사</th>
-              <th className="px-3 py-2 font-bold">발송 상태</th>
-              <th className="px-3 py-2 text-right font-bold">열람</th>
+              <SortableTh sortKey="teacher" state={sortState} onSort={onSort}>강사</SortableTh>
+              <SortableTh sortKey="status" state={sortState} onSort={onSort}>발송 상태</SortableTh>
+              <SortableTh sortKey="read" state={sortState} onSort={onSort} align="right">열람</SortableTh>
             </tr>
           </thead>
           <tbody>

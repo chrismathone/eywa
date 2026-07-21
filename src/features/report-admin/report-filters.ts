@@ -35,7 +35,60 @@ export type ReportListFilters = {
    */
   read?: "read" | "unread";
   page?: number;
+  /** 헤더 클릭 정렬. 없으면 기본 정렬(수업일 최신 → 발송시각 → 등록시각). */
+  sort?: ReportSortKey;
+  dir?: "asc" | "desc";
 };
+
+/**
+ * 서버 정렬 가능한 열 — **lesson_reports에 실제로 있는 컬럼만.**
+ * ⚠️ '학생'과 '과목'을 일부러 뺐다: 학생 이름은 이 표에 없는 값(students 조인)이고, 과목은 저장값이
+ * 내부 키(`math`)라 그대로 정렬하면 화면의 한글 라벨(수학·영어) 순서와 어긋난다 — 헤더는 한글로
+ * 보여 주면서 로마자 키 순으로 줄 세우면 "정렬이 이상하다"가 된다. 둘 다 별도 설계 후에 연다.
+ */
+export const REPORT_SORT_KEYS = ["date", "teacher", "status", "read"] as const;
+export type ReportSortKey = (typeof REPORT_SORT_KEYS)[number];
+
+type OrderSpec = { column: string; ascending: boolean; nullsFirst: boolean };
+
+/**
+ * 정렬 상태 → PostgREST `.order()` 목록(순수, Vitest). 목록이 **서버 페이지네이션**이라 정렬도 서버에서
+ * 해야 한다 — 화면에서 정렬하면 "보고 있는 30건 안에서만" 정렬되고 사용자는 전체가 정렬된 줄 안다.
+ *
+ * 규약 두 가지:
+ *  ① 빈 값은 방향과 무관하게 **뒤로**(`nullsFirst:false`) — 화면 정렬 규약(`lib/table/sort`)과 같게.
+ *  ② 마지막에 항상 `report_date`·`created_at` tiebreak — 동률이 페이지마다 뒤바뀌면 페이지를 넘길 때
+ *     같은 행이 두 번 보이거나 사라진다(서버 페이징의 고전적 함정).
+ *
+ * ⚠️ 한글 정렬은 DB 콜레이션이 한다(브라우저 `localeCompare("ko")` 아님). 강사 이름처럼 **순 한글**은
+ * 유니코드 한글 음절 블록이 가나다 순이라 결과가 같지만, 로마자·한글이 섞이면 순서가 갈린다
+ * (PG=로마자 먼저 / ICU ko=한글 먼저). 그래서 이 목록은 **한 화면 안에서 서버 정렬만** 쓴다.
+ */
+export function reportOrderSpecs(sort?: ReportSortKey, dir: "asc" | "desc" = "asc"): OrderSpec[] {
+  const asc = dir === "asc";
+  const tiebreak: OrderSpec[] = [
+    { column: "report_date", ascending: false, nullsFirst: false },
+    { column: "created_at", ascending: false, nullsFirst: false },
+  ];
+  switch (sort) {
+    case "date":
+      return [{ column: "report_date", ascending: asc, nullsFirst: false }, tiebreak[1]!];
+    case "teacher":
+      return [{ column: "teacher_name", ascending: asc, nullsFirst: false }, ...tiebreak];
+    case "status":
+      return [{ column: "classnote_status", ascending: asc, nullsFirst: false }, ...tiebreak];
+    case "read":
+      return [{ column: "classnote_read_at", ascending: asc, nullsFirst: false }, ...tiebreak];
+    default:
+      // 기본: 같은 수업일 내 최신 발송이 위로. 이관분은 created_at이 cron 배치 시각으로 전부 같아
+      // 실제 발송시각(classnote_sent_at)을 먼저 본다.
+      return [
+        { column: "report_date", ascending: false, nullsFirst: false },
+        { column: "classnote_sent_at", ascending: false, nullsFirst: false },
+        { column: "created_at", ascending: false, nullsFirst: false },
+      ];
+  }
+}
 
 // 상태 필터 특수값: 발송 이력 없는 이관분(edutrix_import). classnote_status가 아니라 source로 거른다.
 export const IMPORT_FILTER = "__import__";
