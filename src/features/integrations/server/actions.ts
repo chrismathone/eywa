@@ -8,6 +8,7 @@ import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { canManageSheetSync, SHEET_ACCESS_DENIED_MSG } from "@/features/integrations/server/sheet-access";
+import { isPushableConsultation } from "@/features/integrations/push-eligibility";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getTenantSettings } from "@/features/owner/server/queries";
@@ -305,20 +306,27 @@ export async function enqueueConsultationPush(ids: string[]): Promise<PushState>
   if (clean.length === 0) return { error: "전송할 상담을 선택하세요" };
 
   const admin = createAdminClient();
-  // 대상 검증: 이 테넌트의 QR 접수 + 미푸시(makeedu_id/pushed_at 없음) + 미등록만.
-  // enrolled 제외 = 학원 등록이 끝난 학생은 예비원생 단계를 지났음 — 예비상담으로 푸시하면 군더더기.
-  // (makeedu 원생목록에도 없는 enrolled는 '원생등록' 푸시가 맞는 경로 — v2 후보. 후보 쿼리와 동일 가드.)
+  // 대상 검증: 이 테넌트의 QR 접수 + 미푸시(makeedu_id/pushed_at 없음) + 푸시 가능.
+  // ⚠️ enrolled 판정은 [push-eligibility.ts](../push-eligibility.ts) 단일 규칙(후보 쿼리·워커와 동일):
+  // "등록완료면 무조건 제외"가 아니라 **"등록완료 + 학생이 makeedu 원생일 때만 제외"**.
   const { data: valid, error: selErr } = await admin
     .from("enrollment_consultations")
-    .select("id")
+    .select("id, outcome, student:student_id ( makeedu_id )")
     .eq("tenant_id", user.tenantId)
     .eq("from_public_intake", true)
     .is("makeedu_id", null)
     .is("makeedu_pushed_at", null)
-    .neq("outcome", "enrolled")
     .in("id", clean);
   if (selErr) return { error: `대상 확인 실패: ${selErr.message}` };
-  const validIds = (valid ?? []).map((r) => r.id as string);
+  const validIds = (valid ?? [])
+    .filter((r) => {
+      const s = Array.isArray(r.student) ? r.student[0] : r.student;
+      return isPushableConsultation({
+        outcome: r.outcome as string,
+        studentMakeeduId: (s as { makeedu_id?: string | null } | null | undefined)?.makeedu_id ?? null,
+      });
+    })
+    .map((r) => r.id as string);
   if (validIds.length === 0)
     return { error: "전송 가능한 상담이 없습니다(이미 전송됐거나, 등록완료됐거나, QR 접수가 아님)" };
 

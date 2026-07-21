@@ -28,6 +28,14 @@ const HEADED = !!process.env.HEADED;
 const IDS = (process.argv.find((a) => a.startsWith("--ids=")) || "").split("=")[1];
 const REGIST_URL = "/counsel/counselList_regist.do?callpage=res";
 
+// 상담 + **연결 학생의 makeedu_id**(= makeedu 원생목록 등록 여부). enrolled 가드가 이 값을 본다 —
+// 등록완료라도 학생이 makeedu에 없으면 예비상담으로 보내야 한다(2026-07-21 권도현 케이스).
+const fetchConsultations = (sql, ids) => sql`
+  select ec.*, s.makeedu_id as student_makeedu_id
+    from enrollment_consultations ec
+    left join students s on s.id = ec.student_id
+   where ec.id in ${sql(ids)}`;
+
 // eywa 학년 라벨 → makeedu preGrade 코드(정찰 확정). 없으면 99(일반).
 const GRADE_MAP = {
   유치원: "01", 초1: "11", 초2: "12", 초3: "13", 초4: "14", 초5: "15", 초6: "16",
@@ -195,7 +203,7 @@ async function captureCounselSeq(page, c) {
     let targets; // [{ requestId|null, consultation }]
     if (IDS) {
       const ids = IDS.split(",").map((s) => s.trim()).filter(Boolean);
-      const rows = await sql`select * from enrollment_consultations where id in ${sql(ids)}`;
+      const rows = await fetchConsultations(sql, ids);
       targets = rows.map((c) => ({ requestId: null, consultation: c }));
     } else {
       const reqs = await sql`
@@ -203,7 +211,7 @@ async function captureCounselSeq(page, c) {
         where status = 'pending' returning id, consultation_id`;
       if (reqs.length === 0) { console.log("pending 푸시 요청 없음."); return; }
       const cids = reqs.map((r) => r.consultation_id);
-      const rows = await sql`select * from enrollment_consultations where id in ${sql(cids)}`;
+      const rows = await fetchConsultations(sql, cids);
       const byId = new Map(rows.map((c) => [c.id, c]));
       targets = reqs.map((r) => ({ requestId: r.id, consultation: byId.get(r.consultation_id) }));
     }
@@ -223,12 +231,18 @@ async function captureCounselSeq(page, c) {
         continue;
       }
       // 등록완료 가드(실행 시점 재검사): 큐잉~실행 사이(PC 꺼짐 등)에 학원 등록이 됐으면 스킵 — 예비원생
-      // 단계를 지난 학생을 신규 문의로 넣는 군더더기 방지(액션 쪽 가드와 이중). 원생목록 등록은 v2(별도 폼).
-      if (c.outcome === "enrolled") {
-        console.log(`⏭  ${label} — 등록완료(enrolled) 스킵`);
-        if (requestId) await finish(sql, requestId, "skipped", null, "학원 등록 완료된 상담(예비원생 푸시 대상 아님)");
+      // 단계를 지난 학생을 신규 문의로 넣는 군더더기 방지(액션 쪽 가드와 이중).
+      // ⚠️ 단, **학생이 makeedu 원생일 때만** 스킵한다(2026-07-21 권도현 케이스). makeedu 어디에도 없는
+      // 등록 학생은 예비상담으로라도 들어가야 사무실이 원생 전환→청구로 이을 수 있다.
+      // 앱 쪽 단일 규칙 = src/features/integrations/push-eligibility.ts (여기와 같은 판정을 유지할 것).
+      if (c.outcome === "enrolled" && c.student_makeedu_id) {
+        console.log(`⏭  ${label} — 등록완료 + makeedu 원생(${c.student_makeedu_id}) 스킵`);
+        if (requestId) await finish(sql, requestId, "skipped", null, "학원 등록 완료 + makeedu 원생으로 이미 존재");
         results.push({ label, skip: "enrolled" });
         continue;
+      }
+      if (c.outcome === "enrolled") {
+        console.log(`⚠  ${label} — 등록완료지만 makeedu에 학생 기록 없음 → 예비상담으로 전송(원생 전환은 사무실이 수동)`);
       }
       try {
         const filled = await fillForm(page, c);
