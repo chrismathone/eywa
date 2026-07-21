@@ -194,7 +194,10 @@ export function EnrollmentAssignDialog({
                 value={selectedClassId}
                 onValueChange={setSelectedClassId}
                 placeholder="반 선택..."
-                searchPlaceholder="반 이름·강사 검색..."
+                searchPlaceholder="반 이름·과목·강사 검색..."
+                // ⚠️ 기본 cap 50이면 이름순 앞을 로마자 영어반이 독점해 목록을 훑을 때 수학반이
+                // 8개만 보였다(gotcha #84). 학생을 수학반에 배정하는 게 이 다이얼로그의 주 용도다.
+                cap={300}
                 options={classes.map((c) => ({
                   value: c.id,
                   label: c.className,

@@ -111,7 +111,15 @@ export default async function AttendancePage({
   const classesForFilters = classesForSubject.filter(
     (c) => !effectiveTeacher || c.teacherId === effectiveTeacher,
   );
-  const classOptions = classesForFilters.map((c) => ({ value: c.id, label: c.className }));
+  // ⚠️ hint를 반드시 넣는다(gotcha #84 후속): 옛 옵션은 `{value, label}`뿐이라 드롭다운 검색이 반 이름만
+  // 매칭했는데, 수학반 이름엔 '수학'이 없어("고등M 고1 BS4A") **"수학"으로 검색해도 0건**이었다.
+  // 이 드롭다운은 '바로 열기' 패널이 안내하는 탈출구라 여기서 막히면 갈 곳이 없다. hint는 검색 대상이자
+  // 부가표시(SearchableSelect가 label·hint 양쪽을 매칭).
+  const classOptions = classesForFilters.map((c) => ({
+    value: c.id,
+    label: c.className,
+    hint: [subjectMaps.labelOf(c.subject), c.teacherName].filter(Boolean).join(" · "),
+  }));
   const effectiveClassId =
     classParam && classesForFilters.some((c) => c.id === classParam) ? classParam : null;
 
@@ -179,12 +187,15 @@ export default async function AttendancePage({
         {/* 반 dropdown — '전체 반'은 반 미선택(안내문구) */}
         <div className="flex items-center gap-1.5">
           <span className="micro mr-1">반</span>
+          {/* cap 상향 — 기본 50이면 이름순 앞을 로마자 영어반이 독점해 목록을 훑을 때 수학반이 7개만
+              보였다(gotcha #84). 반 목록은 수백 규모라 전량 렌더가 안전하고, 초과분은 hint 검색으로 도달. */}
           <FilterSelect
             paramName="class"
             value={effectiveClassId}
             options={classOptions}
             ariaLabel="반 필터"
             allLabel="전체 반"
+            cap={300}
           />
         </div>
 

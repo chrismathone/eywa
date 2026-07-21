@@ -13,6 +13,30 @@ export async function subjectLabeler(): Promise<(key: string | null | undefined)
   return (key) => (key ? maps.labelOf(key) : null);
 }
 
+/**
+ * 모델이 준 과목 표현 → 내부 key. 모델은 한글 라벨("수학")로 말하지 내부 키("math")를 모르므로
+ * **라벨·키 양쪽을 받아** 해석한다(못 찾으면 null → 호출부가 필터를 걸지 않는다).
+ * 하드코딩 금지 규칙대로 후보는 학원설정(buildSubjectMaps.options)에서만 나온다.
+ */
+export async function subjectResolver(): Promise<(input: string | null | undefined) => string | null> {
+  const settings = await getTenantSettings();
+  const maps = buildSubjectMaps(settings.operations.subjects);
+  const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, "");
+  const byLabel = new Map(maps.options.map((o) => [norm(o.label), o.value]));
+  const byKey = new Map(maps.options.map((o) => [norm(o.value), o.value]));
+  return (input) => {
+    if (!input) return null;
+    const n = norm(input);
+    return byLabel.get(n) ?? byKey.get(n) ?? null;
+  };
+}
+
+/** 학원설정에 등록된 과목 라벨 목록 — 툴 설명·안내 문구에 "고를 수 있는 값"을 노출할 때. */
+export async function subjectLabelList(): Promise<string[]> {
+  const settings = await getTenantSettings();
+  return buildSubjectMaps(settings.operations.subjects).options.map((o) => o.label);
+}
+
 // 재원생 상담 카테고리(코드 고정 도메인 enum — 운영 enum 아님). consultation-meta.ts와 동일 어휘.
 export const CONSULTATION_CATEGORY_LABEL: Record<string, string> = {
   general: "일반",

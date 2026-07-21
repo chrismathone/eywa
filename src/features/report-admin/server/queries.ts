@@ -364,22 +364,32 @@ export async function getWeeklyWritingRates(): Promise<WritingRatesView | null> 
 
 export type ReportFilterOptions = { teachers: string[]; subjects: string[] };
 
-/** 보고서 목록 필터 옵션(원장 보고서 관리 Part C) — 최근 보고서에서 강사·과목 distinct. */
+/**
+ * 보고서 목록 필터 옵션(원장 보고서 관리 Part C) — 최근 보고서에서 강사·과목 distinct.
+ *
+ * ⚠️ 전건 select 금지(B2). 옛 구현은 `.select("teacher_name, subject").limit(5000)`으로 전건을 받아
+ * JS Set으로 distinct를 만들었는데, PostgREST max-rows(≈1000)가 명시 limit을 덮어 **에러 없이** 잘렸다:
+ * 최근 60일 4,010행 중 1,000행만 도달 → distinct 강사 14명 중 3명이 옵션에서 통째로 누락됐고,
+ * 소비처가 자유입력 없는 <select>라 그 강사의 보고서는 어떤 경로로도 필터할 수 없었다(2026-07-21).
+ * distinct = 집계이므로 group-by RPC(0126a)로 내린다 — 4,010행 스캔 → 17행 반환.
+ */
 export async function getReportFilterOptions(): Promise<ReportFilterOptions> {
   const user = await getCurrentUser();
   if (!user) return { teachers: [], subjects: [] };
   const supabase = await createClient();
   const since = daysBefore(kstToday(), 60);
-  const { data } = await supabase
-    .from("lesson_reports")
-    .select("teacher_name, subject")
-    .gte("report_date", since)
-    .limit(5000);
+  const { data, error } = await supabase.rpc("lesson_report_filter_options", { p_since: since });
+  if (error) {
+    // 옵션이 비면 필터를 못 쓸 뿐 목록 자체는 보이므로 화면을 죽이지 않는다. 단 조용히 넘기면
+    // "필터에 강사가 안 뜬다"가 또 원인 불명이 되므로 로그는 남긴다.
+    console.error("[report-admin] 필터 옵션 조회 실패", error);
+    return { teachers: [], subjects: [] };
+  }
   const teachers = new Set<string>();
   const subjects = new Set<string>();
-  for (const r of data ?? []) {
-    if (r.teacher_name) teachers.add(r.teacher_name as string);
-    if (r.subject) subjects.add(r.subject as string);
+  for (const r of (data ?? []) as { teacher_name: string | null; subject: string | null }[]) {
+    if (r.teacher_name) teachers.add(r.teacher_name);
+    if (r.subject) subjects.add(r.subject);
   }
   return { teachers: [...teachers].sort(), subjects: [...subjects].sort() };
 }
