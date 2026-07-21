@@ -232,24 +232,28 @@ export function StudentInfoCard({
           {status === "withdrawn" && endDate ? <Row label="퇴원일" value={endDate} mono /> : null}
         </div>
       ) : null}
-      {textbook ? (
-        <p className="border-line border-t pt-1.5">
-          <span className="text-text-dim">교재 </span>
-          <span className="text-foreground">{textbook.name}</span>
-        </p>
-      ) : null}
-      {report?.progress ? (
+      {/* 교재·진도는 **같은 수업보고서 1건**에서 온다(queries.ts) — 그래서 한 블록에 묶어 날짜·강사
+          헤더를 공유한다. 따로 두면 출처가 갈라진 것처럼 보이고, 실제로 예전엔 갈라져 있었다. */}
+      {report && (report.progress || textbook) ? (
         <div className="border-line space-y-0.5 border-t pt-1.5">
           <div className="text-text-dim flex flex-wrap items-center gap-1.5">
             <span className="text-primary font-bold">진도</span>
             <span className="num">{report.date}</span>
             {report.teacherName ? <span>· {report.teacherName}</span> : null}
           </div>
+          {textbook ? (
+            <p>
+              <span className="text-text-dim">교재 </span>
+              <span className="text-foreground">{textbook.name}</span>
+            </p>
+          ) : null}
           {/* 진도 스마트 줄바꿈 — "1.극한 2.연속" 인라인 번호 run-on을 항목별 줄로(오탐 시 원문 1줄).
               whitespace-pre-line이라 원문 \n도 살고, line-clamp가 물리 줄 기준으로 과대 성장 방지. */}
-          <p className="text-foreground line-clamp-5 whitespace-pre-line">
-            {splitNumberedItems(report.progress).join("\n")}
-          </p>
+          {report.progress ? (
+            <p className="text-foreground line-clamp-5 whitespace-pre-line">
+              {splitNumberedItems(report.progress).join("\n")}
+            </p>
+          ) : null}
           {report.examInfo || report.homeworkScore ? (
             <div className="text-text-dim flex flex-wrap gap-x-2.5 num text-[10px]">
               {report.examInfo ? <span>시험 {report.examInfo}</span> : null}
