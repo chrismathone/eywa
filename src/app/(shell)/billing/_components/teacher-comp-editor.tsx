@@ -5,6 +5,7 @@ import { useFormStatus } from "react-dom";
 import { Check, Loader2, Pencil } from "@/components/icons/eywa-icon-compat";
 import { saveTeacherComp, type SaveCompState } from "@/features/payroll/server/comp-actions";
 import type { SalaryType } from "@/features/payroll/settlement";
+import { SALARY_GROUPS, type GroupRates } from "@/features/payroll/salary-group";
 
 const TYPE_LABEL: Record<SalaryType, string> = {
   commission: "비율제",
@@ -35,11 +36,14 @@ export function TeacherCompEditor({
   salaryType,
   commissionRate,
   monthlyBase,
+  groupRates,
 }: {
   userId: string;
   salaryType: SalaryType | null;
   commissionRate: number | null;
   monthlyBase: number;
+  /** 과정별 배분율(초·중·고·수능·특강). 비면 기본 비율만 쓴다. */
+  groupRates?: GroupRates | null;
 }) {
   const [state, formAction] = useActionState<SaveCompState, FormData>(saveTeacherComp, undefined);
   const [open, setOpen] = useState(false);
@@ -59,6 +63,8 @@ export function TeacherCompEditor({
         : salaryType === "hybrid"
           ? `혼합 ${monthlyBase.toLocaleString("ko-KR")}원+${commissionRate ?? "?"}%`
           : `비율제 ${commissionRate ?? "?"}%`;
+  // 과정별이 하나라도 있으면 요약에 알린다 — 기본 비율만 보고 "45%네" 하고 오해하지 않게.
+  const groupCount = groupRates ? Object.keys(groupRates).length : 0;
 
   if (!open) {
     return (
@@ -70,6 +76,7 @@ export function TeacherCompEditor({
       >
         <Pencil className="size-3" />
         {summary}
+        {groupCount > 0 ? <span className="text-text-faint">· 과정별 {groupCount}</span> : null}
       </button>
     );
   }
@@ -104,6 +111,25 @@ export function TeacherCompEditor({
       ) : (
         <input type="hidden" name="commissionRate" value={commissionRate ?? ""} />
       )}
+      {type === "commission" || type === "hybrid" ? (
+        <div className="border-line flex w-full flex-wrap items-center gap-1.5 rounded-md border border-dashed px-2 py-1.5">
+          <span className="text-text-faint text-[11px]">과정별</span>
+          {SALARY_GROUPS.map((g) => (
+            <label key={g} className="text-text-dim inline-flex items-center gap-0.5 text-[11px]">
+              {g}
+              <input
+                name={`rate_${g}`}
+                defaultValue={groupRates?.[g] ?? ""}
+                inputMode="decimal"
+                placeholder="—"
+                className="border-line bg-card text-foreground w-11 rounded-md border px-1 py-0.5 text-[11px]"
+              />
+              %
+            </label>
+          ))}
+          <span className="text-text-faint text-[10px]">비우면 위 기본 배분율 적용</span>
+        </div>
+      ) : null}
       {type === "fixed" || type === "hybrid" ? (
         <label className="text-text-dim inline-flex items-center gap-0.5 text-xs">
           <input

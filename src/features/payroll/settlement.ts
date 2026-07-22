@@ -1,7 +1,11 @@
 // 강사 정산(급여) 산출 — 순수 함수(Vitest + 골든마스터 N6). 급여 연계 v1. docs/payroll-linkage-plan.md.
 //
-// splits(invoice_teacher_splits, 0117a)의 확정치를 강사별 급여로 환산한다. 원장 결정(2026-07-17):
-// - 지급 기준 = confirmed_amount(청구 기준). actual_amount/diff는 **검토 신호로만**(자동 조정 없음, N2).
+// splits(invoice_teacher_splits, 0117a)의 확정치를 강사별 급여로 환산한다.
+// - **지급 기준액 = min(실측 actual_amount, 청구 confirmed_amount)** — 원장 확정 2026-07-21(구 급여 시트와 동일):
+//   *"실제 수업한 기준으로 급여가 발생해야 한다. 수업을 안 했는데 급여가 나가면 안 된다. 아무리 많이 수업해도
+//    청구액을 넘어서는 분은 지급하지 않는다(시수 차이가 +로 남는다)."*
+//   ⚠️ 2026-07-17의 "지급 기준 = confirmed, actual은 신호로만"을 **원장이 명시적으로 뒤집은 것**이다. 되돌리지 말 것.
+//   ⚠️ min은 **선택**이지 합산이 아니다 — confirmed와 actual을 더하는 것은 여전히 금지(P2/R3 +60.5M 사고).
 // - 급여 모델 = 강사별 개별(비율제/급여제/혼합). users.salary_type + commission_rate(0119a).
 // - 귀속 = teacher_id(동명이인 병합 금지, P3). 미배정·미설정은 지어내지 않고 가시화(P4/N4).
 // - confirmed와 actual은 절대 합산 금지(P2/R3, +60.5M 이중계상 사고).
@@ -26,8 +30,11 @@ export type SettlementRowInput = {
   teacherId: string | null; // null = 미배정
   teacherName: string | null;
   classId: string | null;
-  confirmedAmount: number; // 청구 기준(splits.confirmed_amount)
-  actualAmount: number; // 실측 기준(splits.actual_amount) — 신호로만
+  confirmedAmount: number; // 청구 기준(splits.confirmed_amount) — 지급 상한(캡)
+  /** 실측 기준(splits.actual_amount) = 실제 수업한 차수 × 단가. 지급 기준액의 후보. */
+  actualAmount: number;
+  /** 실측이 아직 없으면 true — 캡만 적용하고 실측으로 깎지 않는다(0을 지어내지 않기 위해). */
+  actualMissing?: boolean;
   /** 반 이름 — 과정 자동 판정(초등M…)에 쓴다. 없으면 미분류. */
   className?: string | null;
   /** 반별 수동 과정 지정(class_salary_settings). 이름 자동 판정을 이긴다. */
@@ -56,9 +63,11 @@ export type TeacherSettlement = {
   /** 과정별 배분율 — 편집기가 현재 값을 다시 그리기 위해 그대로 실어 보낸다. */
   groupRates: GroupRates | null;
   monthlyBase: number;
-  /** 수수료 차감 후 배분 기준액 = round(confirmedTotal × NET_MULTIPLIER). 화면이 산식을 보여주기 위한 중간값. */
+  /** 지급 기준액 합 = Σ min(실측, 청구). 청구·실측과 별개로 "실제로 비율이 곱해지는 금액". */
+  payableTotal: number;
+  /** 수수료 차감 후 배분 기준액 = round(payableTotal × NET_MULTIPLIER). 화면이 산식을 보여주기 위한 중간값. */
   netBase: number;
-  commissionAmount: number; // 배분액 = round(Σ 반별 청구 × 0.911 × 반별 rate/100). 해당 없으면 0
+  commissionAmount: number; // 배분액 = round(Σ 반별 지급기준 × 0.911 × 반별 rate/100). 해당 없으면 0
   settlement: number | null; // 산정 급여. null = 산정 불가(unset/unassigned/missing_rate)
   status: SettlementStatus;
   /** 비율을 정하지 못한 반 이름들 — "어느 반 때문에 보류인지"를 화면이 말할 수 있게(0 지어내기 금지). */
@@ -75,9 +84,19 @@ const UNASSIGNED = "미배정";
 export const PLATFORM_FEE_RATE = 0.089;
 export const NET_MULTIPLIER = 1 - PLATFORM_FEE_RATE; // 0.911
 
-/** 청구액에서 수수료를 뗀 배분 기준액(정수 반올림). */
-export function netBaseOf(confirmedTotal: number): number {
-  return Math.round(confirmedTotal * NET_MULTIPLIER);
+/** 지급 기준액에서 수수료를 뗀 배분 기준액(정수 반올림). */
+export function netBaseOf(payableTotal: number): number {
+  return Math.round(payableTotal * NET_MULTIPLIER);
+}
+
+/**
+ * 한 행의 **지급 기준액** = min(실제 수업분, 청구액).
+ * · 덜 수업했으면 수업한 만큼(실측) · 더 수업했어도 청구액이 상한(초과분은 시수 차이 +로 남고 지급 안 함).
+ * ⚠️ 실측이 아직 없는 행(시수 검증 전)은 실측 0으로 보고 급여를 0으로 만들면 안 된다 — 캡(청구액)만 적용한다.
+ */
+export function payableOf(row: Pick<SettlementRowInput, "confirmedAmount" | "actualAmount" | "actualMissing">): number {
+  if (row.actualMissing) return row.confirmedAmount;
+  return Math.min(row.actualAmount, row.confirmedAmount);
 }
 
 /**
@@ -100,7 +119,7 @@ function commissionOfRows(rows: SettlementRowInput[], comp: TeacherComp, sink: s
       if (!sink.includes(label)) sink.push(label);
       continue;
     }
-    raw += (r.confirmedAmount * NET_MULTIPLIER * rate) / 100;
+    raw += (payableOf(r) * NET_MULTIPLIER * rate) / 100;
   }
   return sink.length > 0 ? null : Math.round(raw);
 }
@@ -122,6 +141,7 @@ export function computeTeacherSettlements(
       rowCount: number;
       confirmedTotal: number;
       actualTotal: number;
+      payableTotal: number;
       rows: SettlementRowInput[]; // 반별 비율을 곱하려면 행을 남겨둬야 한다(합계에 단일 rate를 곱하면 안 됨)
     }
   >();
@@ -130,7 +150,7 @@ export function computeTeacherSettlements(
     const key = r.teacherId ?? UNASSIGNED;
     let g = groups.get(key);
     if (!g) {
-      g = { teacherId: r.teacherId, teacherName: r.teacherName, classIds: new Set(), rowCount: 0, confirmedTotal: 0, actualTotal: 0, rows: [] };
+      g = { teacherId: r.teacherId, teacherName: r.teacherName, classIds: new Set(), rowCount: 0, confirmedTotal: 0, actualTotal: 0, payableTotal: 0, rows: [] };
       groups.set(key, g);
     }
     g.rowCount++;
@@ -138,6 +158,7 @@ export function computeTeacherSettlements(
     if (r.classId) g.classIds.add(r.classId);
     g.confirmedTotal += r.confirmedAmount;
     g.actualTotal += r.actualAmount;
+    g.payableTotal += payableOf(r);
     // 표시 이름은 첫 non-null 유지(스냅샷 이름)
     if (!g.teacherName && r.teacherName) g.teacherName = r.teacherName;
   }
@@ -190,7 +211,8 @@ export function computeTeacherSettlements(
       confirmedTotal: g.confirmedTotal,
       actualTotal: g.actualTotal,
       diffTotal: g.actualTotal - g.confirmedTotal,
-      netBase: netBaseOf(g.confirmedTotal),
+      payableTotal: g.payableTotal,
+      netBase: netBaseOf(g.payableTotal),
       salaryType: comp.salaryType,
       commissionRate: comp.commissionRate,
       groupRates: comp.groupRates ?? null,

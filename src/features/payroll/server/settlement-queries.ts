@@ -73,6 +73,8 @@ export async function getTeacherSettlementView(period: string): Promise<Settleme
       classId: s.class_id,
       confirmedAmount: Number(s.confirmed_amount) || 0,
       actualAmount: Number(s.actual_amount) || 0,
+      // 실측이 아직 기록되지 않은 행(시수 검증 전)은 0으로 깎지 않고 청구액을 쓴다 — 0을 지어내지 않는다.
+      actualMissing: s.actual_amount === null || s.actual_amount === undefined,
       className: classNameById.get(s.class_id) ?? null,
       manualGroup: setting?.salary_group ?? null,
       classRate:
