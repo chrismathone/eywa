@@ -2,6 +2,7 @@
 
 import { Button } from "@/components/ui/button";
 import { EyIcon } from "@/components/icons/eywa-icons";
+import { TEXTAREA_AUTOSIZE_RESIZABLE } from "@/lib/ui/textarea";
 import { joinComment, splitComment } from "../comment-paragraphs";
 import { resolveStudyGrade } from "../curriculum";
 import { subjectTone, toneSoftClass, toneSolidClass } from "../data";
@@ -22,8 +23,9 @@ const TD_BASE = "px-2 py-1.5 align-top";
 //    어느 쪽이 이기는지 생성 CSS 순서에 달린다. 아예 다른 상수로 갈라 충돌 자체를 없앤다.
 const TD = `border-line border-t ${TD_BASE}`;
 const TD_GROUP = `border-t-2 border-t-text-faint/50 ${TD_BASE}`;
-// 문구·특이사항 textarea — 내용에 따라 자동 확장(field-sizing, 미지원 브라우저는 min-h 고정 + resize-y 수동).
-const AUTOSIZE = "field-sizing-content max-h-[200px] resize-y"; // Tailwind v4 내장 유틸리티
+// 문구·특이사항 textarea — 내용에 따라 자동 확장(공용 상수, 미지원 브라우저는 각 칸의 min-h가 폴백).
+// 표 모드는 좁은 칸이 여러 개라 손잡이를 남기는 변형을 쓴다(폼 입력칸은 손잡이 없는 TEXTAREA_AUTOSIZE).
+const AUTOSIZE = TEXTAREA_AUTOSIZE_RESIZABLE;
 
 /** 필드 편집 핸들러(카드뷰와 같은 state·저장로직 공유 — studentId 파라미터 버전). */
 export type GridFieldHandlers = {

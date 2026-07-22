@@ -1,4 +1,5 @@
 import { isClassnoteSubjectEnabled } from "@/features/onescreen/classnote-guard";
+import type { NoticeAttachment } from "@/features/onescreen/notice-attachments";
 
 /**
  * 반 공지 타깃 해석(순수) — eywa 반에서 고른 학생들을 ClassNote **학생별 개별 보드**로 매핑.
@@ -23,7 +24,14 @@ export type NoticeCandidate = {
 
 // body?: 학생별 개별 내용(공통과 다르게 쓴 학생만). 워커는 target.body ?? notice.body(공통)를 게시.
 // ⚠️ body는 resolveNoticeTargets **이후** studentId lookup으로 붙일 것(target↔student 고정 — 오발송 방지).
-export type NoticeTarget = { studentId: string; studentName: string; board: string; body?: string };
+// attachments = 그 학생에게만 붙는 이미지/파일(0130a, 예: 학생별 교재요청서 PNG). 공통 첨부는 큐 행(classnote_notices.attachments).
+export type NoticeTarget = {
+  studentId: string;
+  studentName: string;
+  board: string;
+  body?: string;
+  attachments?: NoticeAttachment[];
+};
 export type NoticeSkip = { name: string; reason: "subject_off" | "name_collision" | "no_name" };
 
 /**

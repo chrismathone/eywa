@@ -4,10 +4,7 @@
 // 과목 1개=자동 확정 표시, 2개+=선택, 0개=발송 불가(비활성). 학생 연결이 없는 요청도 사유와 함께 드러낸다.
 
 import { SearchableSelect } from "@/components/ui/searchable-select";
-import type {
-  TextbookNoticeOrder,
-  TextbookNoticeSkip,
-} from "@/features/billing/server/textbook-notice-actions";
+import type { TextbookNoticeOrder, TextbookNoticeSkip } from "@/features/billing/textbook-notice-types";
 
 /** 제외 사유 한글 라벨 — raw 영문 코드는 화면에 절대 노출하지 않는다. */
 const SKIP_LABEL: Record<TextbookNoticeSkip["reason"], string> = {
