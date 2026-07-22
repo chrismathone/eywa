@@ -314,10 +314,17 @@ export async function getWeeklyWritingRates(month?: string): Promise<WritingRate
    *   · 선발송  = 7/19분을 7/3에 미리 함 → 7/19 대상에서 제외
    *   · 연속수업 = 7/19분을 7/3에 2타임으로 함(보고서 1건) → 7/19 대상에서 제외(7/3은 보고서가 있어 그대로 충족)
    */
+  // ⚠️ 키에 **강사**를 넣는다 — 학생·날짜만으로 잡으면 수학 보고서의 지정이 같은 날 **영어 강사 분모에서도**
+  //    그 학생을 빼버려(이 학원은 다중강사 학생이 흔하다) 남의 미작성을 조용히 가린다(적대 검증 확정).
+  //    라벨이 안 맞으면 면제가 '적용 안 되는' 쪽으로 실패한다 — 강사는 빨갛게 남아 눈에 띄므로
+  //    "부당하게 빠지는" 방향보다 안전하다(fail-safe).
+  const dischargeKey = (studentId: string, date: string, teacher: string) => `${studentId}|${date}|${teacher}`;
   const discharged = new Set(
     (reps ?? [])
       .filter((r) => r.covers_date)
-      .map((r) => `${r.student_id}|${r.covers_date as string}`),
+      .map((r) =>
+        dischargeKey(r.student_id, r.covers_date as string, (r.teacher_name as string | null) ?? "(미지정)"),
+      ),
   );
 
   // 2) 오늘 시작된 반 → 강사별 classIds (예외 강사 반 제외).
@@ -390,7 +397,9 @@ export async function getWeeklyWritingRates(month?: string): Promise<WritingRate
     // 5) 강사별 대상(결석 제외)/작성/미작성.
     todayTargets = [...studentsByTeacher].map(([teacher, ids]) => {
       // 결석 제외 + **의무 면제(covers_date로 이미 처리된 수업)** 제외 — 오지 않는 학생을 미작성으로 몰지 않는다.
-      const target = [...ids].filter((id) => !absent.has(id) && !discharged.has(`${id}|${today}`));
+      const target = [...ids].filter(
+        (id) => !absent.has(id) && !discharged.has(dischargeKey(id, today, teacher)),
+      );
       const written = target.filter((id) => reported.has(id)).length;
       const missing = target.filter((id) => !reported.has(id)).map((id) => nameById.get(id) ?? "(학생)").slice(0, 20);
       return { teacher, target: target.length, written, missing };
@@ -464,7 +473,9 @@ export async function getWeeklyWritingRates(month?: string): Promise<WritingRate
         }
         for (const [teacher, ids] of studentsByTeacher) {
           // 오늘과 같은 규칙: 결석 + 의무 면제(covers_date) 제외.
-          const target = [...ids].filter((id) => !absent.has(id) && !discharged.has(`${id}|${d}`)).length;
+          const target = [...ids].filter(
+            (id) => !absent.has(id) && !discharged.has(dischargeKey(id, d, teacher)),
+          ).length;
           dailyTargets.push({ teacher, date: d, target });
         }
       }

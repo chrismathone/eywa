@@ -317,7 +317,7 @@ export function ReportList({
                     {r.coversDate ? (
                       <span
                         className="bg-bg-soft text-text-dim ml-1.5 rounded-full px-1.5 py-0.5 text-[10px] font-bold"
-                        title={`실제 수업일 ${r.coversDate} · 그날 작성률 대상에서 제외됩니다(내부 표시)`}
+                        title={coversTitle(r)}
                       >
                         수업 {r.coversDate.slice(5)}
                       </span>
@@ -372,6 +372,17 @@ export function ReportList({
   );
 }
 
+/** 지정 사유 프리셋 — 원장이 정의한 두 경우(0139a 감사 기록). */
+const COVERS_REASONS = ["선발송(미리 수업)", "연속수업(몰아서)"] as const;
+
+/** 배지 툴팁 — 면제 근거를 화면에서 바로 읽히게(누가·언제·왜). */
+function coversTitle(r: ReportListRow): string {
+  const who = r.coversBy ? ` · ${r.coversBy}` : "";
+  const when = r.coversAt ? ` ${hhmmKst(r.coversAt)}` : "";
+  const why = r.coversNote ? ` · ${r.coversNote}` : "";
+  return `실제 수업일 ${r.coversDate} · 그날 작성률 대상에서 제외${why}${who}${when} 지정(내부 표시)`;
+}
+
 /**
  * 실제 수업일(covers_date) 지정 — 미리 하거나 앞 수업에 몰아서 한 수업분(0136a).
  *
@@ -391,12 +402,13 @@ function CoversDateControl({
 }) {
   const [open, setOpen] = useState(false);
   const [value, setValue] = useState(row.coversDate ?? "");
+  const [note, setNote] = useState(row.coversNote ?? COVERS_REASONS[0]);
   const [saving, setSaving] = useState(false);
   if (!canEdit) return null;
 
   async function save(next: string | null) {
     setSaving(true);
-    const res = await setReportCoversDate(row.id, next);
+    const res = await setReportCoversDate(row.id, next, next ? note : null);
     setSaving(false);
     if (!res.ok) {
       toast.error(res.error ?? "저장하지 못했습니다");
@@ -414,6 +426,7 @@ function CoversDateControl({
         variant="ghost"
         onClick={() => {
           setValue(row.coversDate ?? "");
+          setNote(row.coversNote ?? COVERS_REASONS[0]!);
           setOpen(true);
         }}
         title="미리 했거나 앞 수업에 몰아서 한 수업이면 실제 수업일을 지정하세요(내부 표시)"
@@ -431,6 +444,19 @@ function CoversDateControl({
         className="border-line rounded-lg border px-1.5 py-1 text-[11px]"
         aria-label="실제 수업일"
       />
+      {/* 사유 — 나중에 "왜 이 날이 빠졌나"를 알 수 있어야 감사가 의미 있다(원장이 정의한 두 경우). */}
+      <select
+        value={note}
+        onChange={(e) => setNote(e.target.value)}
+        className="border-line rounded-lg border px-1.5 py-1 text-[11px]"
+        aria-label="지정 사유"
+      >
+        {COVERS_REASONS.map((o) => (
+          <option key={o} value={o}>
+            {o}
+          </option>
+        ))}
+      </select>
       <Button size="sm" variant="outline" disabled={saving || !value} onClick={() => save(value)}>
         저장
       </Button>

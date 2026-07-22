@@ -279,22 +279,26 @@ export async function setSessionTermCarryover(
 
   const id = String(formData.get("id") ?? "").trim();
   if (!id) return { error: "대상이 없습니다" };
-  const rawOut = String(formData.get("carryoverOut") ?? "0").trim();
-  const rawIn = String(formData.get("carryoverIn") ?? "0").trim();
+  // ⚠️ **부분 수정 보존**: 키가 아예 안 오면 기존 값을 유지한다. `?? "0"`으로 두면 out만 보낸 호출이
+  //    이미 승인된 carryover_in을 0으로 덮어 **크레딧이 조용히 사라진다**(돈 필드, 적대 검증 확정).
+  const rawOut = formData.get("carryoverOut");
+  const rawIn = formData.get("carryoverIn");
   const note = String(formData.get("note") ?? "").trim();
-  const out = Number(rawOut);
-  const inn = Number(rawIn);
 
   const supabase = await createClient();
 
   // 대상 행 + 그 청구서(학생·청구월)
   const { data: term, error: termErr } = await supabase
     .from("invoice_session_terms")
-    .select("id, invoice_id, class_id, confirmed_sessions, invoice:invoice_id ( student_id, period )")
+    .select(
+      "id, invoice_id, class_id, confirmed_sessions, carryover_out, carryover_in, invoice:invoice_id ( student_id, period )",
+    )
     .eq("id", id)
     .maybeSingle();
   if (termErr) return { error: termErr.message };
   if (!term) return { error: "대상을 찾을 수 없습니다" };
+  const out = rawOut === null ? (Number(term.carryover_out) || 0) : Number(String(rawOut).trim());
+  const inn = rawIn === null ? (Number(term.carryover_in) || 0) : Number(String(rawIn).trim());
   const inv = (Array.isArray(term.invoice) ? term.invoice[0] : term.invoice) as
     | { student_id?: string; period?: string }
     | undefined;

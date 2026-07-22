@@ -81,3 +81,56 @@ describe("deriveMarksFromReports", () => {
     expect(deriveMarksFromReports({ ...base, reportDates: new Set(["2026-07-14"]) })).toEqual({});
   });
 });
+
+// 0134a 후속 — "한 수업, 두 수강행"(같은 강사가 같은 학생을 같은 요일 두 반에 걸어 둔 형태).
+// 강사는 한 번 가르치고 보고서를 한 건 쓴다. 짝 반에 결석을 단정하면 온 학생이 결석으로 찍힌다.
+// 실측 2026-07-22: 이 규칙이 없으면 6칸이 즉시 거짓 결석(마수호 JJPS 5 · 김은정 JJ1E 1).
+describe("deriveMarksFromReports — 같은 과목 다른 반 보고서는 판정 보류", () => {
+  const base = { attendDates: ["2026-07-21"], manualDates: new Set<string>(), today: "2026-07-22" };
+
+  it("짝 반에 그날 보고서가 있으면 결석으로 찍지 않는다(빈 칸)", () => {
+    expect(
+      deriveMarksFromReports({
+        ...base,
+        reportDates: new Set(),
+        siblingReportDates: new Set(["2026-07-21"]),
+      }),
+    ).toEqual({});
+  });
+
+  it("보류일 뿐 출석으로 올려주지도 않는다 — 그 반 수업이 있었는지는 모른다", () => {
+    const got = deriveMarksFromReports({
+      ...base,
+      reportDates: new Set(),
+      siblingReportDates: new Set(["2026-07-21"]),
+    });
+    expect(got["2026-07-21"]).toBeUndefined();
+  });
+
+  it("짝 반 보고서가 없는 날은 예전대로 결석", () => {
+    expect(
+      deriveMarksFromReports({ ...base, reportDates: new Set(), siblingReportDates: new Set() }),
+    ).toEqual({ "2026-07-21": "absent" });
+  });
+
+  it("이 반 보고서가 있으면 짝 반 여부와 무관하게 출석", () => {
+    expect(
+      deriveMarksFromReports({
+        ...base,
+        reportDates: new Set(["2026-07-21"]),
+        siblingReportDates: new Set(["2026-07-21"]),
+      }),
+    ).toEqual({ "2026-07-21": "present" });
+  });
+
+  it("수기 기록이 있으면 보류보다 먼저 — 사람이 적은 게 이긴다", () => {
+    expect(
+      deriveMarksFromReports({
+        ...base,
+        manualDates: new Set(["2026-07-21"]),
+        reportDates: new Set(),
+        siblingReportDates: new Set(["2026-07-21"]),
+      }),
+    ).toEqual({});
+  });
+});

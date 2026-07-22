@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { Pill } from "@/components/atoms/pill";
 import { subjectTone, toneSoftClass } from "../data";
-import { isAlreadySent, isRowActionable } from "../grid";
+import { effectiveClassnoteStatus, isAlreadySent, isRowActionable } from "../grid";
 import { parentUnreadBadge, progressAnomalyBadge } from "../roster-signals";
 import { splitLessons } from "../curriculum";
 import { AttendancePills, type BasicAttendance } from "./attendance-pills";
@@ -22,7 +22,8 @@ export type SubjectReport = {
   trendDraft?: string; // 학습 추세(종합분석) 초안 — 4a. 멘트(draft)와 별개, 자동작성 시 함께 채움.
   sent: boolean;
   shareToken?: string;
-  classnoteStatus?: string;
+  /** null = 이번 세션에서 명시적으로 해제됨(재발급·첨부변경). undefined = 아직 모름 — 둘은 다르다. */
+  classnoteStatus?: string | null;
   revoked?: boolean;
   viewCount?: number;
   attachments?: { path: string; name: string }[]; // 학생 사진 첨부(P2b)
@@ -31,7 +32,7 @@ export type SubjectReport = {
 const MAX_ATTACHMENTS = 6;
 
 /** classnote_status → 표시 라벨 + 색. 표 뷰(onescreen-grid)와 공용(중복 방지) → export. */
-export function classnoteBadge(status?: string): { label: string; cls: string } | null {
+export function classnoteBadge(status?: string | null): { label: string; cls: string } | null {
   switch (status) {
     case "queued":
       return { label: "ClassNote 발송 대기", cls: "text-text-dim" };
@@ -191,9 +192,12 @@ export function ReportCard({
   const shareUrl = rep.shareToken ? `${origin}/r/${rep.shareToken}` : "";
   const generating = generatingSubject === subjectName; // 이 과목 AI 멘트 생성 중
   const cnBadge = classnoteBadge(rep.classnoteStatus); // ClassNote 발송 상태 배지
-  // 재발송 차단(2026-07-22) — 상태는 화면 state(rep)가 우선, 없으면 로스터 스냅샷(subject).
-  const alreadySent = isAlreadySent(rep.classnoteStatus ?? subject.classnoteStatus);
-  const canQueue = isRowActionable(subject, "send", rep.classnoteStatus ?? subject.classnoteStatus);
+  // 재발송 차단(2026-07-22) — 화면 state가 로스터 스냅샷을 이긴다.
+  // ⚠️ `??`가 아니라 effectiveClassnoteStatus: 재발급·첨부변경이 상태를 **명시적으로 지운**(null) 뒤에도
+  //    `??`면 스냅샷의 옛 "success"가 되살아나 잠금이 안 풀린다(적대 검수 확정).
+  const liveStatus = effectiveClassnoteStatus(rep.classnoteStatus, subject.classnoteStatus);
+  const alreadySent = isAlreadySent(liveStatus);
+  const canQueue = isRowActionable(subject, "send", liveStatus);
   const atts = rep.attachments ?? []; // 학생 사진 첨부(P2b)
   const uploadingAtt = uploadingSubject === subjectName;
   // 로스터 신호(G2·G3) — 카드 헤더 배지. 진도 신호는 math 전용 데이터라 수학 과목 보유 학생만(표뷰와 동일 규약).

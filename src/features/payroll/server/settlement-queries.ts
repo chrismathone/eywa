@@ -107,8 +107,17 @@ export async function getTeacherSettlementView(period: string): Promise<Settleme
     }
 
     // 시간표 요일(class_schedules.day_of_week) — 안분 반만. "주말 반인데 주말 시수 0 = 출석 미입력"을 보류로 만든다(B3 청크).
+    // ⚠️ **그 달에 유효한 행만** 본다(valid_from/valid_to) — 이 테넌트는 스케줄 1,060행 중 493행(46%)이
+    //    이미 만료다. 필터를 빼면 "예전엔 토요일 반이었다"는 옛 행 때문에 평일 전용으로 바뀐 반이
+    //    영원히 보류로 남고, 한 반만 보류여도 `commissionOfRows`가 그 **강사 정산 전체**를 null로 만든다.
+    //    (refreshPlannedTerms가 이미 같은 필터를 쓴다 — 판정 소스를 어긋나게 두지 말 것.)
     const schedules = await fetchInChunks<{ class_id: string; day_of_week: string | null }>(dowClassIds, (chunk) =>
-      supabase.from("class_schedules").select("class_id, day_of_week").in("class_id", chunk),
+      supabase
+        .from("class_schedules")
+        .select("class_id, day_of_week")
+        .in("class_id", chunk)
+        .lte("valid_from", to)
+        .or(`valid_to.is.null,valid_to.gte.${from}`),
     );
     for (const sc of schedules) {
       if (!sc.day_of_week) continue;

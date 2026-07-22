@@ -81,9 +81,16 @@ export function matchReportsToRows<R extends ReportRowRef>(
     if (!key) return;
     out[i] = take((r) => !r.classId?.trim() && (r.subject?.trim() ?? "") === key);
   });
-  // 3차 — 과목도 없는 이관분. 명시 opt-in + 단일 과목 학생만(위 🔴 참조).
-  if (opts?.legacyFallback && rows.length === 1 && !out[0]) {
-    out[0] = take((r) => !r.classId?.trim() && !r.subject?.trim());
+  // 3차 — 과목도 반도 없는 이관분. 명시 opt-in(위 🔴) + **행들이 전부 같은 과목일 때만**.
+  // ⚠️ 조건이 `rows.length === 1`이면 안 된다: 같은 과목 두 반으로 갈린 학생(정규+특강, 중복 수강행)이
+  //    행 2개가 되는 순간 이관분 폴백이 통째로 꺼져 **이전 회차 참고·교재 승계가 0건**이 된다
+  //    (실측 2026-07-22: 김지호 90행·최주원 75·이채은A 68·전주율 68·윤정인 62·주준호 36의 이력이 전부 사라짐).
+  //    같은 과목뿐이면 "어느 과목인지" 모호하지 않으므로 **첫 행**에 준다 — roster의 학생단위 prev 폴백이
+  //    `subjects[0]`에 붙이는 것과 같은 보수 규약이다. 다과목 학생(수학+영어)은 여전히 붙이지 않는다.
+  const subjectKeys = new Set(rows.map((r) => r.subjectKey?.trim() ?? ""));
+  if (opts?.legacyFallback && subjectKeys.size === 1) {
+    const i = out.findIndex((v) => !v);
+    if (i >= 0) out[i] = take((r) => !r.classId?.trim() && !r.subject?.trim());
   }
   return out;
 }

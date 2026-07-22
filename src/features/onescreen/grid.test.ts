@@ -3,6 +3,7 @@ import {
   buildGridRows,
   buildRowRenderMeta,
   isReportEligible,
+  effectiveClassnoteStatus,
   isAlreadySent,
   isRowActionable,
   planBulkApply,
@@ -430,5 +431,27 @@ describe("planPrevComments", () => {
   it("과목별로 각각 — 다과목 학생은 과목마다 자기 직전 멘트", () => {
     const plan = planPrevComments([row("a", "수학", "수학 멘트"), row("a", "영어", "영어 멘트")]);
     expect(plan.map((p) => p.comment)).toEqual(["수학 멘트", "영어 멘트"]);
+  });
+});
+
+// 🔴 재발급·첨부변경은 상태를 **명시적으로 해제**(null)한다. `?? 스냅샷`으로 읽으면 로스터가 실어 온
+// 옛 "success"가 되살아나, 수정·재발송 잠금의 **유일한 탈출구가 새로고침 전까지 죽는다**(적대 검수 확정).
+describe("effectiveClassnoteStatus", () => {
+  it("명시적 해제(null)는 스냅샷을 이긴다 — 재발급 직후 잠금이 풀려야 한다", () => {
+    expect(effectiveClassnoteStatus(null, "success")).toBeNull();
+    expect(isRowActionable({ name: "수학", prev: "", today: "x", classnoteStatus: "success" }, "send", null)).toBe(
+      false,
+    );
+    // 화면 state가 null이면 실효 상태도 null → 잠기지 않는다.
+    expect(isAlreadySent(effectiveClassnoteStatus(null, "success"))).toBe(false);
+  });
+
+  it("아직 모름(undefined)이면 스냅샷을 쓴다", () => {
+    expect(effectiveClassnoteStatus(undefined, "success")).toBe("success");
+    expect(isAlreadySent(effectiveClassnoteStatus(undefined, "success"))).toBe(true);
+  });
+
+  it("화면 state에 값이 있으면 그것이 이긴다", () => {
+    expect(effectiveClassnoteStatus("queued", "success")).toBe("queued");
   });
 });
