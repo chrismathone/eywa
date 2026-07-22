@@ -338,7 +338,7 @@ export function TeacherGridView({
                           <div className="flex h-full min-w-0 gap-px">
                             {group.intervals.map((iv) => {
                               const s = intervalSlot(iv);
-                              // 비수업 블록(감독·준비·회의·연차, 0134a) = 반이 아니다 → 학생 명단 토글도
+                              // 비수업 블록(감독·준비·회의·연차, 0135a) = 반이 아니다 → 학생 명단 토글도
                               // 반 링크도 없는 **읽기 전용 라벨**. 시트가 이 칸을 그리므로 자리는 지키되,
                               // 수업 칩과 헷갈리지 않게 톤을 낮춘다(테두리 점선 + 흐린 글자).
                               if (s.blockKind) {
