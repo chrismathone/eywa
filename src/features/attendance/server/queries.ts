@@ -623,7 +623,7 @@ export async function getMonthlyAttendanceMatrix(
   // 학생 등원요일 ∩ 그 달 날짜, 공휴일 제외, 수강 구간 안. 어긋나면 화면과 파생이 서로 다른 말을 한다.
   const selectedClass = classes.find((c) => c.id === classId);
   const derivedActive = isDerivedAttendanceSubject(selectedClass?.subject);
-  if (derivedActive && studentIds.length > 0) {
+  if (derivedActive && selectedClass && studentIds.length > 0) {
     const [reports, settings] = await Promise.all([
       // 학생 수 × 최대 31일이라 청크당 1000행을 넘길 여지는 낮지만, 반 인원은 상한이 없다(B2).
       fetchAllPagedInChunks<{ student_id: string; report_date: string }>(
@@ -637,6 +637,13 @@ export async function getMonthlyAttendanceMatrix(
             .lte("report_date", endIso);
           // 기본은 '작성됨'. 발송 성공만 인정하려면 REQUIRE_SENT_REPORT를 켠다(근거는 그 상수 주석).
           if (REQUIRE_SENT_REPORT) q = q.eq("classnote_status", "success");
+          // 🔴 **이 반의 보고서만**(0134a). 예전엔 학생의 그 달 보고서를 반 구분 없이 다 봤다 —
+          //    같은 과목 두 반(정규 수학 + 수학 특강)이 생기면서, 특강만 쓴 날이 정규 반 출석부에도
+          //    '출석'으로 파생돼 오지도 않은 날이 채워진다. class_id NULL(이관분 99.8%·보강·관리자 작성)은
+          //    반을 알 수 없으므로 예전대로 포함한다 — 빼면 파생이 통째로 죽는다.
+          // ⚠️ `.or()`는 **원시 필터 문자열**이라 값을 그대로 이어붙인다(.eq처럼 인코딩해 주지 않는다) →
+          //    URL 검색어에서 온 classId가 아니라 **DB에서 읽어온 반 id**(selectedClass.id)를 쓴다.
+          q = q.or(`class_id.is.null,class_id.eq.${selectedClass.id}`);
           return q
             .order("report_date", { ascending: false })
             .order("id", { ascending: false }) // OFFSET 페이지 안정용 unique tie-break
