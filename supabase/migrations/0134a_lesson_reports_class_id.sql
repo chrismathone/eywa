@@ -107,5 +107,5 @@ create unique index if not exists lesson_reports_student_date_unit_key
 --    `on conflict (tenant_id,student_id,report_date,subject)`로 upsert한다. 여기서 인덱스를 지우면
 --    그 구 코드의 보고서 저장이 "no unique or exclusion constraint matching" 에러로 전부 실패한다
 --    (한창 수업 중인 시간대에 강사 화면이 통째로 멈춘다).
---    → 배포가 뜬 뒤 **0136a**로 지운다. 두 인덱스가 함께 사는 동안에도 신규 코드는 정상 동작한다
+--    → 배포가 뜬 뒤 **0137a**로 지운다. 두 인덱스가 함께 사는 동안에도 신규 코드는 정상 동작한다
 --      (구 인덱스는 같은 학생·날짜·과목 2행을 막지만, 그건 특강 보고서를 실제로 쓸 때만 부딪힌다).
