@@ -85,14 +85,31 @@ type OnescreenSessionRow = {
   progress_confirmed: boolean | null;
 };
 
-function emptyRoster(
-  today: string,
-  date: string,
-  teacherName: string,
-  noticeMode: "A" | "B" | null = null,
-  academyNoticeMode: "A" | "B" = "A",
-  flags: { noClassesToday?: boolean; showingAll?: boolean } = {},
-): TeacherRoster {
+/** 학원·강사 설정에서 온 값 — 빈 로스터도 정상 로스터와 **같은 값**을 실어야 한다(아래 emptyRoster 주석). */
+type RosterSettings = Pick<
+  TeacherRoster,
+  | "allowTeacherTestMax"
+  | "showDailyTest"
+  | "showCheckTest"
+  | "noticeMode"
+  | "academyNoticeMode"
+  | "classnoteSendEnabled"
+  | "sendWindowLabel"
+  | "showAttachments"
+  | "canEditAttendance"
+>;
+type RosterConfig = Partial<RosterSettings & Pick<TeacherRoster, "noClassesToday" | "showingAll">>;
+
+/**
+ * 빈 로스터(학생 0명).
+ *
+ * ⚠️ 학원설정에서 온 값(테스트 표시·첨부·발송 시간창·발송 스위치)은 **반드시 그대로 실어라** — 하드코딩 금지.
+ * 이 경로는 '그 요일에 담당 수업 없음'에서도 오는데, 그 화면에서도 강사는 상단 '+ 보강 학생 추가'로 학생을
+ * 넣어 보고서를 쓰고 발송한다(보강은 요일과 무관 — 서버 게이트도 outOfClass로 열려 있다, 2026-07-22 확인).
+ * 값을 하드코딩하면 **그 보강 행만** 학원설정을 무시한다(발송 시간대 안내 증발, 꺼둔 테스트칸·첨부칸 노출).
+ * 그래서 기본값은 "설정을 아직 못 읽은 경우"(비로그인)용이고, 읽은 뒤엔 항상 config로 덮어쓴다.
+ */
+function emptyRoster(today: string, date: string, teacherName: string, config: RosterConfig = {}): TeacherRoster {
   return {
     today,
     date,
@@ -100,17 +117,18 @@ function emptyRoster(
     teacherName,
     students: [],
     todayClasses: [],
-    noClassesToday: flags.noClassesToday ?? false,
-    showingAll: flags.showingAll ?? false,
+    noClassesToday: false,
+    showingAll: false,
     allowTeacherTestMax: false,
     showDailyTest: true,
     showCheckTest: true,
-    noticeMode,
-    academyNoticeMode,
+    noticeMode: null,
+    academyNoticeMode: "A",
     classnoteSendEnabled: false,
     sendWindowLabel: null,
-    showAttachments: true, // 빈 로스터는 첨부 표면이 없어 값 무의미 — 경고를 띄우지 않는 쪽으로 고정
+    showAttachments: true,
     canEditAttendance: false,
+    ...config,
   };
 }
 
@@ -135,18 +153,37 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
   const { showDailyTest, showCheckTest } = settings.report;
   const academyNoticeMode: "A" | "B" = settings.report.noticeMode ?? "A";
 
-  // 1) 강사 담당 활성 반 + 본인 멘트 모드 + 학생 표시 순서(0116a, 강사×반 개인 설정) — 독립 조회 → 병렬(B4)
-  const [{ data: classes }, { data: meRow }, { data: orderRows }] = await Promise.all([
+  // 1) 강사 담당 활성 반 + 본인 멘트 모드 + 학생 표시 순서(0116a, 강사×반 개인 설정) + 출결 쓰기 권한
+  //    — 서로 독립이라 병렬(B4).
+  const [{ data: classes }, { data: meRow }, { data: orderRows }, canEditAttendance] = await Promise.all([
     supabase.from("classes").select("id, class_name, subject").eq("teacher_id", user.id).eq("is_active", true),
     supabase.from("users").select("report_notice_mode").eq("id", user.id).single(),
     supabase.from("onescreen_student_order").select("class_id, student_ids").eq("teacher_id", user.id),
+    canWriteTenant(user.systemRole, "attendance"),
   ]);
   const orderByClass = new Map(
     (orderRows ?? []).map((r) => [r.class_id as string, (r.student_ids ?? []) as string[]]),
   );
   const noticeMode = ((meRow?.report_notice_mode as "A" | "B" | null | undefined) ?? null);
+
+  // 학원설정·강사설정에서 온 값 — 빈 로스터를 포함해 **모든 반환 경로가 이걸 그대로 쓴다**(emptyRoster 주석 참조).
+  const config: RosterSettings = {
+    allowTeacherTestMax,
+    showDailyTest,
+    showCheckTest,
+    noticeMode,
+    academyNoticeMode,
+    classnoteSendEnabled: settings.report.classnoteSendEnabled,
+    sendWindowLabel: classnoteSendWindowLabel(
+      settings.report.classnoteSendWindowStart,
+      settings.report.classnoteSendWindowEnd,
+    ),
+    showAttachments: settings.report.showAttachments,
+    canEditAttendance,
+  };
+
   const allClasses = classes ?? [];
-  if (allClasses.length === 0) return emptyRoster(today, targetDate, teacherName, noticeMode, academyNoticeMode);
+  if (allClasses.length === 0) return emptyRoster(today, targetDate, teacherName, config);
 
   // 2) 오늘 요일에 수업 있는 반(없으면 전체 담당 반 폴백 — 주말/휴일에도 화면이 비지 않게)
   const allIds = allClasses.map((c) => c.id);
@@ -169,9 +206,10 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
   // ⚠️ 그 요일에 수업이 없으면 **비운다** — 옛 코드는 담당 반 전체로 조용히 폴백해, 수요일 수업이 없는
   // 강사에게 담당 반 7개·학생 37명을 "오늘 목록"처럼 보여줬다(2026-07-22 이수진 사례, 타입 주석 참조).
   // 전체 보기는 남기되 **강사가 명시로 고를 때만**(showAll) — 그때는 화면이 "전체 보기 중"임을 밝힌다.
+  // ⚠️ 빈 목록이어도 학원설정(config)은 그대로 실어 보낸다 — 이 화면에서도 '+ 보강 학생 추가'로 발송이 가능하다.
   const noClassesToday = todayIds.size === 0;
   if (noClassesToday && !showAll) {
-    return emptyRoster(today, targetDate, teacherName, noticeMode, academyNoticeMode, { noClassesToday: true });
+    return emptyRoster(today, targetDate, teacherName, { ...config, noClassesToday: true });
   }
   const activeClasses = noClassesToday ? allClasses : allClasses.filter((c) => todayIds.has(c.id));
   const classById = new Map(activeClasses.map((c) => [c.id, c]));
@@ -209,7 +247,8 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
   );
   const studentIds = [...new Set(enrollments.map((e) => e.student_id))];
   if (studentIds.length === 0)
-    return emptyRoster(today, targetDate, teacherName, noticeMode, academyNoticeMode, {
+    return emptyRoster(today, targetDate, teacherName, {
+      ...config,
       noClassesToday,
       showingAll: noClassesToday && showAll,
     });
@@ -630,19 +669,8 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
     teacherName,
     students,
     todayClasses,
+    ...config,
     noClassesToday,
     showingAll: noClassesToday && showAll,
-    allowTeacherTestMax,
-    showDailyTest,
-    showCheckTest,
-    noticeMode,
-    academyNoticeMode,
-    classnoteSendEnabled: settings.report.classnoteSendEnabled,
-    sendWindowLabel: classnoteSendWindowLabel(
-      settings.report.classnoteSendWindowStart,
-      settings.report.classnoteSendWindowEnd,
-    ),
-    showAttachments: settings.report.showAttachments,
-    canEditAttendance: await canWriteTenant(user.systemRole, "attendance"),
   };
 }
