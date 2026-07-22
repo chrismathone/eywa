@@ -50,7 +50,7 @@ describe("computeTeacherSettlements", () => {
 
   it("혼합 — 기본급 + 배분액", () => {
     const [s] = computeTeacherSettlements(
-      [row({ confirmedAmount: 1000000 })],
+      [row({ confirmedAmount: 1000000, actualAmount: 1000000 })],
       new Map([["t-park", comp({ salaryType: "hybrid", monthlyBase: 1500000, commissionRate: 30 })]]),
     );
     expect(s!.commissionAmount).toBe(273300); // 1,000,000 × 0.911 × 30%
@@ -59,7 +59,7 @@ describe("computeTeacherSettlements", () => {
 
   it("배분율 반올림 — 홀수 배분 금액", () => {
     const [s] = computeTeacherSettlements(
-      [row({ confirmedAmount: 137500 })],
+      [row({ confirmedAmount: 137500, actualAmount: 137500 })],
       new Map([["t-park", comp({ commissionRate: 45 })]]),
     );
     expect(s!.commissionAmount).toBe(56368); // 137,500 × 0.911 × 45% = 56,368.125 → 반올림
@@ -116,8 +116,8 @@ describe("computeTeacherSettlements", () => {
   it("동명이인 강사(같은 이름, 다른 id) 분리 — teacher_id 그룹(P3)", () => {
     const out = computeTeacherSettlements(
       [
-        row({ teacherId: "t-1", teacherName: "김태건", confirmedAmount: 100000 }),
-        row({ teacherId: "t-2", teacherName: "김태건", confirmedAmount: 200000, classId: "cls-x" }),
+        row({ teacherId: "t-1", teacherName: "김태건", confirmedAmount: 100000, actualAmount: 100000 }),
+        row({ teacherId: "t-2", teacherName: "김태건", confirmedAmount: 200000, actualAmount: 200000, classId: "cls-x" }),
       ],
       new Map([
         ["t-1", comp({ commissionRate: 50 })],
@@ -128,7 +128,7 @@ describe("computeTeacherSettlements", () => {
     expect(out.map((s) => s.settlement).sort((a, b) => (a ?? 0) - (b ?? 0))).toEqual([45550, 91100]);
   });
 
-  it("actual/diff는 신호로만 — confirmed와 절대 합산 안 함(R3/P2)", () => {
+  it("덜 수업했으면 실측만큼 — 청구·실측을 합산하지 않는다(R3/P2)", () => {
     const [s] = computeTeacherSettlements(
       [row({ confirmedAmount: 100000, actualAmount: 90000 })],
       new Map([["t-park", comp({ commissionRate: 50 })]]),
@@ -136,8 +136,29 @@ describe("computeTeacherSettlements", () => {
     expect(s!.confirmedTotal).toBe(100000);
     expect(s!.actualTotal).toBe(90000);
     expect(s!.diffTotal).toBe(-10000);
-    // 배분은 confirmed에만 적용 — actual이 섞이지 않는다
-    expect(s!.commissionAmount).toBe(45550); // 100,000 × 0.911 × 50%
+    expect(s!.payableTotal).toBe(90000); // min(실측, 청구)
+    // 합산(190,000)은 절대 아니다 — 90,000 × 0.911 × 50%
+    expect(s!.commissionAmount).toBe(40995);
+  });
+
+  // 2026-07-21 원장: "실제 수업한 기준으로 급여가 발생하되, 청구액을 넘는 수업분은 지급하지 않는다."
+  it("더 수업했어도 청구액이 상한 — 초과분은 급여로 안 나간다", () => {
+    const [s] = computeTeacherSettlements(
+      [row({ confirmedAmount: 100000, actualAmount: 130000 })],
+      new Map([["t-park", comp({ commissionRate: 50 })]]),
+    );
+    expect(s!.payableTotal).toBe(100000); // 실측 130,000이어도 청구 100,000이 캡
+    expect(s!.diffTotal).toBe(30000); // 더 수업한 사실은 신호로 남는다
+    expect(s!.commissionAmount).toBe(45550);
+  });
+
+  it("실측이 아직 없으면(시수 검증 전) 급여를 0으로 만들지 않고 청구액을 쓴다", () => {
+    const [s] = computeTeacherSettlements(
+      [row({ confirmedAmount: 100000, actualAmount: 0, actualMissing: true })],
+      new Map([["t-park", comp({ commissionRate: 50 })]]),
+    );
+    expect(s!.payableTotal).toBe(100000);
+    expect(s!.commissionAmount).toBe(45550);
   });
 });
 
