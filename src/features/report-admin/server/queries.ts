@@ -259,7 +259,7 @@ export async function getWeeklyWritingRates(month?: string): Promise<WritingRate
   // ⚠️ 작성 기록은 강사×일 집계 소스라 절단되면 작성률이 과소집계된다. `.limit(5000)`은 방어가 안 됨 —
   // PostgREST max-rows(≈1000)가 명시 limit도 덮어 1000행에서 silent 절단(실측 확인, #54). fetchAllPaged로 전건.
   const [reps, schedule, weekly, settings, labelsBySubject, { data: inactiveStaff }] = await Promise.all([
-    // ⚠️ 집계 기준은 **유효일 = covers_date ?? report_date**(0135a) — 미리/나중에 쓴 보고서를 실제 수업일로 귀속.
+    // ⚠️ 집계 기준은 **유효일 = covers_date ?? report_date**(0136a) — 미리/나중에 쓴 보고서를 실제 수업일로 귀속.
     //   그래서 범위 조회도 두 날짜 **중 하나라도** 걸치면 가져온 뒤(or) JS에서 유효일로 다시 거른다.
     //   report_date만으로 자르면 "6/28에 쓰고 7/2 수업분"인 보고서가 7월 뷰에서 통째로 사라진다.
     fetchAllPaged<{
@@ -295,7 +295,7 @@ export async function getWeeklyWritingRates(month?: string): Promise<WritingRate
     if (name) exempt.add(name);
   }
   // 보고서는 **쓴 날(report_date)에 그대로** 집계한다. covers_date는 집계를 옮기는 게 아니라
-  // "그 날 수업의 의무를 이 보고서가 대신했다"는 표시라, 아래에서 **분모(대상)에서 빼는** 데 쓴다(0135a).
+  // "그 날 수업의 의무를 이 보고서가 대신했다"는 표시라, 아래에서 **분모(대상)에서 빼는** 데 쓴다(0136a).
   // ⚠️ 옮기면 연속수업(7/3에 2타임 몰아서 하고 보고서 1건)에서 7/3이 거꾸로 미작성이 된다.
   const reports = (reps ?? [])
     .map((r) => ({
@@ -308,7 +308,7 @@ export async function getWeeklyWritingRates(month?: string): Promise<WritingRate
     .filter((r) => !exempt.has(r.teacher));
 
   /**
-   * **의무가 면제된 (학생, 날짜)** — 보고서에 실제 수업일(covers_date)이 지정된 건(0135a).
+   * **의무가 면제된 (학생, 날짜)** — 보고서에 실제 수업일(covers_date)이 지정된 건(0136a).
    * 그 날은 그 학생이 오지 않는다(미리 했거나 앞 수업에 몰아서 했다) → 대상에서 뺀다.
    * 두 케이스 모두 이 한 규칙으로 풀린다:
    *   · 선발송  = 7/19분을 7/3에 미리 함 → 7/19 대상에서 제외

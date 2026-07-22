@@ -9,7 +9,7 @@ export type ReportListRow = {
   subject: string | null;
   reportDate: string;
   /**
-   * 실제 수업일(covers_date, 0135a) — 미리/몰아서 한 수업의 보고서를 그 수업일에 귀속시킨다.
+   * 실제 수업일(covers_date, 0136a) — 미리/몰아서 한 수업의 보고서를 그 수업일에 귀속시킨다.
    * 효과는 **분모 면제**: 그 (학생, 날짜)는 작성률 대상에서 빠진다(보고서 집계는 reportDate 그대로).
    * ⚠️ 내부 메타데이터 — 학부모 발송 페이로드에 넣지 않는다.
    */
