@@ -259,10 +259,11 @@ export async function getWeeklyWritingRates(month?: string): Promise<WritingRate
   // ⚠️ 작성 기록은 강사×일 집계 소스라 절단되면 작성률이 과소집계된다. `.limit(5000)`은 방어가 안 됨 —
   // PostgREST max-rows(≈1000)가 명시 limit도 덮어 1000행에서 silent 절단(실측 확인, #54). fetchAllPaged로 전건.
   const [reps, schedule, weekly, settings, labelsBySubject, { data: inactiveStaff }] = await Promise.all([
-    fetchAllPaged<{ teacher_name: string | null; report_date: string }>((from, to) =>
+    // student_id 포함 — 작성 수치는 **학생 단위**로 센다(0134a로 한 학생이 같은 날 2건을 만들 수 있다).
+    fetchAllPaged<{ teacher_name: string | null; report_date: string; student_id: string }>((from, to) =>
       supabase
         .from("lesson_reports")
-        .select("teacher_name, report_date")
+        .select("teacher_name, report_date, student_id")
         .gte("report_date", since)
         .lte("report_date", until) // 범위 상한 — 월간에선 다음 달 기록이 섞이면 안 된다
         // OFFSET 페이지 안정화 — unique tie-break(id) 포함 order(batch.ts 계약)
@@ -289,6 +290,7 @@ export async function getWeeklyWritingRates(month?: string): Promise<WritingRate
     .map((r) => ({
       teacher: (r.teacher_name as string | null) ?? "(미지정)",
       date: r.report_date as string,
+      studentId: r.student_id as string,
     }))
     .filter((r) => !exempt.has(r.teacher));
 

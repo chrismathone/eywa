@@ -136,3 +136,36 @@ describe("computeWritingRates — 오늘 아직 시작 전 수업(todayPending)"
     expect(t.daily[2]!.pending).toBe(true);
   });
 });
+
+// 0134a — 보고서가 반 단위가 되면서 같은 학생이 같은 날 2건(정규+특강)을 만든다.
+// 분모(대상)는 학생 수이므로 분자도 학생 단위로 세야 한다 — 안 그러면 작성률이 실제보다 높게 나온다.
+describe("computeWritingRates — 작성 수치는 학생 단위(보고서 건수 아님)", () => {
+  it("같은 학생의 같은 날 보고서 2건은 1명으로 센다(정규 + 특강)", () => {
+    const rows = computeWritingRates(
+      ["2026-07-20"],
+      [
+        { teacher: "김강사", date: "2026-07-20", studentId: "s1" },
+        { teacher: "김강사", date: "2026-07-20", studentId: "s1" }, // 특강 보고서
+      ],
+      [],
+      [{ teacher: "김강사", date: "2026-07-20", target: 2 }],
+      "2026-07-21",
+    );
+    expect(rows[0]!.daily[0]!.written).toBe(1); // 2건이지만 1명
+    expect(rows[0]!.weekWritten).toBe(1);
+  });
+
+  it("서로 다른 학생 2명은 그대로 2로 센다", () => {
+    const rows = computeWritingRates(
+      ["2026-07-20"],
+      [
+        { teacher: "김강사", date: "2026-07-20", studentId: "s1" },
+        { teacher: "김강사", date: "2026-07-20", studentId: "s2" },
+      ],
+      [],
+      [{ teacher: "김강사", date: "2026-07-20", target: 2 }],
+      "2026-07-21",
+    );
+    expect(rows[0]!.daily[0]!.written).toBe(2);
+  });
+});
