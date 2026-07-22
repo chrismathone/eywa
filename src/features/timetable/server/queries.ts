@@ -505,6 +505,7 @@ export async function getWeeklyScheduleWithStudents(
   if (studentIds.length > 0) {
     type RepRow = {
       student_id: string;
+      class_id: string | null; // 0134a — 이 보고서가 어느 수업의 것인가
       report_date: string;
       progress: string | null;
       exam_info: string | null;
@@ -518,7 +519,7 @@ export async function getWeeklyScheduleWithStudents(
     const repRows = await fetchAllPagedInChunks<RepRow>(studentIds, (chunk, from, to) => {
       let q = supabase
         .from("lesson_reports")
-        .select("student_id, report_date, progress, exam_info, homework_score, teacher_name, textbook")
+        .select("student_id, class_id, report_date, progress, exam_info, homework_score, teacher_name, textbook")
         .in("student_id", chunk)
         .not("progress", "is", null) // hover는 진도 있는 최신 1건(상세 '진도' 탭은 전건)
         .order("report_date", { ascending: false });
@@ -526,31 +527,34 @@ export async function getWeeklyScheduleWithStudents(
       // id desc = 페이지 안정 tie-break 겸 같은 날짜 2건일 때 '최신' 결정(옛 코드는 비결정적이었다).
       return q.order("id", { ascending: false }).range(from, to);
     });
-    const latestRep = new Map<string, StudentLine["latestReport"]>();
-    const latestTb = new Map<string, { name: string; date: string | null }>();
+    // 🔴 **그 수업의** 최신 보고서를 먼저 본다(0134a). 예전엔 학생 단위 최신 1건이라, 같은 학생이
+    //    정규 수학 + 수학 특강을 들으면 두 슬롯의 hover가 **똑같은 진도·교재**를 보여줬다(둘 중 하나는 거짓).
+    //    반 매칭이 없으면(이관분·관리자 작성분 = class_id NULL) 예전처럼 학생 단위 최신으로 폴백한다.
+    const keyOf = (studentId: string, classId: string) => `${studentId}::${classId}`;
+    const byStudentClass = new Map<string, RepRow>();
+    const byStudentOnly = new Map<string, RepRow>();
     for (const r of repRows) {
-      if (latestRep.has(r.student_id)) continue; // 이미 최신(정렬 desc) 저장됨
-      latestRep.set(r.student_id, {
-        date: r.report_date,
-        progress: r.progress,
-        examInfo: r.exam_info,
-        homeworkScore: r.homework_score,
-        teacherName: r.teacher_name,
-      });
-      // 교재는 진도와 **같은 행**에서만 — 다른 행에서 끌어오면 카드 안에서 날짜가 또 갈라진다.
-      const book = (r.textbook ?? "").trim();
-      if (book) latestTb.set(r.student_id, { name: book, date: r.report_date });
-    }
-    for (const list of byClass.values()) {
-      for (const l of list) {
-        const tb = latestTb.get(l.studentId);
-        if (tb) l.latestTextbook = tb;
+      // repRows는 report_date desc, id desc 정렬 → 각 키의 **첫 행**이 최신.
+      if (r.class_id) {
+        const k = keyOf(r.student_id, r.class_id);
+        if (!byStudentClass.has(k)) byStudentClass.set(k, r);
       }
+      if (!byStudentOnly.has(r.student_id)) byStudentOnly.set(r.student_id, r);
     }
-    for (const list of byClass.values()) {
+    for (const [classId, list] of byClass) {
       for (const l of list) {
-        const rep = latestRep.get(l.studentId);
-        if (rep) l.latestReport = rep;
+        const r = byStudentClass.get(keyOf(l.studentId, classId)) ?? byStudentOnly.get(l.studentId);
+        if (!r) continue;
+        l.latestReport = {
+          date: r.report_date,
+          progress: r.progress,
+          examInfo: r.exam_info,
+          homeworkScore: r.homework_score,
+          teacherName: r.teacher_name,
+        };
+        // 교재는 진도와 **같은 행**에서만 — 다른 행에서 끌어오면 카드 안에서 날짜가 또 갈라진다.
+        const book = (r.textbook ?? "").trim();
+        if (book) l.latestTextbook = { name: book, date: r.report_date };
       }
     }
   }
