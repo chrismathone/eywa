@@ -60,9 +60,13 @@ function leadName(header: string): string {
   return m ? m[1]! : h.slice(0, 10);
 }
 
-/** "수업명/방\n\n…"에서 수업명(첫 세그먼트). */
+/**
+ * "수업명/방\n\n…"에서 수업명(첫 세그먼트).
+ * ⚠️ 선두 `*`(보강·정규시간 밖 추가 수업 표시)는 **떼고** 돌려준다 — 표식은 `starred`가 따로 들고 있고,
+ * 이름에 남기면 `*MEC1-3`이 기존 반 `MEC1-3`과 매칭에 실패해 그 슬롯이 통째로 누락된다(2026-07-22 실측 3반).
+ */
 function className(raw: string): string {
-  return raw.split(/[/\n]/)[0]!.trim();
+  return raw.split(/[/\n]/)[0]!.replace(/^\*+/, "").trim();
 }
 
 export function parseTeacherGrid(grid: SheetGrid): ParsedStructure {
@@ -145,6 +149,11 @@ export function parseTeacherGrid(grid: SheetGrid): ParsedStructure {
         // ⚠️ 방은 **반명을 뺀 잔여**에서만 탐색 — 반명에 "SKY"가 든 반(중등E_초6 SKY)에서 raw 전체를
         // 매칭하면 실제 방(303)보다 이름의 SKY가 먼저 걸린다(2026-07-06 — 원 임포트 '본원SKY' 오류의 근본 원인).
         const room = raw.replace(className(raw), "").match(ROOM_RE)?.[1] ?? block.homeRoom;
+        // 반명이 비면(별표만 있는 표식 셀 등) 슬롯이 아니다 — 빈 이름은 어떤 반과도 매칭될 수 없다.
+        if (className(raw) === "") {
+          warnings.push(`반명 없는 셀 건너뜀: (${r},${c}) "${raw.replace(/\n/g, "⏎").slice(0, 30)}"`);
+          continue;
+        }
         const slot: ParsedStructureSlot = {
           teacherIndex: block.index,
           teacherName: block.name,

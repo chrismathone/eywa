@@ -73,4 +73,23 @@ describe("parseTeacherGrid — 실 강사별 그리드", () => {
     // room==='SKY'는 실제 방 줄에 SKY라고 적힌 경우에만 — 현 시트엔 없다.
     expect(parsed.slots.filter((s) => s.room === "SKY")).toHaveLength(0);
   });
+
+  it("선두 '*'(보강 표식)는 반명에서 떼고 starred로만 남긴다 — 안 그러면 기존 반과 매칭 실패", () => {
+    // 2026-07-22 실측: 마스터 시트 7/9~ 탭의 *MEC1-3·*JP1·*LT4가 반명에 별표를 달고 나와
+    // 기존 반(MEC1-3 등)에 매칭되지 못하고 "eywa에 없는 반"으로 통째 제외됐다.
+    expect(parsed.slots.some((s) => s.className.startsWith("*"))).toBe(false);
+    const grid = {
+      cells: [
+        ["", "1"], // 1행 = 블록 번호(블록 시작 열 판별)
+        ["", "Test 강사 301"], // 2행 = 강사 헤더
+        ["", ""], // 3행 = 메모
+        ["", "월"], // 4행 = 요일 헤더
+        ["4:20~5:00", "*MEC1-3/606"], // 5행+ = 데이터
+      ],
+      merges: [],
+    };
+    const starred = parseTeacherGrid(grid as unknown as SheetGrid).slots[0]!;
+    expect(starred.className).toBe("MEC1-3");
+    expect(starred.starred).toBe(true);
+  });
 });

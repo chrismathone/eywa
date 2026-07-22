@@ -75,6 +75,8 @@ export async function getTeacherSettlementView(period: string): Promise<Settleme
   // ⚠️ 지정된 반이 없으면 쿼리 자체를 안 한다(대부분의 학원은 이 설정이 0건 — 불필요한 조회 금지, B4).
   const dowClassIds = classSettings.filter((c) => (c.applies_dows?.length ?? 0) > 0).map((c) => c.class_id);
   const sessionsByClass = new Map<string, SessionUnit[]>();
+  // 반별 시간표 요일 — "주말 반인데 주말 출석 미입력"을 0이 아니라 보류로 승격하기 위한 신호(apportion opts.scheduledDows).
+  const scheduledDowsByClass = new Map<string, string[]>();
   if (dowClassIds.length > 0) {
     // 그 달 = period("YYYY-MM")의 1일~말일. 시수는 attendance_records(session_units, null=기본 1).
     const from = `${period}-01`;
@@ -103,6 +105,17 @@ export async function getTeacherSettlementView(period: string): Promise<Settleme
       list.push({ date: r.session_date, units: Number.isFinite(units) && units > 0 ? units : 1 });
       sessionsByClass.set(r.class_id, list);
     }
+
+    // 시간표 요일(class_schedules.day_of_week) — 안분 반만. "주말 반인데 주말 시수 0 = 출석 미입력"을 보류로 만든다(B3 청크).
+    const schedules = await fetchInChunks<{ class_id: string; day_of_week: string | null }>(dowClassIds, (chunk) =>
+      supabase.from("class_schedules").select("class_id, day_of_week").in("class_id", chunk),
+    );
+    for (const sc of schedules) {
+      if (!sc.day_of_week) continue;
+      const list = scheduledDowsByClass.get(sc.class_id) ?? [];
+      if (!list.includes(sc.day_of_week)) list.push(sc.day_of_week);
+      scheduledDowsByClass.set(sc.class_id, list);
+    }
   }
 
   const rows: SettlementRowInput[] = splits.map((s) => {
@@ -119,7 +132,9 @@ export async function getTeacherSettlementView(period: string): Promise<Settleme
       manualGroup: setting?.salary_group ?? null,
       dowRatio:
         (setting?.applies_dows?.length ?? 0) > 0
-          ? dowApportionRatio(sessionsByClass.get(s.class_id) ?? [], setting!.applies_dows)
+          ? dowApportionRatio(sessionsByClass.get(s.class_id) ?? [], setting!.applies_dows, {
+              scheduledDows: scheduledDowsByClass.get(s.class_id) ?? null,
+            })
           : undefined,
       classRate:
         setting?.commission_rate === null || setting?.commission_rate === undefined
