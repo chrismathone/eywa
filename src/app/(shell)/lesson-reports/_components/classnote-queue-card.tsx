@@ -8,7 +8,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { classnoteBadge } from "@/features/onescreen/components/report-card";
 import { humanizeClassnoteError } from "@/features/report-admin/classnote-error";
-import { formatWorkerLogLines } from "@/features/report-admin/worker-log";
+import { formatWorkerLogLines, isWorkerLogStale, workerLogAgeLabel } from "@/features/report-admin/worker-log";
 import { sanitizeErrorText } from "@/lib/text/sanitize-error";
 import { useSubjectMaps } from "@/features/owner/operations-context";
 import { refreshClassnoteQueue, resetStuckClassnote, retryClassnote } from "@/features/report-admin/server/actions";
@@ -21,6 +21,8 @@ import type { ClassnoteQueueView } from "@/features/report-admin/server/queries"
 const MAX_IDLE_MS = 10 * 60_000;
 // 탭 전환을 연타해도 조회가 터지지 않게 하는 최소 간격.
 const MIN_GAP_MS = 3_000;
+// 알림이 '지난 기록'으로 보이기 시작하는 나이(시간) — 판정은 worker-log.ts WORKER_LOG_STALE_MS.
+const WORKER_STALE_HOURS = 2;
 
 // 처리 시작 시각의 시:분(KST) — 대기·처리중 목록에서 언제 잡혔는지 표시. 값 없으면 "—".
 function hhmmKst(iso: string | null): string {
@@ -70,8 +72,12 @@ function BigStatInline({
  * ⚠️ 목록을 **인라인으로 펴면 카드(배경)가 길어진다**(2026-07-22 원장 제보) → base-ui Popover(포털)로
  * **떠 있는 팝업**으로 낸다 — 레이아웃 흐름 밖이라 배경 높이를 안 밀고, 밖을 누르면 닫힌다.
  */
-function WorkerIssues({ lines }: { lines: string[] }) {
+function WorkerIssues({ lines, now }: { lines: string[]; now: number }) {
   const items = formatWorkerLogLines(lines);
+  // ⚠️ 워커의 '최근 경고'는 **5칸 링버퍼**라 새 문제가 없으면 옛 줄이 그대로 남는다(데몬 재시작 전까지).
+  //    경과를 안 보여주면 몇 시간 전 해결된 오류가 **지금 문제로 읽힌다**(2026-07-22 원장 문의의 실제 원인).
+  //    `now`는 **서버가 준 시각**(뷰 생성 시점) — 렌더 중 Date.now()는 purity 룰 위반이고 시계도 갈린다.
+  const stale = items.filter((it) => isWorkerLogStale(it.at, now)).length;
   if (items.length === 0) return null;
   return (
     <Popover.Root>
@@ -83,13 +89,26 @@ function WorkerIssues({ lines }: { lines: string[] }) {
         <Popover.Positioner side="bottom" align="end" sideOffset={4} className="z-50">
           <Popover.Popup className="bg-card border-line shadow-card max-h-[60vh] w-[420px] max-w-[calc(100vw-2rem)] overflow-y-auto rounded-lg border p-2 text-left outline-none">
             <p className="text-text-faint mb-1.5 px-1 text-[11px] font-bold">발송 PC 최근 알림 {items.length}건</p>
+            {/* 전부 오래된 알림이면 "지금 문제"로 오해하지 않게 먼저 말해 준다. 워커가 살아 있어도 이 목록은
+                새 문제가 생겨야 바뀐다(링버퍼) — 그 사실을 모르면 해결된 오류를 계속 쫓게 된다. */}
+            {stale === items.length ? (
+              <p className="text-text-faint mb-1.5 px-1 text-[11px] leading-snug break-keep">
+                모두 <b>{WORKER_STALE_HOURS}시간 이상 지난 기록</b>입니다 — 이미 해결됐을 수 있습니다(새 문제가
+                생길 때까지 이 목록은 그대로 남습니다).
+              </p>
+            ) : null}
             <ul className="space-y-1">
               {items.map((it, i) => (
                 <li
                   key={i}
-                  className="border-line/60 text-text-dim rounded-md border px-2 py-1.5 text-[11px] leading-snug break-keep"
+                  className={`border-line/60 text-text-dim rounded-md border px-2 py-1.5 text-[11px] leading-snug break-keep ${
+                    isWorkerLogStale(it.at, now) ? "opacity-60" : ""
+                  }`}
                 >
                   {it.time ? <span className="text-text-faint num mr-1">{it.time}</span> : null}
+                  {workerLogAgeLabel(it.at, now) ? (
+                    <span className="text-text-faint mr-1 opacity-80">({workerLogAgeLabel(it.at, now)})</span>
+                  ) : null}
                   {it.label ? <span className="text-foreground mr-1 font-bold">{it.label}</span> : null}
                   {it.summary}
                   {it.raw ? <span className="text-text-faint mt-0.5 block break-all opacity-70">{it.raw}</span> : null}
@@ -350,7 +369,7 @@ export function ClassnoteQueueCard({ view: served }: { view: ClassnoteQueueView 
                     로그 {w.env.logDir}
                   </span>
                 ) : null}
-                {w.env.recent.length > 0 ? <WorkerIssues lines={w.env.recent} /> : null}
+                {w.env.recent.length > 0 ? <WorkerIssues lines={w.env.recent} now={view.nowMs} /> : null}
               </div>
             ))
           )}

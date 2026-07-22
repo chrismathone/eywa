@@ -13,6 +13,8 @@ import { sanitizeErrorText } from "@/lib/text/sanitize-error";
 export type WorkerLogLine = {
   /** KST "HH:MM" — 시각을 못 읽으면 빈 문자열. */
   time: string;
+  /** 그 줄의 시각(epoch ms) — 경과 표시용. 못 읽으면 null. */
+  at: number | null;
   /** 폴러 한글 라벨(없으면 빈 문자열). */
   label: string;
   /** 한 줄 한글 요약. */
@@ -58,10 +60,31 @@ function hostOf(url: string): string {
   return m[1].replace(/^www\./i, "");
 }
 
-/** ISO(UTC) → KST "HH:MM". 파싱 실패면 빈 문자열. */
-function kstHHMM(iso: string): string {
-  const ms = Date.parse(iso);
-  if (!Number.isFinite(ms)) return "";
+/**
+ * 로그 앞머리 시각 → epoch ms. **두 형식을 모두 받는다.**
+ *
+ * 🔴 왜 두 개인가(2026-07-22 실측 회귀): 워커가 그날 로그 스탬프를 UTC ISO에서 **KST 평문**
+ *    (`2026-07-22 13:56:55`, T 없이 공백)으로 바꿨는데 앱 파서는 ISO만 받고 있었다. 그 결과
+ *    ① 시각이 통째로 안 나오고 ② 앞머리가 안 잘려 **다음 `[...]`(=`[notice]`) 태그 매칭이 시각을 집어**
+ *    라벨 변환도 실패 → 화면에 `[notice]` 같은 **원시 태그와 UUID가 그대로** 노출됐다(UI raw 노출 금지 위반).
+ * ⚠️ 워커 로그 형식을 바꾸면 여기도 같이 바꿀 것. 옛 로그(ISO)도 계속 읽혀야 한다.
+ */
+function parseStamp(raw: string): number | null {
+  const s = raw.trim();
+  // ISO(UTC/오프셋 포함) — 그대로 Date.parse.
+  if (/[TZ]|[+-]\d{2}:?\d{2}$/.test(s)) {
+    const ms = Date.parse(s);
+    return Number.isFinite(ms) ? ms : null;
+  }
+  // KST 평문 "YYYY-MM-DD HH:MM:SS" — 오프셋이 없으므로 **한국 시간으로 못박아** 해석한다
+  // (그냥 Date.parse하면 실행 환경 타임존으로 읽혀 Vercel(UTC)에서 9시간 어긋난다).
+  const ms = Date.parse(`${s.replace(" ", "T")}+09:00`);
+  return Number.isFinite(ms) ? ms : null;
+}
+
+/** epoch ms → KST "HH:MM". 없으면 빈 문자열. */
+function kstHHMM(ms: number | null): string {
+  if (ms === null) return "";
   return new Date(ms).toLocaleTimeString("ko-KR", {
     timeZone: "Asia/Seoul",
     hour: "2-digit",
@@ -71,18 +94,45 @@ function kstHHMM(iso: string): string {
 }
 
 /**
+ * 얼마나 지난 알림인가 — 사람 말로. **이게 없으면 10시간 전 해결된 오류가 방금 일처럼 보인다**
+ * (2026-07-22 원장 문의의 실제 원인: 워커의 최근-경고 버퍼는 5칸 링버퍼라 새 문제가 없으면
+ * 옛 줄이 그대로 남는데, 화면엔 시각조차 안 떠서 현재 문제로 읽혔다).
+ */
+export function workerLogAgeLabel(at: number | null, now: number): string {
+  if (at === null) return "";
+  const min = Math.floor((now - at) / 60_000);
+  if (min < 0) return "";
+  if (min < 1) return "방금";
+  if (min < 60) return `${min}분 전`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}시간 전`;
+  const day = Math.floor(hr / 24);
+  return day === 1 ? "어제" : `${day}일 전`;
+}
+
+/** 이 알림이 "지금 문제"라기엔 오래됐는가 — 화면에서 흐리게 + 안내를 붙이는 기준. */
+export const WORKER_LOG_STALE_MS = 2 * 60 * 60_000;
+export function isWorkerLogStale(at: number | null, now: number): boolean {
+  return at !== null && now - at >= WORKER_LOG_STALE_MS;
+}
+
+/**
  * 로그 한 줄 변환. 형식: `[ISO] [태그] 본문` (태그·시각은 없을 수 있음).
  * 요약이 원문과 사실상 같으면 `raw`를 비워 '자세히'를 띄우지 않는다(노이즈 방지).
  */
 export function formatWorkerLogLine(line: string): WorkerLogLine {
   const clean = sanitizeErrorText(line);
-  if (!clean) return { time: "", label: "", summary: "", raw: "" };
+  if (!clean) return { time: "", at: null, label: "", summary: "", raw: "" };
 
   let rest = clean;
   let time = "";
-  const ts = /^\[([0-9]{4}-[0-9]{2}-[0-9]{2}T[^\]]+)\]\s*/.exec(rest);
+  let at: number | null = null;
+  // 날짜 뒤가 'T'(ISO)이든 공백(KST 평문)이든 받는다 — 형식이 하나라도 빠지면 앞머리가 안 잘려
+  // 아래 태그 매칭이 시각을 태그로 오인한다(원시 태그 노출의 실제 경로).
+  const ts = /^\[([0-9]{4}-[0-9]{2}-[0-9]{2}[T ][^\]]+)\]\s*/.exec(rest);
   if (ts) {
-    time = kstHHMM(ts[1]);
+    at = parseStamp(ts[1]!);
+    time = kstHHMM(at);
     rest = rest.slice(ts[0].length);
   }
 
@@ -109,7 +159,7 @@ export function formatWorkerLogLine(line: string): WorkerLogLine {
     }
   }
   summary = summary.replace(/\s+/g, " ").trim();
-  return { time, label, summary, raw: summary === rest.trim() ? "" : rest.trim() };
+  return { time, at, label, summary, raw: summary === rest.trim() ? "" : rest.trim() };
 }
 
 /** 여러 줄 변환 — 빈 줄은 버린다. */

@@ -63,6 +63,7 @@ function waitingView(over: Partial<ClassnoteQueueView> = {}): ClassnoteQueueView
     workers: [worker(true)],
     since: "2026-07-18",
     days: 3,
+    nowMs: Date.parse("2026-07-22T12:00:00+09:00"),
     sendEnabled: true,
     ...over,
   };
@@ -77,6 +78,7 @@ function drainedView(over: Partial<ClassnoteQueueView> = {}): ClassnoteQueueView
     workers: [worker(true)],
     since: "2026-07-18",
     days: 3,
+    nowMs: Date.parse("2026-07-22T12:00:00+09:00"),
     sendEnabled: true,
     ...over,
   };
