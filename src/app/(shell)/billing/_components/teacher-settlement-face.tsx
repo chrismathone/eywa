@@ -139,13 +139,15 @@ export async function TeacherSettlementFace({ period }: { period?: string }) {
                     ) : null}
                   </td>
                   <td className="px-3 py-2">
+                    {/* ⚠️ groupRates는 TeacherCompEditor가 아직 받지 않는다(2026-07-22). 넘기면 타입 에러로
+                        **프로덕션 빌드 전체가 실패**해 배포가 멈춘다(실제로 멈춰 있었다 — 신규 라우트 404).
+                        과정별 배분율 편집을 이 편집기에 붙일 때 **자식 props와 함께** 되살릴 것. */}
                     {r.teacherId ? (
                       <TeacherCompEditor
                         userId={r.teacherId}
                         salaryType={r.salaryType}
                         commissionRate={r.commissionRate}
                         monthlyBase={r.monthlyBase}
-                        groupRates={r.groupRates}
                       />
                     ) : (
                       <span className="text-text-faint text-xs">—</span>
