@@ -239,3 +239,38 @@ describe("buildSubjectReport (과목별)", () => {
     expect(all).not.toContain("BS4F");
   });
 });
+
+// 2026-07-22 실측 회귀: 강사가 초안을 안 쓰면 이 템플릿이 **학부모에게 그대로 발송**된다.
+// 진도가 여러 줄인 게 실사용 기본형이라, 접지 않으면 한 문장이 3줄로 쪼개진 채 나갔다.
+describe("폴백 템플릿 개행 접기 — 학부모 문장이 줄로 쪼개지지 않음", () => {
+  const st = makeStudent({
+    name: "김담희",
+    subjects: [
+      {
+        name: "수학",
+        prev: "",
+        today: "원과 직선의 위치 관계\n원의 접선의 방정식(1)\n원의 접선의 방정식(2)",
+        homeworkToday: "본책 p.55~69\n워크북 ~49",
+      },
+    ],
+    tests: { daily: { score: null, max: 10, prevScore: null }, check: { score: null, max: 10, prevScore: null } },
+  });
+
+  it("여러 줄 진도가 ', '로 접혀 한 문장이 된다", () => {
+    const r = buildSubjectReport(st, 0);
+    expect(r).not.toContain("\n");
+    expect(r).toContain(
+      "오늘 수학 원과 직선의 위치 관계, 원의 접선의 방정식(1), 원의 접선의 방정식(2) 진도를 진행했습니다.",
+    );
+  });
+
+  it("여러 줄 오늘 과제도 한 문장 안에 접힌다", () => {
+    expect(buildSubjectReport(st, 0)).toContain("오늘 과제는 본책 p.55~69, 워크북 ~49입니다.");
+  });
+
+  it("합본(buildReport)도 같은 규약", () => {
+    const r = buildReport(st);
+    expect(r).not.toContain("\n");
+    expect(r).toContain("수학 원과 직선의 위치 관계, 원의 접선의 방정식(1), 원의 접선의 방정식(2)");
+  });
+});

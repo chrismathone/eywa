@@ -44,6 +44,19 @@ export function isStudentDone(st: OneScreenStudent, cfg?: TestConfig): boolean {
   return s.prog === "ok" && s.test === "ok" && s.rep === "ok";
 }
 
+/** 여러 줄 값(차시 나열 등)을 **한 문장 안에** 넣기 위한 정규화 — 개행을 ", "로 접는다.
+ *  ⚠️ 이 템플릿은 강사가 초안을 안 쓰면 **학부모에게 그대로 나간다**(buildSaveInputFor 폴백).
+ *  진도가 여러 줄인 게 실사용 기본형이라(2026-07-22 실측: 이성우 반 전원) 접지 않으면
+ *  "오늘 수학 원과 직선의 위치 관계\n원의 접선의 방정식(1)\n… 진도를 진행했습니다."처럼
+ *  **한 문장이 3줄로 쪼개진 채** 발송된다. report-comment.ts flatten과 같은 규약. */
+function flatten(s: string): string {
+  return s
+    .split(/\n+/)
+    .map((v) => v.trim())
+    .filter(Boolean)
+    .join(", ");
+}
+
 function testClause(label: string, t: TestScore): string | null {
   if (t.score == null) return null;
   const d = delta(t.score, t.prevScore);
@@ -90,7 +103,7 @@ function testAndClosingLines(st: OneScreenStudent): string[] {
 export function buildReport(st: OneScreenStudent): string {
   // ⚠️ 학부모에게 나가는 문장이라 **순수 과목 라벨**을 쓴다 — `name`엔 반 이름이 붙을 수 있고
   //    (같은 과목 두 반일 때 "수학 · 고1 특강"), 보고서에 반은 노출하지 않는 것이 원장 확정 규칙이다.
-  const subj = st.subjects.map((s) => `${s.subjectLabel || s.name} ${s.today}`).join(", ");
+  const subj = st.subjects.map((s) => `${s.subjectLabel || s.name} ${flatten(s.today)}`).join(", ");
   return [`${st.name} 학생, 오늘 ${subj} 진도를 진행했습니다.`, ...testAndClosingLines(st)].join(" ");
 }
 
@@ -100,10 +113,10 @@ export function buildSubjectReport(st: OneScreenStudent, subjectIndex: number): 
   if (!su) return buildReport(st);
   const lines = [
     // 학부모 문장 — 반 이름이 섞이지 않는 subjectLabel(위 buildReport와 같은 이유).
-    `${st.name} 학생, 오늘 ${su.subjectLabel || su.name} ${su.today} 진도를 진행했습니다.`,
+    `${st.name} 학생, 오늘 ${su.subjectLabel || su.name} ${flatten(su.today)} 진도를 진행했습니다.`,
     ...testAndClosingLines(st),
   ];
   // 오늘 과제(0096a) — AI 멘트 프롬프트의 마무리 규칙("오늘 과제는 ~입니다")과 폴백 템플릿 대칭 유지.
-  if (su.homeworkToday?.trim()) lines.push(`오늘 과제는 ${su.homeworkToday.trim()}입니다.`);
+  if (su.homeworkToday?.trim()) lines.push(`오늘 과제는 ${flatten(su.homeworkToday)}입니다.`);
   return lines.join(" ");
 }

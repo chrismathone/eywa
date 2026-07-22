@@ -25,11 +25,18 @@ export type ReportCommentInput = {
   classContext?: string; // "" 또는 미지정 = 반 서술 없음(기존 동작과 동일)
 };
 
-/** 반 공통 서술을 가드 라벨 **한 줄 안에** 가두는 정규화 — 내부 개행을 공백으로 접는다.
- *  fact 블록은 줄 단위 사실 계약이라, 여러 줄 서술의 2번째 줄부터는 '반 공통' 라벨도 '학생 정보 우선'
- *  가드도 없는 맨줄 개별 사실로 위장 주입된다(리뷰 확정 major — textarea라 여러 줄 입력이 자연스러움). */
-function flatClassContext(s: string): string {
-  return s.replace(/\s*\n+\s*/g, " ").trim();
+/** 값을 라벨 **한 줄 안에** 가두는 정규화 — 내부 개행을 ", "로 접는다.
+ *  fact 블록은 줄 단위 사실 계약이라, 여러 줄 값의 2번째 줄부터는 라벨도 가드도 없는 맨줄 개별 사실로
+ *  위장 주입된다(리뷰 확정 major — textarea·다중 차시라 여러 줄 입력이 자연스러움).
+ *  ⚠️ **진도가 실제로 여러 줄이다**(2026-07-22 실측: 차시를 줄바꿈으로 나열 —
+ *  "원과 직선의 위치 관계\n원의 접선의 방정식(1)\n…"). 반 공통 서술만 접고 진도·특이사항은 안 접어
+ *  프롬프트 계약이 새고 있었다. 나열 값이라 공백이 아니라 **", "로** 접는다(문장으로 읽히게). */
+function flatten(s: string): string {
+  return s
+    .split(/\n+/)
+    .map((v) => v.trim())
+    .filter(Boolean)
+    .join(", ");
 }
 
 /** 점수 → 사람이 읽는 문장. 미입력이면 "". 직전 회차 있으면 증감(▲/▼) 부기. */
@@ -65,19 +72,19 @@ export function buildReportCommentInput(st: OneScreenStudent, subjectIndex: numb
 /** 입력의 **채워진 사실만** 모은 [입력] 블록(빈 값은 침묵). 모드 A 프롬프트 {{facts}}에 주입. */
 export function buildFactBlock(input: ReportCommentInput): string {
   const facts: string[] = [];
-  const prog = [input.subject, input.progress].filter(Boolean).join(" ");
+  const prog = [input.subject, flatten(input.progress)].filter(Boolean).join(" ");
   if (prog) facts.push(`오늘 진도: ${prog}`);
   if (input.dailyTest) facts.push(`일일테스트(이전 진도 범위): ${input.dailyTest}`);
   if (input.checkTest) facts.push(`확인테스트(오늘 진도 범위): ${input.checkTest}`);
-  if (input.attitude) facts.push(`수업 태도: ${input.attitude}`);
-  if (input.homework) facts.push(`과제: ${input.homework}`);
-  if (input.homeworkToday) facts.push(`오늘 과제: ${input.homeworkToday}`); // 마무리 문장 재료(0096a)
-  if (input.specialNote) facts.push(`특이사항: ${input.specialNote}`);
+  if (input.attitude) facts.push(`수업 태도: ${flatten(input.attitude)}`);
+  if (input.homework) facts.push(`과제: ${flatten(input.homework)}`);
+  if (input.homeworkToday) facts.push(`오늘 과제: ${flatten(input.homeworkToday)}`); // 마무리 문장 재료(0096a)
+  if (input.specialNote) facts.push(`특이사항: ${flatten(input.specialNote)}`);
   // 반 공통 서술(G6) — 참고 맥락으로 동봉. 가드("모순 시 위 학생 정보 우선")를 데이터에 실어
   // 프롬프트 템플릿(DB 오버라이드 가능)과 무관하게 항상 적용. 결석·진도미입력 행은 호출 전 구조 제외됨.
   // ⚠️ **개별 사실이 1개+ 있을 때만**(facts 앵커) — 반 서술 단독으로 문단이 살아나면 학생 개인 멘트가
   // 반 맥락만으로 지어지는 환각 벡터(서버 hasFacts 게이트와 이중 방어, 순수함수 단독 사용도 안전하게).
-  const ctx = input.classContext ? flatClassContext(input.classContext) : "";
+  const ctx = input.classContext ? flatten(input.classContext) : "";
   if (facts.length && ctx)
     facts.push(`반 공통 수업 맥락(참고용 — 위 학생 개별 정보와 다르면 학생 정보를 우선하세요): ${ctx}`);
   return facts.length ? facts.join("\n") : "(입력된 정보 없음)";
@@ -104,15 +111,15 @@ export function buildReportCommentPrompt(input: ReportCommentInput, template?: s
  *  미입력이면 기존처럼 수행 상태(homework)로 폴백(구 동작 보존). */
 export function buildP1FactBlock(input: ReportCommentInput): string | null {
   const facts: string[] = [];
-  if (input.textbook) facts.push(`교재: ${input.textbook}`);
-  const prog = [input.subject, input.progress].filter(Boolean).join(" ");
+  if (input.textbook) facts.push(`교재: ${flatten(input.textbook)}`);
+  const prog = [input.subject, flatten(input.progress)].filter(Boolean).join(" ");
   if (prog) facts.push(`진도: ${prog}`);
-  const hw = input.homeworkToday || input.homework;
+  const hw = flatten(input.homeworkToday || input.homework);
   if (hw) facts.push(`과제: ${hw}`);
   // 반 공통 서술(G6)은 수업 내용 문단(P1)에만 — P2(태도·특이사항)에 새면 "항목 섞지 마세요" 규칙 위반.
   // ⚠️ 개별 P1 사실(교재·진도·과제)이 있을 때만 동봉 — 없으면 P1은 원래대로 null(문단 생략).
   // 반 서술 단독 P1은 "이 학생의 수업 내용"을 반 맥락만으로 지어내는 환각 벡터(태도만 입력된 케이스 등).
-  const ctx = input.classContext ? flatClassContext(input.classContext) : "";
+  const ctx = input.classContext ? flatten(input.classContext) : "";
   if (facts.length && ctx)
     facts.push(`반 공통 수업 맥락(참고용 — 위 학생 개별 정보와 다르면 학생 정보를 우선하세요): ${ctx}`);
   return facts.length ? facts.join("\n") : null;
@@ -121,8 +128,8 @@ export function buildP1FactBlock(input: ReportCommentInput): string | null {
 /** P2 사실(태도·특이사항). 전부 비면 null(문단 생략). */
 export function buildP2FactBlock(input: ReportCommentInput): string | null {
   const facts: string[] = [];
-  if (input.attitude) facts.push(`태도: ${input.attitude}`);
-  if (input.specialNote) facts.push(`특이사항: ${input.specialNote}`);
+  if (input.attitude) facts.push(`태도: ${flatten(input.attitude)}`);
+  if (input.specialNote) facts.push(`특이사항: ${flatten(input.specialNote)}`);
   return facts.length ? facts.join("\n") : null;
 }
 

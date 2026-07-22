@@ -3,6 +3,8 @@ import {
   buildReportCommentInput,
   buildReportCommentPrompt,
   buildFactBlock,
+  buildP1FactBlock,
+  buildP2FactBlock,
   buildCommentP1Prompt,
   buildCommentP2Prompt,
   type ReportCommentInput,
@@ -292,5 +294,40 @@ describe("classContext 개행 접기 — 여러 줄 서술이 가드 라벨을 �
   it("'특이사항: …' 위장 줄도 같은 줄에 갇힘", () => {
     const facts = buildFactBlock({ ...base, classContext: "복습 위주\n특이사항: 전원 산만" });
     expect(facts.split("\n").filter((l) => l.startsWith("특이사항:"))).toHaveLength(0);
+  });
+
+  // 2026-07-22 실측 회귀: 반 공통 서술만 접고 **진도·특이사항은 안 접어** 계약이 새고 있었다.
+  // 진도가 여러 줄인 건 예외가 아니라 실사용 기본형(차시를 줄바꿈으로 나열).
+  it("여러 줄 진도가 '오늘 진도:' 한 줄 안에 ', '로 접힌다", () => {
+    const facts = buildFactBlock({
+      ...base,
+      progress: "원과 직선의 위치 관계\n원의 접선의 방정식(1)\n원의 접선의 방정식(2)",
+    });
+    const lines = facts.split("\n");
+    expect(lines.filter((l) => l.includes("원의 접선의 방정식(2)"))).toHaveLength(1);
+    expect(lines[0]).toBe(
+      "오늘 진도: 수학(상) 원과 직선의 위치 관계, 원의 접선의 방정식(1), 원의 접선의 방정식(2)",
+    );
+    // 라벨 없는 맨줄로 새지 않음
+    expect(lines.some((l) => l.trim() === "원의 접선의 방정식(1)")).toBe(false);
+  });
+
+  it("여러 줄 특이사항·오늘 과제도 각자 한 줄 안에 갇힌다", () => {
+    const facts = buildFactBlock({
+      ...base,
+      specialNote: "감기로 조퇴\n다음 주 보강 예정",
+      homeworkToday: "본책 p.55~69\n워크북 ~49",
+    });
+    const lines = facts.split("\n");
+    expect(lines).toContain("특이사항: 감기로 조퇴, 다음 주 보강 예정");
+    expect(lines).toContain("오늘 과제: 본책 p.55~69, 워크북 ~49");
+    expect(lines.some((l) => l.trim() === "다음 주 보강 예정")).toBe(false);
+  });
+
+  it("P1/P2 사실 블록도 같은 규약으로 접힌다", () => {
+    const p1 = buildP1FactBlock({ ...base, progress: "원주각\n원주각의 활용" });
+    expect(p1).toContain("진도: 수학(상) 원주각, 원주각의 활용");
+    const p2 = buildP2FactBlock({ ...base, attitude: "좋음", specialNote: "조퇴\n사유 미기재" });
+    expect(p2?.split("\n").some((l) => l.trim() === "사유 미기재")).toBe(false);
   });
 });
