@@ -74,8 +74,11 @@ export function buildFactBlock(input: ReportCommentInput): string {
   const facts: string[] = [];
   const prog = [input.subject, flatten(input.progress)].filter(Boolean).join(" ");
   if (prog) facts.push(`오늘 진도: ${prog}`);
-  if (input.dailyTest) facts.push(`일일테스트(이전 진도 범위): ${input.dailyTest}`);
-  if (input.checkTest) facts.push(`확인테스트(오늘 진도 범위): ${input.checkTest}`);
+  // ⚠️ 라벨에 괄호 설명을 달지 말 것 — 모델이 값과 함께 **그대로 베껴** 학부모 문장에 넣는다
+  // (2026-07-22 실측: "이전 진도 범위 일일테스트에서 10문제 중 5개를 맞혔으며" — 40건 중 8건 누출).
+  // 두 테스트가 무엇을 다루는지는 프롬프트 [반드시] 절이 설명한다(데이터가 아니라 지침에).
+  if (input.dailyTest) facts.push(`일일테스트: ${input.dailyTest}`);
+  if (input.checkTest) facts.push(`확인테스트: ${input.checkTest}`);
   if (input.attitude) facts.push(`수업 태도: ${flatten(input.attitude)}`);
   if (input.homework) facts.push(`과제: ${flatten(input.homework)}`);
   if (input.homeworkToday) facts.push(`오늘 과제: ${flatten(input.homeworkToday)}`); // 마무리 문장 재료(0096a)

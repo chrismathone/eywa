@@ -69,7 +69,7 @@ describe("buildReportCommentPrompt", () => {
     const prompt = buildReportCommentPrompt(buildReportCommentInput(student(), 0));
     const sec = inputSection(prompt);
     expect(sec).toContain("오늘 진도: 수학(상) 이차함수");
-    expect(sec).toContain("일일테스트(이전 진도 범위): 20문제 중 16개 (지난 회차 대비 ▲2)");
+    expect(sec).toContain("일일테스트: 20문제 중 16개 (지난 회차 대비 ▲2)");
     expect(sec).toContain("수업 태도: 좋음");
     expect(sec).toContain("과제: 완료");
     expect(prompt).toContain("JSON"); // Upstage JSON mode 필수 토큰
@@ -329,5 +329,34 @@ describe("classContext 개행 접기 — 여러 줄 서술이 가드 라벨을 �
     expect(p1).toContain("진도: 수학(상) 원주각, 원주각의 활용");
     const p2 = buildP2FactBlock({ ...base, attitude: "좋음", specialNote: "조퇴\n사유 미기재" });
     expect(p2?.split("\n").some((l) => l.trim() === "사유 미기재")).toBe(false);
+  });
+});
+
+// 2026-07-22 실측: fact 라벨의 괄호 설명이 학부모 문장에 그대로 베껴졌다(40건 중 8건
+// "이전 진도 범위 일일테스트에서 …"). 설명은 데이터가 아니라 프롬프트 지침이 담는다.
+describe("fact 라벨에 괄호 설명 금지 — 모델이 값과 함께 베낀다", () => {
+  const base: ReportCommentInput = {
+    studentName: "김민승",
+    subject: "수학",
+    progress: "이차방정식",
+    dailyTest: "10문제 중 5개",
+    checkTest: "10문제 중 8개",
+    attitude: "",
+    homework: "",
+    homeworkToday: "",
+    textbook: "",
+    specialNote: "",
+  };
+  it("테스트 라벨은 시험 이름만", () => {
+    const facts = buildFactBlock(base);
+    expect(facts).toContain("일일테스트: 10문제 중 5개");
+    expect(facts).toContain("확인테스트: 10문제 중 8개");
+    expect(facts).not.toContain("이전 진도 범위");
+    expect(facts).not.toContain("오늘 진도 범위");
+  });
+  it("두 시험의 의미는 프롬프트 지침이 설명한다(설명 자체는 옮겨 적지 말라는 규칙 포함)", () => {
+    const p = buildReportCommentPrompt(base);
+    expect(p).toContain("'일일테스트'는 지난 회차 진도를");
+    expect(p).toContain("이 설명 자체를 문장에 옮겨 적지 말고");
   });
 });
