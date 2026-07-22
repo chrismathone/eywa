@@ -45,6 +45,7 @@ import { NoticeComposer } from "./notice-composer";
 import {
   buildGridRows,
   rowKey,
+  isAlreadySent,
   isRowActionable,
   planBulkApply,
   planPrevFill,
@@ -660,12 +661,18 @@ export function OneScreenClient({
       setGenKey((cur) => (cur === key ? null : cur));
     }
   }
+  // 이 행의 **최신** ClassNote 상태 — 화면 state(방금 보낸 결과·워커 폴링 반영)가 로스터 스냅샷을 이긴다.
+  // ⚠️ 로스터 값만 보면 "방금 보낸 건"을 모른 채 일괄 발송이 그 행을 다시 집는다(중복 게시).
+  function liveClassnoteStatus(studentId: string, subjectName: string): string | null {
+    return reportsRef.current[studentId]?.[subjectName]?.classnoteStatus ?? null;
+  }
   // 표 일괄 작업 대상 — keys(체크된 행) 있으면 그 교집합, 없으면 표시 행 전체. 진도 필수 공통.
   // ⚠️ action별 판정(2-3, isRowActionable): save=결석 포함(기록 보존), send/autowrite=결석 제외(발송·AI 무의미).
+  //    send는 **이미 발송된 행도 제외**(중복 게시 차단, 2026-07-22) — 최신 상태를 override로 넘긴다.
   function selectRows(action: RowAction, keys?: string[]) {
     const all = buildGridRows(visible)
       .filter((r) => rowInClass(r.subject, activeClassFilter)) // 특정 반이면 그 반 행만(타 반 혼입 차단)
-      .filter((r) => isRowActionable(r.subject, action));
+      .filter((r) => isRowActionable(r.subject, action, liveClassnoteStatus(r.student.id, r.subject.name)));
     if (!keys || keys.length === 0) return all;
     const set = new Set(keys);
     return all.filter((r) => set.has(r.key));
@@ -927,12 +934,16 @@ export function OneScreenClient({
     const built = buildSaveInputFor(student, subjectName);
     const res = await saveAndQueueClassnote(built.input);
     if (res.ok) {
+      // ⚠️ 응답 status에는 DB 상태가 아닌 **결과 코드**도 섞여 있다(dry_run·subject_off·absent·already_sent).
+      //    그중 `already_sent`를 그대로 배지 state에 넣으면 "success가 아니게" 되어 발송 가드가 스스로 풀린다
+      //    → 그 행의 **실제** DB 상태인 success로 되돌려 저장한다.
+      const badgeStatus = res.status === "already_sent" ? "success" : res.status;
       patchReport(student.id, subjectName, (r) => ({
         ...r,
         draft: r.draft?.trim() && r.draft !== built.draft ? r.draft : built.draft,
         sent: true,
         shareToken: res.shareToken ?? r.shareToken,
-        classnoteStatus: res.status,
+        classnoteStatus: badgeStatus,
       }));
       confirmProgressOnSave(student.id);
     }
@@ -1006,6 +1017,13 @@ export function OneScreenClient({
       toast.message(`${subjectName} — 수업일 출결이 결석으로 기록돼 있어 발송하지 않았습니다(기록 저장은 유지)`);
       return;
     }
+    // 이미 게시된 건(중복 게시 차단) — 저장도 안 했으므로 "내용을 고쳤다면 저장부터"를 함께 안내한다.
+    if (res.status === "already_sent") {
+      toast.message(
+        `${subjectName} — 이미 학부모에게 발송된 보고서라 다시 보내지 않았습니다. 내용을 고쳤다면 '저장'을 누르세요`,
+      );
+      return;
+    }
     const msg =
       res.status === "queued"
         ? res.sendWindowHint
@@ -1046,6 +1064,9 @@ export function OneScreenClient({
     } else if (res.status === "absent") {
       // 결석 게이트(#77 서버판) — 반 모호(attendanceRaw 미채움) 행 등 클라 게이트 사각을 서버가 막은 경우.
       toast.message(`${student.name} — 수업일 출결이 결석으로 기록돼 있어 발송하지 않았습니다(기록 저장은 유지)`);
+    } else if (res.status === "already_sent") {
+      // 중복 게시 차단(서버판) — 화면 게이트를 지난 경로(stale 화면·다른 창에서 먼저 발송)도 서버가 막는다.
+      toast.message(`${student.name} ${subjectName} — 이미 학부모에게 발송된 보고서라 다시 보내지 않았습니다`);
     } else if (res.status === "queued" && res.sendWindowHint) {
       // 발송 허용 시간창 밖 — 큐엔 정상 적재, 워커가 창 진입 시 자동 발송("왜 안 나가지?" 재발송 혼란 방지).
       toast.success(`${student.name} ${subjectName} — 발송 예약됨(${res.sendWindowHint}에 자동 발송)`);
@@ -1088,8 +1109,19 @@ export function OneScreenClient({
     if (bulkBusy || bulkGen) return; // 재진입·중첩 방지(#10)
     const rows = selectRows("send", keys);
     const preSkipped = keys?.length ? keys.length - rows.length : 0; // 미선택=전체=0(음수 방지 #11)
+    // 발송 후보(진도 입력·결석 아님) 중 **이미 발송된 행** — 아래 안내에 쓰고, rows에는 이미 빠져 있다.
+    // ⚠️ 이 수치는 "일괄 발송을 다시 눌러도 안 나가는 이유"라 반드시 보여준다(무언 제외 = 사고 은폐).
+    const alreadySentRows = selectRows("save", keys).filter(
+      (r) =>
+        r.subject.attendanceRaw !== "absent" &&
+        isAlreadySent(liveClassnoteStatus(r.student.id, r.subject.name) ?? r.subject.classnoteStatus),
+    ).length;
     if (rows.length === 0) {
-      toast.message("발송할 행이 없습니다 — 오늘 진도를 입력하세요 (결석 학생은 발송 제외)");
+      toast.message(
+        alreadySentRows
+          ? `발송할 새 행이 없습니다 — ${alreadySentRows}건은 이미 학부모에게 발송됐습니다`
+          : "발송할 행이 없습니다 — 오늘 진도를 입력하세요 (결석 학생은 발송 제외)",
+      );
       return;
     }
     // 발송 전 누락 안내(2-4) — 차단 아님("누락=생략" 철학 유지). 누락은 고유 학생 수 기준.
@@ -1102,9 +1134,12 @@ export function OneScreenClient({
         ? `\n태도 미입력 ${gaps.missingAttitude}명 · 테스트 미입력 ${gaps.missingTest}명 — 미입력 항목은 보고서에서 생략됩니다`
         : "";
     const absentLine = absentRows ? `\n결석 행 ${absentRows}건은 발송에서 제외됩니다` : "";
+    const sentLine = alreadySentRows
+      ? `\n이미 발송된 ${alreadySentRows}건은 제외됩니다 — ClassNote는 게시글 수정이 안 돼 다시 보내면 글만 하나 더 붙습니다`
+      : "";
     if (
       !window.confirm(
-        `${rows.length}건을 ClassNote로 일괄 발송할까요? (동명이인·취소·오래된 건은 자동 제외)${gapLine}${absentLine}`,
+        `${rows.length}건을 ClassNote로 일괄 발송할까요? (동명이인·취소·오래된 건은 자동 제외)${gapLine}${absentLine}${sentLine}`,
       )
     )
       return;
@@ -1114,6 +1149,7 @@ export function OneScreenClient({
     let skipped = 0;
     let subjectOff = 0; // 발송 대상 과목 아님(저장만) — '발송 대기'로 뭉뚱그리지 않고 명시(#2 확정)
     let absentSkip = 0; // 서버 결석 게이트에 걸린 행(클라 사전 필터의 사각 — 반 모호 행 등)
+    let sentSkip = 0; // 서버 중복 게시 가드에 걸린 행(다른 창에서 먼저 보낸 경우 등)
     let dry = 0;
     let fail = 0;
     let windowHint = ""; // 발송 허용 시간창 밖 큐잉 — 마지막 응답의 창 라벨(테넌트 단일 설정이라 동일)
@@ -1129,7 +1165,8 @@ export function OneScreenClient({
         else if (res.status === "subject_off") subjectOff++;
         else if (res.status === "name_conflict" || res.status === "revoked") blocked++;
         else if (res.status === "absent") absentSkip++; // 서버 결석 게이트(클라 사전 필터를 지난 반 모호 행 등)
-        else skipped++; // success/processing/too_old
+        else if (res.status === "already_sent") sentSkip++; // 서버 중복 게시 가드(클라 게이트를 지난 stale 행)
+        else skipped++; // processing/too_old
       }
     } finally {
       setBulkBusy(null);
@@ -1139,9 +1176,10 @@ export function OneScreenClient({
         (windowHint ? `발송 예약 ${queued}건(${windowHint}에 자동 발송)` : `발송 대기 ${queued}건`) +
         (subjectOff ? ` · 과목 제외 ${subjectOff}건(발송 대상 과목 아님)` : "") +
         (absentSkip ? ` · 결석 제외 ${absentSkip}건` : "") +
+        (alreadySentRows || sentSkip ? ` · 발송완료 제외 ${alreadySentRows + sentSkip}건` : "") +
         (blocked ? ` · 차단 ${blocked}건(동명이인/취소)` : "") +
         (skipped ? ` · 제외 ${skipped}건` : "") +
-        (preSkipped ? ` · 대상 제외 ${preSkipped}건(진도 미입력·결석)` : "") +
+        (preSkipped ? ` · 대상 제외 ${preSkipped}건(진도 미입력·결석·발송완료)` : "") +
         (fail ? ` · 실패 ${fail}건` : ""),
     );
   }

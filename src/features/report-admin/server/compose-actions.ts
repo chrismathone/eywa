@@ -136,6 +136,10 @@ export async function saveAndQueueAdminReport(
     .maybeSingle();
   if (prior?.revoked_at) return { ok: true, id: prior.id, status: "revoked" };
   if (prior?.classnote_status === "processing") return { ok: true, id: prior.id, status: "processing" };
+  // 이미 게시된 건은 재발송 차단(강사 경로 saveAndQueueClassnote와 동일 규칙, 2026-07-22).
+  // ClassNote는 게시글 수정·삭제가 없어 재발송 = 학부모 게시판에 글이 하나 더 붙는 것뿐이다.
+  // 정말 다시 보내야 하면 발송 콘솔의 '재발송'(retryClassnote) 또는 공유링크 재발급을 쓴다.
+  if (prior?.classnote_status === "success") return { ok: true, id: prior.id, status: "already_sent" };
 
   const saved = await upsertAdminReport(supabase, user, input);
   if (!saved.ok || !saved.id) return { ok: false, error: saved.error ?? "보고서 저장에 실패했습니다" };

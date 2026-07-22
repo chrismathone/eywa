@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { Pill } from "@/components/atoms/pill";
 import { subjectTone, toneSoftClass } from "../data";
-import { isRowActionable } from "../grid";
+import { isAlreadySent, isRowActionable } from "../grid";
 import { parentUnreadBadge, progressAnomalyBadge } from "../roster-signals";
 import { splitLessons } from "../curriculum";
 import { AttendancePills, type BasicAttendance } from "./attendance-pills";
@@ -191,6 +191,9 @@ export function ReportCard({
   const shareUrl = rep.shareToken ? `${origin}/r/${rep.shareToken}` : "";
   const generating = generatingSubject === subjectName; // 이 과목 AI 멘트 생성 중
   const cnBadge = classnoteBadge(rep.classnoteStatus); // ClassNote 발송 상태 배지
+  // 재발송 차단(2026-07-22) — 상태는 화면 state(rep)가 우선, 없으면 로스터 스냅샷(subject).
+  const alreadySent = isAlreadySent(rep.classnoteStatus ?? subject.classnoteStatus);
+  const canQueue = isRowActionable(subject, "send", rep.classnoteStatus ?? subject.classnoteStatus);
   const atts = rep.attachments ?? []; // 학생 사진 첨부(P2b)
   const uploadingAtt = uploadingSubject === subjectName;
   // 로스터 신호(G2·G3) — 카드 헤더 배지. 진도 신호는 math 전용 데이터라 수학 과목 보유 학생만(표뷰와 동일 규약).
@@ -439,13 +442,15 @@ export function ReportCard({
         <div className="flex flex-wrap items-center gap-2">
           <Button
             size="sm"
-            disabled={!isRowActionable(subject, "send")}
+            disabled={!canQueue}
             title={
-              isRowActionable(subject, "send")
+              canQueue
                 ? "저장 후 ClassNote 발송 큐에 올립니다 — 워커가 자동으로 게시합니다"
-                : subject.attendanceRaw === "absent"
-                  ? "결석 학생 — 발송 제외 (기록 저장은 가능)"
-                  : "오늘 진도를 먼저 입력하세요"
+                : alreadySent
+                  ? "이미 학부모에게 발송된 보고서입니다 — ClassNote는 게시글 수정이 안 됩니다"
+                  : subject.attendanceRaw === "absent"
+                    ? "결석 학생 — 발송 제외 (기록 저장은 가능)"
+                    : "오늘 진도를 먼저 입력하세요"
             }
             onClick={() => onQueueClassnote(subjectName)}
           >
@@ -461,14 +466,15 @@ export function ReportCard({
           {cnBadge ? <span className={`text-[11px] font-bold ${cnBadge.cls}`}>{cnBadge.label}</span> : null}
         </div>
 
-        {/* ⚠️ 게시된 보고서 수정 경고 — 수업보고서는 카드 '이미지'로 게시돼 텍스트 수정이 안 됨(교체=이미지 재생성 필요, 준비 중).
-            이미 게시(success)된 뒤 내용을 고쳐 다시 보내면 게시판에 새 글이 추가되고 기존 이미지는 남는다. */}
-        {rep.classnoteStatus === "success" ? (
+        {/* ⚠️ 게시된 보고서는 재발송 차단(2026-07-22) — 수업보고서는 카드 '이미지'로 게시돼 텍스트 수정이 안 되고,
+            다시 보내면 기존 글은 그대로 둔 채 새 글만 하나 더 붙는다(되돌릴 수단 없음). 그래서 버튼을 잠근다.
+            정말 다시 보내야 하면 아래 '링크 재발급'(상태 리셋) 또는 관리자 발송 콘솔의 '재발송'을 쓴다. */}
+        {alreadySent ? (
           <p className="border-amber/40 bg-amber-soft text-amber flex items-start gap-1 rounded-md border px-2.5 py-1.5 text-[11px] leading-relaxed">
             <EyIcon name="alert" size={13} className="mt-0.5 shrink-0" />
             <span>
-              이미 학부모 게시판에 올라간 보고서입니다. 내용을 고쳐 <b>다시 보내면 새 글이 추가</b>되고, 기존 게시글(이미지)은
-              자동으로 교체되지 않습니다. <b>게시된 보고서 수정·교체는 준비 중</b>입니다.
+              이미 학부모 게시판에 올라간 보고서라 <b>다시 보낼 수 없습니다</b>. ClassNote는 게시글 수정·삭제가 안 되고, 다시
+              보내면 <b>새 글이 하나 더 추가</b>될 뿐입니다. 내용만 고치려면 아래 <b>기록 저장</b>을 쓰세요.
             </span>
           </p>
         ) : null}

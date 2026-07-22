@@ -62,14 +62,39 @@ export function rowInClass(subject: Subject, classFilter: string | null): boolea
 export type RowAction = "save" | "send" | "autowrite";
 
 /**
- * 행이 액션 대상인가 — 진도 입력은 공통 필수(빈 보고서 방지).
- * ⚠️ save=결석 포함(기록은 보존해야), send/autowrite=결석 제외(학부모 발송·AI 멘트 무의미).
- * 결석 판정은 행(반) 단위 raw(absent)만 — 조퇴(early_leave)는 수업을 들었으므로 발송 유지.
+ * 이미 학부모 게시판에 올라간 보고서인가 — 발송 대상에서 뺄 유일한 상태.
+ *
+ * ⚠️ `success`만 본다. queued·processing은 "발송 진행 중"이라 서버가 따로 막고(in-flight 보호),
+ *    failed·too_old·name_conflict는 **아직 학부모에게 안 갔으므로** 다시 시도할 수 있어야 한다.
+ *    여기서 그 상태들까지 막으면 실패한 보고서를 강사가 영영 못 보낸다.
  */
-export function isRowActionable(subject: Subject, action: RowAction): boolean {
+export function isAlreadySent(status: string | null | undefined): boolean {
+  // `already_sent`는 서버 액션의 **결과 코드**(DB 상태 아님)다. 호출부가 배지용으로 success로 정규화하지만,
+  // 어딘가 그대로 흘러들어도 게이트가 fail-open 되지 않도록 여기서도 같이 인정한다(가드는 보수적으로).
+  return status === "success" || status === "already_sent";
+}
+
+/**
+ * 행이 액션 대상인가 — 진도 입력은 공통 필수(빈 보고서 방지).
+ * ⚠️ save=결석·발송완료 포함(기록은 언제든 보존해야), send=결석·**발송완료** 제외, autowrite=결석 제외.
+ * 결석 판정은 행(반) 단위 raw(absent)만 — 조퇴(early_leave)는 수업을 들었으므로 발송 유지.
+ *
+ * 발송완료 제외(2026-07-22): 일괄 발송을 두 번 누르면 그날 전원에게 게시글이 하나씩 더 붙었다
+ * (ClassNote는 수정·삭제가 없어 되돌릴 수 없다). 서버(saveAndQueueClassnote)가 권위 있는 차단이고
+ * 여기는 화면 게이트 — 버튼을 잠그고 일괄 대상에서 빼서 "눌렀는데 아무 일도 안 남"을 없앤다.
+ * ⚠️ `subject.classnoteStatus`는 **로스터가 로드한 시점** 값이라 세션 중 방금 보낸 건을 모른다 →
+ *    호출부(selectRows)가 화면 state의 최신 상태를 넣어 준다(`statusOverride`).
+ */
+export function isRowActionable(
+  subject: Subject,
+  action: RowAction,
+  statusOverride?: string | null,
+): boolean {
   if (!isReportEligible(subject)) return false;
   if (action === "save") return true;
-  return subject.attendanceRaw !== "absent";
+  if (subject.attendanceRaw === "absent") return false;
+  if (action === "send" && isAlreadySent(statusOverride ?? subject.classnoteStatus)) return false;
+  return true;
 }
 
 /**

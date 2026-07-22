@@ -6,7 +6,7 @@ import { TEXTAREA_AUTOSIZE_RESIZABLE } from "@/lib/ui/textarea";
 import { joinComment, splitComment } from "../comment-paragraphs";
 import { resolveStudyGrade } from "../curriculum";
 import { subjectTone, toneSoftClass, toneSolidClass } from "../data";
-import { isRowActionable, type GridRow } from "../grid";
+import { isAlreadySent, isRowActionable, type GridRow } from "../grid";
 import { parentUnreadBadge, progressAnomalyBadge } from "../roster-signals";
 import type { OneScreenStudent } from "../types";
 import { classnoteBadge, type SubjectReport } from "./report-card";
@@ -163,7 +163,12 @@ export function GridBodyRow({
   const draftParas = splitComment(rep?.draft ?? "");
   const bulkGen = gen.bulk;
   const hasDraft = !!rep?.draft?.trim(); // 학부모 멘트(draft) 준비됨 — 발송 시 사용
-  const canSend = isRowActionable(subject, "send"); // 진도 입력됨 + 결석 아님(2-3) — 자동작성·발송 게이트
+  // ⚠️ 화면 state(rep)의 상태가 로스터 스냅샷을 이긴다 — 방금 보낸 행을 계속 '발송 가능'으로 두면 중복 게시.
+  const liveStatus = rep?.classnoteStatus ?? subject.classnoteStatus;
+  const alreadySent = isAlreadySent(liveStatus);
+  const canSend = isRowActionable(subject, "send", liveStatus); // 진도 + 결석 아님 + 미발송(2-3)
+  // 자동작성은 발송과 게이트가 다르다 — 이미 보낸 뒤라도 기록용 멘트는 다시 만들 수 있어야 한다.
+  const canAutoWrite = isRowActionable(subject, "autowrite");
   const isAbsent = subject.attendanceRaw === "absent";
   // 파일을 행 위에 놓으면 그 행에 바로 첨부(가장 빠른 경로). 진도 미입력 등 게이트는 부모 핸들러가 안내한다.
   const drop = useRowFileDrop((files) => actions.onAttach(student, subject.name, files));
@@ -392,9 +397,9 @@ export function GridBodyRow({
             <button
               type="button"
               onClick={() => actions.onAutoWrite(student, subject.name)}
-              disabled={genRowBusy || bulkGen || !canSend}
+              disabled={genRowBusy || bulkGen || !canAutoWrite}
               title={
-                canSend
+                canAutoWrite
                   ? "AI 학부모 멘트 자동작성 (발송 문구)"
                   : isAbsent
                     ? "결석 학생 — 발송 제외 (기록 저장은 가능)"
@@ -440,9 +445,11 @@ export function GridBodyRow({
             title={
               bulkGen
                 ? "전체 자동작성 중 — 완료 후 발송"
-                : !canSend && isAbsent
-                  ? "결석 학생 — 발송 제외 (기록 저장은 가능)"
-                  : undefined
+                : alreadySent
+                  ? "이미 학부모에게 발송된 보고서입니다 — ClassNote는 게시글 수정이 안 됩니다"
+                  : !canSend && isAbsent
+                    ? "결석 학생 — 발송 제외 (기록 저장은 가능)"
+                    : undefined
             }
             onClick={() => actions.onSendRow(student, subject.name)}
           >

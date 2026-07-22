@@ -140,10 +140,15 @@ export async function saveLessonReport(
  * 원스크린 "ClassNote 발송" — 보고서 저장(upsert) + ClassNote 큐 적재를 한 액션으로.
  * 강사는 큐에 넣고 즉시 반환(비동기) — 실제 게시는 로컬 워커가 폴링해 처리(P3).
  *
- * 재발송 정책(리뷰 반영): **저장 전** 기존 상태를 확인한다.
+ * 재발송 정책(2026-07-22 원장 확정 "다시 보낼 일이 없다"): **저장 전** 기존 상태를 확인한다.
  * - `processing`(워커가 게시 중) → 내용을 덮어쓰지 않고 반환(레이스·오게시 방지).
- * - 그 외(null/queued/success/failed) → upsert 후 `queued`로 재적재 → **재발송 허용**(강사의 발송 재클릭 = 재게시 의도).
- *   기존엔 저장을 먼저 해 내용은 바뀌고 success면 재큐잉을 막아 ClassNote와 불일치가 났음.
+ * - `success`(이미 학부모 게시판에 올라감) → **차단**. ClassNote는 게시글 수정·삭제가 없어 재발송 =
+ *   글이 하나 더 붙는 것뿐이고 되돌릴 수단이 없다. 저장도 하지 않는다 — 여기서 내용만 갱신하면
+ *   DB와 학부모가 실제로 본 글이 갈라진다(내용 수정은 '저장' 버튼으로, 그건 발송과 무관).
+ *   ⚠️ 탈출구는 둘 다 사람이 명시적으로 여는 경로다: ① 공유링크 **재발급**(reissueShareLink가 상태를
+ *   리셋 → 다시 발송 가능) ② 관리자 발송 콘솔의 '재발송'(retryClassnote). 이 함수에 force 인자를
+ *   더하지 말 것 — 강사 화면의 실수 클릭을 막는 게 이 가드의 전부다.
+ * - 그 외(null/queued/failed/too_old/name_conflict) → upsert 후 `queued`로 적재.
  */
 export async function saveAndQueueClassnote(
   input: SaveLessonReportInput,
@@ -180,6 +185,10 @@ export async function saveAndQueueClassnote(
   // 워커 게시 중이면 내용 덮어쓰지 않고 그대로 반환(in-flight 보호).
   if (prior?.classnote_status === "processing") {
     return { ok: true, id: prior.id, status: "processing" };
+  }
+  // 이미 게시된 건은 재발송하지 않는다(중복 게시 차단, 위 주석 참조). 저장도 건너뛴다.
+  if (prior?.classnote_status === "success") {
+    return { ok: true, id: prior.id, status: "already_sent" };
   }
 
   // 저장(upsert) — 권한 재검증(getCurrentUser+담당 활성수강생)은 saveLessonReport 내부.
