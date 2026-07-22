@@ -115,7 +115,16 @@ export function MakeeduPushCard({ candidates }: { candidates: UnpushedIntakeCons
                       disabled={locked}
                     />
                   </td>
-                  <td className="text-foreground px-3 py-2 font-medium whitespace-nowrap">{c.prospectName}</td>
+                  <td className="text-foreground px-3 py-2 font-medium whitespace-nowrap">
+                    {c.prospectName}
+                    {/* 등록됐는데 makeedu에 학생이 없는 건 — 왜 목록에 있는지 밝히지 않으면
+                        "이미 다니는 학생이 왜 신규 문의에?"로 읽힌다(push-eligibility.ts). */}
+                    {c.note ? (
+                      <span className="bg-amber/15 text-amber rounded-pill ml-1.5 px-2 py-0.5 text-[11px] font-bold" title={c.note}>
+                        makeedu 미등록
+                      </span>
+                    ) : null}
+                  </td>
                   <td className="text-text-dim px-3 py-2 whitespace-nowrap">
                     {schoolGradeLabel(c.prospectSchool, c.prospectGrade) || "—"}
                   </td>

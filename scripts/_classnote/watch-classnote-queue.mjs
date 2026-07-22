@@ -49,8 +49,16 @@ const recentIssues = [];
  */
 const WORKER_CAPS = { noticeAttachments: true };
 
+// 로그 타임스탬프 = KST(UTC+9) 고정 오프셋 — 연동 PC의 시스템 로케일/타임존과 무관하게 "YYYY-MM-DD HH:MM:SS".
+// watch.log이 UTC(…Z)로 찍혀 실제 시각과 9시간 어긋나 보이던 문제(2026-07-22 원장 제보). DB/하트비트는 ISO 유지(기계용).
+function kstStamp(d = new Date()) {
+  const k = new Date(d.getTime() + 9 * 3600 * 1000);
+  const p = (n) => String(n).padStart(2, "0");
+  return `${k.getUTCFullYear()}-${p(k.getUTCMonth() + 1)}-${p(k.getUTCDate())} ${p(k.getUTCHours())}:${p(k.getUTCMinutes())}:${p(k.getUTCSeconds())}`;
+}
+
 function log(msg) {
-  const line = `[${new Date().toISOString()}] ${msg}`;
+  const line = `[${kstStamp()}] ${msg}`;
   console.log(line);
   // ⚠️ 단순히 /실패|오류/ 로 잡으면 **"실패 0"(정상 보고)** 이 5칸 중 2칸을 먹어 진짜 문제를 밀어낸다
   // (2026-07-21 실측). 0건 여부까지 보는 판정은 worker-issue-filter.mjs 단일 소스.

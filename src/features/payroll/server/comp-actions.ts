@@ -6,6 +6,7 @@
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { createClient } from "@/lib/supabase/server";
+import { SALARY_GROUPS } from "../salary-group";
 import type { SalaryType } from "../settlement";
 
 const SALARY_TYPES: SalaryType[] = ["commission", "fixed", "hybrid"];
@@ -76,9 +77,25 @@ export async function saveTeacherComp(
     return { error: "대상 강사를 찾을 수 없습니다" };
   }
 
+  // 과정별 배분율(초·중·고·수능·특강) — 비율제/혼합에서만 의미. 각 칸은 비워둘 수 있고(그러면 기본 비율로 폴백),
+  // 값이 있으면 0~100. ⚠️ 비율제가 아니면 통째로 null로 정리(옛 값이 남아 잘못 계산되는 것 방지 — 기본 비율과 동일 규율).
+  let groupRates: Record<string, number> | null = null;
+  if (isCommissiony) {
+    const acc: Record<string, number> = {};
+    for (const g of SALARY_GROUPS) {
+      const raw = String(formData.get(`rate_${g}`) ?? "").trim();
+      if (raw === "") continue;
+      const n = Number(raw.replace(/,/g, ""));
+      if (!Number.isFinite(n) || n < 0 || n > 100) return { error: `${g} 배분율은 0~100 사이여야 합니다` };
+      acc[g] = Math.round(n * 100) / 100;
+    }
+    groupRates = Object.keys(acc).length > 0 ? acc : null;
+  }
+
   const patch: Record<string, unknown> = {
     salary_type: salaryType,
     commission_rate: commissionRate, // 비율제/혼합만 값, 그 외 null(위에서 정리)
+    commission_rates: groupRates,
   };
   // 급여제/혼합일 때만 기본급 저장(비율제·미설정에선 monthly_base 안 건드림 — 시간모델 값 보존).
   if (needsBase) patch.monthly_base = monthlyBase;

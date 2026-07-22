@@ -9,6 +9,7 @@ import { addDays, resolveReportDate, weekdayIndexOf, formatKoreanDate } from "@/
 import { parseExamScores } from "../exam-info";
 import { classnoteSendWindowLabel } from "../classnote-guard";
 import { applyStudentOrder } from "../student-order";
+import { rosterIncludesEnrollment } from "../roster-filter";
 import { getTextbookOrdersForStudents } from "@/features/billing/server/textbook-queries";
 import type { AttendanceMark, OneScreenStudent } from "../types";
 
@@ -159,13 +160,26 @@ export async function getTeacherRoster(rawDate?: string): Promise<TeacherRoster>
   // 3) 대상 날짜 시점 수강생 — start≤date AND (end null OR end≥date). null 양단 허용(레거시 안전).
   // ⚠️ end_date IS NULL 고정이면 과거 날짜 마감 시 그새 종료된 학생이 누락되고, 출결 write 게이트(날짜기준)와
   //    어긋나 pill 클릭이 거부된다(회귀). 출석부·setAttendanceCell과 같은 날짜 기준으로 통일.
-  const enrollments = await fetchInChunks<{ student_id: string; class_id: string }>(activeIds, (chunk) =>
+  // 날짜창은 DB에서 좁히고, 분리등원·휴원·반이동 규약은 rosterIncludesEnrollment(eligibility 단일소스)로 판정.
+  const enrollmentRows = await fetchInChunks<{
+    student_id: string;
+    class_id: string;
+    start_date: string | null;
+    end_date: string | null;
+    on_hold: boolean | null;
+    is_transferred: boolean | null;
+    attendance_days: string[] | null;
+  }>(activeIds, (chunk) =>
     supabase
       .from("enrollments")
-      .select("student_id, class_id")
+      .select("student_id, class_id, start_date, end_date, on_hold, is_transferred, attendance_days")
       .or(`start_date.is.null,start_date.lte.${targetDate}`)
       .or(`end_date.is.null,end_date.gte.${targetDate}`)
       .in("class_id", chunk),
+  );
+  // 그 요일에 안 오는 학생(분리등원)·휴원은 제외 — 폴백(요일 수업 없음)일 땐 요일 조건 미적용.
+  const enrollments = enrollmentRows.filter((e) =>
+    rosterIncludesEnrollment(e, targetDate, dow, todayIds.size > 0),
   );
   // 결정적 정렬(반 시작시각→class_id) — '대표 반'(tag=첫 반)·과목 행 순서를 새로고침 간 안정화(비결정 방지).
   enrollments.sort(
