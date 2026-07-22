@@ -95,10 +95,13 @@ export function AttendanceInputForm({
   classId,
   date,
   rows,
+  locked,
 }: {
   classId: string;
   date: string;
   rows: AttendanceInputRow[];
+  /** 수정 기간(7일)이 지나 강사가 못 고치는 날 — 입력·저장을 전부 잠근다. */
+  locked?: boolean;
 }) {
   const [state, formAction] = useActionState<SaveAttendanceState, FormData>(saveAttendance, undefined);
   const [pending, setPending] = useState<Record<string, CellState>>(() => {
@@ -164,6 +167,9 @@ export function AttendanceInputForm({
 
   return (
     <form onSubmit={(e) => submitAction(e, formAction)} className="space-y-4">
+      {/* 잠금은 fieldset 하나로 — 컨트롤을 하나씩 disabled 처리하면 새 입력이 생길 때마다 빠뜨린다.
+          ⚠️ 진짜 게이트는 서버 액션(saveAttendance)이다(#77). 여기선 헛수고를 없앨 뿐. */}
+      <fieldset disabled={locked} className={locked ? "opacity-60" : undefined}>
       <input type="hidden" name="classId" value={classId} />
       <input type="hidden" name="date" value={date} />
 
@@ -369,6 +375,7 @@ export function AttendanceInputForm({
         </span>
         <SubmitButton />
       </div>
+    </fieldset>
     </form>
   );
 }

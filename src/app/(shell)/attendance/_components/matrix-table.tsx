@@ -32,6 +32,7 @@ export function MatrixTable({
   holidays,
   showGroups,
   money,
+  lockBefore,
 }: {
   groups: MatrixGroup[];
   days: AttendanceMatrix["days"];
@@ -41,6 +42,8 @@ export function MatrixTable({
   showGroups: boolean;
   /** 원장 전용 금액 열. null/undefined면 열 자체를 안 그린다(강사는 못 본다). */
   money?: TeacherMoney | null;
+  /** 이 날짜 이전 칸은 강사가 수정 못 함(7일 창). null = 관리자 이상이라 제한 없음. */
+  lockBefore?: string | null;
 }) {
   // 헤더의 수업요일 하이라이트 = 표에 담긴 반들의 수업요일 합집합(강사 전체 보기는 반마다 다르다).
   const classDows = new Set(groups.flatMap((g) => g.matrix.classDows));
@@ -144,6 +147,7 @@ export function MatrixTable({
                 days={days}
                 holidays={holidays}
                 money={money ? money.byStudent[s.id] ?? null : undefined}
+                lockBefore={lockBefore}
               />
             ))}
           </tbody>

@@ -29,6 +29,7 @@ export function AttendanceCell({
   attendDay,
   muted,
   derived,
+  locked,
 }: {
   studentId: string;
   classId: string;
@@ -42,6 +43,8 @@ export function AttendanceCell({
   muted?: boolean;
   /** 수기 기록이 아니라 수업보고서에서 파생한 값 — 툴팁에 출처 표시(derive-from-reports.ts). */
   derived?: boolean;
+  /** 수정 기간(7일)이 지나 강사가 못 고치는 칸 — 이유를 담은 문장. 없으면 편집 가능. */
+  locked?: string | null;
 }) {
   const [status, setStatus] = useState<AttendanceStatus | null>(initialStatus);
   const [units, setUnits] = useState<number | null>(initialUnits ?? null);
@@ -109,7 +112,9 @@ export function AttendanceCell({
     <>
       <button
         type="button"
+        disabled={!!locked}
         onClick={(e) => {
+          if (locked) return; // 서버에서도 막지만(#77) 클릭 자체를 죽여 헛수고를 없앤다
           const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
           // 아래 공간이 팝오버 높이(시수·메모 포함 ~300px)보다 좁으면 위로 플립.
           const EST_HEIGHT = 300;
@@ -125,11 +130,11 @@ export function AttendanceCell({
           setUnitsError(false);
           setOpen(true);
         }}
-        title={titleText}
+        title={locked ?? titleText}
         // 셀 전체를 채우는 배경색이 곧 상태 표시 — 부모 td는 relative + p-0.
         // ⚠️ 고정 크기 칩에 배경을 주면 셀을 못 채운다(gotcha #66).
         className={`absolute inset-0 flex items-center justify-center text-[11px] font-bold transition ${display.className} ${
-          status ? "" : "hover:bg-bg-soft"
+          locked ? "cursor-not-allowed" : status ? "" : "hover:bg-bg-soft"
         }`}
         aria-label={[
           `출결 상태 변경 (현재: ${status ? STATUS_TEXT[status] : "미기록"})`,

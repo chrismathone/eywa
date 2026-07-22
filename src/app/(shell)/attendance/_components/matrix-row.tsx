@@ -31,6 +31,11 @@ export function rowTotals(
   };
 }
 
+/** 잠긴 칸 툴팁 — 서버 응답과 같은 취지의 한글 문장(raw 코드 노출 금지). */
+function lockedMessage(date: string, lockBefore: string): string {
+  return `${date} 출결은 수정 기간(7일)이 지나 고칠 수 없습니다 — ${lockBefore} 이후만 수정 가능, 그 전은 관리자에게 요청하세요`;
+}
+
 function rateColorOf(rate: number | null): string {
   if (rate === null) return "text-text-faint";
   return rate >= 90 ? "text-primary" : rate >= 80 ? "text-amber" : "text-danger";
@@ -47,6 +52,7 @@ export function MatrixRow({
   days,
   holidays,
   money,
+  lockBefore,
 }: {
   student: MatrixStudent;
   /** 이 행이 속한 반 — 셀 저장 대상. 강사 전체 보기에선 행마다 다르다. */
@@ -56,6 +62,8 @@ export function MatrixRow({
   holidays: Record<string, string>;
   /** 원장 전용 금액 열(강사 전체 보기). undefined = 열 자체 없음. */
   money?: StudentMoney | null;
+  /** 이 날짜 **이전**은 강사가 수정 못 함(7일 창). null = 제한 없음(관리자 이상). */
+  lockBefore?: string | null;
 }) {
   const marks = matrix.marks[student.id] ?? {};
   const units = matrix.units[student.id] ?? {};
@@ -99,6 +107,7 @@ export function MatrixRow({
               initialUnits={units[d.date] ?? null}
               attendDay={attend}
               muted={!!holiday || (!attend && d.isWeekend)}
+              locked={lockBefore && d.date < lockBefore ? lockedMessage(d.date, lockBefore) : null}
               derived={!!matrix.derived[student.id]?.[d.date]}
             />
           </td>
