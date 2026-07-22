@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { extractWorkerEnv, formatWorkerResults } from "./worker-results";
+import { extractWorkerEnv, formatWorkerResults, workerSupportsNoticeAttachments } from "./worker-results";
 
 // KST 12:30 = 03:30 UTC
 const AT = "2026-07-19T03:30:00.000Z";
@@ -78,5 +78,19 @@ describe("정상 요약은 '최근 경고'로 세지 않는다(늑대소년 방�
   it("진짜 오류 줄은 그대로 남는다", () => {
     const line = "[feed] 오류(다음 폴에서 재시도): page.goto: Timeout 60000ms exceeded.";
     expect(extractWorkerEnv({ env: { logDir: "x", recent: [line] } }).recent).toEqual([line]);
+  });
+});
+
+describe("workerSupportsNoticeAttachments", () => {
+  it("caps.noticeAttachments가 true일 때만 지원으로 본다", () => {
+    expect(workerSupportsNoticeAttachments({ caps: { noticeAttachments: true } })).toBe(true);
+  });
+
+  it("구버전 워커(캡 없음)는 미지원 — 첨부를 무시하고 글자만 게시하므로 fail-safe", () => {
+    expect(workerSupportsNoticeAttachments({ notice: { at: AT, processed: 1 } })).toBe(false);
+    expect(workerSupportsNoticeAttachments({ caps: {} })).toBe(false);
+    expect(workerSupportsNoticeAttachments({ caps: { noticeAttachments: "yes" } })).toBe(false);
+    expect(workerSupportsNoticeAttachments(null)).toBe(false);
+    expect(workerSupportsNoticeAttachments("caps")).toBe(false);
   });
 });

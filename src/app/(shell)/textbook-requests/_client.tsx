@@ -1,14 +1,14 @@
 "use client";
 
 import { useActionState, useEffect, useRef, useState } from "react";
-import { BookMarked, BookOpen, Eraser, Eye, Save, User, X } from "@/components/icons/eywa-icon-compat";
-import { EyIcon } from "@/components/icons/eywa-icons";
-import { Button } from "@/components/ui/button";
+import { BookMarked, BookOpen, Eye, User, X } from "@/components/icons/eywa-icon-compat";
 import { Input } from "@/components/ui/input";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { kstToday } from "@/lib/date-kst";
+import { TEXTAREA_AUTOSIZE } from "@/lib/ui/textarea";
 import type { AccountSetting } from "@/features/owner/settings-types";
 import { requestTextbook, type TextbookState } from "@/features/billing/server/textbook-actions";
+import { TextbookMentField, useMentDraft } from "@/features/billing/textbook-ment";
 import type { StudentOption, TextbookOrderRow } from "@/features/billing/server/textbook-queries";
 import type { CatalogOption } from "@/features/billing/server/catalog-queries";
 import {
@@ -17,6 +17,7 @@ import {
 } from "@/app/(print)/textbook/[id]/print/textbook-request-card-body";
 import { downloadCardPng } from "@/app/(print)/textbook/[id]/print/download-card";
 import { RequestHistory } from "./request-history";
+import { TextbookFormFooter } from "./_form-footer";
 import { TextbookSendDialog } from "./_send-dialog";
 
 // 교재 요청 — ijw TextbookRequestView 구조 그대로 이식(선생님들이 익숙한 화면):
@@ -68,6 +69,11 @@ export function TextbookRequestClient({
   const [sendIds, setSendIds] = useState<string[] | null>(null);
   // '초기화'는 폼만 비우고 useActionState 결과는 못 지우므로, 직전 결과 메시지를 함께 숨긴다(잔존 방지).
   const [msgHiddenFor, setMsgHiddenFor] = useState<TextbookState>(undefined);
+  // 학부모용 문구 — 저장된 내 멘트를 불러오고(autoLoad) 입력이 멈추면 자동 저장. 발송창으로 그대로 이어진다.
+  const { ment, edit: editMent } = useMentDraft({ autoLoad: true });
+  const formRef = useRef<HTMLFormElement>(null);
+  const [sending, setSending] = useState(false); // '클래스노트 발송' 경로의 저장 진행 표시
+  const [notice, setNotice] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
 
   // 바로 다운로드 — 카드 데이터를 화면 밖에 렌더 → html2canvas → PNG 저장(새 탭·창 없음).
   // 여러 명 일괄 발행을 위해 **큐**: head를 렌더 → 다운로드 완료 후 slice → 다음. k는 updater에서 파생(단조).
@@ -141,7 +147,36 @@ export function TextbookRequestClient({
     setPrice("");
     setNotes("");
     setMsgHiddenFor(state); // 직전 성공/에러 문구도 함께 치움
+    setNotice(null);
   };
+
+  /**
+   * '클래스노트 발송' — 기록을 먼저 남기고(요청 생성) 발송창을 연다. **저장이 실패하면 열지 않는다.**
+   * ⚠️ submit을 가로채지 않는다(type="button" + 액션 직접 호출) — '이미지 저장 및 기록'의 PNG 자동 저장
+   *    흐름(useActionState → enqueueCards)은 그대로 둔다. 이 경로는 PNG 없이 기록만 남긴다(두 동작 분리).
+   */
+  async function saveAndSend() {
+    const form = formRef.current;
+    if (!form || sending) return;
+    setSending(true);
+    setNotice(null);
+    const res = await requestTextbook(undefined, new FormData(form));
+    setSending(false);
+    const ids = res?.ok ? (res.created ?? []).map((c) => c.id) : [];
+    if (!res?.ok || ids.length === 0) {
+      setNotice({
+        kind: "error",
+        text:
+          res?.error ??
+          Object.values(res?.fieldErrors ?? {})[0] ??
+          "저장하지 못해 발송을 시작할 수 없습니다",
+      });
+      return;
+    }
+    setMsgHiddenFor(state); // 직전 저장 안내와 겹치지 않게
+    setNotice({ kind: "ok", text: `${ids.length}건을 기록했습니다 — 발송창에서 학부모에게 보낼 수 있어요` });
+    setSendIds(ids);
+  }
 
   // 선택된 학생들(칩·미리보기용) + 추가 셀렉트에서 이미 선택된 건 제외.
   const selectedStudents = studentIds.map((id) => ({
@@ -194,7 +229,11 @@ export function TextbookRequestClient({
           담당 학생이 없어 교재를 요청할 수 없습니다.
         </p>
       ) : (
-        <form action={formAction} className="grid gap-6 lg:grid-cols-[minmax(320px,2fr)_minmax(0,3fr)] lg:items-start">
+        <form
+          ref={formRef}
+          action={formAction}
+          className="grid gap-6 lg:grid-cols-[minmax(320px,2fr)_minmax(0,3fr)] lg:items-start"
+        >
           {/* 좌: 작성 폼 (ijw 기본 정보 → 교재 내용 섹션 구조) */}
           <section className="border-line bg-card space-y-5 rounded-2xl border p-4">
             <div className="space-y-3">
@@ -328,44 +367,30 @@ export function TextbookRequestClient({
               </label>
               <label className="block space-y-1">
                 <span className="text-text-dim text-[12px] font-medium">메모 (사무실 전달, 선택)</span>
-                <Input name="notes" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="예: 급해요 — 이번 주 수업에 필요" />
+                {/* 손잡이로 잡아끄는 대신 작성량에 따라 자동 확장(rows=기본 줄 수 겸 미지원 브라우저 폴백). */}
+                <textarea
+                  name="notes"
+                  rows={3}
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="예: 급해요 — 이번 주 수업에 필요"
+                  className={`border-input placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 min-h-[68px] w-full rounded-lg border bg-transparent px-2.5 py-1.5 text-sm transition-colors outline-none focus-visible:ring-3 ${TEXTAREA_AUTOSIZE}`}
+                />
               </label>
+              {/* 메모 바로 아래 = 학부모에게 실제로 나가는 문구(발송 시 그대로 쓰인다). */}
+              <TextbookMentField value={ment} onChange={editMent} />
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
-              <Button type="button" variant="outline" onClick={reset}>
-                <Eraser className="size-4" />
-                초기화
-              </Button>
-              <Button type="submit" disabled={pending || !canSubmit}>
-                <Save className="size-4" />
-                {pending ? "저장 중…" : "이미지 저장 및 기록"}
-              </Button>
-              {!canSubmit ? (
-                <span className="text-text-faint text-[11px]">학생과 교재명을 입력하면 저장할 수 있어요</span>
-              ) : null}
-            </div>
-            {showMsg && state?.error ? <p className="text-danger text-[12px]">{state.error}</p> : null}
-            {showMsg && state?.ok ? (
-              <div className="space-y-2">
-                <p className="text-primary text-[12px]">
-                  {(state.created?.length ?? 0) > 1
-                    ? `${state.created!.length}명에게 교재 요청이 기록되었습니다 — 요청서 ${state.created!.length}장이 각각 저장됩니다.`
-                    : "기록되었습니다 — 요청서 이미지가 자동 저장됩니다. (아래 내역의 ‘요청서’로 다시 받을 수 있어요)"}
-                </p>
-                {/* 방금 만든 요청 그대로 학부모 알림장으로 — PNG 자동 저장 흐름은 그대로 두고 진입점만 추가. */}
-                {created && created.length > 0 ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => setSendIds(created.map((c) => c.id))}
-                  >
-                    <EyIcon name="send" size={16} />
-                    학부모에게 발송
-                  </Button>
-                ) : null}
-              </div>
-            ) : null}
+            <TextbookFormFooter
+              result={showMsg ? state : undefined}
+              notice={notice}
+              canSubmit={canSubmit}
+              pending={pending}
+              sending={sending}
+              onReset={reset}
+              onSaveAndSend={saveAndSend}
+              onSendCreated={setSendIds}
+            />
           </section>
 
           {/* 우: 실시간 미리보기 (ijw 우측 패널 — 타이핑 즉시 종이 서식에 반영) */}
@@ -412,7 +437,17 @@ export function TextbookRequestClient({
         capNote={isTeacher ? undefined : "최근 100건 기준 — 전체는 수납관리 › 교재"}
       />
 
-      {sendIds ? <TextbookSendDialog orderIds={sendIds} onClose={() => setSendIds(null)} /> : null}
+      {/* 학부모 발송 — 다이얼로그가 요청서 카드를 숨김 렌더해 PNG로 캡처하므로 카드 렌더 재료(학원명·로고·계좌)를 넘긴다. */}
+      {sendIds ? (
+        <TextbookSendDialog
+          orderIds={sendIds}
+          onClose={() => setSendIds(null)}
+          academyName={academyName}
+          logoUrl={logoUrl}
+          account={account}
+          initialMent={ment}
+        />
+      ) : null}
 
       {/* 바로 다운로드용 숨김 카드 — 큐의 head를 렌더(다운로드 후 다음으로). 여러 명 일괄 발행 시 순차 렌더. */}
       {dlHead ? (

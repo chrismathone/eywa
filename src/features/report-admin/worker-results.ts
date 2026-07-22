@@ -69,6 +69,20 @@ export function extractWorkerEnv(raw: unknown): WorkerEnvInfo {
   };
 }
 
+/**
+ * 이 워커가 **공지 이미지 첨부(0130a)를 지원하는 버전**인가 — 하트비트 `last_results.caps.noticeAttachments`.
+ *
+ * 워커는 zip 물리 이관이라 앱보다 늦게 갱신된다. 구버전은 이 키가 없고, 첨부를 실어 보내도 **무시하고
+ * 글자만 게시한 뒤 success로 기록**한다(학부모는 요청서 없는 글, 강사는 정상 발송으로 오인). 그래서
+ * 발송 전에 이 값을 확인해 미지원이면 막는다. 키가 없으면 **미지원으로 본다**(fail-safe).
+ */
+export function workerSupportsNoticeAttachments(raw: unknown): boolean {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return false;
+  const caps = (raw as Record<string, unknown>).caps;
+  if (!caps || typeof caps !== "object" || Array.isArray(caps)) return false;
+  return (caps as Record<string, unknown>).noticeAttachments === true;
+}
+
 function kstHHMM(iso: string): string {
   const ms = Date.parse(iso);
   if (!Number.isFinite(ms)) return "";

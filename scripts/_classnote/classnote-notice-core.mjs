@@ -10,21 +10,32 @@
  * (fan-out이 다른 가족에게 남 이름을 노출하는 것 차단). **게시취소(회수)**: eywa가 status='revoke_requested'로 표시하면
  * 저장된 리포트 id를 GET로 (cls/child) 대조 후 `DELETE /api/v1_2/reports/{id}/`(204) — 엉뚱한 id로 남 글 삭제 방지.
  *
+ * **첨부(2단계, 0130a)**: 공지에 첨부가 있으면(공통 `attachments` + 학생별 `targets[].attachments`) 글자 대신
+ * **이미지 동반 게시**를 탄다 — 내부 라우트에서 signed URL을 받아 kage에 올리고 `postClassnoteReport`로 게시.
+ * 첨부 0건이면 기존 글자 전용 `postReport` 경로 그대로(회귀 격리). 준비 헬퍼는 notice-attachments.mjs.
+ *
  * 안전장치: 실게시·회수는 --post + classnoteSendEnabled(킬스위치) 확인. 타깃별 실패는 그 타깃만 기록(results).
  */
-import { isClassnoteSendEnabled, getClassnoteBoardAllowlist } from "./classnote-core.mjs";
+import { isClassnoteSendEnabled, getClassnoteBoardAllowlist, DEFAULT_BASE } from "./classnote-core.mjs";
 import {
   CLASSNOTE_BASE,
+  dismissHonorificDialog,
   loginClassnote,
   fetchCenterId,
   fetchBoards,
   fetchBoardChildren,
   fetchChildren,
   fetchChildDetail,
+  postClassnoteReport,
+  uploadToKage,
   childKeys,
   norm,
 } from "./classnote-admin-core.mjs";
 import { boardNameAmbiguity, evaluateBoardSafety, kstSchoolYear } from "./board-safety.mjs";
+import { createNoticeMediaUploader, fetchNoticeMedia, mediaForNoticeTarget } from "./notice-attachments.mjs";
+
+// 내부 첨부 라우트 게이트(보고서 첨부·/r 스샷과 동일 시크릿). 없으면 라우트가 401 → 한글 사유로 보고된다.
+const INTERNAL_SECRET = process.env.CLASSNOTE_INTERNAL_SECRET;
 
 /**
  * 학생 색인 — 매핑 검증에 필요한 두 가지를 한 쿼리로.
@@ -62,8 +73,12 @@ async function postReport(page, { clsId, childId, enrollmentId, content, authorN
   );
 }
 
-/** 방금 게시한 리포트 id 조회 — centers/{center}/reports/?child= 목록(최신순)에서 cls+child+content 매칭. 실패 시 null. */
-async function findReportId(page, centerId, { cls, child, content }) {
+/**
+ * 방금 게시한 리포트 id 조회 — centers/{center}/reports/?child= 목록(최신순)에서 cls+child+content 매칭. 실패 시 null.
+ * `strict`면 **내용까지 일치할 때만** 반환한다(=옛 글로 오인 금지). "이미 게시됐나?" 판정처럼
+ * 잘못 맞추면 중복/누락으로 이어지는 자리에서 쓴다. 평소(게시 직후 id 캡처)는 폴백을 허용한다.
+ */
+async function findReportId(page, centerId, { cls, child, content }, { strict = false } = {}) {
   const list = await page.evaluate(
     async ([center, ch]) => {
       const csrf = (document.cookie.match(/csrftoken=([^;]+)/) || [])[1];
@@ -78,10 +93,12 @@ async function findReportId(page, centerId, { cls, child, content }) {
     [centerId, child],
   );
   if (!list) return null;
-  const match =
-    list.find((r) => String(r.cls) === String(cls) && String(r.child) === String(child) && r.content === content) ||
-    list.find((r) => String(r.cls) === String(cls) && String(r.child) === String(child)); // content 미저장 폴백=최신
-  return match?.id ?? null;
+  const exact = list.find(
+    (r) => String(r.cls) === String(cls) && String(r.child) === String(child) && r.content === content,
+  );
+  if (exact || strict) return exact?.id ?? null;
+  // content 미저장 폴백=최신
+  return list.find((r) => String(r.cls) === String(cls) && String(r.child) === String(child))?.id ?? null;
 }
 
 /** 리포트 단건 조회(회수 전 대조) — {status, cls, child}. */
@@ -124,8 +141,35 @@ async function patchReport(page, id, content) {
   );
 }
 
+/**
+ * 공통 첨부 개수(0130a `attachments`) — 이 공지가 첨부 경로를 타야 하는지 판정용.
+ * ⚠️ 워커만 먼저 갱신되고 마이그레이션이 아직 안 올라간 DB에서도 죽지 않게 try/catch로 0 처리(= 기존 동작).
+ */
+async function countCommonAttachments(sql, noticeId) {
+  try {
+    const [row] = await sql`select case when jsonb_typeof(attachments)='array'
+        then jsonb_array_length(attachments) else 0 end as n
+      from classnote_notices where id=${noticeId}`;
+    return Number(row?.n ?? 0);
+  } catch {
+    return 0; // 컬럼 없음 = 첨부 기능 이전과 동일 동작
+  }
+}
+
+/** 학생별 첨부 개수 합(targets[].attachments) — 스키마 변경 없이 targets 안에 들어온다. */
+function countTargetAttachments(targets) {
+  return (targets ?? []).reduce((n, t) => n + (Array.isArray(t?.attachments) ? t.attachments.length : 0), 0);
+}
+
+/** kage 업로드는 작성폼의 네이티브 file input 경유 — 그 폼으로 이동(타깃마다 새로 열어 첨부 누적 방지). */
+async function openAddForm(page) {
+  await page.goto(`${CLASSNOTE_BASE}/service/report/add`, { waitUntil: "domcontentloaded", timeout: 30000 });
+  await dismissHonorificDialog(page).catch(() => {});
+  await page.waitForTimeout(1500);
+}
+
 /** 타깃 1건 처리 — 보드·원아·enrollment 해석 후 게시 + 리포트 id 캡처. 실패 사유는 한글 note. */
-async function processTarget(page, ctx, target) {
+async function processTarget(page, ctx, target, index = 0) {
   const board = ctx.boardByNorm.get(norm(target.board));
   if (!board) return { board: target.board, ok: false, note: "보드 없음(프로비저닝 필요)" };
 
@@ -173,16 +217,67 @@ async function processTarget(page, ctx, target) {
   // 기반이라 이름 다른 제3 가족을 못 잡아 폐기했다.
   const content = target.body != null ? target.body : ctx.body;
 
+  // 첨부(2단계) — **보드 안전 게이트를 통과한 뒤에** 준비한다(막힐 보드에 업로드 낭비 방지).
+  // ⚠️ 하나라도 준비에 실패하면 게시하지 않는다 — 요청서가 빠진 글은 이 기능의 의미가 없다(거짓 발송 방지).
+  let media = null;
+  if (ctx.mediaFor) {
+    media = await ctx.mediaFor(target, index, {});
+    if (!media) return { board: target.board, ok: false, note: "첨부 목록에서 이 학생을 찾지 못했습니다(재발송 필요)" };
+    if (media.failures.length) return { board: target.board, ok: false, note: `첨부 준비 실패 — ${media.failures.join(" / ")}` };
+    // 이 학생 몫이 0장 = 글자만 — 기존 경로로 되돌려 요청 본문을 완전히 동일하게 유지.
+    // ⚠️ `expected`는 **앱이 서명하기 전** 장수라 0 = "원래 첨부가 없었다"가 확실하다(서명 실패로 사라진
+    //    첨부는 위 failures로 이미 걸린다). 서명 뒤 목록 길이로 판정하면 "전멸 → 글자만 발송 → success"가 된다.
+    if (!media.expected) media = null;
+  }
+
   // 이중 등록(부모 계정 2개)이면 전원에게 게시. 성공한 글은 reports[]에 남겨 부분성공도 회수 가능하게.
   const reports = [];
   for (const { child, enrollment } of enrolled) {
-    const res = await postReport(page, {
-      clsId: board.id,
-      childId: child.id,
-      enrollmentId: enrollment.id,
-      content,
-      authorName: ctx.authorName,
-    });
+    const send = (m) =>
+      m
+        ? postClassnoteReport(page, {
+            cls: board.id,
+            child: child.id,
+            enrollment: enrollment.id,
+            content,
+            dateWritten: kstToday(),
+            authorName: ctx.authorName,
+            attachedImages: m.attachedImages,
+            attachedFiles: m.attachedFiles,
+          })
+        : postReport(page, {
+            clsId: board.id,
+            childId: child.id,
+            enrollmentId: enrollment.id,
+            content,
+            authorName: ctx.authorName,
+          });
+
+    let res = await send(media);
+    // ⚠️ **미검증**: kage access_key를 다른 글에 재사용해도 되는지 확인 못 했다 → 재사용분으로 실패하면
+    // 이 타깃만 **재업로드해 1회 재시도**한다. 재사용이 원인이 아니면 그대로 실패로 남는다.
+    if ((res.status < 200 || res.status >= 300) && media?.reused && ctx.mediaFor) {
+      // 🔴 재시도 전에 **이미 게시됐는지 먼저 확인**한다 — ClassNote가 글을 만든 뒤 후처리에서 5xx를 주거나
+      // 게이트웨이가 끊기면, 그냥 다시 POST하는 순간 학부모 알림장에 **같은 글이 2개** 남는다(회수는 id를
+      // 캡처한 두 번째만 지운다). 내용까지 같은 글이 있으면 그 id를 성공으로 받아들이고 재시도하지 않는다.
+      const posted = await findReportId(
+        page,
+        ctx.centerId,
+        { cls: board.id, child: child.id, content },
+        { strict: true },
+      ).catch(() => null);
+      if (posted != null) {
+        ctx.log?.(`[notice] ${target.board} 게시 응답 실패(HTTP ${res.status})지만 글이 이미 있어 재시도하지 않습니다`);
+        reports.push({ id: posted, url: `${CLASSNOTE_BASE}/service/report/${posted}`, cls: board.id, child: child.id });
+        continue;
+      }
+      ctx.log?.(`[notice] ${target.board} 게시 실패(HTTP ${res.status}) — 첨부 재업로드 후 1회 재시도`);
+      const fresh = await ctx.mediaFor(target, index, { fresh: true });
+      if (fresh && !fresh.failures.length) {
+        media = fresh;
+        res = await send(media);
+      }
+    }
     if (res.status < 200 || res.status >= 300) {
       return { board: target.board, ok: false, note: `게시 실패(HTTP ${res.status})`, reports };
     }
@@ -289,7 +384,13 @@ async function editNotice(page, notice) {
  * 큐 1회 처리 — 게시(queued) + 게시취소(revoke_requested) + 게시본 수정(edit_requested). stale 복구 후 하나씩 클레임(SKIP LOCKED).
  * post=false(dry-run)면 클레임하지 않고 개수만 보고. 게시는 classnoteSendEnabled 킬스위치도 확인(회수·수정은 정리/정정이라 미적용).
  */
-export async function processNoticesOnce(sql, browser, { tenant, post, log = console.log, authorName = "인재원 학원" }) {
+export async function processNoticesOnce(
+  sql,
+  browser,
+  // base = eywa 앱 주소(첨부 signed URL을 받는 내부 라우트). 보고서 경로와 같은 env(CLASSNOTE_SCREENSHOT_BASE)를 쓴다
+  // — 연동 PC는 공개 도메인이어야 한다(localhost면 첨부 조회가 실패하고 그 사유가 results에 남는다).
+  { tenant, post, log = console.log, authorName = "인재원 학원", base = DEFAULT_BASE },
+) {
   // stale 복구 — 크래시로 갇힌 처리중 상태
   await sql`update classnote_notices set status='queued', processing_at=null
     where tenant_id=${tenant} and status='processing' and processing_at < now() - interval '${sql.unsafe(String(STUCK_MIN))} minutes'`;
@@ -333,11 +434,52 @@ export async function processNoticesOnce(sql, browser, { tenant, post, log = con
                       order by created_at limit 1 for update skip locked)
           returning id, body, targets`;
         if (!notice) break;
-        log(`[notice] ${notice.id} 게시 시작 — 타깃 ${(notice.targets ?? []).length}건`);
+        const targets = notice.targets ?? [];
+
+        // ── 첨부 유무 판정(2단계) — 있을 때만 이미지 동반 게시 경로. 0건이면 아래 로직은 전부 건너뛰고
+        //    기존 글자 전용 경로 그대로 돈다(회귀 격리). 공통=0130a 컬럼 · 학생별=targets[].attachments.
+        const attCount = (await countCommonAttachments(sql, notice.id)) + countTargetAttachments(targets);
+        let mediaFor = null;
+        let mediaError = null;
+        if (attCount) {
+          // expectedTotal = DB가 아는 첨부 장수. 라우트가 "전 타깃 0장"을 주면 서명 전멸이라 실패로 잡힌다.
+          const fetched = await fetchNoticeMedia({
+            base,
+            secret: INTERNAL_SECRET,
+            noticeId: notice.id,
+            expectedTotal: attCount,
+          });
+          if (!fetched.ok) mediaError = fetched.error;
+          else {
+            const uploader = createNoticeMediaUploader({
+              openForm: () => openAddForm(page),
+              upload: (kind, file) =>
+                uploadToKage(page, kind === "image" ? "media-attachment-add-input" : "doc-attachment-add-input", file),
+              log,
+            });
+            // 🔴 라우트의 targets[i]는 이미 "공통 + 그 타깃"이 합쳐진 최종 목록 — common을 다시 더하지 않는다(중복 게시).
+            mediaFor = async (t, idx, opts) => {
+              const entry = mediaForNoticeTarget(fetched.targets, t, idx);
+              return entry ? uploader.build(entry, opts) : null;
+            };
+          }
+          log(
+            `[notice] ${notice.id} 첨부 ${attCount}건 — ` +
+              (mediaError ? `첨부 준비 중단(${mediaError})` : `공통 ${fetched.common.images.length + fetched.common.files.length}장 포함 이미지 동반 게시`),
+          );
+        }
+
+        log(`[notice] ${notice.id} 게시 시작 — 타깃 ${targets.length}건`);
+        const ctx = { ...ctxBase, body: notice.body, mediaFor, log };
         const results = [];
-        for (const t of notice.targets ?? []) {
+        for (const [idx, t] of targets.entries()) {
+          // 첨부를 실어야 하는데 목록 자체를 못 받았으면 **한 건도 게시하지 않는다**(요청서 빠진 글 방지).
+          if (mediaError) {
+            results.push({ board: t.board, ok: false, note: mediaError });
+            continue;
+          }
           try {
-            results.push(await processTarget(page, { ...ctxBase, body: notice.body }, t));
+            results.push(await processTarget(page, ctx, t, idx));
           } catch (e) {
             results.push({ board: t.board, ok: false, note: `오류: ${String(e.message).slice(0, 80)}` });
           }

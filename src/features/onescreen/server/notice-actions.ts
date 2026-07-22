@@ -24,6 +24,15 @@ import {
   type NoticeTarget,
 } from "@/features/report-admin/notice-targets";
 import { logAction } from "@/features/audit/server/log";
+import { isTenantReportAttachmentPath } from "@/lib/storage/legacy-audio-path";
+import {
+  hasNoticeTargetAttachments,
+  noticeAttachmentOverflow,
+  NOTICE_ATTACHMENT_INPUT_MAX,
+  NOTICE_ATTACHMENT_MAX,
+  sanitizeNoticeAttachments,
+  type NoticeAttachment,
+} from "../notice-attachments";
 
 const BODY_MAX = 4000;
 // 학원이(테스트 학생) 고정 타깃 — 실 학부모에게 안 가는 검증 경로(반 공지 TEST_TARGET과 동일 관례).
@@ -32,8 +41,15 @@ const TEST_TARGET = { studentName: "학원이", board: "(수학)학원이" };
 export type OnescreenNoticeInput = {
   body: string; // 공통 내용(모든 대상 공통). 개별 내용이 없는 학생은 이 본문으로 발송.
   // (학생, 과목) — 과목이 보드 prefix 결정. individualBody = 그 학생에게만 공통 뒤에 덧붙일 개별 내용(선택).
-  students: { studentId: string; subject: string | null; individualBody?: string }[];
+  // attachments = 그 학생에게만 붙는 이미지(예: 학생별 교재요청서 PNG). 업로드가 끝난 {path,name,size}.
+  students: { studentId: string; subject: string | null; individualBody?: string; attachments?: NoticeAttachment[] }[];
   test?: boolean; // 학원이 1명에게만(파이프라인 검증)
+  /**
+   * 전원 공통 첨부(선택, 0130a) — 예: 교재 표지. 워커가 "공통 + 타깃별"을 합쳐 한 글에 올린다.
+   * ⚠️ **0건이면 큐 행의 attachments 컬럼을 아예 건드리지 않는다** → 기존 공지 호출부(원스크린 공지 컴포저·
+   * 반 공지)는 이 인자를 안 넘기므로 동작이 완전히 동일하다.
+   */
+  attachments?: NoticeAttachment[];
 };
 
 export type OnescreenNoticeResult = {
@@ -127,27 +143,69 @@ export async function sendOnescreenNotice(input: OnescreenNoticeInput): Promise<
   if (!targets.length) return { ok: false, error: "발송 가능한 학생이 없습니다", skipped };
 
   // ── 개별 내용 — 공통 뒤에 덧붙여 그 학생 target.body에만 저장. resolve·동명이인 가드 **이후** studentId lookup으로
-  // 붙여 target↔student를 고정(오발송 방지). 개별 있는 학생만 personalized → 워커가 공유 보드(2가족+)엔 차단, 없으면 공통 발송. ──
+  // 붙여 target↔student를 고정(오발송 방지). 개별 있는 학생만 personalized → 워커가 공유 보드(2가족+)엔 차단, 없으면 공통 발송.
+  // 개별 **첨부**(학생별 요청서 PNG)도 같은 자리에서 같은 방식으로 붙인다 — 남의 요청서가 가는 사고 차단. ──
   if (!input.test) {
     const indiv = new Map<string, string>();
+    const files = new Map<string, NoticeAttachment[]>();
     for (const s of input.students ?? []) {
+      if (!s.studentId) continue;
       const t = (s.individualBody ?? "").trim();
-      if (s.studentId && t) indiv.set(s.studentId, t);
+      if (t) indiv.set(s.studentId, t);
+      // 경로는 서버가 다시 검증(클라가 남의 파일 경로를 큐에 싣는 것 차단).
+      // ⚠️ 여기서 상한(10)으로 자르지 않는다 — 넘치면 아래 overflow 가드가 **막는다**(조용히 자르면 누락 은폐).
+      const atts = sanitizeNoticeAttachments(
+        s.attachments,
+        (p) => isTenantReportAttachmentPath(p, user.tenantId),
+        NOTICE_ATTACHMENT_INPUT_MAX,
+      );
+      if (atts.length) files.set(s.studentId, atts);
     }
-    if (indiv.size) {
+    if (indiv.size || files.size) {
       targets = targets.map((tg) => {
         const add = indiv.get(tg.studentId);
-        return add ? { ...tg, body: `${body}\n\n${add}` } : tg;
+        const atts = files.get(tg.studentId);
+        return {
+          ...tg,
+          ...(add ? { body: `${body}\n\n${add}` } : {}),
+          ...(atts ? { attachments: atts } : {}),
+        };
       });
     }
   }
+
+  // 공통 첨부 — 0건이면 컬럼 자체를 안 건드린다(기존 호출부 무영향). 상한 판정은 아래 overflow 가드가 단독으로.
+  const commonAttachments = sanitizeNoticeAttachments(
+    input.attachments,
+    (p) => isTenantReportAttachmentPath(p, user.tenantId),
+    NOTICE_ATTACHMENT_INPUT_MAX,
+  );
+
+  // 한 글 상한 초과는 **조용히 자르지 않고 막는다** — 자르면 워커가 받는 목록엔 잘린 뒤 개수만 남아
+  // 누락을 아무도 못 본다(학생 본인 요청서가 사라져도 '성공'으로 기록). 어느 학생이든 넘치면 거부.
+  const worstOverflow = targets.reduce(
+    (n, tg) => Math.max(n, noticeAttachmentOverflow(commonAttachments, tg.attachments)),
+    0,
+  );
+  if (worstOverflow > 0)
+    return {
+      ok: false,
+      error: `한 글에 올릴 수 있는 이미지는 최대 ${NOTICE_ATTACHMENT_MAX}장입니다 — 공통 이미지를 ${worstOverflow}장 줄여주세요`,
+      skipped,
+    };
 
   // ── 2. 발송 안전 스위치(기본 OFF) — dry-run이면 적재 안 함 ──
   if (!settings.report.classnoteSendEnabled) return { ok: true, queued: 0, skipped, dryRun: true };
 
   const { data: inserted, error } = await supabase
     .from("classnote_notices")
-    .insert({ tenant_id: user.tenantId, body, targets, created_by: user.id })
+    .insert({
+      tenant_id: user.tenantId,
+      body,
+      targets,
+      created_by: user.id,
+      ...(commonAttachments.length ? { attachments: commonAttachments } : {}),
+    })
     .select("id")
     .single();
   if (error) return { ok: false, error: error.message };
@@ -157,7 +215,13 @@ export async function sendOnescreenNotice(input: OnescreenNoticeInput): Promise<
     action: "classnote_notice_send",
     targetType: "classnote_notice",
     targetLabel: `대상 ${targets.length}명`,
-    metadata: { noticeId: inserted?.id ?? null, targetCount: targets.length, source: "onescreen" },
+    metadata: {
+      noticeId: inserted?.id ?? null,
+      targetCount: targets.length,
+      source: "onescreen",
+      commonAttachments: commonAttachments.length,
+      targetAttachments: targets.reduce((n, t) => n + (t.attachments?.length ?? 0), 0),
+    },
   });
 
   return { ok: true, queued: targets.length, skipped };
@@ -290,6 +354,13 @@ export async function editPostedNotice(noticeId: string, newBody: string): Promi
   const links = flattenReportLinks(row.results);
   if (!links.some((l) => !l.revoked))
     return { ok: false, error: "수정할 게시글 정보가 없습니다(연동 PC 업데이트 전 발송분은 ClassNote 앱에서 직접 수정)" };
+  // ⚠️ 개별 첨부(요청서 이미지)가 있는 공지는 일괄 수정 금지 — 아래에서 개별 **본문**만 지우므로,
+  // 교재명·금액·계좌가 사라진 새 공통 본문에 **요청서 그림만 남는다**(학부모는 이미지 속 숫자만 보고 입금).
+  if (hasNoticeTargetAttachments(row.targets))
+    return {
+      ok: false,
+      error: "요청서 이미지가 붙은 공지는 내용만 바꿀 수 없습니다 — 게시취소한 뒤 다시 보내주세요",
+    };
 
   const strippedTargets = Array.isArray(row.targets)
     ? (row.targets as Array<Record<string, unknown>>).map((t) => {
@@ -355,6 +426,12 @@ export async function editQueuedNotice(noticeId: string, newBody: string): Promi
     .eq("created_by", user.id)
     .eq("status", "queued")
     .maybeSingle();
+  // 게시본 수정과 같은 이유 — 개별 첨부가 있으면 본문만 갈아끼울 수 없다(그림만 남은 글 방지).
+  if (hasNoticeTargetAttachments(cur?.targets))
+    return {
+      ok: false,
+      error: "요청서 이미지가 붙은 공지는 내용만 바꿀 수 없습니다 — 삭제한 뒤 다시 보내주세요",
+    };
   const strippedTargets = Array.isArray(cur?.targets)
     ? (cur.targets as Array<Record<string, unknown>>).map((t) => {
         const rest = { ...t };

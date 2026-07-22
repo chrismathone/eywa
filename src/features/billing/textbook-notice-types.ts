@@ -1,0 +1,56 @@
+/**
+ * 교재요청 → 학부모 ClassNote 발송의 공용 타입(순수 — 클라·서버 공용, server-only/use client 금지).
+ * 발송 다이얼로그(클라)와 서버 액션이 같은 타입을 보도록 여기 한 곳에 둔다.
+ */
+import type { NoticeAttachment } from "@/features/onescreen/notice-attachments";
+
+export type TextbookNoticeOrder = {
+  id: string;
+  studentId: string | null;
+  studentName: string | null;
+  /** 요청서 카드에 찍히는 담임 이름(발송 첨부 PNG를 저장값 그대로 만들기 위해 필요). */
+  teacherName: string | null;
+  bookName: string;
+  bookDetail: string | null;
+  price: number;
+  requestDate: string | null;
+  /** 발송 가능 과목 키(보드 prefix가 있는 것만). 1개=자동 확정, 2개+=선택, 0개=발송 불가. */
+  subjects: string[];
+};
+
+export type TextbookNoticeSkip = {
+  name: string;
+  reason: "no_subject" | "no_student" | "subject_off" | "name_collision" | "no_name";
+};
+
+export type PreparedTextbookNotice = {
+  ok: boolean;
+  error?: string;
+  orders?: TextbookNoticeOrder[];
+  /** 저장된 내 멘트 ?? 기본 템플릿 */
+  ment?: string;
+  account?: { bank: string; holder: string; number: string };
+  /** 학원설정 'ClassNote 실제 발송' 스위치 — off면 dry-run(보내지 않음)임을 화면이 미리 알린다. */
+  sendEnabled?: boolean;
+  /**
+   * 학원설정 '사진/파일 첨부'(report.showAttachments) — 학부모에게 사진·파일을 보내지 않는다는 방침 스위치.
+   * 이 발송은 요청서 그림이 본체라 방침과 충돌 → off면 화면이 막고 서버도 거부한다(이중 방어).
+   * 🔴 공지 워커는 이 설정을 읽지 않는다 — 방침을 지키는 지점은 발송 액션 한 곳뿐이다.
+   */
+  showAttachments?: boolean;
+  /**
+   * 연동 PC 워커가 **이미지 첨부를 아직 지원하지 않을 때의 한글 사유**(지원하면 undefined).
+   * 구버전 워커는 첨부를 무시하고 글자만 게시한 뒤 성공으로 기록하므로 발송 전에 막는다.
+   */
+  workerError?: string;
+};
+
+export type SendTextbookNoticeResult = {
+  ok: boolean;
+  error?: string;
+  queued?: number;
+  dryRun?: boolean;
+  skipped?: TextbookNoticeSkip[];
+};
+
+export type { NoticeAttachment };
