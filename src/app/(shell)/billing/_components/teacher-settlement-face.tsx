@@ -92,6 +92,14 @@ export async function TeacherSettlementFace({ period }: { period?: string }) {
         <b>지급 기준액 = 실제 수업분과 청구액 중 작은 값</b>입니다(덜 수업했으면 한 만큼, 더 수업했어도 청구액이 상한).
         이 화면은 <b>참고용</b>으로, 급여로 자동 기록되지 않습니다.
       </p>
+      {/* ⚠️ 배분율은 users에 **현재 값 한 벌**만 있다. 구 급여 시트 실측(김윤하 18개월)에서 비율이 달마다
+          바뀌었다(25.03~25.09 44/44/46/48/50 · 25.08 42/42/44/46/48 · 25.11~26.06 45/45/45/48/50 ·
+          26.01·26.07 43/43/43/46/48). 지난 달을 열면 **그때 비율이 아니라 지금 비율**로 계산되므로 그 사실을 밝힌다.
+          월별 동결은 Phase 2(payroll_records 확정 스냅샷) 몫. */}
+      <p className="text-amber-700 text-xs leading-relaxed">
+        배분율은 <b>현재 설정값</b>으로 계산합니다. 과거 달을 열어도 그 달에 적용했던 비율이 아니라 지금 비율이
+        쓰이므로, 이미 지급이 끝난 달의 실제 금액과 다를 수 있습니다(월별 비율 동결은 급여 확정 기능에서 다룹니다).
+      </p>
 
       {view.splitCount === 0 ? (
         <div className="border-border text-text-dim rounded-2xl border border-dashed p-10 text-center text-sm">
