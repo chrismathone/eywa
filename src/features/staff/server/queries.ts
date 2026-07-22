@@ -89,6 +89,13 @@ export type StaffDetail = {
   status: "active" | "inactive" | "pending";
   hireDate: string | null;
   jobTitle: string | null;
+  /**
+   * 영어 닉네임(`users.english_name`). 비우면 이름을 그대로 쓰고, 채우면 영어 표면에서 이 값으로 매핑한다.
+   * 이미 소비처가 있다: 영어 시간표 임포트가 시트의 `Jane 중1 정규A` 같은 라벨을 이 값으로 강사에 붙이고
+   * (`features/timetable/import/structure/match`), 통합 시트 내보내기가 `이름 (닉네임)`으로 표기한다.
+   * 입력 UI만 없어서 임포트가 채운 값이 화면에서 안 보이던 것을 배선했다(2026-07-22).
+   */
+  englishName: string | null;
   subjects: string[];
   defaultClassroom: string | null;
   memo: string | null;
@@ -102,7 +109,7 @@ export async function getStaffById(id: string): Promise<StaffDetail | null> {
   const { data } = await supabase
     .from("users")
     .select(
-      "id, display_name, email, phone, system_role, status, hire_date, job_title, subjects, default_classroom, memo, bg_color, hourly_rate, monthly_base",
+      "id, display_name, email, phone, system_role, status, hire_date, job_title, english_name, subjects, default_classroom, memo, bg_color, hourly_rate, monthly_base",
     )
     .eq("id", id)
     .single();
@@ -118,6 +125,7 @@ export async function getStaffById(id: string): Promise<StaffDetail | null> {
     status: data.status as "active" | "inactive" | "pending",
     hireDate: data.hire_date,
     jobTitle: data.job_title,
+    englishName: data.english_name ?? null,
     subjects: Array.isArray(data.subjects) ? (data.subjects as string[]) : [],
     defaultClassroom: data.default_classroom,
     memo: data.memo,

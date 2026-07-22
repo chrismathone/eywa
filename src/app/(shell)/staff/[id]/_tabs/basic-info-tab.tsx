@@ -48,6 +48,8 @@ export async function BasicInfoTab({
           <Field label="연락처" value={staff.phone ? <span className="num">{staff.phone}</span> : null} />
           <Field label="시스템 역할" value={ROLE_LABEL[displayRole] ?? displayRole} />
           <Field label="직급 (닉네임)" value={staff.jobTitle} />
+          {/* 영어 닉네임 — 영어 시간표 임포트가 시트 라벨(`Jane 중1 정규A`)을 이 값으로 강사에 붙인다. */}
+          <Field label="영어 닉네임" value={staff.englishName} />
           <Field label="입사일" value={staff.hireDate ? <span className="num">{staff.hireDate}</span> : null} />
           <Field label="기본 강의실" value={staff.defaultClassroom} />
           <Field

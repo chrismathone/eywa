@@ -72,6 +72,7 @@ export default async function EditStaffPage({
           systemRole: staff.systemRole,
           hireDate: staff.hireDate,
           jobTitle: staff.jobTitle,
+          englishName: staff.englishName,
           subjects: staff.subjects,
           defaultClassroom: staff.defaultClassroom,
           memo: staff.memo,

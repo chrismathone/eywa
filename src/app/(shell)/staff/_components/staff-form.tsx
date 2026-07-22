@@ -30,6 +30,8 @@ export type StaffFormValue = {
   systemRole: SystemRole;
   hireDate: string | null;
   jobTitle: string | null;
+  /** 영어 닉네임(`users.english_name`) — 비우면 이름을 쓰고, 채우면 영어 표면에서 이 값으로 매핑. */
+  englishName: string | null;
   subjects: string[];
   defaultClassroom: string | null;
   memo: string | null;
@@ -78,6 +80,7 @@ export function StaffForm({
     systemRole: assignableRoleOptions[0] ?? "viewer",
     hireDate: null,
     jobTitle: null,
+    englishName: null,
     subjects: [],
     defaultClassroom: null,
     memo: null,
@@ -246,6 +249,22 @@ export function StaffForm({
               ))}
             </div>
           ) : null}
+        </Field>
+
+        {/* 영어 닉네임 — `users.english_name`. 컬럼·소비처는 있었는데 입력칸이 없어 임포트가 채운 값을
+            화면에서 못 고치던 것을 배선(2026-07-22). 조건부 렌더는 하지 않는다: 숨기면 폼 제출에서
+            빠져 비영어 직원 저장 시 값이 지워진다(#83류 footgun). */}
+        <Field label="영어 닉네임" htmlFor="englishName">
+          <input
+            id="englishName"
+            name="englishName"
+            defaultValue={v.englishName ?? ""}
+            placeholder="예: Jane, Charlie, Sam"
+            className={inputClass}
+          />
+          <p className="text-muted-foreground mt-1 text-xs">
+            비우면 이름을 그대로 씁니다. 채우면 영어 시간표·반 배정에서 이 닉네임으로 매칭됩니다.
+          </p>
         </Field>
       </div>
 
