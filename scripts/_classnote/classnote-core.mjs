@@ -36,6 +36,9 @@ const PREFLIGHT_BACKOFF_MAX_MS = 10 * 60_000; // 준비 실패 시 최대 백오
 let adminCache = null; // { browser, page, centerId }
 let preflightFails = 0;
 let preflightBackoffUntil = 0;
+// 발송 허용 시간대 로그 스로틀 — 매 폴(15초) "시간대 밖 대기"를 찍으면 밤새 수백 줄 스팸이 된다(2026-07-22 원장 제보).
+// 상태 전이(밖→안·안→밖)에서만 한 줄씩 남긴다. null=미확인(첫 폴은 항상 남김). true=창 안, false=창 밖.
+let sendWindowOpen = null;
 
 async function getAdminSession(browser) {
   if (adminCache && adminCache.browser === browser && !adminCache.page.isClosed()) return adminCache;
@@ -148,9 +151,12 @@ export async function isShowAttachmentsEnabled(sql, tenant) {
 const IMG_ATTACHMENT_RE = /\.(jpe?g|png|webp|gif)(\?|$)/i;
 
 /**
- * 파일 첨부가 있는 리포트를 **내부 API로 게시**(Phase 2) — 스샷=`attached_images` + 파일=`attached_files` 한 POST.
+ * 파일(비이미지) 첨부가 있는 리포트를 **내부 API로 게시**(Phase 2) — 스샷=`attached_images` + 파일=`attached_files` 한 POST.
  * ① 스샷 buffer → kage(`img`) ② eywa 내부 엔드포인트로 파일 signed URL → fetch → kage(`etc`) ③ board→child→enrollment
  * 해석 후 postClassnoteReport(이중 계정이면 전원). 반환 { ok, error? }. 리버스엔지니어링·학원이 POC 검증(2026-07-16).
+ * ⚠️ 이미지 첨부(교재 등)는 **개별 부착하지 않는다**(2026-07-22 방향 B 확정) — /r 스샷 하단에 크게 실려 세로로
+ *    완결(ParentReportCard). ClassNote가 attached_images를 가로로 나열해 세로가 안 됐던 문제를 스샷 내 배치로 우회.
+ *    → 이미지만 있는 리포트는 이 경로로 **진입하지 않고**(진입 조건 fileAtts.length) Cloud Run 스샷 경로로 게시된다.
  */
 export async function sendReportViaApi(adminPage, { report, studentName, boardId, screenshot, shareUrl, base, fileAtts, children, log }) {
   // kage 업로드는 작성폼 네이티브 file input 경유(수동 FormData는 415) → adminPage를 add 폼으로 이동.
@@ -185,7 +191,9 @@ export async function sendReportViaApi(adminPage, { report, studentName, boardId
       log(`  · ${studentName}: 첨부 목록 조회 네트워크 실패 — ${e.message}`);
       return { files: [] };
     });
-  if (!(ep.files ?? []).length) {
+  const epFiles = ep.files ?? [];
+  // 파일 첨부 리포트(경로 진입)인데 파일 URL을 하나도 못 받으면 서명/조회 실패.
+  if (!epFiles.length) {
     const why =
       epStatus === -1
         ? "네트워크 연결 실패"
@@ -200,7 +208,7 @@ export async function sendReportViaApi(adminPage, { report, studentName, boardId
   }
   const attachedFiles = [];
   const failures = [];
-  for (const f of ep.files ?? []) {
+  for (const f of epFiles) {
     let bytes;
     try {
       const res = await fetch(f.url);
@@ -270,9 +278,15 @@ export async function processQueueOnce(sql, browser, opts) {
   if (post) {
     const sendWindow = await getClassnoteSendWindow(sql, tenant);
     if (!isWithinSendWindow(sendWindow)) {
-      log(`[worker] 발송 허용 시간대(${formatSendWindow(sendWindow)}) 밖 — 이 주기 대기(큐 보존)`);
+      // 상태 전이(창 안/미확인 → 밖)에서만 한 줄 — 매 폴(15초) 반복 스팸 방지(sendWindowOpen 스로틀, 2026-07-22).
+      if (sendWindowOpen !== false)
+        log(`[worker] 발송 허용 시간대(${formatSendWindow(sendWindow)}) 밖 — 대기 시작(창 진입까지 조용히 대기, 큐 보존)`);
+      sendWindowOpen = false;
       return { stale: 0, claimed: 0, success: 0, failed: 0, requeued: 0, blocked: 0 };
     }
+    // 창 밖 → 안 전이도 한 줄(대기 재개 사유가 로그에서 닫히게).
+    if (sendWindowOpen === false) log(`[worker] 발송 허용 시간대(${formatSendWindow(sendWindow)}) 진입 — 발송 재개`);
+    sendWindowOpen = true;
   }
 
   // 0-b) 프리플라이트 백오프 — 준비가 연속 실패 중이면 **클레임조차 하지 않는다**.
@@ -464,6 +478,8 @@ export async function processQueueOnce(sql, browser, opts) {
       }
 
       // ── Phase 2: 파일 첨부(비이미지) + showAttachments ON → 내부 API 경로(스샷=attached_images + 파일=attached_files) ──
+      // ⚠️ 이미지 첨부만 있는 리포트는 여기로 진입하지 않는다(2026-07-22 방향 B) — 이미지는 /r 스샷 하단에 크게 실려
+      //    아래 Cloud Run 스샷 경로로 게시된다(개별 부착=ClassNote 가로 나열이라 철회). fileAtts(비이미지)만 API 경로.
       const fileAtts = (r.attachments ?? []).filter((a) => a?.name && !IMG_ATTACHMENT_RE.test(a.name));
       if (showAttachments && fileAtts.length && boardId) {
         childrenCache ??= await fetchChildren(adminPage, centerId); // 파일 리포트 첫 만남에 1회

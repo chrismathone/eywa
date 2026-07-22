@@ -23,6 +23,18 @@
   자동 리셋 때문에 "저장했는데 선택이 풀린" 화면이 된다(실제로 재현 후 고침, #83 계열).
 - 검증: tsc0/lint0/test1950 + 실화면(JP1 → 중등·42% 저장 → DB 반영 → 새로고침 후 폼에 그대로 재표시)
   ⚠️ **검증용 값은 즉시 전량 삭제**(class_salary_settings 0행·commission_rates 0명으로 원복 확인).
+### ClassNote 이미지 첨부 = 개별 부착 철회(방향 B) + watch.log 정리(KST·스팸 제거) (2026-07-22) — node✓/vitest322
+원장 방향 B 확정: 이미지 개별 부착은 ClassNote가 **가로 나열**이라 세로가 안 됨 → **철회**하고 이미지는 `/r` 스샷 하단에
+크게 실어 **스샷 1장으로 세로 완결**(ParentReportCard·route.ts는 `1239ccb2`에서 이미 처리). **워커가 미반영이라 불일치 버그**였다:
+이미지만 첨부된 리포트가 API 경로로 진입 → route가 URL을 안 줘 `첨부 목록 조회 실패`로 3회 재시도 후 `failed`(학원이 테스트 실측).
+- [`classnote-core.mjs`](../scripts/_classnote/classnote-core.mjs): 진입 조건을 `fileAtts.length`(비이미지)만으로 되돌림 —
+  이미지만 있으면 Cloud Run 스샷 경로로 게시(`sendReportViaApi`의 `imageAtts`/`epImages` 개별부착 블록 제거, `e4436758` 리버트).
+- **로그 정리(원장 제보)**: `발송 허용 시간대 밖 — 대기`가 15초마다 밤새 수백 줄 → **상태 전이(밖↔안)에서만** 한 줄
+  (`sendWindowOpen` 스로틀). 읽음 `이미 반영됨(정상)` 반복 줄 제거(토큰 미매칭만 경고). 타임스탬프 **UTC→KST**(`kstStamp`).
+- ⚠️ **연동 PC zip 재이관 필요**(앱은 배포 자동, 워커는 물리 이관) — `워커수정-안내-2026-07-22.md` 갱신.
+- **발송 큐 UI(원장 제보)**: `발송 PC 알림 N건 보기`를 누르면 목록이 **인라인으로 펴져 카드(배경)가 길어지던** 것 →
+  base-ui `Popover`(포털)로 **떠 있는 팝업**으로 전환([classnote-queue-card.tsx](<../src/app/(shell)/lesson-reports/_components/classnote-queue-card.tsx>)).
+  레이아웃 흐름 밖이라 배경 높이 불변 + `max-h-[60vh] overflow-y-auto`로 긴 목록은 팝업 안에서 스크롤.
 
 ### 급여 산식에 결제 수수료 도입 — 급여 = 청구 × 0.911 × 배분율 (2026-07-21) - tsc0/lint0/test1928 · ⚠️골든 핀 갱신
 원장 확정: *"우리는 급여를 매출 × 0.911(수수료 −8.9%) × 비율로 산정한다."* 기존 엔진은 `청구 × 비율`이라

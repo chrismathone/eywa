@@ -131,10 +131,9 @@ export async function pollReportReadsOnce(
       select count(*)::int as n from lesson_reports
       where tenant_id = ${tenant}
         and (edutrix_share_token = any(${allTokens}::text[]) or share_token::text = any(${allTokens}::text[]))`;
+    // 진짜 문제(토큰 미매칭)만 로깅한다 — "이미 반영됨(정상)"은 매 읽음 폴 반복되는 순수 노이즈라 제거(2026-07-22 원장 제보).
     if (known === 0) {
       log(`[읽음] ⚠️ 후보 ${updates.length}건이 eywa 행과 매칭되지 않음 — edutrix_share_token 임포트 여부 확인 필요`);
-    } else {
-      log(`[읽음] 새로 반영할 읽음 없음 — 후보 ${updates.length}건 중 eywa 대응 ${known}행은 이미 반영됨(정상)`);
     }
   }
   return { ran: true, ...scan, matched, dryRun: false };

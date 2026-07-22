@@ -25,7 +25,7 @@ describe("visibleAttachments", () => {
     ]);
   });
 
-  it("워커 스크린샷에선 파일이 빠지고 사진만 남는다(눌리지 않는 '받기' 오해 방지)", () => {
+  it("워커 스크린샷에선 파일이 빠지고 사진만 남는다(눌리지 않는 '받기' 오해 방지 · 사진은 스샷에 크게)", () => {
     expect(visibleAttachments(list, { forScreenshot: true }).map((a) => a.name)).toEqual([
       "풀이.jpg",
       "칠판.png",
