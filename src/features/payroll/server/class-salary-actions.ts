@@ -8,6 +8,8 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { createClient } from "@/lib/supabase/server";
 import { isSalaryGroup } from "../salary-group";
 
+const DOW_KEYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
+
 export type SaveClassSalaryState = { ok?: true; error?: string; nonce?: number } | undefined;
 
 export async function saveClassSalary(
@@ -34,6 +36,10 @@ export async function saveClassSalary(
     commissionRate = Math.round(n * 100) / 100;
   }
 
+  // 적용 요일(0132a) — "그 반의 주말 수업분만 비율제". 아무것도 안 고르면 null(전 요일).
+  const dows = DOW_KEYS.filter((d) => formData.get(`dow_${d}`) === "on");
+  const appliesDows = dows.length === 0 || dows.length === DOW_KEYS.length ? null : dows;
+
   const supabase = await createClient();
   // 같은 테넌트의 반인지 확인(RLS가 이미 막지만 명시 방어 — 남의 반 id로 행을 만들지 못하게).
   const { data: klass } = await supabase.from("classes").select("id, tenant_id").eq("id", classId).maybeSingle();
@@ -45,6 +51,7 @@ export async function saveClassSalary(
       class_id: classId,
       salary_group: salaryGroup,
       commission_rate: commissionRate,
+      applies_dows: appliesDows,
       updated_at: new Date().toISOString(),
       updated_by: user.id,
     },
