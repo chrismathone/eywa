@@ -9,7 +9,7 @@
 //   A열 라벨 텍스트는 불규칙("3:00~3:40" 다음 행이 "3:10~3:20")해 end가 틀렸었음 — 앵커 검증에만 사용.
 // 파서는 throw하지 않는다 — 인식 못한 셀은 건너뛰고 warnings에 남긴다(자유 편집 시트 방어).
 
-import { koDayToEnum } from "@/features/timetable/lib/periods";
+import { enumDayToKo, koDayToEnum, type DayOfWeek } from "@/features/timetable/lib/periods";
 import type {
   ParsedStructure,
   ParsedStructureSlot,
@@ -126,6 +126,11 @@ export function parseTeacherGrid(grid: SheetGrid): ParsedStructure {
     teachers.push(block);
 
     // 이 블록의 요일 열(4행 헤더 기준).
+    // ⚠️ 요일 헤더가 **가로 병합**이면 그 요일은 여러 열(=병렬 레인)을 덮는다 — LAB(JJ·이주희)처럼 같은
+    // 시각에 여러 반이 도는 강사가 이렇게 그려진다(실측 이주희 화=5열). 병합 셀은 좌상단에만 값이 있어
+    // 셀 값만 보면 나머지 레인이 "요일 없음"으로 통째 스킵된다 → 2026-07-22 실측: 이주희 51→24슬롯 유실.
+    // 그래서 병합 범위만큼 요일을 **펼쳐서** 열마다 매핑한다.
+    const dayOfCol = new Map<number, DayOfWeek>();
     for (let c = bc; c < nextCol; c++) {
       const koDay = cell(grid, DAY_ROW, c).match(DAY_HEAD_RE)?.[1];
       if (!koDay) continue;
@@ -134,6 +139,12 @@ export function parseTeacherGrid(grid: SheetGrid): ParsedStructure {
         warnings.push(`요일 인식 실패: (${DAY_ROW},${c}) "${cell(grid, DAY_ROW, c)}"`);
         continue;
       }
+      const dm = mergeAt.get(`${DAY_ROW},${c}`);
+      const lastCol = dm && dm.r1 === DAY_ROW ? Math.min(dm.c2, nextCol - 1) : c;
+      for (let cc = c; cc <= lastCol; cc++) dayOfCol.set(cc, day);
+    }
+    for (const [c, day] of dayOfCol) {
+      const koDay = cell(grid, DAY_ROW, c).match(DAY_HEAD_RE)?.[1] ?? enumDayToKo(day);
 
       // 데이터 셀 순회 — 값 있는 셀만(병합은 좌상단에만 값). 각 셀 = 한 수업.
       for (let r = DATA_START_ROW; r < rowCount; r++) {

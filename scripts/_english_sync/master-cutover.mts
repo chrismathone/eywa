@@ -211,10 +211,11 @@ if (!APPLY) {
 // RPC는 security invoker + auth_tenant_id() → 스크립트 연결엔 JWT 클레임을 주입해야 테넌트가 잡힌다.
 const [res] = await sql.begin(async (tx) => {
   await tx`select set_config('request.jwt.claims', ${JSON.stringify({ sub: ACTOR, role: "authenticated" })}, true)`;
-  // payload는 **객체**라 `JSON.stringify(...)::jsonb`가 정확히 1회 인코딩된다(텍스트 파라미터 → jsonb 파싱).
-  // ⚠️ gotcha #82의 이중 인코딩은 **스칼라**(문자열)에 이 패턴을 쓸 때다 — 스칼라는 `to_jsonb(v::text)`.
-  // (sql.json()은 postgres.js의 JSONValue 타입이 이 구조체를 거부해서 미사용.)
-  return tx`select public.apply_english_structure(${JSON.stringify(payload)}::jsonb, ${CUTOVER}::date) as r`;
+  // ⚠️ **반드시 `sql.json(...)`** — gotcha #82. `${JSON.stringify(payload)}::jsonb`로 바꿨더니 postgres.js가
+  // jsonb **문자열**로 넣어 `payload->'inserts'`가 null이 됐고, RPC 세 루프가 전부 0회 돌아 **조용히 아무것도
+  // 안 썼다**(2026-07-22 실측: 마감 0·삽입 0·반갱신 0인데 에러는 없음). 객체라도 예외가 아니다.
+  // 타입만 안 맞아 캐스팅한다(런타임은 검증됨 — 이 경로로 마감 108·삽입 64가 실제로 적용됐다).
+  return tx`select public.apply_english_structure(${sql.json(payload as never)}::jsonb, ${CUTOVER}::date) as r`;
 });
 const r = (res as { r: { snapshotId: string; closed: number; inserted: number; classUpdated: number } }).r;
 console.log(`\n✅ 적용 완료 — 마감 ${r.closed} · 삽입 ${r.inserted} · 반 갱신 ${r.classUpdated}`);

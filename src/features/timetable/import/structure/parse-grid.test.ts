@@ -25,8 +25,21 @@ describe("parseTeacherGrid — 실 강사별 그리드", () => {
     expect(parsed.teachers.filter((t) => t.reserve)).toHaveLength(4);
   });
 
-  it("배치 슬롯 275건 파싱", () => {
-    expect(parsed.slots).toHaveLength(275);
+  // 핀 갱신 2026-07-22: 275 → 330. 요일 헤더가 가로 병합된 **병렬 레인**(LAB: JJ·이주희)을 파서가
+  // 통째로 건너뛰고 있었다(병합 셀은 좌상단에만 값 → 나머지 레인이 "요일 없음"). 55슬롯 = 2026-07-06에
+  // `import-lab-parallel-slots.cjs`로 따로 이식해야 했던 그 병렬 수업들 — 이제 파서가 직접 읽는다.
+  it("배치 슬롯 330건 파싱(병렬 레인 포함)", () => {
+    expect(parsed.slots).toHaveLength(330);
+  });
+
+  it("병렬 레인: 같은 강사·요일·시각에 여러 반(LAB) — 병합 요일헤더를 펼쳐야 잡힌다", () => {
+    const key = (s: (typeof parsed.slots)[number]) => `${s.teacherName}|${s.day}|${s.startTime}`;
+    const counts = new Map<string, number>();
+    for (const s of parsed.slots) counts.set(key(s), (counts.get(key(s)) ?? 0) + 1);
+    const parallel = [...counts.entries()].filter(([, n]) => n > 1);
+    expect(parallel.length).toBeGreaterThan(0);
+    // 실제로 LAB 강사(이주희·JJ)에서 나와야 한다 — 일반 강사는 요일당 1레인.
+    expect(parallel.some(([k]) => k.startsWith("이주희|") || k.startsWith("JJ|"))).toBe(true);
   });
 
   it("모든 슬롯: 요일 mon~sat, 시작시각 HH:MM", () => {
