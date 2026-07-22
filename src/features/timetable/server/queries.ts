@@ -6,6 +6,7 @@ import { getTeacherScope } from "@/lib/auth/teacher-scope";
 import { weekEndOf, weekSundayOf, shiftDays } from "../lib/week";
 import { compareStudentLines } from "../lib/student-sort";
 import type { TeacherColorMap } from "../lib/class-grid";
+import { isSpecialLecture } from "@/features/classes/special-lecture";
 import {
   enrollmentAttendsOnDay,
   isEnrollmentActiveOn,
@@ -99,6 +100,9 @@ export type ScheduleSlot = {
   classTextColor: string | null;
   // 강사 인수인계 예약(0044a `classes.pending_teacher_id`) — 있으면 셀 배경 틴트 + hover 상세. null=예약 없음.
   pendingHandover: { teacherName: string | null; date: string | null } | null;
+  // 정규/특강 구분(0133a) — 판정 단일소스 isSpecialLecture(컬럼 우선, 없으면 반 이름 폴백).
+  // 화면은 이 boolean만 쓴다(이름 매칭 재구현 금지 — 급여와 판정이 갈리면 시간표엔 특강인데 급여엔 아닌 반이 생긴다).
+  isSpecialLecture: boolean;
 };
 
 type SlotClassRef = {
@@ -109,6 +113,7 @@ type SlotClassRef = {
   text_color?: string | null;
   is_active?: boolean | null;
   closed_at?: string | null;
+  is_special?: boolean | null;
   pending_teacher_id?: string | null;
   pending_teacher_date?: string | null;
   teacher?: { display_name?: string } | { display_name?: string }[];
@@ -142,7 +147,7 @@ async function fetchSlots(referenceDate: string, db?: TimetableDb): Promise<Sche
       .select(
         `id, day_of_week, start_time, end_time, class_id, slot_teacher_label, slot_room_label,
        class:class_id!inner (
-         id, class_name, subject, bg_color, text_color, is_active, closed_at,
+         id, class_name, subject, bg_color, text_color, is_active, closed_at, is_special,
          pending_teacher_id, pending_teacher_date,
          teacher:teacher_id ( display_name ),
          pendingTeacher:pending_teacher_id ( display_name ),
@@ -189,6 +194,7 @@ async function fetchSlots(referenceDate: string, db?: TimetableDb): Promise<Sche
           subject?: string;
           bg_color?: string | null;
           text_color?: string | null;
+          is_special?: boolean | null;
           pending_teacher_id?: string | null;
           pending_teacher_date?: string | null;
           teacher?: { display_name?: string } | { display_name?: string }[];
@@ -229,6 +235,11 @@ async function fetchSlots(referenceDate: string, db?: TimetableDb): Promise<Sche
       pendingHandover: klass?.pending_teacher_id
         ? { teacherName: pending?.display_name ?? null, date: (klass?.pending_teacher_date as string | null) ?? null }
         : null,
+      // 판정 단일소스 — 컬럼(0133a) 우선, 없으면 반 이름 폴백. 급여 autoSalaryGroup과 이름 규칙을 공유한다.
+      isSpecialLecture: isSpecialLecture({
+        isSpecial: (klass?.is_special as boolean | null) ?? null,
+        className: (klass?.class_name as string | null) ?? null,
+      }),
     };
   });
 }
@@ -677,6 +688,8 @@ export async function getTodaySchedule(): Promise<TodaySlot[]> {
         classBgColor: null,
         classTextColor: null,
         pendingHandover: null,
+        // 대시보드 '오늘 일정'은 정규/특강을 가르지 않지만 타입 계약상 채운다(이름 폴백만으로 충분).
+        isSpecialLecture: isSpecialLecture({ isSpecial: null, className: klass?.class_name ?? null }),
       };
     })
     .sort((a, b) => toMins(a.startTime) - toMins(b.startTime))
