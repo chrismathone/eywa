@@ -1,16 +1,15 @@
 "use client";
 
 import { useActionState, useEffect, useRef, useState } from "react";
-import { useFormStatus } from "react-dom";
 import { useRouter } from "next/navigation";
 import { Loader2, Save } from "@/components/icons/eywa-icon-compat";
-import { EyIcon } from "@/components/icons/eywa-icons";
 import { Button } from "@/components/ui/button";
 import {
   createClass,
   updateClass,
   type ClassFormState,
 } from "@/features/classes/server/actions";
+import { overlapSummary } from "@/features/classes/overlap";
 import {
   subjectWeekdayPeriods,
   subjectWeekendPeriods,
@@ -20,9 +19,14 @@ import { useConcurrentEditGuard } from "@/components/workspace/use-concurrent-ed
 import { useUnsavedGuard } from "@/components/workspace/use-unsaved-guard";
 import { conflictToast } from "@/lib/ui/conflict-toast";
 import { FormActionBar } from "@/components/forms/form-action-bar";
+import { submitAction } from "@/components/forms/submit-action";
 import { useFormDraft } from "@/components/forms/use-form-draft";
 import { DraftBanner } from "@/components/forms/draft-banner";
+import { splitGridSlots } from "@/features/classes/grid-slots";
 import { ScheduleGrid } from "./schedule-grid";
+import { ClassSpecialFields } from "./class-special-fields";
+import { CustomTimeSlots } from "./custom-time-slots";
+import { OverlapNotice } from "./overlap-notice";
 
 // 설정(operations.subjects) 미전달 경로용 폴백 = DEFAULT_SETTINGS.subjects와 동일 키/순서로 유지
 // (드리프트 방지). 서버 부모가 subjectOptions를 주면 그 값(=테넌트 설정)이 우선한다.
@@ -51,13 +55,39 @@ export type ClassFormDefaults = {
   classroomId: string | null;
   notes: string | null;
   bgColor?: string | null;
+  /** 특강 토글값(0133a 컬럼 그대로). 이름 폴백은 서버 판정용이라 폼 체크상태에 섞지 않는다. */
+  isSpecial?: boolean;
+  /** 운영 기간 프리필 — 스케줄 슬롯들의 공통값. 슬롯마다 다르면 그 칸은 **비워** 주고 periodMixed로 알린다. */
+  validFrom?: string | null;
+  validTo?: string | null;
+  periodMixed?: "from" | "to" | "both";
+  /** 운영이 끝난(이력) 교시 수 — 폼이 건드리지 않는다는 안내용. */
+  historyCount?: number;
+  /** ⚠️ **현재 유효한 슬롯만** 넘길 것(만료 행을 섞으면 옛 배치가 되살아난다 — 편집 화면 주석 참조). */
   schedules: Schedule[];
 };
 
-function Submit({ mode }: { mode: "create" | "edit" }) {
-  const { pending } = useFormStatus();
+/**
+ * ⚠️ pending은 `useActionState`의 세 번째 값 — `useFormStatus`가 아니다. 이 폼은 #83(제출마다 자동
+ * 리셋)을 피하려고 `onSubmit`+`submitAction`으로 직접 디스패치하는데, 그러면 네이티브 액션 제출이
+ * 아니라서 `useFormStatus().pending`이 계속 false다(= 스피너 없음 + 더블클릭 중복 생성).
+ */
+function Submit({
+  mode,
+  pending,
+  locked,
+}: {
+  mode: "create" | "edit";
+  pending: boolean;
+  /** 생성 직후 겹침 경고가 떠 있는 동안 재제출 잠금 — 다시 누르면 **같은 반이 하나 더** 만들어진다. */
+  locked?: boolean;
+}) {
   return (
-    <Button type="submit" disabled={pending}>
+    <Button
+      type="submit"
+      disabled={pending || locked}
+      {...(locked ? { title: "이미 생성되었습니다 — 위 알림의 '확인'을 눌러주세요" } : {})}
+    >
       {pending ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
       {mode === "create" ? "반 생성" : "변경 저장"}
     </Button>
@@ -85,7 +115,7 @@ export function ClassForm({
 }) {
   const subjects = subjectOptions ?? DEFAULT_SUBJECT_OPTIONS;
   const action = mode === "create" ? createClass : updateClass;
-  const [state, formAction] = useActionState<ClassFormState, FormData>(action, undefined);
+  const [state, formAction, pending] = useActionState<ClassFormState, FormData>(action, undefined);
   const router = useRouter();
   const formRef = useRef<HTMLFormElement>(null);
   const { notifySaved } = useConcurrentEditGuard({ scope, formRef });
@@ -100,9 +130,29 @@ export function ClassForm({
   const [teacherId, setTeacherId] = useState(defaults?.teacherId ?? "");
   // 반 색상(시간표 통합뷰 헤더색) — 빈 문자열=미지정(과목색 폴백). 글자색은 서버가 휘도로 자동.
   const [bgColor, setBgColor] = useState(defaults?.bgColor ?? "");
+  // 특강 토글 — 컨트롤드(초안 복원 시 onRestore로 rehydrate해야 하므로 state로 든다).
+  const [isSpecial, setIsSpecial] = useState(defaults?.isSpecial ?? false);
   // 초안 복원용 — 복원된 스케줄을 그리드 initial로 주고 key를 바꿔 remount(그리드는 initial을 마운트 1회만 읽음).
-  const [restoredSchedules, setRestoredSchedules] = useState<Schedule[] | null>(null);
   const [gridKey, setGridKey] = useState(0);
+  // 스케줄을 "교시 클릭그리드로 표현되는 것"과 "자유 시각 행"으로 나눈다 — 교시표에 없는 시각의 슬롯은
+  // 그리드가 못 그려서, 안 나누면 저장 시 통째로 삭제된다(오전 특강도 이 경로로만 만들 수 있다).
+  // 마운트 1회 계산(그리드의 initial 해석과 같은 시점·같은 교시표를 쓰기 위해).
+  const [initialSplit] = useState(() =>
+    splitGridSlots({
+      slots: defaults?.schedules ?? [],
+      // 마운트 시점의 과목 = subject state 초기값과 같은 식(교시표가 갈리면 그리드와 자유행이 어긋난다).
+      weekdayPeriods: subjectWeekdayPeriods(
+        defaults?.subject ?? subjects[0]?.value ?? "math",
+        periodsConfig,
+      ),
+      weekendPeriods: subjectWeekendPeriods(periodsConfig),
+    }),
+  );
+  const [restoredSplit, setRestoredSplit] = useState<{
+    grid: Schedule[];
+    custom: Schedule[];
+  } | null>(null);
+  const split = restoredSplit ?? initialSplit;
 
   // 로컬 초안 자동저장 — 스케줄(그리드 hidden input schedule_*_${i})·과목·담임·색까지 onRestore로 rehydrate.
   const draft = useFormDraft({
@@ -112,24 +162,45 @@ export function ClassForm({
       if (vals.subject) setSubject(vals.subject);
       setTeacherId(vals.teacherId ?? "");
       setBgColor(vals.bgColor ?? "");
-      // schedule_*_${i} 인덱스 hidden을 스케줄 배열로 복원 → 그리드 remount.
-      const sched: Schedule[] = [];
-      for (let i = 0; vals[`schedule_day_${i}`] !== undefined; i++) {
-        sched.push({
-          dayOfWeek: vals[`schedule_day_${i}`]!,
-          startTime: vals[`schedule_start_${i}`] ?? "",
-          endTime: vals[`schedule_end_${i}`] ?? "",
-          teacherId: vals[`schedule_teacher_${i}`] || null,
-          classroomId: vals[`schedule_classroom_${i}`] || null,
-        });
-      }
-      setRestoredSchedules(sched);
+      // 체크박스는 applyFormValues가 DOM만 건드려 컨트롤드 state와 갈라진다 → 여기서 함께 맞춘다.
+      setIsSpecial(vals.isSpecial === "true");
+      // ⚠️ 같은 이름의 hidden("0")까지 applyFormValues가 초안값("true"/"")으로 덮어쓴다 → 복구 후 토글을
+      // **끄고 저장해도** getAll에 "true"가 남아 특강으로 저장된다. 마커를 원래 값으로 되돌려 놓는다.
+      const marker = formRef.current?.querySelector('input[type="hidden"][name="isSpecial"]');
+      if (marker instanceof HTMLInputElement) marker.value = "0";
+      // schedule_*_${i} / custom_*_${i} 인덱스 hidden을 스케줄 배열로 복원 → 그리드·자유행 remount.
+      // (applyFormValues는 DOM만 건드려 컨트롤드 state와 갈라진다 — 두 컴포넌트 모두 initial로 다시 받는다.)
+      const readNs = (prefix: string): Schedule[] => {
+        const out: Schedule[] = [];
+        for (let i = 0; vals[`${prefix}day_${i}`] !== undefined; i++) {
+          out.push({
+            dayOfWeek: vals[`${prefix}day_${i}`]!,
+            startTime: vals[`${prefix}start_${i}`] ?? "",
+            endTime: vals[`${prefix}end_${i}`] ?? "",
+            teacherId: vals[`${prefix}teacher_${i}`] || null,
+            classroomId: vals[`${prefix}classroom_${i}`] || null,
+          });
+        }
+        return out;
+      };
+      setRestoredSplit({ grid: readNs("schedule_"), custom: readNs("custom_") });
       setGridKey((k) => k + 1);
     },
+    // periodProvided·periodKeepValidTo는 값이 항상 "1"인 마커라 "사용자가 뭔가 입력했다"는 신호가
+    // 아니다(빈 폼 오탐 방지).
+    ignoreForBanner: ["periodProvided", "periodKeepValidTo"],
   });
   const clearDraft = draft.clear;
 
+  // 🔴 겹침(강의실·강사)은 **저장을 막지 않는다**(원장 확정 2026-07-22). 저장은 이미 끝난 상태로 오고,
+  // 여기서는 "몇 개 반과 몇 건 겹치는지"를 보여줄 뿐이다. 사용자가 '확인'을 누른 nonce만 기억해 패널을 닫는다.
+  // (setState-in-effect(#25) 회피 — 표시 여부는 state에서 파생, ack만 사용자 클릭으로 갱신.)
+  const [ackedNonce, setAckedNonce] = useState<number | undefined>(undefined);
+  const overlaps = state?.ok ? (state.overlaps ?? []) : [];
+  const showOverlaps = overlaps.length > 0 && state?.nonce !== ackedNonce;
+
   // 저장 성공 확정(nonce) 후: 초안 삭제 → 동시편집 신호 발화 → 상세로 이동(서버 redirect 대체, B-2).
+  // ⚠️ 겹침이 있으면 **이동을 붙잡는다** — 즉시 상세로 넘어가면 경고가 화면에서 사라진다(원장 최우선 요구).
   const handledNonce = useRef<number | undefined>(undefined);
   useEffect(() => {
     if (state?.ok && state.nonce && state.nonce !== handledNonce.current) {
@@ -137,24 +208,34 @@ export function ClassForm({
       clearDraft();
       notifySaved();
       markSaved();
-      if (state.redirectTo) router.push(state.redirectTo);
+      if ((state.overlaps?.length ?? 0) === 0 && state.redirectTo) router.push(state.redirectTo);
     }
   }, [state, notifySaved, markSaved, router, clearDraft]);
 
-  // 강의실/강사 시간 충돌 등 저장 차단 경고 — 폼 하단 작은 텍스트를 놓치지 않게 가운데(top-center) 토스트 병행.
-  // state 참조가 바뀔 때(=매 제출 결과)만 발화 → 같은 충돌 재제출도 다시 알림.
+  // 폼 하단 인라인 알림을 놓치지 않게 가운데(top-center) 토스트 병행.
+  // state 참조가 바뀔 때(=매 제출 결과)만 발화 → 같은 겹침으로 재저장해도 다시 알림.
   const notifiedState = useRef<ClassFormState>(undefined);
   useEffect(() => {
     if (state === notifiedState.current) return;
     notifiedState.current = state;
-    if (state?.error) conflictToast(state.error);
-    else if (state?.teacherConflict) conflictToast(`강사 시간 겹침: ${state.teacherConflict}`);
+    if (state?.error) {
+      conflictToast(state.error);
+      return;
+    }
+    const saved = state?.ok ? (state.overlaps ?? []) : [];
+    if (saved.length > 0) conflictToast(`저장했습니다 — ${overlapSummary(saved)}`);
   }, [state]);
 
   const fieldErrs = state?.fieldErrors ?? {};
+  const confirmOverlaps = () => {
+    setAckedNonce(state?.nonce);
+    if (state?.redirectTo) router.push(state.redirectTo);
+  };
 
+  // ⚠️ `action={formAction}` 금지(#83) — 겹침 경고로 이동을 붙잡으면 폼이 화면에 남는데, React 19는
+  // 액션 제출마다 form.reset()을 걸어 컨트롤드 state와 DOM이 갈라진다(저장 직후 재저장 = 직전 저장 되돌림).
   return (
-    <form action={formAction} ref={formRef} className="space-y-5">
+    <form onSubmit={(e) => submitAction(e, formAction)} ref={formRef} className="space-y-5">
       <DraftBanner savedAt={draft.draftSavedAt} onRestore={draft.restore} onDiscard={draft.discard} />
       {defaults?.id ? <input type="hidden" name="id" value={defaults.id} /> : null}
 
@@ -258,11 +339,26 @@ export function ClassForm({
         </Field>
       </div>
 
+      <ClassSpecialFields
+        isSpecial={isSpecial}
+        onSpecialChange={setIsSpecial}
+        defaultValidFrom={defaults?.validFrom ?? ""}
+        defaultValidTo={defaults?.validTo ?? ""}
+        {...(defaults?.periodMixed ? { periodMixed: defaults.periodMixed } : {})}
+        {...(defaults?.historyCount ? { historyCount: defaults.historyCount } : {})}
+        {...(fieldErrs.validTo ? { validToError: fieldErrs.validTo } : {})}
+      />
+
       <section className="space-y-3 border-t pt-4">
         <header>
           <h3 className="text-foreground text-sm font-bold">주간 스케줄</h3>
-          <p className="text-muted-foreground text-xs">
-            요일 × 교시 칸을 눌러 수업 교시를 지정하세요. 강의실·강사 시간 겹침은 저장 시 자동 감지(강사 겹침은 합반 등 의도 시 무시 가능).
+          <p className="text-muted-foreground text-xs break-keep">
+            요일 × 교시 칸을 눌러 수업 교시를 지정하세요. 교시표에 없는 시간대(방학 오전 특강 등)는 아래
+            &lsquo;시각 직접 입력&rsquo;에 넣습니다. 강의실·강사 시간이 다른 반과 겹쳐도 저장은 됩니다 —
+            저장 후 겹치는 반을 자세히 알려드립니다(합반 등 의도된 겹침 허용).
+          </p>
+          <p className="text-muted-foreground text-xs break-keep">
+            수업 시간을 하나도 지정하지 않으면 이 반은 시간표에 나타나지 않습니다.
           </p>
         </header>
 
@@ -274,34 +370,31 @@ export function ClassForm({
           key={gridKey}
           weekdayPeriods={periods}
           weekendPeriods={weekendPeriods}
-          initial={restoredSchedules ?? defaults?.schedules ?? []}
+          initial={split.grid}
           teacherId={teacherId || null}
           teacherOptions={teacherOptions}
           classroomOptions={classroomOptions.map((c) => ({ id: c.id, name: c.name }))}
           bgColor={bgColor || null}
         />
+
+        {/* 교시표에 없는 시각(방학 오전 특강·불규칙 배치) — 클릭그리드가 표현 못 하는 슬롯의 유일한
+            입력·보존 경로. 여기 없으면 그런 슬롯은 저장 한 번에 조용히 삭제된다. */}
+        <CustomTimeSlots key={`custom-${gridKey}`} initial={split.custom} />
       </section>
 
-      {state?.teacherConflict ? (
-        <div className="border-amber/30 bg-amber/10 rounded-md border px-3 py-2.5">
-          <p className="text-amber flex items-start gap-1.5 text-sm font-medium">
-            <EyIcon name="alert" size={16} className="mt-0.5 shrink-0" />
-            <span>강사 시간 겹침: {state.teacherConflict}</span>
-          </p>
-          <p className="text-text-dim mt-0.5 text-xs">
-            합반 등 의도된 겹침이면 아래 “겹침 무시하고 저장”을 누르세요. 아니면 강사·시간을 조정하세요.
-          </p>
-        </div>
+      {/* 겹침 상세 — 저장 성공 뒤에만 뜬다(차단 아님). '확인'을 눌러야 상세로 이동한다. */}
+      {showOverlaps ? (
+        <OverlapNotice
+          items={overlaps}
+          onConfirm={confirmOverlaps}
+          // 생성 모드엔 '계속 편집'을 주지 않는다 — 반은 이미 만들어졌고 재제출하면 **중복 생성**된다.
+          {...(mode === "edit" ? { onStay: () => setAckedNonce(state?.nonce) } : {})}
+        />
       ) : null}
       {state?.error ? <p className="text-chart-4 text-sm">{state.error}</p> : null}
 
       <FormActionBar>
-        <Submit mode={mode} />
-        {state?.teacherConflict ? (
-          <Button type="submit" variant="outline" name="ignoreTeacherConflict" value="1">
-            겹침 무시하고 저장
-          </Button>
-        ) : null}
+        <Submit mode={mode} pending={pending} locked={mode === "create" && showOverlaps} />
       </FormActionBar>
     </form>
   );

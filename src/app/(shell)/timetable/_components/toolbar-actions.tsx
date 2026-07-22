@@ -7,19 +7,31 @@ import { EnglishImportDialog } from "./english-import-dialog";
 import { checkSheetSyncBusy, syncSheetsNow } from "@/features/integrations/server/actions";
 import { supportsTimetableImport, supportsStructureImport } from "@/features/integrations/sheets-provider";
 import { useSubjectMaps } from "@/features/owner/operations-context";
+import { DEFAULT_TIMETABLE_KIND, type TimetableKind } from "@/features/timetable/lib/class-kind";
 
 /** 리스 진행 중 버튼 마우스오버 안내(비활성 사유) — 자동 반영(새벽 4시)·다른 관리자 실행 공통. */
 const SYNC_BUSY_TITLE =
   "시트 동기화가 진행 중입니다(자동 반영 또는 다른 관리자의 반영/가져오기) — 잠시 후 자동으로 풀립니다.";
 
+/**
+ * 정규 외 구분에서 내보내기를 막는 이유 — 엑셀·시트 익스포터는 **정규 주간표 전체**를 만든다(화면의
+ * 정규/특강 필터를 받지 않는다). 그대로 열어 두면 특강만 보는 화면에서 정규가 통째로 담긴 파일이
+ * 내려오고, '시트 반영'은 특강을 마스터 시트에 밀어 넣어 '시트에서 가져오기' 왕복에 굳는다.
+ */
+const KIND_EXPORT_TITLE =
+  "내보내기는 정규 시간표 기준으로만 지원합니다 — 구분을 '정규'로 바꾼 뒤 사용하세요.";
+
 export function TimetableToolbarActions({
   subject,
+  kind = DEFAULT_TIMETABLE_KIND,
   canSync = false,
   canManageImport = false,
   sheetUrl = null,
   compact1h = [],
 }: {
   subject?: string;
+  /** 화면의 정규/특강/전체 구분. 정규가 아니면 내보내기·시트 버튼을 잠근다(화면과 파일 불일치 방지). */
+  kind?: TimetableKind;
   /** 구글 시트 동기화(=테넌트 전체 시간표 외부 push)는 sheet_sync 권한 + 지원 과목 + 연동 ON일 때만. */
   canSync?: boolean;
   /**
@@ -47,6 +59,8 @@ export function TimetableToolbarActions({
   // 구조 가져오기(강사별 그리드 → class_schedules 재구축)는 english 전용. 시트→앱 되읽기라 canSync와 AND.
   // 영어는 구조+반이동을 하나의 '시트에서 가져오기'(EnglishImportDialog)로 통합 → canStructureImport로 분기.
   const canStructureImport = supportsStructureImport(subjectKey);
+  // 정규 화면에서만 내보내기 허용 — 익스포터가 화면 구분을 못 받으므로 "화면과 파일이 다른" 상태를 만들지 않는다.
+  const exportsAllowed = kind === "regular";
 
   // 리스 상태 폴링(20s, makeedu 워커 카드 선례) — canSync(시트 버튼 노출)일 때만.
   useEffect(() => {
@@ -86,15 +100,22 @@ export function TimetableToolbarActions({
     <div className="print:hidden flex flex-wrap items-center gap-1">
       {/* 엑셀 그룹: 내보내기(전 과목) + 가져오기(수강편집 라운드트립 = 학생 반이동, math·english) */}
       <div className="flex items-center gap-1">
-        <a href={exportHref} className={btnCls}>
-          <FileSpreadsheet className="size-3" />
-          엑셀
-        </a>
+        {exportsAllowed ? (
+          <a href={exportHref} className={btnCls}>
+            <FileSpreadsheet className="size-3" />
+            엑셀
+          </a>
+        ) : (
+          <button type="button" disabled title={KIND_EXPORT_TITLE} className={btnCls}>
+            <FileSpreadsheet className="size-3" />
+            엑셀
+          </button>
+        )}
         {/* 파일 업로드 가져오기 = math·english 공통(둘 다 내보내기 xlsx에 '수강편집' 시트 포함 = 라운드트립).
             영어도 시트 연동 OFF·권한 없음일 때 유일한 가져오기 경로라 열어둔다(2026-07-15).
             ⚠️ 이 경로는 '수강편집'만 읽어 **학생 반이동만** 반영 — 영어 배치(강사별 그리드) 변경은
             구글시트 경로(EnglishImportDialog)만 지원. 다이얼로그가 그 한계를 문구로 명시한다. */}
-        {canImport ? <TimetableImportDialog subject={subjectKey} /> : null}
+        {canImport && exportsAllowed ? <TimetableImportDialog subject={subjectKey} /> : null}
       </div>
 
       {/* 구글 시트 그룹: 반영(push) + 열기 — 구분선으로 엑셀 그룹과 분리(줄바꿈 시에도 그룹 단위 유지) */}
@@ -104,9 +125,13 @@ export function TimetableToolbarActions({
             <button
               type="button"
               onClick={pushToSheet}
-              disabled={syncing || syncBusy}
+              disabled={syncing || syncBusy || !exportsAllowed}
               title={
-                syncBusy ? SYNC_BUSY_TITLE : (syncMsg ?? `${subjectLabel} 시간표 전체를 연결된 구글 시트에 반영`)
+                !exportsAllowed
+                  ? KIND_EXPORT_TITLE
+                  : syncBusy
+                    ? SYNC_BUSY_TITLE
+                    : (syncMsg ?? `${subjectLabel} 시간표 전체를 연결된 구글 시트에 반영`)
               }
               className={btnCls}
             >
@@ -116,14 +141,18 @@ export function TimetableToolbarActions({
           ) : null}
           {/* 시트에서 가져오기 — 영어=구조(강사별)+반이동(수강편집) 통합 1버튼, 수학=반이동(수강편집)만. */}
           {canSync && canStructureImport ? (
-            <EnglishImportDialog subject={subjectKey} disabled={syncBusy} disabledTitle={SYNC_BUSY_TITLE} />
+            <EnglishImportDialog
+              subject={subjectKey}
+              disabled={syncBusy || !exportsAllowed}
+              disabledTitle={exportsAllowed ? SYNC_BUSY_TITLE : KIND_EXPORT_TITLE}
+            />
           ) : null}
           {canSync && canImport && !canStructureImport ? (
             <TimetableImportDialog
               mode="sheet"
               subject={subjectKey}
-              disabled={syncBusy}
-              disabledTitle={SYNC_BUSY_TITLE}
+              disabled={syncBusy || !exportsAllowed}
+              disabledTitle={exportsAllowed ? SYNC_BUSY_TITLE : KIND_EXPORT_TITLE}
             />
           ) : null}
           {sheetUrl ? (

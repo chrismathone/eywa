@@ -269,6 +269,9 @@ export const classes = pgTable(
     // 종강(0059a): 운영 종료일. is_active(폐지)와 별개 — 종강 반은 is_active=true 유지하고
     // 타임머신에서 closed_at 이전 주엔 표시(이력), 이후 주에선 숨김. NULL=운영중.
     closedAt: date("closed_at"),
+    // 특강(0133a): 방학 단기강좌. 폼 토글이 쓰는 컬럼 — false여도 반 이름에 '특강'이 있으면 특강으로 본다
+    // (하위호환 폴백). 판정 단일소스 = src/features/classes/special-lecture.ts `isSpecialLecture`.
+    isSpecial: boolean("is_special").notNull().default(false),
     notes: text("notes"),
     // Cell color (ijw bgColor/textColor). Stored as #RRGGBB; ARGB normalized on import.
     bgColor: text("bg_color"),
