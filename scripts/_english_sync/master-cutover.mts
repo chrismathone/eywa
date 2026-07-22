@@ -162,7 +162,7 @@ const dropped = match.newClassNames;
 if (dropped.length) console.log(`  버려진 이름 ${dropped.length}건(메모로 판단 — 반 생성 안 함): ${dropped.join(" / ")}`);
 console.log(`계획: 생성 ${report.plan.create} · 변경 ${report.plan.update} · 유지 ${report.plan.keep} · 마감 ${report.plan.remove}`);
 
-// ── 비수업 블록(감독·준비·회의·연차) — 반이 아니라 teacher_schedule_blocks(0135a) ─────────────
+// ── 비수업 블록(감독·준비·회의·연차) — 반이 아니라 teacher_schedule_blocks(0138a) ─────────────
 // 수업 슬롯과 **같은 날짜 경계**로 갈아끼운다: 기존 유효행 마감(valid_to=컷오버−1) + 신규 삽입(valid_from=컷오버).
 // 삭제하지 않아 타임머신 보존. 강사뷰 렌더 전용이라 수강·청구·급여 어디에도 영향 없다.
 // ⚠️ 배치 변경이 0건이어도 블록은 따로 갈아끼운다 — 둘은 독립이다(수업은 그대로인데 감독만 바뀔 수 있다).
