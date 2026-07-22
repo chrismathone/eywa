@@ -383,6 +383,16 @@ export async function getWeeklyWritingRates(month?: string): Promise<WritingRate
     const name = (u.display_name as string | null)?.trim();
     if (name) exempt.add(name);
   }
+  /**
+   * ClassNote로 재는 과목은 이 경로(lesson_reports)에서 **분모에 넣지 않는다.**
+   *
+   * 영어 강사는 eywa가 아니라 ClassNote에 직접 쓰므로 lesson_reports가 늘 0건이다. 그대로 두면
+   * ① `김태건 0% (0/201)`처럼 **거짓 0%**가 뜨고 ② 아래 getEnglishTeacherRates가 만든 진짜 행과
+   * **같은 강사가 두 줄**로 나온다(2026-07-23 원장 제보 — 실제로 그렇게 보였다).
+   * 두 경로를 과목으로 갈라 겹치지 않게 한다: 여기 = 영어 외, 저기 = 영어.
+   */
+  const CLASSNOTE_MEASURED = new Set(["english"]);
+  const measuredHere = (subject: string | null | undefined) => !CLASSNOTE_MEASURED.has(String(subject ?? ""));
   // 보고서는 **쓴 날(report_date)에 그대로** 집계한다. covers_date는 집계를 옮기는 게 아니라
   // "그 날 수업의 의무를 이 보고서가 대신했다"는 표시라, 아래에서 **분모(대상)에서 빼는** 데 쓴다(0136a).
   // ⚠️ 옮기면 연속수업(7/3에 2타임 몰아서 하고 보고서 1건)에서 7/3이 거꾸로 미작성이 된다.
@@ -419,7 +429,7 @@ export async function getWeeklyWritingRates(month?: string): Promise<WritingRate
   // 2) 오늘 시작된 반 → 강사별 classIds (예외 강사 반 제외).
   // 귀속 = 반 담당(teacherName) 우선, 없으면 **슬롯 강사 라벨 폴백** — 반 담당 없이 슬롯 라벨로만 도는
   // 영어반(RTT2류)이 "(미지정)"으로 뭉치지 않게. 라벨 인물이 예외면 그 슬롯도 예외로 빠진다.
-  const started = schedule.filter((s) => s.status !== "upcoming");
+  const started = schedule.filter((s) => s.status !== "upcoming" && measuredHere(s.subject));
   const teacherOfClass = new Map<string, string>();
   for (const s of started) {
     const t = s.teacherName ?? s.slotTeacherLabel ?? "(미지정)";
@@ -509,6 +519,7 @@ export async function getWeeklyWritingRates(month?: string): Promise<WritingRate
       const m = new Map<string, string>();
       for (const s of weekly) {
         if (s.dayOfWeek !== key) continue;
+        if (!measuredHere(s.subject)) continue; // 영어는 ClassNote 경로가 잰다(중복·거짓 0% 방지)
         // 오늘 로직과 동일: 반 담당 → 슬롯 라벨 폴백(반 담당 없는 영어반 "(미지정)" 방지).
         const t = s.teacherName ?? s.slotTeacherLabel ?? "(미지정)";
         if (exempt.has(t)) continue;
