@@ -565,6 +565,9 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
     const priorMatched = matchReportsToRows(
       os.subjects.map((su) => ({ classId: su.classId ?? null, subjectKey: su.subjectKey ?? null })),
       (priorByStudent.get(os.id) ?? []).map((r) => ({ ...r, classId: r.class_id })),
+      // 이관분(반·과목 둘 다 없음) 폴백은 **직전 회차에서만** — 당일 행에 켜면 edutrix가 오늘 넣은
+      // 남의 보고서가 "이미 저장됨"으로 붙는다(report-unit.ts 🔴 참조).
+      { legacyFallback: true },
     );
     os.subjects.forEach((su, i) => {
       const pbs = priorMatched[i];

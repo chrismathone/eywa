@@ -45,11 +45,18 @@ describe("matchReportsToRows", () => {
     expect(got.map((r) => r?.tag)).toEqual(["A", "T"]);
   });
 
-  it("과목도 반도 없는 이관분은 단일 과목 학생에게만 붙는다", () => {
-    expect(matchReportsToRows([row("c1", "math")], [rep(null, null, "L")])?.[0]?.tag).toBe("L");
+  it("과목도 반도 없는 이관분은 legacyFallback + 단일 과목 학생일 때만 붙는다", () => {
+    const opts = { legacyFallback: true };
+    expect(matchReportsToRows([row("c1", "math")], [rep(null, null, "L")], opts)?.[0]?.tag).toBe("L");
     // 다과목 학생 — 어느 과목인지 알 수 없어 붙이지 않는다.
-    const multi = matchReportsToRows([row("c1", "math"), row("c2", "english")], [rep(null, null, "L")]);
+    const multi = matchReportsToRows([row("c1", "math"), row("c2", "english")], [rep(null, null, "L")], opts);
     expect(multi).toEqual([undefined, undefined]);
+  });
+
+  // 🔴 당일 행(기본값)에서 이 폴백이 켜지면, edutrix가 오늘 넣은 이관분(반·과목 없음)이
+  // 강사가 쓰지도 않은 "이미 저장됨"으로 붙고 그 본문이 초안으로 로드된다.
+  it("legacyFallback 미지정이면 이관분을 붙이지 않는다(당일 행 기본값)", () => {
+    expect(matchReportsToRows([row("c1", "math")], [rep(null, null, "L")])).toEqual([undefined]);
   });
 
   it("다른 반 보고서는 안 붙는다(교차 주입 금지)", () => {

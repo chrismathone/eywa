@@ -37,8 +37,15 @@ export type ReportRowRef = { classId?: string | null; subject?: string | null };
  *  1차 **반 정확매칭** — `report.classId === row.classId`. 정규/특강이 갈리는 유일한 축이다.
  *  2차 **과목 매칭(반 없는 보고서)** — 관리자 직접작성·0134a 이전 저장분·이관분 중 과목이 있는 행.
  *      같은 과목 행이 둘이면 **앞 행이 가져간다**(로스터가 반 시작시각 순으로 정렬하므로 결정적).
- *  3차 **과목도 없는 보고서(이관분)** — 학생이 단일 과목일 때만. 다과목 학생은 어느 과목인지 알 수 없어
- *      붙이지 않는다(엉뚱한 과목에 남의 진도를 주입하지 않는다 — roster의 기존 보수 규약 유지).
+ *  3차 **과목도 없는 보고서(이관분)** — `legacyFallback`이 켜졌고 학생이 단일 과목일 때만.
+ *      다과목 학생은 어느 과목인지 알 수 없어 붙이지 않는다(엉뚱한 과목에 남의 진도 주입 금지 —
+ *      roster의 기존 보수 규약 유지).
+ *
+ * 🔴 **3차는 기본 꺼짐이고 '직전 회차'에서만 켠다.** ijw 이식분은 subject가 거의 다 비어 있어
+ *    (실측 17,337/17,345 NULL) 이 폴백이 없으면 참고행·교재 승계가 통째로 0건이 된다. 그러나
+ *    **당일 행에 켜면 안 된다** — edutrix 동기화가 오늘 날짜 이관분을 계속 넣는다(실측 최근 14일 870행,
+ *    최신 2026-07-21). 켜면 강사가 쓰지도 않은 남의 보고서가 "이미 저장됨"으로 붙고 그 본문이 초안으로
+ *    로드된다. 예전 코드도 당일 행엔 이 폴백이 없었다(키가 달라 자연히 안 걸렸을 뿐이다).
  *
  * 🔴 **한 보고서를 두 행에 붙이면 안 된다.** 붙이면 두 행이 같은 DB 행을 가리키게 되고, 각각 저장할 때
  *    서로를 덮어쓴다(이 작업이 없애려던 바로 그 버그가 화면 쪽에서 재현된다). 그래서 소비(consume)한다.
@@ -46,6 +53,7 @@ export type ReportRowRef = { classId?: string | null; subject?: string | null };
 export function matchReportsToRows<R extends ReportRowRef>(
   rows: readonly SubjectRowRef[],
   reports: readonly R[],
+  opts?: { legacyFallback?: boolean },
 ): (R | undefined)[] {
   const out: (R | undefined)[] = rows.map(() => undefined);
   const used = new Set<R>();
@@ -73,8 +81,8 @@ export function matchReportsToRows<R extends ReportRowRef>(
     if (!key) return;
     out[i] = take((r) => !r.classId?.trim() && (r.subject?.trim() ?? "") === key);
   });
-  // 3차 — 과목도 없는 이관분. 단일 과목 학생만.
-  if (rows.length === 1 && !out[0]) {
+  // 3차 — 과목도 없는 이관분. 명시 opt-in + 단일 과목 학생만(위 🔴 참조).
+  if (opts?.legacyFallback && rows.length === 1 && !out[0]) {
     out[0] = take((r) => !r.classId?.trim() && !r.subject?.trim());
   }
   return out;
