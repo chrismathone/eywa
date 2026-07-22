@@ -17,7 +17,12 @@ const TREND_TEXT_WINDOW_DAYS = 30;
 
 /**
  * 추세용 점수 이력 — 같은 학생·과목의 저장 보고서, **beforeDate 기준 최근 30일 윈도** 안에서 최근 N
- * (beforeDate 이전, exam_info 있는 것) 날짜 오름차순.
+ * (beforeDate 이전, 시험 **또는 과제** 기록 있는 것) 날짜 오름차순.
+ * ⚠️ 2026-07-22까지 `exam_info is not null`만 받았다 — 그런데 buildTrendInput은 '과제 흐름' 줄을 따로
+ * 만들고 프롬프트도 그걸 쓰라고 지시한다. 즉 **과제만 기록된 날이 통째로 버려져 과제 흐름이 체계적으로
+ * 불완전**했다(실측 최근 30일: 시험 있는 행 651 vs 과제만 있는 행 853 = 57% 유실. 윤수빈은 과제 0%가
+ * 13회 연속인데 추세엔 2회만 등장). 그래프(fetchReportTrendRows)는 이미 둘 다 받으므로 표본도 어긋났다
+ * — 아래 필터를 그래프와 같은 규약으로 맞춘다("그래프와 서술이 다른 기간을 말하지 않게").
  * 과목 매칭: native math("math")는 legacy 임포트(subject=null, 대부분 수학)도 포함(progress ingest 동형).
  * 그 외 과목은 정확 매칭(혼선 방지), 미지정이면 null-subject만. generateReportComment(추세 섹션)·testPrompt 공용.
  */
@@ -26,7 +31,9 @@ export async function fetchScoreHistory(
   studentId: string,
   subject: string | undefined,
   beforeDate: string,
-  limit = 10,
+  // 30일 윈도를 넉넉히 덮는 상한(실측 학생당 평균 7.4행, 최대치도 30 미만). 흐름별 최근 N개를 고르는 건
+  // buildTrendInput(순수)이 하므로 여기서 자르면 시험 기록이 과제-only 행에 밀려 사라진다(실측 26/215명).
+  limit = 30,
 ): Promise<TrendHistoryRow[]> {
   const windowStart = windowStartOf(beforeDate, TREND_TEXT_WINDOW_DAYS);
   if (!windowStart) return []; // 비정상 beforeDate 방어 — 추세만 조용히 생략
@@ -36,7 +43,7 @@ export async function fetchScoreHistory(
     .eq("student_id", studentId)
     .lt("report_date", beforeDate)
     .gte("report_date", windowStart)
-    .not("exam_info", "is", null)
+    .or("exam_info.not.is.null,homework_score.not.is.null")
     .order("report_date", { ascending: false })
     .limit(limit);
   if (!subject) q = q.is("subject", null);

@@ -25,25 +25,38 @@ export const MIN_TREND_RECORDS = 2;
 const TREND_WINDOW = 10;
 
 /**
+ * `X/100` → `X점(100점 만점)`. 추세 프롬프트는 "'X/Y'는 'Y문제 중 X문제'로 풀어쓰세요"라 지시하는데,
+ * **분모 100은 문항 수가 아니라 100점 만점 시험 점수**다 → 그대로 두면 학부모에게
+ * "100문제 중 88개를 맞혔습니다"라는 없는 사실이 나간다(2026-07-22 실측: 최주원 6/25 88/100이
+ * 그렇게 발송됨. 반대로 92/100·96/100은 점수가 통째로 사라지고 "100점 만점으로 시작"이 됐다).
+ * 판정 근거: 6/25 하루에 21명이 x/100(48~89 분포, 5의 배수 아님 123/158) — 100문항 일일테스트가 아니라
+ * 시험 점수. 그 외 분모(5·10·15·20…)는 문항 수라 건드리지 않는다.
+ */
+export function normalizeExamInfo(examInfo: string): string {
+  return examInfo.replace(/(?<!\d)(\d{1,3})\s*\/\s*100(?!\d)/g, "$1점(100점 만점)");
+}
+
+/**
  * 최근 기록 → 추세 입력. edutrix 규격 `[MM-DD] 값 -> [MM-DD] 값 -> …`(날짜순).
  * 유효 데이터 포인트 < MIN_TREND_RECORDS 또는 시험·과제 둘 다 비면 null(빈데이터 창작 방지).
  * history는 날짜 오름차순이라 가정(호출부에서 정렬). 최근 TREND_WINDOW회만 사용.
  */
 export function buildTrendInput(history: TrendHistoryRow[]): TrendInput | null {
-  const recent = history.slice(-TREND_WINDOW);
   const line = (v: string | null | undefined) => (v && v.trim() ? v.trim() : "");
-  const examTrend = recent
-    .filter((h) => line(h.examInfo))
-    .map((h) => `[${h.date.slice(5)}] ${line(h.examInfo)}`)
+  // ⚠️ 최근 N개를 **흐름별로 따로** 센다(공통 슬라이스 아님) — 과제만 기록된 날이 흔해서
+  // (실측 최근 30일 853행 vs 시험 651행) 공통으로 자르면 과제-only 행이 슬롯을 잠식해
+  // 시험 기록이 추세에서 사라진다(실측 215명 중 26명). 두 줄은 프롬프트에서도 독립 문장이라 분리가 안전하다.
+  const examRows = history.filter((h) => line(h.examInfo)).slice(-TREND_WINDOW);
+  const assignRows = history.filter((h) => line(h.homeworkScore)).slice(-TREND_WINDOW);
+  const examTrend = examRows
+    .map((h) => `[${h.date.slice(5)}] ${normalizeExamInfo(line(h.examInfo))}`)
     .join(" -> ");
-  const assignTrend = recent
-    .filter((h) => line(h.homeworkScore))
-    .map((h) => `[${h.date.slice(5)}] ${line(h.homeworkScore)}`)
-    .join(" -> ");
-  const dataPoints = recent.filter((h) => line(h.examInfo) || line(h.homeworkScore)).length;
-  if (dataPoints < MIN_TREND_RECORDS) return null;
+  const assignTrend = assignRows.map((h) => `[${h.date.slice(5)}] ${line(h.homeworkScore)}`).join(" -> ");
+  // 표본 수 = 실제 인용되는 날짜의 합집합(둘 다 있는 날을 두 번 세지 않는다).
+  const dates = new Set([...examRows, ...assignRows].map((h) => h.date));
+  if (dates.size < MIN_TREND_RECORDS) return null;
   if (!examTrend && !assignTrend) return null;
-  return { count: recent.length, examTrend, assignTrend };
+  return { count: dates.size, examTrend, assignTrend };
 }
 
 /** edutrix historySummary 규격(날짜순 흐름 3줄). 프롬프트 [기록] 블록에 주입. */
