@@ -93,7 +93,8 @@ export default async function PublicLessonReportPage({
   const attachmentAll = attachments
     .map((a) => ({ ...a, url: attachmentUrls[a.path] }))
     .filter((a): a is { path: string; name: string; url: string } => !!a.url);
-  // 워커 스크린샷(내부 요청)에선 파일 첨부를 빼고 사진만 — 판정·사유는 visibleAttachments 주석 참조.
+  // 워커 스크린샷(내부 요청)에선 첨부를 전부 뺀다(이미지·파일 모두 게시글에 네이티브 부착 → 스샷 중복 제거).
+  // 판정·사유는 visibleAttachments 주석 참조.
   const attachmentImgs = visibleAttachments(attachmentAll, { forScreenshot: isInternal });
 
   return (

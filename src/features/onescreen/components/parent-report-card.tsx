@@ -173,12 +173,14 @@ export function ParentReportCard({
       {rpt.showAttachments && attachments.length ? (
         <Section title="첨부">
           {attachments.some((a) => isImageAttachment(a.name || a.path)) ? (
-            <div className="mb-2 grid grid-cols-2 gap-2">
+            // 이미지는 1열로 **크게** 세로 쌓기 — 스샷 1장에 보고서 본문 → 교재가 세로로 완결되게(2026-07-22 원장 방향).
+            // ClassNote가 attached_images를 가로로 나열해 세로가 안 되는 문제를 스샷 내 세로 배치로 우회.
+            <div className="mb-2 space-y-2">
               {attachments
                 .filter((a) => isImageAttachment(a.name || a.path))
                 .map((a) => (
                   // eslint-disable-next-line @next/next/no-img-element -- 공개/인쇄 페이지 첨부(signed URL, 최적화 불필요)
-                  <img key={a.path} src={a.url} alt={a.name} className="max-h-72 w-full rounded-md object-contain" />
+                  <img key={a.path} src={a.url} alt={a.name} className="w-full rounded-md object-contain" />
                 ))}
             </div>
           ) : null}

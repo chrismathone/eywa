@@ -2,6 +2,7 @@
 
 // 원장 보고서 관리 > ClassNote 발송 큐(5단계-2 Part A) — 상태 집계 + 주의 목록(재발송/멈춤복구) + 워커 상태.
 import { useEffect, useState } from "react";
+import { Popover } from "@base-ui/react/popover";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -63,36 +64,42 @@ function BigStatInline({
 }
 
 /**
- * 발송 PC 최근 경고 — 원문 로그를 한글로 정리해 **화면에 보이게** 편다.
+ * 발송 PC 최근 경고 — 원문 로그를 한글로 정리해 보여준다. 변환은 formatWorkerLogLines(순수).
  * ⚠️ 예전엔 title 툴팁 하나에 원문을 통째로 넣었는데, ANSI 제어문자·UTC 시각·영문 스택이 뒤섞여
- * 읽을 수가 없었고 툴팁 자체가 안 뜨기도 했다(2026-07-21 원장 제보). 변환은 formatWorkerLogLines(순수).
+ * 읽을 수가 없었고 툴팁 자체가 안 뜨기도 했다(2026-07-21 원장 제보) → 화면에 정리해 노출.
+ * ⚠️ 목록을 **인라인으로 펴면 카드(배경)가 길어진다**(2026-07-22 원장 제보) → base-ui Popover(포털)로
+ * **떠 있는 팝업**으로 낸다 — 레이아웃 흐름 밖이라 배경 높이를 안 밀고, 밖을 누르면 닫힌다.
  */
 function WorkerIssues({ lines }: { lines: string[] }) {
-  const [open, setOpen] = useState(false);
   const items = formatWorkerLogLines(lines);
   if (items.length === 0) return null;
   return (
-    <div className="flex flex-col items-end gap-0.5">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="text-danger text-[11px] font-bold underline-offset-2 hover:underline"
-      >
-        발송 PC 알림 {items.length}건 {open ? "접기" : "보기"}
-      </button>
-      {open ? (
-        <ul className="border-line bg-card max-w-[420px] space-y-1 rounded-md border p-2 text-left">
-          {items.map((it, i) => (
-            <li key={i} className="text-text-dim text-[11px] leading-snug break-keep">
-              {it.time ? <span className="text-text-faint num mr-1">{it.time}</span> : null}
-              {it.label ? <span className="text-foreground mr-1 font-bold">{it.label}</span> : null}
-              {it.summary}
-              {it.raw ? <span className="text-text-faint block break-all opacity-70">{it.raw}</span> : null}
-            </li>
-          ))}
-        </ul>
-      ) : null}
-    </div>
+    <Popover.Root>
+      <Popover.Trigger className="text-danger data-[popup-open]:underline text-[11px] font-bold underline-offset-2 hover:underline">
+        발송 PC 알림 {items.length}건 보기
+      </Popover.Trigger>
+      <Popover.Portal>
+        {/* 오른쪽 정렬(align=end) — 트리거가 카드 우상단이라 팝업이 화면 밖으로 안 넘치게. 좁은 창에선 max-w로 접힘. */}
+        <Popover.Positioner side="bottom" align="end" sideOffset={4} className="z-50">
+          <Popover.Popup className="bg-card border-line shadow-card max-h-[60vh] w-[420px] max-w-[calc(100vw-2rem)] overflow-y-auto rounded-lg border p-2 text-left outline-none">
+            <p className="text-text-faint mb-1.5 px-1 text-[11px] font-bold">발송 PC 최근 알림 {items.length}건</p>
+            <ul className="space-y-1">
+              {items.map((it, i) => (
+                <li
+                  key={i}
+                  className="border-line/60 text-text-dim rounded-md border px-2 py-1.5 text-[11px] leading-snug break-keep"
+                >
+                  {it.time ? <span className="text-text-faint num mr-1">{it.time}</span> : null}
+                  {it.label ? <span className="text-foreground mr-1 font-bold">{it.label}</span> : null}
+                  {it.summary}
+                  {it.raw ? <span className="text-text-faint mt-0.5 block break-all opacity-70">{it.raw}</span> : null}
+                </li>
+              ))}
+            </ul>
+          </Popover.Popup>
+        </Popover.Positioner>
+      </Popover.Portal>
+    </Popover.Root>
   );
 }
 

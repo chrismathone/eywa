@@ -8,13 +8,17 @@
 //
 // ⚠️ v1은 읽기전용 참고 — 이 산출값은 어디에도 저장하지 않는다(payroll_records 미기록).
 
+import { resolveClassRate, type GroupRates } from "./salary-group";
+
 export type SalaryType = "commission" | "fixed" | "hybrid";
 
 /** 강사 급여 정책(users 0119a). */
 export type TeacherComp = {
   salaryType: SalaryType | null; // null = 미설정
-  commissionRate: number | null; // 배분율 %(commission/hybrid). null = 미설정
+  commissionRate: number | null; // **기본** 배분율 %(과정별·반별이 없을 때). null = 미설정
   monthlyBase: number; // 고정/기본급(fixed/hybrid). 원
+  /** 과정별 배분율(초·중·고·수능·특강). 기본 비율보다 우선. */
+  groupRates?: GroupRates | null;
 };
 
 /** 정산 입력 한 행 = splits 한 행(청구서×반). */
@@ -24,6 +28,12 @@ export type SettlementRowInput = {
   classId: string | null;
   confirmedAmount: number; // 청구 기준(splits.confirmed_amount)
   actualAmount: number; // 실측 기준(splits.actual_amount) — 신호로만
+  /** 반 이름 — 과정 자동 판정(초등M…)에 쓴다. 없으면 미분류. */
+  className?: string | null;
+  /** 반별 수동 과정 지정(class_salary_settings). 이름 자동 판정을 이긴다. */
+  manualGroup?: string | null;
+  /** 반별 수동 배분율 %(class_salary_settings). 과정별·기본보다 우선. */
+  classRate?: number | null;
 };
 
 export type SettlementStatus =
@@ -43,18 +53,56 @@ export type TeacherSettlement = {
   diffTotal: number; // 실측 − 청구(신호)
   salaryType: SalaryType | null;
   commissionRate: number | null;
+  /** 과정별 배분율 — 편집기가 현재 값을 다시 그리기 위해 그대로 실어 보낸다. */
+  groupRates: GroupRates | null;
   monthlyBase: number;
-  commissionAmount: number; // 배분액 = round(confirmedTotal × rate/100). 해당 없으면 0
+  /** 수수료 차감 후 배분 기준액 = round(confirmedTotal × NET_MULTIPLIER). 화면이 산식을 보여주기 위한 중간값. */
+  netBase: number;
+  commissionAmount: number; // 배분액 = round(Σ 반별 청구 × 0.911 × 반별 rate/100). 해당 없으면 0
   settlement: number | null; // 산정 급여. null = 산정 불가(unset/unassigned/missing_rate)
   status: SettlementStatus;
+  /** 비율을 정하지 못한 반 이름들 — "어느 반 때문에 보류인지"를 화면이 말할 수 있게(0 지어내기 금지). */
+  unresolvedClasses: string[];
 };
 
 const UNASSIGNED = "미배정";
 
-/** confirmedTotal × rate% (정수 반올림). rate null이면 null. */
-function commissionOf(confirmedTotal: number, rate: number | null): number | null {
-  if (rate === null) return null;
-  return Math.round((confirmedTotal * rate) / 100);
+/**
+ * 결제 수수료 8.9% — **원장 확정 산식(2026-07-21): 급여 = 매출(청구) × 0.911 × 비율.**
+ * ⚠️ 결제수단을 가리지 않고 **전 건 일괄** 적용한다(원장 지시). 카드만 빼거나 현금을 예외 처리하지 말 것.
+ * ⚠️ 이 상수를 바꾸면 급여가 통째로 바뀐다 — 골든마스터(billing/golden)를 반드시 함께 갱신하고 사유를 남길 것.
+ */
+export const PLATFORM_FEE_RATE = 0.089;
+export const NET_MULTIPLIER = 1 - PLATFORM_FEE_RATE; // 0.911
+
+/** 청구액에서 수수료를 뗀 배분 기준액(정수 반올림). */
+export function netBaseOf(confirmedTotal: number): number {
+  return Math.round(confirmedTotal * NET_MULTIPLIER);
+}
+
+/**
+ * 반별 배분액 합 = Σ(반 청구 × 0.911 × 반 비율%) — **마지막에 한 번만 반올림**.
+ * 비율을 못 정한 반이 하나라도 있으면 null(=보류) — 일부만 계산한 값을 진짜 급여처럼 보여주지 않는다.
+ * 못 정한 반 이름은 `sink`에 모아 화면이 "어느 반 때문인지"를 말할 수 있게 한다.
+ */
+function commissionOfRows(rows: SettlementRowInput[], comp: TeacherComp, sink: string[]): number | null {
+  let raw = 0;
+  for (const r of rows) {
+    const { rate } = resolveClassRate({
+      className: r.className,
+      manualGroup: r.manualGroup,
+      classRate: r.classRate,
+      groupRates: comp.groupRates,
+      defaultRate: comp.commissionRate,
+    });
+    if (rate === null) {
+      const label = (r.className ?? "").trim() || "(반 이름 없음)";
+      if (!sink.includes(label)) sink.push(label);
+      continue;
+    }
+    raw += (r.confirmedAmount * NET_MULTIPLIER * rate) / 100;
+  }
+  return sink.length > 0 ? null : Math.round(raw);
 }
 
 /**
@@ -67,17 +115,26 @@ export function computeTeacherSettlements(
 ): TeacherSettlement[] {
   const groups = new Map<
     string,
-    { teacherId: string | null; teacherName: string | null; classIds: Set<string>; rowCount: number; confirmedTotal: number; actualTotal: number }
+    {
+      teacherId: string | null;
+      teacherName: string | null;
+      classIds: Set<string>;
+      rowCount: number;
+      confirmedTotal: number;
+      actualTotal: number;
+      rows: SettlementRowInput[]; // 반별 비율을 곱하려면 행을 남겨둬야 한다(합계에 단일 rate를 곱하면 안 됨)
+    }
   >();
 
   for (const r of rows) {
     const key = r.teacherId ?? UNASSIGNED;
     let g = groups.get(key);
     if (!g) {
-      g = { teacherId: r.teacherId, teacherName: r.teacherName, classIds: new Set(), rowCount: 0, confirmedTotal: 0, actualTotal: 0 };
+      g = { teacherId: r.teacherId, teacherName: r.teacherName, classIds: new Set(), rowCount: 0, confirmedTotal: 0, actualTotal: 0, rows: [] };
       groups.set(key, g);
     }
     g.rowCount++;
+    g.rows.push(r);
     if (r.classId) g.classIds.add(r.classId);
     g.confirmedTotal += r.confirmedAmount;
     g.actualTotal += r.actualAmount;
@@ -94,6 +151,7 @@ export function computeTeacherSettlements(
     let settlement: number | null;
     let status: SettlementStatus;
     let commissionAmount = 0;
+    const unresolvedClasses: string[] = [];
 
     if (!g.teacherId) {
       settlement = null;
@@ -111,8 +169,9 @@ export function computeTeacherSettlements(
         status = "computed";
       }
     } else {
-      // commission | hybrid — 배분율 필요
-      const commission = commissionOf(g.confirmedTotal, comp.commissionRate);
+      // commission | hybrid — **반마다** 배분율이 다를 수 있다(반별 수동 > 과정별 > 기본).
+      // ⚠️ 합계에 단일 rate를 곱하지 말 것. 반올림도 행마다 하지 않고 **마지막에 한 번**(원 단위 흔들림 방지).
+      const commission = commissionOfRows(g.rows, comp, unresolvedClasses);
       if (commission === null) {
         settlement = null;
         status = "missing_rate";
@@ -131,12 +190,15 @@ export function computeTeacherSettlements(
       confirmedTotal: g.confirmedTotal,
       actualTotal: g.actualTotal,
       diffTotal: g.actualTotal - g.confirmedTotal,
+      netBase: netBaseOf(g.confirmedTotal),
       salaryType: comp.salaryType,
       commissionRate: comp.commissionRate,
+      groupRates: comp.groupRates ?? null,
       monthlyBase: comp.monthlyBase,
       commissionAmount,
       settlement,
       status,
+      unresolvedClasses,
     });
   }
 
