@@ -64,6 +64,20 @@
   조회식을 둘 다 만족할 수 없어 화면엔 안 나오지만, 지우면 스냅샷 롤백이 복원 못 하므로 **경고만 출력**.
 - 스크립트: [`master-cutover.mts`](scripts/_english_sync/master-cutover.mts)(dry-run 기본·`--apply`·`--cutover=`),
   [`dryrun-master-cutover.mts`](scripts/_english_sync/dryrun-master-cutover.mts)(영향 리포트 전용).
+### 인프라 비용·소진 예측 설계 — **보류(미구현)** (2026-07-22)
+원장 "vercel 자동결제인가 / 이메일은 잘 못 볼 것 같은데 eywa 안에서 알림 안 되나 / 미리 충전해두는 부수효과도 있겠다"
+→ 조사·설계 후 **"당장 급한 불은 아니니 문서로만"**. 전체 설계 = [`docs/infra-cost-runway-plan.md`](infra-cost-runway-plan.md).
+- **실측(30일)**: AI 토큰 전체 **월 $1 미만**(관리 대상 아님). 진짜 변동비는 **전사 25.79시간**(회의 80,177초 +
+  등록상담 12,656초, 시간당 과금) + Vercel $20 고정. 즉 가치는 총액 집계가 아니라 **급증 포착**이라 지금은 후순위.
+- **배치 = super-admin**(학원설정 아님) — 인프라 요금은 학원 데이터가 아니라 운영비. `tenant_settings`에 넣으면
+  멀티테넌트 때 남의 학원 원장이 우리 청구서를 본다. 실측 `super_admins` 1명·tenants 1개라 지금은 접근성 차이 0.
+- **축 = 선불/후불 분리**: prepaid(DeepSeek·AssemblyAI·Upstage·Gemini)는 잔액 0 = **서비스 중단**이라 "며칠
+  남았나"가 전부(충전 대상). postpaid(Vercel·Supabase·Anthropic)는 자동결제라 안 멈춤 → 요금 폭탄 감시만.
+- **불변식 3**: ① 단가 미입력 = null(0원 = 거짓 안심, 추측 단가 시드 금지) ② 소진 예측은 7일/30일 평균 중 **큰 쪽**
+  (방학·시험기간 편차로 소진일을 늦게 잡는 것 방지) ③ 임계는 금액 아닌 **잔여일수**(14/7/3), bucket에 날짜 금지.
+- 기반 코드는 로컬 브랜치 `feat/infra-cost-dashboard`(450937a4) — 마이그레이션(테이블 4 + 집계 RPC 2) +
+  순수계산 `calc.ts` + **Vitest 30/30**. RPC 본문 2개는 실 스키마에 읽기전용 실행해 동작 확인. **DDL 미적용·main 미머지.**
+- ⏳ 재개 전 필요한 입력 = **AssemblyAI 시간당 단가**(변동비 대부분인데 미확인). Supabase 사용량 API 경로도 미확정.
 
 ### 특강 시간표 + 겹침을 차단→상세 경고로 전환 (2026-07-22) - tsc0/lint0/test2091
 원장 "특강용 시간표 / 새 반이 기존 시간대와 겹쳐 생성이 막힌다 / 정규도 풀자, 경고만 남기고 만들어지게 / 몇 개 반이 겹치는지 자세히".

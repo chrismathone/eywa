@@ -213,7 +213,15 @@ export function WritingRateCard({ view }: { view: WritingRatesView }) {
                   {r.daily.map((d) => (
                     <td key={d.date} className="px-2 py-2 text-center align-middle">
                       {d.target == null ? (
-                        d.pending ? (
+                        d.holiday ? (
+                          // 휴일은 "·"(수업 없음)와 구분해 표기 — 왜 분모에서 빠졌는지 화면에서 읽히게.
+                          <span
+                            className="text-text-faint text-[11px]"
+                            title={`휴일${d.holidayName ? `(${d.holidayName})` : ""} · 작성률에서 제외`}
+                          >
+                            휴일
+                          </span>
+                        ) : d.pending ? (
                           <span className="text-text-dim text-[11px]" title="오늘 수업이 아직 시작 전입니다">
                             수업 전
                           </span>

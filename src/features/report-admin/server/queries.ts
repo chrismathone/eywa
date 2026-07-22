@@ -447,6 +447,9 @@ export async function getWeeklyWritingRates(month?: string): Promise<WritingRate
     for (const n of names)
       (subjectsOfTeacher.get(n) ?? subjectsOfTeacher.set(n, new Set()).get(n)!).add(subj);
 
+  // 학원이 휴일로 지정한 날은 분모에서 뺀다(원장 2026-07-22) — 스케줄상 반이 있어도 수업을 안 했으므로
+  // 그날 0%는 거짓 빨강이다. ⚠️ **공휴일 자동 포함은 하지 않는다** — 학원이 설정에 넣은 날짜만 본다
+  // (공휴일에도 여는 학원이 있어 임의로 빼면 진짜 미작성을 가린다). 필요하면 학원설정에 추가하면 된다.
   const rates: TeacherRateRow[] = computeWritingRates(
     dates,
     reports,
@@ -454,6 +457,7 @@ export async function getWeeklyWritingRates(month?: string): Promise<WritingRate
     dailyTargets,
     today,
     todayPendings,
+    settings.operations.holidays,
   ).map((r) => ({
     ...r,
     subjects: [...(subjectsOfTeacher.get(r.teacher) ?? [])],
