@@ -8,6 +8,8 @@ import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { mergeHolidays } from "@/features/billing/tuition-calc";
 import { planTermsForMonth, monthRange, type PlanEnrollment } from "../plan";
+import { classifyVerification } from "../verification";
+import { maxCarryoverOut, maxCarryoverIn, validateCarryover } from "../carryover";
 
 const DOW: Record<string, number> = { sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 };
 
@@ -242,6 +244,115 @@ export async function unconfirmSessionTerm(
   const { error } = await supabase
     .from("invoice_session_terms")
     .update({ confirmed_sessions: null, unit_price: null, amount: null, confirmed_by: null, confirmed_at: null })
+    .eq("id", id);
+  if (error) return { error: error.message };
+
+  revalidatePath("/billing");
+  return { ok: true };
+}
+
+/** "YYYY-MM" 한 달 전. */
+function prevPeriodOf(period: string): string {
+  const [y, m] = period.split("-").map(Number);
+  const d = new Date(Date.UTC(y!, m! - 1, 1));
+  d.setUTCMonth(d.getUTCMonth() - 1);
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+/**
+ * 회차 **이월** 기록 — 부족분을 다음 달로 넘기거나(out), 전 달 이월분을 받아 쓴다(in).
+ *
+ * ⚠️ 원장 제약(2026-07-22): **더한 수업은 절대 급여에 포함되지 않는다(학원 손해).**
+ *   상한을 올리는 유일한 근거는 **기록된 이월**이라, 여기서 서버가 한도를 재검증한다(UI 신뢰 금지).
+ *   · out ≤ 그 달 부족분(청구−실측)  · in ≤ min(그 달 초과분, 전 달 이월분)
+ * ⚠️ 컷오버 예외: 전 달(26.06)은 eywa에 term 행이 **없어서** 크레딧을 조회할 수 없다.
+ *   그때만 **사유(note) 필수**로 그 달 초과분까지 허용하고, 누가·언제·왜를 남긴다(0134a 감사 컬럼).
+ * 1단계는 **기록만** — 급여 상한이 실제로 이월을 소비하는 것은 2단계(돈 산식 변경 → 골든마스터 게이트).
+ */
+export async function setSessionTermCarryover(
+  _prev: SessionTermActionState,
+  formData: FormData,
+): Promise<SessionTermActionState> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "로그인이 필요합니다" };
+  if (!(await canWriteTenant(user.systemRole, "billing"))) return { error: "수납 관리 권한이 없습니다" };
+
+  const id = String(formData.get("id") ?? "").trim();
+  if (!id) return { error: "대상이 없습니다" };
+  const rawOut = String(formData.get("carryoverOut") ?? "0").trim();
+  const rawIn = String(formData.get("carryoverIn") ?? "0").trim();
+  const note = String(formData.get("note") ?? "").trim();
+  const out = Number(rawOut);
+  const inn = Number(rawIn);
+
+  const supabase = await createClient();
+
+  // 대상 행 + 그 청구서(학생·청구월)
+  const { data: term, error: termErr } = await supabase
+    .from("invoice_session_terms")
+    .select("id, invoice_id, class_id, confirmed_sessions, invoice:invoice_id ( student_id, period )")
+    .eq("id", id)
+    .maybeSingle();
+  if (termErr) return { error: termErr.message };
+  if (!term) return { error: "대상을 찾을 수 없습니다" };
+  const inv = (Array.isArray(term.invoice) ? term.invoice[0] : term.invoice) as
+    | { student_id?: string; period?: string }
+    | undefined;
+  const period = inv?.period;
+  const studentId = inv?.student_id;
+  if (!period || !studentId) return { error: "청구서 정보를 확인할 수 없습니다" };
+
+  // 실측 시수(확정 대비) — 검증 화면과 같은 RPC를 써서 판정이 갈리지 않게 한다.
+  const { data: att, error: attErr } = await supabase.rpc("session_term_attendance", { p_period: period });
+  if (attErr) return { error: attErr.message };
+  const actual =
+    (att as { invoice_id: string; class_id: string; consumed: number | string }[] | null)?.find(
+      (a) => a.invoice_id === term.invoice_id && a.class_id === term.class_id,
+    )?.consumed ?? 0;
+  const verdict = classifyVerification(term.confirmed_sessions, Number(actual) || 0);
+
+  // 전 달 이월분(같은 학생·같은 반). 컷오버(전 달 term 행 없음)면 크레딧 조회 불가.
+  const prev = prevPeriodOf(period);
+  const { data: prevInv } = await supabase
+    .from("invoices")
+    .select("id")
+    .eq("student_id", studentId)
+    .eq("period", prev)
+    .maybeSingle();
+  let priorCredit = 0;
+  let cutover = true; // 전 달 근거 행이 있으면 false
+  if (prevInv?.id && term.class_id) {
+    const { data: prevTerm } = await supabase
+      .from("invoice_session_terms")
+      .select("carryover_out")
+      .eq("invoice_id", prevInv.id)
+      .eq("class_id", term.class_id)
+      .maybeSingle();
+    if (prevTerm) {
+      cutover = false;
+      priorCredit = Number(prevTerm.carryover_out) || 0;
+    }
+  }
+
+  const limitOut = maxCarryoverOut(verdict);
+  // 컷오버는 근거 행이 없으니 사유를 받아 그 달 초과분까지 허용(그 이상은 여전히 불가 — 안 가르친 몫은 못 받는다).
+  const limitIn = cutover
+    ? maxCarryoverIn(verdict, Number.MAX_SAFE_INTEGER)
+    : maxCarryoverIn(verdict, priorCredit);
+  if (cutover && inn > 0 && !note) return { error: "전 달 기록이 없어 사유를 입력해야 이월을 받을 수 있습니다" };
+
+  const checked = validateCarryover({ out, in: inn }, { maxOut: limitOut, maxIn: limitIn });
+  if (!checked.ok) return { error: checked.error };
+
+  const { error } = await supabase
+    .from("invoice_session_terms")
+    .update({
+      carryover_out: checked.out,
+      carryover_in: checked.in,
+      carryover_by: user.id,
+      carryover_at: new Date().toISOString(),
+      carryover_note: note || null,
+    })
     .eq("id", id);
   if (error) return { error: error.message };
 
