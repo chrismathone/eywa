@@ -38,6 +38,17 @@ const STARTED_AT = new Date().toISOString(); // 이 데몬 프로세스 시작 �
 const RECENT_MAX = 5;
 const recentIssues = [];
 
+/**
+ * 이 워커 버전이 할 수 있는 일 — 하트비트에 실어 **앱이 발송 전에 확인**한다.
+ *
+ * 🔴 왜 필요한가: 앱은 Vercel로 즉시 배포되지만 이 워커는 **zip 물리 이관**이라 시차가 필연이다.
+ * 그 사이 강사가 이미지 첨부 공지(교재요청서)를 보내면, 첨부를 모르는 구버전 워커가 **글자만 게시하고
+ * `success`로 기록**한다 — 학부모는 요청서 없는 안내만 받고 강사는 정상 발송으로 본다(이미 게시돼
+ * 재발송하면 중복 글). 앱이 이 플래그를 보고 미지원이면 발송을 막는다(개인화 태그 롤아웃 가드와 같은 패턴).
+ * ⚠️ 새 기능이 워커·앱 양쪽을 함께 바꿔야 할 때마다 여기에 키를 추가할 것(구버전은 키가 없어 자동 차단).
+ */
+const WORKER_CAPS = { noticeAttachments: true };
+
 function log(msg) {
   const line = `[${new Date().toISOString()}] ${msg}`;
   console.log(line);
@@ -107,7 +118,11 @@ async function heartbeat(tenant) {
   const s = db();
   // env 진단(logDir·recent)을 함께 실어 보낸다 — 연동 PC가 물리적으로 다른 컴퓨터라, 웹에서 못 보면
   // 원인 추적이 불가능해진다(2026-07-21 로그 미생성 사고에서 실제로 막혔다).
-  const payload = { ...lastResults, env: { logDir: stateDirLabel(), recent: recentIssues.slice(-RECENT_MAX) } };
+  const payload = {
+    ...lastResults,
+    caps: WORKER_CAPS, // 이 워커가 지원하는 기능(앱의 발송 전 롤아웃 가드가 읽는다)
+    env: { logDir: stateDirLabel(), recent: recentIssues.slice(-RECENT_MAX) },
+  };
   await s`
     insert into classnote_workers (tenant_id, hostname, started_at, last_seen, last_results)
     values (${tenant}, ${HOSTNAME}, ${STARTED_AT}, now(), ${s.json(payload)})

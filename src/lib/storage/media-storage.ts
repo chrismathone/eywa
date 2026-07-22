@@ -86,6 +86,11 @@ export async function createUploadTicket(args: {
   kind: MediaKind;
   path: string;
   contentType: string;
+  /**
+   * 같은 경로 덮어쓰기 허용 — **결정적 경로**(같은 원본을 다시 만들어 올리는 경우)에만.
+   * GCS signed PUT은 원래 덮어쓰지만 Supabase는 이 옵션 없이는 "이미 존재" 오류가 난다(백엔드 스왑 대비).
+   */
+  upsert?: boolean;
 }): Promise<UploadTicket> {
   const backend = getMediaBackend();
   if (backend === "gcs") {
@@ -100,7 +105,7 @@ export async function createUploadTicket(args: {
   const bucket = MEDIA_KIND[args.kind].supabaseBucket;
   const { data, error } = await createAdminClient()
     .storage.from(bucket)
-    .createSignedUploadUrl(args.path);
+    .createSignedUploadUrl(args.path, args.upsert ? { upsert: true } : undefined);
   if (error || !data?.signedUrl) {
     throw new Error(`업로드 URL 생성 실패: ${error?.message ?? "unknown"}`);
   }

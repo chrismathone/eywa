@@ -63,24 +63,29 @@ export async function createTextbookOrder(_prev: TextbookState, formData: FormDa
 
   const supabase = await createClient();
   const studentName = await resolveStudentName(supabase, f.studentId);
-  const { error } = await supabase.from("textbook_orders").insert({
-    tenant_id: user.tenantId,
-    student_id: f.studentId,
-    student_name: studentName,
-    teacher_name: f.teacherName,
-    book_name: f.bookName,
-    book_detail: f.bookDetail,
-    price: f.price,
-    status: "requested",
-    request_date: f.requestDate ?? kstToday(),
-    status_at: new Date().toISOString(),
-    status_by_name: user.displayName,
-    notes: f.notes,
-  });
+  // 생성 id를 돌려받는다 — 다이얼로그의 '클래스노트 발송'이 **방금 저장한 그 건**을 대상으로 열려면 필요.
+  const { data, error } = await supabase
+    .from("textbook_orders")
+    .insert({
+      tenant_id: user.tenantId,
+      student_id: f.studentId,
+      student_name: studentName,
+      teacher_name: f.teacherName,
+      book_name: f.bookName,
+      book_detail: f.bookDetail,
+      price: f.price,
+      status: "requested",
+      request_date: f.requestDate ?? kstToday(),
+      status_at: new Date().toISOString(),
+      status_by_name: user.displayName,
+      notes: f.notes,
+    })
+    .select("id")
+    .single();
   if (error) return { error: error.message };
 
   revalidatePath("/billing");
-  return { ok: true };
+  return { ok: true, createdId: (data?.id as string | undefined) ?? undefined };
 }
 
 /**

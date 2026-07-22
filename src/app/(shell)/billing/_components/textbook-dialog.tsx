@@ -1,64 +1,41 @@
 "use client";
 
-import { useActionState, useEffect, useRef, useState } from "react";
+// 교재신청 등록/수정 — 강사뷰(/textbook-requests)와 동일한 좌 폼 + 우 실시간 요청서 미리보기.
+// 관리자 전용(강사 자유입력·전체 학생·기존 행 수정)은 유지. 입력칸=textbook-dialog-fields, 미리보기=textbook-dialog-preview.
+//
+// 하단 버튼 3개(원장 요청): 취소 / 클래스노트 발송 / 저장.
+// **발송을 저장에 묶지 않는다** — 이미지·기록만 남기고 싶은 경우가 있어서 '저장'은 그대로 두고,
+// '클래스노트 발송'은 저장까지 끝낸 뒤 발송창을 연다(기록 없이 글만 나가는 일 없음).
+
+import { useActionState, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { kstToday } from "@/lib/date-kst";
-import { AlertCircle, Eye, Loader2, Save, X } from "@/components/icons/eywa-icon-compat";
+import { AlertCircle, Loader2, Save, X } from "@/components/icons/eywa-icon-compat";
+import { EyIcon } from "@/components/icons/eywa-icons";
 import { Button } from "@/components/ui/button";
-import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   createTextbookOrder,
   updateTextbookOrder,
   type TextbookState,
 } from "@/features/billing/server/textbook-actions";
+import { useMentDraft } from "@/features/billing/textbook-ment";
 import type { StudentOption, TextbookOrderRow } from "@/features/billing/server/textbook-queries";
 import type { CatalogOption } from "@/features/billing/server/catalog-queries";
 import type { AccountSetting } from "@/features/owner/settings-types";
-import { TextbookRequestCardBody } from "@/app/(print)/textbook/[id]/print/textbook-request-card-body";
+import { TextbookSendDialog } from "@/app/(shell)/textbook-requests/_send-dialog";
+import { TextbookFields, type TextbookDraft } from "./textbook-dialog-fields";
+import { TextbookPreview } from "./textbook-dialog-preview";
 
-function SubmitBtn() {
+function SubmitBtn({ disabled }: { disabled?: boolean }) {
   const { pending } = useFormStatus();
   return (
-    <Button type="submit" disabled={pending}>
+    <Button type="submit" disabled={pending || disabled}>
       {pending ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
       저장
     </Button>
   );
 }
 
-// 요청서 카드는 720px 고정 인쇄 서식이라 좁은 칸에선 잘린다 → 칸 폭에 맞춰 전체를 비례 축소(잘림 없이 온전히 표시).
-// 카드를 720px로 렌더 후 transform:scale로 줄이고, 축소된 만큼 래퍼 높이를 맞춘다(빈 공간 방지).
-const PREVIEW_BASE_W = 720;
-function ScaledPreview({ children }: { children: React.ReactNode }) {
-  const boxRef = useRef<HTMLDivElement>(null);
-  const cardRef = useRef<HTMLDivElement>(null);
-  const [scale, setScale] = useState(1);
-  const [height, setHeight] = useState<number | undefined>(undefined);
-  useEffect(() => {
-    const box = boxRef.current;
-    const card = cardRef.current;
-    if (!box || !card) return;
-    // ResizeObserver 콜백은 렌더 밖(비동기)이라 setState 안전(#25 무관). 칸 폭·카드 높이 변화(타이핑 등)에 반응.
-    const ro = new ResizeObserver(() => {
-      const s = Math.min(1, box.clientWidth / PREVIEW_BASE_W);
-      setScale(s);
-      setHeight(card.offsetHeight * s);
-    });
-    ro.observe(box);
-    ro.observe(card);
-    return () => ro.disconnect();
-  }, []);
-  return (
-    <div ref={boxRef} className="overflow-hidden" style={{ height }}>
-      <div ref={cardRef} style={{ width: PREVIEW_BASE_W, transform: `scale(${scale})`, transformOrigin: "top left" }}>
-        {children}
-      </div>
-    </div>
-  );
-}
-
-// 교재신청 등록/수정 — 강사뷰(/textbook-requests)와 동일한 좌 폼 + 우 실시간 요청서 미리보기.
-// 관리자 전용(강사 자유입력·전체 학생·기존 행 수정)은 유지. 미리보기 카드 = TextbookRequestCardBody 재사용.
 export function TextbookDialog({
   order,
   students,
@@ -82,21 +59,61 @@ export function TextbookDialog({
     undefined,
   );
   // 전 필드 controlled — 우측 실시간 미리보기 데이터 소스이자 '교재 검색'(단가표) 자동입력 대상.
-  const [studentId, setStudentId] = useState(order?.studentId ?? "");
-  const [teacherName, setTeacherName] = useState(order?.teacherName ?? "");
-  const [requestDate, setRequestDate] = useState(order?.requestDate ?? kstToday());
-  const [bookName, setBookName] = useState(order?.bookName ?? "");
-  const [bookDetail, setBookDetail] = useState(order?.bookDetail ?? "");
-  const [price, setPrice] = useState<number | string>(order?.price ?? 0);
-  const [notes, setNotes] = useState(order?.notes ?? "");
+  const [draft, setDraft] = useState<TextbookDraft>({
+    studentId: order?.studentId ?? "",
+    teacherName: order?.teacherName ?? "",
+    requestDate: order?.requestDate ?? kstToday(),
+    bookName: order?.bookName ?? "",
+    bookDetail: order?.bookDetail ?? "",
+    price: order?.price ?? 0,
+    notes: order?.notes ?? "",
+  });
+  const patch = (p: Partial<TextbookDraft>) => setDraft((d) => ({ ...d, ...p }));
+  // 학부모용 문구 — 저장된 내 멘트를 불러오고(autoLoad), 입력이 멈추면 자동 저장.
+  const { ment, edit: editMent } = useMentDraft({ autoLoad: true });
+
+  const formRef = useRef<HTMLFormElement>(null);
+  const [sendIds, setSendIds] = useState<string[] | null>(null); // 발송창 대상(null=미마운트, #67 회피)
+  const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
 
   // 성공 시 부모가 닫고 목록 갱신. 조건부 마운트(부모 {dialog ? …})라 언마운트 시 useActionState 리셋 = #67 안전.
-  if (state?.ok) {
+  // ⚠️ 발송창이 열려 있는 동안엔 닫지 않는다(발송 경로는 아래 saveThenSend가 별도로 저장한다).
+  if (state?.ok && !sendIds) {
     queueMicrotask(() => onClose(true));
   }
 
+  /**
+   * '클래스노트 발송' — 저장(신규=생성, 수정=갱신)이 **성공했을 때만** 발송창을 연다.
+   * ⚠️ form submit을 가로채지 않는다(type="button" + 액션 직접 호출) — 기존 '저장'(useActionState) 경로는 그대로.
+   */
+  async function saveThenSend() {
+    const form = formRef.current;
+    if (!form || sending) return;
+    setSending(true);
+    setSendError(null);
+    const fd = new FormData(form);
+    const res = order
+      ? await updateTextbookOrder(undefined, fd)
+      : await createTextbookOrder(undefined, fd);
+    setSending(false);
+    if (!res?.ok) {
+      setSendError(
+        res?.error ?? Object.values(res?.fieldErrors ?? {})[0] ?? "저장하지 못해 발송을 시작할 수 없습니다",
+      );
+      return;
+    }
+    const id = order ? order.id : res.createdId;
+    if (!id) {
+      setSendError("저장은 됐지만 발송 대상을 찾지 못했습니다 — 목록에서 다시 시도해주세요");
+      return;
+    }
+    setSendIds([id]);
+  }
+
   // 학생명 = 선택 학생(전체 학생 목록) → 미리보기 카드. 수정 시 목록에 없어도 저장된 이름 폴백.
-  const studentName = students.find((s) => s.id === studentId)?.name ?? order?.studentName ?? "";
+  const studentName = students.find((s) => s.id === draft.studentId)?.name ?? order?.studentName ?? "";
+  const errorMsg = sendError ?? state?.error;
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center">
@@ -120,162 +137,63 @@ export function TextbookDialog({
 
         <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] lg:items-start">
           {/* 좌: 작성 폼 */}
-          <form action={formAction} className="space-y-4">
+          <form ref={formRef} action={formAction} className="space-y-4">
             {editing ? <input type="hidden" name="id" value={order.id} /> : null}
 
-            {catalog.length > 0 ? (
-              <Field label="교재 검색 (단가표에서 불러오기)">
-                {/* value=""(controlled) — 선택 후 placeholder로 복귀하는 '불러오기' 버튼 동작(강사뷰와 동일). */}
-                <SearchableSelect
-                  value=""
-                  options={catalog.map((c) => ({
-                    value: c.id,
-                    label: c.title,
-                    hint: `${c.price.toLocaleString()}원${c.bookDetail ? ` · ${c.bookDetail}` : ""}`,
-                  }))}
-                  placeholder="단가표에서 선택..."
-                  searchPlaceholder="교재명 검색..."
-                  onValueChange={(id) => {
-                    const c = catalog.find((x) => x.id === id);
-                    if (c) {
-                      setBookName(c.title);
-                      setBookDetail(c.bookDetail ?? "");
-                      setPrice(c.price);
-                    }
-                  }}
-                />
-              </Field>
-            ) : null}
+            <TextbookFields
+              draft={draft}
+              onChange={patch}
+              students={students}
+              catalog={catalog}
+              fieldErrors={state?.fieldErrors}
+              ment={ment}
+              onMentChange={editMent}
+            />
 
-            <Field label="교재명" error={state?.fieldErrors?.bookName}>
-              <input
-                name="bookName"
-                value={bookName}
-                onChange={(e) => setBookName(e.target.value)}
-                className={inputCls}
-                placeholder="예: 가우스 중2-1 1권"
-              />
-            </Field>
-            <Field label="상세 (단원 등)">
-              <input
-                name="bookDetail"
-                value={bookDetail}
-                onChange={(e) => setBookDetail(e.target.value)}
-                className={inputCls}
-                placeholder="선택"
-              />
-            </Field>
-
-            <Field label="학생" error={state?.fieldErrors?.studentId}>
-              <SearchableSelect
-                name="studentId"
-                value={studentId}
-                onValueChange={setStudentId}
-                options={students.map((s) => ({ value: s.id, label: s.name, hint: s.grade ?? undefined }))}
-                placeholder="학생 선택..."
-                searchPlaceholder="학생 이름 검색..."
-              />
-            </Field>
-
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="강사">
-                <input
-                  name="teacherName"
-                  value={teacherName}
-                  onChange={(e) => setTeacherName(e.target.value)}
-                  className={inputCls}
-                  placeholder="선택"
-                />
-              </Field>
-              <Field label="신청일">
-                <input
-                  name="requestDate"
-                  type="date"
-                  value={requestDate}
-                  onChange={(e) => setRequestDate(e.target.value)}
-                  className={inputCls}
-                />
-              </Field>
-            </div>
-
-            <Field label="금액">
-              <input
-                name="price"
-                type="number"
-                min="0"
-                step="500"
-                value={price}
-                onChange={(e) => setPrice(e.target.value)}
-                className={`${inputCls} num text-right`}
-              />
-            </Field>
-
-            <Field label="메모">
-              <textarea
-                name="notes"
-                rows={2}
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                className={`${inputCls} resize-y`}
-                placeholder="선택"
-              />
-            </Field>
-
-            {state?.error ? (
+            {errorMsg ? (
               <p className="text-danger bg-danger-soft border-danger/20 inline-flex items-center gap-1.5 rounded-md border px-3 py-2 text-sm">
                 <AlertCircle className="size-4" />
-                {state.error}
+                {errorMsg}
               </p>
             ) : null}
 
-            <div className="border-line flex items-center justify-end gap-2 border-t pt-4">
-              <Button type="button" variant="outline" onClick={() => onClose(false)}>
+            <div className="border-line flex flex-wrap items-center justify-end gap-2 border-t pt-4">
+              <Button type="button" variant="outline" onClick={() => onClose(false)} disabled={sending}>
                 취소
               </Button>
-              <SubmitBtn />
+              <Button type="button" variant="outline" onClick={saveThenSend} disabled={sending}>
+                {sending ? <Loader2 className="size-4 animate-spin" /> : <EyIcon name="send" size={16} />}
+                클래스노트 발송
+              </Button>
+              <SubmitBtn disabled={sending} />
             </div>
           </form>
 
           {/* 우: 실시간 미리보기 (강사뷰 우측 패널과 동일 — 타이핑 즉시 종이 서식에 반영) */}
-          <section className="space-y-2">
-            <h3 className="text-text-dim flex items-center gap-1.5 text-[12px] font-bold">
-              <Eye className="size-3.5" />
-              미리보기
-            </h3>
-            <div className="bg-bg-soft/60 border-line rounded-md border p-3 sm:p-4">
-              <ScaledPreview>
-                <TextbookRequestCardBody
-                  data={{
-                    studentName: studentName || null,
-                    teacherName: teacherName || null,
-                    // 빈 날짜는 저장 시 오늘로 폴백(서버 규칙)이라 미리보기도 동일 — WYSIWYG 일치.
-                    requestDate: requestDate || kstToday(),
-                    bookName,
-                    bookDetail: bookDetail || null,
-                    price: Math.max(0, Number(price) || 0),
-                  }}
-                  academyName={academyName}
-                  logoUrl={logoUrl}
-                  account={account}
-                />
-              </ScaledPreview>
-            </div>
-          </section>
+          <TextbookPreview
+            draft={draft}
+            studentName={studentName}
+            academyName={academyName}
+            logoUrl={logoUrl}
+            account={account}
+          />
         </div>
       </div>
-    </div>
-  );
-}
 
-const inputCls =
-  "border-line bg-background text-foreground placeholder:text-text-faint w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary/40";
-
-function Field({ label, error, children }: { label: string; error?: string; children: React.ReactNode }) {
-  return (
-    <div className="space-y-1.5">
-      <span className="text-foreground block text-sm font-medium">{label}</span>
-      {children}
-      {error ? <p className="text-danger text-xs">{error}</p> : null}
+      {/* 발송창 — 이 시점엔 이미 저장이 끝났다. 닫으면 다이얼로그도 함께 닫아 같은 내용이 두 번 저장되는 걸 막는다. */}
+      {sendIds ? (
+        <TextbookSendDialog
+          orderIds={sendIds}
+          onClose={() => {
+            setSendIds(null);
+            onClose(true);
+          }}
+          academyName={academyName}
+          logoUrl={logoUrl}
+          account={account}
+          initialMent={ment}
+        />
+      ) : null}
     </div>
   );
 }

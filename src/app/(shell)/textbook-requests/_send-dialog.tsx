@@ -1,37 +1,53 @@
 "use client";
 
-// 교재요청 → 학부모 ClassNote 공지 발송(1단계, 텍스트) — 강사가 요청서를 만든 그 자리에서 바로 보낸다.
-// 서버 로직(강사 스코프·보드 판정·동명이인 가드·발송 킬스위치·큐 적재)은 textbook-notice-actions.ts에
-// 이미 있고 여기는 화면만. 본문은 발송과 **같은 순수 함수**(composeTextbookNotice)로 미리보기 = 실제 발송글.
+// 교재요청 → 학부모 ClassNote 공지 발송(2단계) — 강사가 요청서를 만든 그 자리에서 바로 보낸다.
+// 글 1개 = 멘트+교재 내용(텍스트) + 요청서 양식 이미지(학생별, 자동) + 교재 표지(선택, 공통).
+// 서버 로직(강사 스코프·보드 판정·동명이인 가드·발송 킬스위치·큐 적재)은 textbook-notice-actions.ts에 있고
+// 여기는 화면만. 요청서 이미지는 목록의 '요청서' 다운로드와 **같은 카드**를 캡처해 올린다(_use-form-capture).
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { useSubjectMaps } from "@/features/owner/operations-context";
-import { composeTextbookNotice, DEFAULT_TEXTBOOK_MENT } from "@/features/billing/textbook-notice";
-import {
-  prepareTextbookNotice,
-  saveMyTextbookMent,
-  sendTextbookNotice,
-  type PreparedTextbookNotice,
-  type TextbookNoticeSkip,
-} from "@/features/billing/server/textbook-notice-actions";
+import type { AccountSetting } from "@/features/owner/settings-types";
+import type { NoticeAttachment } from "@/features/onescreen/notice-attachments";
+import { cardFileBase } from "@/app/(print)/textbook/[id]/print/download-card";
+import { prepareTextbookNotice, sendTextbookNotice } from "@/features/billing/server/textbook-notice-actions";
+import type { PreparedTextbookNotice, TextbookNoticeSkip } from "@/features/billing/textbook-notice-types";
+import { DEFAULT_TEXTBOOK_MENT } from "@/features/billing/textbook-notice";
+import { useMentDraft } from "@/features/billing/textbook-ment";
 import { groupTargets, SendSkipList, SendTargetList } from "./_send-targets";
+import { MentField, NoticeBanners } from "./_send-fields";
+import { CoverPicker, FormCaptureStatus } from "./_send-images";
+import { NoticePreview } from "./_send-preview";
+import { useFormCapture, type CaptureJob } from "./_use-form-capture";
 
-/** 입력이 멈추고 이 시간이 지나면 멘트를 조용히 저장(저장 버튼 없음 = '중간저장'). */
-const MENT_SAVE_DELAY = 1500;
-
-export function TextbookSendDialog({ orderIds, onClose }: { orderIds: string[]; onClose: () => void }) {
+export function TextbookSendDialog({
+  orderIds,
+  onClose,
+  academyName,
+  logoUrl,
+  account,
+  initialMent,
+}: {
+  orderIds: string[];
+  onClose: () => void;
+  /** 요청서 카드 렌더용(목록의 다운로드와 동일 소스) */
+  academyName: string;
+  logoUrl: string | null;
+  account: AccountSetting;
+  /** 작성 폼의 '학부모에게 보낼 메시지'를 그대로 이어받는다(비면 저장된 내 멘트 → 기본 문구). */
+  initialMent?: string;
+}) {
   const subjectMaps = useSubjectMaps();
   const [prep, setPrep] = useState<PreparedTextbookNotice | null>(null); // null = 불러오는 중
-  const [ment, setMent] = useState(DEFAULT_TEXTBOOK_MENT);
+  const { ment, edit: editMent, apply: applyMent } = useMentDraft();
   const [pick, setPick] = useState<Record<string, string>>({}); // studentId → 보낼 보드 과목
+  const [covers, setCovers] = useState<NoticeAttachment[]>([]); // 전원 공통(교재 표지)
   const [busy, setBusy] = useState(false);
   const [skipped, setSkipped] = useState<TextbookNoticeSkip[] | null>(null);
-  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pendingMent = useRef<string | null>(null); // 아직 저장 안 된 마지막 입력(닫을 때 flush)
   const key = orderIds.join(","); // 배열 identity 대신 안정 키로 1회만 로드
 
   useEffect(() => {
@@ -41,7 +57,8 @@ export function TextbookSendDialog({ orderIds, onClose }: { orderIds: string[]; 
       if (cancelled) return;
       setPrep(res);
       if (!res.ok) return;
-      setMent(res.ment ?? DEFAULT_TEXTBOOK_MENT);
+      // 작성 폼에서 방금 쓴 문구가 있으면 그것이 우선(같은 화면에서 쓴 글이 발송창에서 바뀌면 안 된다).
+      applyMent(initialMent?.trim() ? initialMent : (res.ment ?? DEFAULT_TEXTBOOK_MENT));
       // 과목 1개=자동 확정, 2개+=첫 과목 기본 선택(비워두면 서버가 조용히 제외하므로 항상 채운다).
       const init: Record<string, string> = {};
       for (const o of res.orders ?? []) {
@@ -52,45 +69,50 @@ export function TextbookSendDialog({ orderIds, onClose }: { orderIds: string[]; 
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- applyMent는 매 렌더 새 함수(안정 키 key로만 1회 로드)
   }, [key]);
 
-  // 디바운스는 타이머로만(effect 안 동기 setState 금지 #25). 닫기가 1.5초보다 빨라도 마지막 타이핑이
-  // 유실되지 않게 언마운트 때 예약분을 즉시 저장(flush)한다.
-  useEffect(() => () => {
-    if (saveTimer.current) clearTimeout(saveTimer.current);
-    if (pendingMent.current !== null) void saveMyTextbookMent(pendingMent.current);
-  }, []);
-
-  const editMent = (v: string) => {
-    setMent(v);
-    pendingMent.current = v;
-    if (saveTimer.current) clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(() => {
-      pendingMent.current = null;
-      void saveMyTextbookMent(v);
-    }, MENT_SAVE_DELAY);
-  };
+  // 요청서 캡처 대상 — 학생 연결이 있는 요청만(연결 없는 건 애초에 발송 불가). prep 로드 후 1회 확정.
+  const jobs = useMemo<CaptureJob[]>(
+    () =>
+      (prep?.orders ?? [])
+        .filter((o) => o.studentId)
+        .map((o) => ({
+          orderId: o.id,
+          studentId: o.studentId!,
+          fileName: cardFileBase(o.requestDate, o.studentName, o.bookName),
+          data: {
+            studentName: o.studentName,
+            teacherName: o.teacherName,
+            requestDate: o.requestDate,
+            bookName: o.bookName,
+            bookDetail: o.bookDetail,
+            price: o.price,
+          },
+        })),
+    [prep],
+  );
+  const capture = useFormCapture(jobs);
 
   const { targets, orphans } = groupTargets(prep?.orders ?? []);
   const sendable = targets.filter((t) => t.subjects.length > 0 && pick[t.studentId]);
   const head = sendable[0] ?? null;
-  const headOrder = head?.orders[0] ?? null;
-  const preview =
-    head && headOrder
-      ? composeTextbookNotice(ment, {
-          studentName: head.name,
-          bookName: headOrder.bookName,
-          bookDetail: headOrder.bookDetail,
-          price: headOrder.price,
-          requestDate: headOrder.requestDate,
-          account: prep?.account,
-        }).full
-      : "";
+  const attachOff = prep?.showAttachments === false;
+  const workerError = prep?.workerError; // 연동 PC가 구버전이면 첨부가 통째로 무시된다 → 아예 막는다
+  // 이미지가 준비되기 전엔 보내지 않는다 — 요청서 없이 글자만 나가면 원장이 손으로 올리던 것과 다르다.
+  const canSend = !busy && !!head && capture.ready && !attachOff && !workerError;
 
   async function send(test: boolean) {
     setBusy(true);
     setSkipped(null);
-    const res = await sendTextbookNotice({ orderIds: key.split(","), ment, subjectByStudent: pick, test });
+    const res = await sendTextbookNotice({
+      orderIds: key.split(","),
+      ment,
+      subjectByStudent: pick,
+      commonAttachments: covers,
+      attachmentsByStudent: capture.byStudent,
+      test,
+    });
     setBusy(false);
     setSkipped(res.skipped?.length ? res.skipped : null);
     if (!res.ok) {
@@ -128,25 +150,20 @@ export function TextbookSendDialog({ orderIds, onClose }: { orderIds: string[]; 
           </div>
         ) : (
           <div className="space-y-4">
-            {prep.sendEnabled === false ? (
-              <p className="border-amber/30 bg-amber-soft text-amber rounded-2xl border px-3 py-2 text-[12px]">
-                학원설정에서 &lsquo;ClassNote 실제 발송&rsquo;이 꺼져 있습니다 — 지금 누르면 실제로 보내지 않습니다.
-              </p>
-            ) : null}
+            <NoticeBanners
+              attachOff={attachOff}
+              sendOff={prep.sendEnabled === false}
+              workerError={workerError}
+            />
+            <MentField value={ment} onChange={editMent} />
 
-            <div className="space-y-1">
-              <span className="text-text-dim block text-[12px] font-medium">학부모께 드릴 말씀</span>
-              <textarea
-                value={ment}
-                onChange={(e) => editMent(e.target.value)}
-                rows={4}
-                aria-label="학부모께 드릴 말씀"
-                className="border-line bg-card focus:border-primary w-full resize-y rounded-lg border p-3 text-[13px] outline-none"
-              />
-              <p className="text-text-faint text-[11px]">
-                {"{학생}·{교재명}·{금액}"}은 학생마다 자동으로 채워집니다 · 입력을 멈추면 자동 저장됩니다.
-              </p>
-            </div>
+            <FormCaptureStatus
+              capture={capture}
+              academyName={academyName}
+              logoUrl={logoUrl}
+              account={account}
+            />
+            <CoverPicker covers={covers} onChange={setCovers} disabled={busy || attachOff || !!workerError} />
 
             <div className="space-y-1.5">
               <span className="text-text-dim block text-[12px] font-medium">
@@ -161,33 +178,27 @@ export function TextbookSendDialog({ orderIds, onClose }: { orderIds: string[]; 
               />
             </div>
 
-            <div className="space-y-1">
-              <span className="text-text-dim block text-[12px] font-medium">
-                {/* 같은 학생의 요청 여러 건은 서버가 한 글로 이어 붙인다 — 미리보기는 첫 건만이라 명시. */}
-                미리보기{head ? ` · ${head.name} 기준` : ""}
-                {head && head.orders.length > 1 ? ` (요청 ${head.orders.length}건이 한 글로 이어집니다 — 첫 건만 표시)` : ""}
-              </span>
-              {preview ? (
-                <p className="border-line bg-bg-soft/60 text-foreground rounded-2xl border p-3 text-[13px] whitespace-pre-wrap">
-                  {preview}
-                </p>
-              ) : (
-                <p className="text-text-faint border-line rounded-2xl border border-dashed p-3 text-[12px]">
-                  보낼 수 있는 학생이 없습니다.
-                </p>
-              )}
-            </div>
+            <NoticePreview
+              ment={ment}
+              target={head}
+              account={prep.account}
+              imageCount={(head ? (capture.byStudent[head.studentId]?.length ?? 0) : 0) + covers.length}
+            />
 
             {skipped ? <SendSkipList skipped={skipped} /> : null}
 
             <div className="flex flex-wrap items-center justify-end gap-2">
               <span className="text-text-faint text-[11px]">실제 학부모에게 가지 않습니다</span>
-              <Button variant="secondary" disabled={busy || !head} onClick={() => send(true)}>
+              <Button variant="secondary" disabled={!canSend} onClick={() => send(true)}>
                 학원이 테스트 발송
               </Button>
-              <Button disabled={busy || !head} onClick={() => send(false)}>
+              <Button disabled={!canSend} onClick={() => send(false)}>
                 <EyIcon name="send" size={16} />
-                {busy ? "보내는 중…" : `학부모에게 발송 (${sendable.length}명)`}
+                {busy
+                  ? "보내는 중…"
+                  : !capture.ready && capture.total > 0 && !capture.error
+                    ? "요청서 준비 중…"
+                    : `학부모에게 발송 (${sendable.length}명)`}
               </Button>
             </div>
           </div>
