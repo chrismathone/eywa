@@ -54,6 +54,22 @@ describe("mergeClassnoteStatuses", () => {
     expect(next).toBe(prev);
   });
 
+  it("반(classId)을 해석 함수에 그대로 넘긴다 — 같은 과목 두 행을 가르는 유일한 축", () => {
+    // 정규 수학·수학 특강 두 행. 해석 함수는 반으로 행 이름을 고른다.
+    const prev = {
+      s1: { 수학: rep({ classnoteStatus: "queued" }), "수학 · 특강": rep({ classnoteStatus: "queued" }) },
+    };
+    const byClass = (_sid: string, _key: string | null, classId: string | null) =>
+      classId === "c-special" ? "수학 · 특강" : classId === "c-regular" ? "수학" : undefined;
+    const next = mergeClassnoteStatuses(
+      prev,
+      [{ studentId: "s1", subject: "math", classId: "c-special", status: "success" }],
+      byClass,
+    );
+    expect(next.s1!["수학 · 특강"]!.classnoteStatus).toBe("success");
+    expect(next.s1!.수학!.classnoteStatus).toBe("queued"); // 정규 행은 건드리지 않는다
+  });
+
   it("여러 학생·여러 행을 한 번에 병합한다", () => {
     const prev = {
       s1: { 수학: rep({ classnoteStatus: "queued" }) },

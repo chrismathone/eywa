@@ -59,6 +59,13 @@ export function WritingRateMonth({ view }: { view: WritingRatesView }) {
   );
 
   const days = useMemo(() => dates.map(dayMeta), [dates]);
+  // 휴일 날짜 — 헤더 숫자를 **일요일과 같은 색**으로(원장 2026-07-22). 휴일은 강사가 아니라 날짜의 성질이라
+  // 어느 행에서 읽어도 같지만, 행이 비어 있을 수 있어 전 행을 훑어 모은다.
+  const holidayDates = useMemo(() => {
+    const s = new Set<string>();
+    for (const r of rates) for (const c of r.daily) if (c.holiday) s.add(c.date);
+    return s;
+  }, [rates]);
 
   return (
     <div className="space-y-3">
@@ -90,9 +97,13 @@ export function WritingRateMonth({ view }: { view: WritingRatesView }) {
                 <th
                   key={dates[i]}
                   className={`border-line min-w-[30px] border-b border-r px-1 py-2 text-center text-[11px] font-bold ${
-                    d.dow === 0 ? "text-danger" : d.dow === 6 ? "text-blue" : "text-text-dim"
+                    d.dow === 0 || holidayDates.has(dates[i]!)
+                      ? "text-danger"
+                      : d.dow === 6
+                        ? "text-blue"
+                        : "text-text-dim"
                   }`}
-                  title={`${dates[i]} (${WEEKDAY[d.dow]})`}
+                  title={`${dates[i]} (${WEEKDAY[d.dow]})${holidayDates.has(dates[i]!) ? " · 휴일" : ""}`}
                 >
                   {d.day}
                 </th>
@@ -117,7 +128,9 @@ export function WritingRateMonth({ view }: { view: WritingRatesView }) {
                     }`}
                     title={
                       c.holiday
-                        ? `${c.date} — 휴일${c.holidayName ? `(${c.holidayName})` : ""} · 작성률에서 제외`
+                        ? c.target == null
+                          ? `${c.date} — 휴일${c.holidayName ? `(${c.holidayName})` : ""} · 작성률에서 제외`
+                          : `${c.date} — 휴일${c.holidayName ? `(${c.holidayName})` : ""}인데 ${c.written}건 작성 · 한 일로 인정`
                         : c.target == null
                           ? c.pending
                             ? `${c.date} — 수업 전(대상은 수업이 시작된 뒤 잡힙니다)`
@@ -125,7 +138,7 @@ export function WritingRateMonth({ view }: { view: WritingRatesView }) {
                           : `${c.date} — ${c.written}/${c.target}${c.rate == null ? "" : ` (${c.rate}%)`}`
                     }
                   >
-                    {c.holiday ? "휴" : c.target == null ? "·" : c.rate == null ? "·" : `${c.rate}`}
+                    {c.holiday && c.target == null ? "휴" : c.target == null ? "·" : c.rate == null ? "·" : `${c.rate}`}
                   </td>
                 ))}
                 <td className="border-line bg-card sticky right-0 z-10 border-b border-l px-3 py-2 text-right whitespace-nowrap">

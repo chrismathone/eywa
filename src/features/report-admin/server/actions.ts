@@ -2,6 +2,7 @@
 
 // 수업보고서(발송 관리) — ClassNote 발송 큐 관리 액션(재발송·멈춤복구). 쓰기는 lesson_reports 메뉴 권한(위임 반영).
 // edutrix retrySelectedClassNoteReports/resetStuckClassNoteReports 이식. 과거일 재발송 사고 방지(isClassnoteAllowed).
+import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canAccessTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
@@ -34,7 +35,7 @@ export async function retryClassnote(
   // 취소(revoked_at)된 행도 제외 — 워커가 영원히 클레임 안 해 좀비 queued가 되던 구멍.
   const { data: rows } = await supabase
     .from("lesson_reports")
-    .select("id, report_date, subject, student_id, makeup")
+    .select("id, report_date, subject, class_id, student_id, makeup")
     .in("id", ids.slice(0, 200))
     .not("classnote_status", "is", null)
     .neq("source", "edutrix_import")
@@ -60,27 +61,16 @@ export async function retryClassnote(
   let absentSkipped: number;
   try {
     const gateTargets = allowed.filter((r) => !r.makeup);
-    const blocked = await getAbsenceBlockedKeys(
-      supabase,
-      user.tenantId,
-      gateTargets.map((r) => ({
-        studentId: r.student_id as string,
-        reportDate: (r.report_date as string).slice(0, 10),
-        subject: r.subject as string | null,
-      })),
-    );
+    // 반 단위 판정(0134a) — 보고서에 반이 있으면 그 반 출결만 본다(없으면 예전대로 과목 단위).
+    const keyOf = (r: (typeof allowed)[number]) => ({
+      studentId: r.student_id as string,
+      reportDate: (r.report_date as string).slice(0, 10),
+      subject: r.subject as string | null,
+      classId: (r.class_id as string | null) ?? null,
+    });
+    const blocked = await getAbsenceBlockedKeys(supabase, user.tenantId, gateTargets.map(keyOf));
     requeueIds = allowed
-      .filter(
-        (r) =>
-          r.makeup ||
-          !blocked.has(
-            absenceKeyOf({
-              studentId: r.student_id as string,
-              reportDate: (r.report_date as string).slice(0, 10),
-              subject: r.subject as string | null,
-            }),
-          ),
-      )
+      .filter((r) => r.makeup || !blocked.has(absenceKeyOf(keyOf(r))))
       .map((r) => r.id as string);
     absentSkipped = allowed.length - requeueIds.length;
   } catch {
@@ -134,7 +124,7 @@ export async function sendClassnoteForUnsent(ids: string[]): Promise<{
   // 대상 조회 — 미발송 native만. source NULL(구컬럼 이전 행)은 native로 간주(현 DB 0건, too_old가 최종 방어).
   const { data: rows } = await supabase
     .from("lesson_reports")
-    .select("id, report_date, subject, student_id, makeup")
+    .select("id, report_date, subject, class_id, student_id, makeup")
     .in("id", capped)
     .is("classnote_status", null)
     .or("source.is.null,source.neq.edutrix_import")
@@ -159,26 +149,15 @@ export async function sendClassnoteForUnsent(ids: string[]): Promise<{
   let sendable: typeof eligible;
   try {
     const gateTargets = eligible.filter((r) => !r.makeup);
-    const blocked = await getAbsenceBlockedKeys(
-      supabase,
-      user.tenantId,
-      gateTargets.map((r) => ({
-        studentId: r.student_id as string,
-        reportDate: (r.report_date as string).slice(0, 10),
-        subject: r.subject as string | null,
-      })),
-    );
-    sendable = eligible.filter(
-      (r) =>
-        r.makeup ||
-        !blocked.has(
-          absenceKeyOf({
-            studentId: r.student_id as string,
-            reportDate: (r.report_date as string).slice(0, 10),
-            subject: r.subject as string | null,
-          }),
-        ),
-    );
+    // 반 단위 판정(0134a) — 위 retryClassnote와 같은 규약.
+    const keyOf = (r: (typeof eligible)[number]) => ({
+      studentId: r.student_id as string,
+      reportDate: (r.report_date as string).slice(0, 10),
+      subject: r.subject as string | null,
+      classId: (r.class_id as string | null) ?? null,
+    });
+    const blocked = await getAbsenceBlockedKeys(supabase, user.tenantId, gateTargets.map(keyOf));
+    sendable = eligible.filter((r) => r.makeup || !blocked.has(absenceKeyOf(keyOf(r))));
   } catch {
     return { ok: false, error: "출결 확인에 실패했습니다 — 다시 시도하세요" };
   }
@@ -288,7 +267,7 @@ export async function listReports(
 
   let q = supabase
     .from("lesson_reports")
-    .select("id, student_id, subject, report_date, created_at, classnote_sent_at, classnote_status, classnote_read_at, teacher_name, share_token, source", { count: "exact" });
+    .select("id, student_id, subject, report_date, covers_date, created_at, classnote_sent_at, classnote_status, classnote_read_at, teacher_name, share_token, source", { count: "exact" });
   // 정렬은 **서버에서** — 30건씩 끊어 주는 목록이라 화면에서 정렬하면 그 페이지 안에서만 정렬된다.
   // 기본값·헤더 클릭 모두 순수 함수(reportOrderSpecs)가 결정(동률 tiebreak 포함 — 페이징 중복/누락 방지).
   for (const o of reportOrderSpecs(filters.sort, filters.dir)) {
@@ -326,6 +305,7 @@ export async function listReports(
     studentName: nameById.get(r.student_id as string) ?? "(학생)",
     subject: r.subject as string | null,
     reportDate: r.report_date as string,
+    coversDate: (r.covers_date as string | null) ?? null,
     createdAt: r.created_at as string | null,
     sentAt: r.classnote_sent_at as string | null,
     classnoteStatus: r.classnote_status as string | null,
@@ -335,4 +315,38 @@ export async function listReports(
     readAt: r.classnote_read_at as string | null,
   }));
   return { ok: true, rows, total: count ?? rows.length, page, pageSize: REPORT_PAGE_SIZE };
+}
+
+/**
+ * 보고서의 **실제 수업일(covers_date)** 지정/해제 — 미리 하거나 앞 수업에 몰아서 한 수업분(0136a).
+ *
+ * 효과: 그 (학생, 지정일)이 작성률 **분모에서 면제**된다 — 그날 학생이 오지 않으므로 미작성이 아니다.
+ *   · 선발송   7/19분을 7/3에 미리 함           → 7/19 면제
+ *   · 연속수업 7/19분을 7/3에 2타임으로 함(보고서 1건) → 7/19 면제(7/3은 보고서가 있어 그대로 충족)
+ * ⚠️ 집계를 **옮기지 않는다** — 옮기면 연속수업에서 7/3이 거꾸로 미작성이 된다.
+ * ⚠️ **내부 메타데이터**(원장 확정) — 학부모 발송 페이로드·학부모용 보고서에는 싣지 않는다.
+ */
+export async function setReportCoversDate(
+  reportId: string,
+  coversDate: string | null,
+): Promise<{ ok: boolean; error?: string }> {
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, error: "로그인이 필요합니다" };
+  if (!(await canWriteTenant(user.systemRole, "lesson_reports"))) {
+    return { ok: false, error: "보고서 관리 권한이 없습니다" };
+  }
+  const id = (reportId ?? "").trim();
+  if (!id) return { ok: false, error: "대상이 없습니다" };
+  const date = (coversDate ?? "").trim();
+  if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) return { ok: false, error: "날짜 형식이 올바르지 않습니다" };
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("lesson_reports")
+    .update({ covers_date: date || null })
+    .eq("id", id);
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath("/lesson-reports");
+  return { ok: true };
 }

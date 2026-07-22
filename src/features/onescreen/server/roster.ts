@@ -10,6 +10,7 @@ import { parseExamScores } from "../exam-info";
 import { classnoteSendWindowLabel } from "../classnote-guard";
 import { applyStudentOrder } from "../student-order";
 import { rosterIncludesEnrollment } from "../roster-filter";
+import { matchReportsToRows } from "../report-unit";
 import { getTextbookOrdersForStudents } from "@/features/billing/server/textbook-queries";
 import type { AttendanceMark, OneScreenStudent } from "../types";
 
@@ -299,14 +300,37 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
       };
       byStudent.set(stu.id, os);
     }
-    const dupSubject = os.subjects.find((su) => su.subjectKey === cls.subject);
-    if (!dupSubject) {
+    // 🔴 행 단위 = **반**(0134a). 예전엔 subjectKey로 dedup해 같은 과목 두 반을 한 행으로 합치고 classId를
+    //    지웠다 → ① 정규 수학 + 수학 특강을 같은 날 들어도 보고서를 1건밖에 못 썼고(원장 요구 "수업마다 1건씩"에
+    //    정면 위배) ② 반이 모호해져 출결 pill이 통째로 사라졌다. 이제 반마다 한 행을 만든다.
+    //    같은 반이 두 번 들어오는 경우(중복 enrollment)만 합친다.
+    if (!os.subjects.some((su) => su.classId === cls.id)) {
       // classId = 이 과목 행의 반(출결 원장이 student+class+date라 행 단위 출결 입력(2단계)의 키).
-      os.subjects.push({ name: subjects.labelOf(cls.subject), subjectKey: cls.subject, classId: cls.id, className: cls.class_name, prev: "", today: "", textbook: "", makeup: false, homeworkToday: "" });
-    } else if (dupSubject.classId !== cls.id) {
-      // 같은 과목을 두 반에서 수강(subjectKey dedup으로 1행) — 행의 반이 모호 → 출결 pill 숨김(출석부에서 기록).
-      dupSubject.classId = null;
-      dupSubject.className = null;
+      // subjectLabel = 순수 과목명 — name은 아래에서 반 이름이 덧붙을 수 있으므로 저장용 값은 이쪽을 쓴다.
+      const label = subjects.labelOf(cls.subject);
+      os.subjects.push({ name: label, subjectLabel: label, subjectKey: cls.subject, classId: cls.id, className: cls.class_name, prev: "", today: "", textbook: "", makeup: false, homeworkToday: "" });
+    }
+  }
+  // 표시명 유일화 — 화면 state가 (학생, 행 이름)을 키로 쓰므로 같은 이름 두 행은 서로를 덮는다.
+  // 원장 선택(2026-07-22): **겹칠 때만** 반 이름을 덧붙인다("수학" → "수학 · 고1 특강"). 평소 화면은 그대로.
+  // ⚠️ 반 이름까지 같은 경우(동명 반)엔 그래도 겹치므로 마지막에 순번을 붙여 유일성을 보장한다 —
+  //    "보기 좋음"보다 "서로 안 덮음"이 먼저다.
+  for (const os of byStudent.values()) {
+    const dup = new Map<string, number>();
+    for (const su of os.subjects) dup.set(su.name, (dup.get(su.name) ?? 0) + 1);
+    for (const su of os.subjects) {
+      if ((dup.get(su.name) ?? 0) > 1 && su.className) su.name = `${su.name} · ${su.className}`;
+    }
+    const used = new Set<string>();
+    for (const su of os.subjects) {
+      if (!used.has(su.name)) {
+        used.add(su.name);
+        continue;
+      }
+      let n = 2;
+      while (used.has(`${su.name} (${n})`)) n += 1;
+      su.name = `${su.name} (${n})`;
+      used.add(su.name);
     }
   }
 
@@ -320,6 +344,7 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
       id: string;
       student_id: string;
       subject: string | null;
+      class_id: string | null; // 0134a — 행(반) 매칭 키. 이관분·관리자 작성분은 null(과목 폴백).
       share_token: string | null;
       classnote_status: string | null;
       revoked_at: string | null;
@@ -331,9 +356,12 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
       (chunk) =>
         supabase
           .from("lesson_reports")
-          .select("id, student_id, subject, share_token, classnote_status, revoked_at, attachments, notes, trend_note")
+          .select("id, student_id, subject, class_id, share_token, classnote_status, revoked_at, attachments, notes, trend_note")
           .eq("report_date", todayIso)
-          .in("student_id", chunk),
+          .in("student_id", chunk)
+          // 결정적 매칭 순서 — 같은 (학생,반) 폴백 후보가 여럿일 때 항상 같은 것을 집는다.
+          .order("created_at", { ascending: true })
+          .order("id", { ascending: true }),
     ),
     // (b) (학생×과목)별 대상 날짜 **직전 최신 1건** — 이전 회차 참고행·prev·prevScore·교재 승계.
     // ⚠️ 옛 코드는 전체 이력을 무페이징 select(B2 위반) → PostgREST 1000행 silent 절단으로 오래된 학생부터 누락.
@@ -394,6 +422,7 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
   type PriorRow = {
     student_id: string;
     subject: string | null;
+    class_id: string | null; // 0135a — 반 단위 직전 회차. 이관분은 null(과목 폴백).
     report_date: string;
     progress: string | null;
     exam_info: string | null;
@@ -433,47 +462,26 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
   }
 
   // student별: 오늘 저장된 보고서 존재(reportSent) + 오늘 이전 최신 보고서(prev 진도/prevScore).
-  // 오늘 보고서는 **과목별**로도 적재(sentToday는 학생단위 폴백, todayBySubject는 과목별 발송상태·공유링크 수명).
+  // 🔴 매칭 단위 = **반**(0134a). 예전엔 (학생, 과목) 한 키였는데, 같은 과목 두 반(정규+특강)이 생기면서
+  //    한 보고서가 두 행에 붙거나 엉뚱한 반의 진도가 뜬다 → 반 우선 1:1 매칭(matchReportsToRows, Vitest).
+  //    반이 없는 보고서(이관분·관리자 작성·0134a 이전 저장분)는 과목으로 폴백하되 **한 행만** 가져간다.
   const sentToday = new Set<string>();
-  const todayBySubject = new Map<
-    string,
-    {
-      reportId: string;
-      shareToken: string | null;
-      classnoteStatus: string | null;
-      revokedAt: string | null;
-      attachments: { path: string; name: string }[];
-      notes: string | null; // 발송본 멘트 — 세션 초안 없을 때 초안 복원 폴백
-      trendNote: string | null; // 발송본 학습 추세 — 동일 폴백
-    }
-  >();
-  const subjKey = (studentId: string, subject: string | null) => `${studentId}::${subject ?? ""}`;
-  // 학생단위 직전(prev 진도·prevScore 폴백) = 그 학생 과목행들 중 최신 회차.
-  const priorReport = new Map<string, { progress: string | null; examInfo: string | null; date: string }>();
-  // (학생×과목)별 직전 회차 — 이전 회차 참고행(prevReport). RPC가 이미 (학생,과목) 최신 1건씩 반환.
-  const priorBySubject = new Map<string, PriorRow>();
-  const todayReportIds: string[] = [];
-  // (a) 당일 행 — 발송상태·과목별 공유링크·초안 복원.
+  const todayByStudent = new Map<string, typeof todayReports>();
   for (const r of todayReports) {
     sentToday.add(r.student_id);
-    const k = subjKey(r.student_id, r.subject);
-    if (!todayBySubject.has(k)) {
-      todayBySubject.set(k, {
-        reportId: r.id,
-        shareToken: r.share_token,
-        classnoteStatus: r.classnote_status,
-        revokedAt: r.revoked_at,
-        attachments: r.attachments ?? [],
-        notes: r.notes,
-        trendNote: r.trend_note,
-      });
-      todayReportIds.push(r.id);
-    }
+    const arr = todayByStudent.get(r.student_id);
+    if (arr) arr.push(r);
+    else todayByStudent.set(r.student_id, [r]);
   }
-  // (b) 직전 회차(RPC, 대상 날짜 이전 최신) — 참고행 + 학생단위 최신.
+  const todayReportIds = todayReports.map((r) => r.id);
+  // 학생단위 직전(prev 진도·prevScore 폴백) = 그 학생 과목행들 중 최신 회차.
+  const priorReport = new Map<string, { progress: string | null; examInfo: string | null; date: string }>();
+  // 학생별 직전 회차 후보 — RPC(0135a)가 이미 (학생, 반|과목) 최신 1건씩 반환. 행 매칭은 아래에서.
+  const priorByStudent = new Map<string, PriorRow[]>();
   for (const r of priorRows) {
-    const pk = subjKey(r.student_id, r.subject);
-    if (!priorBySubject.has(pk)) priorBySubject.set(pk, r);
+    const arr = priorByStudent.get(r.student_id);
+    if (arr) arr.push(r);
+    else priorByStudent.set(r.student_id, [r]);
     const cur = priorReport.get(r.student_id);
     if (!cur || r.report_date > cur.date)
       priorReport.set(r.student_id, { progress: r.progress, examInfo: r.exam_info, date: r.report_date });
@@ -503,21 +511,25 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
 
   for (const os of byStudent.values()) {
     os.reportSent = sentToday.has(os.id);
-    // 과목별 오늘 발송상태 — report.subject ↔ subject.subjectKey 매칭(학생단위 뭉갬 방지).
-    for (const su of os.subjects) {
-      const t = todayBySubject.get(subjKey(os.id, su.subjectKey ?? null));
-      if (t) {
-        su.reportSent = true;
-        su.shareToken = t.shareToken ?? undefined;
-        su.classnoteStatus = t.classnoteStatus ?? undefined;
-        su.revokedAt = t.revokedAt ?? undefined;
-        su.viewCount = viewCountByReport.get(t.reportId) ?? 0;
-        su.attachments = t.attachments;
-        // 발송본 멘트/추세 = 초안 복원 폴백 — 아래 세션 블록이 비어있지 않은 세션 초안으로 덮음(작업중 편집 우선).
-        if (t.notes) su.draft = t.notes;
-        if (t.trendNote) su.trendDraft = t.trendNote;
-      }
-    }
+    // 행(반)별 오늘 보고서 — 반 정확매칭 우선, 반 없는 행은 과목으로 **1:1** 폴백(matchReportsToRows).
+    // ⚠️ 한 보고서를 두 행에 붙이면 두 행의 저장이 서로를 덮는다 → 소비형 매칭이 불변식이다.
+    const todayMatched = matchReportsToRows(
+      os.subjects.map((su) => ({ classId: su.classId ?? null, subjectKey: su.subjectKey ?? null })),
+      (todayByStudent.get(os.id) ?? []).map((r) => ({ ...r, classId: r.class_id })),
+    );
+    os.subjects.forEach((su, i) => {
+      const t = todayMatched[i];
+      if (!t) return;
+      su.reportSent = true;
+      su.shareToken = t.share_token ?? undefined;
+      su.classnoteStatus = t.classnote_status ?? undefined;
+      su.revokedAt = t.revoked_at ?? undefined;
+      su.viewCount = viewCountByReport.get(t.id) ?? 0;
+      su.attachments = t.attachments ?? [];
+      // 발송본 멘트/추세 = 초안 복원 폴백 — 아래 세션 블록이 비어있지 않은 세션 초안으로 덮음(작업중 편집 우선).
+      if (t.notes) su.draft = t.notes;
+      if (t.trend_note) su.trendDraft = t.trend_note;
+    });
     os.attendance = toMark(attById.get(os.id));
     // 행(반) 단위 raw 출결 — 출결 pill(2단계). classId 모호(null)면 미채움=pill 숨김.
     for (const su of os.subjects) {
@@ -530,10 +542,13 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
       os.tests.check.prevScore = check;
       if (pr.progress) {
         // 이전 진도 텍스트("수학 1-1-2 …")를 과목명 접두로 매칭 → 그 과목 prev. 폴백=첫 과목.
+        // ⚠️ 접두는 **순수 과목 라벨**(subjectLabel)로 본다 — 행 이름(name)엔 반 이름이 붙을 수 있어
+        //    "수학 · 고1 특강"으로는 저장된 진도("수학 …")와 절대 안 맞는다.
         let matched = false;
         for (const su of os.subjects) {
-          if (su.name && pr.progress.startsWith(su.name)) {
-            su.prev = pr.progress.slice(su.name.length).trim() || pr.progress;
+          const label = su.subjectLabel || su.name;
+          if (label && pr.progress.startsWith(label)) {
+            su.prev = pr.progress.slice(label.length).trim() || pr.progress;
             matched = true;
           }
         }
@@ -543,19 +558,24 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
     // (학생×과목) 직전 회차 → 참고행(prevReport) + 과목 정확매칭 prev + 교재 자동입력 기본값(②교재요청서 > ③직전교재).
     // ①오늘 입력값(세션)은 아래 sess 블록이 최종으로 덮으므로 항상 우선. su.textbook 초기값은 ""(과목 push).
     const reqBook = bookByStudent.get(os.id);
-    for (const su of os.subjects) {
-      // ⚠️ 과목 정확매칭 우선, 없으면 **과목 미기재(subject NULL) 직전 회차**로 폴백 — 단 학생이 단일 과목일 때만.
-      // ijw에서 이식된 lesson_reports는 대부분 subject가 비어 있어(2026-07-21 실측 17,345건 중 17,337건 NULL)
-      // 정확매칭만으론 참고행이 통째로 안 잡혔다 → 교재 자동승계도, '이전값 (일괄) 채우기'도 항상 0건이었다.
-      // 다과목 학생은 그 행이 어느 과목인지 알 수 없어 폴백하지 않는다(엉뚱한 과목 값 주입 금지 — 위
-      // 학생단위 prev 폴백이 첫 과목에만 붙는 것과 같은 보수 규약).
-      const pbs =
-        priorBySubject.get(subjKey(os.id, su.subjectKey ?? null)) ??
-        (os.subjects.length === 1 ? priorBySubject.get(subjKey(os.id, null)) : undefined);
+    // 행(반)별 직전 회차 — 오늘 행과 같은 매칭 규약(반 → 과목 → 이관분(단일과목만)). 소비형이라 두 행이
+    // 같은 직전 회차를 나눠 갖지 않는다(특강 행에 정규 진도가 뜨던 문제).
+    // ⚠️ 이관분 폴백(과목·반 둘 다 없는 행)은 단일 과목 학생만 — matchReportsToRows 3차 규칙과 동일.
+    //    ijw 이식분은 대부분 subject가 비어 있어(실측 17,337/17,345 NULL) 이 폴백이 없으면 참고행·교재 승계가 0건이 된다.
+    const priorMatched = matchReportsToRows(
+      os.subjects.map((su) => ({ classId: su.classId ?? null, subjectKey: su.subjectKey ?? null })),
+      (priorByStudent.get(os.id) ?? []).map((r) => ({ ...r, classId: r.class_id })),
+      // 이관분(반·과목 둘 다 없음) 폴백은 **직전 회차에서만** — 당일 행에 켜면 edutrix가 오늘 넣은
+      // 남의 보고서가 "이미 저장됨"으로 붙는다(report-unit.ts 🔴 참조).
+      { legacyFallback: true },
+    );
+    os.subjects.forEach((su, i) => {
+      const pbs = priorMatched[i];
+      const label = su.subjectLabel || su.name;
       if (pbs) {
         const prog =
-          pbs.progress && su.name && pbs.progress.startsWith(su.name)
-            ? pbs.progress.slice(su.name.length).trim() || pbs.progress
+          pbs.progress && label && pbs.progress.startsWith(label)
+            ? pbs.progress.slice(label.length).trim() || pbs.progress
             : pbs.progress;
         su.prevReport = {
           date: pbs.report_date,
@@ -572,7 +592,7 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
       const prevBook = su.prevReport?.textbook?.trim();
       if (prevBook) su.textbook = prevBook; // ③ 직전 교재
       if (reqBook) su.textbook = reqBook; // ② 교재요청서(덮음)
-    }
+    });
     // Phase3: 오늘 세션(작업중) 복원 — 점수/진도/태도/과제/확정을 하드코딩 기본값 위에 덮어씀.
     const sess = sessionById.get(os.id);
     if (sess) {
@@ -587,7 +607,10 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
       if (sess.progress_confirmed != null) os.progressConfirmed = sess.progress_confirmed;
       const sp = sess.subject_progress ?? {};
       for (const su of os.subjects) {
-        const entry = sp[su.subjectKey || su.name];
+        // 세션 키 = **반**(0134a) — 과목키로 두면 같은 과목 두 행(정규+특강)이 한 항목을 공유해
+        // 한쪽에 입력한 진도가 다른 쪽에도 뜬다(그리고 저장할 때 서로를 덮는다).
+        // 반 키가 없으면(구버전 세션·보강) 예전 과목키로 폴백 — 배포 당일 작업중이던 입력이 날아가지 않게.
+        const entry = (su.classId ? sp[su.classId] : undefined) ?? sp[su.subjectKey || su.name];
         if (entry?.today) su.today = entry.today;
         if (entry?.textbook != null) su.textbook = entry.textbook;
         if (entry?.makeup != null) su.makeup = entry.makeup;

@@ -3,7 +3,13 @@
  * 화면 state를 서버가 알려준 상태로 **병합**하는 규칙이 여기 한 곳에만 있다.
  */
 
-export type ClassnoteStatusRow = { studentId: string; subject: string | null; status: string | null };
+export type ClassnoteStatusRow = {
+  studentId: string;
+  subject: string | null;
+  /** 이 보고서의 반(0134a). 같은 과목 두 행(정규+특강)을 가르는 유일한 축 — 없으면 과목으로 폴백. */
+  classId?: string | null;
+  status: string | null;
+};
 
 /** 아직 결과가 안 나온 발송(워커가 처리 중) — 이 학생들이 있는 동안만 상태를 다시 읽는다. */
 export const PENDING_STATUSES = ["queued", "processing"] as const;
@@ -31,18 +37,23 @@ export function pendingSendStudentIds(reports: Record<string, Record<string, Has
  *     보이게 하는 역전을 막는다.
  *  ② 화면에 없는 (학생, 과목)은 건드리지 않는다 — 다른 강사 담당 과목이 강사 화면에 새로 생기면 안 된다.
  *
- * `subjectNameOf`: 보고서 행의 과목 키(`math`)를 이 화면의 과목 표시명으로 바꾸는 함수(state 키가 표시명이라).
+ * `rowNameOf`: 보고서 행(반 + 과목키)을 이 화면의 **행 이름**으로 바꾸는 함수(state 키가 행 이름이라).
+ * ⚠️ 반을 먼저 본다 — 같은 과목 두 행(정규 수학 + 수학 특강)은 과목키가 같아서 과목만으론 못 가른다.
  */
 export function mergeClassnoteStatuses<T extends HasStatus>(
   prev: Record<string, Record<string, T>>,
   rows: ClassnoteStatusRow[],
-  subjectNameOf: (studentId: string, subjectKey: string | null) => string | undefined,
+  rowNameOf: (
+    studentId: string,
+    subjectKey: string | null,
+    classId: string | null,
+  ) => string | undefined,
 ): Record<string, Record<string, T>> {
   let changed = false;
   const next = { ...prev };
   for (const row of rows) {
     if (!row.status) continue; // ①
-    const subjectName = subjectNameOf(row.studentId, row.subject);
+    const subjectName = rowNameOf(row.studentId, row.subject, row.classId ?? null);
     if (!subjectName) continue; // ②
     const cur = next[row.studentId]?.[subjectName];
     if (!cur || cur.classnoteStatus === row.status) continue;

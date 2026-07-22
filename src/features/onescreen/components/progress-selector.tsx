@@ -27,6 +27,7 @@ export function ProgressSelector({
   studentGrade,
   prev,
   ariaLabel,
+  locked,
 }: {
   value: string; // today(합본, 개행)
   onChange: (joined: string) => void; // 선택 변경 → 합본 문자열
@@ -35,6 +36,8 @@ export function ProgressSelector({
   studentGrade: string; // 실제 학년(선행/후행 배지)
   prev?: string; // 이전 진도(합본) — 참고 표시용
   ariaLabel?: string;
+  /** 발송 완료된 보고서 — 수정 금지(0134a/2026-07-22 원장 지시). 선택 UI를 열지 않는다. */
+  locked?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -52,6 +55,22 @@ export function ProgressSelector({
 
   const toggle = (lesson: string) =>
     onChange(joinLessons(selectedSet.has(lesson) ? selected.filter((l) => l !== lesson) : [...selected, lesson]));
+
+  // 발송 완료된 보고서는 **수정 금지**(2026-07-22 원장 지시) — 학부모가 받은 이미지와 기록이 갈라지면
+  // 나중에 어느 쪽이 사실인지 아무도 모른다. 팝오버를 아예 열지 않고 값만 읽기 전용으로 보여준다.
+  if (locked) {
+    return (
+      <div
+        className="border-line bg-bg-soft text-text-dim flex h-8 w-full items-center gap-1 rounded-lg border px-2 text-left text-[12px]"
+        aria-label={ariaLabel ?? "진도"}
+        aria-readonly="true"
+      >
+        <span className="min-w-0 flex-1 truncate">
+          {selected.length ? displayLessons(value) : "—"}
+        </span>
+      </div>
+    );
+  }
 
   return (
     <Popover.Root open={open} onOpenChange={setOpen}>

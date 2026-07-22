@@ -213,4 +213,29 @@ describe("buildSubjectReport (과목별)", () => {
     expect(r).toContain("국어 문학");
     expect(r).toContain("영어 어법");
   });
+
+  // 🔴 학부모에게 나가는 문장에 **반 이름이 새면 안 된다**(원장 확정: 보고서에 반 미노출, 0134a).
+  // 같은 과목 두 반(정규+특강)일 때 로스터가 행 이름을 "수학 · 고1 특강"으로 유일화하므로,
+  // 이 문장은 반드시 subjectLabel(순수 과목명)을 써야 한다.
+  it("행 이름에 반이 붙어 있어도 학부모 문장엔 과목명만 나간다", () => {
+    const dual = makeStudent({
+      name: "이채은",
+      subjects: [
+        { name: "수학 · 고1 특강", subjectLabel: "수학", prev: "", today: "등비급수" },
+        { name: "수학 · BS4F 토", subjectLabel: "수학", prev: "", today: "미분" },
+      ],
+      tests: {
+        daily: { score: null, max: 20, prevScore: null },
+        check: { score: null, max: 20, prevScore: null },
+      },
+    });
+    const r = buildSubjectReport(dual, 0);
+    expect(r).toContain("수학 등비급수");
+    expect(r).not.toContain("특강");
+    expect(r).not.toContain("·");
+    // 합본(폴백) 경로도 마찬가지.
+    const all = buildReport(dual);
+    expect(all).not.toContain("특강");
+    expect(all).not.toContain("BS4F");
+  });
 });

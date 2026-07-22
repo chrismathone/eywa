@@ -499,7 +499,7 @@ async function detectUnsentReports(admin: SupabaseClient, tenantId: string): Pro
 
   const { data, error } = await admin
     .from("lesson_reports")
-    .select("id, student_id, report_date, subject, makeup, student:student_id ( name )")
+    .select("id, student_id, report_date, subject, class_id, makeup, student:student_id ( name )")
     .eq("tenant_id", tenantId) // admin RLS 우회 — 테넌트 필터가 유일한 격리선
     .is("classnote_status", null)
     .is("revoked_at", null)
@@ -520,30 +520,21 @@ async function detectUnsentReports(admin: SupabaseClient, tenantId: string): Pro
   // 저장하는 게 정책이라, 결석이라 **보낼 수 없는** 저장분을 '미발송'으로 재촉하면 거짓 알림이 된다.
   // 보강 보고서(makeup)는 게이트 제외(발송 콘솔과 동일). 조회 실패는 throw → 외곽 try/catch가 기록
   // (그날 재촉 생략 = fail-closed, 다음 cron 재시도).
+  // 반 단위 판정(0134a) — 발송 콘솔과 동일 규약(게이트 불변식이 갈라지면 "보낼 수 없는 건"을 재촉한다).
+  const gateKeyOf = (row: (typeof gated)[number]) => ({
+    studentId: row.student_id as string,
+    reportDate: (row.report_date as string).slice(0, 10),
+    subject: row.subject as string | null,
+    classId: (row.class_id as string | null) ?? null,
+  });
   const absentBlocked = await getAbsenceBlockedKeys(
     admin,
     tenantId,
-    gated
-      .filter((row) => !row.makeup)
-      .map((row) => ({
-        studentId: row.student_id as string,
-        reportDate: (row.report_date as string).slice(0, 10),
-        subject: row.subject as string | null,
-      })),
+    gated.filter((row) => !row.makeup).map(gateKeyOf),
   );
   const candidates = buildUnsentReportEvents(
     gated
-      .filter(
-        (row) =>
-          row.makeup ||
-          !absentBlocked.has(
-            absenceKeyOf({
-              studentId: row.student_id as string,
-              reportDate: (row.report_date as string).slice(0, 10),
-              subject: row.subject as string | null,
-            }),
-          ),
-      )
+      .filter((row) => row.makeup || !absentBlocked.has(absenceKeyOf(gateKeyOf(row))))
       .map((row) => {
         const student = (Array.isArray(row.student) ? row.student[0] : row.student) as { name?: string } | undefined;
         const subject = row.subject as string | null;

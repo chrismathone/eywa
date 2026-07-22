@@ -45,6 +45,7 @@ import { NoticeComposer } from "./notice-composer";
 import {
   buildGridRows,
   rowKey,
+  isAlreadySent,
   isRowActionable,
   planBulkApply,
   planPrevFill,
@@ -258,7 +259,9 @@ export function OneScreenClient({
       studyGrade: s.studyGrade ?? null,
       subjectProgress: Object.fromEntries(
         s.subjects.map((su) => [
-          su.subjectKey || su.name,
+          // 반 키 우선(0134a) — 과목키면 같은 과목 두 행(정규+특강)이 한 항목을 공유해 서로를 덮는다.
+          // 로스터 복원(roster.ts)이 같은 순서로 읽는다(반 키 → 과목키 폴백).
+          su.classId || su.subjectKey || su.name,
           {
             today: su.today,
             draft: r?.[su.name]?.draft ?? "",
@@ -326,6 +329,16 @@ export function OneScreenClient({
   }).length;
 
   // 허브 통계(B2) — 오늘 마감 진행 현황.
+  // 이 날짜에 **이미 학부모에게 나간** 행 수 — 상단 안내 + "왜 수정/발송이 막혔나"의 근거.
+  // ⚠️ 화면 state(reports)를 본다: 로스터 스냅샷만 보면 세션 중 방금 보낸 건이 안 세어진다.
+  const sentRowCount = visible.reduce(
+    (n, s) =>
+      n +
+      s.subjects.filter((su) => isAlreadySent(reports[s.id]?.[su.name]?.classnoteStatus ?? su.classnoteStatus))
+        .length,
+    0,
+  );
+
   const hubStats = {
     students: students.length,
     progressDone: students.filter((s) => s.progressConfirmed).length,
@@ -342,11 +355,19 @@ export function OneScreenClient({
   // 병합 규칙(빈 상태 무시·화면에 없는 과목 무시)은 순수함수 mergeClassnoteStatuses 한 곳에.
   function applyClassnoteStatuses(rows: ClassnoteStatusRow[]) {
     setReports((prev) =>
-      mergeClassnoteStatuses(prev, rows, (studentId, subjectKey) =>
-        studentsRef.current
-          .find((s) => s.id === studentId)
-          ?.subjects.find((su) => (su.subjectKey || su.name) === subjectKey)?.name,
-      ),
+      mergeClassnoteStatuses(prev, rows, (studentId, subjectKey, classId) => {
+        const subjects = studentsRef.current.find((s) => s.id === studentId)?.subjects;
+        if (!subjects) return undefined;
+        // 반 정확매칭 우선(0134a) — 같은 과목 두 행은 과목키가 같아 폴백만으론 엉뚱한 행에 배지가 붙는다.
+        if (classId) {
+          const byClass = subjects.find((su) => su.classId === classId);
+          if (byClass) return byClass.name;
+          // 화면에 없는 반(다른 강사·다른 요일)의 보고서 → 어느 행에도 붙이지 않는다.
+          return undefined;
+        }
+        // 반 없는 보고서(관리자 작성·구버전)는 과목으로. 같은 과목 두 행이면 **앞 행**(로스터 정렬 순).
+        return subjects.find((su) => (su.subjectKey || su.subjectLabel || su.name) === subjectKey)?.name;
+      }),
     );
   }
   // 대기·처리중인 학생이 있는 동안만 감시(없으면 조회 0회, 다 끝나면 저절로 멈춘다).
@@ -613,7 +634,8 @@ export function OneScreenClient({
     const idx = student.subjects.findIndex((su) => su.name === subjectName);
     if (idx < 0) return;
     const su = student.subjects[idx];
-    const subjectKey = su?.subjectKey || su?.name || undefined;
+    // ⚠️ 과목**키**(math…)여야 한다 — su.name엔 반 이름이 붙을 수 있어 폴백도 subjectLabel 먼저.
+    const subjectKey = su?.subjectKey || su?.subjectLabel || su?.name || undefined;
     // 반 공통 서술(G6) — 이 행의 반 서술을 생성 재료로 동봉(없으면 기존 동작). 카드·표·일괄 공용 경로라 전부 커버.
     // ⚠️ 키 = classId(이름 아님) — 동명 반(수학·영어 같은 이름, 스키마 허용)에서 이름 키면 남의 반 수업
     // 맥락이 교차 주입된다(리뷰 확정 major, 순서 기능 동명 가드와 같은 원인). classId null(모호 행·보강)=서술 없음.
@@ -660,12 +682,18 @@ export function OneScreenClient({
       setGenKey((cur) => (cur === key ? null : cur));
     }
   }
+  // 이 행의 **최신** ClassNote 상태 — 화면 state(방금 보낸 결과·워커 폴링 반영)가 로스터 스냅샷을 이긴다.
+  // ⚠️ 로스터 값만 보면 "방금 보낸 건"을 모른 채 일괄 발송이 그 행을 다시 집는다(중복 게시).
+  function liveClassnoteStatus(studentId: string, subjectName: string): string | null {
+    return reportsRef.current[studentId]?.[subjectName]?.classnoteStatus ?? null;
+  }
   // 표 일괄 작업 대상 — keys(체크된 행) 있으면 그 교집합, 없으면 표시 행 전체. 진도 필수 공통.
   // ⚠️ action별 판정(2-3, isRowActionable): save=결석 포함(기록 보존), send/autowrite=결석 제외(발송·AI 무의미).
+  //    send는 **이미 발송된 행도 제외**(중복 게시 차단, 2026-07-22) — 최신 상태를 override로 넘긴다.
   function selectRows(action: RowAction, keys?: string[]) {
     const all = buildGridRows(visible)
       .filter((r) => rowInClass(r.subject, activeClassFilter)) // 특정 반이면 그 반 행만(타 반 혼입 차단)
-      .filter((r) => isRowActionable(r.subject, action));
+      .filter((r) => isRowActionable(r.subject, action, liveClassnoteStatus(r.student.id, r.subject.name)));
     if (!keys || keys.length === 0) return all;
     const set = new Set(keys);
     return all.filter((r) => set.has(r.key));
@@ -885,7 +913,9 @@ export function OneScreenClient({
         textbook: su?.textbook || "",
         makeup: su?.makeup ?? false,
         homeworkToday: su?.homeworkToday || "",
-        progress: su ? `${su.name} ${su.today}`.trim() : "",
+        // ⚠️ 진도 접두는 **순수 과목 라벨**(subjectLabel) — 행 이름(name)엔 반 이름이 붙을 수 있고
+        //    이 값은 학부모 카드에 그대로 나간다(원장 확정: 보고서에 반은 노출하지 않는다).
+        progress: su ? `${su.subjectLabel || su.name} ${su.today}`.trim() : "",
         examInfo,
         homeworkScore: student.homework,
         dailyTest,
@@ -895,7 +925,11 @@ export function OneScreenClient({
         // comment-paragraphs.ts 불변식). 학부모에게 나가는 값은 여기서 다듬는다 — 앞 빈 줄 금지.
         notes: draft.trim(),
         trendNote, // 학습 추세(종합분석) — 4a
-        subject: su?.subjectKey || su?.name || undefined, // (student,date,subject) 과목별 1행 dedup 키
+        // ⚠️ subject는 **과목키**(math)여야 한다 — 발송 과목 게이트·보드 매핑이 이 값을 본다.
+        //    행 이름(name)엔 반 이름이 붙을 수 있으므로 폴백도 subjectLabel을 먼저 본다.
+        subject: su?.subjectKey || su?.subjectLabel || su?.name || undefined,
+        // 반(수업) — 보고서 1건의 단위(0134a). 같은 날 정규+특강이 서로 안 덮게 하는 키.
+        classId: su?.classId ?? null,
         outOfClass: student.isMakeup ?? false, // 보강(수업외) 학생 = 담당반 검사 우회(같은 학원이면 허용)
       },
     };
@@ -927,12 +961,16 @@ export function OneScreenClient({
     const built = buildSaveInputFor(student, subjectName);
     const res = await saveAndQueueClassnote(built.input);
     if (res.ok) {
+      // ⚠️ 응답 status에는 DB 상태가 아닌 **결과 코드**도 섞여 있다(dry_run·subject_off·absent·already_sent).
+      //    그중 `already_sent`를 그대로 배지 state에 넣으면 "success가 아니게" 되어 발송 가드가 스스로 풀린다
+      //    → 그 행의 **실제** DB 상태인 success로 되돌려 저장한다.
+      const badgeStatus = res.status === "already_sent" ? "success" : res.status;
       patchReport(student.id, subjectName, (r) => ({
         ...r,
         draft: r.draft?.trim() && r.draft !== built.draft ? r.draft : built.draft,
         sent: true,
         shareToken: res.shareToken ?? r.shareToken,
-        classnoteStatus: res.status,
+        classnoteStatus: badgeStatus,
       }));
       confirmProgressOnSave(student.id);
     }
@@ -1006,6 +1044,13 @@ export function OneScreenClient({
       toast.message(`${subjectName} — 수업일 출결이 결석으로 기록돼 있어 발송하지 않았습니다(기록 저장은 유지)`);
       return;
     }
+    // 이미 게시된 건(중복 게시 차단) — 저장도 안 했으므로 "내용을 고쳤다면 저장부터"를 함께 안내한다.
+    if (res.status === "already_sent") {
+      toast.message(
+        `${subjectName} — 이미 학부모에게 발송된 보고서라 다시 보내지 않았습니다. 내용을 고쳤다면 '저장'을 누르세요`,
+      );
+      return;
+    }
     const msg =
       res.status === "queued"
         ? res.sendWindowHint
@@ -1046,6 +1091,9 @@ export function OneScreenClient({
     } else if (res.status === "absent") {
       // 결석 게이트(#77 서버판) — 반 모호(attendanceRaw 미채움) 행 등 클라 게이트 사각을 서버가 막은 경우.
       toast.message(`${student.name} — 수업일 출결이 결석으로 기록돼 있어 발송하지 않았습니다(기록 저장은 유지)`);
+    } else if (res.status === "already_sent") {
+      // 중복 게시 차단(서버판) — 화면 게이트를 지난 경로(stale 화면·다른 창에서 먼저 발송)도 서버가 막는다.
+      toast.message(`${student.name} ${subjectName} — 이미 학부모에게 발송된 보고서라 다시 보내지 않았습니다`);
     } else if (res.status === "queued" && res.sendWindowHint) {
       // 발송 허용 시간창 밖 — 큐엔 정상 적재, 워커가 창 진입 시 자동 발송("왜 안 나가지?" 재발송 혼란 방지).
       toast.success(`${student.name} ${subjectName} — 발송 예약됨(${res.sendWindowHint}에 자동 발송)`);
@@ -1064,7 +1112,12 @@ export function OneScreenClient({
     const rows = selectRows("save", keys);
     const skipped = keys?.length ? keys.length - rows.length : 0; // 미선택=전체=0(음수 방지 #11)
     if (rows.length === 0) {
-      toast.message("저장할 행이 없습니다 — 오늘 진도를 입력하세요");
+      // 발송 완료건은 수정 금지라 저장 대상에서도 빠진다 — "왜 아무것도 저장이 안 되지"의 답을 준다.
+      toast.message(
+        sentRowCount
+          ? `저장할 행이 없습니다 — 이미 발송된 ${sentRowCount}건은 수정할 수 없습니다(진도 미입력 행도 제외)`
+          : "저장할 행이 없습니다 — 오늘 진도를 입력하세요",
+      );
       return;
     }
     setBulkBusy("save");
@@ -1088,23 +1141,44 @@ export function OneScreenClient({
     if (bulkBusy || bulkGen) return; // 재진입·중첩 방지(#10)
     const rows = selectRows("send", keys);
     const preSkipped = keys?.length ? keys.length - rows.length : 0; // 미선택=전체=0(음수 방지 #11)
+    // 발송 후보 중 **이미 발송된 행** — 아래 안내에 쓰고, rows에는 이미 빠져 있다.
+    // ⚠️ 이 수치는 "일괄 발송을 다시 눌러도 안 나가는 이유"라 반드시 보여준다(무언 제외 = 사고 은폐).
+    // ⚠️ `selectRows`로 세면 **항상 0**이 된다 — 발송 완료건은 save 게이트에서도 이미 빠지기 때문
+    //    (2026-07-22 '수정도 금지'로 강화된 뒤의 함정). 그래서 게이트 이전의 원본 행에서 센다.
+    const allRows = buildGridRows(visible).filter((r) => rowInClass(r.subject, activeClassFilter));
+    const keySet = keys?.length ? new Set(keys) : null;
+    const alreadySentRows = allRows.filter(
+      (r) =>
+        (!keySet || keySet.has(r.key)) &&
+        r.subject.attendanceRaw !== "absent" &&
+        isAlreadySent(liveClassnoteStatus(r.student.id, r.subject.name) ?? r.subject.classnoteStatus),
+    ).length;
     if (rows.length === 0) {
-      toast.message("발송할 행이 없습니다 — 오늘 진도를 입력하세요 (결석 학생은 발송 제외)");
+      toast.message(
+        alreadySentRows
+          ? `발송할 새 행이 없습니다 — ${alreadySentRows}건은 이미 학부모에게 발송됐습니다`
+          : "발송할 행이 없습니다 — 오늘 진도를 입력하세요 (결석 학생은 발송 제외)",
+      );
       return;
     }
     // 발송 전 누락 안내(2-4) — 차단 아님("누락=생략" 철학 유지). 누락은 고유 학생 수 기준.
     // ⚠️ 결석 제외는 **행(과목) 단위 건수** — 다과목 학생은 결석 반 과목만 빠지고 다른 과목은 발송되므로
     //    "N명 제외"로 쓰면 오안내(리뷰 확정). 발송 단위=행(lesson_reports 1건)이라 "건"이 정확.
-    const absentRows = selectRows("save", keys).filter((r) => r.subject.attendanceRaw === "absent").length;
+    const absentRows = allRows.filter(
+      (r) => (!keySet || keySet.has(r.key)) && r.subject.attendanceRaw === "absent",
+    ).length;
     const gaps = summarizeSendGaps(rows, { dailyEnabled: showDailyTest, checkEnabled: showCheckTest });
     const gapLine =
       gaps.missingAttitude || gaps.missingTest
         ? `\n태도 미입력 ${gaps.missingAttitude}명 · 테스트 미입력 ${gaps.missingTest}명 — 미입력 항목은 보고서에서 생략됩니다`
         : "";
     const absentLine = absentRows ? `\n결석 행 ${absentRows}건은 발송에서 제외됩니다` : "";
+    const sentLine = alreadySentRows
+      ? `\n이미 발송된 ${alreadySentRows}건은 제외됩니다 — ClassNote는 게시글 수정이 안 돼 다시 보내면 글만 하나 더 붙습니다`
+      : "";
     if (
       !window.confirm(
-        `${rows.length}건을 ClassNote로 일괄 발송할까요? (동명이인·취소·오래된 건은 자동 제외)${gapLine}${absentLine}`,
+        `${rows.length}건을 ClassNote로 일괄 발송할까요? (동명이인·취소·오래된 건은 자동 제외)${gapLine}${absentLine}${sentLine}`,
       )
     )
       return;
@@ -1114,6 +1188,7 @@ export function OneScreenClient({
     let skipped = 0;
     let subjectOff = 0; // 발송 대상 과목 아님(저장만) — '발송 대기'로 뭉뚱그리지 않고 명시(#2 확정)
     let absentSkip = 0; // 서버 결석 게이트에 걸린 행(클라 사전 필터의 사각 — 반 모호 행 등)
+    let sentSkip = 0; // 서버 중복 게시 가드에 걸린 행(다른 창에서 먼저 보낸 경우 등)
     let dry = 0;
     let fail = 0;
     let windowHint = ""; // 발송 허용 시간창 밖 큐잉 — 마지막 응답의 창 라벨(테넌트 단일 설정이라 동일)
@@ -1129,7 +1204,8 @@ export function OneScreenClient({
         else if (res.status === "subject_off") subjectOff++;
         else if (res.status === "name_conflict" || res.status === "revoked") blocked++;
         else if (res.status === "absent") absentSkip++; // 서버 결석 게이트(클라 사전 필터를 지난 반 모호 행 등)
-        else skipped++; // success/processing/too_old
+        else if (res.status === "already_sent") sentSkip++; // 서버 중복 게시 가드(클라 게이트를 지난 stale 행)
+        else skipped++; // processing/too_old
       }
     } finally {
       setBulkBusy(null);
@@ -1139,9 +1215,10 @@ export function OneScreenClient({
         (windowHint ? `발송 예약 ${queued}건(${windowHint}에 자동 발송)` : `발송 대기 ${queued}건`) +
         (subjectOff ? ` · 과목 제외 ${subjectOff}건(발송 대상 과목 아님)` : "") +
         (absentSkip ? ` · 결석 제외 ${absentSkip}건` : "") +
+        (alreadySentRows || sentSkip ? ` · 발송완료 제외 ${alreadySentRows + sentSkip}건` : "") +
         (blocked ? ` · 차단 ${blocked}건(동명이인/취소)` : "") +
         (skipped ? ` · 제외 ${skipped}건` : "") +
-        (preSkipped ? ` · 대상 제외 ${preSkipped}건(진도 미입력·결석)` : "") +
+        (preSkipped ? ` · 대상 제외 ${preSkipped}건(진도 미입력·결석·발송완료)` : "") +
         (fail ? ` · 실패 ${fail}건` : ""),
     );
   }
@@ -1188,19 +1265,24 @@ export function OneScreenClient({
   //    진도·점수 핸들러와 같은 "로직 단일 소스" 규약. 표 첨부(클립·드롭·일괄)가 이 경로를 그대로 쓴다.
   const subjectKeyFor = (student: OneScreenStudent, subjectName: string): string | undefined => {
     const su = student.subjects.find((s) => s.name === subjectName);
-    return su?.subjectKey || su?.name || undefined;
+    return su?.subjectKey || su?.subjectLabel || su?.name || undefined;
   };
+  // 첨부가 붙을 **행(반)** — 보고서 단위가 반이라(0134a) 과목만 넘기면 정규/특강 중 아무 행에나 붙는다.
+  const classIdFor = (student: OneScreenStudent, subjectName: string): string | null =>
+    student.subjects.find((s) => s.name === subjectName)?.classId ?? null;
 
   // 선택 학생 과목별 첨부 path 시그니처 — 경로 변경 시에만 썸네일 URL 재요청(draft 편집엔 재요청 안 함).
   const attTargets = selected
     ? selected.subjects
         .map((su) => ({
-          subject: su.subjectKey || su.name || undefined,
+          subject: su.subjectKey || su.subjectLabel || su.name || undefined,
+          // 반(0134a) — 같은 과목 두 행이면 과목만으론 어느 보고서의 첨부인지 못 가른다.
+          classId: su.classId ?? null,
           paths: (reports[selected.id]?.[su.name]?.attachments ?? []).map((a) => a.path),
         }))
         .filter((t) => t.paths.length > 0)
     : [];
-  const attSig = attTargets.map((t) => `${t.subject ?? ""}:${t.paths.join(",")}`).join("|");
+  const attSig = attTargets.map((t) => `${t.classId ?? t.subject ?? ""}:${t.paths.join(",")}`).join("|");
   useEffect(() => {
     // attTargets 없으면 재요청 안 함(기존 map은 path 키라 stale해도 오표시 없음 — 신규 서명 시 전체 교체).
     if (!selected || attTargets.length === 0) return;
@@ -1208,7 +1290,12 @@ export function OneScreenClient({
     void (async () => {
       const merged: Record<string, string> = {};
       for (const t of attTargets) {
-        const res = await signReportAttachmentUrls({ studentId: selected.id, subject: t.subject, reportDate: date || undefined });
+        const res = await signReportAttachmentUrls({
+          studentId: selected.id,
+          subject: t.subject,
+          classId: t.classId,
+          reportDate: date || undefined,
+        });
         if (res.urls) Object.assign(merged, res.urls);
       }
       if (!cancelled) setAttUrls(merged);
@@ -1265,6 +1352,7 @@ export function OneScreenClient({
         const issued = await issueReportAttachmentUploadTicket({
           studentId,
           subject,
+          classId: classIdFor(student, subjectName), // 그 반 보고서에만 붙인다(0134a)
           reportDate: date || undefined, // 과거 날짜 첨부가 '오늘' 행에 붙지 않게 대상 날짜 명시(#5 확정)
           contentType: file.type,
           size: file.size,
@@ -1283,6 +1371,7 @@ export function OneScreenClient({
         const reg = await registerReportAttachment({
           studentId,
           subject,
+          classId: classIdFor(student, subjectName),
           reportDate: date || undefined,
           path: issued.ticket.path,
           name: original.name,
@@ -1318,6 +1407,7 @@ export function OneScreenClient({
     const res = await removeReportAttachment({
       studentId,
       subject: subjectKeyFor(student, subjectName),
+      classId: classIdFor(student, subjectName),
       reportDate: date || undefined,
       path,
     });
@@ -1347,6 +1437,7 @@ export function OneScreenClient({
     const res = await signReportAttachmentUrls({
       studentId: student.id,
       subject: subjectKeyFor(student, subjectName),
+      classId: classIdFor(student, subjectName),
       reportDate: date || undefined,
     });
     if (res.urls) setAttUrls((prev) => ({ ...prev, ...res.urls }));
@@ -1447,6 +1538,23 @@ export function OneScreenClient({
           >
             오늘 수업만 보기
           </a>
+        </div>
+      ) : null}
+
+      {/* 발송 완료 안내(2026-07-22 원장 지시) — **과거 날짜로 돌아갔을 때가 핵심**이다.
+          그 날짜는 대부분 이미 발송이 끝나 있는데, 화면은 평소와 똑같이 보이고 발송 버튼도 그냥 거기 있다
+          → "왜 안 나가지?" 하며 계속 누르거나, 반대로 눌러서 학부모 게시판에 글이 하나 더 붙는다.
+          ClassNote는 게시글 수정·삭제가 없어 되돌릴 수 없으므로, 이 날짜에 이미 나간 게 몇 건인지 먼저 말한다. */}
+      {sentRowCount > 0 ? (
+        <div className="border-primary/30 bg-primary-soft/40 text-text flex flex-wrap items-center gap-x-1.5 rounded-md border px-3 py-2 text-[12.5px]">
+          <span className="font-bold">
+            이 날짜는 이미 학부모에게 발송된 보고서가 {sentRowCount}건 있습니다
+          </span>
+          <span className="text-text-dim">
+            — 발송 완료된 건은 <b>수정도 재발송도 할 수 없습니다</b>. ClassNote는 게시글 수정·삭제가 없어
+            학부모가 받은 것과 기록이 갈라지기 때문입니다. 정말 고쳐야 하면 카드에서 <b>공유 링크 재발급</b>
+            으로 그 건을 무효화한 뒤 다시 작성하세요.
+          </span>
         </div>
       ) : null}
 

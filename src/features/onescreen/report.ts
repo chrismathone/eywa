@@ -88,7 +88,9 @@ function testAndClosingLines(st: OneScreenStudent): string[] {
 
 /** 오늘 진도·테스트·태도를 합친 학부모 보고서 초안 (전 과목 합본 — 학생 데일리 리포트용) */
 export function buildReport(st: OneScreenStudent): string {
-  const subj = st.subjects.map((s) => `${s.name} ${s.today}`).join(", ");
+  // ⚠️ 학부모에게 나가는 문장이라 **순수 과목 라벨**을 쓴다 — `name`엔 반 이름이 붙을 수 있고
+  //    (같은 과목 두 반일 때 "수학 · 고1 특강"), 보고서에 반은 노출하지 않는 것이 원장 확정 규칙이다.
+  const subj = st.subjects.map((s) => `${s.subjectLabel || s.name} ${s.today}`).join(", ");
   return [`${st.name} 학생, 오늘 ${subj} 진도를 진행했습니다.`, ...testAndClosingLines(st)].join(" ");
 }
 
@@ -97,7 +99,8 @@ export function buildSubjectReport(st: OneScreenStudent, subjectIndex: number): 
   const su = st.subjects[subjectIndex];
   if (!su) return buildReport(st);
   const lines = [
-    `${st.name} 학생, 오늘 ${su.name} ${su.today} 진도를 진행했습니다.`,
+    // 학부모 문장 — 반 이름이 섞이지 않는 subjectLabel(위 buildReport와 같은 이유).
+    `${st.name} 학생, 오늘 ${su.subjectLabel || su.name} ${su.today} 진도를 진행했습니다.`,
     ...testAndClosingLines(st),
   ];
   // 오늘 과제(0096a) — AI 멘트 프롬프트의 마무리 규칙("오늘 과제는 ~입니다")과 폴백 템플릿 대칭 유지.

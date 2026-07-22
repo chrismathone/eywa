@@ -34,22 +34,55 @@ const CLASSNOTE_RESET = {
 } as const;
 
 type Attachment = { path: string; name: string; size: number };
-type ReportRow = { id: string; attachments: Attachment[] | null };
+type ReportRow = { id: string; attachments: Attachment[] | null; classnote_status?: string | null };
 
-/** (tenant,student,date,subject) 저장된 보고서 행. 없으면 null — 첨부는 저장된 행에만 붙는다. date 기본=오늘(admin 직접작성은 작성일 전달). */
+/**
+ * 발송 완료된 보고서는 첨부도 못 바꾼다(2026-07-22 원장 지시 "발송된 보고서 수정 금지").
+ * 🔴 여기가 특히 중요한 이유: 첨부 변경은 CLASSNOTE_RESET으로 발송 상태를 지워 **재발송을 여는 뒷문**이다.
+ *    이걸 안 막으면 "사진 한 장 추가"가 수정 금지와 재발송 차단을 동시에 우회한다.
+ */
+const SENT_LOCK_ERROR =
+  "이미 학부모에게 발송된 보고서라 첨부를 바꿀 수 없습니다 — 고쳐야 하면 공유 링크를 재발급하세요";
+const isSentLocked = (row: ReportRow | null) => row?.classnote_status === "success";
+
+/**
+ * 저장된 보고서 행 — 첨부는 저장된 행에만 붙는다. date 기본=오늘(admin 직접작성은 작성일 전달).
+ *
+ * 🔴 단위 = **반**(0134a). 같은 (학생,날짜,과목)에 반이 다른 2행이 정상적으로 존재할 수 있으므로
+ *    `maybeSingle()`을 쓰면 정규+특강을 듣는 학생의 첨부가 통째로 에러가 된다.
+ *    반이 없으면(보강·관리자 작성) 예전대로 과목으로 찾되 **반 없는 행**만 본다 —
+ *    반 없는 요청이 특강 행에 사진을 붙이면 엉뚱한 보고서에 사진이 들어간다.
+ */
 async function findReportRow(
   supabase: Awaited<ReturnType<typeof createClient>>,
   studentId: string,
   subject: string | undefined,
   reportDate?: string,
+  classId?: string | null,
 ): Promise<ReportRow | null> {
   const base = supabase
     .from("lesson_reports")
-    .select("id, attachments")
+    .select("id, attachments, class_id, classnote_status")
     .eq("student_id", studentId)
     .eq("report_date", reportDate || kstToday());
-  const { data } = await (subject ? base.eq("subject", subject) : base.is("subject", null)).maybeSingle();
-  return (data as ReportRow | null) ?? null;
+  if (classId) {
+    const { data } = await base.eq("class_id", classId).limit(1);
+    return ((data as ReportRow[] | null)?.[0]) ?? null;
+  }
+  if (!subject) {
+    const { data } = await base.is("class_id", null).is("subject", null).limit(1);
+    return ((data as ReportRow[] | null)?.[0]) ?? null;
+  }
+  // 반을 모르는 호출(관리자 직접작성 화면 — 반 선택 UI가 없다). 그 과목 행을 보되:
+  //  · 반 없는 행이 있으면 그것(관리자가 방금 저장한 행 = 예전과 동일 동작)
+  //  · 없고 반 있는 행이 **하나뿐**이면 그것(관리자 저장 시 서버가 반을 확정한 경우)
+  //  · 반 있는 행이 둘 이상이면 **null** — 어느 수업의 사진인지 사람만 안다. 추측해서 엉뚱한 보고서에
+  //    붙이느니 "먼저 보고서를 저장하세요"로 멈추는 편이 낫다(잘못 붙으면 학부모에게 그대로 나간다).
+  const { data } = await base.eq("subject", subject).limit(5);
+  const rows = (data as (ReportRow & { class_id?: string | null })[] | null) ?? [];
+  const classless = rows.find((r) => !r.class_id);
+  if (classless) return classless;
+  return rows.length === 1 ? rows[0]! : null;
 }
 
 /**
@@ -72,6 +105,8 @@ async function gate(studentId: string) {
 export type IssueAttachmentTicketInput = {
   studentId: string;
   subject?: string;
+  /** 이 보고서의 반(0134a) — 같은 과목 두 행(정규+특강)을 가르는 키. 없으면 반 없는 행. */
+  classId?: string | null;
   reportDate?: string; // 대상 보고서 날짜(생략=오늘) — admin 직접작성이 과거 날짜 첨부 시 전달
   contentType: string;
   size: number;
@@ -88,8 +123,9 @@ export async function issueReportAttachmentUploadTicket(
     return { error: "사진·문서(pdf·hwp·office·mp3 등)만 첨부할 수 있습니다" };
   if (!Number.isFinite(input.size) || input.size <= 0 || input.size > MEDIA_KIND[KIND].maxBytes)
     return { error: "파일이 너무 큽니다 (최대 20MB)" };
-  const row = await findReportRow(g.supabase, input.studentId, input.subject, input.reportDate);
+  const row = await findReportRow(g.supabase, input.studentId, input.subject, input.reportDate, input.classId);
   if (!row) return { error: "먼저 보고서를 저장하세요" };
+  if (isSentLocked(row)) return { error: SENT_LOCK_ERROR };
   if ((row.attachments ?? []).length >= MAX_ATTACHMENTS)
     return { error: `사진은 최대 ${MAX_ATTACHMENTS}장까지 첨부할 수 있습니다` };
   const ext = input.ext.toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
@@ -105,6 +141,8 @@ export async function issueReportAttachmentUploadTicket(
 export type RegisterAttachmentInput = {
   studentId: string;
   subject?: string;
+  /** 이 보고서의 반(0134a) — 같은 과목 두 행(정규+특강)을 가르는 키. 없으면 반 없는 행. */
+  classId?: string | null;
   reportDate?: string; // 대상 보고서 날짜(생략=오늘)
   path: string;
   name: string;
@@ -120,10 +158,14 @@ export async function registerReportAttachment(
   if (!isTenantReportAttachmentPath(input.path, g.user.tenantId))
     return { ok: false, error: "잘못된 파일 경로입니다" };
 
-  const row = await findReportRow(g.supabase, input.studentId, input.subject, input.reportDate);
+  const row = await findReportRow(g.supabase, input.studentId, input.subject, input.reportDate, input.classId);
   if (!row) {
     await removeObject(input.path, { bucket: BUCKET }).catch(() => {});
     return { ok: false, error: "먼저 보고서를 저장하세요" };
+  }
+  if (isSentLocked(row)) {
+    await removeObject(input.path, { bucket: BUCKET }).catch(() => {});
+    return { ok: false, error: SENT_LOCK_ERROR };
   }
   const current = row.attachments ?? [];
   if (current.length >= MAX_ATTACHMENTS) {
@@ -152,7 +194,7 @@ export async function registerReportAttachment(
   return { ok: true, attachments: next };
 }
 
-export type RemoveAttachmentInput = { studentId: string; subject?: string; reportDate?: string; path: string };
+export type RemoveAttachmentInput = { studentId: string; subject?: string; classId?: string | null; reportDate?: string; path: string };
 
 /** 첨부 삭제 — 행 attachments에서 path 제거 + storage 정리 + classnote 리셋. */
 export async function removeReportAttachment(
@@ -160,8 +202,9 @@ export async function removeReportAttachment(
 ): Promise<{ ok: boolean; attachments?: Attachment[]; error?: string }> {
   const g = await gate(input.studentId);
   if ("error" in g) return { ok: false, error: g.error };
-  const row = await findReportRow(g.supabase, input.studentId, input.subject, input.reportDate);
+  const row = await findReportRow(g.supabase, input.studentId, input.subject, input.reportDate, input.classId);
   if (!row) return { ok: false, error: "보고서를 찾을 수 없습니다" };
+  if (isSentLocked(row)) return { ok: false, error: SENT_LOCK_ERROR };
   const current = row.attachments ?? [];
   const next = current.filter((a) => a.path !== input.path);
   if (next.length === current.length) return { ok: true, attachments: current }; // 이미 없음(멱등)
@@ -181,11 +224,13 @@ export async function removeReportAttachment(
 export async function signReportAttachmentUrls(input: {
   studentId: string;
   subject?: string;
+  /** 이 보고서의 반(0134a) — 같은 과목 두 행(정규+특강)을 가르는 키. 없으면 반 없는 행. */
+  classId?: string | null;
   reportDate?: string;
 }): Promise<{ urls?: Record<string, string>; attachments?: Attachment[]; error?: string }> {
   const g = await gate(input.studentId);
   if ("error" in g) return { error: g.error };
-  const row = await findReportRow(g.supabase, input.studentId, input.subject, input.reportDate);
+  const row = await findReportRow(g.supabase, input.studentId, input.subject, input.reportDate, input.classId);
   const attachments = row?.attachments ?? [];
   const paths = attachments.map((a) => a.path);
   if (paths.length === 0) return { urls: {}, attachments: [] };

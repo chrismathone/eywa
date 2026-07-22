@@ -30,20 +30,23 @@ export async function getClassnoteStatuses(
 
   const supabase = await createClient();
   const date = resolveReportDate(reportDate); // 빈값·미래 → 오늘(KST) — 저장/발송이 쓰는 날짜와 같은 규칙
+  // class_id 포함(0134a) — 같은 과목 두 행(정규+특강)을 과목만으론 못 가른다. 병합은 반 우선.
   const rows = await fetchInChunks<{
     student_id: string;
     subject: string | null;
+    class_id: string | null;
     classnote_status: string | null;
   }>(ids, (chunk) =>
     supabase
       .from("lesson_reports")
-      .select("student_id, subject, classnote_status")
+      .select("student_id, subject, class_id, classnote_status")
       .eq("report_date", date)
       .in("student_id", chunk),
   );
   return rows.map((r) => ({
     studentId: r.student_id,
     subject: r.subject,
+    classId: r.class_id,
     status: r.classnote_status,
   }));
 }

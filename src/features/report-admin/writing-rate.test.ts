@@ -137,6 +137,39 @@ describe("computeWritingRates — 오늘 아직 시작 전 수업(todayPending)"
   });
 });
 
+// 0134a — 보고서가 반 단위가 되면서 같은 학생이 같은 날 2건(정규+특강)을 만든다.
+// 분모(대상)는 학생 수이므로 분자도 학생 단위로 세야 한다 — 안 그러면 작성률이 실제보다 높게 나온다.
+describe("computeWritingRates — 작성 수치는 학생 단위(보고서 건수 아님)", () => {
+  it("같은 학생의 같은 날 보고서 2건은 1명으로 센다(정규 + 특강)", () => {
+    const rows = computeWritingRates(
+      ["2026-07-20"],
+      [
+        { teacher: "김강사", date: "2026-07-20", studentId: "s1" },
+        { teacher: "김강사", date: "2026-07-20", studentId: "s1" }, // 특강 보고서
+      ],
+      [],
+      [{ teacher: "김강사", date: "2026-07-20", target: 2 }],
+      "2026-07-21",
+    );
+    expect(rows[0]!.daily[0]!.written).toBe(1); // 2건이지만 1명
+    expect(rows[0]!.weekWritten).toBe(1);
+  });
+
+  it("서로 다른 학생 2명은 그대로 2로 센다", () => {
+    const rows = computeWritingRates(
+      ["2026-07-20"],
+      [
+        { teacher: "김강사", date: "2026-07-20", studentId: "s1" },
+        { teacher: "김강사", date: "2026-07-20", studentId: "s2" },
+      ],
+      [],
+      [{ teacher: "김강사", date: "2026-07-20", target: 2 }],
+      "2026-07-21",
+    );
+    expect(rows[0]!.daily[0]!.written).toBe(2);
+  });
+});
+
 describe("학원 지정 휴일 — 분모에서 제외(원장 2026-07-22)", () => {
   const D = ["2026-07-07", "2026-07-08", "2026-07-09"];
   const T = "2026-07-09";
@@ -144,7 +177,8 @@ describe("학원 지정 휴일 — 분모에서 제외(원장 2026-07-22)", () =
   it("휴일인 과거일은 대상 null·합계 제외 + 휴일명 표시", () => {
     const rows = computeWritingRates(
       D,
-      [{ teacher: "김선생", date: "2026-07-07" }],
+      // ⚠️ 휴일에 **보고서가 없을 때** 순수 제외를 본다(작성분이 있으면 '한 일로 인정'이 새 규칙).
+      [{ teacher: "김선생", date: "2026-07-08" }],
       [{ teacher: "김선생", target: 2, written: 2, missing: [] }],
       [
         { teacher: "김선생", date: "2026-07-07", target: 5 }, // ← 휴일이라 무시돼야 함
@@ -157,7 +191,7 @@ describe("학원 지정 휴일 — 분모에서 제외(원장 2026-07-22)", () =
     const k = rows.find((r) => r.teacher === "김선생")!;
     expect(k.daily[0]).toEqual({
       date: "2026-07-07",
-      count: 1,
+      count: 0,
       target: null,
       written: 0,
       rate: null,
@@ -202,6 +236,52 @@ describe("학원 지정 휴일 — 분모에서 제외(원장 2026-07-22)", () =
     expect(c.todayMissing).toEqual([]);
     expect(c.todayRate).toBeNull();
     expect(c.todayPending).toBeNull();
+  });
+
+  it("휴일에 부득이 수업하고 보고서를 쓰면 **한 일로 인정**(대상=작성=100%)", () => {
+    const rows = computeWritingRates(
+      D,
+      [
+        { teacher: "김선생", date: "2026-07-07" },
+        { teacher: "김선생", date: "2026-07-07" },
+        { teacher: "김선생", date: "2026-07-07" },
+      ],
+      [],
+      [{ teacher: "김선생", date: "2026-07-08", target: 2 }],
+      T,
+      [],
+      [{ date: "2026-07-07", name: "제헌절" }],
+    );
+    const k = rows.find((r) => r.teacher === "김선생")!;
+    expect(k.daily[0]).toEqual({
+      date: "2026-07-07",
+      count: 3,
+      target: 3,
+      written: 3,
+      rate: 100,
+      holiday: true,
+      holidayName: "제헌절",
+    });
+    // 합계에도 3/3이 들어간다 — 휴일 근무가 집계에서 증발하지 않게.
+    expect(k.weekWritten).toBe(3);
+    expect(k.weekTarget).toBe(5); // 휴일 3 + 08일 대상 2
+  });
+
+  it("휴일에 아무도 안 썼으면 종전대로 대상 null('휴') — 분모를 늘리지 않는다", () => {
+    // 08일 대상만 두고(강사 행이 생기게) 07일은 휴일 + 보고서 0건.
+    const rows = computeWritingRates(
+      D,
+      [],
+      [],
+      [{ teacher: "박선생", date: "2026-07-08", target: 4 }],
+      T,
+      [],
+      [{ date: "2026-07-07" }],
+    );
+    const p = rows.find((r) => r.teacher === "박선생")!;
+    expect(p.daily[0].target).toBeNull();
+    expect(p.daily[0].holiday).toBe(true);
+    expect(p.weekTarget).toBe(4); // 휴일이 분모를 늘리지 않았다
   });
 
   it("휴일 목록이 비면 기존 동작 그대로(하위호환)", () => {

@@ -36,7 +36,13 @@ export type SaveLessonReportInput = {
   attitude?: string; // "좋음"
   trendNote?: string; // 학습 추세(종합분석) 문구 — 0091a. 멘트(notes)와 별개 저장·표시.
   reportDate?: string; // 대상 날짜(YYYY-MM-DD) — 빈값=오늘. 과거 날짜 마감·재발송용(report_date=카드·ClassNote 게시일).
-  subject?: string; // 과목키(math/english…) — (student,date,subject) 과목별 1행 dedup용
+  subject?: string; // 과목키(math/english…) — 발송 과목 게이트·보드 매핑의 키. 반이 없을 때의 dedup 단위이기도 하다.
+  /**
+   * 이 보고서가 속한 반(수업) — **보고서 1건의 단위**(0134a). 같은 날 정규 수학 + 수학 특강을 들어도
+   * 서로 안 덮게 하는 키다(`unit_key = coalesce(class_id, subject)` 유니크).
+   * null 허용: 보강·수업외 수동 추가처럼 반이 없는 저장(그때는 예전대로 과목이 단위).
+   */
+  classId?: string | null;
   // 보강·수업외 학생(수동 추가) — true면 '내 담당 반 활성 수강생' 검사 대신 같은 학원(tenant) 학생이면 허용.
   // 원장 승인 정책(보강 저장=학원 전체). RLS가 테넌트 격리(cross-tenant는 select null) → 학원 밖 학생은 여전히 거부.
   outOfClass?: boolean;
@@ -76,19 +82,50 @@ export async function saveLessonReport(
       .eq("teacher_id", user.id);
     const myClassIds = (myClasses ?? []).map((c) => c.id);
     if (myClassIds.length === 0) return { ok: false, error: "담당 반이 없습니다" };
+    // 반이 지정되면 **그 반**이 내 담당인지까지 본다(0134a) — 예전엔 '내 담당 반 아무거나'만 봐서
+    // 남의 반 id를 실어 보내면 그 반 보고서가 만들어졌다(반이 보고서 단위가 되면서 실제 영향이 생긴 구멍).
+    if (input.classId && !myClassIds.includes(input.classId))
+      return { ok: false, error: "담당 반이 아닙니다" };
 
-    const { data: enr } = await supabase
+    let q = supabase
       .from("enrollments")
       .select("id")
       .eq("student_id", input.studentId)
       .or(`start_date.is.null,start_date.lte.${reportDate}`)
-      .or(`end_date.is.null,end_date.gte.${reportDate}`)
-      .in("class_id", myClassIds)
-      .limit(1);
+      .or(`end_date.is.null,end_date.gte.${reportDate}`);
+    // 반이 지정되면 그 반 수강 여부까지 확인(다른 반 학생에 특강 보고서를 쓰는 것 차단).
+    q = input.classId ? q.eq("class_id", input.classId) : q.in("class_id", myClassIds);
+    const { data: enr } = await q.limit(1);
     if (!enr || enr.length === 0) return { ok: false, error: "담당 학생이 아닙니다" };
   }
 
-  // (student, date, subject) 과목별 1행 upsert — 재발송 시 같은 행 갱신(중복 방지, 0083a 유니크).
+  // 🔴 **발송 완료된 보고서는 수정 금지**(2026-07-22 원장 지시). ClassNote는 게시글 수정·삭제가 없어
+  //    학부모는 발송 시점의 이미지를 그대로 갖고 있다. 여기서 내용만 바꾸면 DB와 학부모가 본 것이 갈라져
+  //    나중에 어느 쪽이 사실인지 아무도 모른다(문의가 오면 대조할 근거가 사라진다).
+  //    이 함수가 저장의 **단일 관문**이라 원스크린·카드·일괄·첨부 자동저장이 전부 여기서 막힌다.
+  //    푸는 방법은 공유링크 재발급(reissueShareLink — 상태 리셋 = "이 건은 무효" 선언)뿐이다.
+  const gateBase = supabase
+    .from("lesson_reports")
+    .select("id, classnote_status")
+    .eq("student_id", input.studentId)
+    .eq("report_date", reportDate);
+  const gateScoped = input.classId
+    ? gateBase.eq("class_id", input.classId)
+    : input.subject
+      ? gateBase.is("class_id", null).eq("subject", input.subject)
+      : gateBase.is("class_id", null).is("subject", null);
+  const { data: gateRows } = await gateScoped.limit(1);
+  if (gateRows?.[0]?.classnote_status === "success") {
+    return {
+      ok: false,
+      id: gateRows[0].id,
+      error: "이미 학부모에게 발송된 보고서라 수정할 수 없습니다 — 고쳐야 하면 공유링크를 재발급하세요",
+    };
+  }
+
+  // (student, date, 반|과목) 1행 upsert — 재저장 시 같은 행 갱신(0134a `unit_key` 유니크).
+  // ⚠️ onConflict 타깃은 **생성열 unit_key**(= coalesce(class_id::text, subject)) — 부분·표현식 인덱스는
+  //    supabase-js upsert가 타깃으로 못 잡아서(0083a 교훈) 생성열로 평범한 컬럼처럼 만들어 둔 것이다.
   // share_token은 update 시 payload에 없어 미변경(안정 링크). classnote_* 도 미변경(별도 saveAndQueueClassnote가 관리).
   const { data, error } = await supabase
     .from("lesson_reports")
@@ -98,6 +135,7 @@ export async function saveLessonReport(
         student_id: input.studentId,
         report_date: reportDate,
         subject: input.subject || null,
+        class_id: input.classId || null,
         textbook: input.textbook || null,
         makeup: input.makeup ?? false,
         homework_today: input.homeworkToday || null,
@@ -112,7 +150,7 @@ export async function saveLessonReport(
         trend_note: input.trendNote || null,
         source: "onescreen",
       },
-      { onConflict: "tenant_id,student_id,report_date,subject" },
+      { onConflict: "tenant_id,student_id,report_date,unit_key" },
     )
     .select("id, share_token")
     .single();
@@ -140,10 +178,15 @@ export async function saveLessonReport(
  * 원스크린 "ClassNote 발송" — 보고서 저장(upsert) + ClassNote 큐 적재를 한 액션으로.
  * 강사는 큐에 넣고 즉시 반환(비동기) — 실제 게시는 로컬 워커가 폴링해 처리(P3).
  *
- * 재발송 정책(리뷰 반영): **저장 전** 기존 상태를 확인한다.
+ * 재발송 정책(2026-07-22 원장 확정 "다시 보낼 일이 없다"): **저장 전** 기존 상태를 확인한다.
  * - `processing`(워커가 게시 중) → 내용을 덮어쓰지 않고 반환(레이스·오게시 방지).
- * - 그 외(null/queued/success/failed) → upsert 후 `queued`로 재적재 → **재발송 허용**(강사의 발송 재클릭 = 재게시 의도).
- *   기존엔 저장을 먼저 해 내용은 바뀌고 success면 재큐잉을 막아 ClassNote와 불일치가 났음.
+ * - `success`(이미 학부모 게시판에 올라감) → **차단**. ClassNote는 게시글 수정·삭제가 없어 재발송 =
+ *   글이 하나 더 붙는 것뿐이고 되돌릴 수단이 없다. 저장도 하지 않는다 — 여기서 내용만 갱신하면
+ *   DB와 학부모가 실제로 본 글이 갈라진다(내용 수정은 '저장' 버튼으로, 그건 발송과 무관).
+ *   ⚠️ 탈출구는 둘 다 사람이 명시적으로 여는 경로다: ① 공유링크 **재발급**(reissueShareLink가 상태를
+ *   리셋 → 다시 발송 가능) ② 관리자 발송 콘솔의 '재발송'(retryClassnote). 이 함수에 force 인자를
+ *   더하지 말 것 — 강사 화면의 실수 클릭을 막는 게 이 가드의 전부다.
+ * - 그 외(null/queued/failed/too_old/name_conflict) → upsert 후 `queued`로 적재.
  */
 export async function saveAndQueueClassnote(
   input: SaveLessonReportInput,
@@ -164,15 +207,21 @@ export async function saveAndQueueClassnote(
   // 대상 날짜 = 고른 날짜 클램프(saveLessonReport와 동일 계산 → pre-read·too_old 게이트가 그 날짜 기준).
   const reportDate = resolveReportDate(input.reportDate);
 
-  // 저장 전 상태 pre-read((student,date,subject) 행). RLS로 테넌트 격리.
+  // 저장 전 상태 pre-read — **행(반) 단위**(0134a). 반이 있으면 그 반 행, 없으면 반 없는 같은 과목 행.
+  // ⚠️ 예전엔 (student,date,subject)로 maybeSingle이었다. 같은 과목 두 반(정규+특강)이 생기면
+  //    2행이 걸려 maybeSingle이 에러를 던지고 발송 전체가 "실패"로 죽는다.
   const base = supabase
     .from("lesson_reports")
     .select("id, classnote_status, revoked_at")
     .eq("student_id", input.studentId)
     .eq("report_date", reportDate);
-  const { data: prior } = await (
-    input.subject ? base.eq("subject", input.subject) : base.is("subject", null)
-  ).maybeSingle();
+  const scoped = input.classId
+    ? base.eq("class_id", input.classId)
+    : input.subject
+      ? base.is("class_id", null).eq("subject", input.subject)
+      : base.is("class_id", null).is("subject", null);
+  const { data: priorRows } = await scoped.limit(1);
+  const prior = priorRows?.[0];
   // 취소된 링크는 재큐잉 안 함 — 옛 링크가 死링크라 재발송하려면 먼저 재발급(새 토큰·취소 해제)해야 함.
   if (prior?.revoked_at) {
     return { ok: true, id: prior.id, status: "revoked" };
@@ -180,6 +229,10 @@ export async function saveAndQueueClassnote(
   // 워커 게시 중이면 내용 덮어쓰지 않고 그대로 반환(in-flight 보호).
   if (prior?.classnote_status === "processing") {
     return { ok: true, id: prior.id, status: "processing" };
+  }
+  // 이미 게시된 건은 재발송하지 않는다(중복 게시 차단, 위 주석 참조). 저장도 건너뛴다.
+  if (prior?.classnote_status === "success") {
+    return { ok: true, id: prior.id, status: "already_sent" };
   }
 
   // 저장(upsert) — 권한 재검증(getCurrentUser+담당 활성수강생)은 saveLessonReport 내부.
@@ -210,6 +263,8 @@ export async function saveAndQueueClassnote(
           studentId: input.studentId,
           reportDate,
           subject: input.subject ?? null,
+          // 반이 있으면 **그 반** 출결만 본다(0134a) — 특강 결석인데 정규 출석이라 통과하던 구멍을 막는다.
+          classId: input.classId ?? null,
         })
       ) {
         // 대기 중(queued) 재고 회수 — 안 지우면 "발송하지 않았습니다" 안내 직후 워커가 방금 갱신된

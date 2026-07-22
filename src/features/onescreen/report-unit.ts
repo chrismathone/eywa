@@ -1,0 +1,89 @@
+/**
+ * 수업보고서 1건의 **유일성 단위** — 반(수업)이 있으면 반, 없으면 과목.
+ *
+ * 원장 확정(2026-07-22): "보고서 2건 가야지. 수강한 수업마다 1건씩."
+ * 같은 날 정규 수학 + 수학 특강을 들으면 보고서가 2건이고, 서로 덮어쓰지 않아야 한다.
+ *
+ * 🔴 이 규약은 **세 곳에 같은 식으로 존재한다.** 하나만 바꾸면 조용히 갈라진다:
+ *   ① DB 생성열 `lesson_reports.unit_key` = `coalesce(class_id::text, subject)` (0134a)
+ *      → `(tenant_id, student_id, report_date, unit_key)` 유니크가 덮어쓰기를 막는다.
+ *   ② RPC `onescreen_prior_reports`의 `distinct on` 키 (0135a)
+ *   ③ 이 파일 — 로스터가 DB 행을 화면 행에 붙일 때.
+ *
+ * 반이 없는 보고서가 **정상적으로** 존재한다: 이관분(반 정보 자체가 없음)·보강/수업외 수동 추가·
+ * 관리자 직접작성(반이 모호할 때)·0134a 이전에 저장된 행. 그때는 과목이 단위 = 예전과 동일 동작이다.
+ */
+
+/** 반 우선, 없으면 과목. 둘 다 없으면 null("단위를 특정할 수 없음" — DB에선 NULLS DISTINCT라 제약 밖). */
+export function reportUnitKey(
+  classId: string | null | undefined,
+  subject: string | null | undefined,
+): string | null {
+  const c = classId?.trim();
+  if (c) return c;
+  const s = subject?.trim();
+  return s ? s : null;
+}
+
+/** 화면의 과목 행(로스터가 만든 것) — 매칭에 필요한 만큼만. */
+export type SubjectRowRef = { classId?: string | null; subjectKey?: string | null };
+/** DB 보고서 행 — 매칭에 필요한 만큼만. */
+export type ReportRowRef = { classId?: string | null; subject?: string | null };
+
+/**
+ * 한 학생의 **화면 행들**에 그 학생의 **DB 보고서 행들**을 1:1로 붙인다. 반환은 rows와 같은 길이·순서.
+ *
+ * 매칭 순서(앞 단계가 이기고, 소비된 보고서는 뒤 단계에서 다시 안 잡힌다):
+ *  1차 **반 정확매칭** — `report.classId === row.classId`. 정규/특강이 갈리는 유일한 축이다.
+ *  2차 **과목 매칭(반 없는 보고서)** — 관리자 직접작성·0134a 이전 저장분·이관분 중 과목이 있는 행.
+ *      같은 과목 행이 둘이면 **앞 행이 가져간다**(로스터가 반 시작시각 순으로 정렬하므로 결정적).
+ *  3차 **과목도 없는 보고서(이관분)** — `legacyFallback`이 켜졌고 학생이 단일 과목일 때만.
+ *      다과목 학생은 어느 과목인지 알 수 없어 붙이지 않는다(엉뚱한 과목에 남의 진도 주입 금지 —
+ *      roster의 기존 보수 규약 유지).
+ *
+ * 🔴 **3차는 기본 꺼짐이고 '직전 회차'에서만 켠다.** ijw 이식분은 subject가 거의 다 비어 있어
+ *    (실측 17,337/17,345 NULL) 이 폴백이 없으면 참고행·교재 승계가 통째로 0건이 된다. 그러나
+ *    **당일 행에 켜면 안 된다** — edutrix 동기화가 오늘 날짜 이관분을 계속 넣는다(실측 최근 14일 870행,
+ *    최신 2026-07-21). 켜면 강사가 쓰지도 않은 남의 보고서가 "이미 저장됨"으로 붙고 그 본문이 초안으로
+ *    로드된다. 예전 코드도 당일 행엔 이 폴백이 없었다(키가 달라 자연히 안 걸렸을 뿐이다).
+ *
+ * 🔴 **한 보고서를 두 행에 붙이면 안 된다.** 붙이면 두 행이 같은 DB 행을 가리키게 되고, 각각 저장할 때
+ *    서로를 덮어쓴다(이 작업이 없애려던 바로 그 버그가 화면 쪽에서 재현된다). 그래서 소비(consume)한다.
+ */
+export function matchReportsToRows<R extends ReportRowRef>(
+  rows: readonly SubjectRowRef[],
+  reports: readonly R[],
+  opts?: { legacyFallback?: boolean },
+): (R | undefined)[] {
+  const out: (R | undefined)[] = rows.map(() => undefined);
+  const used = new Set<R>();
+
+  const take = (pred: (r: R) => boolean): R | undefined => {
+    for (const r of reports) {
+      if (!used.has(r) && pred(r)) {
+        used.add(r);
+        return r;
+      }
+    }
+    return undefined;
+  };
+
+  // 1차 — 반 정확매칭.
+  rows.forEach((row, i) => {
+    const cls = row.classId?.trim();
+    if (!cls) return;
+    out[i] = take((r) => (r.classId?.trim() ?? "") === cls);
+  });
+  // 2차 — 반이 없는 보고서를 과목으로.
+  rows.forEach((row, i) => {
+    if (out[i]) return;
+    const key = row.subjectKey?.trim();
+    if (!key) return;
+    out[i] = take((r) => !r.classId?.trim() && (r.subject?.trim() ?? "") === key);
+  });
+  // 3차 — 과목도 없는 이관분. 명시 opt-in + 단일 과목 학생만(위 🔴 참조).
+  if (opts?.legacyFallback && rows.length === 1 && !out[0]) {
+    out[0] = take((r) => !r.classId?.trim() && !r.subject?.trim());
+  }
+  return out;
+}

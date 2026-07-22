@@ -57,7 +57,10 @@ export type TeacherRate = {
 /**
  * 강사별 작성률 조립.
  * @param dates 이번 주 7일(오름차순 월→일)
- * @param reports 작성기록(teacher×date) — 강사 집합 + 요일별 작성 건수
+ * @param reports 작성기록(teacher×date×student) — 강사 집합 + 요일별 **작성 학생 수**
+ *   🔴 학생 단위로 센다(보고서 건수 아님). 분모(dailyTargets)가 **학생 수**라 단위를 맞춰야 한다 —
+ *   0134a로 보고서가 반 단위가 되면서 같은 날 정규+특강을 들은 학생이 2건을 만들고, 건수로 세면
+ *   한 학생이 두 번 세어져 작성률이 실제보다 높게 나온다(다과목 학생도 원래 같은 문제였다).
  * @param todayTargets 오늘 대상/작성/미작성(정밀)
  * @param dailyTargets 과거일 대상(강사×날짜) — 주간 스케줄 기반
  * @param todayDate 오늘(YYYY-MM-DD) — 이 날짜 셀은 todayTargets(정밀)로, 그 이후는 null(미래)
@@ -70,7 +73,7 @@ export type TeacherRate = {
  */
 export function computeWritingRates(
   dates: string[],
-  reports: { teacher: string; date: string }[],
+  reports: { teacher: string; date: string; studentId?: string | null }[],
   todayTargets: TodayTarget[],
   dailyTargets: DailyTarget[],
   todayDate: string,
@@ -91,12 +94,16 @@ export function computeWritingRates(
   // 오늘 수업이 아직 안 시작된 강사는 작성 기록도 대상도 없을 수 있다 — 여기서 넣어야 행이 사라지지 않는다.
   todayPendings.forEach((t) => teachers.add(t.teacher));
 
-  // (teacher,date) → 작성 건수.
-  const counts = new Map<string, number>();
-  for (const r of reports) {
+  // (teacher,date) → 작성 **학생 수**. 같은 학생의 여러 보고서(정규+특강, 다과목)는 1로 친다.
+  // studentId가 없는 호출(구 픽스처·테스트)은 행마다 고유 키를 만들어 예전처럼 건수로 센다.
+  const seen = new Map<string, Set<string>>();
+  reports.forEach((r, i) => {
     const k = `${r.teacher} ${r.date}`;
-    counts.set(k, (counts.get(k) ?? 0) + 1);
-  }
+    const set = seen.get(k) ?? new Set<string>();
+    set.add(r.studentId ?? `#${i}`);
+    seen.set(k, set);
+  });
+  const counts = new Map<string, number>([...seen].map(([k, set]) => [k, set.size]));
   const todayByTeacher = new Map(todayTargets.map((t) => [t.teacher, t]));
   const dailyTargetMap = new Map(dailyTargets.map((t) => [`${t.teacher} ${t.date}`, t.target]));
   const pendingByTeacher = new Map(todayPendings.map((t) => [t.teacher, t]));
@@ -114,6 +121,22 @@ export function computeWritingRates(
       // 휴일이 최우선 — 대상 0, 합계 제외. 그날 작성 건수(count)는 참고로 그대로 실어 둔다.
       if (isHoliday(date)) {
         const name = holidayByDate.get(date)!;
+        // 휴일엔 **의무가 없다**(대상 0). 다만 부득이하게 수업하고 보고서를 쓴 경우가 있어(원장 2026-07-22)
+        // 그 작성분은 **한 일로 인정**한다 — 대상=작성=count(100%). 의무가 없으니 감점될 일은 없고,
+        // 안 쓴 휴일은 종전대로 대상 null("휴")이라 분모를 늘리지도 않는다.
+        if (count > 0) {
+          weekTarget += count;
+          weekWritten += count;
+          return {
+            date,
+            count,
+            target: count,
+            written: count,
+            rate: 100,
+            holiday: true,
+            ...(name ? { holidayName: name } : {}),
+          };
+        }
         return {
           date,
           count,

@@ -3,6 +3,7 @@ import {
   buildGridRows,
   buildRowRenderMeta,
   isReportEligible,
+  isAlreadySent,
   isRowActionable,
   planBulkApply,
   planPrevFill,
@@ -89,6 +90,48 @@ describe("isRowActionable", () => {
     expect(isRowActionable(sub({ attendanceRaw: "early_leave" }), "send")).toBe(true);
     expect(isRowActionable(sub({ attendanceRaw: "late" }), "send")).toBe(true);
     expect(isRowActionable(sub({}), "send")).toBe(true);
+  });
+
+  // 2026-07-22 원장 지시로 강화: 발송 완료 = **수정도 금지**(예전엔 save만 열려 있었다).
+  // ClassNote는 게시글 수정·삭제가 없어, 기록만 바꾸면 학부모가 받은 것과 사실이 갈라진다.
+  it("이미 발송된 행 — save·send·autowrite 전부 금지", () => {
+    const sent = sub({ classnoteStatus: "success" });
+    expect(isRowActionable(sent, "send")).toBe(false);
+    expect(isRowActionable(sent, "save")).toBe(false);
+    expect(isRowActionable(sent, "autowrite")).toBe(false);
+  });
+
+  it("아직 학부모에게 안 간 상태(failed·too_old·queued 등)는 발송·수정 모두 가능해야 한다", () => {
+    for (const st of ["queued", "processing", "failed", "too_old", "name_conflict", undefined]) {
+      expect(isRowActionable(sub({ classnoteStatus: st }), "send")).toBe(true);
+      expect(isRowActionable(sub({ classnoteStatus: st }), "save")).toBe(true);
+    }
+  });
+
+  it("statusOverride(화면 state)가 로스터 스냅샷을 이긴다 — 방금 보낸 행을 다시 집지 않는다", () => {
+    // 로스터엔 미발송으로 실려 있지만 세션 중 발송이 끝난 행.
+    expect(isRowActionable(sub({}), "send", "success")).toBe(false);
+    expect(isRowActionable(sub({}), "save", "success")).toBe(false);
+    // 반대로 override가 비면(null) 로스터 값으로 판단한다.
+    expect(isRowActionable(sub({ classnoteStatus: "success" }), "send", null)).toBe(false);
+  });
+
+  it("결석이 발송완료보다 먼저 걸린다(두 사유가 겹쳐도 발송은 어차피 불가)", () => {
+    expect(isRowActionable(sub({ attendanceRaw: "absent", classnoteStatus: "success" }), "send")).toBe(false);
+  });
+});
+
+describe("isAlreadySent", () => {
+  it("게시 완료(success)만 참", () => {
+    expect(isAlreadySent("success")).toBe(true);
+    expect(isAlreadySent("queued")).toBe(false);
+    expect(isAlreadySent("failed")).toBe(false);
+    expect(isAlreadySent(null)).toBe(false);
+    expect(isAlreadySent(undefined)).toBe(false);
+  });
+
+  it("서버 결과 코드 already_sent가 새어 들어와도 게이트는 닫힌 채로 유지된다", () => {
+    expect(isAlreadySent("already_sent")).toBe(true);
   });
 });
 
