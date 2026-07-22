@@ -14,6 +14,8 @@ export type ClassSalaryRow = {
   manualGroup: SalaryGroup | null;
   /** 반별 수동 배분율 %. null = 과정별/기본 사용. */
   commissionRate: number | null;
+  /** 비율제가 적용되는 요일(sun~sat). null = 전 요일(안분 없음). */
+  appliesDows: string[] | null;
 };
 
 /**
@@ -44,12 +46,17 @@ export async function getClassSalaryRows(): Promise<ClassSalaryRow[]> {
   const ids = classes.map((c) => c.id);
   const settings =
     ids.length > 0
-      ? await fetchInChunks<{ class_id: string; salary_group: string | null; commission_rate: number | string | null }>(
+      ? await fetchInChunks<{
+          class_id: string;
+          salary_group: string | null;
+          commission_rate: number | string | null;
+          applies_dows: string[] | null;
+        }>(
           ids,
           (chunk) =>
             supabase
               .from("class_salary_settings")
-              .select("class_id, salary_group, commission_rate")
+              .select("class_id, salary_group, commission_rate, applies_dows")
               .in("class_id", chunk),
         )
       : [];
@@ -68,6 +75,7 @@ export async function getClassSalaryRows(): Promise<ClassSalaryRow[]> {
       manualGroup: (manual as SalaryGroup | null) ?? null,
       commissionRate:
         s?.commission_rate === null || s?.commission_rate === undefined ? null : Number(s.commission_rate),
+      appliesDows: s?.applies_dows ?? null,
     };
   });
 

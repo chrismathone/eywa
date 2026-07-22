@@ -1,6 +1,6 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
-import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
+import { fetchAllPaged, fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 import {
   computeTeacherSettlements,
   totalSettlements,
@@ -11,6 +11,7 @@ import {
   type SettlementTotals,
 } from "../settlement";
 import { parseGroupRates } from "../salary-group";
+import { dowApportionRatio, type SessionUnit } from "../apportion";
 
 export type SettlementView = {
   rows: TeacherSettlement[];
@@ -52,18 +53,57 @@ export async function getTeacherSettlementView(period: string): Promise<Settleme
         )
       : Promise.resolve([]),
     classIds.length > 0
-      ? fetchInChunks<{ class_id: string; salary_group: string | null; commission_rate: number | string | null }>(
+      ? fetchInChunks<{
+          class_id: string;
+          salary_group: string | null;
+          commission_rate: number | string | null;
+          applies_dows: string[] | null;
+        }>(
           classIds,
           (chunk) =>
             supabase
               .from("class_salary_settings")
-              .select("class_id, salary_group, commission_rate")
+              .select("class_id, salary_group, commission_rate, applies_dows")
               .in("class_id", chunk),
         )
       : Promise.resolve([]),
   ]);
   const classNameById = new Map(classRows.map((c) => [c.id, c.class_name ?? null]));
   const settingByClassId = new Map(classSettings.map((c) => [c.class_id, c]));
+
+  // ── 요일 안분(0132a) — "그 반의 주말 수업분만 비율제". applies_dows가 지정된 반만 출결 시수를 본다.
+  // ⚠️ 지정된 반이 없으면 쿼리 자체를 안 한다(대부분의 학원은 이 설정이 0건 — 불필요한 조회 금지, B4).
+  const dowClassIds = classSettings.filter((c) => (c.applies_dows?.length ?? 0) > 0).map((c) => c.class_id);
+  const sessionsByClass = new Map<string, SessionUnit[]>();
+  if (dowClassIds.length > 0) {
+    // 그 달 = period("YYYY-MM")의 1일~말일. 시수는 attendance_records(session_units, null=기본 1).
+    const from = `${period}-01`;
+    const [y, m] = period.split("-").map(Number);
+    const to = new Date(Date.UTC(y!, m!, 0)).toISOString().slice(0, 10);
+    const recs = await fetchAllPagedInChunks<{
+      class_id: string;
+      session_date: string;
+      session_units: number | string | null;
+      status: string;
+    }>(dowClassIds, (chunk, f, t) =>
+      supabase
+        .from("attendance_records")
+        .select("class_id, session_date, session_units, status")
+        .in("class_id", chunk)
+        .gte("session_date", from)
+        .lte("session_date", to)
+        .order("id", { ascending: true })
+        .range(f, t),
+    );
+    for (const r of recs) {
+      // 결석은 시수를 소비하지 않는다(COUNTABLE_STATUSES와 같은 기준) — 안분 분모에서도 뺀다.
+      if (r.status === "absent" || r.status === "excused") continue;
+      const units = r.session_units === null || r.session_units === undefined ? 1 : Number(r.session_units);
+      const list = sessionsByClass.get(r.class_id) ?? [];
+      list.push({ date: r.session_date, units: Number.isFinite(units) && units > 0 ? units : 1 });
+      sessionsByClass.set(r.class_id, list);
+    }
+  }
 
   const rows: SettlementRowInput[] = splits.map((s) => {
     const setting = settingByClassId.get(s.class_id);
@@ -77,6 +117,10 @@ export async function getTeacherSettlementView(period: string): Promise<Settleme
       actualMissing: s.actual_amount === null || s.actual_amount === undefined,
       className: classNameById.get(s.class_id) ?? null,
       manualGroup: setting?.salary_group ?? null,
+      dowRatio:
+        (setting?.applies_dows?.length ?? 0) > 0
+          ? dowApportionRatio(sessionsByClass.get(s.class_id) ?? [], setting!.applies_dows)
+          : undefined,
       classRate:
         setting?.commission_rate === null || setting?.commission_rate === undefined
           ? null

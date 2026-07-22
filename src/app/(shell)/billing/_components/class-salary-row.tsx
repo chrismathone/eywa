@@ -5,6 +5,18 @@ import { useFormStatus } from "react-dom";
 import { Check, Loader2 } from "@/components/icons/eywa-icon-compat";
 import { saveClassSalary, type SaveClassSalaryState } from "@/features/payroll/server/class-salary-actions";
 import { SALARY_GROUPS } from "@/features/payroll/salary-group";
+import { formatDowKeys } from "@/features/payroll/apportion";
+
+/** 요일 체크박스 — 아무것도 안 고르면 '전 요일'(안분 없음). 주말만 비율제인 반에서 토·일만 체크한다. */
+const DOWS: { key: string; label: string }[] = [
+  { key: "mon", label: "월" },
+  { key: "tue", label: "화" },
+  { key: "wed", label: "수" },
+  { key: "thu", label: "목" },
+  { key: "fri", label: "금" },
+  { key: "sat", label: "토" },
+  { key: "sun", label: "일" },
+];
 import type { ClassSalaryRow } from "@/features/payroll/server/class-salary-queries";
 
 function SaveBtn() {
@@ -46,6 +58,14 @@ export function ClassSalaryRowForm({ row }: { row: ClassSalaryRow }) {
           // ⚠️ 추정하지 않는다(원장 결정) — 영어 코드명 반은 사람이 지정할 때까지 미분류로 둔다.
           <span className="text-amber-700 text-[11px]">미분류</span>
         )}
+        {row.appliesDows?.length ? (
+          <span
+            className="text-text-faint ml-1.5 text-[10px]"
+            title="이 요일 수업분만 비율제로 계산합니다(나머지 요일은 제외)"
+          >
+            {formatDowKeys(row.appliesDows)}만
+          </span>
+        ) : null}
       </td>
       <td className="px-3 py-2">
         <form action={formAction} className="flex flex-wrap items-center gap-1.5">
@@ -72,6 +92,22 @@ export function ClassSalaryRowForm({ row }: { row: ClassSalaryRow }) {
             />
             %
           </label>
+          {/* 적용 요일 — 반 하나에 주말·평일이 섞인 경우(예: 토+수) 주말분만 비율제로 인정한다.
+              전부 비우면 전 요일(안분 없음). 그 달 시수 기록이 없으면 화면이 '산정 보류'로 밝힌다. */}
+          <span className="text-text-faint text-[10px]" title="비율제를 적용할 요일 — 비우면 전 요일">
+            요일
+          </span>
+          {DOWS.map((d) => (
+            <label key={d.key} className="text-text-dim inline-flex items-center gap-0.5 text-[10px]">
+              <input
+                type="checkbox"
+                name={`dow_${d.key}`}
+                defaultChecked={row.appliesDows?.includes(d.key) ?? false}
+                className="size-3"
+              />
+              {d.label}
+            </label>
+          ))}
           <SaveBtn />
           {state?.error ? <span className="text-danger text-[11px]">{state.error}</span> : null}
           {state?.ok ? <span className="text-text-faint text-[11px]">저장됨</span> : null}

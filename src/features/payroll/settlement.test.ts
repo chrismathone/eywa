@@ -243,3 +243,46 @@ describe("computeTeacherSettlements — 반마다 다른 배분율", () => {
     expect(s!.unresolvedClasses).toEqual([]);
   });
 });
+
+// 2026-07-21 원장: 이성우 선생님은 주말만 비율제인데 담당 반 하나가 토+수 복합 → 그 반의 주말분만 인정.
+describe("computeTeacherSettlements — 요일 안분(주말만 비율제)", () => {
+  it("안분 계수 0.5면 지급 기준액도 절반", () => {
+    const [s] = computeTeacherSettlements(
+      [row({ confirmedAmount: 200000, actualAmount: 200000, dowRatio: 0.5 })],
+      new Map([["t-park", comp({ commissionRate: 50 })]]),
+    );
+    expect(s!.payableTotal).toBe(100000);
+    expect(s!.commissionAmount).toBe(45550); // 100,000 × 0.911 × 50%
+  });
+
+  it("적용 요일에 수업이 없던 달은 0 — 비율제 몫이 없다", () => {
+    const [s] = computeTeacherSettlements(
+      [row({ confirmedAmount: 200000, actualAmount: 200000, dowRatio: 0 })],
+      new Map([["t-park", comp({ commissionRate: 50 })]]),
+    );
+    expect(s!.payableTotal).toBe(0);
+    expect(s!.commissionAmount).toBe(0);
+  });
+
+  it("⚠️ 안분 계수를 못 구하면(시수 기록 없음) 보류 — 0으로 지어내지 않는다", () => {
+    const [s] = computeTeacherSettlements(
+      [row({ confirmedAmount: 200000, actualAmount: 200000, className: "고등M 고1 BS4F 토", dowRatio: null })],
+      new Map([["t-park", comp({ commissionRate: 50 })]]),
+    );
+    expect(s!.status).toBe("missing_rate");
+    expect(s!.settlement).toBeNull();
+    expect(s!.unresolvedClasses).toEqual(["고등M 고1 BS4F 토"]);
+  });
+
+  it("안분 반과 일반 반이 섞여도 각각 계산된다", () => {
+    const [s] = computeTeacherSettlements(
+      [
+        row({ confirmedAmount: 200000, actualAmount: 200000, dowRatio: 0.5 }), // 주말분만 → 100,000
+        row({ classId: "c2", confirmedAmount: 100000, actualAmount: 100000 }), // 전액
+      ],
+      new Map([["t-park", comp({ commissionRate: 50 })]]),
+    );
+    expect(s!.payableTotal).toBe(200000);
+    expect(s!.commissionAmount).toBe(91100); // 200,000 × 0.911 × 50%
+  });
+});

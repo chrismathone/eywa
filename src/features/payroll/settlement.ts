@@ -41,6 +41,12 @@ export type SettlementRowInput = {
   manualGroup?: string | null;
   /** 반별 수동 배분율 %(class_salary_settings). 과정별·기본보다 우선. */
   classRate?: number | null;
+  /**
+   * 요일 안분 계수(0~1) — "그 반의 주말 수업분만 비율제" 케이스(0132a).
+   * null = **판정 불가**(적용 요일이 지정됐는데 그 달 시수 기록이 없음) → 그 반은 산정 보류.
+   * undefined/1 = 안분 없음(전 요일).
+   */
+  dowRatio?: number | null;
 };
 
 export type SettlementStatus =
@@ -94,9 +100,13 @@ export function netBaseOf(payableTotal: number): number {
  * · 덜 수업했으면 수업한 만큼(실측) · 더 수업했어도 청구액이 상한(초과분은 시수 차이 +로 남고 지급 안 함).
  * ⚠️ 실측이 아직 없는 행(시수 검증 전)은 실측 0으로 보고 급여를 0으로 만들면 안 된다 — 캡(청구액)만 적용한다.
  */
-export function payableOf(row: Pick<SettlementRowInput, "confirmedAmount" | "actualAmount" | "actualMissing">): number {
-  if (row.actualMissing) return row.confirmedAmount;
-  return Math.min(row.actualAmount, row.confirmedAmount);
+export function payableOf(
+  row: Pick<SettlementRowInput, "confirmedAmount" | "actualAmount" | "actualMissing" | "dowRatio">,
+): number {
+  const base = row.actualMissing ? row.confirmedAmount : Math.min(row.actualAmount, row.confirmedAmount);
+  // 요일 안분(주말만 비율제 등) — 계수가 있으면 그만큼만 비율제 몫으로 인정한다.
+  const ratio = row.dowRatio === null || row.dowRatio === undefined ? 1 : row.dowRatio;
+  return base * ratio;
 }
 
 /**
@@ -107,6 +117,12 @@ export function payableOf(row: Pick<SettlementRowInput, "confirmedAmount" | "act
 function commissionOfRows(rows: SettlementRowInput[], comp: TeacherComp, sink: string[]): number | null {
   let raw = 0;
   for (const r of rows) {
+    // 적용 요일이 지정됐는데 그 달 시수가 없어 비중을 못 구하면 **보류** — 0(급여 증발)이나 1(평일까지 지급) 둘 다 거짓.
+    if (r.dowRatio === null) {
+      const label = (r.className ?? "").trim() || "(반 이름 없음)";
+      if (!sink.includes(label)) sink.push(label);
+      continue;
+    }
     const { rate } = resolveClassRate({
       className: r.className,
       manualGroup: r.manualGroup,
@@ -211,7 +227,7 @@ export function computeTeacherSettlements(
       confirmedTotal: g.confirmedTotal,
       actualTotal: g.actualTotal,
       diffTotal: g.actualTotal - g.confirmedTotal,
-      payableTotal: g.payableTotal,
+      payableTotal: Math.round(g.payableTotal),
       netBase: netBaseOf(g.payableTotal),
       salaryType: comp.salaryType,
       commissionRate: comp.commissionRate,
