@@ -5,13 +5,15 @@ import { PhotoCard } from "@/components/atoms/photo-card";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
 import { FilterSelect } from "@/components/filter-select";
-import { kstMonth } from "@/lib/date-kst";
+import { kstMonth, kstToday } from "@/lib/date-kst";
 import { requireAccess } from "@/lib/auth/require-access";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { getMonthlyAttendanceMatrix, type AttendanceMatrix } from "@/features/attendance/server/queries";
 import { getTeacherMoney } from "@/features/attendance/server/teacher-money";
 import { buildHolidayMap } from "@/features/attendance/calendar";
+import { ATTENDANCE_EDIT_WINDOW_DAYS } from "@/features/attendance/edit-window";
+import { accessLevelTenant } from "@/lib/auth/perm-matrix";
 import { buildQuickOpen } from "@/features/attendance/quick-open";
 import { QuickOpenPanel } from "./_components/quick-open-panel";
 import { MatrixTable, type MatrixGroup } from "./_components/matrix-table";
@@ -208,6 +210,16 @@ export default async function AttendancePage({
   // 월 보기는 **항상 31칸**으로 패딩 — 28/30일 달도 뒤에 빈 칸(29~31)을 채워 컬럼 수를 일정하게 한다.
   // 그래야 셀 폭과 '출석률' 열 위치가 달마다 안 바뀐다(빈 칸은 여백). 패딩은 표시 전용(쿼리/집계 무관).
   const visibleDays = range === "2w" ? matrix.days.slice(-14) : padTo31(matrix.days);
+
+  // 수정 가능 기간 — 강사(scoped)는 KST 오늘 기준 7일 이내만. 관리자 이상(full)은 제한 없음(원장 2026-07-21).
+  // ⚠️ 역할을 코드로 나열하지 않고 권한 매트릭스를 읽는다(#58) — 원장이 역할 권한을 조정하면 함께 따라간다.
+  // ⚠️ 이건 화면 편의일 뿐 진짜 게이트는 서버 액션이다(#77).
+  const scopedAttendance = (await accessLevelTenant(user.systemRole, "attendance")) === "scoped";
+  const lockBefore = scopedAttendance
+    ? new Date(Date.parse(`${kstToday()}T00:00:00Z`) - (ATTENDANCE_EDIT_WINDOW_DAYS - 1) * 86_400_000)
+        .toISOString()
+        .slice(0, 10)
+    : null;
 
   const teacherLabel = teacherOptions.find((t) => t.value === effectiveTeacher)?.label;
   const selectedClassLabel =
@@ -406,6 +418,13 @@ export default async function AttendancePage({
           ) : (
             <>
               {/* 파생 반(수학)은 표가 "누가 찍은 값인지"를 스스로 밝혀야 한다 — 셀 툴팁만으론 안 보인다. */}
+              {lockBefore ? (
+                <p className="text-text-dim bg-bg-soft/60 border-line rounded-2xl border px-4 py-2.5 text-xs break-keep">
+                  출결 수정은 <strong className="text-foreground">최근 {ATTENDANCE_EDIT_WINDOW_DAYS}일</strong>
+                  (오늘 포함 {lockBefore} 이후)만 가능합니다. 그보다 지난 날짜는 잠기며, 수정이 필요하면 관리자에게
+                  요청하세요.
+                </p>
+              ) : null}
               {groups.some((g) => g.matrix.derivedActive) ? (
                 <p className="text-text-dim bg-bg-soft/60 border-line rounded-2xl border px-4 py-2.5 text-xs break-keep">
                   수업보고서가 있는 등원일은 <strong className="text-foreground">출석</strong>, 보고서가 없는 등원일은{" "}
@@ -419,6 +438,7 @@ export default async function AttendancePage({
                 days={visibleDays}
                 showGroups={mode === "teacher"}
                 money={money}
+                lockBefore={lockBefore}
                 // 공휴일은 학원설정(operations.holidays)이 단일 소스 — 헤더 빨간 날짜·셀 회색 처리에 동기화.
                 holidays={buildHolidayMap(operations.holidays)}
               />

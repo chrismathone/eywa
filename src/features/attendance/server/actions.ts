@@ -8,6 +8,8 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { accessLevelTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
 import { parseSessionUnits } from "../session-units";
+import { attendanceLockMessage, isWithinAttendanceEditWindow } from "../edit-window";
+import { kstToday } from "@/lib/date-kst";
 
 const STATUSES = ["present", "absent", "late", "excused", "makeup", "early_leave"] as const;
 type Status = (typeof STATUSES)[number];
@@ -75,6 +77,15 @@ export async function saveAttendance(
   }
 
   if (rows.length === 0) return { error: "저장할 출결 데이터가 없습니다" };
+
+  // 수정 가능 기간 — 강사(scoped)는 세션일로부터 7일 이내만. 관리자 이상(full)은 제한 없음(원장 2026-07-21).
+  // ⚠️ 화면에서만 잠그면 우회할 수 있다(#77) — 쓰기 경로 **양쪽**(이 액션과 setAttendanceCell)에 서버 게이트를 둔다.
+  // ⚠️ 기준일은 항상 **KST 오늘**. 서버는 UTC라 new Date()로 재면 한국 새벽에 하루가 밀린다.
+  if ((await accessLevelTenant(user.systemRole, "attendance")) === "scoped") {
+    if (!isWithinAttendanceEditWindow(date, kstToday())) {
+      return { error: attendanceLockMessage(date, kstToday()) };
+    }
+  }
 
   const supabase = await createClient();
   const nowIso = new Date().toISOString();
@@ -173,6 +184,10 @@ export async function setAttendanceCell(input: {
   //    미래 end_date(퇴원 예정) 재원생의 오늘 출결까지 차단되는 회귀(리뷰 확정). getAttendanceInputRows와 동일 의미.
   if ((await accessLevelTenant(user.systemRole, "attendance")) === "scoped") {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(sessionDate)) return { error: "잘못된 날짜입니다" }; // .or() 보간 안전
+    // 7일 지난 출결은 강사가 못 고친다(원장 2026-07-21). 기준일은 항상 KST 오늘.
+    if (!isWithinAttendanceEditWindow(sessionDate, kstToday())) {
+      return { error: attendanceLockMessage(sessionDate, kstToday()) };
+    }
     const [{ count: ownClass }, { count: enrolled }] = await Promise.all([
       supabase
         .from("classes")
