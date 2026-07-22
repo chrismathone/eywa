@@ -118,6 +118,16 @@ export function WritingRateMonth({ view }: { view: WritingRatesView }) {
               <tr key={r.teacher} className="hover:bg-bg-soft/40">
                 <td className="border-line text-foreground bg-card sticky left-0 z-10 border-b border-r px-3 py-2 text-[12px] font-bold whitespace-nowrap">
                   {r.teacher}
+                  {/* 영어는 ClassNote 반 알림장 기준 — 일자 칸은 전부 '·'이고 월간 합계만 유효하다.
+                      배지가 없으면 "매일 안 썼는데 합계는 있다"로 읽혀 오해를 산다. */}
+                  {r.source === "classnote" ? (
+                    <span
+                      className="border-line text-text-dim ml-1.5 rounded-full border px-1.5 py-0.5 text-[10px] font-normal"
+                      title="영어는 ClassNote 반 알림장 기준(반 단위) — 일자별은 집계하지 않고 합계만 셉니다"
+                    >
+                      ClassNote
+                    </span>
+                  ) : null}
                 </td>
                 {r.daily.map((c) => (
                   <td

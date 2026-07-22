@@ -20,6 +20,12 @@ import {
   type DailyTarget,
   type TodayPending,
 } from "../writing-rate";
+import {
+  computeEnglishRates,
+  foldByTeacher,
+  type Dow,
+  type EnglishClassInput,
+} from "../english-writing";
 
 /**
  * 대상(분모) 산출용 수강 행 — **그 날 실제로 오는 학생만** 세려면 기간·휴원·분리등원을 다 봐야 한다.
@@ -218,7 +224,14 @@ export async function getClassnoteQueue(days = 3): Promise<ClassnoteQueueView | 
 }
 
 // 강사 행 + 과목 태그(반 담당·슬롯 라벨 기준) — 카드의 [전체/과목] 분류 칩 소스.
-export type TeacherRateRow = TeacherRate & { subjects: string[] };
+/**
+ * `source` — 이 행의 작성률이 **어디서 왔는가**.
+ *  `eywa`      = lesson_reports(수학). 일자별·오늘까지 정밀 집계.
+ *  `classnote` = ClassNote 반 알림장(영어). 반 단위라 **주간만** 집계하고 일자·오늘은 없다.
+ * ⚠️ 화면이 이걸 안 보면 영어 행의 빈 '오늘' 칸을 "수업 없음"으로 렌더해 **거짓말**이 된다
+ *    (수업은 있고 일간 집계만 없는 것).
+ */
+export type TeacherRateRow = TeacherRate & { subjects: string[]; source: "eywa" | "classnote" };
 export type WritingRatesView = {
   dates: string[];
   rates: TeacherRateRow[];
@@ -239,6 +252,76 @@ function monthDates(month: string): string[] {
  * 오늘 대상 = 오늘 시작된 반(getTodaySchedule status≠upcoming)의 활성 수강생 − 결석. 작성 = 오늘 lesson_report 존재.
  * RLS 테넌트 스코프. edutrix WeeklyTeacherSummary 이식(session snapshot 대신 스케줄+출결로 대상 산출).
  */
+/**
+ * 영어 강사별 작성률 — **소스가 다르다.** 영어 강사는 eywa가 아니라 ClassNote에 직접 알림장을 쓰므로
+ * `lesson_reports`엔 0건으로 잡힌다(빼는 게 아니라 다른 소스로 세야 하는 문제, 2026-07-23 원장 확인).
+ * 워커가 적재한 `classnote_class_posts`(0140a)를 반 시간표와 맞춰 센다.
+ *
+ * 수학 표와 한 표에 섞이므로 `TeacherRateRow` 모양을 맞춘다. 다만 **일자별 셀(daily)·오늘 열은 비운다** —
+ * 반 단위 알림장이라 "학생 몇 명 작성"이라는 단위가 없다. 주간 합계(weekWritten/weekTarget)만 채우고
+ * 오늘 열은 null로 둬 화면이 "—"로 렌더한다(0으로 채우면 '오늘 안 씀'이라는 거짓말이 된다).
+ *
+ * ⚠️ 분모 = **현재 시간표 요일** − 공휴일(원장 확인). 실제 수업일과 어긋난 반이 있어 정확도 한계가 있다.
+ */
+async function getEnglishTeacherRates(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  since: string,
+  until: string,
+  dates: readonly string[],
+): Promise<TeacherRateRow[]> {
+  const { data: classRows } = await supabase
+    .from("classes")
+    .select("id, class_name, teacher:teacher_id ( display_name ), class_schedules ( day_of_week, valid_from, valid_to )")
+    .eq("subject", "english")
+    .eq("is_active", true);
+  if (!classRows?.length) return [];
+
+  const today = kstToday();
+  const classes: EnglishClassInput[] = classRows.map((c) => {
+    const t = (Array.isArray(c.teacher) ? c.teacher[0] : c.teacher) as { display_name?: string } | null;
+    const sched = (c.class_schedules ?? []) as { day_of_week: string; valid_from: string | null; valid_to: string | null }[];
+    // 현재 유효한 슬롯의 요일만 — 지난 개편(컷오버)으로 마감된 슬롯이 분모를 부풀리면 안 된다.
+    const dows = [
+      ...new Set(
+        sched
+          .filter((s) => (!s.valid_to || s.valid_to >= today) && (!s.valid_from || s.valid_from <= today))
+          .map((s) => s.day_of_week as Dow),
+      ),
+    ];
+    return { classId: c.id as string, className: c.class_name as string, teacher: t?.display_name ?? null, dows };
+  });
+
+  const { data: posts } = await supabase
+    .from("classnote_class_posts")
+    .select("board_name, posted_on")
+    .gte("posted_on", since)
+    .lte("posted_on", until);
+
+  const settings = await getTenantSettings();
+  const rows = computeEnglishRates(
+    classes,
+    (posts ?? []).map((p) => ({ boardName: p.board_name as string, postedOn: String(p.posted_on).slice(0, 10) })),
+    { from: since, to: until, holidays: settings.operations.holidays.map((h) => h.date) },
+  );
+
+  return foldByTeacher(rows).map((t) => ({
+    teacher: t.teacher,
+    // 일자별 셀은 target=null로 둔다 → 화면이 "·"(수업 없음/집계 불가)로 렌더한다.
+    // 반 단위 알림장이라 "그날 학생 몇 명분 작성"이라는 단위 자체가 없다. 0으로 채우면 거짓말.
+    daily: dates.map((date) => ({ date, count: 0, target: null, written: 0, rate: null })),
+    weekWritten: t.written,
+    weekTarget: t.sessions,
+    weekRate: t.rate,
+    todayTarget: 0,
+    todayWritten: 0,
+    todayMissing: [],
+    todayRate: null,
+    todayPending: null,
+    subjects: ["english"],
+    source: "classnote" as const,
+  }));
+}
+
 export async function getWeeklyWritingRates(month?: string): Promise<WritingRatesView | null> {
   const user = await getCurrentUser();
   if (!user) return null;
@@ -508,8 +591,12 @@ export async function getWeeklyWritingRates(month?: string): Promise<WritingRate
   ).map((r) => ({
     ...r,
     subjects: [...(subjectsOfTeacher.get(r.teacher) ?? [])],
+    source: "eywa" as const,
   }));
-  return { dates, rates, range };
+  // 영어는 강사가 ClassNote에 직접 써서 lesson_reports에 안 남는다 — 워커가 적재한
+  // classnote_class_posts(0140a)로 따로 계산해 **같은 표에 합친다**(과목 칩이 그대로 걸러 준다).
+  const english = await getEnglishTeacherRates(supabase, since, until, dates);
+  return { dates, rates: [...rates, ...english], range };
 }
 
 export type ReportFilterOptions = { teachers: string[]; subjects: string[] };

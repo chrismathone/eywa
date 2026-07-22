@@ -179,12 +179,29 @@ export function WritingRateCard({ view }: { view: WritingRatesView }) {
                 <tr key={r.teacher} className="border-line border-b last:border-b-0 align-top">
                   <td className="px-3 py-2">
                     <span className="text-foreground font-bold">{r.teacher}</span>
+                    {/* 영어는 ClassNote 반 알림장이 소스라 셈법이 다르다 — 배지로 밝혀 둔다. */}
+                    {r.source === "classnote" ? (
+                      <span
+                        className="border-line text-text-dim ml-1.5 rounded-full border px-1.5 py-0.5 text-[10px]"
+                        title="영어는 강사가 ClassNote에 직접 쓰므로 반 알림장 기준으로 셉니다(반 단위 · 주간만)"
+                      >
+                        ClassNote
+                      </span>
+                    ) : null}
                     {r.todayMissing.length > 0 ? (
                       <p className="text-danger mt-0.5 text-[11px]">미작성: {nameList(r.todayMissing)}</p>
                     ) : null}
                   </td>
                   <td className="px-3 py-2 text-center">
-                    {r.todayRate == null ? (
+                    {r.source === "classnote" ? (
+                      // ⚠️ "수업 없음"으로 렌더하면 거짓말이다 — 수업은 있고 일간 집계가 없을 뿐.
+                      <span
+                        className="text-text-faint text-[11px]"
+                        title="반 단위 알림장이라 '오늘 학생 몇 명분' 단위가 없습니다. 주간 합계만 집계합니다."
+                      >
+                        주간만 집계
+                      </span>
+                    ) : r.todayRate == null ? (
                       // ⚠️ 대상 0 = "수업 없음"이 아니다 — 저녁 수업만 있는 강사는 낮엔 '아직 시작 전'이다.
                       r.todayPending ? (
                         <span className="text-text-dim text-[11px]" title={pendingTitle(r.todayPending)}>
