@@ -75,9 +75,6 @@ function readForm(formData: FormData, allowedSubjects: ReadonlySet<string>) {
     teacherId: get("teacherId") || null,
     classroomId: get("classroomId") || null,
     notes: get("notes") || null,
-    // ⚠️ 체크박스는 해제 시 FormData에 아무것도 안 보냄 → "" 가 온다. `!== "false"`면 해제해도 true로
-    //    저장돼(체크 해제 무시 버그) 폐지한 반이 시간표에 계속 노출됐다. 체크됐을 때만(value="true") true.
-    isActive: get("isActive") === "true",
     bgColor,
     textColor: bgColor ? readableTextColor(bgColor) || null : null,
     schedules: parseSchedules(formData),
@@ -153,7 +150,9 @@ export async function createClass(
       subject: input.subject,
       teacher_id: input.teacherId,
       classroom_id: input.classroomId,
-      is_active: input.isActive,
+      // 새 반은 **항상 활성**. 끄는 것은 반 상세의 '반 폐지'뿐이다(2026-07-21) — 폐지만이 그 반 활성
+      // 수강까지 함께 종료해 학생목록·학생상세와 어긋나지 않는다. 폼에서 끄는 문은 폐지했다.
+      is_active: true,
       notes: input.notes,
       bg_color: input.bgColor,
       text_color: input.textColor,
@@ -234,7 +233,9 @@ export async function updateClass(
       subject: input.subject,
       teacher_id: input.teacherId,
       classroom_id: input.classroomId,
-      is_active: input.isActive,
+      // ⚠️ **is_active를 여기서 건드리지 않는다**(2026-07-21). 예전엔 폼 체크박스가 이 값을 썼는데,
+      // 폐지 버튼과 달리 **그 반 활성 수강을 종료하지 않아** 시간표·출석부에선 사라지고 학생목록엔
+      // "수강중"으로 남는 사각지대가 생겼다. 폐지/재운영은 archiveClass 단일 경로.
       notes: input.notes,
       bg_color: input.bgColor,
       text_color: input.textColor,

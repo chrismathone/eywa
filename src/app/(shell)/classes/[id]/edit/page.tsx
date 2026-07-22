@@ -50,7 +50,6 @@ export default async function EditClassPage({
           subject: klass.subject,
           teacherId: klass.teacherId,
           classroomId: klass.classroomId,
-          isActive: klass.isActive,
           notes: klass.notes,
           bgColor: klass.bgColor,
           schedules: klass.scheduleSlots.map((s) => ({

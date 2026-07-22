@@ -49,7 +49,6 @@ export type ClassFormDefaults = {
   subject: string;
   teacherId: string | null;
   classroomId: string | null;
-  isActive: boolean;
   notes: string | null;
   bgColor?: string | null;
   schedules: Schedule[];
@@ -244,18 +243,10 @@ export function ClassForm({
           </div>
         </Field>
 
-        <Field label="활성 상태" className="sm:col-span-2">
-          <label className="text-foreground inline-flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              name="isActive"
-              value="true"
-              defaultChecked={defaults?.isActive !== false}
-            />
-            <span>활성 — 시간표·출석부·학생목록에 노출</span>
-          </label>
-        </Field>
-
+{/* '활성' 체크박스 폐지(2026-07-21 원장 확정) — 같은 `is_active`를 쓰는 문이 둘인데 **뒷정리는 하나만**
+    했다. '반 폐지' 버튼은 그 반 활성 수강도 함께 종료하는데, 이 체크박스는 플래그만 꺼서 시간표·출석부에선
+    사라지지만 **학생목록·학생상세엔 "수강중"으로 남는** 사각지대를 되살렸다(2026-07-15에 고친 그 버그).
+    라벨의 "학생목록에 노출"도 이 경로에선 거짓이었다. → 끄고 켜는 것은 **반 상세의 '반 폐지/재운영' 단일 경로**로. */}
         <Field label="메모" className="sm:col-span-2">
           <textarea
             name="notes"
