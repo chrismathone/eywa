@@ -42,6 +42,23 @@ describe("dowApportionRatio — 적용 요일 시수 비중", () => {
     expect(dowApportionRatio([], ["sat"])).toBeNull();
     expect(dowApportionRatio(u([...SAT], 0), ["sat"])).toBeNull();
   });
+
+  describe("scheduledDows — 주말 반인데 주말 출석이 아직 없으면 보류(0 지어내기 금지)", () => {
+    it("시간표에 토가 잡힌 반이 평일 시수만 있으면 → null(보류·출석 미입력)", () => {
+      // 토·수 복합 반인데 이번 달 수요일 출석만 입력됨 → 토 시수 0 → 0 아니라 보류
+      expect(dowApportionRatio(u(WED), ["sat"], { scheduledDows: ["wed", "sat"] })).toBeNull();
+    });
+    it("시간표가 순수 평일이면 → 0 유지(비율제 대상 아님, 원장 규칙)", () => {
+      expect(dowApportionRatio(u(WED), ["sat"], { scheduledDows: ["wed", "fri"] })).toBe(0);
+    });
+    it("시간표 정보가 없으면(하위호환) 종전대로 0", () => {
+      expect(dowApportionRatio(u(WED), ["sat"])).toBe(0);
+      expect(dowApportionRatio(u(WED), ["sat"], {})).toBe(0);
+    });
+    it("주말 시수가 실제로 있으면 scheduledDows와 무관하게 정상 비중", () => {
+      expect(dowApportionRatio(u([...SAT, ...WED]), ["sat"], { scheduledDows: ["wed", "sat"] })).toBeCloseTo(0.5, 10);
+    });
+  });
 });
 
 describe("formatDowKeys", () => {
