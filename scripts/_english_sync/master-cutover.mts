@@ -162,10 +162,49 @@ const dropped = match.newClassNames;
 if (dropped.length) console.log(`  버려진 이름 ${dropped.length}건(메모로 판단 — 반 생성 안 함): ${dropped.join(" / ")}`);
 console.log(`계획: 생성 ${report.plan.create} · 변경 ${report.plan.update} · 유지 ${report.plan.keep} · 마감 ${report.plan.remove}`);
 
+// ── 비수업 블록(감독·준비·회의·연차) — 반이 아니라 teacher_schedule_blocks(0134a) ─────────────
+// 수업 슬롯과 **같은 날짜 경계**로 갈아끼운다: 기존 유효행 마감(valid_to=컷오버−1) + 신규 삽입(valid_from=컷오버).
+// 삭제하지 않아 타임머신 보존. 강사뷰 렌더 전용이라 수강·청구·급여 어디에도 영향 없다.
+// ⚠️ 배치 변경이 0건이어도 블록은 따로 갈아끼운다 — 둘은 독립이다(수업은 그대로인데 감독만 바뀔 수 있다).
+async function syncBlocks(): Promise<void> {
+  const byKind = parsed.blocks.reduce<Record<string, number>>((a, b) => ({ ...a, [b.kind]: (a[b.kind] ?? 0) + 1 }), {});
+  const summary = Object.entries(byKind).map(([k, n]) => `${k} ${n}`).join(" · ") || "없음";
+  if (!APPLY) {
+    console.log(`  [dry] 비수업 블록 ${parsed.blocks.length}건 교체 예정 — ${summary}`);
+    return;
+  }
+  const labelToId = new Map<string, string>();
+  for (const t of ctx.teachers) {
+    if (t.englishName) labelToId.set(t.englishName.toLowerCase(), t.id);
+    labelToId.set(t.displayName.toLowerCase(), t.id);
+  }
+  await sql.begin(async (tx) => {
+    const [row] = await tx<{ count: number }[]>`
+      with upd as (
+        update public.teacher_schedule_blocks
+           set valid_to = ${CLOSE_AT}::date
+         where tenant_id = ${TENANT} and subject = ${SUBJECT}
+           and (valid_to is null or valid_to >= ${CUTOVER}::date)
+        returning 1
+      ) select count(*)::int as count from upd`;
+    for (const b of parsed.blocks) {
+      await tx`insert into public.teacher_schedule_blocks
+        (tenant_id, subject, teacher_label, teacher_id, day_of_week, start_time, end_time, kind, label, valid_from)
+        values (${TENANT}, ${SUBJECT}, ${b.teacherName},
+                ${labelToId.get(b.teacherName.toLowerCase()) ?? null},
+                ${b.day}::public.day_of_week, ${b.startTime}::time, ${b.endTime}::time,
+                ${b.kind}, ${b.label}, ${CUTOVER}::date)`;
+    }
+    console.log(`  비수업 블록 — 마감 ${row!.count} · 삽입 ${parsed.blocks.length}  (${summary})`);
+  });
+}
+
 // ── 4. payload = applyStructureImport(server action)과 동일 구조 ──────────────
 const changeItems = report.planItems.filter((p) => p.action !== "keep");
 if (changeItems.length === 0) {
-  console.log("\n변경 없음 — 시트와 배치가 이미 일치합니다.");
+  // 배치가 같아도 **비수업 블록은 따로** 갈아끼운다 — 수업은 그대로인데 감독만 바뀔 수 있다(독립).
+  console.log("\n배치 변경 없음 — 시트와 일치합니다.");
+  await syncBlocks();
   await sql.end();
   process.exit(0);
 }
@@ -199,7 +238,7 @@ const payload = {
   classUpdates,
   planItems: report.planItems,
 };
-console.log(`쓰기 예정: 마감 ${closes.length}행 · 삽입 ${inserts.length}행 · 반 갱신 ${classUpdates.length}건`);
+console.log(`쓰기 예정: 마감 ${closes.length}행 · 삽입 ${inserts.length}행 · 반 갱신 ${classUpdates.length}건 · 비수업 블록 ${parsed.blocks.length}건`);
 
 if (!APPLY) {
   console.log("\n(dry-run — 쓰기 없음. 실제 반영은 --apply)");
@@ -220,6 +259,7 @@ const [res] = await sql.begin(async (tx) => {
 const r = (res as { r: { snapshotId: string; closed: number; inserted: number; classUpdated: number } }).r;
 console.log(`\n✅ 적용 완료 — 마감 ${r.closed} · 삽입 ${r.inserted} · 반 갱신 ${r.classUpdated}`);
 console.log(`   되돌리기: select public.rollback_english_structure('${r.snapshotId}');`);
+await syncBlocks();
 
 // ⚠️ 소급 컷오버의 부작용 점검 — 컷오버 이후에 만들어진 행(valid_from > 마감일)을 마감하면
 // valid_to < valid_from 인 **역전 범위**가 된다. 조회식이 둘 다 만족할 수 없어 화면엔 안 보이지만(무해),

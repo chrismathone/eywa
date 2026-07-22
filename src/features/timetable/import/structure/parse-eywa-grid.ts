@@ -141,5 +141,7 @@ export function parseEywaTeacherGrid(grid: SheetGrid): ParsedStructure {
     }
   }
 
-  return { tabName: grid.tabName, teachers, slots, warnings };
+  // blocks는 항상 빈 배열 — eywa export 격자는 **수업만** 그린다(비수업 블록은 마스터 시트 문법이고,
+  // 여기로 왕복시키면 export→import에서 사라지거나 반으로 오인된다). 마스터 파서(parse-grid)만 채운다.
+  return { tabName: grid.tabName, teachers, slots, blocks: [], warnings };
 }

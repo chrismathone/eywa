@@ -28,8 +28,46 @@ describe("parseTeacherGrid — 실 강사별 그리드", () => {
   // 핀 갱신 2026-07-22: 275 → 330. 요일 헤더가 가로 병합된 **병렬 레인**(LAB: JJ·이주희)을 파서가
   // 통째로 건너뛰고 있었다(병합 셀은 좌상단에만 값 → 나머지 레인이 "요일 없음"). 55슬롯 = 2026-07-06에
   // `import-lab-parallel-slots.cjs`로 따로 이식해야 했던 그 병렬 수업들 — 이제 파서가 직접 읽는다.
-  it("배치 슬롯 330건 파싱(병렬 레인 포함)", () => {
-    expect(parsed.slots).toHaveLength(330);
+  // 2026-07-22 2차: 비수업 칸(감독·쉬는 시간·수업준비·회의·연차)이 slots에서 blocks로 빠졌다(0134a).
+  // 합계는 보존된다 — 한 칸은 수업이거나 블록이지 둘 다일 수 없다.
+  it("인식 칸 330건 = 수업 슬롯 + 비수업 블록(상호배타·합계 보존)", () => {
+    expect(parsed.slots.length + parsed.blocks.length).toBe(330);
+    expect(parsed.slots.length).toBeGreaterThan(0);
+    expect(parsed.blocks.length).toBeGreaterThan(0);
+  });
+
+  it("강사 이름이 반으로 남지 않는다(감독 칸은 blocks로 빠진다)", () => {
+    // ⚠️ 이 픽스처는 7/9 개편 이전 스냅샷이라 감독('JJ') 칸이 아직 없다 — 승격 자체는 아래 합성 격자로
+    //    검증하고, 여기선 "강사 이름이 반 이름 자리에 남아 있지 않다"는 불변만 지킨다.
+    const names = new Set(parsed.teachers.map((t) => t.name));
+    expect(parsed.slots.some((s) => names.has(s.className))).toBe(false);
+  });
+
+  it("감독 승격: 다른 강사 이름 한 단어인 칸 = supervise 블록(반 아님)", () => {
+    // 2026-07-22 원장 확인: "병합 셀에 JJ 문구 딱 하나면 실제 JJ 수업이 맞아. 감독하러 가야함."
+    // 감독 칸 1개가 JJ 수업 0~5개에 걸쳐(LAB 병렬) 반으로 환원되지 않으므로 blocks로 뺀다(0134a).
+    const grid = {
+      cells: [
+        ["", "1", "", "2", ""],
+        ["", "JJ 김주희 305", "", "Dom 김동후 303", ""],
+        ["", "", "", "", ""],
+        ["", "월", "화", "월", "화"],
+        ["4:20~5:00", "중등E_중1 TOP/305", "쉬는 시간", "JJ", "Dom"],
+      ],
+      merges: [],
+    };
+    const r = parseTeacherGrid(grid as unknown as SheetGrid);
+    // JJ 블록 월 = 진짜 수업 1건만 슬롯으로.
+    expect(r.slots.map((s) => s.className)).toEqual(["중등E_중1 TOP"]);
+    const kinds = r.blocks.map((b) => `${b.teacherName}:${b.kind}:${b.label}`).sort();
+    // JJ 화 "쉬는 시간" = break · Dom 월 "JJ" = 감독 · Dom 화 "Dom"(자기 이름) = 승격 안 함(반 취급도 안 함).
+    expect(kinds).toContain("JJ:break:쉬는 시간");
+    expect(kinds).toContain("Dom:supervise:JJ");
+    expect(r.blocks.find((b) => b.kind === "supervise")?.superviseTarget).toBe("JJ");
+    // ⚠️ 자기 이름 칸은 감독이 아니지만 **반도 아니다** — 'other'로 담기고 슬롯엔 안 남는다.
+    const self = r.blocks.find((b) => b.teacherName === "Dom" && b.label === "Dom");
+    expect(self?.kind).toBe("other");
+    expect(self?.superviseTarget).toBeUndefined();
   });
 
   it("병렬 레인: 같은 강사·요일·시각에 여러 반(LAB) — 병합 요일헤더를 펼쳐야 잡힌다", () => {

@@ -103,6 +103,12 @@ export type ScheduleSlot = {
   // 정규/특강 구분(0133a) — 판정 단일소스 isSpecialLecture(컬럼 우선, 없으면 반 이름 폴백).
   // 화면은 이 boolean만 쓴다(이름 매칭 재구현 금지 — 급여와 판정이 갈리면 시간표엔 특강인데 급여엔 아닌 반이 생긴다).
   isSpecialLecture: boolean;
+  /**
+   * 비수업 블록(감독·준비·회의·연차·쉬는 시간, 0134a)이면 그 종류. 수업 슬롯은 항상 undefined.
+   * ⚠️ **강사뷰 렌더 전용** — 반이 아니라서 classId가 없고, 학생·수강·청구·급여 어디에도 안 걸린다.
+   * 다른 뷰·집계는 이 값이 있는 항목을 세지 말 것(수업 수가 부풀어 보인다).
+   */
+  blockKind?: "supervise" | "prep" | "break" | "meeting" | "leave" | "other";
 };
 
 type SlotClassRef = {
@@ -705,4 +711,59 @@ export async function getTodaySchedule(): Promise<TodaySlot[]> {
 
 export function dayOfWeekIndex(key: string): number {
   return DOW_INDEX[key] ?? 7;
+}
+
+/**
+ * 강사 시간표의 **비수업 블록**(감독·준비·회의·연차·쉬는 시간, 0134a) — 강사뷰 렌더 전용.
+ *
+ * 왜 있는가: 영어 마스터 시트의 강사별 탭은 **강사의 하루 전체**를 그린다. 수업 칸 사이의 'JJ'(감독)·
+ * '쉬는 시간'·'교수부미팅' 같은 칸이 eywa엔 담을 곳이 없어 통째로 버려졌고, 그래서 감독이 15칸인
+ * 강사의 시간표가 텅 비어 보였다(2026-07-22 Dom). 반으로 만들면 그 강사가 남의 반 담당이 되어
+ * 로스터·보고서·급여까지 오염되므로 **반이 아닌 별도 테이블**로 담는다.
+ *
+ * ⚠️ 반환 항목은 `blockKind`가 채워진 **가짜 슬롯**이다 — classId/className이 실재하지 않는다.
+ *    강사뷰 격자 계산에 그대로 태우려고 모양만 맞춘 것이니, **다른 화면·집계에 넘기지 말 것.**
+ */
+export async function getTeacherScheduleBlocks(
+  subject: string,
+  referenceDate: string,
+): Promise<ScheduleSlotWithStudents[]> {
+  const supabase = await createClient();
+  const rows = await fetchAllPaged<{
+    id: string;
+    teacher_label: string;
+    day_of_week: string;
+    start_time: string;
+    end_time: string;
+    kind: string;
+    label: string;
+  }>((from, to) =>
+    supabase
+      .from("teacher_schedule_blocks")
+      .select("id, teacher_label, day_of_week, start_time, end_time, kind, label")
+      .eq("subject", subject)
+      .lte("valid_from", referenceDate)
+      .or(`valid_to.is.null,valid_to.gte.${referenceDate}`)
+      .range(from, to),
+  );
+  return rows.map((r) => ({
+    id: `block:${r.id}`,
+    classId: "",
+    className: r.label,
+    subject,
+    dayOfWeek: r.day_of_week,
+    startTime: r.start_time,
+    endTime: r.end_time,
+    teacherName: r.teacher_label,
+    classroomName: null,
+    studentCount: 0,
+    slotTeacherLabel: r.teacher_label,
+    slotRoomLabel: null,
+    classBgColor: null,
+    classTextColor: null,
+    pendingHandover: null,
+    isSpecialLecture: false,
+    blockKind: r.kind as NonNullable<ScheduleSlot["blockKind"]>,
+    students: [],
+  }));
 }

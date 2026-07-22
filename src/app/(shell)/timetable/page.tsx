@@ -6,7 +6,11 @@ import { PageHeader } from "@/components/page-header";
 import { cookies } from "next/headers";
 import { requireAccess } from "@/lib/auth/require-access";
 import { effectiveTeacherId } from "@/lib/auth/view-mode";
-import { getWeeklyScheduleWithStudents, getTeacherColorMap } from "@/features/timetable/server/queries";
+import {
+  getTeacherColorMap,
+  getTeacherScheduleBlocks,
+  getWeeklyScheduleWithStudents,
+} from "@/features/timetable/server/queries";
 import { settingsToPeriodsConfig } from "@/features/timetable/lib/periods";
 import type { TeacherColorMap } from "@/features/timetable/lib/class-grid";
 import { getTenantSettings } from "@/features/owner/server/queries";
@@ -126,6 +130,12 @@ export default async function TimetablePage({
   const defaultSubject = available[0] ?? "";
   const subject =
     subjectParam && available.includes(subjectParam) ? subjectParam : defaultSubject;
+
+  // 비수업 블록(감독·준비·회의·연차, 0134a) — **강사뷰에서만** 그린다. 반이 아니라서 다른 뷰·집계에
+  // 섞으면 수업 수가 부풀고 과목/구분 칩에도 새어 나온다. subject 확정 뒤에 읽어야 해서(위 Promise.all은
+  // subject를 아직 모른다) 여기서 조회 — 강사뷰일 때만 도는 경량 쿼리다.
+  const scheduleBlocks =
+    view === "teacher" && subject ? await getTeacherScheduleBlocks(subject, referenceDate) : [];
 
   // '시트 반영' 버튼 = sheet_sync 권한(기본 원장·관리자·실장, owner에서 조정) + 지원 과목(math·english) + 연동 ON.
   // 상태는 **현재 보는 과목** 기준. (subject가 allSlots·설정에 의존하므로 위 Promise.all 뒤에 조회 —
@@ -476,7 +486,7 @@ export default async function TimetablePage({
         // 가로줄·격자 단위는 과목 설정(teacherViewLines/Step, 학원설정 과목 운영)에서.
         <div className="flex min-h-0 flex-1 flex-col">
           <TeacherGridView
-            slots={slots}
+            slots={[...slots, ...scheduleBlocks]}
             weekMonday={week}
             teacherColors={teacherColors}
             sectionLineMins={sectionLineMins}

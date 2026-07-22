@@ -50,10 +50,31 @@ export interface ParsedStructureSlot {
   grid: { r1: number; c1: number; r2: number; c2: number };
 }
 
+/**
+ * 강사 시간표의 **비수업 블록**(감독·준비·회의·연차·쉬는 시간) — 반이 아니다(0134a).
+ * 시트 강사별 탭은 강사의 하루 전체를 그려서 수업 칸 사이에 이런 칸이 섞여 있다. 예전엔 "반으로 매칭
+ * 안 되는 이름"으로 버려졌고, 그래서 감독이 15칸인 Dom의 시간표가 텅 비어 보였다(2026-07-22).
+ */
+export type ScheduleBlockKind = "supervise" | "prep" | "break" | "meeting" | "leave" | "other";
+
+export interface ParsedScheduleBlock {
+  teacherName: string; // 이 블록이 그려질 강사 레인(= 시트 블록 강사)
+  day: DayOfWeek;
+  startTime: string; // "HH:MM"
+  endTime: string; // "HH:MM"
+  kind: ScheduleBlockKind;
+  /** 화면에 그대로 찍을 시트 원문("JJ"·"쉬는 시간") — 정규화 금지(시트와 같아 보이는 게 목적). */
+  label: string;
+  /** kind==="supervise"일 때 감독 대상 강사명(셀 원문이 그 강사 이름 한 단어). */
+  superviseTarget?: string;
+}
+
 export interface ParsedStructure {
   tabName?: string;
   teachers: ParsedTeacherBlock[];
   slots: ParsedStructureSlot[];
+  /** 수업이 아닌 칸 — 강사뷰 렌더 전용. slots와 상호배타(같은 칸이 양쪽에 들어가지 않는다). */
+  blocks: ParsedScheduleBlock[];
   warnings: string[];
 }
 
