@@ -8,7 +8,7 @@ import {
   enrollmentAttendsOnDay,
   isEnrollmentActiveOn,
 } from "@/features/enrollments/eligibility";
-import { includeInAttendanceInput } from "@/features/attendance/input-roster";
+import { includeInAttendanceInput, makeupStudentIds } from "@/features/attendance/input-roster";
 import { buildHolidayMap, dowsFromKeys, resolveAttendDows } from "@/features/attendance/calendar";
 import {
   deriveMarksFromReports,
@@ -173,7 +173,13 @@ export type AttendanceInputRow = {
   studentId: string;
   studentName: string;
   studentGrade: string | null;
-  enrollmentId: string;
+  /** 그 반 수강행 id. **보강(수업외) 학생은 수강행이 없어 null**. */
+  enrollmentId: string | null;
+  /**
+   * 보강(수업외) 참석 — 그 반 수강생이 아닌데 그날 와서 수업을 들은 학생.
+   * 원스크린 '+ 보강 학생 추가'(보고서)와 같은 개념의 출결판. 처리현황 '예정' 분모엔 안 들어간다.
+   */
+  isMakeup: boolean;
   existingRecordId: string | null;
   status: AttendanceStatus | null;
   note: string | null;
@@ -285,33 +291,73 @@ export async function getAttendanceInputRows(
     );
   });
 
-  return active
+  const rosterRows = active
     .map((e) => {
       const s = (Array.isArray(e.student) ? e.student[0] : e.student) as
         | { id: string; name: string; grade: string | null }
         | undefined;
       if (!s) return null;
       const existing = recordMap.get(s.id);
-      return {
+      const row: AttendanceInputRow = {
         studentId: s.id,
         studentName: s.name,
         studentGrade: s.grade,
         enrollmentId: e.id,
+        isMakeup: false,
         existingRecordId: existing?.id ?? null,
         status: existing?.status ?? null,
         note: existing?.note ?? null,
         homeworkRequired: existing?.homeworkRequired ?? false,
         homeworkDone: existing?.homeworkDone ?? false,
         sessionUnits: existing?.sessionUnits ?? null,
-      } satisfies AttendanceInputRow;
+      };
+      return row;
     })
-    .filter((r): r is AttendanceInputRow => r !== null)
-    .sort((a, b) => {
-      const ga = a.studentGrade ?? "";
-      const gb = b.studentGrade ?? "";
-      if (ga !== gb) return ga.localeCompare(gb, "ko");
-      return a.studentName.localeCompare(b.studentName, "ko");
+    .filter((r): r is AttendanceInputRow => r !== null);
+
+  // ── 보강(수업외) 참석 ── 그 반 수강생이 아닌데 그날 기록이 있는 학생.
+  // 강사가 '+ 보강 학생 추가'로 저장하면 수강행이 없어 위 명단엔 절대 안 잡힌다 → 여기서 합쳐야
+  // 저장 뒤에도 보이고 **수정·삭제가 가능**하다(안 그러면 "안 보이는데 존재하는 데이터"가 된다).
+  // 이관분에도 이런 행이 다수 있어(실측 1,264행/2026-02~06) 과거 날짜를 열면 그것도 함께 드러난다.
+  const enrolledIds = new Set(
+    (enrollments ?? [])
+      .map((e) => (Array.isArray(e.student) ? e.student[0] : e.student) as { id: string } | undefined)
+      .filter((s): s is { id: string } => !!s)
+      .map((s) => s.id),
+  );
+  const makeupIds = makeupStudentIds([...recordMap.keys()], [...enrolledIds]);
+  let makeupRows: AttendanceInputRow[] = [];
+  if (makeupIds.length > 0) {
+    const students = await fetchInChunks<{ id: string; name: string; grade: string | null }>(
+      makeupIds,
+      (chunk) => supabase.from("students").select("id, name, grade").in("id", chunk),
+    );
+    makeupRows = students.map((s): AttendanceInputRow => {
+      const existing = recordMap.get(s.id);
+      return {
+        studentId: s.id,
+        studentName: s.name,
+        studentGrade: s.grade,
+        enrollmentId: null,
+        isMakeup: true,
+        existingRecordId: existing?.id ?? null,
+        status: existing?.status ?? null,
+        note: existing?.note ?? null,
+        homeworkRequired: existing?.homeworkRequired ?? false,
+        homeworkDone: existing?.homeworkDone ?? false,
+        sessionUnits: existing?.sessionUnits ?? null,
+      };
     });
+  }
+
+  const byName = (a: AttendanceInputRow, b: AttendanceInputRow) => {
+    const ga = a.studentGrade ?? "";
+    const gb = b.studentGrade ?? "";
+    if (ga !== gb) return ga.localeCompare(gb, "ko");
+    return a.studentName.localeCompare(b.studentName, "ko");
+  };
+  // 정규 명단 먼저, 보강은 아래로 묶어 표시(섞이면 "이 반 학생"으로 오인된다).
+  return [...rosterRows.sort(byName), ...makeupRows.sort(byName)];
 }
 
 export async function getMostRecentAttendanceDate(): Promise<string | null> {

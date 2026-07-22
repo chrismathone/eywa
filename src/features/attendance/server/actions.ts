@@ -10,6 +10,7 @@ import { createClient } from "@/lib/supabase/server";
 import { parseSessionUnits } from "../session-units";
 import { attendanceLockMessage, isWithinAttendanceEditWindow } from "../edit-window";
 import { kstToday } from "@/lib/date-kst";
+import { schoolGradeLabel } from "@/lib/format/school-grade";
 
 const STATUSES = ["present", "absent", "late", "excused", "makeup", "early_leave"] as const;
 type Status = (typeof STATUSES)[number];
@@ -81,13 +82,24 @@ export async function saveAttendance(
   // 수정 가능 기간 — 강사(scoped)는 세션일로부터 7일 이내만. 관리자 이상(full)은 제한 없음(원장 2026-07-21).
   // ⚠️ 화면에서만 잠그면 우회할 수 있다(#77) — 쓰기 경로 **양쪽**(이 액션과 setAttendanceCell)에 서버 게이트를 둔다.
   // ⚠️ 기준일은 항상 **KST 오늘**. 서버는 UTC라 new Date()로 재면 한국 새벽에 하루가 밀린다.
+  const supabase = await createClient();
+
   if ((await accessLevelTenant(user.systemRole, "attendance")) === "scoped") {
     if (!isWithinAttendanceEditWindow(date, kstToday())) {
       return { error: attendanceLockMessage(date, kstToday()) };
     }
+    // ⚠️ 담당 반 강제 — 예전엔 이 액션에 **반 소유 검사가 아예 없었다**(셀 토글 setAttendanceCell에만 있었음).
+    // RLS는 tenant 격리뿐이라, 강사가 폼을 직접 POST하면 학원 내 아무 반 출결이나 쓸 수 있었다
+    // (2026-07-21 적대검증 미수리분 "출석부 scoped 검증 부재=보안·돈"). 아래 보강 추가로 **임의 학생**까지
+    // 폼에 실을 수 있게 되므로, 그 문을 열기 전에 이 게이트를 먼저 닫는다(#77).
+    const { count: ownClass } = await supabase
+      .from("classes")
+      .select("*", { count: "exact", head: true })
+      .eq("id", classId)
+      .eq("teacher_id", user.id);
+    if (!ownClass) return { error: "담당 반이 아닙니다" };
   }
 
-  const supabase = await createClient();
   const nowIso = new Date().toISOString();
 
   // Split into updates (existing row) and inserts (new)
@@ -257,4 +269,44 @@ export async function setAttendanceCell(input: {
   );
   revalidatePath("/attendance");
   return { ok: true };
+}
+
+/**
+ * 보강(수업외) 학생 검색 — 출석 입력 화면 '+ 보강 학생 추가' 피커.
+ *
+ * 원스크린의 같은 이름 액션과 **의도적으로 분리**했다: 이 표면은 출결(=시수·급여 재료)을 쓰므로
+ * 자기 게이트를 자기가 통과해야 한다(#77 — 화면이 아니라 액션이 게이트). 강사(scoped)는 담당 반일 때만
+ * 검색할 수 있어, 남의 반 화면을 억지로 열어 학원 전체 명단을 훑는 경로를 막는다.
+ * 퇴원생은 제외(보강 대상이 아님), 최대 20건.
+ */
+export async function searchMakeupStudents(
+  classId: string,
+  query: string,
+): Promise<{ id: string; name: string; label: string }[]> {
+  const user = await getCurrentUser();
+  if (!user) return [];
+  if (!(await canWriteTenant(user.systemRole, "attendance"))) return [];
+  const q = query.trim();
+  if (!q || !classId) return [];
+  const supabase = await createClient();
+  if ((await accessLevelTenant(user.systemRole, "attendance")) === "scoped") {
+    const { count: ownClass } = await supabase
+      .from("classes")
+      .select("*", { count: "exact", head: true })
+      .eq("id", classId)
+      .eq("teacher_id", user.id);
+    if (!ownClass) return [];
+  }
+  const { data } = await supabase
+    .from("students")
+    .select("id, name, grade, school")
+    .neq("status", "withdrawn")
+    .ilike("name", `%${q}%`)
+    .order("name", { ascending: true })
+    .limit(20);
+  return (data ?? []).map((s) => ({
+    id: s.id,
+    name: s.name,
+    label: schoolGradeLabel(s.school ?? null, s.grade ?? null),
+  }));
 }

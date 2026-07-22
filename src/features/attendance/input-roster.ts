@@ -24,6 +24,14 @@ export function includeInAttendanceInput(
   hasRecord: boolean,
 ): boolean {
   if (hasRecord) return true;
+  return activeAndAttending(enrollment, date, dayKey);
+}
+
+function activeAndAttending(
+  enrollment: AttendanceInputCandidate,
+  date: string,
+  dayKey: string,
+): boolean {
   if (
     !isEnrollmentActiveOn(
       {
@@ -38,4 +46,26 @@ export function includeInAttendanceInput(
     return false;
   }
   return enrollmentAttendsOnDay(enrollment.attendanceDays, dayKey);
+}
+
+/**
+ * 보강(수업외) 참석자 = 그 (반,날짜)에 **기록은 있는데 그 반 수강행이 없는** 학생.
+ *
+ * 출석 입력 화면이 이들을 명단에 합치지 않으면, 강사가 '+ 보강 학생 추가'로 저장한 행이 다음 로드에서
+ * 통째로 사라져 **수정·삭제할 방법이 없어진다**(수강행이 없어 enrollments 쿼리에 절대 안 걸리므로).
+ * 이관분에도 이런 행이 많다(실측 1,264행 / 2026-02~06) — 과거 날짜를 열면 그것도 함께 드러난다.
+ */
+export function makeupStudentIds(
+  recordedStudentIds: readonly string[],
+  enrolledStudentIds: readonly string[],
+): string[] {
+  const enrolled = new Set(enrolledStudentIds);
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const id of recordedStudentIds) {
+    if (enrolled.has(id) || seen.has(id)) continue;
+    seen.add(id);
+    out.push(id);
+  }
+  return out;
 }

@@ -28,6 +28,7 @@ import type {
 } from "@/features/attendance/server/queries";
 import { formatSessionUnits } from "@/features/attendance/session-units";
 import { submitAction } from "@/components/forms/submit-action";
+import { AttendanceMakeupAdder } from "./makeup-adder";
 
 const STATUS_DEFS: {
   value: AttendanceStatus;
@@ -104,6 +105,9 @@ export function AttendanceInputForm({
   locked?: boolean;
 }) {
   const [state, formAction] = useActionState<SaveAttendanceState, FormData>(saveAttendance, undefined);
+  // 이번 화면에서 새로 추가한 보강 학생(아직 저장 전) — 저장되면 서버 rows에 isMakeup으로 합류한다.
+  const [added, setAdded] = useState<AttendanceInputRow[]>([]);
+  const allRows = [...rows, ...added];
   const [pending, setPending] = useState<Record<string, CellState>>(() => {
     const init: Record<string, CellState> = {};
     for (const r of rows) {
@@ -120,6 +124,37 @@ export function AttendanceInputForm({
     return init;
   });
 
+  // 보강 학생 추가 — 기본 상태를 '보강'으로 찍어 둔다(그 학생은 온 게 확실하니 한 번 더 누르게 하지 않는다).
+  // 이미 명단에 있으면(정규 수강생이거나 이미 추가함) 중복 행을 만들지 않는다.
+  function addMakeup(s: { id: string; name: string; label: string }) {
+    if (allRows.some((r) => r.studentId === s.id)) return;
+    setAdded((prev) => [
+      ...prev,
+      {
+        studentId: s.id,
+        studentName: s.name,
+        studentGrade: s.label || null,
+        enrollmentId: null,
+        isMakeup: true,
+        existingRecordId: null,
+        status: "makeup",
+        note: null,
+        homeworkRequired: false,
+        homeworkDone: false,
+        sessionUnits: null,
+      },
+    ]);
+    setPending((p) => ({
+      ...p,
+      [s.id]: { status: "makeup", note: "", homeworkRequired: false, homeworkDone: false, units: "", expanded: false },
+    }));
+  }
+
+  // 저장 전 보강 행 취소 — 서버에 이미 기록이 있는 행(isMakeup이어도)은 이 목록에 없으니 안전하다.
+  function removeAdded(studentId: string) {
+    setAdded((prev) => prev.filter((r) => r.studentId !== studentId));
+  }
+
   function patchOne(studentId: string, patch: Partial<CellState>) {
     setPending((p) => ({ ...p, [studentId]: { ...p[studentId], ...patch } }));
   }
@@ -128,10 +163,15 @@ export function AttendanceInputForm({
     patchOne(studentId, { status });
   }
 
+  // ⚠️ '전체 출석'은 **정규 명단만** 바꾼다 — 보강 행까지 '출석'으로 덮으면 보강이 정규 출석으로 둔갑해
+  // 시수·완료율 판정이 흐려진다(보강은 개별로 남긴다).
   function setAll(status: AttendanceStatus) {
     setPending((p) => {
       const next = { ...p };
-      for (const r of rows) next[r.studentId] = { ...next[r.studentId], status };
+      for (const r of rows) {
+        if (r.isMakeup) continue;
+        next[r.studentId] = { ...next[r.studentId], status };
+      }
       return next;
     });
   }
@@ -139,7 +179,7 @@ export function AttendanceInputForm({
   function clearAll() {
     setPending((p) => {
       const next = { ...p };
-      for (const r of rows) {
+      for (const r of allRows) {
         next[r.studentId] = {
           ...next[r.studentId],
           status: null,
@@ -153,17 +193,22 @@ export function AttendanceInputForm({
     });
   }
 
-  const dirty = rows.some((r) => {
-    const c = pending[r.studentId];
-    return (
-      c.status !== r.status ||
-      c.note !== (r.note ?? "") ||
-      c.homeworkRequired !== r.homeworkRequired ||
-      c.homeworkDone !== r.homeworkDone ||
-      c.units !== unitsToDraft(r.sessionUnits)
-    );
-  });
-  const filled = rows.filter((r) => pending[r.studentId].status != null).length;
+  const dirty =
+    added.length > 0 ||
+    rows.some((r) => {
+      const c = pending[r.studentId];
+      return (
+        c.status !== r.status ||
+        c.note !== (r.note ?? "") ||
+        c.homeworkRequired !== r.homeworkRequired ||
+        c.homeworkDone !== r.homeworkDone ||
+        c.units !== unitsToDraft(r.sessionUnits)
+      );
+    });
+  // 진행 표시는 **정규 명단 기준** — 보강은 예정 인원이 아니라 분모에 넣으면 완료율이 흐려진다
+  // (서버 처리현황 expected와 같은 규약).
+  const roster = rows.filter((r) => !r.isMakeup);
+  const filled = roster.filter((r) => pending[r.studentId]?.status != null).length;
 
   return (
     <form onSubmit={(e) => submitAction(e, formAction)} className="space-y-4">
@@ -176,7 +221,13 @@ export function AttendanceInputForm({
       {/* Bulk actions */}
       <div className="border-line bg-card flex flex-wrap items-center justify-between gap-2 rounded-2xl border px-4 py-2.5">
         <div className="text-text-dim text-xs">
-          입력 {filled} / {rows.length}
+          입력 <span className="num">{filled}</span> / <span className="num">{roster.length}</span>
+          {allRows.length > roster.length ? (
+            <span className="text-text-faint">
+              {" "}
+              · 보강 <span className="num">{allRows.length - roster.length}</span>명
+            </span>
+          ) : null}
         </div>
         <div className="flex items-center gap-1.5">
           <button
@@ -194,16 +245,21 @@ export function AttendanceInputForm({
           >
             전체 초기화
           </button>
+          <span className="text-text-dim/40 text-xs">·</span>
+          <AttendanceMakeupAdder classId={classId} disabled={locked} onAdd={addMakeup} />
         </div>
       </div>
 
-      {rows.length === 0 ? (
+      {allRows.length === 0 ? (
         <div className="border-line bg-bg-soft/20 rounded-2xl border border-dashed p-8 text-center">
-          <p className="text-text-dim text-sm">이 날짜에 활성 재원생이 없습니다.</p>
+          <p className="text-text-dim text-sm">이 날짜에 등원하는 학생이 없습니다.</p>
+          <p className="text-text-faint mt-1 text-xs break-keep">
+            보강으로 온 학생이 있으면 위 &lsquo;+ 보강 학생 추가&rsquo;로 출결을 남길 수 있습니다.
+          </p>
         </div>
       ) : (
         <ul className="bg-card border-line divide-border divide-y rounded-2xl border">
-          {rows.map((r) => {
+          {allRows.map((r) => {
             const cell = pending[r.studentId];
             const hasExtra = !!(cell.note || cell.homeworkRequired);
             return (
@@ -222,8 +278,29 @@ export function AttendanceInputForm({
                     {r.studentGrade ? (
                       <span className="text-text-dim text-xs">{r.studentGrade}</span>
                     ) : null}
+                    {/* 보강 = 이 반 수강생이 아님. 표식이 없으면 명단에 섞여 "이 반 학생"으로 오인된다. */}
+                    {r.isMakeup ? (
+                      <span
+                        className="bg-purple/10 text-purple border-purple/20 rounded-full border px-1.5 py-0.5 text-[10px] font-medium"
+                        title="이 반 수강생이 아닌 보강(수업외) 참석 — 처리현황 '예정' 인원에는 포함되지 않습니다"
+                      >
+                        보강
+                      </span>
+                    ) : null}
                     {r.existingRecordId ? (
                       <span className="text-text-dim text-[10px]">· 이전 기록 있음</span>
+                    ) : null}
+                    {/* 저장 전 취소 — 서버에 이미 기록이 있는 보강 행은 여기 안 걸린다(그건 상태를 지워 반영). */}
+                    {added.some((a) => a.studentId === r.studentId) ? (
+                      <button
+                        type="button"
+                        onClick={() => removeAdded(r.studentId)}
+                        className="text-text-faint hover:text-danger rounded-md p-0.5 transition"
+                        aria-label={`${r.studentName} 보강 행 취소`}
+                        title="추가 취소"
+                      >
+                        <X className="size-3" />
+                      </button>
                     ) : null}
                     {hasExtra ? (
                       <span className="bg-purple/10 text-purple border-purple/20 inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px]">

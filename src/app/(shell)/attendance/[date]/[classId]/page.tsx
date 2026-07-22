@@ -57,7 +57,8 @@ export default async function AttendanceInputPage({
         <p className="text-text-dim text-sm">
           {subjectMaps.labelOf(klass.subject)}
           {klass.teacherName ? ` · 담임 ${klass.teacherName}` : ""} · 재원생{" "}
-          <span className="num">{rows.length}</span>명
+          {/* 보강(수업외) 행은 이 반 수강생이 아니라 '재원생' 수에 넣지 않는다 — 넣으면 명단 규모가 부풀어 보인다. */}
+          <span className="num">{rows.filter((r) => !r.isMakeup).length}</span>명
         </p>
       </header>
 
