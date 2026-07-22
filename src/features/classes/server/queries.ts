@@ -62,6 +62,8 @@ export type ClassDetail = {
   isActive: boolean;
   /** 종강일(0059a) — 있으면 종강. is_active=false(폐지)와 구분. */
   closedAt: string | null;
+  /** 특강(0133a) 토글값 **그대로**. ⚠️ "이 반이 특강인가"는 이름 폴백까지 보는 `isSpecialLecture()`로 판정할 것. */
+  isSpecial: boolean;
   notes: string | null;
   bgColor: string | null;
   // 강사 인수인계 예약(0044a) — pendingTeacherId 있으면 예약 존재.
@@ -381,7 +383,7 @@ export async function getClassDetail(id: string): Promise<ClassDetail | null> {
   const { data: c } = await supabase
     .from("classes")
     .select(
-      `id, class_name, subject, is_active, closed_at, notes, bg_color,
+      `id, class_name, subject, is_active, closed_at, is_special, notes, bg_color,
        teacher_id, classroom_id,
        pending_teacher_id, pending_teacher_date, pending_teacher_reason,
        teacher:teacher_id ( display_name ),
@@ -428,6 +430,7 @@ export async function getClassDetail(id: string): Promise<ClassDetail | null> {
     classroomName: room?.name ?? null,
     isActive: c.is_active,
     closedAt: (c as { closed_at?: string | null }).closed_at ?? null,
+    isSpecial: (c as { is_special?: boolean | null }).is_special ?? false,
     notes: c.notes,
     bgColor: (c as { bg_color?: string | null }).bg_color ?? null,
     pendingTeacherId: (c as { pending_teacher_id?: string | null }).pending_teacher_id ?? null,

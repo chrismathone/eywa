@@ -16,6 +16,14 @@ import { canManageTimetableImport } from "@/features/timetable/server/import-acc
 import { isSheetExportSubject } from "@/features/integrations/sheets-provider";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { normalizeWeekdayGrouping } from "@/features/timetable/lib/weekday-groups";
+import {
+  DEFAULT_TIMETABLE_KIND,
+  TIMETABLE_KINDS,
+  TIMETABLE_KIND_LABEL,
+  matchesTimetableKind,
+  parseTimetableKind,
+  type TimetableKind,
+} from "@/features/timetable/lib/class-kind";
 import { getWeekReferenceDate, mondayOf, thisMonday, weekRelation } from "@/features/timetable/lib/week";
 import { kstToday } from "@/lib/date-kst";
 import { RichGridView } from "./_components/rich-grid-view";
@@ -48,10 +56,12 @@ type ViewMode = "basic" | "integrated" | "teacher";
 export default async function TimetablePage({
   searchParams,
 }: {
-  searchParams: Promise<{ view?: ViewMode; subject?: string; week?: string; compact1h?: string; emptydays?: string; emptyperiods?: string }>;
+  searchParams: Promise<{ view?: ViewMode; subject?: string; kind?: string; week?: string; compact1h?: string; emptydays?: string; emptyperiods?: string }>;
 }) {
   const user = await requireAccess("timetable");
-  const { view: viewParam, subject: subjectParam, week: weekRaw, compact1h: compact1hRaw, emptydays: emptydaysRaw, emptyperiods: emptyperiodsRaw } = await searchParams;
+  const { view: viewParam, subject: subjectParam, kind: kindRaw, week: weekRaw, compact1h: compact1hRaw, emptydays: emptydaysRaw, emptyperiods: emptyperiodsRaw } = await searchParams;
+  // 정규/특강/전체 — 기본 = 정규(특강 제외). 특강은 방학 단기강좌라 정규 주간표에 섞이면 시야가 흐려진다.
+  const kind = parseTimetableKind(kindRaw);
   // 강사뷰 '미사용 요일' 토글 — 기본 = 표시(강사마다 월~토 전 컬럼). emptydays=hide 일 때만 수업 요일만.
   // ⚠️ URL 파라미터가 없으면 **기기에 저장된 선호(쿠키)** 를 기본으로 쓴다 — 창(iframe)은 항상 깨끗한
   // URL로 열려서, 파라미터만으론 열 때마다 초기화됐다(주 2일 강사가 매번 넓은 표를 다시 접어야 했음).
@@ -105,10 +115,14 @@ export default async function TimetablePage({
   // 교시 시각 = owner 설정(operations.weekdayPeriods/weekendPeriods) → PeriodsConfig. 미설정 시 기본 상수.
   const periodsConfig = settingsToPeriodsConfig(settings.operations);
   const subjectMaps = buildSubjectMaps(settings.operations.subjects);
+  // 구분(정규/특강/전체) 먼저 좁힌다 — 과목 칩도 "그 구분에 실제 있는 과목"만 떠야 한다
+  // (특강이 수학뿐인데 영어 칩이 뜨고 눌러도 빈 화면이면 고장으로 보인다).
+  // 판정은 서버가 확정한 boolean만 사용(화면에서 이름 매칭 재구현 금지).
+  const kindSlots = allSlots.filter((s) => matchesTimetableKind(kind, s.isSpecialLecture));
   // 과목 칩 = 학원설정 과목 순서 ∩ 데이터에 실제 존재하는 과목(빈 과목칩 방지). 무조건 한 과목.
   const available = subjectMaps.options
     .map((o) => o.value)
-    .filter((k) => allSlots.some((s) => s.subject === k));
+    .filter((k) => kindSlots.some((s) => s.subject === k));
   const defaultSubject = available[0] ?? "";
   const subject =
     subjectParam && available.includes(subjectParam) ? subjectParam : defaultSubject;
@@ -129,7 +143,7 @@ export default async function TimetablePage({
     ? `https://docs.google.com/spreadsheets/d/${sheetsStatus.spreadsheetId}/edit`
     : null;
   // 평일/주말은 WeekdayGroupTables가 알아서 분리 렌더(주말은 시작시각이 달라 별도 판). 여기선 과목만 필터.
-  const slots = allSlots.filter((s) => s.subject === subject);
+  const slots = kindSlots.filter((s) => s.subject === subject);
   const subjectRow = settings.operations.subjects.find((s) => s.key === subject);
   // 과목별 요일 병합 프리셋(설정) — 미설정/구데이터는 mon-thu 폴백(resolve가 스키마 미통과).
   const weekdayGrouping = normalizeWeekdayGrouping(subjectRow?.weekdayGrouping);
@@ -160,6 +174,7 @@ export default async function TimetablePage({
       view: effView,
       subject,
       defaultSubject,
+      kind,
       week,
       thisWk,
       compact1h: compactSections.has(sectionKey)
@@ -225,7 +240,7 @@ export default async function TimetablePage({
         <WeekNav
           currentWeek={week}
           today={today}
-          hrefForWeek={(monday) => buildHref({ view: effView, subject, defaultSubject, week: monday, thisWk, compact1h: compactList, hideEmptyDays, collapseEmptyPeriods })}
+          hrefForWeek={(monday) => buildHref({ view: effView, subject, defaultSubject, kind, week: monday, thisWk, compact1h: compactList, hideEmptyDays, collapseEmptyPeriods })}
         />
         <span className="bg-line h-4 w-px" aria-hidden />
 
@@ -241,6 +256,7 @@ export default async function TimetablePage({
                 view: effView === "teacher" && !allowsTeacherView(k) ? "basic" : effView,
                 subject: k,
                 defaultSubject,
+                kind,
                 week,
                 thisWk,
                 // 과목 전환 = 섹션 order가 과목마다 달라 '1시간 단위' 압축 집합을 초기화(엉뚱한 섹션 압축 방지).
@@ -261,6 +277,36 @@ export default async function TimetablePage({
         </div>
         <span className="bg-line h-4 w-px" aria-hidden />
 
+        {/* 정규 / 특강 / 전체 — 특강(방학 단기강좌)을 정규 주간표와 분리해 본다(원장 요구 2026-07-22).
+            기본은 정규라 파라미터 없는 URL = 지금까지의 화면. 과목 칩은 이 구분에 실제 있는 과목만 뜬다. */}
+        <div className="flex flex-wrap items-center gap-1">
+          <span className="micro mr-1">구분</span>
+          {TIMETABLE_KINDS.map((k) => (
+            <Link
+              key={k}
+              href={buildHref({
+                view: effView,
+                subject,
+                defaultSubject,
+                kind: k,
+                week,
+                thisWk,
+                compact1h: compactList,
+                hideEmptyDays,
+                collapseEmptyPeriods,
+              })}
+              className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs transition ${
+                kind === k
+                  ? "border-primary bg-primary text-primary-foreground font-medium"
+                  : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
+              }`}
+            >
+              {TIMETABLE_KIND_LABEL[k]}
+            </Link>
+          ))}
+        </div>
+        <span className="bg-line h-4 w-px" aria-hidden />
+
         {/* 뷰 토글 — 강사뷰는 허용 과목(영어 또는 강사별시간표 설정 보유)에서만 노출. */}
         <div className="flex items-center gap-1">
           <span className="micro mr-1">뷰</span>
@@ -275,7 +321,7 @@ export default async function TimetablePage({
             return (
               <Link
                 key={v.key}
-                href={buildHref({ view: v.key, subject, defaultSubject, week, thisWk, compact1h: compactList, hideEmptyDays, collapseEmptyPeriods })}
+                href={buildHref({ view: v.key, subject, defaultSubject, kind, week, thisWk, compact1h: compactList, hideEmptyDays, collapseEmptyPeriods })}
                 className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs transition ${
                   effView === v.key
                     ? "border-primary bg-primary text-primary-foreground font-medium"
@@ -298,6 +344,7 @@ export default async function TimetablePage({
                 view: effView,
                 subject,
                 defaultSubject,
+                kind,
                 week,
                 thisWk,
                 compact1h: compactList,
@@ -330,6 +377,7 @@ export default async function TimetablePage({
                 view: effView,
                 subject,
                 defaultSubject,
+                kind,
                 week,
                 thisWk,
                 compact1h: compactList,
@@ -362,6 +410,7 @@ export default async function TimetablePage({
         <span className="bg-line h-4 w-px" aria-hidden />
         <TimetableToolbarActions
           subject={subject}
+          kind={kind}
           canSync={canSync}
           canManageImport={canManageImport}
           sheetUrl={sheetUrl}
@@ -397,11 +446,18 @@ export default async function TimetablePage({
 
       {slots.length === 0 ? (
         <div className="mx-auto max-w-xl py-4">
+          {/* 특강 화면의 빈 상태는 "과목이 없다"가 아니라 "특강이 없다" — 원인이 다르면 문구도 달라야 한다. */}
           <PhotoCard
             src="/photos/timetable-empty.webp"
             alt=""
-            caption="해당 과목의 시간표가 없습니다"
-            sub="가져오기 또는 편집으로 반을 배치해 보세요"
+            caption={
+              kind === "special" ? "이 기간에 등록된 특강이 없습니다" : "해당 과목의 시간표가 없습니다"
+            }
+            sub={
+              kind === "special"
+                ? "반을 만들 때 '특강'을 켜면 여기에 표시됩니다 (운영 종료일이 지난 특강은 자동으로 내려갑니다)"
+                : "가져오기 또는 편집으로 반을 배치해 보세요"
+            }
             aspect="3/2"
             sizes="(max-width: 768px) 100vw, 576px"
           />
@@ -456,6 +512,8 @@ function buildHref(opts: {
   view: ViewMode;
   subject: string;
   defaultSubject: string;
+  /** 정규/특강/전체. 기본(정규)이면 파라미터를 생략해 지금까지의 URL과 같게 둔다. */
+  kind: TimetableKind;
   week: string; // 월요일 YYYY-MM-DD
   thisWk: string; // 이번 주 월요일(기본값이면 생략)
   compact1h?: number[]; // 통합뷰 '1시간 단위' 압축 섹션(sectionKey 집합) — 다른 네비 시 유지, 미지정=초기화
@@ -474,6 +532,7 @@ function buildHref(opts: {
 }): string {
   const params = new URLSearchParams();
   if (opts.view !== "basic") params.set("view", opts.view);
+  if (opts.kind !== DEFAULT_TIMETABLE_KIND) params.set("kind", opts.kind);
   if (opts.subject !== opts.defaultSubject) params.set("subject", opts.subject);
   if (opts.week !== opts.thisWk) params.set("week", opts.week);
   if (opts.compact1h && opts.compact1h.length)

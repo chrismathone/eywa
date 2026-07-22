@@ -10,35 +10,39 @@ import { isHexColor, readableTextColor } from "@/lib/color-utils";
 import { logAction } from "@/features/audit/server/log";
 import { notifyUsers } from "@/features/notifications/server/notify";
 import { getClassroomAssignmentData } from "./queries";
+import { detectOverlaps } from "./overlap-detect";
 import {
   ARCHIVE_REASON,
   CLOSE_TERM_REASON,
   closeClassEnrollments,
   reopenClassEnrollments,
 } from "./enrollment-lifecycle";
+import { deleteCurrentSlots, loadCurrentSlots } from "./schedule-sync";
 import type { ClassroomAssignData } from "../lib/classroom-assign";
+import type { OverlapItem } from "../overlap";
+import { preserveScheduleFields } from "../schedule-preserve";
 
 export type ClassFormState =
   | {
       error?: string;
       fieldErrors?: Record<string, string>;
-      // 강사 시간 겹침 경고(부분허용) — 합반 등 의도된 겹침은 "무시하고 저장"으로 통과.
+      /**
+       * 🔴 겹침 **경고**(차단 아님, 원장 확정 2026-07-22). 저장은 이미 끝난 상태로 온다.
+       * 화면은 이 목록으로 "몇 개 반이 · 어떤 반과 · 언제 · 무엇이" 겹치는지 상세히 알린다
+       * (`overlapSummary`/`overlapItemLabel` 사용). 비었으면 겹침 없음.
+       */
+      overlaps?: OverlapItem[];
+      /**
+       * @deprecated 폐기 — **서버는 이 값을 더 이상 채우지 않는다**(겹침이 저장을 막지 않으므로).
+       * 구 폼(`class-form.tsx`)의 "겹침 무시하고 저장" 분기를 컴파일만 살려두려고 남긴 자리다.
+       * UI는 `overlaps`로 옮기고 이 필드와 `ignoreTeacherConflict` 우회 버튼을 지울 것.
+       */
       teacherConflict?: string;
       ok?: true;
       redirectTo?: string;
       nonce?: number;
     }
   | undefined;
-
-const DAY_LABEL_KR: Record<string, string> = {
-  mon: "월",
-  tue: "화",
-  wed: "수",
-  thu: "목",
-  fri: "금",
-  sat: "토",
-  sun: "일",
-};
 
 type ScheduleInput = {
   dayOfWeek: string;
@@ -47,7 +51,12 @@ type ScheduleInput = {
   // 교시별 오버라이드 — null이면 반 담임/기본 강의실 상속.
   teacherId: string | null;
   classroomId: string | null;
+  /** 자유 시각 입력 행(교시표 밖 = 오전 특강·불규칙 시각)인가. 교시 클릭그리드 셀이면 false. */
+  explicitTime?: boolean;
 };
+
+/** DB 오류를 화면 문구로 — 영문 원문(PostgREST 메시지)을 그대로 내보내지 않는다(UI raw 노출 금지). */
+const SAVE_FAILED = "저장에 실패했습니다. 잠시 후 다시 시도해주세요.";
 
 const DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
 // 레거시 기본 과목 — owner 설정의 과목 key와 합쳐 허용 집합을 만든다(설정에 추가한 과목도 저장 허용).
@@ -62,12 +71,20 @@ async function allowedSubjectSet(): Promise<ReadonlySet<string>> {
   ]);
 }
 
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+const asDate = (v: string) => (ISO_DATE.test(v) ? v : null);
+
 function readForm(formData: FormData, allowedSubjects: ReadonlySet<string>) {
   const get = (k: string) => String(formData.get(k) ?? "").trim();
   const subject = get("subject") || "math";
   const bgRaw = get("bgColor");
   // 반 헤더색(시간표 통합뷰 소비) — 유효 hex만, 없으면 null=과목색 폴백. 글자색은 휘도로 자동.
   const bgColor = isHexColor(bgRaw) ? bgRaw : null;
+  // 특강 토글 — 폼은 hidden value="0" 뒤에 체크박스 value="1"을 둔다(체크 해제 시 필드가 통째로
+  // 사라지는 HTML 기본 동작 때문). 키가 아예 없으면 '이 폼은 특강 필드를 모른다'로 보고 수정 시 건드리지 않는다.
+  const specialValues = formData.getAll("isSpecial").map((v) => String(v));
+  // 운영 기간(특강은 방학 한정 → 끝나면 시간표에서 자동으로 내려간다). periodProvided=1이면
+  // 종료일을 **비운 것도 명시**(무기한으로 되돌리기)로 해석한다 — schedule-preserve.ts 참조.
   return {
     className: get("className"),
     // 허용 집합(설정 과목 ∪ 레거시)에 없는 값만 'etc'로 강등(쓰레기 입력 가드).
@@ -77,24 +94,53 @@ function readForm(formData: FormData, allowedSubjects: ReadonlySet<string>) {
     notes: get("notes") || null,
     bgColor,
     textColor: bgColor ? readableTextColor(bgColor) || null : null,
+    isSpecialProvided: specialValues.length > 0,
+    isSpecial: specialValues.some((v) => v === "1" || v === "on" || v === "true"),
+    periodProvided: get("periodProvided") === "1",
+    // 교시마다 종료일이 갈려 폼이 칸을 비운 경우 — 빈 칸을 "무기한으로 되돌리기"가 아니라
+    // "안 정함(교시별 기존값 유지)"으로 읽는다(조용한 일괄 삭제 방지).
+    periodKeepValidTo: get("periodKeepValidTo") === "1",
+    validFrom: asDate(get("validFrom")),
+    validTo: asDate(get("validTo")),
     schedules: parseSchedules(formData),
   };
 }
 
-function parseSchedules(formData: FormData): ScheduleInput[] {
-  // 클릭그리드 제출: schedule_{day,start,end,teacher,classroom}_${i}. 요일×교시라 슬롯이 많을 수 있어 상한 80.
+/** 한 네임스페이스(`schedule_` 또는 `custom_`)의 인덱스 hidden을 슬롯 배열로. */
+function readSlotNamespace(
+  formData: FormData,
+  prefix: string,
+  limit: number,
+  explicitTime: boolean,
+): ScheduleInput[] {
   const result: ScheduleInput[] = [];
-  for (let i = 0; i < 80; i++) {
-    const dayOfWeek = String(formData.get(`schedule_day_${i}`) ?? "").trim();
-    const startTime = String(formData.get(`schedule_start_${i}`) ?? "").trim();
-    const endTime = String(formData.get(`schedule_end_${i}`) ?? "").trim();
+  for (let i = 0; i < limit; i++) {
+    const dayOfWeek = String(formData.get(`${prefix}day_${i}`) ?? "").trim();
+    const startTime = String(formData.get(`${prefix}start_${i}`) ?? "").trim().slice(0, 5);
+    const endTime = String(formData.get(`${prefix}end_${i}`) ?? "").trim().slice(0, 5);
     if (!dayOfWeek || !startTime || !endTime) continue;
     if (!DAYS.includes(dayOfWeek as (typeof DAYS)[number])) continue;
-    const teacherId = String(formData.get(`schedule_teacher_${i}`) ?? "").trim() || null;
-    const classroomId = String(formData.get(`schedule_classroom_${i}`) ?? "").trim() || null;
-    result.push({ dayOfWeek, startTime, endTime, teacherId, classroomId });
+    const teacherId = String(formData.get(`${prefix}teacher_${i}`) ?? "").trim() || null;
+    const classroomId = String(formData.get(`${prefix}classroom_${i}`) ?? "").trim() || null;
+    result.push({ dayOfWeek, startTime, endTime, teacherId, classroomId, explicitTime });
   }
   return result;
+}
+
+/**
+ * 폼이 보낸 스케줄 = **교시 클릭그리드 + 자유 시각 행** 두 네임스페이스의 합.
+ *  · `schedule_*` = 클릭그리드 셀(교시표 파생 시각). 요일×교시라 슬롯이 많을 수 있어 상한 80.
+ *  · `custom_*`   = 자유 시각 행. **교시표에 없는 시각**(방학 오전 특강 09~14시 / 불규칙 배치)의
+ *    유일한 입력·보존 경로다. 인덱스 공간이 겹치지 않게 이름을 분리했다(그리드 선택 수에 따라
+ *    번호가 밀리면 두 컴포넌트가 서로의 hidden을 덮어쓴다).
+ * ⚠️ 상한은 **폼이 만들 수 있는 최대보다 넉넉하게**(둘 다 80). 상한을 넘긴 행은 조용히 사라지므로
+ *    UI 쪽 추가 상한(자유 시각 행 40개)보다 낮게 잡지 말 것.
+ */
+function parseSchedules(formData: FormData): ScheduleInput[] {
+  return [
+    ...readSlotNamespace(formData, "schedule_", 80, false),
+    ...readSlotNamespace(formData, "custom_", 80, true),
+  ];
 }
 
 function validate(input: ReturnType<typeof readForm>): Record<string, string> | null {
@@ -106,6 +152,10 @@ function validate(input: ReturnType<typeof readForm>): Record<string, string> | 
       errors.schedules = "시작 시간이 종료 시간보다 빠르야 합니다";
       break;
     }
+  }
+  // 운영 기간은 뒤집힐 수 없다(종료일 < 시작일이면 그 스케줄은 하루도 안 열린다 = 조용히 사라짐).
+  if (input.validFrom && input.validTo && input.validTo < input.validFrom) {
+    errors.validTo = "종료일이 시작일보다 빠릅니다";
   }
   return Object.keys(errors).length > 0 ? errors : null;
 }
@@ -124,23 +174,9 @@ export async function createClass(
 
   const supabase = await createClient();
 
-  // 충돌 감지: 같은 강의실 + 요일 + 시간 겹침
-  if (input.classroomId && input.schedules.length > 0) {
-    const conflict = await detectScheduleConflict(
-      supabase,
-      input.classroomId,
-      input.schedules,
-    );
-    if (conflict) {
-      return { error: `강의실 스케줄 충돌: ${conflict}` };
-    }
-  }
-
-  // 강사 시간 겹침(부분허용) — 같은 강사 같은 시간대면 경고. "무시하고 저장"(ignoreTeacherConflict=1)이면 통과(합반 등).
-  if (input.schedules.length > 0 && formData.get("ignoreTeacherConflict") !== "1") {
-    const tConflict = await detectTeacherConflict(supabase, input.schedules, input.teacherId);
-    if (tConflict) return { teacherConflict: tConflict };
-  }
+  // 🔴 겹침은 **저장을 막지 않는다**(원장 확정 2026-07-22) — 정규·특강 모두. 합반이 실제 운영이라
+  // 겹침은 사고가 아니라 정상 업무다. 상세 경고만 결과에 실어 화면이 알린다.
+  const overlaps = await collectOverlaps(supabase, input);
 
   const { data, error } = await supabase
     .from("classes")
@@ -153,6 +189,7 @@ export async function createClass(
       // 새 반은 **항상 활성**. 끄는 것은 반 상세의 '반 폐지'뿐이다(2026-07-21) — 폐지만이 그 반 활성
       // 수강까지 함께 종료해 학생목록·학생상세와 어긋나지 않는다. 폼에서 끄는 문은 폐지했다.
       is_active: true,
+      is_special: input.isSpecial,
       notes: input.notes,
       bg_color: input.bgColor,
       text_color: input.textColor,
@@ -160,11 +197,15 @@ export async function createClass(
     .select("id")
     .single();
 
-  if (error || !data) return { error: error?.message ?? "반 생성 실패" };
+  // ⚠️ 원문(PostgREST 영문)을 화면에 내보내지 않는다. 배포 순서가 어긋나 0133a(`is_special`)가 아직
+  // 안 올라갔을 때도 여기로 떨어진다 — 마이그레이션은 **코드보다 먼저** 적용할 것(0133a 헤더 참조).
+  if (error || !data) return { error: SAVE_FAILED };
 
   if (input.schedules.length > 0) {
     // valid_from은 NOT NULL(기본값 없음) — 반드시 채워야 insert 성공(없으면 전 스케줄 저장이 조용히 실패).
-    const validFrom = kstToday();
+    // 운영 기간을 입력했으면 그 값으로(특강은 종료일이 지나면 시간표가 알아서 내린다 — timetable
+    // fetchSlots가 valid_from/valid_to를 이미 본다). 비우면 오늘~무기한(기존 동작).
+    const validFrom = input.validFrom ?? kstToday();
     const rows = input.schedules.map((s) => ({
       tenant_id: user.tenantId,
       class_id: data.id,
@@ -172,6 +213,7 @@ export async function createClass(
       start_time: s.startTime,
       end_time: s.endTime,
       valid_from: validFrom,
+      valid_to: input.validTo,
       teacher_id: s.teacherId,
       classroom_id: s.classroomId,
     }));
@@ -179,7 +221,7 @@ export async function createClass(
     if (schedErr) {
       // 반은 생성됐지만 스케줄 실패 - 반 삭제 후 에러 반환
       await supabase.from("classes").delete().eq("id", data.id);
-      return { error: `스케줄 저장 실패: ${schedErr.message}` };
+      return { error: "스케줄 저장에 실패했습니다. 잠시 후 다시 시도해주세요." };
     }
   }
 
@@ -187,7 +229,7 @@ export async function createClass(
   revalidatePath("/timetable");
   // redirect 대신 결과 반환 — 클라가 성공 확정(nonce) 후 초안 삭제·동시편집 신호·이동(B-2).
   // (redirect()면 NEXT_REDIRECT throw로 폼의 nonce 효과가 안 돌아 'class:new' 초안이 안 비워진다.)
-  return { ok: true, redirectTo: `/classes/${data.id}`, nonce: Date.now() };
+  return { ok: true, redirectTo: `/classes/${data.id}`, nonce: Date.now(), overlaps };
 }
 
 export async function updateClass(
@@ -206,25 +248,18 @@ export async function updateClass(
   if (fieldErrors) return { fieldErrors };
 
   const supabase = await createClient();
+  const today = kstToday();
 
-  // 강의실 충돌 감지 (자기 자신 제외)
-  if (input.classroomId && input.schedules.length > 0) {
-    const conflict = await detectScheduleConflict(
-      supabase,
-      input.classroomId,
-      input.schedules,
-      id,
-    );
-    if (conflict) {
-      return { error: `강의실 스케줄 충돌: ${conflict}` };
-    }
-  }
-
-  // 강사 시간 겹침(부분허용) — 자기 자신(id) 제외. "무시하고 저장"이면 통과(합반 등).
-  if (input.schedules.length > 0 && formData.get("ignoreTeacherConflict") !== "1") {
-    const tConflict = await detectTeacherConflict(supabase, input.schedules, input.teacherId, id);
-    if (tConflict) return { teacherConflict: tConflict };
-  }
+  // 🔴 겹침은 저장을 막지 않는다(경고만). 자기 자신(id)은 제외.
+  // 독립 조회 2건은 병렬(B4) — 겹침 진단과 "delete 전에 기존 스케줄 읽어두기"는 서로 안 쓴다.
+  const [overlaps, priorRes] = await Promise.all([
+    collectOverlaps(supabase, input, id),
+    loadCurrentSlots(supabase, id, today),
+  ]);
+  // ⚠️ 승계 자료를 못 읽었으면 **아무것도 쓰기 전에** 멈춘다 — 빈 배열로 진행하면 delete 뒤 재insert가
+  // 라벨·기간을 전부 null로 덮어쓰는데 그땐 복구가 불가능하다(규칙 B3: error를 `?? []`로 삼키지 않는다).
+  if (priorRes.error || !priorRes.rows) return { error: priorRes.error ?? SAVE_FAILED };
+  const prior = priorRes.rows;
 
   const { error } = await supabase
     .from("classes")
@@ -236,39 +271,92 @@ export async function updateClass(
       // ⚠️ **is_active를 여기서 건드리지 않는다**(2026-07-21). 예전엔 폼 체크박스가 이 값을 썼는데,
       // 폐지 버튼과 달리 **그 반 활성 수강을 종료하지 않아** 시간표·출석부에선 사라지고 학생목록엔
       // "수강중"으로 남는 사각지대가 생겼다. 폐지/재운영은 archiveClass 단일 경로.
+      // 특강 토글은 **폼이 그 필드를 보냈을 때만** 쓴다 — 안 보내는 폼(구 폼·부분 저장)이 조용히 false로 되돌리지 않게.
+      ...(input.isSpecialProvided ? { is_special: input.isSpecial } : {}),
       notes: input.notes,
       bg_color: input.bgColor,
       text_color: input.textColor,
     })
     .eq("id", id);
 
-  if (error) return { error: error.message };
+  if (error) return { error: SAVE_FAILED };
 
-  // 기존 스케줄 모두 삭제 후 재삽입 (간단한 동기화)
-  await supabase.from("class_schedules").delete().eq("class_id", id);
+  // 스케줄 동기화 = **현재 유효한 행만** delete 후 재삽입. 만료 행(valid_to 지난 = 지난 배치 이력)은
+  // 건드리지 않는다 — 옛 코드의 무조건 전삭제는 반 메모 한 줄 수정에도 3~6월 배치 기록을 영구 삭제했다.
+  const del = await deleteCurrentSlots(supabase, id, today);
+  if (del.error) return { error: del.error };
 
   if (input.schedules.length > 0) {
-    // valid_from은 NOT NULL(기본값 없음) — 반드시 채워야 insert 성공(없으면 delete만 되고 재삽입이 실패).
-    const validFrom = kstToday();
-    const rows = input.schedules.map((s) => ({
+    // ⚠️ 재삽입 값은 **반드시** preserveScheduleFields를 거친다 — 폼이 안 보내는
+    // valid_to·slot_teacher_label·slot_room_label·period_label·merge_group을 기존 행에서 되살리고
+    // valid_from이 오늘로 리셋되는 것을 막는다(실측 위험분: 라벨 492/342행, valid_to 372행).
+    const rows = preserveScheduleFields({
+      incoming: input.schedules,
+      prior,
+      period: {
+        validFrom: input.validFrom,
+        validTo: input.validTo,
+        provided: input.periodProvided,
+        ...(input.periodKeepValidTo ? { keepValidTo: true } : {}),
+      },
+      today,
+    }).map((s) => ({
       tenant_id: user.tenantId,
       class_id: id,
       day_of_week: s.dayOfWeek,
       start_time: s.startTime,
       end_time: s.endTime,
-      valid_from: validFrom,
+      valid_from: s.validFrom,
+      valid_to: s.validTo,
       teacher_id: s.teacherId,
       classroom_id: s.classroomId,
+      slot_teacher_label: s.slotTeacherLabel,
+      slot_room_label: s.slotRoomLabel,
+      period_label: s.periodLabel,
+      merge_group: s.mergeGroup,
     }));
     const { error: schedErr } = await supabase.from("class_schedules").insert(rows);
-    if (schedErr) return { error: `스케줄 저장 실패: ${schedErr.message}` };
+    if (schedErr) return { error: "스케줄 저장에 실패했습니다. 잠시 후 다시 시도해주세요." };
   }
 
   revalidatePath("/classes");
   revalidatePath(`/classes/${id}`);
   revalidatePath("/timetable");
   // redirect 대신 결과 반환 — 클라가 성공 확정 후 동시편집 신호(publish) → 이동(B-2).
-  return { ok: true, redirectTo: `/classes/${id}`, nonce: Date.now() };
+  return { ok: true, redirectTo: `/classes/${id}`, nonce: Date.now(), overlaps };
+}
+
+/**
+ * 후보 슬롯의 **실효** 강사/강의실(슬롯 override ?? 반 기본)로 겹침 상세를 모은다. 저장은 막지 않는다.
+ * ⚠️ 기간은 폼이 보낸 값만 쓴다 — 폼에 기간 UI가 없으면 무기한(null)으로 보고 **넓게** 판정한다.
+ *    경고이므로 과다보고는 안전한 쪽(놓치는 것보다 낫다). 정확한 기간은 저장 후 스케줄 행이 진실.
+ * 🔴 **best-effort**: 이 진단이 실패해도 저장은 그대로 진행한다(경고 없이). `detectOverlaps`는 안에서
+ *    `fetchAllPaged`를 쓰는데 그건 error를 throw하므로, 감싸지 않으면 "진단 쿼리 한 번 실패 = 반이 아예
+ *    안 만들어짐"이 된다 — 원장 지시("경고만 남기고 실제로는 만들어지는걸로")와 정반대다.
+ */
+async function collectOverlaps(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  input: ReturnType<typeof readForm>,
+  excludeClassId?: string,
+): Promise<OverlapItem[]> {
+  if (input.schedules.length === 0) return [];
+  try {
+    return await detectOverlaps(supabase, {
+      candidates: input.schedules.map((s) => ({
+        dayOfWeek: s.dayOfWeek,
+        startTime: s.startTime,
+        endTime: s.endTime,
+        validFrom: input.validFrom,
+        validTo: input.validTo,
+        teacherId: s.teacherId ?? input.teacherId,
+        classroomId: s.classroomId ?? input.classroomId,
+      })),
+      ...(excludeClassId ? { excludeClassId } : {}),
+    });
+  } catch {
+    // 경고를 못 만든 것뿐 — 쓰기의 선행 조건이 되면 안 된다.
+    return [];
+  }
 }
 
 export type ArchiveClassState = { error?: string } | undefined;
@@ -621,120 +709,3 @@ export async function applyClassroomAssignments(
   return { ok: true, applied };
 }
 
-/**
- * 강의실의 기존 스케줄과 새 스케줄 시간이 겹치는지 확인.
- * 같은 반(excludeClassId)은 제외 (수정 시 자기 자신).
- */
-/**
- * 강사 시간 겹침 감지 — 같은 강사(실효 강사 = 슬롯 override ?? 반 담임)가 같은 요일·시간대에
- * 다른 활성 반과 겹치는지. 폐지(is_active=false)·종강(closed_at<오늘)·만료(valid_to<오늘) 반은 제외.
- * 자유입력 슬롯 라벨(slot_teacher_label)은 FK가 아니라 검사 불가 → teacher_id로 풀리는 것만.
- * 하드 차단이 아니라 "경고"용(부분허용) — 합반 등 의도된 겹침은 호출부에서 무시 가능.
- */
-async function detectTeacherConflict(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  candidates: ScheduleInput[],
-  classDefaultTeacherId: string | null,
-  excludeClassId?: string,
-): Promise<string | null> {
-  // 실효 강사가 있는 후보 슬롯만(강사 미지정 슬롯은 검사 불가).
-  const cands = candidates
-    .map((s) => ({ day: s.dayOfWeek, start: s.startTime, end: s.endTime, teacher: s.teacherId ?? classDefaultTeacherId }))
-    .filter((s): s is { day: string; start: string; end: string; teacher: string } => !!s.teacher);
-  if (cands.length === 0) return null;
-
-  const days = [...new Set(cands.map((c) => c.day))];
-  const today = kstToday();
-
-  // 같은 요일의 기존 스케줄(활성 반만, !inner + is_active). 종강·만료는 JS에서 추가 제외.
-  const { data } = await supabase
-    .from("class_schedules")
-    .select(
-      "class_id, day_of_week, start_time, end_time, teacher_id, valid_to, class:class_id!inner ( class_name, teacher_id, is_active, closed_at )",
-    )
-    .in("day_of_week", days)
-    .eq("class.is_active", true);
-  if (!data) return null;
-
-  for (const c of cands) {
-    for (const ex of data) {
-      if (excludeClassId && ex.class_id === excludeClassId) continue; // 자기 자신(수정 시)
-      if (ex.day_of_week !== c.day) continue;
-      const k = (Array.isArray(ex.class) ? ex.class[0] : ex.class) as
-        | { class_name?: string; teacher_id?: string | null; closed_at?: string | null }
-        | undefined;
-      if (!k) continue;
-      if (ex.valid_to && String(ex.valid_to).slice(0, 10) < today) continue; // 만료 스케줄 제외
-      if (k.closed_at && String(k.closed_at).slice(0, 10) < today) continue; // 종강 반 제외
-      const exTeacher = (ex.teacher_id as string | null) ?? k.teacher_id ?? null;
-      if (!exTeacher || exTeacher !== c.teacher) continue; // 같은 강사만
-      const exStart = String(ex.start_time).slice(0, 5);
-      const exEnd = String(ex.end_time).slice(0, 5);
-      if (c.start < exEnd && c.end > exStart) {
-        const { data: u } = await supabase
-          .from("users")
-          .select("display_name")
-          .eq("id", exTeacher)
-          .maybeSingle();
-        const tname = u?.display_name ?? "해당 강사";
-        return `${tname} · ${DAY_LABEL_KR[c.day] ?? c.day}요일 ${exStart}~${exEnd} (${k.class_name ?? "기존 반"})`;
-      }
-    }
-  }
-  return null;
-}
-
-async function detectScheduleConflict(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  classroomId: string,
-  candidates: ScheduleInput[],
-  excludeClassId?: string,
-): Promise<string | null> {
-  let qb = supabase
-    .from("class_schedules")
-    .select("class_id, day_of_week, start_time, end_time, class:class_id ( class_name )")
-    .eq("class_id", classroomId);
-
-  // 같은 강의실에 있는 모든 클래스 스케줄 조회
-  let q2 = supabase
-    .from("classes")
-    .select("id")
-    .eq("classroom_id", classroomId);
-  if (excludeClassId) q2 = q2.neq("id", excludeClassId);
-  const { data: clsList } = await q2;
-  if (!clsList || clsList.length === 0) return null;
-
-  qb = supabase
-    .from("class_schedules")
-    .select("class_id, day_of_week, start_time, end_time, class:class_id ( class_name )")
-    .in("class_id", clsList.map((c) => c.id));
-
-  const { data } = await qb;
-  if (!data || data.length === 0) return null;
-
-  for (const c of candidates) {
-    for (const existing of data) {
-      if (existing.day_of_week !== c.dayOfWeek) continue;
-      const exStart = String(existing.start_time).slice(0, 5);
-      const exEnd = String(existing.end_time).slice(0, 5);
-      // 시간 겹침
-      if (c.startTime < exEnd && c.endTime > exStart) {
-        const klass = (Array.isArray(existing.class) ? existing.class[0] : existing.class) as
-          | { class_name?: string }
-          | undefined;
-        const cn = klass?.class_name ?? "기존 반";
-        const dayLabel: Record<string, string> = {
-          mon: "월",
-          tue: "화",
-          wed: "수",
-          thu: "목",
-          fri: "금",
-          sat: "토",
-          sun: "일",
-        };
-        return `${dayLabel[c.dayOfWeek] ?? c.dayOfWeek}요일 ${exStart}~${exEnd} (${cn})`;
-      }
-    }
-  }
-  return null;
-}

@@ -1,6 +1,8 @@
 // 과정별 배분율 — 반이 어느 과정(초등/중등/고등/수능/특강)인지 판정하고, 그 반에 적용할 비율을 고른다.
 // 순수 함수(Vitest). 원장 확정 2026-07-21: 급여 = 청구 × 0.911 × **과정별 비율**, 반별 수동 override 허용.
 
+import { hasSpecialLectureName } from "@/features/classes/special-lecture";
+
 /** 급여 과정 5분류(구 출석부와 동일 축). ⚠️ 과목이 아니라 **학년 과정**이다. */
 export const SALARY_GROUPS = ["초등", "중등", "고등", "수능", "특강"] as const;
 export type SalaryGroup = (typeof SALARY_GROUPS)[number];
@@ -23,7 +25,11 @@ export function autoSalaryGroup(className: string | null | undefined): SalaryGro
   // ⚠️ 접두어가 아니라 **포함**으로 본다 — "개별(초등M) 초5 BS2C"처럼 과정이 이름 가운데 있는 반이 실재한다
   // (접두어 판정이던 초안에서 이런 반이 통째로 미분류로 빠졌다). 순서는 구체적인 것부터:
   // 특강 > 수능 > 초등 > 중등 > 고등 ("고등M 수능특강"은 특강).
-  if (n.includes("특강")) return "특강";
+  // ⚠️ '특강' **이름 규칙**만 시간표와 공유한다(classes/special-lecture.ts `hasSpecialLectureName`,
+  // 동작은 종전과 동일 = trim 후 '특강' 포함). 시간표의 특강 구분은 여기에 더해 `classes.is_special`
+  // (폼 토글)도 보지만 **급여는 그 컬럼을 보지 않는다** — 배분율이 달라지는 돈 산식 변경이라 골든마스터
+  // 게이트가 필요하다. 토글만 켠 반의 과정은 수납관리에서 수동 지정한다(폼 문구가 이를 안내).
+  if (hasSpecialLectureName(n)) return "특강";
   if (n.includes("수능")) return "수능";
   if (n.includes("초등")) return "초등";
   if (n.includes("중등")) return "중등";
