@@ -8,6 +8,12 @@ export type ReportListRow = {
   studentName: string;
   subject: string | null;
   reportDate: string;
+  /**
+   * 실제 수업일(covers_date, 0135a) — 미리/몰아서 한 수업의 보고서를 그 수업일에 귀속시킨다.
+   * 효과는 **분모 면제**: 그 (학생, 날짜)는 작성률 대상에서 빠진다(보고서 집계는 reportDate 그대로).
+   * ⚠️ 내부 메타데이터 — 학부모 발송 페이로드에 넣지 않는다.
+   */
+  coversDate: string | null;
   createdAt: string | null; // 작성/이관 등록 시각(timestamptz) — 정렬 최종 tiebreak(이관분은 cron 배치 시각으로 동일)
   sentAt: string | null; // 실제 학부모 발송 시각(classnote_sent_at) — 목록 hh:mm 표시 + 같은 날짜 내 최신 발송 정렬 키. 없으면 createdAt 폴백
   classnoteStatus: string | null;

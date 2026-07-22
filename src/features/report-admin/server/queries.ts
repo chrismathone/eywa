@@ -259,12 +259,21 @@ export async function getWeeklyWritingRates(month?: string): Promise<WritingRate
   // ⚠️ 작성 기록은 강사×일 집계 소스라 절단되면 작성률이 과소집계된다. `.limit(5000)`은 방어가 안 됨 —
   // PostgREST max-rows(≈1000)가 명시 limit도 덮어 1000행에서 silent 절단(실측 확인, #54). fetchAllPaged로 전건.
   const [reps, schedule, weekly, settings, labelsBySubject, { data: inactiveStaff }] = await Promise.all([
-    fetchAllPaged<{ teacher_name: string | null; report_date: string }>((from, to) =>
+    // ⚠️ 집계 기준은 **유효일 = covers_date ?? report_date**(0135a) — 미리/나중에 쓴 보고서를 실제 수업일로 귀속.
+    //   그래서 범위 조회도 두 날짜 **중 하나라도** 걸치면 가져온 뒤(or) JS에서 유효일로 다시 거른다.
+    //   report_date만으로 자르면 "6/28에 쓰고 7/2 수업분"인 보고서가 7월 뷰에서 통째로 사라진다.
+    fetchAllPaged<{
+      teacher_name: string | null;
+      report_date: string;
+      covers_date: string | null;
+      student_id: string;
+    }>((from, to) =>
       supabase
         .from("lesson_reports")
-        .select("teacher_name, report_date")
-        .gte("report_date", since)
-        .lte("report_date", until) // 범위 상한 — 월간에선 다음 달 기록이 섞이면 안 된다
+        .select("teacher_name, report_date, covers_date, student_id")
+        .or(
+          `and(report_date.gte.${since},report_date.lte.${until}),and(covers_date.gte.${since},covers_date.lte.${until})`,
+        )
         // OFFSET 페이지 안정화 — unique tie-break(id) 포함 order(batch.ts 계약)
         .order("report_date")
         .order("id")
@@ -285,12 +294,30 @@ export async function getWeeklyWritingRates(month?: string): Promise<WritingRate
     const name = (u.display_name as string | null)?.trim();
     if (name) exempt.add(name);
   }
+  // 보고서는 **쓴 날(report_date)에 그대로** 집계한다. covers_date는 집계를 옮기는 게 아니라
+  // "그 날 수업의 의무를 이 보고서가 대신했다"는 표시라, 아래에서 **분모(대상)에서 빼는** 데 쓴다(0135a).
+  // ⚠️ 옮기면 연속수업(7/3에 2타임 몰아서 하고 보고서 1건)에서 7/3이 거꾸로 미작성이 된다.
   const reports = (reps ?? [])
     .map((r) => ({
       teacher: (r.teacher_name as string | null) ?? "(미지정)",
       date: r.report_date as string,
     }))
+    // or() 조회로 범위 밖 행(covers_date만 걸친 것)이 섞여 온다 — 쓴 날 기준으로 다시 좁힌다.
+    .filter((r) => r.date >= since && r.date <= until)
     .filter((r) => !exempt.has(r.teacher));
+
+  /**
+   * **의무가 면제된 (학생, 날짜)** — 보고서에 실제 수업일(covers_date)이 지정된 건(0135a).
+   * 그 날은 그 학생이 오지 않는다(미리 했거나 앞 수업에 몰아서 했다) → 대상에서 뺀다.
+   * 두 케이스 모두 이 한 규칙으로 풀린다:
+   *   · 선발송  = 7/19분을 7/3에 미리 함 → 7/19 대상에서 제외
+   *   · 연속수업 = 7/19분을 7/3에 2타임으로 함(보고서 1건) → 7/19 대상에서 제외(7/3은 보고서가 있어 그대로 충족)
+   */
+  const discharged = new Set(
+    (reps ?? [])
+      .filter((r) => r.covers_date)
+      .map((r) => `${r.student_id}|${r.covers_date as string}`),
+  );
 
   // 2) 오늘 시작된 반 → 강사별 classIds (예외 강사 반 제외).
   // 귀속 = 반 담당(teacherName) 우선, 없으면 **슬롯 강사 라벨 폴백** — 반 담당 없이 슬롯 라벨로만 도는
@@ -361,7 +388,8 @@ export async function getWeeklyWritingRates(month?: string): Promise<WritingRate
 
     // 5) 강사별 대상(결석 제외)/작성/미작성.
     todayTargets = [...studentsByTeacher].map(([teacher, ids]) => {
-      const target = [...ids].filter((id) => !absent.has(id));
+      // 결석 제외 + **의무 면제(covers_date로 이미 처리된 수업)** 제외 — 오지 않는 학생을 미작성으로 몰지 않는다.
+      const target = [...ids].filter((id) => !absent.has(id) && !discharged.has(`${id}|${today}`));
       const written = target.filter((id) => reported.has(id)).length;
       const missing = target.filter((id) => !reported.has(id)).map((id) => nameById.get(id) ?? "(학생)").slice(0, 20);
       return { teacher, target: target.length, written, missing };
@@ -434,7 +462,8 @@ export async function getWeeklyWritingRates(month?: string): Promise<WritingRate
           for (const e of rows) if (attendsOn(e, d)) ts.add(e.student_id);
         }
         for (const [teacher, ids] of studentsByTeacher) {
-          const target = [...ids].filter((id) => !absent.has(id)).length;
+          // 오늘과 같은 규칙: 결석 + 의무 면제(covers_date) 제외.
+          const target = [...ids].filter((id) => !absent.has(id) && !discharged.has(`${id}|${d}`)).length;
           dailyTargets.push({ teacher, date: d, target });
         }
       }
