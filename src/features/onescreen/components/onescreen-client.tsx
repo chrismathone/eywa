@@ -624,7 +624,8 @@ export function OneScreenClient({
     const idx = student.subjects.findIndex((su) => su.name === subjectName);
     if (idx < 0) return;
     const su = student.subjects[idx];
-    const subjectKey = su?.subjectKey || su?.name || undefined;
+    // ⚠️ 과목**키**(math…)여야 한다 — su.name엔 반 이름이 붙을 수 있어 폴백도 subjectLabel 먼저.
+    const subjectKey = su?.subjectKey || su?.subjectLabel || su?.name || undefined;
     // 반 공통 서술(G6) — 이 행의 반 서술을 생성 재료로 동봉(없으면 기존 동작). 카드·표·일괄 공용 경로라 전부 커버.
     // ⚠️ 키 = classId(이름 아님) — 동명 반(수학·영어 같은 이름, 스키마 허용)에서 이름 키면 남의 반 수업
     // 맥락이 교차 주입된다(리뷰 확정 major, 순서 기능 동명 가드와 같은 원인). classId null(모호 행·보강)=서술 없음.
@@ -1252,12 +1253,14 @@ export function OneScreenClient({
   const attTargets = selected
     ? selected.subjects
         .map((su) => ({
-          subject: su.subjectKey || su.name || undefined,
+          subject: su.subjectKey || su.subjectLabel || su.name || undefined,
+          // 반(0134a) — 같은 과목 두 행이면 과목만으론 어느 보고서의 첨부인지 못 가른다.
+          classId: su.classId ?? null,
           paths: (reports[selected.id]?.[su.name]?.attachments ?? []).map((a) => a.path),
         }))
         .filter((t) => t.paths.length > 0)
     : [];
-  const attSig = attTargets.map((t) => `${t.subject ?? ""}:${t.paths.join(",")}`).join("|");
+  const attSig = attTargets.map((t) => `${t.classId ?? t.subject ?? ""}:${t.paths.join(",")}`).join("|");
   useEffect(() => {
     // attTargets 없으면 재요청 안 함(기존 map은 path 키라 stale해도 오표시 없음 — 신규 서명 시 전체 교체).
     if (!selected || attTargets.length === 0) return;
@@ -1265,7 +1268,12 @@ export function OneScreenClient({
     void (async () => {
       const merged: Record<string, string> = {};
       for (const t of attTargets) {
-        const res = await signReportAttachmentUrls({ studentId: selected.id, subject: t.subject, reportDate: date || undefined });
+        const res = await signReportAttachmentUrls({
+          studentId: selected.id,
+          subject: t.subject,
+          classId: t.classId,
+          reportDate: date || undefined,
+        });
         if (res.urls) Object.assign(merged, res.urls);
       }
       if (!cancelled) setAttUrls(merged);

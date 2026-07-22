@@ -48,7 +48,9 @@ export function buildReportCommentInput(st: OneScreenStudent, subjectIndex: numb
   const su = st.subjects[subjectIndex];
   return {
     studentName: st.name,
-    subject: su?.name ?? "",
+    // ⚠️ AI 프롬프트 → 학부모 멘트로 그대로 흘러가는 값이라 **순수 과목 라벨**만 넣는다.
+    //    `su.name`엔 반 이름이 붙을 수 있다(같은 과목 두 반 = "수학 · 고1 특강"). 보고서에 반 노출 금지.
+    subject: su?.subjectLabel || su?.name || "",
     progress: su?.today ?? "",
     dailyTest: testLine(st.tests.daily.score, st.tests.daily.max, st.tests.daily.prevScore),
     checkTest: testLine(st.tests.check.score, st.tests.check.max, st.tests.check.prevScore),

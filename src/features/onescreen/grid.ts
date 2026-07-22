@@ -4,7 +4,11 @@
  */
 import type { OneScreenStudent, PrevReport, Subject } from "./types";
 
-/** 표 한 행 = (학생 × 과목). lesson_reports 1건·발송 1건과 1:1. */
+/**
+ * 표 한 행 = (학생 × **반**). lesson_reports 1건·발송 1건과 1:1(0134a — 예전엔 과목 단위였다).
+ * ⚠️ `subject.name`은 그래서 학생 안에서 유일하다(같은 과목 두 반이면 로스터가 반 이름을 덧붙인다).
+ *    그 유일성이 깨지면 두 행이 같은 state·같은 보고서를 가리켜 서로를 덮는다.
+ */
 export type GridRow = {
   student: OneScreenStudent;
   subject: Subject;
