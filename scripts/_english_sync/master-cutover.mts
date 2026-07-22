@@ -179,14 +179,26 @@ async function syncBlocks(): Promise<void> {
     labelToId.set(t.displayName.toLowerCase(), t.id);
   }
   await sql.begin(async (tx) => {
+    // ⚠️ 같은 컷오버 날짜로 **재실행**할 수 있어야 한다(파서 고치고 다시 돌리는 게 정상 경로다).
+    // ① 이번 컷오버가 만든 행(valid_from >= CUTOVER)은 **삭제** — 재생성 대상이다. 마감으로 처리하면
+    //    valid_to(=CUTOVER−1) < valid_from 이라 valid_order 제약에 걸려 트랜잭션이 통째로 터진다
+    //    (2026-07-22 실측: 재실행이 여기서 죽었다). ② 그 이전 행만 마감한다.
+    const [del] = await tx<{ count: number }[]>`
+      with d as (
+        delete from public.teacher_schedule_blocks
+         where tenant_id = ${TENANT} and subject = ${SUBJECT} and valid_from >= ${CUTOVER}::date
+        returning 1
+      ) select count(*)::int as count from d`;
     const [row] = await tx<{ count: number }[]>`
       with upd as (
         update public.teacher_schedule_blocks
            set valid_to = ${CLOSE_AT}::date
          where tenant_id = ${TENANT} and subject = ${SUBJECT}
+           and valid_from < ${CUTOVER}::date
            and (valid_to is null or valid_to >= ${CUTOVER}::date)
         returning 1
       ) select count(*)::int as count from upd`;
+    if (del!.count > 0) console.log(`  (재실행) 같은 컷오버로 만든 블록 ${del!.count}건 삭제 후 재생성`);
     for (const b of parsed.blocks) {
       await tx`insert into public.teacher_schedule_blocks
         (tenant_id, subject, teacher_label, teacher_id, day_of_week, start_time, end_time, kind, label, valid_from)

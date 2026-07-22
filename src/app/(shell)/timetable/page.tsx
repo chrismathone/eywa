@@ -135,7 +135,9 @@ export default async function TimetablePage({
   // 섞으면 수업 수가 부풀고 과목/구분 칩에도 새어 나온다. subject 확정 뒤에 읽어야 해서(위 Promise.all은
   // subject를 아직 모른다) 여기서 조회 — 강사뷰일 때만 도는 경량 쿼리다.
   const scheduleBlocks =
-    view === "teacher" && subject ? await getTeacherScheduleBlocks(subject, referenceDate) : [];
+    view === "teacher" && subject
+      ? await getTeacherScheduleBlocks(subject, referenceDate, teacherId)
+      : [];
 
   // '시트 반영' 버튼 = sheet_sync 권한(기본 원장·관리자·실장, owner에서 조정) + 지원 과목(math·english) + 연동 ON.
   // 상태는 **현재 보는 과목** 기준. (subject가 allSlots·설정에 의존하므로 위 Promise.all 뒤에 조회 —

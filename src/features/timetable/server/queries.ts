@@ -731,8 +731,26 @@ export function dayOfWeekIndex(key: string): number {
 export async function getTeacherScheduleBlocks(
   subject: string,
   referenceDate: string,
+  /**
+   * 강사 스코프 — 넘기면 **그 강사 본인 블록만**. 수업 슬롯은 이미 teacherId로 좁혀지는데(intra-tenant
+   * PII 격리) 블록만 전체를 가져오면, 강사 화면에 **남의 연차·회의·감독 일정**이 뜨고 스코프가 지운
+   * 강사 컬럼까지 되살아난다(적대검증 2026-07-22 확정). 관리자(=undefined)는 전체.
+   */
+  teacherId?: string,
 ): Promise<ScheduleSlotWithStudents[]> {
   const supabase = await createClient();
+  // 라벨이 표시 앵커라 id만으로는 못 좁힌다 — 그 사람의 표기(display_name·english_name)까지 함께 본다.
+  let labels: string[] = [];
+  if (teacherId) {
+    const { data: me } = await supabase
+      .from("users")
+      .select("display_name, english_name")
+      .eq("id", teacherId)
+      .maybeSingle();
+    labels = [me?.display_name, me?.english_name].filter((x): x is string => !!x);
+    // 이름을 못 찾으면 **아무것도 보여주지 않는다**(전체 노출로 폴백하면 격리가 뚫린다).
+    if (labels.length === 0) return [];
+  }
   const rows = await fetchAllPaged<{
     id: string;
     teacher_label: string;
@@ -741,15 +759,16 @@ export async function getTeacherScheduleBlocks(
     end_time: string;
     kind: string;
     label: string;
-  }>((from, to) =>
-    supabase
+  }>((from, to) => {
+    let q = supabase
       .from("teacher_schedule_blocks")
       .select("id, teacher_label, day_of_week, start_time, end_time, kind, label")
       .eq("subject", subject)
       .lte("valid_from", referenceDate)
-      .or(`valid_to.is.null,valid_to.gte.${referenceDate}`)
-      .range(from, to),
-  );
+      .or(`valid_to.is.null,valid_to.gte.${referenceDate}`);
+    if (labels.length > 0) q = q.in("teacher_label", labels);
+    return q.order("id").range(from, to);
+  });
   return rows.map((r) => ({
     id: `block:${r.id}`,
     classId: "",

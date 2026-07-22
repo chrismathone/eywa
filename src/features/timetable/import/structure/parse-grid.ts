@@ -26,7 +26,10 @@ const DATA_START_ROW = 4; // 0-based: 데이터 시작(5행)
 const TIME_COL = 0; // A열
 
 const ROOM_RE = /\b(\d{3}|SKY)\b/;
-const DAY_HEAD_RE = /^\s*([월화수목금토])/;
+// ⚠️ **일요일 포함** — 빼면 그 열이 통째로 사라진다. 2026-07-22 실측: 7/9 개편에서 Jane 토요일 반이
+// 일요일로 옮겨졌는데(`고등E_고2 심화` 3칸) 정규식에 '일'이 없어 열째로 스킵됐고, 컷오버가 그걸
+// "시트에서 없어진 수업"으로 읽어 마감했다. 학원이 일요일에 수업을 안 한다는 보장은 없다.
+const DAY_HEAD_RE = /^\s*([월화수목금토일])/;
 const TIME_TOKEN_RE = /\d{1,2}:\d{2}/g;
 
 function cell(grid: SheetGrid, r: number, c: number): string {
@@ -129,8 +132,16 @@ export function parseTeacherGrid(grid: SheetGrid): ParsedStructure {
   const teachers: ParsedTeacherBlock[] = [];
   const slots: ParsedStructureSlot[] = [];
 
+  // ⚠️ 그리드 폭은 **모든 행의 최대 길이**로 잡는다 — 특정 행(요일 헤더) 길이를 쓰면 안 된다.
+  // Sheets API의 rowData는 행마다 마지막 유효 셀까지만 보내 **행 길이가 제각각(ragged)** 이다.
+  // 요일 헤더는 가로 병합이라 값이 좌상단에만 있어 데이터 행보다 짧게 끝나는데, 그걸 마지막 블록의
+  // 오른쪽 경계로 쓰면 **그 블록의 우측 레인이 통째로 순회에서 빠진다**(경고조차 안 남는 침묵 유실).
+  // 2026-07-22 실측: 헤더행 146 vs 실제 149 → 마지막 블록(이주희 LAB) 레인 c146~c148 스킵 →
+  // 금요일 5슬롯(LS2a·JP1·MEC1-3·KW1·LS5)이 파싱에서 사라지고 컷오버가 그걸 'remove'로 마감했다.
+  const gridWidth = grid.cells.reduce((w, r) => Math.max(w, r.length), 0);
+
   startCols.forEach((bc, i) => {
-    const nextCol = i + 1 < startCols.length ? startCols[i + 1]! : (grid.cells[DAY_ROW]?.length ?? bc + 6);
+    const nextCol = i + 1 < startCols.length ? startCols[i + 1]! : Math.max(gridWidth, bc + 6);
     const header = cell(grid, HEADER_ROW, bc).trim();
     const homeRoom = header.match(ROOM_RE)?.[1] ?? null;
     const block: ParsedTeacherBlock = {
@@ -151,8 +162,20 @@ export function parseTeacherGrid(grid: SheetGrid): ParsedStructure {
     // 그래서 병합 범위만큼 요일을 **펼쳐서** 열마다 매핑한다.
     const dayOfCol = new Map<number, DayOfWeek>();
     for (let c = bc; c < nextCol; c++) {
-      const koDay = cell(grid, DAY_ROW, c).match(DAY_HEAD_RE)?.[1];
-      if (!koDay) continue;
+      const rawDay = cell(grid, DAY_ROW, c);
+      const koDay = rawDay.match(DAY_HEAD_RE)?.[1];
+      if (!koDay) {
+        // ⚠️ 요일로 못 읽은 헤더는 **반드시 경고로 남긴다** — 그 열의 수업이 전부 스킵되는데 조용히
+        // 넘어가면 컷오버가 "시트에서 없어진 수업"으로 읽어 마감한다(2026-07-22 일요일 열 3칸 실측).
+        // 데이터가 실제로 있는 열만 경고(빈 여백 열까지 경고하면 노이즈로 묻힌다).
+        const hasData = grid.cells.some((row, r) => r >= DATA_START_ROW && (row[c] ?? "") !== "");
+        if (hasData) {
+          warnings.push(
+            `요일 헤더를 못 읽어 열 전체를 건너뜀: (${DAY_ROW},${c}) "${rawDay}" — ${block.name} 블록. 이 열의 수업은 반영되지 않는다.`,
+          );
+        }
+        continue;
+      }
       const day = koDayToEnum(koDay);
       if (!day) {
         warnings.push(`요일 인식 실패: (${DAY_ROW},${c}) "${cell(grid, DAY_ROW, c)}"`);

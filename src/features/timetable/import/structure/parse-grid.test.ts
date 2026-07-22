@@ -70,6 +70,27 @@ describe("parseTeacherGrid — 실 강사별 그리드", () => {
     expect(self?.superviseTarget).toBeUndefined();
   });
 
+  it("⚠️ 마지막 블록 우측 레인 — 요일 헤더 행이 짧아도(ragged) 안 잘린다", () => {
+    // 2026-07-22 실측 사고: Sheets API rowData는 행마다 길이가 다르다(마지막 유효 셀까지만).
+    // 요일 헤더는 가로 병합이라 짧게 끝나는데 그걸 마지막 블록 경계로 쓰면 우측 레인이 통째로
+    // 스킵된다 → 이주희 금요일 5슬롯이 조용히 사라지고 컷오버가 'remove'로 마감했다.
+    // 아래 격자는 그 형태를 최소 재현: 요일 헤더 행(길이 3)이 데이터 행(길이 5)보다 짧다.
+    const grid = {
+      cells: [
+        ["", "1"],
+        ["", "이주희 T LAB (603호)"],
+        [""],
+        ["", "금"], // ← 길이 2. 병합이 c1~c3을 덮지만 값은 좌상단에만.
+        ["4:20~5:00", "LS2b/603", "LS2a/603", "JP1/603"], // ← 길이 4
+      ],
+      merges: [{ startRowIndex: 3, endRowIndex: 4, startColumnIndex: 1, endColumnIndex: 4 }],
+    };
+    const r = parseTeacherGrid(grid as unknown as SheetGrid);
+    // 헤더 행 길이(2)로 잘렸다면 LS2b 하나만 잡힌다. 최대 행 길이(4)를 써야 셋 다 잡힌다.
+    expect(r.slots.map((s) => s.className).sort()).toEqual(["JP1", "LS2a", "LS2b"]);
+    for (const s of r.slots) expect(s.day).toBe("fri");
+  });
+
   it("병렬 레인: 같은 강사·요일·시각에 여러 반(LAB) — 병합 요일헤더를 펼쳐야 잡힌다", () => {
     const key = (s: (typeof parsed.slots)[number]) => `${s.teacherName}|${s.day}|${s.startTime}`;
     const counts = new Map<string, number>();

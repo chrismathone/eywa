@@ -1,6 +1,6 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
-import { fetchInChunks } from "@/lib/supabase/batch";
+import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
 import { effectiveTeacherId } from "@/lib/auth/view-mode";
 import { getTeacherScope } from "@/lib/auth/teacher-scope";
 import { attendanceRate } from "@/lib/calc/attendance";
@@ -396,17 +396,23 @@ export async function getClassTeacherFilterOptions(): Promise<
   const [assignable, assignedRows] = await Promise.all([
     getClassTeacherOptions(),
     // 활성 반의 실제 담임 id + 그 반 과목 — 역할·재직상태 무관(데이터에 있는 그대로).
-    supabase
-      .from("classes")
-      .select("teacher_id, subject")
-      .eq("is_active", true)
-      .not("teacher_id", "is", null),
+    // ⚠️ 결과를 distinct·whitelist로 쓰므로 **무페이징 select 금지**(B2: PostgREST 1000행 silent 절단).
+    //    잘리면 담임이 또 조용히 사라진다 — 이 함수가 고치려던 바로 그 증상이다.
+    fetchAllPaged<{ teacher_id: string; subject: string }>((from, to) =>
+      supabase
+        .from("classes")
+        .select("teacher_id, subject")
+        .eq("is_active", true)
+        .not("teacher_id", "is", null)
+        .order("id")
+        .range(from, to),
+    ),
   ]);
   // 담임 → 실제로 맡고 있는 반의 과목 집합.
   const taught = new Map<string, Set<string>>();
-  for (const r of assignedRows.data ?? []) {
-    const id = r.teacher_id as string;
-    (taught.get(id) ?? taught.set(id, new Set()).get(id)!).add(r.subject as string);
+  for (const r of assignedRows) {
+    const id = r.teacher_id;
+    (taught.get(id) ?? taught.set(id, new Set()).get(id)!).add(r.subject);
   }
   const known = new Set(assignable.map((t) => t.id));
   const missing = [...taught.keys()].filter((id) => !known.has(id));
