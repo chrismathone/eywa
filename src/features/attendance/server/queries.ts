@@ -8,6 +8,7 @@ import {
   enrollmentAttendsOnDay,
   isEnrollmentActiveOn,
 } from "@/features/enrollments/eligibility";
+import { includeInAttendanceInput } from "@/features/attendance/input-roster";
 import { buildHolidayMap, dowsFromKeys, resolveAttendDows } from "@/features/attendance/calendar";
 import {
   deriveMarksFromReports,
@@ -201,36 +202,50 @@ export async function getClassMeta(classId: string): Promise<ClassMeta | null> {
   };
 }
 
-/** Active enrollments + their current attendance record for one (class, date). */
+/**
+ * Active enrollments + their current attendance record for one (class, date).
+ *
+ * ⚠️ 수강 판정은 **공용 헬퍼**(isEnrollmentActiveOn·enrollmentAttendsOnDay)로만 한다 — 손으로 다시
+ * 구현하지 말 것. 예전 이 함수는 `!on_hold && (!end_date || end_date >= date)`만 봐서 **분리등원
+ * (attendance_days)을 select조차 안 했고** is_transferred도 무시했다. 그래서 같은 날짜에 대해
+ * 처리현황(위 getDailyProcessingStatus, 헬퍼 사용)은 "예정 M명"인데 '입력' 화면은 M보다 많은 명단을
+ * 보여주고, 그 요일에 오지 않는 학생까지 출결을 찍을 수 있었다(2026-07-22 전수검사 실측: 월7·화7·목9·금5명,
+ * 17개 반 — 원스크린 로스터에서 고친 것과 **같은 숫자·같은 원인**, main 6db1c3ca). 찍힌 기록은
+ * session_units(시수)를 타고 시수 검증·강사 분배로 흘러가는데 expected 집합 밖이라 완료율엔 영원히 안 잡힌다.
+ *
+ * ⚠️ 단 **이미 기록이 있는 학생은 등원요일 밖이어도 반드시 남긴다**(아래 `hasRecord` 합집합).
+ * 필터만 걸면 과거에 이미 찍힌 기록이 화면에서 통째로 사라져 **수정·삭제할 방법이 없어진다**
+ * (실측 52행: 2026-02~06, 대부분 보강 등으로 정규 요일 밖에 찍힌 present). 새 오입력은 막되
+ * 기존 기록은 숨기지 않는 게 규약 — "안 보이는데 존재하는 데이터"를 만들지 말 것.
+ */
 export async function getAttendanceInputRows(
   classId: string,
   date: string,
 ): Promise<AttendanceInputRow[]> {
   const supabase = await createClient();
+  const dayEnum = DOW_ENUM[new Date(`${date}T00:00:00Z`).getUTCDay()];
 
-  const { data: enrollments } = await supabase
-    .from("enrollments")
-    .select(
-      `id, start_date, end_date, on_hold,
+  // 반·날짜 단위 조회라 학생 필터 없이 받는다(한 반 명단 규모라 절단 위험 없음) — 등원요일 밖에
+  // 이미 찍힌 기록을 알아야 그 행을 남길지 판단할 수 있어, 명단보다 **먼저** 읽는다.
+  const [{ data: enrollments }, { data: records }] = await Promise.all([
+    supabase
+      .from("enrollments")
+      .select(
+        `id, start_date, end_date, on_hold, is_transferred, attendance_days,
        student:student_id ( id, name, grade )`,
-    )
-    .eq("class_id", classId)
-    .lte("start_date", date);
+      )
+      .eq("class_id", classId)
+      .lte("start_date", date),
+    supabase
+      .from("attendance_records")
+      .select("id, student_id, status, note, homework_required, homework_done, session_units, recorded_at")
+      .eq("class_id", classId)
+      .eq("session_date", date)
+      .order("recorded_at", { ascending: false }),
+  ]);
 
-  const active = (enrollments ?? []).filter(
-    (e) => !e.on_hold && (!e.end_date || e.end_date >= date),
-  );
-
-  const studentIds = active
-    .map((e) => {
-      const s = (Array.isArray(e.student) ? e.student[0] : e.student) as
-        | { id: string }
-        | undefined;
-      return s?.id;
-    })
-    .filter((id): id is string => !!id);
-
-  let recordMap = new Map<
+  // Keep the latest record per student (records are sorted desc by recorded_at)
+  const recordMap = new Map<
     string,
     {
       id: string;
@@ -241,30 +256,34 @@ export async function getAttendanceInputRows(
       sessionUnits: number | null;
     }
   >();
-  if (studentIds.length > 0) {
-    const { data: records } = await supabase
-      .from("attendance_records")
-      .select("id, student_id, status, note, homework_required, homework_done, session_units, recorded_at")
-      .eq("class_id", classId)
-      .eq("session_date", date)
-      .in("student_id", studentIds)
-      .order("recorded_at", { ascending: false });
-
-    // Keep the latest record per student (records are sorted desc by recorded_at)
-    recordMap = new Map();
-    for (const r of records ?? []) {
-      if (!recordMap.has(r.student_id)) {
-        recordMap.set(r.student_id, {
-          id: r.id,
-          status: r.status as AttendanceStatus,
-          note: r.note,
-          homeworkRequired: r.homework_required,
-          homeworkDone: r.homework_done,
-          sessionUnits: r.session_units === null ? null : Number(r.session_units),
-        });
-      }
+  for (const r of records ?? []) {
+    if (!recordMap.has(r.student_id)) {
+      recordMap.set(r.student_id, {
+        id: r.id,
+        status: r.status as AttendanceStatus,
+        note: r.note,
+        homeworkRequired: r.homework_required,
+        homeworkDone: r.homework_done,
+        sessionUnits: r.session_units === null ? null : Number(r.session_units),
+      });
     }
   }
+
+  const active = (enrollments ?? []).filter((e) => {
+    const s = (Array.isArray(e.student) ? e.student[0] : e.student) as { id: string } | undefined;
+    return includeInAttendanceInput(
+      {
+        startDate: e.start_date,
+        endDate: e.end_date,
+        onHold: e.on_hold,
+        isTransferred: e.is_transferred === true,
+        attendanceDays: e.attendance_days,
+      },
+      date,
+      dayEnum,
+      !!(s && recordMap.has(s.id)),
+    );
+  });
 
   return active
     .map((e) => {

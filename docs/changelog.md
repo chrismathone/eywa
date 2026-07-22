@@ -22,6 +22,43 @@
 ### 김화영(퇴사) 급여 검산 + 비율 입력 (2026-07-21)
 630행 중 626행(99.4%) 일치, 비율 **48/48/48.5/50/50**(16개월). 5명 합계 **3,360행 중 3,344행(99.5%)**.
 퇴사자지만 과거 정산 재현용으로 `commission` + 과정별 비율 입력.
+### 전수검사 — "빈/조기 경로가 설정·사실을 하드코딩으로 덮는" 패턴 (2026-07-22) — ✅ tsc0/lint0/test2033/build✓
+바로 위 `emptyRoster` 건이 **작성 당시엔 무해했다가 경로가 흔해지자 터진** 성질이라, 같은 모양을 전수로 훑었다
+(6렌즈 스캔 → 발견마다 3인 적대 반증 → 완결성 비평). 후보 20건 중 14건 기각, **6건 수리**.
+
+- **AST 스캐너로 음성 결과 확립**: 비평 에이전트가 TS 컴파일러 API로 "한 파일 안 교차 함수 리터럴 대조" 스캐너를
+  만들어, 수리 **직전**의 roster.ts에서 `emptyRoster↔getTeacherRoster shared=17 diverging=9`로 검출됨을 먼저 증명한 뒤
+  현재 트리를 전수 → **같은 모양의 두 번째 사례는 없다.** (교과서 사례는 헬퍼가 별도 함수라 단일 함수 스캔으론 안 잡힌다.)
+- **① 출석 입력 폼이 분리등원·반이동을 무시**([queries.ts](src/features/attendance/server/queries.ts)): 수강 판정을 손으로
+  다시 구현(`!on_hold && (!end_date || end_date >= date)`)해 `attendance_days`를 **select조차 안 했다**. 처리현황은
+  공용 헬퍼를 쓰는데 '입력' 화면만 갈려, 그 요일에 안 오는 학생까지 출결을 찍을 수 있었다(실측 월7·화7·목9·금5명,
+  17개 반 — **원스크린에서 고친 것과 같은 숫자·같은 원인**). 찍힌 기록은 시수→강사 분배로 흘러가는데 expected 밖이라
+  완료율엔 영원히 안 잡힌다. → 순수함수 [`includeInAttendanceInput`](src/features/attendance/input-roster.ts)(Vitest)로
+  분리, 공용 헬퍼 단일 소스. **⚠️ 기록이 이미 있으면 무조건 남긴다**(실측 52행 — 안 그러면 과거 기록이 화면에서 사라져 수정 불가).
+- **② AI 실패 시 가짜 진단을 커밋하던 것**([enrollment/actions.ts](src/features/enrollment/server/actions.ts)): `stubAnalysis`가
+  "기초 학력 양호·성실한 학습 태도" 같은 **아무 학생에게나 통하는 진단**을 만들어 DB에 넣고 `outcome='ai_done'`까지 찍었다
+  (그 값은 담임 인수인계 인쇄물에 그대로 실린다). 형제 액션은 전부 실패를 실패로 표면화한다. 실측 `model_version='stub*'`
+  **0행** — 한 번도 안 터졌을 뿐 배선은 살아 있었다. → 함수 삭제 + 한글 에러 반환(원문은 서버 로그만).
+- **③ 인쇄물 '학부모·상담사' 칸이 항상 "—"**: printPayload가 `parentName`·`parentPhone`·`consultantName`을 **null 리터럴**로
+  넣었다(`consultant_id`를 select만 하고 한 번도 안 씀). → 상담 행에서 읽어 채움(users 조인은 `Promise.all` 편입).
+- **④ 등록상담 인쇄가 6/6행 전부 TypeError로 죽던 것**: `PrintPayload` 타입이 `diagnosis`/`recommendedClasses`/`consultedAt`을
+  **필수**로 적었는데 jsonb라 강제되지 않는다 — 녹음 웹훅 경로는 `{prospect, audioReport, speakerRoles, formSuggestions}`만
+  저장해 실제 프로덕션 6행 **전부** 그 필드가 없다. 인쇄 페이지가 `p.diagnosis.level`을 분기 밖에서 무방비 역참조 → 크래시.
+  → 타입을 optional(=진실)로, 페이지는 존재 확인 후 렌더 + 상담일은 상담 행 폴백.
+- **⑤ 학생 요약 창 과목이 raw 키**(`math`): `<WorkspaceCanvas>`가 `<OperationsProvider>` **밖**에 있어 창 안
+  `useSubjectMaps()`가 `buildSubjectMaps([])` 폴백을 탔다. → Provider를 셸 전체로 승격. (라우트 창은 iframe이라 무관했음.)
+  등록상담 '추천 반' 카드의 raw 과목도 `labelOf` 경유로 교정.
+- **⑥ 대시보드가 조회 실패를 사실로 위장**: `dashboardQuery` 래퍼가 `unavailable`을 정확히 계산해 두고도 소비처가
+  `.data`만 꺼내 써서, 실패가 '상담 없음'·'공지 없음'·'이번 달 ±0'으로 렌더됐다(코드 주석이 스스로 금지한 바로 그것).
+  → 등록상담·공지 카드·공지 관리 모달·재원생 KPI 4곳 배선. 관리 모달은 카드와 **별개 쿼리**라 실패 표시도 분리.
+- **🔴 내가 낸 회귀를 되돌린 기록**: ④와 함께 워커 첨부 라우트에 `showAttachments` 게이트를 넣었다가 **철회**했다.
+  두 가지가 틀렸다 — ⑴ 게이트는 이미 있다(워커가 Postgres에서 직접 읽어 경로 진입 자체를 막는다. grep을
+  `src/features/report-admin/`으로만 돌려 워커 파일을 놓쳤다) ⑵ 빈 목록을 주면 워커가 **서명 실패로 오인**해
+  retry→failed로 떨궈 **본문까지 발송이 통째로 막히고** 원인이 거짓 기록된다. 형제 라우트가 이미 명문화한 규약이었다.
+  → **읽기 시점에 조용히 빼지 말 것. 게이트는 발송 시점 한 곳(#77).**
+- ⚠️ 적대검증 자체의 오류도 기록: 에이전트들이 ②③을 "high, 인쇄물에 가짜 진단이 찍힌다"로 보고했으나 DB엔 0행이었다
+  (정적 추적만 하고 아무도 실데이터를 안 셌다). **findings는 실데이터 count로 재확인 후 착수**가 규칙(#적대검증 07-21과 동일 교훈).
+
 ### 수업 없는 요일에 담당 반 전체가 뜨던 것 + 추천 진도 칩 폐지 (2026-07-22) — ✅ tsc0/lint0/test2013
 원장 제보 2건.
 

@@ -32,13 +32,18 @@ export type PrintPayload = {
     parentName: string | null;
     parentPhone: string | null;
   };
-  consultedAt: string;
-  consultantName: string | null;
-  parentRequest: string | null;
-  learningHistory: LearningHistory | null;
-  diagnosis: Diagnosis;
-  learningPlan: LearningPlan;
-  recommendedClasses: string[];
+  // ⚠️ 아래는 **텍스트 분석 경로(runAiAnalysis)만** 채운다 — 녹음 웹훅 경로는
+  // `{prospect, audioReport, speakerRoles, formSuggestions}`만 저장해 이 필드들이 통째로 없다
+  // (2026-07-22 실측: 프로덕션 6행 전부 없음). print_payload는 jsonb라 타입이 강제되지 않으므로
+  // **optional이 진실**이다 — 필수로 적어 두면 인쇄 페이지가 `p.diagnosis.level`을 무방비로
+  // 역참조해 TypeError로 죽는다(실제로 6/6행이 인쇄 불가였다). 소비처는 존재 확인 후 역참조할 것.
+  consultedAt?: string;
+  consultantName?: string | null;
+  parentRequest?: string | null;
+  learningHistory?: LearningHistory | null;
+  diagnosis?: Diagnosis;
+  learningPlan?: LearningPlan;
+  recommendedClasses?: string[];
 };
 
 export type ConsultationProcessingStatus =

@@ -321,6 +321,7 @@ export default async function TodayPage() {
             : null,
         }}
         enrollmentChanges={access.read.students ? enrollmentChanges : null}
+        enrollmentChangesUnavailable={access.read.students && enrollmentChangesResult.unavailable}
       />
 
       {/* ①.5 일일 AI 브리핑 — cron 사전 생성분 표시 + 명시 '다시 생성'(master/admin/manager 전용) */}
@@ -409,12 +410,14 @@ export default async function TodayPage() {
             <OutstandingCard items={outstanding} canOpenStudents={access.read.students} />
           ) : null}
           {access.read.enrollment ? (
-            <EnrollmentListCard list={enrollList} />
+            <EnrollmentListCard list={enrollList} unavailable={enrollListResult.unavailable} />
           ) : null}
           <AnnouncementsCard
             items={announcements}
             canManage={canManageAnnouncements}
             manageItems={manageAnnouncements}
+            unavailable={recentAnnouncementsResult.unavailable}
+            manageUnavailable={manageAnnouncementsResult.unavailable}
           />
         </div>
       </section>

@@ -457,6 +457,7 @@ export default async function EnrollmentDetailPage({
           <AiAnalysisPanel
             analysis={consult.aiAnalysis}
             recommendedClasses={consult.recommendedClasses}
+            subjectLabelOf={(k) => subjectMaps.labelOf(k)}
           />
         ) : !isProcessing ? (
           <Card title="AI 분석 결과">
@@ -590,9 +591,12 @@ function InfoCard({
 function AiAnalysisPanel({
   analysis,
   recommendedClasses,
+  subjectLabelOf,
 }: {
   analysis: AiAnalysisDetail;
   recommendedClasses: { id: string; className: string; subject: string }[];
+  // 과목 라벨은 학원설정 단일 소스(buildSubjectMaps) — 예전엔 raw 키(`math`)를 그대로 찍었다.
+  subjectLabelOf: (key: string) => string;
 }) {
   const { diagnosis, learningPlan } = analysis;
   return (
@@ -654,7 +658,7 @@ function AiAnalysisPanel({
                 className="border-border bg-muted/30 flex items-center justify-between rounded-md border px-3 py-2"
               >
                 <span className="text-foreground font-medium">{c.className}</span>
-                <span className="text-muted-foreground text-xs">{c.subject}</span>
+                <span className="text-muted-foreground text-xs">{subjectLabelOf(c.subject)}</span>
               </li>
             ))}
           </ul>

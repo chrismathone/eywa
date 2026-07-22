@@ -75,6 +75,15 @@ export async function sendOnescreenNotice(input: OnescreenNoticeInput): Promise<
   const supabase = await createClient();
   const settings = await getTenantSettings();
 
+  // ⚠️ 인가 게이트는 test 분기 **위**에서 한 번 — 예전엔 아래 else 블록 안에만 있어서 `test:true`로
+  // 부르면 로그인만으로 통과했다(#77 "UI 조건은 게이트 아님": 원스크린 화면으로는 도달 불가여도
+  // 서버액션 id는 클라 청크에 실려 직접 호출이 가능하다. 2026-07-22 전수검사).
+  // 규칙은 아래 대상 해석과 동일 — 강사(겸직 포함)면 통과하고 그 담당 학생만, 아니면 쓰기 권한 필요.
+  const teacherId = await effectiveTeacherId();
+  if (!teacherId && !(await canWriteTenant(user.systemRole, "lesson_reports"))) {
+    return { ok: false, error: "공지 발송 권한이 없습니다" };
+  }
+
   // ── 1. 대상 (학생,과목) 후보 해석 + 강사 스코프 ──
   let targets: NoticeTarget[] = [];
   let skipped: NoticeSkip[] = [];
@@ -86,8 +95,8 @@ export async function sendOnescreenNotice(input: OnescreenNoticeInput): Promise<
     if (!students.length) return { ok: false, error: "대상 학생을 선택하세요" };
     const studentIds = [...new Set(students.map((s) => s.studentId))];
 
-    // 강사 스코프(겸직 포함) — effectiveTeacherId 있으면 그 강사 담당 활성수강생만, 없으면 canWriteTenant(관리자뷰).
-    const teacherId = await effectiveTeacherId();
+    // 강사 스코프(겸직 포함) — teacherId(위에서 해석) 있으면 그 강사 담당 활성수강생만,
+    // 없으면 관리자뷰 = 위 게이트에서 canWriteTenant를 이미 통과했으므로 전체 허용.
     let allowedIds: Set<string>;
     if (teacherId) {
       const { data: myClasses } = await supabase.from("classes").select("id").eq("teacher_id", teacherId);
@@ -103,8 +112,6 @@ export async function sendOnescreenNotice(input: OnescreenNoticeInput): Promise<
       );
       allowedIds = new Set(enr.map((e) => e.student_id));
     } else {
-      if (!(await canWriteTenant(user.systemRole, "lesson_reports")))
-        return { ok: false, error: "공지 발송 권한이 없습니다" };
       allowedIds = new Set(studentIds);
     }
     if (!allowedIds.size) return { ok: false, error: "담당 학생이 아닙니다" };

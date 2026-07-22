@@ -184,7 +184,7 @@ function AnnouncementForm({
   );
 }
 
-function Manager({ items }: { items: ManageAnnouncementRow[] }) {
+function Manager({ items, unavailable = false }: { items: ManageAnnouncementRow[]; unavailable?: boolean }) {
   const [editing, setEditing] = useState<ManageAnnouncementRow | null>(null);
   const editTriggerRef = useRef<HTMLButtonElement | null>(null);
   const finishEditing = () => {
@@ -205,8 +205,14 @@ function Manager({ items }: { items: ManageAnnouncementRow[] }) {
 
       {/* 기존 공지 목록 */}
       <div className="border-border flex min-h-0 flex-1 flex-col border-t px-5 pt-3 pb-4">
-          <p className="micro mb-2 shrink-0">등록된 공지 ({items.length})</p>
-          {items.length === 0 ? (
+          <p className="micro mb-2 shrink-0">등록된 공지 {unavailable ? "" : `(${items.length})`}</p>
+          {/* ⚠️ 조회 실패를 '아직 공지가 없습니다'로 위장하면 원장이 같은 공지를 다시 써서 중복 게시된다
+              (관리 목록은 카드와 별개 쿼리라 카드만 정상일 수 있음, 2026-07-22 전수검사). */}
+          {unavailable ? (
+            <p className="text-text-faint py-4 text-center text-xs">
+              공지 목록을 불러오지 못했습니다. 잠시 후 다시 열어 주세요.
+            </p>
+          ) : items.length === 0 ? (
             <p className="text-text-faint py-4 text-center text-xs">아직 공지가 없습니다</p>
           ) : (
             <ul className="divide-border min-h-0 flex-1 divide-y overflow-y-auto">
@@ -245,7 +251,13 @@ function Manager({ items }: { items: ManageAnnouncementRow[] }) {
   );
 }
 
-export function AnnouncementsManager({ items }: { items: ManageAnnouncementRow[] }): ReactNode {
+export function AnnouncementsManager({
+  items,
+  unavailable = false,
+}: {
+  items: ManageAnnouncementRow[];
+  unavailable?: boolean;
+}): ReactNode {
   return (
     <Dialog>
       <DialogTrigger
@@ -280,7 +292,7 @@ export function AnnouncementsManager({ items }: { items: ManageAnnouncementRow[]
           <X className="size-4" />
           <span className="sr-only">공지 관리 닫기</span>
         </DialogClose>
-        <Manager items={items} />
+        <Manager items={items} unavailable={unavailable} />
       </DialogContent>
     </Dialog>
   );

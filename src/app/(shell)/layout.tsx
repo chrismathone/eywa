@@ -153,7 +153,13 @@ export default async function ShellLayout({ children }: { children: ReactNode })
   const canTeacherView = await canUseTeacherView();
 
   return (
-    // print:h-auto/overflow-visible — 인쇄 클리핑 방지(위 미니멀 셸 래퍼와 동일).
+    // ⚠️ OperationsProvider는 **셸 전체**를 감싼다 — 예전엔 <main> 안 {children}만 감쌌더니
+    // 그 밖 형제로 마운트되는 <WorkspaceCanvas>(플로팅 창)가 컨텍스트를 못 받아, 창 안에서 부른
+    // useSubjectMaps()가 buildSubjectMaps([]) 폴백을 타 과목이 "수학" 대신 raw 키 `math`로 떴다
+    // (2026-07-22 전수검사 — 학생 요약 peek 창, 진입=커맨드 팰릿 학생 검색).
+    // 라우트 창(iframe)은 자식 문서가 위 embed 분기에서 다시 받으므로 무관했다.
+    <OperationsProvider subjects={settings.operations.subjects} gradeLevels={settings.operations.gradeLevels}>
+    {/* print:h-auto/overflow-visible — 인쇄 클리핑 방지(위 미니멀 셸 래퍼와 동일). */}
     <div style={brandStyle} className="bg-background text-foreground flex h-screen flex-col overflow-hidden print:h-auto print:overflow-visible lg:flex-row">
       {/* 셸 크롬(사이드바·모바일내비·헤더)은 iframe(플로팅 창) 안에선 숨긴다 — 드릴인으로 embed가
           떨어져도 메뉴탭이 이중으로 뜨지 않도록 사전 차단(HideInFrame). 최상위 프레임은 그대로 노출. */}
@@ -189,9 +195,9 @@ export default async function ShellLayout({ children }: { children: ReactNode })
           {/* 드릴인 등으로 embed 파라미터가 떨어진 하드 내비가 창(iframe) 안에서 풀 셸을 렌더하면
               물리 프레임 판정으로 .embed-main 마커를 재부착 — PageHeader 컴팩트의 HideInFrame판. */}
           <EmbedMainMarker />
-          <EditPresenceProvider user={{ id: user.id, displayName: user.displayName, tenantId: user.tenantId }}><OperationsProvider subjects={settings.operations.subjects} gradeLevels={settings.operations.gradeLevels}>
+          <EditPresenceProvider user={{ id: user.id, displayName: user.displayName, tenantId: user.tenantId }}>
             {children}
-          </OperationsProvider></EditPresenceProvider>
+          </EditPresenceProvider>
         </main>
       </div>
 
@@ -204,5 +210,6 @@ export default async function ShellLayout({ children }: { children: ReactNode })
       {/* 공지 팝업 — 셸 진입 시 창처럼 노출(데스크톱/모바일 공용, 임베드 제외) */}
       <NoticePopupLayer popups={popups} />
     </div>
+    </OperationsProvider>
   );
 }

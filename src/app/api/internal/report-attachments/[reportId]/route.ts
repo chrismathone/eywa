@@ -37,6 +37,16 @@ export async function GET(
   const files = attachments.filter((a) => !isImageAttachment(a.name || a.path)); // 파일만(이미지는 스샷에 포함)
   if (!files.length) return NextResponse.json({ files: [] });
 
+  // ⚠️ 학원설정 showAttachments는 **여기서 재검사하지 않는다**(형제 notice-attachments와 동일 규약).
+  // 2026-07-22 전수검사에서 "여기가 유일한 초크포인트"라며 게이트를 넣었다가 되돌렸다 — 두 가지가 틀렸다:
+  //  ① 게이트는 이미 있다. 워커가 이 설정을 **Postgres에서 직접** 읽고(classnote-core.mjs `isShowAttachmentsEnabled`)
+  //     `if (showAttachments && fileAtts.length && boardId)`로 이 경로 진입 자체를 막는다. 앱이 전달할 필요가 없다.
+  //     (당시 grep을 `src/features/report-admin/`으로만 돌려 워커 파일을 놓쳤다.)
+  //  ② 여기서 빈 목록을 주면 **더 나쁘다**. 워커는 이 경로에 들어온 이상 빈 목록을 서명 실패로 보고
+  //     `ok:false` → retry+1 → 3회째 `failed`로 떨군다. 첨부만 빠지는 게 아니라 **본문까지 발송이 통째로 막히고**,
+  //     원인은 "스토리지 서명 실패"로 거짓 기록된다(원장이 폴 진행 중 토글을 끄면 그 배치가 전멸).
+  // 읽기 시점에 조용히 빼지 말 것 — 게이트는 발송 시점 한 곳(#77).
+
   const urls = await resolveTenantReadUrls(
     files.map((a) => a.path),
     "report_attachment",

@@ -20,6 +20,7 @@ export function CommandBand({
   identity,
   metrics,
   enrollmentChanges,
+  enrollmentChangesUnavailable = false,
 }: {
   identity: {
     name: string;
@@ -46,6 +47,11 @@ export function CommandBand({
     newStudents: EnrollmentChangeStudent[];
     withdrawn: EnrollmentChangeStudent[];
   } | null;
+  /**
+   * 증감 조회 실패 — '이번 달 ±0'은 **사실 주장**이라 실패를 그걸로 위장하면 원장이 "이번 달 변동 없음"으로
+   * 읽는다(실제로는 신규·퇴원이 있어도). 페이지 래퍼가 이미 계산해 두고도 안 넘기던 값(2026-07-22 전수검사).
+   */
+  enrollmentChangesUnavailable?: boolean;
 }) {
   const { name, honorific } = identity;
   const { enrollment, attendance, billing } = metrics;
@@ -88,13 +94,17 @@ export function CommandBand({
             value={enrollment.count.toLocaleString("ko-KR")}
             unit="명"
             sub={
-              <EnrollmentChangeModal
-                deltaText={deltaText}
-                newCount={enrollmentChanges?.newCount ?? 0}
-                withdrawnCount={enrollmentChanges?.withdrawnCount ?? 0}
-                newStudents={newStudents}
-                withdrawn={withdrawn}
-              />
+              enrollmentChangesUnavailable ? (
+                <span className="text-text-faint text-[12px]">이번 달 증감을 불러오지 못했습니다</span>
+              ) : (
+                <EnrollmentChangeModal
+                  deltaText={deltaText}
+                  newCount={enrollmentChanges?.newCount ?? 0}
+                  withdrawnCount={enrollmentChanges?.withdrawnCount ?? 0}
+                  newStudents={newStudents}
+                  withdrawn={withdrawn}
+                />
+              )
             }
           />
         ) : null}

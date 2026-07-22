@@ -17,15 +17,25 @@ const OUTCOME: Record<DashEnrollmentRow["outcome"], { label: string; color: Pill
   ai_done: { label: "AI 완료", color: "gold" },
 };
 
-export function EnrollmentListCard({ list }: { list: DashEnrollmentList }) {
+export function EnrollmentListCard({
+  list,
+  // 조회 실패 — '상담 없음'(사실 주장)과 구분해야 한다. 페이지의 dashboardQuery 래퍼가 이미 계산해
+  // 두고도 카드가 안 읽어, 실패를 "오늘 상담이 없었다"로 위장하고 있었다(2026-07-22 전수검사).
+  unavailable = false,
+}: {
+  list: DashEnrollmentList;
+  unavailable?: boolean;
+}) {
   return (
     <DashCard
       title="등록상담"
-      count={list.total > 0 ? `최근 30일 ${list.total}건` : undefined}
+      count={!unavailable && list.total > 0 ? `최근 30일 ${list.total}건` : undefined}
       href="/enrollment"
       hrefLabel="전체"
     >
-      {list.rows.length === 0 ? (
+      {unavailable ? (
+        <DashEmpty>등록상담을 불러오지 못했습니다. 등록상담 화면에서 확인해 주세요.</DashEmpty>
+      ) : list.rows.length === 0 ? (
         <DashEmpty>최근 30일 진행 중인 등록상담이 없습니다</DashEmpty>
       ) : (
         <ul className="divide-border min-h-0 flex-1 divide-y overflow-y-auto">

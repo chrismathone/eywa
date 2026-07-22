@@ -50,12 +50,18 @@ export default async function EnrollmentPrintPage({
   const latePolicy = settings.billing.latePolicy?.trim();
 
   const p = consult.aiAnalysis.printPayload;
-  const consultedDate = new Date(p.consultedAt).toLocaleDateString("ko-KR", {
-    timeZone: "Asia/Seoul",
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
+  // ⚠️ 녹음 경로 payload엔 consultedAt·diagnosis·recommendedClasses가 **없다**(PrintPayload 주석 참조) —
+  // 상담일은 상담 행(consult)을 폴백으로 쓴다. payload만 믿으면 "Invalid Date"가 찍힌다.
+  const consultedAtRaw = p.consultedAt ?? consult.consultedAt;
+  const consultedDate = consultedAtRaw
+    ? new Date(consultedAtRaw).toLocaleDateString("ko-KR", {
+        timeZone: "Asia/Seoul",
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      })
+    : "—";
+  const recommendedClasses = p.recommendedClasses ?? [];
 
   return (
     <div className="print-portrait mx-auto max-w-[210mm] bg-white px-12 py-10 text-black print:p-0">
@@ -89,7 +95,8 @@ export default async function EnrollmentPrintPage({
         />
         <Row label="상담일" value={consultedDate} />
         <Row label="상담사" value={p.consultantName ?? "—"} />
-        <Row label="종합 수준" value={p.diagnosis.level} bold />
+        {/* 녹음 경로엔 diagnosis가 없다 — 그 경우 이 줄을 빼고 아래 AudioReportSections가 본문을 채운다. */}
+        {p.diagnosis ? <Row label="종합 수준" value={p.diagnosis.level} bold /> : null}
       </section>
 
       <hr className="my-6 border-black/20" />
@@ -120,7 +127,7 @@ export default async function EnrollmentPrintPage({
             (p as unknown as { audioReport: ConsultationAudioReport }).audioReport
           }
         />
-      ) : (
+      ) : p.diagnosis && p.learningPlan ? (
         <>
           <Section title="AI 진단 요약">
             <p className="text-sm leading-relaxed">{p.diagnosis.summary}</p>
@@ -152,12 +159,12 @@ export default async function EnrollmentPrintPage({
             </div>
           </Section>
         </>
-      )}
+      ) : null}
 
-      {p.recommendedClasses.length > 0 ? (
+      {recommendedClasses.length > 0 ? (
         <Section title="추천 반">
           <ul className="space-y-1 text-sm">
-            {p.recommendedClasses.map((c) => (
+            {recommendedClasses.map((c) => (
               <li key={c} className="flex items-center gap-2">
                 <span className="text-black/40">▸</span>
                 <span>{c}</span>

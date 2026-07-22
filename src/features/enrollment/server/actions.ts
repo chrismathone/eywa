@@ -571,23 +571,11 @@ type AnalysisShape = {
   };
 };
 
-function stubAnalysis(prospectName: string, level: string): AnalysisShape {
-  return {
-    diagnosis: {
-      strengths: ["기초 학력 양호", "성실한 학습 태도", "꾸준한 출석 의지"],
-      weaknesses: ["응용 문제 풀이 훈련 부족", "서술형 정리 미숙"],
-      level,
-      summary:
-        `${prospectName} 학생은 기본 학력은 안정적이지만 응용/서술형 영역에서 추가 훈련이 필요합니다. ` +
-        `(ANTHROPIC_API_KEY 미연결 — 실제 Claude 호출 대신 stub 결과를 사용합니다)`,
-    },
-    learningPlan: {
-      immediate: ["기본 개념 복습 4주", "주 1회 과제 첨삭"],
-      semester: ["응용 문제 100제 풀이", "월말 평가 + 1:1 피드백"],
-      longTerm: ["상위 반 진학", "기말고사 1등급 목표"],
-    },
-  };
-}
+// ⚠️ 여기 있던 stubAnalysis()는 2026-07-22 전수검사로 제거했다(재도입 금지).
+// AI 호출이 실패하면 "기초 학력 양호·성실한 학습 태도" 같은 **아무 학생에게나 통하는 가짜 진단**을
+// 만들어 DB에 커밋하고 outcome까지 'ai_done'으로 바꿨다. 그 값은 담임 인수인계 인쇄물에 그대로 실린다
+// (analyzeMeeting·analyzeStudentConsultation·재분석 등 형제 액션은 전부 실패를 실패로 표면화한다).
+// 실데이터 확인 결과 model_version='stub*' 행은 0건 — 한 번도 안 터졌을 뿐 배선은 살아 있었다.
 
 export type RunAiState = { error?: string } | undefined;
 
@@ -611,17 +599,21 @@ export async function runAiAnalysis(
   const { data: c } = await supabase
     .from("enrollment_consultations")
     .select(
-      "id, prospect_name, prospect_grade, prospect_school, parent_request, learning_history, consulted_at, consultant_id",
+      "id, prospect_name, prospect_grade, prospect_school, parent_name, parent_phone, parent_request, learning_history, consulted_at, consultant_id",
     )
     .eq("id", consultationId)
     .single();
 
   if (!c) return { error: "상담을 찾을 수 없습니다" };
 
-  const { data: classes } = await supabase
-    .from("classes")
-    .select("id, class_name, subject")
-    .eq("is_active", true);
+  // 상담사 이름 — print_payload.consultantName의 소스. consultant_id는 예전부터 select만 하고
+  // 한 번도 안 썼다(인쇄물 '상담사' 칸이 항상 "—"였던 원인, 2026-07-22 전수검사).
+  const [{ data: classes }, { data: consultant }] = await Promise.all([
+    supabase.from("classes").select("id, class_name, subject").eq("is_active", true),
+    c.consultant_id
+      ? supabase.from("users").select("display_name").eq("id", c.consultant_id).maybeSingle()
+      : Promise.resolve({ data: null }),
+  ]);
 
   const gradePrefix = (c.prospect_grade ?? "").slice(0, 2);
   const matchingClasses = (classes ?? []).filter((cl) =>
@@ -629,7 +621,7 @@ export async function runAiAnalysis(
   );
 
   let analysis: AnalysisShape;
-  let modelId = "stub";
+  let modelId: string;
   try {
     const { data, model } = await generateJSON<AnalysisShape>({
       maxTokens: 2048,
@@ -663,8 +655,11 @@ export async function runAiAnalysis(
     });
     analysis = data;
     modelId = model;
-  } catch {
-    analysis = stubAnalysis(c.prospect_name, "중상위권");
+  } catch (e) {
+    // 실패는 실패로 — 가짜 분석을 만들어 저장하지 않는다(위 stubAnalysis 주석 참조).
+    // 원문은 서버 로그로만(UI에 기술 원문 노출 금지), 화면엔 한글 안내 + 재시도 유도.
+    console.error("[runAiAnalysis] AI 분석 실패", e);
+    return { error: "AI 분석에 실패했습니다 — 잠시 후 다시 시도해 주세요" };
   }
 
   const printPayload = {
@@ -672,11 +667,13 @@ export async function runAiAnalysis(
       name: c.prospect_name,
       grade: c.prospect_grade,
       school: c.prospect_school,
-      parentName: null,
-      parentPhone: null,
+      // ⚠️ 예전엔 셋 다 null 리터럴이라 인수인계 인쇄물의 '학부모 (연락처)'·'상담사' 칸이 항상 "—"였다
+      // (녹음 웹훅 경로는 채우고 있어 "어떤 상담은 되고 어떤 상담은 안 되는" 형태였음).
+      parentName: c.parent_name,
+      parentPhone: c.parent_phone,
     },
     consultedAt: c.consulted_at,
-    consultantName: null,
+    consultantName: consultant?.display_name ?? null,
     parentRequest: c.parent_request,
     learningHistory: c.learning_history,
     diagnosis: analysis.diagnosis,

@@ -14,17 +14,27 @@ export function AnnouncementsCard({
   items,
   canManage = false,
   manageItems = [],
+  // 조회 실패 — '공지 없음'(사실 주장)과 구분(EnrollmentListCard 주석 참조).
+  unavailable = false,
+  // 카드와 관리 목록은 **별개 쿼리**라 한쪽만 실패할 수 있다 → 실패 표시도 각각.
+  manageUnavailable = false,
 }: {
   items: AnnouncementRow[];
   canManage?: boolean;
   manageItems?: ManageAnnouncementRow[];
+  unavailable?: boolean;
+  manageUnavailable?: boolean;
 }) {
   return (
     <DashCard
       title="공지"
-      action={canManage ? <AnnouncementsManager items={manageItems} /> : undefined}
+      action={
+        canManage ? <AnnouncementsManager items={manageItems} unavailable={manageUnavailable} /> : undefined
+      }
     >
-      {items.length === 0 ? (
+      {unavailable ? (
+        <DashEmpty>공지를 불러오지 못했습니다. 잠시 후 새로고침해 주세요.</DashEmpty>
+      ) : items.length === 0 ? (
         <DashEmpty>등록된 공지가 없습니다</DashEmpty>
       ) : (
         <ul className="divide-border min-h-0 flex-1 divide-y overflow-y-auto">
