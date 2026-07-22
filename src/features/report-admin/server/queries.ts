@@ -113,6 +113,12 @@ export type ClassnoteQueueView = {
   items: QueueItem[]; // 주의 필요(실패·오래됨·동명이인·멈춤) 목록 — 상한 100
   pending: QueueItem[]; // 진행 중(대기·처리중, 정상 흐름) 목록 — 상한 100
   workers: WorkerStatus[];
+  /**
+   * 이 뷰를 만든 **서버 시각**(epoch ms). 화면이 워커 알림의 경과("10시간 전")를 계산하는 기준.
+   * ⚠️ 클라에서 `Date.now()`를 부르지 않는 이유 둘: ① React 19 purity 룰(렌더 중 비순수 호출 금지)
+   *    ② 연동 PC·서버·브라우저 시계가 서로 다를 수 있어 **서버 기준**이 유일하게 일관된다.
+   */
+  nowMs: number;
   since: string; // 집계 시작일
   days: number;
   sendEnabled: boolean; // ClassNote 실제 발송 스위치(false=dry-run, 재발송이 실제 전송 안 함)
@@ -208,7 +214,7 @@ export async function getClassnoteQueue(days = 3): Promise<ClassnoteQueueView | 
   });
 
   const settings = await getTenantSettings();
-  return { summary, items, pending, workers, since, days, sendEnabled: settings.report.classnoteSendEnabled };
+  return { summary, items, pending, workers, nowMs, since, days, sendEnabled: settings.report.classnoteSendEnabled };
 }
 
 // 강사 행 + 과목 태그(반 담당·슬롯 라벨 기준) — 카드의 [전체/과목] 분류 칩 소스.
