@@ -11,17 +11,18 @@ export function isImageAttachment(nameOrPath: string): boolean {
 /**
  * 화면에 실을 첨부 목록.
  *
- * ⚠️ `forScreenshot`(ClassNote 발송 워커가 /r을 캡처하는 요청)이면 **첨부를 전부 뺀다**(빈 배열).
- * 워커가 첨부를 ClassNote 게시글에 **네이티브 첨부**로 따로 붙이기 때문에 스샷에 또 실으면 중복이다:
- *  · 파일(비이미지) = `attached_files` (스샷은 그림이라 '받기'가 안 눌려 다운로드 버튼처럼 오해 — 2026-07-21 원장 제보)
- *  · 이미지(교재 등) = `attached_images`에 개별 부착 (2026-07-22 원장 요청 — "보고서 하단엔 첨부이미지 없어야")
- * 둘 다 게시글에 네이티브로 붙으므로 정보 손실 없이 스샷 중복만 사라진다.
- * forScreenshot=false(학부모가 여는 실제 /r 페이지)는 종전대로 전부 렌더(이미지 인라인 + 파일 링크).
+ * ⚠️ `forScreenshot`(ClassNote 발송 워커가 /r을 캡처하는 요청)이면 **파일(비이미지) 첨부를 뺀다**
+ * — 스샷은 그림이라 '받기'가 눌리지 않는데, 게시글 이미지 안에 다운로드 버튼처럼 찍혀 학부모가
+ * 눌러보고 오해한다(2026-07-21 원장 제보). 실제 파일은 같은 게시글에 **네이티브 첨부**로 따로 붙으므로
+ * 정보 손실이 없고 중복도 사라진다.
+ *
+ * **사진(이미지)은 스샷에 남긴다** — /r 하단에 크게 실려 스샷 1장으로 세로 완결(ParentReportCard).
+ * ⚠️ 이미지 개별 부착(attached_images)은 2026-07-22 시도했다가 철회: ClassNote가 가로로 나열해 세로가 안 됐다.
  */
 export function visibleAttachments<T extends { name: string; path: string }>(
   list: T[],
   opts: { forScreenshot: boolean },
 ): T[] {
   if (!opts.forScreenshot) return list;
-  return []; // 워커 스샷: 첨부는 전부 네이티브 부착으로 이관 → 스샷엔 안 실음
+  return list.filter((a) => isImageAttachment(a.name || a.path));
 }
