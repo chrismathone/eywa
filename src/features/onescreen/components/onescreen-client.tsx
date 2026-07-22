@@ -146,6 +146,8 @@ export function OneScreenClient({
   canEditAttendance = true,
   presenceScope,
   initialView = "card",
+  noClassesToday = false,
+  showingAll = false,
 }: {
   initial: OneScreenStudent[];
   today?: string;
@@ -158,6 +160,10 @@ export function OneScreenClient({
   noticeMode?: "A" | "B" | null; // 강사 본인 멘트 모드 오버라이드(null=학원 기본) — 0104a
   academyNoticeMode?: "A" | "B"; // 학원 기본 멘트 모드(토글 '학원 기본' 라벨)
   classnoteSendEnabled?: boolean; // ClassNote 실제 발송 스위치 — 공지 dry-run 안내
+  /** 그 요일에 담당 수업이 없음 — 목록 대신 안내를 띄운다(폴백 금지, roster.ts 주석). */
+  noClassesToday?: boolean;
+  /** '담당 반 전체 보기'로 보는 중(요일 무시) — 화면이 그 사실을 밝힌다. */
+  showingAll?: boolean;
   sendWindowLabel?: string | null; // 발송 허용 시간창 "HH:MM~HH:MM"(무제한=null) — 상단 강사 참고 안내
   showAttachments?: boolean; // 사진/파일 첨부 표시(학원 설정) — off면 첨부해도 안 실린다는 경고를 카드에 표시
   canEditAttendance?: boolean; // 출결 쓰기 권한 — false면 pill을 표시 전용으로(서버 거절 전에 화면에서 알림)
@@ -1414,6 +1420,33 @@ export function OneScreenClient({
           {/* "수업 보고서" 한정 표기 — 반 공지는 시간창 미적용(G1 확정)이라 ClassNote 전체로 말하면 과약속. */}
           <span className="text-foreground font-bold">수업 보고서 발송 시간대 {sendWindowLabel}</span>
           <span> — 이 시간 외에 발송하면 예약돼 시간대가 열릴 때 자동 발송됩니다.</span>
+        </div>
+      ) : null}
+
+      {/* 그 요일에 담당 수업이 없을 때 — 예전엔 담당 반 전체가 '오늘 목록'처럼 떴다(2026-07-22 이수진 수요일:
+          반 7개·학생 37명). 이제 목록 대신 사실을 말하고, 전체 보기는 **누를 때만** 연다. */}
+      {noClassesToday && !showingAll ? (
+        <div className="border-line bg-bg-soft text-text-dim flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border px-3 py-2 text-[12.5px]">
+          <span className="text-foreground font-bold">이 날짜에는 담당 수업이 없습니다</span>
+          <span>— 다른 날짜를 고르거나, 필요하면 담당 반 전체를 볼 수 있습니다.</span>
+          <a
+            href={`/onescreen?date=${date}&all=1${view === "card" ? "" : `&view=${view}`}`}
+            className="text-primary font-bold underline underline-offset-2"
+          >
+            담당 반 전체 보기
+          </a>
+        </div>
+      ) : null}
+      {showingAll ? (
+        <div className="border-amber/40 bg-amber/5 text-amber flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border px-3 py-2 text-[12.5px]">
+          <span className="font-bold">담당 반 전체 보기 — 이 날짜에 수업이 있는 학생이 아닙니다</span>
+          <span>안 오는 날 입력·발송이 되지 않도록 주의하세요.</span>
+          <a
+            href={`/onescreen?date=${date}${view === "card" ? "" : `&view=${view}`}`}
+            className="font-bold underline underline-offset-2"
+          >
+            오늘 수업만 보기
+          </a>
         </div>
       ) : null}
 

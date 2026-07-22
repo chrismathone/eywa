@@ -38,7 +38,17 @@ export type TeacherRoster = {
   classTags: string[]; // ["전체", ...현재 로스터에 있는 학년]
   teacherName: string;
   students: OneScreenStudent[];
-  todayClasses: TodayClass[]; // 오늘(또는 폴백 전체) 담당 반 — 시작시각순
+  todayClasses: TodayClass[]; // 그 날짜에 수업이 있는 담당 반 — 시작시각순('전체 보기'면 담당 반 전체)
+  /**
+   * 그 요일에 담당 수업이 **하나도 없음**. true면 화면이 "오늘은 수업이 없습니다"를 말해야 한다.
+   * ⚠️ 2026-07-22 원장 제보: 수요일 수업이 없는 강사(이수진)의 원스크린에 **담당 반 7개·학생 37명**이
+   * 그대로 떴다 — 옛 코드가 "그 요일 반 0개 → 담당 반 전체"로 조용히 폴백했기 때문. 작성률 화면은 같은 날
+   * "수업 없음"이라 말하고 있어 **두 화면이 서로 다른 말**을 했고, 강사는 안 오는 학생 37명분을 입력할 수
+   * 있었다(발송은 0이라 막히지만 헛수고 + 출결 pill도 열림). 폴백은 이제 **명시 선택**(showAll)일 때만.
+   */
+  noClassesToday: boolean;
+  /** 지금 '담당 반 전체 보기'로 보고 있는가(요일 조건 미적용) — 화면이 그 사실을 밝힌다. */
+  showingAll: boolean;
   allowTeacherTestMax: boolean; // 강사가 테스트 문항수(/N) 직접 변경 허용(report 설정) — 원스크린 입력 UI 분기
   // 일일/확인테스트 사용 여부 = 보고서 '표시 항목' 토글(showDailyTest/showCheckTest) 재사용. off면 원스크린
   // 점수 입력칸을 숨겨(입력 안 함) + 학부모 보고서에도 미표시(parent-report-card). 표시·입력 단일 스위치.
@@ -81,6 +91,7 @@ function emptyRoster(
   teacherName: string,
   noticeMode: "A" | "B" | null = null,
   academyNoticeMode: "A" | "B" = "A",
+  flags: { noClassesToday?: boolean; showingAll?: boolean } = {},
 ): TeacherRoster {
   return {
     today,
@@ -89,6 +100,8 @@ function emptyRoster(
     teacherName,
     students: [],
     todayClasses: [],
+    noClassesToday: flags.noClassesToday ?? false,
+    showingAll: flags.showingAll ?? false,
     allowTeacherTestMax: false,
     showDailyTest: true,
     showCheckTest: true,
@@ -101,7 +114,7 @@ function emptyRoster(
   };
 }
 
-export async function getTeacherRoster(rawDate?: string): Promise<TeacherRoster> {
+export async function getTeacherRoster(rawDate?: string, showAll = false): Promise<TeacherRoster> {
   // 대상 날짜 = 고른 날짜(YYYY-MM-DD) 클램프(미래·형식오류→오늘). 요일·표시·데이터 앵커를 **모두 이 날짜**로
   // 통일(옛 코드는 요일=서버 로컬 now.getDay(), 데이터=KST kstToday()로 어긋날 수 있었음 — 함께 교정).
   const targetDate = resolveReportDate(rawDate);
@@ -153,7 +166,14 @@ export async function getTeacherRoster(rawDate?: string): Promise<TeacherRoster>
     if (prev === undefined) startByClass.set(s.class_id, t);
     else if (t && (prev === null || t < prev)) startByClass.set(s.class_id, t);
   }
-  const activeClasses = todayIds.size > 0 ? allClasses.filter((c) => todayIds.has(c.id)) : allClasses;
+  // ⚠️ 그 요일에 수업이 없으면 **비운다** — 옛 코드는 담당 반 전체로 조용히 폴백해, 수요일 수업이 없는
+  // 강사에게 담당 반 7개·학생 37명을 "오늘 목록"처럼 보여줬다(2026-07-22 이수진 사례, 타입 주석 참조).
+  // 전체 보기는 남기되 **강사가 명시로 고를 때만**(showAll) — 그때는 화면이 "전체 보기 중"임을 밝힌다.
+  const noClassesToday = todayIds.size === 0;
+  if (noClassesToday && !showAll) {
+    return emptyRoster(today, targetDate, teacherName, noticeMode, academyNoticeMode, { noClassesToday: true });
+  }
+  const activeClasses = noClassesToday ? allClasses : allClasses.filter((c) => todayIds.has(c.id));
   const classById = new Map(activeClasses.map((c) => [c.id, c]));
   const activeIds = activeClasses.map((c) => c.id);
 
@@ -188,7 +208,11 @@ export async function getTeacherRoster(rawDate?: string): Promise<TeacherRoster>
       a.class_id.localeCompare(b.class_id),
   );
   const studentIds = [...new Set(enrollments.map((e) => e.student_id))];
-  if (studentIds.length === 0) return emptyRoster(today, targetDate, teacherName, noticeMode, academyNoticeMode);
+  if (studentIds.length === 0)
+    return emptyRoster(today, targetDate, teacherName, noticeMode, academyNoticeMode, {
+      noClassesToday,
+      showingAll: noClassesToday && showAll,
+    });
 
   // 4) 학생 기본 정보
   const studentRows = await fetchInChunks<{ id: string; name: string; grade: string | null }>(
@@ -606,6 +630,8 @@ export async function getTeacherRoster(rawDate?: string): Promise<TeacherRoster>
     teacherName,
     students,
     todayClasses,
+    noClassesToday,
+    showingAll: noClassesToday && showAll,
     allowTeacherTestMax,
     showDailyTest,
     showCheckTest,

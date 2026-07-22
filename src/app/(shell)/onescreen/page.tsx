@@ -23,15 +23,16 @@ export const metadata = { title: "선생님 원스크린 — eywa" };
 export default async function OneScreenPage({
   searchParams,
 }: {
-  searchParams: Promise<{ date?: string; view?: string }>;
+  searchParams: Promise<{ date?: string; view?: string; all?: string }>;
 }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   if ((await getShellView()) !== "teacher") {
     redirect(roleHome(user.systemRole, await getPermMatrix()));
   }
-  const { date, view } = await searchParams;
-  const roster = await getTeacherRoster(date);
+  const { date, view, all } = await searchParams;
+  // all=1 = 강사가 '담당 반 전체 보기'를 명시로 고른 상태. 기본은 그 요일 수업만(폴백 금지).
+  const roster = await getTeacherRoster(date, all === "1");
   return (
     // key=대상 날짜 — 날짜 이동(searchParam) 시 클라 상태를 새 날짜 로스터로 재초기화(useState는 최초 1회만).
     <OneScreenClient
@@ -50,6 +51,8 @@ export default async function OneScreenPage({
       sendWindowLabel={roster.sendWindowLabel}
       showAttachments={roster.showAttachments}
       canEditAttendance={roster.canEditAttendance}
+      noClassesToday={roster.noClassesToday}
+      showingAll={roster.showingAll}
       // 다른 창/기기 동시 열림 경고(3-3) — teacherId는 서버 파생(user.id = 담당 반 소유자, 겸직 포함).
       presenceScope={`onescreen:${user.id}:${roster.date}`}
       // 날짜 이동은 위 key로 클라를 재마운트하므로 뷰(표·발송현황 등)는 URL로 넘겨받아야 유지된다.
