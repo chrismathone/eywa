@@ -80,6 +80,42 @@ let lastReadRunAt = 0;
  * 무관하게 돌아도 안전하다. eywa DB 쓰기는 `apply`가 false면 건너뛴다(조사·검증용 dry-run).
  * 반환: `{ran}` + 관측 카운터.
  */
+/**
+ * 반 단위 알림장 작성일 적재(0140a `classnote_class_posts`) — **영어 작성률용**.
+ *
+ * 영어 강사는 eywa가 아니라 ClassNote에 직접 쓴다. 피드는 페이지 상한 때문에 최근 3주치만 보이므로,
+ * 워커가 볼 때 (보드, 날짜)를 남겨 둬야 그 이후로 영구 보존된다.
+ * 복합 PK(tenant, board_name, posted_on)라 30분마다 같은 창을 다시 긁어도 upsert로 덮일 뿐 중복이 없다.
+ *
+ * ⚠️ best-effort — 실패해도 읽음 동기화(본 흐름)를 막지 않는다. 로그만 남긴다.
+ * ⚠️ 한시적: 영어가 eywa 발송으로 전환되면 `lesson_reports`가 진실이 되므로 이 적재는 폐기 대상.
+ */
+async function ingestClassPosts(sql, rows, { tenant, log, dryRun }) {
+  try {
+    const { extractClassPostDays } = await import("./english-posts-filter.mjs");
+    const days = extractClassPostDays(rows);
+    if (days.length === 0) return;
+    if (dryRun) {
+      log(`[반알림장] 적재 후보 ${days.length}건 (dry-run — 저장 안 함)`);
+      return;
+    }
+    const boards = days.map((d) => d.boardName);
+    const dates = days.map((d) => d.postedOn);
+    const counts = days.map((d) => d.postCount);
+    const saved = await sql`
+      insert into classnote_class_posts (tenant_id, board_name, posted_on, post_count)
+      select ${tenant}, b, d::date, c
+      from unnest(${boards}::text[], ${dates}::text[], ${counts}::int[]) as t(b, d, c)
+      on conflict (tenant_id, board_name, posted_on)
+        do update set post_count = excluded.post_count, updated_at = now()
+      returning board_name`;
+    const distinctBoards = new Set(days.map((d) => d.boardName)).size;
+    log(`[반알림장] 보드 ${distinctBoards}개 · 작성일 ${saved.length}건 적재(멱등)`);
+  } catch (e) {
+    log(`[반알림장] ⚠️ 적재 실패(읽음 동기화는 계속): ${e?.message ?? e}`);
+  }
+}
+
 export async function pollReportReadsOnce(
   sql,
   browser,
@@ -93,6 +129,12 @@ export async function pollReportReadsOnce(
   const scan = summarizeReadScan(rows);
   const updates = buildReadUpdates(rows);
   log(`[읽음] 피드 ${rows.length}건 · 학원발송 ${scan.sent} (읽음 ${scan.read}/미읽음 ${scan.unread}, 링크없음 ${scan.noToken}) → 갱신 후보 ${updates.length}`);
+
+  // ── 영어 작성률 적재(0140a) — **같은 rows를 재사용하므로 추가 요청 0.**
+  // 피드는 3주치만 보이므로 볼 수 있을 때 적재해 둔다(안 그러면 영구 유실). 읽음 갱신과 독립이라
+  // 여기서 먼저 처리하고, 실패해도 읽음 동기화를 막지 않는다(best-effort).
+  await ingestClassPosts(sql, rows, { tenant, log, dryRun });
+
   if (dryRun || updates.length === 0) return { ran: true, ...scan, matched: 0, dryRun };
 
   // 토큰 종류별로 배치 갱신. 이미 채워진 행은 건드리지 않는다(멱등 + 쓰기 최소화).
