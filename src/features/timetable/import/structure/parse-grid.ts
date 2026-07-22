@@ -9,8 +9,10 @@
 //   A열 라벨 텍스트는 불규칙("3:00~3:40" 다음 행이 "3:10~3:20")해 end가 틀렸었음 — 앵커 검증에만 사용.
 // 파서는 throw하지 않는다 — 인식 못한 셀은 건너뛰고 warnings에 남긴다(자유 편집 시트 방어).
 
-import { koDayToEnum } from "@/features/timetable/lib/periods";
+import { enumDayToKo, koDayToEnum, type DayOfWeek } from "@/features/timetable/lib/periods";
 import type {
+  ParsedScheduleBlock,
+  ScheduleBlockKind,
   ParsedStructure,
   ParsedStructureSlot,
   ParsedTeacherBlock,
@@ -69,8 +71,25 @@ function className(raw: string): string {
   return raw.split(/[/\n]/)[0]!.replace(/^\*+/, "").trim();
 }
 
+/**
+ * 비수업 칸 분류 — 시트가 강사의 하루 전체를 그리므로 수업 사이에 이런 칸이 섞인다(0135a).
+ * ⚠️ 감독('supervise')은 여기서 못 정한다 — 셀이 **다른 강사 이름 한 단어**인지 알려면 블록 목록이
+ * 다 모여야 해서, 파싱 2패스 뒤에 판정한다. 여기선 문구로 바로 아는 것만.
+ */
+const NON_CLASS_KINDS: { re: RegExp; kind: ScheduleBlockKind }[] = [
+  { re: /^쉬는\s*시간/, kind: "break" },
+  { re: /^수업\s*준비/, kind: "prep" },
+  { re: /미팅|회의/, kind: "meeting" },
+  { re: /연차|휴가/, kind: "leave" },
+];
+
+function nonClassKind(name: string): ScheduleBlockKind | null {
+  return NON_CLASS_KINDS.find((x) => x.re.test(name))?.kind ?? null;
+}
+
 export function parseTeacherGrid(grid: SheetGrid): ParsedStructure {
   const warnings: string[] = [];
+  const blocks: ParsedScheduleBlock[] = [];
   const rowCount = grid.cells.length;
 
   // 시각 앵커 — DATA_START_ROW의 A열 라벨 첫 토큰으로 검증(파싱 실패 시 14:20 기본 + 경고).
@@ -126,6 +145,11 @@ export function parseTeacherGrid(grid: SheetGrid): ParsedStructure {
     teachers.push(block);
 
     // 이 블록의 요일 열(4행 헤더 기준).
+    // ⚠️ 요일 헤더가 **가로 병합**이면 그 요일은 여러 열(=병렬 레인)을 덮는다 — LAB(JJ·이주희)처럼 같은
+    // 시각에 여러 반이 도는 강사가 이렇게 그려진다(실측 이주희 화=5열). 병합 셀은 좌상단에만 값이 있어
+    // 셀 값만 보면 나머지 레인이 "요일 없음"으로 통째 스킵된다 → 2026-07-22 실측: 이주희 51→24슬롯 유실.
+    // 그래서 병합 범위만큼 요일을 **펼쳐서** 열마다 매핑한다.
+    const dayOfCol = new Map<number, DayOfWeek>();
     for (let c = bc; c < nextCol; c++) {
       const koDay = cell(grid, DAY_ROW, c).match(DAY_HEAD_RE)?.[1];
       if (!koDay) continue;
@@ -134,6 +158,12 @@ export function parseTeacherGrid(grid: SheetGrid): ParsedStructure {
         warnings.push(`요일 인식 실패: (${DAY_ROW},${c}) "${cell(grid, DAY_ROW, c)}"`);
         continue;
       }
+      const dm = mergeAt.get(`${DAY_ROW},${c}`);
+      const lastCol = dm && dm.r1 === DAY_ROW ? Math.min(dm.c2, nextCol - 1) : c;
+      for (let cc = c; cc <= lastCol; cc++) dayOfCol.set(cc, day);
+    }
+    for (const [c, day] of dayOfCol) {
+      const koDay = cell(grid, DAY_ROW, c).match(DAY_HEAD_RE)?.[1] ?? enumDayToKo(day);
 
       // 데이터 셀 순회 — 값 있는 셀만(병합은 좌상단에만 값). 각 셀 = 한 수업.
       for (let r = DATA_START_ROW; r < rowCount; r++) {
@@ -152,6 +182,19 @@ export function parseTeacherGrid(grid: SheetGrid): ParsedStructure {
         // 반명이 비면(별표만 있는 표식 셀 등) 슬롯이 아니다 — 빈 이름은 어떤 반과도 매칭될 수 없다.
         if (className(raw) === "") {
           warnings.push(`반명 없는 셀 건너뜀: (${r},${c}) "${raw.replace(/\n/g, "⏎").slice(0, 30)}"`);
+          continue;
+        }
+        // 비수업 칸(쉬는 시간·수업준비·회의·연차)은 슬롯이 아니라 **블록**으로. 감독은 2패스에서 승격.
+        const kind = nonClassKind(className(raw));
+        if (kind) {
+          blocks.push({
+            teacherName: block.name,
+            day,
+            startTime: start,
+            endTime: end,
+            kind,
+            label: className(raw),
+          });
           continue;
         }
         const slot: ParsedStructureSlot = {
@@ -174,5 +217,31 @@ export function parseTeacherGrid(grid: SheetGrid): ParsedStructure {
     }
   });
 
-  return { tabName: grid.tabName, teachers, slots, warnings };
+  // ── 2패스: '감독' 승격 ──────────────────────────────────────────────────────
+  // 셀이 **다른 강사 블록의 이름 한 단어**면 그 강사 수업을 감독하러 가는 것이다(원장 확인 2026-07-22:
+  // "병합 셀에 JJ 문구 딱 하나면 실제 JJ 수업이 맞아. 감독하러 가야함"). 1패스에선 반 이름과 구분이
+  // 안 돼 슬롯으로 들어가 있으므로, 블록 이름이 다 모인 지금 걸러 블록으로 옮긴다.
+  // ⚠️ 자기 이름은 제외 — 자기 블록에 자기 이름이 적힌 건 감독이 아니다(머리글 오인 방어).
+  const teacherNames = new Set(teachers.filter((t) => !t.reserve).map((t) => t.name));
+  const classSlots: ParsedStructureSlot[] = [];
+  for (const s of slots) {
+    if (teacherNames.has(s.className)) {
+      // 강사 이름이 적힌 칸은 **어떤 경우에도 반이 아니다.** 다른 강사면 감독, 자기 이름이면 의미가
+      // 불분명하니 'other'로 담아만 둔다(그림엔 나오고 반·수강엔 절대 안 들어간다).
+      const isOther = s.className === s.teacherName;
+      blocks.push({
+        teacherName: s.teacherName,
+        day: s.day,
+        startTime: s.startTime,
+        endTime: s.endTime!,
+        kind: isOther ? "other" : "supervise",
+        label: s.className,
+        ...(isOther ? {} : { superviseTarget: s.className }),
+      });
+      continue;
+    }
+    classSlots.push(s);
+  }
+
+  return { tabName: grid.tabName, teachers, slots: classSlots, blocks, warnings };
 }

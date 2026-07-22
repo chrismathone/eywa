@@ -338,6 +338,20 @@ export function TeacherGridView({
                           <div className="flex h-full min-w-0 gap-px">
                             {group.intervals.map((iv) => {
                               const s = intervalSlot(iv);
+                              // 비수업 블록(감독·준비·회의·연차, 0135a) = 반이 아니다 → 학생 명단 토글도
+                              // 반 링크도 없는 **읽기 전용 라벨**. 시트가 이 칸을 그리므로 자리는 지키되,
+                              // 수업 칩과 헷갈리지 않게 톤을 낮춘다(테두리 점선 + 흐린 글자).
+                              if (s.blockKind) {
+                                return (
+                                  <div
+                                    key={s.id}
+                                    title={s.blockKind === "supervise" ? `${s.className} 수업 감독` : s.className}
+                                    className="border-line text-text-dim bg-bg-soft/60 flex h-full min-w-0 flex-1 items-center justify-center rounded-lg border border-dashed px-1 text-center text-[11px] leading-tight break-keep"
+                                  >
+                                    {s.className}
+                                  </div>
+                                );
+                              }
                               // 방 = 슬롯 방(slot_room_label)만 — classroomName은 반의 "기본" 강의실이라
                               // 시트 미러가 아니다(JJ LAB=305인데 반 기본방이 뜨는 오류). 이주희(라벨 null)는
                               // 시트 셀처럼 방 미표기.
