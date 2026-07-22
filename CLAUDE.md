@@ -316,6 +316,7 @@ key(DB 식별자)는 **자동 확정**: 과목명 입력 후 blur 시 1회 — �
 - 셋업·마이그레이션·git 협업·검증 게이트·데모 계정·남은 작업 → `docs/setup-and-ops.md`
 - 로그인 지속·세션 정책(자동 로그인 = 회전 끔) + **외부 SaaS 전환 시 되돌리기** → `docs/auth-session-policy.md`
 - ClassNote 발송(수업보고서→학부모) 구조·운영·트러블슈팅 → `docs/classnote-integration.md` (⚠️ ClassNote를 만지기 전 필독 — 보드 명명 A~G 접미사·안전 가드·알려진 구멍·테스트 학생 '학원이')
+- 인프라 비용·소진 예측("사이버 월세" — Vercel·Supabase·AI/전사 API) 설계 → `docs/infra-cost-runway-plan.md` (⚠️ **보류 중**, 미구현. 선불 키 소진·요금 급증이 실제로 문제되면 그때 재개)
 - 기타 심층 문서 → `docs/` (audit-log · ijw-feature-port · makeedu-reverse-sync · payment-collection-plan · perf-open-window-backlog 등)
 
 > ⚠️ 새 기능·배선을 완성하면 그 요약을 `docs/changelog.md`에 한 줄 추가(진행 상황 로그). 새 함정을 만나면 `docs/gotchas.md`에 항목 추가 + 아래 인덱스에 트리거 한 줄. 새 UI 규칙은 `docs/design-conventions.md` + 디자인 인덱스.

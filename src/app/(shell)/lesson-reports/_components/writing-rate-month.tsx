@@ -111,16 +111,21 @@ export function WritingRateMonth({ view }: { view: WritingRatesView }) {
                 {r.daily.map((c) => (
                   <td
                     key={c.date}
-                    className={`border-line min-w-[30px] border-b border-r px-1 py-2 text-center text-[11px] font-bold ${cellTone(c.rate)}`}
+                    // 휴일은 "수업 없음(·)"과 눈으로도 구분되게 옅은 음영 — 분모에서 빠진 날임을 표에서 바로 읽게.
+                    className={`border-line min-w-[30px] border-b border-r px-1 py-2 text-center text-[11px] font-bold ${
+                      c.holiday ? "bg-bg-soft text-text-faint" : cellTone(c.rate)
+                    }`}
                     title={
-                      c.target == null
-                        ? c.pending
-                          ? `${c.date} — 수업 전(대상은 수업이 시작된 뒤 잡힙니다)`
-                          : `${c.date} — 수업 없음`
-                        : `${c.date} — ${c.written}/${c.target}${c.rate == null ? "" : ` (${c.rate}%)`}`
+                      c.holiday
+                        ? `${c.date} — 휴일${c.holidayName ? `(${c.holidayName})` : ""} · 작성률에서 제외`
+                        : c.target == null
+                          ? c.pending
+                            ? `${c.date} — 수업 전(대상은 수업이 시작된 뒤 잡힙니다)`
+                            : `${c.date} — 수업 없음`
+                          : `${c.date} — ${c.written}/${c.target}${c.rate == null ? "" : ` (${c.rate}%)`}`
                     }
                   >
-                    {c.target == null ? "·" : c.rate == null ? "·" : `${c.rate}`}
+                    {c.holiday ? "휴" : c.target == null ? "·" : c.rate == null ? "·" : `${c.rate}`}
                   </td>
                 ))}
                 <td className="border-line bg-card sticky right-0 z-10 border-b border-l px-3 py-2 text-right whitespace-nowrap">

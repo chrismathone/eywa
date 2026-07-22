@@ -169,3 +169,76 @@ describe("computeWritingRates — 작성 수치는 학생 단위(보고서 건�
     expect(rows[0]!.daily[0]!.written).toBe(2);
   });
 });
+
+describe("학원 지정 휴일 — 분모에서 제외(원장 2026-07-22)", () => {
+  const D = ["2026-07-07", "2026-07-08", "2026-07-09"];
+  const T = "2026-07-09";
+
+  it("휴일인 과거일은 대상 null·합계 제외 + 휴일명 표시", () => {
+    const rows = computeWritingRates(
+      D,
+      [{ teacher: "김선생", date: "2026-07-07" }],
+      [{ teacher: "김선생", target: 2, written: 2, missing: [] }],
+      [
+        { teacher: "김선생", date: "2026-07-07", target: 5 }, // ← 휴일이라 무시돼야 함
+        { teacher: "김선생", date: "2026-07-08", target: 3 },
+      ],
+      T,
+      [],
+      [{ date: "2026-07-07", name: "제헌절" }],
+    );
+    const k = rows.find((r) => r.teacher === "김선생")!;
+    expect(k.daily[0]).toEqual({
+      date: "2026-07-07",
+      count: 1,
+      target: null,
+      written: 0,
+      rate: null,
+      holiday: true,
+      holidayName: "제헌절",
+    });
+    // 주간 합계에서 휴일 대상(5)이 빠졌는지 — 08(3) + 오늘(2) = 5
+    expect(k.weekTarget).toBe(5);
+  });
+
+  it("⚠️ 서버가 실수로 대상을 넣어도 휴일이 이긴다(순수에서 최종 판정)", () => {
+    const rows = computeWritingRates(
+      D,
+      [],
+      [],
+      [{ teacher: "박선생", date: "2026-07-08", target: 9 }],
+      T,
+      [],
+      [{ date: "2026-07-08" }],
+    );
+    const p = rows.find((r) => r.teacher === "박선생")!;
+    expect(p.daily[1].target).toBeNull();
+    expect(p.daily[1].holiday).toBe(true);
+    expect(p.daily[1].holidayName).toBeUndefined(); // 이름 없는 휴일
+    expect(p.weekTarget).toBe(0);
+  });
+
+  it("오늘이 휴일이면 오늘 지표·'수업 전'도 통째로 빠진다(미작성 독촉 금지)", () => {
+    const rows = computeWritingRates(
+      D,
+      [],
+      [{ teacher: "최선생", target: 4, written: 0, missing: ["A", "B"] }],
+      [],
+      T,
+      [{ teacher: "최선생", classes: 2, firstStart: "20:10" }],
+      [{ date: T, name: "개원기념일" }],
+    );
+    const c = rows.find((r) => r.teacher === "최선생")!;
+    expect(c.daily[2].holiday).toBe(true);
+    expect(c.daily[2].pending).toBeUndefined();
+    expect(c.todayTarget).toBe(0);
+    expect(c.todayMissing).toEqual([]);
+    expect(c.todayRate).toBeNull();
+    expect(c.todayPending).toBeNull();
+  });
+
+  it("휴일 목록이 비면 기존 동작 그대로(하위호환)", () => {
+    const rows = computeWritingRates(D, [], [], [{ teacher: "김선생", date: "2026-07-08", target: 3 }], T);
+    expect(rows[0].daily[1]).toEqual({ date: "2026-07-08", count: 0, target: 3, written: 0, rate: 0 });
+  });
+});
