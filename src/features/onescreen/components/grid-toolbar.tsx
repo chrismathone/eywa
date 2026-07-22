@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { AttachPicker } from "./grid-attach";
+import { bulkPickLabel } from "../bulk-label";
 import type { BulkPatch } from "../grid";
 
 /** 표 일괄 작업 핸들러 — keys(선택 행) 있으면 그 행만, 없으면 전체. */
@@ -137,18 +138,38 @@ export function GridToolbar({
                 : `${genTarget}건의 멘트를 생성합니다`
           }
         >
-          {bulkGen ? "자동작성 중…" : selectedKeys.length ? `선택 ${genTarget} 자동작성` : `전체 자동작성 ${genTarget}`}
+          {bulkGen
+            ? "자동작성 중…"
+            : selectedKeys.length
+              ? `${bulkPickLabel(selectedKeys.length, genTarget)} 자동작성`
+              : `전체 자동작성 ${genTarget}`}
         </Button>
+        {/* ⚠️ disabled는 **선택이 있으면 선택분 기준**이다(2026-07-21 수정). 예전엔 전체 `saveable`만 봐서,
+            고른 37행이 전부 저장 대상이 아닌데도 버튼이 살아 있어 눌러도 아무 일이 없었다. */}
         <Button
           variant="outline"
           size="sm"
           onClick={() => actions.onSaveAll(selectedKeys)}
-          disabled={saveable === 0 || off}
+          disabled={(selectedKeys.length ? selectedSaveable : saveable) === 0 || off}
+          title={
+            selectedKeys.length && selectedSaveable === 0
+              ? "고른 행 중 저장할 수 있는 행이 없습니다 — 오늘 진도가 비었거나 이미 발송된 행입니다"
+              : undefined
+          }
         >
-          {selectedKeys.length ? `선택 ${selectedSaveable} 저장` : "일괄 저장"}
+          {selectedKeys.length ? `${bulkPickLabel(selectedKeys.length, selectedSaveable)} 저장` : "일괄 저장"}
         </Button>
-        <Button size="sm" onClick={() => actions.onSendAll(selectedKeys)} disabled={sendable === 0 || off}>
-          {selectedKeys.length ? `선택 ${selectedSendable} 발송` : "ClassNote 일괄 발송"}
+        <Button
+          size="sm"
+          onClick={() => actions.onSendAll(selectedKeys)}
+          disabled={(selectedKeys.length ? selectedSendable : sendable) === 0 || off}
+          title={
+            selectedKeys.length && selectedSendable === 0
+              ? "고른 행 중 발송할 수 있는 행이 없습니다 — 결석·과목 제외·이미 발송된 행입니다"
+              : undefined
+          }
+        >
+          {selectedKeys.length ? `${bulkPickLabel(selectedKeys.length, selectedSendable)} 발송` : "ClassNote 일괄 발송"}
         </Button>
       </div>
     </div>

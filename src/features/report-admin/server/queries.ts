@@ -213,23 +213,47 @@ export async function getClassnoteQueue(days = 3): Promise<ClassnoteQueueView | 
 
 // 강사 행 + 과목 태그(반 담당·슬롯 라벨 기준) — 카드의 [전체/과목] 분류 칩 소스.
 export type TeacherRateRow = TeacherRate & { subjects: string[] };
-export type WritingRatesView = { dates: string[]; rates: TeacherRateRow[] };
+export type WritingRatesView = {
+  dates: string[];
+  rates: TeacherRateRow[];
+  /** 이 뷰가 담은 범위 — 화면이 "주간/월간" 라벨과 월 이동을 결정한다. */
+  range: { kind: "week" | "month"; month: string };
+};
+
+/** 월 키("2026-07") → 그 달 1일~말일 날짜 배열(오름차순). */
+function monthDates(month: string): string[] {
+  const [y, m] = month.split("-").map(Number);
+  if (!y || !m) return [];
+  const last = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  return Array.from({ length: last }, (_, i) => `${month}-${String(i + 1).padStart(2, "0")}`);
+}
 
 /**
  * 강사별 주간 작성률(원장 보고서 관리 Part B) — 이번 주(월~일) 작성 건수(강사×일별) + 오늘 대상 대비 작성률·미작성.
  * 오늘 대상 = 오늘 시작된 반(getTodaySchedule status≠upcoming)의 활성 수강생 − 결석. 작성 = 오늘 lesson_report 존재.
  * RLS 테넌트 스코프. edutrix WeeklyTeacherSummary 이식(session snapshot 대신 스케줄+출결로 대상 산출).
  */
-export async function getWeeklyWritingRates(): Promise<WritingRatesView | null> {
+export async function getWeeklyWritingRates(month?: string): Promise<WritingRatesView | null> {
   const user = await getCurrentUser();
   if (!user) return null;
   const supabase = await createClient();
   const today = kstToday();
-  // 이번 주 월~일 — 요일 헤더가 월화수목금토일 순으로 읽히게(한국 표준 주 시작=월). daysBefore(음수)=이후 날짜.
+  // 범위 = 이번 주(기본) 또는 지정한 달. **날짜 배열만 달라지고 아래 로직은 그대로**다 —
+  // 대상(분모) 산출이 이미 날짜 단위(분리등원·휴원·그날 결석)라 7일이든 31일이든 같은 코드가 돈다.
+  // ⚠️ 비용도 거의 안 늘어난다: class_schedules는 **요일 단위**(7행)라 달이어도 그대로고, 작성기록은
+  //    fetchAllPaged(전건), 반 집합도 동일하다. 늘어나는 건 JS 날짜 루프뿐.
+  const isMonth = !!month && /^\d{4}-\d{2}$/.test(month);
   const dowIdx = new Date(`${today}T00:00:00Z`).getUTCDay(); // 0=일 … 6=토
   const monday = daysBefore(today, (dowIdx + 6) % 7); // 이번 주 월요일(월=0 기준 오프셋)
-  const dates = Array.from({ length: 7 }, (_, i) => daysBefore(monday, -i)); // 월→일 오름차순
-  const since = dates[0]!; // = 이번 주 월요일
+  const dates = isMonth
+    ? monthDates(month!)
+    : Array.from({ length: 7 }, (_, i) => daysBefore(monday, -i)); // 월→일 오름차순
+  if (dates.length === 0) return null;
+  const since = dates[0]!;
+  const until = dates[dates.length - 1]!;
+  const range = { kind: (isMonth ? "month" : "week") as "week" | "month", month: (month ?? today).slice(0, 7) };
+  // 오늘이 범위 밖(지난 달·다음 달)이면 '오늘' 열이 의미 없다 — 무거운 오늘 스케줄 조회를 건너뛴다.
+  const includesToday = today >= since && today <= until;
 
   // 1) 이번 주 작성 기록·오늘 스케줄·설정(예외 강사)·강사→과목 라벨·퇴사(비활성) 직원 — 상호 독립이라 병렬(B4).
   // ⚠️ 작성 기록은 강사×일 집계 소스라 절단되면 작성률이 과소집계된다. `.limit(5000)`은 방어가 안 됨 —
@@ -240,13 +264,15 @@ export async function getWeeklyWritingRates(): Promise<WritingRatesView | null> 
         .from("lesson_reports")
         .select("teacher_name, report_date")
         .gte("report_date", since)
+        .lte("report_date", until) // 범위 상한 — 월간에선 다음 달 기록이 섞이면 안 된다
         // OFFSET 페이지 안정화 — unique tie-break(id) 포함 order(batch.ts 계약)
         .order("report_date")
         .order("id")
         .range(from, to),
     ),
-    getTodaySchedule(),
-    getWeeklySchedule(), // 요일별 대상(분모) 계산용 — 이번 주 전 요일 스케줄
+    // 오늘이 범위 밖이면 '오늘' 정밀 계산이 무의미하다 — 조회 자체를 건너뛴다(지난 달 열람 비용 절감).
+    includesToday ? getTodaySchedule() : Promise.resolve([]),
+    getWeeklySchedule(), // 요일별 대상(분모) 계산용 — 요일 단위라 주/월 무관하게 같은 비용
     getTenantSettings(),
     getTeacherLabelsBySubject(),
     // 퇴사자 = users.status 'inactive'(RLS 테넌트 스코프, 직원 표라 소량). 이름으로 작성률에서 자동 제외.
@@ -432,7 +458,7 @@ export async function getWeeklyWritingRates(): Promise<WritingRatesView | null> 
     ...r,
     subjects: [...(subjectsOfTeacher.get(r.teacher) ?? [])],
   }));
-  return { dates, rates };
+  return { dates, rates, range };
 }
 
 export type ReportFilterOptions = { teachers: string[]; subjects: string[] };

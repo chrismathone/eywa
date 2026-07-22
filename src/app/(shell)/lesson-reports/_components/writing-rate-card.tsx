@@ -3,7 +3,9 @@
 // 수업보고서 > 강사별 주간 작성률(Part B) — 이번 주(월~일) 작성 건수 + 오늘 작성률·미작성.
 // [전체/과목] 칩으로 강사 분류(반 담당 기준 태깅, 학원설정 승인 과목만 칩 노출 — 하드코딩 금지).
 // 예외 강사(report.writingExemptTeachers)는 서버 쿼리에서 이미 제외되어 여기 안 온다.
+import Link from "next/link";
 import { SortableTh } from "@/components/table/sortable-th";
+import { WritingRateMonth } from "./writing-rate-month";
 import { sortRows, type SortState } from "@/lib/table/sort";
 import { useMemo, useState } from "react";
 import { useSubjectMaps } from "@/features/owner/operations-context";
@@ -33,8 +35,54 @@ function pendingTitle(p: { classes: number; firstStart: string }): string {
   return `오늘 시작 전 수업 ${p.classes}개 (첫 수업 ${p.firstStart}) — 작성률 대상에는 수업이 시작된 뒤 들어갑니다`;
 }
 
+function formatMonth(month: string): string {
+  const [y, m] = month.split("-");
+  return `${y}년 ${Number(m)}월`;
+}
+
+function shiftMonth(month: string, delta: number): string {
+  const [y, m] = month.split("-").map(Number);
+  const d = new Date(Date.UTC(y!, (m ?? 1) - 1 + delta, 1));
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+/**
+ * 주간 ↔ 월간 전환 + 월 이동. 링크(searchParam)라 서버가 그 범위로 다시 계산한다 —
+ * 클라에 한 달치를 미리 받아두지 않는다(주간만 보는 사람이 월간 비용을 물지 않게).
+ */
+function RangeSwitch({ range }: { range: WritingRatesView["range"] }) {
+  const isMonth = range.kind === "month";
+  const base = "/lesson-reports?tab=writing";
+  const chip = "rounded-full border px-3 py-1 text-[12px] transition";
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      {isMonth ? (
+        <>
+          <Link href={`${base}&rmonth=${shiftMonth(range.month, -1)}`} className={`${chip} border-line text-text-dim hover:bg-bg-soft`} aria-label="이전 달">
+            ‹
+          </Link>
+          <span className="text-foreground px-1 text-[12px] font-bold">{formatMonth(range.month)}</span>
+          <Link href={`${base}&rmonth=${shiftMonth(range.month, 1)}`} className={`${chip} border-line text-text-dim hover:bg-bg-soft`} aria-label="다음 달">
+            ›
+          </Link>
+        </>
+      ) : null}
+      <Link href={base} className={`${chip} ${isMonth ? "border-line text-text-dim hover:bg-bg-soft" : "border-primary bg-primary text-white"}`}>
+        이번 주
+      </Link>
+      <Link
+        href={`${base}&rmonth=${range.month}`}
+        className={`${chip} ${isMonth ? "border-primary bg-primary text-white" : "border-line text-text-dim hover:bg-bg-soft"}`}
+      >
+        월간
+      </Link>
+    </div>
+  );
+}
+
 export function WritingRateCard({ view }: { view: WritingRatesView }) {
   const { dates, rates } = view;
+  const isMonth = view.range.kind === "month";
   const subjects = useSubjectMaps();
   const [sel, setSel] = useState("all");
   // 칩 = 학원설정 승인 과목 중 실제 데이터에 등장하는 과목만(승인 밖 키·미태깅 강사는 '전체'에서만 보임).
@@ -59,9 +107,20 @@ export function WritingRateCard({ view }: { view: WritingRatesView }) {
           <p className="editorial-eyebrow">작성 현황</p>
           <h2 className="text-foreground mt-0.5 text-[16px] font-bold">강사별 작성률</h2>
           <p className="text-text-faint mt-0.5 text-[12px]">
-            이번 주(월~일) 요일별·주간 작성률 — 작성/대상(결석 제외) · 오늘은 <b className="font-medium">시작된 수업</b>까지만
+            {isMonth ? (
+              <>
+                {formatMonth(view.range.month)} 날짜별·월간 작성률 — 작성/대상(결석 제외) · 오늘은{" "}
+                <b className="font-medium">시작된 수업</b>까지만
+              </>
+            ) : (
+              <>
+                이번 주(월~일) 요일별·주간 작성률 — 작성/대상(결석 제외) · 오늘은{" "}
+                <b className="font-medium">시작된 수업</b>까지만
+              </>
+            )}
           </p>
         </div>
+        <RangeSwitch range={view.range} />
         {showChips ? (
           <div className="flex flex-wrap gap-1.5">
             {[{ value: "all", label: "전체" }, ...chipOptions].map((o) => {
@@ -86,7 +145,11 @@ export function WritingRateCard({ view }: { view: WritingRatesView }) {
         ) : null}
       </div>
 
-      {filtered.length === 0 ? (
+      {/* 월간은 열이 31개라 주간표(요일 7열 + 오늘 열)와 레이아웃이 다르다 — 전용 매트릭스로 분기.
+          과목 칩·정렬은 각 뷰가 자기 것을 쓴다(주간표의 '오늘' 정렬은 월간에 의미가 없다). */}
+      {isMonth ? (
+        <WritingRateMonth view={view} />
+      ) : filtered.length === 0 ? (
         <p className="text-text-faint text-[13px]">
           {rates.length === 0 ? "최근 작성 기록이 없습니다." : "이 과목 강사의 작성 기록이 없습니다."}
         </p>

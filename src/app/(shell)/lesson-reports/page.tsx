@@ -73,7 +73,10 @@ export default async function LessonReportsPage({ searchParams }: { searchParams
   const queueP = isSettings ? Promise.resolve(null) : getClassnoteQueue(3);
   const tabP =
     tab === "writing"
-      ? getWeeklyWritingRates().then((rates) => ({ rates }))
+      ? // 범위 = 기본 이번 주, `?rmonth=YYYY-MM`이면 그 달(월간 매트릭스). 파라미터 하나로 같은 쿼리를 재사용.
+        getWeeklyWritingRates(/^\d{4}-\d{2}$/.test(sp.rmonth ?? "") ? sp.rmonth : undefined).then((rates) => ({
+          rates,
+        }))
       : tab === "unmapped"
         ? getEdutrixUnmapped().then((edutrixMap) => ({ edutrixMap }))
         : tab === "report"
