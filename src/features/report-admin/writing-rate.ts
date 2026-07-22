@@ -121,6 +121,22 @@ export function computeWritingRates(
       // 휴일이 최우선 — 대상 0, 합계 제외. 그날 작성 건수(count)는 참고로 그대로 실어 둔다.
       if (isHoliday(date)) {
         const name = holidayByDate.get(date)!;
+        // 휴일엔 **의무가 없다**(대상 0). 다만 부득이하게 수업하고 보고서를 쓴 경우가 있어(원장 2026-07-22)
+        // 그 작성분은 **한 일로 인정**한다 — 대상=작성=count(100%). 의무가 없으니 감점될 일은 없고,
+        // 안 쓴 휴일은 종전대로 대상 null("휴")이라 분모를 늘리지도 않는다.
+        if (count > 0) {
+          weekTarget += count;
+          weekWritten += count;
+          return {
+            date,
+            count,
+            target: count,
+            written: count,
+            rate: 100,
+            holiday: true,
+            ...(name ? { holidayName: name } : {}),
+          };
+        }
         return {
           date,
           count,
