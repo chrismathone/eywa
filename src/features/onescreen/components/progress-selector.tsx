@@ -2,7 +2,7 @@
 
 /**
  * 진도 선택기 — edutrix 진도선택창 이식. **여러 차시를 한 번에** 고르는 팝오버(다중 체크).
- * - 학년 필터 + 단원/차시 검색 + 이전 진도 표시 + 추천 진도(다음 차시) 칩 + 단원별 체크리스트.
+ * - 학년 필터 + 단원/차시 검색 + 이전 진도 표시 + 단원별 체크리스트.
  * - 선택값은 개행 구분자로 join된 하나의 문자열(today) — 저장/파싱 계약은 단일 string 유지(curriculum.ts PROGRESS_DELIM).
  * - 커리큘럼(math) 과목 전용. 비math(영어 등)는 소비처에서 자유 텍스트 입력 유지.
  * - overflow-x-auto(그리드) 안에서도 잘리지 않게 base-ui Popover 포털로 렌더.
@@ -10,21 +10,14 @@
  */
 import { useState } from "react";
 import { Popover } from "@base-ui/react/popover";
-import { ChevronDown, Plus } from "@/components/icons/eywa-icon-compat";
+import { ChevronDown } from "@/components/icons/eywa-icon-compat";
 import {
   CURRICULUM_GRADES,
   curriculumForGrade,
   splitLessons,
   joinLessons,
   displayLessons,
-  lastLesson,
-  nextLessons,
 } from "../curriculum";
-
-/** 차시 코드 접두("2-3-5 ") 제거 — 칩·요약의 짧은 표시용. 중등(코드 없음)은 그대로. */
-function shortLesson(l: string): string {
-  return l.replace(/^[\d]+(?:-[\d]+)*\s+/, "").trim() || l;
-}
 
 export function ProgressSelector({
   value,
@@ -40,7 +33,7 @@ export function ProgressSelector({
   studyGrade: string; // 진도 학년
   onStudyGrade: (grade: string) => void; // 진도 학년 변경(선행/후행)
   studentGrade: string; // 실제 학년(선행/후행 배지)
-  prev?: string; // 이전 진도(합본) — 표시 + 추천 진도 계산
+  prev?: string; // 이전 진도(합본) — 참고 표시용
   ariaLabel?: string;
 }) {
   const [open, setOpen] = useState(false);
@@ -55,15 +48,10 @@ export function ProgressSelector({
         .map((u) => ({ unit: u.unit, lessons: u.lessons.filter((l) => l.includes(q) || u.unit.includes(q)) }))
         .filter((u) => u.lessons.length > 0)
     : units;
-  // 추천 진도 = 이전 진도 마지막 차시 다음 3개(이미 선택된 건 제외).
-  const recos = nextLessons(studyGrade, lastLesson(prev), 3).filter((l) => !selectedSet.has(l));
   const ahead = studyGrade !== studentGrade;
 
   const toggle = (lesson: string) =>
     onChange(joinLessons(selectedSet.has(lesson) ? selected.filter((l) => l !== lesson) : [...selected, lesson]));
-  const add = (lesson: string) => {
-    if (!selectedSet.has(lesson)) onChange(joinLessons([...selected, lesson]));
-  };
 
   return (
     <Popover.Root open={open} onOpenChange={setOpen}>
@@ -120,27 +108,14 @@ export function ProgressSelector({
               />
             </div>
 
-            {/* 이전 진도 + 추천 진도 */}
+            {/* 이전 진도 — 참고 표시만. 추천 진도 칩은 2026-07-22 원장 지시로 폐지(재도입 금지):
+                커리큘럼 순서상 '다음 차시'일 뿐 그 반이 실제로 나갈 진도가 아니라, 맞을 때보다 틀릴 때가
+                많았고 한 번 누르면 잘못된 진도가 그대로 저장된다. 진도는 강사가 고르는 게 맞다. */}
             {prev?.trim() ? (
               <div className="border-line bg-bg-soft/40 border-b px-3 py-2">
                 <p className="text-text-faint text-[11px]">
                   이전 진도: <span className="text-text-dim">{displayLessons(prev)}</span>
                 </p>
-                {recos.length ? (
-                  <div className="mt-1.5 flex flex-wrap gap-1">
-                    <span className="text-text-faint text-[10px] self-center">추천</span>
-                    {recos.map((l) => (
-                      <button
-                        key={l}
-                        type="button"
-                        onClick={() => add(l)}
-                        className="border-primary/40 text-primary hover:bg-primary-soft inline-flex items-center gap-0.5 rounded-pill border px-1.5 py-0.5 text-[11px] font-bold"
-                      >
-                        <Plus size={10} /> {shortLesson(l)}
-                      </button>
-                    ))}
-                  </div>
-                ) : null}
               </div>
             ) : null}
 
