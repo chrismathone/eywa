@@ -317,6 +317,11 @@ export const students = pgTable(
     englishName: text("english_name"),
     // ClassNote 보드명 오버라이드(동명이인 구분, 0088a) — 지정 시 워커 보드명·감지가 (classnote_name || name) 사용.
     classnoteName: text("classnote_name"),
+    /**
+     * 테스트 전용 학생(0141a). ClassNote 발송 시험은 실학생 대신 이 학생에게 한다(`학원이`).
+     * 작성률 등 **집계에서 제외** — 화면에서 숨기지는 않는다(원장이 테스트하려면 찾을 수 있어야 함).
+     */
+    isTest: boolean("is_test").notNull().default(false),
     school: text("school"),
     grade: text("grade"),
     gender: text("gender"), // "male" | "female" | null

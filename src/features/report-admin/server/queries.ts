@@ -347,6 +347,13 @@ export async function getWeeklyWritingRates(month?: string): Promise<WritingRate
   // 1) 이번 주 작성 기록·오늘 스케줄·설정(예외 강사)·강사→과목 라벨·퇴사(비활성) 직원 — 상호 독립이라 병렬(B4).
   // ⚠️ 작성 기록은 강사×일 집계 소스라 절단되면 작성률이 과소집계된다. `.limit(5000)`은 방어가 안 됨 —
   // PostgREST max-rows(≈1000)가 명시 limit도 덮어 1000행에서 silent 절단(실측 확인, #54). fetchAllPaged로 전건.
+  // 테스트 학생(0141a `students.is_test`) — ClassNote 발송 시험용(`학원이`). 이 학생 앞으로 생긴
+  // 보고서가 집계에 섞이면 ① 계정도 없는 가짜 작성자(`테스트`·`테스트강사`)가 강사로 등장하고
+  // ② 실강사 분자가 부풀려진다(김민주 8건·이수진 1건 실측). **분자에서 원천 제외**한다.
+  // ⚠️ 화면에서 숨기는 게 아니다 — 학생목록·발송에는 그대로 보여야 원장이 테스트할 수 있다.
+  const { data: testStudents } = await supabase.from("students").select("id").eq("is_test", true);
+  const testStudentIds = new Set((testStudents ?? []).map((s) => s.id as string));
+
   const [reps, schedule, weekly, settings, labelsBySubject, { data: inactiveStaff }] = await Promise.all([
     // ⚠️ 집계 기준은 **유효일 = covers_date ?? report_date**(0136a) — 미리/나중에 쓴 보고서를 실제 수업일로 귀속.
     //   그래서 범위 조회도 두 날짜 **중 하나라도** 걸치면 가져온 뒤(or) JS에서 유효일로 다시 거른다.
@@ -404,7 +411,8 @@ export async function getWeeklyWritingRates(month?: string): Promise<WritingRate
     }))
     // or() 조회로 범위 밖 행(covers_date만 걸친 것)이 섞여 온다 — 쓴 날 기준으로 다시 좁힌다.
     .filter((r) => r.date >= since && r.date <= until)
-    .filter((r) => !exempt.has(r.teacher));
+    .filter((r) => !exempt.has(r.teacher))
+    .filter((r) => !testStudentIds.has(r.studentId)); // 테스트 학생분 제외(0141a)
 
   /**
    * **의무가 면제된 (학생, 날짜)** — 보고서에 실제 수업일(covers_date)이 지정된 건(0136a).
@@ -472,6 +480,7 @@ export async function getWeeklyWritingRates(month?: string): Promise<WritingRate
     for (const e of enr) {
       const t = teacherOfClass.get(e.class_id);
       if (!t) continue;
+      if (testStudentIds.has(e.student_id)) continue; // 테스트 학생은 분모에도 넣지 않는다(0141a)
       if (!studentsByTeacher.has(t)) studentsByTeacher.set(t, new Set());
       studentsByTeacher.get(t)!.add(e.student_id);
     }
@@ -569,7 +578,7 @@ export async function getWeeklyWritingRates(month?: string): Promise<WritingRate
           const rows = enrollmentsByClass.get(classId);
           if (!rows) continue;
           const ts = studentsByTeacher.get(teacher) ?? studentsByTeacher.set(teacher, new Set()).get(teacher)!;
-          for (const e of rows) if (attendsOn(e, d)) ts.add(e.student_id);
+          for (const e of rows) if (attendsOn(e, d) && !testStudentIds.has(e.student_id)) ts.add(e.student_id);
         }
         for (const [teacher, ids] of studentsByTeacher) {
           // 오늘과 같은 규칙: 결석 + 의무 면제(covers_date) 제외.
