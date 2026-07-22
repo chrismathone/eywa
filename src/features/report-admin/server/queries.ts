@@ -451,6 +451,11 @@ export async function getWeeklyWritingRates(month?: string): Promise<WritingRate
   const pendingByTeacher = new Map<string, { classes: number; firstStart: string }>();
   for (const s of schedule) {
     if (s.status !== "upcoming") continue;
+    // ⚠️ 여기도 과목으로 갈라야 한다 — 이 한 줄이 빠져서 영어 강사가 **두 줄**로 나왔다(2026-07-23 원장 제보).
+    // 분모(started)·주간(weekly)은 걸렀는데 '수업 예정'만 안 걸러, 오늘 수업이 남은 영어 강사가
+    // `김태건 14:20 수업 예정 (주간 ·)`이라는 **빈 eywa 행**을 하나 더 만들었다(rates는 강사 이름 집합으로
+    // 행을 만들므로, pending만 있어도 행이 생긴다). 영어의 진실은 아래 ClassNote 행 하나뿐이다.
+    if (!measuredHere(s.subject)) continue;
     const t = s.teacherName ?? s.slotTeacherLabel ?? "(미지정)";
     if (exempt.has(t)) continue;
     const cur = pendingByTeacher.get(t);
