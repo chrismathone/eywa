@@ -42,12 +42,27 @@ export function deriveMarksFromReports(input: {
   reportDates: ReadonlySet<string>;
   manualDates: ReadonlySet<string>;
   today: string;
+  /**
+   * **판정 보류일** — 이 학생이 그날 같은 과목의 **다른 반**에 보고서를 남긴 날(0134a).
+   *
+   * 🔴 왜 필요한가: 실데이터에 "한 수업, 두 수강행"이 있다(같은 강사가 같은 요일에 같은 학생을 두 반에
+   *    걸어 둔 형태 — 이유정 전주율 BS3E+BS2G, 김은정 김지호 CR1C+CR1D 등). 강사는 그 수업을 **한 번**
+   *    가르치고 보고서도 **한 건** 쓴다. 보고서를 반 단위로 좁힌 뒤 이 보류가 없으면, 짝 반의 그 날짜가
+   *    매주 영구히 **결석**으로 찍힌다 — 실제로는 온 학생인데.
+   *    (실측 2026-07-22: 이 규칙 없이는 6칸이 즉시 거짓 결석 — 마수호 JJPS 5칸·김은정 JJ1E 1칸.)
+   * 규약: **출석으로 올려주지도 않는다.** 그 반 수업이 실제로 있었는지 여기선 알 수 없다.
+   *    "모르면 아무 말도 하지 않는다" — 빈 칸으로 두고 사람이 채우게 한다.
+   */
+  siblingReportDates?: ReadonlySet<string>;
 }): Record<string, DerivedMark> {
   const out: Record<string, DerivedMark> = {};
   for (const date of input.attendDates) {
     if (input.manualDates.has(date)) continue;
     if (input.reportDates.has(date)) {
       out[date] = "present";
+    } else if (input.siblingReportDates?.has(date)) {
+      // 같은 과목 다른 반에 그날 보고서가 있다 → 이 반의 결석을 단정하지 않는다(위 🔴).
+      continue;
     } else if (date < input.today) {
       out[date] = "absent";
     }

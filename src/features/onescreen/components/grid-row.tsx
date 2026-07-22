@@ -6,7 +6,7 @@ import { TEXTAREA_AUTOSIZE_RESIZABLE } from "@/lib/ui/textarea";
 import { joinComment, splitComment } from "../comment-paragraphs";
 import { resolveStudyGrade } from "../curriculum";
 import { subjectTone, toneSoftClass, toneSolidClass } from "../data";
-import { isAlreadySent, isRowActionable, type GridRow } from "../grid";
+import { effectiveClassnoteStatus, isAlreadySent, isRowActionable, type GridRow } from "../grid";
 import { parentUnreadBadge, progressAnomalyBadge } from "../roster-signals";
 import type { OneScreenStudent } from "../types";
 import { classnoteBadge, type SubjectReport } from "./report-card";
@@ -171,7 +171,8 @@ export function GridBodyRow({
   const bulkGen = gen.bulk;
   const hasDraft = !!rep?.draft?.trim(); // 학부모 멘트(draft) 준비됨 — 발송 시 사용
   // ⚠️ 화면 state(rep)의 상태가 로스터 스냅샷을 이긴다 — 방금 보낸 행을 계속 '발송 가능'으로 두면 중복 게시.
-  const liveStatus = rep?.classnoteStatus ?? subject.classnoteStatus;
+  // ⚠️ `??` 금지 — 재발급·첨부변경이 명시적으로 지운(null) 상태를 스냅샷의 옛 "success"가 덮는다.
+  const liveStatus = effectiveClassnoteStatus(rep?.classnoteStatus, subject.classnoteStatus);
   const alreadySent = isAlreadySent(liveStatus);
   const canSend = isRowActionable(subject, "send", liveStatus); // 진도 + 결석 아님 + 미발송(2-3)
   // 발송 완료건은 자동작성도 막는다 — 멘트를 새로 만들어 봐야 저장이 서버에서 거부된다(입력 유실).

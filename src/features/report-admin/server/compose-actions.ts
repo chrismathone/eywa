@@ -113,7 +113,17 @@ export async function saveAdminReport(
   if (!input.studentId) return { ok: false, error: "학생을 선택하세요" };
   if (!input.subject) return { ok: false, error: "과목을 선택하세요" };
   const supabase = await createClient();
-  return upsertAdminReport(supabase, user, input);
+  // 🔴 저장 경로도 **발송 경로와 같은 반**을 붙여야 한다(적대 검수 확정 blocker).
+  //    안 붙이면 '저장'은 class_id NULL 행을, '발송'은 반이 붙은 행을 만들어 **같은 수업에 2행**이 생긴다
+  //    → 발송된 쪽엔 저장 때 붙인 첨부가 없고, 남은 고아 행은 벨이 '미발송'으로 재촉한다.
+  //    (실측 2026-07-22: resolveReportClassId가 267 조합 중 266에서 반을 확정 — 예외가 아니라 기본 경로다.)
+  const classId = input.classId ?? (await resolveReportClassId(supabase, {
+    studentId: input.studentId,
+    reportDate: resolveReportDate(input.reportDate),
+    subject: input.subject,
+    teacherName: input.teacherName,
+  }));
+  return upsertAdminReport(supabase, user, { ...input, classId });
 }
 
 /**

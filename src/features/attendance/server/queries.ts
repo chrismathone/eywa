@@ -626,24 +626,20 @@ export async function getMonthlyAttendanceMatrix(
   if (derivedActive && selectedClass && studentIds.length > 0) {
     const [reports, settings] = await Promise.all([
       // 학생 수 × 최대 31일이라 청크당 1000행을 넘길 여지는 낮지만, 반 인원은 상한이 없다(B2).
-      fetchAllPagedInChunks<{ student_id: string; report_date: string }>(
+      // ⚠️ 반으로 **거르지 않고** 그 달 보고서를 다 가져온 뒤 JS에서 세 갈래로 나눈다
+      //    (이 반 것 / 같은 과목 다른 반 것 / 무관). 쿼리를 반으로 좁히면 "짝 반이 썼는지"를
+      //    알 수 없어 판정 보류를 못 한다 — 그게 거짓 결석의 원인이었다(아래 sibling 주석).
+      fetchAllPagedInChunks<{ student_id: string; report_date: string; class_id: string | null }>(
         studentIds,
         (chunk, from, to) => {
           let q = supabase
             .from("lesson_reports")
-            .select("student_id, report_date")
+            .select("student_id, report_date, class_id")
             .in("student_id", chunk)
             .gte("report_date", startIso)
             .lte("report_date", endIso);
           // 기본은 '작성됨'. 발송 성공만 인정하려면 REQUIRE_SENT_REPORT를 켠다(근거는 그 상수 주석).
           if (REQUIRE_SENT_REPORT) q = q.eq("classnote_status", "success");
-          // 🔴 **이 반의 보고서만**(0134a). 예전엔 학생의 그 달 보고서를 반 구분 없이 다 봤다 —
-          //    같은 과목 두 반(정규 수학 + 수학 특강)이 생기면서, 특강만 쓴 날이 정규 반 출석부에도
-          //    '출석'으로 파생돼 오지도 않은 날이 채워진다. class_id NULL(이관분 99.8%·보강·관리자 작성)은
-          //    반을 알 수 없으므로 예전대로 포함한다 — 빼면 파생이 통째로 죽는다.
-          // ⚠️ `.or()`는 **원시 필터 문자열**이라 값을 그대로 이어붙인다(.eq처럼 인코딩해 주지 않는다) →
-          //    URL 검색어에서 온 classId가 아니라 **DB에서 읽어온 반 id**(selectedClass.id)를 쓴다.
-          q = q.or(`class_id.is.null,class_id.eq.${selectedClass.id}`);
           return q
             .order("report_date", { ascending: false })
             .order("id", { ascending: false }) // OFFSET 페이지 안정용 unique tie-break
@@ -652,11 +648,26 @@ export async function getMonthlyAttendanceMatrix(
       ),
       getTenantSettings(),
     ]);
+    // 🔴 반 단위 분류(0134a) — 세 갈래다:
+    //  · 이 반(또는 반 미상 = 이관분·보강·관리자 작성) → **출석 파생 근거**.
+    //  · 같은 과목 **다른 반** → 출석도 결석도 아닌 **판정 보류**. 실데이터에 "한 수업, 두 수강행"이
+    //    있어(같은 강사·같은 요일·같은 학생을 두 반에 걸어 둠) 강사는 한 번 가르치고 한 건만 쓴다.
+    //    보류가 없으면 짝 반의 그 날짜가 매주 영구히 거짓 결석이 된다(실측 6칸 즉시 발생).
+    //  · 그 외 과목 → 무시.
+    const sameSubjectClassIds = new Set(
+      classes.filter((c) => c.subject === selectedClass.subject).map((c) => c.id),
+    );
     const reportsByStudent = new Map<string, Set<string>>();
+    const siblingByStudent = new Map<string, Set<string>>();
     for (const r of reports) {
-      const set = reportsByStudent.get(r.student_id) ?? new Set<string>();
+      const cid = r.class_id;
+      const mine = !cid || cid === selectedClass.id;
+      const sibling = !mine && sameSubjectClassIds.has(cid);
+      if (!mine && !sibling) continue; // 다른 과목 보고서 — 이 출석부와 무관
+      const target = mine ? reportsByStudent : siblingByStudent;
+      const set = target.get(r.student_id) ?? new Set<string>();
       set.add(r.report_date);
-      reportsByStudent.set(r.student_id, set);
+      target.set(r.student_id, set);
     }
     const holidays = buildHolidayMap(settings.operations.holidays);
     const todayIso = kstToday();
@@ -672,6 +683,7 @@ export async function getMonthlyAttendanceMatrix(
       const got = deriveMarksFromReports({
         attendDates,
         reportDates: reportsByStudent.get(s.id) ?? new Set(),
+        siblingReportDates: siblingByStudent.get(s.id),
         manualDates: new Set(Object.keys(marks[s.id] ?? {})),
         today: todayIso,
       });

@@ -45,6 +45,7 @@ import { NoticeComposer } from "./notice-composer";
 import {
   buildGridRows,
   rowKey,
+  effectiveClassnoteStatus,
   isAlreadySent,
   isRowActionable,
   planBulkApply,
@@ -334,7 +335,7 @@ export function OneScreenClient({
   const sentRowCount = visible.reduce(
     (n, s) =>
       n +
-      s.subjects.filter((su) => isAlreadySent(reports[s.id]?.[su.name]?.classnoteStatus ?? su.classnoteStatus))
+      s.subjects.filter((su) => isAlreadySent(effectiveClassnoteStatus(reports[s.id]?.[su.name]?.classnoteStatus, su.classnoteStatus)))
         .length,
     0,
   );
@@ -684,8 +685,8 @@ export function OneScreenClient({
   }
   // 이 행의 **최신** ClassNote 상태 — 화면 state(방금 보낸 결과·워커 폴링 반영)가 로스터 스냅샷을 이긴다.
   // ⚠️ 로스터 값만 보면 "방금 보낸 건"을 모른 채 일괄 발송이 그 행을 다시 집는다(중복 게시).
-  function liveClassnoteStatus(studentId: string, subjectName: string): string | null {
-    return reportsRef.current[studentId]?.[subjectName]?.classnoteStatus ?? null;
+  function liveClassnoteStatus(studentId: string, subjectName: string): string | null | undefined {
+    return reportsRef.current[studentId]?.[subjectName]?.classnoteStatus;
   }
   // 표 일괄 작업 대상 — keys(체크된 행) 있으면 그 교집합, 없으면 표시 행 전체. 진도 필수 공통.
   // ⚠️ action별 판정(2-3, isRowActionable): save=결석 포함(기록 보존), send/autowrite=결석 제외(발송·AI 무의미).
@@ -693,7 +694,7 @@ export function OneScreenClient({
   function selectRows(action: RowAction, keys?: string[]) {
     const all = buildGridRows(visible)
       .filter((r) => rowInClass(r.subject, activeClassFilter)) // 특정 반이면 그 반 행만(타 반 혼입 차단)
-      .filter((r) => isRowActionable(r.subject, action, liveClassnoteStatus(r.student.id, r.subject.name)));
+      .filter((r) => isRowActionable(r.subject, action, effectiveClassnoteStatus(liveClassnoteStatus(r.student.id, r.subject.name), r.subject.classnoteStatus)));
     if (!keys || keys.length === 0) return all;
     const set = new Set(keys);
     return all.filter((r) => set.has(r.key));
@@ -1151,7 +1152,7 @@ export function OneScreenClient({
       (r) =>
         (!keySet || keySet.has(r.key)) &&
         r.subject.attendanceRaw !== "absent" &&
-        isAlreadySent(liveClassnoteStatus(r.student.id, r.subject.name) ?? r.subject.classnoteStatus),
+        isAlreadySent(effectiveClassnoteStatus(liveClassnoteStatus(r.student.id, r.subject.name), r.subject.classnoteStatus)),
     ).length;
     if (rows.length === 0) {
       toast.message(
@@ -1255,7 +1256,7 @@ export function OneScreenClient({
       ...r,
       shareToken: res.shareToken,
       revoked: false,
-      classnoteStatus: undefined,
+      classnoteStatus: null, // 명시적 해제(undefined=미확인과 구분 — effectiveClassnoteStatus)
     }));
     toast.success(`${subjectName} 공유 링크를 재발급했습니다 — 새 링크를 다시 전달하세요`);
   }
@@ -1386,7 +1387,7 @@ export function OneScreenClient({
         patchReport(studentId, subjectName, (r) => ({
           ...r,
           attachments: reg.attachments ?? r.attachments,
-          classnoteStatus: undefined,
+          classnoteStatus: null, // 명시적 해제(undefined=미확인과 구분 — effectiveClassnoteStatus)
         }));
       }
       if (added) {
@@ -1418,7 +1419,7 @@ export function OneScreenClient({
     patchReport(studentId, subjectName, (r) => ({
       ...r,
       attachments: res.attachments ?? [],
-      classnoteStatus: undefined,
+      classnoteStatus: null, // 명시적 해제(undefined=미확인과 구분 — effectiveClassnoteStatus)
     }));
     setAttUrls((prev) => {
       const n = { ...prev };

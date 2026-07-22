@@ -59,6 +59,33 @@ describe("matchReportsToRows", () => {
     expect(matchReportsToRows([row("c1", "math")], [rep(null, null, "L")])).toEqual([undefined]);
   });
 
+  // 🔴 같은 과목 두 반으로 갈린 학생(정규+특강)이 이관분 이력을 통째로 잃던 회귀.
+  it("같은 과목 두 행이어도 이관분은 첫 행에 붙는다(이력 유실 방지)", () => {
+    const got = matchReportsToRows(
+      [row("정규", "math"), row("특강", "math")],
+      [rep(null, null, "L")],
+      { legacyFallback: true },
+    );
+    expect(got.map((r) => r?.tag)).toEqual(["L", undefined]);
+  });
+
+  it("다과목 학생에겐 여전히 안 붙인다 — 어느 과목인지 모른다", () => {
+    expect(
+      matchReportsToRows([row("c1", "math"), row("c2", "english")], [rep(null, null, "L")], {
+        legacyFallback: true,
+      }),
+    ).toEqual([undefined, undefined]);
+  });
+
+  it("반 매칭으로 이미 채워진 행은 건너뛰고 남은 행에 준다", () => {
+    const got = matchReportsToRows(
+      [row("정규", "math"), row("특강", "math")],
+      [rep("정규", "math", "R"), rep(null, null, "L")],
+      { legacyFallback: true },
+    );
+    expect(got.map((r) => r?.tag)).toEqual(["R", "L"]);
+  });
+
   it("다른 반 보고서는 안 붙는다(교차 주입 금지)", () => {
     expect(matchReportsToRows([row("정규", "math")], [rep("특강", "math")])?.[0]).toBeUndefined();
   });

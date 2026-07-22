@@ -188,12 +188,17 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
 
   // 2) 오늘 요일에 수업 있는 반(없으면 전체 담당 반 폴백 — 주말/휴일에도 화면이 비지 않게)
   const allIds = allClasses.map((c) => c.id);
+  // ⚠️ **그 날짜에 유효한 스케줄만**. 예전엔 valid_from/valid_to를 안 봐서 만료된 배치가 계속 "오늘 수업"으로
+  //    잡혔다 — 특강처럼 기간이 정해진 반(실측: 특강 4반 전부 valid_to 08-07~08-31, 수강행은 대부분 무기한)이
+  //    종료일 뒤에도 로스터에 영원히 남는다. 시간표(fetchSlots)와 같은 규약으로 맞춘다.
   const scheds = await fetchInChunks<{ class_id: string; start_time: string | null }>(allIds, (chunk) =>
     supabase
       .from("class_schedules")
       .select("class_id, start_time")
       .eq("day_of_week", dow)
-      .in("class_id", chunk),
+      .in("class_id", chunk)
+      .or(`valid_from.is.null,valid_from.lte.${targetDate}`)
+      .or(`valid_to.is.null,valid_to.gte.${targetDate}`),
   );
   const todayIds = new Set(scheds.map((s) => s.class_id));
   // 반별 오늘 최초 시작시각(HH:MM)
@@ -606,11 +611,19 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
       if (sess.special_note != null) os.note = sess.special_note;
       if (sess.progress_confirmed != null) os.progressConfirmed = sess.progress_confirmed;
       const sp = sess.subject_progress ?? {};
+      // 구버전(과목키) 세션 항목은 **한 행만** 가져간다 — 배포 당일 작업중이던 입력을 살리되,
+      // 같은 과목 두 행이 같은 항목을 나눠 갖고 같은 진도를 보여주는 것을 막는다(적대 검수 확정).
+      const legacyTaken = new Set<string>();
       for (const su of os.subjects) {
         // 세션 키 = **반**(0134a) — 과목키로 두면 같은 과목 두 행(정규+특강)이 한 항목을 공유해
         // 한쪽에 입력한 진도가 다른 쪽에도 뜬다(그리고 저장할 때 서로를 덮는다).
-        // 반 키가 없으면(구버전 세션·보강) 예전 과목키로 폴백 — 배포 당일 작업중이던 입력이 날아가지 않게.
-        const entry = (su.classId ? sp[su.classId] : undefined) ?? sp[su.subjectKey || su.name];
+        const byClass = su.classId ? sp[su.classId] : undefined;
+        const legacyKey = su.subjectKey || su.name;
+        let entry = byClass;
+        if (!entry && !legacyTaken.has(legacyKey)) {
+          entry = sp[legacyKey];
+          if (entry) legacyTaken.add(legacyKey);
+        }
         if (entry?.today) su.today = entry.today;
         if (entry?.textbook != null) su.textbook = entry.textbook;
         if (entry?.makeup != null) su.makeup = entry.makeup;

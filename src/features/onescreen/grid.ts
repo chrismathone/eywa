@@ -89,6 +89,21 @@ export function isAlreadySent(status: string | null | undefined): boolean {
  * ⚠️ `subject.classnoteStatus`는 **로스터가 로드한 시점** 값이라 세션 중 방금 보낸 건을 모른다 →
  *    호출부(selectRows)가 화면 state의 최신 상태를 넣어 준다(`statusOverride`).
  */
+/**
+ * 이 행의 **실효** ClassNote 상태 — 화면 state가 로스터 스냅샷을 이긴다.
+ *
+ * 🔴 `undefined`(아직 모름)와 `null`(이번 세션에서 **명시적으로 지워짐**)을 구분하는 게 핵심이다.
+ *    공유링크 재발급·첨부 변경은 서버가 상태를 리셋하고 화면도 지운다 — 그때 `?? 스냅샷`으로 읽으면
+ *    **로스터가 실어 온 옛 "success"가 되살아나** 방금 푼 잠금이 그대로 다시 걸린다.
+ *    그러면 재발급이 유일한 탈출구인데 그 탈출구가 새로고침 전까지 죽는다(적대 검수 확정).
+ */
+export function effectiveClassnoteStatus(
+  live: string | null | undefined,
+  snapshot: string | null | undefined,
+): string | null | undefined {
+  return live !== undefined ? live : snapshot;
+}
+
 export function isRowActionable(
   subject: Subject,
   action: RowAction,
