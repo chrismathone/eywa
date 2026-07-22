@@ -259,7 +259,9 @@ export function OneScreenClient({
       studyGrade: s.studyGrade ?? null,
       subjectProgress: Object.fromEntries(
         s.subjects.map((su) => [
-          su.subjectKey || su.name,
+          // 반 키 우선(0134a) — 과목키면 같은 과목 두 행(정규+특강)이 한 항목을 공유해 서로를 덮는다.
+          // 로스터 복원(roster.ts)이 같은 순서로 읽는다(반 키 → 과목키 폴백).
+          su.classId || su.subjectKey || su.name,
           {
             today: su.today,
             draft: r?.[su.name]?.draft ?? "",
@@ -343,11 +345,19 @@ export function OneScreenClient({
   // 병합 규칙(빈 상태 무시·화면에 없는 과목 무시)은 순수함수 mergeClassnoteStatuses 한 곳에.
   function applyClassnoteStatuses(rows: ClassnoteStatusRow[]) {
     setReports((prev) =>
-      mergeClassnoteStatuses(prev, rows, (studentId, subjectKey) =>
-        studentsRef.current
-          .find((s) => s.id === studentId)
-          ?.subjects.find((su) => (su.subjectKey || su.name) === subjectKey)?.name,
-      ),
+      mergeClassnoteStatuses(prev, rows, (studentId, subjectKey, classId) => {
+        const subjects = studentsRef.current.find((s) => s.id === studentId)?.subjects;
+        if (!subjects) return undefined;
+        // 반 정확매칭 우선(0134a) — 같은 과목 두 행은 과목키가 같아 폴백만으론 엉뚱한 행에 배지가 붙는다.
+        if (classId) {
+          const byClass = subjects.find((su) => su.classId === classId);
+          if (byClass) return byClass.name;
+          // 화면에 없는 반(다른 강사·다른 요일)의 보고서 → 어느 행에도 붙이지 않는다.
+          return undefined;
+        }
+        // 반 없는 보고서(관리자 작성·구버전)는 과목으로. 같은 과목 두 행이면 **앞 행**(로스터 정렬 순).
+        return subjects.find((su) => (su.subjectKey || su.subjectLabel || su.name) === subjectKey)?.name;
+      }),
     );
   }
   // 대기·처리중인 학생이 있는 동안만 감시(없으면 조회 0회, 다 끝나면 저절로 멈춘다).
@@ -892,7 +902,9 @@ export function OneScreenClient({
         textbook: su?.textbook || "",
         makeup: su?.makeup ?? false,
         homeworkToday: su?.homeworkToday || "",
-        progress: su ? `${su.name} ${su.today}`.trim() : "",
+        // ⚠️ 진도 접두는 **순수 과목 라벨**(subjectLabel) — 행 이름(name)엔 반 이름이 붙을 수 있고
+        //    이 값은 학부모 카드에 그대로 나간다(원장 확정: 보고서에 반은 노출하지 않는다).
+        progress: su ? `${su.subjectLabel || su.name} ${su.today}`.trim() : "",
         examInfo,
         homeworkScore: student.homework,
         dailyTest,
@@ -902,7 +914,11 @@ export function OneScreenClient({
         // comment-paragraphs.ts 불변식). 학부모에게 나가는 값은 여기서 다듬는다 — 앞 빈 줄 금지.
         notes: draft.trim(),
         trendNote, // 학습 추세(종합분석) — 4a
-        subject: su?.subjectKey || su?.name || undefined, // (student,date,subject) 과목별 1행 dedup 키
+        // ⚠️ subject는 **과목키**(math)여야 한다 — 발송 과목 게이트·보드 매핑이 이 값을 본다.
+        //    행 이름(name)엔 반 이름이 붙을 수 있으므로 폴백도 subjectLabel을 먼저 본다.
+        subject: su?.subjectKey || su?.subjectLabel || su?.name || undefined,
+        // 반(수업) — 보고서 1건의 단위(0134a). 같은 날 정규+특강이 서로 안 덮게 하는 키.
+        classId: su?.classId ?? null,
         outOfClass: student.isMakeup ?? false, // 보강(수업외) 학생 = 담당반 검사 우회(같은 학원이면 허용)
       },
     };
@@ -1226,8 +1242,11 @@ export function OneScreenClient({
   //    진도·점수 핸들러와 같은 "로직 단일 소스" 규약. 표 첨부(클립·드롭·일괄)가 이 경로를 그대로 쓴다.
   const subjectKeyFor = (student: OneScreenStudent, subjectName: string): string | undefined => {
     const su = student.subjects.find((s) => s.name === subjectName);
-    return su?.subjectKey || su?.name || undefined;
+    return su?.subjectKey || su?.subjectLabel || su?.name || undefined;
   };
+  // 첨부가 붙을 **행(반)** — 보고서 단위가 반이라(0134a) 과목만 넘기면 정규/특강 중 아무 행에나 붙는다.
+  const classIdFor = (student: OneScreenStudent, subjectName: string): string | null =>
+    student.subjects.find((s) => s.name === subjectName)?.classId ?? null;
 
   // 선택 학생 과목별 첨부 path 시그니처 — 경로 변경 시에만 썸네일 URL 재요청(draft 편집엔 재요청 안 함).
   const attTargets = selected
@@ -1303,6 +1322,7 @@ export function OneScreenClient({
         const issued = await issueReportAttachmentUploadTicket({
           studentId,
           subject,
+          classId: classIdFor(student, subjectName), // 그 반 보고서에만 붙인다(0134a)
           reportDate: date || undefined, // 과거 날짜 첨부가 '오늘' 행에 붙지 않게 대상 날짜 명시(#5 확정)
           contentType: file.type,
           size: file.size,
@@ -1321,6 +1341,7 @@ export function OneScreenClient({
         const reg = await registerReportAttachment({
           studentId,
           subject,
+          classId: classIdFor(student, subjectName),
           reportDate: date || undefined,
           path: issued.ticket.path,
           name: original.name,
@@ -1356,6 +1377,7 @@ export function OneScreenClient({
     const res = await removeReportAttachment({
       studentId,
       subject: subjectKeyFor(student, subjectName),
+      classId: classIdFor(student, subjectName),
       reportDate: date || undefined,
       path,
     });
@@ -1385,6 +1407,7 @@ export function OneScreenClient({
     const res = await signReportAttachmentUrls({
       studentId: student.id,
       subject: subjectKeyFor(student, subjectName),
+      classId: classIdFor(student, subjectName),
       reportDate: date || undefined,
     });
     if (res.urls) setAttUrls((prev) => ({ ...prev, ...res.urls }));

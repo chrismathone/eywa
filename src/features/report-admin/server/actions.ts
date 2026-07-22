@@ -34,7 +34,7 @@ export async function retryClassnote(
   // 취소(revoked_at)된 행도 제외 — 워커가 영원히 클레임 안 해 좀비 queued가 되던 구멍.
   const { data: rows } = await supabase
     .from("lesson_reports")
-    .select("id, report_date, subject, student_id, makeup")
+    .select("id, report_date, subject, class_id, student_id, makeup")
     .in("id", ids.slice(0, 200))
     .not("classnote_status", "is", null)
     .neq("source", "edutrix_import")
@@ -60,27 +60,16 @@ export async function retryClassnote(
   let absentSkipped: number;
   try {
     const gateTargets = allowed.filter((r) => !r.makeup);
-    const blocked = await getAbsenceBlockedKeys(
-      supabase,
-      user.tenantId,
-      gateTargets.map((r) => ({
-        studentId: r.student_id as string,
-        reportDate: (r.report_date as string).slice(0, 10),
-        subject: r.subject as string | null,
-      })),
-    );
+    // 반 단위 판정(0134a) — 보고서에 반이 있으면 그 반 출결만 본다(없으면 예전대로 과목 단위).
+    const keyOf = (r: (typeof allowed)[number]) => ({
+      studentId: r.student_id as string,
+      reportDate: (r.report_date as string).slice(0, 10),
+      subject: r.subject as string | null,
+      classId: (r.class_id as string | null) ?? null,
+    });
+    const blocked = await getAbsenceBlockedKeys(supabase, user.tenantId, gateTargets.map(keyOf));
     requeueIds = allowed
-      .filter(
-        (r) =>
-          r.makeup ||
-          !blocked.has(
-            absenceKeyOf({
-              studentId: r.student_id as string,
-              reportDate: (r.report_date as string).slice(0, 10),
-              subject: r.subject as string | null,
-            }),
-          ),
-      )
+      .filter((r) => r.makeup || !blocked.has(absenceKeyOf(keyOf(r))))
       .map((r) => r.id as string);
     absentSkipped = allowed.length - requeueIds.length;
   } catch {
@@ -134,7 +123,7 @@ export async function sendClassnoteForUnsent(ids: string[]): Promise<{
   // 대상 조회 — 미발송 native만. source NULL(구컬럼 이전 행)은 native로 간주(현 DB 0건, too_old가 최종 방어).
   const { data: rows } = await supabase
     .from("lesson_reports")
-    .select("id, report_date, subject, student_id, makeup")
+    .select("id, report_date, subject, class_id, student_id, makeup")
     .in("id", capped)
     .is("classnote_status", null)
     .or("source.is.null,source.neq.edutrix_import")
@@ -159,26 +148,15 @@ export async function sendClassnoteForUnsent(ids: string[]): Promise<{
   let sendable: typeof eligible;
   try {
     const gateTargets = eligible.filter((r) => !r.makeup);
-    const blocked = await getAbsenceBlockedKeys(
-      supabase,
-      user.tenantId,
-      gateTargets.map((r) => ({
-        studentId: r.student_id as string,
-        reportDate: (r.report_date as string).slice(0, 10),
-        subject: r.subject as string | null,
-      })),
-    );
-    sendable = eligible.filter(
-      (r) =>
-        r.makeup ||
-        !blocked.has(
-          absenceKeyOf({
-            studentId: r.student_id as string,
-            reportDate: (r.report_date as string).slice(0, 10),
-            subject: r.subject as string | null,
-          }),
-        ),
-    );
+    // 반 단위 판정(0134a) — 위 retryClassnote와 같은 규약.
+    const keyOf = (r: (typeof eligible)[number]) => ({
+      studentId: r.student_id as string,
+      reportDate: (r.report_date as string).slice(0, 10),
+      subject: r.subject as string | null,
+      classId: (r.class_id as string | null) ?? null,
+    });
+    const blocked = await getAbsenceBlockedKeys(supabase, user.tenantId, gateTargets.map(keyOf));
+    sendable = eligible.filter((r) => r.makeup || !blocked.has(absenceKeyOf(keyOf(r))));
   } catch {
     return { ok: false, error: "출결 확인에 실패했습니다 — 다시 시도하세요" };
   }

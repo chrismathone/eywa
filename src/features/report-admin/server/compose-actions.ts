@@ -17,11 +17,17 @@ import { hasClassnoteNameCollision } from "@/features/onescreen/server/scope";
 import { absenceKeyOf, getAbsenceBlockedKeys, isStudentAbsentForSend } from "@/features/onescreen/server/absence-gate";
 import { ingestReport } from "@/features/progress/server/ingest";
 import { BOARD_PREFIX } from "../notice-targets";
+import { resolveReportClassId } from "./resolve-class";
 
 export type AdminSaveReportInput = {
   studentId: string;
   reportDate?: string; // 대상 날짜(YYYY-MM-DD) — 빈값=오늘. 과거 날짜 작성·발송용(report_date=카드·ClassNote 게시일).
-  subject: string; // 과목키(math/english…) — 관리자 발송은 필수(보드·게이트·(student,date,subject) dedup 결정)
+  subject: string; // 과목키(math/english…) — 관리자 발송은 필수(보드·게이트 결정. 반이 없을 때의 dedup 단위)
+  /**
+   * 이 보고서의 반(0134a) — 보고서 1건의 단위. 반 단위 대량발송은 고른 반을 그대로 싣고,
+   * 개별 작성은 `resolveReportClassId`가 **모호하지 않을 때만** 채운다(모호하면 null = 과목 단위, 예전과 동일).
+   */
+  classId?: string | null;
   teacherName?: string; // 학부모 카드에 표시할 강사명 — 기본=해당 과목 담당 강사, 미지정 시 관리자 본인
   textbook?: string;
   makeup?: boolean;
@@ -59,6 +65,7 @@ async function upsertAdminReport(
         student_id: input.studentId,
         report_date: reportDate,
         subject: input.subject || null,
+        class_id: input.classId || null, // 0134a — 보고서 단위(없으면 과목이 단위)
         textbook: input.textbook || null,
         makeup: input.makeup ?? false,
         homework_today: input.homeworkToday || null,
@@ -73,7 +80,8 @@ async function upsertAdminReport(
         trend_note: input.trendNote || null,
         source: "admin",
       },
-      { onConflict: "tenant_id,student_id,report_date,subject" },
+      // 생성열 unit_key = coalesce(class_id::text, subject) — 0134a. 강사 경로와 같은 타깃.
+      { onConflict: "tenant_id,student_id,report_date,unit_key" },
     )
     .select("id, share_token")
     .single();
@@ -126,14 +134,27 @@ export async function saveAndQueueAdminReport(
   const supabase = await createClient();
   const reportDate = resolveReportDate(input.reportDate); // 빈값·미래→오늘, 과거 그대로(아래 too_old 가드가 실발송 범위 강제)
 
-  // 저장 전 상태 pre-read((student,date,subject) 행). 취소/게시중은 덮어쓰지 않는다.
-  const { data: prior } = await supabase
+  // 반을 모호하지 않게 특정할 수 있으면 붙인다(0134a) — 강사가 그 반 보고서를 이미 썼다면 **같은 행**을
+  // 갱신해야 한다. 안 붙이면 반 있는 행과 반 없는 행이 따로 생겨 학부모에게 두 번 나간다.
+  const classId = input.classId ?? (await resolveReportClassId(supabase, {
+    studentId: input.studentId,
+    reportDate,
+    subject: input.subject,
+    teacherName: input.teacherName,
+  }));
+  const scopedInput = { ...input, classId };
+
+  // 저장 전 상태 pre-read — 행(반) 단위. 취소/게시중/발송완료는 덮어쓰지 않는다.
+  // ⚠️ maybeSingle 금지: 같은 (student,date,subject)에 반이 다른 2행이 정상적으로 존재할 수 있다.
+  const priorBase = supabase
     .from("lesson_reports")
     .select("id, classnote_status, revoked_at")
     .eq("student_id", input.studentId)
-    .eq("report_date", reportDate)
-    .eq("subject", input.subject)
-    .maybeSingle();
+    .eq("report_date", reportDate);
+  const { data: priorRows } = await (
+    classId ? priorBase.eq("class_id", classId) : priorBase.is("class_id", null).eq("subject", input.subject)
+  ).limit(1);
+  const prior = priorRows?.[0];
   if (prior?.revoked_at) return { ok: true, id: prior.id, status: "revoked" };
   if (prior?.classnote_status === "processing") return { ok: true, id: prior.id, status: "processing" };
   // 이미 게시된 건은 재발송 차단(강사 경로 saveAndQueueClassnote와 동일 규칙, 2026-07-22).
@@ -141,7 +162,7 @@ export async function saveAndQueueAdminReport(
   // 정말 다시 보내야 하면 발송 콘솔의 '재발송'(retryClassnote) 또는 공유링크 재발급을 쓴다.
   if (prior?.classnote_status === "success") return { ok: true, id: prior.id, status: "already_sent" };
 
-  const saved = await upsertAdminReport(supabase, user, input);
+  const saved = await upsertAdminReport(supabase, user, scopedInput);
   if (!saved.ok || !saved.id) return { ok: false, error: saved.error ?? "보고서 저장에 실패했습니다" };
 
   // 발송 안전 스위치(기본 OFF) — 원장 승인 전까지 저장만.
@@ -162,6 +183,7 @@ export async function saveAndQueueAdminReport(
           studentId: input.studentId,
           reportDate,
           subject: input.subject,
+          classId, // 반이 정해졌으면 그 반 출결만(0134a)
         })
       ) {
         // 대기 중(queued) 재고 회수 — 안 지우면 "전송하지 않았습니다" 안내 직후 워커가 갱신 내용을 게시.
@@ -223,7 +245,8 @@ export type BulkAdminReportInput = {
   test?: boolean; // 학원이 1명에게만(파이프라인 검증)
 };
 
-type BulkTarget = { studentId: string; subject: string; teacherName: string | null };
+// classId: 0134a — 대량발송은 **반을 골라서** 보내므로 반이 항상 정확하다(테스트 학생 경로만 null).
+type BulkTarget = { studentId: string; subject: string; classId: string | null; teacherName: string | null };
 
 /**
  * 반 단위 대량 발송 — 선택 반들의 재원생 각자에게 **같은 내용**의 리포트 카드를 작성해 ClassNote 큐에 적재.
@@ -272,7 +295,8 @@ export async function sendBulkAdminReports(input: BulkAdminReportInput): Promise
       .limit(1)
       .maybeSingle();
     if (!t) return { ok: false, error: `테스트 학생(${BULK_TEST_STUDENT_NAME})을 찾을 수 없습니다` };
-    targets = [{ studentId: t.id as string, subject: firstSendable, teacherName: input.teacherName?.trim() || null }];
+    // 테스트 학생(학원이)은 반 해석 경로 밖이라 classId 없음 → 과목이 단위(예전과 동일).
+    targets = [{ studentId: t.id as string, subject: firstSendable, classId: null, teacherName: input.teacherName?.trim() || null }];
   } else {
     const classIds = [...new Set(input.classIds ?? [])].slice(0, BULK_CLASS_CAP);
     if (!classIds.length) return { ok: false, error: "대상 반을 선택하세요" };
@@ -299,18 +323,20 @@ export async function sendBulkAdminReports(input: BulkAdminReportInput): Promise
     );
     const statusById = new Map(students.map((s) => [s.id, s.status]));
     const override = input.teacherName?.trim() || null;
-    // (학생,과목) dedup — 같은 학생이 같은 과목 반을 둘 이상 들어도 1건. 첫 반의 담당 강사 채택.
+    // (학생,**반**) dedup — 0134a. 예전엔 (학생,과목)이라 같은 과목 두 반을 고르면 **한 건만** 나갔다
+    // (관리자가 정규 반과 특강 반을 함께 선택하면 특강 몫이 조용히 사라짐). 이제 반마다 1건이다.
     const byKey = new Map<string, BulkTarget>();
     for (const e of enr) {
       if (statusById.get(e.student_id) !== "enrolled") continue; // 재원생만
       const subject = subjectByClass.get(e.class_id);
       if (!subject) continue;
-      const key = `${e.student_id}|${subject}`;
+      const key = `${e.student_id}|${e.class_id}`;
       if (byKey.has(key)) continue;
       const tId = teacherByClass.get(e.class_id);
       byKey.set(key, {
         studentId: e.student_id,
         subject,
+        classId: e.class_id,
         teacherName: override || (tId ? nameByTeacher.get(tId) ?? null : null),
       });
     }
@@ -335,15 +361,29 @@ export async function sendBulkAdminReports(input: BulkAdminReportInput): Promise
 
   // ── 3. 오늘 그 과목 보고서가 이미 있는 학생 제외(덮어쓰기·중복 발송 방지) ──
   const targetStudentIds = [...new Set(targets.map((t) => t.studentId))];
-  const existing = await fetchInChunks<{ student_id: string; subject: string | null }>(targetStudentIds, (chunk) =>
-    supabase
-      .from("lesson_reports")
-      .select("student_id, subject")
-      .eq("report_date", reportDate)
-      .in("student_id", chunk),
+  // ⚠️ 판정 단위 = 보고서 단위(0134a) = 반, 반이 없으면 과목. 반 기준과 과목 기준을 **둘 다** 본다 —
+  //    반 있는 행이 이미 있으면 그 반 대상만 빼고, 반 없는 행(관리자 구버전·이관)은 같은 과목 대상을 뺀다
+  //    (안 그러면 이미 학부모에게 나간 건에 한 건 더 붙는다).
+  const existing = await fetchInChunks<{ student_id: string; subject: string | null; class_id: string | null }>(
+    targetStudentIds,
+    (chunk) =>
+      supabase
+        .from("lesson_reports")
+        .select("student_id, subject, class_id")
+        .eq("report_date", reportDate)
+        .in("student_id", chunk),
   );
-  const existingKeys = new Set(existing.map((r) => `${r.student_id}|${r.subject ?? ""}`));
-  const fresh = targets.filter((t) => !existingKeys.has(`${t.studentId}|${t.subject}`));
+  const existingByClass = new Set(
+    existing.filter((r) => r.class_id).map((r) => `${r.student_id}|${r.class_id}`),
+  );
+  const existingBySubject = new Set(
+    existing.filter((r) => !r.class_id).map((r) => `${r.student_id}|${r.subject ?? ""}`),
+  );
+  const fresh = targets.filter(
+    (t) =>
+      !(t.classId && existingByClass.has(`${t.studentId}|${t.classId}`)) &&
+      !existingBySubject.has(`${t.studentId}|${t.subject}`),
+  );
   const skippedExisting = targets.length - fresh.length;
   if (!fresh.length) return { ok: true, queued: 0, conflicts: 0, skippedExisting, subjectOff, overflow };
 
@@ -356,12 +396,15 @@ export async function sendBulkAdminReports(input: BulkAdminReportInput): Promise
     sendable = fresh;
   } else {
     try {
-      const blocked = await getAbsenceBlockedKeys(
-        supabase,
-        user.tenantId,
-        fresh.map((t) => ({ studentId: t.studentId, reportDate, subject: t.subject })),
-      );
-      sendable = fresh.filter((t) => !blocked.has(absenceKeyOf({ studentId: t.studentId, reportDate, subject: t.subject })));
+      // 반 단위 판정(0134a) — 대량발송은 반을 골라 보내므로 그 반 출결만 본다.
+      const keyOf = (t: BulkTarget) => ({
+        studentId: t.studentId,
+        reportDate,
+        subject: t.subject,
+        classId: t.classId,
+      });
+      const blocked = await getAbsenceBlockedKeys(supabase, user.tenantId, fresh.map(keyOf));
+      sendable = fresh.filter((t) => !blocked.has(absenceKeyOf(keyOf(t))));
     } catch {
       return { ok: false, error: "출결 확인에 실패했습니다 — 다시 시도하세요" };
     }
@@ -386,6 +429,7 @@ export async function sendBulkAdminReports(input: BulkAdminReportInput): Promise
     student_id: t.studentId,
     report_date: reportDate,
     subject: t.subject,
+    class_id: t.classId, // 0134a — 반 단위(선택한 반). 테스트 학생 경로만 null.
     textbook: input.textbook?.trim() || null,
     makeup: input.makeup ?? false,
     homework_today: input.homeworkToday?.trim() || null,
@@ -404,7 +448,7 @@ export async function sendBulkAdminReports(input: BulkAdminReportInput): Promise
   for (let i = 0; i < rowsToAuthor.length; i += 100) {
     const { data, error } = await supabase
       .from("lesson_reports")
-      .upsert(rowsToAuthor.slice(i, i + 100), { onConflict: "tenant_id,student_id,report_date,subject" })
+      .upsert(rowsToAuthor.slice(i, i + 100), { onConflict: "tenant_id,student_id,report_date,unit_key" })
       .select("id, student_id, subject");
     if (error) return { ok: false, error: error.message };
     authored.push(...((data ?? []) as typeof authored));

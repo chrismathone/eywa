@@ -36,7 +36,13 @@ export type SaveLessonReportInput = {
   attitude?: string; // "좋음"
   trendNote?: string; // 학습 추세(종합분석) 문구 — 0091a. 멘트(notes)와 별개 저장·표시.
   reportDate?: string; // 대상 날짜(YYYY-MM-DD) — 빈값=오늘. 과거 날짜 마감·재발송용(report_date=카드·ClassNote 게시일).
-  subject?: string; // 과목키(math/english…) — (student,date,subject) 과목별 1행 dedup용
+  subject?: string; // 과목키(math/english…) — 발송 과목 게이트·보드 매핑의 키. 반이 없을 때의 dedup 단위이기도 하다.
+  /**
+   * 이 보고서가 속한 반(수업) — **보고서 1건의 단위**(0134a). 같은 날 정규 수학 + 수학 특강을 들어도
+   * 서로 안 덮게 하는 키다(`unit_key = coalesce(class_id, subject)` 유니크).
+   * null 허용: 보강·수업외 수동 추가처럼 반이 없는 저장(그때는 예전대로 과목이 단위).
+   */
+  classId?: string | null;
   // 보강·수업외 학생(수동 추가) — true면 '내 담당 반 활성 수강생' 검사 대신 같은 학원(tenant) 학생이면 허용.
   // 원장 승인 정책(보강 저장=학원 전체). RLS가 테넌트 격리(cross-tenant는 select null) → 학원 밖 학생은 여전히 거부.
   outOfClass?: boolean;
@@ -76,19 +82,26 @@ export async function saveLessonReport(
       .eq("teacher_id", user.id);
     const myClassIds = (myClasses ?? []).map((c) => c.id);
     if (myClassIds.length === 0) return { ok: false, error: "담당 반이 없습니다" };
+    // 반이 지정되면 **그 반**이 내 담당인지까지 본다(0134a) — 예전엔 '내 담당 반 아무거나'만 봐서
+    // 남의 반 id를 실어 보내면 그 반 보고서가 만들어졌다(반이 보고서 단위가 되면서 실제 영향이 생긴 구멍).
+    if (input.classId && !myClassIds.includes(input.classId))
+      return { ok: false, error: "담당 반이 아닙니다" };
 
-    const { data: enr } = await supabase
+    let q = supabase
       .from("enrollments")
       .select("id")
       .eq("student_id", input.studentId)
       .or(`start_date.is.null,start_date.lte.${reportDate}`)
-      .or(`end_date.is.null,end_date.gte.${reportDate}`)
-      .in("class_id", myClassIds)
-      .limit(1);
+      .or(`end_date.is.null,end_date.gte.${reportDate}`);
+    // 반이 지정되면 그 반 수강 여부까지 확인(다른 반 학생에 특강 보고서를 쓰는 것 차단).
+    q = input.classId ? q.eq("class_id", input.classId) : q.in("class_id", myClassIds);
+    const { data: enr } = await q.limit(1);
     if (!enr || enr.length === 0) return { ok: false, error: "담당 학생이 아닙니다" };
   }
 
-  // (student, date, subject) 과목별 1행 upsert — 재발송 시 같은 행 갱신(중복 방지, 0083a 유니크).
+  // (student, date, 반|과목) 1행 upsert — 재저장 시 같은 행 갱신(0134a `unit_key` 유니크).
+  // ⚠️ onConflict 타깃은 **생성열 unit_key**(= coalesce(class_id::text, subject)) — 부분·표현식 인덱스는
+  //    supabase-js upsert가 타깃으로 못 잡아서(0083a 교훈) 생성열로 평범한 컬럼처럼 만들어 둔 것이다.
   // share_token은 update 시 payload에 없어 미변경(안정 링크). classnote_* 도 미변경(별도 saveAndQueueClassnote가 관리).
   const { data, error } = await supabase
     .from("lesson_reports")
@@ -98,6 +111,7 @@ export async function saveLessonReport(
         student_id: input.studentId,
         report_date: reportDate,
         subject: input.subject || null,
+        class_id: input.classId || null,
         textbook: input.textbook || null,
         makeup: input.makeup ?? false,
         homework_today: input.homeworkToday || null,
@@ -112,7 +126,7 @@ export async function saveLessonReport(
         trend_note: input.trendNote || null,
         source: "onescreen",
       },
-      { onConflict: "tenant_id,student_id,report_date,subject" },
+      { onConflict: "tenant_id,student_id,report_date,unit_key" },
     )
     .select("id, share_token")
     .single();
@@ -169,15 +183,21 @@ export async function saveAndQueueClassnote(
   // 대상 날짜 = 고른 날짜 클램프(saveLessonReport와 동일 계산 → pre-read·too_old 게이트가 그 날짜 기준).
   const reportDate = resolveReportDate(input.reportDate);
 
-  // 저장 전 상태 pre-read((student,date,subject) 행). RLS로 테넌트 격리.
+  // 저장 전 상태 pre-read — **행(반) 단위**(0134a). 반이 있으면 그 반 행, 없으면 반 없는 같은 과목 행.
+  // ⚠️ 예전엔 (student,date,subject)로 maybeSingle이었다. 같은 과목 두 반(정규+특강)이 생기면
+  //    2행이 걸려 maybeSingle이 에러를 던지고 발송 전체가 "실패"로 죽는다.
   const base = supabase
     .from("lesson_reports")
     .select("id, classnote_status, revoked_at")
     .eq("student_id", input.studentId)
     .eq("report_date", reportDate);
-  const { data: prior } = await (
-    input.subject ? base.eq("subject", input.subject) : base.is("subject", null)
-  ).maybeSingle();
+  const scoped = input.classId
+    ? base.eq("class_id", input.classId)
+    : input.subject
+      ? base.is("class_id", null).eq("subject", input.subject)
+      : base.is("class_id", null).is("subject", null);
+  const { data: priorRows } = await scoped.limit(1);
+  const prior = priorRows?.[0];
   // 취소된 링크는 재큐잉 안 함 — 옛 링크가 死링크라 재발송하려면 먼저 재발급(새 토큰·취소 해제)해야 함.
   if (prior?.revoked_at) {
     return { ok: true, id: prior.id, status: "revoked" };
@@ -219,6 +239,8 @@ export async function saveAndQueueClassnote(
           studentId: input.studentId,
           reportDate,
           subject: input.subject ?? null,
+          // 반이 있으면 **그 반** 출결만 본다(0134a) — 특강 결석인데 정규 출석이라 통과하던 구멍을 막는다.
+          classId: input.classId ?? null,
         })
       ) {
         // 대기 중(queued) 재고 회수 — 안 지우면 "발송하지 않았습니다" 안내 직후 워커가 방금 갱신된
