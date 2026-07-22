@@ -651,11 +651,28 @@ export async function getMonthlyAttendanceMatrix(
     // 🔴 반 단위 분류(0134a) — 세 갈래다:
     //  · 이 반(또는 반 미상 = 이관분·보강·관리자 작성) → **출석 파생 근거**.
     //  · 같은 과목 **다른 반** → 출석도 결석도 아닌 **판정 보류**. 실데이터에 "한 수업, 두 수강행"이
-    //    있어(같은 강사·같은 요일·같은 학생을 두 반에 걸어 둠) 강사는 한 번 가르치고 한 건만 쓴다.
-    //    보류가 없으면 짝 반의 그 날짜가 매주 영구히 거짓 결석이 된다(실측 6칸 즉시 발생).
+    //    있어 강사는 한 번 가르치고 한 건만 쓴다. 보류가 없으면 짝 반의 그 날짜가 매주 영구히 거짓 결석.
     //  · 그 외 과목 → 무시.
+    //
+    // 🔴 짝 반 판정을 위 `classes`로 하면 **안 된다** — 그 목록은 강사뷰에서 `teacher_id`로 좁혀져 있다.
+    //    실측(2026-07-22) 짝 반은 전부 **다른 강사** 소유였다(JJPS 마수호 ↔ PS2S 이성우, JJ1E 김은정 ↔
+    //    JJ1I 이유정). 그래서 좁힌 목록으로 판정하면 **정작 그 화면을 보는 강사에게만** 짝 반이 안 보여
+    //    거짓 결석이 그대로 남는다(관리자 화면에서만 고쳐진 것처럼 보인다).
+    //    → 보고서에 실제로 붙어 있는 class_id들의 과목을 **직접** 조회한다(테넌트 RLS만 적용, 강사 무관).
+    const otherClassIds = [
+      ...new Set(
+        reports
+          .map((r) => r.class_id)
+          .filter((c): c is string => !!c && c !== selectedClass.id),
+      ),
+    ];
+    const otherClasses = otherClassIds.length
+      ? await fetchInChunks<{ id: string; subject: string | null }>(otherClassIds, (chunk) =>
+          supabase.from("classes").select("id, subject").in("id", chunk),
+        )
+      : [];
     const sameSubjectClassIds = new Set(
-      classes.filter((c) => c.subject === selectedClass.subject).map((c) => c.id),
+      otherClasses.filter((c) => c.subject === selectedClass.subject).map((c) => c.id),
     );
     const reportsByStudent = new Map<string, Set<string>>();
     const siblingByStudent = new Map<string, Set<string>>();
