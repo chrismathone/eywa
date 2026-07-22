@@ -95,10 +95,13 @@ export function isRowActionable(
   statusOverride?: string | null,
 ): boolean {
   if (!isReportEligible(subject)) return false;
+  // 발송 완료 = **수정도 금지**(2026-07-22 원장 지시). ClassNote는 게시글 수정·삭제가 없어 학부모는
+  // 발송 시점의 이미지를 그대로 갖고 있다 — 여기서 내용을 바꾸면 기록과 학부모가 본 것이 갈라진다.
+  // 그래서 save·send·autowrite **전부** 막는다(예전엔 save만 열려 있었다).
+  // 푸는 유일한 문 = 공유링크 재발급(그 건을 무효화 선언). 서버 saveLessonReport가 같은 규칙을 강제한다.
+  if (isAlreadySent(statusOverride ?? subject.classnoteStatus)) return false;
   if (action === "save") return true;
-  if (subject.attendanceRaw === "absent") return false;
-  if (action === "send" && isAlreadySent(statusOverride ?? subject.classnoteStatus)) return false;
-  return true;
+  return subject.attendanceRaw !== "absent";
 }
 
 /**

@@ -80,11 +80,14 @@ function GridProgressCell({
   subjectIndex,
   onProgress,
   onStudyGrade,
+  locked,
 }: {
   student: OneScreenStudent;
   subjectIndex: number;
   onProgress: GridFieldHandlers["onProgress"];
   onStudyGrade: GridFieldHandlers["onStudyGrade"];
+  /** 발송 완료된 보고서 — 수정 금지(읽기 전용). */
+  locked?: boolean;
 }) {
   const su = student.subjects[subjectIndex];
   if (!su) return null;
@@ -94,9 +97,12 @@ function GridProgressCell({
         type="text"
         value={su.today}
         onChange={(e) => onProgress(student.id, subjectIndex, e.target.value)}
+        readOnly={locked}
         placeholder="오늘 진도 (예: Unit 8 · p.90)"
         aria-label={`${student.name} ${su.name} 오늘 진도`}
-        className="border-line bg-card focus:border-primary h-8 w-full rounded-sm border px-2 text-[12px] outline-none"
+        className={`border-line focus:border-primary h-8 w-full rounded-sm border px-2 text-[12px] outline-none ${
+          locked ? "bg-bg-soft text-text-dim" : "bg-card"
+        }`}
       />
     );
   }
@@ -108,6 +114,7 @@ function GridProgressCell({
       onStudyGrade={(g) => onStudyGrade(student.id, g)}
       studentGrade={student.grade}
       prev={su.prev}
+      locked={locked}
       ariaLabel={`${student.name} ${su.name} 오늘 진도`}
     />
   );
@@ -167,11 +174,15 @@ export function GridBodyRow({
   const liveStatus = rep?.classnoteStatus ?? subject.classnoteStatus;
   const alreadySent = isAlreadySent(liveStatus);
   const canSend = isRowActionable(subject, "send", liveStatus); // 진도 + 결석 아님 + 미발송(2-3)
-  // 자동작성은 발송과 게이트가 다르다 — 이미 보낸 뒤라도 기록용 멘트는 다시 만들 수 있어야 한다.
-  const canAutoWrite = isRowActionable(subject, "autowrite");
+  // 발송 완료건은 자동작성도 막는다 — 멘트를 새로 만들어 봐야 저장이 서버에서 거부된다(입력 유실).
+  const canAutoWrite = isRowActionable(subject, "autowrite", liveStatus);
   const isAbsent = subject.attendanceRaw === "absent";
   // 파일을 행 위에 놓으면 그 행에 바로 첨부(가장 빠른 경로). 진도 미입력 등 게이트는 부모 핸들러가 안내한다.
-  const drop = useRowFileDrop((files) => actions.onAttach(student, subject.name, files));
+  // 발송 완료건은 파일을 행에 떨어뜨려도 첨부되지 않는다(위 버튼 잠금과 같은 이유).
+  const drop = useRowFileDrop((files) => {
+    if (alreadySent) return;
+    actions.onAttach(student, subject.name, files);
+  });
   // 결석 행은 배경 톤으로 표시(입력은 여전히 가능=기록 보존). opacity로 전체를 흐리면 활성 입력칸이 disabled로 오인된다(#20).
   return (
     <tr
@@ -260,6 +271,7 @@ export function GridBodyRow({
           subjectIndex={subjectIndex}
           onProgress={fields.onProgress}
           onStudyGrade={fields.onStudyGrade}
+          locked={alreadySent}
         />
       </td>
       {config.dailyEnabled ? (
@@ -313,6 +325,7 @@ export function GridBodyRow({
             type="text"
             value={subject.textbook ?? ""}
             onChange={(e) => fields.onTextbook(student.id, subject.name, e.target.value)}
+            readOnly={alreadySent}
             placeholder="교재명"
             aria-label={`${student.name} ${subject.name} 교재명`}
             data-nav-col="textbook"
@@ -325,6 +338,7 @@ export function GridBodyRow({
             type="text"
             value={subject.homeworkToday ?? ""}
             onChange={(e) => fields.onHomeworkToday(student.id, subject.name, e.target.value)}
+            readOnly={alreadySent}
             placeholder="오늘 과제 (예: 개념편 p10~16)"
             aria-label={`${student.name} ${subject.name} 오늘 과제`}
             data-nav-col="homeworkToday"
@@ -337,7 +351,8 @@ export function GridBodyRow({
               type="checkbox"
               checked={!!subject.makeup}
               onChange={() => fields.onMakeup(student.id, subject.name)}
-              className="accent-primary size-3.5"
+              disabled={alreadySent}
+              className="accent-primary size-3.5 disabled:opacity-50"
               aria-label={`${student.name} ${subject.name} 보강`}
             />
             보강
@@ -361,6 +376,7 @@ export function GridBodyRow({
               <textarea
                 value={draftParas.p1}
                 onChange={(e) => fields.onDraft(student.id, subject.name, joinComment(e.target.value, draftParas.p2))}
+                readOnly={alreadySent}
                 placeholder={genRowBusy ? "자동작성 중…" : "1문단 · 수업 내용(교재·진도·과제)"}
                 aria-label={`${student.name} ${subject.name} 학부모 문구 1문단 수업 내용`}
                 className={`border-line focus:border-primary scrollbar-thin min-h-[52px] w-full rounded-sm border bg-background px-2 py-1 text-[11px] leading-snug outline-none ${AUTOSIZE}`}
@@ -368,6 +384,7 @@ export function GridBodyRow({
               <textarea
                 value={draftParas.p2}
                 onChange={(e) => fields.onDraft(student.id, subject.name, joinComment(draftParas.p1, e.target.value))}
+                readOnly={alreadySent}
                 placeholder={genRowBusy ? "자동작성 중…" : "2문단 · 태도 · 특이사항"}
                 aria-label={`${student.name} ${subject.name} 학부모 문구 2문단 태도 특이사항`}
                 className={`border-line focus:border-primary scrollbar-thin min-h-[52px] w-full rounded-sm border bg-background px-2 py-1 text-[11px] leading-snug outline-none ${AUTOSIZE}`}
@@ -377,6 +394,7 @@ export function GridBodyRow({
             <textarea
               value={rep?.draft ?? ""}
               onChange={(e) => fields.onDraft(student.id, subject.name, e.target.value)}
+              readOnly={alreadySent}
               placeholder={genRowBusy ? "자동작성 중…" : "'자동작성'으로 생성 · 직접 편집·확인 후 발송"}
               aria-label={`${student.name} ${subject.name} 학부모 문구`}
               className={`border-line focus:border-primary scrollbar-thin min-h-[72px] w-full rounded-sm border bg-background px-2 py-1 text-[11px] leading-snug outline-none ${AUTOSIZE}`}
@@ -385,6 +403,7 @@ export function GridBodyRow({
           <textarea
             value={rep?.trendDraft ?? ""}
             onChange={(e) => fields.onTrend(student.id, subject.name, e.target.value)}
+            readOnly={alreadySent}
             placeholder="학습 추세(종합분석) · 기록 적으면 비어 있음"
             aria-label={`${student.name} ${subject.name} 학습 추세`}
             className={`border-line focus:border-primary scrollbar-thin min-h-[48px] w-full rounded-sm border bg-bg-soft px-2 py-1 text-[11px] leading-snug outline-none ${AUTOSIZE}`}
@@ -397,9 +416,11 @@ export function GridBodyRow({
             <button
               type="button"
               onClick={() => actions.onAutoWrite(student, subject.name)}
-              disabled={genRowBusy || bulkGen || !canAutoWrite}
+              disabled={genRowBusy || bulkGen || !canAutoWrite || alreadySent}
               title={
-                canAutoWrite
+                alreadySent
+                  ? "이미 발송된 보고서 — 수정할 수 없습니다"
+                  : canAutoWrite
                   ? "AI 학부모 멘트 자동작성 (발송 문구)"
                   : isAbsent
                     ? "결석 학생 — 발송 제외 (기록 저장은 가능)"
@@ -420,6 +441,10 @@ export function GridBodyRow({
               )}
             </button>
             <GridAttachButton
+              // 발송 완료건은 첨부도 잠근다 — 첨부 변경은 classnote 상태를 리셋해 **재발송을 여는 뒷문**이었다
+              // (수정 금지 규칙을 우회하는 경로가 되어버린다).
+              disabled={alreadySent}
+              disabledReason="이미 발송된 보고서 — 첨부를 바꿀 수 없습니다"
               attachments={rep?.attachments ?? []}
               urls={config.attachmentUrls}
               uploading={gen.uploadingKey === key}
@@ -453,14 +478,18 @@ export function GridBodyRow({
             }
             onClick={() => actions.onSendRow(student, subject.name)}
           >
-            발송
+            {alreadySent ? "발송 완료" : "발송"}
           </Button>
-          {/* ⚠️ 결석 사유를 **눈에 보이게** — 예전엔 버튼 title 툴팁뿐이라 강사가 왜 발송이 막혔는지 알 수
+          {/* ⚠️ 막힌 이유는 **눈에 보이게** — 예전엔 버튼 title 툴팁뿐이라 강사가 왜 발송이 막혔는지 알 수
               없었다(2026-07-21: 네이티브 툴팁이 실제로 안 뜨는 사례 확인). 행 배경 톤만으론 이유가 안 읽힌다. */}
           {isAbsent ? (
             <span className="text-danger text-center text-[10px] font-bold">결석 — 발송 제외</span>
           ) : null}
-          {badge ? (
+          {/* 이미 게시된 건은 재발송이 **막혀 있다**는 사실 자체를 알린다(배지 "발송 완료"만으론
+              "다시 눌러도 되는 줄" 알고 계속 누르게 된다 — 원장 지적 2026-07-22). */}
+          {alreadySent ? (
+            <span className="text-primary text-center text-[10px] font-bold">발송됨 — 재발송 불가</span>
+          ) : badge ? (
             <span className={`text-center text-[10px] font-bold ${badge.cls}`}>{badge.label}</span>
           ) : null}
         </div>

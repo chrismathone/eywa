@@ -381,9 +381,11 @@ export function ReportCard({
             <Button
               variant="ghost"
               size="sm"
-              disabled={generating || !isRowActionable(subject, "autowrite")}
+              disabled={generating || !isRowActionable(subject, "autowrite") || alreadySent}
               title={
-                isRowActionable(subject, "autowrite")
+                alreadySent
+                  ? "이미 발송된 보고서 — 수정할 수 없습니다"
+                  : isRowActionable(subject, "autowrite")
                   ? undefined
                   : subject.attendanceRaw === "absent"
                     ? "결석 학생 — 발송 제외 (기록 저장은 가능)"
@@ -473,8 +475,9 @@ export function ReportCard({
           <p className="border-amber/40 bg-amber-soft text-amber flex items-start gap-1 rounded-md border px-2.5 py-1.5 text-[11px] leading-relaxed">
             <EyIcon name="alert" size={13} className="mt-0.5 shrink-0" />
             <span>
-              이미 학부모 게시판에 올라간 보고서라 <b>다시 보낼 수 없습니다</b>. ClassNote는 게시글 수정·삭제가 안 되고, 다시
-              보내면 <b>새 글이 하나 더 추가</b>될 뿐입니다. 내용만 고치려면 아래 <b>기록 저장</b>을 쓰세요.
+              이미 학부모 게시판에 올라간 보고서라 <b>수정도 재발송도 할 수 없습니다</b>. ClassNote는 게시글 수정·삭제가
+              안 되므로, 여기서 내용을 바꾸면 학부모가 받은 것과 기록이 갈라집니다. 정말 고쳐야 하면 아래{" "}
+              <b>공유 링크 재발급</b>으로 이 건을 무효화한 뒤 다시 작성하세요.
             </span>
           </p>
         ) : null}
@@ -486,15 +489,17 @@ export function ReportCard({
           <Button
             variant="outline"
             size="sm"
-            disabled={!isRowActionable(subject, "save")}
+            disabled={!isRowActionable(subject, "save") || alreadySent}
             title={
-              isRowActionable(subject, "save")
-                ? "보고서를 기록에 저장합니다 — 아래 학부모 공유 링크를 복사해 카톡·문자로 보낼 수 있습니다"
-                : "오늘 진도를 먼저 입력하세요"
+              alreadySent
+                ? "이미 학부모에게 발송된 보고서 — 수정할 수 없습니다(고치려면 공유 링크 재발급)"
+                : isRowActionable(subject, "save")
+                  ? "보고서를 기록에 저장합니다 — 아래 학부모 공유 링크를 복사해 카톡·문자로 보낼 수 있습니다"
+                  : "오늘 진도를 먼저 입력하세요"
             }
             onClick={() => onSend(subjectName, "save")}
           >
-            저장
+            {alreadySent ? "발송됨 — 수정 불가" : "저장"}
           </Button>
           <Button
             variant="ghost"

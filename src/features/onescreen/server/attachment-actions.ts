@@ -34,7 +34,16 @@ const CLASSNOTE_RESET = {
 } as const;
 
 type Attachment = { path: string; name: string; size: number };
-type ReportRow = { id: string; attachments: Attachment[] | null };
+type ReportRow = { id: string; attachments: Attachment[] | null; classnote_status?: string | null };
+
+/**
+ * 발송 완료된 보고서는 첨부도 못 바꾼다(2026-07-22 원장 지시 "발송된 보고서 수정 금지").
+ * 🔴 여기가 특히 중요한 이유: 첨부 변경은 CLASSNOTE_RESET으로 발송 상태를 지워 **재발송을 여는 뒷문**이다.
+ *    이걸 안 막으면 "사진 한 장 추가"가 수정 금지와 재발송 차단을 동시에 우회한다.
+ */
+const SENT_LOCK_ERROR =
+  "이미 학부모에게 발송된 보고서라 첨부를 바꿀 수 없습니다 — 고쳐야 하면 공유 링크를 재발급하세요";
+const isSentLocked = (row: ReportRow | null) => row?.classnote_status === "success";
 
 /**
  * 저장된 보고서 행 — 첨부는 저장된 행에만 붙는다. date 기본=오늘(admin 직접작성은 작성일 전달).
@@ -53,7 +62,7 @@ async function findReportRow(
 ): Promise<ReportRow | null> {
   const base = supabase
     .from("lesson_reports")
-    .select("id, attachments, class_id")
+    .select("id, attachments, class_id, classnote_status")
     .eq("student_id", studentId)
     .eq("report_date", reportDate || kstToday());
   if (classId) {
@@ -116,6 +125,7 @@ export async function issueReportAttachmentUploadTicket(
     return { error: "파일이 너무 큽니다 (최대 20MB)" };
   const row = await findReportRow(g.supabase, input.studentId, input.subject, input.reportDate, input.classId);
   if (!row) return { error: "먼저 보고서를 저장하세요" };
+  if (isSentLocked(row)) return { error: SENT_LOCK_ERROR };
   if ((row.attachments ?? []).length >= MAX_ATTACHMENTS)
     return { error: `사진은 최대 ${MAX_ATTACHMENTS}장까지 첨부할 수 있습니다` };
   const ext = input.ext.toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
@@ -152,6 +162,10 @@ export async function registerReportAttachment(
   if (!row) {
     await removeObject(input.path, { bucket: BUCKET }).catch(() => {});
     return { ok: false, error: "먼저 보고서를 저장하세요" };
+  }
+  if (isSentLocked(row)) {
+    await removeObject(input.path, { bucket: BUCKET }).catch(() => {});
+    return { ok: false, error: SENT_LOCK_ERROR };
   }
   const current = row.attachments ?? [];
   if (current.length >= MAX_ATTACHMENTS) {
@@ -190,6 +204,7 @@ export async function removeReportAttachment(
   if ("error" in g) return { ok: false, error: g.error };
   const row = await findReportRow(g.supabase, input.studentId, input.subject, input.reportDate, input.classId);
   if (!row) return { ok: false, error: "보고서를 찾을 수 없습니다" };
+  if (isSentLocked(row)) return { ok: false, error: SENT_LOCK_ERROR };
   const current = row.attachments ?? [];
   const next = current.filter((a) => a.path !== input.path);
   if (next.length === current.length) return { ok: true, attachments: current }; // 이미 없음(멱등)

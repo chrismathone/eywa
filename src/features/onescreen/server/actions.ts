@@ -99,6 +99,30 @@ export async function saveLessonReport(
     if (!enr || enr.length === 0) return { ok: false, error: "담당 학생이 아닙니다" };
   }
 
+  // 🔴 **발송 완료된 보고서는 수정 금지**(2026-07-22 원장 지시). ClassNote는 게시글 수정·삭제가 없어
+  //    학부모는 발송 시점의 이미지를 그대로 갖고 있다. 여기서 내용만 바꾸면 DB와 학부모가 본 것이 갈라져
+  //    나중에 어느 쪽이 사실인지 아무도 모른다(문의가 오면 대조할 근거가 사라진다).
+  //    이 함수가 저장의 **단일 관문**이라 원스크린·카드·일괄·첨부 자동저장이 전부 여기서 막힌다.
+  //    푸는 방법은 공유링크 재발급(reissueShareLink — 상태 리셋 = "이 건은 무효" 선언)뿐이다.
+  const gateBase = supabase
+    .from("lesson_reports")
+    .select("id, classnote_status")
+    .eq("student_id", input.studentId)
+    .eq("report_date", reportDate);
+  const gateScoped = input.classId
+    ? gateBase.eq("class_id", input.classId)
+    : input.subject
+      ? gateBase.is("class_id", null).eq("subject", input.subject)
+      : gateBase.is("class_id", null).is("subject", null);
+  const { data: gateRows } = await gateScoped.limit(1);
+  if (gateRows?.[0]?.classnote_status === "success") {
+    return {
+      ok: false,
+      id: gateRows[0].id,
+      error: "이미 학부모에게 발송된 보고서라 수정할 수 없습니다 — 고쳐야 하면 공유링크를 재발급하세요",
+    };
+  }
+
   // (student, date, 반|과목) 1행 upsert — 재저장 시 같은 행 갱신(0134a `unit_key` 유니크).
   // ⚠️ onConflict 타깃은 **생성열 unit_key**(= coalesce(class_id::text, subject)) — 부분·표현식 인덱스는
   //    supabase-js upsert가 타깃으로 못 잡아서(0083a 교훈) 생성열로 평범한 컬럼처럼 만들어 둔 것이다.

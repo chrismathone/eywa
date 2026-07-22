@@ -329,6 +329,16 @@ export function OneScreenClient({
   }).length;
 
   // 허브 통계(B2) — 오늘 마감 진행 현황.
+  // 이 날짜에 **이미 학부모에게 나간** 행 수 — 상단 안내 + "왜 수정/발송이 막혔나"의 근거.
+  // ⚠️ 화면 state(reports)를 본다: 로스터 스냅샷만 보면 세션 중 방금 보낸 건이 안 세어진다.
+  const sentRowCount = visible.reduce(
+    (n, s) =>
+      n +
+      s.subjects.filter((su) => isAlreadySent(reports[s.id]?.[su.name]?.classnoteStatus ?? su.classnoteStatus))
+        .length,
+    0,
+  );
+
   const hubStats = {
     students: students.length,
     progressDone: students.filter((s) => s.progressConfirmed).length,
@@ -1102,7 +1112,12 @@ export function OneScreenClient({
     const rows = selectRows("save", keys);
     const skipped = keys?.length ? keys.length - rows.length : 0; // 미선택=전체=0(음수 방지 #11)
     if (rows.length === 0) {
-      toast.message("저장할 행이 없습니다 — 오늘 진도를 입력하세요");
+      // 발송 완료건은 수정 금지라 저장 대상에서도 빠진다 — "왜 아무것도 저장이 안 되지"의 답을 준다.
+      toast.message(
+        sentRowCount
+          ? `저장할 행이 없습니다 — 이미 발송된 ${sentRowCount}건은 수정할 수 없습니다(진도 미입력 행도 제외)`
+          : "저장할 행이 없습니다 — 오늘 진도를 입력하세요",
+      );
       return;
     }
     setBulkBusy("save");
@@ -1126,10 +1141,15 @@ export function OneScreenClient({
     if (bulkBusy || bulkGen) return; // 재진입·중첩 방지(#10)
     const rows = selectRows("send", keys);
     const preSkipped = keys?.length ? keys.length - rows.length : 0; // 미선택=전체=0(음수 방지 #11)
-    // 발송 후보(진도 입력·결석 아님) 중 **이미 발송된 행** — 아래 안내에 쓰고, rows에는 이미 빠져 있다.
+    // 발송 후보 중 **이미 발송된 행** — 아래 안내에 쓰고, rows에는 이미 빠져 있다.
     // ⚠️ 이 수치는 "일괄 발송을 다시 눌러도 안 나가는 이유"라 반드시 보여준다(무언 제외 = 사고 은폐).
-    const alreadySentRows = selectRows("save", keys).filter(
+    // ⚠️ `selectRows`로 세면 **항상 0**이 된다 — 발송 완료건은 save 게이트에서도 이미 빠지기 때문
+    //    (2026-07-22 '수정도 금지'로 강화된 뒤의 함정). 그래서 게이트 이전의 원본 행에서 센다.
+    const allRows = buildGridRows(visible).filter((r) => rowInClass(r.subject, activeClassFilter));
+    const keySet = keys?.length ? new Set(keys) : null;
+    const alreadySentRows = allRows.filter(
       (r) =>
+        (!keySet || keySet.has(r.key)) &&
         r.subject.attendanceRaw !== "absent" &&
         isAlreadySent(liveClassnoteStatus(r.student.id, r.subject.name) ?? r.subject.classnoteStatus),
     ).length;
@@ -1144,7 +1164,9 @@ export function OneScreenClient({
     // 발송 전 누락 안내(2-4) — 차단 아님("누락=생략" 철학 유지). 누락은 고유 학생 수 기준.
     // ⚠️ 결석 제외는 **행(과목) 단위 건수** — 다과목 학생은 결석 반 과목만 빠지고 다른 과목은 발송되므로
     //    "N명 제외"로 쓰면 오안내(리뷰 확정). 발송 단위=행(lesson_reports 1건)이라 "건"이 정확.
-    const absentRows = selectRows("save", keys).filter((r) => r.subject.attendanceRaw === "absent").length;
+    const absentRows = allRows.filter(
+      (r) => (!keySet || keySet.has(r.key)) && r.subject.attendanceRaw === "absent",
+    ).length;
     const gaps = summarizeSendGaps(rows, { dailyEnabled: showDailyTest, checkEnabled: showCheckTest });
     const gapLine =
       gaps.missingAttitude || gaps.missingTest
@@ -1516,6 +1538,23 @@ export function OneScreenClient({
           >
             오늘 수업만 보기
           </a>
+        </div>
+      ) : null}
+
+      {/* 발송 완료 안내(2026-07-22 원장 지시) — **과거 날짜로 돌아갔을 때가 핵심**이다.
+          그 날짜는 대부분 이미 발송이 끝나 있는데, 화면은 평소와 똑같이 보이고 발송 버튼도 그냥 거기 있다
+          → "왜 안 나가지?" 하며 계속 누르거나, 반대로 눌러서 학부모 게시판에 글이 하나 더 붙는다.
+          ClassNote는 게시글 수정·삭제가 없어 되돌릴 수 없으므로, 이 날짜에 이미 나간 게 몇 건인지 먼저 말한다. */}
+      {sentRowCount > 0 ? (
+        <div className="border-primary/30 bg-primary-soft/40 text-text flex flex-wrap items-center gap-x-1.5 rounded-md border px-3 py-2 text-[12.5px]">
+          <span className="font-bold">
+            이 날짜는 이미 학부모에게 발송된 보고서가 {sentRowCount}건 있습니다
+          </span>
+          <span className="text-text-dim">
+            — 발송 완료된 건은 <b>수정도 재발송도 할 수 없습니다</b>. ClassNote는 게시글 수정·삭제가 없어
+            학부모가 받은 것과 기록이 갈라지기 때문입니다. 정말 고쳐야 하면 카드에서 <b>공유 링크 재발급</b>
+            으로 그 건을 무효화한 뒤 다시 작성하세요.
+          </span>
         </div>
       ) : null}
 
