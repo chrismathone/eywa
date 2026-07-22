@@ -378,6 +378,59 @@ export async function getClassTeacherOptions(): Promise<
   }));
 }
 
+/**
+ * 수업목록 **강사 필터** 선택지 — 배정 가능한 사람(위 `getClassTeacherOptions`) **∪ 실제로 담임인 사람**.
+ *
+ * 왜 배정용과 갈라놨나(2026-07-22 원장 제보 "수업목록에서 왜 허은진이 필터에 없지?"):
+ *   배정용은 역할 화이트리스트(teacher/manager/master) + active로 좁혀야 한다 — 안 그러면 **퇴직자가
+ *   '새 반 담임' 후보로 뜬다**. 그런데 필터는 정반대 질문이다: "이 목록에 실제로 있는 담임이 누구냐".
+ *   화이트리스트를 그대로 필터에 쓰면 **역할이 admin이거나 퇴직 처리된 담임의 반이 필터에서 통째로
+ *   사라진다**(실측 4명·12반: 김민주 admin 7 · 김태건 viewer 2 · 신명진 manager/inactive 2 · 허은진 admin 1).
+ *
+ * ⚠️ 이 함수는 **필터 전용**이다. 담임 배정·변경 드롭다운에 쓰지 말 것(퇴직자·비강사가 후보로 샌다).
+ */
+export async function getClassTeacherFilterOptions(): Promise<
+  { id: string; name: string; subjects: string[] }[]
+> {
+  const supabase = await createClient();
+  const [assignable, assignedRows] = await Promise.all([
+    getClassTeacherOptions(),
+    // 활성 반의 실제 담임 id + 그 반 과목 — 역할·재직상태 무관(데이터에 있는 그대로).
+    supabase
+      .from("classes")
+      .select("teacher_id, subject")
+      .eq("is_active", true)
+      .not("teacher_id", "is", null),
+  ]);
+  // 담임 → 실제로 맡고 있는 반의 과목 집합.
+  const taught = new Map<string, Set<string>>();
+  for (const r of assignedRows.data ?? []) {
+    const id = r.teacher_id as string;
+    (taught.get(id) ?? taught.set(id, new Set()).get(id)!).add(r.subject as string);
+  }
+  const known = new Set(assignable.map((t) => t.id));
+  const missing = [...taught.keys()].filter((id) => !known.has(id));
+  // 화이트리스트 밖 담임만 보강 조회(대개 0~5명이지만 id가 수십 될 수 있어 청크 — B3).
+  const extra = missing.length
+    ? await fetchInChunks<{ id: string; display_name: string; subjects: string[] | null }>(
+        missing,
+        (chunk) => supabase.from("users").select("id, display_name, subjects").in("id", chunk),
+      )
+    : [];
+  // ⚠️ 과목은 `users.subjects` **∪ 실제 담당반 과목**. 필터바가 과목 선택 시 이 목록으로 강사를 다시
+  //    좁히는데(teacherTeaches), users.subjects가 비었거나 어긋난 담임은 그 순간 또 사라진다 — 같은 결함의
+  //    반복이라 여기서 막는다(프로필 값이 아니라 **실제로 맡은 반**이 진실).
+  const withTaught = (id: string, subjects: string[]) => [...new Set([...subjects, ...(taught.get(id) ?? [])])];
+  return [
+    ...assignable.map((t) => ({ ...t, subjects: withTaught(t.id, t.subjects) })),
+    ...extra.map((u) => ({
+      id: u.id,
+      name: u.display_name,
+      subjects: withTaught(u.id, u.subjects ?? []),
+    })),
+  ].sort((a, b) => a.name.localeCompare(b.name, "ko"));
+}
+
 export async function getClassDetail(id: string): Promise<ClassDetail | null> {
   const supabase = await createClient();
   const { data: c } = await supabase

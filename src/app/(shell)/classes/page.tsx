@@ -11,7 +11,7 @@ import { requireAccess } from "@/lib/auth/require-access";
 import {
   getClassesPage,
   getClassesStats,
-  getClassTeacherOptions,
+  getClassTeacherFilterOptions,
   type ClassListRow,
   type ClassDaySlot,
   type ClassSort,
@@ -73,7 +73,7 @@ export default async function ClassesPage({
 
   const [{ rows: classes, total }, teachers, stats, settings] = await Promise.all([
     getClassesPage({ subject, teacherId, days, q, sort }, page, PAGE_SIZE),
-    getClassTeacherOptions(),
+    getClassTeacherFilterOptions(), // 필터 전용 — 배정용과 다르다(admin·퇴직 담임도 포함)
     getClassesStats(),
     getTenantSettings(),
   ]);

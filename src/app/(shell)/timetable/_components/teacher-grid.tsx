@@ -346,7 +346,10 @@ export function TeacherGridView({
                                   <div
                                     key={s.id}
                                     title={s.blockKind === "supervise" ? `${s.className} 수업 감독` : s.className}
-                                    className="border-line text-text-dim bg-bg-soft/60 flex h-full min-w-0 flex-1 items-center justify-center rounded-lg border border-dashed px-1 text-center text-[11px] leading-tight break-keep"
+                                    // ⚠️ cursor-default 필수 — 바깥 DragScrollArea가 컨테이너에
+                                    // cursor-grab(펼친 손)을 깔아서, 안 덮으면 **끌어서 옮길 수 있는 것처럼**
+                                    // 보인다(원장 지적 2026-07-22). 이 블록은 읽기 전용 라벨이다.
+                                    className="border-line text-text-dim bg-bg-soft/60 flex h-full min-w-0 flex-1 cursor-default items-center justify-center rounded-lg border border-dashed px-1 text-center text-[11px] leading-tight break-keep"
                                   >
                                     {s.className}
                                   </div>
