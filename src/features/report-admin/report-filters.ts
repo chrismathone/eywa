@@ -14,6 +14,10 @@ export type ReportListRow = {
    * ⚠️ 내부 메타데이터 — 학부모 발송 페이로드에 넣지 않는다.
    */
   coversDate: string | null;
+  /** covers_date 감사(0139a) — 누가·언제·왜 면제를 걸었는지. 지표를 빼주는 값이라 화면에 근거를 보여준다. */
+  coversBy: string | null; // 지정자 이름(표시용)
+  coversAt: string | null;
+  coversNote: string | null;
   createdAt: string | null; // 작성/이관 등록 시각(timestamptz) — 정렬 최종 tiebreak(이관분은 cron 배치 시각으로 동일)
   sentAt: string | null; // 실제 학부모 발송 시각(classnote_sent_at) — 목록 hh:mm 표시 + 같은 날짜 내 최신 발송 정렬 키. 없으면 createdAt 폴백
   classnoteStatus: string | null;

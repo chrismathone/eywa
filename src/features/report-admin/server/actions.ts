@@ -267,7 +267,7 @@ export async function listReports(
 
   let q = supabase
     .from("lesson_reports")
-    .select("id, student_id, subject, report_date, covers_date, created_at, classnote_sent_at, classnote_status, classnote_read_at, teacher_name, share_token, source", { count: "exact" });
+    .select("id, student_id, subject, report_date, covers_date, covers_by, covers_at, covers_note, created_at, classnote_sent_at, classnote_status, classnote_read_at, teacher_name, share_token, source", { count: "exact" });
   // 정렬은 **서버에서** — 30건씩 끊어 주는 목록이라 화면에서 정렬하면 그 페이지 안에서만 정렬된다.
   // 기본값·헤더 클릭 모두 순수 함수(reportOrderSpecs)가 결정(동률 tiebreak 포함 — 페이징 중복/누락 방지).
   for (const o of reportOrderSpecs(filters.sort, filters.dir)) {
@@ -300,12 +300,23 @@ export async function listReports(
     supabase.from("students").select("id, name").in("id", chunk),
   );
   const nameById = new Map(nameRows.map((s) => [s.id, s.name]));
+  // covers_date 지정자 이름 — 소수(그 페이지에 지정된 행만)라 청크 조회 한 번.
+  const byIds = [...new Set(list.map((r) => r.covers_by as string | null).filter((v): v is string => !!v))];
+  const staffRows = byIds.length
+    ? await fetchInChunks<{ id: string; display_name: string | null }>(byIds, (chunk) =>
+        supabase.from("users").select("id, display_name").in("id", chunk),
+      )
+    : [];
+  const staffById = new Map(staffRows.map((u) => [u.id, u.display_name ?? null]));
   const rows: ReportListRow[] = list.map((r) => ({
     id: r.id as string,
     studentName: nameById.get(r.student_id as string) ?? "(학생)",
     subject: r.subject as string | null,
     reportDate: r.report_date as string,
     coversDate: (r.covers_date as string | null) ?? null,
+    coversBy: r.covers_by ? (staffById.get(r.covers_by as string) ?? null) : null,
+    coversAt: (r.covers_at as string | null) ?? null,
+    coversNote: (r.covers_note as string | null) ?? null,
     createdAt: r.created_at as string | null,
     sentAt: r.classnote_sent_at as string | null,
     classnoteStatus: r.classnote_status as string | null,
@@ -329,6 +340,7 @@ export async function listReports(
 export async function setReportCoversDate(
   reportId: string,
   coversDate: string | null,
+  note?: string | null,
 ): Promise<{ ok: boolean; error?: string }> {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
@@ -341,9 +353,19 @@ export async function setReportCoversDate(
   if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) return { ok: false, error: "날짜 형식이 올바르지 않습니다" };
 
   const supabase = await createClient();
+  // 감사(0139a) — 지정하면 누가·언제·왜를 남기고, 해제하면 함께 지운다(남은 흔적이 현재 상태와 어긋나지 않게).
   const { error } = await supabase
     .from("lesson_reports")
-    .update({ covers_date: date || null })
+    .update(
+      date
+        ? {
+            covers_date: date,
+            covers_by: user.id,
+            covers_at: new Date().toISOString(),
+            covers_note: (note ?? "").trim() || null,
+          }
+        : { covers_date: null, covers_by: null, covers_at: null, covers_note: null },
+    )
     .eq("id", id);
   if (error) return { ok: false, error: error.message };
 
