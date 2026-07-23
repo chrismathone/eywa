@@ -646,6 +646,8 @@ export function OneScreenClient({
       const res = await generateReportComment({ ...buildReportCommentInput(student, idx), classContext }, {
         studentId: student.id,
         subject: subjectKey,
+        classId: su?.classId ?? null, // 정규/특강 추세 분리(2026-07-23) — 이 행의 반.
+
         todayExamInfo: buildExamInfo(student, showDailyTest, showCheckTest),
         todayHomework: student.homework,
         date: date || undefined, // 보는 날짜 — 과거 날짜면 추세를 그 날짜 기준으로(이후 채점 이력 있으면 추세 생략)

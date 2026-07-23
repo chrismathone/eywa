@@ -1,3 +1,4 @@
+import { FACT_GUARD } from "@/lib/ai/fact-guard";
 import "server-only";
 /**
  * AI 비서 대화 루프 — generateJSON(단발 JSON)과 별개의 tool-use 진입점.
@@ -89,6 +90,8 @@ function buildSystemPrompt(todayKst: string): string {
     "- 신규생 등록상담은 search_enrollment_consultations, 퇴원은 recent_withdrawals를 씁니다(재원생 상담은 search_consultations).",
     "- 영어 단어·코드·내부 키 이름을 답변에 노출하지 않습니다.",
     "- 주민번호·계좌·급여·연락처 등 민감 정보 질문에는 도울 수 없다고 답합니다.",
+    // 비서는 generateJSON을 안 거치는 자체 툴 루프라 공통 사실 가드를 여기서 직접 잇는다(원장 2026-07-23).
+    FACT_GUARD,
   ].join("\n");
 }
 

@@ -2,6 +2,7 @@
 
 // 직접 작성·발송 — 관리자가 임의 학생을 골라 수업보고서를 작성해 ClassNote로 발송(강사 원스크린과 동일 포맷·레일).
 // 발송 안전가드(dry-run·과목·동명이인·too_old)는 서버 액션(saveAndQueueAdminReport)이 최종 강제 — 여기선 안내·확인만.
+import { HOMEWORK } from "@/features/onescreen/data"; // 단일 소스 — 화면마다 다시 적지 않는다.
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
@@ -21,7 +22,7 @@ import {
 } from "@/features/report-admin/server/compose-actions";
 
 const ATTITUDE = ["아주 좋음", "좋음", "보통", "산만함", "피곤함"];
-const HOMEWORK = ["완료", "일부 미흡", "미제출"];
+
 const INPUT = "border-border bg-card text-foreground rounded-lg border px-2.5 py-1.5 text-sm w-full";
 const LABEL = "text-text-dim text-[11px] font-medium";
 

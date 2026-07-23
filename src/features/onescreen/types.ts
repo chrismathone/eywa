@@ -62,6 +62,13 @@ export type Subject = {
   classId?: string | null;
   // 이 과목 행의 반 이름 — 반 필터 시 이 행이 그 반 소속인지 판정(다과목/다반 학생 필터 정확도). null=모호.
   className?: string | null;
+  /**
+   * 이 행의 반이 **특강**인가(`classes.is_special`, 0133a). 정규와 특강을 섞지 않기 위한 축이다.
+   * ⚠️ 이관분(`class_id`·`subject` 둘 다 NULL, 실측 17,478행)은 **전부 정규**다 — 특강 반은 최근
+   *    만들어졌고 이관 시점엔 존재하지 않았다. 그래서 "반이 안 붙은 옛 보고서"를 특강 행에 붙이면
+   *    100% 오배정이다(실제 증상: 특강 행의 '이전 회차'에 정규 수업 진도·교재가 떴다).
+   */
+  isSpecial?: boolean;
   // 이 반의 대상 날짜 raw status(present/late/absent/early_leave/excused/makeup). null=기록 없음.
   // ⚠️ 표시 축약(toMark)과 별개로 raw를 보존 — 조퇴·공결·보강을 pill이 축약값으로 되쓰는 사고 방지.
   attendanceRaw?: string | null;
