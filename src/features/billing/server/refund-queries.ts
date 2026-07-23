@@ -2,10 +2,10 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged } from "@/lib/supabase/batch";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
-import { getStudentEnrollments, getStudentInvoices } from "@/features/students/server/queries";
+import { getStudentEnrollments } from "@/features/students/server/queries";
 import { studentStatusLabel } from "@/features/students/status-labels";
 import { normalizeRefund, REFUND_FORM_TYPE, type RefundRequestData } from "../refund-request";
-import type { RefundPrefillSource } from "../refund-prefill";
+import type { RefundPrefillInvoice, RefundPrefillSource } from "../refund-prefill";
 
 // 환불 요청서 조회 — tenant 스코프는 RLS, restricted 행 열람은 RLS restrictive(0072a)가
 // DB 레벨에서 사무실 역할(master/admin/manager/accountant)로 한정. 직원 이력서(resume-queries) 패턴.
@@ -85,13 +85,49 @@ export async function getRefundStudentOptions(): Promise<RefundStudentOption[]> 
   }));
 }
 
-/** 자동입력 원본 — 학생 기본정보 + 수강 이력 + 납부 이력(독립 조회라 Promise.all, B4). */
+// 결제내역은 **라인 단위 상세**(수납명·항목별 납부/미납/할인/수단/수납일)까지 필요하다 —
+// getStudentInvoices는 라인에서 description/amount만 남기고 상세를 버리므로 여기서 따로 읽는다.
+type RawInvoice = {
+  period: string;
+  status: string;
+  amount_total: string | number;
+  amount_paid: string | number;
+  amount_discount: string | number;
+  payment_method: string | null;
+  paid_at: string | null;
+  line_items: unknown;
+};
+
+function toPrefillLines(raw: unknown): RefundPrefillInvoice["lineItems"] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((v) => {
+    const li = (v ?? {}) as Record<string, unknown>;
+    const num = (x: unknown) => (x === undefined || x === null ? undefined : Number(x));
+    return {
+      kind: String(li.kind ?? ""),
+      description: String(li.description ?? li.name ?? ""),
+      amount: Number(li.amount ?? 0),
+      discount: num(li.discount),
+      paid: num(li.paid),
+      unpaid: num(li.unpaid),
+      method: typeof li.method === "string" ? li.method : null,
+      paidDate: typeof li.paidDate === "string" ? li.paidDate : null,
+    };
+  });
+}
+
+/** 자동입력 원본 — 학생 기본정보 + 수강 이력 + 청구/납부 이력(독립 조회라 Promise.all, B4). */
 export async function getRefundPrefillSource(studentId: string): Promise<RefundPrefillSource | null> {
   const supabase = await createClient();
-  const [{ data: student }, enrollments, invoices] = await Promise.all([
+  const [{ data: student }, enrollments, { data: invoiceRows }] = await Promise.all([
     supabase.from("students").select("name, school, grade, address").eq("id", studentId).maybeSingle(),
     getStudentEnrollments(studentId),
-    getStudentInvoices(studentId),
+    supabase
+      .from("invoices")
+      .select("period, status, amount_total, amount_paid, amount_discount, payment_method, paid_at, line_items")
+      .eq("student_id", studentId)
+      .order("period", { ascending: true }) // 결제내역은 오래된 달부터 — 시간순 원장으로 읽힌다
+      .returns<RawInvoice[]>(),
   ]);
   if (!student) return null;
   return {
@@ -106,8 +142,16 @@ export async function getRefundPrefillSource(studentId: string): Promise<RefundP
       startDate: e.startDate,
       endDate: e.endDate,
     })),
-    // period 내림차순(getStudentInvoices) 유지 — 최근 납부부터 3건만 서식에 들어간다.
-    payments: invoices.map((i) => ({ period: i.period, amountPaid: i.amountPaid })),
+    invoices: (invoiceRows ?? []).map((i) => ({
+      period: i.period,
+      status: i.status,
+      amountTotal: Number(i.amount_total),
+      amountPaid: Number(i.amount_paid),
+      amountDiscount: Number(i.amount_discount),
+      paymentMethod: i.payment_method,
+      paidAt: i.paid_at,
+      lineItems: toPrefillLines(i.line_items),
+    })),
   };
 }
 

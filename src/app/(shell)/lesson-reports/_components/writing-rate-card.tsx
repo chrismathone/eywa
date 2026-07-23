@@ -121,7 +121,10 @@ export function WritingRateCard({ view }: { view: WritingRatesView }) {
           </p>
         </div>
         <RangeSwitch range={view.range} />
-        {showChips ? (
+        {/* ⚠️ 월간은 본문을 WritingRateMonth가 그리고 **자기 과목 칩**을 따로 갖는다 — 여기 칩까지 두면
+            같은 필터가 두 벌로 보이고(원장 제보 2026-07-23), 게다가 이 칩은 월간 표에 아무 영향이 없다
+            (filtered는 주간표 전용). 죽은 컨트롤을 숨긴다. */}
+        {showChips && !isMonth ? (
           <div className="flex flex-wrap gap-1.5">
             {[{ value: "all", label: "전체" }, ...chipOptions].map((o) => {
               const on = sel === o.value;
