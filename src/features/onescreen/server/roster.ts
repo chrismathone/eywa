@@ -4,7 +4,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
-import { fetchInChunks } from "@/lib/supabase/batch";
+import { fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 import { addDays, resolveReportDate, weekdayIndexOf, formatKoreanDate } from "@/lib/date-kst";
 import { parseExamScores } from "../exam-info";
 import { classnoteSendWindowLabel } from "../classnote-guard";
@@ -343,7 +343,19 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
   // 셋 다 studentIds에만 의존하는 독립 조회 → Promise.all 병렬(B4). 전부 fetchInChunks(B2/B3).
   // 앵커 = 대상 날짜(오늘 또는 과거). session_date/report_date/attendance 필터가 모두 이 날짜.
   const todayIso = targetDate;
-  const [todayReports, priorReports, attRows, sessionRows, textbookRows, readStats, anomalyEvents] = await Promise.all([
+  // 문항수(/N) 승계 조회 창 — 이보다 오래 안 가르친 학생은 학원 설정값으로 돌아간다(무한 소급 방지).
+  const TEST_MAX_LOOKBACK_DAYS = 60;
+  const testMaxFrom = addDays(todayIso, -TEST_MAX_LOOKBACK_DAYS);
+  const [
+    todayReports,
+    priorReports,
+    attRows,
+    sessionRows,
+    textbookRows,
+    readStats,
+    anomalyEvents,
+    priorMaxRows,
+  ] = await Promise.all([
     // (a) 당일 행만 — 발송상태·공유링크·초안복원용. eq(report_date)라 학생×과목 소량(절단 불가).
     fetchInChunks<{
       id: string;
@@ -423,7 +435,49 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
       console.error("[roster] progress_events 조회 실패 — 진도 이상 배지 생략:", e instanceof Error ? e.message : e);
       return [] as { student_id: string }[];
     }),
+    // (h) 문항수(/N) 승계 — **직전에 이 강사가 이 학생에게 쓴 만점**을 오늘의 기본값으로 이어받는다.
+    //     그러지 않으면 매일 학원 설정값(기본 5)으로 되돌아가, 20문항 시험을 보는 반은 날마다 /N을 다시 고쳐야 한다
+    //     (실측: 07-21 12·13문항, 07-23 10·100문항이 다음 날 전부 5로 리셋). 원장 지시 2026-07-23.
+    //  ⚠️ 강사축(0118a) 유지 — 같은 학생을 다른 강사가 가르쳐도 서로의 문항수를 물려받지 않는다.
+    //  ⚠️ `allowTeacherTestMax`가 꺼져 있으면 아예 조회하지 않는다 — off의 계약이 "과목 설정값 고정"이라
+    //     옛 강사 입력값이 살아나면 설정을 무시하는 꼴이 된다.
+    allowTeacherTestMax
+      ? fetchAllPagedInChunks<{ student_id: string; session_date: string; daily_max: number | null; check_max: number | null }>(
+          studentIds,
+          (chunk, from, to) =>
+            supabase
+              .from("onescreen_daily_sessions")
+              .select("student_id, session_date, daily_max, check_max")
+              .eq("updated_by", user.id)
+              .lt("session_date", todayIso)
+              .gte("session_date", testMaxFrom)
+              .in("student_id", chunk)
+              // 최신 우선 + unique tie-break(student_id) — 페이지가 흔들리지 않게(fetchAllPagedInChunks 계약).
+              .order("session_date", { ascending: false })
+              .order("student_id", { ascending: true })
+              .range(from, to),
+        ).catch((e) => {
+          console.error("[roster] 문항수 승계 조회 실패 — 학원 설정값 사용:", e instanceof Error ? e.message : e);
+          return [] as { student_id: string; session_date: string; daily_max: number | null; check_max: number | null }[];
+        })
+      : Promise.resolve([]),
   ]);
+  const seededDailyMax = new Set<string>();
+  const seededCheckMax = new Set<string>();
+  // 학생별 **가장 최근** 문항수(위 정렬이 최신순이라 처음 만난 값이 그 학생의 직전 값) → 오늘의 기본값으로 승계.
+  // 오늘 세션이 있으면 아래 Phase3 복원이 다시 덮으므로, 여기서 넣는 건 "오늘 아직 안 건드린 행"의 출발값이다.
+  for (const r of priorMaxRows) {
+    const os = byStudent.get(r.student_id);
+    if (!os) continue;
+    if (r.daily_max != null && !seededDailyMax.has(r.student_id)) {
+      os.tests.daily.max = r.daily_max;
+      seededDailyMax.add(r.student_id);
+    }
+    if (r.check_max != null && !seededCheckMax.has(r.student_id)) {
+      os.tests.check.max = r.check_max;
+      seededCheckMax.add(r.student_id);
+    }
+  }
   type PriorRow = {
     student_id: string;
     subject: string | null;
