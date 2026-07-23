@@ -9,7 +9,7 @@ import { commentBody, commentP1Body, commentP2Body, type ReportCommentInput } fr
 import { buildTrendInput, trendBody } from "../trend-comment";
 import { assembleCombined, MENT_AI_TUNING, type PromptSection } from "../prompt-defaults";
 import { loadActivePrompt } from "./prompt-loader";
-import { fetchScoreHistory, hasLaterScoredReport } from "./score-history";
+import { fetchScoreHistory, fetchSpecialClassIds, hasLaterScoredReport } from "./score-history";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { classnoteSendWindowHint, isClassnoteAllowed, isClassnoteSubjectEnabled } from "../classnote-guard";
@@ -467,7 +467,9 @@ export async function saveOnescreenSession(
  */
 export async function generateReportComment(
   input: ReportCommentInput,
-  trendCtx?: { studentId?: string; subject?: string; todayExamInfo?: string; todayHomework?: string; date?: string },
+  // classId = 이 행의 반. 정규/특강 분리(2026-07-23 원장 지시)에 쓴다 — 특강 보고서면 그 반 기록만,
+  // 정규면 특강 기록을 제외한다. 미지정이면 기존 동작(안 가름).
+  trendCtx?: { studentId?: string; subject?: string; classId?: string | null; todayExamInfo?: string; todayHomework?: string; date?: string },
 ): Promise<{ ok: boolean; comment?: string; trend?: string; error?: string }> {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
@@ -525,7 +527,11 @@ export async function generateReportComment(
       const skipTrend =
         anchorDate < kstToday() && (await hasLaterScoredReport(supabase, trendCtx.studentId, trendCtx.subject, anchorDate));
       if (!skipTrend) {
-        const history = await fetchScoreHistory(supabase, trendCtx.studentId, trendCtx.subject, anchorDate);
+        const specialClassIds = await fetchSpecialClassIds(supabase);
+        const history = await fetchScoreHistory(supabase, trendCtx.studentId, trendCtx.subject, anchorDate, 30, {
+          classId: trendCtx.classId,
+          specialClassIds,
+        });
         history.push({
           date: anchorDate,
           examInfo: trendCtx.todayExamInfo?.trim() || null,

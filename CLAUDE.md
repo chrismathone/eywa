@@ -83,6 +83,14 @@ eywa는 메뉴=플로팅 창=same-origin iframe이라 **창마다 셸 레이아�
 **모든 AI(JSON) 호출은 단일 진입점 `src/lib/ai/generate.ts`의 `generateJSON()`을 거친다.**
 직접 `getAnthropic`/`getUpstage`를 부르지 말 것 — provider 라우팅·파싱·폴백이 한 곳에 모여 있다.
 
+- **⚠️ 사실 원칙은 모든 AI 호출에 예외 없이 붙는다 (원장 지시 2026-07-23, 불변)**: *"'팩트' '환각금지'
+  '사실만 작성' '창작 금지' '추측 금지'도 항상 거쳐야 해."* → [`FACT_GUARD`](src/lib/ai/fact-guard.ts)가
+  `generateJSON()` 안에서 **모든 프롬프트 앞에 자동 부착**(멱등). generateJSON을 안 거치는 자체 루프
+  (대화형 비서 `runAssistantLoop`)는 시스템 프롬프트에 같은 상수를 직접 잇는다.
+  🔴 **호출부 프롬프트 본문에만 적지 말 것** — 본문은 원장이 화면에서 편집 가능(`ai_prompt_overrides`)이라
+  편집 한 번에 가드가 사라진다. 지울 수 없는 자리(코드)에 둬야 "항상"이 성립한다. 문구 완화·삭제 금지
+  (Vitest가 5개 원칙 단어를 잠근다). 항목별 세부 규칙은 호출부가 계속 담당 — 여기는 최소 공통 바닥.
+
 - **외부 AI 전송 금지 필드(불변, 2026-07-16 명문화)**: 주민번호·계좌/카드번호·급여(`users.hourly_rate/monthly_base`·`payroll_records`)·
   이력서 `academy_documents.form_data`(restricted)·환불요청서 계좌 — **어떤 AI 프롬프트에도 넣지 않는다**(전송 전례 0,
   restricted RLS+재인증으로 잠근 대상). 학생 이름·학교·상담 내용 수준은 기존 관행상 전송 허용선.

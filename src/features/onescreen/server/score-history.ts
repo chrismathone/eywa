@@ -16,6 +16,46 @@ function windowStartOf(date: string, days: number): string | null {
 const TREND_TEXT_WINDOW_DAYS = 30;
 
 /**
+ * 이 학원의 **특강 반 id 목록**(`classes.is_special`, 0133a). 추세를 정규/특강으로 가르는 축.
+ * 반 수가 극소수(실측 3)라 매번 조회해도 저렴하다. 없으면 빈 배열 = 기존 동작(안 가름).
+ */
+export async function fetchSpecialClassIds(
+  supabase: SupabaseClient,
+  // admin(service_role)로 부를 땐 **필수** — RLS를 우회하므로 남의 학원 특강 id가 섞이면
+  // 그 id로 이 학원 기록을 걸러 추이가 조용히 빈다(#B6 계열 격리 규약).
+  tenantId?: string,
+): Promise<string[]> {
+  let q = supabase.from("classes").select("id").eq("is_special", true);
+  if (tenantId) q = q.eq("tenant_id", tenantId);
+  const { data } = await q;
+  return (data ?? []).map((r) => r.id as string).filter((id) => UUID_RE.test(id));
+}
+
+/** `.or()`는 값 인코딩 없는 **원시 필터 문자열**이라 id를 그대로 끼워 넣는다 → uuid만 통과시킨다(주입 방지). */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * 정규/특강 분리 필터를 쿼리에 건다(2026-07-23 원장 지시: "정규와 특강을 분리시켜").
+ *  · 대상이 **특강 보고서**(classId가 특강 목록에 있음) → **그 반 기록만**. 정규 성적을 빌려오지 않는다
+ *    (특강 첫 수업에 추세가 안 나오는 건 정상 — 다른 수업 점수로 추세를 지어내는 게 더 나쁘다).
+ *  · 대상이 **정규**(또는 반 미상) → 특강 반 기록만 제외. 나머지는 그대로.
+ * 🔴 `class_id.not.in.(…)`만 쓰면 **NULL 행이 통째로 탈락**한다(SQL에서 NULL NOT IN … = NULL).
+ *    이관분 17,478행이 전부 class_id NULL이라 그러면 거의 모든 학생의 추세가 붕괴한다 →
+ *    반드시 `class_id.is.null` 분기를 OR로 함께 둔다.
+ */
+function applyClassScope<Q extends { or: (f: string) => Q; eq: (c: string, v: string) => Q }>(
+  q: Q,
+  classId: string | null | undefined,
+  specialClassIds: readonly string[],
+): Q {
+  const cid = classId?.trim();
+  if (cid && specialClassIds.includes(cid)) return q.eq("class_id", cid);
+  const specials = specialClassIds.filter((id) => UUID_RE.test(id));
+  if (specials.length === 0) return q;
+  return q.or(`class_id.is.null,class_id.not.in.(${specials.join(",")})`);
+}
+
+/**
  * 추세용 점수 이력 — 같은 학생·과목의 저장 보고서, **beforeDate 기준 최근 30일 윈도** 안에서 최근 N
  * (beforeDate 이전, 시험 **또는 과제** 기록 있는 것) 날짜 오름차순.
  * ⚠️ 2026-07-22까지 `exam_info is not null`만 받았다 — 그런데 buildTrendInput은 '과제 흐름' 줄을 따로
@@ -34,6 +74,8 @@ export async function fetchScoreHistory(
   // 30일 윈도를 넉넉히 덮는 상한(실측 학생당 평균 7.4행, 최대치도 30 미만). 흐름별 최근 N개를 고르는 건
   // buildTrendInput(순수)이 하므로 여기서 자르면 시험 기록이 과제-only 행에 밀려 사라진다(실측 26/215명).
   limit = 30,
+  // 정규/특강 분리(applyClassScope). 미지정이면 기존 동작(안 가름) — 데모·구 호출부 보존.
+  scope?: { classId?: string | null; specialClassIds?: readonly string[] },
 ): Promise<TrendHistoryRow[]> {
   const windowStart = windowStartOf(beforeDate, TREND_TEXT_WINDOW_DAYS);
   if (!windowStart) return []; // 비정상 beforeDate 방어 — 추세만 조용히 생략
@@ -49,6 +91,7 @@ export async function fetchScoreHistory(
   if (!subject) q = q.is("subject", null);
   else if (subject === "math") q = q.or("subject.eq.math,subject.is.null");
   else q = q.eq("subject", subject);
+  q = applyClassScope(q, scope?.classId, scope?.specialClassIds ?? []);
   const { data } = await q;
   return (data ?? [])
     .map((r) => ({
@@ -107,7 +150,14 @@ export async function fetchReportTrendRows(
   studentId: string,
   subject: string | null | undefined,
   reportDate: string,
-  opts: { tenantId?: string; limit?: number } = {},
+  // classId/specialClassIds = 정규·특강 분리(applyClassScope). 학부모 그래프도 추세 문장과 **같은 표본**을
+  // 봐야 한다 — 한쪽만 가르면 "그래프와 서술이 다른 것을 말한다".
+  opts: {
+    tenantId?: string;
+    limit?: number;
+    classId?: string | null;
+    specialClassIds?: readonly string[];
+  } = {},
 ): Promise<TrendReportRow[]> {
   const limit = opts.limit ?? TREND_POINT_LIMIT;
   // 안전망(30일)은 "몇 달 전 점" 차단용일 뿐 — 점 개수를 정하는 건 limit(최근 7건)다.
@@ -126,6 +176,7 @@ export async function fetchReportTrendRows(
   if (!subject) q = q.is("subject", null);
   else if (subject === "math") q = q.or("subject.eq.math,subject.is.null");
   else q = q.eq("subject", subject);
+  q = applyClassScope(q, opts.classId, opts.specialClassIds ?? []);
   const { data } = await q;
   return (data ?? []).map((r) => ({
     id: r.id as string,
