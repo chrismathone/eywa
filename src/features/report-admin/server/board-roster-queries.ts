@@ -2,16 +2,26 @@ import "server-only";
 
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { fetchAllPaged } from "@/lib/supabase/batch";
 import { kstToday } from "@/lib/date-kst";
 import { classKey, boardKey } from "../english-writing";
-import { checkClassRosters, summarize, type BoardSnapshot, type ClassCheck, type ClassRoster } from "../board-roster-diff";
+import {
+  checkClassRosters,
+  summarize,
+  type BoardSnapshot,
+  type ChildLink,
+  type ClassCheck,
+  type ClassRoster,
+} from "../board-roster-diff";
 
 export type BoardRosterView = {
   checks: ClassCheck[];
   summary: ReturnType<typeof summarize>;
   /** 스냅샷 시각(가장 최근 동기화). null = 워커가 아직 한 번도 안 돌았다 — 화면이 "문제 없음"으로 보이면 안 된다. */
   syncedAt: string | null;
+  /** 연결/해제 버튼 노출 여부 — 열람 전용 계정에 버튼을 보여 놓고 거부하지 않는다. */
+  canLink: boolean;
 };
 
 /**
@@ -30,24 +40,33 @@ export async function getBoardRosterCheck(subject = "english"): Promise<BoardRos
   const supabase = await createClient();
   const today = kstToday();
 
-  const [{ data: boardRows }, memberRows, { data: classRows }] = await Promise.all([
+  const [{ data: boardRows }, memberRows, { data: classRows }, { data: linkRows }, canLink] = await Promise.all([
     supabase.from("classnote_boards").select("board_id, board_name, synced_at"),
     // 원아는 반 수 × 인원이라 수백 행 — 1000행 절단(B2)을 피해 페이지네이션으로 전건.
-    fetchAllPaged<{ board_id: number; child_name: string; birth_year: number | null; child_id: number }>((from, to) =>
-      supabase.from("classnote_board_members").select("board_id, child_id, child_name, birth_year").order("board_id").order("child_id").range(from, to),
+    fetchAllPaged<{ board_id: number; child_id: number; child_name: string; birth_year: number | null }>((from, to) =>
+      supabase
+        .from("classnote_board_members")
+        .select("board_id, child_id, child_name, birth_year")
+        .order("board_id")
+        .order("child_id")
+        .range(from, to),
     ),
     supabase
       .from("classes")
-      .select("id, class_name, teacher:teacher_id ( display_name ), enrollments ( student_id, end_date, students ( name, classnote_name, status, is_test ) )")
+      .select(
+        "id, class_name, teacher:teacher_id ( display_name ), enrollments ( end_date, students ( id, name, classnote_name, grade, status, is_test ) )",
+      )
       .eq("subject", subject)
       .eq("is_active", true),
+    supabase.from("classnote_student_links").select("student_id, board_id, child_id, child_name_at_link"),
+    canWriteTenant(user.systemRole, "lesson_reports"),
   ]);
 
   const syncedAt = (boardRows ?? []).reduce<string | null>((acc, b) => {
     const s = b.synced_at as string | null;
     return s && (!acc || s > acc) ? s : acc;
   }, null);
-  if (!boardRows?.length) return { checks: [], summary: summarize([]), syncedAt: null };
+  if (!boardRows?.length) return { checks: [], summary: summarize([]), syncedAt: null, canLink };
 
   const membersByBoard = new Map<number, BoardSnapshot["members"]>();
   for (const m of memberRows ?? []) {
@@ -61,30 +80,55 @@ export async function getBoardRosterCheck(subject = "english"): Promise<BoardRos
     members: membersByBoard.get(b.board_id as number) ?? [],
   }));
 
+  const links: ChildLink[] = (linkRows ?? []).map((l) => ({
+    studentId: l.student_id as string,
+    boardId: l.board_id as number,
+    childId: l.child_id as number,
+    childNameAtLink: l.child_name_at_link as string,
+  }));
+
   const classes: ClassRoster[] = (classRows ?? []).map((c) => {
     const t = (Array.isArray(c.teacher) ? c.teacher[0] : c.teacher) as { display_name?: string } | null;
     // PostgREST 임베드는 관계를 배열로 타이핑한다(실제로는 to-one) — 단일 객체로 좁히려면 unknown 경유가 필요.
     const enr = (c.enrollments ?? []) as unknown as {
       end_date: string | null;
-      students: { name: string; classnote_name: string | null; status: string; is_test: boolean } | null;
+      students: {
+        id: string;
+        name: string;
+        classnote_name: string | null;
+        grade: string | null;
+        status: string;
+        is_test: boolean;
+      } | null;
     }[];
+    const seen = new Set<string>();
     const students = enr
       // 발송 대상과 같은 조건 — 재원 + 유효 수강 + 테스트 학생 제외(0141a).
       .filter((e) => (!e.end_date || e.end_date >= today) && e.students?.status === "enrolled" && !e.students?.is_test)
-      // ClassNote 원아 매칭 키 = **유효이름**(classnote_name 오버라이드 || name) — 워커 발송과 동일 규약.
-      .map((e) => (e.students!.classnote_name?.trim() || e.students!.name || "").trim())
-      .filter(Boolean);
+      .map((e) => ({
+        studentId: e.students!.id,
+        // ClassNote 원아 매칭 키 = **유효이름**(classnote_name 오버라이드 || name) — 워커 발송과 동일 규약.
+        name: (e.students!.classnote_name?.trim() || e.students!.name || "").trim(),
+        grade: e.students!.grade,
+      }))
+      // 같은 학생이 한 반에 두 수강행을 가질 수 있다(분리등원) — 로스터엔 한 번만.
+      .filter((s) => {
+        if (!s.name || seen.has(s.studentId)) return false;
+        seen.add(s.studentId);
+        return true;
+      })
+      .sort((a, b) => a.name.localeCompare(b.name, "ko"));
     return {
       classId: c.id as string,
       className: c.class_name as string,
       teacher: t?.display_name ?? null,
-      students: [...new Set(students)].sort((a, b) => a.localeCompare(b, "ko")),
+      students,
     };
   });
 
-  const checks = checkClassRosters(classes, boards, { class: classKey, board: boardKey })
+  const checks = checkClassRosters(classes, boards, { class: classKey, board: boardKey }, { links })
     // 문제 있는 반부터(원장이 찾는 건 어긋난 반이다). 같은 등급이면 반 이름 순.
     .sort((a, b) => b.problems - a.problems || a.className.localeCompare(b.className, "ko"));
 
-  return { checks, summary: summarize(checks), syncedAt };
+  return { checks, summary: summarize(checks), syncedAt, canLink };
 }

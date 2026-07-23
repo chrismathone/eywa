@@ -119,3 +119,25 @@ describe("통합뷰 커스텀 그룹(ijw CUSTOM_GROUP 이식)", () => {
     expect(labels(groups).every((l) => l.endsWith("시작"))).toBe(true); // 유효 그룹 0개 → 자동 그룹 폴백
   });
 });
+
+describe("커스텀 그룹 안 열 순서", () => {
+  it("그룹에 적힌 순서를 그대로 쓴다(가나다로 재정렬하지 않음)", () => {
+    // 가나다면 DP5·JP1·KW6, 정의 순서면 KW6·DP5·JP1 — 원장 시트의 좌우 순서 재현이 목적.
+    const groups = buildRichCardGroups(slots, DEFAULT_PERIODS_CONFIG, new Set(), {
+      groups: [{ id: "g1", title: "오후 2:20", classIds: ["c3", "c1", "c2"] }],
+      showOthers: false,
+      othersTitle: "기타",
+    });
+    expect(groups[0].cards.map((c) => c.className)).toEqual(["KW6", "DP5", "JP1"]);
+  });
+
+  it("'기타' 섹션은 정의 순서가 없으므로 가나다 유지", () => {
+    const groups = buildRichCardGroups(slots, DEFAULT_PERIODS_CONFIG, new Set(), {
+      groups: [{ id: "g1", title: "묶음", classIds: [] }, { id: "g2", title: "묶음2", classIds: ["c2"] }],
+      showOthers: true,
+      othersTitle: "기타 수업",
+    });
+    const others = groups.find((g) => g.label === "기타 수업")!;
+    expect(others.cards.map((c) => c.className)).toEqual(["DP5", "KW6"]);
+  });
+});

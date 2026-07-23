@@ -97,6 +97,11 @@ export type RichClassCard = {
    *    (아래 presentOrders에서 혼합 카드의 주말 order를 함께 넣는 이유).
    */
   days: DayOfWeek[];
+  /**
+   * 커스텀 그룹 안에서의 열 순서(그룹 정의에 적힌 반 순서). 미설정(자동 그룹)이면 undefined → 가나다.
+   * 원장 시트의 좌우 순서를 그대로 재현하기 위한 값이라 **정의 순서가 곧 화면 순서**다.
+   */
+  groupSeq?: number;
 };
 
 /**
@@ -191,10 +196,13 @@ function applyCustomGroups(
   if (!groups.length) return cards;
 
   const groupOf = new Map<string, number>(); // classId → 그룹 인덱스(먼저 나온 그룹이 이긴다)
+  const seqOf = new Map<string, number>(); // classId → 그룹 안 열 순서(정의 순서 = 화면 순서)
   groups.forEach((g, i) => {
-    for (const classId of g.classIds ?? []) {
-      if (!groupOf.has(classId)) groupOf.set(classId, i);
-    }
+    (g.classIds ?? []).forEach((classId, seq) => {
+      if (groupOf.has(classId)) return;
+      groupOf.set(classId, i);
+      seqOf.set(classId, seq);
+    });
   });
 
   const out: RichClassCard[] = [];
@@ -214,6 +222,7 @@ function applyCustomGroups(
       ...c,
       groupOrder: CUSTOM_BASE + idx * 10 + (c.weekendOnly ? 1 : 0),
       groupLabel: c.weekendOnly ? `${title} (주말)` : title,
+      groupSeq: seqOf.get(c.classId),
     });
   }
   return out;
@@ -324,7 +333,14 @@ export function buildRichCardGroups(
 
   const out: RichCardGroup[] = [];
   for (const cs of groupMap.values()) {
-    cs.sort((a, b) => a.className.localeCompare(b.className, "ko"));
+    // 카드 순서 = 커스텀 그룹이면 **원장이 정한 순서**(groupSeq), 아니면 가나다.
+    // 그룹 안 열 순서까지 원장 시트와 같아야 "동일한 뷰"가 된다(가나다로 재정렬하면 DP5·LT2·LS2a…가
+    // DP5·JP1·KW6…로 뒤섞인다). 자동 그룹은 groupSeq가 없어 tie → 지금까지처럼 가나다.
+    cs.sort(
+      (a, b) =>
+        (a.groupSeq ?? Number.POSITIVE_INFINITY) - (b.groupSeq ?? Number.POSITIVE_INFINITY) ||
+        a.className.localeCompare(b.className, "ko"),
+    );
     const weekend = cs[0].weekendOnly;
     const standard = subjectPeriodRows(subject, weekend, config);
     const standardByOrder = new Map(standard.map((r) => [r.order, r]));

@@ -6,6 +6,7 @@
 
 import type { BoardRosterView } from "@/features/report-admin/server/board-roster-queries";
 import type { ClassCheck } from "@/features/report-admin/board-roster-diff";
+import { PinButtons, UnpinButton } from "./board-roster-pin";
 
 const STATUS_LABEL: Record<ClassCheck["status"], string> = {
   ok: "정상",
@@ -47,7 +48,7 @@ export function BoardRosterCard({ view }: { view: BoardRosterView }) {
       </div>
     );
 
-  const { summary: s, checks } = view;
+  const { summary: s, checks, canLink } = view;
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
@@ -92,21 +93,49 @@ export function BoardRosterCard({ view }: { view: BoardRosterView }) {
               </p>
             ) : null}
 
+            {/* 고정 연결로 풀린 학생 — 정상이지만 "사람이 확정한 것"이라 근거를 남겨 보여준다. */}
+            {c.students.some((v) => v.pinned) ? (
+              <ul className="mt-2 space-y-1">
+                {c.students
+                  .filter((v) => v.pinned)
+                  .map((v) => (
+                    <li key={`pin-${v.studentId}`} className="text-[12px] break-keep">
+                      <span className="text-foreground font-bold">{v.student}</span>
+                      <span className="text-text-faint"> — 원아 «{v.pinned!.childName}»에 연결됨</span>
+                      {v.pinned!.renamed ? (
+                        <span className="text-amber"> (연결 후 원아 이름이 바뀌었습니다 — 확인해 주세요)</span>
+                      ) : null}
+                      {canLink && c.board ? (
+                        <UnpinButton studentId={v.studentId} boardId={c.board.id} childName={v.pinned!.childName} />
+                      ) : null}
+                    </li>
+                  ))}
+              </ul>
+            ) : null}
+
             {c.students.some((v) => v.kind !== "ok") ? (
               <ul className="mt-2 space-y-1">
                 {c.students
                   .filter((v) => v.kind !== "ok")
                   .map((v) => (
-                    <li key={v.student} className="text-[12px] break-keep">
+                    <li key={v.studentId} className="text-[12px] break-keep">
                       {v.kind === "missing" ? (
                         <>
                           <span className="text-danger font-bold">{v.student}</span>
                           <span className="text-text-dim"> — 보드에 없습니다(발송 실패)</span>
+                          {v.pinBroken ? <span className="text-amber"> · {v.pinBroken}</span> : null}
                           {v.hint ? (
                             <span className="text-text-dim">
-                              . 보드의 <b>{v.hint}</b>와 같은 학생인지 확인해 주세요 — 맞다면 학생 정보의 ClassNote 이름에
-                              «{v.hint}»를 넣으면 해결됩니다.
+                              . 보드의 <b>{v.hint}</b>와 같은 학생인지 확인해 주세요.
                             </span>
+                          ) : null}
+                          {canLink && c.board ? (
+                            <PinButtons
+                              studentId={v.studentId}
+                              studentName={v.student}
+                              boardId={c.board.id}
+                              candidates={v.pinCandidates ?? []}
+                            />
                           ) : null}
                         </>
                       ) : v.kind === "conflict" ? (
