@@ -122,3 +122,17 @@ describe("흐름별 독립 윈도 — 과제-only 행이 시험 기록을 밀어
     expect(input!.assignTrend).toBe("[06-01] 미제출 -> [06-08] 미제출");
   });
 });
+
+// 2026-07-23 실발송 E2E에서 잡음: 이름 없는 기록(`88/100`)에 모델이 "확인테스트"라는 이름을 지어냈다.
+// 이 학원은 확인테스트를 아예 쓰지 않는다(showCheckTest=false) — 학부모에게 없는 시험이 통보된다.
+describe("시험 이름 환각 방지", () => {
+  it("프롬프트가 이름 없는 점수에 이름을 붙이지 말라고 지시한다", () => {
+    const input = buildTrendInput([
+      row("2026-06-25", "88/100", null),
+      row("2026-07-13", "6/10", null),
+    ])!;
+    const p = buildTrendPrompt(input);
+    expect(p).toContain("시험 이름을 지어내지 마세요");
+    expect(p).toContain("이름 없이 점수만 있으면 '테스트'라고만 쓰세요");
+  });
+});
