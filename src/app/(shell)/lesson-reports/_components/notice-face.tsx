@@ -10,6 +10,7 @@ import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { useSubjectMaps } from "@/features/owner/operations-context";
 import { listClassNotices, sendClassNotice, type NoticeClassOption, type NoticeRow } from "@/features/report-admin/server/notice-actions";
 import { NoticeAttachmentPicker } from "@/features/onescreen/components/notice-attachment-picker";
+import { humanizeClassnoteError } from "@/features/report-admin/classnote-error";
 import type { NoticeAttachment } from "@/features/onescreen/notice-attachments";
 
 // 공지 상태 한글 라벨(raw 코드 UI 노출 금지) — 워커 처리 상태와 동기.
@@ -312,7 +313,11 @@ export function NoticeFace({
                         {failNotes.length ? (
                           <span
                             className="text-text-faint ml-1.5 text-[11px]"
-                            title={failNotes.map((f) => `${f.studentName}: ${f.note ?? ""}`).join("\n")}
+                            // 사유는 워커/상류 원문이라 그대로 두면 "해당 학생 없음"처럼 조치를 알 수 없다 —
+                            // 알림(0144a)·발송 콘솔과 **같은 해석**을 쓴다.
+                            title={failNotes
+                              .map((f) => `${f.studentName}: ${humanizeClassnoteError(f.note) ?? "사유 없음"}`)
+                              .join("\n")}
                           >
                             실패 {failNotes.length}
                           </span>
