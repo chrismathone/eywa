@@ -170,3 +170,32 @@ export function evaluateBoardSafety({ className, boards, allowlist = [], mapping
   }
   return { ok: true, code: "ok", boardId: board.id };
 }
+
+/**
+ * **보드가 곧 매핑이다** — 1인 보드 `(과목)이름`에 배정된 원아를 이 학생으로 인정할지 판정(순수).
+ *
+ * 배경(원장 2026-07-23): 1인 보드는 학생 1명에 보드 1개다. eywa가 보드명으로 그 보드를 특정한 순간
+ * **매핑은 이미 끝났다** — 그 보드에 배정된 원아가 곧 그 학생이다. 그런데 발송 워커는 그 뒤에 다시
+ * **원아 이름이 eywa 이름과 같은지**까지 봤고, 학부모가 ClassNote에서 원아 이름을 바꾸면
+ * (`박서연E` → `서연`) 배정이 멀쩡한데도 "보드 미배정"으로 오판해 발송이 막혔다.
+ * 실측 2026-07-23: 원아가 있는 1인 보드 378개 중 이름 불일치 7개(재원생 2명 — 박서연E·엄채율).
+ *
+ * ⚠️ 이름 검사를 걷어내는 대신 **생년 대조를 반드시 통과**시킨다. 이름은 학부모가 바꿀 수 있는 표시값이지만
+ *    생년은 그 아이의 사실이라, "엉뚱한 집이 이 보드에 붙어 있는가"(박서준 사고 경로)는 생년이 더 정확히 잡는다.
+ *    생년을 모르면(원아 생년 없음·eywa 학년 없음) **거부**한다 — 확인 못 하면 안 보낸다.
+ *
+ * @param {{members: Array<{id?:number,name?:string,date_birth?:string|null}>, grade: string|null, schoolYear: number}} p
+ * @returns {{ok:boolean, code:string, reason?:string, members?:Array<object>}}
+ */
+export function acceptBoardMembers({ members, grade, schoolYear }) {
+  const kids = members ?? [];
+  if (!kids.length)
+    return {
+      ok: false,
+      code: "no_member",
+      reason: "ClassNote 보드에 연결된 원아가 없습니다 — 학부모 초대·반 배정이 필요합니다",
+    };
+  const v = evaluateBoardMapping({ grade, children: kids, schoolYear });
+  if (!v.ok) return v;
+  return { ok: true, code: "ok", members: kids };
+}

@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  acceptBoardMembers,
   boardNameAmbiguity,
   evaluateBoardMapping,
   evaluateBoardSafety,
@@ -201,5 +202,66 @@ describe("evaluateBoardSafety", () => {
 
   it("보드 없음이 예외 등재보다 우선 — 없는 보드엔 못 보낸다", () => {
     expect(evaluateBoardSafety({ className: "(수학)없는애", boards, allowlist: ["(수학)없는애"] }).code).toBe("no_board");
+  });
+});
+
+// ── 보드가 곧 매핑 — 이름이 달라도 그 보드의 원아가 이 학생이다(원장 2026-07-23) ────────────────
+describe("acceptBoardMembers — 이름 매칭이 실패했을 때의 폴백", () => {
+  const SY = 2026;
+
+  it("실사례: 보드 `(수학)박서연E`의 원아가 «서연»이어도 생년이 맞으면 인정한다", () => {
+    const v = acceptBoardMembers({
+      members: [{ id: 5226347, name: "서연", date_birth: "2015-03-18" }],
+      grade: "초5",
+      schoolYear: SY,
+    });
+    expect(v.ok).toBe(true);
+    expect(v.members).toHaveLength(1);
+  });
+
+  it("원아가 없으면 거부 — 이건 진짜 미배정이라 사실대로 말한다", () => {
+    const v = acceptBoardMembers({ members: [], grade: "초5", schoolYear: SY });
+    expect(v.ok).toBe(false);
+    expect(v.code).toBe("no_member");
+    expect(v.reason).toContain("원아가 없습니다");
+  });
+
+  it("🔴 생년이 학년과 3년 어긋나면 거부 — 이름 검사를 뺀 자리를 생년이 지킨다(박서준 사고 경로)", () => {
+    const v = acceptBoardMembers({
+      members: [{ name: "박서준", date_birth: "2008-05-01" }],
+      grade: "초6",
+      schoolYear: SY,
+    });
+    expect(v.ok).toBe(false);
+    expect(v.code).toBe("grade_mismatch");
+  });
+
+  it("🔴 원아 생년이 없으면 거부 — 확인할 수 없으면 안 보낸다(모르면 거부)", () => {
+    const v = acceptBoardMembers({ members: [{ name: "서연", date_birth: null }], grade: "초5", schoolYear: SY });
+    expect(v.ok).toBe(false);
+    expect(v.code).toBe("mapping_unknown");
+  });
+
+  it("🔴 eywa 학년이 없어도 거부 — 대조 기준이 없으면 통과시키지 않는다", () => {
+    const v = acceptBoardMembers({ members: [{ name: "서연", date_birth: "2015-03-18" }], grade: null, schoolYear: SY });
+    expect(v.ok).toBe(false);
+    expect(v.code).toBe("mapping_unknown");
+  });
+
+  it("±1년(조기입학·유급·학부모 오입력)은 흡수", () => {
+    expect(acceptBoardMembers({ members: [{ name: "서연", date_birth: "2014-11-02" }], grade: "초5", schoolYear: SY }).ok).toBe(true);
+  });
+
+  it("여러 원아(부모·본인 이중 계정) 중 **한 명이라도** 생년이 어긋나면 전원 거부 — 한 집만 아니어도 오발송이다", () => {
+    const v = acceptBoardMembers({
+      members: [
+        { name: "서연", date_birth: "2015-03-18" },
+        { name: "박서연", date_birth: "2011-01-05" },
+      ],
+      grade: "초5",
+      schoolYear: SY,
+    });
+    expect(v.ok).toBe(false);
+    expect(v.code).toBe("grade_mismatch");
   });
 });

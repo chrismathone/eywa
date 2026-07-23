@@ -11,7 +11,12 @@ import {
   REFUND_FORM_TYPE,
   type RefundRequestData,
 } from "../refund-request";
-import { buildRefundPrefill } from "../refund-prefill";
+import {
+  buildRefundPrefill,
+  DEFAULT_PAYMENT_MONTHS,
+  PAYMENT_MONTH_CHOICES,
+  type PaymentMonths,
+} from "../refund-prefill";
 import {
   getRefundPrefillSource,
   getRefundStudentOptions,
@@ -119,16 +124,23 @@ export async function loadRefundStudentOptions(): Promise<{
   return { options: await getRefundStudentOptions() };
 }
 
-/** 선택한 학생 → 서식 칸 값. 주소 등 민감정보가 있어 목록엔 안 싣고 **고른 1명만** 여기서 내려준다. */
-export async function loadRefundPrefill(studentId: string): Promise<{
-  values?: Record<string, string>;
-  error?: string;
-}> {
+/**
+ * 선택한 학생 → 서식 칸 값. 주소 등 민감정보가 있어 목록엔 안 싣고 **고른 1명만** 여기서 내려준다.
+ * `months` = 결제내역에 넣을 최근 개월 수(1 = 이번 달, null = 전체). 화면 세그먼트가 바뀌면 다시 부른다.
+ */
+export async function loadRefundPrefill(
+  studentId: string,
+  months: PaymentMonths = DEFAULT_PAYMENT_MONTHS,
+): Promise<{ values?: Record<string, string>; error?: string }> {
   const gate = await requireBillingWrite();
   if ("error" in gate) return { error: gate.error };
+  // 클라가 보낸 값이라 선택지 화이트리스트로 좁힌다(임의 숫자로 창을 늘리지 못하게).
+  const safeMonths = (PAYMENT_MONTH_CHOICES as readonly (number | null)[]).includes(months)
+    ? months
+    : DEFAULT_PAYMENT_MONTHS;
   const src = await getRefundPrefillSource(studentId);
   if (!src) return { error: "학생 정보를 찾지 못했습니다" };
-  return { values: buildRefundPrefill(src) };
+  return { values: buildRefundPrefill(src, { months: safeMonths }) };
 }
 
 export async function deleteRefundRequest(id: string): Promise<{ ok?: boolean; error?: string }> {

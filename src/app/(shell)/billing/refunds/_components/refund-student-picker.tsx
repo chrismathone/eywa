@@ -5,8 +5,12 @@ import { AlertCircle, Loader2, Sparkles } from "@/components/icons/eywa-icon-com
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { applyFormValues, readFormValues } from "@/lib/form-draft";
 import {
+  DEFAULT_PAYMENT_MONTHS,
+  PAYMENT_MONTH_CHOICES,
+  paymentMonthsLabel,
   REFUND_PREFILL_LABELS,
   splitPrefill,
+  type PaymentMonths,
 } from "@/features/billing/refund-prefill";
 import {
   loadRefundPrefill,
@@ -28,8 +32,10 @@ export function RefundStudentPicker({ formRef }: { formRef: React.RefObject<HTML
   const [loadError, setLoadError] = useState<string | null>(null);
   const [selected, setSelected] = useState("");
   const [note, setNote] = useState<{ text: string; overwrite?: Record<string, string> } | null>(null);
+  const [months, setMonths] = useState<PaymentMonths>(DEFAULT_PAYMENT_MONTHS);
   const [pending, startTransition] = useTransition();
-  const lastValues = useRef<Record<string, string>>({});
+  /** 우리가 마지막으로 결제내역 칸에 써넣은 값 — 사람이 손댔는지 판별해 덮어쓸지 정한다. */
+  const lastPayment = useRef<string>("");
 
   // 폼이 열린 뒤 목록을 따로 가져온다(약 800명 — 페이지 첫 페인트를 이걸로 막지 않는다).
   useEffect(() => {
@@ -45,12 +51,15 @@ export function RefundStudentPicker({ formRef }: { formRef: React.RefObject<HTML
     };
   }, []);
 
+  const lineCount = (v: string | undefined) => (v ? v.split("\n").length : 0);
+
   function apply(values: Record<string, string>, force: boolean) {
     const form = formRef.current;
     if (!form) return;
     const current = readFormValues(form, []);
     const { fill, skipped } = force ? { fill: values, skipped: [] as string[] } : splitPrefill(values, current);
     applyFormValues(form, fill);
+    if ("r_paymentDetails" in fill) lastPayment.current = fill.r_paymentDetails!;
     const filled = Object.keys(fill).length;
     const head = filled > 0 ? `${filled}개 칸을 채웠습니다` : "채울 새 칸이 없습니다";
     setNote({
@@ -61,19 +70,42 @@ export function RefundStudentPicker({ formRef }: { formRef: React.RefObject<HTML
     });
   }
 
-  function pick(studentId: string) {
-    setSelected(studentId);
-    setNote(null);
-    if (!studentId) return;
+  /** 결제내역 칸만 다시 채운다 — 사람이 손댄 값은 건드리지 않고 알린다. */
+  function applyPaymentOnly(next: string, label: string) {
+    const form = formRef.current;
+    if (!form) return;
+    const cur = String(readFormValues(form, []).r_paymentDetails ?? "");
+    if (cur.trim() && cur !== lastPayment.current) {
+      setNote({ text: `결제내역을 직접 수정하신 것 같아 그대로 뒀습니다(${label}로 바꾸려면 덮어쓰기).`, overwrite: { r_paymentDetails: next } });
+      return;
+    }
+    applyFormValues(form, { r_paymentDetails: next });
+    lastPayment.current = next;
+    setNote({ text: `결제내역 ${label} · ${lineCount(next)}줄을 넣었습니다.` });
+  }
+
+  function load(studentId: string, nextMonths: PaymentMonths, mode: "all" | "payment") {
     startTransition(async () => {
-      const res = await loadRefundPrefill(studentId);
+      const res = await loadRefundPrefill(studentId, nextMonths);
       if (res.error || !res.values) {
         setNote({ text: res.error ?? "학생 정보를 불러오지 못했습니다" });
         return;
       }
-      lastValues.current = res.values;
-      apply(res.values, false);
+      if (mode === "all") apply(res.values, false);
+      else applyPaymentOnly(res.values.r_paymentDetails ?? "", paymentMonthsLabel(nextMonths));
     });
+  }
+
+  function pick(studentId: string) {
+    setSelected(studentId);
+    setNote(null);
+    lastPayment.current = "";
+    if (studentId) load(studentId, months, "all");
+  }
+
+  function changeMonths(next: PaymentMonths) {
+    setMonths(next);
+    if (selected) load(selected, next, "payment");
   }
 
   return (
@@ -99,6 +131,25 @@ export function RefundStudentPicker({ formRef }: { formRef: React.RefObject<HTML
         </div>
         {pending ? <Loader2 className="text-text-faint size-4 animate-spin" /> : null}
       </div>
+      {/* 결제내역 기간 — 팝업 대신 항상 보이는 세그먼트(고른 즉시 결제내역 칸만 다시 채운다). */}
+      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+        <span className="text-text-faint text-xs whitespace-nowrap">결제내역 기간</span>
+        <div className="border-line bg-background inline-flex overflow-hidden rounded-lg border">
+          {PAYMENT_MONTH_CHOICES.map((m) => (
+            <button
+              key={String(m)}
+              type="button"
+              onClick={() => changeMonths(m)}
+              aria-pressed={months === m}
+              className={`border-line px-2.5 py-1 text-xs not-first:border-l ${
+                months === m ? "bg-primary text-primary-foreground font-semibold" : "text-text-dim hover:bg-bg-soft"
+              }`}
+            >
+              {paymentMonthsLabel(m)}
+            </button>
+          ))}
+        </div>
+      </div>
       {loadError ? (
         <p className="text-danger mt-2 flex items-center gap-1.5 text-xs">
           <AlertCircle className="size-3.5 shrink-0" />
@@ -120,7 +171,7 @@ export function RefundStudentPicker({ formRef }: { formRef: React.RefObject<HTML
             ) : null}
           </>
         ) : (
-          "이름을 고르면 학교/학년·주소·수강반·담당선생님·수강기간·결제내역이 채워집니다(빈 칸만)."
+          "이름을 고르면 학교/학년·주소·수강반·담당선생님·수강기간·결제내역이 채워집니다(빈 칸만). 결제내역은 위 기간만큼 — 다음 달 선청구는 항상 포함."
         )}
       </p>
     </div>

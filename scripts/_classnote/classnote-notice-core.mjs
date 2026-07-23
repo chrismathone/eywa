@@ -25,10 +25,9 @@ import {
   fetchBoards,
   fetchBoardChildren,
   fetchChildren,
-  fetchChildDetail,
+  resolveBoardChildEnrollments,
   postClassnoteReport,
   uploadToKage,
-  childKeys,
   norm,
 } from "./classnote-admin-core.mjs";
 import { boardNameAmbiguity, evaluateBoardSafety, kstSchoolYear } from "./board-safety.mjs";
@@ -198,19 +197,19 @@ async function processTarget(page, ctx, target, index = 0) {
   }
   if (!verdict.ok) return { board: target.board, ok: false, note: verdict.reason };
 
-  const clean = (target.studentName || "").replace(/[a-zA-Z]/g, "").trim();
-  const cands = ctx.children.filter((c) => {
-    const keys = childKeys(c.name);
-    return keys.has(target.studentName) || keys.has(clean);
+  // 원아 해석 = 발송 워커와 **같은 함수**(resolveBoardChildEnrollments). 이름으로 못 찾으면
+  // "보드가 곧 매핑" 폴백이 돌고(생년 대조 필수), 그래도 안 되면 아래 note로 사유가 나온다.
+  let rejected = null;
+  const enrolled = await resolveBoardChildEnrollments(page, board.id, target.studentName, ctx.children, {
+    centerId: ctx.centerId,
+    grade: ctx.gradeById?.get(target.studentId) ?? null,
+    schoolYear: kstSchoolYear(),
+    onReject: (v) => {
+      rejected = v;
+    },
   });
-  if (cands.length === 0) return { board: target.board, ok: false, note: "학부모 미가입(초대 필요)" };
-  const enrolled = [];
-  for (const c of cands) {
-    const detail = await fetchChildDetail(page, c.id);
-    const e = (detail.enrollment ?? []).find((x) => x.belong_to_class === board.id && !x.removed_child);
-    if (e) enrolled.push({ child: c, enrollment: e });
-  }
-  if (enrolled.length === 0) return { board: target.board, ok: false, note: "보드 미배정(배정 필요)" };
+  if (enrolled.length === 0)
+    return { board: target.board, ok: false, note: rejected?.reason ?? "학부모 미가입 또는 보드 미배정" };
 
   // 개인화 본문(target.body, 학생별) 우선, 없으면 공통 본문(ctx.body).
   // 공유 보드 차단은 위 프리플라이트 게이트가 담당(개인화·공통 **둘 다**) — 옛 개인화-only 체크는 이름 매칭
