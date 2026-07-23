@@ -84,4 +84,54 @@ describe("인재원 통합영어시간표 익스포터", () => {
     expect(joined).toContain("퇴원수");
     expect(joined).toContain("이퇴원"); // 퇴원생 명단
   });
+
+  it("명단 셀엔 내부 테두리가 없다 — 이름↔학교학년 세로선·행 사이 가로선 제거(2026-07-23)", () => {
+    const wb = new ExcelJS.Workbook();
+    appendInjaewonIntegratedSheet(wb, fixture(), {
+      config: DEFAULT_PERIODS_CONFIG,
+      capacityByClassId: { dp5: 8, lt2: 8 },
+    });
+    const sheet = wb.getWorksheet("통합영어시간표")!;
+
+    // 학생 이름이 실제로 찍힌 칸을 찾는다(빈 칸이 아니라 **값이 있는 칸**이 예전에 격자를 갖고
+    // 있었다 — 그래서 명단이 들쭉날쭉했다). 이름 셀은 C:E 병합이라 오른쪽 학교학년 셀은 +3.
+    const NAME_COLS = 3;
+    let checked = 0;
+    sheet.eachRow((row, r) =>
+      row.eachCell((cell, c) => {
+        if (typeof cell.value !== "string" || !cell.value.startsWith("신지민")) return;
+        // ⚠️ eachCell은 병합 **슬레이브 칸도** 같은 값으로 돌려준다 — 슬레이브에서 +3을 하면 옆 카드의
+        // 이름 칸(카드 경계라 굵은 좌측선 보유)을 검사하게 돼 헛되이 실패한다. 마스터만 본다.
+        if (cell.master !== cell) return;
+        checked++;
+        const name = sheet.getCell(r, c).border ?? {};
+        const schoolGrade = sheet.getCell(r, c + NAME_COLS).border ?? {};
+        // 행 사이 가로선 없음
+        expect(name.top).toBeUndefined();
+        expect(name.bottom).toBeUndefined();
+        expect(schoolGrade.top).toBeUndefined();
+        expect(schoolGrade.bottom).toBeUndefined();
+        // 이름↔학교학년 사이 세로선 없음(이게 140820에서 거슬리던 내부선)
+        expect(name.right).toBeUndefined();
+        expect(schoolGrade.left).toBeUndefined();
+      }),
+    );
+    expect(checked).toBeGreaterThan(0); // 명단 셀을 실제로 검사했는지(빈 검증 방지)
+  });
+
+  it("A열(시간범위 축)은 명단·정원/인원·대기·퇴원 구간이 각각 한 칸으로 병합된다", () => {
+    const wb = new ExcelJS.Workbook();
+    appendInjaewonIntegratedSheet(wb, fixture(), {
+      config: DEFAULT_PERIODS_CONFIG,
+      capacityByClassId: { dp5: 8, lt2: 8 },
+    });
+    const sheet = wb.getWorksheet("통합영어시간표")!;
+    // 명단은 최소 11행 고정이라, A열에 11행 이상을 덮는 세로 병합이 반드시 하나는 있어야 한다.
+    const merges: string[] = (sheet.model as unknown as { merges: string[] }).merges ?? [];
+    const tallColA = merges.filter((m) => {
+      const mm = /^A(\d+):A(\d+)$/.exec(m);
+      return mm && Number(mm[2]) - Number(mm[1]) >= 10;
+    });
+    expect(tallColA.length).toBeGreaterThan(0);
+  });
 });
