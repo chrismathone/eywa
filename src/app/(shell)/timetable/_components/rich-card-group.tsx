@@ -132,7 +132,9 @@ function ClassColumn({
   holdH: number;
   wdH: number;
 }) {
-  const days = group.days;
+  // ⚠️ 요일축은 **카드별**(ijw finalDays 규약, 2026-07-23) — 섹션 공통이 월~금 고정이라
+  //    평일+토 혼합 반의 토요일이 통째로 안 보였다. 카드가 축을 못 주면 그룹 축으로 폴백.
+  const days = card.days?.length ? card.days : group.days;
   const gridCols = { gridTemplateColumns: `repeat(${days.length}, 1fr)` };
   // 반 헤더색 — ijw bgColor 우선(인라인), 없으면 과목색 클래스.
   const headerStyle = card.bgColor
