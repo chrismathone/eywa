@@ -182,8 +182,17 @@ function Section({
                   <td className="px-4 py-2.5">
                     <Pill color={subjects.colorOf(r.subject)}>{subjects.labelOf(r.subject)}</Pill>
                   </td>
-                  <td className="text-foreground px-4 py-2.5 font-medium">
-                    <WindowLink href={`/classes/${r.classId}`} title={r.className} className="hover:text-primary hover:underline">
+                  {/* 수업명은 길면 **잘라내고 hover 툴팁**으로 보여준다(원장 2026-07-23) — 반 이름이 길어지면
+                      (특강·병합반) 표가 옆으로 밀려 다른 열이 화면 밖으로 나갔다. `title`이 이미 전체 이름을
+                      담고 있어 잘라도 정보 손실이 없다.
+                      ⚠️ 표에 `[&_td]:whitespace-nowrap`이 걸려 있어 td만으론 안 잘린다 — 잘림은
+                      **block + max-width**를 가진 안쪽 요소에 걸어야 먹는다. */}
+                  <td className="text-foreground max-w-[200px] px-4 py-2.5 font-medium">
+                    <WindowLink
+                      href={`/classes/${r.classId}`}
+                      title={r.className}
+                      className="hover:text-primary block overflow-hidden text-ellipsis whitespace-nowrap hover:underline"
+                    >
                       {r.className}
                     </WindowLink>
                   </td>

@@ -23,6 +23,7 @@ export function FieldSelect({
   ariaLabel,
   placeholder = "선택",
   className,
+  radius = "lg",
 }: {
   options: readonly string[];
   /** 현재 값. 빈 문자열·null 모두 "미선택"으로 본다. */
@@ -32,6 +33,11 @@ export function FieldSelect({
   ariaLabel: string;
   placeholder?: string;
   className?: string;
+  /**
+   * 이웃 입력칸과 **같은 라운드**를 쓴다 — 표(grid-row)는 밀도 때문에 `rounded-sm`,
+   * 카드·일괄 팝오버는 `rounded-lg`다. 높이·padding·글자크기는 세 표면이 동일해서 상수로 고정.
+   */
+  radius?: "sm" | "lg";
 }) {
   const opts = useMemo(
     () => [{ value: "", label: "선택 안 함" }, ...options.map((o) => ({ value: o, label: o }))],
@@ -47,6 +53,13 @@ export function FieldSelect({
       // 선택지가 5개 안팎이라 검색 입력은 실질 무용 — 안내 문구만 짧게(컴포넌트가 항상 그린다).
       searchPlaceholder="찾기"
       className={className}
+      // ⚠️ 이웃 텍스트 입력과 **완전히 같은 치수**(원장 2026-07-23 "네모박스 크기가 너무 다름").
+      //    표·카드·일괄 세 표면의 입력칸이 모두 `border-line bg-card h-8 px-2 text-[12px]`이고
+      //    라운드만 다르다. 기본 트리거(py-2·px-3·text-sm)를 그대로 쓰면 한 줄에서 이 칸만 커진다.
+      //    ⚠️ 새 표면에 FieldSelect를 놓을 땐 그 자리 입력칸 클래스와 대조해볼 것.
+      triggerClassName={`border-line bg-card text-foreground focus:border-primary h-8 border px-2 text-[12px] outline-none ${
+        radius === "sm" ? "rounded-sm" : "rounded-lg"
+      }`}
     />
   );
 }

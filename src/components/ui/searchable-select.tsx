@@ -23,6 +23,7 @@ export function SearchableSelect({
   searchPlaceholder = "검색...",
   cap = 50,
   className,
+  triggerClassName,
   ariaLabel,
 }: {
   options: ComboOption[];
@@ -34,6 +35,13 @@ export function SearchableSelect({
   searchPlaceholder?: string;
   cap?: number;
   className?: string;
+  /**
+   * 트리거 버튼의 **박스 스타일**만 교체(테두리·높이·padding·글자크기·라운드). 레이아웃(flex·w-full·
+   * 화살표 정렬)은 항상 유지된다. ⚠️ 촘촘한 표 안에서는 기본값(py-2·px-3·text-sm)이 옆 입력칸(h-8·px-2·
+   * text-[12px])보다 눈에 띄게 커서 줄이 들쭉날쭉해진다(원장 2026-07-23 지적) → 그 자리에선 이웃과 같은
+   * 클래스를 넘길 것. 미지정이면 기존 기본값 그대로(다른 화면 영향 없음).
+   */
+  triggerClassName?: string;
   /** 트리거 버튼의 접근성 이름 — 선택값만으론 무엇의 드롭다운인지 불명할 때(필터 등) 서술 라벨 제공. */
   ariaLabel?: string;
 }) {
@@ -78,7 +86,10 @@ export function SearchableSelect({
         type="button"
         aria-label={ariaLabel}
         onClick={() => setOpen((o) => !o)}
-        className="border-border bg-card text-foreground flex w-full items-center justify-between gap-2 rounded-md border px-3 py-2 text-sm"
+        className={`flex w-full items-center justify-between gap-2 ${
+          triggerClassName ??
+          "border-border bg-card text-foreground rounded-md border px-3 py-2 text-sm"
+        }`}
       >
         <span className={`truncate ${selected ? "" : "text-text-faint"}`}>
           {selected ? selected.label : placeholder}

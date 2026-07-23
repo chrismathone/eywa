@@ -310,6 +310,7 @@ export function GridBodyRow({
       <td className={td}>
         {/* 원장 2026-07-23: 알약 → 드롭다운. 선택지가 늘어(과제 '없음' 추가) 표 가로가 터졌다. */}
         <FieldSelect
+          radius="sm"
           options={config.attitudes}
           value={student.attitude}
           onSelect={(a) => fields.onAttitude(student.id, a)}
@@ -318,6 +319,7 @@ export function GridBodyRow({
       </td>
       <td className={td}>
         <FieldSelect
+          radius="sm"
           options={config.homeworks}
           value={student.homework || null}
           onSelect={(h) => fields.onHomework(student.id, h ?? "")}

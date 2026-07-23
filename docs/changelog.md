@@ -4,6 +4,17 @@
 
 ## 진행 상황
 
+### 드롭다운 치수를 이웃 입력칸에 정렬 + 수업명 잘라내기(hover 툴팁) (2026-07-23) - tsc0/lint0/test2306/build✓
+원장 디테일 지적 2건.
+- **드롭다운만 유독 컸다** — `SearchableSelect` 기본 트리거는 `px-3 py-2 text-sm rounded-md`인데 옆 입력칸은
+  세 표면 모두 `border-line bg-card h-8 px-2 text-[12px]`(라운드만 표=sm, 카드·일괄=lg). 한 줄에서 이 칸만
+  높이·글자가 커져 들쭉날쭉했다. → `SearchableSelect`에 **`triggerClassName`**(박스 스타일만 교체, 레이아웃은
+  유지) 추가 + `FieldSelect`가 이웃과 동일 클래스를 넘긴다(`radius` prop으로 표/카드 구분).
+  ⚠️ 새 표면에 `FieldSelect`를 놓을 땐 **그 자리 입력칸 클래스와 대조**할 것. 기본값은 안 건드려 다른 화면 영향 0.
+- **학생 상세 > 수업 탭 수업명이 표를 밀어냈다** — 특강·병합반처럼 이름이 길면 다른 열이 화면 밖으로 나갔다.
+  → `max-w-[200px]` + 말줄임 + 기존 `title` 툴팁으로 hover 시 전체 이름. ⚠️ 표에 `[&_td]:whitespace-nowrap`이
+  걸려 있어 **td만으론 안 잘린다** — block + max-width를 가진 안쪽 요소에 걸어야 한다.
+
 ### 태도·과제 드롭다운 전환 + 과목 알약 분리 + 특강 누수 3곳 마감 (2026-07-23) - tsc0/lint0/test2298/build✓
 원장 지시 3건을 함께 처리.
 - **태도·과제 = 알약 → 드롭다운**([`FieldSelect`](src/features/onescreen/components/field-select.tsx),
