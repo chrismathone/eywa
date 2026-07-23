@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildRefundPrefill,
   formatPaymentLines,
+  limitInvoicesToMonths,
   splitPrefill,
   type RefundPrefillInvoice,
   type RefundPrefillSource,
@@ -181,6 +182,47 @@ describe("formatPaymentLines — 월별로 하나하나, 항목까지 분리", (
       inv("2026-05", [{ kind: "수업", description: "정규반", amount: 50000, paid: 50000, method: "vbank" }]),
     ]);
     expect(lines).toEqual(["2026-05 수업 정규반 50,000원 납부"]);
+  });
+});
+
+describe("limitInvoicesToMonths — 결제내역 기간 선택", () => {
+  const list = ["2026-04", "2026-05", "2026-06", "2026-07", "2026-08"].map((p) =>
+    inv(p, [{ kind: "수업", description: "정규반", amount: 100000, paid: 100000 }]),
+  );
+
+  it("1 = 이번 달만", () => {
+    expect(limitInvoicesToMonths(list, 1, "2026-07").map((i) => i.period)).toEqual(["2026-07", "2026-08"]);
+  });
+
+  it("2 = 이번 달 + 지난달", () => {
+    expect(limitInvoicesToMonths(list, 2, "2026-07").map((i) => i.period)).toEqual([
+      "2026-06",
+      "2026-07",
+      "2026-08",
+    ]);
+  });
+
+  it("다음 달 선청구(2026-08)는 어떤 기간에서도 안 잘린다 — 환불 대상이 대개 그 선청구분", () => {
+    expect(limitInvoicesToMonths(list, 1, "2026-07").some((i) => i.period === "2026-08")).toBe(true);
+  });
+
+  it("연 경계를 넘어간다", () => {
+    const cross = ["2025-11", "2025-12", "2026-01"].map((p) => inv(p, []));
+    expect(limitInvoicesToMonths(cross, 2, "2026-01").map((i) => i.period)).toEqual(["2025-12", "2026-01"]);
+  });
+
+  it("null = 전체", () => {
+    expect(limitInvoicesToMonths(list, null, "2026-07")).toHaveLength(5);
+  });
+
+  it("buildRefundPrefill 기본값은 최근 3개월", () => {
+    const out = buildRefundPrefill({ ...base, invoices: list }, { currentMonth: "2026-07" });
+    expect(out.r_paymentDetails?.split("\n").map((l) => l.slice(0, 7))).toEqual([
+      "2026-05",
+      "2026-06",
+      "2026-07",
+      "2026-08",
+    ]);
   });
 });
 

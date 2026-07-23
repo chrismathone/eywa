@@ -5,6 +5,7 @@
 // 사람이 판단하는 칸(환불사유·차감내역·총 환불금액·총수업횟수·환불방식)은 **비운 채로 둔다**.
 // 총수업횟수는 계획 회차·실제 출석·청구 회차가 서로 달라 하나로 단정할 수 없어 의도적으로 제외.
 
+import { kstMonth, shiftMonth } from "@/lib/date-kst";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 
 export type RefundPrefillEnrollment = {
@@ -110,6 +111,34 @@ function classDateRange(list: RefundPrefillEnrollment[]): string {
   return end ? `${start} ~ ${end}` : start;
 }
 
+/** 결제내역 기간 선택지 — `null`=전체. 화면 세그먼트 버튼과 서버 검증이 이 목록을 공유한다. */
+export const PAYMENT_MONTH_CHOICES = [1, 2, 3, 6, 12, null] as const;
+export type PaymentMonths = (typeof PAYMENT_MONTH_CHOICES)[number];
+/** 기본 = 최근 3개월(전건은 20줄까지 나와 서식이 결제내역으로 뒤덮인다). */
+export const DEFAULT_PAYMENT_MONTHS: PaymentMonths = 3;
+
+export function paymentMonthsLabel(months: PaymentMonths): string {
+  if (months === null) return "전체";
+  return months === 1 ? "이번 달" : `${months}개월`;
+}
+
+/**
+ * 결제내역에 넣을 청구서를 **최근 N개월**로 자른다(1 = 이번 달, 2 = 이번 달+지난달).
+ * `months`가 null이면 전건.
+ *
+ * ⚠️ **다음 달 선청구(2026-08 등)는 자르지 않는다** — 환불은 대개 그 선청구분을 되돌리는 일이라
+ * 창을 "이번 달까지"로 막으면 정작 환불 대상이 사라진다. 즉 창은 과거 방향으로만 N개월.
+ */
+export function limitInvoicesToMonths(
+  invoices: RefundPrefillInvoice[],
+  months: PaymentMonths,
+  currentMonth: string = kstMonth(),
+): RefundPrefillInvoice[] {
+  if (months === null || months <= 0) return invoices;
+  const from = shiftMonth(currentMonth, -(months - 1));
+  return invoices.filter((i) => i.period >= from);
+}
+
 /** `2026-01 수업 정규반 182,000원 납부 (계좌이체 · 2025-12-29 · 할인 10,000원)` 한 줄 조립. */
 function paymentLine(
   head: string,
@@ -211,7 +240,10 @@ export function formatPaymentLines(invoices: RefundPrefillInvoice[]): string[] {
  * 담임선생님은 담당강사가 **정확히 1명일 때만** 채운다 — eywa는 담임 개념을 폐기(과목별 담당)했고,
  * 여러 명을 나열하면 "담임이 여럿"이라는 없는 사실이 서류에 남는다.
  */
-export function buildRefundPrefill(src: RefundPrefillSource): Record<string, string> {
+export function buildRefundPrefill(
+  src: RefundPrefillSource,
+  opts: { months?: PaymentMonths; currentMonth?: string } = {},
+): Record<string, string> {
   const out: Record<string, string> = {};
   const put = (k: string, v: string) => {
     const t = v.trim();
@@ -231,7 +263,8 @@ export function buildRefundPrefill(src: RefundPrefillSource): Record<string, str
 
   put("s_classDate", classDateRange(rel));
 
-  put("r_paymentDetails", formatPaymentLines(src.invoices).join("\n"));
+  const months = opts.months === undefined ? DEFAULT_PAYMENT_MONTHS : opts.months;
+  put("r_paymentDetails", formatPaymentLines(limitInvoicesToMonths(src.invoices, months, opts.currentMonth)).join("\n"));
 
   return out;
 }
