@@ -599,7 +599,7 @@ export async function runAiAnalysis(
   const { data: c } = await supabase
     .from("enrollment_consultations")
     .select(
-      "id, prospect_name, prospect_grade, prospect_school, parent_name, parent_phone, parent_request, learning_history, consulted_at, consultant_id",
+      "id, prospect_name, prospect_grade, prospect_school, parent_name, parent_phone, parent_request, learning_history, consultation_date, consulted_at, consultant_id",
     )
     .eq("id", consultationId)
     .single();
@@ -672,7 +672,10 @@ export async function runAiAnalysis(
       parentName: c.parent_name,
       parentPhone: c.parent_phone,
     },
-    consultedAt: c.consulted_at,
+    // ⚠️ 상담일 = 사람이 편집하는 consultation_date(date). consulted_at은 정렬용 레코드 타임스탬프라
+    // 3월 상담을 7월에 입력하거나 makeedu에서 넘어온 건이면 화면 '상담일'과 인쇄물이 어긋난다
+    // (화면: f.consultationDate ?? consulted_at 폴백과 같은 순서로 맞춘 것).
+    consultedAt: c.consultation_date ?? c.consulted_at,
     consultantName: consultant?.display_name ?? null,
     parentRequest: c.parent_request,
     learningHistory: c.learning_history,

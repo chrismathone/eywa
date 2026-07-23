@@ -50,9 +50,13 @@ export default async function EnrollmentPrintPage({
   const latePolicy = settings.billing.latePolicy?.trim();
 
   const p = consult.aiAnalysis.printPayload;
-  // ⚠️ 녹음 경로 payload엔 consultedAt·diagnosis·recommendedClasses가 **없다**(PrintPayload 주석 참조) —
-  // 상담일은 상담 행(consult)을 폴백으로 쓴다. payload만 믿으면 "Invalid Date"가 찍힌다.
-  const consultedAtRaw = p.consultedAt ?? consult.consultedAt;
+  // ⚠️ 상담일은 **화면과 똑같은 순서**로 해석한다(enrollment/[id] 상세: f.consultationDate ?? consulted_at).
+  //   ① consultation_date = 사람이 편집하는 상담일(date). 이게 진실이다.
+  //   ② payload 동결값 — 녹음 경로 payload엔 아예 없고(PrintPayload 주석 참조), 2026-07-23 이전에
+  //      만들어진 분석은 여기에 consulted_at(정렬용 레코드 타임스탬프)이 굳어 있다.
+  //   ③ 상담 행 타임스탬프 폴백. payload만 믿으면 녹음 경로에서 "Invalid Date"가 찍힌다.
+  // ①을 맨 앞에 두는 게 핵심 — 그래야 3월 상담을 7월에 입력한 건도 화면과 인쇄물이 같은 날짜를 말한다.
+  const consultedAtRaw = consult.fields.consultationDate ?? p.consultedAt ?? consult.consultedAt;
   const consultedDate = consultedAtRaw
     ? new Date(consultedAtRaw).toLocaleDateString("ko-KR", {
         timeZone: "Asia/Seoul",
