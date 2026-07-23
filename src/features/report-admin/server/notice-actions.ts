@@ -9,6 +9,19 @@ import { fetchInChunks } from "@/lib/supabase/batch";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { hasClassnoteNameCollision } from "@/features/onescreen/server/scope";
 import { logAction } from "@/features/audit/server/log";
+import { isTenantReportAttachmentPath } from "@/lib/storage/legacy-audio-path";
+import {
+  flattenNoticeReportLinks,
+  boardStudentName,
+  type NoticeReportLink,
+} from "@/features/onescreen/notice-links";
+import {
+  noticeAttachmentOverflow,
+  NOTICE_ATTACHMENT_INPUT_MAX,
+  NOTICE_ATTACHMENT_MAX,
+  sanitizeNoticeAttachments,
+  type NoticeAttachment,
+} from "@/features/onescreen/notice-attachments";
 import { resolveNoticeTargets, type NoticeCandidate, type NoticeSkip, type NoticeTarget } from "../notice-targets";
 
 export type NoticeClassOption = {
@@ -86,6 +99,8 @@ export async function sendClassNotice(input: {
   classIds: string[];
   body: string; // 공통 내용(선택 반 재원생 모두에게). 개별 내용이 없는 학생은 이 본문만.
   individual?: Record<string, string>; // studentId → 개별 내용(공통 뒤에 덧붙여 그 학생 보드에만)
+  /** 전원 공통 이미지(0130a) — 워커가 각 글에 같이 올린다. 0건이면 컬럼을 아예 건드리지 않는다(기존 동작 보존). */
+  attachments?: NoticeAttachment[];
   test?: boolean;
 }): Promise<{ ok: boolean; queued?: number; skipped?: NoticeSkip[]; dryRun?: boolean; error?: string }> {
   const user = await getCurrentUser();
@@ -168,12 +183,32 @@ export async function sendClassNotice(input: {
     }
   }
 
+  // 공통 첨부 — 경로는 서버가 다시 검증(클라가 남의 파일 경로를 큐에 싣는 것 차단). 0건이면 컬럼 미접촉.
+  // ⚠️ 여기서 상한으로 자르지 않는다 — 넘치면 아래 가드가 **막는다**(조용히 자르면 누락을 아무도 못 본다).
+  const commonAttachments = sanitizeNoticeAttachments(
+    input.attachments,
+    (p) => isTenantReportAttachmentPath(p, user.tenantId),
+    NOTICE_ATTACHMENT_INPUT_MAX,
+  );
+  if (noticeAttachmentOverflow(commonAttachments, []) > 0)
+    return {
+      ok: false,
+      error: `한 글에 올릴 수 있는 이미지는 최대 ${NOTICE_ATTACHMENT_MAX}장입니다`,
+      skipped,
+    };
+
   // 발송 안전 스위치 — OFF면 dry-run(큐 적재 안 함). 보고서 발송과 동일 스위치 공유.
   if (!settings.report.classnoteSendEnabled) return { ok: true, queued: 0, skipped, dryRun: true };
 
   const { data: inserted, error } = await supabase
     .from("classnote_notices")
-    .insert({ tenant_id: user.tenantId, body, targets, created_by: user.id })
+    .insert({
+      tenant_id: user.tenantId,
+      body,
+      targets,
+      created_by: user.id,
+      ...(commonAttachments.length ? { attachments: commonAttachments } : {}),
+    })
     .select("id")
     .single();
   if (error) return { ok: false, error: error.message };
@@ -183,7 +218,12 @@ export async function sendClassNotice(input: {
     action: "classnote_notice_send",
     targetType: "classnote_notice",
     targetLabel: `대상 ${targets.length}명`,
-    metadata: { noticeId: inserted?.id ?? null, targetCount: targets.length, source: "class" },
+    metadata: {
+      noticeId: inserted?.id ?? null,
+      targetCount: targets.length,
+      source: "class",
+      commonAttachments: commonAttachments.length,
+    },
   });
 
   return { ok: true, queued: targets.length, skipped };
@@ -194,7 +234,10 @@ export type NoticeRow = {
   body: string;
   targetCount: number;
   status: string;
-  results: { board: string; ok: boolean; note?: string }[] | null;
+  /** 실패 표시용 — board는 보드명이라 화면에선 학생 이름(studentName)으로 보여준다. */
+  results: { board: string; studentName: string; ok: boolean; note?: string }[] | null;
+  /** 게시된 글 주소 + 학생 이름 — '#1 #2'로는 누구 글인지 알 수 없어 이름으로 되붙인다. */
+  reportLinks: NoticeReportLink[];
   error: string | null;
   createdAt: string;
   processedAt: string | null;
@@ -214,15 +257,32 @@ export async function listClassNotices(): Promise<{ ok: boolean; rows?: NoticeRo
   if (error) return { ok: false, error: error.message };
   return {
     ok: true,
-    rows: (data ?? []).map((r) => ({
-      id: r.id as string,
-      body: r.body as string,
-      targetCount: Array.isArray(r.targets) ? r.targets.length : 0,
-      status: r.status as string,
-      results: (r.results as NoticeRow["results"]) ?? null,
-      error: r.error as string | null,
-      createdAt: r.created_at as string,
-      processedAt: r.processed_at as string | null,
-    })),
+    rows: (data ?? []).map((r) => {
+      // 워커 results[]는 보드명 기준 — targets[]로 학생 이름을 되붙인다(못 찾으면 보드명에서 과목 접두어만 벗김).
+      const nameByBoard = new Map<string, string>();
+      if (Array.isArray(r.targets)) {
+        for (const t of r.targets as Array<Record<string, unknown>>) {
+          if (typeof t?.board === "string" && typeof t?.studentName === "string")
+            nameByBoard.set(t.board, t.studentName);
+        }
+      }
+      const results = (r.results as Array<{ board: string; ok: boolean; note?: string }> | null) ?? null;
+      return {
+        id: r.id as string,
+        body: r.body as string,
+        targetCount: Array.isArray(r.targets) ? r.targets.length : 0,
+        status: r.status as string,
+        results: results
+          ? results.map((x) => ({
+              ...x,
+              studentName: nameByBoard.get(x.board) ?? boardStudentName(x.board ?? ""),
+            }))
+          : null,
+        reportLinks: flattenNoticeReportLinks(r.results, r.targets),
+        error: r.error as string | null,
+        createdAt: r.created_at as string,
+        processedAt: r.processed_at as string | null,
+      };
+    }),
   };
 }

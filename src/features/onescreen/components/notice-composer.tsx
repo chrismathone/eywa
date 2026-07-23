@@ -19,10 +19,8 @@ import {
   type NoticeStudent,
   type OnescreenNoticeRow,
 } from "../server/notice-actions";
-import { issueNoticeAttachmentTicket, registerNoticeAttachment } from "../server/notice-attachment-actions";
-import { uploadToTicket } from "@/lib/storage/upload-to-ticket";
-import { resizeImageForUpload } from "../resize-image";
-import { NOTICE_ATTACHMENT_MAX, type NoticeAttachment } from "../notice-attachments";
+import { NoticeAttachmentPicker } from "./notice-attachment-picker";
+import type { NoticeAttachment } from "../notice-attachments";
 import type { OneScreenStudent } from "../types";
 
 const BODY = "border-line bg-card text-foreground rounded-lg border px-3 py-2 text-[13px] w-full resize-y";
@@ -169,59 +167,6 @@ export function NoticeComposer({
         subject: s.subject,
         individualBody: individual[s.id]?.trim() || undefined,
       }));
-  }
-
-  /**
-   * 공통 이미지 첨부 — 보고서 첨부와 같은 2단계(티켓 → PUT → 재검증). 업로드된 것만 목록에 들어가고,
-   * 실제 적재는 발송 시. 순차 업로드(티켓 발급이 실패하면 그 자리에서 멈춰 원인을 보여준다).
-   */
-  async function addFiles(list: FileList | null) {
-    const picked = Array.from(list ?? []);
-    if (!picked.length) return;
-    const room = NOTICE_ATTACHMENT_MAX - atts.length;
-    if (room <= 0) {
-      toast.error(`이미지는 한 글에 최대 ${NOTICE_ATTACHMENT_MAX}장까지 첨부할 수 있습니다`);
-      return;
-    }
-    if (picked.length > room) toast.message(`${room}장만 첨부합니다 — 한 글에 최대 ${NOTICE_ATTACHMENT_MAX}장`);
-    setUploading(true);
-    const added: NoticeAttachment[] = [];
-    try {
-      for (const original of picked.slice(0, room)) {
-        if (!original.type.startsWith("image/")) {
-          toast.error(`${original.name} — 이미지(JPG·PNG·WebP)만 첨부할 수 있습니다`);
-          continue;
-        }
-        const file = await resizeImageForUpload(original);
-        const issued = await issueNoticeAttachmentTicket({ contentType: file.type, size: file.size });
-        if (issued.error || !issued.ticket) {
-          toast.error(issued.error ?? "업로드 준비에 실패했습니다");
-          break;
-        }
-        try {
-          await uploadToTicket(issued.ticket, file);
-        } catch (e) {
-          toast.error(e instanceof Error ? e.message : "업로드에 실패했습니다");
-          break;
-        }
-        const reg = await registerNoticeAttachment({
-          path: issued.ticket.path,
-          name: original.name,
-          size: file.size,
-        });
-        if (reg.error || !reg.attachment) {
-          toast.error(reg.error ?? "첨부 등록에 실패했습니다");
-          break;
-        }
-        added.push(reg.attachment);
-      }
-    } finally {
-      setUploading(false);
-    }
-    if (added.length) {
-      setAtts((prev) => [...prev, ...added]);
-      toast.success(`이미지 ${added.length}장 첨부`);
-    }
   }
 
   async function doSend(test: boolean) {
@@ -442,57 +387,14 @@ export function NoticeComposer({
               ) : null}
             </div>
           ) : null}
-          {/* 공통 이미지 첨부 — 선택 학생 모두의 글에 같은 이미지가 붙는다(수업 보고서 첨부와 같은 레일). */}
-          <div className="border-line rounded-md border px-3 py-2">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="text-text-dim text-[11px] font-medium">
-                이미지 첨부 (선택 학생 모두에게){atts.length ? ` · ${atts.length}장` : ""}
-              </p>
-              <label
-                className={`border-line text-text-dim rounded-md border px-2 py-1 text-[11px] ${
-                  uploading || atts.length >= NOTICE_ATTACHMENT_MAX
-                    ? "text-text-faint cursor-not-allowed"
-                    : "hover:bg-bg-soft cursor-pointer"
-                }`}
-              >
-                {uploading ? "업로드 중…" : "이미지 추가"}
-                <input
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp"
-                  multiple
-                  className="hidden"
-                  disabled={uploading || atts.length >= NOTICE_ATTACHMENT_MAX}
-                  onChange={(e) => {
-                    const list = e.target.files;
-                    e.target.value = ""; // 같은 파일 다시 고를 수 있게 초기화
-                    void addFiles(list);
-                  }}
-                />
-              </label>
-            </div>
-            {atts.length ? (
-              <ul className="mt-1.5 space-y-1">
-                {atts.map((a) => (
-                  <li key={a.path} className="flex items-center gap-2 text-[11px]">
-                    <span className="text-foreground min-w-0 flex-1 truncate" title={a.name}>
-                      {a.name}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setAtts((prev) => prev.filter((x) => x.path !== a.path))}
-                      className="text-text-faint hover:text-danger shrink-0"
-                    >
-                      삭제
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-text-faint mt-1 text-[11px]">
-                사진(JPG·PNG·WebP) · 한 글에 최대 {NOTICE_ATTACHMENT_MAX}장
-              </p>
-            )}
-          </div>
+          {/* 공통 이미지 첨부 — 선택 학생 모두의 글에 같은 이미지가 붙는다(수업 보고서 첨부와 같은 레일).
+              관리자 반 공지와 **같은 컴포넌트**를 쓴다(업로드 규칙이 두 벌로 갈라지지 않게). */}
+          <NoticeAttachmentPicker
+            attachments={atts}
+            onChange={setAtts}
+            uploading={uploading}
+            onUploadingChange={setUploading}
+          />
 
           {confirmSend ? (
             <div className="border-primary/40 bg-primary/5 flex flex-wrap items-center gap-2 rounded-md border px-3 py-2">
