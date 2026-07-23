@@ -56,6 +56,9 @@ import {
 } from "./_components/prefs-sync";
 import { EmptyPeriodScope } from "./_components/empty-period-scope";
 import { TimetableColorToggle } from "./_components/color-mode-toggle";
+import { TimetableViewSettings } from "./_components/view-settings";
+import { applyGradeFilter } from "@/features/timetable/lib/view-prefs";
+import { getMyTimetableViewPrefs } from "@/features/timetable/server/view-prefs-queries";
 import { StudentTally } from "./_components/student-tally";
 import { WeekNav } from "./_components/week-nav";
 import { WeekdayGroupTables } from "./_components/weekday-group-tables";
@@ -128,11 +131,14 @@ export default async function TimetablePage({
 
   // 강사(또는 겸직-강사뷰)는 본인 담당 반만(intra-tenant PII 누수 차단). master/직원은 전체.
   const teacherId = (await effectiveTeacherId()) ?? undefined;
-  const [allSlots, settings, teacherColors] = await Promise.all([
+  const [allSlots, settings, teacherColors, viewPrefs] = await Promise.all([
     getWeeklyScheduleWithStudents({ referenceDate, teacherId }),
     getTenantSettings(),
     // 강사색 맵은 통합뷰(셀·담임색)·강사뷰(헤더색)에서만 필요. 기본뷰는 생략.
     view !== "basic" ? getTeacherColorMap() : Promise.resolve({} as TeacherColorMap),
+    // 계정 귀속 뷰 설정(0146a) — 서버 첫 렌더에서 읽어야 필터 없는 화면을 그렸다가 학생이 사라지는
+    // 깜빡임이 없다. 미로그인·깨진 값은 '설정 없음'으로 떨어져 무중단.
+    getMyTimetableViewPrefs(),
   ]);
   // 교시 시각 = owner 설정(operations.weekdayPeriods/weekendPeriods) → PeriodsConfig. 미설정 시 기본 상수.
   const periodsConfig = settingsToPeriodsConfig(settings.operations);
@@ -177,7 +183,15 @@ export default async function TimetablePage({
     ? `https://docs.google.com/spreadsheets/d/${sheetsStatus.spreadsheetId}/edit`
     : null;
   // 평일/주말은 WeekdayGroupTables가 알아서 분리 렌더(주말은 시작시각이 달라 별도 판). 여기선 과목만 필터.
-  const slots = kindSlots.filter((s) => s.subject === subject);
+  // 이어서 계정 뷰 설정의 학년 필터를 **학생 단위**로 건다 — 반 단위로 걸면 학제 혼합 반이 통째로
+  // 사라진다(실측 활성 반 106개 중 9개가 혼합, applyGradeFilter 주석 참조). 여기 한 곳만 거치면
+  // 기본·강사·통합 3뷰와 상단 명단 요약이 전부 같은 명단을 본다(뷰마다 따로 거르면 숫자가 갈린다).
+  // ⚠️ 과목 칩(available)에는 **일부러 적용하지 않는다** — 필터가 과목을 지우면 고를 과목이 0개가 돼
+  // 빈 화면에 갇힌다. 칩은 "학원이 무엇을 운영하나", 필터는 "내가 누구를 보나"로 층을 나눈다.
+  const slots = applyGradeFilter(
+    kindSlots.filter((s) => s.subject === subject),
+    viewPrefs.grades,
+  );
   const subjectRow = settings.operations.subjects.find((s) => s.key === subject);
   // 통합뷰 섹션 = 커스텀 그룹(학원설정 과목별)이 켜져 있으면 그것, 아니면 "N교시 시작" 자동 그룹.
   // 엑셀·시트 빌더도 같은 해석기를 쓴다(화면과 배치 일치가 이 기능의 존재 이유).
@@ -474,6 +488,23 @@ export default async function TimetablePage({
             <span className="bg-line h-4 w-px" aria-hidden />
             <TimetableColorToggle />
           </>
+        ) : null}
+
+        {/* 뷰 설정(학제·학년으로 학생 켜고 끄기) — 계정 저장이라 다른 기기에서도 따라온다.
+            ⚠️ 인라인 토글이 아니라 팝오버인 이유·배지를 항상 띄우는 이유는 view-settings.tsx 주석 참조.
+            전 뷰 공통(필터는 명단에 걸리므로 기본·강사·통합 어디서나 같은 뜻). */}
+        <span className="bg-line h-4 w-px" aria-hidden />
+        <TimetableViewSettings
+          allGrades={settings.operations.gradeLevels ?? []}
+          savedGrades={viewPrefs.grades}
+        />
+
+        {/* 학년 필터가 걸린 채로 이 과목·이 주에 보이는 학생이 0명이면, 화면이 그냥 비어 있어 고장으로
+            보인다. 배지만으론 부족해 한 줄로 명시한다(필터 때문임을 알아야 되돌릴 수 있다). */}
+        {viewPrefs.grades && slots.length === 0 && kindSlots.some((s) => s.subject === subject) ? (
+          <span className="bg-accent text-accent-foreground rounded-full px-2.5 py-0.5 text-[11px]">
+            학년 필터에 걸려 표시할 수업이 없습니다 — 뷰 설정에서 학년을 넓혀 보세요.
+          </span>
         ) : null}
 
         {/* 엑셀·시트 액션 — ⚠️ ml-auto 스페이서 **앞**에 둔다: 스페이서 뒤(우측 정렬 편집 옆)에 두면
