@@ -17,6 +17,7 @@ describe("isImportantNotification", () => {
     expect(isImportantNotification("classnote_parent_post")).toBe(true);
     // 발송 실패는 "학부모에게 안 갔는데 아무도 모르는" 상태 — 담당이 초대·재발송을 해야 끝난다(0143a).
     expect(isImportantNotification("report_send_failed")).toBe(true);
+    expect(isImportantNotification("notice_send_failed")).toBe(true);
     // 나머지는 벨 배지로만 — 수업 중 중앙 팝업 방해 방지(원장 결정).
     expect(isImportantNotification("enrollment_assigned")).toBe(false);
     expect(isImportantNotification("teacher_handover")).toBe(false);
