@@ -15,6 +15,7 @@ import {
 } from "@/features/billing/refund-request";
 import { saveRefundRequest, type RefundActionState } from "@/features/billing/server/refund-actions";
 import { DeleteRefundButton, PrintRefundButton } from "./refund-buttons";
+import { RefundStudentPicker } from "./refund-student-picker";
 
 // 종이 서식("환불처리요청서") 레이아웃을 재현한 시트 — 읽기(뷰) ↔ 인라인 편집 한 컴포넌트(WYSIWYG).
 // 화면·A4 인쇄 공용. 직원 이력서(resume-sheet) 패턴 — 전 필드가 plain input/textarea라 초안 자동복원도 DOM 캡처만으로 완결.
@@ -338,6 +339,7 @@ export function RefundSheet({
       {id ? <input type="hidden" name="id" value={id} /> : null}
       {toolbar}
       <DraftBanner savedAt={draft.draftSavedAt} onRestore={draft.restore} onDiscard={draft.discard} />
+      <RefundStudentPicker formRef={formRef} />
       {state?.error ? (
         <p className="text-danger flex items-center gap-1.5 text-sm">
           <AlertCircle className="size-4 shrink-0" />

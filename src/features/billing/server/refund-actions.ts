@@ -11,6 +11,12 @@ import {
   REFUND_FORM_TYPE,
   type RefundRequestData,
 } from "../refund-request";
+import { buildRefundPrefill } from "../refund-prefill";
+import {
+  getRefundPrefillSource,
+  getRefundStudentOptions,
+  type RefundStudentOption,
+} from "./refund-queries";
 
 // 환불 요청서(웹 작성 폼) 변경 액션 — 게이트는 canWriteTenant("billing")(수납 쓰기 = master/admin/accountant).
 // 저장소는 academy_documents(kind='form', restricted=true) — 데이터베이스 탐색기에도 같은 행이 보인다.
@@ -98,6 +104,31 @@ export async function saveRefundRequest(
   if (error || !row) return { error: `저장 실패: ${error?.message ?? "unknown"}` };
   revalidateRefund(row.id);
   return { ok: true, id: row.id, nonce: Date.now(), redirectTo: `/billing/refunds/${row.id}` };
+}
+
+/**
+ * 자동입력 학생 목록 — 폼이 열린 뒤 클라에서 on-demand로 부른다(첫 페인트를 800명 목록으로 막지 않게, B7).
+ * 게이트는 저장과 동일(수납 쓰기) — 환불서를 못 쓰는 사람이 학생 명부를 긁어가는 통로가 되면 안 된다.
+ */
+export async function loadRefundStudentOptions(): Promise<{
+  options?: RefundStudentOption[];
+  error?: string;
+}> {
+  const gate = await requireBillingWrite();
+  if ("error" in gate) return { error: gate.error };
+  return { options: await getRefundStudentOptions() };
+}
+
+/** 선택한 학생 → 서식 칸 값. 주소 등 민감정보가 있어 목록엔 안 싣고 **고른 1명만** 여기서 내려준다. */
+export async function loadRefundPrefill(studentId: string): Promise<{
+  values?: Record<string, string>;
+  error?: string;
+}> {
+  const gate = await requireBillingWrite();
+  if ("error" in gate) return { error: gate.error };
+  const src = await getRefundPrefillSource(studentId);
+  if (!src) return { error: "학생 정보를 찾지 못했습니다" };
+  return { values: buildRefundPrefill(src) };
 }
 
 export async function deleteRefundRequest(id: string): Promise<{ ok?: boolean; error?: string }> {
