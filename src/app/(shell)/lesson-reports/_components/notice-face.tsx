@@ -9,6 +9,8 @@ import { EyIcon } from "@/components/icons/eywa-icons";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { useSubjectMaps } from "@/features/owner/operations-context";
 import { listClassNotices, sendClassNotice, type NoticeClassOption, type NoticeRow } from "@/features/report-admin/server/notice-actions";
+import { NoticeAttachmentPicker } from "@/features/onescreen/components/notice-attachment-picker";
+import type { NoticeAttachment } from "@/features/onescreen/notice-attachments";
 
 // 공지 상태 한글 라벨(raw 코드 UI 노출 금지) — 워커 처리 상태와 동기.
 const STATUS_LABEL: Record<string, { label: string; cls: string }> = {
@@ -46,6 +48,8 @@ export function NoticeFace({
   const [showIndividual, setShowIndividual] = useState(false);
   const [busy, setBusy] = useState(false);
   const [rows, setRows] = useState<NoticeRow[]>(initial);
+  const [atts, setAtts] = useState<NoticeAttachment[]>([]); // 전원 공통 이미지
+  const [uploading, setUploading] = useState(false);
 
   // 선택 반들의 재원생 합집합(학생이 두 반에 걸치면 1회) — 개별 내용 입력 박스의 소스이자 실제 대상 수.
   const selectedStudents = (() => {
@@ -67,6 +71,10 @@ export function NoticeFace({
       return n;
     });
 
+  // 전체 선택/해제 — 반 목록 전부(=발송 가능한 모든 재원생). 학원 전체 공지를 반마다 클릭하지 않게.
+  const allChecked = classes.length > 0 && classes.every((c) => checked.has(c.id));
+  const toggleAll = () => setChecked(allChecked ? new Set() : new Set(classes.map((c) => c.id)));
+
   async function refresh() {
     const res = await listClassNotices();
     if (res.ok) setRows(res.rows ?? []);
@@ -80,7 +88,13 @@ export function NoticeFace({
       if (t) indiv[s.id] = t;
     }
     setBusy(true);
-    const res = await sendClassNotice({ classIds: [...checked], body, individual: indiv, test });
+    const res = await sendClassNotice({
+      classIds: [...checked],
+      body,
+      individual: indiv,
+      test,
+      ...(atts.length ? { attachments: atts } : {}),
+    });
     setBusy(false);
     if (res.ok && res.dryRun) {
       toast.message("dry-run — '보고서 설정' 탭에서 'ClassNote 실제 발송'을 켜야 큐에 올라갑니다");
@@ -100,6 +114,7 @@ export function NoticeFace({
       setChecked(new Set());
       setIndividual({});
       setShowIndividual(false);
+      setAtts([]);
     }
     refresh();
   }
@@ -118,6 +133,21 @@ export function NoticeFace({
           {/* 반 선택 — 데스크톱에선 우측(공통+개별)이 길어지면 함께 늘어 내부 스크롤(높이 균형), 모바일은 360px 캡. */}
           <div className="lg:relative lg:min-h-[240px]">
             <div className="border-line flex max-h-[360px] flex-col overflow-y-auto rounded-md border p-2 lg:absolute lg:inset-0 lg:max-h-none">
+              {canSend && classes.length > 0 ? (
+                <div className="border-line mb-1 flex items-center justify-between gap-2 border-b px-2 pb-1.5">
+                  <span className="text-text-faint text-[11px]">
+                    반 {classes.length}
+                    {selectedCount ? ` · 대상 ${selectedCount}명` : ""}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={toggleAll}
+                    className="text-primary shrink-0 text-[11px] font-medium hover:underline"
+                  >
+                    {allChecked ? "전체 해제" : "전체 선택"}
+                  </button>
+                </div>
+              ) : null}
               {classes.length === 0 ? (
                 <p className="text-text-faint p-2 text-[12px]">발송 허용 과목의 활성 반이 없습니다.</p>
               ) : (
@@ -187,10 +217,22 @@ export function NoticeFace({
               </div>
             ) : null}
 
+            {/* 공통 이미지 첨부 — 강사 원스크린 공지와 같은 컴포넌트(업로드 규칙 단일 소스). */}
+            {canSend ? (
+              <NoticeAttachmentPicker
+                attachments={atts}
+                onChange={setAtts}
+                uploading={uploading}
+                onUploadingChange={setUploading}
+                label="이미지 첨부 (선택 반 재원생 모두에게)"
+              />
+            ) : null}
+
             {canSend ? (
               <div className="flex flex-wrap items-center gap-2">
                 <Button size="sm" disabled={busy || !body.trim() || checked.size === 0} onClick={() => doSend(false)}>
                   발송 {selectedCount > 0 ? `(${selectedCount}명${indivCount ? ` · 개별 ${indivCount}` : ""})` : ""}
+                  {atts.length ? ` · 이미지 ${atts.length}` : ""}
                 </Button>
                 <Button
                   size="sm"
@@ -236,11 +278,42 @@ export function NoticeFace({
                       <td className="text-foreground max-w-[320px] truncate px-3 py-2" title={r.body}>
                         {r.body}
                       </td>
-                      <td className="text-text-dim px-3 py-2">{r.targetCount}명</td>
+                      <td className="text-text-dim px-3 py-2">
+                        {r.targetCount}명
+                        {/* 게시된 글은 **학생 이름**으로 링크 — 번호로는 누구 글인지 알 수 없다. 많으면 앞 6명만. */}
+                        {r.reportLinks.length ? (
+                          <span className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-[11px]">
+                            {r.reportLinks.slice(0, 6).map((l, i) =>
+                              l.url ? (
+                                <a
+                                  key={i}
+                                  href={l.url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  title={l.revoked ? `${l.name} — 회수됨` : l.name}
+                                  className={`underline ${l.revoked ? "text-text-faint line-through" : "text-primary"}`}
+                                >
+                                  {l.name}
+                                </a>
+                              ) : (
+                                <span key={i} className="text-text-faint" title="주소를 못 찾아 링크 없음">
+                                  {l.name}
+                                </span>
+                              ),
+                            )}
+                            {r.reportLinks.length > 6 ? (
+                              <span className="text-text-faint">외 {r.reportLinks.length - 6}명</span>
+                            ) : null}
+                          </span>
+                        ) : null}
+                      </td>
                       <td className="px-3 py-2">
                         <span className={`text-[11px] font-bold ${st.cls}`}>{st.label}</span>
                         {failNotes.length ? (
-                          <span className="text-text-faint ml-1.5 text-[11px]" title={failNotes.map((f) => `${f.board}: ${f.note ?? ""}`).join("\n")}>
+                          <span
+                            className="text-text-faint ml-1.5 text-[11px]"
+                            title={failNotes.map((f) => `${f.studentName}: ${f.note ?? ""}`).join("\n")}
+                          >
                             실패 {failNotes.length}
                           </span>
                         ) : null}
