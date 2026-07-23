@@ -1,4 +1,4 @@
--- 0142a: 수업 보고서 ClassNote **발송 실패 → 담당 강사에게 알림**
+-- 0143a: 수업 보고서 ClassNote **발송 실패 → 담당 강사에게 알림**
 --
 -- 배경(원장 제보 2026-07-23): 손민우 학생 07-22 보고서가 `해당 학생 없음`(= 학부모가 ClassNote 알림장에
 -- 연결되지 않음)으로 3회 재시도 끝에 failed. 그런데 **원장에게 로그로만** 남아, 정작 학부모를 초대해야 할
@@ -90,4 +90,4 @@ when (NEW.classnote_status = 'failed' and OLD.classnote_status is distinct from 
 execute function public.notify_report_send_failed();
 
 comment on function public.notify_report_send_failed() is
-  '수업 보고서 ClassNote 발송이 최종 실패(failed)하면 담당 강사(없으면 master)에게 벨 알림 — 0142a';
+  '수업 보고서 ClassNote 발송이 최종 실패(failed)하면 담당 강사(없으면 master)에게 벨 알림 — 0143a';
