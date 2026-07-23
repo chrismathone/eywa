@@ -13,6 +13,8 @@ export type GridBulkActions = {
   onAutoWriteAll: (keys?: string[]) => void; // 선택(또는 전체) 행 자동작성
   onClassNotice?: (keys?: string[]) => void; // 선택(없으면 표시 전체) 학생 학부모 공지 — 진도 무관
   onBulkApply: (keys: string[], patch: BulkPatch, onlyEmpty: boolean) => void; // 값 일괄 적용(1-2) — 진도 필터 없는 raw 행 대상
+  // 맨 위 행의 수업 내용(진도·교재·오늘 과제)을 아래 행에 복사 — 같은 진도를 학생마다 다시 고르지 않게.
+  onCopyFirstRow?: (keys: string[], overwrite: boolean) => void;
   // 이전 회차 일괄 가져오기(G5 얕은판) — 선택(없으면 표시 전체) 행의 **빈 칸만** planPrevFill로 채움(특이사항·교재 제외).
   onBulkImportPrev?: (keys?: string[]) => void;
   // 선택 행 일괄 첨부 — 같은 시험지·판서 사진을 여러 학생에게 한 번에. **선택이 있을 때만** 노출(전체 대상 오첨부 방지).

@@ -7,6 +7,7 @@ import { moveInOrder } from "../student-order";
 import type { OneScreenStudent } from "../types";
 import type { SubjectReport } from "./report-card";
 import { BulkApplyPopover } from "./bulk-apply";
+import { CopyFirstRowPopover } from "./copy-first-row";
 import { ClassNarrativePopover } from "./class-narrative";
 import { GridToolbar, type GridBulkActions } from "./grid-toolbar";
 import { GridBodyRow, type GridConfig, type GridFieldHandlers, type GridRowActions } from "./grid-row";
@@ -90,6 +91,9 @@ export function OneScreenGrid({
   const autoWritable = sendableRows.filter(noDraft).length;
   const selectedAutoWritable = sendableRows.filter((r) => checked.has(r.key) && noDraft(r)).length;
   const hasPrev = rows.some((r) => r.subject.prevReport); // 참고행 데이터가 있을 때만 토글 노출
+  // '맨 위 행 복사' 표시용 — 선택이 있으면 선택 행, 없으면 표시 전체(핸들러와 같은 규약).
+  const copyRows = selectedKeys.length ? rows.filter((r) => selectedKeys.includes(r.key)) : rows;
+  const copySource = copyRows[0];
   const allChecked = rows.length > 0 && selectedKeys.length === rows.length;
   const toggleRow = (k: string) =>
     setChecked((prev) => {
@@ -181,6 +185,16 @@ export function OneScreenGrid({
               onApply={(patch, onlyEmpty) => bulkActions.onBulkApply(selectedKeys, patch, onlyEmpty)}
               disabled={bulkGen}
             />
+            {/* 맨 위 행 복사 — 대상은 다른 일괄 작업과 같은 규약(선택 있으면 선택, 없으면 표시 전체). */}
+            {bulkActions.onCopyFirstRow ? (
+              <CopyFirstRowPopover
+                firstLabel={copySource ? copySource.student.name : null}
+                targetCount={Math.max(0, copyRows.length - 1)}
+                selectedCount={selectedKeys.length}
+                onCopy={(overwrite) => bulkActions.onCopyFirstRow?.(selectedKeys, overwrite)}
+                disabled={bulkGen}
+              />
+            ) : null}
             {/* 반 공통 서술(G6) — 항상 노출·반 미특정(전체/동명 모호)이면 비활성+안내(순서 버튼 #22 발견성 패턴). */}
             {narrative ? (
               <ClassNarrativePopover

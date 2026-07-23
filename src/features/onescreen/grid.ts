@@ -306,3 +306,87 @@ export function planBulkPrevFill(
   }
   return out;
 }
+
+// ───────────────────────── 첫 행 내용 아래로 복사 (2026-07-23) ─────────────────────────
+
+/**
+ * 같은 수업을 들은 반은 **진도·교재·오늘 과제가 대체로 같다**. 그런데 표에서는 학생마다 진도 피커를
+ * 다시 열어 고르고 있었다(원장 2026-07-23: "같은 진도일 때 일일이 진도선택 등 고르지 않도록").
+ * → 맨 위 행에 한 번 입력하고 **아래 행 전부에 복사**한다.
+ *
+ * ⚠️ **복사하는 것은 '수업'이지 '학생'이 아니다.** 진도·교재·오늘 과제만 옮기고
+ *    테스트 점수·태도·과제 수행·학부모 문구는 손대지 않는다 — 그건 학생마다 다른 **개별 사실**이라
+ *    한 명의 값을 반 전체에 붙이면 기록이 거짓이 된다(태도·과제를 일부러 통일하려면 '값 일괄 입력'으로
+ *    강사가 값을 **직접 골라** 넣는다).
+ * ⚠️ **다른 과목 행에는 복사하지 않는다** — 수학 진도가 영어 행에 들어가면 학부모에게 그대로 나간다.
+ * ⚠️ **발송 완료 행은 제외** — 발송분 수정 금지(원장 2026-07-22)와 같은 규칙.
+ */
+export type CopyRowValues = {
+  subjectKey: string; // 과목 일치 판정 키(미지정은 "math"로 간주 — isMathSubject와 동일 규칙)
+  today: string;
+  textbook: string;
+  homeworkToday: string;
+};
+
+export type CopyRowTarget = CopyRowValues & {
+  studentId: string;
+  subjectName: string;
+  subjectIndex: number;
+  actionable: boolean; // isRowActionable(subject, "save") — 발송 완료면 false
+};
+
+export type CopyRowPlan = {
+  studentId: string;
+  subjectName: string;
+  subjectIndex: number;
+  set: { today?: string; textbook?: string; homeworkToday?: string };
+};
+
+export type CopyRowResult = {
+  plan: CopyRowPlan[];
+  skippedSent: number; // 발송 완료라 건너뜀
+  skippedSubject: number; // 과목이 달라 건너뜀
+  skippedFilled: number; // 이미 값이 있어 건너뜀(덮어쓰기 끔)
+};
+
+/** 원본 행에서 실제로 복사할 값만 추린다(빈 값은 복사하지 않음 — 지우기가 아니다). */
+export function copyableFields(source: CopyRowValues): { today?: string; textbook?: string; homeworkToday?: string } {
+  const out: { today?: string; textbook?: string; homeworkToday?: string } = {};
+  if (source.today.trim()) out.today = source.today;
+  if (source.textbook.trim()) out.textbook = source.textbook;
+  if (source.homeworkToday.trim()) out.homeworkToday = source.homeworkToday;
+  return out;
+}
+
+export function planCopyFirstRow(
+  source: CopyRowValues,
+  targets: readonly CopyRowTarget[],
+  opts: { overwrite: boolean },
+): CopyRowResult {
+  const fields = copyableFields(source);
+  const srcKey = source.subjectKey || "math";
+  const res: CopyRowResult = { plan: [], skippedSent: 0, skippedSubject: 0, skippedFilled: 0 };
+  if (Object.keys(fields).length === 0) return res;
+
+  for (const t of targets) {
+    if (!t.actionable) {
+      res.skippedSent++;
+      continue;
+    }
+    if ((t.subjectKey || "math") !== srcKey) {
+      res.skippedSubject++;
+      continue;
+    }
+    const set: CopyRowPlan["set"] = {};
+    if (fields.today !== undefined && (opts.overwrite || !t.today.trim())) set.today = fields.today;
+    if (fields.textbook !== undefined && (opts.overwrite || !t.textbook.trim())) set.textbook = fields.textbook;
+    if (fields.homeworkToday !== undefined && (opts.overwrite || !t.homeworkToday.trim()))
+      set.homeworkToday = fields.homeworkToday;
+    if (Object.keys(set).length === 0) {
+      res.skippedFilled++;
+      continue;
+    }
+    res.plan.push({ studentId: t.studentId, subjectName: t.subjectName, subjectIndex: t.subjectIndex, set });
+  }
+  return res;
+}

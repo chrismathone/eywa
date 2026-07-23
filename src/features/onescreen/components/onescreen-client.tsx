@@ -52,6 +52,7 @@ import {
   planPrevFill,
   planBulkPrevFill,
   planPrevComments,
+  planCopyFirstRow,
   rowInClass,
   summarizeSendGaps,
   type BulkPatch,
@@ -765,6 +766,68 @@ export function OneScreenClient({
       if (p.set.homeworkToday !== undefined) setHomeworkTodayFor(p.studentId, p.subjectName, p.set.homeworkToday);
     }
     toast.success(`${plan.length}행에 일괄 적용했습니다`);
+  }
+  /**
+   * 맨 위 행의 **수업 내용**(진도·교재·오늘 과제)을 아래 행 전부에 복사.
+   * 대상 = 선택 행이 있으면 그 행들, 없으면 표시 전체(반 필터 반영) — 다른 일괄 작업과 같은 규약.
+   * ⚠️ 점수·태도·과제 수행·학부모 문구는 **복사하지 않는다**(학생마다 다른 개별 사실 — grid.ts 주석 참조).
+   */
+  function copyFirstRowDown(keys: string[], overwrite: boolean) {
+    const all = buildGridRows(visible).filter((r) => rowInClass(r.subject, activeClassFilter));
+    const keySet = new Set(keys);
+    const rows = keys.length ? all.filter((r) => keySet.has(r.key)) : all;
+    const [first, ...rest] = rows;
+    if (!first || rest.length === 0) {
+      toast.message("복사할 아래 행이 없습니다");
+      return;
+    }
+    const res = planCopyFirstRow(
+      {
+        subjectKey: first.subject.subjectKey ?? "math",
+        today: first.subject.today ?? "",
+        textbook: first.subject.textbook ?? "",
+        homeworkToday: first.subject.homeworkToday ?? "",
+      },
+      rest.map((r) => ({
+        studentId: r.student.id,
+        subjectName: r.subject.name,
+        subjectIndex: r.subjectIndex,
+        subjectKey: r.subject.subjectKey ?? "math",
+        today: r.subject.today ?? "",
+        textbook: r.subject.textbook ?? "",
+        homeworkToday: r.subject.homeworkToday ?? "",
+        actionable: isRowActionable(r.subject, "save"),
+      })),
+      { overwrite },
+    );
+    if (res.plan.length === 0) {
+      // 왜 아무 일도 안 일어났는지 말해준다 — "눌렀는데 무반응"이 되지 않게.
+      const why = [
+        res.skippedSent ? `발송 완료 ${res.skippedSent}행` : "",
+        res.skippedSubject ? `다른 과목 ${res.skippedSubject}행` : "",
+        res.skippedFilled ? `이미 입력됨 ${res.skippedFilled}행` : "",
+      ].filter(Boolean);
+      toast.message(why.length ? `복사할 칸이 없습니다 — ${why.join(" · ")}` : "맨 위 행에 먼저 진도를 입력하세요");
+      return;
+    }
+    for (const p of res.plan) {
+      if (p.set.today !== undefined) setProgressFor(p.studentId, p.subjectIndex, p.set.today);
+      if (p.set.textbook !== undefined) setTextbookFor(p.studentId, p.subjectName, p.set.textbook);
+      if (p.set.homeworkToday !== undefined) setHomeworkTodayFor(p.studentId, p.subjectName, p.set.homeworkToday);
+    }
+    const skipped = res.skippedSent + res.skippedSubject + res.skippedFilled;
+    toast.success(
+      `${first.student.name} 행을 ${res.plan.length}행에 복사했습니다` +
+        (skipped
+          ? ` · 건너뜀 ${skipped}행(${[
+              res.skippedSent ? `발송완료 ${res.skippedSent}` : "",
+              res.skippedSubject ? `다른 과목 ${res.skippedSubject}` : "",
+              res.skippedFilled ? `이미 입력 ${res.skippedFilled}` : "",
+            ]
+              .filter(Boolean)
+              .join(", ")})`
+          : ""),
+    );
   }
   // 이전 회차 가져오기(1-3) — 그 행의 **빈 칸만** 채움(진도·태도·과제·오늘 과제).
   // ⚠️ 특이사항은 채우지 않음 — prevReport.note는 학부모 발송 본문(notes)이라 특이사항이 아니다.
@@ -1616,6 +1679,7 @@ export function OneScreenClient({
             onAutoWriteAll: autoWriteAllVisible,
             onClassNotice: openNoticeForRows,
             onBulkApply: bulkApplyValues,
+            onCopyFirstRow: copyFirstRowDown,
             onBulkImportPrev: bulkImportPrev,
             onBulkAttach: (keys, files) => void bulkAttach(keys, files),
           }}

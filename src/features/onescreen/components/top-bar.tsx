@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useRef, type ReactNode } from "react";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { addDays } from "@/lib/date-kst";
 import type { OneScreenView } from "../view";
@@ -50,6 +50,7 @@ export function OneScreenTopBar({
     { value: "A", label: "단일 A" },
     { value: "B", label: "2문단 B" },
   ];
+  const dateRef = useRef<HTMLInputElement>(null);
   const isToday = date >= todayYmd; // 오늘(또는 이상) = 다음날 이동 막고 '오늘' 버튼 숨김
   return (
     <div className="bg-card border-line shadow-card flex flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl border px-3 py-2">
@@ -69,15 +70,31 @@ export function OneScreenTopBar({
           </button>
           <div className="min-w-[128px] text-center">
             <p className="micro text-text-faint">{isToday ? "수업 마감" : "지난 마감"}</p>
-            <label className="relative block cursor-pointer">
+            {/* 날짜 클릭 = 달력 열기.
+                🔴 예전엔 투명 `<input type="date">`를 겹쳐 두기만 했는데, 크로미움은 **달력 아이콘
+                (::-webkit-calendar-picker-indicator)을 눌러야** 달력이 열린다 — 투명 입력의 가운데를
+                누르면 포커스만 가고 아무 일도 안 일어났다(원장 제보 2026-07-23 "달력뷰가 안 되는 것 같네").
+                → ① 클릭 때 `showPicker()`를 직접 호출하고, ② 달력 아이콘을 입력 전체로 늘려 어디를 눌러도
+                열리게 이중으로 보장한다(showPicker 미지원 브라우저 폴백). */}
+            <label
+              className="relative block cursor-pointer"
+              onClick={() => {
+                // showPicker는 사용자 제스처 밖이거나 미지원이면 throw — 실패해도 아래 CSS 폴백이 받는다.
+                try {
+                  dateRef.current?.showPicker?.();
+                } catch {
+                  /* 폴백: 달력 아이콘이 입력 전체를 덮고 있어 이 클릭이 그대로 picker를 연다 */
+                }
+              }}
+            >
               <p className="text-foreground text-[13px] font-bold">{today}</p>
-              {/* 네이티브 date input을 겹쳐 라벨 클릭 = 달력 열기(표시는 한글 날짜 유지). */}
               <input
+                ref={dateRef}
                 type="date"
                 value={date}
                 max={todayYmd}
                 onChange={(e) => e.target.value && onDateChange(e.target.value)}
-                className="absolute inset-0 cursor-pointer opacity-0"
+                className="absolute inset-0 cursor-pointer opacity-0 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:inset-0 [&::-webkit-calendar-picker-indicator]:h-full [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:cursor-pointer"
                 aria-label="날짜 선택"
               />
             </label>
