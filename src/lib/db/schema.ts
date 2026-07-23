@@ -178,6 +178,9 @@ export const users = pgTable(
     // 교재요청 학부모 발송 멘트(0129a) — 강사가 마지막에 쓴 멘트 = 다음 발송 기본값(PC 공유라 브라우저 저장 불가).
     // 소비: prepareTextbookNotice. 쓰기: saveMyTextbookMent(본인만, admin client). null=미설정(기본 템플릿).
     textbookNoticeMent: text("textbook_notice_ment"),
+    // 계정 귀속 화면 설정(0146a) — 화면별 네임스페이스 1단({"timetable":{grades,…}}).
+    // 저장은 **해당 화면 키만 병합**(다른 화면 설정을 지우지 않게). 소비: /timetable 서버 렌더.
+    uiPrefs: jsonb("ui_prefs").default({}).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
