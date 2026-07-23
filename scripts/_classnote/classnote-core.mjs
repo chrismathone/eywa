@@ -158,7 +158,7 @@ const IMG_ATTACHMENT_RE = /\.(jpe?g|png|webp|gif)(\?|$)/i;
  *    완결(ParentReportCard). ClassNote가 attached_images를 가로로 나열해 세로가 안 됐던 문제를 스샷 내 배치로 우회.
  *    → 이미지만 있는 리포트는 이 경로로 **진입하지 않고**(진입 조건 fileAtts.length) Cloud Run 스샷 경로로 게시된다.
  */
-export async function sendReportViaApi(adminPage, { report, studentName, boardId, screenshot, shareUrl, base, fileAtts, children, log }) {
+export async function sendReportViaApi(adminPage, { report, studentName, boardId, screenshot, shareUrl, base, fileAtts, children, boardFallback = null, log }) {
   // kage 업로드는 작성폼 네이티브 file input 경유(수동 FormData는 415) → adminPage를 add 폼으로 이동.
   // 이후 API 호출(resolve·post)은 same-origin이라 add 폼에서도 그대로 유효.
   await adminPage.goto(`${CLASSNOTE_BASE}/service/report/add`, { waitUntil: "domcontentloaded", timeout: 30000 });
@@ -232,8 +232,17 @@ export async function sendReportViaApi(adminPage, { report, studentName, boardId
   if (!attachedFiles.length) return { ok: false, error: `파일 첨부 실패 — ${failures.join(" / ") || "원인 불명"}` };
 
   // 3) board → child → enrollment
-  const enrolled = await resolveBoardChildEnrollments(adminPage, boardId, studentName, children);
-  if (!enrolled.length) return { ok: false, error: "원아·enrollment 해석 실패(미가입/미배정)" };
+  // 이름으로 못 찾으면 **보드가 곧 매핑** 폴백(생년 대조 통과분만) — 학부모가 ClassNote에서 원아 이름을
+  // 바꿔도 배정이 살아 있으면 발송된다(2026-07-23 박서연E 사례).
+  let rejected = null;
+  const enrolled = await resolveBoardChildEnrollments(adminPage, boardId, studentName, children, {
+    ...(boardFallback ?? {}),
+    onReject: (v) => {
+      rejected = v;
+    },
+  });
+  if (!enrolled.length)
+    return { ok: false, error: rejected?.reason ?? "원아·enrollment 해석 실패(미가입/미배정)" };
 
   // 4) 게시 — 이중 계정(부모·본인)이면 전원
   for (const { child, enrollment } of enrolled) {
@@ -486,6 +495,7 @@ export async function processQueueOnce(sql, browser, opts) {
         const result = await sendReportViaApi(adminPage, {
           report: r, studentName, boardId, screenshot: buf, shareUrl: `${shareBase}/r/${r.share_token}`,
           base, fileAtts, children: childrenCache, log,
+          boardFallback: { centerId, grade: stu?.grade ?? null, schoolYear: kstSchoolYear() },
         });
         if (result.ok) {
           await sql`update lesson_reports set classnote_status='success', classnote_sent_at=now(), classnote_error=null where id=${r.id}`;

@@ -7,6 +7,8 @@
  * 배경/구조 근거 = docs/classnote-integration.md §3 "왜 학생 1명=반 1개인가".
  */
 import { chromium } from "@playwright/test";
+// 순수 판정(의존성 0)만 가져온다 — 반대 방향 import 금지(board-safety 테스트가 playwright를 끌면 안 됨).
+import { acceptBoardMembers, kstSchoolYear } from "./board-safety.mjs";
 
 export const CLASSNOTE_BASE = "https://www.classnote.com";
 
@@ -442,7 +444,7 @@ export async function uploadToKage(page, inputTestId, { name, mimeType, buffer }
  * 보드 → 원아 → enrollment 해석 — 이름 매칭 원아들 중 이 보드에 활성 배정된 `{child, enrollment}` 목록.
  * 이중 계정(부모·본인 각자 가입)이면 여럿. notice-core processTarget 해석부와 동일 로직(단일화).
  */
-export async function resolveBoardChildEnrollments(page, boardId, studentName, children) {
+export async function resolveBoardChildEnrollments(page, boardId, studentName, children, fallback = null) {
   const clean = (studentName || "").replace(/[a-zA-Z]/g, "").trim();
   const cands = children.filter((c) => {
     const keys = childKeys(c.name);
@@ -454,7 +456,36 @@ export async function resolveBoardChildEnrollments(page, boardId, studentName, c
     const e = (detail.enrollment ?? []).find((x) => x.belong_to_class === boardId && !x.removed_child);
     if (e) enrolled.push({ child: c, enrollment: e });
   }
-  return enrolled;
+  // 이름으로 찾았으면 기존 그대로(동작 불변). 못 찾았을 때만 아래 폴백이 돈다.
+  if (enrolled.length || !fallback?.centerId) return enrolled;
+
+  // ── 폴백: **보드가 곧 매핑이다**(원장 2026-07-23) ─────────────────────────────────────────
+  // 1인 보드는 학생 1명 = 보드 1개다. 보드를 이름으로 특정한 순간 매핑은 끝났고, 거기 배정된 원아가
+  // 곧 그 학생이다. 학부모가 원아 이름을 바꿔도(`박서연E`→`서연`) 배정은 그대로이므로 이름으로 다시
+  // 거르면 멀쩡한 발송이 "미배정"으로 막힌다. 대신 **생년 대조(acceptBoardMembers)를 반드시 통과**시켜
+  // 엉뚱한 집이 붙은 보드는 여전히 차단한다(모르면 거부).
+  const members = await fetchBoardChildren(page, fallback.centerId, boardId).catch(() => null);
+  if (!Array.isArray(members)) {
+    fallback.onReject?.({ code: "lookup_failed", reason: "ClassNote 원아 조회에 실패해 보류합니다" });
+    return [];
+  }
+  const verdict = acceptBoardMembers({
+    members,
+    grade: fallback.grade ?? null,
+    schoolYear: fallback.schoolYear ?? kstSchoolYear(),
+  });
+  if (!verdict.ok) {
+    fallback.onReject?.(verdict);
+    return [];
+  }
+  const viaBoard = [];
+  for (const m of verdict.members) {
+    const detail = await fetchChildDetail(page, m.id).catch(() => null);
+    const e = (detail?.enrollment ?? []).find((x) => x.belong_to_class === boardId && !x.removed_child);
+    if (e) viaBoard.push({ child: m, enrollment: e, viaBoard: true });
+  }
+  if (!viaBoard.length) fallback.onReject?.({ code: "no_member", reason: "보드 미배정(배정 필요)" });
+  return viaBoard;
 }
 
 /** 알림장 게시(내부 API) — attached_images/attached_files 선택 포함. 응답은 빈 201이라 status만. */
