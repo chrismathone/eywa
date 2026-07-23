@@ -25,6 +25,7 @@ import { processNoticesOnce } from "./classnote-notice-core.mjs";
 import { provisionDailyOnce } from "./classnote-provision-core.mjs";
 import { pollParentCommentsOnce, pollParentPostsOnce } from "./classnote-feed-core.mjs";
 import { pollReportReadsOnce } from "./classnote-read-core.mjs";
+import { snapshotBoardRosterOnce } from "./classnote-roster-core.mjs";
 
 const POLL_MS = 15_000;
 const POST = process.argv.includes("--post");
@@ -202,6 +203,15 @@ async function main() {
         return { ran: false };
       });
       if (rres.ran) noteResult("reads", rres);
+      // 7) 반 보드 구성 스냅샷(0142a, 읽기 전용 GET) — eywa 반 ↔ ClassNote 반 보드 대조용 원본.
+      //    ⚠️ ClassNote에 아무것도 쓰지 않으므로 --post와 무관하게 돈다(구성은 사실 데이터).
+      //    KST 05시 이후 하루 1회. 영어는 반 보드로 운영돼 학생 배정이 어긋나면 발송이 조용히 실패한다.
+      const bres = await snapshotBoardRosterOnce(db(), b, { tenant, log }).catch((e) => {
+        log(`[roster] 오류(내일 재시도): ${e.message}`);
+        noteResult("roster", { error: e.message });
+        return { ran: false };
+      });
+      if (bres.ran) noteResult("roster", bres);
     } catch (e) {
       log(`폴링 오류(다음 폴에서 재시도): ${e.message}`);
       await dropDb();

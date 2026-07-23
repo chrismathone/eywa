@@ -274,3 +274,37 @@ describe("폴백 템플릿 개행 접기 — 학부모 문장이 줄로 쪼개�
     expect(r).toContain("수학 원과 직선의 위치 관계, 원의 접선의 방정식(1), 원의 접선의 방정식(2)");
   });
 });
+
+// 원장 2026-07-23: 과제 '없음'은 미제출이 아니라 '해당 없음' — 문장이 어색해지지 않게.
+describe("과제 '없음' 문장 처리", () => {
+  const base = makeStudent({
+    name: "김담희",
+    subjects: [{ name: "수학", prev: "", today: "미분계수", homeworkToday: "없음" }],
+    tests: { daily: { score: null, max: 10, prevScore: null }, check: { score: null, max: 10, prevScore: null } },
+    attitude: "아주 좋음",
+    homework: "없음",
+  });
+
+  it("오늘 과제가 '없음'이면 전용 문장", () => {
+    const r = buildSubjectReport(base, 0);
+    expect(r).toContain("오늘은 따로 내드린 과제가 없습니다.");
+    expect(r).not.toContain("오늘 과제는 없음입니다");
+  });
+
+  it("지난 과제가 '없음'이면 과제 절을 생략(태도만)", () => {
+    const r = buildSubjectReport(base, 0);
+    expect(r).toContain("수업 태도는 '아주 좋음'입니다.");
+    expect(r).not.toContain("과제는 없음 상태입니다");
+  });
+
+  it("'미제출'은 그대로 문장에 남는다(구분 유지)", () => {
+    const st = makeStudent({
+      name: "김담희",
+      subjects: [{ name: "수학", prev: "", today: "미분계수" }],
+      tests: { daily: { score: null, max: 10, prevScore: null }, check: { score: null, max: 10, prevScore: null } },
+      attitude: "아주 좋음",
+      homework: "미제출",
+    });
+    expect(buildSubjectReport(st, 0)).toContain("과제는 미제출 상태입니다.");
+  });
+});

@@ -541,7 +541,13 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
       if (su.classId) su.attendanceRaw = attByRow.get(`${os.id}::${su.classId}`) ?? null;
     }
     const pr = priorReport.get(os.id);
-    if (pr) {
+    // 🔴 이 폴백은 **학생 단위**(반 무관) 직전 회차다 — 정규/특강을 구분하지 못한다(원장 2026-07-23).
+    //    특강 행만 있는 학생은 없으므로(특강은 정규와 함께 듣는다) 특강 행에 이 값이 들어가면
+    //    "이전 진도"·"지난 회차 대비 ▲2"가 **정규 수업 기준**으로 표시된다. 행별 매칭(priorMatched)이
+    //    성공하면 아래에서 덮이지만, 특강 첫 수업이면 덮을 게 없어 정규 값이 그대로 남는다.
+    //    → 특강 행이 하나라도 있으면 이 학생단위 폴백을 통째로 끄고, 행별 매칭에만 맡긴다.
+    const hasSpecialRow = os.subjects.some((su) => su.isSpecial);
+    if (pr && !hasSpecialRow) {
       const { daily, check } = parseExamScores(pr.examInfo);
       os.tests.daily.prevScore = daily;
       os.tests.check.prevScore = check;

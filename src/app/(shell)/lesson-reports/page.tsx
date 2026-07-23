@@ -4,6 +4,7 @@ import { PageHeader } from "@/components/page-header";
 import { FaceTabs, type Face } from "@/components/face-tabs";
 import { getClassnoteQueue, getReportFilterOptions, getWeeklyWritingRates, getReportTeacherCandidates } from "@/features/report-admin/server/queries";
 import { getEdutrixUnmapped } from "@/features/report-admin/server/edutrix-map-queries";
+import { getBoardRosterCheck } from "@/features/report-admin/server/board-roster-queries";
 import { listReports } from "@/features/report-admin/server/actions";
 import { defaultReportFilters } from "@/features/report-admin/report-filters";
 import { kstToday } from "@/lib/date-kst";
@@ -17,6 +18,7 @@ import { ReportList } from "./_components/report-list";
 import { ComposeTab } from "./_components/compose-tab";
 import { NoticeFace } from "./_components/notice-face";
 import { EdutrixUnmappedCard } from "./_components/edutrix-unmapped-card";
+import { BoardRosterCard } from "./_components/board-roster-card";
 import { ReportSection } from "@/app/(shell)/owner/_components/report-section";
 import { AiMentSection } from "@/app/(shell)/owner/_components/ai-ment-section";
 
@@ -25,14 +27,14 @@ export const metadata = { title: "수업보고서 — eywa" };
 
 type Sp = Record<string, string | undefined>;
 // 관리 5면(작성률·미매핑·목록·공지·직접발송) + 설정 2면(보고서 표시·AI 멘트, owner 쓰기 권한 있을 때만).
-type Tab = "writing" | "unmapped" | "list" | "notice" | "compose" | "report" | "ai_ment";
+type Tab = "writing" | "unmapped" | "boards" | "list" | "notice" | "compose" | "report" | "ai_ment";
 
 // 설정 2탭(report·ai_ment)은 saveOwnerSection/savePrompt가 owner 쓰기 게이트라 — owner를 못 쓰는
 // 계정(위임 안 받은 admin/manager)에겐 폼을 보여주면 '저장 거부'가 된다. canOwner일 때만 탭을 노출.
 // 직접 발송(compose)은 lesson_reports 쓰기 권한(canSend) 있을 때만(관리자 발송).
 function resolveTab(sp: Sp, canOwner: boolean, canSend: boolean): Tab {
   const t = sp.tab;
-  if (t === "unmapped" || t === "list" || t === "writing" || t === "notice") return t;
+  if (t === "unmapped" || t === "list" || t === "writing" || t === "notice" || t === "boards") return t;
   if (t === "compose" && canSend) return t;
   if ((t === "report" || t === "ai_ment") && canOwner) return t;
   return "writing";
@@ -56,6 +58,7 @@ export default async function LessonReportsPage({ searchParams }: { searchParams
   const FACES: Face[] = [
     { key: "writing", label: "작성률", href: "/lesson-reports?tab=writing", group: "관리" },
     { key: "unmapped", label: "미매핑", href: "/lesson-reports?tab=unmapped", group: "관리" },
+    { key: "boards", label: "반 구성", href: "/lesson-reports?tab=boards", group: "관리" },
     { key: "list", label: "목록", href: "/lesson-reports?tab=list", group: "관리" },
     { key: "notice", label: "반 공지", href: "/lesson-reports?tab=notice", group: "관리" },
     ...(canSendReports
@@ -79,6 +82,8 @@ export default async function LessonReportsPage({ searchParams }: { searchParams
         }))
       : tab === "unmapped"
         ? getEdutrixUnmapped().then((edutrixMap) => ({ edutrixMap }))
+        : tab === "boards"
+          ? getBoardRosterCheck().then((boardRoster) => ({ boardRoster }))
         : tab === "report"
           ? Promise.all([getTenantSettings(), getReportTeacherCandidates()]).then(([settings, cand]) => ({
               reportSettings: settings.report,
@@ -144,6 +149,14 @@ export default async function LessonReportsPage({ searchParams }: { searchParams
       ) : null}
 
       {tab === "unmapped" && "edutrixMap" in tabData ? <EdutrixUnmappedCard view={tabData.edutrixMap} /> : null}
+
+      {tab === "boards" && "boardRoster" in tabData ? (
+        tabData.boardRoster ? (
+          <BoardRosterCard view={tabData.boardRoster} />
+        ) : (
+          <p className="text-text-faint text-sm">반 구성을 불러올 수 없습니다.</p>
+        )
+      ) : null}
 
       {tab === "list" && "filterOptions" in tabData && "initialList" in tabData ? (
         <ReportList options={tabData.filterOptions} initial={tabData.initialList} canSend={canSendReports} todayYmd={kstToday()} />

@@ -9,7 +9,7 @@ import { parentUnreadBadge, progressAnomalyBadge } from "../roster-signals";
 import { splitLessons } from "../curriculum";
 import { AttendancePills, type BasicAttendance } from "./attendance-pills";
 import { DeltaChip } from "./delta-chip";
-import { PillGroup } from "./pill-group";
+import { FieldSelect } from "./field-select";
 import { isImageAttachment } from "../attachment-utils";
 import { splitComment, joinComment } from "../comment-paragraphs";
 import type { OneScreenStudent, Subject, TestScore } from "../types";
@@ -323,21 +323,21 @@ export function ReportCard({
 
         <div>
           <p className="micro text-text-faint mb-1.5">수업 태도</p>
-          {/* 1클릭 pill — 재클릭 해제는 부모 setAttitude가 처리(같은 값이면 null). */}
-          <PillGroup
+          {/* 원장 2026-07-23: 알약 → 드롭다운(표 모드와 동일 규약). 해제는 "선택 안 함". */}
+          <FieldSelect
             options={attitudes}
             value={student.attitude}
-            onSelect={onAttitude}
+            onSelect={(v) => onAttitude(v ?? "")}
             ariaLabel={`${student.name} 수업 태도`}
           />
         </div>
 
         <div>
           <p className="micro text-text-faint mb-1.5">과제</p>
-          <PillGroup
+          <FieldSelect
             options={homeworks}
             value={student.homework || null}
-            onSelect={onHomework}
+            onSelect={(v) => onHomework(v ?? "")}
             ariaLabel={`${student.name} 과제 수행`}
           />
           {/* 오늘 과제(숙제 내용) — 0096a(edutrix 패리티, 사용률 90%). 위 칩은 '지난 과제 수행', 이건 '오늘 내줄 숙제'.

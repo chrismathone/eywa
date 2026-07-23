@@ -40,6 +40,14 @@ describe("워커가 쓴 한글 안내문은 요약하지 않고 그대로", () =
     expect(humanizeClassnoteError(raw)).toBe(raw);
   });
 
+  it("상류 API의 짧은 코드성 한글 '해당 학생 없음'은 조치가 보이게 바꾼다", () => {
+    // 한글이라 isHumanKorean을 통과해 그대로 노출됐지만, 강사는 무엇을 해야 할지 알 수 없었다(손민우 07-22).
+    const got = humanizeClassnoteError("해당 학생 없음");
+    expect(got).toContain("학부모");
+    expect(got).toContain("초대");
+    expect(got).not.toBe("해당 학생 없음");
+  });
+
   it("기술 원문(영문·스택·URL)은 여전히 한글 요약으로", () => {
     expect(humanizeClassnoteError("page.goto: net::ERR_NAME_NOT_RESOLVED at https://x/y")).toContain(
       "발송 PC가 보고서 주소에 접속하지 못함",
