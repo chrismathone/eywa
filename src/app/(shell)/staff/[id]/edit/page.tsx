@@ -6,9 +6,9 @@ import { requireAccess } from "@/lib/auth/require-access";
 import { BackLink } from "@/components/back-link";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canManageStaff } from "@/lib/auth/role-hierarchy";
-import { getStaffById } from "@/features/staff/server/queries";
+import { getStaffById, hasStaffEverSignedIn } from "@/features/staff/server/queries";
 import { getTenantSettings } from "@/features/owner/server/queries";
-import { isImportArtifactEmail } from "@/features/staff/email";
+import { canEditLoginEmail } from "@/features/staff/email";
 import { StaffForm } from "../../_components/staff-form";
 import { PAYROLL_ENABLED } from "@/features/payroll/config";
 
@@ -26,11 +26,16 @@ export default async function EditStaffPage({
   }
 
   const { id } = await params;
-  const [staff, { operations }] = await Promise.all([getStaffById(id), getTenantSettings()]);
+  const [staff, { operations }, everSignedIn] = await Promise.all([
+    getStaffById(id),
+    getTenantSettings(),
+    hasStaffEverSignedIn(id),
+  ]);
   if (!staff) notFound();
-  // canEditEmail: 임포트 산물 이메일(형식불량·@imported.local)만 편집 허용 — 실 로그인 이메일은 잠금.
+  // canEditEmail: 임포트 산물 이메일 + **아직 로그인 전인 초대 계정**(오타 교정 통로)만 편집 허용.
+  // 한 번이라도 로그인한 계정의 이메일은 잠금(그 사람의 실제 로그인 수단 = 조용한 탈취 통로 방지).
   // auth 계정 보유 시 서버 액션이 auth.users 이메일을 직접 변경(미러 트리거가 public 동기, 0075a).
-  const canEditEmail = isImportArtifactEmail(staff.email);
+  const canEditEmail = canEditLoginEmail(staff.email, everSignedIn);
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">

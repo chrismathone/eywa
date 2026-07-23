@@ -183,8 +183,8 @@ export function StaffForm({
           {mode === "edit" ? (
             <p className="text-muted-foreground mt-1 text-xs">
               {canEditEmail
-                ? "임포트 과정에서 잘못 저장된 이메일 — 올바른 주소로 수정할 수 있습니다"
-                : "로그인 계정 이메일은 여기서 변경할 수 없습니다"}
+                ? "아직 로그인 전이거나 임포트 과정에서 잘못 저장된 이메일 — 올바른 주소로 수정할 수 있습니다"
+                : "이미 로그인한 계정의 이메일은 여기서 변경할 수 없습니다"}
             </p>
           ) : null}
         </Field>
