@@ -86,6 +86,18 @@ export type RichClassCard = {
    */
   weekendOnly: boolean;
   /**
+   * 이 **카드**가 실제 수업하는 요일축(ijw `finalDays` 이식, 2026-07-23 원장 지시).
+   *
+   * 🔴 왜 카드별인가: 예전엔 섹션 공통 요일축이 평일=월~금 **고정**이라, 평일+토 **혼합 반**의
+   * 토요일 수업이 통합뷰에서 **통째로 사라졌다**(실측 4개 반·주말 슬롯 21개 — 반 이름이
+   * "고등M 고1 BS4F 토"인데 정작 토요일이 안 보였다). 주말 **전용** 반만 별도 섹션으로 잘 나왔다.
+   * ijw 통합뷰는 카드마다 자기 요일축(`finalDays`)을 써서 토요일이 있는 반에만 토 열이 붙는다.
+   * → 같은 규약으로 되돌린다. 다른 반 카드에 빈 토 열이 생기지 않는다.
+   * ⚠️ 셀은 (그룹 교시행 × 카드 요일)로 조회하므로, 주말 슬롯의 교시 order도 그룹 축에 있어야 보인다
+   *    (아래 presentOrders에서 혼합 카드의 주말 order를 함께 넣는 이유).
+   */
+  days: DayOfWeek[];
+  /**
    * 커스텀 그룹 안에서의 열 순서(그룹 정의에 적힌 반 순서). 미설정(자동 그룹)이면 undefined → 가나다.
    * 원장 시트의 좌우 순서를 그대로 재현하기 위한 값이라 **정의 순서가 곧 화면 순서**다.
    */
@@ -125,7 +137,6 @@ export type RichCardGroup = {
 };
 
 const DAY_ORDER: DayOfWeek[] = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
-const WEEKDAY_DAYS: DayOfWeek[] = ["mon", "tue", "wed", "thu", "fri"];
 const WEEKEND = new Set<string>(["sat", "sun"]);
 /** 주말 섹션의 groupOrder(=sectionKey). 교시 체계가 없어 '1시간 단위' 압축 대상이 아니다. */
 export const WEEKEND_ORDER = 100000;
@@ -267,7 +278,10 @@ export function buildRichCardGroups(
     const students = first.students;
     const split = (st: GridStudent["status"]) => students.filter((x) => x.status === st);
     const weekend = weekdayStart === Infinity;
+    // 이 카드가 실제 수업하는 요일(ijw finalDays) — 평일 반이라도 토·일 슬롯이 있으면 그 요일이 들어간다.
+    const cardDays = DAY_ORDER.filter((d) => group.some((s) => (s.dayOfWeek as DayOfWeek) === d));
     cards.push({
+      days: cardDays,
       classId: first.classId,
       className: first.className,
       subject: first.subject,
@@ -368,12 +382,16 @@ export function buildRichCardGroups(
       // order=자정기준 분이라 평일 영어 2교시(15:00)와 주말 7교시(토 15:00)가 충돌 → 요일로 체계를 가른다.
       const daySet = new Set<DayOfWeek>();
       const presentOrders = new Set<number>();
+      // 평일 섹션에 섞여 있는 **주말 슬롯의 교시 order** — 평일 표준표엔 없는 시각이라(수학 토 12:00 등)
+      // 따로 모아 축에 얹어야 한다. 안 그러면 토요일 열을 붙여도 셀이 놓일 행이 없어 여전히 안 보인다.
+      const mixedWeekendOrders = new Set<number>();
       for (const c of cluster) {
         for (const k of Object.keys(c.cells)) {
           const [ordPart, dayPart] = k.split(":");
           const day = dayPart as DayOfWeek;
           daySet.add(day);
           if (WEEKEND.has(day) === weekend) presentOrders.add(Number(ordPart));
+          else if (!weekend) mixedWeekendOrders.add(Number(ordPart));
         }
       }
       // 교시축 = 표준 교시표에서 섹션 시작 교시부터 5칸 윈도우(5×5 기본). 끝 가까운 섹션은
@@ -394,8 +412,24 @@ export function buildRichCardGroups(
         const r = standardByOrder.get(o)!;
         winRows.set(o, { order: r.order, label: r.label, time: r.time });
       }
+      // 혼합 반(평일+토·일)의 주말 교시 행을 추가 — 라벨·시각은 그 카드가 이미 만들어 둔 행에서 가져온다
+      // (주말 교시표로 해석된 "N교시 09:00~10:00"). ⚠️ **주말 요일 셀에서 온 order만** 넣는다 —
+      // 폴백 시각까지 넣으면 예전 주석대로 그리드가 폭발한다. 없는 반엔 빈 행이지만, 애초에 안 보이던
+      // 수업이 보이는 쪽이 낫다(원장 2026-07-23 "토요일 포함 수업을 어떻게 나타내야 하는지").
+      if (!weekend && mixedWeekendOrders.size) {
+        for (const c of cluster) {
+          for (const r of c.periodRows) {
+            if (!mixedWeekendOrders.has(r.order) || winRows.has(r.order)) continue;
+            winRows.set(r.order, { order: r.order, label: r.label, time: r.time });
+          }
+        }
+      }
       // 요일축 = 평일 섹션은 항상 월~금(5열), 주말 섹션은 실제 주말요일.
-      const days = weekend ? DAY_ORDER.filter((d) => WEEKEND.has(d) && daySet.has(d)) : WEEKDAY_DAYS;
+      // 그룹 축은 **폴백·집계용**(렌더는 카드별 `card.days`). 평일 섹션은 월~금을 항상 보장하되
+      // 이 섹션에 실제 등장하는 주말 요일을 뒤에 덧붙인다(혼합 반이 있으면 토/일).
+      const days = weekend
+        ? DAY_ORDER.filter((d) => WEEKEND.has(d) && daySet.has(d))
+        : DAY_ORDER.filter((d) => !WEEKEND.has(d) || daySet.has(d));
       // compact = 이 그룹이 실제 쓰는 교시 범위 [lo,hi] "사이"의 빈 행만 제거.
       // 범위 밖(그룹 위아래 패딩 행)은 유지 — 5칸 윈도우의 컨텍스트 보존(사용자 결정 2026-07-06).
       const winList = [...winRows.values()].sort((a, b) => a.order - b.order);
