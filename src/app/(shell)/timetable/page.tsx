@@ -49,13 +49,9 @@ import {
   EMPTY_PERIODS_COOKIE,
   readCompact1hFor,
 } from "@/features/timetable/lib/pref-cookies";
-import {
-  Compact1hPrefSync,
-  EmptyDaysPrefSync,
-  EmptyPeriodsPrefSync,
-} from "./_components/prefs-sync";
+import { TimetableViewPrefsSync } from "./_components/prefs-sync";
 import { EmptyPeriodScope } from "./_components/empty-period-scope";
-import { TimetableColorToggle } from "./_components/color-mode-toggle";
+import { TimetableColorPrefSync, TimetableColorToggle } from "./_components/color-mode-toggle";
 import { TimetableViewSettings } from "./_components/view-settings";
 import { applyGradeFilter } from "@/features/timetable/lib/view-prefs";
 import { getMyTimetableViewPrefs } from "@/features/timetable/server/view-prefs-queries";
@@ -82,20 +78,9 @@ export default async function TimetablePage({
   const { view: viewParam, subject: subjectParam, kind: kindRaw, week: weekRaw, compact1h: compact1hRaw, emptydays: emptydaysRaw, emptyperiods: emptyperiodsRaw } = await searchParams;
   // 정규/특강/전체 — 기본 = 정규(특강 제외). 특강은 방학 단기강좌라 정규 주간표에 섞이면 시야가 흐려진다.
   const kind = parseTimetableKind(kindRaw);
-  // 강사뷰 '미사용 요일' 토글 — 기본 = 표시(강사마다 월~토 전 컬럼). emptydays=hide 일 때만 수업 요일만.
-  // ⚠️ URL 파라미터가 없으면 **기기에 저장된 선호(쿠키)** 를 기본으로 쓴다 — 창(iframe)은 항상 깨끗한
-  // URL로 열려서, 파라미터만으론 열 때마다 초기화됐다(주 2일 강사가 매번 넓은 표를 다시 접어야 했음).
-  // 파라미터가 있으면 그쪽 우선(공유 링크 존중). 쓰기는 EmptyDaysPrefSync(클라).
   const cookieStore = await cookies();
-  const savedHideEmptyDays = cookieStore.get(EMPTY_DAYS_COOKIE)?.value === "hide";
-  const hideEmptyDays = emptydaysRaw ? emptydaysRaw === "hide" : savedHideEmptyDays;
-  // 기본뷰 '빈 교시 접기'(C안, 2026-07-19) — 수업 없는 교시 행을 222px → 36px 밴드로 축소(행 유지 =
-  // 교시 축 연속·편집 드롭 존 보존, 편집 모드는 자동 펼침). 기본 = 현행(펼침). 파라미터/쿠키 우선순위는
-  // emptydays와 동일(파라미터 → 쿠키 → 기본). 쓰기는 EmptyPeriodsPrefSync(클라).
-  const savedCollapseEmptyPeriods = cookieStore.get(EMPTY_PERIODS_COOKIE)?.value === "collapse";
-  const collapseEmptyPeriods = emptyperiodsRaw
-    ? emptyperiodsRaw === "collapse"
-    : savedCollapseEmptyPeriods;
+  // 표시 선호(미사용 요일·빈 교시 접기·1시간 단위·셀 색) 해석은 **계정 설정을 읽은 뒤**로 내렸다 —
+  // 아래 Promise.all의 viewPrefs가 필요하기 때문(우선순위 = URL 파라미터 → 계정 → 쿠키 → 기본값).
   // 통합뷰 '1시간 단위' — **섹션별 토글**(사용자 결정 2026-07-06, 전역 아님). compact1h=쉼표구분 sectionKey
   // (=시작교시 order, 자정기준 분). 든 섹션만 사이 빈 교시 행을 숨긴다.
   // 우선순위 = 파라미터 → (없으면) 쿠키 → 빈 값. `none`은 **명시적 해제** 센티널이라 쿠키로 되돌아가지 않는다
@@ -140,6 +125,24 @@ export default async function TimetablePage({
     // 깜빡임이 없다. 미로그인·깨진 값은 '설정 없음'으로 떨어져 무중단.
     getMyTimetableViewPrefs(),
   ]);
+  // 표시 선호 해석 — 우선순위 **URL 파라미터 → 계정(0146a) → 쿠키(구 기기 저장) → 기본값**.
+  // 계정을 쿠키보다 먼저 보는 게 이 배선의 핵심(원장 지시: 기기가 아니라 계정에 귀속). 쿠키는 계정에
+  // 아직 값이 없는 사용자를 위한 **이관 폴백**으로만 남는다 — 다음 토글 때 계정으로 올라간다.
+  // 파라미터가 있으면 그쪽 우선(공유 링크 존중). 쓰기는 TimetableViewPrefsSync(클라).
+  //
+  // 강사뷰 '미사용 요일' — 기본 = 표시(강사마다 월~토 전 컬럼). hide면 수업 있는 요일만.
+  // (창(iframe)은 항상 깨끗한 URL로 열려서, 파라미터만으론 열 때마다 초기화됐다 — 주 2일 강사가 매번
+  //  넓은 표를 다시 접어야 했던 문제.)
+  const savedHideEmptyDays =
+    viewPrefs.hideEmptyDays ?? cookieStore.get(EMPTY_DAYS_COOKIE)?.value === "hide";
+  const hideEmptyDays = emptydaysRaw ? emptydaysRaw === "hide" : savedHideEmptyDays;
+  // 기본뷰 '빈 교시 접기'(C안, 2026-07-19) — 수업 없는 교시 행을 222px → 36px 밴드로 축소(행 유지 =
+  // 교시 축 연속·편집 드롭 존 보존, 편집 모드는 자동 펼침). 기본 = 현행(펼침).
+  const savedCollapseEmptyPeriods =
+    viewPrefs.collapseEmptyPeriods ?? cookieStore.get(EMPTY_PERIODS_COOKIE)?.value === "collapse";
+  const collapseEmptyPeriods = emptyperiodsRaw
+    ? emptyperiodsRaw === "collapse"
+    : savedCollapseEmptyPeriods;
   // 교시 시각 = owner 설정(operations.weekdayPeriods/weekendPeriods) → PeriodsConfig. 미설정 시 기본 상수.
   const periodsConfig = settingsToPeriodsConfig(settings.operations);
   const subjectMaps = buildSubjectMaps(settings.operations.subjects);
@@ -156,7 +159,13 @@ export default async function TimetablePage({
     subjectParam && available.includes(subjectParam) ? subjectParam : defaultSubject;
   // '1시간 단위' 최종 해석 — 파라미터(공유 링크 존중) → 이 **과목의** 쿠키 → 빈 값(전부 펼침).
   // 쓰기는 Compact1hPrefSync(클라). 과목별이라 영어에서 접어둔 섹션이 수학에 새지 않는다.
-  const compactList = compactFromParam ?? readCompact1hFor(cookieStore.get(COMPACT1H_COOKIE)?.value, subject);
+  // ⚠️ 과목별이라 **그 과목 키가 계정에 있을 때만** 계정을 쓴다 — 계정 맵이 있어도 아직 그 과목을
+  // 토글한 적이 없으면 쿠키(구 설정)를 살려야 한다(계정 첫 저장이 다른 과목 설정을 덮어버리지 않게).
+  // '해제'는 계정에 **빈 배열로 명시 저장**되므로 `?? 쿠키`가 옛 값을 되살리지 않는다(none 센티널과 같은 이유).
+  const compactList =
+    compactFromParam ??
+    viewPrefs.compact1h?.[subject] ??
+    readCompact1hFor(cookieStore.get(COMPACT1H_COOKIE)?.value, subject);
   const compactSections = new Set(compactList);
 
   // 비수업 블록(감독·준비·회의·연차, 0138a) — **강사뷰에서만** 그린다. 반이 아니라서 다른 뷰·집계에
@@ -274,10 +283,20 @@ export default async function TimetablePage({
   return (
     <TimetableEditProvider effectiveDate={effectiveDate} today={today} canEdit={canEdit}>
       <div className="flex h-full min-h-0 flex-col gap-4 [.embed-main_&]:gap-3">
-      {/* '미사용 요일'·'빈 교시 접기' 선호를 기기에 기억(쿠키) — 창은 깨끗한 URL로 열려 파라미터만으론 매번 초기화된다. */}
-      <EmptyDaysPrefSync hide={hideEmptyDays} />
-      <EmptyPeriodsPrefSync collapse={collapseEmptyPeriods} />
-      <Compact1hPrefSync subject={subject} sections={compactList} />
+      {/* 표시 선호('미사용 요일'·'빈 교시 접기'·'1시간 단위')를 **계정에** 기억(0146a) + 쿠키 폴백 —
+          창은 깨끗한 URL로 열려 파라미터만으론 매번 초기화된다. 셋을 한 컴포넌트로 합친 이유(동시 쓰기
+          충돌)는 prefs-sync.tsx 주석 참조. */}
+      <TimetableViewPrefsSync
+        hideEmptyDays={hideEmptyDays}
+        collapseEmptyPeriods={collapseEmptyPeriods}
+        subject={subject}
+        sections={compactList}
+        savedHideEmptyDays={viewPrefs.hideEmptyDays}
+        savedCollapseEmptyPeriods={viewPrefs.collapseEmptyPeriods}
+        savedSections={viewPrefs.compact1h?.[subject] ?? null}
+      />
+      {/* 계정에 저장된 셀 색 강도를 스토어에 주입(서버→클라 단방향). 계정값이 없으면 기기 설정 유지. */}
+      <TimetableColorPrefSync mode={viewPrefs.colorMode} />
       {/* Editorial 문법 ① — 헤더 위계 + 우측 학생 집계(StudentTally). 시간표는 세로 공간이 가장
           귀한 화면이라 **창(임베드)에선 이 줄을 통째로 접고** 집계를 툴바 우측으로 내린다(컴팩트
           1행조차 아까움 — 2026-07-20 원장 "여전히 많은 공간"). 최상위 프레임은 풀 헤더 유지. */}
@@ -486,7 +505,7 @@ export default async function TimetablePage({
         {effView === "basic" ? (
           <>
             <span className="bg-line h-4 w-px" aria-hidden />
-            <TimetableColorToggle />
+            <TimetableColorToggle saved={viewPrefs.colorMode} />
           </>
         ) : null}
 

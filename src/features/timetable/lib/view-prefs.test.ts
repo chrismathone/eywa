@@ -3,13 +3,17 @@ import { describe, expect, it } from "vitest";
 import {
   applyGradeFilter,
   bucketsOf,
+  EMPTY_VIEW_PREFS,
   gradeBucket,
   gradeFilterLabel,
   gradesInBucket,
   isGradeFilterActive,
+  mergeCompact1h,
+  mergeViewPrefs,
   normalizeGradeSelection,
   parseViewPrefs,
   serializeViewPrefs,
+  type TimetableViewPrefs,
 } from "./view-prefs";
 
 // 학원설정(operations.gradeLevels) 실값.
@@ -137,21 +141,42 @@ describe("applyGradeFilter — 혼합 반 보존이 핵심", () => {
   });
 });
 
+const prefs = (p: Partial<TimetableViewPrefs> = {}): TimetableViewPrefs => ({
+  ...EMPTY_VIEW_PREFS,
+  ...p,
+});
+
 describe("parseViewPrefs — 깨진 jsonb에도 throw하지 않는다", () => {
   it("빈 값", () => {
     for (const raw of [null, undefined, 0, "x", [], {}, { timetable: 3 }]) {
-      expect(parseViewPrefs(raw)).toEqual({
-        grades: null,
-        hideEmptyDays: null,
-        collapseEmptyPeriods: null,
-      });
+      expect(parseViewPrefs(raw)).toEqual(EMPTY_VIEW_PREFS);
     }
   });
 
   it("정상값", () => {
     expect(
       parseViewPrefs({ timetable: { grades: ["초1"], hideEmptyDays: true, collapseEmptyPeriods: false } }),
-    ).toEqual({ grades: ["초1"], hideEmptyDays: true, collapseEmptyPeriods: false });
+    ).toEqual(prefs({ grades: ["초1"], hideEmptyDays: true, collapseEmptyPeriods: false }));
+  });
+
+  it("색 강도는 알려진 3값만 통과", () => {
+    expect(parseViewPrefs({ timetable: { colorMode: "pastel" } }).colorMode).toBe("pastel");
+    for (const bad of ["neon", "", 3, null]) {
+      expect(parseViewPrefs({ timetable: { colorMode: bad } }).colorMode).toBeNull();
+    }
+  });
+
+  it("compact1h — 잡값을 걸러내되 **빈 배열 과목은 보존**(명시적 해제)", () => {
+    const p = parseViewPrefs({
+      timetable: { compact1h: { english: [600, "540", -1, 600], math: [], bad: "x" } },
+    });
+    expect(p.compact1h).toEqual({ english: [540, 600], math: [] });
+  });
+
+  it("compact1h가 배열·원시값이면 미설정", () => {
+    for (const bad of [[], "x", 3, null]) {
+      expect(parseViewPrefs({ timetable: { compact1h: bad } }).compact1h).toBeNull();
+    }
   });
 
   it("배열에 잡값이 섞여도 문자열만 취한다", () => {
@@ -170,15 +195,21 @@ describe("parseViewPrefs — 깨진 jsonb에도 throw하지 않는다", () => {
 
 describe("serializeViewPrefs / normalizeGradeSelection", () => {
   it("미설정 키는 아예 안 쓴다", () => {
-    expect(serializeViewPrefs({ grades: null, hideEmptyDays: null, collapseEmptyPeriods: null })).toEqual(
-      {},
-    );
+    expect(serializeViewPrefs(EMPTY_VIEW_PREFS)).toEqual({});
   });
 
   it("설정된 것만 직렬화", () => {
-    expect(
-      serializeViewPrefs({ grades: ["고3"], hideEmptyDays: false, collapseEmptyPeriods: null }),
-    ).toEqual({ grades: ["고3"], hideEmptyDays: false });
+    expect(serializeViewPrefs(prefs({ grades: ["고3"], hideEmptyDays: false }))).toEqual({
+      grades: ["고3"],
+      hideEmptyDays: false,
+    });
+  });
+
+  it("compact1h — 빈 배열 과목은 적고, 맵 자체가 비면 안 적는다", () => {
+    expect(serializeViewPrefs(prefs({ compact1h: { math: [] } }))).toEqual({
+      compact1h: { math: [] },
+    });
+    expect(serializeViewPrefs(prefs({ compact1h: {} }))).toEqual({});
   });
 
   it("전체 선택은 필터 없음(null)으로 정규화", () => {
@@ -192,7 +223,73 @@ describe("serializeViewPrefs / normalizeGradeSelection", () => {
   });
 
   it("직렬화 → 파싱 왕복", () => {
-    const prefs = { grades: ["초1", "중2"], hideEmptyDays: true, collapseEmptyPeriods: false };
-    expect(parseViewPrefs({ timetable: serializeViewPrefs(prefs) })).toEqual(prefs);
+    const p = prefs({
+      grades: ["초1", "중2"],
+      hideEmptyDays: true,
+      collapseEmptyPeriods: false,
+      colorMode: "mid",
+      compact1h: { english: [540], math: [] },
+    });
+    expect(parseViewPrefs({ timetable: serializeViewPrefs(p) })).toEqual(p);
+  });
+});
+
+describe("mergeViewPrefs — 부분 저장이 서로를 덮지 않는다", () => {
+  const current = prefs({
+    grades: ["고3"],
+    hideEmptyDays: true,
+    colorMode: "vivid",
+    compact1h: { english: [540] },
+  });
+
+  it("넘어온 키만 바꾼다(undefined = 안 건드림)", () => {
+    const next = mergeViewPrefs(current, { colorMode: "pastel" });
+    expect(next.colorMode).toBe("pastel");
+    expect(next.grades).toEqual(["고3"]);
+    expect(next.hideEmptyDays).toBe(true);
+    expect(next.compact1h).toEqual({ english: [540] });
+  });
+
+  it("null은 명시적 해제", () => {
+    expect(mergeViewPrefs(current, { grades: null }).grades).toBeNull();
+  });
+
+  it("필터 패널이 grades만 보내도 표시 설정이 살아남는다(회귀 가드)", () => {
+    const next = mergeViewPrefs(current, { grades: ["초1"] });
+    expect(next.hideEmptyDays).toBe(true);
+    expect(next.colorMode).toBe("vivid");
+    expect(next.compact1h).toEqual({ english: [540] });
+  });
+
+  it("compact1h는 통째 교체가 아니라 **과목 단위 병합**", () => {
+    const next = mergeViewPrefs(current, { compact1h: { math: [480] } });
+    expect(next.compact1h).toEqual({ english: [540], math: [480] });
+  });
+});
+
+describe("mergeCompact1h", () => {
+  it("그 과목만 갈아끼운다(다른 과목 보존)", () => {
+    expect(mergeCompact1h({ english: [540], math: [480] }, { math: [600] })).toEqual({
+      english: [540],
+      math: [600],
+    });
+  });
+
+  it("빈 배열은 지우지 않고 남긴다 — 쿠키 폴백이 옛 값을 되살리면 안 되기 때문", () => {
+    expect(mergeCompact1h({ english: [540] }, { english: [] })).toEqual({ english: [] });
+  });
+
+  it("현재값이 없어도 동작", () => {
+    expect(mergeCompact1h(null, { english: [540] })).toEqual({ english: [540] });
+  });
+
+  it("null 패치는 전체 해제", () => {
+    expect(mergeCompact1h({ english: [540] }, null)).toBeNull();
+  });
+
+  it("정규화 — 중복 제거·정렬·잡값 제거", () => {
+    expect(mergeCompact1h(null, { english: [600, 540, 600, -3, Number.NaN] })).toEqual({
+      english: [540, 600],
+    });
   });
 });

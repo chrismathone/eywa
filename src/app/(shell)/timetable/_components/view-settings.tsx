@@ -66,11 +66,9 @@ export function TimetableViewSettings({
   const apply = () => {
     const grades = normalizeGradeSelection(draft, allGrades);
     startTransition(async () => {
-      const res = await saveTimetableViewPrefs({
-        grades,
-        hideEmptyDays: null,
-        collapseEmptyPeriods: null,
-      });
+      // ⚠️ **grades 키만** 보낸다 — 저장은 부분 병합이라, 여기서 다른 키를 함께 넘기면
+      // 표시 토글(미사용 요일·빈 교시·1시간 단위·색)이 이 저장에 덮여 날아간다.
+      const res = await saveTimetableViewPrefs({ grades });
       if (!res.ok) {
         toast.error(res.error ?? "뷰 설정을 저장하지 못했습니다");
         return;

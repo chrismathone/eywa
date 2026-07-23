@@ -26,12 +26,28 @@ export type TimetableViewPrefs = {
   hideEmptyDays: boolean | null;
   /** 기본뷰 '빈 교시 접기'. null = 미설정(기존 쿠키/기본값 폴백). */
   collapseEmptyPeriods: boolean | null;
+  /** 기본뷰 셀 색 강도. null = 미설정(기기 저장 localStorage/기본 vivid 폴백). */
+  colorMode: TimetableColorPref | null;
+  /**
+   * 통합뷰 '1시간 단위' — **과목별** 압축 섹션키 목록. null = 미설정(쿠키 폴백).
+   * ⚠️ 값이 빈 배열인 과목은 "그 과목은 명시적으로 전부 펼침"이다 — 쿠키 직렬화(빈 과목은 아예 안 적음)와
+   * 다르게 **키를 남긴다**. 안 그러면 마지막 하나를 해제했을 때 `?? 쿠키` 폴백이 옛 값을 되살려
+   * 토글이 안 꺼진다(URL의 `compact1h=none` 센티널과 같은 이유).
+   */
+  compact1h: Record<string, number[]> | null;
 };
+
+/** 셀 색 강도 — workspace prefs 스토어의 TimetableColorMode와 같은 3값(런타임 소스는 그 스토어). */
+export type TimetableColorPref = "vivid" | "mid" | "pastel";
+
+const COLOR_MODES: readonly string[] = ["vivid", "mid", "pastel"];
 
 export const EMPTY_VIEW_PREFS: TimetableViewPrefs = {
   grades: null,
   hideEmptyDays: null,
   collapseEmptyPeriods: null,
+  colorMode: null,
+  compact1h: null,
 };
 
 /**
@@ -124,6 +140,21 @@ export function applyGradeFilter<S extends StudentLike, T extends SlotLike<S>>(
   return out;
 }
 
+/** jsonb의 `{과목: 섹션키[]}` 조각을 방어적으로 정규화. 빈 배열 키는 **보존**(명시적 해제). */
+function parseCompact1h(raw: unknown): Record<string, number[]> | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const out: Record<string, number[]> = {};
+  for (const [subject, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (!subject || !Array.isArray(v)) continue;
+    const sections = v
+      .map((n) => Number(n))
+      .filter((n) => Number.isFinite(n) && n > 0)
+      .sort((a, b) => a - b);
+    out[subject] = [...new Set(sections)];
+  }
+  return Object.keys(out).length > 0 ? out : null;
+}
+
 /** users.ui_prefs jsonb → 타입 안전한 prefs. 모양이 깨져 있어도 절대 throw하지 않는다. */
 export function parseViewPrefs(raw: unknown): TimetableViewPrefs {
   if (!raw || typeof raw !== "object") return EMPTY_VIEW_PREFS;
@@ -138,6 +169,11 @@ export function parseViewPrefs(raw: unknown): TimetableViewPrefs {
     hideEmptyDays: typeof o.hideEmptyDays === "boolean" ? o.hideEmptyDays : null,
     collapseEmptyPeriods:
       typeof o.collapseEmptyPeriods === "boolean" ? o.collapseEmptyPeriods : null,
+    colorMode:
+      typeof o.colorMode === "string" && COLOR_MODES.includes(o.colorMode)
+        ? (o.colorMode as TimetableColorPref)
+        : null,
+    compact1h: parseCompact1h(o.compact1h),
   };
 }
 
@@ -151,7 +187,55 @@ export function serializeViewPrefs(prefs: TimetableViewPrefs): Record<string, un
   if (prefs.grades && prefs.grades.length > 0) out.grades = prefs.grades;
   if (prefs.hideEmptyDays !== null) out.hideEmptyDays = prefs.hideEmptyDays;
   if (prefs.collapseEmptyPeriods !== null) out.collapseEmptyPeriods = prefs.collapseEmptyPeriods;
+  if (prefs.colorMode !== null) out.colorMode = prefs.colorMode;
+  // ⚠️ 빈 배열 과목도 그대로 적는다(명시적 해제). 맵 자체가 비면 키를 안 적는다(= 미설정).
+  if (prefs.compact1h && Object.keys(prefs.compact1h).length > 0) out.compact1h = prefs.compact1h;
   return out;
+}
+
+/**
+ * 부분 저장(patch) 병합 — **넘어온 키만** 바꾼다.
+ *
+ * 뷰 설정은 쓰는 곳이 여러 군데다(필터 패널·표시 토글 동기화·색 강도 토글). 매번 통째로 덮으면
+ * 서로의 값을 날린다. 그래서 저장 액션은 항상 이 함수로 "현재값 + 넘어온 키"만 합친다.
+ * `undefined` = 안 건드림, `null` = 명시적 해제.
+ */
+export function mergeViewPrefs(
+  current: TimetableViewPrefs,
+  patch: Partial<TimetableViewPrefs>,
+): TimetableViewPrefs {
+  const pick = <K extends keyof TimetableViewPrefs>(k: K): TimetableViewPrefs[K] =>
+    patch[k] !== undefined ? (patch[k] as TimetableViewPrefs[K]) : current[k];
+  return {
+    grades: pick("grades"),
+    hideEmptyDays: pick("hideEmptyDays"),
+    collapseEmptyPeriods: pick("collapseEmptyPeriods"),
+    colorMode: pick("colorMode"),
+    // compact1h는 과목별이라 통째 교체가 아니라 **과목 단위 병합**이다(아래 참조).
+    compact1h: patch.compact1h !== undefined
+      ? mergeCompact1h(current.compact1h, patch.compact1h)
+      : current.compact1h,
+  };
+}
+
+/**
+ * '1시간 단위'는 화면에 **한 과목만** 떠 있으므로 저장도 그 과목만 온다.
+ * 통째로 덮으면 다른 과목 설정이 날아간다 — 과목 키 단위로 합친다(쿠키 `writeCompact1hFor`와 같은 규약).
+ * ⚠️ 빈 배열은 지우지 않고 **남긴다**(그 과목 '전부 펼침'을 명시 — 쿠키 폴백이 옛 값을 되살리지 않게).
+ */
+export function mergeCompact1h(
+  current: Record<string, number[]> | null,
+  patch: Record<string, number[]> | null,
+): Record<string, number[]> | null {
+  if (patch === null) return null;
+  const out: Record<string, number[]> = { ...(current ?? {}) };
+  for (const [subject, sections] of Object.entries(patch)) {
+    if (!subject) continue;
+    out[subject] = [...new Set(sections.filter((n) => Number.isFinite(n) && n > 0))].sort(
+      (a, b) => a - b,
+    );
+  }
+  return Object.keys(out).length > 0 ? out : null;
 }
 
 /**
