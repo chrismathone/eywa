@@ -164,12 +164,19 @@ export type BulkPatch = {
   homework?: string;
   textbook?: string;
   homeworkToday?: string;
+  /** 오늘 진도 — 필드명은 모듈 전체 규약(planPrevFill·planCopyFirstRow)과 같은 `today`. */
+  today?: string;
 };
 
-/** 일괄 적용 대상 행의 현재값(경량 shape — 테스트 용이). 태도·과제는 학생 단위, 교재·오늘과제는 과목(행) 단위. */
+/** 일괄 적용 대상 행의 현재값(경량 shape — 테스트 용이). 태도·과제는 학생 단위, 교재·오늘과제·진도는 과목(행) 단위. */
 export type BulkTarget = {
   studentId: string;
   subjectName: string;
+  /** 진도 setter가 인덱스 기반(setProgressFor) — 이름만으론 못 쓴다. */
+  subjectIndex: number;
+  /** 진도를 같은 과목 행에만 넣기 위한 키(미지정=math, 진도 셀 분기와 동일 규약). */
+  subjectKey: string;
+  today: string;
   attitude: string | null;
   homework: string;
   textbook: string;
@@ -184,19 +191,25 @@ const normPatchField = (v: string | undefined): string | undefined => {
 /**
  * 값 일괄 적용 계획 — patch에 채워진 필드만, onlyEmpty면 현재값이 빈 칸인 행만.
  * 태도·과제는 학생 단위 필드라 같은 학생의 두 번째 행부터는 중복 적용하지 않는다.
+ *
+ * ⚠️ **진도(today)는 `progressSubjectKey`와 같은 과목 행에만** 넣는다 — 수학 진도가 영어 행에 들어가면
+ * 그대로 학부모에게 나간다(planCopyFirstRow의 과목 가드와 같은 이유). 키를 안 주면 진도는 적용하지 않는다
+ * (대상 과목이 모호한 채로 진도를 뿌리는 것보다 아무것도 안 하는 게 낫다).
  */
 export function planBulkApply(
   targets: BulkTarget[],
   patch: BulkPatch,
   onlyEmpty: boolean,
-): Array<{ studentId: string; subjectName: string; set: BulkPatch }> {
+  progressSubjectKey?: string,
+): Array<{ studentId: string; subjectName: string; subjectIndex: number; set: BulkPatch }> {
   const p = {
     attitude: normPatchField(patch.attitude),
     homework: normPatchField(patch.homework),
     textbook: normPatchField(patch.textbook),
     homeworkToday: normPatchField(patch.homeworkToday),
+    today: normPatchField(patch.today),
   };
-  const out: Array<{ studentId: string; subjectName: string; set: BulkPatch }> = [];
+  const out: Array<{ studentId: string; subjectName: string; subjectIndex: number; set: BulkPatch }> = [];
   const studentDone = new Set<string>(); // 학생 단위 필드(태도·과제) 중복 방지
   for (const t of targets) {
     const set: BulkPatch = {};
@@ -205,8 +218,16 @@ export function planBulkApply(
     if (p.homework !== undefined && firstRowOfStudent && (!onlyEmpty || !t.homework)) set.homework = p.homework;
     if (p.textbook !== undefined && (!onlyEmpty || !t.textbook.trim())) set.textbook = p.textbook;
     if (p.homeworkToday !== undefined && (!onlyEmpty || !t.homeworkToday.trim())) set.homeworkToday = p.homeworkToday;
+    if (
+      p.today !== undefined &&
+      progressSubjectKey !== undefined &&
+      t.subjectKey === progressSubjectKey &&
+      (!onlyEmpty || !t.today.trim())
+    )
+      set.today = p.today;
     studentDone.add(t.studentId);
-    if (Object.keys(set).length) out.push({ studentId: t.studentId, subjectName: t.subjectName, set });
+    if (Object.keys(set).length)
+      out.push({ studentId: t.studentId, subjectName: t.subjectName, subjectIndex: t.subjectIndex, set });
   }
   return out;
 }

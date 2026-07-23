@@ -198,6 +198,9 @@ function target(over: Partial<BulkTarget> = {}): BulkTarget {
   return {
     studentId: "a",
     subjectName: "수학",
+    subjectIndex: 0,
+    subjectKey: "math",
+    today: "",
     attitude: null,
     homework: "",
     textbook: "",
@@ -219,8 +222,8 @@ describe("planBulkApply", () => {
       false,
     );
     expect(plan).toEqual([
-      { studentId: "a", subjectName: "수학", set: { textbook: "쎈 중2-1", homeworkToday: "p10~16" } },
-      { studentId: "b", subjectName: "수학", set: { textbook: "쎈 중2-1", homeworkToday: "p10~16" } },
+      { studentId: "a", subjectName: "수학", subjectIndex: 0, set: { textbook: "쎈 중2-1", homeworkToday: "p10~16" } },
+      { studentId: "b", subjectName: "수학", subjectIndex: 0, set: { textbook: "쎈 중2-1", homeworkToday: "p10~16" } },
     ]);
   });
 
@@ -231,7 +234,7 @@ describe("planBulkApply", () => {
       true,
     );
     expect(plan).toEqual([
-      { studentId: "b", subjectName: "수학", set: { attitude: "아주 좋음", textbook: "쎈" } },
+      { studentId: "b", subjectName: "수학", subjectIndex: 0, set: { attitude: "아주 좋음", textbook: "쎈" } },
     ]);
   });
 
@@ -242,9 +245,56 @@ describe("planBulkApply", () => {
       false,
     );
     expect(plan).toEqual([
-      { studentId: "a", subjectName: "수학", set: { attitude: "좋음", homeworkToday: "복습" } },
-      { studentId: "a", subjectName: "영어", set: { homeworkToday: "복습" } },
+      { studentId: "a", subjectName: "수학", subjectIndex: 0, set: { attitude: "좋음", homeworkToday: "복습" } },
+      { studentId: "a", subjectName: "영어", subjectIndex: 0, set: { homeworkToday: "복습" } },
     ]);
+  });
+
+  // 진도(today)는 이 팝오버의 유일한 **과목 한정** 필드 — 2026-07-23 강사 제보로 추가됐다.
+  it("진도는 고른 과목 행에만 — 수학 진도가 영어 행에 들어가면 그대로 학부모에게 나간다", () => {
+    const plan = planBulkApply(
+      [
+        target({ subjectName: "수학", subjectKey: "math", subjectIndex: 0 }),
+        target({ subjectName: "영어", subjectKey: "english", subjectIndex: 1 }),
+      ],
+      { today: "1-1-1 받아올림" },
+      false,
+      "math",
+    );
+    expect(plan).toEqual([
+      { studentId: "a", subjectName: "수학", subjectIndex: 0, set: { today: "1-1-1 받아올림" } },
+    ]);
+  });
+
+  it("과목 키를 안 주면 진도는 아예 적용하지 않는다(대상이 모호한 채로 뿌리지 않는다)", () => {
+    expect(planBulkApply([target()], { today: "1-1-1" }, false)).toEqual([]);
+  });
+
+  it("onlyEmpty면 진도가 이미 있는 행은 건너뛴다", () => {
+    const plan = planBulkApply(
+      [target({ today: "이미 입력" }), target({ studentId: "b" })],
+      { today: "1-1-1 받아올림" },
+      true,
+      "math",
+    );
+    expect(plan).toEqual([
+      { studentId: "b", subjectName: "수학", subjectIndex: 0, set: { today: "1-1-1 받아올림" } },
+    ]);
+  });
+
+  it("진도 setter는 인덱스 기반 — 계획에 그 행의 subjectIndex가 실린다", () => {
+    const plan = planBulkApply(
+      [target({ subjectName: "영어", subjectKey: "english", subjectIndex: 2 })],
+      { today: "Unit 8 · p.90" },
+      false,
+      "english",
+    );
+    expect(plan[0]).toEqual({
+      studentId: "a",
+      subjectName: "영어",
+      subjectIndex: 2,
+      set: { today: "Unit 8 · p.90" },
+    });
   });
 });
 

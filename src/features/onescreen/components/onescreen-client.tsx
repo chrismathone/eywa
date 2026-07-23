@@ -740,7 +740,12 @@ export function OneScreenClient({
   }
   // 값 일괄 적용(1-2) — 선택(없으면 표시 전체) 행에 채워진 필드만 반영. 빈 필드=미적용(지우기 아님).
   // 대상은 진도 필터 없는 raw 행(발송가능 selectRows와 별개 경로) — 값 채우기는 진도와 무관.
-  function bulkApplyValues(keys: string[], patchFields: BulkPatch, onlyEmpty: boolean) {
+  function bulkApplyValues(
+    keys: string[],
+    patchFields: BulkPatch,
+    onlyEmpty: boolean,
+    progressSubjectKey: string,
+  ) {
     const all = buildGridRows(visible).filter((r) => rowInClass(r.subject, activeClassFilter));
     const keySet = new Set(keys);
     const rows = keys.length ? all.filter((r) => keySet.has(r.key)) : all;
@@ -748,6 +753,9 @@ export function OneScreenClient({
       rows.map((r) => ({
         studentId: r.student.id,
         subjectName: r.subject.name,
+        subjectIndex: r.subjectIndex,
+        subjectKey: r.subject.subjectKey ?? "math",
+        today: r.subject.today ?? "",
         attitude: r.student.attitude,
         homework: r.student.homework,
         textbook: r.subject.textbook ?? "",
@@ -755,6 +763,7 @@ export function OneScreenClient({
       })),
       patchFields,
       onlyEmpty,
+      progressSubjectKey,
     );
     if (plan.length === 0) {
       toast.message("적용할 칸이 없습니다");
@@ -765,6 +774,7 @@ export function OneScreenClient({
       if (p.set.homework !== undefined) setHomeworkValue(p.studentId, p.set.homework);
       if (p.set.textbook !== undefined) setTextbookFor(p.studentId, p.subjectName, p.set.textbook);
       if (p.set.homeworkToday !== undefined) setHomeworkTodayFor(p.studentId, p.subjectName, p.set.homeworkToday);
+      if (p.set.today !== undefined) setProgressFor(p.studentId, p.subjectIndex, p.set.today);
     }
     toast.success(`${plan.length}행에 일괄 적용했습니다`);
   }
