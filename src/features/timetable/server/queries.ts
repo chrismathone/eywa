@@ -547,9 +547,17 @@ export async function getWeeklyScheduleWithStudents(
       }
       if (!byStudentOnly.has(r.student_id)) byStudentOnly.set(r.student_id, r);
     }
+    // 🔴 특강 슬롯은 **학생 단위 폴백을 쓰지 않는다**(원장 2026-07-23 "정규와 특강을 분리시켜").
+    //    폴백은 이관분(class_id NULL)을 살리려는 장치인데 이관분은 전부 정규다 → 특강 슬롯에 쓰면
+    //    100% 정규 수업의 진도·교재가 뜬다. 정규 슬롯의 폴백은 그대로 유지(없애면 hover가 전부 빈다).
+    //    ⚠️ 특강 첫 수업 슬롯의 hover가 비는 건 정상 — 남의 수업 진도를 보여주는 것보다 낫다.
+    const specialClassIds = new Set(slots.filter((s) => s.isSpecialLecture).map((s) => s.classId));
     for (const [classId, list] of byClass) {
+      const special = specialClassIds.has(classId);
       for (const l of list) {
-        const r = byStudentClass.get(keyOf(l.studentId, classId)) ?? byStudentOnly.get(l.studentId);
+        const r = special
+          ? byStudentClass.get(keyOf(l.studentId, classId))
+          : (byStudentClass.get(keyOf(l.studentId, classId)) ?? byStudentOnly.get(l.studentId));
         if (!r) continue;
         l.latestReport = {
           date: r.report_date,

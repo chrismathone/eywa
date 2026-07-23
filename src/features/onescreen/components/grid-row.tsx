@@ -13,7 +13,7 @@ import { classnoteBadge, type SubjectReport } from "./report-card";
 import { GridAttachButton, useRowFileDrop } from "./grid-attach";
 import { AttendancePills, type BasicAttendance } from "./attendance-pills";
 import { handleGridNavKey } from "./grid-nav";
-import { PillGroup } from "./pill-group";
+import { FieldSelect } from "./field-select";
 import { ProgressSelector } from "./progress-selector";
 import { ScoreInput } from "./score-input";
 
@@ -239,10 +239,16 @@ export function GridBodyRow({
             </span>
           ) : null}
         </div>
+        {/* ⚠️ 알약엔 **과목 라벨만** 칠한다(원장 2026-07-23 제보: "하나는 수학만 파란 배경, 나머지는 반 전체가
+            파란 배경"). `subject.name`은 같은 과목 두 반일 때 로스터가 반 이름을 이어 붙인 **유일화 라벨**이라
+            그대로 칠하면 알약이 반 이름까지 삼켜 행마다 폭·모양이 달라진다. 반 이름은 학년 태그와 같은 톤으로 밖에. */}
         <div className="mt-0.5 flex flex-wrap items-center gap-1">
           <span className={`rounded-pill px-1.5 py-px text-[10px] font-bold ${toneSoftClass(tone)}`}>
-            {subject.name}
+            {subject.subjectLabel || subject.name}
           </span>
+          {subject.subjectLabel && subject.name !== subject.subjectLabel && subject.className ? (
+            <span className="text-text-faint text-[10px]">{subject.className}</span>
+          ) : null}
           <span className="text-text-faint text-[10px]">{student.tag}</span>
         </div>
         {/* 출결 인라인 입력(2-2) — 행(반) 단위. 보강(수동추가)·반 모호(같은 과목 2반)는 pill 불가 → 배지만. */}
@@ -302,21 +308,19 @@ export function GridBodyRow({
         </td>
       ) : null}
       <td className={td}>
-        {/* 1클릭 pill(edutrix 라디오 패리티) — 재클릭 해제. 드롭다운(2클릭) 폐기(1-1). */}
-        <PillGroup
-          size="sm"
+        {/* 원장 2026-07-23: 알약 → 드롭다운. 선택지가 늘어(과제 '없음' 추가) 표 가로가 터졌다. */}
+        <FieldSelect
           options={config.attitudes}
           value={student.attitude}
-          onSelect={(a) => fields.onAttitude(student.id, student.attitude === a ? null : a)}
+          onSelect={(a) => fields.onAttitude(student.id, a)}
           ariaLabel={`${student.name} 태도`}
         />
       </td>
       <td className={td}>
-        <PillGroup
-          size="sm"
+        <FieldSelect
           options={config.homeworks}
           value={student.homework || null}
-          onSelect={(h) => fields.onHomework(student.id, student.homework === h ? "" : h)}
+          onSelect={(h) => fields.onHomework(student.id, h ?? "")}
           ariaLabel={`${student.name} 과제`}
         />
       </td>

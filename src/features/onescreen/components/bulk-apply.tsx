@@ -9,7 +9,7 @@ import { useState } from "react";
 import { Popover } from "@base-ui/react/popover";
 import { Button } from "@/components/ui/button";
 import type { BulkPatch } from "../grid";
-import { PillGroup } from "./pill-group";
+import { FieldSelect } from "./field-select";
 
 export function BulkApplyPopover({
   targetCount,
@@ -84,21 +84,19 @@ export function BulkApplyPopover({
             </p>
             <div>
               <p className="micro text-text-faint mb-1">태도</p>
-              <PillGroup
-                size="sm"
+              <FieldSelect
                 options={attitudes}
                 value={attitude}
-                onSelect={(a) => setAttitude((cur) => (cur === a ? null : a))}
+                onSelect={setAttitude}
                 ariaLabel="일괄 태도"
               />
             </div>
             <div>
               <p className="micro text-text-faint mb-1">과제</p>
-              <PillGroup
-                size="sm"
+              <FieldSelect
                 options={homeworks}
                 value={homework}
-                onSelect={(h) => setHomework((cur) => (cur === h ? null : h))}
+                onSelect={setHomework}
                 ariaLabel="일괄 과제"
               />
             </div>
