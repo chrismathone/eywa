@@ -157,7 +157,7 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
   // 1) 강사 담당 활성 반 + 본인 멘트 모드 + 학생 표시 순서(0116a, 강사×반 개인 설정) + 출결 쓰기 권한
   //    — 서로 독립이라 병렬(B4).
   const [{ data: classes }, { data: meRow }, { data: orderRows }, canEditAttendance] = await Promise.all([
-    supabase.from("classes").select("id, class_name, subject").eq("teacher_id", user.id).eq("is_active", true),
+    supabase.from("classes").select("id, class_name, subject, is_special").eq("teacher_id", user.id).eq("is_active", true),
     supabase.from("users").select("report_notice_mode").eq("id", user.id).single(),
     supabase.from("onescreen_student_order").select("class_id, student_ids").eq("teacher_id", user.id),
     canWriteTenant(user.systemRole, "attendance"),
@@ -313,7 +313,7 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
       // classId = 이 과목 행의 반(출결 원장이 student+class+date라 행 단위 출결 입력(2단계)의 키).
       // subjectLabel = 순수 과목명 — name은 아래에서 반 이름이 덧붙을 수 있으므로 저장용 값은 이쪽을 쓴다.
       const label = subjects.labelOf(cls.subject);
-      os.subjects.push({ name: label, subjectLabel: label, subjectKey: cls.subject, classId: cls.id, className: cls.class_name, prev: "", today: "", textbook: "", makeup: false, homeworkToday: "" });
+      os.subjects.push({ name: label, subjectLabel: label, subjectKey: cls.subject, classId: cls.id, className: cls.class_name, isSpecial: !!cls.is_special, prev: "", today: "", textbook: "", makeup: false, homeworkToday: "" });
     }
   }
   // 표시명 유일화 — 화면 state가 (학생, 행 이름)을 키로 쓰므로 같은 이름 두 행은 서로를 덮는다.
@@ -519,7 +519,7 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
     // 행(반)별 오늘 보고서 — 반 정확매칭 우선, 반 없는 행은 과목으로 **1:1** 폴백(matchReportsToRows).
     // ⚠️ 한 보고서를 두 행에 붙이면 두 행의 저장이 서로를 덮는다 → 소비형 매칭이 불변식이다.
     const todayMatched = matchReportsToRows(
-      os.subjects.map((su) => ({ classId: su.classId ?? null, subjectKey: su.subjectKey ?? null })),
+      os.subjects.map((su) => ({ classId: su.classId ?? null, subjectKey: su.subjectKey ?? null, isSpecial: su.isSpecial })),
       (todayByStudent.get(os.id) ?? []).map((r) => ({ ...r, classId: r.class_id })),
     );
     os.subjects.forEach((su, i) => {
@@ -568,7 +568,7 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
     // ⚠️ 이관분 폴백(과목·반 둘 다 없는 행)은 단일 과목 학생만 — matchReportsToRows 3차 규칙과 동일.
     //    ijw 이식분은 대부분 subject가 비어 있어(실측 17,337/17,345 NULL) 이 폴백이 없으면 참고행·교재 승계가 0건이 된다.
     const priorMatched = matchReportsToRows(
-      os.subjects.map((su) => ({ classId: su.classId ?? null, subjectKey: su.subjectKey ?? null })),
+      os.subjects.map((su) => ({ classId: su.classId ?? null, subjectKey: su.subjectKey ?? null, isSpecial: su.isSpecial })),
       (priorByStudent.get(os.id) ?? []).map((r) => ({ ...r, classId: r.class_id })),
       // 이관분(반·과목 둘 다 없음) 폴백은 **직전 회차에서만** — 당일 행에 켜면 edutrix가 오늘 넣은
       // 남의 보고서가 "이미 저장됨"으로 붙는다(report-unit.ts 🔴 참조).

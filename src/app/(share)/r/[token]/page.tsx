@@ -7,7 +7,7 @@ import { resolveBrandingSrc, resolveTenantReadUrls } from "@/lib/storage/media-s
 import { parseForwardedFor } from "@/features/attendance/kiosk/device-info";
 import { isShareExpired } from "@/features/onescreen/share-expiry";
 import { visibleAttachments } from "@/features/onescreen/attachment-utils";
-import { fetchReportTrendRows } from "@/features/onescreen/server/score-history";
+import { fetchReportTrendRows, fetchSpecialClassIds } from "@/features/onescreen/server/score-history";
 import { buildTrendPoints } from "@/features/onescreen/report-trend";
 import { ParentReportCard } from "@/features/onescreen/components/parent-report-card";
 import { ClosedReportScreen } from "./_closed";
@@ -32,7 +32,7 @@ export default async function PublicLessonReportPage({
   const { data: report } = await admin
     .from("lesson_reports")
     .select(
-      "id, tenant_id, student_id, subject, report_date, revoked_at, textbook, progress, exam_info, homework_score, homework_today, teacher_name, notes, trend_note, daily_test, check_test, attitude, attachments",
+      "id, tenant_id, student_id, class_id, subject, report_date, revoked_at, textbook, progress, exam_info, homework_score, homework_today, teacher_name, notes, trend_note, daily_test, check_test, attitude, attachments",
     )
     .eq("share_token", token)
     .maybeSingle();
@@ -62,12 +62,18 @@ export default async function PublicLessonReportPage({
     }
   }
 
+  // 특강 반 목록 — 정규/특강 추이를 가르는 축(2026-07-23). admin은 RLS 우회라 tenant 필터 필수.
+  const specialClassIds = await fetchSpecialClassIds(admin, report.tenant_id as string).catch(
+    () => [] as string[],
+  );
   const [{ data: student }, settings, trendRows] = await Promise.all([
     admin.from("students").select("name, school, grade").eq("id", report.student_id).maybeSingle(),
     getTenantSettingsByTenantId(report.tenant_id as string),
     // 성적 추이 이력 — admin(service_role)이라 tenantId 필터로 테넌트 격리 필수(#B6 규약). 실패해도 페이지 안 깨짐.
     fetchReportTrendRows(admin, report.student_id as string, report.subject as string | null, report.report_date as string, {
       tenantId: report.tenant_id as string,
+      classId: report.class_id as string | null,
+      specialClassIds,
     }).catch(() => []),
   ]);
   const trend = buildTrendPoints(trendRows, report.id as string);

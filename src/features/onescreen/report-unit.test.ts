@@ -94,3 +94,45 @@ describe("matchReportsToRows", () => {
     expect(matchReportsToRows([row("c1", "math"), row("c2", "english")], [])).toEqual([undefined, undefined]);
   });
 });
+
+// 2026-07-23 원장 제보: "특강에서도 정규수업의 이전 보고서를 가져온다".
+// 원인 = 2·3차 폴백이 "반 없는 보고서"를 과목만 보고 붙이는데, 정규와 특강은 같은 과목이라 구분 못 함.
+describe("정규/특강 분리 — 특강 행은 그 반으로 확정된 보고서만", () => {
+  const 정규 = { classId: "c-regular", subjectKey: "math" };
+  const 특강 = { classId: "c-special", subjectKey: "math", isSpecial: true };
+
+  it("이관분(반·과목 없음)은 특강이 아니라 정규 행에 붙는다", () => {
+    const legacy = { classId: null, subject: null, tag: "이관분" };
+    const out = matchReportsToRows([정규, 특강], [legacy], { legacyFallback: true });
+    expect(out[0]).toBe(legacy);
+    expect(out[1]).toBeUndefined();
+  });
+
+  it("정규가 이미 자기 반 보고서를 가졌으면 이관분은 아무 행에도 안 붙는다(특강으로 새지 않음)", () => {
+    const own = { classId: "c-regular", subject: "math", tag: "정규 당일" };
+    const legacy = { classId: null, subject: null, tag: "이관분" };
+    const out = matchReportsToRows([정규, 특강], [own, legacy], { legacyFallback: true });
+    expect(out[0]).toBe(own);
+    expect(out[1]).toBeUndefined(); // ← 예전엔 여기에 legacy가 붙어 정규 진도가 특강에 떴다
+  });
+
+  it("반 없는 과목 보고서(2차)도 특강 행엔 안 붙는다", () => {
+    const bySubject = { classId: null, subject: "math", tag: "관리자 작성" };
+    const out = matchReportsToRows([특강], [bySubject], { legacyFallback: true });
+    expect(out[0]).toBeUndefined();
+  });
+
+  it("특강 반으로 확정된 보고서는 정확히 그 행에 붙는다", () => {
+    const sp = { classId: "c-special", subject: "math", tag: "특강" };
+    const reg = { classId: "c-regular", subject: "math", tag: "정규" };
+    const out = matchReportsToRows([정규, 특강], [sp, reg], { legacyFallback: true });
+    expect(out[0]).toBe(reg);
+    expect(out[1]).toBe(sp);
+  });
+
+  it("특강이 없는 학생은 기존 동작 그대로(이관분 폴백 유지)", () => {
+    const legacy = { classId: null, subject: null, tag: "이관분" };
+    const out = matchReportsToRows([정규], [legacy], { legacyFallback: true });
+    expect(out[0]).toBe(legacy);
+  });
+});

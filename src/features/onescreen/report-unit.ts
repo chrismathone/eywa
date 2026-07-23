@@ -26,7 +26,12 @@ export function reportUnitKey(
 }
 
 /** 화면의 과목 행(로스터가 만든 것) — 매칭에 필요한 만큼만. */
-export type SubjectRowRef = { classId?: string | null; subjectKey?: string | null };
+export type SubjectRowRef = {
+  classId?: string | null;
+  subjectKey?: string | null;
+  /** 특강 반인가(`classes.is_special`). 켜지면 **그 반으로 확정된 보고서만** 붙는다(아래 2·3차 제외). */
+  isSpecial?: boolean;
+};
 /** DB 보고서 행 — 매칭에 필요한 만큼만. */
 export type ReportRowRef = { classId?: string | null; subject?: string | null };
 
@@ -74,9 +79,9 @@ export function matchReportsToRows<R extends ReportRowRef>(
     if (!cls) return;
     out[i] = take((r) => (r.classId?.trim() ?? "") === cls);
   });
-  // 2차 — 반이 없는 보고서를 과목으로.
+  // 2차 — 반이 없는 보고서를 과목으로. ⚠️ **특강 행은 제외**(아래 규칙).
   rows.forEach((row, i) => {
-    if (out[i]) return;
+    if (out[i] || row.isSpecial) return;
     const key = row.subjectKey?.trim();
     if (!key) return;
     out[i] = take((r) => !r.classId?.trim() && (r.subject?.trim() ?? "") === key);
@@ -87,9 +92,18 @@ export function matchReportsToRows<R extends ReportRowRef>(
   //    (실측 2026-07-22: 김지호 90행·최주원 75·이채은A 68·전주율 68·윤정인 62·주준호 36의 이력이 전부 사라짐).
   //    같은 과목뿐이면 "어느 과목인지" 모호하지 않으므로 **첫 행**에 준다 — roster의 학생단위 prev 폴백이
   //    `subjects[0]`에 붙이는 것과 같은 보수 규약이다. 다과목 학생(수학+영어)은 여전히 붙이지 않는다.
+  //
+  // 🔴 **정규/특강 분리(2026-07-23 원장 지시)**: 2·3차는 "반이 안 붙은 보고서"를 과목만 보고 붙이는
+  //    폴백인데, 정규와 특강은 **같은 과목**이라 이 폴백이 둘을 구분하지 못한다. 실제로 특강 행의
+  //    '이전 회차'에 정규 수업의 진도·교재가 떴다(정규 행이 1차에서 매칭되면 `findIndex(!v)`가
+  //    가리키는 "첫 빈 행"이 특강 행이 되어 이관분을 가져갔다).
+  //    → **특강 행은 1차(반 정확매칭)만 허용한다.** 근거: 이관분·반 없는 보고서는 전부 정규다
+  //    (특강 반은 최근 생성 — 이관 시점에 없었다). 반대 방향(정규 행이 특강 보고서를 가져가는 것)은
+  //    특강 보고서에 class_id가 항상 붙으므로 1차에서 정확히 갈린다.
+  //    ⚠️ 특강 첫 수업에 '이전 회차'가 비는 건 **정상**이다 — 정규 진도를 빌려오는 것보다 낫다.
   const subjectKeys = new Set(rows.map((r) => r.subjectKey?.trim() ?? ""));
   if (opts?.legacyFallback && subjectKeys.size === 1) {
-    const i = out.findIndex((v) => !v);
+    const i = out.findIndex((v, idx) => !v && !rows[idx]!.isSpecial);
     if (i >= 0) out[i] = take((r) => !r.classId?.trim() && !r.subject?.trim());
   }
   return out;

@@ -6,7 +6,7 @@ import { getTeacherScope } from "@/lib/auth/teacher-scope";
 import { createClient } from "@/lib/supabase/server";
 import { resolveBrandingSrc, resolveTenantReadUrls } from "@/lib/storage/media-storage";
 import { getTenantSettings } from "@/features/owner/server/queries";
-import { fetchReportTrendRows } from "@/features/onescreen/server/score-history";
+import { fetchReportTrendRows, fetchSpecialClassIds } from "@/features/onescreen/server/score-history";
 import { buildTrendPoints } from "@/features/onescreen/report-trend";
 import { ParentReportCard } from "@/features/onescreen/components/parent-report-card";
 import { PrintActions } from "@/app/(print)/enrollment/[id]/print/print-actions";
@@ -40,7 +40,7 @@ export default async function LessonReportPrintPage({
   const { data: report } = await supabase
     .from("lesson_reports")
     .select(
-      "id, student_id, subject, report_date, textbook, progress, exam_info, homework_score, homework_today, teacher_name, notes, trend_note, daily_test, check_test, attitude, attachments",
+      "id, student_id, class_id, subject, report_date, textbook, progress, exam_info, homework_score, homework_today, teacher_name, notes, trend_note, daily_test, check_test, attitude, attachments",
     )
     .eq("id", id)
     .single();
@@ -55,12 +55,18 @@ export default async function LessonReportPrintPage({
     supabase.from("students").select("name, school, grade").eq("id", report.student_id).single(),
     getTenantSettings(),
     // 성적 추이 이력 — RLS 클라이언트라 테넌트 격리 자동(tenantId 불요). 실패해도 문서 안 깨짐.
-    fetchReportTrendRows(
-      supabase,
-      report.student_id as string,
-      report.subject as string | null,
-      report.report_date as string,
-    ).catch(() => []),
+    // 정규/특강 분리(2026-07-23) — 그래프도 추세 문장과 같은 표본을 봐야 한다. RLS 클라이언트라 tenant 자동.
+    fetchSpecialClassIds(supabase)
+      .then((specialClassIds) =>
+        fetchReportTrendRows(
+          supabase,
+          report.student_id as string,
+          report.subject as string | null,
+          report.report_date as string,
+          { classId: report.class_id as string | null, specialClassIds },
+        ),
+      )
+      .catch(() => []),
   ]);
   const trend = buildTrendPoints(trendRows, report.id as string);
 

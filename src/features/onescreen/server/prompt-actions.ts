@@ -24,7 +24,7 @@ import {
   type ReportCommentInput,
 } from "../report-comment";
 import { buildTrendInput, buildTrendPrompt } from "../trend-comment";
-import { fetchScoreHistory } from "./score-history";
+import { fetchScoreHistory, fetchSpecialClassIds } from "./score-history";
 
 export type PromptRow = {
   type: PromptType;
@@ -210,7 +210,7 @@ export async function testPrompt(
   const supabase = await createClient();
   const { data: r } = await supabase
     .from("lesson_reports")
-    .select("student_id, subject, progress, daily_test, check_test, attitude, homework_score, textbook, homework_today")
+    .select("student_id, class_id, subject, progress, daily_test, check_test, attitude, homework_score, textbook, homework_today")
     .eq("id", reportId)
     .maybeSingle();
   if (!r) return { ok: false, error: "보고서를 찾을 수 없습니다" };
@@ -220,7 +220,16 @@ export async function testPrompt(
   let key: "comment" | "trend";
   if (type === "trend") {
     key = "trend";
-    const history = await fetchScoreHistory(supabase, r.student_id as string, (r.subject as string) ?? undefined, kstToday());
+    // 미리보기도 프로덕션과 같은 표본을 봐야 한다 — 정규/특강 분리(2026-07-23).
+    const specialClassIds = await fetchSpecialClassIds(supabase);
+    const history = await fetchScoreHistory(
+      supabase,
+      r.student_id as string,
+      (r.subject as string) ?? undefined,
+      kstToday(),
+      30,
+      { classId: (r.class_id as string | null) ?? null, specialClassIds },
+    );
     const input = buildTrendInput(history);
     if (!input) return { ok: false, error: "이 학생은 추세 표본이 부족합니다 — 다른 보고서를 선택하세요" };
     prompt = buildTrendPrompt(input, trimmed);
