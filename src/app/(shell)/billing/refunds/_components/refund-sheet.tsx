@@ -216,7 +216,8 @@ export function RefundSheet({
             </th>
             <th className={`${head} w-28`}>결제내역</th>
             <td className={cell} colSpan={2}>
-              {areaField("r_paymentDetails", r.paymentDetails, 4, "결제 내역(월·금액·결제수단 등)")}
+              {/* 자동입력이 월×항목별로 줄을 만들어 길다 — 8줄 기본(더 길면 resize-y로 늘린다). */}
+              {areaField("r_paymentDetails", r.paymentDetails, 8, "결제 내역(월·금액·결제수단 등)")}
             </td>
           </tr>
           <tr>
