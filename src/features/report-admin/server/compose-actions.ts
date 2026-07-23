@@ -5,6 +5,7 @@
 // 강사 소유(teacherOwnsStudent) 게이트 대신 **canWriteTenant('lesson_reports')** 로 인가한다(관리자는 학원 전체 발송 총괄).
 // ⚠️ 발송 안전 가드는 강사 경로와 100% 동일하게 유지: dry-run 스위치 · 과목 opt-in/화이트리스트 · 동명이인 name_conflict ·
 //    too_old · 취소/게시중 보호. RLS가 테넌트 격리(다른 테넌트 학생 접근 불가). source='admin'(강사 작성률 오염 방지).
+import { normalizeNoneMarker } from "@/features/onescreen/none-marker";
 import { getCurrentUser, type CurrentUser } from "@/lib/auth/current-user";
 import { canAccessTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
@@ -68,10 +69,12 @@ async function upsertAdminReport(
         class_id: input.classId || null, // 0134a — 보고서 단위(없으면 과목이 단위)
         textbook: input.textbook || null,
         makeup: input.makeup ?? false,
-        homework_today: input.homeworkToday || null,
+        // 자유입력 자리표시자(`-`·`X` 등)를 "없음" 하나로 표준화(none-marker.ts 규약, 원장 2026-07-23) —
+        // 그대로 두면 학부모 카드에 "오늘 과제: -"가 나가고 AI 멘트가 그걸 사실로 받는다.
+        homework_today: normalizeNoneMarker(input.homeworkToday),
         progress: input.progress || null,
         exam_info: input.examInfo || null,
-        homework_score: input.homeworkScore || null,
+        homework_score: normalizeNoneMarker(input.homeworkScore),
         daily_test: input.dailyTest || null,
         check_test: input.checkTest || null,
         attitude: input.attitude || null,
@@ -442,7 +445,7 @@ export async function sendBulkAdminReports(input: BulkAdminReportInput): Promise
     class_id: t.classId, // 0134a — 반 단위(선택한 반). 테스트 학생 경로만 null.
     textbook: input.textbook?.trim() || null,
     makeup: input.makeup ?? false,
-    homework_today: input.homeworkToday?.trim() || null,
+    homework_today: normalizeNoneMarker(input.homeworkToday), // 대량 작성도 같은 규약.
     progress: input.progress?.trim() || null,
     exam_info: null,
     homework_score: null,
