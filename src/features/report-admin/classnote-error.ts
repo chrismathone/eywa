@@ -21,6 +21,13 @@ function isHumanKorean(text: string): boolean {
 export function humanizeClassnoteError(raw: string | null | undefined): string | null {
   const r = (raw ?? "").trim();
   if (!r) return null;
+  // ⚠️ isHumanKorean보다 **먼저** — ClassNote(상류) API가 주는 짧은 한글 코드성 메시지다. 한글이라 그대로
+  // 통과하지만("해당 학생 없음") 무엇을 해야 하는지는 말해주지 않는다. 실제 뜻은 "그 알림장에 이 아이가 없다"
+  // = 학부모 미연결이고, 조치는 **학부모 초대**다(2026-07-23 손민우 사례).
+  // ⚠️ 이 문구는 발송 실패 알림(0142a 트리거 본문)과 **같은 뜻으로 유지**할 것 — 두 표면이 같은 실패를
+  //    다르게 설명하면 원장과 강사가 서로 다른 조치를 하게 된다.
+  if (/해당 학생 없음/.test(r))
+    return "학부모가 ClassNote 알림장에 연결되어 있지 않습니다 — 학부모를 초대한 뒤 다시 발송하세요";
   // ⚠️ 패턴 매칭보다 **먼저** — 아래 표는 영문/기술 원문 전용이다(위 주석 참조).
   if (isHumanKorean(r)) return r;
   if (/ERR_NAME_NOT_RESOLVED|ENOTFOUND|ERR_CONNECTION|ECONNREFUSED|net::/i.test(r))

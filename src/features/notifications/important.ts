@@ -10,6 +10,10 @@ import type { NotificationItem } from "./types";
  */
 export const IMPORTANT_NOTIFICATION_TYPES: readonly string[] = [
   "classnote_parent_post", // 학부모가 ClassNote에 새 글 → 담당 강사가 바로 확인·응답해야 함
+  // 보고서가 학부모에게 **안 갔는데 아무도 모르는** 상태를 끝내려면 벨 배지로는 약하다(원장 2026-07-23:
+  // "안 그러면 영원히 모를듯"). 빈도 걱정은 실측으로 해소 — 전체 12,483건 중 failed 1건이고,
+  // 발화도 'failed 전이' 1회뿐이다. 다발 시에도 팝업은 최신 1건 + "외 N건"이라 폭주하지 않는다.
+  "report_send_failed",
 ];
 
 /**
