@@ -16,7 +16,8 @@ export type NotificationType =
   | "unsent_report" // 저장만 하고 발송 안 한 수업 보고서(발송 콘솔과 동일 게이트) → master + 담당 강사(Phase 3, cron)
   | "progress_anomaly" // 진도 기록 이상(점프·겹침, math ingest) → master + 담당 강사(G2 선알림, cron)
   | "attendance_complete" // 반 출석 전원 입력 완료 → 담당 강사(G4, 저장 액션 전이 훅 — 본인이 찍으면 스킵)
-  | "report_send_failed"; // 수업 보고서 ClassNote 발송 최종 실패 → 담당 강사 폴백 master(0143a, DB 트리거)
+  | "report_send_failed" // 수업 보고서 ClassNote 발송 최종 실패 → 담당 강사 폴백 master(0143a, DB 트리거)
+  | "notice_send_failed"; // 학부모 공지 게시 실패/일부실패 → 담당 강사(자기 학생) + 발송자(0144a, DB 트리거)
 
 export type NotificationItem = {
   id: string;
@@ -44,4 +45,5 @@ export const NOTIFICATION_ICON: Record<string, EywaIconName> = {
   progress_anomaly: "alert",
   attendance_complete: "userCheck",
   report_send_failed: "alert",
+  notice_send_failed: "alert",
 };
