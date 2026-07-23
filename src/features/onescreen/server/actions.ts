@@ -1,5 +1,6 @@
 "use server";
 
+import { normalizeNoneMarker } from "../none-marker";
 import { randomUUID } from "node:crypto";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth/current-user";
@@ -138,10 +139,12 @@ export async function saveLessonReport(
         class_id: input.classId || null,
         textbook: input.textbook || null,
         makeup: input.makeup ?? false,
-        homework_today: input.homeworkToday || null,
+        // 자유입력 자리표시자(`-`·`X` 등)를 "없음" 하나로 표준화(none-marker.ts 규약, 원장 2026-07-23) —
+        // 그대로 두면 학부모 카드에 "오늘 과제: -"가 나가고 AI 멘트가 그걸 사실로 받는다.
+        homework_today: normalizeNoneMarker(input.homeworkToday),
         progress: input.progress || null,
         exam_info: input.examInfo || null,
-        homework_score: input.homeworkScore || null,
+        homework_score: normalizeNoneMarker(input.homeworkScore),
         daily_test: input.dailyTest || null,
         check_test: input.checkTest || null,
         attitude: input.attitude || null,

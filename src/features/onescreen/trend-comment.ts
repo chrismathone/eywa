@@ -6,6 +6,7 @@
  * CLAUDE.md 원칙: 계산/프롬프트 조립은 순수 함수 + Vitest.
  */
 import { DEFAULT_PROMPTS, interpolate, assembleSingle } from "./prompt-defaults";
+import { isNoneValue } from "./none-marker";
 
 /** 추세 조립 입력 1행 — 저장된 보고서(같은 과목)의 날짜·시험·과제. */
 export type TrendHistoryRow = {
@@ -47,7 +48,12 @@ export function buildTrendInput(history: TrendHistoryRow[]): TrendInput | null {
   // (실측 최근 30일 853행 vs 시험 651행) 공통으로 자르면 과제-only 행이 슬롯을 잠식해
   // 시험 기록이 추세에서 사라진다(실측 215명 중 26명). 두 줄은 프롬프트에서도 독립 문장이라 분리가 안전하다.
   const examRows = history.filter((h) => line(h.examInfo)).slice(-TREND_WINDOW);
-  const assignRows = history.filter((h) => line(h.homeworkScore)).slice(-TREND_WINDOW);
+  // 🔴 "없음"(과제가 없던 날)은 **추세에서 제외**한다 — 원장 2026-07-23. 미제출이 아니라 '해당 없음'이라
+  //    흐름에 넣으면 성실한 학생이 미제출로 몰린다. 정규화 전 원본(`-`·`X` 등 이관분 표기)도 함께 걸러야
+  //    해서(실측 67건) 저장 시점 정규화만으로는 부족하다 → 조립 시점에서도 판정한다.
+  const assignRows = history
+    .filter((h) => line(h.homeworkScore) && !isNoneValue(h.homeworkScore))
+    .slice(-TREND_WINDOW);
   const examTrend = examRows
     .map((h) => `[${h.date.slice(5)}] ${normalizeExamInfo(line(h.examInfo))}`)
     .join(" -> ");

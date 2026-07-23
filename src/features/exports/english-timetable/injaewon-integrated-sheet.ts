@@ -489,7 +489,15 @@ export function appendInjaewonIntegratedSheet(
       set(wdcRow, cs, String(wdByCard[i].length), { size: 10, formula: `COUNTA(${colLetter(cs)}${wdStart}:${colLetter(cs)}${wdEnd})` });
     });
 
-    // ── 테두리: 얇은 격자 + 구조 굵은선. 미니그리드·빈 학생 셀은 내부선 없음(외부 위주) ──
+    // A열(시간범위 축)은 교시 구간에서만 행마다 값이 있다. 그 아래(명단·정원/인원·대기·퇴원)는 늘 빈
+    // 칸이라 행마다 쪼개진 빈 셀이 사다리처럼 쌓였다 → **구간별 1칸으로 병합**(원장 지시 2026-07-23,
+    // 원본 시트와 동일한 모양). merge()는 1행짜리 구간이면 아무것도 안 하므로 그대로 호출해도 안전.
+    merge(rosterStart, 1, rosterEnd, 1);
+    merge(capRow, 1, cntRow, 1);
+    merge(waitStart, 1, waitEnd, 1);
+    merge(wdStart, 1, wdEnd, 1);
+
+    // ── 테두리: 얇은 격자 + 구조 굵은선. 미니그리드·학생 명단은 내부선 없음(외부 위주) ──
     const inList = (r: number) =>
       (r >= rosterStart && r <= rosterEnd) || (r >= waitStart && r <= waitEnd) || (r >= wdStart && r <= wdEnd);
     for (let r = secRow; r <= wdcRow; r++) {
@@ -497,10 +505,11 @@ export function appendInjaewonIntegratedSheet(
       const listRow = inList(r);
       for (let c = 1; c <= endCol; c++) {
         if (inMiniGrid && c >= START_COL) continue;
-        if (listRow && c >= START_COL) {
-          const cell = sheet.getCell(r, c);
-          if (cell.value == null && !cell.isMerged) continue; // 빈 학생 셀 = 내부 테두리 없음
-        }
+        // 명단(재원·대기·퇴원)은 **내부 테두리 전부 없음**(원장 지시 2026-07-23). 이름↔학교학년 세로선과
+        // 행 사이 가로선이 촘촘해 이름이 잘 안 읽혔다 — 구분은 상태 배경색·굵기가 이미 하고 있다.
+        // 카드 좌우 굵은선과 구간 경계 가로선은 아래 두 루프가 따로 그리므로 블록 경계는 안 흐려진다.
+        // (전엔 '빈 셀만' 건너뛰어, 학생이 있는 칸에만 격자가 남아 들쭉날쭉했다.)
+        if (listRow && c >= START_COL) continue;
         applyBorderSide(sheet, r, c, { top: SS, bottom: SS, left: SS, right: SS });
       }
     }

@@ -6,6 +6,7 @@
  * CLAUDE.md 원칙: 계산 함수는 순수 함수로 분리 + Vitest 단위테스트.
  */
 import type { CellState, OneScreenStudent, StudentStatus, TestScore } from "./types";
+import { isNoneValue } from "./none-marker";
 
 /** 정답 개수 → 백분율 (만점 0이면 0) */
 export function pct(score: number, max: number): number {
@@ -79,7 +80,9 @@ function testAndClosingLines(st: OneScreenStudent): string[] {
   if (tparts.length) lines.push(tparts.join(", ") + " 결과를 받았습니다.");
 
   // 태도·과제를 독립 처리 — 빈 값(과제 미입력 "" / "—")은 문장에서 생략(무의미한 "과제는 — 상태입니다" 방지).
-  const hasHomework = !!st.homework && st.homework !== "—";
+  // "없음"(과제가 없던 날, 원장 2026-07-23)도 문장에선 생략한다 — "과제는 없음 상태입니다"는 어색하고,
+  //  없던 과제를 굳이 언급할 이유도 없다. 학부모 카드엔 '지난 과제: 없음'으로 그대로 보인다.
+  const hasHomework = !!st.homework && st.homework !== "—" && !isNoneValue(st.homework);
   if (st.attitude && hasHomework)
     lines.push(`수업 태도는 '${st.attitude}', 과제는 ${st.homework} 상태입니다.`);
   else if (st.attitude) lines.push(`수업 태도는 '${st.attitude}'입니다.`);
@@ -117,6 +120,8 @@ export function buildSubjectReport(st: OneScreenStudent, subjectIndex: number): 
     ...testAndClosingLines(st),
   ];
   // 오늘 과제(0096a) — AI 멘트 프롬프트의 마무리 규칙("오늘 과제는 ~입니다")과 폴백 템플릿 대칭 유지.
-  if (su.homeworkToday?.trim()) lines.push(`오늘 과제는 ${flatten(su.homeworkToday)}입니다.`);
+  // 오늘 과제 — "없음"이면 "오늘 과제는 없음입니다"가 되지 않게 전용 문장으로(원장 2026-07-23).
+  if (isNoneValue(su.homeworkToday)) lines.push("오늘은 따로 내드린 과제가 없습니다.");
+  else if (su.homeworkToday?.trim()) lines.push(`오늘 과제는 ${flatten(su.homeworkToday)}입니다.`);
   return lines.join(" ");
 }

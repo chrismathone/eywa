@@ -39,8 +39,18 @@ import {
 import { TimetableToolbarActions } from "./_components/toolbar-actions";
 // ⚠️ 쿠키 이름 상수는 반드시 pref-cookies(일반 모듈)에서 — prefs-sync("use client")의 export를
 // 서버가 import하면 참조 프록시로 런타임 undefined가 된다(쿠키 기본값 침묵 사망, 2026-07-19 실측).
-import { EMPTY_DAYS_COOKIE, EMPTY_PERIODS_COOKIE } from "@/features/timetable/lib/pref-cookies";
-import { EmptyDaysPrefSync, EmptyPeriodsPrefSync } from "./_components/prefs-sync";
+import {
+  COMPACT1H_COOKIE,
+  COMPACT1H_NONE,
+  EMPTY_DAYS_COOKIE,
+  EMPTY_PERIODS_COOKIE,
+  readCompact1hFor,
+} from "@/features/timetable/lib/pref-cookies";
+import {
+  Compact1hPrefSync,
+  EmptyDaysPrefSync,
+  EmptyPeriodsPrefSync,
+} from "./_components/prefs-sync";
 import { EmptyPeriodScope } from "./_components/empty-period-scope";
 import { TimetableColorToggle } from "./_components/color-mode-toggle";
 import { StudentTally } from "./_components/student-tally";
@@ -81,14 +91,19 @@ export default async function TimetablePage({
     ? emptyperiodsRaw === "collapse"
     : savedCollapseEmptyPeriods;
   // 통합뷰 '1시간 단위' — **섹션별 토글**(사용자 결정 2026-07-06, 전역 아님). compact1h=쉼표구분 sectionKey
-  // (=시작교시 order, 자정기준 분). 든 섹션만 사이 빈 교시 행을 숨긴다. 읽기전용이라 상태는 URL 파라미터.
-  const compactSections = new Set(
-    (compact1hRaw ?? "")
-      .split(",")
-      .map((s) => Number(s.trim()))
-      .filter((n) => Number.isFinite(n) && n > 0),
-  );
-  const compactList = [...compactSections];
+  // (=시작교시 order, 자정기준 분). 든 섹션만 사이 빈 교시 행을 숨긴다.
+  // 우선순위 = 파라미터 → (없으면) 쿠키 → 빈 값. `none`은 **명시적 해제** 센티널이라 쿠키로 되돌아가지 않는다
+  // (없으면 마지막 하나를 풀 때 파라미터가 사라져 쿠키가 옛 값을 되살린다 = 안 꺼지는 토글).
+  // 쿠키는 과목별이라 `subject` 확정 뒤에 읽는다(아래 compactList).
+  const compactFromParam =
+    compact1hRaw === undefined
+      ? null
+      : compact1hRaw === COMPACT1H_NONE
+        ? []
+        : compact1hRaw
+            .split(",")
+            .map((s) => Number(s.trim()))
+            .filter((n) => Number.isFinite(n) && n > 0);
   const view: ViewMode =
     viewParam === "integrated" ? "integrated" : viewParam === "teacher" ? "teacher" : "basic";
 
@@ -130,6 +145,10 @@ export default async function TimetablePage({
   const defaultSubject = available[0] ?? "";
   const subject =
     subjectParam && available.includes(subjectParam) ? subjectParam : defaultSubject;
+  // '1시간 단위' 최종 해석 — 파라미터(공유 링크 존중) → 이 **과목의** 쿠키 → 빈 값(전부 펼침).
+  // 쓰기는 Compact1hPrefSync(클라). 과목별이라 영어에서 접어둔 섹션이 수학에 새지 않는다.
+  const compactList = compactFromParam ?? readCompact1hFor(cookieStore.get(COMPACT1H_COOKIE)?.value, subject);
+  const compactSections = new Set(compactList);
 
   // 비수업 블록(감독·준비·회의·연차, 0138a) — **강사뷰에서만** 그린다. 반이 아니라서 다른 뷰·집계에
   // 섞으면 수업 수가 부풀고 과목/구분 칩에도 새어 나온다. subject 확정 뒤에 읽어야 해서(위 Promise.all은
@@ -192,6 +211,9 @@ export default async function TimetablePage({
       compact1h: compactSections.has(sectionKey)
         ? compactList.filter((k) => k !== sectionKey)
         : [...compactList, sectionKey],
+      // 사용자가 방금 정한 값 = 빈 집합도 명시(compact1h=none). 안 그러면 마지막 하나를 해제할 때
+      // 파라미터가 사라져 쿠키의 옛 값이 되살아난다(안 꺼지는 토글).
+      compact1hExplicit: true,
       hideEmptyDays,
       collapseEmptyPeriods,
     });
@@ -227,6 +249,7 @@ export default async function TimetablePage({
       {/* '미사용 요일'·'빈 교시 접기' 선호를 기기에 기억(쿠키) — 창은 깨끗한 URL로 열려 파라미터만으론 매번 초기화된다. */}
       <EmptyDaysPrefSync hide={hideEmptyDays} />
       <EmptyPeriodsPrefSync collapse={collapseEmptyPeriods} />
+      <Compact1hPrefSync subject={subject} sections={compactList} />
       {/* Editorial 문법 ① — 헤더 위계 + 우측 학생 집계(StudentTally). 시간표는 세로 공간이 가장
           귀한 화면이라 **창(임베드)에선 이 줄을 통째로 접고** 집계를 툴바 우측으로 내린다(컴팩트
           1행조차 아까움 — 2026-07-20 원장 "여전히 많은 공간"). 최상위 프레임은 풀 헤더 유지. */}
@@ -271,7 +294,9 @@ export default async function TimetablePage({
                 kind,
                 week,
                 thisWk,
-                // 과목 전환 = 섹션 order가 과목마다 달라 '1시간 단위' 압축 집합을 초기화(엉뚱한 섹션 압축 방지).
+                // 과목 전환 = '1시간 단위'를 안 싣는다(섹션 order가 과목마다 달라 엉뚱한 섹션이 접힌다).
+                // 파라미터가 없으면 서버가 **그 과목 쿠키**를 읽으므로, 초기화가 아니라 "그 과목에서 내가
+                // 마지막으로 정해둔 값"으로 복원된다(2026-07-23 — 과목별 기억 도입 전엔 매번 초기화였음).
                 // ⚠️ 단 '미사용 요일'·'빈 교시 접기' 상태는 과목과 무관한 표시 취향이라 **유지**한다 — 다른
                 // 네비(주 이동·뷰 전환·강사 토글)는 전부 보존하는데 과목 칩만 떨궈 설정이 초기화됐다(적대 감사 LOW).
                 hideEmptyDays,
@@ -528,7 +553,14 @@ function buildHref(opts: {
   kind: TimetableKind;
   week: string; // 월요일 YYYY-MM-DD
   thisWk: string; // 이번 주 월요일(기본값이면 생략)
-  compact1h?: number[]; // 통합뷰 '1시간 단위' 압축 섹션(sectionKey 집합) — 다른 네비 시 유지, 미지정=초기화
+  compact1h?: number[]; // 통합뷰 '1시간 단위' 압축 섹션(sectionKey 집합) — 다른 네비 시 유지, 미지정=쿠키(과목별 기기 선호)
+  /**
+   * 이 링크가 '1시간 단위'를 **사용자가 방금 정한 값**으로 못박는지. 위 hideEmptyDays와 같은
+   * 양방향 직렬화 규약이다 — 빈 집합을 `compact1h=none`으로 명시해야 "마지막 하나 해제"가 살아남는다
+   * (명시하지 않으면 파라미터가 사라져 쿠키의 옛 값이 되살아나 토글이 안 꺼진다).
+   * 섹션 토글 링크만 true. 주·뷰·구분 이동 링크는 현재 값을 그대로 실어 나르므로 불필요.
+   */
+  compact1hExplicit?: boolean;
   /**
    * 강사뷰 '미사용 요일' 해제 상태. ⚠️ 값이 오면 **양방향 모두 명시 직렬화**(hide/show) — 파라미터
    * 없음은 "쿠키(기기 선호) 참조"라는 제3의 상태다. hide만 직렬화하던 옛 방식은 쿠키가 hide로
@@ -549,6 +581,7 @@ function buildHref(opts: {
   if (opts.week !== opts.thisWk) params.set("week", opts.week);
   if (opts.compact1h && opts.compact1h.length)
     params.set("compact1h", [...opts.compact1h].sort((a, b) => a - b).join(","));
+  else if (opts.compact1hExplicit) params.set("compact1h", COMPACT1H_NONE);
   if (opts.hideEmptyDays !== undefined) params.set("emptydays", opts.hideEmptyDays ? "hide" : "show");
   if (opts.collapseEmptyPeriods !== undefined)
     params.set("emptyperiods", opts.collapseEmptyPeriods ? "collapse" : "expand");
