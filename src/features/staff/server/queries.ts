@@ -1,5 +1,6 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchInChunks } from "@/lib/supabase/batch";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import type { SystemRole } from "@/lib/permissions";
@@ -133,6 +134,19 @@ export async function getStaffById(id: string): Promise<StaffDetail | null> {
     hourlyRate: Number(data.hourly_rate ?? 0),
     monthlyBase: Number(data.monthly_base ?? 0),
   };
+}
+
+/**
+ * 이 직원 계정이 **한 번이라도 로그인한 적 있는지**(auth.users.last_sign_in_at).
+ * 초대만 해두고 아직 안 들어온 계정이면 이메일 오타를 화면에서 고칠 수 있다(`canEditLoginEmail`).
+ * auth 스키마는 admin 클라이언트로만 읽힌다 — 호출부(직원 수정 화면·액션)가 이미 canManageStaff로 잠겨 있다.
+ * ⚠️ 조회 실패·계정 없음은 **"로그인한 적 있음"(=이메일 잠금)** 으로 떨어뜨린다 — 모르면 안 여는 쪽.
+ */
+export async function hasStaffEverSignedIn(id: string): Promise<boolean> {
+  const admin = createAdminClient();
+  const { data, error } = await admin.auth.admin.getUserById(id);
+  if (error || !data?.user) return true;
+  return Boolean(data.user.last_sign_in_at);
 }
 
 // Alias for backward-compat (별칭 — payroll/leaves 페이지에서 사용)

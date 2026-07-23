@@ -12,7 +12,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logAction } from "@/features/audit/server/log";
 import { createClient } from "@/lib/supabase/server";
-import { EMAIL_RE, isImportArtifactEmail } from "@/features/staff/email";
+import { canEditLoginEmail, EMAIL_RE } from "@/features/staff/email";
 
 const ROLES = Object.keys(ROLE_HIERARCHY) as SystemRole[];
 const STATUSES = ["active", "inactive", "pending"] as const;
@@ -186,11 +186,17 @@ export async function updateStaff(
   if (!emailChanged) delete fieldErrors.email;
   if (Object.keys(fieldErrors).length > 0) return { fieldErrors };
 
+  const { data: authData } = emailChanged
+    ? await admin.auth.admin.getUserById(id)
+    : { data: null };
+
   if (emailChanged) {
-    // 임포트 산물 이메일(형식불량·@imported.local)만 교정 허용 — 실 로그인 이메일 오변경 방지(UI와 동일 기준 이중 검증).
-    if (!isImportArtifactEmail(String(target.email ?? ""))) {
+    // 임포트 산물 이메일 + **아직 로그인 전인 초대 계정**만 교정 허용(UI와 동일 기준 이중 검증).
+    // 계정 조회 실패는 "로그인한 적 있음"으로 본다 — 모르면 안 여는 쪽(queries.hasStaffEverSignedIn과 동일).
+    const everSignedIn = !authData?.user || Boolean(authData.user.last_sign_in_at);
+    if (!canEditLoginEmail(String(target.email ?? ""), everSignedIn)) {
       return {
-        fieldErrors: { email: "실사용 로그인 이메일은 여기서 변경할 수 없습니다" },
+        fieldErrors: { email: "이미 로그인한 계정의 이메일은 여기서 변경할 수 없습니다" },
       };
     }
     // 같은 테넌트 중복(대소문자 무시, 본인 제외) — (tenant_id,email) 유니크 위반 사전 안내.
@@ -207,7 +213,6 @@ export async function updateStaff(
     }
     // auth 계정이 있으면 로그인 이메일(auth.users) 자체를 변경 — public.users만 바꾸면 미러 트리거
     // (0075a: email = excluded.email)가 다음 auth 갱신 때 옛 이메일로 되덮는다. 트리거가 public도 동기.
-    const { data: authData } = await admin.auth.admin.getUserById(id);
     if (authData?.user) {
       const { error: authErr } = await admin.auth.admin.updateUserById(id, {
         email: input.email,
