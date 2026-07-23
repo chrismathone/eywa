@@ -11,15 +11,27 @@ import { schoolGradeLabel } from "@/lib/format/school-grade";
 import {
   sendOnescreenNotice,
   listMyOnescreenNotices,
+  listMyNoticeStudents,
   editQueuedNotice,
   editPostedNotice,
   deleteQueuedNotice,
   cancelOnescreenNotice,
+  type NoticeStudent,
   type OnescreenNoticeRow,
 } from "../server/notice-actions";
+import { issueNoticeAttachmentTicket, registerNoticeAttachment } from "../server/notice-attachment-actions";
+import { uploadToTicket } from "@/lib/storage/upload-to-ticket";
+import { resizeImageForUpload } from "../resize-image";
+import { NOTICE_ATTACHMENT_MAX, type NoticeAttachment } from "../notice-attachments";
 import type { OneScreenStudent } from "../types";
 
 const BODY = "border-line bg-card text-foreground rounded-lg border px-3 py-2 text-[13px] w-full resize-y";
+
+/** 대상 후보 — '오늘 수업'(로스터)과 '내 담당 전체'(서버 조회)를 한 모양으로 다룬다. */
+type Candidate = NoticeStudent;
+
+/** 대상 범위 — 기본은 오늘(카드/표에서 넘어온 선택을 그대로 살림), '전체'는 요일과 무관한 담당 학생 전원. */
+type Scope = "today" | "all";
 
 /** classnote_notices.status → 한글 라벨 + 색(원문 노출 금지). */
 function statusLabel(s: string): { label: string; cls: string } {
@@ -71,6 +83,13 @@ export function NoticeComposer({
   const [rows, setRows] = useState<OnescreenNoticeRow[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editBody, setEditBody] = useState("");
+  const [scope, setScope] = useState<Scope>("today");
+  const [allStudents, setAllStudents] = useState<Candidate[] | null>(null); // 담당 전체(한 번 받아 캐시)
+  // 관리자뷰는 담당 반 개념이 없어 실제로 학원 전체가 담긴다 — 라벨이 거짓말하지 않게 서버가 알려준 범위를 쓴다.
+  const [allLabel, setAllLabel] = useState("내 담당 전체");
+  const [loadingAll, setLoadingAll] = useState(false);
+  const [atts, setAtts] = useState<NoticeAttachment[]>([]); // 전원 공통 이미지
+  const [uploading, setUploading] = useState(false);
   // seed 초기 선택은 useState 초기화로만 반영 — 진입 시 부모가 key로 remount해 새 seed를 적용(effect 동기 setState 회피).
 
   async function refreshHistory() {
@@ -100,15 +119,109 @@ export function NoticeComposer({
     setConfirmSend(false);
   };
 
-  // 선택 학생 → (학생, 첫 과목, 개별내용) — 과목이 보드 prefix 결정. 학생당 1건(첫 과목)으로 보드 중복 방지.
+  // 오늘 로스터 학생 → 후보 모양으로 정규화(과목 = 첫 과목, 보드 prefix 결정).
+  const todayCandidates: Candidate[] = students.map((s) => ({
+    id: s.id,
+    name: s.name,
+    grade: s.grade,
+    className: s.className ?? "",
+    subject: s.subjects[0]?.subjectKey ?? s.subjects[0]?.name ?? null,
+  }));
+  const candidates: Candidate[] = scope === "all" ? (allStudents ?? []) : todayCandidates;
+
+  // 범위 전환 — '전체'는 서버에서 한 번 받아 캐시. 선택은 유지하되 후보에 없는 id는 발송에서 자동으로 빠진다.
+  async function switchScope(next: Scope) {
+    setScope(next);
+    setConfirmSend(false);
+    if (next !== "all" || allStudents || loadingAll) return;
+    setLoadingAll(true);
+    const res = await listMyNoticeStudents();
+    setLoadingAll(false);
+    if (!res.ok) {
+      toast.error(res.error ?? "담당 학생을 불러오지 못했습니다");
+      setScope("today");
+      return;
+    }
+    if (res.scope === "tenant") setAllLabel("학원 전체");
+    setAllStudents(res.students ?? []);
+  }
+
+  // 전체 선택/해제 — **현재 보이는 후보에만** 적용(다른 범위에서 고른 선택을 조용히 날리지 않는다).
+  const allChecked = candidates.length > 0 && candidates.every((c) => checked.has(c.id));
+  function toggleAll() {
+    setChecked((prev) => {
+      const n = new Set(prev);
+      for (const c of candidates) {
+        if (allChecked) n.delete(c.id);
+        else n.add(c.id);
+      }
+      return n;
+    });
+    setConfirmSend(false);
+  }
+
+  // 선택 학생 → (학생, 과목, 개별내용) — 과목이 보드 prefix 결정. 학생당 1건으로 보드 중복 방지.
   function buildTargets() {
-    return students
+    return candidates
       .filter((s) => checked.has(s.id))
       .map((s) => ({
         studentId: s.id,
-        subject: s.subjects[0]?.subjectKey ?? s.subjects[0]?.name ?? null,
+        subject: s.subject,
         individualBody: individual[s.id]?.trim() || undefined,
       }));
+  }
+
+  /**
+   * 공통 이미지 첨부 — 보고서 첨부와 같은 2단계(티켓 → PUT → 재검증). 업로드된 것만 목록에 들어가고,
+   * 실제 적재는 발송 시. 순차 업로드(티켓 발급이 실패하면 그 자리에서 멈춰 원인을 보여준다).
+   */
+  async function addFiles(list: FileList | null) {
+    const picked = Array.from(list ?? []);
+    if (!picked.length) return;
+    const room = NOTICE_ATTACHMENT_MAX - atts.length;
+    if (room <= 0) {
+      toast.error(`이미지는 한 글에 최대 ${NOTICE_ATTACHMENT_MAX}장까지 첨부할 수 있습니다`);
+      return;
+    }
+    if (picked.length > room) toast.message(`${room}장만 첨부합니다 — 한 글에 최대 ${NOTICE_ATTACHMENT_MAX}장`);
+    setUploading(true);
+    const added: NoticeAttachment[] = [];
+    try {
+      for (const original of picked.slice(0, room)) {
+        if (!original.type.startsWith("image/")) {
+          toast.error(`${original.name} — 이미지(JPG·PNG·WebP)만 첨부할 수 있습니다`);
+          continue;
+        }
+        const file = await resizeImageForUpload(original);
+        const issued = await issueNoticeAttachmentTicket({ contentType: file.type, size: file.size });
+        if (issued.error || !issued.ticket) {
+          toast.error(issued.error ?? "업로드 준비에 실패했습니다");
+          break;
+        }
+        try {
+          await uploadToTicket(issued.ticket, file);
+        } catch (e) {
+          toast.error(e instanceof Error ? e.message : "업로드에 실패했습니다");
+          break;
+        }
+        const reg = await registerNoticeAttachment({
+          path: issued.ticket.path,
+          name: original.name,
+          size: file.size,
+        });
+        if (reg.error || !reg.attachment) {
+          toast.error(reg.error ?? "첨부 등록에 실패했습니다");
+          break;
+        }
+        added.push(reg.attachment);
+      }
+    } finally {
+      setUploading(false);
+    }
+    if (added.length) {
+      setAtts((prev) => [...prev, ...added]);
+      toast.success(`이미지 ${added.length}장 첨부`);
+    }
   }
 
   async function doSend(test: boolean) {
@@ -122,7 +235,12 @@ export function NoticeComposer({
       return;
     }
     setBusy(true);
-    const res = await sendOnescreenNotice({ body: body.trim(), students: targets, test });
+    const res = await sendOnescreenNotice({
+      body: body.trim(),
+      students: targets,
+      test,
+      ...(atts.length ? { attachments: atts } : {}),
+    });
     setBusy(false);
     setConfirmSend(false);
     if (!res.ok) {
@@ -144,6 +262,7 @@ export function NoticeComposer({
       setChecked(new Set());
       setIndividual({});
       setShowIndividual(false);
+      setAtts([]);
       void refreshHistory();
       onSent?.();
     } else {
@@ -188,23 +307,62 @@ export function NoticeComposer({
     void refreshHistory();
   }
 
-  const selectedCount = students.filter((s) => checked.has(s.id)).length;
-  const indivCount = students.filter((s) => checked.has(s.id) && (individual[s.id] ?? "").trim()).length;
+  const selectedCount = candidates.filter((s) => checked.has(s.id)).length;
+  const indivCount = candidates.filter((s) => checked.has(s.id) && (individual[s.id] ?? "").trim()).length;
 
   return (
     <div className="grid items-stretch gap-4 lg:grid-cols-[300px_1fr]">
       {/* 대상 선택 — 데스크톱에선 우측(작성+이력)이 길어지면 함께 늘어 목록 내부 스크롤(높이 균형), 모바일은 520px 캡. */}
       <div className="lg:relative lg:min-h-[320px]">
         <div className="bg-card border-line shadow-card flex max-h-[520px] flex-col rounded-2xl border lg:absolute lg:inset-0 lg:max-h-none">
-          <div className="border-line border-b px-3 py-2">
-            <p className="text-foreground text-[13px] font-bold">대상 학생 <span className="text-primary">{selectedCount}</span></p>
-            <p className="text-text-faint text-[11px]">보이는 반의 재원생 · 발송 과목(수학 등)만 실제 게시</p>
+          <div className="border-line space-y-1.5 border-b px-3 py-2">
+            <p className="text-foreground text-[13px] font-bold">
+              대상 학생 <span className="text-primary">{selectedCount}</span>
+            </p>
+            {/* 범위 — 오늘 수업(로스터) vs 내 담당 전체. 요일과 무관한 공지(휴강 안내 등)는 '전체'로. */}
+            <div className="border-line inline-flex rounded-full border p-0.5 text-[11px]">
+              {(
+                [
+                  { key: "today", label: "오늘 수업" },
+                  { key: "all", label: allLabel },
+                ] as const
+              ).map((o) => (
+                <button
+                  key={o.key}
+                  type="button"
+                  onClick={() => void switchScope(o.key)}
+                  className={`rounded-full px-2.5 py-1 font-medium ${
+                    scope === o.key ? "bg-primary text-white" : "text-text-dim hover:bg-bg-soft"
+                  }`}
+                >
+                  {o.label}
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-text-faint text-[11px]">
+                {scope === "all" ? `${allLabel} 재원생` : "보이는 반의 재원생"} · 발송 과목(수학 등)만 실제 게시
+              </p>
+              {candidates.length > 0 ? (
+                <button
+                  type="button"
+                  onClick={toggleAll}
+                  className="text-primary shrink-0 text-[11px] font-medium hover:underline"
+                >
+                  {allChecked ? "전체 해제" : `전체 선택 ${candidates.length}`}
+                </button>
+              ) : null}
+            </div>
           </div>
           <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto p-1.5">
-            {students.length === 0 ? (
-              <p className="text-text-faint p-2 text-[12px]">표시할 학생이 없습니다.</p>
+            {loadingAll ? (
+              <p className="text-text-faint p-2 text-[12px]">담당 학생을 불러오는 중…</p>
+            ) : candidates.length === 0 ? (
+              <p className="text-text-faint p-2 text-[12px]">
+                {scope === "all" ? "담당 반의 재원생이 없습니다." : "표시할 학생이 없습니다."}
+              </p>
             ) : (
-              students.map((s) => (
+              candidates.map((s) => (
                 <label
                   key={s.id}
                   className="hover:bg-bg-soft flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-[13px]"
@@ -264,7 +422,7 @@ export function NoticeComposer({
                   <p className="text-text-faint px-1 text-[11px]">
                     입력한 학생은 <b>공통 내용 뒤에</b> 이 내용이 덧붙어 발송됩니다. 비우면 공통 내용만 나갑니다.
                   </p>
-                  {students
+                  {candidates
                     .filter((s) => checked.has(s.id))
                     .map((s) => (
                       <div key={s.id} className="flex items-start gap-2">
@@ -284,10 +442,65 @@ export function NoticeComposer({
               ) : null}
             </div>
           ) : null}
+          {/* 공통 이미지 첨부 — 선택 학생 모두의 글에 같은 이미지가 붙는다(수업 보고서 첨부와 같은 레일). */}
+          <div className="border-line rounded-md border px-3 py-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-text-dim text-[11px] font-medium">
+                이미지 첨부 (선택 학생 모두에게){atts.length ? ` · ${atts.length}장` : ""}
+              </p>
+              <label
+                className={`border-line text-text-dim rounded-md border px-2 py-1 text-[11px] ${
+                  uploading || atts.length >= NOTICE_ATTACHMENT_MAX
+                    ? "text-text-faint cursor-not-allowed"
+                    : "hover:bg-bg-soft cursor-pointer"
+                }`}
+              >
+                {uploading ? "업로드 중…" : "이미지 추가"}
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  multiple
+                  className="hidden"
+                  disabled={uploading || atts.length >= NOTICE_ATTACHMENT_MAX}
+                  onChange={(e) => {
+                    const list = e.target.files;
+                    e.target.value = ""; // 같은 파일 다시 고를 수 있게 초기화
+                    void addFiles(list);
+                  }}
+                />
+              </label>
+            </div>
+            {atts.length ? (
+              <ul className="mt-1.5 space-y-1">
+                {atts.map((a) => (
+                  <li key={a.path} className="flex items-center gap-2 text-[11px]">
+                    <span className="text-foreground min-w-0 flex-1 truncate" title={a.name}>
+                      {a.name}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setAtts((prev) => prev.filter((x) => x.path !== a.path))}
+                      className="text-text-faint hover:text-danger shrink-0"
+                    >
+                      삭제
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-text-faint mt-1 text-[11px]">
+                사진(JPG·PNG·WebP) · 한 글에 최대 {NOTICE_ATTACHMENT_MAX}장
+              </p>
+            )}
+          </div>
+
           {confirmSend ? (
             <div className="border-primary/40 bg-primary/5 flex flex-wrap items-center gap-2 rounded-md border px-3 py-2">
               <span className="text-foreground text-[12px]">
-                선택 <b>{selectedCount}명</b>{indivCount ? ` (개별 내용 ${indivCount}명)` : ""}의 학부모에게 공지를 발송할까요?{!sendEnabled ? " (실제 발송 OFF — 전송 안 됨)" : ""}
+                {scope === "all" ? `${allLabel} ` : ""}<b>{selectedCount}명</b>
+                {indivCount ? ` (개별 내용 ${indivCount}명)` : ""}
+                {atts.length ? ` · 이미지 ${atts.length}장` : ""}의 학부모에게 공지를 발송할까요?
+                {!sendEnabled ? " (실제 발송 OFF — 전송 안 됨)" : ""}
               </span>
               <Button size="sm" onClick={() => doSend(false)} disabled={busy}>
                 {busy ? "발송 중…" : "발송 확인"}
@@ -345,26 +558,30 @@ export function NoticeComposer({
                         <p className="text-text-faint mt-0.5 text-[11px]">
                           <span className={st.cls}>{st.label}</span> · 대상 {r.targetCount}명
                         </p>
-                        {/* 게시된 리포트 주소(회수·확인용) — 최대 5개 링크, 초과분은 개수만. */}
+                        {/* 게시된 리포트 — **학생 이름**으로 링크(원장 요청: #1 #2로는 누구 글인지 알 수 없음).
+                            많으면 앞 8명만 이름으로, 나머지는 수만 표시. */}
                         {r.reportLinks.length ? (
                           <p className="text-text-faint mt-0.5 flex flex-wrap items-center gap-x-1.5 text-[11px]">
                             <span>게시글 {r.reportLinks.length}개:</span>
-                            {r.reportLinks.slice(0, 5).map((l, i) =>
+                            {r.reportLinks.slice(0, 8).map((l, i) =>
                               l.url ? (
                                 <a
                                   key={i}
                                   href={l.url}
                                   target="_blank"
                                   rel="noreferrer"
+                                  title={l.revoked ? `${l.name} — 회수됨` : l.name}
                                   className={`underline ${l.revoked ? "text-text-faint line-through" : "text-primary"}`}
                                 >
-                                  #{i + 1}
+                                  {l.name}
                                 </a>
                               ) : (
-                                <span key={i} className="text-text-faint">#{i + 1}</span>
+                                <span key={i} className="text-text-faint" title="주소를 못 찾아 링크 없음">
+                                  {l.name}
+                                </span>
                               ),
                             )}
-                            {r.reportLinks.length > 5 ? <span>…</span> : null}
+                            {r.reportLinks.length > 8 ? <span>외 {r.reportLinks.length - 8}명</span> : null}
                           </p>
                         ) : null}
                       </div>

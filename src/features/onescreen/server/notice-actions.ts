@@ -13,7 +13,7 @@
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
-import { fetchInChunks } from "@/lib/supabase/batch";
+import { fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { effectiveTeacherId } from "@/lib/auth/view-mode";
 import { hasClassnoteNameCollision } from "./scope";
@@ -24,6 +24,7 @@ import {
   type NoticeTarget,
 } from "@/features/report-admin/notice-targets";
 import { logAction } from "@/features/audit/server/log";
+import { flattenNoticeReportLinks, type NoticeReportLink } from "../notice-links";
 import { isTenantReportAttachmentPath } from "@/lib/storage/legacy-audio-path";
 import {
   hasNoticeTargetAttachments,
@@ -234,6 +235,99 @@ export async function sendOnescreenNotice(input: OnescreenNoticeInput): Promise<
   return { ok: true, queued: targets.length, skipped };
 }
 
+export type NoticeStudent = {
+  id: string;
+  name: string;
+  grade: string | null;
+  className: string;
+  subject: string | null; // 반 과목 키 — 보드 prefix 결정(발송 과목만 담기므로 항상 발송 가능한 값)
+};
+
+/**
+ * **내 담당 학생 전체** — 공지 대상 후보(원장 요청 2026-07-23: "전체공지는 관리자가 아니라 강사가 내 담당학생에 대한").
+ *
+ * 컴포저의 기본 후보는 **그날 로스터**(오늘 수업하는 반)라 "휴강 안내"처럼 요일과 무관한 공지를 담당 전원에게
+ * 보낼 방법이 없었다. 이 액션이 요일을 빼고 담당 반 전체 재원생을 돌려준다.
+ *
+ * 인가는 sendOnescreenNotice와 **같은 분기**(#77) — 강사(겸직 강사뷰 포함)면 본인 담당 반, 아니면 보고서 관리
+ * 권한으로 학원 전체. 최종 인가는 발송 액션이 다시 하므로 여기서 새는 값이 곧바로 발송되진 않는다.
+ *
+ * ⚠️ **발송 과목(classnoteSubjects) 반만** 담는다 — 안 되는 학생을 후보에 세우면 "30명 선택"이라 해놓고
+ *    발송 결과가 12명이 되어 숫자가 거짓말을 한다.
+ */
+export async function listMyNoticeStudents(): Promise<{
+  ok: boolean;
+  students?: NoticeStudent[];
+  /** 실제로 담긴 범위 — 강사면 담당 반, 관리자뷰면 학원 전체. 화면 라벨이 거짓말하지 않게 그대로 알린다. */
+  scope?: "teacher" | "tenant";
+  error?: string;
+}> {
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, error: "로그인이 필요합니다" };
+  const supabase = await createClient();
+  const settings = await getTenantSettings();
+  const allowed = settings.report.classnoteSubjects;
+
+  const teacherId = await effectiveTeacherId();
+  if (!teacherId && !(await canWriteTenant(user.systemRole, "lesson_reports")))
+    return { ok: false, error: "공지 발송 권한이 없습니다" };
+  const scope = teacherId ? ("teacher" as const) : ("tenant" as const);
+  if (!allowed.length) return { ok: true, students: [], scope };
+
+  const base = supabase
+    .from("classes")
+    .select("id, class_name, subject")
+    .eq("is_active", true)
+    .in("subject", allowed);
+  const { data: classes, error } = await (teacherId ? base.eq("teacher_id", teacherId) : base).order("class_name");
+  if (error) return { ok: false, error: error.message };
+  const classById = new Map((classes ?? []).map((c) => [c.id as string, c]));
+  const classIds = [...classById.keys()];
+  if (!classIds.length) return { ok: true, students: [], scope };
+
+  // 활성 수강 — 반이 수십 개면 청크당 1000행에 근접한다(세는 데 쓰이므로 절단 금지, B2). order는 페이지 안정용 tie-break.
+  const enr = await fetchAllPagedInChunks<{ id: string; class_id: string; student_id: string }>(
+    classIds,
+    (chunk, from, to) =>
+      supabase
+        .from("enrollments")
+        .select("id, class_id, student_id")
+        .in("class_id", chunk)
+        .is("end_date", null)
+        .order("id")
+        .range(from, to),
+  );
+  const studentIds = [...new Set(enr.map((e) => e.student_id))];
+  if (!studentIds.length) return { ok: true, students: [], scope };
+
+  const rows = await fetchInChunks<{ id: string; name: string; grade: string | null; status: string }>(
+    studentIds,
+    (chunk) => supabase.from("students").select("id, name, grade, status").in("id", chunk),
+  );
+  const byId = new Map(rows.map((r) => [r.id, r]));
+
+  // 학생 1명 = 대상 1건(첫 반) — 두 반을 들어도 보드는 하나라 중복 게시가 되면 안 된다.
+  const seen = new Set<string>();
+  const out: NoticeStudent[] = [];
+  for (const e of enr) {
+    if (seen.has(e.student_id)) continue;
+    const s = byId.get(e.student_id);
+    if (!s || s.status !== "enrolled") continue;
+    const c = classById.get(e.class_id);
+    if (!c) continue;
+    seen.add(e.student_id);
+    out.push({
+      id: s.id,
+      name: s.name,
+      grade: s.grade,
+      className: c.class_name as string,
+      subject: (c.subject as string | null) ?? null,
+    });
+  }
+  out.sort((a, b) => a.className.localeCompare(b.className, "ko") || a.name.localeCompare(b.name, "ko"));
+  return { ok: true, students: out, scope };
+}
+
 export type OnescreenNoticeRow = {
   id: string;
   body: string;
@@ -242,25 +336,10 @@ export type OnescreenNoticeRow = {
   error: string | null;
   createdAt: string;
   processedAt: string | null;
-  reportLinks: { url: string; revoked: boolean }[]; // 게시된 리포트 주소(회수용 워커가 캡처) — 없으면 구버전/미게시
+  // 게시된 리포트 주소(회수용 워커가 캡처) + **학생 이름**(targets에서 되붙임) — 없으면 구버전/미게시
+  reportLinks: NoticeReportLink[];
   canRevoke: boolean; // 게시취소 가능(게시됨 + 캡처 id 있음 + 아직 회수 안 됨)
 };
-
-// results(jsonb)에서 게시된 리포트 링크 평탄화 — 게시 결과 results[].reports[] 또는 회수 결과 results[].revoked[].
-function flattenReportLinks(results: unknown): { url: string; revoked: boolean }[] {
-  if (!Array.isArray(results)) return [];
-  const out: { url: string; revoked: boolean }[] = [];
-  for (const r of results as Array<Record<string, unknown>>) {
-    const reps = (Array.isArray(r.reports) ? r.reports : Array.isArray(r.revoked) ? r.revoked : []) as Array<
-      Record<string, unknown>
-    >;
-    for (const rep of reps) {
-      if (typeof rep.url === "string" && rep.url) out.push({ url: rep.url, revoked: rep.revoked === true });
-      else if (rep.id != null) out.push({ url: "", revoked: rep.revoked === true }); // id는 있으나 url 조립 실패
-    }
-  }
-  return out;
-}
 
 /** 내가 보낸 공지 이력(20건) — 대기건 수정/삭제·게시건 게시취소 UI의 소스. created_by=본인만. */
 export async function listMyOnescreenNotices(): Promise<{ ok: boolean; rows?: OnescreenNoticeRow[]; error?: string }> {
@@ -278,7 +357,7 @@ export async function listMyOnescreenNotices(): Promise<{ ok: boolean; rows?: On
     ok: true,
     rows: (data ?? []).map((r) => {
       const status = r.status as string;
-      const links = flattenReportLinks(r.results);
+      const links = flattenNoticeReportLinks(r.results, r.targets);
       // 게시취소 가능 = 게시됨(success/partial) + 캡처된 리포트 id(=워커 신버전) 있음 + 아직 회수 안 됨.
       const hasLive = links.some((l) => !l.revoked);
       const canRevoke = (status === "success" || status === "partial") && hasLive;
@@ -308,14 +387,14 @@ export async function cancelOnescreenNotice(noticeId: string): Promise<MutateRes
   const supabase = await createClient();
   const { data: row } = await supabase
     .from("classnote_notices")
-    .select("status, created_by, results")
+    .select("status, created_by, results, targets")
     .eq("id", noticeId)
     .maybeSingle();
   if (!row) return { ok: false, reason: "not_found", error: "공지를 찾을 수 없습니다" };
   if (row.created_by !== user.id) return { ok: false, reason: "forbidden", error: "본인이 보낸 공지만 회수할 수 있습니다" };
   if (row.status !== "success" && row.status !== "partial")
     return { ok: false, error: "게시 완료된 공지만 게시취소할 수 있습니다" };
-  const links = flattenReportLinks(row.results);
+  const links = flattenNoticeReportLinks(row.results, row.targets);
   if (!links.some((l) => !l.revoked))
     return { ok: false, error: "회수할 게시글 정보가 없습니다(연동 PC 업데이트 전 발송분은 ClassNote 앱에서 직접 삭제)" };
 
@@ -358,7 +437,7 @@ export async function editPostedNotice(noticeId: string, newBody: string): Promi
   if (row.created_by !== user.id) return { ok: false, reason: "forbidden", error: "본인이 보낸 공지만 수정할 수 있습니다" };
   if (row.status !== "success" && row.status !== "partial")
     return { ok: false, error: "게시 완료된 공지만 제자리 수정할 수 있습니다" };
-  const links = flattenReportLinks(row.results);
+  const links = flattenNoticeReportLinks(row.results, row.targets);
   if (!links.some((l) => !l.revoked))
     return { ok: false, error: "수정할 게시글 정보가 없습니다(연동 PC 업데이트 전 발송분은 ClassNote 앱에서 직접 수정)" };
   // ⚠️ 개별 첨부(요청서 이미지)가 있는 공지는 일괄 수정 금지 — 아래에서 개별 **본문**만 지우므로,
