@@ -1,3 +1,4 @@
+import { withFactGuard } from "./fact-guard";
 import { getAnthropic } from "./anthropic";
 import { getUpstage } from "./upstage";
 import { getDeepseek } from "./deepseek";
@@ -259,7 +260,11 @@ async function callProvider(
   };
 }
 
-export async function generateJSON<T>(opts: GenerateJSONOptions): Promise<{ data: T; model: string }> {
+export async function generateJSON<T>(rawOpts: GenerateJSONOptions): Promise<{ data: T; model: string }> {
+  // 🔴 사실 원칙(팩트·환각금지·창작금지·추측금지)은 **모든 AI 호출에 예외 없이** 붙는다(원장 2026-07-23).
+  //    호출부 프롬프트가 아니라 이 단일 관문에 두는 이유·삭제 금지 사유는 fact-guard.ts 주석 참조
+  //    (요약: 프롬프트 본문은 원장이 화면에서 편집 가능 = 가드가 지워질 수 있는 자리다).
+  const opts: GenerateJSONOptions = { ...rawOpts, prompt: withFactGuard(rawOpts.prompt) };
   const tier = opts.tier ?? "balanced";
   const keyName = opts.keyName ?? "default";
   const chain = resolveModelChain(tier, keyName, opts.provider);
