@@ -47,6 +47,7 @@ import {
   rowKey,
   effectiveClassnoteStatus,
   isAlreadySent,
+  isCopyTargetRow,
   isRowActionable,
   planBulkApply,
   planPrevFill,
@@ -796,7 +797,17 @@ export function OneScreenClient({
         today: r.subject.today ?? "",
         textbook: r.subject.textbook ?? "",
         homeworkToday: r.subject.homeworkToday ?? "",
-        actionable: isRowActionable(r.subject, "save"),
+        // 🔴 여기서 `isRowActionable(…,"save")`를 쓰면 안 된다(2026-07-23 원장 제보로 발견).
+        //    그 판정은 **진도가 있어야 통과**(isReportEligible)라, 복사가 필요한 바로 그 행
+        //    (진도가 빈 행)을 전부 대상에서 빼 버려 기능이 사실상 항상 0건이었다.
+        //    게다가 제외 사유를 전부 "발송 완료"로 세어, 보고서가 한 건도 없는 반에서도
+        //    "복사할 칸이 없습니다 — 발송 완료 6행"이라는 **거짓 문구**가 떴다.
+        //    복사가 실제로 막혀야 하는 유일한 조건은 **이미 학부모에게 나간 행**이다.
+        //    (세션 중 방금 보낸 건은 로스터 스냅샷이 모르므로 live 상태를 덮어 읽는다.)
+        actionable: isCopyTargetRow(
+          r.subject,
+          effectiveClassnoteStatus(liveClassnoteStatus(r.student.id, r.subject.name), r.subject.classnoteStatus),
+        ),
       })),
       { overwrite },
     );

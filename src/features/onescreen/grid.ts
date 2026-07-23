@@ -120,6 +120,21 @@ export function isRowActionable(
 }
 
 /**
+ * '맨 위 행 복사'의 **대상** 판정 — 제외 사유는 **발송 완료 하나뿐**이다.
+ *
+ * 🔴 여기에 `isRowActionable(…,"save")`를 쓰면 안 된다(2026-07-23 회귀). 그 판정은
+ *    `isReportEligible`(=진도가 있어야 통과)을 먼저 보기 때문에, **진도가 빈 행**을 전부 대상에서 뺀다.
+ *    그런데 진도가 빈 행이야말로 복사로 채우려는 대상이라, 기능이 사실상 항상 0건이 됐다.
+ *    (실제 증상: 보고서가 한 건도 없는 반에서 "복사할 칸이 없습니다 — 발송 완료 6행".)
+ *
+ * 결석 행은 **대상이 맞다** — 복사가 채우는 건 진도·교재·오늘 과제 = 수업 단위 기록이고,
+ * save는 결석 행도 허용한다(기록은 언제든 보존). 발송 단계에서 결석은 따로 걸러진다.
+ */
+export function isCopyTargetRow(subject: Subject, statusOverride?: string | null): boolean {
+  return !isAlreadySent(statusOverride ?? subject.classnoteStatus);
+}
+
+/**
  * 일괄 발송 confirm 누락 요약(2-4) — **고유 학생 수** 기준(과목 행 수 아님).
  * 호출부가 결석 제외된(send 대상) 행만 넘기므로 결석 학생은 누락 카운트에 안 들어간다.
  */
@@ -332,7 +347,7 @@ export type CopyRowTarget = CopyRowValues & {
   studentId: string;
   subjectName: string;
   subjectIndex: number;
-  actionable: boolean; // isRowActionable(subject, "save") — 발송 완료면 false
+  actionable: boolean; // isCopyTargetRow(subject, live상태) — **발송 완료면만** false(진도 유무와 무관)
 };
 
 export type CopyRowPlan = {
