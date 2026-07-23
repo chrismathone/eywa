@@ -267,3 +267,78 @@ export async function removeUnusedSubject(key: string): Promise<AbsorbResult> {
 
   return { ok: true, moved: 0 };
 }
+
+export type IntegrationGroupsInput = {
+  subject: string;
+  enabled: boolean;
+  groups: { id: string; title: string; classIds: string[] }[];
+  showOthers: boolean;
+  othersTitle: string;
+};
+
+/**
+ * 통합뷰 커스텀 그룹 저장(과목별) — 시간표 화면의 '그룹 설정' 창이 부른다.
+ *
+ * 쓰기 경로는 다른 과목 설정과 **동일**하게 saveOwnerSection(operations) 하나로 모은다: zod 검증·섹션
+ * 머지·감사로그·캐시 무효화를 그대로 재사용하고, tenant_settings 직접 쓰기를 만들지 않는다([[#59]]).
+ * 게이트도 owner 쓰기 — 시간표 화면에 있다고 시간표 권한으로 열면 학원설정을 우회하는 뒷문이 된다(#77).
+ *
+ * ⚠️ read-modify-write라 fresh 읽기(readFreshOperations) 후 **그 과목 행만** 교체한다. 폼 전체를
+ * 덮어쓰면 같은 시각 과목 운영 탭에서 저장한 다른 설정이 날아간다.
+ */
+export async function saveIntegrationGroups(input: IntegrationGroupsInput): Promise<AbsorbResult> {
+  const gate = await requireOwnerWrite();
+  if (gate.error !== undefined) return { error: gate.error };
+  if (!isValidSubjectKey(input.subject)) return { error: "잘못된 과목 키입니다" };
+  const supabase = await createClient();
+
+  let operations;
+  try {
+    operations = await readFreshOperations(supabase, gate.actor.tenantId);
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "설정 읽기 실패" };
+  }
+  if (!operations.subjects.some((s) => s.key === input.subject)) {
+    return { error: "학원 설정에 없는 과목입니다" };
+  }
+
+  // 빈 제목 그룹은 저장 단계에서 버린다(화면에서 이름 없는 섹션이 생기지 않게). 반 중복 배정도 여기서
+  // 정리 — 먼저 나온 그룹이 갖는다(렌더 규칙 applyCustomGroups와 같은 순서라 화면·저장이 안 어긋난다).
+  const seen = new Set<string>();
+  const groups = input.groups
+    .map((g) => ({ ...g, title: g.title.trim() }))
+    .filter((g) => g.title)
+    .map((g) => ({
+      id: g.id,
+      title: g.title,
+      classIds: g.classIds.filter((id) => (seen.has(id) ? false : (seen.add(id), true))),
+    }));
+
+  const nextOperations = {
+    ...operations,
+    subjects: operations.subjects.map((s) =>
+      s.key === input.subject
+        ? {
+            ...s,
+            integrationGroups: groups,
+            integrationGroupsEnabled: input.enabled,
+            integrationShowOthers: input.showOthers,
+            integrationOthersTitle: input.othersTitle.trim() || undefined,
+          }
+        : s,
+    ),
+  };
+  const fd = new FormData();
+  fd.set("section", "operations");
+  fd.set("data", JSON.stringify(nextOperations));
+  const res = await saveOwnerSection(undefined, fd);
+  if (res?.error) return { error: res.error };
+
+  await logAction({
+    action: "owner_integration_groups_update",
+    targetType: "tenant_settings",
+    targetLabel: input.subject,
+    metadata: { subject: input.subject, enabled: input.enabled, groups: groups.length },
+  });
+  return { ok: true };
+}

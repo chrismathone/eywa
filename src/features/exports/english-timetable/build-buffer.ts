@@ -4,6 +4,7 @@ import { getWeeklyScheduleWithStudents, getTeacherColorMap } from "@/features/ti
 import { getTenantSettings } from "@/features/owner/server/queries";
 import type { TenantSettings } from "@/features/owner/settings-types";
 import { settingsToPeriodsConfig } from "@/features/timetable/lib/periods";
+import { resolveIntegrationGroups } from "@/features/timetable/lib/integration-groups";
 import { kstToday } from "@/lib/date-kst";
 import { thisMonday } from "@/features/timetable/lib/week";
 import { buildTeacherGridModel } from "@/features/timetable/lib/teacher-grid-model";
@@ -66,6 +67,9 @@ export async function buildEnglishTimetableBuffer(opts?: {
   const stepMin = subjectRow?.teacherViewStep ?? 10;
   const breakRanges = subjectRow?.teacherViewBreaks ?? [];
   const excludedTeachers = subjectRow?.teacherViewLineExcluded ?? [];
+  // 통합 탭 섹션 = 화면 통합뷰와 **같은 해석기**. "시트가 화면 그대로"가 이 빌더의 계약이라, 커스텀
+  // 그룹을 화면에서만 적용하면 계약이 깨진다(원장이 배치를 바꿔도 시트는 옛 섹션으로 나감).
+  const customGroups = resolveIntegrationGroups(subjectRow);
 
   const ExcelJS = (await import("exceljs")).default;
   const wb = new ExcelJS.Workbook();
@@ -84,6 +88,7 @@ export async function buildEnglishTimetableBuffer(opts?: {
     teacherColors,
     referenceDate: weekMonday,
     compactSections: opts?.compactSections,
+    customGroups,
     formulaSink: opts?.withFormulas ? formulaCells : undefined,
     // 스마트 동기화: 미니그리드를 강사별 역조회 수식으로(구글시트만 — withFormulas일 때 sink와 함께).
     teacherGeometry: opts?.withFormulas ? teacherGeometry : undefined,

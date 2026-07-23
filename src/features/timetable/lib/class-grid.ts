@@ -79,6 +79,23 @@ export type RichClassCard = {
   activeCount: number;
   groupOrder: number;
   groupLabel: string;
+  /**
+   * 이 반이 주말 전용인지 — 섹션의 축(교시표·요일열)을 평일/주말 중 무엇으로 잡을지 결정한다.
+   * ⚠️ 예전엔 `groupOrder === WEEKEND_ORDER`로 판정했는데, 커스텀 그룹은 groupOrder를 그룹 번호로
+   * 덮어쓰므로 그 판정이 깨진다(주말 반이 평일 축에 얹혀 요일열이 어긋남). 그래서 카드에 못박는다.
+   */
+  weekendOnly: boolean;
+};
+
+/**
+ * 통합뷰 섹션을 "N교시 시작" 자동 그룹 대신 **원장이 정한 그룹**으로 묶는 설정(과목별).
+ * ijw-calander 통합뷰의 `viewMode: CUSTOM_GROUP`을 이식한 것 — 반을 원하는 행(섹션)에 배치한다.
+ * 어느 그룹에도 없는 반은 `showOthers`면 맨 아래 '기타' 섹션으로, 아니면 화면에서 빠진다.
+ */
+export type IntegrationGroupsConfig = {
+  groups: { id: string; title: string; classIds: string[] }[];
+  showOthers: boolean;
+  othersTitle: string;
 };
 
 export type RichCardGroup = {
@@ -89,6 +106,12 @@ export type RichCardGroup = {
   sectionKey: number;
   /** 이 섹션이 현재 '1시간 단위'로 압축됐는지(토글 체크 상태). 압축 섹션은 부그룹 ②③로 나뉠 수 있어 각 부그룹이 동일 sectionKey·compacted. */
   compacted: boolean;
+  /**
+   * '1시간 단위' 토글을 붙일 수 있는 섹션인지 = 평일 섹션. 주말은 교시 체계가 없어 압축 대상이 아니다.
+   * ⚠️ 소비처가 `sectionKey !== WEEKEND_ORDER`로 판정하면 **커스텀 그룹의 주말 하위 섹션**을 놓친다
+   * (그쪽 sectionKey는 그룹 번호라 WEEKEND_ORDER가 아니다) → 이 플래그를 볼 것.
+   */
+  compactable: boolean;
   cards: RichClassCard[];
   periodRows: GridPeriodRow[]; // 그룹 공통 교시축(카드 union, order순)
   days: DayOfWeek[]; // 그룹 공통 요일축(카드 union)
@@ -101,6 +124,13 @@ const WEEKDAY_DAYS: DayOfWeek[] = ["mon", "tue", "wed", "thu", "fri"];
 const WEEKEND = new Set<string>(["sat", "sun"]);
 /** 주말 섹션의 groupOrder(=sectionKey). 교시 체계가 없어 '1시간 단위' 압축 대상이 아니다. */
 export const WEEKEND_ORDER = 100000;
+/**
+ * 커스텀 그룹 섹션의 groupOrder 시작값 — 자동 그룹(교시 order, 최대 1440)·주말(100000)과 안 겹치게 크게 잡는다.
+ * 그룹 i = BASE + i*10(평일) / +1(그 그룹의 주말 반). '기타'는 항상 맨 아래.
+ * ⚠️ 정수만 쓴다 — sectionKey는 '1시간 단위' 쿠키·URL에 실려 다니는데 쿠키 형식이 `.`를 구분자로 쓴다.
+ */
+const CUSTOM_BASE = 200000;
+const CUSTOM_OTHERS = 299000;
 const GRID_MIN = 5; // 미니그리드 기본 크기 — 평일 섹션은 항상 5요일(월~금) × 5교시(섹션 시작부터).
 
 /** "본원304" → "304"(공통 건물 접두사 제거로 라벨 압축). "LAB실"·타건물은 그대로 — 건물 구분 유지. */
@@ -132,6 +162,58 @@ function classroomLabel(perDayRooms: Map<DayOfWeek, Set<string>>): string {
 }
 
 /**
+ * 카드를 커스텀 그룹에 배정 — `groupOrder`(정렬·섹션키)와 `groupLabel`(제목)만 덮어쓴다.
+ *
+ * 규칙(ijw 통합뷰와 동일):
+ * · 한 반이 여러 그룹에 적혀 있으면 **먼저 나온 그룹**이 갖는다(중복 노출 금지 — 같은 반이 두 줄에 뜨면
+ *   인원·명단이 두 번 세어진 것처럼 보인다).
+ * · 어느 그룹에도 없는 반은 `showOthers`면 맨 아래 '기타' 섹션, 아니면 **화면에서 뺀다**.
+ * · 주말 전용 반은 같은 그룹 안에서도 **별도 섹션**(제목 뒤 "(주말)") — 교시표·요일열 체계가 평일과
+ *   달라 한 축에 얹으면 요일이 어긋난다.
+ * 미설정(그룹 0개)이면 원본 배열을 그대로 돌려준다 = 지금까지의 "N교시 시작" 자동 그룹.
+ */
+function applyCustomGroups(
+  cards: RichClassCard[],
+  custom?: IntegrationGroupsConfig | null,
+): RichClassCard[] {
+  const groups = custom?.groups?.filter((g) => g.title.trim()) ?? [];
+  if (!groups.length) return cards;
+
+  const groupOf = new Map<string, number>(); // classId → 그룹 인덱스(먼저 나온 그룹이 이긴다)
+  groups.forEach((g, i) => {
+    for (const classId of g.classIds ?? []) {
+      if (!groupOf.has(classId)) groupOf.set(classId, i);
+    }
+  });
+
+  const out: RichClassCard[] = [];
+  for (const c of cards) {
+    const idx = groupOf.get(c.classId);
+    if (idx === undefined) {
+      if (!custom?.showOthers) continue; // '기타' 숨김 = 미배정 반은 화면에서 제외(원장 선택)
+      out.push({
+        ...c,
+        groupOrder: CUSTOM_OTHERS + (c.weekendOnly ? 1 : 0),
+        groupLabel: othersLabel(custom, c.weekendOnly),
+      });
+      continue;
+    }
+    const title = groups[idx].title.trim();
+    out.push({
+      ...c,
+      groupOrder: CUSTOM_BASE + idx * 10 + (c.weekendOnly ? 1 : 0),
+      groupLabel: c.weekendOnly ? `${title} (주말)` : title,
+    });
+  }
+  return out;
+}
+
+const othersLabel = (custom: IntegrationGroupsConfig, weekend: boolean) => {
+  const base = custom.othersTitle?.trim() || "기타 수업";
+  return weekend ? `${base} (주말)` : base;
+};
+
+/**
  * 한 과목 슬롯 → 시작 교시별 리치 카드 섹션. 교시 정렬은 평일 기준, 주말 전용 반은 "주말" 섹션.
  * '1시간 단위'는 **섹션(N교시 시작)별 토글**(사용자 결정 2026-07-06 — 전역 아님): compactSections(=압축할
  * 섹션의 groupOrder 집합)에 든 섹션만 압축. 압축 섹션은:
@@ -144,6 +226,8 @@ export function buildRichCardGroups(
   slots: GridSlot[],
   config: PeriodsConfig,
   compactSections: Set<number> = new Set(),
+  /** 커스텀 그룹(학원설정 과목별). 미지정·빈 그룹이면 지금까지처럼 "N교시 시작" 자동 그룹. */
+  custom?: IntegrationGroupsConfig | null,
 ): RichCardGroup[] {
   const subject = (slots[0]?.subject ?? "math") as TimetableSubject;
   const byClass = new Map<string, GridSlot[]>();
@@ -190,12 +274,17 @@ export function buildRichCardGroups(
       activeCount: students.filter((x) => x.status === "active").length,
       groupOrder: weekend ? WEEKEND_ORDER : weekdayStart,
       groupLabel: weekend ? "주말" : `${periodMap.get(weekdayStart)?.label ?? ""} 시작`,
+      weekendOnly: weekend,
     });
   }
 
+  // 커스텀 그룹 — 카드의 소속(groupOrder·groupLabel)만 갈아끼운다. 아래 클러스터링·압축·정렬은
+  // 그 두 값만 보고 돌아가므로 자동 그룹과 완전히 같은 경로를 탄다(분기 없음).
+  const assignedCards = applyCustomGroups(cards, custom);
+
   // 시작 교시별 그룹 + 그룹 공통 교시·요일 축(카드 union).
   const groupMap = new Map<string, RichClassCard[]>();
-  for (const c of cards) {
+  for (const c of assignedCards) {
     const key = `${c.groupOrder}::${c.groupLabel}`;
     (groupMap.get(key) ?? groupMap.set(key, []).get(key)!).push(c);
   }
@@ -222,7 +311,7 @@ export function buildRichCardGroups(
   const out: RichCardGroup[] = [];
   for (const cs of groupMap.values()) {
     cs.sort((a, b) => a.className.localeCompare(b.className, "ko"));
-    const weekend = cs[0].groupOrder === WEEKEND_ORDER;
+    const weekend = cs[0].weekendOnly;
     const standard = subjectPeriodRows(subject, weekend, config);
     const standardByOrder = new Map(standard.map((r) => [r.order, r]));
     // '1시간 단위'는 섹션별 토글(사용자 결정 2026-07-06 "각 교시 시작별로 세팅, 전역 아님").
@@ -308,6 +397,7 @@ export function buildRichCardGroups(
         order: cluster[0].groupOrder + ci * 0.001, // 같은 앵커의 부그룹은 바로 뒤에 정렬
         sectionKey: cluster[0].groupOrder,
         compacted: sectionCompact,
+        compactable: !weekend,
         cards: cluster,
         periodRows,
         days,

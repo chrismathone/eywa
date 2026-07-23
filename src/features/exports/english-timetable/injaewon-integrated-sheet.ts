@@ -8,7 +8,13 @@
 import type { Workbook, Worksheet, Borders } from "exceljs";
 import type { ScheduleSlotWithStudents, StudentLine } from "@/features/timetable/server/queries";
 import { type PeriodsConfig, slotPeriodRow, enumDayToKo, type DayOfWeek } from "@/features/timetable/lib/periods";
-import { buildRichCardGroups, type GridSlot, type RichClassCard, type TeacherColorMap } from "@/features/timetable/lib/class-grid";
+import {
+  buildRichCardGroups,
+  type GridSlot,
+  type IntegrationGroupsConfig,
+  type RichClassCard,
+  type TeacherColorMap,
+} from "@/features/timetable/lib/class-grid";
 import { readableTextColor } from "@/lib/color-utils";
 import { formatSchoolGrade } from "@/features/exports/math-timetable/student-format";
 import type { TeacherGeometry } from "./teacher-grid-sheet";
@@ -206,6 +212,8 @@ export type InjaewonSheetOpts = {
   teacherColors?: TeacherColorMap;
   referenceDate?: string; // 기준 월요일(YYYY-MM-DD) — 신입/퇴원 윈도우. 미지정=오늘.
   compactSections?: Set<number>; // '1시간 단위' 압축 섹션(sectionKey) — 화면 통합뷰 토글과 동일.
+  /** 통합뷰 커스텀 그룹(학원설정 과목별) — 화면과 같은 섹션 배치로 뽑기 위해 그대로 전달받는다. */
+  customGroups?: IntegrationGroupsConfig | null;
   // 제공 시 수식 셀을 여기 수집(셀엔 정적 값을 씀). ⚠️ xlsx에 구글 수식(LET/LAMBDA)을 넣으면 xlsx→시트
   // 변환이 통째로 실패("Conversion not supported")하므로, 수식은 업로드 후 Sheets API로 별도 주입한다.
   formulaSink?: FormulaCell[];
@@ -263,7 +271,12 @@ export function appendInjaewonIntegratedSheet(
   };
 
   // 앱 통합뷰와 동일 그룹핑/순서/교시축/요일축(N교시 시작, 카드 가나다).
-  const groups = buildRichCardGroups(slots as unknown as GridSlot[], opts.config, opts.compactSections ?? new Set()).filter(
+  const groups = buildRichCardGroups(
+    slots as unknown as GridSlot[],
+    opts.config,
+    opts.compactSections ?? new Set(),
+    opts.customGroups,
+  ).filter(
     (g) => g.days.some((d) => WEEKDAYS.includes(d as Weekday)),
   );
   // 셀별 방(인재원 셀 "강사↵↵방") — buildRichCardGroups는 방을 헤더로만 집계하므로 order 키로 별도 매핑.

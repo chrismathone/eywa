@@ -1,7 +1,12 @@
 import Link from "next/link";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { SUBJECT_SOFT, type SubjectMaps } from "@/features/owner/subjects";
-import { buildRichCardGroups, WEEKEND_ORDER, type GridSlot, type TeacherColorMap } from "@/features/timetable/lib/class-grid";
+import {
+  buildRichCardGroups,
+  type GridSlot,
+  type IntegrationGroupsConfig,
+  type TeacherColorMap,
+} from "@/features/timetable/lib/class-grid";
 import type { PeriodsConfig } from "@/features/timetable/lib/periods";
 import { RichCardGroupBoard } from "./rich-card-group";
 
@@ -19,17 +24,20 @@ export function RichGridView({
   teacherColors,
   compactSections,
   hrefForSectionToggle,
+  customGroups,
 }: {
   slots: GridSlot[];
   subjectMaps: SubjectMaps;
   config: PeriodsConfig;
   teacherColors: TeacherColorMap;
+  /** 커스텀 그룹(학원설정 과목별). 미지정이면 "N교시 시작" 자동 그룹. */
+  customGroups?: IntegrationGroupsConfig | null;
   /** 압축할 섹션(N교시 시작)의 sectionKey 집합 — 이 섹션만 '1시간 단위'로 사이 빈 교시 행 숨김. */
   compactSections: Set<number>;
   /** 섹션 토글 href — 그 sectionKey를 압축 집합에 넣고/빼는 URL(읽기전용이라 상태는 URL 파라미터). */
   hrefForSectionToggle: (sectionKey: number) => string;
 }) {
-  const groups = buildRichCardGroups(slots, config, compactSections);
+  const groups = buildRichCardGroups(slots, config, compactSections, customGroups);
   const total = groups.reduce((n, g) => n + g.cards.length, 0);
   const subjectSoftClass = SUBJECT_SOFT[subjectMaps.colorOf(slots[0]?.subject ?? "")];
 
@@ -51,8 +59,8 @@ export function RichGridView({
             <span className="text-foreground text-[13px] font-bold whitespace-nowrap">{g.label}</span>
             <span className="text-text-dim text-[12px] whitespace-nowrap">{g.cards.length}개 수업</span>
             {/* 섹션별 '1시간 단위' 토글 — 이 시작 교시 섹션만 사이 빈 교시 행을 숨긴다(전역 아님).
-                주말 섹션은 교시 체계가 없어 압축 대상 아님 → 토글 숨김. */}
-            {g.sectionKey !== WEEKEND_ORDER ? (
+                주말 섹션은 교시 체계가 없어 압축 대상 아님 → 토글 숨김(커스텀 그룹의 주말 하위 섹션 포함). */}
+            {g.compactable ? (
               <Link
                 href={hrefForSectionToggle(g.sectionKey)}
                 aria-pressed={g.compacted}

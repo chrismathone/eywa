@@ -28,6 +28,9 @@ import {
   parseTimetableKind,
   type TimetableKind,
 } from "@/features/timetable/lib/class-kind";
+import { canWriteTenant } from "@/lib/auth/perm-matrix";
+import { resolveIntegrationGroups } from "@/features/timetable/lib/integration-groups";
+import { GroupSettingsDialog } from "./_components/group-settings-dialog";
 import { getWeekReferenceDate, mondayOf, thisMonday, weekRelation } from "@/features/timetable/lib/week";
 import { kstToday } from "@/lib/date-kst";
 import { RichGridView } from "./_components/rich-grid-view";
@@ -176,6 +179,14 @@ export default async function TimetablePage({
   // 평일/주말은 WeekdayGroupTables가 알아서 분리 렌더(주말은 시작시각이 달라 별도 판). 여기선 과목만 필터.
   const slots = kindSlots.filter((s) => s.subject === subject);
   const subjectRow = settings.operations.subjects.find((s) => s.key === subject);
+  // 통합뷰 섹션 = 커스텀 그룹(학원설정 과목별)이 켜져 있으면 그것, 아니면 "N교시 시작" 자동 그룹.
+  // 엑셀·시트 빌더도 같은 해석기를 쓴다(화면과 배치 일치가 이 기능의 존재 이유).
+  const customGroups = resolveIntegrationGroups(subjectRow);
+  // '그룹 설정' 창의 배정 대상 = 이 과목·이 주 시간표에 실제 있는 반(가나다). 반 목록을 따로 조회하지
+  // 않고 slots에서 뽑는다 — 화면에 보이는 것과 창이 보여주는 것이 어긋나지 않게.
+  const groupClassOptions = [...new Map(slots.map((s) => [s.classId, s.className])).entries()]
+    .map(([classId, className]) => ({ classId, className }))
+    .sort((a, b) => a.className.localeCompare(b.className, "ko"));
   // 과목별 요일 병합 프리셋(설정) — 미설정/구데이터는 mon-thu 폴백(resolve가 스키마 미통과).
   const weekdayGrouping = normalizeWeekdayGrouping(subjectRow?.weekdayGrouping);
 
@@ -186,6 +197,9 @@ export default async function TimetablePage({
     ((settings.operations.subjects.find((s) => s.key === k)?.teacherViewLines?.length ?? 0) > 0);
   const teacherViewAllowed = allowsTeacherView(subject);
   const effView: ViewMode = view === "teacher" && !teacherViewAllowed ? "basic" : view;
+  // 통합뷰 '그룹 설정' = 학원설정(과목별)을 쓰므로 게이트도 **owner 쓰기**. 시간표에 있다고 시간표
+  // 권한으로 열면 학원설정 우회 뒷문이 된다(서버 액션도 같은 게이트로 2차 방어, #77).
+  const canEditGroups = effView === "integrated" && (await canWriteTenant(user.systemRole, "owner"));
   // 강사뷰 커스터마이징(과목 설정) — 가로줄 시각(분)·격자 단위. english는 resolve가 기본 프리필.
   const sectionLineMins = (subjectRow?.teacherViewLines ?? [])
     .map((t) => {
@@ -404,6 +418,26 @@ export default async function TimetablePage({
         {/* 통합뷰 '1시간 단위' 토글은 전역이 아니라 **각 섹션 헤더(RichGridView)** 에 있다
             (사용자 결정 2026-07-06 — 각 교시 시작별로 세팅). 툴바 전역 토글 없음. */}
 
+        {/* 통합뷰 '그룹 설정' — 섹션을 'N교시 시작' 자동 묶음 대신 원장이 정한 묶음으로(ijw 이식). */}
+        {canEditGroups ? (
+          <>
+            <span className="bg-line h-4 w-px" aria-hidden />
+            <GroupSettingsDialog
+              subject={subject}
+              subjectLabel={subjectMaps.labelOf(subject)}
+              classes={groupClassOptions}
+              initialGroups={(subjectRow?.integrationGroups ?? []).map((g) => ({
+                id: g.id,
+                title: g.title,
+                classIds: g.classIds ?? [],
+              }))}
+              initialEnabled={subjectRow?.integrationGroupsEnabled === true}
+              initialShowOthers={subjectRow?.integrationShowOthers !== false}
+              initialOthersTitle={subjectRow?.integrationOthersTitle ?? ""}
+            />
+          </>
+        ) : null}
+
         {/* 기본뷰 '빈 교시 접기' — 수업 없는 교시 행을 얇은 밴드로 축소(C안). 켜짐=강조.
             편집 모드에선 접힌 행이 자동으로 펼쳐진다(평소 격자 지형 복원, EmptyPeriodScope). */}
         {effView === "basic" ? (
@@ -507,6 +541,7 @@ export default async function TimetablePage({
           teacherColors={teacherColors}
           compactSections={compactSections}
           hrefForSectionToggle={hrefForSectionToggle}
+          customGroups={customGroups}
         />
       ) : effView === "teacher" ? (
         // 강사뷰 — 시트 "강사별영어시간표" 그대로(강사=세로 블록, 그 안 월~토, 셀=반명+방). 읽기전용, 반 클릭=학생 명단.

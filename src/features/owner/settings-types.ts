@@ -40,6 +40,15 @@ export const breakRangeSchema = z.object({
 });
 export type BreakRangeSetting = z.infer<typeof breakRangeSchema>;
 
+// 통합뷰 커스텀 그룹(과목별) — "N교시 시작" 자동 섹션 대신 원장이 정한 묶음으로 반을 배치한다.
+// ijw-calander 통합뷰 CUSTOM_GROUP 이식(2026-07-23). id는 편집 중 안정 키(재정렬·이름변경에도 유지).
+export const integrationGroupSchema = z.object({
+  id: z.string().min(1).max(36),
+  title: z.string().min(1).max(30),
+  classIds: z.array(z.string().min(1).max(64)).max(200),
+});
+export type IntegrationGroupSetting = z.infer<typeof integrationGroupSchema>;
+
 export const subjectSchema = z.object({
   key: z.string().min(1).max(24).regex(/^[a-z0-9_]+$/, "영문 소문자·숫자·_"),
   label: z.string().min(1).max(24),
@@ -66,6 +75,13 @@ export const subjectSchema = z.object({
   teacherViewLineExcluded: z.array(z.string().min(1).max(40)).max(80).optional(),
   // 강사뷰 세로 밀도(분당 px). 격자 한 칸(step분) 높이 = step × 이 값. 미설정 = DEFAULT_TEACHER_VIEW_PX_PER_MIN(1.4).
   teacherViewPxPerMin: z.number().min(0.5).max(6).optional(),
+  // 통합뷰 커스텀 그룹(섹션) 정의. 비었으면 지금까지처럼 "N교시 시작" 자동 그룹.
+  integrationGroups: z.array(integrationGroupSchema).max(40).optional(),
+  // 커스텀 그룹을 실제로 적용할지. false·미설정 = 자동 그룹(정의는 남겨둔다 — 껐다 켜도 배치가 안 날아간다).
+  integrationGroupsEnabled: z.boolean().optional(),
+  // 어느 그룹에도 없는 반을 맨 아래 '기타' 섹션으로 보여줄지. 미설정 = 보여줌(반이 조용히 사라지면 안 된다).
+  integrationShowOthers: z.boolean().optional(),
+  integrationOthersTitle: z.string().max(30).optional(),
 });
 export type SubjectSetting = z.infer<typeof subjectSchema>;
 
