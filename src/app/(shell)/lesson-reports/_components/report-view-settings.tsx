@@ -46,19 +46,30 @@ export function ReportViewSettings({
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState<ReportListFilters>(filters);
 
-  const active = activeReportFilterCount(filters, todayYmd);
-
-  // 열 때마다 초안을 **현재 적용값으로** 맞춘다 — 취소하고 다시 열었을 때 옛 초안이 남아 있으면
-  // 화면에 안 걸린 필터가 걸린 것처럼 보인다.
-  const onOpenChange = (o: boolean) => {
-    if (o) setDraft(filters);
-    setOpen(o);
-  };
+  const active = activeReportFilterCount(filters);
 
   const patch = (p: Partial<ReportListFilters>) => setDraft((d) => ({ ...d, ...p }));
-  const apply = () => {
-    onApply({ ...draft, page: 0 }); // 필터가 바뀌면 항상 1페이지부터(현재 페이지 번호를 물고 가면 빈 화면이 난다)
+
+  // 필터가 바뀌면 항상 1페이지부터(현재 페이지 번호를 물고 가면 빈 화면이 난다).
+  const commit = () => {
     setOpen(false);
+    onApply({ ...draft, page: 0 });
+  };
+  const cancel = () => setOpen(false);
+
+  // ⚠️ **닫히면 커밋한다**(2026-07-24 적대검수). base-ui Popover는 바깥 클릭으로 닫히는데, 예전처럼
+  // 초안을 그냥 버리면 기간·강사·과목·상태·읽음·반을 다 고른 뒤 표를 보려고 한 번 클릭한 순간
+  // **경고 없이 전부 사라진다** — 즉시 적용이던 옛 인라인 필터 바엔 없던 손실이다. 되돌릴 길은 '취소'로 남긴다.
+  // ⚠️ '적용'·'취소'는 setOpen을 직접 부른다 — controlled라 prop 변경만으로 닫히고 onOpenChange가 다시
+  //    불리지 않으므로 이중 커밋이 안 난다.
+  const onOpenChange = (o: boolean) => {
+    // 열 때마다 초안을 **현재 적용값으로** 재시드 — 옛 초안이 남아 있으면 안 걸린 필터가 걸린 것처럼 보인다.
+    if (o) {
+      setDraft(filters);
+      setOpen(true);
+      return;
+    }
+    commit();
   };
 
   const isAllTime = !draft.from && !draft.to;
@@ -91,7 +102,11 @@ export function ReportViewSettings({
               <span className="text-foreground text-xs font-semibold">뷰 설정</span>
               <button
                 type="button"
-                onClick={() => setDraft(defaultReportFilters(todayYmd))}
+                onClick={() =>
+                  // ⚠️ 정렬(sort/dir)은 보존한다 — 팝오버가 다루지도, 배지로 세지도 않는 값을
+                  //    "초기화"가 조용히 해제하면 표의 줄 세우기가 이유 없이 되돌아간다(적대검수).
+                  setDraft({ ...defaultReportFilters(todayYmd), sort: draft.sort, dir: draft.dir })
+                }
                 className="text-text-dim hover:text-foreground inline-flex items-center gap-1 text-[11px]"
               >
                 <RotateCcw size={10} strokeWidth={1.8} aria-hidden />
@@ -160,6 +175,36 @@ export function ReportViewSettings({
                 ))}
               </select>
 
+              {/* 반(0134a) — 옵션은 0147a RPC가 **최근 창에 실제 보고서가 붙은 반만** 준다(반 149개 전체가
+                  아니다 — 대부분 0건이라 못 고른다). 마이그레이션 전이면 목록이 비므로 항목 자체를 숨긴다:
+                  선택지 없는 드롭다운을 띄우면 "고장"으로 읽힌다. */}
+              {/* ⚠️ `?? []` — 배포 중 버전 스큐(구 서버 페이로드에 classes 없음)로 undefined가 와도
+                     팝오버 전체가 죽지 않게. 타입상으론 필수지만 런타임 방어가 싸다. */}
+              {(options.classes ?? []).length > 0 ? (
+                <>
+                  <label className="text-text-faint text-[11px] font-bold" htmlFor="rvs-class">반</label>
+                  <select
+                    id="rvs-class"
+                    value={draft.classId ?? ""}
+                    onChange={(e) => patch({ classId: e.target.value || undefined })}
+                    className={sel}
+                    title="반이 붙은 보고서만 걸립니다 — 이관분은 반 정보가 없어 제외됩니다"
+                  >
+                    <option value="">전체</option>
+                    {(options.classes ?? []).map((c) => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                  {/* ⚠️ 옵션은 **최근 60일** 보고서에서 뽑는다(강사·과목과 같은 창). 목록은 '전체 기간'을
+                      고를 수 있어 옛 학기 반은 목록엔 있어도 이 드롭다운엔 없다 — 자유입력이 없으니
+                      기대치를 문구로 맞춘다(안 적으면 "왜 그 반이 없지"가 된다). */}
+                  <span />
+                  <span className="text-text-faint text-[10px] leading-snug">
+                    최근 60일에 보고서가 있는 반만 — 이관분은 반 정보가 없어 제외됩니다
+                  </span>
+                </>
+              ) : null}
+
               <label className="text-text-faint text-[11px] font-bold" htmlFor="rvs-status">상태</label>
               <select
                 id="rvs-status"
@@ -191,14 +236,14 @@ export function ReportViewSettings({
             <div className="flex items-center justify-end gap-1.5">
               <button
                 type="button"
-                onClick={() => setOpen(false)}
+                onClick={cancel}
                 className="border-line text-text-dim hover:text-foreground rounded-lg border px-2.5 py-1 text-xs"
               >
                 취소
               </button>
               <button
                 type="button"
-                onClick={apply}
+                onClick={commit}
                 className="bg-primary text-primary-foreground rounded-lg px-3 py-1 text-xs font-medium"
               >
                 적용

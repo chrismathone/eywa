@@ -173,7 +173,7 @@ export function ReportList({
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <h2
           className="text-foreground text-[15px] font-bold"
-          title="강사·기간·상태·과목으로 조회 · 행 클릭 시 학부모 보고서 열람"
+          title="기간·강사·과목·상태·읽음·반으로 조회 — 오른쪽 '열람' 버튼으로 학부모 보고서를 엽니다"
         >
           보고서 목록
         </h2>

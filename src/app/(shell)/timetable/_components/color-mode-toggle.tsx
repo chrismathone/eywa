@@ -36,11 +36,18 @@ export function TimetableColorPrefSync({ mode }: { mode: TimetableColorMode | nu
   return null;
 }
 
-export function TimetableColorToggle({ saved }: { saved: TimetableColorMode | null }) {
+export function TimetableColorToggle() {
   const mode = usePrefs((s) => s.timetableColor);
   const setMode = usePrefs((s) => s.setTimetableColor);
-  // 같은 값을 두 번 저장하지 않게(연타·재렌더) 마지막으로 보낸 값을 기억한다.
-  const sentRef = useRef<TimetableColorMode | null>(saved);
+  // 같은 값을 두 번 저장하지 않게(연타·재렌더) **이 마운트에서** 마지막으로 보낸 값을 기억한다.
+  //
+  // ⚠️ `saved`로 시드하면 안 된다(2026-07-24 적대검수). 이 토글이 뷰 설정 팝오버 안으로 들어가면서
+  // 팝오버를 닫을 때마다 언마운트되는데(Popover.Portal keepMounted 기본 false), `saveTimetableViewPrefs`는
+  // revalidatePath를 부르지 않아 서버 prop `saved`가 갱신되지 않는다 → 재오픈 시 ref가 **stale한 옛 값**으로
+  // 다시 시드된다. 그 상태에서 원래 값으로 되돌리는 클릭이 `sentRef.current === next`에 걸려
+  // **저장이 안 나가고**, 새로고침하면 계정값(직전 선택)이 되살아난다("되돌렸는데 안 되돌아감").
+  // null 시드면 마운트당 첫 클릭은 항상 저장된다 — 같은 값 재저장은 멱등이라 무해하다.
+  const sentRef = useRef<TimetableColorMode | null>(null);
 
   const pick = (next: TimetableColorMode) => {
     setMode(next); // ① 화면은 즉시

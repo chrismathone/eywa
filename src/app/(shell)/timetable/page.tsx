@@ -455,7 +455,6 @@ export default async function TimetablePage({
           allGrades={settings.operations.gradeLevels ?? []}
           savedGrades={viewPrefs.grades}
           showColor={effView === "basic"}
-          colorSaved={viewPrefs.colorMode}
           collapseHref={
             effView === "basic"
               ? buildHref({

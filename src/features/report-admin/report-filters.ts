@@ -46,6 +46,11 @@ export type ReportListFilters = {
   teacher?: string;
   subject?: string;
   /**
+   * 반 필터(0134a class_id). 옵션 목록은 0147a RPC가 **최근 창에 실제 보고서가 붙은 반만** 준다
+   * (반 149개 전체를 띄우면 대부분 0건이라 못 쓴다). 반이 없는 이관분은 이 필터를 걸면 당연히 빠진다.
+   */
+  classId?: string;
+  /**
    * 읽음 필터. "read"=읽음 기록 있음. "unread"=**판정 가능한 미읽음만** —
    * 발송 성공(success) + 매칭 키 있음(edutrix분은 edutrix_share_token 필요, native분은 항상 매칭 가능)
    * + 읽음 기록 없음. 매칭 키 없는 옛 이관분은 동기화 자체가 안 되므로 "안읽음"에 안 섞는다(거짓 미확인 방지).
@@ -149,16 +154,21 @@ export function defaultReportFilters(todayYmd: string): ReportListFilters {
  *
  * ⚠️ 왜 필요한가: 필터를 팝오버 안으로 넣으면 **걸려 있는지가 화면에서 사라진다** — 시간표 뷰 설정이
  * "필터가 걸린 동안엔 트리거에 항상 배지"를 타협 불가 규칙으로 둔 것과 같은 이유다(조용히 걸린 필터가
- * "왜 안 보이지"를 만든다). 기간은 **기본값(이번 달)과 다를 때만** 1로 센다 — 기본을 필터로 세면 배지가 항상 켜진다.
+ * "왜 안 보이지"를 만든다).
+ *
+ * ⚠️ **기간은 세지 않는다**(2026-07-24 적대검수로 수정). 배지의 뜻은 "화면에 안 보이는 필터가 걸렸다"인데,
+ * 기간은 팝오버 **밖** 월 이동 칩에 "2026년 6월"/"전체 기간"/"직접 지정"으로 **항상 그대로 보인다**.
+ * 기간을 세면 지난달을 볼 때마다 배지가 상시 점등돼, 팝오버를 열어도 강사·과목·상태·읽음이 전부 '전체'라
+ * 원인을 못 찾고, 배지를 끄려 '초기화'하면 보려던 달까지 되돌아간다 = 진짜 숨은 필터와 구분이 사라진다.
+ * ⚠️ 정렬(sort/dir)도 세지 않는다 — 줄 세우기는 **무엇이 보이는지**를 바꾸지 않고, 표 헤더 화살표로 드러난다.
  */
-export function activeReportFilterCount(f: ReportListFilters, todayYmd: string): number {
-  const base = defaultReportFilters(todayYmd);
+export function activeReportFilterCount(f: ReportListFilters): number {
   let n = 0;
   if (f.teacher) n++;
   if (f.subject) n++;
   if (f.status) n++;
   if (f.read) n++;
-  if ((f.from ?? "") !== (base.from ?? "") || (f.to ?? "") !== (base.to ?? "")) n++;
+  if (f.classId) n++;
   return n;
 }
 

@@ -7,7 +7,6 @@ import { Popover } from "@base-ui/react/popover";
 import { toast } from "sonner";
 
 import { CalendarOff, Filter, ListFilter, RotateCcw } from "@/components/icons/eywa-icon-compat";
-import type { TimetableColorMode } from "@/components/workspace/use-prefs";
 import { saveTimetableViewPrefs } from "@/features/timetable/server/view-prefs-actions";
 import {
   bucketsOf,
@@ -39,7 +38,6 @@ import { TimetableColorToggle } from "./color-mode-toggle";
 export function TimetableViewSettings({
   allGrades,
   savedGrades,
-  colorSaved,
   showColor = false,
   collapseHref,
   collapseOn = false,
@@ -50,8 +48,6 @@ export function TimetableViewSettings({
   allGrades: string[];
   /** 계정에 저장된 선택. null = 전체. */
   savedGrades: string[] | null;
-  /** 계정에 저장된 셀 색 강도(없으면 기기 설정 유지). 색 토글을 띄울 때만 의미. */
-  colorSaved?: TimetableColorMode | null;
   /** 색 강도 노출 = 셀 색이 있는 기본뷰에서만. */
   showColor?: boolean;
   /** 기본뷰 '빈 교시 접기' 토글 링크(반대 상태로 가는 href). 없으면 항목 자체를 숨긴다. */
@@ -117,7 +113,17 @@ export function TimetableViewSettings({
   const noneSelected = draft.length === 0;
 
   return (
-    <Popover.Root open={open} onOpenChange={setOpen}>
+    <Popover.Root
+      open={open}
+      onOpenChange={(o) => {
+        // ⚠️ 열 때마다 초안을 **저장된 값으로 재시드**한다(2026-07-24 적대검수).
+        // 안 하면: 학년을 고치다 '취소'로 닫은 초안이 그대로 살아 있다가, 나중에 색 강도를 바꾸려고
+        // 팝오버를 다시 열어 '적용'을 누르는 순간 **그 옛 초안이 계정에 저장돼** 전 기기에서 학생이 사라진다.
+        // 표시 토글을 여기로 들여오며 팝오버를 훨씬 자주 열게 됐으므로 실제로 밟히는 경로가 됐다.
+        if (o) setDraft(savedGrades ?? allGrades);
+        setOpen(o);
+      }}
+    >
       <Popover.Trigger
         className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs transition ${
           badge
@@ -204,7 +210,7 @@ export function TimetableViewSettings({
                   <span className="text-foreground text-xs font-semibold">표시</span>
                   <span className="text-text-faint text-[10px]">바로 적용됩니다</span>
                 </div>
-                {showColor ? <TimetableColorToggle saved={colorSaved ?? null} /> : null}
+                {showColor ? <TimetableColorToggle /> : null}
                 {collapseHref || hideEmptyDaysHref ? (
                   <div className={`flex flex-wrap items-center gap-1 ${showColor ? "mt-1.5" : ""}`}>
                     {collapseHref ? (

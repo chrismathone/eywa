@@ -624,7 +624,12 @@ export async function getWeeklyWritingRates(month?: string): Promise<WritingRate
   return { dates, rates: [...rates, ...english], range };
 }
 
-export type ReportFilterOptions = { teachers: string[]; subjects: string[] };
+export type ReportFilterOptions = {
+  teachers: string[];
+  subjects: string[];
+  /** 최근 창에 **실제로 보고서가 붙은** 반만(0147a RPC). 반 149개 전체가 아니라 = 0건 옵션 방지. */
+  classes: { id: string; name: string }[];
+};
 
 /**
  * 보고서 목록 필터 옵션(원장 보고서 관리 Part C) — 최근 보고서에서 강사·과목 distinct.
@@ -634,24 +639,47 @@ export type ReportFilterOptions = { teachers: string[]; subjects: string[] };
  * 최근 60일 4,010행 중 1,000행만 도달 → distinct 강사 14명 중 3명이 옵션에서 통째로 누락됐고,
  * 소비처가 자유입력 없는 <select>라 그 강사의 보고서는 어떤 경로로도 필터할 수 없었다(2026-07-21).
  * distinct = 집계이므로 group-by RPC(0126a)로 내린다 — 4,010행 스캔 → 17행 반환.
+ *
+ * 반(class) 옵션은 **별도 RPC(0147a)** 를 병렬로 부른다(B4). 0126a에 컬럼을 더하지 않은 이유는
+ * 0147a 마이그레이션 주석 참조(반환 타입 변경 = DROP 필요 + distinct 조합 폭증).
+ * ⚠️ 반 옵션은 **fail-soft**다 — 0147a 적용 전에 코드가 먼저 배포돼도 반 드롭다운만 비고
+ *    강사·과목 필터와 목록은 그대로 동작한다(배포 순서 제약 제거).
  */
 export async function getReportFilterOptions(): Promise<ReportFilterOptions> {
   const user = await getCurrentUser();
-  if (!user) return { teachers: [], subjects: [] };
+  const empty: ReportFilterOptions = { teachers: [], subjects: [], classes: [] };
+  if (!user) return empty;
   const supabase = await createClient();
   const since = daysBefore(kstToday(), 60);
-  const { data, error } = await supabase.rpc("lesson_report_filter_options", { p_since: since });
-  if (error) {
+  // 서로 독립인 두 RPC → 직렬 워터폴 금지(B4).
+  const [main, cls] = await Promise.all([
+    supabase.rpc("lesson_report_filter_options", { p_since: since }),
+    supabase.rpc("lesson_report_class_options", { p_since: since }),
+  ]);
+  // 반 옵션 실패는 본 옵션을 죽이지 않는다(마이그레이션 미적용 = 함수 없음이 정상 시나리오).
+  const classes: { id: string; name: string }[] = [];
+  if (cls.error) {
+    console.error("[report-admin] 반 필터 옵션 조회 실패(0147a 미적용?)", cls.error);
+  } else {
+    for (const r of (cls.data ?? []) as { class_id: string | null; class_name: string | null }[]) {
+      if (r.class_id && r.class_name) classes.push({ id: r.class_id, name: r.class_name });
+    }
+    // ⚠️ 정렬은 **여기서** 확정한다(gotcha #84): DB 콜레이션은 로마자를 한글보다 앞에 두는데 반 이름은
+    //    'JP1'·'중등E_중1 TOP'처럼 섞여 있어 화면 다른 목록과 순서가 갈린다. SQL 함수 안의 ORDER BY도
+    //    바깥 쿼리에서 보존이 보장되지 않으므로 의존하지 않는다.
+    classes.sort((a, b) => a.name.localeCompare(b.name, "ko"));
+  }
+  if (main.error) {
     // 옵션이 비면 필터를 못 쓸 뿐 목록 자체는 보이므로 화면을 죽이지 않는다. 단 조용히 넘기면
     // "필터에 강사가 안 뜬다"가 또 원인 불명이 되므로 로그는 남긴다.
-    console.error("[report-admin] 필터 옵션 조회 실패", error);
-    return { teachers: [], subjects: [] };
+    console.error("[report-admin] 필터 옵션 조회 실패", main.error);
+    return { ...empty, classes };
   }
   const teachers = new Set<string>();
   const subjects = new Set<string>();
-  for (const r of (data ?? []) as { teacher_name: string | null; subject: string | null }[]) {
+  for (const r of (main.data ?? []) as { teacher_name: string | null; subject: string | null }[]) {
     if (r.teacher_name) teachers.add(r.teacher_name);
     if (r.subject) subjects.add(r.subject);
   }
-  return { teachers: [...teachers].sort(), subjects: [...subjects].sort() };
+  return { teachers: [...teachers].sort(), subjects: [...subjects].sort(), classes };
 }

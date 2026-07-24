@@ -283,6 +283,15 @@ export async function listReports(
   else if (filters.status) q = q.eq("classnote_status", filters.status);
   if (filters.teacher) q = q.eq("teacher_name", filters.teacher);
   if (filters.subject) q = q.eq("subject", filters.subject);
+  // 반 필터(0134a class_id) — 옵션은 0147a RPC가 "실제 보고서가 붙은 반"만 준다.
+  // ⚠️ uuid 형식을 먼저 검사한다: 잘못된 값이 오면 PostgREST가 22P02(invalid input syntax) **영문 원문**을
+  //    내고 그게 그대로 토스트에 뜬다(UI에 raw 에러 노출 금지 규칙 위반). 형식이 아니면 한글로 되돌린다.
+  if (filters.classId) {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(filters.classId)) {
+      return { ok: false, error: "반 필터 값이 올바르지 않습니다 — 뷰 설정에서 반을 다시 골라 주세요" };
+    }
+    q = q.eq("class_id", filters.classId);
+  }
   // 읽음 필터 — "안읽음"은 판정 가능한 행만(발송 성공 + 매칭 키 + 읽음 없음). 매칭 키 없는 옛 이관분은
   // 동기화 불가 = "안읽음" 아님(report-filters.ts ReportListFilters.read 주석 참조).
   if (filters.read === "read") q = q.not("classnote_read_at", "is", null);

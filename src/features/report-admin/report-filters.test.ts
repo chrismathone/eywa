@@ -123,22 +123,39 @@ describe("activeReportFilterCount", () => {
   const base = defaultReportFilters(today);
 
   it("기본 상태(이번 달·필터 없음)는 0 — 기본을 세면 배지가 항상 켜져 의미가 없어진다", () => {
-    expect(activeReportFilterCount(base, today)).toBe(0);
+    expect(activeReportFilterCount(base)).toBe(0);
   });
 
-  it("강사·과목·상태·읽음은 각각 1로 센다", () => {
-    expect(activeReportFilterCount({ ...base, teacher: "이수진" }, today)).toBe(1);
+  it("강사·과목·상태·읽음·반은 각각 1로 센다", () => {
+    expect(activeReportFilterCount({ ...base, teacher: "이수진" })).toBe(1);
+    expect(activeReportFilterCount({ ...base, classId: "c1" })).toBe(1);
     expect(
-      activeReportFilterCount({ ...base, teacher: "이수진", subject: "math", status: "success", read: "unread" }, today),
-    ).toBe(4);
+      activeReportFilterCount({
+        ...base,
+        teacher: "이수진",
+        subject: "math",
+        status: "success",
+        read: "unread",
+        classId: "c1",
+      }),
+    ).toBe(5);
   });
 
-  it("기간이 기본(이번 달)과 다르면 1 — 전체 기간·직접 지정 모두", () => {
-    expect(activeReportFilterCount({ page: 0 }, today)).toBe(1); // 전체 기간(from/to 없음)
-    expect(activeReportFilterCount({ ...base, from: "2026-07-10" }, today)).toBe(1); // 직접 지정
+  // ⚠️ 배지의 뜻은 "화면에 **안 보이는** 필터가 걸렸다"이다. 기간은 팝오버 밖 월 이동 칩에 항상 그대로
+  // 보이므로 세지 않는다 — 세면 지난달을 볼 때마다 배지가 상시 점등돼 진짜 숨은 필터와 구분이 사라진다.
+  it("기간은 세지 않는다 — 월 이동·전체 기간·직접 지정 전부 화면에 그대로 보인다", () => {
+    expect(activeReportFilterCount({ page: 0 })).toBe(0); // 전체 기간
+    expect(activeReportFilterCount({ ...base, from: "2026-07-10" })).toBe(0); // 직접 지정
+    expect(activeReportFilterCount({ page: 0, from: "2026-06-01", to: "2026-06-30" })).toBe(0); // 지난달
   });
 
   it("정렬은 필터가 아니다 — 줄 세우기는 무엇이 보이는지를 바꾸지 않는다", () => {
-    expect(activeReportFilterCount({ ...base, sort: "class", dir: "asc" }, today)).toBe(0);
+    expect(activeReportFilterCount({ ...base, sort: "class", dir: "asc" })).toBe(0);
+  });
+
+  it("기간·정렬이 섞여 있어도 진짜 필터만 센다", () => {
+    expect(
+      activeReportFilterCount({ page: 0, from: "2026-01-01", sort: "teacher", dir: "desc", subject: "math" }),
+    ).toBe(1);
   });
 });
