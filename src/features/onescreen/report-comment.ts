@@ -5,8 +5,39 @@
  * 실 AI 호출은 server/actions.ts의 generateReportComment, 실패 시 report.ts buildSubjectReport로 폴백.
  * CLAUDE.md 원칙: 계산/프롬프트 조립은 순수 함수 + Vitest.
  */
-import type { OneScreenStudent } from "./types";
+import type { OneScreenStudent, TestScore, TestScoreMode } from "./types";
 import { DEFAULT_PROMPTS, interpolate, assembleSingle } from "./prompt-defaults";
+
+/**
+ * 테스트 점수 → 사람이 읽는 문자열(순수, 0148a). **표시 단일 소스** — 학부모 카드(daily_test)와 AI 멘트(testLine)가
+ * 이 함수를 공유해야 "카드는 개수인데 멘트는 점수" 불일치가 안 난다.
+ *  · count 모드 = "20문제 중 18개"(현행)
+ *  · score 모드 = "95점"(만점 100) / "45/50점"(만점≠100). mode 미지정 = count(기존 동작 보존).
+ * ⚠️ 이건 **표시**만 담당한다 — exam_info(합본 "일일 95/100")는 별도로 항상 X/Y를 유지한다(추세·prevScore 불변식).
+ */
+export function formatTestScore(score: number, max: number, mode?: TestScoreMode): string {
+  if (mode === "score") return max === 100 ? `${score}점` : `${score}/${max}점`;
+  return `${max}문제 중 ${score}개`;
+}
+
+/**
+ * 테스트 표기 모드 전환 시 상태 조정(순수, 0148a). **적대검수 2건 방어**:
+ *  ① 점수↔개수 왕복에서 문항수 유실 방지 — 점수로 갈 때 개수 만점(문항수)을 `countMax`에 기억,
+ *     개수로 돌아올 때 복원(없으면 현재값). 점수 모드 만점은 100 고정.
+ *  ② 척도가 바뀌면(개수↔점수) `prevScore`를 버린다 — 척도 다른 직전 회차를 빼면 "▲77" 허위 증감이 난다.
+ * 점수는 항상 새 만점에 재클램프.
+ */
+export function applyTestScoreMode(test: TestScore, mode: TestScoreMode): TestScore {
+  const prevScore = (test.mode ?? "count") === mode ? test.prevScore : null;
+  if (mode === "score") {
+    const countMax = test.mode === "score" ? test.countMax : test.max;
+    const score = test.score != null ? Math.min(test.score, 100) : test.score;
+    return { ...test, mode, max: 100, score, prevScore, countMax };
+  }
+  const max = test.countMax ?? test.max;
+  const score = test.score != null ? Math.min(test.score, max) : test.score;
+  return { ...test, mode, max, score, prevScore };
+}
 
 export type ReportCommentInput = {
   studentName: string;
@@ -39,10 +70,10 @@ function flatten(s: string): string {
     .join(", ");
 }
 
-/** 점수 → 사람이 읽는 문장. 미입력이면 "". 직전 회차 있으면 증감(▲/▼) 부기. */
-function testLine(score: number | null, max: number, prev: number | null): string {
+/** 점수 → 사람이 읽는 문장. 미입력이면 "". 직전 회차 있으면 증감(▲/▼) 부기. 표기는 모드(0148a) 공유 포맷. */
+function testLine(score: number | null, max: number, prev: number | null, mode?: TestScoreMode): string {
   if (score == null) return "";
-  let s = `${max}문제 중 ${score}개`;
+  let s = formatTestScore(score, max, mode);
   if (prev != null) {
     const d = score - prev;
     s += d === 0 ? " (지난 회차와 동일)" : ` (지난 회차 대비 ${d > 0 ? "▲" : "▼"}${Math.abs(d)})`;
@@ -59,8 +90,8 @@ export function buildReportCommentInput(st: OneScreenStudent, subjectIndex: numb
     //    `su.name`엔 반 이름이 붙을 수 있다(같은 과목 두 반 = "수학 · 고1 특강"). 보고서에 반 노출 금지.
     subject: su?.subjectLabel || su?.name || "",
     progress: su?.today ?? "",
-    dailyTest: testLine(st.tests.daily.score, st.tests.daily.max, st.tests.daily.prevScore),
-    checkTest: testLine(st.tests.check.score, st.tests.check.max, st.tests.check.prevScore),
+    dailyTest: testLine(st.tests.daily.score, st.tests.daily.max, st.tests.daily.prevScore, st.tests.daily.mode),
+    checkTest: testLine(st.tests.check.score, st.tests.check.max, st.tests.check.prevScore, st.tests.check.mode),
     attitude: st.attitude ?? "",
     homework: st.homework && st.homework !== "—" ? st.homework : "",
     homeworkToday: su?.homeworkToday ?? "",

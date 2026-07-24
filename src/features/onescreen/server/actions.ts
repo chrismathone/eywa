@@ -400,6 +400,8 @@ export type SaveOnescreenSessionInput = {
   dailyMax?: number | null;
   checkScore?: number | null;
   checkMax?: number | null;
+  dailyScoreMode?: string | null; // 0148a — 점수 표기 모드 오버라이드(score|count). 아래에서 clamp.
+  checkScoreMode?: string | null;
   attitude?: string | null;
   homework?: string | null;
   note?: string | null; // 특이사항(강사 메모) — 0093a
@@ -449,6 +451,9 @@ export async function saveOnescreenSession(
       daily_max: input.dailyMax ?? null,
       check_score: input.checkScore ?? null,
       check_max: input.checkMax ?? null,
+      // 0148a — 표기 모드. 순수 TS 타입이라 zod가 없어 여기서 직접 clamp(유효 enum만, 그 외 null).
+      daily_score_mode: input.dailyScoreMode === "score" || input.dailyScoreMode === "count" ? input.dailyScoreMode : null,
+      check_score_mode: input.checkScoreMode === "score" || input.checkScoreMode === "count" ? input.checkScoreMode : null,
       attitude: input.attitude ?? null,
       homework: input.homework ?? null,
       special_note: input.note ?? null,

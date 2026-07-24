@@ -4,6 +4,25 @@
 
 ## 진행 상황
 
+### 테스트 점수 '개수/점수' 표기 모드 + 분모 입력 스냅백 버그 수정 (2026-07-24) - tsc0/lint0/test2433/build✓
+원장 제보: 이수진T가 이준혁 **100점(만점)**을 넣으려다 "100문제 중 1개"(=1점)로 저장·발송됨. 근본 원인 =
+인재원은 **100점 만점(점수제)**인데 원스크린은 **"N문제 중 M개(개수제)"** 단일 모델이라 점수를 개수에 욱여넣던 것.
+프롬프트만으론 못 고침(데이터가 이미 "100문제 중 1개"로 굳어 AI에 넘어감) → **입력 모델에 모드 도입**.
+- **학원 설정(report)**: `dailyTestScoreMode`/`checkTestScoreMode`(score|count). 기본 **count**(무회귀) — 인재원은
+  학원설정 > 보고서 > '테스트 점수 표기'에서 일일=**점수**로 전환. score 모드 = "95점"(만점 100 고정), count = "20문제 중 18개".
+- **입력칸 [개|점] 토글**(공용 [TestModeToggle](../src/features/onescreen/components/test-mode-toggle.tsx)) — 카드·그리드 셀. 강사가 건별 오버라이드.
+- **승계**: 문항수 승계(8214105e)와 같은 세션 경로(0148a `daily_score_mode`/`check_score_mode` 컬럼) — 단 **모드는
+  `allowTeacherTestMax`와 무관하게 항상 승계**(원장 요구: "한번 정한 토글은 다음 보고서로"). 문항수 시드만 게이트.
+- **불변식**: `exam_info`는 **양 모드 모두 X/Y 유지**("일일 95/100") → prevScore·추세·DeltaChip·normalizeExamInfo 무손상.
+  표시(daily_test·testLine)만 모드 분기. 학부모카드·AI멘트가 **공유 순수함수 `formatTestScore`**를 써 불일치 0.
+- **분모 입력 버그**(원장 제보, 별건): 문항수 칸이 컨트롤드 `value` + `if(n>0)` 가드라 **빈칸으로 지우면 옛 값 스냅백**
+  ("1이 안 지워짐") → 공용 [TestMaxInput](../src/features/onescreen/components/test-max-input.tsx)(로컬 텍스트 상태 + blur 복원)으로 수정. 렌더 중 조정 패턴으로 #25 회피.
+- ⚠️ **적대검수(15에이전트) 실버그 2건 수리**: ① 점수↔개수 왕복 시 문항수가 100으로 굳던 것(off면 편집불가로 영구
+  "100문제 중 N개") → `countMax` 기억 후 복원 ② 척도 경계 delta 오류(개수 18 ↔ 점수 95를 빼 "▲77" 허위 증감,
+  롤아웃 당일 전 학생) → 모드 변경 시 prevScore 폐기(setModeFor) + roster가 직전 회차 척도(exam_info 분모)
+  불일치 시 무효화(`parseExamMaxes`). 전환 로직은 순수함수 [`applyTestScoreMode`](../src/features/onescreen/report-comment.ts)로 추출·테스트.
+- ⚠️ **0148a 마이그레이션 적용 필요**(`pnpm db:alphas`, add column + notify pgrst). 미적용 시 저장·로드가 실패하니 **코드 배포 전** 적용.
+
 ### 시간표 툴바 슬림화 2단계 — 엑셀·시트 5버튼을 '엑셀·시트' 팝오버 1개로 (2026-07-24) - tsc0/lint0/test2421/build✓
 1단계(표시 취향 → 뷰 설정)에 이어 툴바 둘째 줄을 걷어냈다. 반증 에이전트가 **초안 계획을 반려**해서 설계를 바꿨다.
 

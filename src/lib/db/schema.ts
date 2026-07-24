@@ -754,6 +754,9 @@ export const onescreenDailySessions = pgTable(
     dailyMax: integer("daily_max"),
     checkScore: integer("check_score"),
     checkMax: integer("check_max"),
+    // 테스트 점수 표기 모드 오버라이드(0148a) — score|count, NULL=학원설정 기본(report.*TestScoreMode).
+    dailyScoreMode: text("daily_score_mode"),
+    checkScoreMode: text("check_score_mode"),
     attitude: text("attitude"),
     homework: text("homework"),
     specialNote: text("special_note"), // 강사 특이사항(메모) — 0093a. AI 멘트 입력(공지 모드 A/B).

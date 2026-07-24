@@ -10,7 +10,7 @@ import { usePrintWindow } from "@/components/workspace/print-window";
 import { ATTITUDE, CLASS_TAGS, HOMEWORK, TODAY } from "../data";
 import type { OneScreenView } from "../view";
 import { buildSubjectReport, studentStatus } from "../report";
-import { buildReportCommentInput } from "../report-comment";
+import { applyTestScoreMode, buildReportCommentInput, formatTestScore } from "../report-comment";
 import {
   buildMakeupStudent,
   loadMakeupHistory,
@@ -280,6 +280,9 @@ export function OneScreenClient({
       dailyMax: s.tests.daily.max,
       checkScore: showCheckTest ? s.tests.check.score : null,
       checkMax: s.tests.check.max,
+      // 0148a — 표기 모드를 세션에 실어야 승계 소스가 채워진다(안 하면 write-only-orphan → 새로고침 시 모드 리셋).
+      dailyScoreMode: s.tests.daily.mode ?? null,
+      checkScoreMode: s.tests.check.mode ?? null,
       attitude: s.attitude,
       homework: s.homework || null,
       note: s.note || null,
@@ -491,6 +494,14 @@ export function OneScreenClient({
       return { ...s, tests: { ...s.tests, [which]: { ...cur, max, score } } };
     });
   }
+  // 표기 모드(개수/점수) 전환(0148a) — 로직은 순수함수 applyTestScoreMode 단일 소스(Vitest). 점수↔개수 왕복
+  // 문항수 보존(countMax) + 척도 변경 시 prevScore 폐기 + 재클램프를 그 함수가 담당(적대검수 2건 방어).
+  function setModeFor(studentId: string, which: "daily" | "check", mode: "score" | "count") {
+    patch(studentId, (s) => ({
+      ...s,
+      tests: { ...s.tests, [which]: applyTestScoreMode(s.tests[which], mode) },
+    }));
+  }
   // ── 출결 인라인 입력(2-2) — 출석부와 같은 기록(setAttendanceCell 재사용). 행(반) 단위 raw 보존 ──
   const markOf = (s: string): AttendanceMark =>
     s === "late" ? "지각" : s === "absent" || s === "early_leave" ? "결석" : "출석";
@@ -575,6 +586,10 @@ export function OneScreenClient({
   function setMax(which: "daily" | "check", v: number) {
     if (!selected) return;
     setMaxFor(selected.id, which, v);
+  }
+  function setMode(which: "daily" | "check", m: "score" | "count") {
+    if (!selected) return;
+    setModeFor(selected.id, which, m);
   }
   function setAttitude(a: string) {
     if (!selected) return;
@@ -988,10 +1003,15 @@ export function OneScreenClient({
     const examInfo = buildExamInfo(student, showDailyTest, showCheckTest);
     // 학부모 보고서 일일/확인테스트 분리 표시용("N문제 중 M개"). exam_info(합본)는 roster prev-score 파싱용 별도 보존.
     // 비활성 테스트(학원설정 off)는 세션에서 복원된 옛 점수가 남아 있어도 저장·발송하지 않는다(입력칸도 숨김 → 새 보고서엔 안 나감).
+    // 표기는 공유 순수함수(0148a) — testLine(AI 멘트)과 같은 포맷이라 "카드는 개수·멘트는 점수" 불일치가 없다.
     const dailyTest =
-      showDailyTest && student.tests.daily.score != null ? `${student.tests.daily.max}문제 중 ${student.tests.daily.score}개` : "";
+      showDailyTest && student.tests.daily.score != null
+        ? formatTestScore(student.tests.daily.score, student.tests.daily.max, student.tests.daily.mode)
+        : "";
     const checkTest =
-      showCheckTest && student.tests.check.score != null ? `${student.tests.check.max}문제 중 ${student.tests.check.score}개` : "";
+      showCheckTest && student.tests.check.score != null
+        ? formatTestScore(student.tests.check.score, student.tests.check.max, student.tests.check.mode)
+        : "";
     return {
       draft,
       input: {
@@ -1675,6 +1695,7 @@ export function OneScreenClient({
             onStudyGrade: setStudyGradeFor,
             onScore: setScoreFor,
             onMax: setMaxFor,
+            onMode: setModeFor,
             onAttitude: setAttitudeValue,
             onHomework: setHomeworkValue,
             onTextbook: setTextbookFor,
@@ -1774,7 +1795,7 @@ export function OneScreenClient({
                     : undefined
                 }
               />
-              <TestCard student={selected} onScore={setScore} allowMax={allowTeacherTestMax} onMax={setMax} dailyEnabled={showDailyTest} checkEnabled={showCheckTest} />
+              <TestCard student={selected} onScore={setScore} allowMax={allowTeacherTestMax} onMax={setMax} onMode={setMode} dailyEnabled={showDailyTest} checkEnabled={showCheckTest} />
             </div>
             <div className="flex flex-col gap-3">
               <header className="flex items-center gap-1.5">
