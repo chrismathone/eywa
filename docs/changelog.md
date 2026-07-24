@@ -22,6 +22,8 @@
   롤아웃 당일 전 학생) → 모드 변경 시 prevScore 폐기(setModeFor) + roster가 직전 회차 척도(exam_info 분모)
   불일치 시 무효화(`parseExamMaxes`). 전환 로직은 순수함수 [`applyTestScoreMode`](../src/features/onescreen/report-comment.ts)로 추출·테스트.
 - ⚠️ **0148a 마이그레이션 적용 필요**(`pnpm db:alphas`, add column + notify pgrst). 미적용 시 저장·로드가 실패하니 **코드 배포 전** 적용.
+- **후속(2026-07-24)**: 그리드 셀 [개\|점] 토글 **제거** — 테스트 열이 88px 고정(table-fixed)이라 토글이 셀을 넘쳐 겹쳤다(원장 제보).
+  모드 전환은 **점수 입력 카드(TestCard)** 에서만(넓음), 그리드는 모드에 맞게 **표시만**(점수="X점"). 승계·설정은 그대로 독립 동작.
 
 ### 시간표 툴바 슬림화 2단계 — 엑셀·시트 5버튼을 '엑셀·시트' 팝오버 1개로 (2026-07-24) - tsc0/lint0/test2421/build✓
 1단계(표시 취향 → 뷰 설정)에 이어 툴바 둘째 줄을 걷어냈다. 반증 에이전트가 **초안 계획을 반려**해서 설계를 바꿨다.

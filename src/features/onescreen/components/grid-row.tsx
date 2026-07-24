@@ -8,7 +8,7 @@ import { resolveStudyGrade } from "../curriculum";
 import { subjectTone, toneSoftClass, toneSolidClass } from "../data";
 import { effectiveClassnoteStatus, isAlreadySent, isRowActionable, type GridRow } from "../grid";
 import { parentUnreadBadge, progressAnomalyBadge } from "../roster-signals";
-import type { OneScreenStudent, TestScoreMode } from "../types";
+import type { OneScreenStudent } from "../types";
 import { classnoteBadge, type SubjectReport } from "./report-card";
 import { GridAttachButton, useRowFileDrop } from "./grid-attach";
 import { AttendancePills, type BasicAttendance } from "./attendance-pills";
@@ -34,7 +34,7 @@ export type GridFieldHandlers = {
   onStudyGrade: (studentId: string, grade: string) => void;
   onScore: (studentId: string, which: "daily" | "check", v: number | null) => void;
   onMax: (studentId: string, which: "daily" | "check", v: number) => void;
-  onMode: (studentId: string, which: "daily" | "check", m: TestScoreMode) => void; // 개수/점수 표기 전환(0148a)
+  // ⚠️ 모드 전환(onMode)은 그리드에 없다 — 열이 88px 고정이라 셀이 넘친다(2026-07-24). 카드(TestCard)에서만 전환.
   onAttitude: (studentId: string, a: string | null) => void;
   onHomework: (studentId: string, h: string) => void;
   onTextbook: (studentId: string, subjectName: string, text: string) => void;
@@ -292,7 +292,6 @@ export function GridBodyRow({
             allowMax={config.allowTestMax}
             onMax={(v) => fields.onMax(student.id, "daily", v)}
             mode={student.tests.daily.mode}
-            onMode={(m) => fields.onMode(student.id, "daily", m)}
             nav={nav.studentRow !== undefined ? { col: "daily", row: nav.studentRow } : undefined}
           />
         </td>
@@ -307,7 +306,6 @@ export function GridBodyRow({
             allowMax={config.allowTestMax}
             onMax={(v) => fields.onMax(student.id, "check", v)}
             mode={student.tests.check.mode}
-            onMode={(m) => fields.onMode(student.id, "check", m)}
             nav={nav.studentRow !== undefined ? { col: "check", row: nav.studentRow } : undefined}
           />
         </td>

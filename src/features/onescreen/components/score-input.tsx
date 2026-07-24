@@ -2,7 +2,6 @@
 
 import { handleGridNavKey } from "./grid-nav";
 import { TestMaxInput } from "./test-max-input";
-import { TestModeToggle } from "./test-mode-toggle";
 import type { TestScoreMode } from "../types";
 
 function clamp(n: number, max: number) {
@@ -10,7 +9,9 @@ function clamp(n: number, max: number) {
 }
 
 /** 점수 셀 — 맞은 개수/점수 입력. count 모드=값+/문항수, score 모드="값 점"(만점 100 고정). allowMax면 문항수 편집.
- *  onMode를 주면 [개|점] 컴팩트 토글 노출(0148a). nav를 주면 Enter/↑↓로 같은 열 위·아래 행 이동(3-1). */
+ *  nav를 주면 Enter/↑↓로 같은 열 위·아래 행 이동(3-1).
+ *  ⚠️ 표기 모드 **토글은 없다** — 그리드 열은 고정 88px(table-fixed)이라 토글을 넣으면 셀이 넘쳐 겹친다
+ *  (2026-07-24 원장 제보). 모드에 맞게 **표시만** 하고(점수="X점"), 모드 전환은 **점수 입력 카드(TestCard)**에서 한다. */
 export function ScoreInput({
   value,
   max,
@@ -19,7 +20,6 @@ export function ScoreInput({
   allowMax,
   onMax,
   mode = "count",
-  onMode,
   nav,
 }: {
   value: number | null;
@@ -29,7 +29,6 @@ export function ScoreInput({
   allowMax?: boolean;
   onMax?: (v: number) => void;
   mode?: TestScoreMode;
-  onMode?: (m: TestScoreMode) => void;
   nav?: { col: string; row: number };
 }) {
   const scoreMode = mode === "score";
@@ -66,7 +65,6 @@ export function ScoreInput({
           )}
         </>
       )}
-      {onMode ? <TestModeToggle mode={mode} onMode={onMode} size="xs" /> : null}
     </div>
   );
 }

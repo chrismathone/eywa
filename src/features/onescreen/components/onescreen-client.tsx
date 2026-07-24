@@ -1695,7 +1695,6 @@ export function OneScreenClient({
             onStudyGrade: setStudyGradeFor,
             onScore: setScoreFor,
             onMax: setMaxFor,
-            onMode: setModeFor,
             onAttitude: setAttitudeValue,
             onHomework: setHomeworkValue,
             onTextbook: setTextbookFor,
