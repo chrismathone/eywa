@@ -666,12 +666,18 @@ export async function buildMakeupStudent(
   // ⚠️ 대상 날짜 발송상태 복원 — 보강 학생은 세션 미저장이라 재추가 시 상태가 빈다. 그대로면 이미 발송(success)된 과목을
   //    다시 눌러 ClassNote 중복 게시될 수 있다(#13 확정). **조회 중인 날짜**(과거 백필 포함) lesson_reports를 과목별로
   //    매핑해 sent/토큰/상태 복원 — 저장/발송이 쓰는 reportDate와 동일 날짜여야 과거 날짜에서도 중복게시 방지.
+  // 🔴 **class_id IS NULL(보강 유닛)만** 복원한다(2026-07-24 적대검수 확정). 보강 보고서는 unit_key=coalesce(class_id,subject)=과목이라
+  //    class_id가 항상 NULL이고, 정규/특강 반 보고서는 class_id가 붙는다. 스코프를 안 하고 과목만으로 매핑하면
+  //    같은 과목 **정규 발송본**(class_id 있음, classnote_status='success')을 보강 행이 물려받아 ① born-locked(저장·발송 영영 불가)
+  //    ② 보강 행의 재발급/취소가 정규 보고서 토큰을 회전·무효화(학부모 라이브 링크 파괴)한다. class_id null 스코프면
+  //    유니크(unit_key)로 과목당 ≤1행 → Map도 결정적(정렬·last-wins 비결정 제거).
   const targetDate = resolveReportDate(reportDate);
   const { data: todayReports } = await supabase
     .from("lesson_reports")
     .select("subject, share_token, classnote_status, revoked_at, attachments")
     .eq("student_id", studentId)
-    .eq("report_date", targetDate);
+    .eq("report_date", targetDate)
+    .is("class_id", null);
   const statusBySubject = new Map(
     (todayReports ?? []).map((r) => [r.subject ?? "", r]),
   );

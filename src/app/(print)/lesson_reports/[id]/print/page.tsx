@@ -40,7 +40,7 @@ export default async function LessonReportPrintPage({
   const { data: report } = await supabase
     .from("lesson_reports")
     .select(
-      "id, student_id, class_id, subject, report_date, textbook, progress, exam_info, homework_score, homework_today, teacher_name, notes, trend_note, daily_test, check_test, attitude, attachments",
+      "id, student_id, class_id, subject, report_date, textbook, progress, exam_info, homework_score, homework_today, teacher_name, notes, trend_note, daily_test, check_test, attitude, attachments, makeup",
     )
     .eq("id", id)
     .single();
@@ -111,6 +111,7 @@ export default async function LessonReportPrintPage({
             attitude: report.attitude,
             notes: report.notes,
             trendNote: report.trend_note,
+            makeup: report.makeup === true, // 보강이면 제목에 "(보강)"
           }}
           student={student ?? null}
           academyName={academyName}

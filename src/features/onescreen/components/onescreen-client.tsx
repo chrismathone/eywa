@@ -261,19 +261,25 @@ export function OneScreenClient({
       classId: s.classId ?? null,
       studyGrade: s.studyGrade ?? null,
       subjectProgress: Object.fromEntries(
-        s.subjects.map((su) => [
-          // 반 키 우선(0134a) — 과목키면 같은 과목 두 행(정규+특강)이 한 항목을 공유해 서로를 덮는다.
-          // 로스터 복원(roster.ts)이 같은 순서로 읽는다(반 키 → 과목키 폴백).
-          su.classId || su.subjectKey || su.name,
-          {
-            today: su.today,
-            draft: r?.[su.name]?.draft ?? "",
-            trendDraft: r?.[su.name]?.trendDraft ?? "",
-            textbook: su.textbook ?? "",
-            makeup: su.makeup ?? false,
-            homeworkToday: su.homeworkToday ?? "",
-          },
-        ]),
+        s.subjects
+          // 병합된 보강 행(classId 없음·makeup)은 세션에 저장하지 않는다(2026-07-24 적대검수): 로스터가
+          // 보강 행을 재구성하지 않으므로 그 세션 항목은 아무도 안 읽는 write-only-orphan이다. 게다가
+          // 과목키(예 'math')로 저장되면 정규 행이 미편집(sp[classId] 없음)일 때 legacyKey 폴백이 그 항목을
+          // 집어 보강 진도가 정규 행에 새어들 수 있다(교차오염). 보강 초안은 세션 무관 임시(카드 makeup과 동일).
+          .filter((su) => !(su.makeup && !su.classId))
+          .map((su) => [
+            // 반 키 우선(0134a) — 과목키면 같은 과목 두 행(정규+특강)이 한 항목을 공유해 서로를 덮는다.
+            // 로스터 복원(roster.ts)이 같은 순서로 읽는다(반 키 → 과목키 폴백).
+            su.classId || su.subjectKey || su.name,
+            {
+              today: su.today,
+              draft: r?.[su.name]?.draft ?? "",
+              trendDraft: r?.[su.name]?.trendDraft ?? "",
+              textbook: su.textbook ?? "",
+              makeup: su.makeup ?? false,
+              homeworkToday: su.homeworkToday ?? "",
+            },
+          ]),
       ),
       // 비활성 테스트는 세션에도 점수를 재기입하지 않는다(off 후 남은 옛 점수를 다음 저장이 되살리지 않도록 self-heal).
       dailyScore: showDailyTest ? s.tests.daily.score : null,
@@ -432,23 +438,57 @@ export function OneScreenClient({
       );
     }
   }
-  // 보강(수업외) 학생 추가 — 서버에서 OneScreenStudent 조립(담당 과목·교재 기본값). 세션 저장은 스킵(반 없음).
+  // 보강(수업외) 학생 추가 — 서버에서 OneScreenStudent 조립(담당 과목·교재 기본값).
+  //
+  // ⚠️ 정규/특강으로 **이미 목록에 있는 학생**도 보강 추가가 돼야 한다(2026-07-24 원장: 특강+정규외 보강).
+  //    별도 카드(가짜 id)는 카드 id가 곳곳에서 DB 학생 id로 쓰여 첨부·발송상태를 깨뜨린다(적대검수 실측) →
+  //    대신 **그 학생 카드에 '수학 (보강)' 행을 병합**한다(카드 id=실제 학생 id 불변 = 안전). 보강 행은
+  //    classId=null·makeup=true라 DB에서 정규 보고서와 별개(unit_key 분리)로 저장되고, 학부모 보고서엔 "(보강)"이 붙는다.
   async function addMakeupStudent(studentId: string) {
-    if (students.some((s) => s.id === studentId)) {
-      setSelId(studentId);
-      toast.message("이미 목록에 있는 학생입니다");
-      return;
-    }
     const res = await buildMakeupStudent(studentId, date || undefined); // 조회 중인 날짜 전달(과거 백필 중복게시 방지)
     if (!res.ok || !res.student) {
       toast.error(res.error ?? "학생을 추가하지 못했습니다");
       return;
     }
-    const st = res.student;
-    setStudents((prev) => [...prev, st]);
-    setReports((prev) => ({ ...prev, [st.id]: initReports([st])[st.id] ?? {} }));
-    setSelId(st.id);
-    toast.success(`${st.name} (보강) 추가됨`);
+    const mk = res.student;
+    const existing = students.find((s) => s.id === studentId);
+    if (!existing) {
+      // 목록에 없던 학생 → 종전대로 보강 카드로 추가(무변경).
+      setStudents((prev) => [...prev, mk]);
+      setReports((prev) => ({ ...prev, [mk.id]: initReports([mk])[mk.id] ?? {} }));
+      setSelId(mk.id);
+      toast.success(`${mk.name} (보강) 추가됨`);
+      return;
+    }
+    // 이미 목록에 있음 → 그 카드에 '보강' 행 병합. 이름 유일화(reports 키 충돌 방지)로 초안 덮어쓰기 차단.
+    const used = new Set(existing.subjects.map((su) => su.name));
+    // mk.subjects는 강사의 **모든 담당 과목**이라, 그대로 병합하면 math만 듣는 학생 카드에 '영어 (보강)' 잡행까지
+    // 붙는다(2026-07-24 적대검수). 학생이 실제 수강하는 과목(정규+특강 행)으로 좁히되, 겹치는 과목이 하나도 없으면
+    // (학생이 안 듣는 과목의 순수 추가보강) 종전대로 전체를 후보로 둔다.
+    const attended = new Set(existing.subjects.filter((su) => !su.makeup).map((su) => su.subjectKey));
+    const attendedRows = mk.subjects.filter((su) => attended.has(su.subjectKey));
+    const source = attendedRows.length ? attendedRows : mk.subjects;
+    const makeupRows = source
+      // 같은 과목 보강 행이 이미 있으면 중복 추가 안 함.
+      .filter((su) => !existing.subjects.some((ex) => ex.makeup && !ex.classId && ex.subjectKey === su.subjectKey))
+      .map((su) => {
+        let name = `${su.name} (보강)`;
+        let n = 2;
+        while (used.has(name)) name = `${su.name} (보강 ${n++})`;
+        used.add(name);
+        // ⚠️ classId=null·makeup=true 유지(반 무관 보강). subjectLabel은 깨끗한 라벨 — 진도 접두에 "(보강)" 누출 방지.
+        return { ...su, name, classId: null, makeup: true, subjectLabel: su.subjectLabel ?? su.name };
+      });
+    if (makeupRows.length === 0) {
+      setSelId(existing.id);
+      toast.message("이미 보강 행이 추가되어 있습니다");
+      return;
+    }
+    patch(studentId, (s) => ({ ...s, subjects: [...s.subjects, ...makeupRows] }));
+    const slots = initReports([{ ...existing, subjects: makeupRows }])[existing.id] ?? {};
+    setReports((prev) => ({ ...prev, [studentId]: { ...(prev[studentId] ?? {}), ...slots } }));
+    setSelId(studentId);
+    toast.success(`${existing.name} 보강 추가됨`);
   }
   // 보강 학생 '이전 진도 불러오기' — 직전 회차를 당겨 prev/prevReport/prevScore를 채운다(세션 저장 없음).
   async function loadMakeupPrev(studentId: string) {
@@ -1035,9 +1075,11 @@ export function OneScreenClient({
         // ⚠️ subject는 **과목키**(math)여야 한다 — 발송 과목 게이트·보드 매핑이 이 값을 본다.
         //    행 이름(name)엔 반 이름이 붙을 수 있으므로 폴백도 subjectLabel을 먼저 본다.
         subject: su?.subjectKey || su?.subjectLabel || su?.name || undefined,
-        // 반(수업) — 보고서 1건의 단위(0134a). 같은 날 정규+특강이 서로 안 덮게 하는 키.
+        // 반(수업) — 보고서 1건의 단위(0134a). 같은 날 정규+특강이 서로 안 덮게 하는 키. 보강 행은 classId=null → unit_key=과목키.
         classId: su?.classId ?? null,
-        outOfClass: student.isMakeup ?? false, // 보강(수업외) 학생 = 담당반 검사 우회(같은 학원이면 허용)
+        // 보강(수업외) = 담당반·결석 게이트 우회. 카드 전체가 보강(isMakeup)이거나, **정규 카드에 병합된 보강 행**
+        // (makeup=true·classId 없음)도 우회 — 그 학생의 담당반이 아닌 추가수업이라 담당반/결석 검사에 걸리면 안 된다.
+        outOfClass: (student.isMakeup ?? false) || (!!su?.makeup && !su?.classId),
       },
     };
   }

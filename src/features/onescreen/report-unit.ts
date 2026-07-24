@@ -33,7 +33,17 @@ export type SubjectRowRef = {
   isSpecial?: boolean;
 };
 /** DB 보고서 행 — 매칭에 필요한 만큼만. */
-export type ReportRowRef = { classId?: string | null; subject?: string | null };
+export type ReportRowRef = {
+  classId?: string | null;
+  subject?: string | null;
+  /**
+   * 보강(수업외) 보고서인가(`lesson_reports.makeup`). 보강은 `class_id`가 NULL이라 2·3차 과목 폴백이
+   * **정규 반 행에 오배정**한다(안 보낸 정규 보고서가 보강의 발송상태로 잠기는 버그, 2026-07-24 적대검수).
+   * → 폴백에서 `!makeup`으로 걸러 보강 보고서는 어느 정규/이관 행에도 붙지 않게 한다(보강 행은 로스터가
+   *   재구성하지 않는 임시 클라 행이라, 매칭 대상이 아니다 = 깨끗이 orphan → 재추가 시 buildMakeupStudent가 복원).
+   */
+  makeup?: boolean | null;
+};
 
 /**
  * 한 학생의 **화면 행들**에 그 학생의 **DB 보고서 행들**을 1:1로 붙인다. 반환은 rows와 같은 길이·순서.
@@ -79,12 +89,13 @@ export function matchReportsToRows<R extends ReportRowRef>(
     if (!cls) return;
     out[i] = take((r) => (r.classId?.trim() ?? "") === cls);
   });
-  // 2차 — 반이 없는 보고서를 과목으로. ⚠️ **특강 행은 제외**(아래 규칙).
+  // 2차 — 반이 없는 보고서를 과목으로. ⚠️ **특강 행 + 보강 보고서는 제외**(아래 규칙).
+  //    보강 보고서(class_id NULL·makeup)는 과목만 같은 정규 행에 붙으면 그 행을 잠근다 → `!r.makeup`로 차단.
   rows.forEach((row, i) => {
     if (out[i] || row.isSpecial) return;
     const key = row.subjectKey?.trim();
     if (!key) return;
-    out[i] = take((r) => !r.classId?.trim() && (r.subject?.trim() ?? "") === key);
+    out[i] = take((r) => !r.classId?.trim() && !r.makeup && (r.subject?.trim() ?? "") === key);
   });
   // 3차 — 과목도 반도 없는 이관분. 명시 opt-in(위 🔴) + **행들이 전부 같은 과목일 때만**.
   // ⚠️ 조건이 `rows.length === 1`이면 안 된다: 같은 과목 두 반으로 갈린 학생(정규+특강, 중복 수강행)이
@@ -104,7 +115,8 @@ export function matchReportsToRows<R extends ReportRowRef>(
   const subjectKeys = new Set(rows.map((r) => r.subjectKey?.trim() ?? ""));
   if (opts?.legacyFallback && subjectKeys.size === 1) {
     const i = out.findIndex((v, idx) => !v && !rows[idx]!.isSpecial);
-    if (i >= 0) out[i] = take((r) => !r.classId?.trim() && !r.subject?.trim());
+    // 보강 보고서는 과목·반 없이도 매칭 대상이 아니다(위 2차와 동일 이유) — `!r.makeup` 방어.
+    if (i >= 0) out[i] = take((r) => !r.classId?.trim() && !r.subject?.trim() && !r.makeup);
   }
   return out;
 }

@@ -247,6 +247,13 @@ export function GridBodyRow({
           <span className={`rounded-pill px-1.5 py-px text-[10px] font-bold ${toneSoftClass(tone)}`}>
             {subject.subjectLabel || subject.name}
           </span>
+          {/* 병합된 보강 행(classId 없음·makeup) — 알약엔 순수 과목 라벨('수학')만 칠해 정규 행과 똑같아 보이므로,
+              행 단위 '보강' 배지로 구분한다(2026-07-24). 정규 반에 보강 토글만 켠 행(classId 있음)은 대상 아님. */}
+          {subject.makeup && !subject.classId ? (
+            <span className="bg-amber-soft text-amber shrink-0 rounded-pill px-1 py-px text-[9px] font-bold">
+              보강
+            </span>
+          ) : null}
           {subject.subjectLabel && subject.name !== subject.subjectLabel && subject.className ? (
             <span className="text-text-faint text-[10px]">{subject.className}</span>
           ) : null}

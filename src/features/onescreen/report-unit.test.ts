@@ -136,3 +136,39 @@ describe("정규/특강 분리 — 특강 행은 그 반으로 확정된 보고�
     expect(out[0]).toBe(legacy);
   });
 });
+
+// 2026-07-24 적대검수: 병합 보강(수업외) 보고서(class_id=null·makeup)가 새로고침 후 매처의 과목 폴백으로
+// **정규 반 행에 오배정**돼, 안 보낸 정규 보고서가 보강의 발송상태로 잠기던 버그. 보강 보고서는 로스터가
+// 재구성하지 않는 임시 행의 산물이라 어느 정규/이관 행에도 붙으면 안 된다(깨끗이 orphan → 재추가 시 복원).
+describe("보강(makeup) 보고서는 과목 폴백으로 정규 행에 붙지 않는다", () => {
+  it("2차(반 없는 과목) 폴백 — makeup 보고서는 정규 행에 안 붙는다", () => {
+    const 정규 = { classId: "c1", subjectKey: "math" };
+    const makeup = { classId: null, subject: "math", makeup: true, tag: "보강" };
+    // makeup=true라 2차 폴백에서 제외 → 정규 행은 미매칭(=안 보낸 정규가 잠기지 않음).
+    expect(matchReportsToRows([정규], [makeup])).toEqual([undefined]);
+  });
+
+  it("makeup이 아닌 반 없는 보고서(관리자 작성)는 여전히 붙는다 — 회귀 방지", () => {
+    const 정규 = { classId: "c1", subjectKey: "math" };
+    const admin = { classId: null, subject: "math", makeup: false, tag: "관리자" };
+    expect(matchReportsToRows([정규], [admin])?.[0]?.tag).toBe("관리자");
+    // makeup 필드가 아예 없어도(레거시 행) 붙는다.
+    const legacyRow = { classId: null, subject: "math", tag: "구버전" };
+    expect(matchReportsToRows([정규], [legacyRow])?.[0]?.tag).toBe("구버전");
+  });
+
+  it("정규 반 보고서는 자기 행에 붙고, 같은 과목 makeup 보고서는 어느 행에도 안 붙는다(공존)", () => {
+    const 정규 = { classId: "c1", subjectKey: "math" };
+    const own = { classId: "c1", subject: "math", tag: "정규 발송본" };
+    const makeup = { classId: null, subject: "math", makeup: true, tag: "보강 발송본" };
+    const out = matchReportsToRows([정규], [own, makeup]);
+    expect(out[0]?.tag).toBe("정규 발송본"); // 1차 정확매칭 — 보강에 오염되지 않음
+  });
+
+  it("3차 이관분 폴백도 makeup 보고서는 제외한다(방어)", () => {
+    const 정규 = { classId: "c1", subjectKey: "math" };
+    const makeupNoSubject = { classId: null, subject: null, makeup: true, tag: "보강(과목없음)" };
+    // legacyFallback이 켜져도 makeup이면 안 붙는다.
+    expect(matchReportsToRows([정규], [makeupNoSubject], { legacyFallback: true })).toEqual([undefined]);
+  });
+});

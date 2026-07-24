@@ -368,6 +368,7 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
       student_id: string;
       subject: string | null;
       class_id: string | null; // 0134a — 행(반) 매칭 키. 이관분·관리자 작성분은 null(과목 폴백).
+      makeup: boolean | null; // 보강(수업외) 보고서 — matchReportsToRows가 정규 행에 오배정하지 않게 하는 판별축(2026-07-24).
       share_token: string | null;
       classnote_status: string | null;
       revoked_at: string | null;
@@ -379,7 +380,7 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
       (chunk) =>
         supabase
           .from("lesson_reports")
-          .select("id, student_id, subject, class_id, share_token, classnote_status, revoked_at, attachments, notes, trend_note")
+          .select("id, student_id, subject, class_id, makeup, share_token, classnote_status, revoked_at, attachments, notes, trend_note")
           .eq("report_date", todayIso)
           .in("student_id", chunk)
           // 결정적 매칭 순서 — 같은 (학생,반) 폴백 후보가 여럿일 때 항상 같은 것을 집는다.
