@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { LucideIcon } from "@/components/icons/eywa-icon-compat";
-import { Columns3, LayoutGrid, CalendarOff, ListFilter, Users } from "@/components/icons/eywa-icon-compat";
+import { Columns3, LayoutGrid, Users } from "@/components/icons/eywa-icon-compat";
 import { PhotoCard } from "@/components/atoms/photo-card";
 import { PageHeader } from "@/components/page-header";
 import { cookies } from "next/headers";
@@ -51,7 +51,7 @@ import {
 } from "@/features/timetable/lib/pref-cookies";
 import { TimetableViewPrefsSync } from "./_components/prefs-sync";
 import { EmptyPeriodScope } from "./_components/empty-period-scope";
-import { TimetableColorPrefSync, TimetableColorToggle } from "./_components/color-mode-toggle";
+import { TimetableColorPrefSync } from "./_components/color-mode-toggle";
 import { TimetableViewSettings } from "./_components/view-settings";
 import { applyGradeFilter } from "@/features/timetable/lib/view-prefs";
 import { getMyTimetableViewPrefs } from "@/features/timetable/server/view-prefs-queries";
@@ -419,34 +419,9 @@ export default async function TimetablePage({
           })}
         </div>
 
-        {/* 강사뷰 '미사용 요일' 토글 — 기본 활성(월~토 전 컬럼). 해제 시 수업 있는 요일만. */}
-        {effView === "teacher" ? (
-          <>
-            <span className="bg-line h-4 w-px" aria-hidden />
-            <Link
-              href={buildHref({
-                view: effView,
-                subject,
-                defaultSubject,
-                kind,
-                week,
-                thisWk,
-                compact1h: compactList,
-                hideEmptyDays: !hideEmptyDays,
-                collapseEmptyPeriods,
-              })}
-              title="수업 없는 요일 컬럼 표시/숨김"
-              className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs transition ${
-                !hideEmptyDays
-                  ? "border-primary bg-primary text-primary-foreground font-medium"
-                  : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
-              }`}
-            >
-              <CalendarOff size={11} strokeWidth={1.8} />
-              미사용 요일
-            </Link>
-          </>
-        ) : null}
+        {/* 강사뷰 '미사용 요일'·기본뷰 '빈 교시 접기'·'색 강도'는 **뷰 설정 팝오버 안으로** 옮겼다
+            (2026-07-24 원장 "시간표도 깔끔하게"). 셋 다 "무엇이 어떻게 보이나"라 학년 필터와 같은 성격이고,
+            특히 색 3칩이 툴바를 상시 2줄로 밀어내던 주범이었다. href는 아래 TimetableViewSettings에 넘긴다. */}
 
         {/* 통합뷰 '1시간 단위' 토글은 전역이 아니라 **각 섹션 헤더(RichGridView)** 에 있다
             (사용자 결정 2026-07-06 — 각 교시 시작별로 세팅). 툴바 전역 토글 없음. */}
@@ -471,51 +446,48 @@ export default async function TimetablePage({
           </>
         ) : null}
 
-        {/* 기본뷰 '빈 교시 접기' — 수업 없는 교시 행을 얇은 밴드로 축소(C안). 켜짐=강조.
-            편집 모드에선 접힌 행이 자동으로 펼쳐진다(평소 격자 지형 복원, EmptyPeriodScope). */}
-        {effView === "basic" ? (
-          <>
-            <span className="bg-line h-4 w-px" aria-hidden />
-            <Link
-              href={buildHref({
-                view: effView,
-                subject,
-                defaultSubject,
-                kind,
-                week,
-                thisWk,
-                compact1h: compactList,
-                hideEmptyDays,
-                collapseEmptyPeriods: !collapseEmptyPeriods,
-              })}
-              title="수업 없는 교시 행을 얇게 접기/펼치기 (편집 중엔 자동으로 펼쳐짐)"
-              className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs transition ${
-                collapseEmptyPeriods
-                  ? "border-primary bg-primary text-primary-foreground font-medium"
-                  : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
-              }`}
-            >
-              <ListFilter size={11} strokeWidth={1.8} />
-              빈 교시 접기
-            </Link>
-          </>
-        ) : null}
-
-        {/* 셀 색 강도 개인 토글(쨍/중간/옅게) — 기본뷰에서만(셀 색이 있는 뷰). localStorage 영속. */}
-        {effView === "basic" ? (
-          <>
-            <span className="bg-line h-4 w-px" aria-hidden />
-            <TimetableColorToggle saved={viewPrefs.colorMode} />
-          </>
-        ) : null}
-
-        {/* 뷰 설정(학제·학년으로 학생 켜고 끄기) — 계정 저장이라 다른 기기에서도 따라온다.
+        {/* 뷰 설정 — 학제·학년 필터(계정 저장) + **표시 취향 3종**(색 강도·빈 교시 접기·미사용 요일).
             ⚠️ 인라인 토글이 아니라 팝오버인 이유·배지를 항상 띄우는 이유는 view-settings.tsx 주석 참조.
-            전 뷰 공통(필터는 명단에 걸리므로 기본·강사·통합 어디서나 같은 뜻). */}
+            전 뷰 공통(필터는 명단에 걸리므로 기본·강사·통합 어디서나 같은 뜻)이고, 표시 3종은 해당 뷰에서만
+            항목이 뜬다(색·빈 교시=기본뷰 / 미사용 요일=강사뷰). 링크는 그대로 URL 파라미터라 공유 링크도 보존. */}
         <span className="bg-line h-4 w-px" aria-hidden />
         <TimetableViewSettings
           allGrades={settings.operations.gradeLevels ?? []}
           savedGrades={viewPrefs.grades}
+          showColor={effView === "basic"}
+          colorSaved={viewPrefs.colorMode}
+          collapseHref={
+            effView === "basic"
+              ? buildHref({
+                  view: effView,
+                  subject,
+                  defaultSubject,
+                  kind,
+                  week,
+                  thisWk,
+                  compact1h: compactList,
+                  hideEmptyDays,
+                  collapseEmptyPeriods: !collapseEmptyPeriods,
+                })
+              : undefined
+          }
+          collapseOn={collapseEmptyPeriods}
+          hideEmptyDaysHref={
+            effView === "teacher"
+              ? buildHref({
+                  view: effView,
+                  subject,
+                  defaultSubject,
+                  kind,
+                  week,
+                  thisWk,
+                  compact1h: compactList,
+                  hideEmptyDays: !hideEmptyDays,
+                  collapseEmptyPeriods,
+                })
+              : undefined
+          }
+          hideEmptyDaysOn={hideEmptyDays}
         />
 
         {/* 학년 필터가 걸린 채로 이 과목·이 주에 보이는 학생이 0명이면, 화면이 그냥 비어 있어 고장으로
