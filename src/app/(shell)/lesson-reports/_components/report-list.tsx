@@ -10,7 +10,6 @@ import { classnoteBadge } from "@/features/onescreen/components/report-card";
 import { useSubjectMaps } from "@/features/owner/operations-context";
 import { listReports, sendClassnoteForUnsent, setReportCoversDate } from "@/features/report-admin/server/actions";
 import {
-  IMPORT_FILTER,
   isAdminSendable,
   type ReportListFilters,
   type ReportListRow,
@@ -22,9 +21,7 @@ import { EyIcon } from "@/components/icons/eywa-icons";
 import { SortableTh } from "@/components/table/sortable-th";
 import type { SortState } from "@/lib/table/sort";
 import type { ReportFilterOptions } from "@/features/report-admin/server/queries";
-
-// 라벨은 classnoteBadge가 해석(한글) — 여기엔 상태 키만. blocked_shared = 프리플라이트 게이트 보류.
-const STATUS_OPTIONS = ["queued", "processing", "success", "failed", "too_old", "name_conflict", "blocked_shared"];
+import { ReportViewSettings } from "./report-view-settings";
 
 // 시:분(KST). timestamptz → Asia/Seoul HH:mm. 값 없으면 빈 문자열.
 function hhmmKst(iso: string | null): string {
@@ -120,7 +117,6 @@ export function ReportList({
   const activeMonth = filters.from ? monthOf(filters.from) : monthOf(todayYmd);
   const isMonthRange =
     !!filters.from && !!filters.to && filters.from === monthRange(activeMonth).from && filters.to === monthRange(activeMonth).to;
-  const isThisMonth = isMonthRange && activeMonth === monthOf(todayYmd);
   // ⚠️ "전체 기간"은 from/to가 **둘 다 없을 때만**이다. 사용자가 날짜를 직접 좁힌 커스텀 범위를
   // '전체 기간'이라 말하고 칩까지 켜면, 필터가 걸린 화면을 전 기간으로 오독한다(적대 검증 확정 5건).
   const isAllTime = !filters.from && !filters.to;
@@ -166,19 +162,21 @@ export function ReportList({
     } else toast.error(res.error ?? "발송 요청에 실패했습니다");
   }
 
-  const selCls =
-    "border-line bg-card focus:border-primary h-8 rounded-lg border px-2 text-[12px] outline-none";
-
   return (
     <section className="bg-card border-line shadow-card rounded-2xl border px-5 py-4">
-      <div className="mb-3">
-        <h2 className="text-foreground text-[15px] font-bold">보고서 목록</h2>
-        <p className="text-text-faint text-[12px]">강사·기간·상태·과목으로 조회 · 행 클릭 시 학부모 보고서 열람</p>
-      </div>
-
-      {/* 기간 프리셋 — 기본은 **이번 달**. 전체 기간을 기본으로 두면 '강사'로 정렬했을 때 1페이지가
-          두 달 전 기록으로만 채워져 정렬이 무의미해진다(실측). 월 단위로 끊어야 "이 달 안에서 강사순"이 된다. */}
-      <div className="mb-2 flex flex-wrap items-center gap-1.5">
+      {/* 상단 **1줄** — 제목 · 월 이동 · 뷰 설정 · 발송 · 건수.
+          ⚠️ 예전엔 제목+부제 / 월이동 / 필터 7개 / 발송+안내로 **4줄**이 표를 아래로 밀어냈다
+          (원장 제보 2026-07-24 "공간낭비"). 기간·강사·과목·상태·읽음은 전부 뷰 설정 팝오버로 옮기고,
+          여기엔 **가장 자주 쓰는 월 이동만** 남긴다. 걸린 필터는 뷰 설정 트리거 배지로 항상 드러난다.
+          ⚠️ 기본이 **이번 달**인 이유는 그대로다: 전체 기간이 기본이면 '강사'로 정렬했을 때 1페이지가
+          두 달 전 기록으로만 채워져 정렬이 무의미해진다(실측). 월로 끊어야 "이 달 안에서 강사순"이 된다. */}
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <h2
+          className="text-foreground text-[15px] font-bold"
+          title="강사·기간·상태·과목으로 조회 · 행 클릭 시 학부모 보고서 열람"
+        >
+          보고서 목록
+        </h2>
         <div className="border-line flex items-center gap-0.5 rounded-full border p-0.5">
           <button type="button" onClick={() => setMonthRange(shiftMonth(activeMonth, -1))} aria-label="이전 달" className="text-text-dim hover:bg-bg-soft rounded-full px-1.5 py-0.5">
             <EyIcon name="chevronLeft" size={14} />
@@ -190,83 +188,25 @@ export function ReportList({
             <EyIcon name="chevronRight" size={14} />
           </button>
         </div>
-        {!isThisMonth ? (
-          <button type="button" onClick={() => setMonthRange(monthOf(todayYmd))} className="border-line text-text-dim hover:bg-bg-soft rounded-lg border px-2 py-1 text-[11px] font-bold">
-            이번 달
-          </button>
-        ) : null}
-        <button
-          type="button"
-          onClick={() => set({ from: undefined, to: undefined })}
-          aria-pressed={isAllTime}
-          className={`rounded-lg border px-2 py-1 text-[11px] font-bold ${
-            isAllTime ? "border-primary bg-primary-soft text-primary" : "border-line text-text-dim hover:bg-bg-soft"
-          }`}
-          title="전체 기간에서는 정렬을 눌러도 오래된 기록이 먼저 나올 수 있습니다"
-        >
-          전체 기간
-        </button>
-      </div>
-
-      {/* 필터 바 */}
-      <div className="mb-3 flex flex-wrap items-center gap-2">
-        <input type="date" value={filters.from ?? ""} onChange={(e) => set({ from: e.target.value || undefined })} className={selCls} aria-label="시작일" />
-        <span className="text-text-faint text-[12px]">~</span>
-        <input type="date" value={filters.to ?? ""} onChange={(e) => set({ to: e.target.value || undefined })} className={selCls} aria-label="종료일" />
-        <select value={filters.teacher ?? ""} onChange={(e) => set({ teacher: e.target.value || undefined })} className={selCls} aria-label="강사">
-          <option value="">강사 전체</option>
-          {options.teachers.map((t) => (
-            <option key={t} value={t}>{t}</option>
-          ))}
-        </select>
-        <select value={filters.subject ?? ""} onChange={(e) => set({ subject: e.target.value || undefined })} className={selCls} aria-label="과목">
-          <option value="">과목 전체</option>
-          {options.subjects.map((s) => (
-            <option key={s} value={s}>{subjects.labelOf(s)}</option>
-          ))}
-        </select>
-        <select value={filters.status ?? ""} onChange={(e) => set({ status: e.target.value || undefined })} className={selCls} aria-label="상태">
-          <option value="">상태 전체</option>
-          {STATUS_OPTIONS.map((s) => (
-            <option key={s} value={s}>{classnoteBadge(s)?.label ?? s}</option>
-          ))}
-          <option value={IMPORT_FILTER}>이관(edutrix)</option>
-        </select>
-        <select
-          value={filters.read ?? ""}
-          onChange={(e) => set({ read: (e.target.value || undefined) as ReportListFilters["read"] })}
-          className={selCls}
-          aria-label="읽음"
-          title="안읽음 = 발송 성공했고 읽음 확인이 가능한데 아직 안 읽은 건만 (확인 불가한 옛 이관분 제외)"
-        >
-          <option value="">읽음 전체</option>
-          <option value="read">읽음</option>
-          <option value="unread">안읽음</option>
-        </select>
-        {/* 기간은 이제 기본값이 있으므로(이번 달) '초기화' 조건에서 뺀다 — 안 그러면 항상 떠 있다.
-            초기화는 "기본 상태로" = 이번 달 + 필터 없음(전체 기간이 아니다). */}
-        {(!isThisMonth || filters.teacher || filters.subject || filters.status || filters.read || filters.sort) ? (
-          <Button size="sm" variant="ghost" onClick={() => run(defaultReportFilters(todayYmd))}>
-            초기화
+        <ReportViewSettings options={options} filters={filters} todayYmd={todayYmd} onApply={run} />
+        {/* 관리자 발송 — 미발송(native)만 대상. 이미 발송된 건은 선택 자체가 안 되고 서버도 거부(중복발송 차단).
+            안내 문구는 비활성 체크박스의 title이 이미 같은 말을 하므로 줄을 따로 쓰지 않는다(공간 절약). */}
+        {canSend ? (
+          <Button
+            size="sm"
+            disabled={busy || pending || checked.size === 0}
+            onClick={doSend}
+            title="미발송 보고서만 선택할 수 있습니다 · 발송된 건의 재발송은 위 발송 큐 카드에서"
+          >
+            선택 발송 {checked.size > 0 ? `(${checked.size})` : ""}
           </Button>
         ) : null}
         <span className="text-text-faint ml-auto text-[12px]">{pending ? "불러오는 중…" : `총 ${total}건`}</span>
       </div>
 
-      {/* 관리자 발송 — 미발송(native)만 대상. 이미 발송된 건은 선택 자체가 안 되고 서버도 거부(중복발송 차단). */}
-      {canSend ? (
-        <div className="mb-3 flex flex-wrap items-center gap-2">
-          <Button size="sm" disabled={busy || pending || checked.size === 0} onClick={doSend}>
-            선택 발송 {checked.size > 0 ? `(${checked.size})` : ""}
-          </Button>
-          <span className="text-text-faint text-[12px]">
-            미발송 보고서만 선택 가능 · 발송된 건의 재발송은 위 발송 큐 카드에서
-          </span>
-        </div>
-      ) : null}
-
       <div className="border-line overflow-x-auto rounded-md border">
-        <table className="w-full min-w-[600px] text-left text-[12px]">
+        {/* 반 열이 늘어 최소폭 상향(600→680) — 좁은 창에서 열이 서로 뭉개지지 않게. 넘치면 가로 스크롤. */}
+        <table className="w-full min-w-[680px] text-left text-[12px]">
           <thead>
             <tr className="border-line text-text-faint group border-b">
               {canSend ? (
@@ -282,8 +222,11 @@ export function ReportList({
               ) : null}
               <SortableTh sortKey="date" state={sortState} onSort={onSort}>날짜</SortableTh>
               {/* 학생·과목은 서버 정렬 대상이 아니다 — 학생 이름은 이 표에 없는 값(조인), 과목은 저장값이
-                  내부 키라 한글 라벨 순서와 어긋난다(report-filters.ts REPORT_SORT_KEYS 주석). */}
+                  내부 키라 한글 라벨 순서와 어긋난다(report-filters.ts REPORT_SORT_KEYS 주석).
+                  ⚠️ 반은 예외로 정렬된다 — 조인이지만 PostgREST가 to-one 임베드로 부모를 정렬해 주고,
+                  반 이름은 저장값 자체가 한글 표시명이라 라벨 불일치가 없다. */}
               <th className="px-3 py-2 font-bold">학생 · 과목</th>
+              <SortableTh sortKey="class" state={sortState} onSort={onSort}>반</SortableTh>
               <SortableTh sortKey="teacher" state={sortState} onSort={onSort}>강사</SortableTh>
               <SortableTh sortKey="status" state={sortState} onSort={onSort}>발송 상태</SortableTh>
               <SortableTh sortKey="read" state={sortState} onSort={onSort} align="right">열람</SortableTh>
@@ -292,7 +235,7 @@ export function ReportList({
           <tbody>
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={canSend ? 6 : 5} className="text-text-faint px-3 py-6 text-center">
+                <td colSpan={canSend ? 7 : 6} className="text-text-faint px-3 py-6 text-center">
                   조건에 맞는 보고서가 없습니다.
                 </td>
               </tr>
@@ -336,6 +279,9 @@ export function ReportList({
                     <span className="text-foreground font-bold">{r.studentName}</span>
                     {r.subject ? <span className="text-text-faint ml-1.5">{subjects.labelOf(r.subject)}</span> : null}
                   </td>
+                  {/* 반(0134a) — **내부 표시 전용**(학부모 화면엔 안 나온다). 이관분은 반 추정이 구조적으로
+                      불가해 대부분 "—"다. 반 정렬 시 이 빈 값들이 뒤로 가고 반 있는 건이 위로 모인다. */}
+                  <td className="text-text-dim px-3 py-2 whitespace-nowrap">{r.className ?? "—"}</td>
                   <td className="text-text-dim px-3 py-2">{r.teacherName ?? "—"}</td>
                   <td className="px-3 py-2">
                     <StatusCell status={r.classnoteStatus} source={r.source} readAt={r.readAt} />

@@ -7,6 +7,13 @@ export type ReportListRow = {
   id: string;
   studentName: string;
   subject: string | null;
+  /**
+   * 반 이름(0134a `class_id` → `classes.class_name` 임베드). **내부 표시 전용** — 학부모 화면엔 반이 나오지 않는다(0134a).
+   * ⚠️ 대부분 null이다: class_id는 0134a(2026-07-22) 이후 **eywa가 직접 쓴 보고서**에만 붙고, edutrix 이관분은
+   * `subject`가 전부 NULL이라 반 추정(resolveReportClassId)이 구조적으로 불가하다(실측 2026-07: 1,520건 중 71건).
+   * 그래서 목록은 없으면 "—"로 두고, 반 정렬 시 null을 뒤로 보낸다(반 있는 건이 위로 모임).
+   */
+  className: string | null;
   reportDate: string;
   /**
    * 실제 수업일(covers_date, 0136a) — 미리/몰아서 한 수업의 보고서를 그 수업일에 귀속시킨다.
@@ -51,12 +58,16 @@ export type ReportListFilters = {
 };
 
 /**
- * 서버 정렬 가능한 열 — **lesson_reports에 실제로 있는 컬럼만.**
+ * 서버 정렬 가능한 열 — lesson_reports 컬럼 + **to-one 임베드 1개(반 이름)**.
  * ⚠️ '학생'과 '과목'을 일부러 뺐다: 학생 이름은 이 표에 없는 값(students 조인)이고, 과목은 저장값이
  * 내부 키(`math`)라 그대로 정렬하면 화면의 한글 라벨(수학·영어) 순서와 어긋난다 — 헤더는 한글로
  * 보여 주면서 로마자 키 순으로 줄 세우면 "정렬이 이상하다"가 된다. 둘 다 별도 설계 후에 연다.
+ *
+ * ⚠️ '반'만 예외로 연 이유(2026-07-24 원장 요청): 학생 이름과 달리 **PostgREST가 to-one 임베드 컬럼으로
+ * 부모를 정렬**해 준다(`order=classes(class_name)`) — 실측으로 확인했다. 반 이름은 저장값 자체가 한글
+ * 표시명이라 과목 같은 라벨 불일치도 없다. 즉 학생·과목을 막았던 두 이유가 반에는 해당하지 않는다.
  */
-export const REPORT_SORT_KEYS = ["date", "teacher", "status", "read"] as const;
+export const REPORT_SORT_KEYS = ["date", "teacher", "status", "read", "class"] as const;
 export type ReportSortKey = (typeof REPORT_SORT_KEYS)[number];
 
 type OrderSpec = { column: string; ascending: boolean; nullsFirst: boolean };
@@ -93,6 +104,14 @@ export function reportOrderSpecs(sort?: ReportSortKey, dir: "asc" | "desc" = "as
       return [{ column: "classnote_status", ascending: asc, nullsFirst: false }, ...tiebreak];
     case "read":
       return [{ column: "classnote_read_at", ascending: asc, nullsFirst: false }, ...tiebreak];
+    case "class":
+      // ⚠️ **to-one 임베드 정렬** — PostgREST의 `order=classes(class_name)`(부모를 조인 컬럼으로 줄 세운다).
+      // supabase-js의 `.order(col)`은 col 문자열을 그대로 붙이므로 이 형태가 그대로 나가고, 괄호는 URL
+      // 인코딩(%28/%29)돼도 서버가 디코드한다(2026-07-24 실측: raw·인코딩 둘 다 HTTP 200 + 정렬 정확).
+      // ⚠️ `.order(col, { referencedTable: "classes" })`와 **다르다** — 그건 임베드된 행을 정렬할 뿐
+      //    부모 순서를 바꾸지 않는다. 반드시 이 합성 컬럼 형태를 쓸 것.
+      // 반 없는 행(이관분 대다수)은 규약 ①대로 방향과 무관하게 뒤로 → 반 있는 건이 위로 모인다.
+      return [{ column: "classes(class_name)", ascending: asc, nullsFirst: false }, ...tiebreak];
     default:
       // 기본: 같은 수업일 내 최신 발송이 위로. 이관분은 created_at이 cron 배치 시각으로 전부 같아
       // 실제 발송시각(classnote_sent_at)을 먼저 본다.
@@ -123,6 +142,24 @@ export function defaultReportFilters(todayYmd: string): ReportListFilters {
   const [y, m] = month.split("-").map(Number);
   const last = new Date(Date.UTC(y!, m!, 0)).getUTCDate();
   return { page: 0, from: `${month}-01`, to: `${month}-${String(last).padStart(2, "0")}` };
+}
+
+/**
+ * 뷰 설정 트리거에 띄울 **걸린 필터 개수**(순수, Vitest).
+ *
+ * ⚠️ 왜 필요한가: 필터를 팝오버 안으로 넣으면 **걸려 있는지가 화면에서 사라진다** — 시간표 뷰 설정이
+ * "필터가 걸린 동안엔 트리거에 항상 배지"를 타협 불가 규칙으로 둔 것과 같은 이유다(조용히 걸린 필터가
+ * "왜 안 보이지"를 만든다). 기간은 **기본값(이번 달)과 다를 때만** 1로 센다 — 기본을 필터로 세면 배지가 항상 켜진다.
+ */
+export function activeReportFilterCount(f: ReportListFilters, todayYmd: string): number {
+  const base = defaultReportFilters(todayYmd);
+  let n = 0;
+  if (f.teacher) n++;
+  if (f.subject) n++;
+  if (f.status) n++;
+  if (f.read) n++;
+  if ((f.from ?? "") !== (base.from ?? "") || (f.to ?? "") !== (base.to ?? "")) n++;
+  return n;
 }
 
 /**

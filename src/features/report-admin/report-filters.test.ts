@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { defaultReportFilters, isAdminSendable, REPORT_SORT_KEYS, reportOrderSpecs } from "./report-filters";
+import {
+  activeReportFilterCount,
+  defaultReportFilters,
+  isAdminSendable,
+  REPORT_SORT_KEYS,
+  reportOrderSpecs,
+} from "./report-filters";
 
 // 기본 조회 범위 = 이번 달. 전체 기간이 기본이면 '강사' 정렬 1페이지가 두 달 전 기록으로만 채워진다(실측).
 describe("defaultReportFilters", () => {
@@ -82,5 +88,57 @@ describe("isAdminSendable", () => {
 
   it("source 미상(null)은 미발송이면 통과 — 서버 게이트(too_old·과목)가 최종 방어", () => {
     expect(isAdminSendable({ classnoteStatus: null, source: null })).toBe(true);
+  });
+});
+
+// 반 정렬(2026-07-24) — 조인 값이지만 PostgREST의 to-one 임베드 정렬로 부모를 줄 세운다.
+describe("reportOrderSpecs — 반(class)", () => {
+  it("반은 정렬 가능한 열이다", () => {
+    expect(REPORT_SORT_KEYS).toContain("class");
+  });
+
+  it("임베드 합성 컬럼 형태로 나간다 — referencedTable 방식(임베드 행만 정렬)과 혼동 금지", () => {
+    expect(reportOrderSpecs("class", "asc")[0]).toEqual({
+      column: "classes(class_name)",
+      ascending: true,
+      nullsFirst: false,
+    });
+  });
+
+  it("반 없는 행(이관분 대다수)은 방향과 무관하게 뒤 — 반 있는 건이 위로 모여야 '반별로 보기'가 된다", () => {
+    for (const dir of ["asc", "desc"] as const) {
+      expect(reportOrderSpecs("class", dir)[0]!.nullsFirst).toBe(false);
+    }
+  });
+
+  it("반 정렬도 유일값 id로 끝난다(서버 페이징 중복·누락 방지)", () => {
+    const specs = reportOrderSpecs("class", "asc");
+    expect(specs.at(-1)!.column).toBe("id");
+  });
+});
+
+// 필터를 팝오버로 숨기면 '걸려 있다'는 사실이 화면에서 사라진다 → 트리거 배지의 근거가 이 함수다.
+describe("activeReportFilterCount", () => {
+  const today = "2026-07-24";
+  const base = defaultReportFilters(today);
+
+  it("기본 상태(이번 달·필터 없음)는 0 — 기본을 세면 배지가 항상 켜져 의미가 없어진다", () => {
+    expect(activeReportFilterCount(base, today)).toBe(0);
+  });
+
+  it("강사·과목·상태·읽음은 각각 1로 센다", () => {
+    expect(activeReportFilterCount({ ...base, teacher: "이수진" }, today)).toBe(1);
+    expect(
+      activeReportFilterCount({ ...base, teacher: "이수진", subject: "math", status: "success", read: "unread" }, today),
+    ).toBe(4);
+  });
+
+  it("기간이 기본(이번 달)과 다르면 1 — 전체 기간·직접 지정 모두", () => {
+    expect(activeReportFilterCount({ page: 0 }, today)).toBe(1); // 전체 기간(from/to 없음)
+    expect(activeReportFilterCount({ ...base, from: "2026-07-10" }, today)).toBe(1); // 직접 지정
+  });
+
+  it("정렬은 필터가 아니다 — 줄 세우기는 무엇이 보이는지를 바꾸지 않는다", () => {
+    expect(activeReportFilterCount({ ...base, sort: "class", dir: "asc" }, today)).toBe(0);
   });
 });

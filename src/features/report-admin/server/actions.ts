@@ -252,7 +252,8 @@ const REPORT_PAGE_SIZE = 30;
 /**
  * 보고서 목록 조회(수업보고서 Part C) — 강사·기간·상태·과목 필터 + 페이지네이션. 클라 필터 UI에서 호출(데이터 반환).
  * 읽기 게이트: lesson_reports 메뉴 접근(readonly 포함, canAccessTenant). RLS 테넌트 스코프.
- * 반 필터는 lesson_reports에 class_id가 없어 후속.
+ * 반(0134a class_id)은 **표시 + 정렬**까지 열려 있다(`classes(class_name)` to-one 임베드). 반 **필터**는
+ * distinct 목록이 필요한데 B2상 전건 스캔 금지라 filter-options RPC 확장이 선행이다 — 후속.
  */
 export async function listReports(
   filters: ReportListFilters,
@@ -267,7 +268,9 @@ export async function listReports(
 
   let q = supabase
     .from("lesson_reports")
-    .select("id, student_id, subject, report_date, covers_date, covers_by, covers_at, covers_note, created_at, classnote_sent_at, classnote_status, classnote_read_at, teacher_name, share_token, source", { count: "exact" });
+    // ⚠️ `classes(class_name)` = to-one 임베드(0134a class_id FK). 조인 1회라 별도 조회가 없고,
+    //    반 정렬(reportOrderSpecs "class")이 이 임베드를 그대로 정렬 키로 쓴다. 반 없는 행은 null.
+    .select("id, student_id, subject, report_date, covers_date, covers_by, covers_at, covers_note, created_at, classnote_sent_at, classnote_status, classnote_read_at, teacher_name, share_token, source, class_id, classes(class_name)", { count: "exact" });
   // 정렬은 **서버에서** — 30건씩 끊어 주는 목록이라 화면에서 정렬하면 그 페이지 안에서만 정렬된다.
   // 기본값·헤더 클릭 모두 순수 함수(reportOrderSpecs)가 결정(동률 tiebreak 포함 — 페이징 중복/누락 방지).
   for (const o of reportOrderSpecs(filters.sort, filters.dir)) {
@@ -308,10 +311,16 @@ export async function listReports(
       )
     : [];
   const staffById = new Map(staffRows.map((u) => [u.id, u.display_name ?? null]));
+  // to-one 임베드는 객체로 온다(실측). 관계 추론이 배열로 잡히는 경우까지 견디게 both를 받는다.
+  const embeddedClassName = (v: unknown): string | null => {
+    const one = Array.isArray(v) ? v[0] : v;
+    return (one as { class_name?: string | null } | null)?.class_name ?? null;
+  };
   const rows: ReportListRow[] = list.map((r) => ({
     id: r.id as string,
     studentName: nameById.get(r.student_id as string) ?? "(학생)",
     subject: r.subject as string | null,
+    className: embeddedClassName((r as { classes?: unknown }).classes),
     reportDate: r.report_date as string,
     coversDate: (r.covers_date as string | null) ?? null,
     coversBy: r.covers_by ? (staffById.get(r.covers_by as string) ?? null) : null,
