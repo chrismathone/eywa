@@ -2,6 +2,7 @@ import { useRef, type ReactNode } from "react";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { addDays } from "@/lib/date-kst";
 import type { OneScreenView } from "../view";
+import type { WriteFilter } from "../write-filter";
 import type { TodayClass } from "../server/roster";
 
 /**
@@ -16,6 +17,9 @@ export function OneScreenTopBar({
   classTags,
   classFilter,
   onFilter,
+  writeFilter,
+  writeCounts,
+  onWriteFilter,
   doneCount,
   total,
   view,
@@ -34,6 +38,9 @@ export function OneScreenTopBar({
   classTags: readonly string[];
   classFilter: string;
   onFilter: (tag: string) => void;
+  writeFilter: WriteFilter; // 작성 상태 필터(전체/작성/미작성)
+  writeCounts: { written: number; unwritten: number }; // 지금 조건에 맞는 학생 수(실시간)
+  onWriteFilter: (f: WriteFilter) => void; // 같은 값을 다시 누르면 목록 재계산(정리)
   doneCount: number;
   total: number;
   view: OneScreenView;
@@ -45,6 +52,13 @@ export function OneScreenTopBar({
   onNoticeMode: (mode: "A" | "B" | null) => void;
   makeupAdder?: ReactNode; // 보강 학생 추가 컨트롤(슬롯)
 }) {
+  // 작성 상태 필터 — 순서는 원장 표현대로 전체 → 작성 → 미작성. 숫자는 **지금 조건에 맞는 학생 수**라
+  // 고정(pinned)으로 화면에 남아 있는 학생과 다를 수 있다(그래서 아래 안내줄이 그 차이를 밝힌다).
+  const writeOptions: { value: WriteFilter; label: string; count?: number }[] = [
+    { value: "all", label: "전체" },
+    { value: "written", label: "작성", count: writeCounts.written },
+    { value: "unwritten", label: "미작성", count: writeCounts.unwritten },
+  ];
   const noticeOptions: { value: "A" | "B" | null; label: string }[] = [
     { value: null, label: `학원 기본(${academyNoticeMode})` },
     { value: "A", label: "단일 A" },
@@ -137,6 +151,33 @@ export function OneScreenTopBar({
               }`}
             >
               {tag}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* 작성 상태 필터 — "아직 안 쓴 학생만" 추려 마저 쓰기 위한 것(반 필터 바로 옆 = 둘 다 '무엇을 보여줄지').
+          판정은 학부모 문구 기준(write-filter.ts). 같은 값을 다시 누르면 목록을 새로 계산한다. */}
+      <div
+        className="border-line flex items-center rounded-full border p-0.5"
+        title="학부모 문구 기준 — 모든 행에 문구가 있거나 이미 발송됐으면 '작성', 한 행이라도 비어 있으면 '미작성'입니다(결석 행은 발송 대상이 아니라 판정에서 제외). 필터를 켠 뒤 입력해도 카드·행이 사라지지 않으며, 같은 버튼을 다시 누르면 목록을 정리합니다."
+      >
+        {writeOptions.map((o) => {
+          const on = writeFilter === o.value;
+          return (
+            <button
+              key={o.value}
+              type="button"
+              onClick={() => onWriteFilter(o.value)}
+              aria-pressed={on}
+              className={`rounded-full px-2 py-1 text-[11px] font-bold transition ${
+                on ? "bg-primary text-primary-foreground" : "text-text-dim hover:bg-bg-soft"
+              }`}
+            >
+              {o.label}
+              {o.count != null ? (
+                <span className={`tabular ml-1 ${on ? "" : "text-text-faint"}`}>{o.count}</span>
+              ) : null}
             </button>
           );
         })}

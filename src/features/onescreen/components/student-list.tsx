@@ -92,11 +92,14 @@ export function StudentList({
   reportCellById,
   classOrder,
   testConfig,
+  emptyLabel = "해당 반 학생이 없습니다",
 }: {
   students: OneScreenStudent[];
   selId: string;
   onSelect: (id: string) => void;
   reportCellById?: Record<string, CellState>;
+  /** 빈 목록 문구 — 반이 아니라 **작성 필터** 때문에 비었을 때 사실과 다른 말을 하지 않도록 호출부가 덮어쓴다. */
+  emptyLabel?: string;
   /** 반 그룹 표시 순서(보통 시각순). 없으면 등장 순서. */
   classOrder?: readonly string[];
   /** 테스트 사용 여부 — '테' 셀이 비활성 테스트를 요구하지 않게(#25). */
@@ -145,7 +148,7 @@ export function StudentList({
       </header>
       <div className="scrollbar-thin flex max-h-[calc(100vh-220px)] flex-col gap-2 overflow-y-auto p-2 [scrollbar-gutter:stable]">
         {students.length === 0 ? (
-          <p className="text-text-faint px-2 py-6 text-center text-xs">해당 반 학생이 없습니다</p>
+          <p className="text-text-faint px-2 py-6 text-center text-xs">{emptyLabel}</p>
         ) : (
           orderedKeys.map((key) => {
             const rows = groups.get(key)!;

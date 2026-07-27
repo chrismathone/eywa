@@ -68,6 +68,13 @@ import {
   setClassNarrative,
   subscribeClassNarratives,
 } from "../class-narrative-store";
+import {
+  applyWriteFilter,
+  countByWriteFilter,
+  isStudentWritten,
+  matchesWriteFilter,
+  type WriteFilter,
+} from "../write-filter";
 import { applyStudentOrder } from "../student-order";
 import { saveStudentOrder } from "../server/order-actions";
 import { useClassnoteStatusSync } from "./use-classnote-status-sync";
@@ -183,6 +190,10 @@ export function OneScreenClient({
   const [prevLoaded, setPrevLoaded] = useState<Set<string>>(new Set());
   const [selId, setSelId] = useState<string>(initial[0]?.id ?? "");
   const [classFilter, setClassFilter] = useState<string>("전체");
+  // 작성 상태 필터(전체/작성/미작성) + 그 필터를 누른 시점의 대상 고정 — 입력 중 카드·행이 사라지지 않게.
+  // (판정·합집합 규칙은 write-filter.ts. 날짜 이동은 클라 재마운트라 필터도 '전체'로 초기화된다.)
+  const [writeFilter, setWriteFilter] = useState<WriteFilter>("all");
+  const [writePins, setWritePins] = useState<ReadonlySet<string>>(() => new Set<string>());
   // 대상 날짜(빈값=오늘). 날짜 이동 = searchParam 네비 → 서버가 그 날짜 로스터 재조회 + key로 클라 재초기화.
   const activeDate = date || kstToday();
   const todayYmd = kstToday();
@@ -320,7 +331,7 @@ export function OneScreenClient({
   // ⚠️ 보강(수업외)은 반 무관이라 필터를 통과시킨다(studentInClass) — 안 그러면 특정 반을 고른 채 추가한
   //    보강 학생이 카드째 사라진다(2026-07-27 강사 제보). 라벨 리맵은 **그 반 실제 수강생에게만**:
   //    보강 카드까지 리맵하면 듣지도 않는 반 이름이 카드에 박힌다.
-  const visible =
+  const classVisible =
     activeClassFilter == null
       ? students
       : students
@@ -330,6 +341,55 @@ export function OneScreenClient({
               ? { ...s, className: activeClassFilter, tag: activeClassFilter }
               : s,
           );
+
+  // ── 작성 상태 필터(전체/작성/미작성) — 판정은 순수함수(write-filter.ts), 여기선 재료 조립만 ──
+  // ⚠️ 반 필터가 걸려 있으면 **그 반 행만** 보고 판정한다. 안 그러면 화면에 보이지도 않는 다른 반 행 때문에
+  //    "보이는 행은 다 썼는데 미작성으로 남는" 유령이 생긴다(표 행은 이미 rowInClass로 좁혀져 있다).
+  const writtenById: Record<string, boolean> = {};
+  for (const s of classVisible) {
+    writtenById[s.id] = isStudentWritten(
+      s.subjects
+        .filter((su) => rowInClass(su, activeClassFilter))
+        .map((su) => ({
+          draft: reports[s.id]?.[su.name]?.draft,
+          sent: reports[s.id]?.[su.name]?.sent,
+          attendanceRaw: su.attendanceRaw,
+        })),
+    );
+  }
+  // 🔴 필터는 `visible` 자체를 좁힌다 — 표시 목록과 **일괄 저장·발송·자동작성 대상이 반드시 같은 집합**이어야
+  //    한다(일괄 액션은 전부 visible에서 행을 만든다). 표시만 따로 좁히면 "화면엔 12명인데 일괄 발송은 28명"이 된다.
+  const visible = applyWriteFilter(classVisible, writeFilter, writtenById, writePins);
+  const writeCounts = {
+    written: countByWriteFilter(classVisible, "written", writtenById),
+    unwritten: countByWriteFilter(classVisible, "unwritten", writtenById),
+  };
+  // 필터로 목록이 비었을 때의 문구 — 기본 문구("해당 반 학생이 없습니다")는 반 탓을 하는 거짓말이 된다.
+  const emptyByWriteFilter =
+    writeFilter === "all"
+      ? undefined
+      : writeFilter === "unwritten"
+        ? "미작성 학생이 없습니다"
+        : "작성한 학생이 없습니다";
+  // 고정(pinned) 덕에 조건과 어긋난 채 남아 있는 학생 수 — 안내줄이 그 사실을 밝히고 '목록 정리'를 준다.
+  const staleCount =
+    writeFilter === "all"
+      ? 0
+      : visible.filter((s) => !matchesWriteFilter(writeFilter, writtenById[s.id] === true)).length;
+  // 필터를 누른 **그 시점의 대상**을 고정 — 이후 입력으로 상태가 바뀌어도 카드·행이 눈앞에서 사라지지 않는다.
+  // 같은 버튼을 다시 누르면 여기서 재계산돼 목록이 정리된다(= 안내줄의 '목록 정리'와 동일 경로).
+  function changeWriteFilter(next: WriteFilter) {
+    setWriteFilter(next);
+    setWritePins(
+      next === "all"
+        ? new Set<string>()
+        : new Set(
+            classVisible
+              .filter((s) => matchesWriteFilter(next, writtenById[s.id] === true))
+              .map((s) => s.id),
+          ),
+    );
+  }
   // 순서변경(3-2)은 단일 반 필터에서만 — 저장 키가 (강사×반)이라 "전체"에선 반이 특정되지 않는다.
   // ⚠️ 동명 반(과목만 다른 같은 이름, 스키마 허용) 가드: 필터는 이름 기반이라 두 반 학생이 섞여 보이는데
   //    첫 반 id로 저장하면 남의 반 학생이 섞인다(리뷰 확정) → 이름 매칭이 유일할 때만 순서 기능 노출.
@@ -1650,6 +1710,9 @@ export function OneScreenClient({
         classTags={classTags}
         classFilter={classFilter}
         onFilter={setClassFilter}
+        writeFilter={writeFilter}
+        writeCounts={writeCounts}
+        onWriteFilter={changeWriteFilter}
         doneCount={doneCount}
         total={students.length}
         view={view}
@@ -1722,6 +1785,44 @@ export function OneScreenClient({
           <span className="font-bold">다른 창/기기에서 같은 날짜를 열어 두었습니다</span>
           <span>— 같은 학생을 양쪽에서 입력하면 마지막 저장이 덮어씁니다.</span>
         </div>
+      ) : null}
+
+      {/* 작성 필터 안내(월간 발송 뷰는 목록을 안 쓰므로 제외).
+          ① 조건과 어긋난 채 남아 있는 학생 = 입력 중 사라지지 않게 고정한 결과라는 사실을 밝힌다(무언 잔류 금지).
+          ② 필터 결과가 0명이면 왜 비었는지 말하고 되돌아갈 문을 준다(빈 화면 막다른 길 금지). */}
+      {writeFilter !== "all" && view !== "history" ? (
+        staleCount > 0 ? (
+          <div className="border-line bg-bg-soft text-text-dim flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border px-3 py-2 text-[12.5px]">
+            <span>
+              <b className="text-foreground">
+                {writeFilter === "unwritten" ? "작성을 마친" : "문구가 비워진"} {staleCount}명
+              </b>
+              이 목록에 남아 있습니다 — 입력 중 카드·행이 사라지지 않도록 유지합니다.
+            </span>
+            <button
+              type="button"
+              onClick={() => changeWriteFilter(writeFilter)}
+              className="text-primary font-bold underline underline-offset-2"
+            >
+              목록 정리
+            </button>
+          </div>
+        ) : visible.length === 0 ? (
+          <div className="border-line bg-bg-soft text-text-dim flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border px-3 py-2 text-[12.5px]">
+            <span className="text-foreground font-bold">
+              {writeFilter === "unwritten"
+                ? "미작성 학생이 없습니다 — 이 목록은 모두 작성했습니다"
+                : "작성한 학생이 아직 없습니다"}
+            </span>
+            <button
+              type="button"
+              onClick={() => changeWriteFilter("all")}
+              className="text-primary font-bold underline underline-offset-2"
+            >
+              전체 보기
+            </button>
+          </div>
+        ) : null
       ) : null}
 
       {view === "grid" ? (
@@ -1801,7 +1902,12 @@ export function OneScreenClient({
           bulkGen={bulkGen || bulkBusy === "save"}
         />
       ) : view === "status" ? (
-        <StatusBoard students={visible} reports={reports} onOpenCard={openCard} />
+        <StatusBoard
+          students={visible}
+          reports={reports}
+          onOpenCard={openCard}
+          emptyLabel={emptyByWriteFilter}
+        />
       ) : view === "history" ? (
         <SendCalendarBoard todayYmd={todayYmd} />
       ) : view === "notice" ? (
@@ -1824,6 +1930,7 @@ export function OneScreenClient({
           reportCellById={reportCellById}
           classOrder={classTags.filter((t) => t !== "전체")}
           testConfig={testCfg}
+          emptyLabel={emptyByWriteFilter}
         />
 
         {selected ? (
