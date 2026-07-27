@@ -2,9 +2,17 @@
 
 import { useState } from "react";
 import { ChevronDown } from "@/components/icons/eywa-icon-compat";
+import { EyIcon } from "@/components/icons/eywa-icons";
 import { studentStatus, type TestConfig } from "../report";
 import { subjectTone, toneSolidClass } from "../data";
 import type { CellState, OneScreenStudent } from "../types";
+
+/**
+ * 이름 옆 발송 표시 재료(원장 요청 2026-07-27: "발송완료면 체크 같은 걸 이름 옆에").
+ * `sent`=학부모에게 나간 행 수 / `total`=나갈 수 있는 행 수(결석 행 제외 — 호출부가 세어 넘긴다).
+ * 표시 기준(ClassNote 게시 vs 보고서 저장)은 학원 설정에 따라 갈리므로 호출부가 `label`로 그 사실을 밝힌다.
+ */
+export type SendMark = { sent: number; total: number; label: string };
 
 const CELL_CLASS: Record<CellState, string> = {
   ok: "bg-primary-soft text-primary",
@@ -22,12 +30,14 @@ function StudentRow({
   st,
   active,
   reportCell,
+  sendMark,
   onClick,
   testConfig,
 }: {
   st: OneScreenStudent;
   active: boolean;
   reportCell?: CellState;
+  sendMark?: SendMark;
   onClick: () => void;
   testConfig?: TestConfig;
 }) {
@@ -47,6 +57,26 @@ function StudentRow({
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5">
           <span className="text-foreground truncate text-[13px] font-bold">{st.name}</span>
+          {/* 발송 표시 — 라벨 색(보 셀)만으로는 '나갔는지'가 눈에 안 띈다는 원장 지적(2026-07-27).
+              ⚠️ 표시는 **실제로 나간 행**에만 붙는다: 전부 나갔으면 채운 체크, 일부면 흐린 체크 + 남은 수.
+                 아무것도 안 나갔으면 아무 표시도 없다(없음 = 미발송, 거짓 안심 금지). */}
+          {sendMark && sendMark.total > 0 && sendMark.sent > 0 ? (
+            <span
+              title={`${sendMark.label} ${sendMark.sent}/${sendMark.total}`}
+              className={`flex shrink-0 items-center gap-0.5 rounded-full px-1 py-px text-[10px] font-bold ${
+                sendMark.sent >= sendMark.total
+                  ? "bg-primary-soft text-primary"
+                  : "border-line text-text-faint border"
+              }`}
+            >
+              <EyIcon name="check" size={10} />
+              {sendMark.sent < sendMark.total ? (
+                <span className="tabular">
+                  {sendMark.sent}/{sendMark.total}
+                </span>
+              ) : null}
+            </span>
+          ) : null}
           {st.attendance !== "출석" ? (
             <span
               className={`rounded-full px-1 py-px text-[10px] font-bold ${
@@ -90,6 +120,7 @@ export function StudentList({
   selId,
   onSelect,
   reportCellById,
+  sendMarkById,
   classOrder,
   testConfig,
   emptyLabel = "해당 반 학생이 없습니다",
@@ -98,6 +129,8 @@ export function StudentList({
   selId: string;
   onSelect: (id: string) => void;
   reportCellById?: Record<string, CellState>;
+  /** 이름 옆 발송 표시 — 학생 id → {나간 행 수, 나갈 수 있는 행 수, 기준 라벨}. */
+  sendMarkById?: Record<string, SendMark>;
   /** 빈 목록 문구 — 반이 아니라 **작성 필터** 때문에 비었을 때 사실과 다른 말을 하지 않도록 호출부가 덮어쓴다. */
   emptyLabel?: string;
   /** 반 그룹 표시 순서(보통 시각순). 없으면 등장 순서. */
@@ -178,6 +211,7 @@ export function StudentList({
                         st={st}
                         active={st.id === selId}
                         reportCell={reportCellById?.[st.id]}
+                        sendMark={sendMarkById?.[st.id]}
                         onClick={() => onSelect(st.id)}
                         testConfig={testConfig}
                       />

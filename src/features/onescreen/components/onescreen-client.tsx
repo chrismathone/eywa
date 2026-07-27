@@ -33,7 +33,7 @@ import { uploadToTicket } from "@/lib/storage/upload-to-ticket";
 import { resizeImageForUpload } from "../resize-image";
 import type { AttendanceMark, CellState, OneScreenStudent } from "../types";
 import { OneScreenTopBar } from "./top-bar";
-import { StudentList } from "./student-list";
+import { StudentList, type SendMark } from "./student-list";
 import type { TodayClass } from "../server/roster";
 import { ProgressCard } from "./progress-card";
 import { TestCard } from "./test-card";
@@ -404,6 +404,23 @@ export function OneScreenClient({
   const testCfg = { dailyEnabled: showDailyTest, checkEnabled: showCheckTest };
   const reportCellById: Record<string, CellState> = {};
   for (const s of students) reportCellById[s.id] = reportCell(reports[s.id], s.subjects.length);
+  // 이름 옆 발송 표시(원장 2026-07-27: "발송완료면 체크 같은 걸 이름 옆에" — 지금은 라벨 불 들어온 걸로만 구분).
+  // 기준은 **학부모에게 실제로 나간 행**(ClassNote 발송 완료) — '저장됨'과 다르다(저장만으론 안 나간다).
+  // ⚠️ ClassNote 발송이 꺼진 학원은 게시가 아예 없어 표시가 영원히 안 뜬다 → 그땐 '보고서 저장' 기준으로
+  //    폴백하되, 툴팁 라벨로 어느 기준인지 밝힌다(같은 아이콘이 말없이 다른 뜻이 되지 않게).
+  // ⚠️ 분모에서 결석 행은 뺀다 — 발송이 원천 차단된 행이라 남기면 "1/2"가 영영 안 채워진다(#77과 같은 이유).
+  const sendMarkLabel = classnoteSendEnabled ? "학부모 발송" : "보고서 저장";
+  const sendMarkById: Record<string, SendMark> = {};
+  for (const s of students) {
+    const rows = s.subjects.filter((su) => su.attendanceRaw !== "absent");
+    const sent = rows.filter((su) => {
+      const rep = reports[s.id]?.[su.name];
+      return classnoteSendEnabled
+        ? isAlreadySent(effectiveClassnoteStatus(rep?.classnoteStatus, su.classnoteStatus))
+        : rep?.sent === true;
+    }).length;
+    sendMarkById[s.id] = { sent, total: rows.length, label: sendMarkLabel };
+  }
   const doneCount = students.filter((s) => {
     const st = studentStatus(s, testCfg);
     return st.prog === "ok" && st.test === "ok" && reportCellById[s.id] === "ok";
@@ -1928,6 +1945,7 @@ export function OneScreenClient({
           selId={effectiveId}
           onSelect={setSelId}
           reportCellById={reportCellById}
+          sendMarkById={sendMarkById}
           classOrder={classTags.filter((t) => t !== "전체")}
           testConfig={testCfg}
           emptyLabel={emptyByWriteFilter}
