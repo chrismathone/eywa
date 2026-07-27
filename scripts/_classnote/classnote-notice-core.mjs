@@ -56,7 +56,11 @@ function kstToday() {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul" }).format(new Date());
 }
 
-/** 알림장 게시(내부 API). enrollment = 원아↔보드 연결 id. 응답은 빈 201이라 status만. */
+/**
+ * 알림장 게시(내부 API). enrollment = 원아↔보드 연결 id. 성공 응답은 빈 201이라 status가 전부다.
+ * 🔴 실패 응답은 **본문까지** 돌려준다 — 사유를 버리면 다음 실패도 원인 미상으로 끝난다
+ *    (2026-07-27 공지 11건 `HTTP 409` 사유 소실). 자세한 배경은 `postClassnoteReport` 주석.
+ */
 async function postReport(page, { clsId, childId, enrollmentId, content, authorName }) {
   return page.evaluate(
     async ([cls, child, enrollment, body, author, date]) => {
@@ -66,7 +70,9 @@ async function postReport(page, { clsId, childId, enrollmentId, content, authorN
         headers: { "content-type": "application/json", accept: "application/json", ...(csrf ? { "X-CSRFToken": csrf } : {}) },
         body: JSON.stringify({ cls, child, enrollment, content: body, date_written: date, author_name: author, tz: "Asia/Seoul" }),
       });
-      return { status: res.status };
+      if (res.status >= 200 && res.status < 300) return { status: res.status };
+      const detail = await res.text().catch(() => "");
+      return { status: res.status, detail: (detail || "").slice(0, 500) };
     },
     [clsId, childId, enrollmentId, content, authorName, kstToday()],
   );
@@ -253,32 +259,56 @@ async function processTarget(page, ctx, target, index = 0) {
           });
 
     let res = await send(media);
-    // ⚠️ **미검증**: kage access_key를 다른 글에 재사용해도 되는지 확인 못 했다 → 재사용분으로 실패하면
-    // 이 타깃만 **재업로드해 1회 재시도**한다. 재사용이 원인이 아니면 그대로 실패로 남는다.
-    if ((res.status < 200 || res.status >= 300) && media?.reused && ctx.mediaFor) {
-      // 🔴 재시도 전에 **이미 게시됐는지 먼저 확인**한다 — ClassNote가 글을 만든 뒤 후처리에서 5xx를 주거나
-      // 게이트웨이가 끊기면, 그냥 다시 POST하는 순간 학부모 알림장에 **같은 글이 2개** 남는다(회수는 id를
-      // 캡처한 두 번째만 지운다). 내용까지 같은 글이 있으면 그 id를 성공으로 받아들이고 재시도하지 않는다.
+    const failed = (r) => r.status < 200 || r.status >= 300;
+
+    /**
+     * 🔴 **실패 응답이면 "그래도 글이 올라갔는지" 확인한다.** ClassNote가 글을 만든 뒤 후처리에서 5xx를 주거나
+     *    게이트웨이가 끊기면, 응답만 믿고 실패로 적는 순간 **화면이 사실과 다른 말을** 한다 — 원장은 "안 갔다"고
+     *    알고 재발송하는데 학부모 알림장엔 같은 글이 2개 남는다(회수는 id를 캡처한 쪽만 지운다). 반대로 정말
+     *    안 갔는데 성공으로 적으면 학부모가 영영 못 받는다. 어느 쪽도 사후에 되돌릴 수 없다.
+     * ⚠️ 예전엔 이 확인이 `media?.reused`(첨부 재사용 재시도) 안에 갇혀 있었다 → **첨부 없는 공지는 확인
+     *    자체를 건너뛰었다.** 2026-07-27 공지 11건이 `HTTP 409`로 적혔지만 "실제로 갔는지"를 DB만으로는
+     *    판정할 수 없었던 이유가 이것이다(원장이 ClassNote를 직접 열어 미게시 확인). 이제 첨부 유무와 무관하고,
+     *    **첫 시도·재시도 양쪽 뒤에** 돈다(재시도가 글을 만들고 에러를 줬을 수 있다).
+     * @returns 게시돼 있으면 true(reports에 담고 이 원아는 완료), 아니면 false.
+     */
+    const claimIfPosted = async () => {
       const posted = await findReportId(
         page,
         ctx.centerId,
         { cls: board.id, child: child.id, content },
         { strict: true },
       ).catch(() => null);
-      if (posted != null) {
-        ctx.log?.(`[notice] ${target.board} 게시 응답 실패(HTTP ${res.status})지만 글이 이미 있어 재시도하지 않습니다`);
-        reports.push({ id: posted, url: `${CLASSNOTE_BASE}/service/report/${posted}`, cls: board.id, child: child.id });
-        continue;
-      }
+      if (posted == null) return false;
+      ctx.log?.(`[notice] ${target.board} 게시 응답 실패(HTTP ${res.status})지만 글이 이미 있어 성공으로 처리합니다`);
+      reports.push({ id: posted, url: `${CLASSNOTE_BASE}/service/report/${posted}`, cls: board.id, child: child.id });
+      return true;
+    };
+
+    if (failed(res) && (await claimIfPosted())) continue;
+    // ⚠️ **미검증**: kage access_key를 다른 글에 재사용해도 되는지 확인 못 했다 → 재사용분으로 실패하면
+    // 이 타깃만 **재업로드해 1회 재시도**한다. 재사용이 원인이 아니면 그대로 실패로 남는다.
+    // (위에서 "이미 게시됨"은 걸러졌으므로 여기 오는 건 정말 안 올라간 건이다 = 재시도해도 중복 아님.)
+    if (failed(res) && media?.reused && ctx.mediaFor) {
       ctx.log?.(`[notice] ${target.board} 게시 실패(HTTP ${res.status}) — 첨부 재업로드 후 1회 재시도`);
       const fresh = await ctx.mediaFor(target, index, { fresh: true });
       if (fresh && !fresh.failures.length) {
         media = fresh;
         res = await send(media);
+        if (failed(res) && (await claimIfPosted())) continue;
       }
     }
-    if (res.status < 200 || res.status >= 300) {
-      return { board: target.board, ok: false, note: `게시 실패(HTTP ${res.status})`, reports };
+    if (failed(res)) {
+      // note = 사람이 읽는 한글 요약(화면 노출), detail = 서버 응답 원문(원인 규명용, 화면 미노출).
+      // 원문을 note에 이어붙이지 않는다 — UI에 raw 기술 원문을 그대로 내보내지 않는 전역 규약.
+      ctx.log?.(`[notice] ${target.board} 게시 실패(HTTP ${res.status}) 응답: ${res.detail ?? "(본문 없음)"}`);
+      return {
+        board: target.board,
+        ok: false,
+        note: `게시 실패(HTTP ${res.status})`,
+        ...(res.detail ? { detail: res.detail } : {}),
+        reports,
+      };
     }
     // 게시 성공 → 회수용 id 조회(실패해도 게시는 유지 = id null=회수불가 표시). cls/child 저장(회수 대조용).
     const id = await findReportId(page, ctx.centerId, { cls: board.id, child: child.id, content }).catch(() => null);

@@ -251,7 +251,10 @@ export async function sendReportViaApi(adminPage, { report, studentName, boardId
       dateWritten: report.report_date, authorName: report.teacher_name || "인재원 학원",
       attachedImages, attachedFiles,
     });
-    if (res.status < 200 || res.status >= 300) return { ok: false, error: `게시 실패(HTTP ${res.status})` };
+    // 실패 사유는 **응답 본문까지** 남긴다(2026-07-27) — status만 적으면 왜 거부됐는지 영영 모른다.
+    // 화면은 humanizeClassnoteError가 한글로 요약하고 원문은 '자세히'로만 보여준다(raw 노출 금지 규약).
+    if (res.status < 200 || res.status >= 300)
+      return { ok: false, error: `게시 실패(HTTP ${res.status})${res.detail ? ` — ${res.detail}` : ""}` };
   }
   return { ok: true };
 }

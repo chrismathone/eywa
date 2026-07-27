@@ -488,7 +488,15 @@ export async function resolveBoardChildEnrollments(page, boardId, studentName, c
   return viaBoard;
 }
 
-/** 알림장 게시(내부 API) — attached_images/attached_files 선택 포함. 응답은 빈 201이라 status만. */
+/**
+ * 알림장 게시(내부 API) — attached_images/attached_files 선택 포함. 성공 응답은 빈 201이라 status가 전부다.
+ *
+ * 🔴 **실패 응답은 본문까지 돌려준다**(2026-07-27). 예전엔 `{status}`만 반환해 실패 사유가 그 자리에서
+ *    영영 사라졌다 — 공지 12건 중 11건이 `HTTP 409`로 거부됐는데(학부모에게 실제로 안 감, 원장 확인)
+ *    본문이 없어 왜 거부됐는지 코드·로그·DB 어디에도 근거가 남지 않았다. 사유를 모르면 고칠 수도 없다.
+ * ⚠️ 본문은 **호출부가 `detail`로만** 쓴다(원문은 화면에 그대로 내보내지 않는다 — 한글 요약이 `note`).
+ *    길이는 500자로 자른다(로그·jsonb 비대 방지).
+ */
 export async function postClassnoteReport(page, { cls, child, enrollment, content, dateWritten, authorName, attachedImages = [], attachedFiles = [] }) {
   return page.evaluate(
     async ([cls, child, enrollment, body, author, date, ai, af]) => {
@@ -502,7 +510,10 @@ export async function postClassnoteReport(page, { cls, child, enrollment, conten
           ...(af.length ? { attached_files: af } : {}),
         }),
       });
-      return { status: res.status };
+      // 성공(2xx)은 본문을 읽지 않는다 — 빈 201이라 읽을 게 없고, 기존 동작을 그대로 둔다.
+      if (res.status >= 200 && res.status < 300) return { status: res.status };
+      const detail = await res.text().catch(() => "");
+      return { status: res.status, detail: (detail || "").slice(0, 500) };
     },
     [cls, child, enrollment, content, authorName, dateWritten, attachedImages, attachedFiles],
   );

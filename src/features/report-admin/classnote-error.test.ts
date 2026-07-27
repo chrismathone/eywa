@@ -55,3 +55,24 @@ describe("워커가 쓴 한글 안내문은 요약하지 않고 그대로", () =
     expect(humanizeClassnoteError("Error: something exploded")).toBe("발송 실패 — 아래 ‘자세히’를 눌러 원문 확인");
   });
 });
+
+// 2026-07-27: 학부모 공지 12건 중 11건이 `게시 실패(HTTP 409)`. 한글이라 isHumanKorean을 통과해
+// 그대로 노출됐지만 원장은 무엇을 해야 할지 알 수 없었다(→ 조치가 보이게).
+describe("HTTP 409(중복 거부)", () => {
+  it("워커 원문을 그대로 두지 않고 '이미 올라갔는지 확인' 조치를 준다", () => {
+    const got = humanizeClassnoteError("게시 실패(HTTP 409)");
+    expect(got).not.toBe("게시 실패(HTTP 409)");
+    expect(got).toContain("중복");
+    expect(got).toContain("확인");
+  });
+
+  it("응답 원문이 덧붙어도 같은 안내(원문은 '자세히'로만)", () => {
+    const got = humanizeClassnoteError('게시 실패(HTTP 409) — {"detail":"duplicate"}');
+    expect(got).toContain("중복");
+    expect(got).not.toContain("duplicate"); // raw 원문은 요약에 새지 않는다
+  });
+
+  it("⚠️ 더 구체적인 기존 사유가 있으면 그쪽이 이긴다(409 분기가 덮지 않게)", () => {
+    expect(humanizeClassnoteError("해당 학생 없음")).toContain("초대");
+  });
+});
