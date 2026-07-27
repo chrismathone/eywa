@@ -5,7 +5,7 @@ import { fetchAllPaged, fetchAllPagedInChunks } from "@/lib/supabase/batch";
 import { kstToday, kstMinutesOfDay } from "@/lib/date-kst";
 import { getTeacherScope } from "@/lib/auth/teacher-scope";
 import { weekEndOf, weekSundayOf, shiftDays } from "../lib/week";
-import { reportSubject } from "../lib/report-subject";
+// 보고서 과목 판정 규칙은 RPC(0150a) SQL에 내장 — 규칙 문서·테스트는 lib/report-subject.ts가 담당(동기 유지).
 import { compareStudentLines } from "../lib/student-sort";
 import type { TeacherColorMap } from "../lib/class-grid";
 import { buildTeacherLabelMap, resolveTeacherLabel, type TeacherLabelMap } from "../lib/teacher-label";
@@ -165,11 +165,20 @@ type SlotRow = {
   class?: SlotClassRef | SlotClassRef[];
 };
 
-async function fetchSlots(referenceDate: string, db?: TimetableDb): Promise<ScheduleSlot[]> {
+async function fetchSlots(
+  referenceDate: string,
+  db?: TimetableDb,
+  opts?: {
+    /**
+     * 셀 헤더용 근사 카운트 쿼리(enrollment 전건)를 생략 — getWeeklyScheduleWithStudents 경로 전용.
+     * 그 경로는 바로 뒤에 **정확한 로스터**를 어차피 조회하므로 같은 데이터를 두 번 당길 이유가 없다
+     * (2026-07-27 성능: 매 렌더 −1 왕복·−600행). studentCount는 그쪽에서 로스터 재원 수로 다시 채운다.
+     * ⚠️ 생략하면 studentCount=0으로 나가니, 이 옵션은 **직후에 카운트를 재기입하는 호출부만** 쓸 것.
+     */
+    skipCounts?: boolean;
+  },
+): Promise<ScheduleSlot[]> {
   const supabase = db?.supabase ?? (await createClient());
-  // 🔴 강사 라벨 해석의 **단일 지점**(원장 2026-07-27) — 여기서 한글 이름으로 바꿔 내보내면 기본뷰·통합뷰·
-  //    강사뷰·hover가 전부 따라온다. 화면 컴포넌트에서 각자 바꾸면 열 식별자가 갈려 컬럼이 쪼개진다.
-  const labelMap = await getTeacherLabelMap(db);
   const weekEnd = weekEndOf(referenceDate);
   // 그 주 시점에 유효한 스케줄만: valid_from ≤ 그 주 일요일(미래 시작 스케줄 제외) + valid_to ≥ 기준일(만료 제외).
   // ⚠️ valid_from 상한은 weekEnd(ref+6 롤링 창)가 아니라 weekSundayOf(그 주 실제 끝) — 롤링 창이면
@@ -178,11 +187,16 @@ async function fetchSlots(referenceDate: string, db?: TimetableDb): Promise<Sche
   // 종강(class.closed_at)된 반은 종강일 이후 주에서만 제외(이전 주엔 수강이력으로 표시) — JS에서 거른다.
   // ⚠️ 무페이징 select 금지(B2) — 이 쿼리는 시간표 화면의 **뿌리**라, 1000행에서 조용히 잘리면 반이
   // 통째로 화면에서 사라진다. 익스포터 쪽 쌍둥이 쿼리와 동일하게 fetchAllPaged + id unique tie-break.
-  const data = await fetchAllPaged<SlotRow>((from, to) => {
-    let q = supabase
-      .from("class_schedules")
-      .select(
-        `id, day_of_week, start_time, end_time, class_id, slot_teacher_label, slot_room_label,
+  // 🔴 라벨맵·스케줄·카운트는 서로 독립 → Promise.all(B4, 2026-07-27 성능 — 직렬이면 왕복이 합산된다).
+  //    라벨맵은 강사 라벨 해석의 단일 지점(원장 2026-07-27) — 여기서 한글 이름으로 바꿔 내보내면
+  //    기본뷰·통합뷰·강사뷰·hover가 전부 따라온다(컴포넌트별 해석 금지 — 열 식별자가 쪼개진다).
+  const [labelMap, data, enrollments] = await Promise.all([
+    getTeacherLabelMap(db),
+    fetchAllPaged<SlotRow>((from, to) => {
+      let q = supabase
+        .from("class_schedules")
+        .select(
+          `id, day_of_week, start_time, end_time, class_id, slot_teacher_label, slot_room_label,
        class:class_id!inner (
          id, class_name, subject, bg_color, text_color, is_active, closed_at, is_special,
          pending_teacher_id, pending_teacher_date,
@@ -190,32 +204,34 @@ async function fetchSlots(referenceDate: string, db?: TimetableDb): Promise<Sche
          pendingTeacher:pending_teacher_id ( display_name ),
          classroom:classroom_id ( name )
        )`,
-      )
-      .eq("class.is_active", true)
-      .lte("valid_from", weekSundayOf(referenceDate))
-      .or(`valid_to.is.null,valid_to.gte.${referenceDate}`);
-    if (db) q = q.eq("tenant_id", db.tenantId); // admin(cron) 경로 — RLS 우회라 명시 격리
-    return q.order("start_time").order("id").range(from, to);
-  });
+        )
+        .eq("class.is_active", true)
+        .lte("valid_from", weekSundayOf(referenceDate))
+        .or(`valid_to.is.null,valid_to.gte.${referenceDate}`);
+      if (db) q = q.eq("tenant_id", db.tenantId); // admin(cron) 경로 — RLS 우회라 명시 격리
+      return q.order("start_time").order("id").range(from, to);
+    }),
+    // as-of-week 재원 카운트 — 그 주 끝(weekEnd)까지 시작했고 그 주 끝에 아직 안 끝난 enrollment.
+    // (정확한 재원/대기/퇴원 분류는 getWeeklyScheduleWithStudents. 여기선 셀 헤더 카운트용 근사.) #54 페이지네이션.
+    opts?.skipCounts
+      ? Promise.resolve([] as { class_id: string }[])
+      : fetchAllPaged<{ class_id: string }>((from, to) => {
+          let q = supabase
+            .from("enrollments")
+            .select("class_id")
+            .lte("start_date", weekEnd)
+            .or(`end_date.is.null,end_date.gt.${weekEnd}`);
+          if (db) q = q.eq("tenant_id", db.tenantId); // admin(cron) 경로 — 명시 격리
+          // order 없는 .range()는 OFFSET 페이지가 흔들려 행이 중복·누락될 수 있다(카운트가 틀어짐) → id tie-break.
+          return q.order("id").range(from, to);
+        }),
+  ]);
 
   // 종강 반: closed_at < 기준일이면 그 주엔 이미 종강 → 제외(closed_at ≥ 기준일인 과거 주엔 표시).
   const visible = data.filter((r) => {
     const k = (Array.isArray(r.class) ? r.class[0] : r.class) as { closed_at?: string | null } | undefined;
     const closedAt = k?.closed_at ?? null;
     return !closedAt || closedAt >= referenceDate;
-  });
-
-  // as-of-week 재원 카운트 — 그 주 끝(weekEnd)까지 시작했고 그 주 끝에 아직 안 끝난 enrollment.
-  // (정확한 재원/대기/퇴원 분류는 getWeeklyScheduleWithStudents. 여기선 셀 헤더 카운트용 근사.) #54 페이지네이션.
-  const enrollments = await fetchAllPaged<{ class_id: string }>((from, to) => {
-    let q = supabase
-      .from("enrollments")
-      .select("class_id")
-      .lte("start_date", weekEnd)
-      .or(`end_date.is.null,end_date.gt.${weekEnd}`);
-    if (db) q = q.eq("tenant_id", db.tenantId); // admin(cron) 경로 — 명시 격리
-    // order 없는 .range()는 OFFSET 페이지가 흔들려 행이 중복·누락될 수 있다(카운트가 틀어짐) → id tie-break.
-    return q.order("id").range(from, to);
   });
 
   const counts = new Map<string, number>();
@@ -359,7 +375,9 @@ export async function getWeeklyScheduleWithStudents(
   const newCutoff = shiftDays(referenceDate, -30); // 신입: 기준일 30일 이내 시작
   const withdrawnFloor = shiftDays(referenceDate, -30); // 퇴원 표시 윈도우: 기준일 1달(30일) 전까지(클러터 캡, 2026-07-14 원장 1년→1달)
 
-  let slots = await fetchSlots(referenceDate, db);
+  // skipCounts — 이 함수는 바로 아래에서 정확한 로스터를 조회하므로 근사 카운트 쿼리(전 enrollment)를
+  // 생략하고, 반환 직전에 로스터 재원 수로 studentCount를 다시 채운다(같은 데이터 2회 조회 제거).
+  let slots = await fetchSlots(referenceDate, db, { skipCounts: true });
   // 과목 스코핑(선택) — 한 과목만 필요한 호출부(과목별 익스포터 등)는 classIds를 먼저 좁혀
   // 무거운 학생/수강/진도 조회량을 줄인다(전 과목 로딩 방지, B2). 필터 후 빈 결과는 아래 조기반환.
   if (subject) slots = slots.filter((s) => s.subject === subject);
@@ -544,55 +562,53 @@ export async function getWeeklyScheduleWithStudents(
   const studentIds = Array.from(new Set([...byClass.values()].flat().map((l) => l.studentId)));
   if (studentIds.length > 0) {
     type RepRow = {
+      bucket: string; // 'class:<uuid>' | 'subject:<key>'
       student_id: string;
-      class_id: string | null; // 0134a — 이 보고서가 어느 수업의 것인가
+      class_id: string | null;
       report_date: string;
       progress: string | null;
       exam_info: string | null;
       homework_score: string | null;
       teacher_name: string | null;
       textbook: string | null;
-      subject: string | null; // 보고서 자체 과목(신규 발송분). 이관분은 null.
-      class?: { subject?: string } | { subject?: string }[]; // class_id 경유 과목(보조 판정)
+      subject: string | null;
     };
-    // ⚠️ 학생당 N행(1:N)이라 fetchInChunks면 청크당 1000행 캡에 조용히 잘린다(B2). 특히 진도는
-    // report_date desc + '첫 행 승리'라, 잘리면 오래된 행부터 사라지는 게 아니라 **정렬 뒤쪽 학생의
-    // 전 행이 통째로** 없어져 hover 진도가 아예 안 뜬다 → fetchAllPagedInChunks.
-    const repRows = await fetchAllPagedInChunks<RepRow>(studentIds, (chunk, from, to) => {
-      let q = supabase
-        .from("lesson_reports")
-        .select(
-          "student_id, class_id, report_date, progress, exam_info, homework_score, teacher_name, textbook, subject, class:class_id ( subject )",
-        )
-        .in("student_id", chunk)
-        .not("progress", "is", null) // hover는 진도 있는 최신 1건(상세 '진도' 탭은 전건)
-        .order("report_date", { ascending: false });
-      if (db) q = q.eq("tenant_id", db.tenantId); // admin(cron) 경로 — 명시 격리
-      // id desc = 페이지 안정 tie-break 겸 같은 날짜 2건일 때 '최신' 결정(옛 코드는 비결정적이었다).
-      return q.order("id", { ascending: false }).range(from, to);
-    });
+    // 🔴 최신 1건 집계는 **RPC**(0150a `timetable_latest_reports`) — 예전엔 학생 399명의 보고서
+    //    **전 이력 13,233행(3.2MB)** 을 매 렌더 끌어와 JS로 '첫 행 승리' 집계했다(직렬 왕복 ~14회,
+    //    시간표 전체 응답의 지배 비용). RPC는 (학생×반)·(학생×과목) 최신 1건씩 ~336행(87KB)만 돌려준다.
+    //    dedup 규칙(report_date desc, id desc)·과목 판정(reportSubject)은 RPC SQL과 **동일** —
+    //    규칙 문서·테스트는 lib/report-subject.ts가 계속 담당(양쪽 동기 유지 주석 참조).
+    // ⚠️ 학생 배열은 300명씩 청크 — PostgREST max-rows(~1000)가 RPC 결과에도 걸리므로, 전교생이
+    //    한 번에 가면 union 결과가 조용히 잘릴 수 있다(청크당 최대 ~600행으로 안전 마진).
+    const repRows: RepRow[] = [];
+    const CHUNK = 300;
+    const chunks: string[][] = [];
+    for (let i = 0; i < studentIds.length; i += CHUNK) chunks.push(studentIds.slice(i, i + CHUNK));
+    const results = await Promise.all(
+      chunks.map((chunk) =>
+        supabase.rpc("timetable_latest_reports", {
+          p_student_ids: chunk,
+          // cron/admin 경로는 auth_tenant_id()가 null → 명시 tenant 필수(세션 경로는 null로 RLS+auth 격리)
+          p_tenant: db?.tenantId ?? null,
+        }),
+      ),
+    );
+    for (const { data, error } of results) {
+      if (error) throw new Error(`timetable_latest_reports RPC 실패: ${error.message}`); // ?? [] 삼킴 금지(B3)
+      repRows.push(...((data ?? []) as RepRow[]));
+    }
     // 🔴 **그 수업의** 최신 보고서를 먼저 본다(0134a). 예전엔 학생 단위 최신 1건이라, 같은 학생이
     //    정규 수학 + 수학 특강을 들으면 두 슬롯의 hover가 **똑같은 진도·교재**를 보여줬다(둘 중 하나는 거짓).
-    //    반 매칭이 없으면(이관분·관리자 작성분 = class_id NULL) 예전처럼 학생 단위 최신으로 폴백한다.
+    //    반 매칭이 없으면(이관분·관리자 작성분 = class_id NULL) 학생×과목 최신으로 폴백한다.
     const keyOf = (studentId: string, classId: string) => `${studentId}::${classId}`;
     const byStudentClass = new Map<string, RepRow>();
     // 🔴 학생 단위 폴백은 **과목별로** 나눈다(원장 2026-07-27 "영어 시간표에 수학 관련 내용이 나오지
-    //    않게 / 수학 시간표에서만 수학 내용이 호버링되게"). 예전엔 과목 구분 없이 학생의 최신 1건이라,
-    //    영어 통합뷰에서 학생에 hover하면 **수학 진도·교재**(예 "1-2 개념의 숲 · 김민주")가 떴다.
-    //    ⚠️ 영어도 eywa에서 발송되기 시작하면 자동으로 영어끼리만 맞물린다(같은 규칙, 분기 없음).
+    //    않게 / 수학 시간표에서만 수학 내용이 호버링되게"). 과목 버킷 키는 RPC가 판정해 내려준다
+    //    (판정 규칙 = lib/report-subject.ts와 동일: 보고서 subject → 반 subject → 레거시 'math').
     const byStudentSubject = new Map<string, RepRow>();
     for (const r of repRows) {
-      // repRows는 report_date desc, id desc 정렬 → 각 키의 **첫 행**이 최신.
-      if (r.class_id) {
-        const k = keyOf(r.student_id, r.class_id);
-        if (!byStudentClass.has(k)) byStudentClass.set(k, r);
-      }
-      // ⚠️ `r.class`는 PostgREST 임베드라 배열일 수도 있다 — 순수 함수엔 **평평하게 풀어서** 넘긴다
-      //    (r을 그대로 넘기면 classSubject가 undefined라 반 과목이 통째로 무시된다).
-      const cf = r.class;
-      const classSubject = (Array.isArray(cf) ? cf[0] : cf)?.subject ?? null;
-      const k = `${r.student_id}::${reportSubject({ subject: r.subject, classSubject })}`;
-      if (!byStudentSubject.has(k)) byStudentSubject.set(k, r);
+      if (r.bucket.startsWith("class:")) byStudentClass.set(keyOf(r.student_id, r.bucket.slice(6)), r);
+      else if (r.bucket.startsWith("subject:")) byStudentSubject.set(`${r.student_id}::${r.bucket.slice(8)}`, r);
     }
     // 🔴 특강 슬롯은 **학생 단위 폴백을 쓰지 않는다**(원장 2026-07-23 "정규와 특강을 분리시켜").
     //    폴백은 이관분(class_id NULL)을 살리려는 장치인데 이관분은 전부 정규다 → 특강 슬롯에 쓰면
@@ -623,7 +639,12 @@ export async function getWeeklyScheduleWithStudents(
     }
   }
 
-  return slots.map((s) => ({ ...s, students: byClass.get(s.classId) ?? [] }));
+  // studentCount 재기입 — fetchSlots를 skipCounts로 불렀으므로(근사 카운트 쿼리 생략) 로스터의
+  // 재원(active) 수로 채운다. 근사치보다 오히려 정확하다(옛 카운트는 대기 포함·주말 경계 근사).
+  return slots.map((s) => {
+    const roster = byClass.get(s.classId) ?? [];
+    return { ...s, students: roster, studentCount: roster.filter((l) => l.status === "active").length };
+  });
 }
 
 const DOW_INDEX: Record<string, number> = {

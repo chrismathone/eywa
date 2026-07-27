@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { ParamLink } from "./_components/param-link";
 import type { LucideIcon } from "@/components/icons/eywa-icon-compat";
 import { Columns3, LayoutGrid, Users } from "@/components/icons/eywa-icon-compat";
 import { PhotoCard } from "@/components/atoms/photo-card";
@@ -339,7 +339,7 @@ export default async function TimetablePage({
         <div className="flex flex-wrap items-center gap-1">
           <span className="micro mr-1">과목</span>
           {available.map((k) => (
-            <Link
+            <ParamLink
               key={k}
               href={buildHref({
                 view: effView === "teacher" && !allowsTeacherView(k) ? "basic" : effView,
@@ -363,7 +363,7 @@ export default async function TimetablePage({
               }`}
             >
               {subjectMaps.labelOf(k)}
-            </Link>
+            </ParamLink>
           ))}
         </div>
         <span className="bg-line h-4 w-px" aria-hidden />
@@ -373,7 +373,7 @@ export default async function TimetablePage({
         <div className="flex flex-wrap items-center gap-1">
           <span className="micro mr-1">구분</span>
           {TIMETABLE_KINDS.map((k) => (
-            <Link
+            <ParamLink
               key={k}
               href={buildHref({
                 view: effView,
@@ -393,7 +393,7 @@ export default async function TimetablePage({
               }`}
             >
               {TIMETABLE_KIND_LABEL[k]}
-            </Link>
+            </ParamLink>
           ))}
         </div>
         <span className="bg-line h-4 w-px" aria-hidden />
@@ -410,7 +410,7 @@ export default async function TimetablePage({
           ] as { key: ViewMode; label: string; icon: LucideIcon }[]).map((v) => {
             const Icon = v.icon;
             return (
-              <Link
+              <ParamLink
                 key={v.key}
                 href={buildHref({ view: v.key, subject, defaultSubject, kind, week, thisWk, compact1h: compactList, hideEmptyDays, collapseEmptyPeriods })}
                 className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs transition ${
@@ -421,7 +421,7 @@ export default async function TimetablePage({
               >
                 <Icon size={11} strokeWidth={1.8} />
                 {v.label}
-              </Link>
+              </ParamLink>
             );
           })}
         </div>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import Link from "next/link";
+import { ParamLink } from "./param-link";
 import { useRouter } from "next/navigation";
 import { Popover } from "@base-ui/react/popover";
 import { toast } from "sonner";
@@ -214,25 +214,25 @@ export function TimetableViewSettings({
                 {collapseHref || hideEmptyDaysHref ? (
                   <div className={`flex flex-wrap items-center gap-1 ${showColor ? "mt-1.5" : ""}`}>
                     {collapseHref ? (
-                      <Link
+                      <ParamLink
                         href={collapseHref}
                         title="수업 없는 교시 행을 얇게 접기/펼치기 (편집 중엔 자동으로 펼쳐짐)"
                         className={toggleCls(collapseOn)}
                       >
                         <ListFilter size={11} strokeWidth={1.8} />
                         빈 교시 접기
-                      </Link>
+                      </ParamLink>
                     ) : null}
                     {/* ⚠️ 강조는 `!hideEmptyDays`일 때 — "미사용 요일을 **보여주는**" 상태가 켜짐이다(툴바 원본과 동일). */}
                     {hideEmptyDaysHref ? (
-                      <Link
+                      <ParamLink
                         href={hideEmptyDaysHref}
                         title="수업 없는 요일 컬럼 표시/숨김"
                         className={toggleCls(!hideEmptyDaysOn)}
                       >
                         <CalendarOff size={11} strokeWidth={1.8} />
                         미사용 요일
-                      </Link>
+                      </ParamLink>
                     ) : null}
                   </div>
                 ) : null}

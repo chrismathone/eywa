@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { ParamLink } from "./param-link";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { SUBJECT_SOFT, type SubjectMaps } from "@/features/owner/subjects";
 import {
@@ -61,9 +61,8 @@ export function RichGridView({
             {/* 섹션별 '1시간 단위' 토글 — 이 시작 교시 섹션만 사이 빈 교시 행을 숨긴다(전역 아님).
                 주말 섹션은 교시 체계가 없어 압축 대상 아님 → 토글 숨김(커스텀 그룹의 주말 하위 섹션 포함). */}
             {g.compactable ? (
-              <Link
+              <ParamLink
                 href={hrefForSectionToggle(g.sectionKey)}
-                aria-pressed={g.compacted}
                 className={`ml-auto inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] whitespace-nowrap transition ${
                   g.compacted
                     ? "border-primary bg-primary text-primary-foreground"
@@ -78,7 +77,7 @@ export function RichGridView({
                   {g.compacted ? <EyIcon name="check" size={9} /> : null}
                 </span>
                 1시간 단위
-              </Link>
+              </ParamLink>
             ) : null}
           </div>
           <RichCardGroupBoard group={g} subjectSoftClass={subjectSoftClass} teacherColors={teacherColors} />

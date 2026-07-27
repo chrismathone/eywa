@@ -4,6 +4,29 @@
 
 ## 진행 상황
 
+### 시간표 과목전환·페이지 내 이동 성능 (RPC 최신보고서 + 병렬화 + 무플래시 네비) (2026-07-27) - tsc0/lint0/test2514/동치검증·실측
+원장: "프로덕션에서 특히 시간표 과목전환이 왜 이렇게 느릴까? 전반적으로 페이지 내 이동이 원활하게."
+진단(실측): 시간표는 모든 네비(과목·뷰·주·구분·표시설정)가 **풀 서버 재렌더 + `loading.tsx` 스켈레톤**이고,
+그 서버 렌더가 hover용 "최근 진도 1건"을 위해 **보고서 전 이력 14,855행(3.2MB)** 을 매번 직렬 페이지(~14왕복)로
+끌어왔다. 네 가지 처리:
+- **① RPC 최신 1건 집계**([0150a](../supabase/migrations/0150a_timetable_latest_reports_rpc.sql)
+  `timetable_latest_reports`) — (학생×반)·(학생×과목) 버킷별 `distinct on` 최신 1건만 반환.
+  실측 **14,855행→392행(2.6%) · 1,718ms→125ms(13.7배)**. dedup(report_date desc, id desc)·과목 판정
+  (subject→반 subject→레거시 'math')은 기존 JS와 **완전 동치 검증**(winner 392건 양방향 일치, mismatch 0).
+  🔴 규칙의 문서·테스트는 [report-subject.ts](../src/features/timetable/lib/report-subject.ts)가 계속 담당 —
+  **규칙을 바꾸면 SQL도 함께**. ⚠️ RPC 결과도 PostgREST max-rows(~1000)에 걸린다 — 학생 300명 청크 병렬
+  (청크당 최대 ~600행 안전 마진). 오류는 throw(B3 — `?? []` 삼킴 금지). cron/admin 경로는 `p_tenant` 명시
+  (service_role은 `auth_tenant_id()` null — invoker RLS라 세션 사용자가 남의 p_tenant를 넣어도 교집합 빈 결과).
+- **② 근사 카운트 쿼리 제거** — `fetchSlots`의 enrollment 전건 카운트(600행)는 로스터를 어차피 정확히
+  조회하는 `getWeeklyScheduleWithStudents`에선 이중 조회 → `skipCounts`로 생략하고 `studentCount`를 로스터
+  재원 수로 재기입(옛 근사치는 대기 포함이라 오히려 부정확했다). 대시보드 `getTodaySchedule` 경로는 불변.
+- **③ 병렬화(B4)** — 라벨맵·스케줄·카운트 3개 독립 쿼리를 `Promise.all`로(직렬 왕복 합산 제거).
+- **④ 무플래시 파라미터 네비**([param-link.tsx](../src/app/(shell)/timetable/_components/param-link.tsx)) —
+  과목·구분·뷰·주·표시설정·'1시간 단위' 칩을 `<Link>`→`ParamLink`(startTransition+router.push)로. 파라미터
+  전환 시 **이전 화면을 유지**한 채 백그라운드 교체(클릭한 칩만 pulse). 첫 진입은 종전대로 `loading.tsx`(B7).
+  실제 `<a href>`라 새 탭·중클릭·복사 보존(수식키 클릭은 브라우저 기본).
+- ⚠️ 시각검증: 재부팅으로 localhost 세션 소실 → 무플래시 동작은 배포 후 프로덕션에서 확인 필요.
+
 ### 원스크린 작성 필터(전체/작성/미작성) + 이름 옆 발송 체크 + 상단 반 목록 2줄→1줄 (2026-07-27) - tsc0(내 파일)/lint0/test431(onescreen) + 실 강사계정 화면검증
 원장 3연속 요청. 28명 로스터에서 "아직 안 쓴 학생만" 보고, 발송 완료가 한눈에 구분되게.
 - **작성 필터**: 상단 반 필터 옆 `전체 · 작성 N · 미작성 N`(실시간 카운트). 판정 = **학부모 문구**
