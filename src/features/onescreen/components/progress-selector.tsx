@@ -61,7 +61,7 @@ export function ProgressSelector({
   if (locked) {
     return (
       <div
-        className="border-line bg-bg-soft text-text-dim flex h-8 w-full items-center gap-1 rounded-lg border px-2 text-left text-[12px]"
+        className="border-line bg-bg-soft text-text-dim flex h-8 w-full min-w-0 flex-1 items-center gap-1 rounded-lg border px-2 text-left text-[12px]"
         aria-label={ariaLabel ?? "진도"}
         aria-readonly="true"
       >
@@ -74,8 +74,12 @@ export function ProgressSelector({
 
   return (
     <Popover.Root open={open} onOpenChange={setOpen}>
+      {/* ⚠️ `min-w-0 flex-1` 필수 — flex 행(라벨 '오늘 →' + 이 트리거) 안에서 `w-full`만 주면 트리거가
+          **행 전체 너비**를 요구해 라벨 폭만큼 카드 밖으로 삐져나온다(2026-07-27 실측 23px 오버플로,
+          `scrollWidth 417 > clientWidth 394`). 옆 자유입력 <input>은 처음부터 `w-full min-w-0 flex-1`이라
+          멀쩡했다 — 같은 규약으로 맞춘다. 표 뷰(블록 컨텍스트)에선 flex-1이 무시돼 기존 동작 그대로. */}
       <Popover.Trigger
-        className={`border-line bg-card hover:border-primary/60 data-[popup-open]:border-primary flex h-8 w-full items-center gap-1 rounded-lg border px-2 text-left text-[12px] outline-none transition-colors ${
+        className={`border-line bg-card hover:border-primary/60 data-[popup-open]:border-primary flex h-8 w-full min-w-0 flex-1 items-center gap-1 rounded-lg border px-2 text-left text-[12px] outline-none transition-colors ${
           selected.length ? "text-foreground" : "text-text-faint"
         }`}
         aria-label={ariaLabel ?? "진도 선택"}
