@@ -59,6 +59,9 @@ export function OneScreenTopBar({
     { value: "written", label: "작성", count: writeCounts.written },
     { value: "unwritten", label: "미작성", count: writeCounts.unwritten },
   ];
+  // 시각 칩으로 못 덮는 태그(todayClasses 없이 classTags만 오는 호출부 방어) — 보통은 빈 배열.
+  const timedNames = new Set(todayClasses.map((c) => c.name));
+  const extraTags = classTags.filter((t) => t !== "전체" && !timedNames.has(t));
   const noticeOptions: { value: "A" | "B" | null; label: string }[] = [
     { value: null, label: `학원 기본(${academyNoticeMode})` },
     { value: "A", label: "단일 A" },
@@ -136,9 +139,49 @@ export function OneScreenTopBar({
 
       <span className="bg-line hidden h-5 w-px shrink-0 sm:block" aria-hidden />
 
-      {/* 반 필터 */}
+      {/* 반 필터 = '오늘 수업' 칩 하나로 통합(2026-07-27 원장: "수업명이 2줄로 겹치는데 굳이 2개나?").
+          예전엔 ① 반 이름만 있는 필터 줄 + ② 시각·인원이 붙은 '오늘' 정보 줄이 따로 있었는데,
+          서버가 `classTags = ["전체", ...todayClasses 이름]`으로 **같은 원본에서** 만들기 때문에 두 줄은
+          항상 같은 목록이었다(roster.ts). → 정보가 많은 쪽(시각·인원)을 남기고 그걸 클릭 가능한 필터로.
+          ⚠️ todayClasses 없이 classTags만 오는 호출부(데모 등)를 위해 남는 태그는 이름 칩으로 계속 렌더한다. */}
       <div className="flex flex-wrap items-center gap-1.5">
-        {classTags.map((tag) => {
+        <button
+          type="button"
+          onClick={() => onFilter("전체")}
+          aria-pressed={classFilter === "전체"}
+          className={`rounded-pill px-2.5 py-1 text-[12px] font-bold transition ${
+            classFilter === "전체"
+              ? "bg-primary text-primary-foreground"
+              : "border-line text-text-dim hover:bg-bg-soft border"
+          }`}
+        >
+          전체
+        </button>
+        {todayClasses.map((c) => {
+          const on = c.name === classFilter;
+          return (
+            <button
+              key={c.id}
+              type="button"
+              onClick={() => onFilter(c.name)}
+              aria-pressed={on}
+              className={`rounded-pill inline-flex items-center gap-1 px-2.5 py-1 text-[12px] font-bold whitespace-nowrap transition ${
+                on ? "bg-primary text-primary-foreground" : "border-line text-text-dim hover:bg-bg-soft border"
+              }`}
+            >
+              <span
+                className={`font-mono text-[10px] font-bold ${on ? "text-primary-foreground/75" : "text-primary"}`}
+              >
+                {c.startTime ?? "—"}
+              </span>
+              <span className={on ? "" : "text-foreground"}>{c.name}</span>
+              <span className={on ? "text-primary-foreground/75" : "text-text-faint"}>
+                {c.studentCount}
+              </span>
+            </button>
+          );
+        })}
+        {extraTags.map((tag) => {
           const on = tag === classFilter;
           return (
             <button
@@ -182,26 +225,6 @@ export function OneScreenTopBar({
           );
         })}
       </div>
-
-      {/* 오늘 수업 — 시각·인원(반 필터와 같은 반이지만 시각/인원 정보 유지) */}
-      {todayClasses.length ? (
-        <>
-          <span className="bg-line hidden h-5 w-px shrink-0 lg:block" aria-hidden />
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="micro text-text-faint">오늘</span>
-            {todayClasses.map((c) => (
-              <span
-                key={c.id}
-                className="border-line inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[11.5px] whitespace-nowrap"
-              >
-                <span className="text-primary font-mono text-[10px] font-bold">{c.startTime ?? "—"}</span>
-                <span className="text-foreground font-bold">{c.name}</span>
-                <span className="text-text-faint">{c.studentCount}</span>
-              </span>
-            ))}
-          </div>
-        </>
-      ) : null}
 
       {/* 우측: 마감 통계 + 카드/표 토글 */}
       <div className="ml-auto flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
