@@ -2,9 +2,17 @@
 
 import { useState } from "react";
 import { ChevronDown } from "@/components/icons/eywa-icon-compat";
+import { EyIcon } from "@/components/icons/eywa-icons";
 import { studentStatus, type TestConfig } from "../report";
 import { subjectTone, toneSolidClass } from "../data";
 import type { CellState, OneScreenStudent } from "../types";
+
+/**
+ * 이름 옆 발송 표시 재료(원장 요청 2026-07-27: "발송완료면 체크 같은 걸 이름 옆에").
+ * `sent`=학부모에게 나간 행 수 / `total`=나갈 수 있는 행 수(결석 행 제외 — 호출부가 세어 넘긴다).
+ * 표시 기준(ClassNote 게시 vs 보고서 저장)은 학원 설정에 따라 갈리므로 호출부가 `label`로 그 사실을 밝힌다.
+ */
+export type SendMark = { sent: number; total: number; label: string };
 
 const CELL_CLASS: Record<CellState, string> = {
   ok: "bg-primary-soft text-primary",
@@ -22,12 +30,14 @@ function StudentRow({
   st,
   active,
   reportCell,
+  sendMark,
   onClick,
   testConfig,
 }: {
   st: OneScreenStudent;
   active: boolean;
   reportCell?: CellState;
+  sendMark?: SendMark;
   onClick: () => void;
   testConfig?: TestConfig;
 }) {
@@ -47,6 +57,26 @@ function StudentRow({
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5">
           <span className="text-foreground truncate text-[13px] font-bold">{st.name}</span>
+          {/* 발송 표시 — 라벨 색(보 셀)만으로는 '나갔는지'가 눈에 안 띈다는 원장 지적(2026-07-27).
+              ⚠️ 표시는 **실제로 나간 행**에만 붙는다: 전부 나갔으면 채운 체크, 일부면 흐린 체크 + 남은 수.
+                 아무것도 안 나갔으면 아무 표시도 없다(없음 = 미발송, 거짓 안심 금지). */}
+          {sendMark && sendMark.total > 0 && sendMark.sent > 0 ? (
+            <span
+              title={`${sendMark.label} ${sendMark.sent}/${sendMark.total}`}
+              className={`flex shrink-0 items-center gap-0.5 rounded-full px-1 py-px text-[10px] font-bold ${
+                sendMark.sent >= sendMark.total
+                  ? "bg-primary-soft text-primary"
+                  : "border-line text-text-faint border"
+              }`}
+            >
+              <EyIcon name="check" size={10} />
+              {sendMark.sent < sendMark.total ? (
+                <span className="tabular">
+                  {sendMark.sent}/{sendMark.total}
+                </span>
+              ) : null}
+            </span>
+          ) : null}
           {st.attendance !== "출석" ? (
             <span
               className={`rounded-full px-1 py-px text-[10px] font-bold ${
@@ -90,13 +120,19 @@ export function StudentList({
   selId,
   onSelect,
   reportCellById,
+  sendMarkById,
   classOrder,
   testConfig,
+  emptyLabel = "해당 반 학생이 없습니다",
 }: {
   students: OneScreenStudent[];
   selId: string;
   onSelect: (id: string) => void;
   reportCellById?: Record<string, CellState>;
+  /** 이름 옆 발송 표시 — 학생 id → {나간 행 수, 나갈 수 있는 행 수, 기준 라벨}. */
+  sendMarkById?: Record<string, SendMark>;
+  /** 빈 목록 문구 — 반이 아니라 **작성 필터** 때문에 비었을 때 사실과 다른 말을 하지 않도록 호출부가 덮어쓴다. */
+  emptyLabel?: string;
   /** 반 그룹 표시 순서(보통 시각순). 없으면 등장 순서. */
   classOrder?: readonly string[];
   /** 테스트 사용 여부 — '테' 셀이 비활성 테스트를 요구하지 않게(#25). */
@@ -127,7 +163,12 @@ export function StudentList({
   const allCollapsed = orderedKeys.length > 0 && orderedKeys.every((k) => collapsed.has(k));
 
   return (
-    <div className="bg-card border-line shadow-card flex flex-col rounded-2xl border">
+    /* 높이 = 창에 맞춤(2026-07-27 원장: "하단 공간이 이렇게 많은데 왜 저기서 잘라버리나").
+       예전엔 안쪽 스크롤러에 `max-h-[calc(100vh-220px)]` 고정값을 박아, 화면을 아래로 굴려 상단 바가
+       사라진 뒤에도 그 220px을 계속 비워 둬 목록만 일찍 잘렸다.
+       → 넓은 화면에선 **sticky로 붙여 창 높이만큼** 쓰고(스크롤해도 목록이 늘 보인다), 좁은 화면(세로 적층)
+       에선 60vh까지만 차지하고 나머지는 페이지가 스크롤한다. */
+    <div className="bg-card border-line shadow-card flex flex-col rounded-2xl border lg:sticky lg:top-2 lg:max-h-[calc(100dvh-6rem)]">
       <header className="border-line flex items-center justify-between gap-2 border-b px-3 py-2.5">
         <p className="micro text-text-faint">학생 · 반별</p>
         <div className="flex items-center gap-2">
@@ -143,9 +184,9 @@ export function StudentList({
           <p className="text-text-dim font-mono text-[11px]">{students.length}명</p>
         </div>
       </header>
-      <div className="scrollbar-thin flex max-h-[calc(100vh-220px)] flex-col gap-2 overflow-y-auto p-2 [scrollbar-gutter:stable]">
+      <div className="scrollbar-thin flex max-h-[60vh] min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-2 lg:max-h-none [scrollbar-gutter:stable]">
         {students.length === 0 ? (
-          <p className="text-text-faint px-2 py-6 text-center text-xs">해당 반 학생이 없습니다</p>
+          <p className="text-text-faint px-2 py-6 text-center text-xs">{emptyLabel}</p>
         ) : (
           orderedKeys.map((key) => {
             const rows = groups.get(key)!;
@@ -175,6 +216,7 @@ export function StudentList({
                         st={st}
                         active={st.id === selId}
                         reportCell={reportCellById?.[st.id]}
+                        sendMark={sendMarkById?.[st.id]}
                         onClick={() => onSelect(st.id)}
                         testConfig={testConfig}
                       />
