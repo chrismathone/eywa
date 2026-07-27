@@ -4,6 +4,35 @@
 
 ## 진행 상황
 
+### 알림을 눌러도 아무 일이 없음 — 창이 아니라 배경 프레임만 바뀌었다 (2026-07-27) - tsc0/lint0/test2517
+원장: "진도기록 이상에 대해 확인하려고 눌렀는데 아무런 출력이 없네."
+**원인 2개(둘 다 수정) — 첫 번째는 진도 이상뿐 아니라 모든 알림 유형에 해당했다.**
+- **① 벨이 `router.push`로 배경 프레임만 이동**([notification-bell.tsx](../src/features/notifications/components/notification-bell.tsx)) —
+  데스크톱 풀셸은 메뉴가 전부 플로팅 창이라 **화면이 창으로 덮여 있는 게 정상 상태**고, 그 밑에서 배경
+  라우트가 바뀌어봐야 눈에 보이는 변화가 0이다. 앱의 다른 모든 링크([WindowLink](../src/components/workspace/window-link.tsx))와
+  **같은 경로·같은 가드**(`windowIdForHref` + `useWindowStore.open("route")`, `isDesktop && workspaceEnabled && isTopFrame`)로
+  플로팅 창을 연다. 창 시스템 없는 강사 미니셸·모바일·임베드는 `router.push` 폴백, 외부 URL(ClassNote)은 기존 확인창 그대로.
+  ⚠️ **새 알림 유형을 추가할 때 link는 창으로 열린다는 전제로 정할 것**(메뉴 라우트가 아니면 자동 폴백).
+- **② 진도 이상 알림의 link가 `/students`(학생 전체 목록)** — 도착해도 누가 왜 걸렸는지 알 방법이 없었다.
+  알림은 link가 **하나뿐**이라 여러 명을 한 건으로 묶으면 목적지를 표현할 수 없다 → **학생 1명 = 알림 1건**으로
+  쪼개고 `/students/{id}?tab=progress` 직행([events-core.ts](../src/features/notifications/events-core.ts)
+  `groupProgressAnomalyByStudent`·`progressAnomalyStudentBody`·`progressAnomalyLink`). 실측 볼륨 14일 한
+  자릿수라 분할해도 벨 폭탄 아님. **강사 알림도 같은 딥링크로** — `/onescreen` 배지는 '오늘 로스터'에만
+  붙어서 그 학생이 그날 수업이 없으면 원스크린에도 아무 표시가 없었다(같은 증상).
+  🔴 **일반화: 알림 본문이 N명을 말하는데 link가 1개면 그 link는 반드시 거짓말이 된다** — 수신자를 쪼개거나,
+  그 N명만 보여주는 화면을 먼저 만들 것.
+- **착지 화면도 고쳤다** — 진도 탭 이상 표시가 유형 배지 하나(`진도 점프 감지`)뿐이라 "뭐가 어떻게 이상한지"를
+  알 수 없었다 → **언제 · 어디서 어디로 · 몇 차시**를 적는 카드로 교체([progress-panel.tsx](../src/features/progress/components/progress-panel.tsx)
+  `AnomalyCard`). 실데이터 예: `진도 점프 · 2026년 7월 24일 · 중1 합동 → 중2 삼각형의 내심 (54차시 건너뜀)`.
+  위치 번호는 `describePosition`으로 커리큘럼 라벨 변환(raw 숫자 노출 금지), 모르면 그 줄만 생략(없는 사실 안 지어냄).
+  ⚠️ 이상 목록을 **트랙별→학생 단위**로 옮겼다 — `progress_events`엔 트랙 정보가 없어 같은 목록이 현행·선행
+  카드에 **두 번** 찍히고 있었다(같은 이상이 2건으로 보임).
+- 본문 조사도 수정: `진도 점프이(가) 감지` → `이상이 감지됐습니다(진도 점프)`. 라벨마다 받침이 달라 고정
+  조사로는 못 맞춘다 — **유형은 괄호로 빼는 게 정답**.
+- **낡은 알림 4건 backfill 완료**(dedup `pe:{eventId}`가 이미 기록돼 cron이 재발송하지 않으므로 손으로 정정):
+  `/students`·`/onescreen` 4건 → 학생별 10건으로 분할(수신자·읽음 상태·created_at 보존, 원일 3건 미읽음 유지).
+  이벤트→학생 매핑은 이름 파싱이 아니라 `notification_events.bucket`→`progress_events` 조인(이벤트가 진실).
+
 ### 시간표 과목전환·페이지 내 이동 성능 (RPC 최신보고서 + 병렬화 + 무플래시 네비) (2026-07-27) - tsc0/lint0/test2514/동치검증·실측
 원장: "프로덕션에서 특히 시간표 과목전환이 왜 이렇게 느릴까? 전반적으로 페이지 내 이동이 원활하게."
 진단(실측): 시간표는 모든 네비(과목·뷰·주·구분·표시설정)가 **풀 서버 재렌더 + `loading.tsx` 스켈레톤**이고,
