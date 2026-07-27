@@ -4,6 +4,19 @@
 
 ## 진행 상황
 
+### 강사 원스크린에 '학부모 읽음' 배지 배선 (2026-07-27) - tsc0(내 파일)/lint0/test404(onescreen)
+원장: "선생님도 학부모가 읽었을 때 체크 가능하도록". 조사 결과 읽음 표시 표면 = **원장 전용 보고서 목록 1곳뿐**
+(`lesson_reports` 권한 teacher=none) — 강사 표면 0개. 데이터(`classnote_read_at`, 0122a 워커 동기화)는 정상 축적
+중(최근 7일 발송 229 중 읽음 150 = 65.5%)이라 **표시 배선만** 추가.
+- **경로**: roster (a) 당일 행 select에 `classnote_read_at` 1컬럼 추가 → `Subject.classnoteReadAt` →
+  카드([report-card.tsx](../src/features/onescreen/components/report-card.tsx) 발송 배지 옆 "읽음") +
+  표([grid-row.tsx](../src/features/onescreen/components/grid-row.tsx) 발송 열 "학부모 읽음"). 툴팁 = KST 일시
+  (`readAtLabel` export — 원장 목록 report-list와 같은 표기).
+- 🔴 **양성 배지만**: 없음 = "안 읽음"이 아니라 "동기화 안 됨"일 수 있어 미표시(원장 목록 StatusCell·G3 배지와
+  동일 규약 — 거짓 '미확인' 방지). 실시간 폴러(`getClassnoteStatuses`)에는 **일부러 안 실었다** — 폴링은
+  queued/processing 동안만 돌고 읽음은 몇 시간 뒤 일어나므로 실어봐야 죽은 배선(다음 로스터 로드에 반영이 정직).
+- ⚠️ 시각검증 미완(온스크린=강사 로그인·프로덕션 제약, 07-24 항목과 동일) — 강사 화면에서 발송 완료 행에 "읽음" 확인 필요.
+
 ### 🔴 병합커밋이 배포를 조용히 건너뛰던 버그 — `ignoreCommand`가 **tip 커밋 1개만** 본다 (2026-07-27)
 원장 제보 "배포가 안 되었는데". 실측: 그날 push한 **3커밋 전부 미배포**인데 GitHub 상태는 **초록색 `success`**였다
 (설명란에만 `Canceled by Ignored Build Step`). 초록색이라 아무도 이상을 눈치채지 못한다 — 이게 진짜 위험.

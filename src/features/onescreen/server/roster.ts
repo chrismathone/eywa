@@ -371,6 +371,7 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
       makeup: boolean | null; // 보강(수업외) 보고서 — matchReportsToRows가 정규 행에 오배정하지 않게 하는 판별축(2026-07-24).
       share_token: string | null;
       classnote_status: string | null;
+      classnote_read_at: string | null; // 학부모 읽음(0122a) — 강사 행 배지용(2026-07-27 원장 지시)
       revoked_at: string | null;
       attachments: { path: string; name: string }[] | null;
       notes: string | null;
@@ -380,7 +381,7 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
       (chunk) =>
         supabase
           .from("lesson_reports")
-          .select("id, student_id, subject, class_id, makeup, share_token, classnote_status, revoked_at, attachments, notes, trend_note")
+          .select("id, student_id, subject, class_id, makeup, share_token, classnote_status, classnote_read_at, revoked_at, attachments, notes, trend_note")
           .eq("report_date", todayIso)
           .in("student_id", chunk)
           // 결정적 매칭 순서 — 같은 (학생,반) 폴백 후보가 여럿일 때 항상 같은 것을 집는다.
@@ -620,6 +621,7 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
       su.reportSent = true;
       su.shareToken = t.share_token ?? undefined;
       su.classnoteStatus = t.classnote_status ?? undefined;
+      su.classnoteReadAt = t.classnote_read_at ?? undefined;
       su.revokedAt = t.revoked_at ?? undefined;
       su.viewCount = viewCountByReport.get(t.id) ?? 0;
       su.attachments = t.attachments ?? [];

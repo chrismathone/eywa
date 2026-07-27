@@ -78,6 +78,10 @@ export type Subject = {
   reportSent?: boolean; // 오늘 이 과목 보고서가 저장됨
   shareToken?: string; // 오늘 이 과목 보고서의 /r 공유 토큰
   classnoteStatus?: string; // ClassNote 발송 상태(queued/processing/success/failed/too_old, null=미요청)
+  // 학부모 읽음 시각(0122a classnote_read_at — 연동 PC 워커가 피드에서 채움, 강사 행 배지용 2026-07-27).
+  // ⚠️ **양성 표시 전용**: 없음 = "안 읽음"이 아니라 "아직 동기화 안 됨"일 수 있어 배지를 생략한다
+  //    (원장 목록 StatusCell과 같은 규약 — 거짓 '미확인' 방지).
+  classnoteReadAt?: string;
   revokedAt?: string; // 공유링크 취소 시각(P2a) — 있으면 링크 열람 차단됨
   viewCount?: number; // 학부모 열람 수(share_link_views count, P2a)
   attachments?: { path: string; name: string }[]; // 학생 사진 첨부(P2b) — /r·ClassNote 스샷에 렌더

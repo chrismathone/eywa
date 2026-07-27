@@ -9,7 +9,7 @@ import { subjectTone, toneSoftClass, toneSolidClass } from "../data";
 import { effectiveClassnoteStatus, isAlreadySent, isRowActionable, type GridRow } from "../grid";
 import { parentUnreadBadge, progressAnomalyBadge } from "../roster-signals";
 import type { OneScreenStudent } from "../types";
-import { classnoteBadge, type SubjectReport } from "./report-card";
+import { classnoteBadge, readAtLabel, type SubjectReport } from "./report-card";
 import { GridAttachButton, useRowFileDrop } from "./grid-attach";
 import { AttendancePills, type BasicAttendance } from "./attendance-pills";
 import { handleGridNavKey } from "./grid-nav";
@@ -508,6 +508,15 @@ export function GridBodyRow({
             <span className="text-primary text-center text-[10px] font-bold">발송됨 — 재발송 불가</span>
           ) : badge ? (
             <span className={`text-center text-[10px] font-bold ${badge.cls}`}>{badge.label}</span>
+          ) : null}
+          {/* 학부모 읽음(0122a) — 양성 배지만(카드와 동일 규약, types.ts). 표는 세로 여유가 있어 풀 라벨. */}
+          {subject.classnoteReadAt ? (
+            <span
+              className="text-primary text-center text-[10px] font-bold"
+              title={`학부모 읽음 · ${readAtLabel(subject.classnoteReadAt)}`}
+            >
+              학부모 읽음
+            </span>
           ) : null}
         </div>
       </td>
