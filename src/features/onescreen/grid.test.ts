@@ -5,12 +5,14 @@ import {
   isReportEligible,
   effectiveClassnoteStatus,
   isAlreadySent,
+  isClassMember,
   isRowActionable,
   planBulkApply,
   planPrevFill,
   planBulkPrevFill,
   planPrevComments,
   rowInClass,
+  studentInClass,
   summarizeSendGaps,
   type BulkTarget,
 } from "./grid";
@@ -64,6 +66,68 @@ describe("rowInClass", () => {
   });
   it("반 모호(className=null)는 어느 필터에서도 통과(같은 과목 두 반)", () => {
     expect(rowInClass(sub(null), "A반")).toBe(true);
+  });
+});
+
+// 2026-07-27 강사 제보(허다빈): 특정 반을 고른 채 보강 학생을 추가하면 "추가됨" 토스트만 뜨고 카드가 사라졌다.
+// 보강 학생은 buildMakeupStudent가 조립해 tags가 없어(tag:"보강") 어떤 반 이름과도 매칭되지 않는 게 원인.
+describe("studentInClass — 보강은 반 필터에 숨지 않는다", () => {
+  const member = (tags: string[]): OneScreenStudent => ({ ...stu("m", [{ name: "수학" }]), tag: tags[0]!, tags });
+  const makeupCard = (): OneScreenStudent => ({
+    ...stu("mk", [{ name: "수학" }]),
+    tag: "보강",
+    isMakeup: true,
+  });
+  /** 정규 카드에 병합된 보강 행(classId 없음·makeup) — 그 학생이 필터 반 소속이 아닌 상황. */
+  const merged = (): OneScreenStudent => {
+    const s = member(["토일반"]);
+    return { ...s, subjects: [...s.subjects, { name: "수학 (보강)", prev: "", today: "", makeup: true, classId: null }] };
+  };
+
+  it("전체(null)면 항상 통과", () => {
+    expect(studentInClass(member(["A반"]), null)).toBe(true);
+    expect(studentInClass(makeupCard(), null)).toBe(true);
+  });
+
+  it("특정 반이면 그 반 수강생만(기존 동작 보존)", () => {
+    expect(studentInClass(member(["A반", "B반"]), "B반")).toBe(true);
+    expect(studentInClass(member(["A반"]), "B반")).toBe(false);
+  });
+
+  it("tags가 없으면 대표 tag로 폴백", () => {
+    const s = { ...stu("t", [{ name: "수학" }]), tag: "A반" };
+    expect(studentInClass(s, "A반")).toBe(true);
+    expect(studentInClass(s, "B반")).toBe(false);
+  });
+
+  it("🔴 보강 전용 카드는 어느 반 필터에서도 통과(반 무관 수업)", () => {
+    expect(studentInClass(makeupCard(), "A반")).toBe(true);
+    expect(studentInClass(makeupCard(), "아무반")).toBe(true);
+  });
+
+  it("🔴 정규 카드에 병합된 보강 행이 있으면, 그 반 소속이 아니어도 통과", () => {
+    expect(studentInClass(merged(), "평일반")).toBe(true);
+  });
+
+  it("⚠️ 정규 행에 켠 '보강' 토글(반 있음)은 필터를 우회시키지 않는다", () => {
+    const s = member(["A반"]);
+    const toggled: OneScreenStudent = {
+      ...s,
+      subjects: [{ name: "수학", prev: "", today: "", makeup: true, classId: "c1" }],
+    };
+    expect(studentInClass(toggled, "B반")).toBe(false);
+  });
+});
+
+describe("isClassMember — 좌측 그룹 라벨 리맵 기준", () => {
+  it("tags 우선, 없으면 대표 tag", () => {
+    expect(isClassMember({ tag: "A반", tags: ["A반", "B반"] }, "B반")).toBe(true);
+    expect(isClassMember({ tag: "A반" }, "A반")).toBe(true);
+    expect(isClassMember({ tag: "A반" }, "B반")).toBe(false);
+  });
+
+  it("보강 카드는 멤버가 아니다 — 리맵되면 듣지도 않는 반 이름이 카드에 박힌다", () => {
+    expect(isClassMember({ tag: "보강" }, "A반")).toBe(false);
   });
 });
 

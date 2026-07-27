@@ -61,6 +61,38 @@ export function rowInClass(subject: Subject, classFilter: string | null): boolea
   return subject.className == null || subject.className === classFilter;
 }
 
+/**
+ * 이 학생이 필터한 반의 **실제 수강생**인가 — 좌측 그룹 라벨을 필터 반으로 리맵할지의 기준이기도 하다.
+ * `tags`(수강 반 전체)가 원천이고, 비면 대표 `tag`로 폴백(로스터 규약, roster.ts `os.tags`).
+ */
+export function isClassMember(
+  student: Pick<OneScreenStudent, "tag" | "tags">,
+  classFilter: string,
+): boolean {
+  return (student.tags ?? [student.tag]).includes(classFilter);
+}
+
+/**
+ * 반 필터가 이 **학생 카드**를 남기는가(행 단위는 위 `rowInClass`).
+ *
+ * 🔴 **보강(수업외)은 반에 묶이지 않으므로 반 필터에 숨으면 안 된다** (2026-07-27 강사 제보 — 특정 반을
+ *    고른 채 보강 학생을 추가하면 "추가됨" 토스트만 뜨고 카드가 사라졌다). 보강 학생은 로스터가 만든 게
+ *    아니라 `buildMakeupStudent`가 조립하는데 거기엔 `tags`가 없어(`tag:"보강"`뿐) 어떤 반 이름과도
+ *    매칭되지 않는다 → 필터가 걸린 동안 **영영 안 보인다**. 정규 카드에 병합된 보강 행도 같다: 그 학생이
+ *    필터한 반 소속이 아니면 카드째 걸러져, 방금 붙인 보강 행에 손도 못 댄다.
+ * ⚠️ 조건이 `su.makeup`만이면 안 된다 — 정규 행에도 강사가 "보강" 토글을 켤 수 있다(그 행은 `classId`가
+ *    있고 그 반 소속이라 필터를 우회할 이유가 없다). **반이 없는(`classId` 없음) 보강 행만** 통과시킨다.
+ */
+export function studentInClass(
+  student: Pick<OneScreenStudent, "tag" | "tags" | "isMakeup" | "subjects">,
+  classFilter: string | null,
+): boolean {
+  if (!classFilter) return true;
+  if (student.isMakeup) return true;
+  if (student.subjects.some((su) => su.makeup && !su.classId)) return true;
+  return isClassMember(student, classFilter);
+}
+
 // ───────────────────────── 결석 연동 — 작업별 대상 판정 (2-3) ─────────────────────────
 
 export type RowAction = "save" | "send" | "autowrite";

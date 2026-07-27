@@ -47,6 +47,7 @@ import {
   rowKey,
   effectiveClassnoteStatus,
   isAlreadySent,
+  isClassMember,
   isCopyTargetRow,
   isRowActionable,
   planBulkApply,
@@ -55,6 +56,7 @@ import {
   planPrevComments,
   planCopyFirstRow,
   rowInClass,
+  studentInClass,
   summarizeSendGaps,
   type BulkPatch,
   type PrevCommentPlan,
@@ -315,12 +317,19 @@ export function OneScreenClient({
   // 반 필터 — 특정 반이면 그 반 수강생 전부(tags로 다과목/다반 학생도 양쪽에서 잡음, 누락 방지) + 좌측 그룹 라벨을
   // 필터 반으로 리맵. 표 행은 activeClassFilter로 rowInClass 필터해 타 반 과목 행 혼입을 막는다.
   const activeClassFilter = classFilter === "전체" ? null : classFilter;
+  // ⚠️ 보강(수업외)은 반 무관이라 필터를 통과시킨다(studentInClass) — 안 그러면 특정 반을 고른 채 추가한
+  //    보강 학생이 카드째 사라진다(2026-07-27 강사 제보). 라벨 리맵은 **그 반 실제 수강생에게만**:
+  //    보강 카드까지 리맵하면 듣지도 않는 반 이름이 카드에 박힌다.
   const visible =
     activeClassFilter == null
       ? students
       : students
-          .filter((s) => (s.tags ?? [s.tag]).includes(activeClassFilter))
-          .map((s) => ({ ...s, className: activeClassFilter, tag: activeClassFilter }));
+          .filter((s) => studentInClass(s, activeClassFilter))
+          .map((s) =>
+            isClassMember(s, activeClassFilter)
+              ? { ...s, className: activeClassFilter, tag: activeClassFilter }
+              : s,
+          );
   // 순서변경(3-2)은 단일 반 필터에서만 — 저장 키가 (강사×반)이라 "전체"에선 반이 특정되지 않는다.
   // ⚠️ 동명 반(과목만 다른 같은 이름, 스키마 허용) 가드: 필터는 이름 기반이라 두 반 학생이 섞여 보이는데
   //    첫 반 id로 저장하면 남의 반 학생이 섞인다(리뷰 확정) → 이름 매칭이 유일할 때만 순서 기능 노출.
