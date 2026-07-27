@@ -264,25 +264,39 @@ function Cell({
   day: DayOfWeek | null;
   teacherColors: TeacherColorMap;
 }) {
-  const base = "border-line flex items-center justify-center border-r text-[10px] font-bold last:border-r-0";
+  const base = "border-line flex items-center justify-center overflow-hidden border-r font-bold last:border-r-0";
   if (!day) return <div className={base} />;
   const c = card.cells[`${order}:${day}`];
   if (!c) return <div className={base} />;
-  if (c.isLab) return <div className={`${base} bg-blue-soft text-blue`} title="LAB">LAB</div>;
+  if (c.isLab) return <div className={`${base} bg-blue-soft text-blue ${cellFont("LAB")}`} title="LAB">LAB</div>;
   if (!c.label) return <div className={base} />;
   // 저장된 강사색(ijw) 우선 — 라벨(한글명·영문닉네임)이 users 맵에 있으면 그 hex. 없으면 라벨 해시색.
   const tc = teacherColors[c.label];
+  const text = abbrev(c.label);
+  const cls = `${base} ${cellFont(text)}`;
   if (tc)
     return (
-      <div className={base} style={{ background: tc.bg, color: tc.text }} title={c.label}>
-        {abbrev(c.label)}
+      <div className={cls} style={{ background: tc.bg, color: tc.text }} title={c.label}>
+        {text}
       </div>
     );
   return (
-    <div className={`${base} ${SUBJECT_SOLID[teacherColor(c.label)]} text-white`} title={c.label}>
-      {abbrev(c.label)}
+    <div className={`${cls} ${SUBJECT_SOLID[teacherColor(c.label)]} text-white`} title={c.label}>
+      {text}
     </div>
   );
+}
+
+/**
+ * 셀 강사명 글자 크기 — 칸 너비는 35px(CARD_W/5) 고정인데 라벨은 길이가 제각각이라 길면 줄인다.
+ * ⚠️ 한글 이름 배선(2026-07-27) 전엔 라벨이 "Kris"·"Sam" 같은 짧은 닉네임이라 10px 한 줄로 충분했는데,
+ * "크리스틴"·"플로렌스"(4자)가 들어오면서 35px 칸에서 **두 줄로 쪼개져** 행 높이가 들쭉날쭉해졌다.
+ * 자르지 않고(사람 이름을 클립하면 누군지 모른다) 줄여서 한 줄에 넣는다 — 전체 이름은 title 툴팁에도 있다.
+ */
+function cellFont(text: string): string {
+  if (text.length >= 4) return "text-[8px] tracking-tight whitespace-nowrap";
+  if (text.length === 3) return "text-[9px] tracking-tight whitespace-nowrap";
+  return "text-[10px] whitespace-nowrap";
 }
 
 /**
