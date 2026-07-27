@@ -856,6 +856,10 @@ export const progressEvents = pgTable(
     details: jsonb("details"),
     actor: text("actor"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    // "이상 없음 확인"(0151a) — 사람이 보고 정상이라 판정한 이벤트. 배지·이상 카드·알림 감지에서 제외.
+    // 삭제가 아니라 해소 표시라 되돌릴 수 있고 누가 언제 확인했는지 남는다.
+    resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+    resolvedBy: uuid("resolved_by").references(() => users.id, { onDelete: "set null" }),
   },
   (t) => [
     index("progress_events_student_idx").on(t.studentId, t.createdAt),

@@ -437,6 +437,9 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
         .from("progress_events")
         .select("student_id")
         .in("event_type", ["jump_error", "overlap_error"])
+        // "이상 없음" 확인분 제외(0151a) — 사람이 정상이라 판정한 신호까지 배지가 계속 켜져 있으면
+        // 확인 기능이 무의미하다. 진도 탭 이상 카드·알림 감지와 **같은 조건**(#77).
+        .is("resolved_at", null)
         .gte("created_at", `${addDays(todayIso, -14)}T00:00:00+09:00`)
         .in("student_id", chunk),
     ).catch((e) => {

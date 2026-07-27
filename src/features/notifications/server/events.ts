@@ -397,6 +397,9 @@ async function detectProgressAnomaly(admin: SupabaseClient, tenantId: string): P
     .select("id, student_id, event_type, student:student_id ( name )")
     .eq("tenant_id", tenantId)
     .in("event_type", ["jump_error", "overlap_error"])
+    // "이상 없음" 확인분 제외(0151a) — dedup이 이미 재발송을 막지만, dedup이 비워지거나 이벤트가 다시
+    // 감지되는 경로에서도 확인 판정이 이겨야 한다(배지·이상 카드와 같은 조건, #77).
+    .is("resolved_at", null)
     .gte("created_at", since)
     .order("created_at", { ascending: true })
     .limit(500); // 실측 한 자릿수/14일 — 폭주(버그) 시에도 벨 폭탄 방지 상한

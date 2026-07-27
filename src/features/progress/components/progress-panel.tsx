@@ -1,4 +1,10 @@
+import { getCurrentUser } from "@/lib/auth/current-user";
+import { accessLevelTenant } from "@/lib/auth/perm-matrix";
+import { createClient } from "@/lib/supabase/server";
+import { teacherOwnsStudent } from "@/features/onescreen/server/scope";
+import { canResolveProgressAnomaly } from "../anomaly-gate";
 import { getStudentProgressAnalytics, type ProgressAnomaly, type TrackAnalytics } from "../server/queries";
+import { AnomalyResolveButton } from "./anomaly-resolve-button";
 
 // 진도 현황 패널 — 학생 상세 진도 탭 상단. 활성 컨테이너(현행/선행)별 현재위치·진도율·속도·또래 백분위·예측
 // + 학생 단위 이상감지 카드. 데이터는 서버 쿼리(순수 analytics 산출). 진도 기록 없으면 안내문.
@@ -30,11 +36,41 @@ function fmtDetectedAt(iso: string): string {
 }
 
 /**
+ * 한 건의 설명문 — 언제 · 어디서 어디로 · 몇 차시. 위치를 모르면 그 조각만 뺀다(없는 사실 안 지어냄).
+ * `muted` = 확인 완료 목록용(전체를 흐리게, 강조 없음).
+ */
+function AnomalyLine({ a, muted }: { a: ProgressAnomaly; muted?: boolean }) {
+  const move = a.from && a.to ? `${a.from.grade} ${a.from.lesson} → ${a.to.grade} ${a.to.lesson}` : null;
+  return (
+    <span className={`break-keep text-[12px] leading-snug ${muted ? "text-text-faint" : "text-text-dim"}`}>
+      <span className={muted ? "" : "text-danger font-bold"}>{anomalyLabel(a.type)}</span>
+      <span className="text-text-faint mx-1.5">·</span>
+      <span className="num">{fmtDetectedAt(a.at)}</span>
+      {move ? (
+        <>
+          <span className="text-text-faint mx-1.5">·</span>
+          <span className={muted ? "" : "text-foreground"}>{move}</span>
+        </>
+      ) : null}
+      {a.jumpSize != null && a.jumpSize > 0 ? (
+        <span className="text-text-faint"> ({a.jumpSize}차시 건너뜀)</span>
+      ) : null}
+      {muted && a.resolvedAt ? (
+        <span className="ml-1.5">
+          — {a.resolvedByName ?? "확인자 미상"} · {fmtDetectedAt(a.resolvedAt)} 확인
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
+/**
  * 이상 감지 카드 — 진도 이상 알림(벨)이 착지하는 화면. 유형만 던지지 말고 **무엇이 어떻게 이상한지**를
  * 적는다: 언제 · 어디서 어디로 · 몇 차시. 이게 있어야 어느 보고서의 진도를 고칠지 판단할 수 있다.
- * 위치를 모르면(커리큘럼 범위 밖·미기록) 그 줄만 생략 — 없는 사실을 지어내지 않는다.
+ * 각 줄에 "이상 없음" 버튼(0151a) — 진도 점프의 상당수는 정상(선행 시작·교재 건너뜀·반 이동)이라 끌 수
+ * 있어야 한다. 끌 수 없는 경고는 결국 통째로 무시된다.
  */
-function AnomalyCard({ anomalies }: { anomalies: readonly ProgressAnomaly[] }) {
+function AnomalyCard({ anomalies, canResolve }: { anomalies: readonly ProgressAnomaly[]; canResolve: boolean }) {
   return (
     <div className="border-danger/25 bg-danger-soft/40 rounded-2xl border p-4">
       <div className="flex items-center gap-2">
@@ -42,32 +78,40 @@ function AnomalyCard({ anomalies }: { anomalies: readonly ProgressAnomaly[] }) {
         <p className="text-foreground text-[13px] font-bold">최근 이상 감지 {anomalies.length}건</p>
       </div>
       <ul className="mt-2 space-y-1.5">
-        {anomalies.map((a, i) => {
-          const move =
-            a.from && a.to ? `${a.from.grade} ${a.from.lesson} → ${a.to.grade} ${a.to.lesson}` : null;
-          return (
-            <li key={i} className="text-text-dim break-keep text-[12px] leading-snug">
-              <span className="text-danger font-bold">{anomalyLabel(a.type)}</span>
-              <span className="text-text-faint mx-1.5">·</span>
-              <span className="num">{fmtDetectedAt(a.at)}</span>
-              {move ? (
-                <>
-                  <span className="text-text-faint mx-1.5">·</span>
-                  <span className="text-foreground">{move}</span>
-                </>
-              ) : null}
-              {a.jumpSize != null && a.jumpSize > 0 ? (
-                <span className="text-text-faint"> ({a.jumpSize}차시 건너뜀)</span>
-              ) : null}
-            </li>
-          );
-        })}
+        {anomalies.map((a) => (
+          <li key={a.id} className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <AnomalyLine a={a} />
+            {canResolve ? <AnomalyResolveButton eventId={a.id} resolved={false} /> : null}
+          </li>
+        ))}
       </ul>
       <p className="text-text-faint mt-2 text-[11px] leading-snug break-keep">
         아래 수업 진도 표에서 해당 날짜의 진도 입력이 맞는지 확인해 주세요. 선행을 시작했거나 교재를 건너뛴
-        경우라면 정상입니다.
+        경우라면 정상입니다 — <b>이상 없음</b>을 누르면 이 학생의 진도 경고(원스크린 배지 포함)가 꺼집니다.
       </p>
     </div>
+  );
+}
+
+/**
+ * 확인 완료 목록 — 접어 두되 **지우지는 않는다**. 누가 언제 정상이라고 판단했는지가 남아야 나중에
+ * 되짚을 수 있고, 오판이면 되돌릴 수 있어야 한다.
+ */
+function ResolvedAnomalies({ anomalies, canResolve }: { anomalies: readonly ProgressAnomaly[]; canResolve: boolean }) {
+  return (
+    <details className="border-line bg-bg-soft/40 rounded-2xl border px-4 py-2.5">
+      <summary className="text-text-dim cursor-pointer text-[12px]">
+        이상 없음으로 확인한 기록 <b className="text-foreground">{anomalies.length}</b>건
+      </summary>
+      <ul className="mt-2 space-y-1.5">
+        {anomalies.map((a) => (
+          <li key={a.id} className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <AnomalyLine a={a} muted />
+            {canResolve ? <AnomalyResolveButton eventId={a.id} resolved /> : null}
+          </li>
+        ))}
+      </ul>
+    </details>
   );
 }
 
@@ -140,6 +184,15 @@ function TrackCard({ t }: { t: TrackAnalytics }) {
 
 export async function ProgressContainerPanel({ studentId }: { studentId: string }) {
   const data = await getStudentProgressAnalytics(studentId);
+  const open = data.anomalies.filter((a) => a.resolvedAt === null);
+  const resolved = data.anomalies.filter((a) => a.resolvedAt !== null);
+  // 버튼 노출 판정 = 서버 액션과 **같은 순수 게이트**(#77). 강사(scoped)는 담당 학생일 때만.
+  const user = await getCurrentUser();
+  const level = user ? await accessLevelTenant(user.systemRole, "students") : "none";
+  const supabase = await createClient();
+  const owns =
+    user && level === "scoped" ? await teacherOwnsStudent(supabase, user.id, studentId) : false;
+  const canResolve = canResolveProgressAnomaly(level, owns);
 
   return (
     <div className="space-y-3">
@@ -148,7 +201,8 @@ export async function ProgressContainerPanel({ studentId }: { studentId: string 
         <p className="text-text-faint text-[11px]">원스크린 진도 기록 기반 자동 산출</p>
       </header>
       {/* 이상 감지는 트랙 카드보다 위 — 진도 이상 알림을 타고 온 사람이 스크롤 없이 바로 본다. */}
-      {data.anomalies.length ? <AnomalyCard anomalies={data.anomalies} /> : null}
+      {open.length ? <AnomalyCard anomalies={open} canResolve={canResolve} /> : null}
+      {resolved.length ? <ResolvedAnomalies anomalies={resolved} canResolve={canResolve} /> : null}
       {data.tracks.length === 0 ? (
         <div className="bg-card border-line text-text-faint rounded-2xl border p-6 text-center text-sm">
           아직 진도 기록이 없습니다. 원스크린에서 진도를 입력·저장하면 자동으로 분석됩니다.
