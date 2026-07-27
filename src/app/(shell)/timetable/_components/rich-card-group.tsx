@@ -5,6 +5,7 @@ import { SUBJECT_SOLID } from "@/features/owner/subjects";
 import { enumDayToKo, type DayOfWeek } from "@/features/timetable/lib/periods";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 import {
+  AXIS_COLS,
   teacherColor,
   type GridStudent,
   type RichCardGroup,
@@ -12,7 +13,7 @@ import {
   type TeacherColorMap,
 } from "@/features/timetable/lib/class-grid";
 import { ClassInfoCard, HoverCard, StudentInfoCard } from "./hover-cards";
-import { useTimetableColorMode, withdrawnTone } from "./timetable-color";
+import { timetableStudentTone, useTimetableColorMode, withdrawnTone } from "./timetable-color";
 
 // 라벨열·카드가 공유하는 고정 섹션 높이(px) — 같은 y에서 행이 맞물려 "행=라벨, 열=수업" 스프레드시트 정렬.
 const NAME_H = 40;
@@ -20,7 +21,9 @@ const TEACHER_H = 24;
 const ROOM_H = 34;
 const DAYHEAD_H = 22;
 const PERIOD_H = 26;
-const STU_H = 20; // 학생 1행
+// 학생 1행 높이 — 기본뷰 StudentRow 실측(13px × leading-tight + py-[3px] = 23.1px)에 맞춘 값.
+// ⚠️ 서식을 기본뷰와 동일하게 두는 한 이 값도 함께 따라가야 한다(안 그러면 12행 프레임에서 행이 잘린다).
+const STU_H = 24;
 const LABEL_W = 58;
 const CARD_W = 176;
 // 명단 섹션 고정 행수(2026-07-06, 사용자 지정) — 그룹 내 최대 인원으로 늘리지 않는다.
@@ -132,10 +135,13 @@ function ClassColumn({
   holdH: number;
   wdH: number;
 }) {
-  // ⚠️ 요일축은 **카드별**(ijw finalDays 규약, 2026-07-23) — 섹션 공통이 월~금 고정이라
-  //    평일+토 혼합 반의 토요일이 통째로 안 보였다. 카드가 축을 못 주면 그룹 축으로 폴백.
-  const days = card.days?.length ? card.days : group.days;
-  const gridCols = { gridTemplateColumns: `repeat(${days.length}, 1fr)` };
+  // ⚠️ 요일축은 **카드별 5칸 고정**(월~금 기준, `buildAxisDays`) — 열 수가 카드마다 다르면 한 칸
+  //    너비도 달라져 시트처럼 안 읽힌다(원장 2026-07-27). 토요일은 "그 반이 안 쓰는 평일" 칸을
+  //    대체해 들어오므로 2026-07-23 혼합 반 회귀도 없다. 축을 못 주는 구데이터만 그룹 축 폴백.
+  const days: (DayOfWeek | null)[] = card.axisDays?.length
+    ? card.axisDays
+    : (card.days?.length ? card.days : group.days);
+  const gridCols = { gridTemplateColumns: `repeat(${AXIS_COLS}, 1fr)` };
   // 반 헤더색 — ijw bgColor 우선(인라인), 없으면 과목색 클래스.
   const headerStyle = card.bgColor
     ? { background: card.bgColor, color: card.textColor ?? "#1d1d1f" }
@@ -191,22 +197,23 @@ function ClassColumn({
       <div className="border-line text-text-dim flex items-center justify-center border-b px-1 text-center text-[10px] leading-tight" style={{ height: ROOM_H }}>
         <span className="line-clamp-2" title={card.classroomLabel}>{card.classroomLabel}</span>
       </div>
-      {/* 요일 헤더 */}
+      {/* 요일 헤더 — 항상 5칸(빈 칸은 라벨 없는 자리표시자, 열 너비 유지용) */}
       <div className="border-line grid border-b" style={{ ...gridCols, height: DAYHEAD_H }}>
-        {days.map((d) => (
-          <DayHead key={d} day={d} />
+        {days.map((d, i) => (
+          <DayHead key={d ?? `pad-${i}`} day={d} />
         ))}
       </div>
       {/* 요일×교시 미니그리드 */}
       {group.periodRows.map((p) => (
         <div key={p.order} className="border-line grid border-b" style={{ ...gridCols, height: PERIOD_H }}>
-          {days.map((d) => (
-            <Cell key={d} card={card} order={p.order} day={d} teacherColors={teacherColors} />
+          {days.map((d, i) => (
+            <Cell key={d ?? `pad-${i}`} card={card} order={p.order} day={d} teacherColors={teacherColors} />
           ))}
         </div>
       ))}
-      {/* 재원생 — 고정 12행, 넘치면 섹션 내부 스크롤(카드 높이 불변 = 이단 스크롤 방지). */}
-      <div className="bg-card border-line overflow-y-auto border-b p-1" style={{ height: activeH }}>
+      {/* 재원생 — 고정 12행, 넘치면 섹션 내부 스크롤(카드 높이 불변 = 이단 스크롤 방지).
+          ⚠️ `text-[13px]` = 기본뷰 명단 컨테이너(class-cell)와 같은 글자 크기 — 행은 여기서 상속받는다. */}
+      <div className="bg-card border-line overflow-y-auto border-b p-1 text-[13px]" style={{ height: activeH }}>
         {card.activeCount === 0 ? (
           <div className="text-text-faint py-2 text-center text-[10px]">-</div>
         ) : (
@@ -214,15 +221,15 @@ function ClassColumn({
         )}
       </div>
       {/* 대기 — 고정 3행 + 내부 스크롤 */}
-      <div className="bg-rose-soft/30 border-line overflow-y-auto border-b p-1" style={{ height: holdH }}>
+      <div className="bg-rose-soft/30 border-line overflow-y-auto border-b p-1 text-[13px]" style={{ height: holdH }}>
         {card.hold.length === 0 ? (
           <div className="text-text-faint text-center text-[10px]">-</div>
         ) : (
           card.hold.map((s, i) => <RosterRow key={s.studentId ?? `h-${i}`} s={s} />)
         )}
       </div>
-      {/* 퇴원 — 고정 5행 + 내부 스크롤. 재원/대기와 동일 서식, 취소선·dim 톤으로 구분 */}
-      <div className="bg-bg-soft overflow-y-auto p-1" style={{ height: wdH }}>
+      {/* 퇴원 — 고정 5행 + 내부 스크롤. 재원/대기와 동일 서식, 진회색 배경+흰 글자 톤으로 구분 */}
+      <div className="bg-bg-soft overflow-y-auto p-1 text-[13px]" style={{ height: wdH }}>
         {card.withdrawn.length === 0 ? (
           <div className="text-text-faint text-center text-[10px]">-</div>
         ) : (
@@ -233,7 +240,7 @@ function ClassColumn({
   );
 }
 
-function DayHead({ day }: { day: DayOfWeek }) {
+function DayHead({ day }: { day: DayOfWeek | null }) {
   const weekend = day === "sat" || day === "sun";
   return (
     <div
@@ -241,7 +248,7 @@ function DayHead({ day }: { day: DayOfWeek }) {
         weekend ? "text-rose" : "text-text-dim"
       }`}
     >
-      {enumDayToKo(day)}
+      {day ? enumDayToKo(day) : null}
     </div>
   );
 }
@@ -254,11 +261,12 @@ function Cell({
 }: {
   card: RichClassCard;
   order: number;
-  day: DayOfWeek;
+  day: DayOfWeek | null;
   teacherColors: TeacherColorMap;
 }) {
-  const c = card.cells[`${order}:${day}`];
   const base = "border-line flex items-center justify-center border-r text-[10px] font-bold last:border-r-0";
+  if (!day) return <div className={base} />;
+  const c = card.cells[`${order}:${day}`];
   if (!c) return <div className={base} />;
   if (c.isLab) return <div className={`${base} bg-blue-soft text-blue`} title="LAB">LAB</div>;
   if (!c.label) return <div className={base} />;
@@ -277,30 +285,33 @@ function Cell({
   );
 }
 
-/** 학생 행 — 신입=빨강·전입=초록·퇴원=진회색 배경+흰 볼드, 이름(영문), 학교/학년. 클릭=학생 창. */
+/**
+ * 학생 행 — 신입=빨강·전입=초록·퇴원=진회색 배경+흰 볼드. 클릭=학생 창.
+ *
+ * 서식은 **기본뷰와 동일**(`이름/학교학년` 한 덩어리, 원장 지시 2026-07-27). 예전엔 통합뷰만
+ * `justify-between`으로 이름은 왼쪽·메타는 오른쪽 끝에 작은 흐린 글씨로 떼어 놨고 영문명을
+ * 괄호로 덧붙여, 같은 학생이 뷰마다 다르게 보였다. 이름 우선·메타는 뒤에 붙어 잘리는 규약으로 통일.
+ * ⚠️ 영문명은 행에서 뺐지만 hover 카드(StudentInfoCard)엔 그대로 있어 정보 손실은 없다.
+ */
 function RosterRow({ s }: { s: GridStudent }) {
   const withdrawn = s.status === "withdrawn";
   const colorMode = useTimetableColorMode();
-  // ⚠️ 전입(반이동)을 신입보다 먼저 — 반이동 학생은 start_date가 최근이라 isNew에도 걸릴 수 있으나 "전입"으로.
-  // (studentRowTone과 동일 순서. 데이터 계층에서 이미 상호배타지만 표시도 방어적으로.)
-  const tone = withdrawn
-    ? withdrawnTone(colorMode)
-    : s.isTransferredIn
-      ? "bg-primary-soft text-primary"
-      : s.isNew
-        ? "bg-danger-soft text-danger"
-        : "text-foreground";
+  // 재원/대기는 기본뷰와 **같은 tone 헬퍼**(색 강도 모드 반영). 예전엔 여기서 pastel 색을 손으로 박아
+  // 뷰 설정 '색 강도'를 바꿔도 통합뷰만 안 따라왔다. 퇴원은 통합뷰에만 있는 섹션이라 전용 tone 유지.
+  const tone = withdrawn ? withdrawnTone(colorMode) : timetableStudentTone(colorMode, s);
   const meta = schoolGradeLabel(s.school, s.grade);
-  const name = s.englishName ? `${s.name} (${s.englishName})` : s.name;
+  // 기본뷰 StudentRow와 같은 조립 — 이름이 먼저, 메타는 `/`로 붙어 좁으면 메타부터 잘린다(생략부호 없이 clip).
   const inner = (
     <>
-      <span className="overflow-hidden whitespace-nowrap text-clip">{name}</span>
-      {meta ? <span className={`shrink-0 text-[9px] ${withdrawn ? "text-white/70" : "text-text-faint"}`}>{meta}</span> : null}
+      {s.name}
+      {meta ? <span className="opacity-90">/{meta}</span> : null}
     </>
   );
-  const cls = `flex items-baseline justify-between gap-1 rounded-[3px] px-1 text-[10px] leading-[18px] ${tone}`;
+  // ⚠️ 클래스 문자열도 기본뷰 StudentRow와 동일하게 유지할 것(px-2 py-[3px] leading-tight + hover:bg-bg-soft).
+  //    글자 크기는 명단 컨테이너의 text-[13px]에서 상속 — 기본뷰 class-cell과 같은 값이다.
+  const cls = `block overflow-hidden whitespace-nowrap text-clip px-2 py-[3px] leading-tight ${tone}`;
   const trigger = s.studentId ? (
-    <WindowLink href={`/students/${s.studentId}`} title={s.name} ariaLabel={`${s.name} 학생 정보`} className={`${cls} hover:brightness-95`}>
+    <WindowLink href={`/students/${s.studentId}`} title={s.name} ariaLabel={`${s.name} 학생 정보`} className={`${cls} hover:bg-bg-soft`}>
       {inner}
     </WindowLink>
   ) : (

@@ -4,6 +4,29 @@
 
 ## 진행 상황
 
+### 통합뷰 요일축 = 월~금 5칸 고정 + 학생 서식 전 뷰 통일 (2026-07-27) - tsc0(내 파일)/lint0/test2456/브라우저 실검증
+원장 지시 2건. ① "통합뷰에서도 월화수목금 5일 기준 5칸이 되어야 하는데 일부는 등원요일만 표시된다.
+ijw-calander 영어 통합뷰를 참고해 똑같이" + "요일이 줄어도 늘어도 1개당 열너비가 변하면 안 됨"
+② "수학 기본뷰의 학생 서식을 전체 학생 이름 서식에 적용".
+- **요일축(①)**: 카드가 **실제 수업 요일만** 열로 그려서 2요일 반=한 칸 88px·5요일 반=35px로 카드마다 칸
+  너비가 달랐다. ijw [`useEnglishClasses`](file:///D:/ijw-calander/components/Timetable/English/hooks/useEnglishClasses.ts)의
+  `finalDays` 규약을 [`buildAxisDays`](../src/features/timetable/lib/class-grid.ts)로 이식 — 축은 월~금 5칸 고정,
+  **주말 요일은 "그 반이 안 쓰는 평일" 칸을 대체**(없으면 금요일). 카드에 `axisDays`(5칸, `null`=빈 칸) 신설,
+  `days`(실제 수업 요일)는 **그대로 두어** 사실과 표시 규약을 분리(집계·기존 테스트 무영향).
+  🔴 **2026-07-23 회귀(평일+토 혼합 반의 토요일 증발) 재발 없음** — 월~금 "고정"으로 되돌린 게 아니라 주말이
+  빈 평일 칸을 **대체**하므로 열 수 5를 지키면서 토 열이 생긴다. 실측: 61개 카드 전부 **칸 너비 35px 단일값**,
+  축 종류 = `월화수목금`·`화수목금토`(혼합 3반)·`토····`/`일····`(주말 전용, 라벨 없는 패딩).
+- **학생 서식(②)**: 통합뷰만 `justify-between`으로 이름은 왼쪽·메타는 오른쪽 끝 작은 흐린 글씨 + 영문명 괄호에
+  10px 보통 굵기였다 → **기본뷰 `StudentRow`와 완전 동일**하게: 조립 `이름/학교학년` 한 덩어리(좁으면 메타부터
+  clip) + 클래스 `px-2 py-[3px] leading-tight` + 명단 컨테이너 `text-[13px]`(기본뷰 class-cell과 같은 값) +
+  `hover:bg-bg-soft`. 행 높이 상수 `STU_H` 20→24(13px 행 실측 22.3px). 강사뷰 메타 톤 `opacity-60`→`90`.
+  🔴 **tone도 기본뷰와 공유**([`timetableStudentTone`](../src/app/(shell)/timetable/_components/timetable-color.ts)) —
+  예전엔 통합뷰가 pastel 색을 손으로 박아 뷰 설정 '색 강도'(vivid/mid/pastel)를 바꿔도 **통합뷰만 안 따라왔다**.
+  ⚠️ 행에서 뺀 영문명은 **hover 카드(StudentInfoCard)에 그대로** 있어 정보 손실 0(영어 통합뷰가 유일한 영향
+  표면 — 되살리려면 `RosterRow` 한 줄).
+- 검증: 수학·영어 통합뷰 + 주말 섹션 브라우저 실화면, `class-grid-axis.test.ts` 신설(9케이스: 5칸 불변·토요일
+  대체·금요일 폴백·주말 패딩·`days` 불변).
+
 ### 강사 원스크린에 '학부모 읽음' 배지 배선 (2026-07-27) - tsc0(내 파일)/lint0/test404(onescreen)
 원장: "선생님도 학부모가 읽었을 때 체크 가능하도록". 조사 결과 읽음 표시 표면 = **원장 전용 보고서 목록 1곳뿐**
 (`lesson_reports` 권한 teacher=none) — 강사 표면 0개. 데이터(`classnote_read_at`, 0122a 워커 동기화)는 정상 축적

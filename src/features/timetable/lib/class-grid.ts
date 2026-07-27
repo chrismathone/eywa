@@ -98,6 +98,12 @@ export type RichClassCard = {
    */
   days: DayOfWeek[];
   /**
+   * **표시용** 요일축 — 항상 5칸(월~금 기준, `buildAxisDays` 참조). 렌더는 이걸 쓴다.
+   * `days`(실제 수업 요일)와 분리한 이유: 실제 요일은 집계·테스트가 쓰는 사실이고, 축은 열 너비를
+   * 고정하기 위한 표시 규약이라 서로 다른 관심사다. `null`은 라벨 없는 빈 칸(주말 섹션 패딩).
+   */
+  axisDays: (DayOfWeek | null)[];
+  /**
    * 커스텀 그룹 안에서의 열 순서(그룹 정의에 적힌 반 순서). 미설정(자동 그룹)이면 undefined → 가나다.
    * 원장 시트의 좌우 순서를 그대로 재현하기 위한 값이라 **정의 순서가 곧 화면 순서**다.
    */
@@ -138,6 +144,40 @@ export type RichCardGroup = {
 
 const DAY_ORDER: DayOfWeek[] = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
 const WEEKEND = new Set<string>(["sat", "sun"]);
+const WEEKDAYS: DayOfWeek[] = ["mon", "tue", "wed", "thu", "fri"];
+/** 통합뷰 카드 요일축의 **고정 열 수**(월~금 5일 기준). 요일이 늘고 줄어도 열 너비가 변하지 않게 하는 상수. */
+export const AXIS_COLS = 5;
+
+/**
+ * 통합뷰 카드의 **표시 요일축** — 항상 `AXIS_COLS`(5)칸. ijw `useEnglishClasses`의 `finalDays` 이식.
+ *
+ * 🔴 왜 5칸 고정인가(원장 지시 2026-07-27): 예전엔 카드가 **실제 수업 요일만** 열로 그려서, 2요일 반은
+ * 열 2개(폭 88px)·5요일 반은 열 5개(폭 35px)로 **한 칸 너비가 카드마다 달랐다**. 시트처럼 읽히려면
+ * 열 너비가 카드 간 같아야 한다 → 축을 월~금 5칸으로 못박고, 남는 요일은 빈 칸으로 둔다.
+ *
+ * 🔴 그러면서도 토요일은 안 잃는다(2026-07-23 회귀 방지, [[class-grid-saturday.test.ts]]): 평일 섹션의
+ * 축을 월~금 **고정**으로 되돌리면 평일+토 혼합 반의 토요일이 통째로 사라졌었다. ijw 영어 규약은
+ * **주말 요일이 "그 반이 안 쓰는 평일" 칸을 대체**하는 것 — 열 수는 5로 유지되면서 토 열이 생긴다.
+ * (대체할 빈 평일이 없으면 금요일 칸을 내준다 = ijw 폴백 동일.)
+ *
+ * 주말 **전용** 반은 별도 주말 섹션이라 평일 라벨이 노이즈다 → 실제 주말 요일만 앞에 두고 나머지는
+ * `null`(빈 칸)로 채운다. 열 수는 5 그대로라 너비 불변 규칙은 지켜진다.
+ */
+export function buildAxisDays(activeDays: DayOfWeek[], weekendOnly: boolean): (DayOfWeek | null)[] {
+  const active = new Set<DayOfWeek>(activeDays);
+  if (weekendOnly) {
+    const used = DAY_ORDER.filter((d) => WEEKEND.has(d) && active.has(d));
+    return [...used, ...Array<null>(Math.max(0, AXIS_COLS - used.length)).fill(null)].slice(0, AXIS_COLS);
+  }
+  const axis: DayOfWeek[] = [...WEEKDAYS];
+  for (const wknd of DAY_ORDER.filter((d) => WEEKEND.has(d) && active.has(d))) {
+    if (axis.includes(wknd)) continue;
+    // 이 반이 **안 쓰는** 평일 칸을 내준다(빈 칸이면 정보 손실 0). 전부 쓰면 ijw와 동일하게 금요일 칸.
+    const free = axis.findIndex((d) => !active.has(d));
+    axis[free === -1 ? AXIS_COLS - 1 : free] = wknd;
+  }
+  return axis.sort((a, b) => DAY_ORDER.indexOf(a) - DAY_ORDER.indexOf(b));
+}
 /** 주말 섹션의 groupOrder(=sectionKey). 교시 체계가 없어 '1시간 단위' 압축 대상이 아니다. */
 export const WEEKEND_ORDER = 100000;
 /**
@@ -282,6 +322,7 @@ export function buildRichCardGroups(
     const cardDays = DAY_ORDER.filter((d) => group.some((s) => (s.dayOfWeek as DayOfWeek) === d));
     cards.push({
       days: cardDays,
+      axisDays: buildAxisDays(cardDays, weekend),
       classId: first.classId,
       className: first.className,
       subject: first.subject,
