@@ -5,6 +5,7 @@
 // ⚠️ server-only 금지 — 클라(rich-card-group)도 import. 순수·plain만.
 import {
   slotPeriodRow,
+  weekdayPeriodRowOrNull,
   subjectPeriodRows,
   enumDayToKo,
   type DayOfWeek,
@@ -159,6 +160,40 @@ const WEEKEND = new Set<string>(["sat", "sun"]);
 const WEEKDAYS: DayOfWeek[] = ["mon", "tue", "wed", "thu", "fri"];
 /** 명단 섹션 최대 표시 행수(원장 2026-07-27 "최대 12명"). 넘치면 카드 안에서 스크롤(스크롤바 숨김+페이드). */
 export const ROSTER_ROW_CAP = 12;
+
+/** 교시표를 시각순으로 세우고 order→인덱스 맵을 만든다(시프트는 '분'이 아니라 '몇 번째 교시'로 센다). */
+function periodIndexByOrder(rows: readonly { order: number; label: string; time: string }[]) {
+  const sorted = [...rows].sort((a, b) => a.order - b.order);
+  const byOrder = new Map<number, number>();
+  sorted.forEach((r, i) => byOrder.set(r.order, i));
+  return { rows: sorted, byOrder };
+}
+
+/**
+ * 주말 슬롯의 교시 행을 **평일 교시 행으로 끌어올린다**(ijw `weekendShift` 이식, 원장 2026-07-27).
+ *
+ * 🔴 왜: 평일+토 혼합 반은 토요일 교시(예 09:00~)가 평일 교시표에 없는 시각이라, 예전엔 그 order를 축에
+ * **행으로 추가**했다 → 같은 섹션의 **모든 카드**에 빈 행이 생겨 그리드가 세로로 늘어났다(실측 6행: 위 3행
+ * 토·일 / 아래 3행 평일). ijw 영어 통합뷰는 주말 교시를 평일 교시 행에 **얹어** 행을 공유한다.
+ *
+ * ⚠️ eywa의 `order`는 교시 번호가 아니라 **자정 기준 분**이라 ijw처럼 번호를 빼면 안 된다(평일 40분·주말
+ * 60분 간격이라 분 단위 시프트는 두 번째 교시부터 어긋난다). 그래서 **교시 인덱스** 공간에서 옮긴다:
+ * 주말 k번째 교시 → 평일 (k + shift)번째 교시 행.
+ *
+ * 행의 라벨·시각은 **평일 것**이 된다(ijw도 동일 — 행은 "몇 번째 교시"를 뜻하지 절대 시각이 아니다).
+ * 평일 표를 벗어나면(주말 교시가 더 많은 반) 원래 행을 그대로 써서 정보를 잃지 않는다.
+ */
+function shiftedWeekendRow(
+  row: { order: number; label: string; time: string; key?: string },
+  weekendIdx: { byOrder: Map<number, number> },
+  weekdayRows: readonly { order: number; label: string; time: string }[],
+  shift: number,
+): { order: number; label: string; time: string } {
+  if (shift <= 0) return row;
+  const k = weekendIdx.byOrder.get(row.order);
+  if (k === undefined) return row;
+  return weekdayRows[k + shift] ?? row;
+}
 const clampRows = (n: number, min: number) => Math.min(ROSTER_ROW_CAP, Math.max(min, Number.isFinite(n) ? n : min));
 /** 통합뷰 카드 요일축의 **고정 열 수**(월~금 5일 기준). 요일이 늘고 줄어도 열 너비가 변하지 않게 하는 상수. */
 export const AXIS_COLS = 5;
@@ -307,6 +342,10 @@ export function buildRichCardGroups(
   const subject = (slots[0]?.subject ?? "math") as TimetableSubject;
   const byClass = new Map<string, GridSlot[]>();
   for (const s of slots) (byClass.get(s.classId) ?? byClass.set(s.classId, []).get(s.classId)!).push(s);
+  // 교시축 시프트 계산용 — 평일/주말 표준 교시표를 시각순으로. order(자정 기준 분) → 그 표에서의 인덱스.
+  const weekdayIdx = periodIndexByOrder(subjectPeriodRows(subject, false, config));
+  const weekendIdx = periodIndexByOrder(subjectPeriodRows(subject, true, config));
+  const weekdayRows = [...weekdayIdx.rows];
 
   const cards: RichClassCard[] = [];
   for (const group of byClass.values()) {
@@ -316,17 +355,53 @@ export function buildRichCardGroups(
     const periodMap = new Map<number, GridPeriodRow>();
     const slotTeacherCount = new Map<string, number>(); // 담임 폴백용(최빈 슬롯 강사, LAB 제외)
     let weekdayStart = Infinity;
-    for (const s of group) {
+    // 1차 스캔 — 슬롯의 교시 행을 뽑고 평일/주말 **시작 교시 인덱스**를 잰다(시프트 재료).
+    const hasWeekday = group.some((s) => !WEEKEND.has(s.dayOfWeek as DayOfWeek));
+    const scanned = group.map((s) => {
       const day = s.dayOfWeek as DayOfWeek;
-      const row = slotPeriodRow(subject, s.startTime, day, config);
-      if (!periodMap.has(row.order)) periodMap.set(row.order, { order: row.order, label: row.label, time: row.time });
+      const isW = WEEKEND.has(day);
+      // 혼합 반의 주말 슬롯이 **평일 교시 시각 그대로**면(토 14:20 = 영어 평일 1교시) 그 평일 행에 바로 놓는다.
+      // ⚠️ 주말표보다 먼저 본다 — 15:00처럼 양쪽 표에 다 있는 시각이 있어서, 주말표를 먼저 보면 같은 반의
+      //    연속 3교시(14:20·15:00·15:40)가 1교시·주말7교시·3교시로 찢어진다(실측).
+      const onWeekday = isW && hasWeekday ? weekdayPeriodRowOrNull(subject, s.startTime, config) : null;
+      return {
+        s,
+        day,
+        row: onWeekday ?? slotPeriodRow(subject, s.startTime, day, config),
+        weekend: isW,
+        // 이미 평일 행에 앉은 주말 슬롯은 시프트 대상이 아니다(더 옮기면 엉뚱한 교시로 간다).
+        shiftable: isW && !onWeekday,
+      };
+    });
+    let wdStartIdx = Infinity;
+    let wkStartIdx = Infinity;
+    for (const { row, weekend: isW, shiftable } of scanned) {
+      if (isW && !shiftable) {
+        // 평일 행에 앉은 주말 슬롯은 평일 기준점에 포함(시프트 폭 계산의 앵커가 흔들리지 않게).
+        const i = weekdayIdx.byOrder.get(row.order);
+        if (i !== undefined) wdStartIdx = Math.min(wdStartIdx, i);
+        continue;
+      }
+      const i = (isW ? weekendIdx : weekdayIdx).byOrder.get(row.order);
+      if (i === undefined) continue;
+      if (isW) wkStartIdx = Math.min(wkStartIdx, i);
+      else wdStartIdx = Math.min(wdStartIdx, i);
+    }
+    // 주말 교시를 평일 교시 행으로 끌어올리는 폭(교시 **개수** 단위). ijw `useEnglishClasses`의 weekendShift 이식.
+    const weekendShift =
+      wdStartIdx !== Infinity && wkStartIdx !== Infinity && wdStartIdx > wkStartIdx ? wdStartIdx - wkStartIdx : 0;
+
+    for (const { s, day, row, weekend: isW, shiftable } of scanned) {
+      // 혼합 반의 주말 슬롯은 **평일 교시 행에 얹는다** — 새 행을 만들지 않는다(shiftedWeekendRow 주석).
+      const eff = isW && shiftable ? shiftedWeekendRow(row, weekendIdx, weekdayRows, weekendShift) : row;
+      if (!periodMap.has(eff.order)) periodMap.set(eff.order, { order: eff.order, label: eff.label, time: eff.time });
       const teacher = s.slotTeacherLabel ?? s.teacherName ?? "";
-      cells[`${row.order}:${day}`] = { label: teacher, isLab: s.slotTeacherLabel === "LAB" };
+      cells[`${eff.order}:${day}`] = { label: teacher, isLab: s.slotTeacherLabel === "LAB" };
       if (s.slotTeacherLabel && s.slotTeacherLabel !== "LAB")
         slotTeacherCount.set(s.slotTeacherLabel, (slotTeacherCount.get(s.slotTeacherLabel) ?? 0) + 1);
       const room = s.slotRoomLabel ?? s.classroomName;
       if (room) (perDayRooms.get(day) ?? perDayRooms.set(day, new Set()).get(day)!).add(room);
-      if (!WEEKEND.has(day) && row.order < weekdayStart) weekdayStart = row.order;
+      if (!isW && row.order < weekdayStart) weekdayStart = row.order;
     }
     // 담임 = 반 기본 강사 우선, 없으면 가장 많이 가르치는 슬롯 강사(ijw homeroom은 영문닉네임이라 FK 미해결).
     const topSlotTeacher = [...slotTeacherCount.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
@@ -468,10 +543,10 @@ export function buildRichCardGroups(
         const r = standardByOrder.get(o)!;
         winRows.set(o, { order: r.order, label: r.label, time: r.time });
       }
-      // 혼합 반(평일+토·일)의 주말 교시 행을 추가 — 라벨·시각은 그 카드가 이미 만들어 둔 행에서 가져온다
-      // (주말 교시표로 해석된 "N교시 09:00~10:00"). ⚠️ **주말 요일 셀에서 온 order만** 넣는다 —
-      // 폴백 시각까지 넣으면 예전 주석대로 그리드가 폭발한다. 없는 반엔 빈 행이지만, 애초에 안 보이던
-      // 수업이 보이는 쪽이 낫다(원장 2026-07-23 "토요일 포함 수업을 어떻게 나타내야 하는지").
+      // 혼합 반(평일+토·일)의 주말 교시는 **행을 추가하지 않는다** — 카드 빌드 단계에서 `shiftedWeekendRow`가
+      // 이미 평일 교시 행으로 끌어올려 뒀다(ijw weekendShift). 예전엔 여기서 주말 order를 축에 얹었는데,
+      // 그러면 같은 섹션의 **모든 카드**에 빈 행이 생겨 그리드가 세로로 늘어났다(2026-07-27 원장 지적).
+      // 시프트로 평일 표를 벗어난 주말 교시만 예외적으로 남으므로, 그것만 축에 얹어 클립을 막는다.
       if (!weekend && mixedWeekendOrders.size) {
         for (const c of cluster) {
           for (const r of c.periodRows) {

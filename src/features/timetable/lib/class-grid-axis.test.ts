@@ -146,3 +146,48 @@ describe("rosterRows — 명단 섹션 행수", () => {
     expect(rows.withdrawn).toBe(2); // 카드 b가 2명 → 섹션 전체가 2행(카드 간 정렬 유지)
   });
 });
+
+/**
+ * 평일+토 혼합 반의 토요일 표현 = ijw `weekendShift` — 주말 교시를 **평일 교시 행으로 끌어올려** 행을 공유한다.
+ * 예전엔 주말 order를 축에 **행으로 추가**해서 같은 섹션의 모든 카드가 세로로 늘어났다(원장 2026-07-27 지적:
+ * "토요일을 있는 그대로 표현하지 않고 ijw-calander에서 표현하는 방법이 있었을 것").
+ */
+describe("weekendShift — 혼합 반 토요일은 평일 교시 행에 얹는다", () => {
+  // 영어: 평일 교시표 14:20부터, 주말 교시표 09:00부터 → 평일이 훨씬 늦게 시작 = 시프트 발생.
+  const mixed = [slot("m1", "wed", "16:20"), slot("m1", "sat", "09:00")];
+  const card = () => cardOf(mixed, "m1");
+
+  it("주말 셀이 평일 교시 행 위에 놓인다(주말 전용 행이 안 생긴다)", () => {
+    const c = card();
+    const satOrders = Object.keys(c.cells).filter((k) => k.endsWith(":sat")).map((k) => Number(k.split(":")[0]));
+    const wedOrders = Object.keys(c.cells).filter((k) => k.endsWith(":wed")).map((k) => Number(k.split(":")[0]));
+    expect(satOrders).toHaveLength(1);
+    // 토요일 셀의 order가 평일 교시표 안의 값이어야 한다(= 평일 행을 공유).
+    expect(c.periodRows.some((r) => r.order === satOrders[0])).toBe(true);
+    // 이 반은 평일·주말 각각 첫 교시뿐이라 같은 행을 공유한다.
+    expect(satOrders[0]).toBe(wedOrders[0]);
+  });
+
+  it("교시 행이 늘어나지 않는다 — 주말 때문에 생기던 추가 행이 없다", () => {
+    expect(card().periodRows).toHaveLength(1);
+  });
+
+  it("토요일 열은 그대로 유지된다(2026-07-23 회귀 방지 — 시프트는 '행'만 바꾼다)", () => {
+    expect(card().axisDays).toContain("sat");
+    expect(card().days).toEqual(["wed", "sat"]);
+  });
+
+  it("주말 전용 반은 시프트 대상이 아니다(평일이 없어 기준이 없다)", () => {
+    const weekendOnly = [slot("w1", "sat", "09:00"), slot("w1", "sat", "10:00")];
+    const c = cardOf(weekendOnly, "w1");
+    expect(c.weekendOnly).toBe(true);
+    expect(c.periodRows).toHaveLength(2); // 주말 교시표 그대로
+  });
+
+  it("평일이 주말보다 이르면 시프트하지 않는다(ijw 조건 동일)", () => {
+    // 평일 첫 교시(14:20)가 주말 표에서 이미 늦은 자리 → wdStartIdx <= wkStartIdx → shift 0
+    const c = cardOf([slot("x1", "wed", "14:20"), slot("x1", "sat", "20:00")], "x1");
+    const satKeys = Object.keys(c.cells).filter((k) => k.endsWith(":sat"));
+    expect(satKeys).toHaveLength(1);
+  });
+});
