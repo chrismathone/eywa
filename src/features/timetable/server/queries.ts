@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged, fetchAllPagedInChunks } from "@/lib/supabase/batch";
 import { kstToday, kstMinutesOfDay } from "@/lib/date-kst";
@@ -6,6 +7,7 @@ import { getTeacherScope } from "@/lib/auth/teacher-scope";
 import { weekEndOf, weekSundayOf, shiftDays } from "../lib/week";
 import { compareStudentLines } from "../lib/student-sort";
 import type { TeacherColorMap } from "../lib/class-grid";
+import { buildTeacherLabelMap, resolveTeacherLabel, type TeacherLabelMap } from "../lib/teacher-label";
 import { isSpecialLecture } from "@/features/classes/special-lecture";
 import {
   enrollmentAttendsOnDay,
@@ -24,8 +26,30 @@ const todayStr = (): string => kstToday();
 export type TimetableDb = { supabase: Awaited<ReturnType<typeof createClient>>; tenantId: string };
 
 /**
+ * 강사 라벨 → 표시 이름 맵(영문닉네임 → 한글 이름). 규칙·예외는 [`teacher-label.ts`](../lib/teacher-label.ts).
+ *
+ * ⚠️ 이 맵은 **시간표 슬롯이 만들어지는 지점에서** 적용된다(아래 getScheduleSlots·비수업 블록·라벨 목록).
+ * 라벨이 곧 강사뷰 열 식별자라, 화면 컴포넌트마다 따로 바꾸면 수업과 블록이 다른 열로 갈라진다.
+ * React `cache` — 한 요청에서 여러 쿼리가 같이 쓴다.
+ */
+export const getTeacherLabelMap = cache(async (db?: TimetableDb): Promise<TeacherLabelMap> => {
+  const supabase = db?.supabase ?? (await createClient());
+  let q = supabase.from("users").select("display_name, english_name, status").not("english_name", "is", null);
+  if (db) q = q.eq("tenant_id", db.tenantId);
+  const { data } = await q;
+  return buildTeacherLabelMap(
+    (data ?? []).map((u) => ({
+      displayName: (u.display_name as string | null) ?? null,
+      englishName: (u.english_name as string | null) ?? null,
+      active: (u.status as string | null) === "active",
+    })),
+  );
+});
+
+/**
  * 강사 라벨 → 저장된 색 맵(통합뷰 셀·담임색). display_name·english_name(영문닉네임 슬롯 라벨) 둘 다 키.
  * users(소수·테넌트 RLS)에서 색 있는 행만. 미해결 라벨은 렌더에서 teacherColor 해시 폴백.
+ * ⚠️ 라벨을 한글 이름으로 바꿔도 **display_name 키가 이미 있어** 색은 그대로 붙는다(양쪽 키 유지 이유).
  */
 export async function getTeacherColorMap(db?: TimetableDb): Promise<TeacherColorMap> {
   const supabase = db?.supabase ?? (await createClient());
@@ -52,6 +76,8 @@ export async function getTeacherColorMap(db?: TimetableDb): Promise<TeacherColor
  */
 export async function getTeacherLabelsBySubject(): Promise<Record<string, string[]>> {
   const supabase = await createClient();
+  // 선택지도 화면(강사뷰 열)과 **같은 해석**을 거쳐야 한다 — 칩은 "Hannah"인데 열은 "이현이"면 못 고른다.
+  const labelMap = await getTeacherLabelMap();
   const rows = await fetchAllPaged<{
     slot_teacher_label: string | null;
     class: unknown;
@@ -72,7 +98,7 @@ export async function getTeacherLabelsBySubject(): Promise<Record<string, string
     if (!klass?.subject) continue;
     const tField = klass.teacher;
     const teacher = (Array.isArray(tField) ? tField[0] : tField) as { display_name?: string } | undefined;
-    const label = r.slot_teacher_label ?? teacher?.display_name ?? null;
+    const label = resolveTeacherLabel(r.slot_teacher_label ?? teacher?.display_name ?? null, labelMap);
     if (!label) continue;
     (bySubject.get(klass.subject) ?? bySubject.set(klass.subject, new Set()).get(klass.subject)!).add(label);
   }
@@ -139,6 +165,9 @@ type SlotRow = {
 
 async function fetchSlots(referenceDate: string, db?: TimetableDb): Promise<ScheduleSlot[]> {
   const supabase = db?.supabase ?? (await createClient());
+  // 🔴 강사 라벨 해석의 **단일 지점**(원장 2026-07-27) — 여기서 한글 이름으로 바꿔 내보내면 기본뷰·통합뷰·
+  //    강사뷰·hover가 전부 따라온다. 화면 컴포넌트에서 각자 바꾸면 열 식별자가 갈려 컬럼이 쪼개진다.
+  const labelMap = await getTeacherLabelMap(db);
   const weekEnd = weekEndOf(referenceDate);
   // 그 주 시점에 유효한 스케줄만: valid_from ≤ 그 주 일요일(미래 시작 스케줄 제외) + valid_to ≥ 기준일(만료 제외).
   // ⚠️ valid_from 상한은 weekEnd(ref+6 롤링 창)가 아니라 weekSundayOf(그 주 실제 끝) — 롤링 창이면
@@ -231,15 +260,18 @@ async function fetchSlots(referenceDate: string, db?: TimetableDb): Promise<Sche
       dayOfWeek: r.day_of_week,
       startTime: r.start_time,
       endTime: r.end_time,
-      teacherName: teacher?.display_name ?? null,
+      teacherName: resolveTeacherLabel(teacher?.display_name ?? null, labelMap),
       classroomName: room?.name ?? null,
       studentCount: counts.get(r.class_id) ?? 0,
-      slotTeacherLabel: (r.slot_teacher_label as string | null) ?? null,
+      slotTeacherLabel: resolveTeacherLabel((r.slot_teacher_label as string | null) ?? null, labelMap),
       slotRoomLabel: (r.slot_room_label as string | null) ?? null,
       classBgColor: klass?.bg_color ?? null,
       classTextColor: klass?.text_color ?? null,
       pendingHandover: klass?.pending_teacher_id
-        ? { teacherName: pending?.display_name ?? null, date: (klass?.pending_teacher_date as string | null) ?? null }
+        ? {
+            teacherName: resolveTeacherLabel(pending?.display_name ?? null, labelMap),
+            date: (klass?.pending_teacher_date as string | null) ?? null,
+          }
         : null,
       // 판정 단일소스 — 컬럼(0133a) 우선, 없으면 반 이름 폴백. 급여 autoSalaryGroup과 이름 규칙을 공유한다.
       isSpecialLecture: isSpecialLecture({
@@ -777,18 +809,24 @@ export async function getTeacherScheduleBlocks(
     if (labels.length > 0) q = q.in("teacher_label", labels);
     return q.order("id").range(from, to);
   });
+  // ⚠️ 조회 필터(labels)는 DB 원본 라벨로 두고, **내보내는 라벨만** 해석한다 — 안 그러면 블록이
+  //    'Hannah' 열, 수업이 '이현이' 열로 갈라져 강사뷰에 같은 사람의 컬럼이 두 개 생긴다.
+  const labelMap = await getTeacherLabelMap();
   return rows.map((r) => ({
     id: `block:${r.id}`,
     classId: "",
-    className: r.label,
+    // 블록 라벨은 자유 문자열이지만 감독(supervise) 블록은 **감독 대상 강사 이름**이 들어온다
+    // (실데이터: teacher_label=Dom/Daniella/Hannah, label='JJ' = "JJ 감독"). 그것도 같은 표기로 읽혀야
+    // 하므로 통과시킨다 — '쉬는 시간'·'연차사용' 같은 비-이름 라벨은 맵에 없어 그대로 지나간다.
+    className: resolveTeacherLabel(r.label, labelMap) ?? r.label,
     subject,
     dayOfWeek: r.day_of_week,
     startTime: r.start_time,
     endTime: r.end_time,
-    teacherName: r.teacher_label,
+    teacherName: resolveTeacherLabel(r.teacher_label, labelMap),
     classroomName: null,
     studentCount: 0,
-    slotTeacherLabel: r.teacher_label,
+    slotTeacherLabel: resolveTeacherLabel(r.teacher_label, labelMap),
     slotRoomLabel: null,
     classBgColor: null,
     classTextColor: null,

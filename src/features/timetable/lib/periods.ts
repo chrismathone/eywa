@@ -305,6 +305,32 @@ export function slotPeriodRow(
 }
 
 /**
+ * 그 시각이 **평일 교시표**에 있으면 그 행을, 없으면 null. (요일은 안 본다.)
+ *
+ * 용도 = 통합뷰의 평일+주말 혼합 반: 실데이터에 토·일 수업이 평일 교시 시각을 그대로 쓰는 경우가 많다
+ * (injaewon 영어 토 14:20·15:00·15:40 = 영어 평일 1·2·3교시). 그런 슬롯은 시프트할 게 아니라 **그 평일
+ * 교시 행 그대로** 놓는 게 맞다. `slotPeriodRow`는 요일로 표를 고르므로(주말이면 주말표만) 이걸 못 한다.
+ * ⚠️ 주말 **전용** 반에는 쓰지 말 것 — 그쪽 섹션 축은 주말 교시표라 평일 order를 넣으면 셀이 사라진다.
+ */
+export function weekdayPeriodRowOrNull(
+  subject: string,
+  startTime: string,
+  config: PeriodsConfig = DEFAULT_PERIODS_CONFIG,
+): PeriodRow | null {
+  const start = hm(startTime);
+  const table = weekdayTableFor(subject, config);
+  const p = reverseStart(table).get(start);
+  if (!p) return null;
+  const t = table[p]!;
+  if (subject === "english")
+    return { key: `e-${p}`, label: `${p}교시`, time: `${hm(t.startTime)}~${hm(t.endTime)}`, order: toMin(t.startTime) };
+  const { groupOf, display } = mathGroups(table);
+  const g = groupOf.get(p)!;
+  const d = display.get(g)!;
+  return { key: `m-${g}`, label: d.label, time: d.time, order: d.order };
+}
+
+/**
  * 그 과목/평일·주말의 **표준 교시 행 전체**(수업 없어도 표시 — 빈 교시도 균일 높이 유지).
  * 평일 수학계열 = 4그룹(1교시 14:30~16:20 …), 영어 = 10교시, 주말 = 8교시(시간단위).
  */

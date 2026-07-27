@@ -8,9 +8,11 @@ import { requireAccess } from "@/lib/auth/require-access";
 import { effectiveTeacherId } from "@/lib/auth/view-mode";
 import {
   getTeacherColorMap,
+  getTeacherLabelMap,
   getTeacherScheduleBlocks,
   getWeeklyScheduleWithStudents,
 } from "@/features/timetable/server/queries";
+import { resolveTeacherLabels } from "@/features/timetable/lib/teacher-label";
 import { settingsToPeriodsConfig } from "@/features/timetable/lib/periods";
 import type { TeacherColorMap } from "@/features/timetable/lib/class-grid";
 import { getTenantSettings } from "@/features/owner/server/queries";
@@ -233,7 +235,12 @@ export default async function TimetablePage({
   const teacherViewStep = subjectRow?.teacherViewStep ?? 10;
   const teacherViewPxPerMin = subjectRow?.teacherViewPxPerMin;
   const teacherViewBreaks = subjectRow?.teacherViewBreaks ?? [];
-  const teacherViewExcluded = subjectRow?.teacherViewLineExcluded ?? [];
+  // '가로줄 제외 강사'는 **라벨 문자열로** 열과 맞물린다 — 슬롯 라벨을 한글 이름으로 바꾼 뒤에도
+  // 예전에 저장된 값("Hannah"·"이주희")이 계속 맞도록 같은 해석기를 통과시킨다(마이그레이션 불필요).
+  const teacherViewExcluded = resolveTeacherLabels(
+    subjectRow?.teacherViewLineExcluded ?? [],
+    await getTeacherLabelMap(),
+  );
 
   const isIntegrated = effView === "integrated";
   // 섹션별 '1시간 단위' 토글 href — 그 sectionKey를 압축 집합에 넣고/빼기(다른 필터·주·과목은 유지).
