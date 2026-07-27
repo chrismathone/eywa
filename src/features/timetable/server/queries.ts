@@ -5,6 +5,7 @@ import { fetchAllPaged, fetchAllPagedInChunks } from "@/lib/supabase/batch";
 import { kstToday, kstMinutesOfDay } from "@/lib/date-kst";
 import { getTeacherScope } from "@/lib/auth/teacher-scope";
 import { weekEndOf, weekSundayOf, shiftDays } from "../lib/week";
+import { reportSubject } from "../lib/report-subject";
 import { compareStudentLines } from "../lib/student-sort";
 import type { TeacherColorMap } from "../lib/class-grid";
 import { buildTeacherLabelMap, resolveTeacherLabel, type TeacherLabelMap } from "../lib/teacher-label";
@@ -17,6 +18,7 @@ import {
 
 /** 오늘(YYYY-MM-DD, 기준일 기본값) — KST 기준(서버 UTC라 새벽 시간대 하루 밀림 방지). */
 const todayStr = (): string => kstToday();
+
 
 /**
  * 세션 없는 호출(cron 자동 시트 반영 등)용 DB 주입 — admin 클라이언트 + **명시 tenant 필터**.
@@ -550,6 +552,8 @@ export async function getWeeklyScheduleWithStudents(
       homework_score: string | null;
       teacher_name: string | null;
       textbook: string | null;
+      subject: string | null; // 보고서 자체 과목(신규 발송분). 이관분은 null.
+      class?: { subject?: string } | { subject?: string }[]; // class_id 경유 과목(보조 판정)
     };
     // ⚠️ 학생당 N행(1:N)이라 fetchInChunks면 청크당 1000행 캡에 조용히 잘린다(B2). 특히 진도는
     // report_date desc + '첫 행 승리'라, 잘리면 오래된 행부터 사라지는 게 아니라 **정렬 뒤쪽 학생의
@@ -557,7 +561,9 @@ export async function getWeeklyScheduleWithStudents(
     const repRows = await fetchAllPagedInChunks<RepRow>(studentIds, (chunk, from, to) => {
       let q = supabase
         .from("lesson_reports")
-        .select("student_id, class_id, report_date, progress, exam_info, homework_score, teacher_name, textbook")
+        .select(
+          "student_id, class_id, report_date, progress, exam_info, homework_score, teacher_name, textbook, subject, class:class_id ( subject )",
+        )
         .in("student_id", chunk)
         .not("progress", "is", null) // hover는 진도 있는 최신 1건(상세 '진도' 탭은 전건)
         .order("report_date", { ascending: false });
@@ -570,26 +576,38 @@ export async function getWeeklyScheduleWithStudents(
     //    반 매칭이 없으면(이관분·관리자 작성분 = class_id NULL) 예전처럼 학생 단위 최신으로 폴백한다.
     const keyOf = (studentId: string, classId: string) => `${studentId}::${classId}`;
     const byStudentClass = new Map<string, RepRow>();
-    const byStudentOnly = new Map<string, RepRow>();
+    // 🔴 학생 단위 폴백은 **과목별로** 나눈다(원장 2026-07-27 "영어 시간표에 수학 관련 내용이 나오지
+    //    않게 / 수학 시간표에서만 수학 내용이 호버링되게"). 예전엔 과목 구분 없이 학생의 최신 1건이라,
+    //    영어 통합뷰에서 학생에 hover하면 **수학 진도·교재**(예 "1-2 개념의 숲 · 김민주")가 떴다.
+    //    ⚠️ 영어도 eywa에서 발송되기 시작하면 자동으로 영어끼리만 맞물린다(같은 규칙, 분기 없음).
+    const byStudentSubject = new Map<string, RepRow>();
     for (const r of repRows) {
       // repRows는 report_date desc, id desc 정렬 → 각 키의 **첫 행**이 최신.
       if (r.class_id) {
         const k = keyOf(r.student_id, r.class_id);
         if (!byStudentClass.has(k)) byStudentClass.set(k, r);
       }
-      if (!byStudentOnly.has(r.student_id)) byStudentOnly.set(r.student_id, r);
+      // ⚠️ `r.class`는 PostgREST 임베드라 배열일 수도 있다 — 순수 함수엔 **평평하게 풀어서** 넘긴다
+      //    (r을 그대로 넘기면 classSubject가 undefined라 반 과목이 통째로 무시된다).
+      const cf = r.class;
+      const classSubject = (Array.isArray(cf) ? cf[0] : cf)?.subject ?? null;
+      const k = `${r.student_id}::${reportSubject({ subject: r.subject, classSubject })}`;
+      if (!byStudentSubject.has(k)) byStudentSubject.set(k, r);
     }
     // 🔴 특강 슬롯은 **학생 단위 폴백을 쓰지 않는다**(원장 2026-07-23 "정규와 특강을 분리시켜").
     //    폴백은 이관분(class_id NULL)을 살리려는 장치인데 이관분은 전부 정규다 → 특강 슬롯에 쓰면
     //    100% 정규 수업의 진도·교재가 뜬다. 정규 슬롯의 폴백은 그대로 유지(없애면 hover가 전부 빈다).
     //    ⚠️ 특강 첫 수업 슬롯의 hover가 비는 건 정상 — 남의 수업 진도를 보여주는 것보다 낫다.
     const specialClassIds = new Set(slots.filter((s) => s.isSpecialLecture).map((s) => s.classId));
+    const subjectOfClass = new Map(slots.map((s) => [s.classId, s.subject]));
     for (const [classId, list] of byClass) {
       const special = specialClassIds.has(classId);
+      const slotSubject = subjectOfClass.get(classId) ?? "";
       for (const l of list) {
         const r = special
           ? byStudentClass.get(keyOf(l.studentId, classId))
-          : (byStudentClass.get(keyOf(l.studentId, classId)) ?? byStudentOnly.get(l.studentId));
+          : (byStudentClass.get(keyOf(l.studentId, classId)) ??
+            byStudentSubject.get(`${l.studentId}::${slotSubject}`));
         if (!r) continue;
         l.latestReport = {
           date: r.report_date,

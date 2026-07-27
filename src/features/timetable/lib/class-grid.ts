@@ -55,7 +55,17 @@ export type GridSlot = {
 };
 
 export type GridCell = { label: string; isLab: boolean };
-export type GridPeriodRow = { order: number; label: string; time: string };
+export type GridPeriodRow = {
+  order: number;
+  label: string;
+  time: string;
+  /**
+   * 이 행이 **축 생략(물결) 마커**면 접힌 교시 수. 일반 교시 행이면 undefined.
+   * 막대그래프에서 최대·최소 차가 클 때 축을 끊고 물결을 넣는 것과 같은 표기(원장 2026-07-27).
+   * `label`엔 접힌 교시 목록("7·8교시")이 들어가 툴팁으로 쓰인다.
+   */
+  gapRows?: number;
+};
 
 /**
  * 강사 라벨(display_name·영문닉네임) → 저장된 색(#RRGGBB). 통합뷰 셀·담임색 배선용.
@@ -195,6 +205,43 @@ function shiftedWeekendRow(
   return weekdayRows[k + shift] ?? row;
 }
 const clampRows = (n: number, min: number) => Math.min(ROSTER_ROW_CAP, Math.max(min, Number.isFinite(n) ? n : min));
+
+/**
+ * 아무 카드도 쓰지 않는 **중간** 교시 구간을 접어 축 생략(물결) 한 줄로 바꾼다.
+ *
+ * 🔴 왜(원장 2026-07-27 "그냥 7·8 없애도 되지 않나? 1·2·3 / 9·10·11만 있어도 될 듯 · 중간에 물결처리"):
+ * 혼합 반 섹션은 위쪽(토요일이 얹힌 1~3교시)과 아래쪽(평일 9~11교시)만 쓰는데, 그 사이 윈도우 패딩(7·8교시)이
+ * 통째로 비어 세로만 먹었다. 막대그래프에서 최대·최소 차가 크면 축을 끊고 물결을 넣는 것과 같은 처리다.
+ *
+ * ⚠️ **중간만** 접는다 — 위/아래 끝의 빈 패딩 행은 그대로 둔다(5칸 윈도우의 컨텍스트 보존,
+ * 2026-07-06 사용자 결정). 접을 게 없으면 입력을 그대로 돌려준다(참조 동일).
+ */
+export function collapseEmptyRuns(rows: GridPeriodRow[], usedOrders: Set<number>): GridPeriodRow[] {
+  const firstUsed = rows.findIndex((r) => usedOrders.has(r.order));
+  const lastUsed = rows.findLastIndex((r) => usedOrders.has(r.order));
+  if (firstUsed < 0 || lastUsed <= firstUsed) return rows;
+  const out: GridPeriodRow[] = [];
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i];
+    // 끝단 패딩이거나 실제로 쓰는 행이면 그대로.
+    if (i < firstUsed || i > lastUsed || usedOrders.has(r.order)) {
+      out.push(r);
+      continue;
+    }
+    // 중간의 빈 구간 — 연속 구간을 통째로 한 줄로.
+    let j = i;
+    while (j <= lastUsed && !usedOrders.has(rows[j].order)) j++;
+    const run = rows.slice(i, j);
+    out.push({
+      order: run[0].order,
+      label: run.map((x) => x.label).join("·"),
+      time: "",
+      gapRows: run.length,
+    });
+    i = j - 1;
+  }
+  return out;
+}
 /** 통합뷰 카드 요일축의 **고정 열 수**(월~금 5일 기준). 요일이 늘고 줄어도 열 너비가 변하지 않게 하는 상수. */
 export const AXIS_COLS = 5;
 
@@ -570,6 +617,8 @@ export function buildRichCardGroups(
         const hi = Math.max(...presentStd);
         periodRows = winList.filter((r) => r.order <= lo || r.order >= hi || presentOrders.has(r.order));
       }
+      // 아무 카드도 안 쓰는 **중간** 교시 구간은 접고 축 생략(물결) 한 줄로 대체한다.
+      periodRows = collapseEmptyRuns(periodRows, new Set([...presentOrders, ...mixedWeekendOrders]));
       // 분리된 부그룹은 라벨에 ②③… 접미(같은 "N교시 시작"이 두 박스로 나뉠 때 구분).
       const label = ci === 0 ? cluster[0].groupLabel : `${cluster[0].groupLabel} ${"②③④⑤"[ci - 1] ?? `(${ci + 1})`}`;
       out.push({

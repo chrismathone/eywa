@@ -21,6 +21,7 @@ const TEACHER_H = 24;
 const ROOM_H = 34;
 const DAYHEAD_H = 22;
 const PERIOD_H = 26;
+const GAP_H = 12; // 축 생략(물결) 행 — 교시 행보다 얕게 둬서 "여기는 접힌 자리"로 읽히게.
 // 학생 1행 높이 — 기본뷰 StudentRow 실측(13px × leading-tight + py-[3px] = 23.1px)에 맞춘 값.
 // ⚠️ 서식을 기본뷰와 동일하게 두는 한 이 값도 함께 따라가야 한다(안 그러면 행이 잘린다).
 const STU_H = 24;
@@ -93,16 +94,20 @@ function LabelColumn({
       <div className={cell} style={{ height: TEACHER_H }}>담임</div>
       <div className={cell} style={{ height: ROOM_H }}>강의실</div>
       <div className={cell} style={{ height: DAYHEAD_H }}>교시</div>
-      {group.periodRows.map((p) => (
-        <div
-          key={p.order}
-          className="border-line text-text-faint flex flex-col items-center justify-center border-b num leading-none"
-          style={{ height: PERIOD_H }}
-        >
-          <span className="text-foreground text-[10px] font-bold">{p.label}</span>
-          <span className="text-[7px]">{p.time}</span>
-        </div>
-      ))}
+      {group.periodRows.map((p) =>
+        p.gapRows ? (
+          <AxisBreak key={p.order} label={p.label} />
+        ) : (
+          <div
+            key={p.order}
+            className="border-line text-text-faint flex flex-col items-center justify-center border-b num leading-none"
+            style={{ height: PERIOD_H }}
+          >
+            <span className="text-foreground text-[10px] font-bold">{p.label}</span>
+            <span className="text-[7px]">{p.time}</span>
+          </div>
+        ),
+      )}
       <div className="text-primary border-line flex items-center justify-center border-b text-[10px] font-bold" style={{ height: activeH }}>
         재원
       </div>
@@ -203,14 +208,18 @@ function ClassColumn({
           <DayHead key={d ?? `pad-${i}`} day={d} />
         ))}
       </div>
-      {/* 요일×교시 미니그리드 */}
-      {group.periodRows.map((p) => (
-        <div key={p.order} className="border-line grid border-b" style={{ ...gridCols, height: PERIOD_H }}>
-          {days.map((d, i) => (
-            <Cell key={d ?? `pad-${i}`} card={card} order={p.order} day={d} teacherColors={teacherColors} />
-          ))}
-        </div>
-      ))}
+      {/* 요일×교시 미니그리드 — 축 생략 행은 셀 대신 물결 띠 하나로(라벨열과 같은 높이라 행이 맞물린다). */}
+      {group.periodRows.map((p) =>
+        p.gapRows ? (
+          <AxisBreak key={p.order} label={p.label} />
+        ) : (
+          <div key={p.order} className="border-line grid border-b" style={{ ...gridCols, height: PERIOD_H }}>
+            {days.map((d, i) => (
+              <Cell key={d ?? `pad-${i}`} card={card} order={p.order} day={d} teacherColors={teacherColors} />
+            ))}
+          </div>
+        ),
+      )}
       {/* 재원생 — 섹션 최대 인원(상한 12행). 넘치면 카드 안에서 스크롤하되 스크롤바는 숨기고 하단 페이드. */}
       <RosterSection h={activeH} rows={group.rosterRows.active} count={card.active.length} className="bg-card border-line border-b">
         {card.activeCount === 0 ? (
@@ -275,6 +284,29 @@ function RosterSection({
       }}
     >
       {children}
+    </div>
+  );
+}
+
+/**
+ * 축 생략(물결) 행 — 아무도 안 쓰는 중간 교시 구간을 접은 자리.
+ * 막대그래프에서 최대·최소 차가 클 때 축을 끊고 물결을 넣는 것과 같은 표기(원장 2026-07-27).
+ * ⚠️ 라벨열과 카드가 **같은 컴포넌트·같은 높이**를 써야 행이 어긋나지 않는다(시트처럼 읽히는 성질).
+ * 접힌 교시는 `title`로 확인할 수 있게 남긴다(정보를 숨기되 잃지는 않는다).
+ */
+function AxisBreak({ label }: { label: string }) {
+  return (
+    <div
+      className="border-line bg-bg-soft/60 flex items-center justify-center overflow-hidden border-b"
+      style={{ height: GAP_H }}
+      title={`${label} 생략(수업 없음)`}
+    >
+      <span
+        className="text-text-faint/70 w-full text-center text-[9px] leading-none tracking-[0.25em] select-none"
+        aria-label={`${label} 생략`}
+      >
+        〜〜〜
+      </span>
     </div>
   );
 }
