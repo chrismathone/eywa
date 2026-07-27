@@ -766,3 +766,26 @@ scope에 userId도 없었다 → **로그인조차 없이** DevTools › Applica
   → `Canceled by Ignored Build Step`이면 **안 나간 것**. `Deployment has completed`여야 실제 배포다.
 - ⚠️ 배포 상태 조회한다고 워크트리에서 `npx vercel ls`를 돌리지 말 것 — **폴더명으로 새 프로젝트를 자동 생성·링크**하고
   `.vercel/`을 만든다(실제로 `eywa-ai-assistant-review-fb9a08` 빈 프로젝트가 생겼다). 조회는 위 `gh api`로.
+
+## #86 창 시스템 앱에서 `router.push`는 **눈에 안 보인다** — 배경 프레임이 창에 덮여 있다 (2026-07-27)
+
+**증상**: 벨 알림을 눌렀는데 "아무런 출력이 없다"(원장 제보). 오류도 없고, 읽음 처리도 되고, 라우트도 실제로 바뀐다.
+그런데 화면은 그대로다.
+
+- **원인**: eywa 데스크톱 풀셸은 **메뉴 = 플로팅 창(iframe)** 이라, 사용자가 일하는 동안 **화면이 창으로 덮여
+  있는 게 정상 상태**다. 그 상태에서 `router.push("/students")`는 창 **뒤의 배경 `<main>`** 만 바꾼다 →
+  보이는 변화 0. 개발자 화면(창 0개)에선 멀쩡히 동작해 **재현이 안 되는** 유형의 버그다.
+- **규칙**: 앱 안에서 **프로그램적으로 이동**시키는 코드는 `router.push`가 아니라
+  [WindowLink](../src/components/workspace/window-link.tsx)와 **같은 경로**를 쓴다 —
+  `windowIdForHref(href)` → `useWindowStore.getState().open("route", { id, title, href })`.
+  가드도 같게: `isDesktop && workspaceEnabled && isTopFrame()`일 때만 창, 아니면 `router.push` 폴백
+  (강사 미니셸·모바일·임베드엔 캔버스가 없다). 외부 절대 URL은 `router.push`가 아예 안 먹으므로 별도 처리.
+- **점검**: `grep -rn "router.push" src/` 중 **최상위 프레임에서 도는 UI**(벨·팰릿·토스트 액션·전역 단축키)가
+  있으면 의심. 페이지 **안**의 이동(창 내부 드릴인)은 그 창 문서 안이라 정상.
+- **함께 나온 규칙(알림 설계)**: **본문이 N명을 말하는데 `link`가 1개면 그 link는 반드시 거짓말이 된다.**
+  진도 이상 알림이 3명 묶음 + `link:"/students"`(전체 목록)라 도착해도 정보가 0이었다 → 수신 단위를
+  **학생 1명 = 알림 1건**으로 쪼개고 `/students/{id}?tab=progress`로 직행. 묶고 싶으면 **그 N명만 보여주는
+  화면을 먼저** 만들어야 한다.
+- **착지 화면도 같이 볼 것**: 링크가 맞아도 도착지가 "빨간 배지 하나"면 사용자는 여전히 아무것도 모른다.
+  알림이 행동을 요구하면 도착지에 **언제·무엇이·얼마나**가 있어야 한다(진도 탭 이상 카드 = 날짜 + 위치
+  변화 + 건너뛴 차시).
