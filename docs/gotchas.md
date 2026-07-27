@@ -741,3 +741,28 @@ scope에 userId도 없었다 → **로그인조차 없이** DevTools › Applica
 - **같은 실패의 다른 표면(2026-07-21 스윕, 미수정)**: AI 비서 `search_classes`(상위 25 = 영어 22:수학 3, 게다가 툴
   스키마에 과목 인자가 없고 수학반 이름에 '수학'이 없어 도달 불가) · 반 배정 다이얼로그와 반 드롭다운의
   `SearchableSelect` 기본 `cap=50`(훑어보면 영어만) · 대시보드 '어제 미기록' 미리보기 2개(항상 한글=수학반).
+
+## #85 배포가 "초록색 success"인데 실제로는 안 나감 — `ignoreCommand`는 **tip 커밋 1개만** 본다 (2026-07-27)
+
+원장 제보 "배포가 안 되었는데". 그날 main에 push한 **3커밋 전부 미배포**였는데 GitHub 커밋 상태는
+전부 **초록색 `success`**였다. 설명란을 열어야만 진실이 보인다 — `Canceled by Ignored Build Step`.
+**초록색을 배포 성공으로 읽으면 안 된다**는 게 이 항목의 핵심이다(스킵도 초록색이다).
+
+- **메커니즘**: `vercel.json`의 `ignoreCommand`가 `git diff --quiet HEAD^ HEAD -- <제외경로>` 였다.
+  Vercel은 **push 범위가 아니라 tip 커밋 하나만** 평가한다(exit 0=skip / 1=build).
+- **왜 항상 터지나(워크트리 정책과 정면충돌)**: CLAUDE.md 정책상 push 직전 `git merge origin/main`을 하므로
+  **tip이 병합커밋**이 된다. 병합커밋에서 `HEAD^`=제1부모=**내 마지막 커밋**이라, diff에는 "머지가 상대편에서
+  가져온 것"만 잡힌다. 내 실제 src 변경은 `HEAD^` **쪽에 있어** 애초에 diff 대상이 아니다.
+  그날 origin/main이 가져온 건 빈 chore 커밋 3개 → **diff 0 → skip**. 즉 **머지하고 push하면 항상 skip**이었다.
+- **수정**: 병합커밋(`HEAD^2` 존재)이면 무조건 빌드.
+  `git rev-parse -q --verify HEAD^2 >/dev/null && exit 1 || git diff --quiet HEAD^ HEAD -- <제외경로>`
+  (docs/scripts 단독 커밋 skip은 유지 — 빌드가 비용의 64%라 그 절감은 살려야 한다.)
+- ⚠️ **남은 구조적 함정(미해결)**: 여러 커밋을 **한 번에 push**할 때 **tip이 docs/scripts-only면 그 앞의 src
+  커밋까지 통째로 skip**된다. Vercel은 "직전 배포 sha"를 env로 주지 않아 push 범위를 알 수 없다.
+  → **뭉쳐 push할 땐 docs 커밋을 tip에 두지 말 것**(`docs/perf` 문서화 커밋을 마지막에 얹는 습관이 특히 위험).
+  이건 "main 푸시를 뭉쳐라"(빌드 비용 절감)와 정면으로 부딪히는 지점이라 의식적으로 순서를 잡아야 한다.
+- **점검 명령(초록색 대신 이걸로)**:
+  `gh api repos/<owner>/eywa/commits/$(git rev-parse HEAD)/status --jq '.statuses[].description'`
+  → `Canceled by Ignored Build Step`이면 **안 나간 것**. `Deployment has completed`여야 실제 배포다.
+- ⚠️ 배포 상태 조회한다고 워크트리에서 `npx vercel ls`를 돌리지 말 것 — **폴더명으로 새 프로젝트를 자동 생성·링크**하고
+  `.vercel/`을 만든다(실제로 `eywa-ai-assistant-review-fb9a08` 빈 프로젝트가 생겼다). 조회는 위 `gh api`로.
