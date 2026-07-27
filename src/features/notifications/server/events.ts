@@ -39,7 +39,9 @@ import {
   gradeDropDigestBody,
   groupEventsByTeacher,
   outstandingDigestBody,
-  progressAnomalyDigestBody,
+  groupProgressAnomalyByStudent,
+  progressAnomalyLink,
+  progressAnomalyStudentBody,
   unsentReportDigestBody,
   UNSENT_REPORT_WINDOW_DAYS,
   type AbsenceEvent,
@@ -414,11 +416,17 @@ async function detectProgressAnomaly(admin: SupabaseClient, tenantId: string): P
   const fresh = (await recordNew(admin, tenantId, "progress_anomaly", candidates, cold)) as ProgressAnomalyEvent[];
   if (cold || fresh.length === 0) return 0;
 
+  // ⚠️ **학생 1명 = 알림 1건**(2026-07-27) — 알림은 link가 하나뿐이라 여러 명을 묶으면 "어디서 확인"을
+  // 표현할 수 없다. 예전엔 3명 묶음 → link `/students`(전체 목록)라 눌러도 아무 정보가 없었다(원장 제보).
+  // 이제 각 알림이 그 학생 **진도 탭**으로 직행한다. 실측 볼륨 14일 한 자릿수라 분할해도 벨 폭탄 아님.
+  const byStudent = groupProgressAnomalyByStudent(fresh);
   const items: NotifyInput[] = [];
-  const masterBody = progressAnomalyDigestBody(fresh);
-  if (masterBody) {
-    for (const recipientId of await activeMasterIds(admin, tenantId)) {
-      items.push({ tenantId, recipientId, type: "progress_anomaly", title: "진도 기록 이상", body: masterBody, link: "/students", actorId: null });
+  const masterIds = await activeMasterIds(admin, tenantId);
+  for (const group of byStudent) {
+    const body = progressAnomalyStudentBody(group.studentName, group.events);
+    if (!body) continue;
+    for (const recipientId of masterIds) {
+      items.push({ tenantId, recipientId, type: "progress_anomaly", title: "진도 기록 이상", body, link: progressAnomalyLink(group.studentId), actorId: null });
     }
   }
   // 담당 강사 = 자기 학생의 **수학 반** 강사만(리뷰 확정 #77형: 진도 파이프라인이 math 전용이라
@@ -431,10 +439,15 @@ async function detectProgressAnomaly(admin: SupabaseClient, tenantId: string): P
     today,
     ["math"],
   );
+  // 강사도 같은 딥링크 — `/onescreen`은 **오늘 로스터**에만 배지를 다는데 알림은 다음날 도니, 그 학생이
+  // 그날 수업이 없으면 원스크린에도 아무 표시가 없다(같은 "눌렀는데 아무것도 없음"). 진도 탭은 항상 보인다.
+  // (강사의 students 권한은 scoped — 알림 수신자 자체가 그 학생 담당 강사라 열람 범위 안.)
   for (const [teacherId, teacherEvents] of groupEventsByTeacher(fresh, studentTeachers)) {
-    const body = progressAnomalyDigestBody(teacherEvents);
-    if (!body) continue;
-    items.push({ tenantId, recipientId: teacherId, type: "progress_anomaly", title: "담당 학생 진도 기록 이상", body, link: "/onescreen", actorId: null });
+    for (const group of groupProgressAnomalyByStudent(teacherEvents)) {
+      const body = progressAnomalyStudentBody(group.studentName, group.events);
+      if (!body) continue;
+      items.push({ tenantId, recipientId: teacherId, type: "progress_anomaly", title: "담당 학생 진도 기록 이상", body, link: progressAnomalyLink(group.studentId), actorId: null });
+    }
   }
   await notifyUsers(items);
   return fresh.length;

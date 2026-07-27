@@ -356,6 +356,7 @@ export type ProgressAnomalyRow = {
 };
 export type ProgressAnomalyEvent = {
   subjectKey: string; // studentId — 담당 강사 라우팅(groupEventsByTeacher 기본 추출자와 호환)
+  studentId: string; // 딥링크(학생 상세 진도 탭)용 — subjectKey와 같은 값이지만 용도가 달라 별도 필드
   bucket: string; // `pe:${eventId}` — 이벤트 1건 = 전이 1회 = 알림 1회(앵커일 아님, dedup 규약 준수)
   studentName: string;
   label: string; // 한글 라벨(raw enum 노출 금지) — progress-panel과 동일 표현
@@ -372,19 +373,52 @@ export function buildProgressAnomalyEvents(rows: readonly ProgressAnomalyRow[]):
   for (const row of rows) {
     const label = PROGRESS_ANOMALY_LABEL[row.eventType];
     if (!label) continue; // regression 등 미대상 유형 방어(쿼리 필터와 이중)
-    events.push({ subjectKey: row.studentId, bucket: `pe:${row.eventId}`, studentName: row.studentName, label });
+    events.push({
+      subjectKey: row.studentId,
+      studentId: row.studentId,
+      bucket: `pe:${row.eventId}`,
+      studentName: row.studentName,
+      label,
+    });
   }
   return events;
 }
 
-/** 진도 이상 개별/집계 본문 — "수학" 명시(파이프라인이 math 전용, 리뷰 확정: 무표기 시 타과목 오인). */
-export function progressAnomalyDigestBody(events: readonly ProgressAnomalyEvent[]): string | null {
-  if (events.length === 0) return null;
-  if (events.length === 1) {
-    const event = events[0];
-    return `${event.studentName} 학생 수학 진도 기록에 ${event.label}이(가) 감지됐습니다 — 진도 입력을 확인해 주세요.`;
+/**
+ * 진도 이상 알림은 **학생 1명 = 알림 1건**으로 쪼갠다 — 알림의 link는 1개뿐이라, 여러 명을 한 건으로
+ * 묶으면 "누구를 어디서 확인하라"를 링크로 표현할 수 없다(2026-07-27 원장 제보: 3명 묶음 알림 →
+ * `/students`(전체 목록)로 보내 클릭해도 아무 정보가 없었음). 실측 볼륨이 14일 한 자릿수라 분할해도
+ * 벨 폭탄이 아니다. 순서는 입력 순(안정 정렬) — 같은 배치는 항상 같은 알림 순서.
+ */
+export function groupProgressAnomalyByStudent(
+  events: readonly ProgressAnomalyEvent[],
+): { studentId: string; studentName: string; events: ProgressAnomalyEvent[] }[] {
+  const byStudent = new Map<string, { studentId: string; studentName: string; events: ProgressAnomalyEvent[] }>();
+  for (const event of events) {
+    const found = byStudent.get(event.studentId);
+    if (found) found.events.push(event);
+    else byStudent.set(event.studentId, { studentId: event.studentId, studentName: event.studentName, events: [event] });
   }
-  return `${summarizeNames([...new Set(events.map((event) => event.studentName))])} 학생의 수학 진도 기록에 이상(점프·겹침)이 감지됐습니다 — 진도 입력을 확인해 주세요.`;
+  return [...byStudent.values()];
+}
+
+/**
+ * 진도 이상 본문(학생 1명분) — "수학" 명시(파이프라인이 math 전용, 리뷰 확정: 무표기 시 타과목 오인).
+ * 유형 라벨은 괄호로 뺀다 — `${label}이(가)`처럼 조사를 붙이면 "진도 점프이(가)"처럼 어색해진다
+ * (받침 유무가 라벨마다 달라 고정 조사로는 못 맞춤). 문장 조사는 "이상이"로 고정.
+ */
+export function progressAnomalyStudentBody(
+  studentName: string,
+  events: readonly ProgressAnomalyEvent[],
+): string | null {
+  if (events.length === 0) return null;
+  const labels = [...new Set(events.map((event) => event.label))];
+  return `${studentName} 학생 수학 진도 기록에 이상이 감지됐습니다(${labels.join(", ")}) — 진도 탭에서 확인해 주세요.`;
+}
+
+/** 진도 이상 알림 딥링크 — 학생 상세 **진도 탭**(이상 감지 내역이 실제로 보이는 유일한 화면). */
+export function progressAnomalyLink(studentId: string): string {
+  return `/students/${studentId}?tab=progress`;
 }
 
 /** 성적 급락 개별/집계 본문. 한 명이면 과목·하락폭, 여러 명이면 이름 집계. */

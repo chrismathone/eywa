@@ -24,6 +24,10 @@ import { NOTIFICATION_ICON, type NotificationItem } from "@/features/notificatio
 import { mergeAlerted, pickAlertTargets } from "@/features/notifications/important";
 import { isTopFrame, showDesktopNotification } from "@/features/notifications/desktop-notify";
 import { enableDesktopNotify, useNotifyPermission } from "@/features/notifications/notify-permission-store";
+import { useWindowStore } from "@/components/workspace/window-store";
+import { windowIdForHref } from "@/components/workspace/window-link";
+import { useIsDesktop } from "@/components/workspace/use-is-desktop";
+import { useWorkspaceEnabled } from "@/components/workspace/workspace-enabled";
 import { NotificationAlertDialog } from "./notification-alert-dialog";
 
 const POLL_MS = 60_000;
@@ -70,6 +74,9 @@ function relTime(iso: string): string {
 export function NotificationBell() {
   const router = useRouter();
   const pathname = usePathname();
+  // 알림 클릭 = 앱의 다른 모든 링크와 같은 이동 방식(플로팅 창)이어야 한다 — 아래 openItem 주석 참조.
+  const isDesktop = useIsDesktop();
+  const workspaceEnabled = useWorkspaceEnabled();
   const [items, setItems] = useState<NotificationItem[]>([]);
   const [unread, setUnread] = useState(0);
   const [pendingLink, setPendingLink] = useState<string | null>(null); // 확인 대기 중인 외부 링크
@@ -182,8 +189,22 @@ export function NotificationBell() {
     if (!n.link) return;
     // 외부 링크(ClassNote 학부모 글 등)는 eywa를 벗어나므로 먼저 확인받는다 — router.push는 앱 내부 경로 전용이라
     // 절대 URL을 넘기면 동작하지 않는다. 확인 후 새 탭으로 열어 작업 중이던 eywa 화면을 잃지 않게 한다.
-    if (isExternal(n.link)) setPendingLink(n.link);
-    else router.push(n.link);
+    if (isExternal(n.link)) {
+      setPendingLink(n.link);
+      return;
+    }
+    // ⚠️ 앱 내부 경로는 **플로팅 창**으로 연다 — router.push는 창 뒤 배경 프레임만 바꾼다(2026-07-27 원장 제보
+    // "알림을 눌렀는데 아무런 출력이 없다"의 진짜 원인). 데스크톱 풀셸은 메뉴가 전부 창이라 화면이 창으로 덮여
+    // 있는 게 정상 상태고, 그 밑에서 배경이 바뀌어봐야 **눈에 보이는 변화가 0**이다. WindowLink와 같은 경로·
+    // 같은 가드를 쓴다(창 시스템 없는 강사 미니셸·모바일·임베드는 아래 router.push로 자연 폴백).
+    const resolved = isDesktop && workspaceEnabled && isTopFrame() ? windowIdForHref(n.link) : null;
+    if (resolved) {
+      useWindowStore
+        .getState()
+        .open("route", { id: resolved.id, title: resolved.navLabel ?? n.title, href: n.link });
+      return;
+    }
+    router.push(n.link);
   }
 
   const badge = unread > 99 ? "99+" : String(unread);
