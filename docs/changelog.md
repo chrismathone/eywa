@@ -4,6 +4,21 @@
 
 ## 진행 상황
 
+### 🔴 병합커밋이 배포를 조용히 건너뛰던 버그 — `ignoreCommand`가 **tip 커밋 1개만** 본다 (2026-07-27)
+원장 제보 "배포가 안 되었는데". 실측: 그날 push한 **3커밋 전부 미배포**인데 GitHub 상태는 **초록색 `success`**였다
+(설명란에만 `Canceled by Ignored Build Step`). 초록색이라 아무도 이상을 눈치채지 못한다 — 이게 진짜 위험.
+- **원인**: `vercel.json`의 `ignoreCommand` = `git diff --quiet HEAD^ HEAD -- <제외경로>`. **HEAD 한 커밋만** 본다.
+  워크트리 정책상 push 전 `git merge origin/main`을 하므로 **tip이 병합커밋**이 되는데, 이때 `HEAD^`=제1부모(내 마지막 커밋)라
+  diff에는 **"머지가 가져온 것"만** 잡힌다. 그날 origin/main이 가져온 건 빈 chore 커밋 3개 → **diff 0 → skip.**
+  내 실제 src 변경은 `HEAD^` **쪽에** 있어서 애초에 diff에 안 들어간다. 즉 **머지하고 push하면 항상 skip**이다.
+- **수정**: 병합커밋(=`HEAD^2` 존재)이면 **무조건 빌드**. `git rev-parse -q --verify HEAD^2 >/dev/null && exit 1 || <기존 diff>`
+  (ignoreCommand는 **exit 0=skip / 1=build**). 검증: 병합 `1827804e`→BUILD·docs `9f2b2ae8`→SKIP(비용 절감 유지)·src→BUILD.
+- ⚠️ **남은 함정(구조적)**: 여러 커밋을 한 번에 push할 때 **tip이 docs/scripts-only면 그 앞의 src 커밋도 통째로 skip**된다
+  (Vercel은 push 범위가 아니라 tip만 평가하고, "직전 배포 sha" env는 제공되지 않는다). [[project_vercel-build-cost]]의
+  "main 푸시를 뭉쳐라"와 정면으로 부딪히는 지점 → **뭉쳐 push할 땐 docs 커밋을 tip에 두지 말 것.**
+- 📌 **배포 확인은 초록색으로 하지 말 것**: `gh api repos/BIGSHOL/eywa/commits/<sha>/status --jq '.statuses[].description'`
+  가 `Canceled by Ignored Build Step`이면 **안 나간 것**이다.
+
 ### 공지 발송 `HTTP 409` — 실패 사유 소실 + "실제로 갔는지" 확인 불가 수리 (2026-07-27) - tsc0/lint0/test2448 + 0149a
 학부모 공지 12명 중 **11명이 `게시 실패(HTTP 409)`**(김경민 1명만 성공). 원장이 ClassNote를 직접 열어
 **미게시 확인**(=409는 진짜 거부, 학부모 미수신 → 재발송해도 중복 아님). 원인 규명은 **불가능했다** —
