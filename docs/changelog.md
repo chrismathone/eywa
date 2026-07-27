@@ -4,6 +4,26 @@
 
 ## 진행 상황
 
+### 진도 이상 "이상 없음 확인" — 끌 수 없는 경고는 결국 전부 무시된다 (2026-07-27, 0151a) - tsc0/lint0/test519
+원장: "이상이 없다고 체크해서 다음부터 알림이 안 뜨게 하는 기능은 있나?" → **없었다.** 진도 점프의 상당수는
+**정상**(선행 시작·교재 건너뜀·반 이동)인데 확인해도 끌 방법이 없어, 원스크린 '진도 확인 필요' 배지(14일)와
+학생 상세 이상 카드가 계속 떠 있었다. 끌 수 없는 경고는 경보 피로로 **통째로 무시**된다 → 확인 도장을 만든다.
+- **[0151a](../supabase/migrations/0151a_progress_event_resolution.sql)** — `progress_events.resolved_at`·
+  `resolved_by`(users FK) + 미확인 오류 전용 부분 인덱스. ⚠️ 0090a엔 progress_events **update 정책이 없어**
+  RLS 기본 거부였다(그대로 뒀으면 버튼이 "눌러도 아무 일이 없음") → `progress_events_tenant_upd` 신설.
+  ⚠️ **삭제가 아니라 해소 표시** — 누가 언제 확인했는지 남고 되돌릴 수 있다. 컨테이너·진도 데이터는 무접촉
+  (진도 자체가 틀렸으면 그 보고서의 진도를 고치는 게 정답 → 재-ingest가 새 이벤트를 만든다).
+  ⚠️ ingest의 이벤트 upsert는 `ignoreDuplicates:true`(ON CONFLICT DO NOTHING)라 재-ingest가 확인 상태를 지우지 않는다(확인함).
+- **게이트 = 순수함수 [anomaly-gate.ts](../src/features/progress/anomaly-gate.ts)**(Vitest 3) — `full`=전 학생,
+  `scoped`(강사)=**담당 학생만**, `readonly`/`none`=불가. 🔴 scoped는 `canWrite`를 통과하므로 소유 확인
+  (`teacherOwnsStudent`)을 **반드시 AND**로 붙여야 한다 — 안 붙이면 강사가 남의 반 신호를 끈다.
+  서버 액션과 **버튼 노출이 같은 함수**를 쓴다(#77: UI 조건문은 게이트가 아니다).
+- **소비처 3곳을 같은 조건으로**(#77) — 진도 탭 카드 / 원스크린 배지([roster.ts](../src/features/onescreen/server/roster.ts))
+  / 알림 감지([events.ts](../src/features/notifications/server/events.ts))에 전부 `.is("resolved_at", null)`.
+  🔴 **한 곳만 빼먹으면 "확인했는데 배지는 그대로"** — 확인 기능 자체가 거짓말이 된다.
+- **UI** — 이상 카드의 각 줄에 `이상 없음` 버튼, 확인분은 아래 접이식 "이상 없음으로 확인한 기록 N건"에
+  **확인자·확인일과 함께** 보존 + `되돌리기`. 알림은 이벤트당 1회 발송이라 확인 시점부터 자동으로 조용해진다.
+
 ### 알림을 눌러도 아무 일이 없음 — 창이 아니라 배경 프레임만 바뀌었다 (2026-07-27) - tsc0/lint0/test2517
 원장: "진도기록 이상에 대해 확인하려고 눌렀는데 아무런 출력이 없네."
 **원인 2개(둘 다 수정) — 첫 번째는 진도 이상뿐 아니라 모든 알림 유형에 해당했다.**
