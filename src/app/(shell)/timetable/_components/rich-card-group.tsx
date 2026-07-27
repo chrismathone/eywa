@@ -22,17 +22,14 @@ const ROOM_H = 34;
 const DAYHEAD_H = 22;
 const PERIOD_H = 26;
 // 학생 1행 높이 — 기본뷰 StudentRow 실측(13px × leading-tight + py-[3px] = 23.1px)에 맞춘 값.
-// ⚠️ 서식을 기본뷰와 동일하게 두는 한 이 값도 함께 따라가야 한다(안 그러면 12행 프레임에서 행이 잘린다).
+// ⚠️ 서식을 기본뷰와 동일하게 두는 한 이 값도 함께 따라가야 한다(안 그러면 행이 잘린다).
 const STU_H = 24;
 const LABEL_W = 58;
 const CARD_W = 176;
-// 명단 섹션 고정 행수(2026-07-06, 사용자 지정) — 그룹 내 최대 인원으로 늘리지 않는다.
-// 예전엔 재원=무제한(flex-1)·대기/퇴원=그룹 max 동기화라 한 반(예: DP5 퇴원 10명)이 전 카드를
-// 세로로 폭주시켰음. 이제 섹션 높이는 항상 이 행수로 고정, 넘치는 명단은 섹션 안에서 스크롤.
-const ACTIVE_ROWS = 12;
-const HOLD_ROWS = 3;
-const WD_ROWS = 5;
 const SECTION_PAD = 8; // p-1(4px) 상하
+// 명단 섹션 높이는 **그룹 내 최대 인원**(`group.rosterRows`, 상한 12)에서 온다 — 고정 행수 상수는 폐지.
+// 배경·상한 근거는 class-grid.ts `rosterRows` 주석 참조(2026-07-27 "세로 여백이 너무 많다").
+const sectionH = (rows: number) => (rows > 0 ? rows * STU_H + SECTION_PAD : 0);
 
 function abbrev(label: string): string {
   return label.length > 4 ? label.slice(0, 4) : label;
@@ -48,10 +45,10 @@ export function RichCardGroupBoard({
   subjectSoftClass: string;
   teacherColors: TeacherColorMap;
 }) {
-  // 고정 행수(재원12·대기3·퇴원5) — 그룹 max와 무관하게 모든 그룹·카드 동일 프레임(시트처럼).
-  const activeH = ACTIVE_ROWS * STU_H + SECTION_PAD;
-  const holdH = HOLD_ROWS * STU_H + SECTION_PAD;
-  const wdH = WD_ROWS * STU_H + SECTION_PAD;
+  // 섹션 안에서는 모든 카드가 같은 높이(행이 맞물려 시트처럼 읽힌다) — 높이는 그 섹션의 최대 인원.
+  const activeH = sectionH(group.rosterRows.active);
+  const holdH = sectionH(group.rosterRows.hold);
+  const wdH = sectionH(group.rosterRows.withdrawn);
 
   return (
     <DragScrollArea barX className="border-line border-t">
@@ -109,10 +106,13 @@ function LabelColumn({
       <div className="text-primary border-line flex items-center justify-center border-b text-[10px] font-bold" style={{ height: activeH }}>
         재원
       </div>
-      <div className={`${cell} text-rose`} style={{ height: holdH }}>대기</div>
-      <div className="border-line text-text-dim flex items-center justify-center text-[10px] font-bold" style={{ height: wdH }}>
-        퇴원
-      </div>
+      {/* 대기·퇴원은 그 섹션에 한 명도 없으면 라벨까지 통째로 접는다 — 카드 쪽과 같은 높이라 정렬이 유지된다. */}
+      {holdH > 0 ? <div className={`${cell} text-rose`} style={{ height: holdH }}>대기</div> : null}
+      {wdH > 0 ? (
+        <div className="border-line text-text-dim flex items-center justify-center text-[10px] font-bold" style={{ height: wdH }}>
+          퇴원
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -211,31 +211,70 @@ function ClassColumn({
           ))}
         </div>
       ))}
-      {/* 재원생 — 고정 12행, 넘치면 섹션 내부 스크롤(카드 높이 불변 = 이단 스크롤 방지).
-          ⚠️ `text-[13px]` = 기본뷰 명단 컨테이너(class-cell)와 같은 글자 크기 — 행은 여기서 상속받는다. */}
-      <div className="bg-card border-line overflow-y-auto border-b p-1 text-[13px]" style={{ height: activeH }}>
+      {/* 재원생 — 섹션 최대 인원(상한 12행). 넘치면 카드 안에서 스크롤하되 스크롤바는 숨기고 하단 페이드. */}
+      <RosterSection h={activeH} rows={group.rosterRows.active} count={card.active.length} className="bg-card border-line border-b">
         {card.activeCount === 0 ? (
           <div className="text-text-faint py-2 text-center text-[10px]">-</div>
         ) : (
           card.active.map((s, i) => <RosterRow key={s.studentId ?? `a-${i}`} s={s} />)
         )}
-      </div>
-      {/* 대기 — 고정 3행 + 내부 스크롤 */}
-      <div className="bg-rose-soft/30 border-line overflow-y-auto border-b p-1 text-[13px]" style={{ height: holdH }}>
+      </RosterSection>
+      <RosterSection h={holdH} rows={group.rosterRows.hold} count={card.hold.length} className="bg-rose-soft/30 border-line border-b">
         {card.hold.length === 0 ? (
           <div className="text-text-faint text-center text-[10px]">-</div>
         ) : (
           card.hold.map((s, i) => <RosterRow key={s.studentId ?? `h-${i}`} s={s} />)
         )}
-      </div>
-      {/* 퇴원 — 고정 5행 + 내부 스크롤. 재원/대기와 동일 서식, 진회색 배경+흰 글자 톤으로 구분 */}
-      <div className="bg-bg-soft overflow-y-auto p-1 text-[13px]" style={{ height: wdH }}>
+      </RosterSection>
+      {/* 퇴원 — 재원/대기와 동일 서식, 진회색 배경+흰 글자 톤으로 구분 */}
+      <RosterSection h={wdH} rows={group.rosterRows.withdrawn} count={card.withdrawn.length} className="bg-bg-soft">
         {card.withdrawn.length === 0 ? (
           <div className="text-text-faint text-center text-[10px]">-</div>
         ) : (
           card.withdrawn.map((s, i) => <RosterRow key={s.studentId ?? `w-${i}`} s={s} />)
         )}
-      </div>
+      </RosterSection>
+    </div>
+  );
+}
+
+/**
+ * 명단 섹션 한 칸(재원/대기/퇴원 공용).
+ * - `rows`가 0이면 **아예 안 그린다**(그 섹션에 인원이 한 명도 없는 그룹 — 빈 "-" 줄이 사라진다).
+ * - 인원이 표시 행수를 넘으면 카드 안에서만 스크롤한다. 카드 높이는 그대로라 이단 스크롤이 안 생긴다.
+ *   ⚠️ 스크롤바는 숨기고(`scrollbar-hide`) **하단 페이드**로 "더 있음"을 알린다(원장 2026-07-27 지시).
+ *   페이드는 넘칠 때만 — 안 넘치는 카드에 걸면 마지막 학생 이름이 괜히 흐려진다.
+ */
+function RosterSection({
+  h,
+  rows,
+  count,
+  className,
+  children,
+}: {
+  h: number;
+  rows: number;
+  count: number;
+  className: string;
+  children: React.ReactNode;
+}) {
+  if (rows <= 0) return null;
+  const overflowing = count > rows;
+  return (
+    <div
+      className={`${className} scrollbar-hide overflow-y-auto p-1 text-[13px]`}
+      style={{
+        height: h,
+        // 아래 12px에 걸쳐 서서히 사라지게 — 잘린 이름이 "여기서 끝"으로 안 읽히도록.
+        ...(overflowing
+          ? {
+              maskImage: "linear-gradient(to bottom, #000 calc(100% - 12px), transparent)",
+              WebkitMaskImage: "linear-gradient(to bottom, #000 calc(100% - 12px), transparent)",
+            }
+          : null),
+      }}
+    >
+      {children}
     </div>
   );
 }

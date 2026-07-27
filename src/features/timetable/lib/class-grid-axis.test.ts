@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_PERIODS_CONFIG } from "./periods";
-import { AXIS_COLS, buildAxisDays, buildRichCardGroups, type GridSlot } from "./class-grid";
+import {
+  AXIS_COLS,
+  ROSTER_ROW_CAP,
+  buildAxisDays,
+  buildRichCardGroups,
+  type GridSlot,
+} from "./class-grid";
 
 /**
  * 통합뷰 카드 요일축 = **월~금 5칸 고정**(원장 지시 2026-07-27).
@@ -91,5 +97,52 @@ describe("buildRichCardGroups — 카드에 axisDays가 실린다", () => {
   it("`days`(실제 수업 요일)는 그대로 — 축과 사실을 분리해 둔다", () => {
     const mixed = [slot("m1", "wed"), slot("m1", "sat", "12:00")];
     expect(cardOf(mixed, "m1").days).toEqual(["wed", "sat"]);
+  });
+});
+
+/**
+ * 명단 섹션 높이 = 그룹 내 최대 인원(상한 `ROSTER_ROW_CAP`) — 원장 2026-07-27 "세로 여백이 너무 많다",
+ * "최대 12명 학생이 보이도록, 그것보다 넘치면 스크롤이 안 보이는 스크롤처리(페이드아웃)".
+ * 예전엔 12/3/5 고정이라 실측 재원 최대가 9명(수학)·11명(영어)인데도 카드마다 20행을 잡았다.
+ */
+function slotWithStudents(classId: string, day: string, students: GridSlot["students"]): GridSlot {
+  return { ...slot(classId, day), students } as GridSlot;
+}
+const stu = (name: string, status: "active" | "hold" | "withdrawn") =>
+  ({ name, grade: "초6", school: "칠성초", status }) as GridSlot["students"][number];
+
+describe("rosterRows — 명단 섹션 행수", () => {
+  const rowsOf = (slots: GridSlot[]) => buildRichCardGroups(slots, DEFAULT_PERIODS_CONFIG)[0].rosterRows;
+
+  it("그룹 내 최대 인원으로 맞춘다(고정 12행 아님)", () => {
+    const rows = rowsOf([
+      slotWithStudents("a", "mon", [stu("가", "active"), stu("나", "active")]),
+      slotWithStudents("b", "mon", [stu("다", "active")]),
+    ]);
+    expect(rows.active).toBe(2); // max(2,1) — 고정 12가 아니다
+  });
+
+  it("12명을 넘으면 12에서 자른다(넘는 만큼은 카드 안 스크롤 + 페이드)", () => {
+    const many = Array.from({ length: 20 }, (_, i) => stu(`학생${i}`, "active"));
+    expect(rowsOf([slotWithStudents("a", "mon", many)]).active).toBe(ROSTER_ROW_CAP);
+  });
+
+  it("재원이 0명인 반도 한 줄은 남긴다('-' 표시 자리)", () => {
+    expect(rowsOf([slotWithStudents("a", "mon", [])]).active).toBe(1);
+  });
+
+  it("🔴 대기·퇴원은 그룹에 한 명도 없으면 0 — 섹션을 통째로 안 그린다(빈 여백 제거의 핵심)", () => {
+    const rows = rowsOf([slotWithStudents("a", "mon", [stu("가", "active")])]);
+    expect(rows.hold).toBe(0);
+    expect(rows.withdrawn).toBe(0);
+  });
+
+  it("한 명이라도 있으면 그 최대치만큼만 잡는다", () => {
+    const rows = rowsOf([
+      slotWithStudents("a", "mon", [stu("가", "active"), stu("나", "hold"), stu("다", "withdrawn")]),
+      slotWithStudents("b", "mon", [stu("라", "withdrawn"), stu("마", "withdrawn")]),
+    ]);
+    expect(rows.hold).toBe(1);
+    expect(rows.withdrawn).toBe(2); // 카드 b가 2명 → 섹션 전체가 2행(카드 간 정렬 유지)
   });
 });

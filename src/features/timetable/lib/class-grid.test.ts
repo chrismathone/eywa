@@ -98,7 +98,10 @@ describe("buildRichCardGroups", () => {
     expect(g.days).toEqual(["mon", "tue", "wed", "thu", "fri"]); // 실제 월·화뿐이어도 항상 월~금 5열
     expect(g.periodRows).toHaveLength(5); // 영어 1교시 시작 → 1~5교시 5행
     expect(g.periodRows.map((p) => p.label)).toEqual(["1교시", "2교시", "3교시", "4교시", "5교시"]);
-    expect(g.holdRows).toBe(1); // max(1,0)=1 → 빈 칸도 한 줄 높이
+    // 명단 행수 = 그룹 내 max (2026-07-27). 대기 1명 → 1행, 퇴원 0명 → 0(섹션 자체를 안 그린다).
+    expect(g.rosterRows.hold).toBe(1);
+    expect(g.rosterRows.withdrawn).toBe(0);
+    expect(g.rosterRows.active).toBe(1);
   });
 
   it("끝 가까운 섹션도 5교시 확보(윈도우 당김) — 10교시 시작 → 7~11교시", () => {

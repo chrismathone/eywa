@@ -138,13 +138,28 @@ export type RichCardGroup = {
   cards: RichClassCard[];
   periodRows: GridPeriodRow[]; // 그룹 공통 교시축(카드 union, order순)
   days: DayOfWeek[]; // 그룹 공통 요일축(카드 union)
-  holdRows: number; // 그룹 내 max(대기 수) — 카드/라벨열 높이 동기화
-  withdrawnRows: number; // 그룹 내 max(퇴원 수)
+  /**
+   * 명단 섹션 표시 행수 — **그룹 내 최대 인원**(카드·라벨열 높이 동기화) + `ROSTER_ROW_CAP` 상한.
+   *
+   * 🔴 왜 그룹 max인가(원장 2026-07-27 "세로 여백이 너무 많다"): 예전엔 12/3/5 **고정**이라 실제 인원과
+   * 무관하게 카드마다 20행(504px)을 잡았다. 실측(injaewon 이번 주) 재원 최대가 수학 9명·영어 11명이라
+   * **12행을 채우는 반이 하나도 없었고**, 대기는 103개 반 중 4개만 인원이 있어 3행이 통째로 빈칸.
+   * 영어 통합뷰 기준 명단 영역의 **65%가 빈칸**이었다.
+   * 그룹 max로 맞추면 카드 간 행 정렬(시트처럼 읽히는 성질)은 그대로면서 빈칸만 사라진다.
+   *
+   * ⚠️ 상한이 **반드시** 필요하다 — 2026-07-06에 고정 행수로 바꾼 이유가 "한 반(DP5 퇴원 10명)이 전 카드를
+   * 세로로 폭주시킴"이었다. 상한을 넘는 명단은 카드 안에서 스크롤(스크롤바 숨김 + 하단 페이드).
+   * 0이면 그 섹션은 **아예 안 그린다**(대기 0명인 그룹에서 '대기 —' 빈 줄이 사라진다).
+   */
+  rosterRows: { active: number; hold: number; withdrawn: number };
 };
 
 const DAY_ORDER: DayOfWeek[] = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
 const WEEKEND = new Set<string>(["sat", "sun"]);
 const WEEKDAYS: DayOfWeek[] = ["mon", "tue", "wed", "thu", "fri"];
+/** 명단 섹션 최대 표시 행수(원장 2026-07-27 "최대 12명"). 넘치면 카드 안에서 스크롤(스크롤바 숨김+페이드). */
+export const ROSTER_ROW_CAP = 12;
+const clampRows = (n: number, min: number) => Math.min(ROSTER_ROW_CAP, Math.max(min, Number.isFinite(n) ? n : min));
 /** 통합뷰 카드 요일축의 **고정 열 수**(월~금 5일 기준). 요일이 늘고 줄어도 열 너비가 변하지 않게 하는 상수. */
 export const AXIS_COLS = 5;
 
@@ -492,8 +507,12 @@ export function buildRichCardGroups(
         cards: cluster,
         periodRows,
         days,
-        holdRows: Math.max(1, ...cluster.map((c) => c.hold.length)),
-        withdrawnRows: Math.max(1, ...cluster.map((c) => c.withdrawn.length)),
+        rosterRows: {
+          // 재원은 빈 반도 "-" 한 줄은 보여준다(반이 있는데 명단 칸이 통째로 없으면 오독).
+          active: clampRows(Math.max(...cluster.map((c) => c.active.length)), 1),
+          hold: clampRows(Math.max(...cluster.map((c) => c.hold.length)), 0),
+          withdrawn: clampRows(Math.max(...cluster.map((c) => c.withdrawn.length)), 0),
+        },
       });
     });
   }
