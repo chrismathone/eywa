@@ -286,6 +286,31 @@ async function processTarget(page, ctx, target, index = 0) {
     };
 
     if (failed(res) && (await claimIfPosted())) continue;
+
+    // 🔴 **409(중복 판정) 백오프 재시도** — 2026-07-27 실측으로 확정한 ClassNote 신설 가드 대응.
+    //    ClassNote가 07-23~07-27 사이 "같은 내용을 짧은 간격에 다시 게시"를 콘텐츠 성격에 따라
+    //    **보드가 달라도** 409 {"detail":"Already exists."}로 거부하게 바뀌었다(실측: 설명회 안내문은
+    //    교차보드 0.3초 간격 거부 / 짧은 평문은 통과 / **~1분 뒤엔 같은 본문도 통과**(T8) — 창은 마지막
+    //    성공 게시가 다시 감는다). 다대상 공지는 공통 본문이라 두 번째 타깃부터 전부 걸린다(07-27 11명 실사고).
+    //    → 대응 = **기다렸다 그대로 재시도**(30s→60s→90s, 총 3분 = 실측 창 ~90초의 2배 여유).
+    //    본문은 절대 변형하지 않는다(학부모 노출 콘텐츠 — 워커가 임의로 바꾸면 안 됨).
+    //    재시도 사이마다 claimIfPosted를 다시 돈다(그 사이 다른 경로로 올라갔을 수 있음 = 중복 방지).
+    if (failed(res) && res.status === 409) {
+      let claimed = false;
+      for (const waitMs of [30_000, 60_000, 90_000]) {
+        ctx.log?.(`[notice] ${target.board} 중복 판정(409) — ${waitMs / 1000}초 대기 후 재시도`);
+        await new Promise((r) => setTimeout(r, waitMs));
+        res = await send(media);
+        if (!failed(res)) break;
+        if (await claimIfPosted()) {
+          claimed = true;
+          break;
+        }
+        if (res.status !== 409) break; // 다른 에러로 바뀜 → 백오프는 무의미, 아래 일반 실패 경로로
+      }
+      if (claimed) continue;
+    }
+
     // ⚠️ **미검증**: kage access_key를 다른 글에 재사용해도 되는지 확인 못 했다 → 재사용분으로 실패하면
     // 이 타깃만 **재업로드해 1회 재시도**한다. 재사용이 원인이 아니면 그대로 실패로 남는다.
     // (위에서 "이미 게시됨"은 걸러졌으므로 여기 오는 건 정말 안 올라간 건이다 = 재시도해도 중복 아님.)
@@ -507,6 +532,10 @@ export async function processNoticesOnce(
             results.push({ board: t.board, ok: false, note: mediaError });
             continue;
           }
+          // 하트비트 — 409 백오프(타깃당 최대 ~3분)로 다대상 공지가 STUCK_MIN(10분)을 넘을 수 있다.
+          // processing_at을 갱신 안 하면 stale 복구가 **진행 중인** 공지를 죽은 것으로 오판해 재큐잉
+          // → 전 타깃 재게시(중복 위험). 타깃마다 한 줄 갱신으로 차단(best-effort — 실패해도 게시는 계속).
+          await sql`update classnote_notices set processing_at=now() where id=${notice.id}`.catch(() => {});
           try {
             results.push(await processTarget(page, ctx, t, idx));
           } catch (e) {
