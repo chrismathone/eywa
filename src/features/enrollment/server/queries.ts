@@ -4,6 +4,14 @@ import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
 import { kstToday } from "@/lib/date-kst";
 import type { ExtractedConsultationForm } from "../form-fill";
 import type { IntakeChecklist } from "../intake-checklist";
+import type { PrepBriefRecord } from "../prep-brief";
+
+/** prep_brief jsonb 방어 — 형태가 맞을 때만 통과(옛 스냅샷·수기 편집으로 깨진 값이 렌더를 죽이지 않게). */
+function isPrepBriefRecord(v: unknown): v is PrepBriefRecord {
+  if (!v || typeof v !== "object") return false;
+  const r = v as Partial<PrepBriefRecord>;
+  return r.version === 1 && !!r.brief && typeof r.brief === "object" && !!r.facts;
+}
 
 export type LearningHistory = {
   prevAcademy?: string;
@@ -407,6 +415,8 @@ export type ConsultationDetail = ConsultationListRow & {
   /** 녹음 행들(시간순) — 상세의 녹음 섹션·수정 폼 "등록된 녹음 N개" 표시가 소비. */
   recordings: ConsultationRecordingRow[];
   recommendedClasses: { id: string; className: string; subject: string }[];
+  /** 사전 상담 브리프 스냅샷(0152a) — 미생성이면 null. 상담 *전* 준비 문서. */
+  prepBrief: PrepBriefRecord | null;
   studentId: string | null;
   /** makeedu counselSeq — 있으면 makeedu 원본 상세 페이지로 바로 가는 링크를 표시. */
   makeeduId: string | null;
@@ -428,7 +438,7 @@ export async function getEnrollmentConsultationById(id: string): Promise<Consult
        subject, career_goal, siblings, safety_notes, registration_status,
        payment_amount, payment_date, registrar, follow_up_date, follow_up_content,
        non_registration_reason, shuttle_bus_request, privacy_agreement,
-       installment_agreement, subject_details, intake_checklist,
+       installment_agreement, subject_details, intake_checklist, prep_brief,
        counselor, received_date, student_type, siblings_details, consultation_date,
        consultant:consultant_id ( display_name )`,
     )
@@ -579,6 +589,8 @@ export async function getEnrollmentConsultationById(id: string): Promise<Consult
         }
       : null,
     recommendedClasses,
+    // 버전 필드가 맞는 스냅샷만 통과 — 옛/깨진 jsonb가 화면 렌더를 크래시시키지 않게(speaker_labels 방어와 동일).
+    prepBrief: isPrepBriefRecord(c.prep_brief) ? c.prep_brief : null,
     studentId: linkedStudentId,
     assignedClassCount,
     personConsultCount: 1, // 상세는 목록 카드 배지를 안 씀 — 타입 충족용(상세의 '다른 상담'은 getSiblingConsultations로 별도 조회).
