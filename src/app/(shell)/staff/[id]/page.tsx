@@ -167,7 +167,6 @@ export default async function StaffDetailPage({
             resumeAccess={resumeAccess}
             resumeCanWrite={resumeCanWrite}
             resumePhotoUrls={resumePhotoUrls}
-            viewerId={viewer?.id ?? ""}
           />
         ) : tab === "monthly" ? (
           <MonthlyScheduleTab staffId={staff.id} staffName={staff.displayName} canManage={canManage} />
