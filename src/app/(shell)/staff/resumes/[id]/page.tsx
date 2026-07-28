@@ -27,7 +27,7 @@ export default async function ResumeViewPage({ params }: { params: Promise<{ id:
   return (
     <div className="print-portrait space-y-4 p-6">
       <header className="print:hidden">
-        <BackLink href="/staff?tab=resumes" label="직원 이력서 목록으로" />
+        <BackLink href="/staff" label="직원관리로" />
         <h1 className="text-foreground mt-1 text-lg font-bold">직원 이력서 — {name}</h1>
         <p className="text-text-dim text-xs">
           {new Date(resume.createdAt).toLocaleDateString("ko-KR", { timeZone: "Asia/Seoul" })} 작성

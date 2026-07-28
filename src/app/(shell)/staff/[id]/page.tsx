@@ -74,8 +74,8 @@ export default async function StaffDetailPage({
   // 급여 노출은 원장(master) + 본인만 (schema.ts 주석). admin/manager에게도 보이면 안 됨.
   const canSeeSalary = !!viewer && (viewer.systemRole === "master" || viewer.id === staff.id);
   // 기본정보 탭의 이력서 섹션 — 열람은 이력서 공용 게이트(원장·관리자)와 동일([[#77]] 우회 방지).
-  const resume =
-    tab === "info" && viewer && (await canViewResume(viewer)) ? await getResumeByStaffUser(staff.id) : null;
+  const resumeAccess = tab === "info" && !!viewer && (await canViewResume(viewer));
+  const resume = resumeAccess ? await getResumeByStaffUser(staff.id) : null;
   const role = ROLE_COLOR[displayRole] ?? ROLE_COLOR.viewer!;
   const status = STATUS_META[staff.status] ?? STATUS_META.active!;
   // 급여·휴가 버튼 노출은 표시 역할 기준(위장된 admin은 일반 관리자처럼 미노출) — 순수 표시.
@@ -148,6 +148,7 @@ export default async function StaffDetailPage({
             showSalary={canSeeSalary}
             roleOptions={roleOptions}
             resume={resume}
+            resumeAccess={resumeAccess}
           />
         ) : tab === "monthly" ? (
           <MonthlyScheduleTab staffId={staff.id} staffName={staff.displayName} canManage={canManage} />

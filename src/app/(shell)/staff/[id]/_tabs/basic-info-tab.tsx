@@ -27,6 +27,7 @@ export async function BasicInfoTab({
   showSalary,
   roleOptions,
   resume,
+  resumeAccess = false,
 }: {
   staff: StaffDetail;
   // 표시용 역할(super_admin은 '관리자'로 위장). 배지·급여카드 노출 등 '보이는 것'에만 사용.
@@ -37,6 +38,8 @@ export async function BasicInfoTab({
   roleOptions: SystemRole[];
   /** 연결된 이력서(원장·관리자 게이트를 통과한 경우에만 전달됨 — 기본정보에 서식대로 표시). */
   resume?: ResumeDetail | null;
+  /** 이력서 열람 자격(원장·관리자) — true인데 resume이 없으면 '이력서 작성' 카드를 보여준다. */
+  resumeAccess?: boolean;
 }) {
   // 독립 조회 병렬(B4). 담임 반 목록은 계정 관리 패널(퇴사/삭제 경고)에서만 쓰여 canManageThis일 때만 조회.
   const [settings, homeroomClasses] = await Promise.all([
@@ -95,7 +98,30 @@ export async function BasicInfoTab({
 
       {/* 이력서 내용(원장 지시 2026-07-28) — 연결된 이력서를 기본정보 서식(Field 그리드)에 맞춰 표시.
           원장·관리자 게이트(canViewResume)를 통과했을 때만 페이지가 resume을 전달한다. */}
-      {resume ? <ResumeSummaryCard resume={resume} /> : null}
+      {resume ? (
+        <ResumeSummaryCard resume={resume} />
+      ) : resumeAccess ? (
+        <div className="bg-card border-line shadow-card rounded-2xl border p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="micro">이력서</p>
+              <p className="text-text-dim mt-1 text-sm">아직 작성된 이력서가 없습니다.</p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              render={
+                <WindowLink
+                  href={`/staff/resumes/new?staff=${staff.id}`}
+                  title={`이력서 작성 — ${staff.displayName}`}
+                />
+              }
+            >
+              이력서 작성
+            </Button>
+          </div>
+        </div>
+      ) : null}
 
       {canManageThis ? (
         <AccountActions

@@ -17,10 +17,9 @@ import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { EMPLOYMENT_TYPES } from "@/features/staff/resume";
 import { SearchForm } from "@/components/search-form";
-import { FaceTabs, type Face } from "@/components/face-tabs";
 import { NewStaffTrigger } from "./_components/new-staff-trigger";
+import { StaffRowLink } from "./_components/staff-row-link";
 import { PAYROLL_ENABLED } from "@/features/payroll/config";
-import { ResumesFace } from "./_components/resumes-face";
 
 export const metadata = { title: "직원관리 — eywa" };
 
@@ -84,6 +83,8 @@ const SORT_FILTERS: { key: SortKey; label: string }[] = [
 function buildStaffHref(p: {
   role: RoleKey;
   status: StatusKey;
+  subject: string; // "all" 또는 과목 key(학원설정)
+  emp: string; // "all" 또는 근무형태(정규직/아르바이트/프리랜서)
   q: string;
   sort: SortKey;
   per: number;
@@ -92,6 +93,8 @@ function buildStaffHref(p: {
   const sp = new URLSearchParams();
   if (p.role !== "all") sp.set("role", p.role);
   if (p.status !== "all") sp.set("status", p.status);
+  if (p.subject !== "all") sp.set("subject", p.subject);
+  if (p.emp !== "all") sp.set("emp", p.emp);
   if (p.q) sp.set("q", p.q);
   if (p.sort !== "role") sp.set("sort", p.sort);
   if (p.per !== DEFAULT_PER) sp.set("per", String(p.per));
@@ -150,6 +153,8 @@ export default async function StaffPage({
     tab?: string;
     role?: RoleKey;
     status?: StatusKey;
+    subject?: string;
+    emp?: string;
     q?: string;
     sort?: string;
     per?: string;
@@ -160,26 +165,7 @@ export default async function StaffPage({
   const user = await getCurrentUser();
   const canManage = !!user && canManageStaff(user.systemRole);
   const sp = await searchParams;
-
-  // 면 전환(FaceTabs) — 직원 목록 / 직원 이력서(웹 작성 서식 → 데이터베이스 저장).
-  const FACES: Face[] = [
-    { key: "list", label: "직원 목록", href: "/staff" },
-    { key: "resumes", label: "직원 이력서", href: "/staff?tab=resumes" },
-  ];
-  if (sp.tab === "resumes") {
-    return (
-      <div className="space-y-5">
-        {/* Editorial 문법 ① — eyebrow→헤드라인→서브 */}
-        <PageHeader
-          eyebrow="운영"
-          title="직원관리"
-          description="웹 서식으로 작성하는 직원 이력서"
-        />
-        <FaceTabs faces={FACES} active="resumes" ariaLabel="직원관리 면" />
-        <ResumesFace page={Math.max(1, Number(sp.page) || 1)} />
-      </div>
-    );
-  }
+  // '직원 이력서' 면은 2026-07-28 목록에 통합(이름 클릭=이력서, 등록=이력서 작성) — 옛 링크는 목록으로.
 
   const invited = sp.invited;
   const role: RoleKey = (sp.role as RoleKey) ?? "all";
@@ -197,6 +183,9 @@ export default async function StaffPage({
     getTenantSettings(),
   ]);
   const subjectMaps = buildSubjectMaps(settings.operations.subjects);
+  // 과목·근무형태 필터(원장 요청 2026-07-28) — 과목 선택지는 학원설정에서, 근무형태는 이력서 3종.
+  const subject = subjectMaps.options.some((o) => o.value === sp.subject) ? (sp.subject as string) : "all";
+  const emp = (EMPLOYMENT_TYPES as readonly string[]).includes(sp.emp ?? "") ? (sp.emp as string) : "all";
   const all = rawAll
     .map((s) => ({
       ...s,
@@ -221,6 +210,8 @@ export default async function StaffPage({
   }
   if (role !== "all") staff = staff.filter((s) => s.systemRole === role);
   if (status !== "all") staff = staff.filter((s) => s.status === status);
+  if (subject !== "all") staff = staff.filter((s) => s.subjects.includes(subject));
+  if (emp !== "all") staff = staff.filter((s) => s.employmentType === emp);
   staff = sortStaff(staff, sort);
 
   // 대시보드(원장 요청 2026-07-28): 전직원 수 · 근무형태별 · 과목별 — 전체(all, 재직+대기) 기준.
@@ -234,7 +225,7 @@ export default async function StaffPage({
       count: all.filter((s) => s.subjects.includes(o.value)).length,
     }))
     .filter((s) => s.count > 0);
-  const current = { role, status, q, sort, per };
+  const current = { role, status, subject, emp, q, sort, per };
 
   // 대시보드 집계는 전체(all) 기준 — 목록만 per명으로 슬라이스(메모리 페이지네이션, 기본 10).
   const total = staff.length;
@@ -250,7 +241,6 @@ export default async function StaffPage({
         title="직원관리"
         description="직원 계정·역할과 담당 현황을 관리합니다"
       />
-      <FaceTabs faces={FACES} active="list" ariaLabel="직원관리 면" />
 
       {/* 직원 대시보드(원장 요청 2026-07-28) — 전직원 수 · 근무형태별 · 과목별 */}
       <section className="grid grid-cols-2 gap-3.5 sm:grid-cols-4">
@@ -308,6 +298,50 @@ export default async function StaffPage({
                 }`}
               >
                 {f.label}
+              </Link>
+            ))}
+          </div>
+          <span className="bg-line h-4 w-px" aria-hidden />
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="micro mr-1">과목</span>
+            <Link
+              href={buildStaffHref({ ...current, subject: "all" })}
+              className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs transition ${
+                subject === "all"
+                  ? "border-primary bg-primary text-primary-foreground font-medium"
+                  : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
+              }`}
+            >
+              전체
+            </Link>
+            {subjectMaps.options.map((o) => (
+              <Link
+                key={o.value}
+                href={buildStaffHref({ ...current, subject: o.value })}
+                className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs transition ${
+                  subject === o.value
+                    ? "border-primary bg-primary text-primary-foreground font-medium"
+                    : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
+                }`}
+              >
+                {o.label}
+              </Link>
+            ))}
+          </div>
+          <span className="bg-line h-4 w-px" aria-hidden />
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="micro mr-1">근무형태</span>
+            {["all", ...EMPLOYMENT_TYPES].map((t) => (
+              <Link
+                key={t}
+                href={buildStaffHref({ ...current, emp: t })}
+                className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs transition ${
+                  emp === t
+                    ? "border-foreground bg-foreground text-background font-medium"
+                    : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
+                }`}
+              >
+                {t === "all" ? "전체" : t}
               </Link>
             ))}
           </div>
@@ -409,9 +443,6 @@ export default async function StaffPage({
                   <th className="px-3 py-2.5 text-right font-medium">담당 반</th>
                   <th className="px-3 py-2.5 text-right font-medium">담당 학생</th>
                   <th className="px-3 py-2.5 font-medium">상태</th>
-                  <th className="px-3 py-2.5 font-medium">
-                    <span className="sr-only">직원 상세</span>
-                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -419,26 +450,28 @@ export default async function StaffPage({
                   const roleMeta = ROLE_META[s.systemRole] ?? ROLE_META.viewer!;
                   const statusMeta = STATUS_META[s.status] ?? STATUS_META.active!;
                   return (
-                    <tr key={s.id} className="border-line/60 hover:bg-bg-soft/50 border-b last:border-0 transition">
-                      <td className="p-0">
-                        {/* 셀 전체 클릭 → 이력서 뷰(원장 지시 2026-07-28 — 수정·삭제도 거기서, 텍스트만이 아니라
-                            칸 어디를 눌러도). 이력서가 없으면 직원 정보가 미리 채워진 새 이력서 폼으로.
-                            아바타 금지 — 사람 표시는 이름 텍스트만. */}
+                    // 행 전체 클릭 → 직원 상세(기본정보에 이력서 내용 포함) — 원장 지시 2026-07-28.
+                    <StaffRowLink
+                      key={s.id}
+                      href={`/staff/${s.id}`}
+                      title={s.displayName}
+                      className="border-line/60 hover:bg-bg-soft/50 border-b last:border-0 cursor-pointer transition"
+                    >
+                      <td className="px-4 py-2.5">
+                        {/* 이름 링크 = 키보드 접근 경로(행 클릭과 같은 상세). 아바타 금지 — 이름 텍스트만. */}
                         <WindowLink
-                          href={s.resumeId ? `/staff/resumes/${s.resumeId}` : `/staff/resumes/new?staff=${s.id}`}
-                          title={`${s.displayName} 이력서`}
-                          ariaLabel={`${s.displayName} 이력서`}
-                          className="group block cursor-pointer px-4 py-2.5"
+                          href={`/staff/${s.id}`}
+                          title={s.displayName}
+                          ariaLabel={`${s.displayName} 상세`}
+                          className="group inline-flex items-center gap-1.5"
                         >
-                          <span className="inline-flex items-center gap-1.5">
-                            <span className="text-foreground font-bold group-hover:underline">{s.displayName}</span>
-                            <EditingBadge scope={`staff:${s.id}`} />
-                          </span>
-                          <span className="text-text-dim num mt-0.5 block truncate text-[11px]">
-                            {/* 플레이스홀더(@imported.local)는 미설정으로 표시 — raw 노출 금지. */}
-                            {s.email.toLowerCase().endsWith("@imported.local") ? "이메일 미설정" : s.email}
-                          </span>
+                          <span className="text-foreground font-bold group-hover:underline">{s.displayName}</span>
+                          <EditingBadge scope={`staff:${s.id}`} />
                         </WindowLink>
+                        <p className="text-text-dim num mt-0.5 truncate text-[11px]">
+                          {/* 플레이스홀더(@imported.local)는 미설정으로 표시 — raw 노출 금지. */}
+                          {s.email.toLowerCase().endsWith("@imported.local") ? "이메일 미설정" : s.email}
+                        </p>
                       </td>
                       <td className="px-3 py-2.5">
                         <Pill color={roleMeta.color}>{roleMeta.label}</Pill>
@@ -467,18 +500,7 @@ export default async function StaffPage({
                       <td className="px-3 py-2.5">
                         <Pill color={statusMeta.color}>{statusMeta.label}</Pill>
                       </td>
-                      <td className="px-3 py-2.5 whitespace-nowrap">
-                        {/* 계정·근무일정 등 운영 정보는 기존 직원 상세로 — 이력서와 별도 진입점 유지. */}
-                        <WindowLink
-                          href={`/staff/${s.id}`}
-                          title={s.displayName}
-                          ariaLabel={`${s.displayName} 직원 상세`}
-                          className="border-line text-text-dim hover:text-foreground hover:border-primary/40 inline-flex items-center rounded-md border px-2 py-0.5 text-[11.5px] transition"
-                        >
-                          상세
-                        </WindowLink>
-                      </td>
-                    </tr>
+                    </StaffRowLink>
                   );
                 })}
               </tbody>

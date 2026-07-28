@@ -28,8 +28,6 @@ export type StaffRow = {
   subjects: string[];
   department: string | null; // 근무부서(0147a — 이력서/직원명부에서 승격)
   employmentType: string | null; // 근무형태: 정규직|아르바이트|프리랜서
-  /** 연결된 이력서(academy_documents.staff_user_id, 최신 1건) — 목록 이름 클릭이 이 뷰로 간다. */
-  resumeId: string | null;
   classesCount: number;
   primaryStudentsCount: number;
 };
@@ -39,8 +37,7 @@ export async function getStaffList(): Promise<StaffRow[]> {
 
   // 세 쿼리는 서로 독립 → 병렬(3 round-trip → 1). users/classes/students 모두 단일 테넌트 ≤1000행이라
   // 절단 위험 없음(현재 users 39·classes 129·enrolled 524).
-  // 이력서 연결은 restricted 행이라 RLS restrictive(0072a)로 사무실 역할만 보인다 — 비사무실은 빈 결과(=링크 없음).
-  const [{ data: users }, { data: teaching }, { data: resumeLinks }] = await Promise.all([
+  const [{ data: users }, { data: teaching }] = await Promise.all([
     supabase
       .from("users")
       .select(
@@ -50,18 +47,7 @@ export async function getStaffList(): Promise<StaffRow[]> {
       .order("system_role", { ascending: true })
       .order("display_name", { ascending: true }),
     supabase.from("classes").select("id, teacher_id").eq("is_active", true),
-    supabase
-      .from("academy_documents")
-      .select("id, staff_user_id")
-      .eq("form_type", "staff_resume")
-      .not("staff_user_id", "is", null)
-      .order("created_at", { ascending: false }),
   ]);
-  const resumeByUser = new Map<string, string>();
-  for (const d of resumeLinks ?? []) {
-    const uid = d.staff_user_id as string | null;
-    if (uid && !resumeByUser.has(uid)) resumeByUser.set(uid, d.id); // 최신 1건
-  }
 
   if (!users) return [];
 
@@ -102,7 +88,6 @@ export async function getStaffList(): Promise<StaffRow[]> {
     subjects: Array.isArray(u.subjects) ? (u.subjects as string[]) : [],
     department: (u.department as string | null) ?? null,
     employmentType: (u.employment_type as string | null) ?? null,
-    resumeId: resumeByUser.get(u.id) ?? null,
     classesCount: classCount.get(u.id) ?? 0,
     primaryStudentsCount: studentsByTeacher.get(u.id)?.size ?? 0,
   }));

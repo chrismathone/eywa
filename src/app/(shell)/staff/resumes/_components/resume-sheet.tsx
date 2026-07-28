@@ -196,7 +196,8 @@ export function ResumeSheet({
   const [previews, setPreviews] = useState<(string | null)[]>(slotify(photoUrls));
   const [uploadingSlot, setUploadingSlot] = useState<number | null>(null);
   // 원샷 직원 등록(생성 화면 전용) — 서버가 권한·역할을 재검증한다.
-  const [acctRegister, setAcctRegister] = useState(false);
+  // '직원 등록' 진입이 이 서식으로 통합(2026-07-28)돼 기본 ON — 역할 미선택 저장은 이력서만 저장+경고.
+  const [acctRegister, setAcctRegister] = useState(!id && (assignableRoles?.length ?? 0) > 0);
   const [acctRole, setAcctRole] = useState("");
 
   const draft = useFormDraft({
@@ -276,7 +277,7 @@ export function ResumeSheet({
     // 취소 = 명시적 폐기 → 초안도 함께 비운다. (창 X는 미저장 가드가 잡고, 그땐 초안이 남아 이어쓰기 가능)
     clearDraft();
     if (id) setEditing(false);
-    else router.push("/staff?tab=resumes");
+    else router.push("/staff");
   }
   const toggleDay = (key: string) =>
     setWorkDays((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]));
