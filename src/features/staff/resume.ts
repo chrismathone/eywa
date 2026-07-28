@@ -89,6 +89,7 @@ export type StaffResumeData = {
   contract: {
     company: string; // 회사 구분 — RESUME_COMPANIES 중 하나 또는 ""
     division: string; // 근무부서(통합 단일 칸) — RESUME_DEPARTMENTS 중 하나 또는 ""
+    jobTitle: string; // 직급 — 자유입력(2026-07-28 추가, 직원 등록 시 users.job_title로)
     manager: string; // 담당자(회사 측 채용 담당) — 자유입력
     workDays: string[]; // WORKDAYS key 배열
     salaryMonthly: string;
@@ -120,6 +121,7 @@ export function emptyResume(): StaffResumeData {
     contract: {
       company: "",
       division: "",
+      jobTitle: "",
       manager: "",
       workDays: [],
       salaryMonthly: "",
@@ -201,6 +203,7 @@ export function parseResumeForm(fd: FormData): StaffResumeData {
     contract: {
       company: pick(s("c_company"), RESUME_COMPANIES),
       division: pickDept(s("c_division")),
+      jobTitle: s("c_jobTitle"),
       manager: s("c_manager"),
       workDays: WORKDAYS.filter((d) => fd.get(`c_workday_${d.key}`)).map((d) => d.key),
       salaryMonthly: s("c_salaryMonthly"),
@@ -262,6 +265,7 @@ export function normalizeResume(v: unknown): StaffResumeData {
     contract: {
       company: pick(str(c.company), RESUME_COMPANIES),
       division: pickDept(str(c.division)),
+      jobTitle: str(c.jobTitle),
       manager: str(c.manager),
       workDays: Array.isArray(c.workDays) ? c.workDays.map(String).filter((d) => validDays.has(d)) : [],
       salaryMonthly: str(c.salaryMonthly),

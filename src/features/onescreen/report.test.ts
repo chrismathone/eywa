@@ -309,7 +309,7 @@ describe("과제 '없음' 문장 처리", () => {
   });
 });
 
-// ── 월말평가일(monthly-exam.ts) — 나간 차시가 없으므로 "~ 진도를 진행했습니다"를 쓰면 거짓이 된다 ──
+// ── 진도가 중단된 날(progress-status.ts) — 나간 차시가 없으므로 "~ 진도를 진행했습니다"를 쓰면 거짓이 된다 ──
 describe("월말평가 보고서 문장", () => {
   const noTests = {
     daily: { score: null, max: 10, prevScore: null },
@@ -365,5 +365,37 @@ describe("월말평가 보고서 문장", () => {
     const r = buildSubjectReport(st, 0);
     expect(r).toContain("일일테스트(이전 진도) 18/20");
     expect(r).toContain("수업 태도는 '아주 좋음'");
+  });
+});
+
+describe("진도 중단 상태 4종 문장", () => {
+  const noTests = {
+    daily: { score: null, max: 10, prevScore: null },
+    check: { score: null, max: 10, prevScore: null },
+  };
+
+  it("월말평가 외 세 상태도 각자 라벨로 문장을 쓴다", () => {
+    for (const status of ["모의고사", "내신대비", "시험대비"]) {
+      const st = makeStudent({
+        name: "김담희",
+        subjects: [{ name: "수학", subjectLabel: "수학", prev: "", today: status }],
+        tests: noTests,
+      });
+      expect(buildSubjectReport(st, 0)).toContain(`오늘 수학 ${status}를 진행했습니다.`);
+      expect(buildSubjectReport(st, 0)).not.toContain("진도를 진행했습니다");
+    }
+  });
+
+  it("합본 — 과목마다 다른 상태면 각자 라벨이 붙는다(하나로 뭉개지 않음)", () => {
+    const st = makeStudent({
+      name: "김담희",
+      subjects: [
+        { name: "수학", subjectLabel: "수학", prev: "", today: "월말평가" },
+        { name: "영어", subjectLabel: "영어", prev: "", today: "모의고사" },
+      ],
+      tests: noTests,
+    });
+    const r = buildReport(st);
+    expect(r).toContain("수학 월말평가, 영어 모의고사를 진행했습니다.");
   });
 });

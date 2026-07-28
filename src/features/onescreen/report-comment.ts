@@ -7,7 +7,7 @@
  */
 import type { OneScreenStudent, TestScore, TestScoreMode } from "./types";
 import { DEFAULT_PROMPTS, interpolate, assembleSingle } from "./prompt-defaults";
-import { isMonthlyExam } from "./monthly-exam";
+import { isSkipStatus } from "./progress-status";
 
 /**
  * 테스트 점수 → 사람이 읽는 문자열(순수, 0148a). **표시 단일 소스** — 학부모 카드(daily_test)와 AI 멘트(testLine)가
@@ -102,14 +102,14 @@ export function buildReportCommentInput(st: OneScreenStudent, subjectIndex: numb
 }
 
 /**
- * 진도 사실 1줄 — 월말평가일(monthly-exam.ts)은 **라벨을 '오늘 수업'으로 바꾼다**. '진도' 라벨로 주면
+ * 진도 사실 1줄 — 진도가 중단된 날(progress-status.ts)은 **라벨을 '오늘 수업'으로 바꾼다**. '진도' 라벨로 주면
  * 모델이 "월말평가 진도를 나갔습니다"처럼 나가지도 않은 진도를 문장에 만든다. 값(`수학 월말평가`)은
  * 그대로 둔다 — 값에 괄호 설명을 달면 모델이 통째로 베낀다(아래 ⚠️ 주석의 실측 사고와 같은 벡터).
  */
 function progressFact(input: ReportCommentInput, label: string): string | null {
   const prog = [input.subject, flatten(input.progress)].filter(Boolean).join(" ");
   if (!prog) return null;
-  return `${isMonthlyExam(input.progress) ? "오늘 수업" : label}: ${prog}`;
+  return `${isSkipStatus(input.progress) ? "오늘 수업" : label}: ${prog}`;
 }
 
 /** 입력의 **채워진 사실만** 모은 [입력] 블록(빈 값은 침묵). 모드 A 프롬프트 {{facts}}에 주입. */

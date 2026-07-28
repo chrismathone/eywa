@@ -40,7 +40,7 @@ export function DeleteResumeButton({ id, name }: { id: string; name: string }) {
               return;
             }
             toast.success("이력서를 삭제했습니다");
-            router.push("/staff?tab=resumes");
+            router.push("/staff");
           }}
           className="text-danger font-bold hover:underline"
         >

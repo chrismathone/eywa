@@ -6,7 +6,9 @@
  * - 선택값은 개행 구분자로 join된 하나의 문자열(today) — 저장/파싱 계약은 단일 string 유지(curriculum.ts PROGRESS_DELIM).
  * - 커리큘럼(math) 과목 전용. 비math(영어 등)는 소비처에서 자유 텍스트 입력 유지.
  * - overflow-x-auto(그리드) 안에서도 잘리지 않게 base-ui Popover 포털로 렌더.
- * (edutrix의 '상태 선택'=활동유형 태그는 별도 필드 설계가 필요해 v1 미포함 — 진도 차시 선택에 집중.)
+ * - **'진도 없이 제출'**(edutrix `SKIP_CHAPTER_STATUSES` 이식) = 시험처럼 진도가 중단되는 날의 특수 상태.
+ *   차시와 상호배타라 고르면 아래 차시 선택을 통째로 잠근다(규약·목록 = progress-status.ts).
+ * (edutrix '상태 선택'의 나머지 6개 = 진도와 **병행**하는 별개 축이라 미포함 — progress-status.ts 🔴 참조.)
  */
 import { useState } from "react";
 import { Popover } from "@base-ui/react/popover";
@@ -18,7 +20,7 @@ import {
   joinLessons,
   displayLessons,
 } from "../curriculum";
-import { MONTHLY_EXAM_LABEL, isMonthlyExam } from "../monthly-exam";
+import { SKIP_PROGRESS_STATUSES, skipStatusOf } from "../progress-status";
 
 export function ProgressSelector({
   value,
@@ -42,13 +44,15 @@ export function ProgressSelector({
 }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
-  /** 월말평가를 켜기 직전의 차시 선택 — 껐을 때 되살린다(실수로 켰다고 고른 차시가 날아가면 다시 고르게 된다). */
-  const [beforeMonthly, setBeforeMonthly] = useState("");
+  /** 특수 상태를 고르기 직전의 차시 선택 — 해제하면 되살린다(실수로 눌렀다고 고른 차시가 날아가면 다시 고르게 된다). */
+  const [beforeSkip, setBeforeSkip] = useState("");
+  /** 펼쳐 둔 대단원(기본 접힘). 검색 중에는 이 상태와 무관하게 전부 펼친다. */
+  const [openUnits, setOpenUnits] = useState<Set<string>>(new Set());
 
-  // 월말평가일 = 나간 차시가 없는 날(monthly-exam.ts 규약). 진도 문자열에 라벨 **단독**으로 들어가므로
-  // 차시 선택과 상호배타 — 켜면 아래 선택 UI를 통째로 잠근다.
-  const monthly = isMonthlyExam(value);
-  const selected = monthly ? [] : splitLessons(value);
+  // 진도가 중단된 날(progress-status.ts 규약) — 진도 문자열에 라벨 **단독**으로 들어가므로 차시 선택과
+  // 상호배타다. 고르면 아래 선택 UI를 통째로 잠근다.
+  const skip = skipStatusOf(value);
+  const selected = skip ? [] : splitLessons(value);
   const selectedSet = new Set(selected);
   const units = curriculumForGrade(studyGrade);
   const q = search.trim();
@@ -62,13 +66,34 @@ export function ProgressSelector({
   const toggle = (lesson: string) =>
     onChange(joinLessons(selectedSet.has(lesson) ? selected.filter((l) => l !== lesson) : [...selected, lesson]));
 
-  const toggleMonthly = () => {
-    if (monthly) {
-      onChange(beforeMonthly); // 되돌리기 — 켜기 전 차시 복원(없었으면 빈 값)
-    } else {
-      setBeforeMonthly(value);
-      onChange(MONTHLY_EXAM_LABEL);
+  const toggleUnit = (unit: string) =>
+    setOpenUnits((prev) => {
+      const next = new Set(prev);
+      if (!next.delete(unit)) next.add(unit);
+      return next;
+    });
+
+  /**
+   * 팝오버를 열 때 **이미 고른 차시가 있는 단원만** 펼쳐 둔다 — 접힘이 기본이라 그냥 두면 강사가
+   * "내가 뭘 골랐지"를 보려고 단원을 하나씩 눌러야 한다. 열 때마다 계산해 현재 값과 어긋나지 않는다.
+   */
+  const handleOpenChange = (o: boolean) => {
+    setOpen(o);
+    if (!o) return;
+    const chosen = new Set(splitLessons(value));
+    setOpenUnits(
+      new Set(curriculumForGrade(studyGrade).filter((u) => u.lessons.some((l) => chosen.has(l))).map((u) => u.unit)),
+    );
+  };
+
+  /** 특수 상태 알약 — 같은 것을 다시 누르면 해제(차시 복원), 다른 것을 누르면 교체(둘을 동시에 못 고른다). */
+  const pickSkip = (status: string) => {
+    if (skip === status) {
+      onChange(beforeSkip); // 해제 — 고르기 전 차시 복원(없었으면 빈 값)
+      return;
     }
+    if (!skip) setBeforeSkip(value); // 차시 → 상태로 넘어가는 순간에만 기억(상태 간 교체는 덮어쓰지 않음)
+    onChange(status);
   };
 
   // 발송 완료된 보고서는 **수정 금지**(2026-07-22 원장 지시) — 학부모가 받은 이미지와 기록이 갈라지면
@@ -80,27 +105,27 @@ export function ProgressSelector({
         aria-label={ariaLabel ?? "진도"}
         aria-readonly="true"
       >
-        <span className={`min-w-0 flex-1 truncate ${monthly ? "text-amber font-bold" : ""}`}>
-          {monthly ? MONTHLY_EXAM_LABEL : selected.length ? displayLessons(value) : "—"}
+        <span className={`min-w-0 flex-1 truncate ${skip ? "text-amber font-bold" : ""}`}>
+          {skip ?? (selected.length ? displayLessons(value) : "—")}
         </span>
       </div>
     );
   }
 
   return (
-    <Popover.Root open={open} onOpenChange={setOpen}>
+    <Popover.Root open={open} onOpenChange={handleOpenChange}>
       {/* ⚠️ `min-w-0 flex-1` 필수 — flex 행(라벨 '오늘 →' + 이 트리거) 안에서 `w-full`만 주면 트리거가
           **행 전체 너비**를 요구해 라벨 폭만큼 카드 밖으로 삐져나온다(2026-07-27 실측 23px 오버플로,
           `scrollWidth 417 > clientWidth 394`). 옆 자유입력 <input>은 처음부터 `w-full min-w-0 flex-1`이라
           멀쩡했다 — 같은 규약으로 맞춘다. 표 뷰(블록 컨텍스트)에선 flex-1이 무시돼 기존 동작 그대로. */}
       <Popover.Trigger
         className={`bg-card hover:border-primary/60 data-[popup-open]:border-primary flex h-8 w-full min-w-0 flex-1 items-center gap-1 rounded-lg border px-2 text-left text-[12px] outline-none transition-colors ${
-          monthly ? "border-amber text-amber font-bold" : selected.length ? "border-line text-foreground" : "border-line text-text-faint"
+          skip ? "border-amber text-amber font-bold" : selected.length ? "border-line text-foreground" : "border-line text-text-faint"
         }`}
         aria-label={ariaLabel ?? "진도 선택"}
       >
         <span className="min-w-0 flex-1 truncate">
-          {monthly ? MONTHLY_EXAM_LABEL : selected.length ? displayLessons(value) : "진도 선택…"}
+          {skip ?? (selected.length ? displayLessons(value) : "진도 선택…")}
         </span>
         {selected.length > 1 ? (
           <span className="bg-primary-soft text-primary shrink-0 rounded-pill px-1.5 py-px text-[10px] font-bold">
@@ -112,125 +137,182 @@ export function ProgressSelector({
       <Popover.Portal>
         <Popover.Positioner side="bottom" align="start" sideOffset={4} className="z-50">
           <Popover.Popup className="bg-card border-line shadow-card flex max-h-[70vh] w-[380px] flex-col overflow-hidden rounded-lg border text-[12px] outline-none">
-            {/* 학년 필터 + 월말평가 토글 */}
-            <div className="border-line flex items-center gap-2 border-b px-3 py-2">
-              <span className="text-text-faint shrink-0">진도 학년</span>
-              <select
-                value={studyGrade}
-                onChange={(e) => onStudyGrade(e.target.value)}
-                disabled={monthly}
-                className="border-line bg-card focus:border-primary h-7 rounded-sm border px-1.5 text-[12px] outline-none disabled:opacity-40"
-                aria-label="진도 학년 선택"
-              >
-                {CURRICULUM_GRADES.map((g) => (
-                  <option key={g} value={g}>
-                    {g}
-                  </option>
-                ))}
-              </select>
-              {ahead && !monthly ? (
-                <span className="bg-amber-soft text-amber rounded-pill px-1.5 py-0.5 text-[10px] font-bold">
-                  실제 {studentGrade}
-                </span>
-              ) : null}
-              {/* 월말평가일 = 나간 차시가 없는 날. 켜면 아래 차시 선택을 통째로 잠그고 진도값을 라벨 하나로 고정한다. */}
-              <label
-                className={`ml-auto inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-pill border px-2 py-0.5 text-[11px] font-bold transition-colors ${
-                  monthly ? "border-amber bg-amber-soft text-amber" : "border-line text-text-faint hover:border-amber/60"
-                }`}
-              >
-                <input
-                  type="checkbox"
-                  checked={monthly}
-                  onChange={toggleMonthly}
-                  className="accent-amber size-3 shrink-0"
-                />
-                {MONTHLY_EXAM_LABEL}
-              </label>
+            {/* ── 진도 없이 제출(edutrix '상태 선택'의 특수 상태) — 진도가 중단된 날. 맨 위에 두는 이유:
+                   이걸 고르면 아래가 전부 잠기므로 **분기 지점**이고, 아래에 묻히면 강사가 못 찾는다. ── */}
+            <div className="border-line border-b px-3 py-2">
+              <p className="text-text-faint mb-1.5 text-[11px]">
+                진도 없이 제출 <span className="text-text-faint/70">· 시험 등 진도가 중단된 날</span>
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {SKIP_PROGRESS_STATUSES.map((s) => {
+                  const on = skip === s;
+                  return (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => pickSkip(s)}
+                      aria-pressed={on}
+                      className={`rounded-pill border px-2.5 py-1 text-[11px] font-bold transition-colors ${
+                        on
+                          ? "border-amber bg-amber-soft text-amber"
+                          : "border-line text-text-dim hover:border-amber/60 hover:text-amber"
+                      }`}
+                    >
+                      {s}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
-            {monthly ? (
+            {skip ? (
               <p className="text-text-dim bg-amber-soft/50 border-line border-b px-3 py-2 text-[11px]">
-                오늘은 <b className="text-amber">월말평가</b>라 진도 선택이 잠겨 있어요. 차시를 고르려면 위 토글을 끄세요.
+                오늘은 <b className="text-amber">{skip}</b>라 진도 선택이 잠겨 있어요. 차시를 고르려면 위에서
+                <b> {skip}</b>를 한 번 더 눌러 해제하세요.
               </p>
             ) : null}
 
-            {/* 검색 */}
-            <div className="border-line border-b px-3 py-2">
-              <input
-                type="text"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="단원·차시 검색"
-                disabled={monthly}
-                className="border-line bg-bg-soft focus:border-primary h-7 w-full rounded-sm border px-2 text-[12px] outline-none disabled:opacity-40"
-                aria-label="단원·차시 검색"
-              />
-            </div>
-
-            {/* 이전 진도 — 참고 표시만. 추천 진도 칩은 2026-07-22 원장 지시로 폐지(재도입 금지):
-                커리큘럼 순서상 '다음 차시'일 뿐 그 반이 실제로 나갈 진도가 아니라, 맞을 때보다 틀릴 때가
-                많았고 한 번 누르면 잘못된 진도가 그대로 저장된다. 진도는 강사가 고르는 게 맞다. */}
-            {prev?.trim() ? (
-              <div className="border-line bg-bg-soft/40 border-b px-3 py-2">
-                <p className="text-text-faint text-[11px]">
-                  이전 진도: <span className="text-text-dim">{displayLessons(prev)}</span>
-                </p>
-              </div>
-            ) : null}
-
-            {/* 선택 요약 */}
-            {selected.length ? (
-              <div className="border-line flex items-center justify-between gap-2 border-b px-3 py-1.5">
-                <span className="text-text-dim text-[11px]">
-                  선택 <b className="text-primary">{selected.length}</b>차시
-                </span>
-                <button
-                  type="button"
-                  onClick={() => onChange("")}
-                  className="text-text-faint hover:text-danger text-[11px]"
+            {/* 아래는 전부 '차시 고르기' — 특수 상태를 고른 날엔 통째로 잠근다(입력마다 disabled: 시각만
+                흐리면 키보드·스크린리더로 들어와 값이 바뀐다). */}
+            <div className={`flex min-h-0 flex-1 flex-col ${skip ? "opacity-40" : ""}`}>
+              {/* 학년 필터 + 검색 — 원래 두 밴드였는데 한 줄로 합쳤다(팝오버가 380px라 겹이 쌓이면 정작
+                  체크리스트가 안 보인다). */}
+              <div className="border-line flex items-center gap-2 border-b px-3 py-2">
+                <select
+                  value={studyGrade}
+                  onChange={(e) => onStudyGrade(e.target.value)}
+                  disabled={!!skip}
+                  className="border-line bg-card focus:border-primary h-7 shrink-0 rounded-sm border px-1.5 text-[12px] outline-none"
+                  aria-label="진도 학년 선택"
                 >
-                  모두 해제
-                </button>
+                  {CURRICULUM_GRADES.map((g) => (
+                    <option key={g} value={g}>
+                      {g}
+                    </option>
+                  ))}
+                </select>
+                {ahead ? (
+                  <span className="bg-amber-soft text-amber shrink-0 rounded-pill px-1.5 py-0.5 text-[10px] font-bold">
+                    실제 {studentGrade}
+                  </span>
+                ) : null}
+                <input
+                  type="text"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="단원·차시 검색"
+                  disabled={!!skip}
+                  className="border-line bg-bg-soft focus:border-primary h-7 w-full min-w-0 flex-1 rounded-sm border px-2 text-[12px] outline-none"
+                  aria-label="단원·차시 검색"
+                />
               </div>
-            ) : null}
 
-            {/* 단원별 체크리스트 — 월말평가면 잠금(입력 자체를 disabled로: 시각만 흐리면 키보드·스크린리더로 들어와 값이 바뀐다) */}
-            <div
-              className={`scrollbar-thin min-h-0 flex-1 overflow-y-auto px-1 py-1 ${monthly ? "pointer-events-none opacity-40" : ""}`}
-              aria-hidden={monthly || undefined}
-            >
-              {filteredUnits.length === 0 ? (
-                <p className="text-text-faint px-2 py-4 text-center">검색 결과가 없습니다</p>
-              ) : (
-                filteredUnits.map((u) => (
-                  <div key={u.unit} className="mb-1">
-                    <p className="text-text-faint bg-bg-soft/60 sticky top-0 px-2 py-1 text-[10.5px] font-bold">
-                      {u.unit}
+              {/* 이전 진도(참고) + 선택 요약 — 둘 다 한 줄짜리 메타라 같은 밴드에 좌/우로 놓는다.
+                  추천 진도 칩은 2026-07-22 원장 지시로 폐지(재도입 금지): 커리큘럼 순서상 '다음 차시'일 뿐
+                  그 반이 실제로 나갈 진도가 아니라, 맞을 때보다 틀릴 때가 많았고 한 번 누르면 잘못된 진도가
+                  그대로 저장된다. 진도는 강사가 고르는 게 맞다. */}
+              {prev?.trim() || selected.length ? (
+                <div className="border-line bg-bg-soft/40 flex items-center gap-2 border-b px-3 py-1.5">
+                  {prev?.trim() ? (
+                    <p className="text-text-faint min-w-0 flex-1 truncate text-[11px]" title={displayLessons(prev)}>
+                      이전 진도: <span className="text-text-dim">{displayLessons(prev)}</span>
                     </p>
-                    {u.lessons.map((l) => {
-                      const on = selectedSet.has(l);
-                      return (
-                        <label
-                          key={l}
-                          className={`hover:bg-bg-soft flex cursor-pointer items-start gap-2 rounded-md px-2 py-1 ${
-                            on ? "text-primary font-bold" : "text-text-dim"
-                          }`}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={on}
-                            onChange={() => toggle(l)}
-                            disabled={monthly}
-                            className="accent-primary mt-0.5 size-3.5 shrink-0"
-                          />
-                          <span className="leading-snug">{l}</span>
-                        </label>
-                      );
-                    })}
-                  </div>
-                ))
-              )}
+                  ) : (
+                    <span className="flex-1" />
+                  )}
+                  {selected.length ? (
+                    <span className="text-text-dim shrink-0 text-[11px]">
+                      선택 <b className="text-primary">{selected.length}</b>차시
+                    </span>
+                  ) : null}
+                  {selected.length ? (
+                    <button
+                      type="button"
+                      onClick={() => onChange("")}
+                      disabled={!!skip}
+                      className="text-text-faint hover:text-danger shrink-0 text-[11px]"
+                    >
+                      모두 해제
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {/* 단원별 체크리스트 — **대단원 단위 아코디언, 기본 접힘**(2026-07-28 원장: "진도가 너무 펼쳐져
+                  있으니 눌러서 펼치는 형식으로"). 한 학년 차시가 수십 개라 전부 펼쳐두면 원하는 단원까지
+                  스크롤이 길다. ⚠️ 접었다고 **선택이 숨지 않아야 한다** — 접힌 단원엔 '선택 N' 배지를 달고,
+                  검색 중에는 전부 펼친다(안 그러면 검색 결과가 접힌 채로 안 보인다). */}
+              <div
+                className={`scrollbar-thin min-h-0 flex-1 overflow-y-auto px-1 py-1 ${skip ? "pointer-events-none" : ""}`}
+                aria-hidden={!!skip || undefined}
+              >
+                {filteredUnits.length === 0 ? (
+                  <p className="text-text-faint px-2 py-4 text-center">검색 결과가 없습니다</p>
+                ) : (
+                  filteredUnits.map((u) => {
+                    const unitSelected = u.lessons.filter((l) => selectedSet.has(l)).length;
+                    const expanded = !!q || openUnits.has(u.unit);
+                    return (
+                      <div key={u.unit} className="mb-1">
+                        {/* 검색 중엔 전부 펼쳐지므로 접기 버튼이 **아무 일도 안 하는 컨트롤**이 된다 →
+                            버튼을 disabled로 두면 "고장난 것처럼" 보이므로 아예 비대화형 헤더로 렌더한다. */}
+                        {q ? (
+                          <div className="text-text-faint bg-bg-soft/60 sticky top-0 z-10 flex w-full items-center gap-1.5 px-2 py-1.5 text-[10.5px] font-bold">
+                            <span className="min-w-0 flex-1 truncate">{u.unit}</span>
+                            {unitSelected ? (
+                              <span className="bg-primary-soft text-primary shrink-0 rounded-pill px-1.5 py-px text-[10px]">
+                                선택 {unitSelected}
+                              </span>
+                            ) : null}
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => toggleUnit(u.unit)}
+                            disabled={!!skip}
+                            aria-expanded={expanded}
+                            className="text-text-faint hover:bg-bg-soft bg-bg-soft/60 sticky top-0 z-10 flex w-full items-center gap-1.5 px-2 py-1.5 text-left text-[10.5px] font-bold"
+                          >
+                            <ChevronDown
+                              className={`size-3 shrink-0 transition-transform ${expanded ? "" : "-rotate-90"}`}
+                            />
+                            <span className="min-w-0 flex-1 truncate">{u.unit}</span>
+                            {unitSelected ? (
+                              <span className="bg-primary-soft text-primary shrink-0 rounded-pill px-1.5 py-px text-[10px]">
+                                선택 {unitSelected}
+                              </span>
+                            ) : (
+                              <span className="text-text-faint/60 shrink-0 font-normal">{u.lessons.length}</span>
+                            )}
+                          </button>
+                        )}
+                        {expanded
+                          ? u.lessons.map((l) => {
+                              const on = selectedSet.has(l);
+                              return (
+                                <label
+                                  key={l}
+                                  className={`hover:bg-bg-soft flex cursor-pointer items-start gap-2 rounded-md px-2 py-1 ${
+                                    on ? "text-primary font-bold" : "text-text-dim"
+                                  }`}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={on}
+                                    onChange={() => toggle(l)}
+                                    disabled={!!skip}
+                                    className="accent-primary mt-0.5 size-3.5 shrink-0"
+                                  />
+                                  <span className="leading-snug">{l}</span>
+                                </label>
+                              );
+                            })
+                          : null}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
             </div>
           </Popover.Popup>
         </Popover.Positioner>

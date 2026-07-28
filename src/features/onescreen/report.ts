@@ -7,7 +7,7 @@
  */
 import type { CellState, OneScreenStudent, StudentStatus, TestScore } from "./types";
 import { isNoneValue } from "./none-marker";
-import { MONTHLY_EXAM_LABEL, isMonthlyExam } from "./monthly-exam";
+import { isSkipStatus, skipStatusOf } from "./progress-status";
 
 /** 정답 개수 → 백분율 (만점 0이면 0) */
 export function pct(score: number, max: number): number {
@@ -107,17 +107,18 @@ function testAndClosingLines(st: OneScreenStudent): string[] {
 export function buildReport(st: OneScreenStudent): string {
   // ⚠️ 학부모에게 나가는 문장이라 **순수 과목 라벨**을 쓴다 — `name`엔 반 이름이 붙을 수 있고
   //    (같은 과목 두 반일 때 "수학 · 고1 특강"), 보고서에 반은 노출하지 않는 것이 원장 확정 규칙이다.
-  // 월말평가일(monthly-exam.ts)은 나간 차시가 없으므로 "~ 진도를 진행했습니다"를 쓰면 거짓이 된다 —
-  // 과목을 진도/월말평가 두 무리로 갈라 각각 제 문장을 쓴다(수학은 월말평가, 영어는 정상 수업인 날 대비).
+  // 진도가 중단된 날(progress-status.ts — 월말평가·모의고사·내신대비·시험대비)은 나간 차시가 없으므로
+  // "~ 진도를 진행했습니다"를 쓰면 거짓이 된다 — 과목을 진도/특수상태 두 무리로 갈라 각각 제 문장을 쓴다
+  // (수학은 시험, 영어는 정상 수업인 날 대비). 상태 라벨은 과목마다 다를 수 있어 과목별로 붙인다.
   const labelOf = (s: OneScreenStudent["subjects"][number]) => s.subjectLabel || s.name;
-  const progressed = st.subjects.filter((s) => !isMonthlyExam(s.today));
-  const exams = st.subjects.filter((s) => isMonthlyExam(s.today));
+  const progressed = st.subjects.filter((s) => !isSkipStatus(s.today));
+  const exams = st.subjects.filter((s) => isSkipStatus(s.today));
   const progText = progressed.map((s) => `${labelOf(s)} ${flatten(s.today)}`).join(", ");
-  const examText = exams.map(labelOf).join(", ");
+  const examText = exams.map((s) => `${labelOf(s)} ${skipStatusOf(s.today)}`).join(", ");
   const head = exams.length
     ? progressed.length
-      ? `${st.name} 학생, 오늘 ${progText} 진도를 진행했고, ${examText} ${MONTHLY_EXAM_LABEL}를 진행했습니다.`
-      : `${st.name} 학생, 오늘 ${examText} ${MONTHLY_EXAM_LABEL}를 진행했습니다.`
+      ? `${st.name} 학생, 오늘 ${progText} 진도를 진행했고, ${examText}를 진행했습니다.`
+      : `${st.name} 학생, 오늘 ${examText}를 진행했습니다.`
     : `${st.name} 학생, 오늘 ${progText} 진도를 진행했습니다.`;
   return [head, ...testAndClosingLines(st)].join(" ");
 }
@@ -129,9 +130,9 @@ export function buildSubjectReport(st: OneScreenStudent, subjectIndex: number): 
   const label = su.subjectLabel || su.name;
   const lines = [
     // 학부모 문장 — 반 이름이 섞이지 않는 subjectLabel(위 buildReport와 같은 이유).
-    // 월말평가일은 차시가 없어 "진도를 진행했습니다"가 거짓 — 전용 문장으로 간다.
-    isMonthlyExam(su.today)
-      ? `${st.name} 학생, 오늘 ${label} ${MONTHLY_EXAM_LABEL}를 진행했습니다.`
+    // 진도가 중단된 날은 차시가 없어 "진도를 진행했습니다"가 거짓 — 전용 문장으로 간다.
+    isSkipStatus(su.today)
+      ? `${st.name} 학생, 오늘 ${label} ${skipStatusOf(su.today)}를 진행했습니다.`
       : `${st.name} 학생, 오늘 ${label} ${flatten(su.today)} 진도를 진행했습니다.`,
     ...testAndClosingLines(st),
   ];
