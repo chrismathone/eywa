@@ -187,10 +187,10 @@ export async function deleteDocument(id: string): Promise<{ ok?: boolean; error?
     .eq("id", id)
     .maybeSingle();
 
-  // ⚠️ 이력서는 같은 행이 여기(탐색기)에도 뜨지만 **열람은 재인증으로 잠겨 있다** — 열람 못 하는 이력서를
-  // 이 경로로 삭제할 수 있으면 잠금이 무의미해진다(2026-07-15 적대검수 실적발). 뷰 페이지와 같은 게이트를 건다.
+  // ⚠️ 이력서는 같은 행이 여기(탐색기)에도 뜨지만 **열람은 원장·관리자로 잠겨 있다**(재인증 제거 2026-07-28) —
+  // 열람 못 하는 이력서를 이 경로로 삭제할 수 있으면 잠금이 무의미해진다(2026-07-15 적대검수 실적발). 같은 게이트를 건다.
   if (row?.form_type === RESUME_FORM_TYPE) {
-    const ok = await canViewResume(gate.user, id, (row.uploaded_by as string | null) ?? null);
+    const ok = await canViewResume(gate.user);
     if (!ok) return { error: RESUME_LOCKED_MSG };
   }
 

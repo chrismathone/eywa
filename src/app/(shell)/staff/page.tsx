@@ -16,16 +16,16 @@ import { getSuperAdminIds, displayRoleFor } from "@/lib/auth/super-admin";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { EMPLOYMENT_TYPES } from "@/features/staff/resume";
-import { Pagination } from "@/components/pagination";
 import { SearchForm } from "@/components/search-form";
-import { FaceTabs, type Face } from "@/components/face-tabs";
 import { NewStaffTrigger } from "./_components/new-staff-trigger";
+import { StaffRowLink } from "./_components/staff-row-link";
 import { PAYROLL_ENABLED } from "@/features/payroll/config";
-import { ResumesFace } from "./_components/resumes-face";
 
 export const metadata = { title: "직원관리 — eywa" };
 
-const PAGE_SIZE = 50;
+// 페이지 크기 선택(원장 요청 2026-07-28) — 기본 10명, 창에서 10/30/50 선택.
+const PER_OPTIONS = [10, 30, 50] as const;
+const DEFAULT_PER = 10;
 
 const ROLE_META: Record<string, { label: string; color: PillColor }> = {
   master: { label: "원장", color: "danger" },
@@ -80,14 +80,39 @@ const SORT_FILTERS: { key: SortKey; label: string }[] = [
   { key: "hire", label: "입사일순" },
 ];
 
-function buildStaffHref(p: { role: RoleKey; status: StatusKey; q: string; sort: SortKey }): string {
+function buildStaffHref(p: {
+  role: RoleKey;
+  status: StatusKey;
+  subject: string; // "all" 또는 과목 key(학원설정)
+  emp: string; // "all" 또는 근무형태(정규직/아르바이트/프리랜서)
+  q: string;
+  sort: SortKey;
+  per: number;
+  page?: number;
+}): string {
   const sp = new URLSearchParams();
   if (p.role !== "all") sp.set("role", p.role);
   if (p.status !== "all") sp.set("status", p.status);
+  if (p.subject !== "all") sp.set("subject", p.subject);
+  if (p.emp !== "all") sp.set("emp", p.emp);
   if (p.q) sp.set("q", p.q);
   if (p.sort !== "role") sp.set("sort", p.sort);
+  if (p.per !== DEFAULT_PER) sp.set("per", String(p.per));
+  if (p.page && p.page > 1) sp.set("page", String(p.page));
   const s = sp.toString();
   return s ? `/staff?${s}` : "/staff";
+}
+
+/** 페이지 번호 나열(1 … 현재±2 … 끝) — 눈에 띄는 번호형 페이저용. null = 말줄임. */
+function pageNumbers(page: number, totalPages: number): (number | null)[] {
+  if (totalPages <= 7) return Array.from({ length: totalPages }, (_, i) => i + 1);
+  const around = [page - 1, page, page + 1].filter((n) => n > 1 && n < totalPages);
+  const out: (number | null)[] = [1];
+  if ((around[0] ?? totalPages) > 2) out.push(null);
+  out.push(...around);
+  if ((around[around.length - 1] ?? 1) < totalPages - 1) out.push(null);
+  out.push(totalPages);
+  return out;
 }
 
 /** 정렬 비교기 — null(미입력)은 항상 뒤로, 동률은 이름 가나다순. */
@@ -128,8 +153,11 @@ export default async function StaffPage({
     tab?: string;
     role?: RoleKey;
     status?: StatusKey;
+    subject?: string;
+    emp?: string;
     q?: string;
     sort?: string;
+    per?: string;
     page?: string;
   }>;
 }) {
@@ -137,32 +165,14 @@ export default async function StaffPage({
   const user = await getCurrentUser();
   const canManage = !!user && canManageStaff(user.systemRole);
   const sp = await searchParams;
-
-  // 면 전환(FaceTabs) — 직원 목록 / 직원 이력서(웹 작성 서식 → 데이터베이스 저장).
-  const FACES: Face[] = [
-    { key: "list", label: "직원 목록", href: "/staff" },
-    { key: "resumes", label: "직원 이력서", href: "/staff?tab=resumes" },
-  ];
-  if (sp.tab === "resumes") {
-    return (
-      <div className="space-y-5">
-        {/* Editorial 문법 ① — eyebrow→헤드라인→서브 */}
-        <PageHeader
-          eyebrow="운영"
-          title="직원관리"
-          description="웹 서식으로 작성하는 직원 이력서"
-        />
-        <FaceTabs faces={FACES} active="resumes" ariaLabel="직원관리 면" />
-        <ResumesFace page={Math.max(1, Number(sp.page) || 1)} />
-      </div>
-    );
-  }
+  // '직원 이력서' 면은 2026-07-28 목록에 통합(이름 클릭=이력서, 등록=이력서 작성) — 옛 링크는 목록으로.
 
   const invited = sp.invited;
   const role: RoleKey = (sp.role as RoleKey) ?? "all";
   const status: StatusKey = (sp.status as StatusKey) ?? "all";
   const q = sp.q ?? "";
   const sort: SortKey = SORT_FILTERS.some((f) => f.key === sp.sort) ? (sp.sort as SortKey) : "role";
+  const per = (PER_OPTIONS as readonly number[]).includes(Number(sp.per)) ? Number(sp.per) : DEFAULT_PER;
   const page = Math.max(1, Number(sp.page) || 1);
 
   // super_admin(숨은 총괄)은 학원 화면에서 '관리자'로 위장 표시(실제 role/접근 불변, displayRoleFor).
@@ -173,6 +183,9 @@ export default async function StaffPage({
     getTenantSettings(),
   ]);
   const subjectMaps = buildSubjectMaps(settings.operations.subjects);
+  // 과목·근무형태 필터(원장 요청 2026-07-28) — 과목 선택지는 학원설정에서, 근무형태는 이력서 3종.
+  const subject = subjectMaps.options.some((o) => o.value === sp.subject) ? (sp.subject as string) : "all";
+  const emp = (EMPLOYMENT_TYPES as readonly string[]).includes(sp.emp ?? "") ? (sp.emp as string) : "all";
   const all = rawAll
     .map((s) => ({
       ...s,
@@ -197,6 +210,8 @@ export default async function StaffPage({
   }
   if (role !== "all") staff = staff.filter((s) => s.systemRole === role);
   if (status !== "all") staff = staff.filter((s) => s.status === status);
+  if (subject !== "all") staff = staff.filter((s) => s.subjects.includes(subject));
+  if (emp !== "all") staff = staff.filter((s) => s.employmentType === emp);
   staff = sortStaff(staff, sort);
 
   // 대시보드(원장 요청 2026-07-28): 전직원 수 · 근무형태별 · 과목별 — 전체(all, 재직+대기) 기준.
@@ -210,22 +225,13 @@ export default async function StaffPage({
       count: all.filter((s) => s.subjects.includes(o.value)).length,
     }))
     .filter((s) => s.count > 0);
-  const current = { role, status, q, sort };
+  const current = { role, status, subject, emp, q, sort, per };
 
-  // 역할 분포 Stat은 전체(all) 기준 — 목록만 50명으로 슬라이스(billing 메모리 페이지네이션).
+  // 대시보드 집계는 전체(all) 기준 — 목록만 per명으로 슬라이스(메모리 페이지네이션, 기본 10).
   const total = staff.length;
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-  const pageStaff = staff.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-  const pageHref = (p: number) => {
-    const params = new URLSearchParams();
-    if (role !== "all") params.set("role", role);
-    if (status !== "all") params.set("status", status);
-    if (q) params.set("q", q);
-    if (sort !== "role") params.set("sort", sort);
-    if (p > 1) params.set("page", String(p));
-    const s = params.toString();
-    return s ? `/staff?${s}` : "/staff";
-  };
+  const totalPages = Math.max(1, Math.ceil(total / per));
+  const pageStaff = staff.slice((page - 1) * per, page * per);
+  const pageHref = (p: number) => buildStaffHref({ ...current, page: p });
 
   return (
     <div className="space-y-5">
@@ -235,7 +241,6 @@ export default async function StaffPage({
         title="직원관리"
         description="직원 계정·역할과 담당 현황을 관리합니다"
       />
-      <FaceTabs faces={FACES} active="list" ariaLabel="직원관리 면" />
 
       {/* 직원 대시보드(원장 요청 2026-07-28) — 전직원 수 · 근무형태별 · 과목별 */}
       <section className="grid grid-cols-2 gap-3.5 sm:grid-cols-4">
@@ -298,6 +303,50 @@ export default async function StaffPage({
           </div>
           <span className="bg-line h-4 w-px" aria-hidden />
           <div className="flex flex-wrap items-center gap-1.5">
+            <span className="micro mr-1">과목</span>
+            <Link
+              href={buildStaffHref({ ...current, subject: "all" })}
+              className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs transition ${
+                subject === "all"
+                  ? "border-primary bg-primary text-primary-foreground font-medium"
+                  : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
+              }`}
+            >
+              전체
+            </Link>
+            {subjectMaps.options.map((o) => (
+              <Link
+                key={o.value}
+                href={buildStaffHref({ ...current, subject: o.value })}
+                className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs transition ${
+                  subject === o.value
+                    ? "border-primary bg-primary text-primary-foreground font-medium"
+                    : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
+                }`}
+              >
+                {o.label}
+              </Link>
+            ))}
+          </div>
+          <span className="bg-line h-4 w-px" aria-hidden />
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="micro mr-1">근무형태</span>
+            {["all", ...EMPLOYMENT_TYPES].map((t) => (
+              <Link
+                key={t}
+                href={buildStaffHref({ ...current, emp: t })}
+                className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs transition ${
+                  emp === t
+                    ? "border-foreground bg-foreground text-background font-medium"
+                    : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
+                }`}
+              >
+                {t === "all" ? "전체" : t}
+              </Link>
+            ))}
+          </div>
+          <span className="bg-line h-4 w-px" aria-hidden />
+          <div className="flex flex-wrap items-center gap-1.5">
             <span className="micro mr-1">정렬</span>
             {SORT_FILTERS.map((f) => (
               <Link
@@ -322,14 +371,33 @@ export default async function StaffPage({
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="micro">
-          결과 <span className="text-foreground font-bold">{total}</span>명
-          {totalPages > 1 ? (
-            <span className="text-text-faint ml-2 normal-case">
-              · {page}/{totalPages} 페이지
-            </span>
-          ) : null}
-        </p>
+        <div className="flex flex-wrap items-center gap-3">
+          <p className="micro">
+            결과 <span className="text-foreground font-bold">{total}</span>명
+            {totalPages > 1 ? (
+              <span className="text-text-faint ml-2 normal-case">
+                · {page}/{totalPages} 페이지
+              </span>
+            ) : null}
+          </p>
+          <div className="flex items-center gap-1">
+            <span className="micro mr-0.5">표시</span>
+            {PER_OPTIONS.map((n) => (
+              <Link
+                key={n}
+                href={buildStaffHref({ ...current, per: n })}
+                className={`num shrink-0 rounded-md border px-2 py-0.5 text-xs transition ${
+                  per === n
+                    ? "border-primary bg-primary text-primary-foreground font-bold"
+                    : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
+                }`}
+              >
+                {n}
+              </Link>
+            ))}
+            <span className="text-text-faint ml-0.5 text-[11px]">명씩</span>
+          </div>
+        </div>
         <div className="flex flex-wrap items-center gap-2">
           {PAYROLL_ENABLED && user?.systemRole === "master" ? (
             <Button variant="outline" render={<WindowLink href="/staff/payroll" title="월별 급여" />}>
@@ -375,9 +443,6 @@ export default async function StaffPage({
                   <th className="px-3 py-2.5 text-right font-medium">담당 반</th>
                   <th className="px-3 py-2.5 text-right font-medium">담당 학생</th>
                   <th className="px-3 py-2.5 font-medium">상태</th>
-                  <th className="px-3 py-2.5 font-medium">
-                    <span className="sr-only">직원 상세</span>
-                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -385,14 +450,19 @@ export default async function StaffPage({
                   const roleMeta = ROLE_META[s.systemRole] ?? ROLE_META.viewer!;
                   const statusMeta = STATUS_META[s.status] ?? STATUS_META.active!;
                   return (
-                    <tr key={s.id} className="border-line/60 hover:bg-bg-soft/50 border-b last:border-0 transition">
+                    // 행 전체 클릭 → 직원 상세(기본정보에 이력서 내용 포함) — 원장 지시 2026-07-28.
+                    <StaffRowLink
+                      key={s.id}
+                      href={`/staff/${s.id}`}
+                      title={s.displayName}
+                      className="border-line/60 hover:bg-bg-soft/50 border-b last:border-0 cursor-pointer transition"
+                    >
                       <td className="px-4 py-2.5">
-                        {/* 이름 클릭 → 이력서 뷰(원장 지시 2026-07-28 — 수정·삭제도 거기서). 이력서가 없으면
-                            직원 정보가 미리 채워진 새 이력서 폼으로. 아바타 금지 — 사람 표시는 이름 텍스트만. */}
+                        {/* 이름 링크 = 키보드 접근 경로(행 클릭과 같은 상세). 아바타 금지 — 이름 텍스트만. */}
                         <WindowLink
-                          href={s.resumeId ? `/staff/resumes/${s.resumeId}` : `/staff/resumes/new?staff=${s.id}`}
-                          title={`${s.displayName} 이력서`}
-                          ariaLabel={`${s.displayName} 이력서`}
+                          href={`/staff/${s.id}`}
+                          title={s.displayName}
+                          ariaLabel={`${s.displayName} 상세`}
                           className="group inline-flex items-center gap-1.5"
                         >
                           <span className="text-foreground font-bold group-hover:underline">{s.displayName}</span>
@@ -430,24 +500,61 @@ export default async function StaffPage({
                       <td className="px-3 py-2.5">
                         <Pill color={statusMeta.color}>{statusMeta.label}</Pill>
                       </td>
-                      <td className="px-3 py-2.5 whitespace-nowrap">
-                        {/* 계정·근무일정 등 운영 정보는 기존 직원 상세로 — 이력서와 별도 진입점 유지. */}
-                        <WindowLink
-                          href={`/staff/${s.id}`}
-                          title={s.displayName}
-                          ariaLabel={`${s.displayName} 직원 상세`}
-                          className="border-line text-text-dim hover:text-foreground hover:border-primary/40 inline-flex items-center rounded-md border px-2 py-0.5 text-[11.5px] transition"
-                        >
-                          상세
-                        </WindowLink>
-                      </td>
-                    </tr>
+                    </StaffRowLink>
                   );
                 })}
               </tbody>
             </table>
           </div>
-          <Pagination page={page} totalPages={totalPages} hrefForPage={pageHref} />
+          {/* 눈에 띄는 번호형 페이저(원장 지시 2026-07-28 — 표준 컴팩트 페이저는 존재감이 약해 이 목록만 강조형) */}
+          {totalPages > 1 ? (
+            <nav className="flex flex-wrap items-center justify-center gap-1.5 pt-1" aria-label="페이지 이동">
+              {page > 1 ? (
+                <Link
+                  href={pageHref(page - 1)}
+                  className="border-line bg-card text-foreground hover:border-primary/40 hover:bg-bg-soft inline-flex items-center rounded-lg border px-3 py-1.5 text-sm font-medium shadow-sm transition"
+                >
+                  ← 이전
+                </Link>
+              ) : (
+                <span className="border-line text-text-faint inline-flex cursor-default items-center rounded-lg border px-3 py-1.5 text-sm opacity-40">
+                  ← 이전
+                </span>
+              )}
+              {pageNumbers(page, totalPages).map((n, i) =>
+                n === null ? (
+                  <span key={`gap${i}`} className="text-text-faint px-1 text-sm">
+                    …
+                  </span>
+                ) : (
+                  <Link
+                    key={n}
+                    href={pageHref(n)}
+                    aria-current={n === page ? "page" : undefined}
+                    className={`num inline-flex min-w-9 items-center justify-center rounded-lg border px-2.5 py-1.5 text-sm transition ${
+                      n === page
+                        ? "border-primary bg-primary text-primary-foreground font-bold shadow-sm"
+                        : "border-line bg-card text-foreground hover:border-primary/40 hover:bg-bg-soft"
+                    }`}
+                  >
+                    {n}
+                  </Link>
+                ),
+              )}
+              {page < totalPages ? (
+                <Link
+                  href={pageHref(page + 1)}
+                  className="border-line bg-card text-foreground hover:border-primary/40 hover:bg-bg-soft inline-flex items-center rounded-lg border px-3 py-1.5 text-sm font-medium shadow-sm transition"
+                >
+                  다음 →
+                </Link>
+              ) : (
+                <span className="border-line text-text-faint inline-flex cursor-default items-center rounded-lg border px-3 py-1.5 text-sm opacity-40">
+                  다음 →
+                </span>
+              )}
+            </nav>
+          ) : null}
         </>
       )}
     </div>

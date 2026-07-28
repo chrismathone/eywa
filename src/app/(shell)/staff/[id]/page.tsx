@@ -13,6 +13,10 @@ import {
   ROLE_LABEL,
 } from "@/lib/auth/role-hierarchy";
 import { getStaffById } from "@/features/staff/server/queries";
+import { getResumeByStaffUser } from "@/features/staff/server/resume-queries";
+import { canViewResume } from "@/features/staff/server/resume-access";
+import { canWriteTenant } from "@/lib/auth/perm-matrix";
+import { resolveTenantReadUrls } from "@/lib/storage/media-storage";
 import { getSuperAdminIds, displayRoleFor } from "@/lib/auth/super-admin";
 import { StaffTabsNav, isStaffTabKey } from "./_components/tabs-nav";
 import { BasicInfoTab } from "./_tabs/basic-info-tab";
@@ -71,16 +75,31 @@ export default async function StaffDetailPage({
   const roleOptions = canManageThis && viewer ? assignableRoles(viewer.systemRole) : [];
   // 급여 노출은 원장(master) + 본인만 (schema.ts 주석). admin/manager에게도 보이면 안 됨.
   const canSeeSalary = !!viewer && (viewer.systemRole === "master" || viewer.id === staff.id);
+  // 기본정보 탭의 이력서 섹션 — 열람은 이력서 공용 게이트(원장·관리자)와 동일([[#77]] 우회 방지).
+  const resumeAccess = tab === "info" && !!viewer && (await canViewResume(viewer));
+  const resume = resumeAccess ? await getResumeByStaffUser(staff.id) : null;
+  const resumeCanWrite = resumeAccess && !!viewer && (await canWriteTenant(viewer.systemRole, "staff"));
+  // 증명사진 signed URL(슬라이드) — 게이트 통과 시에만 발급.
+  const resumePhotoUrls =
+    resume && viewer && resume.data.photos.length > 0
+      ? await (async () => {
+          const map = await resolveTenantReadUrls(resume.data.photos, "document", viewer.tenantId);
+          return resume.data.photos.map((p) => map[p] ?? null);
+        })()
+      : [];
   const role = ROLE_COLOR[displayRole] ?? ROLE_COLOR.viewer!;
   const status = STATUS_META[staff.status] ?? STATUS_META.active!;
   // 급여·휴가 버튼 노출은 표시 역할 기준(위장된 admin은 일반 관리자처럼 미노출) — 순수 표시.
   const isTeacherLike = displayRole === "teacher" || displayRole === "master";
 
   return (
-    <div className="space-y-6">
-      <BackLink href="/staff" label="직원관리로" />
+    // print-portrait — 기본정보(종이 서식)·이력서만 세로 A4로 인쇄. 헤더·탭·계정관리 등 화면 크롬은 print:hidden.
+    <div className="print-portrait space-y-6">
+      <div className="print:hidden">
+        <BackLink href="/staff" label="직원관리로" />
+      </div>
 
-      <header className="border-border flex flex-col gap-3 border-b pb-5 sm:flex-row sm:items-end sm:justify-between">
+      <header className="border-border print:hidden flex flex-col gap-3 border-b pb-5 sm:flex-row sm:items-end sm:justify-between">
         <div className="flex items-center gap-3">
           <div className="space-y-1">
             <p className="eyebrow">직원</p>
@@ -132,7 +151,9 @@ export default async function StaffDetailPage({
         </div>
       </header>
 
-      <StaffTabsNav staffId={staff.id} active={tab} showActivity={canManage} />
+      <div className="print:hidden">
+        <StaffTabsNav staffId={staff.id} active={tab} showActivity={canManage} />
+      </div>
 
       <section>
         {tab === "info" ? (
@@ -142,6 +163,11 @@ export default async function StaffDetailPage({
             canManageThis={canManageThis}
             showSalary={canSeeSalary}
             roleOptions={roleOptions}
+            resume={resume}
+            resumeAccess={resumeAccess}
+            resumeCanWrite={resumeCanWrite}
+            resumePhotoUrls={resumePhotoUrls}
+            viewerId={viewer?.id ?? ""}
           />
         ) : tab === "monthly" ? (
           <MonthlyScheduleTab staffId={staff.id} staffName={staff.displayName} canManage={canManage} />

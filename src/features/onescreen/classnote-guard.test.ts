@@ -7,33 +7,38 @@ import {
   isClassnoteSubjectEnabled,
 } from "./classnote-guard";
 
-describe("classnoteMinDate", () => {
-  it("전 달 1일", () => {
-    expect(classnoteMinDate("2026-07-07")).toBe("2026-06-01");
-    expect(classnoteMinDate("2026-07-01")).toBe("2026-06-01");
+describe("classnoteMinDate — 오늘 포함 최근 7일 창(원장 절대 규칙 2026-07-28)", () => {
+  it("오늘-6일이 창 시작", () => {
+    expect(classnoteMinDate("2026-07-28")).toBe("2026-07-22");
+    expect(classnoteMinDate("2026-07-07")).toBe("2026-07-01");
   });
-  it("1월 → 전년 12월", () => {
-    expect(classnoteMinDate("2026-01-10")).toBe("2025-12-01");
+  it("월 경계를 넘는다", () => {
+    expect(classnoteMinDate("2026-07-03")).toBe("2026-06-27");
+  });
+  it("연 경계를 넘는다", () => {
+    expect(classnoteMinDate("2026-01-02")).toBe("2025-12-27");
   });
 });
 
 describe("isClassnoteAllowed (KST 문자열 비교)", () => {
-  const today = "2026-07-07"; // minDate 2026-06-01
-  it("전 달 1일 이후는 허용", () => {
-    expect(isClassnoteAllowed("2026-06-01", today)).toBe(true);
+  const today = "2026-07-07"; // minDate 2026-07-01
+  it("7일 창 안은 허용", () => {
+    expect(isClassnoteAllowed("2026-07-01", today)).toBe(true);
     expect(isClassnoteAllowed("2026-07-05", today)).toBe(true);
     expect(isClassnoteAllowed("2026-07-07", today)).toBe(true);
   });
-  it("전 달 1일 이전은 차단(사고 방지)", () => {
-    expect(isClassnoteAllowed("2026-05-31", today)).toBe(false);
+  it("7일 지난 보고서는 차단(학부모가 일주일 지난 보고서를 받는 건 비합리적)", () => {
+    expect(isClassnoteAllowed("2026-06-30", today)).toBe(false);
+    expect(isClassnoteAllowed("2026-06-01", today)).toBe(false);
     expect(isClassnoteAllowed("2026-01-15", today)).toBe(false);
   });
   it("빈 값은 차단", () => {
     expect(isClassnoteAllowed("", today)).toBe(false);
   });
-  it("1월 경계", () => {
-    expect(isClassnoteAllowed("2025-12-01", "2026-01-10")).toBe(true);
-    expect(isClassnoteAllowed("2025-11-30", "2026-01-10")).toBe(false);
+  it("연 경계 — 7일 창이 전년 12월로 넘어간다", () => {
+    expect(isClassnoteAllowed("2025-12-27", "2026-01-02")).toBe(true);
+    expect(isClassnoteAllowed("2025-12-26", "2026-01-02")).toBe(false);
+    expect(isClassnoteAllowed("2025-12-01", "2026-01-10")).toBe(false); // 구 '전 달 1일' 규칙에선 허용이었음
   });
 });
 

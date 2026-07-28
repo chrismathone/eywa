@@ -39,10 +39,8 @@ export const SUBTABS_BY_MENU: Partial<Record<MenuKey, SubTab[]>> = {
     { label: "시수 검증", href: "/billing?tab=verify" },
     { label: "환불 요청서", href: "/billing?tab=refunds" },
   ],
-  staff: [
-    { label: "직원 목록", href: "/staff" },
-    { label: "직원 이력서", href: "/staff?tab=resumes" },
-  ],
+  // 직원 이력서 면은 2026-07-28 직원 목록에 통합(이름 클릭=이력서, 등록=이력서 작성) — 하위 메뉴 제거.
+  staff: [{ label: "직원 목록", href: "/staff" }],
   help: [
     { label: "도움말", href: "/help" },
     { label: "아이콘 시스템", href: "/help/icons" },

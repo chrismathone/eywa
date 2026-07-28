@@ -16,7 +16,7 @@ export default async function NewResumePage({
   searchParams: Promise<{ staff?: string }>;
 }) {
   const user = await requireAccess("staff");
-  if (!(await canWriteTenant(user.systemRole, "staff"))) redirect("/staff?tab=resumes");
+  if (!(await canWriteTenant(user.systemRole, "staff"))) redirect("/staff");
 
   // 직원목록에서 이력서 없는 직원을 클릭해 온 경우(?staff=) — 아는 정보를 미리 채우고 저장 시 그 직원과 연결.
   const { staff: staffParam } = await searchParams;
@@ -33,12 +33,13 @@ export default async function NewResumePage({
       ? (staff.department as string)
       : "";
     data.contract.employmentType = staff.employmentType ?? "";
+    data.contract.jobTitle = staff.jobTitle ?? "";
   }
 
   return (
     <div className="print-portrait space-y-4 p-6">
       <header className="print:hidden">
-        <BackLink href="/staff?tab=resumes" label="직원 이력서 목록으로" />
+        <BackLink href="/staff" label="직원관리로" />
         <h1 className="text-foreground mt-1 text-lg font-bold">
           직원 이력서 작성{staff ? ` — ${staff.displayName}` : ""}
         </h1>
