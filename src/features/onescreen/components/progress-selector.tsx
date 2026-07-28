@@ -254,25 +254,38 @@ export function ProgressSelector({
                     const expanded = !!q || openUnits.has(u.unit);
                     return (
                       <div key={u.unit} className="mb-1">
-                        <button
-                          type="button"
-                          onClick={() => toggleUnit(u.unit)}
-                          disabled={!!q || !!skip}
-                          aria-expanded={expanded}
-                          className="text-text-faint hover:bg-bg-soft bg-bg-soft/60 sticky top-0 z-10 flex w-full items-center gap-1.5 px-2 py-1.5 text-left text-[10.5px] font-bold"
-                        >
-                          <ChevronDown
-                            className={`size-3 shrink-0 transition-transform ${expanded ? "" : "-rotate-90"}`}
-                          />
-                          <span className="min-w-0 flex-1 truncate">{u.unit}</span>
-                          {unitSelected ? (
-                            <span className="bg-primary-soft text-primary shrink-0 rounded-pill px-1.5 py-px text-[10px]">
-                              선택 {unitSelected}
-                            </span>
-                          ) : (
-                            <span className="text-text-faint/60 shrink-0 font-normal">{u.lessons.length}</span>
-                          )}
-                        </button>
+                        {/* 검색 중엔 전부 펼쳐지므로 접기 버튼이 **아무 일도 안 하는 컨트롤**이 된다 →
+                            버튼을 disabled로 두면 "고장난 것처럼" 보이므로 아예 비대화형 헤더로 렌더한다. */}
+                        {q ? (
+                          <div className="text-text-faint bg-bg-soft/60 sticky top-0 z-10 flex w-full items-center gap-1.5 px-2 py-1.5 text-[10.5px] font-bold">
+                            <span className="min-w-0 flex-1 truncate">{u.unit}</span>
+                            {unitSelected ? (
+                              <span className="bg-primary-soft text-primary shrink-0 rounded-pill px-1.5 py-px text-[10px]">
+                                선택 {unitSelected}
+                              </span>
+                            ) : null}
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => toggleUnit(u.unit)}
+                            disabled={!!skip}
+                            aria-expanded={expanded}
+                            className="text-text-faint hover:bg-bg-soft bg-bg-soft/60 sticky top-0 z-10 flex w-full items-center gap-1.5 px-2 py-1.5 text-left text-[10.5px] font-bold"
+                          >
+                            <ChevronDown
+                              className={`size-3 shrink-0 transition-transform ${expanded ? "" : "-rotate-90"}`}
+                            />
+                            <span className="min-w-0 flex-1 truncate">{u.unit}</span>
+                            {unitSelected ? (
+                              <span className="bg-primary-soft text-primary shrink-0 rounded-pill px-1.5 py-px text-[10px]">
+                                선택 {unitSelected}
+                              </span>
+                            ) : (
+                              <span className="text-text-faint/60 shrink-0 font-normal">{u.lessons.length}</span>
+                            )}
+                          </button>
+                        )}
                         {expanded
                           ? u.lessons.map((l) => {
                               const on = selectedSet.has(l);
