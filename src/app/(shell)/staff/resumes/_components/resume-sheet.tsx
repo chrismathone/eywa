@@ -4,7 +4,17 @@ import { useActionState, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useFormStatus } from "react-dom";
 import { toast } from "sonner";
-import { AlertCircle, CheckSquare, Loader2, Pencil, Save, Square, X } from "@/components/icons/eywa-icon-compat";
+import {
+  AlertCircle,
+  CheckSquare,
+  Loader2,
+  Minus,
+  Pencil,
+  Plus,
+  Save,
+  Square,
+  X,
+} from "@/components/icons/eywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { useFormDraft } from "@/components/forms/use-form-draft";
@@ -13,15 +23,31 @@ import { useUnsavedGuard } from "@/components/workspace/use-unsaved-guard";
 import { FormActionBar } from "@/components/forms/form-action-bar";
 import { EditingBanner } from "@/features/presence/editing-badge";
 import { useEditPresence } from "@/features/presence/edit-presence";
+import type { SystemRole } from "@/lib/permissions";
+import { ROLE_LABEL } from "@/lib/auth/role-hierarchy";
+import { uploadToTicket } from "@/lib/storage/upload-to-ticket";
 import {
+  DYNAMIC_ROWS_MAX,
   EMPLOYMENT_TYPES,
+  emptyCert,
+  emptyLanguage,
+  INITIAL_STAFF_PASSWORD,
+  RESUME_CHECKS,
   RESUME_COMPANIES,
   RESUME_DEPARTMENTS,
   RESUME_DRAFT_EXCLUDE,
+  RESUME_PHOTO_SLOTS,
   WORKDAYS,
+  type ResumeCert,
+  type ResumeCheckKey,
+  type ResumeLanguage,
   type StaffResumeData,
 } from "@/features/staff/resume";
-import { saveStaffResume, type ResumeActionState } from "@/features/staff/server/resume-actions";
+import {
+  issueResumePhotoTicket,
+  saveStaffResume,
+  type ResumeActionState,
+} from "@/features/staff/server/resume-actions";
 import { DeleteResumeButton, PrintResumeButton } from "./resume-buttons";
 
 // 종이 서식("인재원 이력서") 레이아웃을 재현한 시트 — 읽기(뷰) ↔ 인라인 편집(칸에 바로 타이핑) 한 컴포넌트.
@@ -39,6 +65,30 @@ const V = (s: string) => s || " ";
 
 function SectionHead({ children }: { children: React.ReactNode }) {
   return <h2 className="text-foreground mt-5 mb-1.5 text-[13px] font-bold print:mt-3 print:text-[12px]">{children}</h2>;
+}
+
+/** 동적 섹션의 행 +/− 버튼 — 마지막 행에 입력하면 자동으로도 늘어나고, 버튼으로도 조절(원장 요청). */
+function RowButtons({ label, onAdd, onRemove }: { label: string; onAdd: () => void; onRemove: () => void }) {
+  return (
+    <div className="print:hidden mt-1 flex items-center justify-end gap-1">
+      <button
+        type="button"
+        onClick={onAdd}
+        aria-label={`${label} 행 추가`}
+        className="border-line text-text-dim hover:text-foreground hover:border-primary/40 inline-flex size-6 items-center justify-center rounded-md border transition"
+      >
+        <Plus size={12} aria-hidden="true" />
+      </button>
+      <button
+        type="button"
+        onClick={onRemove}
+        aria-label={`${label} 마지막 행 삭제`}
+        className="border-line text-text-dim hover:text-foreground hover:border-primary/40 inline-flex size-6 items-center justify-center rounded-md border transition"
+      >
+        <Minus size={12} aria-hidden="true" />
+      </button>
+    </div>
+  );
 }
 
 function EditInput({
@@ -84,12 +134,33 @@ function SaveButton({ done = false }: { done?: boolean }) {
   );
 }
 
+/** photos 배열 → 고정 슬롯 배열(길이 RESUME_PHOTO_SLOTS, 빈 슬롯 null). */
+const slotify = <T,>(arr: readonly T[] | undefined): (T | null)[] =>
+  Array.from({ length: RESUME_PHOTO_SLOTS }, (_, i) => arr?.[i] ?? null);
+
+/** 초안 vals에서 동적 행 배열 복원 — 인덱스가 존재하는 만큼(캡 DYNAMIC_ROWS_MAX). */
+function rowsFromDraft<T>(
+  vals: Record<string, string | undefined>,
+  prefix: string,
+  keys: string[],
+  make: (get: (k: string) => string) => T,
+): T[] {
+  const out: T[] = [];
+  for (let i = 0; i < DYNAMIC_ROWS_MAX; i++) {
+    if (keys.every((k) => vals[`${prefix}_${i}_${k}`] === undefined)) break;
+    out.push(make((k) => vals[`${prefix}_${i}_${k}`] ?? ""));
+  }
+  return out;
+}
+
 export function ResumeSheet({
   data,
   id,
   userId,
   canWrite = false,
   startEditing = false,
+  photoUrls,
+  assignableRoles,
 }: {
   data: StaffResumeData;
   id?: string;
@@ -97,6 +168,10 @@ export function ResumeSheet({
   userId: string;
   canWrite?: boolean;
   startEditing?: boolean;
+  /** data.photos와 같은 순서의 열람용 signed URL(서버에서 resolve — 게이트 통과 시에만 전달됨). */
+  photoUrls?: (string | null)[];
+  /** 원샷 직원 등록에서 부여 가능한 역할(작성자 권한 기준, 서버가 재검증). 생성 화면에서만 전달. */
+  assignableRoles?: SystemRole[];
 }) {
   const [editing, setEditing] = useState(startEditing);
   const [state, formAction] = useActionState<ResumeActionState, FormData>(saveStaffResume, undefined);
@@ -106,9 +181,20 @@ export function ResumeSheet({
   // 근무형태(단일 선택)·근무요일(다중)은 컨트롤드 — 초안 복원 시 onRestore로 rehydrate.
   const [empType, setEmpType] = useState(data.contract.employmentType);
   const [workDays, setWorkDays] = useState<string[]>(data.contract.workDays);
-  // 회사 구분·소속부서(SearchableSelect = hidden input 제출)도 컨트롤드 — 초안 복원 동일 경로.
+  // 회사 구분·근무부서(SearchableSelect = hidden input 제출)도 컨트롤드 — 초안 복원 동일 경로.
   const [company, setCompany] = useState(data.contract.company);
   const [division, setDivision] = useState(data.contract.division);
+  // 동적 행(자격증·외국어)·서류 체크·사진은 컨트롤드 — 행 추가/삭제·복원이 상태 기준으로 돌아야 안전.
+  const [certs, setCerts] = useState<ResumeCert[]>(data.certificates);
+  const [langs, setLangs] = useState<ResumeLanguage[]>(data.languages);
+  const [checks, setChecks] = useState<Record<ResumeCheckKey, boolean>>(data.checks);
+  const [photos, setPhotos] = useState<(string | null)[]>(slotify(data.photos));
+  // 미리보기 URL — 기존 저장분은 서버 signed URL, 방금 올린 파일은 로컬 objectURL.
+  const [previews, setPreviews] = useState<(string | null)[]>(slotify(photoUrls));
+  const [uploadingSlot, setUploadingSlot] = useState<number | null>(null);
+  // 원샷 직원 등록(생성 화면 전용) — 서버가 권한·역할을 재검증한다.
+  const [acctRegister, setAcctRegister] = useState(false);
+  const [acctRole, setAcctRole] = useState("");
 
   const draft = useFormDraft({
     // 스코프에 userId 포함 — 사무실 공용 PC에서 앞사람 초안이 뒷사람에게 복구 제안되면 안 된다.
@@ -122,6 +208,28 @@ export function ResumeSheet({
       setWorkDays(WORKDAYS.filter((d) => vals[`c_workday_${d.key}`] === "true").map((d) => d.key));
       setCompany(vals.c_company ?? "");
       setDivision(vals.c_division ?? "");
+      const rc = rowsFromDraft<ResumeCert>(vals, "cert", ["name", "date", "issuer"], (get) => ({
+        name: get("name"),
+        date: get("date"),
+        issuer: get("issuer"),
+      }));
+      setCerts(rc.length ? rc : [emptyCert()]);
+      const rl = rowsFromDraft<ResumeLanguage>(vals, "lang", ["name", "testDate", "score"], (get) => ({
+        name: get("name"),
+        testDate: get("testDate"),
+        score: get("score"),
+      }));
+      setLangs(rl.length ? rl : [emptyLanguage()]);
+      setChecks(
+        Object.fromEntries(RESUME_CHECKS.map((c) => [c.key, vals[`chk_${c.key}`] === "true"])) as Record<
+          ResumeCheckKey,
+          boolean
+        >,
+      );
+      // 사진 경로 복원 — 미리보기 URL은 복원 불가(로컬 objectURL 소멸)라 자리표시로만 보인다.
+      setPhotos(Array.from({ length: RESUME_PHOTO_SLOTS }, (_, i) => vals[`photo_${i}`] || null));
+      setAcctRegister(vals.acct_register === "true");
+      setAcctRole(vals.acct_role ?? "");
     },
   });
   const clearDraft = draft.clear;
@@ -154,6 +262,11 @@ export function ResumeSheet({
     setWorkDays(data.contract.workDays);
     setCompany(data.contract.company);
     setDivision(data.contract.division);
+    setCerts(data.certificates);
+    setLangs(data.languages);
+    setChecks(data.checks);
+    setPhotos(slotify(data.photos));
+    setPreviews(slotify(photoUrls));
     setEditing(true);
   }
   function cancel() {
@@ -164,6 +277,54 @@ export function ResumeSheet({
   }
   const toggleDay = (key: string) =>
     setWorkDays((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]));
+  const toggleCheck = (key: ResumeCheckKey) => setChecks((prev) => ({ ...prev, [key]: !prev[key] }));
+
+  /** 동적 행 수정 — 마지막 행에 내용이 생기면 자동으로 빈 행 1개 추가(반응형, 캡 DYNAMIC_ROWS_MAX). */
+  function updateRow<T extends Record<string, string>>(
+    set: React.Dispatch<React.SetStateAction<T[]>>,
+    make: () => T,
+    index: number,
+    key: keyof T & string,
+    value: string,
+  ) {
+    set((prev) => {
+      const next = prev.map((row, i) => (i === index ? { ...row, [key]: value } : row));
+      const last = next[next.length - 1];
+      if (index === next.length - 1 && value.trim() && Object.values(last).some(Boolean) && next.length < DYNAMIC_ROWS_MAX) {
+        next.push(make());
+      }
+      return next;
+    });
+  }
+  const addRow = <T,>(set: React.Dispatch<React.SetStateAction<T[]>>, make: () => T) =>
+    set((prev) => (prev.length < DYNAMIC_ROWS_MAX ? [...prev, make()] : prev));
+  const removeLastRow = <T,>(set: React.Dispatch<React.SetStateAction<T[]>>) =>
+    set((prev) => (prev.length > 1 ? prev.slice(0, -1) : prev));
+
+  /** 증명사진 선택 → 티켓 발급 → 스토리지 PUT → 슬롯에 경로/미리보기 반영. 저장 전에는 DB에 안 남는다. */
+  async function pickPhoto(slot: number, file: File | undefined) {
+    if (!file) return;
+    setUploadingSlot(slot);
+    try {
+      const fd = new FormData();
+      fd.set("contentType", file.type);
+      fd.set("size", String(file.size));
+      const res = await issueResumePhotoTicket(undefined, fd);
+      const ticket = res?.ticket;
+      if (!ticket) throw new Error(res?.error ?? "업로드 티켓 발급 실패");
+      await uploadToTicket(ticket, file);
+      setPhotos((prev) => prev.map((p, i) => (i === slot ? ticket.path : p)));
+      setPreviews((prev) => prev.map((p, i) => (i === slot ? URL.createObjectURL(file) : p)));
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "사진 업로드에 실패했습니다");
+    } finally {
+      setUploadingSlot(null);
+    }
+  }
+  const clearPhoto = (slot: number) => {
+    setPhotos((prev) => prev.map((p, i) => (i === slot ? null : p)));
+    setPreviews((prev) => prev.map((p, i) => (i === slot ? null : p)));
+  };
 
   const p = data.personal;
   const c = data.contract;
@@ -190,6 +351,57 @@ export function ResumeSheet({
             <td className={cell}>{field("p_name", p.name, { ph: "성명" })}</td>
             <th className={`${head} w-28`}>영문</th>
             <td className={cell}>{field("p_nameEn", p.nameEn, { ph: "영문 이름" })}</td>
+            {/* 증명사진 2장 — 직원 얼굴 구별용(원장 지시 2026-07-28). rowSpan으로 종이 이력서 사진칸 재현. */}
+            <td className={`${cell} w-[92px] align-top print:w-[80px]`} rowSpan={4}>
+              <div className="flex flex-col gap-1.5">
+                {Array.from({ length: RESUME_PHOTO_SLOTS }, (_, slot) => {
+                  const url = editing ? previews[slot] : (photoUrls?.[slot] ?? null);
+                  const hasPath = editing ? Boolean(photos[slot]) : Boolean(data.photos[slot]);
+                  return (
+                    <div key={slot} className="relative">
+                      <div className="border-foreground/25 bg-bg-soft/40 flex aspect-[3/4] w-full items-center justify-center overflow-hidden rounded-sm border">
+                        {url ? (
+                          // eslint-disable-next-line @next/next/no-img-element -- signed URL/objectURL 미리보기(최적화 불필요)
+                          <img src={url} alt={`증명사진 ${slot + 1}`} className="size-full object-cover" />
+                        ) : hasPath ? (
+                          <span className="text-text-faint px-1 text-center text-[10px]">사진 첨부됨</span>
+                        ) : (
+                          <span className="text-text-faint px-1 text-center text-[10px]">사진 {slot + 1}</span>
+                        )}
+                      </div>
+                      {editing ? (
+                        <div className="print:hidden mt-0.5 flex items-center justify-center gap-1">
+                          <label className="text-primary relative cursor-pointer text-[10px] font-bold hover:underline">
+                            {uploadingSlot === slot ? "올리는 중…" : hasPath ? "변경" : "첨부"}
+                            <input
+                              type="file"
+                              accept="image/jpeg,image/png,image/webp"
+                              className="sr-only"
+                              disabled={uploadingSlot !== null}
+                              onChange={(e) => {
+                                void pickPhoto(slot, e.target.files?.[0]);
+                                e.target.value = ""; // 같은 파일 재선택 허용
+                              }}
+                            />
+                          </label>
+                          {hasPath ? (
+                            <button
+                              type="button"
+                              onClick={() => clearPhoto(slot)}
+                              className="text-text-dim text-[10px] hover:underline"
+                            >
+                              삭제
+                            </button>
+                          ) : null}
+                        </div>
+                      ) : null}
+                      {/* 저장 제출용 경로 — 파일 자체는 티켓으로 이미 업로드됨. */}
+                      {editing ? <input type="hidden" name={`photo_${slot}`} value={photos[slot] ?? ""} /> : null}
+                    </div>
+                  );
+                })}
+              </div>
+            </td>
           </tr>
           <tr>
             <th className={head}>주민등록번호</th>
@@ -282,17 +494,54 @@ export function ResumeSheet({
           </tr>
         </thead>
         <tbody>
-          {data.certificates.map((r, i) => (
+          {(editing ? certs : data.certificates).map((r, i) => (
             <tr key={i}>
-              <td className={cell}>{field(`cert_${i}_name`, r.name, { ph: "자격증명" })}</td>
-              <td className={`${cell} num text-center`}>
-                {field(`cert_${i}_date`, r.date, { ph: "취득년월일", align: "center" })}
+              <td className={cell}>
+                {editing ? (
+                  <input
+                    name={`cert_${i}_name`}
+                    value={r.name}
+                    onChange={(e) => updateRow(setCerts, emptyCert, i, "name", e.target.value)}
+                    placeholder="자격증명"
+                    className={inputBase}
+                  />
+                ) : (
+                  V(r.name)
+                )}
               </td>
-              <td className={cell}>{field(`cert_${i}_issuer`, r.issuer, { ph: "발행처" })}</td>
+              <td className={`${cell} num text-center`}>
+                {editing ? (
+                  <input
+                    name={`cert_${i}_date`}
+                    value={r.date}
+                    onChange={(e) => updateRow(setCerts, emptyCert, i, "date", e.target.value)}
+                    placeholder="취득년월일"
+                    className={`${inputBase} text-center`}
+                  />
+                ) : (
+                  V(r.date)
+                )}
+              </td>
+              <td className={cell}>
+                {editing ? (
+                  <input
+                    name={`cert_${i}_issuer`}
+                    value={r.issuer}
+                    onChange={(e) => updateRow(setCerts, emptyCert, i, "issuer", e.target.value)}
+                    placeholder="발행처"
+                    className={inputBase}
+                  />
+                ) : (
+                  V(r.issuer)
+                )}
+              </td>
             </tr>
           ))}
         </tbody>
       </table>
+      {editing ? (
+        <RowButtons label="자격증" onAdd={() => addRow(setCerts, emptyCert)} onRemove={() => removeLastRow(setCerts)} />
+      ) : null}
       <table className={`${T} mt-2`}>
         <thead>
           <tr>
@@ -302,19 +551,54 @@ export function ResumeSheet({
           </tr>
         </thead>
         <tbody>
-          {data.languages.map((r, i) => (
+          {(editing ? langs : data.languages).map((r, i) => (
             <tr key={i}>
-              <td className={cell}>{field(`lang_${i}_name`, r.name, { ph: "외국어 (시험명)" })}</td>
+              <td className={cell}>
+                {editing ? (
+                  <input
+                    name={`lang_${i}_name`}
+                    value={r.name}
+                    onChange={(e) => updateRow(setLangs, emptyLanguage, i, "name", e.target.value)}
+                    placeholder="외국어 (시험명)"
+                    className={inputBase}
+                  />
+                ) : (
+                  V(r.name)
+                )}
+              </td>
               <td className={`${cell} num text-center`}>
-                {field(`lang_${i}_testDate`, r.testDate, { ph: "시험일", align: "center" })}
+                {editing ? (
+                  <input
+                    name={`lang_${i}_testDate`}
+                    value={r.testDate}
+                    onChange={(e) => updateRow(setLangs, emptyLanguage, i, "testDate", e.target.value)}
+                    placeholder="시험일"
+                    className={`${inputBase} text-center`}
+                  />
+                ) : (
+                  V(r.testDate)
+                )}
               </td>
               <td className={`${cell} text-center`}>
-                {field(`lang_${i}_score`, r.score, { ph: "점수/등급", align: "center" })}
+                {editing ? (
+                  <input
+                    name={`lang_${i}_score`}
+                    value={r.score}
+                    onChange={(e) => updateRow(setLangs, emptyLanguage, i, "score", e.target.value)}
+                    placeholder="점수/등급"
+                    className={`${inputBase} text-center`}
+                  />
+                ) : (
+                  V(r.score)
+                )}
               </td>
             </tr>
           ))}
         </tbody>
       </table>
+      {editing ? (
+        <RowButtons label="외국어" onAdd={() => addRow(setLangs, emptyLanguage)} onRemove={() => removeLastRow(setLangs)} />
+      ) : null}
 
       <SectionHead>5. 계약사항</SectionHead>
       <table className={T}>
@@ -337,7 +621,8 @@ export function ResumeSheet({
                 V(c.company)
               )}
             </td>
-            <th className={`${head} w-24`}>소속부서</th>
+            {/* 소속부서·근무부서 두 칸을 근무부서 한 칸으로 통합(원장 지시 2026-07-28). */}
+            <th className={`${head} w-24`}>근무부서</th>
             <td className={cell}>
               {editing ? (
                 <SearchableSelect
@@ -346,7 +631,7 @@ export function ResumeSheet({
                   onValueChange={setDivision}
                   options={RESUME_DEPARTMENTS.map((v) => ({ value: v, label: v }))}
                   placeholder="선택"
-                  ariaLabel="소속부서"
+                  ariaLabel="근무부서"
                   className="w-full"
                 />
               ) : (
@@ -355,10 +640,10 @@ export function ResumeSheet({
             </td>
           </tr>
           <tr>
-            <th className={head}>근무부서</th>
-            <td className={cell}>{field("c_department", c.department, { ph: "근무부서" })}</td>
             <th className={head}>담당자</th>
-            <td className={cell}>{field("c_manager", c.manager, { ph: "담당자" })}</td>
+            <td className={cell} colSpan={3}>
+              {field("c_manager", c.manager, { ph: "담당자" })}
+            </td>
           </tr>
           <tr>
             <th className={head}>근무요일</th>
@@ -468,6 +753,42 @@ export function ResumeSheet({
           </tr>
         </tbody>
       </table>
+
+      <SectionHead>6. 제출서류 확인</SectionHead>
+      <table className={T}>
+        <tbody>
+          <tr>
+            <th className={`${head} w-32`}>서류 확인</th>
+            <td className={cell}>
+              {RESUME_CHECKS.map((item) =>
+                editing ? (
+                  // relative — sr-only input의 absolute 탈출 방지([[#79]], 근무요일 체크박스와 동일).
+                  <label key={item.key} className="relative mr-4 inline-flex cursor-pointer items-center gap-1 select-none">
+                    <input
+                      type="checkbox"
+                      name={`chk_${item.key}`}
+                      value="1"
+                      checked={checks[item.key]}
+                      onChange={() => toggleCheck(item.key)}
+                      className="sr-only"
+                    />
+                    <span className="inline-flex items-center gap-1 whitespace-nowrap">
+                      {checks[item.key] ? <CheckSquare size={13} aria-hidden="true" /> : <Square size={13} aria-hidden="true" />}
+                      {item.label}
+                    </span>
+                  </label>
+                ) : (
+                  <span key={item.key} className="relative mr-4 inline-flex items-center gap-1 whitespace-nowrap">
+                    {data.checks[item.key] ? <CheckSquare size={13} aria-hidden="true" /> : <Square size={13} aria-hidden="true" />}
+                    {item.label}
+                    <span className="sr-only">{data.checks[item.key] ? " 완료" : " 미완료"}</span>
+                  </span>
+                ),
+              )}
+            </td>
+          </tr>
+        </tbody>
+      </table>
     </div>
   );
 
@@ -517,6 +838,44 @@ export function ResumeSheet({
         </p>
       ) : null}
       {sheet}
+      {/* 원샷 직원 등록(신규 작성 전용) — 저장하면서 인적사항 E-mail로 로그인 계정까지 생성(원장 지시 2026-07-28). */}
+      {!id && assignableRoles && assignableRoles.length > 0 ? (
+        <div className="print:hidden border-line bg-card mx-auto w-full max-w-[780px] rounded-2xl border p-4 shadow-card">
+          <label className="relative inline-flex cursor-pointer items-center gap-1.5 select-none">
+            <input
+              type="checkbox"
+              name="acct_register"
+              value="1"
+              checked={acctRegister}
+              onChange={() => setAcctRegister((v) => !v)}
+              className="sr-only"
+            />
+            <span className="inline-flex items-center gap-1.5 text-[13px] font-bold">
+              {acctRegister ? <CheckSquare size={15} aria-hidden="true" /> : <Square size={15} aria-hidden="true" />}
+              저장하면서 직원 계정도 함께 등록
+            </span>
+          </label>
+          {acctRegister ? (
+            <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-2">
+              <span className="text-text-dim text-[12.5px]">시스템 역할</span>
+              <SearchableSelect
+                name="acct_role"
+                value={acctRole}
+                onValueChange={setAcctRole}
+                options={assignableRoles.map((r) => ({ value: r, label: ROLE_LABEL[r] }))}
+                placeholder="역할 선택"
+                ariaLabel="직원 계정 역할"
+                className="w-40"
+              />
+              <p className="text-text-dim w-full text-[12px]">
+                인적사항의 E-mail로 로그인 계정을 만들고, 초기 비밀번호는{" "}
+                <span className="num font-bold">{INITIAL_STAFF_PASSWORD}</span> — 본인이 로그인 후 변경합니다. 같은
+                이메일 직원이 이미 있으면 새로 만들지 않고 그 직원과 이력서를 연결합니다.
+              </p>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
       <FormActionBar>
         <Button type="button" variant="outline" onClick={cancel}>
           <X className="size-4" />

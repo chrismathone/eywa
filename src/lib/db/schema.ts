@@ -181,6 +181,10 @@ export const users = pgTable(
     // 계정 귀속 화면 설정(0146a) — 화면별 네임스페이스 1단({"timetable":{grades,…}}).
     // 저장은 **해당 화면 키만 병합**(다른 화면 설정을 지우지 않게). 소비: /timetable 서버 렌더.
     uiPrefs: jsonb("ui_prefs").default({}).notNull(),
+    // 근무부서·근무형태(0147a) — 이력서/직원명부 시트에서 승격(선택지는 코드 RESUME_DEPARTMENTS·
+    // EMPLOYMENT_TYPES). 소비: 직원목록 list·대시보드 집계. null=미입력.
+    department: text("department"),
+    employmentType: text("employment_type"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
@@ -1640,6 +1644,8 @@ export const academyDocuments = pgTable(
     restricted: boolean("restricted").notNull().default(false),
     pinned: boolean("pinned").notNull().default(false), // 자주 쓰는 서식 상단 고정(목록 정렬 pinned→최신)
     uploadedBy: uuid("uploaded_by").references(() => users.id, { onDelete: "set null" }),
+    // 직원 이력서 ↔ 직원 연결(0147a) — form_type='staff_resume'가 가리키는 users.id. 직원 삭제 시 문서 보존.
+    staffUserId: uuid("staff_user_id").references(() => users.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },

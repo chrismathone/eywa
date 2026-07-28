@@ -49,7 +49,8 @@ export async function getStaffResumes(
     return {
       id: r.id,
       name: d.personal.name || "(이름 미입력)",
-      department: d.contract.department,
+      department: d.contract.division, // 2026-07-28 부서 통합 — 근무부서 단일 칸(division)이 부서의 진실
+
       startDate: d.contract.startDate,
       createdAt: r.created_at,
       updatedAt: r.updated_at,

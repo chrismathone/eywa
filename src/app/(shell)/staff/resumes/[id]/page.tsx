@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { requireAccess } from "@/lib/auth/require-access";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
+import { resolveTenantReadUrls } from "@/lib/storage/media-storage";
 import { BackLink } from "@/components/back-link";
 import { getStaffResumeById } from "@/features/staff/server/resume-queries";
 import { canViewResume } from "@/features/staff/server/resume-access";
@@ -35,7 +36,18 @@ export default async function ResumeViewPage({ params }: { params: Promise<{ id:
         </p>
       </header>
       {canView ? (
-        <ResumeSheet data={resume.data} id={id} userId={user.id} canWrite={canWrite} />
+        <ResumeSheet
+          data={resume.data}
+          id={id}
+          userId={user.id}
+          canWrite={canWrite}
+          // 증명사진 signed URL — **게이트 통과(canView) 시에만** 발급·전달(경로만으론 열람 불가).
+          photoUrls={await (async () => {
+            if (resume.data.photos.length === 0) return [];
+            const map = await resolveTenantReadUrls(resume.data.photos, "document", user.tenantId);
+            return resume.data.photos.map((p) => map[p] ?? null);
+          })()}
+        />
       ) : (
         <ResumeUnlock id={id} name={name} />
       )}

@@ -16,7 +16,6 @@ describe("parseResumeForm", () => {
     fd.set("p_residentId", "900101-1234567");
     fd.set("edu_0_school", "한국대학교");
     fd.set("car_1_company", "이전학원");
-    fd.set("c_department", "수학팀");
     fd.set("c_workday_mon", "1");
     fd.set("c_workday_thu", "1");
     fd.set("c_employmentType", "정규직");
@@ -38,14 +37,14 @@ describe("parseResumeForm", () => {
     expect(parseResumeForm(fd).contract.employmentType).toBe("");
   });
 
-  it("회사 구분·소속부서는 선택지만 통과, 담당자는 자유입력(trim)", () => {
+  it("회사 구분·근무부서는 선택지만 통과, 담당자는 자유입력(trim)", () => {
     const fd = new FormData();
     fd.set("c_company", "EIE인재원");
-    fd.set("c_division", "영어과");
+    fd.set("c_division", "개발팀");
     fd.set("c_manager", " 김담당 ");
     const d = parseResumeForm(fd);
     expect(d.contract.company).toBe("EIE인재원");
-    expect(d.contract.division).toBe("영어과");
+    expect(d.contract.division).toBe("개발팀");
     expect(d.contract.manager).toBe("김담당");
 
     const bad = new FormData();
@@ -53,6 +52,36 @@ describe("parseResumeForm", () => {
     bad.set("c_division", "없는부서");
     expect(parseResumeForm(bad).contract.company).toBe("");
     expect(parseResumeForm(bad).contract.division).toBe("");
+  });
+
+  it("자격증·외국어는 폼에 있는 행 수만큼 동적 파싱, 없으면 빈 1행", () => {
+    const fd = new FormData();
+    fd.set("cert_0_name", "정보처리기사");
+    fd.set("cert_1_name", "TESOL");
+    fd.set("cert_2_name", "");
+    fd.set("lang_0_name", "영어");
+    const d = parseResumeForm(fd);
+    expect(d.certificates).toHaveLength(3);
+    expect(d.certificates[1].name).toBe("TESOL");
+    expect(d.languages).toHaveLength(1);
+    expect(parseResumeForm(new FormData()).certificates).toHaveLength(1); // 최소 1행 보장
+  });
+
+  it("서류 체크박스 4종은 boolean으로 파싱한다", () => {
+    const fd = new FormData();
+    fd.set("chk_sexCrime", "1");
+    fd.set("chk_eduOffice", "1");
+    const d = parseResumeForm(fd);
+    expect(d.checks).toEqual({ sexCrime: true, childAbuse: false, eduOffice: true, etcDocs: false });
+  });
+
+  it("증명사진 경로는 슬롯 수까지만 수집한다", () => {
+    const fd = new FormData();
+    fd.set("photo_0", "t1/documents/a.jpg");
+    fd.set("photo_1", "t1/documents/b.jpg");
+    const d = parseResumeForm(fd);
+    expect(d.photos).toEqual(["t1/documents/a.jpg", "t1/documents/b.jpg"]);
+    expect(parseResumeForm(new FormData()).photos).toEqual([]);
   });
 });
 
@@ -77,12 +106,12 @@ describe("normalizeResume", () => {
     expect(d.contract.employmentType).toBe("아르바이트");
   });
 
-  it("회사 구분·소속부서는 선택지 화이트리스트, 옛 데이터(필드 없음)는 빈 값으로 보정", () => {
+  it("회사 구분·근무부서는 선택지 화이트리스트, 옛 저장값은 새 목록으로 매핑(경영지원→경영지원팀)", () => {
     const d = normalizeResume({
       contract: { company: "파라엑스", division: "경영지원", manager: "김담당" },
     });
     expect(d.contract.company).toBe("파라엑스");
-    expect(d.contract.division).toBe("경영지원");
+    expect(d.contract.division).toBe("경영지원팀"); // 옛 선택지 → 새 선택지 자동 매핑
     expect(d.contract.manager).toBe("김담당");
 
     const legacy = normalizeResume({ contract: { department: "수학팀" } }); // 신 필드 없는 기존 저장본
@@ -90,9 +119,24 @@ describe("normalizeResume", () => {
     expect(legacy.contract.division).toBe("");
     expect(legacy.contract.manager).toBe("");
 
+    // '기타과목'은 새 목록에 대응이 없어 빈 값(수동 재선택 대상).
+    expect(normalizeResume({ contract: { division: "기타과목" } }).contract.division).toBe("");
+
     const tampered = normalizeResume({ contract: { company: "없는회사", division: 7 } });
     expect(tampered.contract.company).toBe("");
     expect(tampered.contract.division).toBe("");
+  });
+
+  it("동적 섹션(자격증)은 저장된 행 수 그대로, 체크박스는 true만 통과", () => {
+    const d = normalizeResume({
+      certificates: [{ name: "A" }, { name: "B" }, { name: "C" }, { name: "D" }, { name: "E" }],
+      checks: { sexCrime: true, childAbuse: "yes", bogus: true },
+      photos: ["t1/documents/a.jpg", "t1/documents/b.jpg", "t1/documents/c.jpg"],
+    });
+    expect(d.certificates).toHaveLength(5);
+    expect(d.certificates[4].name).toBe("E");
+    expect(d.checks).toEqual({ sexCrime: true, childAbuse: false, eduOffice: false, etcDocs: false });
+    expect(d.photos).toHaveLength(2); // 슬롯 수 캡
   });
 });
 
