@@ -1,8 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { cookies } from "next/headers";
-import { createClient as createRawClient } from "@supabase/supabase-js";
 import type { SystemRole } from "@/lib/permissions";
 import { getCurrentUser, type CurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
@@ -10,7 +8,6 @@ import { canManageStaff, ROLE_HIERARCHY } from "@/lib/auth/role-hierarchy";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { humanizeDbError } from "@/lib/supabase/db-error";
-import { SUPABASE_ANON_KEY, SUPABASE_URL } from "@/lib/supabase/env";
 import { createUploadTicket, MEDIA_KIND, removeObject } from "@/lib/storage/media-storage";
 import { isTenantDocumentPath } from "@/lib/storage/legacy-audio-path";
 import type { UploadTicket } from "@/lib/storage/types";
@@ -24,9 +21,7 @@ import {
   type StaffResumeData,
 } from "../resume";
 import { canViewResume, RESUME_LOCKED_MSG } from "./resume-access";
-import { getStaffResumeById } from "./resume-queries";
 import { appendResumeToRoster } from "./resume-roster-sheet";
-import { RESUME_VIEW_COOKIE, RESUME_VIEW_TTL_SEC, signResumeViewToken } from "./resume-view-token";
 
 // 직원 이력서(웹 작성 폼) 변경 액션 — 게이트 2단: ① 역할(canWriteTenant("staff") = 사무실)
 // ② 대상 이력서 열람 자격(canViewResume — 작성 본인·원장·재인증 토큰). ②가 없으면 화면에선 잠긴
@@ -76,7 +71,7 @@ async function requireResumeAccess(id: string): Promise<Gate> {
     .maybeSingle();
   if (error) return { error: humanizeDbError(error.message, "확인"), detail: error.message };
   if (!data) return { error: "이력서를 찾을 수 없습니다 — 이미 삭제되었을 수 있습니다" };
-  if (!(await canViewResume(gate.user, id, (data.uploaded_by as string | null) ?? null))) {
+  if (!(await canViewResume(gate.user))) {
     return { error: RESUME_LOCKED_MSG };
   }
   return { user: gate.user };
@@ -146,19 +141,20 @@ async function registerStaffFromResume(
     hire_date: data.contract.startDate || null,
     department: data.contract.division || null,
     employment_type: data.contract.employmentType || null,
+    job_title: data.contract.jobTitle || null,
   };
 
   // 같은 테넌트에 같은 이메일 직원이 이미 있으면 = 같은 사람(시트 이관분 등) → 새 계정 대신 연결.
   const { data: dup } = await admin
     .from("users")
-    .select("id, display_name, phone, hire_date, department, employment_type")
+    .select("id, display_name, phone, hire_date, department, employment_type, job_title")
     .eq("tenant_id", actor.tenantId)
     .ilike("email", email)
     .maybeSingle();
   if (dup) {
     // 빈 인사 필드만 보강(기존 값은 절대 덮지 않는다 — 이력서가 옛 정보일 수 있음).
     const fill: Record<string, unknown> = {};
-    for (const k of ["phone", "hire_date", "department", "employment_type"] as const) {
+    for (const k of ["phone", "hire_date", "department", "employment_type", "job_title"] as const) {
       if (!dup[k] && profile[k]) fill[k] = profile[k];
     }
     if (Object.keys(fill).length > 0) await admin.from("users").update(fill).eq("id", dup.id);
@@ -336,56 +332,5 @@ function revalidateResume(id: string) {
   revalidatePath("/documents"); // 같은 행이 데이터베이스 탐색기에도 노출
 }
 
-export type ResumeUnlockState = { ok?: boolean; error?: string; nonce?: number } | undefined;
-
-/**
- * 이력서 열람 잠금 해제 — 본인 재인증(step-up). 작성자·원장이 아닌 사무실 직원이 다른 사람 이력서를
- * 열람하려 할 때, **자신의 로그인 비밀번호**를 재입력해 10분 열람 창(서명 쿠키)을 얻는다.
- * ⚠️ 세션 비파괴: 쿠키를 저장하지 않는 격리 클라이언트로 signInWithPassword만 수행 → 현재 로그인
- *    세션(쿠키)은 건드리지 않는다(#10 재로그아웃 루프 회피). 성공/실패 모두 그 클라이언트는 버린다.
- */
-export async function unlockResumeView(
-  _prev: ResumeUnlockState,
-  formData: FormData,
-): Promise<ResumeUnlockState> {
-  const user = await getCurrentUser();
-  if (!user) return { error: "로그인이 필요합니다" };
-  // 사무실 역할만(비-사무실은 RLS로 애초에 이력서가 안 보임 — 여기서도 이중 방어).
-  if (!(await canWriteTenant(user.systemRole, "staff"))) {
-    return { error: "직원관리 권한이 없습니다" };
-  }
-  const password = String(formData.get("password") ?? "");
-  if (!password) return { error: "비밀번호를 입력하세요" };
-  const resumeId = String(formData.get("id") ?? "").trim();
-  if (!resumeId) return { error: "이력서 정보가 없습니다" };
-  // 감사로그에 **대상**(누구 이력서인지)을 남기기 위해 미리 조회 — 없는 id면 재인증 자체가 무의미.
-  const target = await getStaffResumeById(resumeId);
-  if (!target) return { error: "이력서를 찾을 수 없습니다 — 이미 삭제되었을 수 있습니다" };
-
-  // 격리 클라이언트: persistSession=false → 응답 쿠키를 안 쓴다(현재 세션 무손상). anon 키로 password grant만.
-  const verifier = createRawClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
-  });
-  const { error } = await verifier.auth.signInWithPassword({ email: user.email, password });
-  if (error) return { error: "비밀번호가 일치하지 않습니다" };
-
-  // 이 이력서 전용 토큰 — 다른 이력서는 다시 재인증 필요(한 번에 전 직원 PII 훑기 차단).
-  const jar = await cookies();
-  jar.set(RESUME_VIEW_COOKIE, signResumeViewToken(user.id, resumeId), {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    path: "/",
-    maxAge: RESUME_VIEW_TTL_SEC,
-  });
-  // 누가 언제 **누구** 이력서의 잠금을 풀었는지 감사로그(개인 계정 자책 방지 = 재인증의 핵심 가치).
-  // ⚠️ actor(푼 사람)는 logAction이 actor_id/actor_name으로 자동 기록한다 — targetLabel엔 **대상**을 넣을 것.
-  //    여기에 actor를 넣으면 "누구 이력서를 열었나"가 로그에서 통째로 사라진다(2026-07-15 실적발).
-  await logAction({
-    action: "resume_view_unlock",
-    targetType: "staff_resume",
-    targetLabel: target.data.personal.name || "(이름 미입력)",
-    metadata: { resumeId },
-  });
-  return { ok: true, nonce: Date.now() };
-}
+// (재인증 unlockResumeView는 2026-07-28 원장 지시로 제거 — 열람은 canViewResume(원장·관리자)만.
+//  과거 감사로그의 resume_view_unlock 액션 라벨은 log.ts 레지스트리에 유지.)

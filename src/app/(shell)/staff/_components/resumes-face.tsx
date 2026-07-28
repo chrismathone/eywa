@@ -31,10 +31,10 @@ export async function ResumesFace({ page }: { page: number }) {
     canWriteTenant(user.systemRole, "staff"),
     getStaffResumes(page, PAGE_SIZE),
   ]);
-  // 목록 마스킹: 부서·입사일은 이력서(민감 섹션) 내용이라 상세와 **같은 게이트**(canViewResume)로 판정 —
-  // 작성 본인·원장·재인증 창. 그 외 사무실은 이름/작성일/작성자(디렉터리 정보)만 보고, 열려면 상세에서 재인증한다.
-  const visible = await Promise.all(rows.map((r) => canViewResume(user, r.id, r.uploadedBy)));
-  const canSeeDetail = (i: number) => visible[i];
+  // 목록 마스킹: 부서·입사일은 이력서(민감 섹션) 내용이라 상세와 **같은 게이트**(canViewResume =
+  // 원장·관리자, 재인증 제거 2026-07-28)로 판정. 그 외 사무실은 이름/작성일/작성자(디렉터리 정보)만.
+  const canSee = await canViewResume(user);
+
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const pageHref = (p: number) =>
@@ -72,7 +72,7 @@ export async function ResumesFace({ page }: { page: number }) {
               </tr>
             </thead>
             <tbody>
-              {rows.map((r, i) => (
+              {rows.map((r) => (
                 <tr key={r.id} className="border-line hover:bg-bg-soft/50 border-t transition-colors">
                   <td className="px-4 py-2">
                     <WindowLink
@@ -86,10 +86,10 @@ export async function ResumesFace({ page }: { page: number }) {
                     <EditingBadge scope={`staff-resume:${r.id}`} className="ml-1.5" />
                   </td>
                   <td className="text-text-dim px-3 py-2 whitespace-nowrap">
-                    {canSeeDetail(i) ? r.department || "—" : <span className="text-text-faint">잠김</span>}
+                    {canSee ? r.department || "—" : <span className="text-text-faint">잠김</span>}
                   </td>
                   <td className="text-text-dim num px-3 py-2 whitespace-nowrap">
-                    {canSeeDetail(i) ? (
+                    {canSee ? (
                       r.startDate ? (
                         ymdLabel(r.startDate)
                       ) : (

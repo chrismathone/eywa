@@ -16,7 +16,6 @@ import { getSuperAdminIds, displayRoleFor } from "@/lib/auth/super-admin";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { EMPLOYMENT_TYPES } from "@/features/staff/resume";
-import { Pagination } from "@/components/pagination";
 import { SearchForm } from "@/components/search-form";
 import { FaceTabs, type Face } from "@/components/face-tabs";
 import { NewStaffTrigger } from "./_components/new-staff-trigger";
@@ -25,7 +24,9 @@ import { ResumesFace } from "./_components/resumes-face";
 
 export const metadata = { title: "직원관리 — eywa" };
 
-const PAGE_SIZE = 50;
+// 페이지 크기 선택(원장 요청 2026-07-28) — 기본 10명, 창에서 10/30/50 선택.
+const PER_OPTIONS = [10, 30, 50] as const;
+const DEFAULT_PER = 10;
 
 const ROLE_META: Record<string, { label: string; color: PillColor }> = {
   master: { label: "원장", color: "danger" },
@@ -80,14 +81,35 @@ const SORT_FILTERS: { key: SortKey; label: string }[] = [
   { key: "hire", label: "입사일순" },
 ];
 
-function buildStaffHref(p: { role: RoleKey; status: StatusKey; q: string; sort: SortKey }): string {
+function buildStaffHref(p: {
+  role: RoleKey;
+  status: StatusKey;
+  q: string;
+  sort: SortKey;
+  per: number;
+  page?: number;
+}): string {
   const sp = new URLSearchParams();
   if (p.role !== "all") sp.set("role", p.role);
   if (p.status !== "all") sp.set("status", p.status);
   if (p.q) sp.set("q", p.q);
   if (p.sort !== "role") sp.set("sort", p.sort);
+  if (p.per !== DEFAULT_PER) sp.set("per", String(p.per));
+  if (p.page && p.page > 1) sp.set("page", String(p.page));
   const s = sp.toString();
   return s ? `/staff?${s}` : "/staff";
+}
+
+/** 페이지 번호 나열(1 … 현재±2 … 끝) — 눈에 띄는 번호형 페이저용. null = 말줄임. */
+function pageNumbers(page: number, totalPages: number): (number | null)[] {
+  if (totalPages <= 7) return Array.from({ length: totalPages }, (_, i) => i + 1);
+  const around = [page - 1, page, page + 1].filter((n) => n > 1 && n < totalPages);
+  const out: (number | null)[] = [1];
+  if ((around[0] ?? totalPages) > 2) out.push(null);
+  out.push(...around);
+  if ((around[around.length - 1] ?? 1) < totalPages - 1) out.push(null);
+  out.push(totalPages);
+  return out;
 }
 
 /** 정렬 비교기 — null(미입력)은 항상 뒤로, 동률은 이름 가나다순. */
@@ -130,6 +152,7 @@ export default async function StaffPage({
     status?: StatusKey;
     q?: string;
     sort?: string;
+    per?: string;
     page?: string;
   }>;
 }) {
@@ -163,6 +186,7 @@ export default async function StaffPage({
   const status: StatusKey = (sp.status as StatusKey) ?? "all";
   const q = sp.q ?? "";
   const sort: SortKey = SORT_FILTERS.some((f) => f.key === sp.sort) ? (sp.sort as SortKey) : "role";
+  const per = (PER_OPTIONS as readonly number[]).includes(Number(sp.per)) ? Number(sp.per) : DEFAULT_PER;
   const page = Math.max(1, Number(sp.page) || 1);
 
   // super_admin(숨은 총괄)은 학원 화면에서 '관리자'로 위장 표시(실제 role/접근 불변, displayRoleFor).
@@ -210,22 +234,13 @@ export default async function StaffPage({
       count: all.filter((s) => s.subjects.includes(o.value)).length,
     }))
     .filter((s) => s.count > 0);
-  const current = { role, status, q, sort };
+  const current = { role, status, q, sort, per };
 
-  // 역할 분포 Stat은 전체(all) 기준 — 목록만 50명으로 슬라이스(billing 메모리 페이지네이션).
+  // 대시보드 집계는 전체(all) 기준 — 목록만 per명으로 슬라이스(메모리 페이지네이션, 기본 10).
   const total = staff.length;
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-  const pageStaff = staff.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-  const pageHref = (p: number) => {
-    const params = new URLSearchParams();
-    if (role !== "all") params.set("role", role);
-    if (status !== "all") params.set("status", status);
-    if (q) params.set("q", q);
-    if (sort !== "role") params.set("sort", sort);
-    if (p > 1) params.set("page", String(p));
-    const s = params.toString();
-    return s ? `/staff?${s}` : "/staff";
-  };
+  const totalPages = Math.max(1, Math.ceil(total / per));
+  const pageStaff = staff.slice((page - 1) * per, page * per);
+  const pageHref = (p: number) => buildStaffHref({ ...current, page: p });
 
   return (
     <div className="space-y-5">
@@ -322,14 +337,33 @@ export default async function StaffPage({
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="micro">
-          결과 <span className="text-foreground font-bold">{total}</span>명
-          {totalPages > 1 ? (
-            <span className="text-text-faint ml-2 normal-case">
-              · {page}/{totalPages} 페이지
-            </span>
-          ) : null}
-        </p>
+        <div className="flex flex-wrap items-center gap-3">
+          <p className="micro">
+            결과 <span className="text-foreground font-bold">{total}</span>명
+            {totalPages > 1 ? (
+              <span className="text-text-faint ml-2 normal-case">
+                · {page}/{totalPages} 페이지
+              </span>
+            ) : null}
+          </p>
+          <div className="flex items-center gap-1">
+            <span className="micro mr-0.5">표시</span>
+            {PER_OPTIONS.map((n) => (
+              <Link
+                key={n}
+                href={buildStaffHref({ ...current, per: n })}
+                className={`num shrink-0 rounded-md border px-2 py-0.5 text-xs transition ${
+                  per === n
+                    ? "border-primary bg-primary text-primary-foreground font-bold"
+                    : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
+                }`}
+              >
+                {n}
+              </Link>
+            ))}
+            <span className="text-text-faint ml-0.5 text-[11px]">명씩</span>
+          </div>
+        </div>
         <div className="flex flex-wrap items-center gap-2">
           {PAYROLL_ENABLED && user?.systemRole === "master" ? (
             <Button variant="outline" render={<WindowLink href="/staff/payroll" title="월별 급여" />}>
@@ -386,22 +420,25 @@ export default async function StaffPage({
                   const statusMeta = STATUS_META[s.status] ?? STATUS_META.active!;
                   return (
                     <tr key={s.id} className="border-line/60 hover:bg-bg-soft/50 border-b last:border-0 transition">
-                      <td className="px-4 py-2.5">
-                        {/* 이름 클릭 → 이력서 뷰(원장 지시 2026-07-28 — 수정·삭제도 거기서). 이력서가 없으면
-                            직원 정보가 미리 채워진 새 이력서 폼으로. 아바타 금지 — 사람 표시는 이름 텍스트만. */}
+                      <td className="p-0">
+                        {/* 셀 전체 클릭 → 이력서 뷰(원장 지시 2026-07-28 — 수정·삭제도 거기서, 텍스트만이 아니라
+                            칸 어디를 눌러도). 이력서가 없으면 직원 정보가 미리 채워진 새 이력서 폼으로.
+                            아바타 금지 — 사람 표시는 이름 텍스트만. */}
                         <WindowLink
                           href={s.resumeId ? `/staff/resumes/${s.resumeId}` : `/staff/resumes/new?staff=${s.id}`}
                           title={`${s.displayName} 이력서`}
                           ariaLabel={`${s.displayName} 이력서`}
-                          className="group inline-flex items-center gap-1.5"
+                          className="group block cursor-pointer px-4 py-2.5"
                         >
-                          <span className="text-foreground font-bold group-hover:underline">{s.displayName}</span>
-                          <EditingBadge scope={`staff:${s.id}`} />
+                          <span className="inline-flex items-center gap-1.5">
+                            <span className="text-foreground font-bold group-hover:underline">{s.displayName}</span>
+                            <EditingBadge scope={`staff:${s.id}`} />
+                          </span>
+                          <span className="text-text-dim num mt-0.5 block truncate text-[11px]">
+                            {/* 플레이스홀더(@imported.local)는 미설정으로 표시 — raw 노출 금지. */}
+                            {s.email.toLowerCase().endsWith("@imported.local") ? "이메일 미설정" : s.email}
+                          </span>
                         </WindowLink>
-                        <p className="text-text-dim num mt-0.5 truncate text-[11px]">
-                          {/* 플레이스홀더(@imported.local)는 미설정으로 표시 — raw 노출 금지. */}
-                          {s.email.toLowerCase().endsWith("@imported.local") ? "이메일 미설정" : s.email}
-                        </p>
                       </td>
                       <td className="px-3 py-2.5">
                         <Pill color={roleMeta.color}>{roleMeta.label}</Pill>
@@ -447,7 +484,55 @@ export default async function StaffPage({
               </tbody>
             </table>
           </div>
-          <Pagination page={page} totalPages={totalPages} hrefForPage={pageHref} />
+          {/* 눈에 띄는 번호형 페이저(원장 지시 2026-07-28 — 표준 컴팩트 페이저는 존재감이 약해 이 목록만 강조형) */}
+          {totalPages > 1 ? (
+            <nav className="flex flex-wrap items-center justify-center gap-1.5 pt-1" aria-label="페이지 이동">
+              {page > 1 ? (
+                <Link
+                  href={pageHref(page - 1)}
+                  className="border-line bg-card text-foreground hover:border-primary/40 hover:bg-bg-soft inline-flex items-center rounded-lg border px-3 py-1.5 text-sm font-medium shadow-sm transition"
+                >
+                  ← 이전
+                </Link>
+              ) : (
+                <span className="border-line text-text-faint inline-flex cursor-default items-center rounded-lg border px-3 py-1.5 text-sm opacity-40">
+                  ← 이전
+                </span>
+              )}
+              {pageNumbers(page, totalPages).map((n, i) =>
+                n === null ? (
+                  <span key={`gap${i}`} className="text-text-faint px-1 text-sm">
+                    …
+                  </span>
+                ) : (
+                  <Link
+                    key={n}
+                    href={pageHref(n)}
+                    aria-current={n === page ? "page" : undefined}
+                    className={`num inline-flex min-w-9 items-center justify-center rounded-lg border px-2.5 py-1.5 text-sm transition ${
+                      n === page
+                        ? "border-primary bg-primary text-primary-foreground font-bold shadow-sm"
+                        : "border-line bg-card text-foreground hover:border-primary/40 hover:bg-bg-soft"
+                    }`}
+                  >
+                    {n}
+                  </Link>
+                ),
+              )}
+              {page < totalPages ? (
+                <Link
+                  href={pageHref(page + 1)}
+                  className="border-line bg-card text-foreground hover:border-primary/40 hover:bg-bg-soft inline-flex items-center rounded-lg border px-3 py-1.5 text-sm font-medium shadow-sm transition"
+                >
+                  다음 →
+                </Link>
+              ) : (
+                <span className="border-line text-text-faint inline-flex cursor-default items-center rounded-lg border px-3 py-1.5 text-sm opacity-40">
+                  다음 →
+                </span>
+              )}
+            </nav>
+          ) : null}
         </>
       )}
     </div>

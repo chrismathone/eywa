@@ -643,10 +643,10 @@ export function ResumeSheet({
             </td>
           </tr>
           <tr>
+            <th className={head}>직급</th>
+            <td className={cell}>{field("c_jobTitle", c.jobTitle, { ph: "직급 (예: 강사, 부원장)" })}</td>
             <th className={head}>담당자</th>
-            <td className={cell} colSpan={3}>
-              {field("c_manager", c.manager, { ph: "담당자" })}
-            </td>
+            <td className={cell}>{field("c_manager", c.manager, { ph: "담당자" })}</td>
           </tr>
           <tr>
             <th className={head}>근무요일</th>

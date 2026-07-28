@@ -33,6 +33,7 @@ export default async function NewResumePage({
       ? (staff.department as string)
       : "";
     data.contract.employmentType = staff.employmentType ?? "";
+    data.contract.jobTitle = staff.jobTitle ?? "";
   }
 
   return (

@@ -6,7 +6,6 @@ import { BackLink } from "@/components/back-link";
 import { getStaffResumeById } from "@/features/staff/server/resume-queries";
 import { canViewResume } from "@/features/staff/server/resume-access";
 import { ResumeSheet } from "../_components/resume-sheet";
-import { ResumeUnlock } from "../_components/resume-unlock";
 
 export const metadata = { title: "직원 이력서 — eywa" };
 
@@ -20,9 +19,9 @@ export default async function ResumeViewPage({ params }: { params: Promise<{ id:
   if (!resume) notFound();
   const name = resume.data.personal.name || "(이름 미입력)";
 
-  // 열람 게이트 = 공용 canViewResume(작성 본인 · 원장 · 재인증 10분 창). 쓰기 액션·/documents 삭제도 같은 함수.
-  // 잠김일 땐 sheet(민감 데이터)를 렌더하지 않는다 — 클라로 전송 자체가 안 감.
-  const canView = await canViewResume(user, id, resume.uploadedBy);
+  // 열람 게이트 = 공용 canViewResume(원장·관리자 — 재인증 제거, 2026-07-28). 쓰기 액션·/documents 삭제도 같은 함수.
+  // 권한 밖이면 sheet(민감 데이터)를 렌더하지 않는다 — 클라로 전송 자체가 안 감.
+  const canView = await canViewResume(user);
   const canWrite = canView && canWriteRole; // 열람 못 하면 수정도 불가(sheet 인라인 편집)
 
   return (
@@ -49,7 +48,10 @@ export default async function ResumeViewPage({ params }: { params: Promise<{ id:
           })()}
         />
       ) : (
-        <ResumeUnlock id={id} name={name} />
+        <div className="border-line bg-card mx-auto w-full max-w-[780px] rounded-2xl border p-8 text-center shadow-card">
+          <p className="text-foreground text-sm font-bold">이력서는 원장·관리자만 열람할 수 있습니다</p>
+          <p className="text-text-dim mt-1 text-xs">개인 인사 정보(주민번호·급여·계좌)가 담겨 있어 열람 권한이 제한됩니다.</p>
+        </div>
       )}
     </div>
   );
