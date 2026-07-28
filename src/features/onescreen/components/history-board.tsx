@@ -133,40 +133,65 @@ export function HistoryBoard({ date }: { date?: string }) {
                 const badge = classnoteBadge(r.classnoteStatus ?? undefined);
                 const linkOk = r.shareToken && !r.revoked && !isShareExpired(r.reportDate);
                 return (
-                  <li key={r.id} className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1 px-3 py-2">
+                  // ⚠️ 열 정렬(2026-07-28 원장 제보): 예전 flex-wrap + 조건부 렌더는 값이 없는 항목의 **자리가
+                  // 통째로 사라져** 행마다 열이 어긋났다(점수·상태·열람이 뒤섞여 보임). 오른쪽 열들은 값이
+                  // 없어도 고정폭 슬롯을 **항상** 렌더해 세로 정렬을 보장한다(wrap 금지 — 진도만 truncate).
+                  <li key={r.id} className="flex items-baseline gap-x-2.5 px-3 py-2">
                     <span className="text-foreground w-24 shrink-0 truncate text-[13px] font-bold">
                       {r.studentName}
                     </span>
                     <span className="text-text-faint w-20 shrink-0 truncate text-[11px]">{r.studentLabel}</span>
-                    {r.subject ? (
-                      <span className="border-line text-text-dim shrink-0 rounded-full border px-1.5 py-0.5 text-[11px]">
-                        {subjects.labelOf(r.subject)}
-                      </span>
-                    ) : null}
+                    <span className="w-12 shrink-0 text-center">
+                      {r.subject ? (
+                        <span className="border-line text-text-dim rounded-full border px-1.5 py-0.5 text-[11px]">
+                          {subjects.labelOf(r.subject)}
+                        </span>
+                      ) : null}
+                    </span>
                     <span className="text-text-dim min-w-0 flex-1 truncate text-[12px]" title={r.progress ?? ""}>
                       {r.progress || "—"}
                     </span>
-                    {r.examInfo ? (
-                      <span className="text-text-faint hidden shrink-0 text-[11px] sm:inline">{r.examInfo}</span>
-                    ) : null}
-                    {badge ? (
-                      <span className={`shrink-0 rounded-md px-1.5 py-0.5 text-[10.5px] font-bold ${badge.cls}`}>
-                        {badge.label}
-                      </span>
-                    ) : null}
-                    {r.viewCount > 0 ? (
-                      <span className="text-text-faint shrink-0 text-[11px]">열람 {r.viewCount}</span>
-                    ) : null}
-                    {linkOk ? (
-                      <a
-                        href={`/r/${r.shareToken}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-primary inline-flex shrink-0 items-center gap-0.5 text-[11px] hover:underline"
-                      >
-                        보고서 보기 <EyIcon name="arrowRight" size={11} />
-                      </a>
-                    ) : null}
+                    <span
+                      className="text-text-faint hidden w-12 shrink-0 truncate text-right text-[11px] sm:inline-block"
+                      title={r.examInfo ?? ""}
+                    >
+                      {r.examInfo ?? ""}
+                    </span>
+                    <span className="w-32 shrink-0 text-right">
+                      {badge ? (
+                        <span
+                          className={`inline-block max-w-full truncate rounded-md px-1.5 py-0.5 align-bottom text-[10.5px] font-bold ${badge.cls}`}
+                          title={badge.label}
+                        >
+                          {badge.label}
+                        </span>
+                      ) : r.sendable ? (
+                        // 미발송 + 발송 게이트 통과(0128a sendable) = 지금 그 날짜로 가서 발송하면 실제로 나감.
+                        // 달력 요약의 '보낼 수 있음'과 같은 판정·같은 amber(2026-07-28 원장 제보: 실패는 보이는데
+                        // 보낼 수 있는 건이 목록에서 구분되지 않았다).
+                        <span className="bg-amber-soft text-amber rounded-pill inline-block px-1.5 py-0.5 text-[10.5px] font-bold">
+                          보낼 수 있음
+                        </span>
+                      ) : (
+                        // 미발송이지만 게이트 밖(이관분·취소·과목 밖·기한 초과) — 사실만 표기(재촉 아님, #77).
+                        <span className="text-text-faint text-[10.5px]">미발송</span>
+                      )}
+                    </span>
+                    <span className="text-text-faint w-12 shrink-0 text-right text-[11px]">
+                      {r.viewCount > 0 ? `열람 ${r.viewCount}` : ""}
+                    </span>
+                    <span className="w-[74px] shrink-0 text-right">
+                      {linkOk ? (
+                        <a
+                          href={`/r/${r.shareToken}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-primary inline-flex items-center gap-0.5 text-[11px] hover:underline"
+                        >
+                          보고서 보기 <EyIcon name="arrowRight" size={11} />
+                        </a>
+                      ) : null}
+                    </span>
                   </li>
                 );
               })}

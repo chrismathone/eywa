@@ -52,6 +52,7 @@ import {
   isRowActionable,
   planBulkApply,
   planPrevFill,
+  isReportEligible,
   planBulkPrevFill,
   planPrevComments,
   planCopyFirstRow,
@@ -1402,6 +1403,21 @@ export function OneScreenClient({
     const absentRows = allRows.filter(
       (r) => (!keySet || keySet.has(r.key)) && r.subject.attendanceRaw === "absent",
     ).length;
+    // 진도 미입력 제외(2026-07-28 김민찬 사례) — 멘트까지 다 써놓고 진도만 빠진 행이 **소리 없이** 빠지면
+    // 강사는 발송된 줄 알고, 학부모는 못 받는다. 제외라는 사실 + **누구인지**를 confirm에서 알린다.
+    const noProgressRows = allRows.filter(
+      (r) =>
+        (!keySet || keySet.has(r.key)) &&
+        r.subject.attendanceRaw !== "absent" &&
+        !isAlreadySent(effectiveClassnoteStatus(liveClassnoteStatus(r.student.id, r.subject.name), r.subject.classnoteStatus)) &&
+        !isReportEligible(r.subject),
+    );
+    const noProgressNames = [...new Set(noProgressRows.map((r) => r.student.name))];
+    const progressLine = noProgressRows.length
+      ? `\n진도 미입력 ${noProgressRows.length}건은 발송에서 제외됩니다 — ${noProgressNames.slice(0, 5).join(", ")}${
+          noProgressNames.length > 5 ? ` 외 ${noProgressNames.length - 5}명` : ""
+        } (진도 입력 후 다시 발송하세요)`
+      : "";
     const gaps = summarizeSendGaps(rows, { dailyEnabled: showDailyTest, checkEnabled: showCheckTest });
     const gapLine =
       gaps.missingAttitude || gaps.missingTest
@@ -1413,7 +1429,7 @@ export function OneScreenClient({
       : "";
     if (
       !window.confirm(
-        `${rows.length}건을 ClassNote로 일괄 발송할까요? (동명이인·취소·오래된 건은 자동 제외)${gapLine}${absentLine}${sentLine}`,
+        `${rows.length}건을 ClassNote로 일괄 발송할까요? (동명이인·취소·오래된 건은 자동 제외)${progressLine}${gapLine}${absentLine}${sentLine}`,
       )
     )
       return;
