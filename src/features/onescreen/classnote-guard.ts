@@ -2,19 +2,25 @@ import { kstMinutesOfDay, kstToday } from "@/lib/date-kst";
 
 /**
  * ClassNote 발송 too_old 가드 — edutrix 2026-05~06 과거보고서 재발송 사고(1~4월 3,500건이 학부모에게 오발송)
- * 대응으로 도입. "전 달 1일 이후" 보고서만 발송 허용. **KST 기준** 순수 문자열(YYYY-MM-DD) 비교라 Vercel UTC
- * 월초/자정 경계 오류 없음. (edutrix utils/classnoteGuard.ts 이식.)
+ * 대응으로 도입. **KST 기준** 순수 문자열(YYYY-MM-DD) 비교라 Vercel UTC 월초/자정 경계 오류 없음.
+ *
+ * 🔴 2026-07-28 원장 결정: 허용 창 = "전 달 1일 이후" → **오늘 포함 최근 7일**로 조임(절대 규칙).
+ *    "학부모가 일주일이 지났는데 이전 보고서를 받는 것도 비합리적" — 이날 이관분 대량 발송에서
+ *    2주 전 보고서까지 나가는 사고 후 확정. 모든 소비처(큐잉·발송 콘솔·재발송·달력 sendable·
+ *    미발송 재촉 이벤트)가 이 함수 하나를 지나므로 여기만이 규칙의 자리다. **완화 금지.**
  */
 
-/** 오늘(KST) 기준 발송 허용 최소 날짜 = "전 달 1일"(YYYY-MM-DD). 1월이면 전년 12월 1일. */
+const ALLOW_WINDOW_DAYS = 7; // 오늘 포함 7일(= 오늘-6일까지 허용). 7/28 기준 7/22~7/28 발송 가능.
+
+/** 오늘(KST) 기준 발송 허용 최소 날짜(YYYY-MM-DD) = 오늘 포함 최근 7일 창의 시작일. */
 export function classnoteMinDate(todayKst: string = kstToday()): string {
-  const [y, m] = todayKst.split("-").map(Number);
-  const py = m === 1 ? y - 1 : y;
-  const pm = m === 1 ? 12 : m - 1;
-  return `${py}-${String(pm).padStart(2, "0")}-01`;
+  const [y, m, d] = todayKst.split("-").map(Number);
+  const t = new Date(Date.UTC(y!, m! - 1, d!));
+  t.setUTCDate(t.getUTCDate() - (ALLOW_WINDOW_DAYS - 1));
+  return `${t.getUTCFullYear()}-${String(t.getUTCMonth() + 1).padStart(2, "0")}-${String(t.getUTCDate()).padStart(2, "0")}`;
 }
 
-/** report_date(YYYY-MM-DD)가 발송 허용 범위인가 — 전 달 1일 이후(문자열 사전순 비교). */
+/** report_date(YYYY-MM-DD)가 발송 허용 범위인가 — 최근 7일 창(문자열 사전순 비교). */
 export function isClassnoteAllowed(reportDate: string, todayKst: string = kstToday()): boolean {
   if (!reportDate) return false;
   return reportDate >= classnoteMinDate(todayKst);

@@ -2,8 +2,10 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { getTenantSettings } from "@/features/owner/server/queries";
 import { fetchInChunks } from "@/lib/supabase/batch";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
+import { classnoteMinDate } from "../classnote-guard";
 
 /**
  * 원스크린 "지난 보고서" 뷰 — 로그인 강사 **본인이 쓴** 보고서 이력(날짜 내림차순, 커서 페이징).
@@ -26,6 +28,12 @@ export type PastReportRow = {
   shareToken: string | null;
   revoked: boolean;
   viewCount: number; // 학부모 열람 수
+  /**
+   * **지금 발송하면 실제로 나가는가** — 월간 달력 RPC(0128a)의 sendable과 **같은 4조건**(이관분 아님·
+   * 미취소·과목 opt-in·기한 내)을 행 단위로 계산(#77: 행동 라벨은 그 행동의 기존 게이트 재사용).
+   * 미발송(unsent)과 조합해 "보낼 수 있음" 라벨에만 쓴다 — 분모·재촉 집계에 쓰지 말 것(0128a 주석).
+   */
+  sendable: boolean;
 };
 
 const PAGE_ROWS = 200; // 한 페이지 최대 행(강사 하루 수십 건 기준 수 주 분량)
@@ -41,11 +49,14 @@ export async function getMyPastReports(input?: {
   const teacherName = user.displayName?.trim();
   if (!teacherName) return { ok: false, error: "강사 이름이 없습니다" };
 
-  const supabase = await createClient();
+  // 과목 opt-in·발송 기한 = 월간 달력(calendar-actions)과 동일 소스 — sendable 판정 재료(#77 게이트 단일화).
+  const [supabase, settings] = await Promise.all([createClient(), getTenantSettings()]);
+  const subjectsGate = settings.report.classnoteSubjects ?? null;
+  const minDate = classnoteMinDate();
   let q = supabase
     .from("lesson_reports")
     .select(
-      "id, report_date, student_id, subject, progress, exam_info, homework_score, classnote_status, share_token, revoked_at, students(name, school, grade)",
+      "id, report_date, student_id, subject, source, progress, exam_info, homework_score, classnote_status, share_token, revoked_at, students(name, school, grade)",
     )
     .eq("teacher_name", teacherName)
     .order("report_date", { ascending: false })
@@ -99,6 +110,13 @@ export async function getMyPastReports(input?: {
         shareToken: (r.share_token as string | null) ?? null,
         revoked: r.revoked_at != null,
         viewCount: viewCountById.get(r.id as string) ?? 0,
+        // 0128a RPC의 sendable 4조건을 행 단위로 동일 재현(이관분·취소·과목 밖·기한 초과 = false).
+        // ⚠️ RPC와 동일하게 subject null은 과목 게이트가 설정돼 있으면 false(`= any()`의 null 의미 보존).
+        sendable:
+          ((r.source as string | null) ?? "") !== "edutrix_import" &&
+          r.revoked_at == null &&
+          (!subjectsGate || subjectsGate.length === 0 || (r.subject != null && subjectsGate.includes(r.subject as string))) &&
+          (minDate == null || (r.report_date as string) >= minDate),
       };
     }),
   };
