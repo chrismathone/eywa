@@ -14,7 +14,7 @@ export function ResumePhotoSlide({ urls }: { urls: (string | null)[] }) {
   const url = urls[current];
   const step = (d: number) => setSlide((s) => (s + d + urls.length) % urls.length);
   return (
-    <div className="w-24 shrink-0">
+    <div className="w-28 shrink-0">
       <div className="border-line bg-bg-soft/40 flex aspect-[3/4] w-full items-center justify-center overflow-hidden rounded-lg border">
         {url ? (
           // eslint-disable-next-line @next/next/no-img-element -- signed URL 미리보기(최적화 불필요)
