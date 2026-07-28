@@ -4,6 +4,7 @@ import { reportError } from "@/lib/observability/report-error";
 import { generateDailyBriefing } from "@/features/dashboard/server/briefing";
 import { detectAndNotifyEvents } from "@/features/notifications/server/events";
 import { pruneNotificationData } from "@/features/notifications/server/prune";
+import { sweepFailedReportNotifications } from "@/features/notifications/server/failed-notify-sweep";
 
 /**
  * 운영실 일일 AI 브리핑 cron (매일 07:00 KST = 22:00 UTC, 원장 승인 2026-07-16 — 새벽 동기화
@@ -39,6 +40,7 @@ export async function GET(req: Request) {
   const tenantIds = [...new Set((masters ?? []).map((row) => row.tenant_id as string))];
   const results: Record<string, string> = {};
   const events: Record<string, string> = {};
+  const sweeps: Record<string, string> = {}; // 발송 실패 알림 유실 보정 결과(테넌트별)
   for (const tenantId of tenantIds) {
     try {
       const result = await generateDailyBriefing(tenantId, { notifyOnFirstGeneration: true });
@@ -56,6 +58,16 @@ export async function GET(req: Request) {
       reportError(e, { scope: "cron.daily-briefing.events", tenantId });
       events[tenantId] = `실패: ${e instanceof Error ? e.message : String(e)}`;
     }
+    // 발송 실패 알림 유실 보정 — 0143a 트리거가 예외를 삼켜 알림이 사라진 건을 메운다(failed-notify-sweep.ts).
+    // 브리핑·이벤트와 **독립된 try/catch**: 이건 "강사가 실패를 영영 모르는" 문제를 막는 마지막 그물이라
+    // 앞 단계가 실패해도 반드시 돌아야 한다. 새 cron 슬롯을 쓰지 않으려고 여기 얹었다(Vercel cron 제한).
+    try {
+      const swept = await sweepFailedReportNotifications(admin, tenantId);
+      sweeps[tenantId] = `확인 ${swept.checked}·보정 ${swept.created}`;
+    } catch (e) {
+      reportError(e, { scope: "cron.daily-briefing.failed-notify-sweep", tenantId });
+      sweeps[tenantId] = `실패: ${e instanceof Error ? e.message : String(e)}`;
+    }
   }
 
   // 오래된 dedup 이벤트·읽은 알림 정리 — 전 테넌트 공통 1회, 브리핑/이벤트와 독립(실패해도 무해).
@@ -67,5 +79,5 @@ export async function GET(req: Request) {
     pruned = `실패: ${e instanceof Error ? e.message : String(e)}`;
   }
 
-  return NextResponse.json({ ok: true, tenants: tenantIds.length, results, events, pruned });
+  return NextResponse.json({ ok: true, tenants: tenantIds.length, results, events, sweeps, pruned });
 }
