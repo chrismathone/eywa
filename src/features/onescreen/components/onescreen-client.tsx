@@ -1308,12 +1308,11 @@ export function OneScreenClient({
       toast.message("일괄 작업이 진행 중입니다 — 완료 후 다시 시도하세요");
       return;
     }
-    // 빈 멘트 재확인(2026-07-28 원장 지시) — 멘트 없이 보내면 학부모 화면에 "작성된 보고 내용이
-    // 없습니다"가 그대로 노출된다(이날 실제 22건 발송→회수 사고). 차단이 아니라 확인 — 점수·사진만
-    // 보내려는 의도가 정말 있으면 보낼 수 있게 하되, 모르고 나가는 일은 없게.
+    // 🔴 빈 멘트 절대 가드(원장 지시 2026-07-28) — 워커 최종 관문이 무조건 차단하므로(빈 보고서가
+    // 학부모에게 노출된 이날 사고) 여기서 보내봐야 실패 예약일 뿐이다. 이유를 즉시 말하고 막는다.
     if (!(reports[student.id]?.[subjectName]?.draft ?? "").trim()) {
-      if (!window.confirm(`${student.name} — 학부모 전달 멘트가 비어 있습니다.\n빈 내용으로 발송할까요? (자동작성 또는 직접 입력 후 발송을 권장)`))
-        return;
+      toast.error(`${student.name} — 학부모 전달 멘트가 비어 있어 발송할 수 없습니다 (자동작성 또는 직접 입력 후 발송)`);
+      return;
     }
     const res = await queueOne(student, subjectName);
     if (!res.ok) {
@@ -1382,7 +1381,8 @@ export function OneScreenClient({
   }
   async function sendAllVisible(keys?: string[]) {
     if (bulkBusy || bulkGen) return; // 재진입·중첩 방지(#10)
-    const rows = selectRows("send", keys);
+    let rows = selectRows("send", keys); // ⚠️ let — 아래 빈 멘트 절대 가드가 대상을 좁힌다
+
     const preSkipped = keys?.length ? keys.length - rows.length : 0; // 미선택=전체=0(음수 방지 #11)
     // 발송 후보 중 **이미 발송된 행** — 아래 안내에 쓰고, rows에는 이미 빠져 있다.
     // ⚠️ 이 수치는 "일괄 발송을 다시 눌러도 안 나가는 이유"라 반드시 보여준다(무언 제외 = 사고 은폐).
@@ -1430,16 +1430,20 @@ export function OneScreenClient({
       gaps.missingAttitude || gaps.missingTest
         ? `\n태도 미입력 ${gaps.missingAttitude}명 · 테스트 미입력 ${gaps.missingTest}명 — 미입력 항목은 보고서에서 생략됩니다`
         : "";
-    // 빈 멘트 재확인(2026-07-28 원장 지시) — 멘트 없는 행이 소리 없이 나가면 학부모 화면에
-    // "작성된 보고 내용이 없습니다"가 노출된다(이날 22건 발송→회수 사고). 발송 대상에 포함해 두되
-    // confirm에 **누구인지까지** 박아 모르고 나가는 일이 없게 한다(발송 단위 안내라 '건').
+    // 🔴 빈 멘트 절대 가드(원장 지시 2026-07-28) — 멘트 없는 행은 **발송 대상에서 제외**한다(워커
+    // 최종 관문도 무조건 차단 — 이날 빈 보고서 22건이 학부모에게 노출된 사고). confirm에 누구인지 명시.
     const emptyMentRows = rows.filter((r) => !(reports[r.student.id]?.[r.subject.name]?.draft ?? "").trim());
+    rows = rows.filter((r) => (reports[r.student.id]?.[r.subject.name]?.draft ?? "").trim());
     const emptyMentNames = [...new Set(emptyMentRows.map((r) => r.student.name))];
     const emptyMentLine = emptyMentRows.length
-      ? `\n⚠️ 멘트 미작성 ${emptyMentRows.length}건 — 학부모 전달 내용이 빈 채 발송됩니다: ${emptyMentNames.slice(0, 5).join(", ")}${
+      ? `\n멘트 미작성 ${emptyMentRows.length}건은 발송에서 제외됩니다 — ${emptyMentNames.slice(0, 5).join(", ")}${
           emptyMentNames.length > 5 ? ` 외 ${emptyMentNames.length - 5}명` : ""
-        } (제외하려면 취소 후 멘트를 채우세요)`
+        } (멘트 작성 후 다시 발송하세요)`
       : "";
+    if (rows.length === 0) {
+      toast.message(`발송할 행이 없습니다 — 멘트 미작성 ${emptyMentRows.length}건 전부 제외됐습니다 (자동작성 또는 직접 입력 후 발송)`);
+      return;
+    }
     const absentLine = absentRows ? `\n결석 행 ${absentRows}건은 발송에서 제외됩니다` : "";
     const sentLine = alreadySentRows
       ? `\n이미 발송된 ${alreadySentRows}건은 제외됩니다 — ClassNote는 게시글 수정이 안 돼 다시 보내면 글만 하나 더 붙습니다`

@@ -69,12 +69,16 @@ async function dropAdminSession() {
   if (c) await c.page.close().catch(() => {});
 }
 
-/** too_old 최소날짜 = 오늘(로컬) 기준 전 달 1일. 워커도 belt-and-suspenders 가드. */
+/**
+ * too_old 최소날짜 = **오늘 포함 최근 7일 창의 시작일**(오늘-6, 로컬=KST PC 전제).
+ * 🔴 2026-07-28 원장 절대 규칙: "학부모가 일주일이 지났는데 이전 보고서를 받는 것도 비합리적" —
+ * 앱의 classnoteMinDate(classnote-guard.ts)와 같은 창. 워커는 모든 발송이 지나는 최종 관문이라
+ * 앱을 우회한 큐잉(직접 DB·재고·복구분)도 여기서 걸린다. **완화 금지.**
+ */
 export function minDate() {
   const d = new Date();
-  const y = d.getMonth() === 0 ? d.getFullYear() - 1 : d.getFullYear();
-  const m = d.getMonth() === 0 ? 12 : d.getMonth(); // getMonth()=0-based → 전 달 = 그대로(1-based로 -1)
-  return `${y}-${String(m).padStart(2, "0")}-01`;
+  d.setDate(d.getDate() - 6);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 /**
@@ -384,7 +388,7 @@ export async function processQueueOnce(sql, browser, opts) {
     )
     update lesson_reports lr set classnote_status='processing', classnote_processing_at=now()
     from cte where lr.id=cte.id
-    returning lr.id, lr.share_token, lr.report_date::text as report_date, lr.subject, lr.teacher_name, lr.student_id, lr.attachments, lr.classnote_sent_at`;
+    returning lr.id, lr.share_token, lr.report_date::text as report_date, lr.subject, lr.teacher_name, lr.student_id, lr.attachments, lr.classnote_sent_at, lr.notes`;
   const summary = { stale: stale.length, claimed: claimed.length, success: 0, failed: 0, requeued: 0, blocked: 0 };
   if (!claimed.length) return summary;
   log(`[worker] 클레임 ${claimed.length}건`);
@@ -448,6 +452,19 @@ export async function processQueueOnce(sql, browser, opts) {
     const [stu] = await sql`select name, classnote_name, grade from students where id=${r.student_id} and tenant_id=${tenant}`;
     // ClassNote 보드명·원아 = 유효이름(classnote_name 오버라이드 || name). 동명이인은 오버라이드로 구분(0088a).
     const studentName = (stu?.classnote_name?.trim() || stu?.name || "").trim();
+    // 🔴 빈 멘트 절대 가드(원장 지시 2026-07-28) — 멘트(notes) 없는 보고서가 나가면 학부모 화면에
+    // "작성된 보고 내용이 없습니다"가 노출된다(이날 이관분 22건 실발송→회수 사고). 여기가 **모든 발송
+    // 경로의 최종 관문**(앱 큐잉·콘솔·재발송·직접 DB 큐잉·재고·복구분 전부 통과)이라 여기 없으면 절대가
+    // 아니다. 재시도 무의미(멘트를 써야 풀림) → 결정적 failed + 한글 사유. dry-run은 상태 무변경 원칙이라
+    // post 모드에서만 기록. 실측: 정상 onescreen 발송 232건 중 빈 멘트 0 — 기존 워크플로 파급 없음.
+    if (post && !((r.notes ?? "").trim())) {
+      await sql`update lesson_reports set classnote_status='failed',
+        classnote_error=${"멘트(학부모 전달 내용)가 비어 있어 발송하지 않았습니다 — 멘트 작성 후 다시 발송하세요"}
+        where id=${r.id}`;
+      summary.failed++;
+      log(`  · ${studentName}: 빈 멘트 — 발송 차단(절대 가드) → failed`);
+      continue;
+    }
     // P0-3: 보드 라벨이 없는 과목(비수학·비영어·subject null)은 재시도 무의미한 결정적 실패 — 즉시 failed.
     if (!subjectLabel(r.subject)) {
       await sql`update lesson_reports set classnote_status='failed',
