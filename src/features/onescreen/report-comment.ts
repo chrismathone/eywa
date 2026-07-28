@@ -7,6 +7,7 @@
  */
 import type { OneScreenStudent, TestScore, TestScoreMode } from "./types";
 import { DEFAULT_PROMPTS, interpolate, assembleSingle } from "./prompt-defaults";
+import { isMonthlyExam } from "./monthly-exam";
 
 /**
  * 테스트 점수 → 사람이 읽는 문자열(순수, 0148a). **표시 단일 소스** — 학부모 카드(daily_test)와 AI 멘트(testLine)가
@@ -100,11 +101,22 @@ export function buildReportCommentInput(st: OneScreenStudent, subjectIndex: numb
   };
 }
 
+/**
+ * 진도 사실 1줄 — 월말평가일(monthly-exam.ts)은 **라벨을 '오늘 수업'으로 바꾼다**. '진도' 라벨로 주면
+ * 모델이 "월말평가 진도를 나갔습니다"처럼 나가지도 않은 진도를 문장에 만든다. 값(`수학 월말평가`)은
+ * 그대로 둔다 — 값에 괄호 설명을 달면 모델이 통째로 베낀다(아래 ⚠️ 주석의 실측 사고와 같은 벡터).
+ */
+function progressFact(input: ReportCommentInput, label: string): string | null {
+  const prog = [input.subject, flatten(input.progress)].filter(Boolean).join(" ");
+  if (!prog) return null;
+  return `${isMonthlyExam(input.progress) ? "오늘 수업" : label}: ${prog}`;
+}
+
 /** 입력의 **채워진 사실만** 모은 [입력] 블록(빈 값은 침묵). 모드 A 프롬프트 {{facts}}에 주입. */
 export function buildFactBlock(input: ReportCommentInput): string {
   const facts: string[] = [];
-  const prog = [input.subject, flatten(input.progress)].filter(Boolean).join(" ");
-  if (prog) facts.push(`오늘 진도: ${prog}`);
+  const prog = progressFact(input, "오늘 진도");
+  if (prog) facts.push(prog);
   // ⚠️ 라벨에 괄호 설명을 달지 말 것 — 모델이 값과 함께 **그대로 베껴** 학부모 문장에 넣는다
   // (2026-07-22 실측: "이전 진도 범위 일일테스트에서 10문제 중 5개를 맞혔으며" — 40건 중 8건 누출).
   // 두 테스트가 무엇을 다루는지는 프롬프트 [반드시] 절이 설명한다(데이터가 아니라 지침에).
@@ -146,8 +158,8 @@ export function buildReportCommentPrompt(input: ReportCommentInput, template?: s
 export function buildP1FactBlock(input: ReportCommentInput): string | null {
   const facts: string[] = [];
   if (input.textbook) facts.push(`교재: ${flatten(input.textbook)}`);
-  const prog = [input.subject, flatten(input.progress)].filter(Boolean).join(" ");
-  if (prog) facts.push(`진도: ${prog}`);
+  const prog = progressFact(input, "진도");
+  if (prog) facts.push(prog);
   const hw = flatten(input.homeworkToday || input.homework);
   if (hw) facts.push(`과제: ${hw}`);
   // 반 공통 서술(G6)은 수업 내용 문단(P1)에만 — P2(태도·특이사항)에 새면 "항목 섞지 마세요" 규칙 위반.

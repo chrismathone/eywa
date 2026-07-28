@@ -18,6 +18,7 @@ import {
   joinLessons,
   displayLessons,
 } from "../curriculum";
+import { MONTHLY_EXAM_LABEL, isMonthlyExam } from "../monthly-exam";
 
 export function ProgressSelector({
   value,
@@ -41,8 +42,13 @@ export function ProgressSelector({
 }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
+  /** 월말평가를 켜기 직전의 차시 선택 — 껐을 때 되살린다(실수로 켰다고 고른 차시가 날아가면 다시 고르게 된다). */
+  const [beforeMonthly, setBeforeMonthly] = useState("");
 
-  const selected = splitLessons(value);
+  // 월말평가일 = 나간 차시가 없는 날(monthly-exam.ts 규약). 진도 문자열에 라벨 **단독**으로 들어가므로
+  // 차시 선택과 상호배타 — 켜면 아래 선택 UI를 통째로 잠근다.
+  const monthly = isMonthlyExam(value);
+  const selected = monthly ? [] : splitLessons(value);
   const selectedSet = new Set(selected);
   const units = curriculumForGrade(studyGrade);
   const q = search.trim();
@@ -56,6 +62,15 @@ export function ProgressSelector({
   const toggle = (lesson: string) =>
     onChange(joinLessons(selectedSet.has(lesson) ? selected.filter((l) => l !== lesson) : [...selected, lesson]));
 
+  const toggleMonthly = () => {
+    if (monthly) {
+      onChange(beforeMonthly); // 되돌리기 — 켜기 전 차시 복원(없었으면 빈 값)
+    } else {
+      setBeforeMonthly(value);
+      onChange(MONTHLY_EXAM_LABEL);
+    }
+  };
+
   // 발송 완료된 보고서는 **수정 금지**(2026-07-22 원장 지시) — 학부모가 받은 이미지와 기록이 갈라지면
   // 나중에 어느 쪽이 사실인지 아무도 모른다. 팝오버를 아예 열지 않고 값만 읽기 전용으로 보여준다.
   if (locked) {
@@ -65,8 +80,8 @@ export function ProgressSelector({
         aria-label={ariaLabel ?? "진도"}
         aria-readonly="true"
       >
-        <span className="min-w-0 flex-1 truncate">
-          {selected.length ? displayLessons(value) : "—"}
+        <span className={`min-w-0 flex-1 truncate ${monthly ? "text-amber font-bold" : ""}`}>
+          {monthly ? MONTHLY_EXAM_LABEL : selected.length ? displayLessons(value) : "—"}
         </span>
       </div>
     );
@@ -79,13 +94,13 @@ export function ProgressSelector({
           `scrollWidth 417 > clientWidth 394`). 옆 자유입력 <input>은 처음부터 `w-full min-w-0 flex-1`이라
           멀쩡했다 — 같은 규약으로 맞춘다. 표 뷰(블록 컨텍스트)에선 flex-1이 무시돼 기존 동작 그대로. */}
       <Popover.Trigger
-        className={`border-line bg-card hover:border-primary/60 data-[popup-open]:border-primary flex h-8 w-full min-w-0 flex-1 items-center gap-1 rounded-lg border px-2 text-left text-[12px] outline-none transition-colors ${
-          selected.length ? "text-foreground" : "text-text-faint"
+        className={`bg-card hover:border-primary/60 data-[popup-open]:border-primary flex h-8 w-full min-w-0 flex-1 items-center gap-1 rounded-lg border px-2 text-left text-[12px] outline-none transition-colors ${
+          monthly ? "border-amber text-amber font-bold" : selected.length ? "border-line text-foreground" : "border-line text-text-faint"
         }`}
         aria-label={ariaLabel ?? "진도 선택"}
       >
         <span className="min-w-0 flex-1 truncate">
-          {selected.length ? displayLessons(value) : "진도 선택…"}
+          {monthly ? MONTHLY_EXAM_LABEL : selected.length ? displayLessons(value) : "진도 선택…"}
         </span>
         {selected.length > 1 ? (
           <span className="bg-primary-soft text-primary shrink-0 rounded-pill px-1.5 py-px text-[10px] font-bold">
@@ -97,13 +112,14 @@ export function ProgressSelector({
       <Popover.Portal>
         <Popover.Positioner side="bottom" align="start" sideOffset={4} className="z-50">
           <Popover.Popup className="bg-card border-line shadow-card flex max-h-[70vh] w-[380px] flex-col overflow-hidden rounded-lg border text-[12px] outline-none">
-            {/* 학년 필터 */}
+            {/* 학년 필터 + 월말평가 토글 */}
             <div className="border-line flex items-center gap-2 border-b px-3 py-2">
               <span className="text-text-faint shrink-0">진도 학년</span>
               <select
                 value={studyGrade}
                 onChange={(e) => onStudyGrade(e.target.value)}
-                className="border-line bg-card focus:border-primary h-7 rounded-sm border px-1.5 text-[12px] outline-none"
+                disabled={monthly}
+                className="border-line bg-card focus:border-primary h-7 rounded-sm border px-1.5 text-[12px] outline-none disabled:opacity-40"
                 aria-label="진도 학년 선택"
               >
                 {CURRICULUM_GRADES.map((g) => (
@@ -112,12 +128,32 @@ export function ProgressSelector({
                   </option>
                 ))}
               </select>
-              {ahead ? (
+              {ahead && !monthly ? (
                 <span className="bg-amber-soft text-amber rounded-pill px-1.5 py-0.5 text-[10px] font-bold">
                   실제 {studentGrade}
                 </span>
               ) : null}
+              {/* 월말평가일 = 나간 차시가 없는 날. 켜면 아래 차시 선택을 통째로 잠그고 진도값을 라벨 하나로 고정한다. */}
+              <label
+                className={`ml-auto inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-pill border px-2 py-0.5 text-[11px] font-bold transition-colors ${
+                  monthly ? "border-amber bg-amber-soft text-amber" : "border-line text-text-faint hover:border-amber/60"
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  checked={monthly}
+                  onChange={toggleMonthly}
+                  className="accent-amber size-3 shrink-0"
+                />
+                {MONTHLY_EXAM_LABEL}
+              </label>
             </div>
+
+            {monthly ? (
+              <p className="text-text-dim bg-amber-soft/50 border-line border-b px-3 py-2 text-[11px]">
+                오늘은 <b className="text-amber">월말평가</b>라 진도 선택이 잠겨 있어요. 차시를 고르려면 위 토글을 끄세요.
+              </p>
+            ) : null}
 
             {/* 검색 */}
             <div className="border-line border-b px-3 py-2">
@@ -126,7 +162,8 @@ export function ProgressSelector({
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="단원·차시 검색"
-                className="border-line bg-bg-soft focus:border-primary h-7 w-full rounded-sm border px-2 text-[12px] outline-none"
+                disabled={monthly}
+                className="border-line bg-bg-soft focus:border-primary h-7 w-full rounded-sm border px-2 text-[12px] outline-none disabled:opacity-40"
                 aria-label="단원·차시 검색"
               />
             </div>
@@ -158,8 +195,11 @@ export function ProgressSelector({
               </div>
             ) : null}
 
-            {/* 단원별 체크리스트 */}
-            <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto px-1 py-1">
+            {/* 단원별 체크리스트 — 월말평가면 잠금(입력 자체를 disabled로: 시각만 흐리면 키보드·스크린리더로 들어와 값이 바뀐다) */}
+            <div
+              className={`scrollbar-thin min-h-0 flex-1 overflow-y-auto px-1 py-1 ${monthly ? "pointer-events-none opacity-40" : ""}`}
+              aria-hidden={monthly || undefined}
+            >
               {filteredUnits.length === 0 ? (
                 <p className="text-text-faint px-2 py-4 text-center">검색 결과가 없습니다</p>
               ) : (
@@ -181,6 +221,7 @@ export function ProgressSelector({
                             type="checkbox"
                             checked={on}
                             onChange={() => toggle(l)}
+                            disabled={monthly}
                             className="accent-primary mt-0.5 size-3.5 shrink-0"
                           />
                           <span className="leading-snug">{l}</span>

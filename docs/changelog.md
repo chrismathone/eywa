@@ -4,6 +4,34 @@
 
 ## 진행 상황
 
+### 원스크린 진도 선택기 '월말평가' 토글 — 시험 보는 날도 보고서를 보낸다 (2026-07-28)
+월말평가일엔 나간 차시가 없다. 그런데 진도칸이 비면 ① 학부모 카드에서 진도가 통째로 빠지고 ② AI 멘트는
+사실 0이라 생성이 거부되며(`hasFacts`) ③ 강사가 차시칸에 "월말평가"·"시험"·"-"를 제각각 적어 그대로
+학부모에게 나간다(과제칸에서 이미 겪은 실측 67건 패턴 = `none-marker.ts`). 진도칸을 단일 소스로 둔 채
+**정식 값 하나**로 규약화했다 — 마이그레이션 0.
+- **토글**: [`progress-selector.tsx`](../src/features/onescreen/components/progress-selector.tsx) 팝오버 상단
+  '진도 학년' 행 **우측**에 `월말평가` 체크. 켜면 진도값이 라벨 하나(`"월말평가"`)로 고정되고 **아래 차시
+  선택이 잠긴다**(학년 select·검색·체크박스 전부 `disabled` — 시각만 흐리면 키보드·스크린리더로 들어와 값이
+  바뀐다). 끄면 **켜기 직전 차시 선택을 복원**한다(실수로 켰다고 고른 차시가 날아가면 다시 고르게 된다).
+  트리거는 amber로 `월말평가`를 표시해 팝오버를 열지 않아도 보인다. 표(그리드) 뷰·일괄 적용 팝오버도 같은
+  컴포넌트라 자동 적용(반 전체를 한 번에 월말평가로 넘길 수 있다).
+- **규약**: [`monthly-exam.ts`](../src/features/onescreen/monthly-exam.ts) `MONTHLY_EXAM_LABEL`·`isMonthlyExam`
+  (원본값)·`isMonthlyExamProgress`(과목 라벨 접두 붙은 저장값). 차시와 **상호배타** — 섞인 값은 인식하지 않아
+  진짜 기록을 삼키지 않는다. 🔴 라벨을 커리큘럼 차시 이름과 겹치게 바꾸지 말 것(겹치면 진도로 집계된다).
+- **문장**: [`report.ts`](../src/features/onescreen/report.ts) `buildSubjectReport`/`buildReport`가 "~ 진도를
+  진행했습니다"(거짓) 대신 "오늘 수학 **월말평가**를 진행했습니다". 합본은 진도/월말평가 두 무리로 갈라
+  각각 제 문장을 쓴다(수학은 월말평가·영어는 정상 수업인 날). 테스트 점수·태도 뒷문장은 그대로 붙는다.
+- **AI 멘트**: [`report-comment.ts`](../src/features/onescreen/report-comment.ts) 사실 블록 라벨이 '오늘 진도'
+  → **'오늘 수업'**(모드 A·B P1 공통). '진도' 라벨로 주면 모델이 나가지도 않은 진도를 문장에 만든다.
+  ⚠️ 값에는 괄호 설명을 달지 않는다 — 모델이 통째로 베낀다(2026-07-22 실측 누출 8/40건과 같은 벡터).
+- **학부모 카드**: [`parent-report-card.tsx`](../src/features/onescreen/components/parent-report-card.tsx)
+  '오늘 수업' 섹션의 필드 라벨이 '진도' → **'수업'**(값은 그대로 `수학 월말평가`).
+- **진도 파이프라인 무오염(자동)**: `positionOf("수학 월말평가")`가 null → `ingestReport`가 `no-position`으로
+  skip. 진도 컨테이너·이상 감지(G2 배지)가 월말평가를 진도로 세지 않는다 — 테스트로 못박음.
+- 검증 typecheck0 · lint0 · **test2542**(신규 monthly-exam 8 + report 4 + report-comment 4). ⚠️ 브라우저
+  시각검증 미완(로그인 게이트·프로덕션 DB). ⚠️ **자유입력 과목(영어 등)엔 토글 없음** — 커리큘럼 선택기가
+  math 전용이라, 영어는 진도칸에 직접 "월말평가"를 적으면 같은 규약을 탄다(문장·라벨·AI 전부 동일 동작).
+
 ### ClassNote 게시 엔진 워커 내장(§10 옵션 B) — Cloud Run 의존 절단 + 3중 방어 (2026-07-28) - 학원이 실E2E 통과
 edutrix classreport-web 소등의 유일한 블로커 해소. **DOM 마법사 포팅이 아니라 내부 API 경로 확장**을 채택 —
 Cloud Run 함수(2,500줄 Puppeteer)를 3방향 정찰로 해부한 결과 emotion 해시 셀렉터 수십 개 + 실측 결함

@@ -422,3 +422,40 @@ describe("fact 라벨에 괄호 설명 금지 — 모델이 값과 함께 베낀
     expect(p).toContain("이 설명 자체를 문장에 옮겨 적지 말고");
   });
 });
+
+// ── 월말평가일 — '진도' 라벨로 주면 모델이 나가지도 않은 진도를 문장에 만든다(monthly-exam.ts) ──
+describe("월말평가 사실 라벨", () => {
+  const base = {
+    studentName: "김담희",
+    subject: "수학",
+    progress: "월말평가",
+    dailyTest: "",
+    checkTest: "",
+    attitude: "",
+    homework: "",
+    homeworkToday: "",
+    textbook: "",
+    specialNote: "",
+  };
+
+  it("모드 A — '오늘 진도' 대신 '오늘 수업'으로 라벨링", () => {
+    const block = buildFactBlock(base);
+    expect(block).toContain("오늘 수업: 수학 월말평가");
+    expect(block).not.toContain("오늘 진도:");
+  });
+
+  it("모드 B P1 — '진도' 대신 '오늘 수업'", () => {
+    const block = buildP1FactBlock(base);
+    expect(block).toContain("오늘 수업: 수학 월말평가");
+    expect(block).not.toContain("진도: 수학 월말평가");
+  });
+
+  it("값에는 괄호 설명을 붙이지 않는다(모델이 통째로 베껴 학부모 문장에 넣는다)", () => {
+    expect(buildFactBlock(base)).not.toContain("(");
+  });
+
+  it("일반 진도는 라벨이 그대로 '오늘 진도'", () => {
+    const block = buildFactBlock({ ...base, progress: "1. 다항식의 연산" });
+    expect(block).toContain("오늘 진도: 수학 1. 다항식의 연산");
+  });
+});
