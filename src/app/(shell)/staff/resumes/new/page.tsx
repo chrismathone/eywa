@@ -3,31 +3,59 @@ import { requireAccess } from "@/lib/auth/require-access";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { assignableRoles, canManageStaff } from "@/lib/auth/role-hierarchy";
 import { BackLink } from "@/components/back-link";
-import { emptyResume } from "@/features/staff/resume";
+import { emptyResume, RESUME_DEPARTMENTS } from "@/features/staff/resume";
+import { isImportArtifactEmail } from "@/features/staff/email";
+import { getStaffById } from "@/features/staff/server/queries";
 import { ResumeSheet } from "../_components/resume-sheet";
 
 export const metadata = { title: "직원 이력서 작성 — eywa" };
 
-export default async function NewResumePage() {
+export default async function NewResumePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ staff?: string }>;
+}) {
   const user = await requireAccess("staff");
   if (!(await canWriteTenant(user.systemRole, "staff"))) redirect("/staff?tab=resumes");
+
+  // 직원목록에서 이력서 없는 직원을 클릭해 온 경우(?staff=) — 아는 정보를 미리 채우고 저장 시 그 직원과 연결.
+  const { staff: staffParam } = await searchParams;
+  const staff = staffParam ? await getStaffById(staffParam) : null;
+  const data = emptyResume();
+  if (staff) {
+    data.personal.name = staff.displayName;
+    data.personal.nameEn = staff.englishName ?? "";
+    // 플레이스홀더(@imported.local)는 실이메일이 아니므로 이력서에 안 옮긴다.
+    data.personal.email = isImportArtifactEmail(staff.email) ? "" : staff.email;
+    data.personal.phone = staff.phone ?? "";
+    data.contract.startDate = staff.hireDate ?? "";
+    data.contract.division = (RESUME_DEPARTMENTS as readonly string[]).includes(staff.department ?? "")
+      ? (staff.department as string)
+      : "";
+    data.contract.employmentType = staff.employmentType ?? "";
+  }
 
   return (
     <div className="print-portrait space-y-4 p-6">
       <header className="print:hidden">
         <BackLink href="/staff?tab=resumes" label="직원 이력서 목록으로" />
-        <h1 className="text-foreground mt-1 text-lg font-bold">직원 이력서 작성</h1>
+        <h1 className="text-foreground mt-1 text-lg font-bold">
+          직원 이력서 작성{staff ? ` — ${staff.displayName}` : ""}
+        </h1>
         <p className="text-text-dim mt-1 text-sm">
-          종이 서식의 각 칸에 바로 입력하세요 — 저장하면 데이터베이스(인사·직원)에 보관되고 언제든 다시 수정·A4 인쇄할 수 있습니다.
+          {staff
+            ? "직원 정보로 미리 채워진 서식입니다 — 저장하면 이 직원과 이력서가 연결됩니다."
+            : "종이 서식의 각 칸에 바로 입력하세요 — 저장하면 데이터베이스(인사·직원)에 보관되고 언제든 다시 수정·A4 인쇄할 수 있습니다."}
         </p>
       </header>
       <ResumeSheet
-        data={emptyResume()}
+        data={data}
         userId={user.id}
         canWrite
         startEditing
-        // 원샷 직원 등록 옵션 — 직원관리 권한(master/admin/manager)일 때만 노출(서버가 재검증).
-        assignableRoles={canManageStaff(user.systemRole) ? assignableRoles(user.systemRole) : []}
+        staffUserId={staff?.id}
+        // 원샷 직원 등록 옵션 — 기존 직원 연결 모드에선 계정이 이미 있으므로 미노출.
+        assignableRoles={!staff && canManageStaff(user.systemRole) ? assignableRoles(user.systemRole) : []}
       />
     </div>
   );

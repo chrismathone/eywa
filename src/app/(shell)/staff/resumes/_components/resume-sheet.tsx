@@ -161,6 +161,7 @@ export function ResumeSheet({
   startEditing = false,
   photoUrls,
   assignableRoles,
+  staffUserId,
 }: {
   data: StaffResumeData;
   id?: string;
@@ -172,6 +173,8 @@ export function ResumeSheet({
   photoUrls?: (string | null)[];
   /** 원샷 직원 등록에서 부여 가능한 역할(작성자 권한 기준, 서버가 재검증). 생성 화면에서만 전달. */
   assignableRoles?: SystemRole[];
+  /** 기존 직원과 연결해 작성하는 모드(?staff= 프리필) — 저장 시 staff_user_id로 연결(서버가 재검증). */
+  staffUserId?: string;
 }) {
   const [editing, setEditing] = useState(startEditing);
   const [state, formAction] = useActionState<ResumeActionState, FormData>(saveStaffResume, undefined);
@@ -827,6 +830,7 @@ export function ResumeSheet({
   return (
     <form action={formAction} ref={formRef} className="space-y-4">
       {id ? <input type="hidden" name="id" value={id} /> : null}
+      {!id && staffUserId ? <input type="hidden" name="staff_user_id" value={staffUserId} /> : null}
       {toolbar}
       {id ? <EditingBanner scope={`staff-resume:${id}`} /> : null}
       <DraftBanner savedAt={draft.draftSavedAt} onRestore={draft.restore} onDiscard={draft.discard} />
