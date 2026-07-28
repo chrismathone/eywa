@@ -149,8 +149,14 @@ export function HelpBrowser({
             <p className="micro">{menus.length}개 메뉴 안내</p>
             <h2 className="text-foreground mt-0.5 text-[17px] font-bold">기능 한눈에 보기</h2>
           </header>
-          {/* 동질 목록(메뉴)은 개별 카드로 과박싱하지 않고 한 컨테이너 안 리스트로(영역 구분 규약: 과적용 금지, FAQ와 동일 톤). */}
-          <div className="bg-card border-line shadow-card grid grid-cols-1 gap-1 rounded-2xl border p-2 sm:grid-cols-2">
+          {/* 동질 목록(메뉴)은 개별 카드로 과박싱하지 않고 한 컨테이너 안 리스트로(영역 구분 규약: 과적용 금지, FAQ와 동일 톤).
+              열은 auto-fit — `sm:grid-cols-2`는 검색이 1건으로 좁혀지면 오른쪽 반쪽을 비워 두고, 반대로 넓은
+              창에선 12개 메뉴가 2열에 갇혀 설명 옆이 텅 비었다. 여긴 행이 truncate가 아니라 **줄바꿈되는 카드**라
+              열을 늘리는 게 이득(브리핑·출석 퀵오픈의 truncate 행과 반대 판단).
+              하한 300px = 옛 `sm:grid-cols-2`가 640px에서 만들던 열폭(310px)보다 살짝 좁게 잡은 값 —
+              **어떤 폭에서도 예전보다 열이 줄지 않게** 하려는 것(420px로 잡았더니 640~847px 구간이
+              2열→1열로 퇴행해 높이가 416→818px가 됐다). */}
+          <div className="bg-card border-line shadow-card grid grid-cols-[repeat(auto-fit,minmax(min(100%,300px),1fr))] gap-1 rounded-2xl border p-2">
             {filteredMenus.map((m) => {
               const iconName = MENU_ICON[m.id];
               return (

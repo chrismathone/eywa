@@ -91,7 +91,9 @@ export function QuickOpenPanel({
                 </div>
               ) : null}
 
-              <ul className="grid gap-x-2 sm:grid-cols-2">
+              {/* 2열은 **반이 2개 이상일 때만** — 반이 하나뿐인 과목 그룹은 오른쪽 반쪽이 빈 채로 남았다.
+                  행이 truncate라 열을 더 늘리진 않는다(넓을수록 강사명이 더 보이는 게 이득). */}
+              <ul className={`grid gap-x-2 ${g.classes.length > 1 ? "sm:grid-cols-2" : ""}`}>
                 {g.classes.map((c) => (
                   <li key={c.id}>
                     <Link
