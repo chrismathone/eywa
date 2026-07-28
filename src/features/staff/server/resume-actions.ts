@@ -231,12 +231,28 @@ export async function saveStaffResume(
       })
       .eq("id", id)
       .eq("form_type", RESUME_FORM_TYPE)
-      .select("id"); // ⚠️ select 없으면 **0행 매칭도 error:null** → "저장됨"인데 아무것도 안 바뀜.
+      .select("id, staff_user_id"); // ⚠️ select 없으면 **0행 매칭도 error:null** → "저장됨"인데 아무것도 안 바뀜.
     if (error) return { error: humanizeDbError(error.message, "저장"), detail: error.message };
     if (!updated?.length) {
       return {
         error: "이력서를 찾을 수 없습니다 — 다른 사람이 삭제했을 수 있습니다. 입력한 내용을 복사해 두고 새로 작성하세요",
       };
+    }
+    // 연결된 직원 동기화(2026-07-28 원장 제보: "부서를 이력서에서 바꿨는데 목록이 안 바뀜") —
+    // 직원목록·필터·대시보드는 users를 읽으므로, 이력서 수정이 인사 필드를 users로 밀어줘야 한다.
+    // 이력서에 **값이 있는 항목만** 덮는다(빈 칸으로 계정 값을 지우지 않게). admin + tenant 스코프(0104a 규약).
+    const linkedId = (updated[0] as { staff_user_id?: string | null }).staff_user_id ?? null;
+    if (linkedId) {
+      const sync: Record<string, unknown> = {};
+      if (data.contract.division) sync.department = data.contract.division;
+      if (data.contract.employmentType) sync.employment_type = data.contract.employmentType;
+      if (data.contract.jobTitle) sync.job_title = data.contract.jobTitle;
+      if (data.personal.phone) sync.phone = data.personal.phone;
+      if (data.contract.startDate) sync.hire_date = data.contract.startDate;
+      if (Object.keys(sync).length > 0) {
+        await createAdminClient().from("users").update(sync).eq("id", linkedId).eq("tenant_id", gate.user.tenantId);
+      }
+      revalidatePath(`/staff/${linkedId}`);
     }
     revalidateResume(id);
     return { ok: true, id, nonce: Date.now(), redirectTo: `/staff/resumes/${id}` };
