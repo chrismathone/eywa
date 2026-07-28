@@ -118,7 +118,9 @@ function ResolvedAnomalies({ anomalies, canResolve }: { anomalies: readonly Prog
 function TrackCard({ t }: { t: TrackAnalytics }) {
   const top = t.percentile != null && t.poolSize >= MIN_POOL ? Math.max(0, 100 - t.percentile) : null;
   return (
-    <div className="bg-card border-line shadow-card rounded-2xl border p-4">
+    // @container — 아래 본문 2열 분기는 **창 폭이 아니라 이 카드 폭** 기준. 트랙이 1개면 카드가 전폭이라
+    // 창이 좁아도 2열이 되고, 2개면 반폭이라 넓은 창에서만 2열이 된다(트랙 수 × 창 폭 조합을 한 규칙으로).
+    <div className="bg-card border-line shadow-card @container rounded-2xl border p-4">
       <div className="mb-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span
@@ -133,51 +135,56 @@ function TrackCard({ t }: { t: TrackAnalytics }) {
         <span className="text-text-faint text-[11px]">{t.chapterCount}개 기록</span>
       </div>
 
-      {/* 현재 위치 */}
-      {t.current ? (
-        <div className="mb-3">
-          <p className="text-text-faint text-[11px]">현재 위치</p>
-          <p className="text-foreground text-[15px] font-bold">
-            {t.current.grade} · {t.current.lesson}
-          </p>
-          <p className="text-text-faint text-[11px]">{t.current.unit}</p>
-          <div className="bg-bg-soft relative mt-1.5 h-1.5 w-full overflow-hidden rounded-pill">
-            <div className="bg-primary absolute inset-y-0 left-0 rounded-pill" style={{ width: `${t.progressPct}%` }} />
+      <div className="@2xl:grid @2xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)] @2xl:items-start @2xl:gap-x-5">
+        {/* 현재 위치 */}
+        {t.current ? (
+          <div className="mb-3 @2xl:mb-0">
+            <p className="text-text-faint text-[11px]">현재 위치</p>
+            <p className="text-foreground text-[15px] font-bold break-keep">
+              {t.current.grade} · {t.current.lesson}
+            </p>
+            <p className="text-text-faint text-[11px] break-keep">{t.current.unit}</p>
+            <div className="bg-bg-soft relative mt-1.5 h-1.5 w-full overflow-hidden rounded-pill">
+              <div
+                className="bg-primary absolute inset-y-0 left-0 rounded-pill"
+                style={{ width: `${t.progressPct}%` }}
+              />
+            </div>
+            <p className="text-text-faint mt-0.5 text-[10px]">전체 커리큘럼의 {t.progressPct}%</p>
           </div>
-          <p className="text-text-faint mt-0.5 text-[10px]">전체 커리큘럼의 {t.progressPct}%</p>
-        </div>
-      ) : null}
+        ) : null}
 
-      {/* 지표 3셀 */}
-      <div className="border-line grid grid-cols-3 divide-x rounded-md border text-center">
-        <div className="px-2 py-2">
-          <p className="text-text-faint text-[10px]">수업당 속도</p>
-          <p className="text-foreground text-[13px] font-bold">{fmtSpeed(t.speedPerLessonDay)}</p>
-        </div>
-        <div className="px-2 py-2">
-          <p className="text-text-faint text-[10px]">또래 대비</p>
-          <p className="text-primary text-[13px] font-bold">
-            {top != null ? `상위 ${top}%` : "표본 부족"}
-          </p>
-        </div>
-        <div className="px-2 py-2">
-          <p className="text-text-faint text-[10px]">90일 예측</p>
-          <p className="text-foreground text-[13px] font-bold">
-            {t.predictions.find((p) => p.days === 90)?.grade || "—"}
-          </p>
+        <div>
+          {/* 지표 3셀 */}
+          <div className="border-line grid grid-cols-3 divide-x rounded-md border text-center">
+            <div className="px-2 py-2">
+              <p className="text-text-faint text-[10px]">수업당 속도</p>
+              <p className="text-foreground text-[13px] font-bold">{fmtSpeed(t.speedPerLessonDay)}</p>
+            </div>
+            <div className="px-2 py-2">
+              <p className="text-text-faint text-[10px]">또래 대비</p>
+              <p className="text-primary text-[13px] font-bold">{top != null ? `상위 ${top}%` : "표본 부족"}</p>
+            </div>
+            <div className="px-2 py-2">
+              <p className="text-text-faint text-[10px]">90일 예측</p>
+              <p className="text-foreground text-[13px] font-bold">
+                {t.predictions.find((p) => p.days === 90)?.grade || "—"}
+              </p>
+            </div>
+          </div>
+
+          {/* 예측 상세 */}
+          {t.predictions.length ? (
+            <div className="text-text-dim mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px]">
+              {t.predictions.map((p) => (
+                <span key={p.days}>
+                  {p.days}일 후 <b className="text-foreground">{p.grade}</b> {p.lesson}
+                </span>
+              ))}
+            </div>
+          ) : null}
         </div>
       </div>
-
-      {/* 예측 상세 */}
-      {t.predictions.length ? (
-        <div className="text-text-dim mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px]">
-          {t.predictions.map((p) => (
-            <span key={p.days}>
-              {p.days}일 후 <b className="text-foreground">{p.grade}</b> {p.lesson}
-            </span>
-          ))}
-        </div>
-      ) : null}
     </div>
   );
 }
@@ -208,7 +215,10 @@ export async function ProgressContainerPanel({ studentId }: { studentId: string 
           아직 진도 기록이 없습니다. 원스크린에서 진도를 입력·저장하면 자동으로 분석됩니다.
         </div>
       ) : (
-        <div className="grid gap-3 md:grid-cols-2">
+        // auto-fit — 트랙이 1개면 전폭(md:grid-cols-2는 빈 오른쪽 반을 예약해 낭비였다), 2개면 폭이 되는
+        // 창에서만 나란히, 좁으면 접힘. 트랙 수를 세어 클래스를 분기하지 않아도 된다.
+        // 하한 420px = 지표 3셀이 한 줄로 버티는 최소치(340이면 344px 카드가 나와 "29.5 차시/수업일"이 2줄).
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,420px),1fr))] gap-3">
           {data.tracks.map((t) => (
             <TrackCard key={t.track} t={t} />
           ))}
