@@ -4,6 +4,23 @@
 
 ## 진행 상황
 
+### 레거시 소등 준비 — 미디어 GCS→Supabase 이전 + 시트 SA 분리 (2026-07-28) - tsc0/lint0/storage테스트11
+원장 결정: **edutrix·ijw-calander 서버 전부 소등**(비용 0). eywa Vercel·Supabase 유료 티어 전환으로 용량
+블로커 소멸 — 전량 이전 + 적대검증 후 폐쇄. 이날 배선 2건:
+- **시트 SA 분리(ijw 의존 절단)**: 시트 연동이 `GOOGLE_SERVICE_ACCOUNT_KEY` 미설정 폴백으로 **ijw-calander
+  소속 SA**로 돌고 있었다(프로젝트 삭제=시트 전멸). 새 GCP `eywa-injaewon`(chrismathone) + SA
+  `eywa-sheets@…` 신설, eywa 소비 시트 3개(수학/영어 시간표·직원명부)만 writer 공유, `.env.local`+Vercel
+  3환경에 `GOOGLE_SERVICE_ACCOUNT_KEY` 등록. 적대검증: 새 키 단독 canEdit 3/3 + 코드 해석순서 재현 통과.
+- **미디어 이전 + legacy 분기 배선**: ijw GCS 1.78GB/165객체 → Supabase Storage(신규 버킷 branding·
+  academy-documents 생성, 오디오 버킷 MIME `audio/*`+`video/webm`·200MB 상향). ⚠️ **Supabase 키는 한글
+  거부**(% 인코딩도 서버가 디코드해 무효) → 레거시 한글 파일명 60개는 `b64_<base64url>.<ext>` 가역 변환
+  + `meeting_minutes.audio_path` 29건 재작성(백업 선행). 레거시 지출 영수증 48행은 firebase **풀 URL**
+  참조라 ijw 삭제 시 증빙 소실 → `{tenant}/{expenseId}/legacy-….ext`로 이전 + `receipt_urls` 재작성.
+  [media-storage.ts](../src/lib/storage/media-storage.ts) `resolveAudioReadUrl`의 legacy 분기가 "항상
+  GCS"였던 것을 **백엔드 추종**으로 변경(supabase면 kind 버킷에서 원경로 서명). 전환 스위치는
+  `MEDIA_STORAGE_BACKEND=supabase`(이전·검증 완료 후 플립). 이전 스크립트=멱등(같은 크기 존재 시 스킵)·
+  md5 검증. 잔여: 50MB 초과 7건은 **프로젝트 전역 업로드 한도 상향 후 재실행** 필요.
+
 ### 진도 이상 "이상 없음 확인" — 끌 수 없는 경고는 결국 전부 무시된다 (2026-07-27, 0151a) - tsc0/lint0/test519
 원장: "이상이 없다고 체크해서 다음부터 알림이 안 뜨게 하는 기능은 있나?" → **없었다.** 진도 점프의 상당수는
 **정상**(선행 시작·교재 건너뜀·반 이동)인데 확인해도 끌 방법이 없어, 원스크린 '진도 확인 필요' 배지(14일)와

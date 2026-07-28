@@ -14,17 +14,13 @@ if (!url || !key) {
 
 const admin = createClient(url, key, { auth: { persistSession: false } });
 
-const AUDIO_MIME_TYPES = [
-  "audio/mpeg",
-  "audio/mp4",
-  "audio/x-m4a",
-  "audio/wav",
-  "audio/x-wav",
-  "audio/webm",
-  "audio/ogg",
-];
+// audio/* 와일드카드: 레거시 ijw 녹음의 `audio/webm;codecs=opus` 등 파라미터 변형 흡수.
+// video/webm: MediaRecorder가 오디오 전용 녹음도 video/webm 컨테이너로 뱉는 경우(레거시 5건 실측).
+const AUDIO_MIME_TYPES = ["audio/*", "video/webm"];
 
-const AUDIO_SIZE_LIMIT = 50 * 1024 * 1024; // 50 MB — Supabase free-tier per-file cap
+// 2026-07-28 유료 티어 전환 + ijw 레거시 녹음 이전(최대 119.7MB)으로 200MB로 상향.
+// ⚠️ 프로젝트 전역 업로드 한도(Project Settings → Storage)가 이 값 이상이어야 updateBucket이 통과한다.
+const AUDIO_SIZE_LIMIT = 200 * 1024 * 1024;
 
 // 지출결의서 증빙(영수증/세금계산서 등) — 이미지·PDF. 사적·재무 문서이므로 비공개 버킷 + signed URL로만 열람.
 const RECEIPT_MIME_TYPES = [
