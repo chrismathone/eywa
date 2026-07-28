@@ -10,22 +10,57 @@
 //       node --env-file=.env.local scripts/_edutrix_retire/archive-edutrix.cjs --apply
 const fs = require("fs");
 const path = require("path");
+const crypto = require("crypto");
 const { createClient } = require("@supabase/supabase-js");
 const postgres = require("postgres");
 
 const TENANT = "becaa316-e636-42e9-9d09-08b133e0b094";
 const APPLY = process.argv.includes("--apply");
 const OUT_DIR = path.join(__dirname, "..", "..", "data", "edutrix-archive");
+// ⚠️ 소등 전 **원본 전 테이블**을 담는다. 2026-07-28 보강: 초판 9개는 수학·영어 본체만 담아
+// 고등수학관(hs_*)·수강이력·프롬프트·숙제·진도컨테이너가 통째로 빠져 있었다. hs_*는 lesson_reports
+// 이관 대상도 아니라(cron이 `reports`만 읽음) **아카이브에 없으면 소등과 함께 영구 소실**된다.
+// 존재하지 않는 테이블은 아래 루프의 try/catch가 SKIP으로 넘긴다(목록에 남겨 둬도 무해).
 const TABLES = [
+  // 수학(본체)
   "reports",
-  "en_reports",
   "students",
   "classes",
+  "class_teachers",
+  "class_enrollments",
   "profiles",
+  // 영어
+  "en_reports",
   "en_students",
   "en_classes",
+  "en_class_teachers",
+  "en_class_enrollments",
+  "en_textbooks",
+  "en_textbook_page_analysis",
+  // 고등수학관 — 이관 대상 아님(소실 후보 1순위)
+  "hs_reports",
+  "hs_students",
+  "hs_classes",
+  "hs_class_teachers",
+  "hs_class_enrollments",
+  // 발송·열람 이력
   "share_link_views",
   "submission_logs",
+  "notice_queue",
+  // 설정·AI
+  "academy_settings",
+  "ai_prompt_settings",
+  "chat_conversations",
+  "chat_messages",
+  "chat_logs",
+  // 숙제·첨부·진도
+  "homework_assignments",
+  "homework_assignment_targets",
+  "homework_assignment_attachments",
+  "homework_submission_comments",
+  "student_attachments",
+  "progress_containers",
+  "notifications",
 ];
 const CRED_RE = /pass|pw|secret|token/i; // share_token 등도 걸리지만 아카이브 무결성보다 자격증명 비유출 우선(원본엔 있음)
 
@@ -79,10 +114,14 @@ async function fetchAllPaged(q, page = 1000) {
     fs.writeFileSync(path.join(OUT_DIR, `${table}.jsonl`), rows.map((r) => JSON.stringify(r)).join("\n"));
 
     for (let i = 0; i < rows.length; i += 500) {
+      // ⚠️ source_id는 (source_table, source_id) 유니크의 절반이다. `id` 없는 테이블에서 예전 폴백
+      // `${table}:${i}`는 **청크 시작 인덱스**라 500행이 같은 키가 됐다 → 한 INSERT 안에서 같은 키가
+      // 두 번 나와 "ON CONFLICT DO UPDATE command cannot affect row a second time"로 청크 전체가 실패한다.
+      // 행 내용 해시로 바꿔 행마다 고유하고 재실행에도 안정적인 키를 만든다(2026-07-28).
       const c = rows.slice(i, i + 500).map((r) => ({
         tenant_id: TENANT,
         source_table: table,
-        source_id: String(r.id ?? `${table}:${i}`),
+        source_id: String(r.id ?? `${table}:${crypto.createHash("sha1").update(JSON.stringify(r)).digest("hex")}`),
         row: sql.json(r),
       }));
       await sql`insert into edutrix_archive ${sql(c)}
