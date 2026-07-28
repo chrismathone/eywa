@@ -195,6 +195,8 @@ export function ResumeSheet({
   // 미리보기 URL — 기존 저장분은 서버 signed URL, 방금 올린 파일은 로컬 objectURL.
   const [previews, setPreviews] = useState<(string | null)[]>(slotify(photoUrls));
   const [uploadingSlot, setUploadingSlot] = useState<number | null>(null);
+  // 사진 슬라이드(원장 지시 2026-07-28) — 2칸을 세로로 쌓지 않고 한 칸에서 ‹ › 로 넘긴다.
+  const [photoSlide, setPhotoSlide] = useState(0);
   // 원샷 직원 등록(생성 화면 전용) — 서버가 권한·역할을 재검증한다.
   // '직원 등록' 진입이 이 서식으로 통합(2026-07-28)돼 기본 ON — 역할 미선택 저장은 이력서만 저장+경고.
   const [acctRegister, setAcctRegister] = useState(!id && (assignableRoles?.length ?? 0) > 0);
@@ -355,56 +357,89 @@ export function ResumeSheet({
             <td className={cell}>{field("p_name", p.name, { ph: "성명" })}</td>
             <th className={`${head} w-28`}>영문</th>
             <td className={cell}>{field("p_nameEn", p.nameEn, { ph: "영문 이름" })}</td>
-            {/* 증명사진 2장 — 직원 얼굴 구별용(원장 지시 2026-07-28). rowSpan으로 종이 이력서 사진칸 재현. */}
-            <td className={`${cell} w-[92px] align-top print:w-[80px]`} rowSpan={4}>
-              <div className="flex flex-col gap-1.5">
-                {Array.from({ length: RESUME_PHOTO_SLOTS }, (_, slot) => {
-                  const url = editing ? previews[slot] : (photoUrls?.[slot] ?? null);
-                  const hasPath = editing ? Boolean(photos[slot]) : Boolean(data.photos[slot]);
-                  return (
-                    <div key={slot} className="relative">
-                      <div className="border-foreground/25 bg-bg-soft/40 flex aspect-[3/4] w-full items-center justify-center overflow-hidden rounded-sm border">
-                        {url ? (
-                          // eslint-disable-next-line @next/next/no-img-element -- signed URL/objectURL 미리보기(최적화 불필요)
-                          <img src={url} alt={`증명사진 ${slot + 1}`} className="size-full object-cover" />
-                        ) : hasPath ? (
-                          <span className="text-text-faint px-1 text-center text-[10px]">사진 첨부됨</span>
-                        ) : (
-                          <span className="text-text-faint px-1 text-center text-[10px]">사진 {slot + 1}</span>
-                        )}
-                      </div>
-                      {editing ? (
-                        <div className="print:hidden mt-0.5 flex items-center justify-center gap-1">
-                          <label className="text-primary relative cursor-pointer text-[10px] font-bold hover:underline">
-                            {uploadingSlot === slot ? "올리는 중…" : hasPath ? "변경" : "첨부"}
-                            <input
-                              type="file"
-                              accept="image/jpeg,image/png,image/webp"
-                              className="sr-only"
-                              disabled={uploadingSlot !== null}
-                              onChange={(e) => {
-                                void pickPhoto(slot, e.target.files?.[0]);
-                                e.target.value = ""; // 같은 파일 재선택 허용
-                              }}
-                            />
-                          </label>
-                          {hasPath ? (
-                            <button
-                              type="button"
-                              onClick={() => clearPhoto(slot)}
-                              className="text-text-dim text-[10px] hover:underline"
-                            >
-                              삭제
-                            </button>
-                          ) : null}
-                        </div>
-                      ) : null}
-                      {/* 저장 제출용 경로 — 파일 자체는 티켓으로 이미 업로드됨. */}
-                      {editing ? <input type="hidden" name={`photo_${slot}`} value={photos[slot] ?? ""} /> : null}
+            {/* 증명사진 2장 — 직원 얼굴 구별용. 한 칸에서 ‹ › 슬라이드로 넘긴다(원장 지시 2026-07-28). */}
+            <td className={`${cell} w-[104px] align-top print:w-[80px]`} rowSpan={4}>
+              {(() => {
+                const slot = Math.min(photoSlide, RESUME_PHOTO_SLOTS - 1);
+                const url = editing ? previews[slot] : (photoUrls?.[slot] ?? null);
+                const hasPath = editing ? Boolean(photos[slot]) : Boolean(data.photos[slot]);
+                const step = (d: number) =>
+                  setPhotoSlide((s) => (s + d + RESUME_PHOTO_SLOTS) % RESUME_PHOTO_SLOTS);
+                return (
+                  <div className="relative">
+                    <div className="border-foreground/25 bg-bg-soft/40 flex aspect-[3/4] w-full items-center justify-center overflow-hidden rounded-sm border">
+                      {url ? (
+                        // eslint-disable-next-line @next/next/no-img-element -- signed URL/objectURL 미리보기(최적화 불필요)
+                        <img src={url} alt={`증명사진 ${slot + 1}`} className="size-full object-cover" />
+                      ) : hasPath ? (
+                        <span className="text-text-faint px-1 text-center text-[10px]">사진 첨부됨</span>
+                      ) : (
+                        <span className="text-text-faint px-1 text-center text-[10px]">사진 {slot + 1}</span>
+                      )}
                     </div>
-                  );
-                })}
-              </div>
+                    {RESUME_PHOTO_SLOTS > 1 ? (
+                      <div className="print:hidden mt-0.5 flex items-center justify-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => step(-1)}
+                          aria-label="이전 사진"
+                          className="text-text-dim hover:text-foreground px-0.5 text-[11px] leading-none"
+                        >
+                          ‹
+                        </button>
+                        {Array.from({ length: RESUME_PHOTO_SLOTS }, (_, i) => (
+                          <button
+                            key={i}
+                            type="button"
+                            onClick={() => setPhotoSlide(i)}
+                            aria-label={`사진 ${i + 1} 보기`}
+                            aria-current={i === slot}
+                            className={`size-1.5 rounded-full transition ${i === slot ? "bg-primary" : "bg-line"}`}
+                          />
+                        ))}
+                        <button
+                          type="button"
+                          onClick={() => step(1)}
+                          aria-label="다음 사진"
+                          className="text-text-dim hover:text-foreground px-0.5 text-[11px] leading-none"
+                        >
+                          ›
+                        </button>
+                      </div>
+                    ) : null}
+                    {editing ? (
+                      <div className="print:hidden mt-0.5 flex items-center justify-center gap-1.5">
+                        <label className="text-primary relative cursor-pointer text-[10px] font-bold hover:underline">
+                          {uploadingSlot === slot ? "올리는 중…" : hasPath ? "변경" : "첨부"}
+                          <input
+                            type="file"
+                            accept="image/jpeg,image/png,image/webp"
+                            className="sr-only"
+                            disabled={uploadingSlot !== null}
+                            onChange={(e) => {
+                              void pickPhoto(slot, e.target.files?.[0]);
+                              e.target.value = ""; // 같은 파일 재선택 허용
+                            }}
+                          />
+                        </label>
+                        {hasPath ? (
+                          <button
+                            type="button"
+                            onClick={() => clearPhoto(slot)}
+                            className="text-text-dim text-[10px] hover:underline"
+                          >
+                            삭제
+                          </button>
+                        ) : null}
+                      </div>
+                    ) : null}
+                    {/* 저장 제출용 경로 — 슬라이드와 무관하게 **모든 슬롯**을 항상 제출(안 하면 안 보이는 쪽이 유실). */}
+                    {editing
+                      ? photos.map((p, i) => <input key={i} type="hidden" name={`photo_${i}`} value={p ?? ""} />)
+                      : null}
+                  </div>
+                );
+              })()}
             </td>
           </tr>
           <tr>

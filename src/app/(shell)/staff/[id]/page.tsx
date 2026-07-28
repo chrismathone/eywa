@@ -15,6 +15,8 @@ import {
 import { getStaffById } from "@/features/staff/server/queries";
 import { getResumeByStaffUser } from "@/features/staff/server/resume-queries";
 import { canViewResume } from "@/features/staff/server/resume-access";
+import { canWriteTenant } from "@/lib/auth/perm-matrix";
+import { resolveTenantReadUrls } from "@/lib/storage/media-storage";
 import { getSuperAdminIds, displayRoleFor } from "@/lib/auth/super-admin";
 import { StaffTabsNav, isStaffTabKey } from "./_components/tabs-nav";
 import { BasicInfoTab } from "./_tabs/basic-info-tab";
@@ -76,6 +78,15 @@ export default async function StaffDetailPage({
   // 기본정보 탭의 이력서 섹션 — 열람은 이력서 공용 게이트(원장·관리자)와 동일([[#77]] 우회 방지).
   const resumeAccess = tab === "info" && !!viewer && (await canViewResume(viewer));
   const resume = resumeAccess ? await getResumeByStaffUser(staff.id) : null;
+  const resumeCanWrite = resumeAccess && !!viewer && (await canWriteTenant(viewer.systemRole, "staff"));
+  // 증명사진 signed URL(슬라이드) — 게이트 통과 시에만 발급.
+  const resumePhotoUrls =
+    resume && viewer && resume.data.photos.length > 0
+      ? await (async () => {
+          const map = await resolveTenantReadUrls(resume.data.photos, "document", viewer.tenantId);
+          return resume.data.photos.map((p) => map[p] ?? null);
+        })()
+      : [];
   const role = ROLE_COLOR[displayRole] ?? ROLE_COLOR.viewer!;
   const status = STATUS_META[staff.status] ?? STATUS_META.active!;
   // 급여·휴가 버튼 노출은 표시 역할 기준(위장된 admin은 일반 관리자처럼 미노출) — 순수 표시.
@@ -149,6 +160,9 @@ export default async function StaffDetailPage({
             roleOptions={roleOptions}
             resume={resume}
             resumeAccess={resumeAccess}
+            resumeCanWrite={resumeCanWrite}
+            resumePhotoUrls={resumePhotoUrls}
+            viewerId={viewer?.id ?? ""}
           />
         ) : tab === "monthly" ? (
           <MonthlyScheduleTab staffId={staff.id} staffName={staff.displayName} canManage={canManage} />
