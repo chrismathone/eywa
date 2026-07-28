@@ -26,6 +26,25 @@ export function isEnrollmentActiveOn(
   return !isEnrollmentEndedOn(enrollment.endDate, date, enrollment.isTransferred);
 }
 
+/**
+ * 같은 (학생, 반)의 두 수강 기간이 겹치는가 — **DB GiST `enrollments_no_overlap`과 같은 규칙**.
+ *
+ * 제약은 `daterange(start_date, coalesce(end_date,'infinity'), '[)')`라 **종료일은 제외(반열림)**다.
+ * 즉 A가 8/4에 끝나고 B가 8/4에 시작하면 겹치지 않는다(반 이동이 이 경계를 쓴다, 0063a).
+ *
+ * ⚠️ 표시용 종료 규약(`isEnrollmentEndedOn` — 일반 종료는 종료일 당일까지 재원)과 **다르다.**
+ * 여기서 그 규약을 쓰면 화면 판정과 DB 판정이 갈려 "화면은 괜찮다는데 저장이 거부"가 난다.
+ * 이 함수는 저장 가능 여부를 **미리 알려주는 용도**(배정 다이얼로그)로만 쓴다.
+ */
+export function enrollmentPeriodsOverlap(
+  aStart: string,
+  aEnd: string | null | undefined,
+  bStart: string,
+  bEnd: string | null | undefined,
+): boolean {
+  return (!aEnd || bStart < aEnd) && (!bEnd || aStart < bEnd);
+}
+
 /** 분리등원 요일: 빈 배열은 반의 모든 운영 요일, 값이 있으면 해당 요일만 대상이다. */
 export function enrollmentAttendsOnDay(
   attendanceDays: readonly string[] | null,

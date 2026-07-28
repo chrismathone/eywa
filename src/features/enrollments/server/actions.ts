@@ -13,6 +13,78 @@ export type CreateEnrollmentState =
 
 const DAY_ORDER = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
 const VALID_DAYS = new Set<string>(DAY_ORDER);
+const DAY_LABEL: Record<string, string> = {
+  mon: "월", tue: "화", wed: "수", thu: "목", fri: "금", sat: "토", sun: "일",
+};
+
+type DbError = { message?: string; code?: string } | null | undefined;
+
+/** GiST `enrollments_no_overlap`(같은 학생·같은 반 기간 겹침) 위반인가 — Postgres 23P01. */
+function isOverlapConflict(error: DbError): boolean {
+  if (!error) return false;
+  return (
+    error.code === "23P01" ||
+    /enrollments_no_overlap|exclusion constraint/i.test(error.message ?? "")
+  );
+}
+
+/**
+ * DB 원문(영문) 에러 → 화면용 한글. **UI에 raw 노출 금지**(작업 선호) —
+ * 매핑 못 한 원문은 서버 로그로만 남기고 화면엔 일반 문구를 준다.
+ * (`conflicting key value violates exclusion constraint "enrollments_no_overlap"`가 배정
+ * 다이얼로그에 그대로 떴던 2026-07-28 제보의 재발 방지.)
+ */
+function toKoreanDbError(error: DbError, fallback: string): string {
+  const msg = error?.message ?? "";
+  if (isOverlapConflict(error)) return "이미 이 반에 기간이 겹치는 수강이 있습니다.";
+  if (msg.includes("conflicting_period")) {
+    return "이 학생이 같은 시간대 다른 반에 이미 배정되어 있습니다.";
+  }
+  if (msg.includes("range lower bound")) {
+    return "종료일이 시작일보다 빠릅니다. 날짜를 확인해 주세요.";
+  }
+  console.error("[enrollments] 미매핑 DB 에러:", error?.code, msg);
+  return fallback;
+}
+
+/**
+ * 겹친 **기존 수강을 실제로 찾아** "언제부터·무슨 요일"까지 알려준다.
+ * 막연한 "겹칩니다"로는 원장이 무엇을 고쳐야 할지 알 수 없다(제보 2026-07-28).
+ *
+ * 조회는 (학생, 반) 한 쌍 + 겹침 조건까지 DB에서 좁힌 뒤 3건만 — 전건 fetch·JS 집계 아님(B2).
+ * 겹침 조건은 GiST와 동일한 반열림: `end_date is null or end_date > 새 시작` + `start_date < 새 종료`.
+ *
+ * @param excludeId 날짜 수정처럼 **자기 자신**이 후보에 섞이면 안 되는 경우의 제외 대상.
+ */
+async function describeOverlapConflict(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  studentId: string,
+  classId: string,
+  startDate: string,
+  endDate: string | null,
+  excludeId?: string,
+): Promise<string> {
+  let query = supabase
+    .from("enrollments")
+    .select("start_date, end_date, attendance_days")
+    .eq("student_id", studentId)
+    .eq("class_id", classId)
+    .or(`end_date.is.null,end_date.gt.${startDate}`);
+  if (endDate) query = query.lt("start_date", endDate);
+  if (excludeId) query = query.neq("id", excludeId);
+  const { data } = await query.order("start_date", { ascending: true }).limit(3);
+
+  const hit = (data ?? [])[0];
+  if (!hit) return "이미 이 반에 기간이 겹치는 수강이 있어 중복 배정할 수 없습니다.";
+
+  const period = hit.end_date ? `${hit.start_date} ~ ${hit.end_date}` : `${hit.start_date}부터`;
+  const days: string[] = hit.attendance_days ?? [];
+  const daysLabel = days.length > 0 ? ` · ${days.map((d) => DAY_LABEL[d] ?? d).join("·")}만 등원` : "";
+  return (
+    `이미 이 반에 배정되어 있습니다 (${period}${daysLabel}). 같은 반에 기간이 겹치는 배정은 만들 수 없습니다 — ` +
+    `기존 수강을 학생 상세 '수업' 탭에서 수정하거나, 겹치지 않는 시작일을 선택해 주세요.`
+  );
+}
 
 /**
  * 분리등원 요일 정규화 — 선택 요일을 수업 운영 요일 교집합으로 좁히고 요일순 정렬한다.
@@ -94,14 +166,11 @@ export async function createEnrollment(
     .single();
 
   if (error || !data) {
-    if (error?.message?.includes("conflicting_period")) {
-      return { error: "이 학생이 같은 시간대 다른 반에 이미 배정되어 있습니다" };
+    // 같은 학생·같은 반 기간 겹침(GiST) — 어느 수강과 겹쳤는지까지 알려준다.
+    if (isOverlapConflict(error)) {
+      return { error: await describeOverlapConflict(supabase, studentId, classId, startDate, endDate) };
     }
-    // daterange lower>upper — 종료일이 시작일보다 빠름(원문 영어 에러 대신 친절 메시지).
-    if (error?.message?.includes("range lower bound")) {
-      return { error: "종료일이 시작일보다 빠릅니다. 날짜를 확인해 주세요." };
-    }
-    return { error: error?.message ?? "수강 배정 실패" };
+    return { error: toKoreanDbError(error, "수강 배정에 실패했습니다. 잠시 후 다시 시도해 주세요.") };
   }
 
   // 담당 강사(반 담임)에게 인앱 알림 — best-effort(실패해도 배정은 성공).
@@ -154,7 +223,7 @@ export async function moveEnrollment(
     .from("enrollments")
     .update({ end_date: today, withdrawal_reason: "반 이동" })
     .eq("id", enrollmentId);
-  if (endErr) return { error: endErr.message };
+  if (endErr) return { error: toKoreanDbError(endErr, "기존 수강을 종료하지 못했습니다") };
 
   // 2) 새 enrollment INSERT
   const { error: newErr } = await supabase.from("enrollments").insert({
@@ -170,10 +239,7 @@ export async function moveEnrollment(
       .from("enrollments")
       .update({ end_date: current.end_date, withdrawal_reason: null })
       .eq("id", enrollmentId);
-    if (newErr.message?.includes("conflicting_period")) {
-      return { error: "학생이 같은 시간대 다른 반에 이미 배정되어 있습니다" };
-    }
-    return { error: newErr.message };
+    return { error: toKoreanDbError(newErr, "반 이동에 실패했습니다") };
   }
 
   revalidatePath("/timetable");
@@ -230,7 +296,7 @@ export async function moveEnrollmentsBatch(
     p_effective_date: eff,
   });
 
-  if (error) return { error: error.message };
+  if (error) return { error: toKoreanDbError(error, "반 이동을 저장하지 못했습니다") };
 
   const results = (data ?? []) as BatchMoveResult[];
 
@@ -288,7 +354,7 @@ export async function updateEnrollmentsAttendanceBatch(
       .from("enrollments")
       .update({ attendance_days: days })
       .eq("id", enrollmentId);
-    if (error) return { error: error.message, count };
+    if (error) return { error: toKoreanDbError(error, "등원 요일을 저장하지 못했습니다"), count };
     count++;
   }
   revalidatePath("/timetable");
@@ -351,13 +417,19 @@ export async function updateEnrollmentDates(
 
   const { error } = await supabase.from("enrollments").update(patch).eq("id", enrollmentId);
   if (error) {
-    if (
-      error.message?.includes("enrollments_no_overlap") ||
-      (error as { code?: string }).code === "23P01"
-    ) {
-      return { error: "같은 반에서 수강 기간이 겹칩니다" };
+    if (isOverlapConflict(error)) {
+      return {
+        error: await describeOverlapConflict(
+          supabase,
+          current.student_id as string,
+          current.class_id as string,
+          nextStart,
+          nextEnd,
+          enrollmentId,
+        ),
+      };
     }
-    return { error: error.message };
+    return { error: toKoreanDbError(error, "날짜를 저장하지 못했습니다") };
   }
 
   revalidatePath("/timetable");
