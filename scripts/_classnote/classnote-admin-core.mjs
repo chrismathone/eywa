@@ -433,7 +433,9 @@ export async function uploadToKage(page, inputTestId, { name, mimeType, buffer }
   page.on("response", onResp);
   try {
     await page.locator(`input[data-testid='${inputTestId}']`).setInputFiles({ name, mimeType, buffer });
-    for (let i = 0; i < 40 && !result; i++) await page.waitForTimeout(300); // kage 업로드 완료 대기(최대 12s)
+    // 업로드 완료 폴링 — 총 상한 12초는 유지하고 **간격만 300→100ms**(2026-07-28 속도).
+    // 응답을 감지하고도 최대 300ms를 더 기다리던 낭비를 줄인다(건당 평균 ~150ms, 부하 증가 없음 — 로컬 폴링).
+    for (let i = 0; i < 120 && !result; i++) await page.waitForTimeout(100);
   } finally {
     page.off("response", onResp);
   }

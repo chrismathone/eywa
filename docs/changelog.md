@@ -28,6 +28,17 @@ Cloud Run 함수(2,500줄 Puppeteer)를 3방향 정찰로 해부한 결과 emoti
 - 컷오버 절차: zip 폴더 전체 이관(부분 전달 금지) → 연동 PC .env.local에 `CLASSNOTE_PUBLISH_MODE=local` 추가
   → 재시작 → 학원이 테스트 발송 → 실발송 며칠 무사고 확인 → Cloud Run(classreport-web) 삭제. ⚠️ 삭제 후엔
   cloudrun 롤백이 사라짐(의도된 소등) — local이 유일 경로.
+- **속도 병목 실측·개선(같은 날 후속, 원장 "분당 1건은 너무 느린 것 아닌가")**: 실측 건간 간격 **중앙 63.5초**,
+  5초 미만 간격 **0/109**(= 배치 2건도 완전 직렬). 과거 2주 피크도 분당 1.1건이라 **원래 속도**였다. 병목은
+  Cloud Run이 **요청마다 브라우저 기동 + 재로그인**(16GiB 콜드스타트 + 한 글자 0.1초 타이핑) + 고정 sleep 다수
+  (호칭 팝업 5s·업로드 3s·전송 전 5s·클릭 후 2s). local 경로는 상주 브라우저·유지 세션이라 이게 통째로 소멸.
+  추가 4건: ① **데몬 15초 sleep 조건부 생략** — 배치를 꽉 채워 성공했으면(=밀린 큐) 즉시 다음 주기
+  ([watch-classnote-queue.mjs](../scripts/_classnote/watch-classnote-queue.mjs) `backlogFastPoll`; ⚠️ `success>0`
+  조건을 붙여 실패 반복 시 재시도 폭풍 방지 + 오류 catch에서 강제 false). 평상시는 15초 그대로라 상시 부하 불변,
+  부가 폴러는 자체 시간 가드로 no-op. ② 폼 준비 고정 1.5초 → **file input attached 상태 대기**(빠른 날 단축·느린
+  날 안전). ③ 사후확인 **선(先)조회 후 대기**(건당 1.5초 회수). ④ kage 폴링 간격 300→100ms(상한 12초 유지).
+  학원이 재E2E: 게시 단계 **2.2초**(폼 진입→kage→POST→사후확인 전체) + 멱등 재확인 통과. ⚠️ 병렬 발송은 비채택
+  — 로그인 세션 단일 + 반복 로그인 ~50% 실패 실측(2026-07-15 봇 스로틀)이라 안전 마진을 남긴다.
 
 ### 레거시 소등 준비 — 미디어 GCS→Supabase 이전 + 시트 SA 분리 (2026-07-28) - tsc0/lint0/storage테스트11
 원장 결정: **edutrix·ijw-calander 서버 전부 소등**(비용 0). eywa Vercel·Supabase 유료 티어 전환으로 용량

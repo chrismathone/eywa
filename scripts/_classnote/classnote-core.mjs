@@ -170,7 +170,14 @@ export async function sendReportViaApi(adminPage, { report, studentName, boardId
   // 이후 API 호출(resolve·post)은 same-origin이라 add 폼에서도 그대로 유효.
   await adminPage.goto(`${CLASSNOTE_BASE}/service/report/add`, { waitUntil: "domcontentloaded", timeout: 30000 });
   await dismissHonorificDialog(adminPage).catch(() => {});
-  await adminPage.waitForTimeout(1500);
+  // 폼 준비 대기 = **상태 기반**(2026-07-28 속도). 기존 고정 1.5초는 빠른 날엔 낭비, 느린 날엔 부족했다.
+  // 실제로 필요한 건 "kage 업로드용 file input이 DOM에 붙었는가" 하나뿐이라 그것만 기다린다(보통 수백 ms).
+  // 15초 안에 안 붙으면 그대로 진행 — 다음 단계(uploadToKage)의 Playwright auto-wait이 다시 기다리고,
+  // 거기서도 없으면 그 단계의 오류로 명확히 실패한다(여기서 throw하면 원인이 뭉개진다).
+  await adminPage
+    .locator("input[data-testid='media-attachment-add-input']")
+    .waitFor({ state: "attached", timeout: 15000 })
+    .catch(() => {});
 
   // 1) 스샷 → kage(img input) → attached_images
   const imgKage = await uploadToKage(adminPage, "media-attachment-add-input", { name: `report_${studentName}.jpg`, mimeType: "image/jpeg", buffer: screenshot });
@@ -293,9 +300,11 @@ export async function sendReportViaApi(adminPage, { report, studentName, boardId
       return { ok: false, error: `게시 실패(HTTP ${res.status})${res.detail ? ` — ${res.detail}` : ""}` };
     }
     if (dedupOn) {
+      // 사후확인은 **먼저 조회하고, 없을 때만 기다린다**(2026-07-28 속도). 게시 직후 목록에 바로 뜨는 게
+      // 보통이라 선(先)대기는 건당 1.5초를 그냥 버리는 셈이었다. 반영이 늦는 경우만 1.5초씩 최대 2회 더 본다.
       let verified = null;
       for (let i = 0; i < 3; i++) {
-        await adminPage.waitForTimeout(1500);
+        if (i > 0) await adminPage.waitForTimeout(1500);
         verified = await findChildReportId(adminPage, centerId, { cls: boardId, child: child.id, content: shareUrl });
         if (verified.ok && verified.id) break;
       }
