@@ -78,3 +78,18 @@ export function skipStatusOfProgress(progress: string | null | undefined): strin
 export function isSkipStatusProgress(progress: string | null | undefined): boolean {
   return skipStatusOfProgress(progress) !== null;
 }
+
+/**
+ * '이전 진도'의 기준점 — **시험 회차를 건너뛴** 가장 최근 실제 진도(원장 2026-07-28: *"그 날은 시험을 치기
+ * 때문에 진도가 '중단'되는 날"*). 입력은 같은 단위(반|과목)의 **최신순** 진도 저장값 배열
+ * (RPC `onescreen_prior_reports.recent_progress`, 0152a).
+ *
+ * 없으면 null → 호출부가 기존 동작(직전 회차 그대로)으로 폴백한다. 폴백이 있어야 RPC 미배포·전부 시험인
+ * 학생에서도 '이전 진도'가 통째로 비지 않는다.
+ *
+ * ⚠️ **직전 회차 자체를 이 값으로 갈아끼우지 말 것** — 표 뷰 '이전 회차 참고행'·교재 승계·prevScore는
+ *    실제 직전 회차가 사실이다(그날이 월말평가면 참고행엔 월말평가가 떠야 맞다). 바뀌는 건 '이전 진도'뿐.
+ */
+export function carryProgress(recent: readonly (string | null)[] | null | undefined): string | null {
+  return recent?.find((p) => p?.trim() && !isSkipStatusProgress(p)) ?? null;
+}

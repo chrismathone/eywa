@@ -160,5 +160,7 @@ pnpm db:seed
 
 | `0123a_classnote_workers_last_results` | **워커 폴러별 마지막 결과 동봉** — `classnote_workers.last_results jsonb`(하트비트에 `{queue|notice|provision|posts|comments|reads: {at, 숫자요약|error}}` 동봉). 하트비트는 살아도 특정 폴러만 조용히 실패하는 걸 앱(발송 큐 카드)에서 감지. 이력 아님(최신 상태만 — 이력은 연동 PC watch.log). 쓰기=워커 직결, 읽기=기존 tenant_read. |
 
+| `0152a_onescreen_prior_reports_recent_progress` | **`onescreen_prior_reports`에 `recent_progress text[]` 추가** — 같은 단위(반\|과목)의 최근 진도 5건(최신순). 시험을 치는 날(월말평가·모의고사·내신대비·시험대비)은 진도칸에 상태 라벨만 저장돼 **다음 회차의 '이전 진도'가 시험으로 덮이던** 문제(원장 2026-07-28 *"그 날은 진도가 중단되는 날"*)를 해소. 어느 것이 시험 회차인지는 **앱이 판정**한다(`progress-status.ts` `carryProgress`) — 🔴 상태 라벨 목록을 SQL에 복제하지 않기 위해서(두 곳에 살면 한쪽만 고쳐져 조용히 어긋난다). 직전 회차 자체(참고행·교재 승계·prevScore)는 **불변** — 그건 실제 회차가 사실이다. `security invoker`+`auth_tenant_id()` 이중격리는 lateral 안에서도 유지. 롤백 = 0135a 재실행(앱은 컬럼이 없으면 기존 동작으로 폴백). 실측: 학생 120명 69ms. |
+
 새 alpha를 추가할 때: 다음 번호의 `000Na_*` 또는 `000Nb_*`로 만들고, 멱등 패턴을 지키고, **이 표에 추가**한다.
 상세 흐름은 [`../../CLAUDE.md`](../../CLAUDE.md) "마이그레이션 & 시드 흐름" 참고.

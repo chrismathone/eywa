@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   MONTHLY_EXAM_LABEL,
   SKIP_PROGRESS_STATUSES,
+  carryProgress,
   isSkipStatus,
   isSkipStatusProgress,
   skipStatusOf,
@@ -78,5 +79,34 @@ describe("진도 파이프라인 격리", () => {
       expect(positionOf(s)).toBeNull();
       expect(positionOf(`수학 ${s}`)).toBeNull();
     }
+  });
+});
+
+describe("carryProgress — '이전 진도'는 시험 회차를 건너뛴다", () => {
+  it("직전이 시험이면 그 전 실제 진도를 가리킨다", () => {
+    expect(carryProgress(["수학 월말평가", "수학 원의 접선", "수학 원과 현"])).toBe("수학 원의 접선");
+  });
+
+  it("직전이 일반 진도면 그대로 직전 값", () => {
+    expect(carryProgress(["수학 원의 접선", "수학 원과 현"])).toBe("수학 원의 접선");
+  });
+
+  it("시험이 연달아 있어도 계속 거슬러 올라간다", () => {
+    expect(carryProgress(["수학 모의고사", "수학 월말평가", "수학 내신대비", "수학 다항식"])).toBe("수학 다항식");
+  });
+
+  it("전부 시험이면 null — 호출부가 기존 동작으로 폴백해야 '이전 진도'가 통째로 비지 않는다", () => {
+    expect(carryProgress(["수학 월말평가", "수학 모의고사"])).toBeNull();
+  });
+
+  it("빈 값·null·미배포(undefined)는 null", () => {
+    expect(carryProgress([])).toBeNull();
+    expect(carryProgress(null)).toBeNull();
+    expect(carryProgress(undefined)).toBeNull();
+    expect(carryProgress(["", "   ", null])).toBeNull();
+  });
+
+  it("빈 항목은 건너뛰고 첫 실제 진도를 집는다", () => {
+    expect(carryProgress([null, "  ", "수학 다항식"])).toBe("수학 다항식");
   });
 });
