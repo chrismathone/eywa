@@ -1251,6 +1251,12 @@ export function OneScreenClient({
       toast.message("일괄 작업이 진행 중입니다 — 완료 후 다시 시도하세요");
       return;
     }
+    // 🔴 빈 멘트 절대 가드(원장 지시 2026-07-28) — 표 sendRow와 동일. 워커 최종 관문이 무조건 차단하므로
+    // 여기서 큐잉해 봐야 "발송 대기" 표시 후 실패로 뒤집히는 혼란만 남는다. 이유를 즉시 말하고 막는다.
+    if (!(reports[selected.id]?.[subjectName]?.draft ?? "").trim()) {
+      toast.error(`${subjectName} — 학부모 전달 멘트가 비어 있어 발송할 수 없습니다 (자동 작성 또는 직접 입력 후 발송)`);
+      return;
+    }
     const res = await queueOne(selected, subjectName);
     if (!res.ok) {
       toast.error(res.error ?? "ClassNote 발송 큐 적재에 실패했습니다");
