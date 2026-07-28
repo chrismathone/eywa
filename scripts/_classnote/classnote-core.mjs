@@ -9,11 +9,18 @@ import {
   CLASSNOTE_BASE, dismissHonorificDialog,
   loginClassnote, fetchCenterId, fetchBoards, fetchBoardChildren,
   fetchChildren, uploadToKage, resolveBoardChildEnrollments, postClassnoteReport,
+  findChildReportId,
 } from "./classnote-admin-core.mjs";
 import { boardNameAmbiguity, evaluateBoardSafety, kstSchoolYear } from "./board-safety.mjs";
 import { resolveSendWindow, isWithinSendWindow, formatSendWindow } from "./send-window.mjs";
 
 export const CLOUD_RUN = "https://submittoclassnotev2-q4dmdhnkvq-uc.a.run.app";
+/**
+ * 게시 엔진 스위치(2026-07-28, §10 옵션 B) — "local"이면 **모든** 보고서를 워커 내장 내부 API 경로로 게시
+ * (Cloud Run 미호출 = edutrix Firebase 의존 0). 그 외/미설정 = 기존 Cloud Run 경로(파일첨부 리포트만 API).
+ * 롤백 = 연동 PC .env.local에서 이 키 제거 후 워커 재시작. classreport-web 소등 후엔 local이 유일 경로다.
+ */
+export const isLocalPublish = () => process.env.CLASSNOTE_PUBLISH_MODE === "local";
 export const DEFAULT_BASE = process.env.CLASSNOTE_SCREENSHOT_BASE || "http://localhost:3113"; // 스크린샷용(로컬 dev 가능)
 export const DEFAULT_SHARE_BASE = process.env.CLASSNOTE_SHARE_BASE || "https://eywa-alpha.vercel.app"; // 게시글 상단 공유 링크(/r) 공개 도메인
 export const BATCH = 2;
@@ -158,7 +165,7 @@ const IMG_ATTACHMENT_RE = /\.(jpe?g|png|webp|gif)(\?|$)/i;
  *    완결(ParentReportCard). ClassNote가 attached_images를 가로로 나열해 세로가 안 됐던 문제를 스샷 내 배치로 우회.
  *    → 이미지만 있는 리포트는 이 경로로 **진입하지 않고**(진입 조건 fileAtts.length) Cloud Run 스샷 경로로 게시된다.
  */
-export async function sendReportViaApi(adminPage, { report, studentName, boardId, screenshot, shareUrl, base, fileAtts, children, boardFallback = null, log }) {
+export async function sendReportViaApi(adminPage, { report, studentName, boardId, centerId = null, screenshot, shareUrl, base, fileAtts = [], children, boardFallback = null, verifyDedup = true, log }) {
   // kage 업로드는 작성폼 네이티브 file input 경유(수동 FormData는 415) → adminPage를 add 폼으로 이동.
   // 이후 API 호출(resolve·post)은 same-origin이라 add 폼에서도 그대로 유효.
   await adminPage.goto(`${CLASSNOTE_BASE}/service/report/add`, { waitUntil: "domcontentloaded", timeout: 30000 });
@@ -178,6 +185,9 @@ export async function sendReportViaApi(adminPage, { report, studentName, boardId
   // 전부 "파일 첨부 업로드 실패(전건) — eywa 엔드포인트/스토리지 확인" 한 줄로 뭉개져, 원인을 보려면 연동 PC의
   // watch.log를 사람이 열어야 했다(그 PC에 CLASSNOTE_OUT 폴더가 없으면 로그 파일 자체가 없어 추적 불가).
   // error는 DB(lesson_reports.classnote_error)에 남아 발송 콘솔·원격에서 그대로 읽힌다 = 물리 접근 불필요.
+  // 무첨부 리포트(local 게시 모드의 기본 케이스, 2026-07-28)는 이 블록을 통째로 건너뛴다(스샷만 게시).
+  const attachedFiles = [];
+  if (fileAtts.length) {
   let epStatus = 0;
   const ep = await fetch(`${base}/api/internal/report-attachments/${report.id}`, {
     headers: INTERNAL_SECRET ? { "x-eywa-internal": INTERNAL_SECRET } : {},
@@ -206,7 +216,6 @@ export async function sendReportViaApi(adminPage, { report, studentName, boardId
               : `HTTP ${epStatus}`;
     return { ok: false, error: `첨부 목록 조회 실패 — ${why}` };
   }
-  const attachedFiles = [];
   const failures = [];
   for (const f of epFiles) {
     let bytes;
@@ -230,6 +239,7 @@ export async function sendReportViaApi(adminPage, { report, studentName, boardId
   }
   if (attachedFiles.length !== fileAtts.length) log(`  · ${studentName}: 파일 ${attachedFiles.length}/${fileAtts.length} 업로드`);
   if (!attachedFiles.length) return { ok: false, error: `파일 첨부 실패 — ${failures.join(" / ") || "원인 불명"}` };
+  } // if (fileAtts.length)
 
   // 3) board → child → enrollment
   // 이름으로 못 찾으면 **보드가 곧 매핑** 폴백(생년 대조 통과분만) — 학부모가 ClassNote에서 원아 이름을
@@ -244,8 +254,26 @@ export async function sendReportViaApi(adminPage, { report, studentName, boardId
   if (!enrolled.length)
     return { ok: false, error: rejected?.reason ?? "원아·enrollment 해석 실패(미가입/미배정)" };
 
-  // 4) 게시 — 이중 계정(부모·본인)이면 전원
+  // 4) 게시 — 이중 계정(부모·본인)이면 전원. centerId가 있고 **첫 발송**(verifyDedup)일 때 자식별 3중 방어(2026-07-28):
+  //    ⓐ 멱등 선확인 — 같은 share 링크가 이 원아에게 이미 게시돼 있으면 재게시 생략(크래시-재시도 중복 차단,
+  //       §7-2 중복 게시 창의 구조적 해소). 조회 실패(ok=false)는 fail-closed(확인 못 하면 안 보냄 — 킬스위치 원칙).
+  //    ⓑ 게시 실패 시에도 실게시 여부 재확인 — 응답만 믿으면 화면이 사실과 다른 말(공지 409 사고 교훈, 2026-07-27).
+  //       실제로 올라갔으면 성공 취급해 재발송 중복을 원천 차단.
+  //    ⓒ 게시 사후확인 — 2xx여도 목록에서 실물을 재확인(§7-3 '침묵 미발송 success' 계열의 역방향 방어).
+  //       확인 조회 자체가 실패하면 2xx(REST 응답)를 근거로 성공 유지 + 경고 로그(재큐 루프 방지).
+  //    ⚠️ verifyDedup=false = **의도적 재발송**(classnote_sent_at 있는 행) — 같은 share 링크의 옛 게시물이
+  //       실존하므로 content 일치 판정 ⓐⓑⓒ 전부가 옛 글에 오염된다(ⓐ면 새 게시가 조용히 생략됨 = 침묵 무발송).
+  //       재발송은 오늘의 Cloud Run과 동일하게 status 코드 신뢰로 동작한다.
+  const dedupOn = centerId != null && verifyDedup;
   for (const { child, enrollment } of enrolled) {
+    if (dedupOn) {
+      const pre = await findChildReportId(adminPage, centerId, { cls: boardId, child: child.id, content: shareUrl });
+      if (!pre.ok) return { ok: false, error: "게시 전 중복 확인 실패(ClassNote 조회 불가) — 안전상 보류" };
+      if (pre.id) {
+        log(`  · ${studentName}: 이미 게시됨(report ${pre.id}, 원아 ${child.id}) — 재게시 생략(멱등)`);
+        continue;
+      }
+    }
     const res = await postClassnoteReport(adminPage, {
       cls: boardId, child: child.id, enrollment: enrollment.id, content: shareUrl,
       dateWritten: report.report_date, authorName: report.teacher_name || "인재원 학원",
@@ -253,8 +281,29 @@ export async function sendReportViaApi(adminPage, { report, studentName, boardId
     });
     // 실패 사유는 **응답 본문까지** 남긴다(2026-07-27) — status만 적으면 왜 거부됐는지 영영 모른다.
     // 화면은 humanizeClassnoteError가 한글로 요약하고 원문은 '자세히'로만 보여준다(raw 노출 금지 규약).
-    if (res.status < 200 || res.status >= 300)
+    if (res.status < 200 || res.status >= 300) {
+      // ⓑ 실패 응답인데 실제로 올라갔나 — 올라가 있으면 성공 취급(재발송=학부모에게 중복, ClassNote는 비가역).
+      if (dedupOn) {
+        const posted = await findChildReportId(adminPage, centerId, { cls: boardId, child: child.id, content: shareUrl });
+        if (posted.ok && posted.id) {
+          log(`  · ${studentName}: 게시 응답 HTTP ${res.status}였으나 실물 확인(report ${posted.id}) — 성공 취급`);
+          continue;
+        }
+      }
       return { ok: false, error: `게시 실패(HTTP ${res.status})${res.detail ? ` — ${res.detail}` : ""}` };
+    }
+    if (dedupOn) {
+      let verified = null;
+      for (let i = 0; i < 3; i++) {
+        await adminPage.waitForTimeout(1500);
+        verified = await findChildReportId(adminPage, centerId, { cls: boardId, child: child.id, content: shareUrl });
+        if (verified.ok && verified.id) break;
+      }
+      if (verified?.ok && !verified.id)
+        return { ok: false, error: "게시 응답은 정상이나 알림장 목록에서 확인 실패 — 재시도 대상(멱등 선확인이 중복을 막음)" };
+      if (!verified?.ok) log(`  · ${studentName}: 게시 확인 조회 실패 — 2xx 응답 근거로 성공 유지(경고)`);
+      else log(`  · ${studentName}: 게시 확인 완료(report ${verified.id}, 원아 ${child.id})`);
+    }
   }
   return { ok: true };
 }
@@ -326,7 +375,7 @@ export async function processQueueOnce(sql, browser, opts) {
     )
     update lesson_reports lr set classnote_status='processing', classnote_processing_at=now()
     from cte where lr.id=cte.id
-    returning lr.id, lr.share_token, lr.report_date::text as report_date, lr.subject, lr.teacher_name, lr.student_id, lr.attachments`;
+    returning lr.id, lr.share_token, lr.report_date::text as report_date, lr.subject, lr.teacher_name, lr.student_id, lr.attachments, lr.classnote_sent_at`;
   const summary = { stale: stale.length, claimed: claimed.length, success: 0, failed: 0, requeued: 0, blocked: 0 };
   if (!claimed.length) return summary;
   log(`[worker] 클레임 ${claimed.length}건`);
@@ -481,6 +530,7 @@ export async function processQueueOnce(sql, browser, opts) {
         continue;
       }
       // 게시 직전 취소(revoke) 재확인 — claim~여기 사이에 강사가 취소했을 수 있음(死링크 게시 방지).
+      // + 킬스위치 재확인(2026-07-28) — 주기 시작 후 스위치가 꺼졌으면 이 건부터 게시하지 않는다(배치 중 정지).
       const [fresh] = await sql`select revoked_at from lesson_reports where id=${r.id}`;
       if (fresh?.revoked_at) {
         await sql`update lesson_reports set classnote_status='queued' where id=${r.id}`;
@@ -488,22 +538,45 @@ export async function processQueueOnce(sql, browser, opts) {
         log(`  · ${studentName}: 취소됨 → 게시 skip`);
         continue;
       }
+      if (!(await isClassnoteSendEnabled(sql, tenant))) {
+        await sql`update lesson_reports set classnote_status='queued' where id=${r.id}`;
+        summary.requeued++;
+        log(`  · ${studentName}: 킬스위치 OFF 감지(주기 중) → 게시 skip, 재큐`);
+        continue;
+      }
 
-      // ── Phase 2: 파일 첨부(비이미지) + showAttachments ON → 내부 API 경로(스샷=attached_images + 파일=attached_files) ──
-      // ⚠️ 이미지 첨부만 있는 리포트는 여기로 진입하지 않는다(2026-07-22 방향 B) — 이미지는 /r 스샷 하단에 크게 실려
-      //    아래 Cloud Run 스샷 경로로 게시된다(개별 부착=ClassNote 가로 나열이라 철회). fileAtts(비이미지)만 API 경로.
+      // ── 내부 API 게시 경로 ──
+      // 진입 조건 2종:
+      //  · Phase 2(기존): 파일 첨부(비이미지) + showAttachments ON — 스샷=attached_images + 파일=attached_files.
+      //  · local 게시 모드(2026-07-28, §10 옵션 B): CLASSNOTE_PUBLISH_MODE=local이면 **모든** 리포트가 이 경로
+      //    (Cloud Run 미호출). 파일 첨부는 showAttachments ON일 때만 싣는다(기존 정책 유지).
+      // ⚠️ 이미지 첨부만 있는 리포트는 파일로 싣지 않는다(2026-07-22 방향 B) — 이미지는 /r 스샷 하단에 크게 실림.
       const fileAtts = (r.attachments ?? []).filter((a) => a?.name && !IMG_ATTACHMENT_RE.test(a.name));
-      if (showAttachments && fileAtts.length && boardId) {
-        childrenCache ??= await fetchChildren(adminPage, centerId); // 파일 리포트 첫 만남에 1회
+      const localMode = isLocalPublish();
+      const wantApiPath = (showAttachments && fileAtts.length > 0) || localMode;
+      if (wantApiPath && !boardId) {
+        // 이론상 도달 불가(post 게이트 통과 시 boardId 확보) — 도달하면 코드 결함이므로 fail-closed 재큐 + 명시 로그.
+        await sql`update lesson_reports set classnote_status='queued',
+          classnote_error=${"내부 API 게시 경로인데 보드 ID가 없음(게이트 결함 의심) — 안전상 보류"} where id=${r.id}`;
+        summary.requeued++;
+        log(`  · ${studentName}: boardId 없음(API 경로) → 재큐 [코드 결함 의심 — 점검 필요]`);
+        continue;
+      }
+      if (wantApiPath) {
+        const sendFiles = showAttachments ? fileAtts : []; // 첨부 표시 OFF면 파일 안 실음(스샷만) — 기존 정책
+        childrenCache ??= await fetchChildren(adminPage, centerId); // 첫 만남에 1회
         const result = await sendReportViaApi(adminPage, {
-          report: r, studentName, boardId, screenshot: buf, shareUrl: `${shareBase}/r/${r.share_token}`,
-          base, fileAtts, children: childrenCache, log,
+          report: r, studentName, boardId, centerId, screenshot: buf, shareUrl: `${shareBase}/r/${r.share_token}`,
+          base, fileAtts: sendFiles, children: childrenCache, log,
+          // 첫 발송만 3중 방어(멱등·사후확인) — classnote_sent_at 있는 행 = 의도적 재발송이라 content 판정이
+          // 옛 게시물에 오염된다(sendReportViaApi 4) 주석). 재발송은 status 코드 신뢰(오늘의 Cloud Run과 동일 의미).
+          verifyDedup: !r.classnote_sent_at,
           boardFallback: { centerId, grade: stu?.grade ?? null, schoolYear: kstSchoolYear() },
         });
         if (result.ok) {
           await sql`update lesson_reports set classnote_status='success', classnote_sent_at=now(), classnote_error=null where id=${r.id}`;
           summary.success++;
-          log(`    → success (파일 ${fileAtts.length}건 네이티브 첨부, 내부 API)`);
+          log(`    → success (내부 API${sendFiles.length ? `, 파일 ${sendFiles.length}건` : ""}${localMode ? ", local" : ""})`);
         } else {
           await sql`update lesson_reports set
             classnote_retry_count = classnote_retry_count + 1,
@@ -516,7 +589,7 @@ export async function processQueueOnce(sql, browser, opts) {
         continue;
       }
 
-      // 실게시 (Cloud Run — 파일 없는 리포트, 기존 경로)
+      // 실게시 (Cloud Run — 파일 없는 리포트, 기존 경로. local 모드에선 위 API 경로가 전건을 가져가 도달 불가)
       // ⚠️ 중복 게시 방지(구멍2): abort 타임아웃을 Cloud Run 함수 상한(900s) **위**로 둔다. 이전 120s는
       // 함수가 아직 게시 중인데 워커가 중도 abort→catch에서 retry_count+1 후 queued로 되돌려 다음 폴에
       // 재게시 = 같은 보고서가 학부모에게 2번 갔다(fetch를 끊어도 서버 실행은 안 멈춤). 함수 상한 위로 올리면

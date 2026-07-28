@@ -130,7 +130,13 @@ async function heartbeat(tenant) {
   const payload = {
     ...lastResults,
     caps: WORKER_CAPS, // 이 워커가 지원하는 기능(앱의 발송 전 롤아웃 가드가 읽는다)
-    env: { logDir: stateDirLabel(), recent: recentIssues.slice(-RECENT_MAX) },
+    env: {
+      logDir: stateDirLabel(),
+      recent: recentIssues.slice(-RECENT_MAX),
+      // 게시 엔진(2026-07-28 §10 옵션 B) — local=워커 내장 내부 API(Cloud Run 미호출) / cloudrun=기존.
+      // 웹 발송 콘솔에서 어느 엔진으로 도는지 원격 확인용(컷오버·롤백 검증에 필수).
+      publishMode: process.env.CLASSNOTE_PUBLISH_MODE === "local" ? "local" : "cloudrun",
+    },
   };
   await s`
     insert into classnote_workers (tenant_id, hostname, started_at, last_seen, last_results)

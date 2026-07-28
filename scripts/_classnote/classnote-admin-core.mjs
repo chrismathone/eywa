@@ -518,3 +518,38 @@ export async function postClassnoteReport(page, { cls, child, enrollment, conten
     [cls, child, enrollment, content, authorName, dateWritten, attachedImages, attachedFiles],
   );
 }
+
+/**
+ * 특정 원아의 최근 리포트에서 cls+child+content 일치 건의 id 조회 — **게시 멱등·사후확인 공용**(2026-07-28, 로컬 게시 내장).
+ * notice-core의 findReportId(strict)와 동일 계약을 admin-core로 승격(발송 워커도 쓰도록 — notice-core 원본은
+ * 안정성 위해 무접촉 유지, 이후 통일 후보). strict 의미: content까지 일치해야만 반환 = 옛 글 오인 금지.
+ * 수업보고서 content = 학생별 고유 share 링크라 strict 일치가 곧 "이 보고서가 이미 게시됨" 증명이다.
+ * 반환 { ok, id }: ok=false = **조회 자체 실패(확인 불가)** — '없음(ok=true, id=null)'과 반드시 구분.
+ * 확인 불가를 '없음=게시 가능'으로 뭉개면 중복 게시로, '있음'으로 뭉개면 침묵 미발송으로 새므로
+ * 호출부는 ok=false에서 fail-closed(재시도 큐 반환)해야 한다.
+ */
+export async function findChildReportId(page, centerId, { cls, child, content }) {
+  const list = await page
+    .evaluate(
+      async ([center, ch]) => {
+        const csrf = (document.cookie.match(/csrftoken=([^;]+)/) || [])[1];
+        const res = await fetch(
+          `/api/v1_2/centers/${center}/reports/?page_size=20&child=${ch}&tz=Asia/Seoul&center_id=${center}`,
+          { headers: { accept: "application/json", ...(csrf ? { "X-CSRFToken": csrf } : {}) } },
+        );
+        if (!res.ok) return null;
+        const j = await res.json().catch(() => null);
+        return Array.isArray(j) ? j : j && Array.isArray(j.results) ? j.results : [];
+      },
+      [centerId, child],
+    )
+    .catch(() => null);
+  if (!Array.isArray(list)) return { ok: false, id: null };
+  return {
+    ok: true,
+    id:
+      list.find(
+        (r) => String(r.cls) === String(cls) && String(r.child) === String(child) && r.content === content,
+      )?.id ?? null,
+  };
+}

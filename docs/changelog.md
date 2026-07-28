@@ -4,6 +4,31 @@
 
 ## 진행 상황
 
+### ClassNote 게시 엔진 워커 내장(§10 옵션 B) — Cloud Run 의존 절단 + 3중 방어 (2026-07-28) - 학원이 실E2E 통과
+edutrix classreport-web 소등의 유일한 블로커 해소. **DOM 마법사 포팅이 아니라 내부 API 경로 확장**을 채택 —
+Cloud Run 함수(2,500줄 Puppeteer)를 3방향 정찰로 해부한 결과 emotion 해시 셀렉터 수십 개 + 실측 결함
+(🕳️ 전송버튼 못 찾아도 success·발송 검증 0·로그인 무검증·달력 년월 불일치 진행·바깥 catch 스코프 버그로
+부분성공 응답 도달불가)이라, 이미 프로덕션 가동 중인 내부 REST 경로(`sendReportViaApi`·공지 워커)로 통일.
+- **스위치**: `CLASSNOTE_PUBLISH_MODE=local`(연동 PC .env.local) → 전 리포트가 내부 API 게시(Cloud Run 미호출).
+  미설정=기존 cloudrun(파일첨부만 API). 롤백=키 제거+재시작. 하트비트 `env.publishMode`로 원격 확인.
+- **[classnote-core.mjs](../scripts/_classnote/classnote-core.mjs)**: `sendReportViaApi` 무첨부 지원(fileAtts=[]
+  → 내부 엔드포인트 블록 skip, 스샷만 게시) + `centerId` 파라미터 + **3중 방어** — ⓐ 멱등 선확인(같은 share
+  링크가 그 원아에게 이미 게시 → 재게시 생략, §7-2 중복 창 구조 해소) ⓑ 실패 응답이어도 실물 확인되면 성공
+  취급(공지 409 교훈) ⓒ 2xx여도 목록 사후확인(§7-3 역방향). 🔴 **verifyDedup=!classnote_sent_at** — 의도적
+  재발송(sent_at 있음)은 같은 링크의 옛 게시물이 실존해 content 판정 ⓐⓑⓒ가 전부 오염되므로(ⓐ면 새 게시가
+  조용히 생략=침묵 무발송 재발명) 3중 방어를 끄고 status 코드 신뢰(오늘의 Cloud Run과 동일 의미).
+  + 게시 직전 킬스위치 재확인(배치 중 OFF 감지 시 그 건부터 재큐). boardId 없이 API 경로 진입 = fail-closed 재큐.
+- **[classnote-admin-core.mjs](../scripts/_classnote/classnote-admin-core.mjs)**: `findChildReportId` 신설
+  (notice-core findReportId strict 계약 승격 — 원본 무접촉). 🔴 반환 `{ok,id}` — **조회 실패(ok=false)와
+  '없음'(ok=true,id=null)을 구분**. 확인 불가를 '없음=게시 가능'으로 뭉개면 중복, '있음'으로 뭉개면 침묵
+  미발송이라 호출부는 ok=false에서 fail-closed.
+- **학원이 실E2E**(DB 무접촉·실큐 145건과 무간섭 — 큐 밖 success 행 사용, 데몬 레이스 원천 회피): 게이트
+  boardId 확보 → 기존 게시물 정리(204) → 첫발송 풀패스(kage→POST→사후확인 report id) → 동일 호출 재실행
+  =멱등 스킵·게시물 수 불변 → 정리(204). 🏁 전 구간 통과.
+- 컷오버 절차: zip 폴더 전체 이관(부분 전달 금지) → 연동 PC .env.local에 `CLASSNOTE_PUBLISH_MODE=local` 추가
+  → 재시작 → 학원이 테스트 발송 → 실발송 며칠 무사고 확인 → Cloud Run(classreport-web) 삭제. ⚠️ 삭제 후엔
+  cloudrun 롤백이 사라짐(의도된 소등) — local이 유일 경로.
+
 ### 레거시 소등 준비 — 미디어 GCS→Supabase 이전 + 시트 SA 분리 (2026-07-28) - tsc0/lint0/storage테스트11
 원장 결정: **edutrix·ijw-calander 서버 전부 소등**(비용 0). eywa Vercel·Supabase 유료 티어 전환으로 용량
 블로커 소멸 — 전량 이전 + 적대검증 후 폐쇄. 이날 배선 2건:
