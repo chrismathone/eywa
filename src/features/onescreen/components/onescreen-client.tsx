@@ -1308,6 +1308,13 @@ export function OneScreenClient({
       toast.message("일괄 작업이 진행 중입니다 — 완료 후 다시 시도하세요");
       return;
     }
+    // 빈 멘트 재확인(2026-07-28 원장 지시) — 멘트 없이 보내면 학부모 화면에 "작성된 보고 내용이
+    // 없습니다"가 그대로 노출된다(이날 실제 22건 발송→회수 사고). 차단이 아니라 확인 — 점수·사진만
+    // 보내려는 의도가 정말 있으면 보낼 수 있게 하되, 모르고 나가는 일은 없게.
+    if (!(reports[student.id]?.[subjectName]?.draft ?? "").trim()) {
+      if (!window.confirm(`${student.name} — 학부모 전달 멘트가 비어 있습니다.\n빈 내용으로 발송할까요? (자동작성 또는 직접 입력 후 발송을 권장)`))
+        return;
+    }
     const res = await queueOne(student, subjectName);
     if (!res.ok) {
       toast.error(res.error ?? "발송에 실패했습니다");
@@ -1423,13 +1430,23 @@ export function OneScreenClient({
       gaps.missingAttitude || gaps.missingTest
         ? `\n태도 미입력 ${gaps.missingAttitude}명 · 테스트 미입력 ${gaps.missingTest}명 — 미입력 항목은 보고서에서 생략됩니다`
         : "";
+    // 빈 멘트 재확인(2026-07-28 원장 지시) — 멘트 없는 행이 소리 없이 나가면 학부모 화면에
+    // "작성된 보고 내용이 없습니다"가 노출된다(이날 22건 발송→회수 사고). 발송 대상에 포함해 두되
+    // confirm에 **누구인지까지** 박아 모르고 나가는 일이 없게 한다(발송 단위 안내라 '건').
+    const emptyMentRows = rows.filter((r) => !(reports[r.student.id]?.[r.subject.name]?.draft ?? "").trim());
+    const emptyMentNames = [...new Set(emptyMentRows.map((r) => r.student.name))];
+    const emptyMentLine = emptyMentRows.length
+      ? `\n⚠️ 멘트 미작성 ${emptyMentRows.length}건 — 학부모 전달 내용이 빈 채 발송됩니다: ${emptyMentNames.slice(0, 5).join(", ")}${
+          emptyMentNames.length > 5 ? ` 외 ${emptyMentNames.length - 5}명` : ""
+        } (제외하려면 취소 후 멘트를 채우세요)`
+      : "";
     const absentLine = absentRows ? `\n결석 행 ${absentRows}건은 발송에서 제외됩니다` : "";
     const sentLine = alreadySentRows
       ? `\n이미 발송된 ${alreadySentRows}건은 제외됩니다 — ClassNote는 게시글 수정이 안 돼 다시 보내면 글만 하나 더 붙습니다`
       : "";
     if (
       !window.confirm(
-        `${rows.length}건을 ClassNote로 일괄 발송할까요? (동명이인·취소·오래된 건은 자동 제외)${progressLine}${gapLine}${absentLine}${sentLine}`,
+        `${rows.length}건을 ClassNote로 일괄 발송할까요? (동명이인·취소·오래된 건은 자동 제외)${emptyMentLine}${progressLine}${gapLine}${absentLine}${sentLine}`,
       )
     )
       return;
