@@ -4,6 +4,10 @@
 
 ## 진행 상황
 
+### 등록상담 사전 브리프(상담지) — 상담 *전에* 받아보는 준비 문서 (2026-07-28) - tsc0/lint0/test110(신규34)/build✓/실AI E2E✓
+"상담자가 상담하기 전에 상담지를 미리 받아보자"(원장 발상). 기존 산출물(AI 인수인계서)은 상담 *후*였고, 정작 상담 직전엔 QR 접수 13문항과 학원 실데이터를 머릿속에서 조합해야 했다. **eywa DB를 총동원한 사실 스냅샷**(개설 반·강사·요일/시각·정원/현원/잔여석 + 수강료 단가표(회당/월 명기) + 교재 + 같은 학교/학년/전체 재원생 count + 학부모 연락처 매칭 형제 재원생과 그 수강 반 + 같은 학생 이전 접수(자연키) + 셔틀/납부일/미납정책) 위에 LLM이 상담 스크립트(헤드라인·오프닝·확인질문·걱정→대응화법·반제안·예상반론·클로징·주의)를 쓴다.
+- **사실은 코드가, 말은 LLM이**(팀보고 패턴): [`prep-brief.ts`](../src/features/enrollment/prep-brief.ts) `validatePrepBrief`가 사실 블록에 없는 **숫자(2자리+)·영문 토큰**을 걸러 탈락 시 결정론 폴백(`buildFallbackPrepBrief`, `source:"fallback"` 배지 "접수 정보 기반 기본 브리프"로 정직 표시). 수집은 [`server/prep-facts.ts`](../src/features/enrollment/server/prep-facts.ts)(B2 count/head·B3 fetchInChunks·B4 Promise.all, 연락처·주소는 facts에 안 실음). 생성은 명시 버튼만([`prep-actions.ts`](../src/features/enrollment/server/prep-actions.ts) Sonnet 고정·8192tok — 4096은 잘림 실측), 저장은 `enrollment_consultations.prep_brief` jsonb 스냅샷(0152a, 상담 1건=브리프 1개 덮어쓰기, 그때 자료 동결=인쇄물 정책). 상세 상단 카드 + A4 인쇄 `/enrollment/[id]/prep`(내부용 명기, `print/enrollment-prep` A4 창 등록).
+- **적대 검수(같은 날) 5건 수리**: ① 회당 단가를 월액으로 오안내 위험 → `modeLabel`("회당 단가") 금액 옆 필수 표기 + 프롬프트에 월액 단정 금지 ② 중1 후보에 "[특강] 고등개별" → 타학제 명시 반 배제 ③ "[특강]중2-2"도 통과 → 타학년 숫자 배제(`conflictsSchoolLevel`, 표기 없는 반은 유지=과소포함 방지) ④ 요일별 시각 다른 반을 "화·금 16:20"으로 거짓 표기 → `formatSchedule` 요일별 명기("화 17:15·금 16:20" 실측) ⑤ 이전 접수 이름-only 매칭(동명이인 fan-out) → 자연키(이름+학교+학년, getSiblingConsultations 동형).
 ### 진도 선택기 v2 — '진도 없이 제출' 4종 + 대단원 아코디언 + 팝오버 정리 (2026-07-28)
 같은 날 오전에 넣은 월말평가 단일 토글을 원장 지시(edutrix 화면 캡처 + *"비슷하게 진도 체크 안 해도 되도록
 항목. 그리고 ui/ux 정리도"* / *"진도가 너무 펼쳐져 있으니 눌러서 펼치는 형식으로 (대단원 기준)"*)로 확장.
