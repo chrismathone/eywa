@@ -59,43 +59,77 @@ export async function BasicInfoTab({
   const isTeacherLike = displayRole === "teacher" || displayRole === "master";
   const won = (n: number) => `${n.toLocaleString("ko-KR")}원`;
 
+  // 이력서(ResumeSheet)와 같은 종이 서식 언어 — 기본정보도 TR/TD 표로(원장 지시 2026-07-28), 인쇄 시 함께 출력.
+  const T = "w-full border-collapse text-[12px] leading-relaxed print:text-[11px] print:leading-snug";
+  const cell = "border-foreground/35 border px-2 py-1.5 align-middle print:py-1";
+  const head = `${cell} bg-bg-soft/70 w-28 text-center font-bold print:whitespace-nowrap`;
+  const dash = <span className="text-text-faint">—</span>;
+
   return (
     <div className="space-y-5">
-      <div className="bg-card border-line shadow-card rounded-2xl border p-5">
-        <div className="grid grid-cols-2 gap-x-5 gap-y-4 sm:grid-cols-3">
-          <Field label="이메일" value={<span className="num">{staff.email}</span>} />
-          <Field label="연락처" value={staff.phone ? <span className="num">{staff.phone}</span> : null} />
-          <Field label="시스템 역할" value={ROLE_LABEL[displayRole] ?? displayRole} />
-          <Field label="직급 (닉네임)" value={staff.jobTitle} />
-          {/* 영어 닉네임 — 영어 시간표 임포트가 시트 라벨(`Jane 중1 정규A`)을 이 값으로 강사에 붙인다. */}
-          <Field label="영어 닉네임" value={staff.englishName} />
-          <Field label="입사일" value={staff.hireDate ? <span className="num">{staff.hireDate}</span> : null} />
-          <Field label="기본 강의실" value={staff.defaultClassroom} />
-          <Field
-            label="담당 과목"
-            value={
-              staff.subjects.length > 0 ? (
-                <div className="flex flex-wrap gap-1">
-                  {staff.subjects.map((s) => (
-                    <Pill key={s} color={subjects.colorOf(s)} soft>
-                      {subjects.labelOf(s)}
-                    </Pill>
-                  ))}
-                </div>
-              ) : null
-            }
-          />
-        </div>
-        {staff.memo ? (
-          <div className="border-line mt-4 border-t pt-4">
-            <p className="micro mb-1">메모</p>
-            <p className="text-text-dim text-sm whitespace-pre-wrap">{staff.memo}</p>
-          </div>
-        ) : null}
+      {/* 직원 기본정보 — 이력서와 같은 폭·같은 표 서식(한 문서처럼 이어져 인쇄된다). */}
+      <div className="border-line bg-card text-foreground shadow-card mx-auto w-full max-w-[780px] rounded-2xl border p-6 sm:p-8 print:rounded-none print:border-2 print:border-foreground/60 print:p-3 print:shadow-none">
+        <h2 className="text-foreground mb-1.5 text-[13px] font-bold print:text-[12px]">직원 기본정보</h2>
+        <table className={T}>
+          <tbody>
+            <tr>
+              <th className={head}>이메일</th>
+              <td className={`${cell} num`}>{staff.email || dash}</td>
+              <th className={head}>시스템 역할</th>
+              <td className={cell}>{ROLE_LABEL[displayRole] ?? displayRole}</td>
+            </tr>
+            <tr>
+              <th className={head}>연락처</th>
+              <td className={`${cell} num`}>{staff.phone || dash}</td>
+              <th className={head}>영어 닉네임</th>
+              {/* 영어 닉네임 — 영어 시간표 임포트가 시트 라벨(`Jane 중1 정규A`)을 이 값으로 강사에 붙인다. */}
+              <td className={cell}>{staff.englishName || dash}</td>
+            </tr>
+            <tr>
+              <th className={head}>직급</th>
+              <td className={cell}>{staff.jobTitle || dash}</td>
+              <th className={head}>입사일</th>
+              <td className={`${cell} num`}>{staff.hireDate || dash}</td>
+            </tr>
+            <tr>
+              <th className={head}>근무부서</th>
+              <td className={cell}>{staff.department || dash}</td>
+              <th className={head}>근무형태</th>
+              <td className={cell}>{staff.employmentType || dash}</td>
+            </tr>
+            <tr>
+              <th className={head}>기본 강의실</th>
+              <td className={cell}>{staff.defaultClassroom || dash}</td>
+              <th className={head}>담당 과목</th>
+              <td className={cell}>
+                {staff.subjects.length > 0 ? (
+                  <span className="flex flex-wrap gap-1">
+                    {staff.subjects.map((s) => (
+                      <Pill key={s} color={subjects.colorOf(s)} soft>
+                        {subjects.labelOf(s)}
+                      </Pill>
+                    ))}
+                  </span>
+                ) : (
+                  dash
+                )}
+              </td>
+            </tr>
+            {staff.memo ? (
+              <tr>
+                <th className={head}>메모</th>
+                <td className={cell} colSpan={3}>
+                  <span className="whitespace-pre-wrap">{staff.memo}</span>
+                </td>
+              </tr>
+            ) : null}
+          </tbody>
+        </table>
       </div>
 
       {showSalary && isTeacherLike ? (
-        <div className="bg-card border-line shadow-card rounded-2xl border p-5">
+        // 급여는 화면 전용(원장·본인만) — 인쇄물엔 넣지 않는다.
+        <div className="bg-card border-line shadow-card print:hidden rounded-2xl border p-5">
           <p className="micro mb-3">급여 기준</p>
           <div className="grid grid-cols-2 gap-5">
             <Field label="시급" value={<span className="tabular">{won(staff.hourlyRate)}</span>} />
@@ -115,7 +149,7 @@ export async function BasicInfoTab({
           photoUrls={resumePhotoUrls}
         />
       ) : resumeAccess ? (
-        <div className="bg-card border-line shadow-card rounded-2xl border p-5">
+        <div className="bg-card border-line shadow-card print:hidden rounded-2xl border p-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <p className="micro">이력서</p>
@@ -138,15 +172,18 @@ export async function BasicInfoTab({
       ) : null}
 
       {canManageThis ? (
-        <AccountActions
-          staffId={staff.id}
-          displayName={staff.displayName}
-          currentEmail={staff.email}
-          currentRole={staff.systemRole}
-          currentStatus={staff.status}
-          roleOptions={roleOptions}
-          homeroomClasses={homeroomClasses}
-        />
+        // 계정 관리(비번 재설정·역할 변경 등)는 화면 전용 — 인쇄물 제외.
+        <div className="print:hidden">
+          <AccountActions
+            staffId={staff.id}
+            displayName={staff.displayName}
+            currentEmail={staff.email}
+            currentRole={staff.systemRole}
+            currentStatus={staff.status}
+            roleOptions={roleOptions}
+            homeroomClasses={homeroomClasses}
+          />
+        </div>
       ) : null}
     </div>
   );

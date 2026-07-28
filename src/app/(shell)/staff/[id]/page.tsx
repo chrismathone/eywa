@@ -93,10 +93,13 @@ export default async function StaffDetailPage({
   const isTeacherLike = displayRole === "teacher" || displayRole === "master";
 
   return (
-    <div className="space-y-6">
-      <BackLink href="/staff" label="직원관리로" />
+    // print-portrait — 기본정보(종이 서식)·이력서만 세로 A4로 인쇄. 헤더·탭·계정관리 등 화면 크롬은 print:hidden.
+    <div className="print-portrait space-y-6">
+      <div className="print:hidden">
+        <BackLink href="/staff" label="직원관리로" />
+      </div>
 
-      <header className="border-border flex flex-col gap-3 border-b pb-5 sm:flex-row sm:items-end sm:justify-between">
+      <header className="border-border print:hidden flex flex-col gap-3 border-b pb-5 sm:flex-row sm:items-end sm:justify-between">
         <div className="flex items-center gap-3">
           <div className="space-y-1">
             <p className="eyebrow">직원</p>
@@ -148,7 +151,9 @@ export default async function StaffDetailPage({
         </div>
       </header>
 
-      <StaffTabsNav staffId={staff.id} active={tab} showActivity={canManage} />
+      <div className="print:hidden">
+        <StaffTabsNav staffId={staff.id} active={tab} showActivity={canManage} />
+      </div>
 
       <section>
         {tab === "info" ? (
