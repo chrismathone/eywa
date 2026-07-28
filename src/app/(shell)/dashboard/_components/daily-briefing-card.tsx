@@ -107,7 +107,13 @@ export function DailyBriefingCard({ briefing }: { briefing: DailyBriefingRow | n
                   살펴볼 학생{" "}
                   <span className="text-text-faint font-medium">{payload.spotlights.length}</span>
                 </p>
-                <ul className="mt-1.5 grid gap-x-2 gap-y-0.5 lg:grid-cols-2">
+                {/* 2열은 **2명 이상일 때만** — 1명이면 오른쪽 반쪽을 빈 채로 예약했다.
+                    행 내용이 truncate라 열을 더 늘리진 않는다(넓을수록 사유가 더 보이는 게 이득). */}
+                <ul
+                  className={`mt-1.5 grid gap-x-2 gap-y-0.5 ${
+                    payload.spotlights.length > 1 ? "lg:grid-cols-2" : ""
+                  }`}
+                >
                   {payload.spotlights.map((s, i) => (
                     // 이름만으론 동명이인 key 충돌 — payload가 studentId를 안 담는 동안 index로 유일화.
                     <li key={`${s.name}-${i}`}>

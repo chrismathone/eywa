@@ -194,8 +194,14 @@ export function DragScrollArea({
           // 나머지 표/보드는 높이 제한이 없어 세로는 페이지가 담당 → overflow-y-hidden으로 두면
           // 그 축의 스크롤 컨테이너가 아니게 되어 세로 휠이 컨테이너에 안 먹히고 페이지로 전파된다.
           // (가로만 넘치는 표 위에서 세로 스크롤이 죽던 버그 — overscroll-y:auto만으론 부족했음.)
+          //
+          // ⚠️ barX의 세로는 **`overscroll-x-contain`**(양축 contain 아님, 2026-07-27 원장 제보).
+          // `overscroll-contain`은 세로까지 가둬서, 안에 세로로 스크롤할 게 **없는데도** 휠이 먹히고
+          // 페이지가 안 움직인다(통합뷰 섹션이 그렇다 — 높이 제한이 없어 내부 세로 오버플로가 0).
+          // x만 가두면: 세로는 스크롤할 게 있으면 내부가 먹고, 없거나 끝에 닿으면 페이지로 넘어간다.
+          // (가로 contain은 유지 — 끝에서 가로 오버스크롤이 브라우저 뒤로가기로 새는 것 차단.)
           barX
-            ? "scroll-x-always overflow-y-auto overscroll-contain"
+            ? "scroll-x-always overflow-y-auto overscroll-x-contain"
             : "overflow-x-auto overflow-y-hidden overscroll-x-contain"
         } ${grabbable ? "cursor-grab" : ""}`}
       >

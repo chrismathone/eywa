@@ -4,9 +4,9 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
-import { fetchInChunks } from "@/lib/supabase/batch";
+import { fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 import { addDays, resolveReportDate, weekdayIndexOf, formatKoreanDate } from "@/lib/date-kst";
-import { parseExamScores } from "../exam-info";
+import { parseExamScores, parseExamMaxes } from "../exam-info";
 import { classnoteSendWindowLabel } from "../classnote-guard";
 import { applyStudentOrder } from "../student-order";
 import { rosterIncludesEnrollment } from "../roster-filter";
@@ -80,6 +80,8 @@ type OnescreenSessionRow = {
   daily_max: number | null;
   check_score: number | null;
   check_max: number | null;
+  daily_score_mode: string | null; // 0148a — 점수 표기 모드 오버라이드(score|count)
+  check_score_mode: string | null;
   attitude: string | null;
   homework: string | null;
   special_note: string | null;
@@ -152,6 +154,9 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
   const subjectTestMax = new Map(settings.operations.subjects.map((su) => [su.key, su.testMax ?? 5]));
   const allowTeacherTestMax = settings.report.allowTeacherTestMax;
   const { showDailyTest, showCheckTest } = settings.report;
+  // 테스트 점수 표기 모드(0148a) 학원 기본 — 세션에 오버라이드가 없으면 이 값이 출발점(문항수 시드와 같은 층).
+  const dailyModeDefault: "score" | "count" = settings.report.dailyTestScoreMode ?? "count";
+  const checkModeDefault: "score" | "count" = settings.report.checkTestScoreMode ?? "count";
   const academyNoticeMode: "A" | "B" = settings.report.noticeMode ?? "A";
 
   // 1) 강사 담당 활성 반 + 본인 멘트 모드 + 학생 표시 순서(0116a, 강사×반 개인 설정) + 출결 쓰기 권한
@@ -293,8 +298,9 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
         attendance: "출석",
         subjects: [],
         tests: {
-          daily: { score: null, max: tmax, prevScore: null },
-          check: { score: null, max: tmax, prevScore: null },
+          // 모드(0148a) 학원 기본으로 시드 — 아래 승계·세션복원이 있으면 덮어씀. 점수 모드의 만점은 100 고정(v1).
+          daily: { score: null, max: dailyModeDefault === "score" ? 100 : tmax, prevScore: null, mode: dailyModeDefault },
+          check: { score: null, max: checkModeDefault === "score" ? 100 : tmax, prevScore: null, mode: checkModeDefault },
         },
         attitude: null,
         homework: "",
@@ -343,15 +349,29 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
   // 셋 다 studentIds에만 의존하는 독립 조회 → Promise.all 병렬(B4). 전부 fetchInChunks(B2/B3).
   // 앵커 = 대상 날짜(오늘 또는 과거). session_date/report_date/attendance 필터가 모두 이 날짜.
   const todayIso = targetDate;
-  const [todayReports, priorReports, attRows, sessionRows, textbookRows, readStats, anomalyEvents] = await Promise.all([
+  // 문항수(/N) 승계 조회 창 — 이보다 오래 안 가르친 학생은 학원 설정값으로 돌아간다(무한 소급 방지).
+  const TEST_MAX_LOOKBACK_DAYS = 60;
+  const testMaxFrom = addDays(todayIso, -TEST_MAX_LOOKBACK_DAYS);
+  const [
+    todayReports,
+    priorReports,
+    attRows,
+    sessionRows,
+    textbookRows,
+    readStats,
+    anomalyEvents,
+    priorMaxRows,
+  ] = await Promise.all([
     // (a) 당일 행만 — 발송상태·공유링크·초안복원용. eq(report_date)라 학생×과목 소량(절단 불가).
     fetchInChunks<{
       id: string;
       student_id: string;
       subject: string | null;
       class_id: string | null; // 0134a — 행(반) 매칭 키. 이관분·관리자 작성분은 null(과목 폴백).
+      makeup: boolean | null; // 보강(수업외) 보고서 — matchReportsToRows가 정규 행에 오배정하지 않게 하는 판별축(2026-07-24).
       share_token: string | null;
       classnote_status: string | null;
+      classnote_read_at: string | null; // 학부모 읽음(0122a) — 강사 행 배지용(2026-07-27 원장 지시)
       revoked_at: string | null;
       attachments: { path: string; name: string }[] | null;
       notes: string | null;
@@ -361,7 +381,7 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
       (chunk) =>
         supabase
           .from("lesson_reports")
-          .select("id, student_id, subject, class_id, share_token, classnote_status, revoked_at, attachments, notes, trend_note")
+          .select("id, student_id, subject, class_id, makeup, share_token, classnote_status, classnote_read_at, revoked_at, attachments, notes, trend_note")
           .eq("report_date", todayIso)
           .in("student_id", chunk)
           // 결정적 매칭 순서 — 같은 (학생,반) 폴백 후보가 여럿일 때 항상 같은 것을 집는다.
@@ -388,7 +408,7 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
       supabase
         .from("onescreen_daily_sessions")
         .select(
-          "student_id, study_grade, subject_progress, daily_score, daily_max, check_score, check_max, attitude, homework, special_note, progress_confirmed",
+          "student_id, study_grade, subject_progress, daily_score, daily_max, check_score, check_max, daily_score_mode, check_score_mode, attitude, homework, special_note, progress_confirmed",
         )
         .eq("session_date", todayIso)
         .eq("updated_by", user.id)
@@ -417,13 +437,89 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
         .from("progress_events")
         .select("student_id")
         .in("event_type", ["jump_error", "overlap_error"])
+        // "이상 없음" 확인분 제외(0151a) — 사람이 정상이라 판정한 신호까지 배지가 계속 켜져 있으면
+        // 확인 기능이 무의미하다. 진도 탭 이상 카드·알림 감지와 **같은 조건**(#77).
+        .is("resolved_at", null)
         .gte("created_at", `${addDays(todayIso, -14)}T00:00:00+09:00`)
         .in("student_id", chunk),
     ).catch((e) => {
       console.error("[roster] progress_events 조회 실패 — 진도 이상 배지 생략:", e instanceof Error ? e.message : e);
       return [] as { student_id: string }[];
     }),
+    // (h) 문항수(/N) 승계 — **직전에 이 강사가 이 학생에게 쓴 만점**을 오늘의 기본값으로 이어받는다.
+    //     그러지 않으면 매일 학원 설정값(기본 5)으로 되돌아가, 20문항 시험을 보는 반은 날마다 /N을 다시 고쳐야 한다
+    //     (실측: 07-21 12·13문항, 07-23 10·100문항이 다음 날 전부 5로 리셋). 원장 지시 2026-07-23.
+    //  ⚠️ 강사축(0118a) 유지 — 같은 학생을 다른 강사가 가르쳐도 서로의 문항수를 물려받지 않는다.
+    //  ⚠️ 조회는 **항상** 돈다 — 표기 모드(0148a)는 문항수 권한과 무관하게 항상 승계해야 하기 때문(원장 요구:
+    //     "한번 정한 점수/개수 토글은 다음 보고서로 이어짐"). 단 **문항수(max) 시드만** allowTeacherTestMax로
+    //     게이트한다(off의 계약="과목 설정값 고정"). 모드 시드는 게이트 없음.
+    fetchAllPagedInChunks<{
+      student_id: string;
+      session_date: string;
+      daily_max: number | null;
+      check_max: number | null;
+      daily_score_mode: string | null;
+      check_score_mode: string | null;
+    }>(
+      studentIds,
+      (chunk, from, to) =>
+        supabase
+          .from("onescreen_daily_sessions")
+          .select("student_id, session_date, daily_max, check_max, daily_score_mode, check_score_mode")
+          .eq("updated_by", user.id)
+          .lt("session_date", todayIso)
+          .gte("session_date", testMaxFrom)
+          .in("student_id", chunk)
+          // 최신 우선 + unique tie-break(student_id) — 페이지가 흔들리지 않게(fetchAllPagedInChunks 계약).
+          .order("session_date", { ascending: false })
+          .order("student_id", { ascending: true })
+          .range(from, to),
+    ).catch((e) => {
+      console.error("[roster] 문항수·모드 승계 조회 실패 — 학원 설정값 사용:", e instanceof Error ? e.message : e);
+      return [] as {
+        student_id: string;
+        session_date: string;
+        daily_max: number | null;
+        check_max: number | null;
+        daily_score_mode: string | null;
+        check_score_mode: string | null;
+      }[];
+    }),
   ]);
+  const seededDailyMax = new Set<string>();
+  const seededCheckMax = new Set<string>();
+  // ⚠️ 모드용 가드 Set은 max와 **분리**한다 — max는 있는데 mode가 null인 과거 행에서 max Set을 재사용하면
+  //    그 학생을 조기 seeded 처리해 더 오래된 행의 mode를 못 물려받는 미묘한 버그가 난다.
+  const seededDailyMode = new Set<string>();
+  const seededCheckMode = new Set<string>();
+  const asMode = (v: string | null): "score" | "count" | null =>
+    v === "score" || v === "count" ? v : null;
+  // 학생별 **가장 최근** 값(정렬 최신순 → 처음 만난 값이 직전 값) → 오늘의 기본값으로 승계.
+  // 오늘 세션이 있으면 아래 Phase3 복원이 다시 덮으므로, 여기서 넣는 건 "오늘 아직 안 건드린 행"의 출발값이다.
+  for (const r of priorMaxRows) {
+    const os = byStudent.get(r.student_id);
+    if (!os) continue;
+    // 문항수 승계 — allowTeacherTestMax on일 때만(off=과목 설정값 고정). 점수 모드 만점(100)은 아래 normalize가 고정.
+    if (allowTeacherTestMax && r.daily_max != null && !seededDailyMax.has(r.student_id)) {
+      os.tests.daily.max = r.daily_max;
+      seededDailyMax.add(r.student_id);
+    }
+    if (allowTeacherTestMax && r.check_max != null && !seededCheckMax.has(r.student_id)) {
+      os.tests.check.max = r.check_max;
+      seededCheckMax.add(r.student_id);
+    }
+    // 표기 모드 승계 — **항상**(원장 요구). 유효값(score|count)만.
+    const dm = asMode(r.daily_score_mode);
+    if (dm && !seededDailyMode.has(r.student_id)) {
+      os.tests.daily.mode = dm;
+      seededDailyMode.add(r.student_id);
+    }
+    const cm = asMode(r.check_score_mode);
+    if (cm && !seededCheckMode.has(r.student_id)) {
+      os.tests.check.mode = cm;
+      seededCheckMode.add(r.student_id);
+    }
+  }
   type PriorRow = {
     student_id: string;
     subject: string | null;
@@ -528,6 +624,7 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
       su.reportSent = true;
       su.shareToken = t.share_token ?? undefined;
       su.classnoteStatus = t.classnote_status ?? undefined;
+      su.classnoteReadAt = t.classnote_read_at ?? undefined;
       su.revokedAt = t.revoked_at ?? undefined;
       su.viewCount = viewCountByReport.get(t.id) ?? 0;
       su.attachments = t.attachments ?? [];
@@ -612,6 +709,11 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
       if (sess.daily_max != null) os.tests.daily.max = sess.daily_max;
       if (sess.check_score != null) os.tests.check.score = sess.check_score;
       if (sess.check_max != null) os.tests.check.max = sess.check_max;
+      // 표기 모드 복원(0148a) — 저장 세션이 시드·승계를 최종으로 덮는다(문항수와 대칭). 만점 100 고정은 아래 normalize.
+      const sdm = asMode(sess.daily_score_mode);
+      if (sdm) os.tests.daily.mode = sdm;
+      const scm = asMode(sess.check_score_mode);
+      if (scm) os.tests.check.mode = scm;
       if (sess.attitude != null) os.attitude = sess.attitude;
       if (sess.homework != null) os.homework = sess.homework;
       if (sess.special_note != null) os.note = sess.special_note;
@@ -640,6 +742,16 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
         if (entry?.trendDraft?.trim()) su.trendDraft = entry.trendDraft;
       }
     }
+    // 점수 모드의 만점 = v1에서 **100 고정** — 시드·승계·세션복원 어느 경로로 mode가 정해졌든 max를 일관되게 맞춘다.
+    // (개수 모드는 문항수 그대로.) 이걸 안 하면 개수 세션에서 승계된 max로 "95/5점" 같은 어긋남이 난다.
+    if (os.tests.daily.mode === "score") os.tests.daily.max = 100;
+    if (os.tests.check.mode === "score") os.tests.check.max = 100;
+    // ⚠️ 척도 경계에서 prevScore 폐기(2026-07-24 적대검수): 직전 회차의 척도(exam_info 분모)가 오늘의 max와
+    //    다르면(개수 20문항 ↔ 점수 100점) prevScore를 그대로 빼면 "▲77" 같은 허위 증감이 학부모에게 나간다.
+    //    척도가 같을 때만 유지(같은 척도의 직전 회차가 쌓이면 다음 회차부터 정상 복원). 원장 롤아웃 당일 전 학생 커버.
+    const prMax = parseExamMaxes(pr?.examInfo);
+    if (prMax.daily != null && prMax.daily !== os.tests.daily.max) os.tests.daily.prevScore = null;
+    if (prMax.check != null && prMax.check !== os.tests.check.max) os.tests.check.prevScore = null;
     // 이 학생이 수강 중인 담당 반 전체(tags) — enrollments 기준(모호 과목 포함, 위 F4 후속 회귀 주석 참조). 비면 대표 tag 폴백.
     const classNames = [...(classNamesByStudent.get(os.id) ?? [])];
     os.tags = classNames.length ? classNames : os.tag ? [os.tag] : [];

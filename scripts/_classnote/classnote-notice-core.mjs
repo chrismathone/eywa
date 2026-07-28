@@ -56,7 +56,11 @@ function kstToday() {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul" }).format(new Date());
 }
 
-/** 알림장 게시(내부 API). enrollment = 원아↔보드 연결 id. 응답은 빈 201이라 status만. */
+/**
+ * 알림장 게시(내부 API). enrollment = 원아↔보드 연결 id. 성공 응답은 빈 201이라 status가 전부다.
+ * 🔴 실패 응답은 **본문까지** 돌려준다 — 사유를 버리면 다음 실패도 원인 미상으로 끝난다
+ *    (2026-07-27 공지 11건 `HTTP 409` 사유 소실). 자세한 배경은 `postClassnoteReport` 주석.
+ */
 async function postReport(page, { clsId, childId, enrollmentId, content, authorName }) {
   return page.evaluate(
     async ([cls, child, enrollment, body, author, date]) => {
@@ -66,7 +70,9 @@ async function postReport(page, { clsId, childId, enrollmentId, content, authorN
         headers: { "content-type": "application/json", accept: "application/json", ...(csrf ? { "X-CSRFToken": csrf } : {}) },
         body: JSON.stringify({ cls, child, enrollment, content: body, date_written: date, author_name: author, tz: "Asia/Seoul" }),
       });
-      return { status: res.status };
+      if (res.status >= 200 && res.status < 300) return { status: res.status };
+      const detail = await res.text().catch(() => "");
+      return { status: res.status, detail: (detail || "").slice(0, 500) };
     },
     [clsId, childId, enrollmentId, content, authorName, kstToday()],
   );
@@ -253,32 +259,81 @@ async function processTarget(page, ctx, target, index = 0) {
           });
 
     let res = await send(media);
-    // ⚠️ **미검증**: kage access_key를 다른 글에 재사용해도 되는지 확인 못 했다 → 재사용분으로 실패하면
-    // 이 타깃만 **재업로드해 1회 재시도**한다. 재사용이 원인이 아니면 그대로 실패로 남는다.
-    if ((res.status < 200 || res.status >= 300) && media?.reused && ctx.mediaFor) {
-      // 🔴 재시도 전에 **이미 게시됐는지 먼저 확인**한다 — ClassNote가 글을 만든 뒤 후처리에서 5xx를 주거나
-      // 게이트웨이가 끊기면, 그냥 다시 POST하는 순간 학부모 알림장에 **같은 글이 2개** 남는다(회수는 id를
-      // 캡처한 두 번째만 지운다). 내용까지 같은 글이 있으면 그 id를 성공으로 받아들이고 재시도하지 않는다.
+    const failed = (r) => r.status < 200 || r.status >= 300;
+
+    /**
+     * 🔴 **실패 응답이면 "그래도 글이 올라갔는지" 확인한다.** ClassNote가 글을 만든 뒤 후처리에서 5xx를 주거나
+     *    게이트웨이가 끊기면, 응답만 믿고 실패로 적는 순간 **화면이 사실과 다른 말을** 한다 — 원장은 "안 갔다"고
+     *    알고 재발송하는데 학부모 알림장엔 같은 글이 2개 남는다(회수는 id를 캡처한 쪽만 지운다). 반대로 정말
+     *    안 갔는데 성공으로 적으면 학부모가 영영 못 받는다. 어느 쪽도 사후에 되돌릴 수 없다.
+     * ⚠️ 예전엔 이 확인이 `media?.reused`(첨부 재사용 재시도) 안에 갇혀 있었다 → **첨부 없는 공지는 확인
+     *    자체를 건너뛰었다.** 2026-07-27 공지 11건이 `HTTP 409`로 적혔지만 "실제로 갔는지"를 DB만으로는
+     *    판정할 수 없었던 이유가 이것이다(원장이 ClassNote를 직접 열어 미게시 확인). 이제 첨부 유무와 무관하고,
+     *    **첫 시도·재시도 양쪽 뒤에** 돈다(재시도가 글을 만들고 에러를 줬을 수 있다).
+     * @returns 게시돼 있으면 true(reports에 담고 이 원아는 완료), 아니면 false.
+     */
+    const claimIfPosted = async () => {
       const posted = await findReportId(
         page,
         ctx.centerId,
         { cls: board.id, child: child.id, content },
         { strict: true },
       ).catch(() => null);
-      if (posted != null) {
-        ctx.log?.(`[notice] ${target.board} 게시 응답 실패(HTTP ${res.status})지만 글이 이미 있어 재시도하지 않습니다`);
-        reports.push({ id: posted, url: `${CLASSNOTE_BASE}/service/report/${posted}`, cls: board.id, child: child.id });
-        continue;
+      if (posted == null) return false;
+      ctx.log?.(`[notice] ${target.board} 게시 응답 실패(HTTP ${res.status})지만 글이 이미 있어 성공으로 처리합니다`);
+      reports.push({ id: posted, url: `${CLASSNOTE_BASE}/service/report/${posted}`, cls: board.id, child: child.id });
+      return true;
+    };
+
+    if (failed(res) && (await claimIfPosted())) continue;
+
+    // 🔴 **409(중복 판정) 백오프 재시도** — 2026-07-27 실측으로 확정한 ClassNote 신설 가드 대응.
+    //    ClassNote가 07-23~07-27 사이 "같은 내용을 짧은 간격에 다시 게시"를 콘텐츠 성격에 따라
+    //    **보드가 달라도** 409 {"detail":"Already exists."}로 거부하게 바뀌었다(실측: 설명회 안내문은
+    //    교차보드 0.3초 간격 거부 / 짧은 평문은 통과 / **~1분 뒤엔 같은 본문도 통과**(T8) — 창은 마지막
+    //    성공 게시가 다시 감는다). 다대상 공지는 공통 본문이라 두 번째 타깃부터 전부 걸린다(07-27 11명 실사고).
+    //    → 대응 = **기다렸다 그대로 재시도**(30s→60s→90s, 총 3분 = 실측 창 ~90초의 2배 여유).
+    //    본문은 절대 변형하지 않는다(학부모 노출 콘텐츠 — 워커가 임의로 바꾸면 안 됨).
+    //    재시도 사이마다 claimIfPosted를 다시 돈다(그 사이 다른 경로로 올라갔을 수 있음 = 중복 방지).
+    if (failed(res) && res.status === 409) {
+      let claimed = false;
+      for (const waitMs of [30_000, 60_000, 90_000]) {
+        ctx.log?.(`[notice] ${target.board} 중복 판정(409) — ${waitMs / 1000}초 대기 후 재시도`);
+        await new Promise((r) => setTimeout(r, waitMs));
+        res = await send(media);
+        if (!failed(res)) break;
+        if (await claimIfPosted()) {
+          claimed = true;
+          break;
+        }
+        if (res.status !== 409) break; // 다른 에러로 바뀜 → 백오프는 무의미, 아래 일반 실패 경로로
       }
+      if (claimed) continue;
+    }
+
+    // ⚠️ **미검증**: kage access_key를 다른 글에 재사용해도 되는지 확인 못 했다 → 재사용분으로 실패하면
+    // 이 타깃만 **재업로드해 1회 재시도**한다. 재사용이 원인이 아니면 그대로 실패로 남는다.
+    // (위에서 "이미 게시됨"은 걸러졌으므로 여기 오는 건 정말 안 올라간 건이다 = 재시도해도 중복 아님.)
+    if (failed(res) && media?.reused && ctx.mediaFor) {
       ctx.log?.(`[notice] ${target.board} 게시 실패(HTTP ${res.status}) — 첨부 재업로드 후 1회 재시도`);
       const fresh = await ctx.mediaFor(target, index, { fresh: true });
       if (fresh && !fresh.failures.length) {
         media = fresh;
         res = await send(media);
+        if (failed(res) && (await claimIfPosted())) continue;
       }
     }
-    if (res.status < 200 || res.status >= 300) {
-      return { board: target.board, ok: false, note: `게시 실패(HTTP ${res.status})`, reports };
+    if (failed(res)) {
+      // note = 사람이 읽는 한글 요약(화면 노출), detail = 서버 응답 원문(원인 규명용, 화면 미노출).
+      // 원문을 note에 이어붙이지 않는다 — UI에 raw 기술 원문을 그대로 내보내지 않는 전역 규약.
+      ctx.log?.(`[notice] ${target.board} 게시 실패(HTTP ${res.status}) 응답: ${res.detail ?? "(본문 없음)"}`);
+      return {
+        board: target.board,
+        ok: false,
+        note: `게시 실패(HTTP ${res.status})`,
+        ...(res.detail ? { detail: res.detail } : {}),
+        reports,
+      };
     }
     // 게시 성공 → 회수용 id 조회(실패해도 게시는 유지 = id null=회수불가 표시). cls/child 저장(회수 대조용).
     const id = await findReportId(page, ctx.centerId, { cls: board.id, child: child.id, content }).catch(() => null);
@@ -477,6 +532,10 @@ export async function processNoticesOnce(
             results.push({ board: t.board, ok: false, note: mediaError });
             continue;
           }
+          // 하트비트 — 409 백오프(타깃당 최대 ~3분)로 다대상 공지가 STUCK_MIN(10분)을 넘을 수 있다.
+          // processing_at을 갱신 안 하면 stale 복구가 **진행 중인** 공지를 죽은 것으로 오판해 재큐잉
+          // → 전 타깃 재게시(중복 위험). 타깃마다 한 줄 갱신으로 차단(best-effort — 실패해도 게시는 계속).
+          await sql`update classnote_notices set processing_at=now() where id=${notice.id}`.catch(() => {});
           try {
             results.push(await processTarget(page, ctx, t, idx));
           } catch (e) {

@@ -7,7 +7,9 @@ import {
   buildGradeDropEvents,
   buildOutstandingEvents,
   buildProgressAnomalyEvents,
-  progressAnomalyDigestBody,
+  groupProgressAnomalyByStudent,
+  progressAnomalyLink,
+  progressAnomalyStudentBody,
   buildUnsentReportEvents,
   unsentReportDigestBody,
   UNSENT_REPORT_WINDOW_DAYS,
@@ -317,7 +319,7 @@ describe("pruneCutoffs (정리 정책)", () => {
   });
 });
 
-describe("buildProgressAnomalyEvents / progressAnomalyDigestBody (G2 진도 이상)", () => {
+describe("buildProgressAnomalyEvents / 학생별 진도 이상 알림 (G2)", () => {
   const row = (p: Partial<import("./events-core").ProgressAnomalyRow>) => ({
     studentId: "s1",
     studentName: "김민수",
@@ -327,7 +329,7 @@ describe("buildProgressAnomalyEvents / progressAnomalyDigestBody (G2 진도 이�
   });
   it("bucket = pe:{eventId} — 이벤트 1건=전이 1회(앵커일 아님)", () => {
     const [ev] = buildProgressAnomalyEvents([row({})]);
-    expect(ev).toMatchObject({ subjectKey: "s1", bucket: "pe:e1", label: "진도 점프" });
+    expect(ev).toMatchObject({ subjectKey: "s1", studentId: "s1", bucket: "pe:e1", label: "진도 점프" });
   });
   it("overlap_error 라벨 = 선행·현행 겹침(진도 탭과 동일 표현)", () => {
     const [ev] = buildProgressAnomalyEvents([row({ eventType: "overlap_error", eventId: "e2" })]);
@@ -338,19 +340,35 @@ describe("buildProgressAnomalyEvents / progressAnomalyDigestBody (G2 진도 이�
     expect(buildProgressAnomalyEvents([row({ eventType: "regression" })])).toEqual([]);
     expect(buildProgressAnomalyEvents([row({ eventType: "forward" })])).toEqual([]);
   });
-  it("본문 — 1건이면 라벨 포함 + '수학' 명시(타과목 오인 방지, 리뷰 확정), 여러 학생이면 이름 집계", () => {
-    const one = progressAnomalyDigestBody(buildProgressAnomalyEvents([row({})]));
-    expect(one).toContain("김민수");
-    expect(one).toContain("수학");
-    expect(one).toContain("진도 점프");
-    const many = progressAnomalyDigestBody(
+  it("학생별로 쪼갠다 — 알림 link가 1개뿐이라 묶으면 '어디서 확인'을 표현 못 함", () => {
+    const groups = groupProgressAnomalyByStudent(
       buildProgressAnomalyEvents([
         row({}),
         row({ eventId: "e2", eventType: "overlap_error" }),
         row({ studentId: "s2", studentName: "이서연", eventId: "e3" }),
       ]),
     );
-    expect(many).toContain("이서연");
-    expect(progressAnomalyDigestBody([])).toBeNull();
+    expect(groups.map((g) => g.studentId)).toEqual(["s1", "s2"]); // 입력 순 유지(같은 배치=같은 순서)
+    expect(groups[0].events).toHaveLength(2); // 한 학생의 여러 이벤트는 한 건으로
+    expect(groups[1].events).toHaveLength(1);
+    expect(groupProgressAnomalyByStudent([])).toEqual([]);
+  });
+  it("본문 — '수학' 명시(타과목 오인 방지) + 유형은 괄호로(조사 '진도 점프이(가)' 어색함 회피)", () => {
+    const one = progressAnomalyStudentBody("김민수", buildProgressAnomalyEvents([row({})]));
+    expect(one).toContain("김민수");
+    expect(one).toContain("수학");
+    expect(one).toContain("(진도 점프)");
+    expect(one).not.toContain("이(가)");
+    expect(progressAnomalyStudentBody("김민수", [])).toBeNull();
+  });
+  it("본문 — 같은 학생의 유형이 여러 개면 중복 없이 나열", () => {
+    const body = progressAnomalyStudentBody(
+      "김민수",
+      buildProgressAnomalyEvents([row({}), row({ eventId: "e2" }), row({ eventId: "e3", eventType: "overlap_error" })]),
+    );
+    expect(body).toContain("(진도 점프, 선행·현행 겹침)");
+  });
+  it("링크 = 학생 상세 진도 탭(이상 감지가 실제로 보이는 화면)", () => {
+    expect(progressAnomalyLink("s1")).toBe("/students/s1?tab=progress");
   });
 });

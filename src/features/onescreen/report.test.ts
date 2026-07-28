@@ -308,3 +308,62 @@ describe("과제 '없음' 문장 처리", () => {
     expect(buildSubjectReport(st, 0)).toContain("과제는 미제출 상태입니다.");
   });
 });
+
+// ── 월말평가일(monthly-exam.ts) — 나간 차시가 없으므로 "~ 진도를 진행했습니다"를 쓰면 거짓이 된다 ──
+describe("월말평가 보고서 문장", () => {
+  const noTests = {
+    daily: { score: null, max: 10, prevScore: null },
+    check: { score: null, max: 10, prevScore: null },
+  };
+
+  it("과목별 보고서 — 진도 표현 대신 '월말평가를 진행했습니다'", () => {
+    const st = makeStudent({
+      name: "김담희",
+      subjects: [{ name: "수학", subjectLabel: "수학", prev: "미분계수", today: "월말평가" }],
+      tests: noTests,
+    });
+    const r = buildSubjectReport(st, 0);
+    expect(r).toContain("오늘 수학 월말평가를 진행했습니다.");
+    expect(r).not.toContain("진도를 진행했습니다");
+  });
+
+  it("합본 보고서 — 전 과목이 월말평가면 진도 문장이 아예 없다", () => {
+    const st = makeStudent({
+      name: "김담희",
+      subjects: [{ name: "수학", subjectLabel: "수학", prev: "", today: "월말평가" }],
+      tests: noTests,
+    });
+    const r = buildReport(st);
+    expect(r).toContain("오늘 수학 월말평가를 진행했습니다.");
+    expect(r).not.toContain("진도를 진행했습니다");
+  });
+
+  it("합본 보고서 — 수학만 월말평가고 영어는 정상 수업이면 두 사실이 모두 남는다", () => {
+    const st = makeStudent({
+      name: "김담희",
+      subjects: [
+        { name: "수학", subjectLabel: "수학", prev: "", today: "월말평가" },
+        { name: "영어", subjectLabel: "영어", prev: "Unit 7", today: "Unit 8" },
+      ],
+      tests: noTests,
+    });
+    const r = buildReport(st);
+    expect(r).toContain("영어 Unit 8 진도를 진행했고");
+    expect(r).toContain("수학 월말평가를 진행했습니다.");
+  });
+
+  it("테스트 점수·태도 등 뒷문장은 평소와 동일하게 붙는다(월말평가라고 사라지지 않음)", () => {
+    const st = makeStudent({
+      name: "김담희",
+      subjects: [{ name: "수학", subjectLabel: "수학", prev: "", today: "월말평가" }],
+      tests: {
+        daily: { score: 18, max: 20, prevScore: null },
+        check: { score: null, max: 20, prevScore: null },
+      },
+      attitude: "아주 좋음",
+    });
+    const r = buildSubjectReport(st, 0);
+    expect(r).toContain("일일테스트(이전 진도) 18/20");
+    expect(r).toContain("수업 태도는 '아주 좋음'");
+  });
+});

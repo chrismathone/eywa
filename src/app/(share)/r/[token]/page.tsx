@@ -32,7 +32,7 @@ export default async function PublicLessonReportPage({
   const { data: report } = await admin
     .from("lesson_reports")
     .select(
-      "id, tenant_id, student_id, class_id, subject, report_date, revoked_at, textbook, progress, exam_info, homework_score, homework_today, teacher_name, notes, trend_note, daily_test, check_test, attitude, attachments",
+      "id, tenant_id, student_id, class_id, subject, report_date, revoked_at, textbook, progress, exam_info, homework_score, homework_today, teacher_name, notes, trend_note, daily_test, check_test, attitude, attachments, makeup",
     )
     .eq("share_token", token)
     .maybeSingle();
@@ -120,6 +120,7 @@ export default async function PublicLessonReportPage({
           attitude: report.attitude,
           notes: report.notes,
           trendNote: report.trend_note,
+          makeup: report.makeup === true, // 보강이면 제목에 "(보강)" — 정규 보고서와 구분
         }}
         student={student ?? null}
         academyName={academyName}

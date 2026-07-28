@@ -62,6 +62,18 @@ export function classnoteBadge(status?: string | null): { label: string; cls: st
   }
 }
 
+/** 학부모 읽음 툴팁용 KST 일시("7월 18일 13:01") — 원장 목록(report-list readAtLabel)과 같은 표기. 표뷰 공용 → export. */
+export function readAtLabel(iso: string): string {
+  return new Date(iso).toLocaleString("ko-KR", {
+    timeZone: "Asia/Seoul",
+    month: "long",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+}
+
 function fmt(t: TestScore) {
   return t.score == null ? "미입력" : `${t.score}/${t.max}`;
 }
@@ -470,6 +482,16 @@ export function ReportCard({
             </span>
           ) : null}
           {cnBadge ? <span className={`text-[11px] font-bold ${cnBadge.cls}`}>{cnBadge.label}</span> : null}
+          {/* 학부모 읽음(0122a) — 양성 배지만(없음 = 미읽음이 아니라 동기화 안 됨일 수 있음, types.ts 규약).
+              원장 목록의 "읽음"과 같은 뜻·같은 툴팁 표기 — 강사도 확인 가능하게(원장 지시 2026-07-27). */}
+          {subject.classnoteReadAt ? (
+            <span
+              className="text-primary text-[11px] font-bold"
+              title={`학부모 읽음 · ${readAtLabel(subject.classnoteReadAt)}`}
+            >
+              읽음
+            </span>
+          ) : null}
         </div>
 
         {/* ⚠️ 게시된 보고서는 재발송 차단(2026-07-22) — 수업보고서는 카드 '이미지'로 게시돼 텍스트 수정이 안 되고,

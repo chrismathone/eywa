@@ -4,10 +4,10 @@ import { Fragment, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { buildGridRows, buildRowRenderMeta, isRowActionable, rowInClass } from "../grid";
 import { moveInOrder } from "../student-order";
+import { resolveStudyGrade } from "../curriculum";
 import type { OneScreenStudent } from "../types";
 import type { SubjectReport } from "./report-card";
 import { BulkApplyPopover } from "./bulk-apply";
-import { CopyFirstRowPopover } from "./copy-first-row";
 import { ClassNarrativePopover } from "./class-narrative";
 import { GridToolbar, type GridBulkActions } from "./grid-toolbar";
 import { GridBodyRow, type GridConfig, type GridFieldHandlers, type GridRowActions } from "./grid-row";
@@ -94,6 +94,27 @@ export function OneScreenGrid({
   // '맨 위 행 복사' 표시용 — 선택이 있으면 선택 행, 없으면 표시 전체(핸들러와 같은 규약).
   const copyRows = selectedKeys.length ? rows.filter((r) => selectedKeys.includes(r.key)) : rows;
   const copySource = copyRows[0];
+  // 값 일괄 입력의 **진도 대상 과목** 후보 — 대상 행에 실제로 있는 과목만, 행이 많은 순(첫 항목이 기본값).
+  // 진도는 과목 한정이라(수학 진도가 영어 행에 들어가면 그대로 학부모에게 나간다) 선택지를 화면에서 준다.
+  const bulkSubjects = (() => {
+    const by = new Map<string, { key: string; name: string; count: number }>();
+    for (const r of copyRows) {
+      const key = r.subject.subjectKey ?? "math";
+      const cur = by.get(key);
+      if (cur) cur.count += 1;
+      else by.set(key, { key, name: r.subject.subjectLabel || r.subject.name, count: 1 });
+    }
+    return [...by.values()].sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, "ko"));
+  })();
+  // 진도 차시 선택기의 기본 학년 — 대상 행에서 가장 흔한 진도 학년(반은 대개 같은 학년이라 한 번에 맞는다).
+  const bulkStudyGrade = (() => {
+    const tally = new Map<string, number>();
+    for (const r of copyRows) {
+      const g = resolveStudyGrade(r.student.studyGrade ?? r.student.grade);
+      if (g) tally.set(g, (tally.get(g) ?? 0) + 1);
+    }
+    return [...tally.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? "";
+  })();
   const allChecked = rows.length > 0 && selectedKeys.length === rows.length;
   const toggleRow = (k: string) =>
     setChecked((prev) => {
@@ -182,19 +203,19 @@ export function OneScreenGrid({
               selectedCount={selectedKeys.length}
               attitudes={config.attitudes}
               homeworks={config.homeworks}
-              onApply={(patch, onlyEmpty) => bulkActions.onBulkApply(selectedKeys, patch, onlyEmpty)}
+              subjects={bulkSubjects}
+              studyGrade={bulkStudyGrade}
+              copySource={
+                copySource && bulkActions.onCopyFirstRow
+                  ? { label: copySource.student.name, belowCount: Math.max(0, copyRows.length - 1) }
+                  : null
+              }
+              onApply={(patch, onlyEmpty, progressSubjectKey) =>
+                bulkActions.onBulkApply(selectedKeys, patch, onlyEmpty, progressSubjectKey)
+              }
+              onCopyFirstRow={(overwrite) => bulkActions.onCopyFirstRow?.(selectedKeys, overwrite)}
               disabled={bulkGen}
             />
-            {/* 맨 위 행 복사 — 대상은 다른 일괄 작업과 같은 규약(선택 있으면 선택, 없으면 표시 전체). */}
-            {bulkActions.onCopyFirstRow ? (
-              <CopyFirstRowPopover
-                firstLabel={copySource ? copySource.student.name : null}
-                targetCount={Math.max(0, copyRows.length - 1)}
-                selectedCount={selectedKeys.length}
-                onCopy={(overwrite) => bulkActions.onCopyFirstRow?.(selectedKeys, overwrite)}
-                disabled={bulkGen}
-              />
-            ) : null}
             {/* 반 공통 서술(G6) — 항상 노출·반 미특정(전체/동명 모호)이면 비활성+안내(순서 버튼 #22 발견성 패턴). */}
             {narrative ? (
               <ClassNarrativePopover

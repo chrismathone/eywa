@@ -433,7 +433,9 @@ export async function uploadToKage(page, inputTestId, { name, mimeType, buffer }
   page.on("response", onResp);
   try {
     await page.locator(`input[data-testid='${inputTestId}']`).setInputFiles({ name, mimeType, buffer });
-    for (let i = 0; i < 40 && !result; i++) await page.waitForTimeout(300); // kage 업로드 완료 대기(최대 12s)
+    // 업로드 완료 폴링 — 총 상한 12초는 유지하고 **간격만 300→100ms**(2026-07-28 속도).
+    // 응답을 감지하고도 최대 300ms를 더 기다리던 낭비를 줄인다(건당 평균 ~150ms, 부하 증가 없음 — 로컬 폴링).
+    for (let i = 0; i < 120 && !result; i++) await page.waitForTimeout(100);
   } finally {
     page.off("response", onResp);
   }
@@ -488,7 +490,15 @@ export async function resolveBoardChildEnrollments(page, boardId, studentName, c
   return viaBoard;
 }
 
-/** 알림장 게시(내부 API) — attached_images/attached_files 선택 포함. 응답은 빈 201이라 status만. */
+/**
+ * 알림장 게시(내부 API) — attached_images/attached_files 선택 포함. 성공 응답은 빈 201이라 status가 전부다.
+ *
+ * 🔴 **실패 응답은 본문까지 돌려준다**(2026-07-27). 예전엔 `{status}`만 반환해 실패 사유가 그 자리에서
+ *    영영 사라졌다 — 공지 12건 중 11건이 `HTTP 409`로 거부됐는데(학부모에게 실제로 안 감, 원장 확인)
+ *    본문이 없어 왜 거부됐는지 코드·로그·DB 어디에도 근거가 남지 않았다. 사유를 모르면 고칠 수도 없다.
+ * ⚠️ 본문은 **호출부가 `detail`로만** 쓴다(원문은 화면에 그대로 내보내지 않는다 — 한글 요약이 `note`).
+ *    길이는 500자로 자른다(로그·jsonb 비대 방지).
+ */
 export async function postClassnoteReport(page, { cls, child, enrollment, content, dateWritten, authorName, attachedImages = [], attachedFiles = [] }) {
   return page.evaluate(
     async ([cls, child, enrollment, body, author, date, ai, af]) => {
@@ -502,8 +512,46 @@ export async function postClassnoteReport(page, { cls, child, enrollment, conten
           ...(af.length ? { attached_files: af } : {}),
         }),
       });
-      return { status: res.status };
+      // 성공(2xx)은 본문을 읽지 않는다 — 빈 201이라 읽을 게 없고, 기존 동작을 그대로 둔다.
+      if (res.status >= 200 && res.status < 300) return { status: res.status };
+      const detail = await res.text().catch(() => "");
+      return { status: res.status, detail: (detail || "").slice(0, 500) };
     },
     [cls, child, enrollment, content, authorName, dateWritten, attachedImages, attachedFiles],
   );
+}
+
+/**
+ * 특정 원아의 최근 리포트에서 cls+child+content 일치 건의 id 조회 — **게시 멱등·사후확인 공용**(2026-07-28, 로컬 게시 내장).
+ * notice-core의 findReportId(strict)와 동일 계약을 admin-core로 승격(발송 워커도 쓰도록 — notice-core 원본은
+ * 안정성 위해 무접촉 유지, 이후 통일 후보). strict 의미: content까지 일치해야만 반환 = 옛 글 오인 금지.
+ * 수업보고서 content = 학생별 고유 share 링크라 strict 일치가 곧 "이 보고서가 이미 게시됨" 증명이다.
+ * 반환 { ok, id }: ok=false = **조회 자체 실패(확인 불가)** — '없음(ok=true, id=null)'과 반드시 구분.
+ * 확인 불가를 '없음=게시 가능'으로 뭉개면 중복 게시로, '있음'으로 뭉개면 침묵 미발송으로 새므로
+ * 호출부는 ok=false에서 fail-closed(재시도 큐 반환)해야 한다.
+ */
+export async function findChildReportId(page, centerId, { cls, child, content }) {
+  const list = await page
+    .evaluate(
+      async ([center, ch]) => {
+        const csrf = (document.cookie.match(/csrftoken=([^;]+)/) || [])[1];
+        const res = await fetch(
+          `/api/v1_2/centers/${center}/reports/?page_size=20&child=${ch}&tz=Asia/Seoul&center_id=${center}`,
+          { headers: { accept: "application/json", ...(csrf ? { "X-CSRFToken": csrf } : {}) } },
+        );
+        if (!res.ok) return null;
+        const j = await res.json().catch(() => null);
+        return Array.isArray(j) ? j : j && Array.isArray(j.results) ? j.results : [];
+      },
+      [centerId, child],
+    )
+    .catch(() => null);
+  if (!Array.isArray(list)) return { ok: false, id: null };
+  return {
+    ok: true,
+    id:
+      list.find(
+        (r) => String(r.cls) === String(cls) && String(r.child) === String(child) && r.content === content,
+      )?.id ?? null,
+  };
 }

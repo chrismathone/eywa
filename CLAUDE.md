@@ -476,6 +476,8 @@ key(DB 식별자)는 **자동 확정**: 과목명 입력 후 blur 시 1회 — �
 - **#83** React 19는 `<form action={서버액션}>`을 제출할 때마다 **자동 리셋** — 컨트롤드 입력이 "저장했는데 옛 값"으로 굳고, 재저장 시 직전 저장이 되돌아감 (⚠️ 제출 후에도 남는 폼은 `onSubmit`+직접 디스패치)
 
 - **#84** "정렬 편향 × 상위 N 자르기" = 카테고리 통째 실종 — 상위 N 미리보기는 **카테고리별로** 자를 것(⚠️ Postgres 정렬은 로마자→한글, `localeCompare("ko")`는 정반대)
+- **#85** 배포가 "초록색 success"인데 실제로는 안 나감 — `ignoreCommand`는 **tip 커밋 1개만** 본다. **머지하고 push하면 항상 skip**이었다(워크트리 정책과 충돌). ⚠️ 뭉쳐 push할 땐 docs 커밋을 tip에 두지 말 것 · 확인은 초록색이 아니라 `gh api …/status --jq '.statuses[].description'`
+- **#86** 창 시스템 앱에서 `router.push`는 눈에 안 보인다 — 배경이 창에 덮여 있다 (⚠️ 알림/팰릿 등 최상위 프레임 이동은 WindowLink와 같은 경로로) + 본문이 N명인데 link가 1개면 그 link는 거짓말
 - **#82** postgres.js에서 `${JSON.stringify(v)}::jsonb` = **이중 인코딩**(`"#153e75"` 9자 저장 → 검증 실패 → 설정 침묵 무시). 스칼라는 `to_jsonb(${v}::text)`·객체는 `sql.json(obj)`, 검증은 **길이까지** (⚠️ 눈으로 따옴표 구분 안 됨)
 
 ## 🎨 디자인 규칙 인덱스 (상세는 `docs/design-conventions.md`)

@@ -253,6 +253,48 @@ export function ReportSection({
           </SettingsCard>
 
           <SettingsCard
+            title="테스트 점수 표기"
+            description="테스트 점수를 학부모에게 어떻게 보일지입니다. 점수제(100점 만점)면 ‘점수’, 문항 개수제면 ‘개수’를 고르세요. 강사가 원스크린 입력칸에서 건별로 바꿀 수도 있습니다."
+          >
+            <div className="flex flex-col gap-3">
+              {(
+                [
+                  ["dailyTestScoreMode", "일일테스트", r.dailyTestScoreMode ?? "count"],
+                  ["checkTestScoreMode", "확인테스트", r.checkTestScoreMode ?? "count"],
+                ] as const
+              ).map(([key, label, cur]) => (
+                <div key={key} className="flex items-center justify-between gap-2">
+                  <span className="text-foreground text-[13px] font-bold">{label}</span>
+                  <div className="border-line inline-flex overflow-hidden rounded-md border">
+                    {(
+                      [
+                        ["score", "점수", "95점"],
+                        ["count", "개수", "20문제 중 18개"],
+                      ] as const
+                    ).map(([mode, title, ex]) => {
+                      const on = cur === mode;
+                      return (
+                        <button
+                          key={mode}
+                          type="button"
+                          onClick={() => set({ [key]: mode })}
+                          aria-pressed={on}
+                          title={`예: ${ex}`}
+                          className={`px-3 py-1.5 text-[12px] font-bold transition ${
+                            on ? "bg-primary text-primary-foreground" : "text-text-dim hover:bg-bg-soft"
+                          }`}
+                        >
+                          {title}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </SettingsCard>
+
+          <SettingsCard
             title="AI 멘트 공지 모드"
             description="자동작성 학부모 멘트의 문단 구성입니다. 프롬프트 세부는 학원 운영 > AI 멘트에서 편집합니다."
           >

@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { ParamLink } from "./param-link";
 import { ChevronLeft, ChevronRight } from "@/components/icons/eywa-icon-compat";
 import { addWeeks, thisMonday, weekLabel, weekRelation } from "@/features/timetable/lib/week";
 
@@ -26,10 +26,10 @@ export function WeekNav({
     <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
       <span className="micro mr-0.5">주</span>
       <div className="flex items-center gap-0.5">
-        <Link href={hrefForWeek(addWeeks(currentWeek, -1))} aria-label="이전 주" className={iconBtn}>
+        <ParamLink href={hrefForWeek(addWeeks(currentWeek, -1))} ariaLabel="이전 주" className={iconBtn}>
           <ChevronLeft size={13} strokeWidth={2.5} />
-        </Link>
-        <Link
+        </ParamLink>
+        <ParamLink
           href={hrefForWeek(thisMonday(today))}
           className={`shrink-0 rounded-full border px-2 py-0.5 text-xs font-medium transition ${
             isCurrent
@@ -38,10 +38,10 @@ export function WeekNav({
           }`}
         >
           이번주
-        </Link>
-        <Link href={hrefForWeek(addWeeks(currentWeek, 1))} aria-label="다음 주" className={iconBtn}>
+        </ParamLink>
+        <ParamLink href={hrefForWeek(addWeeks(currentWeek, 1))} ariaLabel="다음 주" className={iconBtn}>
           <ChevronRight size={13} strokeWidth={2.5} />
-        </Link>
+        </ParamLink>
       </div>
       <span className="text-text-dim num text-[11px] whitespace-nowrap">{weekLabel(currentWeek)}</span>
       {!isCurrent ? (

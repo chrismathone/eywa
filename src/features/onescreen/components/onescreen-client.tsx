@@ -10,7 +10,7 @@ import { usePrintWindow } from "@/components/workspace/print-window";
 import { ATTITUDE, CLASS_TAGS, HOMEWORK, TODAY } from "../data";
 import type { OneScreenView } from "../view";
 import { buildSubjectReport, studentStatus } from "../report";
-import { buildReportCommentInput } from "../report-comment";
+import { applyTestScoreMode, buildReportCommentInput, formatTestScore } from "../report-comment";
 import {
   buildMakeupStudent,
   loadMakeupHistory,
@@ -33,7 +33,7 @@ import { uploadToTicket } from "@/lib/storage/upload-to-ticket";
 import { resizeImageForUpload } from "../resize-image";
 import type { AttendanceMark, CellState, OneScreenStudent } from "../types";
 import { OneScreenTopBar } from "./top-bar";
-import { StudentList } from "./student-list";
+import { StudentList, type SendMark } from "./student-list";
 import type { TodayClass } from "../server/roster";
 import { ProgressCard } from "./progress-card";
 import { TestCard } from "./test-card";
@@ -47,6 +47,7 @@ import {
   rowKey,
   effectiveClassnoteStatus,
   isAlreadySent,
+  isClassMember,
   isCopyTargetRow,
   isRowActionable,
   planBulkApply,
@@ -55,6 +56,7 @@ import {
   planPrevComments,
   planCopyFirstRow,
   rowInClass,
+  studentInClass,
   summarizeSendGaps,
   type BulkPatch,
   type PrevCommentPlan,
@@ -66,6 +68,13 @@ import {
   setClassNarrative,
   subscribeClassNarratives,
 } from "../class-narrative-store";
+import {
+  applyWriteFilter,
+  countByWriteFilter,
+  isStudentWritten,
+  matchesWriteFilter,
+  type WriteFilter,
+} from "../write-filter";
 import { applyStudentOrder } from "../student-order";
 import { saveStudentOrder } from "../server/order-actions";
 import { useClassnoteStatusSync } from "./use-classnote-status-sync";
@@ -181,6 +190,10 @@ export function OneScreenClient({
   const [prevLoaded, setPrevLoaded] = useState<Set<string>>(new Set());
   const [selId, setSelId] = useState<string>(initial[0]?.id ?? "");
   const [classFilter, setClassFilter] = useState<string>("전체");
+  // 작성 상태 필터(전체/작성/미작성) + 그 필터를 누른 시점의 대상 고정 — 입력 중 카드·행이 사라지지 않게.
+  // (판정·합집합 규칙은 write-filter.ts. 날짜 이동은 클라 재마운트라 필터도 '전체'로 초기화된다.)
+  const [writeFilter, setWriteFilter] = useState<WriteFilter>("all");
+  const [writePins, setWritePins] = useState<ReadonlySet<string>>(() => new Set<string>());
   // 대상 날짜(빈값=오늘). 날짜 이동 = searchParam 네비 → 서버가 그 날짜 로스터 재조회 + key로 클라 재초기화.
   const activeDate = date || kstToday();
   const todayYmd = kstToday();
@@ -261,25 +274,34 @@ export function OneScreenClient({
       classId: s.classId ?? null,
       studyGrade: s.studyGrade ?? null,
       subjectProgress: Object.fromEntries(
-        s.subjects.map((su) => [
-          // 반 키 우선(0134a) — 과목키면 같은 과목 두 행(정규+특강)이 한 항목을 공유해 서로를 덮는다.
-          // 로스터 복원(roster.ts)이 같은 순서로 읽는다(반 키 → 과목키 폴백).
-          su.classId || su.subjectKey || su.name,
-          {
-            today: su.today,
-            draft: r?.[su.name]?.draft ?? "",
-            trendDraft: r?.[su.name]?.trendDraft ?? "",
-            textbook: su.textbook ?? "",
-            makeup: su.makeup ?? false,
-            homeworkToday: su.homeworkToday ?? "",
-          },
-        ]),
+        s.subjects
+          // 병합된 보강 행(classId 없음·makeup)은 세션에 저장하지 않는다(2026-07-24 적대검수): 로스터가
+          // 보강 행을 재구성하지 않으므로 그 세션 항목은 아무도 안 읽는 write-only-orphan이다. 게다가
+          // 과목키(예 'math')로 저장되면 정규 행이 미편집(sp[classId] 없음)일 때 legacyKey 폴백이 그 항목을
+          // 집어 보강 진도가 정규 행에 새어들 수 있다(교차오염). 보강 초안은 세션 무관 임시(카드 makeup과 동일).
+          .filter((su) => !(su.makeup && !su.classId))
+          .map((su) => [
+            // 반 키 우선(0134a) — 과목키면 같은 과목 두 행(정규+특강)이 한 항목을 공유해 서로를 덮는다.
+            // 로스터 복원(roster.ts)이 같은 순서로 읽는다(반 키 → 과목키 폴백).
+            su.classId || su.subjectKey || su.name,
+            {
+              today: su.today,
+              draft: r?.[su.name]?.draft ?? "",
+              trendDraft: r?.[su.name]?.trendDraft ?? "",
+              textbook: su.textbook ?? "",
+              makeup: su.makeup ?? false,
+              homeworkToday: su.homeworkToday ?? "",
+            },
+          ]),
       ),
       // 비활성 테스트는 세션에도 점수를 재기입하지 않는다(off 후 남은 옛 점수를 다음 저장이 되살리지 않도록 self-heal).
       dailyScore: showDailyTest ? s.tests.daily.score : null,
       dailyMax: s.tests.daily.max,
       checkScore: showCheckTest ? s.tests.check.score : null,
       checkMax: s.tests.check.max,
+      // 0148a — 표기 모드를 세션에 실어야 승계 소스가 채워진다(안 하면 write-only-orphan → 새로고침 시 모드 리셋).
+      dailyScoreMode: s.tests.daily.mode ?? null,
+      checkScoreMode: s.tests.check.mode ?? null,
       attitude: s.attitude,
       homework: s.homework || null,
       note: s.note || null,
@@ -306,12 +328,68 @@ export function OneScreenClient({
   // 반 필터 — 특정 반이면 그 반 수강생 전부(tags로 다과목/다반 학생도 양쪽에서 잡음, 누락 방지) + 좌측 그룹 라벨을
   // 필터 반으로 리맵. 표 행은 activeClassFilter로 rowInClass 필터해 타 반 과목 행 혼입을 막는다.
   const activeClassFilter = classFilter === "전체" ? null : classFilter;
-  const visible =
+  // ⚠️ 보강(수업외)은 반 무관이라 필터를 통과시킨다(studentInClass) — 안 그러면 특정 반을 고른 채 추가한
+  //    보강 학생이 카드째 사라진다(2026-07-27 강사 제보). 라벨 리맵은 **그 반 실제 수강생에게만**:
+  //    보강 카드까지 리맵하면 듣지도 않는 반 이름이 카드에 박힌다.
+  const classVisible =
     activeClassFilter == null
       ? students
       : students
-          .filter((s) => (s.tags ?? [s.tag]).includes(activeClassFilter))
-          .map((s) => ({ ...s, className: activeClassFilter, tag: activeClassFilter }));
+          .filter((s) => studentInClass(s, activeClassFilter))
+          .map((s) =>
+            isClassMember(s, activeClassFilter)
+              ? { ...s, className: activeClassFilter, tag: activeClassFilter }
+              : s,
+          );
+
+  // ── 작성 상태 필터(전체/작성/미작성) — 판정은 순수함수(write-filter.ts), 여기선 재료 조립만 ──
+  // ⚠️ 반 필터가 걸려 있으면 **그 반 행만** 보고 판정한다. 안 그러면 화면에 보이지도 않는 다른 반 행 때문에
+  //    "보이는 행은 다 썼는데 미작성으로 남는" 유령이 생긴다(표 행은 이미 rowInClass로 좁혀져 있다).
+  const writtenById: Record<string, boolean> = {};
+  for (const s of classVisible) {
+    writtenById[s.id] = isStudentWritten(
+      s.subjects
+        .filter((su) => rowInClass(su, activeClassFilter))
+        .map((su) => ({
+          draft: reports[s.id]?.[su.name]?.draft,
+          sent: reports[s.id]?.[su.name]?.sent,
+          attendanceRaw: su.attendanceRaw,
+        })),
+    );
+  }
+  // 🔴 필터는 `visible` 자체를 좁힌다 — 표시 목록과 **일괄 저장·발송·자동작성 대상이 반드시 같은 집합**이어야
+  //    한다(일괄 액션은 전부 visible에서 행을 만든다). 표시만 따로 좁히면 "화면엔 12명인데 일괄 발송은 28명"이 된다.
+  const visible = applyWriteFilter(classVisible, writeFilter, writtenById, writePins);
+  const writeCounts = {
+    written: countByWriteFilter(classVisible, "written", writtenById),
+    unwritten: countByWriteFilter(classVisible, "unwritten", writtenById),
+  };
+  // 필터로 목록이 비었을 때의 문구 — 기본 문구("해당 반 학생이 없습니다")는 반 탓을 하는 거짓말이 된다.
+  const emptyByWriteFilter =
+    writeFilter === "all"
+      ? undefined
+      : writeFilter === "unwritten"
+        ? "미작성 학생이 없습니다"
+        : "작성한 학생이 없습니다";
+  // 고정(pinned) 덕에 조건과 어긋난 채 남아 있는 학생 수 — 안내줄이 그 사실을 밝히고 '목록 정리'를 준다.
+  const staleCount =
+    writeFilter === "all"
+      ? 0
+      : visible.filter((s) => !matchesWriteFilter(writeFilter, writtenById[s.id] === true)).length;
+  // 필터를 누른 **그 시점의 대상**을 고정 — 이후 입력으로 상태가 바뀌어도 카드·행이 눈앞에서 사라지지 않는다.
+  // 같은 버튼을 다시 누르면 여기서 재계산돼 목록이 정리된다(= 안내줄의 '목록 정리'와 동일 경로).
+  function changeWriteFilter(next: WriteFilter) {
+    setWriteFilter(next);
+    setWritePins(
+      next === "all"
+        ? new Set<string>()
+        : new Set(
+            classVisible
+              .filter((s) => matchesWriteFilter(next, writtenById[s.id] === true))
+              .map((s) => s.id),
+          ),
+    );
+  }
   // 순서변경(3-2)은 단일 반 필터에서만 — 저장 키가 (강사×반)이라 "전체"에선 반이 특정되지 않는다.
   // ⚠️ 동명 반(과목만 다른 같은 이름, 스키마 허용) 가드: 필터는 이름 기반이라 두 반 학생이 섞여 보이는데
   //    첫 반 id로 저장하면 남의 반 학생이 섞인다(리뷰 확정) → 이름 매칭이 유일할 때만 순서 기능 노출.
@@ -326,6 +404,23 @@ export function OneScreenClient({
   const testCfg = { dailyEnabled: showDailyTest, checkEnabled: showCheckTest };
   const reportCellById: Record<string, CellState> = {};
   for (const s of students) reportCellById[s.id] = reportCell(reports[s.id], s.subjects.length);
+  // 이름 옆 발송 표시(원장 2026-07-27: "발송완료면 체크 같은 걸 이름 옆에" — 지금은 라벨 불 들어온 걸로만 구분).
+  // 기준은 **학부모에게 실제로 나간 행**(ClassNote 발송 완료) — '저장됨'과 다르다(저장만으론 안 나간다).
+  // ⚠️ ClassNote 발송이 꺼진 학원은 게시가 아예 없어 표시가 영원히 안 뜬다 → 그땐 '보고서 저장' 기준으로
+  //    폴백하되, 툴팁 라벨로 어느 기준인지 밝힌다(같은 아이콘이 말없이 다른 뜻이 되지 않게).
+  // ⚠️ 분모에서 결석 행은 뺀다 — 발송이 원천 차단된 행이라 남기면 "1/2"가 영영 안 채워진다(#77과 같은 이유).
+  const sendMarkLabel = classnoteSendEnabled ? "학부모 발송" : "보고서 저장";
+  const sendMarkById: Record<string, SendMark> = {};
+  for (const s of students) {
+    const rows = s.subjects.filter((su) => su.attendanceRaw !== "absent");
+    const sent = rows.filter((su) => {
+      const rep = reports[s.id]?.[su.name];
+      return classnoteSendEnabled
+        ? isAlreadySent(effectiveClassnoteStatus(rep?.classnoteStatus, su.classnoteStatus))
+        : rep?.sent === true;
+    }).length;
+    sendMarkById[s.id] = { sent, total: rows.length, label: sendMarkLabel };
+  }
   const doneCount = students.filter((s) => {
     const st = studentStatus(s, testCfg);
     return st.prog === "ok" && st.test === "ok" && reportCellById[s.id] === "ok";
@@ -429,23 +524,57 @@ export function OneScreenClient({
       );
     }
   }
-  // 보강(수업외) 학생 추가 — 서버에서 OneScreenStudent 조립(담당 과목·교재 기본값). 세션 저장은 스킵(반 없음).
+  // 보강(수업외) 학생 추가 — 서버에서 OneScreenStudent 조립(담당 과목·교재 기본값).
+  //
+  // ⚠️ 정규/특강으로 **이미 목록에 있는 학생**도 보강 추가가 돼야 한다(2026-07-24 원장: 특강+정규외 보강).
+  //    별도 카드(가짜 id)는 카드 id가 곳곳에서 DB 학생 id로 쓰여 첨부·발송상태를 깨뜨린다(적대검수 실측) →
+  //    대신 **그 학생 카드에 '수학 (보강)' 행을 병합**한다(카드 id=실제 학생 id 불변 = 안전). 보강 행은
+  //    classId=null·makeup=true라 DB에서 정규 보고서와 별개(unit_key 분리)로 저장되고, 학부모 보고서엔 "(보강)"이 붙는다.
   async function addMakeupStudent(studentId: string) {
-    if (students.some((s) => s.id === studentId)) {
-      setSelId(studentId);
-      toast.message("이미 목록에 있는 학생입니다");
-      return;
-    }
     const res = await buildMakeupStudent(studentId, date || undefined); // 조회 중인 날짜 전달(과거 백필 중복게시 방지)
     if (!res.ok || !res.student) {
       toast.error(res.error ?? "학생을 추가하지 못했습니다");
       return;
     }
-    const st = res.student;
-    setStudents((prev) => [...prev, st]);
-    setReports((prev) => ({ ...prev, [st.id]: initReports([st])[st.id] ?? {} }));
-    setSelId(st.id);
-    toast.success(`${st.name} (보강) 추가됨`);
+    const mk = res.student;
+    const existing = students.find((s) => s.id === studentId);
+    if (!existing) {
+      // 목록에 없던 학생 → 종전대로 보강 카드로 추가(무변경).
+      setStudents((prev) => [...prev, mk]);
+      setReports((prev) => ({ ...prev, [mk.id]: initReports([mk])[mk.id] ?? {} }));
+      setSelId(mk.id);
+      toast.success(`${mk.name} (보강) 추가됨`);
+      return;
+    }
+    // 이미 목록에 있음 → 그 카드에 '보강' 행 병합. 이름 유일화(reports 키 충돌 방지)로 초안 덮어쓰기 차단.
+    const used = new Set(existing.subjects.map((su) => su.name));
+    // mk.subjects는 강사의 **모든 담당 과목**이라, 그대로 병합하면 math만 듣는 학생 카드에 '영어 (보강)' 잡행까지
+    // 붙는다(2026-07-24 적대검수). 학생이 실제 수강하는 과목(정규+특강 행)으로 좁히되, 겹치는 과목이 하나도 없으면
+    // (학생이 안 듣는 과목의 순수 추가보강) 종전대로 전체를 후보로 둔다.
+    const attended = new Set(existing.subjects.filter((su) => !su.makeup).map((su) => su.subjectKey));
+    const attendedRows = mk.subjects.filter((su) => attended.has(su.subjectKey));
+    const source = attendedRows.length ? attendedRows : mk.subjects;
+    const makeupRows = source
+      // 같은 과목 보강 행이 이미 있으면 중복 추가 안 함.
+      .filter((su) => !existing.subjects.some((ex) => ex.makeup && !ex.classId && ex.subjectKey === su.subjectKey))
+      .map((su) => {
+        let name = `${su.name} (보강)`;
+        let n = 2;
+        while (used.has(name)) name = `${su.name} (보강 ${n++})`;
+        used.add(name);
+        // ⚠️ classId=null·makeup=true 유지(반 무관 보강). subjectLabel은 깨끗한 라벨 — 진도 접두에 "(보강)" 누출 방지.
+        return { ...su, name, classId: null, makeup: true, subjectLabel: su.subjectLabel ?? su.name };
+      });
+    if (makeupRows.length === 0) {
+      setSelId(existing.id);
+      toast.message("이미 보강 행이 추가되어 있습니다");
+      return;
+    }
+    patch(studentId, (s) => ({ ...s, subjects: [...s.subjects, ...makeupRows] }));
+    const slots = initReports([{ ...existing, subjects: makeupRows }])[existing.id] ?? {};
+    setReports((prev) => ({ ...prev, [studentId]: { ...(prev[studentId] ?? {}), ...slots } }));
+    setSelId(studentId);
+    toast.success(`${existing.name} 보강 추가됨`);
   }
   // 보강 학생 '이전 진도 불러오기' — 직전 회차를 당겨 prev/prevReport/prevScore를 채운다(세션 저장 없음).
   async function loadMakeupPrev(studentId: string) {
@@ -490,6 +619,14 @@ export function OneScreenClient({
       const score = cur.score != null ? Math.min(cur.score, max) : cur.score;
       return { ...s, tests: { ...s.tests, [which]: { ...cur, max, score } } };
     });
+  }
+  // 표기 모드(개수/점수) 전환(0148a) — 로직은 순수함수 applyTestScoreMode 단일 소스(Vitest). 점수↔개수 왕복
+  // 문항수 보존(countMax) + 척도 변경 시 prevScore 폐기 + 재클램프를 그 함수가 담당(적대검수 2건 방어).
+  function setModeFor(studentId: string, which: "daily" | "check", mode: "score" | "count") {
+    patch(studentId, (s) => ({
+      ...s,
+      tests: { ...s.tests, [which]: applyTestScoreMode(s.tests[which], mode) },
+    }));
   }
   // ── 출결 인라인 입력(2-2) — 출석부와 같은 기록(setAttendanceCell 재사용). 행(반) 단위 raw 보존 ──
   const markOf = (s: string): AttendanceMark =>
@@ -575,6 +712,10 @@ export function OneScreenClient({
   function setMax(which: "daily" | "check", v: number) {
     if (!selected) return;
     setMaxFor(selected.id, which, v);
+  }
+  function setMode(which: "daily" | "check", m: "score" | "count") {
+    if (!selected) return;
+    setModeFor(selected.id, which, m);
   }
   function setAttitude(a: string) {
     if (!selected) return;
@@ -740,7 +881,12 @@ export function OneScreenClient({
   }
   // 값 일괄 적용(1-2) — 선택(없으면 표시 전체) 행에 채워진 필드만 반영. 빈 필드=미적용(지우기 아님).
   // 대상은 진도 필터 없는 raw 행(발송가능 selectRows와 별개 경로) — 값 채우기는 진도와 무관.
-  function bulkApplyValues(keys: string[], patchFields: BulkPatch, onlyEmpty: boolean) {
+  function bulkApplyValues(
+    keys: string[],
+    patchFields: BulkPatch,
+    onlyEmpty: boolean,
+    progressSubjectKey: string,
+  ) {
     const all = buildGridRows(visible).filter((r) => rowInClass(r.subject, activeClassFilter));
     const keySet = new Set(keys);
     const rows = keys.length ? all.filter((r) => keySet.has(r.key)) : all;
@@ -748,6 +894,9 @@ export function OneScreenClient({
       rows.map((r) => ({
         studentId: r.student.id,
         subjectName: r.subject.name,
+        subjectIndex: r.subjectIndex,
+        subjectKey: r.subject.subjectKey ?? "math",
+        today: r.subject.today ?? "",
         attitude: r.student.attitude,
         homework: r.student.homework,
         textbook: r.subject.textbook ?? "",
@@ -755,6 +904,7 @@ export function OneScreenClient({
       })),
       patchFields,
       onlyEmpty,
+      progressSubjectKey,
     );
     if (plan.length === 0) {
       toast.message("적용할 칸이 없습니다");
@@ -765,6 +915,7 @@ export function OneScreenClient({
       if (p.set.homework !== undefined) setHomeworkValue(p.studentId, p.set.homework);
       if (p.set.textbook !== undefined) setTextbookFor(p.studentId, p.subjectName, p.set.textbook);
       if (p.set.homeworkToday !== undefined) setHomeworkTodayFor(p.studentId, p.subjectName, p.set.homeworkToday);
+      if (p.set.today !== undefined) setProgressFor(p.studentId, p.subjectIndex, p.set.today);
     }
     toast.success(`${plan.length}행에 일괄 적용했습니다`);
   }
@@ -978,10 +1129,15 @@ export function OneScreenClient({
     const examInfo = buildExamInfo(student, showDailyTest, showCheckTest);
     // 학부모 보고서 일일/확인테스트 분리 표시용("N문제 중 M개"). exam_info(합본)는 roster prev-score 파싱용 별도 보존.
     // 비활성 테스트(학원설정 off)는 세션에서 복원된 옛 점수가 남아 있어도 저장·발송하지 않는다(입력칸도 숨김 → 새 보고서엔 안 나감).
+    // 표기는 공유 순수함수(0148a) — testLine(AI 멘트)과 같은 포맷이라 "카드는 개수·멘트는 점수" 불일치가 없다.
     const dailyTest =
-      showDailyTest && student.tests.daily.score != null ? `${student.tests.daily.max}문제 중 ${student.tests.daily.score}개` : "";
+      showDailyTest && student.tests.daily.score != null
+        ? formatTestScore(student.tests.daily.score, student.tests.daily.max, student.tests.daily.mode)
+        : "";
     const checkTest =
-      showCheckTest && student.tests.check.score != null ? `${student.tests.check.max}문제 중 ${student.tests.check.score}개` : "";
+      showCheckTest && student.tests.check.score != null
+        ? formatTestScore(student.tests.check.score, student.tests.check.max, student.tests.check.mode)
+        : "";
     return {
       draft,
       input: {
@@ -1005,9 +1161,11 @@ export function OneScreenClient({
         // ⚠️ subject는 **과목키**(math)여야 한다 — 발송 과목 게이트·보드 매핑이 이 값을 본다.
         //    행 이름(name)엔 반 이름이 붙을 수 있으므로 폴백도 subjectLabel을 먼저 본다.
         subject: su?.subjectKey || su?.subjectLabel || su?.name || undefined,
-        // 반(수업) — 보고서 1건의 단위(0134a). 같은 날 정규+특강이 서로 안 덮게 하는 키.
+        // 반(수업) — 보고서 1건의 단위(0134a). 같은 날 정규+특강이 서로 안 덮게 하는 키. 보강 행은 classId=null → unit_key=과목키.
         classId: su?.classId ?? null,
-        outOfClass: student.isMakeup ?? false, // 보강(수업외) 학생 = 담당반 검사 우회(같은 학원이면 허용)
+        // 보강(수업외) = 담당반·결석 게이트 우회. 카드 전체가 보강(isMakeup)이거나, **정규 카드에 병합된 보강 행**
+        // (makeup=true·classId 없음)도 우회 — 그 학생의 담당반이 아닌 추가수업이라 담당반/결석 검사에 걸리면 안 된다.
+        outOfClass: (student.isMakeup ?? false) || (!!su?.makeup && !su?.classId),
       },
     };
   }
@@ -1569,6 +1727,9 @@ export function OneScreenClient({
         classTags={classTags}
         classFilter={classFilter}
         onFilter={setClassFilter}
+        writeFilter={writeFilter}
+        writeCounts={writeCounts}
+        onWriteFilter={changeWriteFilter}
         doneCount={doneCount}
         total={students.length}
         view={view}
@@ -1641,6 +1802,44 @@ export function OneScreenClient({
           <span className="font-bold">다른 창/기기에서 같은 날짜를 열어 두었습니다</span>
           <span>— 같은 학생을 양쪽에서 입력하면 마지막 저장이 덮어씁니다.</span>
         </div>
+      ) : null}
+
+      {/* 작성 필터 안내(월간 발송 뷰는 목록을 안 쓰므로 제외).
+          ① 조건과 어긋난 채 남아 있는 학생 = 입력 중 사라지지 않게 고정한 결과라는 사실을 밝힌다(무언 잔류 금지).
+          ② 필터 결과가 0명이면 왜 비었는지 말하고 되돌아갈 문을 준다(빈 화면 막다른 길 금지). */}
+      {writeFilter !== "all" && view !== "history" ? (
+        staleCount > 0 ? (
+          <div className="border-line bg-bg-soft text-text-dim flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border px-3 py-2 text-[12.5px]">
+            <span>
+              <b className="text-foreground">
+                {writeFilter === "unwritten" ? "작성을 마친" : "문구가 비워진"} {staleCount}명
+              </b>
+              이 목록에 남아 있습니다 — 입력 중 카드·행이 사라지지 않도록 유지합니다.
+            </span>
+            <button
+              type="button"
+              onClick={() => changeWriteFilter(writeFilter)}
+              className="text-primary font-bold underline underline-offset-2"
+            >
+              목록 정리
+            </button>
+          </div>
+        ) : visible.length === 0 ? (
+          <div className="border-line bg-bg-soft text-text-dim flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border px-3 py-2 text-[12.5px]">
+            <span className="text-foreground font-bold">
+              {writeFilter === "unwritten"
+                ? "미작성 학생이 없습니다 — 이 목록은 모두 작성했습니다"
+                : "작성한 학생이 아직 없습니다"}
+            </span>
+            <button
+              type="button"
+              onClick={() => changeWriteFilter("all")}
+              className="text-primary font-bold underline underline-offset-2"
+            >
+              전체 보기
+            </button>
+          </div>
+        ) : null
       ) : null}
 
       {view === "grid" ? (
@@ -1720,7 +1919,12 @@ export function OneScreenClient({
           bulkGen={bulkGen || bulkBusy === "save"}
         />
       ) : view === "status" ? (
-        <StatusBoard students={visible} reports={reports} onOpenCard={openCard} />
+        <StatusBoard
+          students={visible}
+          reports={reports}
+          onOpenCard={openCard}
+          emptyLabel={emptyByWriteFilter}
+        />
       ) : view === "history" ? (
         <SendCalendarBoard todayYmd={todayYmd} />
       ) : view === "notice" ? (
@@ -1741,8 +1945,10 @@ export function OneScreenClient({
           selId={effectiveId}
           onSelect={setSelId}
           reportCellById={reportCellById}
+          sendMarkById={sendMarkById}
           classOrder={classTags.filter((t) => t !== "전체")}
           testConfig={testCfg}
+          emptyLabel={emptyByWriteFilter}
         />
 
         {selected ? (
@@ -1764,7 +1970,7 @@ export function OneScreenClient({
                     : undefined
                 }
               />
-              <TestCard student={selected} onScore={setScore} allowMax={allowTeacherTestMax} onMax={setMax} dailyEnabled={showDailyTest} checkEnabled={showCheckTest} />
+              <TestCard student={selected} onScore={setScore} allowMax={allowTeacherTestMax} onMax={setMax} onMode={setMode} dailyEnabled={showDailyTest} checkEnabled={showCheckTest} />
             </div>
             <div className="flex flex-col gap-3">
               <header className="flex items-center gap-1.5">

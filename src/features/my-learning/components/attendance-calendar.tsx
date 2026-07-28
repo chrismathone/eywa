@@ -40,9 +40,13 @@ export function AttendanceCalendar({ history }: { history: Session[] }) {
           <Legend cls="bg-danger-soft" label="결석" />
         </div>
       </div>
-      <div className="mt-3 grid grid-cols-1 gap-5 sm:grid-cols-2">
+      {/* sm:grid-cols-2는 월이 1개뿐인 학생에게 오른쪽 절반을 비워 두고, 반대로 넓은 창에선 달력 한 판이
+          절반(~940px)까지 늘어나 aspect-square 칸이 130px짜리 빈 사각형으로 부풀었다. auto-fit으로 폭이
+          되는 만큼 달을 늘어놓되, 칸이 커지지 않게 한 판의 상한(max-w)을 둔다 — 달력은 "늘려서 채우는"
+          패널이 아니라 고유 크기가 있는 위젯이라 진도 카드와 달리 상한이 필요하다. */}
+      <div className="mt-3 grid grid-cols-[repeat(auto-fit,minmax(min(100%,240px),1fr))] gap-5">
         {months.map((m) => (
-          <div key={m}>
+          <div key={m} className="w-full max-w-[340px]">
             <p className="text-text-dim mb-1.5 text-[12px] font-bold">{m}월</p>
             <div className="grid grid-cols-7 gap-1 text-center">
               {DOW.map((w, i) => (

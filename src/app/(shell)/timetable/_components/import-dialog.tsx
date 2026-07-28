@@ -29,6 +29,9 @@ export function TimetableImportDialog({
   label,
   disabled = false,
   disabledTitle,
+  open: openProp,
+  onOpenChange,
+  hideTrigger = false,
 }: {
   mode?: "file" | "sheet";
   subject?: string;
@@ -36,10 +39,26 @@ export function TimetableImportDialog({
   /** 시트 리스 진행 중(새벽 자동 반영·타 관리자 실행) 트리거 선제 비활성 — 사유는 마우스오버(title). */
   disabled?: boolean;
   disabledTitle?: string;
+  /** 부모가 open을 소유할 때(팝오버 메뉴에서 열기). 미지정이면 자기 상태로 동작. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  /** 자체 트리거 버튼을 숨긴다 — 부모(팝오버 항목)가 여는 경우. */
+  hideTrigger?: boolean;
 }) {
   const sheet = mode === "sheet";
   const router = useRouter();
-  const [open, setOpen] = useState(false);
+  // ⚠️ controlled 하이브리드(2026-07-24) — 툴바가 이 다이얼로그를 '엑셀·시트' 팝오버 항목에서 열기 위해
+  // open을 부모가 소유할 수 있게 한다. prop을 안 주면 종전대로 자기 상태로 동작(완전 하위호환).
+  // ⚠️ 부모는 **조건부 마운트**로 쓴다 — 항상 마운트한 채 부모가 open을 false로 만들면 close()를 우회해
+  //    미리보기·결과(diff/hash/result/snapshotId)가 잔존하고 "미리보기한 변경을 아직 적용하지 않았습니다"
+  //    confirm 가드까지 건너뛴다(gotcha #67 나머지 절반). 조건부 마운트면 언마운트가 곧 리셋이라 안전하다.
+  const [internalOpen, setInternalOpen] = useState(false);
+  const isControlled = openProp !== undefined;
+  const open = isControlled ? openProp : internalOpen;
+  const setOpen = (v: boolean) => {
+    if (!isControlled) setInternalOpen(v);
+    onOpenChange?.(v);
+  };
   const [file, setFile] = useState<File | null>(null);
   const [diff, setDiff] = useState<ImportDiff | null>(null);
   // 미리보기 hash — apply 시 서버가 재계산 결과와 대조(stale 미리보기 차단). diff와 항상 함께 세팅/해제.
@@ -155,16 +174,18 @@ export function TimetableImportDialog({
 
   return (
     <>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        disabled={disabled}
-        title={disabled ? disabledTitle : undefined}
-        className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-2 py-0.5 text-xs transition disabled:opacity-50"
-      >
-        {sheet ? <Sheet className="size-3" /> : <Upload className="size-3" />}
-        {label ?? (sheet ? "시트에서 가져오기" : "가져오기")}
-      </button>
+      {hideTrigger ? null : (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          disabled={disabled}
+          title={disabled ? disabledTitle : undefined}
+          className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-2 py-0.5 text-xs transition disabled:opacity-50"
+        >
+          {sheet ? <Sheet className="size-3" /> : <Upload className="size-3" />}
+          {label ?? (sheet ? "시트에서 가져오기" : "가져오기")}
+        </button>
+      )}
 
       {open ? (
         <>

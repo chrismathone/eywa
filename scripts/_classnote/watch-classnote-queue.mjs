@@ -20,7 +20,7 @@ import path from "node:path";
 import postgres from "postgres";
 import { isWorkerIssueLine } from "./worker-issue-filter.mjs";
 import { stateDirLabel, stateFile } from "./classnote-paths.mjs";
-import { closeClassnoteAdminSession, launchBrowser, processQueueOnce, resolveTenant } from "./classnote-core.mjs";
+import { BATCH, closeClassnoteAdminSession, launchBrowser, processQueueOnce, resolveTenant } from "./classnote-core.mjs";
 import { processNoticesOnce } from "./classnote-notice-core.mjs";
 import { provisionDailyOnce } from "./classnote-provision-core.mjs";
 import { pollParentCommentsOnce, pollParentPostsOnce } from "./classnote-feed-core.mjs";
@@ -130,7 +130,13 @@ async function heartbeat(tenant) {
   const payload = {
     ...lastResults,
     caps: WORKER_CAPS, // 이 워커가 지원하는 기능(앱의 발송 전 롤아웃 가드가 읽는다)
-    env: { logDir: stateDirLabel(), recent: recentIssues.slice(-RECENT_MAX) },
+    env: {
+      logDir: stateDirLabel(),
+      recent: recentIssues.slice(-RECENT_MAX),
+      // 게시 엔진(2026-07-28 §10 옵션 B) — local=워커 내장 내부 API(Cloud Run 미호출) / cloudrun=기존.
+      // 웹 발송 콘솔에서 어느 엔진으로 도는지 원격 확인용(컷오버·롤백 검증에 필수).
+      publishMode: process.env.CLASSNOTE_PUBLISH_MODE === "local" ? "local" : "cloudrun",
+    },
   };
   await s`
     insert into classnote_workers (tenant_id, hostname, started_at, last_seen, last_results)
@@ -145,6 +151,7 @@ async function main() {
     console.error("--post엔 CLASSNOTE_UPLOAD_ID/PW env 필요"); process.exit(1);
   }
   log(`데몬 시작 — mode=${POST ? "POST(실게시)" : "DRY-RUN"} host=${HOSTNAME} poll=${POLL_MS / 1000}s`);
+  let backlogFastPoll = false; // 직전 주기가 배치를 꽉 채워 성공했는가 = 밀린 큐 → 다음 주기 즉시 진행
   for (;;) {
     try {
       const tenant = await getTenant();
@@ -157,6 +164,12 @@ async function main() {
         log(`처리 완료 — 성공 ${s.success} / 실패 ${s.failed} / 재큐 ${s.requeued} / stale복구 ${s.stale}`);
         noteResult("queue", s);
       }
+      // 밀린 큐는 **쉬지 않고 이어서** 처리한다(2026-07-28 속도) — 한 배치(BATCH)를 꽉 채워 집어왔다는 건
+      // 뒤에 더 남았다는 뜻이므로 폴 간격 15초를 건너뛴다. 발송 실적이 있을 때만(success>0) 적용해
+      // 실패·보류가 반복되는 상황에서 15초 간격이 사라져 재시도 폭풍이 되는 것을 막는다.
+      // ⚠️ 평상시(큐가 비었거나 배치 미달)는 그대로 15초 — 상시 부하는 늘지 않는다.
+      // 아래 부가 폴러(공지·프로비저닝·피드·읽음 등)는 전부 자체 시간 가드가 있어 즉시 재호출돼도 no-op.
+      backlogFastPoll = s.claimed >= BATCH && s.success > 0;
       // 2) 반 공지 큐(classnote_notices) — 내부 API 게시(별 코어). 실패해도 보고서 큐와 독립.
       const nres = await processNoticesOnce(db(), b, { tenant, post: POST, log }).catch((e) => {
         log(`[notice] 처리 오류(다음 폴에서 재시도): ${e.message}`);
@@ -216,8 +229,9 @@ async function main() {
       log(`폴링 오류(다음 폴에서 재시도): ${e.message}`);
       await dropDb();
       await dropBrowser(); // 브라우저 상태도 의심 → 재launch
+      backlogFastPoll = false; // 오류 뒤엔 반드시 쉬어간다(오류 폭주 방지)
     }
-    await new Promise((r) => setTimeout(r, POLL_MS));
+    if (!backlogFastPoll) await new Promise((r) => setTimeout(r, POLL_MS));
   }
 }
 main().catch((e) => { console.error(e); process.exit(1); });

@@ -9,7 +9,7 @@ import { subjectTone, toneSoftClass, toneSolidClass } from "../data";
 import { effectiveClassnoteStatus, isAlreadySent, isRowActionable, type GridRow } from "../grid";
 import { parentUnreadBadge, progressAnomalyBadge } from "../roster-signals";
 import type { OneScreenStudent } from "../types";
-import { classnoteBadge, type SubjectReport } from "./report-card";
+import { classnoteBadge, readAtLabel, type SubjectReport } from "./report-card";
 import { GridAttachButton, useRowFileDrop } from "./grid-attach";
 import { AttendancePills, type BasicAttendance } from "./attendance-pills";
 import { handleGridNavKey } from "./grid-nav";
@@ -34,6 +34,7 @@ export type GridFieldHandlers = {
   onStudyGrade: (studentId: string, grade: string) => void;
   onScore: (studentId: string, which: "daily" | "check", v: number | null) => void;
   onMax: (studentId: string, which: "daily" | "check", v: number) => void;
+  // ⚠️ 모드 전환(onMode)은 그리드에 없다 — 열이 88px 고정이라 셀이 넘친다(2026-07-24). 카드(TestCard)에서만 전환.
   onAttitude: (studentId: string, a: string | null) => void;
   onHomework: (studentId: string, h: string) => void;
   onTextbook: (studentId: string, subjectName: string, text: string) => void;
@@ -246,6 +247,13 @@ export function GridBodyRow({
           <span className={`rounded-pill px-1.5 py-px text-[10px] font-bold ${toneSoftClass(tone)}`}>
             {subject.subjectLabel || subject.name}
           </span>
+          {/* 병합된 보강 행(classId 없음·makeup) — 알약엔 순수 과목 라벨('수학')만 칠해 정규 행과 똑같아 보이므로,
+              행 단위 '보강' 배지로 구분한다(2026-07-24). 정규 반에 보강 토글만 켠 행(classId 있음)은 대상 아님. */}
+          {subject.makeup && !subject.classId ? (
+            <span className="bg-amber-soft text-amber shrink-0 rounded-pill px-1 py-px text-[9px] font-bold">
+              보강
+            </span>
+          ) : null}
           {subject.subjectLabel && subject.name !== subject.subjectLabel && subject.className ? (
             <span className="text-text-faint text-[10px]">{subject.className}</span>
           ) : null}
@@ -290,6 +298,7 @@ export function GridBodyRow({
             label={`${student.name} 일일테스트`}
             allowMax={config.allowTestMax}
             onMax={(v) => fields.onMax(student.id, "daily", v)}
+            mode={student.tests.daily.mode}
             nav={nav.studentRow !== undefined ? { col: "daily", row: nav.studentRow } : undefined}
           />
         </td>
@@ -303,6 +312,7 @@ export function GridBodyRow({
             label={`${student.name} 확인테스트`}
             allowMax={config.allowTestMax}
             onMax={(v) => fields.onMax(student.id, "check", v)}
+            mode={student.tests.check.mode}
             nav={nav.studentRow !== undefined ? { col: "check", row: nav.studentRow } : undefined}
           />
         </td>
@@ -498,6 +508,15 @@ export function GridBodyRow({
             <span className="text-primary text-center text-[10px] font-bold">발송됨 — 재발송 불가</span>
           ) : badge ? (
             <span className={`text-center text-[10px] font-bold ${badge.cls}`}>{badge.label}</span>
+          ) : null}
+          {/* 학부모 읽음(0122a) — 양성 배지만(카드와 동일 규약, types.ts). 표는 세로 여유가 있어 풀 라벨. */}
+          {subject.classnoteReadAt ? (
+            <span
+              className="text-primary text-center text-[10px] font-bold"
+              title={`학부모 읽음 · ${readAtLabel(subject.classnoteReadAt)}`}
+            >
+              학부모 읽음
+            </span>
           ) : null}
         </div>
       </td>

@@ -88,7 +88,8 @@ export function TeacherChip({ slot }: { slot: ClassDetailQuick }) {
               const inner = (
                 <>
                   {s.name}
-                  {meta ? <span className="opacity-60">/{meta}</span> : null}
+                  {/* 기본뷰 StudentRow와 동일한 톤(opacity-90) — 뷰마다 메타 진하기가 다르면 같은 학생이 달리 보인다. */}
+                  {meta ? <span className="opacity-90">/{meta}</span> : null}
                 </>
               );
               const rowCls =

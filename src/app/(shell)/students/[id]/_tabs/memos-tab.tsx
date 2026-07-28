@@ -17,7 +17,10 @@ export async function MemosTab({ studentId }: { studentId: string }) {
       {memos.length === 0 ? (
         <p className="text-muted-foreground py-8 text-center text-sm">기록된 메모가 없습니다</p>
       ) : (
-        <ul className="space-y-2">
+        // 메모는 짧은 카드라 1열로만 쌓으면 넓은 창에서 한 건이 1900px 한 줄을 다 먹는다. auto-fit으로
+        // 폭이 되는 만큼 열을 늘린다(1건이면 전폭 = 기존과 동일). items-start = 카드가 같은 행 최고
+        // 높이로 늘어나지 않게(한 줄 메모가 긴 메모 높이만큼 부풀지 않음).
+        <ul className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,420px),1fr))] items-start gap-2">
           {memos.map((m) => (
             <MemoItem key={m.id} memo={m} studentId={studentId} />
           ))}

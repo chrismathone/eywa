@@ -5,12 +5,14 @@ import {
   isReportEligible,
   effectiveClassnoteStatus,
   isAlreadySent,
+  isClassMember,
   isRowActionable,
   planBulkApply,
   planPrevFill,
   planBulkPrevFill,
   planPrevComments,
   rowInClass,
+  studentInClass,
   summarizeSendGaps,
   type BulkTarget,
 } from "./grid";
@@ -64,6 +66,68 @@ describe("rowInClass", () => {
   });
   it("반 모호(className=null)는 어느 필터에서도 통과(같은 과목 두 반)", () => {
     expect(rowInClass(sub(null), "A반")).toBe(true);
+  });
+});
+
+// 2026-07-27 강사 제보(허다빈): 특정 반을 고른 채 보강 학생을 추가하면 "추가됨" 토스트만 뜨고 카드가 사라졌다.
+// 보강 학생은 buildMakeupStudent가 조립해 tags가 없어(tag:"보강") 어떤 반 이름과도 매칭되지 않는 게 원인.
+describe("studentInClass — 보강은 반 필터에 숨지 않는다", () => {
+  const member = (tags: string[]): OneScreenStudent => ({ ...stu("m", [{ name: "수학" }]), tag: tags[0]!, tags });
+  const makeupCard = (): OneScreenStudent => ({
+    ...stu("mk", [{ name: "수학" }]),
+    tag: "보강",
+    isMakeup: true,
+  });
+  /** 정규 카드에 병합된 보강 행(classId 없음·makeup) — 그 학생이 필터 반 소속이 아닌 상황. */
+  const merged = (): OneScreenStudent => {
+    const s = member(["토일반"]);
+    return { ...s, subjects: [...s.subjects, { name: "수학 (보강)", prev: "", today: "", makeup: true, classId: null }] };
+  };
+
+  it("전체(null)면 항상 통과", () => {
+    expect(studentInClass(member(["A반"]), null)).toBe(true);
+    expect(studentInClass(makeupCard(), null)).toBe(true);
+  });
+
+  it("특정 반이면 그 반 수강생만(기존 동작 보존)", () => {
+    expect(studentInClass(member(["A반", "B반"]), "B반")).toBe(true);
+    expect(studentInClass(member(["A반"]), "B반")).toBe(false);
+  });
+
+  it("tags가 없으면 대표 tag로 폴백", () => {
+    const s = { ...stu("t", [{ name: "수학" }]), tag: "A반" };
+    expect(studentInClass(s, "A반")).toBe(true);
+    expect(studentInClass(s, "B반")).toBe(false);
+  });
+
+  it("🔴 보강 전용 카드는 어느 반 필터에서도 통과(반 무관 수업)", () => {
+    expect(studentInClass(makeupCard(), "A반")).toBe(true);
+    expect(studentInClass(makeupCard(), "아무반")).toBe(true);
+  });
+
+  it("🔴 정규 카드에 병합된 보강 행이 있으면, 그 반 소속이 아니어도 통과", () => {
+    expect(studentInClass(merged(), "평일반")).toBe(true);
+  });
+
+  it("⚠️ 정규 행에 켠 '보강' 토글(반 있음)은 필터를 우회시키지 않는다", () => {
+    const s = member(["A반"]);
+    const toggled: OneScreenStudent = {
+      ...s,
+      subjects: [{ name: "수학", prev: "", today: "", makeup: true, classId: "c1" }],
+    };
+    expect(studentInClass(toggled, "B반")).toBe(false);
+  });
+});
+
+describe("isClassMember — 좌측 그룹 라벨 리맵 기준", () => {
+  it("tags 우선, 없으면 대표 tag", () => {
+    expect(isClassMember({ tag: "A반", tags: ["A반", "B반"] }, "B반")).toBe(true);
+    expect(isClassMember({ tag: "A반" }, "A반")).toBe(true);
+    expect(isClassMember({ tag: "A반" }, "B반")).toBe(false);
+  });
+
+  it("보강 카드는 멤버가 아니다 — 리맵되면 듣지도 않는 반 이름이 카드에 박힌다", () => {
+    expect(isClassMember({ tag: "보강" }, "A반")).toBe(false);
   });
 });
 
@@ -198,6 +262,9 @@ function target(over: Partial<BulkTarget> = {}): BulkTarget {
   return {
     studentId: "a",
     subjectName: "수학",
+    subjectIndex: 0,
+    subjectKey: "math",
+    today: "",
     attitude: null,
     homework: "",
     textbook: "",
@@ -219,8 +286,8 @@ describe("planBulkApply", () => {
       false,
     );
     expect(plan).toEqual([
-      { studentId: "a", subjectName: "수학", set: { textbook: "쎈 중2-1", homeworkToday: "p10~16" } },
-      { studentId: "b", subjectName: "수학", set: { textbook: "쎈 중2-1", homeworkToday: "p10~16" } },
+      { studentId: "a", subjectName: "수학", subjectIndex: 0, set: { textbook: "쎈 중2-1", homeworkToday: "p10~16" } },
+      { studentId: "b", subjectName: "수학", subjectIndex: 0, set: { textbook: "쎈 중2-1", homeworkToday: "p10~16" } },
     ]);
   });
 
@@ -231,7 +298,7 @@ describe("planBulkApply", () => {
       true,
     );
     expect(plan).toEqual([
-      { studentId: "b", subjectName: "수학", set: { attitude: "아주 좋음", textbook: "쎈" } },
+      { studentId: "b", subjectName: "수학", subjectIndex: 0, set: { attitude: "아주 좋음", textbook: "쎈" } },
     ]);
   });
 
@@ -242,9 +309,56 @@ describe("planBulkApply", () => {
       false,
     );
     expect(plan).toEqual([
-      { studentId: "a", subjectName: "수학", set: { attitude: "좋음", homeworkToday: "복습" } },
-      { studentId: "a", subjectName: "영어", set: { homeworkToday: "복습" } },
+      { studentId: "a", subjectName: "수학", subjectIndex: 0, set: { attitude: "좋음", homeworkToday: "복습" } },
+      { studentId: "a", subjectName: "영어", subjectIndex: 0, set: { homeworkToday: "복습" } },
     ]);
+  });
+
+  // 진도(today)는 이 팝오버의 유일한 **과목 한정** 필드 — 2026-07-23 강사 제보로 추가됐다.
+  it("진도는 고른 과목 행에만 — 수학 진도가 영어 행에 들어가면 그대로 학부모에게 나간다", () => {
+    const plan = planBulkApply(
+      [
+        target({ subjectName: "수학", subjectKey: "math", subjectIndex: 0 }),
+        target({ subjectName: "영어", subjectKey: "english", subjectIndex: 1 }),
+      ],
+      { today: "1-1-1 받아올림" },
+      false,
+      "math",
+    );
+    expect(plan).toEqual([
+      { studentId: "a", subjectName: "수학", subjectIndex: 0, set: { today: "1-1-1 받아올림" } },
+    ]);
+  });
+
+  it("과목 키를 안 주면 진도는 아예 적용하지 않는다(대상이 모호한 채로 뿌리지 않는다)", () => {
+    expect(planBulkApply([target()], { today: "1-1-1" }, false)).toEqual([]);
+  });
+
+  it("onlyEmpty면 진도가 이미 있는 행은 건너뛴다", () => {
+    const plan = planBulkApply(
+      [target({ today: "이미 입력" }), target({ studentId: "b" })],
+      { today: "1-1-1 받아올림" },
+      true,
+      "math",
+    );
+    expect(plan).toEqual([
+      { studentId: "b", subjectName: "수학", subjectIndex: 0, set: { today: "1-1-1 받아올림" } },
+    ]);
+  });
+
+  it("진도 setter는 인덱스 기반 — 계획에 그 행의 subjectIndex가 실린다", () => {
+    const plan = planBulkApply(
+      [target({ subjectName: "영어", subjectKey: "english", subjectIndex: 2 })],
+      { today: "Unit 8 · p.90" },
+      false,
+      "english",
+    );
+    expect(plan[0]).toEqual({
+      studentId: "a",
+      subjectName: "영어",
+      subjectIndex: 2,
+      set: { today: "Unit 8 · p.90" },
+    });
   });
 });
 

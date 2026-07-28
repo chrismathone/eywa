@@ -53,10 +53,13 @@ export function StatusBoard({
   students,
   reports,
   onOpenCard,
+  emptyLabel = "오늘 담당 학생이 없습니다",
 }: {
   students: OneScreenStudent[];
   reports: Record<string, Record<string, SubjectReport>>;
   onOpenCard: (studentId: string) => void;
+  /** 빈 표 문구 — **작성 필터**로 비었을 때 "담당 학생이 없다"는 거짓말을 하지 않도록 호출부가 덮어쓴다. */
+  emptyLabel?: string;
 }) {
   const [sort, setSort] = useState<SortState<SortKey>>(null);
   const rows = buildGridRows(students);
@@ -65,7 +68,7 @@ export function StatusBoard({
   if (rows.length === 0) {
     return (
       <div className="bg-card border-line shadow-card text-text-faint flex items-center justify-center rounded-2xl border p-10 text-sm">
-        오늘 담당 학생이 없습니다
+        {emptyLabel}
       </div>
     );
   }

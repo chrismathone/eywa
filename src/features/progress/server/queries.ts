@@ -17,13 +17,32 @@ export type TrackAnalytics = {
   percentile: number | null; // 같은 학년×track 또래 대비 상위 %(클수록 빠름). null=표본 없음
   poolSize: number;
   predictions: { days: number; grade: string; lesson: string }[]; // speed>0일 때만
-  anomalies: { type: string; at: string }[]; // 최근 jump_error/overlap_error
+};
+
+/**
+ * 이상 감지 1건 — **어떤 이상인지 사람이 읽을 수 있게** 위치 변화까지 담는다.
+ * 예전엔 유형 배지("진도 점프 감지") 한 개뿐이라, 진도 이상 알림을 타고 와도 "뭐가 어떻게 이상한지"를
+ * 알 수 없었다(2026-07-27 원장 제보). 날짜 + 어디→어디 + 몇 차시가 있어야 진도 입력을 정정할 수 있다.
+ */
+export type ProgressAnomaly = {
+  id: string; // progress_events.id — "이상 없음 확인" 토글 대상
+  type: string; // jump_error | overlap_error (표시 라벨은 소비처가 매핑 — raw 노출 금지)
+  at: string; // ISO 타임스탬프
+  from: { grade: string; lesson: string } | null; // 커리큘럼 범위 밖·미기록이면 null
+  to: { grade: string; lesson: string } | null;
+  jumpSize: number | null; // 건너뛴 차시 수(overlap_error엔 없을 수 있음)
+  resolvedAt: string | null; // 이상 없음 확인 시각(0151a). null=미확인
+  resolvedByName: string | null; // 확인자 이름(계정 삭제 등으로 못 찾으면 null)
 };
 
 export type StudentProgressAnalytics = {
   studentGrade: string | null;
   tracks: TrackAnalytics[]; // 활성 트랙(현행 먼저)
   totalLessons: number;
+  // ⚠️ 트랙별이 아니라 **학생 단위** — progress_events엔 트랙 정보가 없어 예전엔 같은 목록이 현행·선행
+  // 카드에 통째로 두 번 찍혔다(같은 이상이 2개로 보임). 학생 단위 1곳에 모아 표시한다.
+  // 확인된 것(resolvedAt≠null)도 함께 돌려준다 — 소비처가 접어서 보여주고 되돌릴 수 있어야 하기 때문.
+  anomalies: ProgressAnomaly[];
 };
 
 /**
@@ -35,7 +54,7 @@ export async function getStudentProgressAnalytics(studentId: string): Promise<St
   const today = kstToday();
 
   const { data: stu } = await supabase.from("students").select("tenant_id, grade").eq("id", studentId).maybeSingle();
-  if (!stu) return { studentGrade: null, tracks: [], totalLessons: TOTAL_LESSONS };
+  if (!stu) return { studentGrade: null, tracks: [], totalLessons: TOTAL_LESSONS, anomalies: [] };
   const studentGrade = (stu.grade as string | null) ?? null;
 
   const [{ data: containers }, { data: entryRows }, { data: anomEvents }] = await Promise.all([
@@ -46,12 +65,33 @@ export async function getStudentProgressAnalytics(studentId: string): Promise<St
     supabase.from("progress_entries").select("global_position, entry_date, container_id").eq("student_id", studentId),
     supabase
       .from("progress_events")
-      .select("event_type, created_at")
+      .select("id, event_type, created_at, from_position, to_position, jump_size, resolved_at, resolver:resolved_by ( display_name )")
       .eq("student_id", studentId)
       .in("event_type", ["jump_error", "overlap_error"])
       .order("created_at", { ascending: false })
-      .limit(5),
+      .limit(8), // 미확인 + 확인분을 함께 담아야 해서 5→8(이벤트는 실측 희소라 비용 무시 가능)
   ]);
+
+  // 위치 번호(글로벌 차시 인덱스)는 화면에 그대로 내면 raw 코드다 — 커리큘럼 라벨("중3 · 3차시")로 변환.
+  const describe = (pos: unknown) => {
+    if (typeof pos !== "number") return null;
+    const d = describePosition(pos);
+    return d ? { grade: d.grade, lesson: d.lesson } : null;
+  };
+  const anomalies: ProgressAnomaly[] = (anomEvents ?? []).map((e) => {
+    // PostgREST 임베드는 관계에 따라 객체/배열로 오므로 둘 다 받는다(events.ts student 조인과 동일 처리).
+    const resolver = (Array.isArray(e.resolver) ? e.resolver[0] : e.resolver) as { display_name?: string } | null;
+    return {
+      id: e.id as string,
+      type: e.event_type as string,
+      at: e.created_at as string,
+      from: describe(e.from_position),
+      to: describe(e.to_position),
+      jumpSize: typeof e.jump_size === "number" ? e.jump_size : null,
+      resolvedAt: (e.resolved_at as string | null) ?? null,
+      resolvedByName: resolver?.display_name ?? null,
+    };
+  });
 
   const conts = containers ?? [];
   const contTrack = new Map<string, Track>(conts.map((c) => [c.id as string, c.track as Track]));
@@ -90,11 +130,10 @@ export async function getStudentProgressAnalytics(studentId: string): Promise<St
       percentile,
       poolSize: pool.length,
       predictions,
-      anomalies: (anomEvents ?? []).map((e) => ({ type: e.event_type as string, at: e.created_at as string })),
     });
   }
 
-  return { studentGrade, tracks, totalLessons: TOTAL_LESSONS };
+  return { studentGrade, tracks, totalLessons: TOTAL_LESSONS, anomalies };
 }
 
 /** 같은 학년×track 또래의 수업당 속도 배열(백분위 풀). 활성 컨테이너 있는 학생만, 대상 학생 포함. */

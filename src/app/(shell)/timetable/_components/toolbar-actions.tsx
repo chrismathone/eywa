@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
-import { ExternalLink, FileSpreadsheet, Loader2, Sheet } from "@/components/icons/eywa-icon-compat";
+import { Popover } from "@base-ui/react/popover";
+import { ChevronDown, ExternalLink, FileSpreadsheet, Loader2, Sheet, Upload } from "@/components/icons/eywa-icon-compat";
 import { TimetableImportDialog } from "./import-dialog";
 import { EnglishImportDialog } from "./english-import-dialog";
 import { checkSheetSyncBusy, syncSheetsNow } from "@/features/integrations/server/actions";
@@ -20,6 +21,14 @@ const SYNC_BUSY_TITLE =
  */
 const KIND_EXPORT_TITLE =
   "내보내기는 정규 시간표 기준으로만 지원합니다 — 구분을 '정규'로 바꾼 뒤 사용하세요.";
+
+/**
+ * 비활성 사유 한 줄 — ⚠️ **툴팁이 아니라 보이는 문구**다. disabled button의 `title`은 브라우저마다 안 뜨고,
+ * 메뉴로 접어 놓으면 "왜 못 누르지"를 확인할 다른 경로가 없다(원장 제보 이력: "마우스 올려도 안 보임").
+ */
+function Reason({ text }: { text: string }) {
+  return <p className="text-text-faint px-2 pb-1 text-[10px] leading-snug break-keep">{text}</p>;
+}
 
 export function TimetableToolbarActions({
   subject,
@@ -62,6 +71,10 @@ export function TimetableToolbarActions({
   // 정규 화면에서만 내보내기 허용 — 익스포터가 화면 구분을 못 받으므로 "화면과 파일이 다른" 상태를 만들지 않는다.
   const exportsAllowed = kind === "regular";
 
+  const [menuOpen, setMenuOpen] = useState(false);
+  // 다이얼로그는 동시에 열릴 일이 없어 단일 유니온으로 둔다(둘 다 마운트되는 상태 자체를 없앤다).
+  const [openDialog, setOpenDialog] = useState<"file" | "sheet" | null>(null);
+
   // 리스 상태 폴링(20s, makeedu 워커 카드 선례) — canSync(시트 버튼 노출)일 때만.
   useEffect(() => {
     if (!canSync) return;
@@ -93,13 +106,59 @@ export function TimetableToolbarActions({
 
   const btnCls =
     "border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-2 py-0.5 text-xs transition disabled:opacity-50";
-  const hasSheetGroup = canSync || !!sheetUrl;
 
-  return (
-    // flex-wrap — 좁은 화면(모바일)에서 버튼 5개가 한 줄로 강제돼 카드 밖으로 넘치지 않게 줄바꿈.
-    <div className="print:hidden flex flex-wrap items-center gap-1">
-      {/* 엑셀 그룹: 내보내기(전 과목) + 가져오기(수강편집 라운드트립 = 학생 반이동, math·english) */}
-      <div className="flex items-center gap-1">
+  // 팝오버에 담을 항목 수 — 권한이 없어 '엑셀' 하나뿐이면 접는 게 순손해라 평면으로 둔다.
+  const canFileImport = canImport && exportsAllowed;
+  const canSheetImport = canSync && (canStructureImport || canImport);
+  const itemCount = 1 + (canFileImport ? 1 : 0) + (canSync ? 1 : 0) + (canSheetImport ? 1 : 0) + (sheetUrl ? 1 : 0);
+
+  const itemCls =
+    "flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs text-text-dim transition hover:bg-bg-soft hover:text-foreground disabled:opacity-50 disabled:hover:bg-transparent";
+  // 다이얼로그 2개는 **조건부 마운트**한다 — 항상 마운트한 채 부모가 open을 false로 만들면 close()의
+  // 상태 리셋(미리보기·결과·snapshotId)과 "아직 적용하지 않았습니다" confirm 가드를 우회한다(gotcha #67).
+  // 언마운트가 곧 리셋이라 재오픈이 항상 깨끗하다.
+  // ⚠️ 팝오버 **밖 형제**여야 한다 — base-ui Popover.Positioner는 transform 배치라, 그 안에 두면
+  //    다이얼로그의 position:fixed 오버레이가 팝업 박스를 컨테이닝 블록으로 삼아 통째로 깨진다.
+  const dialogs = (
+    <>
+      {openDialog === "file" && canFileImport ? (
+        <TimetableImportDialog
+          subject={subjectKey}
+          hideTrigger
+          open
+          onOpenChange={(o) => {
+            if (!o) setOpenDialog(null);
+          }}
+        />
+      ) : null}
+      {openDialog === "sheet" && canSync && canStructureImport ? (
+        <EnglishImportDialog
+          subject={subjectKey}
+          hideTrigger
+          open
+          onOpenChange={(o) => {
+            if (!o) setOpenDialog(null);
+          }}
+        />
+      ) : null}
+      {openDialog === "sheet" && canSync && canImport && !canStructureImport ? (
+        <TimetableImportDialog
+          mode="sheet"
+          subject={subjectKey}
+          hideTrigger
+          open
+          onOpenChange={(o) => {
+            if (!o) setOpenDialog(null);
+          }}
+        />
+      ) : null}
+    </>
+  );
+
+  // 항목이 하나면 접지 않는다 — 클릭만 한 번 늘고 얻는 게 없다(권한 없는 사용자 = '엑셀'만).
+  if (itemCount <= 1) {
+    return (
+      <div className="print:hidden flex items-center gap-1">
         {exportsAllowed ? (
           <a href={exportHref} className={btnCls}>
             <FileSpreadsheet className="size-3" />
@@ -111,71 +170,131 @@ export function TimetableToolbarActions({
             엑셀
           </button>
         )}
-        {/* 파일 업로드 가져오기 = math·english 공통(둘 다 내보내기 xlsx에 '수강편집' 시트 포함 = 라운드트립).
-            영어도 시트 연동 OFF·권한 없음일 때 유일한 가져오기 경로라 열어둔다(2026-07-15).
-            ⚠️ 이 경로는 '수강편집'만 읽어 **학생 반이동만** 반영 — 영어 배치(강사별 그리드) 변경은
-            구글시트 경로(EnglishImportDialog)만 지원. 다이얼로그가 그 한계를 문구로 명시한다. */}
-        {canImport && exportsAllowed ? <TimetableImportDialog subject={subjectKey} /> : null}
       </div>
+    );
+  }
 
-      {/* 구글 시트 그룹: 반영(push) + 열기 — 구분선으로 엑셀 그룹과 분리(줄바꿈 시에도 그룹 단위 유지) */}
-      {hasSheetGroup ? (
-        <div className="border-line ml-0.5 flex flex-wrap items-center gap-1 border-l pl-2">
-          {canSync ? (
-            <button
-              type="button"
-              onClick={pushToSheet}
-              disabled={syncing || syncBusy || !exportsAllowed}
-              title={
-                !exportsAllowed
-                  ? KIND_EXPORT_TITLE
-                  : syncBusy
-                    ? SYNC_BUSY_TITLE
-                    : (syncMsg ?? `${subjectLabel} 시간표 전체를 연결된 구글 시트에 반영`)
-              }
-              className={btnCls}
-            >
-              {syncing ? <Loader2 className="size-3 animate-spin" /> : <Sheet className="size-3" />}
-              시트 반영
-            </button>
-          ) : null}
-          {/* 시트에서 가져오기 — 영어=구조(강사별)+반이동(수강편집) 통합 1버튼, 수학=반이동(수강편집)만. */}
-          {canSync && canStructureImport ? (
-            <EnglishImportDialog
-              subject={subjectKey}
-              disabled={syncBusy || !exportsAllowed}
-              disabledTitle={exportsAllowed ? SYNC_BUSY_TITLE : KIND_EXPORT_TITLE}
-            />
-          ) : null}
-          {canSync && canImport && !canStructureImport ? (
-            <TimetableImportDialog
-              mode="sheet"
-              subject={subjectKey}
-              disabled={syncBusy || !exportsAllowed}
-              disabledTitle={exportsAllowed ? SYNC_BUSY_TITLE : KIND_EXPORT_TITLE}
-            />
-          ) : null}
-          {sheetUrl ? (
-            <a
-              href={sheetUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              title="연결된 구글 시트를 새 탭에서 엽니다"
-              className={btnCls}
-            >
-              <ExternalLink className="size-3" />
-              시트 열기
-            </a>
-          ) : null}
-          {syncMsg ? (
-            <span
-              className={`whitespace-nowrap text-[10px] ${syncMsg === "시트에 반영됨" ? "text-primary" : "text-chart-4"}`}
-            >
-              {syncMsg}
-            </span>
-          ) : null}
-        </div>
-      ) : null}
+  return (
+    <div className="print:hidden flex items-center gap-1">
+      <Popover.Root open={menuOpen} onOpenChange={setMenuOpen}>
+        <Popover.Trigger
+          className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft data-[popup-open]:bg-bg-soft inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-2 py-0.5 text-xs transition"
+          title="엑셀 내보내기·가져오기, 구글 시트 반영·가져오기"
+        >
+          {/* 진행 중이면 트리거에서 바로 보이게 — 접으면 안쪽 스피너가 안 보인다. */}
+          {syncing || syncBusy ? <Loader2 className="size-3 animate-spin" /> : <FileSpreadsheet className="size-3" />}
+          엑셀·시트
+          <ChevronDown className="size-3" />
+        </Popover.Trigger>
+        <Popover.Portal>
+          <Popover.Positioner side="bottom" align="start" sideOffset={6} className="z-50">
+            <Popover.Popup className="bg-card border-line shadow-card w-[248px] max-w-[calc(100vw-2rem)] rounded-xl border p-2 text-left outline-none">
+              {exportsAllowed ? (
+                <a href={exportHref} className={itemCls} onClick={() => setMenuOpen(false)}>
+                  <FileSpreadsheet className="size-3 shrink-0" />
+                  엑셀 내보내기
+                </a>
+              ) : (
+                <>
+                  <button type="button" disabled className={itemCls}>
+                    <FileSpreadsheet className="size-3 shrink-0" />
+                    엑셀 내보내기
+                  </button>
+                  <Reason text={KIND_EXPORT_TITLE} />
+                </>
+              )}
+
+              {canFileImport ? (
+                <button
+                  type="button"
+                  className={itemCls}
+                  onClick={() => {
+                    setMenuOpen(false);
+                    setOpenDialog("file");
+                  }}
+                >
+                  <Upload className="size-3 shrink-0" />
+                  가져오기(파일)
+                </button>
+              ) : null}
+
+              {canSync || sheetUrl ? <div className="border-line my-1 border-t" /> : null}
+
+              {canSync ? (
+                <>
+                  <button
+                    type="button"
+                    // ⚠️ 여기선 팝오버를 **닫지 않는다** — 닫으면 진행 스피너와 결과 문구(syncMsg)를
+                    //    볼 곳이 사라진다(다이얼로그와 달리 이 동작은 제자리에서 끝난다).
+                    onClick={pushToSheet}
+                    disabled={syncing || syncBusy || !exportsAllowed}
+                    title={`${subjectLabel} 시간표 전체를 연결된 구글 시트에 반영합니다`}
+                    className={itemCls}
+                  >
+                    {syncing ? (
+                      <Loader2 className="size-3 shrink-0 animate-spin" />
+                    ) : (
+                      <Sheet className="size-3 shrink-0" />
+                    )}
+                    시트 반영
+                  </button>
+                  {!exportsAllowed ? (
+                    <Reason text={KIND_EXPORT_TITLE} />
+                  ) : syncBusy ? (
+                    <Reason text={SYNC_BUSY_TITLE} />
+                  ) : null}
+                  {syncMsg ? (
+                    <p
+                      className={`px-2 pb-1 text-[10px] leading-snug break-keep ${
+                        syncMsg === "시트에 반영됨" ? "text-primary" : "text-chart-4"
+                      }`}
+                    >
+                      {syncMsg}
+                    </p>
+                  ) : null}
+                </>
+              ) : null}
+
+              {canSheetImport ? (
+                <>
+                  <button
+                    type="button"
+                    className={itemCls}
+                    disabled={syncBusy || !exportsAllowed}
+                    onClick={() => {
+                      setMenuOpen(false);
+                      setOpenDialog("sheet");
+                    }}
+                  >
+                    <Sheet className="size-3 shrink-0" />
+                    시트에서 가져오기
+                  </button>
+                  {!exportsAllowed ? (
+                    <Reason text={KIND_EXPORT_TITLE} />
+                  ) : syncBusy ? (
+                    <Reason text={SYNC_BUSY_TITLE} />
+                  ) : null}
+                </>
+              ) : null}
+
+              {sheetUrl ? (
+                <a
+                  href={sheetUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={itemCls}
+                  onClick={() => setMenuOpen(false)}
+                >
+                  <ExternalLink className="size-3 shrink-0" />
+                  시트 열기
+                </a>
+              ) : null}
+            </Popover.Popup>
+          </Popover.Positioner>
+        </Popover.Portal>
+      </Popover.Root>
+
+      {dialogs}
     </div>
   );
 }

@@ -28,6 +28,12 @@ export function humanizeClassnoteError(raw: string | null | undefined): string |
   //    다르게 설명하면 원장과 강사가 서로 다른 조치를 하게 된다.
   if (/해당 학생 없음/.test(r))
     return "학부모가 ClassNote 알림장에 연결되어 있지 않습니다 — 학부모를 초대한 뒤 다시 발송하세요";
+  // ⚠️ **isHumanKorean보다 먼저** — "게시 실패(HTTP 409)"는 한글이라 그대로 통과하지만 원장에게 아무것도
+  // 알려주지 않는다. 409=Conflict는 ClassNote가 **중복으로 보고 거부**한 것이라, 조치가 "재발송"이 아니라
+  // "이미 올라갔는지 먼저 확인"이다(2026-07-27 공지 11건 거부 — 실제로는 미게시였다).
+  // ⚠️ 워커가 응답 본문을 덧붙이므로(`— {원문}`) 그 원문은 '자세히'로만 보이고 여기선 요약만 준다.
+  if (/HTTP 409/.test(r))
+    return "ClassNote가 중복으로 보고 거부했습니다(409) — 알림장에 이미 올라갔는지 확인한 뒤 재발송하세요";
   // ⚠️ 패턴 매칭보다 **먼저** — 아래 표는 영문/기술 원문 전용이다(위 주석 참조).
   if (isHumanKorean(r)) return r;
   if (/ERR_NAME_NOT_RESOLVED|ENOTFOUND|ERR_CONNECTION|ECONNREFUSED|net::/i.test(r))

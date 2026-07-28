@@ -177,8 +177,10 @@ async function supabaseSignedRead(
 }
 
 /**
- * 오디오 fetch용 signed GET URL — tenant=현 백엔드 / legacy(옛 ijw)=항상 GCS.
+ * 오디오 fetch용 signed GET URL — tenant/legacy 모두 **현 백엔드**를 따른다.
  * (legacy-audio.ts resolveAudioUrl 본체 이전·일반화. AssemblyAI가 이 URL을 fetch.)
+ * legacy(옛 ijw 경로)는 2026-07-28 ijw 소등 이전 때 Supabase kind 버킷에 **원경로 그대로**(한글
+ * 파일명만 b64_ 인코딩·DB 재작성) 복사됨 — supabase 백엔드에선 같은 경로를 kind 버킷에서 서명한다.
  */
 export async function resolveAudioReadUrl(
   path: string,
@@ -187,13 +189,12 @@ export async function resolveAudioReadUrl(
   ttlMs: number = READ_TTL_MS,
 ): Promise<string> {
   const cls = classifyAudioPath(path, kind, tenantId);
-  if (cls === "tenant") {
-    return getMediaBackend() === "gcs"
-      ? gcsSignedRead(path, ttlMs)
-      : supabaseSignedRead(SUPABASE_BUCKET_BY_KIND[kind], path, ttlMs);
-  }
-  if (cls === "legacy") return gcsSignedRead(path, ttlMs); // 옛 ijw 녹음은 항상 GCS
-  throw new Error("잘못된 오디오 경로입니다");
+  if (cls === "invalid") throw new Error("잘못된 오디오 경로입니다");
+  // tenant=`{tenantId}/{uuid.ext}` · legacy=`{kind}-recordings/{파일명}` — 키 모양만 다르고
+  // supabase에선 둘 다 kind 버킷 안 원경로 키라 같은 분기로 서명한다.
+  return getMediaBackend() === "gcs"
+    ? gcsSignedRead(path, ttlMs)
+    : supabaseSignedRead(SUPABASE_BUCKET_BY_KIND[kind], path, ttlMs);
 }
 
 /** 이미지·문서(영수증/브랜딩/서식/보고서첨부) signed GET URL — legacy 없음, tenant 전용. downloadName=attachment 저장. */
