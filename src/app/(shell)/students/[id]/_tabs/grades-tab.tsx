@@ -120,11 +120,11 @@ export async function GradesTab({ studentId }: { studentId: string }) {
         </div>
       )}
 
-      <div className="border-border border-t pt-4">
+      {/* 성적 코멘트 · 레벨테스트 — 둘 다 짧은 목록이라 세로로만 쌓으면 넓은 창에서 오른쪽이 통째로 빈다.
+          폭이 되면 나란히(auto-fit), 좁으면 접힘. 구분선은 두 줄이 겹치지 않게 그리드 바깥에 한 번만.
+          (목표 섹션은 입력폼·성적표 위라 인접하지 않아 그대로 둔다 — 순서를 바꾸면 입력 흐름이 깨진다.) */}
+      <div className="border-border grid grid-cols-[repeat(auto-fit,minmax(min(100%,420px),1fr))] items-start gap-x-6 gap-y-4 border-t pt-4">
         <GradeCommentsSection studentId={studentId} comments={comments} />
-      </div>
-
-      <div className="border-border border-t pt-4">
         <LevelTests studentId={studentId} tests={levelTests} />
       </div>
     </div>
