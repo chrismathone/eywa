@@ -67,6 +67,7 @@ export const ROUTE_WINDOW_SIZE: Record<string, { w: number; h: number }> = {
   // 인쇄 문서 창(세로 A4). 창 id 규약 `print/<type>/<recordId>` → longest-prefix가 `print/<type>` 매칭.
   // (windowIdForHref가 만드는 `enrollment/123/print`는 매칭 못 해 DEFAULT로 떨어지므로 명시 id 사용.)
   "print/enrollment": { w: 840, h: 1120 }, // 신입생 인수인계서
+  "print/enrollment-prep": { w: 840, h: 1120 }, // 상담 준비 브리프(상담 전 내부용)
   "print/meetings": { w: 840, h: 1120 }, // 회의록
   "print/textbook": { w: 800, h: 1040 }, // 교재요청서 카드(짧음)
   "print/lesson_reports": { w: 840, h: 1120 }, // 수업 보고서(원스크린 PDF)

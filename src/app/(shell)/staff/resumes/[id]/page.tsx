@@ -9,9 +9,16 @@ import { ResumeSheet } from "../_components/resume-sheet";
 
 export const metadata = { title: "직원 이력서 — eywa" };
 
-export default async function ResumeViewPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function ResumeViewPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ edit?: string }>;
+}) {
   const user = await requireAccess("staff");
   const { id } = await params;
+  const { edit } = await searchParams;
   const [resume, canWriteRole] = await Promise.all([
     getStaffResumeById(id),
     canWriteTenant(user.systemRole, "staff"),
@@ -40,6 +47,8 @@ export default async function ResumeViewPage({ params }: { params: Promise<{ id:
           id={id}
           userId={user.id}
           canWrite={canWrite}
+          // 직원 상세 '수정' 버튼(?edit=1) — 편집 모드로 바로 연다(수정 권한이 있을 때만).
+          startEditing={edit === "1" && canWrite}
           // 증명사진 signed URL — **게이트 통과(canView) 시에만** 발급·전달(경로만으론 열람 불가).
           photoUrls={await (async () => {
             if (resume.data.photos.length === 0) return [];
