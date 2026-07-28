@@ -246,6 +246,15 @@ export async function saveStaffResume(
     return { ok: true, id, nonce: Date.now(), redirectTo: `/staff/resumes/${id}` };
   }
 
+  // 기존 직원 연결 모드(?staff= 프리필) — 넘겨온 id가 **우리 테넌트 직원**인지 서버가 재검증(변조 차단, RLS 스코프).
+  let linkStaffUserId: string | null = null;
+  const staffUserRaw = String(formData.get("staff_user_id") ?? "").trim();
+  if (staffUserRaw) {
+    const { data: staffRow } = await supabase.from("users").select("id").eq("id", staffUserRaw).maybeSingle();
+    if (!staffRow) return { error: "연결할 직원을 찾을 수 없습니다 — 직원목록에서 다시 열어주세요" };
+    linkStaffUserId = staffRow.id;
+  }
+
   const { data: row, error } = await supabase
     .from("academy_documents")
     .insert({
@@ -258,6 +267,7 @@ export async function saveStaffResume(
       restricted: true, // 주민번호·급여 포함 → 사무실 전용 열람
       description: "직원 이력서 (웹 작성)",
       uploaded_by: gate.user.id,
+      staff_user_id: linkStaffUserId,
     })
     .select("id")
     .single();
@@ -266,8 +276,9 @@ export async function saveStaffResume(
   // 실패해도 이력서 저장은 유효 — 경고 토스트만(시트 공유·env 미설정 등은 운영자가 조치).
   const roster = await appendResumeToRoster(data);
   // 원샷 직원 등록(옵션) — 시트 기입과 독립인 부가 효과. 실패해도 이력서 저장은 유효.
+  // 기존 직원 연결 모드에선 계정이 이미 있으므로 등록을 시도하지 않는다.
   const account =
-    formData.get("acct_register") === "1"
+    !linkStaffUserId && formData.get("acct_register") === "1"
       ? await registerStaffFromResume(gate.user, data, String(formData.get("acct_role") ?? ""), row.id)
       : {};
   revalidateResume(row.id);

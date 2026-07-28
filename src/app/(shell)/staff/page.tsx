@@ -375,6 +375,9 @@ export default async function StaffPage({
                   <th className="px-3 py-2.5 text-right font-medium">담당 반</th>
                   <th className="px-3 py-2.5 text-right font-medium">담당 학생</th>
                   <th className="px-3 py-2.5 font-medium">상태</th>
+                  <th className="px-3 py-2.5 font-medium">
+                    <span className="sr-only">직원 상세</span>
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -384,17 +387,21 @@ export default async function StaffPage({
                   return (
                     <tr key={s.id} className="border-line/60 hover:bg-bg-soft/50 border-b last:border-0 transition">
                       <td className="px-4 py-2.5">
-                        {/* 이름 클릭 → 직원 상세 창. 아바타 금지 규칙 — 사람 표시는 이름 텍스트만. */}
+                        {/* 이름 클릭 → 이력서 뷰(원장 지시 2026-07-28 — 수정·삭제도 거기서). 이력서가 없으면
+                            직원 정보가 미리 채워진 새 이력서 폼으로. 아바타 금지 — 사람 표시는 이름 텍스트만. */}
                         <WindowLink
-                          href={`/staff/${s.id}`}
-                          title={s.displayName}
-                          ariaLabel={`${s.displayName} 상세`}
+                          href={s.resumeId ? `/staff/resumes/${s.resumeId}` : `/staff/resumes/new?staff=${s.id}`}
+                          title={`${s.displayName} 이력서`}
+                          ariaLabel={`${s.displayName} 이력서`}
                           className="group inline-flex items-center gap-1.5"
                         >
                           <span className="text-foreground font-bold group-hover:underline">{s.displayName}</span>
                           <EditingBadge scope={`staff:${s.id}`} />
                         </WindowLink>
-                        <p className="text-text-dim num mt-0.5 truncate text-[11px]">{s.email}</p>
+                        <p className="text-text-dim num mt-0.5 truncate text-[11px]">
+                          {/* 플레이스홀더(@imported.local)는 미설정으로 표시 — raw 노출 금지. */}
+                          {s.email.toLowerCase().endsWith("@imported.local") ? "이메일 미설정" : s.email}
+                        </p>
                       </td>
                       <td className="px-3 py-2.5">
                         <Pill color={roleMeta.color}>{roleMeta.label}</Pill>
@@ -422,6 +429,17 @@ export default async function StaffPage({
                       </td>
                       <td className="px-3 py-2.5">
                         <Pill color={statusMeta.color}>{statusMeta.label}</Pill>
+                      </td>
+                      <td className="px-3 py-2.5 whitespace-nowrap">
+                        {/* 계정·근무일정 등 운영 정보는 기존 직원 상세로 — 이력서와 별도 진입점 유지. */}
+                        <WindowLink
+                          href={`/staff/${s.id}`}
+                          title={s.displayName}
+                          ariaLabel={`${s.displayName} 직원 상세`}
+                          className="border-line text-text-dim hover:text-foreground hover:border-primary/40 inline-flex items-center rounded-md border px-2 py-0.5 text-[11.5px] transition"
+                        >
+                          상세
+                        </WindowLink>
                       </td>
                     </tr>
                   );
