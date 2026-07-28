@@ -3,7 +3,7 @@ import type { ReportSettings } from "@/features/owner/settings-types";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { hasTrend, type TrendPoint } from "../report-trend";
 import { isImageAttachment } from "../attachment-utils";
-import { isMonthlyExamProgress } from "../monthly-exam";
+import { isSkipStatusProgress } from "../progress-status";
 import { ReportTrendGraph } from "./report-trend-graph";
 
 // 학부모 수업 보고서 카드 — 공유 서버 컴포넌트(순수 프레젠테이션, 데이터는 props로만).
@@ -127,9 +127,9 @@ export function ParentReportCard({
       {showToday ? (
         <Section title="오늘 수업">
           {rpt.showTextbook && report.textbook ? <Field label="교재" value={report.textbook} /> : null}
-          {/* 월말평가일은 나간 차시가 없다 — '진도'라는 라벨로 내보내면 학부모에게 거짓이라 라벨만 바꾼다. */}
+          {/* 진도가 중단된 날(시험 등)은 나간 차시가 없다 — '진도' 라벨로 내보내면 학부모에게 거짓이라 라벨만 바꾼다. */}
           {rpt.showProgress && report.progress ? (
-            <Field label={isMonthlyExamProgress(report.progress) ? "수업" : "진도"} value={report.progress} />
+            <Field label={isSkipStatusProgress(report.progress) ? "수업" : "진도"} value={report.progress} />
           ) : null}
           {rpt.showHomeworkToday && report.homeworkToday ? (
             <Field label="오늘 과제" value={report.homeworkToday} />

@@ -423,7 +423,7 @@ describe("fact 라벨에 괄호 설명 금지 — 모델이 값과 함께 베낀
   });
 });
 
-// ── 월말평가일 — '진도' 라벨로 주면 모델이 나가지도 않은 진도를 문장에 만든다(monthly-exam.ts) ──
+// ── 진도가 중단된 날 — '진도' 라벨로 주면 모델이 나가지도 않은 진도를 문장에 만든다(progress-status.ts) ──
 describe("월말평가 사실 라벨", () => {
   const base = {
     studentName: "김담희",

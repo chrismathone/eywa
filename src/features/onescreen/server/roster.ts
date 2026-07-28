@@ -11,6 +11,7 @@ import { classnoteSendWindowLabel } from "../classnote-guard";
 import { applyStudentOrder } from "../student-order";
 import { rosterIncludesEnrollment } from "../roster-filter";
 import { matchReportsToRows } from "../report-unit";
+import { carryProgress } from "../progress-status";
 import { getTextbookOrdersForStudents } from "@/features/billing/server/textbook-queries";
 import type { AttendanceMark, OneScreenStudent } from "../types";
 
@@ -532,6 +533,12 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
     homework_score: string | null;
     attitude: string | null;
     notes: string | null;
+    /**
+     * 같은 단위(반|과목)의 **최근 진도 5건, 최신순**(0152a). '이전 진도'가 시험 회차("월말평가" 등)로
+     * 덮이지 않게 앱이 여기서 **시험이 아닌 첫 값**을 고른다 — 판정을 앱에 두는 이유는 상태 라벨 목록을
+     * SQL에 복제하지 않기 위해서다(progress-status.ts 단일 소스). RPC 미배포 시 undefined → 기존 동작.
+     */
+    recent_progress: string[] | null;
   };
   // RPC 에러는 무신호 삼킴 금지(B2/B3) — 다만 이전회차는 '보강' 데이터라 throw로 화면 전체를 죽이지 않고 로그+graceful.
   // (0117a 미배포·일시장애 시 이전회차/prevScore/교재승계만 빠지고 당일 데이터·세션은 정상 렌더 → 진단 가능하게 로그.)
@@ -575,6 +582,13 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
     else todayByStudent.set(r.student_id, [r]);
   }
   const todayReportIds = todayReports.map((r) => r.id);
+  /**
+   * '이전 진도' = **진도가 중단된 날(시험)을 건너뛴** 직전 실제 진도(0152a + progress-status.ts).
+   * 원장 2026-07-28: *"그 날은 시험을 치기 때문에 진도가 '중단'되는 날"* — 다음 회차의 기준점은
+   * 그 전 차시여야 한다. 최근 5건이 전부 시험이면 null → 호출부가 기존 동작(직전 회차 그대로)로 폴백.
+   * ⚠️ 직전 회차 자체(prevReport·교재 승계·prevScore)는 건드리지 않는다 — 그건 실제 회차가 사실이다.
+   */
+  const carryProgressOf = (r: PriorRow): string | null => carryProgress(r.recent_progress);
   // 학생단위 직전(prev 진도·prevScore 폴백) = 그 학생 과목행들 중 최신 회차.
   const priorReport = new Map<string, { progress: string | null; examInfo: string | null; date: string }>();
   // 학생별 직전 회차 후보 — RPC(0135a)가 이미 (학생, 반|과목) 최신 1건씩 반환. 행 매칭은 아래에서.
@@ -585,7 +599,13 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
     else priorByStudent.set(r.student_id, [r]);
     const cur = priorReport.get(r.student_id);
     if (!cur || r.report_date > cur.date)
-      priorReport.set(r.student_id, { progress: r.progress, examInfo: r.exam_info, date: r.report_date });
+      // progress만 carry(시험 회차 건너뜀) — examInfo는 **실제 직전 회차** 것이어야 한다(그날 본 시험 점수가
+      // prevScore의 진짜 직전 값이다. 여기까지 소급하면 증감이 엉뚱한 회차와 비교된다).
+      priorReport.set(r.student_id, {
+        progress: carryProgressOf(r) ?? r.progress,
+        examInfo: r.exam_info,
+        date: r.report_date,
+      });
   }
 
   // 오늘 보고서들의 학부모 열람 수(share_link_views) — PostgREST group-by 대신 행을 청크로 가져와 JS 집계(fetchInChunks).
@@ -696,6 +716,10 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
           note: pbs.notes ?? null,
         };
         if (prog) su.prev = prog; // 과목 정확매칭 prev 우선(위 startsWith 학생단위 폴백보다 정확)
+        // '이전 진도'만 시험 회차를 건너뛴 값으로 덮는다(0152a). prevReport(참고행)·교재 승계는 위에서
+        // 실제 직전 회차로 이미 채워졌고 그대로 둔다 — 그날이 월말평가면 참고행엔 월말평가가 떠야 맞다.
+        const carry = carryProgressOf(pbs);
+        if (carry) su.prev = label && carry.startsWith(label) ? carry.slice(label.length).trim() || carry : carry;
       }
       const prevBook = su.prevReport?.textbook?.trim();
       if (prevBook) su.textbook = prevBook; // ③ 직전 교재
