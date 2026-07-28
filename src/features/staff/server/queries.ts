@@ -23,6 +23,11 @@ export type StaffRow = {
   phone: string | null;
   systemRole: SystemRole;
   status: string;
+  hireDate: string | null;
+  jobTitle: string | null;
+  subjects: string[];
+  department: string | null; // 근무부서(0147a — 이력서/직원명부에서 승격)
+  employmentType: string | null; // 근무형태: 정규직|아르바이트|프리랜서
   classesCount: number;
   primaryStudentsCount: number;
 };
@@ -35,7 +40,9 @@ export async function getStaffList(): Promise<StaffRow[]> {
   const [{ data: users }, { data: teaching }] = await Promise.all([
     supabase
       .from("users")
-      .select("id, display_name, email, phone, system_role, status")
+      .select(
+        "id, display_name, email, phone, system_role, status, hire_date, job_title, subjects, department, employment_type",
+      )
       .neq("status", "inactive")
       .order("system_role", { ascending: true })
       .order("display_name", { ascending: true }),
@@ -76,6 +83,11 @@ export async function getStaffList(): Promise<StaffRow[]> {
     phone: u.phone ?? null,
     systemRole: u.system_role as SystemRole,
     status: u.status,
+    hireDate: (u.hire_date as string | null) ?? null,
+    jobTitle: (u.job_title as string | null) ?? null,
+    subjects: Array.isArray(u.subjects) ? (u.subjects as string[]) : [],
+    department: (u.department as string | null) ?? null,
+    employmentType: (u.employment_type as string | null) ?? null,
     classesCount: classCount.get(u.id) ?? 0,
     primaryStudentsCount: studentsByTeacher.get(u.id)?.size ?? 0,
   }));

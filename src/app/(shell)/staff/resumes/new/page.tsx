@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { requireAccess } from "@/lib/auth/require-access";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
+import { assignableRoles, canManageStaff } from "@/lib/auth/role-hierarchy";
 import { BackLink } from "@/components/back-link";
 import { emptyResume } from "@/features/staff/resume";
 import { ResumeSheet } from "../_components/resume-sheet";
@@ -20,7 +21,14 @@ export default async function NewResumePage() {
           종이 서식의 각 칸에 바로 입력하세요 — 저장하면 데이터베이스(인사·직원)에 보관되고 언제든 다시 수정·A4 인쇄할 수 있습니다.
         </p>
       </header>
-      <ResumeSheet data={emptyResume()} userId={user.id} canWrite startEditing />
+      <ResumeSheet
+        data={emptyResume()}
+        userId={user.id}
+        canWrite
+        startEditing
+        // 원샷 직원 등록 옵션 — 직원관리 권한(master/admin/manager)일 때만 노출(서버가 재검증).
+        assignableRoles={canManageStaff(user.systemRole) ? assignableRoles(user.systemRole) : []}
+      />
     </div>
   );
 }

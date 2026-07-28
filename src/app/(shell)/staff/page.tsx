@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Users, UserCog, GraduationCap, MessageCircle, Calculator, Wallet, CalendarClock } from "@/components/icons/eywa-icon-compat";
+import { Users, Wallet, CalendarClock } from "@/components/icons/eywa-icon-compat";
 import { WindowLink } from "@/components/workspace/window-link";
 import { EditingBadge } from "@/features/presence/editing-badge";
 import { EyIcon } from "@/components/icons/eywa-icons";
@@ -11,8 +11,11 @@ import { Button } from "@/components/ui/button";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { requireAccess } from "@/lib/auth/require-access";
 import { canManageStaff, ROLE_HIERARCHY } from "@/lib/auth/role-hierarchy";
-import { getStaffList } from "@/features/staff/server/queries";
+import { getStaffList, type StaffRow } from "@/features/staff/server/queries";
 import { getSuperAdminIds, displayRoleFor } from "@/lib/auth/super-admin";
+import { getTenantSettings } from "@/features/owner/server/queries";
+import { buildSubjectMaps } from "@/features/owner/subjects";
+import { EMPLOYMENT_TYPES } from "@/features/staff/resume";
 import { Pagination } from "@/components/pagination";
 import { SearchForm } from "@/components/search-form";
 import { FaceTabs, type Face } from "@/components/face-tabs";
@@ -67,13 +70,54 @@ const STATUS_FILTERS: { key: StatusKey; label: string }[] = [
   { key: "pending", label: "대기" },
 ];
 
-function buildStaffHref(p: { role: RoleKey; status: StatusKey; q: string }): string {
+// 정렬 선택(원장 요청 2026-07-28) — 검색과 별개로 목록 정렬 축을 고른다. 기본 = 역할순(권한 위계).
+type SortKey = "role" | "name" | "dept" | "emp" | "hire";
+const SORT_FILTERS: { key: SortKey; label: string }[] = [
+  { key: "role", label: "역할순" },
+  { key: "name", label: "이름순" },
+  { key: "dept", label: "부서순" },
+  { key: "emp", label: "근무형태순" },
+  { key: "hire", label: "입사일순" },
+];
+
+function buildStaffHref(p: { role: RoleKey; status: StatusKey; q: string; sort: SortKey }): string {
   const sp = new URLSearchParams();
   if (p.role !== "all") sp.set("role", p.role);
   if (p.status !== "all") sp.set("status", p.status);
   if (p.q) sp.set("q", p.q);
+  if (p.sort !== "role") sp.set("sort", p.sort);
   const s = sp.toString();
   return s ? `/staff?${s}` : "/staff";
+}
+
+/** 정렬 비교기 — null(미입력)은 항상 뒤로, 동률은 이름 가나다순. */
+function sortStaff(rows: StaffRow[], sort: SortKey): StaffRow[] {
+  const byName = (a: StaffRow, b: StaffRow) => a.displayName.localeCompare(b.displayName, "ko");
+  const nullsLast = (a: string | null, b: string | null) => {
+    if (!a && !b) return 0;
+    if (!a) return 1;
+    if (!b) return -1;
+    return a.localeCompare(b, "ko");
+  };
+  const sorted = [...rows];
+  switch (sort) {
+    case "name":
+      return sorted.sort(byName);
+    case "dept":
+      return sorted.sort((a, b) => nullsLast(a.department, b.department) || byName(a, b));
+    case "emp":
+      return sorted.sort((a, b) => nullsLast(a.employmentType, b.employmentType) || byName(a, b));
+    case "hire":
+      // 최근 입사가 위(신입 파악 용도), 미입력은 뒤.
+      return sorted.sort((a, b) => {
+        if (!a.hireDate && !b.hireDate) return byName(a, b);
+        if (!a.hireDate) return 1;
+        if (!b.hireDate) return -1;
+        return b.hireDate.localeCompare(a.hireDate) || byName(a, b);
+      });
+    default:
+      return sorted; // role — getStaffList + 위장 role 재정렬이 이미 역할순
+  }
 }
 
 export default async function StaffPage({
@@ -85,6 +129,7 @@ export default async function StaffPage({
     role?: RoleKey;
     status?: StatusKey;
     q?: string;
+    sort?: string;
     page?: string;
   }>;
 }) {
@@ -117,10 +162,17 @@ export default async function StaffPage({
   const role: RoleKey = (sp.role as RoleKey) ?? "all";
   const status: StatusKey = (sp.status as StatusKey) ?? "all";
   const q = sp.q ?? "";
+  const sort: SortKey = SORT_FILTERS.some((f) => f.key === sp.sort) ? (sp.sort as SortKey) : "role";
   const page = Math.max(1, Number(sp.page) || 1);
 
   // super_admin(숨은 총괄)은 학원 화면에서 '관리자'로 위장 표시(실제 role/접근 불변, displayRoleFor).
-  const [rawAll, superAdminIds] = await Promise.all([getStaffList(), getSuperAdminIds()]);
+  // 과목 라벨·색은 학원설정 단일 소스(buildSubjectMaps) — 하드코딩 금지 규칙.
+  const [rawAll, superAdminIds, settings] = await Promise.all([
+    getStaffList(),
+    getSuperAdminIds(),
+    getTenantSettings(),
+  ]);
+  const subjectMaps = buildSubjectMaps(settings.operations.subjects);
   const all = rawAll
     .map((s) => ({
       ...s,
@@ -145,9 +197,20 @@ export default async function StaffPage({
   }
   if (role !== "all") staff = staff.filter((s) => s.systemRole === role);
   if (status !== "all") staff = staff.filter((s) => s.status === status);
+  staff = sortStaff(staff, sort);
 
-  const roleCount = (key: string) => all.filter((s) => s.systemRole === key).length;
-  const current = { role, status, q };
+  // 대시보드(원장 요청 2026-07-28): 전직원 수 · 근무형태별 · 과목별 — 전체(all, 재직+대기) 기준.
+  const empCount = (t: string) => all.filter((s) => s.employmentType === t).length;
+  const empUnset = all.filter((s) => !s.employmentType).length;
+  const subjectStats = subjectMaps.options
+    .map((o) => ({
+      key: o.value,
+      label: o.label,
+      color: subjectMaps.colorOf(o.value),
+      count: all.filter((s) => s.subjects.includes(o.value)).length,
+    }))
+    .filter((s) => s.count > 0);
+  const current = { role, status, q, sort };
 
   // 역할 분포 Stat은 전체(all) 기준 — 목록만 50명으로 슬라이스(billing 메모리 페이지네이션).
   const total = staff.length;
@@ -158,6 +221,7 @@ export default async function StaffPage({
     if (role !== "all") params.set("role", role);
     if (status !== "all") params.set("status", status);
     if (q) params.set("q", q);
+    if (sort !== "role") params.set("sort", sort);
     if (p > 1) params.set("page", String(p));
     const s = params.toString();
     return s ? `/staff?${s}` : "/staff";
@@ -173,14 +237,28 @@ export default async function StaffPage({
       />
       <FaceTabs faces={FACES} active="list" ariaLabel="직원관리 면" />
 
-      {/* Stat strip — Editorial 문법 ②(BigStat 공용 아톰) */}
-      <section className="grid grid-cols-2 gap-3.5 sm:grid-cols-5">
-        <BigStat label="전체" value={all.length} unit="명" tone="primary" icon={<Users size={16} strokeWidth={1.8} />} />
-        <BigStat label="원장·관리자" value={roleCount("master") + roleCount("admin")} unit="명" tone="danger" icon={<UserCog size={16} strokeWidth={1.8} />} />
-        <BigStat label="강사" value={roleCount("teacher")} unit="명" tone="primary" icon={<GraduationCap size={16} strokeWidth={1.8} />} />
-        <BigStat label="상담" value={roleCount("counselor")} unit="명" tone="rose" icon={<MessageCircle size={16} strokeWidth={1.8} />} />
-        <BigStat label="회계" value={roleCount("accountant")} unit="명" tone="purple" icon={<Calculator size={16} strokeWidth={1.8} />} />
+      {/* 직원 대시보드(원장 요청 2026-07-28) — 전직원 수 · 근무형태별 · 과목별 */}
+      <section className="grid grid-cols-2 gap-3.5 sm:grid-cols-4">
+        <BigStat label="전직원" value={all.length} unit="명" tone="primary" icon={<Users size={16} strokeWidth={1.8} />} />
+        {EMPLOYMENT_TYPES.map((t) => (
+          <BigStat key={t} label={t} value={empCount(t)} unit="명" tone="neutral" />
+        ))}
       </section>
+      {subjectStats.length > 0 ? (
+        <section className="bg-card shadow-card flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl px-4 py-3">
+          <span className="micro">과목별</span>
+          {subjectStats.map((s) => (
+            <span key={s.key} className="inline-flex items-center gap-1.5 text-[13px]">
+              <Pill color={s.color}>{s.label}</Pill>
+              <span className="num text-foreground font-bold">{s.count}</span>
+              <span className="text-text-dim text-[11px]">명</span>
+            </span>
+          ))}
+          {empUnset > 0 ? (
+            <span className="text-text-faint ml-auto text-[11.5px]">근무형태 미입력 {empUnset}명</span>
+          ) : null}
+        </section>
+      ) : null}
 
       {/* Filter bar */}
       <div className="bg-card shadow-card space-y-3 rounded-2xl px-4 py-3">
@@ -211,6 +289,23 @@ export default async function StaffPage({
                 className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs transition ${
                   status === f.key
                     ? "border-foreground bg-foreground text-background font-medium"
+                    : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
+                }`}
+              >
+                {f.label}
+              </Link>
+            ))}
+          </div>
+          <span className="bg-line h-4 w-px" aria-hidden />
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="micro mr-1">정렬</span>
+            {SORT_FILTERS.map((f) => (
+              <Link
+                key={f.key}
+                href={buildStaffHref({ ...current, sort: f.key })}
+                className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs transition ${
+                  sort === f.key
+                    ? "border-primary bg-primary-soft text-primary font-medium"
                     : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
                 }`}
               >
@@ -265,69 +360,78 @@ export default async function StaffPage({
         <EmptyState image="staff" icon={() => <Users size={32} strokeWidth={1.8} />} title="등록된 직원이 없습니다" />
       ) : (
         <>
-        <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
-          {pageStaff.map((s) => {
-            const role = ROLE_META[s.systemRole] ?? ROLE_META.viewer!;
-            const status = STATUS_META[s.status] ?? STATUS_META.active!;
-            const isTeacher = s.systemRole === "teacher";
-            const cardClass = "bg-card border-line shadow-card flex flex-col rounded-2xl border p-5";
-            const body = (
-              <>
-                <header className="flex items-start justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <div className="min-w-0">
-                      <p className="text-foreground flex items-center gap-1.5 text-[15px] font-bold">
-                        {s.displayName}
-                        <EditingBadge scope={`staff:${s.id}`} />
-                      </p>
-                      <p className="text-text-dim num mt-0.5 truncate text-[11px]">{s.email}</p>
-                    </div>
-                  </div>
-                  <Pill color={role.color}>{role.label}</Pill>
-                </header>
-
-                {isTeacher ? (
-                  <div className="border-line mt-4 grid grid-cols-3 gap-3 border-t pt-4">
-                    <Mini label="담당 반" value={s.classesCount} unit="개" />
-                    <Mini label="담당 학생" value={s.primaryStudentsCount} unit="명" />
-                    <Mini label="상태" value={status.label} />
-                  </div>
-                ) : (
-                  <div className="border-line text-text-dim mt-4 border-t pt-4 text-[12px]">
-                    {status.label} · {s.classesCount > 0 ? `반 ${s.classesCount}개` : "반 없음"}
-                  </div>
-                )}
-              </>
-            );
-            // 카드 전체 클릭 → 직원 상세(읽기전용 뷰 + 탭). 관리 권한은 상세 안에서 분기.
-            return (
-              <WindowLink
-                key={s.id}
-                href={`/staff/${s.id}`}
-                title={s.displayName}
-                ariaLabel={`${s.displayName} 상세`}
-                className={`${cardClass} group hover:border-primary/40 hover:shadow-modal cursor-pointer transition`}
-              >
-                {body}
-              </WindowLink>
-            );
-          })}
-        </div>
+          {/* list(테이블) 형식 — 원장 지시 2026-07-28(카드 그리드에서 전환). 좁은 창은 가로 스크롤. */}
+          <div className="bg-card shadow-card overflow-x-auto rounded-2xl">
+            <table className="w-full min-w-[860px] border-collapse text-[13px]">
+              <thead>
+                <tr className="border-line text-text-dim border-b text-left text-[11.5px]">
+                  <th className="px-4 py-2.5 font-medium">이름</th>
+                  <th className="px-3 py-2.5 font-medium">역할</th>
+                  <th className="px-3 py-2.5 font-medium">부서</th>
+                  <th className="px-3 py-2.5 font-medium">근무형태</th>
+                  <th className="px-3 py-2.5 font-medium">직급</th>
+                  <th className="px-3 py-2.5 font-medium">과목</th>
+                  <th className="px-3 py-2.5 font-medium">입사일</th>
+                  <th className="px-3 py-2.5 text-right font-medium">담당 반</th>
+                  <th className="px-3 py-2.5 text-right font-medium">담당 학생</th>
+                  <th className="px-3 py-2.5 font-medium">상태</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pageStaff.map((s) => {
+                  const roleMeta = ROLE_META[s.systemRole] ?? ROLE_META.viewer!;
+                  const statusMeta = STATUS_META[s.status] ?? STATUS_META.active!;
+                  return (
+                    <tr key={s.id} className="border-line/60 hover:bg-bg-soft/50 border-b last:border-0 transition">
+                      <td className="px-4 py-2.5">
+                        {/* 이름 클릭 → 직원 상세 창. 아바타 금지 규칙 — 사람 표시는 이름 텍스트만. */}
+                        <WindowLink
+                          href={`/staff/${s.id}`}
+                          title={s.displayName}
+                          ariaLabel={`${s.displayName} 상세`}
+                          className="group inline-flex items-center gap-1.5"
+                        >
+                          <span className="text-foreground font-bold group-hover:underline">{s.displayName}</span>
+                          <EditingBadge scope={`staff:${s.id}`} />
+                        </WindowLink>
+                        <p className="text-text-dim num mt-0.5 truncate text-[11px]">{s.email}</p>
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <Pill color={roleMeta.color}>{roleMeta.label}</Pill>
+                      </td>
+                      <td className="text-foreground px-3 py-2.5 whitespace-nowrap">{s.department ?? "—"}</td>
+                      <td className="text-foreground px-3 py-2.5 whitespace-nowrap">{s.employmentType ?? "—"}</td>
+                      <td className="text-foreground px-3 py-2.5 whitespace-nowrap">{s.jobTitle ?? "—"}</td>
+                      <td className="px-3 py-2.5">
+                        <span className="flex flex-wrap gap-1">
+                          {s.subjects.length > 0
+                            ? s.subjects.map((k) => (
+                                <Pill key={k} color={subjectMaps.colorOf(k)}>
+                                  {subjectMaps.labelOf(k)}
+                                </Pill>
+                              ))
+                            : "—"}
+                        </span>
+                      </td>
+                      <td className="num text-text-dim px-3 py-2.5 whitespace-nowrap">{s.hireDate ?? "—"}</td>
+                      <td className="num text-foreground px-3 py-2.5 text-right">
+                        {s.classesCount > 0 ? s.classesCount : "—"}
+                      </td>
+                      <td className="num text-foreground px-3 py-2.5 text-right">
+                        {s.primaryStudentsCount > 0 ? s.primaryStudentsCount : "—"}
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <Pill color={statusMeta.color}>{statusMeta.label}</Pill>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
           <Pagination page={page} totalPages={totalPages} hrefForPage={pageHref} />
         </>
       )}
-    </div>
-  );
-}
-
-function Mini({ label, value, unit }: { label: string; value: number | string; unit?: string }) {
-  return (
-    <div>
-      <p className="text-text-dim text-[12px]">{label}</p>
-      <p className="num text-foreground mt-1 text-base">
-        {value}
-        {unit ? <span className="text-text-dim ml-0.5 text-[11px]">{unit}</span> : null}
-      </p>
     </div>
   );
 }
