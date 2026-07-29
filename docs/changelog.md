@@ -4,6 +4,25 @@
 
 ## 진행 상황
 
+### 창 반응속도 — warm 캐시 상한 4 + presence 채널 지연 연결 (2026-07-29)
+"유료 티어로 올렸는데 왜 안 빨라지냐"에서 출발한 75에이전트 감사의 1·2순위 레버 실행. 감사 결론은
+**지배항이 서버가 아니라 뷰어 PC의 클라 JS 실행**이라는 것(CPU 4배 스로틀 시 창 열기 405→746ms,
+서버 TTFB는 9.2~10.2ms 불변). 자세한 정정은 [perf-open-window-backlog.md](./perf-open-window-backlog.md) 인프라 메모.
+- **BL3 `CACHE_MAX` 2 → 4**: warm 재오픈은 그 클라 실행을 통째로 건너뛰므로 상한을 늘린 만큼 그대로
+  체감이 된다. 12메뉴 중 실제로 오가는 건 3~5개라 4면 대부분의 왕복을 덮는다. 대가는 숨은 iframe 4개(메모리).
+  ⚠️ LRU 테스트 2개를 **CACHE_MAX에서 도출**하도록 고쳐 상수를 또 바꿔도 안 깨지게 했다.
+- **presence Realtime 지연 연결**: `EditPresenceProvider`가 마운트 즉시 채널을 열어 **창 개수만큼 WS**가
+  늘었다(presence를 안 쓰는 시간표·출석부·수납 창도 예외 없이). 이제 실제 소비처
+  (`useEditingOthers`·`useEditPresence`)가 있을 때만 연다 — 순수 참조수 모듈
+  [connection-demand.ts](../src/features/presence/connection-demand.ts) + Vitest 6.
+  · 마지막 소비처가 빠져도 **10초 유예** 후 끊는다(폼 편집 토글마다 WS 재핸드셰이크 방지).
+  · 유예 중 재retain이면 통지 자체를 안 한다(열린 채널 승계, 재연결 0).
+  · 채널이 닫히면 스냅샷을 비우고 구독자에게 통지 — 안 그러면 "수정중"이 유령으로 굳는다.
+- ⚠️ 시각검증 미완(typecheck 0·lint 0·관련 테스트 94 통과). 동시편집 "수정중" 표시는 **기능 유지**가
+  전제라, 감사가 제안한 "embed 분기에서 provider 제거"는 **채택하지 않았다**(창 안이 곧 편집 표면이라
+  그대로 죽는다).
+- 📌 별건으로 감사가 찾은 🔴 2건은 미처리: `invoices_bak_20260708` anon 노출 · '미수강 제외' 필터 100% 고장.
+
 ### 등록상담 사전 브리프 — 기본 접힘 + 펼치기/접기 (2026-07-29)
 브리프가 길어 등록상담 상세를 열 때마다 아래 내용(접수 정보·AI 분석·수강 이력)을 통째로 밀어냈다 →
 본문을 **기본 접힘**으로 바꾸고 토글을 달았다([prep-brief-collapse.tsx](<../src/app/(shell)/enrollment/[id]/prep-brief-collapse.tsx>)).
