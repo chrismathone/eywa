@@ -7,6 +7,7 @@ import { getTeacherScope } from "@/lib/auth/teacher-scope";
 import { effectiveTeacherId } from "@/lib/auth/view-mode";
 import { kstToday } from "@/lib/date-kst";
 import { createClient } from "@/lib/supabase/server";
+import { ownsTextbookRequest } from "../textbook-ownership";
 
 // 교재신청(textbook_orders) CRUD — invoices actions 골격 본뜸. 상태 전환 시 해당 타임스탬프를
 // 진입 시각으로 채운다(ijw timestamp-on-toggle). tenant_id는 RLS 강제(INSERT엔 명시).
@@ -162,15 +163,20 @@ async function loadEditableRequest(
 ): Promise<{ error: string } | { ok: true }> {
   const { data: row } = await supabase
     .from("textbook_orders")
-    .select("student_id, registered_at, ordered_at, paid_at")
+    .select("student_id, teacher_name, registered_at, ordered_at, paid_at")
     .eq("id", id)
     .single();
   if (!row) return { error: "교재 요청을 찾을 수 없습니다" };
-  // 강사(또는 겸직-강사뷰)는 본인 담당 학생 요청만.
+  // 강사(또는 겸직-강사뷰)는 본인 담당 학생 + **본인 요청**만.
+  // 🔴 담당 학생만으로는 부족하다(2026-07-29): 수학·영어를 같이 듣는 학생은 두 강사 모두의 담당이라
+  //    영어 강사가 수학 강사의 요청을 수정·삭제할 수 있었다. 소유 판정은 ownsTextbookRequest 단일 소스.
   const tId = await effectiveTeacherId();
   if (tId) {
+    const user = await getCurrentUser();
     const { studentIds } = await getTeacherScope(tId);
     if (!row.student_id || !studentIds.includes(row.student_id)) return { error: "담당 학생의 요청만 수정·삭제할 수 있습니다" };
+    if (!ownsTextbookRequest(row.teacher_name, user?.displayName))
+      return { error: `본인이 낸 요청만 수정·삭제할 수 있습니다${row.teacher_name ? ` (이 요청: ${row.teacher_name})` : ""}` };
   }
   // 사무실이 하나라도 처리(등록/주문/납부)했으면 잠금.
   if (row.registered_at || row.ordered_at || row.paid_at) {

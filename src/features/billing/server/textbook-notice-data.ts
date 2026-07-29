@@ -12,6 +12,7 @@ import { kstToday } from "@/lib/date-kst";
 import { createClient } from "@/lib/supabase/server";
 import { fetchInChunks } from "@/lib/supabase/batch";
 import { BOARD_PREFIX } from "@/features/report-admin/notice-targets";
+import { ownsTextbookRequest } from "../textbook-ownership";
 import { workerSupportsNoticeAttachments } from "@/features/report-admin/worker-results";
 
 export type TextbookOrderRow = {
@@ -102,7 +103,13 @@ export async function getNoticeAttachmentWorkerGate(): Promise<{ ok: boolean; er
   };
 }
 
-/** orderIds → 요청 행. 강사(겸직-강사뷰 포함)는 본인 담당 학생 요청만(하나라도 밖이면 전체 거부). */
+/**
+ * orderIds → 요청 행. 강사(겸직-강사뷰 포함)는 **본인 담당 학생 + 본인이 낸 요청**만(하나라도 밖이면 전체 거부).
+ *
+ * 🔴 소유 조건은 2026-07-29 적대 감사로 추가됐다 — 여기가 **가장 넓은 표면**이었다. 수정·삭제는 그나마
+ * "사무실 미처리" 조건에 걸려 실측 4건뿐이었는데, 이 발송 경로엔 그 제한이 없어 강사가 담당 학생의
+ * **모든** 교재 요청(=대부분 남의 과목)을 학부모 알림장으로 내보낼 수 있었다.
+ */
 export async function loadScopedOrders(
   orderIds: string[],
 ): Promise<{ error: string } | { rows: TextbookOrderRow[] }> {
@@ -116,10 +123,16 @@ export async function loadScopedOrders(
   if (!rows.length) return { error: "교재 요청을 찾을 수 없습니다" };
   const teacherId = await effectiveTeacherId();
   if (teacherId) {
+    const user = await getCurrentUser();
     const { studentIds } = await getTeacherScope(teacherId);
     const scoped = new Set(studentIds);
     if (!rows.every((r) => r.student_id && scoped.has(r.student_id)))
       return { error: "담당 학생의 요청만 학부모에게 보낼 수 있습니다" };
+    const notMine = rows.filter((r) => !ownsTextbookRequest(r.teacher_name, user?.displayName));
+    if (notMine.length)
+      return {
+        error: `본인이 낸 요청만 학부모에게 보낼 수 있습니다 — ${[...new Set(notMine.map((r) => r.teacher_name).filter(Boolean))].join(", ") || "다른 선생님"} 요청이 포함돼 있습니다`,
+      };
   }
   return { rows };
 }
