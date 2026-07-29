@@ -11,7 +11,14 @@ import {
   type ReactNode,
 } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { createDemandTracker } from "./connection-demand";
 import { buildOthersByScope, isPresenceScope, type Editor, type RawPresenceState } from "./presence-state";
+
+/**
+ * 마지막 소비처가 사라진 뒤 채널을 유지하는 시간. 폼의 편집 토글(`useEditPresence(scope, editing)`)이
+ * 껐다 켤 때마다 WS 핸드셰이크가 다시 도는 걸 막는다.
+ */
+const PRESENCE_LINGER_MS = 10_000;
 
 /**
  * cross-user "수정중" presence — 테넌트 단일 채널 `edit-presence:${tenantId}`.
@@ -49,6 +56,15 @@ export function EditPresenceProvider({ user, children }: { user: PresenceUser; c
   const myScopes = useRef(new Map<string, number>());
   const channelRef = useRef<ReturnType<ReturnType<typeof createClient>["channel"]> | null>(null);
 
+  // 채널 **지연 연결**(2026-07-29 성능 감사) — 소비처가 하나라도 있을 때만 WS를 연다. 창=iframe이라
+  // 예전엔 창 개수만큼 WebSocket이 늘었고, presence를 안 쓰는 화면(시간표·출석부·수납…)도 예외가
+  // 아니었다. 참조수 관리는 순수 모듈 [connection-demand](./connection-demand.ts)가 담당(Vitest).
+  const [needChannel, setNeedChannel] = useState(false);
+  const [demand] = useState(() =>
+    createDemandTracker({ onChange: setNeedChannel, lingerMs: PRESENCE_LINGER_MS }),
+  );
+  useEffect(() => () => demand.dispose(), [demand]);
+
   // store는 mount 1회 생성(lazy useState). 메서드는 안정 ref 객체 + 세션 불변 user를 클로저로 잡아,
   // .current를 이벤트/효과 시점에만 읽는다(렌더 중 ref 접근 없음).
   const [store] = useState<PresenceStore>(() => {
@@ -68,13 +84,18 @@ export function EditPresenceProvider({ user, children }: { user: PresenceUser; c
           listeners.current.set(scope, set);
         }
         set.add(cb);
+        // 읽기만 하는 소비처(useEditingOthers)도 채널이 있어야 값이 온다 — 수요로 센다.
+        demand.retain();
         return () => {
           set!.delete(cb);
           if (!set!.size) listeners.current.delete(scope);
+          demand.release();
         };
       },
       startEditing: (scope) => {
         myScopes.current.set(scope, (myScopes.current.get(scope) ?? 0) + 1);
+        // retain이 채널을 열고, 열린 뒤 subscribe 콜백이 myScopes를 통째로 track한다(아래 효과).
+        demand.retain();
         retrack();
       },
       stopEditing: (scope) => {
@@ -82,13 +103,20 @@ export function EditPresenceProvider({ user, children }: { user: PresenceUser; c
         if (n <= 0) myScopes.current.delete(scope);
         else myScopes.current.set(scope, n);
         retrack();
+        demand.release();
       },
     };
   });
 
   useEffect(() => {
+    // 소비처가 없으면 아예 연결하지 않는다 — presence를 안 쓰는 창은 WS 0개.
+    if (!needChannel) return;
     // presence key는 이 채널 구독 생명주기 동안 고정. 탭/기기마다 nonce가 달라 같은 계정 다른 탭도 구분된다.
     const myKey = `${user.id}:${Math.random().toString(36).slice(2)}`;
+    // ref.current를 effect 진입 시점에 로컬로 고정 — cleanup이 다른 Map을 보게 되는 함정 차단
+    // (react-hooks/exhaustive-deps 경고의 실제 사유). 이 두 Map은 프로바이더 수명 내내 같은 인스턴스다.
+    const snaps = snapshots.current;
+    const subs = listeners.current;
     const supabase = createClient();
     const ch = supabase.channel(`edit-presence:${user.tenantId}`, {
       config: { presence: { key: myKey } },
@@ -97,7 +125,7 @@ export function EditPresenceProvider({ user, children }: { user: PresenceUser; c
 
     const rebuild = () => {
       const next = buildOthersByScope(ch.presenceState() as unknown as RawPresenceState, myKey);
-      const cur = snapshots.current;
+      const cur = snaps;
       const scopes = new Set<string>([...cur.keys(), ...next.keys()]);
       const changed: string[] = [];
       for (const scope of scopes) {
@@ -108,7 +136,7 @@ export function EditPresenceProvider({ user, children }: { user: PresenceUser; c
         else cur.delete(scope);
         changed.push(scope);
       }
-      for (const scope of changed) listeners.current.get(scope)?.forEach((cb) => cb());
+      for (const scope of changed) subs.get(scope)?.forEach((cb) => cb());
     };
 
     ch.on("presence", { event: "sync" }, rebuild);
@@ -122,8 +150,12 @@ export function EditPresenceProvider({ user, children }: { user: PresenceUser; c
       void ch.untrack();
       supabase.removeChannel(ch);
       channelRef.current = null;
+      // 채널이 닫히면 이전 스냅샷은 더 이상 사실이 아니다 — 남겨두면 "수정중"이 유령으로 굳는다.
+      const stale = [...snaps.keys()];
+      snaps.clear();
+      for (const scope of stale) subs.get(scope)?.forEach((cb) => cb());
     };
-  }, [user.id, user.displayName, user.tenantId]);
+  }, [needChannel, user.id, user.displayName, user.tenantId]);
 
   return <Ctx.Provider value={store}>{children}</Ctx.Provider>;
 }

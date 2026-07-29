@@ -82,7 +82,7 @@ export async function registerUploadedDocument(
   try {
     verified = await verifyUploadedObject("document", path);
   } catch (e) {
-    await removeObject(path).catch(() => {});
+    await removeObject(path, { bucket: MEDIA_KIND.document.supabaseBucket }).catch(() => {});
     return { error: e instanceof Error ? e.message : "업로드 검증 실패" };
   }
 
@@ -104,7 +104,7 @@ export async function registerUploadedDocument(
     .select("id")
     .single();
   if (error || !data) {
-    await removeObject(path).catch(() => {});
+    await removeObject(path, { bucket: MEDIA_KIND.document.supabaseBucket }).catch(() => {});
     return { error: `등록 실패: ${error?.message ?? "unknown"}` };
   }
   revalidatePath("/documents");
@@ -201,7 +201,7 @@ export async function deleteDocument(id: string): Promise<{ ok?: boolean; error?
     .select("id"); // select 없으면 0행 삭제도 성공으로 보고된다.
   if (error) return { error: humanizeDbError(error.message, "삭제") };
   if (!deleted?.length) return { error: "문서를 찾을 수 없습니다 — 이미 삭제되었을 수 있습니다" };
-  if (row?.file_path) await removeObject(row.file_path).catch(() => {});
+  if (row?.file_path) await removeObject(row.file_path, { bucket: MEDIA_KIND.document.supabaseBucket }).catch(() => {});
   revalidatePath("/documents");
   return { ok: true };
 }

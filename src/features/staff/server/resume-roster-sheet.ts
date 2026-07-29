@@ -6,8 +6,7 @@ import { buildRosterRow, firstEmptyRowIndex } from "../resume-roster";
 // 직원 이력서 저장(신규 작성) 시 "신규 직원명부" 구글시트에 한 행 기입 — 부가 효과.
 // 실패해도 이력서 저장 자체는 유효해야 하므로 throw하지 않고 {ok:false, error}로 돌려
 // 호출부(saveStaffResume)가 경고 토스트만 띄운다. 인증은 기존 서비스계정 키
-// (GOOGLE_SERVICE_ACCOUNT_KEY/FIREBASE_SERVICE_ACCOUNT_KEY) 재사용 — 대상 시트는 그
-// 서비스계정에 '편집자'로 공유돼 있어야 한다.
+// (`GOOGLE_SERVICE_ACCOUNT_KEY`) 재사용 — 대상 시트는 그 서비스계정에 '편집자'로 공유돼 있어야 한다.
 
 const DEFAULT_TAB = "2026신규 직원명부";
 

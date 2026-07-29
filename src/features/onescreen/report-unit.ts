@@ -14,6 +14,8 @@
  * 관리자 직접작성(반이 모호할 때)·0134a 이전에 저장된 행. 그때는 과목이 단위 = 예전과 동일 동작이다.
  */
 
+import { LEGACY_REPORT_SUBJECT } from "@/features/timetable/lib/report-subject";
+
 /** 반 우선, 없으면 과목. 둘 다 없으면 null("단위를 특정할 수 없음" — DB에선 NULLS DISTINCT라 제약 밖). */
 export function reportUnitKey(
   classId: string | null | undefined,
@@ -112,8 +114,22 @@ export function matchReportsToRows<R extends ReportRowRef>(
   //    (특강 반은 최근 생성 — 이관 시점에 없었다). 반대 방향(정규 행이 특강 보고서를 가져가는 것)은
   //    특강 보고서에 class_id가 항상 붙으므로 1차에서 정확히 갈린다.
   //    ⚠️ 특강 첫 수업에 '이전 회차'가 비는 건 **정상**이다 — 정규 진도를 빌려오는 것보다 낫다.
+  //
+  // 🔴🔴 **이관분의 과목(=math)과 같은 행에만 준다** (원장 제보 2026-07-29, 영어 강사 원스크린).
+  //    `subjectKeys.size === 1`은 "학생이 단일 과목"이 아니라 "**이 강사에게 보이는 행이** 단일 과목"이다.
+  //    로스터는 강사 담당 반만 싣기 때문에, 영어 강사에겐 수학도 듣는 학생조차 영어 행 하나로 보인다
+  //    → 이 조건을 그냥 통과해 **수학 이관분이 영어 행의 '이전 회차'**로 붙었다(실측 2026-07-29:
+  //    영어반 학생 249명 중 101명이 레거시 보고서 보유. 김수민 '가우스5-2-1'·김준영 '중3-1-1 인재원'·
+  //    김지호 '5-1-3'이 영어 참고행·교재 칸에 그대로 떴다). 강사가 '가져오기'를 누르면 수학 진도·과제가
+  //    영어 보고서 본문이 되어 학부모에게 나간다.
+  //    ⚠️ 같은 버그를 **시간표 hover는 2026-07-27에 이미 막았다**(reportSubject() 단일 소스, 원장 지시
+  //    "수학 시간표에서만 수학 내용이 호버링되게"). 원스크린만 남아 있었다 — 규칙을 그 상수로 통일한다.
+  //    📌 영어도 eywa에서 발송되기 시작하면 그 보고서는 `subject='english'`를 갖고 들어와 1·2차에서
+  //       정확히 갈리므로, 이 게이트는 영어 참고행을 영구히 막지 않는다.
   const subjectKeys = new Set(rows.map((r) => r.subjectKey?.trim() ?? ""));
-  if (opts?.legacyFallback && subjectKeys.size === 1) {
+  // 행 과목 미지정("")은 math 간주 — 진도 입력 분기·G2 배지(grid-row.tsx)와 같은 규약.
+  const onlyRowSubject = subjectKeys.size === 1 ? [...subjectKeys][0]! || LEGACY_REPORT_SUBJECT : null;
+  if (opts?.legacyFallback && onlyRowSubject === LEGACY_REPORT_SUBJECT) {
     const i = out.findIndex((v, idx) => !v && !rows[idx]!.isSpecial);
     // 보강 보고서는 과목·반 없이도 매칭 대상이 아니다(위 2차와 동일 이유) — `!r.makeup` 방어.
     if (i >= 0) out[i] = take((r) => !r.classId?.trim() && !r.subject?.trim() && !r.makeup);

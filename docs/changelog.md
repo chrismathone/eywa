@@ -39,7 +39,7 @@
 - **비범위(재제안 금지 계열)**: 기존 28개 시트 데이터 이관(새로 시작 확정)·시트 역-export·영어 파생출석 ON·
   원스크린/ClassNote 통합·slot_teacher_label→userId 바인딩·attendance_days/on_hold 이력화.
 
-### ECS 후속 — 시간표 하위 카테고리·헤더 바로가기·일괄 입력·팝오버·강사뷰 조임 (2026-07-30) - tsc0/lint0/test50/build✓
+### ECS 후속 — 시간표 하위 카테고리·헤더 바로가기·일괄 입력·팝오버·강사뷰 조임 (2026-07-29) - tsc0/lint0/test50/build✓
 원장 dev 검수 피드백 일괄 반영(같은 브랜치 후속 커밋 6개).
 - **카드 크기 맞춤**: 주간 시트를 요일별 독립 스택 → **단일 CSS grid**(`SheetGrid`, day-column 대체) — 같은
   slotStart가 요일 간 같은 행·같은 높이(시트 원본의 가로 정렬 재현). 랜딩 반 카드는 flex-col+`mt-auto` 균형.
@@ -65,6 +65,211 @@
   고칠 수 없는 일을 시키는 거짓 안내였음.
 - 🔴 **미해결(원장 결정 대기)**: ECS 접근=반 담당(`teacher_id`) 기준인데 영어 슬롯 633개 중 226개가 슬롯 강사≠반
   담당 — 부담임/보조는 "담당 반이 아닙니다". 스코프 확장은 전 화면 파급이라 보류.
+### 🔴 영어 강사 원스크린에 **수학 보고서가 배선**돼 있었다 — 과목별 분리 (2026-07-29) - test 2650 전부 통과
+원장 제보(스크린샷): 영어반(`중등E_초등 브릿지 A`) 학생인데 '이전 회차' 참고행이 **수학**이었다
+(김수민 '가우스5-2-1 / 5-2-1단원 단원평가', 김지호 '5-1-3', 김준영 '중3-1-1 인재원'). 교재명 칸에도
+수학 교재가 **미리 채워져** 있었다. '가져오기'를 누르면 수학 진도·과제가 영어 보고서 본문이 되어 학부모에게 나간다.
+
+**원인 = 과목 게이트가 없는 배선 4곳.** 공통 뿌리는 하나다 — **로스터는 강사 담당 반만 싣는다.**
+그래서 "학생이 단일 과목"과 "이 강사에게 보이는 행이 단일 과목"이 코드에서 같은 조건으로 취급됐다.
+영어 강사에겐 수학도 듣는 학생조차 영어 행 하나로 보이므로, 그 조건을 전부 통과했다.
+- **① 이관분 폴백**([report-unit.ts](../src/features/onescreen/report-unit.ts) 3차) — `subjectKeys.size === 1`이면
+  반·과목 없는 이관분을 붙였다. 실측: 영어반 학생 **249명 중 101명**이 레거시(=수학) 보고서 보유.
+- **② 학생단위 prev 폴백**([roster.ts](../src/features/onescreen/server/roster.ts)) — 반도 과목도 안 보고 학생의
+  **아무 과목** 최신 회차를 집어 '이전 진도'·점수 증감(▲▼)에 썼다. `subject='english'` 보고서는 **실측 0건**이라
+  영어 행에 뜬 값은 100% 수학이었다.
+- **③ 교재요청서 기본값**(roster.ts + [actions.ts](../src/features/onescreen/server/actions.ts) `buildMakeupStudent`) —
+  `textbook_orders`엔 **과목 컬럼이 없어** 학생 단위 대표 1건을 모든 과목 행에 깔았다.
+- **④ 보강 '이전 진도 불러오기'**(actions.ts `loadMakeupHistory`) — `prevScore`가 "과목 무관"으로 명시돼 있었다.
+
+**수리 = 이미 있던 단일 소스로 통일.** 같은 버그를 **시간표 hover는 2026-07-27에 이미 막았다**
+([report-subject.ts](../src/features/timetable/lib/report-subject.ts) `reportSubject()`/`LEGACY_REPORT_SUBJECT`,
+원장 지시 "수학 시간표에서만 수학 내용이 호버링되게"). 원스크린만 그 규약 밖에 있었다 → 네 곳 모두 그 상수를 쓰게 했다.
+- 이관분(subject·class_id 둘 다 NULL) = `math` → **math 행에만** 붙는다. 행 과목 미지정("")은 math 간주(G2 배지와 같은 규약).
+- 📌 **영어를 영구히 막지 않는다** — 영어가 eywa에서 발송되기 시작하면 `subject='english'`로 들어와 1·2차에서 정확히 갈린다(테스트로 고정).
+- 곁다리로 **학부모 읽음(G3) 배지**도 math 행 게이트를 붙였다(형제 배지 `progressAnomalyBadge`는 이미 걸려 있었다) —
+  RPC가 학생의 **모든** 보고서를 세는데 발송분이 전부 수학이라, 영어 행에 달리면 "당신의 영어 보고서가 미확인"으로 읽힌다.
+- ⚠️ **수학 강사 회귀 없음**(실측 재현): 이관분 폴백이 그대로 동작(김민주 로스터 5명 전원 직전 회차 정상 매칭).
+  메모리에 남은 "이관분 폴백이 꺼지면 이력 유실"(김지호 90행 등) 사례는 전부 math 행이라 영향 없음.
+- 검증: typecheck 0 / lint 0 / **test 2650**(report-unit +4) + **실데이터 전/후 대조**(추민아 `중등E_초등 브릿지 A` 6명 —
+  수정 전 5명에게 수학 참고행, 수정 후 전원 빈칸 = 스크린샷과 4/4 일치).
+
+#### 적대적 검증(테넌트 전수 A/B — 옛 규칙을 재현해 나란히 비교)
+수정 전 3차 규칙을 스크립트 안에 그대로 재현해 **558개 (강사,학생) 쌍**(영어 행 234·수학 행 378)에 양방향으로 돌렸다.
+- **누출 잔존** = 영어 행에 비-영어 보고서가 붙은 수: **104 → 0**.
+- **과잉 차단** = 수학 행이 옛 규칙에선 받았는데 새 규칙에선 못 받은 직전 회차: **0건**.
+- 로스터 게이트: 영어 전용 234쌍 중 prevScore 누출 0 · 교재요청서 누출 0(누출 가능했던 학생 **72명**).
+- 새로 만든 엣지 확인 — 한 강사가 같은 학생을 math+english 둘 다 가르치는 쌍 = **0** → `subjects[0]` 폴백 오배정 불가.
+- 저장 경로 확인: 영어 행은 `subject='english'`로 저장된다(클라가 `su.subjectKey` 우선) → **영어 발송이 시작되면 게이트가 스스로 열린다.**
+- 자기검토에서 **이 수정이 만든 결함 1건** 발견·수리: 영어 화면이 정상적으로 '이전 회차' 0건이 되자 참고행 토글만
+  `hasPrev`로 숨고 **'이전값 일괄 가져오기' 버튼은 남아** 죽은 컨트롤이 됐다(planPrevFill이 `{}` 반환) → 같은 게이트로 묶음.
+
+#### ⚠️ 남은 한계 (고의로 남김 — 재발 시 여기부터 볼 것)
+1. **`textbook_orders`에 과목 컬럼이 없다.** 지금은 "교재요청서 기본값 = math 행에만"으로 막았다(실측 442건 전부 수학 교재).
+   **영어 교재요청이 실제로 생기면 이 폴백으론 못 가른다** → `textbook_orders.subject` 컬럼 추가가 정답.
+   소비처 2곳(`roster.ts` reqBook · `actions.ts buildMakeupStudent`)을 함께 고칠 것.
+2. **`loadMakeupHistory`는 `class_id`를 읽지 않는다** → `subject IS NULL`인데 반은 영어인 보고서가 생기면 math로 오분류한다.
+   현재 그런 행 0건이라 무해. 수리 = select에 `class_id` 추가 + `reportSubject({subject, classSubject})`(roster.ts와 동일).
+3. **`onescreen_parent_read_stats` RPC 자체는 여전히 전 과목을 센다.** 지금은 **표시 단**에서만 math 행 게이트를 걸었다.
+   영어 발송이 시작되면 RPC에 과목을 넘겨 과목별로 세고 그 게이트를 풀 것.
+4. **`reportSubject`의 반 과목 폴백은 '강사 담당 반'만 안다**(roster는 그 강사 반만 로드). 다른 강사 반의 `class_id`는
+   해석되지 않아 `subject` 컬럼 → 레거시(math)로 떨어진다. 현재 데이터에선 결과가 같지만, 반 과목이 진실이어야 하는
+   상황이 오면 전 반 과목 맵이 필요하다(쿼리 1회 추가 = 성능 규칙 B4 검토 대상).
+5. **`onescreen_daily_sessions`엔 과목이 없다**(학생×날짜×강사). 점수·태도·과제가 한 강사의 여러 과목 행에 공유된다.
+   지금은 math+english를 함께 가르치는 (강사,학생) 쌍이 0이라 무해 — 그런 쌍이 생기면 실제 문제가 된다.
+6. **브라우저 시각검증 미완**(웨일 연결 필요). 검증은 전부 순수함수 + 실DB 대조로 했다.
+
+### `invoices_bak_20260708` 정체 확인 → `archive` 스키마로 이관 (2026-07-29, 0156a)
+0155a로 권한만 막아둔 백업 테이블의 **정체를 실측으로 확정하고** public 밖으로 뺐다.
+
+**정체**: 2026-07-08 **수납 line_items 재구성 직전**의 invoices 스냅샷
+(출처 = 이 문서 "수납 브랜치 머지(2026-07-13)" 항목의 "DB는 이미 선반영(2821건 11-key line_items,
+백업 invoices_bak_20260708)"). 백업 최종 `updated_at` 2026-07-07 ↔ 현재 2026-07-28.
+
+**실측 대조 — 이 백업은 현재보다 낡고 덜 채워져 있다**
+- 2,002행 **전부**가 현재 `invoices`에 같은 id로 존재(백업에만 있는 행 = **0**).
+- 컬럼 20종에서 "백업엔 값이 있는데 현재는 NULL" = **전 컬럼 0건**(정보 유실 없음).
+- 오히려 현재가 더 채워짐: `billed_at` +1,967 · `discount_reason` +1,608 · `card_company` +1,509 ·
+  `cash_receipt_number` +375 · `paid_at` +97 · `payment_method` +96.
+- `line_items`도 유실 0 / 보강 2(백업의 2건은 array가 아니라 **string** = 깨진 값이었다).
+- 고유 정보는 **값이 바뀐 행의 이전 값**뿐: `status` 962 · `amount_paid` 183 · `paid_at` 147 ·
+  `amount_total` 109 · `amount_discount` 11 · `due_date` 7행.
+
+**🔴 그래서 DROP하지 않았다** — `audit_logs`에 invoice/billing/payment 계열 기록이 **0건**이다.
+위 "이전 값"을 담은 기록이 이 테이블 말고는 없다. 돈 데이터라 파기는 원장 판단으로 남긴다.
+
+**조치**: 데이터는 그대로 두고 **위치만** 옮겼다 — `public` → 신설 `archive` 스키마,
+이름도 자기설명적으로 `invoices_pre_line_items_20260708`.
+- `archive`는 PostgREST 노출 스키마가 아니다 → **노출 사고 유형 자체가 사라진다**(grant/RLS가
+  나중에 되돌려져도 무관). 추가로 스키마 USAGE를 `anon`/`authenticated`/`public`에서 revoke하고
+  `service_role`에만 부여(이중 방어). 테이블 RLS(force, 정책 0)도 유지.
+- 검증: public에서 소멸 ✅ · archive 2,002행 + 합계 ₩795,877,775 **정확 보존** ✅ ·
+  anon REST 두 이름 모두 차단(42P01 / PGRST205) ✅ · 라이브 `invoices` 3,220행 무손상 ✅ ·
+  **public 스키마에 RLS 꺼진 테이블 0개**(전수 재확인) ✅.
+- 되돌리기: `alter table archive.invoices_pre_line_items_20260708 set schema public;`
+- ⏰ **2026-08-29 재검토 예정** — 원장 결정(07-29) "백업은 1달 후에 지워보자". 그날 행수·합계 재확인 +
+  코드 참조 0 확인 + `audit_logs`에 invoice 기록이 생겼는지(= 대체재 유무) 확인 후 **승인 받고** DROP한다.
+  덤프를 먼저 전달하고 삭제도 마이그레이션 파일로 남길 것. 알림은 예약작업 `delete-invoices-bak-decision`,
+  다만 그 스케줄러는 앱이 열려 있을 때만 도니 **이 문서와 0156a 주석이 백업 채널**이다.
+
+📌 **앞으로 백업·스냅샷 테이블은 `archive` 스키마에 만든다.** public에 만들면 PostgREST가 자동
+노출하고 Supabase 기본 grant가 `anon`에 붙는다 — 0155a가 정확히 그 경로였다.
+
+### 아이콘 규약 위반 2건 — main이 red였다 (2026-07-29) - test 2646 전부 통과
+`eywa-icon-mapping` 스위트가 main에서 **2건 실패 중**이었다(다른 작업의 부수효과라 아무도 자기 것으로 안 봄).
+Vercel 게이트는 `typecheck`뿐이라 배포는 계속 초록이었고, 그래서 조용히 방치됐다.
+- **`⚠` 텍스트 글리프**([classnote-queue-card.tsx](<../src/app/(shell)/lesson-reports/_components/classnote-queue-card.tsx>) 구워커 경고,
+  `eba7ad6c`): 아이콘 자리에 이모지를 세우는 걸 스위트가 금지한다 → `AlertTriangle`(`size-3.5`, 코드베이스 13파일 관행)로 교체.
+- **미사용 compat 별칭 `Lock`**: 마지막 소비처가 `1beee908`("재인증 제거")에서 사라져 **orphan 별칭**만 남았다 →
+  별칭 제거(카탈로그의 `lock` 글리프 자체는 유지). 절대 개수 트립와이어 143→142 갱신 + **왜 줄었는지 주석**을 남겨
+  다음 사람이 숫자만 보고 맞추지 않게 했다.
+
+### 🔴 수납 백업 테이블 익명 노출 차단 + '미수강 제외' 필터 복구 (2026-07-29)
+성능 감사([perf-open-window-backlog.md](./perf-open-window-backlog.md))가 곁다리로 찾아낸 실제 사고 2건.
+
+**① `invoices_bak_20260708` — 공개 anon 키로 수납 실데이터가 읽히고 있었다 (0155a)**
+- RLS 비활성 + `anon`/`authenticated`에 SELECT뿐 아니라 **INSERT/UPDATE/DELETE/TRUNCATE까지** 부여된 상태.
+  브라우저에 노출되는 공개 키만으로 `GET /rest/v1/invoices_bak_20260708` → **HTTP 206**, injaewon 실데이터
+  **2,002행**(합계 ₩795,877,775, `student_id`·카드사·현금영수증번호 포함) 반환을 실증.
+- **원인 = `supabase/migrations`에 없는 애드혹 생성물.** psql/대시보드로 직접 만든 백업이라 마이그레이션
+  리뷰 게이트를 통째로 우회했고, public 스키마 새 테이블은 PostgREST가 자동 노출 + Supabase 기본 grant가 붙는다.
+- 조치 = 권한 회수 + `enable`/`force row level security`, **정책 0개**(= 아무도 못 읽음).
+  `service_role`·`postgres`는 `rolbypassrls=true`라 운영·복구 경로는 유지됨(사전 확인).
+- 적용 후 실검증: anon SELECT ✅차단 · anon DELETE ✅차단 · service_role ✅유지 · 2,002행 보존.
+- ⚠️ **DROP하지 않았다** — 07-08 line_items 재구성 이전의 유일한 백업일 수 있어 보존 판단이 먼저.
+- 전수 점검 결과 public 스키마에서 **RLS 꺼진 테이블은 이 1개뿐**이었다.
+- 📌 규칙: 백업/임시 테이블을 public 스키마에 만들지 말 것. 부득이하면 같은 트랜잭션에서 revoke + RLS까지.
+
+**② '미수강 제외' 학생 필터가 100% 고장이었다 — 8초 뒤 "학생 0명"**
+- 미수강 학생 id를 전부 풀어 `.not("id","in","(…)")`에 넣는 구조였는데 "미수강은 소수"라는 전제가 깨졌다
+  (실측 812명 중 **458명**). URL 17,943자 → PostgREST가 `content-location` 헤더로 그 쿼리를 되돌려주면서
+  헤더가 Node `maxHeaderSize`(16384) 초과 → `fetch failed` → **`data ?? []`가 그 에러를 삼켜** 빈 목록으로 표시.
+  실패 임계 n=398/399, 3/3 재현.
+- 수리 = id를 URL에 싣지 않고 **`enrollments!inner` 임베드로 서버 조인 필터**. 과목 필터도 같은 방식으로 전환
+  (기존엔 과목별 distinct 학생 id를 `.in()`에 넣어 같은 폭탄을 안고 있었다 — 실측 english 249명).
+- **고치기 전에 실데이터로 동치 검증**: 미수강 제외 354 = SQL ground truth 354 · 과목 english 249 = 249 ·
+  부모행 중복 없음. 현행 방식은 같은 조건에서 `TypeError: fetch failed` 재현.
+- ⚠️ 의미 차이 보존: '미수강 제외'는 `end_date is null`만 본다(**휴원은 '수강 중'**). 과목 필터는 `on_hold=false`까지.
+- 🔴 `data ?? []` 제거 — 빈 결과와 실패가 화면에서 구분돼야 한다. 실패는 이제 한글 메시지로 throw.
+
+**③ 곁다리 — proxy matcher 정리 · BL4 주석 정정**
+- `proxy.ts` matcher에서 `api`·폰트/스타일 확장자·robots/sitemap/manifest 제외. `updateSession`은 이미
+  `/api/*`를 early-return 하고 있어 **동작상 완전 동치**이고, 함수를 깨우지 않게 된다(warm 실측 17~26ms/요청).
+  ⚠️ 폰트 확장자 제외는 **예방 조치**다 — Pretendard는 `next/font/local`이라 `/_next/static/media`로
+  나가고 그 경로는 이미 제외돼 있었다(측정된 이득 아님). robots/manifest는 실제로 307→404로 교정됨.
+- `prefetch-embed.ts` 주석의 "클릭 시 **HTTP 캐시 히트**로 시작"은 **거짓**이었다 — 인증 셸 문서는
+  `no-store`(3/3 재현)라 저장 자체가 안 된다. 실제 효과는 함수 warm-up·테넌트 캐시 선점·커넥션 예열.
+- 감사가 지목한 `perm-matrix.ts:78` 주석은 **그 파일이 63줄이라 존재하지 않았다**(지적이 부정확) — 손대지 않음.
+
+### 미디어 스토리지 = Supabase 단일 경로 — GCS 분기 제거 + 업로드 검증 복구 (2026-07-29) - typecheck0/lint0/build✓
+ijw-calander GCP 프로젝트를 삭제해 **되돌릴 수 없게 된** GCS 경로를 코드에서 걷어냈다. 남겨두면 `MEDIA_STORAGE_BACKEND=gcs`가
+살아있는 안전장치처럼 보이지만 실제로 켜면 업로드·읽기가 전부 실패하는 **소등 지뢰**(ClassNote Cloud Run 폴백과 같은 부류)라
+경로를 하나로 줄였다. 프로덕션 env 실측으로 안전 확인: `GOOGLE_SERVICE_ACCOUNT_KEY` 존재(시트 연동 유지) ·
+`FIREBASE_SERVICE_ACCOUNT_KEY`는 **프로덕션에 애초에 없었다**(= 폴백은 이미 죽은 경로였음).
+- **삭제**: `gcs-client.ts` · `backend.ts`(+테스트) · `scripts/setup-gcs-cors.cjs` ·
+  `scripts/_oneoff/notice-attachment-hakwoni.e2e.ts`(`expect(ticket.backend).toBe("gcs")` — 영영 통과 불가) ·
+  `@google-cloud/storage` 의존성(+lockfile 134줄, 순수 제거) · `StorageBackend` 타입 · `removeObject`의 backend 인자(호출부 11곳).
+- **🔴 무검증이던 업로드 검증 복구**: `verifyUploadedObject`가 Supabase 백엔드에선 `{size:0}`만 돌려주고 **아무것도 검증하지
+  않고 있었다**(크기·MIME 강제가 GCS 분기에만 존재) → 백엔드를 바꾼 순간부터 검증이 꺼져 있던 셈. Supabase `list(dir,{search})`
+  메타로 재구현: **부재=차단**(업로드 없이 register만 불러 DB 행부터 만드는 우회를 막음. 옛 GCS `exists()` 강제를 이어받음),
+  크기 초과=차단. ⚠️ **MIME은 일부러 강제하지 않는다** — Supabase에 기록되는 mimetype은 서버 승인값이 아니라 **클라 `File.type`**
+  이라(MediaRecorder가 오디오를 `video/webm`으로 뱉는 등) 강제하면 정상 업로드를 거부하고 호출부가 그 파일을 지운다(녹음 소실).
+  형식 관문은 버킷 `allowed_mime_types`가 담당.
+- **조용히 멈춰 있던 것**: `recordings-retention` cron이 `backend!=="supabase"`면 no-op로 빠져나가 **보관기한 정리를 하지 않고 있었다** → 가드 제거.
+- **부수 정리**: 죽은 `MEDIA_KIND.hasLegacy`(읽는 곳 0, 선행 dead) 제거 · `createUploadTicket` JSDoc이 다른 함수 위로 밀려 붙은 것 복구 ·
+  존재하지 않는 Vitest를 주장하던 주석 정정(모듈이 server-only라 import 불가 [[#61]]) · `gcs-client.ts`를 가리키던 stale 주석 3곳.
+- **env 정리 완료**: Vercel 프로덕션 `MEDIA_STORAGE_BACKEND` 삭제(코드가 안 읽는데 남겨두면 "이 값을 바꾸면
+  백엔드가 바뀐다"는 오해가 그대로 남는다). 프로덕션 env 20개를 전수 대조해 **죽은 건 이것 하나뿐**임을 확인
+  (나머지 19개는 `process.env` 소비처 존재). `.env.local.example`에서도 `MEDIA_STORAGE_BACKEND`·
+  `FIREBASE_STORAGE_BUCKET` 항목 제거 + `FIREBASE_SERVICE_ACCOUNT_KEY`는 "앱 미사용, 로컬 스크립트 폴백 전용"으로 정정.
+- ⚠️ **알려진 한계(이번 변경이 만든 게 아님, 어제 백엔드 전환 시점부터)**: 업로드 진행률이 0→100 2단계
+  (Supabase `uploadToSignedUrl`은 진행률 미노출, 옛 GCS는 XHR PUT이라 실시간이었음) · 다운로드 파일명은 Supabase `?download=`에
+  위임(`attachmentFilename` RFC 5987 헬퍼를 끼울 자리가 없음). 한글 파일명 저장은 실사용 확인 필요.
+### 창 반응속도 — warm 캐시 상한 4 + presence 채널 지연 연결 (2026-07-29)
+"유료 티어로 올렸는데 왜 안 빨라지냐"에서 출발한 75에이전트 감사의 1·2순위 레버 실행. 감사 결론은
+**지배항이 서버가 아니라 뷰어 PC의 클라 JS 실행**이라는 것(CPU 4배 스로틀 시 창 열기 405→746ms,
+서버 TTFB는 9.2~10.2ms 불변). 자세한 정정은 [perf-open-window-backlog.md](./perf-open-window-backlog.md) 인프라 메모.
+- **BL3 `CACHE_MAX` 2 → 4**: warm 재오픈은 그 클라 실행을 통째로 건너뛰므로 상한을 늘린 만큼 그대로
+  체감이 된다. 12메뉴 중 실제로 오가는 건 3~5개라 4면 대부분의 왕복을 덮는다. 대가는 숨은 iframe 4개(메모리).
+  ⚠️ LRU 테스트 2개를 **CACHE_MAX에서 도출**하도록 고쳐 상수를 또 바꿔도 안 깨지게 했다.
+- **presence Realtime 지연 연결**: `EditPresenceProvider`가 마운트 즉시 채널을 열어 **창 개수만큼 WS**가
+  늘었다(presence를 안 쓰는 시간표·출석부·수납 창도 예외 없이). 이제 실제 소비처
+  (`useEditingOthers`·`useEditPresence`)가 있을 때만 연다 — 순수 참조수 모듈
+  [connection-demand.ts](../src/features/presence/connection-demand.ts) + Vitest 6.
+  · 마지막 소비처가 빠져도 **10초 유예** 후 끊는다(폼 편집 토글마다 WS 재핸드셰이크 방지).
+  · 유예 중 재retain이면 통지 자체를 안 한다(열린 채널 승계, 재연결 0).
+  · 채널이 닫히면 스냅샷을 비우고 구독자에게 통지 — 안 그러면 "수정중"이 유령으로 굳는다.
+- ⚠️ 시각검증 미완(typecheck 0·lint 0·관련 테스트 94 통과). 동시편집 "수정중" 표시는 **기능 유지**가
+  전제라, 감사가 제안한 "embed 분기에서 provider 제거"는 **채택하지 않았다**(창 안이 곧 편집 표면이라
+  그대로 죽는다).
+- 📌 별건으로 감사가 찾은 🔴 2건은 미처리: `invoices_bak_20260708` anon 노출 · '미수강 제외' 필터 100% 고장.
+
+### 등록상담 사전 브리프 — 기본 접힘 + 펼치기/접기 (2026-07-29)
+브리프가 길어 등록상담 상세를 열 때마다 아래 내용(접수 정보·AI 분석·수강 이력)을 통째로 밀어냈다 →
+본문을 **기본 접힘**으로 바꾸고 토글을 달았다([prep-brief-collapse.tsx](<../src/app/(shell)/enrollment/[id]/prep-brief-collapse.tsx>)).
+- **항상 보이는 것**: 헤더(제목·헤드라인·모델 라벨·생성시각) · 인쇄/갱신 버튼 · 생성 진행바 · 실패 안내.
+  상태와 조작은 접혀 있어도 손이 닿아야 한다(접힌 채로 '갱신'이 안 눌리면 회귀).
+- 본문은 **서버 렌더 유지** — `PrepBriefSection`은 서버 컴포넌트 그대로고, 클라 래퍼는 children의 표시 여부만
+  관리한다(Server Component 우선 원칙 유지, 클라 번들 증가 최소).
+- 접기/펼치기 관례는 같은 폴더 `consultation-report-editor`·`meetings/[id]/ai-report`와 동일
+  (버튼 + `aria-expanded` + ChevronDown 180도 회전).
+- ⚠️ 시각검증 미완(typecheck·lint 통과). 인쇄 화면은 별도 라우트라 영향 없음.
+
+### Edutrix 소등 완료 — 옛 시스템 3개 종료, eywa 단독 운영 (2026-07-29) - 헬스체크 5종 통과
+1세대(classreport-web) → 2세대(edutrix) → eywa 계보의 마지막 정리. 하루에 **edutrix Vercel · ijw-calander(GCP) ·
+classreport-web(GCP) 삭제 + edutrix Supabase 일시정지 + Vercel env 5종 제거**를 실행했고, 매 단계마다
+헬스체크(구글시트·첨부 PDF·`/r`·앱 첫화면·워커)로 무중단을 확인했다. 전 과정·잔여물·교훈은
+**[edutrix-retirement.md](./edutrix-retirement.md) 단일 문서**에 정리(이 항목은 색인).
+- **보존**: eywa `lesson_reports` 이관분 17,814건 · 읽음 매칭 키 `edutrix_share_token` 917건 ·
+  `edutrix_archive` 30테이블 28,000+행 · 로컬 JSONL 35MB · Supabase Storage 미디어 97개(실측 200).
+- **버림(승인)**: edutrix `/share` 옛 링크 · GCS 고아 123개 · MakeEdu 자동제출(8,010건, 이미 0건 상태) ·
+  1세대 랭킹 스냅샷.
+- 🔴 **교훈**: ①빌링을 끄면 백업도 못 뜬다(ijw는 Spark 전환 시점부터 GCS·Firestore 접근 차단 → 마지막 백업 실패)
+  ②폴백은 소등 전에 코드에서 없앤다(Cloud Run 폴백을 오전에 제거 → 오후 Spark 전환으로 그 함수가 죽었는데 무중단)
+  ③원본보다 소비 코드를 먼저 지운다 ④"안 쓰는 것 같다"는 데이터로 확인한다 ⑤env 제거는 재배포까지 해야 검증된다.
+- 함께 정리: 발송 경로 단일화·게시 타임아웃·부분게시 failed 고정 · 구워커 감지 배지 · 동명이인 가드 오탐 수정 ·
+  실패 알림 스윕/테스트학생 제외 · 워커 로그 날짜 회전 · `CLASSNOTE_INTERNAL_SECRET` 회전(첨부 발송 9건 복구 +
+  워커 스샷이 '학부모 열람'으로 오집계되던 것 중단).
 
 ### ClassNote 게시 = 워커 내장 단일 경로 (Cloud Run 폴백 제거) (2026-07-29) - tsc0/lint0/test255+17/적대검증 4렌즈
 소등 준비의 마지막 지뢰 제거. 어제(07-28) 도입한 `CLASSNOTE_PUBLISH_MODE=local` **env 스위치를 없애고**

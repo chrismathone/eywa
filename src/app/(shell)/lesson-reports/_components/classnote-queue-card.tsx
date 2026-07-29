@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { Popover } from "@base-ui/react/popover";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
+import { AlertTriangle } from "@/components/icons/eywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { classnoteBadge } from "@/features/onescreen/components/report-card";
 import { humanizeClassnoteError } from "@/features/report-admin/classnote-error";
@@ -350,8 +351,12 @@ export function ClassnoteQueueCard({ view: served }: { view: ClassnoteQueueView 
                 {/* 구워커 경고(2026-07-29) — 자체 게시 버전이 아니면 옛 Edutrix 서버로 게시한다. 화면상 정상으로
                     보이다가 그 서버를 끄는 순간 전 발송이 실패하므로, 이관 전까지 여기서만 드러난다. */}
                 {!w.nativePublish ? (
-                  <span className="text-danger" title="이 PC는 옛 버전 워커입니다 — 새 zip을 전달해 주세요">
-                    ⚠ 구버전 워커(옛 서버로 게시) — 업데이트 필요
+                  <span
+                    className="text-danger inline-flex items-center gap-1"
+                    title="이 PC는 옛 버전 워커입니다 — 새 zip을 전달해 주세요"
+                  >
+                    <AlertTriangle className="size-3.5 shrink-0" aria-hidden />
+                    구버전 워커(옛 서버로 게시) — 업데이트 필요
                   </span>
                 ) : null}
                 {/* 폴러별 마지막 실행(0123a) — 하트비트는 살아도 특정 폴러만 조용히 실패하는 걸 여기서 잡는다. */}

@@ -2,7 +2,13 @@
 
 /**
  * BL4 — 메뉴 hover 시 창 iframe이 쓸 `?embed=1` document를 브라우저에 prefetch.
- * 클릭 시 iframe `src`가 HTTP 캐시 히트로 시작해 TTFB 체감을 줄인다(서버 부수효과 없는 GET).
+ *
+ * ⚠️ **효과의 정체 정정(2026-07-29 실측)** — 예전 주석은 "클릭 시 iframe src가 **HTTP 캐시 히트**로
+ * 시작한다"고 적었는데 **거짓이다**. 인증 셸 문서는 동적 렌더라 응답이
+ * `Cache-Control: private, no-cache, no-store, must-revalidate`(3/3 재현)라서 브라우저가 저장할 수
+ * 없다 — 클릭 시 문서는 **다시 요청된다**. 실제로 얻는 건 ① Vercel 함수 warm-up ② 테넌트 설정
+ * `unstable_cache` 선점 ③ DNS/TLS·커넥션 예열이다(그래서 여전히 유효하지만, 캐시 히트가 아니다).
+ * 창 재오픈의 진짜 즉시화는 BL3 warm iframe(window-store `CACHE_MAX`)이 담당한다.
  *
  * 가드: 자주 쓰는 메뉴 루트만 · 디바운스 120ms · URL당 1회 · 동시 1개 스케줄(마지막 hover 승).
  * ⚠️ 부모 `router.prefetch`는 iframe과 캐시 미공유 → 효과 0(비권장). 여기는 document link prefetch.

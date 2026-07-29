@@ -16,7 +16,6 @@ import { combineConsultationTranscripts, type SpeakerUtterance } from "@/feature
 import { runConsultationAnalysis } from "@/features/enrollment/server/consultation-analysis";
 import { isTenantAudioPath } from "@/lib/storage/audio-path";
 import {
-  getMediaBackend,
   removeObject,
   resolveAudioReadUrl,
   verifyUploadedObject,
@@ -207,7 +206,7 @@ async function createConsultationWithAudio(
     if (meta.size > 0) verifiedSize = meta.size;
     audioUrl = await resolveAudioReadUrl(audioPath, "registration", user.tenantId);
   } catch (e) {
-    await removeObject(audioPath, { backend: getMediaBackend(), bucket: "consultation-recordings" }).catch(() => {});
+    await removeObject(audioPath, { bucket: "consultation-recordings" }).catch(() => {});
     return { error: e instanceof Error ? e.message : "오디오 검증 실패" };
   }
 
@@ -332,7 +331,7 @@ async function attachAudioAndTranscribe(
     if (meta.size > 0) verifiedSize = meta.size;
     audioUrl = await resolveAudioReadUrl(audioPath, "registration", user.tenantId);
   } catch (e) {
-    await removeObject(audioPath, { backend: getMediaBackend(), bucket: "consultation-recordings" }).catch(() => {});
+    await removeObject(audioPath, { bucket: "consultation-recordings" }).catch(() => {});
     return e instanceof Error ? e.message : "오디오 검증 실패";
   }
 
@@ -355,7 +354,7 @@ async function attachAudioAndTranscribe(
   if (updErr) return `음성 첨부 실패: ${updErr.message}`;
   if (!mirrored) {
     // 소유권 불일치(타 테넌트 id 변조 등) — 방금 올린 객체 정리 후 거부.
-    await removeObject(audioPath, { backend: getMediaBackend(), bucket: "consultation-recordings" }).catch(() => {});
+    await removeObject(audioPath, { bucket: "consultation-recordings" }).catch(() => {});
     return "상담을 찾을 수 없습니다";
   }
 
@@ -545,7 +544,7 @@ export async function deleteEnrollmentConsultation(
       .filter((p): p is string => !!p && isTenantAudioPath(p, user.tenantId)),
   );
   for (const p of paths) {
-    await removeObject(p, { backend: getMediaBackend(), bucket: "consultation-recordings" }).catch(() => {});
+    await removeObject(p, { bucket: "consultation-recordings" }).catch(() => {});
   }
 
   // 2) row 삭제(RLS). consultation_ai_analysis·consultation_recordings는 FK cascade.
