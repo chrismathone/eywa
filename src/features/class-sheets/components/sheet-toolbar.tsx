@@ -10,10 +10,12 @@ import type { ClassSheetWeekData } from "../server/queries";
 import { useSaveIndicator, type SheetSaveStore } from "./use-sheet-saves";
 
 const DOW_KO: Record<string, string> = { mon: "월", tue: "화", wed: "수", thu: "목", fri: "금", sat: "토", sun: "일" };
+// ⚠️ cursor-pointer 명시 — Tailwind v4 preflight엔 v3의 `button{cursor:pointer}`가 없어서
+// 안 적으면 클릭 가능한 버튼이 화살표로 보인다(이 앱 globals.css에도 cursor 규칙 0건).
 const iconBtn =
-  "border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex shrink-0 items-center rounded-full border p-1 transition";
+  "border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex shrink-0 cursor-pointer items-center rounded-full border p-1 transition";
 const pill = (on: boolean) =>
-  `shrink-0 rounded-full border px-2.5 py-0.5 text-xs font-medium transition ${
+  `shrink-0 cursor-pointer rounded-full border px-2.5 py-0.5 text-xs font-medium transition ${
     on ? "border-foreground bg-foreground text-background" : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
   }`;
 

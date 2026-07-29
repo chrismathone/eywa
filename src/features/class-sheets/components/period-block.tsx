@@ -38,7 +38,14 @@ export const PeriodBlock = memo(function PeriodBlock({
     (slot.teacherId ? (data.teacherNames[slot.teacherId] ?? null) : null) ??
     data.classTeacherName;
   return (
-    <article className="bg-card shadow-card rounded-2xl p-3">
+    // ⚠️ cursor-default 필수 — 바깥 DragScrollArea가 컨테이너에 cursor-grab(펼친 손)을 깔아서,
+    // 안 덮으면 카드를 **끌어서 옮길 수 있는 것처럼** 보인다(teacher-grid 선례·원장 지적 2026-07-29).
+    //
+    // ⚠️ `cursor-auto`로 바꾸지 말 것(검토 후 기각): auto는 텍스트 위에서 I빔이 되는데, 이 컨테이너는
+    // 5px 넘게 끌면 팬으로 전환하며 `userSelect:none`을 걸어(drag-scroll-area.tsx:128) **드래그 선택이
+    // 아예 불가능**하다 — I빔은 못 하는 일을 약속하는 거짓 어포던스가 된다. 중립적인 화살표가 정직하다.
+    // 선택이 실제로 되는 곳(input·textarea)은 skip() 대상이라 UA I빔을 그대로 유지한다(실측 확인).
+    <article className="bg-card shadow-card cursor-default rounded-2xl p-3">
       <header className="flex flex-wrap items-center gap-x-2 gap-y-1 pb-2">
         {periodLabel ? <span className="text-foreground text-[13px] font-bold">{periodLabel}</span> : null}
         <span className="text-text-dim num text-[12px] whitespace-nowrap">

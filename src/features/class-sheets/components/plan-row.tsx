@@ -45,14 +45,14 @@ function CasInput({
         <div className="flex gap-1">
           <button
             type="button"
-            className="border-line rounded-full border px-1.5 text-[10px]"
+            className="border-line cursor-pointer rounded-full border px-1.5 text-[10px]"
             onClick={() => handlers.resolveConflict(saveKey, "server")}
           >
             서버값 사용
           </button>
           <button
             type="button"
-            className="border-danger text-danger rounded-full border px-1.5 text-[10px]"
+            className="border-danger text-danger cursor-pointer rounded-full border px-1.5 text-[10px]"
             onClick={() => handlers.resolveConflict(saveKey, "mine")}
           >
             내 값으로 덮기
@@ -134,7 +134,7 @@ export const PlanRow = memo(function PlanRow({
           <button
             type="button"
             aria-label="줄 삭제"
-            className="text-text-faint hover:text-danger rounded p-0.5"
+            className="text-text-faint hover:text-danger cursor-pointer rounded p-0.5"
             onClick={() => {
               const hasContent = [line.textbook, line.pageRange, line.progress, line.homework].some(
                 (v) => (v ?? "").trim() !== "",

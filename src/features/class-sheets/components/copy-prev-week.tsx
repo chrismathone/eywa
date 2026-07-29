@@ -42,7 +42,7 @@ export function CopyPrevWeek({
       <span className="text-text-dim">이 주는 아직 비어 있어요.</span>
       <button
         type="button"
-        className="text-primary font-bold underline-offset-2 hover:underline"
+        className="text-primary cursor-pointer font-bold underline-offset-2 hover:underline"
         onClick={() => dialogRef.current?.showModal()}
       >
         지난주 계획 가져오기

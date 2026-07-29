@@ -296,10 +296,14 @@ export function SheetClient({
           <span className="text-foreground">
             이전에 저장되지 못한 입력 {doc.recoverable.mutations.length}건이 이 기기에 남아 있습니다.
           </span>
-          <button type="button" className="text-primary font-bold underline-offset-2 hover:underline" onClick={() => void applyRecovered()}>
+          <button
+            type="button"
+            className="text-primary cursor-pointer font-bold underline-offset-2 hover:underline"
+            onClick={() => void applyRecovered()}
+          >
             복구해서 저장
           </button>
-          <button type="button" className="text-text-faint hover:text-foreground" onClick={doc.dismissRecoverable}>
+          <button type="button" className="text-text-faint hover:text-foreground cursor-pointer" onClick={doc.dismissRecoverable}>
             무시
           </button>
         </div>

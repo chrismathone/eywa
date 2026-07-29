@@ -45,7 +45,7 @@ export function PlanTable({
               {canEdit ? (
                 <button
                   type="button"
-                  className="text-text-faint hover:text-primary text-[11px]"
+                  className="text-text-faint hover:text-primary cursor-pointer text-[11px]"
                   onClick={() => handlers.addLine(date, slotStart, term.key, defaultArea)}
                 >
                   + 줄 추가

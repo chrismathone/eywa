@@ -54,7 +54,8 @@ export const SheetGrid = memo(function SheetGrid({
         return (
           <header
             key={day.date}
-            className="bg-card shadow-card sticky top-0 z-10 flex items-center gap-2 rounded-2xl px-3 py-2"
+            // cursor-default — DragScrollArea의 cursor-grab이 헤더까지 덮지 않게(period-block과 동일)
+            className="bg-card shadow-card sticky top-0 z-10 flex cursor-default items-center gap-2 rounded-2xl px-3 py-2"
             style={{ gridColumn: ci + 1, gridRow: 1 }}
           >
             <span className={`text-[14px] font-bold ${isToday ? "text-primary" : "text-foreground"}`}>

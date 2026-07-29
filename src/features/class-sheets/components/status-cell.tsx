@@ -32,7 +32,7 @@ export function AttendanceCheck({
         aria-label="출석 체크"
         disabled={!canMark}
         title={canMark ? "출석으로 기록" : "출석 입력 권한이 없거나 수정 기간이 지났습니다"}
-        className="border-line hover:border-primary inline-flex size-5 items-center justify-center rounded-md border disabled:opacity-40"
+        className="border-line hover:border-primary inline-flex size-5 cursor-pointer items-center justify-center rounded-md border disabled:cursor-not-allowed disabled:opacity-40"
         onClick={onMark}
       >
         <span className="sr-only">출석 체크</span>
@@ -79,7 +79,7 @@ export function StatusCell({
     <div className="relative">
       <button
         type="button"
-        className={`w-full rounded-lg border px-1.5 py-1 text-left text-[11px] ${
+        className={`w-full cursor-pointer rounded-lg border px-1.5 py-1 text-left text-[11px] ${
           value ? "border-line text-foreground" : "border-line text-text-faint border-dashed"
         }`}
         aria-label="상태"
@@ -94,7 +94,7 @@ export function StatusCell({
               <button
                 key={chip}
                 type="button"
-                className={`rounded-full border px-2 py-0.5 text-[11px] ${
+                className={`cursor-pointer rounded-full border px-2 py-0.5 text-[11px] ${
                   value === chip ? "border-foreground bg-foreground text-background" : "border-line text-text-dim"
                 }`}
                 onClick={() => {
@@ -122,7 +122,7 @@ export function StatusCell({
           />
           <button
             type="button"
-            className="text-text-faint hover:text-danger mt-1 text-[10px]"
+            className="text-text-faint hover:text-danger mt-1 cursor-pointer text-[10px]"
             onClick={() => {
               onChange(null);
               setOpen(false);
