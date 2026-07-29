@@ -1,6 +1,7 @@
 "use client";
 
-import { LogOut, Sparkles, User } from "@/components/icons/eywa-icon-compat";
+import Link from "next/link";
+import { LogOut, Sparkles, User, UserCheck } from "@/components/icons/eywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -49,6 +50,11 @@ export function UserMenu({
             <span className="truncate text-sm font-normal">{email}</span>
           )}
         </DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        {/* 내 이력서·로그인 정보 — 권한과 무관하게 누구나(본인 것만). */}
+        <DropdownMenuItem render={<Link href="/me" className="cursor-pointer" />}>
+          <UserCheck className="size-4" />내 정보
+        </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuCheckboxItem
           checked={animations}

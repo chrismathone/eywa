@@ -76,7 +76,8 @@ export default async function StaffDetailPage({
   // 급여 노출은 원장(master) + 본인만 (schema.ts 주석). admin/manager에게도 보이면 안 됨.
   const canSeeSalary = !!viewer && (viewer.systemRole === "master" || viewer.id === staff.id);
   // 기본정보 탭의 이력서 섹션 — 열람은 이력서 공용 게이트(원장·관리자)와 동일([[#77]] 우회 방지).
-  const resumeAccess = tab === "info" && !!viewer && (await canViewResume(viewer));
+  // 이 상세가 곧 그 직원의 이력서이므로 소유자 = staff.id(본인이 자기 상세를 보면 통과).
+  const resumeAccess = tab === "info" && !!viewer && (await canViewResume(viewer, staff.id));
   const resume = resumeAccess ? await getResumeByStaffUser(staff.id) : null;
   const resumeCanWrite = resumeAccess && !!viewer && (await canWriteTenant(viewer.systemRole, "staff"));
   // 증명사진 signed URL(슬라이드) — 게이트 통과 시에만 발급.
