@@ -529,7 +529,19 @@ subject NULL(이관·레거시)은 게이트가 거부한다(2026-07-10 P0-2·P0
    내지 않는지 확인(Supabase가 살아있는 동안은 무해) — Supabase 소등과 함께 vercel.json에서 cron 제거.
 4. **Edutrix Supabase 종료** — 이전·아카이브 완료로 의존 0. eywa .env.local의 `EDUTRIX_*` 키와
    `vercel.json` edutrix-sync cron, `instrumentation.ts` 권장 env를 같이 정리.
-5. **Edutrix Firebase(Cloud Run)** — ✅ **옵션 B 완료(2026-07-29): 코드에서 Cloud Run 분기를 제거**했다.
+5. **Edutrix Firebase(Cloud Run) — ✅ 2026-07-29 프로젝트 삭제 완료.** 아래는 그 경위(재발 방지용 기록).
+
+   > **소등 실행 기록(2026-07-29)**: `ijw-calander`·`classreport-web` 두 GCP 프로젝트 **삭제**, edutrix Vercel **삭제**.
+   > 삭제 직후 헬스체크 4종 통과(구글시트 200 · 첨부 PDF signed URL 200 · `/r` 200·GCS 참조 0 · 워커 발송 정상).
+   > 🔴 **얻은 교훈 — 빌링을 끄면 백업도 못 뜬다**: ijw는 Spark 전환 시점부터 GCS 다운로드·Firestore 조회가
+   > 전부 `billing disabled`로 막혀, 삭제 전 마지막 백업을 뜨지 못했다(참조 파일은 이미 Supabase 이관 완료라
+   > 운영 영향은 0, 미참조 고아 123개만 소실). **다음에 어떤 프로젝트든 내릴 땐 "백업 → 빌링 해제 → 삭제" 순서.**
+   > 🔴 **Cloud Run 폴백 제거가 실제로 방화벽이 됐다**: Spark 전환 직후 `submitToClassNoteV2`가 500→503으로
+   > 죽었는데, 같은 날 오전에 폴백을 코드에서 걷어낸 덕에 발송은 무중단이었다(제거 전이었다면 env 한 줄로 전멸).
+   > 잔여물: `classreport-web` Firestore(1세대 보고서·랭킹)는 edutrix→eywa로 계승·아카이브돼 삭제 승인(원장,
+   > 랭킹 데이터 불요). GCP 프로젝트 삭제는 **30일 유예**라 그 안에는 복구 가능.
+
+   ✅ **옵션 B 완료(2026-07-29): 코드에서 Cloud Run 분기를 제거**했다.
    워커는 내부 API 경로 하나로만 게시하고 env 스위치(`CLASSNOTE_PUBLISH_MODE`)도 없앴다 — 폴백이 남아 있으면
    env 한 줄이 빠지는 순간 삭제된 함수를 불러 전 발송이 실패한다(적대 검증 P1).
    - 🔴 **삭제 전 필수 관문**: 연동 PC에 **새 zip 이관 완료**. 구워커는 코드가 바뀌어도 계속 Cloud Run을 부르고,
