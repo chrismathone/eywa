@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { OperationsSettings } from "@/features/owner/settings-types";
+import { RESUME_DEPARTMENTS } from "@/features/staff/resume";
 import type { ClassroomRow } from "@/features/owner/server/classroom-queries";
 import { SectionForm, SettingsCard } from "./section-form";
 import { ClassroomManager } from "./classroom-manager";
@@ -58,13 +59,35 @@ export function OperationsSection({
         />
       </SettingsCard>
 
-      <SettingsCard title="직급" description="직원 등록·수정의 직급 선택지.">
+      <SettingsCard title="직급 (공통)" description="부서별 목록이 없을 때 쓰는 기본 직급 선택지.">
         <StringListEditor
           value={o.jobTitles}
           onChange={(v) => set({ jobTitles: v })}
           placeholder="강사"
           addLabel="직급 추가"
         />
+      </SettingsCard>
+
+      {/* 부서별 직급(2026-07-29) — 이력서에서 근무부서를 고르면 이 목록으로 직급 드롭다운이 바뀐다.
+          한 부서에 직급이 하나뿐이면 부서 선택만으로 직급이 자동 확정된다(아르바이트). */}
+      <SettingsCard
+        title="부서별 직급"
+        description="근무부서를 고르면 그 부서의 직급만 선택지로 뜹니다. 직급이 하나뿐인 부서는 자동으로 입력됩니다."
+        span2
+      >
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {RESUME_DEPARTMENTS.map((dept) => (
+            <div key={dept} className="border-line rounded-xl border p-3">
+              <p className="text-foreground mb-2 text-xs font-bold">{dept}</p>
+              <StringListEditor
+                value={o.jobTitlesByDepartment?.[dept] ?? []}
+                onChange={(v) => set({ jobTitlesByDepartment: { ...o.jobTitlesByDepartment, [dept]: v } })}
+                placeholder="직급"
+                addLabel="직급 추가"
+              />
+            </div>
+          ))}
+        </div>
       </SettingsCard>
 
       {/* ⚠️ 학기(terms)는 소비처가 없어 v1에서 입력 숨김(상태·스키마·저장은 보존).

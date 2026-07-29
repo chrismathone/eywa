@@ -69,26 +69,38 @@ async function requireStaffWrite(): Promise<Gate> {
   return { user };
 }
 
+/** 학생이 아닌 로그인 직원(본인 이력서 작성 포함) — 사진 업로드 티켓처럼 '직원이면 되는' 표면용. */
+async function requireStaffMember(): Promise<Gate> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "로그인이 필요합니다" };
+  if (user.systemRole === "student") return { error: "권한이 없습니다" };
+  return { user };
+}
+
 /**
  * 역할 게이트 + **대상 이력서 열람 자격**까지 — 잠긴 이력서는 수정·삭제도 불가(화면 게이트와 동일 기준).
  * 화면의 `canWrite = canView && canWriteRole`는 렌더용일 뿐이라 서버가 같은 기준을 다시 확인해야 한다.
  */
 async function requireResumeAccess(id: string): Promise<Gate> {
-  const gate = await requireStaffWrite();
-  if ("error" in gate) return gate;
+  const user = await getCurrentUser();
+  if (!user) return { error: "로그인이 필요합니다" };
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("academy_documents")
-    .select("uploaded_by")
+    .select("uploaded_by, staff_user_id")
     .eq("id", id)
     .eq("form_type", RESUME_FORM_TYPE)
     .maybeSingle();
   if (error) return { error: humanizeDbError(error.message, "확인"), detail: error.message };
   if (!data) return { error: "이력서를 찾을 수 없습니다 — 이미 삭제되었을 수 있습니다" };
-  if (!(await canViewResume(gate.user))) {
-    return { error: RESUME_LOCKED_MSG };
+  const owner = (data as { staff_user_id?: string | null }).staff_user_id ?? null;
+  if (!(await canViewResume(user, owner))) return { error: RESUME_LOCKED_MSG };
+  // 남의 이력서를 고치려면 직원관리 쓰기 권한이 필요하다. **본인 이력서는 권한 없이도** 통과
+  // (원장 지시 2026-07-29 — 강사·뷰어가 자기 이력서를 직접 채운다). 열람 게이트는 위에서 이미 통과.
+  if (owner !== user.id && !(await canWriteTenant(user.systemRole, "staff"))) {
+    return { error: "직원관리 권한이 없습니다" };
   }
-  return { user: gate.user };
+  return { user };
 }
 
 export type ResumePhotoTicketState = { ticket?: UploadTicket; error?: string } | undefined;
@@ -105,7 +117,9 @@ export async function issueResumePhotoTicket(
   _prev: ResumePhotoTicketState,
   formData: FormData,
 ): Promise<ResumePhotoTicketState> {
-  const gate = await requireStaffWrite();
+  // 사무실뿐 아니라 **본인 이력서를 채우는 직원**도 사진을 올린다(2026-07-29). 티켓은 테넌트 내부 경로만
+  // 만들 뿐이고, 그 경로가 실제 이력서에 붙는 건 게이트된 saveStaffResume을 통과할 때뿐이다. 학생은 제외.
+  const gate = await requireStaffMember();
   if ("error" in gate) return { error: gate.error };
 
   const contentType = String(formData.get("contentType") ?? "");
@@ -228,8 +242,16 @@ export async function saveStaffResume(
   formData: FormData,
 ): Promise<ResumeActionState> {
   const id = String(formData.get("id") ?? "").trim();
-  // 수정은 열람 자격까지(잠긴 이력서 덮어쓰기 차단), 생성은 역할만.
-  const gate = id ? await requireResumeAccess(id) : await requireStaffWrite();
+  // 수정은 열람 자격까지(잠긴 이력서 덮어쓰기 차단), 생성은 역할만 —
+  // 단 **본인에게 연결되는 이력서를 본인이 처음 쓰는 경우**는 직원관리 권한 없이도 허용(2026-07-29).
+  const linkRaw = String(formData.get("staff_user_id") ?? "").trim();
+  const me = await getCurrentUser();
+  const selfCreate = !id && !!me && linkRaw === me.id;
+  const gate = id
+    ? await requireResumeAccess(id)
+    : selfCreate
+      ? await requireStaffMember()
+      : await requireStaffWrite();
   if ("error" in gate) return { error: gate.error, detail: gate.detail };
 
   const data = parseResumeForm(formData);
@@ -319,6 +341,7 @@ export async function saveStaffResume(
       ? await registerStaffFromResume(gate.user, data, String(formData.get("acct_role") ?? ""), row.id)
       : {};
   revalidateResume(row.id);
+  if (selfCreate) revalidatePath("/me");
   const notices = [
     // env 미설정(의도적 비활성)은 skipped — 토스트 없음(거짓 '실패' 경고 금지).
     roster.ok ? (roster.skipped ? null : "'신규 직원명부' 구글시트에도 기입했습니다") : null,
@@ -332,7 +355,8 @@ export async function saveStaffResume(
     ok: true,
     id: row.id,
     nonce: Date.now(),
-    redirectTo: `/staff/resumes/${row.id}`,
+    // 본인이 쓴 이력서는 '내 정보'로 돌아간다 — 강사·뷰어는 /staff/* 자체가 차단이라 빈 화면이 된다.
+    redirectTo: selfCreate ? "/me" : `/staff/resumes/${row.id}`,
     ...(notices.length ? { notice: notices.join(" · ") } : {}),
     ...(warnings.length ? { warning: warnings.join(" · ") } : {}),
   };
