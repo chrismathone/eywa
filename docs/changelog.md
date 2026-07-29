@@ -4,6 +4,41 @@
 
 ## 진행 상황
 
+### English Class Sheet(ECS) — 영어 반별 주간 수업계획서/출석부 네이티브 신설 (2026-07-29) - tsc0/lint0/유닛41+통합15/build✓
+영어팀 구글시트(반 1개=스프레드시트 1개, 주차 탭 매주 복제 — 실물 3종+마스터 전수 조사) eywa 이식. 원장 확정:
+네이티브 재구현·철저 배선·DB화 / 출석=attendance_records 실기록 / 이관 없이 새 주부터 / 메뉴명 "English Class Sheet".
+3차에 걸친 계획 검수(Blocker 총 14건)를 계약·테스트로 고정한 뒤 구현(계획 파일 v2.2).
+- **DB(0155a)**: `class_sheet_plan_lines`(앵커=실날짜+slot_start, 행 식별=id, 위치 UNIQUE는 skill_area **제외**+DEFERRABLE)
+  ·`class_sheet_goals`(담임/부담임×월간/주간)·`class_sheet_student_marks`(**교시 포함 키** — 하루 2교시 독립)·`class_sheet_memos`.
+  🔒 4테이블 **RLS 정책 0 + PUBLIC/anon/authenticated 정밀 revoke = service_role 전용**(브라우저 REST 우회 차단) +
+  classes/students `(tenant_id,id)` 복합 FK(교차 테넌트 봉쇄). RPC 5종(create/move/delete/copy_week/mark_present_if_absent) —
+  슬롯 advisory xact 락·재번호·⚠️ DEFERRABLE UNIQUE는 ON CONFLICT 불가라 insert 전부 WHERE NOT EXISTS.
+- **권한**: menuKey `ecs`(teacher=scoped·viewer=readonly) + **`requireEcsClassAccess` 단일 게이트**(#77 — 조회·전 액션 공용:
+  effectiveTeacherScope 상시 + 반 tenant 일치 + 진입 조건 `subject==="english" && resolveSkillAreas>0`).
+  변경은 전부 `tenant+class+id` 3중 조건 결속, mixed-class 배치 전체 거부, field 런타임 allowlist(5필드).
+  ⚠️ `slot_teacher_label`은 권한 근거 사용 금지(표시 전용 — LAB/JJ 역할 라벨). label→userId 바인딩은 후속.
+- **설정**: `subjects[].skillAreas`(slug+라벨) 5단계 완주 — english 미설정 시 기본 6영역(Vocab~Speaking) 프리필
+  (`resolveSkillAreas`), 과목 운영 탭 편집기(ID 자동 확정·불변), 삭제된 slug는 "미등록 영역"으로 표시 유지(소실 금지).
+- **저장 계약**: 계획 셀 = **필드 단위 CAS**(`is not distinct from` — 같은 행 두 필드 자기충돌 없음, already_applied=
+  응답 유실 재전송 흡수, 진짜 충돌=셀 pause+"서버값/내 값" 사용자 선택 — 자동 재전송은 자기 앞선 저장 rebase만).
+  goals/marks/memos = **명시적 LWW**(단일 편집자 가정). NULL/빈문자 codec(`normalizePlanText`) TS↔SQL 동일.
+  미저장분은 **versioned patch journal**(IDB, 키에 마운트별 instanceId — iframe 복제·복제 탭 격리, 단일 writer chain,
+  (mutationId,rev) 일치 시만 ack 삭제, flush=IDB persist 대기, 죽은 인스턴스 회수는 Web Locks/BC ping 확인 후 claim).
+- **출석(비파괴)**: ECS에서 허용되는 유일한 조작 = "기록 없음→present"(`ecs_mark_present_if_absent` — 원자,
+  기록 있으면 no-op). absent 등은 배지 표시만·수정은 /attendance. 권한=기존 attendance 계약+**날짜별** 7일 창.
+  영어 반 출결이 /attendance 매트릭스에 자동 생존. `DERIVED_ATTENDANCE_SUBJECTS`(math) 무접촉.
+- **주간 로더**: `getWeeklyScheduleWithStudents` 재사용 **안 함**(valid 범위 유실+주 대표일 1회 판정) — ECS 전용
+  `buildWeekGrid`(순수, Vitest 12): **실날짜별** 스케줄 유효성(주중 시간표 변경)·로스터 합집합(eligible∪마크∪출석 —
+  비eligible은 historical 읽기 전용)·attendanceOnly 분리·고아 슬롯(계획∪마크∪메모) 보존.
+  ⚠️ **비보장 명시**: attendance_days/on_hold는 이력이 없어 현재값 기준(전 화면 공통 한계).
+- **UI**: `/ecs`(랜딩: 반 카드+작성률 분모=스케줄 교시·고아 제외) + `/ecs/[classId]?week=&day=`(접이식 계획 패널 300px +
+  DragScrollArea 요일 컬럼, 요일 알약은 History API — flush·재조회 없음, 주/반 이동은 **flush 성공 후에만**).
+  창 1400×760, loading.tsx(B7), presence `ecs:` allowlist(중립 톤 — 충돌 방지는 CAS), 메뉴 13곳 배선.
+- **유기 연동**: 반 상세(영어 반) 헤더 "Class Sheet" 창 버튼. 시간표→반 이름 엔티티 링크→반 상세→Class Sheet 경로
+  (hover 카드는 `pointer-events-none`이라 카드 안 링크 불가 — 직접 링크는 의도적 비채택).
+- **비범위(재제안 금지 계열)**: 기존 28개 시트 데이터 이관(새로 시작 확정)·시트 역-export·영어 파생출석 ON·
+  원스크린/ClassNote 통합·slot_teacher_label→userId 바인딩·attendance_days/on_hold 이력화.
+
 ### ClassNote 게시 = 워커 내장 단일 경로 (Cloud Run 폴백 제거) (2026-07-29) - tsc0/lint0/test255+17/적대검증 4렌즈
 소등 준비의 마지막 지뢰 제거. 어제(07-28) 도입한 `CLASSNOTE_PUBLISH_MODE=local` **env 스위치를 없애고**
 Cloud Run(`submitToClassNoteV2`, edutrix Firebase) 분기를 [classnote-core.mjs](../scripts/_classnote/classnote-core.mjs)에서 **삭제**했다.

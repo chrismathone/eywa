@@ -162,6 +162,15 @@ export default async function ClassDetailPage({
             <Pencil className="size-4" />
             반 수정
           </Button>
+          {klass.subject === "english" ? (
+            // English Class Sheet — 영어 반만(진입 조건은 requireEcsClassAccess가 재검증: skillAreas 설정 기반)
+            <Button
+              variant="outline"
+              render={<WindowLink href={`/ecs/${klass.id}`} title="English Class Sheet" />}
+            >
+              Class Sheet
+            </Button>
+          ) : null}
           <Button render={<WindowLink href={`/attendance/${todayIso()}/${klass.id}`} title="출석 입력" />}>
             <ClipboardCheck className="size-4" />
             오늘 출석 입력
