@@ -12,6 +12,7 @@ import {
   type TeacherColorMap,
 } from "@/features/timetable/lib/class-grid";
 import { readableTextColor } from "@/lib/color-utils";
+import { specialSlotShortLabel } from "@/features/timetable/lib/teacher-label";
 
 const LABEL_W = 11;
 const DAY_SUB_W = 8;
@@ -191,8 +192,14 @@ export function appendIntegratedSheet(
             setCell(pr, st + di, "", {});
             return;
           }
+          // 특수 자리(랩실·집중자율수업실) — 강사색 대신 고정색 + 짧은 이름(셀 폭).
           if (cell.isLab) {
-            setCell(pr, st + di, "LAB", { bg: "FFDBEAFE", color: "FF1D4ED8", bold: true, size: 9 });
+            setCell(pr, st + di, specialSlotShortLabel(cell.label) ?? cell.label, {
+              bg: "FFDBEAFE",
+              color: "FF1D4ED8",
+              bold: true,
+              size: 9,
+            });
             return;
           }
           const tc = teacherColors[cell.label];

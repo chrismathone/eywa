@@ -1,8 +1,9 @@
 // 통합뷰(반=열 리치 그리드) 데이터 도출 — ijw EnglishClassTab 이식. 순수 함수(테스트 강제).
 // 한 과목 슬롯을 **반(class)별 카드**로 묶고 **시작 교시별 섹션**으로 그룹화. 각 카드:
-// 헤더(반명·담임·요일별 강의실) + **요일×교시 미니그리드**(셀마다 강사/LAB, ijw slotTeachers) + 재원/대기/퇴원.
-// 셀 강사·LAB·요일별 강의실은 슬롯 라벨(class_schedules.slot_teacher_label/slot_room_label, 0041a 백필)에서 온다.
+// 헤더(반명·담임·요일별 강의실) + **요일×교시 미니그리드**(셀마다 강사/특수자리, ijw slotTeachers) + 재원/대기/퇴원.
+// 셀 강사·특수자리·요일별 강의실은 슬롯 라벨(class_schedules.slot_teacher_label/slot_room_label, 0041a 백필)에서 온다.
 // ⚠️ server-only 금지 — 클라(rich-card-group)도 import. 순수·plain만.
+import { isSpecialSlotLabel } from "./teacher-label";
 import {
   slotPeriodRow,
   weekdayPeriodRowOrNull,
@@ -54,6 +55,7 @@ export type GridSlot = {
   students: GridStudent[];
 };
 
+/** 셀 하나 — `label`은 해석된 표시 이름(강사명 또는 자리명), `isLab`은 **특수 자리**(랩실·집중자율수업실) 여부. */
 export type GridCell = { label: string; isLab: boolean };
 export type GridPeriodRow = {
   order: number;
@@ -443,8 +445,9 @@ export function buildRichCardGroups(
       const eff = isW && shiftable ? shiftedWeekendRow(row, weekendIdx, weekdayRows, weekendShift) : row;
       if (!periodMap.has(eff.order)) periodMap.set(eff.order, { order: eff.order, label: eff.label, time: eff.time });
       const teacher = s.slotTeacherLabel ?? s.teacherName ?? "";
-      cells[`${eff.order}:${day}`] = { label: teacher, isLab: s.slotTeacherLabel === "LAB" };
-      if (s.slotTeacherLabel && s.slotTeacherLabel !== "LAB")
+      cells[`${eff.order}:${day}`] = { label: teacher, isLab: isSpecialSlotLabel(s.slotTeacherLabel) };
+      // 담임 폴백 집계에서 특수 자리는 제외 — 랩실·집중자율수업실은 사람이 아니라 담임이 될 수 없다.
+      if (s.slotTeacherLabel && !isSpecialSlotLabel(s.slotTeacherLabel))
         slotTeacherCount.set(s.slotTeacherLabel, (slotTeacherCount.get(s.slotTeacherLabel) ?? 0) + 1);
       const room = s.slotRoomLabel ?? s.classroomName;
       if (room) (perDayRooms.get(day) ?? perDayRooms.set(day, new Set()).get(day)!).add(room);

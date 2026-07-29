@@ -20,8 +20,10 @@ export const ENGLISH_SHEET_TEACHERS: Record<string, SheetTeacherMeta> = {
   Florence: { order: 8, color: "#cc0000" },
   Kristine: { order: 9, color: "#a4c2f4" },
   Sam: { order: 10, color: "#ffc000" },
-  JJ: { order: 11, color: "#bdbdbd" },
-  이주희: { order: 12, color: "#fff2cc" },
+  // ⚠️ 마지막 두 열은 **사람이 아니라 자리**다(시트에선 JJ·이주희 블록) — 열 순서·색은 시트 그대로 두고
+  //    이름만 자리명으로 바꿨다(teacher-label.ts `SPECIAL_SLOT_LABELS`, 원장 2026-07-29).
+  집중자율수업실: { order: 11, color: "#bdbdbd" }, // 305호(구 JJ 블록)
+  랩실: { order: 12, color: "#fff2cc" }, // 603호(구 이주희 블록)
 };
 
 /** 강사 라벨 정렬 비교 — 시트 순서 우선, 시트 밖 강사는 뒤(이름순). */

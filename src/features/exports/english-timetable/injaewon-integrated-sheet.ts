@@ -16,6 +16,7 @@ import {
   type TeacherColorMap,
 } from "@/features/timetable/lib/class-grid";
 import { readableTextColor } from "@/lib/color-utils";
+import { specialSlotShortLabel } from "@/features/timetable/lib/teacher-label";
 import { formatSchoolGrade } from "@/features/exports/math-timetable/student-format";
 import type { TeacherGeometry } from "./teacher-grid-sheet";
 
@@ -397,7 +398,8 @@ export function appendInjaewonIntegratedSheet(
           if (geometry && formulaSink) miniCells.push({ row: gr, col: cs + di });
           const cell = c.cells[`${pr.order}:${d}`];
           if (!cell) { set(gr, cs + di, "", { size: 7 }); return; }
-          if (cell.isLab) { set(gr, cs + di, "LAB", { bg: LAB_BG, bold: true, size: 7 }); return; }
+          // 특수 자리(랩실·집중자율수업실)는 강사색 대신 고정색 + 짧은 이름(셀 폭).
+          if (cell.isLab) { set(gr, cs + di, specialSlotShortLabel(cell.label) ?? cell.label, { bg: LAB_BG, bold: true, size: 7 }); return; }
           const rm = roomByCell.get(`${c.classId}:${pr.order}:${d}`) ?? "";
           set(gr, cs + di, rm ? `${cell.label}\n\n${rm}` : cell.label, { bg: teacherBg(cell.label), color: teacherFg(cell.label), size: 7, wrap: true });
         });
