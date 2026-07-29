@@ -26,6 +26,7 @@ export const MENU_KEYS = [
   "consultations",
   "withdrawals",
   "retention",
+  "ecs",
   "lesson_reports",
   "staff",
   "billing",
@@ -51,6 +52,7 @@ export type MenuKey = (typeof MENU_KEYS)[number];
  */
 export const TEACHER_MENU_KEYS = [
   "teacher_onescreen",
+  "ecs", // English Class Sheet — 영어 강사 주간 수업계획서/출석부(scoped: 담당 반만)
   "students",
   "attendance",
   "classes",
@@ -81,6 +83,10 @@ export const MENU_ACCESS: AccessMatrix = {
   withdrawals: { master: "full", admin: "full", manager: "full", teacher: "none", counselor: "full", accountant: "full", viewer: "readonly", student: "none" },
   // 이탈 방어(리텐션) — 위험도 기반 재등록 방어. 강사는 담당 학생만(scoped), 회계는 매출 위험 열람.
   retention: { master: "full", admin: "full", manager: "full", teacher: "scoped", counselor: "full", accountant: "readonly", viewer: "readonly", student: "none" },
+  // English Class Sheet(ECS) — 영어 반별 주간 수업계획서/출석부(구글시트 이식). 강사=scoped(담당 반만,
+  // 게이트는 requireEcsClassAccess 공용 함수 — effectiveTeacherScope 상시 적용). viewer=readonly(열람만).
+  // 출석 체크 쓰기는 이 키가 아니라 attendance 게이트(비파괴 markPresentIfAbsent)가 별도 판정.
+  ecs: { master: "full", admin: "full", manager: "full", teacher: "scoped", counselor: "none", accountant: "none", viewer: "readonly", student: "none" },
   // 수업보고서(발송 관리) — 학원 전체 보고서 발송 큐·작성률·목록 총괄(오버사이트). 구 학원설정 ?tab=report_mgmt에서
   // 좌측 독립 메뉴로 승격(옛 Edutrix 외부링크 대체). 사무실(master/admin/manager)이 관리(재발송 등 쓰기 포함),
   // 뷰어는 열람만. 강사=none(작성은 /onescreen 원스크린 담당, 여기는 전체 오버사이트라 스코핑 없음).
@@ -167,6 +173,7 @@ const PATH_SEGMENT_TO_MENU: Record<string, MenuKey> = {
   consultations: "consultations",
   withdrawals: "withdrawals",
   retention: "retention",
+  ecs: "ecs",
   "lesson-reports": "lesson_reports",
   staff: "staff",
   billing: "billing",
