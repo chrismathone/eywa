@@ -23,6 +23,7 @@ import {
   setMyNoticeMode,
 } from "../server/actions";
 import { MakeupAdder } from "./makeup-adder";
+import { SendWindowNotice } from "./send-window-notice";
 import {
   issueReportAttachmentUploadTicket,
   registerReportAttachment,
@@ -155,7 +156,7 @@ export function OneScreenClient({
   noticeMode: initialNoticeMode = null,
   academyNoticeMode = "A",
   classnoteSendEnabled = false,
-  sendWindowLabel = null,
+  sendWindow = null,
   showAttachments = true,
   canEditAttendance = true,
   presenceScope,
@@ -178,7 +179,7 @@ export function OneScreenClient({
   noClassesToday?: boolean;
   /** '담당 반 전체 보기'로 보는 중(요일 무시) — 화면이 그 사실을 밝힌다. */
   showingAll?: boolean;
-  sendWindowLabel?: string | null; // 발송 허용 시간창 "HH:MM~HH:MM"(무제한=null) — 상단 강사 참고 안내
+  sendWindow?: { start: string; end: string } | null; // 발송 허용 시간창 원문(무제한=null) — 창 밖일 때만 안내 배너
   showAttachments?: boolean; // 사진/파일 첨부 표시(학원 설정) — off면 첨부해도 안 실린다는 경고를 카드에 표시
   canEditAttendance?: boolean; // 출결 쓰기 권한 — false면 pill을 표시 전용으로(서버 거절 전에 화면에서 알림)
   presenceScope?: string; // `onescreen:{teacherId}:{date}` — 다른 창/기기 동시 열림 경고(서버가 teacherId 파생)
@@ -1785,15 +1786,9 @@ export function OneScreenClient({
         makeupAdder={<MakeupAdder onAdd={addMakeupStudent} />}
       />
 
-      {/* 발송 시간창 참고 안내 — 원장이 학원설정(보고서)에 시간대를 정한 경우만 표시(무제한=미표시).
-          실제 지연은 워커 게이트·발송 시점 토스트가 담당 — 이 줄은 정책 인지용 상시 안내다. */}
-      {sendWindowLabel ? (
-        <div className="border-line bg-bg-soft text-text-dim rounded-md border px-3 py-2 text-[12.5px]">
-          {/* "수업 보고서" 한정 표기 — 반 공지는 시간창 미적용(G1 확정)이라 ClassNote 전체로 말하면 과약속. */}
-          <span className="text-foreground font-bold">수업 보고서 발송 시간대 {sendWindowLabel}</span>
-          <span> — 이 시간 외에 발송하면 예약돼 시간대가 열릴 때 자동 발송됩니다.</span>
-        </div>
-      ) : null}
+      {/* 발송 시간창 안내 — **지금이 창 밖일 때만**(KST, 분 단위 재판정 — 원장 지시 2026-07-29).
+          창 안에선 발송이 그냥 나가므로 상시 안내는 노이즈. 실제 지연은 워커 게이트가 담당. */}
+      {sendWindow ? <SendWindowNotice start={sendWindow.start} end={sendWindow.end} /> : null}
 
       {/* 그 요일에 담당 수업이 없을 때 — 예전엔 담당 반 전체가 '오늘 목록'처럼 떴다(2026-07-22 이수진 수요일:
           반 7개·학생 37명). 이제 목록 대신 사실을 말하고, 전체 보기는 **누를 때만** 연다. */}

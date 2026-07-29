@@ -4,6 +4,13 @@
 
 ## 진행 상황
 
+### 원스크린 발송 시간대 안내 = 창 밖일 때만 표시 (2026-07-29) - tsc0/lint0/test460/build✓
+원장 지시: 발송 시간대 배너를 **해당 시간대 밖일 때만**(KST). 창 안에선 발송이 그냥 나가므로 상시 안내는
+노이즈였다. 판정은 기존 워커 미러 순수함수 `classnoteSendWindowHint`(창 안·무제한=null, Vitest 잠금) 재사용,
+원스크린은 하루 종일 켜두는 화면이라 [SendWindowNotice](../src/features/onescreen/components/send-window-notice.tsx)가
+**30초마다 재판정**(서버 시점 고정이면 8시에 연 화면이 9시에도 배너를 보이는 거짓말). useSyncExternalStore
+(SSR 스냅샷 null)라 hydration 불일치·setState-in-effect(#25) 없음. roster는 라벨 대신 시간창 원문을 내린다.
+
 ### English Class Sheet(ECS) — 영어 반별 주간 수업계획서/출석부 네이티브 신설 (2026-07-29) - tsc0/lint0/유닛41+통합15/build✓
 영어팀 구글시트(반 1개=스프레드시트 1개, 주차 탭 매주 복제 — 실물 3종+마스터 전수 조사) eywa 이식. 원장 확정:
 네이티브 재구현·철저 배선·DB화 / 출석=attendance_records 실기록 / 이관 없이 새 주부터 / 메뉴명 "English Class Sheet".
