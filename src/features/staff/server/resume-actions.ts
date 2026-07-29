@@ -360,7 +360,7 @@ export async function deleteStaffResume(
       photos
         .map(String)
         .filter((p) => isTenantDocumentPath(p, gate.user.tenantId))
-        .map((p) => removeObject(p).catch(() => {})),
+        .map((p) => removeObject(p, { bucket: MEDIA_KIND.document.supabaseBucket }).catch(() => {})),
     );
   }
   revalidateResume(id);

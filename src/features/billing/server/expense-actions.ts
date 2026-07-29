@@ -8,7 +8,6 @@ import { kstToday } from "@/lib/date-kst";
 import { createClient } from "@/lib/supabase/server";
 import {
   createUploadTicket,
-  getMediaBackend,
   MEDIA_KIND,
   removeObject,
   resolveTenantReadUrl,
@@ -253,9 +252,8 @@ export async function deleteExpense(_prev: ExpenseState, formData: FormData): Pr
   const paths = parseReceipts(row?.receipt_urls)
     .map((r) => r.path)
     .filter((p) => isTenantReceiptPath(p, user.tenantId, id));
-  const backend = getMediaBackend();
   for (const p of paths) {
-    await removeObject(p, { backend, bucket: RECEIPTS_BUCKET }).catch(() => {});
+    await removeObject(p, { bucket: RECEIPTS_BUCKET }).catch(() => {});
   }
 
   const { error } = await supabase.from("expenses").delete().eq("id", id);
@@ -452,14 +450,14 @@ export async function addExpenseReceipt(
   try {
     await verifyUploadedObject("receipt", path);
   } catch (e) {
-    await removeObject(path, { backend: getMediaBackend(), bucket: RECEIPTS_BUCKET }).catch(() => {});
+    await removeObject(path, { bucket: RECEIPTS_BUCKET }).catch(() => {});
     return { error: e instanceof Error ? e.message : "첨부 검증 실패" };
   }
 
   const supabase = await createClient();
   const { data: row } = await supabase.from("expenses").select("receipt_urls").eq("id", id).maybeSingle();
   if (!row) {
-    await removeObject(path, { backend: getMediaBackend(), bucket: RECEIPTS_BUCKET }).catch(() => {});
+    await removeObject(path, { bucket: RECEIPTS_BUCKET }).catch(() => {});
     return { error: "지출을 찾을 수 없습니다" };
   }
   const list = parseReceipts(row.receipt_urls);
@@ -471,7 +469,7 @@ export async function addExpenseReceipt(
     .update({ receipt_urls: list, updated_at: new Date().toISOString() })
     .eq("id", id);
   if (error) {
-    await removeObject(path, { backend: getMediaBackend(), bucket: RECEIPTS_BUCKET }).catch(() => {});
+    await removeObject(path, { bucket: RECEIPTS_BUCKET }).catch(() => {});
     return { error: error.message };
   }
 
@@ -510,7 +508,7 @@ export async function removeExpenseReceipt(
     .eq("id", id);
   if (error) return { error: error.message };
 
-  if (!isLegacy) await removeObject(path, { backend: getMediaBackend(), bucket: RECEIPTS_BUCKET }).catch(() => {});
+  if (!isLegacy) await removeObject(path, { bucket: RECEIPTS_BUCKET }).catch(() => {});
 
   revalidatePath("/billing");
   revalidatePath("/expense-requests");

@@ -4,6 +4,28 @@
 
 ## 진행 상황
 
+### 미디어 스토리지 = Supabase 단일 경로 — GCS 분기 제거 + 업로드 검증 복구 (2026-07-29) - typecheck0/lint0/build✓
+ijw-calander GCP 프로젝트를 삭제해 **되돌릴 수 없게 된** GCS 경로를 코드에서 걷어냈다. 남겨두면 `MEDIA_STORAGE_BACKEND=gcs`가
+살아있는 안전장치처럼 보이지만 실제로 켜면 업로드·읽기가 전부 실패하는 **소등 지뢰**(ClassNote Cloud Run 폴백과 같은 부류)라
+경로를 하나로 줄였다. 프로덕션 env 실측으로 안전 확인: `GOOGLE_SERVICE_ACCOUNT_KEY` 존재(시트 연동 유지) ·
+`FIREBASE_SERVICE_ACCOUNT_KEY`는 **프로덕션에 애초에 없었다**(= 폴백은 이미 죽은 경로였음).
+- **삭제**: `gcs-client.ts` · `backend.ts`(+테스트) · `scripts/setup-gcs-cors.cjs` ·
+  `scripts/_oneoff/notice-attachment-hakwoni.e2e.ts`(`expect(ticket.backend).toBe("gcs")` — 영영 통과 불가) ·
+  `@google-cloud/storage` 의존성(+lockfile 134줄, 순수 제거) · `StorageBackend` 타입 · `removeObject`의 backend 인자(호출부 11곳).
+- **🔴 무검증이던 업로드 검증 복구**: `verifyUploadedObject`가 Supabase 백엔드에선 `{size:0}`만 돌려주고 **아무것도 검증하지
+  않고 있었다**(크기·MIME 강제가 GCS 분기에만 존재) → 백엔드를 바꾼 순간부터 검증이 꺼져 있던 셈. Supabase `list(dir,{search})`
+  메타로 재구현: **부재=차단**(업로드 없이 register만 불러 DB 행부터 만드는 우회를 막음. 옛 GCS `exists()` 강제를 이어받음),
+  크기 초과=차단. ⚠️ **MIME은 일부러 강제하지 않는다** — Supabase에 기록되는 mimetype은 서버 승인값이 아니라 **클라 `File.type`**
+  이라(MediaRecorder가 오디오를 `video/webm`으로 뱉는 등) 강제하면 정상 업로드를 거부하고 호출부가 그 파일을 지운다(녹음 소실).
+  형식 관문은 버킷 `allowed_mime_types`가 담당.
+- **조용히 멈춰 있던 것**: `recordings-retention` cron이 `backend!=="supabase"`면 no-op로 빠져나가 **보관기한 정리를 하지 않고 있었다** → 가드 제거.
+- **부수 정리**: 죽은 `MEDIA_KIND.hasLegacy`(읽는 곳 0, 선행 dead) 제거 · `createUploadTicket` JSDoc이 다른 함수 위로 밀려 붙은 것 복구 ·
+  존재하지 않는 Vitest를 주장하던 주석 정정(모듈이 server-only라 import 불가 [[#61]]) · `gcs-client.ts`를 가리키던 stale 주석 3곳.
+- ⚠️ **잔여(수동)**: Vercel 프로덕션의 `MEDIA_STORAGE_BACKEND` env는 코드가 더 이상 읽지 않으므로 제거 대상.
+- ⚠️ **알려진 한계(이번 변경이 만든 게 아님, 어제 백엔드 전환 시점부터)**: 업로드 진행률이 0→100 2단계
+  (Supabase `uploadToSignedUrl`은 진행률 미노출, 옛 GCS는 XHR PUT이라 실시간이었음) · 다운로드 파일명은 Supabase `?download=`에
+  위임(`attachmentFilename` RFC 5987 헬퍼를 끼울 자리가 없음). 한글 파일명 저장은 실사용 확인 필요.
+
 ### Edutrix 소등 완료 — 옛 시스템 3개 종료, eywa 단독 운영 (2026-07-29) - 헬스체크 5종 통과
 1세대(classreport-web) → 2세대(edutrix) → eywa 계보의 마지막 정리. 하루에 **edutrix Vercel · ijw-calander(GCP) ·
 classreport-web(GCP) 삭제 + edutrix Supabase 일시정지 + Vercel env 5종 제거**를 실행했고, 매 단계마다

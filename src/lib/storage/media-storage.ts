@@ -1,8 +1,5 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { attachmentFilename } from "@/lib/http/content-disposition";
-import { getMediaBackend } from "./backend";
-import { gcsFile } from "./gcs-client";
 import {
   classifyAudioPath,
   isTenantAudioPath,
@@ -13,10 +10,11 @@ import {
   SUPABASE_BUCKET_BY_KIND,
   type AudioKind,
 } from "./legacy-audio-path";
-import type { MediaKind, StorageBackend, UploadTicket } from "./types";
+import type { MediaKind, UploadTicket } from "./types";
 
-// 단일 미디어 스토리지 추상화 — 신규 업로드를 GCS(ijw Firebase) 또는 Supabase로 라우팅.
-// 백엔드는 env MEDIA_STORAGE_BACKEND(기본 gcs). 추상화 덕에 추후 Supabase 스왑은 flag 한 줄.
+// 단일 미디어 스토리지 — **Supabase Storage 전용**(2026-07-29). 옛 GCS(ijw Firebase) 분기는 제거했다:
+// 그 프로젝트를 삭제해 `MEDIA_STORAGE_BACKEND=gcs`로 되돌리면 업로드·읽기가 전부 실패하는데, 코드만 보면
+// 되돌릴 수 있는 안전장치처럼 보였다(= ClassNote Cloud Run 폴백과 같은 지뢰). 경로가 하나면 그 오해가 없다.
 // ⚠️ 호출부(server action)는 throw를 try/catch로 `{error}` 변환.
 
 const AUDIO_MAX = 50 * 1024 * 1024; // 50MB (클라 validateAudioFile과 동일 — 필요 시 함께 상향)
@@ -25,7 +23,7 @@ const BRANDING_MAX = 5 * 1024 * 1024; // 5MB
 const DOCUMENT_MAX = 20 * 1024 * 1024; // 20MB — 스캔 PDF 등 큰 서식 고려
 const REPORT_ATTACHMENT_MAX = 20 * 1024 * 1024; // 20MB — 학생 풀이 사진 + 문서/오디오 첨부(pdf·hwp·office·mp3)
 const READ_TTL_MS = 2 * 60 * 60 * 1000; // 2h — AssemblyAI 큐+다운로드 여유
-const UPLOAD_TTL_MS = 15 * 60 * 1000; // 15m — signed PUT 유효
+// 업로드 URL 수명은 Supabase createSignedUploadUrl 기본값을 따른다(옛 GCS signed PUT 15분 상수는 제거).
 
 const isAudioCT = (ct: string) => /^audio\//.test(ct);
 const isImageCT = (ct: string) => /^image\//.test(ct);
@@ -54,54 +52,47 @@ const isReportAttachmentCT = (ct: string) =>
   /^audio\/(mpeg|mp4|m4a|x-m4a)$/.test(ct);
 
 type KindMeta = {
-  /** Supabase 백엔드 버킷(GCS 백엔드는 단일 버킷이라 미사용). */
+  /** 이 kind가 저장되는 Supabase Storage 버킷. */
   supabaseBucket: string;
   maxBytes: number;
   allowCT: (ct: string) => boolean;
   /** tenant 경로 형식 검증(순수). */
   validate: (path: string, tenantId: string) => boolean;
-  /** 레거시 Firebase prefix를 갖는가(오디오만 true — 옛 ijw 녹음). */
-  hasLegacy: boolean;
 };
 
 /** kind별 메타 — 오디오/영수증/브랜딩을 한 곳에서 분리(버킷·검증·크기·형식). */
 export const MEDIA_KIND: Record<MediaKind, KindMeta> = {
-  meeting: { supabaseBucket: SUPABASE_BUCKET_BY_KIND.meeting, maxBytes: AUDIO_MAX, allowCT: isAudioCT, validate: isTenantAudioPath, hasLegacy: true },
-  consultation: { supabaseBucket: SUPABASE_BUCKET_BY_KIND.consultation, maxBytes: AUDIO_MAX, allowCT: isAudioCT, validate: isTenantAudioPath, hasLegacy: true },
-  registration: { supabaseBucket: SUPABASE_BUCKET_BY_KIND.registration, maxBytes: AUDIO_MAX, allowCT: isAudioCT, validate: isTenantAudioPath, hasLegacy: true },
-  receipt: { supabaseBucket: "expense-receipts", maxBytes: RECEIPT_MAX, allowCT: isReceiptCT, validate: isTenantReceiptPath, hasLegacy: false },
-  branding: { supabaseBucket: "branding", maxBytes: BRANDING_MAX, allowCT: isImageCT, validate: isTenantBrandingPath, hasLegacy: false },
-  document: { supabaseBucket: "academy-documents", maxBytes: DOCUMENT_MAX, allowCT: isDocumentCT, validate: isTenantDocumentPath, hasLegacy: false },
-  report_attachment: { supabaseBucket: "report-attachments", maxBytes: REPORT_ATTACHMENT_MAX, allowCT: isReportAttachmentCT, validate: isTenantReportAttachmentPath, hasLegacy: false },
+  meeting: { supabaseBucket: SUPABASE_BUCKET_BY_KIND.meeting, maxBytes: AUDIO_MAX, allowCT: isAudioCT, validate: isTenantAudioPath},
+  consultation: { supabaseBucket: SUPABASE_BUCKET_BY_KIND.consultation, maxBytes: AUDIO_MAX, allowCT: isAudioCT, validate: isTenantAudioPath},
+  registration: { supabaseBucket: SUPABASE_BUCKET_BY_KIND.registration, maxBytes: AUDIO_MAX, allowCT: isAudioCT, validate: isTenantAudioPath},
+  receipt: { supabaseBucket: "expense-receipts", maxBytes: RECEIPT_MAX, allowCT: isReceiptCT, validate: isTenantReceiptPath},
+  branding: { supabaseBucket: "branding", maxBytes: BRANDING_MAX, allowCT: isImageCT, validate: isTenantBrandingPath},
+  document: { supabaseBucket: "academy-documents", maxBytes: DOCUMENT_MAX, allowCT: isDocumentCT, validate: isTenantDocumentPath},
+  report_attachment: { supabaseBucket: "report-attachments", maxBytes: REPORT_ATTACHMENT_MAX, allowCT: isReportAttachmentCT, validate: isTenantReportAttachmentPath},
 };
-
-export { getMediaBackend }; // backend.ts(순수)에서 — 호출부는 media-storage에서 계속 import 가능.
 
 // ── 업로드 티켓 ──────────────────────────────────────────────
 /**
+ * 업로드된 객체 크기가 허용 범위인가 — 0·음수·미확인(0)도 거부한다(빈 파일·메타 미기록 = 신뢰 불가).
+ * verifyUploadedObject가 Supabase 메타로 이 판정을 쓴다.
+ * ⚠️ 이 모듈은 server-only라 Vitest에서 import할 수 없다 [[#61]] — 단위테스트가 필요해지면
+ * 순수 모듈로 먼저 분리할 것(여기 두고 "테스트됨"이라고 적지 말 것).
+ */
+function assertUploadedSize(size: number, maxBytes: number): boolean {
+  return Number.isFinite(size) && size > 0 && size <= maxBytes;
+}
+
+/**
  * 업로드 티켓 발급. ⚠️ path/권한/size는 **호출 server action이 이미 검증**한 뒤 부른다.
- * GCS=v4 signed PUT(+contentType 서명, 클라가 동일 헤더로 PUT). Supabase=createSignedUploadUrl.
+ * Supabase `createSignedUploadUrl` — 클라는 `bucket`+`token`으로 `uploadToSignedUrl`.
  */
 export async function createUploadTicket(args: {
   kind: MediaKind;
   path: string;
   contentType: string;
-  /**
-   * 같은 경로 덮어쓰기 허용 — **결정적 경로**(같은 원본을 다시 만들어 올리는 경우)에만.
-   * GCS signed PUT은 원래 덮어쓰지만 Supabase는 이 옵션 없이는 "이미 존재" 오류가 난다(백엔드 스왑 대비).
-   */
+  /** 같은 경로 덮어쓰기 허용 — **결정적 경로**(같은 원본을 다시 만들어 올리는 경우)에만. 없으면 "이미 존재" 오류. */
   upsert?: boolean;
 }): Promise<UploadTicket> {
-  const backend = getMediaBackend();
-  if (backend === "gcs") {
-    const [uploadUrl] = await gcsFile(args.path).getSignedUrl({
-      version: "v4",
-      action: "write",
-      expires: Date.now() + UPLOAD_TTL_MS,
-      contentType: args.contentType,
-    });
-    return { backend, uploadUrl, path: args.path, headers: { "Content-Type": args.contentType } };
-  }
   const bucket = MEDIA_KIND[args.kind].supabaseBucket;
   const { data, error } = await createAdminClient()
     .storage.from(bucket)
@@ -109,58 +100,49 @@ export async function createUploadTicket(args: {
   if (error || !data?.signedUrl) {
     throw new Error(`업로드 URL 생성 실패: ${error?.message ?? "unknown"}`);
   }
-  return { backend, uploadUrl: data.signedUrl, path: args.path, bucket, token: data.token };
+  return { uploadUrl: data.signedUrl, path: args.path, bucket, token: data.token };
 }
 
 /**
- * 업로드 직후 객체 진실성 검증(P1) — GCS signed PUT은 size/MIME를 자동검증하지 않으므로
- * exists·size≤max·contentType∈allowCT를 서버가 확인. 위반/부재면 throw(호출부가 removeObject로 cleanup).
- * 반환 size는 메타데이터 실값(DB 저장에 신뢰값으로 사용).
+ * 업로드 직후 객체 진실성 검증(P1) — 클라가 올린 **실제 객체**를 서버가 다시 확인한다.
+ * 부재/크기 위반이면 throw(호출부가 removeObject로 cleanup). 반환 size는 메타 실값(DB 저장용 신뢰값).
+ *
+ * 🔴 **부재는 반드시 차단한다**(2026-07-29 적대 검증 P1): 업로드 티켓은 register 호출과 무관하게 유효하므로,
+ * "업로드하지 않고 register만" 부르면 검증을 통째로 우회해 DB 행부터 만들 수 있다. 옛 GCS 분기의 `exists()`
+ * 강제가 그 구멍을 막고 있었고, 여기서 그대로 이어받는다. Supabase list는 강한 일관성이라 지연 걱정도 없다.
+ *
+ * ⚠️ **MIME은 강제하지 않는다**(같은 검증 P1): Supabase에 기록되는 mimetype은 서버가 승인한 contentType이
+ * 아니라 **클라 File.type**이다(storage-js uploadToSignedUrl은 File 본문에서 fileOptions.contentType을 쓰지
+ * 않는다). MediaRecorder가 오디오 전용 녹음도 `video/webm`으로 뱉는 등 실제 타입이 흔들려, 여기서 allowCT를
+ * 강제하면 **정상 업로드를 거부하고 호출부가 그 파일을 지운다**(녹음 소실). 형식 관문은 버킷의
+ * `allowed_mime_types`(setup-storage.ts)가 담당하고, 여기서는 관측값으로만 돌려준다.
  */
 export async function verifyUploadedObject(
   kind: MediaKind,
   path: string,
 ): Promise<{ size: number; contentType: string }> {
   const meta = MEDIA_KIND[kind];
-  if (getMediaBackend() === "gcs") {
-    const file = gcsFile(path);
-    const [exists] = await file.exists();
-    if (!exists) throw new Error("업로드된 파일을 찾을 수 없습니다");
-    const [md] = await file.getMetadata();
-    const size = Number(md.size ?? 0);
-    const contentType = String(md.contentType ?? "");
-    if (size <= 0 || size > meta.maxBytes) {
-      throw new Error("업로드 파일 크기가 허용 범위를 벗어났습니다");
-    }
-    if (!meta.allowCT(contentType)) {
-      throw new Error(`허용되지 않는 파일 형식입니다: ${contentType || "unknown"}`);
-    }
-    return { size, contentType };
+  const slash = path.lastIndexOf("/");
+  const dir = slash === -1 ? "" : path.slice(0, slash);
+  const name = slash === -1 ? path : path.slice(slash + 1);
+  const { data, error } = await createAdminClient()
+    .storage.from(meta.supabaseBucket)
+    .list(dir, { search: name, limit: 100 });
+  if (error) throw new Error(`업로드 확인 실패: ${error.message}`);
+  const found = data?.find((o) => o.name === name);
+  if (!found) throw new Error("업로드된 파일을 찾을 수 없습니다");
+  const md = found.metadata as { size?: number; mimetype?: string } | null;
+  const size = Number(md?.size ?? 0);
+  const contentType = String(md?.mimetype ?? "");
+  if (!assertUploadedSize(size, meta.maxBytes)) {
+    throw new Error("업로드 파일 크기가 허용 범위를 벗어났습니다");
   }
-  // Supabase 백엔드: RLS+클라 contentType로 1차 제약 — best-effort(엄격 검증은 GCS 분기).
-  return { size: 0, contentType: "" };
+  return { size, contentType };
 }
 
 // ── 읽기(signed GET URL) ─────────────────────────────────────
 // downloadName을 주면 attachment disposition으로 서명 → 브라우저가 미리보기 대신 그 파일명으로 저장.
 // (한글 파일명은 attachmentFilename이 RFC 5987로 안전 인코딩 — B1 헤더 규칙.)
-async function gcsSignedRead(path: string, ttlMs: number, downloadName?: string): Promise<string> {
-  const file = gcsFile(path);
-  const [exists] = await file.exists();
-  if (!exists) {
-    throw new Error(
-      "원본 파일이 없습니다(보존기간 만료 등). 'AI 분석 다시 생성'으로 텍스트 기반 재분석을 사용하세요.",
-    );
-  }
-  const [url] = await file.getSignedUrl({
-    version: "v4",
-    action: "read",
-    expires: Date.now() + ttlMs,
-    ...(downloadName ? { responseDisposition: attachmentFilename(downloadName) } : {}),
-  });
-  return url;
-}
-
 async function supabaseSignedRead(
   bucket: string,
   path: string,
@@ -192,9 +174,7 @@ export async function resolveAudioReadUrl(
   if (cls === "invalid") throw new Error("잘못된 오디오 경로입니다");
   // tenant=`{tenantId}/{uuid.ext}` · legacy=`{kind}-recordings/{파일명}` — 키 모양만 다르고
   // supabase에선 둘 다 kind 버킷 안 원경로 키라 같은 분기로 서명한다.
-  return getMediaBackend() === "gcs"
-    ? gcsSignedRead(path, ttlMs)
-    : supabaseSignedRead(SUPABASE_BUCKET_BY_KIND[kind], path, ttlMs);
+  return supabaseSignedRead(SUPABASE_BUCKET_BY_KIND[kind], path, ttlMs);
 }
 
 /** 이미지·문서(영수증/브랜딩/서식/보고서첨부) signed GET URL — legacy 없음, tenant 전용. downloadName=attachment 저장. */
@@ -206,14 +186,12 @@ export async function resolveTenantReadUrl(
   downloadName?: string,
 ): Promise<string> {
   if (!MEDIA_KIND[kind].validate(path, tenantId)) throw new Error("잘못된 파일 경로입니다");
-  return getMediaBackend() === "gcs"
-    ? gcsSignedRead(path, ttlMs, downloadName)
-    : supabaseSignedRead(MEDIA_KIND[kind].supabaseBucket, path, ttlMs, downloadName);
+  return supabaseSignedRead(MEDIA_KIND[kind].supabaseBucket, path, ttlMs, downloadName);
 }
 
 /**
  * 로고/직인 표시용 src — 빈 값=null, http(s)=그대로(외부 URL 하위호환), 그 외=branding 경로로 보고 signed URL.
- * 인쇄 서버컴포넌트가 `<img src>`에 쓴다(GCS 비공개 path를 직접 못 쓰므로 resolve).
+ * 인쇄 서버컴포넌트가 `<img src>`에 쓴다(비공개 버킷 path를 직접 못 쓰므로 resolve).
  */
 export async function resolveBrandingSrc(
   value: string | null | undefined,
@@ -249,15 +227,8 @@ export async function resolveTenantReadUrls(
 }
 
 // ── 삭제 ─────────────────────────────────────────────────────
-/** 객체 삭제(best-effort). gcs=file.delete(ignoreNotFound) / supabase=bucket.remove. */
-export async function removeObject(
-  path: string,
-  opts: { backend?: StorageBackend; bucket?: string } = {},
-): Promise<void> {
-  const backend = opts.backend ?? getMediaBackend();
-  if (backend === "gcs") {
-    await gcsFile(path).delete({ ignoreNotFound: true });
-  } else if (opts.bucket) {
-    await createAdminClient().storage.from(opts.bucket).remove([path]);
-  }
+/** 객체 삭제(best-effort) — bucket 없으면 no-op(호출부가 kind 버킷을 넘긴다). */
+export async function removeObject(path: string, opts: { bucket?: string } = {}): Promise<void> {
+  if (!opts.bucket) return;
+  await createAdminClient().storage.from(opts.bucket).remove([path]);
 }
