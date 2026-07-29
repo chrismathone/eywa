@@ -4,6 +4,21 @@
 
 ## 진행 상황
 
+### 담당 과목 = 근무부서에서 자동 도출 + 인적사항 사진 자리 상시 노출 (2026-07-29) - tsc0/lint0/test57(신규7)/build✓/실데이터 백필 12명
+원장 지적: *"부서랑 과목이랑 똑같은데 두 번 설정해야 함"* — 부서는 이력서, 담당 과목은 직원 수정 폼에 있어 같은 축을 두 곳에서 입력했다.
+**부서를 단일 소스로 삼고 과목은 파생**한다. 매칭은 [`subjectsFromDepartment`](../src/features/staff/department-subjects.ts)(순수+Vitest)가
+**학원설정 과목 라벨 포함 여부**로만 판정 — 과목 목록을 코드에 박지 않는다(운영 enum 하드코딩 금지 규칙 준수).
+'영어과'→영어 · '국어과'→국어 · '수학/과학과'→수학·과학 / 'EIE'·'경영지원팀'·'개발팀'·'아르바이트'·'차량팀'→**없음**(교과 부서가 아니면 그냥 비우고 쓴다).
+- **쓰기 배선 2경로**: 이력서 수정 저장 = 부서 파생 과목을 `users.subjects`로 동기화(파생 0건이면 **손대지 않음** — 겸임(경영팀이면서 수업)의 수동 지정 보존).
+  이력서 원샷 등록 = `profile.subjects`에 포함, 기존 계정 병합 시엔 **비어 있을 때만** 채움(기존 값 불가침 규칙 유지).
+- **화면**: 이력서 폼 근무부서 아래 "담당 과목 영어 (부서 기준 자동)" 결과만 표시(입력 칸 신설 없음, 클라는 `useSubjectMaps()` 단일 소스).
+  직원 수정 폼 담당 과목 안내문을 "부서 저장 시 자동 — 겸임만 수동 조정"으로 교체.
+- **실데이터 백필 12명**([`backfill-subjects-from-department.mjs`](../scripts/staff-roster-import/backfill-subjects-from-department.mjs), 드라이런→적용,
+  이미 과목 있는 8명은 불가침): 영어과 6·수학과 4·국어과 1·수학/과학과 1. 원복 = `revert-subjects-backfill.mjs logs/subjects-backfill-<ts>.json --apply`
+  (백필 후 수기 수정된 행은 자동 건너뜀). 결과: 과목별 대시보드·수업목록 강사 필터가 실제로 채워짐.
+- **인적사항 사진 자리 상시 노출**(원장 지시): 증명사진이 없으면 슬라이드가 통째로 사라져 "사진을 넣을 수 있다"는 걸 몰랐다 → 빈 액자 + "증명사진 없음"으로 자리 유지.
+- ⚠️ **남은 갭**: `RESUME_DEPARTMENTS`(이력서 부서 드롭다운)에 **국어과·과학과·경영팀·차량팀 등 실사용 부서가 없다**(원장 지정 6종만). 그 사람들 이력서를 저장하면 부서가 빈 값으로 떨어진다 — 목록 확장은 원장 결정 대기.
+
 ### 등록상담 사전 브리프(상담지) — 상담 *전에* 받아보는 준비 문서 (2026-07-28) - tsc0/lint0/test110(신규34)/build✓/실AI E2E✓
 "상담자가 상담하기 전에 상담지를 미리 받아보자"(원장 발상). 기존 산출물(AI 인수인계서)은 상담 *후*였고, 정작 상담 직전엔 QR 접수 13문항과 학원 실데이터를 머릿속에서 조합해야 했다. **eywa DB를 총동원한 사실 스냅샷**(개설 반·강사·요일/시각·정원/현원/잔여석 + 수강료 단가표(회당/월 명기) + 교재 + 같은 학교/학년/전체 재원생 count + 학부모 연락처 매칭 형제 재원생과 그 수강 반 + 같은 학생 이전 접수(자연키) + 셔틀/납부일/미납정책) 위에 LLM이 상담 스크립트(헤드라인·오프닝·확인질문·걱정→대응화법·반제안·예상반론·클로징·주의)를 쓴다.
 - **사실은 코드가, 말은 LLM이**(팀보고 패턴): [`prep-brief.ts`](../src/features/enrollment/prep-brief.ts) `validatePrepBrief`가 사실 블록에 없는 **숫자(2자리+)·영문 토큰**을 걸러 탈락 시 결정론 폴백(`buildFallbackPrepBrief`, `source:"fallback"` 배지 "접수 정보 기반 기본 브리프"로 정직 표시). 수집은 [`server/prep-facts.ts`](../src/features/enrollment/server/prep-facts.ts)(B2 count/head·B3 fetchInChunks·B4 Promise.all, 연락처·주소는 facts에 안 실음). 생성은 명시 버튼만([`prep-actions.ts`](../src/features/enrollment/server/prep-actions.ts) Sonnet 고정·8192tok — 4096은 잘림 실측), 저장은 `enrollment_consultations.prep_brief` jsonb 스냅샷(0152a, 상담 1건=브리프 1개 덮어쓰기, 그때 자료 동결=인쇄물 정책). 상세 상단 카드 + A4 인쇄 `/enrollment/[id]/prep`(내부용 명기, `print/enrollment-prep` A4 창 등록).

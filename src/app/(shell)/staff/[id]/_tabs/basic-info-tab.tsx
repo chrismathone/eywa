@@ -140,9 +140,8 @@ export async function BasicInfoTab({
               </>
             ) : null}
           </div>
-          {resumeAccess && resumePhotoUrls && resumePhotoUrls.some(Boolean) ? (
-            <ResumePhotoSlide urls={resumePhotoUrls} />
-          ) : null}
+          {/* 사진 자리는 비어 있어도 유지 — 인적사항에서 얼굴을 보는 게 이 카드의 목적. */}
+          {resumeAccess ? <ResumePhotoSlide urls={resumePhotoUrls ?? []} /> : null}
         </div>
       </SectionCard>
 

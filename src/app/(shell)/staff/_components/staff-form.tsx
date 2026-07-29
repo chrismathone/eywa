@@ -348,7 +348,9 @@ export function StaffForm({
             등록된 과목이 없습니다 — 학원 설정 → 운영 체계에서 과목을 먼저 추가하세요.
           </p>
         )}
-        <p className="text-muted-foreground mt-1 text-xs">학원 설정(운영 체계)의 과목에서 선택</p>
+        <p className="text-muted-foreground mt-1 text-xs">
+          이력서의 근무부서(영어과·수학과…)를 저장하면 자동으로 맞춰집니다 — 겸임일 때만 여기서 조정하세요.
+        </p>
       </Field>
 
       <Field label="시간표 색" htmlFor="bgColor">

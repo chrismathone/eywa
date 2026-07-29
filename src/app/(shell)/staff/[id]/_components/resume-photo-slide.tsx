@@ -8,11 +8,12 @@ import { useState } from "react";
  */
 export function ResumePhotoSlide({ urls }: { urls: (string | null)[] }) {
   const [slide, setSlide] = useState(0);
-  const valid = urls.filter(Boolean);
-  if (valid.length === 0) return null;
-  const current = Math.min(slide, urls.length - 1);
-  const url = urls[current];
-  const step = (d: number) => setSlide((s) => (s + d + urls.length) % urls.length);
+  // 사진이 하나도 없어도 **자리는 남긴다** — 인적사항에 얼굴 칸이 보여야 등록 여지를 안다(원장 지시 2026-07-29).
+  const hasAny = urls.some(Boolean);
+  const slots = hasAny ? urls : [null];
+  const current = Math.min(slide, slots.length - 1);
+  const url = slots[current];
+  const step = (d: number) => setSlide((s) => (s + d + slots.length) % slots.length);
   return (
     <div className="w-28 shrink-0">
       <div className="border-line bg-bg-soft/40 flex aspect-[3/4] w-full items-center justify-center overflow-hidden rounded-lg border">
@@ -20,10 +21,10 @@ export function ResumePhotoSlide({ urls }: { urls: (string | null)[] }) {
           // eslint-disable-next-line @next/next/no-img-element -- signed URL 미리보기(최적화 불필요)
           <img src={url} alt={`증명사진 ${current + 1}`} className="size-full object-cover" />
         ) : (
-          <span className="text-text-faint text-[10px]">사진 {current + 1}</span>
+          <span className="text-text-faint px-2 text-center text-[10px] leading-tight">증명사진 없음</span>
         )}
       </div>
-      {urls.length > 1 ? (
+      {slots.length > 1 ? (
         <div className="mt-1 flex items-center justify-center gap-1.5">
           <button
             type="button"
@@ -33,7 +34,7 @@ export function ResumePhotoSlide({ urls }: { urls: (string | null)[] }) {
           >
             ‹
           </button>
-          {urls.map((_, i) => (
+          {slots.map((_, i) => (
             <button
               key={i}
               type="button"

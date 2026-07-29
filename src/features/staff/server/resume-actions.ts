@@ -12,7 +12,10 @@ import { createUploadTicket, MEDIA_KIND, removeObject } from "@/lib/storage/medi
 import { isTenantDocumentPath } from "@/lib/storage/legacy-audio-path";
 import type { UploadTicket } from "@/lib/storage/types";
 import { logAction } from "@/features/audit/server/log";
+import { getTenantSettings } from "@/features/owner/server/queries";
+import { buildSubjectMaps } from "@/features/owner/subjects";
 import { EMAIL_RE } from "@/features/staff/email";
+import { subjectsFromDepartment } from "../department-subjects";
 import {
   INITIAL_STAFF_PASSWORD,
   parseResumeForm,
@@ -45,6 +48,17 @@ export type ResumeActionState =
   | undefined;
 
 type Gate = { error: string; detail?: string } | { user: CurrentUser };
+
+/**
+ * 근무부서 → 담당 과목(users.subjects) 자동 도출. 부서와 과목은 같은 축이라 두 번 입력시키지 않는다
+ * (원장 지시 2026-07-29). 과목 라벨은 학원설정 단일 소스 — 코드에 박지 않는다.
+ * 교과가 아닌 부서(EIE·경영지원팀·개발팀·아르바이트…)는 빈 배열 = 담당 과목 없이 쓴다.
+ */
+async function subjectsForDivision(division: string): Promise<string[]> {
+  if (!division.trim()) return [];
+  const settings = await getTenantSettings();
+  return subjectsFromDepartment(division, buildSubjectMaps(settings.operations.subjects).options);
+}
 
 async function requireStaffWrite(): Promise<Gate> {
   const user = await getCurrentUser();
@@ -136,18 +150,21 @@ async function registerStaffFromResume(
   }
 
   const admin = createAdminClient();
+  const derivedSubjects = await subjectsForDivision(data.contract.division);
   const profile = {
     phone: data.personal.phone || null,
     hire_date: data.contract.startDate || null,
     department: data.contract.division || null,
     employment_type: data.contract.employmentType || null,
     job_title: data.contract.jobTitle || null,
+    // 담당 과목 = 부서에서 파생(별도 입력 없음). 교과 부서가 아니면 빈 배열.
+    subjects: derivedSubjects,
   };
 
   // 같은 테넌트에 같은 이메일 직원이 이미 있으면 = 같은 사람(시트 이관분 등) → 새 계정 대신 연결.
   const { data: dup } = await admin
     .from("users")
-    .select("id, display_name, phone, hire_date, department, employment_type, job_title")
+    .select("id, display_name, phone, hire_date, department, employment_type, job_title, subjects")
     .eq("tenant_id", actor.tenantId)
     .ilike("email", email)
     .maybeSingle();
@@ -156,6 +173,10 @@ async function registerStaffFromResume(
     const fill: Record<string, unknown> = {};
     for (const k of ["phone", "hire_date", "department", "employment_type", "job_title"] as const) {
       if (!dup[k] && profile[k]) fill[k] = profile[k];
+    }
+    // 담당 과목도 비어 있을 때만 부서에서 채운다(겸임 수동 지정을 덮지 않게).
+    if (derivedSubjects.length > 0 && !(Array.isArray(dup.subjects) && dup.subjects.length > 0)) {
+      fill.subjects = derivedSubjects;
     }
     if (Object.keys(fill).length > 0) await admin.from("users").update(fill).eq("id", dup.id);
     await admin.from("academy_documents").update({ staff_user_id: dup.id }).eq("id", resumeId);
@@ -249,6 +270,10 @@ export async function saveStaffResume(
       if (data.contract.jobTitle) sync.job_title = data.contract.jobTitle;
       if (data.personal.phone) sync.phone = data.personal.phone;
       if (data.contract.startDate) sync.hire_date = data.contract.startDate;
+      // 담당 과목은 부서에서 파생(별도 입력 없음, 2026-07-29). 부서를 바꾸면 과목도 따라간다.
+      // 교과가 아닌 부서(파생 0건)면 손대지 않는다 — 겸임(경영팀이면서 수업)의 수동 지정 보존.
+      const derived = await subjectsForDivision(data.contract.division);
+      if (derived.length > 0) sync.subjects = derived;
       if (Object.keys(sync).length > 0) {
         await createAdminClient().from("users").update(sync).eq("id", linkedId).eq("tenant_id", gate.user.tenantId);
       }

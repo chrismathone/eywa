@@ -26,6 +26,8 @@ import { useEditPresence } from "@/features/presence/edit-presence";
 import type { SystemRole } from "@/lib/permissions";
 import { ROLE_LABEL } from "@/lib/auth/role-hierarchy";
 import { uploadToTicket } from "@/lib/storage/upload-to-ticket";
+import { useSubjectMaps } from "@/features/owner/operations-context";
+import { subjectsFromDepartment } from "@/features/staff/department-subjects";
 import {
   DYNAMIC_ROWS_MAX,
   EMPLOYMENT_TYPES,
@@ -187,6 +189,10 @@ export function ResumeSheet({
   // 회사 구분·근무부서(SearchableSelect = hidden input 제출)도 컨트롤드 — 초안 복원 동일 경로.
   const [company, setCompany] = useState(data.contract.company);
   const [division, setDivision] = useState(data.contract.division);
+  // 담당 과목은 **부서에서 자동 도출**(별도 입력 칸 없음, 원장 지시 2026-07-29) — 저장 시 서버가 직원(users)에 반영.
+  // 라벨은 학원설정 단일 소스(클라는 useSubjectMaps 훅).
+  const subjectMaps = useSubjectMaps();
+  const autoSubjects = subjectsFromDepartment(division, subjectMaps.options);
   // 동적 행(자격증·외국어)·서류 체크·사진은 컨트롤드 — 행 추가/삭제·복원이 상태 기준으로 돌아야 안전.
   const [certs, setCerts] = useState<ResumeCert[]>(data.certificates);
   const [langs, setLangs] = useState<ResumeLanguage[]>(data.languages);
@@ -676,6 +682,15 @@ export function ResumeSheet({
               ) : (
                 V(c.division)
               )}
+              {/* 담당 과목 = 부서에서 자동 — 두 번 입력하지 않는다(입력 칸 없음, 결과만 보여줌). */}
+              {division ? (
+                <p className="text-text-faint mt-1 text-[11px]">
+                  담당 과목{" "}
+                  {autoSubjects.length > 0
+                    ? `${autoSubjects.map((k) => subjectMaps.labelOf(k)).join(" · ")} (부서 기준 자동)`
+                    : "없음 (교과 부서가 아님)"}
+                </p>
+              ) : null}
             </td>
           </tr>
           <tr>
