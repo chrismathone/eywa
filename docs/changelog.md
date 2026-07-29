@@ -44,7 +44,8 @@ Vercel 게이트는 `typecheck`뿐이라 배포는 계속 초록이었고, 그�
 **③ 곁다리 — proxy matcher 정리 · BL4 주석 정정**
 - `proxy.ts` matcher에서 `api`·폰트/스타일 확장자·robots/sitemap/manifest 제외. `updateSession`은 이미
   `/api/*`를 early-return 하고 있어 **동작상 완전 동치**이고, 함수를 깨우지 않게 된다(warm 실측 17~26ms/요청).
-  `public/fonts/*.woff2`가 매 요청 함수를 태우고 있던 것도 함께 해소. 라우트 충돌 없음(전수 확인).
+  ⚠️ 폰트 확장자 제외는 **예방 조치**다 — Pretendard는 `next/font/local`이라 `/_next/static/media`로
+  나가고 그 경로는 이미 제외돼 있었다(측정된 이득 아님). robots/manifest는 실제로 307→404로 교정됨.
 - `prefetch-embed.ts` 주석의 "클릭 시 **HTTP 캐시 히트**로 시작"은 **거짓**이었다 — 인증 셸 문서는
   `no-store`(3/3 재현)라 저장 자체가 안 된다. 실제 효과는 함수 warm-up·테넌트 캐시 선점·커넥션 예열.
 - 감사가 지목한 `perm-matrix.ts:78` 주석은 **그 파일이 63줄이라 존재하지 않았다**(지적이 부정확) — 손대지 않음.
