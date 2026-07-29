@@ -26,10 +26,16 @@ if (-not $OutDir) { $OutDir = Join-Path $repo "data\발송PC-워커" }
 if (-not $Date) { $Date = Get-Date -Format "yyyy-MM-dd" }
 New-Item -ItemType Directory -Force $OutDir | Out-Null
 
+# 같은 날/같은 분에 다시 빌드해도 **덮어쓰지 않는다** — 옛 zip이 곧 롤백 수단이라 소실이 곧 손실이다.
+# (Compress-Archive는 대상이 있으면 -Force 없이는 에러로 죽는다 → 빈 이름을 찾을 때까지 접미사를 늘린다.)
 $zip = Join-Path $OutDir "발송PC-워커-$Date.zip"
 if (Test-Path $zip) {
-  # 같은 날 다시 빌드하면 시:분을 붙여 **덮어쓰지 않는다** — 옛 zip이 곧 롤백 수단이다.
   $zip = Join-Path $OutDir ("발송PC-워커-$Date" + "_" + (Get-Date -Format "HHmm") + ".zip")
+  $i = 1
+  while (Test-Path $zip) {
+    $zip = Join-Path $OutDir ("발송PC-워커-$Date" + "_" + (Get-Date -Format "HHmm") + "-$i.zip")
+    $i++
+  }
 }
 
 # 압축 안 경로를 scripts\_classnote\... 로 만들기 위해 스테이징(연동 PC에서 저장소 루트에 그대로 풀면 제자리).
