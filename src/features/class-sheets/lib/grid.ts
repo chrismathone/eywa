@@ -75,7 +75,10 @@ export type GridSlot = {
   /** 그 날짜에 유효한 스케줄이 실재하는가. false=고아(시간 변경됨 — 데이터만 남음). */
   scheduled: boolean;
   teacherId: string | null;
-  teacherLabel: string | null; // slot_teacher_label 원문(표시 해석은 소비처)
+  // slot_teacher_label을 **해석기(resolveTeacherLabel)를 통과시킨 표시명** — 로더(queries.ts)가 이미
+  // 변환해 넣는다(영문 닉네임→한글 이름, 이주희/JJ→LAB). 소비처는 그대로 그리면 된다.
+  // ⚠️ 원문이 아니므로 이 값을 권한·매칭 근거로 쓰지 말 것(게이트는 teacher_id FK만 — access.ts).
+  teacherLabel: string | null;
   roomLabel: string | null;
   lines: GridPlanLine[]; // regular 먼저, line_no 순
   roster: RosterEntry[];

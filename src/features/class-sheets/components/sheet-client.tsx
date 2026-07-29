@@ -19,7 +19,7 @@ import {
   type PlanLineDTO,
 } from "../server/actions";
 import { buildSaveKey, type PlanFieldPatch } from "../lib/save-keys";
-import { PLAN_PATCH_FIELDS } from "../lib/plan-codec";
+import { PLAN_PATCH_FIELDS, isMeaningfulPlanLine } from "../lib/plan-codec";
 import { useSheetDoc } from "./use-sheet-doc";
 import { useFlushOnUnmount, useSheetSaveStore } from "./use-sheet-saves";
 import { SheetToolbar } from "./sheet-toolbar";
@@ -118,6 +118,11 @@ export function SheetClient({
   useEffect(() => {
     goalsRef.current = goals;
   }, [goals]);
+  // 마크 롤백용 직전 값 미러(저장 실패 시 낙관 반영을 되돌린다)
+  const marksRef = useRef(marks);
+  useEffect(() => {
+    marksRef.current = marks;
+  }, [marks]);
 
   // ── 요일 필터(같은 주 전환 = flush·재조회 없이 History API) ────────────────
   const [dayFilter, setDayFilter] = useState<string | null>(() => {
@@ -210,6 +215,9 @@ export function SheetClient({
       },
       saveMark: (studentId, date, slotStart, status, note) => {
         const key = `${studentId}|${date}|${slotStart}`;
+        // 실패 시 되돌릴 직전 값 — 낙관 반영만 하고 롤백이 없으면 화면엔 남고 서버엔 없는 상태가 되어
+        // 툴바가 "저장됨"이라 말하는 동안 강사는 입력을 잃는다(적대검증 2026-07-29). 출석과 같은 처방.
+        const before = marksRef.current[key] ?? null;
         setMarks((prev) => ({ ...prev, [key]: { status, progressNote: note } }));
         store.scheduleLww(`mark:${key}`, async () => {
           const r = await upsertStudentMark({
@@ -220,7 +228,15 @@ export function SheetClient({
             status,
             progressNote: note,
           });
-          if (!r.ok) toast.error(r.error);
+          if (!r.ok) {
+            setMarks((prev) => {
+              const next = { ...prev };
+              if (before) next[key] = before;
+              else delete next[key];
+              return next;
+            });
+            toast.error(r.error);
+          }
         });
       },
     }),
@@ -258,7 +274,9 @@ export function SheetClient({
           textbook: g?.textbook ?? null,
           targetProgress: g?.targetProgress ?? null,
         });
-        if (!r.ok) toast.error(r.error);
+        // 목표는 행 단위 LWW라 직전 값 복원이 다른 필드를 되돌릴 수 있다 → 롤백 대신 **명시 고지**
+        // (조용히 "저장됨"으로 넘어가지 않게. 새로고침하면 서버 값이 진실이다.)
+        if (!r.ok) toast.error(`${r.error} — 저장되지 않았습니다(새로고침하면 이전 값으로 돌아갑니다)`);
       });
     },
     [classId, data.monthStart, store, weekMonday],
@@ -269,14 +287,22 @@ export function SheetClient({
       setMemos((prev) => ({ ...prev, [memoKey]: body }));
       store.scheduleLww(`memo:${memoKey}`, async () => {
         const r = await saveMemo({ classId, weekStart: weekMonday, memoKey, body });
-        if (!r.ok) toast.error(r.error);
+        if (!r.ok) toast.error(`${r.error} — 저장되지 않았습니다`);
       });
     },
     [classId, store, weekMonday],
   );
 
   const visibleDays = dayFilter ? data.grid.days.filter((d) => d.date === dayFilter) : data.grid.days;
-  const weekIsEmpty = data.fill.filledSlots === 0;
+  // "이 주는 아직 비어 있어요"는 **현재 화면 상태**로 판정한다. 서버 스냅샷(data.fill)만 보면 계획 셀
+  // 저장이 RSC를 갱신하지 않으므로(서버 액션에 revalidate 없음·같은 주에선 재마운트 없음) 강사가 그 주를
+  // 다 채워도 채워진 표 바로 위에 "비어 있어요"가 계속 뜬다(적대검증 2026-07-29, 첫 사용 시 100% 발생).
+  const weekIsEmpty = useMemo(
+    () =>
+      data.fill.filledSlots === 0 &&
+      !Object.values(linesBySlot).some((lines) => lines.some((l) => isMeaningfulPlanLine(l))),
+    [data.fill.filledSlots, linesBySlot],
+  );
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">

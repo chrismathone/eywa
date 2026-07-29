@@ -361,35 +361,8 @@ export async function upsertStudentMark(input: {
   }
 
   // mark_date 기준 실수강·등원요일 검증 — 비eligible(historical) 학생 행은 읽기 전용(§F)
-  const { data: enrs, error: enrError } = await admin
-    .from("enrollments")
-    .select("start_date, end_date, on_hold, is_transferred, attendance_days, students!inner(withdrawn_at)")
-    .eq("tenant_id", tenantId)
-    .eq("class_id", input.classId)
-    .eq("student_id", input.studentId);
-  if (enrError) return { ok: false, error: `수강 확인에 실패했습니다: ${enrError.message}` };
-  const dow = dowKeyOf(input.markDate);
-  const eligible = (enrs ?? []).some((e) => {
-    const withdrawnAt = (e.students as unknown as { withdrawn_at: string | null } | null)?.withdrawn_at ?? null;
-    if (withdrawnAt && withdrawnAt < input.markDate) return false;
-    if (
-      !isEnrollmentActiveOn(
-        {
-          startDate: e.start_date as string,
-          endDate: (e.end_date as string | null) ?? null,
-          onHold: e.on_hold as boolean,
-          isTransferred: (e.is_transferred as boolean | null) ?? undefined,
-        },
-        input.markDate,
-      )
-    ) {
-      return false;
-    }
-    return enrollmentAttendsOnDay(e.attendance_days as string[] | null, dow);
-  });
-  if (!eligible) {
-    return { ok: false, error: "그 날짜에 이 반을 수강하지 않는 학생입니다(기록 행은 읽기 전용)" };
-  }
+  const elig = await checkStudentEligibleOn(admin, tenantId, input.classId, input.studentId, input.markDate);
+  if (!elig.ok) return elig;
 
   const { error } = await admin.from("class_sheet_student_marks").upsert(
     {
@@ -459,13 +432,62 @@ export async function saveMemo(input: {
   return { ok: true };
 }
 
+/**
+ * (학생,반,날짜) 실수강 검증 — **쓰기 전 공용 게이트**(§F "기록 행은 읽기 전용").
+ * 화면은 `entry.eligible`로 컨트롤을 감추지만 서버 액션은 공개 엔드포인트라 화면 조건은 게이트가 아니다(#77).
+ * 마크 저장과 **출석 생성이 같은 판정**을 쓴다 — 한쪽만 검사하면 되돌리기 어려운 쪽(출석 행)이 뚫린다.
+ */
+async function checkStudentEligibleOn(
+  admin: ReturnType<typeof createAdminClient>,
+  tenantId: string,
+  classId: string,
+  studentId: string,
+  date: string,
+): Promise<{ ok: true } | ActionError> {
+  const { data: enrs, error } = await admin
+    .from("enrollments")
+    .select("start_date, end_date, on_hold, is_transferred, attendance_days, students!inner(withdrawn_at)")
+    .eq("tenant_id", tenantId)
+    .eq("class_id", classId)
+    .eq("student_id", studentId);
+  if (error) return { ok: false, error: `수강 확인에 실패했습니다: ${error.message}` };
+  const dow = dowKeyOf(date);
+  const eligible = (enrs ?? []).some((e) => {
+    const withdrawnAt = (e.students as unknown as { withdrawn_at: string | null } | null)?.withdrawn_at ?? null;
+    if (withdrawnAt && withdrawnAt < date) return false;
+    if (
+      !isEnrollmentActiveOn(
+        {
+          startDate: e.start_date as string,
+          endDate: (e.end_date as string | null) ?? null,
+          onHold: e.on_hold as boolean,
+          isTransferred: (e.is_transferred as boolean | null) ?? undefined,
+        },
+        date,
+      )
+    ) {
+      return false;
+    }
+    return enrollmentAttendsOnDay(e.attendance_days as string[] | null, dow);
+  });
+  if (!eligible) {
+    return { ok: false, error: "그 날짜에 이 반을 수강하지 않는 학생입니다(기록 행은 읽기 전용)" };
+  }
+  return { ok: true };
+}
+
 // ── 출석(비파괴) ─────────────────────────────────────────────────────────────
 
 /**
  * ECS 출석 체크 — 허용되는 유일한 조작 = "기록 없음 → present"(0157a RPC, 원자).
  * 어떤 기록이든 이미 있으면 no-op + canonical 상태 반환(absent/메모/시수 절대 불변).
- * 권한 = **기존 attendance 계약**: canWriteTenant("attendance") + 강사는 날짜별 7일 편집창.
- * (반 소유는 ECS 게이트의 effectiveTeacherScope가 이미 classes.teacher_id 기준으로 보장.)
+ * 권한 = **기존 attendance 계약**: canWriteTenant("attendance") + 강사는 날짜별 7일 편집창
+ * + **(학생,반,날짜) 실수강 검증**(checkStudentEligibleOn — 마크 저장과 같은 판정).
+ *
+ * ⚠️ 반 소유 범위: ECS 게이트는 `classes.teacher_id`(반담당) **∪ `class_schedules.teacher_id`(부담임)**
+ * 이다(원장 승인 2026-07-29 부담임 확장). 즉 이 액션은 /attendance의 '반담당만' 규칙보다 **넓다** —
+ * 실제로 그 교시를 가르치는 강사가 ECS에서 출석을 찍는 게 이 기능의 취지라 의도된 범위다.
+ * 대신 학생 결속을 서버에서 검증해 "아무 학생에게나 출석 행 생성"은 닫는다(적대검증 2026-07-29).
  */
 export async function markPresentIfAbsent(input: {
   classId: string;
@@ -484,6 +506,10 @@ export async function markPresentIfAbsent(input: {
     return { ok: false, error: attendanceLockMessage(input.date, today) };
   }
   const admin = createAdminClient();
+  // 학생-반-날짜 결속 — 화면(entry.eligible)은 게이트가 아니다. 출석 행은 ECS에서 되돌릴 수 없어
+  // (RPC에 삭제 경로 없음) 잘못 만들면 /attendance 권한자만 치울 수 있고 시수·정산에도 들어간다.
+  const elig = await checkStudentEligibleOn(admin, tenantId, input.classId, input.studentId, input.date);
+  if (!elig.ok) return elig;
   const { data, error } = await admin.rpc("ecs_mark_present_if_absent", {
     p_tenant: tenantId,
     p_actor: user.id,

@@ -32,7 +32,11 @@ export const PeriodBlock = memo(function PeriodBlock({
   handlers: SheetHandlers;
   canEdit: boolean;
 }) {
-  const periodLabel = data.periodLabelBySlot[slot.slotStart] ?? null;
+  // 키에 날짜 포함 — 같은 시각이라도 평일/주말 교시 번호가 다르다(주말은 별도 교시표).
+  const periodLabel = data.periodLabelBySlot[`${date}|${slot.slotStart}`] ?? null;
+  // teacherLabel은 로더에서 이미 해석된 표시명(시간표와 동일 문자열). 라벨 우선은 **시간표 3뷰와 같은
+  // 순서**라 두 화면이 같은 이름을 보여준다 — 뒤집지 말 것(실측: 라벨과 FK가 서로 다른 사람을 가리키는
+  // 슬롯이 존재해, FK 우선으로 바꾸면 시간표와 어긋난 이름이 ECS에만 뜬다. 상세는 changelog 2026-07-29).
   const teacher =
     slot.teacherLabel ??
     (slot.teacherId ? (data.teacherNames[slot.teacherId] ?? null) : null) ??

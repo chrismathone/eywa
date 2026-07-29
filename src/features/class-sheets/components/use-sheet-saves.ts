@@ -97,7 +97,14 @@ export class SheetSaveStore {
     const k = this.keys.get(saveKey);
     if (!k) return null;
     const next: CellSaveState = {
-      value: k.hasDraft ? k.draft : k.canonical,
+      // 저장이 확정된 뒤에도 **사용자가 친 원문**을 그대로 보여준다(정규화값과 같은 뜻일 때만).
+      // 안 그러면 확정 순간 끝 공백이 화면에서 사라져("Unit 5 "→"Unit 5") 이어 친 단어가 붙는다
+      // ("Unit 5p.32", 적대검증 2026-07-29). 뜻이 달라졌으면(충돌 해결·서버 변경) canonical이 진실.
+      value: k.hasDraft
+        ? k.draft
+        : k.draft !== null && normalizePlanText(k.draft) === k.canonical
+          ? k.draft
+          : k.canonical,
       dirty: k.hasDraft,
       paused: k.paused,
       conflict: k.conflict,
@@ -222,7 +229,13 @@ export class SheetSaveStore {
 
   /** 전송 1회(직렬) — dirty & !paused 키를 배치로. */
   private async runFlush(): Promise<void> {
-    if (this.inFlight) return this.inFlight;
+    if (this.inFlight) {
+      // 🔴 전송 중 발화한 디바운스를 그냥 버리면 그 사이 입력한 셀이 **영영 안 나간다** — 타이머는
+      // 발화와 동시에 소모됐고, 완료 후 재예약(needMore)은 **배치에 포함된 키**만 깨우기 때문이다.
+      // 끝나면 한 번 더 돌게 예약한다(적대검증 2026-07-29 실행 재현).
+      this.scheduleFlush(0);
+      return this.inFlight;
+    }
     const batch: { saveKey: string; patch: PlanFieldPatch; mutationId: string }[] = [];
     for (const [saveKey, k] of this.keys) {
       if (!k.hasDraft || k.paused || k.inFlightRev !== null) continue;
@@ -256,13 +269,18 @@ export class SheetSaveStore {
         const sentRev = k.inFlightRev ?? r.clientRev;
         k.inFlightRev = null;
         if (r.status === "applied" || r.status === "already_applied") {
-          const sent = normalizePlanText(k.draft);
+          // 🔴 canonical = **서버가 실제로 저장한 값**(= 이번에 보낸 newValue)이어야 한다. 예전엔
+          // 현재 draft로 덮었는데, 전송 중 이어 친 셀은 draft가 이미 달라져 다음 CAS의 expectedValue가
+          // 서버 상태와 어긋난다 → **아무도 안 고쳤는데 "다른 강사가 수정" 가짜 충돌**이 뜨고,
+          // 거기서 '서버값 사용'을 누르면 방금 친 입력이 사라진다(적대검증 2026-07-29 실행 재현).
+          const sent = entry.patch.newValue;
           k.canonical = sent; // 대상 필드만 merge(행 전체 설치 금지)
           void this.journal?.ack(entry.mutationId, sentRev);
           if (k.latestRev > sentRev) {
             needMore = true; // 전송 중 새 입력 — 자기 앞선 저장 성공 뒤 rebase(허용된 자동 재전송)
           } else {
-            k.draft = null;
+            // draft는 **표시용으로 남긴다**(cellState가 정규화 동치일 때만 쓴다) — null로 지우면
+            // 확정 순간 끝 공백이 사라져 이어 친 글자가 붙는다. 전송 대상 판정은 hasDraft가 한다.
             k.hasDraft = false;
             k.mutationId = null;
           }
