@@ -53,3 +53,6 @@ scripts/_makeedu/_incoming/
 
 # Edutrix 소등 아카이브 — 학생 PII 원본(35MB). 절대 커밋 금지, 로컬 보관 전용.
 data/edutrix-archive/
+
+# 발송 PC 워커 zip — 빌드 산출물(폴더의 README만 추적). 롤백용 옛 zip은 로컬에 남긴다.
+data/발송PC-워커/*.zip
