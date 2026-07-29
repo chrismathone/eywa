@@ -374,10 +374,23 @@ export type SheetLandingCard = {
   orphanSlots: number;
 };
 
+/**
+ * 카드가 0개인 **이유** — 화면이 원인을 정확히 말하게 하려고 구분한다.
+ * 담당 영어 반이 없는 강사에게 "학원 설정을 확인하라"고 하면 고칠 수 없는 일을 시키는 거짓 안내다.
+ */
+export type SheetLandingEmptyReason = "not-configured" | "no-scoped-classes" | "no-classes" | null;
+
 export async function getSheetLanding(
   weekParam?: string | null,
 ): Promise<
-  | { ok: true; weekMonday: string; weekLabel: string; today: string; cards: SheetLandingCard[] }
+  | {
+      ok: true;
+      weekMonday: string;
+      weekLabel: string;
+      today: string;
+      cards: SheetLandingCard[];
+      emptyReason: SheetLandingEmptyReason;
+    }
   | { ok: false; error: string }
 > {
   const user = await getCurrentUser();
@@ -393,7 +406,14 @@ export async function getSheetLanding(
   const settings = await getTenantSettings();
   const english = settings.operations.subjects.find((s) => s.key === "english");
   if (resolveSkillAreas(english).length === 0) {
-    return { ok: true, weekMonday, weekLabel: weekLabel(weekMonday), today, cards: [] };
+    return {
+      ok: true,
+      weekMonday,
+      weekLabel: weekLabel(weekMonday),
+      today,
+      cards: [],
+      emptyReason: "not-configured",
+    };
   }
 
   const supabase = await createClient();
@@ -411,7 +431,15 @@ export async function getSheetLanding(
   const classes = (allClasses ?? []).filter((c) => !scopeSet || scopeSet.has(c.id as string));
   const classIds = classes.map((c) => c.id as string);
   if (classIds.length === 0) {
-    return { ok: true, weekMonday, weekLabel: weekLabel(weekMonday), today, cards: [] };
+    return {
+      ok: true,
+      weekMonday,
+      weekLabel: weekLabel(weekMonday),
+      today,
+      cards: [],
+      // 학원엔 영어 반이 있는데 내 스코프에 없다 = "내가 담당이 아니다"(설정 문제 아님).
+      emptyReason: scopeSet && (allClasses ?? []).length > 0 ? "no-scoped-classes" : "no-classes",
+    };
   }
 
   const admin = createAdminClient();
@@ -499,5 +527,5 @@ export async function getSheetLanding(
     };
   });
 
-  return { ok: true, weekMonday, weekLabel: weekLabel(weekMonday), today, cards };
+  return { ok: true, weekMonday, weekLabel: weekLabel(weekMonday), today, cards, emptyReason: null };
 }

@@ -43,9 +43,14 @@ export default async function EcsLandingPage({
       </div>
 
       {res.cards.length === 0 ? (
+        // 원인별로 다른 안내 — 담당 반이 없는 강사에게 "학원 설정을 확인하라"고 하면
+        // 고칠 수 없는 일을 시키는 거짓 안내가 된다(원인 오표시 금지).
         <p className="bg-card shadow-card text-text-dim rounded-2xl px-4 py-6 text-sm">
-          표시할 영어 반이 없습니다. 반이 있는데 안 보이면 학원 설정 → 과목 운영에서 영어 과목의
-          수업계획(English Class Sheet) 영역을 확인하세요.
+          {res.emptyReason === "no-scoped-classes"
+            ? "담당하고 계신 영어 반이 없습니다. 반 배정은 사무실에 문의하세요."
+            : res.emptyReason === "not-configured"
+              ? "영어 과목의 수업계획(English Class Sheet) 영역이 아직 설정되지 않았습니다. 학원 설정 → 과목 운영에서 영역을 지정하세요."
+              : "이 주에 운영 중인 영어 반이 없습니다."}
         </p>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">

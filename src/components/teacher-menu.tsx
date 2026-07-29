@@ -43,14 +43,23 @@ const LINKS: { href: string; label: string; icon: EywaIconName; menu: MenuKey }[
 export function TeacherMenu({
   permMatrix,
   canReturnToAdmin = false,
+  showEcs = true,
 }: {
   permMatrix: AccessMatrix;
   /** 겸직(관리자 계열)이 강사뷰에 있을 때 → 드롭다운 하단에 '관리자뷰로 전환'. 실 강사는 false. */
   canReturnToAdmin?: boolean;
+  /**
+   * English Class Sheet는 **영어 반을 담당할 때만** 보인다(원장 지시 2026-07-29 "영어강사의 강사뷰에").
+   * 권한(ecs=scoped)은 전 강사가 갖고 있어 그것만으론 못 거른다 — 담당 과목은 서버에서만 알 수 있으므로
+   * (`effectiveTeacherScope`) 레이아웃이 계산해 내려준다. 모르면 표시(fail-open)가 기본.
+   */
+  showEcs?: boolean;
 }) {
   // 학원 권한 매트릭스에서 강사 접근이 '없음'인 탭은 숨긴다(설정 반영). teacher_onescreen은 항상 통과(locked full).
   // 수업보고서 오버사이트(/lesson-reports)는 teacher=none — 작성은 /onescreen. 옛 Edutrix 외부링크는 제거됨.
-  const links = LINKS.filter((l) => canAccess("teacher", l.menu, permMatrix));
+  const links = LINKS.filter(
+    (l) => canAccess("teacher", l.menu, permMatrix) && (l.menu !== "ecs" || showEcs),
+  );
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
