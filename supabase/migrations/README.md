@@ -164,5 +164,7 @@ pnpm db:seed
 
 | `0153a_test_student_flag_notify_skip` | **테스트 학생 플래그 + 발송 실패 알림 제외** — `students.is_test boolean not null default false`(상수 default라 재작성 없음) + 2026-07-28 기준 테스트 계정 7명 백필. `notify_report_send_failed`(0143a) 맨 앞에 가드 한 줄 추가 — 테스트 학생이면 알림 없이 종료. 배경: 학부모가 없는 테스트 학생(학원이)의 실패가 담당 강사에게 매번 벨로 가서 **진짜 실패까지 무시되게** 만들었다(원장 2026-07-28). 🔴 이름 패턴(`학원%`)을 트리거에 넣지 않는다 — 실학생이 걸리면 진짜 실패가 조용히 사라진다. 플래그는 앞으로 집계·발송 큐에서도 재사용. 검증: 롤백 트랜잭션에서 학원이 0건·김수련 1건. |
 
+| `0155a_class_sheets` | **English Class Sheet(ECS) — 반별 주간 수업계획서/출석부** — `class_sheet_plan_lines`(계획 줄: 앵커=실날짜+slot_start, 행 식별=id, 위치 UNIQUE는 skill_area **제외**+**DEFERRABLE**·이동 RPC 재번호용) · `class_sheet_goals`(담임/부담임 월간·주간 목표, period_start CHECK 월1일/월요일) · `class_sheet_student_marks`(교시 포함 키 — 하루 2교시 독립) · `class_sheet_memos`(위치키 CHECK — 내장 날짜 주 범위 검증). 🔒 4테이블 **RLS 정책 0 + PUBLIC/anon/authenticated revoke** = service_role 전용(0114a보다 넓게 — 역할 게이트는 앱 `requireEcsClassAccess`). classes/students `(tenant_id,id)` unique + **복합 FK**(교차 테넌트 참조 봉쇄). RPC 5종(`ecs_create/move/delete_plan_line`·`ecs_copy_week`·`ecs_mark_present_if_absent`) — 슬롯 advisory **xact** 락(정렬 획득), copy=의미행 있는 대상 교시 skip·placeholder 재번호·스케줄 밖 unmapped·주간 goals fill-empty, 출석=기록 없을 때만 present 생성(비파괴). ⚠️ DEFERRABLE UNIQUE는 ON CONFLICT 대상 불가 → insert는 전부 WHERE NOT EXISTS. '의미 있는 행' 정의는 TS `isMeaningfulPlanLine`과 동치 유지(Vitest 게이트). |
+
 새 alpha를 추가할 때: 다음 번호의 `000Na_*` 또는 `000Nb_*`로 만들고, 멱등 패턴을 지키고, **이 표에 추가**한다.
 상세 흐름은 [`../../CLAUDE.md`](../../CLAUDE.md) "마이그레이션 & 시드 흐름" 참고.
