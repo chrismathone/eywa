@@ -1,0 +1,81 @@
+import type { Metadata } from "next";
+import Link from "next/link";
+import { requireAccess } from "@/lib/auth/require-access";
+import { PageHeader } from "@/components/page-header";
+import { WeekNav } from "@/app/(shell)/timetable/_components/week-nav";
+import { getSheetLanding } from "@/features/class-sheets/server/queries";
+
+export const metadata: Metadata = { title: "English Class Sheet — eywa" };
+
+/**
+ * ECS 랜딩 — 영어 반 카드 + 주간 작성 상태. 반 카드를 누르면 같은 창에서 주간 시트로 드릴인.
+ * 강사(scoped)는 담당 반만 보인다(effectiveTeacherScope — getSheetLanding 내부).
+ */
+export default async function EcsLandingPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ week?: string }>;
+}) {
+  await requireAccess("ecs");
+  const { week } = await searchParams;
+  const res = await getSheetLanding(week ?? null);
+
+  if (!res.ok) {
+    return (
+      <div className="space-y-4">
+        <PageHeader eyebrow="수업 운영" title="English Class Sheet" description="영어 반별 주간 수업계획서/출석부" />
+        <p className="bg-card shadow-card text-text-dim rounded-2xl px-4 py-6 text-sm">{res.error}</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <PageHeader
+        eyebrow="수업 운영"
+        title="English Class Sheet"
+        description={`영어 반별 주간 수업계획서/출석부 · ${res.weekLabel}`}
+        embedLabel={`English Class Sheet · ${res.weekLabel}`}
+      />
+
+      <div className="bg-card shadow-card flex flex-wrap items-center gap-3 rounded-2xl px-4 py-3">
+        <WeekNav currentWeek={res.weekMonday} today={res.today} hrefForWeek={(monday) => `/ecs?week=${monday}`} />
+      </div>
+
+      {res.cards.length === 0 ? (
+        <p className="bg-card shadow-card text-text-dim rounded-2xl px-4 py-6 text-sm">
+          표시할 영어 반이 없습니다. 반이 있는데 안 보이면 학원 설정 → 과목 운영에서 영어 과목의
+          수업계획(English Class Sheet) 영역을 확인하세요.
+        </p>
+      ) : (
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {res.cards.map((card) => {
+            const pct = card.totalSlots > 0 ? Math.round((card.filledSlots / card.totalSlots) * 100) : 0;
+            return (
+              <Link
+                key={card.classId}
+                href={`/ecs/${card.classId}?week=${res.weekMonday}`}
+                className="bg-card shadow-card hover:shadow-md block rounded-2xl px-4 py-3 transition"
+              >
+                <p className="text-foreground truncate text-[14px] font-bold">{card.className}</p>
+                <p className="text-text-dim mt-0.5 text-[12px]">{card.teacherName ?? "담임 미지정"}</p>
+                <div className="mt-2 flex items-center gap-2">
+                  <span className="num text-foreground text-[13px] font-bold">
+                    {card.filledSlots}/{card.totalSlots}
+                  </span>
+                  <span className="text-text-faint text-[11px]">교시 작성</span>
+                  <span className="bg-bg-soft ml-auto h-1.5 w-16 overflow-hidden rounded-full">
+                    <span className="bg-primary block h-full rounded-full" style={{ width: `${pct}%` }} />
+                  </span>
+                </div>
+                {card.orphanSlots > 0 ? (
+                  <p className="text-text-faint mt-1 text-[11px]">시간 변경된 기록 {card.orphanSlots}건</p>
+                ) : null}
+              </Link>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}

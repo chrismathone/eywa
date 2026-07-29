@@ -24,6 +24,8 @@ import { canAccess, type AccessMatrix, type MenuKey } from "@/lib/permissions";
  */
 const LINKS: { href: string; label: string; icon: EywaIconName; menu: MenuKey }[] = [
   { href: "/onescreen", label: "수업 마감 (원스크린)", icon: MENU_ICON.teacher_onescreen, menu: "teacher_onescreen" },
+  // English Class Sheet — 영어 반별 주간 수업계획서/출석부(scoped: 담당 반만. requireEcsClassAccess 게이트).
+  { href: "/ecs", label: "English Class Sheet", icon: MENU_ICON.ecs, menu: "ecs" },
   { href: "/students", label: "내 학생", icon: MENU_ICON.students, menu: "students" },
   { href: "/attendance", label: "출석부", icon: MENU_ICON.attendance, menu: "attendance" },
   { href: "/classes", label: "내 수업", icon: MENU_ICON.classes, menu: "classes" },
