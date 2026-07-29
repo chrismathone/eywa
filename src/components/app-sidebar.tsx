@@ -16,9 +16,9 @@ import { NotificationBell } from "@/features/notifications/components/notificati
 import { EyIcon } from "@/components/icons/eywa-icons";
 import {
   NAV_GROUPS,
-  SUBTABS_BY_MENU,
   EXTERNAL_NAV,
   navPresentation,
+  subTabsForMenu,
   type NavItem,
   type ExternalNavItem,
   type SubTab as SubTabItem,
@@ -177,10 +177,18 @@ export function AppSidebar({
   const hasFocus = isDesktop && !!focusedId && openIds.has(focusedId);
 
   // 접근 가능한 항목만 남기고 빈 그룹 제거 (그룹 구분선 위치 계산용)
+  // subOf 항목은 최상위에서 빼고 부모의 하부탭으로 내린다(subTabsForMenu). 팰릿·모바일내비엔 그대로 남는다.
   const groups = NAV_GROUPS.map((g) => ({
     label: g.label,
-    items: g.items.filter((item) => !item.hidden && canAccess(systemRole, item.menuKey, permMatrix)),
+    items: g.items.filter(
+      (item) => !item.hidden && !item.subOf && canAccess(systemRole, item.menuKey, permMatrix),
+    ),
   })).filter((g) => g.items.length > 0);
+
+  // 하부탭 권한 필터 — 독립 메뉴 하부탭(menuKey 有)은 자기 키로 검사한다. 부모만 통과하면 노출되던
+  // 기존 구조에선 ecs=none인 역할(상담사·회계)에게 눌러도 튕기는 죽은 링크가 보인다(#77 거짓 약속).
+  const subTabsFor = (menuKey: MenuKey): SubTabItem[] =>
+    subTabsForMenu(menuKey).filter((s) => !s.menuKey || canAccess(systemRole, s.menuKey, permMatrix));
 
   return (
     <TooltipProvider delay={200}>
@@ -292,7 +300,8 @@ export function AppSidebar({
                 // 이미 최상단(포커스)인 창 — 이 메뉴를 다시 누르면 "첫 화면"으로 리셋(아래 handleNav).
                 const atTop =
                   isDesktop && presentation === "window" && hasFocus && focusedId === winId;
-                const subs = SUBTABS_BY_MENU[item.menuKey];
+                const subsAll = subTabsFor(item.menuKey);
+                const subs = subsAll.length > 0 ? subsAll : undefined;
                 // 비활성 메뉴 + 하부탭 有 → hover 시 우측 플라이아웃(왼쪽 메뉴는 고정, 리플로우 없음).
                 const flyoutable = isDesktop && expanded && !!subs && !active;
                 return (
@@ -322,10 +331,14 @@ export function AppSidebar({
                         {subs.map((sub) => (
                           <li key={sub.href}>
                             <SubTab
-                              menuKey={item.menuKey}
+                              windowKey={sub.menuKey ?? item.menuKey}
                               label={sub.label}
                               href={sub.href}
-                              active={isSubActive(sub.href, pathname, currentTab)}
+                              active={
+                                sub.menuKey
+                                  ? hasFocus && focusedId === windowId("route", sub.menuKey)
+                                  : isSubActive(sub.href, pathname, currentTab)
+                              }
                             />
                           </li>
                         ))}
@@ -448,10 +461,14 @@ export function AppSidebar({
                 {flyout.subs.map((sub) => (
                   <li key={sub.href}>
                     <SubTab
-                      menuKey={flyout.menuKey}
+                      windowKey={sub.menuKey ?? flyout.menuKey}
                       label={sub.label}
                       href={sub.href}
-                      active={isSubActive(sub.href, pathname, currentTab)}
+                      active={
+                        sub.menuKey
+                          ? hasFocus && focusedId === windowId("route", sub.menuKey)
+                          : isSubActive(sub.href, pathname, currentTab)
+                      }
                       inFlyout
                     />
                   </li>
@@ -473,16 +490,18 @@ function isSubActive(href: string, pathname: string, currentTab: string | null):
   return (tab ?? null) === (currentTab ?? null);
 }
 
-/** 하부탭(면) 링크 — 클릭 시 부모 menuKey 창에서 그 면으로 이동(open이 href 갱신 → iframe 네비).
+/** 하부탭(면) 링크 — 클릭 시 `windowKey` 창에서 그 면으로 이동(open이 href 갱신 → iframe 네비).
+ *  windowKey = 면이면 부모 menuKey, **독립 메뉴 하부탭이면 자기 menuKey**(자기 창·자기 크기로 열림 —
+ *  부모 키로 열면 ECS가 시간표 창 크기 1040으로 열려 계획 패널+요일 2.5칸이 안 들어간다).
  *  inFlyout=우측 플라이아웃 팝업 안(아이콘 들여쓰기 pl-9 대신 균등 px-2.5). */
 function SubTab({
-  menuKey,
+  windowKey,
   label,
   href,
   active,
   inFlyout,
 }: {
-  menuKey: string;
+  windowKey: string;
   label: string;
   href: string;
   active: boolean;
@@ -496,8 +515,8 @@ function SubTab({
         e.preventDefault();
         const store = useWindowStore.getState();
         // shift+클릭 = 그 면을 새 창으로(듀얼), 일반 클릭 = 부모 메뉴 창에서 면 전환.
-        if (e.shiftKey) store.openNewInstance("route", { id: menuKey, title: label, href });
-        else store.open("route", { id: menuKey, title: label, href });
+        if (e.shiftKey) store.openNewInstance("route", { id: windowKey, title: label, href });
+        else store.open("route", { id: windowKey, title: label, href });
       }}
       className={`block truncate rounded text-[11px] transition ${
         inFlyout ? "px-2.5 py-1" : "py-0.5 pr-2 pl-9"

@@ -15,6 +15,13 @@ export type NavItem = {
   // 사이드바·모바일내비·팰릿에선 숨기되 findNavItem(창 해석)·아이콘맵엔 남긴다.
   // 예: 등록상담은 "상담" 메뉴의 FaceTabs 면이라 사이드바엔 안 뜨지만 창/링크 해석은 필요.
   hidden?: boolean;
+  /**
+   * **사이드바에서만** 이 메뉴를 부모 메뉴의 하부탭으로 내려 표시한다(독립 라우트·독립 창 유지).
+   * `hidden`과 다른 점: 팰릿·모바일내비엔 그대로 남아 검색·이동이 된다(발견성 보존).
+   * 창 id·권한키는 자기 menuKey를 그대로 쓰므로 창 크기(routeWindowSize)도 자기 것이다.
+   * 예: English Class Sheet = 시간표의 하위 카테고리(원장 지시 2026-07-29).
+   */
+  subOf?: MenuKey;
 };
 
 export type NavGroup = {
@@ -28,7 +35,11 @@ export function navPresentation(item: Pick<NavItem, "presentation">): "desktop" 
 
 // 메뉴 하부탭(면) — 펼친 사이드바에서 현재 메뉴 아래 작게 노출. 클릭 시 같은 menuKey 창에서 면 전환.
 // 면 정의는 각 페이지 FaceTabs와 동기 유지(여기 라벨/href는 표시·이동용 미러).
-export type SubTab = { label: string; href: string };
+//
+// `menuKey`가 있으면 그 하부탭은 **독립 메뉴**(별도 라우트·별도 창·별도 권한)다 — 부모 창에서 면만
+// 바꾸는 게 아니라 자기 창(자기 크기)으로 열리고, 사이드바가 그 키로 접근권한을 검사한다.
+// (없으면 기존처럼 부모 menuKey 창의 면 전환. `?tab=` 면들이 여기 해당.)
+export type SubTab = { label: string; href: string; menuKey?: MenuKey };
 export const SUBTABS_BY_MENU: Partial<Record<MenuKey, SubTab[]>> = {
   billing: [
     { label: "수납", href: "/billing" },
@@ -89,7 +100,8 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: "/timetable", label: "시간표", icon: MENU_ICON.timetable, menuKey: "timetable" },
       { href: "/attendance", label: "출석부", icon: MENU_ICON.attendance, menuKey: "attendance" },
       // English Class Sheet(ECS) — 영어 반별 주간 수업계획서/출석부(구글시트 이식). 라벨은 원장 확정 명칭.
-      { href: "/ecs", label: "English Class Sheet", icon: MENU_ICON.ecs, menuKey: "ecs" },
+      // subOf: 사이드바에선 시간표 하위 카테고리로 표시(원장 지시 2026-07-29). 팰릿·모바일내비엔 그대로 노출.
+      { href: "/ecs", label: "English Class Sheet", icon: MENU_ICON.ecs, menuKey: "ecs", subOf: "timetable" },
       { href: "/classes", label: "수업목록", icon: MENU_ICON.classes, menuKey: "classes" },
       // 수업보고서 = 학원 전체 보고서 발송 총괄(구 학원설정 ?tab=report_mgmt에서 승격, 옛 Edutrix 외부링크 대체).
       { href: "/lesson-reports", label: "수업보고서", icon: MENU_ICON.lesson_reports, menuKey: "lesson_reports" },
@@ -168,4 +180,24 @@ export function findNavGroup(pathname: string): NavGroup | undefined {
     }
   }
   return undefined;
+}
+
+/**
+ * 사이드바 하부탭 = 정적 면(`SUBTABS_BY_MENU`) + **부모를 지정한 독립 라우트 메뉴**(`subOf`).
+ * subOf 항목은 `menuKey`를 달고 나오므로 사이드바가 그 키로 권한을 검사하고, 클릭 시 부모 창이
+ * 아니라 자기 창(자기 크기)으로 열린다. 부모에 면이 하나도 없어도 subOf만으로 하부탭이 생긴다.
+ */
+export function subTabsForMenu(menuKey: MenuKey): SubTab[] {
+  const faces = SUBTABS_BY_MENU[menuKey] ?? [];
+  const childMenus: SubTab[] = [];
+  for (const group of NAV_GROUPS) {
+    for (const item of group.items) {
+      if (item.subOf === menuKey && !item.hidden) {
+        childMenus.push({ label: item.label, href: item.href, menuKey: item.menuKey });
+      }
+    }
+  }
+  if (childMenus.length === 0) return faces;
+  // 부모 자신의 면이 있으면 그 뒤에 자식 메뉴를 붙인다(면 → 독립 메뉴 순).
+  return [...faces, ...childMenus];
 }
