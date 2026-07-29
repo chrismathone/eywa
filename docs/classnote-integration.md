@@ -302,6 +302,16 @@ assign_teacher_to_classnote)을 eywa DB 기준·Playwright·**dry-run 기본**�
 
 ## 4. Cloud Run 함수(submitToClassNoteV2) 요점 — 소스: D:\edutrix\functions\index.js
 
+> 🔴 **2026-07-29 폐기 — 이 함수는 더 이상 발송 경로가 아니다.** 워커에서 Cloud Run 분기를 **코드로 제거**했고
+> (`scripts/_classnote/classnote-core.mjs`), 게시는 워커 내장 내부 API 경로 하나뿐이다. env 스위치
+> (`CLASSNOTE_PUBLISH_MODE`)도 함께 없앴다 — 폴백이 남아 있으면 env 한 줄이 빠지는 순간 이미 삭제된 함수를
+> 호출해 **전 발송이 실패**하는데, 앱·DB와는 호환돼 그 전까지 화면상 아무 이상이 없다(적대 검증 P1).
+> 아래 내용은 **역사·리버스엔지니어링 기록**으로만 읽을 것 — 보드/원아 매칭 규칙의 유래가 여기 있다.
+>
+> ⚠️ **연동 PC에 새 zip이 이관되기 전까지는 그 PC의 구워커가 아직 이 함수를 부른다.** 발송 콘솔 워커 카드의
+> "구버전 워커(옛 서버로 게시)" 경고가 사라진 뒤에야 edutrix Firebase를 삭제할 수 있다
+> (판정 = 하트비트 `caps.nativePublish`, `worker-results.ts`).
+
 - 요청마다 **새 Puppeteer 브라우저**로 classnote.com/login 로그인(세션 재사용 없음). 호칭 다이얼로그(Manager) 처리.
 - 학생모드 판정: `/^\((수학|영어)\)/.test(className)` — 이 prefix면 그 문자열 그대로 반명 검색.
 - 같은 (날짜+이미지해시+강사+반+링크) 그룹은 원아선택 모달에서 **다중 반 선택 → 알림장 1건으로 동시 발송**.
@@ -519,11 +529,12 @@ subject NULL(이관·레거시)은 게이트가 거부한다(2026-07-10 P0-2·P0
    내지 않는지 확인(Supabase가 살아있는 동안은 무해) — Supabase 소등과 함께 vercel.json에서 cron 제거.
 4. **Edutrix Supabase 종료** — 이전·아카이브 완료로 의존 0. eywa .env.local의 `EDUTRIX_*` 키와
    `vercel.json` edutrix-sync cron, `instrumentation.ts` 권장 env를 같이 정리.
-5. **Edutrix Firebase(Cloud Run)** — ⚠️ **마지막까지 유지.** eywa 발송의 실게시 엔진. 끄려면 선행 필요:
-   - 권장 **옵션 B: 워커에 게시 로직 내장** — 연동 PC 워커가 이미 Playwright를 돌리므로 submitToClassNoteV2의
-     DOM 자동화(로그인→원아선택→업로드→전송)를 classnote-core.mjs에 포팅하면 GCP 의존이 통째로 사라짐
-     (가정용 IP라 봇 차단 리스크도 낮음). 그 후 Firebase 삭제 가능.
-   - 옵션 A: 함수를 eywa 소유 GCP/Firebase로 재배포(소스 `D:\edutrix\functions\index.js` — noticeAdd.js
-     부재 주의). 인프라 이중 관리가 남아 B보다 열위.
+5. **Edutrix Firebase(Cloud Run)** — ✅ **옵션 B 완료(2026-07-29): 코드에서 Cloud Run 분기를 제거**했다.
+   워커는 내부 API 경로 하나로만 게시하고 env 스위치(`CLASSNOTE_PUBLISH_MODE`)도 없앴다 — 폴백이 남아 있으면
+   env 한 줄이 빠지는 순간 삭제된 함수를 불러 전 발송이 실패한다(적대 검증 P1).
+   - 🔴 **삭제 전 필수 관문**: 연동 PC에 **새 zip 이관 완료**. 구워커는 코드가 바뀌어도 계속 Cloud Run을 부르고,
+     앱·DB와 호환돼 **화면상 정상으로 보인다**. 판정 = 발송 콘솔 워커 카드에 **"구버전 워커(옛 서버로 게시)"
+     경고가 사라졌는지**(하트비트 `caps.nativePublish`). 경고가 남아 있는 동안 Firebase를 지우면 발송 전멸.
+   - 옛 옵션 A(함수를 eywa 소유 GCP로 재배포)는 폐기 — 이중 관리만 남는다.
 6. 소등 후 잔여물: `edutrix_archive`(영구 보험) · lesson_reports 풀 이력(운영) · `D:\edutrix` 로컬 소스
    (함수 원본 — 옵션 B 완료 전까지 보관 필수).

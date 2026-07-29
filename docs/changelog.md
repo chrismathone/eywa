@@ -4,6 +4,23 @@
 
 ## 진행 상황
 
+### ClassNote 게시 = 워커 내장 단일 경로 (Cloud Run 폴백 제거) (2026-07-29) - tsc0/lint0/test255+17/적대검증 4렌즈
+소등 준비의 마지막 지뢰 제거. 어제(07-28) 도입한 `CLASSNOTE_PUBLISH_MODE=local` **env 스위치를 없애고**
+Cloud Run(`submitToClassNoteV2`, edutrix Firebase) 분기를 [classnote-core.mjs](../scripts/_classnote/classnote-core.mjs)에서 **삭제**했다.
+- **왜**: 폴백이 남아 있으면 env 한 줄이 빠지는 순간(워커 재설치·zip 부분전달·PC 교체) 조용히 옛 경로로 돌아간다.
+  Firebase를 이미 지웠다면 그 순간 **전 발송 실패**인데, 앱·DB와는 호환돼 **그 전까지 화면상 아무 이상이 없다**.
+  단일 경로면 env가 어떻든 동작이 같다 = 소등해도 안전.
+- **적대 검증(4렌즈: 정확성·안전성·운영·파급)에서 잡아 함께 고친 것 3건**:
+  ① 게시 호출에 **시간 상한이 없었다**(삭제한 960s AbortController의 공백) → `POST_TIMEOUT_MS=10분`,
+     초과 시 **재큐 없이 failed 고정**(POST가 이미 닿았을 수 있어 자동 재시도는 학부모 중복 게시로 직결).
+  ② boardId 미확보 재큐가 `retry_count`를 안 올려 **무한 반복** 여지(조건부→전건 확대) → 3회 후 failed.
+  ③ `!boardId` falsy 검사 → `== null || === ""`(보드 id 0 오탐 방지).
+- **이관 확인 수단 신설**: 하트비트 `caps.nativePublish` + [`workerSupportsNativePublish`](../src/features/report-admin/worker-results.ts) →
+  발송 큐 카드에 **"⚠ 구버전 워커(옛 서버로 게시) — 업데이트 필요"** 배지. 🔴 **이 경고가 사라진 뒤에야 Firebase 삭제 가능.**
+  (구워커는 코드가 바뀌어도 계속 옛 함수를 부른다 — 원격에서 판별할 유일한 신호.)
+- ⚠️ **07-28 엔트리의 "env 스위치 + `.env.local` 한 줄 지우기 롤백"은 이 커밋으로 무효**다. 롤백 = 이전 zip 재이관뿐.
+  연동 PC 안내는 [워커수정-안내-2026-07-29-폴백제거.md](../scripts/_classnote/워커수정-안내-2026-07-29-폴백제거.md).
+
 ### 담당 과목 = 근무부서에서 자동 도출 + 인적사항 사진 자리 상시 노출 (2026-07-29) - tsc0/lint0/test57(신규7)/build✓/실데이터 백필 12명
 원장 지적: *"부서랑 과목이랑 똑같은데 두 번 설정해야 함"* — 부서는 이력서, 담당 과목은 직원 수정 폼에 있어 같은 축을 두 곳에서 입력했다.
 **부서를 단일 소스로 삼고 과목은 파생**한다. 매칭은 [`subjectsFromDepartment`](../src/features/staff/department-subjects.ts)(순수+Vitest)가

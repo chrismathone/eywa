@@ -120,3 +120,19 @@ export function formatWorkerResults(raw: unknown): WorkerResultRow[] {
   }
   return rows;
 }
+
+/**
+ * 이 워커가 **Cloud Run 없이 자체 게시하는 버전**인가 — 하트비트 `last_results.caps.nativePublish`(2026-07-29).
+ *
+ * 워커는 zip 물리 이관이라 앱보다 늦게 갱신된다. 구버전 워커는 첨부 없는 리포트를 **edutrix Firebase의
+ * Cloud Run 함수**로 게시하는데, 그 프로젝트를 소등하면 그 순간부터 전 발송이 실패한다 —
+ * 그런데 앱·DB와는 완전히 호환돼 **이관 전까지는 화면상 아무 이상이 없다**(적대 검증 2026-07-29 P1).
+ * 그래서 "이관됐는가"를 원격에서 볼 수 있는 유일한 신호가 이 값이다. 키가 없으면 **구워커로 본다**(fail-safe).
+ */
+export function workerSupportsNativePublish(raw: unknown): boolean {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return false;
+  const caps = (raw as Record<string, unknown>).caps;
+  if (!caps || typeof caps !== "object" || Array.isArray(caps)) return false;
+  return (caps as Record<string, unknown>).nativePublish === true;
+}
+

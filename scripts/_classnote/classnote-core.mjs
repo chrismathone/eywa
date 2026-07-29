@@ -1,6 +1,6 @@
 // scripts/_classnote/classnote-core.mjs — ClassNote 발송 처리 코어 (one-shot·데몬 공용).
 //
-// stale 복구 + SKIP LOCKED 원자 클레임 + 건별 스크린샷·Cloud Run 게시·재시도 로직을 processQueueOnce로 묶어
+// stale 복구 + SKIP LOCKED 원자 클레임 + 건별 스크린샷·내부 API 게시·재시도 로직을 processQueueOnce로 묶어
 // one-shot(process-classnote-queue.mjs)과 상주 데몬(watch-classnote-queue.mjs)이 동일 코어를 공유한다.
 //
 // ⚠️ tenant 격리 필수 — DATABASE_URL 직결(RLS 우회)이라 필터 없으면 다른 테넌트 보고서를 이 계정으로 게시.
@@ -14,13 +14,18 @@ import {
 import { boardNameAmbiguity, evaluateBoardSafety, kstSchoolYear } from "./board-safety.mjs";
 import { resolveSendWindow, isWithinSendWindow, formatSendWindow } from "./send-window.mjs";
 
-export const CLOUD_RUN = "https://submittoclassnotev2-q4dmdhnkvq-uc.a.run.app";
 /**
- * 게시 엔진 스위치(2026-07-28, §10 옵션 B) — "local"이면 **모든** 보고서를 워커 내장 내부 API 경로로 게시
- * (Cloud Run 미호출 = edutrix Firebase 의존 0). 그 외/미설정 = 기존 Cloud Run 경로(파일첨부 리포트만 API).
- * 롤백 = 연동 PC .env.local에서 이 키 제거 후 워커 재시작. classreport-web 소등 후엔 local이 유일 경로다.
+ * 🔴 게시 엔진 = **워커 내장(내부 API) 단일 경로**. Cloud Run(edutrix Firebase `submitToClassNoteV2`) 분기는
+ * 2026-07-29 제거했다(§10 옵션 B 완료).
+ *
+ * 왜 스위치를 없앴나: 폴백이 남아 있으면 `CLASSNOTE_PUBLISH_MODE=local` **env 한 줄이 빠지는 순간**
+ * (워커 재설치·zip 부분전달·PC 교체) 조용히 Cloud Run으로 되돌아간다. edutrix Firebase를 이미 껐다면
+ * 그 순간 전 발송이 실패하고, 원인은 "왜 갑자기 안 가지"로만 보인다 — 소등 계획에서 가장 위험한 지뢰였다.
+ * 단일 경로면 env가 어떻든 동작이 같다(= 소등해도 안전).
+ *
+ * 실전 근거: local 모드 전환 후 2026-07-28~29 발송이 내부 API 경로로 정상 처리됐다(무첨부 리포트 포함).
+ * 롤백이 필요하면 이 커밋을 되돌린다 — env로 되살리는 길은 의도적으로 남기지 않는다.
  */
-export const isLocalPublish = () => process.env.CLASSNOTE_PUBLISH_MODE === "local";
 export const DEFAULT_BASE = process.env.CLASSNOTE_SCREENSHOT_BASE || "http://localhost:3113"; // 스크린샷용(로컬 dev 가능)
 export const DEFAULT_SHARE_BASE = process.env.CLASSNOTE_SHARE_BASE || "https://eywa-alpha.vercel.app"; // 게시글 상단 공유 링크(/r) 공개 도메인
 export const BATCH = 2;
@@ -29,6 +34,21 @@ export const STALE_MIN = 10;
 const INTERNAL_SECRET = process.env.CLASSNOTE_INTERNAL_SECRET;
 
 const PREFLIGHT_BACKOFF_MAX_MS = 10 * 60_000; // 준비 실패 시 최대 백오프(10분) — 무한 로그인 루프 차단
+/** 게시 1건 상한(2026-07-29) — 초과 시 failed 고정. 스샷 업로드+API 왕복은 실측 수~수십초라 10분이면 정상 건은 절대 안 걸린다. */
+export const POST_TIMEOUT_MS = 10 * 60_000;
+
+/** 게시 호출에 상한을 씌운다 — 초과하면 `{ ok:false, timedOut:true }`(호출자가 failed로 고정). */
+async function withPostTimeout(promise) {
+  let timer;
+  const timeout = new Promise((resolve) => {
+    timer = setTimeout(() => resolve({ ok: false, timedOut: true }), POST_TIMEOUT_MS);
+  });
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 /**
  * 프리플라이트용 **로그인 세션을 폴 사이에 유지**한다.
@@ -151,7 +171,7 @@ export async function getClassnoteBoardAllowlist(sql, tenant) {
 
 /**
  * 첨부 표시 토글(tenant_settings.data->'report'->>'showAttachments'). Phase 2 파일첨부 라우팅 게이트 —
- * OFF면 파일 있는 리포트도 Cloud Run(스샷)만(첨부 안 실음). isClassnoteSendEnabled와 동일하게 커밋값 즉시.
+ * OFF면 파일 있는 리포트도 스샷만 게시(첨부 안 실음). isClassnoteSendEnabled와 동일하게 커밋값 즉시.
  */
 export async function isShowAttachmentsEnabled(sql, tenant) {
   const [row] = await sql`select (data->'report'->>'showAttachments')::boolean as on
@@ -162,12 +182,12 @@ export async function isShowAttachmentsEnabled(sql, tenant) {
 const IMG_ATTACHMENT_RE = /\.(jpe?g|png|webp|gif)(\?|$)/i;
 
 /**
- * 파일(비이미지) 첨부가 있는 리포트를 **내부 API로 게시**(Phase 2) — 스샷=`attached_images` + 파일=`attached_files` 한 POST.
+ * 리포트를 **내부 API로 게시**(2026-07-29부터 **모든** 리포트의 유일 경로) — 스샷=`attached_images` + 파일=`attached_files` 한 POST.
  * ① 스샷 buffer → kage(`img`) ② eywa 내부 엔드포인트로 파일 signed URL → fetch → kage(`etc`) ③ board→child→enrollment
  * 해석 후 postClassnoteReport(이중 계정이면 전원). 반환 { ok, error? }. 리버스엔지니어링·학원이 POC 검증(2026-07-16).
  * ⚠️ 이미지 첨부(교재 등)는 **개별 부착하지 않는다**(2026-07-22 방향 B 확정) — /r 스샷 하단에 크게 실려 세로로
  *    완결(ParentReportCard). ClassNote가 attached_images를 가로로 나열해 세로가 안 됐던 문제를 스샷 내 배치로 우회.
- *    → 이미지만 있는 리포트는 이 경로로 **진입하지 않고**(진입 조건 fileAtts.length) Cloud Run 스샷 경로로 게시된다.
+ *    → 이미지만 있는 리포트는 `fileAtts`가 비어 파일 첨부 없이 **스샷만** 게시된다(경로는 동일).
  */
 export async function sendReportViaApi(adminPage, { report, studentName, boardId, centerId = null, screenshot, shareUrl, base, fileAtts = [], children, boardFallback = null, verifyDedup = true, log }) {
   // kage 업로드는 작성폼 네이티브 file input 경유(수동 FormData는 415) → adminPage를 add 폼으로 이동.
@@ -537,16 +557,6 @@ export async function processQueueOnce(sql, browser, opts) {
         ? await card.screenshot({ type: "jpeg", quality: 90 })
         : await page.screenshot({ type: "jpeg", quality: 90, fullPage: true });
       await ctx.close();
-      const imageBase64 = `data:image/jpeg;base64,${buf.toString("base64")}`;
-      const payload = {
-        loginId: process.env.CLASSNOTE_UPLOAD_ID,
-        loginPw: process.env.CLASSNOTE_UPLOAD_PW,
-        reports: [{
-          reportId: r.id, studentName, className, teacherName: className,
-          reportDate: `${r.report_date}T12:00:00`, imageBase64, isExactMatchNeeded: true,
-          shareUrl: `${shareBase}/r/${r.share_token}`,
-        }],
-      };
       log(`  · ${studentName} (${r.subject ?? "-"}) 보드="${className}" img=${buf.length}B`);
 
       if (!post) {
@@ -571,75 +581,60 @@ export async function processQueueOnce(sql, browser, opts) {
         continue;
       }
 
-      // ── 내부 API 게시 경로 ──
-      // 진입 조건 2종:
-      //  · Phase 2(기존): 파일 첨부(비이미지) + showAttachments ON — 스샷=attached_images + 파일=attached_files.
-      //  · local 게시 모드(2026-07-28, §10 옵션 B): CLASSNOTE_PUBLISH_MODE=local이면 **모든** 리포트가 이 경로
-      //    (Cloud Run 미호출). 파일 첨부는 showAttachments ON일 때만 싣는다(기존 정책 유지).
+      // ── 게시 = 내부 API 단일 경로(2026-07-29, Cloud Run 분기 제거) ──
+      // 파일 첨부(비이미지)는 showAttachments ON일 때만 싣는다(기존 정책 유지).
       // ⚠️ 이미지 첨부만 있는 리포트는 파일로 싣지 않는다(2026-07-22 방향 B) — 이미지는 /r 스샷 하단에 크게 실림.
       const fileAtts = (r.attachments ?? []).filter((a) => a?.name && !IMG_ATTACHMENT_RE.test(a.name));
-      const localMode = isLocalPublish();
-      const wantApiPath = (showAttachments && fileAtts.length > 0) || localMode;
-      if (wantApiPath && !boardId) {
-        // 이론상 도달 불가(post 게이트 통과 시 boardId 확보) — 도달하면 코드 결함이므로 fail-closed 재큐 + 명시 로그.
-        await sql`update lesson_reports set classnote_status='queued',
-          classnote_error=${"내부 API 게시 경로인데 보드 ID가 없음(게이트 결함 의심) — 안전상 보류"} where id=${r.id}`;
-        summary.requeued++;
-        log(`  · ${studentName}: boardId 없음(API 경로) → 재큐 [코드 결함 의심 — 점검 필요]`);
-        continue;
-      }
-      if (wantApiPath) {
-        const sendFiles = showAttachments ? fileAtts : []; // 첨부 표시 OFF면 파일 안 실음(스샷만) — 기존 정책
-        childrenCache ??= await fetchChildren(adminPage, centerId); // 첫 만남에 1회
-        const result = await sendReportViaApi(adminPage, {
-          report: r, studentName, boardId, centerId, screenshot: buf, shareUrl: `${shareBase}/r/${r.share_token}`,
-          base, fileAtts: sendFiles, children: childrenCache, log,
-          // 첫 발송만 3중 방어(멱등·사후확인) — classnote_sent_at 있는 행 = 의도적 재발송이라 content 판정이
-          // 옛 게시물에 오염된다(sendReportViaApi 4) 주석). 재발송은 status 코드 신뢰(오늘의 Cloud Run과 동일 의미).
-          verifyDedup: !r.classnote_sent_at,
-          boardFallback: { centerId, grade: stu?.grade ?? null, schoolYear: kstSchoolYear() },
-        });
-        if (result.ok) {
-          await sql`update lesson_reports set classnote_status='success', classnote_sent_at=now(), classnote_error=null where id=${r.id}`;
-          summary.success++;
-          log(`    → success (내부 API${sendFiles.length ? `, 파일 ${sendFiles.length}건` : ""}${localMode ? ", local" : ""})`);
-        } else {
-          await sql`update lesson_reports set
-            classnote_retry_count = classnote_retry_count + 1,
-            classnote_status = case when classnote_retry_count + 1 >= 3 then 'failed' else 'queued' end,
-            classnote_error = ${result.error}
-            where id=${r.id}`;
-          summary.failed++;
-          log(`    → 실패(API): ${result.error} (재시도+1)`);
-        }
-        continue;
-      }
-
-      // 실게시 (Cloud Run — 파일 없는 리포트, 기존 경로. local 모드에선 위 API 경로가 전건을 가져가 도달 불가)
-      // ⚠️ 중복 게시 방지(구멍2): abort 타임아웃을 Cloud Run 함수 상한(900s) **위**로 둔다. 이전 120s는
-      // 함수가 아직 게시 중인데 워커가 중도 abort→catch에서 retry_count+1 후 queued로 되돌려 다음 폴에
-      // 재게시 = 같은 보고서가 학부모에게 2번 갔다(fetch를 끊어도 서버 실행은 안 멈춤). 함수 상한 위로 올리면
-      // 정상 실행 중 abort가 사라져 이 중복 창이 닫힌다. (완전 멱등은 함수측 reportId dedupe 필요 — edutrix repo.)
-      const ac = new AbortController();
-      const to = setTimeout(() => ac.abort(), 960000);
-      const res = await fetch(CLOUD_RUN, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload), signal: ac.signal });
-      clearTimeout(to);
-      const json = await res.json().catch(() => ({}));
-      const ok = json?.success && json?.results?.[0]?.success;
-      if (ok) {
-        await sql`update lesson_reports set classnote_status='success', classnote_sent_at=now(), classnote_error=null where id=${r.id}`;
-        summary.success++;
-        log(`    → success`);
-      } else {
-        const msg = json?.results?.[0]?.message || json?.message || `HTTP ${res.status}`;
+      // ⚠️ `!boardId`가 아니라 null/빈문자만 본다 — 보드 id가 숫자 0이면 falsy라 정상 건을 보류시킨다.
+      // ⚠️ 재시도 카운트를 **올린다**: 예전엔 조건부 경로였지만 이제 전건이 지나므로, 카운트 없이 재큐하면
+      //    게이트 결함 1건이 15초마다 영원히 되돌아오는 무한 루프가 된다(로그인 폭풍 유발). 3회면 failed로 고정돼
+      //    사람이 발송 콘솔에서 본다.
+      if (boardId == null || boardId === "") {
         await sql`update lesson_reports set
           classnote_retry_count = classnote_retry_count + 1,
           classnote_status = case when classnote_retry_count + 1 >= 3 then 'failed' else 'queued' end,
-          classnote_error = ${msg}
+          classnote_error = ${"보드 ID를 얻지 못했습니다(게이트 결함 의심) — 안전상 게시 보류"}
+          where id=${r.id}`;
+        summary.requeued++;
+        log(`  · ${studentName}: boardId 없음 → 보류(재시도+1) [코드 결함 의심 — 점검 필요]`);
+        continue;
+      }
+      const sendFiles = showAttachments ? fileAtts : []; // 첨부 표시 OFF면 파일 안 실음(스샷만) — 기존 정책
+      childrenCache ??= await fetchChildren(adminPage, centerId); // 첫 만남에 1회
+      // ⏱ 게시 호출 상한 — Cloud Run 경로에 있던 AbortController(960s)를 제거하면서 **전건이 상한 없는 호출**이 됐다.
+      // kage 업로드·API 응답이 영영 안 오면 데몬이 그 건에서 멈춰 큐 전체가 정지한다(폴이 다음으로 못 넘어감).
+      // 🔴 타임아웃 시 **재큐하지 않고 failed로 고정**한다: POST가 이미 서버에 닿았을 수 있어(게시됐는지 불명)
+      //    자동 재시도는 학부모 중복 게시로 직결된다. 사람이 ClassNote에서 확인 후 재발송하는 게 유일하게 안전하다.
+      const result = await withPostTimeout(sendReportViaApi(adminPage, {
+        report: r, studentName, boardId, centerId, screenshot: buf, shareUrl: `${shareBase}/r/${r.share_token}`,
+        base, fileAtts: sendFiles, children: childrenCache, log,
+        // 첫 발송만 3중 방어(멱등·사후확인) — classnote_sent_at 있는 행 = 의도적 재발송이라 content 판정이
+        // 옛 게시물에 오염된다(sendReportViaApi 4) 주석). 재발송은 status 코드를 신뢰한다.
+        verifyDedup: !r.classnote_sent_at,
+        boardFallback: { centerId, grade: stu?.grade ?? null, schoolYear: kstSchoolYear() },
+      }));
+      if (result.timedOut) {
+        await sql`update lesson_reports set classnote_status='failed',
+          classnote_error=${`게시 응답 없음(${Math.round(POST_TIMEOUT_MS / 60000)}분 초과) — ClassNote에서 실제 게시 여부를 확인한 뒤 재발송하세요`}
           where id=${r.id}`;
         summary.failed++;
-        log(`    → 실패: ${msg} (재시도 카운트+1)`);
+        log(`    → 타임아웃(${Math.round(POST_TIMEOUT_MS / 60000)}분) → failed 고정(자동 재시도 안 함 — 중복 게시 방지)`);
+        continue;
       }
+      if (result.ok) {
+        await sql`update lesson_reports set classnote_status='success', classnote_sent_at=now(), classnote_error=null where id=${r.id}`;
+        summary.success++;
+        log(`    → success (내부 API${sendFiles.length ? `, 파일 ${sendFiles.length}건` : ""})`);
+      } else {
+        await sql`update lesson_reports set
+          classnote_retry_count = classnote_retry_count + 1,
+          classnote_status = case when classnote_retry_count + 1 >= 3 then 'failed' else 'queued' end,
+          classnote_error = ${result.error}
+          where id=${r.id}`;
+        summary.failed++;
+        log(`    → 실패(API): ${result.error} (재시도+1)`);
+      }
+
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       await sql`update lesson_reports set

@@ -24,11 +24,12 @@ vi.mock("@/features/owner/operations-context", () => ({
   useGradeLevels: () => [],
 }));
 
-const worker = (online: boolean) => ({
+const worker = (online: boolean, nativePublish = true) => ({
   hostname: "학원동기화-PC",
   lastSeenMinutes: online ? 0 : 12,
   online,
   results: [], env: { logDir: null, recent: [] },
+  nativePublish,
 });
 
 const emptySummary = {
@@ -358,5 +359,17 @@ describe("ClassnoteQueueCard 자동 갱신", () => {
 
     expect(screen.getByText(/갱신에 실패해 다시 시도하는 중입니다/)).toBeInTheDocument();
     expect(screen.getByText("학원이")).toBeInTheDocument(); // 직전 값은 유지(빈 화면 금지)
+  });
+});
+
+describe("구워커 경고", () => {
+  it("nativePublish=false면 업데이트 필요 경고를 띄운다 — 옛 서버 소등 시 발송 전멸을 미리 알린다", () => {
+    render(<ClassnoteQueueCard view={drainedView({ workers: [worker(true, false)] })} />);
+    expect(screen.getByText(/구버전 워커/)).toBeInTheDocument();
+  });
+
+  it("최신 워커면 경고가 없다", () => {
+    render(<ClassnoteQueueCard view={drainedView()} />);
+    expect(screen.queryByText(/구버전 워커/)).toBeNull();
   });
 });

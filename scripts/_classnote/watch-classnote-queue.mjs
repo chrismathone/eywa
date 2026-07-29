@@ -48,7 +48,9 @@ const recentIssues = [];
  * 재발송하면 중복 글). 앱이 이 플래그를 보고 미지원이면 발송을 막는다(개인화 태그 롤아웃 가드와 같은 패턴).
  * ⚠️ 새 기능이 워커·앱 양쪽을 함께 바꿔야 할 때마다 여기에 키를 추가할 것(구버전은 키가 없어 자동 차단).
  */
-const WORKER_CAPS = { noticeAttachments: true };
+// nativePublish=이 워커가 Cloud Run 없이 자체 게시하는 버전인가(2026-07-29). 구버전엔 이 키가 없어
+// **키 부재 = 구워커**로 판정할 수 있다 — zip 이관 여부를 원격에서 확인하는 유일한 신호다.
+const WORKER_CAPS = { noticeAttachments: true, nativePublish: true };
 
 // 로그 타임스탬프 = KST(UTC+9) 고정 오프셋 — 연동 PC의 시스템 로케일/타임존과 무관하게 "YYYY-MM-DD HH:MM:SS".
 // watch.log이 UTC(…Z)로 찍혀 실제 시각과 9시간 어긋나 보이던 문제(2026-07-22 원장 제보). DB/하트비트는 ISO 유지(기계용).
@@ -133,9 +135,9 @@ async function heartbeat(tenant) {
     env: {
       logDir: stateDirLabel(),
       recent: recentIssues.slice(-RECENT_MAX),
-      // 게시 엔진(2026-07-28 §10 옵션 B) — local=워커 내장 내부 API(Cloud Run 미호출) / cloudrun=기존.
-      // 웹 발송 콘솔에서 어느 엔진으로 도는지 원격 확인용(컷오버·롤백 검증에 필수).
-      publishMode: process.env.CLASSNOTE_PUBLISH_MODE === "local" ? "local" : "cloudrun",
+      // 게시 엔진 표기 — 2026-07-29 Cloud Run 분기 제거 후 경로는 하나뿐이라 상수다(env 무관).
+      // ⚠️ 앱은 이 값을 읽지 않는다(extractWorkerEnv는 logDir·recent만 본다) — 이관 확인은 위 caps.nativePublish로.
+      publishMode: "native",
     },
   };
   await s`
