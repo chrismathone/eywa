@@ -12,7 +12,8 @@
  *
  * 실행: node --env-file=.env.local scripts/_classnote/watch-classnote-queue.mjs [--post]
  *   기본 dry-run(게시 안 함), 프로덕션은 --post. 등록: setup-classnote-pc.ps1(작업 스케줄러 "eywa-classnote-worker").
- * 로그: D:/tmp/classnote/watch.log (env CLASSNOTE_OUT).
+ * 로그: D:/tmp/classnote/watch.log (env CLASSNOTE_OUT). **watch.log = 항상 오늘 로그**이고,
+ * 날짜가 바뀌면 그 파일이 watch-YYYY-MM-DD.log로 넘어간다(보관 30일, env CLASSNOTE_LOG_KEEP_DAYS).
  */
 import fs from "node:fs";
 import os from "node:os";
@@ -20,6 +21,7 @@ import path from "node:path";
 import postgres from "postgres";
 import { isWorkerIssueLine } from "./worker-issue-filter.mjs";
 import { stateDirLabel, stateFile } from "./classnote-paths.mjs";
+import { DEFAULT_KEEP_DAYS, DEFAULT_MAX_BYTES, archiveName, needsRotation, pruneList, uniqueArchiveName } from "./log-rotation.mjs";
 import { BATCH, closeClassnoteAdminSession, launchBrowser, processQueueOnce, resolveTenant } from "./classnote-core.mjs";
 import { processNoticesOnce } from "./classnote-notice-core.mjs";
 import { provisionDailyOnce } from "./classnote-provision-core.mjs";
@@ -31,6 +33,35 @@ const POLL_MS = 15_000;
 const POST = process.argv.includes("--post");
 // 로그 파일 — 폴더 결정은 classnote-paths(단일 진입점, 쓰기 테스트까지 통과한 폴더).
 const LOG = stateFile("watch.log");
+// 로그 회전(2026-07-29 원장 지적 "log txt가 너무 길어진다") — 규칙은 log-rotation.mjs(순수+Vitest).
+// watch.log 이름은 **고정**한다: 연동 PC 안내문·문서가 전부 "로그는 watch.log"라고 지시하기 때문(이름이
+// 매일 바뀌면 그 안내가 전부 거짓이 된다). 날짜가 바뀐 뒤 첫 기록에서 옛 내용을 날짜 파일로 넘긴다.
+const LOG_KEEP_DAYS = Number(process.env.CLASSNOTE_LOG_KEEP_DAYS) || DEFAULT_KEEP_DAYS;
+const LOG_MAX_BYTES = (Number(process.env.CLASSNOTE_LOG_MAX_MB) || 0) * 1024 * 1024 || DEFAULT_MAX_BYTES;
+let lastRotateCheck = 0;
+let pendingRotateNote = null; // 회전 사실은 **새 파일 첫 줄**에 남긴다(어디로 갔는지 추적 가능하게)
+
+/** 필요하면 watch.log를 날짜/크기 기준으로 넘긴다. 실패해도 로깅은 계속(fail-open). */
+function maybeRotateLog(nowMs) {
+  if (!LOG) return;
+  if (nowMs - lastRotateCheck < 60_000) return; // stat 남발 방지 — 1분 간격이면 자정 감지에 충분
+  lastRotateCheck = nowMs;
+  try {
+    const st = fs.statSync(LOG);
+    const r = needsRotation({ mtimeMs: st.mtimeMs, sizeBytes: st.size, nowMs, maxBytes: LOG_MAX_BYTES });
+    if (!r.rotate) return;
+    const dir = path.dirname(LOG);
+    const name = uniqueArchiveName(archiveName({ ...r, nowMs }), (n) => fs.existsSync(path.join(dir, n)), nowMs);
+    fs.renameSync(LOG, path.join(dir, name));
+    pendingRotateNote = `[로그] 이전 로그를 ${name}로 넘겼습니다(${r.reason === "size" ? "크기 초과" : "날짜 변경"}).`;
+    // 보관 기간 지난 것 정리 — 형식이 맞는 회전본만(다른 상태파일은 pruneList가 제외).
+    for (const old of pruneList(fs.readdirSync(dir), { nowMs, keepDays: LOG_KEEP_DAYS })) {
+      fs.unlinkSync(path.join(dir, old));
+    }
+  } catch {
+    /* 파일 없음(첫 기동)·권한·잠금 — 회전 실패가 로깅을 막지 않는다 */
+  }
+}
 const HOSTNAME = os.hostname();
 const STARTED_AT = new Date().toISOString(); // 이 데몬 프로세스 시작 시각(재시작 감지)
 
