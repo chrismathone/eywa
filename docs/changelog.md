@@ -27,6 +27,38 @@
 - **원장 확인 필요(잔여)**: JP1 · MEC1-3 · 중등E_초5 의치대 = **담임 미배정**. 후보(유효 슬롯 동률)는
   JP1 `Hannah·Florence·부원장` / MEC1-3 `Anna·Daniella·Kristine` / 초5 의치대 `Elsa·부원장`. 수업목록에서 지정하면 끝.
 
+### `invoices_bak_20260708` 정체 확인 → `archive` 스키마로 이관 (2026-07-29, 0156a)
+0155a로 권한만 막아둔 백업 테이블의 **정체를 실측으로 확정하고** public 밖으로 뺐다.
+
+**정체**: 2026-07-08 **수납 line_items 재구성 직전**의 invoices 스냅샷
+(출처 = 이 문서 "수납 브랜치 머지(2026-07-13)" 항목의 "DB는 이미 선반영(2821건 11-key line_items,
+백업 invoices_bak_20260708)"). 백업 최종 `updated_at` 2026-07-07 ↔ 현재 2026-07-28.
+
+**실측 대조 — 이 백업은 현재보다 낡고 덜 채워져 있다**
+- 2,002행 **전부**가 현재 `invoices`에 같은 id로 존재(백업에만 있는 행 = **0**).
+- 컬럼 20종에서 "백업엔 값이 있는데 현재는 NULL" = **전 컬럼 0건**(정보 유실 없음).
+- 오히려 현재가 더 채워짐: `billed_at` +1,967 · `discount_reason` +1,608 · `card_company` +1,509 ·
+  `cash_receipt_number` +375 · `paid_at` +97 · `payment_method` +96.
+- `line_items`도 유실 0 / 보강 2(백업의 2건은 array가 아니라 **string** = 깨진 값이었다).
+- 고유 정보는 **값이 바뀐 행의 이전 값**뿐: `status` 962 · `amount_paid` 183 · `paid_at` 147 ·
+  `amount_total` 109 · `amount_discount` 11 · `due_date` 7행.
+
+**🔴 그래서 DROP하지 않았다** — `audit_logs`에 invoice/billing/payment 계열 기록이 **0건**이다.
+위 "이전 값"을 담은 기록이 이 테이블 말고는 없다. 돈 데이터라 파기는 원장 판단으로 남긴다.
+
+**조치**: 데이터는 그대로 두고 **위치만** 옮겼다 — `public` → 신설 `archive` 스키마,
+이름도 자기설명적으로 `invoices_pre_line_items_20260708`.
+- `archive`는 PostgREST 노출 스키마가 아니다 → **노출 사고 유형 자체가 사라진다**(grant/RLS가
+  나중에 되돌려져도 무관). 추가로 스키마 USAGE를 `anon`/`authenticated`/`public`에서 revoke하고
+  `service_role`에만 부여(이중 방어). 테이블 RLS(force, 정책 0)도 유지.
+- 검증: public에서 소멸 ✅ · archive 2,002행 + 합계 ₩795,877,775 **정확 보존** ✅ ·
+  anon REST 두 이름 모두 차단(42P01 / PGRST205) ✅ · 라이브 `invoices` 3,220행 무손상 ✅ ·
+  **public 스키마에 RLS 꺼진 테이블 0개**(전수 재확인) ✅.
+- 되돌리기: `alter table archive.invoices_pre_line_items_20260708 set schema public;`
+
+📌 **앞으로 백업·스냅샷 테이블은 `archive` 스키마에 만든다.** public에 만들면 PostgREST가 자동
+노출하고 Supabase 기본 grant가 `anon`에 붙는다 — 0155a가 정확히 그 경로였다.
+
 ### 아이콘 규약 위반 2건 — main이 red였다 (2026-07-29) - test 2646 전부 통과
 `eywa-icon-mapping` 스위트가 main에서 **2건 실패 중**이었다(다른 작업의 부수효과라 아무도 자기 것으로 안 봄).
 Vercel 게이트는 `typecheck`뿐이라 배포는 계속 초록이었고, 그래서 조용히 방치됐다.
@@ -35,6 +67,43 @@ Vercel 게이트는 `typecheck`뿐이라 배포는 계속 초록이었고, 그�
 - **미사용 compat 별칭 `Lock`**: 마지막 소비처가 `1beee908`("재인증 제거")에서 사라져 **orphan 별칭**만 남았다 →
   별칭 제거(카탈로그의 `lock` 글리프 자체는 유지). 절대 개수 트립와이어 143→142 갱신 + **왜 줄었는지 주석**을 남겨
   다음 사람이 숫자만 보고 맞추지 않게 했다.
+
+### 🔴 수납 백업 테이블 익명 노출 차단 + '미수강 제외' 필터 복구 (2026-07-29)
+성능 감사([perf-open-window-backlog.md](./perf-open-window-backlog.md))가 곁다리로 찾아낸 실제 사고 2건.
+
+**① `invoices_bak_20260708` — 공개 anon 키로 수납 실데이터가 읽히고 있었다 (0155a)**
+- RLS 비활성 + `anon`/`authenticated`에 SELECT뿐 아니라 **INSERT/UPDATE/DELETE/TRUNCATE까지** 부여된 상태.
+  브라우저에 노출되는 공개 키만으로 `GET /rest/v1/invoices_bak_20260708` → **HTTP 206**, injaewon 실데이터
+  **2,002행**(합계 ₩795,877,775, `student_id`·카드사·현금영수증번호 포함) 반환을 실증.
+- **원인 = `supabase/migrations`에 없는 애드혹 생성물.** psql/대시보드로 직접 만든 백업이라 마이그레이션
+  리뷰 게이트를 통째로 우회했고, public 스키마 새 테이블은 PostgREST가 자동 노출 + Supabase 기본 grant가 붙는다.
+- 조치 = 권한 회수 + `enable`/`force row level security`, **정책 0개**(= 아무도 못 읽음).
+  `service_role`·`postgres`는 `rolbypassrls=true`라 운영·복구 경로는 유지됨(사전 확인).
+- 적용 후 실검증: anon SELECT ✅차단 · anon DELETE ✅차단 · service_role ✅유지 · 2,002행 보존.
+- ⚠️ **DROP하지 않았다** — 07-08 line_items 재구성 이전의 유일한 백업일 수 있어 보존 판단이 먼저.
+- 전수 점검 결과 public 스키마에서 **RLS 꺼진 테이블은 이 1개뿐**이었다.
+- 📌 규칙: 백업/임시 테이블을 public 스키마에 만들지 말 것. 부득이하면 같은 트랜잭션에서 revoke + RLS까지.
+
+**② '미수강 제외' 학생 필터가 100% 고장이었다 — 8초 뒤 "학생 0명"**
+- 미수강 학생 id를 전부 풀어 `.not("id","in","(…)")`에 넣는 구조였는데 "미수강은 소수"라는 전제가 깨졌다
+  (실측 812명 중 **458명**). URL 17,943자 → PostgREST가 `content-location` 헤더로 그 쿼리를 되돌려주면서
+  헤더가 Node `maxHeaderSize`(16384) 초과 → `fetch failed` → **`data ?? []`가 그 에러를 삼켜** 빈 목록으로 표시.
+  실패 임계 n=398/399, 3/3 재현.
+- 수리 = id를 URL에 싣지 않고 **`enrollments!inner` 임베드로 서버 조인 필터**. 과목 필터도 같은 방식으로 전환
+  (기존엔 과목별 distinct 학생 id를 `.in()`에 넣어 같은 폭탄을 안고 있었다 — 실측 english 249명).
+- **고치기 전에 실데이터로 동치 검증**: 미수강 제외 354 = SQL ground truth 354 · 과목 english 249 = 249 ·
+  부모행 중복 없음. 현행 방식은 같은 조건에서 `TypeError: fetch failed` 재현.
+- ⚠️ 의미 차이 보존: '미수강 제외'는 `end_date is null`만 본다(**휴원은 '수강 중'**). 과목 필터는 `on_hold=false`까지.
+- 🔴 `data ?? []` 제거 — 빈 결과와 실패가 화면에서 구분돼야 한다. 실패는 이제 한글 메시지로 throw.
+
+**③ 곁다리 — proxy matcher 정리 · BL4 주석 정정**
+- `proxy.ts` matcher에서 `api`·폰트/스타일 확장자·robots/sitemap/manifest 제외. `updateSession`은 이미
+  `/api/*`를 early-return 하고 있어 **동작상 완전 동치**이고, 함수를 깨우지 않게 된다(warm 실측 17~26ms/요청).
+  ⚠️ 폰트 확장자 제외는 **예방 조치**다 — Pretendard는 `next/font/local`이라 `/_next/static/media`로
+  나가고 그 경로는 이미 제외돼 있었다(측정된 이득 아님). robots/manifest는 실제로 307→404로 교정됨.
+- `prefetch-embed.ts` 주석의 "클릭 시 **HTTP 캐시 히트**로 시작"은 **거짓**이었다 — 인증 셸 문서는
+  `no-store`(3/3 재현)라 저장 자체가 안 된다. 실제 효과는 함수 warm-up·테넌트 캐시 선점·커넥션 예열.
+- 감사가 지목한 `perm-matrix.ts:78` 주석은 **그 파일이 63줄이라 존재하지 않았다**(지적이 부정확) — 손대지 않음.
 
 ### 미디어 스토리지 = Supabase 단일 경로 — GCS 분기 제거 + 업로드 검증 복구 (2026-07-29) - typecheck0/lint0/build✓
 ijw-calander GCP 프로젝트를 삭제해 **되돌릴 수 없게 된** GCS 경로를 코드에서 걷어냈다. 남겨두면 `MEDIA_STORAGE_BACKEND=gcs`가
