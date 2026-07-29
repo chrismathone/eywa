@@ -1,0 +1,391 @@
+"use client";
+
+// ECS 자동저장 큐 — 필드 CAS 상태기계(계획 v2.2 §C) + LWW 큐 + 저널 연동(§F).
+// saveKey(`${lineId}:${field}`) 단위로 canonical/draft/inFlight/latestRev를 분리:
+//  · applied/already_applied → 대상 필드만 canonical merge. 그 사이 새 입력(latestRev>응답 rev)이면 draft 유지.
+//  · conflict → 해당 키 pause + 사용자 선택(서버값/내 값 덮기) 전까지 자동 재전송 금지(LWW 퇴화 방지).
+//  · 자동 재전송은 "자기 앞선 저장 성공 뒤 rebase"만(성공 후 남은 draft를 새 canonical 기준으로 재전송).
+// 전송은 flushSheetPatches 배치 1콜(Next16 Server Function은 클라 호출 순차 처리) — in-flight 1개 직렬화.
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { normalizePlanText, type PlanPatchField } from "../lib/plan-codec";
+import { buildSaveKey, type PatchResult, type PlanFieldPatch } from "../lib/save-keys";
+import type { EcsPatchJournal } from "../lib/patch-journal";
+
+export type CellSaveState = {
+  value: string | null; // draft ?? canonical(표시값)
+  dirty: boolean;
+  paused: boolean;
+  conflict: { serverValue: string | null } | null;
+};
+
+type KeyState = {
+  lineId: string;
+  field: PlanPatchField;
+  canonical: string | null;
+  draft: string | null; // null = draft 없음(canonical 표시). "빈 값으로 지움"은 draft="" → normalize에서 null 전송
+  hasDraft: boolean;
+  latestRev: number;
+  mutationId: string | null;
+  inFlightRev: number | null;
+  paused: boolean;
+  conflict: { serverValue: string | null } | null;
+};
+
+export type SendPatches = (
+  patches: PlanFieldPatch[],
+) => Promise<{ ok: true; results: PatchResult[] } | { ok: false; error: string }>;
+
+const DEBOUNCE_MS = 800;
+const RETRY_MS = 5000;
+
+export class SheetSaveStore {
+  private keys = new Map<string, KeyState>();
+  private listeners = new Map<string, Set<() => void>>();
+  private globalListeners = new Set<() => void>();
+  private timer: ReturnType<typeof setTimeout> | null = null;
+  private inFlight: Promise<void> | null = null;
+  private lwwTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  private lwwRuns = new Map<string, () => Promise<void>>();
+  private lwwInFlight = new Set<Promise<void>>();
+  private globalVersion = 0;
+  onGone: ((lineId: string) => void) | null = null;
+  onError: ((message: string) => void) | null = null;
+
+  constructor(
+    private readonly send: SendPatches,
+    private readonly journal: EcsPatchJournal | null,
+    public canEdit: boolean,
+  ) {}
+
+  setCanEdit(v: boolean): void {
+    this.canEdit = v;
+  }
+
+  setCallbacks(cb: { onGone?: (lineId: string) => void; onError?: (message: string) => void }): void {
+    if (cb.onGone) this.onGone = cb.onGone;
+    if (cb.onError) this.onError = cb.onError;
+  }
+
+  // ── 구독(셀 selector — 렌더 격리) ──────────────────────────────────────────
+  subscribe(saveKey: string, cb: () => void): () => void {
+    const set = this.listeners.get(saveKey) ?? new Set();
+    set.add(cb);
+    this.listeners.set(saveKey, set);
+    return () => {
+      set.delete(cb);
+    };
+  }
+  subscribeGlobal(cb: () => void): () => void {
+    this.globalListeners.add(cb);
+    return () => {
+      this.globalListeners.delete(cb);
+    };
+  }
+  private notify(saveKey: string) {
+    this.globalVersion += 1;
+    for (const cb of this.listeners.get(saveKey) ?? []) cb();
+    for (const cb of this.globalListeners) cb();
+  }
+  private notifyGlobal() {
+    this.globalVersion += 1;
+    for (const cb of this.globalListeners) cb();
+  }
+
+  // ── 상태 조회 ──────────────────────────────────────────────────────────────
+  private stateCache = new Map<string, CellSaveState>();
+  cellState(saveKey: string): CellSaveState | null {
+    const k = this.keys.get(saveKey);
+    if (!k) return null;
+    const next: CellSaveState = {
+      value: k.hasDraft ? k.draft : k.canonical,
+      dirty: k.hasDraft,
+      paused: k.paused,
+      conflict: k.conflict,
+    };
+    // useSyncExternalStore 스냅샷 안정화 — 내용 동일하면 같은 참조 반환
+    const prev = this.stateCache.get(saveKey);
+    if (
+      prev &&
+      prev.value === next.value &&
+      prev.dirty === next.dirty &&
+      prev.paused === next.paused &&
+      prev.conflict === next.conflict
+    ) {
+      return prev;
+    }
+    this.stateCache.set(saveKey, next);
+    return next;
+  }
+  get pendingCount(): number {
+    let n = 0;
+    for (const k of this.keys.values()) if (k.hasDraft || k.inFlightRev !== null) n += 1;
+    return n + this.lwwTimers.size + this.lwwInFlight.size;
+  }
+  get conflictCount(): number {
+    let n = 0;
+    for (const k of this.keys.values()) if (k.conflict) n += 1;
+    return n;
+  }
+  get version(): number {
+    return this.globalVersion;
+  }
+
+  /** 서버 canonical 시드/갱신(초기 로드·슬롯 재조회). draft가 있으면 draft 유지(pending overlay). */
+  seed(lineId: string, field: PlanPatchField, canonicalValue: string | null): void {
+    const saveKey = buildSaveKey(lineId, field);
+    const k = this.keys.get(saveKey);
+    if (!k) {
+      this.keys.set(saveKey, {
+        lineId,
+        field,
+        canonical: normalizePlanText(canonicalValue),
+        draft: null,
+        hasDraft: false,
+        latestRev: 0,
+        mutationId: null,
+        inFlightRev: null,
+        paused: false,
+        conflict: null,
+      });
+      return;
+    }
+    k.canonical = normalizePlanText(canonicalValue);
+    if (!k.hasDraft) this.notify(saveKey);
+  }
+
+  /** 사용자 입력 — draft 갱신 + 저널 write-through + 디바운스 전송 예약. */
+  edit(lineId: string, field: PlanPatchField, rawValue: string): void {
+    if (!this.canEdit) return;
+    const saveKey = buildSaveKey(lineId, field);
+    if (!this.keys.has(saveKey)) this.seed(lineId, field, null);
+    const k = this.keys.get(saveKey)!;
+    k.draft = rawValue;
+    k.hasDraft = true;
+    k.latestRev += 1;
+    if (!k.mutationId) k.mutationId = crypto.randomUUID();
+    if (k.conflict) {
+      // 충돌 셀에 계속 타이핑 — pause 유지(사용자 선택 전 자동 전송 금지), draft만 최신화
+    }
+    this.notify(saveKey);
+    void this.journal?.enqueue({
+      mutationId: k.mutationId,
+      clientRev: k.latestRev,
+      patch: this.patchOf(k, saveKey),
+    });
+    this.scheduleFlush(DEBOUNCE_MS);
+  }
+
+  private patchOf(k: KeyState, saveKey: string): PlanFieldPatch {
+    return {
+      saveKey,
+      lineId: k.lineId,
+      field: k.field,
+      expectedValue: k.canonical,
+      newValue: normalizePlanText(k.draft),
+      clientRev: k.latestRev,
+    };
+  }
+
+  /** 충돌 해소 — server: 서버값 수용 / mine: 서버값을 기준(expected)으로 내 값 재전송(명시적 덮기). */
+  resolveConflict(saveKey: string, choice: "server" | "mine"): void {
+    const k = this.keys.get(saveKey);
+    if (!k || !k.conflict) return;
+    const serverValue = k.conflict.serverValue;
+    k.conflict = null;
+    k.paused = false;
+    k.canonical = serverValue;
+    if (choice === "server") {
+      k.draft = null;
+      k.hasDraft = false;
+      if (k.mutationId) void this.journal?.ack(k.mutationId, k.latestRev);
+      k.mutationId = null;
+    } else {
+      k.latestRev += 1;
+      if (!k.mutationId) k.mutationId = crypto.randomUUID();
+      void this.journal?.enqueue({
+        mutationId: k.mutationId,
+        clientRev: k.latestRev,
+        patch: this.patchOf(k, saveKey),
+      });
+      this.scheduleFlush(0);
+    }
+    this.notify(saveKey);
+  }
+
+  private scheduleFlush(ms: number) {
+    if (this.timer) clearTimeout(this.timer);
+    this.timer = setTimeout(() => {
+      this.timer = null;
+      void this.runFlush();
+    }, ms);
+  }
+
+  /** 전송 1회(직렬) — dirty & !paused 키를 배치로. */
+  private async runFlush(): Promise<void> {
+    if (this.inFlight) return this.inFlight;
+    const batch: { saveKey: string; patch: PlanFieldPatch; mutationId: string }[] = [];
+    for (const [saveKey, k] of this.keys) {
+      if (!k.hasDraft || k.paused || k.inFlightRev !== null) continue;
+      batch.push({ saveKey, patch: this.patchOf(k, saveKey), mutationId: k.mutationId! });
+      k.inFlightRev = k.latestRev;
+    }
+    if (batch.length === 0) return;
+    this.notifyGlobal();
+    const run = (async () => {
+      let res: Awaited<ReturnType<SendPatches>>;
+      try {
+        res = await this.send(batch.map((b) => b.patch));
+      } catch (e) {
+        res = { ok: false, error: e instanceof Error ? e.message : "네트워크 오류" };
+      }
+      if (!res.ok) {
+        for (const b of batch) {
+          const k = this.keys.get(b.saveKey);
+          if (k) k.inFlightRev = null;
+        }
+        this.onError?.(res.error);
+        this.notifyGlobal();
+        this.scheduleFlush(RETRY_MS); // draft 보존 — 저널이 안전망
+        return;
+      }
+      let needMore = false;
+      for (const r of res.results) {
+        const entry = batch.find((b) => b.saveKey === r.saveKey);
+        const k = this.keys.get(r.saveKey);
+        if (!entry || !k) continue;
+        const sentRev = k.inFlightRev ?? r.clientRev;
+        k.inFlightRev = null;
+        if (r.status === "applied" || r.status === "already_applied") {
+          const sent = normalizePlanText(k.draft);
+          k.canonical = sent; // 대상 필드만 merge(행 전체 설치 금지)
+          void this.journal?.ack(entry.mutationId, sentRev);
+          if (k.latestRev > sentRev) {
+            needMore = true; // 전송 중 새 입력 — 자기 앞선 저장 성공 뒤 rebase(허용된 자동 재전송)
+          } else {
+            k.draft = null;
+            k.hasDraft = false;
+            k.mutationId = null;
+          }
+        } else if (r.status === "conflict") {
+          k.paused = true;
+          k.conflict = { serverValue: r.serverValue };
+        } else if (r.status === "gone") {
+          k.draft = null;
+          k.hasDraft = false;
+          void this.journal?.ack(entry.mutationId, sentRev);
+          k.mutationId = null;
+          this.onGone?.(k.lineId);
+        } else {
+          needMore = true; // error — draft 보존, 재시도
+        }
+        this.notify(r.saveKey);
+      }
+      this.notifyGlobal();
+      if (needMore) this.scheduleFlush(RETRY_MS);
+    })();
+    this.inFlight = run;
+    try {
+      await run;
+    } finally {
+      this.inFlight = null;
+    }
+  }
+
+  // ── LWW 큐(목표·마크·메모 — 계획 v2.2 §C 명시적 LWW) ──────────────────────
+  scheduleLww(key: string, run: () => Promise<void>, ms: number = DEBOUNCE_MS): void {
+    if (!this.canEdit) return;
+    this.lwwRuns.set(key, run);
+    const prev = this.lwwTimers.get(key);
+    if (prev) clearTimeout(prev);
+    this.lwwTimers.set(
+      key,
+      setTimeout(() => {
+        this.lwwTimers.delete(key);
+        const fn = this.lwwRuns.get(key);
+        this.lwwRuns.delete(key);
+        if (!fn) return;
+        const p = fn()
+          .catch(() => this.onError?.("자동 저장에 실패했습니다"))
+          .finally(() => {
+            this.lwwInFlight.delete(p);
+            this.notifyGlobal();
+          }) as unknown as Promise<void>;
+        this.lwwInFlight.add(p);
+        this.notifyGlobal();
+      }, ms),
+    );
+    this.notifyGlobal();
+  }
+
+  /** 예약분+in-flight 전부 drain + 저널 IDB persist 대기 — 주/반 이동은 이 결과를 await(실패 시 이동 중단). */
+  async flush(): Promise<{ ok: boolean }> {
+    if (this.timer) {
+      clearTimeout(this.timer);
+      this.timer = null;
+    }
+    // LWW 예약분 즉시 실행
+    for (const [key, t] of this.lwwTimers) {
+      clearTimeout(t);
+      this.lwwTimers.delete(key);
+      const fn = this.lwwRuns.get(key);
+      this.lwwRuns.delete(key);
+      if (fn) {
+        const p = fn().catch(() => this.onError?.("자동 저장에 실패했습니다")) as Promise<void>;
+        this.lwwInFlight.add(p);
+        void p.finally(() => this.lwwInFlight.delete(p));
+      }
+    }
+    await this.runFlush();
+    if (this.inFlight) await this.inFlight;
+    await Promise.allSettled([...this.lwwInFlight]);
+    const journalOk = this.journal ? (await this.journal.flushPersist()).ok : true;
+    // 미확정(dirty·충돌) 존재 여부 — 이동 차단 판정은 호출부(충돌은 사용자 선택 대기라 이동 확인 필요)
+    const clean = [...this.keys.values()].every((k) => !k.hasDraft && k.inFlightRev === null);
+    this.notifyGlobal();
+    return { ok: journalOk && clean };
+  }
+}
+
+// ── 훅 ────────────────────────────────────────────────────────────────────────
+
+export function useSheetSaveStore(
+  send: SendPatches,
+  journal: EcsPatchJournal | null,
+  canEdit: boolean,
+): SheetSaveStore {
+  // 페이지가 key={classId:week}로 재마운트하므로 스토어는 마운트당 1개(lazy init — 렌더 중 ref 접근 금지 룰 회피).
+  const [store] = useState(() => new SheetSaveStore(send, journal, canEdit));
+  useEffect(() => {
+    store.setCanEdit(canEdit);
+  }, [store, canEdit]);
+  return store;
+}
+
+/** 셀 1칸 구독(selector) — 그 saveKey가 바뀔 때만 리렌더. */
+export function useCellState(store: SheetSaveStore, saveKey: string): CellSaveState | null {
+  return useSyncExternalStore(
+    useMemo(() => (cb: () => void) => store.subscribe(saveKey, cb), [store, saveKey]),
+    () => store.cellState(saveKey),
+    () => store.cellState(saveKey),
+  );
+}
+
+/** 전역 저장 인디케이터(pending/충돌 수) — 툴바 전용(셀 리렌더와 분리). */
+export function useSaveIndicator(store: SheetSaveStore): { pending: number; conflicts: number } {
+  const version = useSyncExternalStore(
+    useMemo(() => (cb: () => void) => store.subscribeGlobal(cb), [store]),
+    () => store.version,
+    () => store.version,
+  );
+  void version;
+  return { pending: store.pendingCount, conflicts: store.conflictCount };
+}
+
+/** 언마운트 시 남은 타이머 flush 시도(best-effort — 확정 보장은 명시 flush + 저널). */
+export function useFlushOnUnmount(store: SheetSaveStore): void {
+  useEffect(() => {
+    return () => {
+      void store.flush();
+    };
+  }, [store]);
+}

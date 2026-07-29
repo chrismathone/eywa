@@ -434,7 +434,20 @@ export function buildFactsBlock(f: PrepFacts): string {
   if (f.student.request) L.push(`- 학부모 요청사항: ${f.student.request}`);
   if (f.student.siblingsText) L.push(`- 형제자매(접수 기재): ${f.student.siblingsText}`);
   if (f.student.safetyNotes) L.push(`- 안전·건강 특이사항: ${f.student.safetyNotes}`);
-  if (f.student.shuttleRequest) L.push("- 셔틀버스 이용을 희망함");
+  // 셔틀은 **접수 폼이 이미 물어본 항목**이라 답을 양방향으로 싣는다(원장 지적 2026-07-29).
+  // ⚠️ 예전엔 신청(true)일 때만 한 줄을 넣고 미신청이면 침묵했다 → LLM은 아래 [학원 현황]의 "셔틀 운행
+  //    (월 20,000원)"만 보고 "셔틀 이용을 원하시나요?"를 확인 질문으로 만들었다(실측 3/3 브리프 전부).
+  //    학부모가 폼에서 이미 고른 것을 상담 자리에서 되묻는 건 "접수서를 안 읽었다"는 신호다.
+  //    요금·노선은 **신청한 경우에만** 싣는다(안 실으면 grounding 화이트리스트에서도 빠져 언급 자체가 막힌다).
+  if (f.student.shuttleRequest) {
+    const detail = [f.policy.shuttleFee, f.policy.shuttleRoutes.join(", ")].filter(Boolean).join(" · ");
+    L.push(`- 셔틀버스: 접수서에서 신청함${detail ? ` (${detail})` : ""} — 탑승 위치·노선만 상담에서 확정`);
+  } else if (f.policy.shuttleEnabled) {
+    // ⚠️ 여기에 "묻지 말 것" 같은 지시문을 쓰면 모델이 그 문장을 cautions에 그대로 옮겨 적는다
+    //    (드라이런 실측: "셔틀버스 관련 질문 절대 금지"가 상담사 주의사항으로 출력됨). 사실만 적고
+    //    재질문 금지는 아래 프롬프트 [작성 원칙]이 담당한다.
+    L.push("- 셔틀버스: 접수서에서 신청하지 않음(미신청)");
+  }
 
   if (f.checklist.length > 0) {
     L.push("", "[학부모가 접수 폼에 답한 사전 체크리스트]");
@@ -479,9 +492,8 @@ export function buildFactsBlock(f: PrepFacts): string {
   if (f.student.grade) L.push(`- ${f.student.grade} 재원생 ${f.peers.sameGrade}명`);
   if (f.policy.dueDay != null) L.push(`- 수강료 납부일: 매월 ${f.policy.dueDay}일`);
   if (f.policy.latePolicy) L.push(`- 미납·환불 정책: ${f.policy.latePolicy}`);
-  if (f.policy.shuttleEnabled) {
-    L.push(`- 셔틀 운행${f.policy.shuttleFee ? ` (${f.policy.shuttleFee})` : ""}${f.policy.shuttleRoutes.length > 0 ? ` · 노선: ${f.policy.shuttleRoutes.join(", ")}` : ""}`);
-  }
+  // ⚠️ 셔틀 요금·노선을 여기(학원 현황)에 상시로 두지 말 것 — 미신청 학부모의 브리프에도 "월 20,000원,
+  //    1·2호차"가 실려 확인 질문·반론이 만들어졌다. 신청한 경우에만 위 [학생·접수 정보]에 함께 싣는다.
   return L.join("\n");
 }
 
@@ -493,9 +505,12 @@ export function buildPrepBriefPrompt(f: PrepFacts): string {
     "⚠️ 작성 원칙 (최우선):",
     "- 사실에 없는 반 이름·강사 이름·교재·금액·인원·기간을 절대 만들어내지 마세요. 숫자는 [사실]에 적힌 숫자만 씁니다.",
     "- 학부모가 답하지 않은 내용을 답한 것처럼 쓰지 마세요. 접수서에 없는 것은 '확인 질문'으로 돌립니다.",
+    "- 반대로 [사실]에 이미 답이 있는 항목은 questions·objections에 넣지 마세요. 접수 폼이 이미 물어본 것(셔틀 신청 여부·상담 과목·학교/학년·형제자매 유무·진로 희망·유입 경로·체크리스트 18문항)을 되물으면 접수서를 안 읽었다는 인상을 줍니다. 답이 있으면 그 답을 전제로 '한 단계 더 깊은' 질문만 하세요.",
     "- 성적 향상 보장·합격 보장 같은 지킬 수 없는 약속 문구를 만들지 마세요.",
     "- 일반론(어느 학생에게나 통할 문장) 금지. 이 학생의 접수 답변을 직접 인용해 구체적으로 씁니다.",
     "- 개설 반이 없거나 근거가 부족하면 억지로 채우지 말고 해당 항목을 짧게 비우세요.",
+    "- 다만 개설 반 목록에 반이 하나라도 있으면 proposal을 비우지 마세요. 목록에서 후보 1~3개를 요일·시간·강사와 함께 적고, '레벨테스트 결과에 따라 확정'이라는 전제를 덧붙이면 됩니다(반 이름에 학년 표기가 없어도 목록에 있으면 후보로 제시 가능).",
+    "- cautions에는 이 학부모를 응대할 때 조심할 점만 쓰세요. 위 [사실]·지시문의 문장을 그대로 옮겨 적지 마세요.",
     "- 모든 문장은 한국어. 영문 표기는 [사실]에 등장한 것만 그대로 사용합니다.",
     "- 마크다운(**, #, 코드블록) 금지. 순수 문장만.",
     "",
@@ -506,7 +521,7 @@ export function buildPrepBriefPrompt(f: PrepFacts): string {
     "{",
     '  "headline": string (이 상담을 한 줄로 규정, 20~60자),',
     '  "opening": string (오프닝 멘트 2~3문장 — 접수 내용을 읽고 왔다는 신호를 주되 학부모 답변을 그대로 인용),',
-    '  "questions": string[3-6] (접수서로는 알 수 없어 상담에서 반드시 확인할 질문),',
+    '  "questions": string[3-6] (접수서·체크리스트로는 알 수 없어 상담에서 반드시 확인할 질문. 이미 답이 있는 항목 재질문 금지),',
     '  "playbook": [ { "concern": string (학부모의 걱정), "evidence": string (접수서 어디에 근거가 있는지), "response": string (상담사 대응 화법 2~3문장) } ] (2~4개),',
     '  "proposal": string (제안할 반·요일·시간·시작 시점. 위 개설 반 목록의 반만 인용. 없으면 빈 문자열),',
     '  "objections": [ { "objection": string (예상 반론), "answer": string (답변 화법) } ] (2~4개),',
@@ -704,7 +719,14 @@ export function buildFallbackPrepBrief(f: PrepFacts): PrepBrief {
   if (!worries) questions.push("현재 학습에서 가장 걱정되는 부분 확인");
   questions.push("현재 다니는 학원·공부방과 그만두려는 이유 확인");
   questions.push("가능한 등원 요일과 시간대 확인");
-  questions.push("형제자매 재원 여부와 등·하원 동선 확인");
+  // 형제자매는 접수 폼이 이미 묻는다("있음"/"없음(외동)") — 답이 있으면 되묻지 않고, 동선만 확인한다.
+  // 셔틀도 폼이 묻는 항목이라 폴백에서도 "이용하시나요?"를 만들지 않는다(신청 시 노선 확정만).
+  if (f.student.siblingsText || f.siblings.length > 0) {
+    if (f.siblings.length > 0) questions.push("형제자매 등·하원 동선을 함께 맞출지 확인");
+  } else {
+    questions.push("형제자매 재원 여부와 등·하원 동선 확인");
+  }
+  if (f.student.shuttleRequest) questions.push("셔틀 탑승 위치와 이용 노선 확정");
 
   const playbook = (worries ? [{ concern: worries, evidence: "접수 폼 '가장 걱정되는 것' 응답", response: "접수 폼에 적은 걱정을 그대로 되짚어 확인한 뒤, 해당 영역을 어떻게 진단하고 관리하는지 설명한다." }] : []).concat(
     wants

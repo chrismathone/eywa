@@ -45,6 +45,8 @@ export const ROUTE_WINDOW_SIZE: Record<string, { w: number; h: number }> = {
   // 유발), 1280이면 30·31일 달 모두 이름이 한 줄로 펴져 콘텐츠가 ~488px로 줄어든다(세로 스크롤 제거).
   attendance: { w: 1280, h: 620 },
   exams: { w: 960, h: 680 }, // 시험 목록(통계 열) + 반 일괄 점수 그리드
+  // ECS(English Class Sheet) — 좌 계획 패널(300px) + 요일 컬럼(~540px) 2.5개가 뜨는 최소 폭. 상세는 prefix 상속.
+  ecs: { w: 1400, h: 760 },
   lesson_reports: { w: 980, h: 720 }, // 수업보고서 발송 관리 — 발송 큐 + 강사별 작성률 + 목록(다열 표·필터)
   consultations: { w: 760, h: 640 }, // 상담 목록(카드)·상세(내용+AI 7섹션) — 읽기 콘텐츠라 기본 480은 좁음. 상세 id도 prefix 상속
 
