@@ -137,8 +137,13 @@ export function emptyResume(): StaffResumeData {
 /** 선택지 화이트리스트 — 목록 밖 값(변조·옛 데이터)은 빈 값으로 떨어뜨린다. */
 const pick = (v: string, allow: readonly string[]) => (allow.includes(v) ? v : "");
 
-/** 부서 정규화 — 옛 선택지는 새 선택지로 매핑 후 화이트리스트(밖 값은 빈 값). */
-const pickDept = (v: string) => pick(DEPT_LEGACY[v] ?? v, RESUME_DEPARTMENTS);
+/**
+ * 부서 정규화 — 옛 선택지는 새 선택지로 매핑하고, **그 밖의 값은 그대로 보존**한다.
+ * 화이트리스트로 잘라내면 시트 이관분의 실사용 부서(국어과·경영팀·차량팀 등 RESUME_DEPARTMENTS 밖)가
+ * 이력서를 한 번 저장하는 것만으로 조용히 빈 값이 된다(원장 결정 2026-07-29: 드롭다운은 지정 6종 유지 +
+ * 기존 값은 보존). 새 값은 드롭다운(6종)이 제한하므로 여기서 다시 자르지 않아도 임의 입력은 안 들어온다.
+ */
+const pickDept = (v: string) => (DEPT_LEGACY[v] ?? v).trim();
 
 /**
  * FormData → 구조화 데이터. 필드 name 규약: p_*, edu_N_*, car_N_*, cert_N_*, lang_N_*, c_*, chk_*, photo_N.

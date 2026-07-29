@@ -75,6 +75,15 @@ export async function ClassesTab({
   const past = rows.filter((r) => hasEnded(r));
 
   const activeClassIds = new Set(current.map((r) => r.classId));
+  // 반별 기존 수강 기간(지난 것 포함) — 배정 다이얼로그가 DB GiST(같은 학생·같은 반 기간 겹침)를
+  // **저장 전에** 감지해 알려주는 재료. 없으면 "배정 예정"인 반을 골라도 저장 순간에야 거부됐다
+  // (2026-07-28 조현준 배정 실패 — 8/4부터 예정 배정된 반에 7/28 시작으로 다시 배정 시도).
+  const periodsByClass = new Map<string, { start: string; end: string | null }[]>();
+  for (const r of rows) {
+    const list = periodsByClass.get(r.classId) ?? [];
+    list.push({ start: r.startDate, end: r.endDate });
+    periodsByClass.set(r.classId, list);
+  }
   // 배정/이동 대상 = 현재 수강 중이 아닌 활성 반. 스케줄(요일·시각)·요일코드 포함.
   const candidateClasses: AssignDialogClass[] = allActiveClasses
     .filter((c) => !activeClassIds.has(c.id))
@@ -86,6 +95,7 @@ export async function ClassesTab({
       studentCount: c.studentCount,
       days: c.days.map((d) => d.day),
       scheduleLabel: formatClassSchedule(c.days),
+      existingPeriods: periodsByClass.get(c.id),
     }));
 
   return (

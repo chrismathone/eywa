@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { conflictToast } from "@/lib/ui/conflict-toast";
 import { useSubjectMaps } from "@/features/owner/operations-context";
+import { enrollmentPeriodsOverlap } from "@/features/enrollments/eligibility";
 import {
   createEnrollment,
   type CreateEnrollmentState,
@@ -41,16 +42,27 @@ export type AssignDialogClass = {
   days?: string[];
   /** 스케줄 요약("월·목 14:20") — 반 옵션에서 무슨 요일·몇 시인지 표시. */
   scheduleLabel?: string;
+  /**
+   * 이 학생이 **이 반에 이미 가진 수강 기간**(지난 것 포함). DB GiST가 같은 (학생,반)에 기간이 겹치는
+   * 배정을 거부하므로, 저장을 눌러 실패하기 전에 화면에서 미리 알려주려고 받는다.
+   * 미지정이면 사전 경고 없이 서버 메시지에 맡긴다(반→학생 모드).
+   */
+  existingPeriods?: { start: string; end: string | null }[];
 };
 
-function Submit() {
+function Submit({ disabled }: { disabled?: boolean }) {
   const { pending } = useFormStatus();
   return (
-    <Button type="submit" disabled={pending}>
+    <Button type="submit" disabled={pending || disabled}>
       {pending ? <Loader2 className="size-4 animate-spin" /> : <UserPlus className="size-4" />}
       배정
     </Button>
   );
+}
+
+/** "2026-08-04" → "2026-08-04부터" / 종료가 있으면 "2026-08-04 ~ 2026-08-31". */
+function periodLabel(e: { start: string; end: string | null }): string {
+  return e.end ? `${e.start} ~ ${e.end}` : `${e.start}부터`;
 }
 
 /**
@@ -87,9 +99,10 @@ export function EnrollmentAssignDialog({
 
   // 분리등원: 대상 반의 운영 요일. student→class 모드는 드롭다운 선택 반, class→student 모드는 고정 반.
   const [selectedClassId, setSelectedClassId] = useState("");
-  const targetClassDays = isStudentMode
-    ? (classes?.find((c) => c.id === selectedClassId)?.days ?? [])
-    : (fixedClass?.days ?? []);
+  const selectedClass = isStudentMode
+    ? classes?.find((c) => c.id === selectedClassId)
+    : fixedClass;
+  const targetClassDays = selectedClass?.days ?? [];
   const classDaysKey = DAY_ORDER.filter((d) => targetClassDays.includes(d)).join(",");
   // 등원 요일(=학생이 실제 가는 요일). 기본 = 반 전 요일. 대상 반이 바뀌면 그 반 전 요일로 리셋.
   // (effect 대신 "렌더 중 prev 비교 조정" 패턴 — set-state-in-effect 룰 회피, React 권장 #25.)
@@ -105,6 +118,24 @@ export function EnrollmentAssignDialog({
       return DAY_ORDER.filter((x) => next.includes(x));
     });
   const orderedClassDays = classDaysKey ? classDaysKey.split(",") : [];
+
+  // 수강 기간(제어 입력) — 겹침을 저장 전에 판정하려면 값을 알아야 한다.
+  const today = kstToday();
+  const [startDate, setStartDate] = useState(today);
+  const [endDate, setEndDate] = useState("");
+  // 같은 (학생,반)에 기간이 겹치는 배정은 DB GiST가 거부한다 → **누르기 전에** 화면에서 막고 이유를 준다.
+  // (겹치는데도 저장을 누르면 서버가 영문 제약 에러를 냈던 2026-07-28 제보의 근본 원인.)
+  const isoStart = /^\d{4}-\d{2}-\d{2}$/.test(startDate) ? startDate : null;
+  const overlapping = isoStart
+    ? (selectedClass?.existingPeriods ?? []).filter((p) =>
+        enrollmentPeriodsOverlap(p.start, p.end, isoStart, endDate || null),
+      )
+    : [];
+  // 반 옵션에 "이미 배정됨" 힌트 — 목록에서 고르기 전에 보이게(오늘 이후로 살아있는 수강만).
+  const assignedHint = (c: AssignDialogClass) => {
+    const live = (c.existingPeriods ?? []).find((p) => !p.end || p.end > today);
+    return live ? ` · 이미 배정됨(${periodLabel(live)})` : "";
+  };
 
   // 배정 성공 시 1회만: 배경 새로고침 + 닫기. 부모(ClassAssignAction/StudentAssignAction)가
   // 다이얼로그를 항상 마운트한 채 open만 토글하므로(언마운트 없음) useActionState state가 잔존한다.
@@ -201,7 +232,7 @@ export function EnrollmentAssignDialog({
                 options={classes.map((c) => ({
                   value: c.id,
                   label: c.className,
-                  hint: `${subjects.labelOf(c.subject)}${c.scheduleLabel ? ` · ${c.scheduleLabel}` : ""}${c.teacherName ? ` · ${c.teacherName}` : ""} · ${c.studentCount}명`,
+                  hint: `${subjects.labelOf(c.subject)}${c.scheduleLabel ? ` · ${c.scheduleLabel}` : ""}${c.teacherName ? ` · ${c.teacherName}` : ""} · ${c.studentCount}명${assignedHint(c)}`,
                 }))}
               />
             </div>
@@ -232,7 +263,8 @@ export function EnrollmentAssignDialog({
                 name="startDate"
                 type="date"
                 required
-                defaultValue={kstToday()}
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
                 className="border-border bg-card text-foreground num w-full rounded-lg border px-2 py-1.5 text-sm"
               />
             </div>
@@ -243,6 +275,8 @@ export function EnrollmentAssignDialog({
               <input
                 name="endDate"
                 type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
                 className="border-border bg-card text-foreground num w-full rounded-lg border px-2 py-1.5 text-sm"
               />
             </div>
@@ -303,13 +337,31 @@ export function EnrollmentAssignDialog({
             </div>
           ) : null}
 
+          {overlapping.length > 0 ? (
+            <div className="border-danger/40 bg-danger/5 rounded-lg border px-3 py-2 text-xs">
+              <div className="text-danger inline-flex items-center gap-1.5">
+                <AlertTriangle className="size-3.5" />
+                <span className="font-bold">이미 배정된 반</span>
+              </div>
+              <p className="text-foreground mt-1">
+                이 학생은 <span className="font-medium">{selectedClass?.className}</span>에 이미{" "}
+                <span className="num">{periodLabel(overlapping[0])}</span> 배정되어 있습니다. 같은 반에
+                기간이 겹치는 배정은 만들 수 없습니다.
+              </p>
+              <p className="text-muted-foreground mt-1">
+                시작일을 겹치지 않게 바꾸거나, 학생 상세 &lsquo;수업&rsquo; 탭에서 기존 수강의 날짜·등원
+                요일을 수정해 주세요.
+              </p>
+            </div>
+          ) : null}
+
           {state?.error ? <p className="text-chart-4 text-sm">{state.error}</p> : null}
 
           <footer className="flex items-center justify-end gap-2 pt-2">
             <Button type="button" variant="ghost" onClick={() => onClose(false)}>
               취소
             </Button>
-            <Submit />
+            <Submit disabled={overlapping.length > 0} />
           </footer>
         </form>
       </div>

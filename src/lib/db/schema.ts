@@ -591,6 +591,13 @@ export const enrollmentConsultations = pgTable(
     // 상담일 = 편집 가능한 순수 date. consulted_at(timestamptz)는 정렬용 레코드 타임스탬프라 폼에서 안 건드린다
     // (timestamptz에 date 문자열을 쓰면 KST↔UTC 하루밀림·시각 소실 발생).
     consultationDate: date("consultation_date"),
+    // 사전 상담 브리프(0152a) — 상담 *전* 준비 문서 스냅샷 { source, model, facts, brief }.
+    // 상담 *후* 산출물인 consultation_ai_analysis(인수인계서)와 방향이 반대다.
+    prepBrief: jsonb("prep_brief"),
+    prepBriefAt: timestamp("prep_brief_at", { withTimezone: true }),
+    // 생성 백그라운드화(0153b): NULL=대기/완료 · generating · failed. 진행바·watcher 근거.
+    prepBriefStatus: text("prep_brief_status"),
+    prepBriefError: text("prep_brief_error"),
     // QR 공개접수 출처(0047a)
     fromPublicIntake: boolean("from_public_intake").notNull().default(false),
     intakeTokenId: uuid("intake_token_id").references(() => intakeTokens.id, { onDelete: "set null" }),

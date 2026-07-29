@@ -9,6 +9,7 @@ import { EyIcon, type EywaIconName } from "@/components/icons/eywa-icons";
 import { Button } from "@/components/ui/button";
 import { PrintWindowButton } from "@/components/workspace/print-window";
 import { requireAccess } from "@/lib/auth/require-access";
+import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { BackLink } from "@/components/back-link";
 import { formatCreatedAt } from "@/lib/utils";
 import {
@@ -31,6 +32,7 @@ import { ConsultationStatusWatcher } from "./status-watcher";
 import { ConvertToStudentDialog } from "./_components/convert-dialog";
 import { ConsultationManageButtons, ConsultationDeleteButton } from "./_components/consultation-manage";
 import { ChecklistView } from "../_components/checklist-view";
+import { PrepBriefSection } from "./prep-brief-section";
 
 export const metadata = { title: "신입생 상담 상세 — eywa" };
 
@@ -68,13 +70,14 @@ export default async function EnrollmentDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await requireAccess("enrollment");
+  const user = await requireAccess("enrollment");
   const { id } = await params;
-  const [consult, allClasses, settings, siblings] = await Promise.all([
+  const [consult, allClasses, settings, siblings, canWrite] = await Promise.all([
     getEnrollmentConsultationById(id),
     getClassesList({ active: "active" }),
     getTenantSettings(),
     getSiblingConsultations(id), // 같은 학생의 다른 등록상담(반복 접수) — 없으면 빈 배열
+    canWriteTenant(user.systemRole, "enrollment"), // 읽기 전용 역할엔 브리프 생성 버튼을 안 준다
   ]);
   if (!consult) notFound();
 
@@ -183,6 +186,22 @@ export default async function EnrollmentDetailPage({
           <ConsultationDeleteButton id={consult.id} />
         </div>
       </header>
+
+      {/* 사전 상담 브리프 — 상담 *전* 준비 문서라 헤더 바로 아래(상담 기록보다 먼저 읽는다).
+          아직 안 만든 건 대기·예약 건에만 권유한다 — 이미 끝난 상담에 "브리프 만들기"를 띄우면 노이즈다.
+          한 번 만든 브리프는 상태와 무관하게 계속 보인다(상담 중 참조 + 인쇄 재출력). */}
+      {consult.prepBrief ||
+      consult.prepBriefStatus ||
+      consult.outcome === "pending" ||
+      consult.outcome === "scheduled" ? (
+        <PrepBriefSection
+          consultationId={id}
+          record={consult.prepBrief}
+          status={consult.prepBriefStatus}
+          errorText={consult.prepBriefError}
+          canWrite={canWrite}
+        />
+      ) : null}
 
       {/* 같은 학생의 다른 등록상담(반복 접수) — 학생 연결 또는 자연키(이름+학교+학년)로 묶은 다른 상담 건.
           카드의 '상담 N건' 배지와 동일 그룹. 각 건을 창으로 열어 나머지 상담을 확인·정리. 등록상담만 대상. */}

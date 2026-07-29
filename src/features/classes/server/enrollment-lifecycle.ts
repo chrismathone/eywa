@@ -30,7 +30,12 @@ function toKorean(message: string): string {
   if (message.includes("range lower bound")) {
     return "수강 종료일이 시작일보다 빠릅니다. 날짜를 확인해 주세요.";
   }
-  return message;
+  if (/enrollments_no_overlap|exclusion constraint/i.test(message)) {
+    return "같은 반에 기간이 겹치는 수강이 있어 처리할 수 없습니다. 학생 상세 '수업' 탭에서 수강 기간을 정리해 주세요.";
+  }
+  // 매핑 못 한 원문은 화면에 그대로 내보내지 않는다(영문 DB 에러 노출 금지) — 로그로만 남긴다.
+  console.error("[enrollment-lifecycle] 미매핑 DB 에러:", message);
+  return "수강 정보를 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.";
 }
 
 /**

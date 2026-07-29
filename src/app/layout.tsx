@@ -5,11 +5,18 @@ import { brandLabels, getPublicBranding } from "@/features/owner/server/public-b
 import { pretendard } from "./fonts";
 import "./globals.css";
 
+// ⚠️ preload:false — de-mono 정책(2026-07-19) 이후 모노는 kbd 힌트·팔레트 라벨 등 극소수에서만 쓴다
+// (`.num`은 tabular-nums만 걸고 Pretendard 유지). 그런데 next/font는 문서마다 preload 링크를 넣고,
+// 메뉴가 **창=iframe**이라 창 하나당 새 문서 = preload가 곱해진다 → 모노 글리프를 한 글자도 안 쓰는
+// 창에서 Chrome이 "preloaded but not used" 경고를 문서 수만큼 찍었다. 폰트는 self-host 그대로이고
+// 첫 모노 글리프 렌더 시점에 로드된다(31KB + display:swap + 메트릭 폴백이라 체감 플래시 없음).
+// Pretendard(fonts.ts)의 preload는 **유지** — 본문 전체 폰트라 빼면 첫 페인트가 시스템폰트로 튄다.
 const jetbrainsMono = JetBrains_Mono({
   variable: "--font-mono",
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],
   display: "swap",
+  preload: false,
 });
 
 /**

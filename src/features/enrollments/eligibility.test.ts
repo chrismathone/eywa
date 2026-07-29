@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { isEnrollmentActiveOn, isEnrollmentEndedOn } from "./eligibility";
+import {
+  enrollmentPeriodsOverlap,
+  isEnrollmentActiveOn,
+  isEnrollmentEndedOn,
+} from "./eligibility";
 
 const REF = "2026-07-16";
 
@@ -44,5 +48,28 @@ describe("isEnrollmentActiveOn — isEnrollmentEndedOn과 정합", () => {
   it("보류·미시작은 종료와 무관하게 비활성", () => {
     expect(isEnrollmentActiveOn({ ...base, endDate: null, onHold: true }, REF)).toBe(false);
     expect(isEnrollmentActiveOn({ startDate: "2026-07-17", endDate: null, onHold: false }, REF)).toBe(false);
+  });
+});
+
+// DB GiST enrollments_no_overlap과 같은 규칙(반열림 [start,end))이어야 한다 — 어긋나면
+// "화면은 괜찮다는데 저장이 거부"(2026-07-28 조현준 배정 실패)가 재발한다.
+describe("enrollmentPeriodsOverlap — GiST 제약과 같은 반열림 판정", () => {
+  it("진행중(종료 없음)끼리는 항상 겹친다", () => {
+    expect(enrollmentPeriodsOverlap("2026-07-28", null, "2026-08-04", null)).toBe(true);
+    expect(enrollmentPeriodsOverlap("2026-08-04", null, "2026-07-28", null)).toBe(true);
+  });
+
+  it("경계는 열려 있다 — 8/4 종료와 8/4 시작은 안 겹친다(반 이동 경계)", () => {
+    expect(enrollmentPeriodsOverlap("2026-03-12", "2026-08-04", "2026-08-04", null)).toBe(false);
+    expect(enrollmentPeriodsOverlap("2026-08-04", null, "2026-03-12", "2026-08-04")).toBe(false);
+  });
+
+  it("하루라도 겹치면 true", () => {
+    expect(enrollmentPeriodsOverlap("2026-03-12", "2026-08-05", "2026-08-04", null)).toBe(true);
+    expect(enrollmentPeriodsOverlap("2026-07-01", "2026-07-31", "2026-07-30", "2026-08-31")).toBe(true);
+  });
+
+  it("완전히 떨어진 기간은 false", () => {
+    expect(enrollmentPeriodsOverlap("2026-03-01", "2026-06-30", "2026-07-01", "2026-08-31")).toBe(false);
   });
 });
