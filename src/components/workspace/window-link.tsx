@@ -11,6 +11,14 @@ import { withEmbed } from "./embed-context";
 import { cancelScheduledPrefetch, scheduleEmbedPrefetch } from "./prefetch-embed";
 
 /**
+ * 12메뉴(NAV_GROUPS) 밖이지만 **창으로 열어야 하는** 라우트.
+ * 메뉴에 넣으면 사이드바·팰릿 목록까지 오염되지만, 창으로 안 열면 최상위 프레임이 이동해
+ * **배경이 창에 가려 아무 일도 안 일어난 것처럼 보인다**([[#86]] — 원장 제보 2026-07-29:
+ * "요청만 하고 받질 못함" = /me가 200인데 화면은 '열린 창이 없어요' 그대로).
+ */
+const EXTRA_WINDOW_ROUTES: Record<string, string> = { "/me": "내 정보" };
+
+/**
  * href(쿼리/해시 제외)를 창 id로 해석.
  * - 메뉴 루트(href === nav item href): id = menuKey (그 메뉴 창과 공유/토글).
  * - 상세·서브 라우트(/students/123, /staff/45/edit, /consultations/stats): id = 경로 기반 고유
@@ -19,6 +27,8 @@ import { cancelScheduledPrefetch, scheduleEmbedPrefetch } from "./prefetch-embed
  */
 export function windowIdForHref(href: string): { id: string; navLabel?: string } | null {
   const path = href.split("?")[0].split("#")[0];
+  const extra = EXTRA_WINDOW_ROUTES[path];
+  if (extra) return { id: path.replace(/^\//, ""), navLabel: extra };
   const item = findNavItem(path);
   if (!item) return null;
   if (item.href === path) return { id: item.menuKey, navLabel: item.label };
