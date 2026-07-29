@@ -54,6 +54,15 @@ roster-signals, **ClassNote 읽음 매칭**이 여기 의존한다. 전부 **eyw
    랭킹은 "1세대 전용"임을 각각 실측으로 확인한 뒤에 버렸다.
 5. **env 제거는 재배포까지 해야 검증된다.** 돌고 있는 배포는 자기 env 스냅샷을 쓰므로, 지운 뒤 재배포해
    헬스체크를 돌려야 "다음 배포에서 터지는" 사고를 막는다.
+6. **의존성을 빼면 락파일을 같은 커밋에 넣는다.** `package.json`에서만 지우고 `pnpm-lock.yaml`을 두면
+   로컬은 stale `node_modules` 덕에 tsc·lint·test·build가 전부 통과하는데 CI/Vercel은
+   `--frozen-lockfile`이라 **설치 단계에서** 죽는다. 로컬 초록불이 무의미해지는 유일한 부류다.
+7. **경로를 하나로 줄이면 그동안 꺼져 있던 검증이 드러난다.** GCS 분기를 걷어내다 `verifyUploadedObject`가
+   Supabase에선 `{size:0}`만 돌려주는 **무검증**이었음을 발견했다(백엔드를 바꾼 날부터 계속). 분기를 지울 때는
+   "지우는 쪽에만 있던 방어"가 무엇이었는지 반드시 확인할 것.
+8. **형식(MIME) 검증은 삭제로 이어질 수 있다.** 업로드 후 MIME을 강제하면 MediaRecorder가 `video/webm`으로
+   뱉는 오디오가 거부되고 호출부가 그 파일을 지운다(녹음 소실). Supabase가 기록하는 mimetype은 서버가 승인한
+   값이 아니라 **클라 `File.type`**이다. 형식 관문은 버킷 `allowed_mime_types`에 두고, 앱은 크기만 강제한다.
 
 ## 5. 소등과 함께 정리된 것들 (같은 날)
 
@@ -64,13 +73,29 @@ roster-signals, **ClassNote 읽음 매칭**이 여기 의존한다. 전부 **eyw
 - **워커 로그 회전** — `watch.log`는 오늘 것, 날짜가 바뀌면 `watch-YYYY-MM-DD.log`로 보관(30일).
 - **`CLASSNOTE_INTERNAL_SECRET` 회전** — 워커↔앱 불일치로 PDF 첨부 발송 9건이 실패하던 것 해소.
   덤으로 워커 스크린샷이 "학부모 열람"으로 오집계되던 것도 멈췄다(발송 직전 열람 6/6 → 0/10).
+- **미디어 = Supabase 단일 경로**(`b27502a6`) — GCS 분기·`backend.ts`·`gcs-client.ts`·`@google-cloud/storage`
+  의존·`setup-gcs-cors.cjs` 제거(384줄 삭제), Vercel `MEDIA_STORAGE_BACKEND` env도 삭제.
+  **업로드 검증 복구**가 함께 나왔다(위 교훈 7·8). 적대 리뷰가 잡아 같이 고친 P1 4건:
+  락파일 미갱신(배포 실패) · `removeObject` 4곳 bucket 누락(문서·증명사진이 조용히 잔존) ·
+  객체 부재 fail-open("업로드 없이 register" 우회) · MIME 강제(정상 오디오 삭제).
+- **업로드 크기 판정 순수 모듈화**(`2c0012ef`) — `upload-verify.ts` + Vitest 5케이스.
+  `media-storage`가 `server-only`라 테스트가 불가능했던 부분을 분리하고, "MIME은 강제하지 않는다"는
+  결정을 회귀 방지 케이스로 못박았다. 죽은 E2E 러너 설정도 제거.
 
 ## 6. 남은 작업
 
 - [ ] **edutrix Supabase Delete** — 며칠 관망 후. 코드·env가 이미 깨끗해 확인할 것 없음.
       (정지 상태에선 `archive-edutrix.cjs` 재실행 불가 — 마지막 스냅샷은 07-29에 완료)
-- [x] ~~정리 후보(선택): `src/lib/storage/gcs-client.ts` + `MEDIA_STORAGE_BACKEND=gcs` 분기~~ —
-      **완료(2026-07-29, `b27502a6`)**. GCS 분기·`backend.ts`·`@google-cloud/storage` 의존·`setup-gcs-cors.cjs`
-      제거 + Vercel 프로덕션 `MEDIA_STORAGE_BACKEND` env도 삭제. 정리하다 **업로드 검증이 꺼져 있던 것**을
-      발견해 함께 복구(`verifyUploadedObject`가 Supabase에선 `{size:0}`만 반환하고 아무것도 안 보고 있었다).
+- [x] ~~죽은 GCS 백엔드 코드 정리~~ — **완료**(§5 참조, `b27502a6`·`8f4df22c`·`2c0012ef`).
 - GCP 프로젝트 삭제는 **30일 유예** — 그 안에는 복구 가능(2026-08-28경까지).
+
+### 마지막 확인 상태 (2026-07-29 18:51 KST)
+
+| 표면 | 결과 |
+|---|---|
+| 구글 시트 sync · 첨부 PDF(+파일 다운로드) · `/r` · 앱 첫화면 | 전부 `200` |
+| 옛 이관 크론 `/api/cron/edutrix-sync` | `404` (제거 확인) |
+| 발송 워커 | 하트비트 정상 · 당일 발송 16건 · 최근 실패 0 |
+| edutrix Supabase | 연결 불가(정지 유지) |
+
+소등 이후 **eywa 단독 운영에서 회귀 0**. 이 표가 다음 점검의 기준선이다.
