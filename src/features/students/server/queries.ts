@@ -99,23 +99,47 @@ function applySearch<T extends { or: (f: string) => T }>(qb: T, q: string | unde
   return qb.or(cols.map((c) => `${c}.ilike.%${term}%`).join(","));
 }
 
-// 수강 중인(end_date null, 휴원 포함) 반이 없는 학생 id — '미수강 제외'는 이 소수 집합을 .not in으로 뺀다
-// (학원 특성상 미수강은 소수 → URL 짧음, #53 414 회피. 전건 조회는 fetchAllPaged라 .in() 없이 안전).
-// 휴원(on_hold)은 반에 적은 상태라 '수강 중'으로 본다(미수강=반 자체가 없는 학생).
-async function getUnenrolledStudentIds(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-): Promise<string[]> {
-  const [enr, stu] = await Promise.all([
-    fetchAllPaged<{ student_id: string }>((from, to) =>
-      supabase.from("enrollments").select("student_id").is("end_date", null).range(from, to),
-    ),
-    fetchAllPaged<{ id: string }>((from, to) =>
-      supabase.from("students").select("id").range(from, to),
-    ),
-  ]);
-  const enrolled = new Set(enr.map((e) => e.student_id));
-  return stu.filter((s) => !enrolled.has(s.id)).map((s) => s.id);
+/**
+ * '미수강 제외'·과목 필터가 students 쿼리에 붙일 **embed 힌트**.
+ *
+ * 🔴 2026-07-29 수리 — 예전엔 미수강 학생 id를 전부 풀어 `.not("id","in","(…)")`에 넣었다. "미수강은
+ * 소수"라는 전제가 깨져(실측 812명 중 **458명**) URL이 17,943자가 됐고, PostgREST가 `content-location`
+ * 헤더로 그 쿼리를 되돌려주면서 헤더가 Node `maxHeaderSize`(16384)를 넘겨 `fetch failed` → 그걸
+ * `data ?? []`가 삼켜 **8초 뒤 "학생 0명"**. 실패 임계 n=398/399, 3/3 재현.
+ *
+ * 이제 id를 URL에 싣지 않고 `enrollments!inner` 임베드로 **서버에서 조인 필터**한다.
+ * 실데이터 동치 검증(injaewon): 미수강 제외 354 = SQL ground truth 354 · 과목 english 249 = 249,
+ * 부모행 중복 없음.
+ *
+ * ⚠️ 의미 차이를 지킬 것 — '미수강 제외'는 `end_date is null`만 본다(**휴원 on_hold는 '수강 중'**,
+ * 반에 적을 뿐이므로). 과목 필터는 기존대로 `on_hold=false`까지 본다. 둘이 함께 걸리면 과목 조건이
+ * 더 좁아 결과가 같다(과목 활성 수강자는 반드시 end_date null 수강이 있다).
+ */
+function enrollmentEmbed(options?: StudentListFilters): { select: string; subjectFilter: boolean } {
+  const bySubject = !!options?.subject && options.subject !== "all";
+  return {
+    select: bySubject ? "enrollments!inner(id, class:class_id!inner(subject))" : "enrollments!inner(id)",
+    subjectFilter: bySubject,
+  };
 }
+
+/**
+ * `getStudentsPage`가 students에서 직접 읽는 컬럼들.
+ * ⚠️ select 문자열을 **조건부로 조립**하면(embed 유무) supabase-js의 리터럴 타입 추론이 풀려
+ * 행 타입이 `GenericStringError`로 떨어진다 → 여기서 실제 모양을 명시하고 좁힌다.
+ * 컬럼을 더 읽게 되면 아래 select 문자열과 **이 타입을 함께** 고칠 것.
+ */
+type StudentPageRecord = {
+  id: string;
+  name: string;
+  school: string | null;
+  grade: string | null;
+  status: string;
+  enrolled_at: string | null;
+  parent_phone: string | null;
+  sync_added_at: string | null;
+  dup_suspect: boolean | null;
+};
 
 export async function getStudentsList(
   options?: StudentListFilters,
@@ -294,24 +318,6 @@ export async function getStudentsPage(
   const teacherStudentIds = (await effectiveTeacherScope())?.studentIds ?? null;
   if (teacherStudentIds && teacherStudentIds.length === 0) return { rows: [], total: 0 };
 
-  let subjectIds: string[] | null = null;
-  if (options?.subject && options.subject !== "all") {
-    const { data: ens } = await supabase
-      .from("enrollments")
-      .select("student_id, class:class_id!inner ( subject )")
-      .eq("class.subject", options.subject)
-      .is("end_date", null)
-      .eq("on_hold", false);
-    subjectIds = [...new Set((ens ?? []).map((e) => e.student_id))];
-    if (subjectIds.length === 0) return { rows: [], total: 0 };
-  }
-
-  // 미수강 제외: 활성 수강 없는(소수) 학생 id를 미리 풀어 .not in으로 뺀다(.in() 414 회피).
-  let unenrolledIds: string[] | null = null;
-  if (options?.excludeNoEnrollment) {
-    unenrolledIds = await getUnenrolledStudentIds(supabase);
-  }
-
   // 담당 강사 필터 → 그 강사 반에 수강 중인 학생 id(getTeacherScope 재사용, primary_teacher_id 대체).
   let teacherFilterIds: string[] | null = null;
   if (options?.teacherId && options.teacherId !== "all") {
@@ -319,17 +325,30 @@ export async function getStudentsPage(
     if (teacherFilterIds.length === 0) return { rows: [], total: 0 };
   }
 
+  // 과목·'미수강 제외'는 **id 목록이 아니라 embed 조인**으로 건다(위 enrollmentEmbed 주석의 🔴 참조).
+  const needEnrollmentJoin =
+    !!options?.excludeNoEnrollment || (!!options?.subject && options.subject !== "all");
+  const embed = enrollmentEmbed(options);
+
   let qb = supabase
     .from("students")
     .select(
-      `id, name, school, grade, status, enrolled_at, parent_phone, sync_added_at, dup_suspect`,
+      `id, name, school, grade, status, enrolled_at, parent_phone, sync_added_at, dup_suspect` +
+        (needEnrollmentJoin ? `, ${embed.select}` : ``),
       { count: "exact" },
     );
   if (options?.status && options.status !== "all") qb = qb.eq("status", options.status);
   if (options?.grade && options.grade !== "all") qb = qb.eq("grade", options.grade);
   qb = applySearch(qb, options?.q, options?.searchField);
-  // 과목(subjectIds) ∩ 강사 스코프(teacherStudentIds) ∩ 담당 강사 필터(teacherFilterIds) → 단일 id 화이트리스트.
-  let idWhitelist: string[] | null = subjectIds;
+  if (needEnrollmentJoin) {
+    // 공통: 종료되지 않은 수강. (휴원은 '수강 중'으로 본다 — 과목 필터일 때만 아래에서 더 좁힌다.)
+    qb = qb.is("enrollments.end_date", null);
+    if (embed.subjectFilter) {
+      qb = qb.eq("enrollments.on_hold", false).eq("enrollments.class.subject", options!.subject!);
+    }
+  }
+  // 강사 스코프 ∩ 담당 강사 필터 → id 화이트리스트. 강사 1인의 담당 학생 수라 URL은 짧다.
+  let idWhitelist: string[] | null = null;
   for (const list of [teacherStudentIds, teacherFilterIds]) {
     if (!list) continue;
     const s = new Set(list);
@@ -337,8 +356,6 @@ export async function getStudentsPage(
     if (idWhitelist.length === 0) return { rows: [], total: 0 };
   }
   if (idWhitelist) qb = qb.in("id", idWhitelist);
-  if (unenrolledIds && unenrolledIds.length > 0)
-    qb = qb.not("id", "in", `(${unenrolledIds.join(",")})`);
 
   // 정렬 — 필터 적용(.eq/.or/.in/.not) 다음에 .order(이후엔 transform 빌더). 기본 grade.
   const sorted =
@@ -348,8 +365,11 @@ export async function getStudentsPage(
         ? qb.order("enrolled_at", { ascending: false, nullsFirst: false })
         : qb.order("grade", { ascending: true }).order("name", { ascending: true });
 
-  const { data, count } = await sorted.range(from, to);
-  const pageData = data ?? [];
+  const { data, count, error } = await sorted.range(from, to);
+  // 🔴 `data ?? []`로 삼키지 말 것 — 이 버그가 "8초 뒤 학생 0명"으로 보인 직접 원인이다.
+  //    빈 결과와 실패는 화면에서 구분돼야 한다(빈 목록은 사실, 실패는 사실이 아니다).
+  if (error) throw new Error(`학생 목록을 불러오지 못했습니다: ${error.message}`);
+  const pageData = (data ?? []) as unknown as StudentPageRecord[];
 
   const ids = pageData.map((r) => r.id);
   const subjectsByStudent = new Map<string, Set<string>>();

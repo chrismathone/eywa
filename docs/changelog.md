@@ -4,6 +4,42 @@
 
 ## 진행 상황
 
+### 🔴 수납 백업 테이블 익명 노출 차단 + '미수강 제외' 필터 복구 (2026-07-29)
+성능 감사([perf-open-window-backlog.md](./perf-open-window-backlog.md))가 곁다리로 찾아낸 실제 사고 2건.
+
+**① `invoices_bak_20260708` — 공개 anon 키로 수납 실데이터가 읽히고 있었다 (0155a)**
+- RLS 비활성 + `anon`/`authenticated`에 SELECT뿐 아니라 **INSERT/UPDATE/DELETE/TRUNCATE까지** 부여된 상태.
+  브라우저에 노출되는 공개 키만으로 `GET /rest/v1/invoices_bak_20260708` → **HTTP 206**, injaewon 실데이터
+  **2,002행**(합계 ₩795,877,775, `student_id`·카드사·현금영수증번호 포함) 반환을 실증.
+- **원인 = `supabase/migrations`에 없는 애드혹 생성물.** psql/대시보드로 직접 만든 백업이라 마이그레이션
+  리뷰 게이트를 통째로 우회했고, public 스키마 새 테이블은 PostgREST가 자동 노출 + Supabase 기본 grant가 붙는다.
+- 조치 = 권한 회수 + `enable`/`force row level security`, **정책 0개**(= 아무도 못 읽음).
+  `service_role`·`postgres`는 `rolbypassrls=true`라 운영·복구 경로는 유지됨(사전 확인).
+- 적용 후 실검증: anon SELECT ✅차단 · anon DELETE ✅차단 · service_role ✅유지 · 2,002행 보존.
+- ⚠️ **DROP하지 않았다** — 07-08 line_items 재구성 이전의 유일한 백업일 수 있어 보존 판단이 먼저.
+- 전수 점검 결과 public 스키마에서 **RLS 꺼진 테이블은 이 1개뿐**이었다.
+- 📌 규칙: 백업/임시 테이블을 public 스키마에 만들지 말 것. 부득이하면 같은 트랜잭션에서 revoke + RLS까지.
+
+**② '미수강 제외' 학생 필터가 100% 고장이었다 — 8초 뒤 "학생 0명"**
+- 미수강 학생 id를 전부 풀어 `.not("id","in","(…)")`에 넣는 구조였는데 "미수강은 소수"라는 전제가 깨졌다
+  (실측 812명 중 **458명**). URL 17,943자 → PostgREST가 `content-location` 헤더로 그 쿼리를 되돌려주면서
+  헤더가 Node `maxHeaderSize`(16384) 초과 → `fetch failed` → **`data ?? []`가 그 에러를 삼켜** 빈 목록으로 표시.
+  실패 임계 n=398/399, 3/3 재현.
+- 수리 = id를 URL에 싣지 않고 **`enrollments!inner` 임베드로 서버 조인 필터**. 과목 필터도 같은 방식으로 전환
+  (기존엔 과목별 distinct 학생 id를 `.in()`에 넣어 같은 폭탄을 안고 있었다 — 실측 english 249명).
+- **고치기 전에 실데이터로 동치 검증**: 미수강 제외 354 = SQL ground truth 354 · 과목 english 249 = 249 ·
+  부모행 중복 없음. 현행 방식은 같은 조건에서 `TypeError: fetch failed` 재현.
+- ⚠️ 의미 차이 보존: '미수강 제외'는 `end_date is null`만 본다(**휴원은 '수강 중'**). 과목 필터는 `on_hold=false`까지.
+- 🔴 `data ?? []` 제거 — 빈 결과와 실패가 화면에서 구분돼야 한다. 실패는 이제 한글 메시지로 throw.
+
+**③ 곁다리 — proxy matcher 정리 · BL4 주석 정정**
+- `proxy.ts` matcher에서 `api`·폰트/스타일 확장자·robots/sitemap/manifest 제외. `updateSession`은 이미
+  `/api/*`를 early-return 하고 있어 **동작상 완전 동치**이고, 함수를 깨우지 않게 된다(warm 실측 17~26ms/요청).
+  `public/fonts/*.woff2`가 매 요청 함수를 태우고 있던 것도 함께 해소. 라우트 충돌 없음(전수 확인).
+- `prefetch-embed.ts` 주석의 "클릭 시 **HTTP 캐시 히트**로 시작"은 **거짓**이었다 — 인증 셸 문서는
+  `no-store`(3/3 재현)라 저장 자체가 안 된다. 실제 효과는 함수 warm-up·테넌트 캐시 선점·커넥션 예열.
+- 감사가 지목한 `perm-matrix.ts:78` 주석은 **그 파일이 63줄이라 존재하지 않았다**(지적이 부정확) — 손대지 않음.
+
 ### 미디어 스토리지 = Supabase 단일 경로 — GCS 분기 제거 + 업로드 검증 복구 (2026-07-29) - typecheck0/lint0/build✓
 ijw-calander GCP 프로젝트를 삭제해 **되돌릴 수 없게 된** GCS 경로를 코드에서 걷어냈다. 남겨두면 `MEDIA_STORAGE_BACKEND=gcs`가
 살아있는 안전장치처럼 보이지만 실제로 켜면 업로드·읽기가 전부 실패하는 **소등 지뢰**(ClassNote Cloud Run 폴백과 같은 부류)라
