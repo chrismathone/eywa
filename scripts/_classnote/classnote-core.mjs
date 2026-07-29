@@ -608,7 +608,7 @@ export async function processQueueOnce(sql, browser, opts) {
         continue;
       }
       const sendFiles = showAttachments ? fileAtts : []; // 첨부 표시 OFF면 파일 안 실음(스샷만) — 기존 정책
-      childrenCache ??= await fetchChildren(adminPage, centerId); // 첫 만남에 1회
+      childrenCache ??= await fetchChildren(adminPage, centerId); // 배치 첫 건에 1회(전건이 이 경로)
       // ⏱ 게시 호출 상한 — Cloud Run 경로에 있던 AbortController(960s)를 제거하면서 **전건이 상한 없는 호출**이 됐다.
       // kage 업로드·API 응답이 영영 안 오면 데몬이 그 건에서 멈춰 큐 전체가 정지한다(폴이 다음으로 못 넘어감).
       // 🔴 타임아웃 시 **재큐하지 않고 failed로 고정**한다: POST가 이미 서버에 닿았을 수 있어(게시됐는지 불명)

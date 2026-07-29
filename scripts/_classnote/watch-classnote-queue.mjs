@@ -153,6 +153,10 @@ async function main() {
     console.error("--post엔 CLASSNOTE_UPLOAD_ID/PW env 필요"); process.exit(1);
   }
   log(`데몬 시작 — mode=${POST ? "POST(실게시)" : "DRY-RUN"} host=${HOSTNAME} poll=${POLL_MS / 1000}s`);
+  // 옛 스위치가 .env.local에 남아 있으면 **무시된다는 사실**을 로그로 남긴다(2026-07-29). 07-28 안내문이
+  // "이 줄을 지우면 예전 방식으로 복귀"라고 적어 둔 탓에, 담당자가 지우고 '롤백했다'고 오인할 수 있다.
+  if (process.env.CLASSNOTE_PUBLISH_MODE)
+    log(`[안내] CLASSNOTE_PUBLISH_MODE=${process.env.CLASSNOTE_PUBLISH_MODE} 는 무시됩니다 — 게시 경로는 워커 내장 하나뿐(2026-07-29 폴백 제거).`);
   let backlogFastPoll = false; // 직전 주기가 배치를 꽉 채워 성공했는가 = 밀린 큐 → 다음 주기 즉시 진행
   for (;;) {
     try {
