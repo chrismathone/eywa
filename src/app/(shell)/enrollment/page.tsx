@@ -2,6 +2,8 @@ import { Suspense } from "react";
 import { QrCode } from "@/components/icons/eywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/page-header";
+import { NewConsultationWatcher } from "./_components/new-consultation-watcher";
+import { getConsultationTotalCount } from "@/features/enrollment/server/poll-actions";
 import { PhotoCard } from "@/components/atoms/photo-card";
 import { MakeeduSyncBadge } from "@/components/makeedu-sync-badge";
 import { MakeeduPushCard } from "@/features/integrations/components/makeedu-push-card";
@@ -61,7 +63,7 @@ export default async function EnrollmentPage({
   // makeedu 역동기화 카드 노출 — `integrations` 쓰기 권한(기본 master/admin/manager)일 때만 후보 조회.
   // (권한 판정은 캐시된 매트릭스 재사용 = 추가 쿼리 0. 후보 조회는 권한자에게만 1쿼리, 아래 병렬 B4.)
   const canPushMakeedu = await canWriteTenant(user.systemRole, "integrations");
-  const [items, consultants, pushCandidates] = await Promise.all([
+  const [items, consultants, pushCandidates, totalCount] = await Promise.all([
     getEnrollmentConsultations({
       month: selectedMonth,
       consultantId: selectedConsultant,
@@ -70,6 +72,9 @@ export default async function EnrollmentPage({
     }),
     getConsultantOptions(),
     canPushMakeedu ? getUnpushedIntakeConsultations() : Promise.resolve([]),
+    // 자동 갱신 기준선 — 필터와 무관한 **전체 건수**(head 카운트라 행 미수신). 필터가 걸려 있어도
+    // 새 접수가 들어오면 화면을 갱신해야 하므로 필터된 items.length를 기준으로 쓰면 안 된다.
+    getConsultationTotalCount(),
   ]);
 
   const aiDone = items.filter((i) => i.outcome === "ai_done").length;
@@ -95,6 +100,9 @@ export default async function EnrollmentPage({
       {/* Editorial 문법 ① — eyebrow→헤드라인 + 인라인 스탯 행(시간표 패턴: BigStat 카드 대신 밀도 우선).
           '등록 전환율'(outcome=enrolled 라벨 기반)은 실제 학생 미생성 건까지 세어 과대였음 →
           진짜 완료 지표인 '배정 완료(수업≥1)' 건수 유지(정직). */}
+      {/* QR 접수가 들어오면 새로고침 없이 목록이 갱신된다(20초 건수 폴링). 알림 줄은 도착 후에만 렌더. */}
+      <NewConsultationWatcher initialCount={totalCount ?? 0} />
+
       <PageHeader
         eyebrow="등록 상담"
         title="등록상담"

@@ -139,9 +139,12 @@ export function PublicIntakeForm({
         </div>
         <CheckCircle2 className="text-primary mt-1 size-12" />
         <p className="text-foreground text-xl font-bold">제출 완료</p>
+        {/* ⚠️ "빠른 시일 내에 연락드리겠습니다"는 쓰지 말 것 — 이 폼은 대부분 **학원에 방문한 학부모가
+            상담 직전 그 자리에서** 작성한다. 눈앞에 상담 선생님이 있는데 나중에 전화하겠다고 하면 어긋난다.
+            원격 링크로 작성한 경우에도 어색하지 않도록 "전달됨 + 곧 안내"까지만 말한다(연락 수단·시점 약속 금지). */}
         <p className="text-text-dim text-sm leading-relaxed">
           입학상담카드가 접수되었습니다.<br />
-          {academyName}에서 빠른 시일 내에 연락드리겠습니다.
+          작성해 주신 내용은 {academyName} 상담 선생님께 전달되었습니다.
         </p>
       </div>
     );
