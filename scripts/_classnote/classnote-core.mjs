@@ -296,12 +296,18 @@ export async function sendReportViaApi(adminPage, { report, studentName, boardId
   //       실존하므로 content 일치 판정 ⓐⓑⓒ 전부가 옛 글에 오염된다(ⓐ면 새 게시가 조용히 생략됨 = 침묵 무발송).
   //       재발송은 오늘의 Cloud Run과 동일하게 status 코드 신뢰로 동작한다.
   const dedupOn = centerId != null && verifyDedup;
+  // ⚠️ 이중 계정(부모·본인) 학생은 원아가 2+다. 앞 원아가 성공한 뒤 뒤가 실패하면 **부분 성공**이고,
+  // 이걸 그냥 실패로 돌려주면 워커가 재시도 → 이미 받은 집에 **같은 글이 한 번 더** 간다(ClassNote는 삭제 불가).
+  // → 부분 성공은 `partial:true`로 표시해 호출자가 **재시도 없이 failed로 고정**하게 한다(적대 검증 2026-07-29 P2).
+  let posted = 0;
+  const partialFail = (error) => ({ ok: false, partial: posted > 0, error });
   for (const { child, enrollment } of enrolled) {
     if (dedupOn) {
       const pre = await findChildReportId(adminPage, centerId, { cls: boardId, child: child.id, content: shareUrl });
-      if (!pre.ok) return { ok: false, error: "게시 전 중복 확인 실패(ClassNote 조회 불가) — 안전상 보류" };
+      if (!pre.ok) return partialFail("게시 전 중복 확인 실패(ClassNote 조회 불가) — 안전상 보류");
       if (pre.id) {
         log(`  · ${studentName}: 이미 게시됨(report ${pre.id}, 원아 ${child.id}) — 재게시 생략(멱등)`);
+        posted++;
         continue;
       }
     }
@@ -315,13 +321,14 @@ export async function sendReportViaApi(adminPage, { report, studentName, boardId
     if (res.status < 200 || res.status >= 300) {
       // ⓑ 실패 응답인데 실제로 올라갔나 — 올라가 있으면 성공 취급(재발송=학부모에게 중복, ClassNote는 비가역).
       if (dedupOn) {
-        const posted = await findChildReportId(adminPage, centerId, { cls: boardId, child: child.id, content: shareUrl });
-        if (posted.ok && posted.id) {
-          log(`  · ${studentName}: 게시 응답 HTTP ${res.status}였으나 실물 확인(report ${posted.id}) — 성공 취급`);
+        const found = await findChildReportId(adminPage, centerId, { cls: boardId, child: child.id, content: shareUrl });
+        if (found.ok && found.id) {
+          log(`  · ${studentName}: 게시 응답 HTTP ${res.status}였으나 실물 확인(report ${found.id}) — 성공 취급`);
+          posted++;
           continue;
         }
       }
-      return { ok: false, error: `게시 실패(HTTP ${res.status})${res.detail ? ` — ${res.detail}` : ""}` };
+      return partialFail(`게시 실패(HTTP ${res.status})${res.detail ? ` — ${res.detail}` : ""}`);
     }
     if (dedupOn) {
       // 사후확인은 **먼저 조회하고, 없을 때만 기다린다**(2026-07-28 속도). 게시 직후 목록에 바로 뜨는 게
@@ -333,10 +340,11 @@ export async function sendReportViaApi(adminPage, { report, studentName, boardId
         if (verified.ok && verified.id) break;
       }
       if (verified?.ok && !verified.id)
-        return { ok: false, error: "게시 응답은 정상이나 알림장 목록에서 확인 실패 — 재시도 대상(멱등 선확인이 중복을 막음)" };
+        return partialFail("게시 응답은 정상이나 알림장 목록에서 확인 실패 — 재시도 대상(멱등 선확인이 중복을 막음)");
       if (!verified?.ok) log(`  · ${studentName}: 게시 확인 조회 실패 — 2xx 응답 근거로 성공 유지(경고)`);
       else log(`  · ${studentName}: 게시 확인 완료(report ${verified.id}, 원아 ${child.id})`);
     }
+    posted++;
   }
   return { ok: true };
 }
@@ -625,6 +633,14 @@ export async function processQueueOnce(sql, browser, opts) {
         await sql`update lesson_reports set classnote_status='success', classnote_sent_at=now(), classnote_error=null where id=${r.id}`;
         summary.success++;
         log(`    → success (내부 API${sendFiles.length ? `, 파일 ${sendFiles.length}건` : ""})`);
+      } else if (result.partial) {
+        // 🔴 이중 계정(부모·본인) 학생에서 **일부 원아는 이미 받았다**. 재시도하면 그 집에 같은 글이 또 간다
+        // (ClassNote는 삭제·수정 불가) → 자동 재시도 없이 failed 고정, 사람이 알림장에서 확인 후 판단한다.
+        await sql`update lesson_reports set classnote_status='failed',
+          classnote_error=${`일부 계정에만 게시됨 — ${result.error} (자동 재시도 안 함: 이미 받은 계정에 중복 게시 방지. 알림장 확인 후 처리하세요)`}
+          where id=${r.id}`;
+        summary.failed++;
+        log(`    → 부분 성공 → failed 고정(중복 방지): ${result.error}`);
       } else {
         await sql`update lesson_reports set
           classnote_retry_count = classnote_retry_count + 1,
