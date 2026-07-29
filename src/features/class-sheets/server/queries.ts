@@ -4,7 +4,6 @@ import { createClient } from "@/lib/supabase/server";
 import { fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 import { accessLevelTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { getCurrentUser } from "@/lib/auth/current-user";
-import { effectiveTeacherScope } from "@/lib/auth/view-mode";
 import { kstToday } from "@/lib/date-kst";
 import { mondayOf, shiftDays, weekLabel, weekRelation } from "@/features/timetable/lib/week";
 import { settingsToPeriodsConfig, weekdayTableFor } from "@/features/timetable/lib/periods";
@@ -22,7 +21,7 @@ import {
 } from "../lib/grid";
 import { isMeaningfulPlanLine } from "../lib/plan-codec";
 import { normalizeSlotTime, weekDatesOf, YMD_RE, type DowKey } from "../lib/week";
-import { requireEcsClassAccess } from "./access";
+import { ecsVisibleClassFilter, requireEcsClassAccess } from "./access";
 
 /**
  * ECS 주간 시트 로더 — 게이트(requireEcsClassAccess) 통과 후 admin client(service_role)로만 읽는다
@@ -425,9 +424,10 @@ export async function getSheetLanding(
     .or(`closed_at.is.null,closed_at.gte.${weekMonday}`)
     .order("class_name");
   if (classError) return { ok: false, error: `반 목록을 불러오지 못했습니다: ${classError.message}` };
-  // 강사 스코프는 JS 교집합(스코프 id를 .in에 넣지 않는다 — 대량 .in 상한/silent cap 회피, B3)
-  const scope = await effectiveTeacherScope();
-  const scopeSet = scope ? new Set(scope.classIds) : null;
+  // 강사 스코프는 JS 교집합(스코프 id를 .in에 넣지 않는다 — 대량 .in 상한/silent cap 회피, B3).
+  // 담당 반 ∪ 부담임 반(ecsVisibleClassFilter — 게이트 requireEcsClassAccess와 같은 확장 스코프).
+  const { classIds: visibleIds } = await ecsVisibleClassFilter();
+  const scopeSet = visibleIds ? new Set(visibleIds) : null;
   const classes = (allClasses ?? []).filter((c) => !scopeSet || scopeSet.has(c.id as string));
   const classIds = classes.map((c) => c.id as string);
   if (classIds.length === 0) {

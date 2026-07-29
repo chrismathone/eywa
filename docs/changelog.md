@@ -4,6 +4,16 @@
 
 ## 진행 상황
 
+### ECS 부담임 확장 — 슬롯 강사(FK)도 시트 접근, JJ·LAB 당번은 구조적 자동 제외 (2026-07-29) - tsc0/lint0/test50/build✓
+원장 승인: *"확장. 부담임도 ECS 열 수 있도록. JJ나 LAB의 아르바이트 강사는 필요없음."* 영어 슬롯 633개 중
+226개가 슬롯 강사≠반담당이라 부담임(이현이 7반·크리스틴 6반·김동후 5반 등 9명)이 "담당 반이 아닙니다"에 막혔었다.
+- **ECS 전용 보조 스코프** [`ecsAssistantClassIds`](../src/features/class-sheets/server/access.ts) —
+  `class_schedules.teacher_id`(FK) 기준 english 반. 전역 teacher-scope.ts는 **불변**(전 화면 파급 차단).
+  게이트 ②단계·랜딩(`ecsVisibleClassFilter` 합집합)·강사 미니셸 메뉴 게이트(반담당 영어 없을 때만 평가) 3곳 배선.
+- 🔴 **JJ·LAB 제외는 라벨 검사가 아니라 구조**: 당번 슬롯은 teacher_id가 전부 null(실측 90/90)이라 FK 확장에
+  애초에 안 걸린다. slot_teacher_label 권한 근거 금지 규칙 그대로 유지 — **라벨 검사를 넣지 말 것**.
+- 보조 스코프 조회 실패 = [](기존 반담당 동작으로 강등) — 확장이 죽어도 본 게이트는 안 죽는다.
+
 ### 원스크린 발송 시간대 안내 = 창 밖일 때만 표시 (2026-07-29) - tsc0/lint0/test460/build✓
 원장 지시: 발송 시간대 배너를 **해당 시간대 밖일 때만**(KST). 창 안에선 발송이 그냥 나가므로 상시 안내는
 노이즈였다. 판정은 기존 워커 미러 순수함수 `classnoteSendWindowHint`(창 안·무제한=null, Vitest 잠금) 재사용,
