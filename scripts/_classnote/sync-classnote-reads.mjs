@@ -52,7 +52,7 @@ async function main() {
       `[확인] 창 내 발송분 ${stat.total}건 · 매칭키(edutrix_share_token) 보유 ${stat.with_token} · 읽음 기록 ${stat.read}`,
     );
     if (stat.with_token === 0 && stat.total > 0) {
-      console.log("⚠️ 매칭 키가 하나도 없습니다 — eywa의 edutrix-sync cron(0122a 반영본)이 아직 안 돌았을 수 있습니다.");
+      console.log("⚠️ 매칭 키가 하나도 없습니다 — 이관분 토큰(edutrix_share_token)이 비어 있거나 창 안 발송이 전부 native입니다.");
     }
   } finally {
     await browser.close().catch(() => {});

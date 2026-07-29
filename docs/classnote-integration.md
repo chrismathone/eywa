@@ -524,11 +524,17 @@ subject NULL(이관·레거시)은 게이트가 거부한다(2026-07-10 P0-2·P0
    윈도 내 **수정 전파**(diff 후 변경분만 UPDATE, 상한 300)로 승격 — full-import와 필드 동형이라 매일
    새벽 cron이 신규·수정분을 완결 상태로 유지(교란-복원 E2E 검증: updated:1 → 원본값 복원).
    소등 날 수동 작업 = **archive-edutrix.cjs 재실행 한 줄만**(원본 raw 최종 스냅샷).
-3. **Edutrix Vercel 종료** — 앱·cron(학생 이름 미러 포함) 소멸. `/share` 옛 링크 사망 = 수용(원장 승인,
+3. **Edutrix Vercel 종료 — ✅ 2026-07-29 실행.** 앱·cron(학생 이름 미러 포함) 소멸. `/share` 옛 링크 사망 = 수용(원장 승인,
    이미지는 ClassNote 게시물에 박제). eywa 측 부수 정리: `/api/cron/edutrix-sync`가 원본 소실 후 500을
    내지 않는지 확인(Supabase가 살아있는 동안은 무해) — Supabase 소등과 함께 vercel.json에서 cron 제거.
-4. **Edutrix Supabase 종료** — 이전·아카이브 완료로 의존 0. eywa .env.local의 `EDUTRIX_*` 키와
-   `vercel.json` edutrix-sync cron, `instrumentation.ts` 권장 env를 같이 정리.
+4. **Edutrix Supabase 종료** — 이전·아카이브 완료로 의존 0.
+   ✅ **eywa 측 코드 정리는 2026-07-29 선행 완료**(원본이 꺼져도 500이 안 나도록 **끄기 전에** 제거):
+   `/api/cron/edutrix-sync` 라우트+vercel.json 크론 · `edutrix-map-queries/actions` · `edutrix-match` ·
+   원장 콘솔 '미매핑' 탭 · `instrumentation.ts` 권장 env · `.env.local.example`.
+   🔴 **남긴 것(고의)**: eywa DB 안의 `source='edutrix_import'`·`edutrix_report_id`·`edutrix_share_token`·
+   `students.edutrix_student_id`와 이를 읽는 코드(이관 라벨·발송 차단 가드·**ClassNote 읽음 매칭**).
+   전부 eywa DB만 읽으므로 원본 소등과 무관하다 — 지우면 옛 발송분의 읽음 추적이 끊긴다.
+   남은 수동 작업 = Vercel의 `EDUTRIX_*` 3종 삭제(코드가 이미 안 읽으므로 언제 해도 무해).
 5. **Edutrix Firebase(Cloud Run) — ✅ 2026-07-29 프로젝트 삭제 완료.** 아래는 그 경위(재발 방지용 기록).
 
    > **소등 실행 기록(2026-07-29)**: `ijw-calander`·`classreport-web` 두 GCP 프로젝트 **삭제**, edutrix Vercel **삭제**.
