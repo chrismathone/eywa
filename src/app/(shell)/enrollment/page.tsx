@@ -77,6 +77,9 @@ export default async function EnrollmentPage({
     getConsultationTotalCount(),
   ]);
 
+  // 상대시간 기준 시각 — 서버·클라 첫 렌더를 같은 기준으로 계산해 하이드레이션 불일치를 없앤다.
+  // eslint-disable-next-line react-hooks/purity -- 동적 페이지, 요청당 1회 렌더(intake page 선례)
+  const nowMs = Date.now();
   const aiDone = items.filter((i) => i.outcome === "ai_done").length;
   // "배정 완료" = 상담 → 수업 배정으로 학생이 생기고 수업이 1개 이상 붙은 진짜 완료(outcome 라벨과 별개).
   const assigned = items.filter((i) => i.assignedClassCount >= 1);
@@ -167,9 +170,9 @@ export default async function EnrollmentPage({
           />
         </div>
       ) : view === "table" ? (
-        <EnrollmentTable rows={items} />
+        <EnrollmentTable rows={items} nowMs={nowMs} />
       ) : (
-        <EnrollmentKanban columns={columns} />
+        <EnrollmentKanban columns={columns} nowMs={nowMs} />
       )}
     </div>
   );
