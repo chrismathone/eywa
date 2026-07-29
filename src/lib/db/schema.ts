@@ -222,6 +222,33 @@ export const payrollRecords = pgTable(
 );
 
 // === staff_leaves (강사 휴가) ===
+// 직원 계약 이력(0149a) — 직원 상세 '계약현황'. 기본은 첫 출근일부터 1년이고 차수만큼 이어진다.
+// 파생 계산은 features/staff/contract.ts(순수)가 단일 소스 — 이 테이블엔 **실제 기입·연장분만** 담는다.
+export const staffContracts = pgTable(
+  "staff_contracts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    seq: integer("seq").notNull(), // 계약 차수(1차·2차…)
+    startDate: date("start_date").notNull(),
+    endDate: date("end_date").notNull(),
+    terms: text("terms"), // 계약조건(시트 '계약조건' 열 대응 자유 텍스트)
+    memo: text("memo"),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("staff_contracts_user_seq_idx").on(t.tenantId, t.userId, t.seq),
+    index("staff_contracts_user_idx").on(t.userId, t.startDate),
+  ],
+);
+
 export const staffLeaves = pgTable(
   "staff_leaves",
   {

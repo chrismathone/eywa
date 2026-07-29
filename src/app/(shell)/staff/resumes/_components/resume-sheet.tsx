@@ -707,13 +707,16 @@ export function ResumeSheet({
               ) : (
                 V(c.division)
               )}
-              {/* 담당 과목 = 부서에서 자동 — 두 번 입력하지 않는다(입력 칸 없음, 결과만 보여줌). */}
-              {division ? (
-                <p className="text-text-faint mt-1 text-[11px]">
-                  담당 과목{" "}
-                  {autoSubjects.length > 0
-                    ? `${autoSubjects.map((k) => subjectMaps.labelOf(k)).join(" · ")} (부서 기준 자동)`
-                    : "없음 (교과 부서가 아님)"}
+              {/* 담당 과목 = 부서에서 자동 — 두 번 입력하지 않는다(입력 칸 없음, 결과만 보여줌).
+                  ⚠️ 부서를 고른 뒤에만 나타나게 하면 그 순간 줄 높이가 늘어 표 전체가 밀린다(원장 제보
+                  2026-07-29) → **자리는 항상 잡아두고** 문구만 바뀌게 한다(레이아웃 시프트 0). */}
+              {editing ? (
+                <p className="text-text-faint mt-1 min-h-[15px] text-[11px] leading-[15px]">
+                  {!division
+                    ? "담당 과목은 부서에 따라 자동 지정됩니다"
+                    : autoSubjects.length > 0
+                      ? `담당 과목 ${autoSubjects.map((k) => subjectMaps.labelOf(k)).join(" · ")} (부서 기준 자동)`
+                      : "담당 과목 없음 (교과 부서가 아님)"}
                 </p>
               ) : null}
             </td>
