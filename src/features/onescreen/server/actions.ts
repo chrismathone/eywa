@@ -21,6 +21,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getTextbookOrdersForStudents } from "@/features/billing/server/textbook-queries";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { parseExamScores } from "../exam-info";
+import { LEGACY_REPORT_SUBJECT, reportSubject } from "@/features/timetable/lib/report-subject";
 import type { OneScreenStudent, PrevReport } from "../types";
 
 export type SaveLessonReportInput = {
@@ -697,7 +698,9 @@ export async function buildMakeupStudent(
         subjectKey: key,
         prev: "",
         today: "",
-        textbook: book,
+        // 교재요청서 기본값은 **math 행에만** — `textbook_orders`엔 과목 컬럼이 없어 영어 행에 주면
+        // 수학 교재가 영어 보고서에 미리 채워진다(roster.ts의 같은 게이트와 한 쌍, 2026-07-29).
+        textbook: (key || LEGACY_REPORT_SUBJECT) === LEGACY_REPORT_SUBJECT ? book : "",
         makeup: true,
         homeworkToday: "",
         reportSent: !!st,
@@ -744,14 +747,19 @@ export async function loadMakeupHistory(
 
   // 대상 날짜 **이전**(직전) 보고서만, 최신순. RLS가 테넌트 격리. 한 학생이라 limit 소량.
   // ⚠️ 과거 백필 시 서버 오늘이 아니라 조회 중인 날짜 기준이어야 그 날짜 이후 회차를 '직전'으로 잘못 표시하지 않음.
-  const { data } = await supabase
-    .from("lesson_reports")
-    .select("report_date, subject, progress, exam_info, textbook, homework_today, homework_score, attitude, notes")
-    .eq("student_id", studentId)
-    .lt("report_date", resolveReportDate(reportDate))
-    .order("report_date", { ascending: false })
-    .limit(50);
+  // 보강 행의 과목 = 강사 담당 반의 과목들(buildMakeupStudent와 같은 규약) — 아래 prevScore 게이트가 쓴다. 독립 조회라 병렬(B4).
+  const [{ data }, { data: myClasses }] = await Promise.all([
+    supabase
+      .from("lesson_reports")
+      .select("report_date, subject, progress, exam_info, textbook, homework_today, homework_score, attitude, notes")
+      .eq("student_id", studentId)
+      .lt("report_date", resolveReportDate(reportDate))
+      .order("report_date", { ascending: false })
+      .limit(50),
+    supabase.from("classes").select("subject").eq("teacher_id", user.id).eq("is_active", true),
+  ]);
   const rows = data ?? [];
+  const subjectKeys = [...new Set((myClasses ?? []).map((c) => c.subject).filter(Boolean) as string[])];
 
   const bySubject: Record<string, { prev: string; prevReport: PrevReport }> = {};
   for (const r of rows) {
@@ -778,8 +786,11 @@ export async function loadMakeupHistory(
       },
     };
   }
-  // prevScore = 학생 단위 최신 직전 회차의 exam_info(과목 무관, DeltaChip 폴백과 동일).
-  const first = rows[0];
+  // prevScore = 학생 단위 최신 직전 회차의 exam_info — 단 **이 강사가 가르치는 과목**의 회차만
+  //    (2026-07-29). 과목 무관으로 두면 영어 강사의 보강 학생에게 수학 회차 점수가 '지난 회차'로 잡혀
+  //    DeltaChip이 엉뚱한 증감(▲▼)을 띄운다. roster.ts의 학생단위 폴백 게이트와 한 쌍.
+  const mySubjects = new Set(subjectKeys);
+  const first = rows.find((r) => mySubjects.has(reportSubject({ subject: r.subject as string | null })));
   const prevScore = first ? parseExamScores(first.exam_info as string | null) : { daily: null, check: null };
   return { ok: true, bySubject, prevScore };
 }
