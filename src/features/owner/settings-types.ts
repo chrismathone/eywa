@@ -132,6 +132,12 @@ export const operationsSchema = z
   .object({
     subjects: z.array(subjectSchema).max(40),
     jobTitles: z.array(z.string().min(1).max(24)).max(40),
+    /**
+     * 부서별 직급 선택지(2026-07-29 원장 지시) — 이력서 '근무부서'를 고르면 직급 드롭다운이 그 부서 것으로 바뀐다.
+     * 키 = 근무부서명(`RESUME_DEPARTMENTS`), 값 = 그 부서의 직급들. 부서에 항목이 없으면 위 `jobTitles`(공통)로 폴백.
+     * 값이 정확히 1개면 그 직급으로 **자동 확정**(아르바이트 부서 = 직급 '아르바이트').
+     */
+    jobTitlesByDepartment: z.record(z.string(), z.array(z.string().min(1).max(24)).max(40)),
     gradeLevels: z.array(z.string().min(1).max(24)).max(60),
     weekdayPeriods: z.array(periodTimeSchema).max(20),
     weekendPeriods: z.array(periodTimeSchema).max(20),

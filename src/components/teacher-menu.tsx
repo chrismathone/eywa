@@ -64,6 +64,11 @@ export function TeacherMenu({
             <EyIcon name={icon} size={16} strokeWidth={1.8} /> {label}
           </DropdownMenuItem>
         ))}
+        {/* 내 정보 — 본인 이력서·로그인 정보. 권한 매트릭스와 무관(자기 것만이라 항상 표시). */}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem render={<Link href="/me" className="cursor-pointer" />}>
+          <EyIcon name="user" size={16} strokeWidth={1.8} /> 내 정보
+        </DropdownMenuItem>
         {/* 겸직(관리자 계열)만 — 맨 하단 구분선 아래 '관리자뷰로 전환'(쿠키만 지우고 관리자 홈 복귀, 권한 불변).
             액션이 착지경로를 반환 → window.location으로 확정 네비게이션(드롭다운 안에선 서버액션 redirect의
             클라 네비게이션이 유실되기 때문). closeOnClick=false로 액션 완료 전 메뉴가 닫히는 것을 방지. */}
