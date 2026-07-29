@@ -4,6 +4,17 @@
 
 ## 진행 상황
 
+### 등록상담 사전 브리프 — 기본 접힘 + 펼치기/접기 (2026-07-29)
+브리프가 길어 등록상담 상세를 열 때마다 아래 내용(접수 정보·AI 분석·수강 이력)을 통째로 밀어냈다 →
+본문을 **기본 접힘**으로 바꾸고 토글을 달았다([prep-brief-collapse.tsx](<../src/app/(shell)/enrollment/[id]/prep-brief-collapse.tsx>)).
+- **항상 보이는 것**: 헤더(제목·헤드라인·모델 라벨·생성시각) · 인쇄/갱신 버튼 · 생성 진행바 · 실패 안내.
+  상태와 조작은 접혀 있어도 손이 닿아야 한다(접힌 채로 '갱신'이 안 눌리면 회귀).
+- 본문은 **서버 렌더 유지** — `PrepBriefSection`은 서버 컴포넌트 그대로고, 클라 래퍼는 children의 표시 여부만
+  관리한다(Server Component 우선 원칙 유지, 클라 번들 증가 최소).
+- 접기/펼치기 관례는 같은 폴더 `consultation-report-editor`·`meetings/[id]/ai-report`와 동일
+  (버튼 + `aria-expanded` + ChevronDown 180도 회전).
+- ⚠️ 시각검증 미완(typecheck·lint 통과). 인쇄 화면은 별도 라우트라 영향 없음.
+
 ### Edutrix 소등 완료 — 옛 시스템 3개 종료, eywa 단독 운영 (2026-07-29) - 헬스체크 5종 통과
 1세대(classreport-web) → 2세대(edutrix) → eywa 계보의 마지막 정리. 하루에 **edutrix Vercel · ijw-calander(GCP) ·
 classreport-web(GCP) 삭제 + edutrix Supabase 일시정지 + Vercel env 5종 제거**를 실행했고, 매 단계마다
