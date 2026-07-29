@@ -4,6 +4,15 @@
 
 ## 진행 상황
 
+### 아이콘 규약 위반 2건 — main이 red였다 (2026-07-29) - test 2646 전부 통과
+`eywa-icon-mapping` 스위트가 main에서 **2건 실패 중**이었다(다른 작업의 부수효과라 아무도 자기 것으로 안 봄).
+Vercel 게이트는 `typecheck`뿐이라 배포는 계속 초록이었고, 그래서 조용히 방치됐다.
+- **`⚠` 텍스트 글리프**([classnote-queue-card.tsx](<../src/app/(shell)/lesson-reports/_components/classnote-queue-card.tsx>) 구워커 경고,
+  `eba7ad6c`): 아이콘 자리에 이모지를 세우는 걸 스위트가 금지한다 → `AlertTriangle`(`size-3.5`, 코드베이스 13파일 관행)로 교체.
+- **미사용 compat 별칭 `Lock`**: 마지막 소비처가 `1beee908`("재인증 제거")에서 사라져 **orphan 별칭**만 남았다 →
+  별칭 제거(카탈로그의 `lock` 글리프 자체는 유지). 절대 개수 트립와이어 143→142 갱신 + **왜 줄었는지 주석**을 남겨
+  다음 사람이 숫자만 보고 맞추지 않게 했다.
+
 ### 미디어 스토리지 = Supabase 단일 경로 — GCS 분기 제거 + 업로드 검증 복구 (2026-07-29) - typecheck0/lint0/build✓
 ijw-calander GCP 프로젝트를 삭제해 **되돌릴 수 없게 된** GCS 경로를 코드에서 걷어냈다. 남겨두면 `MEDIA_STORAGE_BACKEND=gcs`가
 살아있는 안전장치처럼 보이지만 실제로 켜면 업로드·읽기가 전부 실패하는 **소등 지뢰**(ClassNote Cloud Run 폴백과 같은 부류)라
