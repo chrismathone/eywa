@@ -4,6 +4,22 @@
 
 ## 진행 상황
 
+### Edutrix 소등 완료 — 옛 시스템 3개 종료, eywa 단독 운영 (2026-07-29) - 헬스체크 5종 통과
+1세대(classreport-web) → 2세대(edutrix) → eywa 계보의 마지막 정리. 하루에 **edutrix Vercel · ijw-calander(GCP) ·
+classreport-web(GCP) 삭제 + edutrix Supabase 일시정지 + Vercel env 5종 제거**를 실행했고, 매 단계마다
+헬스체크(구글시트·첨부 PDF·`/r`·앱 첫화면·워커)로 무중단을 확인했다. 전 과정·잔여물·교훈은
+**[edutrix-retirement.md](./edutrix-retirement.md) 단일 문서**에 정리(이 항목은 색인).
+- **보존**: eywa `lesson_reports` 이관분 17,814건 · 읽음 매칭 키 `edutrix_share_token` 917건 ·
+  `edutrix_archive` 30테이블 28,000+행 · 로컬 JSONL 35MB · Supabase Storage 미디어 97개(실측 200).
+- **버림(승인)**: edutrix `/share` 옛 링크 · GCS 고아 123개 · MakeEdu 자동제출(8,010건, 이미 0건 상태) ·
+  1세대 랭킹 스냅샷.
+- 🔴 **교훈**: ①빌링을 끄면 백업도 못 뜬다(ijw는 Spark 전환 시점부터 GCS·Firestore 접근 차단 → 마지막 백업 실패)
+  ②폴백은 소등 전에 코드에서 없앤다(Cloud Run 폴백을 오전에 제거 → 오후 Spark 전환으로 그 함수가 죽었는데 무중단)
+  ③원본보다 소비 코드를 먼저 지운다 ④"안 쓰는 것 같다"는 데이터로 확인한다 ⑤env 제거는 재배포까지 해야 검증된다.
+- 함께 정리: 발송 경로 단일화·게시 타임아웃·부분게시 failed 고정 · 구워커 감지 배지 · 동명이인 가드 오탐 수정 ·
+  실패 알림 스윕/테스트학생 제외 · 워커 로그 날짜 회전 · `CLASSNOTE_INTERNAL_SECRET` 회전(첨부 발송 9건 복구 +
+  워커 스샷이 '학부모 열람'으로 오집계되던 것 중단).
+
 ### ClassNote 게시 = 워커 내장 단일 경로 (Cloud Run 폴백 제거) (2026-07-29) - tsc0/lint0/test255+17/적대검증 4렌즈
 소등 준비의 마지막 지뢰 제거. 어제(07-28) 도입한 `CLASSNOTE_PUBLISH_MODE=local` **env 스위치를 없애고**
 Cloud Run(`submitToClassNoteV2`, edutrix Firebase) 분기를 [classnote-core.mjs](../scripts/_classnote/classnote-core.mjs)에서 **삭제**했다.
