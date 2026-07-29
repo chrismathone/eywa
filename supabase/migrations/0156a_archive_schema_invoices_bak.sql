@@ -24,6 +24,11 @@
 -- 여기서는 **노출만 제거**한다: 데이터·행수·컬럼 그대로, 위치만 archive 로.
 --
 -- 되돌리기: alter table archive.invoices_pre_line_items_20260708 set schema public;
+--
+-- ⏰ 재검토 예정: **2026-08-29** — 원장 결정(2026-07-29) "백업은 1달 후에 지워보자".
+--    그날 ①행수·합계 재확인 ②코드 참조 0 확인 ③audit_logs 에 invoice 기록이 생겼는지 확인
+--    (생겼으면 이 백업의 대체재가 있는 것) → 원장 승인 후에만 DROP. 승인 전 CSV/JSONL 덤프 전달.
+--    ⚠️ 스스로 DROP 하지 말 것. 삭제도 애드혹이 아니라 마이그레이션 파일로 남긴다.
 
 create schema if not exists archive;
 
@@ -58,5 +63,5 @@ begin
   execute 'alter table archive.invoices_pre_line_items_20260708 force row level security';
   execute 'revoke all privileges on table archive.invoices_pre_line_items_20260708 from anon, authenticated';
   execute $c$comment on table archive.invoices_pre_line_items_20260708 is
-    '2026-07-08 수납 line_items 재구성 직전 invoices 스냅샷(2,002행). 전 행이 public.invoices 에 존재하고 정보 유실 0 — 고유 정보는 값이 바뀐 행들의 이전 값뿐이다. audit_logs 에 invoice 기록이 없어 그 이력의 유일한 사본이라 보존 중. 삭제 여부는 원장 판단.'$c$;
+    '2026-07-08 수납 line_items 재구성 직전 invoices 스냅샷(2,002행). 전 행이 public.invoices 에 존재하고 정보 유실 0 — 고유 정보는 값이 바뀐 행들의 이전 값뿐이다. audit_logs 에 invoice 기록이 없어 그 이력의 유일한 사본이라 보존 중. 삭제 여부는 원장 판단 — 2026-08-29 재검토 예정(원장 지시 2026-07-29).'$c$;
 end $$;
