@@ -13,7 +13,6 @@ import { createClient } from "@/lib/supabase/server";
 import { isTenantAudioPath } from "@/lib/storage/audio-path";
 import { resolveAudioUrl } from "@/lib/storage/legacy-audio";
 import {
-  getMediaBackend,
   removeObject,
   resolveAudioReadUrl,
   verifyUploadedObject,
@@ -234,7 +233,7 @@ export async function startMeetingFromAudio(
     if (meta.size > 0) verifiedSize = meta.size;
     audioUrl = await resolveAudioReadUrl(audioPath, "meeting", user.tenantId);
   } catch (e) {
-    await removeObject(audioPath, { backend: getMediaBackend(), bucket: "meeting-recordings" }).catch(() => {});
+    await removeObject(audioPath, { bucket: "meeting-recordings" }).catch(() => {});
     return { error: e instanceof Error ? e.message : "오디오 검증 실패" };
   }
 
@@ -363,9 +362,9 @@ export async function deleteMeeting(
     .single();
   if (!m) return { error: "회의록을 찾을 수 없습니다" };
 
-  // 1) Storage 음성파일 제거(있으면) — 현 백엔드(GCS/Supabase)로. 레거시(옛 ijw) 경로는 공유라 미삭제.
+  // 1) Storage 음성파일 제거(있으면). 레거시(옛 ijw) 경로는 공유라 미삭제.
   if (m.audio_path && isTenantAudioPath(m.audio_path, user.tenantId)) {
-    await removeObject(m.audio_path, { backend: getMediaBackend(), bucket: "meeting-recordings" }).catch(() => {});
+    await removeObject(m.audio_path, { bucket: "meeting-recordings" }).catch(() => {});
   }
 
   // 2) row 삭제 (RLS 스코프).

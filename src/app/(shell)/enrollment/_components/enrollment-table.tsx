@@ -5,7 +5,7 @@ import { Pill } from "@/components/atoms/pill";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import type { ConsultationListRow } from "@/features/enrollment/server/queries";
 import { EditingBadge } from "@/features/presence/editing-badge";
-import { relativeTimeKo } from "@/lib/relative-time";
+import { RelativeTime } from "@/components/relative-time";
 import { outcomePill } from "./outcome-meta";
 
 function ymd(iso: string): string {
@@ -14,7 +14,7 @@ function ymd(iso: string): string {
 }
 
 /** 등록상담 목록(테이블) 뷰 — 칸반의 대안. 정렬은 상담일 내림차순(쿼리), 행 클릭=상세 창. ijw 테이블 뷰 이식. */
-export function EnrollmentTable({ rows }: { rows: ConsultationListRow[] }) {
+export function EnrollmentTable({ rows, nowMs }: { rows: ConsultationListRow[]; nowMs: number }) {
   return (
     <DragScrollArea className="bg-card border-line shadow-card rounded-2xl border">
       <table className="w-full text-sm [&_td]:whitespace-nowrap">
@@ -61,7 +61,7 @@ export function EnrollmentTable({ rows }: { rows: ConsultationListRow[] }) {
                 <td className="text-text-dim px-4 py-2.5 text-xs">{c.consultantName ?? "—"}</td>
                 <td className="text-text-dim num px-4 py-2.5 text-xs">{ymd(c.consultedAt)}</td>
                 <td className="text-text-faint num px-4 py-2.5 text-right text-xs">
-                  {relativeTimeKo(c.consultedAt)}
+                  <RelativeTime iso={c.consultedAt} nowMs={nowMs} />
                 </td>
               </tr>
             );

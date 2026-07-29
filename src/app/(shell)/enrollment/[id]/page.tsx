@@ -36,6 +36,13 @@ import { PrepBriefSection } from "./prep-brief-section";
 
 export const metadata = { title: "신입생 상담 상세 — eywa" };
 
+/**
+ * ⚠️ 서버 액션은 **호출된 세그먼트의 maxDuration**을 따른다. 사전 브리프 생성은 `after()` 백그라운드로
+ * DeepSeek v4-pro(추론형, 실측 ~70초)를 부르는데, 기본값(15초)이면 플랫폼이 중간에 죽여 상태가
+ * 'generating'에 그대로 남는다 = 진행바 무한. 전사 웹훅(300)·크론(120) 선례와 같은 방식으로 올린다.
+ */
+export const maxDuration = 300;
+
 const OUTCOME_BADGE: Record<string, { label: string; class: string }> = {
   pending: { label: "대기", class: "text-chart-3 bg-chart-3/10 border-chart-3/20" },
   scheduled: { label: "예약", class: "text-chart-3 bg-chart-3/10 border-chart-3/20" },
@@ -190,8 +197,17 @@ export default async function EnrollmentDetailPage({
       {/* 사전 상담 브리프 — 상담 *전* 준비 문서라 헤더 바로 아래(상담 기록보다 먼저 읽는다).
           아직 안 만든 건 대기·예약 건에만 권유한다 — 이미 끝난 상담에 "브리프 만들기"를 띄우면 노이즈다.
           한 번 만든 브리프는 상태와 무관하게 계속 보인다(상담 중 참조 + 인쇄 재출력). */}
-      {consult.prepBrief || consult.outcome === "pending" || consult.outcome === "scheduled" ? (
-        <PrepBriefSection consultationId={id} record={consult.prepBrief} canWrite={canWrite} />
+      {consult.prepBrief ||
+      consult.prepBriefStatus ||
+      consult.outcome === "pending" ||
+      consult.outcome === "scheduled" ? (
+        <PrepBriefSection
+          consultationId={id}
+          record={consult.prepBrief}
+          status={consult.prepBriefStatus}
+          errorText={consult.prepBriefError}
+          canWrite={canWrite}
+        />
       ) : null}
 
       {/* 같은 학생의 다른 등록상담(반복 접수) — 학생 연결 또는 자연키(이름+학교+학년)로 묶은 다른 상담 건.

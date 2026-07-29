@@ -69,6 +69,37 @@ describe("matchReportsToRows", () => {
     expect(got.map((r) => r?.tag)).toEqual(["L", undefined]);
   });
 
+  // 🔴🔴 2026-07-29 원장 제보(영어 강사 원스크린): 영어 학생인데 '이전 회차'가 수학이었다.
+  //    로스터는 **강사 담당 반만** 싣기 때문에, 수학도 듣는 학생이 영어 강사에겐 영어 행 하나로 보인다
+  //    → 옛 조건(`subjectKeys.size === 1`)을 통과해 수학 이관분이 영어 행에 붙었다.
+  it("영어 단일 행에는 이관분(=수학)을 붙이지 않는다 — 강사 시야가 좁아 단일 과목처럼 보일 뿐이다", () => {
+    const got = matchReportsToRows([row("e1", "english")], [rep(null, null, "L")], { legacyFallback: true });
+    expect(got).toEqual([undefined]);
+  });
+
+  it("영어 두 반(정규+심화)도 마찬가지로 안 붙는다", () => {
+    const got = matchReportsToRows(
+      [row("e1", "english"), row("e2", "english")],
+      [rep(null, null, "L")],
+      { legacyFallback: true },
+    );
+    expect(got).toEqual([undefined, undefined]);
+  });
+
+  it("subject='english' 보고서는 영어 행에 정상 매칭된다 — 게이트가 영어를 영구히 막지 않는다", () => {
+    const got = matchReportsToRows([row("e1", "english")], [rep(null, "english", "E")], {
+      legacyFallback: true,
+    });
+    expect(got.map((r) => r?.tag)).toEqual(["E"]);
+  });
+
+  it("행 과목 미지정('')은 math 간주라 이관분을 받는다(진도 분기와 같은 규약)", () => {
+    const got = matchReportsToRows([{ classId: "c1", subjectKey: null }], [rep(null, null, "L")], {
+      legacyFallback: true,
+    });
+    expect(got.map((r) => r?.tag)).toEqual(["L"]);
+  });
+
   it("다과목 학생에겐 여전히 안 붙인다 — 어느 과목인지 모른다", () => {
     expect(
       matchReportsToRows([row("c1", "math"), row("c2", "english")], [rep(null, null, "L")], {

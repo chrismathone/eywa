@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { reportError, reportWarning } from "@/lib/observability/report-error";
-import { getMediaBackend } from "@/lib/storage/backend";
 import {
   groupPathsByBucket,
   RECORDING_RETENTION_DAYS,
@@ -30,10 +29,6 @@ export async function GET(req: Request) {
   if (!secret || auth !== `Bearer ${secret}`) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
-  if (getMediaBackend() !== "supabase") {
-    return NextResponse.json({ skipped: "backend!=supabase(이전 완료 전 no-op)" });
-  }
-
   const admin = createAdminClient();
   const cutoff = retentionCutoffISO(new Date());
   const result: Record<string, number> = {};

@@ -137,11 +137,12 @@ ijw와 동일 엔진이라 품질 차 없음**(12분 회의 재전사 4,880자 v
   [`features/meetings/server/ai.ts`](src/features/meetings/server/ai.ts) `analyzeMeeting`/`formatMeetingTranscript` **단일 소스**로 추출(웹훅·재분석 공유).
   진행 표시: 액션이 `analyzing`으로 즉시 표시 후 **`after()`로 백그라운드 분석** → 음성 분석과 **동일한 '분석 중' 스켈레톤 + StatusWatcher
   자동 새로고침** 재사용(별도 진행바 UI 신설 없이 일관). 완료 시 페이지가 스스로 새 리포트로 갱신.
-- **기둥 B — "전사부터 다시"**([`retryMeetingProcessing`](src/features/meetings/server/actions.ts)): 원본 오디오 재제출. 옛 ijw 오디오(~2GB)는
-  Supabase 미이전(무료 1GB 초과)이라 **eywa가 Firebase에서 직접 읽는다**. [`resolveAudioUrl(path, kind, tenantId)`](src/lib/storage/legacy-audio.ts):
-  tenant 경로→Supabase signed URL / 레거시 Firebase 경로(`{kind}-recordings/…`)→**Firebase v4 signed URL(2h, `exists()` 선확인)**.
-  순수 판별([`legacy-audio-path.ts`](src/lib/storage/legacy-audio-path.ts), Vitest)은 **kind별 prefix allowlist**(교차접근 차단)+한글 파일명 허용.
-  `@google-cloud/storage` + `FIREBASE_SERVICE_ACCOUNT_KEY`(base64). server-only 회피 위해 순수/IO 분리, `audio-path.ts`는 re-export shim(기존 import 무변경).
+- **기둥 B — "전사부터 다시"**([`retryMeetingProcessing`](src/features/meetings/server/actions.ts)): 원본 오디오 재제출.
+  [`resolveAudioUrl(path, kind, tenantId)`](src/lib/storage/legacy-audio.ts)가 signed URL을 만든다.
+  ⚠️ **2026-07-29 정정**: 옛 ijw 오디오는 07-28에 **Supabase kind 버킷으로 원경로 그대로 이전**됐고 GCS 분기는 제거됐다 →
+  tenant·레거시(`{kind}-recordings/…`) **둘 다 Supabase에서 서명**한다. `@google-cloud/storage`·`FIREBASE_SERVICE_ACCOUNT_KEY` 불요.
+  순수 판별([`legacy-audio-path.ts`](src/lib/storage/legacy-audio-path.ts), Vitest)은 **kind별 prefix allowlist**(교차접근 차단)+한글 파일명 허용 — 키 모양이 그대로라 계속 유효.
+  server-only 회피 위해 순수/IO 분리, `audio-path.ts`는 re-export shim(기존 import 무변경).
   throw는 호출부가 `{error}`로 catch(보존만료 삭제 시 "AI 분석 다시 생성 쓰라" 명확 메시지).
 - 검증: typecheck0/lint0/**test464**(legacy-audio-path 5) + 실 E2E(레거시 회의→Firebase signed URL→AssemblyAI 전사 4,880자 / "AI 분석 다시 생성"→Solar→DB `completed`·`solar-pro3`).
 - **가독성 후속(2026-06-24)**: 회의 분석 8섹션이 화면·인쇄 모두 `<p whitespace-pre-wrap>`라 Solar의 쉼표/번호 run-on이 한 줄로 쏟아짐 →
@@ -151,9 +152,9 @@ ijw와 동일 엔진이라 품질 차 없음**(12분 회의 재전사 4,880자 v
 - **전사 가독성(화자 라벨 없는 녹음)**: 옛 ijw 임포트 회의는 **speaker_labels 거의 0개**(40건 중 39건)라 통짜 전사였음 → 순수
   [`breakIntoSentences`](src/lib/text/split-sentences.ts)(종결부호+공백 경계 분리, 소수점·% 안 쪼갬, Vitest 6)로 **문장마다 줄바꿈**.
   [TranscriptSection](src/components/transcript-section.tsx)이 화자 발화·plainText 폴백 둘 다 적용(`whitespace-pre-line`).
-- ⚠️ **트레이드오프**: 기둥 B는 eywa↔Firebase 의존 → ijw **앱**은 닫아도 **Firebase Storage는 콜드 백엔드로 유지**(완전 삭제 불가). 기둥 A(텍스트
-  재분석)는 Firebase·오디오 무관이라 오디오를 나중에 지워도 분석 재생성 가능. ⚠️ 프로덕션 "전사부터 다시"는 Vercel에 `FIREBASE_SERVICE_ACCOUNT_KEY` +
-  유효 `UPSTAGE_API_KEY` 필요(웹훅이 프로덕션서 돔). 텍스트 기반 기둥 A는 로컬·프로덕션 모두 키 추가 없이 동작.
+- ⚠️ ~~**트레이드오프**: 기둥 B는 eywa↔Firebase 의존이라 **Firebase Storage를 콜드 백엔드로 유지**(완전 삭제 불가)~~ →
+  **해소(2026-07-29)**: 오디오를 Supabase로 이전하고 GCS 분기를 제거해 **Firebase 의존 0**(ijw-calander GCP 프로젝트는 삭제됨).
+  두 기둥 모두 `FIREBASE_SERVICE_ACCOUNT_KEY` 없이 동작한다 — 프로덕션 "전사부터 다시"에 필요한 건 유효한 전사/AI 키뿐(웹훅이 프로덕션서 돔).
 
 ### 회의 화자 정확도 — ijw 화자 임포트 + 직원 연결 편집 + 목록 AI요약 (2026-06-24)
 "전사 화자가 실제와 안 맞는다" 제보. **진짜 원인은 AssemblyAI가 아니라 임포트 누락** — ijw `meeting_reports`는 화자 구분
@@ -344,7 +345,7 @@ key(DB 식별자)는 **자동 확정**: 과목명 입력 후 blur 시 1회 — �
 - **🏁 D:\attendance "쏙쏙 이전" 이식 = 완결 (2026-07-17, main a9f5dab).** 아크: 풀이식 NO-GO(06-29) → 청구=N회 키스톤(0102a) → 시수 검증 read-only(0103a) → 출석 시수 배수(0115a) → 골든마스터 N6 → 강사 분배 splits(0117a). attendance의 **구현물**(정산엔진 비율제·블로그 패널티·단가 tier·시트 ETL·shares 수기편집기)은 **영구 제외 유지**(재제안 금지). 유일한 잔여 = 급여 연계(splits→급여 자동 반영)이며 이는 `PAYROLL_ENABLED=false` 상위 결정 뒤 — 원장이 급여를 켤 때만 착수.
 - **⚠️ 돈 산식 변경 = 골든마스터 통과 필수 (2026-07-17, attendance R2·R6 이식).** `src/features/billing/golden/`(실데이터 동결 픽스처: 반 라인 매칭·계획 N·시수 검증/분배·수납 지표 401행)이 깨지면 **테스트를 고치기 전에 "돈 계산이 왜 달라졌는지" 설명이 먼저** — 의도적 산식 변경만 핀 갱신(커밋 메시지에 사유 필수). 수납·회차·분배·급여 계열 코드를 만지면 이 스위트가 머지 게이트다.
 - **Excel/스프레드시트 = 내보내기·가져오기만.** 마법사·임의 컬럼매핑 불요(2026-06-23 결정).
-- **미디어 저장 = 현재 Firebase/GCS** (무료 5GB로 Supabase $25 지연). 결제 구간 오면 Supabase로 스왑 = `MEDIA_STORAGE_BACKEND` 전역 플래그 한 줄.
+- **미디어 저장 = Supabase Storage 단일 경로** (2026-07-29 — 유료 티어 전환으로 용량 블로커가 사라져 GCS 분기·`MEDIA_STORAGE_BACKEND` 플래그를 코드에서 **제거**). ⚠️ 이전 기록("현재 Firebase/GCS, 스왑은 플래그 한 줄")은 **폐기** — ijw-calander GCP 프로젝트를 삭제해 GCS로 되돌릴 길이 없다. 되돌릴 수 있는 척하는 분기는 ClassNote Cloud Run 폴백과 같은 소등 지뢰라 지웠다. **GCS 재도입 재제안 금지.**
 - **makeedu 동기화 = 집 신뢰 IP 로컬 실행** (데이터센터 IP는 CAPTCHA 차단 → GitHub cron 폐기). 담당 PC = 작업 스케줄러 + 상주 워처. 프로덕션 '지금 동기화' = DB 요청 큐 릴레이. **역동기화 전면 자동 = 비권장**(QR 접수 상담 건별 수동 푸시만 opt-in).
 - **강사 = 원스크린 전용 미니셸** ('내 메뉴' 드롭다운). 사이드바 복원(A안) 비채택.
 - **수강료 계산기 = 신입생 상담 견적 도구** (`tuition_quotes`, invoices와 분리 — 재원생 청구는 별개).

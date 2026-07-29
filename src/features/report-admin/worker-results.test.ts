@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { extractWorkerEnv, formatWorkerResults, workerSupportsNoticeAttachments } from "./worker-results";
+import {
+  extractWorkerEnv,
+  formatWorkerResults,
+  workerSupportsNativePublish,
+  workerSupportsNoticeAttachments,
+} from "./worker-results";
 
 // KST 12:30 = 03:30 UTC
 const AT = "2026-07-19T03:30:00.000Z";
@@ -92,5 +97,22 @@ describe("workerSupportsNoticeAttachments", () => {
     expect(workerSupportsNoticeAttachments({ caps: { noticeAttachments: "yes" } })).toBe(false);
     expect(workerSupportsNoticeAttachments(null)).toBe(false);
     expect(workerSupportsNoticeAttachments("caps")).toBe(false);
+  });
+});
+
+describe("workerSupportsNativePublish", () => {
+  it("caps.nativePublish=true면 새 워커", () => {
+    expect(workerSupportsNativePublish({ caps: { nativePublish: true } })).toBe(true);
+  });
+
+  it("키가 없으면 구워커로 본다(fail-safe) — Firebase 소등 시 발송 전멸을 미리 잡기 위함", () => {
+    expect(workerSupportsNativePublish({ caps: { noticeAttachments: true } })).toBe(false);
+    expect(workerSupportsNativePublish({})).toBe(false);
+    expect(workerSupportsNativePublish(null)).toBe(false);
+    expect(workerSupportsNativePublish("caps")).toBe(false);
+  });
+
+  it("truthy 문자열은 인정하지 않는다(엄격 비교)", () => {
+    expect(workerSupportsNativePublish({ caps: { nativePublish: "true" } })).toBe(false);
   });
 });

@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   buildFactsBlock,
   buildFallbackPrepBrief,
+  matchesSubjectCategory,
+  normalizeSchool,
+  phoneVariants,
   classLine,
   conflictsSchoolLevel,
   formatSchedule,
@@ -25,6 +28,7 @@ const facts = (over: Partial<PrepFacts> = {}): PrepFacts => ({
     siblingsText: null,
     safetyNotes: null,
     consultationPath: null,
+    enrolledNow: null,
   },
   parent: { name: "김미영", relation: "모" },
   checklist: [{ question: "가장 걱정되는 것", answer: "또래보다 진도가 늦은 것 같다" }],
@@ -305,5 +309,59 @@ describe("buildFallbackPrepBrief", () => {
     const b = buildFallbackPrepBrief(facts({ classes: [] }));
     expect(b.proposal).toBe("");
     expect(b.cautions.join(" ")).toContain("개설 반");
+  });
+});
+
+describe("실데이터 배선 가드 (감사 2026-07-29)", () => {
+  it("부서 접두사 반이라도 학생 학제가 이름에 있으면 후보로 남긴다", () => {
+    // "중등M 초6 JJ2A" = 중등부가 운영하는 초6 반. 접두사만 보고 빼면 초6 학생이 자기 반을 못 본다.
+    expect(conflictsSchoolLevel("중등M 초6 JJ2A", "초6")).toBe(false);
+    expect(conflictsSchoolLevel("중등E_초등 브릿지 A", "초5")).toBe(false);
+    expect(conflictsSchoolLevel("고등E_중3 최상위", "중3")).toBe(false);
+  });
+
+  it("학생 학제 표기가 없는 타학제 반은 계속 배제한다", () => {
+    expect(conflictsSchoolLevel("[특강] 고등개별", "중1")).toBe(true);
+    expect(conflictsSchoolLevel("중등M 중2 PS3A", "중1")).toBe(true);
+  });
+
+  it("정원이 전부 미상이면 현원 적은 반이 먼저 온다(이름순 아님)", () => {
+    const pool = [
+      { id: "big", className: "중1 수학 B", subjectLabel: "수학", teacherName: null, scheduleLabel: null, seats: null, enrolled: 14, notes: null },
+      { id: "small", className: "중1 수학 C", subjectLabel: "수학", teacherName: null, scheduleLabel: null, seats: null, enrolled: 3, notes: null },
+    ];
+    expect(rankPrepClasses(pool, { subjectKeyLabel: "수학", grade: "중1" })[0]!.id).toBe("small");
+  });
+
+  it("학교명은 전체형·압축형을 같은 학교로 본다", () => {
+    expect(normalizeSchool("칠성초등학교")).toBe("칠성초");
+    expect(normalizeSchool("성광중학교")).toBe("성광중");
+    expect(normalizeSchool("경명여자중학교")).toBe("경명여자중");
+    expect(normalizeSchool("  ")).toBeNull();
+  });
+
+  it("전화번호는 하이픈 유무 양쪽 포맷을 후보로 만든다", () => {
+    const v = phoneVariants("01067332180");
+    expect(v).toContain("01067332180");
+    expect(v).toContain("010-6733-2180");
+    expect(phoneVariants("010-6733-2180")).toContain("01067332180");
+    expect(phoneVariants("정유진")).toEqual([]); // 이름이 들어간 레거시 행은 조회 자체를 안 한다
+  });
+
+  it("영어 상담은 EIE 분류 단가도 함께 본다(초등 영어 본프로그램)", () => {
+    expect(matchesSubjectCategory("EIE", "영어")).toBe(true);
+    expect(matchesSubjectCategory("영어", "영어")).toBe(true);
+    expect(matchesSubjectCategory("EIE", "수학")).toBe(false);
+    expect(matchesSubjectCategory("수학", "수학")).toBe(true);
+  });
+});
+
+describe("이미 재원 중인 학생", () => {
+  it("재원 사실과 현재 수강 반을 사실 블록에 명시한다", () => {
+    const f = facts();
+    f.student.enrolledNow = { classNames: ["중등M 중1 BS3E"] };
+    const block = buildFactsBlock(f);
+    expect(block).toContain("이미 우리 학원 재원생임");
+    expect(block).toContain("중등M 중1 BS3E");
   });
 });

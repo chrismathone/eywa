@@ -28,14 +28,14 @@ async function withSheetsRetry<T>(fn: () => Promise<T>, attempts = 3): Promise<T
 }
 
 /**
- * 서비스계정 키 파싱 — `GOOGLE_SERVICE_ACCOUNT_KEY` 우선, 없으면 `FIREBASE_SERVICE_ACCOUNT_KEY` 폴백.
- * 둘은 **동일 GCP 서비스계정**이다(ijw도 같은 secret을 캘린더/시트에 재사용). raw JSON 또는 base64 허용.
+ * 서비스계정 키 파싱 — `GOOGLE_SERVICE_ACCOUNT_KEY`(eywa-injaewon 프로젝트). raw JSON 또는 base64 허용.
+ * 2026-07-29: 옛 `FIREBASE_SERVICE_ACCOUNT_KEY` 폴백 제거 — 그 프로젝트(ijw-calander)를 삭제해 죽은 경로다.
  */
 function loadServiceAccountCreds(): { client_email: string; private_key: string } {
-  const raw = process.env.GOOGLE_SERVICE_ACCOUNT_KEY || process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
+  const raw = process.env.GOOGLE_SERVICE_ACCOUNT_KEY;
   if (!raw) {
     throw new Error(
-      "구글 연동 키가 없습니다 (GOOGLE_SERVICE_ACCOUNT_KEY 또는 FIREBASE_SERVICE_ACCOUNT_KEY를 설정하세요).",
+      "구글 연동 키가 없습니다 (GOOGLE_SERVICE_ACCOUNT_KEY를 설정하세요).",
     );
   }
   let jsonStr = raw.trim();

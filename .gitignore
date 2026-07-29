@@ -50,3 +50,12 @@ next-env.d.ts
 scripts/_makeedu/_incoming/
 # makeedu scrape 출력·로그 (real PII - never commit) — 기본 출력 디렉터리(MAKEEDU_OUT 미설정 시)
 /.makeedu-tmp/
+
+# Edutrix 소등 아카이브 — 학생 PII 원본(35MB). 절대 커밋 금지, 로컬 보관 전용.
+data/edutrix-archive/
+
+# 발송 PC 워커 zip — 빌드 산출물(폴더의 README만 추적). 롤백용 옛 zip은 로컬에 남긴다.
+data/발송PC-워커/*.zip
+
+# ijw-calander Firebase 삭제 전 마지막 백업(1.7GB, PII 포함) — 로컬 보관 전용
+data/ijw-firebase-backup/

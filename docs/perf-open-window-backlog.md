@@ -64,18 +64,36 @@
 - **방법**: Supabase Dashboard › Authentication › Sessions(JWT expiry) 기본 3600초 → 15~30분. BL1 로컬검증의 "강제 로그아웃 지연" 창을 단축.
 - ⚠️ 학원 앱 특성상 1시간도 보통 무방 → 필수 아님.
 
-### 인프라 메모 — 코드 소진 후 남는 레버 (2026-07-13)
-코드 레버(BL1·BL3·BL4·loading·QW4)를 소진한 뒤 **체감을 더 줄이는 유일한 길은 인프라**다. 특히 **새로고침(⟳)은
-iframe 문서 강제 재요청**이라 어떤 클라 캐시(localStorage 포함)로도 못 줄이고, 순수 TTFB = **Vercel 함수 콜드 + Supabase
-쿼리 실행**만 남는다.
-- **리전 co-location = 이미 최적**: `vercel.json regions:["icn1"]`(서울) ↔ DB `ap-northeast-2`(서울). DB 왕복 ~수 ms.
-  (미스매치였다면 이게 1순위 무료 레버였음 — 지금은 해결됨.)
-- **남은 최대 레버 = Supabase Pro($25) 전용 컴퓨트**: Free는 ① 공유 마이크로 컴퓨트(쿼리 실행 느림) ② **유휴 시 DB
-  자동 일시정지**(오랜만에 첫 접속 = 몇 초 콜드). Pro = 전용 컴퓨트 + 무중단 + 풀 상향 → 새로고침·새 창 둘 다 개선.
-  ⚠️ 결정로그의 "결제 구간 오면 Supabase로 스왑"과 연동(현재 미디어를 Firebase로 우회해 $25 지연 중).
-- **Vercel Pro($20)**: 속도보다 ① 상업적 사용 ToS 준수(무료=비상업용) ② Fluid Compute 콜드스타트 감소.
-- **localStorage로 데이터 캐시 = 비권장**: SC-우선+iframe 구조라 클라 경유 데이터가 거의 없고(효과 낮음), 서버 TTFB를
-  못 줄이며, **공유 PC에 학생 PII가 디스크 잔존**하는 위험. "재오픈 즉시화"는 BL3(메모리 warm)가 더 빠르고 안전.
+### 인프라 메모 — ⚠️ 2026-07-29 전면 정정(아래 옛 예측은 **틀렸다**)
+옛 판본은 "남은 최대 레버 = Supabase Pro($25) 전용 컴퓨트"라고 적었다. 원장이 실제로 Supabase·Vercel을
+유료로 올렸고 **체감이 0**이었다. 75에이전트 감사 + 실측으로 규명한 결과 **다섯 군데가 틀렸다**:
+
+| 옛 서술 | 검증 결과 |
+|---|---|
+| "Pro = **전용 컴퓨트**" | **거짓.** Free도 이미 dedicated Postgres instance다. Pro가 바꾸는 건 크기이고 **dedicated CPU는 Large(~$110/mo)부터**. Micro·Small·Medium 전부 `2-core (shared)` |
+| "**풀 상향**" | **거짓.** 실측 `max_connections=60` = Nano/Micro 동일값. 1도 안 늘었다 |
+| "무중단(일시정지 제거)" | 사실이나 **무관.** 발동 기준이 *7일* 저활동인데 cron 4개 + 워커 폴링이 매일 넘긴다. 지연이 아니라 가용성 항목 |
+| "공유 컴퓨트라 **쿼리 실행 느림**" | **거짓 전제.** 실행 **0.27ms**, 캐시 히트 **99.9994%**, 44일 CPU 듀티 **0.28%**. DB 165MB가 shared_buffers에 전량 상주 |
+| "→ 새 창·새로고침 둘 다 개선" | **거짓.** 문서상 `Compute sizes are not auto-upgraded` — 결제만으론 안 올라간다. `pg_postmaster_start_time` uptime **44일** = 유료 전환 후에도 **리사이즈 0회** |
+| (:76) "Fluid Compute 콜드스타트 감소"를 Pro 이득으로 | **거짓.** Fluid는 Hobby에도 있고 기본 ON이었다(Hobby 시절 청구서에 Fluid 과금 항목 존재). Pro 증분 0 |
+
+**실제 지배항 = 뷰어 PC의 클라 JS 실행이다.** 통제 실험: CPU를 4배 스로틀하니 창 열기가
+**405ms → 746ms**로 배증하는 동안 **서버 TTFB는 9.2~10.2ms로 불변**이었다. 창=독립 iframe document=
+새 JS 렐름이라 창마다 모듈 실행 + 하이드레이션이 처음부터 다시 돈다(first-load JS 중앙값 1.20MB,
+공유 baseline만 0.72MB). 네트워크는 이미 공짜다 — 청크 19개 전부 `transferSize=0`(HTTP 캐시 히트).
+
+- **리전 co-location = 이미 최적**: `regions:["icn1"]` ↔ DB `ap-northeast-2`. 응답 헤더도 `icn1::icn1::` 확인.
+  ⚠️ 이건 **Hobby 때부터** 적용돼 있었다(Hobby도 단일 리전 지정 가능) — Pro 이득이 아니다.
+- **남은 유일한 유료 레버 = Vercel Function CPU → Performance(4GB/2vCPU)**: Hobby·Pro 기본값은 둘 다
+  Standard(2GB/1vCPU)이고 Pro만 상향을 **선택**할 수 있다. `vercel.json`으로는 설정 불가 —
+  Settings → Functions → Advanced → Function CPU + 재배포. ⚠️ 창 열기 TTFB가 10~23ms라 **체감폭은
+  제한적일 것으로 추정(미측정)**.
+- **Supabase 컴퓨트 승급은 성능 레버가 아니라 과금 위생**: Nano로 남아 있으면 Micro 요금을 내며 Nano를
+  쓰는 중이다(승급 추가비용 0, 다운타임 <2분). 성능 기대는 ~0.
+- ❌ **풀러 포트 5432→6543 금지**: 앱은 Postgres 커넥션을 **하나도 안 연다**(`@/lib/db` import 0건, 전부
+  PostgREST/HTTPS). 5432를 쓰는 건 ClassNote 워커·마이그레이션이고 장수명 데몬엔 세션 모드가 맞다.
+  ❌ `DATABASE_URL` 삭제 금지 — `instrumentation.ts`가 부팅 hard-fail로 존재를 검증한다.
+- **localStorage 데이터 캐시 = 여전히 비권장**(공유 PC PII 잔존). "재오픈 즉시화"는 BL3가 더 빠르고 안전.
 
 ## 🚫 비권장 (효과 0 / 위험만)
 
@@ -87,3 +105,7 @@ iframe 문서 강제 재요청**이라 어떤 클라 캐시(localStorage 포함)
 
 ## 측정 메모
 - getCurrentUser는 **server-only** → 인증 호출은 서버→Supabase라 **브라우저 Network 탭에 안 잡힘**. 체감 측정은 Network 탭 **`Doc` 타입**(iframe `?embed=1` 문서 로드)의 **TTFB(Waiting for server response)** 로. 멀티윈도우 복원에서 가장 큼.
+- ⚠️ **TTFB만 보지 말 것(2026-07-29 정정).** 옛 판본이 "체감 측정 = Doc TTFB"라고 못박은 탓에 실제 지배항
+  (창당 클라 실행 400~750ms)을 **한 번도 재지 않았고**, 그래서 병목이 서버로 보였고 남은 레버가 인프라
+  티어로 보였다. **반드시 함께 잴 것**: DevTools Performance로 iframe 로드 구간의 **Scripting/총 시간**,
+  그리고 **CPU 4x 스로틀 대조**(총 시간은 늘고 TTFB는 그대로면 병목은 클라다).

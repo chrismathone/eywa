@@ -595,6 +595,9 @@ export const enrollmentConsultations = pgTable(
     // 상담 *후* 산출물인 consultation_ai_analysis(인수인계서)와 방향이 반대다.
     prepBrief: jsonb("prep_brief"),
     prepBriefAt: timestamp("prep_brief_at", { withTimezone: true }),
+    // 생성 백그라운드화(0153b): NULL=대기/완료 · generating · failed. 진행바·watcher 근거.
+    prepBriefStatus: text("prep_brief_status"),
+    prepBriefError: text("prep_brief_error"),
     // QR 공개접수 출처(0047a)
     fromPublicIntake: boolean("from_public_intake").notNull().default(false),
     intakeTokenId: uuid("intake_token_id").references(() => intakeTokens.id, { onDelete: "set null" }),

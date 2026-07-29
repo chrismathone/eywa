@@ -302,6 +302,16 @@ assign_teacher_to_classnote)을 eywa DB 기준·Playwright·**dry-run 기본**�
 
 ## 4. Cloud Run 함수(submitToClassNoteV2) 요점 — 소스: D:\edutrix\functions\index.js
 
+> 🔴 **2026-07-29 폐기 — 이 함수는 더 이상 발송 경로가 아니다.** 워커에서 Cloud Run 분기를 **코드로 제거**했고
+> (`scripts/_classnote/classnote-core.mjs`), 게시는 워커 내장 내부 API 경로 하나뿐이다. env 스위치
+> (`CLASSNOTE_PUBLISH_MODE`)도 함께 없앴다 — 폴백이 남아 있으면 env 한 줄이 빠지는 순간 이미 삭제된 함수를
+> 호출해 **전 발송이 실패**하는데, 앱·DB와는 호환돼 그 전까지 화면상 아무 이상이 없다(적대 검증 P1).
+> 아래 내용은 **역사·리버스엔지니어링 기록**으로만 읽을 것 — 보드/원아 매칭 규칙의 유래가 여기 있다.
+>
+> ⚠️ **연동 PC에 새 zip이 이관되기 전까지는 그 PC의 구워커가 아직 이 함수를 부른다.** 발송 콘솔 워커 카드의
+> "구버전 워커(옛 서버로 게시)" 경고가 사라진 뒤에야 edutrix Firebase를 삭제할 수 있다
+> (판정 = 하트비트 `caps.nativePublish`, `worker-results.ts`).
+
 - 요청마다 **새 Puppeteer 브라우저**로 classnote.com/login 로그인(세션 재사용 없음). 호칭 다이얼로그(Manager) 처리.
 - 학생모드 판정: `/^\((수학|영어)\)/.test(className)` — 이 prefix면 그 문자열 그대로 반명 검색.
 - 같은 (날짜+이미지해시+강사+반+링크) 그룹은 원아선택 모달에서 **다중 반 선택 → 알림장 1건으로 동시 발송**.
@@ -491,7 +501,10 @@ subject NULL(이관·레거시)은 게이트가 거부한다(2026-07-10 P0-2·P0
 - Edutrix `/share` 링크는 만료 게이트가 없어 앱 제거 시 과거 게시물 링크 대량사(이미지 본문은 ClassNote에 박제).
 - Edutrix 로컬 봇 경로엔 too_old 가드가 없음(가드는 cron 미등록 서버 경로에만) — 병행기 중 Edutrix에서 과거 보고서 재큐잉 조작 금지.
 
-## 10. Edutrix 완전 종료(소등) 체크리스트 — 데이터 이전 완료 (2026-07-10)
+## 10. Edutrix 완전 종료(소등) 체크리스트 — ✅ **2026-07-29 실행 완료**
+
+> 📄 **실행 결과·잔여물·교훈은 [edutrix-retirement.md](./edutrix-retirement.md) 단일 문서를 보라.**
+> 아래는 그 계획 원문(경위 추적용).
 
 > 원장 결정: "유지해야 하는 것들을 eywa로 다 이전해서 Edutrix를 완전히 꺼버린다. Vercel(공유 링크 주소)도
 > 종료 — 발송 이미지가 ClassNote에 박제돼 있으므로 옛 링크 사망은 수용."
@@ -514,16 +527,35 @@ subject NULL(이관·레거시)은 게이트가 거부한다(2026-07-10 P0-2·P0
    윈도 내 **수정 전파**(diff 후 변경분만 UPDATE, 상한 300)로 승격 — full-import와 필드 동형이라 매일
    새벽 cron이 신규·수정분을 완결 상태로 유지(교란-복원 E2E 검증: updated:1 → 원본값 복원).
    소등 날 수동 작업 = **archive-edutrix.cjs 재실행 한 줄만**(원본 raw 최종 스냅샷).
-3. **Edutrix Vercel 종료** — 앱·cron(학생 이름 미러 포함) 소멸. `/share` 옛 링크 사망 = 수용(원장 승인,
+3. **Edutrix Vercel 종료 — ✅ 2026-07-29 실행.** 앱·cron(학생 이름 미러 포함) 소멸. `/share` 옛 링크 사망 = 수용(원장 승인,
    이미지는 ClassNote 게시물에 박제). eywa 측 부수 정리: `/api/cron/edutrix-sync`가 원본 소실 후 500을
    내지 않는지 확인(Supabase가 살아있는 동안은 무해) — Supabase 소등과 함께 vercel.json에서 cron 제거.
-4. **Edutrix Supabase 종료** — 이전·아카이브 완료로 의존 0. eywa .env.local의 `EDUTRIX_*` 키와
-   `vercel.json` edutrix-sync cron, `instrumentation.ts` 권장 env를 같이 정리.
-5. **Edutrix Firebase(Cloud Run)** — ⚠️ **마지막까지 유지.** eywa 발송의 실게시 엔진. 끄려면 선행 필요:
-   - 권장 **옵션 B: 워커에 게시 로직 내장** — 연동 PC 워커가 이미 Playwright를 돌리므로 submitToClassNoteV2의
-     DOM 자동화(로그인→원아선택→업로드→전송)를 classnote-core.mjs에 포팅하면 GCP 의존이 통째로 사라짐
-     (가정용 IP라 봇 차단 리스크도 낮음). 그 후 Firebase 삭제 가능.
-   - 옵션 A: 함수를 eywa 소유 GCP/Firebase로 재배포(소스 `D:\edutrix\functions\index.js` — noticeAdd.js
-     부재 주의). 인프라 이중 관리가 남아 B보다 열위.
+4. **Edutrix Supabase 종료** — 이전·아카이브 완료로 의존 0.
+   ✅ **eywa 측 코드 정리는 2026-07-29 선행 완료**(원본이 꺼져도 500이 안 나도록 **끄기 전에** 제거):
+   `/api/cron/edutrix-sync` 라우트+vercel.json 크론 · `edutrix-map-queries/actions` · `edutrix-match` ·
+   원장 콘솔 '미매핑' 탭 · `instrumentation.ts` 권장 env · `.env.local.example`.
+   🔴 **남긴 것(고의)**: eywa DB 안의 `source='edutrix_import'`·`edutrix_report_id`·`edutrix_share_token`·
+   `students.edutrix_student_id`와 이를 읽는 코드(이관 라벨·발송 차단 가드·**ClassNote 읽음 매칭**).
+   전부 eywa DB만 읽으므로 원본 소등과 무관하다 — 지우면 옛 발송분의 읽음 추적이 끊긴다.
+   남은 수동 작업 = Vercel의 `EDUTRIX_*` 3종 삭제(코드가 이미 안 읽으므로 언제 해도 무해).
+5. **Edutrix Firebase(Cloud Run) — ✅ 2026-07-29 프로젝트 삭제 완료.** 아래는 그 경위(재발 방지용 기록).
+
+   > **소등 실행 기록(2026-07-29)**: `ijw-calander`·`classreport-web` 두 GCP 프로젝트 **삭제**, edutrix Vercel **삭제**.
+   > 삭제 직후 헬스체크 4종 통과(구글시트 200 · 첨부 PDF signed URL 200 · `/r` 200·GCS 참조 0 · 워커 발송 정상).
+   > 🔴 **얻은 교훈 — 빌링을 끄면 백업도 못 뜬다**: ijw는 Spark 전환 시점부터 GCS 다운로드·Firestore 조회가
+   > 전부 `billing disabled`로 막혀, 삭제 전 마지막 백업을 뜨지 못했다(참조 파일은 이미 Supabase 이관 완료라
+   > 운영 영향은 0, 미참조 고아 123개만 소실). **다음에 어떤 프로젝트든 내릴 땐 "백업 → 빌링 해제 → 삭제" 순서.**
+   > 🔴 **Cloud Run 폴백 제거가 실제로 방화벽이 됐다**: Spark 전환 직후 `submitToClassNoteV2`가 500→503으로
+   > 죽었는데, 같은 날 오전에 폴백을 코드에서 걷어낸 덕에 발송은 무중단이었다(제거 전이었다면 env 한 줄로 전멸).
+   > 잔여물: `classreport-web` Firestore(1세대 보고서·랭킹)는 edutrix→eywa로 계승·아카이브돼 삭제 승인(원장,
+   > 랭킹 데이터 불요). GCP 프로젝트 삭제는 **30일 유예**라 그 안에는 복구 가능.
+
+   ✅ **옵션 B 완료(2026-07-29): 코드에서 Cloud Run 분기를 제거**했다.
+   워커는 내부 API 경로 하나로만 게시하고 env 스위치(`CLASSNOTE_PUBLISH_MODE`)도 없앴다 — 폴백이 남아 있으면
+   env 한 줄이 빠지는 순간 삭제된 함수를 불러 전 발송이 실패한다(적대 검증 P1).
+   - 🔴 **삭제 전 필수 관문**: 연동 PC에 **새 zip 이관 완료**. 구워커는 코드가 바뀌어도 계속 Cloud Run을 부르고,
+     앱·DB와 호환돼 **화면상 정상으로 보인다**. 판정 = 발송 콘솔 워커 카드에 **"구버전 워커(옛 서버로 게시)"
+     경고가 사라졌는지**(하트비트 `caps.nativePublish`). 경고가 남아 있는 동안 Firebase를 지우면 발송 전멸.
+   - 옛 옵션 A(함수를 eywa 소유 GCP로 재배포)는 폐기 — 이중 관리만 남는다.
 6. 소등 후 잔여물: `edutrix_archive`(영구 보험) · lesson_reports 풀 이력(운영) · `D:\edutrix` 로컬 소스
    (함수 원본 — 옵션 B 완료 전까지 보관 필수).

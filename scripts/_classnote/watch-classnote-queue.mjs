@@ -12,7 +12,8 @@
  *
  * 실행: node --env-file=.env.local scripts/_classnote/watch-classnote-queue.mjs [--post]
  *   기본 dry-run(게시 안 함), 프로덕션은 --post. 등록: setup-classnote-pc.ps1(작업 스케줄러 "eywa-classnote-worker").
- * 로그: D:/tmp/classnote/watch.log (env CLASSNOTE_OUT).
+ * 로그: D:/tmp/classnote/watch.log (env CLASSNOTE_OUT). **watch.log = 항상 오늘 로그**이고,
+ * 날짜가 바뀌면 그 파일이 watch-YYYY-MM-DD.log로 넘어간다(보관 30일, env CLASSNOTE_LOG_KEEP_DAYS).
  */
 import fs from "node:fs";
 import os from "node:os";
@@ -20,6 +21,7 @@ import path from "node:path";
 import postgres from "postgres";
 import { isWorkerIssueLine } from "./worker-issue-filter.mjs";
 import { stateDirLabel, stateFile } from "./classnote-paths.mjs";
+import { DEFAULT_KEEP_DAYS, DEFAULT_MAX_BYTES, archiveName, needsRotation, pruneList, uniqueArchiveName } from "./log-rotation.mjs";
 import { BATCH, closeClassnoteAdminSession, launchBrowser, processQueueOnce, resolveTenant } from "./classnote-core.mjs";
 import { processNoticesOnce } from "./classnote-notice-core.mjs";
 import { provisionDailyOnce } from "./classnote-provision-core.mjs";
@@ -31,6 +33,35 @@ const POLL_MS = 15_000;
 const POST = process.argv.includes("--post");
 // 로그 파일 — 폴더 결정은 classnote-paths(단일 진입점, 쓰기 테스트까지 통과한 폴더).
 const LOG = stateFile("watch.log");
+// 로그 회전(2026-07-29 원장 지적 "log txt가 너무 길어진다") — 규칙은 log-rotation.mjs(순수+Vitest).
+// watch.log 이름은 **고정**한다: 연동 PC 안내문·문서가 전부 "로그는 watch.log"라고 지시하기 때문(이름이
+// 매일 바뀌면 그 안내가 전부 거짓이 된다). 날짜가 바뀐 뒤 첫 기록에서 옛 내용을 날짜 파일로 넘긴다.
+const LOG_KEEP_DAYS = Number(process.env.CLASSNOTE_LOG_KEEP_DAYS) || DEFAULT_KEEP_DAYS;
+const LOG_MAX_BYTES = (Number(process.env.CLASSNOTE_LOG_MAX_MB) || 0) * 1024 * 1024 || DEFAULT_MAX_BYTES;
+let lastRotateCheck = 0;
+let pendingRotateNote = null; // 회전 사실은 **새 파일 첫 줄**에 남긴다(어디로 갔는지 추적 가능하게)
+
+/** 필요하면 watch.log를 날짜/크기 기준으로 넘긴다. 실패해도 로깅은 계속(fail-open). */
+function maybeRotateLog(nowMs) {
+  if (!LOG) return;
+  if (nowMs - lastRotateCheck < 60_000) return; // stat 남발 방지 — 1분 간격이면 자정 감지에 충분
+  lastRotateCheck = nowMs;
+  try {
+    const st = fs.statSync(LOG);
+    const r = needsRotation({ mtimeMs: st.mtimeMs, sizeBytes: st.size, nowMs, maxBytes: LOG_MAX_BYTES });
+    if (!r.rotate) return;
+    const dir = path.dirname(LOG);
+    const name = uniqueArchiveName(archiveName({ ...r, nowMs }), (n) => fs.existsSync(path.join(dir, n)), nowMs);
+    fs.renameSync(LOG, path.join(dir, name));
+    pendingRotateNote = `[로그] 이전 로그를 ${name}로 넘겼습니다(${r.reason === "size" ? "크기 초과" : "날짜 변경"}).`;
+    // 보관 기간 지난 것 정리 — 형식이 맞는 회전본만(다른 상태파일은 pruneList가 제외).
+    for (const old of pruneList(fs.readdirSync(dir), { nowMs, keepDays: LOG_KEEP_DAYS })) {
+      fs.unlinkSync(path.join(dir, old));
+    }
+  } catch {
+    /* 파일 없음(첫 기동)·권한·잠금 — 회전 실패가 로깅을 막지 않는다 */
+  }
+}
 const HOSTNAME = os.hostname();
 const STARTED_AT = new Date().toISOString(); // 이 데몬 프로세스 시작 시각(재시작 감지)
 
@@ -48,7 +79,9 @@ const recentIssues = [];
  * 재발송하면 중복 글). 앱이 이 플래그를 보고 미지원이면 발송을 막는다(개인화 태그 롤아웃 가드와 같은 패턴).
  * ⚠️ 새 기능이 워커·앱 양쪽을 함께 바꿔야 할 때마다 여기에 키를 추가할 것(구버전은 키가 없어 자동 차단).
  */
-const WORKER_CAPS = { noticeAttachments: true };
+// nativePublish=이 워커가 Cloud Run 없이 자체 게시하는 버전인가(2026-07-29). 구버전엔 이 키가 없어
+// **키 부재 = 구워커**로 판정할 수 있다 — zip 이관 여부를 원격에서 확인하는 유일한 신호다.
+const WORKER_CAPS = { noticeAttachments: true, nativePublish: true };
 
 // 로그 타임스탬프 = KST(UTC+9) 고정 오프셋 — 연동 PC의 시스템 로케일/타임존과 무관하게 "YYYY-MM-DD HH:MM:SS".
 // watch.log이 UTC(…Z)로 찍혀 실제 시각과 9시간 어긋나 보이던 문제(2026-07-22 원장 제보). DB/하트비트는 ISO 유지(기계용).
@@ -133,9 +166,9 @@ async function heartbeat(tenant) {
     env: {
       logDir: stateDirLabel(),
       recent: recentIssues.slice(-RECENT_MAX),
-      // 게시 엔진(2026-07-28 §10 옵션 B) — local=워커 내장 내부 API(Cloud Run 미호출) / cloudrun=기존.
-      // 웹 발송 콘솔에서 어느 엔진으로 도는지 원격 확인용(컷오버·롤백 검증에 필수).
-      publishMode: process.env.CLASSNOTE_PUBLISH_MODE === "local" ? "local" : "cloudrun",
+      // 게시 엔진 표기 — 2026-07-29 Cloud Run 분기 제거 후 경로는 하나뿐이라 상수다(env 무관).
+      // ⚠️ 앱은 이 값을 읽지 않는다(extractWorkerEnv는 logDir·recent만 본다) — 이관 확인은 위 caps.nativePublish로.
+      publishMode: "native",
     },
   };
   await s`
@@ -151,6 +184,10 @@ async function main() {
     console.error("--post엔 CLASSNOTE_UPLOAD_ID/PW env 필요"); process.exit(1);
   }
   log(`데몬 시작 — mode=${POST ? "POST(실게시)" : "DRY-RUN"} host=${HOSTNAME} poll=${POLL_MS / 1000}s`);
+  // 옛 스위치가 .env.local에 남아 있으면 **무시된다는 사실**을 로그로 남긴다(2026-07-29). 07-28 안내문이
+  // "이 줄을 지우면 예전 방식으로 복귀"라고 적어 둔 탓에, 담당자가 지우고 '롤백했다'고 오인할 수 있다.
+  if (process.env.CLASSNOTE_PUBLISH_MODE)
+    log(`[안내] CLASSNOTE_PUBLISH_MODE=${process.env.CLASSNOTE_PUBLISH_MODE} 는 무시됩니다 — 게시 경로는 워커 내장 하나뿐(2026-07-29 폴백 제거).`);
   let backlogFastPoll = false; // 직전 주기가 배치를 꽉 채워 성공했는가 = 밀린 큐 → 다음 주기 즉시 진행
   for (;;) {
     try {

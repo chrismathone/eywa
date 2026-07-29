@@ -160,7 +160,6 @@ export const LayoutDashboard = createEywaCompatIcon("layoutGrid", "LayoutDashboa
 export const LayoutPanelTop = createEywaCompatIcon("panelTop", "LayoutPanelTop");
 export const ListChecks = createEywaCompatIcon("listChecks", "ListChecks");
 export const ListFilter = createEywaCompatIcon("filterList", "ListFilter");
-export const Lock = createEywaCompatIcon("lock", "Lock");
 export const LogIn = createEywaCompatIcon("logIn", "LogIn");
 export const Mail = createEywaCompatIcon("mail", "Mail");
 export const Megaphone = createEywaCompatIcon("megaphone", "Megaphone");

@@ -1,5 +1,6 @@
 import "server-only";
 import type { createClient } from "@/lib/supabase/server";
+import { COLLISION_STATUSES, isNameCollision } from "../classnote-collision";
 
 type ServerClient = Awaited<ReturnType<typeof createClient>>;
 
@@ -30,7 +31,8 @@ export async function teacherOwnsStudent(
  * ClassNote 동명이인 감지 — 이 학생과 **같은 이름의 활성(탈원 아님) 학생이 또 있으면** true.
  * ClassNote 보드/원아 선택이 이름 텍스트 기반(정확 일치 시 첫 발견 클릭, 고유 ID 없음)이라, 동명이인은
  * 엉뚱한 학생 보드에 게시될 위험이 있다 → 자동 발송을 막기 위한 안전 감지(RLS로 테넌트 격리).
- * ⚠️ 안전 우선: withdrawn만 제외(prospect/consulted/enrolled/on_hold는 잠재 보드 충돌로 간주해 과잉 차단).
+ * ⚠️ 세는 대상 = **보드가 존재할 수 있는 상태만**(enrolled·on_hold — classnote-collision.ts 근거).
+ * 예전엔 withdrawn만 제외해 **예비원생까지 세는 바람에 정상 발송이 막혔다**(김수아 등 3명, 2026-07-29 원장 승인 수정).
  */
 export async function hasClassnoteNameCollision(
   supabase: ServerClient,
@@ -51,13 +53,13 @@ export async function hasClassnoteNameCollision(
       .from("students")
       .select("id", { count: "exact", head: true })
       .eq("classnote_name", effName)
-      .neq("status", "withdrawn"),
+      .in("status", [...COLLISION_STATUSES]),
     supabase
       .from("students")
       .select("id", { count: "exact", head: true })
       .is("classnote_name", null)
       .eq("name", effName)
-      .neq("status", "withdrawn"),
+      .in("status", [...COLLISION_STATUSES]),
   ]);
-  return (withOverride.count ?? 0) + (withoutOverride.count ?? 0) > 1; // 본인 포함 2명 이상 = 충돌
+  return isNameCollision((withOverride.count ?? 0) + (withoutOverride.count ?? 0)); // 본인 포함 2명 이상 = 충돌
 }

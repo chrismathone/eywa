@@ -11,6 +11,7 @@ import { classnoteSendWindowLabel } from "../classnote-guard";
 import { applyStudentOrder } from "../student-order";
 import { rosterIncludesEnrollment } from "../roster-filter";
 import { matchReportsToRows } from "../report-unit";
+import { LEGACY_REPORT_SUBJECT, reportSubject } from "@/features/timetable/lib/report-subject";
 import { carryProgress } from "../progress-status";
 import { getTextbookOrdersForStudents } from "@/features/billing/server/textbook-queries";
 import type { AttendanceMark, OneScreenStudent } from "../types";
@@ -548,7 +549,10 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
   const sessionById = new Map(sessionRows.map((r) => [r.student_id, r]));
 
   // 학생별 대표 교재 — 강사 본인 주문 우선, (requestDate ?? createdAt) 최신, book_name 공란 제외.
-  // 교재요청서엔 과목 컬럼이 없어 (학생) 단위 대표 1건을 그 학생의 과목들에 기본값으로 적용(강사가 세션에서 덮어씀).
+  // ⚠️ `textbook_orders`엔 **과목 컬럼이 없다** → 학생 단위 대표 1건뿐이라 어느 과목 교재인지 모른다.
+  //    그래서 아래 적용은 **math 행에만** 한다(LEGACY_REPORT_SUBJECT와 같은 근거 — 실측 2026-07-29
+  //    전체 442건이 전부 수학 교재 '가우스/초N-M 발전/내신대비 중N-M'이고 영어 교재는 0건).
+  //    📌 영어 교재요청이 실제로 생기면 이 폴백으론 못 가르므로 `textbook_orders.subject` 컬럼이 정답이다.
   const bookByStudent = new Map<string, string>();
   {
     const byStudent = new Map<string, typeof textbookRows>();
@@ -589,6 +593,17 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
    * ⚠️ 직전 회차 자체(prevReport·교재 승계·prevScore)는 건드리지 않는다 — 그건 실제 회차가 사실이다.
    */
   const carryProgressOf = (r: PriorRow): string | null => carryProgress(r.recent_progress);
+  // 이 강사 화면에 실제로 있는 행들의 과목(학생별) — 아래 학생단위 폴백의 과목 게이트.
+  // 행 과목 미지정은 math 간주(report-unit 3차·G2 배지와 같은 규약).
+  const rowSubjectsByStudent = new Map<string, Set<string>>();
+  for (const os of byStudent.values())
+    rowSubjectsByStudent.set(
+      os.id,
+      new Set(os.subjects.map((su) => su.subjectKey?.trim() || LEGACY_REPORT_SUBJECT)),
+    );
+  /** 직전 회차 1건의 과목 — 보고서 subject → 반의 과목 → 레거시(math). 시간표 hover와 **같은 단일 소스**. */
+  const subjectOfPrior = (r: PriorRow): string =>
+    reportSubject({ subject: r.subject, classSubject: r.class_id ? classById.get(r.class_id)?.subject : null });
   // 학생단위 직전(prev 진도·prevScore 폴백) = 그 학생 과목행들 중 최신 회차.
   const priorReport = new Map<string, { progress: string | null; examInfo: string | null; date: string }>();
   // 학생별 직전 회차 후보 — RPC(0135a)가 이미 (학생, 반|과목) 최신 1건씩 반환. 행 매칭은 아래에서.
@@ -597,6 +612,11 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
     const arr = priorByStudent.get(r.student_id);
     if (arr) arr.push(r);
     else priorByStudent.set(r.student_id, [r]);
+    // 🔴 **과목 게이트**(원장 제보 2026-07-29) — 이 폴백은 반을 안 보므로 과목마저 안 보면 학생의
+    //    **아무 과목** 최신 회차가 들어온다. 영어 강사 화면에서 그건 100% 수학이었다(subject='english'
+    //    보고서 실측 0건) → 영어 행의 '이전 진도'와 점수 증감(▲▼)이 수학 회차 기준으로 표시됐다.
+    //    화면에 그 과목 행이 있는 보고서만 후보로 삼는다(행 매칭은 아래 matchReportsToRows가 더 정확히 한다).
+    if (!rowSubjectsByStudent.get(r.student_id)?.has(subjectOfPrior(r))) continue;
     const cur = priorReport.get(r.student_id);
     if (!cur || r.report_date > cur.date)
       // progress만 carry(시험 회차 건너뜀) — examInfo는 **실제 직전 회차** 것이어야 한다(그날 본 시험 점수가
@@ -722,8 +742,11 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
         if (carry) su.prev = label && carry.startsWith(label) ? carry.slice(label.length).trim() || carry : carry;
       }
       const prevBook = su.prevReport?.textbook?.trim();
-      if (prevBook) su.textbook = prevBook; // ③ 직전 교재
-      if (reqBook) su.textbook = reqBook; // ② 교재요청서(덮음)
+      if (prevBook) su.textbook = prevBook; // ③ 직전 교재(과목 매칭된 prevReport라 이미 그 과목 것)
+      // ② 교재요청서(덮음) — **math 행에만**. 과목 컬럼이 없어 영어 행에 주면 수학 교재가 영어 보고서
+      //    교재명 칸에 **미리 채워진 채** 저장·발송된다(실측: 영어 행에 '초5-2 발전 1권'·'가우스 중1-1 2권').
+      if (reqBook && (su.subjectKey?.trim() || LEGACY_REPORT_SUBJECT) === LEGACY_REPORT_SUBJECT)
+        su.textbook = reqBook;
     });
     // Phase3: 오늘 세션(작업중) 복원 — 점수/진도/태도/과제/확정을 하드코딩 기본값 위에 덮어씀.
     const sess = sessionById.get(os.id);

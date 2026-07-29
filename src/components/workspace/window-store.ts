@@ -51,9 +51,16 @@ export const MAX_WINDOWS = 6;
 /**
  * BL3 — 닫은 라우트 창을 파괴하지 않고 iframe을 살려두는 warm 풀 상한(재오픈 즉시화).
  * 초과 시 가장 오래 전에 닫힌 warm 창을 실제 파괴(메모리·백그라운드 타이머·realtime WS 가드).
- * minimize된 창과 동급 비용이라 상한만 지키면 안전. 2 = 최근 닫은 2개까지 즉시 재오픈.
+ * minimize된 창과 동급 비용이라 상한만 지키면 안전.
+ *
+ * **4** (2026-07-29, 2에서 상향) — 창 열기의 지배항이 서버가 아니라 **뷰어 PC의 클라 JS 실행**임이
+ * 실측으로 확정됐다(CPU 4배 스로틀 시 창 열기 405ms→746ms인데 서버 TTFB는 ~10ms로 불변). warm 재오픈은
+ * 그 실행을 통째로 건너뛰므로 상한을 늘린 만큼 그대로 체감이 된다. 12개 메뉴 중 실제로 오가는 건
+ * 3~5개라 4면 대부분의 왕복을 덮는다.
+ * ⚠️ 대가는 숨은 iframe 최대 4개(메모리). realtime WS는 [connection-demand](../../features/presence/connection-demand.ts)
+ *    지연 연결로 presence를 쓰는 창만 잡으므로, 상한을 올려도 WS가 상한만큼 늘지는 않는다.
  */
-export const CACHE_MAX = 2;
+export const CACHE_MAX = 4;
 /**
  * 창 식별 키. primary 인스턴스(instance 없음/0)는 `kind:paramId`(오늘과 동일 — 영속 레이아웃·배경 매핑 보존).
  * 복제본(instance≥1)만 `kind:paramId#n` 접미사를 단다. 기존 호출부는 전부 무인자라 영향 0.

@@ -10,7 +10,6 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { isTenantAudioPath } from "@/lib/storage/audio-path";
 import {
-  getMediaBackend,
   removeObject,
   resolveAudioReadUrl,
   verifyUploadedObject,
@@ -60,7 +59,7 @@ export async function startStudentConsultationFromAudio(
     if (meta.size > 0) verifiedSize = meta.size;
     audioUrl = await resolveAudioReadUrl(audioPath, "consultation", user.tenantId);
   } catch (e) {
-    await removeObject(audioPath, { backend: getMediaBackend(), bucket: "consultation-recordings" }).catch(() => {});
+    await removeObject(audioPath, { bucket: "consultation-recordings" }).catch(() => {});
     return { error: e instanceof Error ? e.message : "오디오 검증 실패" };
   }
 

@@ -12,7 +12,7 @@ import {
 import type { ConsultationListRow } from "@/features/enrollment/server/queries";
 import { MakeeduOriginTag } from "@/components/makeedu-origin-tag";
 import { EditingBadge } from "@/features/presence/editing-badge";
-import { relativeTimeKo } from "@/lib/relative-time";
+import { RelativeTime } from "@/components/relative-time";
 import { OUTCOME_PILL } from "./outcome-meta";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import {
@@ -32,8 +32,11 @@ const PAGE_SIZE = 8;
  */
 export function ColumnCards({
   cards,
+  nowMs,
 }: {
   cards: ConsultationListRow[];
+  /** 서버 렌더 시각 — 상대시간 하이드레이션 불일치 방지(RelativeTime 주석 참조). */
+  nowMs: number;
 }) {
   const [page, setPage] = useState(0);
   const subjectMaps = useSubjectMaps(); // 팝오버 상담 행의 과목 라벨(클라 단일소스)
@@ -139,7 +142,9 @@ export function ColumnCards({
                 ) : null}
                 <div className="text-text-faint mt-2 flex items-center justify-between text-[11.5px]">
                   <span>{c.consultantName ?? "—"}</span>
-                  <span className="num">{relativeTimeKo(c.consultedAt)}</span>
+                  <span className="num">
+                    <RelativeTime iso={c.consultedAt} nowMs={nowMs} />
+                  </span>
                 </div>
               </WindowLink>
             </li>

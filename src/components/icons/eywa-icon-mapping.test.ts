@@ -173,7 +173,9 @@ describe("Eywa icon compatibility mapping", () => {
       const mapped = new Set(Object.keys(EYWA_ICON_COMPAT_MAP));
 
       expect(mapped).toEqual(imported);
-      expect(mapped.size).toBe(143);
+      // 절대 개수 트립와이어(위 toEqual과 별개로 대량 유실을 잡는다). 별칭을 의도적으로 늘리거나
+      // 줄였을 때만 갱신할 것 — 143→142는 2026-07-29 `Lock` 제거분(소비처가 1beee908 '재인증 제거'에서 사라짐).
+      expect(mapped.size).toBe(142);
     },
     15_000,
   );

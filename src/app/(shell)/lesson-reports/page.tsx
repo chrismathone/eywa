@@ -3,7 +3,6 @@ import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { PageHeader } from "@/components/page-header";
 import { FaceTabs, type Face } from "@/components/face-tabs";
 import { getClassnoteQueue, getReportFilterOptions, getWeeklyWritingRates, getReportTeacherCandidates } from "@/features/report-admin/server/queries";
-import { getEdutrixUnmapped } from "@/features/report-admin/server/edutrix-map-queries";
 import { getBoardRosterCheck } from "@/features/report-admin/server/board-roster-queries";
 import { listReports } from "@/features/report-admin/server/actions";
 import { defaultReportFilters } from "@/features/report-admin/report-filters";
@@ -17,7 +16,6 @@ import { WritingRateCard } from "./_components/writing-rate-card";
 import { ReportList } from "./_components/report-list";
 import { ComposeTab } from "./_components/compose-tab";
 import { NoticeFace } from "./_components/notice-face";
-import { EdutrixUnmappedCard } from "./_components/edutrix-unmapped-card";
 import { BoardRosterCard } from "./_components/board-roster-card";
 import { ReportSection } from "@/app/(shell)/owner/_components/report-section";
 import { AiMentSection } from "@/app/(shell)/owner/_components/ai-ment-section";
@@ -26,22 +24,23 @@ export const dynamic = "force-dynamic";
 export const metadata = { title: "수업보고서 — eywa" };
 
 type Sp = Record<string, string | undefined>;
-// 관리 5면(작성률·미매핑·목록·공지·직접발송) + 설정 2면(보고서 표시·AI 멘트, owner 쓰기 권한 있을 때만).
-type Tab = "writing" | "unmapped" | "boards" | "list" | "notice" | "compose" | "report" | "ai_ment";
+// 관리 5면(작성률·반 구성·목록·공지·직접발송) + 설정 2면(보고서 표시·AI 멘트, owner 쓰기 권한 있을 때만).
+// (미매핑 탭은 2026-07-29 제거 — Edutrix 소등으로 원본이 사라져 매핑 자체가 불가능해졌다.)
+type Tab = "writing" | "boards" | "list" | "notice" | "compose" | "report" | "ai_ment";
 
 // 설정 2탭(report·ai_ment)은 saveOwnerSection/savePrompt가 owner 쓰기 게이트라 — owner를 못 쓰는
 // 계정(위임 안 받은 admin/manager)에겐 폼을 보여주면 '저장 거부'가 된다. canOwner일 때만 탭을 노출.
 // 직접 발송(compose)은 lesson_reports 쓰기 권한(canSend) 있을 때만(관리자 발송).
 function resolveTab(sp: Sp, canOwner: boolean, canSend: boolean): Tab {
   const t = sp.tab;
-  if (t === "unmapped" || t === "list" || t === "writing" || t === "notice" || t === "boards") return t;
+  if (t === "list" || t === "writing" || t === "notice" || t === "boards") return t;
   if (t === "compose" && canSend) return t;
   if ((t === "report" || t === "ai_ment") && canOwner) return t;
   return "writing";
 }
 
 /**
- * 수업보고서(발송 관리) — ClassNote 큐는 관리 탭 상단 고정, 작성률·미매핑·목록은 내부 FaceTabs(스크롤 단축).
+ * 수업보고서(발송 관리) — ClassNote 큐는 관리 탭 상단 고정, 작성률·반 구성·목록은 내부 FaceTabs(스크롤 단축).
  * 보고서 표시·AI 멘트 설정(옛 학원설정 두 탭)은 뒤에 붙여 5탭 — owner 쓰기 권한이 있을 때만. 강사 작성은 /onescreen.
  * 활성 탭만 무거운 조회(서버 렌더).
  */
@@ -57,7 +56,6 @@ export default async function LessonReportsPage({ searchParams }: { searchParams
 
   const FACES: Face[] = [
     { key: "writing", label: "작성률", href: "/lesson-reports?tab=writing", group: "관리" },
-    { key: "unmapped", label: "미매핑", href: "/lesson-reports?tab=unmapped", group: "관리" },
     { key: "boards", label: "반 구성", href: "/lesson-reports?tab=boards", group: "관리" },
     { key: "list", label: "목록", href: "/lesson-reports?tab=list", group: "관리" },
     { key: "notice", label: "반 공지", href: "/lesson-reports?tab=notice", group: "관리" },
@@ -80,9 +78,7 @@ export default async function LessonReportsPage({ searchParams }: { searchParams
         getWeeklyWritingRates(/^\d{4}-\d{2}$/.test(sp.rmonth ?? "") ? sp.rmonth : undefined).then((rates) => ({
           rates,
         }))
-      : tab === "unmapped"
-        ? getEdutrixUnmapped().then((edutrixMap) => ({ edutrixMap }))
-        : tab === "boards"
+      : tab === "boards"
           ? getBoardRosterCheck().then((boardRoster) => ({ boardRoster }))
         : tab === "report"
           ? Promise.all([getTenantSettings(), getReportTeacherCandidates()]).then(([settings, cand]) => ({
@@ -127,7 +123,7 @@ export default async function LessonReportsPage({ searchParams }: { searchParams
       <PageHeader
         eyebrow="발송 관리"
         title="수업보고서"
-        description="발송 큐는 위에서 상시 확인. 작성률·Edutrix 미매핑·보고서 목록은 탭으로 나눕니다. 작성은 선생님 원스크린에서 진행합니다."
+        description="발송 큐는 위에서 상시 확인. 작성률·반 구성·보고서 목록은 탭으로 나눕니다. 작성은 선생님 원스크린에서 진행합니다."
       />
 
       {!isSettings ? (
@@ -147,8 +143,6 @@ export default async function LessonReportsPage({ searchParams }: { searchParams
           <p className="text-text-faint text-sm">작성률을 불러올 수 없습니다.</p>
         )
       ) : null}
-
-      {tab === "unmapped" && "edutrixMap" in tabData ? <EdutrixUnmappedCard view={tabData.edutrixMap} /> : null}
 
       {tab === "boards" && "boardRoster" in tabData ? (
         tabData.boardRoster ? (

@@ -417,6 +417,10 @@ export type ConsultationDetail = ConsultationListRow & {
   recommendedClasses: { id: string; className: string; subject: string }[];
   /** 사전 상담 브리프 스냅샷(0152a) — 미생성이면 null. 상담 *전* 준비 문서. */
   prepBrief: PrepBriefRecord | null;
+  /** 브리프 생성 상태(0153b): null=대기/완료 · generating=백그라운드 생성 중 · failed=실패. */
+  prepBriefStatus: "generating" | "failed" | null;
+  /** 생성 실패 사유(한글 요약) — status=failed일 때만. */
+  prepBriefError: string | null;
   studentId: string | null;
   /** makeedu counselSeq — 있으면 makeedu 원본 상세 페이지로 바로 가는 링크를 표시. */
   makeeduId: string | null;
@@ -438,7 +442,7 @@ export async function getEnrollmentConsultationById(id: string): Promise<Consult
        subject, career_goal, siblings, safety_notes, registration_status,
        payment_amount, payment_date, registrar, follow_up_date, follow_up_content,
        non_registration_reason, shuttle_bus_request, privacy_agreement,
-       installment_agreement, subject_details, intake_checklist, prep_brief,
+       installment_agreement, subject_details, intake_checklist, prep_brief, prep_brief_status, prep_brief_error,
        counselor, received_date, student_type, siblings_details, consultation_date,
        consultant:consultant_id ( display_name )`,
     )
@@ -591,6 +595,11 @@ export async function getEnrollmentConsultationById(id: string): Promise<Consult
     recommendedClasses,
     // 버전 필드가 맞는 스냅샷만 통과 — 옛/깨진 jsonb가 화면 렌더를 크래시시키지 않게(speaker_labels 방어와 동일).
     prepBrief: isPrepBriefRecord(c.prep_brief) ? c.prep_brief : null,
+    prepBriefStatus:
+      c.prep_brief_status === "generating" || c.prep_brief_status === "failed"
+        ? c.prep_brief_status
+        : null,
+    prepBriefError: (c.prep_brief_error as string | null) ?? null,
     studentId: linkedStudentId,
     assignedClassCount,
     personConsultCount: 1, // 상세는 목록 카드 배지를 안 씀 — 타입 충족용(상세의 '다른 상담'은 getSiblingConsultations로 별도 조회).

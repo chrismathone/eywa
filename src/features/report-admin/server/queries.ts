@@ -10,6 +10,7 @@ import { needsAttention, summarizeQueue, type QueueSummary, HUMAN_RESOLVED_STATU
 import {
   extractWorkerEnv,
   formatWorkerResults,
+  workerSupportsNativePublish,
   type WorkerEnvInfo,
   type WorkerResultRow,
 } from "../worker-results";
@@ -112,6 +113,11 @@ export type WorkerStatus = {
   results: WorkerResultRow[];
   /** 워커 실행환경(로그 폴더·최근 경고) — 연동 PC가 다른 컴퓨터라 웹에서 보이게. 구워커는 빈 값. */
   env: WorkerEnvInfo;
+  /**
+   * 자체 게시(Cloud Run 미사용) 버전인가 — false면 **edutrix Firebase 소등 시 이 PC의 발송이 전부 실패**한다.
+   * zip 이관 여부를 원격에서 확인하는 유일한 신호(2026-07-29). 구워커는 키가 없어 false.
+   */
+  nativePublish: boolean;
 };
 
 export type ClassnoteQueueView = {
@@ -216,6 +222,7 @@ export async function getClassnoteQueue(days = 3): Promise<ClassnoteQueueView | 
       online: mins < WORKER_OFFLINE_MINUTES,
       results: formatWorkerResults(w.last_results),
       env: extractWorkerEnv(w.last_results),
+      nativePublish: workerSupportsNativePublish(w.last_results),
     };
   });
 

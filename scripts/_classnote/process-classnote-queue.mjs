@@ -1,7 +1,7 @@
 // ClassNote 발송 큐 처리기 (P3, one-shot). 처리 로직은 classnote-core.mjs와 공용(데몬과 동일 코어).
 // 사용: node --env-file=.env.local scripts/_classnote/process-classnote-queue.mjs [--post]
-//   기본 dry-run: queued 행을 잡아 /r 스크린샷 + Cloud Run payload 조립까지. **실게시 안 함**(처리 후 다시 queued로 반환).
-//   --post: 기존 Firebase 함수(submitToClassNoteV2)로 실제 POST → 실 ClassNote 게시 + 상태 갱신.
+//   기본 dry-run: queued 행을 잡아 /r 스크린샷까지만. **실게시 안 함**(처리 후 다시 queued로 반환).
+//   --post: 워커 내장 경로로 실제 ClassNote 게시 + 상태 갱신(2026-07-29 Cloud Run 분기 제거).
 // env: DATABASE_URL, CLASSNOTE_TENANT_ID(테넌트 2개+면 필수), CLASSNOTE_UPLOAD_ID/PW(--post 시), CLASSNOTE_SCREENSHOT_BASE(기본 http://localhost:3113).
 //
 // 무한 폴링·heartbeat·작업스케줄러 상주는 watch-classnote-queue.mjs(데몬). 여기선 1회 처리.

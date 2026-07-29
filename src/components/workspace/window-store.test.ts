@@ -224,7 +224,6 @@ describe("window-store close() — BL3 warm 캐시(재오픈 즉시화)", () => 
 
   const A = windowId("route", "a");
   const B = windowId("route", "b");
-  const C = windowId("route", "c");
   const openRoute = (id: string) =>
     useWindowStore.getState().open("route", { id, title: id, href: `/${id}` });
 
@@ -281,37 +280,48 @@ describe("window-store close() — BL3 warm 캐시(재오픈 즉시화)", () => 
     expect(useWindowStore.getState().cached).not.toContain(stu);
   });
 
+  // ⚠️ 아래 두 테스트는 CACHE_MAX 값을 **하드코딩하지 않는다** — 상한을 조정해도(2026-07-29: 2→4)
+  //    테스트가 규칙(LRU·상한 준수)을 계속 검증하도록 개수를 상수에서 도출한다.
+  const names = (n: number) => Array.from({ length: n }, (_, i) => `warm${i}`);
+  const idsOf = (ns: string[]) => ns.map((n) => windowId("route", n));
+
   it("LRU 상한 — CACHE_MAX 초과 시 가장 오래된 warm 창을 실제 파괴(live/nav도 정리)", () => {
-    openRoute("a");
-    openRoute("b");
-    openRoute("c");
-    const s = useWindowStore.getState();
-    s.close(A); // cached [A]
-    s.close(B); // cached [A,B]
-    s.close(C); // cached [A,B,C] → 상한 초과 → A 파괴
+    const ns = names(CACHE_MAX + 1); // 상한을 딱 1개 넘긴다
+    ns.forEach(openRoute);
+    const ids = idsOf(ns);
+    ids.forEach((id) => useWindowStore.getState().close(id));
+
     const st = useWindowStore.getState();
-    expect(st.cached).toEqual([B, C]);
+    const [oldest, ...survivors] = ids;
+    expect(st.cached).toEqual(survivors); // 가장 먼저 닫힌 것만 빠진다
     expect(st.cached.length).toBe(CACHE_MAX);
-    expect(st.windows[A]).toBeFalsy(); // 가장 오래된 것 파괴
-    expect(st.windows[B]).toBeTruthy();
-    expect(st.windows[C]).toBeTruthy();
-    expect(st.live[A]).toBeUndefined();
-    expect(st.nav[A]).toBeUndefined();
+    expect(st.windows[oldest!]).toBeFalsy(); // 가장 오래된 것 파괴
+    for (const id of survivors) expect(st.windows[id]).toBeTruthy();
+    expect(st.live[oldest!]).toBeUndefined();
+    expect(st.nav[oldest!]).toBeUndefined();
   });
 
   it("warm 창을 다시 열고 닫으면 LRU 끝으로 갱신 — 오래된 것으로 오인해 evict 안 됨", () => {
-    openRoute("a");
-    openRoute("b");
-    useWindowStore.getState().close(A); // cached [A]
-    useWindowStore.getState().close(B); // cached [A,B]
-    openRoute("a"); // A 재오픈 → cached [B]
-    expect(useWindowStore.getState().cached).toEqual([B]);
-    useWindowStore.getState().close(A); // cached [B,A]
-    expect(useWindowStore.getState().cached).toEqual([B, A]);
-    openRoute("c");
-    useWindowStore.getState().close(C); // cached [B,A,C] → B evict
+    const ns = names(CACHE_MAX); // 상한을 정확히 채운다(아직 evict 없음)
+    ns.forEach(openRoute);
+    const ids = idsOf(ns);
+    ids.forEach((id) => useWindowStore.getState().close(id));
+    expect(useWindowStore.getState().cached).toEqual(ids);
+
+    const [first, second, ...rest] = ids;
+    openRoute(ns[0]!); // 가장 오래된 것을 재오픈 → warm 풀에서 빠진다
+    expect(useWindowStore.getState().cached).toEqual([second!, ...rest]);
+    useWindowStore.getState().close(first!); // 다시 닫으면 LRU **끝**으로
+    expect(useWindowStore.getState().cached).toEqual([second!, ...rest, first!]);
+
+    openRoute("extra"); // 한 개 더 → 상한 초과
+    const extra = windowId("route", "extra");
+    useWindowStore.getState().close(extra);
+
     const st = useWindowStore.getState();
-    expect(st.cached).toEqual([A, C]);
-    expect(st.windows[B]).toBeFalsy();
+    // 재오픈으로 갱신된 first가 아니라, 이제 가장 오래된 second가 evict된다.
+    expect(st.cached).toEqual([...rest, first!, extra]);
+    expect(st.windows[second!]).toBeFalsy();
+    expect(st.windows[first!]).toBeTruthy();
   });
 });
