@@ -10,6 +10,7 @@ import type { ClassSheetWeekData } from "../server/queries";
 import type { RosterEntry } from "../lib/grid";
 import type { SheetHandlers } from "./sheet-client";
 import { AttendanceCheck, StatusCell } from "./status-cell";
+import { RosterBulk } from "./roster-bulk";
 
 const noteCls =
   "border-line text-foreground w-full rounded-lg border bg-transparent px-1.5 py-1 text-[12px] outline-none focus:border-primary disabled:opacity-60";
@@ -36,6 +37,30 @@ export const RosterTable = memo(function RosterTable({
   const canMarkDate = data.canMarkAttendanceByDate[date] ?? false;
   return (
     <div className="border-line mt-2 border-t pt-1.5">
+      {/* 일괄 입력 — 대상은 이 카드에 보이는 로스터 그 집합(표시=일괄 대상). 권한 없으면 렌더 안 함. */}
+      <div className="flex justify-end pb-1">
+        <RosterBulk
+          date={date}
+          slotStart={slotStart}
+          roster={roster}
+          marks={marks}
+          attendance={attendance}
+          canEdit={canEdit}
+          canMarkDate={canMarkDate}
+          onBulkAttendance={(ids) => ids.forEach((id) => handlers.markPresent(id, date))}
+          onBulkStatus={(ids, status) =>
+            ids.forEach((id) =>
+              handlers.saveMark(
+                id,
+                date,
+                slotStart,
+                status,
+                marks[`${id}|${date}|${slotStart}`]?.progressNote ?? null,
+              ),
+            )
+          }
+        />
+      </div>
       <table className="w-full border-collapse text-[12px]" style={{ tableLayout: "fixed" }}>
         <colgroup>
           <col style={{ width: 96 }} />

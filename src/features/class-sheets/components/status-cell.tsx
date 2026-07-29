@@ -5,6 +5,7 @@
 // absent/late 등 다른 상태는 배지 표시만 — 변경·삭제는 /attendance에서(툴팁 안내).
 // 상태(마크): '완/결석/안침' 칩 제안 + 자유 입력(enum 아님 — 운영 어휘 진화 허용). LWW.
 import { useState } from "react";
+import { Popover } from "@base-ui/react/popover";
 import { EyIcon } from "@/components/icons/eywa-icons";
 
 const ATT_LABEL: Record<string, string> = {
@@ -76,62 +77,73 @@ export function StatusCell({
     return <span className="text-text-dim text-[11px]">{value ?? ""}</span>;
   }
   return (
-    <div className="relative">
-      <button
-        type="button"
+    // base-ui Popover(앱 표준 11곳) — 바깥 클릭·ESC·포커스 이탈 닫기가 내장이고(수동 document 리스너
+    // 금지), Portal이라 DragScrollArea의 이중 overflow에 잘리지 않고 아래 공간이 부족하면 위로 뒤집힌다.
+    // 옛 구현은 td 안 absolute라 ① 바깥을 눌러도 안 닫히고 ② 스크롤 영역 끝에서 잘렸다(원장 제보 07-29).
+    <Popover.Root
+      open={open}
+      onOpenChange={(o) => {
+        setOpen(o);
+        if (!o) setFree(""); // 미저장 자유입력이 남아 다음에 열 때 되살아나면 저장된 값으로 오인한다
+      }}
+    >
+      <Popover.Trigger
         className={`w-full cursor-pointer rounded-lg border px-1.5 py-1 text-left text-[11px] ${
           value ? "border-line text-foreground" : "border-line text-text-faint border-dashed"
         }`}
         aria-label="상태"
-        onClick={() => setOpen((v) => !v)}
       >
         {value ?? "—"}
-      </button>
-      {open ? (
-        <div className="border-line bg-card absolute left-0 z-20 mt-1 w-[150px] rounded-xl border p-1.5 shadow-lg">
-          <div className="flex flex-wrap gap-1">
-            {STATUS_CHIPS.map((chip) => (
-              <button
-                key={chip}
-                type="button"
-                className={`cursor-pointer rounded-full border px-2 py-0.5 text-[11px] ${
-                  value === chip ? "border-foreground bg-foreground text-background" : "border-line text-text-dim"
-                }`}
-                onClick={() => {
-                  onChange(value === chip ? null : chip);
+      </Popover.Trigger>
+      <Popover.Portal>
+        <Popover.Positioner side="bottom" align="start" sideOffset={4} className="z-50">
+          <Popover.Popup className="bg-card border-line shadow-card w-[150px] rounded-lg border p-1.5 text-[11px] outline-none">
+            <div className="flex flex-wrap gap-1">
+              {STATUS_CHIPS.map((chip) => (
+                <button
+                  key={chip}
+                  type="button"
+                  className={`cursor-pointer rounded-full border px-2 py-0.5 text-[11px] ${
+                    value === chip
+                      ? "border-foreground bg-foreground text-background"
+                      : "border-line text-text-dim"
+                  }`}
+                  onClick={() => {
+                    onChange(value === chip ? null : chip);
+                    setOpen(false);
+                  }}
+                >
+                  {chip}
+                </button>
+              ))}
+            </div>
+            <input
+              className="border-line mt-1.5 w-full rounded-lg border bg-transparent px-1.5 py-1 text-[11px] outline-none"
+              placeholder="직접 입력"
+              value={free}
+              aria-label="상태 직접 입력"
+              onChange={(e) => setFree(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+                  onChange(free.trim() === "" ? null : free.trim());
+                  setFree("");
                   setOpen(false);
-                }}
-              >
-                {chip}
-              </button>
-            ))}
-          </div>
-          <input
-            className="border-line mt-1.5 w-full rounded-lg border bg-transparent px-1.5 py-1 text-[11px] outline-none"
-            placeholder="직접 입력"
-            value={free}
-            aria-label="상태 직접 입력"
-            onChange={(e) => setFree(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.nativeEvent.isComposing) {
-                onChange(free.trim() === "" ? null : free.trim());
-                setFree("");
+                }
+              }}
+            />
+            <button
+              type="button"
+              className="text-text-faint hover:text-danger mt-1 cursor-pointer text-[10px]"
+              onClick={() => {
+                onChange(null);
                 setOpen(false);
-              }
-            }}
-          />
-          <button
-            type="button"
-            className="text-text-faint hover:text-danger mt-1 cursor-pointer text-[10px]"
-            onClick={() => {
-              onChange(null);
-              setOpen(false);
-            }}
-          >
-            지우기
-          </button>
-        </div>
-      ) : null}
-    </div>
+              }}
+            >
+              지우기
+            </button>
+          </Popover.Popup>
+        </Popover.Positioner>
+      </Popover.Portal>
+    </Popover.Root>
   );
 }
