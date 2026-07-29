@@ -61,6 +61,10 @@
   anon REST 두 이름 모두 차단(42P01 / PGRST205) ✅ · 라이브 `invoices` 3,220행 무손상 ✅ ·
   **public 스키마에 RLS 꺼진 테이블 0개**(전수 재확인) ✅.
 - 되돌리기: `alter table archive.invoices_pre_line_items_20260708 set schema public;`
+- ⏰ **2026-08-29 재검토 예정** — 원장 결정(07-29) "백업은 1달 후에 지워보자". 그날 행수·합계 재확인 +
+  코드 참조 0 확인 + `audit_logs`에 invoice 기록이 생겼는지(= 대체재 유무) 확인 후 **승인 받고** DROP한다.
+  덤프를 먼저 전달하고 삭제도 마이그레이션 파일로 남길 것. 알림은 예약작업 `delete-invoices-bak-decision`,
+  다만 그 스케줄러는 앱이 열려 있을 때만 도니 **이 문서와 0156a 주석이 백업 채널**이다.
 
 📌 **앞으로 백업·스냅샷 테이블은 `archive` 스키마에 만든다.** public에 만들면 PostgREST가 자동
 노출하고 Supabase 기본 grant가 `anon`에 붙는다 — 0155a가 정확히 그 경로였다.
