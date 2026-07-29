@@ -110,10 +110,17 @@ export const studentLessonReportsTool = betaZodTool({
     limit: z.number().int().min(1).max(20).optional().describe("최대 건수(기본 8)"),
   }),
   run: async ({ studentId, limit }) => {
-    const rows = await getStudentLessonReports(studentId, limit ?? 8);
+    // 🔴 과목을 함께 넘긴다(2026-07-29 적대검증) — 없으면 모델이 **수학 진도를 그 학생의 전체 진도**로
+    //    서술한다(현재 저장된 보고서는 사실상 전부 수학). 라벨은 학원설정 단일 소스 —
+    //    raw 키("math")를 넘기면 모델이 그대로 사용자에게 흘릴 수 있다(UI raw 코드 노출 금지 규칙).
+    const [rows, subjectLabel] = await Promise.all([
+      getStudentLessonReports(studentId, limit ?? 8),
+      subjectLabeler(), // assistant 공용 라벨러(labels.ts) — 이 파일에서 buildSubjectMaps를 다시 짜지 않는다.
+    ]);
     return JSON.stringify({
       reports: rows.map((r) => ({
         date: r.reportDate,
+        subject: subjectLabel(r.subject),
         teacher: r.teacherName,
         progress: r.progress,
         exam: r.examInfo,
