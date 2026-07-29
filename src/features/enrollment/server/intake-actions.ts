@@ -6,7 +6,9 @@ import { headers } from "next/headers";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { accessLevelTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
+import { after } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { generatePrepBriefOnIntake } from "@/features/enrollment/server/prep-generate";
 import { logAction } from "@/features/audit/server/log";
 import { getTenantSettingsByTenantId } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
@@ -234,7 +236,7 @@ export async function submitPublicIntake(
     return { error: "학습 상담을 통해 가장 알고 싶은 문제를 1개 이상 선택해주세요" };
   }
 
-  const { error: insErr } = await admin.from("enrollment_consultations").insert({
+  const { data: inserted, error: insErr } = await admin.from("enrollment_consultations").insert({
     tenant_id: tok.tenant_id,
     prospect_name: prospectName,
     prospect_grade: prospectGrade,
@@ -259,8 +261,17 @@ export async function submitPublicIntake(
     from_public_intake: true,
     intake_token_id: tok.id,
     consultant_id: null,
-  });
+  }).select("id").single();
   if (insErr) return { error: "제출에 실패했습니다. 잠시 후 다시 시도해주세요" };
+
+  // 상담 준비 브리프 **자동 생성**(원장 지시 2026-07-29) — 학부모가 제출한 순간 상담지가 만들어져
+  // 있어야 상담사가 버튼을 누르러 들어올 필요가 없다. 백그라운드(after)라 학부모 화면은 즉시 완료되고,
+  // 실패해도 접수는 이미 저장돼 있으므로 학부모에겐 아무 영향이 없다(상세에서 수기 재생성 가능).
+  if (inserted?.id) {
+    const consultationId = inserted.id as string;
+    const tenantId = tok.tenant_id as string;
+    after(() => generatePrepBriefOnIntake(consultationId, tenantId));
+  }
 
   // 시도 로그를 성공으로 마킹(모니터링: 차단/실패 vs 성공 구분).
   if (attempt) await admin.from("intake_attempts").update({ ok: true }).eq("id", attempt.id);

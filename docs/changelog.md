@@ -5284,3 +5284,20 @@ billing tfoot·상태칩, attendance 30→14열·출석률 sticky, enrollment �
 
 ---
 
+
+## 2026-07-29 — 등록상담 사전 브리프: QR 제출 자동 생성 + 백그라운드화 + 사실 배선 수리
+
+- **자동 생성(원장 지시)**: 학부모가 QR 접수를 제출하면 `after()`로 브리프가 바로 만들어진다
+  ([intake-actions](../src/features/enrollment/server/intake-actions.ts) → `generatePrepBriefOnIntake`).
+  세션이 없어 admin client + 검증된 tenantId로 수집하며, **모든 쿼리에 명시 tenant 필터**(RLS 우회 경로의 유일한 방어선).
+  ⚠️ "페이지 로드 AI 호출 금지"와 충돌 아님 — 렌더가 아니라 제출 이벤트 1회(녹음 웹훅과 같은 모양). 재생성은 여전히 명시 버튼만.
+- **백그라운드 + 진행바**: 버튼이 20~60초 잡히던 병목을 회의록 재분석 구조로 이관(액션은 사실 수집까지만 하고
+  즉시 반환, LLM은 `after()`). 0153b `prep_brief_status/error` + [진행바](<../src/app/(shell)/enrollment/[id]/prep-brief-progress.tsx>)(시간 근사 + realtime/폴링 watcher). 재생성 중에도 직전 브리프 유지.
+- **provider = DeepSeek v4-pro**(Sonnet에서 전환, 원장 지시). 실측 72.6초·grounding 검증 통과.
+- ⚠️ **보안**: 생성 본체를 `"use server"` 밖(server-only `prep-generate.ts`)으로 분리 — `"use server"` 모듈의
+  모든 export는 클라이언트 호출 가능 엔드포인트라, 게이트 없는 헬퍼를 두면 크로스테넌트 생성이 가능해진다.
+- **사실 배선 수리(프로덕션 실측 감사)**: 부서 접두사 반 배제(21/106반 복구) · 형제 탐지 전화 포맷 정규화(QR 8건 누락 해소, 본인 제외)
+  · 같은 학교 재원생 거짓 "0명"(칠성초등학교 0→67명) · 영어 상담 EIE 단가 12건 누락 · 단가/교재 정렬·학년 필터 결정화
+  · 요일별 최소 시각 고정 · 이전 접수 `student_id` 분기 · 이미 재원 중인 학생 명시 · 정원 미입력 시 현원 오름차순 정렬.
+- **콘솔 경고 제거**: JetBrains Mono `preload:false` — 메뉴가 창=iframe이라 문서마다 preload가 곱해지는데
+  모노 글리프를 안 써 "preloaded but not used"가 문서 수만큼 찍혔다(실측 재현: 7회 로드 0건으로 소거).

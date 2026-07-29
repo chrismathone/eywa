@@ -1,8 +1,11 @@
 import "server-only";
 
 import { createClient } from "@/lib/supabase/server";
+
+/** 세션 client와 admin client 어느 쪽이든 받는다(공개 접수 자동 생성 경로용). */
+type SupabaseLike = Awaited<ReturnType<typeof createClient>>;
 import { fetchInChunks } from "@/lib/supabase/batch";
-import { getTenantSettings } from "@/features/owner/server/queries";
+import { getTenantSettings, getTenantSettingsByTenantId } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { GENDER_OPTIONS } from "@/features/enrollment/form-config";
 import { normalizePricingMode, pricingModeLabel } from "@/features/billing/tuition-catalog";
@@ -34,21 +37,34 @@ import type { IntakeChecklist } from "@/features/enrollment/intake-checklist";
  * ⚠️ 개인정보: 학부모 전화번호·주소·학생 연락처는 **facts에 담지 않는다**(브리프는 AI 프롬프트로 나가고
  *   인쇄물로 출력된다). 형제자매 후보는 연락처 매칭으로 *찾되* 결과는 이름·학년·학교만 싣는다.
  */
-export async function collectPrepFacts(consultationId: string): Promise<PrepFacts | null> {
-  const supabase = await createClient();
+export async function collectPrepFacts(
+  consultationId: string,
+  /**
+   * 세션이 없는 호출부(학부모 QR 공개접수 → 자동 생성)를 위한 주입.
+   * ⚠️ admin client는 RLS를 우회하므로 **tenantId 필수** — 아래 모든 쿼리가 명시 tenant 필터를 건다
+   *   (공개 경로의 tenantId는 검증된 접수 토큰에서만 오며 조작 불가).
+   */
+  opts: { client?: SupabaseLike; tenantId?: string } = {},
+): Promise<PrepFacts | null> {
+  const supabase = (opts.client ?? (await createClient())) as SupabaseLike;
 
-  const { data: c } = await supabase
+  let head = supabase
     .from("enrollment_consultations")
     .select(
       `id, tenant_id, prospect_name, prospect_grade, prospect_school, parent_name, parent_phone,
        parent_relation, parent_request, subject, gender, career_goal, siblings, siblings_details,
        safety_notes, shuttle_bus_request, consultation_path, intake_checklist, student_id`,
     )
-    .eq("id", consultationId)
-    .maybeSingle();
+    .eq("id", consultationId);
+  if (opts.tenantId) head = head.eq("tenant_id", opts.tenantId);
+  const { data: c } = await head.maybeSingle();
   if (!c) return null;
 
-  const settings = await getTenantSettings();
+  // 이후 모든 조회의 격리 키 — 세션 경로에선 RLS와 이중 방어, admin 경로에선 유일한 방어선이다.
+  const tenantId = c.tenant_id as string;
+  const settings = opts.tenantId
+    ? await getTenantSettingsByTenantId(tenantId)
+    : await getTenantSettings();
   const subjectMaps = buildSubjectMaps(settings.operations.subjects);
   const subjectLabel = c.subject ? subjectMaps.labelOf(c.subject) : null;
   const school = c.prospect_school?.trim() || null;
@@ -78,11 +94,13 @@ export async function collectPrepFacts(consultationId: string): Promise<PrepFact
         `id, class_name, subject, notes, classroom:classroom_id ( capacity ),
          teacher:teacher_id ( display_name )`,
       )
+      .eq("tenant_id", tenantId)
       .eq("is_active", true)
       .is("closed_at", null),
     supabase
       .from("tuition_catalog")
       .select("category, name, price, pricing_mode, note")
+      .eq("tenant_id", tenantId)
       .eq("is_active", true)
       .neq("category", "할인")
       // ⚠️ 2차 정렬 없이 자르면 어떤 12행이 실릴지 비결정이었다(수학 43행 중 앞머리가 '고등 수능·킬러'라
@@ -92,13 +110,20 @@ export async function collectPrepFacts(consultationId: string): Promise<PrepFact
     supabase
       .from("textbook_catalog")
       .select("title, subject, grade_level")
+      .eq("tenant_id", tenantId)
       .eq("is_active", true)
       .limit(200),
-    supabase.from("students").select("*", { count: "exact", head: true }).eq("status", "enrolled").eq("is_test", false),
+    supabase
+      .from("students")
+      .select("*", { count: "exact", head: true })
+      .eq("tenant_id", tenantId)
+      .eq("status", "enrolled")
+      .eq("is_test", false),
     schoolCandidates.length > 0
       ? supabase
           .from("students")
           .select("*", { count: "exact", head: true })
+          .eq("tenant_id", tenantId)
           .eq("status", "enrolled")
           .eq("is_test", false)
           .in("school", schoolCandidates)
@@ -107,6 +132,7 @@ export async function collectPrepFacts(consultationId: string): Promise<PrepFact
       ? supabase
           .from("students")
           .select("*", { count: "exact", head: true })
+          .eq("tenant_id", tenantId)
           .eq("status", "enrolled")
           .eq("is_test", false)
           .eq("grade", grade)
@@ -118,6 +144,7 @@ export async function collectPrepFacts(consultationId: string): Promise<PrepFact
       ? supabase
           .from("students")
           .select("id, name, school, grade")
+          .eq("tenant_id", tenantId)
           .eq("status", "enrolled")
           .eq("is_test", false)
           .in("parent_phone", phoneCandidates)
@@ -132,6 +159,7 @@ export async function collectPrepFacts(consultationId: string): Promise<PrepFact
       let q = supabase
         .from("enrollment_consultations")
         .select("id, consultation_date, consulted_at, outcome, subject")
+        .eq("tenant_id", tenantId)
         .neq("id", consultationId);
       if (linkedStudentId) {
         q = q.eq("student_id", linkedStudentId);
@@ -150,7 +178,12 @@ export async function collectPrepFacts(consultationId: string): Promise<PrepFact
   const enrolledByClass = new Map<string, number>();
   if (classIds.length > 0) {
     const enrollments = await fetchInChunks<{ class_id: string }>(classIds, (chunk) =>
-      supabase.from("enrollments").select("class_id").is("end_date", null).in("class_id", chunk),
+      supabase
+        .from("enrollments")
+        .select("class_id")
+        .eq("tenant_id", tenantId)
+        .is("end_date", null)
+        .in("class_id", chunk),
     );
     for (const e of enrollments) enrolledByClass.set(e.class_id, (enrolledByClass.get(e.class_id) ?? 0) + 1);
   }
@@ -161,7 +194,11 @@ export async function collectPrepFacts(consultationId: string): Promise<PrepFact
     const scheds = await fetchInChunks<{ class_id: string; day_of_week: string; start_time: string | null }>(
       classIds,
       (chunk) =>
-        supabase.from("class_schedules").select("class_id, day_of_week, start_time").in("class_id", chunk),
+        supabase
+          .from("class_schedules")
+          .select("class_id, day_of_week, start_time")
+          .eq("tenant_id", tenantId)
+          .in("class_id", chunk),
     );
     for (const s of scheds) {
       const list = scheduleByClass.get(s.class_id) ?? [];
@@ -203,6 +240,7 @@ export async function collectPrepFacts(consultationId: string): Promise<PrepFact
     const { data: selfRow } = await supabase
       .from("students")
       .select("id, status, enrollments:enrollments ( end_date, class:class_id ( class_name ) )")
+      .eq("tenant_id", tenantId)
       .eq("id", linkedStudentId)
       .maybeSingle();
     if (selfRow?.status === "enrolled") {
