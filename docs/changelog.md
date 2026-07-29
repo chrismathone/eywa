@@ -4,6 +4,38 @@
 
 ## 진행 상황
 
+### `invoices_bak_20260708` 정체 확인 → `archive` 스키마로 이관 (2026-07-29, 0156a)
+0155a로 권한만 막아둔 백업 테이블의 **정체를 실측으로 확정하고** public 밖으로 뺐다.
+
+**정체**: 2026-07-08 **수납 line_items 재구성 직전**의 invoices 스냅샷
+(출처 = 이 문서 "수납 브랜치 머지(2026-07-13)" 항목의 "DB는 이미 선반영(2821건 11-key line_items,
+백업 invoices_bak_20260708)"). 백업 최종 `updated_at` 2026-07-07 ↔ 현재 2026-07-28.
+
+**실측 대조 — 이 백업은 현재보다 낡고 덜 채워져 있다**
+- 2,002행 **전부**가 현재 `invoices`에 같은 id로 존재(백업에만 있는 행 = **0**).
+- 컬럼 20종에서 "백업엔 값이 있는데 현재는 NULL" = **전 컬럼 0건**(정보 유실 없음).
+- 오히려 현재가 더 채워짐: `billed_at` +1,967 · `discount_reason` +1,608 · `card_company` +1,509 ·
+  `cash_receipt_number` +375 · `paid_at` +97 · `payment_method` +96.
+- `line_items`도 유실 0 / 보강 2(백업의 2건은 array가 아니라 **string** = 깨진 값이었다).
+- 고유 정보는 **값이 바뀐 행의 이전 값**뿐: `status` 962 · `amount_paid` 183 · `paid_at` 147 ·
+  `amount_total` 109 · `amount_discount` 11 · `due_date` 7행.
+
+**🔴 그래서 DROP하지 않았다** — `audit_logs`에 invoice/billing/payment 계열 기록이 **0건**이다.
+위 "이전 값"을 담은 기록이 이 테이블 말고는 없다. 돈 데이터라 파기는 원장 판단으로 남긴다.
+
+**조치**: 데이터는 그대로 두고 **위치만** 옮겼다 — `public` → 신설 `archive` 스키마,
+이름도 자기설명적으로 `invoices_pre_line_items_20260708`.
+- `archive`는 PostgREST 노출 스키마가 아니다 → **노출 사고 유형 자체가 사라진다**(grant/RLS가
+  나중에 되돌려져도 무관). 추가로 스키마 USAGE를 `anon`/`authenticated`/`public`에서 revoke하고
+  `service_role`에만 부여(이중 방어). 테이블 RLS(force, 정책 0)도 유지.
+- 검증: public에서 소멸 ✅ · archive 2,002행 + 합계 ₩795,877,775 **정확 보존** ✅ ·
+  anon REST 두 이름 모두 차단(42P01 / PGRST205) ✅ · 라이브 `invoices` 3,220행 무손상 ✅ ·
+  **public 스키마에 RLS 꺼진 테이블 0개**(전수 재확인) ✅.
+- 되돌리기: `alter table archive.invoices_pre_line_items_20260708 set schema public;`
+
+📌 **앞으로 백업·스냅샷 테이블은 `archive` 스키마에 만든다.** public에 만들면 PostgREST가 자동
+노출하고 Supabase 기본 grant가 `anon`에 붙는다 — 0155a가 정확히 그 경로였다.
+
 ### 아이콘 규약 위반 2건 — main이 red였다 (2026-07-29) - test 2646 전부 통과
 `eywa-icon-mapping` 스위트가 main에서 **2건 실패 중**이었다(다른 작업의 부수효과라 아무도 자기 것으로 안 봄).
 Vercel 게이트는 `typecheck`뿐이라 배포는 계속 초록이었고, 그래서 조용히 방치됐다.
