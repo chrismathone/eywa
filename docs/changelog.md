@@ -5351,3 +5351,14 @@ billing tfoot·상태칩, attendance 30→14열·출석률 sticky, enrollment �
   더 위험하다. 발행 추가는 되돌렸다(죽은 WAL 비용 제거).
   📌 **기존 `ConsultationStatusWatcher`(상담 상세)의 realtime 구독도 같은 이유로 무동작**이며, 실제 갱신은
   옆에 붙은 5초 폴링이 하고 있었다. 새 화면에 realtime을 붙일 땐 "이벤트가 실제로 오는지" 먼저 확인할 것.
+
+## 2026-07-29 (3) — 상대시간 하이드레이션 불일치 수리
+
+등록상담 칸반·표에서 "1분 전"(서버) vs "방금 전"(클라) 불일치로 React가 그 트리를 통째로 재생성하고
+있었다(dev 콘솔 Hydration failed). 원인은 **client 컴포넌트가 렌더 중에 `relativeTimeKo(iso)`를 호출**해
+서버는 서버 시각, 하이드레이션은 브라우저 시각으로 계산한 것.
+- 신규 [`RelativeTime`](src/components/relative-time.tsx) — `nowMs`(서버 렌더 시각)를 **필수 prop**으로 받아
+  서버·클라 첫 렌더를 같은 기준으로 계산하고, 마운트 후 60초마다 브라우저 시각으로 갱신한다.
+- 소비처: `column-cards`·`enrollment-table`(둘 다 client) → page가 `nowMs`를 내려준다.
+- ⚠️ **RSC에서는 이 컴포넌트가 불필요**(하이드레이션 없음) — `relativeTimeKo` 직접 호출 유지.
+- ⚠️ RSC 본문의 `Date.now()`는 `react-hooks/purity`에 걸린다 → intake page 선례대로 eslint-disable 1줄.

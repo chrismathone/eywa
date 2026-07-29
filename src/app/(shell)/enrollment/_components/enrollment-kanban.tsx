@@ -42,7 +42,7 @@ function columnIcon(key: string) {
  * - lg(넓은 화면): 4열 그리드로 모든 컬럼 동시 노출.
  * - lg 미만(좁은 화면): 상단 탭바로 컬럼을 전환해 한 번에 1개만 보여 세로 스크롤을 줄인다.
  */
-export function EnrollmentKanban({ columns }: { columns: KanbanColumn[] }) {
+export function EnrollmentKanban({ columns, nowMs }: { columns: KanbanColumn[]; nowMs: number }) {
   const [active, setActive] = useState(0);
 
   return (
@@ -96,7 +96,7 @@ export function EnrollmentKanban({ columns }: { columns: KanbanColumn[] }) {
                 없음
               </div>
             ) : (
-              <ColumnCards cards={col.cards} />
+              <ColumnCards cards={col.cards} nowMs={nowMs} />
             )}
           </div>
         ))}

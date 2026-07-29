@@ -6,7 +6,7 @@
  *
  * 매칭 키(0122a·docs/classnote-read-sync-plan.md 실측):
  *  - **edutrix 발송분**(현재 대부분): 본문 `edutrix.vercel.app/share/{uuid}` = edutrix `reports.share_token`
- *    → eywa `lesson_reports.edutrix_share_token`(edutrix-sync가 채움)와 조인. 실측 체인 77/77 → 64/77.
+ *    → eywa `lesson_reports.edutrix_share_token`(edutrix-sync가 채웠던 값 — 2026-07-29 소등으로 크론은 제거, 값은 그대로 남아 매칭에 계속 쓰인다)와 조인. 실측 체인 77/77 → 64/77.
  *  - **eywa 발송분**(향후): 본문 `{공개도메인}/r/{share_token}` → 기존 `lesson_reports.share_token`와 조인.
  * 두 형태를 모두 파싱해 각각의 컬럼으로 갱신한다.
  *
@@ -167,7 +167,7 @@ export async function pollReportReadsOnce(
     // ⚠️ matched===0만으로는 경고할 수 없다(2026-07-21 실측 오경보): 창 안 후보를 **매 폴 다시 훑는** 구조라,
     // 이미 다 반영된 정상 정상상태에서도 `classnote_read_at is null` 필터에 걸려 갱신 0건이 된다.
     // (실측: 후보 576건 · eywa 토큰 보유 540행 중 297행 이미 읽음 채움 → 새로 채울 게 없어 0건.)
-    // 진짜 문제는 **토큰이 eywa에 아예 없을 때**(edutrix-sync 미배선)뿐이므로 그것만 구분해 경고한다.
+    // 진짜 문제는 **토큰이 eywa에 아예 없을 때**(옛 이관분 중 토큰 없는 행)뿐이므로 그것만 구분해 경고한다.
     const allTokens = updates.map((u) => u.token);
     const [{ n: known }] = await sql`
       select count(*)::int as n from lesson_reports
