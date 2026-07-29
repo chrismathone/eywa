@@ -23,7 +23,11 @@
  * 정답 = **데이터 정규화**(`teacher_name` 셀린T/김정은/김정은T → 김은정) 한 번. 그러면 이 함수는 그대로 맞는다.
  * ⚠️ 비교 대상: `박민엽`·`남정화`가 0건이 되는 건 **정당하다** — 그 학생들 요청은 실제로 이수진·이유정 것이다.
  *
- * 📌 `textbook_orders.created_by` 컬럼이 생기면 그걸 1순위로 보고 이 이름 매칭은 레거시 폴백으로 내릴 것.
+ * ⚠️ **표시명을 바꾸면 과거 요청이 읽기 전용이 된다**(같은 이유 — `teacher_name`은 그 시점 이름의 스냅샷).
+ * 직원관리에서 강사 표시명을 바꿀 땐 그 강사의 `textbook_orders.teacher_name`도 함께 옮길 것.
+ *
+ * 📌 `textbook_orders.created_by` 컬럼이 생기면 그걸 1순위로 보고 이 이름 매칭은 레거시 폴백으로 내릴 것 —
+ *    위 별칭·개명 문제가 한 번에 사라진다(이 함수는 폴백으로 남는다).
  */
 export function ownsTextbookRequest(
   teacherName: string | null | undefined,

@@ -444,8 +444,10 @@ export default async function AttendancePage({
                   파생도 안 도는 과목(현재 영어)이 여기 해당한다. */}
               {stats.totalRecords === 0 && !groups.some((g) => g.matrix.derivedActive) ? (
                 <p className="text-text-dim bg-bg-soft/60 border-line rounded-2xl border px-4 py-2.5 text-xs break-keep">
-                  이 반은 아직 <strong className="text-foreground">출결 기록이 없습니다</strong>. 수업보고서로 자동
-                  표시되는 과목이 아니라서, 셀을 직접 클릭해 찍은 값만 쌓입니다.
+                  {/* ⚠️ 강사 전체 보기는 반이 여럿이라 "이 반"이 거짓말이 된다(적대검증) — 모드에 맞춰 주어를 바꾼다. */}
+                  {mode === "teacher" ? "담당 반에" : "이 반은"} 아직{" "}
+                  <strong className="text-foreground">출결 기록이 없습니다</strong>. 수업보고서로 자동 표시되는
+                  과목이 아니라서, 셀을 직접 클릭해 찍은 값만 쌓입니다.
                 </p>
               ) : null}
               {groups.some((g) => g.matrix.derivedActive) ? (
