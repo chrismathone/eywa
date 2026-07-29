@@ -1,4 +1,4 @@
-# 발송 PC(연동 PC) 워커 zip 빌드 — **출력 위치는 항상 data\발송PC-워커\ 한 곳**.
+﻿# 발송 PC(연동 PC) 워커 zip 빌드 — **출력 위치는 항상 data\발송PC-워커\ 한 곳**.
 #
 # 왜 스크립트로 고정하나(2026-07-29 원장 지적): 그동안 zip을 만들 때마다 위치가 달랐다(D:\tmp · 바탕화면 ·
 # data\ …). 그러면 ① 지금 PC에 넣은 게 어느 버전인지 대조할 수 없고 ② 롤백에 쓸 **옛 zip이 어디 있는지**
@@ -53,7 +53,7 @@ $sizeKB = [math]::Round((Get-Item $zip).Length / 1KB)
 Write-Host ""
 Write-Host "빌드 완료" -ForegroundColor Green
 Write-Host "  파일 : $zip"
-Write-Host "  내용 : $count개 · ${sizeKB}KB · sha256 $hash…"
+Write-Host "  내용 : ${count}개 · ${sizeKB}KB · sha256 $hash…"
 Write-Host ""
 Write-Host "연동 PC 적용: 저장소 폴더에서 '여기에 압축 풀기'(덮어쓰기) → 발송PC-지정.bat"
 Write-Host "적용 확인   : 발송 큐 현황의 '구버전 워커' 경고가 사라지면 완료"
