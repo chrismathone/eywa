@@ -12,8 +12,10 @@ import {
   TEACHER_VIEW_STEPS,
   type BreakRangeSetting,
   type OperationsSettings,
+  type SkillAreaSetting,
   type SubjectSetting,
 } from "@/features/owner/settings-types";
+import { DEFAULT_ENGLISH_SKILL_AREAS } from "@/features/owner/skill-areas";
 import { ENGLISH_WEEKDAY_PERIOD_LIST } from "@/features/timetable/lib/periods";
 import {
   absorbSubject,
@@ -94,6 +96,11 @@ export function SubjectsSection({
                     {s.teacherViewLineExcluded?.length ? (
                       <span className={badgeCls}>제외 강사 {s.teacherViewLineExcluded.length}</span>
                     ) : null}
+                    {s.skillAreas?.length ? (
+                      <span className={badgeCls}>수업계획 영역 {s.skillAreas.length}</span>
+                    ) : s.key === "english" ? (
+                      <span className={badgeCls}>수업계획 기본 6영역</span>
+                    ) : null}
                   </span>
                 </summary>
 
@@ -119,6 +126,60 @@ export function SubjectsSection({
                       />
                       <span className="text-text-faint text-[11px]">일일·확인테스트 만점(/N). 기본 5</span>
                     </label>
+                  </div>
+
+                  {/* 수업계획(ECS) '구분' 영역 — English Class Sheet 계획 행의 영역 선택지. 저장은 영문 ID(불변),
+                      라벨만 편집. english는 미설정 시 기본 6영역(Vocab~Speaking) 자동 사용(resolveSkillAreas). */}
+                  <div className="space-y-2">
+                    <h4 className="text-foreground text-[12px] font-bold">수업계획(English Class Sheet) 영역</h4>
+                    {s.skillAreas?.length ? (
+                      <>
+                        <SkillAreaListEditor
+                          value={s.skillAreas}
+                          onChange={(v) => patchSubject(i, { skillAreas: v })}
+                        />
+                        <button
+                          type="button"
+                          className={ghostBtnCls}
+                          onClick={() =>
+                            patchSubject(i, {
+                              skillAreas: s.key === "english" ? undefined : [],
+                            })
+                          }
+                        >
+                          {s.key === "english"
+                            ? "기본 6영역(Vocab~Speaking)으로 되돌리기"
+                            : "영역 전체 해제 (수업계획 대상 제외)"}
+                        </button>
+                        <p className="text-text-faint text-[11px]">
+                          영역을 삭제해도 이미 저장된 수업계획 행은 사라지지 않고 &lsquo;미등록 영역&rsquo;으로
+                          표시됩니다.
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-text-dim text-[12px]">
+                          {s.key === "english"
+                            ? "기본 6영역(Vocab · Listening · Reading · Grammar · Writing · Speaking)을 사용 중입니다."
+                            : "이 과목은 수업계획(ECS) 대상이 아닙니다."}
+                        </p>
+                        <button
+                          type="button"
+                          className={ghostBtnCls}
+                          onClick={() =>
+                            patchSubject(i, {
+                              skillAreas:
+                                s.key === "english"
+                                  ? DEFAULT_ENGLISH_SKILL_AREAS.map((a) => ({ ...a }))
+                                  : [{ key: "area_1", label: "" }],
+                            })
+                          }
+                        >
+                          <Plus className="size-3.5" />{" "}
+                          {s.key === "english" ? "영역 직접 편집 (기본 복사로 시작)" : "영역 만들기"}
+                        </button>
+                      </>
+                    )}
                   </div>
 
                   {/* 평일 교시(과목 전용) — 미설정이면 전역(운영 체계 탭) 폴백. 주말 교시는 전역 공통. */}
@@ -392,6 +453,78 @@ function AbsorbDialog({
         )}
       </div>
     </dialog>
+  );
+}
+
+/**
+ * 수업계획(ECS) 영역 목록 편집기 — 라벨만 편집, 내부 ID(key)는 자동 확정·불변(subjects[].key와 동일 원칙:
+ * ID가 바뀌면 저장된 계획 행 연결이 끊긴다). 새 행은 라벨 blur 시 1회 확정 — 기본 6영역 라벨이면 표준
+ * ID(vocab 등), 아니면 area_N 폴백. 중복 라벨은 빨간 경고(저장은 superRefine가 이중 방어).
+ */
+const KNOWN_AREA_KEYS = new Map(
+  DEFAULT_ENGLISH_SKILL_AREAS.map((a) => [a.label.toLowerCase(), a.key]),
+);
+function SkillAreaListEditor({
+  value,
+  onChange,
+}: {
+  value: SkillAreaSetting[];
+  onChange: (v: SkillAreaSetting[]) => void;
+}) {
+  const labels = value.map((a) => a.label.trim()).filter(Boolean);
+  const dupLabels = new Set(labels.filter((l, i) => labels.indexOf(l) !== i));
+  const confirmKey = (i: number) => {
+    const a = value[i];
+    if (a.key) return; // 확정된 ID는 불변
+    const label = a.label.trim();
+    if (!label) return;
+    const known = KNOWN_AREA_KEYS.get(label.toLowerCase());
+    const used = new Set(value.map((x) => x.key).filter(Boolean));
+    let key = known && !used.has(known) ? known : "";
+    if (!key) {
+      let n = 1;
+      while (used.has(`area_${n}`)) n += 1;
+      key = `area_${n}`;
+    }
+    onChange(value.map((x, j) => (j === i ? { ...x, key } : x)));
+  };
+  return (
+    <div className="space-y-1.5">
+      {value.map((a, i) => {
+        const dup = a.label.trim() !== "" && dupLabels.has(a.label.trim());
+        return (
+          <div key={i} className="flex flex-wrap items-center gap-1.5">
+            <input
+              className={`${cellCls} w-[160px] ${dup ? "border-danger" : ""}`}
+              value={a.label}
+              placeholder="영역 이름 (예: Vocab)"
+              onChange={(e) =>
+                onChange(value.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)))
+              }
+              onBlur={() => confirmKey(i)}
+              aria-label="수업계획 영역 이름"
+            />
+            <span className={badgeCls}>{a.key || "ID 자동"}</span>
+            {dup ? <span className="text-danger text-[11px]">이름 중복</span> : null}
+            <button
+              type="button"
+              aria-label="영역 삭제"
+              className="text-text-faint hover:text-danger shrink-0 rounded p-1"
+              onClick={() => onChange(value.filter((_, j) => j !== i))}
+            >
+              <X className="size-4" />
+            </button>
+          </div>
+        );
+      })}
+      <button
+        type="button"
+        className={ghostBtnCls}
+        onClick={() => onChange([...value, { key: "", label: "" }])}
+      >
+        <Plus className="size-3.5" /> 영역 추가
+      </button>
+    </div>
   );
 }
 

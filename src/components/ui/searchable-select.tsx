@@ -86,7 +86,7 @@ export function SearchableSelect({
         type="button"
         aria-label={ariaLabel}
         onClick={() => setOpen((o) => !o)}
-        className={`flex w-full items-center justify-between gap-2 ${
+        className={`flex w-full cursor-pointer items-center justify-between gap-2 ${
           triggerClassName ??
           "border-border bg-card text-foreground rounded-md border px-3 py-2 text-sm"
         }`}
@@ -129,7 +129,7 @@ export function SearchableSelect({
                   <button
                     type="button"
                     onClick={() => choose(o.value)}
-                    className="hover:bg-bg-soft flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-sm"
+                    className="hover:bg-bg-soft flex w-full cursor-pointer items-center justify-between gap-2 px-3 py-1.5 text-left text-sm"
                   >
                     <span className="truncate">
                       {o.label}

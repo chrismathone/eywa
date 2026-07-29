@@ -435,6 +435,8 @@ export function TextbookRequestClient({
         onDownload={download}
         onSend={(r) => setSendIds([r.id])}
         capNote={isTeacher ? undefined : "최근 100건 기준 — 전체는 수납관리 › 교재"}
+        // 강사일 때만 소유 판정 — 사무실(master/accountant)은 서버에서도 이 게이트를 안 탄다.
+        ownerName={isTeacher ? requesterName : undefined}
       />
 
       {/* 학부모 발송 — 다이얼로그가 요청서 카드를 숨김 렌더해 PNG로 캡처하므로 카드 렌더 재료(학원명·로고·계좌)를 넘긴다. */}

@@ -17,6 +17,7 @@ import { goalAchieved } from "../grades-meta";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { isShareExpired } from "@/features/onescreen/share-expiry";
+import { reportSubject } from "@/features/timetable/lib/report-subject";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canSeeStudentEnrollment } from "./enrollment-gate";
 import { OUTCOME_LABEL, type OutcomeKey } from "@/features/enrollment/server/queries";
@@ -900,6 +901,12 @@ export type LessonReportRow = {
   classnoteStatus: string | null; // ClassNote 발송 상태(queued/processing/success/failed/too_old, null=미발송)
   linkStatus: "active" | "revoked" | "expired"; // 학부모 공유 링크 상태(P2a)
   viewCount: number; // 학부모 열람 수(share_link_views)
+  /**
+   * 과목 키 — `reportSubject()` 단일 소스(보고서 subject → 반의 과목 → 레거시 이관분=math).
+   * 🔴 2026-07-29 감사: 이 값이 **select조차 안 돼 있어** 화면이 과목을 표시할 방법이 없었다.
+   * 영어 강사가 학생을 열면 수학 진도 12줄이 그 학생의 '수업 진도'로 보였다(발송상태·열람수 배지까지 달고).
+   */
+  subject: string;
 };
 
 /** 학생 최근 수업보고서 N건(최신순) + 발송상태·링크상태·열람수(P2a/P3). 데이터는 Edutrix 이식(import-lesson-reports.cjs). */
@@ -907,17 +914,30 @@ export async function getStudentLessonReports(studentId: string, limit = 12): Pr
   const supabase = await createClient();
   const { data } = await supabase
     .from("lesson_reports")
-    .select("id, report_date, progress, exam_info, homework_score, teacher_name, classnote_status, revoked_at")
+    .select(
+      "id, report_date, progress, exam_info, homework_score, teacher_name, classnote_status, revoked_at, subject, class_id",
+    )
     .eq("student_id", studentId)
     .order("report_date", { ascending: false })
     .limit(limit);
   if (!data) return [];
 
   // 학부모 열람 수(share_link_views) — 이 보고서 id들로 조회 후 JS 집계(roster와 동일 패턴, RLS 테넌트 격리).
+  // 반 과목 — 보고서 subject가 비어도 반이 있으면 그 반의 과목이 진실(reportSubject 2순위). 12건뿐이라 가볍다.
+  // 서로 독립이라 병렬(B4).
   const ids = data.map((r) => r.id);
-  const viewRows = await fetchInChunks<{ lesson_report_id: string }>(ids, (chunk) =>
-    supabase.from("share_link_views").select("lesson_report_id").in("lesson_report_id", chunk),
-  );
+  const classIds = [...new Set(data.map((r) => r.class_id).filter(Boolean))] as string[];
+  const [viewRows, classRows] = await Promise.all([
+    fetchInChunks<{ lesson_report_id: string }>(ids, (chunk) =>
+      supabase.from("share_link_views").select("lesson_report_id").in("lesson_report_id", chunk),
+    ),
+    classIds.length
+      ? fetchInChunks<{ id: string; subject: string | null }>(classIds, (chunk) =>
+          supabase.from("classes").select("id, subject").in("id", chunk),
+        )
+      : Promise.resolve([] as { id: string; subject: string | null }[]),
+  ]);
+  const classSubjectById = new Map(classRows.map((c) => [c.id, c.subject]));
   const viewCountById = new Map<string, number>();
   for (const v of viewRows)
     viewCountById.set(v.lesson_report_id, (viewCountById.get(v.lesson_report_id) ?? 0) + 1);
@@ -932,6 +952,10 @@ export async function getStudentLessonReports(studentId: string, limit = 12): Pr
     classnoteStatus: r.classnote_status,
     linkStatus: r.revoked_at ? "revoked" : isShareExpired(r.report_date) ? "expired" : "active",
     viewCount: viewCountById.get(r.id) ?? 0,
+    subject: reportSubject({
+      subject: r.subject,
+      classSubject: r.class_id ? classSubjectById.get(r.class_id) : null,
+    }),
   }));
 }
 

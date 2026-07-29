@@ -49,6 +49,15 @@ export const integrationGroupSchema = z.object({
 });
 export type IntegrationGroupSetting = z.infer<typeof integrationGroupSchema>;
 
+// ECS(English Class Sheet) 수업계획 '구분' 영역 — 저장은 영문 slug(key), 라벨은 설정(라벨을 바꿔도
+// 저장된 계획 행의 key는 불변 = orphan 방지, subjects[].key와 동일 원칙). english는 미설정 시
+// resolveSkillAreas(skill-areas.ts)가 기본 6영역(Vocab~Speaking)을 프리필한다.
+export const skillAreaSchema = z.object({
+  key: z.string().min(1).max(24).regex(/^[a-z0-9_]+$/, "영문 소문자·숫자·_"),
+  label: z.string().min(1).max(24),
+});
+export type SkillAreaSetting = z.infer<typeof skillAreaSchema>;
+
 export const subjectSchema = z.object({
   key: z.string().min(1).max(24).regex(/^[a-z0-9_]+$/, "영문 소문자·숫자·_"),
   label: z.string().min(1).max(24),
@@ -82,6 +91,9 @@ export const subjectSchema = z.object({
   // 어느 그룹에도 없는 반을 맨 아래 '기타' 섹션으로 보여줄지. 미설정 = 보여줌(반이 조용히 사라지면 안 된다).
   integrationShowOthers: z.boolean().optional(),
   integrationOthersTitle: z.string().max(30).optional(),
+  // ECS 수업계획 '구분' 영역 목록(과목별). 미설정 = english만 기본 6영역 프리필(resolveSkillAreas),
+  // 그 외 과목은 빈 목록(= ECS 진입 대상 아님). (.optional() — 예외 필드 관례, weekdayPeriods와 동일.)
+  skillAreas: z.array(skillAreaSchema).max(20).optional(),
 });
 export type SubjectSetting = z.infer<typeof subjectSchema>;
 
@@ -160,6 +172,23 @@ export const operationsSchema = z
         ctx.addIssue({ code: "custom", message: `과목명이 중복됩니다: ${l}`, path: ["subjects", i, "label"] });
       }
       labels.add(l);
+      // ECS 영역(skillAreas) 중복 방지 — 과목 안에서 key·라벨 모두 유일해야 한다.
+      if (s.skillAreas) {
+        const areaKeys = new Set<string>();
+        const areaLabels = new Set<string>();
+        s.skillAreas.forEach((a, j) => {
+          const ak = a.key.trim();
+          if (ak && areaKeys.has(ak)) {
+            ctx.addIssue({ code: "custom", message: `영역 ID가 중복됩니다: ${ak}`, path: ["subjects", i, "skillAreas", j, "key"] });
+          }
+          areaKeys.add(ak);
+          const al = a.label.trim();
+          if (al && areaLabels.has(al)) {
+            ctx.addIssue({ code: "custom", message: `영역 이름이 중복됩니다: ${al}`, path: ["subjects", i, "skillAreas", j, "label"] });
+          }
+          areaLabels.add(al);
+        });
+      }
     });
   });
 export type OperationsSettings = z.infer<typeof operationsSchema>;

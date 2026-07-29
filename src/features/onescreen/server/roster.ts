@@ -60,9 +60,10 @@ export type TeacherRoster = {
   noticeMode: "A" | "B" | null; // 강사 본인의 AI 멘트 모드 오버라이드(null=학원 기본 따름) — 0104a
   academyNoticeMode: "A" | "B"; // 학원 기본 멘트 모드(report.noticeMode) — 토글 '학원 기본' 라벨 표시용
   classnoteSendEnabled: boolean; // ClassNote 실제 발송 스위치 — 공지 컴포저 dry-run 안내용
-  // 발송 허용 시간창 라벨("HH:MM~HH:MM", 무제한=null) — 원스크린 상단 강사 참고 안내. 활성 판정은
-  // classnoteSendWindowLabel(워커 fail-open 규약 미러). 빈 로스터는 발송 표면이 없어 null 고정.
-  sendWindowLabel: string | null;
+  // 발송 허용 시간창(HH:MM 원문, 무제한=null) — 원스크린 상단 강사 안내용. 활성 판정은
+  // classnoteSendWindowLabel(워커 fail-open 규약 미러). **표시 여부는 클라가 현재 KST로 재판정**
+  // (창 밖일 때만 노출, 원장 지시 2026-07-29)이라 라벨이 아니라 원문 시각을 내린다. 빈 로스터는 null 고정.
+  sendWindow: { start: string; end: string } | null;
   // 사진/파일 첨부 표시(report.showAttachments) — off면 첨부는 저장되지만 /r·인쇄·ClassNote 어디에도 안 실린다.
   // 강사 카드가 첨부 칸에 그 사실을 경고로 띄운다(입력 시점 고지 = 거짓 약속 차단, 2026-07-21).
   showAttachments: boolean;
@@ -99,7 +100,7 @@ type RosterSettings = Pick<
   | "noticeMode"
   | "academyNoticeMode"
   | "classnoteSendEnabled"
-  | "sendWindowLabel"
+  | "sendWindow"
   | "showAttachments"
   | "canEditAttendance"
 >;
@@ -130,7 +131,7 @@ function emptyRoster(today: string, date: string, teacherName: string, config: R
     noticeMode: null,
     academyNoticeMode: "A",
     classnoteSendEnabled: false,
-    sendWindowLabel: null,
+    sendWindow: null,
     showAttachments: true,
     canEditAttendance: false,
     ...config,
@@ -182,10 +183,16 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
     noticeMode,
     academyNoticeMode,
     classnoteSendEnabled: settings.report.classnoteSendEnabled,
-    sendWindowLabel: classnoteSendWindowLabel(
+    // 활성(둘 다 유효 HH:MM + 시작≠종료)일 때만 원문을 내린다 — 비활성이면 클라 배너 컴포넌트 자체가 안 뜬다.
+    sendWindow: classnoteSendWindowLabel(
       settings.report.classnoteSendWindowStart,
       settings.report.classnoteSendWindowEnd,
-    ),
+    )
+      ? {
+          start: settings.report.classnoteSendWindowStart.trim(),
+          end: settings.report.classnoteSendWindowEnd.trim(),
+        }
+      : null,
     showAttachments: settings.report.showAttachments,
     canEditAttendance,
   };

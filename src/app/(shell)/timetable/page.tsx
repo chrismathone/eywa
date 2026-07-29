@@ -30,7 +30,9 @@ import {
   parseTimetableKind,
   type TimetableKind,
 } from "@/features/timetable/lib/class-kind";
-import { canWriteTenant } from "@/lib/auth/perm-matrix";
+import { canAccessTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
+import { resolveSkillAreas } from "@/features/owner/skill-areas";
+import { EcsShortcut } from "./_components/ecs-shortcut";
 import { resolveIntegrationGroups } from "@/features/timetable/lib/integration-groups";
 import { GroupSettingsDialog } from "./_components/group-settings-dialog";
 import { getWeekReferenceDate, mondayOf, thisMonday, weekRelation } from "@/features/timetable/lib/week";
@@ -204,6 +206,14 @@ export default async function TimetablePage({
     viewPrefs.grades,
   );
   const subjectRow = settings.operations.subjects.find((s) => s.key === subject);
+  // English Class Sheet 바로가기 — 지금 보는 과목이 ECS 대상일 때만. 조건은 ECS의 정식 게이트
+  // (requireEcsClassAccess: english + skillAreas 비어있지 않음)와 **같은 식**이라야 "눌렀는데 빈 목록"이
+  // 안 생긴다. 권한(ecs=none인 상담사·회계)까지 봐야 눌러도 튕기는 죽은 버튼이 안 된다(#77).
+  // ⚠️ searchParams.subject를 직접 보지 말 것 — 기본 과목이면 URL에 파라미터가 없다(buildHref).
+  const showEcsShortcut =
+    subject === "english" &&
+    resolveSkillAreas(subjectRow).length > 0 &&
+    (await canAccessTenant(user.systemRole, "ecs"));
   // 통합뷰 섹션 = 커스텀 그룹(학원설정 과목별)이 켜져 있으면 그것, 아니면 "N교시 시작" 자동 그룹.
   // 엑셀·시트 빌더도 같은 해석기를 쓴다(화면과 배치 일치가 이 기능의 존재 이유).
   const customGroups = resolveIntegrationGroups(subjectRow);
@@ -313,13 +323,16 @@ export default async function TimetablePage({
           title="시간표"
           description={`${subjectMaps.labelOf(subject)} 주간표`}
           actions={
-            <StudentTally
-              enrolled={enrolledCount}
-              newCount={newCount}
-              transferCount={transferCount}
-              holdCount={holdCount}
-              withdrawnCount={withdrawnCount}
-            />
+            <>
+              {showEcsShortcut ? <EcsShortcut week={week} /> : null}
+              <StudentTally
+                enrolled={enrolledCount}
+                newCount={newCount}
+                transferCount={transferCount}
+                holdCount={holdCount}
+                withdrawnCount={withdrawnCount}
+              />
+            </>
           }
         />
       </div>
@@ -520,6 +533,13 @@ export default async function TimetablePage({
 
         {/* 학생 집계 — 최상위 프레임은 PageHeader 우측(문법 ②), 창(임베드)은 헤더 줄을 접으므로
             여기 툴바 우측에 노출(StudentTally 공유, 순수 마크업이라 이중 마운트 안전). */}
+        {/* 창(임베드)에선 위 헤더 줄이 통째로 접히므로 ECS 바로가기도 여기 한 번 더 — 안 그러면
+            실사용(플로팅 창)에서 영영 안 보인다(StudentTally가 이중 렌더인 이유와 동일). */}
+        {showEcsShortcut ? (
+          <div className="hidden [.embed-main_&]:block">
+            <EcsShortcut week={week} />
+          </div>
+        ) : null}
         <div className="hidden [.embed-main_&]:block">
           <StudentTally
             enrolled={enrolledCount}

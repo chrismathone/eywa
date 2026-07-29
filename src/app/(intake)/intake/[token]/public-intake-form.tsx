@@ -106,6 +106,13 @@ export function PublicIntakeForm({
       setStepError("상담 희망 과목을 1개 이상 선택해주세요");
       return;
     }
+    // ⚠️ 셔틀은 답을 비워도 DB엔 false(미신청)로 저장된다 — 무응답과 미신청이 구분되지 않는다.
+    //    상담 사전 브리프가 이 값을 "학부모가 신청하지 않음"으로 읽고 셔틀 질문을 생략하므로,
+    //    빈 채로 넘어가면 셔틀이 필요한 학부모가 상담에서 안내를 못 받는다 → 명시 선택을 받는다.
+    if (shuttle.enabled && applyShuttle === null) {
+      setStepError("셔틀버스 신청 여부를 선택해주세요");
+      return;
+    }
     setStepError(null);
     setStep(2);
     window.scrollTo({ top: 0 });
@@ -168,7 +175,12 @@ export function PublicIntakeForm({
         <input key={s} type="hidden" name="subjects" value={s} />
       ))}
       <input type="hidden" name="siblings" value={siblings} />
-      <input type="hidden" name="shuttleBusRequest" value={applyShuttle ? "true" : ""} />
+      {/* 미선택("")·미신청("false") 모두 서버에선 false로 저장된다 — 무응답을 남기지 않으려고 위 goStep2가 선택을 강제한다. */}
+      <input
+        type="hidden"
+        name="shuttleBusRequest"
+        value={applyShuttle === null ? "" : applyShuttle ? "true" : "false"}
+      />
 
       {/* 헤더 — Editorial 문법 ④: 학원 공간 사진 + 잉크 오버레이(구 단색 ink 블록의 대비는 유지).
           사진은 public/photos/intake-header.webp (placeholder → 실사 덮어쓰기, docs/photo-generation-prompts.md). */}
@@ -366,7 +378,8 @@ export function PublicIntakeForm({
       {shuttle.enabled ? (
         <Section title="셔틀버스 신청" tone="danger">
           <p className="text-foreground text-sm font-bold">
-            셔틀버스를 신청하시겠습니까?{shuttle.fee ? ` (${shuttle.fee})` : ""}
+            셔틀버스를 신청하시겠습니까?{shuttle.fee ? ` (${shuttle.fee})` : ""}{" "}
+            <span className="text-danger">*</span>
           </p>
           <div className="flex gap-2">
             {[

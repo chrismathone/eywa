@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { findNavGroup, findNavItem, navPresentation } from "./navigation";
+import { findNavGroup, findNavItem, navPresentation, subTabsForMenu, NAV_GROUPS } from "./navigation";
 
 describe("navigation presentation", () => {
   it("운영실은 데스크톱 작업면으로 표시한다", () => {
@@ -26,5 +26,29 @@ describe("navigation presentation", () => {
   it("query와 hash가 붙은 창 경로도 메뉴와 그룹을 유지한다", () => {
     expect(findNavItem("/billing?tab=expenses")?.menuKey).toBe("billing");
     expect(findNavGroup("/billing?tab=expenses#pending")?.label).toBe("운영");
+  });
+});
+
+describe("하위 카테고리(subOf)", () => {
+  it("English Class Sheet는 시간표의 하부탭으로 나오고 자기 menuKey를 갖는다(자기 창으로 열림)", () => {
+    const subs = subTabsForMenu("timetable");
+    expect(subs).toContainEqual({ label: "English Class Sheet", href: "/ecs", menuKey: "ecs" });
+  });
+
+  it("subOf 항목은 창 해석(findNavItem)에 그대로 남는다 — 지우면 WindowLink가 창을 못 연다", () => {
+    expect(findNavItem("/ecs")).toMatchObject({ menuKey: "ecs", subOf: "timetable" });
+    expect(findNavItem("/ecs/abc-123")?.menuKey).toBe("ecs");
+  });
+
+  it("subOf는 hidden이 아니다 — 검색 팰릿·모바일 내비에서 계속 찾을 수 있어야 한다", () => {
+    expect(findNavItem("/ecs")?.hidden).not.toBe(true);
+    const inNav = NAV_GROUPS.flatMap((g) => g.items).some((i) => i.href === "/ecs");
+    expect(inNav).toBe(true);
+  });
+
+  it("면(?tab=)만 있는 메뉴는 menuKey 없이 그대로 — 부모 창에서 면 전환", () => {
+    const subs = subTabsForMenu("billing");
+    expect(subs.length).toBeGreaterThan(0);
+    expect(subs.every((s) => s.menuKey === undefined)).toBe(true);
   });
 });

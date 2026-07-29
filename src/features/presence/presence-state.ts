@@ -28,6 +28,7 @@ export const PRESENCE_SCOPE_PREFIXES = [
   "meeting",
   "tenant-settings",
   "onescreen", // 원스크린 날짜 단위(`onescreen:{teacherId}:{date}`) — 같은 계정 다른 창/기기 동시 작성 경고(락 아님)
+  "ecs", // English Class Sheet 주차 단위(`ecs:{classId}:{weekMonday}`) — 팀티칭 동시편집은 정상이라 중립 톤 배지(충돌 방지는 CAS)
 ] as const;
 
 export function isPresenceScope(scope: string): boolean {

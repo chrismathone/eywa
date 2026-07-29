@@ -18,6 +18,119 @@
   ⚠️ 노현진·김화영은 **남긴 행이 퇴사(inactive)** 상태인데 시트는 재직 — 상태는 건드리지 않았다(원장 확인 대상).
 - 로그인 주소 없는 직원 30 → **17명**(재직 13).
 
+### ECS 부담임 확장 — 슬롯 강사(FK)도 시트 접근, JJ·LAB 당번은 구조적 자동 제외 (2026-07-29) - tsc0/lint0/test50/build✓
+원장 승인: *"확장. 부담임도 ECS 열 수 있도록. JJ나 LAB의 아르바이트 강사는 필요없음."* 영어 슬롯 633개 중
+226개가 슬롯 강사≠반담당이라 부담임(이현이 7반·크리스틴 6반·김동후 5반 등 9명)이 "담당 반이 아닙니다"에 막혔었다.
+- **ECS 전용 보조 스코프** [`ecsAssistantClassIds`](../src/features/class-sheets/server/access.ts) —
+  `class_schedules.teacher_id`(FK) 기준 english 반. 전역 teacher-scope.ts는 **불변**(전 화면 파급 차단).
+  게이트 ②단계·랜딩(`ecsVisibleClassFilter` 합집합)·강사 미니셸 메뉴 게이트(반담당 영어 없을 때만 평가) 3곳 배선.
+- 🔴 **JJ·LAB 제외는 라벨 검사가 아니라 구조**: 당번 슬롯은 teacher_id가 전부 null(실측 90/90)이라 FK 확장에
+  애초에 안 걸린다. slot_teacher_label 권한 근거 금지 규칙 그대로 유지 — **라벨 검사를 넣지 말 것**.
+- 보조 스코프 조회 실패 = [](기존 반담당 동작으로 강등) — 확장이 죽어도 본 게이트는 안 죽는다.
+### 🔴 강사뷰 과목 분리 2탄 — 교재요청 권한·진도탭 과목·출석부 거짓 0% (2026-07-29) - tsc0/lint0/test2666(신규5)
+[원스크린 과목 분리](#-영어-강사-원스크린에-수학-보고서가-배선돼-있었다--과목별-분리-2026-07-29---test-2650-전부-통과)의
+적대 감사를 **강사뷰의 나머지 메뉴**로 넓혀 3건을 잡았다. 뿌리는 같다 — 수학·영어를 같이 듣는 학생은
+**두 강사 모두의 담당**이라, "담당 학생인가"만 묻는 게이트는 과목을 못 가른다.
+
+**① 🔴 교재 요청 — 영어 강사가 수학 강사의 요청서를 수정·삭제·학부모 발송할 수 있었다(쓰기 경로).**
+`loadEditableRequest`·`loadScopedOrders`의 게이트가 **담당 학생 여부뿐**이었고, 화면엔 요청 강사명도 없어
+남의 것인 줄 알 방법이 없었다. 특히 **발송 경로엔 "사무실 미처리" 제한조차 없어** 표면이 가장 넓었다
+(실측: 영어 전담 강사가 학부모에게 보낼 수 있던 건수 **155건**, 수정·삭제 1건).
+→ 소유 판정을 순수함수 [`ownsTextbookRequest`](../src/features/billing/textbook-ownership.ts) 단일 소스로 만들고
+**서버 2곳 + 화면**이 같은 함수를 쓰게 했다(#77 — 화면만 잠그지 않는다). 행에는 남의 것일 때 `· 요청 김민주`를
+찍어 **왜 버튼이 없는지**를 설명한다. 사무실(master/accountant)은 `effectiveTeacherId()`가 null이라 무영향.
+- 실측 전/후 — 영어 전담: 발송 **155→0**, 수정·삭제 **1→0**. 수학 담당: 발송 578→222(남의 것이 빠진 것), 수정·삭제 5→3.
+- ✅ **소유자가 자기 요청을 잃지 않는지 전수 확인**: 미처리 3건 전부 소유자가 지금도 그 학생 담당(접근 유지).
+- 🔴 **원장 판단 필요 — `김은정` 선생님 51건이 별칭으로 저장돼 있다**: `셀린T` 45건(users.english_name=`Celine`)
+  \+ `김정은` 6건(이름 전치). 한글 음차·전치는 코드로 이을 수 없고, 느슨하게 맞추면 남의 것을 내 것으로 오판해
+  **원래 버그가 되돌아온다** → 코드는 엄격 유지, 정답은 **데이터 정규화 1회**(teacher_name → 김은정).
+  그전까지 그 51건은 본인에게도 읽기 전용(사무실은 처리 가능). ⚠️ `박민엽`·`남정화`가 0건이 되는 건 **정당**하다
+  (그 학생들 요청은 실제로 이수진·이유정 것).
+
+**② 내 학생 → 진도 탭이 과목 없이 수업보고서 12건을 나열했다.** `getStudentLessonReports`가 `subject`를
+**select조차 안 해서** 화면이 과목을 표시할 방법이 없었다 → 영어 강사가 학생을 열면 수학 진도 12줄이
+그 학생의 '수업 진도'로 보였다(발송상태·열람수 배지까지). → `subject`·`class_id`를 싣고 `reportSubject()`로
+판정해 **과목 열 신설**(라벨은 `buildSubjectMaps` 학원설정 단일 소스). 반 과목 조회는 12건뿐이라 가볍고 `Promise.all`(B4).
+📌 필터가 아니라 **라벨**이다 — 학생 상세는 학생이 주어라 전 과목이 보이는 게 맞다.
+
+**③ 출석부가 영어 반에 "출석률 0%"를 빨갛게 단언했다.** 영어는 파생 미가동(의도된 설계)이고 수기 기록도
+사실상 0(실측 `attendance_records` 영어 5건 / 수학 5,935건)이라 늘 0%였는데, 설명 문구는 `derivedActive=false`라
+숨겨져 숫자만 남았다. → **과목을 하드코딩하지 않고 `stats.totalRecords === 0`으로** 가른다: 기록이 없으면
+`—` + `기록 없음` + "이 반은 아직 출결 기록이 없습니다" 안내. 데이터가 생기면 저절로 숫자로 돌아오고,
+수학 반이 진짜 0%면 그대로 빨갛게 뜬다. 강사 전체 보기 합산에도 `totalRecords`를 실었다.
+
+**정상으로 확인된 곳(감사 결과, 손대지 않음)**: 시간표 hover(0150a RPC) · 성적관리(`teacherScope.subjects` 필터) ·
+내 수업 · 학생상담 · 성적 탭 · 지출결의서 · 데이터베이스(billing 게이트). 출석부의 형제반 판정
+(`attendance/server/queries.ts:657-676`)은 **이 함정을 주석으로 명시하고 이미 피해 간** 유일한 곳이었다.
+
+### 원스크린 발송 시간대 안내 = 창 밖일 때만 표시 (2026-07-29) - tsc0/lint0/test460/build✓
+원장 지시: 발송 시간대 배너를 **해당 시간대 밖일 때만**(KST). 창 안에선 발송이 그냥 나가므로 상시 안내는
+노이즈였다. 판정은 기존 워커 미러 순수함수 `classnoteSendWindowHint`(창 안·무제한=null, Vitest 잠금) 재사용,
+원스크린은 하루 종일 켜두는 화면이라 [SendWindowNotice](../src/features/onescreen/components/send-window-notice.tsx)가
+**30초마다 재판정**(서버 시점 고정이면 8시에 연 화면이 9시에도 배너를 보이는 거짓말). useSyncExternalStore
+(SSR 스냅샷 null)라 hydration 불일치·setState-in-effect(#25) 없음. roster는 라벨 대신 시간창 원문을 내린다.
+
+### English Class Sheet(ECS) — 영어 반별 주간 수업계획서/출석부 네이티브 신설 (2026-07-29) - tsc0/lint0/유닛41+통합15/build✓
+영어팀 구글시트(반 1개=스프레드시트 1개, 주차 탭 매주 복제 — 실물 3종+마스터 전수 조사) eywa 이식. 원장 확정:
+네이티브 재구현·철저 배선·DB화 / 출석=attendance_records 실기록 / 이관 없이 새 주부터 / 메뉴명 "English Class Sheet".
+3차에 걸친 계획 검수(Blocker 총 14건)를 계약·테스트로 고정한 뒤 구현(계획 파일 v2.2).
+- **DB(0157a)**: `class_sheet_plan_lines`(앵커=실날짜+slot_start, 행 식별=id, 위치 UNIQUE는 skill_area **제외**+DEFERRABLE)
+  ·`class_sheet_goals`(담임/부담임×월간/주간)·`class_sheet_student_marks`(**교시 포함 키** — 하루 2교시 독립)·`class_sheet_memos`.
+  🔒 4테이블 **RLS 정책 0 + PUBLIC/anon/authenticated 정밀 revoke = service_role 전용**(브라우저 REST 우회 차단) +
+  classes/students `(tenant_id,id)` 복합 FK(교차 테넌트 봉쇄). RPC 5종(create/move/delete/copy_week/mark_present_if_absent) —
+  슬롯 advisory xact 락·재번호·⚠️ DEFERRABLE UNIQUE는 ON CONFLICT 불가라 insert 전부 WHERE NOT EXISTS.
+- **권한**: menuKey `ecs`(teacher=scoped·viewer=readonly) + **`requireEcsClassAccess` 단일 게이트**(#77 — 조회·전 액션 공용:
+  effectiveTeacherScope 상시 + 반 tenant 일치 + 진입 조건 `subject==="english" && resolveSkillAreas>0`).
+  변경은 전부 `tenant+class+id` 3중 조건 결속, mixed-class 배치 전체 거부, field 런타임 allowlist(5필드).
+  ⚠️ `slot_teacher_label`은 권한 근거 사용 금지(표시 전용 — LAB/JJ 역할 라벨). label→userId 바인딩은 후속.
+- **설정**: `subjects[].skillAreas`(slug+라벨) 5단계 완주 — english 미설정 시 기본 6영역(Vocab~Speaking) 프리필
+  (`resolveSkillAreas`), 과목 운영 탭 편집기(ID 자동 확정·불변), 삭제된 slug는 "미등록 영역"으로 표시 유지(소실 금지).
+- **저장 계약**: 계획 셀 = **필드 단위 CAS**(`is not distinct from` — 같은 행 두 필드 자기충돌 없음, already_applied=
+  응답 유실 재전송 흡수, 진짜 충돌=셀 pause+"서버값/내 값" 사용자 선택 — 자동 재전송은 자기 앞선 저장 rebase만).
+  goals/marks/memos = **명시적 LWW**(단일 편집자 가정). NULL/빈문자 codec(`normalizePlanText`) TS↔SQL 동일.
+  미저장분은 **versioned patch journal**(IDB, 키에 마운트별 instanceId — iframe 복제·복제 탭 격리, 단일 writer chain,
+  (mutationId,rev) 일치 시만 ack 삭제, flush=IDB persist 대기, 죽은 인스턴스 회수는 Web Locks/BC ping 확인 후 claim).
+- **출석(비파괴)**: ECS에서 허용되는 유일한 조작 = "기록 없음→present"(`ecs_mark_present_if_absent` — 원자,
+  기록 있으면 no-op). absent 등은 배지 표시만·수정은 /attendance. 권한=기존 attendance 계약+**날짜별** 7일 창.
+  영어 반 출결이 /attendance 매트릭스에 자동 생존. `DERIVED_ATTENDANCE_SUBJECTS`(math) 무접촉.
+- **주간 로더**: `getWeeklyScheduleWithStudents` 재사용 **안 함**(valid 범위 유실+주 대표일 1회 판정) — ECS 전용
+  `buildWeekGrid`(순수, Vitest 12): **실날짜별** 스케줄 유효성(주중 시간표 변경)·로스터 합집합(eligible∪마크∪출석 —
+  비eligible은 historical 읽기 전용)·attendanceOnly 분리·고아 슬롯(계획∪마크∪메모) 보존.
+  ⚠️ **비보장 명시**: attendance_days/on_hold는 이력이 없어 현재값 기준(전 화면 공통 한계).
+- **UI**: `/ecs`(랜딩: 반 카드+작성률 분모=스케줄 교시·고아 제외) + `/ecs/[classId]?week=&day=`(접이식 계획 패널 300px +
+  DragScrollArea 요일 컬럼, 요일 알약은 History API — flush·재조회 없음, 주/반 이동은 **flush 성공 후에만**).
+  창 1400×760, loading.tsx(B7), presence `ecs:` allowlist(중립 톤 — 충돌 방지는 CAS), 메뉴 13곳 배선.
+- **유기 연동**: 반 상세(영어 반) 헤더 "Class Sheet" 창 버튼. 시간표→반 이름 엔티티 링크→반 상세→Class Sheet 경로
+  (hover 카드는 `pointer-events-none`이라 카드 안 링크 불가 — 직접 링크는 의도적 비채택).
+- **비범위(재제안 금지 계열)**: 기존 28개 시트 데이터 이관(새로 시작 확정)·시트 역-export·영어 파생출석 ON·
+  원스크린/ClassNote 통합·slot_teacher_label→userId 바인딩·attendance_days/on_hold 이력화.
+
+### ECS 후속 — 시간표 하위 카테고리·헤더 바로가기·일괄 입력·팝오버·강사뷰 조임 (2026-07-29) - tsc0/lint0/test50/build✓
+원장 dev 검수 피드백 일괄 반영(같은 브랜치 후속 커밋 6개).
+- **카드 크기 맞춤**: 주간 시트를 요일별 독립 스택 → **단일 CSS grid**(`SheetGrid`, day-column 대체) — 같은
+  slotStart가 요일 간 같은 행·같은 높이(시트 원본의 가로 정렬 재현). 랜딩 반 카드는 flex-col+`mt-auto` 균형.
+- **커서 의미**: 카드/요일 헤더 `cursor-default`(DragScrollArea cursor-grab이 "끌어 옮기기"로 오독 — teacher-grid
+  선례). ⚠️ `cursor-auto` 금지 — 팬 전환+userSelect:none이라 I빔은 못 하는 선택을 약속하는 거짓 어포던스.
+  Tailwind v4는 preflight의 `button{cursor:pointer}`가 삭제됨 → ECS 클릭 대상 전부에 `cursor-pointer` 명시
+  (📌 앱 전역 공용 `<Button>`에도 같은 누락이 있으나 범위 밖 — 별도 결정).
+- **상태 팝오버**: 수동 absolute → **base-ui Popover**(앱 표준) — 바깥클릭·ESC 닫기 내장, Portal이라
+  DragScrollArea 이중 overflow에 안 잘림. 닫을 때 미저장 자유입력 리셋(저장된 값 오인 방지).
+- **일괄 입력**(교시 카드별, 원스크린 계약 준수): 대상=카드에 보이는 로스터(표시=일괄 집합)·라벨에 실제 대상 수.
+  출석 일괄=**기록 없는 학생만**(비파괴, 확인 불요) / 상태 일괄=덮어쓰기 기본+덮일 건수 밝히고 confirm+'빈 칸만'
+  체크박스. 개인 진도·과제는 개별 사실이라 일괄 제외. 계산=순수 `lib/bulk.ts`(Vitest 9 — "값 있어야 통과" 게이트
+  금지 잠금). 
+- **메뉴 IA**: ECS = **시간표 하위 카테고리**(원장 지시). `NavItem.subOf` 신설 — 사이드바에서만 하부탭으로 내리고
+  팰릿·모바일내비엔 잔존(hidden이면 검색 불가). `SubTab.menuKey` 신설 — 독립 라우트 하부탭은 **자기 창**(ecs
+  1400×760)으로 열리고 자기 키로 권한 검사(부모만 통과하면 ecs=none 역할에 죽은 링크가 보였음). 계약은
+  navigation.test.ts 4케이스로 잠금(subOf 항목 삭제=findNavItem 실패=WindowLink 전멸).
+- **시간표 헤더 [ECS 바로가기]**: 영어 과목을 보고 있을 때만(`subject==="english" && resolveSkillAreas>0 &&
+  canAccessTenant("ecs")` — ECS 정식 게이트와 동일 식). ⚠️ searchParams가 아니라 확정 변수 `subject`로 판정
+  (기본 과목이면 URL에 파라미터 없음). 최상위 헤더+임베드 툴바 **이중 렌더**(창에선 헤더 줄이 접힘). week 승계.
+- **강사뷰**: ECS 메뉴는 **영어 담당 강사에게만**(`effectiveTeacherScope().subjects`에 english — 서버 계산 후
+  prop, 모르면 fail-open). 빈 랜딩 안내를 원인별 분기(`emptyReason`) — 담당 반 없는 강사에게 "학원 설정 확인"은
+  고칠 수 없는 일을 시키는 거짓 안내였음.
+- 🔴 **미해결(원장 결정 대기)**: ECS 접근=반 담당(`teacher_id`) 기준인데 영어 슬롯 633개 중 226개가 슬롯 강사≠반
+  담당 — 부담임/보조는 "담당 반이 아닙니다". 스코프 확장은 전 화면 파급이라 보류.
 ### 본인 이력서 자기수정(/me) + 부서별 직급 (2026-07-29) - tsc0/lint0/test96(신규14)/build✓
 원장 상황: *"며칠간 직원들이 직접 자기 이력서 수정해야 하는 상황"*. 그런데 **강사·상담·뷰어는 `/staff` 진입 자체가 차단**
 (권한 매트릭스 staff=none → roleHome 리다이렉트)이고 이력서는 원장·관리자 전용(2026-07-28)이라, 본인 정보를 보는 화면이 아예 없었다.
@@ -5570,3 +5683,25 @@ billing tfoot·상태칩, attendance 30→14열·출석률 sticky, enrollment �
 - 소비처: `column-cards`·`enrollment-table`(둘 다 client) → page가 `nowMs`를 내려준다.
 - ⚠️ **RSC에서는 이 컴포넌트가 불필요**(하이드레이션 없음) — `relativeTimeKo` 직접 호출 유지.
 - ⚠️ RSC 본문의 `Date.now()`는 `react-hooks/purity`에 걸린다 → intake page 선례대로 eslint-disable 1줄.
+
+## 2026-07-29 (4) — 사전 브리프가 "QR에서 이미 답한 것"을 되묻던 문제
+
+원장 지적: 상담지의 '반드시 확인할 질문'에 **"셔틀 이용을 원하시나요? (월 20,000원, 1·2호차)"**가
+들어갔다 — 셔틀은 QR 접수 폼이 이미 묻는 항목이다. 실측 결과 **브리프 3/3 전부** 셔틀 질문을 달고
+있었고(미신청 2건·신청 1건), 미신청 건엔 셔틀 반론 화법까지 만들어졌다.
+- 뿌리: `buildFactsBlock`이 셔틀을 **신청(true)일 때만** 한 줄 실었다 → 미신청이면 사실 블록이 침묵하고,
+  대신 [학원 현황]에 상시로 있던 "셔틀 운행 (월 20,000원 · 노선…)"만 보여 모델이 확인 질문을 만들었다.
+- 수리 ①(사실): 셔틀 답을 **양방향으로** 명시(`신청함(요금·노선)` / `신청하지 않음(미신청)`).
+  요금·노선은 **신청 건에만** 싣는다 → 미신청 브리프는 grounding 화이트리스트에 금액이 없어 언급 자체가 막힌다.
+  ⚠️ 사실 블록에 "묻지 말 것" 같은 지시문을 쓰면 모델이 그대로 cautions에 옮겨 적는다(드라이런 실측) —
+  사실만 적고 금지는 프롬프트 [작성 원칙]이 담당.
+- 수리 ②(프롬프트): "이미 답이 있는 항목은 questions·objections에 넣지 말 것"(셔틀·과목·학교/학년·형제자매·
+  진로·유입경로·체크리스트 18문항 열거) + "cautions에 지시문을 옮겨 적지 말 것".
+- 수리 ③(폴백): 결정론 폴백도 형제자매 답이 있으면 되묻지 않고, 셔틀은 신청 건에서만 '노선 확정'으로.
+- 수리 ④(QR 폼): 셔틀 선택을 **필수**로(미선택도 DB엔 false로 저장돼 무응답과 미신청이 구분되지 않았다 —
+  브리프가 이제 false를 "신청 안 함"으로 읽고 질문을 생략하므로, 무응답을 남기면 필요한 학부모가 안내를 못 받는다).
+- 덤: 반 후보가 있는데 `proposal`이 비는 문제(초4 영어 — 반 이름에 학년 표기가 없어 모델이 자신 없어 함) →
+  "목록에 반이 있으면 후보 1~3개를 시간·강사와 함께, 레벨테스트 후 확정 전제로" 지시 추가.
+- 검증: 실 facts로 드라이런(DeepSeek v4-pro) — 셔틀 질문·반론 0, cautions 지시문 누출 0, proposal이 실제
+  반(JP1·KW1·LS2a)으로 채워짐, grounding 검증 통과. 유닛 45 pass.
+- ⚠️ 기존 브리프는 **생성 시점 스냅샷 동결**이라 자동으로 안 바뀐다 → 상세 화면의 '갱신' 버튼으로 재생성.
