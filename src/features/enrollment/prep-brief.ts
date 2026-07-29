@@ -85,6 +85,12 @@ export type PrepFacts = {
     siblingsText: string | null;
     safetyNotes: string | null;
     consultationPath: string | null;
+    /**
+     * 이미 우리 학원에 재원 중인 학생인지 + 현재 수강 반. QR 접수는 **기존 재원생이 다른 과목을 물으러
+     * 낼 때도** 들어온다(확정 정책: student_id 연결만 하고 pending 큐 노출). 이걸 모르고 신규처럼
+     * 반·수강료를 깔면 상담 자리에서 바로 사고다 → 사실로 명시한다.
+     */
+    enrolledNow: { classNames: string[] } | null;
   };
   parent: { name: string | null; relation: string | null };
   /** 사전 체크리스트 — 라벨로 변환된 (문항, 답) 쌍. 접수 폼 2단계 미작성이면 빈 배열. */
@@ -222,8 +228,16 @@ export function conflictsSchoolLevel(className: string, studentToken: string | n
     { level: "중", patterns: /중등|중[1-3]/ },
     { level: "고", patterns: /고등|고[1-3]/ },
   ];
-  for (const { level, patterns } of LEVELS) {
-    if (level !== studentLevel && patterns.test(className)) return true;
+  // ⚠️ 이 학원 반 이름은 **부서 접두사 + 실제 학년**이다("중등M 초6 JJ2A" = 중등부가 운영하는 초6 반,
+  //    "고등E_중3 최상위"). 접두사만 보고 배제하면 정작 그 학년 학생이 자기 반을 못 본다(실측 21/106반,
+  //    초등 영어는 브릿지·초5/초6 반이 전멸했음). → 반 이름에 **학생 자신의 학제 표기가 있으면**
+  //    부서 접두사로 인한 학제 배제를 건너뛴다(학년 숫자 충돌 검사는 아래에서 계속 적용).
+  const selfPattern = LEVELS.find((l) => l.level === studentLevel)?.patterns;
+  const selfDeclared = !!selfPattern && selfPattern.test(className);
+  if (!selfDeclared) {
+    for (const { level, patterns } of LEVELS) {
+      if (level !== studentLevel && patterns.test(className)) return true;
+    }
   }
   // 같은 학제라도 **다른 학년 숫자**가 명시돼 있으면 배제("중2-2 문제 풀이반"은 중1 후보 아님).
   // 학생 학년 숫자를 모르면(토큰이 "중"뿐) 학년 비교는 생략(없는 정보로 배제 금지).
@@ -271,9 +285,14 @@ export function rankPrepClasses(
   const pool = anyCriteria ? scored.filter((c) => c.tier > 0) : scored;
   pool.sort((a, b) => {
     if (a.tier !== b.tier) return b.tier - a.tier;
-    const aFree = seatsLeft(a) ?? -1;
-    const bFree = seatsLeft(b) ?? -1;
-    if (aFree !== bFree) return bFree - aFree;
+    const aFree = seatsLeft(a);
+    const bFree = seatsLeft(b);
+    // 정원이 입력된 반끼리는 잔여석 많은 순. ⚠️ 실측상 이 학원 classrooms.capacity는 전부 비어 있어
+    // (0/104) 이 비교가 통째로 무동작이었다 → 정원 미상일 땐 **현원 적은 순**으로 대체한다
+    // (자리 여부를 모를 때 그나마 살아있는 신호. 이름 가나다순은 상담사에게 아무 의미가 없다).
+    if (aFree != null && bFree != null && aFree !== bFree) return bFree - aFree;
+    if (aFree == null && bFree == null && a.enrolled !== b.enrolled) return a.enrolled - b.enrolled;
+    if (aFree == null !== (bFree == null)) return aFree == null ? 1 : -1;
     return a.className.localeCompare(b.className, "ko");
   });
   return pool.slice(0, limit).map((c) => ({
@@ -311,6 +330,65 @@ export function formatSchedule(slots: { day: string; start: string | null }[]): 
   return sorted.map((s) => `${label(s)} ${s.start?.slice(0, 5) ?? "시간 미상"}`).join(" · ");
 }
 
+/**
+ * 학교명 정규화 — "칠성초등학교"와 "칠성초"를 같은 학교로 본다.
+ *
+ * ⚠️ QR 접수는 학부모가 전체 이름을 쓰고("칠성초등학교") 학생 DB는 압축 표기를 쓴다("칠성초", 실측
+ * 재원생 67명). 원문 그대로 비교하면 브리프가 "칠성초등학교 재학 재원생 0명"이라는 **거짓 문장**을
+ * 만든다(실측 QR 29건 중 6개 학교가 이 함정에 빠짐). 표시 규약 `schoolGradeLabel`과 같은 압축 방향.
+ */
+export function normalizeSchool(school: string | null | undefined): string | null {
+  const s = (school ?? "").trim();
+  if (!s) return null;
+  return s
+    .replace(/초등학교$/, "초")
+    .replace(/중학교$/, "중")
+    .replace(/고등학교$/, "고")
+    .replace(/\s+/g, "");
+}
+
+/**
+ * 전화번호 → 숫자만. QR 접수는 "01067332180"(하이픈 없음), 학생 DB는 "010-6733-2180"(하이픈 96%)라
+ * 원문 비교로는 형제자매를 못 찾는다(실측 QR 29건 중 8건이 실제 형제가 있는데 누락).
+ */
+export function phoneDigits(phone: string | null | undefined): string | null {
+  const d = (phone ?? "").replace(/\D/g, "");
+  return d.length >= 9 ? d : null;
+}
+
+/** 숫자 전화번호의 하이픈 표기 후보들 — PostgREST `.in()`으로 양쪽 포맷을 함께 조회하기 위한 변형. */
+export function phoneVariants(phone: string | null | undefined): string[] {
+  const d = phoneDigits(phone);
+  if (!d) return [];
+  const out = new Set<string>([d]);
+  if (d.length === 11) out.add(`${d.slice(0, 3)}-${d.slice(3, 7)}-${d.slice(7)}`);
+  if (d.length === 10) {
+    out.add(`${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6)}`);
+    out.add(`${d.slice(0, 2)}-${d.slice(2, 6)}-${d.slice(6)}`);
+  }
+  const raw = (phone ?? "").trim();
+  if (raw) out.add(raw);
+  return [...out];
+}
+
+/**
+ * 상담 과목 라벨 → 수강료 단가표에서 함께 봐야 할 분류(category)들.
+ *
+ * ⚠️ 이 학원의 초등 영어 본프로그램은 분류가 "EIE"다(활성 12행 — Dr.Phonics·Pre Junior 등). 라벨
+ * 상호포함만 보면 "영어" 상담에서 EIE가 통째로 빠져 **제안할 단가가 하나도 안 실린다**(프롬프트가
+ * "이 금액 외 언급 금지"라 LLM도 말할 수 없다). 별칭을 명시로 잇는다.
+ */
+const SUBJECT_CATEGORY_ALIASES: Record<string, string[]> = { 영어: ["EIE"] };
+
+/** 단가표 분류가 이 상담 과목에 해당하는지 — 라벨 상호포함 + 학원 고유 별칭(EIE 등). */
+export function matchesSubjectCategory(category: string, subjectLabel: string): boolean {
+  const a = category.trim();
+  const b = subjectLabel.trim();
+  if (!a || !b) return false;
+  if (a.includes(b) || b.includes(a)) return true;
+  return (SUBJECT_CATEGORY_ALIASES[b] ?? []).some((alias) => a.includes(alias));
+}
+
 /** 남은 자리 — 정원 미지정이면 null(모르면 모른다고 표시, 0으로 단정 금지). */
 export function seatsLeft(c: Pick<PrepClassFact, "seats" | "enrolled">): number | null {
   return c.seats == null ? null : Math.max(0, c.seats - c.enrolled);
@@ -340,6 +418,12 @@ export function buildFactsBlock(f: PrepFacts): string {
   const L: string[] = [];
   L.push("[학생·접수 정보]");
   L.push(`- 이름: ${f.student.name}`);
+  if (f.student.enrolledNow) {
+    const cls = f.student.enrolledNow.classNames;
+    L.push(
+      `- ⚠️ 이미 우리 학원 재원생임${cls.length > 0 ? ` (현재 수강: ${cls.join(", ")})` : " (현재 수강 반 없음)"}`,
+    );
+  }
   if (f.student.grade) L.push(`- 학년: ${f.student.grade}`);
   if (f.student.school) L.push(`- 학교: ${f.student.school}`);
   if (f.student.subjectLabel) L.push(`- 상담 과목: ${f.student.subjectLabel}`);

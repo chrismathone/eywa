@@ -190,8 +190,17 @@ export default async function EnrollmentDetailPage({
       {/* 사전 상담 브리프 — 상담 *전* 준비 문서라 헤더 바로 아래(상담 기록보다 먼저 읽는다).
           아직 안 만든 건 대기·예약 건에만 권유한다 — 이미 끝난 상담에 "브리프 만들기"를 띄우면 노이즈다.
           한 번 만든 브리프는 상태와 무관하게 계속 보인다(상담 중 참조 + 인쇄 재출력). */}
-      {consult.prepBrief || consult.outcome === "pending" || consult.outcome === "scheduled" ? (
-        <PrepBriefSection consultationId={id} record={consult.prepBrief} canWrite={canWrite} />
+      {consult.prepBrief ||
+      consult.prepBriefStatus ||
+      consult.outcome === "pending" ||
+      consult.outcome === "scheduled" ? (
+        <PrepBriefSection
+          consultationId={id}
+          record={consult.prepBrief}
+          status={consult.prepBriefStatus}
+          errorText={consult.prepBriefError}
+          canWrite={canWrite}
+        />
       ) : null}
 
       {/* 같은 학생의 다른 등록상담(반복 접수) — 학생 연결 또는 자연키(이름+학교+학년)로 묶은 다른 상담 건.

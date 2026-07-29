@@ -5,36 +5,60 @@
  *    다시 읽지 않는다. "그때 이 자료로 상담했다"가 재현돼야 하기 때문(인쇄물 동결과 같은 정책).
  *    오래된 브리프는 '갱신'으로 다시 만든다.
  */
-import { AlertTriangle, ClipboardCheck, HelpCircle, MessageSquare, Printer, ShieldCheck } from "@/components/icons/eywa-icon-compat";
+import { AlertCircle, AlertTriangle, ClipboardCheck, HelpCircle, MessageSquare, Printer, ShieldCheck } from "@/components/icons/eywa-icon-compat";
 import { PrintWindowButton } from "@/components/workspace/print-window";
 import { modelDisplayLabel } from "@/lib/ai/model-label";
 import { classLine, type PrepBriefRecord } from "@/features/enrollment/prep-brief";
 import { PrepBriefButton } from "./prep-brief-button";
+import { PrepBriefProgress } from "./prep-brief-progress";
 
 export function PrepBriefSection({
   consultationId,
   record,
+  status,
+  errorText,
   canWrite,
 }: {
   consultationId: string;
   record: PrepBriefRecord | null;
+  /** 0153b 생성 상태 — generating이면 진행바, failed면 실패 안내 + 재시도. */
+  status: "generating" | "failed" | null;
+  errorText: string | null;
   canWrite: boolean;
 }) {
+  const generating = status === "generating";
+  const failedLine =
+    status === "failed" ? (
+      <p className="text-destructive inline-flex items-center gap-1 text-xs">
+        <AlertCircle className="size-3" />
+        {errorText ?? "브리프 생성에 실패했습니다"} — 다시 시도해 주세요
+      </p>
+    ) : null;
+
   if (!record) {
     return (
       <section className="border-border bg-bg-soft/40 rounded-2xl border border-dashed p-5">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="space-y-1">
+          <div className="min-w-0 flex-1 space-y-1">
             <h2 className="text-foreground inline-flex items-center gap-2 text-sm font-bold">
               <ClipboardCheck className="text-primary size-4" />
               상담 준비 브리프
             </h2>
-            <p className="text-text-dim text-xs break-keep">
-              학부모가 접수 폼에 답한 내용과 학원 데이터(개설 반·잔여석·시간·수강료·형제 재원 여부)를 모아
-              상담 직전에 읽을 준비 문서를 만듭니다.
-            </p>
+            {generating ? (
+              <div className="pt-1">
+                <PrepBriefProgress consultationId={consultationId} />
+              </div>
+            ) : (
+              <p className="text-text-dim text-xs break-keep">
+                학부모가 접수 폼에 답한 내용과 학원 데이터(개설 반·잔여석·시간·수강료·형제 재원 여부)를 모아
+                상담 직전에 읽을 준비 문서를 만듭니다.
+              </p>
+            )}
+            {failedLine}
           </div>
-          {canWrite ? <PrepBriefButton consultationId={consultationId} exists={false} /> : null}
+          {canWrite && !generating ? (
+            <PrepBriefButton consultationId={consultationId} exists={false} />
+          ) : null}
         </div>
       </section>
     );
@@ -82,9 +106,17 @@ export function PrepBriefSection({
             <Printer className="size-4" />
             인쇄
           </PrintWindowButton>
-          {canWrite ? <PrepBriefButton consultationId={consultationId} exists /> : null}
+          {canWrite && !generating ? <PrepBriefButton consultationId={consultationId} exists /> : null}
         </div>
       </header>
+
+      {/* 재생성 중 — 직전 브리프는 그대로 두고 위에 진행바만 얹는다(실패해도 직전 브리프 보존). */}
+      {generating ? (
+        <div className="border-border bg-card rounded-lg border p-3">
+          <PrepBriefProgress consultationId={consultationId} />
+        </div>
+      ) : null}
+      {failedLine}
 
       <Block icon={MessageSquare} title="오프닝 멘트">
         <p className="text-foreground text-[13px] leading-relaxed break-keep whitespace-pre-line">{b.opening}</p>

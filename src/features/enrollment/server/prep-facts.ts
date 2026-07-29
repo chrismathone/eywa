@@ -11,6 +11,10 @@ import {
   checklistHabits,
   checklistToPairs,
   formatSchedule,
+  gradeToken,
+  matchesSubjectCategory,
+  normalizeSchool,
+  phoneVariants,
   rankPrepClasses,
   type PrepClassFact,
   type PrepFacts,
@@ -38,7 +42,7 @@ export async function collectPrepFacts(consultationId: string): Promise<PrepFact
     .select(
       `id, tenant_id, prospect_name, prospect_grade, prospect_school, parent_name, parent_phone,
        parent_relation, parent_request, subject, gender, career_goal, siblings, siblings_details,
-       safety_notes, shuttle_bus_request, consultation_path, intake_checklist`,
+       safety_notes, shuttle_bus_request, consultation_path, intake_checklist, student_id`,
     )
     .eq("id", consultationId)
     .maybeSingle();
@@ -49,7 +53,13 @@ export async function collectPrepFacts(consultationId: string): Promise<PrepFact
   const subjectLabel = c.subject ? subjectMaps.labelOf(c.subject) : null;
   const school = c.prospect_school?.trim() || null;
   const grade = c.prospect_grade?.trim() || null;
-  const parentPhone = c.parent_phone?.trim() || null;
+  const linkedStudentId = (c as { student_id?: string | null }).student_id ?? null;
+  // 형제 후보 조회는 하이픈/무하이픈 두 포맷을 함께 던진다(본인은 아래에서 제외).
+  const phoneCandidates = phoneVariants(c.parent_phone);
+  // 같은 학교 재원생 집계 — "칠성초등학교"(QR) ↔ "칠성초"(학생 DB) 분열 때문에 정규화 변형을 함께 본다.
+  const schoolCandidates = school
+    ? [...new Set([school, normalizeSchool(school)].filter((v): v is string => !!v))]
+    : [];
 
   // 전부 서로 독립 → 한 번에(B4). 각 쿼리는 자기 안에서 count/head 또는 좁은 필터를 쓴다.
   const [
@@ -75,20 +85,23 @@ export async function collectPrepFacts(consultationId: string): Promise<PrepFact
       .select("category, name, price, pricing_mode, note")
       .eq("is_active", true)
       .neq("category", "할인")
-      .order("category"),
+      // ⚠️ 2차 정렬 없이 자르면 어떤 12행이 실릴지 비결정이었다(수학 43행 중 앞머리가 '고등 수능·킬러'라
+      //    중1 상담지에 고등 단가만 실리는 일이 생긴다). 분류→이름 고정 정렬로 결정화.
+      .order("category")
+      .order("name"),
     supabase
       .from("textbook_catalog")
       .select("title, subject, grade_level")
       .eq("is_active", true)
       .limit(200),
     supabase.from("students").select("*", { count: "exact", head: true }).eq("status", "enrolled").eq("is_test", false),
-    school
+    schoolCandidates.length > 0
       ? supabase
           .from("students")
           .select("*", { count: "exact", head: true })
           .eq("status", "enrolled")
           .eq("is_test", false)
-          .eq("school", school)
+          .in("school", schoolCandidates)
       : Promise.resolve({ count: 0 }),
     grade
       ? supabase
@@ -99,25 +112,34 @@ export async function collectPrepFacts(consultationId: string): Promise<PrepFact
           .eq("grade", grade)
       : Promise.resolve({ count: 0 }),
     // 형제자매 후보 — 학부모 연락처가 같은 재원생. 연락처가 없으면 조회 자체를 안 한다(전건 스캔 금지).
-    parentPhone
+    // ⚠️ QR 접수는 하이픈 없는 숫자("01067332180")로 들어오고 학생 DB는 하이픈 표기가 96%라
+    //    원문 eq로는 형제를 못 찾는다(실측 QR 29건 중 8건 누락) → 포맷 변형을 함께 조회한다.
+    phoneCandidates.length > 0
       ? supabase
           .from("students")
           .select("id, name, school, grade")
           .eq("status", "enrolled")
-          .eq("parent_phone", parentPhone)
-          .limit(6)
+          .eq("is_test", false)
+          .in("parent_phone", phoneCandidates)
+          .limit(8)
       : Promise.resolve({ data: [] }),
     // 앞서 들어온 같은 학생의 다른 접수(반복 QR 제출) — 상담에서 같은 질문을 반복하지 않게.
     // ⚠️ 이름-only 매칭 금지(동명이인 fan-out) — getSiblingConsultations와 동일한 자연키
     //    (이름+학교+학년, null은 is null 정확 매칭)로 좁힌다(적대 검수 2026-07-28).
+    // ⚠️ 연결된 학생이 있으면 **student_id 우선**(getSiblingConsultations와 동일 분기) — 진급·전학으로
+    //    자연키가 달라진 과거 접수를 자연키만으로는 놓친다(실측 3건: 중1→중2, 남산초→경명여중).
     (() => {
       let q = supabase
         .from("enrollment_consultations")
         .select("id, consultation_date, consulted_at, outcome, subject")
-        .eq("prospect_name", c.prospect_name)
         .neq("id", consultationId);
-      q = school ? q.eq("prospect_school", school) : q.is("prospect_school", null);
-      q = grade ? q.eq("prospect_grade", grade) : q.is("prospect_grade", null);
+      if (linkedStudentId) {
+        q = q.eq("student_id", linkedStudentId);
+      } else {
+        q = q.eq("prospect_name", c.prospect_name);
+        q = school ? q.eq("prospect_school", school) : q.is("prospect_school", null);
+        q = grade ? q.eq("prospect_grade", grade) : q.is("prospect_grade", null);
+      }
       return q.order("consulted_at", { ascending: false }).limit(5);
     })(),
   ]);
@@ -143,7 +165,11 @@ export async function collectPrepFacts(consultationId: string): Promise<PrepFact
     );
     for (const s of scheds) {
       const list = scheduleByClass.get(s.class_id) ?? [];
-      if (!list.some((x) => x.day === s.day_of_week)) list.push({ day: s.day_of_week, start: s.start_time });
+      const prev = list.find((x) => x.day === s.day_of_week);
+      // ⚠️ 같은 요일에 연속 교시 슬롯이 여러 개다(실측 106반 중 102반). "첫 행 승자"로 두면 PostgREST
+      //    반환 순서에 따라 등원 시각이 17:15로 찍힐 수 있다 → 요일별 **가장 이른 시각**으로 고정.
+      if (!prev) list.push({ day: s.day_of_week, start: s.start_time });
+      else if (s.start_time && (!prev.start || s.start_time < prev.start)) prev.start = s.start_time;
       scheduleByClass.set(s.class_id, list);
     }
   }
@@ -169,7 +195,35 @@ export async function collectPrepFacts(consultationId: string): Promise<PrepFact
 
   // 형제자매 후보의 **현재 수강 반** — 상담에서 가장 강한 카드("형 OO는 지금 이 반입니다").
   // 후보가 있을 때만 도는 추가 왕복이라 위 Promise.all에 넣지 않았다(없으면 쿼리 자체가 없다).
-  const siblingStudents = (siblingRows.data ?? []) as { id: string; name: string; school: string | null; grade: string | null }[];
+  // ⚠️ 본인 제외 — 연락처 정규화를 고치면 이미 재원 중인 **상담 당사자 본인**이 자기 "형제자매 후보"로
+  //    뜬다(QR 기존재원생 접수는 흔하다). 연결된 학생 id로 걸러낸다.
+  // 상담 당사자가 이미 재원생이면 그 사실과 현재 수강 반을 사실로 싣는다(감사 #9d).
+  let enrolledNow: { classNames: string[] } | null = null;
+  if (linkedStudentId) {
+    const { data: selfRow } = await supabase
+      .from("students")
+      .select("id, status, enrollments:enrollments ( end_date, class:class_id ( class_name ) )")
+      .eq("id", linkedStudentId)
+      .maybeSingle();
+    if (selfRow?.status === "enrolled") {
+      const rows = (selfRow.enrollments ?? []) as {
+        end_date: string | null;
+        class: { class_name?: string } | { class_name?: string }[] | null;
+      }[];
+      const names = rows
+        .filter((r) => r.end_date == null)
+        .map((r) => {
+          const cl = (Array.isArray(r.class) ? r.class[0] : r.class) as { class_name?: string } | null;
+          return cl?.class_name ?? null;
+        })
+        .filter((n): n is string => !!n);
+      enrolledNow = { classNames: [...new Set(names)] };
+    }
+  }
+
+  const siblingStudents = ((siblingRows.data ?? []) as {
+    id: string; name: string; school: string | null; grade: string | null;
+  }[]).filter((s) => s.id !== linkedStudentId);
   const siblingClasses = new Map<string, string[]>();
   if (siblingStudents.length > 0) {
     const rows = await fetchInChunks<{ student_id: string; class: { class_name?: string } | { class_name?: string }[] | null }>(
@@ -207,6 +261,7 @@ export async function collectPrepFacts(consultationId: string): Promise<PrepFact
       siblingsText,
       safetyNotes: c.safety_notes?.trim() || null,
       consultationPath: c.consultation_path?.trim() || null,
+      enrolledNow,
     },
     parent: { name: c.parent_name?.trim() || null, relation: c.parent_relation?.trim() || null },
     checklist: checklist ? checklistToPairs(checklist) : [],
@@ -238,6 +293,12 @@ export async function collectPrepFacts(consultationId: string): Promise<PrepFact
       })),
     textbooks: (textbookRows.data ?? [])
       .filter((t) => !c.subject || t.subject === c.subject)
+      // 학년대(초/중/고)까지 맞춘다 — 안 걸면 중1 상담지에 초등 교재가 실린다(math 활성 141권).
+      .filter((t) => {
+        const lvl = gradeToken(grade)?.charAt(0);
+        const g = (t.grade_level as string | null)?.trim();
+        return !lvl || !g || g.startsWith(lvl);
+      })
       .slice(0, 10)
       .map((t) => ({
         title: t.title as string,
@@ -258,14 +319,6 @@ export async function collectPrepFacts(consultationId: string): Promise<PrepFact
       shuttleRoutes: (settings.operations.shuttle?.routes ?? []).map((r) => r.label).filter(Boolean),
     },
   };
-}
-
-/** 상담 과목과 단가표 분류(수학/영어/EIE/국어…)의 느슨한 대응 — 라벨이 서로 포함되면 같은 과목으로 본다. */
-function matchesSubjectCategory(category: string, subjectLabel: string): boolean {
-  const a = category.trim();
-  const b = subjectLabel.trim();
-  if (!a || !b) return false;
-  return a.includes(b) || b.includes(a);
 }
 
 /** timestamptz → KST 날짜(YYYY-MM-DD). 표시는 KST 고정(전역 규칙). */
