@@ -49,9 +49,9 @@ export function TeacherMenu({
   /** 겸직(관리자 계열)이 강사뷰에 있을 때 → 드롭다운 하단에 '관리자뷰로 전환'. 실 강사는 false. */
   canReturnToAdmin?: boolean;
   /**
-   * English Class Sheet는 **영어 반을 담당할 때만** 보인다(원장 지시 2026-07-29 "영어강사의 강사뷰에").
-   * 권한(ecs=scoped)은 전 강사가 갖고 있어 그것만으론 못 거른다 — 담당 과목은 서버에서만 알 수 있으므로
-   * (`effectiveTeacherScope`) 레이아웃이 계산해 내려준다. 모르면 표시(fail-open)가 기본.
+   * English Class Sheet는 **영어 반 담당·부담임일 때만** 보인다(원장 지시 2026-07-29, 부담임 확장 승인).
+   * 권한(ecs=scoped)은 전 강사가 갖고 있어 그것만으론 못 거른다 — 담당·부담임 여부는 서버에서만 알 수
+   * 있으므로(`effectiveTeacherScope`·`ecsAssistantClassIds`) 레이아웃이 계산해 내려준다. 모르면 표시(fail-open).
    */
   showEcs?: boolean;
 }) {

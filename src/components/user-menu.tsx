@@ -1,7 +1,7 @@
 "use client";
 
-import Link from "next/link";
 import { LogOut, Sparkles, User, UserCheck } from "@/components/icons/eywa-icon-compat";
+import { WindowLink } from "@/components/workspace/window-link";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -51,8 +51,9 @@ export function UserMenu({
           )}
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
-        {/* 내 이력서·로그인 정보 — 권한과 무관하게 누구나(본인 것만). */}
-        <DropdownMenuItem render={<Link href="/me" className="cursor-pointer" />}>
+        {/* 내 이력서·로그인 정보 — 권한과 무관하게 누구나(본인 것만).
+            ⚠️ 일반 Link면 최상위 프레임만 이동해 배경이 창에 가려 아무것도 안 뜬다([[#86]]) → WindowLink. */}
+        <DropdownMenuItem render={<WindowLink href="/me" title="내 정보" className="cursor-pointer" />}>
           <UserCheck className="size-4" />내 정보
         </DropdownMenuItem>
         <DropdownMenuSeparator />

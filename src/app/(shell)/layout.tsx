@@ -19,6 +19,7 @@ import { OperationsProvider } from "@/features/owner/operations-context";
 import { EditPresenceProvider } from "@/features/presence/edit-presence";
 import { getPermMatrix } from "@/lib/auth/perm-matrix";
 import { getShellView, canUseTeacherView, isFullShellRole, effectiveTeacherScope } from "@/lib/auth/view-mode";
+import { ecsAssistantClassIds } from "@/features/class-sheets/server/access";
 import { canAccess, menuKeyForPath } from "@/lib/permissions";
 import { brandColorVars } from "@/lib/color-utils";
 import { WorkspaceCanvas } from "@/components/workspace/workspace-canvas";
@@ -96,11 +97,15 @@ export default async function ShellLayout({ children }: { children: ReactNode })
     }
   }
 
-  // English Class Sheet 메뉴는 **영어 반을 담당하는 강사**에게만(원장 지시 2026-07-29). 권한(ecs=scoped)은
-  // 전 강사가 가지므로 그것만으론 못 거르고, 담당 과목은 서버에서만 안다. 담당 반이 하나도 없는 겸직·
+  // English Class Sheet 메뉴는 **영어 반 담당·부담임 강사**에게만(원장 지시 2026-07-29 + 부담임 확장 승인).
+  // 권한(ecs=scoped)은 전 강사가 가지므로 그것만으론 못 거르고, 담당 과목은 서버에서만 안다.
   // 스코프 null은 fail-open(표시) — 모른다고 감추면 정작 영어 담당이 메뉴를 잃는다.
+  // 부담임 확인(ecsAssistantClassIds)은 반담당 영어가 없을 때만 평가(|| 단락 — 영어 담당은 추가 쿼리 0).
   const ecsForTeacher =
-    view === "teacher" ? ((await effectiveTeacherScope())?.subjects.includes("english") ?? true) : false;
+    view === "teacher"
+      ? (((await effectiveTeacherScope())?.subjects.includes("english") ?? true) ||
+        (await ecsAssistantClassIds()).length > 0)
+      : false;
 
   // 강사·학생: 사이드바·네비 없는 단일 화면 셸 — 미니멀 헤더(브랜드 + 로그아웃) + 풀폭 본문.
   // 강사=원스크린, 학생=내 학습 현황. (원장 등 나머지는 아래 12메뉴 풀 셸 그대로.)
