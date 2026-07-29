@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2 } from "@/components/icons/eywa-icon-compat";
+import { AlertCircle, Loader2 } from "@/components/icons/eywa-icon-compat";
 import { createClient } from "@/lib/supabase/client";
 
 /**
@@ -12,7 +12,13 @@ import { createClient } from "@/lib/supabase/client";
  * 20~60초를 기준으로 90%까지 감속 진행하고, 완료는 watcher가 페이지를 새로고침하며 컴포넌트째
  * 사라진다(가짜 100% 고정 화면이 없다). ConsultationStatusWatcher와 동일한 realtime+5초 폴링.
  */
-const EXPECTED_SEC = 45;
+const EXPECTED_SEC = 75;
+/**
+ * 이 시간을 넘기면 "멈춘 것 같다"고 알리고 다시 시도할 길을 준다. 백그라운드 작업이 플랫폼 타임아웃·
+ * 배포 교체로 죽으면 status가 'generating'에 남아 **진행바가 영원히 돈다** — 사람이 빠져나갈 수
+ * 있어야 한다(끝나지 않는 스피너는 고장과 구분이 안 된다).
+ */
+const STALL_SEC = 240;
 const STAGES: [number, string][] = [
   [0, "접수 정보와 학원 데이터를 정리하고 있습니다"],
   [8, "AI가 상담 스크립트를 작성하고 있습니다"],
@@ -54,6 +60,21 @@ export function PrepBriefProgress({ consultationId }: { consultationId: string }
   const ratio = Math.min(1, elapsed / EXPECTED_SEC);
   const pct = elapsed <= EXPECTED_SEC ? Math.round(90 * (1 - Math.pow(1 - ratio, 2))) : Math.min(97, 90 + Math.round((elapsed - EXPECTED_SEC) / 5));
   const stage = STAGES.reduce((acc, [at, label]) => (elapsed >= at ? label : acc), STAGES[0]![1]);
+  const stalled = elapsed >= STALL_SEC;
+
+  if (stalled) {
+    return (
+      <div className="space-y-1">
+        <p className="text-foreground inline-flex items-center gap-2 text-[13px]">
+          <AlertCircle className="text-chart-4 size-4" />
+          생성이 예상보다 오래 걸립니다
+        </p>
+        <p className="text-text-dim text-[11px]">
+          잠시 후 새로고침하거나 ‘다시 작성’을 눌러 주세요. 이전 브리프가 있으면 그대로 남아 있습니다.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-2">
@@ -69,7 +90,7 @@ export function PrepBriefProgress({ consultationId }: { consultationId: string }
         />
       </div>
       <p className="text-text-dim text-[11px]">
-        보통 30초~1분 정도 걸립니다. 페이지를 떠나도 백그라운드에서 계속 진행됩니다.
+        보통 1분 내외 걸립니다. 페이지를 떠나도 백그라운드에서 계속 진행됩니다.
       </p>
     </div>
   );

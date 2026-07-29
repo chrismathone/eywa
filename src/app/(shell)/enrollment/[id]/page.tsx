@@ -36,6 +36,13 @@ import { PrepBriefSection } from "./prep-brief-section";
 
 export const metadata = { title: "신입생 상담 상세 — eywa" };
 
+/**
+ * ⚠️ 서버 액션은 **호출된 세그먼트의 maxDuration**을 따른다. 사전 브리프 생성은 `after()` 백그라운드로
+ * DeepSeek v4-pro(추론형, 실측 ~70초)를 부르는데, 기본값(15초)이면 플랫폼이 중간에 죽여 상태가
+ * 'generating'에 그대로 남는다 = 진행바 무한. 전사 웹훅(300)·크론(120) 선례와 같은 방식으로 올린다.
+ */
+export const maxDuration = 300;
+
 const OUTCOME_BADGE: Record<string, { label: string; class: string }> = {
   pending: { label: "대기", class: "text-chart-3 bg-chart-3/10 border-chart-3/20" },
   scheduled: { label: "예약", class: "text-chart-3 bg-chart-3/10 border-chart-3/20" },
