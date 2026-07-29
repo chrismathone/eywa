@@ -220,6 +220,31 @@ describe.skipIf(!DB)("ECS class_sheet_* 보안·RPC 계약", () => {
     expect(r3[0].note).toBe("병결 — 보존돼야 함");
   });
 
+  it("CAS: 같은 행의 서로 다른 두 필드는 순차 patch가 서로 충돌하지 않는다(필드 단위 CAS)", async () => {
+    // flushSheetPatches의 SQL 계약(`<field> is not distinct from expected`) 검증 —
+    // 행 버전이 아니라 필드 값 자체가 기준이라, 교재 저장 후 과제 저장이 자기충돌하지 않는다.
+    const D = "2026-07-23";
+    const res =
+      await sql`select * from ecs_create_plan_line(${T.tenant}, ${T.user}, ${T.cls}, ${D}, '15:00', 'regular', 'vocab')`;
+    const id = res[0].id;
+    const u1 = await sql`update class_sheet_plan_lines set textbook = '능률 VOCA'
+      where id = ${id} and tenant_id = ${T.tenant} and class_id = ${T.cls}
+        and textbook is not distinct from null returning id`;
+    expect(u1).toHaveLength(1);
+    const u2 = await sql`update class_sheet_plan_lines set homework = '받아쓰기'
+      where id = ${id} and tenant_id = ${T.tenant} and class_id = ${T.cls}
+        and homework is not distinct from null returning id`;
+    expect(u2).toHaveLength(1); // 교재 저장이 과제 CAS 기준을 건드리지 않음
+    // 타인이 바꾼 필드는 0행(=conflict 분기) — 기준값 stale
+    const u3 = await sql`update class_sheet_plan_lines set textbook = '다른 값'
+      where id = ${id} and tenant_id = ${T.tenant} and class_id = ${T.cls}
+        and textbook is not distinct from null returning id`;
+    expect(u3).toHaveLength(0);
+    // 응답 유실 재전송: 서버값이 이미 newValue → already_applied 판정 근거
+    const [cur] = await sql`select textbook from class_sheet_plan_lines where id = ${id}`;
+    expect(cur.textbook).toBe("능률 VOCA");
+  });
+
   it("create: 20행 상한 초과는 명시 에러", async () => {
     const SLOT_DATE = "2026-07-24"; // 금 — 빈 슬롯
     for (let i = 0; i < 20; i++) {
