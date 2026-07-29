@@ -196,6 +196,8 @@ export default async function AttendancePage({
             presentRate: total > 0 ? Math.round((present / total) * 1000) / 10 : 0,
             absentCount: sum((s) => s.absentCount),
             lateCount: sum((s) => s.lateCount),
+            // 합산에도 **기록 수**를 실어야 "0%"와 "기록 없음"을 화면이 구분할 수 있다(반 단위와 같은 규약).
+            totalRecords: total,
           };
         })()
       : matrix.stats;
@@ -397,11 +399,24 @@ export default async function AttendancePage({
           {/* Stat 4 — 반(또는 강사 전체)을 열었을 때만 */}
           <section className="grid grid-cols-2 gap-3.5 sm:grid-cols-4">
             <BigStat label="등록 학생" value={stats.totalStudents} unit="명" tone="primary" icon={<Users size={16} strokeWidth={1.8} />} />
+            {/* 🔴 기록이 0건이면 "0%"는 **사실이 아니다** — 출석률이 0인 게 아니라 아직 아무도 안 찍은 것이다.
+                (2026-07-29 감사: 영어 반은 파생 미가동 + 수기 기록도 사실상 0이라 화면이 늘 빨간 0%를 단언했다.
+                 실측 attendance_records 영어 5건 / 수학 5,935건.) 과목을 하드코딩하지 않고 **데이터 유무**로 가른다 —
+                 데이터가 생기면 저절로 숫자로 돌아오고, 수학 반이 진짜 0%면 그대로 빨갛게 뜬다. */}
             <BigStat
               label="출석률"
-              value={stats.presentRate}
-              unit="%"
-              tone={stats.presentRate >= 90 ? "primary" : stats.presentRate >= 80 ? "amber" : "danger"}
+              value={stats.totalRecords > 0 ? stats.presentRate : "—"}
+              unit={stats.totalRecords > 0 ? "%" : undefined}
+              tone={
+                stats.totalRecords === 0
+                  ? "neutral"
+                  : stats.presentRate >= 90
+                    ? "primary"
+                    : stats.presentRate >= 80
+                      ? "amber"
+                      : "danger"
+              }
+              sub={stats.totalRecords > 0 ? undefined : "기록 없음"}
               icon={<UserCheck size={16} strokeWidth={1.8} />}
             />
             <BigStat label="결석" value={stats.absentCount} unit="회" tone="danger" icon={<UserX size={16} strokeWidth={1.8} />} />
@@ -423,6 +438,14 @@ export default async function AttendancePage({
                   출결 수정은 <strong className="text-foreground">최근 {ATTENDANCE_EDIT_WINDOW_DAYS}일</strong>
                   (오늘 포함 {lockBefore} 이후)만 가능합니다. 그보다 지난 날짜는 잠기며, 수정이 필요하면 관리자에게
                   요청하세요.
+                </p>
+              ) : null}
+              {/* 기록이 하나도 없는 화면은 **왜 비어 있는지**를 말해야 한다 — 빈 표 + "—"만 두면 고장으로 읽힌다.
+                  파생도 안 도는 과목(현재 영어)이 여기 해당한다. */}
+              {stats.totalRecords === 0 && !groups.some((g) => g.matrix.derivedActive) ? (
+                <p className="text-text-dim bg-bg-soft/60 border-line rounded-2xl border px-4 py-2.5 text-xs break-keep">
+                  이 반은 아직 <strong className="text-foreground">출결 기록이 없습니다</strong>. 수업보고서로 자동
+                  표시되는 과목이 아니라서, 셀을 직접 클릭해 찍은 값만 쌓입니다.
                 </p>
               ) : null}
               {groups.some((g) => g.matrix.derivedActive) ? (
