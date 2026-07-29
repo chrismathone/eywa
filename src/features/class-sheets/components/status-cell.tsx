@@ -7,6 +7,7 @@
 import { useState } from "react";
 import { Popover } from "@base-ui/react/popover";
 import { EyIcon } from "@/components/icons/eywa-icons";
+import { STATUS_CHIPS } from "../lib/bulk";
 
 const ATT_LABEL: Record<string, string> = {
   present: "출석",
@@ -59,8 +60,6 @@ export function AttendanceCheck({
     </span>
   );
 }
-
-const STATUS_CHIPS = ["완", "결석", "안침"] as const;
 
 export function StatusCell({
   value,

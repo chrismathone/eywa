@@ -290,18 +290,29 @@ export function AppSidebar({
               {group.items.map((item) => {
                 const presentation = navPresentation(item);
                 const winId = windowId("route", item.menuKey);
-                const isOpen = isDesktop && presentation === "window" && openIds.has(winId);
+                const subsAll = subTabsFor(item.menuKey);
+                const subs = subsAll.length > 0 ? subsAll : undefined;
+                // subOf 자식(독립 메뉴 하부탭)의 창 상태는 부모 항목에 귀속시킨다 — 자식이 최상위에서
+                // 빠졌으므로 안 그러면 "ECS 창이 포커스인데 사이드바 어디에도 표시가 없다"가 된다.
+                // 부모가 켜지면 인라인 하부탭이 열리고, 거기서 자식 탭이 자기 창 포커스로 하이라이트된다.
+                const childWinIds = (subs ?? [])
+                  .filter((s) => s.menuKey)
+                  .map((s) => windowId("route", s.menuKey!));
+                const isOpen =
+                  isDesktop &&
+                  presentation === "window" &&
+                  (openIds.has(winId) || childWinIds.some((id) => openIds.has(id)));
+                const focusedHere =
+                  hasFocus && (focusedId === winId || childWinIds.includes(focusedId!));
                 const active = isDesktop
                   ? presentation === "desktop"
                     ? !hasFocus && isItemActive(item.href, pathname)
-                    : hasFocus && focusedId === winId
+                    : focusedHere
                   : isItemActive(item.href, pathname);
                 const openOnly = isOpen && !active; // 열려 있지만 비포커스 → 점
                 // 이미 최상단(포커스)인 창 — 이 메뉴를 다시 누르면 "첫 화면"으로 리셋(아래 handleNav).
                 const atTop =
                   isDesktop && presentation === "window" && hasFocus && focusedId === winId;
-                const subsAll = subTabsFor(item.menuKey);
-                const subs = subsAll.length > 0 ? subsAll : undefined;
                 // 비활성 메뉴 + 하부탭 有 → hover 시 우측 플라이아웃(왼쪽 메뉴는 고정, 리플로우 없음).
                 const flyoutable = isDesktop && expanded && !!subs && !active;
                 return (

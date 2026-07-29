@@ -9,7 +9,7 @@ import type { SkillAreaSetting } from "@/features/owner/settings-types";
 
 /**
  * ECS(English Class Sheet) 공용 접근 게이트 — 조회·모든 서버 액션·RPC 호출부가 **전부** 이 함수를
- * 통과한다(#77 "게이트는 모든 표면이 같은 함수를"). class_sheet_* 테이블은 service_role 전용(0155a
+ * 통과한다(#77 "게이트는 모든 표면이 같은 함수를"). class_sheet_* 테이블은 service_role 전용(0157a
  * deny-RLS)이라 이 게이트가 유일한 역할·스코프 방어선이다.
  *
  * 검증 순서:

@@ -2,7 +2,7 @@
 
 // ECS 서버 액션 — 전부 requireEcsClassAccess(write) 공용 게이트(#77) 뒤. class_sheet_*는 deny-RLS라
 // admin client(service_role)로만 접근하되, **모든 select/update가 tenant_id + class_id + id 3중 조건**
-// (게이트한 반과 변경 행의 결속 — 계획 v2.2 §A). 구조 변경(create/move/delete/copy)은 0155a RPC 위임
+// (게이트한 반과 변경 행의 결속 — 계획 v2.2 §A). 구조 변경(create/move/delete/copy)은 0157a RPC 위임
 // (슬롯 advisory xact 락·재번호 원자성). 출석은 비파괴 ecs_mark_present_if_absent만(§E).
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchInChunks } from "@/lib/supabase/batch";
@@ -462,7 +462,7 @@ export async function saveMemo(input: {
 // ── 출석(비파괴) ─────────────────────────────────────────────────────────────
 
 /**
- * ECS 출석 체크 — 허용되는 유일한 조작 = "기록 없음 → present"(0155a RPC, 원자).
+ * ECS 출석 체크 — 허용되는 유일한 조작 = "기록 없음 → present"(0157a RPC, 원자).
  * 어떤 기록이든 이미 있으면 no-op + canonical 상태 반환(absent/메모/시수 절대 불변).
  * 권한 = **기존 attendance 계약**: canWriteTenant("attendance") + 강사는 날짜별 7일 편집창.
  * (반 소유는 ECS 게이트의 effectiveTeacherScope가 이미 classes.teacher_id 기준으로 보장.)

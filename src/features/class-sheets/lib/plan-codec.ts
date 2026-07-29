@@ -1,5 +1,5 @@
 // ECS 계획 행 텍스트 codec + '의미 있는 행' 판정 — 순수(Vitest).
-// ⚠️ isMeaningfulPlanLine은 0155a SQL `ecs_is_meaningful_line`과 **동일 정의**여야 한다(복사 skip 판정이
+// ⚠️ isMeaningfulPlanLine은 0157a SQL `ecs_is_meaningful_line`과 **동일 정의**여야 한다(복사 skip 판정이
 //    앱·RPC 양쪽에서 같은 답을 내야 함). 한쪽만 고치지 말 것 — Vitest가 픽스처 동치를 잠근다.
 
 /** 계획 행에서 patch(CAS)로 편집 가능한 컬럼 — 런타임 allowlist(그 외 필드는 액션이 즉시 거부). */

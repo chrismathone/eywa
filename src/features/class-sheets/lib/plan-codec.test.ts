@@ -13,7 +13,7 @@ describe("normalizePlanText — NULL/빈문자 공용 codec", () => {
   });
 });
 
-describe("isMeaningfulPlanLine — SQL ecs_is_meaningful_line 동치(0155a)", () => {
+describe("isMeaningfulPlanLine — SQL ecs_is_meaningful_line 동치(0157a)", () => {
   // ⚠️ 이 픽스처는 SQL 함수와 같은 답을 내야 한다(복사 skip 판정). SQL 정의:
   //   nullif(btrim(coalesce(x,'')),'') is not null OR … (textbook/page_range/progress/homework)
   const CASES: Array<[Parameters<typeof isMeaningfulPlanLine>[0], boolean]> = [

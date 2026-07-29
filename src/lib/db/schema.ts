@@ -1935,7 +1935,7 @@ export const aiUsageLogs = pgTable(
   (t) => [index("ai_usage_logs_tenant_created_idx").on(t.tenantId, t.createdAt)],
 );
 
-// === class_sheet_* (English Class Sheet — 반별 주간 수업계획서/출석부, 0155a 손수 alpha) ===
+// === class_sheet_* (English Class Sheet — 반별 주간 수업계획서/출석부, 0157a 손수 alpha) ===
 // 앵커 = 실날짜 plan_date + slot_start(time). class_schedules FK 금지(valid 교체·분절 시 소실), 교시번호 저장 금지.
 // 🔒 4테이블 전부 RLS 정책 0개 + PUBLIC/anon/authenticated revoke — 서버 admin client(service_role) 전용.
 //    역할 게이트는 앱 레이어 requireEcsClassAccess (src/features/class-sheets/server/access.ts).
@@ -1948,7 +1948,7 @@ export const classSheetPlanLines = pgTable(
     tenantId: uuid("tenant_id")
       .notNull()
       .references(() => tenants.id, { onDelete: "cascade" }),
-    classId: uuid("class_id").notNull(), // (tenant_id, class_id) 복합 FK → classes (0155a)
+    classId: uuid("class_id").notNull(), // (tenant_id, class_id) 복합 FK → classes (0157a)
     planDate: date("plan_date").notNull(),
     slotStart: time("slot_start").notNull(),
     termMode: text("term_mode").notNull().default("regular"), // 'regular'(평시) | 'exam'(내신) — DB CHECK
@@ -2014,7 +2014,7 @@ export const classSheetStudentMarks = pgTable(
       .notNull()
       .references(() => tenants.id, { onDelete: "cascade" }),
     classId: uuid("class_id").notNull(),
-    studentId: uuid("student_id").notNull(), // (tenant_id, student_id) 복합 FK → students (0155a)
+    studentId: uuid("student_id").notNull(), // (tenant_id, student_id) 복합 FK → students (0157a)
     markDate: date("mark_date").notNull(),
     slotStart: time("slot_start").notNull(), // 교시 포함 — 같은 학생 하루 2교시 독립 기록
     status: text("status"), // '완'/'결석'/'안침' 등 자유 라벨(운영 어휘 진화 허용) — 출결 아님

@@ -20,7 +20,7 @@ export function weekDatesOf(monday: string): string[] {
 
 /**
  * class_sheet_goals.period_start 정규화 — week=그 주 월요일 / month=그 달 1일.
- * DB CHECK(0155a)와 같은 규약(어긋난 값은 저장 자체가 거부되므로 액션이 반드시 이걸 거친다).
+ * DB CHECK(0157a)와 같은 규약(어긋난 값은 저장 자체가 거부되므로 액션이 반드시 이걸 거친다).
  */
 export function normalizePeriodStart(scope: "month" | "week", ymd: string): string {
   if (scope === "week") return mondayOf(ymd);

@@ -4,7 +4,7 @@ import { config } from "dotenv";
 import postgres from "postgres";
 
 /**
- * ECS(English Class Sheet) DB 보안·계약 통합 테스트 (0155a) — `pnpm test:rls`로만 실행.
+ * ECS(English Class Sheet) DB 보안·계약 통합 테스트 (0157a) — `pnpm test:rls`로만 실행.
  *
  * ① deny-by-default: class_sheet_* 4테이블·ecs_* RPC는 authenticated에서 **권한 자체가 없어야** 한다
  *    (RLS 빈 정책의 0행이 아니라 permission denied — 브라우저 anon 키 REST 우회 차단, 계획 v2.2 §B).

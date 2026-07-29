@@ -9,9 +9,13 @@
 import { useState } from "react";
 import { Popover } from "@base-ui/react/popover";
 import { Button } from "@/components/ui/button";
-import { planBulkAttendance, planBulkStatus, countStatusOverwrites, type BulkRosterRow } from "../lib/bulk";
-
-const STATUS_CHIPS = ["완", "결석", "안침"] as const;
+import {
+  planBulkAttendance,
+  planBulkStatus,
+  countStatusOverwrites,
+  STATUS_CHIPS,
+  type BulkRosterRow,
+} from "../lib/bulk";
 
 export function RosterBulk({
   date,
@@ -48,11 +52,13 @@ export function RosterBulk({
   const value = free.trim() !== "" ? free.trim() : picked;
 
   const applyStatus = () => {
-    if (statusTargets.length === 0) return;
+    // 값이 없으면 적용 자체가 안 된다(버튼 disabled) — "아무것도 안 골랐는데 전원 상태 삭제"가
+    // 기본 액션이 되면 안 된다. 일괄 지우기는 의도적으로 미제공(지우기는 개별 셀에서).
+    if (statusTargets.length === 0 || value === null) return;
     // 덮어쓰기 + 실제로 덮일 값이 있을 때만 확인(마찰 최소화 — 빈 칸만 채우기는 확인 없음).
     if (!onlyEmpty && overwrites > 0) {
       const ok = window.confirm(
-        `이미 입력된 상태 ${overwrites}건을 덮어씁니다. 계속할까요?\n(기존 값을 남기려면 '빈 칸만 채우기'를 켜세요)`,
+        `이미 입력된 상태 ${overwrites}건을 "${value}"(으)로 덮어씁니다. 계속할까요?\n(기존 값을 남기려면 '빈 칸만 채우기'를 켜세요)`,
       );
       if (!ok) return;
     }
@@ -67,7 +73,10 @@ export function RosterBulk({
       open={open}
       onOpenChange={(o) => {
         setOpen(o);
-        if (!o) setFree("");
+        if (!o) {
+          setFree("");
+          setPicked(null);
+        }
       }}
     >
       <Popover.Trigger
@@ -101,7 +110,8 @@ export function RosterBulk({
               <p className="text-text-faint mt-1 text-[10px]">
                 {canMarkDate
                   ? "이미 기록된 학생은 그대로 둡니다(출석부 기록 보존)."
-                  : "이 날짜는 출결 수정 기간이 지났습니다."}
+                  : // canMarkAttendanceByDate = 권한 AND 기간 — 원인을 단정하면 오표시(개별 툴팁과 동일 문구)
+                    "출석 입력 권한이 없거나 수정 기간이 지났습니다."}
               </p>
             </div>
 
@@ -128,7 +138,11 @@ export function RosterBulk({
                 placeholder="직접 입력"
                 value={free}
                 aria-label="상태 직접 입력"
-                onChange={(e) => setFree(e.target.value)}
+                onChange={(e) => {
+                  setFree(e.target.value);
+                  // 자유입력이 우선 적용되므로 칩 하이라이트가 남으면 "칩이 적용된다"는 거짓 표시가 된다
+                  if (e.target.value.trim() !== "") setPicked(null);
+                }}
               />
               <label className="text-text-dim mt-1.5 flex cursor-pointer items-center gap-1.5 text-[11px]">
                 <input
@@ -143,10 +157,10 @@ export function RosterBulk({
                 type="button"
                 size="sm"
                 className="mt-1.5 w-full"
-                disabled={statusTargets.length === 0}
+                disabled={statusTargets.length === 0 || value === null}
                 onClick={applyStatus}
               >
-                {value === null ? "상태 지우기" : `"${value}"`} 적용 {statusTargets.length}명
+                {value === null ? "상태를 선택하세요" : `"${value}" 적용 ${statusTargets.length}명`}
               </Button>
             </div>
 

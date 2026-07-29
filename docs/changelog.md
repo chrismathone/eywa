@@ -8,7 +8,7 @@
 영어팀 구글시트(반 1개=스프레드시트 1개, 주차 탭 매주 복제 — 실물 3종+마스터 전수 조사) eywa 이식. 원장 확정:
 네이티브 재구현·철저 배선·DB화 / 출석=attendance_records 실기록 / 이관 없이 새 주부터 / 메뉴명 "English Class Sheet".
 3차에 걸친 계획 검수(Blocker 총 14건)를 계약·테스트로 고정한 뒤 구현(계획 파일 v2.2).
-- **DB(0155a)**: `class_sheet_plan_lines`(앵커=실날짜+slot_start, 행 식별=id, 위치 UNIQUE는 skill_area **제외**+DEFERRABLE)
+- **DB(0157a)**: `class_sheet_plan_lines`(앵커=실날짜+slot_start, 행 식별=id, 위치 UNIQUE는 skill_area **제외**+DEFERRABLE)
   ·`class_sheet_goals`(담임/부담임×월간/주간)·`class_sheet_student_marks`(**교시 포함 키** — 하루 2교시 독립)·`class_sheet_memos`.
   🔒 4테이블 **RLS 정책 0 + PUBLIC/anon/authenticated 정밀 revoke = service_role 전용**(브라우저 REST 우회 차단) +
   classes/students `(tenant_id,id)` 복합 FK(교차 테넌트 봉쇄). RPC 5종(create/move/delete/copy_week/mark_present_if_absent) —
@@ -38,6 +38,33 @@
   (hover 카드는 `pointer-events-none`이라 카드 안 링크 불가 — 직접 링크는 의도적 비채택).
 - **비범위(재제안 금지 계열)**: 기존 28개 시트 데이터 이관(새로 시작 확정)·시트 역-export·영어 파생출석 ON·
   원스크린/ClassNote 통합·slot_teacher_label→userId 바인딩·attendance_days/on_hold 이력화.
+
+### ECS 후속 — 시간표 하위 카테고리·헤더 바로가기·일괄 입력·팝오버·강사뷰 조임 (2026-07-30) - tsc0/lint0/test50/build✓
+원장 dev 검수 피드백 일괄 반영(같은 브랜치 후속 커밋 6개).
+- **카드 크기 맞춤**: 주간 시트를 요일별 독립 스택 → **단일 CSS grid**(`SheetGrid`, day-column 대체) — 같은
+  slotStart가 요일 간 같은 행·같은 높이(시트 원본의 가로 정렬 재현). 랜딩 반 카드는 flex-col+`mt-auto` 균형.
+- **커서 의미**: 카드/요일 헤더 `cursor-default`(DragScrollArea cursor-grab이 "끌어 옮기기"로 오독 — teacher-grid
+  선례). ⚠️ `cursor-auto` 금지 — 팬 전환+userSelect:none이라 I빔은 못 하는 선택을 약속하는 거짓 어포던스.
+  Tailwind v4는 preflight의 `button{cursor:pointer}`가 삭제됨 → ECS 클릭 대상 전부에 `cursor-pointer` 명시
+  (📌 앱 전역 공용 `<Button>`에도 같은 누락이 있으나 범위 밖 — 별도 결정).
+- **상태 팝오버**: 수동 absolute → **base-ui Popover**(앱 표준) — 바깥클릭·ESC 닫기 내장, Portal이라
+  DragScrollArea 이중 overflow에 안 잘림. 닫을 때 미저장 자유입력 리셋(저장된 값 오인 방지).
+- **일괄 입력**(교시 카드별, 원스크린 계약 준수): 대상=카드에 보이는 로스터(표시=일괄 집합)·라벨에 실제 대상 수.
+  출석 일괄=**기록 없는 학생만**(비파괴, 확인 불요) / 상태 일괄=덮어쓰기 기본+덮일 건수 밝히고 confirm+'빈 칸만'
+  체크박스. 개인 진도·과제는 개별 사실이라 일괄 제외. 계산=순수 `lib/bulk.ts`(Vitest 9 — "값 있어야 통과" 게이트
+  금지 잠금). 
+- **메뉴 IA**: ECS = **시간표 하위 카테고리**(원장 지시). `NavItem.subOf` 신설 — 사이드바에서만 하부탭으로 내리고
+  팰릿·모바일내비엔 잔존(hidden이면 검색 불가). `SubTab.menuKey` 신설 — 독립 라우트 하부탭은 **자기 창**(ecs
+  1400×760)으로 열리고 자기 키로 권한 검사(부모만 통과하면 ecs=none 역할에 죽은 링크가 보였음). 계약은
+  navigation.test.ts 4케이스로 잠금(subOf 항목 삭제=findNavItem 실패=WindowLink 전멸).
+- **시간표 헤더 [ECS 바로가기]**: 영어 과목을 보고 있을 때만(`subject==="english" && resolveSkillAreas>0 &&
+  canAccessTenant("ecs")` — ECS 정식 게이트와 동일 식). ⚠️ searchParams가 아니라 확정 변수 `subject`로 판정
+  (기본 과목이면 URL에 파라미터 없음). 최상위 헤더+임베드 툴바 **이중 렌더**(창에선 헤더 줄이 접힘). week 승계.
+- **강사뷰**: ECS 메뉴는 **영어 담당 강사에게만**(`effectiveTeacherScope().subjects`에 english — 서버 계산 후
+  prop, 모르면 fail-open). 빈 랜딩 안내를 원인별 분기(`emptyReason`) — 담당 반 없는 강사에게 "학원 설정 확인"은
+  고칠 수 없는 일을 시키는 거짓 안내였음.
+- 🔴 **미해결(원장 결정 대기)**: ECS 접근=반 담당(`teacher_id`) 기준인데 영어 슬롯 633개 중 226개가 슬롯 강사≠반
+  담당 — 부담임/보조는 "담당 반이 아닙니다". 스코프 확장은 전 화면 파급이라 보류.
 
 ### ClassNote 게시 = 워커 내장 단일 경로 (Cloud Run 폴백 제거) (2026-07-29) - tsc0/lint0/test255+17/적대검증 4렌즈
 소등 준비의 마지막 지뢰 제거. 어제(07-28) 도입한 `CLASSNOTE_PUBLISH_MODE=local` **env 스위치를 없애고**

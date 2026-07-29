@@ -41,7 +41,12 @@ export const SheetGrid = memo(function SheetGrid({
   }, [days]);
 
   if (days.length === 0) {
-    return <p className="text-text-dim self-center px-6 py-10 text-sm">이 주에는 수업이 없습니다.</p>;
+    // 랜딩 빈 상태와 동일 스타일(부모가 flex가 아니라 self-center는 무효 — 카드형으로 통일)
+    return (
+      <p className="bg-card shadow-card text-text-dim rounded-2xl px-4 py-6 text-sm">
+        이 주에는 수업이 없습니다.
+      </p>
+    );
   }
 
   return (
