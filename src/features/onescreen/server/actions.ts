@@ -727,7 +727,14 @@ export async function buildMakeupStudent(
 /**
  * 보강(수업외) 학생 '이전 진도 불러오기' — buildMakeupStudent는 경량이라 직전 회차를 안 담는다.
  * 강사가 버튼을 누르면 그 학생의 (과목)별 직전 lesson_reports를 당겨와 prev/prevReport로 반환(roster와 동일 규격).
- * prevScore(일일/확인)는 학생 단위 최신 회차의 exam_info로.
+ * prevScore(일일/확인)는 **이 강사가 가르치는 과목**의 최신 회차 exam_info로(2026-07-29 과목 분리).
+ *
+ * ⚠️ **알려진 한계(고의로 남김)**: 이 함수는 `class_id`를 읽지 않아 과목 판정이 `subject` 컬럼 하나에 걸린다
+ *    → `subject IS NULL`인데 **반은 영어**인 보고서가 생기면 `reportSubject()`가 레거시 규칙대로 math로 오분류한다.
+ *    현재 그런 행은 **0건**이라 무해하다(이관분은 전부 반도 과목도 없는 수학, eywa 저장분은 항상 subject를 쓴다 —
+ *    클라가 `su.subjectKey`를 넘긴다). 영어를 eywa에서 발송하기 시작한 뒤에도 이 전제가 유지되는지 확인할 것.
+ *    깨진다면 수리 = select에 `class_id` 추가 + `reportSubject({subject, classSubject})`로 roster.ts와 같게.
+ *    (roster.ts의 `subjectOfPrior`는 이미 반 과목까지 본다 — 단 **강사 담당 반**만 아는 한계는 동일.)
  */
 export async function loadMakeupHistory(
   studentId: string,
