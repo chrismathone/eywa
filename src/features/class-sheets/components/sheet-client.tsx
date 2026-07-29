@@ -24,7 +24,7 @@ import { useSheetDoc } from "./use-sheet-doc";
 import { useFlushOnUnmount, useSheetSaveStore } from "./use-sheet-saves";
 import { SheetToolbar } from "./sheet-toolbar";
 import { PlanPanel } from "./plan-panel";
-import { DayColumn } from "./day-column";
+import { SheetGrid } from "./sheet-grid";
 import { CopyPrevWeek } from "./copy-prev-week";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 
@@ -321,24 +321,17 @@ export function SheetClient({
           />
         ) : null}
         <DragScrollArea barX className="min-w-0 flex-1">
-          <div className="flex h-full items-stretch gap-3 pb-2">
-            {visibleDays.map((day) => (
-              <DayColumn
-                key={day.date}
-                day={day}
-                data={data}
-                linesBySlot={linesBySlot}
-                marks={marks}
-                attendance={attendance}
-                store={store}
-                handlers={handlers}
-                canEdit={canEdit}
-              />
-            ))}
-            {visibleDays.length === 0 ? (
-              <p className="text-text-dim self-center px-6 py-10 text-sm">이 주에는 수업이 없습니다.</p>
-            ) : null}
-          </div>
+          {/* 같은 교시 블록이 요일 간 같은 행에 정렬(행 높이 통일) — 카드 크기 맞춤 */}
+          <SheetGrid
+            days={visibleDays}
+            data={data}
+            linesBySlot={linesBySlot}
+            marks={marks}
+            attendance={attendance}
+            store={store}
+            handlers={handlers}
+            canEdit={canEdit}
+          />
         </DragScrollArea>
       </div>
 

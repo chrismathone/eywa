@@ -52,14 +52,18 @@ export default async function EcsLandingPage({
           {res.cards.map((card) => {
             const pct = card.totalSlots > 0 ? Math.round((card.filledSlots / card.totalSlots) * 100) : 0;
             return (
+              // 카드 높이 균형: grid stretch + flex-col + 통계줄 mt-auto — 짧은 카드도 같은 높이·하단 정렬
               <Link
                 key={card.classId}
                 href={`/ecs/${card.classId}?week=${res.weekMonday}`}
-                className="bg-card shadow-card hover:shadow-md block rounded-2xl px-4 py-3 transition"
+                className="bg-card shadow-card hover:shadow-md flex h-full flex-col rounded-2xl px-4 py-3 transition"
               >
                 <p className="text-foreground truncate text-[14px] font-bold">{card.className}</p>
                 <p className="text-text-dim mt-0.5 text-[12px]">{card.teacherName ?? "담임 미지정"}</p>
-                <div className="mt-2 flex items-center gap-2">
+                {card.orphanSlots > 0 ? (
+                  <p className="text-text-faint mt-1 text-[11px]">시간 변경된 기록 {card.orphanSlots}건</p>
+                ) : null}
+                <div className="mt-auto flex items-center gap-2 pt-2">
                   <span className="num text-foreground text-[13px] font-bold">
                     {card.filledSlots}/{card.totalSlots}
                   </span>
@@ -68,9 +72,6 @@ export default async function EcsLandingPage({
                     <span className="bg-primary block h-full rounded-full" style={{ width: `${pct}%` }} />
                   </span>
                 </div>
-                {card.orphanSlots > 0 ? (
-                  <p className="text-text-faint mt-1 text-[11px]">시간 변경된 기록 {card.orphanSlots}건</p>
-                ) : null}
               </Link>
             );
           })}
