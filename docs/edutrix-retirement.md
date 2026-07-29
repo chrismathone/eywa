@@ -69,6 +69,8 @@ roster-signals, **ClassNote 읽음 매칭**이 여기 의존한다. 전부 **eyw
 
 - [ ] **edutrix Supabase Delete** — 며칠 관망 후. 코드·env가 이미 깨끗해 확인할 것 없음.
       (정지 상태에선 `archive-edutrix.cjs` 재실행 불가 — 마지막 스냅샷은 07-29에 완료)
-- [ ] 정리 후보(선택): `src/lib/storage/gcs-client.ts` + `MEDIA_STORAGE_BACKEND=gcs` 분기 —
-      GCS 프로젝트가 사라져 되돌릴 수 없는 죽은 경로다.
+- [x] ~~정리 후보(선택): `src/lib/storage/gcs-client.ts` + `MEDIA_STORAGE_BACKEND=gcs` 분기~~ —
+      **완료(2026-07-29, `b27502a6`)**. GCS 분기·`backend.ts`·`@google-cloud/storage` 의존·`setup-gcs-cors.cjs`
+      제거 + Vercel 프로덕션 `MEDIA_STORAGE_BACKEND` env도 삭제. 정리하다 **업로드 검증이 꺼져 있던 것**을
+      발견해 함께 복구(`verifyUploadedObject`가 Supabase에선 `{size:0}`만 반환하고 아무것도 안 보고 있었다).
 - GCP 프로젝트 삭제는 **30일 유예** — 그 안에는 복구 가능(2026-08-28경까지).

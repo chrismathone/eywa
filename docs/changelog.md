@@ -21,7 +21,10 @@ ijw-calander GCP 프로젝트를 삭제해 **되돌릴 수 없게 된** GCS 경�
 - **조용히 멈춰 있던 것**: `recordings-retention` cron이 `backend!=="supabase"`면 no-op로 빠져나가 **보관기한 정리를 하지 않고 있었다** → 가드 제거.
 - **부수 정리**: 죽은 `MEDIA_KIND.hasLegacy`(읽는 곳 0, 선행 dead) 제거 · `createUploadTicket` JSDoc이 다른 함수 위로 밀려 붙은 것 복구 ·
   존재하지 않는 Vitest를 주장하던 주석 정정(모듈이 server-only라 import 불가 [[#61]]) · `gcs-client.ts`를 가리키던 stale 주석 3곳.
-- ⚠️ **잔여(수동)**: Vercel 프로덕션의 `MEDIA_STORAGE_BACKEND` env는 코드가 더 이상 읽지 않으므로 제거 대상.
+- **env 정리 완료**: Vercel 프로덕션 `MEDIA_STORAGE_BACKEND` 삭제(코드가 안 읽는데 남겨두면 "이 값을 바꾸면
+  백엔드가 바뀐다"는 오해가 그대로 남는다). 프로덕션 env 20개를 전수 대조해 **죽은 건 이것 하나뿐**임을 확인
+  (나머지 19개는 `process.env` 소비처 존재). `.env.local.example`에서도 `MEDIA_STORAGE_BACKEND`·
+  `FIREBASE_STORAGE_BUCKET` 항목 제거 + `FIREBASE_SERVICE_ACCOUNT_KEY`는 "앱 미사용, 로컬 스크립트 폴백 전용"으로 정정.
 - ⚠️ **알려진 한계(이번 변경이 만든 게 아님, 어제 백엔드 전환 시점부터)**: 업로드 진행률이 0→100 2단계
   (Supabase `uploadToSignedUrl`은 진행률 미노출, 옛 GCS는 XHR PUT이라 실시간이었음) · 다운로드 파일명은 Supabase `?download=`에
   위임(`attachmentFilename` RFC 5987 헬퍼를 끼울 자리가 없음). 한글 파일명 저장은 실사용 확인 필요.
