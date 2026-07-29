@@ -674,7 +674,13 @@ export function ResumeSheet({
                   name="c_division"
                   value={division}
                   onValueChange={setDivision}
-                  options={RESUME_DEPARTMENTS.map((v) => ({ value: v, label: v }))}
+                  // 지정 6종 + (저장돼 있던 목록 밖 부서는 현재 값으로 유지 — 저장만으로 지워지지 않게).
+                  options={[
+                    ...RESUME_DEPARTMENTS.map((v) => ({ value: v, label: v })),
+                    ...((RESUME_DEPARTMENTS as readonly string[]).includes(division) || !division
+                      ? []
+                      : [{ value: division, label: `${division} (기존)` }]),
+                  ]}
                   placeholder="선택"
                   ariaLabel="근무부서"
                   className="w-full"

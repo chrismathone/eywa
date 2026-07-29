@@ -51,7 +51,9 @@ describe("parseResumeForm", () => {
     bad.set("c_company", "없는회사");
     bad.set("c_division", "없는부서");
     expect(parseResumeForm(bad).contract.company).toBe("");
-    expect(parseResumeForm(bad).contract.division).toBe("");
+    // 부서는 화이트리스트로 자르지 않는다 — 시트 이관분의 실사용 부서(국어과·차량팀 등 지정 6종 밖)가
+    // 이력서 저장 한 번에 사라지던 문제(원장 결정 2026-07-29: 드롭다운 6종 유지 + 기존 값 보존).
+    expect(parseResumeForm(bad).contract.division).toBe("없는부서");
   });
 
   it("자격증·외국어는 폼에 있는 행 수만큼 동적 파싱, 없으면 빈 1행", () => {
@@ -119,12 +121,12 @@ describe("normalizeResume", () => {
     expect(legacy.contract.division).toBe("");
     expect(legacy.contract.manager).toBe("");
 
-    // '기타과목'은 새 목록에 대응이 없어 빈 값(수동 재선택 대상).
-    expect(normalizeResume({ contract: { division: "기타과목" } }).contract.division).toBe("");
+    // 새 목록에 없는 부서도 **보존**한다(드롭다운엔 '(기존)'으로 뜬다) — 저장만으로 지워지면 안 됨.
+    expect(normalizeResume({ contract: { division: "기타과목" } }).contract.division).toBe("기타과목");
 
     const tampered = normalizeResume({ contract: { company: "없는회사", division: 7 } });
     expect(tampered.contract.company).toBe("");
-    expect(tampered.contract.division).toBe("");
+    expect(tampered.contract.division).toBe(""); // 문자열이 아닌 값은 여전히 빈 값
   });
 
   it("동적 섹션(자격증)은 저장된 행 수 그대로, 체크박스는 true만 통과", () => {
