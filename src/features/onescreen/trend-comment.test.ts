@@ -59,9 +59,9 @@ describe("buildTrendPrompt", () => {
     const p = buildTrendPrompt(input);
     expect(p).toContain('{"trend": "..."}'); // 출력 계약
     expect(p).toContain("Y문제 중 X문제"); // 숫자 정확 규칙
-    expect(p).toContain("전망·격려·조언은 넣지 마세요");
+    expect(p).toContain("전망·격려·조언·추측은 넣지 마세요");
     expect(p).toContain("[06-01] 일일 6/10 -> [06-08] 일일 8/10"); // 기록 주입
-    expect(p).toContain("과제 흐름(날짜순): [06-01] 완료 -> [06-08] 완료");
+    expect(p).toContain("과제 흐름(날짜순): [06-01~06-08] 완료(2회)");
   });
 });
 
@@ -104,9 +104,9 @@ describe("흐름별 독립 윈도 — 과제-only 행이 시험 기록을 밀어
     rows.push(row("2026-06-27", "일일 8/10", null));
     const input = buildTrendInput(rows)!;
     expect(input.examTrend).toBe("[06-20] 일일 6/10 -> [06-27] 일일 8/10");
-    // 과제 흐름은 최근 10개로 잘린다(가장 오래된 2개 제외)
-    expect(input.assignTrend.startsWith("[06-03] 0%")).toBe(true);
-    expect(input.assignTrend.split(" -> ")).toHaveLength(10);
+    // 과제 흐름은 최근 10개로 잘린 뒤 **연속 같은 값이 한 덩이로 묶인다**(compressRuns, 2026-07-30).
+    // 예전엔 "0% -> 0% -> …" 10개가 그대로 프롬프트에 들어가 모델이 날짜를 전부 나열했다.
+    expect(input.assignTrend).toBe("[06-03~06-12] 0%(10회)");
   });
   it("count는 실제 인용 날짜 수(중복 날짜 이중계상 없음)", () => {
     const input = buildTrendInput([
@@ -119,7 +119,7 @@ describe("흐름별 독립 윈도 — 과제-only 행이 시험 기록을 밀어
     const input = buildTrendInput([row("2026-06-01", null, "미제출"), row("2026-06-08", null, "미제출")]);
     expect(input).not.toBeNull();
     expect(input!.examTrend).toBe("");
-    expect(input!.assignTrend).toBe("[06-01] 미제출 -> [06-08] 미제출");
+    expect(input!.assignTrend).toBe("[06-01~06-08] 미제출(2회)");
   });
 });
 

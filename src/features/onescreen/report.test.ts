@@ -101,61 +101,60 @@ describe("isStudentDone", () => {
 });
 
 describe("buildReport", () => {
-  it("이름과 오늘 진도를 포함", () => {
+  it("🔴 학생 호칭을 쓰지 않는다 — 수신인은 학부모(AI 멘트 규칙과 동일)", () => {
     const r = buildReport(makeStudent({ name: "김서연" }));
-    expect(r).toContain("김서연 학생");
+    expect(r).not.toContain("김서연 학생");
     expect(r).toContain("영어 독해 Unit 2");
   });
 
-  it("평균 90 이상 → 안정적 성취 마무리", () => {
-    const r = buildReport(
-      makeStudent({
-        tests: { daily: { score: 18, max: 20, prevScore: 16 }, check: { score: 19, max: 20, prevScore: 17 } },
-      }),
-    );
-    expect(r).toContain("안정적인 성취");
+  it("🔴 점수 평균으로 평가·조언을 만들지 않는다 (강사가 하지 않은 말)", () => {
+    for (const tests of [
+      { daily: { score: 19, max: 20, prevScore: null }, check: { score: 19, max: 20, prevScore: null } },
+      { daily: { score: 16, max: 20, prevScore: null }, check: { score: 15, max: 20, prevScore: null } },
+      { daily: { score: 11, max: 20, prevScore: null }, check: { score: null, max: 20, prevScore: null } },
+    ]) {
+      const r = buildReport(makeStudent({ tests }));
+      expect(r).not.toContain("안정적인 성취");
+      expect(r).not.toContain("꾸준히 잘 따라오고");
+      expect(r).not.toContain("복습이 필요");
+      expect(r).not.toContain("부탁드립니다");
+      expect(r).not.toContain("점검해");
+    }
   });
 
-  it("평균 70~89 → 꾸준히 마무리", () => {
+  it("🔴 내부 설명 라벨('이전 진도')을 학부모 문장에 넣지 않는다", () => {
     const r = buildReport(
       makeStudent({
-        tests: { daily: { score: 16, max: 20, prevScore: null }, check: { score: 15, max: 20, prevScore: null } },
+        tests: { daily: { score: 17, max: 25, prevScore: null }, check: { score: null, max: 20, prevScore: null } },
       }),
     );
-    expect(r).toContain("꾸준히 잘 따라오고");
+    expect(r).not.toContain("이전 진도");
+    expect(r).not.toContain("오늘 진도)"); // "확인테스트(오늘 진도)" 라벨
+    expect(r).toContain("일일테스트는 25문제 중 17개"); // 표기는 formatTestScore 단일 소스
+    expect(r).not.toContain("17/25");
   });
 
-  it("평균 70 미만 → 복습 필요 마무리", () => {
-    const r = buildReport(
-      makeStudent({
-        tests: { daily: { score: 11, max: 20, prevScore: null }, check: { score: null, max: 20, prevScore: null } },
-      }),
-    );
-    expect(r).toContain("복습이 필요");
-  });
-
-  it("점수 미입력이면 테스트 문장·마무리 없음", () => {
+  it("점수 미입력이면 테스트 문장 없음", () => {
     const r = buildReport(makeStudent());
-    expect(r).not.toContain("결과를 받았습니다");
-    expect(r).not.toContain("성취");
-    expect(r).not.toContain("복습");
+    expect(r).not.toContain("일일테스트");
+    expect(r).not.toContain("확인테스트");
   });
 
   it("태도가 있으면 태도·과제 문장 포함", () => {
     const r = buildReport(makeStudent({ attitude: "아주 좋음", homework: "완료" }));
-    expect(r).toContain("수업 태도는 '아주 좋음'");
-    expect(r).toContain("과제는 완료");
+    expect(r).toContain("수업 태도는 아주 좋음");
+    expect(r).toContain("지난 과제는 완료");
   });
 
   it("태도만 있고 과제 미입력이면 과제 문구 생략", () => {
     const r = buildReport(makeStudent({ attitude: "보통", homework: "" }));
-    expect(r).toContain("수업 태도는 '보통'입니다");
+    expect(r).toContain("수업 태도는 보통입니다");
     expect(r).not.toContain("과제는");
   });
 
   it("과제만 있고 태도 없으면 과제 문장 단독 포함", () => {
     const r = buildReport(makeStudent({ attitude: null, homework: "완료" }));
-    expect(r).toContain("과제는 완료 상태입니다");
+    expect(r).toContain("지난 과제는 완료입니다");
     expect(r).not.toContain("수업 태도");
   });
 
@@ -170,7 +169,9 @@ describe("buildReport", () => {
         tests: { daily: { score: 18, max: 20, prevScore: 16 }, check: { score: null, max: 20, prevScore: null } },
       }),
     );
-    expect(up).toContain("지난 회차 대비 ▲2점");
+    // 🔴 단위는 척도를 따른다 — 개수 시험에 "▲2점"은 틀린 단위였다(2026-07-30 수리).
+    expect(up).toContain("지난 회차 대비 ▲2개");
+    expect(up).not.toContain("▲2점");
 
     const same = buildReport(
       makeStudent({
@@ -258,9 +259,9 @@ describe("폴백 템플릿 개행 접기 — 학부모 문장이 줄로 쪼개�
 
   it("여러 줄 진도가 ', '로 접혀 한 문장이 된다", () => {
     const r = buildSubjectReport(st, 0);
-    expect(r).not.toContain("\n");
+    // ⚠️ 검사 대상은 **값 안의** 개행이다 — 문장 사이 줄바꿈은 2026-07-30부터 정상(원장 "줄바꿈도 적절히").
     expect(r).toContain(
-      "오늘 수학 원과 직선의 위치 관계, 원의 접선의 방정식(1), 원의 접선의 방정식(2) 진도를 진행했습니다.",
+      "오늘은 수학 원과 직선의 위치 관계, 원의 접선의 방정식(1), 원의 접선의 방정식(2) 진도를 진행했습니다.",
     );
   });
 
@@ -270,7 +271,6 @@ describe("폴백 템플릿 개행 접기 — 학부모 문장이 줄로 쪼개�
 
   it("합본(buildReport)도 같은 규약", () => {
     const r = buildReport(st);
-    expect(r).not.toContain("\n");
     expect(r).toContain("수학 원과 직선의 위치 관계, 원의 접선의 방정식(1), 원의 접선의 방정식(2)");
   });
 });
@@ -293,7 +293,7 @@ describe("과제 '없음' 문장 처리", () => {
 
   it("지난 과제가 '없음'이면 과제 절을 생략(태도만)", () => {
     const r = buildSubjectReport(base, 0);
-    expect(r).toContain("수업 태도는 '아주 좋음'입니다.");
+    expect(r).toContain("수업 태도는 아주 좋음입니다.");
     expect(r).not.toContain("과제는 없음 상태입니다");
   });
 
@@ -305,7 +305,7 @@ describe("과제 '없음' 문장 처리", () => {
       attitude: "아주 좋음",
       homework: "미제출",
     });
-    expect(buildSubjectReport(st, 0)).toContain("과제는 미제출 상태입니다.");
+    expect(buildSubjectReport(st, 0)).toContain("지난 과제는 미제출입니다.");
   });
 });
 
@@ -323,7 +323,7 @@ describe("월말평가 보고서 문장", () => {
       tests: noTests,
     });
     const r = buildSubjectReport(st, 0);
-    expect(r).toContain("오늘 수학 월말평가를 진행했습니다.");
+    expect(r).toContain("오늘은 수학 월말평가를 진행했습니다.");
     expect(r).not.toContain("진도를 진행했습니다");
   });
 
@@ -334,7 +334,7 @@ describe("월말평가 보고서 문장", () => {
       tests: noTests,
     });
     const r = buildReport(st);
-    expect(r).toContain("오늘 수학 월말평가를 진행했습니다.");
+    expect(r).toContain("오늘은 수학 월말평가를 진행했습니다.");
     expect(r).not.toContain("진도를 진행했습니다");
   });
 
@@ -363,8 +363,8 @@ describe("월말평가 보고서 문장", () => {
       attitude: "아주 좋음",
     });
     const r = buildSubjectReport(st, 0);
-    expect(r).toContain("일일테스트(이전 진도) 18/20");
-    expect(r).toContain("수업 태도는 '아주 좋음'");
+    expect(r).toContain("일일테스트는 20문제 중 18개");
+    expect(r).toContain("수업 태도는 아주 좋음");
   });
 });
 
@@ -381,7 +381,7 @@ describe("진도 중단 상태 4종 문장", () => {
         subjects: [{ name: "수학", subjectLabel: "수학", prev: "", today: status }],
         tests: noTests,
       });
-      expect(buildSubjectReport(st, 0)).toContain(`오늘 수학 ${status}를 진행했습니다.`);
+      expect(buildSubjectReport(st, 0)).toContain(`오늘은 수학 ${status}를 진행했습니다.`);
       expect(buildSubjectReport(st, 0)).not.toContain("진도를 진행했습니다");
     }
   });

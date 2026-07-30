@@ -253,3 +253,29 @@ describe("generateJSON 폴백", () => {
     expect(anthropicCreate).toHaveBeenCalledTimes(1);
   });
 });
+
+// 2026-07-30 — 멘트 출력에 줄바꿈을 허용하면서 추가. 모델이 `\n` 대신 **생 줄바꿈**을 흘리면
+// JSON이 통째로 깨지고, 호출부는 "빈 응답"으로 떨어져 학부모에게 폴백 템플릿이 나간다.
+describe("parseJsonLoose — 문자열 안 생 줄바꿈 복구", () => {
+  it("값에 진짜 개행이 들어와도 살려낸다", () => {
+    const raw = '{"comment": "오늘은 원기둥을 배웠습니다.\n오늘 과제는 쎈 3단원입니다."}';
+    expect(parseJsonLoose<{ comment: string }>(raw).comment).toBe(
+      "오늘은 원기둥을 배웠습니다.\n오늘 과제는 쎈 3단원입니다.",
+    );
+  });
+  it("정상 JSON(이스케이프된 \n)은 그대로", () => {
+    const raw = '{"comment": "첫 줄\n둘째 줄"}';
+    expect(parseJsonLoose<{ comment: string }>(raw).comment).toBe("첫 줄\n둘째 줄");
+  });
+  it("구조 개행(들여쓰기)은 건드리지 않는다", () => {
+    const raw = '{\n  "a": "1",\n  "b": "2"\n}';
+    expect(parseJsonLoose<{ a: string; b: string }>(raw)).toEqual({ a: "1", b: "2" });
+  });
+  it("여러 값에 걸친 생 줄바꿈도 복구", () => {
+    const raw = '{"comment": "가\n나", "trend": "다\n라"}';
+    expect(parseJsonLoose<{ comment: string; trend: string }>(raw)).toEqual({ comment: "가\n나", trend: "다\n라" });
+  });
+  it("복구해도 못 읽는 응답은 여전히 throw", () => {
+    expect(() => parseJsonLoose("완전히 JSON이 아님")).toThrow();
+  });
+});

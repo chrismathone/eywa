@@ -1208,13 +1208,23 @@ export function OneScreenClient({
     setNoticeSeed(ids);
     setView("notice");
   }
-  // 저장 입력(보고서 필드)을 (학생,과목)별로 조립 — 카드/표 공용. 초안 없으면 자동 작성분 사용.
+  /**
+   * 저장 입력(보고서 필드)을 (학생,과목)별로 조립 — 카드/표 공용.
+   *
+   * 🔴 **멘트가 비면 빈 채로 저장한다**(2026-07-30 발송 감사로 변경). 예전엔 여기서 조용히
+   *    `buildSubjectReport` 템플릿을 끼워 넣었는데, 그 결과가 아래 저장 후 `patchReport`로
+   *    **강사의 멘트칸에 되써져** 발송 가능 상태가 됐다 — 강사가 쓴 적 없는 문장이 강사 이름으로
+   *    학부모에게 나갔다(4일치 발송분 226건 중 50건, 22%). 진도만 넣고 일괄 저장하면 벌어지는 일이라
+   *    본인은 눈치채기 어렵다.
+   *    이제 멘트가 비면 기록만 저장되고 발송은 게이트가 막는다("멘트 입력 필요") → 강사가 자동작성을
+   *    누르거나 직접 쓰게 된다. 템플릿은 **AI 생성이 실패했을 때만**, 토스트로 알리며 멘트칸에 들어간다.
+   */
   function buildSaveInputFor(student: OneScreenStudent, subjectName: string) {
     const idx = student.subjects.findIndex((su) => su.name === subjectName);
     const su = student.subjects[idx];
     // ⚠️ 최신 초안은 ref에서(일괄 루프 중 사용자 편집·앞 행 patch 반영) — closure `reports`는 클릭 시점 스냅샷이라 유실 위험(#10).
     const existing = reportsRef.current[student.id]?.[subjectName];
-    const draft = existing?.draft.trim() ? existing.draft : buildSubjectReport(student, idx);
+    const draft = existing?.draft ?? "";
     const trendNote = existing?.trendDraft?.trim() || undefined; // 추세 초안 있으면 함께 저장(없으면 미저장)
     const examInfo = buildExamInfo(student, showDailyTest, showCheckTest);
     // 학부모 보고서 일일/확인테스트 분리 표시용("N문제 중 M개"). exam_info(합본)는 roster prev-score 파싱용 별도 보존.
@@ -1271,10 +1281,11 @@ export function OneScreenClient({
     const res = await saveLessonReport(built.input);
     if (res.ok) {
       // shareToken 보존 → report-card가 학부모 공개 링크(/r/[token])를 노출·복사. 기존 첨부·상태는 유지(merge).
-      // draft는 사용자가 저장 중(await) 사이 더 고쳤으면 그 편집을 보존(built는 조립 시점 값 — 클로버 방지, #10).
+      // 🔴 **초안은 건드리지 않는다** — 저장은 화면 값을 DB로 옮기는 일이지 멘트를 새로 쓰는 일이 아니다.
+      //    예전엔 `built.draft`를 되써 넣었고, 멘트가 빈 행에선 그게 **템플릿을 몰래 채우는 통로**였다
+      //    (buildSaveInputFor 주석 — 4일치 발송분 22%가 강사가 쓴 적 없는 문장이었다).
       patchReport(student.id, subjectName, (r) => ({
         ...r,
-        draft: r.draft?.trim() && r.draft !== built.draft ? r.draft : built.draft,
         sent: true,
         shareToken: res.shareToken ?? r.shareToken,
       }));
@@ -1292,7 +1303,6 @@ export function OneScreenClient({
       const badgeStatus = res.status === "already_sent" ? "success" : res.status;
       patchReport(student.id, subjectName, (r) => ({
         ...r,
-        draft: r.draft?.trim() && r.draft !== built.draft ? r.draft : built.draft,
         sent: true,
         shareToken: res.shareToken ?? r.shareToken,
         classnoteStatus: badgeStatus,
@@ -1705,9 +1715,9 @@ export function OneScreenClient({
           toast.error(saved.error ?? "보고서 저장에 실패했습니다");
           return 0;
         }
+        // 초안은 화면 값 그대로 둔다(위 saveRecord와 같은 이유 — 저장이 멘트를 쓰지 않는다).
         patchReport(studentId, subjectName, (r) => ({
           ...r,
-          draft: built.draft,
           sent: true,
           shareToken: saved.shareToken ?? r.shareToken,
         }));
