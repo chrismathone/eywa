@@ -448,15 +448,18 @@ export function ClassnoteQueueCard({ view: served }: { view: ClassnoteQueueView 
                 return (
                   <tr key={it.id} className="border-line border-b last:border-b-0">
                     <td className="px-2 py-2.5">
-                      {/* 공유 보드 차단(blocked_shared)분은 **선택 가능** — 원장이 발송 예외 등재/보드 정리 후
-                          '선택 재발송'으로 내보낼 길이 있어야 한다(막으면 영영 못 나가는 막다른 길).
-                          게이트가 매 시도 재평가하므로 미해결이면 그대로 다시 안전하게 막힌다. */}
+                      {/* 사람이 푸는 상태(blocked_shared·name_conflict)는 **둘 다 선택 가능** — 원장이 원인을
+                          고친 뒤(예외 등재·보드 정리·구분 이름 지정·가드 수정) 보류분을 내보낼 길이 없으면
+                          영영 못 나가는 막다른 길이 된다. 워커 프리플라이트가 매 시도 재평가하므로 미해결이면
+                          그대로 다시 안전하게 막힌다.
+                          🔴 예전엔 name_conflict만 disabled였다 — 위 주석이 "개별은 열어둔다"인데 코드가
+                          반대여서, 동명이인으로 막힌 보고서를 원장이 화면에서 되살릴 방법이 없었다
+                          (2026-07-29 실제로 김수아 건에서 막혀 수동 재큐잉으로 내보냄). 다시 막지 말 것. */}
                       <input
                         type="checkbox"
                         checked={checked.has(it.id)}
                         onChange={() => toggle(it.id)}
                         aria-label={`${it.studentName} 선택`}
-                        disabled={it.status === "name_conflict"}
                       />
                     </td>
                     <td className="px-3 py-2.5">

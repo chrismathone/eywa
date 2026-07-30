@@ -7,6 +7,10 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { kstToday } from "@/lib/date-kst";
 import { mondayOf, shiftDays, weekLabel, weekRelation } from "@/features/timetable/lib/week";
 import { settingsToPeriodsConfig, weekdayTableFor } from "@/features/timetable/lib/periods";
+import { getTeacherLabelMap } from "@/features/timetable/server/queries";
+import { resolveTeacherLabel } from "@/features/timetable/lib/teacher-label";
+import { resolvePeriodLabel, tableToEntries } from "../lib/period-label";
+import { isWeekendDow } from "../lib/grid-rows";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { resolveSkillAreas } from "@/features/owner/skill-areas";
 import type { SkillAreaSetting } from "@/features/owner/settings-types";
@@ -67,7 +71,7 @@ export type ClassSheetWeekData = {
   goals: SheetGoalDTO[];
   monthStart: string;
   memos: Record<string, string>;
-  /** "HH:MM" → "N교시"(설정 교시표 역조회 — 표시 전용). */
+  /** `${date}|${HH:MM}` → "N교시". 요일별 교시표로 확정(주말은 평일과 시각이 달라 표가 다르다) — 표시 전용. */
   periodLabelBySlot: Record<string, string>;
   fill: { totalSlots: number; filledSlots: number; orphanSlots: number };
 };
@@ -97,6 +101,7 @@ export async function getClassSheetWeek(
     attendanceRes,
     memosRes,
     settings,
+    labelMap,
   ] = await Promise.all([
     admin
       .from("class_schedules")
@@ -160,6 +165,11 @@ export async function getClassSheetWeek(
       .eq("class_id", classId)
       .eq("week_start", weekMonday),
     getTenantSettings(),
+    // 강사 라벨 해석기(시간표와 **같은 단일 소스**) — slot_teacher_label 원문은 ijw 시트의 영문 닉네임
+    // ("Hannah")·옛 이름("이주희")이라 그대로 그리면 시간표는 "이현이/LAB"인데 ECS만 다른 이름이 뜬다
+    // (원장 제보 2026-07-29). DB 원문은 시트 동기의 원본이라 건드리지 않고 **표시할 때만** 해석한다.
+    // admin 클라이언트를 주입해 tenantId로 좁힌다(무인자 호출은 쿠키 세션 경로라 admin 흐름과 섞인다).
+    getTeacherLabelMap({ supabase: admin, tenantId }),
   ]);
 
   for (const r of [schedulesRes, enrollmentsRes, planLinesRes, weekGoalsRes, monthGoalsRes, marksRes, attendanceRes, memosRes]) {
@@ -231,7 +241,8 @@ export async function getClassSheetWeek(
       validFrom: s.valid_from as string,
       validTo: (s.valid_to as string | null) ?? null,
       teacherId: (s.teacher_id as string | null) ?? null,
-      slotTeacherLabel: (s.slot_teacher_label as string | null) ?? null,
+      // 해석은 여기(슬롯이 만들어지는 지점) 한 곳에서 — 컴포넌트마다 하면 표기가 갈린다(시간표 규약 동일).
+      slotTeacherLabel: resolveTeacherLabel((s.slot_teacher_label as string | null) ?? null, labelMap),
       slotRoomLabel: (s.slot_room_label as string | null) ?? null,
     })),
     enrollments: enrollments.map((e) => ({
@@ -305,11 +316,22 @@ export async function getClassSheetWeek(
       (access.user.systemRole !== "teacher" || isWithinAttendanceEditWindow(date, today));
   }
 
-  // 교시 라벨(표시 전용) — 설정 교시표 startTime 역조회
-  const periodTable = weekdayTableFor("english", settingsToPeriodsConfig(settings.operations));
+  // 교시 라벨(표시 전용) — **요일별 표**로 슬롯마다 확정한다. 주말은 평일과 시각이 다른 별도 교시표를
+  // 쓰므로(주말 09:00~ 1시간 / 영어 평일 14:20~ 40분), 평일표만 보면 주말 15:00~16:00 수업이
+  // 평일 "2교시"(15:00~15:40)로 표시된다 — 시각이 다른 교시에 남의 번호를 붙이는 거짓 표시(원장 제보).
+  // 키에 날짜를 넣는 이유: 같은 시각이라도 요일에 따라 교시 번호가 다르다.
+  const periodsConfig = settingsToPeriodsConfig(settings.operations);
+  const periodTables = {
+    weekday: tableToEntries(weekdayTableFor("english", periodsConfig)),
+    weekend: tableToEntries(periodsConfig.weekend),
+  };
   const periodLabelBySlot: Record<string, string> = {};
-  for (const [id, t] of Object.entries(periodTable)) {
-    if (!(t.startTime in periodLabelBySlot)) periodLabelBySlot[t.startTime] = `${id}교시`;
+  for (const day of grid.days) {
+    const weekend = isWeekendDow(day.dow);
+    for (const slot of day.slots) {
+      const label = resolvePeriodLabel(slot.slotStart, slot.slotEnd, periodTables, weekend);
+      if (label) periodLabelBySlot[`${day.date}|${slot.slotStart}`] = label;
+    }
   }
 
   const attendanceByStudentDate: Record<string, string> = {};
