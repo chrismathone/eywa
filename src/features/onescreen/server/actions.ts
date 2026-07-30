@@ -21,6 +21,11 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getTextbookOrdersForStudents } from "@/features/billing/server/textbook-queries";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { parseExamScores } from "../exam-info";
+import {
+  DEFAULT_ONESCREEN_FONT_SIZE,
+  ONESCREEN_FONT_SIZES,
+  type OnescreenFontSize,
+} from "../font-size";
 import { LEGACY_REPORT_SUBJECT, reportSubject } from "@/features/timetable/lib/report-subject";
 import type { OneScreenStudent, PrevReport } from "../types";
 
@@ -593,6 +598,55 @@ export async function setMyNoticeMode(
   const { error } = await admin
     .from("users")
     .update({ report_notice_mode: mode })
+    .eq("id", user.id)
+    .eq("tenant_id", user.tenantId);
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
+/**
+ * 원스크린 '글씨 크기'(작음/보통/큼)를 **본인 계정**에 저장 — users.ui_prefs.onescreen.fontSize.
+ *
+ * ⚠️ ui_prefs는 화면별 네임스페이스라 **onescreen 키만 갈아끼우고 형제 키(timetable 등)는 보존**한다
+ *    (saveTimetableViewPrefs와 같은 규약 — 한 화면 저장이 다른 화면 설정을 지우면 안 된다).
+ * ⚠️ 기본값('작음')이면 키를 지운다 — 빈 값이 쌓이지 않게.
+ * ⚠️ `revalidatePath` 없음: 크기는 클라 state가 즉시 반영하고, 이 저장은 다음 방문용 영속화일 뿐이다.
+ */
+export async function setMyOnescreenFontSize(
+  size: OnescreenFontSize,
+): Promise<{ ok: boolean; error?: string }> {
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, error: "로그인이 필요합니다" };
+  if (!(ONESCREEN_FONT_SIZES as readonly string[]).includes(size))
+    return { ok: false, error: "잘못된 글씨 크기입니다" };
+
+  const admin = createAdminClient();
+  const { data: row, error: readErr } = await admin
+    .from("users")
+    .select("ui_prefs")
+    .eq("id", user.id)
+    .eq("tenant_id", user.tenantId)
+    .maybeSingle();
+  if (readErr) return { ok: false, error: readErr.message };
+
+  const raw =
+    row?.ui_prefs && typeof row.ui_prefs === "object" && !Array.isArray(row.ui_prefs)
+      ? (row.ui_prefs as Record<string, unknown>)
+      : {};
+  const ns =
+    raw.onescreen && typeof raw.onescreen === "object" && !Array.isArray(raw.onescreen)
+      ? { ...(raw.onescreen as Record<string, unknown>) }
+      : {};
+  if (size === DEFAULT_ONESCREEN_FONT_SIZE) delete ns.fontSize;
+  else ns.fontSize = size;
+
+  const merged = { ...raw };
+  if (Object.keys(ns).length === 0) delete merged.onescreen;
+  else merged.onescreen = ns;
+
+  const { error } = await admin
+    .from("users")
+    .update({ ui_prefs: merged })
     .eq("id", user.id)
     .eq("tenant_id", user.tenantId);
   if (error) return { ok: false, error: error.message };

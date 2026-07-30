@@ -7,6 +7,7 @@ import { notifyIfClassAttendanceComplete } from "./complete-notify";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { accessLevelTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
+import { fetchInChunks } from "@/lib/supabase/batch";
 import { parseSessionUnits } from "../session-units";
 import { attendanceLockMessage, isWithinAttendanceEditWindow } from "../edit-window";
 import { kstToday } from "@/lib/date-kst";
@@ -269,6 +270,159 @@ export async function setAttendanceCell(input: {
   );
   revalidatePath("/attendance");
   return { ok: true };
+}
+
+/** 일괄로 찍을 수 있는 상태 — 인라인 pill과 같은 3종. 조퇴·공결·보강은 출석부 전용(축약 되쓰기 방지). */
+const BULK_STATUSES = ["present", "late", "absent"] as const;
+/** 한 번에 처리할 셀 상한 — 표뷰 한 화면(수십 행)을 넉넉히 덮으면서 폭주 요청을 막는 안전선. */
+const BULK_CELL_LIMIT = 300;
+
+export type BulkCellResult =
+  | { ok: true; applied: { studentId: string; classId: string }[]; blocked: number }
+  | { error: string };
+
+/**
+ * 여러 (학생·반)의 같은 날짜 출결을 **한 번의 왕복으로** 기록한다 — 원스크린 표뷰 '일괄 입력'용.
+ *
+ * ⚠️ 셀 단위 `setAttendanceCell`을 N번 부르지 않는 이유는 속도다(반 하나가 30~40행 = 왕복 40번).
+ *    대신 **게이트는 그대로 통과해야 한다**(#77 — 화면이 아니라 액션이 게이트):
+ *    권한 → 강사(scoped)면 수정 가능 기간 → 담당 반 → 그 날짜 기준 수강생. 셀 액션과 같은 규칙을
+ *    같은 순서로, 다만 행마다가 아니라 **집합 단위 조회 1회씩**으로 검사한다(B3 청크 · B4 병렬).
+ *
+ * ⚠️ 게이트에 걸린 셀은 **전체를 실패시키지 않고 건너뛴다**(`blocked`) — 강사가 담당하지 않는 반이
+ *    한 줄 섞였다고 나머지 30명 기록이 통째로 날아가면 안 된다. 다만 권한·기간처럼 **요청 전체에
+ *    해당하는 사유**는 조기 반환으로 분명히 알린다(조용한 0건 금지).
+ *
+ * ⚠️ 상태 삭제(null)는 지원하지 않는다 — 일괄 삭제는 되돌릴 수 없고 메모·시수까지 함께 지운다.
+ *    지우기는 출석부에서만(인라인 pill과 같은 계약).
+ */
+export async function setAttendanceBulk(input: {
+  sessionDate: string;
+  status: (typeof BULK_STATUSES)[number];
+  cells: { studentId: string; classId: string }[];
+}): Promise<BulkCellResult> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "로그인이 필요합니다" };
+  if (!(await canWriteTenant(user.systemRole, "attendance"))) return { error: "출석 관리 권한이 없습니다" };
+
+  const { sessionDate, status } = input;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(sessionDate)) return { error: "잘못된 날짜입니다" };
+  if (!BULK_STATUSES.includes(status)) return { error: "잘못된 상태입니다" };
+
+  // 같은 (학생·반)이 두 번 오면 한 번만 — 출결 원장은 그 조합에 한 칸이다.
+  const seen = new Set<string>();
+  const cells: { studentId: string; classId: string }[] = [];
+  for (const c of input.cells) {
+    if (!c?.studentId || !c?.classId) continue;
+    const k = `${c.studentId}::${c.classId}`;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    cells.push({ studentId: c.studentId, classId: c.classId });
+  }
+  if (cells.length === 0) return { error: "기록할 대상이 없습니다" };
+  if (cells.length > BULK_CELL_LIMIT)
+    return { error: `한 번에 ${BULK_CELL_LIMIT}건까지만 기록할 수 있습니다 — 범위를 좁혀 주세요` };
+
+  const supabase = await createClient();
+  let allowed = cells;
+
+  // 강사(scoped) — 셀 액션과 같은 3중 게이트를 집합 단위로. full(관리자 계열)은 기존대로 전 반.
+  if ((await accessLevelTenant(user.systemRole, "attendance")) === "scoped") {
+    if (!isWithinAttendanceEditWindow(sessionDate, kstToday())) {
+      return { error: attendanceLockMessage(sessionDate, kstToday()) };
+    }
+    const classIds = [...new Set(cells.map((c) => c.classId))];
+    const studentIds = [...new Set(cells.map((c) => c.studentId))];
+    // ⚠️ 수강 판정은 **세션 날짜 기준**(셀 액션과 동일 의미) — 반이동·종강 학생의 그날 기록을 막지 않는다.
+    const [ownClasses, enrolled] = await Promise.all([
+      fetchInChunks<{ id: string }>(classIds, (chunk) =>
+        supabase.from("classes").select("id").in("id", chunk).eq("teacher_id", user.id),
+      ),
+      fetchInChunks<{ class_id: string; student_id: string }>(studentIds, (chunk) =>
+        supabase
+          .from("enrollments")
+          .select("class_id, student_id")
+          .in("class_id", classIds)
+          .in("student_id", chunk)
+          .or(`start_date.is.null,start_date.lte.${sessionDate}`)
+          .or(`end_date.is.null,end_date.gte.${sessionDate}`),
+      ),
+    ]);
+    const ownSet = new Set(ownClasses.map((c) => c.id));
+    const enrolledSet = new Set(enrolled.map((e) => `${e.student_id}::${e.class_id}`));
+    allowed = cells.filter(
+      (c) => ownSet.has(c.classId) && enrolledSet.has(`${c.studentId}::${c.classId}`),
+    );
+    if (allowed.length === 0) return { error: "담당 반 수강생이 아니어서 기록할 수 없습니다" };
+  }
+
+  const classIds = [...new Set(allowed.map((c) => c.classId))];
+  const studentIds = [...new Set(allowed.map((c) => c.studentId))];
+  // 기존 기록 — 셀 액션과 같은 "가장 최근 1건" 규약(그 날짜에 행이 여러 개일 수 있다).
+  const existingRows = await fetchInChunks<{
+    id: string;
+    class_id: string;
+    student_id: string;
+    recorded_at: string | null;
+  }>(studentIds, (chunk) =>
+    supabase
+      .from("attendance_records")
+      .select("id, class_id, student_id, recorded_at")
+      .eq("session_date", sessionDate)
+      .in("class_id", classIds)
+      .in("student_id", chunk)
+      .order("recorded_at", { ascending: false }),
+  );
+  const latestId = new Map<string, string>();
+  for (const r of existingRows) {
+    const k = `${r.student_id}::${r.class_id}`;
+    if (!latestId.has(k)) latestId.set(k, r.id); // 청크별 desc 정렬 → 각 조합의 첫 행이 최신
+  }
+
+  const nowIso = new Date().toISOString();
+  const updateIds = allowed
+    .map((c) => latestId.get(`${c.studentId}::${c.classId}`))
+    .filter((id): id is string => !!id);
+  const inserts = allowed.filter((c) => !latestId.has(`${c.studentId}::${c.classId}`));
+
+  // 상태가 전부 같아서 갱신은 한 문장이면 된다(id 목록은 청크로 나눠 URL 길이 회피).
+  if (updateIds.length > 0) {
+    const CHUNK = 100;
+    for (let i = 0; i < updateIds.length; i += CHUNK) {
+      const { error } = await supabase
+        .from("attendance_records")
+        .update({ status, recorded_by: user.id, recorded_at: nowIso })
+        .in("id", updateIds.slice(i, i + CHUNK));
+      if (error) return { error: error.message };
+    }
+  }
+  if (inserts.length > 0) {
+    const { error } = await supabase.from("attendance_records").insert(
+      inserts.map((c) => ({
+        tenant_id: user.tenantId,
+        class_id: c.classId,
+        student_id: c.studentId,
+        session_date: sessionDate,
+        status,
+        recorded_by: user.id,
+      })),
+    );
+    if (error) return { error: error.message };
+  }
+
+  // G4: 반마다 '전원 기록 완료' 전이 검사(셀 액션과 동일) — 백그라운드라 응답을 막지 않는다.
+  after(async () => {
+    for (const classId of classIds) {
+      await notifyIfClassAttendanceComplete({
+        tenantId: user.tenantId,
+        classId,
+        date: sessionDate,
+        actorId: user.id,
+      });
+    }
+  });
+  revalidatePath("/attendance");
+  return { ok: true, applied: allowed, blocked: cells.length - allowed.length };
 }
 
 /**

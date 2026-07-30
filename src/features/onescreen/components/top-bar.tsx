@@ -1,6 +1,11 @@
 import { useRef, type ReactNode } from "react";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { addDays } from "@/lib/date-kst";
+import {
+  ONESCREEN_FONT_SIZES,
+  ONESCREEN_FONT_SIZE_LABEL,
+  type OnescreenFontSize,
+} from "../font-size";
 import type { OneScreenView } from "../view";
 import type { WriteFilter } from "../write-filter";
 import type { TodayClass } from "../server/roster";
@@ -29,6 +34,8 @@ export function OneScreenTopBar({
   noticeMode,
   academyNoticeMode,
   onNoticeMode,
+  fontSize,
+  onFontSize,
   makeupAdder,
 }: {
   today: string;
@@ -50,6 +57,8 @@ export function OneScreenTopBar({
   noticeMode: "A" | "B" | null; // 강사 본인 멘트 모드(null=학원 기본)
   academyNoticeMode: "A" | "B"; // 학원 기본 멘트 모드
   onNoticeMode: (mode: "A" | "B" | null) => void;
+  fontSize: OnescreenFontSize; // 글씨 크기(내 계정) — 아래 목록·표를 통째로 확대
+  onFontSize: (size: OnescreenFontSize) => void;
   makeupAdder?: ReactNode; // 보강 학생 추가 컨트롤(슬롯)
 }) {
   // 작성 상태 필터 — 순서는 원장 표현대로 전체 → 작성 → 미작성. 숫자는 **지금 조건에 맞는 학생 수**라
@@ -274,6 +283,31 @@ export function OneScreenTopBar({
           })}
         </div>
         <span className="bg-line h-5 w-px" aria-hidden />
+        {/* 글씨 크기(내 계정) — 원장 지시 2026-07-30. 지금 크기가 '작음'이라 기본은 화면 무변경.
+            표뷰는 칸마다 px 글자가 박힌 조밀한 스프레드시트라 **표 전체를 같은 비율로** 확대한다
+            (글자만 키우면 칸·체크박스와 어긋난다). 저장은 계정 = 다른 PC에서도 같은 크기. */}
+        <div
+          className="border-line flex items-center rounded-full border p-0.5"
+          title="아래 목록·표의 글씨 크기(내 계정) — 다른 PC에서도 같은 크기로 열립니다"
+        >
+          <span className="text-text-faint px-1.5 text-[11px] font-bold">글씨 크기</span>
+          {ONESCREEN_FONT_SIZES.map((s) => {
+            const on = fontSize === s;
+            return (
+              <button
+                key={s}
+                type="button"
+                onClick={() => onFontSize(s)}
+                aria-pressed={on}
+                className={`rounded-full px-1.5 py-1 text-[11px] font-bold transition ${
+                  on ? "bg-primary text-primary-foreground" : "text-text-dim hover:bg-bg-soft"
+                }`}
+              >
+                {ONESCREEN_FONT_SIZE_LABEL[s]}
+              </button>
+            );
+          })}
+        </div>
         {/* 카드 ↔ 표(스프레드시트) ↔ 오늘 발송 현황 ↔ 월간 발송(달력) ↔ 공지 뷰 전환 */}
         <div className="border-line flex items-center rounded-full border p-0.5">
           {(["card", "grid", "status", "history", "notice"] as const).map((v) => (
