@@ -16,6 +16,26 @@
  */
 import { expectedBirthYear } from "./board-safety.mjs";
 
+/**
+ * 🔴 **보호 계정 — 어떤 이유로도 정리 대상이 되면 안 되는 학생/보드.**
+ *
+ * 원장 지적(2026-07-30): *"학원이 퇴원시켜버리면 다시 가입시켜야 되잖아."* — 정확하다. `학원이`는
+ * **유일한 실발송 E2E 테스트 계정**인데(§6), 명부에서 내리면 복구에 **학부모 재초대 + 재가입**이 필요해
+ * (자동화 불가) 앞으로의 모든 ClassNote 발송 검증 수단을 잃는다.
+ *
+ * ⚠️ **우연한 제외에 기대지 말 것**: 실측상 `학원이`는 지금 '전화 불일치'로만 걸러지고 있어서,
+ * eywa에 전화를 채워 넣는 순간 **삭제 후보로 올라온다**. 그래서 최우선 순위의 명시적 가드로 못박는다.
+ */
+export const PROTECTED_STUDENT_NAMES = ["학원이", "학원삼", "학원사", "학원오"];
+
+/** 보호 대상인가 — 보드명 `(과목)이름`·학생 유효이름 어느 쪽으로 넘겨도 판정된다. */
+export function isProtectedName(nameOrBoard) {
+  const t = String(nameOrBoard ?? "")
+    .replace(/\s/g, "")
+    .replace(/^\((수학|영어)\)/, "");
+  return PROTECTED_STUDENT_NAMES.includes(t);
+}
+
 /** 생년 대조 허용 오차(년) — board-safety와 동일 근거(조기입학·유급·학부모 오입력 흡수). */
 const BIRTH_YEAR_TOLERANCE = 1;
 
@@ -83,6 +103,7 @@ export function phoneMatches(a, b) {
  */
 export const GUARDS = [
   // ── exclude ───────────────────────────────────────────────────────────────
+  { code: "protected_account", action: "exclude" }, //  🔴 실발송 테스트 계정 등 절대 보호(최우선)
   { code: "enrolled", action: "exclude" }, //           정상: 재원이거나 그 과목을 계속 다님(과목 이탈 포함)
   { code: "no_eywa_match", action: "exclude" }, //      eywa에 대응 학생 없음(테스트·퇴사강사 보드 등)
   { code: "ambiguous_forward", action: "exclude" }, //  이 원아에 eywa 학생이 2명+ 걸림
@@ -158,6 +179,13 @@ export function evaluateOffboardCandidate(facts) {
   const verdicts = new Map();
   const set = (code, hit, reason) => verdicts.set(code, hit ? { hit: true, reason } : { hit: false });
   const skip = (code) => verdicts.set(code, null);
+
+  // ── 🔴 보호 계정 — 다른 무엇보다 먼저(우연한 제외에 기대지 않는다) ──────────────
+  set(
+    "protected_account",
+    isProtectedName(child?.name) || isProtectedName(student?.name),
+    "보호 대상 계정입니다(실발송 테스트 계정 등) — 어떤 이유로도 명부에서 내리지 않습니다",
+  );
 
   // ── 카디널리티(I3·I4) — 다른 모든 판정의 전제 ────────────────────────────────
   if (typeof matchedStudentCount !== "number") {
@@ -416,7 +444,8 @@ export function evaluateOffboardCandidate(facts) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const RELEASE_GUARDS = [
-  // ⚠️ **`subject_active`가 1순위** — "정상, 대상 아님"을 먼저 치워야 목록이 사실을 말한다. 이걸 뒤에 두면
+  { code: "protected_account", action: "exclude" }, //  🔴 실발송 테스트 계정 등 절대 보호(최우선)
+  // ⚠️ **`subject_active`가 그다음** — "정상, 대상 아님"을 먼저 치워야 목록이 사실을 말한다. 이걸 뒤에 두면
   //    활발히 수강 중인 학생 33건이 "전화 불일치"로 헤드라인이 잡혀(실측) 원장이 엉뚱한 걸 확인하게 된다.
   //    (Op B에서 `enrolled`를 1순위로 둔 것과 같은 원칙.)
   { code: "subject_active", action: "exclude" }, //    그 과목을 아직 수강 중 = 살아있는 보드
@@ -449,6 +478,12 @@ export function evaluateBoardRelease({ board, matchedStudentCount, student, phon
   const verdicts = new Map();
   const set = (code, hit, reason) => verdicts.set(code, hit ? { hit: true, reason } : { hit: false });
   const skip = (code) => verdicts.set(code, null);
+
+  set(
+    "protected_account",
+    isProtectedName(board?.name) || isProtectedName(student?.name),
+    "보호 대상 계정의 보드입니다(실발송 테스트 계정 등) — 삭제·배정해제하지 않습니다",
+  );
 
   if (typeof matchedStudentCount !== "number") {
     skip("no_eywa_match");
