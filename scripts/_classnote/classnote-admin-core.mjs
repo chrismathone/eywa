@@ -9,6 +9,8 @@
 import { chromium } from "@playwright/test";
 // 순수 판정(의존성 0)만 가져온다 — 반대 방향 import 금지(board-safety 테스트가 playwright를 끌면 안 됨).
 import { acceptBoardMembers, kstSchoolYear } from "./board-safety.mjs";
+// 이름 매칭 키도 같은 이유로 순수 모듈에 산다(offboard 판정이 이 파일을 import하면 playwright가 끌려온다).
+import { childKeys } from "./identity-keys.mjs";
 
 export const CLASSNOTE_BASE = "https://www.classnote.com";
 
@@ -168,6 +170,27 @@ export async function fetchChildren(page, centerId) {
     .filter((r) => r.name);
 }
 
+/**
+ * 퇴원처리 스캔용 원아 전건 — `fetchChildren`이 버리는 **`parent`·`class_name`을 보존**한다.
+ * 왜 별도 함수인가: `fetchChildren`은 `{id,name,birth}`만 남기고, 그 축약을 provision·assign이 전제로 쓴다.
+ * 퇴원처리는 **되돌릴 때 누구에게 재초대할지**(부모 식별자)가 없으면 시작할 수 없어 원본 필드가 필요하다.
+ * 읽기 전용. 생년(`date_birth`)은 신원 대조(생년↔학년)에 쓰므로 원문 그대로 넘긴다.
+ */
+export async function fetchOffboardChildren(page, centerId) {
+  const rows = await fetchAllDrf(page, `/api/v1/centers/${centerId}/children`);
+  return rows
+    .map((r) => ({
+      id: r.id,
+      name: (r.name || "").trim(),
+      birth: r.date_birth ?? null,
+      parentId: r.parent?.id ?? null,
+      parentName: r.parent?.name ?? null,
+      parentUsername: r.parent?.username ?? null,
+      className: r.class_name ?? null,
+    }))
+    .filter((r) => r.name);
+}
+
 /** 원아 상세 — enrollment[](belong_to_class 멤버십, removed_child 플래그 포함). */
 export async function fetchChildDetail(page, childId) {
   return page.evaluate(async (id) => {
@@ -272,20 +295,10 @@ export async function fetchBoardChildren(page, centerId, classId) {
   );
 }
 
-/** ClassNote 원아 표시명 → 매칭 키 집합(원문·알파벳 제거·영문닉(한글)의 괄호 한글).
- *  ⚠️ 괄호 추출은 **영문닉(한글) 형식 한정**(적대 감사 F6) — "박지민(지민)"·"김하늘(동생)" 같은
- *  한글(별명) 표기에서 별명을 이름 키로 승격시키면 다른 학생과 오매칭 연료가 된다. */
-export function childKeys(name) {
-  const keys = new Set();
-  const t = (name || "").trim();
-  if (!t) return keys;
-  keys.add(t);
-  const stripped = t.replace(/[a-zA-Z]/g, "").replace(/[()]/g, "").trim();
-  if (stripped) keys.add(stripped);
-  const paren = t.match(/^[A-Za-z .]+\(([가-힣]{2,6})\)$/);
-  if (paren) keys.add(paren[1]);
-  return keys;
-}
+/** ClassNote 원아 표시명 → 매칭 키 집합. **구현은 [identity-keys.mjs](./identity-keys.mjs)로 이동**했다
+ *  (순수 모듈이어야 offboard 판정이 playwright 없이 import할 수 있다 — 동작·소비처는 그대로).
+ *  여기서 재수출하므로 기존 import(`from "./classnote-admin-core.mjs"`)는 계속 유효하다. */
+export { childKeys };
 
 // ── 반(보드) 생성 — DOM(반 정보 관리 > 반 추가하기). 생성만은 API 미확인이라 DOM 유지 ─────────
 

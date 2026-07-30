@@ -4,6 +4,16 @@
 
 ## 진행 상황
 
+### ClassNote 퇴원처리 안전 판정 — 순수 게이트 + READ-ONLY 스캔 (Phase 0, 쓰기 0) (2026-07-30) - typecheck0/lint0/test185(classnote)
+eywa 퇴원생을 ClassNote 명부에서 내리는 자동화의 **방어 로직만** 먼저 구현(실질 비가역이라 판정을 증명하기 전엔 쓰기 경로를 안 만든다).
+board-safety.mjs의 자매 구조 — 순수 판정 + Vitest + 실데이터 적대 검증. **대상 지목 = `child.id`**(ERP 행은 상세 404·사진키 0/64로 연결 불가),
+신원 = **증거 4겹**(생년↔학년 ±1 · 정/역 카디널리티 · 보드 소속 봉쇄), 유예 45일, **한 과목이라도 살아 있으면 제외**(원장 지시 — activeSubjects=전 과목).
+- 신규: [`identity-keys.mjs`](../scripts/_classnote/identity-keys.mjs)(childKeys 이동+재수출·studentIdentityKeys 접미사 base·matchesIdentity 부분일치 금지) ·
+  [`offboard-safety.mjs`](../scripts/_classnote/offboard-safety.mjs)(`evaluateOffboardCandidate`, 14가드 우선순위·2-pass 계약·복구 스냅샷) ·
+  [`scan-offboard-candidates.mjs`](../scripts/_classnote/scan-offboard-candidates.mjs)(READ-ONLY, 독립 SQL 검증+exit code, 4블록 분리 출력).
+- 실측(read-only): 명부 471 → **후보 20·보류 53(grace)·제외 398**. 독립 검증 후보∩재원=0 ✅ · 후보 20명 오프라인 재대조(위반 0·경과 121~272일·활성수강 0).
+- 상세 = [`classnote-integration.md`](classnote-integration.md) §11. 다음 = Phase 1 ERP `child.id` 쓰기 경로 probe(원장 승인 필요).
+
 ### LAB·JJ = 사람이 아니라 자리(LAB 603 · JJ 305) — 두 열 분리 + 가짜 강사 계정 2개 배선 해제 (2026-07-29~30) - typecheck0/lint0/test2655
 원장 지시: *"직원 이름을 마치 영어이름 LAB인 것처럼 해두니 아르바이트 선생님인데 출석부 등 여러 곳에 필요 없는 게 배선돼 노출된다."*
 ijw 시트의 LAB/JJ **블록**이 임포트 때 `users` 계정(`LAB@imported.local`·`JJ@imported.local`, **로그인 계정 없음**)으로
