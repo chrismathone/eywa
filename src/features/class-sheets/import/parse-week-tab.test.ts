@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   detectDayColumns,
+  expandVerticalMerges,
   parseTimeCell,
   parseGoalPanelLabel,
   parseWeekTab,
@@ -157,6 +158,41 @@ describe("to24h — 12시간 표기 해석", () => {
     expect(to24h(9, 0)).toBe("09:00");
     expect(to24h(12, 0)).toBe("12:00");
     expect(to24h(14, 20)).toBe("14:20");
+  });
+});
+
+describe("expandVerticalMerges — 병합을 펼치지 않으면 이어지는 줄이 사라진다", () => {
+  it("🔴 세로 병합 아래 행에 앵커 값을 채운다 — `시기`·`구분`이 병합이라 안 펼치면 2·3번째 계획 줄이 파싱조차 안 된다", () => {
+    const rows = [
+      ["평시", "Vocab", "능률 VOCA"],
+      ["", "", "그래머인사이드"],
+      ["", "", "수능딥독"],
+    ];
+    const merged = expandVerticalMerges(rows, [
+      { startRowIndex: 0, endRowIndex: 3, startColumnIndex: 0, endColumnIndex: 1 },
+      { startRowIndex: 0, endRowIndex: 3, startColumnIndex: 1, endColumnIndex: 2 },
+    ]);
+    expect(merged.map((r) => r[0])).toEqual(["평시", "평시", "평시"]);
+    expect(merged.map((r) => r[1])).toEqual(["Vocab", "Vocab", "Vocab"]);
+    // 원본은 건드리지 않는다
+    expect(rows[1]![0]).toBe("");
+  });
+
+  it("🔴 가로 병합은 펼치지 않는다 — 헤더 요일 라벨이 옆칸을 덮으면 요일 컬럼 탐지가 무너진다", () => {
+    const rows = [["월", "시기", "구분"]];
+    const merged = expandVerticalMerges(rows, [
+      { startRowIndex: 0, endRowIndex: 1, startColumnIndex: 0, endColumnIndex: 3 },
+    ]);
+    expect(merged[0]).toEqual(["월", "시기", "구분"]);
+    expect(detectDayColumns(merged).mon).toBe(0);
+  });
+
+  it("이미 값이 있는 칸은 덮지 않는다(로스터 TRUE/FALSE 보호)", () => {
+    const rows = [["평시"], ["TRUE"], [""]];
+    const merged = expandVerticalMerges(rows, [
+      { startRowIndex: 0, endRowIndex: 3, startColumnIndex: 0, endColumnIndex: 1 },
+    ]);
+    expect(merged.map((r) => r[0])).toEqual(["평시", "TRUE", "평시"]);
   });
 });
 

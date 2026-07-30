@@ -5,10 +5,16 @@
 //
 // 반복을 **여기서** 한 반씩 도는 이유: 구글 Sheets 읽기 할당량이 분당 60회라(실측 429) 서버에서 28반을
 // 한 번에 훑으면 초과한다. 반마다 2콜이라 사이에 쉼을 두고 진행률을 보여준다.
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, Loader2, Sheet, X } from "@/components/icons/eywa-icon-compat";
-import { importEcsClassSheet, listEcsImportTargets } from "@/features/class-sheets/server/import-actions";
+import {
+  beginEcsImportRun,
+  endEcsImportRun,
+  importEcsClassSheet,
+  isEcsImportBusy,
+  listEcsImportTargets,
+} from "@/features/class-sheets/server/import-actions";
 import {
   ISSUE_HINT,
   ISSUE_LABEL,
@@ -57,10 +63,14 @@ export function EcsSheetImportDialog() {
   const [reports, setReports] = useState<EcsClassImportReport[]>([]);
   const [done, setDone] = useState(0);
   const [current, setCurrent] = useState<string | null>(null);
+  /** 다른 관리자(또는 새벽 자동 반영)가 시트를 잡고 있는가 — 서버 리스를 폴링해 선제 비활성. */
+  const [othersBusy, setOthersBusy] = useState(false);
   const cancelRef = useRef(false);
+  const runningRef = useRef(false);
 
   function reset() {
     setPhase("idle");
+    runningRef.current = false;
     setError(null);
     setTargets([]);
     setUnmatched([]);
@@ -69,8 +79,37 @@ export function EcsSheetImportDialog() {
     setCurrent(null);
     cancelRef.current = false;
   }
+  /** 내가 순회 중이 아닐 때만 남의 점유를 확인한다(내 리스를 '남이 잡았다'고 오표시하지 않게). */
+  const refreshBusy = useCallback(async () => {
+    if (runningRef.current) return;
+    setOthersBusy(await isEcsImportBusy());
+  }, []);
+
+  // 창이 열려 있는 동안만 폴링 — 15초. 창=iframe이라 다른 창/다른 사람의 실행도 여기서 잡힌다.
+  useEffect(() => {
+    if (!open) return;
+    void refreshBusy();
+    const id = setInterval(() => void refreshBusy(), 15_000);
+    return () => clearInterval(id);
+  }, [open, refreshBusy]);
+
+  // 순회 중 창이 닫히거나 페이지를 떠나도 리스를 놓는다(실패해도 3분 stale로 자가 회복).
+  useEffect(
+    () => () => {
+      if (runningRef.current) {
+        runningRef.current = false;
+        void endEcsImportRun();
+      }
+    },
+    [],
+  );
+
   function close() {
     cancelRef.current = true;
+    if (runningRef.current) {
+      runningRef.current = false;
+      void endEcsImportRun();
+    }
     setOpen(false);
     reset();
   }
@@ -97,7 +136,7 @@ export function EcsSheetImportDialog() {
           weeks: [],
           counts: { planLines: 0, goals: 0, marks: 0 },
           written: null,
-          issues: [{ kind: "week-title", detail: `${t.className} — ${res.error}`, count: 1 }],
+          issues: [{ kind: "save-failed", detail: `${t.className} — ${res.error}`, count: 1 }],
         });
       } else {
         acc.push(res.report);
@@ -113,10 +152,22 @@ export function EcsSheetImportDialog() {
   async function startPreview() {
     reset();
     setPhase("listing");
+    // 리스 선점 — 두 사람이 동시에 돌면 같은 구글 할당량을 나눠 쓰다 서로를 429로 떨어뜨린다.
+    const lease = await beginEcsImportRun();
+    if (!lease.ok) {
+      setError(lease.error);
+      setOthersBusy(true);
+      setPhase("idle");
+      return;
+    }
+    runningRef.current = true;
+    setOthersBusy(false);
     const listed = await listEcsImportTargets();
     if (!listed.ok) {
       setError(listed.error);
       setPhase("idle");
+      runningRef.current = false;
+      await endEcsImportRun();
       return;
     }
     setYear(listed.year);
@@ -125,18 +176,35 @@ export function EcsSheetImportDialog() {
     if (listed.targets.length === 0) {
       setError("마스터 시트에서 eywa 반과 이름이 맞는 반 시트를 찾지 못했습니다.");
       setPhase("idle");
+      runningRef.current = false;
+      await endEcsImportRun();
       return;
     }
     setPhase("previewing");
     await runAll(listed.targets, listed.year, true);
     setPhase("previewed");
+    // 결과를 읽는 시간엔 API를 안 쓰므로 리스를 놓는다 — 남을 필요 이상으로 막지 않는다.
+    runningRef.current = false;
+    await endEcsImportRun();
   }
 
   async function apply() {
     if (year == null) return;
     setPhase("applying");
+    // 반영도 별도 회차 — 미리보기 이후 남이 먼저 잡았으면 여기서 멈춘다(겹쳐 쓰지 않는다).
+    const lease = await beginEcsImportRun();
+    if (!lease.ok) {
+      setError(lease.error);
+      setOthersBusy(true);
+      setPhase("previewed");
+      return;
+    }
+    runningRef.current = true;
+    setOthersBusy(false);
     await runAll(targets, year, false);
     setPhase("applied");
+    runningRef.current = false;
+    await endEcsImportRun();
     router.refresh();
   }
 
@@ -198,12 +266,18 @@ export function EcsSheetImportDialog() {
               <button
                 type="button"
                 onClick={startPreview}
-                disabled={busy}
-                className="bg-foreground text-background inline-flex cursor-pointer items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition disabled:opacity-40"
+                disabled={busy || othersBusy}
+                title={othersBusy ? "다른 관리자가 시트를 작업 중입니다" : undefined}
+                className="bg-foreground text-background inline-flex cursor-pointer items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-40"
               >
                 {busy ? <Loader2 className="size-3 animate-spin" /> : <Sheet className="size-3" />}
                 {phase === "idle" ? "불러오기" : "다시 불러오기"}
               </button>
+              {othersBusy && !busy ? (
+                <span className="text-text-dim text-[11px]">
+                  다른 관리자가 시트를 작업 중입니다 — 끝나면 자동으로 다시 눌릴 수 있게 됩니다.
+                </span>
+              ) : null}
               {busy && targets.length > 0 ? (
                 <span className="text-text-dim text-[11px]">
                   {done}/{targets.length} {current ? `· ${current}` : ""}
@@ -293,8 +367,9 @@ export function EcsSheetImportDialog() {
                 <button
                   type="button"
                   onClick={apply}
-                  disabled={t.planLines + t.goals + t.marks === 0}
-                  className="bg-primary text-primary-foreground cursor-pointer rounded-lg px-3 py-1.5 text-xs font-medium transition disabled:opacity-40"
+                  disabled={t.planLines + t.goals + t.marks === 0 || othersBusy}
+                  title={othersBusy ? "다른 관리자가 시트를 작업 중입니다" : undefined}
+                  className="bg-primary text-primary-foreground cursor-pointer rounded-lg px-3 py-1.5 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   eywa에 반영
                 </button>

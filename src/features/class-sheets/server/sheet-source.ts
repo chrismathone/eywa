@@ -6,6 +6,7 @@ import "server-only";
 //    그래서 이 모듈은 **문서 1개 단위**로만 제공하고, 반복은 호출부(클라 다이얼로그)가 한 반씩 돌린다.
 //    429는 짧은 재시도로는 못 넘긴다(분 단위 창) → 아래 백오프는 초 단위가 아니라 **수십 초**다.
 import { getSheetsApi, describeSheetsError } from "@/features/integrations/google-sheets";
+import { expandVerticalMerges } from "../import/parse-week-tab";
 import { isWeekTabTitle } from "../import/week-title";
 
 /** 마스터 문서(원장 진실원본 `2026 영어시간표_인재원 본원`) — 반 시트 링크의 출처. */
@@ -125,13 +126,21 @@ export async function readClassSheetWeeks(spreadsheetId: string): Promise<ClassS
         spreadsheetId,
         ranges: weekTabs.map((t) => `'${t}'!A1:CZ400`),
         includeGridData: true,
-        fields: "sheets(properties/title,data(rowData(values/formattedValue)))",
+        // 🔴 merges 필수 — 구글은 병합 범위의 좌상단 셀에만 값을 준다. `시기`·`구분`이 세로 병합이라
+        //    안 받으면 이어지는 계획 줄이 통째로 안 보이고 skill_area가 null이 된다(expandVerticalMerges).
+        fields: "sheets(properties/title,merges,data(rowData(values/formattedValue)))",
       }),
     );
-    const tabs = (g.data.sheets ?? []).map((sh) => ({
-      title: sh.properties?.title ?? "",
-      rows: (sh.data?.[0]?.rowData ?? []).map((r) => (r.values ?? []).map((v) => v.formattedValue ?? "")),
-    }));
+    const tabs = (g.data.sheets ?? []).map((sh) => {
+      const raw = (sh.data?.[0]?.rowData ?? []).map((r) => (r.values ?? []).map((v) => v.formattedValue ?? ""));
+      const merges = (sh.merges ?? []).map((m) => ({
+        startRowIndex: m.startRowIndex ?? 0,
+        endRowIndex: m.endRowIndex ?? 0,
+        startColumnIndex: m.startColumnIndex ?? 0,
+        endColumnIndex: m.endColumnIndex ?? 0,
+      }));
+      return { title: sh.properties?.title ?? "", rows: expandVerticalMerges(raw, merges) };
+    });
     return { docTitle, tabs };
   } catch (e) {
     throw new Error(describeSheetsError(e));

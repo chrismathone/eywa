@@ -32,7 +32,8 @@ export type PlanRow = {
   planDate: string;
   slotStart: string;
   termMode: "regular" | "exam";
-  skillArea: string | null;
+  /** 🔴 `class_sheet_plan_lines.skill_area`는 **not null**(0157a) — 못 정하면 행을 만들지 않는다. */
+  skillArea: string;
   lineNo: number;
   textbook: string | null;
   pageRange: string | null;
@@ -201,8 +202,19 @@ export function buildWeekRows(
       continue;
     }
     const skillArea = resolveSkillKey(l.skillLabel, ctx.skillAreas);
-    if (l.skillLabel && !skillArea) {
-      addIssue(issues, "skill-unknown", `${ctx.className} · '${l.skillLabel}'`);
+    // 🔴 skill_area는 not null이라 정하지 못한 줄은 **넣지 않는다**. 예전엔 null로 밀어넣어
+    //    그 반의 계획 저장이 통째로 실패했다(2026-07-30 프로덕션: 초5 의치대·중1 정규 A).
+    //    임의 slug를 지어내면 화면에 영문 raw가 노출되므로 그것도 안 된다.
+    if (!skillArea) {
+      const preview = [l.textbook, l.pageRange, l.progress].filter(Boolean).join(" · ").slice(0, 40);
+      addIssue(
+        issues,
+        l.skillLabel ? "skill-unknown" : "skill-missing",
+        l.skillLabel
+          ? `${ctx.className} · '${l.skillLabel}'`
+          : `${ctx.className} · ${at.date} ${l.termMode === "exam" ? "내신" : "평시"}${preview ? ` — ${preview}` : ""}`,
+      );
+      continue;
     }
     const groupKey = `${at.date}|${at.slotStart}|${l.termMode}`;
     const lineNo = (lineNoOf.get(groupKey) ?? 0) + 1;
