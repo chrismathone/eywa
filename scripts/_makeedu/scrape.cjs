@@ -38,6 +38,9 @@ const LISTS = {
   // ⚠️ 재원생 목록 URL은 최초 실행에서 확인할 것. students.json이 0행이면 URL이 틀린 것 →
   //    MAKEEDU_STUDENTS_URL 환경변수로 정확한 경로를 덮어쓴다(코드 변경 없이 교정).
   students: { url: process.env.MAKEEDU_STUDENTS_URL || "/member/student/list.do" },
+  // 퇴원생 관리(원장 확인 2026-07-30). makeedu는 실제 결제·환불을 처리하므로 **퇴원일이 eywa보다 정확**하다 —
+  // eywa의 2026-07-10 일괄분(장부 날짜)을 교정·검증하는 근거로 쓴다(compare-withdrawal-dates.mjs).
+  withdrawn: { url: process.env.MAKEEDU_WITHDRAWN_URL || "/member/student/stopList.do" },
 };
 
 // 페이지 내 실행: 가장 큰 테이블을 헤더+행배열로. 셀값 = select 선택값 > innerText > input.value.
