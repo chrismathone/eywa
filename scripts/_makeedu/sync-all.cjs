@@ -37,7 +37,11 @@ const TRIGGERED_BY = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
   : null;
 
 // cron이 도는 안전·멱등 도메인만(위 헤더 '제외' 참고). 스크래핑 리스트 키와 임포터를 1:1로.
-const SCRAPE_LISTS = ["students", "classes", "prospects", "invoices"];
+// ⚠️ `withdrawn`(퇴원생 목록)은 import-invoices의 **삭제 판정 5번째 가드** 재료다 — 없으면 그 가드가 꺼진다.
+// 스크랩 실패는 scrape.cjs가 목록 단위로 격리하므로(빈 JSON) invoices 적재는 그대로 진행된다.
+// 📌 이전 실행의 withdrawn.json이 남아 낡아도 **양방향으로 안전하게** 실패한다:
+//    재등원한 학생은 활성 수강 가드(④)가 막고, 새로 퇴원한 학생은 목록에 없어 보류될 뿐이다.
+const SCRAPE_LISTS = ["students", "classes", "prospects", "invoices", "withdrawn"];
 const IMPORTERS = [
   ["students", "import-students-list.cjs"],
   ["classes", "import-classes.cjs"],

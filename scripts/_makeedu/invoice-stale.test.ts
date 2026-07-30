@@ -3,8 +3,22 @@ import { createRequire } from "node:module";
 
 // 순수 분류기(CJS 스크립트 모듈) — 돈을 지우는 판정이라 단위테스트로 규칙을 못박는다.
 const require_ = createRequire(import.meta.url);
+type Agg = { count: number; total: number; discount: number; paid: number; points: number };
+type ReconRow = {
+  period: string;
+  aggDiff: Record<string, number>;
+  saveDiff: Record<string, number>;
+  countDiff: number;
+  ok: boolean;
+};
 const S = require_("./invoice-stale.cjs") as {
-  classifyStale: (a: Record<string, unknown>) => Record<string, unknown[]>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  classifyStale: (a: Record<string, unknown>) => Record<string, any>;
+  buildWithdrawnIndex: (doc: unknown) => Set<string> | null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  aggregateByPeriod: (rows: unknown[], pick: Record<string, (r: any) => unknown>) => Map<string, Agg>;
+  reconcilePeriods: (a: { scraped: Map<string, Agg>; aggregated: Map<string, Agg>; stored: Map<string, Agg> }) => ReconRow[];
+  reconcileSummary: (rows: ReconRow[] | null) => string | null;
   STALE_COVERAGE_MIN: number;
   STALE_MIN_ABSENT_DAYS: number;
 };
@@ -119,5 +133,148 @@ describe("classifyStale — 무효 후보 4중 가드", () => {
   it("상수는 완화 금지 — 커버리지 0.8 · 최소 부재 7일", () => {
     expect(S.STALE_COVERAGE_MIN).toBe(0.8);
     expect(S.STALE_MIN_ABSENT_DAYS).toBe(7);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 5번째 가드 — makeedu 퇴원 목록. 정황(4중)만으로는 "삭제"와 "다른 청구월 이동"이 안 갈렸다.
+// ─────────────────────────────────────────────────────────────────────────────
+describe("classifyStale — 5번째 가드(makeedu 퇴원 목록)", () => {
+  it("목록에 있으면 void 대상(makeedu가 퇴원이라고 확인해 준 경우)", () => {
+    const b = classify([row({ makeedu_id: "10021" })], { withdrawnMakeeduIds: new Set(["10021"]) });
+    expect(b.voidable).toHaveLength(1);
+    expect(b.holdNotWithdrawn).toHaveLength(0);
+  });
+
+  // 🔴 실측 회귀 — 2026-07-30 부재 18건 중 2건은 06:00엔 있다가 18:00에 사라졌다.
+  // 12시간 만의 이탈은 삭제보다 '다른 청구월로 이동'에 가깝다. 목록에 없으면 지우지 않는다.
+  it("목록에 없으면 보류(holdNotWithdrawn) — 이동일 수 있다", () => {
+    const b = classify([row({ makeedu_id: "10021" })], { withdrawnMakeeduIds: new Set(["99999"]) });
+    expect(b.voidable).toHaveLength(0);
+    expect(b.holdNotWithdrawn).toHaveLength(1);
+  });
+
+  // 이름 매칭은 동명이인·개명으로 틀리고, 틀리면 **남의 청구를 지운다**. 안전한 쪽으로 실패시킨다.
+  it("makeedu_id가 없는 학생은 목록이 있어도 통과 못한다(안전한 실패)", () => {
+    const b = classify([row({ makeedu_id: null })], { withdrawnMakeeduIds: new Set(["10021"]) });
+    expect(b.voidable).toHaveLength(0);
+    expect(b.holdNotWithdrawn).toHaveLength(1);
+  });
+
+  it("목록을 못 읽은 실행(null)은 가드가 꺼진 채 기존 4중 가드로 판정한다(무중단)", () => {
+    const b = classify([row({ makeedu_id: "10021" })], { withdrawnMakeeduIds: null });
+    expect(b.voidable).toHaveLength(1);
+    expect(b.withdrawnGuard).toEqual({ enabled: false });
+  });
+
+  it("가드가 켜졌는지를 리포트가 알 수 있다(조용히 약해지지 않는다)", () => {
+    const b = classify([row({ makeedu_id: "10021" })], { withdrawnMakeeduIds: new Set(["10021", "3"]) });
+    expect(b.withdrawnGuard).toEqual({ enabled: true, size: 2 });
+  });
+
+  it("활성 수강 가드가 퇴원 목록 가드보다 먼저다(수업 다니는 학생은 목록에 있어도 보류)", () => {
+    const b = classify([row({ makeedu_id: "10021" })], {
+      activeStudentIds: new Set(["s1"]),
+      withdrawnMakeeduIds: new Set(["10021"]),
+    });
+    expect(b.holdActive).toHaveLength(1);
+    expect(b.holdNotWithdrawn).toHaveLength(0);
+    expect(b.voidable).toHaveLength(0);
+  });
+});
+
+describe("buildWithdrawnIndex — 퇴원 목록 파싱", () => {
+  // ⚠️ 실측: 퇴원 목록은 `원생번호`, 재원 목록은 `원생고유번호`. 열 이름이 다르다.
+  it("퇴원 목록(원생번호)과 재원 목록(원생고유번호) 둘 다 읽는다", () => {
+    expect(S.buildWithdrawnIndex({ headers: ["원생번호", "원생명"], rows: [["101", "김"]] })).toEqual(new Set(["101"]));
+    expect(S.buildWithdrawnIndex({ headers: ["원생고유번호"], rows: [["202"]] })).toEqual(new Set(["202"]));
+  });
+
+  it("공백을 제거하고 빈 칸은 버린다", () => {
+    expect(S.buildWithdrawnIndex({ headers: ["원생번호"], rows: [[" 101 "], [""], [null]] })).toEqual(new Set(["101"]));
+  });
+
+  // 읽을 수 없으면 **null**이어야 한다 — 빈 Set을 주면 "아무도 퇴원 안 함"으로 읽혀 전건이 보류된다.
+  it("헤더·행이 없으면 null(가드 비활성) — 빈 Set을 반환하지 않는다", () => {
+    expect(S.buildWithdrawnIndex({ headers: ["이름"], rows: [["김"]] })).toBeNull();
+    expect(S.buildWithdrawnIndex({ headers: ["원생번호"], rows: [] })).toBeNull();
+    expect(S.buildWithdrawnIndex(null)).toBeNull();
+    expect(S.buildWithdrawnIndex({ headers: ["원생번호"], rows: [[""]] })).toBeNull();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 층 2 — 대조. "동기화가 맞는지"의 측정 가능한 정의. 허용 오차 0원.
+// ─────────────────────────────────────────────────────────────────────────────
+describe("reconcilePeriods — 월별 3지점 대조", () => {
+  const agg = (o: Partial<Agg>): Agg => ({ count: 0, total: 0, discount: 0, paid: 0, points: 0, ...o });
+  const m = (o: Record<string, Partial<Agg>>) => new Map(Object.entries(o).map(([k, v]) => [k, agg(v)]));
+
+  it("세 지점이 같으면 ok", () => {
+    const a = { count: 2, total: 500, discount: 50, paid: 400, points: 10 };
+    const r = S.reconcilePeriods({ scraped: m({ "2026-08": { ...a, count: 5 } }), aggregated: m({ "2026-08": a }), stored: m({ "2026-08": a }) });
+    expect(r[0].ok).toBe(true);
+  });
+
+  it("건수는 집계↔저장만 본다(라인 수는 집계 건수와 다른 게 정상)", () => {
+    const a = { count: 2, total: 500 };
+    const r = S.reconcilePeriods({ scraped: m({ "2026-08": { count: 17, total: 500 } }), aggregated: m({ "2026-08": a }), stored: m({ "2026-08": a }) });
+    expect(r[0].ok).toBe(true);
+    expect(r[0].countDiff).toBe(0);
+  });
+
+  it("집계 버그(라인 합 ≠ 집계 합)를 잡는다", () => {
+    const r = S.reconcilePeriods({
+      scraped: m({ "2026-08": { total: 500 } }), aggregated: m({ "2026-08": { total: 480 } }), stored: m({ "2026-08": { total: 480 } }),
+    });
+    expect(r[0].ok).toBe(false);
+    expect(r[0].aggDiff.total).toBe(-20);
+    expect(r[0].saveDiff.total).toBe(0);
+  });
+
+  it("저장 버그(집계 합 ≠ DB 합)를 잡는다", () => {
+    const r = S.reconcilePeriods({
+      scraped: m({ "2026-08": { total: 500 } }), aggregated: m({ "2026-08": { total: 500 } }), stored: m({ "2026-08": { total: 499 } }),
+    });
+    expect(r[0].ok).toBe(false);
+    expect(r[0].saveDiff.total).toBe(-1); // 🔴 1원도 통과시키지 않는다
+  });
+
+  it("저장 건수가 모자라면 잡는다(행이 조용히 안 들어간 경우)", () => {
+    const r = S.reconcilePeriods({
+      scraped: m({ "2026-08": {} }), aggregated: m({ "2026-08": { count: 10 } }), stored: m({ "2026-08": { count: 9 } }),
+    });
+    expect(r[0].ok).toBe(false);
+    expect(r[0].countDiff).toBe(-1);
+  });
+
+  it("한쪽에만 있는 달도 빠뜨리지 않는다", () => {
+    const r = S.reconcilePeriods({ scraped: m({ "2026-07": { total: 100 } }), aggregated: new Map(), stored: new Map() });
+    expect(r.map((x) => x.period)).toEqual(["2026-07"]);
+    expect(r[0].ok).toBe(false);
+  });
+});
+
+describe("reconcileSummary — sync_state.error 한 줄", () => {
+  const rows = (over: Partial<ReconRow>[]) =>
+    over.map((o) => ({
+      period: "2026-08", aggDiff: { total: 0, discount: 0, paid: 0, points: 0 },
+      saveDiff: { total: 0, discount: 0, paid: 0, points: 0 }, countDiff: 0, ok: true, ...o,
+    })) as ReconRow[];
+
+  it("전부 일치면 null(요약에 아무것도 안 붙는다)", () => {
+    expect(S.reconcileSummary(rows([{}, {}]))).toBeNull();
+    expect(S.reconcileSummary([])).toBeNull();
+    expect(S.reconcileSummary(null)).toBeNull();
+  });
+
+  it("불일치는 월·항목·금액을 한글로 말한다(raw 키 노출 금지)", () => {
+    const out = S.reconcileSummary(
+      rows([{ ok: false, saveDiff: { total: -12_000, discount: 0, paid: 0, points: 0 }, countDiff: -1 }]),
+    );
+    expect(out).toContain("2026-08");
+    expect(out).toContain("건수 -1");
+    expect(out).toContain("청구 -12,000원");
+    expect(out).not.toContain("total"); // 영문 키가 화면 문구로 새지 않는다
   });
 });

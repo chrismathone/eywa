@@ -26,6 +26,16 @@ const STALE_COVERAGE_MIN = 0.8;
 const STALE_MIN_ABSENT_DAYS = 7;
 const STATUS_KO = { unpaid: "미수", partial: "부분납", paid: "완납", refunded: "환불", void: "무효" };
 
+// ⚠️⚠️ 2026-07-30(2차) 5번째 가드 — **makeedu 퇴원 목록**(scrape.cjs --list=withdrawn, 실측 4,427행).
+// 위 4중 가드는 전부 **eywa가 가진 정황**뿐이다(활성 수강이 없다·며칠째 안 보인다). 그런데 그날 부재 18건을
+// 실제로 뜯어보니 13명이 **재원생**이었고, 그중 둘은 06:00엔 있다가 18:00에 사라졌다 — 12시간 만의 이탈은
+// '삭제'가 아니라 **다른 청구월로 옮겨졌거나 수납 처리된 것**에 가깝다. 정황만으로는 이 둘을 못 가른다.
+// 퇴원 목록은 **makeedu가 직접 "이 원생은 퇴원"이라고 말하는 유일한 증거**라, 판정을 추측에서 사실로 바꾼다.
+//
+// 규칙: 목록을 **읽을 수 있을 때만** 이 가드가 켜진다(파일 없음·헤더 불일치 = 가드 비활성 → 기존 4중 가드로).
+//       매칭은 `makeedu_id`(원생번호)만 — 이름 매칭은 동명이인·개명으로 틀리고, 틀리면 **남의 청구를 지운다**.
+//       그래서 makeedu_id가 없는 학생은 통과시키지 않는다(안전한 쪽으로 실패).
+
 // makeedu 임포트 라인 판별: 현행 스키마는 paid/unpaid 필드 보유, 07-01 옛 additive 스키마는 {kind,description,amount}뿐이나
 // kind가 한글 구분(수업/교재/차량비…)이다. eywa 수동 청구(createInvoice)는 kind가 영문 카테고리(tuition/material…) + paid 없음.
 // (실측: 2026-07 stale 25건 중 07-01산(産) 구스키마가 다수 — paid만 보면 전부 수동으로 오분류돼 영구 보류된다.)
@@ -48,13 +58,17 @@ const remainWon = (e) =>
  * - holdManual:    라인 형태가 수동 청구(paid 필드 없음) — makeedu에 원래 없는 eywa 자체 청구라 보류
  * - holdRecent:    부재 지속일 < STALE_MIN_ABSENT_DAYS — "한 번 못 잡힌 것"일 수 있어 보류
  * - holdActive:    그 학생에게 활성 수강이 있음 — 수업을 다니는 학생의 청구 삭제는 전제가 약해 보류
+ * - holdNotWithdrawn: makeedu **퇴원 목록에 없다** — 삭제가 아니라 다른 청구월 이동일 수 있어 보류
  * - heldPeriods:   커버리지 < STALE_COVERAGE_MIN 월 — 부분 스크랩 의심, 그 월 부재 전건 보류
  *
  * @param existing        각 행에 `updated_at`(마지막 갱신 = 마지막으로 스크랩에 잡힌 시각) 포함 필요
  * @param activeStudentIds 활성 수강(end_date null · on_hold false)이 있는 학생 id Set
+ * @param withdrawnMakeeduIds makeedu 퇴원 목록의 원생번호 Set. **null이면 가드 비활성**(목록을 못 읽은 실행)
  * @param now             부재 지속일 계산 기준(테스트 결정성 위해 주입)
  */
-function classifyStale({ existing, scrapedKeys, unmatchedNameKeys, normalizeName, activeStudentIds, now }) {
+function classifyStale({
+  existing, scrapedKeys, unmatchedNameKeys, normalizeName, activeStudentIds, withdrawnMakeeduIds, now,
+}) {
   const active = activeStudentIds || new Set();
   const nowMs = (now ? new Date(now) : new Date()).getTime();
   const absentDays = (e) =>
@@ -70,8 +84,13 @@ function classifyStale({ existing, scrapedKeys, unmatchedNameKeys, normalizeName
   }
   const b = {
     voidable: [], settled: [], holdUnmatched: [], holdManual: [],
-    holdRecent: [], holdActive: [], heldPeriods: [],
+    holdRecent: [], holdActive: [], holdNotWithdrawn: [], heldPeriods: [],
+    // 목록을 못 읽은 실행인지 리포트·요약이 알 수 있게 남긴다(가드가 조용히 꺼진 걸 숨기지 않는다).
+    withdrawnGuard: withdrawnMakeeduIds ? { enabled: true, size: withdrawnMakeeduIds.size } : { enabled: false },
   };
+  // makeedu가 "퇴원"이라고 확인해 주는가. 목록이 없으면(가드 비활성) 항상 true로 두어 기존 4중 가드만 적용.
+  const confirmedWithdrawn = (e) =>
+    !withdrawnMakeeduIds || (!!e.makeedu_id && withdrawnMakeeduIds.has(String(e.makeedu_id).trim()));
   for (const [period, g] of byPeriod) {
     if (!g.rows.length) continue;
     const coverage = g.present / g.total;
@@ -86,6 +105,8 @@ function classifyStale({ existing, scrapedKeys, unmatchedNameKeys, normalizeName
       // ⚠️ 순서 주의: 완납 보존 판정을 먼저 하고, 그 다음에 미완납만 부재일·활성수강 가드를 태운다.
       else if (absentDays(e) < STALE_MIN_ABSENT_DAYS) b.holdRecent.push({ ...e, absentDays: absentDays(e) });
       else if (active.has(e.student_id)) b.holdActive.push(e);
+      // ⑤ makeedu 퇴원 목록 대조 — 정황(위 4개)의 마지막 확인. 목록에 없으면 '이동'일 수 있어 지우지 않는다.
+      else if (!confirmedWithdrawn(e)) b.holdNotWithdrawn.push(e);
       else b.voidable.push(e);
     }
   }
@@ -130,23 +151,145 @@ function printIssues({ stale, unmatchedLines }) {
     console.log(`⚠️ 보류(활성 수강 있음) ${stale.holdActive.length}건 · 잔액 ${won(r)} — 지금도 수업을 다니는 학생이라 '청구 삭제' 전제가 약함. **사람이 확인할 것**:`);
     for (const e of stale.holdActive.slice(0, 15)) console.log(`  - ${fmtRow(e)}`);
   }
+  if (stale.holdNotWithdrawn?.length) {
+    const r = stale.holdNotWithdrawn.reduce((s2, e) => s2 + remainWon(e), 0);
+    console.log(`ℹ️ 보류(makeedu 퇴원 목록에 없음) ${stale.holdNotWithdrawn.length}건 · 잔액 ${won(r)} — 삭제가 아니라 다른 청구월로 옮겨졌을 수 있어 유보:`);
+    for (const e of stale.holdNotWithdrawn.slice(0, 10)) console.log(`  - ${fmtRow(e)}`);
+  }
+  if (stale.withdrawnGuard && !stale.withdrawnGuard.enabled)
+    console.log(`ℹ️ makeedu 퇴원 목록을 못 읽어 5번째 가드는 꺼진 채 판정했습니다(scrape --list=withdrawn 확인).`);
   for (const h of stale.heldPeriods)
     console.log(`⚠️ ${h.period} 스크랩 커버리지 ${h.coverage}% < ${STALE_COVERAGE_MIN * 100}% — 부분 스크랩 의심, 그 월 부재 ${h.count}건 판단 보류.`);
   return remain;
 }
 
 // makeedu_sync_state.error에 남길 한 줄 요약(연동 이력 추적용) — 이슈 없으면 null.
-function issueSummary({ stale, unmatchedLines, voidStale, voided }) {
+// ⚠️ 대조 불일치(reconcile)는 **맨 앞**에 둔다 — 화면 배지가 앞부분을 먼저 보여주고, 금액이 안 맞는 건
+//    보류 몇 건보다 항상 먼저 알아야 하는 사실이다.
+function issueSummary({ stale, unmatchedLines, voidStale, voided, reconcile }) {
   const parts = [];
+  const mism = reconcileSummary(reconcile);
+  if (mism) parts.push(mism);
   if (unmatchedLines.length) parts.push(`학생 미매칭 ${unmatchedLines.length}라인`);
   if (stale.voidable.length)
     parts.push(`makeedu 부재 미완납 ${stale.voidable.length}건${voidStale ? `(void ${voided})` : "(보류)"}`);
   if (stale.settled.length) parts.push(`부재 완납 ${stale.settled.length}건(보존)`);
   // ⚠️ 활성 수강 보류는 **사람이 봐야 하는 신호**다 — 화면 배지의 '확인 필요'로 올라간다.
   if (stale.holdActive.length) parts.push(`재원생 청구 부재 ${stale.holdActive.length}건(확인 필요)`);
+  if (stale.holdNotWithdrawn?.length) parts.push(`퇴원 목록에 없음 ${stale.holdNotWithdrawn.length}건(보류)`);
   if (stale.holdRecent.length) parts.push(`부재 ${STALE_MIN_ABSENT_DAYS}일 미만 ${stale.holdRecent.length}건(보류)`);
   if (stale.heldPeriods.length) parts.push(`커버리지 보류 ${stale.heldPeriods.length}개월`);
+  if (stale.withdrawnGuard && !stale.withdrawnGuard.enabled) parts.push("퇴원 목록 없음(가드 비활성)");
   return parts.length ? parts.join(" · ") : null;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 층 2 — 대조(reconciliation). "동기화가 맞는지" 를 실행 안에서 스스로 검산한다.
+//
+// 🔴 이 프로젝트에서 동기화는 지금까지 **넣고 끝**이었다. 그래서 2026-07이 07-16에 통째로 멈춘 뒤에도
+//    화면 배지는 2주 내내 초록불이었다 — 맞는지 아무도 확인하지 않았기 때문이다.
+//    "완벽하게 일치"를 말하려면 먼저 **측정 가능한 정의**가 있어야 한다. 그게 아래 3지점 대조다.
+//      ① scraped    makeedu 라인 원본 합 (학생 매칭에 성공한 라인만)
+//      ② aggregated eywa가 (학생×월) 1행으로 집계한 합
+//      ③ stored     저장 후 DB에서 되읽은 합
+//    ①≠② = 집계 버그 · ②≠③ = 저장 버그. **허용 오차는 0원**이다(돈이라 반올림 여지를 두지 않는다).
+// ⚠️ 건수는 ②↔③만 비교한다 — ①은 라인 수라 집계 건수와 다른 게 정상이다.
+// ⚠️ 미매칭 라인은 애초에 저장 대상이 아니므로 ①에서 제외하고, 별도로 `학생 미매칭 N라인`이 보고한다.
+// ─────────────────────────────────────────────────────────────────────────────
+const MONEY_FIELDS = ["total", "discount", "paid", "points"];
+const zeroAgg = () => ({ count: 0, total: 0, discount: 0, paid: 0, points: 0 });
+
+/** rows를 월별 합계 Map<period, {count,total,discount,paid,points}>로. pick은 각 필드 추출자. */
+function aggregateByPeriod(rows, pick) {
+  const m = new Map();
+  for (const r of rows) {
+    const p = pick.period(r);
+    if (!p) continue;
+    let a = m.get(p);
+    if (!a) m.set(p, (a = zeroAgg()));
+    a.count += 1;
+    for (const f of MONEY_FIELDS) a[f] += Number(pick[f]?.(r) ?? 0) || 0;
+  }
+  return m;
+}
+
+const diffOf = (a, b) => Object.fromEntries(MONEY_FIELDS.map((f) => [f, (b[f] || 0) - (a[f] || 0)]));
+const isZero = (d) => MONEY_FIELDS.every((f) => d[f] === 0);
+
+/**
+ * 월별 3지점 대조. 반환 = 월별 행 배열(불일치 여부 포함). 순수 함수.
+ * @param scraped/aggregated/stored Map<period, agg> (aggregateByPeriod 산출물)
+ */
+function reconcilePeriods({ scraped, aggregated, stored }) {
+  const periods = [...new Set([...scraped.keys(), ...aggregated.keys(), ...stored.keys()])].sort();
+  return periods.map((period) => {
+    const s = scraped.get(period) || zeroAgg();
+    const a = aggregated.get(period) || zeroAgg();
+    const d = stored.get(period) || zeroAgg();
+    const aggDiff = diffOf(s, a); // ①→② 집계에서 생긴 차
+    const saveDiff = diffOf(a, d); // ②→③ 저장에서 생긴 차
+    const countDiff = d.count - a.count;
+    return {
+      period, scraped: s, aggregated: a, stored: d, aggDiff, saveDiff, countDiff,
+      ok: isZero(aggDiff) && isZero(saveDiff) && countDiff === 0,
+    };
+  });
+}
+
+const FIELD_KO = { total: "청구", discount: "할인", paid: "수납", points: "적립" };
+
+/** 불일치만 한 줄로. 전부 일치면 null(요약에 아무것도 안 붙는다). */
+function reconcileSummary(rows) {
+  if (!rows || !rows.length) return null;
+  const bad = rows.filter((r) => !r.ok);
+  if (!bad.length) return null;
+  const detail = bad
+    .map((r) => {
+      const bits = [];
+      if (r.countDiff) bits.push(`건수 ${r.countDiff > 0 ? "+" : ""}${r.countDiff}`);
+      for (const f of MONEY_FIELDS) {
+        const v = (r.aggDiff[f] || 0) + (r.saveDiff[f] || 0);
+        if (v) bits.push(`${FIELD_KO[f]} ${v > 0 ? "+" : ""}${Number(v).toLocaleString("ko-KR")}원`);
+      }
+      return `${r.period}(${bits.join(" ") || "차이"})`;
+    })
+    .join(" · ");
+  return `🔴 makeedu와 불일치 ${detail}`;
+}
+
+/** 콘솔용 월별 대조표. 사람이 연동 PC 로그에서 바로 읽는다. */
+function printReconcile(rows) {
+  if (!rows || !rows.length) return;
+  console.log("\n── 월별 대조(makeedu 라인 → 집계 → 저장, 허용 오차 0원) ──");
+  for (const r of rows) {
+    const head = `${r.ok ? "✅" : "🔴"} ${r.period}  건수 ${r.aggregated.count}→${r.stored.count}`;
+    const nums = MONEY_FIELDS.map((f) => `${FIELD_KO[f]} ${won(r.stored[f])}`).join(" · ");
+    console.log(`  ${head}  ${nums}`);
+    if (!r.ok) {
+      if (r.countDiff) console.log(`      건수 차 ${r.countDiff}`);
+      if (!isZero(r.aggDiff)) console.log(`      집계 차(라인→집계): ${JSON.stringify(r.aggDiff)}`);
+      if (!isZero(r.saveDiff)) console.log(`      저장 차(집계→DB): ${JSON.stringify(r.saveDiff)}`);
+    }
+  }
+}
+
+/**
+ * makeedu 퇴원 목록 JSON({headers, rows}) → 원생번호 Set. 읽을 수 없으면 **null**(가드 비활성).
+ * ⚠️ 열 이름이 목록마다 다르다 — 퇴원 목록은 `원생번호`, 재원 목록은 `원생고유번호`(실측). 둘 다 받는다.
+ * ⚠️ 이 파일에는 보호자 전화·퇴원 사유(실 PII)가 들어 있다. **여기서는 번호만 뽑고 나머지는 절대 안 읽는다.**
+ */
+function buildWithdrawnIndex(doc) {
+  const headers = doc && Array.isArray(doc.headers) ? doc.headers : null;
+  const rows = doc && Array.isArray(doc.rows) ? doc.rows : null;
+  if (!headers || !rows || !rows.length) return null;
+  const ci = headers.findIndex((h) => /원생고유번호|원생번호/.test(String(h || "")));
+  if (ci < 0) return null;
+  const set = new Set();
+  for (const r of rows) {
+    const v = String((Array.isArray(r) ? r[ci] : "") ?? "").trim();
+    if (v) set.add(v);
+  }
+  return set.size ? set : null;
 }
 
 // 리포트 2종: 최신 상세 JSON(덮어쓰기 — 부재 행 원본(line_items 포함) = void 백업·복원 근거) +
@@ -156,9 +299,12 @@ function writeReport(outDir, report) {
   const logPath = path.join(outDir, "import-invoices-issues.log");
   fs.writeFileSync(jsonPath, JSON.stringify(report, null, 2), "utf8");
   const b = report.stale;
+  const rec = report.reconcile?.length
+    ? `${report.reconcile.filter((r) => r.ok).length}/${report.reconcile.length}월 일치`
+    : "대조 없음";
   fs.appendFileSync(
     logPath,
-    `${report.ranAt} apply=${report.apply} voidStale=${report.voidStale} | 미매칭 ${report.unmatchedLines.length} | 부재 미완납 ${b.voidable.length}·완납 ${b.settled.length} | 보류 매칭 ${b.holdUnmatched.length}·수동 ${b.holdManual.length}·월 ${b.heldPeriods.length} | void ${report.voidedCount}\n`,
+    `${report.ranAt} apply=${report.apply} voidStale=${report.voidStale} | 대조 ${rec} | 미매칭 ${report.unmatchedLines.length} | 부재 미완납 ${b.voidable.length}·완납 ${b.settled.length} | 보류 매칭 ${b.holdUnmatched.length}·수동 ${b.holdManual.length}·퇴원목록 ${b.holdNotWithdrawn?.length ?? 0}·월 ${b.heldPeriods.length} | void ${report.voidedCount}\n`,
     "utf8",
   );
   return { jsonPath, logPath };
@@ -172,6 +318,11 @@ module.exports = {
   writeReport,
   isMakeeduShape,
   remainWon,
+  aggregateByPeriod,
+  reconcilePeriods,
+  reconcileSummary,
+  printReconcile,
+  buildWithdrawnIndex,
   STALE_COVERAGE_MIN,
   STALE_MIN_ABSENT_DAYS,
 };

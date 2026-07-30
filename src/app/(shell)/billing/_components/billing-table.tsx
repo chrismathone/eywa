@@ -47,16 +47,21 @@ type Props = {
   q?: string;
   /** 기한 경과만 보기 필터 상태 — 정렬 링크가 이 필터를 잃지 않게 함께 실어 나른다. */
   overdueOnly?: boolean;
+  /** 마지막 동기화에 없던 행만 보기 — 위와 같은 이유로 정렬 링크가 함께 실어 나른다. */
+  missingOnly?: boolean;
 };
 
 function buildSortHref(
   col: SortKey,
-  current: { sort?: SortKey; desc?: boolean; period?: string; q?: string; overdueOnly?: boolean },
+  current: {
+    sort?: SortKey; desc?: boolean; period?: string; q?: string; overdueOnly?: boolean; missingOnly?: boolean;
+  },
 ): string {
   const params = new URLSearchParams();
   if (current.period) params.set("period", current.period);
   if (current.q) params.set("q", current.q);
   if (current.overdueOnly) params.set("overdue", "1");
+  if (current.missingOnly) params.set("missing", "1");
   const nextDesc = current.sort === col ? !current.desc : false;
   if (col !== "status") params.set("sort", col);
   if (nextDesc) params.set("desc", "1");
@@ -72,7 +77,9 @@ function SortHeader({
 }: {
   col: SortKey;
   label: string;
-  current: { sort?: SortKey; desc?: boolean; period?: string; q?: string; overdueOnly?: boolean };
+  current: {
+    sort?: SortKey; desc?: boolean; period?: string; q?: string; overdueOnly?: boolean; missingOnly?: boolean;
+  };
   className?: string;
 }) {
   const active = current.sort === col;
@@ -109,8 +116,8 @@ function toLines(r: InvoiceRow): InvoiceLineItem[] {
   return [{ kind: "수업", description: r.notes ?? "수납", amount: r.amountTotal, ...invoiceLevel }];
 }
 
-export function BillingTable({ rows, sort, desc, period, q, overdueOnly }: Props) {
-  const current = { sort, desc, period, q, overdueOnly };
+export function BillingTable({ rows, sort, desc, period, q, overdueOnly, missingOnly }: Props) {
+  const current = { sort, desc, period, q, overdueOnly, missingOnly };
   const groups = rows.map((r) => ({ r, lines: toLines(r) }));
 
   // 페이지 합계(라인 기준)
