@@ -121,8 +121,16 @@ export async function listEcsImportTargets(): Promise<ListTargetsResult> {
       className: cls.class_name,
     });
   }
-  const dup = targets.filter((t) => t.classId && (seenClass.get(t.classId) ?? 0) > 1);
-  for (const d of dup) unmatched.push(`${d.className} — 시트가 2개 이상 연결돼 있어 건너뜁니다`);
+  // 같은 반이 두 시트에 걸리면 **반 단위로 한 줄만** 알리고, 어느 시트인지 id까지 준다
+  // (예전엔 시트마다 한 줄씩 나와 같은 문장이 두 번 뜨고 무엇을 고쳐야 하는지 알 수 없었다).
+  for (const [classId, n] of seenClass) {
+    if (n <= 1) continue;
+    const rows = targets.filter((t) => t.classId === classId);
+    unmatched.push(
+      `${rows[0]!.className} — 시트가 ${n}개 연결돼 있어 건너뜁니다(어느 쪽이 진짜인지 알 수 없음): ` +
+        rows.map((r) => r.spreadsheetId).join(" / "),
+    );
+  }
   return {
     ok: true,
     year: master.year,

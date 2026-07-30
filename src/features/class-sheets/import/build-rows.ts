@@ -12,6 +12,10 @@ import { parseWeekTabTitle } from "./week-title";
 import { addIssue, resolveSkillKey, type EcsImportIssue } from "./types";
 
 const DAY_ORDER: readonly DowKey[] = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
+/** 이슈 문구용 한글 요일 — 화면에 영문 키(raw code)를 내보내지 않는다. */
+const DAY_KO: Readonly<Record<DowKey, string>> = {
+  mon: "월", tue: "화", wed: "수", thu: "목", fri: "금", sat: "토", sun: "일",
+};
 
 export type SlotRow = { day: DowKey; start: string; validFrom: string; validTo: string | null };
 
@@ -177,9 +181,14 @@ export function buildWeekRows(
     for (const b of blocks) {
       const slotStart = assigned.get(b.slotKey);
       if (!slotStart) {
+        // 🔴 **날짜별로 세지 않는다** — 같은 어긋남이 주마다 반복돼 실측 288줄이 됐고, 그 벽 안에서
+        //    "무엇을 고쳐야 하는지"가 안 보였다. **요일·교시 단위로 묶고 원인을 구분**해서 알린다.
+        //    요일 자체가 없는 것(시트가 수업 없는 날에 쓴 것)과 시각이 다른 것은 고칠 곳이 다르다.
         unmappedNote.set(
           b.slotKey,
-          `${ctx.className} · ${date} ${b.periodLabel}${b.timeRaw ? ` (${b.timeRaw})` : " (시각 없음)"}`,
+          daySlots.length === 0
+            ? `${ctx.className} · ${DAY_KO[day]}요일 ${b.periodLabel}${b.timeRaw ? ` ${b.timeRaw}` : ""} — eywa 시간표엔 이 반의 ${DAY_KO[day]}요일 수업이 없습니다`
+            : `${ctx.className} · ${DAY_KO[day]}요일 ${b.periodLabel} ${b.timeRaw ?? "(시각 없음)"} — eywa 교시: ${daySlots.join(", ")}`,
         );
         continue;
       }

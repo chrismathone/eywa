@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   detectDayColumns,
+  disambiguatePm,
   expandVerticalMerges,
   parseTimeCell,
   parseGoalPanelLabel,
@@ -158,6 +159,23 @@ describe("to24h — 12시간 표기 해석", () => {
     expect(to24h(9, 0)).toBe("09:00");
     expect(to24h(12, 0)).toBe("12:00");
     expect(to24h(14, 20)).toBe("14:20");
+  });
+});
+
+describe("disambiguatePm — 저녁 8~10시 교시를 오전으로 읽지 않는다", () => {
+  it("🔴 앞 교시(19:20)보다 이른 08:20은 밤 20:20이다 — eywa에 20:20 슬롯이 있는데도 매칭 실패했던 원인", () => {
+    expect(disambiguatePm("08:20", "19:20")).toBe("20:20");
+    expect(disambiguatePm("09:10", "20:20")).toBe("21:10");
+  });
+  it("첫 교시(기준 없음)는 그대로 — 토요일 오전 9시 수업이 실재한다", () => {
+    expect(disambiguatePm("09:00", null)).toBe("09:00");
+  });
+  it("이미 앞 교시보다 늦으면 손대지 않는다", () => {
+    expect(disambiguatePm("12:00", "09:00")).toBe("12:00");
+    expect(disambiguatePm("20:20", "19:20")).toBe("20:20");
+  });
+  it("12시는 옮기지 않는다(24시가 된다)", () => {
+    expect(disambiguatePm("12:00", "19:20")).toBe("12:00");
   });
 });
 
