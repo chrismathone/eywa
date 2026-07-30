@@ -5,6 +5,7 @@ import "server-only";
 //    반 시트가 28개라 "전부 한 번에" 훑으면 문서당 2콜(탭목록+격자) = 56콜로 즉시 초과한다.
 //    그래서 이 모듈은 **문서 1개 단위**로만 제공하고, 반복은 호출부(클라 다이얼로그)가 한 반씩 돌린다.
 //    429는 짧은 재시도로는 못 넘긴다(분 단위 창) → 아래 백오프는 초 단위가 아니라 **수십 초**다.
+import { kstToday } from "@/lib/date-kst";
 import { getSheetsApi, describeSheetsError } from "@/features/integrations/google-sheets";
 import { expandVerticalMerges } from "../import/parse-week-tab";
 import { isWeekTabTitle } from "../import/week-title";
@@ -45,7 +46,7 @@ export type MasterLink = { spreadsheetId: string; label: string };
  *    (`textFormatRuns[].format.link.uri`)였고, 셀 링크만 읽으면 그 4개 반이 조용히 빠진다.
  *    `=HYPERLINK()` 수식형까지 세 경로를 모두 훑는다.
  */
-export async function listMasterClassSheets(): Promise<{ year: number; links: MasterLink[] }> {
+export async function listMasterClassSheets(): Promise<{ year: number; links: MasterLink[]; tabsUsed: string[] }> {
   const sheets = await getSheetsApi();
   try {
     const meta = await withQuotaRetry(() =>
@@ -57,10 +58,20 @@ export async function listMasterClassSheets(): Promise<{ year: number; links: Ma
     const docTitle = meta.data.properties?.title ?? "";
     // 반 시트 탭 제목엔 연도가 없다 → 마스터 문서 제목의 4자리 연도를 기준연도로 쓴다(없으면 올해).
     const year = Number(/(\d{4})/.exec(docTitle)?.[1] ?? new Date().getUTCFullYear());
-    // 통합 탭만(강사별·강의실·급여 탭엔 반 시트 링크가 없다). 월별로 여러 개라 전부 합집합.
-    const tabs = (meta.data.sheets ?? [])
+    // 통합 탭만(강사별·강의실·급여 탭엔 반 시트 링크가 없다).
+    const integrated = (meta.data.sheets ?? [])
       .map((s) => s.properties?.title ?? "")
       .filter((t) => t.includes("통합"));
+    // 🔴 **전부 합집합하면 안 된다** — 마스터엔 작년 10월~올해 8월 통합 탭이 11개 쌓여 있고, 옛 탭은 그 반의
+    //    **죽은 시트**를 가리킨다. 합치면 한 반에 시트가 2개로 잡혀 안전장치가 그 반을 통째로 건너뛴다
+    //    (2026-07-30 실측: `중등E_초등 브릿지 A` 누락 → 반 27/28). 그래서 **이번 달·다음 달 탭만** 본다.
+    //    (해당 월 탭이 아직 없으면 전체로 폴백 — 조용히 0건이 되지 않게.)
+    const month = Number(kstToday().slice(5, 7));
+    const wanted = [month, month === 12 ? 1 : month + 1].map((n) => `(${n}월)`);
+    const tabs = (() => {
+      const picked = integrated.filter((t) => wanted.some((w) => t.replace(/\s+/g, "").includes(w)));
+      return picked.length > 0 ? picked : integrated;
+    })();
     const byId = new Map<string, MasterLink>();
     for (const tab of tabs) {
       const g = await withQuotaRetry(() =>
@@ -94,7 +105,7 @@ export async function listMasterClassSheets(): Promise<{ year: number; links: Ma
         }
       }
     }
-    return { year, links: [...byId.values()] };
+    return { year, links: [...byId.values()], tabsUsed: tabs };
   } catch (e) {
     throw new Error(describeSheetsError(e));
   }

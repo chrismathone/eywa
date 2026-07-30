@@ -129,6 +129,23 @@ export function splitTeacherCell(raw: string): { teacher: string | null; room: s
   return { teacher, room };
 }
 
+/**
+ * 12시간 표기 중 **오전/오후가 진짜로 애매한 8~11시**를 앞 교시 시각으로 가른다.
+ *
+ * 🔴 2026-07-30 프로덕션: `중고E_중2 특별` 3교시 `08:20~09:10`은 **밤 20:20**인데 `to24h`가 8시를
+ *    그대로 둬서 오전 08:20으로 읽었다 → eywa에 20:20 슬롯이 **있는데도** 매칭 실패(그 반만 60건).
+ *    같은 요일에서 교시는 **시간 순으로 내려가므로**, 앞 교시보다 이르면 오후로 본다.
+ *    ⚠️ 12시는 옮기지 않는다(24시가 되고 밤 12시 수업은 없다). 첫 교시는 기준이 없어 그대로 둔다
+ *    (토요일 오전 9시 수업이 실재하므로 무조건 오후로 밀면 그쪽이 깨진다).
+ */
+export function disambiguatePm(t: string | null, prev: string | null): string | null {
+  if (!t || !prev || t > prev) return t;
+  const h = Number(t.slice(0, 2));
+  if (h < 8 || h > 11) return t;
+  const shifted = `${String(h + 12).padStart(2, "0")}${t.slice(2)}`;
+  return shifted > prev ? shifted : t;
+}
+
 export type CellMerge = {
   startRowIndex: number;
   endRowIndex: number;
@@ -301,6 +318,17 @@ export function parseWeekTab(rows: string[][]): ParsedWeekTab {
           note,
         });
       }
+    }
+  }
+
+  // 요일별로 교시가 시간 순이라는 사실을 이용해 오전/오후 애매(8~11시)를 확정한다(disambiguatePm 주석).
+  for (const day of Object.keys(dayColumns) as DowKey[]) {
+    let prev: string | null = null;
+    for (const s of slots) {
+      if (s.day !== day) continue;
+      s.start24 = disambiguatePm(s.start24, prev);
+      s.end24 = disambiguatePm(s.end24, s.start24 ?? prev);
+      if (s.start24) prev = s.start24;
     }
   }
 
