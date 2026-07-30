@@ -141,6 +141,8 @@ export const GUARDS = [
   { code: "snapshot_incomplete", action: "exclude" }, // 복구용 스냅샷(부모 식별자) 미확보
   { code: "posts_unknown", action: "exclude" }, //      보드 게시물 이력을 신뢰할 수 없음(100건 초과·조회 실패)
   // ── hold ──────────────────────────────────────────────────────────────────
+  { code: "recent_billing", action: "hold" }, //        🔴 퇴원 이후의 청구·납부가 있음(= 실제로는 다니는 중일 수 있음)
+  { code: "withdrawal_inconsistent", action: "hold" }, // 🔴 퇴원일보다 수강 종료일이 나중(데이터 모순)
   { code: "grace", action: "hold" }, //                 eywa 퇴원일 유예 미경과(시간이 지나면 자동 해소)
   { code: "recent_posts", action: "hold" }, //          ClassNote 보드에 최근 게시물이 있음(원장 기준 1.5개월)
   { code: "recent_any_post", action: "hold" }, //       ⭐ 그 학생의 **어떤 보드든** 최근 7일 내 게시물(원장 백스톱)
@@ -192,6 +194,8 @@ export function evaluateOffboardCandidate(facts) {
     studentAnyPost = null,
     anyPostDays = 7,
     phone = null,
+    billing = null,
+    enrollmentEnd = null,
     today,
     schoolYear,
     graceDays,
@@ -420,6 +424,31 @@ export function evaluateOffboardCandidate(facts) {
     set("recent_any_post", d != null && d < anyPostDays, `최근 ${anyPostDays}일 내에 보고서가 올라왔습니다(마지막 ${studentAnyPost.lastPostAt}, ${d}일 전) — 재원 중일 수 있어 명부에서 내리지 않습니다`);
   }
 
+  // ── 🔴 돈의 흔적 — 가장 강한 "실제로 다닌다" 신호 (원장 2026-07-30) ─────────────
+  // 원장: *"메이크에듀가 실제 퇴원날짜와 일치할 확률이 높음. 실제 결제랑 환불을 진행하므로."*
+  // 같은 논리를 eywa 청구에 적용한다. **퇴원일 이후의 청구·납부는 퇴원과 모순**이다 —
+  // 실측으로 잡았다: 배한빈(퇴원 2026-04-06)에게 **2026-07 청구 + 06-30 납부**가 있었다.
+  // 다른 모든 가드(활성수강 0·보고서 없음·무게시)를 통과했는데 돈만이 그가 살아있다고 말했다.
+  if (!billing) skip("recent_billing");
+  else {
+    const wd = student?.withdrawnAt ?? null;
+    const after = [];
+    // 청구월(YYYY-MM)은 퇴원월과 같은 달까지는 정상(그 달 수업분) — **퇴원 다음 달부터**를 모순으로 본다.
+    if (billing.lastPeriod && wd && billing.lastPeriod > wd.slice(0, 7)) after.push(`청구 ${billing.lastPeriod}`);
+    if (billing.lastPaidAt && wd && billing.lastPaidAt > wd) after.push(`납부 ${billing.lastPaidAt}`);
+    set("recent_billing", after.length > 0, `퇴원일(${wd}) 이후의 돈 흔적이 있습니다(${after.join(", ")}) — 실제로는 다니는 중일 수 있어 명부에서 내리지 않습니다`);
+  }
+
+  // ── 🔴 퇴원일 ↔ 수강 종료일 모순 ────────────────────────────────────────────
+  // 퇴원했는데 수강이 그 뒤까지 열려 있었다면 둘 중 하나가 틀린 것이다(실측: 주상모A 퇴원 03-31 / 종료 07-03).
+  if (!student || !enrollmentEnd) skip("withdrawal_inconsistent");
+  else
+    set(
+      "withdrawal_inconsistent",
+      !!student.withdrawnAt && enrollmentEnd > student.withdrawnAt,
+      `퇴원일(${student.withdrawnAt})보다 수강 종료일(${enrollmentEnd})이 나중입니다 — 어느 쪽이 사실인지 확인이 필요합니다`,
+    );
+
   // ── 최근 활동 ───────────────────────────────────────────────────────────────
   const sig = [];
   if (activity?.lastReportSentAt) sig.push(`최근 발송 ${activity.lastReportSentAt}`);
@@ -486,6 +515,7 @@ export const RELEASE_GUARDS = [
   { code: "shared_board", action: "exclude" }, //      가족 2+ = 남의 집까지 끊긴다
   { code: "members_unknown", action: "exclude" }, //   연결 가족 수 미확인(API 변경 의심)
   { code: "posts_unknown", action: "exclude" }, //     게시물 이력 불완전 = 무활동을 증명 못 함
+  { code: "recent_billing", action: "hold" }, //       🔴 최근 수납·청구가 있음 = 다니는 중일 수 있다(원장 지시)
   { code: "recent_posts", action: "hold" }, //         최근 게시물 있음(원장 기준 45일)
   { code: "teacher_linked", action: "hold" }, //       교사 연결 있음 → ClassNote는 교사 있으면 반 삭제 불가
 ];
@@ -505,7 +535,20 @@ export const RELEASE_GUARDS = [
  * @returns {{action:"release"|"hold"|"exclude", primaryCode:string, matchedCodes:string[],
  *            notEvaluatedCodes:string[], factsComplete:boolean, reason:string, alsoOffboard:boolean}}
  */
-export function evaluateBoardRelease({ board, matchedStudentCount, student, phone, posts, teachers, today, dormantDays, studentAnyPost = null, anyPostDays = 7 }) {
+export function evaluateBoardRelease({
+  board,
+  matchedStudentCount,
+  student,
+  phone,
+  posts,
+  teachers,
+  today,
+  dormantDays,
+  studentAnyPost = null,
+  anyPostDays = 7,
+  billing = null,
+  billingDays = 45,
+}) {
   const verdicts = new Map();
   const set = (code, hit, reason) => verdicts.set(code, hit ? { hit: true, reason } : { hit: false });
   const skip = (code) => verdicts.set(code, null);
@@ -550,6 +593,23 @@ export function evaluateBoardRelease({ board, matchedStudentCount, student, phon
   }
 
   set("teacher_linked", (teachers ?? 0) >= 1, `이 보드에 교사가 ${teachers}명 연결돼 있습니다 — ClassNote는 교사가 있으면 반을 삭제할 수 없습니다(UI에서 먼저 해제)`);
+
+  // 🔴 **최근 수납이 있으면 보드도 지우지 않는다**(원장 지시 2026-07-30: *"최근 수납이 있으면 방어로직으로
+  // 한번 걸러버리는 것도 좋겠어 안전하게"*). 돈은 "실제로 다닌다"의 가장 강한 신호다 — 수강·보고서 데이터가
+  // 전부 조용해도 최근 납부가 있으면 그 학생은 살아있다(실측: 배한빈, 퇴원 04-06인데 07월 청구·06-30 납부).
+  if (!billing) skip("recent_billing");
+  else {
+    const since = billing.lastPaidAt ? dayDiff(billing.lastPaidAt, today) : null;
+    const afterWithdrawal =
+      !!student?.withdrawnAt &&
+      ((billing.lastPeriod && billing.lastPeriod > student.withdrawnAt.slice(0, 7)) ||
+        (billing.lastPaidAt && billing.lastPaidAt > student.withdrawnAt));
+    set(
+      "recent_billing",
+      afterWithdrawal || (since != null && since < billingDays),
+      `최근 수납·청구가 있습니다(청구 ${billing.lastPeriod ?? "-"} · 납부 ${billing.lastPaidAt ?? "-"}) — 다니는 중일 수 있어 보드를 지우지 않습니다`,
+    );
+  }
 
   const matchedCodes = [];
   const notEvaluatedCodes = [];

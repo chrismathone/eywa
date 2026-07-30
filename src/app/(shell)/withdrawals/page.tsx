@@ -186,7 +186,11 @@ export default async function WithdrawalsPage({
   }).length;
 
   // 통계(전체 기준) — 월별 추이 + 과목별 분포
-  const trend = monthlyWithdrawals(all);
+  // ⚠️ **시스템 정리(날짜 미상)는 월별 추이에서 뺀다** — 퇴원일이 실제 시점이 아니라 일괄 처리된 장부 날짜라
+  //    그대로 세면 그 달이 부풀어 "7월 퇴원 N명"이 사실과 달라진다(교정 전 152명이 그렇게 나왔다).
+  //    목록에서는 숨기지 않는다(실제로 퇴원한 게 맞고 날짜만 모른다) — [system-bulk.ts](@/features/withdrawals/system-bulk) 참조.
+  const systemBulkCount = all.filter((r) => r.systemBulk).length;
+  const trend = monthlyWithdrawals(all.filter((r) => !r.systemBulk));
   const subjects = subjectBreakdown(all, subjectMaps.labelOf);
   const subjMax = subjects[0]?.count ?? 1;
 
@@ -342,7 +346,10 @@ export default async function WithdrawalsPage({
           <section className="bg-card shadow-card rounded-2xl p-5">
             <header className="mb-2 flex items-baseline justify-between">
               <h2 className="text-foreground text-[15px] font-bold">월별 퇴원 추이</h2>
-              <span className="text-text-faint text-[11px]">최근 12개월 · 전체 {all.length}명</span>
+              <span className="text-text-faint text-[11px]">
+                최근 12개월 · 전체 {all.length}명
+                {systemBulkCount > 0 ? ` (시스템 정리 ${systemBulkCount}명 제외 — 퇴원일 미상)` : ""}
+              </span>
             </header>
             <WithdrawalTrendChart data={trend} />
           </section>
@@ -407,13 +414,22 @@ export default async function WithdrawalsPage({
                           {r.lastClassName ?? "수강 반 없음"}
                         </p>
                       </div>
-                      <div className="text-right">
-                        <p className="text-foreground num text-[11px] font-bold">
-                          {r.withdrawnAt ?? "—"}
-                        </p>
-                        {ago ? (
-                          <p className="text-text-faint num text-[10px]">{ago}</p>
-                        ) : null}
+                      <div className="shrink-0 text-right">
+                        {/* 시스템 일괄 정리분 = 퇴원일이 실제 시점이 아니라 장부 날짜라 경과일을 표시하지 않는다
+                            (그대로 두면 "20일 전 퇴원"처럼 틀린 사실을 읽게 된다). */}
+                        {r.systemBulk ? (
+                          <>
+                            <Pill color="neutral">시스템 정리</Pill>
+                            <p className="text-text-faint mt-0.5 text-[10px]">퇴원일 미상</p>
+                          </>
+                        ) : (
+                          <>
+                            <p className="text-foreground num text-[11px] font-bold">
+                              {r.withdrawnAt ?? "—"}
+                            </p>
+                            {ago ? <p className="text-text-faint num text-[10px]">{ago}</p> : null}
+                          </>
+                        )}
                       </div>
                     </WindowLink>
                   </li>

@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
 import { REASON_LABEL, normalizeReason, type WithdrawalMetadata } from "../types";
 import { getEndedSubjects } from "../subject-ended";
+import { isSystemBulkWithdrawal } from "../system-bulk";
 
 // Re-export common types so existing callers don't need to switch import paths
 export type {
@@ -23,6 +24,10 @@ export type WithdrawalRow = {
   lastClassSubject: string | null;
   withdrawalReason: string | null;
   metadata: WithdrawalMetadata | null;
+  /** 수강(종료) 이력이 있는가 — '시스템 정리(날짜 미상)' 판정 입력([system-bulk.ts](../system-bulk.ts)). */
+  hasEnrollmentHistory: boolean;
+  /** 퇴원일이 장부상 일괄 날짜이고 수강 이력도 없어 **실제 퇴원 시점을 알 수 없는** 행. */
+  systemBulk: boolean;
 };
 
 function parseMetadata(raw: unknown): WithdrawalMetadata | null {
@@ -96,6 +101,9 @@ export async function getWithdrawnStudents(): Promise<WithdrawalRow[]> {
   return students.map((s) => {
     const last = lastByStudent.get(s.id);
     const md = parseMetadata(s.withdrawal_metadata);
+    // 수강(종료) 이력 유무 = '시스템 정리(날짜 미상)' 판정 입력. lastClassName은 반 조인 실패로도 null이 될 수
+    // 있어 신뢰할 수 없으므로, **enrollment 행의 존재 자체**로 본다.
+    const hasEnrollmentHistory = lastByStudent.has(s.id);
     return {
       id: s.id,
       name: s.name,
@@ -107,6 +115,8 @@ export async function getWithdrawnStudents(): Promise<WithdrawalRow[]> {
       lastClassSubject: last?.subject ?? null,
       withdrawalReason: md?.reason ? REASON_LABEL[md.reason] : last?.reason ?? null,
       metadata: md,
+      hasEnrollmentHistory,
+      systemBulk: isSystemBulkWithdrawal({ withdrawnAt: s.withdrawn_at, hasEnrollmentHistory }),
     };
   });
 }
@@ -189,6 +199,11 @@ export async function getWithdrawalDetail(studentId: string): Promise<Withdrawal
     parentPhone: (s as { parent_phone?: string | null }).parent_phone ?? null,
     parentName: (s as { parent_name?: string | null }).parent_name ?? null,
     enrollmentHistory: history,
+    hasEnrollmentHistory: history.length > 0,
+    systemBulk: isSystemBulkWithdrawal({
+      withdrawnAt: s.withdrawn_at,
+      hasEnrollmentHistory: history.length > 0,
+    }),
   };
 }
 
