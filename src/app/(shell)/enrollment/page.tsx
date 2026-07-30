@@ -34,8 +34,11 @@ const COLUMNS: {
   { key: "consulted", label: "상담 완료", outcomes: ["consulted"], color: "blue" },
   { key: "ai_done", label: "AI 분석 완료", outcomes: ["ai_done"], color: "primary" },
   {
+    // 🔴 "등록 · 종료"였다 — 원장 지적: "등록"은 수강등록(반 배정), "종료"는 학생의 수강종료/퇴원으로
+    // 읽힌다. 실제 뜻은 **상담 파이프라인이 끝난 건**(재원생 등록 결정·거절·노쇼)이고, 그중 반까지
+    // 배정된 건은 옆 열로 빠지므로 여기 남는 등록 건은 아직 배정이 없는 것이다.
     key: "closed",
-    label: "등록 · 종료",
+    label: "상담 종료",
     outcomes: ["enrolled", "declined", "no_show"],
     color: "neutral",
   },
@@ -95,7 +98,9 @@ export default async function EnrollmentPage({
       color: col.color,
       cards: items.filter((i) => col.outcomes.includes(i.outcome) && !assignedIds.has(i.id)),
     })),
-    { key: "assigned", label: "배정 완료", color: "primary" as const, cards: assigned },
+    // "반 배정 완료" — 옆 열의 "재원생 등록"(상담 결과)과 확실히 갈리게 '반'을 붙인다.
+    // 판정도 outcome이 아니라 연결 학생의 상담 과목 수강 여부다(AI 비서 표현과 통일).
+    { key: "assigned", label: "반 배정 완료", color: "primary" as const, cards: assigned },
   ];
 
   return (

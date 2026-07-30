@@ -4,6 +4,7 @@ import { useActionState, useState, type ReactNode } from "react";
 import { useFormStatus } from "react-dom";
 import { Loader2, Tag, Trash2, X } from "@/components/icons/eywa-icon-compat";
 import { Button } from "@/components/ui/button";
+import { OUTCOME_OPTIONS } from "@/features/enrollment/outcome-meta";
 import {
   deleteEnrollmentConsultation,
   setEnrollmentOutcome,
@@ -11,15 +12,9 @@ import {
   type SetOutcomeState,
 } from "@/features/enrollment/server/actions";
 
-const OUTCOME_OPTIONS = [
-  { value: "pending", label: "대기" },
-  { value: "scheduled", label: "예약" },
-  { value: "consulted", label: "상담완료" },
-  { value: "ai_done", label: "AI 완료" },
-  { value: "enrolled", label: "등록" },
-  { value: "declined", label: "거절" },
-  { value: "no_show", label: "노쇼" },
-];
+// 🔴 라벨을 여기서 따로 정의하지 말 것 — 예전엔 정본과 같은 이름의 로컬 배열이라 import된 것처럼
+// 보였는데 실은 하드코딩이었다. 그래서 정본을 바꾸면 **이 모달에서 고른 라벨과 보드에 찍히는 라벨이
+// 달라진다**(가장 찾기 어려운 분열). 값을 실제로 DB에 쓰는 유일한 UI라 특히 정본을 따라야 한다.
 
 // 상세 상단 '상태 변경' 버튼. (수정은 전체 편집 페이지 /enrollment/[id]/edit 하나로 통일 — 모달 quick-edit 제거.)
 export type ConsultValues = { id: string; outcome: string };
@@ -60,7 +55,9 @@ function OutcomeDialog({ id, current, onClose }: { id: string; current: string; 
   const [selected, setSelected] = useState(current);
   const [state, action] = useActionState<SetOutcomeState, FormData>(setEnrollmentOutcome, undefined);
   if (state?.ok) queueMicrotask(onClose);
-  // 배정 완료(등록)된 상담은 이전 단계로 되돌릴 수 없다 — '등록' 유지 또는 '거절'만 허용(서버도 이중 방어).
+  // '재원생 등록'으로 처리된 상담은 이전 단계로 되돌릴 수 없다 — 유지 또는 '거절'만 허용(서버도 이중 방어).
+  // ⚠️ 문구에 "배정 완료"를 쓰지 말 것 — 판정은 outcome='enrolled'인데 화면의 "반 배정 완료"는
+  //    수강 여부라는 **다른 기준**이라, 반 배정이 없는 건에도 "배정 완료"라는 거짓 안내가 뜬다.
   const isConverted = current === "enrolled";
   const allowed = (v: string) => !isConverted || v === "enrolled" || v === "declined";
   return (
@@ -77,7 +74,7 @@ function OutcomeDialog({ id, current, onClose }: { id: string; current: string; 
                 type="button"
                 disabled={disabled}
                 onClick={() => setSelected(o.value)}
-                title={disabled ? "배정 완료된 상담은 이전 단계로 되돌릴 수 없습니다" : undefined}
+                title={disabled ? "‘재원생 등록’으로 처리된 상담은 이전 단계로 되돌릴 수 없습니다" : undefined}
                 className={`rounded-full border px-2.5 py-1 text-xs transition ${
                   disabled
                     ? "border-line text-text-faint cursor-not-allowed opacity-40"
@@ -93,7 +90,7 @@ function OutcomeDialog({ id, current, onClose }: { id: string; current: string; 
         </div>
         {isConverted ? (
           <p className="text-text-dim text-[11px]">
-            배정 완료(등록)된 상담은 대기·예약 등 이전 단계로 되돌릴 수 없습니다. 취소는 ‘거절’로 처리하세요.
+            ‘재원생 등록’으로 처리된 상담은 대기·예약 등 이전 단계로 되돌릴 수 없습니다. 취소는 ‘거절’로 처리하세요.
           </p>
         ) : null}
         {state?.error ? <p className="text-chart-4 text-xs">{state.error}</p> : null}

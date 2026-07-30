@@ -79,15 +79,17 @@ export default async function EnrollmentDashboardPage({
       {/* Stats KPI */}
       <section className="bg-card border-border grid grid-cols-2 gap-4 rounded-2xl border p-5 sm:grid-cols-3">
         <Stat label="전체 상담" value={`${monthTotal}건`} />
-        <Stat label="등록 완료" value={`${monthEnrolled}건`} highlight="text-chart-2" />
-        <Stat label="전환율" value={`${monthlyRate}%`} highlight="text-chart-1" />
+        {/* "등록 완료"였다 — 값은 상담 결과(outcome) 기준이라 반 배정과 별개다. 보드 헤더는 같은 이유로
+            이미 이 지표를 버리고 "반 배정 완료"를 쓴다(page.tsx 주석). 라벨로 잣대를 밝힌다. */}
+        <Stat label="재원생 등록(상담 결과)" value={`${monthEnrolled}건`} highlight="text-chart-2" />
+        <Stat label="등록 결정률" value={`${monthlyRate}%`} highlight="text-chart-1" />
       </section>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <section className="bg-card border-border rounded-2xl border p-5">
           <header className="mb-3">
             <h2 className="text-foreground text-sm font-bold">월별 상태 분포</h2>
-            <p className="text-muted-foreground text-xs">{selectedMonth} 기준 outcome별 카운트</p>
+            <p className="text-muted-foreground text-xs">{selectedMonth} 기준 상담 상태별 건수</p>
           </header>
           <OutcomeDonut data={distribution} />
         </section>
@@ -95,7 +97,7 @@ export default async function EnrollmentDashboardPage({
         <section className="bg-card border-border rounded-2xl border p-5">
           <header className="mb-3">
             <h2 className="text-foreground text-sm font-bold">최근 6개월 전환율</h2>
-            <p className="text-muted-foreground text-xs">상담 완료율 (consulted+ai+enrolled) / 등록 완료율</p>
+            <p className="text-muted-foreground text-xs">상담 완료율(상담완료 · AI 완료 · 재원생 등록 포함) / 등록 결정률</p>
           </header>
           <ConversionBars data={trend} />
         </section>
@@ -119,7 +121,7 @@ export default async function EnrollmentDashboardPage({
                 <th className="eyebrow px-5 py-3 font-normal">상담사</th>
                 <th className="eyebrow num px-5 py-3 text-right font-normal">총 상담</th>
                 <th className="eyebrow num px-5 py-3 text-right font-normal">상담 완료</th>
-                <th className="eyebrow num px-5 py-3 text-right font-normal">등록 완료</th>
+                <th className="eyebrow num px-5 py-3 text-right font-normal">재원생 등록</th>
                 <th className="eyebrow num px-5 py-3 text-right font-normal">전환율</th>
               </tr>
             </thead>

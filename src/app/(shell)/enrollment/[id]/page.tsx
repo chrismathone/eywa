@@ -48,7 +48,7 @@ const OUTCOME_BADGE: Record<string, { label: string; class: string }> = {
   scheduled: { label: "예약", class: "text-chart-3 bg-chart-3/10 border-chart-3/20" },
   consulted: { label: "상담완료", class: "text-chart-1 bg-chart-1/10 border-chart-1/20" },
   ai_done: { label: "AI 완료", class: "text-chart-2 bg-chart-2/10 border-chart-2/20" },
-  enrolled: { label: "등록", class: "text-chart-2 bg-chart-2/10 border-chart-2/20" },
+  enrolled: { label: "재원생 등록", class: "text-chart-2 bg-chart-2/10 border-chart-2/20" },
   declined: { label: "거절", class: "text-muted-foreground bg-muted border-border" },
   no_show: { label: "노쇼", class: "text-chart-4 bg-chart-4/10 border-chart-4/20" },
 };

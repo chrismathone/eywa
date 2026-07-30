@@ -31,10 +31,10 @@ export function EnrollmentTable({ rows, nowMs }: { rows: ConsultationListRow[]; 
         </thead>
         <tbody className="divide-line divide-y">
           {rows.map((c) => {
-            // 수업 배정된 카드는 "배정 완료"로(칸반 카드와 동일 기준).
+            // 수업 배정된 카드는 "반 배정 완료"로(칸반 카드와 동일 기준·동일 문구).
             const pill =
               c.assignedClassCount >= 1
-                ? { label: "배정 완료", color: "primary" as const }
+                ? { label: "반 배정 완료", color: "primary" as const }
                 : outcomePill(c.outcome);
             return (
               <tr key={c.id} className="hover:bg-bg-soft/40">
