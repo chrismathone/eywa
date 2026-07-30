@@ -131,6 +131,9 @@ try {
   const via = { id: 0, phone: 0, name: 0 };
   // makeedu 일괄 날짜 자동 감지(실측 2024-03-18 = 91%).
   const bulkDates = detectBulkDates(mk.map((x) => x.out));
+  // eywa 쪽 일괄(장부) 날짜도 같은 방식으로 감지 — 그 값에 앉은 학생은 makeedu 값으로 다시 채운다.
+  // 실측: 403명 중 2026-07-10(42) · 2026-07-03(39)이 뭉치고, 월말 자연 퇴원일(20건대)은 임계 아래로 통과한다.
+  const eywaBulkDates = detectBulkDates(rows.map((r) => r.wd));
   for (const r of rows) {
     // 매칭 우선순위 — 강한 키부터. ① 원생번호 ② 전화(형제 중복 번호는 위에서 제거됨) ③ 이름(양쪽 모두 유일할 때만)
     let m = r.makeedu_id ? byId.get(String(r.makeedu_id).trim()) : null;
@@ -159,11 +162,17 @@ try {
       bulkSkipped.push({ ...r, mk: m.out }); // makeedu 쪽 장부 날짜 — 채우지도, 불일치로 세지도 않는다
       continue;
     }
-    if (Number(r.enr) === 0) {
+    // 채우기 대상 = ① eywa에 근거가 아예 없는 학생(수강 이력 0) **또는**
+    //               ② 현재 값이 **eywa 쪽 일괄(장부) 날짜**인 학생 — 그 값은 실제 퇴원 시점이 아니다.
+    // ②가 필요한 이유(실측): 07-10 일괄분을 "마지막 수강 종료일"로 교정했더니 40명이 **2026-07-03**으로
+    // 몰렸는데, `enrollments.end_date`의 최다값이 바로 07-03(149건)이었다 — 수강 종료일 자체가 일괄이라
+    // 장부 날짜를 다른 장부 날짜로 옮긴 셈이었다. makeedu는 같은 학생들에게 제각각 날짜를 갖고 있다.
+    const onEywaBulk = eywaBulkDates.has(r.wd);
+    if (Number(r.enr) === 0 || onEywaBulk) {
       // ⚠️ **채우기는 원생번호(id) 매칭만.** 전화·이름 매칭은 오래된 동명이인·재사용 번호에 붙을 수 있어
-      //    보고만 한다(실측: 약한 매칭 15건이 대부분 일괄 날짜로 몰렸다).
+      //    보고만 한다(실측: 약한 매칭이 대부분 일괄 날짜로 몰렸다).
       if (m.out === r.wd) continue;
-      if (how === "id") fill.push({ ...r, to: m.out, via: how });
+      if (how === "id") fill.push({ ...r, to: m.out, via: how, reason: onEywaBulk ? "eywa 일괄날짜" : "수강이력 없음" });
       else weakMatch.push({ ...r, to: m.out, via: how });
     } else if (m.out !== r.wd) {
       // 하루 차이는 기준 차이(마지막 수업일 vs 퇴원 처리일)로 보고 불일치에서 뺀다.
@@ -175,10 +184,11 @@ try {
   console.log(`\n════ makeedu 퇴원일 이중 대조 ${APPLY ? "실행(--apply)" : "DRY-RUN"} ════`);
   console.log(`makeedu 퇴원생 ${mk.length}행(퇴원일 파싱 ${mk.filter((x) => x.out).length}) · eywa 퇴원생 ${rows.length}`);
   console.log(`매칭 경로 — 원생번호 ${via.id} · 전화 ${via.phone} · 이름 ${via.name} · 미매칭 ${unmatched.length}`);
+  if (eywaBulkDates.size) console.log(`⚠️ eywa 일괄(장부) 날짜 감지: ${[...eywaBulkDates].join(", ")} — 이 값에 앉은 학생은 makeedu 값으로 다시 채웁니다`);
   if (bulkDates.size)
     console.log(`⚠️ makeedu 일괄 도장 날짜 감지: ${[...bulkDates].join(", ")} — 이 날짜는 채우지 않습니다(장부 날짜)`);
   console.log(`\n① 날짜 미상 → 채우기 대상(원생번호 매칭만): **${fill.length}건**`);
-  fill.slice(0, 15).forEach((f) => console.log(`   · ${f.name} : ${f.wd} → ${f.to}`));
+  fill.slice(0, 15).forEach((f) => console.log(`   · ${f.name} : ${f.wd} → ${f.to}  [${f.reason}]`));
   if (fill.length > 15) console.log(`   … 외 ${fill.length - 15}건`);
   console.log(`\n② 약한 매칭(전화·이름) — 채우지 않고 보고만: ${weakMatch.length}건`);
   weakMatch.slice(0, 10).forEach((f) => console.log(`   · ${f.name} : ${f.wd} → ${f.to} (${f.via} 매칭, 미적용)`));

@@ -18,7 +18,13 @@
  *    `SYSTEM_BULK_WITHDRAWAL_DATES`). 워커 스크립트(.mjs)는 `src`를 import할 수 없어 부득이 이원화됐다 —
  *    **날짜를 추가할 땐 두 곳을 함께** 고칠 것(근거: 하루 건수 급증 + 수강 종료일 산포).
  */
-export const SYSTEM_BULK_WITHDRAWAL_DATES = ["2026-07-10"] as const;
+export const SYSTEM_BULK_WITHDRAWAL_DATES = [
+  "2026-07-10", // 하루 119명(다음 순위 12명) · 수강 종료일은 제각각 → status 도장만 일괄
+  // ⚠️ 2026-07-03 = 위 119명 중 77명을 "마지막 수강 종료일"로 교정했더니 40명이 몰린 날짜.
+  //    `enrollments.end_date`의 최다값이 **2026-07-03(149건)** — 수강 종료일 자체가 일괄이었다.
+  //    교정이 장부 날짜를 다른 장부 날짜로 옮긴 셈이라, makeedu 대조(결제 기반)로 다시 채운다.
+  "2026-07-03",
+] as const;
 
 /** 그 퇴원일이 시스템 일괄 처리분인가(날짜만 본다). */
 export function isSystemBulkWithdrawalDate(withdrawnAt: string | null): boolean {
