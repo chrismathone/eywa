@@ -3,10 +3,10 @@
 // 빈 화면이 아니라 스켈레톤). 툴바가 데이터(과목칩·인원)에 의존해 부분 페인트가 안 되므로 셸 전체 스켈레톤.
 export default function TimetableLoading() {
   return (
-    <div className="flex h-full min-h-0 flex-col gap-4 [.embed-main_&]:gap-3">
+    <div className="flex h-full min-h-0 flex-col gap-4 compact-chrome:gap-3">
       {/* PageHeader 근사 스켈레톤 — 창(임베드)은 헤더 줄을 통째로 접으므로(집계=툴바 우측) 스켈레톤도
           통째 숨김, 최상위 프레임만 풀 3줄(스켈레톤↔실렌더 높이 정합). */}
-      <header className="shrink-0 px-1 [.embed-main_&]:hidden">
+      <header className="shrink-0 px-1 compact-chrome:hidden">
         <div className="bg-bg-soft h-3 w-16 animate-pulse rounded" />
         <div className="bg-bg-soft mt-2 h-6 w-32 animate-pulse rounded" />
         <div className="bg-bg-soft mt-2 h-4 w-48 animate-pulse rounded" />

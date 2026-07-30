@@ -18,7 +18,7 @@ import { WorkspaceOnboarding } from "./workspace-onboarding";
 import { snapTarget, templateSlots } from "./window-geometry";
 
 // 콘텐츠 스테이지 상단 오프셋 — 데스크톱(캔버스가 뜨는 유일한 조건: useIsDesktop = ≥lg + pointer:fine)에선
-// AppHeader가 lg:pointer-fine:hidden으로 숨겨져 상단탭이 없다(2026-07-20 상단 헤더 데스크톱 폐지). 따라서 0 —
+// 데스크톱엔 상단탭이 없다(2026-07-20 상단 헤더 폐지 → 2026-07-30 모바일 헤더도 MobileTopNav로 흡수). 따라서 0 —
 // 최대화·스냅 창이 화면 최상단까지 덮는다. (이 값이 48이던 시절엔 그 48px 띠로 운영실 배경이 비쳐, 최대화해도
 // 위가 안 덮이는 문제가 있었음.) 좌측 레일은 사이드바 실제 너비를 런타임 계산(아래 rail).
 const HEADER = 0;

@@ -299,7 +299,7 @@ export default async function TimetablePage({
 
   return (
     <TimetableEditProvider effectiveDate={effectiveDate} today={today} canEdit={canEdit}>
-      <div className="flex h-full min-h-0 flex-col gap-4 [.embed-main_&]:gap-3">
+      <div className="flex h-full min-h-0 flex-col gap-4 compact-chrome:gap-3">
       {/* 표시 선호('미사용 요일'·'빈 교시 접기'·'1시간 단위')를 **계정에** 기억(0146a) + 쿠키 폴백 —
           창은 깨끗한 URL로 열려 파라미터만으론 매번 초기화된다. 셋을 한 컴포넌트로 합친 이유(동시 쓰기
           충돌)는 prefs-sync.tsx 주석 참조. */}
@@ -317,7 +317,7 @@ export default async function TimetablePage({
       {/* Editorial 문법 ① — 헤더 위계 + 우측 학생 집계(StudentTally). 시간표는 세로 공간이 가장
           귀한 화면이라 **창(임베드)에선 이 줄을 통째로 접고** 집계를 툴바 우측으로 내린다(컴팩트
           1행조차 아까움 — 2026-07-20 원장 "여전히 많은 공간"). 최상위 프레임은 풀 헤더 유지. */}
-      <div className="shrink-0 [.embed-main_&]:hidden">
+      <div className="shrink-0 compact-chrome:hidden">
         <PageHeader
           eyebrow="수업 운영"
           title="시간표"
@@ -336,8 +336,9 @@ export default async function TimetablePage({
           }
         />
       </div>
-      {/* Toolbar */}
-      <div className="bg-card shadow-card flex shrink-0 flex-wrap items-center gap-3 rounded-2xl px-4 py-3">
+      {/* Toolbar — 좁은 화면(compact-chrome)에선 여백·구분선을 조인다. 구분선(1px)은 그 자체보다
+          양옆 gap 때문에 줄바꿈을 앞당겨, 폰에서 툴바를 한 줄 더 밀어내는 값이 컸다. */}
+      <div className="bg-card shadow-card toolbar-rail flex shrink-0 flex-wrap items-center gap-3 rounded-2xl px-4 py-3 compact-chrome:gap-2 compact-chrome:px-3 compact-chrome:py-2">
         {/* 주간 이동(타임머신) — 과거/미래 주의 반 구성 조회 */}
         <WeekNav
           currentWeek={week}
@@ -350,7 +351,7 @@ export default async function TimetablePage({
             ⚠️ flex-wrap 필수 — 과목이 많은 학원(과학·국어·사회…)에서 칩이 한 줄로 강제되면 툴바가
             가로로 넘친다(칩 자체가 shrink-0이라 줄지도 않음). 형제인 toolbar-actions와 동일 규약. */}
         <div className="flex flex-wrap items-center gap-1">
-          <span className="micro mr-1">과목</span>
+          <span className="micro mr-1 compact-chrome:hidden">과목</span>
           {available.map((k) => (
             <ParamLink
               key={k}
@@ -384,7 +385,7 @@ export default async function TimetablePage({
         {/* 정규 / 특강 / 전체 — 특강(방학 단기강좌)을 정규 주간표와 분리해 본다(원장 요구 2026-07-22).
             기본은 정규라 파라미터 없는 URL = 지금까지의 화면. 과목 칩은 이 구분에 실제 있는 과목만 뜬다. */}
         <div className="flex flex-wrap items-center gap-1">
-          <span className="micro mr-1">구분</span>
+          <span className="micro mr-1 compact-chrome:hidden">구분</span>
           {TIMETABLE_KINDS.map((k) => (
             <ParamLink
               key={k}
@@ -413,7 +414,7 @@ export default async function TimetablePage({
 
         {/* 뷰 토글 — 강사뷰는 허용 과목(영어 또는 강사별시간표 설정 보유)에서만 노출. */}
         <div className="flex items-center gap-1">
-          <span className="micro mr-1">뷰</span>
+          <span className="micro mr-1 compact-chrome:hidden">뷰</span>
           {([
             { key: "basic", label: "기본뷰", icon: Columns3 },
             { key: "integrated", label: "통합뷰", icon: LayoutGrid },
@@ -529,18 +530,18 @@ export default async function TimetablePage({
           compact1h={compactList}
         />
 
-        <div className="ml-auto" aria-hidden />
+        <div className="rail-spacer ml-auto" aria-hidden />
 
         {/* 학생 집계 — 최상위 프레임은 PageHeader 우측(문법 ②), 창(임베드)은 헤더 줄을 접으므로
             여기 툴바 우측에 노출(StudentTally 공유, 순수 마크업이라 이중 마운트 안전). */}
         {/* 창(임베드)에선 위 헤더 줄이 통째로 접히므로 ECS 바로가기도 여기 한 번 더 — 안 그러면
             실사용(플로팅 창)에서 영영 안 보인다(StudentTally가 이중 렌더인 이유와 동일). */}
         {showEcsShortcut ? (
-          <div className="hidden [.embed-main_&]:block">
+          <div className="hidden compact-chrome:block">
             <EcsShortcut week={week} />
           </div>
         ) : null}
-        <div className="hidden [.embed-main_&]:block">
+        <div className="hidden compact-chrome:block">
           <StudentTally
             enrolled={enrolledCount}
             newCount={newCount}
