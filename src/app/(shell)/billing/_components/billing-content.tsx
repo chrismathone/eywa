@@ -246,9 +246,13 @@ export async function BillingContent({ sp }: { sp: Sp }) {
             <EyIcon name="alert" size={16} />
           </span>
           <p className="text-foreground min-w-0 flex-1 text-[12px] leading-relaxed">
-            <b>{formatPeriod(period)}은 makeedu 동기화 창 밖입니다.</b> makeedu 상세수납은 현재 청구월만
-            보여주므로 청구월이 넘어간 뒤로는 이 달의 납부·삭제가 반영되지 않습니다 — 아래 숫자는{" "}
-            <span className="num">{kstDateTime(lastTouched)}</span> 기준입니다.
+            <b>
+              {formatPeriod(period)} 숫자는 <span className="num">{kstDateTime(lastTouched)}</span> 이후
+              갱신되지 않았습니다.
+            </b>{" "}
+            makeedu 상세수납은 가장 최근 청구월 한 달만 보여줍니다 — 달이 바뀌어서가 아니라{" "}
+            <b>다음 달 청구가 시작되는 순간</b> 이 달 화면이 닫힙니다. 그 뒤 들어온 납부·삭제가 반영되지
+            않으므로 <b>아래 미수는 실제보다 많습니다.</b>
           </p>
         </section>
       ) : null}
