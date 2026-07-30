@@ -121,11 +121,20 @@ describe("buildWeekRows", () => {
     expect(issues.map((i) => i.kind)).toEqual(["slot-unmapped"]);
   });
 
-  it("🔴 설정에 없는 영역은 slug를 지어내지 않고 null + 이슈", () => {
+  it("🔴 설정에 없는 영역은 slug를 지어내지 않고 그 줄을 건너뛴다(skill_area는 not null)", () => {
     const issues: EcsImportIssue[] = [];
     const w = buildWeekRows("7/27-31 출석부", grid({ skill: "Phonics" }), ctx(), issues);
-    expect(w.planRows[0]!.skillArea).toBeNull();
+    expect(w.planRows).toEqual([]);
     expect(issues.map((i) => i.kind)).toEqual(["skill-unknown"]);
+  });
+
+  it("🔴 영역 칸이 비면 그 줄만 건너뛴다 — null로 밀어넣어 그 반 계획 저장을 통째로 깨뜨리지 않는다", () => {
+    const issues: EcsImportIssue[] = [];
+    const w = buildWeekRows("7/27-31 출석부", grid({ skill: "" }), ctx(), issues);
+    expect(w.planRows).toEqual([]);
+    expect(issues[0]).toMatchObject({ kind: "skill-missing" });
+    // 학생 기록은 영역과 무관하므로 그대로 들어간다
+    expect(w.markRows).toHaveLength(1);
   });
 
   it("🔴 그 반 수강생이 아니면 기록을 넣지 않는다(다른 반 학생이 템플릿에 남아 있다)", () => {

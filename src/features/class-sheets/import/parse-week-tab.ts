@@ -129,6 +129,43 @@ export function splitTeacherCell(raw: string): { teacher: string | null; room: s
   return { teacher, room };
 }
 
+export type CellMerge = {
+  startRowIndex: number;
+  endRowIndex: number;
+  startColumnIndex: number;
+  endColumnIndex: number;
+};
+
+/**
+ * **세로 병합을 펼친다** — 구글은 병합 범위에서 **좌상단 셀에만** 값을 주므로, 펼치지 않으면
+ * 병합으로 이어진 아래 행들이 "빈 칸"으로 보인다.
+ *
+ * 🔴 이게 실제로 두 가지를 망가뜨렸다(2026-07-30 프로덕션 반영에서 발각):
+ *   ① `시기`(평시/내신)를 세로 병합해 쓰므로 **두 번째·세 번째 계획 줄이 파싱조차 안 됐다**(교재·진도가 있는데 유실).
+ *   ② `구분`(영역)도 병합이라 아래 줄의 skill_area가 null → `class_sheet_plan_lines.skill_area`는
+ *      **not null**이라 그 반의 계획 저장이 통째로 실패했다.
+ *
+ * ⚠️ **가로 병합은 펼치지 않는다** — 헤더의 요일 라벨이 가로로 병합돼 있으면 펼치는 순간 `요일` 옆이
+ *    `시기`가 아니게 되어 요일 컬럼 탐지가 무너진다. 필요한 건 세로 연속뿐이다.
+ */
+export function expandVerticalMerges(rows: string[][], merges: readonly CellMerge[]): string[][] {
+  const out = rows.map((r) => [...r]);
+  for (const m of merges) {
+    if (m.endColumnIndex - m.startColumnIndex !== 1) continue; // 가로 병합 제외
+    if (m.endRowIndex - m.startRowIndex < 2) continue;
+    const c = m.startColumnIndex;
+    const anchor = clean(out[m.startRowIndex]?.[c]);
+    if (!anchor) continue;
+    for (let r = m.startRowIndex + 1; r < m.endRowIndex; r++) {
+      const row = out[r];
+      if (!row) continue;
+      while (row.length <= c) row.push("");
+      if (clean(row[c]) === "") row[c] = anchor;
+    }
+  }
+  return out;
+}
+
 /** 요일 컬럼 탐지 — 헤더행에서 `요일` 바로 오른쪽이 `시기`인 칸. 같은 요일이 여러 번이면 첫 것. */
 export function detectDayColumns(rows: string[][]): Partial<Record<DowKey, number>> {
   const out: Partial<Record<DowKey, number>> = {};
