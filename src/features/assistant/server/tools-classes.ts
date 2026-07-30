@@ -6,6 +6,8 @@ import "server-only";
 import { z } from "zod";
 import { betaZodTool } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { getClassesList, getClassDetail, getClassStudents } from "@/features/classes/server/queries";
+import { formatRow, summarizeSchedule } from "@/features/classes/schedule-summary";
+import { kstToday } from "@/lib/date-kst";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { balancedTake } from "@/lib/collections/balanced-take";
 import { DAY_LABEL, subjectLabeler, subjectResolver, subjectLabelList } from "./labels";
@@ -95,9 +97,10 @@ export const classDetailTool = betaZodTool({
       classroom: detail.classroomName,
       active: detail.isActive ? "진행 중" : "종료",
       closedAt: detail.closedAt,
-      schedule: detail.scheduleSlots.map(
-        (s) => `${DAY_LABEL[s.dayOfWeek] ?? s.dayOfWeek} ${s.startTime}~${s.endTime}`,
-      ),
+      // ⚠️ 전 슬롯을 그대로 넘기면 안 된다 — `class_schedules`는 운영 이력을 함께 담아
+      // 이미 끝난 배치(실측 480/1068행)까지 섞인다. 그걸 넘기면 비서가 "DP5는 17:40까지"처럼
+      // **사실이 아닌 시간표**를 답한다(사실 원칙 위반). 화면(반 상세)과 같은 요약을 쓴다.
+      schedule: summarizeSchedule(detail.scheduleSlots, kstToday()).current.map(formatRow),
       studentCount: detail.studentCount,
       students: students.map((s) => ({
         studentId: s.studentId,

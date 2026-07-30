@@ -87,6 +87,13 @@ try {
   const activeBySid = new Map();
   for (const r of activeRows) activeBySid.set(r.student_id, [...(activeBySid.get(r.student_id) ?? []), r.subject ?? "?"]);
 
+  // 🔴 돈의 흔적 — "실제로 다닌다"의 가장 강한 신호(원장 지시 2026-07-30). 퇴원 이후의 청구·납부가 있으면
+  //    수강·보고서가 전부 조용해도 그 학생은 살아있다(실측: 배한빈 퇴원 04-06인데 07월 청구·06-30 납부).
+  const billingRows = await sql`
+    select student_id, max(period) as last_period, to_char(max(paid_at),'YYYY-MM-DD') as last_paid
+    from invoices where tenant_id = ${tenant} group by student_id`;
+  const billingBySid = new Map(billingRows.map((r) => [r.student_id, { lastPeriod: r.last_period ?? null, lastPaidAt: r.last_paid ?? null }]));
+
   await loginClassnote(page);
   await page.goto(`${CLASSNOTE_BASE}/service/report`, { waitUntil: "domcontentloaded" });
   await dismissHonorificDialog(page);
@@ -201,6 +208,7 @@ try {
       today: TODAY,
       dormantDays: DORMANT_DAYS,
       studentAnyPost: s ? (anyPostByStudent.get(s.id) ?? null) : null,
+      billing: s ? (billingBySid.get(s.id) ?? null) : null,
       anyPostDays: ANY_POST_DAYS,
     });
     results.push({ board: b, student: s, v, posts, phone, teachers: meta.teachers ?? 0, families: meta.children ?? b.children, subjectLabel });

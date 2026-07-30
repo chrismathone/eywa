@@ -21,8 +21,14 @@ const INVOICE_CATEGORIES: Record<string, string> = {
 };
 const PERIOD_RE = /^\d{4}-\d{2}$/;
 
+/**
+ * 폼 금액 → 원(정수, **음수는 0으로 clamp**).
+ * ⚠️ 예전엔 `Number(...) || 0`이라 음수를 그대로 통과시켰다. 할인액에 하한 검증도 없어서
+ * 음수 할인이 저장되면 미수 공식 `max(0, 청구−할인−수납)`이 **청구액보다 큰 미수**를 만든다
+ * (입력의 min="0"은 클라 속성이라 게이트가 아니다). 교재 액션은 이미 서버에서 clamp하고 있었다.
+ */
 function won(v: FormDataEntryValue | null): number {
-  return Number(String(v ?? "0").replace(/[,\s]/g, "")) || 0;
+  return Math.max(0, Number(String(v ?? "0").replace(/[,\s]/g, "")) || 0);
 }
 
 export type CreateInvoiceState =
@@ -53,6 +59,9 @@ export async function createInvoice(
   if (!studentId) fieldErrors.studentId = "학생을 선택해주세요";
   if (!PERIOD_RE.test(period)) fieldErrors.period = "청구월 형식은 YYYY-MM 입니다";
   if (amountTotal <= 0) fieldErrors.amountTotal = "청구액을 입력해주세요";
+  // 할인이 청구액을 넘으면 '실청구 음수' 상태가 되어 수납률·미수 집계가 어긋난다(공식은 0으로 바닥을 치지만
+  // 화면상 "할인이 청구보다 큰 청구서"라는 설명 불가능한 행이 남는다).
+  if (amountDiscount > amountTotal) fieldErrors.amountDiscount = "할인액이 청구액보다 클 수 없습니다";
   if (Object.keys(fieldErrors).length > 0) return { fieldErrors };
   const category = INVOICE_CATEGORIES[categoryRaw] ? categoryRaw : "tuition";
 

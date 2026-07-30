@@ -13,6 +13,8 @@ export default defineConfig({
       "src/**/*.{test,spec}.{ts,tsx}",
       // ClassNote 워커(plain .mjs)는 src TS를 못 import → 순수 로직을 워커·테스트가 공유하는 .mjs로 두고 여기서 픽업.
       "scripts/_classnote/**/*.{test,spec}.mjs",
+      // makeedu 동기화 임포터의 순수 분류기(CJS) — **청구서를 무효로 바꾸는 판정**이라 단위테스트 필수.
+      "scripts/_makeedu/**/*.{test,spec}.{ts,mjs}",
     ],
     exclude: ["tests/e2e/**", "node_modules/**", ".next/**"],
     coverage: {

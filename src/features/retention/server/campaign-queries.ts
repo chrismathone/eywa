@@ -88,7 +88,7 @@ export async function getCampaignBoard(opts?: { teacherId?: string }): Promise<C
       grade: s.grade ?? null,
       school: s.school ?? null,
       teacherName: teacherNameById.get(t.student_id) ?? null,
-      feeLabel: formatWonShort(feeById.get(t.student_id) ?? 0),
+      feeLabel: feeById.get(t.student_id) == null ? "—" : formatWonShort(feeById.get(t.student_id)!),
       status,
     });
   }
@@ -105,7 +105,7 @@ export async function getCampaignBoard(opts?: { teacherId?: string }): Promise<C
       grade: r.grade,
       school: r.school,
       teacherName: r.teacherName,
-      feeLabel: formatWonShort(r.monthlyFee),
+      feeLabel: r.monthlyFee == null ? "—" : formatWonShort(r.monthlyFee),
       renewalLabel: r.risk.renewal.label,
       renewalTone: r.risk.renewal.tone as "risk" | "warn",
     }));

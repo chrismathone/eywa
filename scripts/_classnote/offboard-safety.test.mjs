@@ -29,6 +29,8 @@ function facts(over = {}) {
     boardPosts: { complete: true, count: 4, lastPostAt: "2026-05-01" },
     studentAnyPost: { complete: true, lastPostAt: "2026-05-01" },
     phone: { checked: true, match: true },
+    billing: { lastPeriod: "2026-04", lastPaidAt: "2026-04-20" },
+    enrollmentEnd: "2026-04-30",
     today: TODAY,
     schoolYear: SCHOOL_YEAR,
     graceDays: GRACE,
@@ -522,6 +524,7 @@ describe("Operation A — 보드 삭제·배정해제(과목별)", () => {
       phone: { checked: true, match: true },
       posts: { complete: true, count: 4, lastPostAt: "2026-05-01" },
       studentAnyPost: { complete: true, lastPostAt: "2026-05-01" },
+      billing: { lastPeriod: "2026-04", lastPaidAt: "2026-04-20" },
       teachers: 0,
       today: TODAY,
       dormantDays: 45,
@@ -729,7 +732,75 @@ describe("🔴 시스템 일괄 퇴원(2026-07-10) — 퇴원목록에서 잡지
   });
 
   it("일괄일이 아닌 퇴원은 정상 처리(07-13은 대상)", () => {
-    const v = evaluateOffboardCandidate(facts({ student: { ...facts().student, withdrawnAt: "2026-01-13" } }));
+const v = evaluateOffboardCandidate(facts({ student: { ...facts().student, withdrawnAt: "2026-01-13" }, billing: { lastPeriod: "2026-01", lastPaidAt: "2026-01-10" }, enrollmentEnd: "2026-01-13" }));
     expect(v.action).toBe("offboard");
+  });
+});
+
+describe("🔴 돈의 흔적 — 퇴원 이후 청구·납부는 '실제로 다닌다'는 신호(실측 배한빈)", () => {
+  it("⭐ 퇴원 다음 달 청구가 있으면 hold", () => {
+    const v = evaluateOffboardCandidate(facts({ billing: { lastPeriod: "2026-07", lastPaidAt: null } }));
+    expect(v.action).toBe("hold");
+    expect(v.primaryCode).toBe("recent_billing");
+  });
+
+  it("⭐ 퇴원 이후 납부가 있으면 hold", () => {
+    const v = evaluateOffboardCandidate(facts({ billing: { lastPeriod: null, lastPaidAt: "2026-06-30" } }));
+    expect(v.primaryCode).toBe("recent_billing");
+  });
+
+  it("퇴원한 달의 청구는 정상(그 달 수업분)", () => {
+    const v = evaluateOffboardCandidate(facts({ billing: { lastPeriod: "2026-05", lastPaidAt: "2026-04-30" } }));
+    expect(v.action).toBe("offboard");
+  });
+
+  it("청구 사실이 없으면 미평가(있는 척하지 않는다)", () => {
+    expect(evaluateOffboardCandidate(facts({ billing: null })).notEvaluatedCodes).toContain("recent_billing");
+  });
+
+  it("⭐ 퇴원일보다 수강 종료일이 나중이면 hold(실측 주상모A)", () => {
+    const v = evaluateOffboardCandidate(facts({ enrollmentEnd: "2026-07-03" }));
+    expect(v.action).toBe("hold");
+    expect(v.primaryCode).toBe("withdrawal_inconsistent");
+  });
+
+  it("수강 종료일이 퇴원일 이전이면 정상", () => {
+    expect(evaluateOffboardCandidate(facts({ enrollmentEnd: "2026-04-30" })).action).toBe("offboard");
+  });
+});
+
+describe("🔴 보드 삭제에도 최근 수납 방어(원장 지시 2026-07-30)", () => {
+  const rel2 = (over = {}) =>
+    evaluateBoardRelease({
+      board: { id: 10, name: "(수학)학생A", children: 0 },
+      matchedStudentCount: 1,
+      student: { id: "s1", name: "학생A", status: "withdrawn", subjectActive: false, allSubjectsEnded: true, withdrawnAt: "2026-04-06" },
+      phone: { checked: true, match: true },
+      posts: { complete: true, count: 0, lastPostAt: null },
+      studentAnyPost: { complete: true, lastPostAt: null },
+      teachers: 0,
+      today: TODAY,
+      dormantDays: 45,
+      billing: { lastPeriod: "2026-04", lastPaidAt: "2026-04-01" },
+      ...over,
+    });
+
+  it("⭐ 퇴원 이후 청구가 있으면 보드도 안 지운다(배한빈 형태)", () => {
+    const v = rel2({ billing: { lastPeriod: "2026-07", lastPaidAt: "2026-06-30" } });
+    expect(v.action).toBe("hold");
+    expect(v.primaryCode).toBe("recent_billing");
+    expect(v.alsoOffboard).toBe(false);
+  });
+
+  it("⭐ 퇴원 전 청구라도 납부가 최근 45일 내면 hold(안전측)", () => {
+    expect(rel2({ billing: { lastPeriod: "2026-04", lastPaidAt: "2026-07-01" } }).primaryCode).toBe("recent_billing");
+  });
+
+  it("오래된 수납만 있으면 통과", () => {
+    expect(rel2().action).toBe("release");
+  });
+
+  it("수납 사실이 없으면 미평가(있는 척하지 않음)", () => {
+    expect(rel2({ billing: null }).notEvaluatedCodes).toContain("recent_billing");
   });
 });

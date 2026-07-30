@@ -33,17 +33,29 @@ export async function MakeeduSyncBadge({ domain }: { domain: MakeeduSyncDomain }
   const user = await getCurrentUser();
   const canSync = user ? await canWriteTenant(user.systemRole, "integrations") : false;
   const failed = state.status !== "ok";
+  // status='ok'인데 이슈 요약이 있는 경우 = "동기화는 됐지만 반영 못 한 게 있다"(삭제 보류·학생 미매칭 등).
+  // 실패와는 다른 축이라 amber '확인 필요'로 구분해 보여준다 — 예전엔 이 값이 화면에 전혀 안 나와서
+  // 유령 미수가 '정상' 배지 뒤에 숨었다(2026-07-30 적대 리뷰).
+  const issue = !failed && state.issue ? state.issue : null;
+  const tone = failed
+    ? "text-[color:var(--danger)]"
+    : issue
+      ? "text-[color:var(--amber)]"
+      : "text-[color:var(--text-faint)]";
   return (
     <div className="flex items-center justify-end gap-2">
       {canSync ? <MakeeduSyncNowButton /> : null}
       <span
-        className="inline-flex items-center gap-1 whitespace-nowrap text-[11px] text-[color:var(--text-faint)]"
-        title={`makeedu 동기화: ${kstFull(state.syncedAt)}${state.rowCount != null ? ` · ${state.rowCount}건` : ""}`}
+        className={`inline-flex items-center gap-1 whitespace-nowrap text-[11px] ${issue || failed ? tone : "text-[color:var(--text-faint)]"}`}
+        title={`makeedu 동기화: ${kstFull(state.syncedAt)}${state.rowCount != null ? ` · 신규 ${state.rowCount}건` : ""}${
+          state.issue ? `\n확인 필요: ${state.issue}` : ""
+        }`}
       >
-        <span className={failed ? "text-[color:var(--danger)]" : ""} aria-hidden>
+        <span className={failed || issue ? tone : ""} aria-hidden>
           ↻
         </span>
         {failed ? "동기화 실패" : `동기화 ${relativeKo(state.syncedAt)}`}
+        {issue ? <span className="font-medium">· 확인 필요</span> : null}
       </span>
     </div>
   );

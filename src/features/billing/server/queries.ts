@@ -46,6 +46,11 @@ export type InvoiceRow = {
   discountReason: string | null;
   billedAt: string | null;
   syncAddedAt: string | null; // 지난 동기화가 새로 추가(다음 동기화 성공 시 해제) → ↻ 동기화 배지
+  /**
+   * 이 행이 마지막으로 갱신된 시각. makeedu 임포터의 upsert는 값이 같아도 `updated_at = now()`를 쓰므로
+   * **"이 달이 최근 스크랩에 포함됐는가"의 신뢰 프록시**다(월 커버리지 경고에 사용 — periodCoverage).
+   */
+  updatedAt: string | null;
 };
 
 export type SortKey =
@@ -114,7 +119,7 @@ export async function getInvoicesForPeriod(
       .from("invoices")
       .select(
         `id, period, category, amount_total, amount_paid, amount_discount, status, due_date, paid_at, notes, line_items,
-         payment_method, card_company, cash_receipt_number, points_used, discount_reason, billed_at, sync_added_at,
+         payment_method, card_company, cash_receipt_number, points_used, discount_reason, billed_at, sync_added_at, updated_at,
          student:student_id ( id, name, grade )`,
       )
       .eq("period", periodKey)
@@ -158,6 +163,7 @@ export async function getInvoicesForPeriod(
       discountReason: (r as { discount_reason?: string | null }).discount_reason ?? null,
       billedAt: (r as { billed_at?: string | null }).billed_at ?? null,
       syncAddedAt: (r as { sync_added_at?: string | null }).sync_added_at ?? null,
+      updatedAt: (r as { updated_at?: string | null }).updated_at ?? null,
     };
   });
 

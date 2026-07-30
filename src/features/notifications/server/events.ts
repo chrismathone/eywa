@@ -477,6 +477,12 @@ async function detectOutstanding(admin: SupabaseClient, tenantId: string): Promi
 
   const body = outstandingDigestBody(fresh);
   if (!body) return 0;
+  // 딥링크 — 예전엔 `/billing` 하드코딩이라 **당월(kstMonth) 화면**으로만 갔고, 미수는 전 기간 합계라
+  // 본문에 적힌 학생 대부분이 그 화면에 없었다(2026-07-19 259명 중 당월 행 보유 14명). 이제:
+  //  · 1명 = 그 학생의 수납 탭(기간 무관, 항상 그 학생이 있다)
+  //  · 여러 명 = 새 '기한 경과만' 필터가 걸린 수납 목록(적어도 미수 목록에 착지)
+  const link =
+    fresh.length === 1 ? `/students/${fresh[0]!.subjectKey}?tab=billing` : "/billing?overdue=1";
   // billing 도메인 = master + 회계(accountant). 둘 다 활성만, 각자 전체 집계 1건.
   const recipients = await activeRoleIds(admin, tenantId, ["master", "accountant"]);
   const items: NotifyInput[] = recipients.map((recipientId) => ({
@@ -485,7 +491,7 @@ async function detectOutstanding(admin: SupabaseClient, tenantId: string): Promi
     type: "outstanding_alert",
     title: "미수금 주의 학생",
     body,
-    link: "/billing",
+    link,
     actorId: null,
   }));
   await notifyUsers(items);

@@ -31,7 +31,11 @@ const L = require("./lib.cjs");
 const S = require("./invoice-stale.cjs");
 
 const APPLY = process.argv.includes("--apply");
-const VOID_STALE = process.argv.includes("--void-stale") || process.env.MAKEEDU_VOID_STALE === "true";
+// 삭제 반영은 **기본 ON**(원장 승인 2026-07-30). 끄려면 MAKEEDU_VOID_STALE=false 또는 --no-void-stale.
+// ⚠️ 예전엔 기본 OFF + 연동 PC .env.local 의존이라 **한 번도 켜진 적이 없었다**(void 0행 실측).
+// 안전은 플래그가 아니라 classifyStale의 4중 가드(makeedu형·미완납·7일+ 연속부재·활성수강 없음)가 진다.
+const VOID_STALE =
+  !process.argv.includes("--no-void-stale") && process.env.MAKEEDU_VOID_STALE !== "false";
 const OUT = process.env.MAKEEDU_OUT || path.resolve(__dirname, "..", "..", ".makeedu-tmp");
 const idx = (H) => (s) => H.findIndex((h) => (h || "").includes(s));
 const ym = (v) => { const s = L.txt(v) || ""; const m = s.match(/(\d{4})[.\-/]?(\d{2})/); return m ? `${m[1]}-${m[2]}` : null; };
@@ -64,17 +68,35 @@ const KIND_CAT = { 수업: "tuition", 교재: "material", 차량비: "other", �
   const sql = postgres(process.env.DATABASE_URL, { prepare: false });
   try {
     const tenantId = await L.resolveTenantId(sql);
+
+    // ⚠️ 0행 가드 — scrape.cjs는 목록 실패를 격리해 **exit 0 + 빈 JSON**으로 넘긴다(세션 만료·URL/셀렉터 변경).
+    // 가드가 없으면 lines=[] → scrapedPeriods=[] → 아무것도 upsert 안 하고, 그런데도 아래 recordSync가
+    // status='ok' · error=NULL · synced_at=now로 덮어써 **"방금 정상 동기화됨"으로 위장**된다
+    // (직전에 남아 있던 '삭제 보류 N건' 경고까지 지워진다). 수납은 돈이라 침묵 실패를 허용하지 않는다.
+    if (lines.length === 0) {
+      const msg = "스크랩 0행 — makeedu 상세수납 목록을 못 읽었다(세션 만료·URL/셀렉터 변경 의심). 이번 실행은 반영하지 않음.";
+      console.error(`✖ ${msg}`);
+      if (APPLY) await L.recordSync(sql, tenantId, "invoices", null, "error", msg);
+      process.exitCode = 1;
+      return;
+    }
     // 스크랩이 커버한 청구월 — "eywa에만 남은 행" 판정은 이 범위 안에서만(과거 월은 스크랩 밖 = 판정 불가).
     const scrapedPeriods = [...new Set(lines.map((l) => l.period))].sort();
-    const [studs, existing] = await Promise.all([
+    const [studs, existing, activeRows] = await Promise.all([
       sql`select id, name, grade, makeedu_id from students where tenant_id = ${tenantId}`,
       scrapedPeriods.length
-        ? sql`select i.id, i.student_id, i.period, i.status, i.amount_total, i.amount_paid, i.amount_discount,
-                     i.notes, i.line_items, s.name, s.grade, s.makeedu_id
+        ? // updated_at = 마지막으로 스크랩에 잡힌 시각(upsert가 값이 같아도 now()를 쓴다) → 부재 지속일 계산 재료.
+          sql`select i.id, i.student_id, i.period, i.status, i.amount_total, i.amount_paid, i.amount_discount,
+                     i.notes, i.line_items, i.updated_at, s.name, s.grade, s.makeedu_id
               from invoices i join students s on s.id = i.student_id
               where i.tenant_id = ${tenantId} and i.period = any(${scrapedPeriods}) and i.status <> 'void'`
         : Promise.resolve([]),
+      // 활성 수강이 있는 학생 = "지금도 수업을 다니는 학생" → 그 학생의 청구가 사라진 건 삭제로 단정하지 않는다.
+      sql`select distinct e.student_id from enrollments e
+          join students s on s.id = e.student_id
+          where s.tenant_id = ${tenantId} and e.end_date is null and e.on_hold = false`,
     ]);
+    const activeStudentIds = new Set(activeRows.map((r) => r.student_id));
     const byMkid = new Map();
     for (const s of studs) if (s.makeedu_id) byMkid.set(String(s.makeedu_id), s.id);
     // 동명+동학년 2명 이상은 모호 → null(오매칭 방지). makeedu_id 우선 → (이름·학년) 폴백.
@@ -135,6 +157,8 @@ const KIND_CAT = { 수업: "tuition", 교재: "material", 차량비: "other", �
       scrapedKeys: new Set(inv.keys()),
       unmatchedNameKeys: new Set(unmatchedLines.map((u) => `${L.normalizeName(u.name)}|${u.period}`)),
       normalizeName: L.normalizeName,
+      activeStudentIds,
+      now: new Date(),
     });
     S.printIssues({ stale, unmatchedLines });
     let voided = 0;
