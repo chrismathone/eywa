@@ -24,6 +24,13 @@
 이 zip을 연동 PC로 옮겨, **eywa 저장소 폴더**에서 **"여기에 압축 풀기"** 하세요.
 그러면 `<저장소>\scripts\_classnote\` 안에 스크립트와 배치 파일이 채워집니다(기존 파일 덮어쓰기 = 최신화).
 
+> 🔴 **부분 복사 금지 — 2026-07-30부터 워커가 죽는 새 경로가 생겼습니다.**
+> `classnote-admin-core.mjs`가 이제 **`identity-keys.mjs`를 import** 합니다(이름 매칭 키를 playwright 없는
+> 순수 모듈로 분리). 그래서 **admin-core만 골라 덮으면 `ERR_MODULE_NOT_FOUND`로 워커가 기동조차 못 하고
+> 발송이 전면 정지**합니다. 반대로 **둘 다 안 옮기면** 지금처럼 정상 동작합니다(옛 파일끼리 짝이 맞으므로).
+> → **항상 폴더 전체**를 푸세요. zip은 `scripts\_classnote` 전체를 담도록 빌드됩니다
+> (`build-worker-zip.ps1`, 산출물 `data\발송PC-워커\`).
+
 압축 후 `<저장소>\scripts\_classnote\` 에 다음이 보이면 정상:
 - `발송PC-지정.bat` · `발송PC-상태확인.bat` · `발송PC-해제.bat`  ← 더블클릭용
 - `setup-classnote-pc.ps1` · `run-classnote-worker.ps1` · `watch-classnote-queue.mjs` · `classnote-core.mjs` · `process-classnote-queue.mjs` · `send-window.mjs`
