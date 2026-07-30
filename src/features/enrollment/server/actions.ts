@@ -489,7 +489,8 @@ export async function setEnrollmentOutcome(
   if (isConverted && outcome !== "enrolled" && outcome !== "declined") {
     return {
       error:
-        "이미 배정 완료(등록)된 상담은 대기·예약 등 이전 단계로 되돌릴 수 없습니다. 취소하려면 '거절'로 처리하거나 학생을 퇴원 처리하세요.",
+        // ⚠️ 클라 안내문(consultation-manage.tsx)과 **같은 문장**을 유지할 것 — 한쪽만 고치면 갈린다.
+        "이미 '재원생 등록'으로 처리된 상담은 대기·예약 등 이전 단계로 되돌릴 수 없습니다. 취소하려면 '거절'로 처리하거나 학생을 퇴원 처리하세요.",
     };
   }
 

@@ -665,7 +665,7 @@ export const OUTCOME_LABEL: Record<OutcomeKey, string> = {
   scheduled: "예약",
   consulted: "상담완료",
   ai_done: "AI 완료",
-  enrolled: "등록",
+  enrolled: "재원생 등록",
   declined: "거절",
   no_show: "노쇼",
 };

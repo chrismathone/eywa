@@ -114,7 +114,7 @@ const VALUE_LABEL: Record<string, string> = {
   present: "출석", absent: "결석", late: "지각", excused: "인정결석", makeup: "보강", early_leave: "조퇴",
   manual: "수동", kiosk: "키오스크",
   // 등록상담 outcome / 재등록 캠페인
-  scheduled: "예약", ai_done: "AI완료", declined: "거절", no_show: "노쇼", contacted: "연락완료",
+  scheduled: "예약", ai_done: "AI 완료", declined: "거절", no_show: "노쇼", contacted: "연락완료",
   // 오디오 파이프라인(과거 행)
   uploaded: "업로드됨", transcribing: "전사중", analyzing: "분석중",
   // 역할
