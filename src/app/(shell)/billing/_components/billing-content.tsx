@@ -13,6 +13,12 @@ import {
   type SortKey,
 } from "@/features/billing/server/queries";
 import { invoiceOutstanding } from "@/features/billing/calc";
+import {
+  isOverdue,
+  isOutsideSyncWindow,
+  isMissingFromMakeedu,
+  lastTouchedAt,
+} from "@/features/billing/sync-window";
 import { getStudentOptions } from "@/features/billing/server/textbook-queries";
 import { getMakeeduSyncState } from "@/features/integrations/server/makeedu-sync";
 import { SearchForm } from "@/components/search-form";
@@ -56,12 +62,9 @@ type Sp = {
   page?: string;
   /** "1"이면 기한 경과(미완납 + 납부기한 지남) 행만 — 배너 '목록 보기'가 켠다. */
   overdue?: string;
+  /** "1"이면 마지막 동기화에 없던(= makeedu에서 사라진) 행만 — 경고의 '목록 보기'가 켠다. */
+  missing?: string;
 };
-
-/** 기한 경과 = 미완납(unpaid|partial) + 납부기한이 오늘보다 이전. 배너·필터·표가 공유하는 단일 판정. */
-function isOverdue(r: { status: string; dueDate: string | null }, today: string): boolean {
-  return (r.status === "unpaid" || r.status === "partial") && r.dueDate !== null && r.dueDate < today;
-}
 
 export async function BillingContent({ sp }: { sp: Sp }) {
   const period = sp.period ?? currentPeriod();
@@ -69,6 +72,7 @@ export async function BillingContent({ sp }: { sp: Sp }) {
   const sort: SortKey = (sp.sort as SortKey) ?? "status";
   const desc = sp.desc === "1";
   const overdueOnly = sp.overdue === "1";
+  const missingOnly = sp.missing === "1";
   const PAGE_SIZE = 50;
   const page = Math.max(1, Number(sp.page) || 1);
 
@@ -81,6 +85,23 @@ export async function BillingContent({ sp }: { sp: Sp }) {
 
   const summary = summarizeInvoices(monthRows, period);
   const today = todayIso();
+
+  // ── 이 달이 makeedu 동기화 창(스크랩 범위) 안에 있는가 ────────────────────────
+  // makeedu 상세수납 목록은 **현재 청구월 한 달만** 보여주고 스크랩에 월 파라미터가 없어(scrape.cjs),
+  // 청구월이 다음 달로 넘어가면 직전 달은 그 뒤로 단 한 번도 갱신되지 않는다(2026-07은 07-16에 동결).
+  // 임포터 upsert는 값이 같아도 updated_at=now()를 쓰므로 "이 달 최신 updated_at"이 커버리지 프록시다.
+  // 도메인 배지는 synced_at만 보고 "동기화 N시간 전"이라 말하므로, 그 위에서 이 달이 화석인지 따로 알린다.
+  const lastTouched = lastTouchedAt(monthRows);
+  const outsideSyncWindow = isOutsideSyncWindow({ rows: monthRows, syncedAt: syncState?.syncedAt });
+
+  // ── 마지막 동기화에 없던 청구(= makeedu에서 사라진 행) ──────────────────────
+  // 같은 프록시를 행 단위로 쓴다. 이 신호는 지금까지 makeedu_sync_state.error의 "재원생 청구 부재 N건"
+  // 한 줄로만 존재해 **누구인지 알 수 없었다**(DB를 뒤져야 했다). 돈이 걸린 신호는 화면까지 와야 한다.
+  // ⚠️ 동결된 달은 전 행이 미갱신이라 이 표시가 무의미하다 → **창 안인 달에서만** 켠다.
+  const missingFromMakeedu = (r: { updatedAt: string | null }): boolean =>
+    isMissingFromMakeedu({ row: r, syncedAt: syncState?.syncedAt, outsideSyncWindow });
+  const missingRows = monthRows.filter(missingFromMakeedu);
+  const missingAmount = missingRows.reduce((s, r) => s + invoiceOutstanding(r), 0);
 
   // ⚠️ 배너·KPI는 **항상 이 달 전체(monthRows)** 기준이다 — 검색은 표만 좁힌다.
   // (예전엔 배너만 검색 결과 기준이라 같은 화면에 모집단이 다른 '미수' 숫자 2개가 떴다. 2026-07-30 적대 리뷰.)
@@ -98,24 +119,12 @@ export async function BillingContent({ sp }: { sp: Sp }) {
     : monthRows;
   // '목록 보기'(overdue=1) = **진짜 필터**. 예전엔 sort=due_date만 바꿔서, 401건 중 396건의 납부기한이
   // 같은 달(2026-07)에선 기본 정렬로 1페이지에 모여 있던 연체 38건을 9페이지에 흩뿌렸다(정반대 효과).
-  const filtered = overdueOnly ? searched.filter((r) => isOverdue(r, today)) : searched;
+  const afterOverdue = overdueOnly ? searched.filter((r) => isOverdue(r, today)) : searched;
+  const filtered = missingOnly ? afterOverdue.filter(missingFromMakeedu) : afterOverdue;
 
   const total = filtered.length;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const rows = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-
-  // ── 이 달이 makeedu 동기화 창(스크랩 범위) 안에 있는가 ────────────────────────
-  // makeedu 상세수납 목록은 **현재 청구월 한 달만** 보여주고 스크랩에 월 파라미터가 없어(scrape.cjs),
-  // 청구월이 다음 달로 넘어가면 직전 달은 그 뒤로 단 한 번도 갱신되지 않는다(2026-07은 07-16에 동결).
-  // 임포터 upsert는 값이 같아도 updated_at=now()를 쓰므로 "이 달 최신 updated_at"이 커버리지 프록시다.
-  // 도메인 배지는 synced_at만 보고 "동기화 N시간 전"이라 말하므로, 그 위에서 이 달이 화석인지 따로 알린다.
-  const lastTouched = monthRows.reduce<string | null>(
-    (max, r) => (r.updatedAt && (!max || r.updatedAt > max) ? r.updatedAt : max),
-    null,
-  );
-  const STALE_MS = 26 * 60 * 60 * 1000; // 동기화가 하루 2회라 26시간 이상 미갱신 = 스크랩 밖으로 판단
-  const outsideSyncWindow =
-    !!syncState && !!lastTouched && new Date(syncState.syncedAt).getTime() - new Date(lastTouched).getTime() > STALE_MS;
 
   const prevPeriod = shiftPeriod(period, -1);
   const nextPeriod = shiftPeriod(period, 1);
@@ -140,6 +149,7 @@ export async function BillingContent({ sp }: { sp: Sp }) {
     sort: SortKey;
     desc: boolean;
     overdue?: boolean;
+    missing?: boolean;
   }): string => {
     const params = new URLSearchParams();
     if (opts.period !== currentPeriod()) params.set("period", opts.period);
@@ -147,6 +157,7 @@ export async function BillingContent({ sp }: { sp: Sp }) {
     if (opts.sort !== "status") params.set("sort", opts.sort);
     if (opts.desc) params.set("desc", "1");
     if (opts.overdue ?? overdueOnly) params.set("overdue", "1");
+    if (opts.missing ?? missingOnly) params.set("missing", "1");
     const s = params.toString();
     return s ? `/billing?${s}` : "/billing";
   };
@@ -157,6 +168,7 @@ export async function BillingContent({ sp }: { sp: Sp }) {
     if (sort !== "status") params.set("sort", sort);
     if (desc) params.set("desc", "1");
     if (overdueOnly) params.set("overdue", "1");
+    if (missingOnly) params.set("missing", "1");
     if (p > 1) params.set("page", String(p));
     const s = params.toString();
     return s ? `/billing?${s}` : "/billing";
@@ -165,7 +177,9 @@ export async function BillingContent({ sp }: { sp: Sp }) {
   // 헤더 서브 라인(풀·컴팩트 공용) — 검색·페이지 상태까지 포함(헤더가 총 필터 결과 수의 유일한 표시처).
   const periodSummary = `청구 ${summary.totalCount}건 · 수납률 ${summary.paymentRate.toFixed(1)}%${
     overdueOnly ? ` · 기한 경과만 ${total}건` : ""
-  }${q ? ` · “${q}” 검색 결과 ${total}건` : ""}${totalPages > 1 ? ` · ${page}/${totalPages} 페이지` : ""}`;
+  }${missingOnly ? ` · 동기화 누락만 ${total}건` : ""}${q ? ` · “${q}” 검색 결과 ${total}건` : ""}${
+    totalPages > 1 ? ` · ${page}/${totalPages} 페이지` : ""
+  }`;
 
   return (
     <div className="space-y-5">
@@ -228,6 +242,7 @@ export async function BillingContent({ sp }: { sp: Sp }) {
                   period,
                   ...(q ? { q } : {}),
                   ...(overdueOnly ? { overdue: "1" } : {}),
+                  ...(missingOnly ? { missing: "1" } : {}),
                 }).toString()}`}
               />
             }
@@ -246,35 +261,72 @@ export async function BillingContent({ sp }: { sp: Sp }) {
             <EyIcon name="alert" size={16} />
           </span>
           <p className="text-foreground min-w-0 flex-1 text-[12px] leading-relaxed">
-            <b>{formatPeriod(period)}은 makeedu 동기화 창 밖입니다.</b> makeedu 상세수납은 현재 청구월만
-            보여주므로 청구월이 넘어간 뒤로는 이 달의 납부·삭제가 반영되지 않습니다 — 아래 숫자는{" "}
-            <span className="num">{kstDateTime(lastTouched)}</span> 기준입니다.
+            <b>
+              {formatPeriod(period)} 숫자는 <span className="num">{kstDateTime(lastTouched)}</span> 이후
+              갱신되지 않았습니다.
+            </b>{" "}
+            makeedu 상세수납은 가장 최근 청구월 한 달만 보여줍니다 — 달이 바뀌어서가 아니라{" "}
+            <b>다음 달 청구가 시작되는 순간</b> 이 달 화면이 닫힙니다. 그 뒤 들어온 납부·삭제가 반영되지
+            않으므로 <b>아래 미수는 실제보다 많습니다.</b>
           </p>
+        </section>
+      ) : null}
+
+      {missingRows.length > 0 && syncState ? (
+        /* 지금까지 이 신호는 makeedu_sync_state.error의 "재원생 청구 부재 N건" 한 줄로만 존재해
+           **누구인지 알 수 없었다**(DB를 뒤져야 했다). 돈이 걸린 신호는 화면까지 와야 한다. */
+        <section className="border-amber/40 bg-amber-soft flex flex-wrap items-center gap-3 rounded-2xl border px-4 py-3">
+          <span className="text-amber shrink-0">
+            <EyIcon name="alert" size={16} />
+          </span>
+          <p className="text-foreground min-w-0 flex-1 text-[12px] leading-relaxed">
+            <b>
+              마지막 동기화에 없던 청구 <span className="num">{missingRows.length}</span>건
+            </b>{" "}
+            (미수 <span className="num">{won(missingAmount)}</span>) — makeedu에서 삭제됐거나 다른
+            청구월로 옮겨졌을 수 있습니다. <b>퇴원이 확인된 건만 자동 무효 처리</b>되고 나머지는 그대로
+            둡니다. 기준 <span className="num">{kstDateTime(syncState.syncedAt)}</span>.
+          </p>
+          <Button
+            size="sm"
+            variant="outline"
+            className="shrink-0"
+            render={<Link href={buildHref({ period, q, sort, desc, missing: !missingOnly })} />}
+          >
+            {missingOnly ? "필터 해제" : "목록 보기"}
+          </Button>
         </section>
       ) : null}
 
       {total === 0 ? (
         /* 빈 이유를 구분해 말한다 — 필터 때문에 비었는데 "청구 내역이 없습니다"라고 하면 거짓말. */
         <EmptyState
-          image={q || overdueOnly ? "search" : "billing"}
+          image={q || overdueOnly || missingOnly ? "search" : "billing"}
           icon={() => <ReceiptText size={32} strokeWidth={1.8} />}
           title={
-            overdueOnly
-              ? "기한 경과 건이 없습니다"
-              : q
-                ? "검색 결과 없음"
-                : "이 달 청구 내역이 없습니다"
+            missingOnly
+              ? "동기화에 빠진 청구가 없습니다"
+              : overdueOnly
+                ? "기한 경과 건이 없습니다"
+                : q
+                  ? "검색 결과 없음"
+                  : "이 달 청구 내역이 없습니다"
           }
           description={
-            overdueOnly
-              ? `이 달 청구 ${summary.totalCount}건 중 납부기한이 지난 미완납이 없습니다.`
-              : q
-                ? "검색어를 조정해보세요."
-                : "월을 이동하거나 신규 청구서를 생성하세요."
+            missingOnly
+              ? `이 달 청구 ${summary.totalCount}건이 모두 마지막 동기화에 있었습니다.`
+              : overdueOnly
+                ? `이 달 청구 ${summary.totalCount}건 중 납부기한이 지난 미완납이 없습니다.`
+                : q
+                  ? "검색어를 조정해보세요."
+                  : "월을 이동하거나 신규 청구서를 생성하세요."
           }
           action={
-            overdueOnly ? (
-              <Button variant="outline" render={<Link href={buildHref({ period, q, sort, desc, overdue: false })} />}>
+            overdueOnly || missingOnly ? (
+              <Button
+                variant="outline"
+                render={<Link href={buildHref({ period, q, sort, desc, overdue: false, missing: false })} />}
+              >
                 전체 보기
               </Button>
             ) : undefined
@@ -369,18 +421,36 @@ export async function BillingContent({ sp }: { sp: Sp }) {
           ) : null}
 
           {/* 필터가 걸려 있으면 표 위에 상태를 명시(어떤 집합을 보고 있는지 화면이 스스로 말한다). */}
-          {overdueOnly ? (
+          {overdueOnly || missingOnly ? (
             <p className="text-text-dim flex flex-wrap items-center gap-2 text-[12px]">
-              <span className="bg-danger-soft text-danger rounded-full px-2.5 py-0.5 font-medium">
-                기한 경과만 {total}건
-              </span>
-              <Link href={buildHref({ period, q, sort, desc, overdue: false })} className="hover:text-foreground underline">
+              {overdueOnly ? (
+                <span className="bg-danger-soft text-danger rounded-full px-2.5 py-0.5 font-medium">
+                  기한 경과만 {total}건
+                </span>
+              ) : null}
+              {missingOnly ? (
+                <span className="bg-amber-soft text-amber rounded-full px-2.5 py-0.5 font-medium">
+                  마지막 동기화에 없던 청구만 {total}건
+                </span>
+              ) : null}
+              <Link
+                href={buildHref({ period, q, sort, desc, overdue: false, missing: false })}
+                className="hover:text-foreground underline"
+              >
                 전체 보기
               </Link>
             </p>
           ) : null}
 
-          <BillingTable rows={rows} sort={sort} desc={desc} period={period} q={q} overdueOnly={overdueOnly} />
+          <BillingTable
+            rows={rows}
+            sort={sort}
+            desc={desc}
+            period={period}
+            q={q}
+            overdueOnly={overdueOnly}
+            missingOnly={missingOnly}
+          />
           <Pagination page={page} totalPages={totalPages} hrefForPage={pageHref} />
         </>
       )}
