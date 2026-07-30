@@ -12,6 +12,9 @@ board-safety.mjs의 자매 구조 — 순수 판정 + Vitest + 실데이터 적�
   [`offboard-safety.mjs`](../scripts/_classnote/offboard-safety.mjs)(`evaluateOffboardCandidate`, 14가드 우선순위·2-pass 계약·복구 스냅샷) ·
   [`scan-offboard-candidates.mjs`](../scripts/_classnote/scan-offboard-candidates.mjs)(READ-ONLY, 독립 SQL 검증+exit code, 4블록 분리 출력).
 - 실측(read-only): 명부 471 → **후보 20·보류 53(grace)·제외 398**. 독립 검증 후보∩재원=0 ✅ · 후보 20명 오프라인 재대조(위반 0·경과 121~272일·활성수강 0).
+- **✅ "퇴원 학부모가 과거 알림장을 못 본다" 우려 해소**(원장 제보 + 키즈노트 공식 문서): 퇴소·졸업 후에도 학부모는 `추억보기`로 계속 열람한다
+  → Phase 2 마지막 원장 결정 항목이 닫혔고, **보드 삭제 비채택**이 옳았다는 근거. ⚠️ 단서 2개 = 학부모 **계정 탈퇴**는 다름(자동화 금지) ·
+  🔴 **게시물 삭제 금지**(추억보기가 원본을 읽는다 — 우리에겐 `DELETE /reports/{id}` 경로가 실제로 있으니 "옛 보고서 정리" 명목의 대량 삭제 금지).
 - 상세 = [`classnote-integration.md`](classnote-integration.md) §11. 다음 = Phase 1 ERP `child.id` 쓰기 경로 probe(원장 승인 필요).
 
 ### LAB·JJ = 사람이 아니라 자리(LAB 603 · JJ 305) — 두 열 분리 + 가짜 강사 계정 2개 배선 해제 (2026-07-29~30) - typecheck0/lint0/test2655
