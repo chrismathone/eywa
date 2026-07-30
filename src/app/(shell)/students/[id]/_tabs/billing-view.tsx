@@ -57,18 +57,24 @@ export function BillingView({ invoices }: { invoices: StudentBillingRow[] }) {
   const yearStats = useMemo(() => {
     let billed = 0,
       paid = 0,
+      discount = 0,
       unpaid = 0,
       pending = 0;
     for (const r of filtered) {
       if (r.status === "void") continue; // makeedu에서 삭제된 청구 — 통계에서 제외(목록엔 '무효' 배지로 표시)
       billed += r.amountTotal;
       paid += r.amountPaid;
+      discount += r.amountDiscount;
       if (r.status === "unpaid" || r.status === "partial") {
         unpaid += invoiceOutstanding(r); // 행 레벨 clamp — calc.ts 단일 공식
         pending++;
       }
     }
-    return { billed, paid, unpaid, pending };
+    // ⚠️ discount를 함께 노출해야 카드 산수가 맞는다: '총 청구'는 할인 **전** gross인데 '미납금'은
+    // 할인 **후**(청구−할인−수납)라, 할인 받은 학생은 총청구−납부 ≠ 미납금이 되고 그 차액이 화면
+    // 어디에도 없었다(예: 추연우 5,759,750 − 4,183,874 = 1,575,876원 전액이 할인분).
+    // /billing은 '할인 합계' KPI가 있어 맞아떨어진다 — 학생 상세도 같은 4항목으로 맞춘다.
+    return { billed, paid, discount, unpaid, pending };
   }, [filtered]);
 
   const overall = useMemo(() => {
@@ -132,8 +138,10 @@ export function BillingView({ invoices }: { invoices: StudentBillingRow[] }) {
 
       {/* 수납 통계 (연도+상태 기준) */}
       <Section title="수납 통계" open={showStats} onToggle={() => setShowStats((s) => !s)}>
-        <div className="grid grid-cols-3 gap-2">
+        {/* 4항목이라야 산수가 맞는다: 총 청구 − 할인 − 납부 = 미납금 (/billing KPI와 같은 구성). */}
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           <StatCard label="총 청구" value={`${won(yearStats.billed)}원`} cls="bg-blue/5 border-blue/20 text-blue" />
+          <StatCard label="할인" value={`${won(yearStats.discount)}원`} cls="bg-gold/5 border-gold/20 text-gold" />
           <StatCard label="납부 완료" value={`${won(yearStats.paid)}원`} cls="bg-chart-2/5 border-chart-2/20 text-chart-2" />
           <StatCard
             label="미납금"

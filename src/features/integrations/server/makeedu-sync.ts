@@ -25,6 +25,13 @@ export type MakeeduSyncState = {
   syncedAt: string;
   rowCount: number | null;
   status: string;
+  /**
+   * 임포터가 남긴 **이슈 요약**(예: "학생 미매칭 1라인 · makeedu 부재 미완납 16건(보류)").
+   * ⚠️ status는 이슈가 있어도 'ok'다 — 동기화 자체는 성공했기 때문. 그래서 이 필드가 **유일한 경고 채널**인데
+   * 2026-07-30 적대 리뷰 전까지 아무도 select하지 않아, 유령 미수 16건(₩5,593,000)이 '동기화 정상' 뒤에
+   * 조용히 쌓여 있었다(write-only orphan). 배지가 이 값을 '확인 필요'로 노출한다.
+   */
+  issue: string | null;
 };
 
 /**
@@ -38,11 +45,16 @@ export const getMakeeduSyncState = cache(
     const supabase = await createClient();
     const { data } = await supabase
       .from("makeedu_sync_state")
-      .select("synced_at, row_count, status")
+      .select("synced_at, row_count, status, error")
       .eq("domain", domain)
       .maybeSingle();
     if (!data) return null;
-    return { syncedAt: data.synced_at as string, rowCount: data.row_count as number | null, status: data.status as string };
+    return {
+      syncedAt: data.synced_at as string,
+      rowCount: data.row_count as number | null,
+      status: data.status as string,
+      issue: ((data.error as string | null) ?? null) || null,
+    };
   },
 );
 
@@ -110,9 +122,17 @@ export type MakeeduWorker = {
   hostname: string;
   lastSeen: string;
   startedAt: string | null;
-  /** 마지막 활동이 60초 이내면 온라인(워처 폴 15초 × 4 여유). */
+  /**
+   * 마지막 활동이 {@link WORKER_ONLINE_MS} 이내면 온라인.
+   * ⚠️ 60초였을 땐 워처가 sync-all을 블로킹 실행하는 동안(실측 53~76초) 심장박동이 멈춰
+   * **지금 동기화를 돌리는 그 PC가 '오프라인'으로 뒤집혔다**. 워처는 실행 직전에 한 번 더 찍고
+   * 유휴 구간은 20초 타이머가 메우므로, 임계값을 실행 시간보다 넉넉히 잡아 오탐을 없앤다.
+   */
   online: boolean;
 };
+
+/** 워커 온라인 판정 임계값 — 워처 폴 15초·심장박동 20초 타이머 대비 충분한 여유. */
+export const WORKER_ONLINE_MS = 150_000;
 
 /**
  * 동기화 담당 PC(워처) 목록 + 온라인 여부. 워처가 매 폴(15초)마다 last_seen을 갱신 → 60초 이내면 온라인.
@@ -132,7 +152,7 @@ export async function getMakeeduSyncWorkers(nowMs: number): Promise<MakeeduWorke
       hostname: w.hostname as string,
       lastSeen,
       startedAt: (w.started_at as string | null) ?? null,
-      online: nowMs - new Date(lastSeen).getTime() < 60_000,
+      online: nowMs - new Date(lastSeen).getTime() < WORKER_ONLINE_MS,
     };
   });
 }

@@ -64,6 +64,18 @@ const KIND_CAT = { 수업: "tuition", 교재: "material", 차량비: "other", �
   const sql = postgres(process.env.DATABASE_URL, { prepare: false });
   try {
     const tenantId = await L.resolveTenantId(sql);
+
+    // ⚠️ 0행 가드 — scrape.cjs는 목록 실패를 격리해 **exit 0 + 빈 JSON**으로 넘긴다(세션 만료·URL/셀렉터 변경).
+    // 가드가 없으면 lines=[] → scrapedPeriods=[] → 아무것도 upsert 안 하고, 그런데도 아래 recordSync가
+    // status='ok' · error=NULL · synced_at=now로 덮어써 **"방금 정상 동기화됨"으로 위장**된다
+    // (직전에 남아 있던 '삭제 보류 N건' 경고까지 지워진다). 수납은 돈이라 침묵 실패를 허용하지 않는다.
+    if (lines.length === 0) {
+      const msg = "스크랩 0행 — makeedu 상세수납 목록을 못 읽었다(세션 만료·URL/셀렉터 변경 의심). 이번 실행은 반영하지 않음.";
+      console.error(`✖ ${msg}`);
+      if (APPLY) await L.recordSync(sql, tenantId, "invoices", null, "error", msg);
+      process.exitCode = 1;
+      return;
+    }
     // 스크랩이 커버한 청구월 — "eywa에만 남은 행" 판정은 이 범위 안에서만(과거 월은 스크랩 밖 = 판정 불가).
     const scrapedPeriods = [...new Set(lines.map((l) => l.period))].sort();
     const [studs, existing] = await Promise.all([

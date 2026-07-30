@@ -81,7 +81,7 @@ export default async function RetentionBoardPage({
     const term = state.q.toLowerCase();
     rows = rows.filter((r) => r.name.toLowerCase().includes(term));
   }
-  if (state.sort === "fee") rows = [...rows].sort((a, b) => b.monthlyFee - a.monthlyFee);
+  if (state.sort === "fee") rows = [...rows].sort((a, b) => (b.monthlyFee ?? -1) - (a.monthlyFee ?? -1));
   else if (state.sort === "name") rows = [...rows].sort((a, b) => a.name.localeCompare(b.name, "ko"));
 
   // 통계·필터는 전체(rows) 기준, 목록만 50행으로 슬라이스(billing 메모리 페이지네이션 패턴).

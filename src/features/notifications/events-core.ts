@@ -106,14 +106,23 @@ export function summarizeNames(names: readonly string[], max = 3): string {
   return names.length > max ? `${head} 외 ${names.length - max}명` : head;
 }
 
-/** 결석 이벤트 신규분 → master용 집계 알림 1건 본문(없으면 null). */
+/**
+ * 결석 이벤트 신규분 → master용 집계 알림 1건 본문(없으면 null).
+ * ⚠️ outstandingDigestBody와 같은 규칙 — **최고 tier를 전원에게 붙이지 않는다**(하한을 말한다).
+ */
 export function absenceDigestBody(events: readonly AbsenceEvent[]): string | null {
   if (events.length === 0) return null;
+  if (events.length === 1) {
+    return `${events[0].studentName} 학생이 최근 14일 ${events[0].absences}회 결석으로 반복 결석 위험입니다.`;
+  }
   const names = summarizeNames(events.map((event) => event.studentName));
-  const topTier = Math.max(...events.map((event) => event.tier));
-  return events.length === 1
-    ? `${events[0].studentName} 학생이 최근 14일 ${events[0].absences}회 결석으로 반복 결석 위험입니다.`
-    : `${names}이 반복 결석 위험 단계(최근 14일 ${topTier}회 이상)에 도달했습니다.`;
+  const tiers = events.map((event) => event.tier);
+  const baseTier = Math.min(...tiers);
+  const topTier = Math.max(...tiers);
+  const base = `${names} ${events.length}명이 반복 결석 위험 단계(최근 14일 ${baseTier}회 이상)에 도달했습니다.`;
+  if (topTier === baseTier) return base;
+  const topCount = tiers.filter((tier) => tier === topTier).length;
+  return `${base} (${topTier}회 이상 ${topCount}명)`;
 }
 
 /**
@@ -256,15 +265,27 @@ function manwon(amount: number): string {
   return `${amount.toLocaleString("en-US")}원`;
 }
 
-/** 미수 이벤트 → 집계 알림 본문(없으면 null). */
+/**
+ * 미수 이벤트 → 집계 알림 본문(없으면 null).
+ *
+ * ⚠️ **최고 tier를 명단 전원에게 붙이지 않는다.** 예전엔 `Math.max(tier)`를 뽑아
+ * "{이름들}의 미수금이 {최고tier} 이상입니다"라고 썼는데, 2026-07-20에 실제로
+ * "권하윤·장윤진·허다빈 외 256명의 미수금이 100만원 이상입니다"가 발송됐고 259명 중 244명(94%)은
+ * 100만원 미만이었다. 전원에게 **참인** 문장만 쓴다 = 최저 tier를 하한으로 말하고, 상위 구간은 건수로 덧붙인다.
+ */
 export function outstandingDigestBody(events: readonly OutstandingEvent[]): string | null {
   if (events.length === 0) return null;
   if (events.length === 1) {
     return `${events[0].studentName} 학생의 미수금이 ${manwon(events[0].amount)}에 이릅니다.`;
   }
   const names = summarizeNames(events.map((event) => event.studentName));
-  const topTier = Math.max(...events.map((event) => event.tier));
-  return `${names}의 미수금이 ${manwon(topTier)} 이상입니다.`;
+  const tiers = events.map((event) => event.tier);
+  const baseTier = Math.min(...tiers); // 전원에게 참인 하한
+  const topTier = Math.max(...tiers);
+  const base = `${names} ${events.length}명의 미수금이 ${manwon(baseTier)} 이상입니다.`;
+  if (topTier === baseTier) return base;
+  const topCount = tiers.filter((tier) => tier === topTier).length;
+  return `${base} (${manwon(topTier)} 이상 ${topCount}명)`;
 }
 
 // ─────────── 정리(prune) 정책 ───────────

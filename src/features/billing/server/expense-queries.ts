@@ -1,5 +1,6 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
+import { fetchAllPaged } from "@/lib/supabase/batch";
 import { DEFAULT_CURRENCY, roundMoney } from "../currencies";
 
 // 지출관리(expenses) — 수납관리 창의 '지출' 책갈피 면. 월 단위(수납과 동일 톤). RLS가 tenant 강제.
@@ -256,10 +257,15 @@ export function summarizeExpenses(rows: ExpenseRow[], period: string): ExpenseSu
 // 지출이 존재하는 월 목록(YYYY-MM, 최신순) — 월 칩용.
 export async function getExpenseMonths(): Promise<string[]> {
   const supabase = await createClient();
-  const { data } = await supabase.from("expenses").select("expense_date");
+  // B2: distinct를 JS Set으로 만드는 전건 조회는 무페이징이면 1000행에서 silent 절단된다
+  // (invoices의 getAvailablePeriods가 정확히 이 코드로 2026-03 월 칩을 잃었던 사고와 같은 구조).
+  // `data ?? []`의 error 삼킴도 함께 해소 — fetchAllPaged는 실패를 throw한다. 현재 169행이라 잠복 상태.
+  const rows = await fetchAllPaged<{ expense_date: string | null }>((from, to) =>
+    supabase.from("expenses").select("expense_date").order("id", { ascending: true }).range(from, to),
+  );
   const set = new Set<string>();
-  for (const r of data ?? []) {
-    const d = r.expense_date as string | null;
+  for (const r of rows) {
+    const d = r.expense_date;
     if (d) set.add(d.slice(0, 7));
   }
   return [...set].sort().reverse();

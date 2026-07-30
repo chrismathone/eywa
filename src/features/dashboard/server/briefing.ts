@@ -16,6 +16,8 @@ import { generateJSON } from "@/lib/ai/generate";
 import { reportError, reportWarning } from "@/lib/observability/report-error";
 import { notifyUsers } from "@/features/notifications/server/notify";
 import { computeRetentionRoster } from "@/features/retention/server/queries";
+import { getTenantSettingsByTenantId } from "@/features/owner/server/queries";
+import { canAccess, resolveMatrix } from "@/lib/permissions";
 import { summarizeRoster } from "@/features/retention/roster";
 import { addIsoDateDays } from "@/features/consultations/follow-up-urgency";
 import { getTodayActionSignals, type DashboardSignalsDb } from "./action-signals";
@@ -86,9 +88,18 @@ export async function generateDailyBriefing(
     const dayKey = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"][
       new Date(`${date}T00:00:00Z`).getUTCDay()
     ]!;
+    // ⚠️ 권한 게이트 — /retention 메뉴가 그 테넌트에서 꺼져 있으면(전 역할 none) 브리핑에도 싣지 않는다.
+    // 예전엔 화면은 전원 차단인데 브리핑·AI 비서로는 이탈 명단과 '매출 위험' 금액이 매일 보고돼,
+    // **볼 수 없는 화면의 데이터가 다른 경로로 새어 나갔다**(게다가 눌러서 확인할 화면조차 없다).
+    // master 기준으로 판정: 원장조차 못 여는 메뉴면 브리핑 재료가 될 수 없다. 겸사겸사 cron 비용도 준다.
+    const retentionEnabled = await getTenantSettingsByTenantId(tenantId)
+      .then((settings) => canAccess("master", "retention", resolveMatrix(settings.permissions.overrides)))
+      .catch(() => true); // 설정 조회 실패는 기존 동작 유지(fail-open — perm-matrix.ts와 같은 취지)
     // retention은 앱 최중량 읽기 — 실패해도 브리핑 본체는 살린다(B7 준수: 라이브가 아니라 cron에서만 계산).
     // B4: 아래 신호 배치와 독립 조회라 직렬 await 금지 — 같은 Promise.all에 편입(cron 120s·regen 60s 예산 절약).
-    const retentionPromise = computeRetentionRoster(tenantId)
+    const retentionPromise = (retentionEnabled
+      ? computeRetentionRoster(tenantId)
+      : Promise.reject(new Error("retention 메뉴 비활성 — 브리핑에서 제외")))
       .then((roster) => {
         const stats = summarizeRoster(roster);
         return {
