@@ -50,7 +50,15 @@ export function isProtectedName(nameOrBoard) {
  * ⚠️ 보드 삭제(Operation A)에는 적용하지 않는다 — 그쪽은 `withdrawn_at`이 아니라 **그 과목 수강 종료 + 무게시**로
  *    판정하므로 이 장부 날짜에 의존하지 않는다.
  */
-export const SYSTEM_BULK_WITHDRAWAL_DATES = ["2026-07-10"];
+export const SYSTEM_BULK_WITHDRAWAL_DATES = [
+  "2026-07-10", // 하루 119명(다음 순위 12명) · 수강 종료일은 제각각 → status 도장만 일괄
+  // ⚠️ 2026-07-03: 위 119명 중 77명을 "마지막 수강 종료일"로 교정했더니 40명이 이 날짜로 몰렸다.
+  //    확인해보니 `enrollments.end_date`의 최다값이 **2026-07-03(149건)** — 수강 종료일 자체가 일괄이었다.
+  //    즉 교정이 **장부 날짜를 다른 장부 날짜로 옮긴 것**이었다. makeedu는 같은 학생들에게 04-30·05-06·
+  //    05-07·05-13 등 제각각을 갖고 있어(결제 기반) 그쪽이 진짜다 → makeedu 대조로 다시 채운다.
+  //    🔑 교훈: **"파생값이 원본보다 깨끗하다"고 가정하지 말 것.** 분포를 먼저 보라(한 날짜 뭉침 = 일괄 신호).
+  "2026-07-03",
+];
 
 /** 그 퇴원일이 시스템 일괄 처리분인가. */
 export function isSystemBulkWithdrawal(withdrawnAt) {
