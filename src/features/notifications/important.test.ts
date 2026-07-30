@@ -18,6 +18,8 @@ describe("isImportantNotification", () => {
     // 발송 실패는 "학부모에게 안 갔는데 아무도 모르는" 상태 — 담당이 초대·재발송을 해야 끝난다(0143a).
     expect(isImportantNotification("report_send_failed")).toBe(true);
     expect(isImportantNotification("notice_send_failed")).toBe(true);
+    // makeedu 접속 실패 = 동기화가 조용히 멈춘 상태. 벨 배지로만 두면 낡은 숫자가 계속 사실처럼 읽힌다.
+    expect(isImportantNotification("makeedu_login_failed")).toBe(true);
     // 나머지는 벨 배지로만 — 수업 중 중앙 팝업 방해 방지(원장 결정).
     expect(isImportantNotification("enrollment_assigned")).toBe(false);
     expect(isImportantNotification("teacher_handover")).toBe(false);

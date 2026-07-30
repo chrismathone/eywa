@@ -19,7 +19,9 @@ powershell -ExecutionPolicy Bypass -File scripts\_makeedu\build-makeedu-zip.ps1
 ## 연동 PC 적용
 
 1. zip을 저장소 폴더(`C:\eywa-sync-pc`)에서 "여기에 압축 풀기"(덮어쓰기)
-2. 확인:
+2. **`scripts\_makeedu\동기화PC-지정.bat` 더블클릭** — 작업 스케줄러 3개를 멱등 재등록한다
+   (동기화 06/18시 · 워처 상주 · **접속 점검 08:30**). 이미 지정된 PC에서 다시 눌러도 안전하다.
+3. 확인:
    ```
    cd /d C:\eywa-sync-pc
    node --env-file=C:\eywa-sync-pc\.env.local scripts\_makeedu\check-session.mjs --dry-run

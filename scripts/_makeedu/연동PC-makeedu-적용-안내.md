@@ -9,7 +9,9 @@
 |---|---|
 | `scripts/_makeedu/scrape.cjs` | **퇴원생 목록 추가** — `--list=withdrawn` (`/member/student/stopList.do`, 실측 4,427행) |
 | `scripts/_makeedu/compare-withdrawal-dates.mjs` | **신규** — makeedu 퇴원일 ↔ eywa `withdrawn_at` 이중 대조(기본 dry-run) |
-| `scripts/_makeedu/check-session.mjs` | **신규** — makeedu 접속 헬스체크 → 실패 시 **eywa 벨 알림**(하루 1회 권장) |
+| `scripts/_makeedu/check-session.mjs` | **신규** — makeedu 접속 헬스체크 → 실패 시 **eywa 알림**(원장) |
+| `scripts/_makeedu/run-health-check.ps1` | **신규** — 위 헬스체크의 작업 스케줄러 래퍼(로그 기록) |
+| `scripts/_makeedu/setup-sync-pc.ps1` | 헬스체크 작업(`eywa-makeedu-health`, 매일 08:30) **등록/해제/상태**에 포함 |
 
 ## 🔴 이번에 확인된 사실 (설계가 바뀐 근거)
 
@@ -39,15 +41,29 @@ CAPTCHA는 **낯선 IP·헤드리스**에서만 걸린다. 그래서:
    · ① 채우기 대상 · ② 기존 날짜와 불일치 · ③ 미매칭 이 각각 몇 건인지 보고만 한다.
    · 결과를 확인한 뒤에만 `--apply` (실행 시 **undo JSON**을 같은 폴더에 남긴다).
 
-## 스케줄 등록(권장)
+## 스케줄 등록 — `동기화PC-지정.bat` 한 번이면 끝 (2026-07-30 갱신)
 
-접속 헬스체크는 하루 1회면 충분하다. 작업 스케줄러에 등록:
+접속 헬스체크는 **별도로 등록하지 않는다.** 기존 지정 스크립트가 세 작업을 **한 세트로** 등록한다:
 
 ```
-schtasks /create /tn "eywa-makeedu-health" /tr "cmd /c cd /d C:\eywa-sync-pc && node --env-file=C:\eywa-sync-pc\.env.local scripts\_makeedu\check-session.mjs" /sc daily /st 08:30
+C:\eywa-sync-pc\scripts\_makeedu\동기화PC-지정.bat        (더블클릭)
 ```
+
+| 작업 | 주기 | 하는 일 |
+|---|---|---|
+| `eywa-makeedu-sync` | 매일 06시·18시 | 스크랩 + 임포트(학생·반·예비원생·수납) |
+| `eywa-makeedu-sync-watcher` | 로그온 상주 + 10분 부활 | 웹의 '지금 동기화'·역동기화 요청 처리 |
+| **`eywa-makeedu-health`** | **매일 08:30** | **접속 점검 → 실패하면 원장 벨 알림** |
+
+- 이미 지정된 PC에서 다시 실행해도 안전하다(멱등 `-Force` 재등록). **헬스체크만 추가된다.**
+- 상태 확인 = `동기화PC-상태확인.bat`(세 작업 + 접속 점검 마지막 결과 한 줄).
+- 로그 = `.makeedu-tmp\health-check.log`(하루 한 줄, 2,000줄 넘으면 최근 1,000줄만 남김).
+
+🔴 **`schtasks`로 따로 등록하지 말 것.** 지정 해제(`동기화PC-해제.bat`)가 그 작업을 못 지워서, 동기화 PC를
+옮긴 뒤에도 **옛 PC가 계속 makeedu 로그인을 시도**한다(이중 로그인 = 계정 잠금 위험).
 
 ⚠️ **콜드스타트 규칙**: 처음 실행에서 실패를 만나면 **알리지 않고 시드만** 한다(과거 상태로 벨이 폭탄이 되는 것을 막는 기존 규칙). 그다음 실패부터 알림이 온다.
+⚠️ 알림은 **원장(master)** 에게만 가고, 컴퓨터 알림 + 화면 중앙 팝업까지 뜬다(벨 배지만으론 지나친다).
 
 ## 주의
 

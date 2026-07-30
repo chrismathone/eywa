@@ -16,6 +16,11 @@ export const IMPORTANT_NOTIFICATION_TYPES: readonly string[] = [
   "report_send_failed",
   // 공지도 같은 이유 — 학부모에게 안 갔는데 아무도 모르는 상태를 끝내려면 담당이 초대해야 한다(0144a).
   "notice_send_failed",
+  // makeedu 접속 실패도 **"아무도 모르는" 계열**이다(2026-07-30). 로그인이 깨지면 동기화가 조용히 멈추고
+  // 화면 숫자는 마지막 성공 시점에 **얼어붙은 채 그대로 읽힌다** — 틀린 게 아니라 낡은 것이라 아무도 의심하지
+  // 않는다(같은 실패 모양으로 "7월 퇴원 152명"이 2주 넘게 읽혔다). 수신자는 master 1명, 발화는 하루 최대
+  // 1회이고 그것도 **실제로 깨진 날에만** 울린다 → 경보 피로 위험이 report_send_failed보다도 낮다.
+  "makeedu_login_failed",
 ];
 
 /**

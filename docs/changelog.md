@@ -4,6 +4,21 @@
 
 ## 진행 상황
 
+### makeedu 접속 헬스체크 스케줄 등록 — "동기화가 조용히 멈춘 날"을 벨로 (2026-07-30) - typecheck0/lint0/test50(notifications)
+연동 PC(신뢰 IP)는 ID/PW 자동 로그인이 CAPTCHA 없이 통과해 **동기화가 하루 2회 무인으로 이미 돌고 있었다**
+(`run-local-sync.ps1` 06/18시 — 오늘 새로 켠 게 아니다). 그래서 남은 위험은 세션 만료가 아니라
+**로그인이 깨지는 날**이다: 그날 동기화가 조용히 멈추고 화면 숫자는 마지막 성공 시점에 **얼어붙은 채 그대로 읽힌다**
+(같은 실패 모양으로 "7월 퇴원 152명"이 2주 넘게 사실처럼 읽혔다).
+- 신규 [`run-health-check.ps1`](../scripts/_makeedu/run-health-check.ps1) — `check-session.mjs` 작업 스케줄러 래퍼(UTF-8 로그, 2,000줄 넘으면 최근 1,000줄만).
+- [`setup-sync-pc.ps1`](../scripts/_makeedu/setup-sync-pc.ps1)이 **세 작업을 한 세트로** 등록/해제/상태확인
+  (`eywa-makeedu-sync` 06·18시 · `…-watcher` 상주 · **`eywa-makeedu-health` 매일 08:30**). 06시 동기화가 실패했으면 업무 시작 전에 울린다.
+- 🔴 **`schtasks`로 따로 등록하지 말 것** — 지정 해제(`동기화PC-해제.bat`)가 그걸 못 지워서 동기화 PC를 옮긴 뒤에도
+  **옛 PC가 계속 로그인을 시도**한다(이중 로그인 = 계정 잠금 위험). 그래서 `$TASKS` 한 목록으로 묶었다.
+- 알림 유형 `makeedu_login_failed` 신설(아이콘 alert) + **IMPORTANT 등재** — 수신자 master 1명, 발화는 실제로 깨진
+  날 하루 1회뿐이라 경보 피로 위험이 `report_send_failed`보다 낮은데, 벨 배지만 두면 낡은 숫자가 계속 사실처럼 읽힌다.
+- dedup은 기존 0118a `notification_events`(bucket `login_failed:<날짜>`) — 같은 날 반복 실행은 1회, 콜드스타트는 무발송 시드.
+  ⚠️ 실패해도 **재시도하지 않는다**(반복 로그인 실패 = 계정 잠금).
+
 ### ECS 시트에서 가져오기 — 반별 구글 수업계획서 28개 → class_sheet_* (임시 병행 경로) (2026-07-30) - typecheck0/lint0/test2994/build✓
 원장 마스터 시트(`2026 영어시간표_인재원 본원`)의 통합 탭에서 **수업 셀 하이퍼링크 28개**를 따라가 반별
 `출석부/수업계획서` 주차 탭을 읽고 계획행·목표·학생 기록을 채운다. **시트를 접을 때까지의 임시 버튼**(ECS 랜딩,
