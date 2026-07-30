@@ -59,5 +59,13 @@ export function canManageStaff(actor: SystemRole): boolean {
  * 직원 관리 권한 + actor가 target보다 엄격히 강해야 함(동급·상위 계정은 못 건드림).
  */
 export function canManageStaffMember(actor: SystemRole, target: SystemRole): boolean {
-  return canManageStaff(actor) && ROLE_HIERARCHY[actor] < ROLE_HIERARCHY[target];
+  if (!canManageStaff(actor)) return false;
+  // 원장·관리자는 **동급까지** 관리한다(원장 지시 2026-07-29: "관리자급들까지는 풀어줘 — 어차피
+  // 관리자부터는 계약이나 이런 수정이 되어야 함"). 종전 '엄격히 상위만'이라 원장이 원장을,
+  // 관리자가 관리자를 손댈 수 없어 계약·이메일·비번 버튼이 통째로 사라졌다.
+  // ⚠️ **상위는 여전히 불가**(관리자 → 원장 X) — 아래로 향한 권한만 넓힌 것이다.
+  // 매니저는 종전대로 자기보다 낮은 직급만(관리 계열 중 가장 약한 축이라 동급 개방 대상 아님).
+  // 자기 계정 파괴(삭제·퇴사)는 각 액션의 self 가드가 따로 막는다.
+  if (actor === "master" || actor === "admin") return ROLE_HIERARCHY[actor] <= ROLE_HIERARCHY[target];
+  return ROLE_HIERARCHY[actor] < ROLE_HIERARCHY[target];
 }
