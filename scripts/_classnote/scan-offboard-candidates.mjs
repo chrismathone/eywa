@@ -29,7 +29,7 @@ import {
 } from "./classnote-admin-core.mjs";
 import { kstSchoolYear, normBoard } from "./board-safety.mjs";
 import { childIdentityKeys, studentIdentityKeys, matchesIdentity } from "./identity-keys.mjs";
-import { evaluateOffboardCandidate, ownedBoardNames, GUARDS } from "./offboard-safety.mjs";
+import { evaluateOffboardCandidate, ownedBoardNames, phoneMatches, GUARDS } from "./offboard-safety.mjs";
 
 const JSON_OUT = process.argv.includes("--json");
 const GRACE_DAYS = Number(process.argv.find((a) => a.startsWith("--grace="))?.split("=")[1] ?? 45);
@@ -67,7 +67,7 @@ try {
 
   // ── eywa 사실 ─────────────────────────────────────────────────────────────
   const students = await sql`
-    select s.id, s.name, s.classnote_name, s.status, s.grade,
+    select s.id, s.name, s.classnote_name, s.status, s.grade, s.parent_phone, s.student_phone,
            to_char(s.withdrawn_at, 'YYYY-MM-DD') as withdrawn_at
     from students s where s.tenant_id = ${tenant}`;
   // 활성 수강 = **과목 무관 전 과목**(퇴원처리는 학생 전체를 명부에서 내리므로 어떤 과목이든 살아 있으면 제외)
@@ -134,6 +134,50 @@ try {
   }
   if (process.exitCode === 1) throw new Error("입력 계약 위반으로 중단");
 
+  // 운영관리 명부 — 보호자 연락처(신원 최상위 증거, §11). ⚠️ 같은 응답에 병력·주소가 있어 전화는 대조에만.
+  const adm = await page.evaluate(async (cid) => {
+    const r = await fetch(`/api/v1_2/centers/${cid}/admissioninfos?name=&page_size=2000`, { headers: { accept: "application/json" } });
+    if (!r.ok) return null;
+    const j = await r.json();
+    return (Array.isArray(j) ? j : (j.results ?? [])).map((x) => ({ childId: x.child_id ?? null, phone: x.basic_info?.carer1_phone ?? null }));
+  }, centerId);
+  if (!adm) {
+    fail("운영관리 명부(admissioninfos) 조회 실패 — 전화 대조 없이는 판정하지 않고 중단합니다");
+    throw new Error("admissioninfos 조회 실패");
+  }
+  const phoneByChild = new Map(adm.filter((a) => a.childId != null).map((a) => [a.childId, a.phone]));
+
+  /** 보드 게시물 — ⚠️ `count`는 항상 1인 상수이고 `next` 커서는 cls 필터를 푼다(§11) → 단일 요청 + complete 플래그. */
+  const postsCache = new Map();
+  async function boardPostsOf(boardId) {
+    if (postsCache.has(boardId)) return postsCache.get(boardId);
+    const r = await page.evaluate(
+      async ([cid, bid]) => {
+        const res = await fetch(`/api/v1_2/centers/${cid}/reports/?cls=${bid}&page_size=100`, { headers: { accept: "application/json" } });
+        if (!res.ok) return null;
+        const j = await res.json();
+        const rows = j?.results ?? [];
+        return { n: rows.length, more: !!j?.next, dates: rows.map((x) => x.date_written).filter(Boolean) };
+      },
+      [centerId, boardId],
+    );
+    const out = r ? { count: r.n, complete: !r.more, lastPostAt: r.dates.length ? r.dates.slice().sort().pop() : null } : null;
+    postsCache.set(boardId, out);
+    return out;
+  }
+
+  /** 그 학생 **소유 보드 전부**의 게시물 합산 — 원장 7일 백스톱("어떠한 보고서라도")의 입력. */
+  async function anyPostAcross(rows) {
+    let complete = true;
+    let last = null;
+    for (const b of rows) {
+      const p = await boardPostsOf(b.id);
+      if (!p || p.complete !== true) complete = false;
+      if (p?.lastPostAt && (!last || p.lastPostAt > last)) last = p.lastPostAt;
+    }
+    return { complete, lastPostAt: last };
+  }
+
   // ── 키·카디널리티 ─────────────────────────────────────────────────────────
   // ⚠️ 카디널리티는 **이름 매칭만으로** 센다(생년으로 좁히지 않는다). 생년으로 후보를 좁히면 학년이 없는
   //    동명 학생이 집합에서 빠져 모호성이 숨는다 — 생년은 별개 가드(identity_unknown)로만 검사한다.
@@ -165,7 +209,7 @@ try {
     erpByName.set(k, cur);
   }
 
-  function factsFor(c, childDetail) {
+  function factsFor(c, childDetail, extra = {}) {
     const hits = matchedStudents.get(c.id) ?? [];
     const s = hits.length === 1 ? hits[0] : null;
     const eff = s ? (s.classnote_name || s.name || "").trim() : null;
@@ -206,6 +250,13 @@ try {
             inboundNameHit: eff ? inboundText.some((t) => t.includes(normBoard(eff))) : false,
           }
         : {},
+      // 전화 대조 — ClassNote 보호자 연락처 ↔ eywa parent/student phone. 한쪽이라도 없으면 checked=false(보류).
+      phone: (() => {
+        const cn = phoneByChild.get(c.id);
+        if (!s || !cn) return { checked: false, match: null };
+        return { checked: true, match: phoneMatches([s.parent_phone, s.student_phone], [cn]) === true };
+      })(),
+      ...extra,
       today: TODAY,
       schoolYear: SCHOOL_YEAR,
       graceDays: GRACE_DAYS,
@@ -236,7 +287,10 @@ try {
       detailFailed++;
     }
     detailById.set(c.id, detail);
-    verdicts.set(c.id, evaluateOffboardCandidate(factsFor(c, detail)));
+    // 2-pass에서만 게시물을 읽는다(비용). 소유 보드 전부 합산 = 45일 무게시 + 원장 7일 백스톱의 입력.
+    const owned = factsFor(c, detail).ownedBoards?.boards ?? [];
+    const anyPost = await anyPostAcross(owned);
+    verdicts.set(c.id, evaluateOffboardCandidate(factsFor(c, detail, { boardPosts: anyPost, studentAnyPost: anyPost })));
   }
   if (pending.length && detailFailed / pending.length > DETAIL_FAIL_RATIO) {
     fail(`원아 상세 조회 실패율 ${Math.round((detailFailed / pending.length) * 100)}% — 부분 판정을 신뢰할 수 없어 중단합니다`);

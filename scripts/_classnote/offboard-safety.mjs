@@ -36,6 +36,27 @@ export function isProtectedName(nameOrBoard) {
   return PROTECTED_STUDENT_NAMES.includes(t);
 }
 
+/**
+ * 🔴 **시스템 일괄 퇴원일 — 실제 퇴원 신호가 아니다.** 이 날짜로 찍힌 학생은 **자동 퇴원처리 대상에서 제외**한다.
+ *
+ * 원장 지시(2026-07-30): *"7-10 대량 퇴원분을 퇴원목록에서 잡지 않도록 해줘. 그건 시스템 퇴원처리니까."*
+ *
+ * 실측 근거: `2026-07-10` 하루에 **119명**(다음으로 많은 날은 07-13의 12명)인데, 그들의 **수강 종료일은
+ * 제각각**이다(07-03 40명·04-06 15명·05-04 8명·03-31 7명…). 즉 그날 수업이 끝난 게 아니라 **이미 끝나 있던
+ * 학생들에게 일괄로 `status=withdrawn` 도장을 찍은 날**이다 → `withdrawn_at`이 **장부상 날짜**일 뿐이라
+ * 유예(45일) 계산의 기준으로 쓸 수 없다(실제론 몇 달 전에 그만뒀는데 "20일 전 퇴원"으로 보인다).
+ *
+ * ⚠️ 이 목록에 날짜를 추가할 땐 **일괄 처리였다는 근거**(하루 건수 급증 + 수강 종료일 산포)를 함께 남길 것.
+ * ⚠️ 보드 삭제(Operation A)에는 적용하지 않는다 — 그쪽은 `withdrawn_at`이 아니라 **그 과목 수강 종료 + 무게시**로
+ *    판정하므로 이 장부 날짜에 의존하지 않는다.
+ */
+export const SYSTEM_BULK_WITHDRAWAL_DATES = ["2026-07-10"];
+
+/** 그 퇴원일이 시스템 일괄 처리분인가. */
+export function isSystemBulkWithdrawal(withdrawnAt) {
+  return SYSTEM_BULK_WITHDRAWAL_DATES.includes(String(withdrawnAt ?? "").trim());
+}
+
 /** 생년 대조 허용 오차(년) — board-safety와 동일 근거(조기입학·유급·학부모 오입력 흡수). */
 const BIRTH_YEAR_TOLERANCE = 1;
 
@@ -105,6 +126,7 @@ export const GUARDS = [
   // ── exclude ───────────────────────────────────────────────────────────────
   { code: "protected_account", action: "exclude" }, //  🔴 실발송 테스트 계정 등 절대 보호(최우선)
   { code: "enrolled", action: "exclude" }, //           정상: 재원이거나 그 과목을 계속 다님(과목 이탈 포함)
+  { code: "system_withdrawal", action: "exclude" }, //  🔴 시스템 일괄 퇴원일(장부 날짜) — 실제 퇴원 신호 아님
   { code: "no_eywa_match", action: "exclude" }, //      eywa에 대응 학생 없음(테스트·퇴사강사 보드 등)
   { code: "ambiguous_forward", action: "exclude" }, //  이 원아에 eywa 학생이 2명+ 걸림
   { code: "ambiguous_reverse", action: "exclude" }, //  그 학생에 원아가 2명+ 걸림
@@ -230,6 +252,15 @@ export function evaluateOffboardCandidate(facts) {
   // ⚠️ 값을 로그·DB·AI에 남기지 말 것 — 이 엔드포인트엔 알레르기·병력·주소까지 함께 실려 있다(대조에만 사용).
   if (!phone || phone.checked !== true) skip("phone_mismatch");
   else set("phone_mismatch", phone.match === false, "ClassNote 보호자 연락처가 eywa에 등록된 전화와 다릅니다 — 다른 집일 수 있습니다");
+
+  // ── 🔴 시스템 일괄 퇴원 — 장부 날짜라 자동 대상에서 뺀다(원장 지시) ──────────────
+  if (!student) skip("system_withdrawal");
+  else
+    set(
+      "system_withdrawal",
+      isSystemBulkWithdrawal(student.withdrawnAt),
+      `퇴원일 ${student.withdrawnAt}은 시스템 일괄 처리분입니다(그날 119명 · 수강 종료일은 제각각) — 실제 퇴원 시점이 아니라 자동 퇴원처리 대상에서 제외합니다(개별 판단은 사람이)`,
+    );
 
   // ── 신원(I2) — 생년 ↔ 학년 역산 대조 ────────────────────────────────────────
   if (childDetail?.status === "failed") {
@@ -559,6 +590,8 @@ export function evaluateBoardRelease({ board, matchedStudentCount, student, phon
       !!student &&
       student.status === "withdrawn" &&
       student.allSubjectsEnded === true &&
+      // 🔴 시스템 일괄 퇴원일은 장부 날짜라 퇴원처리 대상이 아니다(원장 지시) — 보드 삭제는 그대로 가능.
+      !isSystemBulkWithdrawal(student.withdrawnAt) &&
       (() => {
         const since = dayDiff(student.withdrawnAt, today);
         if (since == null || since < dormantDays) return false;

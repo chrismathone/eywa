@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { dayDiff, evaluateBoardRelease, evaluateOffboardCandidate, isProtectedName, normalizePhone, ownedBoardNames, phoneMatches } from "./offboard-safety.mjs";
+import { dayDiff, evaluateBoardRelease, evaluateOffboardCandidate, isProtectedName, isSystemBulkWithdrawal, normalizePhone, ownedBoardNames, phoneMatches } from "./offboard-safety.mjs";
 
 // 픽스처는 실사례 기반이지만 **개인정보를 제거**했다(이름은 실제 사고 케이스만 유지, username은 u1 형식).
 // 2026 학년도 기준: 중2 = 2012년생, 고2 = 2009년생, 초6 = 2014년생(expectedBirthYear).
@@ -696,5 +696,40 @@ describe("🔴 보호 계정 — 우연한 제외에 기대지 않는다(원장 
     expect(v.action).toBe("exclude");
     expect(v.primaryCode).toBe("protected_account");
     expect(v.alsoOffboard).toBe(false);
+  });
+});
+
+describe("🔴 시스템 일괄 퇴원(2026-07-10) — 퇴원목록에서 잡지 않는다(원장 지시)", () => {
+  it("isSystemBulkWithdrawal", () => {
+    expect(isSystemBulkWithdrawal("2026-07-10")).toBe(true);
+    expect(isSystemBulkWithdrawal("2026-07-13")).toBe(false);
+    expect(isSystemBulkWithdrawal(null)).toBe(false);
+  });
+
+  it("⭐ 다른 가드를 다 통과해도 07-10 퇴원분은 exclude", () => {
+    const v = evaluateOffboardCandidate(facts({ student: { ...facts().student, withdrawnAt: "2026-07-10" } }));
+    expect(v.action).toBe("exclude");
+    expect(v.primaryCode).toBe("system_withdrawal");
+  });
+
+  it("⭐ 보드 삭제는 그대로 가능하되 alsoOffboard=false — 장부 날짜는 퇴원처리 근거가 못 된다", () => {
+    const v = evaluateBoardRelease({
+      board: { id: 10, name: "(영어)학생A", children: 0 },
+      matchedStudentCount: 1,
+      student: { id: "s1", name: "학생A", status: "withdrawn", subjectActive: false, allSubjectsEnded: true, withdrawnAt: "2026-07-10" },
+      phone: { checked: true, match: true },
+      posts: { complete: true, count: 0, lastPostAt: null },
+      studentAnyPost: { complete: true, lastPostAt: null },
+      teachers: 0,
+      today: TODAY,
+      dormantDays: 45,
+    });
+    expect(v.action).toBe("release");
+    expect(v.alsoOffboard).toBe(false);
+  });
+
+  it("일괄일이 아닌 퇴원은 정상 처리(07-13은 대상)", () => {
+    const v = evaluateOffboardCandidate(facts({ student: { ...facts().student, withdrawnAt: "2026-01-13" } }));
+    expect(v.action).toBe("offboard");
   });
 });
