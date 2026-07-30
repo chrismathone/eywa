@@ -4,6 +4,28 @@
 
 ## 진행 상황
 
+### ECS 시트에서 가져오기 — 반별 구글 수업계획서 28개 → class_sheet_* (임시 병행 경로) (2026-07-30) - typecheck0/lint0/test2994/build✓
+원장 마스터 시트(`2026 영어시간표_인재원 본원`)의 통합 탭에서 **수업 셀 하이퍼링크 28개**를 따라가 반별
+`출석부/수업계획서` 주차 탭을 읽고 계획행·목표·학생 기록을 채운다. **시트를 접을 때까지의 임시 버튼**(ECS 랜딩,
+`sheet_sync=full` 한정) — 접으면 `import/`·`import-actions.ts`·`sheet-import-dialog.tsx`를 함께 지운다.
+- 신규: [`import/parse-week-tab.ts`](../src/features/class-sheets/import/parse-week-tab.ts)(격자 파서) ·
+  [`import/week-title.ts`](../src/features/class-sheets/import/week-title.ts) · [`import/build-rows.ts`](../src/features/class-sheets/import/build-rows.ts)(DB 행 매핑) ·
+  [`import/types.ts`](../src/features/class-sheets/import/types.ts)(이슈 어휘) · [`server/sheet-source.ts`](../src/features/class-sheets/server/sheet-source.ts)(구글 IO) ·
+  [`server/import-actions.ts`](../src/features/class-sheets/server/import-actions.ts) · `(shell)/ecs/_components/sheet-import-dialog.tsx`. 게이트 2단(`canManageSheetSync` + `requireEcsClassAccess(write)`).
+- 🔴 **컬럼 하드코딩 금지** — 요일 블록 시작 열이 문서마다 다르다(실측 **배치 10종**). 고정 열로 짠 1차 시도는
+  28반 중 **26반이 에러 없이 "학생 0명"**이었다(가장 위험한 조용한 실패) → 헤더행(`요일` 옆이 `시기`)에서 열을 찾는다.
+- 🔴 **주차는 끝 날짜로 역산** — `7/26-31`처럼 시작이 일요일인 제목이 실재해 시작일로 mondayOf 하면 한 주 앞으로 밀린다.
+- 🔴 **시각 칸이 두 교시에 걸쳐 쪼개져 있다**(`"04:00\n~"` / `"~\n05:00"`) — 온전한 범위만 받으면 87교시가 유실.
+  부분 시각 인식 + **시각을 못 읽은 블록만** 앞뒤 사이 후보가 1개일 때 순서 보정(읽었는데 안 맞으면 보정 금지=사람 확인).
+- 🔴 **못 붙인 교시를 그 자리에서 경고하지 않는다** — 시트가 수업 없는 요일까지 격자를 그려 그냥 올리면 1,536건 중
+  대부분이 '토·일'. **실제로 버릴 내용이 있을 때만** 이슈로 올린다(248건).
+- 지어내지 않는 것: 반·학생·수강·영역 slug **자동 생성 0**. 못 맞추면 넣지 않고 사유별로 화면에 올린다.
+  **출석 체크는 가져오지 않는다**(원장 결정 — 시수·급여 산식 영향 차단). 계획행은 시트가 채운 (날짜·교시·시기) 그룹만 교체(멱등).
+- ⚠️ **Sheets 읽기 할당량 = 분당 60회**(실측 429). 문서당 2콜이라 서버에서 28반을 한 번에 훑으면 초과 → 다이얼로그가
+  **한 반씩** 돌리고(700ms 간격·진행률) 429는 2s/10s/30s 백오프.
+- 실측 dry-run(쓰기 0): 반 28/28 이름 일치 · 주차 98 · 계획 **362** · 목표 **327** · 학생 기록 **1,113** ·
+  이슈 = 교시 미매핑 248 · 수강명단 밖 149 · 주차 제목 불일치 1.
+
 ### ClassNote 퇴원처리 안전 판정 — 순수 게이트 + READ-ONLY 스캔 (Phase 0, 쓰기 0) (2026-07-30) - typecheck0/lint0/test185(classnote)
 eywa 퇴원생을 ClassNote 명부에서 내리는 자동화의 **방어 로직만** 먼저 구현(실질 비가역이라 판정을 증명하기 전엔 쓰기 경로를 안 만든다).
 board-safety.mjs의 자매 구조 — 순수 판정 + Vitest + 실데이터 적대 검증. **대상 지목 = `child.id`**(ERP 행은 상세 404·사진키 0/64로 연결 불가),
