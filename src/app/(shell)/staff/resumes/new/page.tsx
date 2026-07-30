@@ -3,7 +3,7 @@ import { requireAccess } from "@/lib/auth/require-access";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { assignableRoles, canManageStaff } from "@/lib/auth/role-hierarchy";
 import { BackLink } from "@/components/back-link";
-import { emptyResume, RESUME_DEPARTMENTS } from "@/features/staff/resume";
+import { emptyResume } from "@/features/staff/resume";
 import { isImportArtifactEmail } from "@/features/staff/email";
 import { getStaffById } from "@/features/staff/server/queries";
 import { ResumeSheet } from "../_components/resume-sheet";
@@ -29,9 +29,8 @@ export default async function NewResumePage({
     data.personal.email = isImportArtifactEmail(staff.email) ? "" : staff.email;
     data.personal.phone = staff.phone ?? "";
     data.contract.startDate = staff.hireDate ?? "";
-    data.contract.division = (RESUME_DEPARTMENTS as readonly string[]).includes(staff.department ?? "")
-      ? (staff.department as string)
-      : "";
+    // 지정 목록 밖 부서(시트 이관분 국어과·차량팀 등)도 그대로 옮긴다 — 잘라내면 프리필에서 부서가 사라진다.
+    data.contract.division = staff.department ?? "";
     data.contract.employmentType = staff.employmentType ?? "";
     data.contract.jobTitle = staff.jobTitle ?? "";
   }

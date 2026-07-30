@@ -292,6 +292,15 @@ export function TextbookRequestClient({
                   onChange={(e) => setTeacherName(e.target.value)}
                   placeholder="선생님 성함"
                 />
+                {/* 🔴 이 칸이 곧 **소유자**다(ownsTextbookRequest) — 다른 이름으로 저장하면 수정·삭제·발송을
+                    그 선생님만 할 수 있다. 안 알리면 '기록했습니다, 발송창에서 보낼 수 있어요' 토스트 직후
+                    발송이 거절되는 거짓 약속이 된다(2026-07-29 적대검증). 강사 화면에서만 안내. */}
+                {isTeacher && teacherName.trim() && teacherName.trim() !== requesterName ? (
+                  <span className="text-gold block text-[11px] break-keep">
+                    다른 선생님 이름으로 저장하면 이 요청의 수정·삭제·학부모 발송은{" "}
+                    <strong>{teacherName.trim()}</strong> 선생님만 할 수 있습니다.
+                  </span>
+                ) : null}
               </label>
               <label className="block space-y-1">
                 <span className="text-text-dim text-[12px] font-medium">요청 일자</span>
@@ -435,6 +444,8 @@ export function TextbookRequestClient({
         onDownload={download}
         onSend={(r) => setSendIds([r.id])}
         capNote={isTeacher ? undefined : "최근 100건 기준 — 전체는 수납관리 › 교재"}
+        // 강사일 때만 소유 판정 — 사무실(master/accountant)은 서버에서도 이 게이트를 안 탄다.
+        ownerName={isTeacher ? requesterName : undefined}
       />
 
       {/* 학부모 발송 — 다이얼로그가 요청서 카드를 숨김 렌더해 PNG로 캡처하므로 카드 렌더 재료(학원명·로고·계좌)를 넘긴다. */}

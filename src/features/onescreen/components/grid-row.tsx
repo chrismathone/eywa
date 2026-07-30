@@ -162,9 +162,11 @@ export function GridBodyRow({
   const badge = classnoteBadge(rep?.classnoteStatus);
   // 로스터 신호(G2·G3) — 판정은 순수 함수(roster-signals.ts). 진도 배지는 수학 파이프라인 데이터라 math 행에만
   // (subjectKey 미지정=math 간주는 진도 입력 분기와 동일 규약, types.ts:26-29).
-  const unreadBadge = parentUnreadBadge(student.parentRead);
   const isMathRow = !subject.subjectKey || subject.subjectKey === "math";
   const showProgressBadge = isMathRow && progressAnomalyBadge(student.progressSignal);
+  // 학부모 읽음(G3)도 같은 게이트 — RPC가 학생의 **모든** 보고서를 세는데 발송분이 아직 전부 수학이라
+  // (subject='english' 0건, 2026-07-29) 영어 행에 달면 "이 영어 보고서가 미확인"으로 읽힌다(거짓).
+  const unreadBadge = isMathRow ? parentUnreadBadge(student.parentRead) : null;
   const att = student.attendance;
   const genRowBusy = gen.rowBusy;
   // 모드 B 편집용 분리값 — 라운드트립 불변식(split(join)===원본)은 comment-paragraphs가 보장.

@@ -1,5 +1,7 @@
 import { getStudentLessonReports, type LessonReportRow } from "@/features/students/server/queries";
 import { ProgressContainerPanel } from "@/features/progress/components/progress-panel";
+import { getTenantSettings } from "@/features/owner/server/queries";
+import { buildSubjectMaps } from "@/features/owner/subjects";
 
 // ijw StudentDetail ProgressTab 이식 — 최근 수업보고서 표(날짜·선생님·진도·시험·숙제).
 // + P2a/P3 보강: ClassNote 발송 상태 · 학부모 링크(열람수/취소/만료) — "저장한 보고서 확인"을 여기서.
@@ -41,7 +43,12 @@ function linkBadge(row: LessonReportRow): { label: string; cls: string } {
 }
 
 export async function ProgressTab({ studentId }: { studentId: string }) {
-  const reports = await getStudentLessonReports(studentId, 12);
+  // 과목 라벨은 학원설정 단일 소스(하드코딩 금지). 보고서 조회와 독립이라 병렬(B4).
+  const [reports, settings] = await Promise.all([
+    getStudentLessonReports(studentId, 12),
+    getTenantSettings(),
+  ]);
+  const subjects = buildSubjectMaps(settings.operations.subjects);
 
   return (
     <div className="space-y-6">
@@ -61,6 +68,9 @@ export async function ProgressTab({ studentId }: { studentId: string }) {
             <thead className="border-border bg-bg-soft/40 border-b [&_th]:whitespace-nowrap">
               <tr>
                 <th className="micro px-4 py-2 text-left">날짜</th>
+                {/* 🔴 과목 열은 2026-07-29 감사로 신설 — 없을 땐 영어 강사 화면에서 수학 진도 12줄이
+                    그 학생의 '수업 진도'로 읽혔다(쿼리가 subject를 select조차 안 했다). */}
+                <th className="micro px-4 py-2 text-left">과목</th>
                 <th className="micro px-4 py-2 text-left">선생님</th>
                 <th className="micro px-4 py-2 text-left">진도</th>
                 <th className="micro px-4 py-2 text-center">시험</th>
@@ -76,6 +86,7 @@ export async function ProgressTab({ studentId }: { studentId: string }) {
                 return (
                   <tr key={r.id} className="hover:bg-bg-soft/30 align-top">
                     <td className="num text-muted-foreground px-4 py-2 text-xs whitespace-nowrap">{r.reportDate}</td>
+                    <td className="text-text-dim px-4 py-2 text-xs whitespace-nowrap">{subjects.labelOf(r.subject)}</td>
                     <td className="text-foreground px-4 py-2 text-xs whitespace-nowrap">{r.teacherName ?? "—"}</td>
                     <td className="text-foreground break-keep px-4 py-2 text-xs">{r.progress ?? "—"}</td>
                     <td className="num px-4 py-2 text-center text-xs whitespace-nowrap">{r.examInfo ?? "—"}</td>

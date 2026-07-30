@@ -10,6 +10,7 @@ import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { kstToday } from "@/lib/date-kst";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { resolveUniqueStudentNameFor } from "@/features/students/server/unique-name";
 import { generateJSON } from "@/lib/ai/generate";
 import { after } from "next/server";
 import { combineConsultationTranscripts, type SpeakerUtterance } from "@/features/enrollment/transcripts";
@@ -714,7 +715,9 @@ export async function runAiAnalysis(
 // ────────────────── 상담 → 학생 자동 전환 ──────────────────
 
 export type ConvertToStudentState =
-  | { error?: string; studentId?: string; existingStudentId?: string }
+  // notice = 동명이인이라 접미사(A·B·C)를 붙여 등록했다는 안내. 조용히 바꾸면 직원이 나중에
+  // "내가 넣은 이름이 아닌데?" 하고 헤맨다 — 바꿨으면 그 자리에서 말한다.
+  | { error?: string; studentId?: string; existingStudentId?: string; notice?: string }
   | undefined;
 
 /**
@@ -777,6 +780,9 @@ export async function convertConsultationToStudent(
 
   // 자연키(같은 이름·학교·학년의 재원 학생) 값 — 중복 안내에도 재사용.
   const studentName = overrideName || c.prospect_name;
+  // 동명이인 접미사(A·B·C…) — 수동 등록과 **같은 규칙**. 이 경로에 없어서 상담에서 전환한 학생이
+  // 같은 이름으로 들어왔고, 그 결과 동명이인 가드가 정상 보고서를 조용히 막았다(2026-07-29 김수아 건).
+  const uniqueName = await resolveUniqueStudentNameFor(supabase, c.tenant_id, studentName ?? "");
   const studentSchool = overrideSchool ?? c.prospect_school;
   const studentGrade = overrideGrade ?? c.prospect_grade;
 
@@ -785,7 +791,7 @@ export async function convertConsultationToStudent(
     .from("students")
     .insert({
       tenant_id: c.tenant_id,
-      name: studentName,
+      name: uniqueName.name,
       grade: studentGrade,
       school: studentSchool,
       parent_name: overrideParentName ?? c.parent_name,
@@ -876,7 +882,12 @@ export async function convertConsultationToStudent(
   revalidatePath("/enrollment");
   revalidatePath(`/enrollment/${consultationId}`);
   revalidatePath("/students");
-  return { studentId };
+  return {
+    studentId,
+    notice: uniqueName.suffixed
+      ? `이미 '${studentName}' 학생이 있어 '${uniqueName.name}'(으)로 등록했습니다. 다른 학생이면 그대로 두고, 같은 학생이면 학생 목록에서 정리하세요.`
+      : undefined,
+  };
 }
 
 

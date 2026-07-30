@@ -3,6 +3,7 @@ import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { generateJSON } from "@/lib/ai/generate";
 import {
+  applyParentAddress,
   buildFallbackPrepBrief,
   buildPrepBriefPrompt,
   validatePrepBrief,
@@ -40,8 +41,9 @@ export async function runPrepBriefGeneration(
       prompt: buildPrepBriefPrompt(facts),
     });
     const checked = validatePrepBrief(data, facts);
+    // 호칭 후처리는 검증 **뒤**에 — 한글 이름을 호칭으로 바꾸는 치환이라 grounding(숫자·영문)에 영향 없다.
     record = checked.ok
-      ? { ...base, source: "ai", model, brief: checked.value }
+      ? { ...base, source: "ai", model, brief: applyParentAddress(checked.value, facts) }
       : {
           ...base,
           source: "fallback",

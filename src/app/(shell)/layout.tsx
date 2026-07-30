@@ -18,7 +18,8 @@ import { NoticePopupLayer } from "@/features/notices/components/notice-popup-lay
 import { OperationsProvider } from "@/features/owner/operations-context";
 import { EditPresenceProvider } from "@/features/presence/edit-presence";
 import { getPermMatrix } from "@/lib/auth/perm-matrix";
-import { getShellView, canUseTeacherView, isFullShellRole } from "@/lib/auth/view-mode";
+import { getShellView, canUseTeacherView, isFullShellRole, effectiveTeacherScope } from "@/lib/auth/view-mode";
+import { ecsAssistantClassIds } from "@/features/class-sheets/server/access";
 import { canAccess, menuKeyForPath } from "@/lib/permissions";
 import { brandColorVars } from "@/lib/color-utils";
 import { WorkspaceCanvas } from "@/components/workspace/workspace-canvas";
@@ -45,7 +46,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
   if (embed) {
     return (
       <EmbedProvider embed>
-        <EditPresenceProvider user={{ id: user.id, displayName: user.displayName, tenantId: user.tenantId }}><OperationsProvider subjects={settings.operations.subjects} gradeLevels={settings.operations.gradeLevels}>
+        <EditPresenceProvider user={{ id: user.id, displayName: user.displayName, tenantId: user.tenantId }}><OperationsProvider subjects={settings.operations.subjects} gradeLevels={settings.operations.gradeLevels} jobTitles={settings.operations.jobTitles} jobTitlesByDepartment={settings.operations.jobTitlesByDepartment}>
           {/* .embed-main = 창 컴팩트 마커 — PageHeader 등이 CSS 변형([.embed-main_&])으로 소비. soft nav에서
               layout(<main>)은 재렌더되지 않아 창 안 내비가 embed 파라미터를 흘려도 컴팩트가 유지된다(요청 단위
               x-embed로 판정하면 내비마다 풀 헤더로 플립 — 적대 리뷰 major). */}
@@ -96,6 +97,16 @@ export default async function ShellLayout({ children }: { children: ReactNode })
     }
   }
 
+  // English Class Sheet 메뉴는 **영어 반 담당·부담임 강사**에게만(원장 지시 2026-07-29 + 부담임 확장 승인).
+  // 권한(ecs=scoped)은 전 강사가 가지므로 그것만으론 못 거르고, 담당 과목은 서버에서만 안다.
+  // 스코프 null은 fail-open(표시) — 모른다고 감추면 정작 영어 담당이 메뉴를 잃는다.
+  // 부담임 확인(ecsAssistantClassIds)은 반담당 영어가 없을 때만 평가(|| 단락 — 영어 담당은 추가 쿼리 0).
+  const ecsForTeacher =
+    view === "teacher"
+      ? (((await effectiveTeacherScope())?.subjects.includes("english") ?? true) ||
+        (await ecsAssistantClassIds()).length > 0)
+      : false;
+
   // 강사·학생: 사이드바·네비 없는 단일 화면 셸 — 미니멀 헤더(브랜드 + 로그아웃) + 풀폭 본문.
   // 강사=원스크린, 학생=내 학습 현황. (원장 등 나머지는 아래 12메뉴 풀 셸 그대로.)
   if (view === "teacher" || view === "student") {
@@ -123,7 +134,11 @@ export default async function ShellLayout({ children }: { children: ReactNode })
           <div className="flex items-center gap-1.5">
             {/* 겸직이면 '내 메뉴' 드롭다운 하단에 '관리자뷰로 전환'을 넣는다(헤더 별도 버튼 X). 실 강사는 미노출. */}
             {view === "teacher" ? (
-              <TeacherMenu permMatrix={permMatrix} canReturnToAdmin={isFullShellRole(user.systemRole)} />
+              <TeacherMenu
+                permMatrix={permMatrix}
+                canReturnToAdmin={isFullShellRole(user.systemRole)}
+                showEcs={ecsForTeacher}
+              />
             ) : null}
             {/* 강사가 알림 1차 수신자(반 배정·전입·인수인계) — 미니셸에도 벨 필수(적대리뷰). 학생은 미노출. */}
             {view === "teacher" ? <NotificationBell /> : null}
@@ -139,7 +154,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
         <main className="flex-1 overflow-auto px-3 pt-4 lg:px-6 lg:pt-5 [scrollbar-gutter:stable]">
           {/* 미니멀 셸엔 WorkspaceCanvas가 없다 → WindowLink/새폼이 창을 열지 않고 드릴인(일반 네비)하게 false. */}
           <WorkspaceEnabledProvider enabled={false}>
-            <EditPresenceProvider user={{ id: user.id, displayName: user.displayName, tenantId: user.tenantId }}><OperationsProvider subjects={settings.operations.subjects} gradeLevels={settings.operations.gradeLevels}>
+            <EditPresenceProvider user={{ id: user.id, displayName: user.displayName, tenantId: user.tenantId }}><OperationsProvider subjects={settings.operations.subjects} gradeLevels={settings.operations.gradeLevels} jobTitles={settings.operations.jobTitles} jobTitlesByDepartment={settings.operations.jobTitlesByDepartment}>
               {children}
             </OperationsProvider></EditPresenceProvider>
           </WorkspaceEnabledProvider>
@@ -158,7 +173,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
     // useSubjectMaps()가 buildSubjectMaps([]) 폴백을 타 과목이 "수학" 대신 raw 키 `math`로 떴다
     // (2026-07-22 전수검사 — 학생 요약 peek 창, 진입=커맨드 팰릿 학생 검색).
     // 라우트 창(iframe)은 자식 문서가 위 embed 분기에서 다시 받으므로 무관했다.
-    <OperationsProvider subjects={settings.operations.subjects} gradeLevels={settings.operations.gradeLevels}>
+    <OperationsProvider subjects={settings.operations.subjects} gradeLevels={settings.operations.gradeLevels} jobTitles={settings.operations.jobTitles} jobTitlesByDepartment={settings.operations.jobTitlesByDepartment}>
     {/* print:h-auto/overflow-visible — 인쇄 클리핑 방지(위 미니멀 셸 래퍼와 동일). */}
     <div style={brandStyle} className="bg-background text-foreground flex h-screen flex-col overflow-hidden print:h-auto print:overflow-visible lg:flex-row">
       {/* 셸 크롬(사이드바·모바일내비·헤더)은 iframe(플로팅 창) 안에선 숨긴다 — 드릴인으로 embed가

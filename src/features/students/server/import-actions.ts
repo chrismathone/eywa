@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged } from "@/lib/supabase/batch";
+import { resolveUniqueStudentNameFor } from "./unique-name";
 import { accessLevelTenant } from "@/lib/auth/perm-matrix";
 import { logAction } from "@/features/audit/server/log";
 import {
@@ -122,6 +123,8 @@ export type StudentImportResult = {
   inserted?: number;
   skipped?: number;
   failed?: number;
+  /** 동명이인이라 접미사(A·B·C)가 붙은 항목 "원본 → 저장된 이름". 조용히 바꾸지 않고 결과에 보여준다. */
+  renamed?: string[];
 };
 
 /**
@@ -137,6 +140,8 @@ export async function applyStudentImport(rows: ImportInsertRow[]): Promise<Stude
   let inserted = 0;
   let skipped = 0;
   let failed = 0;
+  // 동명이인이라 접미사(A·B·C)가 붙은 건수 — 조용히 이름이 바뀌면 나중에 못 찾는다(결과에 명시).
+  const renamed: string[] = [];
 
   for (const r of rows) {
     const name = String(r?.name ?? "").trim();
@@ -144,9 +149,12 @@ export async function applyStudentImport(rows: ImportInsertRow[]): Promise<Stude
       failed += 1;
       continue;
     }
+    // 동명이인 접미사 — 수동 등록·상담 전환과 **같은 규칙**(한 경로만 지키면 소용없다).
+    // 행마다 조회하는 이유: 같은 파일 안에 동명이인이 여러 줄 있으면 직전 줄이 만든 이름까지 봐야 한다.
+    const uniqueName = await resolveUniqueStudentNameFor(supabase, user.tenantId, name);
     const { error: insErr } = await supabase.from("students").insert({
       tenant_id: user.tenantId,
-      name,
+      name: uniqueName.name,
       school: r.school?.trim() || null,
       grade: r.grade?.trim() || null,
       status: normalizeStatus(r.status),
@@ -159,14 +167,15 @@ export async function applyStudentImport(rows: ImportInsertRow[]): Promise<Stude
       else failed += 1;
     } else {
       inserted += 1;
+      if (uniqueName.suffixed) renamed.push(`${name} → ${uniqueName.name}`);
     }
   }
 
   await logAction({
     action: "student_import",
     targetType: "student",
-    metadata: { inserted, skipped, failed },
+    metadata: { inserted, skipped, failed, renamed: renamed.length },
   });
   revalidatePath("/students");
-  return { inserted, skipped, failed };
+  return { inserted, skipped, failed, renamed };
 }

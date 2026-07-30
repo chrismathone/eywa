@@ -1,7 +1,8 @@
 "use client";
 
-import { createContext, useContext, useMemo, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useMemo, type ReactNode } from "react";
 import { buildSubjectMaps, type SubjectMaps } from "./subjects";
+import { jobTitlesForDepartment } from "@/features/staff/department-job-titles";
 import type { SubjectSetting } from "./settings-types";
 
 /**
@@ -16,6 +17,8 @@ import type { SubjectSetting } from "./settings-types";
 type OperationsCtx = {
   subjects: SubjectMaps;
   gradeLevels: string[];
+  jobTitles: string[];
+  jobTitlesByDepartment: Record<string, string[]>;
 };
 
 const Ctx = createContext<OperationsCtx | null>(null);
@@ -23,15 +26,19 @@ const Ctx = createContext<OperationsCtx | null>(null);
 export function OperationsProvider({
   subjects,
   gradeLevels,
+  jobTitles = [],
+  jobTitlesByDepartment = {},
   children,
 }: {
   subjects: SubjectSetting[];
   gradeLevels: string[];
+  jobTitles?: string[];
+  jobTitlesByDepartment?: Record<string, string[]>;
   children: ReactNode;
 }) {
   const value = useMemo<OperationsCtx>(
-    () => ({ subjects: buildSubjectMaps(subjects), gradeLevels }),
-    [subjects, gradeLevels],
+    () => ({ subjects: buildSubjectMaps(subjects), gradeLevels, jobTitles, jobTitlesByDepartment }),
+    [subjects, gradeLevels, jobTitles, jobTitlesByDepartment],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
@@ -45,6 +52,27 @@ export function useSubjectMaps(): SubjectMaps {
 /** 학년 체계(operations.gradeLevels). 프로바이더 밖이면 빈 배열. */
 export function useGradeLevels(): string[] {
   return useContext(Ctx)?.gradeLevels ?? [];
+}
+
+/**
+ * 그 근무부서의 직급 선택지(operations.jobTitlesByDepartment → 없으면 공통 jobTitles).
+ * 부서를 바꾸면 직급 드롭다운이 따라 바뀐다 — 목록은 학원설정이 단일 소스.
+ */
+export function useJobTitles(department: string): string[] {
+  const ctx = useContext(Ctx);
+  return jobTitlesForDepartment(department, ctx?.jobTitlesByDepartment, ctx?.jobTitles ?? []);
+}
+
+/**
+ * 부서 → 직급 목록 함수. 부서를 **바꾸는 순간**(onChange 안에서) 새 부서의 직급을 계산해야 할 때 쓴다
+ * — effect에서 setState 하는 패턴은 금지라([[#25]]) 핸들러에서 바로 계산해 넣는다.
+ */
+export function useJobTitleResolver(): (department: string) => string[] {
+  const ctx = useContext(Ctx);
+  return useCallback(
+    (department: string) => jobTitlesForDepartment(department, ctx?.jobTitlesByDepartment, ctx?.jobTitles ?? []),
+    [ctx],
+  );
 }
 
 const EMPTY_SUBJECTS = buildSubjectMaps([]);

@@ -16,6 +16,7 @@ import {
   updateTextbookRequest,
 } from "@/features/billing/server/textbook-actions";
 import type { TextbookOrderRow } from "@/features/billing/server/textbook-queries";
+import { ownsTextbookRequest } from "@/features/billing/textbook-ownership";
 
 // 교재요청 '요청 내역' — ijw TextbookRequestView history 구조 이식: 미완료/완료 필터 탭(건수 배지)
 // + 학생명·교재명 검색 + 메모리 페이지네이션(rows는 이미 서버에서 도착 — 강사 스코프 수백 행 수준).
@@ -68,11 +69,14 @@ function RequestRow({
   row,
   onDownload,
   onSend,
+  ownerName,
 }: {
   row: TextbookOrderRow;
   onDownload: (r: TextbookOrderRow) => void;
   /** 학부모 알림장 발송 다이얼로그 열기(없으면 버튼 미노출). */
   onSend?: (r: TextbookOrderRow) => void;
+  /** 강사일 때만 지정 — 본인 요청이 아니면 수정·삭제·발송을 숨긴다(서버 게이트 미러). */
+  ownerName?: string;
 }) {
   const [editing, setEditing] = useState(false);
   const [confirmDel, setConfirmDel] = useState(false);
@@ -82,7 +86,10 @@ function RequestRow({
   const [bookDetail, setBookDetail] = useState(row.bookDetail ?? "");
   const [notes, setNotes] = useState(row.notes ?? "");
   const [price, setPrice] = useState<number | string>(row.price);
-  const canManage = isUntouched(row);
+  // 소유 판정 = 서버 게이트와 **같은 순수 함수**. ownerName 미지정(사무실)이면 전부 내 것처럼 다룬다
+  // (사무실은 effectiveTeacherId()가 null이라 서버에서도 이 게이트를 안 탄다 — 두 쪽이 같은 말을 한다).
+  const mine = !ownerName || ownsTextbookRequest(row.teacherName, ownerName);
+  const canManage = mine && isUntouched(row);
   const done = isDone(row);
 
   const openEdit = () => {
@@ -154,6 +161,11 @@ function RequestRow({
         </div>
         <div className="text-text-dim mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[12px]">
           {row.studentName ? <span>{row.studentName}</span> : null}
+          {/* 요청 선생님 — 남의 요청인 줄 알 방법이 없어 수정·삭제·발송까지 열려 있던 게 2026-07-29 감사의 발견.
+              권한은 서버가 막고, 화면은 **왜 버튼이 없는지**를 이 이름으로 설명한다. */}
+          {row.teacherName && !mine ? (
+            <span className="text-text-faint">· 요청 {row.teacherName}</span>
+          ) : null}
           {row.requestDate ? <span className="text-text-faint">· {row.requestDate}</span> : null}
           {row.price > 0 ? <span className="num text-text-faint">· {row.price.toLocaleString()}원</span> : null}
           {row.notes ? <span className="text-text-faint">· {row.notes}</span> : null}
@@ -169,7 +181,8 @@ function RequestRow({
       >
         <FileDown className="size-3.5" /> 요청서
       </button>
-      {onSend ? (
+      {/* 발송은 **본인 요청만** — 서버 loadScopedOrders가 같은 조건으로 거절한다(2026-07-29). */}
+      {onSend && mine ? (
         <button
           type="button"
           onClick={() => onSend(row)}
@@ -205,6 +218,7 @@ export function RequestHistory({
   onDownload,
   onSend,
   capNote,
+  ownerName,
 }: {
   rows: TextbookOrderRow[];
   onDownload: (r: TextbookOrderRow) => void;
@@ -212,6 +226,11 @@ export function RequestHistory({
   onSend?: (r: TextbookOrderRow) => void;
   /** rows가 절단본일 때(사무실=최근 100건) 카운트가 전체 통계로 읽히지 않게 붙이는 안내. */
   capNote?: string;
+  /**
+   * 소유 판정 기준 이름 — **강사일 때만** 넘긴다(사무실은 undefined = 전 행 관리 가능).
+   * 서버 게이트(`ownsTextbookRequest`)와 **같은 함수**로 판정해 "눌리는데 서버가 거절"이 안 생기게 한다.
+   */
+  ownerName?: string;
 }) {
   // ijw 기본 탭 = 미완료(처리 중인 것부터). 탭·검색 변경 시 페이지 1 리셋(이벤트 핸들러에서).
   const [tab, setTab] = useState<"incomplete" | "complete">("incomplete");
@@ -294,7 +313,7 @@ export function RequestHistory({
           }`}
         >
           {pageRows.map((r) => (
-            <RequestRow key={r.id} row={r} onDownload={onDownload} onSend={onSend} />
+            <RequestRow key={r.id} row={r} onDownload={onDownload} onSend={onSend} ownerName={ownerName} />
           ))}
         </ul>
       )}

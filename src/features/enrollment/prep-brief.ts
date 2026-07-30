@@ -407,6 +407,70 @@ export function classLine(c: PrepClassFact): string {
   return parts.join(" · ");
 }
 
+// ── 학부모 호칭 ─────────────────────────────────────────────────────────────
+
+/** 접수 폼의 관계(`RELATION_OPTIONS`) → 부르는 호칭. 모르는 값·미기재는 중립 "학부모님". */
+const RELATION_HONORIFIC: Record<string, string> = {
+  모: "어머님",
+  부: "아버님",
+  조모: "할머님",
+  조부: "할아버님",
+};
+
+/**
+ * 상담에서 학부모를 부르는 호칭 — **학생 이름 + 관계**("임세이 어머님").
+ *
+ * ⚠️ 학부모 이름을 부르지 않는다(원장 지적 2026-07-29): 실측 브리프가 "정윤영님, 접수서 꼼꼼히
+ * 읽어보았습니다"로 시작했는데, 학원에서 학부모를 이름+님으로 부르는 일은 없고 어색하다. 게다가
+ * 학생 이름이 빠져 "누구 상담인지"가 첫 문장에서 사라진다. 관계 미기재(레거시 수기 접수 416건)나
+ * '기타'는 단정하지 않고 "학부모님"으로 — 어머님/아버님을 찍어 부르면 그 자리에서 바로 틀린다.
+ */
+export function parentAddress(f: PrepFacts): string {
+  const honorific = RELATION_HONORIFIC[(f.parent.relation ?? "").trim()] ?? "학부모님";
+  const name = f.student.name?.trim();
+  return name ? `${name} ${honorific}` : honorific;
+}
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * LLM이 그래도 학부모 이름을 썼을 때의 **결정론 후처리** — "정윤영님"·"정윤영 어머님"·"정윤영"을
+ * 모두 `parentAddress`로 치환한다. 프롬프트 지시만으로는 모델이 지킬 때도 안 지킬 때도 있어서
+ * (실측 3건이 서로 다른 호칭을 씀), 사람 앞에서 읽는 문서는 코드가 보장한다.
+ *
+ * 치환만 하고 탈락시키지 않는 이유: 호칭은 문체 문제라 브리프 전체를 폴백으로 버릴 사안이 아니다.
+ * ⚠️ 학부모 이름이 학생 이름에 포함되면(동명·부분일치) 학생 언급까지 망가지므로 건너뛴다.
+ */
+export function applyParentAddress(brief: PrepBrief, f: PrepFacts): PrepBrief {
+  const name = (f.parent.name ?? "").trim();
+  const student = (f.student.name ?? "").trim();
+  if (name.length < 2 || (student && student.includes(name))) return brief;
+  const address = parentAddress(f);
+  // ⚠️ 공백은 **호칭이 뒤따를 때만** 먹는다 — `\s*`를 그룹 밖에 두면 "김미영 앞에서"의 띄어쓰기까지
+  //    삼켜 "…어머님앞에서"가 된다(테스트로 잡힘).
+  const re = new RegExp(
+    `${escapeRegExp(name)}(?:\\s*(?:님|씨|어머님|어머니|아버님|아버지|할머님|할아버님|학부모님|보호자님))?`,
+    "g",
+  );
+  const fix = (t: string) => t.replace(re, address);
+  return {
+    headline: fix(brief.headline),
+    opening: fix(brief.opening),
+    questions: brief.questions.map(fix),
+    playbook: brief.playbook.map((p) => ({
+      concern: fix(p.concern),
+      evidence: fix(p.evidence),
+      response: fix(p.response),
+    })),
+    proposal: fix(brief.proposal),
+    objections: brief.objections.map((o) => ({ objection: fix(o.objection), answer: fix(o.answer) })),
+    closing: fix(brief.closing),
+    cautions: brief.cautions.map(fix),
+  };
+}
+
 // ── 프롬프트 ────────────────────────────────────────────────────────────────
 
 /**
@@ -429,12 +493,28 @@ export function buildFactsBlock(f: PrepFacts): string {
   if (f.student.subjectLabel) L.push(`- 상담 과목: ${f.student.subjectLabel}`);
   if (f.student.genderLabel) L.push(`- 성별: ${f.student.genderLabel}`);
   if (f.student.careerGoal) L.push(`- 진로 희망: ${f.student.careerGoal}`);
-  if (f.parent.name) L.push(`- 학부모: ${f.parent.name}${f.parent.relation ? ` (${f.parent.relation})` : ""}`);
+  // ⚠️ 학부모 **이름은 싣지 않는다**(원장 지적 2026-07-29 — 실측 "정윤영님, 접수서 …"). 학원에서 학부모를
+  //    이름+님으로 부르지 않고 **학생 이름 + 관계 호칭**("임세이 어머님")으로 부른다. 이름을 사실로 주면
+  //    모델이 그걸 호칭으로 쓴다 → 사실 자체를 호칭으로 바꿔 실는다(이름은 접수 정보 화면·인쇄 상단에 있다).
+  L.push(`- 학부모 호칭: ${parentAddress(f)}`);
   if (f.student.consultationPath) L.push(`- 유입 경로: ${f.student.consultationPath}`);
   if (f.student.request) L.push(`- 학부모 요청사항: ${f.student.request}`);
   if (f.student.siblingsText) L.push(`- 형제자매(접수 기재): ${f.student.siblingsText}`);
   if (f.student.safetyNotes) L.push(`- 안전·건강 특이사항: ${f.student.safetyNotes}`);
-  if (f.student.shuttleRequest) L.push("- 셔틀버스 이용을 희망함");
+  // 셔틀은 **접수 폼이 이미 물어본 항목**이라 답을 양방향으로 싣는다(원장 지적 2026-07-29).
+  // ⚠️ 예전엔 신청(true)일 때만 한 줄을 넣고 미신청이면 침묵했다 → LLM은 아래 [학원 현황]의 "셔틀 운행
+  //    (월 20,000원)"만 보고 "셔틀 이용을 원하시나요?"를 확인 질문으로 만들었다(실측 3/3 브리프 전부).
+  //    학부모가 폼에서 이미 고른 것을 상담 자리에서 되묻는 건 "접수서를 안 읽었다"는 신호다.
+  //    요금·노선은 **신청한 경우에만** 싣는다(안 실으면 grounding 화이트리스트에서도 빠져 언급 자체가 막힌다).
+  if (f.student.shuttleRequest) {
+    const detail = [f.policy.shuttleFee, f.policy.shuttleRoutes.join(", ")].filter(Boolean).join(" · ");
+    L.push(`- 셔틀버스: 접수서에서 신청함${detail ? ` (${detail})` : ""} — 탑승 위치·노선만 상담에서 확정`);
+  } else if (f.policy.shuttleEnabled) {
+    // ⚠️ 여기에 "묻지 말 것" 같은 지시문을 쓰면 모델이 그 문장을 cautions에 그대로 옮겨 적는다
+    //    (드라이런 실측: "셔틀버스 관련 질문 절대 금지"가 상담사 주의사항으로 출력됨). 사실만 적고
+    //    재질문 금지는 아래 프롬프트 [작성 원칙]이 담당한다.
+    L.push("- 셔틀버스: 접수서에서 신청하지 않음(미신청)");
+  }
 
   if (f.checklist.length > 0) {
     L.push("", "[학부모가 접수 폼에 답한 사전 체크리스트]");
@@ -479,9 +559,8 @@ export function buildFactsBlock(f: PrepFacts): string {
   if (f.student.grade) L.push(`- ${f.student.grade} 재원생 ${f.peers.sameGrade}명`);
   if (f.policy.dueDay != null) L.push(`- 수강료 납부일: 매월 ${f.policy.dueDay}일`);
   if (f.policy.latePolicy) L.push(`- 미납·환불 정책: ${f.policy.latePolicy}`);
-  if (f.policy.shuttleEnabled) {
-    L.push(`- 셔틀 운행${f.policy.shuttleFee ? ` (${f.policy.shuttleFee})` : ""}${f.policy.shuttleRoutes.length > 0 ? ` · 노선: ${f.policy.shuttleRoutes.join(", ")}` : ""}`);
-  }
+  // ⚠️ 셔틀 요금·노선을 여기(학원 현황)에 상시로 두지 말 것 — 미신청 학부모의 브리프에도 "월 20,000원,
+  //    1·2호차"가 실려 확인 질문·반론이 만들어졌다. 신청한 경우에만 위 [학생·접수 정보]에 함께 싣는다.
   return L.join("\n");
 }
 
@@ -493,9 +572,13 @@ export function buildPrepBriefPrompt(f: PrepFacts): string {
     "⚠️ 작성 원칙 (최우선):",
     "- 사실에 없는 반 이름·강사 이름·교재·금액·인원·기간을 절대 만들어내지 마세요. 숫자는 [사실]에 적힌 숫자만 씁니다.",
     "- 학부모가 답하지 않은 내용을 답한 것처럼 쓰지 마세요. 접수서에 없는 것은 '확인 질문'으로 돌립니다.",
+    "- 반대로 [사실]에 이미 답이 있는 항목은 questions·objections에 넣지 마세요. 접수 폼이 이미 물어본 것(셔틀 신청 여부·상담 과목·학교/학년·형제자매 유무·진로 희망·유입 경로·체크리스트 18문항)을 되물으면 접수서를 안 읽었다는 인상을 줍니다. 답이 있으면 그 답을 전제로 '한 단계 더 깊은' 질문만 하세요.",
     "- 성적 향상 보장·합격 보장 같은 지킬 수 없는 약속 문구를 만들지 마세요.",
     "- 일반론(어느 학생에게나 통할 문장) 금지. 이 학생의 접수 답변을 직접 인용해 구체적으로 씁니다.",
+    "- 학부모를 부를 때는 [사실]의 '학부모 호칭'을 그대로 씁니다. 학부모 이름을 부르거나 'OOO님'이라고 쓰지 마세요.",
     "- 개설 반이 없거나 근거가 부족하면 억지로 채우지 말고 해당 항목을 짧게 비우세요.",
+    "- 다만 개설 반 목록에 반이 하나라도 있으면 proposal을 비우지 마세요. 목록에서 후보 1~3개를 요일·시간·강사와 함께 적고, '레벨테스트 결과에 따라 확정'이라는 전제를 덧붙이면 됩니다(반 이름에 학년 표기가 없어도 목록에 있으면 후보로 제시 가능).",
+    "- cautions에는 이 학부모·이 학생의 상황에서 나오는 주의점만 쓰세요. 위 [작성 원칙]과 [사실]에 적힌 규칙·지시문(호칭을 어떻게 쓸지, 무엇을 쓰지 말지, 어떻게 작성할지)을 옮겨 적지 마세요 — 상담사가 읽는 것은 '이 상담의 지뢰'이지 문서 작성 규칙이 아닙니다.",
     "- 모든 문장은 한국어. 영문 표기는 [사실]에 등장한 것만 그대로 사용합니다.",
     "- 마크다운(**, #, 코드블록) 금지. 순수 문장만.",
     "",
@@ -505,8 +588,8 @@ export function buildPrepBriefPrompt(f: PrepFacts): string {
     "JSON schema (모든 값 한국어):",
     "{",
     '  "headline": string (이 상담을 한 줄로 규정, 20~60자),',
-    '  "opening": string (오프닝 멘트 2~3문장 — 접수 내용을 읽고 왔다는 신호를 주되 학부모 답변을 그대로 인용),',
-    '  "questions": string[3-6] (접수서로는 알 수 없어 상담에서 반드시 확인할 질문),',
+    '  "opening": string (오프닝 멘트 2~3문장 — 학부모 호칭으로 부르며, 접수 내용을 읽고 왔다는 신호를 주되 학부모 답변을 그대로 인용),',
+    '  "questions": string[3-6] (접수서·체크리스트로는 알 수 없어 상담에서 반드시 확인할 질문. 이미 답이 있는 항목 재질문 금지),',
     '  "playbook": [ { "concern": string (학부모의 걱정), "evidence": string (접수서 어디에 근거가 있는지), "response": string (상담사 대응 화법 2~3문장) } ] (2~4개),',
     '  "proposal": string (제안할 반·요일·시간·시작 시점. 위 개설 반 목록의 반만 인용. 없으면 빈 문자열),',
     '  "objections": [ { "objection": string (예상 반론), "answer": string (답변 화법) } ] (2~4개),',
@@ -704,7 +787,14 @@ export function buildFallbackPrepBrief(f: PrepFacts): PrepBrief {
   if (!worries) questions.push("현재 학습에서 가장 걱정되는 부분 확인");
   questions.push("현재 다니는 학원·공부방과 그만두려는 이유 확인");
   questions.push("가능한 등원 요일과 시간대 확인");
-  questions.push("형제자매 재원 여부와 등·하원 동선 확인");
+  // 형제자매는 접수 폼이 이미 묻는다("있음"/"없음(외동)") — 답이 있으면 되묻지 않고, 동선만 확인한다.
+  // 셔틀도 폼이 묻는 항목이라 폴백에서도 "이용하시나요?"를 만들지 않는다(신청 시 노선 확정만).
+  if (f.student.siblingsText || f.siblings.length > 0) {
+    if (f.siblings.length > 0) questions.push("형제자매 등·하원 동선을 함께 맞출지 확인");
+  } else {
+    questions.push("형제자매 재원 여부와 등·하원 동선 확인");
+  }
+  if (f.student.shuttleRequest) questions.push("셔틀 탑승 위치와 이용 노선 확정");
 
   const playbook = (worries ? [{ concern: worries, evidence: "접수 폼 '가장 걱정되는 것' 응답", response: "접수 폼에 적은 걱정을 그대로 되짚어 확인한 뒤, 해당 영역을 어떻게 진단하고 관리하는지 설명한다." }] : []).concat(
     wants
@@ -736,8 +826,8 @@ export function buildFallbackPrepBrief(f: PrepFacts): PrepBrief {
     headline: headline || `${f.student.name} 등록 상담`,
     opening:
       top.length > 0
-        ? `접수해 주신 내용을 먼저 확인했습니다. ${top.map((t) => `${t.question}: ${t.answer}`).join(" / ")}`
-        : "접수해 주신 내용을 바탕으로 상담을 진행하겠습니다.",
+        ? `${parentAddress(f)}, 접수해 주신 내용을 먼저 확인했습니다. ${top.map((t) => `${t.question}: ${t.answer}`).join(" / ")}`
+        : `${parentAddress(f)}, 접수해 주신 내용을 바탕으로 상담을 진행하겠습니다.`,
     questions,
     playbook:
       playbook.length > 0

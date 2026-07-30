@@ -5,11 +5,13 @@ import { CheckSquare, Pencil, Square } from "@/components/icons/eywa-icon-compat
 import { WindowLink } from "@/components/workspace/window-link";
 import { Button } from "@/components/ui/button";
 import { getActiveHomeroomClasses, type StaffDetail } from "@/features/staff/server/queries";
+import { getStaffContracts } from "@/features/staff/server/contract-queries";
 import type { ResumeDetail } from "@/features/staff/server/resume-queries";
 import { RESUME_CHECKS, WORKDAYS } from "@/features/staff/resume";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { ResumePhotoSlide } from "../_components/resume-photo-slide";
+import { ContractStatus } from "../_components/contract-status";
 import { AccountActions } from "../_components/account-actions";
 
 // 기본정보 = 이력서 view(원장 지시 2026-07-28): **구조는 이력서**(인적→계약→학력→경력→자격증→서류),
@@ -53,6 +55,7 @@ export async function BasicInfoTab({
   staff,
   displayRole,
   canManageThis,
+  canManageContracts = false,
   showSalary,
   roleOptions,
   resume,
@@ -65,6 +68,8 @@ export async function BasicInfoTab({
   // 권한/위계 로직(AccountActions)엔 실제 staff.systemRole 유지.
   displayRole: SystemRole;
   canManageThis: boolean;
+  /** 계약 갱신 권한 = 직원관리 쓰기(사무실). canManageThis(나보다 낮은 직급만)와 축이 다르다. */
+  canManageContracts?: boolean;
   showSalary: boolean;
   roleOptions: SystemRole[];
   /** 연결된 이력서(원장·관리자 게이트 통과 시에만 전달) — 이 탭의 내용 원천. */
@@ -77,10 +82,13 @@ export async function BasicInfoTab({
   resumePhotoUrls?: (string | null)[];
 }) {
   // 독립 조회 병렬(B4). 담임 반 목록은 계정 관리 패널(퇴사/삭제 경고)에서만 쓰여 canManageThis일 때만 조회.
-  const [settings, homeroomClasses] = await Promise.all([
+  const [settings, homeroomClasses, contracts] = await Promise.all([
     getTenantSettings(),
     canManageThis ? getActiveHomeroomClasses(staff.id) : Promise.resolve([]),
+    getStaffContracts(staff.id),
   ]);
+  // 오늘 날짜는 **서버에서** 확정해 내려보낸다 — 클라에서 new Date()를 쓰면 시간대·하이드레이션이 어긋난다.
+  const today = new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
   // 과목 라벨·색은 학원설정(operations.subjects) 단일 소스 — 하드코딩 금지.
   const subjects = buildSubjectMaps(settings.operations.subjects);
   const isTeacherLike = displayRole === "teacher" || displayRole === "master";
@@ -154,6 +162,25 @@ export async function BasicInfoTab({
             <Field label="직급" value={jobTitle} />
             <Field label="입사일" value={hireDate ? <span className="num">{hireDate}</span> : null} />
             <Field label="근무요일" value={dayLabels.length ? dayLabels.join(" · ") : null} />
+            {/* 시스템 쪽 항목(역할·과목·강의실·닉네임)은 '계정 정보' 카드가 계약현황으로 바뀌면서
+                여기로 합쳤다(2026-07-29 원장 지시) — 어차피 같은 '이 사람이 어떻게 일하는가' 축. */}
+            <Field label="시스템 역할" value={ROLE_LABEL[displayRole] ?? displayRole} />
+            <Field
+              label="담당 과목"
+              value={
+                staff.subjects.length > 0 ? (
+                  <div className="flex flex-wrap gap-1">
+                    {staff.subjects.map((s) => (
+                      <Pill key={s} color={subjects.colorOf(s)} soft>
+                        {subjects.labelOf(s)}
+                      </Pill>
+                    ))}
+                  </div>
+                ) : null
+              }
+            />
+            <Field label="기본 강의실" value={staff.defaultClassroom} />
+            <Field label="영어 닉네임" value={staff.englishName} />
             {resumeAccess ? (
               <>
                 <Field label="급여 계약" value={salary ? <span className="num">{salary}</span> : null} />
@@ -172,29 +199,6 @@ export async function BasicInfoTab({
               </>
             ) : null}
           </div>
-        </SectionCard>
-
-        {/* 계정 정보 — 시스템 쪽(로그인·역할·수업 배정) */}
-        <SectionCard title="계정 정보">
-          <div className="grid grid-cols-2 gap-x-5 gap-y-4">
-            <Field label="시스템 역할" value={ROLE_LABEL[displayRole] ?? displayRole} />
-            <Field
-              label="담당 과목"
-              value={
-                staff.subjects.length > 0 ? (
-                  <div className="flex flex-wrap gap-1">
-                    {staff.subjects.map((s) => (
-                      <Pill key={s} color={subjects.colorOf(s)} soft>
-                        {subjects.labelOf(s)}
-                      </Pill>
-                    ))}
-                  </div>
-                ) : null
-              }
-            />
-            <Field label="기본 강의실" value={staff.defaultClassroom} />
-            <Field label="영어 닉네임" value={staff.englishName} />
-          </div>
           {staff.memo ? (
             <div className="border-line mt-4 border-t pt-4">
               <p className="micro mb-1">메모</p>
@@ -202,6 +206,15 @@ export async function BasicInfoTab({
             </div>
           ) : null}
         </SectionCard>
+
+        {/* 계약현황 — 구 '계정 정보' 자리(2026-07-29 원장 지시). 현재계약 + 계약조건 히스토리 + 연장. */}
+        <ContractStatus
+          userId={staff.id}
+          hireDate={hireDate || null}
+          rows={contracts}
+          today={today}
+          canWrite={canManageContracts}
+        />
       </div>
 
       {resumeAccess ? (

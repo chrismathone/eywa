@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  applyParentAddress,
   buildFactsBlock,
   buildFallbackPrepBrief,
+  parentAddress,
   matchesSubjectCategory,
   normalizeSchool,
   phoneVariants,
@@ -12,6 +14,7 @@ import {
   rankPrepClasses,
   seatsLeft,
   validatePrepBrief,
+  type PrepBrief,
   type PrepFacts,
 } from "./prep-brief";
 
@@ -281,6 +284,83 @@ describe("buildFactsBlock", () => {
     const noMode = facts({ tuition: [{ category: "수학", name: "특강", price: 90000, modeLabel: null, note: null }] });
     expect(buildFactsBlock(noMode)).toContain("특강: 90000원 (단가 종류 미지정)");
   });
+
+  // 셔틀은 접수 폼이 이미 묻는 항목 — 답을 양방향으로 실어야 LLM이 되묻지 않는다(원장 지적 2026-07-29).
+  it("셔틀 미신청도 사실로 명시하고, 요금·노선은 싣지 않는다", () => {
+    const f = facts({
+      policy: { ...facts().policy, shuttleEnabled: true, shuttleFee: "월 20,000원", shuttleRoutes: ["1호차 주요 노선"] },
+    });
+    const block = buildFactsBlock(f);
+    expect(block).toContain("셔틀버스: 접수서에서 신청하지 않음(미신청)");
+    // 요금·노선이 사실에 없으면 grounding 화이트리스트에도 없어 브리프가 금액을 언급할 수 없다.
+    expect(block).not.toContain("20,000");
+    expect(block).not.toContain("1호차");
+    expect(validatePrepBrief(brief({ questions: ["셔틀 이용을 원하시나요? (월 20,000원)"] }), f).ok).toBe(false);
+  });
+
+  it("셔틀 신청 건은 요금·노선을 함께 싣는다(탑승 위치 확정용)", () => {
+    const f = facts({
+      student: { ...facts().student, shuttleRequest: true },
+      policy: { ...facts().policy, shuttleEnabled: true, shuttleFee: "월 20,000원", shuttleRoutes: ["1호차 주요 노선"] },
+    });
+    const block = buildFactsBlock(f);
+    expect(block).toContain("셔틀버스: 접수서에서 신청함");
+    expect(block).toContain("월 20,000원");
+    expect(block).toContain("1호차 주요 노선");
+  });
+
+  it("셔틀 미운영 학원은 셔틀 줄 자체가 없다", () => {
+    expect(buildFactsBlock(facts())).not.toContain("셔틀");
+  });
+});
+
+describe("학부모 호칭 (원장 지적 2026-07-29)", () => {
+  it("학생 이름 + 관계 호칭으로 부른다 — 학부모 이름은 쓰지 않는다", () => {
+    expect(parentAddress(facts())).toBe("이태경 어머님");
+    expect(parentAddress(facts({ parent: { name: "김미영", relation: "부" } }))).toBe("이태경 아버님");
+    expect(parentAddress(facts({ parent: { name: "김미영", relation: "조모" } }))).toBe("이태경 할머님");
+  });
+
+  it("관계가 없거나 '기타'면 단정하지 않고 '학부모님'", () => {
+    expect(parentAddress(facts({ parent: { name: "김미영", relation: null } }))).toBe("이태경 학부모님");
+    expect(parentAddress(facts({ parent: { name: null, relation: "기타" } }))).toBe("이태경 학부모님");
+  });
+
+  it("사실 블록엔 호칭만 싣고 학부모 이름은 안 싣는다(모델이 이름을 호칭으로 쓰던 원인)", () => {
+    const block = buildFactsBlock(facts());
+    expect(block).toContain("학부모 호칭: 이태경 어머님");
+    expect(block).not.toContain("김미영");
+  });
+
+  it("모델이 이름을 써도 후처리가 호칭으로 바꾼다 — 님/어머님/맨이름 전부", () => {
+    const f = facts();
+    const fixed = applyParentAddress(
+      brief({
+        opening: "김미영님, 접수서 꼼꼼히 읽어보았습니다.",
+        closing: "김미영 어머님께 결과를 다시 안내드리겠습니다.",
+        cautions: ["김미영 앞에서 성적 이야기를 먼저 꺼내지 말 것"],
+      }) as unknown as PrepBrief,
+      f,
+    );
+    expect(fixed.opening).toBe("이태경 어머님, 접수서 꼼꼼히 읽어보았습니다.");
+    expect(fixed.closing).toBe("이태경 어머님께 결과를 다시 안내드리겠습니다.");
+    expect(fixed.cautions[0]).toBe("이태경 어머님 앞에서 성적 이야기를 먼저 꺼내지 말 것");
+    expect(fixed.opening).not.toContain("김미영");
+  });
+
+  it("학부모 이름이 학생 이름에 포함되면 치환하지 않는다(학생 언급까지 망가짐)", () => {
+    const f = facts({ parent: { name: "이태경", relation: "모" } });
+    const fixed = applyParentAddress(
+      brief({ opening: "이태경 학생의 진도를 먼저 확인했습니다." }) as unknown as PrepBrief,
+      f,
+    );
+    expect(fixed.opening).toBe("이태경 학생의 진도를 먼저 확인했습니다.");
+  });
+
+  it("폴백 오프닝도 같은 호칭으로 시작한다", () => {
+    const b = buildFallbackPrepBrief(facts());
+    expect(b.opening.startsWith("이태경 어머님,")).toBe(true);
+  });
 });
 
 describe("buildFallbackPrepBrief", () => {
@@ -309,6 +389,17 @@ describe("buildFallbackPrepBrief", () => {
     const b = buildFallbackPrepBrief(facts({ classes: [] }));
     expect(b.proposal).toBe("");
     expect(b.cautions.join(" ")).toContain("개설 반");
+  });
+
+  it("접수 폼이 이미 답한 항목은 폴백도 되묻지 않는다(형제자매·셔틀)", () => {
+    const answered = buildFallbackPrepBrief(facts({ student: { ...facts().student, siblingsText: "없음(외동)" } }));
+    expect(answered.questions.join(" ")).not.toContain("형제자매 재원 여부");
+    expect(answered.questions.join(" ")).not.toContain("셔틀");
+    // 답이 없으면 종전대로 묻는다(수기 접수 건).
+    expect(buildFallbackPrepBrief(facts()).questions.join(" ")).toContain("형제자매 재원 여부");
+    // 신청한 경우엔 '이용하시나요'가 아니라 노선 확정만.
+    const applied = buildFallbackPrepBrief(facts({ student: { ...facts().student, shuttleRequest: true } }));
+    expect(applied.questions.join(" ")).toContain("셔틀 탑승 위치와 이용 노선 확정");
   });
 });
 

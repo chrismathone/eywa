@@ -8,6 +8,7 @@ import {
   numeric,
   pgEnum,
   pgTable,
+  smallint,
   text,
   time,
   timestamp,
@@ -221,6 +222,33 @@ export const payrollRecords = pgTable(
 );
 
 // === staff_leaves (강사 휴가) ===
+// 직원 계약 이력(0149a) — 직원 상세 '계약현황'. 기본은 첫 출근일부터 1년이고 차수만큼 이어진다.
+// 파생 계산은 features/staff/contract.ts(순수)가 단일 소스 — 이 테이블엔 **실제 기입·연장분만** 담는다.
+export const staffContracts = pgTable(
+  "staff_contracts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    seq: integer("seq").notNull(), // 계약 차수(1차·2차…)
+    startDate: date("start_date").notNull(),
+    endDate: date("end_date").notNull(),
+    terms: text("terms"), // 계약조건(시트 '계약조건' 열 대응 자유 텍스트)
+    memo: text("memo"),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("staff_contracts_user_seq_idx").on(t.tenantId, t.userId, t.seq),
+    index("staff_contracts_user_idx").on(t.userId, t.startDate),
+  ],
+);
+
 export const staffLeaves = pgTable(
   "staff_leaves",
   {
@@ -1934,6 +1962,126 @@ export const aiUsageLogs = pgTable(
   (t) => [index("ai_usage_logs_tenant_created_idx").on(t.tenantId, t.createdAt)],
 );
 
+// === class_sheet_* (English Class Sheet — 반별 주간 수업계획서/출석부, 0157a 손수 alpha) ===
+// 앵커 = 실날짜 plan_date + slot_start(time). class_schedules FK 금지(valid 교체·분절 시 소실), 교시번호 저장 금지.
+// 🔒 4테이블 전부 RLS 정책 0개 + PUBLIC/anon/authenticated revoke — 서버 admin client(service_role) 전용.
+//    역할 게이트는 앱 레이어 requireEcsClassAccess (src/features/class-sheets/server/access.ts).
+// ⚠️ 위치 유니크(class_sheet_plan_lines_pos_uq)는 실제 DB에선 DEFERRABLE 제약(이동 RPC 재번호용) —
+//    drizzle은 deferrable을 표현 못해 uniqueIndex로만 선언(문서용. db:generate 금지 저장소라 무해).
+export const classSheetPlanLines = pgTable(
+  "class_sheet_plan_lines",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    classId: uuid("class_id").notNull(), // (tenant_id, class_id) 복합 FK → classes (0157a)
+    planDate: date("plan_date").notNull(),
+    slotStart: time("slot_start").notNull(),
+    termMode: text("term_mode").notNull().default("regular"), // 'regular'(평시) | 'exam'(내신) — DB CHECK
+    skillArea: text("skill_area").notNull(), // settings subjects[].skillAreas[].key — 일반 편집 컬럼(위치 키 아님)
+    lineNo: smallint("line_no").notNull(), // 1..20 — 구조변경은 ecs_* RPC 전용(재번호 원자성)
+    textbook: text("textbook"),
+    pageRange: text("page_range"),
+    progress: text("progress"),
+    homework: text("homework"),
+    updatedBy: uuid("updated_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("class_sheet_plan_lines_pos_uq").on(
+      t.tenantId,
+      t.classId,
+      t.planDate,
+      t.slotStart,
+      t.termMode,
+      t.lineNo,
+    ),
+    index("class_sheet_plan_lines_class_date_idx").on(t.tenantId, t.classId, t.planDate),
+  ],
+);
+
+export const classSheetGoals = pgTable(
+  "class_sheet_goals",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    classId: uuid("class_id").notNull(),
+    scope: text("scope").notNull(), // 'month' | 'week' — DB CHECK(period_start 월1일/월요일 강제)
+    periodStart: date("period_start").notNull(),
+    role: text("role").notNull(), // 'homeroom'(담임) | 'assistant'(부담임)
+    skillArea: text("skill_area").notNull(),
+    textbook: text("textbook"),
+    targetProgress: text("target_progress"),
+    updatedBy: uuid("updated_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("class_sheet_goals_uq").on(
+      t.tenantId,
+      t.classId,
+      t.scope,
+      t.periodStart,
+      t.role,
+      t.skillArea,
+    ),
+    index("class_sheet_goals_class_period_idx").on(t.tenantId, t.classId, t.periodStart),
+  ],
+);
+
+export const classSheetStudentMarks = pgTable(
+  "class_sheet_student_marks",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    classId: uuid("class_id").notNull(),
+    studentId: uuid("student_id").notNull(), // (tenant_id, student_id) 복합 FK → students (0157a)
+    markDate: date("mark_date").notNull(),
+    slotStart: time("slot_start").notNull(), // 교시 포함 — 같은 학생 하루 2교시 독립 기록
+    status: text("status"), // '완'/'결석'/'안침' 등 자유 라벨(운영 어휘 진화 허용) — 출결 아님
+    progressNote: text("progress_note"), // "PL 7, 20개 / PV 4" 등 개인 진도/과제 자유기입
+    updatedBy: uuid("updated_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("class_sheet_student_marks_uq").on(
+      t.tenantId,
+      t.classId,
+      t.studentId,
+      t.markDate,
+      t.slotStart,
+    ),
+    index("class_sheet_student_marks_class_date_idx").on(t.tenantId, t.classId, t.markDate),
+  ],
+);
+
+export const classSheetMemos = pgTable(
+  "class_sheet_memos",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    classId: uuid("class_id").notNull(),
+    weekStart: date("week_start").notNull(), // 월요일 — DB CHECK
+    memoKey: text("memo_key").notNull(), // 'week' | 'panel' | 'day:<date>' | 'slot:<date>:<HH:MM>' — DB CHECK(주 범위 검증)
+    body: text("body").notNull().default(""),
+    updatedBy: uuid("updated_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("class_sheet_memos_uq").on(t.tenantId, t.classId, t.weekStart, t.memoKey),
+  ],
+);
+
 // === tenant_settings (테넌트 단위 학원 설정 — owner 콘솔) ===
 // 단일 행/테넌트. data jsonb에 전체 설정 문서(앱단 Zod + DEFAULT_SETTINGS merge). master가 관리.
 export const tenantSettings = pgTable("tenant_settings", {
@@ -1968,6 +2116,10 @@ export type Enrollment = typeof enrollments.$inferSelect;
 export type NewEnrollment = typeof enrollments.$inferInsert;
 export type AttendanceRecord = typeof attendanceRecords.$inferSelect;
 export type NewAttendanceRecord = typeof attendanceRecords.$inferInsert;
+export type ClassSheetPlanLine = typeof classSheetPlanLines.$inferSelect;
+export type ClassSheetGoal = typeof classSheetGoals.$inferSelect;
+export type ClassSheetStudentMark = typeof classSheetStudentMarks.$inferSelect;
+export type ClassSheetMemo = typeof classSheetMemos.$inferSelect;
 export type ClassSchedule = typeof classSchedules.$inferSelect;
 export type NewClassSchedule = typeof classSchedules.$inferInsert;
 export type EnglishLevel = typeof englishLevels.$inferSelect;

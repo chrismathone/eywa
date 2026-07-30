@@ -328,6 +328,9 @@ export async function deactivateStaff(
   }
 
   const id = String(formData.get("id") ?? "").trim();
+  // 본인을 퇴사 처리하면 그 자리에서 자기 접근이 끊긴다(복구는 다른 원장·관리자만 가능) — 원천 차단.
+  // 삭제(deleteStaff)와 같은 self 가드. 동급 관리가 열린 뒤(2026-07-29)엔 실수로 닿기 더 쉬워졌다.
+  if (id === actor.id) return { error: "본인 계정의 재직 상태는 바꿀 수 없습니다" };
   const next = String(formData.get("next") ?? "inactive");
   if (!STATUSES.includes(next as "active" | "inactive" | "pending")) {
     return { error: "유효한 상태가 아닙니다" };

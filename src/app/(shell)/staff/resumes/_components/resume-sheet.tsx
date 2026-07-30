@@ -26,8 +26,9 @@ import { useEditPresence } from "@/features/presence/edit-presence";
 import type { SystemRole } from "@/lib/permissions";
 import { ROLE_LABEL } from "@/lib/auth/role-hierarchy";
 import { uploadToTicket } from "@/lib/storage/upload-to-ticket";
-import { useSubjectMaps } from "@/features/owner/operations-context";
+import { useJobTitleResolver, useSubjectMaps } from "@/features/owner/operations-context";
 import { subjectsFromDepartment } from "@/features/staff/department-subjects";
+import { autoJobTitle } from "@/features/staff/department-job-titles";
 import {
   DYNAMIC_ROWS_MAX,
   EMPLOYMENT_TYPES,
@@ -136,6 +137,9 @@ function SaveButton({ done = false }: { done?: boolean }) {
   );
 }
 
+/** 학력 행 안내문 — 위에서부터 시간순(원장 지시 2026-07-29). 행이 더 있으면 일반 라벨로 폴백. */
+const EDU_PLACEHOLDERS = ["고등학교", "대학교", "대학원"];
+
 /** photos 배열 → 고정 슬롯 배열(길이 RESUME_PHOTO_SLOTS, 빈 슬롯 null). */
 const slotify = <T,>(arr: readonly T[] | undefined): (T | null)[] =>
   Array.from({ length: RESUME_PHOTO_SLOTS }, (_, i) => arr?.[i] ?? null);
@@ -164,6 +168,7 @@ export function ResumeSheet({
   photoUrls,
   assignableRoles,
   staffUserId,
+  returnHref = "/staff",
 }: {
   data: StaffResumeData;
   id?: string;
@@ -177,6 +182,8 @@ export function ResumeSheet({
   assignableRoles?: SystemRole[];
   /** 기존 직원과 연결해 작성하는 모드(?staff= 프리필) — 저장 시 staff_user_id로 연결(서버가 재검증). */
   staffUserId?: string;
+  /** 취소·작성완료 후 돌아갈 곳. 본인 이력서(/me)는 /staff가 차단이라 여기로 되돌린다. */
+  returnHref?: string;
 }) {
   const [editing, setEditing] = useState(startEditing);
   const [state, formAction] = useActionState<ResumeActionState, FormData>(saveStaffResume, undefined);
@@ -193,6 +200,10 @@ export function ResumeSheet({
   // 라벨은 학원설정 단일 소스(클라는 useSubjectMaps 훅).
   const subjectMaps = useSubjectMaps();
   const autoSubjects = subjectsFromDepartment(division, subjectMaps.options);
+  // 직급도 부서에 종속(원장 지시 2026-07-29) — 목록은 학원설정 단일 소스, 선택지가 하나면 자동 확정(아르바이트).
+  const jobTitlesFor = useJobTitleResolver();
+  const [jobTitle, setJobTitle] = useState(data.contract.jobTitle);
+  const jobTitleOptions = jobTitlesFor(division);
   // 동적 행(자격증·외국어)·서류 체크·사진은 컨트롤드 — 행 추가/삭제·복원이 상태 기준으로 돌아야 안전.
   const [certs, setCerts] = useState<ResumeCert[]>(data.certificates);
   const [langs, setLangs] = useState<ResumeLanguage[]>(data.languages);
@@ -220,6 +231,7 @@ export function ResumeSheet({
       setWorkDays(WORKDAYS.filter((d) => vals[`c_workday_${d.key}`] === "true").map((d) => d.key));
       setCompany(vals.c_company ?? "");
       setDivision(vals.c_division ?? "");
+      setJobTitle(vals.c_jobTitle ?? "");
       const rc = rowsFromDraft<ResumeCert>(vals, "cert", ["name", "date", "issuer"], (get) => ({
         name: get("name"),
         date: get("date"),
@@ -269,11 +281,13 @@ export function ResumeSheet({
     else if (state.redirectTo) router.push(state.redirectTo); // 생성: 새 이력서 뷰로 이동.
   }, [state, router, clearDraft, markSaved, id]);
 
+
   function startEdit() {
     setEmpType(data.contract.employmentType);
     setWorkDays(data.contract.workDays);
     setCompany(data.contract.company);
     setDivision(data.contract.division);
+    setJobTitle(data.contract.jobTitle);
     setCerts(data.certificates);
     setLangs(data.languages);
     setChecks(data.checks);
@@ -285,7 +299,7 @@ export function ResumeSheet({
     // 취소 = 명시적 폐기 → 초안도 함께 비운다. (창 X는 미저장 가드가 잡고, 그땐 초안이 남아 이어쓰기 가능)
     clearDraft();
     if (id) setEditing(false);
-    else router.push("/staff");
+    else router.push(returnHref);
   }
   const toggleDay = (key: string) =>
     setWorkDays((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]));
@@ -486,9 +500,10 @@ export function ResumeSheet({
               <td className={`${cell} num text-center`}>
                 {field(`edu_${i}_period`, r.period, { ph: "0000.00 ~ 0000.00", align: "center" })}
               </td>
-              {/* 맨 아래 행 = 고등학교, 그 위 = 대학교(최상위 학력을 맨 위에 쓰는 서식 관례). */}
+              {/* 위에서부터 시간순 — 고등학교 → 대학교 → 대학원(원장 지시 2026-07-29, 종전 역순에서 뒤집음).
+                  남는 행은 일반 라벨(대학원 위 학력을 강요하지 않는다). */}
               <td className={cell}>
-                {field(`edu_${i}_school`, r.school, { ph: i === data.education.length - 1 ? "고등학교" : "대학교" })}
+                {field(`edu_${i}_school`, r.school, { ph: EDU_PLACEHOLDERS[i] ?? "학교명" })}
               </td>
               <td className={cell}>{field(`edu_${i}_major`, r.major, { ph: "전공" })}</td>
               {/* 학점만 placeholder가 없어 빈 상자로 보이고 보조기술에도 이름이 없었다 — ph로 이름 부여. */}
@@ -673,7 +688,15 @@ export function ResumeSheet({
                 <SearchableSelect
                   name="c_division"
                   value={division}
-                  onValueChange={setDivision}
+                  onValueChange={(v) => {
+                    setDivision(v);
+                    // 부서가 바뀌면 직급 선택지도 바뀐다 — 선택지가 하나면 바로 확정(아르바이트),
+                    // 새 부서에 없는 직급이 남아 있으면 비운다(엉뚱한 직급이 붙은 채 저장되지 않게).
+                    const opts = jobTitlesFor(v);
+                    const auto = autoJobTitle(opts);
+                    if (auto) setJobTitle(auto);
+                    else if (jobTitle && opts.length > 0 && !opts.includes(jobTitle)) setJobTitle("");
+                  }}
                   // 지정 6종 + (저장돼 있던 목록 밖 부서는 현재 값으로 유지 — 저장만으로 지워지지 않게).
                   options={[
                     ...RESUME_DEPARTMENTS.map((v) => ({ value: v, label: v })),
@@ -688,20 +711,43 @@ export function ResumeSheet({
               ) : (
                 V(c.division)
               )}
-              {/* 담당 과목 = 부서에서 자동 — 두 번 입력하지 않는다(입력 칸 없음, 결과만 보여줌). */}
-              {division ? (
-                <p className="text-text-faint mt-1 text-[11px]">
-                  담당 과목{" "}
-                  {autoSubjects.length > 0
-                    ? `${autoSubjects.map((k) => subjectMaps.labelOf(k)).join(" · ")} (부서 기준 자동)`
-                    : "없음 (교과 부서가 아님)"}
+              {/* 담당 과목 = 부서에서 자동 — 두 번 입력하지 않는다(입력 칸 없음, 결과만 보여줌).
+                  ⚠️ 부서를 고른 뒤에만 나타나게 하면 그 순간 줄 높이가 늘어 표 전체가 밀린다(원장 제보
+                  2026-07-29) → **자리는 항상 잡아두고** 문구만 바뀌게 한다(레이아웃 시프트 0). */}
+              {editing ? (
+                <p className="text-text-faint mt-1 min-h-[15px] text-[11px] leading-[15px]">
+                  {!division
+                    ? "담당 과목은 부서에 따라 자동 지정됩니다"
+                    : autoSubjects.length > 0
+                      ? `담당 과목 ${autoSubjects.map((k) => subjectMaps.labelOf(k)).join(" · ")} (부서 기준 자동)`
+                      : "담당 과목 없음 (교과 부서가 아님)"}
                 </p>
               ) : null}
             </td>
           </tr>
           <tr>
             <th className={head}>직급</th>
-            <td className={cell}>{field("c_jobTitle", c.jobTitle, { ph: "직급 (예: 강사, 부원장)" })}</td>
+            <td className={cell}>
+              {editing ? (
+                <SearchableSelect
+                  name="c_jobTitle"
+                  value={jobTitle}
+                  onValueChange={setJobTitle}
+                  // 부서 전용 직급 + (저장돼 있던 목록 밖 직급은 현재 값으로 유지).
+                  options={[
+                    ...jobTitleOptions.map((v) => ({ value: v, label: v })),
+                    ...(!jobTitle || jobTitleOptions.includes(jobTitle)
+                      ? []
+                      : [{ value: jobTitle, label: `${jobTitle} (기존)` }]),
+                  ]}
+                  placeholder={division ? "선택" : "근무부서를 먼저 고르세요"}
+                  ariaLabel="직급"
+                  className="w-full"
+                />
+              ) : (
+                V(c.jobTitle)
+              )}
+            </td>
             <th className={head}>담당자</th>
             <td className={cell}>{field("c_manager", c.manager, { ph: "담당자" })}</td>
           </tr>

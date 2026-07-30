@@ -28,8 +28,10 @@ export default async function ResumeViewPage({
 
   // 열람 게이트 = 공용 canViewResume(원장·관리자 — 재인증 제거, 2026-07-28). 쓰기 액션·/documents 삭제도 같은 함수.
   // 권한 밖이면 sheet(민감 데이터)를 렌더하지 않는다 — 클라로 전송 자체가 안 감.
-  const canView = await canViewResume(user);
-  const canWrite = canView && canWriteRole; // 열람 못 하면 수정도 불가(sheet 인라인 편집)
+  const canView = await canViewResume(user, resume.staffUserId);
+  const isSelf = resume.staffUserId === user.id;
+  // 열람 못 하면 수정도 불가(sheet 인라인 편집). 본인 이력서는 직원관리 권한 없이도 수정(2026-07-29).
+  const canWrite = canView && (canWriteRole || isSelf);
 
   return (
     <div className="print-portrait space-y-4 p-6">
@@ -58,7 +60,7 @@ export default async function ResumeViewPage({
         />
       ) : (
         <div className="border-line bg-card mx-auto w-full max-w-[780px] rounded-2xl border p-8 text-center shadow-card">
-          <p className="text-foreground text-sm font-bold">이력서는 원장·관리자만 열람할 수 있습니다</p>
+          <p className="text-foreground text-sm font-bold">이력서는 원장·관리자와 본인만 열람할 수 있습니다</p>
           <p className="text-text-dim mt-1 text-xs">개인 인사 정보(주민번호·급여·계좌)가 담겨 있어 열람 권한이 제한됩니다.</p>
         </div>
       )}

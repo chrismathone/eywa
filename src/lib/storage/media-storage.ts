@@ -1,5 +1,6 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { assertUploadedSize } from "./upload-verify";
 import {
   classifyAudioPath,
   isTenantAudioPath,
@@ -72,15 +73,6 @@ export const MEDIA_KIND: Record<MediaKind, KindMeta> = {
 };
 
 // ── 업로드 티켓 ──────────────────────────────────────────────
-/**
- * 업로드된 객체 크기가 허용 범위인가 — 0·음수·미확인(0)도 거부한다(빈 파일·메타 미기록 = 신뢰 불가).
- * verifyUploadedObject가 Supabase 메타로 이 판정을 쓴다.
- * ⚠️ 이 모듈은 server-only라 Vitest에서 import할 수 없다 [[#61]] — 단위테스트가 필요해지면
- * 순수 모듈로 먼저 분리할 것(여기 두고 "테스트됨"이라고 적지 말 것).
- */
-function assertUploadedSize(size: number, maxBytes: number): boolean {
-  return Number.isFinite(size) && size > 0 && size <= maxBytes;
-}
 
 /**
  * 업로드 티켓 발급. ⚠️ path/권한/size는 **호출 server action이 이미 검증**한 뒤 부른다.

@@ -68,7 +68,34 @@ export type ResumeDetail = {
   updatedAt: string;
   authorName: string | null;
   uploadedBy: string | null; // 작성자 user id — 열람 게이트(작성 본인 = 무비밀번호)에서 사용
+  /** 연결된 직원(users.id) — 열람 게이트 `canViewResume(user, staffUserId)`의 '본인' 판정 기준. */
+  staffUserId: string | null;
 };
+
+const DETAIL_COLS =
+  "id, form_data, created_at, updated_at, uploaded_by, staff_user_id, uploader:uploaded_by(display_name)";
+
+type DetailRow = {
+  id: string;
+  form_data: unknown;
+  created_at: string;
+  updated_at: string;
+  uploaded_by: string | null;
+  staff_user_id: string | null;
+  uploader: unknown;
+};
+
+function toDetail(r: DetailRow): ResumeDetail {
+  return {
+    id: r.id,
+    data: normalizeResume(r.form_data),
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+    authorName: authorNameOf(r.uploader),
+    uploadedBy: r.uploaded_by ?? null,
+    staffUserId: r.staff_user_id ?? null,
+  };
+}
 
 /**
  * 직원에게 연결된 이력서(최신 1건) — 직원 상세 '기본정보' 탭이 이력서 내용을 함께 보여줄 때 사용.
@@ -78,22 +105,14 @@ export async function getResumeByStaffUser(userId: string): Promise<ResumeDetail
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("academy_documents")
-    .select("id, form_data, created_at, updated_at, uploaded_by, uploader:uploaded_by(display_name)")
+    .select(DETAIL_COLS)
     .eq("form_type", RESUME_FORM_TYPE)
     .eq("staff_user_id", userId)
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
   if (error) throw new Error(`이력서 조회 실패: ${error.message}`);
-  if (!data) return null;
-  return {
-    id: data.id,
-    data: normalizeResume(data.form_data),
-    createdAt: data.created_at,
-    updatedAt: data.updated_at,
-    authorName: authorNameOf(data.uploader),
-    uploadedBy: (data.uploaded_by as string | null) ?? null,
-  };
+  return data ? toDetail(data as unknown as DetailRow) : null;
 }
 
 /** ⚠️ error를 삼키면 조회 실패가 notFound()로 둔갑한다 — 없는 것과 못 읽은 것은 다르다. */
@@ -101,18 +120,10 @@ export async function getStaffResumeById(id: string): Promise<ResumeDetail | nul
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("academy_documents")
-    .select("id, form_data, created_at, updated_at, uploaded_by, uploader:uploaded_by(display_name)")
+    .select(DETAIL_COLS)
     .eq("id", id)
     .eq("form_type", RESUME_FORM_TYPE)
     .maybeSingle();
   if (error) throw new Error(`이력서 조회 실패: ${error.message}`);
-  if (!data) return null;
-  return {
-    id: data.id,
-    data: normalizeResume(data.form_data),
-    createdAt: data.created_at,
-    updatedAt: data.updated_at,
-    authorName: authorNameOf(data.uploader),
-    uploadedBy: (data.uploaded_by as string | null) ?? null,
-  };
+  return data ? toDetail(data as unknown as DetailRow) : null;
 }

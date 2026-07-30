@@ -236,6 +236,11 @@ export async function submitPublicIntake(
     return { error: "학습 상담을 통해 가장 알고 싶은 문제를 1개 이상 선택해주세요" };
   }
 
+  // 🔴 QR 접수는 **학생 행을 만들지 않는다**(상담만 접수) — 동명이인 접미사·중복 경고를 여기에 붙이지 말 것
+  // (원장 지시 2026-07-29: "QR로 학부모가 등록할 때는 예외 — 학부모에게는 의미없음").
+  // 학부모는 자기 아이 이름을 그대로 적으면 되고, 동명이인 판단은 **직원이 상담을 학생으로 전환할 때**
+  // convertConsultationToStudent가 접미사를 붙이며 그 자리에서 알린다. 이름을 학부모 화면에서 고쳐
+  // 보여주면 "내 아이 이름이 왜 바뀌지?"가 되고, 접수 자체를 막으면 상담 유입이 끊긴다.
   const { data: inserted, error: insErr } = await admin.from("enrollment_consultations").insert({
     tenant_id: tok.tenant_id,
     prospect_name: prospectName,

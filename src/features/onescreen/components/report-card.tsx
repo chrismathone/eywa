@@ -213,9 +213,12 @@ export function ReportCard({
   const atts = rep.attachments ?? []; // 학생 사진 첨부(P2b)
   const uploadingAtt = uploadingSubject === subjectName;
   // 로스터 신호(G2·G3) — 카드 헤더 배지. 진도 신호는 math 전용 데이터라 수학 과목 보유 학생만(표뷰와 동일 규약).
-  const unreadBadge = parentUnreadBadge(student.parentRead);
   const hasMathSubject = student.subjects.some((su) => !su.subjectKey || su.subjectKey === "math");
   const showProgressBadge = hasMathSubject && progressAnomalyBadge(student.progressSignal);
+  // 학부모 읽음(G3)도 같은 게이트 — RPC는 학생의 **모든** 보고서를 세는데 발송분이 아직 전부 수학이라
+  // (subject='english' 0건, 2026-07-29), 영어 강사 화면에 달면 "당신의 영어 보고서가 미확인"으로 읽힌다.
+  // 📌 영어 발송이 시작되면 RPC에 과목을 넘겨 과목별로 세고 이 게이트를 그때 푼다.
+  const unreadBadge = hasMathSubject ? parentUnreadBadge(student.parentRead) : null;
   // 멘트 모드 B = 초안을 2문단(수업 내용 / 태도·특이사항)으로 나눠 편집. 값은 단일 문자열 그대로 저장.
   const para = noticeMode === "B";
   const paras = splitComment(rep.draft);
