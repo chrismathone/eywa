@@ -137,6 +137,9 @@ function SaveButton({ done = false }: { done?: boolean }) {
   );
 }
 
+/** 학력 행 안내문 — 위에서부터 시간순(원장 지시 2026-07-29). 행이 더 있으면 일반 라벨로 폴백. */
+const EDU_PLACEHOLDERS = ["고등학교", "대학교", "대학원"];
+
 /** photos 배열 → 고정 슬롯 배열(길이 RESUME_PHOTO_SLOTS, 빈 슬롯 null). */
 const slotify = <T,>(arr: readonly T[] | undefined): (T | null)[] =>
   Array.from({ length: RESUME_PHOTO_SLOTS }, (_, i) => arr?.[i] ?? null);
@@ -497,9 +500,10 @@ export function ResumeSheet({
               <td className={`${cell} num text-center`}>
                 {field(`edu_${i}_period`, r.period, { ph: "0000.00 ~ 0000.00", align: "center" })}
               </td>
-              {/* 맨 아래 행 = 고등학교, 그 위 = 대학교(최상위 학력을 맨 위에 쓰는 서식 관례). */}
+              {/* 위에서부터 시간순 — 고등학교 → 대학교 → 대학원(원장 지시 2026-07-29, 종전 역순에서 뒤집음).
+                  남는 행은 일반 라벨(대학원 위 학력을 강요하지 않는다). */}
               <td className={cell}>
-                {field(`edu_${i}_school`, r.school, { ph: i === data.education.length - 1 ? "고등학교" : "대학교" })}
+                {field(`edu_${i}_school`, r.school, { ph: EDU_PLACEHOLDERS[i] ?? "학교명" })}
               </td>
               <td className={cell}>{field(`edu_${i}_major`, r.major, { ph: "전공" })}</td>
               {/* 학점만 placeholder가 없어 빈 상자로 보이고 보조기술에도 이름이 없었다 — ph로 이름 부여. */}
