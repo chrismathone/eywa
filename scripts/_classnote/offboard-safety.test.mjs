@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { dayDiff, evaluateBoardRelease, evaluateOffboardCandidate, normalizePhone, ownedBoardNames, phoneMatches } from "./offboard-safety.mjs";
+import { dayDiff, evaluateBoardRelease, evaluateOffboardCandidate, isProtectedName, normalizePhone, ownedBoardNames, phoneMatches } from "./offboard-safety.mjs";
 
 // 픽스처는 실사례 기반이지만 **개인정보를 제거**했다(이름은 실제 사고 케이스만 유지, username은 u1 형식).
 // 2026 학년도 기준: 중2 = 2012년생, 고2 = 2009년생, 초6 = 2014년생(expectedBirthYear).
@@ -660,6 +660,41 @@ describe("⭐ 원장 백스톱 — 최근 7일 내 '어떠한 보고서라도' �
       dormantDays: 45,
     });
     expect(v.action).toBe("release");
+    expect(v.alsoOffboard).toBe(false);
+  });
+});
+
+describe("🔴 보호 계정 — 우연한 제외에 기대지 않는다(원장 지적)", () => {
+  it("isProtectedName: 보드명·학생명 어느 쪽이든 판정", () => {
+    expect(isProtectedName("학원이")).toBe(true);
+    expect(isProtectedName("(수학)학원이")).toBe(true);
+    expect(isProtectedName("(영어)학원삼")).toBe(true);
+    expect(isProtectedName("학원")).toBe(false);
+    expect(isProtectedName("학원이다")).toBe(false); // 부분일치 금지
+  });
+
+  it("⭐ 전 가드를 통과하는 조건이어도 보호 계정이면 퇴원처리 exclude(전화까지 맞아도)", () => {
+    const v = evaluateOffboardCandidate(
+      facts({ child: { id: 500, name: "학원이", birth: "2012-05-05", parentId: 900, parentName: "보호자A", parentUsername: "u1" } }),
+    );
+    expect(v.action).toBe("exclude");
+    expect(v.primaryCode).toBe("protected_account");
+  });
+
+  it("⭐ 보드 삭제(Op A)도 보호된다", () => {
+    const v = evaluateBoardRelease({
+      board: { id: 10, name: "(수학)학원이", children: 0 },
+      matchedStudentCount: 1,
+      student: { id: "s1", name: "학원이", status: "withdrawn", subjectActive: false, allSubjectsEnded: true, withdrawnAt: "2026-01-01" },
+      phone: { checked: true, match: true },
+      posts: { complete: true, count: 0, lastPostAt: null },
+      studentAnyPost: { complete: true, lastPostAt: null },
+      teachers: 0,
+      today: TODAY,
+      dormantDays: 45,
+    });
+    expect(v.action).toBe("exclude");
+    expect(v.primaryCode).toBe("protected_account");
     expect(v.alsoOffboard).toBe(false);
   });
 });
