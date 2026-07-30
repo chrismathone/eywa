@@ -45,8 +45,10 @@ export function GridToolbar({
   counts: {
     total: number;
     sendable: number;
+    /** 실제로 발송되는 행 = sendable + 멘트 있음. 상단 숫자·발송 버튼은 **이 값**을 쓴다(행 라벨과 일치). */
+    sendReady: number;
     saveable: number;
-    selectedSendable: number;
+    selectedSendReady: number;
     selectedSaveable: number;
     // 자동작성 실대상 = 발송가능 − 이미 멘트가 있는 행(보존 대상). 버튼 라벨·비활성 판정에 그대로 쓴다.
     autoWritable: number;
@@ -60,23 +62,26 @@ export function GridToolbar({
   navHint?: boolean; // 점수·교재 칸 Enter/↑↓ 세로 이동 힌트 노출(#21)
   children?: ReactNode;
 }) {
-  const { total, sendable, saveable, selectedSendable, selectedSaveable, autoWritable, selectedAutoWritable } =
+  const { total, sendable, sendReady, saveable, selectedSendReady, selectedSaveable, autoWritable, selectedAutoWritable } =
     counts;
   const genTarget = selectedKeys.length ? selectedAutoWritable : autoWritable; // 실제로 생성될 행 수
-  const genPreserved = (selectedKeys.length ? selectedSendable : sendable) - genTarget; // 멘트 있어 건너뛸 행 수
+  const genPreserved = (selectedKeys.length ? selectedKeys.length : sendable) - genTarget; // 멘트 있어 건너뛸 행 수
   const off = bulkGen || locked;
   const noticeStudents = new Set(selectedKeys.map((k) => k.split("::")[0])).size; // 공지=학생 단위(행 아님, #23)
   return (
     <div className="bg-card border-line shadow-card flex flex-wrap items-center gap-2 rounded-2xl border px-4 py-2.5">
       <span className="text-text-dim text-[12px]">
         표시 <span className="text-foreground font-bold">{total}</span> · 발송가능{" "}
-        <span className="text-foreground font-bold">{sendable}</span>
+        <span className="text-foreground font-bold">{sendReady}</span>
+        {sendable > sendReady ? (
+          <span className="text-text-faint"> (멘트 미작성 {sendable - sendReady})</span>
+        ) : null}
         {selectedKeys.length ? (
           <>
             {" "}
             · 선택 <span className="text-primary font-bold">{selectedKeys.length}</span>
-            {selectedKeys.length > selectedSendable ? (
-              <span className="text-text-faint"> (발송가능 {selectedSendable})</span>
+            {selectedKeys.length > selectedSendReady ? (
+              <span className="text-text-faint"> (발송가능 {selectedSendReady})</span>
             ) : null}
           </>
         ) : null}
@@ -173,14 +178,14 @@ export function GridToolbar({
         <Button
           size="sm"
           onClick={() => actions.onSendAll(selectedKeys)}
-          disabled={(selectedKeys.length ? selectedSendable : sendable) === 0 || off}
+          disabled={(selectedKeys.length ? selectedSendReady : sendReady) === 0 || off}
           title={
-            selectedKeys.length && selectedSendable === 0
-              ? "고른 행 중 발송할 수 있는 행이 없습니다 — 결석·과목 제외·이미 발송된 행입니다"
+            (selectedKeys.length ? selectedSendReady : sendReady) === 0
+              ? "발송할 수 있는 행이 없습니다 — 진도·멘트 미작성, 결석, 이미 발송된 행입니다"
               : undefined
           }
         >
-          {selectedKeys.length ? `${bulkPickLabel(selectedKeys.length, selectedSendable)} 발송` : "ClassNote 일괄 발송"}
+          {selectedKeys.length ? `${bulkPickLabel(selectedKeys.length, selectedSendReady)} 발송` : "ClassNote 일괄 발송"}
         </Button>
       </div>
     </div>

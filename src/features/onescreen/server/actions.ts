@@ -8,7 +8,12 @@ import { kstToday, resolveReportDate } from "@/lib/date-kst";
 import { generateJSON } from "@/lib/ai/generate";
 import { commentBody, commentP1Body, commentP2Body, type ReportCommentInput } from "../report-comment";
 import { buildTrendInput, trendBody } from "../trend-comment";
-import { assembleCombined, MENT_AI_TUNING, type PromptSection } from "../prompt-defaults";
+import {
+  assembleCombined,
+  commentStyleDirective,
+  MENT_AI_TUNING,
+  type PromptSection,
+} from "../prompt-defaults";
 import { loadActivePrompt } from "./prompt-loader";
 import { fetchScoreHistory, fetchSpecialClassIds, hasLaterScoredReport } from "./score-history";
 import { getTenantSettings } from "@/features/owner/server/queries";
@@ -530,7 +535,15 @@ export async function generateReportComment(
       if (p2) sections.push({ type: "comment_p2", field: "p2", body: p2 });
     } else {
       const tpl = await loadActivePrompt(supabase, user.tenantId, "comment"); // DB 활성값 > 기본
-      sections.push({ type: "comment", field: "comment", body: commentBody(safeInput, tpl) });
+      // 문체 변형(2026-07-30) — 같은 반 학생들이 한 낱말만 다른 복사본을 받지 않게 **어디서부터 이야기를
+      // 열지**를 학생·날짜별로 돌린다. 사실은 그대로, 순서·초점만 바뀐다(prompt-defaults 주석 참조).
+      // 시드가 결정적이라 같은 학생·같은 날 재생성해도 결이 흔들리지 않는다.
+      const styleSeed = `${input.studentName}|${trendCtx?.date ?? ""}|${input.subject}`;
+      const style = commentStyleDirective(styleSeed);
+      const body = commentBody(safeInput, tpl);
+      sections.push({ type: "comment", field: "comment", body: style ? `${body}
+
+${style}` : body });
     }
 
     // 추세 섹션(선택) — 컨텍스트 있고 표본 충분할 때만. 대상 날짜(작업중, 미저장일 수 있음) 포함(edutrix 패리티).

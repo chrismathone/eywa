@@ -19,6 +19,15 @@ export type TrendInput = {
   count: number; // 분석에 쓴 회차 수(최근 10 이내)
   examTrend: string; // "[07-01] 일일 15/20 -> [07-08] …" | ""
   assignTrend: string; // 과제 흐름 | ""
+  /**
+   * 시험 기록의 **만점(척도)이 회차마다 다른가**. true면 "올랐다/내려갔다"로 이을 수 없다 —
+   * 9문제 중 7개와 100점 만점에 68점 사이엔 증감이라는 게 없다.
+   *
+   * 🔴 2026-07-30 발송 감사: 추세 137건 중 11건이 한 문단에서 척도를 섞었고 **그 11건 전부가
+   *    증감을 서술**했다("100점 만점에 56점으로 시작한 후 … 9문제 중 7개, 68점으로 내려갔습니다").
+   *    코드엔 척도 경계에서 prevScore를 버리는 가드가 있는데(roster.ts) **추세 문장은 그 밖**이었다.
+   */
+  scaleMixed: boolean;
 };
 
 // 유효 데이터(시험 또는 과제)가 이 미만이면 "추세"라 부를 수 없어 생성 skip.
@@ -38,6 +47,41 @@ export function normalizeExamInfo(examInfo: string): string {
 }
 
 /**
+ * 그 회차 시험의 **만점(척도)** 집합. "일일 15/20, 확인 18/20" → {20}, "88점(100점 만점)" → {100}.
+ * 분모를 못 읽는 표기는 무시한다(판정 불가로 기능을 죽이지 않음 — 섞였다고 단정하지 않는다).
+ */
+export function examScales(examInfo: string): number[] {
+  const out: number[] = [];
+  for (const m of examInfo.matchAll(/(?<!\d)\d{1,3}\s*\/\s*(\d{1,3})(?!\d)/g)) out.push(Number(m[1]));
+  for (const m of examInfo.matchAll(/(\d{1,3})\s*점\s*만점/g)) out.push(Number(m[1]));
+  return out;
+}
+
+/**
+ * **연속 같은 값 묶기** — `[07-06] 완료 -> [07-09] 완료 -> [07-13] 완료`를
+ * `[07-06~07-13] 완료(3회)`로. 프롬프트에 "같은 값이 이어지면 묶어 쓰세요"라고 적어 뒀지만
+ * Haiku가 잘 안 따랐다(2026-07-30 감사: 추세 137건 중 86건이 날짜 6개 이상 나열, 최대 18개).
+ *
+ * 🔴 지시를 강화하는 대신 **입력을 줄인다** — 모델이 나열할 항목 자체가 없으면 나열할 수 없다.
+ *    (요약은 코드가 하므로 숫자 창작 여지도 없다.)
+ */
+export function compressRuns(rows: { date: string; value: string }[]): string {
+  if (rows.length === 0) return "";
+  const parts: string[] = [];
+  let i = 0;
+  while (i < rows.length) {
+    let j = i;
+    while (j + 1 < rows.length && rows[j + 1]!.value === rows[i]!.value) j++;
+    const from = rows[i]!.date.slice(5);
+    const to = rows[j]!.date.slice(5);
+    const n = j - i + 1;
+    parts.push(n === 1 ? `[${from}] ${rows[i]!.value}` : `[${from}~${to}] ${rows[i]!.value}(${n}회)`);
+    i = j + 1;
+  }
+  return parts.join(" -> ");
+}
+
+/**
  * 최근 기록 → 추세 입력. edutrix 규격 `[MM-DD] 값 -> [MM-DD] 값 -> …`(날짜순).
  * 유효 데이터 포인트 < MIN_TREND_RECORDS 또는 시험·과제 둘 다 비면 null(빈데이터 창작 방지).
  * history는 날짜 오름차순이라 가정(호출부에서 정렬). 최근 TREND_WINDOW회만 사용.
@@ -54,15 +98,18 @@ export function buildTrendInput(history: TrendHistoryRow[]): TrendInput | null {
   const assignRows = history
     .filter((h) => line(h.homeworkScore) && !isNoneValue(h.homeworkScore))
     .slice(-TREND_WINDOW);
-  const examTrend = examRows
-    .map((h) => `[${h.date.slice(5)}] ${normalizeExamInfo(line(h.examInfo))}`)
-    .join(" -> ");
-  const assignTrend = assignRows.map((h) => `[${h.date.slice(5)}] ${line(h.homeworkScore)}`).join(" -> ");
+  const examTrend = compressRuns(
+    examRows.map((h) => ({ date: h.date, value: normalizeExamInfo(line(h.examInfo)) })),
+  );
+  const assignTrend = compressRuns(
+    assignRows.map((h) => ({ date: h.date, value: line(h.homeworkScore) })),
+  );
   // 표본 수 = 실제 인용되는 날짜의 합집합(둘 다 있는 날을 두 번 세지 않는다).
   const dates = new Set([...examRows, ...assignRows].map((h) => h.date));
   if (dates.size < MIN_TREND_RECORDS) return null;
   if (!examTrend && !assignTrend) return null;
-  return { count: dates.size, examTrend, assignTrend };
+  const scales = new Set(examRows.flatMap((h) => examScales(line(h.examInfo))));
+  return { count: dates.size, examTrend, assignTrend, scaleMixed: scales.size > 1 };
 }
 
 /** edutrix historySummary 규격(날짜순 흐름 3줄). 프롬프트 [기록] 블록에 주입. */
@@ -75,12 +122,26 @@ function historySummary(input: TrendInput): string {
 }
 
 /**
+ * 척도가 섞인 학생에게만 붙는 **코드 측 주의**. 프롬프트 본문(원장 편집 가능) 밖에 두어
+ * 편집으로 사라지지 않게 한다(FACT_GUARD와 같은 이유).
+ */
+export const TREND_MIXED_SCALE_NOTE = [
+  "[주의 — 이 학생의 기록 특성]",
+  "- 회차마다 **만점이 다릅니다**(예: 5문제 중 3개 / 100점 만점에 68점).",
+  "- 만점이 다른 회차끼리 '올랐다·내려갔다·상승·하락·회복'으로 이으면 사실이 아닙니다. 그렇게 쓰지 마세요.",
+  "- **만점이 같은 회차끼리 묶어** 전하세요. 묶음마다 처음과 마지막만 짚으면 충분합니다(전부 나열하지 마세요).",
+  "- 🔴 **가장 최근 회차는 반드시 포함하세요.** 만점이 달라 앞 회차와 이을 수 없더라도, 최근 기록은 사실 그대로 적습니다(빠뜨리면 학부모가 오늘 결과를 못 봅니다).",
+  "- 🔴 만점이 다르다는 **사정 자체는 문장에 쓰지 마세요** — '비교하기 어렵습니다' 같은 설명은 학부모에게 필요 없는 내부 사정입니다. 기록만 전하세요.",
+].join("\n");
+
+/**
  * 추세 프롬프트 — 기본 템플릿(DEFAULT_PROMPTS.trend)에 조립한 [기록]을 주입. edutrix DEFAULT_TREND_PROMPT 이식.
  * template 인자를 주면(원장 DB 오버라이드) 그것을 대신 사용 — 프로덕션은 활성값이 기본을 덮음.
  */
 /** 추세 본문(출력 계약 없음) — 통합 호출 섹션용. template=원장 오버라이드. */
 export function trendBody(input: TrendInput, template?: string | null): string {
-  return interpolate(template || DEFAULT_PROMPTS.trend, { historySummary: historySummary(input) });
+  const body = interpolate(template || DEFAULT_PROMPTS.trend, { historySummary: historySummary(input) });
+  return input.scaleMixed ? `${body}\n\n${TREND_MIXED_SCALE_NOTE}` : body;
 }
 
 /** 추세 단일 프롬프트(본문 + {trend} 계약) — 미리보기·개별 테스트용. */

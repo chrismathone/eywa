@@ -61,6 +61,11 @@ export function OneScreenGrid({
   const rows = buildGridRows(students).filter((r) => rowInClass(r.subject, classFilter));
   // 작업별 대상(2-3): 발송·자동작성=진도+결석 제외, 저장=진도만(결석 포함 — 기록 보존).
   const sendableRows = rows.filter((r) => isRowActionable(r.subject, "send"));
+  // 🔴 실제로 **발송되는** 행 = 위 조건 + **멘트 있음**. 빈 멘트는 절대 가드가 거절하므로(2026-07-28 사고)
+  //    `sendableRows`를 그대로 "발송가능"이라 쓰면 상단 숫자와 행 라벨("멘트 입력 필요")이 서로 다른 말을 한다.
+  //    ⚠️ `sendableRows`는 자동작성 대상 계산(멘트 없는 행 = autoWritable)에 그대로 필요하니 갈라 둔다.
+  const hasDraft = (r: (typeof rows)[number]) => !!reports[r.student.id]?.[r.subject.name]?.draft?.trim();
+  const sendReadyRows = sendableRows.filter(hasDraft);
   const saveableRows = rows.filter((r) => isRowActionable(r.subject, "save"));
   // 행 선택(체크) — 일괄 작업 대상. **표시된 모든 행**을 선택 가능(진도 유무 무관).
   // 실제 처리는 client의 selectRows가 발송가능(진도 입력) 행만 걸러내므로, 진도 없는 행은 안전히 건너뜀.
@@ -83,12 +88,12 @@ export function OneScreenGrid({
     }
   }
   const selectedKeys = rows.filter((r) => checked.has(r.key)).map((r) => r.key);
-  const selectedSendable = sendableRows.filter((r) => checked.has(r.key)).length; // 선택 중 실제 발송될 수
+  const selectedSendReady = sendReadyRows.filter((r) => checked.has(r.key)).length; // 선택 중 실제 발송될 수
   const selectedSaveable = saveableRows.filter((r) => checked.has(r.key)).length; // 선택 중 실제 저장될 수
   // 자동작성 실대상 = 발송가능 − **이미 멘트가 있는 행**(client autoWriteAllVisible이 손댄 문구를 보존하려 건너뜀).
   // 이 수를 버튼에 그대로 노출한다 — 이전값 가져오기로 멘트를 깔면 대상이 즉시 줄어드는 게 눈에 보여야
   // "채웠는데 자동작성이 덮어쓰나?" 하는 불안이 없다(원장 지시 07-21).
-  const noDraft = (r: (typeof rows)[number]) => !reports[r.student.id]?.[r.subject.name]?.draft?.trim();
+  const noDraft = (r: (typeof rows)[number]) => !hasDraft(r);
   const autoWritable = sendableRows.filter(noDraft).length;
   const selectedAutoWritable = sendableRows.filter((r) => checked.has(r.key) && noDraft(r)).length;
   const hasPrev = rows.some((r) => r.subject.prevReport); // 참고행 데이터가 있을 때만 토글 노출
@@ -174,8 +179,9 @@ export function OneScreenGrid({
         counts={{
           total: rows.length,
           sendable: sendableRows.length,
+          sendReady: sendReadyRows.length,
           saveable: saveableRows.length,
-          selectedSendable,
+          selectedSendReady,
           selectedSaveable,
           autoWritable,
           selectedAutoWritable,
