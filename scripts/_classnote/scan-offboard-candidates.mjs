@@ -77,6 +77,18 @@ try {
     where e.tenant_id = ${tenant} and e.end_date is null`;
   const activeBySid = new Map();
   for (const r of activeRows) activeBySid.set(r.student_id, [...(activeBySid.get(r.student_id) ?? []), r.subject ?? "(과목없음)"]);
+
+  // 🔴 돈의 흔적 — "실제로 다닌다"의 가장 강한 신호(원장 지시 2026-07-30). 퇴원 이후의 청구·납부가 있으면
+  //    수강·보고서가 전부 조용해도 그 학생은 살아있다(실측: 배한빈 퇴원 04-06인데 07월 청구·06-30 납부).
+  const billingRows = await sql`
+    select student_id, max(period) as last_period, to_char(max(paid_at),'YYYY-MM-DD') as last_paid
+    from invoices where tenant_id = ${tenant} group by student_id`;
+  const billingBySid = new Map(billingRows.map((r) => [r.student_id, { lastPeriod: r.last_period ?? null, lastPaidAt: r.last_paid ?? null }]));
+  // 마지막 수강 종료일 — 퇴원일과의 모순 탐지용(실측: 주상모A 퇴원 03-31 / 종료 07-03).
+  const endRows = await sql`
+    select student_id, to_char(max(end_date),'YYYY-MM-DD') as last_end
+    from enrollments where tenant_id = ${tenant} and end_date is not null group by student_id`;
+  const endBySid = new Map(endRows.map((r) => [r.student_id, r.last_end]));
   // ⚠️ 보드 감사(블록 2)의 '과목이탈' 판정에 **발송 opt-in을 섞지 말 것** — opt-in이 수학뿐이면 영어를
   //    멀쩡히 다니는 학생의 영어 보드가 전부 '과목이탈'로 잡힌다(실측: 58 → 237로 부풀었다).
   //    "그 보드 과목의 수강이 살아 있는가"는 opt-in과 무관한 사실이므로 activeBySid(전 과목)로 본다.
@@ -256,6 +268,8 @@ try {
         if (!s || !cn) return { checked: false, match: null };
         return { checked: true, match: phoneMatches([s.parent_phone, s.student_phone], [cn]) === true };
       })(),
+      billing: s ? (billingBySid.get(s.id) ?? null) : null,
+      enrollmentEnd: s ? (endBySid.get(s.id) ?? null) : null,
       ...extra,
       today: TODAY,
       schoolYear: SCHOOL_YEAR,
