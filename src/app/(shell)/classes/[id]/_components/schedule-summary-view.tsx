@@ -39,8 +39,10 @@ export function ScheduleSummaryView({ schedule }: { schedule: ScheduleSummary })
         <>
           <p className="text-muted-foreground text-xs">
             <span className="text-foreground font-medium">{formatDays(schedule.days)}</span>
+            {/* 붙은 교시를 이은 뒤라 '회' = 교시 수가 아니라 **앉는 횟수**(DP5 = 10교시가 아니라 주 5회).
+                시수엔 '주'를 붙여 한 번 수업이 6시간 40분처럼 읽히지 않게 한다. */}
             <span className="num"> · 주 {schedule.sessions}회</span>
-            {weekly ? ` · ${weekly}` : ""}
+            {weekly ? <span className="num"> · 주 {weekly}</span> : null}
           </p>
           <ul className="space-y-1.5">
             {current.map((row) => (
