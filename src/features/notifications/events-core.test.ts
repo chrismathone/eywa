@@ -186,6 +186,29 @@ describe("buildOutstandingEvents (미수 임계)", () => {
     expect(many).toContain("김·이");
     expect(many).toContain("100만원 이상");
   });
+
+  // 🔴 회귀 잠금 — 2026-07-20에 "권하윤·장윤진·허다빈 외 256명의 미수금이 100만원 이상입니다"가
+  // 실제로 발송됐고 259명 중 244명(94%)은 100만원 미만이었다. 명단 전원에게 **참인 문장**만 쓴다.
+  it("여러명 — 최고 tier를 전원에게 단정하지 않는다(하한을 말하고 상위는 건수로)", () => {
+    const body = outstandingDigestBody([
+      { subjectKey: "s1", bucket: "300000", studentName: "김", amount: 310_000, tier: 300_000 },
+      { subjectKey: "s2", bucket: "300000", studentName: "박", amount: 320_000, tier: 300_000 },
+      { subjectKey: "s3", bucket: "1000000", studentName: "이", amount: 1_200_000, tier: 1_000_000 },
+    ]);
+    // 주 문장의 기준은 **최저** tier여야 한다(전원에게 참).
+    expect(body).toContain("3명의 미수금이 30만원 이상입니다.");
+    // 상위 구간은 "몇 명인지"까지 밝힌다 — 전원 단정 금지.
+    expect(body).toContain("(100만원 이상 1명)");
+    expect(body).not.toMatch(/^[^(]*100만원 이상입니다/);
+  });
+
+  it("여러명 — tier가 모두 같으면 괄호 보충을 붙이지 않는다", () => {
+    const body = outstandingDigestBody([
+      { subjectKey: "s1", bucket: "300000", studentName: "김", amount: 310_000, tier: 300_000 },
+      { subjectKey: "s2", bucket: "300000", studentName: "박", amount: 320_000, tier: 300_000 },
+    ]);
+    expect(body).toBe("김·박 2명의 미수금이 30만원 이상입니다.");
+  });
 });
 
 describe("groupEventsByTeacher (v2 제네릭)", () => {

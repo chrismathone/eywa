@@ -25,8 +25,9 @@ export function BoardList({ rows }: { rows: RosterStudent[] }) {
                 {r.teacherName ? ` · ${r.teacherName} 강사` : ""}
               </p>
             </div>
+            {/* 청구 근거가 없으면 금액을 지어내지 않고 '—'로 비운다(추측 금지). */}
             <span className="text-text-dim num hidden shrink-0 text-[11px] sm:block">
-              {formatWonShort(r.monthlyFee)}
+              {r.monthlyFee == null ? "—" : formatWonShort(r.monthlyFee)}
             </span>
             <RiskBadge level={r.risk.level} score={r.risk.score} />
           </WindowLink>

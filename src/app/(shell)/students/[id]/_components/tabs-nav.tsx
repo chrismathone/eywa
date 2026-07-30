@@ -21,14 +21,18 @@ export function isStudentTabKey(v: string | undefined): v is StudentTabKey {
 }
 
 // 공용 FaceTabs(상단 가로 탭바)로 통일 — 수납관리·학원설정과 동일한 면 전환 UI.
+// ⚠️ '수납' 탭은 billing 접근 권한이 있어야 보인다(canSeeBilling). 없으면 탭 자체를 안 그리고,
+//    page.tsx가 강제 URL(?tab=billing)도 개요로 되돌린다 — 화면·서버·DB(0158a RLS) 3중.
 export function StudentTabsNav({
   studentId,
   active,
+  canSeeBilling,
 }: {
   studentId: string;
   active: StudentTabKey;
+  canSeeBilling: boolean;
 }) {
-  const faces: Face[] = STUDENT_TABS.map((t) => ({
+  const faces: Face[] = STUDENT_TABS.filter((t) => t.key !== "billing" || canSeeBilling).map((t) => ({
     key: t.key,
     label: t.label,
     href: t.key === "overview" ? `/students/${studentId}` : `/students/${studentId}?tab=${t.key}`,

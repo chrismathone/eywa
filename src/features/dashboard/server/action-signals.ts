@@ -19,6 +19,21 @@ import {
 type Supabase = Awaited<ReturnType<typeof createClient>>;
 
 /**
+ * makeedu 동기화 도메인 키 → 화면 한글 라벨. 원문 enum(invoices·textbook_checks…)을 그대로 노출하지
+ * 않기 위한 매핑(raw 코드 노출 금지 규칙). 미등록 키는 키 그대로 폴백(새 도메인이 조용히 사라지지 않게).
+ */
+const DOMAIN_LABEL: Record<string, string> = {
+  students: "학생",
+  classes: "수업",
+  enrollments: "수강",
+  invoices: "수납",
+  consultations: "상담",
+  prospects: "예비원생",
+  catalog: "교재 단가표",
+  textbook_checks: "교재 체크",
+};
+
+/**
  * cron(세션 없음) 주입 계약 — admin client는 RLS를 우회하므로 tenantId 명시 격리가 필수
  * (TimetableDb 선례). 미주입(대시보드 세션 경로)이면 쿠키 createClient + RLS가 격리한다.
  */
@@ -708,9 +723,19 @@ export async function getTodayActionSignals(
     if (errors.length > 0) {
       makeeduIssue = { kind: "error", detail: `${errors.map((error) => error.domain).join("·")} 실패` };
     } else {
-      const latest = Math.max(...makeedu.value.rows.map((row) => Date.parse(row.synced_at)));
-      const hours = Math.floor((Date.now() - latest) / 3_600_000);
-      if (hours >= 26) makeeduIssue = { kind: "stale", detail: `${hours}시간째 미동기` };
+      // ⚠️ **도메인별로** 판정한다. 예전엔 전 도메인 max(synced_at) 하나만 봐서, 임포터가 도메인별로
+      // 실패 격리되는 구조상 invoices만 몇 주 멈춰도 다른 도메인이 신선하면 경고가 절대 안 떴다
+      // (그 도메인 행은 recordSync에 도달 못 해 status도 옛 'ok'로 남아 위 errors 필터에도 안 걸린다).
+      const stale = makeedu.value.rows
+        .map((row) => ({ domain: row.domain, hours: Math.floor((Date.now() - Date.parse(row.synced_at)) / 3_600_000) }))
+        .filter((row) => row.hours >= 26)
+        .sort((a, b) => b.hours - a.hours);
+      if (stale.length > 0) {
+        makeeduIssue = {
+          kind: "stale",
+          detail: `${stale.map((s) => DOMAIN_LABEL[s.domain] ?? s.domain).join("·")} ${stale[0]!.hours}시간째 미동기`,
+        };
+      }
     }
   }
 

@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { Pencil } from "@/components/icons/eywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { requireAccess } from "@/lib/auth/require-access";
-import { accessLevelTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
+import { accessLevelTenant, canAccessTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { canSeeStudentEnrollment } from "@/features/students/server/enrollment-gate";
 import { BackLink } from "@/components/back-link";
 import { DupSuspectTag } from "@/components/dup-suspect-tag";
@@ -51,7 +51,15 @@ export default async function StudentDetailPage({
   const user = await requireAccess("students");
   const { id } = await params;
   const { tab: tabParam } = await searchParams;
-  const tab = isStudentTabKey(tabParam) ? tabParam : "overview";
+  const requestedTab = isStudentTabKey(tabParam) ? tabParam : "overview";
+
+  // '수납' 탭은 학생(students) 권한이 아니라 **수납(billing) 권한**으로 잠근다 — 학생 상세는 강사(scoped)·
+  // 뷰어(readonly)도 열 수 있어서, 탭 하나가 billing=none 역할에게 청구·납입 금액을 통째로 노출하고 있었다.
+  // 강제 URL(?tab=billing)도 개요로 되돌린다(UI 숨김은 게이트가 아니다 — gotchas #77).
+  // DB에서도 0158a RLS가 같은 매트릭스로 막는다(권한 없으면 0행) — 여기서 되돌리는 이유는 그 경우
+  // 화면이 "미납 0원"이라는 **거짓 요약**을 보여주기 때문.
+  const canSeeBilling = await canAccessTenant(user.systemRole, "billing");
+  const tab = requestedTab === "billing" && !canSeeBilling ? "overview" : requestedTab;
 
   const student = await getStudentById(id);
   if (!student) notFound();
@@ -124,7 +132,7 @@ export default async function StudentDetailPage({
         </div>
       </header>
 
-      <StudentTabsNav studentId={student.id} active={tab} />
+      <StudentTabsNav studentId={student.id} active={tab} canSeeBilling={canSeeBilling} />
 
       <section>
         {tab === "overview" ? (
