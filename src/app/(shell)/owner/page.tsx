@@ -133,7 +133,8 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
         title={`${settings.profile.name || "학원"} 설정`}
         description="학원에 관한 모든 설정과 관리 도구를 여기서 관리하면 해당 학원(테넌트) 전체에 적용됩니다. 원장(master)과 역할·권한에서 위임받은 계정만 변경할 수 있고, 역할·권한 면은 원장 전용입니다."
         // 창 컴팩트 행은 1행이 규칙 — 위 안내문(~110자)은 창 폭에서 2~3줄로 감겨 짧은 라벨로 대체(적대 리뷰).
-        embedLabel="학원 전체에 적용되는 설정 — 변경은 원장·위임 계정만"
+        // ⚠️ 상단 바 브랜드는 `logoText`라 `profile.name`과 다를 수 있다 → 컴팩트 행에 학원명을 남긴다.
+        embedLabel={`${settings.profile.name || "학원"} 설정 — 변경은 원장·위임 계정만`}
         actions={<p className="text-text-faint text-[12px]">최근 저장: {fmt(meta?.updatedAt ?? null)}</p>}
       />
 

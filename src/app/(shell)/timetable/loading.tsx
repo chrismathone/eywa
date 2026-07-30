@@ -15,15 +15,18 @@ export default function TimetableLoading() {
           기본 창 폭(1040px)에서 **두 줄로 감싸진다**. 한 줄짜리 스켈레톤을 쓰면 데이터가 도착하는 순간
           툴바가 늘어나며 그리드가 아래로 밀려 매번 눈에 띄는 레이아웃 점프가 생겼다(창=iframe이라 자주
           열린다). 두 줄 + 실제와 같은 rounded-xl로 높이를 맞춘다(적대 감사 UX). */}
-      <div className="bg-card border-line shadow-card flex shrink-0 flex-wrap items-center gap-3 rounded-2xl border px-4 py-3">
-        <div className="bg-bg-soft h-6 w-36 animate-pulse rounded" />
-        <span className="bg-line h-4 w-px" aria-hidden />
-        <div className="bg-bg-soft h-6 w-44 animate-pulse rounded" />
-        <span className="bg-line h-4 w-px" aria-hidden />
-        <div className="bg-bg-soft h-6 w-28 animate-pulse rounded" />
-        <div className="bg-bg-soft ml-auto h-4 w-32 animate-pulse rounded" />
-        {/* 둘째 줄(액션 버튼군) — w-full로 강제 줄바꿈해 실제 wrap된 높이를 재현 */}
-        <div className="flex w-full items-center gap-2">
+      {/* ⚠️ 좁은 화면(compact-chrome)에선 실제 툴바가 `.toolbar-rail`이라 **한 줄**이다 — 여기서 둘째 줄을
+          그대로 두면 데이터 도착 시 툴바가 줄어들며 그리드가 위로 튀어(위 주석의 점프가 방향만 반대로) 난다.
+          그래서 레일 조건에서는 둘째 줄을 접고 여백·높이도 실제와 같게 맞춘다(2026-07-30). */}
+      <div className="bg-card border-line shadow-card flex shrink-0 flex-wrap items-center gap-3 rounded-2xl border px-4 py-3 compact-chrome:flex-nowrap compact-chrome:gap-2 compact-chrome:overflow-hidden compact-chrome:px-3 compact-chrome:py-2">
+        <div className="bg-bg-soft h-6 w-36 shrink-0 animate-pulse rounded compact-chrome:h-7" />
+        <span className="bg-line h-4 w-px shrink-0" aria-hidden />
+        <div className="bg-bg-soft h-6 w-44 shrink-0 animate-pulse rounded compact-chrome:h-7" />
+        <span className="bg-line h-4 w-px shrink-0" aria-hidden />
+        <div className="bg-bg-soft h-6 w-28 shrink-0 animate-pulse rounded compact-chrome:h-7" />
+        <div className="bg-bg-soft ml-auto h-4 w-32 shrink-0 animate-pulse rounded compact-chrome:hidden" />
+        {/* 둘째 줄(액션 버튼군) — w-full로 강제 줄바꿈해 실제 wrap된 높이를 재현(데스크톱·창 전용) */}
+        <div className="flex w-full items-center gap-2 compact-chrome:hidden">
           <div className="bg-bg-soft h-6 w-20 animate-pulse rounded" />
           <div className="bg-bg-soft h-6 w-24 animate-pulse rounded" />
           <div className="bg-bg-soft h-6 w-24 animate-pulse rounded" />
