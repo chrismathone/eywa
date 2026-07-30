@@ -76,13 +76,11 @@ describe("summarizeSchedule — DP5 실데이터 모양", () => {
     ]),
   ];
 
-  it("25슬롯이 2줄로 접힌다", () => {
+  it("25슬롯이 1줄로 접힌다 — 붙은 두 교시는 이어진 한 자리", () => {
     const s = summarizeSchedule(dp5, TODAY);
-    expect(s.current).toHaveLength(2);
-    expect(s.current.map(formatRow)).toEqual([
-      "월~금 14:20~15:00",
-      "월~금 15:00~15:40",
-    ]);
+    expect(s.current).toHaveLength(1);
+    expect(s.current.map(formatRow)).toEqual(["월~금 14:20~15:40"]);
+    expect(s.current[0].minutes).toBe(80); // 한 번 앉는 길이
   });
 
   it("만료 15행은 빼되 개수는 남겨 밝힌다", () => {
@@ -95,11 +93,14 @@ describe("summarizeSchedule — DP5 실데이터 모양", () => {
     expect(s.current.map((r) => r.startTime)).not.toContain("17:00");
   });
 
-  it("주당 회차·시수", () => {
+  it("주당 회차는 '앉는 횟수' — 교시 수(10)가 아니라 5회", () => {
     const s = summarizeSchedule(dp5, TODAY);
-    expect(s.sessions).toBe(10);
-    expect(s.minutes).toBe(10 * 40);
+    expect(s.sessions).toBe(5);
     expect(s.days).toEqual(["mon", "tue", "wed", "thu", "fri"]);
+  });
+
+  it("🔴 주당 총 시수는 이어붙여도 불변 — 40분×10 == 80분×5", () => {
+    expect(summarizeSchedule(dp5, TODAY).minutes).toBe(400);
   });
 });
 
@@ -189,6 +190,81 @@ describe("summarizeSchedule — 묶기 규칙", () => {
     const s = summarizeSchedule([slot("mon", "10:00", "11:00"), slot("weekday", "10:00", "11:00")], TODAY);
     expect(s.current).toHaveLength(1);
     expect(s.current[0].days).toEqual(["mon"]);
+  });
+});
+
+describe("summarizeSchedule — 붙은 교시 잇기(mergeAdjacent)", () => {
+  it("🔴 10분이라도 비면 안 잇는다 — 없는 수업 시간이 생긴다", () => {
+    // 실측 고등E_고2 심화 수요일: 19:20~20:10 / 20:20~21:10 / 21:10~22:00.
+    const s = summarizeSchedule(
+      [
+        slot("wed", "19:20", "20:10"),
+        slot("wed", "20:20", "21:10"),
+        slot("wed", "21:10", "22:00"),
+      ],
+      TODAY,
+    );
+    // 20:10~20:20은 쉬는 시간 → 앞 하나는 홀로, 뒤 둘만 이어진다.
+    expect(s.current.map(formatRow)).toEqual(["수 19:20~20:10", "수 20:20~22:00"]);
+    expect(s.sessions).toBe(2);
+    expect(s.minutes).toBe(50 + 100);
+  });
+
+  it("3개가 줄줄이 붙으면 한 줄로", () => {
+    const s = summarizeSchedule(
+      [
+        slot("sun", "14:20", "15:00"),
+        slot("sun", "15:00", "15:40"),
+        slot("sun", "15:40", "16:20"),
+      ],
+      TODAY,
+    );
+    expect(s.current.map(formatRow)).toEqual(["일 14:20~16:20"]);
+    expect(s.minutes).toBe(120);
+  });
+
+  it("🔴 요일 집합이 다르면 안 잇는다 — 월만 2교시인데 월~금을 이으면 화~금이 거짓", () => {
+    const s = summarizeSchedule(
+      [
+        ...["mon", "tue", "wed", "thu", "fri"].map((d) => slot(d, "14:20", "15:00")),
+        slot("mon", "15:00", "15:40"),
+      ],
+      TODAY,
+    );
+    expect(s.current.map(formatRow)).toEqual(["월~금 14:20~15:00", "월 15:00~15:40"]);
+    expect(s.minutes).toBe(5 * 40 + 40);
+  });
+
+  it("같은 요일 중복 행은 잇지 않는다 — 어느 쪽을 이을지 근거가 없다", () => {
+    const s = summarizeSchedule(
+      [slot("wed", "15:00", "15:40"), slot("wed", "15:00", "15:40"), slot("wed", "15:40", "16:20")],
+      TODAY,
+    );
+    expect(s.current.map(formatRow)).toEqual(["수 15:00~15:40", "수 15:40~16:20"]);
+    expect(s.current[0].count).toBe(2);
+  });
+
+  it("예정(upcoming) 줄에도 같은 잇기가 적용된다", () => {
+    const s = summarizeSchedule(
+      [
+        slot("mon", "11:00", "12:30", "2026-08-18"),
+        slot("mon", "12:30", "14:00", "2026-08-18"),
+      ],
+      TODAY,
+    );
+    expect(s.upcoming.map(formatRow)).toEqual(["월 11:00~14:00"]);
+  });
+
+  it("이어붙인 뒤에도 시작시각 순", () => {
+    const s = summarizeSchedule(
+      [
+        slot("tue", "18:20", "19:20"),
+        slot("tue", "16:20", "17:20"),
+        slot("tue", "17:20", "18:10"),
+      ],
+      TODAY,
+    );
+    expect(s.current.map(formatRow)).toEqual(["화 16:20~18:10", "화 18:20~19:20"]);
   });
 });
 

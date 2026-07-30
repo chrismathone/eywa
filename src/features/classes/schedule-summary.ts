@@ -11,7 +11,8 @@
  *    편집 화면은 이미 `isCurrentSlot`으로 만료 행을 빼고 있었다 — 상세만 안 걸러졌다.
  *
  * 해법: (a) 오늘 기준 current/upcoming/past로 가르고 (b) current를 **시각으로 묶어** 요일을 칩으로
- * 편다. DP5 = 25줄 → 2줄. 전 반 합계 539줄 → 274줄.
+ * 펴고 (c) **붙어 있는 교시는 한 줄로 잇는다**(`mergeAdjacent`, 2026-07-30 원장 지시
+ * *"이어지는 시간인데 그냥 이어버리면 안 되나?"*). DP5 = **25줄 → 1줄**(`월~금 14:20~15:40`).
  *
  * ⚠️ 숨긴 건 반드시 밝힌다 — `pastCount`/`upcoming`을 호출부가 카드 아래에 적는다. 조용히 빼면
  *    "왜 내가 넣은 교시가 없지"가 되고, 그건 지금 버그(거짓 표시)를 반대 방향으로 되풀이하는 것이다.
@@ -43,14 +44,14 @@ export type SummarySlot = {
   validTo?: string | null;
 };
 
-/** 한 줄 = 같은 시각을 쓰는 요일 묶음. */
+/** 한 줄 = 같은 요일 집합이 쓰는 **이어진 한 자리**(붙은 교시는 합쳐져 있다). */
 export type ScheduleRow = {
   startTime: string;
   endTime: string;
   days: DayKey[];
-  /** 이 시각의 주당 회차(요일 수와 같지만, 같은 요일 중복 행이 있으면 커질 수 있다). */
+  /** 이 자리의 주당 회차(= 요일 수. 같은 요일에 같은 시각이 중복된 행이면 커질 수 있다). */
   count: number;
-  /** 1회 수업 길이(분). 시각이 깨졌으면 0. */
+  /** **한 번 앉는 길이**(분) — 붙은 교시를 합친 뒤의 구간. 시각이 깨졌으면 0. */
   minutes: number;
 };
 
@@ -133,9 +134,60 @@ function groupByTime(slots: SummarySlot[]): ScheduleRow[] {
       });
     }
   }
-  return [...rows.values()]
-    .map((r) => ({ ...r, days: r.days.sort((a, b) => dayIndex(a) - dayIndex(b)) }))
-    .sort((a, b) => a.startTime.localeCompare(b.startTime) || a.endTime.localeCompare(b.endTime));
+  return mergeAdjacent(
+    [...rows.values()].map((r) => ({
+      ...r,
+      days: r.days.sort((a, b) => dayIndex(a) - dayIndex(b)),
+    })),
+  );
+}
+
+const byStart = (a: ScheduleRow, b: ScheduleRow) =>
+  a.startTime.localeCompare(b.startTime) || a.endTime.localeCompare(b.endTime);
+
+/**
+ * 붙어 있는 교시를 한 줄로 잇는다 — 원장 지시(2026-07-30) *"이어지는 시간인데 그냥 이어버리면 안 되나?"*.
+ * DP5 = `14:20~15:00` + `15:00~15:40` → **`14:20~15:40`**(2줄 → 1줄). 학부모·강사에게 이 반은
+ * "2시 20분부터 3시 40분까지" 한 덩어리지, 40분짜리 두 개가 아니다.
+ *
+ * ⚠️ **딱 붙었을 때만**(앞 종료 == 뒤 시작). 10분이라도 비면 쉬었다 다시 앉는 별개 자리다
+ *    (실측 고등E_고2 심화 `19:20~20:10` / `20:20~21:10` — 이어버리면 없는 수업 10분이 생긴다).
+ * ⚠️ **요일 집합이 같을 때만.** 월만 2교시인데 월~금을 통째로 이으면 화~금이 거짓이 된다.
+ * ⚠️ 같은 요일에 같은 시각이 두 번 있는 행(`count > days.length`)은 잇지 않는다 — 어느 쪽을 이을지
+ *    결정할 근거가 없다.
+ * 📌 **주당 총 시수는 불변** — 붙은 구간만 이으므로 부분 합 == 이은 구간(DP5 40×10 = 80×5 = 400분).
+ * 📌 교시 경계가 필요하면 시간표 화면·반 수정이 원본을 그대로 보여준다(여긴 요약이다).
+ */
+function mergeAdjacent(rows: ScheduleRow[]): ScheduleRow[] {
+  const byDays = new Map<string, ScheduleRow[]>();
+  for (const r of rows) {
+    const key = r.days.join(",");
+    const bucket = byDays.get(key);
+    if (bucket) bucket.push(r);
+    else byDays.set(key, [r]);
+  }
+  const out: ScheduleRow[] = [];
+  for (const bucket of byDays.values()) {
+    for (const row of [...bucket].sort(byStart)) {
+      const open = out[out.length - 1];
+      // 딱 붙었고(종료==시작) 양쪽 다 요일마다 1회씩일 때만 잇는다 — 조건 근거는 위 docblock.
+      // ⚠️ `out`의 마지막 줄은 **같은 요일 집합 버킷 안에서만** 후보다(버킷이 바뀌면 days가 달라 걸러진다).
+      if (
+        open &&
+        open.days.length === row.days.length &&
+        open.days.every((d, i) => d === row.days[i]) &&
+        open.endTime === row.startTime &&
+        open.count === open.days.length &&
+        row.count === row.days.length
+      ) {
+        open.endTime = row.endTime;
+        open.minutes = slotMinutes(open.startTime, row.endTime);
+      } else {
+        out.push({ ...row });
+      }
+    }
+  }
+  return out.sort(byStart);
 }
 
 export function summarizeSchedule(slots: SummarySlot[], today: string): ScheduleSummary {
