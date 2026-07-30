@@ -17,7 +17,13 @@
  *
  * dedup(0118a `notification_events`): bucket = **상태 전이 표현**(`login_failed:<감지일>`). 같은 날 반복
  * 실행해도 한 번만 울리고, 고쳐졌다가 다시 실패하면 새 날짜라 다시 알린다.
- * 콜드스타트: (tenant, event_type) 0행이면 첫 실행 — **무발송 시드**만 하고 다음부터 알린다(벨 폭탄 방지).
+ *
+ * 🔴 **콜드스타트 무발송 시드는 여기 적용하지 않는다(2026-07-30 수정).** 처음엔 다른 Phase 3 이벤트를 그대로
+ * 베껴 (tenant, event_type) 0행이면 시드만 하고 넘어가게 했는데, 그러면 **첫 로그인 실패가 통째로 침묵한다** —
+ * 원장이 알고 싶다고 한 바로 그 순간이다. 콜드스타트 규칙의 목적은 "결석 마일스톤처럼 **이미 쌓인 과거 상태
+ * 수백 건**이 한꺼번에 울리는 벨 폭탄" 방지인데, 이 이벤트는 주체가 `makeedu` **하나뿐**이고 발화 조건이
+ * "지금 이 순간 접속이 깨졌다"라 **막을 폭탄 자체가 없다**(최대 하루 1건·수신자 master 1명).
+ * → 규칙을 이름만 보고 옮기지 말 것. 콜드스타트는 **누적 상태를 감지하는 배치**에만 의미가 있다.
  *
  * 실행(연동 PC 작업 스케줄러 권장 — 하루 1회):
  *   node --env-file=.env.local scripts/_makeedu/check-session.mjs            # 점검 + 실패면 알림
@@ -117,23 +123,17 @@ try {
     process.exit(0);
   }
 
-  // ── 만료 확정 → dedup 후 알림 ──────────────────────────────────────────────
+  // ── 접속 실패 확정 → dedup 후 알림 ─────────────────────────────────────────
+  // 같은 날 반복 실행은 1건만(unique 충돌) · 고쳐졌다 다시 깨지면 새 날짜라 다시 울린다.
+  // ⚠️ 콜드스타트 시드는 쓰지 않는다(위 주석) — 첫 실패도 즉시 알린다.
   const bucket = `login_failed:${today}`;
-  const [{ n }] = await sql`select count(*)::int as n from notification_events
-    where tenant_id = ${tenant} and event_type = ${EVENT_TYPE}`;
-  const coldStart = n === 0;
-
   const inserted = await sql`
     insert into notification_events (tenant_id, event_type, subject_key, bucket, seeded)
-    values (${tenant}, ${EVENT_TYPE}, 'makeedu', ${bucket}, ${coldStart})
+    values (${tenant}, ${EVENT_TYPE}, 'makeedu', ${bucket}, false)
     on conflict (tenant_id, event_type, subject_key, bucket) do nothing
     returning id`;
   if (!inserted.length) {
-    console.log("[makeedu-health] 이미 같은 만료로 알렸습니다(재발송 안 함)");
-    process.exit(0);
-  }
-  if (coldStart) {
-    console.log("[makeedu-health] 콜드스타트 — 시드만 하고 알리지 않습니다(다음 만료부터 알림)");
+    console.log("[makeedu-health] 오늘 같은 실패로 이미 알렸습니다(재발송 안 함)");
     process.exit(0);
   }
 
