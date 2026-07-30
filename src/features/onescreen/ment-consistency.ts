@@ -32,6 +32,19 @@ const MENT_SAYS_EXAM =
 /** 멘트가 점수를 말하는가 — "25문제 중 21개" · "92점" 꼴. */
 const MENT_HAS_SCORE = /\d+\s*문제\s*중\s*\d+\s*개|\d+\s*점\s*만점|(?<!\d)\d{1,3}\s*점(?!수)/;
 
+/**
+ * 진도 칸이 **이미 시험 이야기를 하고 있는가**. 여기 걸리면 경고하지 않는다.
+ *
+ * 🔴 왜 `isSkipStatus`만으로 부족한가(2026-07-30 적대검증에서 잡음): 그 판정은 라벨이 **단독**일 때만
+ *    인정한다("월말평가" ⭕ / "수학 월말평가" ❌ / "월말평가 오답풀이" ❌). 그런데 진도값은 표면마다
+ *    과목 라벨이 붙은 형태로 돌아다닌다(저장된 `lesson_reports.progress`는 `"수학 월말평가"`).
+ *    실측: 접두가 붙은 값으로 판정하면 41건 중 **21건이 오탐**(강사가 제대로 '월말평가'라 적었는데 경고).
+ *    경고는 막지 않고 권하는 장치라 **헛경고가 쌓이면 아무도 안 본다** → 시험 단어가 조금이라도 있으면 침묵한다.
+ *    (실데이터 재측정: 이 완화로 진짜 경고 20건은 그대로 남았다 — 잃는 것 없음.)
+ */
+const PROGRESS_MENTIONS_EXAM =
+  /월말평가|단원평가|중간고사|기말고사|모의고사|레벨테스트|진단평가|월간테스트|내신|시험|평가/;
+
 export const MENT_WARNING_LABEL: Record<MentWarning, string> = {
   "exam-progress": "진도 칸 확인",
   "score-not-recorded": "점수 칸 확인",
@@ -60,7 +73,9 @@ export function checkMentConsistency(args: {
   if (!ment) return [];
   const out: MentWarning[] = [];
   // ① 멘트는 시험인데 진도 칸은 차시 — 진도가 비어 있으면 어긋날 것도 없다.
-  if (MENT_SAYS_EXAM.test(ment) && args.progress.trim() && !isSkipStatus(args.progress)) {
+  //    진도 칸이 이미 시험을 말하고 있으면(라벨 단독이든 접두가 붙었든) 어긋난 게 아니다.
+  const prog = args.progress.trim();
+  if (MENT_SAYS_EXAM.test(ment) && prog && !isSkipStatus(prog) && !PROGRESS_MENTIONS_EXAM.test(prog)) {
     out.push("exam-progress");
   }
   // ② 멘트엔 점수, 칸은 빈 채.

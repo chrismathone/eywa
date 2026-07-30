@@ -19,6 +19,13 @@ describe("① 시험 본 날인데 진도 칸은 일반 차시", () => {
     expect(check({ ment: "오늘은 월말평가를 진행했습니다", progress: "월말평가" })).toEqual([]);
   });
 
+  it("🔴 과목 라벨이 붙은 진도('수학 월말평가')도 오탐하지 않는다 — 적대검증 실측 21건", () => {
+    // isSkipStatus는 라벨 **단독**만 인정한다. 저장된 progress엔 과목 접두가 붙는다.
+    expect(check({ ment: "오늘은 수학 월말평가를 실시했습니다", progress: "수학 월말평가" })).toEqual([]);
+    expect(check({ ment: "오늘은 월말평가를 진행했습니다", progress: "월말평가 오답풀이" })).toEqual([]);
+    expect(check({ ment: "단원평가를 봤습니다", progress: "3단원 단원평가" })).toEqual([]);
+  });
+
   it("진도가 비면 검사하지 않는다(어긋날 대상이 없다)", () => {
     expect(check({ ment: "오늘은 월말평가를 봤습니다", progress: "" })).toEqual([]);
   });

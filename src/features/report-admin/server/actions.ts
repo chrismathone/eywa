@@ -19,6 +19,19 @@ import { getClassnoteQueue, type ClassnoteQueueView } from "./queries";
  * 실패/오래됨 보고서 재발송 — queued로 되돌려 워커가 다시 잡게 한다. retry_count·error 초기화.
  * **과거일(전 달 1일 이전)은 재차단**(isClassnoteAllowed) — 옛 보고서 대량 오발송 방지(edutrix 사고 교훈).
  */
+/**
+ * 🔴 **빈 멘트 절대 가드 — 관리자 큐잉 경로판**(2026-07-30 적대검증에서 뚫려 있던 구멍).
+ *
+ * 강사 경로(sendRow·queueClassnote·일괄 발송)는 전부 빈 멘트를 막는데, **관리자 발송 콘솔은 안 막았다.**
+ * 예전엔 저장이 폴백 템플릿을 몰래 채워 넣어 `notes`가 늘 비어 있지 않았기 때문에 드러나지 않았을 뿐이다.
+ * 그 몰래 채우기를 끊은 지금(같은 날 수리), 멘트 없는 행을 관리자가 큐에 올리면 **워커 최종 관문이 거절 →
+ * `failed` + 담당 강사에게 발송 실패 알림**이 간다. 큐에 올리기 전에 여기서 걸러 "왜 안 나갔는지"로 돌려준다.
+ * (#77 — 한 레코드의 모든 발송 표면이 같은 게이트를 통과해야 한다.)
+ */
+function hasMent(r: { notes?: string | null }): boolean {
+  return !!(r.notes ?? "").trim();
+}
+
 export async function retryClassnote(
   ids: string[],
 ): Promise<{ ok: boolean; requeued?: number; skipped?: number; absentSkipped?: number; dryRun?: boolean; error?: string }> {
@@ -35,7 +48,7 @@ export async function retryClassnote(
   // 취소(revoked_at)된 행도 제외 — 워커가 영원히 클레임 안 해 좀비 queued가 되던 구멍.
   const { data: rows } = await supabase
     .from("lesson_reports")
-    .select("id, report_date, subject, class_id, student_id, makeup")
+    .select("id, report_date, subject, class_id, student_id, makeup, notes")
     .in("id", ids.slice(0, 200))
     .not("classnote_status", "is", null)
     .neq("source", "edutrix_import")
@@ -44,6 +57,7 @@ export async function retryClassnote(
   const settings = await getTenantSettings();
   const allowed = (rows ?? []).filter(
     (r) =>
+      hasMent(r) && // 빈 멘트 절대 가드(위 주석)
       isClassnoteAllowed(r.report_date as string) &&
       isClassnoteSubjectEnabled(r.subject as string | null, settings.report.classnoteSubjects),
   );
@@ -111,6 +125,8 @@ export async function sendClassnoteForUnsent(ids: string[]): Promise<{
   conflicts?: number;
   skipped?: number;
   absentSkipped?: number;
+  /** 멘트가 비어 큐잉하지 않은 건수 — 워커가 어차피 거절하므로 미리 거른다(사유를 화면에 밝힌다). */
+  emptyMent?: number;
   dryRun?: boolean;
   error?: string;
 }> {
@@ -124,23 +140,25 @@ export async function sendClassnoteForUnsent(ids: string[]): Promise<{
   // 대상 조회 — 미발송 native만. source NULL(구컬럼 이전 행)은 native로 간주(현 DB 0건, too_old가 최종 방어).
   const { data: rows } = await supabase
     .from("lesson_reports")
-    .select("id, report_date, subject, class_id, student_id, makeup")
+    .select("id, report_date, subject, class_id, student_id, makeup, notes")
     .in("id", capped)
     .is("classnote_status", null)
     .or("source.is.null,source.neq.edutrix_import")
     .is("revoked_at", null);
 
   const settings = await getTenantSettings();
-  const eligible = (rows ?? []).filter(
+  const withMent = (rows ?? []).filter(hasMent); // 빈 멘트 절대 가드(위 주석) — 큐에 올리기 전에 거른다
+  const emptyMent = (rows?.length ?? 0) - withMent.length;
+  const eligible = withMent.filter(
     (r) =>
       isClassnoteAllowed(r.report_date as string) &&
       isClassnoteSubjectEnabled(r.subject as string | null, settings.report.classnoteSubjects),
   );
-  if (eligible.length === 0) return { ok: true, queued: 0, conflicts: 0, skipped: capped.length };
+  if (eligible.length === 0) return { ok: true, queued: 0, conflicts: 0, skipped: capped.length, emptyMent };
 
   // 발송 안전 스위치 — 기본 OFF(dry-run). 어떤 행도 변경하지 않고 반환(동명이인 마킹도 안 함).
   if (!settings.report.classnoteSendEnabled) {
-    return { ok: true, queued: 0, conflicts: 0, skipped: capped.length - eligible.length, dryRun: true };
+    return { ok: true, queued: 0, conflicts: 0, skipped: capped.length - eligible.length, dryRun: true, emptyMent };
   }
 
   // 결석 게이트(#77) — 보고서 날짜에 결석으로 기록된 학생은 관리자 최초 발송에서도 제외(원스크린
@@ -162,7 +180,8 @@ export async function sendClassnoteForUnsent(ids: string[]): Promise<{
     return { ok: false, error: "출결 확인에 실패했습니다 — 다시 시도하세요" };
   }
   const absentSkipped = eligible.length - sendable.length;
-  if (sendable.length === 0) return { ok: true, queued: 0, conflicts: 0, skipped: capped.length - absentSkipped, absentSkipped };
+  if (sendable.length === 0)
+    return { ok: true, queued: 0, conflicts: 0, skipped: capped.length - absentSkipped, absentSkipped, emptyMent };
 
   // 동명이인 감지 — 학생별 1회(중복 제거), 25명 청크로 버스트 제한(학생당 3쿼리).
   const studentIds = [...new Set(sendable.map((r) => r.student_id as string))];
@@ -207,7 +226,14 @@ export async function sendClassnoteForUnsent(ids: string[]): Promise<{
     if (error) return { ok: false, error: error.message };
     queued = (data ?? []).length;
   }
-  return { ok: true, queued, conflicts, skipped: capped.length - queued - conflicts - absentSkipped, absentSkipped };
+  return {
+    ok: true,
+    queued,
+    conflicts,
+    skipped: capped.length - queued - conflicts - absentSkipped,
+    absentSkipped,
+    emptyMent,
+  };
 }
 
 /**
