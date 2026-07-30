@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { AttachPicker } from "./grid-attach";
 import { bulkPickLabel } from "../bulk-label";
+import type { BulkAttendanceStatus } from "../bulk-attendance";
 import type { BulkPatch } from "../grid";
 
 /** 표 일괄 작업 핸들러 — keys(선택 행) 있으면 그 행만, 없으면 전체. */
@@ -13,7 +14,14 @@ export type GridBulkActions = {
   onAutoWriteAll: (keys?: string[]) => void; // 선택(또는 전체) 행 자동작성
   onClassNotice?: (keys?: string[]) => void; // 선택(없으면 표시 전체) 학생 학부모 공지 — 진도 무관
   // 값 일괄 적용(1-2) — 진도 필터 없는 raw 행 대상. progressSubjectKey = 진도를 넣을 과목(그 과목 행에만).
-  onBulkApply: (keys: string[], patch: BulkPatch, onlyEmpty: boolean, progressSubjectKey: string) => void;
+  // attendance = 함께 찍을 출결(null=적용 안 함). ⚠️ 다른 필드와 달리 **즉시 서버(출석부)에 기록**된다.
+  onBulkApply: (
+    keys: string[],
+    patch: BulkPatch,
+    onlyEmpty: boolean,
+    progressSubjectKey: string,
+    attendance: BulkAttendanceStatus | null,
+  ) => void;
   // 맨 위 행의 수업 내용(진도·교재·오늘 과제)을 아래 행에 복사 — 같은 진도를 학생마다 다시 고르지 않게.
   onCopyFirstRow?: (keys: string[], overwrite: boolean) => void;
   // 이전 회차 일괄 가져오기(G5 얕은판) — 선택(없으면 표시 전체) 행의 **빈 칸만** planPrevFill로 채움(특이사항·교재 제외).

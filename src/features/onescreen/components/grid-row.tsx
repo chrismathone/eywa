@@ -6,7 +6,14 @@ import { TEXTAREA_AUTOSIZE_RESIZABLE } from "@/lib/ui/textarea";
 import { joinComment, splitComment } from "../comment-paragraphs";
 import { resolveStudyGrade } from "../curriculum";
 import { subjectTone, toneSoftClass, toneSolidClass } from "../data";
-import { effectiveClassnoteStatus, isAlreadySent, isRowActionable, type GridRow } from "../grid";
+import {
+  effectiveClassnoteStatus,
+  isAlreadySent,
+  isReportEligible,
+  isRowActionable,
+  type GridRow,
+} from "../grid";
+import { evaluateSendGate } from "../send-gate";
 import { parentUnreadBadge, progressAnomalyBadge } from "../roster-signals";
 import type { OneScreenStudent } from "../types";
 import { classnoteBadge, readAtLabel, type SubjectReport } from "./report-card";
@@ -177,7 +184,16 @@ export function GridBodyRow({
   // ⚠️ `??` 금지 — 재발급·첨부변경이 명시적으로 지운(null) 상태를 스냅샷의 옛 "success"가 덮는다.
   const liveStatus = effectiveClassnoteStatus(rep?.classnoteStatus, subject.classnoteStatus);
   const alreadySent = isAlreadySent(liveStatus);
-  const canSend = isRowActionable(subject, "send", liveStatus); // 진도 + 결석 아님 + 미발송(2-3)
+  // 발송 게이트 = **단일 소스**(send-gate.ts) — 버튼 disabled·title·아래 라벨이 같은 판정을 쓴다.
+  // ⚠️ 멘트 미작성도 여기서 막는다: 빈 멘트 절대 가드(2026-07-28)가 어차피 sendRow에서 거절하므로,
+  //    버튼만 살려 두면 눌러 보고서야 이유를 아는 거짓 어포던스다(원장 2026-07-30 제보의 핵심).
+  const sendGate = evaluateSendGate({
+    alreadySent,
+    isAbsent: subject.attendanceRaw === "absent",
+    hasProgress: isReportEligible(subject),
+    hasDraft: !!rep?.draft?.trim(),
+  });
+  const canSend = sendGate.canSend;
   // 발송 완료건은 자동작성도 막는다 — 멘트를 새로 만들어 봐야 저장이 서버에서 거부된다(입력 유실).
   const canAutoWrite = isRowActionable(subject, "autowrite", liveStatus);
   const isAbsent = subject.attendanceRaw === "absent";
@@ -213,9 +229,14 @@ export function GridBodyRow({
         )}
       </td>
       <td className={td}>
-        <div className="flex items-center gap-1.5">
+        {/* 🔴 이름이 배지에 밀려 글자 사이에서 줄바꿈되던 자리(2026-07-30 원장 제보: "김지연"이 "김지/연").
+            이 칸은 고정 폭(128px)인데 배지(보강·학부모 미확인·진도 확인 필요)가 전부 `shrink-0`이라
+            **줄어들 수 있는 유일한 요소가 이름**이었다 → 배지가 뜨는 행에서만 이름이 찌그러졌다.
+            이름을 `shrink-0 whitespace-nowrap`으로 잠그고 컨테이너를 `flex-wrap`으로 바꿔
+            **배지가 다음 줄로 내려가게** 한다(이름은 항상 한 덩이). */}
+        <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
           <span className={`size-1.5 shrink-0 rounded-full ${toneSolidClass(tone)}`} aria-hidden />
-          <span className="text-foreground font-bold">{student.name}</span>
+          <span className="text-foreground shrink-0 font-bold whitespace-nowrap">{student.name}</span>
           {student.isMakeup ? (
             <span className="bg-amber-soft text-amber shrink-0 rounded-pill px-1 py-px text-[9px] font-bold">
               보강
@@ -486,29 +507,31 @@ export function GridBodyRow({
             size="sm"
             variant="outline"
             disabled={!canSend || bulkGen}
-            title={
-              bulkGen
-                ? "전체 자동작성 중 — 완료 후 발송"
-                : alreadySent
-                  ? "이미 학부모에게 발송된 보고서입니다 — ClassNote는 게시글 수정이 안 됩니다"
-                  : !canSend && isAbsent
-                    ? "결석 학생 — 발송 제외 (기록 저장은 가능)"
-                    : undefined
-            }
+            title={bulkGen ? "전체 자동작성 중 — 완료 후 발송" : (sendGate.hint ?? undefined)}
             onClick={() => actions.onSendRow(student, subject.name)}
           >
             {alreadySent ? "발송 완료" : "발송"}
           </Button>
-          {/* ⚠️ 막힌 이유는 **눈에 보이게** — 예전엔 버튼 title 툴팁뿐이라 강사가 왜 발송이 막혔는지 알 수
-              없었다(2026-07-21: 네이티브 툴팁이 실제로 안 뜨는 사례 확인). 행 배경 톤만으론 이유가 안 읽힌다. */}
-          {isAbsent ? (
-            <span className="text-danger text-center text-[10px] font-bold">결석 — 발송 제외</span>
+          {/* 🔴 막힌 이유는 **눈에 보이게** — 버튼 title 툴팁뿐이면 강사는 이유를 모른다(2026-07-21:
+              네이티브 툴팁이 실제로 안 뜨는 사례 확인 / 2026-07-30 원장: "왜 비활성화됐는지 알 방법이
+              없다"). 판정은 위 sendGate 단일 소스라 **비활성인데 라벨이 없는 상태가 생길 수 없다**.
+              색은 사유 성격에 맞춘다: 결석=위험, 발송됨=완료, 남은 입력=주의(할 일). */}
+          {sendGate.label ? (
+            <span
+              className={`text-center text-[10px] font-bold ${
+                sendGate.reasons[0] === "absent"
+                  ? "text-danger"
+                  : sendGate.reasons[0] === "sent"
+                    ? "text-primary"
+                    : "text-amber"
+              }`}
+              title={sendGate.hint ?? undefined}
+            >
+              {sendGate.label}
+            </span>
           ) : null}
-          {/* 이미 게시된 건은 재발송이 **막혀 있다**는 사실 자체를 알린다(배지 "발송 완료"만으론
-              "다시 눌러도 되는 줄" 알고 계속 누르게 된다 — 원장 지적 2026-07-22). */}
-          {alreadySent ? (
-            <span className="text-primary text-center text-[10px] font-bold">발송됨 — 재발송 불가</span>
-          ) : badge ? (
+          {/* 발송 상태 배지(큐·실패 등) — 발송 완료 라벨은 위 게이트가 이미 말했으므로 중복 표시하지 않는다. */}
+          {!alreadySent && badge ? (
             <span className={`text-center text-[10px] font-bold ${badge.cls}`}>{badge.label}</span>
           ) : null}
           {/* 학부모 읽음(0122a) — 양성 배지만(카드와 동일 규약, types.ts). 표는 세로 여유가 있어 풀 라벨. */}

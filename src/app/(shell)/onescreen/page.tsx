@@ -51,6 +51,8 @@ export default async function OneScreenPage({
       sendWindow={roster.sendWindow}
       showAttachments={roster.showAttachments}
       canEditAttendance={roster.canEditAttendance}
+      // 글씨 크기(작음/보통/큼) — 계정 저장값. 서버가 확정해 내리므로 첫 렌더부터 정확하다(하이드레이션 안전).
+      initialFontSize={roster.fontSize}
       noClassesToday={roster.noClassesToday}
       showingAll={roster.showingAll}
       // 다른 창/기기 동시 열림 경고(3-3) — teacherId는 서버 파생(user.id = 담당 반 소유자, 겸직 포함).

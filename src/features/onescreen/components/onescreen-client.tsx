@@ -21,6 +21,7 @@ import {
   saveLessonReport,
   saveOnescreenSession,
   setMyNoticeMode,
+  setMyOnescreenFontSize,
 } from "../server/actions";
 import { MakeupAdder } from "./makeup-adder";
 import { SendWindowNotice } from "./send-window-notice";
@@ -65,6 +66,16 @@ import {
   type RowAction,
 } from "../grid";
 import {
+  describeAttendanceSkips,
+  planBulkAttendance,
+  type BulkAttendanceStatus,
+} from "../bulk-attendance";
+import {
+  DEFAULT_ONESCREEN_FONT_SIZE,
+  ONESCREEN_FONT_SIZE_ZOOM,
+  type OnescreenFontSize,
+} from "../font-size";
+import {
   getClassNarratives,
   getServerClassNarratives,
   setClassNarrative,
@@ -81,7 +92,7 @@ import { applyStudentOrder } from "../student-order";
 import { saveStudentOrder } from "../server/order-actions";
 import { useClassnoteStatusSync } from "./use-classnote-status-sync";
 import { mergeClassnoteStatuses, pendingSendStudentIds, type ClassnoteStatusRow } from "../classnote-status";
-import { setAttendanceCell } from "@/features/attendance/server/actions";
+import { setAttendanceBulk, setAttendanceCell } from "@/features/attendance/server/actions";
 import type { BasicAttendance } from "./attendance-pills";
 import { useEditPresence, useEditingOthers } from "@/features/presence/edit-presence";
 import { dedupeEditors } from "@/features/presence/presence-state";
@@ -161,6 +172,7 @@ export function OneScreenClient({
   canEditAttendance = true,
   presenceScope,
   initialView = "card",
+  initialFontSize = DEFAULT_ONESCREEN_FONT_SIZE,
   noClassesToday = false,
   showingAll = false,
 }: {
@@ -184,10 +196,15 @@ export function OneScreenClient({
   canEditAttendance?: boolean; // 출결 쓰기 권한 — false면 pill을 표시 전용으로(서버 거절 전에 화면에서 알림)
   presenceScope?: string; // `onescreen:{teacherId}:{date}` — 다른 창/기기 동시 열림 경고(서버가 teacherId 파생)
   initialView?: OneScreenView; // URL(?view=)에서 온 초기 뷰 — 날짜 이동(재마운트) 후에도 보던 뷰 유지
+  /** 글씨 크기(내 계정, users.ui_prefs.onescreen.fontSize) — 서버 확정값이라 첫 렌더부터 정확(#75 회피). */
+  initialFontSize?: OnescreenFontSize;
 }) {
   const router = useRouter();
   const [students, setStudents] = useState<OneScreenStudent[]>(initial);
   const [noticeMode, setNoticeMode] = useState<"A" | "B" | null>(initialNoticeMode);
+  // 글씨 크기 — 화면은 즉시(클릭 반응), 계정 저장은 백그라운드(실패해도 이번 세션 크기는 유지).
+  const [fontSize, setFontSize] = useState<OnescreenFontSize>(initialFontSize);
+  const fontZoom = ONESCREEN_FONT_SIZE_ZOOM[fontSize];
   // 보강 학생 중 '이전 진도'를 이미 불러온 학생 id — 버튼 숨김·재요청 방지.
   const [prevLoaded, setPrevLoaded] = useState<Set<string>>(new Set());
   const [selId, setSelId] = useState<string>(initial[0]?.id ?? "");
@@ -525,6 +542,17 @@ export function OneScreenClient({
         mode === null ? "멘트 모드: 학원 기본" : `멘트 모드: ${mode === "A" ? "단일 문단" : "2문단 분리"}`,
       );
     }
+  }
+  /**
+   * 글씨 크기 변경 — 화면은 **즉시** 바꾸고 계정 저장은 뒤따른다(반응속도 1순위).
+   * ⚠️ 저장에 실패해도 되돌리지 않는다 — 지금 보고 있는 크기를 강사 의사와 반대로 되돌리는 게 더 나쁘다.
+   *    다음 방문에 옛 크기로 돌아온다는 사실만 알린다(토스트는 실패했을 때만 — 크기 변화는 눈에 보인다).
+   */
+  async function changeFontSize(size: OnescreenFontSize) {
+    if (size === fontSize) return;
+    setFontSize(size);
+    const res = await setMyOnescreenFontSize(size);
+    if (!res.ok) toast.error("글씨 크기를 계정에 저장하지 못했습니다 — 이 화면에서는 적용됩니다");
   }
   // 보강(수업외) 학생 추가 — 서버에서 OneScreenStudent 조립(담당 과목·교재 기본값).
   //
@@ -883,11 +911,17 @@ export function OneScreenClient({
   }
   // 값 일괄 적용(1-2) — 선택(없으면 표시 전체) 행에 채워진 필드만 반영. 빈 필드=미적용(지우기 아님).
   // 대상은 진도 필터 없는 raw 행(발송가능 selectRows와 별개 경로) — 값 채우기는 진도와 무관.
-  function bulkApplyValues(
+  //
+  // ⚠️ **출결만 즉시 서버에 쓴다**(2026-07-30). 나머지 칸은 화면 state를 고치고 자동저장 큐에 실리지만
+  // 출결의 원장은 출석부(attendance_records)라, 여기서 화면만 바꾸면 출석부와 갈라진다. 그래서 셀 액션이
+  // 아니라 **배치 액션 1회**(setAttendanceBulk)로 보낸다 — 30~40행을 셀 단위로 부르면 왕복이 그만큼 늘어
+  // 반응속도(1순위)를 깎는다. 게이트(담당 반·수강생·수정 기간)는 그 액션이 집합 단위로 강제한다(#77).
+  async function bulkApplyValues(
     keys: string[],
     patchFields: BulkPatch,
     onlyEmpty: boolean,
     progressSubjectKey: string,
+    attendance: BulkAttendanceStatus | null = null,
   ) {
     const all = buildGridRows(visible).filter((r) => rowInClass(r.subject, activeClassFilter));
     const keySet = new Set(keys);
@@ -908,10 +942,7 @@ export function OneScreenClient({
       onlyEmpty,
       progressSubjectKey,
     );
-    if (plan.length === 0) {
-      toast.message("적용할 칸이 없습니다");
-      return;
-    }
+    // 값 칸은 먼저 즉시 반영(출결 왕복을 기다리게 하지 않는다).
     for (const p of plan) {
       if (p.set.attitude !== undefined) setAttitudeValue(p.studentId, p.set.attitude);
       if (p.set.homework !== undefined) setHomeworkValue(p.studentId, p.set.homework);
@@ -919,7 +950,64 @@ export function OneScreenClient({
       if (p.set.homeworkToday !== undefined) setHomeworkTodayFor(p.studentId, p.subjectName, p.set.homeworkToday);
       if (p.set.today !== undefined) setProgressFor(p.studentId, p.subjectIndex, p.set.today);
     }
-    toast.success(`${plan.length}행에 일괄 적용했습니다`);
+    const done: string[] = [];
+    if (plan.length) done.push(`${plan.length}행 입력`);
+
+    if (attendance) {
+      // 팝오버가 미리보기에 쓴 것과 **같은 순수 계획**(같은 행·같은 규칙) — 화면 숫자와 실제가 어긋나지 않게.
+      const attPlan = planBulkAttendance(
+        rows.map((r) => ({
+          studentId: r.student.id,
+          classId: r.subject.classId,
+          isMakeup: r.student.isMakeup,
+          raw: r.subject.attendanceRaw,
+        })),
+        attendance,
+        { onlyEmpty },
+      );
+      const why = describeAttendanceSkips(attPlan);
+      if (attPlan.cells.length === 0) {
+        done.push(`출결 0건${why ? `(제외: ${why})` : ""}`);
+      } else {
+        const attKeys = attPlan.cells.map((c) => `${c.studentId}::${c.classId}`);
+        setAttPending((p) => {
+          const n = new Set(p);
+          attKeys.forEach((k) => n.add(k));
+          return n;
+        });
+        try {
+          const res = await setAttendanceBulk({
+            sessionDate: activeDate,
+            status: attendance,
+            cells: attPlan.cells,
+          });
+          if ("error" in res) {
+            toast.error(res.error);
+          } else {
+            // 서버가 실제로 기록한 셀만 화면에 반영 — 게이트에 걸려 빠진 셀을 '됐다'고 칠하지 않는다.
+            for (const c of res.applied) applyAttendanceLocal(c.studentId, c.classId, attendance);
+            done.push(
+              `출결 ${res.applied.length}건 기록` +
+                (res.blocked ? ` (담당 반·수강생이 아니어서 ${res.blocked}건 제외)` : "") +
+                (why ? ` · 제외 ${why}` : ""),
+            );
+          }
+        } catch {
+          toast.error("출결 저장에 실패했습니다 — 네트워크를 확인해 주세요");
+        } finally {
+          setAttPending((p) => {
+            const n = new Set(p);
+            attKeys.forEach((k) => n.delete(k));
+            return n;
+          });
+        }
+      }
+    }
+    if (done.length === 0) {
+      toast.message("적용할 칸이 없습니다");
+      return;
+    }
+    toast.success(`일괄 적용 — ${done.join(" · ")}`);
   }
   /**
    * 맨 위 행의 **수업 내용**(진도·교재·오늘 과제)을 아래 행 전부에 복사.
@@ -1783,6 +1871,8 @@ export function OneScreenClient({
         noticeMode={noticeMode}
         academyNoticeMode={academyNoticeMode}
         onNoticeMode={changeNoticeMode}
+        fontSize={fontSize}
+        onFontSize={changeFontSize}
         makeupAdder={<MakeupAdder onAdd={addMakeupStudent} />}
       />
 
@@ -1880,6 +1970,10 @@ export function OneScreenClient({
         ) : null
       ) : null}
 
+      {/* 글씨 크기 — 목록·표 영역만 감싼다(상단 바는 그대로: 크기를 고르는 컨트롤 자체가 같이 커지면 어지럽다).
+          ⚠️ `font-size`가 아니라 `zoom`인 이유는 font-size.ts 주석 참조(칸마다 px 글자가 박힌 조밀한 표).
+          기본('작음')은 배율 1이라 **스타일 자체를 붙이지 않는다** — 손대지 않은 강사의 렌더는 완전 무변경. */}
+      <div style={fontZoom === 1 ? undefined : { zoom: fontZoom }}>
       {view === "grid" ? (
         <OneScreenGrid
           students={visible}
@@ -2069,6 +2163,7 @@ export function OneScreenClient({
         )}
       </div>
       )}
+      </div>
 
       {/* '이전값 일괄 가져오기' 뒤 멘트 확인 — 나머지 칸은 이미 채워졌고, 여기 확인해야 학부모 문구까지 채운다.
           닫힘(취소)은 계획을 버리기만 한다(다른 칸 되돌리지 않음 — 그 칸들은 오늘 값 입력이라 문제 없음). */}
