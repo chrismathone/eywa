@@ -162,6 +162,9 @@ export default async function StaffDetailPage({
             staff={staff}
             displayRole={displayRole}
             canManageThis={canManageThis}
+            // 계약 갱신은 **직원관리 쓰기(사무실)** 기준 — canManageThis(나보다 낮은 직급만)를 쓰면
+            // 원장이 원장 계약을, 관리자가 관리자 계약을 갱신하지 못해 버튼이 사라진다(서버·RLS는 통과하는데).
+            canManageContracts={canManage}
             showSalary={canSeeSalary}
             roleOptions={roleOptions}
             resume={resume}
