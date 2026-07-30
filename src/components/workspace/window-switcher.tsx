@@ -45,7 +45,11 @@ export function WindowSwitcher() {
     <div
       onMouseEnter={reveal}
       onMouseLeave={scheduleHide}
-      className="pointer-events-auto absolute bottom-0 left-1/2 z-50 flex -translate-x-1/2 flex-col items-center"
+      // ⚠️ **하단 오른쪽**에 붙인다(원장 제보 2026-07-30: "페이징 디자인 가려서 클릭 안 됨").
+      // 하단 중앙은 목록 페이지네이션의 자리 — 거기 두면 페이징을 누르려 마우스를 내리는 동작이
+      // 곧 독의 hover 트리거라, **누르려는 순간 독이 떠서 그 버튼을 덮는** 덫이 된다.
+      // 오른쪽 끝은 어느 화면에서도 조작 대상이 없어 충돌하지 않는다.
+      className="pointer-events-auto absolute right-2 bottom-0 z-50 flex flex-col items-end"
     >
       {revealed ? (
         <>
