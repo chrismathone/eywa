@@ -1,7 +1,7 @@
 // 파싱 슬롯 ↔ 기존 DB 레코드(이름 기준) 매칭 — 순수 함수.
 // 기존 레코드가 구버전이라 신뢰 대상이 아니므로, 여기서는 "이름으로 찾히면 그 id, 없으면 null(신규 대상)"
 // 로 분류만 한다(생성/수정은 서버 apply 몫). 수업=className, 방=classrooms.name.
-// 강사: 특수 자리(랩실·집중자율수업실) 선차단 → englishName 우선 → displayName 폴백 →
+// 강사: 특수 자리(LAB 603 · JJ 305) 선차단 → englishName 우선 → displayName 폴백 →
 //       복수 후보는 역할(teacher/manager/master)로 좁힘 →
 //       그래도 모호하면 null(라벨-only = slot_teacher_label 보존). (apply-english-schedules.cjs resolveTeacher 이식)
 

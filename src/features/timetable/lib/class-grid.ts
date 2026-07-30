@@ -55,7 +55,7 @@ export type GridSlot = {
   students: GridStudent[];
 };
 
-/** 셀 하나 — `label`은 해석된 표시 이름(강사명 또는 자리명), `isLab`은 **특수 자리**(랩실·집중자율수업실) 여부. */
+/** 셀 하나 — `label`은 해석된 표시 이름(강사명 또는 자리명), `isLab`은 **특수 자리**(LAB·JJ) 여부. */
 export type GridCell = { label: string; isLab: boolean };
 export type GridPeriodRow = {
   order: number;
@@ -446,7 +446,7 @@ export function buildRichCardGroups(
       if (!periodMap.has(eff.order)) periodMap.set(eff.order, { order: eff.order, label: eff.label, time: eff.time });
       const teacher = s.slotTeacherLabel ?? s.teacherName ?? "";
       cells[`${eff.order}:${day}`] = { label: teacher, isLab: isSpecialSlotLabel(s.slotTeacherLabel) };
-      // 담임 폴백 집계에서 특수 자리는 제외 — 랩실·집중자율수업실은 사람이 아니라 담임이 될 수 없다.
+      // 담임 폴백 집계에서 특수 자리는 제외 — LAB·JJ는 방(자리)이라 담임이 될 수 없다.
       if (s.slotTeacherLabel && !isSpecialSlotLabel(s.slotTeacherLabel))
         slotTeacherCount.set(s.slotTeacherLabel, (slotTeacherCount.get(s.slotTeacherLabel) ?? 0) + 1);
       const room = s.slotRoomLabel ?? s.classroomName;

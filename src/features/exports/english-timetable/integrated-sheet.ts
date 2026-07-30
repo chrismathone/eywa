@@ -12,7 +12,6 @@ import {
   type TeacherColorMap,
 } from "@/features/timetable/lib/class-grid";
 import { readableTextColor } from "@/lib/color-utils";
-import { specialSlotShortLabel } from "@/features/timetable/lib/teacher-label";
 
 const LABEL_W = 11;
 const DAY_SUB_W = 8;
@@ -192,9 +191,9 @@ export function appendIntegratedSheet(
             setCell(pr, st + di, "", {});
             return;
           }
-          // 특수 자리(랩실·집중자율수업실) — 강사색 대신 고정색 + 짧은 이름(셀 폭).
+          // 특수 자리(LAB·JJ) — 사람이 아니라 방이라 강사색 대신 고정색. 두 자리는 라벨로 구분된다.
           if (cell.isLab) {
-            setCell(pr, st + di, specialSlotShortLabel(cell.label) ?? cell.label, {
+            setCell(pr, st + di, cell.label, {
               bg: "FFDBEAFE",
               color: "FF1D4ED8",
               bold: true,

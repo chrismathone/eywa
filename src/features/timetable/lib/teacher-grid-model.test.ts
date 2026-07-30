@@ -35,15 +35,15 @@ describe("buildTeacherGridModel", () => {
     expect(model.teachers.map((t) => t.name)).toEqual(["Anna", "Sam", "담임김"]);
   });
 
-  it("특수 자리(랩실·집중자율수업실)도 시트 블록 순서를 지켜 맨 오른쪽 두 열 — 사람 뒤", () => {
-    // 라벨은 서버 쿼리에서 이미 해석돼 도착한다(JJ→집중자율수업실 11 · 이주희/LAB→랩실 12).
+  it("🔴 특수 자리 두 개(LAB·JJ)는 각자 한 열 — 합쳐지지 않고 시트 블록 순서대로 맨 오른쪽", () => {
+    // 라벨은 서버 쿼리에서 이미 해석돼 도착한다(JJ 11 · 이주희/LAB → LAB 12).
     const model = buildTeacherGridModel([
-      slot({ classId: "a", label: "랩실", start: "15:00", end: "15:40" }),
-      slot({ classId: "b", label: "집중자율수업실", start: "15:00", end: "15:40" }),
+      slot({ classId: "a", label: "LAB", start: "15:00", end: "15:40" }),
+      slot({ classId: "b", label: "JJ", start: "15:00", end: "15:40" }),
       slot({ classId: "c", label: "Anna", start: "15:00", end: "15:40" }),
     ]);
-    expect(model.teachers.map((t) => t.name)).toEqual(["Anna", "집중자율수업실", "랩실"]);
-    // 헤더색도 시트 블록색을 그대로 승계(구 JJ=회색 · 구 이주희=연노랑).
+    expect(model.teachers.map((t) => t.name)).toEqual(["Anna", "JJ", "LAB"]);
+    // 헤더색도 시트 블록색을 그대로 승계(JJ=회색 · LAB(시트 이주희 블록)=연노랑).
     expect(model.teachers.map((t) => t.color?.bg)).toEqual(["#4285f4", "#bdbdbd", "#fff2cc"]);
   });
 

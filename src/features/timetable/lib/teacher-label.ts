@@ -15,26 +15,38 @@
 export type TeacherLabelMap = Record<string, string>;
 
 /**
- * **특수 자리 = 사람이 아니라 방(수업 형태)**. 원장 2026-07-29: *"말 그대로 랩실(JJ = 집중자율수업실)로
- * 처리할 것 — 따로 직원 배정 안 함."*
- * - `랩실`(603호) — 옛 라벨 `LAB`(구 LAB실)·`이주희`. 이주희 선생님이 맡던 자리라 한때 그 이름이 라벨로
- *   들어왔지만 **자리가 사람보다 오래 간다**(담당은 바뀐다). 실제 이주희 계정은 별도 직원으로 존재한다.
- * - `집중자율수업실`(305호) — 옛 라벨 `JJ`. 전담자 없이 강사들이 번갈아 감독한다.
+ * **특수 자리 = 사람이 아니라 방(수업 형태)**. 원장 2026-07-29: *"직원 이름을 마치 영어이름 LAB인 것처럼
+ * 해두니 아르바이트 선생님인데 출석부 등 여러 곳에 필요 없는 게 배선돼 노출된다."*
+ * - `LAB`(603호) — 원 라벨 `LAB`·`이주희`. 이주희 선생님이 맡던 자리라 한때 그 이름이 라벨로 들어왔지만
+ *   **자리가 사람보다 오래 간다**(담당은 바뀐다). 실제 이주희 계정은 별도 직원으로 존재한다.
+ * - `JJ`(305호) — 전담자 없이 **일반 강사들이 번갈아** 감독한다(원장 2026-07-27).
+ *
+ * 🔴 **두 자리는 서로 다른 방이라 절대 한 열로 합치지 않는다.** 2026-07-27~29 사이엔 `JJ`까지 `LAB`으로
+ * 합쳐 보여줬는데, 실측하면 JJ(305호) 48슬롯과 이주희(603호) 51슬롯이 **시간까지 겹치는 쌍이 67건**이다
+ * — 동시에 다른 방에서 돌아가는 수업을 한 칸에 쌓은 표기였다. 원장 지시 2026-07-30: *"JJ는 그대로 놔둬야 해."*
+ * → 자리 판정은 유지하되 **표기는 시트 원문 그대로 `LAB`·`JJ`** 두 열이다(방 이름 `랩실`·`집중자율수업실`로
+ * 바꿔봤으나 원장이 시트와 같은 표기를 원해 되돌렸다 — 별칭은 아래에 남겨 옛 값도 계속 해석된다).
  *
  * 🔴 **이 라벨들은 절대 `users`로 해석하지 않는다** — 직원으로 배선되면 출석부 강사 필터·직원명부·급여표·
  * 담임 드롭다운·발송실패 알림 수신자까지 "가짜 강사"가 따라 붙는다(2026-07-23 공지 발송실패 알림이
  * 로그인 불가한 `JJ` 계정으로 배달돼 아무도 못 본 사고). 시트 재동기도 같은 판정을 쓴다
  * ([`match.ts`](../import/structure/match.ts) `resolveTeacher`가 특수 자리를 먼저 걸러낸다).
+ * ⚠️ 그러니 "표기를 `JJ`로 되돌렸다"고 해서 `LAB_ALIASES` 시절처럼 **배열에서 JJ만 빼면 안 된다** — 그러면
+ *    JJ가 다시 사람으로 세어져(담임 폴백·직원 목록) 그 사고가 재발한다. 자리 판정과 표기는 별개다.
  *
  * 📌 DB의 `class_schedules.slot_teacher_label` 원문(`LAB`·`JJ`·`이주희`)은 **그대로 둔다**
  *    (ijw 임포트·시트 동기의 원본이라 고치면 동기화와 충돌). 바뀌는 건 표시뿐이다.
  */
-export const LAB_ROOM_LABEL = "랩실";
-export const SELF_STUDY_ROOM_LABEL = "집중자율수업실";
+export const LAB_ROOM_LABEL = "LAB";
+export const SELF_STUDY_ROOM_LABEL = "JJ";
 export const SPECIAL_SLOT_LABELS = [LAB_ROOM_LABEL, SELF_STUDY_ROOM_LABEL] as const;
 export type SpecialSlotLabel = (typeof SPECIAL_SLOT_LABELS)[number];
 
-/** 원 라벨(시트·DB 원문) → 자리 이름. 해석된 이름도 키에 넣어 **멱등**(두 번 통과해도 같은 값). */
+/**
+ * 원 라벨(시트·DB 원문) → 자리 이름. 해석된 이름도 키에 넣어 **멱등**(두 번 통과해도 같은 값).
+ * `랩실`·`집중자율수업실`·`자율실`은 2026-07-29~30 사이 잠깐 쓰인 표기 — 저장된 설정값
+ * (`teacherViewLineExcluded`)이나 캐시에 남아 있어도 계속 해석되게 별칭으로 남긴다.
+ */
 const SPECIAL_BY_ALIAS = new Map<string, SpecialSlotLabel>([
   ["lab", LAB_ROOM_LABEL],
   ["lab실", LAB_ROOM_LABEL],
@@ -45,27 +57,15 @@ const SPECIAL_BY_ALIAS = new Map<string, SpecialSlotLabel>([
   ["자율실", SELF_STUDY_ROOM_LABEL],
 ]);
 
-/** 좁은 격자 셀용 짧은 이름(열 헤더는 전체 이름) — "집중자율수업실"은 셀 폭을 넘긴다. */
-const SPECIAL_SHORT: Record<SpecialSlotLabel, string> = {
-  [LAB_ROOM_LABEL]: "랩실",
-  [SELF_STUDY_ROOM_LABEL]: "자율실",
-};
-
 /** 라벨이 특수 자리면 그 자리 이름, 아니면 null. 원 라벨·해석된 이름 둘 다 받는다. */
 export function specialSlotLabel(label: string | null | undefined): SpecialSlotLabel | null {
   if (label == null) return null;
   return SPECIAL_BY_ALIAS.get(label.trim().toLowerCase()) ?? null;
 }
 
-/** 이 슬롯이 강사 수업이 아니라 특수 자리(랩실·집중자율수업실)인가. */
+/** 이 슬롯이 강사 수업이 아니라 특수 자리(LAB·JJ)인가. */
 export function isSpecialSlotLabel(label: string | null | undefined): boolean {
   return specialSlotLabel(label) != null;
-}
-
-/** 격자 셀 칩에 쓸 짧은 이름("랩실"·"자율실"). 특수 자리가 아니면 null. */
-export function specialSlotShortLabel(label: string | null | undefined): string | null {
-  const special = specialSlotLabel(label);
-  return special ? SPECIAL_SHORT[special] : null;
 }
 
 /**
@@ -84,7 +84,7 @@ export function resolveTeacherLabel(
   return map?.[raw] ?? raw;
 }
 
-/** 라벨 배열을 해석 + 중복 제거(해석 결과가 겹치면 한 열로 합친다 — 이주희·LAB → 랩실 1열). */
+/** 라벨 배열을 해석 + 중복 제거(해석 결과가 겹치면 한 열로 합친다 — 이주희·LAB → LAB 1열, JJ는 별도 열). */
 export function resolveTeacherLabels(
   labels: readonly (string | null | undefined)[],
   map: TeacherLabelMap | undefined,
