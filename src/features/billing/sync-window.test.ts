@@ -55,6 +55,16 @@ describe("isOutsideSyncWindow — 통째로 동결된 달", () => {
     expect(isOutsideSyncWindow({ rows: [{ updatedAt: hoursBefore(99) }], syncedAt: null })).toBe(false);
     expect(isOutsideSyncWindow({ rows: [], syncedAt: SYNCED })).toBe(false);
   });
+
+  // 🔴 호출부 함정 — 이 판정은 **그 달 전체**를 받아야 한다.
+  // 검색어로 좁힌 부분집합을 넘기면(엑셀 라우트가 그럴 뻔했다) 우연히 그 몇 건만 오래된 경우
+  // 살아있는 달이 '동결'로 뒤집혀 '동기화 누락' 결과가 통째로 비어 버린다.
+  it("부분집합을 넘기면 판정이 뒤집힌다 — 호출부는 반드시 그 달 전체를 넘길 것", () => {
+    const 전체 = [{ updatedAt: hoursBefore(1) }, { updatedAt: hoursBefore(99) }];
+    const 검색으로_좁힌_집합 = [{ updatedAt: hoursBefore(99) }];
+    expect(isOutsideSyncWindow({ rows: 전체, syncedAt: SYNCED })).toBe(false); // 살아있는 달
+    expect(isOutsideSyncWindow({ rows: 검색으로_좁힌_집합, syncedAt: SYNCED })).toBe(true); // 뒤집힘
+  });
 });
 
 describe("isMissingFromMakeedu — 마지막 동기화에 없던 행", () => {

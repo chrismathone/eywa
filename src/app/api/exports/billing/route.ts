@@ -24,8 +24,14 @@ export async function GET(request: Request) {
   let invoices = overdueOnly ? all.filter((r) => isOverdue(r, today)) : all;
   if (missingOnly) {
     // 동기화 누락은 그 달이 동기화 창 안일 때만 의미가 있다(동결된 달은 전 행이 미갱신).
-    const syncState = await getMakeeduSyncState("invoices");
-    const outsideSyncWindow = isOutsideSyncWindow({ rows: all, syncedAt: syncState?.syncedAt });
+    // 🔴 창 판정은 반드시 **그 달 전체**로 해야 한다 — 검색어(q)·분류로 좁힌 집합으로 판정하면,
+    //    우연히 그 몇 건만 오래된 경우 살아있는 달이 '동결'로 뒤집혀 결과가 통째로 비어 버린다.
+    //    화면은 필터 안 걸린 monthRows로 판정하므로, 여기서 좁힌 집합을 쓰면 "화면과 같은 집합"이 깨진다.
+    const [syncState, periodRows] = await Promise.all([
+      getMakeeduSyncState("invoices"),
+      q || category ? getInvoicesForPeriod({ period }) : Promise.resolve(all),
+    ]);
+    const outsideSyncWindow = isOutsideSyncWindow({ rows: periodRows, syncedAt: syncState?.syncedAt });
     invoices = invoices.filter((r) =>
       isMissingFromMakeedu({ row: r, syncedAt: syncState?.syncedAt, outsideSyncWindow }),
     );
