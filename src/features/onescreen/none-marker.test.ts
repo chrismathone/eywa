@@ -49,7 +49,8 @@ describe("추세에서 제외 — '없음'은 미제출이 아니다", () => {
       row("2026-07-08", null, "완료"),
       row("2026-07-15", null, "완료"),
     ])!;
-    expect(input.assignTrend).toBe("[07-08] 완료 -> [07-15] 완료");
+    // 연속 같은 값은 코드가 묶는다(compressRuns, 2026-07-30) — 모델이 날짜를 나열할 재료 자체를 줄인다.
+    expect(input.assignTrend).toBe("[07-08~07-15] 완료(2회)");
     expect(input.assignTrend).not.toContain("없음");
   });
 
