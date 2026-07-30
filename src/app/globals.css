@@ -732,12 +732,17 @@ body {
   }
 }
 
-/* .scroll-x-always — 가로 스크롤바를 항상·또렷하게 노출(시간표 등 항상 넓은 표).
-   overflow-x:scroll로 트랙을 늘 예약하고, 전역(연한 0.18)보다 진한 thumb로 또렷이.
-   현대 Chrome은 scrollbar-width/color(표준)를 쓰면 ::-webkit-scrollbar를 무시하므로
-   color로 진하게 하고, webkit 규칙은 표준 미지원 브라우저용 폴백(굵게)로 둔다. */
+/* .scroll-x-always — 가로 스크롤바를 **넘칠 때** 또렷하게 노출(시간표 등 넓은 표).
+   전역(연한 0.18)보다 진한 thumb로 또렷이. 현대 Chrome은 scrollbar-width/color(표준)를 쓰면
+   ::-webkit-scrollbar를 무시하므로 color로 진하게 하고, webkit 규칙은 표준 미지원 브라우저용 폴백(굵게).
+
+   ⚠️ 예전엔 `overflow-x: scroll`("항상 노출")이었다 — 넘치지 않을 때도 트랙을 예약해
+   **스크롤할 게 없는데 꽉 찬 thumb의 가짜 스크롤바**가 표 아래에 남았다(원장 제보 2026-07-30
+   "스크롤이 없는데도 스크롤이 있네"). 통합뷰 섹션은 `w-max max-w-full`이라 반이 적으면 실제로
+   안 넘치는데, "시간표는 항상 넓다"는 전제가 그때만 틀렸던 것. `auto`면 넓은 표에선 그대로 보이고
+   좁을 때만 사라진다 → 전제를 안 믿고 실제 넘침으로 판정한다. scroll로 되돌리지 말 것. */
 .scroll-x-always {
-  overflow-x: scroll;
+  overflow-x: auto;
   scrollbar-color: rgba(29, 29, 31, 0.4) transparent;
 }
 .scroll-x-always::-webkit-scrollbar {
