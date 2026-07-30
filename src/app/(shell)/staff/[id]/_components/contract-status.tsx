@@ -75,7 +75,9 @@ export function ContractStatus({
   const next = nextContractDefault(rows, hireDate);
   const left = current ? daysUntil(current.endDate, today) : null;
   // 만료됐거나 60일 안에 끝나면 '갱신할 때' — 배지와 버튼이 같은 기준을 쓴다.
-  const dueSoon = left !== null && left <= 60;
+  // 기입된 계약이 없으면 만료 판정 자체가 무의미(계산값이라) → 갱신이 아니라 '기입'이다.
+  const dueSoon = !!current?.stored && left !== null && left <= 60;
+  const actionLabel = !current?.stored ? "계약 기입" : dueSoon ? "계약 갱신" : "계약 연장";
   const latestId = rows.length > 0 ? [...rows].sort((a, b) => b.seq - a.seq)[0].id : null;
 
   return (
@@ -86,7 +88,7 @@ export function ContractStatus({
           // 만료됐거나 임박하면 채운 버튼 + '계약 갱신'으로 — 지난 계약을 못 보고 지나치지 않게(원장 지시).
           <Button variant={dueSoon ? "default" : "outline"} size="sm" onClick={() => setOpen((v) => !v)}>
             {open ? <X className="size-3.5" /> : <Plus className="size-3.5" />}
-            {open ? "취소" : dueSoon ? "계약 갱신" : "계약 연장"}
+            {open ? "취소" : actionLabel}
           </Button>
         ) : null}
       </div>
@@ -96,10 +98,21 @@ export function ContractStatus({
         <div className="border-line bg-bg-soft/40 rounded-xl border p-4">
           <div className="flex flex-wrap items-center gap-2">
             <span className="micro">현재 계약</span>
-            <Pill color="primary" soft>
-              {current.seq}차
-            </Pill>
-            {left !== null ? (
+            {/* 기입된 계약과 **계산값**은 절대 같아 보이면 안 된다(원장 제보 2026-07-30: "둘 다 1차인데
+                왜 한 명은 히스토리가 남고 한 명은 안 남지?"). 저장된 행이 없으면 'N차'라고 단정하지 않는다 —
+                그건 우리가 뒷받침할 수 없는 주장이다. */}
+            {current.stored ? (
+              <Pill color="primary" soft>
+                {current.seq}차
+              </Pill>
+            ) : (
+              <Pill color="neutral" soft>
+                미기입
+              </Pill>
+            )}
+            {/* 만료 배지는 **기입된 계약에만**. 계산값에 붙이면 2018년 입사자가 "만료 2900일 지남"으로
+                뜨는데, 실제로는 계약을 아직 안 적은 것일 뿐이라 거짓 경보가 된다. */}
+            {current.stored && left !== null ? (
               left < 0 ? (
                 <Pill color="danger" soft>
                   만료 {Math.abs(left)}일 지남
@@ -111,12 +124,17 @@ export function ContractStatus({
               ) : null
             ) : null}
           </div>
-          <p className="num text-foreground mt-1.5 text-base font-bold">{periodLabel(current)}</p>
-          {!current.stored ? (
-            <p className="text-text-faint mt-1 text-[11px]">
-              입사일 기준으로 계산한 기간입니다 — 실제 계약서와 다르면 &lsquo;계약 연장&rsquo;으로 기입하세요.
-            </p>
-          ) : null}
+          {current.stored ? (
+            <p className="num text-foreground mt-1.5 text-base font-bold">{periodLabel(current)}</p>
+          ) : (
+            <>
+              <p className="num text-text-dim mt-1.5 text-base font-bold">{periodLabel(current)}</p>
+              <p className="text-text-faint mt-1 text-[11px]">
+                아직 기입된 계약이 없어 <b>입사일({hireDate}) + 1년</b>으로 계산한 값입니다 — 실제 계약서를
+                &lsquo;{actionLabel}&rsquo;으로 넣으면 이 자리와 히스토리에 함께 남습니다.
+              </p>
+            </>
+          )}
         </div>
       ) : (
         <div className="border-line rounded-xl border border-dashed p-4 text-center">
