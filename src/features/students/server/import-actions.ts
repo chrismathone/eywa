@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged } from "@/lib/supabase/batch";
+import { resolveUniqueStudentNameFor } from "./unique-name";
 import { accessLevelTenant } from "@/lib/auth/perm-matrix";
 import { logAction } from "@/features/audit/server/log";
 import {
@@ -144,9 +145,12 @@ export async function applyStudentImport(rows: ImportInsertRow[]): Promise<Stude
       failed += 1;
       continue;
     }
+    // 동명이인 접미사 — 수동 등록·상담 전환과 **같은 규칙**(한 경로만 지키면 소용없다).
+    // 행마다 조회하는 이유: 같은 파일 안에 동명이인이 여러 줄 있으면 직전 줄이 만든 이름까지 봐야 한다.
+    const uniqueName = await resolveUniqueStudentNameFor(supabase, user.tenantId, name);
     const { error: insErr } = await supabase.from("students").insert({
       tenant_id: user.tenantId,
-      name,
+      name: uniqueName.name,
       school: r.school?.trim() || null,
       grade: r.grade?.trim() || null,
       status: normalizeStatus(r.status),

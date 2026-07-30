@@ -55,6 +55,7 @@ export async function BasicInfoTab({
   staff,
   displayRole,
   canManageThis,
+  canManageContracts = false,
   showSalary,
   roleOptions,
   resume,
@@ -67,6 +68,8 @@ export async function BasicInfoTab({
   // 권한/위계 로직(AccountActions)엔 실제 staff.systemRole 유지.
   displayRole: SystemRole;
   canManageThis: boolean;
+  /** 계약 갱신 권한 = 직원관리 쓰기(사무실). canManageThis(나보다 낮은 직급만)와 축이 다르다. */
+  canManageContracts?: boolean;
   showSalary: boolean;
   roleOptions: SystemRole[];
   /** 연결된 이력서(원장·관리자 게이트 통과 시에만 전달) — 이 탭의 내용 원천. */
@@ -210,7 +213,7 @@ export async function BasicInfoTab({
           hireDate={hireDate || null}
           rows={contracts}
           today={today}
-          canWrite={canManageThis}
+          canWrite={canManageContracts}
         />
       </div>
 

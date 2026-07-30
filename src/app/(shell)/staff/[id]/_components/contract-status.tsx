@@ -74,6 +74,8 @@ export function ContractStatus({
   const current = currentContract(rows, hireDate);
   const next = nextContractDefault(rows, hireDate);
   const left = current ? daysUntil(current.endDate, today) : null;
+  // 만료됐거나 60일 안에 끝나면 '갱신할 때' — 배지와 버튼이 같은 기준을 쓴다.
+  const dueSoon = left !== null && left <= 60;
   const latestId = rows.length > 0 ? [...rows].sort((a, b) => b.seq - a.seq)[0].id : null;
 
   return (
@@ -81,9 +83,10 @@ export function ContractStatus({
       <div className="mb-4 flex items-center justify-between gap-2">
         <h2 className="text-foreground text-sm font-bold">계약현황</h2>
         {canWrite && next ? (
-          <Button variant="outline" size="sm" onClick={() => setOpen((v) => !v)}>
+          // 만료됐거나 임박하면 채운 버튼 + '계약 갱신'으로 — 지난 계약을 못 보고 지나치지 않게(원장 지시).
+          <Button variant={dueSoon ? "default" : "outline"} size="sm" onClick={() => setOpen((v) => !v)}>
             {open ? <X className="size-3.5" /> : <Plus className="size-3.5" />}
-            {open ? "취소" : "계약 연장"}
+            {open ? "취소" : dueSoon ? "계약 갱신" : "계약 연장"}
           </Button>
         ) : null}
       </div>

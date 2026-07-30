@@ -12,7 +12,9 @@ import {
   type WithdrawalReason,
 } from "@/features/withdrawals/types";
 import { currentPeriod, isCommentCategory } from "../grades-meta";
+// 생성 = 공용 진입점(전 경로 공유) / 수정 = 자기 자신을 taken에서 빼야 해서 순수 함수 직접 호출.
 import { resolveUniqueStudentName } from "../name-suffix";
+import { resolveUniqueStudentNameFor } from "./unique-name";
 
 export type StudentFormState =
   | {
@@ -115,12 +117,8 @@ export async function createStudent(
   const supabase = await createClient();
 
   // 이름 중복 방지 — 같은 이름이 이미 있으면 다음 빈 알파벳 접미사(A·B·C…) 강제(ijw/makeedu 규약).
-  // 테넌트 전체 이름(퇴원 포함)과 대조해 표시 이름을 절대 유일하게. (수백 명 수준, fetchAllPaged=B2 안전)
-  const existingNames = await fetchAllPaged<{ name: string | null }>((from, to) =>
-    supabase.from("students").select("name").eq("tenant_id", user.tenantId).range(from, to),
-  );
-  const takenNames = new Set(existingNames.map((r) => (r.name ?? "").trim()).filter(Boolean));
-  const resolvedName = resolveUniqueStudentName(input.name, takenNames);
+  // 판정은 공용 진입점 하나로(상담 전환·엑셀 가져오기도 같은 함수) — 한 경로만 지키면 소용없다.
+  const resolvedName = await resolveUniqueStudentNameFor(supabase, user.tenantId, input.name);
 
   const { data, error } = await supabase
     .from("students")
