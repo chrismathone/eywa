@@ -6,8 +6,15 @@
  * CLAUDE.md 원칙: 계산 함수는 순수 함수로 분리 + Vitest 단위테스트.
  */
 import type { CellState, OneScreenStudent, StudentStatus, TestScore } from "./types";
+import { formatTestScore } from "./report-comment";
 import { isNoneValue } from "./none-marker";
 import { isSkipStatus, skipStatusOf } from "./progress-status";
+
+/**
+ * 템플릿 문장 사이 구분자 — **줄바꿈**(원장 2026-07-30: "줄바꿈도 필요하면 적절히 반영").
+ * 한 줄에 다 붙이면 학부모 화면에서 사실이 뭉쳐 읽힌다. 사실 한 덩이 = 한 줄.
+ */
+const LINE_BREAK = "\n";
 
 /** 정답 개수 → 백분율 (만점 0이면 0) */
 export function pct(score: number, max: number): number {
@@ -59,47 +66,51 @@ function flatten(s: string): string {
     .join(", ");
 }
 
+/**
+ * 테스트 한 조각 — **표기는 `formatTestScore` 단일 소스**(카드·AI 멘트와 같은 문자열).
+ *
+ * 🔴 2026-07-30 발송 감사에서 이 함수가 세 가지를 학부모에게 내보내고 있었다:
+ *   ① `일일테스트(이전 진도)` — 괄호 안은 **강사에게 설명하려고 붙인 내부 라벨**이다. AI 멘트 쪽은
+ *      07-23에 이 누출을 막았는데(프롬프트 "설명 자체를 옮겨 적지 말 것") 템플릿만 그대로였다.
+ *   ② `17/25` 생분수 — 다른 표면은 전부 "25문제 중 17개"라 카드와 멘트가 서로 다른 표기를 썼다.
+ *   ③ 증감 단위가 항상 `점` — 개수 척도에서도 "▼3점"이라 틀린 단위였다.
+ */
 function testClause(label: string, t: TestScore): string | null {
   if (t.score == null) return null;
   const d = delta(t.score, t.prevScore);
-  let tail = "";
-  if (d != null) {
-    tail = d === 0 ? " (지난 회차와 동일)" : ` (지난 회차 대비 ${d > 0 ? "▲" : "▼"}${Math.abs(d)}점)`;
-  }
-  return `${label} ${t.score}/${t.max}${tail}`;
+  const unit = t.mode === "score" ? "점" : "개";
+  const tail =
+    d == null ? "" : d === 0 ? " (지난 회차와 동일)" : ` (지난 회차 대비 ${d > 0 ? "▲" : "▼"}${Math.abs(d)}${unit})`;
+  return `${label}는 ${formatTestScore(t.score, t.max, t.mode)}${tail}`;
 }
 
-/** 진도 문장 뒤에 붙는 공통부 — 테스트 결과 + 태도·과제 + 평가 마무리. */
+/**
+ * 진도 문장 뒤에 붙는 공통부 — 입력된 사실만 담담히. **판단·조언은 넣지 않는다.**
+ *
+ * 🔴 예전엔 점수 평균만 보고 "틀린 문항 위주로 복습이 필요해 보입니다. 가정에서도 관심 부탁드립니다."
+ *    같은 문장을 붙였다(2026-07-30 감사: 발송분 50건에 포함). **강사가 하지 않은 평가·조언이 강사
+ *    이름으로 학부모에게 나가는 것**이고, AI 멘트 프롬프트가 금지한 바로 그 종류의 문장이다
+ *    (전망·조언·격려 금지). 템플릿은 AI가 실패했을 때의 **사실 요약**이지 평가서가 아니다.
+ */
 function testAndClosingLines(st: OneScreenStudent): string[] {
   const lines: string[] = [];
 
   const tparts: string[] = [];
-  const dPart = testClause("일일테스트(이전 진도)", st.tests.daily);
-  const cPart = testClause("확인테스트(오늘 진도)", st.tests.check);
+  const dPart = testClause("일일테스트", st.tests.daily);
+  const cPart = testClause("확인테스트", st.tests.check);
   if (dPart) tparts.push(dPart);
   if (cPart) tparts.push(cPart);
-  if (tparts.length) lines.push(tparts.join(", ") + " 결과를 받았습니다.");
+  if (tparts.length) lines.push(tparts.join(", ") + ".");
 
   // 태도·과제를 독립 처리 — 빈 값(과제 미입력 "" / "—")은 문장에서 생략(무의미한 "과제는 — 상태입니다" 방지).
   // "없음"(과제가 없던 날, 원장 2026-07-23)도 문장에선 생략한다 — "과제는 없음 상태입니다"는 어색하고,
   //  없던 과제를 굳이 언급할 이유도 없다. 학부모 카드엔 '지난 과제: 없음'으로 그대로 보인다.
   const hasHomework = !!st.homework && st.homework !== "—" && !isNoneValue(st.homework);
   if (st.attitude && hasHomework)
-    lines.push(`수업 태도는 '${st.attitude}', 과제는 ${st.homework} 상태입니다.`);
-  else if (st.attitude) lines.push(`수업 태도는 '${st.attitude}'입니다.`);
-  else if (hasHomework) lines.push(`과제는 ${st.homework} 상태입니다.`);
+    lines.push(`수업 태도는 ${st.attitude}, 지난 과제는 ${st.homework}입니다.`);
+  else if (st.attitude) lines.push(`수업 태도는 ${st.attitude}입니다.`);
+  else if (hasHomework) lines.push(`지난 과제는 ${st.homework}입니다.`);
 
-  const scored = [st.tests.daily, st.tests.check].filter(
-    (t): t is TestScore & { score: number } => t.score != null,
-  );
-  if (scored.length) {
-    const avg = scored.reduce((acc, t) => acc + pct(t.score, t.max), 0) / scored.length;
-    if (avg >= 90)
-      lines.push("전반적으로 안정적인 성취를 보이고 있습니다. 가정에서도 격려 부탁드립니다.");
-    else if (avg >= 70)
-      lines.push("꾸준히 잘 따라오고 있습니다. 오늘 배운 내용 가볍게 점검해 주시면 좋겠습니다.");
-    else lines.push("틀린 문항 위주로 복습이 필요해 보입니다. 가정에서도 관심 부탁드립니다.");
-  }
   return lines;
 }
 
@@ -115,12 +126,13 @@ export function buildReport(st: OneScreenStudent): string {
   const exams = st.subjects.filter((s) => isSkipStatus(s.today));
   const progText = progressed.map((s) => `${labelOf(s)} ${flatten(s.today)}`).join(", ");
   const examText = exams.map((s) => `${labelOf(s)} ${skipStatusOf(s.today)}`).join(", ");
+  // ⚠️ 학생 호칭('○○ 학생,')을 쓰지 않는다 — AI 멘트 프롬프트가 금지한 것과 같은 규칙(수신인은 학부모).
   const head = exams.length
     ? progressed.length
-      ? `${st.name} 학생, 오늘 ${progText} 진도를 진행했고, ${examText}를 진행했습니다.`
-      : `${st.name} 학생, 오늘 ${examText}를 진행했습니다.`
-    : `${st.name} 학생, 오늘 ${progText} 진도를 진행했습니다.`;
-  return [head, ...testAndClosingLines(st)].join(" ");
+      ? `오늘은 ${progText} 진도를 진행했고, ${examText}를 진행했습니다.`
+      : `오늘은 ${examText}를 진행했습니다.`
+    : `오늘은 ${progText} 진도를 진행했습니다.`;
+  return [head, ...testAndClosingLines(st)].join(LINE_BREAK);
 }
 
 /** 과목별 학부모 보고서 초안 — 해당 과목 진도만 언급(과목별로 따로 발송용). */
@@ -132,13 +144,13 @@ export function buildSubjectReport(st: OneScreenStudent, subjectIndex: number): 
     // 학부모 문장 — 반 이름이 섞이지 않는 subjectLabel(위 buildReport와 같은 이유).
     // 진도가 중단된 날은 차시가 없어 "진도를 진행했습니다"가 거짓 — 전용 문장으로 간다.
     isSkipStatus(su.today)
-      ? `${st.name} 학생, 오늘 ${label} ${skipStatusOf(su.today)}를 진행했습니다.`
-      : `${st.name} 학생, 오늘 ${label} ${flatten(su.today)} 진도를 진행했습니다.`,
+      ? `오늘은 ${label} ${skipStatusOf(su.today)}를 진행했습니다.`
+      : `오늘은 ${label} ${flatten(su.today)} 진도를 진행했습니다.`,
     ...testAndClosingLines(st),
   ];
   // 오늘 과제(0096a) — AI 멘트 프롬프트의 마무리 규칙("오늘 과제는 ~입니다")과 폴백 템플릿 대칭 유지.
   // 오늘 과제 — "없음"이면 "오늘 과제는 없음입니다"가 되지 않게 전용 문장으로(원장 2026-07-23).
   if (isNoneValue(su.homeworkToday)) lines.push("오늘은 따로 내드린 과제가 없습니다.");
   else if (su.homeworkToday?.trim()) lines.push(`오늘 과제는 ${flatten(su.homeworkToday)}입니다.`);
-  return lines.join(" ");
+  return lines.join(LINE_BREAK);
 }

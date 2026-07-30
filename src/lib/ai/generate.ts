@@ -28,8 +28,49 @@ export function parseJsonLoose<T = unknown>(text: string): T {
   } catch {
     const match = cleaned.match(/\{[\s\S]*\}/);
     if (!match) throw new Error("AI 응답에서 JSON을 찾을 수 없습니다");
-    return JSON.parse(match[0]) as T;
+    try {
+      return JSON.parse(match[0]) as T;
+    } catch {
+      // 3차 — **문자열 안 생 줄바꿈** 복구. 값에 줄바꿈을 허용한 뒤(멘트 알림장) 모델이 `\n` 대신
+      // 진짜 개행을 흘리면 JSON이 통째로 깨진다. 그러면 호출부는 "빈 응답"으로 떨어지고
+      // 학부모에게는 폴백 템플릿이 나간다 — 파싱 하나 때문에 품질이 무너지는 자리라 마지막으로 손본다.
+      // ⚠️ 앞의 정상 파싱 두 번이 모두 실패한 뒤에만 도는 보수적 복구다(정상 JSON은 여기 오지 않는다).
+      return JSON.parse(escapeRawNewlinesInStrings(match[0])) as T;
+    }
   }
+}
+
+/**
+ * JSON 텍스트에서 **따옴표 안에 있는** 생 줄바꿈·탭만 이스케이프한다(구조 공백은 그대로).
+ * 문자열 밖 개행은 JSON에서 합법이라 건드리면 안 되므로, 따옴표 상태를 세면서 훑는다.
+ */
+function escapeRawNewlinesInStrings(src: string): string {
+  let out = "";
+  let inStr = false;
+  let escaped = false;
+  for (const ch of src) {
+    if (escaped) {
+      out += ch;
+      escaped = false;
+      continue;
+    }
+    if (ch === "\\") {
+      out += ch;
+      escaped = inStr; // 문자열 밖의 역슬래시는 이스케이프 시작이 아니다
+      continue;
+    }
+    if (ch === '"') {
+      inStr = !inStr;
+      out += ch;
+      continue;
+    }
+    if (inStr && (ch === "\n" || ch === "\r" || ch === "\t")) {
+      out += ch === "\n" ? "\\n" : ch === "\r" ? "" : "\\t";
+      continue;
+    }
+    out += ch;
+  }
+  return out;
 }
 
 export type GenerateJSONOptions = {
