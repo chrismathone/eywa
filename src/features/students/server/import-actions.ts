@@ -123,6 +123,8 @@ export type StudentImportResult = {
   inserted?: number;
   skipped?: number;
   failed?: number;
+  /** 동명이인이라 접미사(A·B·C)가 붙은 항목 "원본 → 저장된 이름". 조용히 바꾸지 않고 결과에 보여준다. */
+  renamed?: string[];
 };
 
 /**
@@ -138,6 +140,8 @@ export async function applyStudentImport(rows: ImportInsertRow[]): Promise<Stude
   let inserted = 0;
   let skipped = 0;
   let failed = 0;
+  // 동명이인이라 접미사(A·B·C)가 붙은 건수 — 조용히 이름이 바뀌면 나중에 못 찾는다(결과에 명시).
+  const renamed: string[] = [];
 
   for (const r of rows) {
     const name = String(r?.name ?? "").trim();
@@ -163,14 +167,15 @@ export async function applyStudentImport(rows: ImportInsertRow[]): Promise<Stude
       else failed += 1;
     } else {
       inserted += 1;
+      if (uniqueName.suffixed) renamed.push(`${name} → ${uniqueName.name}`);
     }
   }
 
   await logAction({
     action: "student_import",
     targetType: "student",
-    metadata: { inserted, skipped, failed },
+    metadata: { inserted, skipped, failed, renamed: renamed.length },
   });
   revalidatePath("/students");
-  return { inserted, skipped, failed };
+  return { inserted, skipped, failed, renamed };
 }

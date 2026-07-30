@@ -3,6 +3,7 @@
 import { useActionState, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { Loader2, UserPlus, X } from "@/components/icons/eywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { useIsDesktop } from "@/components/workspace/use-is-desktop";
@@ -81,9 +82,13 @@ export function ConvertToStudentDialog({
     });
   }
 
-  // 성공 시 학생 페이지로 이동
+  // 성공 시 학생 페이지로 이동. 동명이인이라 접미사가 붙었으면 **이동 전에** 알린다 —
+  // 조용히 이름을 바꾸면 직원이 나중에 "내가 넣은 이름이 아닌데?" 하고 헤맨다.
   if (state?.studentId && !state?.error) {
-    queueMicrotask(() => router.push(`/students/${state.studentId}`));
+    queueMicrotask(() => {
+      if (state.notice) toast.warning(state.notice, { duration: 8000 });
+      router.push(`/students/${state.studentId}`);
+    });
   }
 
   if (alreadyConverted && linkedStudentId) {
