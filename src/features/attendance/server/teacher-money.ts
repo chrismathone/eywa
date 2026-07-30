@@ -56,6 +56,10 @@ export async function getTeacherMoney(
           .from("invoices")
           .select("student_id, amount_total, amount_paid")
           .eq("period", month)
+          // void = makeedu에서 삭제된 청구(동기화가 무효 처리) — 수납·대시보드·리텐션·학생상세와
+          // **같은 집합**을 봐야 한다. 빠져 있으면 삭제 반영을 켜는 순간 이 금액 열만 무효 청구를
+          // 계속 더해 급여 재료가 부풀고, /billing과 다른 금액을 말하게 된다(2026-07-30 적대 리뷰).
+          .neq("status", "void")
           .in("student_id", chunk),
     ),
     fetchInChunks<{ student_id: string; class: { teacher_id: string | null } | { teacher_id: string | null }[] | null }>(

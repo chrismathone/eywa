@@ -18,6 +18,18 @@ const CATEGORY_LABEL: Record<string, string> = {
   other: "기타",
 };
 
+/**
+ * timestamptz(또는 date) → KST "YYYY-MM-DD". 값이 없으면 "—".
+ * 표시 시각은 항상 Asia/Seoul(feedback_kst-timezone-display-rule) — 엑셀도 화면과 같은 날짜를 말해야 한다.
+ */
+function kstDate(iso: string | null): string {
+  if (!iso) return "—";
+  const t = new Date(iso);
+  if (Number.isNaN(t.getTime())) return "—";
+  // en-CA = YYYY-MM-DD 고정 포맷(엑셀 정렬·필터에 유리).
+  return t.toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
+}
+
 export async function buildInvoicesWorkbook(
   invoices: InvoiceRow[],
   period: string,
@@ -60,7 +72,10 @@ export async function buildInvoicesWorkbook(
       amountPaid: inv.amountPaid,
       balance,
       dueDate: inv.dueDate ?? "—",
-      paidAt: inv.paidAt ?? "—",
+      // paid_at은 timestamptz라 PostgREST가 "2026-07-16T00:00:00+00:00" 원문으로 준다 —
+      // 그대로 넣으면 엑셀에 ISO UTC가 찍히고(화면 표는 "07.16") KST 표시 규칙도 깨진다.
+      // 게다가 실제 결제 시각이 들어오는 순간 KST 00:00~08:59 건은 UTC 날짜가 전날이라 하루 밀어 보고된다.
+      paidAt: kstDate(inv.paidAt),
       status: STATUS_LABEL[inv.status] ?? inv.status,
       notes: inv.notes ?? "",
     });

@@ -110,16 +110,25 @@ async function heartbeat() {
 
 (async () => {
   log(`워처 시작 — repo: ${REPO}, poll: ${POLL_MS / 1000}s`);
+  // ⚠️ 심장박동은 폴 루프와 **분리된 타이머**로 돈다. 예전엔 같은 루프 안에 있어서, runSync가
+  // spawnSync(블로킹, 실측 53~76초)로 도는 동안 last_seen이 멈췄고 온라인 판정(60초)을 넘겨
+  // **동기화를 실행 중인 바로 그 PC가 화면에서 '오프라인'으로 뒤집혔다**(2026-07-30 적대 리뷰).
+  // spawnSync가 이벤트 루프를 막으므로 setInterval도 그 사이엔 못 돈다 → 자식 실행 **직전에** 한 번 더 찍고,
+  // 타이머는 유휴 구간을 메운다(둘 다 best-effort).
+  const beat = () => heartbeat().catch((e) => log(`heartbeat 실패(무시): ${e.message}`));
+  const heartbeatTimer = setInterval(beat, 20_000);
+  heartbeatTimer.unref?.();
   for (;;) {
     try {
       // 0) 심장박동 — 담당 PC 생존 신호(웹 표시용). best-effort라 실패해도 요청 처리 계속.
-      await heartbeat().catch((e) => log(`heartbeat 실패(무시): ${e.message}`));
+      await beat();
       // 1) 정방향 동기화 요청.
       const claimed = await claimPending();
       if (claimed.length) {
         // 여럿이 동시에 눌러 합쳐졌으면 첫(가장 이른) 요청자를 대표로 로그에 남긴다.
         const requester = claimed.map((c) => c.requested_by).find(Boolean) || null;
         log(`동기화 요청 ${claimed.length}건 감지 → sync-all 실행`);
+        await beat(); // 블로킹 실행 직전에 갱신 — 실행 중 '오프라인' 오표시 최소화
         const { ok, tail } = runSync(requester);
         await finish(claimed, ok, ok ? null : tail || "sync-all 실패");
         log(ok ? "✅ 동기화 완료 (done)" : `✖ 동기화 실패 (error): ${tail}`);
@@ -127,6 +136,7 @@ async function heartbeat() {
       // 2) 역동기화 푸시 요청(eywa→makeedu) — 스크립트가 pending을 claim·처리·마감.
       if ((await pendingPushCount()) > 0) {
         log(`푸시 요청 감지 → push-consultations 실행`);
+        await beat();
         const { ok, tail } = runPush();
         log(ok ? "✅ 푸시 완료 (done)" : `✖ 푸시 실패/부분실패: ${tail}`);
       }

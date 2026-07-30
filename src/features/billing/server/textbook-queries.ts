@@ -233,13 +233,20 @@ export async function getStudentOptionsForIds(studentIds: string[]): Promise<Stu
 // 교재 신청 모달의 학생 SearchableSelect 옵션 — 재원·휴원 학생만(퇴원 제외), 이름순.
 export async function getStudentOptions(): Promise<StudentOption[]> {
   const supabase = await createClient();
-  const { data } = await supabase
-    .from("students")
-    .select("id, name, grade")
-    .neq("status", "withdrawn")
-    .order("name", { ascending: true })
-    .limit(2000);
-  return (data ?? []).map((s) => ({ id: s.id, name: s.name, grade: s.grade }));
+  // B2/B3: `.limit(2000)`은 PostgREST 기본 max-rows(≈1000)에 밀려 **조용히 1000행에서 잘린다**
+  // (이름 오름차순이라 뒤쪽 이름부터 통째로 사라지고, 검색해도 안 나와 "그 학생은 없다"로 오인).
+  // `data ?? []`는 error까지 삼켜 장애를 '학생 없음'으로 위장한다 → fetchAllPaged(throw)로 전환.
+  // 현재 퇴원 제외 409명이라 잠복 상태였다. 정렬 tie-break는 id(batch.ts 계약).
+  const rows = await fetchAllPaged<{ id: string; name: string; grade: string | null }>((from, to) =>
+    supabase
+      .from("students")
+      .select("id, name, grade")
+      .neq("status", "withdrawn")
+      .order("name", { ascending: true })
+      .order("id", { ascending: true })
+      .range(from, to),
+  );
+  return rows.map((s) => ({ id: s.id, name: s.name, grade: s.grade }));
 }
 
 // 카드용 경량 집계 — ~350행이라 status·price만 전건 fetch 후 메모리 집계(1000행 미만).

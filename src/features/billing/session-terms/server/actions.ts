@@ -29,7 +29,8 @@ export async function refreshPlannedTerms(period: string): Promise<SessionTermAc
   const supabase = await createClient();
   const [invoices, settings] = await Promise.all([
     fetchAllPaged<{ id: string; student_id: string }>((from, to) =>
-      supabase.from("invoices").select("id, student_id").eq("period", period).range(from, to),
+      // void(makeedu 삭제분) 제외 — 무효 청구에 회차 계획을 만들지 않는다.
+      supabase.from("invoices").select("id, student_id").eq("period", period).neq("status", "void").range(from, to),
     ),
     getTenantSettings(),
   ]);
@@ -322,6 +323,7 @@ export async function setSessionTermCarryover(
     .select("id")
     .eq("student_id", studentId)
     .eq("period", prev)
+    .neq("status", "void") // 무효 처리된 전 달 청구서에서 이월 크레딧을 끌어오지 않는다
     .maybeSingle();
   let priorCredit = 0;
   let cutover = true; // 전 달 근거 행이 있으면 false
