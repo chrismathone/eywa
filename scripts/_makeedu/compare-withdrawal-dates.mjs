@@ -64,6 +64,25 @@ if (cId < 0 || cName < 0 || cOut < 0) {
   process.exit(1);
 }
 
+/**
+ * 🔴 **makeedu에도 일괄 도장 날짜가 있다** — 자동 감지해서 채우기에서 뺀다.
+ *
+ * 실측(2026-07-30): 퇴원 목록 4,427행 중 **`2024-03-18`이 4,017건(91%)**, 그다음 순위는 26건.
+ * makeedu 도입 시점에 그전 퇴원생을 전부 그날로 넣은 **장부 날짜**다(eywa의 `2026-07-10`과 같은 성격).
+ * 이걸 그대로 채우면 **2년 전 날짜를 심는다** — 실제로 배한빈(2026-07 청구·06-30 납부 = 활동 중)에게
+ * `2024-03-18`이 붙을 뻔했다. 돈이 오간 기록과 정면으로 모순되는 날짜다.
+ *
+ * ⚠️ 날짜를 하드코딩하지 않는다 — 임포트 시점은 학원마다 다르고 앞으로 또 생길 수 있다.
+ *    **한 날짜에 전체의 `ratio` 이상이 몰리면 일괄로 간주**한다(실측 91% vs 0.6%라 경계가 넉넉하다).
+ */
+export function detectBulkDates(dates, ratio = 0.05) {
+  const n = dates.filter(Boolean).length;
+  if (!n) return new Set();
+  const count = new Map();
+  for (const d of dates) if (d) count.set(d, (count.get(d) ?? 0) + 1);
+  return new Set([...count].filter(([, c]) => c / n >= ratio).map(([d]) => d));
+}
+
 /** 전화 정규화 — 숫자만, 뒤 11자리(대조 전용. 값을 저장·출력하지 않는다). */
 const normPhone = (v) => {
   const d = String(v ?? "").replace(/\D/g, "");
@@ -104,10 +123,14 @@ try {
   const eywaNameCount = new Map();
   for (const r of rows) eywaNameCount.set(r.name, (eywaNameCount.get(r.name) ?? 0) + 1);
 
-  const fill = []; // 날짜 미상(수강 이력 0) → makeedu 날짜로 채움
-  const mismatch = []; // 이미 날짜가 있는데 makeedu와 다름 → 보고만
+  const fill = []; // 날짜 미상(수강 이력 0) + **id 매칭** → makeedu 날짜로 채움
+  const weakMatch = []; // 전화·이름 매칭 → 채우지 않고 보고만(오매칭 위험)
+  const bulkSkipped = []; // makeedu 쪽 일괄 도장 날짜 → 제외
+  const mismatch = []; // 이미 날짜가 있는데 2일 이상 다름 → 보고만
   const unmatched = [];
   const via = { id: 0, phone: 0, name: 0 };
+  // makeedu 일괄 날짜 자동 감지(실측 2024-03-18 = 91%).
+  const bulkDates = detectBulkDates(mk.map((x) => x.out));
   for (const r of rows) {
     // 매칭 우선순위 — 강한 키부터. ① 원생번호 ② 전화(형제 중복 번호는 위에서 제거됨) ③ 이름(양쪽 모두 유일할 때만)
     let m = r.makeedu_id ? byId.get(String(r.makeedu_id).trim()) : null;
@@ -132,22 +155,37 @@ try {
     }
     via[how]++;
     if (!m.out || m.out > today) continue; // 날짜 없음·미래 = 손대지 않음
+    if (bulkDates.has(m.out)) {
+      bulkSkipped.push({ ...r, mk: m.out }); // makeedu 쪽 장부 날짜 — 채우지도, 불일치로 세지도 않는다
+      continue;
+    }
     if (Number(r.enr) === 0) {
-      if (m.out !== r.wd) fill.push({ ...r, to: m.out, via: how });
+      // ⚠️ **채우기는 원생번호(id) 매칭만.** 전화·이름 매칭은 오래된 동명이인·재사용 번호에 붙을 수 있어
+      //    보고만 한다(실측: 약한 매칭 15건이 대부분 일괄 날짜로 몰렸다).
+      if (m.out === r.wd) continue;
+      if (how === "id") fill.push({ ...r, to: m.out, via: how });
+      else weakMatch.push({ ...r, to: m.out, via: how });
     } else if (m.out !== r.wd) {
-      mismatch.push({ ...r, mk: m.out });
+      // 하루 차이는 기준 차이(마지막 수업일 vs 퇴원 처리일)로 보고 불일치에서 뺀다.
+      const gap = Math.abs(Math.round((Date.parse(m.out) - Date.parse(r.wd)) / 86400000));
+      if (gap > 1) mismatch.push({ ...r, mk: m.out, gap });
     }
   }
 
   console.log(`\n════ makeedu 퇴원일 이중 대조 ${APPLY ? "실행(--apply)" : "DRY-RUN"} ════`);
   console.log(`makeedu 퇴원생 ${mk.length}행(퇴원일 파싱 ${mk.filter((x) => x.out).length}) · eywa 퇴원생 ${rows.length}`);
   console.log(`매칭 경로 — 원생번호 ${via.id} · 전화 ${via.phone} · 이름 ${via.name} · 미매칭 ${unmatched.length}`);
-  console.log(`\n① 날짜 미상 → 채우기 대상: **${fill.length}건**`);
-  fill.slice(0, 15).forEach((f) => console.log(`   · ${f.name} : ${f.wd} → ${f.to} (${f.via} 매칭)`));
+  if (bulkDates.size)
+    console.log(`⚠️ makeedu 일괄 도장 날짜 감지: ${[...bulkDates].join(", ")} — 이 날짜는 채우지 않습니다(장부 날짜)`);
+  console.log(`\n① 날짜 미상 → 채우기 대상(원생번호 매칭만): **${fill.length}건**`);
+  fill.slice(0, 15).forEach((f) => console.log(`   · ${f.name} : ${f.wd} → ${f.to}`));
   if (fill.length > 15) console.log(`   … 외 ${fill.length - 15}건`);
-  console.log(`\n② 기존 날짜 ↔ makeedu 불일치(보고만, 자동 수정 안 함): ${mismatch.length}건`);
-  mismatch.slice(0, 15).forEach((f) => console.log(`   · ${f.name} : eywa ${f.wd} / makeedu ${f.mk}`));
-  console.log(`\n③ makeedu에서 못 찾은 eywa 퇴원생: ${unmatched.length}건(makeedu에 없거나 동명이인이라 보류)`);
+  console.log(`\n② 약한 매칭(전화·이름) — 채우지 않고 보고만: ${weakMatch.length}건`);
+  weakMatch.slice(0, 10).forEach((f) => console.log(`   · ${f.name} : ${f.wd} → ${f.to} (${f.via} 매칭, 미적용)`));
+  console.log(`\n③ makeedu 일괄 날짜라 제외: ${bulkSkipped.length}건`);
+  console.log(`\n④ 기존 날짜 ↔ makeedu 불일치(2일 이상, 보고만): ${mismatch.length}건`);
+  mismatch.sort((a, b) => b.gap - a.gap).slice(0, 15).forEach((f) => console.log(`   · ${f.name} : eywa ${f.wd} / makeedu ${f.mk} (${f.gap}일 차)`));
+  console.log(`\n⑤ makeedu에서 못 찾은 eywa 퇴원생: ${unmatched.length}건(makeedu에 없거나 동명이인이라 보류)`);
 
   if (!APPLY) {
     console.log(`\n(dry-run) 아무것도 변경하지 않았습니다. 실행은 --apply.`);
