@@ -4,7 +4,8 @@ import { Button } from "@/components/ui/button";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { Pill } from "@/components/atoms/pill";
 import { subjectTone, toneSoftClass } from "../data";
-import { effectiveClassnoteStatus, isAlreadySent, isRowActionable } from "../grid";
+import { effectiveClassnoteStatus, isAlreadySent, isReportEligible, isRowActionable } from "../grid";
+import { evaluateSendGate } from "../send-gate";
 import { parentUnreadBadge, progressAnomalyBadge } from "../roster-signals";
 import { splitLessons } from "../curriculum";
 import { AttendancePills, type BasicAttendance } from "./attendance-pills";
@@ -209,7 +210,15 @@ export function ReportCard({
   //    `??`면 스냅샷의 옛 "success"가 되살아나 잠금이 안 풀린다(적대 검수 확정).
   const liveStatus = effectiveClassnoteStatus(rep.classnoteStatus, subject.classnoteStatus);
   const alreadySent = isAlreadySent(liveStatus);
-  const canQueue = isRowActionable(subject, "send", liveStatus);
+  // 발송 게이트 = 표뷰와 **같은 단일 소스**(send-gate.ts) — 카드만 다른 판정을 쓰면 한쪽에서만
+  // "왜 안 눌리지"가 생긴다(#77). 멘트 미작성도 여기서 막는다(빈 멘트 절대 가드가 어차피 거절).
+  const sendGate = evaluateSendGate({
+    alreadySent,
+    isAbsent: subject.attendanceRaw === "absent",
+    hasProgress: isReportEligible(subject),
+    hasDraft: !!rep.draft?.trim(),
+  });
+  const canQueue = sendGate.canSend;
   const atts = rep.attachments ?? []; // 학생 사진 첨부(P2b)
   const uploadingAtt = uploadingSubject === subjectName;
   // 로스터 신호(G2·G3) — 카드 헤더 배지. 진도 신호는 math 전용 데이터라 수학 과목 보유 학생만(표뷰와 동일 규약).
@@ -465,26 +474,33 @@ export function ReportCard({
             size="sm"
             disabled={!canQueue}
             title={
-              canQueue
-                ? "저장 후 ClassNote 발송 큐에 올립니다 — 워커가 자동으로 게시합니다"
-                : alreadySent
-                  ? "이미 학부모에게 발송된 보고서입니다 — ClassNote는 게시글 수정이 안 됩니다"
-                  : subject.attendanceRaw === "absent"
-                    ? "결석 학생 — 발송 제외 (기록 저장은 가능)"
-                    : "오늘 진도를 먼저 입력하세요"
+              sendGate.hint ?? "저장 후 ClassNote 발송 큐에 올립니다 — 워커가 자동으로 게시합니다"
             }
             onClick={() => onQueueClassnote(subjectName)}
           >
             ClassNote 발송
           </Button>
-          {/* ⚠️ 결석 사유를 **눈에 보이게** — 예전엔 버튼 title 툴팁뿐이라 왜 비활성인지 알 수 없었다
-              (2026-07-21: 이 프로젝트에서 네이티브 툴팁이 실제로 안 뜨는 사례가 확인됨). */}
-          {subject.attendanceRaw === "absent" ? (
-            <span className="border-danger/40 bg-danger-soft text-danger rounded-pill border px-2 py-0.5 text-[11px] font-bold">
-              결석 — 발송 제외
+          {/* 🔴 막힌 이유를 **눈에 보이게** — 버튼 title 툴팁뿐이면 강사는 알 수 없다(2026-07-21 툴팁 미표시
+              사례 / 2026-07-30 원장 "왜 비활성화됐는지 알 방법이 없다"). 판정은 위 sendGate 단일 소스라
+              **비활성인데 사유 알약이 없는 상태가 생길 수 없다**. */}
+          {sendGate.label ? (
+            <span
+              className={`rounded-pill border px-2 py-0.5 text-[11px] font-bold ${
+                sendGate.reasons[0] === "absent"
+                  ? "border-danger/40 bg-danger-soft text-danger"
+                  : sendGate.reasons[0] === "sent"
+                    ? "border-primary/40 bg-primary-soft text-primary"
+                    : "border-amber/40 bg-amber-soft text-amber"
+              }`}
+              title={sendGate.hint ?? undefined}
+            >
+              {sendGate.label}
             </span>
           ) : null}
-          {cnBadge ? <span className={`text-[11px] font-bold ${cnBadge.cls}`}>{cnBadge.label}</span> : null}
+          {/* 발송 완료는 위 사유 알약이 이미 말했다 — 같은 말을 두 번 붙이지 않는다(표뷰와 동일). */}
+          {!alreadySent && cnBadge ? (
+            <span className={`text-[11px] font-bold ${cnBadge.cls}`}>{cnBadge.label}</span>
+          ) : null}
           {/* 학부모 읽음(0122a) — 양성 배지만(없음 = 미읽음이 아니라 동기화 안 됨일 수 있음, types.ts 규약).
               원장 목록의 "읽음"과 같은 뜻·같은 툴팁 표기 — 강사도 확인 가능하게(원장 지시 2026-07-27). */}
           {subject.classnoteReadAt ? (

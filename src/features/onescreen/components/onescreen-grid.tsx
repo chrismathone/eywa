@@ -3,6 +3,7 @@
 import { Fragment, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { buildGridRows, buildRowRenderMeta, isRowActionable, rowInClass } from "../grid";
+import { planBulkAttendance } from "../bulk-attendance";
 import { moveInOrder } from "../student-order";
 import { resolveStudyGrade } from "../curriculum";
 import type { OneScreenStudent } from "../types";
@@ -213,8 +214,27 @@ export function OneScreenGrid({
                   ? { label: copySource.student.name, belowCount: Math.max(0, copyRows.length - 1) }
                   : null
               }
-              onApply={(patch, onlyEmpty, progressSubjectKey) =>
-                bulkActions.onBulkApply(selectedKeys, patch, onlyEmpty, progressSubjectKey)
+              // 출결 일괄 — 쓰기 권한이 없으면 아예 안 넘긴다(못 하는 일을 보여주지 않는다).
+              // 대상 집합은 다른 일괄 필드와 **같은 행**(copyRows = 선택 행, 없으면 표시 전체).
+              attendance={
+                attReadOnly
+                  ? null
+                  : {
+                      plan: (status, onlyEmpty) =>
+                        planBulkAttendance(
+                          copyRows.map((r) => ({
+                            studentId: r.student.id,
+                            classId: r.subject.classId,
+                            isMakeup: r.student.isMakeup,
+                            raw: r.subject.attendanceRaw,
+                          })),
+                          status,
+                          { onlyEmpty },
+                        ),
+                    }
+              }
+              onApply={(patch, onlyEmpty, progressSubjectKey, attendance) =>
+                bulkActions.onBulkApply(selectedKeys, patch, onlyEmpty, progressSubjectKey, attendance)
               }
               onCopyFirstRow={(overwrite) => bulkActions.onCopyFirstRow?.(selectedKeys, overwrite)}
               disabled={bulkGen}

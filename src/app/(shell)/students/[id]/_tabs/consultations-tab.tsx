@@ -27,13 +27,18 @@ const AUDIENCE_LABEL: Record<string, string> = {
 };
 
 // 등록상담 결과(입학 상담 outcome) — 고정 도메인 enum(운영 enum 아님). 알려진 값만 라벨, 미지정은 미표시.
+// 🔴 여기 표가 등록상담 정본과 어긋나 있었다: enrolled를 "등록완료"라 불러 **수강등록 완료**로 읽혔고
+//    (실데이터상 등록 결정 건의 절반 가까이는 반 배정이 없다), pending("첫 문의 접수")을 "보류"라 불러
+//    뜻이 정반대였으며, scheduled·ai_done·no_show가 없어 그 상태 상담은 결과가 아예 안 보였다.
+//    → 등록상담 정본(OUTCOME_PILL)과 같은 문자열로 통일. registered/hold/rejected는 enum에 없는 죽은 키라 제거.
 const ENROLL_OUTCOME_LABEL: Record<string, string> = {
-  enrolled: "등록완료",
-  registered: "등록완료",
-  pending: "보류",
-  hold: "보류",
-  declined: "미등록",
-  rejected: "미등록",
+  pending: "대기",
+  scheduled: "예약",
+  consulted: "상담완료",
+  ai_done: "AI 완료",
+  enrolled: "재원생 등록",
+  declined: "거절",
+  no_show: "노쇼",
 };
 
 type Consult = Awaited<ReturnType<typeof getStudentConsultationHistory>>[number];

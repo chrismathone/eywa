@@ -479,6 +479,7 @@ key(DB 식별자)는 **자동 확정**: 과목명 입력 후 blur 시 1회 — �
 - **#84** "정렬 편향 × 상위 N 자르기" = 카테고리 통째 실종 — 상위 N 미리보기는 **카테고리별로** 자를 것(⚠️ Postgres 정렬은 로마자→한글, `localeCompare("ko")`는 정반대)
 - **#85** 배포가 "초록색 success"인데 실제로는 안 나감 — `ignoreCommand`는 **tip 커밋 1개만** 본다. **머지하고 push하면 항상 skip**이었다(워크트리 정책과 충돌). ⚠️ 뭉쳐 push할 땐 docs 커밋을 tip에 두지 말 것 · 확인은 초록색이 아니라 `gh api …/status --jq '.statuses[].description'`
 - **#86** 창 시스템 앱에서 `router.push`는 눈에 안 보인다 — 배경이 창에 덮여 있다 (⚠️ 알림/팰릿 등 최상위 프레임 이동은 WindowLink와 같은 경로로) + 본문이 N명인데 link가 1개면 그 link는 거짓말
+- **#87** `overflow-x: scroll`은 넘치지 않아도 트랙을 예약 → **꽉 찬 thumb의 가짜 스크롤바**("스크롤이 없는데도 스크롤이 있네"). 넘침 판정은 브라우저에 맡기고(`auto`) 굵기·색만 손댈 것 (⚠️ 진단 = `offsetHeight-clientHeight`≠0인데 `scrollWidth-clientWidth`=0)
 - **#82** postgres.js에서 `${JSON.stringify(v)}::jsonb` = **이중 인코딩**(`"#153e75"` 9자 저장 → 검증 실패 → 설정 침묵 무시). 스칼라는 `to_jsonb(${v}::text)`·객체는 `sql.json(obj)`, 검증은 **길이까지** (⚠️ 눈으로 따옴표 구분 안 됨)
 
 ## 🎨 디자인 규칙 인덱스 (상세는 `docs/design-conventions.md`)

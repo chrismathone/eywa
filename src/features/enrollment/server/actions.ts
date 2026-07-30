@@ -489,7 +489,8 @@ export async function setEnrollmentOutcome(
   if (isConverted && outcome !== "enrolled" && outcome !== "declined") {
     return {
       error:
-        "이미 배정 완료(등록)된 상담은 대기·예약 등 이전 단계로 되돌릴 수 없습니다. 취소하려면 '거절'로 처리하거나 학생을 퇴원 처리하세요.",
+        // ⚠️ 클라 안내문(consultation-manage.tsx)과 **같은 문장**을 유지할 것 — 한쪽만 고치면 갈린다.
+        "이미 '재원생 등록'으로 처리된 상담은 대기·예약 등 이전 단계로 되돌릴 수 없습니다. 취소하려면 '거절'로 처리하거나 학생을 퇴원 처리하세요.",
     };
   }
 
@@ -715,7 +716,9 @@ export async function runAiAnalysis(
 // ────────────────── 상담 → 학생 자동 전환 ──────────────────
 
 export type ConvertToStudentState =
-  | { error?: string; studentId?: string; existingStudentId?: string }
+  // notice = 동명이인이라 접미사(A·B·C)를 붙여 등록했다는 안내. 조용히 바꾸면 직원이 나중에
+  // "내가 넣은 이름이 아닌데?" 하고 헤맨다 — 바꿨으면 그 자리에서 말한다.
+  | { error?: string; studentId?: string; existingStudentId?: string; notice?: string }
   | undefined;
 
 /**
@@ -880,7 +883,12 @@ export async function convertConsultationToStudent(
   revalidatePath("/enrollment");
   revalidatePath(`/enrollment/${consultationId}`);
   revalidatePath("/students");
-  return { studentId };
+  return {
+    studentId,
+    notice: uniqueName.suffixed
+      ? `이미 '${studentName}' 학생이 있어 '${uniqueName.name}'(으)로 등록했습니다. 다른 학생이면 그대로 두고, 같은 학생이면 학생 목록에서 정리하세요.`
+      : undefined,
+  };
 }
 
 

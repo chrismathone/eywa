@@ -7,7 +7,7 @@ export const OUTCOME_PILL: Record<string, { label: string; color: PillColor }> =
   scheduled: { label: "예약", color: "gold" },
   consulted: { label: "상담완료", color: "blue" },
   ai_done: { label: "AI 완료", color: "purple" },
-  enrolled: { label: "등록", color: "green" },
+  enrolled: { label: "재원생 등록", color: "green" },
   declined: { label: "거절", color: "neutral" },
   no_show: { label: "노쇼", color: "rose" },
 };

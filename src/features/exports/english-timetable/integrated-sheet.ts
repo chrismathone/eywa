@@ -191,8 +191,14 @@ export function appendIntegratedSheet(
             setCell(pr, st + di, "", {});
             return;
           }
+          // 특수 자리(LAB·JJ) — 사람이 아니라 방이라 강사색 대신 고정색. 두 자리는 라벨로 구분된다.
           if (cell.isLab) {
-            setCell(pr, st + di, "LAB", { bg: "FFDBEAFE", color: "FF1D4ED8", bold: true, size: 9 });
+            setCell(pr, st + di, cell.label, {
+              bg: "FFDBEAFE",
+              color: "FF1D4ED8",
+              bold: true,
+              size: 9,
+            });
             return;
           }
           const tc = teacherColors[cell.label];

@@ -3,6 +3,7 @@ import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import { WindowLink } from "@/components/workspace/window-link";
 import { SUBJECT_SOLID } from "@/features/owner/subjects";
 import { enumDayToKo, type DayOfWeek } from "@/features/timetable/lib/periods";
+import { LAB_ROOM_LABEL } from "@/features/timetable/lib/teacher-label";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 import {
   AXIS_COLS,
@@ -339,7 +340,15 @@ function Cell({
   if (!day) return <div className={base} />;
   const c = card.cells[`${order}:${day}`];
   if (!c) return <div className={base} />;
-  if (c.isLab) return <div className={`${base} bg-blue-soft text-blue ${cellFont("LAB")}`} title="LAB">LAB</div>;
+  // 특수 자리(사람 아님) — LAB(603호)=파랑, JJ(305호)=보라. 서로 다른 방이라 색까지 갈라 둔다.
+  if (c.isLab) {
+    const tone = c.label === LAB_ROOM_LABEL ? "bg-blue-soft text-blue" : "bg-purple-soft text-purple";
+    return (
+      <div className={`${base} ${tone} ${cellFont(c.label)}`} title={c.label}>
+        {c.label}
+      </div>
+    );
+  }
   if (!c.label) return <div className={base} />;
   // 저장된 강사색(ijw) 우선 — 라벨(한글명·영문닉네임)이 users 맵에 있으면 그 hex. 없으면 라벨 해시색.
   const tc = teacherColors[c.label];

@@ -206,11 +206,29 @@ export function StudentImportDialog() {
               result.error ? (
                 <p className="text-danger mt-3 text-[12px]">{result.error}</p>
               ) : (
-                <p className="text-primary mt-3 text-[12px]">
-                  등록 완료 — 신규 {result.inserted}
-                  {result.skipped ? <span className="text-text-faint"> · 건너뜀 {result.skipped}</span> : null}
-                  {result.failed ? <span className="text-amber"> · 실패 {result.failed}</span> : null}
-                </p>
+                <>
+                  <p className="text-primary mt-3 text-[12px]">
+                    등록 완료 — 신규 {result.inserted}
+                    {result.skipped ? <span className="text-text-faint"> · 건너뜀 {result.skipped}</span> : null}
+                    {result.failed ? <span className="text-amber"> · 실패 {result.failed}</span> : null}
+                  </p>
+                  {/* 동명이인이라 이름이 바뀐 건 반드시 보여준다 — 조용히 바꾸면 나중에 못 찾는다. */}
+                  {result.renamed?.length ? (
+                    <div className="border-line bg-bg-soft mt-2 rounded-lg border px-3 py-2 text-[12px]">
+                      <p className="text-foreground font-bold">
+                        동명이인이 있어 {result.renamed.length}명은 이름 뒤에 구분자를 붙여 등록했습니다
+                      </p>
+                      <ul className="text-text-dim mt-1 space-y-0.5">
+                        {result.renamed.map((r) => (
+                          <li key={r}>{r}</li>
+                        ))}
+                      </ul>
+                      <p className="text-text-faint mt-1">
+                        같은 학생이 두 번 들어간 것이면 학생 목록에서 정리하세요.
+                      </p>
+                    </div>
+                  ) : null}
+                </>
               )
             ) : null}
           </div>

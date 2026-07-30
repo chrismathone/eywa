@@ -56,3 +56,29 @@ describe("matchStructure — 이름 기준 매칭(구버전 레코드 방어)", 
     expect(res.matchedTeachers).toBeGreaterThan(0);
   });
 });
+
+describe("🔴 특수 자리(LAB 603 · JJ 305)는 사람으로 해석하지 않는다", () => {
+  // 원장 2026-07-29 "직원 배정 안 함". 안 막으면 시트를 재동기할 때마다 '이주희' 라벨이 **실제 이주희
+  // 직원 계정**에 다시 붙어 출석부·직원명부·급여표에 가짜 강사가 되살아난다(재발 방지 잠금).
+  const ctxWithLeeJuhee: ExistingContext = {
+    ...ctx,
+    teachers: [...ctx.teachers, { id: "t9", englishName: null, displayName: "이주희" }],
+  };
+  const withSpecial = {
+    ...parsed,
+    slots: parsed.slots.slice(0, 3).map((s, i) => ({
+      ...s,
+      teacherName: ["이주희", "JJ", "LAB"][i]!,
+      teacherHeader: ["이주희", "JJ", "LAB"][i]!,
+    })),
+  };
+  const out = matchStructure(withSpecial, ctxWithLeeJuhee);
+
+  it("teacherId는 전부 null(라벨-only 보존)", () => {
+    expect(out.resolved.map((s) => s.teacherId)).toEqual([null, null, null]);
+  });
+
+  it("'신규 강사'로도 올라가지 않는다(계정 생성 유도 금지)", () => {
+    for (const n of ["이주희", "JJ", "LAB"]) expect(out.newTeacherNames).not.toContain(n);
+  });
+});

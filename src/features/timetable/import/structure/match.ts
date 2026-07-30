@@ -1,9 +1,11 @@
 // 파싱 슬롯 ↔ 기존 DB 레코드(이름 기준) 매칭 — 순수 함수.
 // 기존 레코드가 구버전이라 신뢰 대상이 아니므로, 여기서는 "이름으로 찾히면 그 id, 없으면 null(신규 대상)"
 // 로 분류만 한다(생성/수정은 서버 apply 몫). 수업=className, 방=classrooms.name.
-// 강사: englishName 우선 → displayName 폴백 → 복수 후보는 역할(teacher/manager/master)로 좁힘 →
+// 강사: 특수 자리(LAB 603 · JJ 305) 선차단 → englishName 우선 → displayName 폴백 →
+//       복수 후보는 역할(teacher/manager/master)로 좁힘 →
 //       그래도 모호하면 null(라벨-only = slot_teacher_label 보존). (apply-english-schedules.cjs resolveTeacher 이식)
 
+import { isSpecialSlotLabel } from "../../lib/teacher-label";
 import type {
   ExistingContext,
   ExistingTeacherRef,
@@ -25,14 +27,19 @@ function roomKey(name: string): string {
 
 const TEACHER_ROLES = new Set(["teacher", "manager", "master"]);
 /**
- * 강사 라벨("Jane"·"이주희"·"부원장"·"LAB") → 기존 user. englishName·displayName 둘 다 대조,
+ * 강사 라벨("Jane"·"부원장"·"LAB") → 기존 user. englishName·displayName 둘 다 대조,
  * 복수 후보는 역할로 좁히고, 그래도 모호하면 null(라벨-only). `existed` = 후보가 하나라도 있었는지
  * (모호로 null이어도 "신규 강사"는 아니므로 newTeachers에 안 넣는다).
+ *
+ * 🔴 **특수 자리(`LAB`·`JJ`·`이주희`)는 사람으로 해석하지 않는다**(원장 2026-07-29 "직원 배정 안 함").
+ * 안 막으면 시트를 재동기할 때마다 `이주희` 라벨이 **실제 이주희 직원 계정**에 다시 붙어
+ * 출석부·직원명부·급여표에 "가짜 강사"가 되살아난다. `existed: true`로 돌려 '신규 강사' 후보에서도 뺀다.
  */
 function resolveTeacher(
   name: string,
   teachers: ExistingTeacherRef[],
 ): { ref: ExistingTeacherRef | null; existed: boolean } {
+  if (isSpecialSlotLabel(name)) return { ref: null, existed: true }; // 자리 = 라벨-only 고정
   const n = norm(name);
   const cands = teachers.filter((t) => norm(t.englishName ?? "") === n || norm(t.displayName) === n);
   if (cands.length === 0) return { ref: null, existed: false };

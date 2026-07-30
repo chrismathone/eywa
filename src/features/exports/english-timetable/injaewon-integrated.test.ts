@@ -57,7 +57,7 @@ function fixture(): ScheduleSlotWithStudents[] {
 }
 
 describe("인재원 통합영어시간표 익스포터", () => {
-  it("원본 형식 구조 — 타이틀·섹션·반헤더·교시셀(강사↵방)·LAB·명단·정원/인원/퇴원수", () => {
+  it("원본 형식 구조 — 타이틀·섹션·반헤더·교시셀(강사↵방)·특수자리(LAB)·명단·정원/인원/퇴원수", () => {
     const wb = new ExcelJS.Workbook();
     appendInjaewonIntegratedSheet(wb, fixture(), {
       config: DEFAULT_PERIODS_CONFIG,
@@ -77,7 +77,7 @@ describe("인재원 통합영어시간표 익스포터", () => {
     expect(joined).toContain("1교시 시작"); // 섹션 라벨(앱 통합뷰 그룹핑 = N교시 시작)
     expect(vals.some((v) => v.includes("DP5") && v.includes("2:20") && v.includes("(Anna)"))).toBe(true); // 반 헤더
     expect(vals.some((v) => v.includes("Anna") && v.includes("602"))).toBe(true); // 교시 셀 강사+방
-    expect(joined).toContain("LAB");
+    expect(joined).toContain("LAB"); // 특수 자리 셀 = 사람 이름이 아니라 자리 라벨(LAB·JJ)
     expect(joined).toContain("신지민(Jenny)"); // 재원 명단(영문)
     expect(joined).toContain("정원");
     expect(joined).toContain("인원");

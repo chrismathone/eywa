@@ -1,0 +1,457 @@
+import { describe, it, expect } from "vitest";
+import { dayDiff, evaluateOffboardCandidate, ownedBoardNames } from "./offboard-safety.mjs";
+
+// 픽스처는 실사례 기반이지만 **개인정보를 제거**했다(이름은 실제 사고 케이스만 유지, username은 u1 형식).
+// 2026 학년도 기준: 중2 = 2012년생, 고2 = 2009년생, 초6 = 2014년생(expectedBirthYear).
+const TODAY = "2026-07-30";
+const SCHOOL_YEAR = 2026;
+const GRACE = 45;
+
+/** 전 가드를 통과하는 기본 사실 — 각 테스트는 필요한 조각만 덮어쓴다. */
+function facts(over = {}) {
+  const base = {
+    child: { id: 500, name: "학생A", birth: "2012-05-05", parentId: 900, parentName: "보호자A", parentUsername: "u1" },
+    matchedStudentCount: 1,
+    reverseMatchCount: 1,
+    student: {
+      id: "s1",
+      name: "학생A",
+      grade: "중2",
+      status: "withdrawn",
+      activeSubjects: [],
+      withdrawnAt: "2026-05-01", // 90일 경과
+    },
+    childDetail: { status: "ok", enrollments: [{ belong_to_class: 10, class_name: "(수학)학생A", isStudentBoard: true }] },
+    ownedBoards: { scanComplete: true, boards: [{ id: 10, name: "(수학)학생A", children: 1 }], nameConflicts: 0 },
+    broadcastBoardIds: [999],
+    erpNameEvidence: { activeRows: 1, outRows: 0 },
+    activity: {},
+    today: TODAY,
+    schoolYear: SCHOOL_YEAR,
+    graceDays: GRACE,
+  };
+  return { ...base, ...over };
+}
+
+describe("dayDiff — KST date-only 일수(타임존 개입 없음)", () => {
+  it("같은 날 0, 하루 1", () => {
+    expect(dayDiff("2026-07-30", "2026-07-30")).toBe(0);
+    expect(dayDiff("2026-07-29", "2026-07-30")).toBe(1);
+  });
+
+  it("미래 퇴원일은 음수", () => {
+    expect(dayDiff("2026-08-05", "2026-07-30")).toBe(-6);
+  });
+
+  it("⭐ 윤년 경계(2028-02-28 → 03-01 = 2일)", () => {
+    expect(dayDiff("2028-02-28", "2028-03-01")).toBe(2);
+    expect(dayDiff("2027-02-28", "2027-03-01")).toBe(1);
+  });
+
+  it("월·연 경계", () => {
+    expect(dayDiff("2025-12-31", "2026-01-01")).toBe(1);
+  });
+
+  it("형식 오류·실존하지 않는 날짜·null은 null", () => {
+    expect(dayDiff("2026-7-30", "2026-07-30")).toBeNull();
+    expect(dayDiff("2026-02-30", "2026-07-30")).toBeNull();
+    expect(dayDiff(null, "2026-07-30")).toBeNull();
+    expect(dayDiff("2026-05-01", "")).toBeNull();
+  });
+});
+
+describe("ownedBoardNames — 활성 수강과 무관", () => {
+  it("⭐ 퇴원생(활성 수강 0)도 수학·영어 보드를 '자기 보드'로 갖는다 — provision 기대집합을 쓰면 전부 foreign 오차단", () => {
+    expect(ownedBoardNames("학생A")).toEqual(["(수학)학생A", "(영어)학생A"]);
+  });
+
+  it("빈 이름은 빈 배열", () => {
+    expect(ownedBoardNames("")).toEqual([]);
+    expect(ownedBoardNames(null)).toEqual([]);
+  });
+});
+
+describe("전 가드 통과 = offboard", () => {
+  it("퇴원 90일 경과 + 신원 확정 + 자기 보드만 = 후보", () => {
+    const v = evaluateOffboardCandidate(facts());
+    expect(v.action).toBe("offboard");
+    expect(v.primaryCode).toBe("ok");
+    expect(v.matchedCodes).toEqual([]);
+    expect(v.factsComplete).toBe(true);
+    expect(v.snapshot).toMatchObject({ childId: 500, parentId: 900, boardIds: [10] });
+  });
+
+  it("⭐ 수학·영어 두 보드에 다 소속돼 있어도 자기 보드면 통과", () => {
+    const v = evaluateOffboardCandidate(
+      facts({
+        childDetail: {
+          status: "ok",
+          enrollments: [
+            { belong_to_class: 10, class_name: "(수학)학생A" },
+            { belong_to_class: 11, class_name: "(영어)학생A" },
+          ],
+        },
+        ownedBoards: {
+          scanComplete: true,
+          boards: [
+            { id: 10, name: "(수학)학생A", children: 1 },
+            { id: 11, name: "(영어)학생A", children: 1 },
+          ],
+        },
+      }),
+    );
+    expect(v.action).toBe("offboard");
+  });
+
+  it("⭐ 보드가 없어도(scanComplete=true, boards=[]) 후보가 된다 — 명부에만 남은 잔존자가 이 경로", () => {
+    const v = evaluateOffboardCandidate(
+      facts({ childDetail: { status: "ok", enrollments: [] }, ownedBoards: { scanComplete: true, boards: [] } }),
+    );
+    expect(v.action).toBe("offboard");
+    expect(v.snapshot.boardIds).toEqual([]);
+  });
+
+  it("[ALL] 전체방 소속은 foreign이 아니다", () => {
+    const v = evaluateOffboardCandidate(
+      facts({
+        childDetail: {
+          status: "ok",
+          enrollments: [
+            { belong_to_class: 10, class_name: "(수학)학생A" },
+            { belong_to_class: 999, class_name: "[ALL] 전체방" },
+          ],
+        },
+      }),
+    );
+    expect(v.action).toBe("offboard");
+  });
+});
+
+describe("재원 신호 = exclude(정상 케이스)", () => {
+  it("status가 퇴원이 아니면 exclude", () => {
+    const v = evaluateOffboardCandidate(facts({ student: { ...facts().student, status: "enrolled" } }));
+    expect(v.action).toBe("exclude");
+    expect(v.primaryCode).toBe("enrolled");
+  });
+
+  it("휴원(on_hold)도 exclude", () => {
+    const v = evaluateOffboardCandidate(facts({ student: { ...facts().student, status: "on_hold" } }));
+    expect(v.primaryCode).toBe("enrolled");
+  });
+
+  it("⭐ 퇴원 처리됐는데 발송 과목 수강이 살아 있으면 exclude(명부에서 내리면 그 과목 보드까지 끊긴다)", () => {
+    const v = evaluateOffboardCandidate(facts({ student: { ...facts().student, activeSubjects: ["english"] } }));
+    expect(v.action).toBe("exclude");
+    expect(v.primaryCode).toBe("enrolled");
+    expect(v.reason).toContain("english");
+  });
+});
+
+describe("신원 카디널리티 — 접미사 양방향·같은 학년 동명이인", () => {
+  it("매칭 0 = no_eywa_match(테스트 계정·퇴사 강사 보드)", () => {
+    const v = evaluateOffboardCandidate(facts({ matchedStudentCount: 0, student: null }));
+    expect(v.action).toBe("exclude");
+    expect(v.primaryCode).toBe("no_eywa_match");
+    expect(v.factsComplete).toBe(false);
+  });
+
+  it("⭐ 접미사 양방향(박서준·박서준C가 원아 '박서준'에 동시 매칭) = ambiguous_forward", () => {
+    const v = evaluateOffboardCandidate(facts({ matchedStudentCount: 2 }));
+    expect(v.action).toBe("exclude");
+    expect(v.primaryCode).toBe("ambiguous_forward");
+  });
+
+  it("⭐ 같은 학년 동명이인은 생년 대조로 안 갈린다 — 카디널리티가 잡는다", () => {
+    // 둘 다 중2(2012년생)라 생년은 통과하지만 후보가 2명이므로 제외.
+    const v = evaluateOffboardCandidate(facts({ matchedStudentCount: 2, child: { ...facts().child, birth: "2012-01-01" } }));
+    expect(v.action).toBe("exclude");
+    expect(v.matchedCodes).toContain("ambiguous_forward");
+  });
+
+  it("역방향(그 학생에 원아 2명) = ambiguous_reverse", () => {
+    const v = evaluateOffboardCandidate(facts({ reverseMatchCount: 2 }));
+    expect(v.primaryCode).toBe("ambiguous_reverse");
+  });
+});
+
+describe("신원 대조(생년 ↔ 학년) — 모르면 제외", () => {
+  it("⭐ 퇴원 동명이인 잔존(고2 재원 학생 보드에 붙은 중1 가족 형태) = 생년 불일치로 제외", () => {
+    // 김서윤·김채은 실사례 모양: eywa는 고2(2009년생 기대)인데 원아는 2013년생.
+    const v = evaluateOffboardCandidate(
+      facts({ student: { ...facts().student, grade: "고2" }, child: { ...facts().child, birth: "2013-04-04" } }),
+    );
+    expect(v.action).toBe("exclude");
+    expect(v.primaryCode).toBe("identity_unknown");
+    expect(v.reason).toContain("생년 불일치");
+  });
+
+  it("±1년은 허용(조기입학·유급·오입력)", () => {
+    const v = evaluateOffboardCandidate(facts({ child: { ...facts().child, birth: "2011-12-31" } }));
+    expect(v.action).toBe("offboard");
+  });
+
+  it("학년 없음 = identity_unknown", () => {
+    const v = evaluateOffboardCandidate(facts({ student: { ...facts().student, grade: null } }));
+    expect(v.primaryCode).toBe("identity_unknown");
+  });
+
+  it("원아 생년 없음 = identity_unknown", () => {
+    const v = evaluateOffboardCandidate(facts({ child: { ...facts().child, birth: null } }));
+    expect(v.primaryCode).toBe("identity_unknown");
+  });
+
+  it("원아 상세 조회 실패 = identity_unknown(재시도 대상)", () => {
+    const v = evaluateOffboardCandidate(facts({ childDetail: { status: "failed" } }));
+    expect(v.action).toBe("exclude");
+    expect(v.primaryCode).toBe("identity_unknown");
+  });
+});
+
+describe("ERP 이름 증거 — 제외 방향으로만", () => {
+  it("⭐ 명부엔 활성인데 같은 이름 ERP 행에 퇴원일이 있으면 exclude(no_action이 아니다 — 같은 아이라 단정 못 함)", () => {
+    const v = evaluateOffboardCandidate(facts({ erpNameEvidence: { activeRows: 1, outRows: 1 } }));
+    expect(v.action).toBe("exclude");
+    expect(v.primaryCode).toBe("erp_link_unknown");
+  });
+
+  it("ERP 사실이 없으면 그 가드는 미평가(factsComplete=false)", () => {
+    const v = evaluateOffboardCandidate(facts({ erpNameEvidence: null }));
+    expect(v.notEvaluatedCodes).toContain("erp_link_unknown");
+    expect(v.factsComplete).toBe(false);
+  });
+});
+
+describe("보드 안전", () => {
+  it("⭐ 남의 개인 보드에 소속 = foreign_board(잔존 가족 의심)", () => {
+    const v = evaluateOffboardCandidate(
+      facts({
+        childDetail: {
+          status: "ok",
+          enrollments: [
+            { belong_to_class: 10, class_name: "(수학)학생A" },
+            { belong_to_class: 77, class_name: "(수학)학생B" },
+          ],
+        },
+      }),
+    );
+    expect(v.action).toBe("exclude");
+    expect(v.primaryCode).toBe("foreign_board");
+  });
+
+  it("⭐ 그룹반(1인 보드가 아닌 보드) 소속은 foreign이 아니다 — 이걸 foreign으로 세면 정상 학생이 통째로 오차단(실측 64건)", () => {
+    const v = evaluateOffboardCandidate(
+      facts({
+        childDetail: {
+          status: "ok",
+          enrollments: [
+            { belong_to_class: 10, class_name: "(수학)학생A", isStudentBoard: true },
+            { belong_to_class: 55, class_name: "[EIE] Let's Speak 2b (화목금 14:20~16:20)", isStudentBoard: false },
+          ],
+        },
+      }),
+    );
+    expect(v.action).toBe("offboard");
+  });
+
+  it("⭐ 보드 카테고리를 판별할 수 없으면(목록에 없는 id) foreign 취급 — 모르면 안 내린다", () => {
+    const v = evaluateOffboardCandidate(
+      facts({
+        childDetail: {
+          status: "ok",
+          enrollments: [
+            { belong_to_class: 10, class_name: "(수학)학생A", isStudentBoard: true },
+            { belong_to_class: 4242 }, // class_name·isStudentBoard 모두 없음
+          ],
+        },
+      }),
+    );
+    expect(v.action).toBe("exclude");
+    expect(v.primaryCode).toBe("foreign_board");
+  });
+
+  it("⭐ 공유 보드(가족 2+) = shared_board(내리면 남의 집도 끊긴다)", () => {
+    const v = evaluateOffboardCandidate(
+      facts({ ownedBoards: { scanComplete: true, boards: [{ id: 10, name: "(수학)학생A", children: 2 }] } }),
+    );
+    expect(v.action).toBe("exclude");
+    expect(v.primaryCode).toBe("shared_board");
+  });
+
+  it("인원 미확인(children=null) = members_unknown", () => {
+    const v = evaluateOffboardCandidate(
+      facts({ ownedBoards: { scanComplete: true, boards: [{ id: 10, name: "(수학)학생A", children: null }] } }),
+    );
+    expect(v.action).toBe("exclude");
+    expect(v.primaryCode).toBe("members_unknown");
+  });
+
+  it("보드 전건 조회 실패 = board_scan_failed", () => {
+    const v = evaluateOffboardCandidate(facts({ ownedBoards: { scanComplete: false, boards: [] } }));
+    expect(v.action).toBe("exclude");
+    expect(v.primaryCode).toBe("board_scan_failed");
+  });
+
+  it("보드에 가족 1명인데 그게 이 원아가 아니면 input_inconsistent", () => {
+    const v = evaluateOffboardCandidate(facts({ childDetail: { status: "ok", enrollments: [] } }));
+    expect(v.action).toBe("exclude");
+    expect(v.primaryCode).toBe("input_inconsistent");
+  });
+
+  it("이 원아가 소속인데 보드 인원이 0이면 input_inconsistent", () => {
+    const v = evaluateOffboardCandidate(
+      facts({ ownedBoards: { scanComplete: true, boards: [{ id: 10, name: "(수학)학생A", children: 0 }] } }),
+    );
+    expect(v.primaryCode).toBe("input_inconsistent");
+  });
+
+  it("같은 이름 보드가 여러 개면 input_inconsistent(대상 특정 불가)", () => {
+    const v = evaluateOffboardCandidate(
+      facts({ ownedBoards: { scanComplete: true, boards: [{ id: 10, name: "(수학)학생A", children: 1 }], nameConflicts: 1 } }),
+    );
+    expect(v.primaryCode).toBe("input_inconsistent");
+  });
+
+  it("removed_child 소속은 무시한다", () => {
+    const v = evaluateOffboardCandidate(
+      facts({
+        childDetail: {
+          status: "ok",
+          enrollments: [
+            { belong_to_class: 10, class_name: "(수학)학생A" },
+            { belong_to_class: 77, class_name: "(수학)학생B", removed_child: true },
+          ],
+        },
+      }),
+    );
+    expect(v.action).toBe("offboard");
+  });
+});
+
+describe("복구 스냅샷 — 없으면 시작하지 않는다", () => {
+  it("부모 식별자 없음 = snapshot_incomplete", () => {
+    const v = evaluateOffboardCandidate(
+      facts({ child: { ...facts().child, parentId: null, parentName: null, parentUsername: null } }),
+    );
+    expect(v.action).toBe("exclude");
+    expect(v.primaryCode).toBe("snapshot_incomplete");
+  });
+
+  it("parentUsername만 있어도 스냅샷은 성립", () => {
+    const v = evaluateOffboardCandidate(facts({ child: { ...facts().child, parentName: null } }));
+    expect(v.action).toBe("offboard");
+  });
+});
+
+describe("유예 45일 — 경계", () => {
+  const withDays = (d) => {
+    const t = Date.UTC(2026, 6, 30) - d * 86400000;
+    const dt = new Date(t);
+    const iso = `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, "0")}-${String(dt.getUTCDate()).padStart(2, "0")}`;
+    return facts({ student: { ...facts().student, withdrawnAt: iso } });
+  };
+
+  it("44일 = hold", () => {
+    const v = evaluateOffboardCandidate(withDays(44));
+    expect(v.action).toBe("hold");
+    expect(v.primaryCode).toBe("grace");
+  });
+
+  it("⭐ 45일 = 통과(경계 포함)", () => {
+    expect(evaluateOffboardCandidate(withDays(45)).action).toBe("offboard");
+  });
+
+  it("46일 = 통과", () => {
+    expect(evaluateOffboardCandidate(withDays(46)).action).toBe("offboard");
+  });
+
+  it("미래 퇴원일 = hold", () => {
+    const v = evaluateOffboardCandidate(facts({ student: { ...facts().student, withdrawnAt: "2026-08-10" } }));
+    expect(v.action).toBe("hold");
+    expect(v.primaryCode).toBe("grace");
+  });
+
+  it("퇴원일 없음/형식 오류 = hold(경과를 확인할 수 없으면 내리지 않는다)", () => {
+    expect(evaluateOffboardCandidate(facts({ student: { ...facts().student, withdrawnAt: null } })).primaryCode).toBe("grace");
+    expect(evaluateOffboardCandidate(facts({ student: { ...facts().student, withdrawnAt: "2026-7-1" } })).primaryCode).toBe("grace");
+  });
+});
+
+describe("최근 활동 = hold", () => {
+  it("최근 발송이 있으면 hold", () => {
+    const v = evaluateOffboardCandidate(facts({ activity: { lastReportSentAt: "2026-07-20" } }));
+    expect(v.action).toBe("hold");
+    expect(v.primaryCode).toBe("recent_activity");
+  });
+
+  it("최근/예정 수강 시작이 있으면 hold", () => {
+    const v = evaluateOffboardCandidate(facts({ activity: { recentEnrollmentStart: "2026-08-01" } }));
+    expect(v.primaryCode).toBe("recent_activity");
+  });
+
+  it("학부모 글·댓글 알림(이름 일치)만으로도 hold — 약한 신호지만 방향이 안전하다", () => {
+    const v = evaluateOffboardCandidate(facts({ activity: { inboundNameHit: true } }));
+    expect(v.primaryCode).toBe("recent_activity");
+  });
+});
+
+describe("우선순위 — exclude > hold, 같은 랭크는 표 순서", () => {
+  it("⭐ 유예 미경과 + 남의 보드 소속이면 exclude가 이긴다(위험이 hold 뒤에 숨지 않는다)", () => {
+    const v = evaluateOffboardCandidate(
+      facts({
+        student: { ...facts().student, withdrawnAt: "2026-07-20" }, // 10일
+        childDetail: { status: "ok", enrollments: [{ belong_to_class: 77, class_name: "(수학)학생B" }] },
+      }),
+    );
+    expect(v.action).toBe("exclude");
+    expect(v.primaryCode).toBe("foreign_board");
+    expect(v.matchedCodes).toContain("grace");
+  });
+
+  it("재원 신호가 다른 exclude보다 먼저 보고된다(정상 케이스를 먼저 치운다)", () => {
+    const v = evaluateOffboardCandidate(
+      facts({
+        student: { ...facts().student, status: "enrolled" },
+        ownedBoards: { scanComplete: true, boards: [{ id: 10, name: "(수학)학생A", children: 2 }] },
+      }),
+    );
+    expect(v.primaryCode).toBe("enrolled");
+    expect(v.matchedCodes).toEqual(expect.arrayContaining(["enrolled", "shared_board"]));
+  });
+
+  it("hold 둘이 겹치면 grace가 primary", () => {
+    const v = evaluateOffboardCandidate(
+      facts({ student: { ...facts().student, withdrawnAt: "2026-07-20" }, activity: { inboundNameHit: true } }),
+    );
+    expect(v.action).toBe("hold");
+    expect(v.primaryCode).toBe("grace");
+    expect(v.matchedCodes).toEqual(expect.arrayContaining(["grace", "recent_activity"]));
+  });
+});
+
+describe("2-pass 계약 — 미평가를 숨기지 않는다", () => {
+  it("⭐ 1-pass(상세 미수집)에서는 foreign_board·input_inconsistent가 미평가로 남는다", () => {
+    const v = evaluateOffboardCandidate(
+      facts({ student: { ...facts().student, status: "enrolled" }, childDetail: { status: "not_collected" } }),
+    );
+    expect(v.action).toBe("exclude");
+    expect(v.factsComplete).toBe(false);
+    expect(v.notEvaluatedCodes).toEqual(expect.arrayContaining(["foreign_board", "input_inconsistent"]));
+  });
+
+  it("⭐ 1-pass에서 hold였던 행이 2-pass에서 foreign_board로 드러나면 최종 exclude", () => {
+    const one = evaluateOffboardCandidate(
+      facts({ student: { ...facts().student, withdrawnAt: "2026-07-20" }, childDetail: { status: "not_collected" } }),
+    );
+    expect(one.action).toBe("hold");
+    expect(one.factsComplete).toBe(false);
+
+    const two = evaluateOffboardCandidate(
+      facts({
+        student: { ...facts().student, withdrawnAt: "2026-07-20" },
+        childDetail: { status: "ok", enrollments: [{ belong_to_class: 77, class_name: "(수학)학생B" }] },
+      }),
+    );
+    expect(two.action).toBe("exclude");
+    expect(two.primaryCode).toBe("foreign_board");
+  });
+});

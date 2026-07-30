@@ -13,6 +13,11 @@ import { rosterIncludesEnrollment } from "../roster-filter";
 import { matchReportsToRows } from "../report-unit";
 import { LEGACY_REPORT_SUBJECT, reportSubject } from "@/features/timetable/lib/report-subject";
 import { carryProgress } from "../progress-status";
+import {
+  DEFAULT_ONESCREEN_FONT_SIZE,
+  readOnescreenFontSize,
+  type OnescreenFontSize,
+} from "../font-size";
 import { getTextbookOrdersForStudents } from "@/features/billing/server/textbook-queries";
 import type { AttendanceMark, OneScreenStudent } from "../types";
 
@@ -70,6 +75,9 @@ export type TeacherRoster = {
   // 출결 쓰기 권한(학원설정 역할·권한). false면 원스크린 pill을 표시 전용으로 — 서버가 거절할 일을
   // 화면이 눌리게 보여주지 않는다(2026-07-21: 강사 attendance=none인데 pill이 눌려 "권한 없음" 토스트만 떴다).
   canEditAttendance: boolean;
+  // 강사 개인 '글씨 크기'(작음/보통/큼) — users.ui_prefs.onescreen.fontSize(계정 귀속, 기기 아님).
+  // 미설정=작음(지금 화면 그대로)이라 아무도 손대지 않으면 렌더가 바뀌지 않는다.
+  fontSize: OnescreenFontSize;
 };
 
 type OnescreenSessionRow = {
@@ -103,6 +111,7 @@ type RosterSettings = Pick<
   | "sendWindow"
   | "showAttachments"
   | "canEditAttendance"
+  | "fontSize"
 >;
 type RosterConfig = Partial<RosterSettings & Pick<TeacherRoster, "noClassesToday" | "showingAll">>;
 
@@ -134,6 +143,7 @@ function emptyRoster(today: string, date: string, teacherName: string, config: R
     sendWindow: null,
     showAttachments: true,
     canEditAttendance: false,
+    fontSize: DEFAULT_ONESCREEN_FONT_SIZE,
     ...config,
   };
 }
@@ -166,7 +176,7 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
   //    — 서로 독립이라 병렬(B4).
   const [{ data: classes }, { data: meRow }, { data: orderRows }, canEditAttendance] = await Promise.all([
     supabase.from("classes").select("id, class_name, subject, is_special").eq("teacher_id", user.id).eq("is_active", true),
-    supabase.from("users").select("report_notice_mode").eq("id", user.id).single(),
+    supabase.from("users").select("report_notice_mode, ui_prefs").eq("id", user.id).single(),
     supabase.from("onescreen_student_order").select("class_id, student_ids").eq("teacher_id", user.id),
     canWriteTenant(user.systemRole, "attendance"),
   ]);
@@ -174,6 +184,7 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
     (orderRows ?? []).map((r) => [r.class_id as string, (r.student_ids ?? []) as string[]]),
   );
   const noticeMode = ((meRow?.report_notice_mode as "A" | "B" | null | undefined) ?? null);
+  const fontSize = readOnescreenFontSize(meRow?.ui_prefs);
 
   // 학원설정·강사설정에서 온 값 — 빈 로스터를 포함해 **모든 반환 경로가 이걸 그대로 쓴다**(emptyRoster 주석 참조).
   const config: RosterSettings = {
@@ -195,6 +206,7 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
       : null,
     showAttachments: settings.report.showAttachments,
     canEditAttendance,
+    fontSize,
   };
 
   const allClasses = classes ?? [];

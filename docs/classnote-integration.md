@@ -563,3 +563,96 @@ subject NULL(이관·레거시)은 게이트가 거부한다(2026-07-10 P0-2·P0
    - 옛 옵션 A(함수를 eywa 소유 GCP로 재배포)는 폐기 — 이중 관리만 남는다.
 6. 소등 후 잔여물: `edutrix_archive`(영구 보험) · lesson_reports 풀 이력(운영) · `D:\edutrix` 로컬 소스
    (함수 원본 — 옵션 B 완료 전까지 보관 필수).
+
+## 11. 퇴원처리 안전 판정 — eywa 퇴원생을 ClassNote에서 내리기 (Phase 0: 판정+스캔만, 쓰기 0, 2026-07-30)
+
+> **한 줄 규칙: eywa 퇴원생을 ClassNote 명부에서 내리는 건 실질 비가역이다. "누구를 내려도 되는가"를
+> 순수 함수로 못박고 실데이터로 재원생 오탐 0을 증명하기 전엔 쓰기 경로를 만들지 않는다.**
+
+### 왜 필요한가 (2026-07-30 실측)
+- ClassNote 활성 명부 471명 중 **101명이 eywa 퇴원생** · 학생모드 보드 526개 중 고아 147(퇴원 82·가족 연결 잔존 40).
+- **실해는 오발송이 아니다**(발송 게이트 3중이 막는다). ① 퇴원 가족이 붙은 보드가 §5.5 인바운드 게이트를
+  fail-closed로 물려 **진짜 학부모 글·댓글 알림까지 보류** ② 퇴원 학부모가 명부·`[ALL] 전체방`에 남아 학원 공지 계속 수신.
+
+### 🔴 이 작업이 비가역인 이유 (발송과 정반대 방향)
+발송은 "남의 집에 보내는 것"이 사고지만, 퇴원처리는 **"다니는 집을 끊는 것"** 이 사고다. ClassNote ERP
+퇴원처리를 하면 원아가 센터 명부에서 빠지고(실측: 처리된 87명 중 명부 잔존 2명 = 2%), 되돌리려면
+**학부모 재초대 + 재가입**이 필요한데 그건 자동화 불가 구간이다. 그래서 모든 가드가 **모르면 제외**(fail-closed)다 —
+안 내리면 현상 유지(무해), 잘못 내리면 복구 불가. ⚠️ **§5.5와 달리 예외 화이트리스트를 두지 않는다** —
+발송은 "못 보내면 손해"라 사람 탈출구가 필요하지만, 퇴원처리는 안 해도 손해가 없어 탈출구가 곧 사고 경로다.
+
+### 조사로 확정된 API 제약 (계획을 여러 번 바꾼 사실)
+- ERP 명부(`GET /api/v1_2/centers/{c}/erp-children/`) 행 필드 = `id·in_date·out_date·child_name·basic_info` **전부**.
+  상세 엔드포인트 **404**, 사진 access_key로 원아 매칭 **0/64** → **ERP 행 ↔ 원아 결정적 연결 키 없음.**
+  그래서 대상 지목은 반드시 **`child.id`**(가입 원아)로 하고, ERP는 **제외 방향으로만** 쓴다(`out_date` 있으면
+  "이미 처리됨"이 아니라 **상태 모순 = 사람이 확인**으로 읽는다 — 같은 아이인지 단정 불가).
+- ERP 활성 명부에 같은 `child_name` **2행+ 21건** · **연락처 필드 API에 없음** → 연락처 대조 가드는 구현 불가.
+- `children`(가입 원아) 471행은 **전원 생년 有** + `parent{id,name,username}` → 신원 대조·복구 스냅샷의 축.
+
+### 방어 구조 = board-safety.mjs의 자매 (같은 순수·Vitest·실데이터 적대 검증 패턴)
+| 구성 | 파일 | 역할 |
+|---|---|---|
+| 이름 매칭 키(순수) | [`identity-keys.mjs`](../scripts/_classnote/identity-keys.mjs) | `childKeys`(admin-core에서 **이동** + 재수출) · `studentIdentityKeys`(A~G 접미사 base 승격) · `matchesIdentity`(교집합, **부분일치 금지**) |
+| 판정(순수) | [`offboard-safety.mjs`](../scripts/_classnote/offboard-safety.mjs) | `evaluateOffboardCandidate(facts)` → `{action, primaryCode, matchedCodes[], notEvaluatedCodes[], factsComplete, snapshot}` |
+| 스캔(READ-ONLY) | [`scan-offboard-candidates.mjs`](../scripts/_classnote/scan-offboard-candidates.mjs) | 사실 수집(2-pass) + 독립 SQL 검증 + exit code. 4블록(원아 판정·보드 감사·ERP 품질·유예 효과)을 **단위 섞지 않고** 분리 출력 |
+
+### 신원 = `child.id` 지목 + 증거 4겹 (연락처 대조 비채택)
+- **I2 생년↔학년 ±1**(`expectedBirthYear` 재사용, 김서윤·김채은 잔존 가족 형태를 잡는다).
+- **I3 정방향 카디널리티**: 이 원아에 매칭된 eywa 학생 **행 수 == 1**(퇴원 포함 전 학생 우주, **이름 매칭만으로** 센다).
+- **I4 역방향 카디널리티**: 그 학생에 매칭된 원아 **행 수 == 1**. I3·I4가 **접미사 양방향**(`박서준`·`박서준C`가
+  둘 다 원아 "박서준"의 후보 → 카디널리티 2 → 제외)과 **같은 학년 동명이인**(생년으로 안 갈림)을 함께 잡는다.
+  ⚠️ `boardNameAmbiguity`는 역방향(`박서준C→박서준`)을 통과시켜 **못 쓴다**(board-safety.mjs:73, 프로브 확인).
+- **I5 보드 소속 봉쇄**: 그 원아의 소속 보드가 전부 `(과목)유효이름` **1인 보드**(자기 것) ∪ `[ALL]`·그룹반 안.
+  ⚠️ 판정은 **보드 ID로** 하고 그룹반(`[EIE]…`)은 foreign이 아니다(이름 파싱으로 세면 정상 학생 64건 오차단 실측).
+  ⚠️ `ownedBoardNames`는 **활성 수강과 무관하게** 유효이름으로만 만든다(provision 기대집합을 쓰면 퇴원생은 0개라 전부 foreign).
+
+### ⚠️⚠️ 원장 결정 (2026-07-30, 불변)
+1. **한 과목이라도 살아 있으면 ClassNote에 남긴다** — `activeSubjects`는 **발송 opt-in이 아니라 전 과목**.
+   수학 발송은 꺼져도 영어를 다니면 명부에서 내리면 안 된다(내리면 그 과목 보드까지 끊긴다). `enrolled`로 제외.
+2. **유예 45일** — 실측: 그 과목을 끊었다가 다시 등록한 사례 31건(수학 11·영어 20)이 **전부 30일 내**, 31일↑ 0건 + 마진 15일.
+3. **자동화 대상 = 완전 퇴원만.** 과목 이탈(재원 + 다른 과목 계속)은 구조적 제외 — 보드 감사 통계로만 표시.
+
+### 판정 코드 (우선순위 순, action: exclude > hold > offboard)
+`enrolled`(재원·전과목 수강 有) > `no_eywa_match` > `ambiguous_forward/reverse` > `identity_unknown` >
+`erp_link_unknown` > `foreign_board` > `shared_board` > `input_inconsistent` > `members_unknown` >
+`board_scan_failed` > `snapshot_incomplete` > `grace`(hold) > `recent_activity`(hold) > `ok`(offboard).
+- **2-pass 계약**: 1-pass(값싼 사실 전건) → exclude 아닌 전부(**hold 포함**)만 원아 상세 조회 후 재평가.
+  hold도 2-pass를 통과시키는 이유 = 뒤에서 `foreign_board`가 드러나면 exclude가 hold를 이겨야 하므로
+  (hold에서 끊으면 위험이 hold 뒤에 숨는다). 미평가 가드는 `notEvaluatedCodes`·`factsComplete=false`로 **드러낸다**.
+- **최근 활동(hold)**: 발송(`lesson_reports.student_id`)·재등록(`enrollments.start_date`)은 신뢰 키.
+  인바운드 알림은 `notifications`에 `student_id`가 없어(§ notifications 스키마) **이름 부분일치뿐 = 약한 신호** →
+  **hold 방향 전용**(과대매칭 무해, 비용=정리 지연). "안전하다"의 근거로는 절대 안 쓴다.
+
+### 실데이터 적대 검증 (2026-07-30, read-only)
+`node --env-file=.env.local scripts/_classnote/scan-offboard-candidates.mjs` — 명부 471명 → **후보 20 · 보류 53(전부 grace) · 제외 398.**
+- **독립 검증(스캐너 판정과 별도 SQL): 후보 ∩ (재원 OR 활성수강 보유) = 0 ✅.** 위반 시 exit 1.
+- 후보 20명 오프라인 재대조: 20행·위반 0·퇴원 경과 121~272일·활성수강 합계 0·최근30일 보고서 0.
+- 유예 효과: 유예 0일이면 53명 → 45일 적용 후 20명(7월 대량 퇴원분이 유예에 걸림, 계산 정상).
+- 보드 감사(별개 단위): 퇴원 보드 80 · 과목이탈 62 · eywa 미매칭 4 · 공유 6 · 인원 미확인 0.
+- 검증 게이트: typecheck0 · lint0 · test 185(board-safety 35 무회귀 + identity-keys 16 + offboard-safety 새 케이스).
+
+### 다음 단계 (범위 밖 · 별도 승인)
+- 🔴 **write Phase 선결 관문**: ERP 행을 결정적으로 지목할 수 없다(이름뿐). Phase 1 probe는 "쓰기가 되는가"보다
+  **"`child.id`로 지목되는 퇴원 경로가 있는가"** 를 먼저 확인해야 한다(학원이 테스트 계정). 그 뒤에야 ERP 연동·
+  `no_action`(이미 처리됨) 판정을 도입한다.
+- **Phase 2**: 큐 + 원장 승인 UI + 사전 스냅샷 저장 + 처리 후 재조회 검증 + `audit_logs` + `selectExecutionBatch`(킬스위치·상한·카나리·TOCTOU).
+
+### ✅ "퇴원 학부모가 과거 알림장을 못 본다"는 우려 = 해소 (2026-07-30, 원장 제보 + 공식 문서 확인)
+
+원장 제보: *"과거 알림장 볼 수 있더라고. 클래스노트 자체에 지난 추억 보기가 있어."* → 사실 확인됨.
+ClassNote는 키즈노트 계열이고(푸터 "Kids Note, Inc."), 키즈노트 공식 안내가 **퇴소·졸업 후에도 학부모가
+로그인하면 그때까지의 알림장·앨범을 `추억보기`로 계속 열람**한다고 명시한다
+([졸업 후 열람](https://www.with-kidsnote.com/guide/tip_parents_4) · [퇴소 후 열람](https://www.with-kidsnote.com/guide/parents/graduation1)).
+기관설정 > 메뉴 관리의 모듈 12종에 '추억'이 없는 것과도 일치한다 — **기관 모듈이 아니라 학부모 앱 기능**이다.
+
+→ **Phase 2의 마지막 원장 결정 항목이 닫혔다.** 남은 관문은 위 write-path probe 하나뿐이다.
+→ 이 사실은 **보드 삭제 비채택**(§11 비목표)이 옳았다는 근거이기도 하다. 우리가 하려는 건 **ERP 퇴원처리**(=퇴소)이고,
+   그건 공식 문서가 말하는 "열람이 유지되는" 바로 그 경로다.
+
+⚠️⚠️ **단서 2개 — 이걸 어기면 추억보기가 실제로 깨진다(공식 문서 명문):**
+1. **회원 탈퇴는 다르다.** 학부모가 키즈노트 **계정을 탈퇴**하면 자료를 못 본다. 우리 작업은 기관 퇴원처리일 뿐
+   학부모 계정을 건드리지 않는다 — 앞으로도 **학부모 계정 삭제·탈퇴를 자동화 대상에 넣지 말 것.**
+2. 🔴 **퇴원 전후로 게시물(알림장)을 삭제하지 말 것.** 공식 안내가 *"원에서 퇴소 전 게시물을 삭제하지 않도록"* 이라고
+   못박는다 — 추억보기는 **그 게시물 원본을 읽기** 때문이다. 우리에겐 실제로 동작하는 삭제 경로가 있다
+   (§ 반 공지 회수 `DELETE /api/v1_2/reports/{id}/` → 204). **"옛 보고서 정리" 같은 명목의 대량 삭제 금지** —
+   퇴원처리는 명부에서 내리는 것이고 게시물은 남겨두는 것이 학부모의 추억을 보존하는 조건이다.

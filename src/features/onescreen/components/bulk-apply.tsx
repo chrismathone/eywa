@@ -14,11 +14,22 @@
  * (planCopyFirstRow의 과목 가드와 같은 이유). 수학 계열은 행과 **같은 차시 선택기**(ProgressSelector),
  * 그 외(영어 등)는 자유 텍스트 — 진도 셀의 분기를 그대로 따른다.
  * (2026-07-23 강사 제보 "진도 일괄 적는 게 안 돼요" — 이 팝오버에 진도만 빠져 있었다.)
+ *
+ * ⚠️ **출결만 성질이 다르다**(2026-07-30 추가). 나머지 칸은 화면 state를 고쳐 두고 나중에 저장하지만
+ * 출결은 **적용 즉시 출석부(attendance_records)에 기록**되고 원스크린에서 되돌릴 수 없다. 그래서
+ * ① 대상·덮어쓸 건수를 고르는 즉시 보여주고 ② 덮어쓸 게 있으면 확인을 받는다(계산은 planBulkAttendance).
  */
 import { useState } from "react";
 import { Popover } from "@base-ui/react/popover";
 import { Button } from "@/components/ui/button";
 import type { BulkPatch } from "../grid";
+import {
+  BULK_ATTENDANCE_LABEL,
+  BULK_ATTENDANCE_STATUSES,
+  describeAttendanceSkips,
+  type BulkAttPlan,
+  type BulkAttendanceStatus,
+} from "../bulk-attendance";
 import { FieldSelect } from "./field-select";
 import { ProgressSelector } from "./progress-selector";
 
@@ -36,6 +47,7 @@ export function BulkApplyPopover({
   subjects,
   studyGrade,
   copySource,
+  attendance,
   onApply,
   onCopyFirstRow,
   disabled,
@@ -50,7 +62,18 @@ export function BulkApplyPopover({
   studyGrade: string;
   /** '맨 위 행 복사'의 원본 — 맨 위 행 학생 이름과 아래 행 수(없으면 복사 모드 비활성). */
   copySource: { label: string; belowCount: number } | null;
-  onApply: (patch: BulkPatch, onlyEmpty: boolean, progressSubjectKey: string) => void;
+  /**
+   * 출결 일괄 — 출결 **쓰기 권한이 있을 때만** 넘어온다(권한 없으면 아예 안 보인다: 못 하는 일을
+   * 할 수 있는 것처럼 보여주지 않는다, attendance-pills와 같은 규칙).
+   * `plan`은 순수 계산(planBulkAttendance)이라 고르는 즉시 대상·덮어쓸 건수를 미리 보여줄 수 있다.
+   */
+  attendance?: { plan: (status: BulkAttendanceStatus, onlyEmpty: boolean) => BulkAttPlan } | null;
+  onApply: (
+    patch: BulkPatch,
+    onlyEmpty: boolean,
+    progressSubjectKey: string,
+    attendance: BulkAttendanceStatus | null,
+  ) => void;
   onCopyFirstRow: (overwrite: boolean) => void;
   disabled?: boolean;
 }) {
@@ -63,13 +86,16 @@ export function BulkApplyPopover({
   const [progress, setProgress] = useState("");
   const [subjectKey, setSubjectKey] = useState<string | null>(null);
   const [grade, setGrade] = useState(studyGrade);
+  const [att, setAtt] = useState<BulkAttendanceStatus | null>(null);
   // 모드마다 기본이 다르다(위 주석) — 직접 입력=덮어쓰기, 복사=빈 칸만.
   const [onlyEmpty, setOnlyEmpty] = useState(false);
   const canCopy = !!copySource && copySource.belowCount > 0;
+  // 고른 출결의 실제 대상 — 상태·'빈 칸만'을 바꿀 때마다 다시 센다(순수 계산이라 렌더 중 안전).
+  const attPlan = attendance && att ? attendance.plan(att, onlyEmpty) : null;
   const hasAny =
     mode === "copy"
       ? canCopy
-      : !!(attitude || homework || textbook.trim() || homeworkToday.trim() || progress.trim());
+      : !!(attitude || homework || textbook.trim() || homeworkToday.trim() || progress.trim() || att);
   // 과목이 하나뿐이면 고를 것도 없다 — 그대로 그 과목.
   const activeSubject = subjects.find((s) => s.key === (subjectKey ?? subjects[0]?.key)) ?? subjects[0] ?? null;
 
@@ -84,6 +110,7 @@ export function BulkApplyPopover({
     setTextbook("");
     setHomeworkToday("");
     setProgress("");
+    setAtt(null); // 출결은 특히 — 남아 있다가 다음 적용에 딸려 나가면 출석부에 그대로 박힌다
     // ⚠️ 과목·진도 학년·모드는 유지 — 같은 반을 연달아 채우는 흐름에서 매번 다시 고르게 하면 손이 는다.
   };
   const apply = () => {
@@ -95,20 +122,27 @@ export function BulkApplyPopover({
       setOpen(false);
       return;
     }
+    // 확인이 필요한 사유를 모아 **한 번만** 묻는다(다이얼로그가 연달아 뜨면 아무도 안 읽는다).
+    const warns: string[] = [];
     // ⚠️ 선택 행이 없으면 **표시 전체**가 대상이라, 이미 개별 입력한 태도/과제를 통째 덮어쓸 수 있다(#4 확정).
     //    "빈 칸만"이 꺼져 있으면(덮어쓰기 모드) 전체 대상일 때 한 번 확인한다(실수 방지, 되돌리기 없음).
     if (selectedCount === 0 && !onlyEmpty) {
-      if (
-        !window.confirm(
-          `선택한 행이 없어 표시된 ${targetCount}행 전체에 적용됩니다. 이미 입력한 값도 덮어씁니다. 계속할까요?\n(빈 칸만 채우려면 '빈 칸만 채우기'를 켜세요)`,
-        )
-      )
-        return;
+      warns.push(
+        `· 선택한 행이 없어 표시된 ${targetCount}행 전체에 적용됩니다. 이미 입력한 값도 덮어씁니다.\n  (빈 칸만 채우려면 '빈 칸만 채우기'를 켜세요)`,
+      );
     }
+    // 출결은 적용 즉시 출석부에 남고 여기서 되돌릴 수 없다 — **기존 기록을 덮을 때만** 따로 밝힌다.
+    if (att && attPlan && attPlan.overwrite > 0) {
+      warns.push(
+        `· 출결 ${attPlan.cells.length}건을 '${BULK_ATTENDANCE_LABEL[att]}'으로 기록합니다 — 그중 ${attPlan.overwrite}건은 이미 있는 기록을 덮어씁니다.\n  출결은 저장 즉시 출석부에 반영되며 여기서는 되돌릴 수 없습니다.`,
+      );
+    }
+    if (warns.length && !window.confirm(`${warns.join("\n\n")}\n\n계속할까요?`)) return;
     onApply(
       { attitude: attitude ?? undefined, homework: homework ?? undefined, textbook, homeworkToday, today: progress },
       onlyEmpty,
       activeSubject?.key ?? "",
+      att,
     );
     setOpen(false);
     reset();
@@ -226,6 +260,61 @@ export function BulkApplyPopover({
                 <p className="text-text-faint mt-1 text-[11px]">
                   {activeSubject.name} 행에만 들어갑니다 — 다른 과목 행은 그대로
                 </p>
+              </div>
+            ) : null}
+            {/* 출결 — 화면 state가 아니라 **출석부에 즉시 기록**되는 유일한 칸이라 따로 묶고 경계를 밝힌다. */}
+            {mode === "input" && attendance ? (
+              <div className="border-line bg-bg-soft/60 rounded-md border p-2">
+                <p className="micro text-text-faint mb-1">출결</p>
+                <div className="flex flex-wrap gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setAtt(null)}
+                    aria-pressed={att === null}
+                    className={`rounded-pill px-2 py-0.5 text-[11px] font-bold transition ${
+                      att === null
+                        ? "bg-primary text-primary-foreground"
+                        : "border-line text-text-dim hover:bg-bg-soft border"
+                    }`}
+                  >
+                    적용 안 함
+                  </button>
+                  {BULK_ATTENDANCE_STATUSES.map((s) => (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => setAtt(att === s ? null : s)}
+                      aria-pressed={att === s}
+                      className={`rounded-pill px-2 py-0.5 text-[11px] font-bold transition ${
+                        att === s
+                          ? "bg-primary text-primary-foreground"
+                          : "border-line text-text-dim hover:bg-bg-soft border"
+                      }`}
+                    >
+                      {BULK_ATTENDANCE_LABEL[s]}
+                    </button>
+                  ))}
+                </div>
+                {/* 고른 즉시 실제 대상·덮어쓸 건수를 보여준다 — 눌러 보고 나서 알게 되면 늦다. */}
+                {attPlan ? (
+                  <p className={`mt-1 text-[11px] ${attPlan.cells.length ? "text-text-dim" : "text-amber"}`}>
+                    {attPlan.cells.length ? (
+                      <>
+                        <span className="text-foreground font-bold">{attPlan.cells.length}건</span> 기록
+                        {attPlan.overwrite ? ` · 기존 기록 ${attPlan.overwrite}건 덮어씀` : ""}
+                      </>
+                    ) : (
+                      "기록할 대상이 없습니다"
+                    )}
+                    {describeAttendanceSkips(attPlan) ? (
+                      <span className="text-text-faint"> · 제외 {describeAttendanceSkips(attPlan)}</span>
+                    ) : null}
+                  </p>
+                ) : (
+                  <p className="text-text-faint mt-1 text-[11px]">
+                    저장 즉시 출석부에 기록됩니다 — 조퇴·공결·보강 행은 건드리지 않습니다
+                  </p>
+                )}
               </div>
             ) : null}
             {mode === "input" ? (
