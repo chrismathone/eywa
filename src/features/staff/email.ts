@@ -25,3 +25,31 @@ export function isImportArtifactEmail(email: string): boolean {
 export function canEditLoginEmail(email: string, everSignedIn: boolean): boolean {
   return isImportArtifactEmail(email) || !everSignedIn;
 }
+
+/** 이메일 편집 기본 도메인 — 학원 계정 대부분이 여기라 새로 만들 땐 이걸 고정으로 쓴다. */
+export const DEFAULT_EMAIL_DOMAIN = "gmail.com";
+
+/**
+ * 이메일을 "아이디 + 도메인"으로 쪼갠다 — 화면에서 **아이디만 고치게** 하기 위한 것(원장 지시 2026-07-30).
+ *
+ * 도메인을 gmail로 **못 박지 않는 이유**: 네이버 등 다른 도메인을 쓰는 직원이 실제로 있고,
+ * 그 사람 이메일을 열었을 때 도메인이 gmail로 바뀌어 있으면 **저장하는 순간 로그인 주소가 조용히 바뀐다.**
+ * 그래서 지금 쓰는 도메인을 그대로 고정값으로 들고 오고, 없거나 임시(@imported.local)일 때만 기본값을 쓴다.
+ *
+ * 임시 주소의 아이디는 사람이 쓸 수 없는 문자열(`sheet-26-…`, `sam 김태건`)인 경우가 많아
+ * **깔끔한 형태일 때만** 남기고 아니면 비운다(그대로 두면 그게 새 아이디가 된다).
+ */
+export function splitEmailForEdit(email: string | null | undefined): { local: string; domain: string } {
+  const raw = (email ?? "").trim();
+  const at = raw.lastIndexOf("@");
+  if (at <= 0) return { local: "", domain: DEFAULT_EMAIL_DOMAIN };
+  const local = raw.slice(0, at);
+  const domain = raw.slice(at + 1).toLowerCase();
+  const usable = /^[a-zA-Z0-9._%+-]+$/.test(local);
+  if (domain === "imported.local") {
+    // 이관이 자동 생성한 아이디(`sheet-26-65579e04`)는 문자 구성만 보면 멀쩡해 보이지만 사람 아이디가 아니다.
+    const generated = /^sheet-\d+-/.test(local);
+    return { local: usable && !generated ? local : "", domain: DEFAULT_EMAIL_DOMAIN };
+  }
+  return { local: usable ? local : "", domain: domain || DEFAULT_EMAIL_DOMAIN };
+}

@@ -3,6 +3,7 @@
 import { useActionState, useState } from "react";
 import { KeyRound, Mail, ShieldCheck, Trash2 } from "@/components/icons/eywa-icon-compat";
 import { Button } from "@/components/ui/button";
+import { EmailIdField } from "@/components/forms/email-id-field";
 import { ROLE_LABEL } from "@/lib/auth/role-hierarchy";
 import type { SystemRole } from "@/lib/permissions";
 import { changeStaffRole } from "@/features/staff/server/actions";
@@ -32,7 +33,8 @@ function EmailDialog({
     <Modal title="이메일 변경" desc={`현재: ${currentEmail}`} onClose={onClose}>
       <form action={action} className="space-y-3">
         <input type="hidden" name="id" value={staffId} />
-        <input name="email" type="email" required defaultValue={currentEmail} className={`num ${INPUT}`} />
+        {/* 아이디만 고치고 도메인은 고정 — 전체 주소 타이핑은 오타 한 글자로 로그인이 막힌다. */}
+        <EmailIdField defaultEmail={currentEmail} inputClassName={INPUT} />
         {state?.error ? <p className="text-chart-4 text-xs">{state.error}</p> : null}
         <Footer onClose={onClose}>
           <SubmitBtn label="변경" />

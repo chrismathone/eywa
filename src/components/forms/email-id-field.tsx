@@ -1,0 +1,75 @@
+"use client";
+
+import { useState } from "react";
+import { splitEmailForEdit } from "@/features/staff/email";
+
+/**
+ * 로그인 이메일 입력 — **아이디만 고치고 도메인은 고정**(원장 지시 2026-07-30).
+ * 전체 주소를 매번 타이핑하면 오타 한 글자로 로그인이 막히는데, 실제로 바뀌는 건 앞부분뿐이다.
+ *
+ * 도메인을 gmail로 못 박지 않는다 — 네이버 등을 쓰는 직원이 있어서, 그 사람 폼을 열었을 때
+ * 도메인이 gmail로 보이면 **저장하는 순간 로그인 주소가 조용히 바뀐다**([`splitEmailForEdit`] 참조).
+ * 지금 쓰는 도메인을 그대로 고정으로 들고 오고, 정말 바꿔야 할 때만 '도메인 변경'으로 연다.
+ *
+ * 제출은 hidden input 한 개(`name`)로 합쳐진 전체 주소 — 서버 액션은 종전 그대로 `email` 하나만 읽는다.
+ */
+export function EmailIdField({
+  name = "email",
+  id,
+  defaultEmail,
+  inputClassName,
+  autoComplete = "email",
+}: {
+  name?: string;
+  id?: string;
+  /** 현재 이메일(없거나 임시 주소면 아이디는 비고 도메인은 기본값). */
+  defaultEmail?: string | null;
+  inputClassName?: string;
+  autoComplete?: string;
+}) {
+  const initial = splitEmailForEdit(defaultEmail);
+  const [local, setLocal] = useState(initial.local);
+  const [domain, setDomain] = useState(initial.domain);
+  const [editDomain, setEditDomain] = useState(false);
+
+  const value = local.trim() && domain.trim() ? `${local.trim()}@${domain.trim()}` : "";
+
+  return (
+    <div>
+      {/* 서버로 나가는 값은 합쳐진 전체 주소 하나 — 액션 계약 불변. */}
+      <input type="hidden" name={name} value={value} />
+      <div className="flex items-stretch gap-1.5">
+        <input
+          id={id}
+          value={local}
+          onChange={(e) => setLocal(e.target.value.trim())}
+          placeholder="아이디"
+          autoComplete={autoComplete}
+          aria-label="이메일 아이디"
+          className={`num min-w-0 flex-1 ${inputClassName ?? ""}`}
+        />
+        <span className="text-text-dim flex shrink-0 items-center text-sm">@</span>
+        {editDomain ? (
+          <input
+            value={domain}
+            onChange={(e) => setDomain(e.target.value.trim().toLowerCase())}
+            placeholder="gmail.com"
+            aria-label="이메일 도메인"
+            className={`num w-36 shrink-0 ${inputClassName ?? ""}`}
+          />
+        ) : (
+          <span className="border-line bg-bg-soft/60 text-text-dim num flex shrink-0 items-center rounded-lg border px-2.5 text-sm">
+            {domain}
+          </span>
+        )}
+      </div>
+      <button
+        type="button"
+        onClick={() => setEditDomain((v) => !v)}
+        className="text-text-faint hover:text-primary mt-1 text-[11px] underline-offset-2 hover:underline"
+      >
+        {editDomain ? "도메인 고정으로" : "도메인 변경"}
+      </button>
+    </div>
+  );
+}

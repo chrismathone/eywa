@@ -5,6 +5,7 @@ import { useFormStatus } from "react-dom";
 import { toast } from "sonner";
 import { Loader2 } from "@/components/icons/eywa-icon-compat";
 import { Button } from "@/components/ui/button";
+import { EmailIdField } from "@/components/forms/email-id-field";
 import { PasswordInput } from "@/components/ui/password-input";
 import {
   updateMyEmail,
@@ -64,15 +65,8 @@ export function AccountCard({ email, isPlaceholder }: { email: string; isPlaceho
           <label htmlFor="me-email" className="micro mb-1 block">
             로그인 이메일
           </label>
-          <input
-            id="me-email"
-            name="email"
-            type="email"
-            defaultValue={isPlaceholder ? "" : email}
-            placeholder={isPlaceholder ? email : "name@example.com"}
-            autoComplete="email"
-            className={inputClass}
-          />
+          {/* 아이디만 고치고 도메인은 고정(지금 쓰는 도메인 그대로) — 전체 주소 타이핑 오타 방지. */}
+          <EmailIdField id="me-email" defaultEmail={email} inputClassName={inputClass} />
           <p className="text-text-faint mt-1 text-[11px]">
             바꾸면 <b>다음 로그인부터</b> 새 주소를 씁니다. 지금 로그인은 그대로 유지됩니다.
           </p>
