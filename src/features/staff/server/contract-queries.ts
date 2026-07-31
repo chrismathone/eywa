@@ -10,16 +10,19 @@ export async function getStaffContracts(userId: string): Promise<ContractRow[]> 
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("staff_contracts")
-    .select("id, seq, start_date, end_date, terms, memo")
+    .select("id, seq, kind, start_date, end_date, terms, memo, line_no")
     .eq("user_id", userId)
-    .order("seq", { ascending: true });
+    .order("seq", { ascending: true })
+    .order("line_no", { ascending: true, nullsFirst: false });
   if (error) throw new Error(`계약 이력 조회 실패: ${error.message}`);
   return (data ?? []).map((r) => ({
     id: r.id as string,
     seq: r.seq as number,
-    startDate: r.start_date as string,
-    endDate: r.end_date as string,
+    kind: (r.kind as "contract" | "note" | null) ?? "contract",
+    startDate: (r.start_date as string | null) ?? null,
+    endDate: (r.end_date as string | null) ?? null,
     terms: (r.terms as string | null) ?? null,
     memo: (r.memo as string | null) ?? null,
+    lineNo: (r.line_no as number | null) ?? null,
   }));
 }

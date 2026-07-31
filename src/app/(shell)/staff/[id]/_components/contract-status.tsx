@@ -11,7 +11,27 @@ import {
   extendStaffContract,
   type ContractActionState,
 } from "@/features/staff/server/contract-actions";
-import { currentContract, daysUntil, nextContractDefault, periodLabel, type ContractRow } from "@/features/staff/contract";
+import {
+  contractsOnly,
+  currentContract,
+  daysUntil,
+  nextContractDefault,
+  periodLabel,
+  type ContractRow,
+} from "@/features/staff/contract";
+
+/**
+ * 히스토리 정렬 — 최신이 위. 날짜가 있으면 날짜 내림차순, 날짜 없는 줄(인센티브 조항 등)은
+ * 시트 원문 순서(line_no)를 따라 뒤에 붙인다. 원문 셀의 읽는 순서를 최대한 보존한다.
+ */
+function sortHistory(a: ContractRow, b: ContractRow): number {
+  const ad = a.startDate ?? "";
+  const bd = b.startDate ?? "";
+  if (ad && bd && ad !== bd) return ad < bd ? 1 : -1;
+  if (ad && !bd) return -1;
+  if (!ad && bd) return 1;
+  return (a.lineNo ?? 0) - (b.lineNo ?? 0);
+}
 
 const inputClass =
   "border-line bg-card text-foreground placeholder:text-text-faint focus:border-primary w-full rounded-lg border px-3 py-2 text-sm outline-none transition";
@@ -78,7 +98,9 @@ export function ContractStatus({
   // 기입된 계약이 없으면 만료 판정 자체가 무의미(계산값이라) → 갱신이 아니라 '기입'이다.
   const dueSoon = !!current?.stored && left !== null && left <= 60;
   const actionLabel = !current?.stored ? "계약 기입" : dueSoon ? "계약 갱신" : "계약 연장";
-  const latestId = rows.length > 0 ? [...rows].sort((a, b) => b.seq - a.seq)[0].id : null;
+  // 삭제 버튼은 **계약의 마지막 차수**에만(시트에서 온 이력 줄은 원문이라 화면에서 지우지 않는다).
+  const periods = contractsOnly(rows);
+  const latestId = periods.length > 0 ? [...periods].sort((a, b) => b.seq - a.seq)[0].id : null;
 
   return (
     <section className="border-line bg-card flex flex-col rounded-2xl border p-5 shadow-card">
@@ -186,17 +208,26 @@ export function ContractStatus({
         ) : (
           <ul className="space-y-1.5">
             {[...rows]
-              .sort((a, b) => b.seq - a.seq)
+              .sort(sortHistory)
               .map((r) => (
                 <li
                   key={r.id}
                   className="border-line flex items-start justify-between gap-3 rounded-lg border px-3 py-2"
                 >
                   <div className="min-w-0">
-                    <p className="text-foreground text-xs font-medium">
-                      <span className="text-text-dim">{r.seq}차</span>{" "}
-                      <span className="num">{periodLabel(r)}</span>
-                    </p>
+                    {/* 기간 있는 계약은 'N차 + 기간', 시트에서 온 이력 줄은 날짜(있으면) + 원문 그대로. */}
+                    {r.kind === "contract" && r.startDate && r.endDate ? (
+                      <p className="text-foreground text-xs font-medium">
+                        <span className="text-text-dim">{r.seq}차</span>{" "}
+                        <span className="num">
+                          {periodLabel({ startDate: r.startDate, endDate: r.endDate })}
+                        </span>
+                      </p>
+                    ) : (
+                      <p className="text-text-dim text-xs">
+                        {r.startDate ? <span className="num">{r.startDate}</span> : "기록"}
+                      </p>
+                    )}
                     {r.terms || r.memo ? (
                       <p className="text-text-dim mt-0.5 text-[11px] break-keep">
                         {[r.terms, r.memo].filter(Boolean).join(" · ")}
