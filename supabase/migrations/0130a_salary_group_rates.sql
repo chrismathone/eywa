@@ -42,15 +42,15 @@ create policy class_salary_settings_master_all on public.class_salary_settings
   for all
   using (
     tenant_id = public.auth_tenant_id()
-    and exists (
+    and (select exists (
       select 1 from public.users u
-      where u.id = auth.uid() and u.system_role = 'master' and u.tenant_id = public.auth_tenant_id()
-    )
+      where u.id = (select auth.uid()) and u.system_role = 'master' and u.tenant_id = public.auth_tenant_id()
+    ))
   )
   with check (
     tenant_id = public.auth_tenant_id()
-    and exists (
+    and (select exists (
       select 1 from public.users u
-      where u.id = auth.uid() and u.system_role = 'master' and u.tenant_id = public.auth_tenant_id()
-    )
+      where u.id = (select auth.uid()) and u.system_role = 'master' and u.tenant_id = public.auth_tenant_id()
+    ))
   );

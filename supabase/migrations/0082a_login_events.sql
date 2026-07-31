@@ -25,7 +25,7 @@ alter table public.login_events enable row level security;
 drop policy if exists login_events_office_read on public.login_events;
 create policy login_events_office_read on public.login_events
   for select
-  using (tenant_id = public.auth_tenant_id() and public.auth_system_role() in ('master', 'admin', 'manager'));
+  using (tenant_id = public.auth_tenant_id() and (select public.auth_system_role()) in ('master', 'admin', 'manager'));
 -- 삽입 = 본인 것만(로그인 액션이 자기 로그인 기록). 위조해도 본인 로그인 행뿐 + 사무실만 열람.
 drop policy if exists login_events_self_insert on public.login_events;
 create policy login_events_self_insert on public.login_events

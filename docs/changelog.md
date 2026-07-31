@@ -4,6 +4,72 @@
 
 ## 진행 상황
 
+### RLS 뒷정리: 청구 계열 나머지 2테이블 + 직원 계약이 전원에게 열려 있었다 · 행마다 도는 필터 정리 (2026-07-31) - typecheck0/lint0/test3210/build✓ - 0165a·0166a·0167a
+
+수납 적대 검증이 "별건"으로 남긴 2건을 처리했다. 하나는 **실제로 뚫려 있었고**, 다른 하나는 **오진이었다.**
+그리고 조사 중 **세 번째 구멍**이 나왔다.
+
+#### 1) 🔴 청구 계열은 4테이블인데 2개만 잠겨 있었다 (0165a)
+
+07-30의 0158a가 `invoices`·`expenses`를 RESTRICTIVE로 잠갔지만, 같은 계열
+`invoice_teacher_splits`(강사별 분배액·단가)·`invoice_session_terms`(회당 단가·확정 회차, 1,337행)는
+`*_tenant_isolation` 하나뿐이라 **역할을 전혀 안 봤다.** teacher(31계정)·viewer(8계정)가 자기 토큰으로
+`GET /rest/v1/invoice_session_terms`를 부르면 그대로 받았다. 0158a는 textbook_orders를 "의도적 제외"로
+**기록**했으나 이 둘은 언급조차 없어 **닫힌 것으로 오인**됐다.
+- 실측(롤백 트랜잭션): teacher·viewer의 `invoice_session_terms` **1,337 → 0**, 사무실 역할은 **전부 불변**.
+- 락아웃 없음을 코드로 확인하고 잠갔다 — 쓰기 3곳은 이미 `canWriteTenant(billing)`을 통과하고, 읽기는
+  billing 화면과 **출석부 '강사 전체 보기' 금액 열(master 조건에서만 호출)**뿐이다.
+
+#### 2) ✅ `auth_tenant_id()` 219곳은 고칠 필요가 없었다 — 적대 검증의 **오진**
+
+"전건 select에 남은 155ms가 이 항"이라는 지적을 확인하러 갔다가 반대 결론이 나왔다. 이 항은
+**컬럼과의 동등비교**라 플래너가 함수를 **인덱스 스캔 키**로 쓴다(1회 평가):
+
+```
+Index Only Scan using lesson_reports_tenant_idx
+  Index Cond: (tenant_id = auth_tenant_id())      ← Filter가 아니다
+```
+
+롤백 트랜잭션에서 실제로 감싸 보고 비교: lesson_reports 18→15ms · activity_log 257→268 ·
+attendance_records 12→12 · invoices 13→13 = **차이 없음**. 정책 86개를 건드릴 이유가 없다.
+
+> 📌 **판별 기준은 "함수를 썼나"가 아니라 "컬럼과 비교되나"** — 비교되면 스캔 키, 아니면 행마다 Filter.
+
+#### 3) 🔴 진짜 잔여분 = **컬럼과 비교되지 않는** 함수 항 (0166a)
+
+그 기준으로 전수 조사하니 6개뿐이었고, 실질 이득은 `activity_log`(18,334행)에 몰려 있었다:
+
+```
+Index Cond: (tenant_id = auth_tenant_id())
+Filter: (auth_system_role() = ANY ('{master,admin,manager}'))   ← 행마다 호출
+```
+
+- 실측: activity_log count **255ms → 17ms**(EXPLAIN 실행시간 268ms → 6.5ms).
+- 나머지(staff_contracts 132행·academy_documents 60행·class_salary_settings 14행·login_events 0행)는
+  지금 작아 체감이 없지만 같은 규칙으로 통일했다 — 행이 늘면 조용히 느려지는 자리다.
+- ⚠️ **1개는 일부러 남겼다**: `consultation_ai_analysis`의 exists는 바깥 행의 컬럼을 참조하는
+  **상관 서브쿼리**라 행마다 평가돼야 맞다(감싸면 의미가 바뀐다).
+
+#### 4) 🔴 직원 **계약 조건**을 테넌트 전원이 읽을 수 있었다 (0167a — 조사 중 발견)
+
+`staff_contracts_tenant_read`(0149a)가 `using (tenant_id = auth_tenant_id())`뿐이라 역할을 안 봤다.
+앱은 이미 사무실 전용인데(`/staff/[id]`는 `requireAccess("staff")`) **DB만 열려 있어** 강사·뷰어가
+PostgREST로 전 직원 계약 132행을 읽을 수 있었다 — gotchas #77의 교과서 사례.
+- 0149a 주석은 *"급여액이 아니라 기간·조건이라 완화된 등급"*이라고 판단 근거를 적어 뒀는데,
+  **실데이터가 그 전제를 반증한다** — `terms` 132행 중 **54행이 급여성 문구**(급여·월급·시급·연봉·수당·만원).
+- ⚠️ 잠그려면 `auth_menu_access('staff')`가 필요한데 0158a DEFAULTS엔 billing·expense_requests뿐이라
+  **그대로 잠갔으면 admin·manager가 계약을 못 보는 fail-closed 락아웃**이었다(master만 통과).
+  → DEFAULTS에 `staff` 행을 추가하고 `permissions-sql-mirror.test.ts`의 미러 목록도 3개로 갱신.
+- `/me`(내 정보)는 계약을 읽지 않아 **본인 열람 예외는 넣지 않았다** — 앱에 없는 경로를 DB만 여는 셈이라.
+  본인 계약 보기를 만들면 그때 `or user_id = (select auth.uid())`를 더한다.
+
+#### 검증
+
+프로덕션에 **트랜잭션 적용 → 5역할 × 10테이블 가시 행 수 대조 → 강제 롤백**으로 먼저 확인한 뒤 적용했다.
+바뀐 칸은 teacher·viewer의 두 테이블뿐이고 사무실 역할·나머지 8테이블은 전부 동일했다.
+원본 파일(0081a·0082a·0130a·0148a·0149a)에도 같은 형태를 접어 넣었다 — 원본만 단독 재적용하면
+느린 형태·열린 형태가 **에러 0건으로** 되살아나기 때문(0158a에서 겪은 함정).
+
 ### 수납관리: 창이 느렸던 진짜 이유(RLS가 행마다) + '기한 경과' 필터가 완납을 데려오던 것 (2026-07-31) - typecheck0/lint0/test3208/build✓ + 적대검증(에이전트69)
 
 원장 제보 3건이 한 화면에서 겹쳤다: *"필터 걸면 완납도 보인다"* · *"완납인데 왜 미수금이라 뜨나"* ·

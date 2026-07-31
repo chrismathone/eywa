@@ -34,16 +34,25 @@ alter table public.staff_contracts enable row level security;
 -- 쓰기는 사무실 역할만. 급여액이 아니라 '기간·조건'이라 이력서(restricted)보다 완화된 등급.
 drop policy if exists staff_contracts_tenant_read on public.staff_contracts;
 create policy staff_contracts_tenant_read on public.staff_contracts
-  for select using (tenant_id = public.auth_tenant_id());
+  -- ⚠️ **사무실만**(0167a). 예전엔 역할을 안 봐서 강사·뷰어가 PostgREST 직결로 전 직원 계약 조건
+  --    132행을 읽을 수 있었다(gotchas #77). 바로 위 "급여액이 아니라 기간·조건"이라는 전제는
+  --    **실데이터가 반증한다** — 132행 중 54행이 급여성 문구(급여·월급·시급·연봉·수당·만원)를 담고 있다.
+  --    앱은 이미 `requireAccess("staff")`라 화면만 닫혀 있었다. 게이트는 `(select …)`로 감쌀 것(#91).
+  --    본인 계약 보기를 만들면 그때 `or user_id = (select auth.uid())`를 더한다(지금은 소비처가 없다 —
+  --    /me는 계약을 읽지 않는다).
+  for select using (
+    tenant_id = public.auth_tenant_id()
+    and (select public.auth_staff_can_read())
+  );
 
 drop policy if exists staff_contracts_office_write on public.staff_contracts;
 create policy staff_contracts_office_write on public.staff_contracts
   for all
   using (
     tenant_id = public.auth_tenant_id()
-    and public.auth_system_role() in ('master', 'admin', 'manager')
+    and (select public.auth_system_role()) in ('master', 'admin', 'manager')
   )
   with check (
     tenant_id = public.auth_tenant_id()
-    and public.auth_system_role() in ('master', 'admin', 'manager')
+    and (select public.auth_system_role()) in ('master', 'admin', 'manager')
   );

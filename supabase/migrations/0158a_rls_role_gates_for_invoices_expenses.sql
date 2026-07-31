@@ -20,6 +20,14 @@
 --    `src/lib/permissions-sql-mirror.test.ts`가 이 파일을 파싱해 MENU_ACCESS와 일치하는지 검사한다.
 --    permissions.ts에서 billing·expense_requests 행을 바꾸면 **이 파일도 같은 커밋에서** 바꿔야 한다.
 --
+-- ⚠️⚠️ **이 파일이 잠그는 건 invoices·expenses 둘뿐이다.** 청구 계열은 4테이블이고 나머지 둘
+--    (`invoice_teacher_splits`·`invoice_session_terms`)은 여기서 안 잠갔다 — 그런데 "의도적 제외"로 적힌 게
+--    textbook_orders 하나뿐이라 **"나머지는 검토됐다"로 읽혀** 두 테이블이 2일간 열린 채였다(2026-07-31 발견,
+--    → 0165a에서 잠금). 같은 오해가 `staff_contracts`에서도 났다(→ 0167a). gotchas #92.
+--    📌 **잠그는 마이그레이션은 같은 계열에서 안 잠근 테이블을 전부 이름으로 적을 것** — 안 적힌 테이블은
+--       존재하지 않는 것처럼 취급된다. 현재 청구/직원 계열 잠금 현황: invoices·expenses(0158a) ·
+--       invoice_teacher_splits·invoice_session_terms(0165a) · staff_contracts(0167a) · textbook_orders(**미잠금**, 아래).
+--
 -- ⚠️ textbook_orders는 같은 구멍이 있으나 **created_by 컬럼이 없다**(teacher_name text만) —
 --    강사 본인 요청을 DB에서 안전하게 식별할 수 없어 이 마이그레이션에서 **의도적으로 제외**한다.
 --    잠그면 강사 교재요청이 통째로 막힌다(fail-closed 락아웃). 근본 해결 = textbook_orders.created_by 도입 후
@@ -37,7 +45,8 @@ create or replace function public.auth_menu_access(p_menu text) returns text
   defaults as (
     select '{
       "billing":          {"master":"full","admin":"full","manager":"readonly","teacher":"none","counselor":"none","accountant":"full","viewer":"none","student":"none"},
-      "expense_requests": {"master":"full","admin":"full","manager":"none","teacher":"full","counselor":"none","accountant":"full","viewer":"none","student":"none"}
+      "expense_requests": {"master":"full","admin":"full","manager":"none","teacher":"full","counselor":"none","accountant":"full","viewer":"none","student":"none"},
+      "staff":            {"master":"full","admin":"full","manager":"full","teacher":"none","counselor":"none","accountant":"full","viewer":"none","student":"none"}
     }'::jsonb as d
   ),
   ov as (
@@ -69,6 +78,12 @@ $$;
 create or replace function public.auth_expense_can_submit() returns boolean
   language sql stable security definer set search_path = public as $$
   select public.auth_menu_access('expense_requests') in ('full', 'scoped')
+$$;
+
+-- 직원관리(사무실) 열람 — staff_contracts 게이트용(0167a). counselor는 injaewon override로 readonly.
+create or replace function public.auth_staff_can_read() returns boolean
+  language sql stable security definer set search_path = public as $$
+  select public.auth_menu_access('staff') <> 'none'
 $$;
 
 -- ⚠️ 게이트 함수는 **반드시 `(select f())`로 감싼다**(2026-07-31 추가). 컬럼을 하나도 안 쓰는 순수

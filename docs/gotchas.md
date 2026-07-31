@@ -875,6 +875,27 @@ makeedu 신호가 뜬 유일한 날이 유일한 검증 탈락일이었다(재�
 AI가 죽어도 결정론 요약이 같은 카드 구조로 렌더돼 화면은 매일 멀쩡해 보였다. **폴백이 있는 기능은 실패율을
 따로 계측해서 봐야 한다**(여기선 `daily_briefings.team_report is null` 집계로 16일 중 6일이 드러났다).
 
+## #92 RLS를 한 테이블에 걸었다고 **그 계열이 다 잠긴 게 아니다** — "의도적 제외"를 안 적으면 닫힌 걸로 오인된다 (2026-07-31)
+
+0158a가 수납 구멍을 막았다고 선언한 뒤, 같은 계열의 나머지가 그대로 열려 있었다.
+
+- **뚫려 있던 것**: `invoice_teacher_splits`(강사별 분배액·단가) · `invoice_session_terms`(회당 단가·확정 회차,
+  1,337행) · `staff_contracts`(계약 조건 132행 — **54행이 급여성 문구**). 셋 다 `*_tenant_isolation`
+  (`tenant_id = auth_tenant_id()`) 하나뿐이라 **역할을 전혀 안 봤다.** 앱은 다 잠겨 있었지만(billing 게이트 ·
+  `requireAccess("staff")`) 강사·뷰어가 자기 access token으로 PostgREST에 직접 붙으면 그대로 받았다(#77 변종).
+- 🔑 **왜 못 봤나 = 0158a가 `textbook_orders`만 "의도적 제외"로 적어 뒀기 때문.** 적힌 것 하나뿐이라
+  "나머지는 다 검토됐다"로 읽혔다. **잠그는 마이그레이션은 같은 계열에서 안 잠근 테이블을 전부 이름으로
+  적고 이유를 남길 것** — 안 적힌 테이블은 존재하지 않는 것처럼 취급된다.
+- ⚠️ **잠그기 전에 `auth_menu_access` DEFAULTS에 그 메뉴가 있는지 확인.** 0158a DEFAULTS엔
+  billing·expense_requests뿐이라 `auth_menu_access('staff')`가 **master 빼고 전부 'none'**을 돌려줬다.
+  그대로 잠갔으면 admin·manager가 계약을 못 보는 **fail-closed 락아웃**(gotchas #60). DEFAULTS에 행을
+  추가하고 `permissions-sql-mirror.test.ts`의 미러 목록도 **같은 커밋에서** 갱신해야 한다.
+- ⚠️ **앱에 없는 경로를 DB만 열지 말 것.** `staff_contracts`에 "본인 열람" 예외를 넣고 싶었지만
+  `/me`는 계약을 읽지 않는다 — 넣었으면 화면엔 없는 열람 권한을 REST에만 만들어 주는 셈이었다.
+- **확인법**: 잠근 뒤 **역할 × 테이블 가시 행 수**를 롤백 트랜잭션에서 전후 대조한다. 바뀐 칸이
+  의도한 칸(teacher·viewer의 그 테이블)뿐인지 눈으로 본다.
+---
+
 ## #91 RLS 정책에 **컬럼을 안 쓰는 게이트 함수를 맨몸으로** 쓰면 행마다 호출된다 — STABLE로는 안 접힌다 (2026-07-31)
 
 - **증상**: 수납관리 창이 눈에 띄게 느리다. 표는 50건만 그리는데 화면이 뜨기까지 1~2초가 걸리고, 월 칩을
@@ -905,8 +926,33 @@ AI가 죽어도 결정론 요약이 같은 카드 구조로 렌더돼 화면은 
   RLS를 통째로 우회해서 **정상으로 보인다** — 성능 측정은 반드시 `set local role authenticated` +
   실 사용자 클레임으로 할 것.
 - **규칙**: 정책에 **컬럼을 참조하지 않는 게이트 함수는 맨몸으로 쓰지 말 것.** 항상 `(select f())`.
-  테이블이 커질수록 조용히 느려진다. (같은 모양이 `academy_documents_restricted_guard`에도 남아 있다 —
-  `auth_system_role()`·`auth.uid()`가 맨몸. 이력서 화면을 만질 때 같이 감쌀 것.)
+  테이블이 커질수록 조용히 느려진다.
+
+### 후속(2026-07-31) — 판별 기준은 "함수를 썼나"가 아니라 **"컬럼과 비교되나"**
+
+전수 조사에서 처음 세운 가설이 **틀렸다.** "`auth_tenant_id()`가 맨몸인 정책 86개(75테이블)도 같은 병"이라
+지목했는데, 실제로 감싸 보고 재니(롤백 트랜잭션) **차이가 없었다** — lesson_reports 18→15ms ·
+activity_log 257→268 · attendance_records 12→12 · invoices 13→13.
+
+이유는 EXPLAIN에 있다. `tenant_id = auth_tenant_id()`는 **컬럼과의 동등비교**라 플래너가 함수를
+**인덱스 스캔 키로 1회 평가**한다:
+
+```
+Index Only Scan using lesson_reports_tenant_idx
+  Index Cond: (tenant_id = auth_tenant_id())      ← Filter가 아니다 = 행마다 안 돈다
+```
+
+반면 `auth_billing_can_read()`나 `auth_system_role() = ANY (…)`처럼 **컬럼이 안 끼는 항**은 비교 대상이
+없어 스캔 키가 못 되고 `Filter`로 떨어져 행마다 돈다. 같은 함수라도 **쓰이는 자리**가 비용을 가른다.
+
+- **진단 순서**: `EXPLAIN`을 떠서 그 항이 `Index Cond`인지 `Filter`인지 본다. `Filter`면 감싼다.
+  코드만 보고 "함수 = 느림"으로 단정하지 말 것(`Index Cond`인 걸 감싸도 손해는 없지만 **무의미**하다).
+- **실측 잔여분은 6개뿐**이었고 이득은 `activity_log`(18,334행) **255ms → 17ms**에 몰려 있었다(0166a).
+- ⚠️ **상관 서브쿼리는 감싸면 안 된다** — `exists (select 1 from x where x.id = 이테이블.컬럼)`처럼
+  바깥 행을 참조하면 행마다 평가돼야 맞다(`consultation_ai_analysis`는 그래서 제외했다).
+- ⚠️ **감싸기를 원본 마이그레이션에도 접어 넣을 것.** 나중 파일이 `alter policy`로 덧칠만 하면, 원본만
+  단독 재적용하는 경로(단일 파일 핫픽스·권한 미러 수정)에서 느린 형태가 **에러 0건으로** 되살아난다.
+- ⏳ `academy_documents_restricted_guard`도 0166a에서 함께 감쌌다(역할 항만 — 컬럼 항 2개는 그대로).
 ---
 
 ## #90 — 브라우저에 저장한 "사용자 설정"은 계정 설정이 아니다: localStorage는 **포트까지 포함한 origin 단위** (2026-07-31)

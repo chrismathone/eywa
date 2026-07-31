@@ -485,7 +485,8 @@ key(DB 식별자)는 **자동 확정**: 과목명 입력 후 blur 시 1회 — �
 <<<<<<< HEAD
 - **#90** 브라우저에 저장한 "사용자 설정"은 계정 설정이 아니다 — localStorage는 **포트까지 포함한 origin 단위**(쿠키는 호스트 단위라 "로그인은 그대로인데 설정만 리셋"으로 위장). 사람을 따라다녀야 할 값(안 보기·읽음·온보딩)은 DB에 계정 단위로 · 설정 토글은 **바꾸는 순간 저장**(닫기 버튼에 매달면 체크만 하고 이동 시 유실) · ⚠️ 마이그 번호는 **rebase 시점**에 확정되고, 개명 시 일괄 치환하면 남의 주석을 깨뜨린다(내 파일만 + `git diff origin/main` 확인)
 =======
-- **#91** RLS 정책에 **컬럼을 안 쓰는 게이트 함수를 맨몸으로** 쓰면 **행마다** 호출된다(`auth_billing_can_read()` 1회 14ms × 3,225행 = 2.1s). `STABLE`로는 안 접힌다 → **`(select f())`로 감쌀 것**(InitPlan, 권한 무변경). ⚠️ service_role 프로브는 RLS를 우회해 **정상으로 보인다** — 성능은 authenticated 롤로 잴 것
+- **#91** RLS 정책에 **컬럼을 안 쓰는 게이트 함수를 맨몸으로** 쓰면 **행마다** 호출된다(`auth_billing_can_read()` 1회 14ms × 3,225행 = 2.1s). `STABLE`로는 안 접힌다 → **`(select f())`로 감쌀 것**(InitPlan, 권한 무변경). ⚠️ service_role 프로브는 RLS를 우회해 **정상으로 보인다** — 성능은 authenticated 롤로 잴 것. 🔑 판별은 "함수를 썼나"가 아니라 **"컬럼과 비교되나"** — `tenant_id = auth_tenant_id()`는 `Index Cond`(1회)라 감쌀 필요 없다(감싸도 무변화 실측). `EXPLAIN`에서 `Filter`인 것만 감싼다. 상관 서브쿼리는 감싸면 의미가 바뀐다
+- **#92** RLS를 한 테이블에 걸었다고 **그 계열이 다 잠긴 게 아니다** — 0158a가 invoices·expenses만 잠근 사이 같은 계열 `invoice_teacher_splits`·`invoice_session_terms`(단가·분배액)와 `staff_contracts`(계약 조건 132행 중 54행이 급여성 문구)는 **역할을 안 보는 tenant_isolation 하나**로 강사·뷰어에게 PostgREST 직결로 열려 있었다(#77의 변종). ⚠️ **"의도적 제외"는 반드시 마이그레이션에 적어라** — 안 적힌 테이블은 닫힌 걸로 오인된다. ⚠️ 잠그기 전 `auth_menu_access` DEFAULTS에 그 메뉴가 있는지 확인(없으면 master 빼고 전부 'none' = fail-closed 락아웃)
 >>>>>>> origin/main
 - **#82** postgres.js에서 `${JSON.stringify(v)}::jsonb` = **이중 인코딩**(`"#153e75"` 9자 저장 → 검증 실패 → 설정 침묵 무시). 스칼라는 `to_jsonb(${v}::text)`·객체는 `sql.json(obj)`, 검증은 **길이까지** (⚠️ 눈으로 따옴표 구분 안 됨)
 

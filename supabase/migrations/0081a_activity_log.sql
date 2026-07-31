@@ -32,7 +32,7 @@ create policy activity_log_office_read on public.activity_log
   for select
   using (
     tenant_id = public.auth_tenant_id()
-    and public.auth_system_role() in ('master', 'admin', 'manager')
+    and (select public.auth_system_role()) in ('master', 'admin', 'manager')
   );
 -- INSERT/UPDATE/DELETE 정책 없음 → 인증 사용자는 직접 못 씀(트리거 security definer만 기록, 로그 위·변조 차단).
 
