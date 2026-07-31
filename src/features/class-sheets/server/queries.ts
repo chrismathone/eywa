@@ -20,6 +20,7 @@ import {
   buildWeekGrid,
   scheduledSlotKeySet,
   sheetFillStats,
+  withdrawnFloorOf,
   type GridPlanLine,
   type WeekGrid,
 } from "../lib/grid";
@@ -89,6 +90,9 @@ export async function getClassSheetWeek(
   const weekMonday = mondayOf(weekParam && YMD_RE.test(weekParam) ? weekParam : today);
   const weekSunday = shiftDays(weekMonday, 6);
   const monthStart = `${weekMonday.slice(0, 7)}-01`;
+  // 끝난 수강도 유예(30일) 안이면 하단 '퇴원' 섹션에 남는다 → 조회 창을 그만큼 넓힌다.
+  // ⚠️ 이 창을 weekMonday로 좁히면 퇴원 섹션이 조용히 비어버린다(판정은 grid, 조회는 여기 — 같은 상수).
+  const enrollmentFloor = withdrawnFloorOf(weekMonday);
 
   const admin = createAdminClient();
   const [
@@ -118,7 +122,7 @@ export async function getClassSheetWeek(
       .eq("tenant_id", tenantId)
       .eq("class_id", classId)
       .lte("start_date", weekSunday)
-      .or(`end_date.is.null,end_date.gte.${weekMonday}`),
+      .or(`end_date.is.null,end_date.gte.${enrollmentFloor}`),
     admin
       .from("class_sheet_plan_lines")
       .select("*")

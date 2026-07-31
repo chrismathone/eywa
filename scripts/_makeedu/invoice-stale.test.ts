@@ -19,6 +19,10 @@ const S = require_("./invoice-stale.cjs") as {
   aggregateByPeriod: (rows: unknown[], pick: Record<string, (r: any) => unknown>) => Map<string, Agg>;
   reconcilePeriods: (a: { scraped: Map<string, Agg>; aggregated: Map<string, Agg>; stored: Map<string, Agg> }) => ReconRow[];
   reconcileSummary: (rows: ReconRow[] | null) => string | null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  reconcileExternal: (a: any) => any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  externalSummary: (x: any) => string;
   STALE_COVERAGE_MIN: number;
   STALE_MIN_ABSENT_DAYS: number;
   STALE_MAX_VOID_PER_RUN: number;
@@ -353,5 +357,107 @@ describe("classifyStale — 매칭 실패율 가드", () => {
 
   it("실패율 미지정(undefined)은 가드 비활성", () => {
     expect(classify([row()]).voidable).toHaveLength(1);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 🔑 외부 대조 — makeedu가 스스로 말하는 합계와 맞추면 비로소 "makeedu와 같다"가 증명된다.
+// 그게 증명되면 '부재'는 추측이 아니라 사실이고, 정황 가드를 풀 근거가 된다.
+// (근거: 화면이 makeedu와 수백만 원 어긋난 채 남으면 아무도 그 화면을 안 믿는다 — 원장 지적.)
+// ─────────────────────────────────────────────────────────────────────────────
+describe("reconcileExternal — makeedu 합계 대조", () => {
+  const rep = { lines: 100, total: 1000, discount: 50, points: 0, paid: 900, unpaid: 50 };
+
+  it("모든 항목이 같으면 ok", () => {
+    const x = S.reconcileExternal({ reported: rep, stored: { ...rep }, scrapedLines: 100 });
+    expect(x).toMatchObject({ available: true, ok: true });
+    expect(S.externalSummary(x)).toContain("일치");
+  });
+
+  it("1원만 달라도 불일치", () => {
+    const x = S.reconcileExternal({ reported: rep, stored: { ...rep, unpaid: 51 }, scrapedLines: 100 });
+    expect(x.ok).toBe(false);
+    expect(S.externalSummary(x)).toContain("미납 +1원");
+  });
+
+  it("라인 수가 다르면 불일치(금액이 맞아도)", () => {
+    const x = S.reconcileExternal({ reported: rep, stored: { ...rep }, scrapedLines: 99 });
+    expect(x.ok).toBe(false);
+    expect(x.lineDiff).toBe(-1);
+  });
+
+  // 합계 표시는 makeedu 설정이라 꺼져 있을 수 있다 — 그때 "검증됨"이라고 하면 안 된다.
+  it("합계 표시가 꺼져 있으면 available=false · ok=false(모르면 안다고 하지 않는다)", () => {
+    const x = S.reconcileExternal({ reported: null, stored: rep, scrapedLines: 100 });
+    expect(x).toMatchObject({ available: false, ok: false });
+    expect(S.externalSummary(x)).toContain("꺼짐");
+  });
+
+  it("통과해도 요약에 말한다(침묵하면 '검증됨'과 '안 함'이 구분 안 된다)", () => {
+    expect(S.externalSummary(S.reconcileExternal({ reported: rep, stored: { ...rep }, scrapedLines: 100 }))).toBeTruthy();
+  });
+});
+
+describe("classifyStale — 검증된 스크랩에서는 부재가 사실", () => {
+  const many = (n: number) => Array.from({ length: n }, (_, i) => row({ id: `x${i}`, student_id: `xs${i}` }));
+
+  it("검증되면 활성수강·최근부재·퇴원목록 가드를 통과시킨다", () => {
+    const b = classify([row({ makeedu_id: "1" })], {
+      scrapeVerified: true,
+      activeStudentIds: new Set(["s1"]),          // 평소라면 holdActive
+      withdrawnMakeeduIds: new Set(["9999"]),     // 평소라면 holdNotWithdrawn
+    });
+    expect(b.voidable).toHaveLength(1);
+    expect(b.holdActive).toHaveLength(0);
+    expect(b.holdNotWithdrawn).toHaveLength(0);
+  });
+
+  it("검증되면 대량 브레이커도 적용하지 않는다(지울 금액까지 증명된 상태)", () => {
+    const b = classify(many(30), { scrapeVerified: true, filler: 200 });
+    expect(b.voidable).toHaveLength(30);
+    expect(b.holdBulk).toHaveLength(0);
+  });
+
+  // 🔴 검증의 근거가 없으면 예전처럼 보수적이어야 한다 — 오늘의 사고들이 그래서 막혔다.
+  it("검증되지 않으면 기존 가드가 그대로 작동한다", () => {
+    const b = classify([row()], { scrapeVerified: false, activeStudentIds: new Set(["s1"]) });
+    expect(b.voidable).toHaveLength(0);
+    expect(b.holdActive).toHaveLength(1);
+  });
+
+  it("검증돼도 완납·수동청구·미매칭 의심은 여전히 보존한다(돈 받은 기록·대상 아님)", () => {
+    const b = classify([
+      row({ id: "p", student_id: "sp", status: "paid", amount_paid: 300_000 }),
+      row({ id: "m", student_id: "sm", line_items: [{ kind: "tuition", description: "수강료", amount: 1 }] }),
+    ], { scrapeVerified: true });
+    expect(b.settled).toHaveLength(1);
+    expect(b.holdManual).toHaveLength(1);
+    expect(b.voidable).toHaveLength(0);
+  });
+
+  it("검증 여부를 리포트가 알 수 있다", () => {
+    expect(classify([row()], { scrapeVerified: true }).scrapeVerified).toBe(true);
+    expect(classify([row()]).scrapeVerified).toBe(false);
+  });
+});
+
+// 🔴 2026-07-31 실측 회귀 — 외부 대조가 **잣대를 잘못 잡아** 불일치로 나왔던 두 경우.
+describe("reconcileExternal — 잣대 맞추기(실측 회귀)", () => {
+  const rep = { lines: 10, total: 1000, discount: 50, points: 0, paid: 900, unpaid: 50 };
+
+  // 미납을 (학생×월) 단위로 재계산하면 음수가 0으로 clamp돼 라인 합과 어긋난다.
+  it("미납은 라인 합 그대로여야 일치한다", () => {
+    const lineSum = { ...rep };                       // 라인 합 그대로
+    expect(S.reconcileExternal({ reported: rep, stored: lineSum, scrapedLines: 10 }).ok).toBe(true);
+    const clamped = { ...rep, unpaid: 50 + 191_250 }; // clamp로 부풀린 값
+    expect(S.reconcileExternal({ reported: rep, stored: clamped, scrapedLines: 10 }).ok).toBe(false);
+  });
+
+  // 미매칭 라인을 빼고 비교하면 매칭이 나쁠수록 대조가 실패해 검증이 영영 안 선다.
+  it("저장분만 비교하면 미매칭분만큼 어긋난다 — 미매칭을 더해야 맞는다", () => {
+    const savedOnly = { ...rep, total: 1000 - 300, paid: 900 - 300 };
+    expect(S.reconcileExternal({ reported: rep, stored: savedOnly, scrapedLines: 10 }).ok).toBe(false);
+    const withUnmatched = { ...savedOnly, total: savedOnly.total + 300, paid: savedOnly.paid + 300 };
+    expect(S.reconcileExternal({ reported: rep, stored: withUnmatched, scrapedLines: 10 }).ok).toBe(true);
   });
 });

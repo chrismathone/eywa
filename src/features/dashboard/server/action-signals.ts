@@ -34,6 +34,19 @@ const DOMAIN_LABEL: Record<string, string> = {
 };
 
 /**
+ * **자동 동기화 대상이 아닌** 도메인 — 미동기 경과시간(stale) 판정에서 제외한다.
+ *
+ * 🔴 2026-07-31 실측: 6개 도메인이 방금(0시간) 동기화됐는데 브리핑이 "makeedu 동기화 이상"을 띄웠다.
+ *    범인은 `catalog`(교재 단가표) — [scripts/_makeedu/sync-all.cjs] IMPORTERS에 **의도적으로 없는**
+ *    수동 전용 도메인(tuition 기타가 이름 insert라 재실행 시 중복)이다. 수동 도메인의 synced_at은
+ *    영원히 낡으므로 26시간 룰에 매일 걸린다 = **영구 오탐**(게다가 AI 팀 보고까지 매일 탈락시켰다).
+ *
+ * ⚠️ 상태 오류(status<>'ok')는 여전히 잡는다 — 수동이라도 "실행했는데 실패"는 진짜 신호다.
+ * ⚠️ sync-all.cjs의 IMPORTERS를 늘리거나 줄이면 여기도 같이 고칠 것(진실은 그쪽 목록).
+ */
+const MANUAL_ONLY_DOMAINS = new Set(["catalog", "enrollments"]);
+
+/**
  * cron(세션 없음) 주입 계약 — admin client는 RLS를 우회하므로 tenantId 명시 격리가 필수
  * (TimetableDb 선례). 미주입(대시보드 세션 경로)이면 쿠키 createClient + RLS가 격리한다.
  */
@@ -546,17 +559,28 @@ export async function getTodayActionSignals(
         menuKey: "billing",
         requiredAccess: "write",
       },
-      0,
+      { total: 0, recent: 0 },
       async () => {
-        const result = await scopeTenant(
-          supabase
-            .from("expenses")
-            .select("*", { count: "exact", head: true })
-            .eq("approval_status", "pending")
-            .gte("expense_date", sevenDayStart),
-          db,
-        );
-        return countOrThrow(result, "pending expenses");
+        // ⚠️ 총건수와 최근 7일분을 **둘 다** 센다. 예전엔 7일분만 세고 그걸 총건수처럼 표시해,
+        // 몇 달째 잠긴 결재가 통째로 안 보였다(2026-07-31 실측: 표시 13건 / 실제 미결 171건).
+        const [totalRes, recentRes] = await Promise.all([
+          scopeTenant(
+            supabase.from("expenses").select("*", { count: "exact", head: true }).eq("approval_status", "pending"),
+            db,
+          ),
+          scopeTenant(
+            supabase
+              .from("expenses")
+              .select("*", { count: "exact", head: true })
+              .eq("approval_status", "pending")
+              .gte("expense_date", sevenDayStart),
+            db,
+          ),
+        ]);
+        return {
+          total: countOrThrow(totalRes, "pending expenses"),
+          recent: countOrThrow(recentRes, "pending expenses (7d)"),
+        };
       },
     ),
     collectSignal(
@@ -647,9 +671,10 @@ export async function getTodayActionSignals(
         menuKey: "students",
         requiredAccess: "write",
       },
-      [] as { studentId: string; name: string }[],
+      { students: [] as { studentId: string; name: string }[], total: 0 },
       // students 기준 anti-join RPC(0097a). 등록상담이 아니라 학생이 출처다.
       // db(cron) 경로는 p_tenant 변형 RPC — 세션용 RPC는 service_role에서 에러 없이 0행(silent 오보).
+      // ⚠️ 30은 **미리보기 상한**이다 — 건수는 반드시 total(0159a)에서 온다(배열 길이 사용 금지).
       () => getUnassignedEnrolledStudents(30, db ? { supabase: db.supabase, tenantId: db.tenantId } : undefined),
     ),
     collectSignal(
@@ -727,6 +752,8 @@ export async function getTodayActionSignals(
       // 실패 격리되는 구조상 invoices만 몇 주 멈춰도 다른 도메인이 신선하면 경고가 절대 안 떴다
       // (그 도메인 행은 recordSync에 도달 못 해 status도 옛 'ok'로 남아 위 errors 필터에도 안 걸린다).
       const stale = makeedu.value.rows
+        // 수동 전용 도메인은 자동 동기화 대상이 아니라 영원히 낡는다 — 제외(MANUAL_ONLY_DOMAINS 주석).
+        .filter((row) => !MANUAL_ONLY_DOMAINS.has(row.domain))
         .map((row) => ({ domain: row.domain, hours: Math.floor((Date.now() - Date.parse(row.synced_at)) / 3_600_000) }))
         .filter((row) => row.hours >= 26)
         .sort((a, b) => b.hours - a.hours);
@@ -765,7 +792,7 @@ export async function getTodayActionSignals(
       consultations: failedConsultations.value,
     },
     makeeduIssue,
-    pendingExpenses: expenses.value,
+    pendingExpenses: { total: expenses.value.total, recent: expenses.value.recent },
     requestedTextbooks: textbooks.value,
     leavesPending: leavesPending.value,
     leavesToday: leavesToday.value.map((row) => {
@@ -773,10 +800,11 @@ export async function getTodayActionSignals(
       return { name: user?.display_name ?? "(직원)" };
     }),
     unwrittenReportsToday: unwrittenReports.value,
-    unassignedEnrolled: unassignedEnrolled.value.map((student) => ({
+    unassignedEnrolled: unassignedEnrolled.value.students.map((student) => ({
       studentId: student.studentId,
       name: student.name,
     })),
+    unassignedEnrolledTotal: unassignedEnrolled.value.total,
     classnoteAttention: classnoteAttention.value,
     sourceIssues: collected.flatMap((result) => (result.issue ? [result.issue] : [])),
   };

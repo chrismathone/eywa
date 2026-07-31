@@ -3,17 +3,28 @@
 // 학생 로스터 표 — [이름 | 출석(일 단위 공유) | 학교학년 | 상태 | 개인 진도/과제].
 // 출석 체크는 (학생,날짜) 하나의 상태를 모든 교시 블록이 미러(하루 1건 — attendance_records).
 // 상태·개인진도는 교시별(class_sheet_student_marks — 키에 slot_start 포함). 아바타 금지(이름 텍스트만).
-import { memo } from "react";
+//
+// 명단은 시간표 셀처럼 **섹션으로 나뉜다**: 재원(기본) → 퇴원(유예 30일) → 기록(그 외 보존 행).
+// 퇴원·기록 섹션은 전부 읽기 전용이고 일괄 입력 대상도 아니다(bulk.ts editableRows).
+import { memo, useMemo } from "react";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { handleGridNavKey } from "@/features/onescreen/components/grid-nav";
 import type { ClassSheetWeekData } from "../server/queries";
 import type { RosterEntry } from "../lib/grid";
+import { groupRosterRows, type RosterGroupKey } from "../lib/roster-order";
 import type { SheetHandlers } from "./sheet-client";
 import { AttendanceCheck, StatusCell } from "./status-cell";
 import { RosterBulk } from "./roster-bulk";
 
 const noteCls =
   "border-line text-foreground w-full rounded-lg border bg-transparent px-1.5 py-1 text-[12px] outline-none focus:border-primary disabled:opacity-60";
+
+/** 섹션 라벨 행의 설명(툴팁) — 왜 이 학생이 아직 보이는지 화면이 스스로 답한다. */
+const GROUP_HINT: Record<RosterGroupKey, string> = {
+  active: "",
+  withdrawn: "수강이 끝난 학생 — 종료일부터 한 달간 표시되고 그 뒤 주부터는 명단에서 빠집니다(읽기 전용)",
+  record: "현재 수강 대상이 아니지만 이 교시에 기록이 있어 표시(읽기 전용)",
+};
 
 export const RosterTable = memo(function RosterTable({
   date,
@@ -35,6 +46,21 @@ export const RosterTable = memo(function RosterTable({
   canEdit: boolean;
 }) {
   const canMarkDate = data.canMarkAttendanceByDate[date] ?? false;
+  // 섹션(재원/퇴원/기록)으로 나눠 이름·종료일 순으로 정렬한 뒤 라벨 행과 함께 한 줄로 편다.
+  // 표를 나누지 않고 한 <table> 안에서 라벨 행으로 가르는 이유: 열 폭(이름/출석/학교/상태/진도)이
+  // 섹션마다 어긋나면 같은 명단으로 안 읽힌다. 키보드 이동(data-nav-row)은 렌더 순서로 다시 매긴다.
+  const rows = useMemo(() => {
+    const out: (
+      | { kind: "label"; key: RosterGroupKey; label: string }
+      | { kind: "row"; entry: RosterEntry; navRow: number }
+    )[] = [];
+    let navRow = 0;
+    for (const group of groupRosterRows(roster, (id) => data.students[id]?.name ?? "")) {
+      if (group.label) out.push({ kind: "label", key: group.key, label: group.label });
+      for (const entry of group.rows) out.push({ kind: "row", entry, navRow: navRow++ });
+    }
+    return out;
+  }, [roster, data.students]);
   return (
     <div className="border-line mt-2 border-t pt-1.5">
       {/* 일괄 입력 — 대상은 이 카드에 보이는 로스터 그 집합(표시=일괄 대상). 권한 없으면 렌더 안 함. */}
@@ -79,7 +105,21 @@ export const RosterTable = memo(function RosterTable({
           </tr>
         </thead>
         <tbody>
-          {roster.map((entry, rowIdx) => {
+          {rows.map((row) => {
+            if (row.kind === "label") {
+              return (
+                <tr key={`label:${row.key}`} className="bg-bg-soft/70">
+                  <td
+                    colSpan={5}
+                    className="text-text-faint px-1 py-0.5 text-[10px] font-medium"
+                    title={GROUP_HINT[row.key]}
+                  >
+                    {row.label}
+                  </td>
+                </tr>
+              );
+            }
+            const { entry, navRow } = row;
             const meta = data.students[entry.studentId];
             const mark = marks[`${entry.studentId}|${date}|${slotStart}`] ?? null;
             const attStatus = attendance[`${entry.studentId}|${date}`] ?? null;
@@ -87,18 +127,19 @@ export const RosterTable = memo(function RosterTable({
             return (
               <tr key={entry.studentId} className={entry.historical ? "opacity-60" : ""}>
                 <td className="py-0.5 pr-1">
-                  <span className="text-foreground truncate text-[12px] font-medium" title={meta?.name}>
+                  <span
+                    className={`text-foreground truncate text-[12px] font-medium ${entry.endedOn ? "line-through" : ""}`}
+                    title={meta?.name}
+                  >
                     {meta?.name ?? "?"}
                   </span>
                   {meta?.englishName ? (
                     <span className="text-text-faint ml-1 text-[10px]">({meta.englishName})</span>
                   ) : null}
-                  {entry.historical ? (
-                    <span
-                      className="text-text-faint ml-1 text-[9px]"
-                      title="현재 수강 대상이 아니지만 기록이 있어 표시(읽기 전용)"
-                    >
-                      기록
+                  {/* 퇴원일 — 섹션 라벨이 '퇴원'이라 날짜만(월-일). 전체 날짜는 툴팁. */}
+                  {entry.endedOn ? (
+                    <span className="text-text-faint num ml-1 text-[10px]" title={`${entry.endedOn} 수강 종료`}>
+                      {entry.endedOn.slice(5)}
                     </span>
                   ) : null}
                 </td>
@@ -128,7 +169,7 @@ export const RosterTable = memo(function RosterTable({
                     disabled={!rowEditable}
                     aria-label={`${meta?.name ?? ""} 개인 진도·과제`}
                     data-nav-col="ecs-note"
-                    data-nav-row={rowIdx}
+                    data-nav-row={navRow}
                     onKeyDown={handleGridNavKey}
                     onChange={(e) =>
                       handlers.saveMark(

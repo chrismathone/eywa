@@ -476,8 +476,11 @@ export type UnassignedEnrolled = {
 
 /**
  * 등록됨(enrolled)인데 활성 수강(반)이 없는 학생 = "배정 필요". anti-join RPC(0097a, security invoker +
- * auth_tenant_id 이중격리) — 대시보드 반응속도 1순위라 전건 fetch+JS 대신 DB 1쿼리. limit는 count 정확도용
- * 안전 상한(현실적으로 소수 — 배정되면 목록에서 빠짐). 호출부가 rows.length를 "배정 필요 N명"으로 사용.
+ * auth_tenant_id 이중격리) — 대시보드 반응속도 1순위라 전건 fetch+JS 대신 DB 1쿼리.
+ *
+ * ⚠️ **`students.length`를 건수로 쓰지 말 것** — limit로 잘린 미리보기다. 총계는 `total`(0159a
+ * `count(*) over ()`, LIMIT 이전 평가라 왕복 추가 없음)을 쓴다. 예전엔 배열 길이를 "N명"으로 보고해
+ * 상한(30)에 닿은 뒤로 실제가 34명이어도 화면이 영원히 30이었다(2026-07-31 실측).
  *
  * db(cron admin) 경로는 p_tenant 변형(0114a) — 세션용 RPC는 auth_tenant_id()가 service_role에서
  * null이라 **에러 없이 0행**을 반환하는 silent 오보가 나기 때문(브리핑 cron 필수 분기).
@@ -485,20 +488,30 @@ export type UnassignedEnrolled = {
 export async function getUnassignedEnrolledStudents(
   limit = 30,
   db?: { supabase: Awaited<ReturnType<typeof createClient>>; tenantId: string },
-): Promise<UnassignedEnrolled[]> {
+): Promise<{ students: UnassignedEnrolled[]; total: number }> {
   const supabase = db?.supabase ?? (await createClient());
   const { data, error } = db
     ? await supabase.rpc("dashboard_unassigned_enrolled_admin", { p_limit: limit, p_tenant: db.tenantId })
     : await supabase.rpc("dashboard_unassigned_enrolled", { p_limit: limit });
   if (error) throw new Error(`getUnassignedEnrolledStudents: ${error.message}`);
-  return (
-    (data ?? []) as Array<{ student_id: string; student_name: string; grade: string | null; school: string | null; enrolled_at: string | null }>
-  ).map((r) => ({
-    studentId: r.student_id,
-    name: r.student_name,
-    meta: schoolGradeLabel(r.school, r.grade) || null,
-    enrolledAt: r.enrolled_at,
-  }));
+  const rows = (data ?? []) as Array<{
+    student_id: string;
+    student_name: string;
+    grade: string | null;
+    school: string | null;
+    enrolled_at: string | null;
+    total_count: number | string | null;
+  }>;
+  return {
+    students: rows.map((r) => ({
+      studentId: r.student_id,
+      name: r.student_name,
+      meta: schoolGradeLabel(r.school, r.grade) || null,
+      enrolledAt: r.enrolled_at,
+    })),
+    // bigint는 postgrest에서 문자열로 올 수 있다. 0행이면 윈도우 행 자체가 없으므로 0.
+    total: rows.length > 0 ? Number(rows[0]!.total_count ?? rows.length) : 0,
+  };
 }
 
 export type PaymentSnapshot = {
