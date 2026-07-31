@@ -22,6 +22,7 @@ const S = require_("./invoice-stale.cjs") as {
   STALE_COVERAGE_MIN: number;
   STALE_MIN_ABSENT_DAYS: number;
   STALE_MAX_VOID_PER_RUN: number;
+  STALE_MAX_UNMATCHED_RATIO: number;
 };
 
 const NOW = "2026-07-30T09:00:00.000Z";
@@ -140,6 +141,7 @@ describe("classifyStale — 무효 후보 4중 가드", () => {
     expect(S.STALE_COVERAGE_MIN).toBe(0.8);
     expect(S.STALE_MIN_ABSENT_DAYS).toBe(7);
     expect(S.STALE_MAX_VOID_PER_RUN).toBe(10);
+    expect(S.STALE_MAX_UNMATCHED_RATIO).toBe(0.05);
   });
 });
 
@@ -322,5 +324,34 @@ describe("reconcileSummary — sync_state.error 한 줄", () => {
     expect(out).toContain("건수 -1");
     expect(out).toContain("청구 -12,000원");
     expect(out).not.toContain("total"); // 영문 키가 화면 문구로 새지 않는다
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 매칭 실패율 가드 — 🔑 **매칭이 나쁘면 '부재'라는 관측 자체가 신뢰할 수 없다.**
+// (2026-07-31: `(퇴)` 접미사로 350/3,459 = 10%가 미매칭 → 멀쩡한 청구가 삭제됐다.)
+// ─────────────────────────────────────────────────────────────────────────────
+describe("classifyStale — 매칭 실패율 가드", () => {
+  it("실패율이 임계 이하면 정상 판정", () => {
+    const b = classify([row()], { unmatchedRatio: 0.05 });
+    expect(b.voidable).toHaveLength(1);
+    expect(b.holdLowMatch).toHaveLength(0);
+  });
+
+  it("실패율이 임계를 넘으면 삭제 판정을 **통째로** 보류한다", () => {
+    const b = classify([row()], { unmatchedRatio: 0.1 });
+    expect(b.voidable).toHaveLength(0);
+    expect(b.holdLowMatch).toHaveLength(1);
+  });
+
+  // 이 가드는 개별 가드 뒤·대량 브레이커 앞이다 — 이미 보류된 건은 여기로 안 온다.
+  it("이미 다른 이유로 보류된 건은 여기에 안 들어온다", () => {
+    const b = classify([row()], { unmatchedRatio: 0.5, activeStudentIds: new Set(["s1"]) });
+    expect(b.holdActive).toHaveLength(1);
+    expect(b.holdLowMatch).toHaveLength(0);
+  });
+
+  it("실패율 미지정(undefined)은 가드 비활성", () => {
+    expect(classify([row()]).voidable).toHaveLength(1);
   });
 });

@@ -3,6 +3,8 @@ import { createRequire } from "node:module";
 
 const require_ = createRequire(import.meta.url);
 const L = require_("./lib.cjs") as {
+  normalizeName: (v: unknown) => string;
+  stripNameStatusSuffix: (v: unknown) => string;
   billingMonthRange: (a?: {
     anchor?: string | null;
     months?: number;
@@ -95,5 +97,46 @@ describe("billingMonthRange — 스크랩할 청구월 범위", () => {
     const r = L.billingMonthRange();
     expect(r.from).toMatch(/^\d{4}-\d{2}$/);
     expect(r.to).toMatch(/^\d{4}-\d{2}$/);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 🔴🔴 2026-07-31 실측 사고 — makeedu는 목록에서 원생 상태를 **이름 뒤 괄호**로 표시한다(`강윤서(퇴)`).
+// 재원생만 보던 시절엔 볼 일이 없다가, 원생상태를 '전체'로 바꾸는 순간 나타나 매칭을 깨뜨렸다
+// (3,459라인 중 350건 = 10% 미매칭). 매칭이 깨지면 그 청구가 "makeedu에 없다"로 읽혀 **삭제된다** —
+// 강윤서·박수빈·김나율A·김경진이 실제로 그렇게 무효 처리됐다(makeedu엔 멀쩡히 있는데도).
+// ─────────────────────────────────────────────────────────────────────────────
+describe("normalizeName — 상태 접미사", () => {
+  it("makeedu의 상태 접미사를 벗겨 eywa 이름과 매칭된다", () => {
+    expect(L.normalizeName("강윤서(퇴)")).toBe(L.normalizeName("강윤서"));
+    expect(L.normalizeName("박수빈(퇴)")).toBe("박수빈");
+    for (const suf of ["(퇴)", "(퇴원)", "(휴)", "(휴원)", "(졸)", "(졸업)"])
+      expect(L.normalizeName(`김경진${suf}`)).toBe("김경진");
+  });
+
+  it("접미사 뒤 공백도 흡수한다", () => {
+    expect(L.normalizeName("김나율A(퇴) ")).toBe("김나율a");
+  });
+
+  // ⚠️ 괄호를 통째로 벗기면 eywa의 실제 이름(`박소선 (테스트)`)이 다른 사람과 충돌한다.
+  it("상태 표시가 아닌 괄호는 **건드리지 않는다**(충돌 방지)", () => {
+    expect(L.normalizeName("박소선 (테스트)")).toBe("박소선(테스트)");
+    expect(L.normalizeName("원일(테스트)")).toBe("원일(테스트)");
+    expect(L.normalizeName("박소선 (테스트)")).not.toBe(L.normalizeName("박소선"));
+  });
+
+  it("이름 중간의 상태 표기는 접미사가 아니므로 남긴다", () => {
+    expect(L.normalizeName("김(퇴)수")).toBe("김(퇴)수");
+  });
+
+  it("기존 동작(공백 제거·소문자)은 그대로", () => {
+    expect(L.normalizeName(" 이 윤 슬 ")).toBe("이윤슬");
+    expect(L.normalizeName("Kim A")).toBe("kima");
+    expect(L.normalizeName(null)).toBe("");
+  });
+
+  it("stripNameStatusSuffix는 표시용 원형을 유지한다(공백·대소문자 보존)", () => {
+    expect(L.stripNameStatusSuffix("박소선 (테스트)")).toBe("박소선 (테스트)");
+    expect(L.stripNameStatusSuffix("강윤서(퇴)")).toBe("강윤서");
   });
 });

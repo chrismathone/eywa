@@ -202,6 +202,8 @@ const KIND_CAT = { 수업: "tuition", 교재: "material", 차량비: "other", �
       activeStudentIds,
       withdrawnMakeeduIds,
       allowBulkVoid: ALLOW_BULK_VOID,
+      // 매칭 실패율 — 못 받은 학생은 '부재'로 보이므로, 매칭이 나쁘면 삭제 판정 자체를 보류한다.
+      unmatchedRatio: lines.length ? unmatchedLines.length / lines.length : 0,
       now: new Date(),
     });
     S.printIssues({ stale, unmatchedLines });
