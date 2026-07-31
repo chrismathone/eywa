@@ -6,7 +6,7 @@
  * followUps가 preview(limit=8)라는 점은 countLabel의 "표시"로 드러낸다.
  */
 import type { AbsenceRisk, DashFollowUp } from "./server/queries";
-import type { TodayActionItem } from "./today-actions";
+import { subjectBreakdownText, type TodayActionItem } from "./today-actions";
 
 export type BriefingLane = "urgent" | "today" | "approval" | "notice";
 export type BriefingPriority = "critical" | "high" | "medium" | "low";
@@ -203,8 +203,8 @@ export function buildOperationsBriefing({
       lane,
       label: action.label,
       countLabel: countLabelForAction(action),
-      // 범위·내역(note)과 이름 미리보기(detail)를 함께 — 예전 detail 한 칸이 하던 표시를 그대로 유지한다.
-      detail: [action.note, action.detail].filter(Boolean).join(" · ") || null,
+      // 과목 분해 → 범위·내역(note) → 이름 미리보기(detail) 순. 예전 detail 한 칸이 하던 표시를 계승한다.
+      detail: [subjectBreakdownText(action.bySubject), action.note, action.detail].filter(Boolean).join(" · ") || null,
       href: action.href,
     }));
   }

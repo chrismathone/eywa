@@ -44,10 +44,12 @@ export async function extendStaffContract(
   if (!target) return { error: "직원을 찾을 수 없습니다" };
 
   // 다음 차수 = 현재 최대 + 1. 계약이 하나도 없으면 1차부터.
+  // 차수는 **계약(kind='contract')만** 센다 — note는 전부 seq=0이라 섞이면 다음 차수가 1로 되돌아간다.
   const { data: last, error: lastErr } = await supabase
     .from("staff_contracts")
     .select("seq")
     .eq("user_id", userId)
+    .eq("kind", "contract")
     .order("seq", { ascending: false })
     .limit(1);
   if (lastErr) return { error: humanizeDbError(lastErr.message, "확인") };
@@ -57,6 +59,7 @@ export async function extendStaffContract(
     tenant_id: target.tenant_id,
     user_id: userId,
     seq,
+    kind: "contract", // 화면에서 넣는 건 언제나 기간 있는 계약(note는 시트 이관 산물).
     start_date: startDate,
     end_date: endDate,
     terms: terms || null,
@@ -89,10 +92,12 @@ export async function deleteLatestStaffContract(
   if (!userId || !contractId) return { error: "삭제할 계약을 찾을 수 없습니다" };
 
   const supabase = await createClient();
+  // 삭제는 **계약의 마지막 차수만** — 시트에서 온 이력 줄(note)은 여기서 지우지 않는다(원문 보존).
   const { data: rows, error: readErr } = await supabase
     .from("staff_contracts")
     .select("id, seq")
     .eq("user_id", userId)
+    .eq("kind", "contract")
     .order("seq", { ascending: false })
     .limit(1);
   if (readErr) return { error: humanizeDbError(readErr.message, "확인") };

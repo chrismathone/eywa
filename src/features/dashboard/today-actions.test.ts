@@ -2,9 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   buildTodayActions,
   enrollmentAttendsOnDay,
-  findStudentsMissingLessonReports,
+  findMissingLessonReportPairs,
   isEnrollmentActiveOn,
   nameList,
+  subjectBreakdownText,
   type TodayActionsRaw,
 } from "./today-actions";
 
@@ -18,7 +19,7 @@ const EMPTY: TodayActionsRaw = {
   requestedTextbooks: 0,
   leavesPending: 0,
   leavesToday: [],
-  unwrittenReportsToday: { count: 0, names: [] },
+  unwrittenReportsToday: { count: 0, names: [], bySubject: [] },
   unassignedEnrolled: [],
   unassignedEnrolledTotal: 0,
   classnoteAttention: { failed: 0, tooOld: 0, humanHold: 0, stuck: 0 },
@@ -33,8 +34,8 @@ describe("buildTodayActions", () => {
     const items = buildTodayActions({
       ...EMPTY,
       absentToday: [
-        { studentId: "1", name: "김민준" },
-        { studentId: "2", name: "이서연" },
+        { studentId: "1", name: "김민준", subject: "math" },
+        { studentId: "2", name: "이서연", subject: "math" },
       ],
     });
     expect(items).toHaveLength(1);
@@ -88,10 +89,82 @@ describe("buildTodayActions", () => {
     expect(items[0]!.detail).toBe("학생0·학생1·학생2 외 31");
   });
 
+  // 원장 지시 2026-07-31 — "과목별로 분류해서 보고하는 게 더 스마트".
+  describe("과목별 분해", () => {
+    const label = (key: string) => ({ math: "수학", english: "영어" })[key] ?? key;
+
+    it("라벨 리졸버가 없으면 분해를 비운다(과목 raw 키 노출 금지)", () => {
+      const items = buildTodayActions({
+        ...EMPTY,
+        absentToday: [{ studentId: "1", name: "김민준", subject: "math" }],
+      });
+      expect(items[0]!.bySubject).toEqual([]);
+    });
+
+    it("결석·미기록·미작성을 설정 라벨로 분해하고 건수 desc로 정렬", () => {
+      const items = buildTodayActions(
+        {
+          ...EMPTY,
+          absentToday: [
+            { studentId: "1", name: "김민준", subject: "math" },
+            { studentId: "2", name: "이서연", subject: "english" },
+            { studentId: "3", name: "박지호", subject: "math" },
+          ],
+          unrecordedYesterday: [
+            { classId: "c1", className: "LS2a", subject: "english" },
+            { classId: "c2", className: "중등E_중1", subject: "english" },
+            { classId: "c3", className: "수학심화", subject: "math" },
+          ],
+          unwrittenReportsToday: {
+            count: 185,
+            names: ["이채은"],
+            bySubject: [
+              { subject: "math", count: 39 },
+              { subject: "english", count: 147 },
+            ],
+          },
+        },
+        { subjectLabel: label },
+      );
+      const by = (key: string) => items.find((i) => i.key === key)!.bySubject;
+      expect(by("absent")).toEqual([
+        { label: "수학", count: 2 },
+        { label: "영어", count: 1 },
+      ]);
+      expect(by("unrecorded")).toEqual([
+        { label: "영어", count: 2 },
+        { label: "수학", count: 1 },
+      ]);
+      // 학생×과목 쌍이라 합(186)이 학생 수(185)보다 클 수 있다 — 의도된 차이.
+      expect(by("unwritten-reports")).toEqual([
+        { label: "영어", count: 147 },
+        { label: "수학", count: 39 },
+      ]);
+      expect(subjectBreakdownText(by("unwritten-reports"))).toBe("영어 147 · 수학 39");
+    });
+
+    it("과목 없는 행은 버리지 않고 '과목 미상'으로 묶는다(분해 합이 총계보다 작아지지 않게)", () => {
+      const items = buildTodayActions(
+        {
+          ...EMPTY,
+          absentToday: [
+            { studentId: "1", name: "김민준", subject: "math" },
+            { studentId: "2", name: "이서연", subject: null },
+          ],
+        },
+        { subjectLabel: label },
+      );
+      expect(items[0]!.bySubject).toEqual([
+        { label: "과목 미상", count: 1 },
+        { label: "수학", count: 1 },
+      ]);
+    });
+  });
+
   it("미작성 보고서 = amber + 명단 요약 + 수업보고서 총괄 링크", () => {
     const items = buildTodayActions({
       ...EMPTY,
-      unwrittenReportsToday: { count: 4, names: ["김민준", "이서연", "박지호", "최유진"] },
+      unwrittenReportsToday: { count: 4, names: ["김민준", "이서연", "박지호", "최유진"], bySubject: [] },
     });
     expect(items).toHaveLength(1);
     expect(items[0]).toMatchObject({
@@ -217,7 +290,7 @@ describe("buildTodayActions", () => {
   it("정렬: danger → amber → info, 같은 심각도는 건수 desc, 카운트 없는 신호는 뒤", () => {
     const items = buildTodayActions({
       ...EMPTY,
-      absentToday: [{ studentId: "1", name: "a" }],
+      absentToday: [{ studentId: "1", name: "a", subject: "math" }],
       pendingExpenses: { total: 9, recent: 9 },
       requestedTextbooks: 2,
       makeeduIssue: { kind: "stale", detail: "30시간째 미동기" },
@@ -300,9 +373,11 @@ describe("수업보고서 작성 대상", () => {
       { studentId: "s1", classId: "math-a", subject: "math" },
       { studentId: "s1", classId: "english-a", subject: "english" },
     ];
-    expect(findStudentsMissingLessonReports(targets, new Set(), [{ studentId: "s1", subject: "math" }])).toEqual(["s1"]);
+    expect(findMissingLessonReportPairs(targets, new Set(), [{ studentId: "s1", subject: "math" }])).toEqual([
+      { studentId: "s1", subject: "english" },
+    ]);
     expect(
-      findStudentsMissingLessonReports(targets, new Set(), [
+      findMissingLessonReportPairs(targets, new Set(), [
         { studentId: "s1", subject: "math" },
         { studentId: "s1", subject: "english" },
       ]),
@@ -316,12 +391,14 @@ describe("수업보고서 작성 대상", () => {
       { studentId: "s2", classId: "math-a", subject: "math" },
     ];
     expect(
-      findStudentsMissingLessonReports(targets, new Set(), [
+      findMissingLessonReportPairs(targets, new Set(), [
         { studentId: "s1", subject: null },
         { studentId: "s2", subject: "math" },
       ]),
     ).toEqual([]);
-    expect(findStudentsMissingLessonReports(targets, new Set(), [{ studentId: "s1", subject: "" }])).toEqual(["s2"]);
+    expect(findMissingLessonReportPairs(targets, new Set(), [{ studentId: "s1", subject: "" }])).toEqual([
+      { studentId: "s2", subject: "math" },
+    ]);
   });
 
   it("같은 과목 반이 전부 결석일 때만 작성 대상에서 제외", () => {
@@ -329,7 +406,9 @@ describe("수업보고서 작성 대상", () => {
       { studentId: "s1", classId: "math-a", subject: "math" },
       { studentId: "s1", classId: "math-b", subject: "math" },
     ];
-    expect(findStudentsMissingLessonReports(targets, new Set(["s1::math-a"]), [])).toEqual(["s1"]);
-    expect(findStudentsMissingLessonReports(targets, new Set(["s1::math-a", "s1::math-b"]), [])).toEqual([]);
+    expect(findMissingLessonReportPairs(targets, new Set(["s1::math-a"]), [])).toEqual([
+      { studentId: "s1", subject: "math" },
+    ]);
+    expect(findMissingLessonReportPairs(targets, new Set(["s1::math-a", "s1::math-b"]), [])).toEqual([]);
   });
 });

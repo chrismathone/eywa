@@ -4,6 +4,7 @@ import {
   currentContract,
   daysUntil,
   nextContractDefault,
+  contractsOnly,
   periodLabel,
   type ContractRow,
 } from "./contract";
@@ -11,10 +12,24 @@ import {
 const row = (seq: number, startDate: string, endDate: string): ContractRow => ({
   id: `c${seq}`,
   seq,
+  kind: "contract",
   startDate,
   endDate,
   terms: null,
   memo: null,
+  lineNo: null,
+});
+
+/** 기간 없는 이력 한 줄(시트 히스토리의 '입사'·'인센티브 수당' 같은 줄). */
+const note = (terms: string, startDate: string | null = null): ContractRow => ({
+  id: `n-${terms}`,
+  seq: 0,
+  kind: "note",
+  startDate,
+  endDate: null,
+  terms,
+  memo: null,
+  lineNo: 0,
 });
 
 describe("addYears", () => {
@@ -103,5 +118,29 @@ describe("daysUntil", () => {
 describe("periodLabel", () => {
   it("기간 한 줄", () => {
     expect(periodLabel({ startDate: "2026-06-06", endDate: "2027-06-06" })).toBe("2026-06-06 ~ 2027-06-06");
+  });
+});
+
+describe("note(기간 없는 이력 줄)", () => {
+  it("현재계약 판정에서 제외된다 — 이력 목록 표시 전용", () => {
+    const rows = [note("1) 2024.01.02 입사", "2024-01-02"), note("인센티브 수당: 강좌당 추가")];
+    // 기간 있는 계약이 하나도 없으므로 입사일 파생으로 떨어져야 한다.
+    expect(currentContract(rows, "2024-01-02")).toEqual({
+      seq: 1,
+      startDate: "2024-01-02",
+      endDate: "2025-01-02",
+      stored: false,
+    });
+  });
+
+  it("계약과 섞여 있어도 계약만 보고 차수를 센다", () => {
+    const rows = [row(1, "2024-03-02", "2025-03-02"), note("2) 컨텐츠개발팀 이전", "2025-02-17")];
+    expect(currentContract(rows, "2024-03-02")?.seq).toBe(1);
+    expect(nextContractDefault(rows, "2024-03-02")?.seq).toBe(2);
+  });
+
+  it("contractsOnly는 기간이 반쪽인 행도 걸러낸다", () => {
+    const half: ContractRow = { ...row(9, "2024-01-01", "2025-01-01"), endDate: null };
+    expect(contractsOnly([half])).toEqual([]);
   });
 });

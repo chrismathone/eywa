@@ -13,7 +13,7 @@ const EMPTY_RAW: TodayActionsRaw = {
   requestedTextbooks: 0,
   leavesPending: 0,
   leavesToday: [],
-  unwrittenReportsToday: { count: 0, names: [] },
+  unwrittenReportsToday: { count: 0, names: [], bySubject: [] },
   unassignedEnrolled: [],
   unassignedEnrolledTotal: 0,
   classnoteAttention: { failed: 0, tooOld: 0, humanHold: 0, stuck: 0 },
@@ -35,9 +35,9 @@ const RICH = buildDailyBriefingPayload({
   yesterdayRaw: {
     ...EMPTY_RAW,
     absentToday: [
-      { studentId: "s1", name: "김민준" },
-      { studentId: "s2", name: "박서연" },
-      { studentId: "s3", name: "정호" },
+      { studentId: "s1", name: "김민준", subject: "math" },
+      { studentId: "s2", name: "박서연", subject: "math" },
+      { studentId: "s3", name: "정호", subject: "math" },
     ],
     pendingExpenses: { total: 18, recent: 5 },
   },

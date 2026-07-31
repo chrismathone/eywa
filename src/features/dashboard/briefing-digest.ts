@@ -6,7 +6,13 @@
  * - LLM 프롬프트에는 개인 이름을 넣지 않고(라벨+수치만), 응답은 validateNarrative(숫자 grounding·
  *   영문 토큰 금지·길이)를 통과한 것만 저장 — 실패 시 buildFallbackNarrative(결정론 요약)로 대체.
  */
-import { buildTodayActions, type TodayActionItem, type TodayActionsRaw } from "./today-actions";
+import {
+  buildTodayActions,
+  subjectBreakdownText,
+  type SubjectLabelResolver,
+  type TodayActionItem,
+  type TodayActionsRaw,
+} from "./today-actions";
 
 export type DailyBriefingPayload = {
   /** 브리핑 대상일(KST 오늘) — briefing_date와 동일 */
@@ -52,6 +58,11 @@ export type BuildDailyBriefingInput = {
   todayClassSessions: number | null;
   /** 조회에 실패해 이번 브리핑에서 빠진 영역 라벨(예: 재등록 이탈 신호) — "0"으로 위장하지 않기 위함. */
   missingDomainLabels?: string[];
+  /**
+   * 과목 키 → 학원설정 라벨. 없으면 과목 분해를 통째로 생략한다(raw 키 노출 금지).
+   * ⚠️ 여기에 하드코딩 맵을 넣지 말 것 — 서버가 `buildSubjectMaps(getTenantSettings…)`로 만들어 주입한다.
+   */
+  subjectLabel?: SubjectLabelResolver;
 };
 
 const SPOTLIGHT_MAX = 6;
@@ -90,7 +101,7 @@ export function buildDailyBriefingPayload(input: BuildDailyBriefingInput): Daily
     leavesPending: 0,
     sourceIssues: [],
   };
-  const attention = buildTodayActions(merged).map((item) =>
+  const attention = buildTodayActions(merged, { subjectLabel: input.subjectLabel }).map((item) =>
     YESTERDAY_RELABEL[item.key] ? { ...item, label: YESTERDAY_RELABEL[item.key] } : item,
   );
   const issueLabels = [
@@ -155,6 +166,8 @@ export function narrativeNumberWhitelist(payload: DailyBriefingPayload): Set<str
     add(item.count);
     // note에 실린 수치("최근 7일 13건", "발송 실패 8")도 프롬프트가 보는 근거다 — 화이트리스트에 포함.
     for (const token of (item.note ?? "").match(/\d+/g) ?? []) numbers.add(String(Number(token)));
+    // 과목별 분해 수치도 프롬프트에 나가므로 인용 허용("영어 147"). 빠뜨리면 정상 보고가 탈락한다.
+    for (const bucket of item.bySubject) add(bucket.count);
   }
   add(payload.attention.length);
   add(payload.today.classSessions);
@@ -198,6 +211,8 @@ export function narrativeWordWhitelist(payload: DailyBriefingPayload): Set<strin
     harvest(item.label);
     harvest(item.note);
     harvest(item.detail);
+    // 과목 라벨이 영문일 수 있다(학원이 "EIE" 같은 이름을 쓰면) — 사실로 준 이상 인용도 허용.
+    for (const bucket of item.bySubject) harvest(bucket.label);
   }
   for (const spotlight of payload.spotlights) {
     harvest(spotlight.name);
@@ -216,7 +231,9 @@ export function digestFactLines(payload: DailyBriefingPayload): string[] {
     const count = item.count != null ? `${item.count}${item.unit ?? "건"}` : "상태 이상";
     // note(범위·내역)는 개인정보가 없어 프롬프트에 안전하다. 이걸 빼면 "지출 결재 대기 13건"처럼
     // 범위 없는 숫자만 남아 매니저가 잘못 판단한다. detail(이름 미리보기)은 여전히 넣지 않는다.
-    lines.push(`- ${item.label}: ${count}${item.note ? ` (${item.note})` : ""}`);
+    // 과목 분해는 매니저가 "어느 과목부터"를 정하는 근거라 프롬프트에도 넣는다(개인정보 없음).
+    const parts = [item.note, subjectBreakdownText(item.bySubject)].filter(Boolean).join(" / ");
+    lines.push(`- ${item.label}: ${count}${parts ? ` (${parts})` : ""}`);
   }
   const followUpTotal = payload.followUps.overdue + payload.followUps.dueSoon;
   if (followUpTotal > 0) {

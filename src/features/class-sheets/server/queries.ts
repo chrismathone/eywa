@@ -470,12 +470,20 @@ export async function getSheetLanding(
 
   const admin = createAdminClient();
   const [schedules, lines, teachers] = await Promise.all([
-    fetchInChunks<{ class_id: string; day_of_week: DowKey; start_time: string; valid_from: string; valid_to: string | null }>(
+    fetchInChunks<{
+      class_id: string;
+      day_of_week: DowKey;
+      start_time: string;
+      valid_from: string;
+      valid_to: string | null;
+      // 자리(LAB·JJ) 판정용 — 작성률 분모에서 빼려면 라벨이 필요하다(빼먹으면 랜딩만 옛 분모로 남는다).
+      slot_teacher_label: string | null;
+    }>(
       classIds,
       (chunk) =>
         supabase
           .from("class_schedules")
-          .select("class_id, day_of_week, start_time, valid_from, valid_to")
+          .select("class_id, day_of_week, start_time, valid_from, valid_to, slot_teacher_label")
           .in("class_id", chunk)
           .lte("valid_from", weekSunday)
           .or(`valid_to.is.null,valid_to.gte.${weekMonday}`),
@@ -535,6 +543,7 @@ export async function getSheetLanding(
         startTime: s.start_time,
         validFrom: s.valid_from,
         validTo: s.valid_to,
+        slotTeacherLabel: s.slot_teacher_label,
       })),
     );
     const meaningful = meaningfulKeysByClass.get(c.id as string) ?? new Set<string>();

@@ -238,9 +238,12 @@ export const staffContracts = pgTable(
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    seq: integer("seq").notNull(), // 계약 차수(1차·2차…)
-    startDate: date("start_date").notNull(),
-    endDate: date("end_date").notNull(),
+    seq: integer("seq").notNull(), // 계약 차수(1차·2차…). note는 0.
+    // 0159a — 시트 히스토리엔 기간 없는 줄(입사·수당 조항·부서 이전…)이 섞여 있어 날짜가 nullable.
+    kind: text("kind").notNull().default("contract"), // 'contract'(기간 있음) | 'note'(원문 한 줄)
+    startDate: date("start_date"),
+    endDate: date("end_date"),
+    lineNo: integer("line_no"), // 시트 셀에서의 줄 순서(0=맨 위)
     terms: text("terms"), // 계약조건(시트 '계약조건' 열 대응 자유 텍스트)
     memo: text("memo"),
     createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),

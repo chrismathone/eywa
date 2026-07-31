@@ -375,6 +375,15 @@ export function SheetClient({
           </p>
         </div>
       ) : null}
+
+      {/* 랩실(LAB·JJ) 교시는 담임 수업이 아니라 표시하지 않는다. 그 자리에 남아 있는 기록이 있으면
+          건수만 각주로 — 화면에서 조용히 사라지면 "쓴 게 증발했다"가 된다(기록은 DB에 그대로). */}
+      {data.grid.hiddenSpecial.records > 0 ? (
+        <p className="text-text-faint px-1 text-[12px]">
+          랩실(LAB·JJ) 교시 {data.grid.hiddenSpecial.slots}개는 표시하지 않습니다 — 그 시간에 남아 있는 기록{" "}
+          {data.grid.hiddenSpecial.records}건은 지워지지 않았습니다.
+        </p>
+      ) : null}
     </div>
   );
 }
