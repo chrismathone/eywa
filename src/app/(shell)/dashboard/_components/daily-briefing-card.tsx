@@ -114,15 +114,9 @@ export function DailyBriefingCard({ briefing }: { briefing: DailyBriefingRow | n
                     payload.spotlights.length > 1 ? "lg:grid-cols-2" : ""
                   }`}
                 >
-                  {payload.spotlights.map((s, i) => (
-                    // 이름만으론 동명이인 key 충돌 — payload가 studentId를 안 담는 동안 index로 유일화.
-                    <li key={`${s.name}-${i}`}>
-                      <WindowLink
-                        href="/retention"
-                        title="이탈 방어"
-                        ariaLabel={`${s.name} — ${s.reasons.join(", ")}`}
-                        className="group hover:bg-bg-soft -mx-2 flex items-center gap-2.5 rounded-xl px-2 py-2 transition"
-                      >
+                  {payload.spotlights.map((s, i) => {
+                    const body = (
+                      <>
                         <span className="text-foreground shrink-0 text-[13.5px] font-bold">{s.name}</span>
                         <span className="text-text-dim min-w-0 flex-1 truncate text-[12.5px]">
                           {s.reasons.slice(0, 2).join(" · ")}
@@ -132,9 +126,30 @@ export function DailyBriefingCard({ briefing }: { briefing: DailyBriefingRow | n
                             {s.action}
                           </span>
                         ) : null}
-                      </WindowLink>
-                    </li>
-                  ))}
+                      </>
+                    );
+                    // 이름만으론 동명이인 key 충돌 — 옛 payload(studentId 없음)도 있어 index로 유일화.
+                    return (
+                      <li key={`${s.name}-${i}`}>
+                        {/* ⚠️ 예전엔 무조건 /retention으로 걸었다. 그런데 이 학원은 이탈 방어 메뉴를 전 역할
+                            차단해둬서(권한 none) 누르면 대시보드로 튕겼다 — 게다가 브리핑 서버는 그걸 알고
+                            retention 데이터를 이미 뺀 상태였다. 학생 상세는 이 카드를 볼 수 있는 역할이면
+                            항상 열 수 있고 조치도 거기서 한다. studentId가 없는 옛 행은 링크 없이 표시. */}
+                        {s.studentId ? (
+                          <WindowLink
+                            href={`/students/${s.studentId}`}
+                            title={s.name}
+                            ariaLabel={`${s.name} — ${s.reasons.join(", ")}`}
+                            className="group hover:bg-bg-soft -mx-2 flex items-center gap-2.5 rounded-xl px-2 py-2 transition"
+                          >
+                            {body}
+                          </WindowLink>
+                        ) : (
+                          <span className="-mx-2 flex items-center gap-2.5 rounded-xl px-2 py-2">{body}</span>
+                        )}
+                      </li>
+                    );
+                  })}
                 </ul>
               </div>
             ) : null}

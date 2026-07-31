@@ -23,14 +23,18 @@ export type DailyBriefingPayload = {
    * 이름·사유·권장 조치 전부 시스템 산출(retention risk.reasons·primaryAction) = 카드가 이걸 직접 렌더하고
    * LLM은 이 명단 안에서만 언급 가능(매니저 팀 보고의 grounding 재료).
    */
-  spotlights: { name: string; reasons: string[]; action: string | null }[];
+  spotlights: { studentId: string | null; name: string; reasons: string[]; action: string | null }[];
   /** 조회 실패 도메인(확인 불가 정직성) — 라벨만 */
   sourceIssueLabels: string[];
 };
 
-/** "오늘" 문구로 수집된 어제 기준 신호의 표시 리라벨(신호 key 고정 규칙). */
+/**
+ * "오늘" 문구로 수집된 어제 기준 신호의 표시 리라벨(신호 key 고정 규칙).
+ * ⚠️ absent는 "결석"이다 — 공결 폐지 후 사전 통보 결석까지 전부 absent라 "무단결석"은 과장이다
+ * (2026-07-31 교정, today-actions `absentToday` 주석 참조). 되돌리지 말 것.
+ */
 const YESTERDAY_RELABEL: Readonly<Record<string, string>> = {
-  absent: "어제 무단결석",
+  absent: "어제 결석",
   "unwritten-reports": "어제 미작성 보고서",
 };
 
@@ -41,11 +45,13 @@ export type BuildDailyBriefingInput = {
   /** 지금(실제 오늘) 수집 — 어제 미기록 반·오늘 휴가·승인 대기만 소비 */
   todayRaw: TodayActionsRaw;
   followUps: { overdue: number; dueSoon: number };
-  absenceRisks: { studentName: string; absences: number }[];
+  absenceRisks: { studentId?: string | null; studentName: string; absences: number }[];
   retention: { total: number; risk: number; warn: number; revenueRisk: number } | null;
   /** retention 상위 위험 학생(위험도 내림차순, 사유·권장 조치 포함) — 서버가 roster에서 추출. */
-  retentionTop: { name: string; reasons: string[]; action: string | null }[];
+  retentionTop: { studentId: string; name: string; reasons: string[]; action: string | null }[];
   todayClassSessions: number | null;
+  /** 조회에 실패해 이번 브리핑에서 빠진 영역 라벨(예: 재등록 이탈 신호) — "0"으로 위장하지 않기 위함. */
+  missingDomainLabels?: string[];
 };
 
 const SPOTLIGHT_MAX = 6;
@@ -53,6 +59,7 @@ const SPOTLIGHT_MAX = 6;
 /** retention 상위 + 반복 결석 병합(이름 중복 제거) — 결석만 걸린 학생은 결석 사유로 추가. */
 function buildSpotlights(input: BuildDailyBriefingInput): DailyBriefingPayload["spotlights"] {
   const spotlights: DailyBriefingPayload["spotlights"] = input.retentionTop.slice(0, SPOTLIGHT_MAX).map((s) => ({
+    studentId: s.studentId,
     name: s.name,
     reasons: s.reasons,
     action: s.action,
@@ -62,7 +69,12 @@ function buildSpotlights(input: BuildDailyBriefingInput): DailyBriefingPayload["
     if (spotlights.length >= SPOTLIGHT_MAX) break;
     if (seen.has(risk.studentName)) continue;
     seen.add(risk.studentName);
-    spotlights.push({ name: risk.studentName, reasons: [`최근 14일 결석 ${risk.absences}회`], action: null });
+    spotlights.push({
+      studentId: risk.studentId ?? null,
+      name: risk.studentName,
+      reasons: [`최근 14일 결석 ${risk.absences}회`],
+      action: null,
+    });
   }
   return spotlights;
 }
@@ -84,7 +96,10 @@ export function buildDailyBriefingPayload(input: BuildDailyBriefingInput): Daily
   const issueLabels = [
     ...(input.yesterdayRaw.sourceIssues ?? []),
     ...(input.todayRaw.sourceIssues ?? []),
-  ].map((issue) => issue.label.replace(/^오늘 /, ""));
+  ]
+    .map((issue) => issue.label.replace(/^오늘 /, ""))
+    // 신호 수집 밖에서 실패한 영역(retention 등)도 같은 "확인 불가" 줄로 — 조용히 빠지면 원장은 '0'으로 읽는다.
+    .concat(input.missingDomainLabels ?? []);
   return {
     date: input.date,
     yesterday: input.todayRaw.yesterday,
@@ -136,7 +151,11 @@ export function narrativeNumberWhitelist(payload: DailyBriefingPayload): Set<str
     add(Number(m));
     add(Number(d));
   }
-  for (const item of payload.attention) add(item.count);
+  for (const item of payload.attention) {
+    add(item.count);
+    // note에 실린 수치("최근 7일 13건", "발송 실패 8")도 프롬프트가 보는 근거다 — 화이트리스트에 포함.
+    for (const token of (item.note ?? "").match(/\d+/g) ?? []) numbers.add(String(Number(token)));
+  }
   add(payload.attention.length);
   add(payload.today.classSessions);
   add(payload.today.leaves.length);
@@ -162,11 +181,42 @@ export function narrativeNumberWhitelist(payload: DailyBriefingPayload): Set<str
   return numbers;
 }
 
-/** 개인 이름 없이 라벨+수치만 — 서술 재료. 프롬프트와 폴백 요약이 같은 사실 목록을 쓴다. */
+/**
+ * 프롬프트가 인용해도 되는 **영문 토큰** 화이트리스트(소문자).
+ *
+ * 팀 보고 검증은 영문 3자 이상을 막는다(코드·키 이름 환각 차단). 그런데 신호 라벨 자체에 영문이
+ * 들어가는 경우가 있다(`makeedu 동기화 이상`) — 그러면 프롬프트가 사실로 준 단어를 그대로 보고한
+ * 정상 응답이 통째로 탈락한다(2026-07-31 실측: makeedu 신호가 뜬 날 = 검증 탈락일). 숫자 grounding과
+ * 같은 원리로, **payload에 실제로 있는 영문만** 허용한다(없는 영문 = 여전히 차단).
+ */
+export function narrativeWordWhitelist(payload: DailyBriefingPayload): Set<string> {
+  const words = new Set<string>();
+  const harvest = (text: string | null | undefined) => {
+    for (const token of (text ?? "").match(/[A-Za-z]{3,}/g) ?? []) words.add(token.toLowerCase());
+  };
+  for (const item of payload.attention) {
+    harvest(item.label);
+    harvest(item.note);
+    harvest(item.detail);
+  }
+  for (const spotlight of payload.spotlights) {
+    harvest(spotlight.name);
+    harvest(spotlight.action);
+    for (const reason of spotlight.reasons) harvest(reason);
+  }
+  for (const label of payload.sourceIssueLabels) harvest(label);
+  return words;
+}
+
+/** 개인 이름 없이 라벨+수치+비개인 단서만 — 서술 재료. 프롬프트와 폴백 요약이 같은 사실 목록을 쓴다. */
 export function digestFactLines(payload: DailyBriefingPayload): string[] {
   const lines: string[] = [];
   for (const item of payload.attention) {
-    lines.push(`- ${item.label}: ${item.count ?? "상태 이상"}${item.count != null ? "건" : ""}`);
+    // 단위는 신호가 들고 온 것(명/개 반/건)을 쓴다 — 전부 "건"으로 찍어 30명을 30건으로 보고했었다.
+    const count = item.count != null ? `${item.count}${item.unit ?? "건"}` : "상태 이상";
+    // note(범위·내역)는 개인정보가 없어 프롬프트에 안전하다. 이걸 빼면 "지출 결재 대기 13건"처럼
+    // 범위 없는 숫자만 남아 매니저가 잘못 판단한다. detail(이름 미리보기)은 여전히 넣지 않는다.
+    lines.push(`- ${item.label}: ${count}${item.note ? ` (${item.note})` : ""}`);
   }
   const followUpTotal = payload.followUps.overdue + payload.followUps.dueSoon;
   if (followUpTotal > 0) {

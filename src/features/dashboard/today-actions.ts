@@ -14,7 +14,11 @@ export {
 export type TodayActionAccess = "read" | "write" | "manage-staff";
 
 export type TodayActionsRaw = {
-  /** 오늘 무단결석(absent) 학생 — 학생 단위 dedupe 후 */
+  /**
+   * 오늘 결석(status=absent) 학생 — 학생 단위 dedupe 후.
+   * ⚠️ "무단결석"이 아니다: 공결 상태는 폐지돼(2026-07-10) 사전 통보 결석도 전부 `absent`로 저장된다.
+   * 라벨을 다시 "무단결석"으로 되돌리지 말 것 — 연락 없이 빠진 학생 수로 읽혀 실제보다 과장된다.
+   */
   absentToday: { studentId: string; name: string }[];
   /**
    * 어제 출석 미기록 반. `subject`는 미리보기 이름을 **과목별로 고르게** 뽑는 데 쓴다 —
@@ -28,8 +32,12 @@ export type TodayActionsRaw = {
   failedAnalysis: { meetings: number; enrollment: number; consultations: number };
   /** makeedu 동기화 이상(자동 동기화 ON일 때만) — 없으면 null */
   makeeduIssue: { kind: "error" | "stale"; detail: string } | null;
-  /** 최근 7일 지출 결재 대기 */
-  pendingExpenses: number;
+  /**
+   * 지출 결재 대기 — `total`은 **미결 전건**, `recent`는 최근 7일분.
+   * ⚠️ 예전엔 최근 7일분만 세어 그 숫자를 총건수처럼 보고했다(2026-07-31 실측: 화면 13건 / 실제 미결 171건,
+   * 가장 오래된 건 2026-03-30). 창 밖에 잠긴 미결이 더 많은 신호라 **총건수를 세고 7일분은 단서로** 붙인다.
+   */
+  pendingExpenses: { total: number; recent: number };
   /** 교재 신청 미처리(주문 전) */
   requestedTextbooks: number;
   /** 휴가 승인 대기(아직 안 끝난 휴가만) */
@@ -44,6 +52,12 @@ export type TodayActionsRaw = {
    * 목적이라 상담 기준으로 재정의하지 말 것(2026-07-15 실측: 상담 기준은 89건 전원이 퇴원·과거 건 = 헛경보).
    */
   unassignedEnrolled: { studentId: string; name: string }[];
+  /**
+   * 반 미배정 재원생 **전체 수**. 위 배열은 미리보기라 RPC에서 상한(30)이 걸린다 —
+   * ⚠️ 배열 길이를 건수로 쓰지 말 것: 상한에 닿는 순간 실제가 34명이든 50명이든 화면은 영원히 "30"이었다
+   * (2026-07-31 실측: 브리핑 30 / 실제 34, 4명이 매일 조용히 누락).
+   */
+  unassignedEnrolledTotal: number;
   /**
    * ClassNote 발송 주의(관리자 조치 대상) — failed/tooOld=워커 확정 실패(7일 창),
    * humanHold=사람 조치 보류(blocked_shared·name_conflict, 창 없음), stuck=processing 10분 초과 멈춤.
@@ -67,7 +81,19 @@ export type TodayActionItem = {
   label: string;
   /** null = 카운트 없는 상태 신호(makeedu 등) */
   count: number | null;
+  /** count의 단위 — 표시·요약·AI 프롬프트가 공유하는 단일 소스("30건"이 실은 30명이던 것 교정). */
+  unit: "명" | "건" | "개 반" | null;
+  /**
+   * 개인 미리보기(학생·직원 이름). ⚠️ **AI 프롬프트에 넣지 말 것** — 브리핑 프롬프트는 라벨+수치만 보낸다.
+   * 이름이 아닌 단서(범위·내역)는 `note`에 담아 프롬프트·요약이 함께 쓴다.
+   */
   detail: string | null;
+  /**
+   * 비개인 단서 — 숫자를 해석하는 데 필요한 범위·내역("최근 7일", "발송 실패 8", "교재 단가표 763시간째").
+   * 예전엔 이게 detail에 섞여 있어 요약·프롬프트가 통째로 버렸고, 그 결과 "지출 결재 대기 13건"처럼
+   * **범위가 사라진 숫자**만 남았다. 개인정보가 없으므로 프롬프트·폴백 양쪽에서 그대로 쓴다.
+   */
+  note: string | null;
   href: string;
   /** 현재 역할이 이 조치를 열 수 있는지 브리핑에서 판정할 메뉴 권한 키. */
   menuKey: MenuKey;
@@ -141,9 +167,12 @@ export function buildTodayActions(raw: TodayActionsRaw): TodayActionItem[] {
     items.push({
       key: "absent",
       severity: "danger",
-      label: "오늘 무단결석",
+      // 공결 폐지 이후 absent가 유일한 결석 상태다 — "무단결석"으로 부르지 말 것(raw 주석 참조).
+      label: "오늘 결석",
       count: raw.absentToday.length,
+      unit: "명",
       detail: nameList(raw.absentToday.map((s) => s.name)),
+      note: null,
       href: "/attendance",
       menuKey: "attendance",
       requiredAccess: "read",
@@ -188,7 +217,9 @@ export function buildTodayActions(raw: TodayActionsRaw): TodayActionItem[] {
     items.push({
       ...analysis,
       severity: "danger",
-      detail: "최근 7일",
+      unit: "건",
+      detail: null,
+      note: "최근 7일",
     });
   }
 
@@ -197,8 +228,11 @@ export function buildTodayActions(raw: TodayActionsRaw): TodayActionItem[] {
       key: "unwritten-reports",
       severity: "amber",
       label: "오늘 미작성 보고서",
+      // 보고서 장수가 아니라 **대상 학생 수**다(학생×과목을 학생 단위로 합침) — 단위는 명.
       count: raw.unwrittenReportsToday.count,
+      unit: "명",
       detail: nameList(raw.unwrittenReportsToday.names),
+      note: null,
       href: "/lesson-reports?tab=writing",
       menuKey: "lesson_reports",
       requiredAccess: "read",
@@ -220,22 +254,28 @@ export function buildTodayActions(raw: TodayActionsRaw): TodayActionItem[] {
       severity: "amber",
       label: "리포트 발송 주의",
       count: cnTotal,
-      detail: cnParts.join(" · "),
+      unit: "건",
+      detail: null,
+      note: cnParts.join(" · "),
       href: "/lesson-reports?tab=writing",
       menuKey: "lesson_reports",
       requiredAccess: "read",
     });
   }
 
-  if (raw.unassignedEnrolled.length > 0) {
+  const unassignedTotal = raw.unassignedEnrolledTotal;
+  if (unassignedTotal > 0) {
     // 소수(대개 1~2명)라 1명이면 그 학생 창으로 바로, 여럿이면 학생목록으로(목록엔 '미수강만' 필터가 없음).
-    const only = raw.unassignedEnrolled.length === 1 ? raw.unassignedEnrolled[0] : null;
+    const only = unassignedTotal === 1 ? raw.unassignedEnrolled[0] : null;
     items.push({
       key: "unassigned-enrolled",
       severity: "amber",
       label: "반 미배정 재원생",
-      count: raw.unassignedEnrolled.length,
-      detail: nameList(raw.unassignedEnrolled.map((s) => s.name)),
+      // ⚠️ 배열 길이가 아니라 총계 — 미리보기 배열은 RPC 상한(30)에서 잘린다(raw 주석).
+      count: unassignedTotal,
+      unit: "명",
+      detail: nameList(raw.unassignedEnrolled.map((s) => s.name), 3, unassignedTotal),
+      note: null,
       href: only ? `/students/${only.studentId}` : "/students",
       menuKey: "students",
       requiredAccess: "write",
@@ -248,6 +288,7 @@ export function buildTodayActions(raw: TodayActionsRaw): TodayActionItem[] {
       severity: "amber",
       label: "어제 출석 미기록",
       count: raw.unrecordedYesterday.length,
+      unit: "개 반",
       // ⚠️ 앞 2개를 그냥 자르지 않는다(gotcha #84). 목록이 이름순인데 ICU 한국어 정렬은 한글을
       // 로마자보다 앞에 둬서, 한글 이름 반(수학)이 미리보기를 독점하고 로마자 코드 반(영어)은
       // 미기록이 아무리 많아도 이름이 절대 안 뜬다 — 영어 담당자는 자기 반이 걸렸는지 알 수 없었다.
@@ -257,19 +298,23 @@ export function buildTodayActions(raw: TodayActionsRaw): TodayActionItem[] {
         2,
         raw.unrecordedYesterday.length,
       ),
+      note: null,
       href: `/attendance/${raw.yesterday}`,
       menuKey: "attendance",
       requiredAccess: "read",
     });
   }
 
-  if (raw.pendingExpenses > 0) {
+  if (raw.pendingExpenses.total > 0) {
     items.push({
       key: "expenses",
       severity: "amber",
       label: "지출 결재 대기",
-      count: raw.pendingExpenses,
-      detail: "최근 7일",
+      // ⚠️ 미결 **전건**. 최근 7일만 세면 창 밖에 몇 달째 잠긴 결재가 통째로 안 보인다(raw 주석).
+      count: raw.pendingExpenses.total,
+      unit: "건",
+      detail: null,
+      note: `최근 7일 ${raw.pendingExpenses.recent}건`,
       href: "/billing?tab=expenses",
       menuKey: "billing",
       requiredAccess: "write",
@@ -282,7 +327,9 @@ export function buildTodayActions(raw: TodayActionsRaw): TodayActionItem[] {
       severity: "amber",
       label: "교재 신청 미처리",
       count: raw.requestedTextbooks,
+      unit: "건",
       detail: null,
+      note: null,
       href: "/billing?tab=textbooks&status=requested",
       menuKey: "billing",
       requiredAccess: "write",
@@ -295,7 +342,9 @@ export function buildTodayActions(raw: TodayActionsRaw): TodayActionItem[] {
       severity: "amber",
       label: "휴가 승인 대기",
       count: raw.leavesPending,
+      unit: "건",
       detail: null,
+      note: null,
       href: "/staff/leaves",
       menuKey: "staff",
       requiredAccess: "manage-staff",
@@ -308,7 +357,10 @@ export function buildTodayActions(raw: TodayActionsRaw): TodayActionItem[] {
       severity: "amber",
       label: "makeedu 동기화 이상",
       count: null,
-      detail: raw.makeeduIssue.detail,
+      unit: null,
+      detail: null,
+      // 어느 도메인이 얼마나 밀렸는지가 이 신호의 전부다 — note라야 요약·프롬프트까지 함께 간다.
+      note: raw.makeeduIssue.detail,
       href: "/owner?tab=sheets",
       menuKey: "owner",
       requiredAccess: "read",
@@ -321,7 +373,9 @@ export function buildTodayActions(raw: TodayActionsRaw): TodayActionItem[] {
       severity: "info",
       label: "오늘 휴가",
       count: raw.leavesToday.length,
+      unit: "명",
       detail: nameList(raw.leavesToday.map((l) => l.name)),
+      note: null,
       href: "/staff/leaves",
       menuKey: "staff",
       requiredAccess: "read",
@@ -334,7 +388,9 @@ export function buildTodayActions(raw: TodayActionsRaw): TodayActionItem[] {
       severity: "amber",
       label: `${issue.label} 확인 불가`,
       count: null,
-      detail: "새로고침 후 다시 확인해 주세요",
+      unit: null,
+      detail: null,
+      note: "새로고침 후 다시 확인해 주세요",
       href: issue.href,
       menuKey: issue.menuKey,
       requiredAccess: issue.requiredAccess,
