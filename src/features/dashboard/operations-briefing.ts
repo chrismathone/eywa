@@ -157,18 +157,10 @@ function laneForAction(action: TodayActionItem): BriefingLane {
   return "notice";
 }
 
+/** 단위는 신호가 스스로 들고 온다(today-actions `unit`) — 여기서 key별로 다시 분기하지 말 것. */
 function countLabelForAction(action: TodayActionItem): string | null {
   if (action.count === null) return null;
-  if (action.key === "unrecorded") return `${action.count}개 반`;
-  if (
-    action.key === "absent" ||
-    action.key === "unwritten-reports" ||
-    action.key === "unassigned-enrolled" ||
-    action.key === "leaves-today"
-  ) {
-    return `${action.count}명`;
-  }
-  return `${action.count}건`;
+  return `${action.count}${action.unit ?? "건"}`;
 }
 
 function summarizeNames(names: readonly string[], max = 3): string {
@@ -211,7 +203,8 @@ export function buildOperationsBriefing({
       lane,
       label: action.label,
       countLabel: countLabelForAction(action),
-      detail: action.detail,
+      // 범위·내역(note)과 이름 미리보기(detail)를 함께 — 예전 detail 한 칸이 하던 표시를 그대로 유지한다.
+      detail: [action.note, action.detail].filter(Boolean).join(" · ") || null,
       href: action.href,
     }));
   }

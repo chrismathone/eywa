@@ -19,7 +19,9 @@ function action(overrides: Partial<TodayActionItem> & Pick<TodayActionItem, "key
   return {
     label: overrides.key,
     count: 1,
+    unit: "건",
     detail: null,
+    note: null,
     href: `/${overrides.key}`,
     menuKey: "dashboard",
     requiredAccess: "read",
@@ -54,10 +56,10 @@ describe("buildOperationsBriefing", () => {
     const result = buildOperationsBriefing({
       ...EMPTY,
       actions: [
-        action({ key: "absent", severity: "danger", count: 2, label: "오늘 무단결석" }),
-        action({ key: "unrecorded", severity: "amber", count: 3, label: "어제 출석 미기록" }),
-        action({ key: "unwritten-reports", severity: "amber", count: 4 }),
-        action({ key: "leaves-today", severity: "info", count: 2 }),
+        action({ key: "absent", severity: "danger", count: 2, unit: "명", label: "오늘 결석" }),
+        action({ key: "unrecorded", severity: "amber", count: 3, unit: "개 반", label: "어제 출석 미기록" }),
+        action({ key: "unwritten-reports", severity: "amber", count: 4, unit: "명" }),
+        action({ key: "leaves-today", severity: "info", count: 2, unit: "명" }),
         action({ key: "makeedu", severity: "amber", count: null }),
       ],
     });
@@ -78,7 +80,7 @@ describe("buildOperationsBriefing", () => {
   it("반 미배정 재원생은 사람 단위로 표시한다", () => {
     const result = buildOperationsBriefing({
       ...EMPTY,
-      actions: [action({ key: "unassigned-enrolled", severity: "amber", count: 2 })],
+      actions: [action({ key: "unassigned-enrolled", severity: "amber", count: 2, unit: "명" })],
     });
 
     expect(result.focus?.countLabel).toBe("2명");
@@ -268,11 +270,11 @@ describe("buildOperationsBriefing", () => {
       actions: [
         action({ key: "textbooks", severity: "amber", count: 4 }),
         action({ key: "expenses", severity: "amber", count: 2 }),
-        action({ key: "absent", severity: "danger", count: 1, label: "오늘 무단결석" }),
+        action({ key: "absent", severity: "danger", count: 1, unit: "명", label: "오늘 결석" }),
         action({ key: "failed-analysis-meetings", severity: "danger", count: 3 }),
         action({ key: "leaves-pending", severity: "amber", count: 1 }),
         action({ key: "unrecorded", severity: "amber", count: 5 }),
-        action({ key: "leaves-today", severity: "info", count: 2 }),
+        action({ key: "leaves-today", severity: "info", count: 2, unit: "명" }),
       ],
       followUps: [{ id: "f1", studentId: "s1", studentName: "김민준", urgency: "overdue" }],
     });
@@ -290,7 +292,7 @@ describe("buildOperationsBriefing", () => {
     expect(result.groups.map((group) => group.lane)).toEqual(["urgent", "today", "approval", "notice"]);
     expect(result.assistantState).toBe("critical");
     expect(result.summary).toBe(
-      "오늘 무단결석부터 확인해 주세요. 긴급 3종을 처리한 뒤 승인 대기 2종과 오늘 할 일 2종이 있습니다.",
+      "오늘 결석부터 확인해 주세요. 긴급 3종을 처리한 뒤 승인 대기 2종과 오늘 할 일 2종이 있습니다.",
     );
   });
 
@@ -371,9 +373,9 @@ describe("buildOperationsBriefing", () => {
   it.each([
     {
       name: "긴급만 있음",
-      actions: [action({ key: "absent", severity: "danger", count: 2, label: "오늘 무단결석" })],
+      actions: [action({ key: "absent", severity: "danger", count: 2, unit: "명", label: "오늘 결석" })],
       state: "critical",
-      summary: "오늘 무단결석부터 확인해 주세요. 긴급 신호 1종이 있습니다.",
+      summary: "오늘 결석부터 확인해 주세요. 긴급 신호 1종이 있습니다.",
     },
     {
       name: "오늘 할 일만 있음",

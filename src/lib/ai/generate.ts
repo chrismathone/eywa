@@ -104,7 +104,12 @@ export type GenerateJSONOptions = {
 
 /** provider 응답의 토큰 usage(제공 안 하면 null). */
 type ProviderUsage = { inputTokens: number | null; outputTokens: number | null } | null;
-type ProviderCall = { text: string; usage: ProviderUsage };
+/**
+ * `truncated` = 모델이 max_tokens 한도에서 말을 끊었다. 이 경우 JSON은 거의 항상 문장 도중에 끊겨
+ * 파싱이 깨지는데, 그 실패가 `Expected ',' or ']' after array element`로만 보이면 원인을 못 찾는다
+ * (2026-07-31 브리핑 실측: 실패한 날의 output_tokens가 전부 정확히 한도값이었다). 사유를 한글로 표면화한다.
+ */
+type ProviderCall = { text: string; usage: ProviderUsage; truncated: boolean };
 
 /**
  * ai_usage_logs에 호출 1건 기록 — **best-effort**: env 미설정(테스트·로컬)이면 조용히 스킵, 실패는
@@ -242,6 +247,7 @@ async function callProvider(
       usage: res.usage
         ? { inputTokens: res.usage.prompt_tokens ?? null, outputTokens: res.usage.completion_tokens ?? null }
         : null,
+      truncated: res.choices[0]?.finish_reason === "length",
     };
   }
   if (provider === "deepseek") {
@@ -271,6 +277,7 @@ async function callProvider(
       usage: res.usage
         ? { inputTokens: res.usage.prompt_tokens ?? null, outputTokens: res.usage.completion_tokens ?? null }
         : null,
+      truncated: res.choices[0]?.finish_reason === "length",
     };
   }
   const client = getAnthropic(keyName);
@@ -298,6 +305,7 @@ async function callProvider(
     usage: res.usage
       ? { inputTokens: res.usage.input_tokens ?? null, outputTokens: res.usage.output_tokens ?? null }
       : null,
+    truncated: res.stop_reason === "max_tokens",
   };
 }
 
@@ -344,7 +352,18 @@ export async function generateJSON<T>(rawOpts: GenerateJSONOptions): Promise<{ d
     if (!call) continue; // 도달 불가(위 catch는 continue 또는 throw) — 타입 안전용
     // provider 호출 성공 = 토큰은 이미 소비됨 — 파싱 실패 여부와 무관하게 usage를 기록.
     await recordUsage({ meta: opts.meta, provider, model, keyName, usage: call.usage, ok: true });
-    return { data: parseJsonLoose<T>(call.text), model };
+    try {
+      return { data: parseJsonLoose<T>(call.text), model };
+    } catch (e) {
+      // 잘린 응답의 파싱 실패는 "모델이 이상한 걸 뱉었다"가 아니라 "한도가 모자랐다"이다 —
+      // 원인을 라우트·화면 오류 문구까지 그대로 들고 가야 max_tokens를 올릴 생각을 한다.
+      if (call.truncated) {
+        throw new Error(
+          `AI 응답이 최대 길이(${opts.maxTokens} 토큰)에서 잘려 해석하지 못했습니다. 응답 한도를 늘리거나 요청을 줄여 주세요.`,
+        );
+      }
+      throw e;
+    }
   }
   // 도달 불가(루프가 항상 return 또는 throw) — 타입 종결용 terminator.
   rethrowAi(candidates[candidates.length - 1].provider, lastErr);

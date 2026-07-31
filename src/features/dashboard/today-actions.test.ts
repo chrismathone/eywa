@@ -14,12 +14,13 @@ const EMPTY: TodayActionsRaw = {
   yesterday: "2026-07-01",
   failedAnalysis: { meetings: 0, enrollment: 0, consultations: 0 },
   makeeduIssue: null,
-  pendingExpenses: 0,
+  pendingExpenses: { total: 0, recent: 0 },
   requestedTextbooks: 0,
   leavesPending: 0,
   leavesToday: [],
   unwrittenReportsToday: { count: 0, names: [] },
   unassignedEnrolled: [],
+  unassignedEnrolledTotal: 0,
   classnoteAttention: { failed: 0, tooOld: 0, humanHold: 0, stuck: 0 },
 };
 
@@ -28,7 +29,7 @@ describe("buildTodayActions", () => {
     expect(buildTodayActions(EMPTY)).toEqual([]);
   });
 
-  it("무단결석 = danger + 명단 요약 + /attendance 링크", () => {
+  it("결석 = danger + 명단 요약 + /attendance 링크", () => {
     const items = buildTodayActions({
       ...EMPTY,
       absentToday: [
@@ -51,6 +52,7 @@ describe("buildTodayActions", () => {
     const items = buildTodayActions({
       ...EMPTY,
       unassignedEnrolled: [{ studentId: "s1", name: "학원이" }],
+      unassignedEnrolledTotal: 1,
     });
     expect(items).toHaveLength(1);
     expect(items[0]).toMatchObject({
@@ -72,8 +74,18 @@ describe("buildTodayActions", () => {
         { studentId: "s1", name: "김민준" },
         { studentId: "s2", name: "이서연" },
       ],
+      unassignedEnrolledTotal: 2,
     });
     expect(items[0]).toMatchObject({ count: 2, detail: "김민준·이서연", href: "/students" });
+  });
+
+  // 🔴 회귀: 미리보기 배열이 RPC 상한(30)에서 잘려도 건수는 총계여야 한다.
+  //    예전엔 배열 길이를 세어 실제 34명이 화면엔 영원히 "30"으로 굳었다(2026-07-31 실측).
+  it("반 미배정 재원생 = 잘린 미리보기가 아니라 총계로 센다", () => {
+    const preview = Array.from({ length: 30 }, (_, i) => ({ studentId: `s${i}`, name: `학생${i}` }));
+    const items = buildTodayActions({ ...EMPTY, unassignedEnrolled: preview, unassignedEnrolledTotal: 34 });
+    expect(items[0]).toMatchObject({ count: 34, unit: "명", href: "/students" });
+    expect(items[0]!.detail).toBe("학생0·학생1·학생2 외 31");
   });
 
   it("미작성 보고서 = amber + 명단 요약 + 수업보고서 총괄 링크", () => {
@@ -92,7 +104,7 @@ describe("buildTodayActions", () => {
     });
   });
 
-  it("ClassNote 발송 주의 = amber + 합산 count + 한글 구분 detail(raw 상태 키 없음)", () => {
+  it("ClassNote 발송 주의 = amber + 합산 count + 한글 구분 note(raw 상태 키 없음)", () => {
     const items = buildTodayActions({
       ...EMPTY,
       classnoteAttention: { failed: 2, tooOld: 1, humanHold: 3, stuck: 1 },
@@ -102,20 +114,20 @@ describe("buildTodayActions", () => {
       key: "classnote-attention",
       severity: "amber",
       count: 7,
-      detail: "발송 실패 2 · 기한 초과 1 · 확인 필요 3 · 멈춤 1",
+      note: "발송 실패 2 · 기한 초과 1 · 확인 필요 3 · 멈춤 1",
       href: "/lesson-reports?tab=writing",
       menuKey: "lesson_reports",
       requiredAccess: "read",
     });
-    expect(items[0].detail).not.toMatch(/blocked_shared|name_conflict|too_old|failed/);
+    expect(items[0].note).not.toMatch(/blocked_shared|name_conflict|too_old|failed/);
   });
 
-  it("ClassNote 발송 주의는 0인 구분을 detail에서 생략", () => {
+  it("ClassNote 발송 주의는 0인 구분을 note에서 생략", () => {
     const items = buildTodayActions({
       ...EMPTY,
       classnoteAttention: { failed: 0, tooOld: 0, humanHold: 2, stuck: 0 },
     });
-    expect(items[0]).toMatchObject({ count: 2, detail: "확인 필요 2" });
+    expect(items[0]).toMatchObject({ count: 2, note: "확인 필요 2" });
   });
 
   it("어제 미기록은 어제 날짜의 일별 페이지로 링크", () => {
@@ -206,7 +218,7 @@ describe("buildTodayActions", () => {
     const items = buildTodayActions({
       ...EMPTY,
       absentToday: [{ studentId: "1", name: "a" }],
-      pendingExpenses: 9,
+      pendingExpenses: { total: 9, recent: 9 },
       requestedTextbooks: 2,
       makeeduIssue: { kind: "stale", detail: "30시간째 미동기" },
       leavesToday: [{ name: "박지훈" }],
@@ -220,12 +232,12 @@ describe("buildTodayActions", () => {
     ]);
   });
 
-  it("makeedu 이상은 detail 그대로 + owner 연동 면 링크", () => {
+  it("makeedu 이상은 note 그대로 + owner 연동 면 링크", () => {
     const items = buildTodayActions({
       ...EMPTY,
       makeeduIssue: { kind: "error", detail: "students 실패" },
     });
-    expect(items[0]).toMatchObject({ count: null, detail: "students 실패", href: "/owner?tab=sheets" });
+    expect(items[0]).toMatchObject({ count: null, note: "students 실패", href: "/owner?tab=sheets" });
   });
 
   it("휴가: 승인 대기=amber, 오늘 휴가=info(명단)", () => {

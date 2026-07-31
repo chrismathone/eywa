@@ -109,10 +109,12 @@ export async function generateDailyBriefing(
             .filter((student) => student.risk.level !== "ok")
             .slice(0, 5)
             .map((student) => ({
+              studentId: student.id,
               name: student.name,
               reasons: student.risk.reasons,
               action: student.primaryAction || null,
             })),
+          missing: null as string | null,
         };
       })
       .catch((e: unknown) => {
@@ -121,7 +123,13 @@ export async function generateDailyBriefing(
           tenantId,
           error: e instanceof Error ? e.message : String(e),
         });
-        return { retention: null, retentionTop: [] as { name: string; reasons: string[]; action: string | null }[] };
+        return {
+          retention: null,
+          retentionTop: [] as { studentId: string; name: string; reasons: string[]; action: string | null }[],
+          // 메뉴를 꺼둔 건 '정상적으로 제외'라 알릴 게 없다. 켜져 있는데 계산이 실패한 것만
+          // "확인 불가"로 표면화한다 — 안 그러면 이탈 신호 0으로 위장된다(2026-07-31 실측).
+          missing: retentionEnabled ? "재등록 이탈 신호" : null,
+        };
       });
 
     const [yesterdayRaw, todayRaw, overdueRes, dueSoonRes, absenceRisks, classSessionsRes, retentionResult] =
@@ -171,7 +179,7 @@ export async function generateDailyBriefing(
           .or(`valid_to.is.null,valid_to.gte.${date}`),
         retentionPromise,
       ]);
-    const { retention, retentionTop } = retentionResult;
+    const { retention, retentionTop, missing: retentionMissing } = retentionResult;
 
     const payload = buildDailyBriefingPayload({
       date,
@@ -181,10 +189,15 @@ export async function generateDailyBriefing(
         overdue: countOrThrow(overdueRes, "후속조치 기한경과"),
         dueSoon: countOrThrow(dueSoonRes, "후속조치 임박"),
       },
-      absenceRisks: absenceRisks.map((risk) => ({ studentName: risk.studentName, absences: risk.absences })),
+      absenceRisks: absenceRisks.map((risk) => ({
+        studentId: risk.studentId,
+        studentName: risk.studentName,
+        absences: risk.absences,
+      })),
       retention,
       retentionTop,
       todayClassSessions: classSessionsRes.error ? null : (classSessionsRes.count ?? null),
+      missingDomainLabels: retentionMissing ? [retentionMissing] : [],
     });
 
     let teamReport: TeamReport | null = null;
@@ -194,7 +207,10 @@ export async function generateDailyBriefing(
       try {
         const { data, model } = await generateJSON<TeamReport>({
           prompt: buildTeamPrompt(payload),
-          maxTokens: 1200,
+          // ⚠️ 1200은 부족했다 — 실측(ai_usage_logs) 결과 실패한 날은 output_tokens가 **정확히 1200**,
+          // 즉 JSON이 문장 도중에 잘려 파싱이 깨진 것이었다(16일 중 4일이 이 사유). 신호가 많은 날은
+          // 5개 영역 × 한국어 3문장이 1200을 쉽게 넘는다. 프롬프트에도 900자 제한을 함께 걸었다.
+          maxTokens: 2400,
           meta: { tenantId, feature: "daily_briefing" },
         });
         modelVersion = `${model}-${date}`;

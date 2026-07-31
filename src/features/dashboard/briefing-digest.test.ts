@@ -13,12 +13,13 @@ const EMPTY_RAW: TodayActionsRaw = {
   yesterday: "2026-07-15",
   failedAnalysis: { meetings: 0, enrollment: 0, consultations: 0 },
   makeeduIssue: null,
-  pendingExpenses: 0,
+  pendingExpenses: { total: 0, recent: 0 },
   requestedTextbooks: 0,
   leavesPending: 0,
   leavesToday: [],
   unwrittenReportsToday: { count: 0, names: [] },
   unassignedEnrolled: [],
+  unassignedEnrolledTotal: 0,
   classnoteAttention: { failed: 0, tooOld: 0, humanHold: 0, stuck: 0 },
 };
 
@@ -34,7 +35,7 @@ const BASE: BuildDailyBriefingInput = {
 };
 
 describe("buildDailyBriefingPayload", () => {
-  it("어제 기준 신호를 리라벨하고(무단결석·미작성) 휴가는 attention에서 분리한다", () => {
+  it("어제 기준 신호를 리라벨하고(결석·미작성) 휴가는 attention에서 분리한다", () => {
     const payload = buildDailyBriefingPayload({
       ...BASE,
       yesterdayRaw: {
@@ -52,7 +53,7 @@ describe("buildDailyBriefingPayload", () => {
       },
     });
     const labels = payload.attention.map((item) => item.label);
-    expect(labels).toContain("어제 무단결석");
+    expect(labels).toContain("어제 결석");
     expect(labels).toContain("어제 미작성 보고서");
     expect(labels).toContain("어제 출석 미기록");
     expect(labels.some((label) => label.includes("휴가"))).toBe(false);
@@ -98,25 +99,25 @@ describe("spotlights (매니저 팀 보고 재료)", () => {
     const payload = buildDailyBriefingPayload({
       ...BASE,
       retentionTop: [
-        { name: "김보민", reasons: ["성적 15점 하락", "상담 공백 45일"], action: "학부모 상담 예약" },
-        { name: "박지율", reasons: ["결석 2회"], action: null },
+        { studentId: "r1", name: "김보민", reasons: ["성적 15점 하락", "상담 공백 45일"], action: "학부모 상담 예약" },
+        { studentId: "r2", name: "박지율", reasons: ["결석 2회"], action: null },
       ],
       absenceRisks: [
-        { studentName: "박지율", absences: 3 }, // retention과 중복 — 스킵
-        { studentName: "정호준", absences: 4 },
+        { studentId: "a1", studentName: "박지율", absences: 3 }, // retention과 중복 — 스킵
+        { studentId: "a2", studentName: "정호준", absences: 4 },
       ],
     });
     expect(payload.spotlights).toEqual([
-      { name: "김보민", reasons: ["성적 15점 하락", "상담 공백 45일"], action: "학부모 상담 예약" },
-      { name: "박지율", reasons: ["결석 2회"], action: null },
-      { name: "정호준", reasons: ["최근 14일 결석 4회"], action: null },
+      { studentId: "r1", name: "김보민", reasons: ["성적 15점 하락", "상담 공백 45일"], action: "학부모 상담 예약" },
+      { studentId: "r2", name: "박지율", reasons: ["결석 2회"], action: null },
+      { studentId: "a2", name: "정호준", reasons: ["최근 14일 결석 4회"], action: null },
     ]);
   });
 
   it("6명 상한 — retention 5명 + 결석 학생은 남는 자리만", () => {
     const payload = buildDailyBriefingPayload({
       ...BASE,
-      retentionTop: Array.from({ length: 5 }, (_, i) => ({ name: `학생${i}`, reasons: ["사유"], action: null })),
+      retentionTop: Array.from({ length: 5 }, (_, i) => ({ studentId: `r${i}`, name: `학생${i}`, reasons: ["사유"], action: null })),
       absenceRisks: [
         { studentName: "결석1", absences: 3 },
         { studentName: "결석2", absences: 3 },
@@ -129,7 +130,7 @@ describe("spotlights (매니저 팀 보고 재료)", () => {
   it("스포트라이트 사유 속 숫자가 화이트리스트에 들어간다(LLM 인용 허용)", () => {
     const payload = buildDailyBriefingPayload({
       ...BASE,
-      retentionTop: [{ name: "김보민", reasons: ["성적 15점 하락", "상담 공백 45일"], action: null }],
+      retentionTop: [{ studentId: "r1", name: "김보민", reasons: ["성적 15점 하락", "상담 공백 45일"], action: null }],
     });
     const allowed = narrativeNumberWhitelist(payload);
     expect(allowed.has("15")).toBe(true);
@@ -145,7 +146,7 @@ describe("shouldGenerateNarrative", () => {
     expect(shouldGenerateNarrative(buildDailyBriefingPayload({ ...BASE, followUps: { overdue: 1, dueSoon: 0 } }))).toBe(true);
     expect(
       shouldGenerateNarrative(
-        buildDailyBriefingPayload({ ...BASE, retentionTop: [{ name: "a", reasons: ["r"], action: null }] }),
+        buildDailyBriefingPayload({ ...BASE, retentionTop: [{ studentId: "r1", name: "a", reasons: ["r"], action: null }] }),
       ),
     ).toBe(true);
   });
