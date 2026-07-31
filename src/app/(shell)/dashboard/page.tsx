@@ -191,7 +191,9 @@ export default async function TodayPage() {
 
   // 기존 운영 신호 + 이미 조회한 상담 후속/반복 결석 preview를 읽기 전용 브리핑으로 조립.
   // 새 쿼리나 AI 호출 없이 순수 계산만 하며, 서로 단위가 다른 count는 합산하지 않는다.
-  const todayActions = buildTodayActions(actionSignals).filter((item) => {
+  // 과목 라벨은 학원설정 단일 소스(하드코딩 금지) — 아래 콕핏에 넘기는 것과 같은 맵을 신호에도 준다.
+  const subjectMaps = buildSubjectMaps(settings.operations.subjects);
+  const todayActions = buildTodayActions(actionSignals, { subjectLabel: subjectMaps.labelOf }).filter((item) => {
     if (!canAccess(user.systemRole, item.menuKey, permissionMatrix)) return false;
     if (item.requiredAccess === "write") return canWrite(user.systemRole, item.menuKey, permissionMatrix);
     if (item.requiredAccess === "manage-staff") return access.manageStaff;
@@ -211,7 +213,7 @@ export default async function TodayPage() {
       : null,
   });
   // 과목 라벨·색은 학원설정(operations.subjects) 단일 소스 — 콕핏에 prop 주입(하드코딩 금지).
-  const subjects = buildSubjectMaps(settings.operations.subjects);
+  const subjects = subjectMaps;
 
   // 오늘 시작한 수업만 예정학생 대비 기록학생으로 판정한다. 한 명만 입력된 반을 완료로 보지 않는다.
   const startedClassIds = new Set(

@@ -53,6 +53,7 @@ export function WindowLink({
   onMouseEnter,
   onMouseLeave,
   onMouseMove,
+  onNavigate,
 }: {
   href: string;
   title?: string;
@@ -63,6 +64,11 @@ export function WindowLink({
   onMouseEnter?: (e: MouseEvent<HTMLAnchorElement>) => void;
   onMouseLeave?: (e: MouseEvent<HTMLAnchorElement>) => void;
   onMouseMove?: (e: MouseEvent<HTMLAnchorElement>) => void;
+  /**
+   * 클릭이 실제로 이동/창열기로 이어질 때 함께 할 일(예: 공지 팝업 닫기).
+   * 모디파이어 클릭(새 탭)에선 호출하지 않는다 — 화면은 그대로 있어야 한다.
+   */
+  onNavigate?: () => void;
 }) {
   const isDesktop = useIsDesktop();
   const inFrame = useInFrame();
@@ -70,6 +76,7 @@ export function WindowLink({
   function onClick(e: MouseEvent<HTMLAnchorElement>) {
     // ctrl/cmd/alt+클릭은 브라우저 기본(새 탭 등) 유지.
     if (e.metaKey || e.ctrlKey || e.altKey) return;
+    onNavigate?.(); // 이동이 확정된 뒤에만 — 새 탭으로 빠지는 경우엔 부르지 않는다.
     const resolved = windowIdForHref(href);
     if (!resolved) return; // 메뉴 라우트가 아니면 기본 이동
     // 창(iframe) 안에서 shift+클릭 = 드릴인 대신 **부모 워크스페이스에 새 플로팅 창**으로 연다.

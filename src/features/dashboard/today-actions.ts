@@ -19,7 +19,7 @@ export type TodayActionsRaw = {
    * ⚠️ "무단결석"이 아니다: 공결 상태는 폐지돼(2026-07-10) 사전 통보 결석도 전부 `absent`로 저장된다.
    * 라벨을 다시 "무단결석"으로 되돌리지 말 것 — 연락 없이 빠진 학생 수로 읽혀 실제보다 과장된다.
    */
-  absentToday: { studentId: string; name: string }[];
+  absentToday: { studentId: string; name: string; subject: string | null }[];
   /**
    * 어제 출석 미기록 반. `subject`는 미리보기 이름을 **과목별로 고르게** 뽑는 데 쓴다 —
    * 이름순 앞 2개만 뽑으면 한 과목(한글 이름 반)만 계속 노출된다(gotcha #84). 필수 필드로 둔 건
@@ -44,8 +44,13 @@ export type TodayActionsRaw = {
   leavesPending: number;
   /** 오늘 휴가 중인 직원 */
   leavesToday: { name: string }[];
-  /** 오늘 수업(시작됨)이 있는데 아직 보고서 0건인 학생 — 미작성 리마인더(5단계-1). */
-  unwrittenReportsToday: { count: number; names: string[] };
+  /**
+   * 오늘 수업(시작됨)이 있는데 아직 보고서 0건인 학생 — 미작성 리마인더(5단계-1).
+   * `bySubject`는 **학생×과목** 건수라 합이 count(학생 수)보다 클 수 있다(두 과목 다 미작성인 학생).
+   * ⚠️ 과목은 반(class.subject)에서 온다 — `lesson_reports.subject`는 채움율이 4.5%(18,229행 중 822)라
+   * 그쪽으로 세면 대부분이 "과목 미상"이 된다(2026-07-31 실측).
+   */
+  unwrittenReportsToday: { count: number; names: string[]; bySubject: { subject: string; count: number }[] };
   /**
    * 재원인데 활성 수강(반)이 0개인 학생 = 반 배정 필요(0097a RPC).
    * ⚠️ 출처는 students 테이블이지 등록상담이 아니다 — 등록상담을 거치지 않은 학생(임포트·선등록)도 잡는 게
@@ -94,6 +99,12 @@ export type TodayActionItem = {
    * **범위가 사라진 숫자**만 남았다. 개인정보가 없으므로 프롬프트·폴백 양쪽에서 그대로 쓴다.
    */
   note: string | null;
+  /**
+   * 과목별 분해(원장 지시 2026-07-31 — "과목별로 분류해서 보고하는 게 더 스마트"). 라벨은 **학원설정**에서
+   * 온다(`subjectLabel` 주입) — 과목 라벨 하드코딩 금지 규칙 때문에 리졸버가 없으면 **비운다**(raw 키 노출 금지).
+   * 신호마다 세는 단위가 달라(학생/반/학생×과목) 합이 count와 다를 수 있다 — 각 신호 주석 참조.
+   */
+  bySubject: { label: string; count: number }[];
   href: string;
   /** 현재 역할이 이 조치를 열 수 있는지 브리핑에서 판정할 메뉴 권한 키. */
   menuKey: MenuKey;
@@ -113,16 +124,63 @@ export function nameList(names: string[], max = 3, total = names.length): string
 
 const SEVERITY_RANK: Record<TodayActionItem["severity"], number> = { danger: 0, amber: 1, info: 2 };
 
+/** 과목 키 → 학원설정 라벨. 리졸버 없으면 분해를 포기한다(영문 raw 키를 화면에 흘리지 않기 위해). */
+export type SubjectLabelResolver = (key: string) => string;
+
 /**
- * 오늘 미작성 보고서 학생을 학생×과목으로 판정한다.
+ * 과목별 집계 — 건수 desc, 동수는 라벨순. 과목이 없는 행(subject null/빈값)은 **버리지 않고** 묶는다:
+ * 조용히 빼면 분해 합이 총계보다 작아져 "어디 갔지"가 된다.
+ */
+function groupBySubject(
+  rows: readonly { subject: string | null }[],
+  subjectLabel: SubjectLabelResolver | undefined,
+): { label: string; count: number }[] {
+  if (!subjectLabel || rows.length === 0) return [];
+  const counts = new Map<string, number>();
+  for (const row of rows) {
+    const key = row.subject?.trim() ? subjectLabel(row.subject.trim()) : "과목 미상";
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  return [...counts]
+    .map(([label, count]) => ({ label, count }))
+    .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label, "ko"));
+}
+
+/** 이미 집계된 `{subject,count}`에 라벨만 입힌다(같은 라벨로 접히면 합산 — 폐지 과목 흡수 대비). */
+function labelSubjectCounts(
+  rows: readonly { subject: string; count: number }[],
+  subjectLabel: SubjectLabelResolver | undefined,
+): { label: string; count: number }[] {
+  if (!subjectLabel || rows.length === 0) return [];
+  const counts = new Map<string, number>();
+  for (const row of rows) {
+    const key = row.subject.trim() ? subjectLabel(row.subject.trim()) : "과목 미상";
+    counts.set(key, (counts.get(key) ?? 0) + row.count);
+  }
+  return [...counts]
+    .map(([label, count]) => ({ label, count }))
+    .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label, "ko"));
+}
+
+/** "영어 147 · 수학 39" — 표시·요약·프롬프트가 공유하는 한 줄 표현. */
+export function subjectBreakdownText(bySubject: readonly { label: string; count: number }[]): string | null {
+  if (bySubject.length === 0) return null;
+  return bySubject.map((s) => `${s.label} ${s.count}`).join(" · ");
+}
+
+/**
+ * 오늘 미작성 보고서를 **학생×과목 쌍**으로 판정한다(과목별 분해의 원천).
  * lesson_reports에는 class_id가 없으므로 같은 학생의 같은 과목 여러 반은 한 대상으로 합치되,
  * 그 과목을 듣는 시작된 반이 전부 결석이면 작성 대상에서 제외한다.
+ *
+ * 반환은 학생 첫 등장 순서 — 호출부가 학생 단위로 접으면(dedupe) 예전과 같은 "미작성 N명"이 되고,
+ * 과목으로 묶으면 "영어 147 · 수학 39"가 된다. 한 학생이 두 과목 다 미작성이면 쌍은 2, 학생은 1이다.
  */
-export function findStudentsMissingLessonReports(
+export function findMissingLessonReportPairs(
   targets: readonly { studentId: string; classId: string; subject: string }[],
   absentClassKeys: ReadonlySet<string>,
   reports: readonly { studentId: string; subject: string | null }[],
-): string[] {
+): { studentId: string; subject: string }[] {
   const classesByTarget = new Map<string, Set<string>>();
   const studentOrder: string[] = [];
   const seenStudents = new Set<string>();
@@ -148,20 +206,29 @@ export function findStudentsMissingLessonReports(
       .filter((report): report is { studentId: string; subject: string } => !!report.subject?.trim())
       .map((report) => `${report.studentId}::${report.subject}`),
   );
-  const missingStudents = new Set<string>();
+  const missingByStudent = new Map<string, string[]>();
   for (const [targetKey, classIds] of classesByTarget) {
     const separator = targetKey.indexOf("::");
     const studentId = targetKey.slice(0, separator);
+    const subject = targetKey.slice(separator + 2);
     if (legacyReportedStudents.has(studentId)) continue;
     const hasAttendedTarget = [...classIds].some((classId) => !absentClassKeys.has(`${studentId}::${classId}`));
-    if (hasAttendedTarget && !reported.has(targetKey)) missingStudents.add(studentId);
+    if (hasAttendedTarget && !reported.has(targetKey)) {
+      missingByStudent.set(studentId, [...(missingByStudent.get(studentId) ?? []), subject]);
+    }
   }
 
-  return studentOrder.filter((studentId) => missingStudents.has(studentId));
+  return studentOrder.flatMap((studentId) =>
+    (missingByStudent.get(studentId) ?? []).map((subject) => ({ studentId, subject })),
+  );
 }
 
-export function buildTodayActions(raw: TodayActionsRaw): TodayActionItem[] {
+export function buildTodayActions(
+  raw: TodayActionsRaw,
+  opts: { subjectLabel?: SubjectLabelResolver } = {},
+): TodayActionItem[] {
   const items: TodayActionItem[] = [];
+  const { subjectLabel } = opts;
 
   if (raw.absentToday.length > 0) {
     items.push({
@@ -173,6 +240,8 @@ export function buildTodayActions(raw: TodayActionsRaw): TodayActionItem[] {
       unit: "명",
       detail: nameList(raw.absentToday.map((s) => s.name)),
       note: null,
+      // 학생은 이미 dedupe돼 있다 — 두 과목에서 결석한 학생은 두 과목 모두에 잡히지 않고 첫 기록 과목에만 든다.
+      bySubject: groupBySubject(raw.absentToday, subjectLabel),
       href: "/attendance",
       menuKey: "attendance",
       requiredAccess: "read",
@@ -220,6 +289,7 @@ export function buildTodayActions(raw: TodayActionsRaw): TodayActionItem[] {
       unit: "건",
       detail: null,
       note: "최근 7일",
+      bySubject: [],
     });
   }
 
@@ -233,6 +303,8 @@ export function buildTodayActions(raw: TodayActionsRaw): TodayActionItem[] {
       unit: "명",
       detail: nameList(raw.unwrittenReportsToday.names),
       note: null,
+      // ⚠️ 학생×과목 쌍이라 **합이 count(학생 수)보다 클 수 있다**(두 과목 다 미작성인 학생).
+      bySubject: labelSubjectCounts(raw.unwrittenReportsToday.bySubject, subjectLabel),
       href: "/lesson-reports?tab=writing",
       menuKey: "lesson_reports",
       requiredAccess: "read",
@@ -257,6 +329,9 @@ export function buildTodayActions(raw: TodayActionsRaw): TodayActionItem[] {
       unit: "건",
       detail: null,
       note: cnParts.join(" · "),
+      // 과목 분해 없음(의도): 4개 버킷의 조회 창이 서로 달라(7일/전체) 부분 집계가 총계와 안 맞는다.
+      // 게다가 lesson_reports.subject는 채움율 4.5%라 대부분 "과목 미상"이 된다.
+      bySubject: [],
       href: "/lesson-reports?tab=writing",
       menuKey: "lesson_reports",
       requiredAccess: "read",
@@ -276,6 +351,7 @@ export function buildTodayActions(raw: TodayActionsRaw): TodayActionItem[] {
       unit: "명",
       detail: nameList(raw.unassignedEnrolled.map((s) => s.name), 3, unassignedTotal),
       note: null,
+      bySubject: [], // 수강이 0개인 학생이라 과목이 없다.
       href: only ? `/students/${only.studentId}` : "/students",
       menuKey: "students",
       requiredAccess: "write",
@@ -299,6 +375,7 @@ export function buildTodayActions(raw: TodayActionsRaw): TodayActionItem[] {
         raw.unrecordedYesterday.length,
       ),
       note: null,
+      bySubject: groupBySubject(raw.unrecordedYesterday, subjectLabel),
       href: `/attendance/${raw.yesterday}`,
       menuKey: "attendance",
       requiredAccess: "read",
@@ -315,6 +392,7 @@ export function buildTodayActions(raw: TodayActionsRaw): TodayActionItem[] {
       unit: "건",
       detail: null,
       note: `최근 7일 ${raw.pendingExpenses.recent}건`,
+      bySubject: [],
       href: "/billing?tab=expenses",
       menuKey: "billing",
       requiredAccess: "write",
@@ -330,6 +408,7 @@ export function buildTodayActions(raw: TodayActionsRaw): TodayActionItem[] {
       unit: "건",
       detail: null,
       note: null,
+      bySubject: [],
       href: "/billing?tab=textbooks&status=requested",
       menuKey: "billing",
       requiredAccess: "write",
@@ -345,6 +424,7 @@ export function buildTodayActions(raw: TodayActionsRaw): TodayActionItem[] {
       unit: "건",
       detail: null,
       note: null,
+      bySubject: [],
       href: "/staff/leaves",
       menuKey: "staff",
       requiredAccess: "manage-staff",
@@ -361,6 +441,7 @@ export function buildTodayActions(raw: TodayActionsRaw): TodayActionItem[] {
       detail: null,
       // 어느 도메인이 얼마나 밀렸는지가 이 신호의 전부다 — note라야 요약·프롬프트까지 함께 간다.
       note: raw.makeeduIssue.detail,
+      bySubject: [],
       href: "/owner?tab=sheets",
       menuKey: "owner",
       requiredAccess: "read",
@@ -376,6 +457,7 @@ export function buildTodayActions(raw: TodayActionsRaw): TodayActionItem[] {
       unit: "명",
       detail: nameList(raw.leavesToday.map((l) => l.name)),
       note: null,
+      bySubject: [],
       href: "/staff/leaves",
       menuKey: "staff",
       requiredAccess: "read",
@@ -391,6 +473,7 @@ export function buildTodayActions(raw: TodayActionsRaw): TodayActionItem[] {
       unit: null,
       detail: null,
       note: "새로고침 후 다시 확인해 주세요",
+      bySubject: [],
       href: issue.href,
       menuKey: issue.menuKey,
       requiredAccess: issue.requiredAccess,
