@@ -79,6 +79,33 @@ function EXTRACT() {
   return { headers, rows };
 }
 
+/**
+ * 상세수납 목록의 **화면 표시 설정을 우리 브라우저에 심는다**(makeedu 서버 상태는 건드리지 않는다).
+ *
+ * 🔴 실측(2026-07-31): 이 설정들은 **쿠키**다 — `payUnionDeList_item_totalSum` · `payUnionDeList_listSize`.
+ * 즉 **PC마다·브라우저마다 다르고**, Playwright는 매 실행 새 컨텍스트라 **항상 꺼진 채 시작**한다.
+ * 사람이 자기 Chrome에서 켜 놔도 연동 PC 스크랩엔 아무 영향이 없다 → 스크래퍼가 스스로 심어야 한다.
+ *
+ * - `item_totalSum=Y` : 화면 하단 '결과 합계' 행. **외부 대조(makeedu 합계 ↔ eywa)의 전제**다.
+ *   이게 없으면 검증이 안 서고, 검증이 없으면 삭제 판정이 보수 모드로 떨어져 유령이 쌓인다.
+ * - `listSize=500`    : 페이지 크기. 셀렉트를 클릭해 바꾸면 **리로드가 한 번 더** 일어나 검색 조건과 서로를 흔든다
+ *   (2026-07-31 수확 실패의 한 원인). 쿠키로 미리 정하면 그 상호작용 자체가 사라진다.
+ *
+ * ⚠️ 이건 **우리 헤드리스 브라우저의 쿠키**일 뿐이다. 화면설정 UI를 클릭하지 않으며, makeedu에 저장되는
+ *    설정도 바꾸지 않는다(원장 지시: makeedu는 읽기만).
+ */
+async function applyDisplayCookies(ctx) {
+  const domain = new URL(BASE).hostname;
+  const cookies = [
+    { name: "payUnionDeList_item_totalSum", value: "Y", domain, path: "/" },
+    { name: "payUnionDeList_listSize", value: "500", domain, path: "/" },
+  ];
+  await ctx.addCookies(cookies).catch((e) => {
+    // 실패해도 진행 — 합계가 없으면 '검증 안 함'으로 떨어질 뿐 동기화는 계속된다.
+    console.warn(`  ⚠️ 화면설정 쿠키를 심지 못했습니다(${e.message}) — 외부 대조가 안 설 수 있습니다.`);
+  });
+}
+
 async function login(page) {
   const id = process.env.MAKEEDU_ID;
   const pw = process.env.MAKEEDU_PW;
@@ -352,6 +379,7 @@ async function harvestList(page, key, cfg) {
   const ctx = storage
     ? await browser.newContext({ storageState: storage })
     : await browser.newContext();
+  await applyDisplayCookies(ctx);
   const page = await ctx.newPage();
   try {
     if (storage) {
