@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import { usePathname } from "next/navigation";
 import { subscribeWindowBusy } from "@/lib/realtime/window-busy";
-import { useWindowStore } from "./window-store";
+import { useWindowStore, instanceLabel } from "./window-store";
 import { usePrefs } from "./use-prefs";
 import { SIDEBAR_COLLAPSED_W } from "./use-sidebar-resize";
 import { useIsDesktop } from "./use-is-desktop";
@@ -40,6 +40,7 @@ export function WorkspaceCanvas({ owner }: { owner: string }) {
   const dragLayout = useWindowStore((s) => s.dragLayout);
   const spotlight = useWindowStore((s) => s.spotlight);
   const exitSpotlight = useWindowStore((s) => s.exitSpotlight);
+  const restore = useWindowStore((s) => s.restore);
   const bounds = useWindowStore((s) => s.bounds);
   const setStage = useWindowStore((s) => s.setStage);
   const adoptOwner = useWindowStore((s) => s.adoptOwner);
@@ -183,6 +184,10 @@ export function WorkspaceCanvas({ owner }: { owner: string }) {
   const wins = Object.values(windows);
   // 열린(비최소화) 창이 하나도 없으면 빈 데스크톱 안내를 띄운다.
   const hasOpenWindow = order.some((id) => !windows[id]?.minimized);
+  // 최소화해서 숨어 있는 창들 — 빈 데스크톱에서 "열린 창이 없어요"만 뜨면 **최소화한 창이 사라진 것처럼**
+  // 보인다(원장 제보 2026-07-31). ⚠️ 반드시 `order` 기준 — BL3 warm 풀(닫힌 라우트 창)은 windows엔
+  // minimized:true로 남지만 order에선 빠져 있어, windows를 훑으면 닫은 창까지 "최소화됨"으로 샌다.
+  const minimizedWins = order.map((id) => windows[id]).filter((w) => w?.minimized);
 
   return (
     <>
@@ -208,8 +213,33 @@ export function WorkspaceCanvas({ owner }: { owner: string }) {
                 className="mb-1 size-40 object-contain sm:size-44"
               />
               <div className="text-center">
-                <p className="text-foreground text-[15px] font-bold">열린 창이 없어요</p>
-                <p className="text-text-dim mt-1 text-[13px]">왼쪽 메뉴를 눌러 창을 여세요.</p>
+                {minimizedWins.length > 0 ? (
+                  <>
+                    <p className="text-foreground text-[15px] font-bold">
+                      최소화한 창 {minimizedWins.length}개
+                    </p>
+                    <p className="text-text-dim mt-1 text-[13px]">
+                      눌러서 다시 열 수 있어요. 오른쪽 아래 독에도 있습니다.
+                    </p>
+                    <div className="pointer-events-auto mt-3 flex flex-wrap items-center justify-center gap-1.5">
+                      {minimizedWins.map((w) => (
+                        <button
+                          key={w.id}
+                          type="button"
+                          onClick={() => restore(w.id)}
+                          className="border-line bg-card text-foreground hover:border-primary/50 hover:bg-bg-soft rounded-full border px-3 py-1 text-[12px] transition"
+                        >
+                          {instanceLabel(w.id, w.params.title)}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-foreground text-[15px] font-bold">열린 창이 없어요</p>
+                    <p className="text-text-dim mt-1 text-[13px]">왼쪽 메뉴를 눌러 창을 여세요.</p>
+                  </>
+                )}
               </div>
             </div>
           ) : null}
