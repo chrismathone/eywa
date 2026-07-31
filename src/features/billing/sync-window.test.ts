@@ -4,6 +4,7 @@ import {
   isOutsideSyncWindow,
   isMissingFromMakeedu,
   lastTouchedAt,
+  overdueLinesOnly,
   SYNC_STALE_MS,
 } from "./sync-window";
 
@@ -14,21 +15,52 @@ const T = (iso: string) => new Date(iso).toISOString();
 const SYNCED = T("2026-07-30T09:00:00Z");
 const hoursBefore = (h: number) => T(new Date(Date.parse(SYNCED) - h * 3_600_000).toISOString());
 
+/** 잔액이 남은 청구서(청구 10만 · 할인 0 · 수납 0) — 금액을 안 따지는 테스트의 기본 재료. */
+const 미납 = { amountTotal: 100_000, amountDiscount: 0, amountPaid: 0 };
+
 describe("isOverdue", () => {
-  it("미완납 + 기한 경과만 true", () => {
-    expect(isOverdue({ status: "unpaid", dueDate: "2026-07-01" }, "2026-07-30")).toBe(true);
-    expect(isOverdue({ status: "partial", dueDate: "2026-07-01" }, "2026-07-30")).toBe(true);
+  it("미완납 + 기한 경과 + 잔액 있음만 true", () => {
+    expect(isOverdue({ ...미납, status: "unpaid", dueDate: "2026-07-01" }, "2026-07-30")).toBe(true);
+    expect(isOverdue({ ...미납, status: "partial", dueDate: "2026-07-01" }, "2026-07-30")).toBe(true);
   });
   it("완납·환불·무효는 기한이 지나도 false(돈 받은 기록)", () => {
     for (const status of ["paid", "refunded", "void"])
-      expect(isOverdue({ status, dueDate: "2026-07-01" }, "2026-07-30")).toBe(false);
+      expect(isOverdue({ ...미납, status, dueDate: "2026-07-01" }, "2026-07-30")).toBe(false);
   });
   it("기한이 오늘이면 아직 경과가 아니다(경계)", () => {
-    expect(isOverdue({ status: "unpaid", dueDate: "2026-07-30" }, "2026-07-30")).toBe(false);
-    expect(isOverdue({ status: "unpaid", dueDate: "2026-07-29" }, "2026-07-30")).toBe(true);
+    expect(isOverdue({ ...미납, status: "unpaid", dueDate: "2026-07-30" }, "2026-07-30")).toBe(false);
+    expect(isOverdue({ ...미납, status: "unpaid", dueDate: "2026-07-29" }, "2026-07-30")).toBe(true);
   });
   it("기한이 없으면 판정하지 않는다", () => {
-    expect(isOverdue({ status: "unpaid", dueDate: null }, "2026-07-30")).toBe(false);
+    expect(isOverdue({ ...미납, status: "unpaid", dueDate: null }, "2026-07-30")).toBe(false);
+  });
+
+  // 🔴 실데이터 회귀 — 임포터가 상태를 `수납 < 청구`로 잡으면 **할인액만큼 항상 모자라** 완납 행이
+  // partial로 굳는다(이승민 2026-03~06 4건). 배너가 "기한 경과 미수금 1건 0원"이라 말했다.
+  it("상태는 미완납인데 잔액이 0이면 false — 받을 돈이 없으면 미수가 아니다", () => {
+    expect(
+      isOverdue(
+        { status: "partial", dueDate: "2026-05-01", amountTotal: 694_875, amountDiscount: 10_000, amountPaid: 684_875 },
+        "2026-07-30",
+      ),
+    ).toBe(false);
+  });
+});
+
+describe("overdueLinesOnly — '기한 경과만'에서 표에 남길 라인", () => {
+  it("완납(0) 라인은 숨기고 미납 라인만 남긴다", () => {
+    const lines = [{ unpaid: 288_000 }, { unpaid: 0 }, { unpaid: 0 }, { unpaid: 0 }];
+    expect(overdueLinesOnly(lines)).toEqual([{ unpaid: 288_000 }]);
+  });
+  // 미상(undefined)은 완납이라는 근거가 없다 — 숨기면 "안 밀렸다"는 거짓말이 된다.
+  it("라인별 미납이 미상이면 남긴다(구형 3-key 인보이스)", () => {
+    const lines = [{ unpaid: 330_000 }, {}, {}];
+    expect(overdueLinesOnly(lines)).toHaveLength(3);
+  });
+  // 배너가 "N건"이라 말한 청구서가 표에서 통째로 증발하는 게 더 나쁘다.
+  it("전부 걸러지면 원본을 그대로 — 청구서가 목록에서 사라지지 않게", () => {
+    const lines = [{ unpaid: 0 }, { unpaid: 0 }];
+    expect(overdueLinesOnly(lines)).toEqual(lines);
   });
 });
 

@@ -834,3 +834,36 @@ scope에 userId도 없었다 → **로그인조차 없이** DevTools › Applica
   (실측 종강 22반 중 18반). 수업목록은 종강 반도 보여주므로 지금도 전 행을 쓴다 — 운영 중 반을 다루는 곳에만 건다.
 - **숨긴 건 밝힐 것**: 만료·예정 행을 조용히 빼면 "내가 넣은 교시가 왜 없지"가 된다. 카드는
   `지난 배치 N개는 숨김` / `8/18부터`로 남은 행의 존재를 표시한다.
+
+## #89 RLS 정책에 **컬럼을 안 쓰는 게이트 함수를 맨몸으로** 쓰면 행마다 호출된다 — STABLE로는 안 접힌다 (2026-07-31)
+
+- **증상**: 수납관리 창이 눈에 띄게 느리다. 표는 50건만 그리는데 화면이 뜨기까지 1~2초가 걸리고, 월 칩을
+  누르면 더 오래 멈춘다. 코드에는 `Promise.all`·페이징·캐시가 다 돼 있어 볼 게 없어 보인다.
+- **진짜 원인**: 0158a가 invoices·expenses에 건 RESTRICTIVE 역할 게이트의 조건이
+  **`auth_billing_can_read()` — 컬럼을 하나도 참조하지 않는 순수 불리언 함수 호출**이었다. 플래너는 이걸
+  상수로 접지 못하고 **스캔한 행마다 호출**한다(`EXPLAIN`에 `Filter: auth_billing_can_read()`).
+  그 함수 1회가 **14ms**다(내부에서 `users` + `tenant_settings` jsonb lateral 조회) → 행 수만큼 곱해진다.
+- **⚠️ `STABLE` 표시로는 안 고쳐진다.** STABLE은 "한 문장 안에서 값이 안 변한다"는 **보장**일 뿐,
+  플래너가 1회 평가로 바꿔주겠다는 **약속이 아니다**. 실제로 이 함수들은 전부 이미 STABLE이었다.
+- **고치는 법**: 함수 호출을 **스칼라 서브쿼리로 감싼다** — `using ((select public.auth_billing_can_read()))`.
+  플래너가 InitPlan으로 끌어올려 문장당 한 번만 실행한다(`Filter: (InitPlan 1).col1`).
+- **실측(injaewon 프로덕션 · authenticated 롤 + 실 사용자 클레임, 0160a)**:
+
+  | | 전 | 후 |
+  |---|---|---|
+  | invoices 2026-07 count(402행) | 273ms | **19ms** |
+  | `invoice_periods()`(3,225행 스캔) | 2,148ms | **19ms** |
+  | invoices 전건(3,225행) | 2,046ms | **155ms** |
+  | EXPLAIN 실행시간 | 2,120ms | **2.7ms** |
+
+- **권한은 안 바뀐다** — 인자 없는 STABLE 함수라 문장 안에서 값이 같다. 같은 불리언을 3,225번 계산하던 걸
+  1번 계산할 뿐. 5개 역할(master/admin/manager/teacher/viewer) 전부로 적용 전·후 **보이는 행 수 동일**을
+  대조하고 적용했다(master/admin/manager 3,225건, teacher/viewer 0건).
+- **⚠️ 감싸면 안 되는 것**: 컬럼을 쓰는 항(`created_by = auth.uid()`, `restricted is not true`)은
+  **행마다 평가돼야 맞다**. 감싸는 대상은 "이 사용자가 이 메뉴를 볼 수 있나" 같은 **행과 무관한 판정**뿐.
+- **왜 안 걸렸나**: 에러가 아니라 **지연**이라 아무도 안 알려준다. 게다가 service_role로 재는 프로브는
+  RLS를 통째로 우회해서 **정상으로 보인다** — 성능 측정은 반드시 `set local role authenticated` +
+  실 사용자 클레임으로 할 것.
+- **규칙**: 정책에 **컬럼을 참조하지 않는 게이트 함수는 맨몸으로 쓰지 말 것.** 항상 `(select f())`.
+  테이블이 커질수록 조용히 느려진다. (같은 모양이 `academy_documents_restricted_guard`에도 남아 있다 —
+  `auth_system_role()`·`auth.uid()`가 맨몸. 이력서 화면을 만질 때 같이 감쌀 것.)
