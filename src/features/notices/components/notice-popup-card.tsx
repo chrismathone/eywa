@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type PointerEvent as RPointerEvent } from "react";
 import { createPortal } from "react-dom";
 import { X } from "@/components/icons/eywa-icon-compat";
 import { WindowLink } from "@/components/workspace/window-link";
@@ -21,6 +21,7 @@ export function NoticePopupCard({ popup }: { popup: ActivePopup }) {
   const [dontWeek, setDontWeek] = useState(false);
   const [dontForever, setDontForever] = useState(false);
   const [zoomed, setZoomed] = useState(false);
+  const [offset, setOffset] = useState({ x: 0, y: 0 });
 
   // 라이트박스 열림 중 Esc로 닫기(이벤트 핸들러라 #25 effect-setState 룰 무관 — 리스너 등록/해제만).
   useEffect(() => {
@@ -31,6 +32,28 @@ export function NoticePopupCard({ popup }: { popup: ActivePopup }) {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [zoomed]);
+
+  // ── 헤더를 잡고 옮기기 ──────────────────────────────────────
+  // 레이어가 앵커로 타일링하므로 위치 자체는 건드리지 않고 **옮긴 만큼의 오프셋**만 기억한다.
+  // 이동 중엔 store도 서버도 안 건드린다(팝업은 세션 동안만 그 자리에 있으면 충분).
+  // ⚠️ 훅은 early return(`closed`)보다 **위**에 있어야 한다(rules-of-hooks).
+  const drag = useRef<{ sx: number; sy: number; ox: number; oy: number; id: number } | null>(null);
+  const startDrag = (e: RPointerEvent<HTMLElement>) => {
+    if (e.button !== 0) return; // 좌클릭만 — 우클릭 메뉴·보조버튼은 그대로
+    if ((e.target as HTMLElement).closest("button")) return; // 닫기 X를 누르는 중이면 드래그 아님
+    drag.current = { sx: e.clientX, sy: e.clientY, ox: offset.x, oy: offset.y, id: e.pointerId };
+    e.currentTarget.setPointerCapture(e.pointerId);
+  };
+  const onDrag = (e: RPointerEvent<HTMLElement>) => {
+    const d = drag.current;
+    if (!d || d.id !== e.pointerId) return;
+    setOffset({ x: d.ox + (e.clientX - d.sx), y: d.oy + (e.clientY - d.sy) });
+  };
+  const endDrag = (e: RPointerEvent<HTMLElement>) => {
+    if (!drag.current) return;
+    drag.current = null;
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
+  };
 
   if (closed) return null;
 
@@ -47,11 +70,23 @@ export function NoticePopupCard({ popup }: { popup: ActivePopup }) {
     <>
       <div
         className="pointer-events-auto bg-card border-line shadow-modal animate-in fade-in-0 zoom-in-95 flex max-h-[82vh] flex-col overflow-hidden rounded-2xl border duration-200"
-        style={{ width: popup.width, maxWidth: "calc(100vw - 2rem)" }}
+        style={{
+          width: popup.width,
+          maxWidth: "calc(100vw - 2rem)",
+          // 사용자가 옮긴 만큼만 원위치에서 밀어준다(레이어 타일링은 그대로 두고 시각적 이동만).
+          transform: offset.x || offset.y ? `translate(${offset.x}px, ${offset.y}px)` : undefined,
+        }}
         role="dialog"
         aria-label={popup.title}
       >
-        <header className="bg-bg-soft border-line flex shrink-0 items-center justify-between gap-2 border-b px-3 py-2">
+        {/* 헤더 = 이동 손잡이. 팝업이 화면 정중앙에 고정돼 뒤를 가리면 치울 방법이 없었다(원장 지적 2026-07-31). */}
+        <header
+          onPointerDown={startDrag}
+          onPointerMove={onDrag}
+          onPointerUp={endDrag}
+          onPointerCancel={endDrag}
+          className="bg-bg-soft border-line flex shrink-0 cursor-grab items-center justify-between gap-2 border-b px-3 py-2 select-none active:cursor-grabbing"
+        >
           <span className="text-foreground truncate text-[13px] font-bold">{popup.title}</span>
           <button
             type="button"
@@ -65,16 +100,31 @@ export function NoticePopupCard({ popup }: { popup: ActivePopup }) {
 
         <div className="min-h-0 flex-1 overflow-y-auto">
           {popup.imageSrc ? (
-            <button
-              type="button"
-              onClick={() => setZoomed(true)}
-              className="block w-full cursor-zoom-in"
-              title="클릭하면 원본 크기로 봅니다"
-              aria-label="이미지 원본 크기로 보기"
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element -- signed/외부 URL 이미지 */}
-              <img src={popup.imageSrc} alt={popup.title} className="block w-full" />
-            </button>
+            // 링크가 있는 공지는 **사진을 눌러도 그리로 간다**(원장 지시 2026-07-31) — 안내 이미지를
+            // 보고 "그래서 어디로 가지?"가 되지 않게. 링크 없는 공지는 종전대로 원본 크기 확대.
+            isInternal ? (
+              <WindowLink
+                href={popup.linkUrl!}
+                title={popup.linkLabel || popup.title}
+                onNavigate={close}
+                className="block w-full cursor-pointer"
+                ariaLabel={`${popup.linkLabel || popup.title}(으)로 이동`}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element -- signed/외부 URL 이미지 */}
+                <img src={popup.imageSrc} alt={popup.title} className="block w-full" />
+              </WindowLink>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setZoomed(true)}
+                className="block w-full cursor-zoom-in"
+                title="클릭하면 원본 크기로 봅니다"
+                aria-label="이미지 원본 크기로 보기"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element -- signed/외부 URL 이미지 */}
+                <img src={popup.imageSrc} alt={popup.title} className="block w-full" />
+              </button>
+            )
           ) : null}
           {popup.body ? (
             <p className="text-text-dim px-4 py-3 text-sm whitespace-pre-wrap">{popup.body}</p>
