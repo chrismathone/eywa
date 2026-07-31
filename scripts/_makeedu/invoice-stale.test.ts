@@ -21,6 +21,7 @@ const S = require_("./invoice-stale.cjs") as {
   reconcileSummary: (rows: ReconRow[] | null) => string | null;
   STALE_COVERAGE_MIN: number;
   STALE_MIN_ABSENT_DAYS: number;
+  STALE_MAX_VOID_PER_RUN: number;
 };
 
 const NOW = "2026-07-30T09:00:00.000Z";
@@ -43,9 +44,14 @@ const row = (over: Partial<Record<string, unknown>> = {}) => ({
   ...over,
 });
 
-/** 부재로 판정시키려면 scrapedKeys에서 빼고, present 채우기용 더미를 채운다(커버리지 가드 통과). */
+/**
+ * 부재로 판정시키려면 scrapedKeys에서 빼고, present 채우기용 더미를 채운다(커버리지 가드 통과).
+ * ⚠️ 더미 수가 부족하면 **커버리지 가드(80%)에 먼저 걸려** 검사하려던 가드까지 못 간다 —
+ *    부재 행을 많이 넣는 테스트는 `filler`를 함께 키울 것.
+ */
 function classify(rows: ReturnType<typeof row>[], opts: Record<string, unknown> = {}) {
-  const filler = Array.from({ length: 40 }, (_, i) =>
+  const { filler: fillerCount = 40, ...rest } = opts as { filler?: number };
+  const filler = Array.from({ length: fillerCount }, (_, i) =>
     row({ id: `f${i}`, student_id: `fs${i}` }),
   );
   const scrapedKeys = new Set(filler.map((f) => `${f.student_id}|${f.period}`));
@@ -56,7 +62,7 @@ function classify(rows: ReturnType<typeof row>[], opts: Record<string, unknown> 
     normalizeName: (n: string) => n,
     activeStudentIds: new Set<string>(),
     now: NOW,
-    ...opts,
+    ...rest,
   });
 }
 
@@ -130,9 +136,49 @@ describe("classifyStale — 무효 후보 4중 가드", () => {
     expect(b.heldPeriods).toHaveLength(1);
   });
 
-  it("상수는 완화 금지 — 커버리지 0.8 · 최소 부재 7일", () => {
+  it("상수는 완화 금지 — 커버리지 0.8 · 최소 부재 7일 · 한 실행 무효 한도 10건", () => {
     expect(S.STALE_COVERAGE_MIN).toBe(0.8);
     expect(S.STALE_MIN_ABSENT_DAYS).toBe(7);
+    expect(S.STALE_MAX_VOID_PER_RUN).toBe(10);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 대량 무효 서킷브레이커 — 개별 가드는 "이 한 건이 삭제인가"만 본다.
+// 🔴 2026-07-31 실측: 스크랩 **범위를 넓힌 첫 실행**에서 17건이 한 번에 void됐다(₩5.4M).
+//    새로 범위에 들어온 달의 행은 그동안 스크랩 밖이었다는 이유만으로 부재일이 길게 잡혀
+//    ③가드를 전부 정상 통과한다 — 개별 가드로는 원리적으로 못 막는 상황이다.
+// ─────────────────────────────────────────────────────────────────────────────
+describe("classifyStale — 대량 무효 차단", () => {
+  const many = (n: number) =>
+    Array.from({ length: n }, (_, i) => row({ id: `v${i}`, student_id: `vs${i}` }));
+
+  it("한도(10건) 이하면 그대로 무효 후보", () => {
+    const b = classify(many(10));
+    expect(b.voidable).toHaveLength(10);
+    expect(b.holdBulk).toHaveLength(0);
+  });
+
+  it("한도를 넘으면 **전부** 보류한다(일부만 지우지 않는다)", () => {
+    const b = classify(many(11), { filler: 200 });
+    expect(b.voidable).toHaveLength(0);
+    expect(b.holdBulk).toHaveLength(11);
+  });
+
+  it("사람이 확인한 뒤 --allow-bulk-void로 해제할 수 있다", () => {
+    const b = classify(many(30), { allowBulkVoid: true, filler: 200 });
+    expect(b.voidable).toHaveLength(30);
+    expect(b.holdBulk).toHaveLength(0);
+  });
+
+  // 브레이커는 **개별 가드 뒤**에 온다 — 보류된 건은 애초에 후보가 아니므로 한도에 포함되지 않는다.
+  it("개별 가드로 이미 걸러진 건은 한도 계산에 안 들어간다", () => {
+    const b = classify([...many(9), ...many(9).map((r) => ({ ...r, id: `a${r.id}`, student_id: "act" }))], {
+      activeStudentIds: new Set(["act"]),
+      filler: 200,
+    });
+    expect(b.voidable).toHaveLength(9); // 활성수강 9건은 holdActive로 빠져 한도(10)를 안 넘는다
+    expect(b.holdBulk).toHaveLength(0);
   });
 });
 

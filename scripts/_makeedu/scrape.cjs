@@ -153,11 +153,14 @@ async function prepareInvoices(page) {
     applied.push("원생상태=전체");
   }
   const months = Number(process.env.MAKEEDU_INVOICE_MONTHS || 3);
-  const { from, to } = L.billingMonthRange(new Date(), months);
+  // 🔴 앵커는 **화면이 말하는 현재 청구월**이다 — 달력 월이 아니다. makeedu는 선청구라 달력 7월에
+  //    이미 청구월이 2026-08이고, 달력으로 계산하면 정작 살아있는 달이 범위에서 빠진다(2026-07-31 사고).
+  const anchor = await page.inputValue("#fromYm").catch(() => null);
+  const { from, to } = L.billingMonthRange({ anchor, months, today: new Date() });
   if ((await page.locator("#fromYm").count()) > 0) {
     await page.fill("#fromYm", from).catch(() => {});
     await page.fill("#toYm", to).catch(() => {});
-    applied.push(`청구월=${from}~${to}`);
+    applied.push(`청구월=${from}~${to}${anchor ? ` (현재 청구월 ${anchor})` : " (화면값 없음·달력 폴백)"}`);
   }
   if (!applied.length) {
     console.warn("    ⚠️ 수납 검색 조건을 못 찾았습니다(화면 개편 의심) — 기본 조건으로 진행합니다.");
@@ -310,8 +313,13 @@ async function scrapeList(page, key, cfg) {
       console.log(`  ✓ ${key}: ${data.rows.length} rows, ${data.headers.length} cols → ${key}.json`);
       console.log(`    headers: ${data.headers.filter(Boolean).join(" | ").slice(0, 160)}`);
       if (data.totalReported != null && data.totalReported !== data.rows.length) {
+        // ⚠️ 부족(절단)과 초과(합계행 혼입·페이지 경계 중복)는 성격이 다르다 — 뭉뚱그려 "절단"이라고 하면
+        //    사람이 엉뚱한 곳을 본다. 실제로 3459 vs 3481(초과 22)이 "절단 의심"으로 보고된 적이 있다.
+        const d = data.rows.length - data.totalReported;
         console.warn(
-          `    ⚠️ ${key} 절단 의심 — 화면은 총 ${data.totalReported}건인데 ${data.rows.length}건만 수집했습니다(페이지 순회 확인).`,
+          d < 0
+            ? `    🔴 ${key} 절단 의심 — 화면 총 ${data.totalReported}건인데 ${data.rows.length}건만 수집(${-d}건 부족). 페이지 순회를 확인하세요.`
+            : `    ⚠️ ${key} 초과 수집 — 화면 총 ${data.totalReported}건인데 ${data.rows.length}건 수집(${d}건 초과). 합계행 혼입·페이지 경계 중복 가능.`,
         );
       }
       if (data.rows.length === 0) {

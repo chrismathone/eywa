@@ -45,6 +45,9 @@ const APPLY = process.argv.includes("--apply");
 // 안전은 플래그가 아니라 classifyStale의 4중 가드(makeedu형·미완납·7일+ 연속부재·활성수강 없음)가 진다.
 const VOID_STALE =
   !process.argv.includes("--no-void-stale") && process.env.MAKEEDU_VOID_STALE !== "false";
+// 대량 무효 서킷브레이커 해제(사람이 목록을 확인한 뒤 의도적으로 정리할 때만). 기본은 차단.
+const ALLOW_BULK_VOID =
+  process.argv.includes("--allow-bulk-void") || process.env.MAKEEDU_ALLOW_BULK_VOID === "true";
 const OUT = process.env.MAKEEDU_OUT || path.resolve(__dirname, "..", "..", ".makeedu-tmp");
 const idx = (H) => (s) => H.findIndex((h) => (h || "").includes(s));
 const ym = (v) => { const s = L.txt(v) || ""; const m = s.match(/(\d{4})[.\-/]?(\d{2})/); return m ? `${m[1]}-${m[2]}` : null; };
@@ -198,6 +201,7 @@ const KIND_CAT = { 수업: "tuition", 교재: "material", 차량비: "other", �
       normalizeName: L.normalizeName,
       activeStudentIds,
       withdrawnMakeeduIds,
+      allowBulkVoid: ALLOW_BULK_VOID,
       now: new Date(),
     });
     S.printIssues({ stale, unmatchedLines });
