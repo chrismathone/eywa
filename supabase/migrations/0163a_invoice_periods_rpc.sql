@@ -1,4 +1,4 @@
--- ⚠️ 원래 0159a로 채번했으나 main의 `0159a_unassigned_enrolled_total`과 충돌해 0161a로 재채번(2026-07-31).
+-- ⚠️ 채번 충돌 2회 — 0159a(main의 unassigned_enrolled_total) → 0161a(main의 document_categories_and_links) → **0163a** (2026-07-31).
 -- 수납 월 칩(청구월 목록) RPC — 전건 fetch + JS Set distinct를 DB group-by 1쿼리로 대체.
 --
 -- 배경(2026-07-31 실측): getAvailablePeriods가 invoices의 `period` 한 컬럼을 **전건** 페이징으로 긁고

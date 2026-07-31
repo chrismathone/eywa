@@ -1,19 +1,21 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
-import { DOCUMENT_CATEGORIES, type DocumentCategory, type DocumentKind } from "../categories";
+import type { DocumentKind } from "../categories";
 
 // 데이터베이스(서식 저장소) 조회 — tenant 스코프는 RLS가 강제.
 
 export type DocumentRow = {
   id: string;
+  /** `document_categories.key` — 0161a부터 학원장이 관리하는 값이라 닫힌 enum이 아니다. */
+  category: string;
   title: string;
-  category: DocumentCategory;
   kind: DocumentKind;
   formType: string | null; // kind='form'일 때 폼 종류(staff_resume 등)
   description: string | null;
   fileName: string | null;
   fileSize: number | null;
   mimeType: string | null;
+  linkUrl: string | null; // kind='link'일 때 외부 문서 주소(구글드라이브 등)
   uploaderName: string | null;
   createdAt: string;
   pinned: boolean;
@@ -38,12 +40,12 @@ export async function getDocumentsPage(
   let qb = supabase
     .from("academy_documents")
     .select(
-      "id, title, category, kind, form_type, description, file_name, file_size, mime_type, pinned, created_at, uploader:uploaded_by(display_name)",
+      "id, title, category, kind, form_type, description, file_name, file_size, mime_type, link_url, pinned, created_at, uploader:uploaded_by(display_name)",
       { count: "exact" },
     );
-  if (opts.category && (DOCUMENT_CATEGORIES as readonly string[]).includes(opts.category)) {
-    qb = qb.eq("category", opts.category);
-  }
+  // 분류 화이트리스트 검증은 호출부(페이지)가 담당 — 분류가 테넌트 데이터라 여기서 닫힌 목록으로
+  // 못 거른다. 키가 존재하지 않으면 결과가 0건일 뿐 누출은 없다(RLS가 테넌트 격리).
+  if (opts.category) qb = qb.eq("category", opts.category);
   const term = opts.q ? sanitize(opts.q) : "";
   if (term) qb = qb.or(`title.ilike.%${term}%,description.ilike.%${term}%,file_name.ilike.%${term}%`);
   // 고정(pinned) 먼저 → 최신순. (탐색기 상단 고정 = 자주 쓰는 서식)
@@ -55,13 +57,14 @@ export async function getDocumentsPage(
   const rows: DocumentRow[] = (data ?? []).map((r) => ({
     id: r.id,
     title: r.title,
-    category: r.category as DocumentCategory,
+    category: r.category as string,
     kind: r.kind as DocumentKind,
     formType: r.form_type,
     description: r.description,
     fileName: r.file_name,
     fileSize: r.file_size,
     mimeType: r.mime_type,
+    linkUrl: r.link_url,
     uploaderName: uploaderNameOf(r.uploader),
     createdAt: r.created_at,
     pinned: !!r.pinned,
@@ -69,20 +72,24 @@ export async function getDocumentsPage(
   return { rows, total: count ?? rows.length };
 }
 
-/** 폴더 팬 카운트 — 분류별 + 전체(행 미fetch, count head:true = B2). */
-export async function getDocumentCategoryCounts(): Promise<Record<DocumentCategory | "all", number>> {
+/**
+ * 폴더 팬 카운트 — 분류별 + 전체. 분류가 동적이 되면서(0161a) "분류마다 head count"는 N+1이라
+ * group-by RPC 1쿼리로(B2, 0039a/0040a 패턴). 문서가 없는 분류는 RPC가 행을 안 주므로 호출부가 0으로 읽는다.
+ */
+export async function getDocumentCategoryCounts(): Promise<Record<string, number> & { all: number }> {
   const supabase = await createClient();
-  const countFor = async (category?: DocumentCategory) => {
-    let qb = supabase.from("academy_documents").select("*", { count: "exact", head: true });
-    if (category) qb = qb.eq("category", category);
-    const { count } = await qb;
-    return count ?? 0;
-  };
-  const [all, ...per] = await Promise.all([countFor(), ...DOCUMENT_CATEGORIES.map((c) => countFor(c))]);
-  const out = { all } as Record<DocumentCategory | "all", number>;
-  DOCUMENT_CATEGORIES.forEach((c, i) => {
-    out[c] = per[i];
-  });
+  const { data, error } = await supabase.rpc("document_category_counts");
+  if (error) {
+    // 카운트 실패가 목록 자체를 못 열게 만들면 안 된다 — 0으로 폴백하되 로그는 남긴다.
+    console.error("[documents/queries] document_category_counts RPC 오류", error);
+    return { all: 0 };
+  }
+  const out: Record<string, number> & { all: number } = { all: 0 };
+  for (const r of (data ?? []) as { category: string; count: number }[]) {
+    const n = Number(r.count) || 0;
+    out[r.category] = n;
+    out.all += n;
+  }
   return out;
 }
 
@@ -93,7 +100,7 @@ export async function getDocumentById(id: string): Promise<DocumentDetail | null
   const { data } = await supabase
     .from("academy_documents")
     .select(
-      "id, title, category, kind, form_type, description, file_path, file_name, file_size, mime_type, body, pinned, created_at, uploader:uploaded_by(display_name)",
+      "id, title, category, kind, form_type, description, file_path, file_name, file_size, mime_type, link_url, body, pinned, created_at, uploader:uploaded_by(display_name)",
     )
     .eq("id", id)
     .maybeSingle();
@@ -101,13 +108,14 @@ export async function getDocumentById(id: string): Promise<DocumentDetail | null
   return {
     id: data.id,
     title: data.title,
-    category: data.category as DocumentCategory,
+    category: data.category as string,
     kind: data.kind as DocumentKind,
     formType: data.form_type,
     description: data.description,
     fileName: data.file_name,
     fileSize: data.file_size,
     mimeType: data.mime_type,
+    linkUrl: data.link_url,
     uploaderName: uploaderNameOf(data.uploader),
     createdAt: data.created_at,
     pinned: !!data.pinned,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildWeekGrid, sheetFillStats, type GridPlanLine } from "./grid";
+import { buildWeekGrid, scheduledSlotKeySet, sheetFillStats, type GridPlanLine } from "./grid";
 
 // 2026-07-20(월) 주. 화=2026-07-21, 수=07-22, 금=07-24, 토=07-25.
 const MON = "2026-07-20";
@@ -321,6 +321,110 @@ describe("buildWeekGrid — 과거 데이터 보존(합집합 로스터·고아�
     });
     expect(grid.days.map((d) => d.date)).toEqual([MON]);
     expect(grid.attendanceOnly).toEqual([{ date: "2026-07-25", studentIds: ["s9"] }]);
+  });
+});
+
+describe("buildWeekGrid — 자리(LAB·JJ)는 수업 교시가 아니다", () => {
+  const lab = (dow: "mon" | "tue" | "wed" | "thu" | "fri", start: string, label = "LAB") =>
+    sched(dow, start, { slotTeacherLabel: label, slotRoomLabel: "603" });
+
+  it("쓴 게 없는 LAB/JJ 교시는 아예 그리지 않는다", () => {
+    const grid = buildWeekGrid({
+      weekMonday: MON,
+      schedules: [lab("mon", "16:20"), lab("tue", "16:20", "JJ"), sched("wed", "15:00")],
+      enrollments: [enr("s1")],
+      planLines: [],
+      marks: [],
+      attendance: [],
+      slotMemoKeys: [],
+    });
+    expect(grid.days.map((d) => d.dow)).toEqual(["wed"]); // 월·화(자리)는 통째로 빠진다
+  });
+
+  it("원 라벨 '이주희'도 자리로 판정(해석 전 값이 와도 동일)", () => {
+    const grid = buildWeekGrid({
+      weekMonday: MON,
+      schedules: [lab("mon", "16:20", "이주희")],
+      enrollments: [enr("s1")],
+      planLines: [],
+      marks: [],
+      attendance: [],
+      slotMemoKeys: [],
+    });
+    expect(grid.days).toHaveLength(0);
+  });
+
+  it("계획·마크가 있어도 숨긴다 — 대신 hiddenSpecial로 건수를 남긴다(침묵 금지)", () => {
+    const grid = buildWeekGrid({
+      weekMonday: MON,
+      schedules: [lab("mon", "16:20"), lab("tue", "16:20", "JJ")],
+      enrollments: [enr("s1")],
+      planLines: [line({ slotStart: "16:20", textbook: "Power Voca" })],
+      marks: [{ studentId: "s1", markDate: "2026-07-21", slotStart: "16:20", status: "완", progressNote: null }],
+      attendance: [],
+      slotMemoKeys: [],
+    });
+    expect(grid.days).toHaveLength(0); // 카드는 안 그린다
+    expect(grid.hiddenSpecial).toEqual({ slots: 2, records: 2 });
+  });
+
+  it("빈 계획 행(placeholder)만 있으면 기록으로 세지 않는다", () => {
+    const grid = buildWeekGrid({
+      weekMonday: MON,
+      schedules: [lab("mon", "16:20")],
+      enrollments: [enr("s1")],
+      planLines: [line({ slotStart: "16:20", textbook: "  " })],
+      marks: [],
+      attendance: [],
+      slotMemoKeys: [],
+    });
+    expect(grid.days).toHaveLength(0);
+    expect(grid.hiddenSpecial).toEqual({ slots: 0, records: 0 });
+  });
+
+  it("자리 교시뿐인 날짜라도 출석 기록은 attendanceOnly로 보존", () => {
+    const grid = buildWeekGrid({
+      weekMonday: MON,
+      schedules: [lab("mon", "16:20")],
+      enrollments: [enr("s1")],
+      planLines: [],
+      marks: [],
+      attendance: [{ studentId: "s1", sessionDate: MON, status: "present" }],
+      slotMemoKeys: [],
+    });
+    expect(grid.days).toHaveLength(0);
+    expect(grid.attendanceOnly).toEqual([{ date: MON, studentIds: ["s1"] }]);
+  });
+
+  it("같은 시각에 강사 수업이 겹치면 수업이 이긴다(실수업이 증발하지 않는다)", () => {
+    const grid = buildWeekGrid({
+      weekMonday: MON,
+      schedules: [lab("mon", "16:20"), sched("mon", "16:20")],
+      enrollments: [enr("s1")],
+      planLines: [],
+      marks: [],
+      attendance: [],
+      slotMemoKeys: [],
+    });
+    expect(grid.days[0].slots[0]).toMatchObject({ teacherLabel: "Hannah" });
+    expect(sheetFillStats(grid).totalSlots).toBe(1);
+  });
+
+  it("작성률 분모·분자에서 빠진다(랜딩 scheduledSlotKeySet과 같은 규칙)", () => {
+    const schedules = [lab("mon", "16:20"), sched("wed", "15:00")];
+    const grid = buildWeekGrid({
+      weekMonday: MON,
+      schedules,
+      enrollments: [],
+      planLines: [line({ slotStart: "16:20", progress: "자율" }), line({ planDate: "2026-07-22", progress: "Ch1" })],
+      marks: [],
+      attendance: [],
+      slotMemoKeys: [],
+    });
+    // LAB 교시는 계획이 있어도 카드도 작성률도 없다(기록 건수만 각주로).
+    expect(sheetFillStats(grid)).toEqual({ totalSlots: 1, filledSlots: 1, orphanSlots: 0 });
+    expect(grid.hiddenSpecial.records).toBe(1);
+    expect([...scheduledSlotKeySet(MON, schedules)]).toEqual(["2026-07-22|15:00"]);
   });
 });
 

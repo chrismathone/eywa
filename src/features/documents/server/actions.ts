@@ -16,7 +16,8 @@ import { humanizeDbError } from "@/lib/supabase/db-error";
 import type { UploadTicket } from "@/lib/storage/types";
 import { RESUME_FORM_TYPE } from "@/features/staff/resume";
 import { canViewResume, RESUME_LOCKED_MSG } from "@/features/staff/server/resume-access";
-import { DOCUMENT_CATEGORIES } from "../categories";
+import { FALLBACK_CATEGORY, normalizeLinkUrl } from "../categories";
+import { getDocumentCategories } from "./category-queries";
 
 // 데이터베이스(서식 저장소) 변경 액션 — 쓰기는 canWriteTenant("documents")(master/admin/manager),
 // 다운로드(읽기)는 canAccessTenant(readonly 강사·상담·회계도 빈 양식을 받아야 하므로).
@@ -33,8 +34,17 @@ async function requireDocumentWrite() {
   return { user };
 }
 
-const parseCategory = (v: unknown) =>
-  (DOCUMENT_CATEGORIES as readonly string[]).includes(String(v)) ? String(v) : "other";
+/**
+ * 분류 검증 — 0161a부터 분류가 테넌트 데이터라 코드 배열이 아니라 **DB 목록**과 대조한다.
+ * ⚠️ 없는 키를 조용히 '기타'로 바꾸지 않고 에러를 돌려준다: 화면 드롭다운은 항상 유효한 키만 보내므로,
+ *    안 맞는 값이 왔다는 건 삭제 레이스이거나 진짜 버그다. 조용한 폴백은 그걸 "저장됨"으로 위장한다.
+ */
+async function parseCategory(v: unknown): Promise<{ category: string } | { error: string }> {
+  const raw = String(v ?? "").trim() || FALLBACK_CATEGORY;
+  const options = await getDocumentCategories();
+  if (options.some((o) => o.key === raw)) return { category: raw };
+  return { error: "없는 분류입니다 — 목록을 새로고침한 뒤 다시 선택해 주세요" };
+}
 
 /** ① 업로드 티켓 발급 — 경로는 서버가 빌드(`{tenantId}/documents/{uuid}.{ext}`), 원본 파일명은 DB에만. */
 export async function issueDocumentUploadTicket(
@@ -77,6 +87,12 @@ export async function registerUploadedDocument(
   if (!title) return { error: "이름을 입력하세요" };
   const fileName = String(formData.get("fileName") ?? "").trim() || null;
   const description = String(formData.get("description") ?? "").trim() || null;
+  // 분류 검증은 스토리지 검증 전에 — 못 쓸 값이면 업로드된 객체를 여기서 바로 회수한다(고아 객체 방지).
+  const cat = await parseCategory(formData.get("category"));
+  if ("error" in cat) {
+    await removeObject(path, { bucket: MEDIA_KIND.document.supabaseBucket }).catch(() => {});
+    return { error: cat.error };
+  }
 
   let verified: { size: number; contentType: string };
   try {
@@ -92,7 +108,7 @@ export async function registerUploadedDocument(
     .insert({
       tenant_id: gate.user.tenantId,
       title,
-      category: parseCategory(formData.get("category")),
+      category: cat.category,
       kind: "file",
       description,
       file_path: path,
@@ -123,6 +139,8 @@ export async function createTextDocument(
   if (!title) return { error: "제목을 입력하세요" };
   const body = String(formData.get("body") ?? "").trim();
   if (!body) return { error: "내용을 입력하세요" };
+  const cat = await parseCategory(formData.get("category"));
+  if ("error" in cat) return { error: cat.error };
 
   const supabase = await createClient();
   const { data, error } = await supabase
@@ -130,7 +148,7 @@ export async function createTextDocument(
     .insert({
       tenant_id: gate.user.tenantId,
       title,
-      category: parseCategory(formData.get("category")),
+      category: cat.category,
       kind: "text",
       description: String(formData.get("description") ?? "").trim() || null,
       body,
@@ -139,6 +157,45 @@ export async function createTextDocument(
     .select("id")
     .single();
   if (error || !data) return { error: `저장 실패: ${error?.message ?? "unknown"}` };
+  revalidatePath("/documents");
+  return { ok: true, id: data.id, nonce: Date.now() };
+}
+
+/**
+ * 외부 링크 문서(kind='link') 등록 — 이미 구글드라이브·노션 등에 있는 자료를 **재업로드 없이** 목록에 올린다.
+ * 파일 사본을 만들지 않으므로 원본이 진실이고 여기선 이름·분류·설명만 우리가 갖는다(연동 폴더와 같은 원칙).
+ * ⚠️ 링크가 살아 있는지, 학부모/직원이 열 권한이 있는지는 대상 서비스가 판단한다 — 우리가 보증하지 않는다.
+ */
+export async function createLinkDocument(
+  _prev: DocActionState,
+  formData: FormData,
+): Promise<DocActionState> {
+  const gate = await requireDocumentWrite();
+  if ("error" in gate) return { error: gate.error };
+
+  const title = String(formData.get("title") ?? "").trim();
+  if (!title) return { error: "이름을 입력하세요" };
+  // javascript:/data: 차단 + 스킴 보정은 순수 함수 한 곳에서(Vitest로 잠금).
+  const link = normalizeLinkUrl(String(formData.get("linkUrl") ?? ""));
+  if ("error" in link) return { error: link.error };
+  const cat = await parseCategory(formData.get("category"));
+  if ("error" in cat) return { error: cat.error };
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("academy_documents")
+    .insert({
+      tenant_id: gate.user.tenantId,
+      title,
+      category: cat.category,
+      kind: "link",
+      description: String(formData.get("description") ?? "").trim() || null,
+      link_url: link.url,
+      uploaded_by: gate.user.id,
+    })
+    .select("id")
+    .single();
+  if (error || !data) return { error: `등록 실패: ${error?.message ?? "unknown"}` };
   revalidatePath("/documents");
   return { ok: true, id: data.id, nonce: Date.now() };
 }
@@ -155,9 +212,12 @@ export async function updateDocument(
   const title = String(formData.get("title") ?? "").trim();
   if (!id || !title) return { error: "잘못된 요청입니다" };
 
+  const cat = await parseCategory(formData.get("category"));
+  if ("error" in cat) return { error: cat.error };
+
   const patch: Record<string, unknown> = {
     title,
-    category: parseCategory(formData.get("category")),
+    category: cat.category,
     description: String(formData.get("description") ?? "").trim() || null,
     updated_at: new Date().toISOString(),
   };
@@ -165,6 +225,11 @@ export async function updateDocument(
     const body = String(formData.get("body") ?? "").trim();
     if (!body) return { error: "내용을 입력하세요" };
     patch.body = body;
+  }
+  if (formData.has("linkUrl")) {
+    const link = normalizeLinkUrl(String(formData.get("linkUrl") ?? ""));
+    if ("error" in link) return { error: link.error };
+    patch.link_url = link.url;
   }
 
   const supabase = await createClient();

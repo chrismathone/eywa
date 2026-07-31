@@ -219,7 +219,7 @@ export async function getBillingSummary(period?: string): Promise<BillingSummary
  * ⚠️ **전건 fetch 금지(B2)** — 예전엔 `period` 한 컬럼을 fetchAllPaged로 전부 긁어 JS Set으로
  * distinct를 만들었다. 결과는 월 문자열 8개인데 비용은 **요청 4회 / 3,225행 / 245ms**였고(2026-07-31
  * 실측) 행이 1,000개 늘 때마다 왕복이 하나씩 더 붙는 구조였다. 이 화면이 여는 창마다 도는 비용이라
- * group-by RPC(0161a `invoice_periods`)로 옮겼다 — 단일 요청, 페이로드 수백 바이트.
+ * group-by RPC(0163a `invoice_periods`)로 옮겼다 — 단일 요청, 페이로드 수백 바이트.
  */
 export async function getAvailablePeriods(): Promise<string[]> {
   const supabase = await createClient();
@@ -230,7 +230,7 @@ export async function getAvailablePeriods(): Promise<string[]> {
   // 에러 종류를 안 가리는 건 의도다: 미적용·타임아웃·권한·스키마캐시 어느 쪽이든 월 칩은 떠야 한다.
   if (error) {
     console.warn(
-      `[billing] invoice_periods RPC 실패 — 전건 스캔으로 폴백(느림). 0161a 적용 여부 확인 필요: ${error.message}`,
+      `[billing] invoice_periods RPC 실패 — 전건 스캔으로 폴백(느림). 0163a 적용 여부 확인 필요: ${error.message}`,
     );
   }
   const rows: { period: string }[] = error

@@ -9,11 +9,21 @@
 export type ContractRow = {
   id: string;
   seq: number;
-  startDate: string;
-  endDate: string;
+  /** 기간이 있는 계약('contract')인지, 시트 히스토리의 기간 없는 한 줄('note')인지. */
+  kind: "contract" | "note";
+  /** note는 날짜가 없을 수 있다(인센티브 조항 등). */
+  startDate: string | null;
+  endDate: string | null;
   terms: string | null;
   memo: string | null;
+  /** 시트 셀에서의 줄 순서(0=맨 위). 날짜 없는 줄의 원문 순서 보존용. */
+  lineNo: number | null;
 };
+
+/** 기간이 온전한 계약만 — 현재계약·차수 계산은 이것만 본다(note는 이력 표시 전용). */
+export function contractsOnly(rows: readonly ContractRow[]): ContractRow[] {
+  return rows.filter((r) => r.kind === "contract" && !!r.startDate && !!r.endDate);
+}
 
 export type ContractPeriod = {
   seq: number;
@@ -40,9 +50,11 @@ export function addYears(date: string, n: number): string {
  * 입사일도 없으면 null(계산할 근거가 없다 — 화면은 "입사일을 먼저 입력하세요"로 안내).
  */
 export function currentContract(rows: readonly ContractRow[], hireDate: string | null | undefined): ContractPeriod | null {
-  if (rows.length > 0) {
-    const top = [...rows].sort((a, b) => b.seq - a.seq)[0];
-    return { seq: top.seq, startDate: top.startDate, endDate: top.endDate, stored: true };
+  // 기간 없는 이력 줄(note)은 '현재 계약'이 될 수 없다 — 이력 목록에만 보인다.
+  const periods = contractsOnly(rows);
+  if (periods.length > 0) {
+    const top = [...periods].sort((a, b) => b.seq - a.seq)[0];
+    return { seq: top.seq, startDate: top.startDate!, endDate: top.endDate!, stored: true };
   }
   const hire = (hireDate ?? "").trim();
   if (!/^\d{4}-\d{2}-\d{2}$/.test(hire)) return null;

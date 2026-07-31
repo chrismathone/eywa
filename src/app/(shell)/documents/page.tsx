@@ -10,13 +10,12 @@ import {
   getDocumentsPage,
 } from "@/features/documents/server/queries";
 import { getLinkedCounts, getLinkedPage } from "@/features/documents/server/linked-queries";
+import { getDocumentCategories } from "@/features/documents/server/category-queries";
 import {
-  CATEGORY_LABEL,
-  DOCUMENT_CATEGORIES,
+  categoryLabelOf,
   fileTypeLabel,
   formatFileSize,
   formViewHref,
-  type DocumentCategory,
 } from "@/features/documents/categories";
 import { isLinkedSource, LINKED_LABEL, LINKED_SOURCES, type LinkedSourceKey } from "@/features/documents/linked";
 import { DocumentToolbar } from "./_components/document-toolbar";
@@ -44,15 +43,14 @@ export default async function DocumentsPage({
 
   // 연동 폴더(교재 요청서·수강료 견적서)는 billing 접근권한이 있어야 노출·조회 —
   // 강사는 담당 학생 스코프 밖 전체 목록을 보면 안 됨(전용 면 /textbook-requests 사용).
-  const [canWrite, canBilling] = await Promise.all([
+  const [canWrite, canBilling, categories] = await Promise.all([
     canWriteTenant(user.systemRole, "documents"),
     canAccessTenant(user.systemRole, "billing"),
+    // 분류는 학원장이 관리하는 테넌트 데이터(0161a) — 코드 상수가 아니라 DB가 단일 소스.
+    getDocumentCategories(),
   ]);
   const linked: LinkedSourceKey | null = canBilling && isLinkedSource(catRaw) ? catRaw : null;
-  const cat =
-    !linked && (DOCUMENT_CATEGORIES as readonly string[]).includes(catRaw)
-      ? (catRaw as DocumentCategory)
-      : null;
+  const cat = !linked && categories.some((c) => c.key === catRaw) ? catRaw : null;
   const activeKey = linked ?? cat;
 
   const [docPage, linkedPage, counts, linkedCounts] = await Promise.all([
@@ -85,7 +83,8 @@ export default async function DocumentsPage({
 
   const folders: FolderItem[] = [
     { key: null, label: "전체 문서", count: counts.all },
-    ...DOCUMENT_CATEGORIES.map((c) => ({ key: c as string, label: CATEGORY_LABEL[c], count: counts[c] })),
+    // 문서가 0건인 분류는 RPC가 행을 안 주므로 0으로 채운다(폴더 자체는 항상 보인다).
+    ...categories.map((c) => ({ key: c.key, label: c.label, count: counts[c.key] ?? 0 })),
   ];
   const linkedFolders: FolderItem[] = linkedCounts
     ? LINKED_SOURCES.map((s) => ({ key: s.key as string, label: s.label, count: linkedCounts[s.key] }))
@@ -102,7 +101,7 @@ export default async function DocumentsPage({
     : {
         title: q ? "검색 결과가 없습니다" : "아직 문서가 없습니다",
         description: canWrite
-          ? "우측 상단 '업로드'로 서식 파일을 올리거나 '새 문서'를 작성하세요."
+          ? "우측 상단에서 서식 파일을 '업로드'하거나, '새 문서'를 작성하거나, 구글 드라이브 등에 있는 자료를 '링크 추가'로 등록하세요."
           : "관리자가 서식을 올리면 여기에 표시됩니다.",
       };
 
@@ -114,19 +113,34 @@ export default async function DocumentsPage({
         title="데이터베이스"
         description="학원 각종 서식을 보관합니다 — 빈 양식을 내려받아 작성하거나, 앱에서 문서를 작성해 두세요."
         actions={
-          <DocumentToolbar canWrite={canWrite} initialQuery={q} category={cat} catParam={activeKey} embed={embed} />
+          <DocumentToolbar
+            canWrite={canWrite}
+            initialQuery={q}
+            category={cat}
+            catParam={activeKey}
+            embed={embed}
+            categories={categories}
+          />
         }
       />
 
       {/* 탐색기 레이아웃 — 넓은 창: 좌 폴더 팬 + 우 상세 테이블 / 좁은 창: 폴더가 상단 칩으로 접힘 */}
       <div className="lg:grid lg:grid-cols-[190px_minmax(0,1fr)] lg:items-start lg:gap-4">
-        <FolderNav folders={folders} linkedFolders={linkedFolders} activeKey={activeKey} hrefFor={folderHref} />
+        <FolderNav
+          folders={folders}
+          linkedFolders={linkedFolders}
+          activeKey={activeKey}
+          hrefFor={folderHref}
+          categories={categories}
+          counts={counts}
+          canManage={canWrite}
+        />
 
         <section className="bg-card border-line rounded-2xl border">
           <div className="border-line text-text-dim flex items-center justify-between border-b px-4 py-2 text-xs">
             <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
               <Files className="size-3.5" />
-              {linked ? LINKED_LABEL[linked] : cat ? CATEGORY_LABEL[cat] : "전체 문서"} · {total}건
+              {linked ? LINKED_LABEL[linked] : cat ? categoryLabelOf(categories, cat) : "전체 문서"} · {total}건
             </span>
             {totalPages > 1 ? (
               // 헤더 컴팩트 페이저 — 작은 창에선 50행 아래 하단 표준 페이저가 안 보여(스크롤 필요)
@@ -172,18 +186,22 @@ export default async function DocumentsPage({
                             title: r.title,
                             kind: r.kind,
                             description: r.description,
-                            categoryLabel: CATEGORY_LABEL[r.category],
-                            typeLabel: fileTypeLabel(r.kind, r.fileName, r.mimeType, r.formType),
+                            categoryLabel: categoryLabelOf(categories, r.category),
+                            typeLabel: fileTypeLabel(r.kind, r.fileName, r.mimeType, r.formType, r.linkUrl),
                             sizeLabel: r.kind === "file" ? formatFileSize(r.fileSize) : "—",
                             createdAt: r.createdAt,
                             uploaderName: r.uploaderName,
                             pinned: r.pinned,
+                            // 링크 문서는 외부 주소로 직행(새 탭) — 값이 비면 상세로 폴백해 죽은 링크를 안 만든다.
                             href:
-                              r.kind === "file"
-                                ? `/documents/${r.id}/preview`
-                                : r.kind === "form"
-                                  ? formViewHref(r.formType, r.id)
-                                  : `/documents/${r.id}`,
+                              r.kind === "link"
+                                ? (r.linkUrl ?? `/documents/${r.id}`)
+                                : r.kind === "file"
+                                  ? `/documents/${r.id}/preview`
+                                  : r.kind === "form"
+                                    ? formViewHref(r.formType, r.id)
+                                    : `/documents/${r.id}`,
+                            external: r.kind === "link" && !!r.linkUrl,
                           }}
                           canWrite={canWrite}
                         />

@@ -887,7 +887,7 @@ AI가 죽어도 결정론 요약이 같은 카드 구조로 렌더돼 화면은 
   플래너가 1회 평가로 바꿔주겠다는 **약속이 아니다**. 실제로 이 함수들은 전부 이미 STABLE이었다.
 - **고치는 법**: 함수 호출을 **스칼라 서브쿼리로 감싼다** — `using ((select public.auth_billing_can_read()))`.
   플래너가 InitPlan으로 끌어올려 문장당 한 번만 실행한다(`Filter: (InitPlan 1).col1`).
-- **실측(injaewon 프로덕션 · authenticated 롤 + 실 사용자 클레임, 0160a)**:
+- **실측(injaewon 프로덕션 · authenticated 롤 + 실 사용자 클레임, 0162a)**:
 
   | | 전 | 후 |
   |---|---|---|

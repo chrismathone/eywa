@@ -17,7 +17,7 @@ const EMPTY_RAW: TodayActionsRaw = {
   requestedTextbooks: 0,
   leavesPending: 0,
   leavesToday: [],
-  unwrittenReportsToday: { count: 0, names: [] },
+  unwrittenReportsToday: { count: 0, names: [], bySubject: [] },
   unassignedEnrolled: [],
   unassignedEnrolledTotal: 0,
   classnoteAttention: { failed: 0, tooOld: 0, humanHold: 0, stuck: 0 },
@@ -40,8 +40,8 @@ describe("buildDailyBriefingPayload", () => {
       ...BASE,
       yesterdayRaw: {
         ...EMPTY_RAW,
-        absentToday: [{ studentId: "s1", name: "김민준" }],
-        unwrittenReportsToday: { count: 2, names: ["김민준", "이서연"] },
+        absentToday: [{ studentId: "s1", name: "김민준", subject: "math" }],
+        unwrittenReportsToday: { count: 2, names: ["김민준", "이서연"], bySubject: [] },
         leavesToday: [{ name: "어제휴가자" }], // asOf=어제 수집분 — 버려져야 함
         leavesPending: 9,
       },
