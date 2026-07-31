@@ -49,8 +49,24 @@ function gender(v) {
 }
 
 // eywa name_normalized 생성 규칙(0001a): lower(regexp_replace(name,'\s+','','g'))
-function normalizeName(v) {
+// 🔴🔴 makeedu는 목록에서 **원생 상태를 이름 뒤 괄호로 표시**한다 — `강윤서(퇴)` · `박수빈(퇴)`.
+// 재원생만 보던 시절엔 이 접미사를 볼 일이 없었는데, 원생상태를 '전체'로 바꾼 순간 나타났고
+// **eywa의 `강윤서`와 매칭이 깨졌다**(2026-07-31 실측: 3,459라인 중 350건 미매칭 = 10%).
+// 매칭이 깨지면 그 학생의 청구가 "makeedu에 없다"로 읽혀 **삭제 후보가 된다** — 실제로 강윤서·박수빈·
+// 김나율A·김경진의 청구가 그렇게 무효 처리됐다(makeedu엔 멀쩡히 있는데도).
+// ⚠️ **괄호를 통째로 벗기면 안 된다** — eywa에 `박소선 (테스트)`·`원일(테스트)` 같은 실제 이름이 있어
+//    벗기면 다른 사람과 충돌한다. **상태 표시로 알려진 것만** 지운다(allowlist).
+const NAME_STATUS_SUFFIX = /\((?:퇴|퇴원|휴|휴원|졸|졸업)\)\s*$/;
+
+function stripNameStatusSuffix(v) {
   const s = txt(v);
+  if (!s) return "";
+  return s.replace(NAME_STATUS_SUFFIX, "").trim();
+}
+
+// 매칭용 정규화 — 공백 제거 + 소문자 + **상태 접미사 제거**(표시용이 아니라 대조 키다).
+function normalizeName(v) {
+  const s = stripNameStatusSuffix(v);
   if (!s) return "";
   return s.replace(/\s+/g, "").toLowerCase();
 }
@@ -211,6 +227,7 @@ module.exports = {
   normPhone,
   gender,
   normalizeName,
+  stripNameStatusSuffix,
   parseAmount,
   gradeNorm,
   subjectFromName,

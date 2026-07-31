@@ -32,6 +32,14 @@ const STALE_MIN_ABSENT_DAYS = 7;
 // 그래서 "한 실행에서 이보다 많이 지우려 하면 전부 보류하고 사람을 부른다"는 상위 브레이커를 둔다.
 // 돈을 지우는 판정에서 **대량은 그 자체로 신호**다. 의도된 대량 정리는 --allow-bulk-void로 명시한다.
 const STALE_MAX_VOID_PER_RUN = 10;
+
+// ⚠️⚠️ 매칭 실패율 가드 (2026-07-31 실측으로 추가).
+// makeedu가 퇴원생 이름에 `(퇴)`를 붙여 표시하는 걸 몰라 3,459라인 중 **350건(10%)이 미매칭**됐고,
+// 미매칭 라인은 저장되지 않으니 그 학생의 청구가 "makeedu에 없다"로 읽혀 **삭제 후보가 됐다**
+// (강윤서·박수빈·김나율A·김경진이 실제로 그렇게 무효 처리됐다 — makeedu엔 멀쩡히 있는데도).
+// 🔑 **매칭이 나쁘면 '부재'라는 관측 자체가 신뢰할 수 없다.** 이름 접미사는 고쳤지만, 다음에 또 다른
+// 표기 변화가 생기면 같은 일이 반복된다 — 그래서 비율을 보고 **관측을 통째로 불신**하는 가드를 둔다.
+const STALE_MAX_UNMATCHED_RATIO = 0.05;
 const STATUS_KO = { unpaid: "미수", partial: "부분납", paid: "완납", refunded: "환불", void: "무효" };
 
 // ⚠️⚠️ 2026-07-30(2차) 5번째 가드 — **makeedu 퇴원 목록**(scrape.cjs --list=withdrawn, 실측 4,427행).
@@ -72,11 +80,12 @@ const remainWon = (e) =>
  * @param existing        각 행에 `updated_at`(마지막 갱신 = 마지막으로 스크랩에 잡힌 시각) 포함 필요
  * @param activeStudentIds 활성 수강(end_date null · on_hold false)이 있는 학생 id Set
  * @param withdrawnMakeeduIds makeedu 퇴원 목록의 원생번호 Set. **null이면 가드 비활성**(목록을 못 읽은 실행)
+ * @param unmatchedRatio  전체 라인 대비 학생 매칭 실패 비율(0~1). 높으면 '부재' 관측 자체를 못 믿는다.
  * @param now             부재 지속일 계산 기준(테스트 결정성 위해 주입)
  */
 function classifyStale({
   existing, scrapedKeys, unmatchedNameKeys, normalizeName, activeStudentIds, withdrawnMakeeduIds,
-  allowBulkVoid, now,
+  allowBulkVoid, unmatchedRatio, now,
 }) {
   const active = activeStudentIds || new Set();
   const nowMs = (now ? new Date(now) : new Date()).getTime();
@@ -93,7 +102,7 @@ function classifyStale({
   }
   const b = {
     voidable: [], settled: [], holdUnmatched: [], holdManual: [],
-    holdRecent: [], holdActive: [], holdNotWithdrawn: [], holdBulk: [], heldPeriods: [],
+    holdRecent: [], holdActive: [], holdNotWithdrawn: [], holdBulk: [], holdLowMatch: [], heldPeriods: [],
     // 목록을 못 읽은 실행인지 리포트·요약이 알 수 있게 남긴다(가드가 조용히 꺼진 걸 숨기지 않는다).
     withdrawnGuard: withdrawnMakeeduIds ? { enabled: true, size: withdrawnMakeeduIds.size } : { enabled: false },
   };
@@ -119,7 +128,12 @@ function classifyStale({
       else b.voidable.push(e);
     }
   }
-  // 상위 브레이커 — 개별 가드를 다 통과했어도 **한 번에 너무 많이** 지우려 하면 전부 보류한다.
+  // 상위 브레이커 ① — 매칭이 나쁜 실행에서는 '부재' 관측 자체를 못 믿는다(못 받은 학생 = 부재로 보인다).
+  if (Number(unmatchedRatio) > STALE_MAX_UNMATCHED_RATIO && b.voidable.length) {
+    b.holdLowMatch = b.voidable;
+    b.voidable = [];
+  }
+  // 상위 브레이커 ② — 개별 가드를 다 통과했어도 **한 번에 너무 많이** 지우려 하면 전부 보류한다.
   if (!allowBulkVoid && b.voidable.length > STALE_MAX_VOID_PER_RUN) {
     b.holdBulk = b.voidable;
     b.voidable = [];
@@ -165,6 +179,10 @@ function printIssues({ stale, unmatchedLines }) {
     console.log(`⚠️ 보류(활성 수강 있음) ${stale.holdActive.length}건 · 잔액 ${won(r)} — 지금도 수업을 다니는 학생이라 '청구 삭제' 전제가 약함. **사람이 확인할 것**:`);
     for (const e of stale.holdActive.slice(0, 15)) console.log(`  - ${fmtRow(e)}`);
   }
+  if (stale.holdLowMatch?.length) {
+    const r = stale.holdLowMatch.reduce((s2, e) => s2 + remainWon(e), 0);
+    console.log(`🔴 보류(매칭 실패율 높음) ${stale.holdLowMatch.length}건 · 잔액 ${won(r)} — 학생 매칭이 ${(STALE_MAX_UNMATCHED_RATIO * 100).toFixed(0)}%를 넘게 실패해 '부재' 판정을 신뢰할 수 없습니다(이름 표기 변화 의심).`);
+  }
   if (stale.holdBulk?.length) {
     const r = stale.holdBulk.reduce((s2, e) => s2 + remainWon(e), 0);
     console.log(`🔴 보류(대량 무효 차단) ${stale.holdBulk.length}건 · 잔액 ${won(r)} — 한 실행 한도 ${STALE_MAX_VOID_PER_RUN}건을 넘어 **전부 보류**했습니다.`);
@@ -204,6 +222,8 @@ function issueSummary({ stale, unmatchedLines, voidStale, voided, reconcile, tru
   if (stale.settled.length) parts.push(`부재 완납 ${stale.settled.length}건(보존)`);
   // ⚠️ 활성 수강 보류는 **사람이 봐야 하는 신호**다 — 화면 배지의 '확인 필요'로 올라간다.
   if (stale.holdActive.length) parts.push(`재원생 청구 부재 ${stale.holdActive.length}건(확인 필요)`);
+  if (stale.holdLowMatch?.length)
+    parts.push(`🔴 매칭 실패율 높아 삭제 판정 보류 ${stale.holdLowMatch.length}건`);
   if (stale.holdBulk?.length)
     parts.push(`🔴 대량 무효 차단 ${stale.holdBulk.length}건(전부 보류 — 확인 필요)`);
   if (stale.holdNotWithdrawn?.length) parts.push(`퇴원 목록에 없음 ${stale.holdNotWithdrawn.length}건(보류)`);
@@ -334,7 +354,7 @@ function writeReport(outDir, report) {
     : "대조 없음";
   fs.appendFileSync(
     logPath,
-    `${report.ranAt} apply=${report.apply} voidStale=${report.voidStale} | 대조 ${rec} | 미매칭 ${report.unmatchedLines.length} | 부재 미완납 ${b.voidable.length}·완납 ${b.settled.length} | 보류 매칭 ${b.holdUnmatched.length}·수동 ${b.holdManual.length}·퇴원목록 ${b.holdNotWithdrawn?.length ?? 0}·대량차단 ${b.holdBulk?.length ?? 0}·월 ${b.heldPeriods.length} | void ${report.voidedCount}\n`,
+    `${report.ranAt} apply=${report.apply} voidStale=${report.voidStale} | 대조 ${rec} | 미매칭 ${report.unmatchedLines.length} | 부재 미완납 ${b.voidable.length}·완납 ${b.settled.length} | 보류 매칭 ${b.holdUnmatched.length}·수동 ${b.holdManual.length}·퇴원목록 ${b.holdNotWithdrawn?.length ?? 0}·대량차단 ${b.holdBulk?.length ?? 0}·저매칭 ${b.holdLowMatch?.length ?? 0}·월 ${b.heldPeriods.length} | void ${report.voidedCount}\n`,
     "utf8",
   );
   return { jsonPath, logPath };
@@ -356,4 +376,5 @@ module.exports = {
   STALE_COVERAGE_MIN,
   STALE_MIN_ABSENT_DAYS,
   STALE_MAX_VOID_PER_RUN,
+  STALE_MAX_UNMATCHED_RATIO,
 };
