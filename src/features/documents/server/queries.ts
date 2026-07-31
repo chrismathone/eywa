@@ -1,6 +1,7 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import type { DocumentKind } from "../categories";
+import { documentOrderSpecs, type DocumentSort } from "../document-sort";
 
 // 데이터베이스(서식 저장소) 조회 — tenant 스코프는 RLS가 강제.
 
@@ -31,7 +32,7 @@ function uploaderNameOf(u: unknown): string | null {
 }
 
 export async function getDocumentsPage(
-  opts: { category?: string; q?: string } = {},
+  opts: { category?: string; q?: string; sort?: DocumentSort } = {},
   page = 1,
   pageSize = PAGE,
 ): Promise<{ rows: DocumentRow[]; total: number }> {
@@ -48,11 +49,12 @@ export async function getDocumentsPage(
   if (opts.category) qb = qb.eq("category", opts.category);
   const term = opts.q ? sanitize(opts.q) : "";
   if (term) qb = qb.or(`title.ilike.%${term}%,description.ilike.%${term}%,file_name.ilike.%${term}%`);
-  // 고정(pinned) 먼저 → 최신순. (탐색기 상단 고정 = 자주 쓰는 서식)
-  qb = qb
-    .order("pinned", { ascending: false })
-    .order("created_at", { ascending: false })
-    .range(from, from + pageSize - 1);
+  // 정렬은 **서버에서** — 페이지로 끊겨 오므로 화면 정렬은 그 페이지 안에서만 맞는 거짓말이 된다.
+  // 기본(정렬 해제)은 고정(자주 쓰는 서식) 먼저 → 최신순. 순서·tiebreak 규칙은 documentOrderSpecs(순수).
+  for (const o of documentOrderSpecs(opts.sort ?? null)) {
+    qb = qb.order(o.column, { ascending: o.ascending, nullsFirst: o.nullsFirst });
+  }
+  qb = qb.range(from, from + pageSize - 1);
   const { data, count } = await qb;
   const rows: DocumentRow[] = (data ?? []).map((r) => ({
     id: r.id,
