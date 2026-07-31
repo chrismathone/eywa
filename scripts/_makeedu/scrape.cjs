@@ -15,6 +15,7 @@
  */
 const fs = require("fs");
 const path = require("path");
+const L = require("./lib.cjs");
 
 let chromium;
 try {
@@ -33,7 +34,8 @@ const LISTS = {
   classes: { url: "/lesson/lessonAllList.do" },
   prospects: { url: "/member/student/resList.do" },
   consultations: { url: "/counsel/counselList.do" },
-  invoices: { url: "/pay/payUnionDeList.do" },
+  // ⚠️ 이 목록은 **검색 조건이 걸린 채로** 열린다 — 아래 prepareInvoices가 그 조건을 바로잡는다.
+  invoices: { url: "/pay/payUnionDeList.do", prepare: prepareInvoices },
   catalog: { url: "/config/bookList.do" },
   // ⚠️ 재원생 목록 URL은 최초 실행에서 확인할 것. students.json이 0행이면 URL이 틀린 것 →
   //    MAKEEDU_STUDENTS_URL 환경변수로 정확한 경로를 덮어쓴다(코드 변경 없이 교정).
@@ -106,6 +108,65 @@ async function login(page) {
   }
 }
 
+// 페이지에 표시된 "총 N건"을 숫자로. 없으면 null(대조를 건너뛴다 — 모르면 경고하지 않는다).
+async function readReportedTotal(page) {
+  return page
+    .evaluate(() => {
+      const m = (document.body.innerText || "").match(/(?:총|전체)\s*([\d,]+)\s*건/);
+      return m ? Number(m[1].replace(/,/g, "")) : null;
+    })
+    .catch(() => null);
+}
+
+// 목록의 '조회/검색' 버튼만 눌러 검색을 다시 돌린다(저장·삭제류는 절대 건드리지 않는다).
+async function clickSearch(page) {
+  const btn = page.locator(
+    'a:has-text("조회"), button:has-text("조회"), input[type="button"][value*="조회"], input[type="submit"][value*="조회"], ' +
+      'a:has-text("검색"), button:has-text("검색"), input[type="button"][value*="검색"], input[type="submit"][value*="검색"]',
+  );
+  if ((await btn.count()) === 0) return false;
+  await btn.first().click().catch(() => {});
+  await page.waitForLoadState("networkidle").catch(() => {});
+  await page.waitForTimeout(1500);
+  return true;
+}
+
+/**
+ * 상세수납 목록의 **검색 조건을 바로잡는다**. 2026-07-30 프로브로 확인된 두 가지 기본값이
+ * 동기화를 조용히 망가뜨리고 있었다.
+ *
+ * 🔴 ① `studStatus` 기본값이 **'1'(재원생만)** 이었다. 그래서 휴·퇴원생의 살아있는 청구가 목록에서
+ *    아예 안 보였고, 임포터는 그걸 "makeedu에서 삭제됨"으로 읽었다 — 퇴원생에 대해서는 **삭제 판정의
+ *    전제 자체가 틀렸다**(실측 855건 → 전체원생 857건). 전체('')로 바꾼다.
+ * 🔴 ② `fromYm`/`toYm`이 **당월 한 달**이었다. 청구월이 넘어가면 직전 달이 그 뒤로 영원히 갱신되지 않는다
+ *    (2026-07이 07-16에 동결돼 미수 ₩12.86M이 스냅샷으로 굳음). 범위로 넣으면 한 번에 여러 달을 받는다
+ *    (실측 857건 → 3개월 3,174건). 개월 수는 MAKEEDU_INVOICE_MONTHS(기본 3).
+ *
+ * 실패해도 throw하지 않는다 — 조건을 못 바꿨으면 **예전과 같은 범위**로 진행될 뿐이라 동기화는 계속된다.
+ * 다만 무엇이 적용됐는지는 반드시 로그에 남긴다(조용히 옛 동작으로 돌아가는 걸 허용하지 않는다).
+ */
+async function prepareInvoices(page) {
+  const applied = [];
+  const status = page.locator('select[name="studStatus"]');
+  if ((await status.count()) > 0) {
+    await status.selectOption("").catch(() => {});
+    applied.push("원생상태=전체");
+  }
+  const months = Number(process.env.MAKEEDU_INVOICE_MONTHS || 3);
+  const { from, to } = L.billingMonthRange(new Date(), months);
+  if ((await page.locator("#fromYm").count()) > 0) {
+    await page.fill("#fromYm", from).catch(() => {});
+    await page.fill("#toYm", to).catch(() => {});
+    applied.push(`청구월=${from}~${to}`);
+  }
+  if (!applied.length) {
+    console.warn("    ⚠️ 수납 검색 조건을 못 찾았습니다(화면 개편 의심) — 기본 조건으로 진행합니다.");
+    return;
+  }
+  const ok = await clickSearch(page);
+  console.log(`    검색 조건: ${applied.join(" · ")}${ok ? "" : " (조회 버튼을 못 찾아 미적용)"}`);
+}
+
 async function maximizeListSize(page) {
   const ls = page.locator('select[name="listSize"]');
   if ((await ls.count()) === 0) return;
@@ -162,8 +223,12 @@ async function scrapeList(page, key, cfg) {
   await page.goto(`${BASE}${cfg.url}`, { waitUntil: "domcontentloaded" }).catch(() => {});
   await page.waitForLoadState("networkidle").catch(() => {});
   await page.waitForTimeout(500);
+  // 목록별 검색 조건 보정(현재는 수납만) — 조건을 바꾸면 페이지 크기가 초기화되므로 **먼저** 한다.
+  if (cfg.prepare) await cfg.prepare(page);
   await maximizeListSize(page);
   await waitForStableTable(page); // 페이지크기 최대화 후 테이블 정착 대기
+  // 화면이 스스로 말하는 총건수 — 수집 결과와 대조해 **조용한 절단**을 잡는다(페이지 순회 중단·목록 개편).
+  const totalReported = await readReportedTotal(page);
 
   let headers = [];
   const all = [];
@@ -188,7 +253,7 @@ async function scrapeList(page, key, cfg) {
     await page.waitForLoadState("networkidle").catch(() => {});
     await waitForStableTable(page); // 다음 페이지 정착 대기
   }
-  return { key, scrapedAt: new Date().toISOString(), headers, rows: all };
+  return { key, scrapedAt: new Date().toISOString(), headers, rows: all, totalReported };
 }
 
 (async () => {
@@ -239,11 +304,16 @@ async function scrapeList(page, key, cfg) {
         data = await scrapeList(page, key, cfg);
       } catch (e) {
         console.warn(`  ⚠️ ${key} 스크래핑 실패: ${e.message} — 건너뜀(0행)`);
-        data = { key, scrapedAt: new Date().toISOString(), headers: [], rows: [] };
+        data = { key, scrapedAt: new Date().toISOString(), headers: [], rows: [], totalReported: null };
       }
       fs.writeFileSync(path.join(OUT, `${key}.json`), JSON.stringify(data));
       console.log(`  ✓ ${key}: ${data.rows.length} rows, ${data.headers.length} cols → ${key}.json`);
       console.log(`    headers: ${data.headers.filter(Boolean).join(" | ").slice(0, 160)}`);
+      if (data.totalReported != null && data.totalReported !== data.rows.length) {
+        console.warn(
+          `    ⚠️ ${key} 절단 의심 — 화면은 총 ${data.totalReported}건인데 ${data.rows.length}건만 수집했습니다(페이지 순회 확인).`,
+        );
+      }
       if (data.rows.length === 0) {
         const hint = key === "students" ? " (URL 확인: MAKEEDU_STUDENTS_URL 환경변수로 교정)" : "";
         console.warn(`    ⚠️ ${key} 0행 — 목록 URL/로그인 세션을 확인하세요${hint}`);

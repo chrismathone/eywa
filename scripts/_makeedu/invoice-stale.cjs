@@ -166,8 +166,11 @@ function printIssues({ stale, unmatchedLines }) {
 // makeedu_sync_state.error에 남길 한 줄 요약(연동 이력 추적용) — 이슈 없으면 null.
 // ⚠️ 대조 불일치(reconcile)는 **맨 앞**에 둔다 — 화면 배지가 앞부분을 먼저 보여주고, 금액이 안 맞는 건
 //    보류 몇 건보다 항상 먼저 알아야 하는 사실이다.
-function issueSummary({ stale, unmatchedLines, voidStale, voided, reconcile }) {
+function issueSummary({ stale, unmatchedLines, voidStale, voided, reconcile, truncation }) {
   const parts = [];
+  // ⚠️ 절단은 대조보다도 먼저다 — 목록을 덜 받은 상태의 판정은 전부 신뢰할 수 없다.
+  if (truncation)
+    parts.push(`🔴 스크랩 절단 의심(화면 ${truncation.reported}건 · 수집 ${truncation.collected}건)`);
   const mism = reconcileSummary(reconcile);
   if (mism) parts.push(mism);
   if (unmatchedLines.length) parts.push(`학생 미매칭 ${unmatchedLines.length}라인`);
