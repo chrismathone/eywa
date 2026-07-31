@@ -4,7 +4,14 @@ import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { BackLink } from "@/components/back-link";
 import { Pill } from "@/components/atoms/pill";
 import { getDocumentById } from "@/features/documents/server/queries";
-import { CATEGORY_LABEL, fileTypeLabel, formatFileSize, formViewHref } from "@/features/documents/categories";
+import { getDocumentCategories } from "@/features/documents/server/category-queries";
+import {
+  categoryLabelOf,
+  categorySelectOptions,
+  fileTypeLabel,
+  formatFileSize,
+  formViewHref,
+} from "@/features/documents/categories";
 import { DocumentDetailClient } from "./_components/document-detail-client";
 
 export const metadata = { title: "문서 상세 — eywa" };
@@ -12,9 +19,10 @@ export const metadata = { title: "문서 상세 — eywa" };
 export default async function DocumentDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const user = await requireAccess("documents");
   const { id } = await params;
-  const [doc, canWrite] = await Promise.all([
+  const [doc, canWrite, categories] = await Promise.all([
     getDocumentById(id),
     canWriteTenant(user.systemRole, "documents"),
+    getDocumentCategories(),
   ]);
   if (!doc) notFound();
   // 폼 문서(직원 이력서·환불 요청서 등)는 전용 뷰가 따로 — 텍스트 상세/수정 폼으로 열면 body가 없어 깨진다.
@@ -26,9 +34,9 @@ export default async function DocumentDetailPage({ params }: { params: Promise<{
 
       <header className="space-y-2">
         <div className="flex flex-wrap items-center gap-2">
-          <Pill color="neutral">{CATEGORY_LABEL[doc.category]}</Pill>
-          <Pill color={doc.kind === "file" ? "blue" : "primary"}>
-            {fileTypeLabel(doc.kind, doc.fileName, doc.mimeType)}
+          <Pill color="neutral">{categoryLabelOf(categories, doc.category)}</Pill>
+          <Pill color={doc.kind === "file" || doc.kind === "link" ? "blue" : "primary"}>
+            {fileTypeLabel(doc.kind, doc.fileName, doc.mimeType, doc.formType, doc.linkUrl)}
           </Pill>
         </div>
         <h1 className="text-foreground text-xl font-bold">{doc.title}</h1>
@@ -48,7 +56,9 @@ export default async function DocumentDetailPage({ params }: { params: Promise<{
           description: doc.description,
           fileName: doc.fileName,
           body: doc.body,
+          linkUrl: doc.linkUrl,
         }}
+        categoryOptions={categorySelectOptions(categories)}
         canWrite={canWrite}
       />
     </div>

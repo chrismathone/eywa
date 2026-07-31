@@ -4,20 +4,22 @@ import { useActionState, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useFormStatus } from "react-dom";
 import { toast } from "sonner";
-import { AlertCircle, FilePlus2, Loader2, Search, Upload, UploadCloud, X } from "@/components/icons/eywa-icon-compat";
+import { ExternalLink, FilePlus2, Loader2, Search, Upload, UploadCloud } from "@/components/icons/eywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { uploadToTicket } from "@/lib/storage/upload-to-ticket";
 import {
+  createLinkDocument,
   createTextDocument,
   issueDocumentUploadTicket,
   registerUploadedDocument,
 } from "@/features/documents/server/actions";
-import { CATEGORY_LABEL, DOCUMENT_CATEGORIES, type DocumentCategory } from "@/features/documents/categories";
-
-const inputCls =
-  "border-line bg-background text-foreground placeholder:text-text-faint w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary/40";
-const CATEGORY_OPTIONS = DOCUMENT_CATEGORIES.map((c) => ({ value: c, label: CATEGORY_LABEL[c] }));
+import {
+  categorySelectOptions,
+  FALLBACK_CATEGORY,
+  type DocumentCategoryOption,
+} from "@/features/documents/categories";
+import { DialogShell, ErrorNote, Field, inputCls } from "./dialog-parts";
 
 const hasFiles = (e: DragEvent) => !!e.dataTransfer?.types?.includes("Files");
 
@@ -27,17 +29,21 @@ export function DocumentToolbar({
   category,
   catParam,
   embed,
+  categories,
 }: {
   canWrite: boolean;
   initialQuery: string;
-  category: DocumentCategory | null;
+  category: string | null;
   /** 검색 폼이 유지할 현재 폴더 키 — 연동 폴더(교재 요청서 등)는 category가 아니라 이 값으로만 전달. */
   catParam?: string | null;
   /** 플로팅 창(embed) 안이면 검색 GET에도 embed=1 유지(크롬리스 분기 유지). */
   embed?: boolean;
+  /** 학원장이 관리하는 분류 목록(0161a) — 코드 상수가 아니라 서버가 DB에서 읽어 내려준다. */
+  categories: DocumentCategoryOption[];
 }) {
+  const categoryOptions = categorySelectOptions(categories);
   const keepCat = catParam !== undefined ? catParam : category;
-  const [dialog, setDialog] = useState<"upload" | "text" | null>(null);
+  const [dialog, setDialog] = useState<"upload" | "text" | "link" | null>(null);
   const [droppedFile, setDroppedFile] = useState<File | null>(null);
   const [dragging, setDragging] = useState(false);
   // dragenter/leave는 자식 요소마다 발화 → 깊이 카운터로 "창 밖으로 나갔을 때만" 오버레이 해제.
@@ -111,6 +117,9 @@ export function DocumentToolbar({
       </form>
       {canWrite ? (
         <>
+          <Button variant="outline" onClick={() => setDialog("link")}>
+            <ExternalLink className="size-4" /> 링크 추가
+          </Button>
           <Button variant="outline" onClick={() => setDialog("text")}>
             <FilePlus2 className="size-4" /> 새 문서
           </Button>
@@ -131,7 +140,8 @@ export function DocumentToolbar({
       ) : null}
       {dialog === "upload" ? (
         <UploadDialog
-          defaultCategory={category ?? "other"}
+          defaultCategory={category ?? FALLBACK_CATEGORY}
+          categoryOptions={categoryOptions}
           initialFile={droppedFile}
           onClose={() => {
             setDialog(null);
@@ -140,56 +150,34 @@ export function DocumentToolbar({
         />
       ) : null}
       {dialog === "text" ? (
-        <TextDocDialog defaultCategory={category ?? "other"} onClose={() => setDialog(null)} />
+        <TextDocDialog
+          defaultCategory={category ?? FALLBACK_CATEGORY}
+          categoryOptions={categoryOptions}
+          onClose={() => setDialog(null)}
+        />
+      ) : null}
+      {dialog === "link" ? (
+        <LinkDocDialog
+          defaultCategory={category ?? FALLBACK_CATEGORY}
+          categoryOptions={categoryOptions}
+          onClose={() => setDialog(null)}
+        />
       ) : null}
     </div>
   );
 }
 
-function DialogShell({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center">
-      <div className="bg-background border-line max-h-[90vh] w-full max-w-md overflow-y-auto rounded-lg border p-6 shadow-lg">
-        <header className="mb-4 flex items-start justify-between">
-          <div>
-            <p className="eyebrow">데이터베이스</p>
-            <h2 className="text-foreground mt-1 text-lg font-bold">{title}</h2>
-          </div>
-          <button type="button" onClick={onClose} className="text-text-dim hover:text-foreground" aria-label="닫기">
-            <X className="size-4" />
-          </button>
-        </header>
-        {children}
-      </div>
-    </div>
-  );
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="space-y-1.5">
-      <span className="text-foreground block text-sm font-medium">{label}</span>
-      {children}
-    </div>
-  );
-}
-
-function ErrorNote({ msg }: { msg: string | null }) {
-  if (!msg) return null;
-  return (
-    <p className="text-danger bg-danger-soft border-danger/20 inline-flex items-center gap-1.5 rounded-md border px-3 py-2 text-sm">
-      <AlertCircle className="size-4 shrink-0" /> {msg}
-    </p>
-  );
-}
+type CategoryOptions = { value: string; label: string }[];
 
 /** 파일 업로드 — 티켓 발급 → 스토리지 PUT → 검증·등록(3단계, 실패 시 에러 표시·행 미생성). */
 function UploadDialog({
   defaultCategory,
+  categoryOptions,
   initialFile,
   onClose,
 }: {
-  defaultCategory: DocumentCategory;
+  defaultCategory: string;
+  categoryOptions: CategoryOptions;
   initialFile?: File | null;
   onClose: () => void;
 }) {
@@ -314,7 +302,7 @@ function UploadDialog({
           <input ref={titleRef} name="title" required className={inputCls} placeholder="예: 입학 등록 신청서 (빈 양식)" />
         </Field>
         <Field label="분류">
-          <SearchableSelect name="category" defaultValue={defaultCategory} options={CATEGORY_OPTIONS} placeholder="분류 선택..." />
+          <SearchableSelect name="category" defaultValue={defaultCategory} options={categoryOptions} placeholder="분류 선택..." />
         </Field>
         <Field label="설명">
           <textarea name="description" rows={2} className={`${inputCls} resize-y`} placeholder="용도 메모 (선택)" />
@@ -341,17 +329,25 @@ function UploadDialog({
   );
 }
 
-function TextSubmitBtn() {
+function SubmitBtn({ icon, label }: { icon: React.ReactNode; label: string }) {
   const { pending } = useFormStatus();
   return (
     <Button type="submit" disabled={pending}>
-      {pending ? <Loader2 className="size-4 animate-spin" /> : <FilePlus2 className="size-4" />} 저장
+      {pending ? <Loader2 className="size-4 animate-spin" /> : icon} {label}
     </Button>
   );
 }
 
 /** 앱 작성 문서 — 조건부 마운트 다이얼로그(닫히면 언마운트=state 리셋, #67 안전 패턴). */
-function TextDocDialog({ defaultCategory, onClose }: { defaultCategory: DocumentCategory; onClose: () => void }) {
+function TextDocDialog({
+  defaultCategory,
+  categoryOptions,
+  onClose,
+}: {
+  defaultCategory: string;
+  categoryOptions: CategoryOptions;
+  onClose: () => void;
+}) {
   const [state, formAction] = useActionState(createTextDocument, undefined);
   if (state?.ok) queueMicrotask(onClose);
 
@@ -362,7 +358,7 @@ function TextDocDialog({ defaultCategory, onClose }: { defaultCategory: Document
           <input name="title" required className={inputCls} placeholder="예: 상담 안내 스크립트" />
         </Field>
         <Field label="분류">
-          <SearchableSelect name="category" defaultValue={defaultCategory} options={CATEGORY_OPTIONS} placeholder="분류 선택..." />
+          <SearchableSelect name="category" defaultValue={defaultCategory} options={categoryOptions} placeholder="분류 선택..." />
         </Field>
         <Field label="설명">
           <input name="description" className={inputCls} placeholder="용도 메모 (선택)" />
@@ -375,7 +371,61 @@ function TextDocDialog({ defaultCategory, onClose }: { defaultCategory: Document
           <Button type="button" variant="outline" onClick={onClose}>
             취소
           </Button>
-          <TextSubmitBtn />
+          <SubmitBtn icon={<FilePlus2 className="size-4" />} label="저장" />
+        </div>
+      </form>
+    </DialogShell>
+  );
+}
+
+/**
+ * 외부 링크 등록 — 이미 구글드라이브·노션 등에 올려둔 자료를 **옮기지 않고** 목록에 세운다.
+ * 사본을 만들지 않으므로 원본이 진실이다(원본이 옮겨지거나 공유가 끊기면 링크도 같이 끊긴다).
+ */
+function LinkDocDialog({
+  defaultCategory,
+  categoryOptions,
+  onClose,
+}: {
+  defaultCategory: string;
+  categoryOptions: CategoryOptions;
+  onClose: () => void;
+}) {
+  const [state, formAction] = useActionState(createLinkDocument, undefined);
+  if (state?.ok) queueMicrotask(onClose);
+
+  return (
+    <DialogShell title="링크 추가" onClose={onClose}>
+      <form action={formAction} className="space-y-4">
+        <Field label="링크 주소 *">
+          <input
+            name="linkUrl"
+            required
+            className={inputCls}
+            placeholder="https://drive.google.com/..."
+            inputMode="url"
+            autoFocus
+          />
+          <p className="text-text-faint text-xs">
+            구글 드라이브·문서·시트, 노션 등 웹 주소를 그대로 붙여넣으세요. 파일은 복사되지 않고 원본을 가리킵니다 —
+            원본의 공유 설정에 따라 열람 권한이 정해집니다.
+          </p>
+        </Field>
+        <Field label="이름 *">
+          <input name="title" required className={inputCls} placeholder="예: 2026 기출 모음 (드라이브)" />
+        </Field>
+        <Field label="분류">
+          <SearchableSelect name="category" defaultValue={defaultCategory} options={categoryOptions} placeholder="분류 선택..." />
+        </Field>
+        <Field label="설명">
+          <input name="description" className={inputCls} placeholder="용도 메모 (선택)" />
+        </Field>
+        <ErrorNote msg={state?.error ?? null} />
+        <div className="border-line flex items-center justify-end gap-2 border-t pt-4">
+          <Button type="button" variant="outline" onClick={onClose}>
+            취소
+          </Button>
+          <SubmitBtn icon={<ExternalLink className="size-4" />} label="등록" />
         </div>
       </form>
     </DialogShell>

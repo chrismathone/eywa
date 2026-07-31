@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import {
   ClipboardList,
   Download,
+  ExternalLink,
   File,
   FileImage,
   FileSpreadsheet,
@@ -31,14 +32,17 @@ export type DocumentRowData = {
   createdAt: string;
   uploaderName: string | null;
   pinned: boolean;
-  /** 이름 클릭 목적지 — 페이지가 kind별로 계산(file=내부 미리보기 / text=상세 / form=이력서 뷰). */
+  /** 이름 클릭 목적지 — 페이지가 kind별로 계산(file=내부 미리보기 / text=상세 / form=이력서 뷰 / link=외부 주소). */
   href: string;
+  /** kind='link' — 외부 사이트(구글드라이브 등)라 창 시스템이 아니라 새 브라우저 탭으로 연다. */
+  external?: boolean;
 };
 
 // 유형 → 탐색기식 파일 아이콘(색으로 형식 구분).
 function TypeIcon({ typeLabel, kind }: { typeLabel: string; kind: DocumentKind }) {
   const cls = "size-4 shrink-0";
   if (kind === "form") return <ClipboardList className={`${cls} text-rose`} />;
+  if (kind === "link") return <ExternalLink className={`${cls} text-blue`} />;
   if (kind === "text") return <StickyNote className={`${cls} text-text-dim`} />;
   if (typeLabel === "PDF") return <FileText className={`${cls} text-danger`} />;
   if (typeLabel === "Word") return <FileText className={`${cls} text-blue`} />;
@@ -90,17 +94,35 @@ export function DocumentRow({ doc, canWrite }: { doc: DocumentRowData; canWrite:
         <div className="flex min-w-0 items-center gap-2">
           {doc.pinned ? <Pin className="text-gold size-3.5 shrink-0 fill-current" strokeWidth={1.8} /> : null}
           <TypeIcon typeLabel={doc.typeLabel} kind={doc.kind} />
-          {/* 이름 클릭 — file=내부 창 미리보기 / text=상세 / form=이력서 뷰(href는 페이지가 계산) */}
-          <WindowLink
-            href={doc.href}
-            title={doc.title}
-            className="text-foreground hover:text-primary min-w-0 truncate font-medium hover:underline"
-          >
-            {doc.title}
-          </WindowLink>
+          {/* 이름 클릭 — file=내부 창 미리보기 / text=상세 / form=이력서 뷰(href는 페이지가 계산).
+              link=외부 사이트라 창(iframe) 시스템에 못 태운다(구글드라이브 등은 X-Frame-Options로 차단) → 새 탭. */}
+          {doc.external ? (
+            <a
+              href={doc.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              title={doc.href}
+              className="text-foreground hover:text-primary min-w-0 truncate font-medium hover:underline"
+            >
+              {doc.title}
+            </a>
+          ) : (
+            <WindowLink
+              href={doc.href}
+              title={doc.title}
+              className="text-foreground hover:text-primary min-w-0 truncate font-medium hover:underline"
+            >
+              {doc.title}
+            </WindowLink>
+          )}
           {doc.kind === "file" && isPreviewableType(doc.typeLabel) ? (
             <span className="text-primary bg-primary/10 shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold whitespace-nowrap">
               미리보기
+            </span>
+          ) : null}
+          {doc.kind === "link" ? (
+            <span className="text-blue bg-blue-soft shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold whitespace-nowrap">
+              외부 링크
             </span>
           ) : null}
         </div>

@@ -119,7 +119,11 @@ export const reenrollmentStatusEnum = pgEnum("reenrollment_status", [
   "declined",
 ]);
 
-// 데이터베이스(서식 저장소) 카테고리 — 학원 행정에서 흔한 분류. 옵션 목록이라 필요 시 추가만(파괴적 변경 지양).
+/**
+ * @deprecated 0161a에서 `academy_documents.category`가 text로 완화되고 분류가 테넌트 데이터
+ * (`document_categories`)로 내려갔다. DB의 enum 타입 자체는 롤백 경로로 남겨 뒀을 뿐 **컬럼은 안 쓴다** —
+ * 새 코드에서 이 enum을 다시 컬럼에 붙이지 말 것(학원장이 추가한 분류가 통째로 거부된다).
+ */
 export const academyDocumentCategoryEnum = pgEnum("academy_document_category", [
   "enrollment",
   "billing",
@@ -1661,8 +1665,11 @@ export const academyDocuments = pgTable(
       .notNull()
       .references(() => tenants.id, { onDelete: "cascade" }),
     title: text("title").notNull(),
-    category: academyDocumentCategoryEnum("category").notNull().default("other"),
-    kind: text("kind").notNull(), // 'file' | 'text' | 'form'
+    // 0161a — enum → text. 값은 `document_categories.key`(테넌트 소유, 학원장이 추가·삭제) 참조.
+    // FK를 안 건 이유: 분류 삭제는 "다른 분류로 이동 후 삭제"(앱 액션)라 cascade/restrict 어느 쪽도 원하는
+    // 동작이 아니고, 고아 키는 표시 시 라벨 폴백으로 흡수된다(과목 LEGACY_LABELS와 같은 취급).
+    category: text("category").notNull().default("other"),
+    kind: text("kind").notNull(), // 'file' | 'text' | 'form' | 'link'
     description: text("description"),
     // kind='file'
     filePath: text("file_path"),
@@ -1671,6 +1678,8 @@ export const academyDocuments = pgTable(
     mimeType: text("mime_type"),
     // kind='text'
     body: text("body"),
+    // kind='link' — 외부 문서(구글드라이브·노션 등) 링크. 사본을 만들지 않고 원본을 가리키기만 한다(0161a).
+    linkUrl: text("link_url"),
     // kind='form' — 웹 작성 폼 문서(0072a). form_type='staff_resume' 등, form_data는 폼별 구조화 스키마
     // (직원 이력서 = src/features/staff/resume.ts StaffResumeData). 작성 화면은 /staff?tab=resumes.
     formType: text("form_type"),
@@ -1685,6 +1694,30 @@ export const academyDocuments = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [index("academy_documents_tenant_category_idx").on(t.tenantId, t.category, t.createdAt)],
+);
+
+// === document_categories (0161a) — 서식 저장소 분류를 학원장이 관리 ===
+// 0067a의 코드 고정 enum을 대체. 기본 6개는 is_system=true로 시드되며 **삭제 불가**(이력서→'hr',
+// 환불요청서→'billing'처럼 코드가 직접 쓰는 고정 대상이 있다). 학원장이 추가한 분류는 key가 `cat_N`
+// (앱이 자동 확정·불변 — 과목 `subject_N` 선례. 라벨을 바꿔도 key는 그대로라 기존 문서 연결이 안 끊긴다).
+export const documentCategories = pgTable(
+  "document_categories",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    key: text("key").notNull(), // academy_documents.category가 참조하는 불변 식별자
+    label: text("label").notNull(), // 화면 표시 이름(편집 가능)
+    sortOrder: integer("sort_order").notNull().default(0),
+    isSystem: boolean("is_system").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("document_categories_tenant_key_uq").on(t.tenantId, t.key),
+    index("document_categories_tenant_sort_idx").on(t.tenantId, t.sortOrder, t.key),
+  ],
 );
 
 // === super_admins (SaaS owner layer — academy 권한과 직교) ===
@@ -2144,6 +2177,8 @@ export type NoticePopup = typeof noticePopups.$inferSelect;
 export type NewNoticePopup = typeof noticePopups.$inferInsert;
 export type AcademyDocument = typeof academyDocuments.$inferSelect;
 export type NewAcademyDocument = typeof academyDocuments.$inferInsert;
+export type DocumentCategoryRow = typeof documentCategories.$inferSelect;
+export type NewDocumentCategoryRow = typeof documentCategories.$inferInsert;
 export type StudentGrade = typeof studentGrades.$inferSelect;
 export type NewStudentGrade = typeof studentGrades.$inferInsert;
 export type StudentMemo = typeof studentMemos.$inferSelect;
