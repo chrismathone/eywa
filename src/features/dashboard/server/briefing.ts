@@ -17,6 +17,7 @@ import { reportError, reportWarning } from "@/lib/observability/report-error";
 import { notifyUsers } from "@/features/notifications/server/notify";
 import { computeRetentionRoster } from "@/features/retention/server/queries";
 import { getTenantSettingsByTenantId } from "@/features/owner/server/queries";
+import { buildSubjectMaps } from "@/features/owner/subjects";
 import { canAccess, resolveMatrix } from "@/lib/permissions";
 import { summarizeRoster } from "@/features/retention/roster";
 import { addIsoDateDays } from "@/features/consultations/follow-up-urgency";
@@ -92,9 +93,13 @@ export async function generateDailyBriefing(
     // 예전엔 화면은 전원 차단인데 브리핑·AI 비서로는 이탈 명단과 '매출 위험' 금액이 매일 보고돼,
     // **볼 수 없는 화면의 데이터가 다른 경로로 새어 나갔다**(게다가 눌러서 확인할 화면조차 없다).
     // master 기준으로 판정: 원장조차 못 여는 메뉴면 브리핑 재료가 될 수 없다. 겸사겸사 cron 비용도 준다.
-    const retentionEnabled = await getTenantSettingsByTenantId(tenantId)
-      .then((settings) => canAccess("master", "retention", resolveMatrix(settings.permissions.overrides)))
-      .catch(() => true); // 설정 조회 실패는 기존 동작 유지(fail-open — perm-matrix.ts와 같은 취지)
+    // 과목 라벨(운영 enum 단일 소스)과 retention 게이트가 같은 설정에서 나온다 — 한 번만 읽는다.
+    // 조회 실패 시 라벨 리졸버가 없으면 과목 분해를 생략한다(raw 키를 화면에 흘리는 것보다 낫다).
+    const settings = await getTenantSettingsByTenantId(tenantId).catch(() => null);
+    const subjectLabel = settings ? buildSubjectMaps(settings.operations.subjects).labelOf : undefined;
+    const retentionEnabled = settings
+      ? canAccess("master", "retention", resolveMatrix(settings.permissions.overrides))
+      : true; // 설정 조회 실패는 기존 동작 유지(fail-open — perm-matrix.ts와 같은 취지)
     // retention은 앱 최중량 읽기 — 실패해도 브리핑 본체는 살린다(B7 준수: 라이브가 아니라 cron에서만 계산).
     // B4: 아래 신호 배치와 독립 조회라 직렬 await 금지 — 같은 Promise.all에 편입(cron 120s·regen 60s 예산 절약).
     const retentionPromise = (retentionEnabled
@@ -198,6 +203,7 @@ export async function generateDailyBriefing(
       retentionTop,
       todayClassSessions: classSessionsRes.error ? null : (classSessionsRes.count ?? null),
       missingDomainLabels: retentionMissing ? [retentionMissing] : [],
+      subjectLabel,
     });
 
     let teamReport: TeamReport | null = null;

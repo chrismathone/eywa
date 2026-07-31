@@ -6,6 +6,7 @@
  */
 import type { DailyBriefingPayload } from "./briefing-digest";
 import { digestFactLines, narrativeNumberWhitelist, narrativeWordWhitelist } from "./briefing-digest";
+import { subjectBreakdownText } from "./today-actions";
 
 /** 보고 영역(매니저) — LLM 출력 area는 반드시 이 중 하나(검증). */
 export const TEAM_AREAS = ["수업", "학생", "상담", "수납", "운영"] as const;
@@ -26,6 +27,7 @@ export function buildTeamPrompt(payload: DailyBriefingPayload): string {
     "",
     "규칙(반드시 준수):",
     "- 각 매니저 보고는 1~3문장 한국어 존댓말. 사실 나열이 아니라 **판단**(왜 중요한지)과 **오늘 할 일 1가지 제안**을 담을 것.",
+    "- 괄호 안 과목별 수치가 있으면 **어느 과목이 문제인지 짚고** 그 과목부터 처리하도록 제안할 것.",
     "- 아래 요약·명단에 있는 숫자만 그대로 사용. 새 숫자·비율·합산·추정 금지.",
     spotlightLines.length > 0
       ? "- 학생 이름은 아래 위험 학생 명단에 있는 이름만 언급 가능. 명단 밖 이름 창작 금지."
@@ -123,7 +125,9 @@ export function buildFallbackTeamReport(payload: DailyBriefingPayload): TeamRepo
     // 단위는 신호가 들고 온 것(명/개 반/건), 범위·내역(note)은 괄호로 함께 — 예전엔 둘 다 버려서
     // "지출 결재 대기 13건"(실은 최근 7일분)·"makeedu 동기화 이상"(어느 도메인인지 없음)이 됐다.
     const count = item.count != null ? ` ${item.count}${item.unit ?? "건"}` : "";
-    put(area, `${item.label}${count}${item.note ? `(${item.note})` : ""}`);
+    // 과목 분해가 있으면 그게 가장 행동에 가까운 정보다("영어 147 · 수학 39" = 영어부터 손대라).
+    const parts = [subjectBreakdownText(item.bySubject), item.note].filter(Boolean).join(", ");
+    put(area, `${item.label}${count}${parts ? `(${parts})` : ""}`);
   }
   if (payload.spotlights.length > 0) {
     put("학생", `살펴볼 학생 ${payload.spotlights.length}명: ${payload.spotlights.map((s) => s.name).join("·")}`);
