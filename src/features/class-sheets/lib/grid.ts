@@ -4,12 +4,32 @@
 //  · 로스터: 날짜별 isEnrollmentActiveOn(입퇴반·반이동 반열림 규약) + 분리등원(attendance_days) +
 //    students.withdrawn_at. 단 attendance_days/on_hold는 이력이 없어 **현재값 기준**(비보장 명시 — eywa 전
 //    화면과 동일 한계).
-//  · 과거 데이터 보존: 로스터 = eligible ∪ 그 슬롯 mark 보유 ∪ 그 날짜 effective 출석 보유(비eligible은
-//    historical 읽기 전용). 스케줄 없는 날짜의 출석은 가짜 슬롯을 만들지 않고 attendanceOnly로 분리.
+//  · 퇴원 유예: 수강이 끝난 학생은 **그 주 기준 30일**까지 endedOn을 달고 로스터에 남는다(하단 '퇴원'
+//    섹션 — 시간표 셀과 같은 창). 반이동 전출(is_transferred)은 새 반에서 보이므로 옛 반엔 안 남긴다.
+//  · 과거 데이터 보존: 로스터 = eligible ∪ 퇴원 유예 ∪ 그 슬롯 mark 보유 ∪ 그 날짜 effective 출석 보유
+//    (비eligible은 historical 읽기 전용). 스케줄 없는 날짜의 출석은 가짜 슬롯 없이 attendanceOnly로 분리.
 //  · 고아 슬롯: 계획·마크·슬롯 메모가 있는데 그 날짜 스케줄에 없는 (date,slot) — 표시는 유지(소실 금지).
-import { isEnrollmentActiveOn, enrollmentAttendsOnDay } from "@/features/enrollments/eligibility";
+import {
+  isEnrollmentActiveOn,
+  isEnrollmentEndedOn,
+  enrollmentAttendsOnDay,
+} from "@/features/enrollments/eligibility";
+import { shiftDays } from "@/features/timetable/lib/week";
 import { isMeaningfulPlanLine } from "./plan-codec";
 import { dowKeyOf, normalizeSlotTime, weekDatesOf, type DowKey } from "./week";
+
+/**
+ * 퇴원 표시 유예 — 수강이 끝난 학생을 **그 주 월요일 기준 30일**까지 로스터 하단 '퇴원' 섹션에 남긴다
+ * (시간표 셀과 같은 창: [timetable/server/queries.ts](src/features/timetable/server/queries.ts) `withdrawnFloor`,
+ * 2026-07-14 원장 1년→1달). 앵커가 **주 월요일**인 이유: 날짜별로 재면 같은 주 안에서 월요일엔 보이고
+ * 금요일엔 사라져 한 주가 자기모순이 된다 — 창은 주 단위로 열고 닫혀야 "다음 주부터 사라진다"가 성립한다.
+ */
+export const WITHDRAWN_GRACE_DAYS = 30;
+
+/** 그 주에 '퇴원'으로 표시할 종료일의 하한(이보다 이른 종료는 유예가 지나 표시하지 않는다). */
+export function withdrawnFloorOf(weekMonday: string): string {
+  return shiftDays(weekMonday, -WITHDRAWN_GRACE_DAYS);
+}
 
 export type GridScheduleRow = {
   dayOfWeek: DowKey;
@@ -65,8 +85,13 @@ export type RosterEntry = {
   studentId: string;
   /** 그 날짜 실제 수강 대상(계획 표시·마크 입력 허용). */
   eligible: boolean;
-  /** 비eligible인데 기록(마크/출석)이 있어 보존 표시되는 행 — 읽기 전용. */
+  /** 비eligible인데 화면에 남는 행(퇴원 유예 또는 기록 보존) — 읽기 전용. */
   historical: boolean;
+  /**
+   * 수강 종료일(YYYY-MM-DD) — 값이 있으면 하단 **'퇴원' 섹션** 행이다(유예 30일 내 종료·퇴원).
+   * 없는 비eligible 행은 '기록' 행(마크·출석만 남은 학생 — 유예가 지났거나 이 반 수강 기록 자체가 없음).
+   */
+  endedOn?: string | null;
 };
 
 export type GridSlot = {
@@ -184,21 +209,46 @@ export function buildWeekGrid(input: {
     attendanceByDate.set(a.sessionDate, set);
   }
 
-  // 날짜별 eligible 학생(중복 enrollment은 "그 날짜에 active인 행 우선" 1개로 dedupe)
-  function eligibleOn(date: string): Set<string> {
+  const withdrawnFloor = withdrawnFloorOf(input.weekMonday);
+
+  /**
+   * 날짜별 로스터 상태 — eligible(그 날 수강 대상) + endedOn(퇴원 유예 내 종료일).
+   * 중복 enrollment(재등록·분리등원 분할)은 학생 1행으로 접는다: **열린 수강이 하나라도 있으면 재원**,
+   * 전부 끝났으면 가장 **최근** 종료일을 퇴원일로 쓴다(시간표 셀의 재원>퇴원 우선순위와 같은 규약).
+   */
+  function rosterStateOn(date: string): { eligible: Set<string>; endedOn: Map<string, string> } {
     const dow = dowKeyOf(date);
-    const out = new Set<string>();
+    const eligible = new Set<string>();
+    const endedOn = new Map<string, string>();
     for (const e of input.enrollments) {
-      if (out.has(e.studentId)) continue;
-      if (e.withdrawnAt && e.withdrawnAt < date) continue;
-      if (!isEnrollmentActiveOn(
-        { startDate: e.startDate, endDate: e.endDate, onHold: e.onHold, isTransferred: e.isTransferred },
-        date,
-      )) continue;
-      if (!enrollmentAttendsOnDay(e.attendanceDays, dow)) continue;
-      out.add(e.studentId);
+      const attendsToday = enrollmentAttendsOnDay(e.attendanceDays, dow);
+      const withdrawn = !!e.withdrawnAt && e.withdrawnAt < date;
+      const active =
+        !withdrawn &&
+        attendsToday &&
+        isEnrollmentActiveOn(
+          { startDate: e.startDate, endDate: e.endDate, onHold: e.onHold, isTransferred: e.isTransferred },
+          date,
+        );
+      if (active) {
+        eligible.add(e.studentId);
+        continue;
+      }
+      // 여기부터 '퇴원(수강 종료)' 판정 — 대기(on_hold)·미시작·분리등원 비등원일은 종료가 아니다.
+      // 안 오던 요일에까지 퇴원을 띄우면 "이 교시에 오던 학생이 그만뒀다"는 의미가 흐려진다.
+      if (!attendsToday) continue;
+      if (!(withdrawn || isEnrollmentEndedOn(e.endDate, date, e.isTransferred))) continue;
+      // 반이동 전출은 새 반 로스터에서 보인다 — 옛 반에 퇴원으로 남기면 같은 학생이 두 번 보인다.
+      if (e.isTransferred) continue;
+      // 실효 종료일 = 반 이탈(end_date)과 학생 퇴원(withdrawn_at) 중 **이른** 것(시간표와 같은 산식).
+      const effectiveEnd = [e.endDate, e.withdrawnAt].filter((x): x is string => !!x).sort()[0];
+      if (!effectiveEnd) continue;
+      if (effectiveEnd < withdrawnFloor) continue; // 유예(30일)가 지난 종료는 표시하지 않는다
+      const prev = endedOn.get(e.studentId);
+      if (!prev || prev < effectiveEnd) endedOn.set(e.studentId, effectiveEnd);
     }
-    return out;
+    for (const id of eligible) endedOn.delete(id); // 재등록: 열린 수강이 있으면 퇴원이 아니다
+    return { eligible, endedOn };
   }
 
   const days: GridDay[] = [];
@@ -216,7 +266,7 @@ export function buildWeekGrid(input: {
       continue;
     }
 
-    const eligible = eligibleOn(date);
+    const { eligible, endedOn } = rosterStateOn(date);
     const attToday = attendanceByDate.get(date) ?? new Set<string>();
 
     const slots: GridSlot[] = [...slotStarts].sort().map((slot) => {
@@ -226,12 +276,14 @@ export function buildWeekGrid(input: {
         .slice()
         .sort((a, b) => (TERM_ORDER[a.termMode] - TERM_ORDER[b.termMode]) || a.lineNo - b.lineNo);
       const markOwners = new Set((marksByKey.get(key) ?? []).map((m) => m.studentId));
-      // 로스터 합집합: eligible ∪ 슬롯 마크 보유 ∪ 그 날짜 출석 보유
-      const ids = new Set<string>([...eligible, ...markOwners, ...attToday]);
+      // 로스터 합집합: eligible ∪ 퇴원 유예 ∪ 슬롯 마크 보유 ∪ 그 날짜 출석 보유
+      const ids = new Set<string>([...eligible, ...endedOn.keys(), ...markOwners, ...attToday]);
+      // 표시 순서는 소비처(roster-order.ts)가 이름·종료일로 정한다 — 여기선 id 순으로 안정 정렬만.
       const roster: RosterEntry[] = [...ids].sort().map((studentId) => ({
         studentId,
         eligible: eligible.has(studentId),
         historical: !eligible.has(studentId),
+        endedOn: endedOn.get(studentId) ?? null,
       }));
       return {
         slotStart: slot,

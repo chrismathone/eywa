@@ -154,6 +154,128 @@ describe("buildWeekGrid — 날짜별 로스터(입퇴반·분리등원·퇴원)
   });
 });
 
+// 퇴원 유예 = 그 주 월요일 −30일. MON=2026-07-20 → 하한 2026-06-20.
+describe("buildWeekGrid — 퇴원 유예(하단 '퇴원' 섹션, 시간표와 같은 30일 창)", () => {
+  const rosterOf = (grid: ReturnType<typeof buildWeekGrid>, date: string) =>
+    grid.days.find((d) => d.date === date)!.slots[0].roster;
+
+  it("종료 다음날부터 endedOn을 달고 남는다(읽기 전용) — 사라지지 않는다", () => {
+    const grid = buildWeekGrid({
+      weekMonday: MON,
+      schedules: [sched("mon", "15:00"), sched("fri", "15:00")],
+      enrollments: [enr("s1", { endDate: "2026-07-22" })],
+      planLines: [],
+      marks: [],
+      attendance: [],
+      slotMemoKeys: [],
+    });
+    expect(rosterOf(grid, MON)[0]).toMatchObject({ eligible: true, historical: false, endedOn: null });
+    expect(rosterOf(grid, "2026-07-24")[0]).toMatchObject({
+      studentId: "s1",
+      eligible: false,
+      historical: true,
+      endedOn: "2026-07-22",
+    });
+  });
+
+  it("유예(30일)가 지난 종료는 기록이 없으면 로스터에서 빠진다", () => {
+    const grid = buildWeekGrid({
+      weekMonday: MON,
+      schedules: [sched("mon", "15:00")],
+      enrollments: [enr("s1", { endDate: "2026-06-19" })], // 하한(06-20)보다 하루 이르다
+      planLines: [],
+      marks: [],
+      attendance: [],
+      slotMemoKeys: [],
+    });
+    expect(rosterOf(grid, MON)).toHaveLength(0);
+  });
+
+  it("유예가 지나도 그 교시 기록이 있으면 '기록' 행으로 남는다(endedOn 없음 — 퇴원 아님)", () => {
+    const grid = buildWeekGrid({
+      weekMonday: MON,
+      schedules: [sched("mon", "15:00")],
+      enrollments: [enr("s1", { endDate: "2026-06-19" })],
+      planLines: [],
+      marks: [{ studentId: "s1", markDate: MON, slotStart: "15:00", status: "완", progressNote: null }],
+      attendance: [],
+      slotMemoKeys: [],
+    });
+    expect(rosterOf(grid, MON)[0]).toMatchObject({ eligible: false, historical: true, endedOn: null });
+  });
+
+  it("퇴원일(withdrawn_at)이 반 종료일보다 이르면 이른 쪽이 종료일", () => {
+    const grid = buildWeekGrid({
+      weekMonday: MON,
+      schedules: [sched("fri", "15:00")],
+      enrollments: [enr("s1", { endDate: "2026-07-22", withdrawnAt: "2026-07-21" })],
+      planLines: [],
+      marks: [],
+      attendance: [],
+      slotMemoKeys: [],
+    });
+    expect(rosterOf(grid, "2026-07-24")[0].endedOn).toBe("2026-07-21");
+  });
+
+  it("반이동 전출(is_transferred)은 옛 반에 퇴원으로 남기지 않는다(새 반에서 보임)", () => {
+    const grid = buildWeekGrid({
+      weekMonday: MON,
+      schedules: [sched("fri", "15:00")],
+      enrollments: [enr("s1", { endDate: "2026-07-22", isTransferred: true })],
+      planLines: [],
+      marks: [],
+      attendance: [],
+      slotMemoKeys: [],
+    });
+    expect(rosterOf(grid, "2026-07-24")).toHaveLength(0);
+  });
+
+  it("대기(on_hold)·미시작은 퇴원이 아니다 — 종료일이 없으면 안 뜬다", () => {
+    const grid = buildWeekGrid({
+      weekMonday: MON,
+      schedules: [sched("mon", "15:00")],
+      enrollments: [enr("s1", { onHold: true }), enr("s2", { startDate: "2026-08-01" })],
+      planLines: [],
+      marks: [],
+      attendance: [],
+      slotMemoKeys: [],
+    });
+    expect(rosterOf(grid, MON)).toHaveLength(0);
+  });
+
+  it("분리등원: 원래 안 오던 요일에는 퇴원도 뜨지 않는다", () => {
+    const grid = buildWeekGrid({
+      weekMonday: MON,
+      schedules: [sched("mon", "15:00"), sched("wed", "15:00")],
+      enrollments: [enr("s1", { attendanceDays: ["mon"], endDate: "2026-07-19" })],
+      planLines: [],
+      marks: [],
+      attendance: [],
+      slotMemoKeys: [],
+    });
+    expect(rosterOf(grid, MON)[0]).toMatchObject({ eligible: false, endedOn: "2026-07-19" });
+    expect(rosterOf(grid, "2026-07-22")).toHaveLength(0); // 수요일엔 원래 안 왔다
+  });
+
+  it("재등록: 열린 수강이 하나라도 있으면 재원(퇴원 행으로 중복되지 않는다)", () => {
+    const grid = buildWeekGrid({
+      weekMonday: MON,
+      schedules: [sched("fri", "15:00")],
+      enrollments: [
+        enr("s1", { endDate: "2026-07-01" }),
+        enr("s1", { startDate: "2026-07-10" }),
+      ],
+      planLines: [],
+      marks: [],
+      attendance: [],
+      slotMemoKeys: [],
+    });
+    const roster = rosterOf(grid, "2026-07-24");
+    expect(roster).toHaveLength(1);
+    expect(roster[0]).toMatchObject({ eligible: true, endedOn: null });
+  });
+});
+
 describe("buildWeekGrid — 과거 데이터 보존(합집합 로스터·고아·attendanceOnly)", () => {
   it("비eligible이어도 마크·출석 보유 학생은 historical로 로스터에 남는다", () => {
     const grid = buildWeekGrid({
