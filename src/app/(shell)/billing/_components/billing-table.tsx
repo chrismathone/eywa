@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { WindowLink } from "@/components/workspace/window-link";
 import { invoiceOutstanding } from "@/features/billing/calc";
+import { overdueLinesOnly } from "@/features/billing/sync-window";
 import type { InvoiceRow, InvoiceLineItem, SortKey } from "@/features/billing/server/queries";
 import { MakeeduOriginTag } from "@/components/makeedu-origin-tag";
 import { EyIcon } from "@/components/icons/eywa-icons";
@@ -118,7 +119,12 @@ function toLines(r: InvoiceRow): InvoiceLineItem[] {
 
 export function BillingTable({ rows, sort, desc, period, q, overdueOnly, missingOnly }: Props) {
   const current = { sort, desc, period, q, overdueOnly, missingOnly };
-  const groups = rows.map((r) => ({ r, lines: toLines(r) }));
+  // '기한 경과만'은 **미납 라인만** 보여준다 — 필터가 청구서 단위라 예전엔 같은 청구서의 완납 라인이
+  // 함께 딸려 나왔다(sync-window.overdueLinesOnly에 판정·예외 근거).
+  const groups = rows.map((r) => {
+    const lines = toLines(r);
+    return { r, lines: overdueOnly ? overdueLinesOnly(lines) : lines };
+  });
 
   // 페이지 합계(라인 기준)
   let pageBilled = 0, pageDiscount = 0, pagePoints = 0, pagePaid = 0, pageUnpaid = 0, lineCount = 0;

@@ -7,13 +7,39 @@
  *
  * ⚠️ 여기엔 서버 전용 import를 넣지 말 것 — 클라이언트가 import하는 순간 빌드가 깨진다(gotchas #81).
  */
+import { invoiceOutstanding, type InvoiceSummaryInput } from "./calc";
 
-/** 기한 경과 = 미완납(unpaid|partial) + 납부기한이 오늘보다 이전. */
+/**
+ * 기한 경과 = 미완납 상태(unpaid|partial) + 납부기한이 오늘보다 이전 + **실제로 받을 돈이 남아 있음**.
+ *
+ * ⚠️ 마지막 조건이 핵심이다. status와 금액이 어긋난 행이 실재한다 — 임포터가 상태를 `수납 < 청구`로
+ * 판정하면 **할인액만큼 항상 모자라** 완납 행이 partial로 굳는다(실측 4건: 이승민 2026-03~06,
+ * 잔액 0인데 partial). 그런 행은 배너에 "기한 경과 미수금 1건 **0원**"으로 떠서 화면이 스스로
+ * 모순됐다 — 받을 돈이 0인 건은 미수가 아니다. 잔액은 calc.ts 단일 공식(청구−할인−수납, 0 바닥).
+ */
 export function isOverdue(
-  row: { status: string; dueDate: string | null },
+  row: InvoiceSummaryInput & { dueDate: string | null },
   today: string,
 ): boolean {
-  return (row.status === "unpaid" || row.status === "partial") && row.dueDate !== null && row.dueDate < today;
+  if (row.status !== "unpaid" && row.status !== "partial") return false;
+  if (row.dueDate === null || row.dueDate >= today) return false;
+  return invoiceOutstanding(row) > 0;
+}
+
+/**
+ * '기한 경과만' 필터가 켜졌을 때 표에 남길 **라인**.
+ *
+ * 필터는 청구서(invoice) 단위인데 표는 그 청구서의 **모든 라인**을 그린다 — 한 학생이 4개 항목 중
+ * 1개만 밀렸어도 완납 3줄이 함께 떴다("미납만 보고 싶다"의 정반대). 라인 단위로 좁힌다.
+ *
+ * ⚠️ `unpaid === undefined`(라인별 미상 — 구형 3-key 인보이스의 2번째+ 라인)는 **숨기지 않는다**.
+ *    완납이라는 근거가 없으므로 숨기면 "안 밀렸다"는 거짓말이 된다(화면엔 '—'로 뜬다).
+ * ⚠️ 전부 걸러지면 원본을 그대로 돌려준다 — 배너가 "N건"이라 말한 청구서가 표에서 통째로
+ *    증발해 건수와 목록이 어긋나는 게 더 나쁘다.
+ */
+export function overdueLinesOnly<T extends { unpaid?: number }>(lines: T[]): T[] {
+  const kept = lines.filter((li) => li.unpaid === undefined || li.unpaid > 0);
+  return kept.length > 0 ? kept : lines;
 }
 
 /**

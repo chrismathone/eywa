@@ -52,7 +52,15 @@ const APPROVED_INLINE_SVG = [
   "src/features/onescreen/components/report-trend-graph.tsx",
 ] as const;
 
+// 이 파일의 검사 3개가 각각 src/ 전체를 훑는다 — 디렉터리 워크는 파일 목록이 같으므로 한 번만 한다
+// (전 스위트 병렬 실행에서 이 파일이 타임아웃으로 빨개졌다. 진짜 비용은 아래 ts.createSourceFile이지만
+//  워크를 3번 반복할 이유는 없다.)
+const sourceFilesCache = new Map<string, string[]>();
+
 function sourceFiles(directory: string): string[] {
+  const cached = sourceFilesCache.get(directory);
+  if (cached) return cached;
+
   const result: string[] = [];
 
   for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
@@ -64,6 +72,7 @@ function sourceFiles(directory: string): string[] {
     }
   }
 
+  sourceFilesCache.set(directory, result);
   return result;
 }
 
@@ -177,7 +186,9 @@ describe("Eywa icon compatibility mapping", () => {
       // 줄였을 때만 갱신할 것 — 143→142는 2026-07-29 `Lock` 제거분(소비처가 1beee908 '재인증 제거'에서 사라짐).
       expect(mapped.size).toBe(142);
     },
-    15_000,
+    // src/ 전건을 ts.createSourceFile로 파싱한다 — 단독 실행 14초라 15초는 여유가 없었고
+    // 전 스위트 병렬(파일 증가 + CPU 경합)에서 실제로 터졌다. 파일 수는 계속 는다.
+    60_000,
   );
 
   it("maps every compatibility name to a registered Eywa glyph", () => {
@@ -198,9 +209,13 @@ describe("Eywa icon compatibility mapping", () => {
     expect(menuTargets.filter((name) => FORBIDDEN_NATURE_ICONS.has(name))).toEqual([]);
   });
 
-  it("has no visible emoji or text glyph standing in for an icon", () => {
-    expect(visibleLegacyIconGlyphs()).toEqual([]);
-  });
+  it(
+    "has no visible emoji or text glyph standing in for an icon",
+    () => {
+      expect(visibleLegacyIconGlyphs()).toEqual([]);
+    },
+    60_000, // 위와 같은 전건 파싱 — 기본 5초로는 전 스위트 병렬에서 터진다
+  );
 
   it("keeps inline SVG limited to reviewed charts and decoration", () => {
     expect(inlineSvgFiles()).toEqual([...APPROVED_INLINE_SVG].sort());

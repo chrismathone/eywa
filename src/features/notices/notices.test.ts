@@ -8,7 +8,7 @@ import {
   noticesForRole,
   type NoticeAudience,
 } from "./audience";
-import { isHidden } from "./popup-store";
+import { dismissUntil, isDismissed } from "./dismiss";
 
 describe("audienceMatchesRole", () => {
   const expectedByRole: Record<SystemRole, NoticeAudience[]> = {
@@ -49,24 +49,48 @@ describe("audienceMatchesRole", () => {
   });
 });
 
-describe("isHidden (dismiss 유효성)", () => {
+describe("isDismissed (계정 단위 dismiss 유효성)", () => {
   const V = "2026-06-30T00:00:00Z";
+  const NOW = Date.parse("2026-07-01T00:00:00Z");
+  const iso = (ms: number) => new Date(ms).toISOString();
 
-  it("엔트리 없으면 보임", () => {
-    expect(isHidden(undefined, V)).toBe(false);
+  it("기록 없으면 보임", () => {
+    expect(isDismissed(undefined, V, NOW)).toBe(false);
   });
 
-  it("forever면 숨김", () => {
-    expect(isHidden({ until: "forever", v: V }, V)).toBe(true);
+  it("until=null(영구)이면 숨김", () => {
+    expect(isDismissed({ until: null, version: V }, V, NOW)).toBe(true);
   });
 
   it("until 미래면 숨김, 과거면 보임", () => {
-    expect(isHidden({ until: Date.now() + 100_000, v: V }, V)).toBe(true);
-    expect(isHidden({ until: Date.now() - 100_000, v: V }, V)).toBe(false);
+    expect(isDismissed({ until: iso(NOW + 100_000), version: V }, V, NOW)).toBe(true);
+    expect(isDismissed({ until: iso(NOW - 100_000), version: V }, V, NOW)).toBe(false);
   });
 
   it("버전(updatedAt)이 바뀌면 옛 dismiss 무시 → 재노출", () => {
-    expect(isHidden({ until: "forever", v: "old-version" }, V)).toBe(false);
-    expect(isHidden({ until: Date.now() + 100_000, v: "old-version" }, V)).toBe(false);
+    const OLD = "2026-06-01T00:00:00Z";
+    expect(isDismissed({ until: null, version: OLD }, V, NOW)).toBe(false);
+    expect(isDismissed({ until: iso(NOW + 100_000), version: OLD }, V, NOW)).toBe(false);
+  });
+
+  it("표기가 달라도 같은 시각이면 같은 버전(timestamptz 문자열 포맷 차이 흡수)", () => {
+    expect(isDismissed({ until: null, version: "2026-06-30T00:00:00+00:00" }, V, NOW)).toBe(true);
+  });
+
+  it("파싱 불가 값은 숨기지 않는다(공지를 삼키지 않는 쪽으로)", () => {
+    expect(isDismissed({ until: null, version: "" }, V, NOW)).toBe(false);
+  });
+});
+
+describe("dismissUntil", () => {
+  const NOW = Date.parse("2026-07-01T00:00:00Z");
+
+  it("forever는 만료 없음(null)", () => {
+    expect(dismissUntil("forever", NOW)).toBeNull();
+  });
+
+  it("today=1일, week=7일 뒤", () => {
+    expect(dismissUntil("today", NOW)).toBe(NOW + 86_400_000);
+    expect(dismissUntil("week", NOW)).toBe(NOW + 7 * 86_400_000);
   });
 });

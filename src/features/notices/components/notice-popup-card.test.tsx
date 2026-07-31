@@ -1,8 +1,23 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { NoticePopupCard } from "./notice-popup-card";
 import type { ActivePopup } from "../server/queries";
+
+// dismiss는 서버 액션(계정 단위 저장) — Next 빌드에선 클라 번들에 참조만 남지만 vitest는 실제로 import하려
+// 들어 server-only 체인이 딸려온다. 저장 호출 여부만 관찰하도록 모듈째 대체한다(hoisted).
+const dismissCalls: { id: string; mode: string }[] = [];
+const undismissCalls: string[] = [];
+vi.mock("../server/dismiss-actions", () => ({
+  dismissNoticePopup: async (id: string, mode: string) => {
+    dismissCalls.push({ id, mode });
+    return { ok: true as const };
+  },
+  undismissNoticePopup: async (id: string) => {
+    undismissCalls.push(id);
+    return { ok: true as const };
+  },
+}));
 
 // React 19 createRoot + act(): act 환경 플래그(테스트 라이브러리 없이 직접 렌더).
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -81,5 +96,57 @@ describe("NoticePopupCard — 이미지 원본 크기 라이트박스", () => {
       container.querySelector('button[aria-label="이미지 원본 크기로 보기"]'),
     ).toBeNull();
     expect(modals()).toHaveLength(0);
+  });
+});
+
+describe("NoticePopupCard — '안 보기' 저장 시점", () => {
+  let container: HTMLDivElement;
+  let root: Root;
+
+  beforeEach(() => {
+    dismissCalls.length = 0;
+    undismissCalls.length = 0;
+    document.body.innerHTML = "";
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+  });
+
+  const boxes = () => [...container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')];
+  // React는 체크박스의 onChange를 click 이벤트로 받는다 → .click()(기본동작 포함)이 실제 사용자 조작과 같다.
+  const toggle = async (el: HTMLInputElement) => {
+    await act(async () => {
+      el.click();
+    });
+  };
+
+  it("체크하는 순간 저장한다 — 닫기를 누르지 않아도(옛 구현은 여기서 조용히 유실)", async () => {
+    await act(async () => {
+      root.render(<NoticePopupCard popup={POPUP} />);
+    });
+    const [week, forever] = boxes();
+    expect(dismissCalls).toHaveLength(0);
+
+    await toggle(week!);
+    expect(dismissCalls).toEqual([{ id: POPUP.id, mode: "week" }]);
+    // 카드는 그대로 열려 있다(저장 ≠ 닫기).
+    expect(container.querySelector('[role="dialog"]')).toBeTruthy();
+
+    // 상호배타 — '다시 보지 않기'를 켜면 7일간은 꺼진다.
+    await toggle(forever!);
+    expect(dismissCalls.at(-1)).toEqual({ id: POPUP.id, mode: "forever" });
+    expect(boxes()[0]!.checked).toBe(false);
+    expect(boxes()[1]!.checked).toBe(true);
+  });
+
+  it("체크를 해제하면 설정을 지운다(다시 보이게)", async () => {
+    await act(async () => {
+      root.render(<NoticePopupCard popup={POPUP} />);
+    });
+    const week = boxes()[0]!;
+    await toggle(week);
+    await toggle(boxes()[0]!);
+    expect(undismissCalls).toEqual([POPUP.id]);
+    expect(boxes()[0]!.checked).toBe(false);
   });
 });

@@ -71,27 +71,34 @@ create or replace function public.auth_expense_can_submit() returns boolean
   select public.auth_menu_access('expense_requests') in ('full', 'scoped')
 $$;
 
+-- ⚠️ 게이트 함수는 **반드시 `(select f())`로 감싼다**(2026-07-31 추가). 컬럼을 하나도 안 쓰는 순수
+--    불리언 함수를 맨몸으로 쓰면 플래너가 상수로 못 접어 **스캔한 행마다** 호출한다(이 함수 1회 = 14ms
+--    → 3,225행 스캔에 2.1초). `(select …)`로 감싸면 InitPlan으로 끌어올려 문장당 1회다. 상세·실측 = 0164a.
+--    ✋ 여기서 풀지 말 것 — 0164a가 alter로 덧칠하지만, **이 파일만 단독 재적용**하면(단일 파일 핫픽스·
+--       권한 미러 수정 등) 맨몸 형태가 되살아나고 에러가 0건이라 아무도 눈치채지 못한다.
+--    ✋ 반대로 `created_by = auth.uid()`처럼 **컬럼을 쓰는 항은 감싸면 안 된다**(행마다 평가돼야 맞다).
+
 -- ── invoices ────────────────────────────────────────────────────────────────
 drop policy if exists invoices_role_gate_select on public.invoices;
 create policy invoices_role_gate_select on public.invoices
   as restrictive for select to authenticated
-  using (public.auth_billing_can_read());
+  using ((select public.auth_billing_can_read()));
 
 drop policy if exists invoices_role_gate_insert on public.invoices;
 create policy invoices_role_gate_insert on public.invoices
   as restrictive for insert to authenticated
-  with check (public.auth_billing_can_write());
+  with check ((select public.auth_billing_can_write()));
 
 drop policy if exists invoices_role_gate_update on public.invoices;
 create policy invoices_role_gate_update on public.invoices
   as restrictive for update to authenticated
-  using (public.auth_billing_can_write())
-  with check (public.auth_billing_can_write());
+  using ((select public.auth_billing_can_write()))
+  with check ((select public.auth_billing_can_write()));
 
 drop policy if exists invoices_role_gate_delete on public.invoices;
 create policy invoices_role_gate_delete on public.invoices
   as restrictive for delete to authenticated
-  using (public.auth_billing_can_write());
+  using ((select public.auth_billing_can_write()));
 
 -- ── expenses ────────────────────────────────────────────────────────────────
 -- 사무실(billing 접근) + **본인이 작성한 지출결의서**(강사 제출 경로 보존 — 앱의 guardOwnExpense와 같은 규칙).
@@ -100,34 +107,34 @@ drop policy if exists expenses_role_gate_select on public.expenses;
 create policy expenses_role_gate_select on public.expenses
   as restrictive for select to authenticated
   using (
-    public.auth_billing_can_read()
-    or (public.auth_expense_can_submit() and created_by = auth.uid())
+    (select public.auth_billing_can_read())
+    or ((select public.auth_expense_can_submit()) and created_by = (select auth.uid()))
   );
 
 drop policy if exists expenses_role_gate_insert on public.expenses;
 create policy expenses_role_gate_insert on public.expenses
   as restrictive for insert to authenticated
   with check (
-    public.auth_billing_can_write()
-    or (public.auth_expense_can_submit() and created_by = auth.uid())
+    (select public.auth_billing_can_write())
+    or ((select public.auth_expense_can_submit()) and created_by = (select auth.uid()))
   );
 
 drop policy if exists expenses_role_gate_update on public.expenses;
 create policy expenses_role_gate_update on public.expenses
   as restrictive for update to authenticated
   using (
-    public.auth_billing_can_write()
-    or (public.auth_expense_can_submit() and created_by = auth.uid())
+    (select public.auth_billing_can_write())
+    or ((select public.auth_expense_can_submit()) and created_by = (select auth.uid()))
   )
   with check (
-    public.auth_billing_can_write()
-    or (public.auth_expense_can_submit() and created_by = auth.uid())
+    (select public.auth_billing_can_write())
+    or ((select public.auth_expense_can_submit()) and created_by = (select auth.uid()))
   );
 
 drop policy if exists expenses_role_gate_delete on public.expenses;
 create policy expenses_role_gate_delete on public.expenses
   as restrictive for delete to authenticated
   using (
-    public.auth_billing_can_write()
-    or (public.auth_expense_can_submit() and created_by = auth.uid())
+    (select public.auth_billing_can_write())
+    or ((select public.auth_expense_can_submit()) and created_by = (select auth.uid()))
   );
