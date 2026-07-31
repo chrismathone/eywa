@@ -15,6 +15,7 @@ import {
   enrollmentAttendsOnDay,
 } from "@/features/enrollments/eligibility";
 import { shiftDays } from "@/features/timetable/lib/week";
+import { specialSlotLabel, type SpecialSlotLabel } from "@/features/timetable/lib/teacher-label";
 import { isMeaningfulPlanLine } from "./plan-codec";
 import { dowKeyOf, normalizeSlotTime, weekDatesOf, type DowKey } from "./week";
 
@@ -105,6 +106,14 @@ export type GridSlot = {
   // ⚠️ 원문이 아니므로 이 값을 권한·매칭 근거로 쓰지 말 것(게이트는 teacher_id FK만 — access.ts).
   teacherLabel: string | null;
   roomLabel: string | null;
+  /**
+   * 강사 수업이 아니라 **자리**(LAB 603호 · JJ 305호)인 슬롯. 랩·자율실은 수업계획을 쓰는 교시가 아니라
+   * ECS에선 **기록이 없으면 아예 그리지 않고**(원장 2026-07-31 "LAB·JJ는 ECS에서 뜰 필요 없음, 랩실이므로),
+   * 작성률 분모에서도 뺀다. 기록(계획·마크·메모)이 있으면 남긴다 — 안 그러면 쓴 내용이 증발한다.
+   * ⚠️ 판정은 표시용 [`specialSlotLabel`](src/features/timetable/lib/teacher-label.ts) 단일 소스.
+   * 라벨을 **권한·스코프 근거로 쓰지 말 것**(그건 `teacher_id` FK — access.ts 규약 불변).
+   */
+  specialRoom: SpecialSlotLabel | null;
   lines: GridPlanLine[]; // regular 먼저, line_no 순
   roster: RosterEntry[];
 };
@@ -132,7 +141,10 @@ function slotKey(date: string, slot: string): string {
  */
 export function scheduledSlotKeySet(
   weekMonday: string,
-  schedules: readonly Pick<GridScheduleRow, "dayOfWeek" | "startTime" | "validFrom" | "validTo">[],
+  schedules: readonly Pick<
+    GridScheduleRow,
+    "dayOfWeek" | "startTime" | "validFrom" | "validTo" | "slotTeacherLabel"
+  >[],
 ): Set<string> {
   const out = new Set<string>();
   for (const date of weekDatesOf(weekMonday)) {
@@ -141,6 +153,9 @@ export function scheduledSlotKeySet(
       if (s.dayOfWeek !== dow) continue;
       if (s.validFrom > date) continue;
       if (s.validTo && s.validTo < date) continue;
+      // 자리(LAB·JJ)는 '작성해야 할 교시'가 아니다 — 분모에 넣으면 작성률이 영영 100%에 못 닿는다.
+      // 같은 시각에 진짜 강사 슬롯이 겹치면 그쪽이 키를 넣으므로 수업은 그대로 세어진다.
+      if (specialSlotLabel(s.slotTeacherLabel)) continue;
       out.add(slotKey(date, normalizeSlotTime(s.startTime)));
     }
   }
@@ -171,7 +186,12 @@ export function buildWeekGrid(input: {
       if (s.validFrom > date) continue;
       if (s.validTo && s.validTo < date) continue;
       const key = slotKey(date, normalizeSlotTime(s.startTime));
-      if (!scheduledByKey.has(key)) scheduledByKey.set(key, s);
+      const cur = scheduledByKey.get(key);
+      // 같은 (날짜,시각)에 자리(LAB·JJ)와 강사 수업이 겹치면 **수업이 이긴다** — 자리로 뽑히면
+      // 그 교시가 작성률에서 빠지고 비어 있을 때 화면에서도 사라진다(실수업이 증발).
+      if (!cur || (specialSlotLabel(cur.slotTeacherLabel) && !specialSlotLabel(s.slotTeacherLabel))) {
+        scheduledByKey.set(key, s);
+      }
     }
   }
 
@@ -195,9 +215,13 @@ export function buildWeekGrid(input: {
     arr.push(m);
     marksByKey.set(key, arr);
   }
+  const memoSlotKeys = new Set<string>();
   for (const memoKey of input.slotMemoKeys) {
     const m = /^slot:(\d{4}-\d{2}-\d{2}):(\d{2}:\d{2})$/.exec(memoKey);
-    if (m && dateSet.has(m[1])) dataKeys.add(slotKey(m[1], m[2]));
+    if (m && dateSet.has(m[1])) {
+      dataKeys.add(slotKey(m[1], m[2]));
+      memoSlotKeys.add(slotKey(m[1], m[2]));
+    }
   }
 
   // 출석: 날짜별 학생 집합
@@ -292,12 +316,40 @@ export function buildWeekGrid(input: {
         teacherId: sched?.teacherId ?? null,
         teacherLabel: sched?.slotTeacherLabel ?? null,
         roomLabel: sched?.slotRoomLabel ?? null,
+        specialRoom: specialSlotLabel(sched?.slotTeacherLabel ?? null),
         lines,
         roster,
       };
     });
 
-    days.push({ date, dow, slots });
+    // 자리(LAB·JJ) 교시는 **쓴 게 없으면 그리지 않는다** — 랩·자율실은 수업계획을 쓰는 교시가 아니라
+    // 빈 카드가 주마다 반복되면 명단만 있는 껍데기가 화면을 채운다(원장 2026-07-31).
+    // ⚠️ 다만 계획(내용 있는 행)·학생 마크·슬롯 메모가 하나라도 있으면 남긴다. 실제로 이 자리에
+    //    'Power Voca'·'듣기월말평가' 같은 계획과 학생 기록이 들어 있다(실측) — 숨기면 쓴 게 증발한다.
+    const visible = slots.filter((s) => {
+      if (!s.specialRoom) return true;
+      const key = slotKey(date, s.slotStart);
+      return (
+        s.lines.some((l) =>
+          isMeaningfulPlanLine({
+            textbook: l.textbook,
+            pageRange: l.pageRange,
+            progress: l.progress,
+            homework: l.homework,
+          }),
+        ) ||
+        (marksByKey.get(key)?.length ?? 0) > 0 ||
+        memoSlotKeys.has(key)
+      );
+    });
+    if (visible.length === 0) {
+      // 그 날 남은 게 없으면 날짜 자체를 만들지 않는다(빈 요일 카드 방지). 출석만 있으면 별도 영역으로.
+      const att = attendanceByDate.get(date);
+      if (att && att.size > 0) attendanceOnly.push({ date, studentIds: [...att].sort() });
+      continue;
+    }
+
+    days.push({ date, dow, slots: visible });
   }
 
   return { weekMonday: input.weekMonday, days, attendanceOnly };
@@ -306,6 +358,8 @@ export function buildWeekGrid(input: {
 /**
  * 작성률 — 분모 = 그 주 **스케줄된** 교시 수(고아 슬롯 제외 — 별도 경고 표시), 분자 = '의미 있는 행' ≥ 1개인
  * 스케줄 교시 수. placeholder-only 슬롯은 미작성으로 센다.
+ * 자리(LAB·JJ)는 분모·분자 **양쪽에서 제외** — 수업계획을 쓰는 교시가 아니라 분모에 넣으면 100%에 못 닿는다
+ * (랜딩 카드의 `scheduledSlotKeySet`도 같은 규칙이라 두 화면의 숫자가 갈리지 않는다).
  */
 export function sheetFillStats(grid: WeekGrid): {
   totalSlots: number;
@@ -317,6 +371,7 @@ export function sheetFillStats(grid: WeekGrid): {
   let orphan = 0;
   for (const day of grid.days) {
     for (const slot of day.slots) {
+      if (slot.specialRoom) continue; // 자리(LAB·JJ) — 작성 대상이 아니다
       if (!slot.scheduled) {
         orphan += 1;
         continue;
