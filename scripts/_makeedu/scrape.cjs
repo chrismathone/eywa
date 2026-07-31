@@ -170,14 +170,16 @@ async function prepareInvoices(page) {
   console.log(`    검색 조건: ${applied.join(" · ")}${ok ? "" : " (조회 버튼을 못 찾아 미적용)"}`);
 }
 
-async function maximizeListSize(page) {
+async function maximizeListSize(page, cap) {
   const ls = page.locator('select[name="listSize"]');
   if ((await ls.count()) === 0) return;
   const vals = await page.$$eval('select[name="listSize"] option', (os) =>
     os.map((o) => o.value).filter((v) => /^\d+$/.test(v)).map(Number),
   );
   if (!vals.length) return;
-  const max = Math.max(...vals);
+  // cap이 있으면 그 이하 중 가장 큰 값 — 재수확 때 페이지를 가볍게 잡아 렌더를 따라가게 한다.
+  const allowed = cap ? vals.filter((v) => v <= cap) : vals;
+  const max = Math.max(...(allowed.length ? allowed : vals));
   await ls.selectOption(String(max)).catch(() => {});
   await page.waitForLoadState("networkidle").catch(() => {});
   await page.waitForTimeout(600);
@@ -200,7 +202,9 @@ async function safeEvaluate(page, fn) {
 }
 
 // 가장 큰 테이블의 tbody 행 수가 안정될 때까지 대기(AJAX 렌더·페이지크기 변경 후 정착) — 부분 로드 읽기 방지.
-async function waitForStableTable(page, maxWait = 8000) {
+// ⚠️ 상한 8초는 **작은 표 기준**이었다. 3개월 × 페이지당 500행이면 렌더가 그 안에 안 끝나고,
+//    부분 렌더된 표를 두 번 같은 수로 읽어 "정착"으로 오판한다(2026-07-31: 3,174건 중 130건만 수집).
+async function waitForStableTable(page, maxWait = 30000) {
   const count = () =>
     safeEvaluate(page, () => {
       let max = 0;
@@ -226,10 +230,11 @@ async function scrapeList(page, key, cfg) {
   await page.goto(`${BASE}${cfg.url}`, { waitUntil: "domcontentloaded" }).catch(() => {});
   await page.waitForLoadState("networkidle").catch(() => {});
   await page.waitForTimeout(500);
-  // 목록별 검색 조건 보정(현재는 수납만) — 조건을 바꾸면 페이지 크기가 초기화되므로 **먼저** 한다.
+  // ⚠️ 순서 주의: **페이지 크기를 먼저** 올리고, 그 다음 검색 조건을 넣어 **한 번의 조회**로 끝낸다.
+  //    (반대로 하면 조회 뒤에 페이지크기 변경이 또 한 번 리로드를 일으켜 두 반영이 서로를 흔든다.)
+  await maximizeListSize(page, cfg.pageSizeCap);
   if (cfg.prepare) await cfg.prepare(page);
-  await maximizeListSize(page);
-  await waitForStableTable(page); // 페이지크기 최대화 후 테이블 정착 대기
+  await waitForStableTable(page);
   // 화면이 스스로 말하는 총건수 — 수집 결과와 대조해 **조용한 절단**을 잡는다(페이지 순회 중단·목록 개편).
   const totalReported = await readReportedTotal(page);
 
@@ -251,12 +256,43 @@ async function scrapeList(page, key, cfg) {
     const next = page
       .locator('.paging a, .pagination a, [class*="pag"] a, .page a')
       .filter({ hasText: new RegExp(`^\\s*${p + 1}\\s*$`) });
+    // ⚠️ added===0 을 곧바로 "끝"으로 읽으면 **느리게 렌더된 페이지에서 조기 종료**한다(실측 3,174→130건).
+    //    다음 페이지 링크가 아직 있다면 한 번 더 정착을 기다려 재추출한 뒤에 판단한다.
+    if (added === 0 && (await next.count()) > 0) {
+      await waitForStableTable(page);
+      const retry = await safeEvaluate(page, EXTRACT);
+      for (const r of retry.rows) {
+        const k = r.join("");
+        if (seen.has(k)) continue;
+        seen.add(k);
+        all.push(r);
+        added++;
+      }
+    }
     if (added === 0 || (await next.count()) === 0) break;
     await next.first().click().catch(() => {});
     await page.waitForLoadState("networkidle").catch(() => {});
     await waitForStableTable(page); // 다음 페이지 정착 대기
   }
   return { key, scrapedAt: new Date().toISOString(), headers, rows: all, totalReported };
+}
+
+/**
+ * 목록 1개 수확. **덜 걷었으면 한 번 더**, 이번엔 페이지를 작게 나눠서 시도한다.
+ *
+ * 🔴 조용한 부족은 곧 **"makeedu에서 삭제됨" 오판**이 된다 — 못 받은 학생은 부재로 보이기 때문이다.
+ * 그래서 부족은 로그 경고로 끝낼 일이 아니라 **재시도할 일**이다. 큰 페이지(500행)가 렌더를 못 따라가는 게
+ * 실측 원인이라(3,174건 중 130건), 재시도는 페이지를 작게 잡는다(요청 수는 늘고 각 페이지는 가볍게).
+ * ⚠️ **더 많이 걷은 쪽을 채택**한다 — 재시도가 더 나쁠 수도 있으므로 결과를 되돌리지 않는다.
+ */
+async function harvestList(page, key, cfg) {
+  const first = await scrapeList(page, key, cfg);
+  if (first.totalReported == null || first.rows.length >= first.totalReported) return first;
+  console.warn(
+    `    ↻ ${key} 재수확 — 화면 ${first.totalReported}건 중 ${first.rows.length}건만 받았습니다(페이지를 작게 나눠 재시도).`,
+  );
+  const second = await scrapeList(page, key, { ...cfg, pageSizeCap: 100 });
+  return second.rows.length > first.rows.length ? second : first;
 }
 
 (async () => {
@@ -304,7 +340,7 @@ async function scrapeList(page, key, cfg) {
       // 한 목록 실패(네비게이션 레이스·URL 오류 등)가 나머지를 막지 않게 격리 — 실패 목록은 0행으로 기록하고 계속.
       let data;
       try {
-        data = await scrapeList(page, key, cfg);
+        data = await harvestList(page, key, cfg);
       } catch (e) {
         console.warn(`  ⚠️ ${key} 스크래핑 실패: ${e.message} — 건너뜀(0행)`);
         data = { key, scrapedAt: new Date().toISOString(), headers: [], rows: [], totalReported: null };
