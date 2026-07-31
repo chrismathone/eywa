@@ -73,16 +73,16 @@ export default async function EcsLandingPage({
                 href={`/ecs/${card.classId}?week=${res.weekMonday}`}
                 className="bg-card shadow-card hover:shadow-md flex h-full flex-col rounded-2xl px-4 py-3 transition"
               >
-                <p className="text-foreground truncate text-[14px] font-bold">{card.className}</p>
-                <p className="text-text-dim mt-0.5 text-[12px]">{card.teacherName ?? "담임 미지정"}</p>
+                <p className="text-foreground truncate text-[15px] font-bold">{card.className}</p>
+                <p className="text-text-dim mt-0.5 text-[13px]">{card.teacherName ?? "담임 미지정"}</p>
                 {card.orphanSlots > 0 ? (
-                  <p className="text-text-faint mt-1 text-[11px]">시간 변경된 기록 {card.orphanSlots}건</p>
+                  <p className="text-text-dim mt-1 text-[12px]">시간 변경된 기록 {card.orphanSlots}건</p>
                 ) : null}
                 <div className="mt-auto flex items-center gap-2 pt-2">
-                  <span className="num text-foreground text-[13px] font-bold">
+                  <span className="num text-foreground text-[14px] font-bold">
                     {card.filledSlots}/{card.totalSlots}
                   </span>
-                  <span className="text-text-faint text-[11px]">교시 작성</span>
+                  <span className="text-text-dim text-[12px]">교시 작성</span>
                   <span className="bg-bg-soft ml-auto h-1.5 w-16 overflow-hidden rounded-full">
                     <span className="bg-primary block h-full rounded-full" style={{ width: `${pct}%` }} />
                   </span>

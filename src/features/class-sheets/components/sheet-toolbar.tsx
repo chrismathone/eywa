@@ -12,11 +12,14 @@ import { useSaveIndicator, type SheetSaveStore } from "./use-sheet-saves";
 const DOW_KO: Record<string, string> = { mon: "월", tue: "화", wed: "수", thu: "목", fri: "금", sat: "토", sun: "일" };
 // ⚠️ cursor-pointer 명시 — Tailwind v4 preflight엔 v3의 `button{cursor:pointer}`가 없어서
 // 안 적으면 클릭 가능한 버튼이 화살표로 보인다(이 앱 globals.css에도 cursor 규칙 0건).
+// 테두리는 line-strong — 헤어라인(9%)이면 눌 수 있는 알약인지 글자인지 구분이 안 된다(가독성 07-31).
 const iconBtn =
-  "border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex shrink-0 cursor-pointer items-center rounded-full border p-1 transition";
+  "border-line-strong text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex shrink-0 cursor-pointer items-center rounded-full border p-1 transition";
 const pill = (on: boolean) =>
   `shrink-0 cursor-pointer rounded-full border px-2.5 py-0.5 text-xs font-medium transition ${
-    on ? "border-foreground bg-foreground text-background" : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
+    on
+      ? "border-foreground bg-foreground text-background font-bold"
+      : "border-line-strong text-text-dim hover:text-foreground hover:bg-bg-soft"
   }`;
 
 export function SheetToolbar({
@@ -87,7 +90,7 @@ export function SheetToolbar({
       </div>
       <span className="text-foreground text-[13px] font-bold whitespace-nowrap">{data.weekLabel}</span>
       {rel !== "current" ? (
-        <span className="border-line text-text-dim rounded-full border px-2 py-0.5 text-[11px] whitespace-nowrap">
+        <span className="border-line-strong text-text-dim rounded-full border px-2 py-0.5 text-[12px] whitespace-nowrap">
           {rel === "past" ? "지난 주 조회" : "다음 주 조회"}
         </span>
       ) : null}
@@ -118,7 +121,7 @@ export function SheetToolbar({
         ) : pending > 0 ? (
           <span className="text-text-dim text-[12px] whitespace-nowrap">저장 중…</span>
         ) : (
-          <span className="text-text-faint text-[12px] whitespace-nowrap">저장됨</span>
+          <span className="text-text-dim text-[12px] whitespace-nowrap">저장됨</span>
         )}
         <button type="button" className={pill(panelOpen)} onClick={onTogglePanel}>
           계획 패널

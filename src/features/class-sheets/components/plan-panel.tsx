@@ -7,7 +7,7 @@ import type { SkillAreaSetting } from "@/features/owner/settings-types";
 import type { SheetGoalDTO } from "../server/queries";
 
 const inputCls =
-  "border-line text-foreground w-full rounded-lg border bg-transparent px-2 py-1 text-[12px] outline-none focus:border-primary";
+  "border-line-strong text-foreground w-full rounded-lg border bg-transparent px-2 py-1 text-[13px] outline-none focus:border-primary";
 
 const SECTIONS: { role: "homeroom" | "assistant"; scope: "month" | "week"; title: string }[] = [
   { role: "homeroom", scope: "month", title: "담임 월간계획" },
@@ -61,13 +61,14 @@ export function PlanPanel({
                 size={11}
                 className="text-text-faint transition-transform group-open:rotate-90"
               />
-              <span className="text-foreground text-[13px] font-bold">{sec.title}</span>
-              <span className="text-text-faint ml-auto text-[10px]">
+              <span className="text-foreground text-[14px] font-bold">{sec.title}</span>
+              <span className="text-text-dim num ml-auto text-[11px]">
                 {sec.scope === "month" ? monthStart.slice(0, 7) : "이번 주"}
               </span>
             </summary>
             <div className="space-y-1.5 px-1 pt-1 pb-3">
-              <div className="text-text-faint grid grid-cols-[64px_1fr_1fr] gap-1 text-[10px]">
+              {/* 열 머리글 — 시트의 '교재명 / 목표 진도' 머리줄. faint 10px는 안 읽혀 dim 11px 굵게로. */}
+              <div className="text-text-dim bg-bg-soft grid grid-cols-[64px_1fr_1fr] gap-1 rounded-md px-1 py-0.5 text-[11px] font-semibold">
                 <span />
                 <span>교재명</span>
                 <span>목표 진도</span>
@@ -76,7 +77,7 @@ export function PlanPanel({
                 const g = goalOf(sec.scope, sec.role, area.key);
                 return (
                   <div key={area.key} className="grid grid-cols-[64px_1fr_1fr] items-center gap-1">
-                    <span className="text-text-dim truncate text-[11px]" title={area.label}>
+                    <span className="text-foreground truncate text-[12px] font-medium" title={area.label}>
                       {area.label}
                     </span>
                     <input

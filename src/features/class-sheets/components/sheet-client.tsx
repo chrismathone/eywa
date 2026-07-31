@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { useEditPresence } from "@/features/presence/edit-presence";
 import type { ClassSheetWeekData } from "../server/queries";
 import {
+  clearPresentAttendance,
   deletePlanLine as deletePlanLineAction,
   createPlanLine as createPlanLineAction,
   flushSheetPatches,
@@ -35,6 +36,7 @@ export type SheetHandlers = {
   removeLine: (lineId: string, planDate: string, slotStart: string) => void;
   moveLineTerm: (lineId: string, planDate: string, slotStart: string, termMode: "regular" | "exam") => void;
   markPresent: (studentId: string, date: string) => void;
+  clearAttendance: (studentId: string, date: string) => void;
   saveMark: (studentId: string, date: string, slotStart: string, status: string | null, note: string | null) => void;
 };
 
@@ -213,6 +215,25 @@ export function SheetClient({
           setAttendance((prev) => ({ ...prev, [`${studentId}|${date}`]: r.status }));
         });
       },
+      // 체크를 다시 누르면 취소(0169a). 서버가 거부하는 경우(결석·지각·출석부 메모/시수)는 낙관 반영을
+      // 되돌리고 사유를 띄운다 — "지워진 것처럼 보였다가 새로고침하면 돌아오는" 거짓 성공을 막는다.
+      clearAttendance: (studentId, date) => {
+        if (!data.canMarkAttendanceByDate[date]) return;
+        const key = `${studentId}|${date}`;
+        let before: string | undefined;
+        setAttendance((prev) => {
+          before = prev[key];
+          const next = { ...prev };
+          delete next[key];
+          return next;
+        });
+        void clearPresentAttendance({ classId, studentId, date }).then((r) => {
+          if (!r.ok) {
+            setAttendance((prev) => (before === undefined ? prev : { ...prev, [key]: before }));
+            toast.error(r.error);
+          }
+        });
+      },
       saveMark: (studentId, date, slotStart, status, note) => {
         const key = `${studentId}|${date}|${slotStart}`;
         // 실패 시 되돌릴 직전 값 — 낙관 반영만 하고 롤백이 없으면 화면엔 남고 서버엔 없는 상태가 되어
@@ -379,7 +400,7 @@ export function SheetClient({
       {/* 랩실(LAB·JJ) 교시는 담임 수업이 아니라 표시하지 않는다. 그 자리에 남아 있는 기록이 있으면
           건수만 각주로 — 화면에서 조용히 사라지면 "쓴 게 증발했다"가 된다(기록은 DB에 그대로). */}
       {data.grid.hiddenSpecial.records > 0 ? (
-        <p className="text-text-faint px-1 text-[12px]">
+        <p className="text-text-dim px-1 text-[12px]">
           랩실(LAB·JJ) 교시 {data.grid.hiddenSpecial.slots}개는 표시하지 않습니다 — 그 시간에 남아 있는 기록{" "}
           {data.grid.hiddenSpecial.records}건은 지워지지 않았습니다.
         </p>

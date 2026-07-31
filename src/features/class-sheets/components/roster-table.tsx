@@ -16,8 +16,10 @@ import type { SheetHandlers } from "./sheet-client";
 import { AttendanceCheck, StatusCell } from "./status-cell";
 import { RosterBulk } from "./roster-bulk";
 
+// 입력칸 테두리는 헤어라인(--line 9%)이 아니라 line-strong(18%) — 9%는 흰 카드 위에서 "칸이 있는지"가
+// 안 보여 표 전체가 흐릿하게 읽혔다(원장 지적 2026-07-31). 글자도 12→13px.
 const noteCls =
-  "border-line text-foreground w-full rounded-lg border bg-transparent px-1.5 py-1 text-[12px] outline-none focus:border-primary disabled:opacity-60";
+  "border-line-strong text-foreground w-full rounded-lg border bg-transparent px-1.5 py-1 text-[13px] outline-none focus:border-primary disabled:opacity-60";
 
 /** 섹션 라벨 행의 설명(툴팁) — 왜 이 학생이 아직 보이는지 화면이 스스로 답한다. */
 const GROUP_HINT: Record<RosterGroupKey, string> = {
@@ -87,31 +89,32 @@ export const RosterTable = memo(function RosterTable({
           }
         />
       </div>
-      <table className="w-full border-collapse text-[12px]" style={{ tableLayout: "fixed" }}>
+      <table className="w-full border-collapse text-[13px]" style={{ tableLayout: "fixed" }}>
         <colgroup>
-          <col style={{ width: 96 }} />
-          <col style={{ width: 44 }} />
-          <col style={{ width: 76 }} />
-          <col style={{ width: 64 }} />
+          <col style={{ width: 100 }} />
+          <col style={{ width: 46 }} />
+          <col style={{ width: 78 }} />
+          <col style={{ width: 68 }} />
           <col />
         </colgroup>
         <thead>
-          <tr className="text-text-faint text-left text-[10px]">
-            <th className="py-0.5 font-medium">학생</th>
-            <th className="py-0.5 font-medium">출석</th>
-            <th className="py-0.5 font-medium">학교</th>
-            <th className="py-0.5 font-medium">상태</th>
-            <th className="py-0.5 font-medium">개인 진도 · 과제</th>
+          {/* 헤더 밴드 — 원본 시트의 노란 머리글 줄이 하던 일(본문과 확실히 구분). 회색 밴드 + dim 굵은 글씨. */}
+          <tr className="bg-bg-soft text-text-dim text-left text-[11px]">
+            <th className="rounded-l-md py-1 pl-1 font-semibold">학생</th>
+            <th className="py-1 font-semibold">출석</th>
+            <th className="py-1 font-semibold">학교</th>
+            <th className="py-1 font-semibold">상태</th>
+            <th className="rounded-r-md py-1 pr-1 font-semibold">개인 진도 · 과제</th>
           </tr>
         </thead>
-        <tbody>
+        <tbody className="divide-line divide-y">
           {rows.map((row) => {
             if (row.kind === "label") {
               return (
-                <tr key={`label:${row.key}`} className="bg-bg-soft/70">
+                <tr key={`label:${row.key}`} className="bg-bg-soft">
                   <td
                     colSpan={5}
-                    className="text-text-faint px-1 py-0.5 text-[10px] font-medium"
+                    className="text-text-dim px-1 py-1 text-[11px] font-semibold"
                     title={GROUP_HINT[row.key]}
                   >
                     {row.label}
@@ -125,35 +128,40 @@ export const RosterTable = memo(function RosterTable({
             const attStatus = attendance[`${entry.studentId}|${date}`] ?? null;
             const rowEditable = canEdit && entry.eligible;
             return (
-              <tr key={entry.studentId} className={entry.historical ? "opacity-60" : ""}>
-                <td className="py-0.5 pr-1">
+              // ⚠️ 읽기 전용 행을 opacity로 흐리지 않는다 — 흐린 회색은 "가독성이 떨어진다"의 본체였다.
+              //    회색조(text-dim)와 은은한 배경으로 구분하고 **글자 대비는 유지**한다.
+              <tr key={entry.studentId} className={entry.historical ? "bg-bg-soft/40" : ""}>
+                <td className="py-1 pr-1">
                   <span
-                    className={`text-foreground truncate text-[12px] font-medium ${entry.endedOn ? "line-through" : ""}`}
+                    className={`truncate text-[13px] font-semibold ${
+                      entry.historical ? "text-text-dim" : "text-foreground"
+                    } ${entry.endedOn ? "line-through" : ""}`}
                     title={meta?.name}
                   >
                     {meta?.name ?? "?"}
                   </span>
                   {meta?.englishName ? (
-                    <span className="text-text-faint ml-1 text-[10px]">({meta.englishName})</span>
+                    <span className="text-text-dim ml-1 text-[11px]">({meta.englishName})</span>
                   ) : null}
                   {/* 퇴원일 — 섹션 라벨이 '퇴원'이라 날짜만(월-일). 전체 날짜는 툴팁. */}
                   {entry.endedOn ? (
-                    <span className="text-text-faint num ml-1 text-[10px]" title={`${entry.endedOn} 수강 종료`}>
+                    <span className="text-text-dim num ml-1 text-[11px]" title={`${entry.endedOn} 수강 종료`}>
                       {entry.endedOn.slice(5)}
                     </span>
                   ) : null}
                 </td>
-                <td className="py-0.5 pr-1">
+                <td className="py-1 pr-1">
                   <AttendanceCheck
                     status={attStatus}
                     canMark={canMarkDate && rowEditable}
                     onMark={() => handlers.markPresent(entry.studentId, date)}
+                    onClear={() => handlers.clearAttendance(entry.studentId, date)}
                   />
                 </td>
-                <td className="text-text-dim truncate py-0.5 pr-1 text-[11px]">
+                <td className="text-text-dim truncate py-1 pr-1 text-[12px]">
                   {meta ? schoolGradeLabel(meta.school, meta.grade) : ""}
                 </td>
-                <td className="py-0.5 pr-1">
+                <td className="py-1 pr-1">
                   <StatusCell
                     value={mark?.status ?? null}
                     canEdit={rowEditable}
@@ -162,7 +170,7 @@ export const RosterTable = memo(function RosterTable({
                     }
                   />
                 </td>
-                <td className="py-0.5">
+                <td className="py-1">
                   <input
                     className={noteCls}
                     defaultValue={mark?.progressNote ?? ""}

@@ -16,6 +16,7 @@ import {
   STATUS_CHIPS,
   type BulkRosterRow,
 } from "../lib/bulk";
+import { statusTone, STATUS_TONE_CLASS } from "../lib/status-tone";
 
 export function RosterBulk({
   date,
@@ -80,20 +81,20 @@ export function RosterBulk({
       }}
     >
       <Popover.Trigger
-        className="text-text-faint hover:text-primary cursor-pointer text-[11px]"
+        className="border-line-strong text-text-dim hover:text-primary hover:border-primary cursor-pointer rounded-full border px-2 py-0.5 text-[12px] font-medium"
         title="이 교시 학생 전체에 출석·상태를 한 번에 입력"
       >
         일괄 입력
       </Popover.Trigger>
       <Popover.Portal>
         <Popover.Positioner side="bottom" align="end" sideOffset={4} className="z-50">
-          <Popover.Popup className="bg-card border-line shadow-card flex w-[240px] flex-col gap-2 rounded-lg border p-3 text-[12px] outline-none">
-            <p className="text-text-dim text-[11px]">
+          <Popover.Popup className="bg-card border-line-strong shadow-card flex w-[250px] flex-col gap-2 rounded-lg border p-3 text-[12px] outline-none">
+            <p className="text-text-dim text-[12px]">
               이 교시 <b className="text-foreground num">{roster.length}</b>명
             </p>
 
-            <div className="border-line border-t pt-2">
-              <p className="text-text-faint mb-1 text-[10px] font-bold">출석</p>
+            <div className="border-line-strong border-t pt-2">
+              <p className="text-text-dim mb-1 text-[11px] font-bold">출석</p>
               <Button
                 type="button"
                 size="sm"
@@ -107,7 +108,7 @@ export function RosterBulk({
               >
                 미체크 {attendanceTargets.length}명 출석
               </Button>
-              <p className="text-text-faint mt-1 text-[10px]">
+              <p className="text-text-dim mt-1 text-[11px]">
                 {canMarkDate
                   ? "이미 기록된 학생은 그대로 둡니다(출석부 기록 보존)."
                   : // canMarkAttendanceByDate = 권한 AND 기간 — 원인을 단정하면 오표시(개별 툴팁과 동일 문구)
@@ -115,17 +116,17 @@ export function RosterBulk({
               </p>
             </div>
 
-            <div className="border-line border-t pt-2">
-              <p className="text-text-faint mb-1 text-[10px] font-bold">상태</p>
+            <div className="border-line-strong border-t pt-2">
+              <p className="text-text-dim mb-1 text-[11px] font-bold">상태</p>
               <div className="flex flex-wrap gap-1">
                 {STATUS_CHIPS.map((chip) => (
                   <button
                     key={chip}
                     type="button"
-                    className={`cursor-pointer rounded-full border px-2 py-0.5 text-[11px] ${
+                    className={`cursor-pointer rounded-full border px-2 py-0.5 text-[12px] ${
                       picked === chip
-                        ? "border-foreground bg-foreground text-background"
-                        : "border-line text-text-dim"
+                        ? "border-foreground bg-foreground text-background font-bold"
+                        : STATUS_TONE_CLASS[statusTone(chip)]
                     }`}
                     onClick={() => setPicked((v) => (v === chip ? null : chip))}
                   >
@@ -134,7 +135,7 @@ export function RosterBulk({
                 ))}
               </div>
               <input
-                className="border-line mt-1.5 w-full rounded-lg border bg-transparent px-1.5 py-1 text-[11px] outline-none"
+                className="border-line-strong text-foreground focus:border-primary mt-1.5 w-full rounded-lg border bg-transparent px-1.5 py-1 text-[12px] outline-none"
                 placeholder="직접 입력"
                 value={free}
                 aria-label="상태 직접 입력"
@@ -144,7 +145,7 @@ export function RosterBulk({
                   if (e.target.value.trim() !== "") setPicked(null);
                 }}
               />
-              <label className="text-text-dim mt-1.5 flex cursor-pointer items-center gap-1.5 text-[11px]">
+              <label className="text-text-dim mt-1.5 flex cursor-pointer items-center gap-1.5 text-[12px]">
                 <input
                   type="checkbox"
                   className="cursor-pointer"
@@ -164,7 +165,7 @@ export function RosterBulk({
               </Button>
             </div>
 
-            <p className="text-text-faint text-[10px]">
+            <p className="text-text-dim text-[11px]">
               개인 진도 · 과제는 학생마다 다른 기록이라 일괄 대상이 아닙니다.
             </p>
           </Popover.Popup>
