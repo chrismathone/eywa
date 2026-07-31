@@ -30,7 +30,18 @@ type PrefsState = {
   /** 시간표 기본뷰 셀 색 강도 — 상단 토글에서 3중1택. 기본 vivid(쨍하게). */
   timetableColor: TimetableColorMode;
   setTimetableColor: (v: TimetableColorMode) => void;
+  /**
+   * 직원 목록 표 글자 크기(%) — 목록 위 −/+ 버튼(원장 지시 2026-07-31: 표 글씨가 작아 안 보임).
+   * 100 = 기본 13px. 사람마다 화면·시력이 달라 개인 설정으로 둔다(영속).
+   */
+  staffTableScale: number;
+  setStaffTableScale: (v: number) => void;
 };
+
+/** 표 글자 크기 허용 범위(%) — 너무 작으면 못 읽고, 너무 크면 열이 깨진다. */
+export const TABLE_SCALE_MIN = 90;
+export const TABLE_SCALE_MAX = 150;
+export const TABLE_SCALE_STEP = 10;
 
 export const usePrefs = create<PrefsState>()(
   persist(
@@ -47,6 +58,9 @@ export const usePrefs = create<PrefsState>()(
       setOnboarded: (onboarded) => set({ onboarded }),
       timetableColor: "vivid", // 기본 쨍하게(시트식). 개인이 상단 토글로 mid/pastel 선택 시 영속.
       setTimetableColor: (timetableColor) => set({ timetableColor }),
+      staffTableScale: 100,
+      setStaffTableScale: (v) =>
+        set({ staffTableScale: Math.min(TABLE_SCALE_MAX, Math.max(TABLE_SCALE_MIN, Math.round(v))) }),
     }),
     { name: "eywa-prefs" },
   ),

@@ -175,6 +175,11 @@ export function AppSidebar({
   );
   const openIds = new Set(openKey ? openKey.split("|") : []);
   const hasFocus = isDesktop && !!focusedId && openIds.has(focusedId);
+  // 포커스된 창이 **지금 보고 있는 주소** — 하부탭 활성 판정에 쓴다.
+  // 창으로 열면 배경 프레임 pathname은 대시보드 그대로라, 그것만 보면 '직원 목록'처럼
+  // 메뉴 루트와 같은 경로인 하부탭이 영원히 비활성이었다(원장 지적 2026-07-31:
+  // "직원 목록에 들어왔는데 직원관리만 켜져 있어 어디인지 혼동").
+  const focusedHref = useWindowStore((s) => (s.focusedId ? s.windows[s.focusedId]?.params.href : undefined));
 
   // 접근 가능한 항목만 남기고 빈 그룹 제거 (그룹 구분선 위치 계산용)
   // subOf 항목은 최상위에서 빼고 부모의 하부탭으로 내린다(subTabsForMenu). 팰릿·모바일내비엔 그대로 남는다.
@@ -348,7 +353,7 @@ export function AppSidebar({
                               active={
                                 sub.menuKey
                                   ? hasFocus && focusedId === windowId("route", sub.menuKey)
-                                  : isSubActive(sub.href, pathname, currentTab)
+                                  : isSubActive(sub.href, pathname, currentTab, hasFocus && focusedId === windowId("route", item.menuKey) ? focusedHref : undefined)
                               }
                             />
                           </li>
@@ -478,7 +483,14 @@ export function AppSidebar({
                       active={
                         sub.menuKey
                           ? hasFocus && focusedId === windowId("route", sub.menuKey)
-                          : isSubActive(sub.href, pathname, currentTab)
+                          : isSubActive(
+                              sub.href,
+                              pathname,
+                              currentTab,
+                              hasFocus && focusedId === windowId("route", flyout.menuKey)
+                                ? focusedHref
+                                : undefined,
+                            )
                       }
                       inFlyout
                     />
@@ -493,11 +505,25 @@ export function AppSidebar({
   );
 }
 
-// 하부탭 활성 판정 — 배경 프레임의 pathname + ?tab과 비교(창 안 면은 미하이라이트, best-effort).
-function isSubActive(href: string, pathname: string, currentTab: string | null): boolean {
+/**
+ * 하부탭 활성 판정 — 창으로 보고 있으면 **그 창의 주소**, 아니면 배경 프레임의 pathname + `?tab`.
+ * 창 안에서 면을 옮기면 store의 href가 갱신되므로(RouteWindow가 iframe src를 바꾼다) 그걸 따라간다.
+ */
+function isSubActive(
+  href: string,
+  pathname: string,
+  currentTab: string | null,
+  focusedHref?: string,
+): boolean {
   const [path, query] = href.split("?");
-  if (path !== pathname) return false;
   const tab = query ? new URLSearchParams(query).get("tab") : null;
+  if (focusedHref) {
+    const [fPath, fQuery] = focusedHref.split("?");
+    if (fPath !== path) return false;
+    const fTab = fQuery ? new URLSearchParams(fQuery).get("tab") : null;
+    return (tab ?? null) === (fTab ?? null);
+  }
+  if (path !== pathname) return false;
   return (tab ?? null) === (currentTab ?? null);
 }
 

@@ -19,6 +19,7 @@ import { EMPLOYMENT_TYPES } from "@/features/staff/resume";
 import { SearchForm } from "@/components/search-form";
 import { NewStaffTrigger } from "./_components/new-staff-trigger";
 import { StaffRowLink } from "./_components/staff-row-link";
+import { StaffTableScaleBox, StaffTableScaleControl } from "./_components/table-scale";
 import { PAYROLL_ENABLED } from "@/features/payroll/config";
 
 export const metadata = { title: "직원관리 — eywa" };
@@ -397,6 +398,11 @@ export default async function StaffPage({
             ))}
             <span className="text-text-faint ml-0.5 text-[11px]">명씩</span>
           </div>
+          {/* 표 글자 크기 −/+ (원장 지시 2026-07-31) — 개인 설정으로 영속. */}
+          <div className="flex items-center gap-1.5">
+            <span className="micro">글자</span>
+            <StaffTableScaleControl />
+          </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {PAYROLL_ENABLED && user?.systemRole === "master" ? (
@@ -429,20 +435,22 @@ export default async function StaffPage({
       ) : (
         <>
           {/* list(테이블) 형식 — 원장 지시 2026-07-28(카드 그리드에서 전환). 좁은 창은 가로 스크롤. */}
-          <div className="bg-card shadow-card overflow-x-auto rounded-2xl">
-            <table className="w-full min-w-[860px] border-collapse text-[13px]">
+          {/* 표 형태(원장 지시 2026-07-31) — 셀마다 테두리를 그어 시트처럼 읽히게. 열 순서도 직원명부 시트와 같은
+              소속 → 이름 → 직급 순. 글자 크기는 StaffTableScaleBox가 em 기준으로 한 번에 조절한다. */}
+          <StaffTableScaleBox className="bg-card shadow-card overflow-x-auto rounded-2xl">
+            <table className="w-full min-w-[900px] border-collapse [&_td]:border [&_td]:border-line [&_th]:border [&_th]:border-line">
               <thead>
-                <tr className="border-line text-text-dim border-b text-left text-[11.5px]">
-                  <th className="px-4 py-2.5 font-medium">이름</th>
-                  <th className="px-3 py-2.5 font-medium">역할</th>
-                  <th className="px-3 py-2.5 font-medium">부서</th>
-                  <th className="px-3 py-2.5 font-medium">근무형태</th>
-                  <th className="px-3 py-2.5 font-medium">직급</th>
-                  <th className="px-3 py-2.5 font-medium">과목</th>
-                  <th className="px-3 py-2.5 font-medium">입사일</th>
-                  <th className="px-3 py-2.5 text-right font-medium">담당 반</th>
-                  <th className="px-3 py-2.5 text-right font-medium">담당 학생</th>
-                  <th className="px-3 py-2.5 font-medium">상태</th>
+                <tr className="bg-bg-soft/70 text-foreground text-left text-[0.9em]">
+                  <th className="px-3 py-2.5 font-bold">부서</th>
+                  <th className="px-4 py-2.5 font-bold">이름</th>
+                  <th className="px-3 py-2.5 font-bold">직급</th>
+                  <th className="px-3 py-2.5 font-bold">역할</th>
+                  <th className="px-3 py-2.5 font-bold">근무형태</th>
+                  <th className="px-3 py-2.5 font-bold">과목</th>
+                  <th className="px-3 py-2.5 font-bold">입사일</th>
+                  <th className="px-3 py-2.5 text-right font-bold">담당 반</th>
+                  <th className="px-3 py-2.5 text-right font-bold">담당 학생</th>
+                  <th className="px-3 py-2.5 font-bold">상태</th>
                 </tr>
               </thead>
               <tbody>
@@ -455,8 +463,11 @@ export default async function StaffPage({
                       key={s.id}
                       href={`/staff/${s.id}`}
                       title={s.displayName}
-                      className="border-line/60 hover:bg-bg-soft/50 border-b last:border-0 cursor-pointer transition"
+                      className="hover:bg-bg-soft/50 cursor-pointer transition"
                     >
+                      <td className="text-foreground px-3 py-2.5 font-medium whitespace-nowrap">
+                        {s.department ?? "—"}
+                      </td>
                       <td className="px-4 py-2.5">
                         {/* 이름 링크 = 키보드 접근 경로(행 클릭과 같은 상세). 아바타 금지 — 이름 텍스트만. */}
                         <WindowLink
@@ -468,17 +479,20 @@ export default async function StaffPage({
                           <span className="text-foreground font-bold group-hover:underline">{s.displayName}</span>
                           <EditingBadge scope={`staff:${s.id}`} />
                         </WindowLink>
-                        <p className="text-text-dim num mt-0.5 truncate text-[11px]">
+                        <p className="text-text-dim num mt-0.5 truncate text-[0.85em]">
                           {/* 플레이스홀더(@imported.local)는 미설정으로 표시 — raw 노출 금지. */}
                           {s.email.toLowerCase().endsWith("@imported.local") ? "이메일 미설정" : s.email}
                         </p>
                       </td>
+                      <td className="text-foreground px-3 py-2.5 font-medium whitespace-nowrap">
+                        {s.jobTitle ?? "—"}
+                      </td>
                       <td className="px-3 py-2.5">
                         <Pill color={roleMeta.color}>{roleMeta.label}</Pill>
                       </td>
-                      <td className="text-foreground px-3 py-2.5 whitespace-nowrap">{s.department ?? "—"}</td>
-                      <td className="text-foreground px-3 py-2.5 whitespace-nowrap">{s.employmentType ?? "—"}</td>
-                      <td className="text-foreground px-3 py-2.5 whitespace-nowrap">{s.jobTitle ?? "—"}</td>
+                      <td className="text-foreground px-3 py-2.5 font-medium whitespace-nowrap">
+                        {s.employmentType ?? "—"}
+                      </td>
                       <td className="px-3 py-2.5">
                         <span className="flex flex-wrap gap-1">
                           {s.subjects.length > 0
@@ -490,11 +504,11 @@ export default async function StaffPage({
                             : "—"}
                         </span>
                       </td>
-                      <td className="num text-text-dim px-3 py-2.5 whitespace-nowrap">{s.hireDate ?? "—"}</td>
-                      <td className="num text-foreground px-3 py-2.5 text-right">
+                      <td className="num text-foreground px-3 py-2.5 whitespace-nowrap">{s.hireDate ?? "—"}</td>
+                      <td className="num text-foreground px-3 py-2.5 text-right font-medium">
                         {s.classesCount > 0 ? s.classesCount : "—"}
                       </td>
-                      <td className="num text-foreground px-3 py-2.5 text-right">
+                      <td className="num text-foreground px-3 py-2.5 text-right font-medium">
                         {s.primaryStudentsCount > 0 ? s.primaryStudentsCount : "—"}
                       </td>
                       <td className="px-3 py-2.5">
@@ -505,7 +519,7 @@ export default async function StaffPage({
                 })}
               </tbody>
             </table>
-          </div>
+          </StaffTableScaleBox>
           {/* 눈에 띄는 번호형 페이저(원장 지시 2026-07-28 — 표준 컴팩트 페이저는 존재감이 약해 이 목록만 강조형) */}
           {totalPages > 1 ? (
             <nav className="flex flex-wrap items-center justify-center gap-1.5 pt-1" aria-label="페이지 이동">
