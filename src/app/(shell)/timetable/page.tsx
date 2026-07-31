@@ -56,6 +56,7 @@ import {
 import { TimetableViewPrefsSync } from "./_components/prefs-sync";
 import { EmptyPeriodScope } from "./_components/empty-period-scope";
 import { TimetableColorPrefSync } from "./_components/color-mode-toggle";
+import { TimetableFontPrefSync, TimetableZoomArea } from "./_components/font-size-toggle";
 import { TimetableViewSettings } from "./_components/view-settings";
 import { applyGradeFilter } from "@/features/timetable/lib/view-prefs";
 import { getMyTimetableViewPrefs } from "@/features/timetable/server/view-prefs-queries";
@@ -314,6 +315,8 @@ export default async function TimetablePage({
       />
       {/* 계정에 저장된 셀 색 강도를 스토어에 주입(서버→클라 단방향). 계정값이 없으면 기기 설정 유지. */}
       <TimetableColorPrefSync mode={viewPrefs.colorMode} />
+      {/* 글씨 크기(계정) → 스토어 주입. 색 강도와 같은 단방향 동기화 — 토글은 뷰 설정 팝오버에 있다. */}
+      <TimetableFontPrefSync fontSize={viewPrefs.fontSize} />
       {/* Editorial 문법 ① — 헤더 위계 + 우측 학생 집계(StudentTally). 시간표는 세로 공간이 가장
           귀한 화면이라 **창(임베드)에선 이 줄을 통째로 접고** 집계를 툴바 우측으로 내린다(컴팩트
           1행조차 아까움 — 2026-07-20 원장 "여전히 많은 공간"). 최상위 프레임은 풀 헤더 유지. */}
@@ -583,45 +586,52 @@ export default async function TimetablePage({
           />
         </div>
       ) : isIntegrated ? (
-        <RichGridView
-          slots={slots}
-          subjectMaps={subjectMaps}
-          config={periodsConfig}
-          teacherColors={teacherColors}
-          compactSections={compactSections}
-          hrefForSectionToggle={hrefForSectionToggle}
-          customGroups={customGroups}
-        />
+        <TimetableZoomArea>
+          <RichGridView
+            slots={slots}
+            subjectMaps={subjectMaps}
+            config={periodsConfig}
+            teacherColors={teacherColors}
+            compactSections={compactSections}
+            hrefForSectionToggle={hrefForSectionToggle}
+            customGroups={customGroups}
+          />
+        </TimetableZoomArea>
       ) : effView === "teacher" ? (
         // 강사뷰 — 시트 "강사별영어시간표" 그대로(강사=세로 블록, 그 안 월~토, 셀=반명+방). 읽기전용, 반 클릭=학생 명단.
         // 가로줄·격자 단위는 과목 설정(teacherViewLines/Step, 학원설정 과목 운영)에서.
-        <div className="flex min-h-0 flex-1 flex-col">
-          <TeacherGridView
-            slots={[...slots, ...scheduleBlocks]}
-            weekMonday={week}
-            teacherColors={teacherColors}
-            sectionLineMins={sectionLineMins}
-            stepMin={teacherViewStep}
-            pxPerMin={teacherViewPxPerMin}
-            breakRanges={teacherViewBreaks}
-            excludedTeachers={teacherViewExcluded}
-            showUnusedDays={!hideEmptyDays}
-          />
-        </div>
+        <TimetableZoomArea>
+          <div className="flex min-h-0 flex-1 flex-col">
+            <TeacherGridView
+              slots={[...slots, ...scheduleBlocks]}
+              weekMonday={week}
+              teacherColors={teacherColors}
+              sectionLineMins={sectionLineMins}
+              stepMin={teacherViewStep}
+              pxPerMin={teacherViewPxPerMin}
+              breakRanges={teacherViewBreaks}
+              excludedTeachers={teacherViewExcluded}
+              showUnusedDays={!hideEmptyDays}
+            />
+          </div>
+        </TimetableZoomArea>
       ) : (
         <TimetableDndArea>
-          <div className="flex min-h-0 flex-1 flex-col">
-            {/* '빈 교시 접기' 중 편집 모드가 켜지면 접힌 행을 CSS 변수·.tt-editing으로 즉시 펼침(평소 격자 지형 복원). */}
-            <EmptyPeriodScope>
-              <WeekdayGroupTables
-                slots={slots}
-                config={periodsConfig}
-                weekMonday={week}
-                weekdayGrouping={weekdayGrouping}
-                collapseEmptyPeriods={collapseEmptyPeriods}
-              />
-            </EmptyPeriodScope>
-          </div>
+          {/* ⚠️ zoom은 DndContext **안쪽**에 — 바깥에 두면 fixed인 DragOverlay가 커서와 어긋난다. */}
+          <TimetableZoomArea>
+            <div className="flex min-h-0 flex-1 flex-col">
+              {/* '빈 교시 접기' 중 편집 모드가 켜지면 접힌 행을 CSS 변수·.tt-editing으로 즉시 펼침(평소 격자 지형 복원). */}
+              <EmptyPeriodScope>
+                <WeekdayGroupTables
+                  slots={slots}
+                  config={periodsConfig}
+                  weekMonday={week}
+                  weekdayGrouping={weekdayGrouping}
+                  collapseEmptyPeriods={collapseEmptyPeriods}
+                />
+              </EmptyPeriodScope>
+            </div>
+          </TimetableZoomArea>
         </TimetableDndArea>
       )}
       </div>
