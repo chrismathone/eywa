@@ -25,8 +25,13 @@ export type RetentionSignals = {
   daysSinceCounsel: number | null;
   /** 최근 상담 요약 + 학생 메모(자유텍스트) — 이탈 키워드 탐지용 */
   parentSignalText: string;
-  /** 월 수강료(원) — 매출 위험·정렬용 */
-  monthlyFee: number;
+  /**
+   * 월 수강료(원) — 매출 위험·정렬용. **null = 청구 근거가 없다**(추정하지 않는다).
+   * 예전엔 학년별 하드코딩(고64만·중54만·초38만)으로 채워 넣어, 청구 이력이 0건인 재원생 28명에게
+   * 실제 수강료처럼 붙었고 그 값이 보드 금액·캠페인 카드·매출 위험 KPI·일일 브리핑까지 흘러갔다
+   * (실 청구 중앙값은 31.8만원). 환불요청서 자동입력의 '추측 금지'와 같은 원칙 — 근거 없으면 비운다.
+   */
+  monthlyFee: number | null;
   /** 가장 임박한 수강 종료까지 남은 일수. null = 종료일 없음 */
   enrollmentEndsInDays: number | null;
 };

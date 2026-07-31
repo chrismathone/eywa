@@ -22,7 +22,16 @@
  *   $MAKEEDU_OUT/import-invoices-report.json(최신 상세) + import-invoices-issues.log(한 줄 히스토리)로 남기고
  *   makeedu_sync_state.error에 요약 기록(성공이어도 이슈 추적 가능. 위험군 = students.makeedu_id 누락 학생뿐).
  *
- *   node --env-file=.env.local scripts/_makeedu/import-invoices.cjs [--apply] [--void-stale]
+ * ⚠️ 2026-07-30(2차) 두 가지 추가:
+ * ③ 삭제 판정 **5번째 가드 = makeedu 퇴원 목록**(withdrawn.json). 기존 4중 가드는 전부 eywa가 가진 정황
+ *   (활성 수강 없음·며칠째 부재)뿐이라, "삭제됐다"와 "다른 청구월로 옮겨졌다"를 구분하지 못했다(실측: 부재 18건 중
+ *   13건이 재원생, 2건은 12시간 만에 이탈). 퇴원 목록은 makeedu가 직접 퇴원이라고 말하는 유일한 증거다.
+ *   파일이 없으면 가드만 꺼진 채 진행(무중단) — 꺼졌다는 사실은 로그·리포트·sync_state에 남긴다.
+ * ④ **층 2 대조** — 저장 후 되읽어 `makeedu 라인 합 → 집계 합 → DB 합`을 월별로 비교(허용 오차 **0원**).
+ *   지금까지 동기화는 "넣고 끝"이라 2026-07이 07-16에 통째 멈춘 뒤에도 배지가 2주간 초록불이었다.
+ *   어긋나면 sync_state.error에 실려 화면 배지가 amber '확인 필요'로 바뀐다.
+ *
+ *   node --env-file=.env.local scripts/_makeedu/import-invoices.cjs [--apply] [--no-void-stale]
  */
 const fs = require("fs");
 const path = require("path");
@@ -31,7 +40,14 @@ const L = require("./lib.cjs");
 const S = require("./invoice-stale.cjs");
 
 const APPLY = process.argv.includes("--apply");
-const VOID_STALE = process.argv.includes("--void-stale") || process.env.MAKEEDU_VOID_STALE === "true";
+// 삭제 반영은 **기본 ON**(원장 승인 2026-07-30). 끄려면 MAKEEDU_VOID_STALE=false 또는 --no-void-stale.
+// ⚠️ 예전엔 기본 OFF + 연동 PC .env.local 의존이라 **한 번도 켜진 적이 없었다**(void 0행 실측).
+// 안전은 플래그가 아니라 classifyStale의 4중 가드(makeedu형·미완납·7일+ 연속부재·활성수강 없음)가 진다.
+const VOID_STALE =
+  !process.argv.includes("--no-void-stale") && process.env.MAKEEDU_VOID_STALE !== "false";
+// 대량 무효 서킷브레이커 해제(사람이 목록을 확인한 뒤 의도적으로 정리할 때만). 기본은 차단.
+const ALLOW_BULK_VOID =
+  process.argv.includes("--allow-bulk-void") || process.env.MAKEEDU_ALLOW_BULK_VOID === "true";
 const OUT = process.env.MAKEEDU_OUT || path.resolve(__dirname, "..", "..", ".makeedu-tmp");
 const idx = (H) => (s) => H.findIndex((h) => (h || "").includes(s));
 const ym = (v) => { const s = L.txt(v) || ""; const m = s.match(/(\d{4})[.\-/]?(\d{2})/); return m ? `${m[1]}-${m[2]}` : null; };
@@ -61,20 +77,66 @@ const KIND_CAT = { 수업: "tuition", 교재: "material", 차량비: "other", �
   }
   console.log("file: invoices.json  lines:", lines.length, "| periods:", [...new Set(lines.map((l) => l.period))].sort().slice(-6));
 
+  // 🔴 조용한 절단 감지 — 스크래퍼가 화면의 "총 N건"을 함께 저장한다. 수집 행수와 다르면 페이지 순회가
+  // 중간에 끊긴 것이고, 그대로 두면 **빠진 학생이 "makeedu에서 삭제됨"으로 오판**된다(돈이 사라진다).
+  const truncation =
+    data.totalReported != null && data.totalReported !== data.rows.length
+      ? { reported: data.totalReported, collected: data.rows.length }
+      : null;
+  if (truncation)
+    console.warn(`⚠️ 스크랩 절단 의심 — 화면 총 ${truncation.reported}건 vs 수집 ${truncation.collected}건.`);
+
+  // makeedu 퇴원 목록(scrape --list=withdrawn) — 삭제 판정 5번째 가드의 재료.
+  // ⚠️ 파일이 없거나 헤더가 달라도 **절대 실패시키지 않는다** — 가드만 꺼진 채 기존 4중 가드로 진행(무중단).
+  //    다만 꺼졌다는 사실은 로그·리포트·sync_state 요약에 남긴다(조용히 약해지는 걸 허용하지 않는다).
+  const withdrawnMakeeduIds = (() => {
+    const p = path.join(OUT, "withdrawn.json");
+    if (!fs.existsSync(p)) return null;
+    try {
+      return S.buildWithdrawnIndex(JSON.parse(fs.readFileSync(p, "utf8")));
+    } catch (e) {
+      console.warn(`퇴원 목록을 읽지 못했습니다(5번째 가드 비활성): ${e.message}`);
+      return null;
+    }
+  })();
+  console.log(
+    withdrawnMakeeduIds
+      ? `퇴원 목록: ${withdrawnMakeeduIds.size}명 — 삭제 판정 5번째 가드 ON`
+      : "퇴원 목록 없음 — 삭제 판정 5번째 가드 OFF(기존 4중 가드로만 판정)",
+  );
+
   const sql = postgres(process.env.DATABASE_URL, { prepare: false });
   try {
     const tenantId = await L.resolveTenantId(sql);
+
+    // ⚠️ 0행 가드 — scrape.cjs는 목록 실패를 격리해 **exit 0 + 빈 JSON**으로 넘긴다(세션 만료·URL/셀렉터 변경).
+    // 가드가 없으면 lines=[] → scrapedPeriods=[] → 아무것도 upsert 안 하고, 그런데도 아래 recordSync가
+    // status='ok' · error=NULL · synced_at=now로 덮어써 **"방금 정상 동기화됨"으로 위장**된다
+    // (직전에 남아 있던 '삭제 보류 N건' 경고까지 지워진다). 수납은 돈이라 침묵 실패를 허용하지 않는다.
+    if (lines.length === 0) {
+      const msg = "스크랩 0행 — makeedu 상세수납 목록을 못 읽었다(세션 만료·URL/셀렉터 변경 의심). 이번 실행은 반영하지 않음.";
+      console.error(`✖ ${msg}`);
+      if (APPLY) await L.recordSync(sql, tenantId, "invoices", null, "error", msg);
+      process.exitCode = 1;
+      return;
+    }
     // 스크랩이 커버한 청구월 — "eywa에만 남은 행" 판정은 이 범위 안에서만(과거 월은 스크랩 밖 = 판정 불가).
     const scrapedPeriods = [...new Set(lines.map((l) => l.period))].sort();
-    const [studs, existing] = await Promise.all([
+    const [studs, existing, activeRows] = await Promise.all([
       sql`select id, name, grade, makeedu_id from students where tenant_id = ${tenantId}`,
       scrapedPeriods.length
-        ? sql`select i.id, i.student_id, i.period, i.status, i.amount_total, i.amount_paid, i.amount_discount,
-                     i.notes, i.line_items, s.name, s.grade, s.makeedu_id
+        ? // updated_at = 마지막으로 스크랩에 잡힌 시각(upsert가 값이 같아도 now()를 쓴다) → 부재 지속일 계산 재료.
+          sql`select i.id, i.student_id, i.period, i.status, i.amount_total, i.amount_paid, i.amount_discount,
+                     i.notes, i.line_items, i.updated_at, s.name, s.grade, s.makeedu_id
               from invoices i join students s on s.id = i.student_id
               where i.tenant_id = ${tenantId} and i.period = any(${scrapedPeriods}) and i.status <> 'void'`
         : Promise.resolve([]),
+      // 활성 수강이 있는 학생 = "지금도 수업을 다니는 학생" → 그 학생의 청구가 사라진 건 삭제로 단정하지 않는다.
+      sql`select distinct e.student_id from enrollments e
+          join students s on s.id = e.student_id
+          where s.tenant_id = ${tenantId} and e.end_date is null and e.on_hold = false`,
     ]);
+    const activeStudentIds = new Set(activeRows.map((r) => r.student_id));
     const byMkid = new Map();
     for (const s of studs) if (s.makeedu_id) byMkid.set(String(s.makeedu_id), s.id);
     // 동명+동학년 2명 이상은 모호 → null(오매칭 방지). makeedu_id 우선 → (이름·학년) 폴백.
@@ -88,6 +150,7 @@ const KIND_CAT = { 수업: "tuition", 교재: "material", 차량비: "other", �
     // (student_id, period)로 집계
     const inv = new Map();
     const unmatchedLines = []; // (b) 매칭 실패 라인 상세 — 리포트로 가시화(조용한 증발 방지)
+    const matchedLines = []; // 층 2 대조의 ① 지점 — 저장 대상이 된 라인만(미매칭은 애초에 저장 안 됨)
     for (const l of lines) {
       const sid = resolve(l);
       if (!sid) {
@@ -95,6 +158,7 @@ const KIND_CAT = { 수업: "tuition", 교재: "material", 차량비: "other", �
           kind: l.gubun, item: l.item, total: l.total, paid: l.paid, unpaid: l.unpaid });
         continue;
       }
+      matchedLines.push(l);
       const key = `${sid}|${l.period}`;
       let a = inv.get(key);
       if (!a) {
@@ -135,12 +199,19 @@ const KIND_CAT = { 수업: "tuition", 교재: "material", 차량비: "other", �
       scrapedKeys: new Set(inv.keys()),
       unmatchedNameKeys: new Set(unmatchedLines.map((u) => `${L.normalizeName(u.name)}|${u.period}`)),
       normalizeName: L.normalizeName,
+      activeStudentIds,
+      withdrawnMakeeduIds,
+      allowBulkVoid: ALLOW_BULK_VOID,
+      // 매칭 실패율 — 못 받은 학생은 '부재'로 보이므로, 매칭이 나쁘면 삭제 판정 자체를 보류한다.
+      unmatchedRatio: lines.length ? unmatchedLines.length / lines.length : 0,
+      now: new Date(),
     });
     S.printIssues({ stale, unmatchedLines });
     let voided = 0;
+    let reconcile = []; // 층 2 대조 결과(APPLY에서만 채워진다 — dry-run은 저장을 안 하므로 비교 대상이 없다)
     const writeReport = () => {
       const p = S.writeReport(OUT, { ranAt: new Date().toISOString(), apply: APPLY, voidStale: VOID_STALE,
-        scrapedPeriods, unmatchedLines, stale, voidedCount: voided });
+        scrapedPeriods, unmatchedLines, stale, voidedCount: voided, reconcile });
       console.log(`리포트: ${p.jsonPath}`);
     };
 
@@ -185,9 +256,37 @@ const KIND_CAT = { 수업: "tuition", 교재: "material", 차량비: "other", �
       }
       console.log(`makeedu 부재 미완납 void 전환: ${voided}/${stale.voidable.length}건.`);
     }
+
+    // ── 층 2: 대조 — 저장 결과를 **되읽어** makeedu 원본과 맞는지 스스로 검산한다(허용 오차 0원) ──
+    // 지금까지 동기화는 "넣고 끝"이라 틀려도 배지가 초록불이었다. 여기서 어긋나면 sync_state.error에
+    // 실려 화면 배지가 amber '확인 필요'로 바뀐다 — 사람이 모르고 지나가는 경로를 없앤다.
+    // ⚠️ 스크랩에 나타난 (학생,월)만 비교한다 — eywa 자체 수동 청구는 makeedu에 없는 게 정상이라 대조 대상이 아니다.
+    const storedRows = await sql`
+      select student_id, period, amount_total, amount_discount, amount_paid, points_used
+      from invoices
+      where tenant_id = ${tenantId} and period = any(${scrapedPeriods}) and status <> 'void'`;
+    reconcile = S.reconcilePeriods({
+      scraped: S.aggregateByPeriod(matchedLines, {
+        period: (l) => l.period, total: (l) => l.total, discount: (l) => l.discount,
+        paid: (l) => l.paid, points: (l) => l.point,
+      }),
+      aggregated: S.aggregateByPeriod(invoices, {
+        period: (i) => i.period, total: (i) => i.total, discount: (i) => i.discount,
+        paid: (i) => i.paid, points: (i) => i.point,
+      }),
+      stored: S.aggregateByPeriod(
+        storedRows.filter((r) => inv.has(`${r.student_id}|${r.period}`)),
+        {
+          period: (r) => r.period, total: (r) => r.amount_total, discount: (r) => r.amount_discount,
+          paid: (r) => r.amount_paid, points: (r) => r.points_used,
+        },
+      ),
+    });
+    S.printReconcile(reconcile);
+
     writeReport();
     await L.recordSync(sql, tenantId, "invoices", inserted, "ok",
-      S.issueSummary({ stale, unmatchedLines, voidStale: VOID_STALE, voided }));
+      S.issueSummary({ stale, unmatchedLines, voidStale: VOID_STALE, voided, reconcile, truncation }));
     console.log(`upsert ${upserted}건 (신규 ${inserted} · 갱신 ${upserted - inserted}).`);
   } finally {
     await sql.end();

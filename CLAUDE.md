@@ -480,6 +480,7 @@ key(DB 식별자)는 **자동 확정**: 과목명 입력 후 blur 시 1회 — �
 - **#85** 배포가 "초록색 success"인데 실제로는 안 나감 — `ignoreCommand`는 **tip 커밋 1개만** 본다. **머지하고 push하면 항상 skip**이었다(워크트리 정책과 충돌). ⚠️ 뭉쳐 push할 땐 docs 커밋을 tip에 두지 말 것 · 확인은 초록색이 아니라 `gh api …/status --jq '.statuses[].description'`
 - **#86** 창 시스템 앱에서 `router.push`는 눈에 안 보인다 — 배경이 창에 덮여 있다 (⚠️ 알림/팰릿 등 최상위 프레임 이동은 WindowLink와 같은 경로로) + 본문이 N명인데 link가 1개면 그 link는 거짓말
 - **#87** `overflow-x: scroll`은 넘치지 않아도 트랙을 예약 → **꽉 찬 thumb의 가짜 스크롤바**("스크롤이 없는데도 스크롤이 있네"). 넘침 판정은 브라우저에 맡기고(`auto`) 굵기·색만 손댈 것 (⚠️ 진단 = `offsetHeight-clientHeight`≠0인데 `scrollWidth-clientWidth`=0)
+- **#88** `class_schedules`는 **운영 이력을 함께 담는다**(실측 1,068행 중 480행 만료) — 전 행을 그리면 끝난 교시가 현재로 보이고(반 상세 25줄 중 15줄) 미래 시작 교시도 현재로 샌다. 화면·AI·집계는 `summarizeSchedule`, 쿼리는 `liveValidTo` 절 (⚠️ 종강 반엔 걸지 말 것 — 요일이 통째로 사라진다)
 - **#82** postgres.js에서 `${JSON.stringify(v)}::jsonb` = **이중 인코딩**(`"#153e75"` 9자 저장 → 검증 실패 → 설정 침묵 무시). 스칼라는 `to_jsonb(${v}::text)`·객체는 `sql.json(obj)`, 검증은 **길이까지** (⚠️ 눈으로 따옴표 구분 안 됨)
 
 ## 🎨 디자인 규칙 인덱스 (상세는 `docs/design-conventions.md`)
@@ -487,7 +488,8 @@ key(DB 식별자)는 **자동 확정**: 과목명 입력 후 blur 시 1회 — �
 > UI·화면·폼·컴포넌트를 만질 때 해당 규칙을 `docs/design-conventions.md`에서 열어라. 대부분 각 절 끝에 "한 줄 규칙" 요약이 있다.
 
 - **Editorial 구성 문법 — 새 화면 기본값** (PageHeader·BigStat·PhotoCard·소프트 패널·알약·de-mono 정책, ⚠️ 로컬 Stat/mono·영문 라벨 신설 금지)
-- 창(embed) 안 페이지 헤더 = PageHeader 자동 컴팩트 1행 (⚠️ 새 메뉴 헤더 기본값 — 수제 eyebrow/h1 신설 금지, 콘텐츠 제목은 embedLabel, 2026-07-19)
+- 창(embed)·**모바일** 페이지 헤더 = PageHeader 자동 컴팩트 1행 (⚠️ 새 메뉴 헤더 기본값 — 수제 eyebrow/h1 신설 금지, 콘텐츠 제목은 embedLabel, 2026-07-19 / 모바일 확장 07-30)
+- **모바일 상단 크롬 = 한 줄 + 칩 툴바는 `.toolbar-rail` 가로 레일** (⚠️ 좁은 화면 기본값, 2026-07-30 — 크롬 43%→14% 실측. 상단 바는 하나·본문 헤더는 `compact-chrome`으로 접힘·판정 조건은 use-is-desktop과 함께 고칠 것)
 - 컬러 토큰 (`src/app/globals.css`)
 - **라운드 = 역할별 캐논** (⚠️ 표면 2xl · 칩 full · 버튼/인풋 lg(공용 기본 승계) · 모달 xl · 스켈레톤=실표면 동일, 임의 px 금지, 2026-07-20)
 - 타이포

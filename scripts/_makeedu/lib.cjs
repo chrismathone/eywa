@@ -49,8 +49,24 @@ function gender(v) {
 }
 
 // eywa name_normalized 생성 규칙(0001a): lower(regexp_replace(name,'\s+','','g'))
-function normalizeName(v) {
+// 🔴🔴 makeedu는 목록에서 **원생 상태를 이름 뒤 괄호로 표시**한다 — `강윤서(퇴)` · `박수빈(퇴)`.
+// 재원생만 보던 시절엔 이 접미사를 볼 일이 없었는데, 원생상태를 '전체'로 바꾼 순간 나타났고
+// **eywa의 `강윤서`와 매칭이 깨졌다**(2026-07-31 실측: 3,459라인 중 350건 미매칭 = 10%).
+// 매칭이 깨지면 그 학생의 청구가 "makeedu에 없다"로 읽혀 **삭제 후보가 된다** — 실제로 강윤서·박수빈·
+// 김나율A·김경진의 청구가 그렇게 무효 처리됐다(makeedu엔 멀쩡히 있는데도).
+// ⚠️ **괄호를 통째로 벗기면 안 된다** — eywa에 `박소선 (테스트)`·`원일(테스트)` 같은 실제 이름이 있어
+//    벗기면 다른 사람과 충돌한다. **상태 표시로 알려진 것만** 지운다(allowlist).
+const NAME_STATUS_SUFFIX = /\((?:퇴|퇴원|휴|휴원|졸|졸업)\)\s*$/;
+
+function stripNameStatusSuffix(v) {
   const s = txt(v);
+  if (!s) return "";
+  return s.replace(NAME_STATUS_SUFFIX, "").trim();
+}
+
+// 매칭용 정규화 — 공백 제거 + 소문자 + **상태 접미사 제거**(표시용이 아니라 대조 키다).
+function normalizeName(v) {
+  const s = stripNameStatusSuffix(v);
   if (!s) return "";
   return s.replace(/\s+/g, "").toLowerCase();
 }
@@ -147,6 +163,58 @@ async function recordSync(sql, tenantId, domain, rowCount, status = "ok", error 
       synced_at = now(), row_count = excluded.row_count, status = excluded.status, error = excluded.error, updated_at = now()`;
 }
 
+/**
+ * 스크랩할 청구월 범위 — makeedu 상세수납의 `fromYm`/`toYm`(텍스트 `YYYY-MM`)에 넣을 값.
+ *
+ * 🔴🔴 **달력 월로 계산하면 안 된다** (2026-07-31 실측 사고). makeedu는 **선청구**라
+ * 달력 7월 중순에 이미 청구월이 2026-08로 넘어가 있다. 달력 기준으로 `당월-2 ~ 당월`을 넣었더니
+ * `2026-05~2026-07`이 되어 **정작 살아있는 2026-08이 통째로 빠졌고**, 그 달 360건이 한 번도
+ * 갱신되지 않은 채 미수 ₩54M이 옛 스냅샷으로 굳었다.
+ *
+ * 그래서 **앵커는 makeedu가 말하는 현재 청구월**이다(목록 화면의 `fromYm` 기본값 = 실측 `2026-08`).
+ * 화면에서 못 읽으면 달력 월로 폴백하되, **선청구를 감안해 한 달 더 넓게** 잡는다(빈 달은 무해).
+ *
+ * @param anchor 현재 청구월 `YYYY-MM`(화면에서 읽은 값). 없으면 달력 기준 폴백.
+ * @param months 포함할 개월 수(앵커 포함). 1이면 앵커 달만.
+ * @param today  달력 폴백 기준일(KST 'YYYY-MM-DD' 또는 Date). 테스트 결정성을 위해 주입.
+ */
+function billingMonthRange({ anchor, months = 3, today } = {}) {
+  const n = Math.max(1, Math.floor(Number(months) || 1));
+  const pad = (v) => String(v).padStart(2, "0");
+  const iso =
+    typeof today === "string"
+      ? today
+      : new Intl.DateTimeFormat("en-CA", {
+          timeZone: "Asia/Seoul",
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+        }).format(today || new Date());
+  const [cy, cm] = iso.split("-").map(Number);
+
+  let ay, am;
+  const m = /^(\d{4})[-.]?(\d{2})$/.exec(String(anchor || "").trim());
+  if (m) {
+    ay = Number(m[1]);
+    am = Number(m[2]);
+  } else {
+    // 폴백: 달력 당월 +1 (선청구로 이미 다음 달이 열려 있을 수 있다 — 빈 달을 하나 더 보는 비용은 싸다).
+    const nx = new Date(Date.UTC(cy, cm, 1));
+    ay = nx.getUTCFullYear();
+    am = nx.getUTCMonth() + 1;
+  }
+  // 앵커가 달력 당월보다 뒤면 달력 당월을 쓴다(화면 값이 과거로 굳어 있는 이상 상황 방어).
+  if (ay * 12 + am < cy * 12 + cm) {
+    ay = cy;
+    am = cm;
+  }
+  const from = new Date(Date.UTC(ay, am - 1 - (n - 1), 1)); // 월 오버플로가 연도를 알아서 내려준다
+  return {
+    from: `${from.getUTCFullYear()}-${pad(from.getUTCMonth() + 1)}`,
+    to: `${ay}-${pad(am)}`,
+  };
+}
+
 module.exports = {
   recordSync,
   tieredMatcher,
@@ -159,9 +227,11 @@ module.exports = {
   normPhone,
   gender,
   normalizeName,
+  stripNameStatusSuffix,
   parseAmount,
   gradeNorm,
   subjectFromName,
   paymentMethod,
   resolveTenantId,
+  billingMonthRange,
 };

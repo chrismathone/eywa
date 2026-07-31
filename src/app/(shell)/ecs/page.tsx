@@ -4,6 +4,9 @@ import { requireAccess } from "@/lib/auth/require-access";
 import { PageHeader } from "@/components/page-header";
 import { WeekNav } from "@/app/(shell)/timetable/_components/week-nav";
 import { getSheetLanding } from "@/features/class-sheets/server/queries";
+import { getCurrentUser } from "@/lib/auth/current-user";
+import { canManageSheetSync } from "@/features/integrations/server/sheet-access";
+import { EcsSheetImportDialog } from "./_components/sheet-import-dialog";
 
 export const metadata: Metadata = { title: "English Class Sheet — eywa" };
 
@@ -18,7 +21,9 @@ export default async function EcsLandingPage({
 }) {
   await requireAccess("ecs");
   const { week } = await searchParams;
-  const res = await getSheetLanding(week ?? null);
+  // 시트 가져오기 버튼은 시트 경로 자격(sheet_sync=full)에만 — 서버 액션도 같은 게이트로 이중 방어.
+  const [res, user] = await Promise.all([getSheetLanding(week ?? null), getCurrentUser()]);
+  const canSync = user ? await canManageSheetSync(user.systemRole) : false;
 
   if (!res.ok) {
     return (
@@ -40,6 +45,11 @@ export default async function EcsLandingPage({
 
       <div className="bg-card shadow-card flex flex-wrap items-center gap-3 rounded-2xl px-4 py-3">
         <WeekNav currentWeek={res.weekMonday} today={res.today} hrefForWeek={(monday) => `/ecs?week=${monday}`} />
+        {canSync ? (
+          <div className="ml-auto">
+            <EcsSheetImportDialog />
+          </div>
+        ) : null}
       </div>
 
       {res.cards.length === 0 ? (

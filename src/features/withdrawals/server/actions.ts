@@ -1,6 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import {
+  clearOnHoldForActiveEnrollments,
+  reopenEnrollmentsClosedByWithdrawal,
+} from "@/features/students/server/enrollment-sync";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
@@ -156,6 +160,14 @@ export async function reactivateStudent(
   if (!studentId) return { error: "학생 ID가 누락되었습니다" };
 
   const supabase = await createClient();
+  // 되돌릴 대상 판정을 위해 퇴원일을 먼저 읽는다 — 퇴원이 닫은 수강(end_date=퇴원일)만 다시 연다.
+  const { data: cur } = await supabase
+    .from("students")
+    .select("withdrawn_at")
+    .eq("id", studentId)
+    .maybeSingle();
+  const withdrawnDate = cur?.withdrawn_at ? String(cur.withdrawn_at).slice(0, 10) : null;
+
   const { error } = await supabase
     .from("students")
     .update({
@@ -167,7 +179,16 @@ export async function reactivateStudent(
 
   if (error) return { error: error.message };
 
+  // ⚠️ students만 되돌리면 수강은 종료된 채로 남아 시간표 셀 '퇴원' 섹션에 계속 뜨고 휴원도 안 풀린다.
+  // 학생 상세(changeStudentStatus)의 재원 전환과 **같은 불변식**을 공유해야 한다 — 예전엔 이 경로에만
+  // 없어서 "어느 화면에서 눌렀느냐"로 결과가 갈렸다(2026-07-30 적대 리뷰).
+  const reopenErr = await reopenEnrollmentsClosedByWithdrawal(supabase, studentId, withdrawnDate);
+  if (reopenErr) return { error: reopenErr };
+  const holdErr = await clearOnHoldForActiveEnrollments(supabase, studentId);
+  if (holdErr) return { error: holdErr };
+
   revalidatePath("/withdrawals");
   revalidatePath(`/students/${studentId}`);
+  revalidatePath("/timetable");
   return undefined;
 }

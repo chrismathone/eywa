@@ -1,7 +1,6 @@
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import type { ReactNode } from "react";
-import { AppHeader } from "@/components/app-header";
 import { AppSidebar } from "@/components/app-sidebar";
 import { CommandPalette } from "@/components/command-palette";
 import { MobileTopNav } from "@/components/mobile-top-nav";
@@ -21,6 +20,7 @@ import { getPermMatrix } from "@/lib/auth/perm-matrix";
 import { getShellView, canUseTeacherView, isFullShellRole, effectiveTeacherScope } from "@/lib/auth/view-mode";
 import { ecsAssistantClassIds } from "@/features/class-sheets/server/access";
 import { canAccess, menuKeyForPath } from "@/lib/permissions";
+import { findNavItem } from "@/lib/navigation";
 import { brandColorVars } from "@/lib/color-utils";
 import { WorkspaceCanvas } from "@/components/workspace/workspace-canvas";
 import { WorkspaceEnabledProvider } from "@/components/workspace/workspace-enabled";
@@ -110,6 +110,9 @@ export default async function ShellLayout({ children }: { children: ReactNode })
   // 강사·학생: 사이드바·네비 없는 단일 화면 셸 — 미니멀 헤더(브랜드 + 로그아웃) + 풀폭 본문.
   // 강사=원스크린, 학생=내 학습 현황. (원장 등 나머지는 아래 12메뉴 풀 셸 그대로.)
   if (view === "teacher" || view === "student") {
+    // 미니셸 헤더에 현재 메뉴명을 얹는다 — 이 셸엔 MobileTopNav가 없어 크롬에 제목이 없다.
+    // 모르는 경로는 null(지어내지 않는다 — 학원명만 남는다).
+    const miniShellLabel = findNavItem((await headers()).get("x-pathname") ?? "")?.label ?? null;
     return (
       // print:h-auto/overflow-visible — 인쇄 시 h-screen+overflow-hidden 래퍼가 문서를 1페이지 높이로
       // 클리핑하는 것 방지(globals.css의 html/body/main 인쇄 리셋과 세트 — 래퍼 div는 셀렉터 밖이라 여기서).
@@ -124,10 +127,13 @@ export default async function ShellLayout({ children }: { children: ReactNode })
                 <EyIcon name="building" size={16} strokeWidth={1.8} className="text-white" />
               </span>
             )}
-            <div className="leading-none">
-              <div className="text-foreground text-[17px] font-bold tracking-tight">{brand}</div>
-              <div className="text-text-dim mt-[3px] text-[10px]">
-                {academyLine}
+            <div className="min-w-0 leading-none">
+              <div className="text-foreground truncate text-[17px] font-bold tracking-tight">{brand}</div>
+              <div className="text-text-dim mt-[3px] truncate text-[10px]">
+                {/* ⚠️ 현재 메뉴명을 여기 넣는 이유: 본문 PageHeader가 좁은 화면에선 `compact-chrome`으로
+                    제목을 접는다(= "제목은 크롬이 이미 보여준다"는 전제). 풀셸은 MobileTopNav가 그 역할을
+                    하는데 이 미니셸엔 그런 줄이 없어, 안 넣으면 강사 화면에서 제목이 어디에도 안 남는다. */}
+                {miniShellLabel ? `${academyLine} · ${miniShellLabel}` : academyLine}
               </div>
             </div>
           </div>
@@ -201,12 +207,12 @@ export default async function ShellLayout({ children }: { children: ReactNode })
       </HideInFrame>
 
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden print:overflow-visible">
-        {/* 상단 헤더 = 모바일/터치 전용(사이드바 없는 화면의 브랜드·검색·벨). 데스크톱은 숨김 —
-            벨은 사이드바 하단 사용자 영역, 검색은 Shift+F/Ctrl·Cmd+K(2026-07-20 원장 "상단탭 무쓸모"). */}
-        <HideInFrame>
-          <AppHeader brand={brand} className="lg:pointer-fine:hidden" />
-        </HideInFrame>
-        <main className="flex-1 overflow-auto px-3 pt-4 lg:px-6 lg:pt-5 [scrollbar-gutter:stable]">
+        {/* ⚠️ 옛 AppHeader(모바일 전용 두 번째 헤더)는 **삭제**했다 — 위 MobileTopNav와 같은 것을 두 번
+            보여주면서(브랜드·그룹·메뉴명 각 2회) 상단 크롬이 390×844에서 318px=43%를 먹었다
+            (원장 2026-07-30 "모바일뷰에서 시간표가 상단 헤더 때문에 거의 보이지 않음"). 제목·벨은
+            MobileTopNav 한 줄로 흡수. 데스크톱은 원래 이 헤더가 숨겨져 있어 영향 없음. */}
+        {/* pt-2(모바일) — 상단 바 바로 아래라 여백을 조인다. 데스크톱은 종전 pt-5. */}
+        <main className="flex-1 overflow-auto px-3 pt-2 lg:px-6 lg:pt-5 [scrollbar-gutter:stable]">
           {/* 드릴인 등으로 embed 파라미터가 떨어진 하드 내비가 창(iframe) 안에서 풀 셸을 렌더하면
               물리 프레임 판정으로 .embed-main 마커를 재부착 — PageHeader 컴팩트의 HideInFrame판. */}
           <EmbedMainMarker />

@@ -1,7 +1,7 @@
 ﻿# setup-sync-pc.ps1 — "이 PC를 makeedu 동기화 PC로 지정" 원커맨드.
 #
 # 웹 버튼은 PC에 작업을 설치할 수 없으므로(브라우저 샌드박스·Vercel 원격), 지정 PC에서 이 스크립트를
-# 한 번 실행하면: ① 사전요건 확인 ② 작업 스케줄러 2개 등록 ③ makeedu 로그인(신뢰 IP) 확인 ④ 워처 시작.
+# 한 번 실행하면: ① 사전요건 확인 ② 작업 스케줄러 3개 등록 ③ makeedu 로그인(신뢰 IP) 확인 ④ 워처 시작.
 # 관리자 권한 불필요(현재 사용자 작업으로 등록). 경로는 스크립트 위치에서 도출(하드코딩 없음).
 #
 # 사용(이 PC에서 PowerShell):
@@ -22,8 +22,13 @@ $ErrorActionPreference = "Stop"
 $repo = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 $SYNC = "eywa-makeedu-sync"
 $WATCH = "eywa-makeedu-sync-watcher"
+$HEALTH = "eywa-makeedu-health"
 $syncWrapper = Join-Path $repo "scripts\_makeedu\run-local-sync.ps1"
 $watchWrapper = Join-Path $repo "scripts\_makeedu\run-watch-requests.ps1"
+$healthWrapper = Join-Path $repo "scripts\_makeedu\run-health-check.ps1"
+# ⚠️ 세 작업은 **한 세트**다 — 등록·해제·상태확인이 모두 같은 목록을 돈다. 헬스체크만 따로 schtasks로
+#    등록하면 -Remove(지정 해제)가 그걸 안 지워서, 동기화 PC를 옮긴 뒤에도 **옛 PC가 계속 로그인을 시도**한다.
+$TASKS = @($SYNC, $WATCH, $HEALTH)
 
 function Write-Head($t) { Write-Host "`n== $t ==" -ForegroundColor Cyan }
 
@@ -41,7 +46,7 @@ function Stop-Watcher {
 
 function Show-Status {
   Write-Head "현재 상태 (repo: $repo)"
-  foreach ($n in @($SYNC, $WATCH)) {
+  foreach ($n in $TASKS) {
     $t = Get-ScheduledTask -TaskName $n -ErrorAction SilentlyContinue
     if ($t) {
       $info = $t | Get-ScheduledTaskInfo
@@ -54,6 +59,12 @@ function Show-Status {
   if (Test-Path $log) {
     $last = (Get-Item $log).LastWriteTime
     Write-Host "  워처 로그 마지막 기록: $last"
+  }
+  # 헬스체크는 결과가 로그 한 줄이라 마지막 줄을 그대로 보여준다(✅ 정상 / 🔴 접속 실패).
+  $hlog = Join-Path $repo ".makeedu-tmp\health-check.log"
+  if (Test-Path $hlog) {
+    $lastLine = @(Get-Content -Path $hlog -Encoding UTF8 -Tail 1)
+    if ($lastLine.Count -gt 0) { Write-Host "  접속 점검 마지막 결과: $($lastLine[0])" }
   }
 }
 
@@ -74,7 +85,7 @@ if ($Test) { if (Test-Login) { return } else { exit 1 } }
 if ($Remove) {
   Write-Head "동기화 PC 지정 해제"
   Stop-Watcher  # 실행 중 워처(래퍼+orphan node)를 먼저 내림 — Unregister는 러닝 프로세스를 안 죽임
-  foreach ($n in @($SYNC, $WATCH)) {
+  foreach ($n in $TASKS) {
     if (Get-ScheduledTask -TaskName $n -ErrorAction SilentlyContinue) {
       Unregister-ScheduledTask -TaskName $n -Confirm:$false
       Write-Host "  해제됨: $n" -ForegroundColor Green
@@ -98,6 +109,7 @@ if (-not $hasPw) { Write-Host "  ✖ playwright 없음 — 'pnpm install' 후 �
 else { Write-Host "  ✓ playwright 설치됨" }
 if (-not (Test-Path $syncWrapper)) { Write-Host "  ✖ 래퍼 없음: $syncWrapper" -ForegroundColor Red; $fail = $true }
 if (-not (Test-Path $watchWrapper)) { Write-Host "  ✖ 래퍼 없음: $watchWrapper" -ForegroundColor Red; $fail = $true }
+if (-not (Test-Path $healthWrapper)) { Write-Host "  ✖ 래퍼 없음: $healthWrapper (zip을 폴더 전체로 덮었는지 확인)" -ForegroundColor Red; $fail = $true }
 if ($fail) { Write-Host "`n사전요건 미충족 — 위 항목을 갖춘 뒤 다시 실행하세요." -ForegroundColor Red; exit 1 }
 
 # ② 작업 등록 (관리자 불필요·현재 사용자). -Force = 멱등 재등록.
@@ -129,6 +141,18 @@ $watchSettings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Z
   -StartWhenAvailable -RestartCount 10 -RestartInterval (New-TimeSpan -Minutes 5)
 Register-ScheduledTask -TaskName $WATCH -Action $watchAction -Trigger $watchTriggers -Settings $watchSettings -Force | Out-Null
 Write-Host "  ✓ $WATCH (로그온 시 상주 + 10분마다 자동 부활 — 지금동기화·역동기화 요청 처리)" -ForegroundColor Green
+
+# 접속 헬스체크 — 하루 1회 08:30. 06시 동기화가 실패했으면 **업무 시작 전에** 원장 벨이 울린다.
+# 이 작업이 감시하는 건 "동기화가 조용히 멈춘 상태"다 — 로그인이 깨지면 화면 숫자가 마지막 성공 시점에
+# 얼어붙은 채 그대로 읽히고, 아무도 모른 채 며칠이 간다(2026-07-30 퇴원일 사고와 같은 실패 모양).
+# ⚠️ 하루 1회로 충분하다 — 자주 시도할수록 계정 잠금 위험만 커진다(실패해도 재시도 안 함).
+# ⚠️ StartWhenAvailable = PC가 꺼져 있어 08:30을 놓치면 켜진 뒤 한 번 따라잡는다.
+$healthAction = New-ScheduledTaskAction -Execute "conhost.exe" -Argument ($hidden -f $healthWrapper)
+$healthTrigger = New-ScheduledTaskTrigger -Daily -At ([datetime]::Today.AddHours(8).AddMinutes(30))
+$healthSettings = New-ScheduledTaskSettingsSet -StartWhenAvailable -MultipleInstances IgnoreNew `
+  -ExecutionTimeLimit (New-TimeSpan -Minutes 10)
+Register-ScheduledTask -TaskName $HEALTH -Action $healthAction -Trigger $healthTrigger -Settings $healthSettings -Force | Out-Null
+Write-Host "  ✓ $HEALTH (매일 08:30 접속 점검 — 실패하면 원장 벨 알림)" -ForegroundColor Green
 
 # ③ 워처 시작 — 옛 인스턴스(옛 env)를 먼저 내려 fresh 재시작(크리덴셜 교체 재실행에도 안전).
 Stop-Watcher

@@ -15,7 +15,7 @@ console.log("\n================ 가상 시드 · 이탈 방어 명단 (위험도
 for (const r of roster) {
   console.log(
     `${mark[r.risk.level]} ${String(r.risk.score).padStart(3)}점  ` +
-      `${r.name}(${r.grade})  ${r.teacherName} 강사  월${won(r.monthlyFee)}  재등록:${r.risk.renewal.label}`,
+      `${r.name}(${r.grade})  ${r.teacherName} 강사  월${r.monthlyFee == null ? "—" : won(r.monthlyFee)}  재등록:${r.risk.renewal.label}`,
   );
   console.log(`        조치: ${r.primaryAction}`);
   console.log(`        사유: ${r.risk.reasons.slice(0, 3).join(" · ")}`);

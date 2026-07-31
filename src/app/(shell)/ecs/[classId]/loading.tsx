@@ -2,7 +2,7 @@
 export default function EcsSheetLoading() {
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
-      <div className="shrink-0 [.embed-main_&]:hidden">
+      <div className="shrink-0 compact-chrome:hidden">
         <div className="bg-bg-soft h-4 w-20 animate-pulse rounded" />
         <div className="bg-bg-soft mt-2 h-6 w-72 animate-pulse rounded" />
         <div className="bg-bg-soft mt-2 h-4 w-56 animate-pulse rounded" />

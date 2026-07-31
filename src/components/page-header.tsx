@@ -7,7 +7,7 @@ import type { ReactNode } from "react";
  * stats에는 BigStat 그리드(문법 ②)를 끼운다. 구분선(border-b) 대신 여백 리듬(문법 ⑥).
  *
  * ⚠️ 임베드(플로팅 창, ?embed=1) 컴팩트 모드(2026-07-19 원장 지적 — "창 안 헤더가 본문을 잠식 +
- * 제목 3중 노출(AppHeader·창 타이틀바·인페이지)"): 창 안에선 **창 타이틀바가 제목**이므로
+ * 제목 3중 노출(상단 바·창 타이틀바·인페이지)"): 창 안에선 **창 타이틀바가 제목**이므로
  * eyebrow·21px 헤드라인을 접고 embedLabel ?? description(?? title)을 13px 한 줄로 — actions와 같은 행.
  *
  * ⚠️ 판정은 요청 헤더(x-embed)가 아니라 **임베드 셸 <main>의 `.embed-main` 마커 + CSS 변형**이다
@@ -43,15 +43,15 @@ export function PageHeader({
   // 없으면 title 자체를 13px dim으로 강등해 라벨로 쓴다(빈 행 방지 — 미래 소비처 안전망).
   const hasCompactLabel = Boolean(embedLabel ?? description);
   return (
-    <header className="flex flex-col gap-4 [.embed-main_&]:gap-3">
-      <div className="flex flex-col gap-2 px-1 sm:flex-row sm:items-end sm:justify-between [.embed-main_&]:flex-row [.embed-main_&]:flex-wrap [.embed-main_&]:items-baseline [.embed-main_&]:gap-x-3 [.embed-main_&]:gap-y-1">
-        <div className="min-w-0 [.embed-main_&]:flex [.embed-main_&]:min-w-0 [.embed-main_&]:flex-wrap [.embed-main_&]:items-baseline [.embed-main_&]:gap-x-2">
-          {eyebrow ? <p className="editorial-eyebrow [.embed-main_&]:hidden">{eyebrow}</p> : null}
+    <header className="flex flex-col gap-4 compact-chrome:gap-3">
+      <div className="flex flex-col gap-2 px-1 sm:flex-row sm:items-end sm:justify-between compact-chrome:flex-row compact-chrome:flex-wrap compact-chrome:items-baseline compact-chrome:gap-x-3 compact-chrome:gap-y-1">
+        <div className="min-w-0 compact-chrome:flex compact-chrome:min-w-0 compact-chrome:flex-wrap compact-chrome:items-baseline compact-chrome:gap-x-2">
+          {eyebrow ? <p className="editorial-eyebrow compact-chrome:hidden">{eyebrow}</p> : null}
           <h2
             className={`text-foreground text-[21px] font-bold tracking-tight ${eyebrow ? "mt-1" : ""} ${
               hasCompactLabel
-                ? "[.embed-main_&]:hidden"
-                : "[.embed-main_&]:text-text-dim [.embed-main_&]:mt-0 [.embed-main_&]:text-[13px] [.embed-main_&]:font-normal [.embed-main_&]:tracking-normal"
+                ? "compact-chrome:hidden"
+                : "compact-chrome:text-text-dim compact-chrome:mt-0 compact-chrome:text-[13px] compact-chrome:font-normal compact-chrome:tracking-normal"
             }`}
           >
             {title}
@@ -59,20 +59,20 @@ export function PageHeader({
           {description ? (
             <p
               className={`text-text-dim mt-1 text-[13px] ${
-                embedLabel ? "[.embed-main_&]:hidden" : "[.embed-main_&]:mt-0"
+                embedLabel ? "compact-chrome:hidden" : "compact-chrome:mt-0"
               }`}
             >
               {description}
             </p>
           ) : null}
           {embedLabel ? (
-            <p className="text-text-dim hidden text-[13px] [.embed-main_&]:block">{embedLabel}</p>
+            <p className="text-text-dim hidden text-[13px] compact-chrome:block">{embedLabel}</p>
           ) : null}
         </div>
         {actions ? (
           // 임베드에선 shrink/wrap 허용 — actions로 들어온 툴바(문서 검색 등)의 내부 flex-wrap이
           // 좁은 창에서 실제로 발동하게(shrink-0 고정이면 max-content 폭이 창을 뚫음, 적대 리뷰).
-          <div className="flex shrink-0 items-center gap-2 [.embed-main_&]:min-w-0 [.embed-main_&]:shrink [.embed-main_&]:flex-wrap">
+          <div className="flex shrink-0 items-center gap-2 compact-chrome:min-w-0 compact-chrome:shrink compact-chrome:flex-wrap">
             {actions}
           </div>
         ) : null}

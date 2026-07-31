@@ -12,6 +12,8 @@ import { getStudentConsultationsPage } from "@/features/consultations/server/que
 import { getRetentionRoster } from "@/features/retention/server/queries";
 import { summarizeRoster } from "@/features/retention/roster";
 import { kstToday } from "@/lib/date-kst";
+import { getCurrentUser } from "@/lib/auth/current-user";
+import { canAccessTenant } from "@/lib/auth/perm-matrix";
 import { CONSULTATION_CATEGORY_LABEL, INVOICE_STATUS_LABEL, RISK_LEVEL_LABEL, subjectLabeler } from "./labels";
 
 const ATTENDANCE_STATUS_LABEL: Record<string, string> = {
@@ -141,6 +143,12 @@ export const retentionRisksTool = betaZodTool({
     limit: z.number().int().min(1).max(20).optional().describe("최대 인원(기본 10)"),
   }),
   run: async ({ limit }) => {
+    // ⚠️ 툴도 화면과 같은 게이트를 통과해야 한다 — /retention이 꺼진 테넌트에서 비서로만 명단이
+    // 새어 나가던 구멍(2026-07-30 적대 리뷰). RLS는 이 테이블들을 역할로 막지 않으므로 여기서 막는다.
+    const user = await getCurrentUser();
+    if (!user || !(await canAccessTenant(user.systemRole, "retention"))) {
+      return JSON.stringify({ error: "이탈 위험 명단을 볼 권한이 없습니다." });
+    }
     const roster = await getRetentionRoster();
     const stats = summarizeRoster(roster);
     return JSON.stringify({

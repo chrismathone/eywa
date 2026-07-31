@@ -23,15 +23,6 @@ function pct(score: number | null, max: number | null): number | null {
   if (score == null || max == null || Number(max) <= 0) return null;
   return (Number(score) / Number(max)) * 100;
 }
-/** 수강료 미기재 시 학년 기준 추정(부원장 estimateFee 포팅). */
-function estimateFee(grade: string | null): number {
-  const g = grade ?? "";
-  if (g.includes("고")) return 640000;
-  if (g.includes("중")) return 540000;
-  if (g.includes("초")) return 380000;
-  return 500000;
-}
-
 // === eywa 원시 행 형태(Supabase select 결과와 동일, snake_case) ===
 export type RawStudentRow = {
   id: string;
@@ -88,7 +79,7 @@ export type RosterStudent = {
   grade: string | null;
   school: string | null;
   teacherName: string | null;
-  monthlyFee: number;
+  monthlyFee: number | null;
   nextContactDate: string | null;
   aiCareSummary: string | null;
   memo: string;
@@ -188,7 +179,7 @@ export function buildRoster(raw: RetentionRawData, today: Date): RosterStudent[]
       lateCount: a?.late ?? 0,
       daysSinceCounsel,
       parentSignalText: memo,
-      monthlyFee: fee.get(s.id) || estimateFee(s.grade),
+      monthlyFee: fee.get(s.id) ?? null, // 청구 근거 없으면 null — 학년별 추정치 날조 금지
       enrollmentEndsInDays: endsIn.get(s.id) ?? null,
     };
     const risk = scoreStudent(signals);
@@ -211,7 +202,7 @@ export function buildRoster(raw: RetentionRawData, today: Date): RosterStudent[]
     } satisfies RosterStudent;
   });
 
-  return roster.sort((x, y) => y.risk.score - x.risk.score || y.monthlyFee - x.monthlyFee);
+  return roster.sort((x, y) => y.risk.score - x.risk.score || (y.monthlyFee ?? -1) - (x.monthlyFee ?? -1));
 }
 
 export type RetentionStats = {
@@ -231,7 +222,7 @@ export function summarizeRoster(roster: RosterStudent[]): RetentionStats {
     if (r.risk.level === "risk") risk++;
     else if (r.risk.level === "warn") warn++;
     else ok++;
-    if (r.risk.level !== "ok") revenueRisk += r.monthlyFee;
+    if (r.risk.level !== "ok") revenueRisk += r.monthlyFee ?? 0; // 근거 없는 학생은 매출 위험에 안 싣는다
     if (r.nextContactDate) scheduled++;
     if (r.risk.renewal.tone === "risk") renewalRisk++;
   }

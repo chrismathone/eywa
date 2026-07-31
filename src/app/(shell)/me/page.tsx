@@ -52,7 +52,9 @@ export default async function MyPage() {
           eyebrow="내 정보"
           title={user.displayName}
           description="내 이력서와 로그인 정보를 직접 확인·수정합니다."
-          embedLabel="내 이력서와 로그인 정보"
+          // ⚠️ title이 **본인 이름**(메뉴명이 아니다)이라 컴팩트(창·모바일)에선 접힌다 →
+          //    이름을 컴팩트 행에 직접 실어야 좁은 화면에서 "누구의 정보인지"가 남는다.
+          embedLabel={`${user.displayName} · 내 이력서와 로그인 정보`}
         />
       </div>
 

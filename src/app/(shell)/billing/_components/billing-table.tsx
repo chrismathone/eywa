@@ -29,6 +29,12 @@ const PAYMENT_METHOD_LABEL: Record<string, string> = {
 };
 const KRW = new Intl.NumberFormat("ko-KR");
 const won = (n: number) => `${KRW.format(n)}원`;
+/** billed_at("2026-07-05" 또는 timestamptz) → 일(day) 숫자. 라인에 dueDay가 없는 수동 청구서 폴백. */
+function dayOfMonth(iso: string | null): number | null {
+  if (!iso) return null;
+  const day = Number(iso.slice(8, 10));
+  return Number.isFinite(day) && day >= 1 && day <= 31 ? day : null;
+}
 const dash = (n: number) => (n > 0 ? won(n) : "—");
 const shortDate = (iso: string | null | undefined) =>
   iso ? new Date(iso).toLocaleDateString("ko-KR", { timeZone: "Asia/Seoul", month: "2-digit", day: "2-digit" }) : "—";
@@ -39,15 +45,23 @@ type Props = {
   desc?: boolean;
   period?: string;
   q?: string;
+  /** 기한 경과만 보기 필터 상태 — 정렬 링크가 이 필터를 잃지 않게 함께 실어 나른다. */
+  overdueOnly?: boolean;
+  /** 마지막 동기화에 없던 행만 보기 — 위와 같은 이유로 정렬 링크가 함께 실어 나른다. */
+  missingOnly?: boolean;
 };
 
 function buildSortHref(
   col: SortKey,
-  current: { sort?: SortKey; desc?: boolean; period?: string; q?: string },
+  current: {
+    sort?: SortKey; desc?: boolean; period?: string; q?: string; overdueOnly?: boolean; missingOnly?: boolean;
+  },
 ): string {
   const params = new URLSearchParams();
   if (current.period) params.set("period", current.period);
   if (current.q) params.set("q", current.q);
+  if (current.overdueOnly) params.set("overdue", "1");
+  if (current.missingOnly) params.set("missing", "1");
   const nextDesc = current.sort === col ? !current.desc : false;
   if (col !== "status") params.set("sort", col);
   if (nextDesc) params.set("desc", "1");
@@ -63,7 +77,9 @@ function SortHeader({
 }: {
   col: SortKey;
   label: string;
-  current: { sort?: SortKey; desc?: boolean; period?: string; q?: string };
+  current: {
+    sort?: SortKey; desc?: boolean; period?: string; q?: string; overdueOnly?: boolean; missingOnly?: boolean;
+  };
   className?: string;
 }) {
   const active = current.sort === col;
@@ -100,8 +116,8 @@ function toLines(r: InvoiceRow): InvoiceLineItem[] {
   return [{ kind: "수업", description: r.notes ?? "수납", amount: r.amountTotal, ...invoiceLevel }];
 }
 
-export function BillingTable({ rows, sort, desc, period, q }: Props) {
-  const current = { sort, desc, period, q };
+export function BillingTable({ rows, sort, desc, period, q, overdueOnly, missingOnly }: Props) {
+  const current = { sort, desc, period, q, overdueOnly, missingOnly };
   const groups = rows.map((r) => ({ r, lines: toLines(r) }));
 
   // 페이지 합계(라인 기준)
@@ -171,7 +187,12 @@ export function BillingTable({ rows, sort, desc, period, q }: Props) {
                     )}
                   </td>
                   <td className="text-muted-foreground num px-3 py-2.5 text-xs">{first ? r.period : ""}</td>
-                  <td className="text-muted-foreground num px-3 py-2.5 text-center text-xs">{li.dueDay ?? "—"}</td>
+                  {/* 청구일 — makeedu 라인엔 dueDay가 있고, eywa 수동 청구서엔 없다(billed_at에만 저장).
+                      폴백이 없던 시절엔 사용자가 다이얼로그에서 청구일을 입력해도 항상 '—'로 떠서
+                      "저장은 됐는데 아무도 안 읽는" write-only-orphan이었다. */}
+                  <td className="text-muted-foreground num px-3 py-2.5 text-center text-xs">
+                    {li.dueDay ?? dayOfMonth(r.billedAt) ?? "—"}
+                  </td>
                   <td className="px-3 py-2.5">
                     <span className={`inline-block rounded-sm px-1.5 py-0.5 text-[11px] font-medium ${KIND_STYLE[kindLabel(li.kind)] ?? "text-text-dim bg-bg-soft"}`}>
                       {kindLabel(li.kind) || "수업"}
@@ -181,8 +202,19 @@ export function BillingTable({ rows, sort, desc, period, q }: Props) {
                     {li.description || "—"}
                   </td>
                   <td className="text-foreground num px-3 py-2.5 text-right">{won(li.amount)}</td>
-                  <td className="num px-3 py-2.5 text-right text-xs">
-                    {(li.discount ?? 0) > 0 ? <span className="text-amber">-{won(li.discount ?? 0)}</span> : <span className="text-text-faint">—</span>}
+                  {/* 할인 사유(discount_reason)는 저장만 되고 어디에도 안 뜨던 orphan — 금액 셀 툴팁으로 노출.
+                      (별도 열을 늘리면 좁은 창에서 표가 깨져 title 툴팁을 택했다.) */}
+                  <td
+                    className="num px-3 py-2.5 text-right text-xs"
+                    title={first && r.discountReason ? `할인 사유: ${r.discountReason}` : undefined}
+                  >
+                    {(li.discount ?? 0) > 0 ? (
+                      <span className={`text-amber${first && r.discountReason ? " underline decoration-dotted underline-offset-2" : ""}`}>
+                        -{won(li.discount ?? 0)}
+                      </span>
+                    ) : (
+                      <span className="text-text-faint">—</span>
+                    )}
                   </td>
                   <td className="num px-3 py-2.5 text-right text-xs">
                     {(li.points ?? 0) > 0 ? <span className="text-text-dim">{won(li.points ?? 0)}</span> : <span className="text-text-faint">—</span>}

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { dayDiff, evaluateOffboardCandidate, ownedBoardNames } from "./offboard-safety.mjs";
+import { dayDiff, evaluateBoardRelease, evaluateOffboardCandidate, isProtectedName, isSystemBulkWithdrawal, normalizePhone, ownedBoardNames, phoneMatches } from "./offboard-safety.mjs";
 
 // 픽스처는 실사례 기반이지만 **개인정보를 제거**했다(이름은 실제 사고 케이스만 유지, username은 u1 형식).
 // 2026 학년도 기준: 중2 = 2012년생, 고2 = 2009년생, 초6 = 2014년생(expectedBirthYear).
@@ -26,6 +26,11 @@ function facts(over = {}) {
     broadcastBoardIds: [999],
     erpNameEvidence: { activeRows: 1, outRows: 0 },
     activity: {},
+    boardPosts: { complete: true, count: 4, lastPostAt: "2026-05-01" },
+    studentAnyPost: { complete: true, lastPostAt: "2026-05-01" },
+    phone: { checked: true, match: true },
+    billing: { lastPeriod: "2026-04", lastPaidAt: "2026-04-20" },
+    enrollmentEnd: "2026-04-30",
     today: TODAY,
     schoolYear: SCHOOL_YEAR,
     graceDays: GRACE,
@@ -453,5 +458,349 @@ describe("2-pass 계약 — 미평가를 숨기지 않는다", () => {
     );
     expect(two.action).toBe("exclude");
     expect(two.primaryCode).toBe("foreign_board");
+  });
+});
+
+describe("전화 대조 — 최상위 신원 증거(원장 제안)", () => {
+  it("정규화: 하이픈·공백·+82를 흡수한다", () => {
+    expect(normalizePhone("010-8577-6698")).toBe("01085776698");
+    expect(normalizePhone("010 8577 6698")).toBe("01085776698");
+    expect(normalizePhone("+82 10-8577-6698")).toBe("01085776698");
+    expect(normalizePhone("")).toBe("");
+    expect(normalizePhone("1234")).toBe("");
+  });
+
+  it("phoneMatches: 한쪽이라도 비면 null(대조 불가), 공통 번호면 true", () => {
+    expect(phoneMatches(["010-1111-2222"], ["01011112222"])).toBe(true);
+    expect(phoneMatches(["010-1111-2222"], ["010-3333-4444"])).toBe(false);
+    expect(phoneMatches([], ["01011112222"])).toBeNull();
+    expect(phoneMatches(["010-1111-2222"], [])).toBeNull();
+  });
+
+  it("⭐ 전화 불일치면 exclude — 이름·생년이 다 맞아도 다른 집이다", () => {
+    const v = evaluateOffboardCandidate(facts({ phone: { checked: true, match: false } }));
+    expect(v.action).toBe("exclude");
+    expect(v.primaryCode).toBe("phone_mismatch");
+  });
+
+  it("전화 일치는 통과에 영향 없음(다른 가드가 그대로 작동)", () => {
+    expect(evaluateOffboardCandidate(facts({ phone: { checked: true, match: true } })).action).toBe("offboard");
+  });
+
+  it("대조 불가(checked=false)면 미평가로 남는다 — 있는 척하지 않는다", () => {
+    const v = evaluateOffboardCandidate(facts({ phone: { checked: false, match: null } }));
+    expect(v.notEvaluatedCodes).toContain("phone_mismatch");
+  });
+});
+
+describe("ClassNote 무게시 45일(원장 기준) — Operation B", () => {
+  it("⭐ 최근 게시물이 있으면 hold", () => {
+    const v = evaluateOffboardCandidate(facts({ boardPosts: { complete: true, count: 3, lastPostAt: "2026-07-20" } }));
+    expect(v.action).toBe("hold");
+    expect(v.primaryCode).toBe("recent_posts");
+  });
+
+  it("45일 이상 무게시면 통과", () => {
+    expect(evaluateOffboardCandidate(facts({ boardPosts: { complete: true, count: 3, lastPostAt: "2026-05-01" } })).action).toBe("offboard");
+  });
+
+  it("게시물 0건도 통과(마지막 게시물 없음)", () => {
+    expect(evaluateOffboardCandidate(facts({ boardPosts: { complete: true, count: 0, lastPostAt: null } })).action).toBe("offboard");
+  });
+
+  it("⭐ 이력이 불완전하면 exclude — 무활동을 증명할 수 없다(커서로 이어받으면 필터가 풀린다)", () => {
+    const v = evaluateOffboardCandidate(facts({ boardPosts: { complete: false, count: 100, lastPostAt: "2026-05-01" } }));
+    expect(v.action).toBe("exclude");
+    expect(v.primaryCode).toBe("posts_unknown");
+  });
+});
+
+describe("Operation A — 보드 삭제·배정해제(과목별)", () => {
+  const rel = (over = {}) =>
+    evaluateBoardRelease({
+      board: { id: 10, name: "(수학)학생A", children: 1 },
+      matchedStudentCount: 1,
+      student: { id: "s1", name: "학생A", status: "withdrawn", subjectActive: false, allSubjectsEnded: true, withdrawnAt: "2026-05-01" },
+      phone: { checked: true, match: true },
+      posts: { complete: true, count: 4, lastPostAt: "2026-05-01" },
+      studentAnyPost: { complete: true, lastPostAt: "2026-05-01" },
+      billing: { lastPeriod: "2026-04", lastPaidAt: "2026-04-20" },
+      teachers: 0,
+      today: TODAY,
+      dormantDays: 45,
+      ...over,
+    });
+
+  it("전 가드 통과 = release", () => {
+    const v = rel();
+    expect(v.action).toBe("release");
+    expect(v.primaryCode).toBe("ok");
+    expect(v.factsComplete).toBe(true);
+  });
+
+  it("⭐ 게시물이 있어도 45일 이상 조용하면 release — 원장 기준(추억은 보드 삭제 시 사라짐을 수용)", () => {
+    expect(rel({ posts: { complete: true, count: 19, lastPostAt: "2026-04-01" } }).action).toBe("release");
+  });
+
+  it("⭐ 일부 과목만 퇴원한 학생: 보드 정리는 되지만 alsoOffboard=false(명부는 건드리면 안 됨)", () => {
+const v = rel({ student: { id: "s1", name: "학생A", status: "enrolled", subjectActive: false, allSubjectsEnded: false, withdrawnAt: null } });
+    expect(v.action).toBe("release");
+    expect(v.alsoOffboard).toBe(false);
+  });
+
+  it("⭐ 전과목 퇴원 + 유예 경과면 alsoOffboard=true", () => {
+    expect(rel().alsoOffboard).toBe(true);
+  });
+
+  it("⭐⭐ 보드 삭제는 되지만 퇴원 20일차면 alsoOffboard=false — 명부 퇴원처리는 비가역이라 유예를 요구한다", () => {
+    const v = rel({ student: { id: "s1", name: "학생A", status: "withdrawn", subjectActive: false, allSubjectsEnded: true, withdrawnAt: "2026-07-10" } });
+    expect(v.action).toBe("release");
+    expect(v.alsoOffboard).toBe(false);
+  });
+
+  it("퇴원일이 없으면 alsoOffboard=false(경과를 증명 못 함)", () => {
+    expect(rel({ student: { id: "s1", name: "학생A", status: "withdrawn", subjectActive: false, allSubjectsEnded: true, withdrawnAt: null } }).alsoOffboard).toBe(false);
+  });
+
+  it("그 과목을 아직 수강 중이면 exclude", () => {
+    const v = rel({ student: { id: "s1", name: "학생A", status: "enrolled", subjectActive: true, allSubjectsEnded: false } });
+    expect(v.action).toBe("exclude");
+    expect(v.primaryCode).toBe("subject_active");
+  });
+
+  it("최근 게시물이 있으면 hold", () => {
+    expect(rel({ posts: { complete: true, count: 2, lastPostAt: "2026-07-25" } }).primaryCode).toBe("recent_posts");
+  });
+
+  it("공유 보드(가족 2+)는 exclude — 배정 해제가 남의 집을 끊는다", () => {
+    const v = rel({ board: { id: 10, name: "(수학)학생A", children: 2 } });
+    expect(v.action).toBe("exclude");
+    expect(v.primaryCode).toBe("shared_board");
+  });
+
+  it("교사 연결이 있으면 hold(ClassNote가 삭제를 거부한다)", () => {
+    expect(rel({ teachers: 1 }).primaryCode).toBe("teacher_linked");
+  });
+
+  it("전화 불일치·미매칭·동명이인은 exclude", () => {
+    expect(rel({ phone: { checked: true, match: false } }).primaryCode).toBe("phone_mismatch");
+    expect(rel({ matchedStudentCount: 0, student: null }).primaryCode).toBe("no_eywa_match");
+    expect(rel({ matchedStudentCount: 2 }).primaryCode).toBe("ambiguous");
+  });
+
+  it("인원·게시물 미확인은 exclude(모르면 안 지운다)", () => {
+    expect(rel({ board: { id: 10, name: "(수학)학생A", children: null } }).primaryCode).toBe("members_unknown");
+    expect(rel({ posts: { complete: false, count: 100, lastPostAt: null } }).primaryCode).toBe("posts_unknown");
+  });
+});
+
+describe("Operation A 우선순위 — '정상, 대상 아님'을 먼저 보고한다", () => {
+  it("⭐ 수강 중 + 전화 불일치가 겹치면 primaryCode는 subject_active(활발한 학생을 '전화 불일치'로 헤드라인 잡지 않는다)", () => {
+    const v = evaluateBoardRelease({
+      board: { id: 10, name: "(수학)학생A", children: 1 },
+      matchedStudentCount: 1,
+      student: { id: "s1", name: "학생A", status: "enrolled", subjectActive: true, allSubjectsEnded: false, withdrawnAt: null },
+      phone: { checked: true, match: false },
+      posts: { complete: true, count: 40, lastPostAt: "2026-07-29" },
+      teachers: 2,
+      today: TODAY,
+      dormantDays: 45,
+    });
+    expect(v.action).toBe("exclude");
+    expect(v.primaryCode).toBe("subject_active");
+    expect(v.matchedCodes).toEqual(expect.arrayContaining(["subject_active", "phone_mismatch", "recent_posts", "teacher_linked"]));
+  });
+});
+
+describe("⭐ 원장 백스톱 — 최근 7일 내 '어떠한 보고서라도' 있으면 퇴원처리 불가", () => {
+  it("최근 7일 내 게시물이 있으면 hold(Op B)", () => {
+    const v = evaluateOffboardCandidate(facts({ studentAnyPost: { complete: true, lastPostAt: "2026-07-28" } }));
+    expect(v.action).toBe("hold");
+    expect(v.primaryCode).toBe("recent_any_post");
+  });
+
+  it("7일 경계: 7일 전은 통과, 6일 전은 hold", () => {
+    expect(evaluateOffboardCandidate(facts({ studentAnyPost: { complete: true, lastPostAt: "2026-07-23" } })).action).toBe("offboard");
+    expect(evaluateOffboardCandidate(facts({ studentAnyPost: { complete: true, lastPostAt: "2026-07-24" } })).primaryCode).toBe("recent_any_post");
+  });
+
+  it("이력이 불완전하면 hold(모르면 안 내린다)", () => {
+    expect(evaluateOffboardCandidate(facts({ studentAnyPost: { complete: false, lastPostAt: null } })).primaryCode).toBe("recent_any_post");
+  });
+
+  it("게시물이 아예 없으면 통과", () => {
+    expect(evaluateOffboardCandidate(facts({ studentAnyPost: { complete: true, lastPostAt: null } })).action).toBe("offboard");
+  });
+
+  it("⭐ Op A의 alsoOffboard도 이 백스톱을 본다 — 보드 삭제는 되지만 퇴원처리는 막힌다", () => {
+    const base = {
+      board: { id: 10, name: "(수학)학생A", children: 0 },
+      matchedStudentCount: 1,
+      student: { id: "s1", name: "학생A", status: "withdrawn", subjectActive: false, allSubjectsEnded: true, withdrawnAt: "2026-05-01" },
+      phone: { checked: true, match: true },
+      posts: { complete: true, count: 0, lastPostAt: null },
+      teachers: 0,
+      today: TODAY,
+      dormantDays: 45,
+    };
+    // 영어 보드에 3일 전 보고서가 올라온 학생: 수학 보드 삭제는 OK, 명부 퇴원처리는 금지
+    const recent = evaluateBoardRelease({ ...base, studentAnyPost: { complete: true, lastPostAt: "2026-07-27" } });
+    expect(recent.action).toBe("release");
+    expect(recent.alsoOffboard).toBe(false);
+    const quiet = evaluateBoardRelease({ ...base, studentAnyPost: { complete: true, lastPostAt: "2026-04-01" } });
+    expect(quiet.alsoOffboard).toBe(true);
+  });
+
+  it("studentAnyPost를 안 넘기면 alsoOffboard=false(모르면 안 내린다)", () => {
+    const v = evaluateBoardRelease({
+      board: { id: 10, name: "(수학)학생A", children: 0 },
+      matchedStudentCount: 1,
+      student: { id: "s1", name: "학생A", status: "withdrawn", subjectActive: false, allSubjectsEnded: true, withdrawnAt: "2026-05-01" },
+      phone: { checked: true, match: true },
+      posts: { complete: true, count: 0, lastPostAt: null },
+      teachers: 0,
+      today: TODAY,
+      dormantDays: 45,
+    });
+    expect(v.action).toBe("release");
+    expect(v.alsoOffboard).toBe(false);
+  });
+});
+
+describe("🔴 보호 계정 — 우연한 제외에 기대지 않는다(원장 지적)", () => {
+  it("isProtectedName: 보드명·학생명 어느 쪽이든 판정", () => {
+    expect(isProtectedName("학원이")).toBe(true);
+    expect(isProtectedName("(수학)학원이")).toBe(true);
+    expect(isProtectedName("(영어)학원삼")).toBe(true);
+    expect(isProtectedName("학원")).toBe(false);
+    expect(isProtectedName("학원이다")).toBe(false); // 부분일치 금지
+  });
+
+  it("⭐ 전 가드를 통과하는 조건이어도 보호 계정이면 퇴원처리 exclude(전화까지 맞아도)", () => {
+    const v = evaluateOffboardCandidate(
+      facts({ child: { id: 500, name: "학원이", birth: "2012-05-05", parentId: 900, parentName: "보호자A", parentUsername: "u1" } }),
+    );
+    expect(v.action).toBe("exclude");
+    expect(v.primaryCode).toBe("protected_account");
+  });
+
+  it("⭐ 보드 삭제(Op A)도 보호된다", () => {
+    const v = evaluateBoardRelease({
+      board: { id: 10, name: "(수학)학원이", children: 0 },
+      matchedStudentCount: 1,
+      student: { id: "s1", name: "학원이", status: "withdrawn", subjectActive: false, allSubjectsEnded: true, withdrawnAt: "2026-01-01" },
+      phone: { checked: true, match: true },
+      posts: { complete: true, count: 0, lastPostAt: null },
+      studentAnyPost: { complete: true, lastPostAt: null },
+      teachers: 0,
+      today: TODAY,
+      dormantDays: 45,
+    });
+    expect(v.action).toBe("exclude");
+    expect(v.primaryCode).toBe("protected_account");
+    expect(v.alsoOffboard).toBe(false);
+  });
+});
+
+describe("🔴 시스템 일괄 퇴원(2026-07-10) — 퇴원목록에서 잡지 않는다(원장 지시)", () => {
+  it("isSystemBulkWithdrawal", () => {
+    expect(isSystemBulkWithdrawal("2026-07-10")).toBe(true);
+    expect(isSystemBulkWithdrawal("2026-07-13")).toBe(false);
+    expect(isSystemBulkWithdrawal(null)).toBe(false);
+  });
+
+  it("⭐ 다른 가드를 다 통과해도 07-10 퇴원분은 exclude", () => {
+    const v = evaluateOffboardCandidate(facts({ student: { ...facts().student, withdrawnAt: "2026-07-10" } }));
+    expect(v.action).toBe("exclude");
+    expect(v.primaryCode).toBe("system_withdrawal");
+  });
+
+  it("⭐ 보드 삭제는 그대로 가능하되 alsoOffboard=false — 장부 날짜는 퇴원처리 근거가 못 된다", () => {
+    const v = evaluateBoardRelease({
+      board: { id: 10, name: "(영어)학생A", children: 0 },
+      matchedStudentCount: 1,
+      student: { id: "s1", name: "학생A", status: "withdrawn", subjectActive: false, allSubjectsEnded: true, withdrawnAt: "2026-07-10" },
+      phone: { checked: true, match: true },
+      posts: { complete: true, count: 0, lastPostAt: null },
+      studentAnyPost: { complete: true, lastPostAt: null },
+      teachers: 0,
+      today: TODAY,
+      dormantDays: 45,
+    });
+    expect(v.action).toBe("release");
+    expect(v.alsoOffboard).toBe(false);
+  });
+
+  it("일괄일이 아닌 퇴원은 정상 처리(07-13은 대상)", () => {
+const v = evaluateOffboardCandidate(facts({ student: { ...facts().student, withdrawnAt: "2026-01-13" }, billing: { lastPeriod: "2026-01", lastPaidAt: "2026-01-10" }, enrollmentEnd: "2026-01-13" }));
+    expect(v.action).toBe("offboard");
+  });
+});
+
+describe("🔴 돈의 흔적 — 퇴원 이후 청구·납부는 '실제로 다닌다'는 신호(실측 배한빈)", () => {
+  it("⭐ 퇴원 다음 달 청구가 있으면 hold", () => {
+    const v = evaluateOffboardCandidate(facts({ billing: { lastPeriod: "2026-07", lastPaidAt: null } }));
+    expect(v.action).toBe("hold");
+    expect(v.primaryCode).toBe("recent_billing");
+  });
+
+  it("⭐ 퇴원 이후 납부가 있으면 hold", () => {
+    const v = evaluateOffboardCandidate(facts({ billing: { lastPeriod: null, lastPaidAt: "2026-06-30" } }));
+    expect(v.primaryCode).toBe("recent_billing");
+  });
+
+  it("퇴원한 달의 청구는 정상(그 달 수업분)", () => {
+    const v = evaluateOffboardCandidate(facts({ billing: { lastPeriod: "2026-05", lastPaidAt: "2026-04-30" } }));
+    expect(v.action).toBe("offboard");
+  });
+
+  it("청구 사실이 없으면 미평가(있는 척하지 않는다)", () => {
+    expect(evaluateOffboardCandidate(facts({ billing: null })).notEvaluatedCodes).toContain("recent_billing");
+  });
+
+  it("⭐ 퇴원일보다 수강 종료일이 나중이면 hold(실측 주상모A)", () => {
+    const v = evaluateOffboardCandidate(facts({ enrollmentEnd: "2026-07-03" }));
+    expect(v.action).toBe("hold");
+    expect(v.primaryCode).toBe("withdrawal_inconsistent");
+  });
+
+  it("수강 종료일이 퇴원일 이전이면 정상", () => {
+    expect(evaluateOffboardCandidate(facts({ enrollmentEnd: "2026-04-30" })).action).toBe("offboard");
+  });
+});
+
+describe("🔴 보드 삭제에도 최근 수납 방어(원장 지시 2026-07-30)", () => {
+  const rel2 = (over = {}) =>
+    evaluateBoardRelease({
+      board: { id: 10, name: "(수학)학생A", children: 0 },
+      matchedStudentCount: 1,
+      student: { id: "s1", name: "학생A", status: "withdrawn", subjectActive: false, allSubjectsEnded: true, withdrawnAt: "2026-04-06" },
+      phone: { checked: true, match: true },
+      posts: { complete: true, count: 0, lastPostAt: null },
+      studentAnyPost: { complete: true, lastPostAt: null },
+      teachers: 0,
+      today: TODAY,
+      dormantDays: 45,
+      billing: { lastPeriod: "2026-04", lastPaidAt: "2026-04-01" },
+      ...over,
+    });
+
+  it("⭐ 퇴원 이후 청구가 있으면 보드도 안 지운다(배한빈 형태)", () => {
+    const v = rel2({ billing: { lastPeriod: "2026-07", lastPaidAt: "2026-06-30" } });
+    expect(v.action).toBe("hold");
+    expect(v.primaryCode).toBe("recent_billing");
+    expect(v.alsoOffboard).toBe(false);
+  });
+
+  it("⭐ 퇴원 전 청구라도 납부가 최근 45일 내면 hold(안전측)", () => {
+    expect(rel2({ billing: { lastPeriod: "2026-04", lastPaidAt: "2026-07-01" } }).primaryCode).toBe("recent_billing");
+  });
+
+  it("오래된 수납만 있으면 통과", () => {
+    expect(rel2().action).toBe("release");
+  });
+
+  it("수납 사실이 없으면 미평가(있는 척하지 않음)", () => {
+    expect(rel2({ billing: null }).notEvaluatedCodes).toContain("recent_billing");
   });
 });

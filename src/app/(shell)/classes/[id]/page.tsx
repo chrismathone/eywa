@@ -15,8 +15,12 @@ import {
   getClassDetail,
   getClassStudents,
   getClassTeacherOptions,
-  type DayOfWeek,
 } from "@/features/classes/server/queries";
+import {
+  DAY_LABEL,
+  DAY_ORDER,
+  summarizeSchedule,
+} from "@/features/classes/schedule-summary";
 import { getStudentsList } from "@/features/students/server/queries";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
@@ -25,20 +29,9 @@ import { ClassLevelAction } from "./_components/class-level-action";
 import { ArchiveClassButton } from "./_components/archive-class-button";
 import { ClassTermButton } from "./_components/class-term-button";
 import { HandoverAction, HandoverBanner } from "./_components/teacher-handover";
+import { ScheduleSummaryView } from "./_components/schedule-summary-view";
 
 export const metadata = { title: "수업 상세 — eywa" };
-
-const DAY_LABEL: Record<DayOfWeek, string> = {
-  mon: "월",
-  tue: "화",
-  wed: "수",
-  thu: "목",
-  fri: "금",
-  sat: "토",
-  sun: "일",
-};
-
-const DAY_ORDER: DayOfWeek[] = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
 
 function todayIso(): string {
   return kstToday();
@@ -88,19 +81,19 @@ export default async function ClassDetailPage({
       };
     })
     .sort((a, b) => Number(b.isSubjectMatch) - Number(a.isSubjectMatch));
-  const handoverDue = !!klass.pendingTeacherDate && klass.pendingTeacherDate <= todayIso();
+  const today = todayIso();
+  const handoverDue = !!klass.pendingTeacherDate && klass.pendingTeacherDate <= today;
 
   // 이 반에 이미 활성 등록된 학생 제외
   const enrolledIds = new Set(students.map((s) => s.studentId));
   const candidateStudents = allEnrolledStudents.filter((s) => !enrolledIds.has(s.id));
 
-  const scheduleByDay = new Map<DayOfWeek, typeof klass.scheduleSlots>();
-  for (const s of klass.scheduleSlots) {
-    if (!scheduleByDay.has(s.dayOfWeek)) scheduleByDay.set(s.dayOfWeek, []);
-    scheduleByDay.get(s.dayOfWeek)!.push(s);
-  }
+  // 시간표 요약 — `class_schedules`는 운영 이력을 함께 담는다(만료 행 480/1068). 전 행을 그리면
+  // 이미 끝난 교시가 아직 있는 것처럼 보이고 줄 수도 폭발한다(DP5 실측 25줄 → 2줄). 상세 = schedule-summary.ts.
+  const schedule = summarizeSchedule(klass.scheduleSlots, today);
   // 반 운영 요일(분리등원 후보) — 배정 다이얼로그 + 학생별 등원요일 배지에 사용.
-  const classDays = DAY_ORDER.filter((d) => scheduleByDay.has(d));
+  // ⚠️ **현재 유효한 슬롯 기준**. 만료 요일까지 세면 이제 안 하는 요일이 등원 후보로 뜬다(실측 1반).
+  const classDays = schedule.days;
   const attendanceBadge = (days: string[]) =>
     days.length > 0 && days.length < classDays.length
       ? DAY_ORDER.filter((d) => days.includes(d))
@@ -214,27 +207,7 @@ export default async function ClassDetailPage({
             <h2 className="text-foreground text-sm font-bold">반 정보</h2>
           </header>
           <Card title="시간표" icon={<CalendarClock className="size-3.5" />}>
-            {klass.scheduleSlots.length === 0 ? (
-              <p className="text-muted-foreground py-2 text-sm">등록된 시간표가 없습니다</p>
-            ) : (
-              <ul className="space-y-2 text-sm">
-                {DAY_ORDER.flatMap((day) => {
-                  const slots = scheduleByDay.get(day);
-                  if (!slots || slots.length === 0) return [];
-                  return slots.map((s, i) => (
-                    <li
-                      key={`${day}-${i}`}
-                      className="border-border bg-muted/30 flex items-center justify-between rounded-md border px-3 py-2"
-                    >
-                      <span className="text-foreground font-medium">{DAY_LABEL[day]}요일</span>
-                      <span className="text-muted-foreground num text-xs">
-                        {s.startTime} – {s.endTime}
-                      </span>
-                    </li>
-                  ));
-                })}
-              </ul>
-            )}
+            <ScheduleSummaryView schedule={schedule} />
           </Card>
 
           <Card title="최근 30일 출결">

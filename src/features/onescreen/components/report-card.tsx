@@ -6,6 +6,7 @@ import { Pill } from "@/components/atoms/pill";
 import { subjectTone, toneSoftClass } from "../data";
 import { effectiveClassnoteStatus, isAlreadySent, isReportEligible, isRowActionable } from "../grid";
 import { evaluateSendGate } from "../send-gate";
+import { checkMentConsistency, MENT_WARNING_HINT, MENT_WARNING_LABEL } from "../ment-consistency";
 import { parentUnreadBadge, progressAnomalyBadge } from "../roster-signals";
 import { splitLessons } from "../curriculum";
 import { AttendancePills, type BasicAttendance } from "./attendance-pills";
@@ -219,6 +220,13 @@ export function ReportCard({
     hasDraft: !!rep.draft?.trim(),
   });
   const canQueue = sendGate.canSend;
+  // 멘트 ↔ 기록 불일치(시험날 진도·멘트에만 있는 점수) — 표뷰와 같은 판정. 막지 않고 알린다.
+  const mentWarnings = checkMentConsistency({
+    ment: rep.draft ?? "",
+    progress: subject.today ?? "",
+    dailyTest: student.tests.daily.score != null ? "y" : "",
+    checkTest: student.tests.check.score != null ? "y" : "",
+  });
   const atts = rep.attachments ?? []; // 학생 사진 첨부(P2b)
   const uploadingAtt = uploadingSubject === subjectName;
   // 로스터 신호(G2·G3) — 카드 헤더 배지. 진도 신호는 math 전용 데이터라 수학 과목 보유 학생만(표뷰와 동일 규약).
@@ -497,6 +505,15 @@ export function ReportCard({
               {sendGate.label}
             </span>
           ) : null}
+          {mentWarnings.map((w) => (
+            <span
+              key={w}
+              className="border-amber/40 bg-amber-soft text-amber rounded-pill border px-2 py-0.5 text-[11px] font-bold"
+              title={MENT_WARNING_HINT[w]}
+            >
+              {MENT_WARNING_LABEL[w]}
+            </span>
+          ))}
           {/* 발송 완료는 위 사유 알약이 이미 말했다 — 같은 말을 두 번 붙이지 않는다(표뷰와 동일). */}
           {!alreadySent && cnBadge ? (
             <span className={`text-[11px] font-bold ${cnBadge.cls}`}>{cnBadge.label}</span>

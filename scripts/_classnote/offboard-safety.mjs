@@ -16,6 +16,55 @@
  */
 import { expectedBirthYear } from "./board-safety.mjs";
 
+/**
+ * 🔴 **보호 계정 — 어떤 이유로도 정리 대상이 되면 안 되는 학생/보드.**
+ *
+ * 원장 지적(2026-07-30): *"학원이 퇴원시켜버리면 다시 가입시켜야 되잖아."* — 정확하다. `학원이`는
+ * **유일한 실발송 E2E 테스트 계정**인데(§6), 명부에서 내리면 복구에 **학부모 재초대 + 재가입**이 필요해
+ * (자동화 불가) 앞으로의 모든 ClassNote 발송 검증 수단을 잃는다.
+ *
+ * ⚠️ **우연한 제외에 기대지 말 것**: 실측상 `학원이`는 지금 '전화 불일치'로만 걸러지고 있어서,
+ * eywa에 전화를 채워 넣는 순간 **삭제 후보로 올라온다**. 그래서 최우선 순위의 명시적 가드로 못박는다.
+ */
+export const PROTECTED_STUDENT_NAMES = ["학원이", "학원삼", "학원사", "학원오"];
+
+/** 보호 대상인가 — 보드명 `(과목)이름`·학생 유효이름 어느 쪽으로 넘겨도 판정된다. */
+export function isProtectedName(nameOrBoard) {
+  const t = String(nameOrBoard ?? "")
+    .replace(/\s/g, "")
+    .replace(/^\((수학|영어)\)/, "");
+  return PROTECTED_STUDENT_NAMES.includes(t);
+}
+
+/**
+ * 🔴 **시스템 일괄 퇴원일 — 실제 퇴원 신호가 아니다.** 이 날짜로 찍힌 학생은 **자동 퇴원처리 대상에서 제외**한다.
+ *
+ * 원장 지시(2026-07-30): *"7-10 대량 퇴원분을 퇴원목록에서 잡지 않도록 해줘. 그건 시스템 퇴원처리니까."*
+ *
+ * 실측 근거: `2026-07-10` 하루에 **119명**(다음으로 많은 날은 07-13의 12명)인데, 그들의 **수강 종료일은
+ * 제각각**이다(07-03 40명·04-06 15명·05-04 8명·03-31 7명…). 즉 그날 수업이 끝난 게 아니라 **이미 끝나 있던
+ * 학생들에게 일괄로 `status=withdrawn` 도장을 찍은 날**이다 → `withdrawn_at`이 **장부상 날짜**일 뿐이라
+ * 유예(45일) 계산의 기준으로 쓸 수 없다(실제론 몇 달 전에 그만뒀는데 "20일 전 퇴원"으로 보인다).
+ *
+ * ⚠️ 이 목록에 날짜를 추가할 땐 **일괄 처리였다는 근거**(하루 건수 급증 + 수강 종료일 산포)를 함께 남길 것.
+ * ⚠️ 보드 삭제(Operation A)에는 적용하지 않는다 — 그쪽은 `withdrawn_at`이 아니라 **그 과목 수강 종료 + 무게시**로
+ *    판정하므로 이 장부 날짜에 의존하지 않는다.
+ */
+export const SYSTEM_BULK_WITHDRAWAL_DATES = [
+  "2026-07-10", // 하루 119명(다음 순위 12명) · 수강 종료일은 제각각 → status 도장만 일괄
+  // ⚠️ 2026-07-03: 위 119명 중 77명을 "마지막 수강 종료일"로 교정했더니 40명이 이 날짜로 몰렸다.
+  //    확인해보니 `enrollments.end_date`의 최다값이 **2026-07-03(149건)** — 수강 종료일 자체가 일괄이었다.
+  //    즉 교정이 **장부 날짜를 다른 장부 날짜로 옮긴 것**이었다. makeedu는 같은 학생들에게 04-30·05-06·
+  //    05-07·05-13 등 제각각을 갖고 있어(결제 기반) 그쪽이 진짜다 → makeedu 대조로 다시 채운다.
+  //    🔑 교훈: **"파생값이 원본보다 깨끗하다"고 가정하지 말 것.** 분포를 먼저 보라(한 날짜 뭉침 = 일괄 신호).
+  "2026-07-03",
+];
+
+/** 그 퇴원일이 시스템 일괄 처리분인가. */
+export function isSystemBulkWithdrawal(withdrawnAt) {
+  return SYSTEM_BULK_WITHDRAWAL_DATES.includes(String(withdrawnAt ?? "").trim());
+}
+
 /** 생년 대조 허용 오차(년) — board-safety와 동일 근거(조기입학·유급·학부모 오입력 흡수). */
 const BIRTH_YEAR_TOLERANCE = 1;
 
@@ -57,6 +106,25 @@ export function dayDiff(fromISO, toISO) {
 }
 
 /**
+ * 전화번호 정규화 — 숫자만. 국가번호(+82)·0 접두는 뒤 10~11자리로 수렴시켜 비교한다.
+ * ⚠️ 정규화 결과를 저장·로그·AI에 넘기지 말 것(대조 목적 한정).
+ */
+export function normalizePhone(v) {
+  const d = String(v ?? "").replace(/\D/g, "");
+  if (!d) return "";
+  const t = d.startsWith("82") ? `0${d.slice(2)}` : d;
+  return t.length >= 9 ? t.slice(-11) : "";
+}
+
+/** 두 전화 목록에 공통 번호가 있나(eywa parent_phone·student_phone ↔ ClassNote carer 연락처). */
+export function phoneMatches(a, b) {
+  const A = new Set((a ?? []).map(normalizePhone).filter(Boolean));
+  const B = (b ?? []).map(normalizePhone).filter(Boolean);
+  if (!A.size || !B.length) return null; // 한쪽이라도 없으면 대조 불가(= 판단 보류)
+  return B.some((x) => A.has(x));
+}
+
+/**
  * 판정 코드 — **우선순위 순서**(위가 우선). `primaryCode`는 이 순서로 뽑으므로 구현 순서·객체 키 순서에
  * 결과가 좌우되지 않는다. `action` 우선순위는 **exclude > hold > offboard**.
  *
@@ -64,10 +132,13 @@ export function dayDiff(fromISO, toISO) {
  */
 export const GUARDS = [
   // ── exclude ───────────────────────────────────────────────────────────────
+  { code: "protected_account", action: "exclude" }, //  🔴 실발송 테스트 계정 등 절대 보호(최우선)
   { code: "enrolled", action: "exclude" }, //           정상: 재원이거나 그 과목을 계속 다님(과목 이탈 포함)
+  { code: "system_withdrawal", action: "exclude" }, //  🔴 시스템 일괄 퇴원일(장부 날짜) — 실제 퇴원 신호 아님
   { code: "no_eywa_match", action: "exclude" }, //      eywa에 대응 학생 없음(테스트·퇴사강사 보드 등)
   { code: "ambiguous_forward", action: "exclude" }, //  이 원아에 eywa 학생이 2명+ 걸림
   { code: "ambiguous_reverse", action: "exclude" }, //  그 학생에 원아가 2명+ 걸림
+  { code: "phone_mismatch", action: "exclude" }, //     ClassNote 보호자 연락처가 eywa 전화와 불일치(= 다른 집)
   { code: "identity_unknown", action: "exclude" }, //   생년·학년 없음/불일치, 원아 상세 조회 실패
   { code: "erp_link_unknown", action: "exclude" }, //   명부엔 활성인데 같은 이름 ERP 행에 out_date(상태 모순)
   { code: "foreign_board", action: "exclude" }, //      남의 개인 보드에 소속(잔존 가족 의심)
@@ -76,8 +147,13 @@ export const GUARDS = [
   { code: "members_unknown", action: "exclude" }, //    보드 연결 가족 수 미확인(API 변경 의심)
   { code: "board_scan_failed", action: "exclude" }, //  보드 전건 조회 실패
   { code: "snapshot_incomplete", action: "exclude" }, // 복구용 스냅샷(부모 식별자) 미확보
+  { code: "posts_unknown", action: "exclude" }, //      보드 게시물 이력을 신뢰할 수 없음(100건 초과·조회 실패)
   // ── hold ──────────────────────────────────────────────────────────────────
-  { code: "grace", action: "hold" }, //                 유예 기간 미경과(시간이 지나면 자동 해소)
+  { code: "recent_billing", action: "hold" }, //        🔴 퇴원 이후의 청구·납부가 있음(= 실제로는 다니는 중일 수 있음)
+  { code: "withdrawal_inconsistent", action: "hold" }, // 🔴 퇴원일보다 수강 종료일이 나중(데이터 모순)
+  { code: "grace", action: "hold" }, //                 eywa 퇴원일 유예 미경과(시간이 지나면 자동 해소)
+  { code: "recent_posts", action: "hold" }, //          ClassNote 보드에 최근 게시물이 있음(원장 기준 1.5개월)
+  { code: "recent_any_post", action: "hold" }, //       ⭐ 그 학생의 **어떤 보드든** 최근 7일 내 게시물(원장 백스톱)
   { code: "recent_activity", action: "hold" }, //       최근 발송·재등록·학부모 활동 신호
 ];
 
@@ -122,6 +198,12 @@ export function evaluateOffboardCandidate(facts) {
     broadcastBoardIds = [],
     erpNameEvidence = null,
     activity = {},
+    boardPosts = null,
+    studentAnyPost = null,
+    anyPostDays = 7,
+    phone = null,
+    billing = null,
+    enrollmentEnd = null,
     today,
     schoolYear,
     graceDays,
@@ -131,6 +213,13 @@ export function evaluateOffboardCandidate(facts) {
   const verdicts = new Map();
   const set = (code, hit, reason) => verdicts.set(code, hit ? { hit: true, reason } : { hit: false });
   const skip = (code) => verdicts.set(code, null);
+
+  // ── 🔴 보호 계정 — 다른 무엇보다 먼저(우연한 제외에 기대지 않는다) ──────────────
+  set(
+    "protected_account",
+    isProtectedName(child?.name) || isProtectedName(student?.name),
+    "보호 대상 계정입니다(실발송 테스트 계정 등) — 어떤 이유로도 명부에서 내리지 않습니다",
+  );
 
   // ── 카디널리티(I3·I4) — 다른 모든 판정의 전제 ────────────────────────────────
   if (typeof matchedStudentCount !== "number") {
@@ -167,6 +256,23 @@ export function evaluateOffboardCandidate(facts) {
         : `eywa에선 퇴원인데 살아 있는 수강이 있습니다(${active.join(", ")}) — 명부에서 내리면 그 과목 보드까지 끊깁니다`,
     );
   }
+
+  // ── 전화 대조(최상위 신원 증거, 원장 제안 2026-07-30) ────────────────────────
+  // ClassNote 운영관리가 보호자 연락처를 준다(`admissioninfos[].basic_info.carer1_phone`, 실측 472/472).
+  // 이름·생년은 **추정**이지만 전화는 **그 집의 사실**이라, 같은 학년 동명이인처럼 다른 증거로 안 갈리는
+  // 경우까지 갈라준다. 불일치면 다른 집이므로 즉시 제외.
+  // ⚠️ 값을 로그·DB·AI에 남기지 말 것 — 이 엔드포인트엔 알레르기·병력·주소까지 함께 실려 있다(대조에만 사용).
+  if (!phone || phone.checked !== true) skip("phone_mismatch");
+  else set("phone_mismatch", phone.match === false, "ClassNote 보호자 연락처가 eywa에 등록된 전화와 다릅니다 — 다른 집일 수 있습니다");
+
+  // ── 🔴 시스템 일괄 퇴원 — 장부 날짜라 자동 대상에서 뺀다(원장 지시) ──────────────
+  if (!student) skip("system_withdrawal");
+  else
+    set(
+      "system_withdrawal",
+      isSystemBulkWithdrawal(student.withdrawnAt),
+      `퇴원일 ${student.withdrawnAt}은 시스템 일괄 처리분입니다(그날 119명 · 수강 종료일은 제각각) — 실제 퇴원 시점이 아니라 자동 퇴원처리 대상에서 제외합니다(개별 판단은 사람이)`,
+    );
 
   // ── 신원(I2) — 생년 ↔ 학년 역산 대조 ────────────────────────────────────────
   if (childDetail?.status === "failed") {
@@ -294,6 +400,63 @@ export function evaluateOffboardCandidate(facts) {
       );
   }
 
+  // ── ClassNote 보드 게시물 이력(원장 기준 2026-07-30: 1.5개월 무게시면 안전장치 충분) ──────
+  // ⚠️ 게시물 이력이 **불완전하면 제외**한다 — 100건 초과(next 존재)나 조회 실패면 "최근 게시물이 없다"를
+  //    증명할 수 없다. 커서로 이어받으면 cls 필터가 풀려 남의 보드 글이 섞이므로 이어받지 않는다.
+  if (!boardPosts) {
+    skip("posts_unknown");
+    skip("recent_posts");
+  } else {
+    set("posts_unknown", boardPosts.complete !== true, "보드 게시물 이력을 끝까지 확인하지 못했습니다(100건 초과·조회 실패) — 무활동을 증명할 수 없습니다");
+    const since = boardPosts.lastPostAt ? dayDiff(boardPosts.lastPostAt, today) : null;
+    if (boardPosts.lastPostAt && since == null)
+      set("recent_posts", true, `마지막 게시물 날짜(${boardPosts.lastPostAt})를 해석할 수 없습니다`);
+    else
+      set(
+        "recent_posts",
+        since != null && since < graceDays,
+        `ClassNote 보드에 최근 게시물이 있습니다(마지막 ${boardPosts.lastPostAt}, ${since}일 전 — 기준 ${graceDays}일)`,
+      );
+  }
+
+  // ── ⭐ 최근 7일 내 "어떤 보고서라도" (원장 백스톱 2026-07-30) ───────────────────
+  // 원장 원문: *"최근 7일 사이에 어떠한 보고서라도 업로드된 학생은 퇴원처리 불가로 놓으면 왠만해서는
+  // 재원중인 학생이 사라지지는 않을듯."* — **과목·보드를 가리지 않고** 그 학생의 전 보드를 합산해 본다.
+  // 값진 이유: 우리 수강 데이터(enrollments)가 틀려도 **ClassNote 활동 자체가 생존을 증명**하므로,
+  // 다른 모든 가드가 동시에 실패해도 재원생을 명부에서 내리는 것을 막는 마지막 그물이 된다.
+  // ⚠️ 보드 삭제(Operation A)에는 적용하지 않는다 — 영어 보고서가 최근이어도 그만둔 수학 보드는 지워도 된다.
+  if (!studentAnyPost) skip("recent_any_post");
+  else if (studentAnyPost.complete !== true) set("recent_any_post", true, "그 학생의 게시물 이력을 끝까지 확인하지 못했습니다 — 최근 활동 없음을 증명할 수 없습니다");
+  else {
+    const d = studentAnyPost.lastPostAt ? dayDiff(studentAnyPost.lastPostAt, today) : null;
+    set("recent_any_post", d != null && d < anyPostDays, `최근 ${anyPostDays}일 내에 보고서가 올라왔습니다(마지막 ${studentAnyPost.lastPostAt}, ${d}일 전) — 재원 중일 수 있어 명부에서 내리지 않습니다`);
+  }
+
+  // ── 🔴 돈의 흔적 — 가장 강한 "실제로 다닌다" 신호 (원장 2026-07-30) ─────────────
+  // 원장: *"메이크에듀가 실제 퇴원날짜와 일치할 확률이 높음. 실제 결제랑 환불을 진행하므로."*
+  // 같은 논리를 eywa 청구에 적용한다. **퇴원일 이후의 청구·납부는 퇴원과 모순**이다 —
+  // 실측으로 잡았다: 배한빈(퇴원 2026-04-06)에게 **2026-07 청구 + 06-30 납부**가 있었다.
+  // 다른 모든 가드(활성수강 0·보고서 없음·무게시)를 통과했는데 돈만이 그가 살아있다고 말했다.
+  if (!billing) skip("recent_billing");
+  else {
+    const wd = student?.withdrawnAt ?? null;
+    const after = [];
+    // 청구월(YYYY-MM)은 퇴원월과 같은 달까지는 정상(그 달 수업분) — **퇴원 다음 달부터**를 모순으로 본다.
+    if (billing.lastPeriod && wd && billing.lastPeriod > wd.slice(0, 7)) after.push(`청구 ${billing.lastPeriod}`);
+    if (billing.lastPaidAt && wd && billing.lastPaidAt > wd) after.push(`납부 ${billing.lastPaidAt}`);
+    set("recent_billing", after.length > 0, `퇴원일(${wd}) 이후의 돈 흔적이 있습니다(${after.join(", ")}) — 실제로는 다니는 중일 수 있어 명부에서 내리지 않습니다`);
+  }
+
+  // ── 🔴 퇴원일 ↔ 수강 종료일 모순 ────────────────────────────────────────────
+  // 퇴원했는데 수강이 그 뒤까지 열려 있었다면 둘 중 하나가 틀린 것이다(실측: 주상모A 퇴원 03-31 / 종료 07-03).
+  if (!student || !enrollmentEnd) skip("withdrawal_inconsistent");
+  else
+    set(
+      "withdrawal_inconsistent",
+      !!student.withdrawnAt && enrollmentEnd > student.withdrawnAt,
+      `퇴원일(${student.withdrawnAt})보다 수강 종료일(${enrollmentEnd})이 나중입니다 — 어느 쪽이 사실인지 확인이 필요합니다`,
+    );
+
   // ── 최근 활동 ───────────────────────────────────────────────────────────────
   const sig = [];
   if (activity?.lastReportSentAt) sig.push(`최근 발송 ${activity.lastReportSentAt}`);
@@ -333,5 +496,177 @@ export function evaluateOffboardCandidate(facts) {
     factsComplete: notEvaluatedCodes.length === 0,
     reason,
     snapshot,
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Operation A — **보드 삭제 + 배정 해제**(보드 단위, 과목별)
+//
+// 원장 지시(2026-07-30): *"두 과목 이상 수강하다가 한 과목을 퇴원한 경우 반 삭제 및 반 배정해제하고
+// 퇴원처리는 하면 안 됨. 여전히 다른 수업에는 배정되어 있어야 하기 때문."*
+//
+// 그래서 두 작업의 자격이 다르다:
+//   · 보드 삭제·배정 해제 = **그 과목**을 그만뒀으면 가능(전과목 퇴원이든 일부 과목이든)
+//   · 명부 퇴원처리      = **전과목 퇴원**만 (evaluateOffboardCandidate가 담당)
+// 이 함수는 앞의 것만 판정한다. `alsoOffboard`는 "이 학생은 전과목 퇴원이라 명부 퇴원처리도 대상"이라는 힌트다.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const RELEASE_GUARDS = [
+  { code: "protected_account", action: "exclude" }, //  🔴 실발송 테스트 계정 등 절대 보호(최우선)
+  // ⚠️ **`subject_active`가 그다음** — "정상, 대상 아님"을 먼저 치워야 목록이 사실을 말한다. 이걸 뒤에 두면
+  //    활발히 수강 중인 학생 33건이 "전화 불일치"로 헤드라인이 잡혀(실측) 원장이 엉뚱한 걸 확인하게 된다.
+  //    (Op B에서 `enrolled`를 1순위로 둔 것과 같은 원칙.)
+  { code: "subject_active", action: "exclude" }, //    그 과목을 아직 수강 중 = 살아있는 보드
+  { code: "no_eywa_match", action: "exclude" }, //     보드명 ↔ eywa 학생 매칭 실패(테스트·퇴사강사 보드)
+  { code: "ambiguous", action: "exclude" }, //         보드명에 eywa 학생 2명+ (전화로도 안 갈림)
+  { code: "phone_mismatch", action: "exclude" }, //    보호자 연락처 불일치 = 다른 집
+  { code: "shared_board", action: "exclude" }, //      가족 2+ = 남의 집까지 끊긴다
+  { code: "members_unknown", action: "exclude" }, //   연결 가족 수 미확인(API 변경 의심)
+  { code: "posts_unknown", action: "exclude" }, //     게시물 이력 불완전 = 무활동을 증명 못 함
+  { code: "recent_billing", action: "hold" }, //       🔴 최근 수납·청구가 있음 = 다니는 중일 수 있다(원장 지시)
+  { code: "recent_posts", action: "hold" }, //         최근 게시물 있음(원장 기준 45일)
+  { code: "teacher_linked", action: "hold" }, //       교사 연결 있음 → ClassNote는 교사 있으면 반 삭제 불가
+];
+
+/**
+ * 보드 1개에 대한 삭제·배정해제 판정(순수).
+ *
+ * @param {object} p
+ * @param {{id:number,name:string,children:number|null}} p.board
+ * @param {number} p.matchedStudentCount  보드 base 이름 ↔ eywa 학생 **정확 일치** 수(전화 대조로 좁힌 뒤)
+ * @param {null|{id:string,name:string,status:string,subjectActive:boolean,allSubjectsEnded:boolean}} p.student
+ * @param {null|{checked:boolean, match:boolean|null}} p.phone
+ * @param {null|{complete:boolean, count:number, lastPostAt:string|null}} p.posts
+ * @param {number} p.teachers
+ * @param {string} p.today  KST YYYY-MM-DD
+ * @param {number} p.dormantDays  무게시 기준(원장: 45일)
+ * @returns {{action:"release"|"hold"|"exclude", primaryCode:string, matchedCodes:string[],
+ *            notEvaluatedCodes:string[], factsComplete:boolean, reason:string, alsoOffboard:boolean}}
+ */
+export function evaluateBoardRelease({
+  board,
+  matchedStudentCount,
+  student,
+  phone,
+  posts,
+  teachers,
+  today,
+  dormantDays,
+  studentAnyPost = null,
+  anyPostDays = 7,
+  billing = null,
+  billingDays = 45,
+}) {
+  const verdicts = new Map();
+  const set = (code, hit, reason) => verdicts.set(code, hit ? { hit: true, reason } : { hit: false });
+  const skip = (code) => verdicts.set(code, null);
+
+  set(
+    "protected_account",
+    isProtectedName(board?.name) || isProtectedName(student?.name),
+    "보호 대상 계정의 보드입니다(실발송 테스트 계정 등) — 삭제·배정해제하지 않습니다",
+  );
+
+  if (typeof matchedStudentCount !== "number") {
+    skip("no_eywa_match");
+    skip("ambiguous");
+  } else {
+    set("no_eywa_match", matchedStudentCount === 0, "eywa에 대응하는 학생이 없습니다(테스트·퇴사 강사·외부 보드일 수 있습니다)");
+    set("ambiguous", matchedStudentCount > 1, `보드명에 eywa 학생 ${matchedStudentCount}명이 걸립니다 — 전화로도 갈리지 않아 확정할 수 없습니다`);
+  }
+
+  if (!phone || phone.checked !== true) skip("phone_mismatch");
+  else set("phone_mismatch", phone.match === false, "ClassNote 보호자 연락처가 eywa 전화와 다릅니다 — 다른 집일 수 있습니다");
+
+  if (!student) skip("subject_active");
+  else set("subject_active", student.subjectActive === true, "이 학생이 그 과목을 아직 수강 중입니다 — 살아있는 보드입니다");
+
+  const fam = board?.children;
+  set("members_unknown", fam == null, "연결 가족 수를 읽지 못했습니다(ClassNote API 변경 의심)");
+  set("shared_board", (fam ?? 0) >= 2, `이 보드에 가족이 ${fam}명 연결돼 있습니다 — 배정을 해제하면 남의 집도 함께 끊깁니다`);
+
+  if (!posts) {
+    skip("posts_unknown");
+    skip("recent_posts");
+  } else {
+    set("posts_unknown", posts.complete !== true, "게시물 이력을 끝까지 확인하지 못했습니다(100건 초과·조회 실패) — 무활동을 증명할 수 없습니다");
+    const since = posts.lastPostAt ? dayDiff(posts.lastPostAt, today) : null;
+    if (posts.lastPostAt && since == null) set("recent_posts", true, `마지막 게시물 날짜(${posts.lastPostAt})를 해석할 수 없습니다`);
+    else
+      set(
+        "recent_posts",
+        since != null && since < dormantDays,
+        `최근 게시물이 있습니다(마지막 ${posts.lastPostAt}, ${since}일 전 — 기준 ${dormantDays}일)`,
+      );
+  }
+
+  set("teacher_linked", (teachers ?? 0) >= 1, `이 보드에 교사가 ${teachers}명 연결돼 있습니다 — ClassNote는 교사가 있으면 반을 삭제할 수 없습니다(UI에서 먼저 해제)`);
+
+  // 🔴 **최근 수납이 있으면 보드도 지우지 않는다**(원장 지시 2026-07-30: *"최근 수납이 있으면 방어로직으로
+  // 한번 걸러버리는 것도 좋겠어 안전하게"*). 돈은 "실제로 다닌다"의 가장 강한 신호다 — 수강·보고서 데이터가
+  // 전부 조용해도 최근 납부가 있으면 그 학생은 살아있다(실측: 배한빈, 퇴원 04-06인데 07월 청구·06-30 납부).
+  if (!billing) skip("recent_billing");
+  else {
+    const since = billing.lastPaidAt ? dayDiff(billing.lastPaidAt, today) : null;
+    const afterWithdrawal =
+      !!student?.withdrawnAt &&
+      ((billing.lastPeriod && billing.lastPeriod > student.withdrawnAt.slice(0, 7)) ||
+        (billing.lastPaidAt && billing.lastPaidAt > student.withdrawnAt));
+    set(
+      "recent_billing",
+      afterWithdrawal || (since != null && since < billingDays),
+      `최근 수납·청구가 있습니다(청구 ${billing.lastPeriod ?? "-"} · 납부 ${billing.lastPaidAt ?? "-"}) — 다니는 중일 수 있어 보드를 지우지 않습니다`,
+    );
+  }
+
+  const matchedCodes = [];
+  const notEvaluatedCodes = [];
+  for (const g of RELEASE_GUARDS) {
+    const v = verdicts.get(g.code);
+    if (v === null || v === undefined) notEvaluatedCodes.push(g.code);
+    else if (v.hit) matchedCodes.push(g.code);
+  }
+  let action = "release";
+  let primaryCode = "ok";
+  let reason = "그 과목 수강 종료 + 무게시 + 신원 확정 — 배정 해제 후 보드 삭제 가능";
+  const rank = { exclude: 3, hold: 2, release: 1 };
+  for (const g of RELEASE_GUARDS) {
+    const v = verdicts.get(g.code);
+    if (!v?.hit) continue;
+    if (rank[g.action] > rank[action]) {
+      action = g.action;
+      primaryCode = g.code;
+      reason = v.reason;
+    }
+  }
+  return {
+    action,
+    primaryCode,
+    matchedCodes,
+    notEvaluatedCodes,
+    factsComplete: notEvaluatedCodes.length === 0,
+    reason,
+    // 명부 퇴원처리(Operation B) 대상 힌트. 세 조건을 **모두** 만족해야 한다:
+    //  ① 전과목 퇴원(일부 과목만 그만둔 학생은 false — 다른 수업 배정이 살아 있어야 한다)
+    //  ② eywa 퇴원 후 유예 경과 — ⚠️ **보드 삭제와 자격이 다르다.** 게시물 없는 빈 보드를 지우는 건 20일차라도
+    //     무해하다(재등록하면 프로비저닝이 다시 만든다). 그러나 **명부에서 내리는 건 비가역**이고(복구 =
+    //     학부모 재초대+재가입) 실측 재등록 31건이 **전부 30일 내**였다. 그래서 퇴원처리에만 유예를 요구한다.
+    //     이걸 빼면 "2026-07-10 대량 퇴원(20일차)"이 그대로 퇴원처리 대상으로 뜬다(실제로 그렇게 나왔다).
+    //  ③ 이 보드 판정이 release(위 가드 전부 통과)
+    alsoOffboard:
+      action === "release" &&
+      !!student &&
+      student.status === "withdrawn" &&
+      student.allSubjectsEnded === true &&
+      // 🔴 시스템 일괄 퇴원일은 장부 날짜라 퇴원처리 대상이 아니다(원장 지시) — 보드 삭제는 그대로 가능.
+      !isSystemBulkWithdrawal(student.withdrawnAt) &&
+      (() => {
+        const since = dayDiff(student.withdrawnAt, today);
+        if (since == null || since < dormantDays) return false;
+        // ⭐ 원장 백스톱: 그 학생의 **어떤 보드든** 최근 7일 내 게시물이 있으면 퇴원처리 불가.
+        if (!studentAnyPost || studentAnyPost.complete !== true) return false; // 모르면 안 내린다
+        const d = studentAnyPost.lastPostAt ? dayDiff(studentAnyPost.lastPostAt, today) : null;
+        return d == null || d >= anyPostDays;
+      })(),
   };
 }

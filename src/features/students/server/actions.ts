@@ -1,6 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import {
+  clearOnHoldForActiveEnrollments,
+  reopenEnrollmentsClosedByWithdrawal,
+} from "./enrollment-sync";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { createClient } from "@/lib/supabase/server";
 import { accessLevelTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
@@ -300,12 +304,8 @@ export async function updateStudent(
     const withdrawnDate = cur?.withdrawn_at ? String(cur.withdrawn_at).slice(0, 10) : null;
     const reopenErr = await reopenEnrollmentsClosedByWithdrawal(supabase, id, withdrawnDate);
     if (reopenErr) return { error: reopenErr };
-    const { error: enrErr } = await supabase
-      .from("enrollments")
-      .update({ on_hold: false })
-      .eq("student_id", id)
-      .is("end_date", null);
-    if (enrErr) return { error: enrErr.message };
+    const holdErr = await clearOnHoldForActiveEnrollments(supabase, id);
+    if (holdErr) return { error: holdErr };
   } else if (input.status === "on_hold" && prevStatus !== "on_hold") {
     const { error: enrErr } = await supabase
       .from("enrollments")
@@ -326,25 +326,6 @@ export async function updateStudent(
   };
 }
 
-/**
- * 재원 복구 시, 그 퇴원(withdrawnDate)이 닫은 enrollment를 다시 연다.
- * 퇴원은 활성 enrollment를 end_date=퇴원일로 닫으므로, 복구는 그 날짜로 닫힌 것만 되돌린다
- * (그 이전에 개별 종료된 과거 수강은 유지). 안 하면 학생은 재원인데 수강이 종료로 남아
- * 시간표 셀 '퇴원' 섹션에 계속 뜬다. withdrawnDate가 없으면(휴원→재원 등) no-op.
- */
-async function reopenEnrollmentsClosedByWithdrawal(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  studentId: string,
-  withdrawnDate: string | null,
-): Promise<string | null> {
-  if (!withdrawnDate) return null;
-  const { error } = await supabase
-    .from("enrollments")
-    .update({ end_date: null, withdrawal_reason: null, on_hold: false })
-    .eq("student_id", studentId)
-    .eq("end_date", withdrawnDate);
-  return error?.message ?? null;
-}
 
 /**
  * 학생의 활성(end_date null) 수강을 date로 종료한다. ⚠️ 미래 시작(start_date > date) 수강에

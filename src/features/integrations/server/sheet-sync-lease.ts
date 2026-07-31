@@ -60,6 +60,28 @@ export async function isSheetSyncBusy(supabase: Supa, provider: string): Promise
   return at != null && Date.now() - at < LEASE_STALE_MS;
 }
 
+/**
+ * 진행 중 리스 **갱신(heartbeat)** — 한 번에 끝나지 않고 **여러 콜에 걸쳐 순회**하는 경로용
+ * (ECS 시트 가져오기: 반 28개를 한 반씩 = 1분+). 갱신이 없으면 순회 중에 3분 stale이 지나
+ * 다른 사람이 끼어들 수 있다.
+ *
+ * ⚠️ **이미 잡혀 있을 때만 갱신한다**(`sync_started_at is not null`) — 무조건 UPDATE로 만들면
+ * 이미 해제된 리스를 되살려(부활) 아무도 못 쓰는 유령 리스가 된다.
+ */
+export async function touchSheetSyncLease(
+  supabase: Supa,
+  provider: string,
+  tenantId?: string,
+): Promise<void> {
+  let q = supabase
+    .from("user_integrations")
+    .update({ sync_started_at: new Date().toISOString() })
+    .eq("provider", provider)
+    .not("sync_started_at", "is", null);
+  if (tenantId) q = q.eq("tenant_id", tenantId);
+  await q;
+}
+
 /** 리스 해제 — 이 쓰기가 실패해도 3분 stale로 자가 회복하므로 best-effort면 충분. */
 export async function releaseSheetSyncLease(
   supabase: Supa,

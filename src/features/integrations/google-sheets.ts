@@ -72,6 +72,22 @@ export function getServiceAccountEmail(): string | null {
 }
 
 /**
+ * 인증된 Sheets v4 클라이언트 — 이 모듈 밖(ECS 시트 가져오기 등)에서 **여러 탭·여러 문서**를 직접
+ * 훑어야 할 때만 쓴다. 단일 탭 읽기는 readSheetTabRows / readSheetGridWithMerges를 쓸 것.
+ * ⚠️ 서비스계정 인증·키 파싱을 복제하지 않기 위한 유일한 통로다(키 로딩은 여전히 이 모듈에만 있다).
+ */
+export async function getSheetsApi() {
+  const auth = getServiceAccountAuth();
+  await auth.authorize();
+  return google.sheets({ version: "v4", auth });
+}
+
+/** 시트 오류 → 사람이 읽는 한글 메시지(권한·할당량 안내 포함). 모듈 밖 호출부도 같은 문구를 쓰게 공개. */
+export function describeSheetsError(e: unknown): string {
+  return translateSheetsError(e);
+}
+
+/**
  * 시트 최종 수정 정보 — cron 자동 반영의 **사람-편집 가드**용.
  * 마지막 수정자가 서비스계정이 아니면(=사람이 시트를 편집한 뒤 아직 '가져오기'를 안 함) 자동 덮어쓰기를
  * 건너뛰어 시트 편집분 유실을 구조적으로 차단한다. emailAddress가 안 오는 케이스(외부 계정 프라이버시)는

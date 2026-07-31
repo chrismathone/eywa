@@ -86,7 +86,10 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
     <div className="space-y-4 print:space-y-0">
       {(effectiveTab === "billing" || effectiveTab === "textbooks") && (
         <div className="print:hidden">
-          <MakeeduSyncBadge domain={effectiveTab === "billing" ? "invoices" : "catalog"} />
+          {/* 교재 면의 기본 하위탭은 '교재신청'이고 그걸 갱신하는 도메인은 textbook_checks다.
+              예전엔 catalog(= sync-all 임포터 목록에 없는 수동 도메인)를 가리켜 배지 날짜가 한 달째
+              굳어 있었고, 옆의 '지금 동기화'를 눌러도 영원히 안 바뀌었다(고장난 것처럼 보임). */}
+          <MakeeduSyncBadge domain={effectiveTab === "billing" ? "invoices" : "textbook_checks"} />
         </div>
       )}
       <div className="print:hidden">

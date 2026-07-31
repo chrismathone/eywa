@@ -411,7 +411,7 @@ export function AppSidebar({
 
         {/* user — 계정/로그아웃 + 알림 벨 합체(2026-07-20 상단 헤더 제거로 벨이 여기로 이관).
             펼침: [사용자][이름·호칭][벨(우측)] 한 줄 / 접힘(52px 레일): 벨 위·사용자 아래 세로 스택.
-            벨은 데스크톱에서만 마운트 — 모바일은 AppHeader 벨이 담당(이중 마운트=폴링·팝업 중복). */}
+            벨은 데스크톱에서만 마운트 — 모바일은 MobileTopNav 벨이 담당(이중 마운트=폴링·팝업 중복). */}
         <div
           className={`border-line shrink-0 overflow-hidden border-t ${
             expanded

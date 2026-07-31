@@ -4,7 +4,16 @@ import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
 import { effectiveTeacherId } from "@/lib/auth/view-mode";
 import { getTeacherScope } from "@/lib/auth/teacher-scope";
 import { attendanceRate } from "@/lib/calc/attendance";
+import { kstToday } from "@/lib/date-kst";
 import type { ClassroomAssignData } from "../lib/classroom-assign";
+
+/**
+ * "만료되지 않은 스케줄" PostgREST `or` 절 — `valid_to`가 무기한(null)이거나 오늘 이후(**포함**).
+ * `class_schedules`는 운영 이력을 함께 담는다(영어 시트 구조 가져오기가 옛 배치를 `valid_to`로 마감하고
+ * 새 배치를 넣는다) — injaewon 실측 1,068행 중 480행이 이미 만료다. 시간표 쿼리·`isCurrentSlot`과 같은 경계.
+ * ⚠️ 종강 반은 슬롯이 전부 만료라 이 필터를 걸면 요일이 통째로 사라진다 → **운영 중 반을 다루는 곳에만** 쓸 것.
+ */
+const liveValidTo = (today: string) => `valid_to.is.null,valid_to.gte.${today}`;
 
 /** 운영 요일 + 그 요일의 최초 시작시각(HH:MM). 같은 요일 여러 교시면 가장 이른 시각. */
 export type ClassDaySlot = { day: string; start: string | null };
@@ -580,7 +589,11 @@ export async function getClassroomAssignmentData(): Promise<ClassroomAssignData>
         supabase
           .from("class_schedules")
           .select("class_id, day_of_week, start_time, end_time")
-          .in("class_id", chunk),
+          .in("class_id", chunk)
+          // ⚠️ 만료 슬롯 제외(실측 1,068행 중 480행이 지난 배치). 안 거르면 자동배정이 이제 안 하는
+          // 3~7월 교시를 "그 시간에 수업 중"으로 보고 **없는 강의실 충돌**을 만든다.
+          // 시작 전(valid_from 미래) 슬롯은 남긴다 — 곧 자리가 필요하니 배정 계획에 들어가야 한다.
+          .or(liveValidTo(kstToday())),
       ),
     ]);
     for (const e of enrollments) counts.set(e.class_id, (counts.get(e.class_id) ?? 0) + 1);

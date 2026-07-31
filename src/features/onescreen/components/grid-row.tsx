@@ -14,6 +14,7 @@ import {
   type GridRow,
 } from "../grid";
 import { evaluateSendGate } from "../send-gate";
+import { checkMentConsistency, MENT_WARNING_HINT, MENT_WARNING_LABEL } from "../ment-consistency";
 import { parentUnreadBadge, progressAnomalyBadge } from "../roster-signals";
 import type { OneScreenStudent } from "../types";
 import { classnoteBadge, readAtLabel, type SubjectReport } from "./report-card";
@@ -194,6 +195,14 @@ export function GridBodyRow({
     hasDraft: !!rep?.draft?.trim(),
   });
   const canSend = sendGate.canSend;
+  // 멘트와 기록 칸이 서로 다른 말을 하는지(시험날 진도·멘트에만 있는 점수) — **막지 않고 알린다**.
+  // 학부모 카드엔 멘트와 기록이 나란히 보이므로 어긋나면 학부모가 두 사실을 동시에 받는다(2026-07-30 감사).
+  const mentWarnings = checkMentConsistency({
+    ment: rep?.draft ?? "",
+    progress: subject.today ?? "",
+    dailyTest: student.tests.daily.score != null ? "y" : "",
+    checkTest: student.tests.check.score != null ? "y" : "",
+  });
   // 발송 완료건은 자동작성도 막는다 — 멘트를 새로 만들어 봐야 저장이 서버에서 거부된다(입력 유실).
   const canAutoWrite = isRowActionable(subject, "autowrite", liveStatus);
   const isAbsent = subject.attendanceRaw === "absent";
@@ -530,6 +539,16 @@ export function GridBodyRow({
               {sendGate.label}
             </span>
           ) : null}
+          {/* 멘트와 기록이 어긋남 — 발송을 막지는 않는다(강사 판단). 무엇을 볼지만 짚어 준다. */}
+          {mentWarnings.map((w) => (
+            <span
+              key={w}
+              className="text-amber text-center text-[10px] font-bold"
+              title={MENT_WARNING_HINT[w]}
+            >
+              {MENT_WARNING_LABEL[w]}
+            </span>
+          ))}
           {/* 발송 상태 배지(큐·실패 등) — 발송 완료 라벨은 위 게이트가 이미 말했으므로 중복 표시하지 않는다. */}
           {!alreadySent && badge ? (
             <span className={`text-center text-[10px] font-bold ${badge.cls}`}>{badge.label}</span>
