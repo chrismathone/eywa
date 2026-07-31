@@ -4,6 +4,38 @@
 
 ## 진행 상황
 
+### 데이터베이스 분류를 학원장이 관리 + 구글드라이브 링크 등록 (2026-07-31) - typecheck0/lint0
+원장 지시: *"왼쪽 카테고리가 고정되어 있지? 연동되지 않는 일반적인 곳은 관리자가 추가할 수 있게. 예를 들어
+'기출시험' 같은 데이터베이스를 추가할 수 있게."* + *"이미 추가되어 있는 구글드라이브 링크를 연동시키고 싶을
+수도 있으니까 링크 연동도 가능하도록."*
+
+- **분류 = 코드 고정 enum → 테넌트 데이터**([0161a](../supabase/migrations/0161a_document_categories_and_links.sql)).
+  `academy_documents.category`를 enum → text로 완화하고 `document_categories`(key·label·sort_order·is_system)
+  신설. 기존 6개는 **같은 키로 시드**돼 실데이터 59건(hr 42·billing 17) 무손실·고아 0.
+  · **키는 학원장이 안 만진다** — 이름만 입력하면 앱이 `cat_N`으로 확정하고 **불변**(과목 `subject_N` 선례).
+    라벨을 바꿔도 키가 그대로라 기존 문서 연결이 안 끊긴다. `cat_` 접두사는 연동 폴더 키(`textbooks`·`quotes`)와의
+    충돌을 구조적으로 차단 — 겹치면 같은 `?cat=` 네임스페이스에서 연동 분기가 먼저 이겨 엉뚱한 폴더가 열린다.
+  · **삭제 = "다른 분류로 이동 후 삭제"**(`absorbSubject` 선례) — 그냥 지우면 그 분류 문서가 어느 폴더에도
+    안 잡힌다. 시스템 6개는 **삭제 불가**(이력서→`hr`, 환불요청서→`billing`처럼 코드가 직접 쓰는 자리라
+    지우면 그 쓰기가 고아 키가 된다) — 이름·순서는 변경 가능.
+  · 편집 UI = 폴더 팬 아래 '분류 관리'([category-manager.tsx](<../src/app/(shell)/documents/_components/category-manager.tsx>),
+    쓰기 권한자만). 추가·이름변경·↑↓·삭제(이동 대상 선택). 내부 키는 화면에 노출 안 함.
+  · 소비처 전수 배선 — 폴더 팬·목록 분류 칸·업로드/새문서/링크 다이얼로그·상세 수정 폼이 전부 DB 목록을 읽는다
+    (`getDocumentCategories`, tenantId별 `unstable_cache` + 변경 시 `updateTag`). ⚠️ **클라에서 상수로 다시
+    만들지 말 것** — 추가한 분류가 드롭다운에서 통째로 사라진다(운영 enum 하드코딩 금지와 같은 원칙).
+- **링크 문서(kind='link')** — 이미 구글드라이브·노션 등에 있는 자료를 **재업로드 없이** 목록에 세운다.
+  파일 사본을 안 만들므로 원본이 진실(연동 폴더와 같은 "원본 단일 소스" 원칙) — 열람 권한은 그쪽 공유 설정을 따른다.
+  · 🔴 `normalizeLinkUrl`이 **`javascript:`·`data:`·`file:` 스킴을 거부**한다 — 목록의 링크는 클릭 가능한
+    앵커가 되므로 그대로 통과시키면 저장형 XSS다(Vitest로 잠금). 스킴 없으면 https 보정.
+  · 외부 링크는 **새 탭**으로 연다(창=iframe에 못 태운다 — 구글드라이브가 X-Frame-Options로 차단).
+    유형 칸은 `linkServiceLabel`로 "구글 드라이브/문서/시트/슬라이드"까지 구분, 모르는 사이트는 "웹 링크"
+    (호스트명 raw 노출 금지).
+- **폴더 카운트 = group-by RPC**(`document_category_counts`) — 분류가 동적이 되면서 "분류마다 head count"가
+  N+1이 됐다(B2). 삭제 시 이동 건수도 `update().select().length`가 아니라 별도 count로 센다([[#89]] 상한 오독).
+- ⚠️ 남은 한계: `document_categories` RLS는 tenant_isolation만이다(부모 `academy_documents`와 동일) — 역할
+  게이트는 앱(`canWriteTenant("documents")`)에만 있다. 분류만 DB로 잠그면 앞뒤가 안 맞고, 역할을 박으면
+  0158a가 경고한 override 락아웃 위험이 있어 **문서 계열 전체를 함께 내릴 때** `auth_menu_access` 패턴으로 처리할 것.
+
 ### 랩실(LAB·JJ)은 기록이 있어도 숨긴다 — 각주 한 줄만 남김 (2026-07-31) - typecheck0/lint0/test3170
 같은 날 아침 판단(*"기록이 있으면 남긴다"*)을 원장이 뒤집었다: *"30개도 숨겨줘 · 실제 담임이 아닌 랩실(LAB 및 JJ)은 숨겨."*
 - **규칙 단순화**: 자리로만 잡힌 (날짜,시각)은 슬롯을 **아예 만들지 않는다**. 기록 유무 예외 삭제 →

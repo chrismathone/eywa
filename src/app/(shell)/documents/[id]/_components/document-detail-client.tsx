@@ -2,34 +2,39 @@
 
 import { useActionState, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, Download, Eye, Loader2, Pencil, Save } from "@/components/icons/eywa-icon-compat";
+import { AlertCircle, Download, ExternalLink, Eye, Loader2, Pencil, Save } from "@/components/icons/eywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { updateDocument } from "@/features/documents/server/actions";
 import { downloadDocument } from "@/features/documents/open-file";
 import { WindowLink } from "@/components/workspace/window-link";
-import {
-  CATEGORY_LABEL,
-  DOCUMENT_CATEGORIES,
-  type DocumentCategory,
-  type DocumentKind,
-} from "@/features/documents/categories";
+import { linkHostLabel, type DocumentKind } from "@/features/documents/categories";
 
 const inputCls =
   "border-line bg-background text-foreground placeholder:text-text-faint w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary/40";
-const CATEGORY_OPTIONS = DOCUMENT_CATEGORIES.map((c) => ({ value: c, label: CATEGORY_LABEL[c] }));
 
 export type DocumentDetailData = {
   id: string;
   title: string;
-  category: DocumentCategory;
+  /** `document_categories.key` — 학원장이 관리하는 값이라 닫힌 enum이 아니다(0161a). */
+  category: string;
   kind: DocumentKind;
   description: string | null;
   fileName: string | null;
   body: string | null;
+  linkUrl: string | null;
 };
 
-export function DocumentDetailClient({ doc, canWrite }: { doc: DocumentDetailData; canWrite: boolean }) {
+export function DocumentDetailClient({
+  doc,
+  categoryOptions,
+  canWrite,
+}: {
+  doc: DocumentDetailData;
+  /** 서버가 DB에서 읽어 내려준 분류 선택지 — 여기서 상수로 만들지 말 것(추가한 분류가 사라진다). */
+  categoryOptions: { value: string; label: string }[];
+  canWrite: boolean;
+}) {
   const router = useRouter();
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -64,8 +69,14 @@ export function DocumentDetailClient({ doc, canWrite }: { doc: DocumentDetailDat
         </div>
         <div className="space-y-1.5">
           <span className="text-foreground block text-sm font-medium">분류</span>
-          <SearchableSelect name="category" defaultValue={doc.category} options={CATEGORY_OPTIONS} placeholder="분류 선택..." />
+          <SearchableSelect name="category" defaultValue={doc.category} options={categoryOptions} placeholder="분류 선택..." />
         </div>
+        {doc.kind === "link" ? (
+          <div className="space-y-1.5">
+            <span className="text-foreground block text-sm font-medium">링크 주소 *</span>
+            <input name="linkUrl" required defaultValue={doc.linkUrl ?? ""} className={inputCls} inputMode="url" />
+          </div>
+        ) : null}
         <div className="space-y-1.5">
           <span className="text-foreground block text-sm font-medium">설명</span>
           <input name="description" defaultValue={doc.description ?? ""} className={inputCls} />
@@ -108,6 +119,12 @@ export function DocumentDetailClient({ doc, canWrite }: { doc: DocumentDetailDat
             </Button>
           </>
         ) : null}
+        {/* 외부 링크는 창(iframe)에 못 태운다(구글드라이브 등이 X-Frame-Options로 차단) → 새 탭. */}
+        {doc.kind === "link" && doc.linkUrl ? (
+          <Button render={<a href={doc.linkUrl} target="_blank" rel="noopener noreferrer" />}>
+            <ExternalLink className="size-4" /> 링크 열기
+          </Button>
+        ) : null}
         {canWrite ? (
           <Button variant="outline" onClick={() => setEditing(true)}>
             <Pencil className="size-4" /> 수정
@@ -115,7 +132,27 @@ export function DocumentDetailClient({ doc, canWrite }: { doc: DocumentDetailDat
         ) : null}
       </div>
 
-      {doc.kind === "file" ? (
+      {doc.kind === "link" ? (
+        <div className="bg-card border-line rounded-2xl border p-4">
+          <p className="text-text-dim text-sm">
+            연결된 위치: <span className="text-foreground font-medium">{linkHostLabel(doc.linkUrl) || "—"}</span>
+          </p>
+          {doc.linkUrl ? (
+            <a
+              href={doc.linkUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-primary mt-1 block text-xs break-all hover:underline"
+            >
+              {doc.linkUrl}
+            </a>
+          ) : null}
+          <p className="text-text-faint mt-2 text-xs">
+            원본은 이 학원 서버가 아니라 위 사이트에 있습니다 — 열람 권한은 그곳의 공유 설정을 따릅니다.
+          </p>
+          {doc.description ? <p className="text-text-dim mt-2 text-sm whitespace-pre-wrap">{doc.description}</p> : null}
+        </div>
+      ) : doc.kind === "file" ? (
         <div className="bg-card border-line rounded-2xl border p-4">
           <p className="text-text-dim text-sm">
             원본 파일명: <span className="text-foreground font-medium">{doc.fileName ?? "—"}</span>
