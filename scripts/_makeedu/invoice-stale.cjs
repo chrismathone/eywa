@@ -306,6 +306,11 @@ const FIELD_KO = { total: "청구", discount: "할인", paid: "수납", points: 
  *
  * ⚠️ makeedu 합계는 **조회 범위 전체 합**이라 월별로 못 쪼갠다 → 범위 총합 1건으로 비교한다.
  * ⚠️ 합계 표시가 꺼져 있으면(`reported=null`) **검증하지 않은 것**으로 둔다(모르면 안다고 하지 않는다).
+ * ⚠️ eywa 쪽(`stored`)은 **저장분 + 미매칭 라인**이어야 한다. 이 대조가 묻는 건 "스크랩이 완전한가"이지
+ *    "저장이 됐는가"가 아니다(그건 층 2가 본다). 미매칭을 빼고 비교하면 매칭이 나쁠수록 대조가 실패해
+ *    검증이 영영 안 선다 — 매칭 품질은 `unmatchedRatio`가 따로 본다.
+ * ⚠️ 미납은 **라인 합**으로 넘겨야 한다. `total-discount-paid`로 재계산하면 (학생×월) 단위 clamp 때문에
+ *    라인 합과 어긋난다(2026-07-31 실측: 미납 191,250원 차이가 전부 이것이었다).
  *
  * @param reported makeedu 합계 {lines,total,discount,points,paid,unpaid} 또는 null
  * @param stored   eywa가 저장한 **스크랩 매칭분** 합계(같은 필드)
