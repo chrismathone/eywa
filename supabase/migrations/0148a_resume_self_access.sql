@@ -10,6 +10,6 @@ create policy academy_documents_restricted_guard on academy_documents
   for all
   using (
     restricted is not true
-    or public.auth_system_role() in ('master', 'admin', 'manager', 'accountant')
-    or staff_user_id = auth.uid()
+    or (select public.auth_system_role()) in ('master', 'admin', 'manager', 'accountant')
+    or staff_user_id = (select auth.uid())
   );

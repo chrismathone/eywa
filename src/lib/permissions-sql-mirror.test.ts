@@ -31,8 +31,11 @@ describe("0158a RLS 기본 권한 = permissions.ts MENU_ACCESS 미러", () => {
   const sqlDefaults = readSqlDefaults();
   const mirrored = Object.keys(sqlDefaults) as MenuKey[];
 
-  it("미러 대상 메뉴는 billing·expense_requests 두 개다", () => {
-    expect(mirrored.sort()).toEqual(["billing", "expense_requests"]);
+  // staff는 0167a(staff_contracts 사무실 전용 읽기)가 auth_staff_can_read()로 쓴다.
+  // ⚠️ 새 메뉴를 SQL DEFAULTS에 넣었으면 여기도 같은 커밋에서 — 안 넣으면 auth_menu_access가
+  //    master 빼고 전부 'none'을 돌려줘 fail-closed 락아웃이 난다(0167a 주석 참조).
+  it("미러 대상 메뉴는 billing·expense_requests·staff 세 개다", () => {
+    expect(mirrored.sort()).toEqual(["billing", "expense_requests", "staff"]);
   });
 
   it.each(mirrored)("%s — 8개 역할의 기본 접근수준이 코드와 일치", (menu) => {
