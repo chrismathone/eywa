@@ -9,13 +9,15 @@ import { Plus, X } from "@/components/icons/eywa-icon-compat";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import {
   DEFAULT_TEACHER_VIEW_PX_PER_MIN,
+  SUBJECT_COLORS,
   TEACHER_VIEW_STEPS,
   type BreakRangeSetting,
   type OperationsSettings,
   type SkillAreaSetting,
   type SubjectSetting,
 } from "@/features/owner/settings-types";
-import { DEFAULT_ENGLISH_SKILL_AREAS } from "@/features/owner/skill-areas";
+import { DEFAULT_ENGLISH_SKILL_AREAS, skillAreaColorOf } from "@/features/owner/skill-areas";
+import { SUBJECT_SOLID } from "@/features/owner/subjects";
 import { ENGLISH_WEEKDAY_PERIOD_LIST } from "@/features/timetable/lib/periods";
 import {
   absorbSubject,
@@ -504,6 +506,34 @@ function SkillAreaListEditor({
               onBlur={() => confirmKey(i)}
               aria-label="수업계획 영역 이름"
             />
+            {/* 영역 색 — 수업계획 화면(패널·계획 행)에서 영역을 한눈에 가르는 색. 미지정은 기본색/순번색. */}
+            <span className="flex items-center gap-1.5">
+              <span
+                className={`size-4 shrink-0 rounded-sm ${SUBJECT_SOLID[skillAreaColorOf(value, a.key)]}`}
+                aria-hidden
+              />
+              <select
+                className={`${cellCls} w-[92px]`}
+                value={a.color ?? ""}
+                onChange={(e) =>
+                  onChange(
+                    value.map((x, j) =>
+                      j === i
+                        ? { ...x, color: (e.target.value || undefined) as SkillAreaSetting["color"] }
+                        : x,
+                    ),
+                  )
+                }
+                aria-label="영역 색"
+              >
+                <option value="">자동</option>
+                {SUBJECT_COLORS.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+            </span>
             <span className={badgeCls}>{a.key || "ID 자동"}</span>
             {dup ? <span className="text-danger text-[11px]">이름 중복</span> : null}
             <button

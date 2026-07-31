@@ -3,17 +3,25 @@
 // english는 미설정이어도 기본 6영역을 프리필(구글시트 원본 어휘) — "설정 무시" 하드코딩이 아니라
 // 설정이 비었을 때의 기본값이며, 원장이 skillAreas를 편집하면 그 값이 이긴다.
 // ⚠️ ECS 진입 조건도 이 함수가 판정한다: resolveSkillAreas(subject).length > 0 인 과목만 ECS 대상.
-import type { SkillAreaSetting, SubjectSetting } from "./settings-types";
+import type { PillColor } from "@/components/atoms/pill";
+import { SUBJECT_COLORS, type SkillAreaSetting, type SubjectSetting } from "./settings-types";
 
-/** english 과목 기본 6영역 — 구글시트 '구분' 어휘(Vocab/Listening/Reading/Grammar/Writing/Speaking). */
+/**
+ * english 과목 기본 6영역 — 구글시트 '구분' 어휘(Vocab/Listening/Reading/Grammar/Writing/Speaking).
+ * 색은 "설정이 비었을 때의 기본값"이지 하드코딩 맵이 아니다 — 원장이 과목 운영 탭에서 바꾸면 그 값이 이긴다.
+ * 서로 최대한 멀리(파랑·보라·초록·앰버·로즈·골드) 떨어뜨려 한눈에 갈리게 골랐다.
+ */
 export const DEFAULT_ENGLISH_SKILL_AREAS: readonly SkillAreaSetting[] = [
-  { key: "vocab", label: "Vocab" },
-  { key: "listening", label: "Listening" },
-  { key: "reading", label: "Reading" },
-  { key: "grammar", label: "Grammar" },
-  { key: "writing", label: "Writing" },
-  { key: "speaking", label: "Speaking" },
+  { key: "vocab", label: "Vocab", color: "blue" },
+  { key: "listening", label: "Listening", color: "purple" },
+  { key: "reading", label: "Reading", color: "green" },
+  { key: "grammar", label: "Grammar", color: "amber" },
+  { key: "writing", label: "Writing", color: "rose" },
+  { key: "speaking", label: "Speaking", color: "gold" },
 ];
+
+/** 색 미설정 영역에 돌려 쓰는 팔레트(neutral·danger 제외 — danger는 '결석' 의미와 겹친다). */
+const ROTATION: readonly PillColor[] = ["blue", "purple", "green", "amber", "rose", "gold", "primary"];
 
 /**
  * 과목의 ECS 영역 목록을 해석한다.
@@ -43,4 +51,22 @@ export function skillAreaLabelOf(
   const hit = areas.find((a) => a.key === key);
   if (hit) return { label: hit.label, known: true };
   return { label: key, known: false };
+}
+
+/**
+ * 영역의 표시 색 — 계획 화면(패널·계획 행)이 **같은 색을 쓰도록** 하는 단일 소스.
+ *
+ * 우선순위: ① 설정 색 → ② 기본 6영역의 내장 색(설정에 색만 비어 있을 때) → ③ 순번 회전 → ④ neutral.
+ * ⚠️ 회전은 **설정 목록에서의 순번**이라, 영역을 지우거나 순서를 바꾸면 색이 따라 움직인다. 색을 고정하고
+ *    싶으면 설정에서 색을 지정하면 된다(그게 ①). 미등록 key(설정에서 삭제된 옛 계획 행)는 neutral —
+ *    살아있는 영역의 색을 빌려 쓰면 "지워진 영역"이 정상 영역처럼 보인다.
+ */
+export function skillAreaColorOf(areas: readonly SkillAreaSetting[], key: string): PillColor {
+  const idx = areas.findIndex((a) => a.key === key);
+  if (idx < 0) return "neutral";
+  const stored = areas[idx]!.color;
+  if (stored && (SUBJECT_COLORS as readonly string[]).includes(stored)) return stored;
+  const builtin = DEFAULT_ENGLISH_SKILL_AREAS.find((a) => a.key === key)?.color;
+  if (builtin) return builtin;
+  return ROTATION[idx % ROTATION.length]!;
 }

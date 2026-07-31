@@ -16,6 +16,7 @@ import { resolveSkillAreas } from "@/features/owner/skill-areas";
 import type { SkillAreaSetting } from "@/features/owner/settings-types";
 import { effectiveAttendanceRecords } from "@/features/attendance/effective-records";
 import { isWithinAttendanceEditWindow } from "@/features/attendance/edit-window";
+import { readEcsFontSize, type EcsFontSize } from "../font-size";
 import {
   buildWeekGrid,
   scheduledSlotKeySet,
@@ -75,6 +76,8 @@ export type ClassSheetWeekData = {
   /** `${date}|${HH:MM}` → "N교시". 요일별 교시표로 확정(주말은 평일과 시각이 달라 표가 다르다) — 표시 전용. */
   periodLabelBySlot: Record<string, string>;
   fill: { totalSlots: number; filledSlots: number; orphanSlots: number };
+  /** 내 글씨 크기(users.ui_prefs.ecs.fontSize) — 계정 귀속이라 다른 PC에서도 같은 크기로 열린다. */
+  fontSize: EcsFontSize;
 };
 
 export async function getClassSheetWeek(
@@ -106,6 +109,7 @@ export async function getClassSheetWeek(
     memosRes,
     settings,
     labelMap,
+    myPrefsRes,
   ] = await Promise.all([
     admin
       .from("class_schedules")
@@ -174,6 +178,8 @@ export async function getClassSheetWeek(
     // (원장 제보 2026-07-29). DB 원문은 시트 동기의 원본이라 건드리지 않고 **표시할 때만** 해석한다.
     // admin 클라이언트를 주입해 tenantId로 좁힌다(무인자 호출은 쿠키 세션 경로라 admin 흐름과 섞인다).
     getTeacherLabelMap({ supabase: admin, tenantId }),
+    // 내 글씨 크기(계정 귀속) — 서버 확정값이라 첫 렌더부터 정확하다(localStorage 초기값 = 하이드레이션 크래시 #75).
+    admin.from("users").select("ui_prefs").eq("id", access.user.id).eq("tenant_id", tenantId).maybeSingle(),
   ]);
 
   for (const r of [schedulesRes, enrollmentsRes, planLinesRes, weekGoalsRes, monthGoalsRes, marksRes, attendanceRes, memosRes]) {
@@ -384,6 +390,8 @@ export async function getClassSheetWeek(
       memos,
       periodLabelBySlot,
       fill: sheetFillStats(grid),
+      // 크기 조회 실패는 기본값으로 떨어진다(개인 취향값이라 시트 전체를 막을 이유가 없다).
+      fontSize: readEcsFontSize(myPrefsRes.data?.ui_prefs),
     },
   };
 }

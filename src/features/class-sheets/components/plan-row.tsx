@@ -4,7 +4,8 @@
 // 충돌 시 그 셀만 pause + "서버값/내 값" 인라인 선택(계획 v2.2 §C — 자동 덮어쓰기 금지).
 import { memo } from "react";
 import { X } from "@/components/icons/eywa-icon-compat";
-import { skillAreaLabelOf } from "@/features/owner/skill-areas";
+import { skillAreaColorOf, skillAreaLabelOf } from "@/features/owner/skill-areas";
+import { SUBJECT_BORDER, SUBJECT_SOFT } from "@/features/owner/subjects";
 import type { SkillAreaSetting } from "@/features/owner/settings-types";
 import { buildSaveKey } from "../lib/save-keys";
 import type { PlanPatchField } from "../lib/plan-codec";
@@ -94,13 +95,17 @@ export const PlanRow = memo(function PlanRow({
   const areaCell = useCellState(store, areaKey);
   const areaValue = areaCell?.value ?? line.skillArea;
   const { label: areaLabel, known } = skillAreaLabelOf(skillAreas, areaValue ?? "");
+  // 영역 고유색 — 계획 표에서도 패널과 **같은 색**이라 "보카 줄"을 색으로 찾는다(단일 소스: 학원설정).
+  const areaTone = skillAreaColorOf(skillAreas, areaValue ?? "");
+  // 셀렉트도 알약처럼 — 닫힌 상태(평소 보이는 모습)에 색·굵기가 그대로 실린다.
+  const areaCls = `w-full cursor-pointer rounded-lg border px-1.5 py-1 text-[13px] font-bold outline-none focus:border-primary ${SUBJECT_BORDER[areaTone]} ${SUBJECT_SOFT[areaTone]}`;
 
   return (
     <tr className="align-top">
       <td className="py-0.5 pr-1">
         {canEdit ? (
           <select
-            className={cellCls}
+            className={areaCls}
             value={known ? (areaValue ?? "") : ""}
             aria-label="구분(영역)"
             onChange={(e) => {
@@ -115,7 +120,11 @@ export const PlanRow = memo(function PlanRow({
             ))}
           </select>
         ) : (
-          <span className={`text-[12px] ${known ? "text-foreground" : "text-text-dim"}`}>{areaLabel}</span>
+          <span
+            className={`inline-block rounded-full px-2 py-0.5 text-[12px] font-bold ${SUBJECT_SOFT[areaTone]}`}
+          >
+            {areaLabel}
+          </span>
         )}
       </td>
       <td className="py-0.5 pr-1">
