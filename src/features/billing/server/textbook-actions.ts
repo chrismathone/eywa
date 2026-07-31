@@ -69,6 +69,9 @@ export async function createTextbookOrder(_prev: TextbookState, formData: FormDa
     .from("textbook_orders")
     .insert({
       tenant_id: user.tenantId,
+      // 실제 저장한 계정(감사·위조 방지, 0168a). ⚠️ **소유자가 아니다** — 소유 판정은 teacher_name이
+      // 단일 소스다(대리 작성이 의도된 동작이라 둘은 다른 사실. textbook-ownership.ts 참조).
+      created_by: user.id,
       student_id: f.studentId,
       student_name: studentName,
       teacher_name: f.teacherName,
@@ -123,6 +126,8 @@ export async function requestTextbook(_prev: TextbookState, formData: FormData):
   const requestDate = f.requestDate ?? kstToday();
   const rows = studentIds.map((sid) => ({
     tenant_id: user.tenantId,
+    // 실제 저장한 계정(0168a) — teacher_name(소유자)과 다른 사실이다. 아래 주석 참조.
+    created_by: user.id,
     student_id: sid,
     student_name: nameById.get(sid) ?? null,
     // ijw 패리티 — 폼의 '담임 선생님'(기본=요청자 본인, 자유 표시명·대리 작성 가능). 미입력이면 요청자.
