@@ -3,7 +3,8 @@
 // ECS 서버 액션 — 전부 requireEcsClassAccess(write) 공용 게이트(#77) 뒤. class_sheet_*는 deny-RLS라
 // admin client(service_role)로만 접근하되, **모든 select/update가 tenant_id + class_id + id 3중 조건**
 // (게이트한 반과 변경 행의 결속 — 계획 v2.2 §A). 구조 변경(create/move/delete/copy)은 0157a RPC 위임
-// (슬롯 advisory xact 락·재번호 원자성). 출석은 비파괴 ecs_mark_present_if_absent만(§E).
+// (슬롯 advisory xact 락·재번호 원자성). 출석은 체크(ecs_mark_present_if_absent) + 취소(ecs_clear_present,
+// 0168a — plain present만) 두 경로뿐. 결석·지각·시수 편집은 여전히 /attendance 전용(§E 완화판).
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchInChunks } from "@/lib/supabase/batch";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
@@ -14,6 +15,7 @@ import {
   isWithinAttendanceEditWindow,
 } from "@/features/attendance/edit-window";
 import { isEnrollmentActiveOn, enrollmentAttendsOnDay } from "@/features/enrollments/eligibility";
+import { logAction } from "@/features/audit/server/log";
 import { normalizePlanText } from "../lib/plan-codec";
 import { validatePatchBatch, type PatchResult } from "../lib/save-keys";
 import { dowKeyOf, HHMM_RE, normalizePeriodStart, YMD_RE } from "../lib/week";
@@ -506,8 +508,8 @@ export async function markPresentIfAbsent(input: {
     return { ok: false, error: attendanceLockMessage(input.date, today) };
   }
   const admin = createAdminClient();
-  // 학생-반-날짜 결속 — 화면(entry.eligible)은 게이트가 아니다. 출석 행은 ECS에서 되돌릴 수 없어
-  // (RPC에 삭제 경로 없음) 잘못 만들면 /attendance 권한자만 치울 수 있고 시수·정산에도 들어간다.
+  // 학생-반-날짜 결속 — 화면(entry.eligible)은 게이트가 아니다. 잘못 만든 행은 시수·정산에도 들어간다
+  // (취소는 clearPresentAttendance로 가능해졌지만, 그건 '내가 방금 찍은 것'을 되돌리는 경로다).
   const elig = await checkStudentEligibleOn(admin, tenantId, input.classId, input.studentId, input.date);
   if (!elig.ok) return elig;
   const { data, error } = await admin.rpc("ecs_mark_present_if_absent", {
@@ -527,4 +529,65 @@ export async function markPresentIfAbsent(input: {
     return acc;
   }, null);
   return { ok: true, status: eff?.status ?? "present" };
+}
+
+/**
+ * ECS 출석 **취소** — 같은 체크를 다시 눌러 되돌린다(원장 지시 2026-07-31, 0168a).
+ *
+ * 게이트는 체크와 **똑같다**(권한 · 강사 7일 창 · 반 접근). 다른 점은 두 가지다:
+ *  · 🔴 **plain present만 지운다** — 그 (반·학생·날짜)의 모든 행이 present + 메모 없음 + 시수 기본일 때만.
+ *    결석/지각/공결이거나 출석부에서 사유·시수가 붙은 기록이면 RPC가 `blocked:'rich'`로 거부하고,
+ *    화면은 "출석부에서 수정하세요"로 안내한다(그쪽 값은 시수 검증·급여 분배가 읽는 사람 입력이다).
+ *  · 수강 자격(checkStudentEligibleOn)은 **묻지 않는다** — 지우는 행위엔 "없던 기록을 만든다"는 위험이
+ *    없고, 오히려 자격이 끝난 뒤(반 이동 직후 등) 잘못 찍힌 기록을 못 지우게 막는 게 해롭다.
+ *    행 결속은 RPC의 tenant+class+student+date 조건이 담당한다.
+ */
+export async function clearPresentAttendance(input: {
+  classId: string;
+  studentId: string;
+  date: string;
+}): Promise<{ ok: true; cleared: number } | ActionError> {
+  const gate = await requireEcsClassAccess(input.classId);
+  if (!gate.ok) return { ok: false, error: gate.error };
+  if (!YMD_RE.test(input.date)) return { ok: false, error: "잘못된 요청입니다(날짜)" };
+  const { user, tenantId } = gate.access;
+  if (!(await canWriteTenant(user.systemRole, "attendance"))) {
+    return { ok: false, error: "출석 입력 권한이 없습니다" };
+  }
+  const today = kstToday();
+  if (user.systemRole === "teacher" && !isWithinAttendanceEditWindow(input.date, today)) {
+    return { ok: false, error: attendanceLockMessage(input.date, today) };
+  }
+  const admin = createAdminClient();
+  const { data, error } = await admin.rpc("ecs_clear_present", {
+    p_tenant: tenantId,
+    p_actor: user.id,
+    p_class: input.classId,
+    p_student: input.studentId,
+    p_date: input.date,
+  });
+  if (error) return { ok: false, error: `출석 취소에 실패했습니다: ${error.message}` };
+  const res = (data ?? {}) as { cleared?: number; blocked?: string | null };
+  if (res.blocked === "rich") {
+    return {
+      ok: false,
+      error: "결석·지각이거나 출석부에서 사유·시수를 적어 둔 기록입니다 — 출석부에서 수정하세요",
+    };
+  }
+  // 감사로그 — DB 트리거(0084a)는 service_role 호출이라 actor가 비어 있다. "누가 지웠는지"는 여기서 남긴다.
+  if ((res.cleared ?? 0) > 0) {
+    const { data: stu } = await admin
+      .from("students")
+      .select("name")
+      .eq("tenant_id", tenantId)
+      .eq("id", input.studentId)
+      .maybeSingle();
+    await logAction({
+      action: "ecs_attendance_clear",
+      targetType: "attendance",
+      targetLabel: stu?.name ?? null,
+      metadata: { classId: input.classId, date: input.date, rows: res.cleared },
+    });
+  }
+  return { ok: true, cleared: res.cleared ?? 0 };
 }

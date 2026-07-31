@@ -169,6 +169,11 @@ export function auditDetail(
       const c = num(m.reportCount);
       return c === null ? "게시된 공지 게시취소(회수)" : `게시된 공지 ${c}건 게시취소(회수)`;
     }
+    case "ecs_attendance_clear": {
+      const rows = num(m.rows);
+      const date = typeof m.date === "string" ? m.date.slice(5) : null;
+      return join(date ? `${date} 출석 체크 해제` : "출석 체크 해제", rows ? `기록 ${rows}건 삭제` : null);
+    }
     case "student_import": {
       const inserted = num(m.inserted);
       if (inserted === null) return null;

@@ -12,8 +12,9 @@ import type { PlanLineDTO } from "../server/actions";
 import type { SheetHandlers } from "./sheet-client";
 import { useCellState, type SheetSaveStore } from "./use-sheet-saves";
 
+// 테두리 = line-strong(18%) — 헤어라인 9%는 흰 카드 위에서 칸 경계가 거의 안 보인다(가독성 지적 07-31).
 const cellCls =
-  "border-line text-foreground w-full rounded-lg border bg-transparent px-1.5 py-1 text-[12px] outline-none focus:border-primary disabled:opacity-60";
+  "border-line-strong text-foreground w-full rounded-lg border bg-transparent px-1.5 py-1 text-[13px] outline-none focus:border-primary disabled:opacity-60";
 
 function CasInput({
   lineId,
@@ -38,21 +39,21 @@ function CasInput({
   if (cell?.conflict) {
     return (
       <div className="border-danger bg-danger/5 space-y-1 rounded-lg border px-1.5 py-1">
-        <p className="text-danger text-[10px] leading-tight">
+        <p className="text-danger text-[11px] leading-tight">
           다른 강사가 수정: <b>{cell.conflict.serverValue ?? "(비움)"}</b>
         </p>
-        <p className="text-text-dim truncate text-[10px]">내 입력: {value || "(비움)"}</p>
+        <p className="text-text-dim truncate text-[11px]">내 입력: {value || "(비움)"}</p>
         <div className="flex gap-1">
           <button
             type="button"
-            className="border-line cursor-pointer rounded-full border px-1.5 text-[10px]"
+            className="border-line-strong text-foreground cursor-pointer rounded-full border px-1.5 text-[11px]"
             onClick={() => handlers.resolveConflict(saveKey, "server")}
           >
             서버값 사용
           </button>
           <button
             type="button"
-            className="border-danger text-danger cursor-pointer rounded-full border px-1.5 text-[10px]"
+            className="border-danger text-danger cursor-pointer rounded-full border px-1.5 text-[11px] font-medium"
             onClick={() => handlers.resolveConflict(saveKey, "mine")}
           >
             내 값으로 덮기
@@ -114,7 +115,7 @@ export const PlanRow = memo(function PlanRow({
             ))}
           </select>
         ) : (
-          <span className={`text-[11px] ${known ? "text-text-dim" : "text-text-faint"}`}>{areaLabel}</span>
+          <span className={`text-[12px] ${known ? "text-foreground" : "text-text-dim"}`}>{areaLabel}</span>
         )}
       </td>
       <td className="py-0.5 pr-1">
@@ -134,7 +135,7 @@ export const PlanRow = memo(function PlanRow({
           <button
             type="button"
             aria-label="줄 삭제"
-            className="text-text-faint hover:text-danger cursor-pointer rounded p-0.5"
+            className="text-text-dim hover:text-danger cursor-pointer rounded p-0.5"
             onClick={() => {
               const hasContent = [line.textbook, line.pageRange, line.progress, line.homework].some(
                 (v) => (v ?? "").trim() !== "",

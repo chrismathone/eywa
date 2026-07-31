@@ -67,12 +67,19 @@ export const SheetGrid = memo(function SheetGrid({
               // cursor-default — DragScrollArea의 cursor-grab이 헤더까지 덮지 않게(period-block과 동일)
               className="bg-card shadow-card flex cursor-default items-center gap-2 rounded-2xl px-3 py-2"
             >
-              <span className={`text-[14px] font-bold ${isToday ? "text-primary" : "text-foreground"}`}>
+              {/* 요일 = 원본 시트의 검정 반전 머리글(월/화/수). 오늘은 브랜드 네이비로 대체. */}
+              <span
+                className={`inline-flex size-7 items-center justify-center rounded-lg text-[15px] font-bold text-white ${
+                  isToday ? "bg-primary" : "bg-foreground"
+                }`}
+              >
                 {DOW_KO[day.dow]}
               </span>
-              <span className="text-text-dim num text-[12px]">{day.date.slice(5).replace("-", "/")}</span>
+              <span className="text-foreground num text-[13px] font-semibold">
+                {day.date.slice(5).replace("-", "/")}
+              </span>
               {isToday ? (
-                <span className="border-primary text-primary rounded-full border px-1.5 py-0.5 text-[10px]">
+                <span className="border-primary text-primary rounded-full border px-1.5 py-0.5 text-[11px] font-bold">
                   오늘
                 </span>
               ) : null}

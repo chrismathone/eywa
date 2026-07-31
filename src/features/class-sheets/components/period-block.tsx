@@ -50,23 +50,28 @@ export const PeriodBlock = memo(function PeriodBlock({
     // 아예 불가능**하다 — I빔은 못 하는 일을 약속하는 거짓 어포던스가 된다. 중립적인 화살표가 정직하다.
     // 선택이 실제로 되는 곳(input·textarea)은 skip() 대상이라 UA I빔을 그대로 유지한다(실측 확인).
     <article className="bg-card shadow-card cursor-default rounded-2xl p-3">
-      <header className="flex flex-wrap items-center gap-x-2 gap-y-1 pb-2">
-        {periodLabel ? <span className="text-foreground text-[13px] font-bold">{periodLabel}</span> : null}
-        <span className="text-text-dim num text-[12px] whitespace-nowrap">
+      {/* 카드 머리 — 원본 시트의 회색 교시 칸(1교시 / 03:00~03:40)과 같은 위계. 교시=칩, 시각=옆 숫자. */}
+      <header className="border-line-strong flex flex-wrap items-center gap-x-2 gap-y-1 border-b pb-2">
+        {periodLabel ? (
+          <span className="bg-bg-soft text-foreground rounded-md px-1.5 py-0.5 text-[13px] font-bold">
+            {periodLabel}
+          </span>
+        ) : null}
+        <span className="text-text-dim num text-[13px] font-medium whitespace-nowrap">
           {slot.slotStart}
           {slot.slotEnd ? ` ~ ${slot.slotEnd}` : ""}
         </span>
         {teacher ? (
-          <span className="bg-bg-soft text-foreground rounded-full px-2 py-0.5 text-[11px] whitespace-nowrap">
+          <span className="border-line-strong text-foreground rounded-full border px-2 py-0.5 text-[12px] font-medium whitespace-nowrap">
             {teacher}
           </span>
         ) : null}
         {slot.roomLabel ? (
-          <span className="text-text-faint text-[11px] whitespace-nowrap">{slot.roomLabel}</span>
+          <span className="text-text-dim text-[12px] whitespace-nowrap">{slot.roomLabel}</span>
         ) : null}
         {!slot.scheduled ? (
           <span
-            className="border-line text-text-dim ml-auto rounded-full border border-dashed px-2 py-0.5 text-[10px] whitespace-nowrap"
+            className="border-amber/50 bg-amber-soft text-amber ml-auto rounded-full border px-2 py-0.5 text-[11px] font-medium whitespace-nowrap"
             title="시간표가 바뀌어 현재 스케줄에 없는 시각입니다 — 기록 보존을 위해 표시"
           >
             시간 변경됨
