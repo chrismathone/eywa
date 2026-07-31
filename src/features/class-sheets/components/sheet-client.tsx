@@ -215,7 +215,7 @@ export function SheetClient({
           setAttendance((prev) => ({ ...prev, [`${studentId}|${date}`]: r.status }));
         });
       },
-      // 체크를 다시 누르면 취소(0168a). 서버가 거부하는 경우(결석·지각·출석부 메모/시수)는 낙관 반영을
+      // 체크를 다시 누르면 취소(0169a). 서버가 거부하는 경우(결석·지각·출석부 메모/시수)는 낙관 반영을
       // 되돌리고 사유를 띄운다 — "지워진 것처럼 보였다가 새로고침하면 돌아오는" 거짓 성공을 막는다.
       clearAttendance: (studentId, date) => {
         if (!data.canMarkAttendanceByDate[date]) return;

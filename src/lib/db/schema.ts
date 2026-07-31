@@ -1208,7 +1208,13 @@ export const textbookOrders = pgTable(
       .references(() => tenants.id, { onDelete: "cascade" }),
     studentId: uuid("student_id").references(() => students.id, { onDelete: "set null" }),
     studentName: text("student_name"), // denormalized (학생 매칭 실패/퇴원 대비 표시용)
+    // 🔴 소유자 = teacherName(표시명 스냅샷). 아래 createdBy(실제 작성자)와 **다른 사실**이다 —
+    //    대리 작성이 의도된 동작이라 사무실이 강사 앞으로 내면 createdBy=사무실·teacherName=그 강사이고
+    //    소유자는 teacherName 쪽이다(ownsTextbookRequest 단일 소스). 둘을 섞지 말 것.
     teacherName: text("teacher_name"),
+    // 이 요청을 실제로 저장한 계정(0168a) — 감사·위조 방지(RLS가 INSERT 시 남의 id를 못 적게 막는다).
+    // 0168a 이전 447행은 null(작성자 미상) — teacherName으로 백필하지 않았다(의미가 다르다).
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
     bookName: text("book_name").notNull(),
     bookDetail: text("book_detail"),
     price: numeric("price", { precision: 12, scale: 0 }).notNull().default("0"),

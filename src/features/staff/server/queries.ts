@@ -1,7 +1,7 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { fetchInChunks } from "@/lib/supabase/batch";
+import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import type { SystemRole } from "@/lib/permissions";
 import {
@@ -30,6 +30,11 @@ export type StaffRow = {
   employmentType: string | null; // 근무형태: 정규직|아르바이트|프리랜서
   classesCount: number;
   primaryStudentsCount: number;
+  /** 현재 계약(가장 큰 차수) — 직원명부 시트의 '현재 계약'·'계약조건'·'계약갱신일' 열에 대응. */
+  contractStart: string | null;
+  contractEnd: string | null;
+  contractTerms: string | null;
+  contractSeq: number | null;
 };
 
 export async function getStaffList(): Promise<StaffRow[]> {
@@ -37,7 +42,7 @@ export async function getStaffList(): Promise<StaffRow[]> {
 
   // 세 쿼리는 서로 독립 → 병렬(3 round-trip → 1). users/classes/students 모두 단일 테넌트 ≤1000행이라
   // 절단 위험 없음(현재 users 39·classes 129·enrolled 524).
-  const [{ data: users }, { data: teaching }] = await Promise.all([
+  const [{ data: users }, { data: teaching }, contracts] = await Promise.all([
     supabase
       .from("users")
       .select(
@@ -47,9 +52,25 @@ export async function getStaffList(): Promise<StaffRow[]> {
       .order("system_role", { ascending: true })
       .order("display_name", { ascending: true }),
     supabase.from("classes").select("id, teacher_id").eq("is_active", true),
+    // 현재 계약(시트 '현재 계약'·'계약조건'·'계약갱신일' 열) — 기간 있는 계약만, 페이지네이션으로 전건(B2).
+    // ⚠️ RLS(0167a)가 사무실만 읽게 하므로 그 밖의 역할은 빈 배열 → 계약 칸이 비어 보인다(정상).
+    fetchAllPaged<{ user_id: string; seq: number; start_date: string; end_date: string; terms: string | null }>(
+      (from, to) =>
+        supabase
+          .from("staff_contracts")
+          .select("user_id, seq, start_date, end_date, terms")
+          .eq("kind", "contract")
+          .order("user_id", { ascending: true })
+          .order("seq", { ascending: true })
+          .range(from, to),
+    ).catch(() => []),
   ]);
 
   if (!users) return [];
+
+  // 사람별 현재 계약 = 가장 큰 차수(위에서 seq 오름차순이라 마지막 것이 최신).
+  const currentContractOf = new Map<string, (typeof contracts)[number]>();
+  for (const c of contracts) currentContractOf.set(c.user_id, c);
 
   const classCount = new Map<string, number>();
   const classTeacher = new Map<string, string>(); // class_id → teacher_id(과목 담당)
@@ -90,6 +111,10 @@ export async function getStaffList(): Promise<StaffRow[]> {
     employmentType: (u.employment_type as string | null) ?? null,
     classesCount: classCount.get(u.id) ?? 0,
     primaryStudentsCount: studentsByTeacher.get(u.id)?.size ?? 0,
+    contractStart: currentContractOf.get(u.id)?.start_date ?? null,
+    contractEnd: currentContractOf.get(u.id)?.end_date ?? null,
+    contractTerms: currentContractOf.get(u.id)?.terms ?? null,
+    contractSeq: currentContractOf.get(u.id)?.seq ?? null,
   }));
 }
 

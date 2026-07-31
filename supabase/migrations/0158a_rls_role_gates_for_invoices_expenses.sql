@@ -25,13 +25,12 @@
 --    textbook_orders 하나뿐이라 **"나머지는 검토됐다"로 읽혀** 두 테이블이 2일간 열린 채였다(2026-07-31 발견,
 --    → 0165a에서 잠금). 같은 오해가 `staff_contracts`에서도 났다(→ 0167a). gotchas #92.
 --    📌 **잠그는 마이그레이션은 같은 계열에서 안 잠근 테이블을 전부 이름으로 적을 것** — 안 적힌 테이블은
---       존재하지 않는 것처럼 취급된다. 현재 청구/직원 계열 잠금 현황: invoices·expenses(0158a) ·
---       invoice_teacher_splits·invoice_session_terms(0165a) · staff_contracts(0167a) · textbook_orders(**미잠금**, 아래).
+--       존재하지 않는 것처럼 취급된다. 현재 청구/직원 계열 잠금 현황(**전부 잠김**): invoices·expenses(0158a) ·
+--       invoice_teacher_splits·invoice_session_terms(0165a) · staff_contracts(0167a) · textbook_orders(0168a).
 --
--- ⚠️ textbook_orders는 같은 구멍이 있으나 **created_by 컬럼이 없다**(teacher_name text만) —
---    강사 본인 요청을 DB에서 안전하게 식별할 수 없어 이 마이그레이션에서 **의도적으로 제외**한다.
---    잠그면 강사 교재요청이 통째로 막힌다(fail-closed 락아웃). 근본 해결 = textbook_orders.created_by 도입 후
---    아래 expenses와 같은 패턴 추가.
+-- ~~⚠️ textbook_orders는 created_by가 없어 의도적으로 제외~~ → **✅ 해소(0168a, 2026-07-31)**:
+--    `created_by`(작성자)를 추가하고 잠갔다. 단 게이트는 expenses식 "본인 행만"이 **아니라 메뉴 권한**이다 —
+--    강사는 담당 학생의 요청을 (남이 낸 것도) 읽어야 해서 행 단위로 좁히면 정상 동작이 깨진다. 상세 = 0168a.
 --
 -- 멱등: create or replace function + drop policy if exists → create policy.
 -- 롤백: 아래 8개 정책을 drop하면 즉시 원상복구(기존 tenant_isolation은 안 건드림).
@@ -46,7 +45,8 @@ create or replace function public.auth_menu_access(p_menu text) returns text
     select '{
       "billing":          {"master":"full","admin":"full","manager":"readonly","teacher":"none","counselor":"none","accountant":"full","viewer":"none","student":"none"},
       "expense_requests": {"master":"full","admin":"full","manager":"none","teacher":"full","counselor":"none","accountant":"full","viewer":"none","student":"none"},
-      "staff":            {"master":"full","admin":"full","manager":"full","teacher":"none","counselor":"none","accountant":"full","viewer":"none","student":"none"}
+      "staff":            {"master":"full","admin":"full","manager":"full","teacher":"none","counselor":"none","accountant":"full","viewer":"none","student":"none"},
+      "textbook_requests":{"master":"full","admin":"full","manager":"full","teacher":"full","counselor":"none","accountant":"full","viewer":"none","student":"none"}
     }'::jsonb as d
   ),
   ov as (

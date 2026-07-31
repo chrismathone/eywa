@@ -4,7 +4,7 @@
 // admin client(service_role)로만 접근하되, **모든 select/update가 tenant_id + class_id + id 3중 조건**
 // (게이트한 반과 변경 행의 결속 — 계획 v2.2 §A). 구조 변경(create/move/delete/copy)은 0157a RPC 위임
 // (슬롯 advisory xact 락·재번호 원자성). 출석은 체크(ecs_mark_present_if_absent) + 취소(ecs_clear_present,
-// 0168a — plain present만) 두 경로뿐. 결석·지각·시수 편집은 여전히 /attendance 전용(§E 완화판).
+// 0169a — plain present만) 두 경로뿐. 결석·지각·시수 편집은 여전히 /attendance 전용(§E 완화판).
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchInChunks } from "@/lib/supabase/batch";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
@@ -532,7 +532,7 @@ export async function markPresentIfAbsent(input: {
 }
 
 /**
- * ECS 출석 **취소** — 같은 체크를 다시 눌러 되돌린다(원장 지시 2026-07-31, 0168a).
+ * ECS 출석 **취소** — 같은 체크를 다시 눌러 되돌린다(원장 지시 2026-07-31, 0169a).
  *
  * 게이트는 체크와 **똑같다**(권한 · 강사 7일 창 · 반 접근). 다른 점은 두 가지다:
  *  · 🔴 **plain present만 지운다** — 그 (반·학생·날짜)의 모든 행이 present + 메모 없음 + 시수 기본일 때만.

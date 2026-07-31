@@ -36,6 +36,13 @@ type PrefsState = {
    */
   staffTableScale: number;
   setStaffTableScale: (v: number) => void;
+  /**
+   * 직원 목록에서 **볼 열과 순서**(원장 지시 2026-07-31). 순서와 숨김을 따로 두는 이유는
+   * staff-columns.ts 주석 참조(새 열 ≠ 사용자가 끈 열). 빈 배열 = 기본(시트 순서·전부 보임).
+   */
+  staffColumnOrder: string[];
+  staffColumnHidden: string[];
+  setStaffColumns: (order: string[], hidden: string[]) => void;
 };
 
 /** 표 글자 크기 허용 범위(%) — 너무 작으면 못 읽고, 너무 크면 열이 깨진다. */
@@ -58,6 +65,9 @@ export const usePrefs = create<PrefsState>()(
       setOnboarded: (onboarded) => set({ onboarded }),
       timetableColor: "vivid", // 기본 쨍하게(시트식). 개인이 상단 토글로 mid/pastel 선택 시 영속.
       setTimetableColor: (timetableColor) => set({ timetableColor }),
+      staffColumnOrder: [],
+      staffColumnHidden: [],
+      setStaffColumns: (staffColumnOrder, staffColumnHidden) => set({ staffColumnOrder, staffColumnHidden }),
       staffTableScale: 100,
       setStaffTableScale: (v) =>
         set({ staffTableScale: Math.min(TABLE_SCALE_MAX, Math.max(TABLE_SCALE_MIN, Math.round(v))) }),
