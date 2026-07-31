@@ -79,9 +79,11 @@ const KIND_CAT = { 수업: "tuition", 교재: "material", 차량비: "other", �
 
   // 🔴 조용한 절단 감지 — 스크래퍼가 화면의 "총 N건"을 함께 저장한다. 수집 행수와 다르면 페이지 순회가
   // 중간에 끊긴 것이고, 그대로 두면 **빠진 학생이 "makeedu에서 삭제됨"으로 오판**된다(돈이 사라진다).
+  // ⚠️ 비교 대상은 **파싱된 라인 수**여야 한다. raw rows에는 합계·소계 행이 섞여 있어서
+  //    그걸로 비교하면 정상 실행에서도 늘 "초과 수집"이 뜬다(2026-07-31: 3,168 vs 3,182 = 합계행 14개).
   const truncation =
-    data.totalReported != null && data.totalReported !== data.rows.length
-      ? { reported: data.totalReported, collected: data.rows.length }
+    data.totalReported != null && data.totalReported !== lines.length
+      ? { reported: data.totalReported, collected: lines.length }
       : null;
   if (truncation)
     console.warn(`⚠️ 스크랩 절단 의심 — 화면 총 ${truncation.reported}건 vs 수집 ${truncation.collected}건.`);
@@ -154,8 +156,10 @@ const KIND_CAT = { 수업: "tuition", 교재: "material", 차량비: "other", �
     for (const l of lines) {
       const sid = resolve(l);
       if (!sid) {
+        // ⚠️ 금액을 **전부** 담는다 — 외부 대조에서 "저장분 + 미매칭분 = makeedu 합계"를 확인하기 때문.
         unmatchedLines.push({ name: l.name, grade: l.grade, mkid: l.mkid, period: l.period,
-          kind: l.gubun, item: l.item, total: l.total, paid: l.paid, unpaid: l.unpaid });
+          kind: l.gubun, item: l.item, total: l.total, discount: l.discount, point: l.point,
+          paid: l.paid, unpaid: l.unpaid });
         continue;
       }
       matchedLines.push(l);
@@ -195,18 +199,28 @@ const KIND_CAT = { 수업: "tuition", 교재: "material", 차량비: "other", �
 
     // 🔑 외부 대조를 **먼저** 한다 — 그 결과(scrapeVerified)가 삭제 판정의 강도를 정하기 때문이다.
     // eywa 쪽은 "스크랩에 나타난 (학생,월)"의 저장 전 집계를 쓴다(저장 후 재조회는 층 2가 따로 검산).
+    // ⚠️ 두 가지를 맞춰야 makeedu와 같은 잣대가 된다:
+    //  ① **미납은 라인 합 그대로**(`i.unpaid`) — `total-discount-paid`로 재계산하면 (학생×월) 단위로
+    //     음수가 0으로 clamp되어 라인 합과 어긋난다(2026-07-31: 미납 +191,250원 차이의 정체).
+    //  ② **미매칭 라인도 더한다** — 이 대조의 목적은 "스크랩이 완전한가"이지 "저장이 됐는가"가 아니다.
+    //     매칭 실패로 저장 안 된 라인을 빼고 비교하면, 매칭이 나쁠수록 대조가 실패해 검증이 영영 안 선다
+    //     (매칭 실패는 이미 별도 신호 `unmatchedRatio`가 담당한다).
     const eywaSide = invoices.reduce(
       (a, i) => {
         a.total += i.total; a.discount += i.discount; a.paid += i.paid; a.points += i.point;
-        a.unpaid += Math.max(0, i.total - i.discount - i.paid);
+        a.unpaid += i.unpaid;
         return a;
       },
       { total: 0, discount: 0, paid: 0, points: 0, unpaid: 0 },
     );
+    for (const u of unmatchedLines) {
+      eywaSide.total += u.total || 0; eywaSide.discount += u.discount || 0;
+      eywaSide.points += u.point || 0; eywaSide.paid += u.paid || 0; eywaSide.unpaid += u.unpaid || 0;
+    }
     const external = S.reconcileExternal({
       reported: data.reportedSummary || null,
       stored: eywaSide,
-      scrapedLines: matchedLines.length + unmatchedLines.length,
+      scrapedLines: lines.length,
     });
     console.log(`외부 대조: ${S.externalSummary(external)}`);
     // 매칭이 나쁘면 합계가 맞아도 개별 '부재'는 못 믿는다 — 두 조건이 함께 서야 검증이다.
