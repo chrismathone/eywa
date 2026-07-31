@@ -354,42 +354,21 @@ describe("buildWeekGrid — 자리(LAB·JJ)는 수업 교시가 아니다", () =
     expect(grid.days).toHaveLength(0);
   });
 
-  it("계획·마크·메모가 있으면 남긴다(쓴 게 증발하면 안 된다)", () => {
-    const withPlan = buildWeekGrid({
+  it("계획·마크가 있어도 숨긴다 — 대신 hiddenSpecial로 건수를 남긴다(침묵 금지)", () => {
+    const grid = buildWeekGrid({
       weekMonday: MON,
-      schedules: [lab("mon", "16:20")],
+      schedules: [lab("mon", "16:20"), lab("tue", "16:20", "JJ")],
       enrollments: [enr("s1")],
       planLines: [line({ slotStart: "16:20", textbook: "Power Voca" })],
-      marks: [],
+      marks: [{ studentId: "s1", markDate: "2026-07-21", slotStart: "16:20", status: "완", progressNote: null }],
       attendance: [],
       slotMemoKeys: [],
     });
-    expect(withPlan.days[0].slots[0]).toMatchObject({ slotStart: "16:20", specialRoom: "LAB", scheduled: true });
-
-    const withMark = buildWeekGrid({
-      weekMonday: MON,
-      schedules: [lab("mon", "16:20", "JJ")],
-      enrollments: [enr("s1")],
-      planLines: [],
-      marks: [{ studentId: "s1", markDate: MON, slotStart: "16:20", status: "완", progressNote: null }],
-      attendance: [],
-      slotMemoKeys: [],
-    });
-    expect(withMark.days[0].slots[0].specialRoom).toBe("JJ");
-
-    const withMemo = buildWeekGrid({
-      weekMonday: MON,
-      schedules: [lab("mon", "16:20")],
-      enrollments: [],
-      planLines: [],
-      marks: [],
-      attendance: [],
-      slotMemoKeys: [`slot:${MON}:16:20`],
-    });
-    expect(withMemo.days[0].slots[0].specialRoom).toBe("LAB");
+    expect(grid.days).toHaveLength(0); // 카드는 안 그린다
+    expect(grid.hiddenSpecial).toEqual({ slots: 2, records: 2 });
   });
 
-  it("빈 계획 행(placeholder)만 있으면 내용이 아니다 — 여전히 숨긴다", () => {
+  it("빈 계획 행(placeholder)만 있으면 기록으로 세지 않는다", () => {
     const grid = buildWeekGrid({
       weekMonday: MON,
       schedules: [lab("mon", "16:20")],
@@ -400,6 +379,21 @@ describe("buildWeekGrid — 자리(LAB·JJ)는 수업 교시가 아니다", () =
       slotMemoKeys: [],
     });
     expect(grid.days).toHaveLength(0);
+    expect(grid.hiddenSpecial).toEqual({ slots: 0, records: 0 });
+  });
+
+  it("자리 교시뿐인 날짜라도 출석 기록은 attendanceOnly로 보존", () => {
+    const grid = buildWeekGrid({
+      weekMonday: MON,
+      schedules: [lab("mon", "16:20")],
+      enrollments: [enr("s1")],
+      planLines: [],
+      marks: [],
+      attendance: [{ studentId: "s1", sessionDate: MON, status: "present" }],
+      slotMemoKeys: [],
+    });
+    expect(grid.days).toHaveLength(0);
+    expect(grid.attendanceOnly).toEqual([{ date: MON, studentIds: ["s1"] }]);
   });
 
   it("같은 시각에 강사 수업이 겹치면 수업이 이긴다(실수업이 증발하지 않는다)", () => {
@@ -412,7 +406,7 @@ describe("buildWeekGrid — 자리(LAB·JJ)는 수업 교시가 아니다", () =
       attendance: [],
       slotMemoKeys: [],
     });
-    expect(grid.days[0].slots[0]).toMatchObject({ specialRoom: null, teacherLabel: "Hannah" });
+    expect(grid.days[0].slots[0]).toMatchObject({ teacherLabel: "Hannah" });
     expect(sheetFillStats(grid).totalSlots).toBe(1);
   });
 
@@ -427,8 +421,9 @@ describe("buildWeekGrid — 자리(LAB·JJ)는 수업 교시가 아니다", () =
       attendance: [],
       slotMemoKeys: [],
     });
-    // LAB 교시는 계획이 있어 카드로는 남지만 작성률엔 안 들어간다.
+    // LAB 교시는 계획이 있어도 카드도 작성률도 없다(기록 건수만 각주로).
     expect(sheetFillStats(grid)).toEqual({ totalSlots: 1, filledSlots: 1, orphanSlots: 0 });
+    expect(grid.hiddenSpecial.records).toBe(1);
     expect([...scheduledSlotKeySet(MON, schedules)]).toEqual(["2026-07-22|15:00"]);
   });
 });

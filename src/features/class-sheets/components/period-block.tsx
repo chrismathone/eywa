@@ -37,13 +37,10 @@ export const PeriodBlock = memo(function PeriodBlock({
   // teacherLabel은 로더에서 이미 해석된 표시명(시간표와 동일 문자열). 라벨 우선은 **시간표 3뷰와 같은
   // 순서**라 두 화면이 같은 이름을 보여준다 — 뒤집지 말 것(실측: 라벨과 FK가 서로 다른 사람을 가리키는
   // 슬롯이 존재해, FK 우선으로 바꾸면 시간표와 어긋난 이름이 ECS에만 뜬다. 상세는 changelog 2026-07-29).
-  // 자리(LAB·JJ)는 사람이 아니다 — 강사 칩 자리에 이름처럼 넣지 않는다(원장 2026-07-31 "랩실이므로").
-  // 이 카드는 기록(계획·마크·메모)이 있을 때만 남는다(빈 자리 교시는 grid가 아예 안 그린다).
-  const teacher = slot.specialRoom
-    ? null
-    : (slot.teacherLabel ??
-      (slot.teacherId ? (data.teacherNames[slot.teacherId] ?? null) : null) ??
-      data.classTeacherName);
+  const teacher =
+    slot.teacherLabel ??
+    (slot.teacherId ? (data.teacherNames[slot.teacherId] ?? null) : null) ??
+    data.classTeacherName;
   return (
     // ⚠️ cursor-default 필수 — 바깥 DragScrollArea가 컨테이너에 cursor-grab(펼친 손)을 깔아서,
     // 안 덮으면 카드를 **끌어서 옮길 수 있는 것처럼** 보인다(teacher-grid 선례·원장 지적 2026-07-29).
@@ -62,14 +59,6 @@ export const PeriodBlock = memo(function PeriodBlock({
         {teacher ? (
           <span className="bg-bg-soft text-foreground rounded-full px-2 py-0.5 text-[11px] whitespace-nowrap">
             {teacher}
-          </span>
-        ) : null}
-        {slot.specialRoom ? (
-          <span
-            className="border-line text-text-dim rounded-full border border-dashed px-2 py-0.5 text-[11px] whitespace-nowrap"
-            title={`강사 수업이 아니라 자리(${slot.specialRoom})입니다 — 기록이 있어 표시합니다`}
-          >
-            {slot.specialRoom} 자리
           </span>
         ) : null}
         {slot.roomLabel ? (

@@ -9,13 +9,15 @@
 //  · 과거 데이터 보존: 로스터 = eligible ∪ 퇴원 유예 ∪ 그 슬롯 mark 보유 ∪ 그 날짜 effective 출석 보유
 //    (비eligible은 historical 읽기 전용). 스케줄 없는 날짜의 출석은 가짜 슬롯 없이 attendanceOnly로 분리.
 //  · 고아 슬롯: 계획·마크·슬롯 메모가 있는데 그 날짜 스케줄에 없는 (date,slot) — 표시는 유지(소실 금지).
+//  · 랩실(LAB·JJ): 담임 수업이 아니라 **아예 안 그린다**(원장 2026-07-31 확정). 기록이 남아 있으면 카드
+//    대신 `hiddenSpecial` 건수로만 알린다. 같은 시각에 강사 수업이 겹치면 수업이 이긴다(실수업 보존).
 import {
   isEnrollmentActiveOn,
   isEnrollmentEndedOn,
   enrollmentAttendsOnDay,
 } from "@/features/enrollments/eligibility";
 import { shiftDays } from "@/features/timetable/lib/week";
-import { specialSlotLabel, type SpecialSlotLabel } from "@/features/timetable/lib/teacher-label";
+import { specialSlotLabel } from "@/features/timetable/lib/teacher-label";
 import { isMeaningfulPlanLine } from "./plan-codec";
 import { dowKeyOf, normalizeSlotTime, weekDatesOf, type DowKey } from "./week";
 
@@ -106,14 +108,6 @@ export type GridSlot = {
   // ⚠️ 원문이 아니므로 이 값을 권한·매칭 근거로 쓰지 말 것(게이트는 teacher_id FK만 — access.ts).
   teacherLabel: string | null;
   roomLabel: string | null;
-  /**
-   * 강사 수업이 아니라 **자리**(LAB 603호 · JJ 305호)인 슬롯. 랩·자율실은 수업계획을 쓰는 교시가 아니라
-   * ECS에선 **기록이 없으면 아예 그리지 않고**(원장 2026-07-31 "LAB·JJ는 ECS에서 뜰 필요 없음, 랩실이므로),
-   * 작성률 분모에서도 뺀다. 기록(계획·마크·메모)이 있으면 남긴다 — 안 그러면 쓴 내용이 증발한다.
-   * ⚠️ 판정은 표시용 [`specialSlotLabel`](src/features/timetable/lib/teacher-label.ts) 단일 소스.
-   * 라벨을 **권한·스코프 근거로 쓰지 말 것**(그건 `teacher_id` FK — access.ts 규약 불변).
-   */
-  specialRoom: SpecialSlotLabel | null;
   lines: GridPlanLine[]; // regular 먼저, line_no 순
   roster: RosterEntry[];
 };
@@ -129,6 +123,12 @@ export type WeekGrid = {
   days: GridDay[]; // 슬롯(스케줄 or 고아 데이터)이 있는 날짜만
   /** 스케줄이 전혀 없는 날짜의 출석 기록 — 별도 영역 표시(가짜 슬롯 금지). */
   attendanceOnly: { date: string; studentIds: string[] }[];
+  /**
+   * 안 그린 자리(LAB·JJ) 교시 중 **기록이 남아 있는** 것의 건수 — 화면 하단 각주용.
+   * 카드를 되살리려는 게 아니라 "여기 쓴 게 있었는데 화면엔 없다"를 **침묵하지 않기 위한** 숫자다
+   * (0이면 아무것도 표시하지 않는다).
+   */
+  hiddenSpecial: { slots: number; records: number };
 };
 
 function slotKey(date: string, slot: string): string {
@@ -277,6 +277,7 @@ export function buildWeekGrid(input: {
 
   const days: GridDay[] = [];
   const attendanceOnly: { date: string; studentIds: string[] }[] = [];
+  const hiddenSpecial = { slots: 0, records: 0 };
 
   for (const date of dates) {
     const dow = dowKeyOf(date);
@@ -293,7 +294,36 @@ export function buildWeekGrid(input: {
     const { eligible, endedOn } = rosterStateOn(date);
     const attToday = attendanceByDate.get(date) ?? new Set<string>();
 
-    const slots: GridSlot[] = [...slotStarts].sort().map((slot) => {
+    // 자리(LAB·JJ) 교시는 **그리지 않는다** — 랩·자율실은 담임(강사) 수업이 아니다(원장 2026-07-31 확정:
+    // "실제 담임이 아닌 랩실(LAB 및 JJ)은 숨겨"). 기록이 있어도 예외를 두지 않는다.
+    // ⚠️ 그래서 그 자리에 남아 있는 계획·마크는 화면에서 안 보인다(DB엔 그대로). 아래 hiddenSpecial로
+    //    건수만 각주에 남긴다 — 조용히 사라지면 "쓴 게 증발했다"가 된다.
+    const isSpecialStart = (slot: string) =>
+      specialSlotLabel(scheduledByKey.get(slotKey(date, slot))?.slotTeacherLabel ?? null) != null;
+    for (const slot of slotStarts) {
+      if (!isSpecialStart(slot)) continue;
+      const key = slotKey(date, slot);
+      const records =
+        (linesByKey.get(key) ?? []).filter((l) =>
+          isMeaningfulPlanLine({
+            textbook: l.textbook,
+            pageRange: l.pageRange,
+            progress: l.progress,
+            homework: l.homework,
+          }),
+        ).length +
+        (marksByKey.get(key)?.length ?? 0) +
+        (memoSlotKeys.has(key) ? 1 : 0);
+      if (records > 0) {
+        hiddenSpecial.slots += 1;
+        hiddenSpecial.records += records;
+      }
+    }
+
+    const slots: GridSlot[] = [...slotStarts]
+      .filter((slot) => !isSpecialStart(slot))
+      .sort()
+      .map((slot) => {
       const key = slotKey(date, slot);
       const sched = scheduledByKey.get(key) ?? null;
       const lines = (linesByKey.get(key) ?? [])
@@ -316,50 +346,30 @@ export function buildWeekGrid(input: {
         teacherId: sched?.teacherId ?? null,
         teacherLabel: sched?.slotTeacherLabel ?? null,
         roomLabel: sched?.slotRoomLabel ?? null,
-        specialRoom: specialSlotLabel(sched?.slotTeacherLabel ?? null),
         lines,
         roster,
       };
     });
 
-    // 자리(LAB·JJ) 교시는 **쓴 게 없으면 그리지 않는다** — 랩·자율실은 수업계획을 쓰는 교시가 아니라
-    // 빈 카드가 주마다 반복되면 명단만 있는 껍데기가 화면을 채운다(원장 2026-07-31).
-    // ⚠️ 다만 계획(내용 있는 행)·학생 마크·슬롯 메모가 하나라도 있으면 남긴다. 실제로 이 자리에
-    //    'Power Voca'·'듣기월말평가' 같은 계획과 학생 기록이 들어 있다(실측) — 숨기면 쓴 게 증발한다.
-    const visible = slots.filter((s) => {
-      if (!s.specialRoom) return true;
-      const key = slotKey(date, s.slotStart);
-      return (
-        s.lines.some((l) =>
-          isMeaningfulPlanLine({
-            textbook: l.textbook,
-            pageRange: l.pageRange,
-            progress: l.progress,
-            homework: l.homework,
-          }),
-        ) ||
-        (marksByKey.get(key)?.length ?? 0) > 0 ||
-        memoSlotKeys.has(key)
-      );
-    });
-    if (visible.length === 0) {
-      // 그 날 남은 게 없으면 날짜 자체를 만들지 않는다(빈 요일 카드 방지). 출석만 있으면 별도 영역으로.
+    if (slots.length === 0) {
+      // 그 날 남은 게 없으면(자리 교시뿐이었다) 날짜 자체를 만들지 않는다 — 빈 요일 카드 방지.
+      // 출석만 있으면 가짜 슬롯 대신 attendanceOnly로.
       const att = attendanceByDate.get(date);
       if (att && att.size > 0) attendanceOnly.push({ date, studentIds: [...att].sort() });
       continue;
     }
 
-    days.push({ date, dow, slots: visible });
+    days.push({ date, dow, slots });
   }
 
-  return { weekMonday: input.weekMonday, days, attendanceOnly };
+  return { weekMonday: input.weekMonday, days, attendanceOnly, hiddenSpecial };
 }
 
 /**
  * 작성률 — 분모 = 그 주 **스케줄된** 교시 수(고아 슬롯 제외 — 별도 경고 표시), 분자 = '의미 있는 행' ≥ 1개인
  * 스케줄 교시 수. placeholder-only 슬롯은 미작성으로 센다.
- * 자리(LAB·JJ)는 분모·분자 **양쪽에서 제외** — 수업계획을 쓰는 교시가 아니라 분모에 넣으면 100%에 못 닿는다
- * (랜딩 카드의 `scheduledSlotKeySet`도 같은 규칙이라 두 화면의 숫자가 갈리지 않는다).
+ * 자리(LAB·JJ)는 애초에 `days`에 없다(buildWeekGrid가 안 그린다) → 분모·분자 어디에도 안 들어간다.
+ * 랜딩 카드의 `scheduledSlotKeySet`도 같은 규칙으로 걸러 두 화면의 숫자가 갈리지 않는다.
  */
 export function sheetFillStats(grid: WeekGrid): {
   totalSlots: number;
@@ -371,7 +381,6 @@ export function sheetFillStats(grid: WeekGrid): {
   let orphan = 0;
   for (const day of grid.days) {
     for (const slot of day.slots) {
-      if (slot.specialRoom) continue; // 자리(LAB·JJ) — 작성 대상이 아니다
       if (!slot.scheduled) {
         orphan += 1;
         continue;
