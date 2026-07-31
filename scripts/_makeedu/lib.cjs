@@ -147,6 +147,38 @@ async function recordSync(sql, tenantId, domain, rowCount, status = "ok", error 
       synced_at = now(), row_count = excluded.row_count, status = excluded.status, error = excluded.error, updated_at = now()`;
 }
 
+/**
+ * 스크랩할 청구월 범위 — makeedu 상세수납의 `fromYm`/`toYm`(텍스트 `YYYY-MM`)에 넣을 값.
+ *
+ * 🔴 배경(2026-07-30 프로브 실측): 이 목록은 **가장 최근 청구월 한 달**만 기본으로 보여준다. 그래서 청구가
+ * 다음 달로 넘어가는 순간(2026-07-16→17) 직전 달이 통째로 동결됐고, 그 뒤 26회 넘는 동기화가 2026-07을
+ * 한 건도 만지지 못했다(미수 ₩12.86M이 그날 스냅샷으로 굳음). `fromYm`~`toYm`는 **범위**라
+ * 한 번의 조회로 여러 달을 받을 수 있다(실측 857건 → 3,174건).
+ *
+ * @param today  기준일(KST 'YYYY-MM-DD' 또는 Date). 테스트 결정성을 위해 주입.
+ * @param months 포함할 개월 수(당월 포함). 1이면 당월만.
+ */
+function billingMonthRange(today, months = 3) {
+  const n = Math.max(1, Math.floor(Number(months) || 1));
+  const iso =
+    typeof today === "string"
+      ? today
+      : new Intl.DateTimeFormat("en-CA", {
+          timeZone: "Asia/Seoul",
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+        }).format(today || new Date());
+  const [y, m] = iso.split("-").map(Number);
+  const pad = (v) => String(v).padStart(2, "0");
+  // 월 산술은 Date의 월 오버플로에 맡긴다(1월에서 뒤로 갈 때 연도가 알아서 내려간다).
+  const from = new Date(Date.UTC(y, m - 1 - (n - 1), 1));
+  return {
+    from: `${from.getUTCFullYear()}-${pad(from.getUTCMonth() + 1)}`,
+    to: `${y}-${pad(m)}`,
+  };
+}
+
 module.exports = {
   recordSync,
   tieredMatcher,
@@ -164,4 +196,5 @@ module.exports = {
   subjectFromName,
   paymentMethod,
   resolveTenantId,
+  billingMonthRange,
 };

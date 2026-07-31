@@ -74,6 +74,15 @@ const KIND_CAT = { 수업: "tuition", 교재: "material", 차량비: "other", �
   }
   console.log("file: invoices.json  lines:", lines.length, "| periods:", [...new Set(lines.map((l) => l.period))].sort().slice(-6));
 
+  // 🔴 조용한 절단 감지 — 스크래퍼가 화면의 "총 N건"을 함께 저장한다. 수집 행수와 다르면 페이지 순회가
+  // 중간에 끊긴 것이고, 그대로 두면 **빠진 학생이 "makeedu에서 삭제됨"으로 오판**된다(돈이 사라진다).
+  const truncation =
+    data.totalReported != null && data.totalReported !== data.rows.length
+      ? { reported: data.totalReported, collected: data.rows.length }
+      : null;
+  if (truncation)
+    console.warn(`⚠️ 스크랩 절단 의심 — 화면 총 ${truncation.reported}건 vs 수집 ${truncation.collected}건.`);
+
   // makeedu 퇴원 목록(scrape --list=withdrawn) — 삭제 판정 5번째 가드의 재료.
   // ⚠️ 파일이 없거나 헤더가 달라도 **절대 실패시키지 않는다** — 가드만 꺼진 채 기존 4중 가드로 진행(무중단).
   //    다만 꺼졌다는 사실은 로그·리포트·sync_state 요약에 남긴다(조용히 약해지는 걸 허용하지 않는다).
@@ -271,7 +280,7 @@ const KIND_CAT = { 수업: "tuition", 교재: "material", 차량비: "other", �
 
     writeReport();
     await L.recordSync(sql, tenantId, "invoices", inserted, "ok",
-      S.issueSummary({ stale, unmatchedLines, voidStale: VOID_STALE, voided, reconcile }));
+      S.issueSummary({ stale, unmatchedLines, voidStale: VOID_STALE, voided, reconcile, truncation }));
     console.log(`upsert ${upserted}건 (신규 ${inserted} · 갱신 ${upserted - inserted}).`);
   } finally {
     await sql.end();
