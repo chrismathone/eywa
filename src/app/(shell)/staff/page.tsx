@@ -1,9 +1,8 @@
 import Link from "next/link";
 import { Users, Wallet, CalendarClock } from "@/components/icons/eywa-icon-compat";
 import { WindowLink } from "@/components/workspace/window-link";
-import { EditingBadge } from "@/features/presence/editing-badge";
 import { EyIcon } from "@/components/icons/eywa-icons";
-import { Pill, type PillColor } from "@/components/atoms/pill";
+import { Pill } from "@/components/atoms/pill";
 import { BigStat } from "@/components/atoms/big-stat";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
@@ -18,8 +17,9 @@ import { buildSubjectMaps } from "@/features/owner/subjects";
 import { EMPLOYMENT_TYPES } from "@/features/staff/resume";
 import { SearchForm } from "@/components/search-form";
 import { NewStaffTrigger } from "./_components/new-staff-trigger";
-import { StaffRowLink } from "./_components/staff-row-link";
 import { StaffTableScaleBox, StaffTableScaleControl } from "./_components/table-scale";
+import { StaffColumnPicker } from "./_components/staff-column-picker";
+import { StaffTable } from "./_components/staff-table";
 import { PAYROLL_ENABLED } from "@/features/payroll/config";
 
 export const metadata = { title: "직원관리 — eywa" };
@@ -27,22 +27,6 @@ export const metadata = { title: "직원관리 — eywa" };
 // 페이지 크기 선택(원장 요청 2026-07-28) — 기본 10명, 창에서 10/30/50 선택.
 const PER_OPTIONS = [10, 30, 50] as const;
 const DEFAULT_PER = 10;
-
-const ROLE_META: Record<string, { label: string; color: PillColor }> = {
-  master: { label: "원장", color: "danger" },
-  admin: { label: "관리자", color: "blue" },
-  manager: { label: "매니저", color: "blue" },
-  teacher: { label: "강사", color: "primary" },
-  counselor: { label: "상담", color: "rose" },
-  accountant: { label: "회계", color: "purple" },
-  viewer: { label: "참관", color: "neutral" },
-};
-
-const STATUS_META: Record<string, { label: string; color: PillColor }> = {
-  active: { label: "재직", color: "primary" },
-  inactive: { label: "퇴사", color: "neutral" },
-  pending: { label: "대기", color: "amber" },
-};
 
 type RoleKey =
   | "all"
@@ -398,11 +382,12 @@ export default async function StaffPage({
             ))}
             <span className="text-text-faint ml-0.5 text-[11px]">명씩</span>
           </div>
-          {/* 표 글자 크기 −/+ (원장 지시 2026-07-31) — 개인 설정으로 영속. */}
+          {/* 표 글자 크기 −/+ · 볼 열 고르기(원장 지시 2026-07-31) — 둘 다 개인 설정으로 영속. */}
           <div className="flex items-center gap-1.5">
             <span className="micro">글자</span>
             <StaffTableScaleControl />
           </div>
+          <StaffColumnPicker />
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {PAYROLL_ENABLED && user?.systemRole === "master" ? (
@@ -438,110 +423,7 @@ export default async function StaffPage({
           {/* 표 형태(원장 지시 2026-07-31) — 셀마다 테두리를 그어 시트처럼 읽히게. 열 순서도 직원명부 시트와 같은
               소속 → 이름 → 직급 순. 글자 크기는 StaffTableScaleBox가 em 기준으로 한 번에 조절한다. */}
           <StaffTableScaleBox className="bg-card shadow-card overflow-x-auto rounded-2xl">
-            <table className="w-full min-w-[1560px] border-collapse [&_td]:border [&_td]:border-line [&_th]:border [&_th]:border-line">
-              <thead>
-                {/* 열 순서 = 직원명부 시트(2026년직원명부) 그대로 — 소속부서·이름·계약구분·메일·입사일·
-                    전화번호·현재 계약·계약조건·계약갱신일. 주민번호·계좌는 **일부러 뺐다**(이력서 안,
-                    원장·관리자 게이트 뒤 — 목록에 늘어놓을 정보가 아니다). */}
-                <tr className="bg-bg-soft/70 text-foreground text-left text-[0.9em]">
-                  <th className="px-3 py-2.5 font-bold">소속부서</th>
-                  <th className="px-4 py-2.5 font-bold">이름</th>
-                  <th className="px-3 py-2.5 font-bold">직급</th>
-                  <th className="px-3 py-2.5 font-bold">계약구분</th>
-                  <th className="px-3 py-2.5 font-bold">메일</th>
-                  <th className="px-3 py-2.5 font-bold">입사일</th>
-                  <th className="px-3 py-2.5 font-bold">전화번호</th>
-                  <th className="px-3 py-2.5 font-bold">현재 계약</th>
-                  <th className="px-3 py-2.5 font-bold">계약조건</th>
-                  <th className="px-3 py-2.5 font-bold">계약갱신일</th>
-                  <th className="px-3 py-2.5 font-bold">과목</th>
-                  <th className="px-3 py-2.5 font-bold">역할</th>
-                  <th className="px-3 py-2.5 text-right font-bold">담당 반</th>
-                  <th className="px-3 py-2.5 text-right font-bold">담당 학생</th>
-                  <th className="px-3 py-2.5 font-bold">상태</th>
-                </tr>
-              </thead>
-              <tbody>
-                {pageStaff.map((s) => {
-                  const roleMeta = ROLE_META[s.systemRole] ?? ROLE_META.viewer!;
-                  const statusMeta = STATUS_META[s.status] ?? STATUS_META.active!;
-                  return (
-                    // 행 전체 클릭 → 직원 상세(기본정보에 이력서 내용 포함) — 원장 지시 2026-07-28.
-                    <StaffRowLink
-                      key={s.id}
-                      href={`/staff/${s.id}`}
-                      title={s.displayName}
-                      className="hover:bg-bg-soft/50 cursor-pointer transition"
-                    >
-                      <td className="text-foreground px-3 py-2.5 font-medium whitespace-nowrap">
-                        {s.department ?? "—"}
-                      </td>
-                      <td className="px-4 py-2.5">
-                        {/* 이름 링크 = 키보드 접근 경로(행 클릭과 같은 상세). 아바타 금지 — 이름 텍스트만. */}
-                        <WindowLink
-                          href={`/staff/${s.id}`}
-                          title={s.displayName}
-                          ariaLabel={`${s.displayName} 상세`}
-                          className="group inline-flex items-center gap-1.5"
-                        >
-                          <span className="text-foreground font-bold group-hover:underline">{s.displayName}</span>
-                          <EditingBadge scope={`staff:${s.id}`} />
-                        </WindowLink>
-                      </td>
-                      <td className="text-foreground px-3 py-2.5 font-medium whitespace-nowrap">
-                        {s.jobTitle ?? "—"}
-                      </td>
-                      <td className="text-foreground px-3 py-2.5 font-medium whitespace-nowrap">
-                        {s.employmentType ?? "—"}
-                      </td>
-                      <td className="text-foreground num px-3 py-2.5">
-                        {/* 플레이스홀더(@imported.local)는 미설정으로 표시 — raw 노출 금지. */}
-                        {s.email.toLowerCase().endsWith("@imported.local") ? "미설정" : s.email}
-                      </td>
-                      <td className="num text-foreground px-3 py-2.5 whitespace-nowrap">{s.hireDate ?? "—"}</td>
-                      <td className="num text-foreground px-3 py-2.5 whitespace-nowrap">{s.phone ?? "—"}</td>
-                      <td className="num text-foreground px-3 py-2.5 whitespace-nowrap">
-                        {s.contractStart && s.contractEnd ? (
-                          <>
-                            {s.contractStart} ~ {s.contractEnd}
-                            {s.contractSeq ? <span className="text-text-dim ml-1">({s.contractSeq}차)</span> : null}
-                          </>
-                        ) : (
-                          "—"
-                        )}
-                      </td>
-                      <td className="text-foreground max-w-[220px] truncate px-3 py-2.5" title={s.contractTerms ?? ""}>
-                        {s.contractTerms ?? "—"}
-                      </td>
-                      <td className="num text-foreground px-3 py-2.5 whitespace-nowrap">{s.contractEnd ?? "—"}</td>
-                      <td className="px-3 py-2.5">
-                        <span className="flex flex-wrap gap-1">
-                          {s.subjects.length > 0
-                            ? s.subjects.map((k) => (
-                                <Pill key={k} color={subjectMaps.colorOf(k)}>
-                                  {subjectMaps.labelOf(k)}
-                                </Pill>
-                              ))
-                            : "—"}
-                        </span>
-                      </td>
-                      <td className="px-3 py-2.5">
-                        <Pill color={roleMeta.color}>{roleMeta.label}</Pill>
-                      </td>
-                      <td className="num text-foreground px-3 py-2.5 text-right font-medium">
-                        {s.classesCount > 0 ? s.classesCount : "—"}
-                      </td>
-                      <td className="num text-foreground px-3 py-2.5 text-right font-medium">
-                        {s.primaryStudentsCount > 0 ? s.primaryStudentsCount : "—"}
-                      </td>
-                      <td className="px-3 py-2.5">
-                        <Pill color={statusMeta.color}>{statusMeta.label}</Pill>
-                      </td>
-                    </StaffRowLink>
-                  );
-                })}
-              </tbody>
-            </table>
+            <StaffTable rows={pageStaff} />
           </StaffTableScaleBox>
           {/* 눈에 띄는 번호형 페이저(원장 지시 2026-07-28 — 표준 컴팩트 페이저는 존재감이 약해 이 목록만 강조형) */}
           {totalPages > 1 ? (
