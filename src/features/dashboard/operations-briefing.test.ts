@@ -22,6 +22,7 @@ function action(overrides: Partial<TodayActionItem> & Pick<TodayActionItem, "key
     unit: "건",
     detail: null,
     note: null,
+    bySubject: [],
     href: `/${overrides.key}`,
     menuKey: "dashboard",
     requiredAccess: "read",

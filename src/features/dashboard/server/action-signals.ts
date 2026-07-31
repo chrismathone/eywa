@@ -10,7 +10,7 @@ import { HUMAN_RESOLVED_STATUSES, STUCK_MINUTES } from "@/features/report-admin/
 import { getUnassignedEnrolledStudents } from "./queries";
 import {
   enrollmentAttendsOnDay,
-  findStudentsMissingLessonReports,
+  findMissingLessonReportPairs,
   isEnrollmentActiveOn,
   type TodayActionsRaw,
   type TodaySignalSourceIssue,
@@ -71,6 +71,8 @@ function scopeTenant<T>(query: T, db: TenantScope): T {
 type TodayAttendanceRow = EffectiveAttendanceRecord & {
   status: string;
   student: { name?: string } | { name?: string }[] | null;
+  // 과목별 분해용 — 반이 곧 과목이다(lesson_reports.subject는 채움율이 낮아 못 쓴다).
+  class: { subject?: string | null } | { subject?: string | null }[] | null;
 };
 
 export type TodayActionSignalScope = {
@@ -286,7 +288,7 @@ async function unwrittenReportsSignal(
   }
 
   const classIds = [...subjectByClass.keys()];
-  if (classIds.length === 0) return { count: 0, names: [] };
+  if (classIds.length === 0) return { count: 0, names: [], bySubject: [] };
 
   // B2: 이 조회는 end_date 필터 없이 과거 수강 이력까지 받아 JS로 거른다 — 청크 1개 응답이 1000행을
   // 넘으면 silent 절단돼 '오늘 미작성 보고서' 명단이 조용히 샌다. 같은 데이터를 읽는
@@ -331,7 +333,7 @@ async function unwrittenReportsSignal(
       subject: subjectByClass.get(row.class_id)!,
     }));
   const studentIds = [...new Set(targets.map((target) => target.studentId))];
-  if (studentIds.length === 0) return { count: 0, names: [] };
+  if (studentIds.length === 0) return { count: 0, names: [], bySubject: [] };
 
   const [attendanceRows, reportRows] = await Promise.all([
     fetchInChunks<{ id: string; student_id: string; class_id: string; status: string; recorded_at: string }>(
@@ -370,12 +372,17 @@ async function unwrittenReportsSignal(
   const absentClassKeys = new Set(
     [...latestAttendance].filter(([, status]) => status === "absent").map(([key]) => key),
   );
-  const missingStudentIds = findStudentsMissingLessonReports(
+  const missingPairs = findMissingLessonReportPairs(
     targets,
     absentClassKeys,
     reportRows.map((row) => ({ studentId: row.student_id, subject: row.subject })),
   );
-  if (missingStudentIds.length === 0) return { count: 0, names: [] };
+  // 건수·명단은 예전과 같은 **학생 단위**(dedupe), 분해만 학생×과목 쌍으로 센다.
+  const missingStudentIds = [...new Set(missingPairs.map((pair) => pair.studentId))];
+  const bySubjectMap = new Map<string, number>();
+  for (const pair of missingPairs) bySubjectMap.set(pair.subject, (bySubjectMap.get(pair.subject) ?? 0) + 1);
+  const bySubject = [...bySubjectMap].map(([subject, count]) => ({ subject, count }));
+  if (missingStudentIds.length === 0) return { count: 0, names: [], bySubject: [] };
 
   const studentRows = await fetchInChunks<{ id: string; name: string }>(missingStudentIds.slice(0, 100), (chunk) =>
     scopeTenant(supabase.from("students").select("id, name").in("id", chunk), db),
@@ -384,6 +391,7 @@ async function unwrittenReportsSignal(
   return {
     count: missingStudentIds.length,
     names: missingStudentIds.slice(0, 100).map((id) => nameById.get(id) ?? "(학생)"),
+    bySubject,
   };
 }
 
@@ -460,7 +468,7 @@ export async function getTodayActionSignals(
             supabase
               .from("attendance_records")
               .select(
-                "id, student_id, class_id, session_date, status, recorded_at, student:student_id ( name )",
+                "id, student_id, class_id, session_date, status, recorded_at, student:student_id ( name ), class:class_id ( subject )",
               )
               .eq("session_date", today)
               .order("recorded_at", { ascending: true })
@@ -659,7 +667,7 @@ export async function getTodayActionSignals(
         menuKey: "lesson_reports",
         requiredAccess: "read",
       },
-      { count: 0, names: [] },
+      { count: 0, names: [], bySubject: [] },
       () => unwrittenReportsSignal(supabase, today, nowMinutes, db),
     ),
     collectSignal(
@@ -735,11 +743,12 @@ export async function getTodayActionSignals(
     ),
   ]);
 
-  const seen = new Map<string, string>();
+  const seen = new Map<string, { name: string; subject: string | null }>();
   for (const row of absent.value) {
     if (seen.has(row.student_id)) continue;
     const student = (Array.isArray(row.student) ? row.student[0] : row.student) ?? undefined;
-    seen.set(row.student_id, student?.name ?? "(학생)");
+    const klass = (Array.isArray(row.class) ? row.class[0] : row.class) ?? undefined;
+    seen.set(row.student_id, { name: student?.name ?? "(학생)", subject: klass?.subject ?? null });
   }
 
   let makeeduIssue: TodayActionsRaw["makeeduIssue"] = null;
@@ -783,7 +792,7 @@ export async function getTodayActionSignals(
   ];
 
   return {
-    absentToday: [...seen].map(([studentId, name]) => ({ studentId, name })),
+    absentToday: [...seen].map(([studentId, info]) => ({ studentId, ...info })),
     unrecordedYesterday: dailyProcessing.value,
     yesterday,
     failedAnalysis: {

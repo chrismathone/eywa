@@ -10,7 +10,6 @@ function slot(slotStart: string): GridSlot {
     teacherId: null,
     teacherLabel: null,
     roomLabel: null,
-    specialRoom: null,
     lines: [],
     roster: [],
   };
