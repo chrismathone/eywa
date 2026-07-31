@@ -193,6 +193,31 @@ const KIND_CAT = { 수업: "tuition", 교재: "material", 차량비: "other", �
     console.log(`lines→invoices(학생×월): ${invoices.length} | unmatched lines: ${unmatchedLines.length}`);
     console.log("status dist:", invoices.reduce((x, i) => ((x[i.status] = (x[i.status] || 0) + 1), x), {}));
 
+    // 🔑 외부 대조를 **먼저** 한다 — 그 결과(scrapeVerified)가 삭제 판정의 강도를 정하기 때문이다.
+    // eywa 쪽은 "스크랩에 나타난 (학생,월)"의 저장 전 집계를 쓴다(저장 후 재조회는 층 2가 따로 검산).
+    const eywaSide = invoices.reduce(
+      (a, i) => {
+        a.total += i.total; a.discount += i.discount; a.paid += i.paid; a.points += i.point;
+        a.unpaid += Math.max(0, i.total - i.discount - i.paid);
+        return a;
+      },
+      { total: 0, discount: 0, paid: 0, points: 0, unpaid: 0 },
+    );
+    const external = S.reconcileExternal({
+      reported: data.reportedSummary || null,
+      stored: eywaSide,
+      scrapedLines: matchedLines.length + unmatchedLines.length,
+    });
+    console.log(`외부 대조: ${S.externalSummary(external)}`);
+    // 매칭이 나쁘면 합계가 맞아도 개별 '부재'는 못 믿는다 — 두 조건이 함께 서야 검증이다.
+    const unmatchedRatio = lines.length ? unmatchedLines.length / lines.length : 0;
+    const scrapeVerified = external.ok && unmatchedRatio <= S.STALE_MAX_UNMATCHED_RATIO && !truncation;
+    console.log(
+      scrapeVerified
+        ? "→ 스크랩 검증됨: '부재'를 사실로 보고 삭제 판정을 진행합니다."
+        : "→ 스크랩 미검증: 삭제 판정은 보수적으로(정황 가드 유지) 진행합니다.",
+    );
+
     // (a) 삭제 미반영 감지 — 스크랩 커버 월에서 eywa에만 남은 (학생,월) 분류(무효 후보/보존/보류).
     const stale = S.classifyStale({
       existing,
@@ -203,7 +228,8 @@ const KIND_CAT = { 수업: "tuition", 교재: "material", 차량비: "other", �
       withdrawnMakeeduIds,
       allowBulkVoid: ALLOW_BULK_VOID,
       // 매칭 실패율 — 못 받은 학생은 '부재'로 보이므로, 매칭이 나쁘면 삭제 판정 자체를 보류한다.
-      unmatchedRatio: lines.length ? unmatchedLines.length / lines.length : 0,
+      unmatchedRatio,
+      scrapeVerified,
       now: new Date(),
     });
     S.printIssues({ stale, unmatchedLines });
@@ -211,7 +237,7 @@ const KIND_CAT = { 수업: "tuition", 교재: "material", 차량비: "other", �
     let reconcile = []; // 층 2 대조 결과(APPLY에서만 채워진다 — dry-run은 저장을 안 하므로 비교 대상이 없다)
     const writeReport = () => {
       const p = S.writeReport(OUT, { ranAt: new Date().toISOString(), apply: APPLY, voidStale: VOID_STALE,
-        scrapedPeriods, unmatchedLines, stale, voidedCount: voided, reconcile });
+        scrapedPeriods, unmatchedLines, stale, voidedCount: voided, reconcile, external });
       console.log(`리포트: ${p.jsonPath}`);
     };
 
@@ -257,6 +283,9 @@ const KIND_CAT = { 수업: "tuition", 교재: "material", 차량비: "other", �
       console.log(`makeedu 부재 미완납 void 전환: ${voided}/${stale.voidable.length}건.`);
     }
 
+    // ── 층 3: **외부 대조** — makeedu가 스스로 말하는 합계와 맞춘다 ──
+    // 층 2는 우리끼리 일관됨만 증명한다. 여기서 비로소 "makeedu와 같다"가 증명되고,
+    // 그게 증명되면 '부재'가 사실이 되어 삭제 판정 가드를 풀 수 있다(classifyStale의 scrapeVerified).
     // ── 층 2: 대조 — 저장 결과를 **되읽어** makeedu 원본과 맞는지 스스로 검산한다(허용 오차 0원) ──
     // 지금까지 동기화는 "넣고 끝"이라 틀려도 배지가 초록불이었다. 여기서 어긋나면 sync_state.error에
     // 실려 화면 배지가 amber '확인 필요'로 바뀐다 — 사람이 모르고 지나가는 경로를 없앤다.
@@ -286,7 +315,7 @@ const KIND_CAT = { 수업: "tuition", 교재: "material", 차량비: "other", �
 
     writeReport();
     await L.recordSync(sql, tenantId, "invoices", inserted, "ok",
-      S.issueSummary({ stale, unmatchedLines, voidStale: VOID_STALE, voided, reconcile, truncation }));
+      S.issueSummary({ stale, unmatchedLines, voidStale: VOID_STALE, voided, reconcile, truncation, external }));
     console.log(`upsert ${upserted}건 (신규 ${inserted} · 갱신 ${upserted - inserted}).`);
   } finally {
     await sql.end();

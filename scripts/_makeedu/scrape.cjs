@@ -118,6 +118,42 @@ async function readReportedTotal(page) {
     .catch(() => null);
 }
 
+/**
+ * makeedu가 **스스로 말하는 합계**를 읽는다 — 화면 하단 '결과 합계' 행(원장이 설정에서 켠 표시).
+ *
+ * 🔑 이게 **외부 기준**이다. 지금까지의 대조는 `라인 → 집계 → 저장` 내부 3지점만 봐서 "우리끼리 일관됨"만
+ * 증명했다. makeedu가 말하는 총액과 맞으면 비로소 **"makeedu와 같다"**를 증명할 수 있고,
+ * 그게 되면 "부재"가 추측이 아니라 **사실**이 된다(= 삭제 판정 가드를 풀 근거).
+ *
+ * 형식(실측): `결과 합계 완납 1051건 152,675,775원 2,307,500원 0원 150,187,025원 0원`
+ *             `미납 5건 818,250원 0원 0원 0원 818,250원`
+ *             → 구분 · 건수 · 청구액 · 할인액 · 적립금 · 실제낸금액 · 미납금액
+ *
+ * ⚠️ 이 표시는 makeedu **설정**이라 꺼져 있을 수 있다 → 못 읽으면 **null**(모르면 검증했다고 하지 않는다).
+ */
+async function readReportedSummary(page) {
+  return page
+    .evaluate(() => {
+      const RE = /(완납|미납)\s+([\d,]+)\s*건\s+([\d,]+)\s*원\s+([\d,]+)\s*원\s+([\d,]+)\s*원\s+([\d,]+)\s*원\s+([\d,]+)\s*원/;
+      const n = (v) => Number(String(v).replace(/,/g, "")) || 0;
+      const acc = { lines: 0, total: 0, discount: 0, points: 0, paid: 0, unpaid: 0 };
+      const seen = new Set();
+      let hit = 0;
+      for (const tr of document.querySelectorAll("tr")) {
+        const t = (tr.innerText || "").replace(/\s+/g, " ").trim();
+        if (t.length > 240) continue;
+        const m = RE.exec(t);
+        if (!m || seen.has(m[0])) continue;
+        seen.add(m[0]);
+        hit++;
+        acc.lines += n(m[2]); acc.total += n(m[3]); acc.discount += n(m[4]);
+        acc.points += n(m[5]); acc.paid += n(m[6]); acc.unpaid += n(m[7]);
+      }
+      return hit ? acc : null;
+    })
+    .catch(() => null);
+}
+
 // 목록의 '조회/검색' 버튼만 눌러 검색을 다시 돌린다(저장·삭제류는 절대 건드리지 않는다).
 async function clickSearch(page) {
   const btn = page.locator(
@@ -237,6 +273,7 @@ async function scrapeList(page, key, cfg) {
   await waitForStableTable(page);
   // 화면이 스스로 말하는 총건수 — 수집 결과와 대조해 **조용한 절단**을 잡는다(페이지 순회 중단·목록 개편).
   const totalReported = await readReportedTotal(page);
+  const reportedSummary = await readReportedSummary(page); // makeedu가 말하는 합계(없으면 null)
 
   let headers = [];
   const all = [];
@@ -274,7 +311,7 @@ async function scrapeList(page, key, cfg) {
     await page.waitForLoadState("networkidle").catch(() => {});
     await waitForStableTable(page); // 다음 페이지 정착 대기
   }
-  return { key, scrapedAt: new Date().toISOString(), headers, rows: all, totalReported };
+  return { key, scrapedAt: new Date().toISOString(), headers, rows: all, totalReported, reportedSummary };
 }
 
 /**
@@ -343,11 +380,13 @@ async function harvestList(page, key, cfg) {
         data = await harvestList(page, key, cfg);
       } catch (e) {
         console.warn(`  ⚠️ ${key} 스크래핑 실패: ${e.message} — 건너뜀(0행)`);
-        data = { key, scrapedAt: new Date().toISOString(), headers: [], rows: [], totalReported: null };
+        data = { key, scrapedAt: new Date().toISOString(), headers: [], rows: [], totalReported: null, reportedSummary: null };
       }
       fs.writeFileSync(path.join(OUT, `${key}.json`), JSON.stringify(data));
       console.log(`  ✓ ${key}: ${data.rows.length} rows, ${data.headers.length} cols → ${key}.json`);
       console.log(`    headers: ${data.headers.filter(Boolean).join(" | ").slice(0, 160)}`);
+      if (data.reportedSummary)
+        console.log(`    makeedu 합계: ${data.reportedSummary.lines}라인 · 청구 ${data.reportedSummary.total.toLocaleString("ko-KR")} · 미납 ${data.reportedSummary.unpaid.toLocaleString("ko-KR")}`);
       if (data.totalReported != null && data.totalReported !== data.rows.length) {
         // ⚠️ 부족(절단)과 초과(합계행 혼입·페이지 경계 중복)는 성격이 다르다 — 뭉뚱그려 "절단"이라고 하면
         //    사람이 엉뚱한 곳을 본다. 실제로 3459 vs 3481(초과 22)이 "절단 의심"으로 보고된 적이 있다.
