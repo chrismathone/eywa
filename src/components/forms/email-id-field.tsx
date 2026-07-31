@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { splitEmailForEdit } from "@/features/staff/email";
+import { DEFAULT_EMAIL_DOMAIN, splitEmailForEdit } from "@/features/staff/email";
 
 /**
  * 로그인 이메일 입력 — **아이디만 고치고 도메인은 고정**(원장 지시 2026-07-30).
@@ -30,7 +30,10 @@ export function EmailIdField({
   const initial = splitEmailForEdit(defaultEmail);
   const [local, setLocal] = useState(initial.local);
   const [domain, setDomain] = useState(initial.domain);
-  const [editDomain, setEditDomain] = useState(false);
+  // gmail이면 도메인을 고정 칩으로(대다수 — 아이디만 고치면 된다).
+  // **gmail이 아니면 처음부터 열어 둔다**(원장 지시 2026-07-30) — 네이버 등을 쓰는 사람은
+  // 도메인까지 손볼 일이 실제로 있는데, 고정해 두면 한 번 더 눌러야 해서 번거롭다.
+  const [editDomain, setEditDomain] = useState(initial.domain !== DEFAULT_EMAIL_DOMAIN);
 
   const value = local.trim() && domain.trim() ? `${local.trim()}@${domain.trim()}` : "";
 
@@ -68,7 +71,8 @@ export function EmailIdField({
         onClick={() => setEditDomain((v) => !v)}
         className="text-text-faint hover:text-primary mt-1 text-[11px] underline-offset-2 hover:underline"
       >
-        {editDomain ? "도메인 고정으로" : "도메인 변경"}
+        {/* 닫아도 도메인 값은 그대로 — 버튼은 '입력칸을 여닫는' 것일 뿐 도메인을 바꾸지 않는다. */}
+        {editDomain ? "도메인 입력칸 닫기" : "도메인 변경"}
       </button>
     </div>
   );
