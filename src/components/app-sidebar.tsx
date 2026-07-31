@@ -519,9 +519,12 @@ function isSubActive(
   const tab = query ? new URLSearchParams(query).get("tab") : null;
   if (focusedHref) {
     const [fPath, fQuery] = focusedHref.split("?");
-    if (fPath !== path) return false;
     const fTab = fQuery ? new URLSearchParams(fQuery).get("tab") : null;
-    return (tab ?? null) === (fTab ?? null);
+    // 면(?tab=)이 있는 하부탭은 정확히 그 면일 때만.
+    if (tab) return fPath === path && fTab === tab;
+    // 면이 없는 하부탭(= 메뉴 루트, 예 '직원 목록')은 **그 아래 상세까지** 포함한다 —
+    // 목록에서 직원 상세로 들어가도 "직원 목록 안"이라는 사실은 그대로다.
+    return (fPath === path || fPath.startsWith(`${path}/`)) && !fTab;
   }
   if (path !== pathname) return false;
   return (tab ?? null) === (currentTab ?? null);
@@ -558,7 +561,11 @@ function SubTab({
       className={`block truncate rounded text-[11px] transition ${
         inFlyout ? "px-2.5 py-1" : "py-0.5 pr-2 pl-9"
       } focus-visible:ring-primary/50 focus-visible:ring-inset focus-visible:ring-2 focus-visible:outline-none ${
-        active ? "text-primary font-medium" : "text-text-dim hover:text-foreground hover:bg-bg-soft"
+        // 활성 하부탭은 **칠해서** 표시한다 — 글자색만 바꾸면 "여기 있다"가 안 읽힌다
+        // (원장 2회 지적 2026-07-31). 부모 메뉴(진한 pill)와 위계가 보이게 옅은 채움 + 굵게.
+        active
+          ? "bg-primary/12 text-primary font-bold"
+          : "text-text-dim hover:text-foreground hover:bg-bg-soft"
       }`}
     >
       {label}

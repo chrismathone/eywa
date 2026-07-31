@@ -438,16 +438,24 @@ export default async function StaffPage({
           {/* 표 형태(원장 지시 2026-07-31) — 셀마다 테두리를 그어 시트처럼 읽히게. 열 순서도 직원명부 시트와 같은
               소속 → 이름 → 직급 순. 글자 크기는 StaffTableScaleBox가 em 기준으로 한 번에 조절한다. */}
           <StaffTableScaleBox className="bg-card shadow-card overflow-x-auto rounded-2xl">
-            <table className="w-full min-w-[900px] border-collapse [&_td]:border [&_td]:border-line [&_th]:border [&_th]:border-line">
+            <table className="w-full min-w-[1560px] border-collapse [&_td]:border [&_td]:border-line [&_th]:border [&_th]:border-line">
               <thead>
+                {/* 열 순서 = 직원명부 시트(2026년직원명부) 그대로 — 소속부서·이름·계약구분·메일·입사일·
+                    전화번호·현재 계약·계약조건·계약갱신일. 주민번호·계좌는 **일부러 뺐다**(이력서 안,
+                    원장·관리자 게이트 뒤 — 목록에 늘어놓을 정보가 아니다). */}
                 <tr className="bg-bg-soft/70 text-foreground text-left text-[0.9em]">
-                  <th className="px-3 py-2.5 font-bold">부서</th>
+                  <th className="px-3 py-2.5 font-bold">소속부서</th>
                   <th className="px-4 py-2.5 font-bold">이름</th>
                   <th className="px-3 py-2.5 font-bold">직급</th>
-                  <th className="px-3 py-2.5 font-bold">역할</th>
-                  <th className="px-3 py-2.5 font-bold">근무형태</th>
-                  <th className="px-3 py-2.5 font-bold">과목</th>
+                  <th className="px-3 py-2.5 font-bold">계약구분</th>
+                  <th className="px-3 py-2.5 font-bold">메일</th>
                   <th className="px-3 py-2.5 font-bold">입사일</th>
+                  <th className="px-3 py-2.5 font-bold">전화번호</th>
+                  <th className="px-3 py-2.5 font-bold">현재 계약</th>
+                  <th className="px-3 py-2.5 font-bold">계약조건</th>
+                  <th className="px-3 py-2.5 font-bold">계약갱신일</th>
+                  <th className="px-3 py-2.5 font-bold">과목</th>
+                  <th className="px-3 py-2.5 font-bold">역할</th>
                   <th className="px-3 py-2.5 text-right font-bold">담당 반</th>
                   <th className="px-3 py-2.5 text-right font-bold">담당 학생</th>
                   <th className="px-3 py-2.5 font-bold">상태</th>
@@ -479,20 +487,33 @@ export default async function StaffPage({
                           <span className="text-foreground font-bold group-hover:underline">{s.displayName}</span>
                           <EditingBadge scope={`staff:${s.id}`} />
                         </WindowLink>
-                        <p className="text-text-dim num mt-0.5 truncate text-[0.85em]">
-                          {/* 플레이스홀더(@imported.local)는 미설정으로 표시 — raw 노출 금지. */}
-                          {s.email.toLowerCase().endsWith("@imported.local") ? "이메일 미설정" : s.email}
-                        </p>
                       </td>
                       <td className="text-foreground px-3 py-2.5 font-medium whitespace-nowrap">
                         {s.jobTitle ?? "—"}
                       </td>
-                      <td className="px-3 py-2.5">
-                        <Pill color={roleMeta.color}>{roleMeta.label}</Pill>
-                      </td>
                       <td className="text-foreground px-3 py-2.5 font-medium whitespace-nowrap">
                         {s.employmentType ?? "—"}
                       </td>
+                      <td className="text-foreground num px-3 py-2.5">
+                        {/* 플레이스홀더(@imported.local)는 미설정으로 표시 — raw 노출 금지. */}
+                        {s.email.toLowerCase().endsWith("@imported.local") ? "미설정" : s.email}
+                      </td>
+                      <td className="num text-foreground px-3 py-2.5 whitespace-nowrap">{s.hireDate ?? "—"}</td>
+                      <td className="num text-foreground px-3 py-2.5 whitespace-nowrap">{s.phone ?? "—"}</td>
+                      <td className="num text-foreground px-3 py-2.5 whitespace-nowrap">
+                        {s.contractStart && s.contractEnd ? (
+                          <>
+                            {s.contractStart} ~ {s.contractEnd}
+                            {s.contractSeq ? <span className="text-text-dim ml-1">({s.contractSeq}차)</span> : null}
+                          </>
+                        ) : (
+                          "—"
+                        )}
+                      </td>
+                      <td className="text-foreground max-w-[220px] truncate px-3 py-2.5" title={s.contractTerms ?? ""}>
+                        {s.contractTerms ?? "—"}
+                      </td>
+                      <td className="num text-foreground px-3 py-2.5 whitespace-nowrap">{s.contractEnd ?? "—"}</td>
                       <td className="px-3 py-2.5">
                         <span className="flex flex-wrap gap-1">
                           {s.subjects.length > 0
@@ -504,7 +525,9 @@ export default async function StaffPage({
                             : "—"}
                         </span>
                       </td>
-                      <td className="num text-foreground px-3 py-2.5 whitespace-nowrap">{s.hireDate ?? "—"}</td>
+                      <td className="px-3 py-2.5">
+                        <Pill color={roleMeta.color}>{roleMeta.label}</Pill>
+                      </td>
                       <td className="num text-foreground px-3 py-2.5 text-right font-medium">
                         {s.classesCount > 0 ? s.classesCount : "—"}
                       </td>
