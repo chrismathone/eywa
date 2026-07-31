@@ -3,8 +3,12 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { X } from "@/components/icons/eywa-icon-compat";
+import { WindowLink } from "@/components/workspace/window-link";
 import { useNoticeDismiss } from "../popup-store";
 import type { ActivePopup } from "../server/queries";
+
+const LINK_CLASS =
+  "bg-primary hover:bg-primary/90 inline-flex items-center rounded-lg px-3 py-1.5 text-xs font-bold text-white transition";
 
 /**
  * 공지 팝업 카드 — 그리드(flex-wrap) 아이템. 절대배치·드래그 없이 부모 레이어가 앵커별로 타일링한다(겹침 없음).
@@ -29,6 +33,9 @@ export function NoticePopupCard({ popup }: { popup: ActivePopup }) {
   }, [zoomed]);
 
   if (closed) return null;
+
+  // 사이트 안쪽 경로인가 — `//`(프로토콜 상대)는 외부라 제외한다.
+  const isInternal = !!popup.linkUrl && popup.linkUrl.startsWith("/") && !popup.linkUrl.startsWith("//");
 
   const close = () => {
     if (dontForever) dismiss(popup.id, "forever", popup.updatedAt);
@@ -74,14 +81,23 @@ export function NoticePopupCard({ popup }: { popup: ActivePopup }) {
           ) : null}
           {popup.linkUrl ? (
             <div className="px-4 pb-3">
-              <a
-                href={popup.linkUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="bg-primary hover:bg-primary/90 inline-flex items-center rounded-lg px-3 py-1.5 text-xs font-bold text-white transition"
-              >
-                {popup.linkLabel || "자세히 보기"}
-              </a>
+              {/* 내부 경로(/me 등)를 `target="_blank"`로 열면 **새 탭에서 셸이 다시 뜨고 이 팝업도 다시 뜬다**
+                  → 눌러도 제자리처럼 보이는 무한 루프(원장 제보 2026-07-31). 내부는 창 시스템으로 열고
+                  팝업은 닫는다([[#86]]). 외부 링크(http…)만 새 탭 유지. */}
+              {isInternal ? (
+                <WindowLink
+                  href={popup.linkUrl}
+                  title={popup.linkLabel || popup.title}
+                  onNavigate={close}
+                  className={LINK_CLASS}
+                >
+                  {popup.linkLabel || "자세히 보기"}
+                </WindowLink>
+              ) : (
+                <a href={popup.linkUrl} target="_blank" rel="noopener noreferrer" className={LINK_CLASS}>
+                  {popup.linkLabel || "자세히 보기"}
+                </a>
+              )}
             </div>
           ) : null}
         </div>
