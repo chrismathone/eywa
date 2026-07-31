@@ -192,6 +192,9 @@ export async function resolveBrandingSrc(
 ): Promise<string | null> {
   if (!value) return null;
   if (/^https?:\/\//.test(value)) return value;
+  // 사이트 내부 정적 파일(`/manuals/...` 등 public/) — 도메인이 바뀌어도 따라오게 경로 그대로 쓴다.
+  // (Storage 경로로 오해해 서명 시도 → 실패 → null이 되면 이미지가 조용히 사라진다.)
+  if (value.startsWith("/")) return value;
   try {
     return await resolveTenantReadUrl(value, "branding", tenantId, ttlMs);
   } catch {

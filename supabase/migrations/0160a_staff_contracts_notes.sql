@@ -1,4 +1,4 @@
--- 0159a_staff_contracts_notes.sql (손수 alpha)
+-- 0160a_staff_contracts_notes.sql (손수 alpha)
 -- 계약 히스토리에 **기간 없는 줄도** 담는다(원장 지적 2026-07-31: "히스토리가 한 줄만 들어가 있음").
 --
 -- 0149a는 '기간이 있는 계약'만 담게 만들었는데, 시트 '계약조건 history' 셀에는 기간 없는 줄이 섞여 있고
@@ -19,6 +19,10 @@ alter table public.staff_contracts add constraint staff_contracts_period_check
 alter table public.staff_contracts
   add column if not exists kind text not null default 'contract',
   add column if not exists line_no integer;
+
+-- note는 차수가 없다(seq=0) — 0149a의 `check (seq >= 1)`이 그걸 막는다.
+alter table public.staff_contracts drop constraint if exists staff_contracts_seq_check;
+alter table public.staff_contracts add constraint staff_contracts_seq_check check (seq >= 0);
 
 alter table public.staff_contracts drop constraint if exists staff_contracts_kind_check;
 alter table public.staff_contracts add constraint staff_contracts_kind_check
