@@ -219,13 +219,20 @@ export async function getBillingSummary(period?: string): Promise<BillingSummary
  * ⚠️ **전건 fetch 금지(B2)** — 예전엔 `period` 한 컬럼을 fetchAllPaged로 전부 긁어 JS Set으로
  * distinct를 만들었다. 결과는 월 문자열 8개인데 비용은 **요청 4회 / 3,225행 / 245ms**였고(2026-07-31
  * 실측) 행이 1,000개 늘 때마다 왕복이 하나씩 더 붙는 구조였다. 이 화면이 여는 창마다 도는 비용이라
- * group-by RPC(0159a `invoice_periods`)로 옮겼다 — 단일 요청, 페이로드 수백 바이트.
+ * group-by RPC(0161a `invoice_periods`)로 옮겼다 — 단일 요청, 페이로드 수백 바이트.
  */
 export async function getAvailablePeriods(): Promise<string[]> {
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("invoice_periods");
   // 마이그레이션 미적용 환경(로컬 등)에서 월 칩이 통째로 사라지지 않게 구 경로로 폴백한다.
-  // 결과는 동일하고 느릴 뿐이라 '조용한 오작동'이 아니다 — 다른 error는 그대로 throw.
+  // 결과는 동일하고 느릴 뿐이라 '조용한 오작동'은 아니지만 **화면이 똑같아 폴백 중인지 알 수 없다** —
+  // 실패는 반드시 로그로 남긴다(gotcha #89: 폴백 있는 기능은 실패를 따로 계측해야 보인다).
+  // 에러 종류를 안 가리는 건 의도다: 미적용·타임아웃·권한·스키마캐시 어느 쪽이든 월 칩은 떠야 한다.
+  if (error) {
+    console.warn(
+      `[billing] invoice_periods RPC 실패 — 전건 스캔으로 폴백(느림). 0161a 적용 여부 확인 필요: ${error.message}`,
+    );
+  }
   const rows: { period: string }[] = error
     ? await fetchAllPaged<{ period: string }>((from, to) =>
         supabase.from("invoices").select("period").order("period", { ascending: false }).range(from, to),

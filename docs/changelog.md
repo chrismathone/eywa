@@ -4,7 +4,7 @@
 
 ## 진행 상황
 
-### 수납관리: 창이 느렸던 진짜 이유(RLS가 행마다) + '기한 경과' 필터가 완납을 데려오던 것 (2026-07-31) - typecheck0/lint0/test3146
+### 수납관리: 창이 느렸던 진짜 이유(RLS가 행마다) + '기한 경과' 필터가 완납을 데려오던 것 (2026-07-31) - typecheck0/lint0/test3164/build✓ + 적대검증(에이전트69)
 
 원장 제보 3건이 한 화면에서 겹쳤다: *"필터 걸면 완납도 보인다"* · *"완납인데 왜 미수금이라 뜨나"* ·
 *"수납관리 창이 너무 반응이 느리다"*. 셋 다 원인이 달랐다.
@@ -28,15 +28,25 @@
 
 - **권한 무변경 증명**: 5개 역할 전부로 적용 전·후 보이는 행 수 대조 — master/admin/manager 3,225건,
   teacher/viewer 0건으로 **동일**. 컬럼을 쓰는 항(`created_by = auth.uid()`)은 행마다 평가되게 그대로 뒀다.
+  ⚠️ **이 대조만으론 부족하다**(적대 리뷰): 행 수는 full/readonly를 구분 못 하고, 이 브랜치가 재작성한
+  `with check`(쓰기)는 한 번도 안 지나간다. injaewon override를 실제로 타는 역할은 **counselor**인데
+  그게 5개에서 빠져 있었다. → **프로덕션 적용 전 8역할 × 4커맨드(SELECT/INSERT/UPDATE/DELETE) ×
+  invoices·expenses 프로브 + `pg_policies` 전후 스냅샷 diff**를 돌린다(아래 '적용 전 점검').
 - ⚠️ **service_role 프로브로는 안 보인다**(RLS 우회). 성능은 반드시 authenticated 롤로 잴 것.
-- ⏳ 같은 모양이 `academy_documents_restricted_guard`에 남아 있다(이력서 화면 만질 때 같이).
+- 🔁 **0158a의 `create policy` 본문에도 같은 형태를 접어 넣었다**(적대 리뷰). 0160a는 `alter`로 덧칠만 하므로,
+  0158a만 단독 재적용하는 경로(단일 파일 핫픽스·권한 미러 수정)에서 **에러 0건으로 2.1초가 되살아났다.**
+- ⏳ **남은 같은 모양**: `invoices_tenant_isolation`(0004a)의 `auth_tenant_id()`는 여전히 맨몸이다 —
+  전건 select에 남은 **155ms**가 이 항이다. 리포 전체 `auth_tenant_id()` **219곳 / 83파일, 감싼 곳 0**.
+  다른 '느린 창' 제보의 공통 뿌리일 가능성이 높다(별건). `academy_documents_restricted_guard`도 같은 모양.
 
-### 2) 월 칩 목록을 만들려고 **3,225행을 긁고 있었다** (0159a `invoice_periods` RPC)
+### 2) 월 칩 목록을 만들려고 **3,225행을 긁고 있었다** (0161a `invoice_periods` RPC)
 
 `getAvailablePeriods`가 `period` 한 컬럼을 fetchAllPaged로 전건 수집해 JS Set으로 distinct를 만들었다 —
 **요청 4회 / 3,225행 / 245ms**를 매 렌더마다 내고 결과는 월 문자열 8개. 행이 1,000개 늘 때마다 왕복이 하나씩
 더 붙는 구조였다(B2가 말하는 "세거나 집계하려면 RPC"의 정확한 사례). group-by RPC로 교체 —
 단일 요청·수백 바이트. 마이그 미적용 환경은 구 경로로 폴백(결과 동일, 느릴 뿐).
+⚠️ 폴백은 **화면이 똑같아 폴백 중인지 알 수 없다**(적대 리뷰 — RPC가 안 잡혀도 월 칩은 정상으로 보이고
+매 렌더 245ms를 계속 낸다) → 폴백 진입 시 서버 로그 1줄(gotcha #89 "폴백 있는 기능은 실패를 따로 계측").
 
 ### 3) 창을 열면 **응답 올 때까지 흰 화면**이었다 — `loading.tsx` 신설 (B7)
 
@@ -44,6 +54,14 @@
 상태를 다 기다린 뒤에야 첫 픽셀이 떴다. 실제 렌더와 **블록 순서·높이를 맞춘** 스켈레톤을 넣었다
 (동기화 배지 → 면탭 → 헤더 → 툴바 → KPI 5 → 진행률 → 표). ⚠️ 트레이드오프: 월·필터 전환에도 스켈레톤이 뜬다 —
 지금은 그 구간이 **무피드백 정지**였으므로 개선이지만, 무플래시가 필요해지면 필터를 클라로 옮기는 게 정석.
+
+⚠️ **헤더 스켈레톤을 시간표에서 베꼈다가 스스로 점프를 만들 뻔했다**(적대 리뷰가 잡은 유일한 생존 지적).
+시간표는 `PageHeader` **자체**를 `compact-chrome:hidden` 래퍼로 감싸 창·모바일에서 진짜 사라지지만,
+수납은 `embedLabel`과 `actions`(월 네비 `size-8`)를 넘기므로 **컴팩트에서도 32px 한 줄이 렌더된다** —
+스켈레톤만 통째로 숨기면 데이터 도착 순간 본문이 **52px**(헤더 32 + gap 20) 밀린다. 컴팩트 1행 형태로
+맞췄다. 겸사겸사 바깥 `space-y-4` 안에 `space-y-5`를 중첩해 블록 간격도 실제와 일치시켰다(4px씩 어긋났음).
+📌 **다른 화면 스켈레톤을 베낄 땐 그 화면이 PageHeader에 무엇을 넘기는지부터 볼 것** — 같은 컴포넌트라도
+`embedLabel`/`actions` 유무로 컴팩트 렌더가 갈린다(선례: lesson-reports는 한 줄을 남긴다).
 
 ### 4) '기한 경과만' 필터가 **완납 라인을 데려왔다**
 
@@ -63,6 +81,34 @@
 — 같은 등급 패키지라 금액이 같았을 뿐이다. 학생 연락처도 다르다(010-4939-5728 / 010-6272-7203).
 원장 확정으로 칠성고(edutrix 출신, makeedu_id 없음) 쪽 이름을 **이승민A**로 변경.
 `name_normalized`는 생성 컬럼이라 자동 갱신, ClassNote 연결·교재주문·견적서에 이름 사본 없음.
+
+### 7) 적대 검증(에이전트 69개) — 생존 1건 + 적용 전 점검표
+
+발견 31건 중 **적대 검증을 통과한 건 1건**(위 3의 헤더 스켈레톤). 나머지 30건은 반박됐다.
+그와 별개로 **완결성 비평**이 "안 본 곳"을 지적해 아래를 반영·기록한다.
+
+**이 브랜치에서 고친 것**: 헤더 스켈레톤(3) · 0158a에 `(select …)` 접어 넣기(1) · 폴백 로그(2).
+
+**🔴 마이그레이션 프로덕션 적용 전 필수 점검** (0160a·0161a):
+1. `pg_policies`(`polname`·`permissive`·`roles`·`cmd`·`qual`·`with_check`) **적용 전/후 스냅샷 diff** —
+   술어 텍스트 말고 **정책 집합·RESTRICTIVE 여부**가 그대로인지.
+2. `set local role authenticated` + `request.jwt.claims`로 **8개 시스템 역할 × SELECT/INSERT/UPDATE/DELETE ×
+   invoices·expenses**. 특히 ⓐ **counselor 읽기 가능**(injaewon override를 타는 유일한 역할) ⓑ **manager 쓰기 가능**
+   (SELECT 행 수로는 full/readonly가 구분되지 않는다) ⓒ **teacher 본인 expenses 쓰기 가능**
+   (`(select f()) or (컬럼 항)` 혼합 술어는 이 경로에서만 실행된다).
+3. 적용 후 **강사가 도달하는 invoices 읽기 화면**을 실제로 열어 숫자 대조 — 학생 상세 수납 탭 ·
+   출석부 강사 전체보기 · /retention · 오늘(대시보드). 이 경로들은 RLS가 0행을 줘도 **에러가 아니라
+   빈 배열/0원**으로 조용히 보인다(`getStudentInvoices`는 error 변수를 받지도 않는다).
+4. 0161a 적용 후 `select proname from pg_proc where proname='invoice_periods'` + PostgREST 스키마 리로드 확인
+   (안 잡히면 화면은 정상인데 폴백으로 계속 돈다 — 이제 서버 로그에 남는다).
+
+**⏳ 별건으로 남긴 것**(이 브랜치 범위 밖, 재확인됨):
+- `invoices_tenant_isolation`(0004a) 등 **`auth_tenant_id()` 맨몸 219곳/83파일** — 같은 병목의 리포 전역판.
+- **`invoice_teacher_splits`·`invoice_session_terms`에 역할 게이트가 없다** — 0158a가 막은 위협(강사·뷰어가
+  자기 토큰으로 PostgREST 직결)이 **단가·강사별 분배액**에 그대로 성립한다. 0158a는 textbook_orders만
+  "의도적 제외"로 기록했고 이 둘은 언급조차 없다. 급여 재료라 등급이 낮지 않다.
+- **정책 술어를 검증하는 테스트가 0건** — `permissions-sql-mirror.test.ts`는 0158a의 defaults jsonb와 master
+  절만 잠근다. `using`/`with check` 본문을 바꿔도 4게이트가 전부 통과한다("test3164 통과"는 0160a의 보증이 아니다).
 
 
 
