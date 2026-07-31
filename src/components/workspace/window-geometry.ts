@@ -52,6 +52,9 @@ export const ROUTE_WINDOW_SIZE: Record<string, { w: number; h: number }> = {
 
   "staff/payroll": { w: 920, h: 640 }, // 월별 전직원 급여표(8열) — 폭 넓음
   "staff/resumes": { w: 840, h: 720 }, // 직원 이력서(작성 폼·A4형 시트 뷰) — 상세 id도 prefix로 상속
+  // 내 정보 — 계정 카드(2열) + 이력서 시트 통째. 기본 480×560이면 시트가 접혀 읽을 수 없다(원장 지적 2026-07-31).
+  // staff/resumes(840)보다 계정 카드만큼 더 필요해 세로를 키움.
+  me: { w: 900, h: 800 },
   "billing/refunds": { w: 840, h: 720 }, // 환불 요청서(작성 폼·A4형 시트 뷰) — 상세 id도 prefix로 상속
   owner: { w: 960, h: 720 }, // 학원 설정 콘솔 — 탭 + 목록 편집(과목·교시·직급) 폼
   documents: { w: 980, h: 640 }, // 데이터베이스(서식 저장소) — 탐색기형(좌 폴더 팬 + 우 상세 테이블)

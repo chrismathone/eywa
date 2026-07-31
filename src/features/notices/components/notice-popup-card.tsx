@@ -69,7 +69,9 @@ export function NoticePopupCard({ popup }: { popup: ActivePopup }) {
   return (
     <>
       <div
-        className="pointer-events-auto bg-card border-line shadow-modal animate-in fade-in-0 zoom-in-95 flex max-h-[82vh] flex-col overflow-hidden rounded-2xl border duration-200"
+        // 흰 카드 + 얇은 회색 테두리라 흰 배경 페이지에 묻혀 "팝업인지 아닌지" 구분이 안 됐다
+        // (원장 지적 2026-07-31). 테두리를 진하게 + 브랜드색 링 + 그림자를 키워 경계를 세운다.
+        className="pointer-events-auto bg-card border-line-strong ring-primary/15 animate-in fade-in-0 zoom-in-95 flex max-h-[82vh] flex-col overflow-hidden rounded-2xl border shadow-2xl ring-4 duration-200"
         style={{
           width: popup.width,
           maxWidth: "calc(100vw - 2rem)",
@@ -85,14 +87,14 @@ export function NoticePopupCard({ popup }: { popup: ActivePopup }) {
           onPointerMove={onDrag}
           onPointerUp={endDrag}
           onPointerCancel={endDrag}
-          className="bg-bg-soft border-line flex shrink-0 cursor-grab items-center justify-between gap-2 border-b px-3 py-2 select-none active:cursor-grabbing"
+          className="bg-primary flex shrink-0 cursor-grab items-center justify-between gap-2 px-3 py-2 text-white select-none active:cursor-grabbing"
         >
-          <span className="text-foreground truncate text-[13px] font-bold">{popup.title}</span>
+          <span className="truncate text-[13px] font-bold">{popup.title}</span>
           <button
             type="button"
             aria-label="닫기"
             onClick={close}
-            className="text-text-dim hover:bg-line-strong/30 hover:text-foreground flex size-6 shrink-0 items-center justify-center rounded-xs transition"
+            className="flex size-6 shrink-0 items-center justify-center rounded-xs text-white/80 transition hover:bg-white/20 hover:text-white"
           >
             <X size={15} strokeWidth={1.8} />
           </button>

@@ -30,6 +30,7 @@ export function DocumentToolbar({
   catParam,
   embed,
   categories,
+  sortParam,
 }: {
   canWrite: boolean;
   initialQuery: string;
@@ -38,6 +39,8 @@ export function DocumentToolbar({
   catParam?: string | null;
   /** 플로팅 창(embed) 안이면 검색 GET에도 embed=1 유지(크롬리스 분기 유지). */
   embed?: boolean;
+  /** 현재 정렬 — 검색해도 정렬이 풀리지 않게 GET 폼이 같이 실어 보낸다. */
+  sortParam?: { key: string; dir: string } | null;
   /** 학원장이 관리하는 분류 목록(0161a) — 코드 상수가 아니라 서버가 DB에서 읽어 내려준다. */
   categories: DocumentCategoryOption[];
 }) {
@@ -104,6 +107,12 @@ export function DocumentToolbar({
       {/* 검색 — GET 폼(현재 폴더 유지, page 리셋) */}
       <form action="/documents" className="relative">
         {keepCat ? <input type="hidden" name="cat" value={keepCat} /> : null}
+        {sortParam ? (
+          <>
+            <input type="hidden" name="sort" value={sortParam.key} />
+            <input type="hidden" name="dir" value={sortParam.dir} />
+          </>
+        ) : null}
         {embed ? <input type="hidden" name="embed" value="1" /> : null}
         <Search className="text-text-faint pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2" />
         <input

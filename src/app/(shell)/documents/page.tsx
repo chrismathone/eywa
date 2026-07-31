@@ -18,6 +18,9 @@ import {
   formViewHref,
 } from "@/features/documents/categories";
 import { isLinkedSource, LINKED_LABEL, LINKED_SOURCES, type LinkedSourceKey } from "@/features/documents/linked";
+import { parseDocumentSort, type DocumentSortKey } from "@/features/documents/document-sort";
+import { SortableThLink } from "@/components/table/sortable-th-link";
+import type { SortState } from "@/lib/table/sort";
 import { DocumentToolbar } from "./_components/document-toolbar";
 import { DocumentRow } from "./_components/document-row";
 import { LinkedDocumentRow } from "./_components/linked-row";
@@ -30,13 +33,16 @@ const PAGE_SIZE = 50;
 export default async function DocumentsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ cat?: string; q?: string; page?: string }>;
+  searchParams: Promise<{ cat?: string; q?: string; page?: string; sort?: string; dir?: string }>;
 }) {
   const user = await requireAccess("documents");
   const sp = await searchParams;
   const catRaw = sp.cat ?? "";
   const q = (sp.q ?? "").trim();
   const page = Math.max(1, Number(sp.page) || 1);
+  // 정렬 상태는 URL에 둔다 — 목록이 서버 페이지네이션이라 정렬도 서버가 해야 하고(50건 안에서만 정렬되는
+  // 거짓말 방지), 덤으로 정렬된 화면을 그대로 링크로 공유·새로고침할 수 있다.
+  const sort = parseDocumentSort(sp.sort, sp.dir);
   // 플로팅 창(iframe, ?embed=1 → proxy가 x-embed 주입) 안이면 폴더·페이저 드릴인에 embed=1을 유지 —
   // 잃으면 창 안에서 풀셸 분기가 서버에서 돌아(크롬은 HideInFrame self-heal) 클릭마다 셸 쿼리 낭비(face-tabs 관례).
   const embed = (await headers()).get("x-embed") === "1";
@@ -54,7 +60,7 @@ export default async function DocumentsPage({
   const activeKey = linked ?? cat;
 
   const [docPage, linkedPage, counts, linkedCounts] = await Promise.all([
-    linked ? null : getDocumentsPage({ category: cat ?? undefined, q }, page, PAGE_SIZE),
+    linked ? null : getDocumentsPage({ category: cat ?? undefined, q, sort }, page, PAGE_SIZE),
     linked ? getLinkedPage(linked, { q }, page, PAGE_SIZE) : null,
     getDocumentCategoryCounts(),
     canBilling ? getLinkedCounts() : null,
@@ -62,24 +68,27 @@ export default async function DocumentsPage({
   const total = linked ? (linkedPage?.total ?? 0) : (docPage?.total ?? 0);
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
-  // 폴더/페이지 href — 필터 바꾸면 page 리셋(파라미터 미포함), pageHref만 p>1일 때 page 세팅.
-  const folderHref = (key: string | null) => {
+  // 폴더/페이지/정렬 href — 필터·정렬을 바꾸면 page 리셋(파라미터 미포함), pageHref만 p>1일 때 page 세팅.
+  // ⚠️ 세 링크가 서로의 파라미터를 **보존**해야 한다 — 하나라도 흘리면 폴더를 옮길 때 정렬이 조용히 풀리거나
+  //    2페이지에서 정렬을 누르면 1페이지 기준으로 되돌아간 것처럼 보인다.
+  const buildHref = (o: { cat?: string | null; page?: number; sort?: SortState<DocumentSortKey> }) => {
     const p = new URLSearchParams();
-    if (key) p.set("cat", key);
+    const c = o.cat !== undefined ? o.cat : activeKey;
+    if (c) p.set("cat", c);
     if (q) p.set("q", q);
+    const s = o.sort !== undefined ? o.sort : sort;
+    if (s) {
+      p.set("sort", s.key);
+      p.set("dir", s.dir);
+    }
+    if (o.page && o.page > 1) p.set("page", String(o.page));
     if (embed) p.set("embed", "1");
-    const s = p.toString();
-    return s ? `/documents?${s}` : "/documents";
+    const qs = p.toString();
+    return qs ? `/documents?${qs}` : "/documents";
   };
-  const pageHref = (p: number) => {
-    const params = new URLSearchParams();
-    if (activeKey) params.set("cat", activeKey);
-    if (q) params.set("q", q);
-    if (p > 1) params.set("page", String(p));
-    if (embed) params.set("embed", "1");
-    const s = params.toString();
-    return s ? `/documents?${s}` : "/documents";
-  };
+  const folderHref = (key: string | null) => buildHref({ cat: key });
+  const pageHref = (p: number) => buildHref({ page: p });
+  const sortHref = (next: SortState<DocumentSortKey>) => buildHref({ sort: next });
 
   const folders: FolderItem[] = [
     { key: null, label: "전체 문서", count: counts.all },
@@ -120,6 +129,7 @@ export default async function DocumentsPage({
             catParam={activeKey}
             embed={embed}
             categories={categories}
+            sortParam={sort}
           />
         }
       />
@@ -165,13 +175,44 @@ export default async function DocumentsPage({
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
+                  {/* 헤더 클릭 정렬 — 서버 정렬(URL `?sort=&dir=`)이라 페이지를 넘겨도 전체 기준으로 줄 선다.
+                      ⚠️ 연동 폴더(교재 요청서·수강료 견적서)는 원본 테이블을 따로 조회해 정렬 배선이 없다 →
+                         누를 수 있게 두면 "눌렀는데 안 바뀐다"가 된다. 그 폴더에선 정적 헤더로 되돌린다.
+                      ⚠️ '분류'·'유형'은 의도적으로 정렬 대상이 아니다(사유 = document-sort.ts). */}
                   <tr className="text-text-dim border-line border-b text-left text-xs">
-                    <th className="px-4 py-2 font-medium">이름</th>
-                    <th className="px-3 py-2 font-medium whitespace-nowrap">분류</th>
-                    <th className="px-3 py-2 font-medium whitespace-nowrap">유형</th>
-                    <th className="px-3 py-2 text-right font-medium whitespace-nowrap">크기</th>
-                    <th className="px-3 py-2 font-medium whitespace-nowrap">등록일</th>
-                    <th className="px-3 py-2 font-medium whitespace-nowrap">등록자</th>
+                    {linked ? (
+                      <>
+                        <th className="px-4 py-2 font-medium">이름</th>
+                        <th className="px-3 py-2 font-medium whitespace-nowrap">분류</th>
+                        <th className="px-3 py-2 font-medium whitespace-nowrap">유형</th>
+                        <th className="px-3 py-2 text-right font-medium whitespace-nowrap">크기</th>
+                        <th className="px-3 py-2 font-medium whitespace-nowrap">등록일</th>
+                        <th className="px-3 py-2 font-medium whitespace-nowrap">등록자</th>
+                      </>
+                    ) : (
+                      <>
+                        <SortableThLink sortKey="name" state={sort} hrefFor={sortHref} padClassName="px-4 py-2">
+                          이름
+                        </SortableThLink>
+                        <th className="px-3 py-2 font-medium whitespace-nowrap">분류</th>
+                        <th className="px-3 py-2 font-medium whitespace-nowrap">유형</th>
+                        <SortableThLink
+                          sortKey="size"
+                          state={sort}
+                          hrefFor={sortHref}
+                          align="right"
+                          className="whitespace-nowrap"
+                        >
+                          크기
+                        </SortableThLink>
+                        <SortableThLink sortKey="date" state={sort} hrefFor={sortHref} className="whitespace-nowrap">
+                          등록일
+                        </SortableThLink>
+                        <SortableThLink sortKey="uploader" state={sort} hrefFor={sortHref} className="whitespace-nowrap">
+                          등록자
+                        </SortableThLink>
+                      </>
+                    )}
                     <th className="px-3 py-2" />
                   </tr>
                 </thead>
