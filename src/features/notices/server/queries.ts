@@ -6,6 +6,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { resolveBrandingSrc } from "@/lib/storage/media-storage";
 import type { SystemRole } from "@/lib/permissions";
 import { audienceMatchesRole } from "../audience";
+import { isDismissed, type DismissRecord } from "../dismiss";
 
 /** 공지 팝업 캐시 무효화 태그(tenantId별). CRUD 액션이 updateTag로 비운다. */
 export function noticePopupsTag(tenantId: string): string {
@@ -71,11 +72,41 @@ const loadActivePopupsRaw = (tenantId: string) =>
     { tags: [noticePopupsTag(tenantId)], revalidate: 60 },
   )();
 
-/** 셸 진입 표시용 — 테넌트 활성 팝업 중 역할(audience)에 맞는 것만. */
-export async function getActivePopups(role: SystemRole, tenantId: string): Promise<ActivePopup[]> {
+/**
+ * 셸 진입 표시용 — 테넌트 활성 팝업 중 ① 역할(audience)에 맞고 ② 이 **계정**이 끄지 않은 것만.
+ * dismiss는 계정 단위 DB(notice_dismissals, 0162a)라 브라우저·포트·PC가 달라도 따라온다
+ * (localStorage 시절엔 origin=포트별로 따로 놀아 "다시 보지 않기"가 매번 리셋됐다).
+ * 팝업 본문은 tenantId별 캐시, dismiss만 사용자별 1쿼리(PK 조회) — 캐시엔 개인 상태를 넣지 않는다.
+ */
+export async function getActivePopups(
+  role: SystemRole,
+  tenantId: string,
+  userId: string,
+): Promise<ActivePopup[]> {
   const all = await loadActivePopupsRaw(tenantId);
-  return all
-    .filter((p) => audienceMatchesRole(p.audience, role))
+  const forRole = all.filter((p) => audienceMatchesRole(p.audience, role));
+  if (forRole.length === 0) return [];
+
+  const supabase = await createClient();
+  const { data: rows } = await supabase
+    .from("notice_dismissals")
+    .select("popup_id, until, version")
+    .eq("user_id", userId)
+    // forRole은 위 raw 쿼리의 limit 20으로 상한이 걸려 있어 .in()이 안전(B3의 대량 id 케이스 아님).
+    .in(
+      "popup_id",
+      forRole.map((p) => p.id),
+    );
+  const dismissed = new Map<string, DismissRecord>(
+    (rows ?? []).map((r) => [
+      r.popup_id as string,
+      { until: (r.until as string | null) ?? null, version: r.version as string },
+    ]),
+  );
+  const now = Date.now();
+
+  return forRole
+    .filter((p) => !isDismissed(dismissed.get(p.id), p.updatedAt, now))
     .map((p) => ({
       id: p.id,
       title: p.title,
