@@ -8,6 +8,7 @@ import {
   numeric,
   pgEnum,
   pgTable,
+  primaryKey,
   smallint,
   text,
   time,
@@ -1651,6 +1652,32 @@ export const noticePopups = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [index("notice_popups_tenant_active_idx").on(t.tenantId, t.isActive, t.priority)],
+);
+
+// === notice_dismissals (공지 팝업 "N일간/다시 보지 않기" — **계정 단위**, 0162a) ===
+// 원래 브라우저 localStorage였는데 origin(스킴+호스트+**포트**) 단위라 dev 포트·브라우저·PC마다 따로 놀았다
+// ("다시 보지 않기를 눌렀는데 또 뜬다"). 사람 기준 1행 = (user_id, popup_id).
+// version = dismiss 시점의 notice_popups.updated_at — 공지가 수정되면 값이 달라져 옛 설정을 무시하고 재노출한다.
+export const noticeDismissals = pgTable(
+  "notice_dismissals",
+  {
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    popupId: uuid("popup_id")
+      .notNull()
+      .references(() => noticePopups.id, { onDelete: "cascade" }),
+    version: timestamp("version", { withTimezone: true }).notNull(),
+    until: timestamp("until", { withTimezone: true }), // null = 영구("다시 보지 않기")
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.userId, t.popupId] }),
+    index("notice_dismissals_tenant_idx").on(t.tenantId),
+  ],
 );
 
 // === academy_documents (데이터베이스 — 학원 서식 저장소, 0067a) ===

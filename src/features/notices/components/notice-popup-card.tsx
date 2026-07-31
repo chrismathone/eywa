@@ -4,7 +4,8 @@ import { useEffect, useRef, useState, type PointerEvent as RPointerEvent } from 
 import { createPortal } from "react-dom";
 import { X } from "@/components/icons/eywa-icon-compat";
 import { WindowLink } from "@/components/workspace/window-link";
-import { useNoticeDismiss } from "../popup-store";
+import type { DismissMode } from "../dismiss";
+import { dismissNoticePopup, undismissNoticePopup } from "../server/dismiss-actions";
 import type { ActivePopup } from "../server/queries";
 
 const LINK_CLASS =
@@ -12,14 +13,17 @@ const LINK_CLASS =
 
 /**
  * 공지 팝업 카드 — 그리드(flex-wrap) 아이템. 절대배치·드래그 없이 부모 레이어가 앵커별로 타일링한다(겹침 없음).
- * footer 체크박스("7일간/다시 보지 않기")로 dismiss(브라우저 localStorage). 닫기=헤더 X 또는 footer 닫기.
+ * footer 체크박스("7일간/다시 보지 않기")로 dismiss — **계정 단위 DB 저장**(0162a). 닫기=헤더 X 또는 footer 닫기.
+ * ⚠️ 저장은 **체크하는 순간**이다(닫을 때가 아니라). 옛 구현은 닫기 핸들러에서만 기록해, 체크만 하고
+ * 새로고침·이동하면 조용히 날아갔다 — 링크 클릭으로 카드가 닫히는 경로까지 생겨 더 잦아졌다.
+ * 두 체크박스는 상호배타(한쪽을 켜면 다른 쪽이 꺼진다) — 같은 축의 강도 선택이라 동시 선택은 뜻이 없다.
  * 이미지 클릭 = 원본 크기 라이트박스(카드 폭에 맞춰 축소된 썸네일을 화면 가득 크게 — body 포털 z-100, 레이어 z-55 위).
  */
 export function NoticePopupCard({ popup }: { popup: ActivePopup }) {
-  const dismiss = useNoticeDismiss((s) => s.dismiss);
   const [closed, setClosed] = useState(false);
-  const [dontWeek, setDontWeek] = useState(false);
-  const [dontForever, setDontForever] = useState(false);
+  const [mode, setMode] = useState<DismissMode | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [zoomed, setZoomed] = useState(false);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
 
@@ -60,10 +64,23 @@ export function NoticePopupCard({ popup }: { popup: ActivePopup }) {
   // 사이트 안쪽 경로인가 — `//`(프로토콜 상대)는 외부라 제외한다.
   const isInternal = !!popup.linkUrl && popup.linkUrl.startsWith("/") && !popup.linkUrl.startsWith("//");
 
-  const close = () => {
-    if (dontForever) dismiss(popup.id, "forever", popup.updatedAt);
-    else if (dontWeek) dismiss(popup.id, "week", popup.updatedAt);
-    setClosed(true);
+  // 닫기는 이 화면에서 치우기만 한다 — "안 보기" 저장은 이미 체크 시점에 끝났다(위 주석).
+  const close = () => setClosed(true);
+
+  /** 체크 즉시 저장(해제면 삭제). 실패하면 체크 상태를 되돌리고 이유를 보여준다 — 조용히 삼키면 다음 진입에 또 뜬다. */
+  const choose = async (next: DismissMode | null) => {
+    const prev = mode;
+    setMode(next); // 낙관적 반영(왕복 동안 체크가 튀지 않게)
+    setSaveError(null);
+    setSaving(true);
+    const res = next === null
+      ? await undismissNoticePopup(popup.id)
+      : await dismissNoticePopup(popup.id, next);
+    setSaving(false);
+    if ("error" in res) {
+      setMode(prev);
+      setSaveError(res.error);
+    }
   };
 
   return (
@@ -157,14 +174,20 @@ export function NoticePopupCard({ popup }: { popup: ActivePopup }) {
         <footer className="border-line bg-bg-soft/50 flex shrink-0 flex-wrap items-center justify-between gap-2 border-t px-3 py-2">
           <div className="text-text-dim flex items-center gap-3 text-[11px]">
             <label className="flex cursor-pointer items-center gap-1">
-              <input type="checkbox" checked={dontWeek} onChange={(e) => setDontWeek(e.target.checked)} />
+              <input
+                type="checkbox"
+                checked={mode === "week"}
+                disabled={saving}
+                onChange={(e) => void choose(e.target.checked ? "week" : null)}
+              />
               7일간 보지 않기
             </label>
             <label className="flex cursor-pointer items-center gap-1">
               <input
                 type="checkbox"
-                checked={dontForever}
-                onChange={(e) => setDontForever(e.target.checked)}
+                checked={mode === "forever"}
+                disabled={saving}
+                onChange={(e) => void choose(e.target.checked ? "forever" : null)}
               />
               다시 보지 않기
             </label>
@@ -176,6 +199,11 @@ export function NoticePopupCard({ popup }: { popup: ActivePopup }) {
           >
             닫기
           </button>
+          {saveError ? (
+            <p role="status" className="text-danger w-full text-[11px]">
+              {saveError}
+            </p>
+          ) : null}
         </footer>
       </div>
 
