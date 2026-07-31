@@ -44,9 +44,36 @@ describe("fillMentTemplate", () => {
       price: 12000,
     });
     expect(out).toBe(
-      "안녕하세요. 김민수이 쎈 중등수학 3-1 교재를 신청합니다. 금액은 12,000원이며 아래 계좌로 납부 부탁드립니다.",
+      "안녕하세요. 김민수가 쎈 중등수학 3-1 교재를 신청합니다. 금액은 12,000원이며 아래 계좌로 납부 부탁드립니다.",
     );
     expect(out).not.toContain("{");
+  });
+
+  // 🔴 2026-07-31 실사고: 템플릿의 `{학생}이`가 그대로 나가 "김지우이 …"가 학부모에게 발송됐다.
+  it("토큰 뒤 조사를 받침에 맞춘다 — 학부모가 읽는 글이다", () => {
+    const of = (studentName: string) =>
+      fillMentTemplate(DEFAULT_TEXTBOOK_MENT, { studentName, bookName: "쎈", price: 1000 });
+    expect(of("김지우")).toContain("김지우가 쎈 교재를"); // 받침 없음 → 가 (실제 사고 사례)
+    expect(of("김민수")).toContain("김민수가 쎈 교재를");
+    expect(of("박성혁")).toContain("박성혁이 쎈 교재를"); // 받침 있음 → 이
+    expect(of("김태희A")).toContain("김태희A가 쎈 교재를"); // 동명이인 접미 A(에이) → 가
+    expect(of("이수빈L")).toContain("이수빈L이 쎈 교재를"); // L(엘) → 이
+  });
+
+  it("원장이 템플릿의 조사를 바꿔도 받침 규칙이 적용된다", () => {
+    const t = "{학생}은 {교재명}을 신청했습니다.";
+    // 쎈=받침 ㄴ → 을 · 가우스=받침 없음 → 를 (교재명도 같은 규칙을 탄다)
+    expect(fillMentTemplate(t, { studentName: "김지우", bookName: "쎈" })).toBe("김지우는 쎈을 신청했습니다.");
+    expect(fillMentTemplate(t, { studentName: "박성혁", bookName: "가우스" })).toBe(
+      "박성혁은 가우스를 신청했습니다.",
+    );
+  });
+
+  it("조사가 아닌 글자는 건드리지 않는다(오작동 방지)", () => {
+    // `{교재명}과학` — `과`를 조사로 오인하면 "…와학"이 된다. 뒤에 한글이 오면 조사로 안 본다.
+    expect(fillMentTemplate("{교재명}과학", { bookName: "쎈" })).toBe("쎈과학");
+    // 받침을 판정할 수 없는 값(기호)은 적힌 조사를 그대로 둔다.
+    expect(fillMentTemplate("{학생}이 왔다", { studentName: "★" })).toBe("★이 왔다");
   });
 
   it("치환 토큰이 없으면 원문 그대로 둔다(강사 자유 문장 보호)", () => {
@@ -138,7 +165,7 @@ describe("composeTextbookNotice (공통/개별 분리)", () => {
   it("토큰 멘트는 학생마다 달라지므로 공통엔 머리말, 개별에 치환된 멘트", () => {
     const c = composeTextbookNotice(DEFAULT_TEXTBOOK_MENT, { ...base, studentName: "김민수" });
     expect(c.common).toBe(TEXTBOOK_NOTICE_HEADER);
-    expect(c.individual).toContain("김민수이 쎈 중등수학 3-1 교재를 신청합니다");
+    expect(c.individual).toContain("김민수가 쎈 중등수학 3-1 교재를 신청합니다");
     expect(c.individual).toContain("[금액] 12,000원");
     // 워커가 게시하는 형태 = 공통 + 빈 줄 + 개별
     expect(c.full).toBe(`${c.common}\n\n${c.individual}`);
