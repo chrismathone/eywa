@@ -150,16 +150,21 @@ async function recordSync(sql, tenantId, domain, rowCount, status = "ok", error 
 /**
  * 스크랩할 청구월 범위 — makeedu 상세수납의 `fromYm`/`toYm`(텍스트 `YYYY-MM`)에 넣을 값.
  *
- * 🔴 배경(2026-07-30 프로브 실측): 이 목록은 **가장 최근 청구월 한 달**만 기본으로 보여준다. 그래서 청구가
- * 다음 달로 넘어가는 순간(2026-07-16→17) 직전 달이 통째로 동결됐고, 그 뒤 26회 넘는 동기화가 2026-07을
- * 한 건도 만지지 못했다(미수 ₩12.86M이 그날 스냅샷으로 굳음). `fromYm`~`toYm`는 **범위**라
- * 한 번의 조회로 여러 달을 받을 수 있다(실측 857건 → 3,174건).
+ * 🔴🔴 **달력 월로 계산하면 안 된다** (2026-07-31 실측 사고). makeedu는 **선청구**라
+ * 달력 7월 중순에 이미 청구월이 2026-08로 넘어가 있다. 달력 기준으로 `당월-2 ~ 당월`을 넣었더니
+ * `2026-05~2026-07`이 되어 **정작 살아있는 2026-08이 통째로 빠졌고**, 그 달 360건이 한 번도
+ * 갱신되지 않은 채 미수 ₩54M이 옛 스냅샷으로 굳었다.
  *
- * @param today  기준일(KST 'YYYY-MM-DD' 또는 Date). 테스트 결정성을 위해 주입.
- * @param months 포함할 개월 수(당월 포함). 1이면 당월만.
+ * 그래서 **앵커는 makeedu가 말하는 현재 청구월**이다(목록 화면의 `fromYm` 기본값 = 실측 `2026-08`).
+ * 화면에서 못 읽으면 달력 월로 폴백하되, **선청구를 감안해 한 달 더 넓게** 잡는다(빈 달은 무해).
+ *
+ * @param anchor 현재 청구월 `YYYY-MM`(화면에서 읽은 값). 없으면 달력 기준 폴백.
+ * @param months 포함할 개월 수(앵커 포함). 1이면 앵커 달만.
+ * @param today  달력 폴백 기준일(KST 'YYYY-MM-DD' 또는 Date). 테스트 결정성을 위해 주입.
  */
-function billingMonthRange(today, months = 3) {
+function billingMonthRange({ anchor, months = 3, today } = {}) {
   const n = Math.max(1, Math.floor(Number(months) || 1));
+  const pad = (v) => String(v).padStart(2, "0");
   const iso =
     typeof today === "string"
       ? today
@@ -169,13 +174,28 @@ function billingMonthRange(today, months = 3) {
           month: "2-digit",
           day: "2-digit",
         }).format(today || new Date());
-  const [y, m] = iso.split("-").map(Number);
-  const pad = (v) => String(v).padStart(2, "0");
-  // 월 산술은 Date의 월 오버플로에 맡긴다(1월에서 뒤로 갈 때 연도가 알아서 내려간다).
-  const from = new Date(Date.UTC(y, m - 1 - (n - 1), 1));
+  const [cy, cm] = iso.split("-").map(Number);
+
+  let ay, am;
+  const m = /^(\d{4})[-.]?(\d{2})$/.exec(String(anchor || "").trim());
+  if (m) {
+    ay = Number(m[1]);
+    am = Number(m[2]);
+  } else {
+    // 폴백: 달력 당월 +1 (선청구로 이미 다음 달이 열려 있을 수 있다 — 빈 달을 하나 더 보는 비용은 싸다).
+    const nx = new Date(Date.UTC(cy, cm, 1));
+    ay = nx.getUTCFullYear();
+    am = nx.getUTCMonth() + 1;
+  }
+  // 앵커가 달력 당월보다 뒤면 달력 당월을 쓴다(화면 값이 과거로 굳어 있는 이상 상황 방어).
+  if (ay * 12 + am < cy * 12 + cm) {
+    ay = cy;
+    am = cm;
+  }
+  const from = new Date(Date.UTC(ay, am - 1 - (n - 1), 1)); // 월 오버플로가 연도를 알아서 내려준다
   return {
     from: `${from.getUTCFullYear()}-${pad(from.getUTCMonth() + 1)}`,
-    to: `${y}-${pad(m)}`,
+    to: `${ay}-${pad(am)}`,
   };
 }
 

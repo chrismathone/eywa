@@ -24,6 +24,14 @@ const STALE_COVERAGE_MIN = 0.8;
 // ④는 "지금도 수업을 다니는 학생의 이번 달 청구가 삭제됐다"는 설명하기 어려운 전제를 거른다.
 // 둘 중 하나라도 미달이면 void가 아니라 **리포트로만** 남긴다(놓친 게 아니라 보류한 것).
 const STALE_MIN_ABSENT_DAYS = 7;
+
+// ⚠️⚠️ 대량 무효 서킷브레이커 (2026-07-31 실측으로 추가).
+// 스크랩 **범위를 넓힌 첫 실행**에서 17건이 한 번에 void됐다(₩5.4M). 새로 범위에 들어온 달의 행들은
+// 그동안 스크랩 밖이었다는 이유만으로 "부재 지속일"이 길게 잡혀 ③가드를 그냥 통과한다 —
+// 즉 **범위 변경 = 대량 오탐의 조건**이다. 개별 가드로는 이 상황을 못 막는다(각 행은 전부 정상 통과한다).
+// 그래서 "한 실행에서 이보다 많이 지우려 하면 전부 보류하고 사람을 부른다"는 상위 브레이커를 둔다.
+// 돈을 지우는 판정에서 **대량은 그 자체로 신호**다. 의도된 대량 정리는 --allow-bulk-void로 명시한다.
+const STALE_MAX_VOID_PER_RUN = 10;
 const STATUS_KO = { unpaid: "미수", partial: "부분납", paid: "완납", refunded: "환불", void: "무효" };
 
 // ⚠️⚠️ 2026-07-30(2차) 5번째 가드 — **makeedu 퇴원 목록**(scrape.cjs --list=withdrawn, 실측 4,427행).
@@ -67,7 +75,8 @@ const remainWon = (e) =>
  * @param now             부재 지속일 계산 기준(테스트 결정성 위해 주입)
  */
 function classifyStale({
-  existing, scrapedKeys, unmatchedNameKeys, normalizeName, activeStudentIds, withdrawnMakeeduIds, now,
+  existing, scrapedKeys, unmatchedNameKeys, normalizeName, activeStudentIds, withdrawnMakeeduIds,
+  allowBulkVoid, now,
 }) {
   const active = activeStudentIds || new Set();
   const nowMs = (now ? new Date(now) : new Date()).getTime();
@@ -84,7 +93,7 @@ function classifyStale({
   }
   const b = {
     voidable: [], settled: [], holdUnmatched: [], holdManual: [],
-    holdRecent: [], holdActive: [], holdNotWithdrawn: [], heldPeriods: [],
+    holdRecent: [], holdActive: [], holdNotWithdrawn: [], holdBulk: [], heldPeriods: [],
     // 목록을 못 읽은 실행인지 리포트·요약이 알 수 있게 남긴다(가드가 조용히 꺼진 걸 숨기지 않는다).
     withdrawnGuard: withdrawnMakeeduIds ? { enabled: true, size: withdrawnMakeeduIds.size } : { enabled: false },
   };
@@ -109,6 +118,11 @@ function classifyStale({
       else if (!confirmedWithdrawn(e)) b.holdNotWithdrawn.push(e);
       else b.voidable.push(e);
     }
+  }
+  // 상위 브레이커 — 개별 가드를 다 통과했어도 **한 번에 너무 많이** 지우려 하면 전부 보류한다.
+  if (!allowBulkVoid && b.voidable.length > STALE_MAX_VOID_PER_RUN) {
+    b.holdBulk = b.voidable;
+    b.voidable = [];
   }
   return b;
 }
@@ -151,6 +165,13 @@ function printIssues({ stale, unmatchedLines }) {
     console.log(`⚠️ 보류(활성 수강 있음) ${stale.holdActive.length}건 · 잔액 ${won(r)} — 지금도 수업을 다니는 학생이라 '청구 삭제' 전제가 약함. **사람이 확인할 것**:`);
     for (const e of stale.holdActive.slice(0, 15)) console.log(`  - ${fmtRow(e)}`);
   }
+  if (stale.holdBulk?.length) {
+    const r = stale.holdBulk.reduce((s2, e) => s2 + remainWon(e), 0);
+    console.log(`🔴 보류(대량 무효 차단) ${stale.holdBulk.length}건 · 잔액 ${won(r)} — 한 실행 한도 ${STALE_MAX_VOID_PER_RUN}건을 넘어 **전부 보류**했습니다.`);
+    console.log(`   스크랩 범위를 방금 넓혔다면 정상입니다(새 달의 행은 부재일이 길게 잡힙니다). 목록을 확인한 뒤 의도한 정리면 --allow-bulk-void 로 다시 실행하세요:`);
+    for (const e of stale.holdBulk.slice(0, 20)) console.log(`  - ${fmtRow(e)}`);
+    if (stale.holdBulk.length > 20) console.log(`  … 외 ${stale.holdBulk.length - 20}건(리포트 파일에 전체)`);
+  }
   if (stale.holdNotWithdrawn?.length) {
     const r = stale.holdNotWithdrawn.reduce((s2, e) => s2 + remainWon(e), 0);
     console.log(`ℹ️ 보류(makeedu 퇴원 목록에 없음) ${stale.holdNotWithdrawn.length}건 · 잔액 ${won(r)} — 삭제가 아니라 다른 청구월로 옮겨졌을 수 있어 유보:`);
@@ -170,7 +191,11 @@ function issueSummary({ stale, unmatchedLines, voidStale, voided, reconcile, tru
   const parts = [];
   // ⚠️ 절단은 대조보다도 먼저다 — 목록을 덜 받은 상태의 판정은 전부 신뢰할 수 없다.
   if (truncation)
-    parts.push(`🔴 스크랩 절단 의심(화면 ${truncation.reported}건 · 수집 ${truncation.collected}건)`);
+    parts.push(
+      truncation.collected < truncation.reported
+        ? `🔴 스크랩 절단 의심(화면 ${truncation.reported}건 · 수집 ${truncation.collected}건)`
+        : `스크랩 초과 수집(화면 ${truncation.reported}건 · 수집 ${truncation.collected}건 — 합계행 혼입 가능)`,
+    );
   const mism = reconcileSummary(reconcile);
   if (mism) parts.push(mism);
   if (unmatchedLines.length) parts.push(`학생 미매칭 ${unmatchedLines.length}라인`);
@@ -179,6 +204,8 @@ function issueSummary({ stale, unmatchedLines, voidStale, voided, reconcile, tru
   if (stale.settled.length) parts.push(`부재 완납 ${stale.settled.length}건(보존)`);
   // ⚠️ 활성 수강 보류는 **사람이 봐야 하는 신호**다 — 화면 배지의 '확인 필요'로 올라간다.
   if (stale.holdActive.length) parts.push(`재원생 청구 부재 ${stale.holdActive.length}건(확인 필요)`);
+  if (stale.holdBulk?.length)
+    parts.push(`🔴 대량 무효 차단 ${stale.holdBulk.length}건(전부 보류 — 확인 필요)`);
   if (stale.holdNotWithdrawn?.length) parts.push(`퇴원 목록에 없음 ${stale.holdNotWithdrawn.length}건(보류)`);
   if (stale.holdRecent.length) parts.push(`부재 ${STALE_MIN_ABSENT_DAYS}일 미만 ${stale.holdRecent.length}건(보류)`);
   if (stale.heldPeriods.length) parts.push(`커버리지 보류 ${stale.heldPeriods.length}개월`);
@@ -307,7 +334,7 @@ function writeReport(outDir, report) {
     : "대조 없음";
   fs.appendFileSync(
     logPath,
-    `${report.ranAt} apply=${report.apply} voidStale=${report.voidStale} | 대조 ${rec} | 미매칭 ${report.unmatchedLines.length} | 부재 미완납 ${b.voidable.length}·완납 ${b.settled.length} | 보류 매칭 ${b.holdUnmatched.length}·수동 ${b.holdManual.length}·퇴원목록 ${b.holdNotWithdrawn?.length ?? 0}·월 ${b.heldPeriods.length} | void ${report.voidedCount}\n`,
+    `${report.ranAt} apply=${report.apply} voidStale=${report.voidStale} | 대조 ${rec} | 미매칭 ${report.unmatchedLines.length} | 부재 미완납 ${b.voidable.length}·완납 ${b.settled.length} | 보류 매칭 ${b.holdUnmatched.length}·수동 ${b.holdManual.length}·퇴원목록 ${b.holdNotWithdrawn?.length ?? 0}·대량차단 ${b.holdBulk?.length ?? 0}·월 ${b.heldPeriods.length} | void ${report.voidedCount}\n`,
     "utf8",
   );
   return { jsonPath, logPath };
@@ -328,4 +355,5 @@ module.exports = {
   buildWithdrawnIndex,
   STALE_COVERAGE_MIN,
   STALE_MIN_ABSENT_DAYS,
+  STALE_MAX_VOID_PER_RUN,
 };
