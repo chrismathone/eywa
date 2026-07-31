@@ -11,6 +11,7 @@ import {
   extendStaffContract,
   type ContractActionState,
 } from "@/features/staff/server/contract-actions";
+import { ContractPdfPicker } from "./contract-pdf-picker";
 import {
   contractsOnly,
   currentContract,
@@ -65,6 +66,10 @@ export function ContractStatus({
   canWrite: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  // 기간·조건 칸은 컨트롤드 — PDF에서 읽은 값을 여기에 채워 넣어야 하기 때문(uncontrolled면 못 덮는다).
+  const [start, setStart] = useState("");
+  const [end, setEnd] = useState("");
+  const [terms, setTerms] = useState("");
   const [state, formAction] = useActionState<ContractActionState, FormData>(extendStaffContract, undefined);
   const [delState, delAction] = useActionState<ContractActionState, FormData>(deleteLatestStaffContract, undefined);
   const seenRef = useRef<ContractActionState>(undefined);
@@ -108,7 +113,19 @@ export function ContractStatus({
         <h2 className="text-foreground text-sm font-bold">계약현황</h2>
         {canWrite && next ? (
           // 만료됐거나 임박하면 채운 버튼 + '계약 갱신'으로 — 지난 계약을 못 보고 지나치지 않게(원장 지시).
-          <Button variant={dueSoon ? "default" : "outline"} size="sm" onClick={() => setOpen((v) => !v)}>
+          <Button
+            variant={dueSoon ? "default" : "outline"}
+            size="sm"
+            onClick={() => {
+              // 열 때 다음 차수 기본값을 채워 넣는다(칸이 컨트롤드라 defaultValue를 못 쓴다).
+              if (!open) {
+                setStart(next.startDate);
+                setEnd(next.endDate);
+                setTerms("");
+              }
+              setOpen(!open);
+            }}
+          >
             {open ? <X className="size-3.5" /> : <Plus className="size-3.5" />}
             {open ? "취소" : actionLabel}
           </Button>
@@ -171,25 +188,56 @@ export function ContractStatus({
       {open && next ? (
         <form action={formAction} className="border-line mt-4 rounded-xl border p-4">
           <input type="hidden" name="userId" value={userId} />
-          <p className="micro mb-2">{next.seq}차 계약 기입</p>
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <p className="micro">{next.seq}차 계약 기입</p>
+            {/* 계약서 PDF에서 기간·조건을 읽어 아래 칸을 채운다. **저장은 사람이** — 돈 정보라 확인 단계를 둔다. */}
+            <ContractPdfPicker
+              onExtract={(d) => {
+                if (d.startDate) setStart(d.startDate);
+                if (d.endDate) setEnd(d.endDate);
+                if (d.terms) setTerms(d.terms);
+              }}
+            />
+          </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label htmlFor="c-start" className="micro mb-1 block">
                 시작일
               </label>
-              <input id="c-start" name="startDate" type="date" defaultValue={next.startDate} className={inputClass} />
+              <input
+                id="c-start"
+                name="startDate"
+                type="date"
+                value={start}
+                onChange={(e) => setStart(e.target.value)}
+                className={inputClass}
+              />
             </div>
             <div>
               <label htmlFor="c-end" className="micro mb-1 block">
                 종료일
               </label>
-              <input id="c-end" name="endDate" type="date" defaultValue={next.endDate} className={inputClass} />
+              <input
+                id="c-end"
+                name="endDate"
+                type="date"
+                value={end}
+                onChange={(e) => setEnd(e.target.value)}
+                className={inputClass}
+              />
             </div>
           </div>
           <label htmlFor="c-terms" className="micro mt-3 mb-1 block">
             계약조건
           </label>
-          <input id="c-terms" name="terms" placeholder="예: 급여제 강사" className={inputClass} />
+          <input
+            id="c-terms"
+            name="terms"
+            value={terms}
+            onChange={(e) => setTerms(e.target.value)}
+            placeholder="예: 급여제 강사"
+            className={inputClass}
+          />
           <label htmlFor="c-memo" className="micro mt-3 mb-1 block">
             메모
           </label>
