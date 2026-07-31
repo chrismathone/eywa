@@ -561,10 +561,11 @@ function SubTab({
       className={`block truncate rounded text-[11px] transition ${
         inFlyout ? "px-2.5 py-1" : "py-0.5 pr-2 pl-9"
       } focus-visible:ring-primary/50 focus-visible:ring-inset focus-visible:ring-2 focus-visible:outline-none ${
-        // 활성 하부탭은 **칠해서** 표시한다 — 글자색만 바꾸면 "여기 있다"가 안 읽힌다
-        // (원장 2회 지적 2026-07-31). 부모 메뉴(진한 pill)와 위계가 보이게 옅은 채움 + 굵게.
+        // 활성 하부탭 = **왼쪽 세로 막대 + 채움 + 굵게**(원장 3회 지적 2026-07-31 — 옅은 칠만으론
+        // "이 메뉴 안에 있다"가 안 읽혔다). 막대는 inset 그림자라 자리를 안 밀어 글자가 흔들리지 않는다.
+        // 부모는 진한 네이비 pill, 자식은 옅은 네이비 + 막대 → 위계가 한눈에 보인다.
         active
-          ? "bg-primary/12 text-primary font-bold"
+          ? "bg-primary/15 text-primary font-bold shadow-[inset_3px_0_0_var(--primary)]"
           : "text-text-dim hover:text-foreground hover:bg-bg-soft"
       }`}
     >
