@@ -440,3 +440,24 @@ describe("classifyStale — 검증된 스크랩에서는 부재가 사실", () =
     expect(classify([row()]).scrapeVerified).toBe(false);
   });
 });
+
+// 🔴 2026-07-31 실측 회귀 — 외부 대조가 **잣대를 잘못 잡아** 불일치로 나왔던 두 경우.
+describe("reconcileExternal — 잣대 맞추기(실측 회귀)", () => {
+  const rep = { lines: 10, total: 1000, discount: 50, points: 0, paid: 900, unpaid: 50 };
+
+  // 미납을 (학생×월) 단위로 재계산하면 음수가 0으로 clamp돼 라인 합과 어긋난다.
+  it("미납은 라인 합 그대로여야 일치한다", () => {
+    const lineSum = { ...rep };                       // 라인 합 그대로
+    expect(S.reconcileExternal({ reported: rep, stored: lineSum, scrapedLines: 10 }).ok).toBe(true);
+    const clamped = { ...rep, unpaid: 50 + 191_250 }; // clamp로 부풀린 값
+    expect(S.reconcileExternal({ reported: rep, stored: clamped, scrapedLines: 10 }).ok).toBe(false);
+  });
+
+  // 미매칭 라인을 빼고 비교하면 매칭이 나쁠수록 대조가 실패해 검증이 영영 안 선다.
+  it("저장분만 비교하면 미매칭분만큼 어긋난다 — 미매칭을 더해야 맞는다", () => {
+    const savedOnly = { ...rep, total: 1000 - 300, paid: 900 - 300 };
+    expect(S.reconcileExternal({ reported: rep, stored: savedOnly, scrapedLines: 10 }).ok).toBe(false);
+    const withUnmatched = { ...savedOnly, total: savedOnly.total + 300, paid: savedOnly.paid + 300 };
+    expect(S.reconcileExternal({ reported: rep, stored: withUnmatched, scrapedLines: 10 }).ok).toBe(true);
+  });
+});
