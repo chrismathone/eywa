@@ -23,7 +23,12 @@
   비-staff 세션에서 읽음 — 0170a 주석에 명기).
 - **데이터**: [`scripts/staff-access/narrow-staff-menu.mjs`](../scripts/staff-access/narrow-staff-menu.mjs)
   (드라이런✓ — staff: admin/manager/accountant→none + counselor readonly 제거 + 설현·이승엽 개인 full, 로그·원복 포함).
-  ⚠️ **적용 순서 = 배포 → 0170a SQL → 스크립트 --apply**(옛 코드는 userOverrides를 몰라 순서 어기면 설현·이승엽 잠김).
+  ⚠️ **적용 순서 = 배포 → 스크립트 --apply**(옛 코드는 userOverrides를 몰라 순서 어기면 설현·이승엽 잠김).
+- **0170a SQL 보류 + 코드 우회(후속, 같은 날)**: 원장이 Supabase SQL Editor 접근 불가 → staff_contracts를
+  읽던 3곳(목록 계약열 `getStaffList`·상세 `getStaffContracts`·계약 액션 차수계산)을 **앱 게이트(개인 예외
+  반영) 통과 후 admin client + tenant_id 명시 필터**로 전환해 SQL 없이 4인 체제 완전 동작. 잔여 DB 직결
+  구멍(잠긴 관리자의 이력서 restricted 읽기·office 역할의 staff_contracts 직접 쓰기)은 0170a 헤더에 명기 —
+  **접근 복구되면 0170a 실행**(멱등·언제든 안전).
 - **owner 역할·권한 면**: 저장 payload에 userOverrides 관통(매트릭스 저장 한 번에 개인 예외 전멸 방지) +
   개인 예외 읽기 전용 목록 표시(이름 매핑 `getUserDisplayNames`). 편집 UI는 비채택 — 관리는 스크립트 경로.
 - 부수리: CLAUDE.md에 커밋돼 있던 **머지 충돌 마커**(#90 vs #91~93, 485-491행) 해소 — 양쪽 항목 전부 보존·번호순 정렬.

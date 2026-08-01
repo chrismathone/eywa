@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { canAccessTenant } from "@/lib/auth/perm-matrix";
 import type { SystemRole } from "@/lib/permissions";
 import {
   WORK_DAYS,
@@ -39,6 +40,13 @@ export type StaffRow = {
 
 export async function getStaffList(): Promise<StaffRow[]> {
   const supabase = await createClient();
+  // 계약 열은 **admin client**로 읽는다(2026-08-01) — staff_contracts RLS(0167a)는 auth_menu_access를
+  // 보는데, 직원관리를 개인 예외로 좁히면서(userOverrides) DB 함수 갱신(0170a)이 원장 Supabase 접근
+  // 불가로 보류됐다. 진짜 게이트는 앱(개인 예외 반영 canAccessTenant) — 통과 못 하면 빈 배열, 통과하면
+  // RLS 우회 + tenant 명시 필터. ⚠️ admin 경로는 tenant_id 필터가 격리의 전부다(빼먹으면 크로스테넌트).
+  const viewer = await getCurrentUser();
+  const canSeeContracts = !!viewer && (await canAccessTenant(viewer.systemRole, "staff"));
+  const admin = createAdminClient();
 
   // 세 쿼리는 서로 독립 → 병렬(3 round-trip → 1). users/classes/students 모두 단일 테넌트 ≤1000행이라
   // 절단 위험 없음(현재 users 39·classes 129·enrolled 524).
@@ -53,17 +61,19 @@ export async function getStaffList(): Promise<StaffRow[]> {
       .order("display_name", { ascending: true }),
     supabase.from("classes").select("id, teacher_id").eq("is_active", true),
     // 현재 계약(시트 '현재 계약'·'계약조건'·'계약갱신일' 열) — 기간 있는 계약만, 페이지네이션으로 전건(B2).
-    // ⚠️ RLS(0167a)가 사무실만 읽게 하므로 그 밖의 역할은 빈 배열 → 계약 칸이 비어 보인다(정상).
-    fetchAllPaged<{ user_id: string; seq: number; start_date: string; end_date: string; terms: string | null }>(
-      (from, to) =>
-        supabase
-          .from("staff_contracts")
-          .select("user_id, seq, start_date, end_date, terms")
-          .eq("kind", "contract")
-          .order("user_id", { ascending: true })
-          .order("seq", { ascending: true })
-          .range(from, to),
-    ).catch(() => []),
+    !canSeeContracts
+      ? Promise.resolve([] as { user_id: string; seq: number; start_date: string; end_date: string; terms: string | null }[])
+      : fetchAllPaged<{ user_id: string; seq: number; start_date: string; end_date: string; terms: string | null }>(
+          (from, to) =>
+            admin
+              .from("staff_contracts")
+              .select("user_id, seq, start_date, end_date, terms")
+              .eq("tenant_id", viewer.tenantId)
+              .eq("kind", "contract")
+              .order("user_id", { ascending: true })
+              .order("seq", { ascending: true })
+              .range(from, to),
+        ).catch(() => []),
   ]);
 
   if (!users) return [];

@@ -1,5 +1,14 @@
 -- 0170a — 권한 매트릭스에 **개인 예외(userOverrides)** 추가 + 이력서 restricted 백스톱을 직원관리 게이트로.
 --
+-- ⚠️⚠️ **적용 보류 중(2026-08-01)** — 원장이 당장 Supabase SQL Editor에 접근할 수 없어 코드 우회를 먼저
+--    깔았다: staff_contracts를 읽던 3곳(목록 계약열·상세 계약이력·계약 액션의 차수계산)이 **앱 게이트
+--    (개인 예외 반영) 통과 후 admin client + tenant_id 명시 필터**로 읽는다 → 이 SQL 없이도 4인 체제가
+--    완전 동작한다. 단 이 SQL을 실행하기 전까지 남는 **DB 직결(PostgREST) 잔여 구멍**: ① 잠긴 관리자
+--    5명이 자기 토큰으로 이력서 restricted 행을 읽을 수 있다(0148a 역할 목록이 아직 admin 포함) ②
+--    잠긴 사무실 역할이 staff_contracts에 직접 쓸 수 있다(0149a office_write가 역할 목록). 화면·서버
+--    액션은 전부 막혀 있어 조작 난도가 높은 틈이지만, **접근이 복구되면 이 파일을 실행해 닫을 것.**
+--    실행 시점은 언제든 안전(멱등 + 실행 전후 앱 동작 불변 — 앱은 이미 admin client 경로).
+--
 -- 배경(2026-08-01 원장 지시): 직원관리(/staff)를 **원장 2명(원일·박소선) + 개발팀 설현·이승엽** 4인으로
 -- 좁힌다. 설현·이승엽은 system_role=admin이라 **역할 축으로는 다른 관리자 5명과 구분할 수 없다** →
 -- tenant_settings.data.permissions에 `userOverrides`([{userId, menu, access}])를 신설해 특정 사용자에게만

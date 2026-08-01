@@ -9,8 +9,9 @@
 //   node scripts/staff-access/narrow-staff-menu.mjs            # 드라이런(변경 없음, 계획 출력)
 //   node scripts/staff-access/narrow-staff-menu.mjs --apply    # 적용(이전 permissions를 로그로 보존)
 //
-// ⚠️ 실행 순서: **새 코드 배포 + 0170a SQL 실행 뒤에** 적용할 것 — 옛 코드는 userOverrides를 몰라
-//    적용 즉시 설현·이승엽이 잠긴다(역할 override는 옛 코드도 읽는다).
+// ⚠️ 실행 순서: **새 코드(개인 예외 + 계약 admin-client 읽기) 배포 뒤에** 적용할 것 — 옛 코드는
+//    userOverrides를 몰라 적용 즉시 설현·이승엽이 잠긴다(역할 override는 옛 코드도 읽는다).
+//    0170a SQL은 보류 가능(코드가 계약 읽기를 admin client로 우회) — 접근 복구되면 실행해 DB 잔여 구멍을 닫는다.
 // 원복: node scripts/staff-access/revert-narrow-staff-menu.mjs logs/narrow-staff-menu-<ts>.json --apply
 //
 // 대상 사용자는 이름+역할로 찾되 **정확히 1명씩** 매칭돼야 진행한다(동명이인·오타 방어).

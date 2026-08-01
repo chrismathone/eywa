@@ -3,12 +3,14 @@
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { humanizeDbError } from "@/lib/supabase/db-error";
 import { logAction } from "@/features/audit/server/log";
 
 // 계약 연장·기입(원장 지시 2026-07-29) — 직원 상세 '계약현황'의 유일한 쓰기 경로.
-// 쓰기 자격 = 직원관리 메뉴 쓰기 권한(개인 예외 포함, 2026-08-01) — 화면·서버·DB(auth_staff_can_read) 3중.
+// 쓰기 자격 = 직원관리 메뉴 쓰기 권한(개인 예외 포함, 2026-08-01) — 게이트 통과 후 admin client로 조회·기입.
+// (staff_contracts 읽기 RLS는 auth_menu_access를 보는데 개인 예외를 아는 0170a가 보류 중 — authenticated로
+// 읽으면 개인 허용 admin의 차수 계산이 빈 결과가 돼 차수가 꼬인다. admin 경로는 tenant_id 필터 필수.)
 
 export type ContractActionState = { ok?: true; error?: string; notice?: string } | undefined;
 
@@ -33,21 +35,22 @@ export async function extendStaffContract(
   if (!YMD.test(startDate) || !YMD.test(endDate)) return { error: "계약 기간을 모두 입력하세요" };
   if (endDate <= startDate) return { error: "종료일은 시작일보다 뒤여야 합니다" };
 
-  const supabase = await createClient();
-  // 대상이 우리 학원 직원인지 재확인(폼 변조 차단). RLS도 이중 방어.
+  const supabase = createAdminClient();
+  // 대상이 우리 학원 직원인지 재확인(폼 변조 차단) — admin client라 RLS가 없으니 tenant 대조가 격리의 전부.
   const { data: target, error: targetErr } = await supabase
     .from("users")
     .select("id, display_name, tenant_id")
     .eq("id", userId)
     .maybeSingle();
   if (targetErr) return { error: humanizeDbError(targetErr.message, "확인"), };
-  if (!target) return { error: "직원을 찾을 수 없습니다" };
+  if (!target || target.tenant_id !== actor.tenantId) return { error: "직원을 찾을 수 없습니다" };
 
   // 다음 차수 = 현재 최대 + 1. 계약이 하나도 없으면 1차부터.
   // 차수는 **계약(kind='contract')만** 센다 — note는 전부 seq=0이라 섞이면 다음 차수가 1로 되돌아간다.
   const { data: last, error: lastErr } = await supabase
     .from("staff_contracts")
     .select("seq")
+    .eq("tenant_id", actor.tenantId)
     .eq("user_id", userId)
     .eq("kind", "contract")
     .order("seq", { ascending: false })
@@ -91,11 +94,12 @@ export async function deleteLatestStaffContract(
   const contractId = String(formData.get("contractId") ?? "").trim();
   if (!userId || !contractId) return { error: "삭제할 계약을 찾을 수 없습니다" };
 
-  const supabase = await createClient();
+  const supabase = createAdminClient();
   // 삭제는 **계약의 마지막 차수만** — 시트에서 온 이력 줄(note)은 여기서 지우지 않는다(원문 보존).
   const { data: rows, error: readErr } = await supabase
     .from("staff_contracts")
     .select("id, seq")
+    .eq("tenant_id", actor.tenantId)
     .eq("user_id", userId)
     .eq("kind", "contract")
     .order("seq", { ascending: false })
@@ -108,6 +112,7 @@ export async function deleteLatestStaffContract(
   const { error, data: deleted } = await supabase
     .from("staff_contracts")
     .delete()
+    .eq("tenant_id", actor.tenantId)
     .eq("id", contractId)
     .select("id"); // ⚠️ select 없으면 0행 삭제도 error:null — "지웠다"는 거짓 성공이 된다.
   if (error) return { error: humanizeDbError(error.message, "삭제") };
