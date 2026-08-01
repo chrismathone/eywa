@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { DEFAULT_UI_FONT_SIZE, type UiFontSize } from "@/lib/ui-prefs/font-size";
 
 /**
  * 워크스페이스 사용자 설정(영속, localStorage "eywa-prefs").
@@ -30,6 +31,13 @@ type PrefsState = {
   /** 시간표 기본뷰 셀 색 강도 — 상단 토글에서 3중1택. 기본 vivid(쨍하게). */
   timetableColor: TimetableColorMode;
   setTimetableColor: (v: TimetableColorMode) => void;
+  /**
+   * 시간표 글씨 크기(작음/보통/큼) — **모든 뷰**(기본·통합·강사)를 같은 비율로 확대한다.
+   * 색 강도와 같은 구조: 진실은 계정(`ui_prefs.timetable.fontSize`)이고 이 스토어는 "클릭 즉시 반영"용
+   * 런타임 값이다(첫 렌더에 계정값 주입 = TimetableFontPrefSync).
+   */
+  timetableFontSize: UiFontSize;
+  setTimetableFontSize: (v: UiFontSize) => void;
   /**
    * 직원 목록 표 글자 크기(%) — 목록 위 −/+ 버튼(원장 지시 2026-07-31: 표 글씨가 작아 안 보임).
    * 100 = 기본 13px. 사람마다 화면·시력이 달라 개인 설정으로 둔다(영속).
@@ -65,6 +73,8 @@ export const usePrefs = create<PrefsState>()(
       setOnboarded: (onboarded) => set({ onboarded }),
       timetableColor: "vivid", // 기본 쨍하게(시트식). 개인이 상단 토글로 mid/pastel 선택 시 영속.
       setTimetableColor: (timetableColor) => set({ timetableColor }),
+      timetableFontSize: DEFAULT_UI_FONT_SIZE, // 기본 '작음' = 배율 1(지금 화면 그대로).
+      setTimetableFontSize: (timetableFontSize) => set({ timetableFontSize }),
       staffColumnOrder: [],
       staffColumnHidden: [],
       setStaffColumns: (staffColumnOrder, staffColumnHidden) => set({ staffColumnOrder, staffColumnHidden }),

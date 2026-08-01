@@ -16,6 +16,8 @@ import {
 } from "@/features/attendance/edit-window";
 import { isEnrollmentActiveOn, enrollmentAttendsOnDay } from "@/features/enrollments/eligibility";
 import { logAction } from "@/features/audit/server/log";
+import { getCurrentUser } from "@/lib/auth/current-user";
+import { DEFAULT_ECS_FONT_SIZE, ECS_FONT_SIZES, type EcsFontSize } from "../font-size";
 import { normalizePlanText } from "../lib/plan-codec";
 import { validatePatchBatch, type PatchResult } from "../lib/save-keys";
 import { dowKeyOf, HHMM_RE, normalizePeriodStart, YMD_RE } from "../lib/week";
@@ -590,4 +592,51 @@ export async function clearPresentAttendance(input: {
     });
   }
   return { ok: true, cleared: res.cleared ?? 0 };
+}
+
+/**
+ * ECS '글씨 크기'를 **본인 계정**에 저장 — `users.ui_prefs.ecs.fontSize`(원스크린과 같은 규약).
+ *
+ * ⚠️ ui_prefs는 화면별 네임스페이스라 **`ecs` 키만 갈아끼우고 형제 키(onescreen·timetable)는 보존**한다.
+ * ⚠️ 기본값('작음')이면 키를 지운다 — 빈 값이 쌓이지 않게.
+ * ⚠️ `revalidatePath` 없음: 크기는 클라 state가 즉시 반영하고 이 저장은 다음 방문용 영속화일 뿐이다.
+ * ⚠️ 반 게이트(requireEcsClassAccess)가 아니라 **로그인만** 본다 — 내 계정의 표시 취향이라 반과 무관하다.
+ */
+export async function setMyEcsFontSize(size: EcsFontSize): Promise<{ ok: boolean; error?: string }> {
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, error: "로그인이 필요합니다" };
+  if (!(ECS_FONT_SIZES as readonly string[]).includes(size)) {
+    return { ok: false, error: "잘못된 글씨 크기입니다" };
+  }
+  const admin = createAdminClient();
+  const { data: row, error: readErr } = await admin
+    .from("users")
+    .select("ui_prefs")
+    .eq("id", user.id)
+    .eq("tenant_id", user.tenantId)
+    .maybeSingle();
+  if (readErr) return { ok: false, error: readErr.message };
+
+  const raw =
+    row?.ui_prefs && typeof row.ui_prefs === "object" && !Array.isArray(row.ui_prefs)
+      ? (row.ui_prefs as Record<string, unknown>)
+      : {};
+  const ns =
+    raw.ecs && typeof raw.ecs === "object" && !Array.isArray(raw.ecs)
+      ? { ...(raw.ecs as Record<string, unknown>) }
+      : {};
+  if (size === DEFAULT_ECS_FONT_SIZE) delete ns.fontSize;
+  else ns.fontSize = size;
+
+  const merged = { ...raw };
+  if (Object.keys(ns).length === 0) delete merged.ecs;
+  else merged.ecs = ns;
+
+  const { error } = await admin
+    .from("users")
+    .update({ ui_prefs: merged })
+    .eq("id", user.id)
+    .eq("tenant_id", user.tenantId);
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
 }

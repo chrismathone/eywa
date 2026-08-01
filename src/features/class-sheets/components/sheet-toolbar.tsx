@@ -7,6 +7,7 @@ import { addWeeks, thisMonday } from "@/features/timetable/lib/week";
 import { EditingBadge } from "@/features/presence/editing-badge";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import type { ClassSheetWeekData } from "../server/queries";
+import { ECS_FONT_SIZES, ECS_FONT_SIZE_LABEL, type EcsFontSize } from "../font-size";
 import { useSaveIndicator, type SheetSaveStore } from "./use-sheet-saves";
 
 const DOW_KO: Record<string, string> = { mon: "월", tue: "화", wed: "수", thu: "목", fri: "금", sat: "토", sun: "일" };
@@ -31,6 +32,8 @@ export function SheetToolbar({
   panelOpen,
   onTogglePanel,
   onNavigate,
+  fontSize,
+  onFontSize,
 }: {
   data: ClassSheetWeekData;
   classOptions: { id: string; name: string }[];
@@ -40,6 +43,9 @@ export function SheetToolbar({
   panelOpen: boolean;
   onTogglePanel: () => void;
   onNavigate: (href: string) => void;
+  /** 글씨 크기(내 계정) — 아래 계획 패널·주간 그리드를 통째로 확대. 상단 바는 그대로. */
+  fontSize: EcsFontSize;
+  onFontSize: (size: EcsFontSize) => void;
 }) {
   const { pending, conflicts } = useSaveIndicator(store);
   const hrefFor = (classId: string, monday: string) => `/ecs/${classId}?week=${monday}`;
@@ -115,6 +121,27 @@ export function SheetToolbar({
       </div>
 
       <span className="ml-auto flex items-center gap-2">
+        {/* 글씨 크기(내 계정) — 수업보고서 강사뷰와 같은 컨트롤·같은 어휘(원장 지시 2026-07-31).
+            지금 크기가 '작음'이라 기본은 화면 무변경. 저장은 계정이라 다른 PC에서도 같은 크기. */}
+        <span
+          className="border-line-strong flex items-center rounded-full border p-0.5"
+          title="계획 패널·주간 시트의 글씨 크기(내 계정) — 다른 PC에서도 같은 크기로 열립니다"
+        >
+          <span className="text-text-dim px-1.5 text-[11px] font-bold">글씨</span>
+          {ECS_FONT_SIZES.map((s) => (
+            <button
+              key={s}
+              type="button"
+              onClick={() => onFontSize(s)}
+              aria-pressed={fontSize === s}
+              className={`cursor-pointer rounded-full px-1.5 py-0.5 text-[11px] font-bold transition ${
+                fontSize === s ? "bg-primary text-primary-foreground" : "text-text-dim hover:bg-bg-soft"
+              }`}
+            >
+              {ECS_FONT_SIZE_LABEL[s]}
+            </button>
+          ))}
+        </span>
         <EditingBadge scope={`ecs:${data.classId}:${data.weekMonday}`} />
         {conflicts > 0 ? (
           <span className="text-danger text-[12px] font-bold whitespace-nowrap">충돌 {conflicts}건 — 셀에서 선택</span>

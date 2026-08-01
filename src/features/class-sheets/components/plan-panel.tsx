@@ -4,6 +4,8 @@
 // 시트 원본의 "담임 월간계획/주간계획·부담임 월간계획/주간계획" 4구획을 아코디언으로 이식. LWW 자동저장.
 import { EyIcon } from "@/components/icons/eywa-icons";
 import type { SkillAreaSetting } from "@/features/owner/settings-types";
+import { skillAreaColorOf } from "@/features/owner/skill-areas";
+import { SUBJECT_SOFT } from "@/features/owner/subjects";
 import type { SheetGoalDTO } from "../server/queries";
 
 const inputCls =
@@ -68,7 +70,7 @@ export function PlanPanel({
             </summary>
             <div className="space-y-1.5 px-1 pt-1 pb-3">
               {/* 열 머리글 — 시트의 '교재명 / 목표 진도' 머리줄. faint 10px는 안 읽혀 dim 11px 굵게로. */}
-              <div className="text-text-dim bg-bg-soft grid grid-cols-[64px_1fr_1fr] gap-1 rounded-md px-1 py-0.5 text-[11px] font-semibold">
+              <div className="text-text-dim bg-bg-soft grid grid-cols-[74px_1fr_1fr] gap-1 rounded-md px-1 py-0.5 text-[11px] font-semibold">
                 <span />
                 <span>교재명</span>
                 <span>목표 진도</span>
@@ -76,8 +78,15 @@ export function PlanPanel({
               {skillAreas.map((area) => {
                 const g = goalOf(sec.scope, sec.role, area.key);
                 return (
-                  <div key={area.key} className="grid grid-cols-[64px_1fr_1fr] items-center gap-1">
-                    <span className="text-foreground truncate text-[12px] font-medium" title={area.label}>
+                  <div key={area.key} className="grid grid-cols-[74px_1fr_1fr] items-center gap-1">
+                    {/* 영역 = 고유색 알약 + 굵게(원장 지시 2026-07-31 "아 보카네! 같은 느낌").
+                        색은 학원설정 단일 소스(skillAreaColorOf) — 여기서 이름별 색을 박지 말 것. */}
+                    <span
+                      className={`truncate rounded-full px-1.5 py-0.5 text-center text-[12px] font-bold ${
+                        SUBJECT_SOFT[skillAreaColorOf(skillAreas, area.key)]
+                      }`}
+                      title={area.label}
+                    >
                       {area.label}
                     </span>
                     <input

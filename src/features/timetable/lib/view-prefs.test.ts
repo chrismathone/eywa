@@ -267,6 +267,32 @@ describe("mergeViewPrefs — 부분 저장이 서로를 덮지 않는다", () =>
   });
 });
 
+describe("fontSize — 모든 뷰 공통 글씨 크기(계정)", () => {
+  it("저장값을 읽고, 모르는 값·미설정은 null(= 기본 '작음' 폴백)", () => {
+    expect(parseViewPrefs({ timetable: { fontSize: "lg" } }).fontSize).toBe("lg");
+    expect(parseViewPrefs({ timetable: { fontSize: "huge" } }).fontSize).toBeNull();
+    expect(parseViewPrefs({ timetable: {} }).fontSize).toBeNull();
+  });
+
+  it("다른 화면(ECS·원스크린) 값을 훔쳐 읽지 않는다", () => {
+    expect(parseViewPrefs({ ecs: { fontSize: "lg" } }).fontSize).toBeNull();
+  });
+
+  it("기본값('작음')은 키를 안 적는다(빈 값이 쌓이지 않게)", () => {
+    expect(serializeViewPrefs(prefs({ fontSize: "sm" })).fontSize).toBeUndefined();
+    expect(serializeViewPrefs(prefs({ fontSize: "lg" })).fontSize).toBe("lg");
+  });
+
+  it("글씨 크기만 저장해도 학년 필터·색이 살아남는다(부분 병합 회귀 가드)", () => {
+    const current = prefs({ grades: ["고3"], colorMode: "vivid", hideEmptyDays: true });
+    const next = mergeViewPrefs(current, { fontSize: "md" });
+    expect(next.fontSize).toBe("md");
+    expect(next.grades).toEqual(["고3"]);
+    expect(next.colorMode).toBe("vivid");
+    expect(next.hideEmptyDays).toBe(true);
+  });
+});
+
 describe("mergeCompact1h", () => {
   it("그 과목만 갈아끼운다(다른 과목 보존)", () => {
     expect(mergeCompact1h({ english: [540], math: [480] }, { math: [600] })).toEqual({

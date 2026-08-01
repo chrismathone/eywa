@@ -15,10 +15,12 @@ import {
   markPresentIfAbsent,
   movePlanLine as movePlanLineAction,
   saveMemo,
+  setMyEcsFontSize,
   upsertGoal,
   upsertStudentMark,
   type PlanLineDTO,
 } from "../server/actions";
+import { ECS_FONT_SIZE_ZOOM, type EcsFontSize } from "../font-size";
 import { buildSaveKey, type PlanFieldPatch } from "../lib/save-keys";
 import { PLAN_PATCH_FIELDS, isMeaningfulPlanLine } from "../lib/plan-codec";
 import { useSheetDoc } from "./use-sheet-doc";
@@ -140,6 +142,18 @@ export function SheetClient({
   }, []);
 
   const [panelOpen, setPanelOpen] = useState(true);
+
+  // ── 글씨 크기(내 계정) ─────────────────────────────────────────────────────
+  // 서버 확정값으로 시작(첫 렌더부터 정확 — localStorage 초기값은 하이드레이션 크래시 #75).
+  // 화면은 **즉시** 바꾸고 계정 저장은 뒤따른다(반응속도 1순위). 저장 실패해도 이번 세션 크기는 유지.
+  const [fontSize, setFontSize] = useState<EcsFontSize>(data.fontSize);
+  const changeFontSize = useCallback((size: EcsFontSize) => {
+    setFontSize(size);
+    void setMyEcsFontSize(size).then((r) => {
+      if (!r.ok) toast.error("글씨 크기를 계정에 저장하지 못했습니다 — 이 화면에서는 적용됩니다");
+    });
+  }, []);
+  const fontZoom = ECS_FONT_SIZE_ZOOM[fontSize];
 
   // ── 네비(주/반 이동) — flush 성공 후에만 이동, 실패·미확정 시 중단(저널 보존) ─
   const navigate = useCallback(
@@ -336,6 +350,8 @@ export function SheetClient({
         panelOpen={panelOpen}
         onTogglePanel={() => setPanelOpen((v) => !v)}
         onNavigate={navigate}
+        fontSize={fontSize}
+        onFontSize={changeFontSize}
       />
 
       {doc.recoverable ? (
@@ -358,7 +374,13 @@ export function SheetClient({
 
       {canEdit && weekIsEmpty ? <CopyPrevWeek classId={classId} weekMonday={weekMonday} weekLabelText={data.weekLabel} /> : null}
 
-      <div className="flex min-h-0 flex-1 items-stretch gap-3">
+      {/* 글씨 크기 — 계획 패널 + 주간 그리드만 감싼다(상단 바는 그대로: 크기를 고르는 컨트롤이 같이
+          커지면 어지럽다). ⚠️ font-size가 아니라 zoom인 이유는 font-size.ts 주석 참조(열 폭이 px 고정인 표).
+          기본('작음')은 배율 1이라 **스타일 자체를 안 붙인다** — 손대지 않은 사용자의 렌더는 완전 무변경. */}
+      <div
+        className="flex min-h-0 flex-1 items-stretch gap-3"
+        style={fontZoom === 1 ? undefined : { zoom: fontZoom }}
+      >
         {panelOpen ? (
           <PlanPanel
             goals={goals}

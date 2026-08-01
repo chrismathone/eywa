@@ -6,10 +6,13 @@
  * 그대로 재사용하고, 이 모듈은 "무슨 글자를 보낼지"만 책임진다.
  *
  * ⚠️ textbook_orders.notes(사무실 내부 메모)는 **입력 타입에 아예 없다** — 학부모 노출 금지를 구조로 차단.
+ * ⚠️ 토큰 뒤 조사(이/가…)는 `fillMentTemplate`가 받침에 맞춰 고른다 — 템플릿 문자열을 그대로 믿지 말 것.
  *
  * 공지 레일의 본문 조립 규약: 워커가 게시하는 글 = `공통(notice.body)` + "\n\n" + `개별(target.body)`.
  * 그래서 학생마다 달라지는 부분(교재·금액, 치환된 멘트)은 **개별**에, 전원 공통인 문장만 **공통**에 둔다.
  */
+
+import { JOSA_ALTERNATION, pickJosa } from "@/lib/text/josa";
 
 /** 계좌(학원설정 accountForTarget(billing,"textbook")) — 구조적 부분집합이라 AccountSetting을 그대로 받는다. */
 export type TextbookNoticeAccount =
@@ -53,17 +56,31 @@ export function mentHasTokens(template: string | null | undefined): boolean {
 }
 
 /**
+ * 토큰 + **바로 뒤 조사**. 조사는 뒤에 한글이 안 올 때만 조사로 본다 — `{교재명}과학`의 `과`를
+ * 조사로 오인해 `…와학`으로 망가뜨리지 않기 위한 안전장치(못 알아보면 원문 유지 = 무해).
+ */
+const TOKEN_JOSA_RE = new RegExp(`\\{(학생|교재명|금액)\\}(?:(${JOSA_ALTERNATION})(?![가-힣]))?`, "g");
+
+/**
  * 멘트 템플릿 치환 — {학생}/{교재명}/{금액}. **토큰이 없으면 원문 그대로**(강사가 자유 문장을 써도 안 깨짐).
  * 값이 비면 빈 문자열로 치환하고 남는 연속 공백만 정리한다(raw 토큰이 학부모에게 노출되지 않게).
+ *
+ * 🔴 **토큰 뒤 조사는 치환된 값의 받침에 맞춘다**(2026-07-31 원장 제보). 예전엔 템플릿에 적힌 `이`가
+ *    그대로 나가 **"김지우이 … 신청합니다"**가 학부모에게 발송됐다. 이제 `김지우` → `가`, `김민수` → `이`.
+ *    `김태희A`처럼 동명이인 접미 알파벳이 붙어도 한국어 읽기(A=에이)로 판정한다(josa.ts).
+ *    ⚠️ 원장이 화면에서 템플릿을 `{학생}은`으로 바꿔도 같은 규칙이 적용된다 — 짝의 어느 쪽을 적든 무관.
  */
 export function fillMentTemplate(template: string, vars: MentVars): string {
-  const filled = (template ?? "")
-    .split("{학생}")
-    .join((vars.studentName ?? "").trim())
-    .split("{교재명}")
-    .join((vars.bookName ?? "").trim())
-    .split("{금액}")
-    .join(formatWon(vars.price));
+  const valueOf = (token: string): string =>
+    token === "학생"
+      ? (vars.studentName ?? "").trim()
+      : token === "교재명"
+        ? (vars.bookName ?? "").trim()
+        : formatWon(vars.price);
+  const filled = (template ?? "").replace(TOKEN_JOSA_RE, (_m, token: string, josa?: string) => {
+    const value = valueOf(token);
+    return josa ? `${value}${pickJosa(value, josa)}` : value;
+  });
   return filled.replace(/[^\S\n]{2,}/g, " ");
 }
 

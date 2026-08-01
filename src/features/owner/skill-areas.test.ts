@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_ENGLISH_SKILL_AREAS, resolveSkillAreas, skillAreaLabelOf } from "./skill-areas";
+import {
+  DEFAULT_ENGLISH_SKILL_AREAS,
+  resolveSkillAreas,
+  skillAreaColorOf,
+  skillAreaLabelOf,
+} from "./skill-areas";
 
 describe("resolveSkillAreas (ECS 구분 영역 해석)", () => {
   it("english 미설정 = 기본 6영역 프리필", () => {
@@ -51,5 +56,39 @@ describe("skillAreaLabelOf (삭제된 slug 표시 유지)", () => {
   });
   it("삭제된 key = slug 원문 표시 + known=false(데이터 소실 금지)", () => {
     expect(skillAreaLabelOf(areas, "grammar")).toEqual({ label: "grammar", known: false });
+  });
+});
+
+describe("skillAreaColorOf (영역 고유색 — '아 보카네' 한눈 구분)", () => {
+  const defaults = [...DEFAULT_ENGLISH_SKILL_AREAS];
+
+  it("기본 6영역은 서로 다른 색", () => {
+    const colors = defaults.map((a) => skillAreaColorOf(defaults, a.key));
+    expect(new Set(colors).size).toBe(defaults.length);
+  });
+
+  it("설정 색이 내장 기본색을 이긴다", () => {
+    expect(skillAreaColorOf(defaults, "vocab")).toBe("blue"); // 내장 기본
+    expect(skillAreaColorOf([{ key: "vocab", label: "Vocab", color: "rose" }], "vocab")).toBe("rose");
+  });
+
+  it("색 없는 커스텀 영역도 순번으로 색을 받는다(무색 화면 금지)", () => {
+    const areas = [
+      { key: "area_1", label: "듣기훈련" },
+      { key: "area_2", label: "쓰기첨삭" },
+    ];
+    const c1 = skillAreaColorOf(areas, "area_1");
+    const c2 = skillAreaColorOf(areas, "area_2");
+    expect(c1).not.toBe("neutral");
+    expect(c1).not.toBe(c2);
+  });
+
+  it("설정에서 사라진 key는 neutral — 지워진 영역이 정상 영역처럼 보이면 안 된다", () => {
+    expect(skillAreaColorOf(defaults, "phonics")).toBe("neutral");
+  });
+
+  it("망가진 저장값(팔레트 밖 색)은 무시하고 기본색으로 폴백", () => {
+    const areas = [{ key: "vocab", label: "Vocab", color: "chartreuse" as never }];
+    expect(skillAreaColorOf(areas, "vocab")).toBe("blue");
   });
 });

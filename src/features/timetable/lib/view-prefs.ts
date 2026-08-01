@@ -14,6 +14,8 @@
 // ⚠️ 학년을 모르는 학생(grade null)은 **항상 보인다**(fail-open). 필터에 안 걸린다고 숨기면
 // 학년 미입력 학생이 시간표에서 통째로 증발한다 — 조용한 소실보다 한 명 더 보이는 쪽이 안전하다.
 
+import { DEFAULT_UI_FONT_SIZE, UI_FONT_SIZES, type UiFontSize } from "@/lib/ui-prefs/font-size";
+
 /** 학년 목록은 학원설정(operations.gradeLevels)이 단일 소스 — 여기에 학년을 하드코딩하지 말 것. */
 export type TimetableViewPrefs = {
   /**
@@ -35,6 +37,11 @@ export type TimetableViewPrefs = {
    * 토글이 안 꺼진다(URL의 `compact1h=none` 센티널과 같은 이유).
    */
   compact1h: Record<string, number[]> | null;
+  /**
+   * 글씨 크기(작음/보통/큼) — **모든 뷰 공통**. null = 미설정(스토어/기본 '작음' 폴백).
+   * 값·배율은 공용 규약(lib/ui-prefs/font-size) — 원스크린·ECS와 같은 어휘를 쓴다.
+   */
+  fontSize: UiFontSize | null;
 };
 
 /** 셀 색 강도 — workspace prefs 스토어의 TimetableColorMode와 같은 3값(런타임 소스는 그 스토어). */
@@ -48,6 +55,7 @@ export const EMPTY_VIEW_PREFS: TimetableViewPrefs = {
   collapseEmptyPeriods: null,
   colorMode: null,
   compact1h: null,
+  fontSize: null,
 };
 
 /**
@@ -174,6 +182,10 @@ export function parseViewPrefs(raw: unknown): TimetableViewPrefs {
         ? (o.colorMode as TimetableColorPref)
         : null,
     compact1h: parseCompact1h(o.compact1h),
+    fontSize:
+      typeof o.fontSize === "string" && (UI_FONT_SIZES as readonly string[]).includes(o.fontSize)
+        ? (o.fontSize as UiFontSize)
+        : null,
   };
 }
 
@@ -190,6 +202,8 @@ export function serializeViewPrefs(prefs: TimetableViewPrefs): Record<string, un
   if (prefs.colorMode !== null) out.colorMode = prefs.colorMode;
   // ⚠️ 빈 배열 과목도 그대로 적는다(명시적 해제). 맵 자체가 비면 키를 안 적는다(= 미설정).
   if (prefs.compact1h && Object.keys(prefs.compact1h).length > 0) out.compact1h = prefs.compact1h;
+  // 기본값('작음')은 키를 지운다 — 빈 값이 쌓이지 않게(ECS·원스크린과 같은 규약).
+  if (prefs.fontSize !== null && prefs.fontSize !== DEFAULT_UI_FONT_SIZE) out.fontSize = prefs.fontSize;
   return out;
 }
 
@@ -211,6 +225,7 @@ export function mergeViewPrefs(
     hideEmptyDays: pick("hideEmptyDays"),
     collapseEmptyPeriods: pick("collapseEmptyPeriods"),
     colorMode: pick("colorMode"),
+    fontSize: pick("fontSize"),
     // compact1h는 과목별이라 통째 교체가 아니라 **과목 단위 병합**이다(아래 참조).
     compact1h: patch.compact1h !== undefined
       ? mergeCompact1h(current.compact1h, patch.compact1h)

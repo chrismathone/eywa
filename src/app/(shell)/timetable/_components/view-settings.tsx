@@ -15,6 +15,7 @@ import {
   normalizeGradeSelection,
 } from "@/features/timetable/lib/view-prefs";
 import { TimetableColorToggle } from "./color-mode-toggle";
+import { TimetableFontToggle } from "./font-size-toggle";
 
 /**
  * 시간표 '뷰 설정' — 학제/학년으로 학생을 켜고 끈다. 설정은 **계정에 저장**돼 다른 기기에서도 따라온다
@@ -204,40 +205,45 @@ export function TimetableViewSettings({
 
             {/* ── 표시(즉시 반영) — 위 학년(초안+적용)과 적용 시점이 달라 구분선과 문구로 가른다.
                    여기 있던 칩들이 툴바를 2줄로 밀어내던 주범(특히 색 3칩)이라 이리로 흡수했다. ── */}
-            {showColor || collapseHref || hideEmptyDaysHref ? (
-              <div className="border-line mb-2 border-t pt-2">
-                <div className="mb-1.5 flex items-baseline justify-between gap-2">
-                  <span className="text-foreground text-xs font-semibold">표시</span>
-                  <span className="text-text-faint text-[10px]">바로 적용됩니다</span>
-                </div>
-                {showColor ? <TimetableColorToggle /> : null}
-                {collapseHref || hideEmptyDaysHref ? (
-                  <div className={`flex flex-wrap items-center gap-1 ${showColor ? "mt-1.5" : ""}`}>
-                    {collapseHref ? (
-                      <ParamLink
-                        href={collapseHref}
-                        title="수업 없는 교시 행을 얇게 접기/펼치기 (편집 중엔 자동으로 펼쳐짐)"
-                        className={toggleCls(collapseOn)}
-                      >
-                        <ListFilter size={11} strokeWidth={1.8} />
-                        빈 교시 접기
-                      </ParamLink>
-                    ) : null}
-                    {/* ⚠️ 강조는 `!hideEmptyDays`일 때 — "미사용 요일을 **보여주는**" 상태가 켜짐이다(툴바 원본과 동일). */}
-                    {hideEmptyDaysHref ? (
-                      <ParamLink
-                        href={hideEmptyDaysHref}
-                        title="수업 없는 요일 컬럼 표시/숨김"
-                        className={toggleCls(!hideEmptyDaysOn)}
-                      >
-                        <CalendarOff size={11} strokeWidth={1.8} />
-                        미사용 요일
-                      </ParamLink>
-                    ) : null}
-                  </div>
-                ) : null}
+            {/* ⚠️ 글씨 크기는 뷰와 무관하게 **항상** 있다(모든 뷰 적용 — 원장 지시 2026-07-31)라
+                   이 칸은 조건 없이 렌더한다. 옛 조건은 색·링크가 다 없는 뷰에서 칸을 통째로 감췄다. */}
+            <div className="border-line mb-2 border-t pt-2">
+              <div className="mb-1.5 flex items-baseline justify-between gap-2">
+                <span className="text-foreground text-xs font-semibold">표시</span>
+                <span className="text-text-faint text-[10px]">바로 적용됩니다</span>
               </div>
-            ) : null}
+              <TimetableFontToggle />
+              {showColor ? (
+                <div className="mt-1.5">
+                  <TimetableColorToggle />
+                </div>
+              ) : null}
+              {collapseHref || hideEmptyDaysHref ? (
+                <div className="mt-1.5 flex flex-wrap items-center gap-1">
+                  {collapseHref ? (
+                    <ParamLink
+                      href={collapseHref}
+                      title="수업 없는 교시 행을 얇게 접기/펼치기 (편집 중엔 자동으로 펼쳐짐)"
+                      className={toggleCls(collapseOn)}
+                    >
+                      <ListFilter size={11} strokeWidth={1.8} />
+                      빈 교시 접기
+                    </ParamLink>
+                  ) : null}
+                  {/* ⚠️ 강조는 `!hideEmptyDays`일 때 — "미사용 요일을 **보여주는**" 상태가 켜짐이다(툴바 원본과 동일). */}
+                  {hideEmptyDaysHref ? (
+                    <ParamLink
+                      href={hideEmptyDaysHref}
+                      title="수업 없는 요일 컬럼 표시/숨김"
+                      className={toggleCls(!hideEmptyDaysOn)}
+                    >
+                      <CalendarOff size={11} strokeWidth={1.8} />
+                      미사용 요일
+                    </ParamLink>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
 
             <div className="flex items-center justify-end gap-1.5">
               <button
