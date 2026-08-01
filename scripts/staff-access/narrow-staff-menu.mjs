@@ -112,9 +112,11 @@ try {
     method: "POST",
     body: JSON.stringify({
       tenant_id: row.tenant_id,
+      actor_name: "system:narrow-staff-menu",
       action: "owner_settings_update",
-      entity: "tenant_settings",
-      detail: { section: "permissions", via: "script:narrow-staff-menu", grants: grants.map((g) => g._name ?? g.userId) },
+      target_type: "tenant_settings",
+      target_label: "permissions",
+      metadata: { via: "script:narrow-staff-menu", grants: grants.map((g) => g._name ?? g.userId) },
     }),
   });
 } catch (e) {
