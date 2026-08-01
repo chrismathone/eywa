@@ -3,9 +3,9 @@ import { notFound, redirect } from "next/navigation";
 import { CalendarDays, Wallet } from "@/components/icons/eywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { requireAccess } from "@/lib/auth/require-access";
+import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { BackLink } from "@/components/back-link";
 import { getCurrentUser } from "@/lib/auth/current-user";
-import { canManageStaff } from "@/lib/auth/role-hierarchy";
 import { getStaffById, hasStaffEverSignedIn } from "@/features/staff/server/queries";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { canEditLoginEmail } from "@/features/staff/email";
@@ -21,7 +21,7 @@ export default async function EditStaffPage({
 }) {
   await requireAccess("staff");
   const user = await getCurrentUser();
-  if (!user || !canManageStaff(user.systemRole)) {
+  if (!user || !(await canWriteTenant(user.systemRole, "staff"))) {
     redirect("/staff");
   }
 

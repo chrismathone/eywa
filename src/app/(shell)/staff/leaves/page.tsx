@@ -2,7 +2,6 @@ import { CalendarClock } from "@/components/icons/eywa-icon-compat";
 import { BackLink } from "@/components/back-link";
 import { EmptyState } from "@/components/empty-state";
 import { requireAccess } from "@/lib/auth/require-access";
-import { canManageStaff } from "@/lib/auth/role-hierarchy";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { getAllStaffLeaves } from "@/features/payroll/server/queries";
 import { LeavesAdminClient } from "./_client";
@@ -13,7 +12,7 @@ export const metadata = { title: "휴가 관리 — eywa" };
 export default async function StaffLeavesPage() {
   const user = await requireAccess("staff");
   const canManage =
-    canManageStaff(user.systemRole) && (await canWriteTenant(user.systemRole, "staff"));
+    await canWriteTenant(user.systemRole, "staff"); // 메뉴 쓰기 권한(개인 예외 포함) 단일 기준
 
   const leaves = await getAllStaffLeaves();
   const pending = leaves.filter((l) => !l.approvedAt).length;

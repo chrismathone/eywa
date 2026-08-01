@@ -1,7 +1,6 @@
 import { notFound } from "next/navigation";
 import { BackLink } from "@/components/back-link";
 import { requireAccess } from "@/lib/auth/require-access";
-import { canManageStaff } from "@/lib/auth/role-hierarchy";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { getStaffDetail } from "@/features/staff/server/queries";
 import { getStaffLeaves } from "@/features/payroll/server/queries";
@@ -17,7 +16,7 @@ export default async function StaffLeavesPage({
   const user = await requireAccess("staff");
   const { id } = await params;
   const canManage =
-    canManageStaff(user.systemRole) && (await canWriteTenant(user.systemRole, "staff"));
+    await canWriteTenant(user.systemRole, "staff"); // 메뉴 쓰기 권한(개인 예외 포함) 단일 기준
 
   const [staff, leaves] = await Promise.all([getStaffDetail(id), getStaffLeaves(id)]);
   if (!staff) notFound();

@@ -235,3 +235,33 @@ export function resolveMatrix(overrides: readonly PermissionOverride[]): AccessM
   }
   return matrix;
 }
+
+// === 개인 예외 (per-user override, 2026-08-01) ===
+// 역할 매트릭스만으론 "같은 admin인데 두 명만 직원관리"를 표현할 수 없어 신설(원장 지시: 직원관리를
+// 원장 2명 + 개발팀 설현·이승엽만). 저장은 tenant_settings.data.permissions.userOverrides(별도 테이블 없음 —
+// getTenantSettings 캐시에 실려 추가 쿼리 0, 쓰기는 0038a master-guard 트리거가 보호).
+// ⚠️ SQL 미러: auth_menu_access(0170a)가 같은 우선순위(개인 예외 > 역할 override > 코드 기본값)로 판정한다.
+export type UserPermissionOverride = { userId: string; menu: MenuKey; access: Access };
+
+/**
+ * 역할 매트릭스 위에 **이 사용자에게만** 셀 단위 예외를 얹은 유효 매트릭스. 순수 함수(Vitest 대상).
+ * 자기 역할 행만 바뀌므로, 이 결과를 requireAccess·사이드바 등 "현재 행위자" 판정에만 쓰면
+ * 다른 역할 행 판정(강사뷰 가드 등)은 영향받지 않는다. 잠긴 셀(isPermissionLocked)은 예외로도 못 연다.
+ * 입력 matrix는 변형하지 않는다(getPermMatrix의 요청 캐시 오염 방지).
+ */
+export function applyUserOverrides(
+  matrix: AccessMatrix,
+  userId: string,
+  role: SystemRole,
+  overrides: readonly UserPermissionOverride[],
+): AccessMatrix {
+  const mine = overrides.filter(
+    (o) => o.userId === userId && matrix[o.menu] && !isPermissionLocked(o.menu, role, o.access),
+  );
+  if (mine.length === 0) return matrix;
+  const out = { ...matrix };
+  for (const o of mine) {
+    out[o.menu] = { ...out[o.menu], [role]: o.access };
+  }
+  return out;
+}

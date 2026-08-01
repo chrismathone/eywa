@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import type { SystemRole } from "@/lib/permissions";
 import { getCurrentUser, type CurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
-import { canManageStaff, ROLE_HIERARCHY } from "@/lib/auth/role-hierarchy";
+import { ROLE_HIERARCHY } from "@/lib/auth/role-hierarchy";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { humanizeDbError } from "@/lib/supabase/db-error";
@@ -150,8 +150,8 @@ async function registerStaffFromResume(
   roleRaw: string,
   resumeId: string,
 ): Promise<{ notice?: string; warning?: string }> {
-  if (!canManageStaff(actor.systemRole)) {
-    return { warning: "직원 계정 등록 권한이 없어 이력서만 저장했습니다 (원장/관리자/매니저)" };
+  if (!(await canWriteTenant(actor.systemRole, "staff"))) {
+    return { warning: "직원 계정 등록 권한이 없어 이력서만 저장했습니다" };
   }
   const role = roleRaw as SystemRole;
   if (!(role in ROLE_HIERARCHY) || role === "student") return { warning: "직원 계정 역할을 선택하지 않아 이력서만 저장했습니다" };

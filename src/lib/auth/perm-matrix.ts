@@ -2,6 +2,7 @@ import "server-only";
 import { cache } from "react";
 import {
   accessLevel,
+  applyUserOverrides,
   canAccess,
   canWrite,
   resolveMatrix,
@@ -11,6 +12,7 @@ import {
   type SystemRole,
 } from "@/lib/permissions";
 import { getTenantSettings } from "@/features/owner/server/queries";
+import { getCurrentUser } from "@/lib/auth/current-user";
 import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
 
 /**
@@ -44,20 +46,46 @@ export const getPermMatrix = cache(async (): Promise<AccessMatrix> => {
   }
 });
 
-/** 현재 테넌트 매트릭스로 메뉴 접근 여부(읽기 게이트용 — none만 차단, readonly 통과). 매트릭스 fetch는 cache(1회). */
+/**
+ * 테넌트 매트릭스 위에 **현재 로그인 사용자의 개인 예외**(permissions.userOverrides)까지 얹은
+ * "사용자 유효 매트릭스" — requireAccess·사이드바 등 현재 행위자 판정의 단일 소스(2026-08-01).
+ * 자기 역할 행만 패치되므로 다른 역할 행을 읽는 소비처(레이아웃 강사뷰 가드 등)는 영향받지 않는다.
+ * 비로그인·super_admin(테넌트 설정 위에 있음)·조회 실패는 테넌트 매트릭스 그대로(fail-open, 위와 동일 철학).
+ */
+export const getUserPermMatrix = cache(async (): Promise<AccessMatrix> => {
+  const base = await getPermMatrix();
+  try {
+    const user = await getCurrentUser();
+    if (!user) return base;
+    const settings = await getTenantSettings(); // getPermMatrix와 같은 요청 캐시 — 추가 라운드트립 0
+    const userOverrides = settings.permissions.userOverrides;
+    if (userOverrides.length === 0) return base;
+    if (await isCurrentUserSuperAdmin()) return base;
+    return applyUserOverrides(base, user.id, user.systemRole, userOverrides);
+  } catch (e) {
+    console.error("[perm-matrix] 개인 예외 적용 실패 — 테넌트 매트릭스로 폴백", e);
+    return base;
+  }
+});
+
+/**
+ * 현재 사용자 유효 매트릭스로 메뉴 접근 여부(읽기 게이트용 — none만 차단, readonly 통과).
+ * 매트릭스 fetch는 cache(1회). ⚠️ role 인자는 **현재 행위자의 역할**만 넘길 것 — 개인 예외가
+ * 현재 사용자 기준으로 얹히므로 남의 역할을 넘기면 판정이 섞인다(2026-08-01 전 호출처 확인함).
+ */
 export async function canAccessTenant(role: SystemRole, menu: MenuKey): Promise<boolean> {
-  return canAccess(role, menu, await getPermMatrix());
+  return canAccess(role, menu, await getUserPermMatrix());
 }
 
 /**
- * 현재 테넌트 매트릭스로 쓰기 권한 여부(변경 서버 액션 게이트용 — full|scoped만 통과, readonly/none 차단).
- * ⚠️ 쓰기 액션은 canAccessTenant 대신 이걸 쓸 것(readonly 누수 방지).
+ * 현재 사용자 유효 매트릭스로 쓰기 권한 여부(변경 서버 액션 게이트용 — full|scoped만 통과, readonly/none 차단).
+ * ⚠️ 쓰기 액션은 canAccessTenant 대신 이걸 쓸 것(readonly 누수 방지). role 인자 주의는 위와 동일.
  */
 export async function canWriteTenant(role: SystemRole, menu: MenuKey): Promise<boolean> {
-  return canWrite(role, menu, await getPermMatrix());
+  return canWrite(role, menu, await getUserPermMatrix());
 }
 
-/** 현재 테넌트 매트릭스로 접근 수준(readonly 다운그레이드가 쓰기 차단에 반영되도록). */
+/** 현재 사용자 유효 매트릭스로 접근 수준(readonly 다운그레이드가 쓰기 차단에 반영되도록). */
 export async function accessLevelTenant(role: SystemRole, menu: MenuKey): Promise<Access> {
-  return accessLevel(role, menu, await getPermMatrix());
+  return accessLevel(role, menu, await getUserPermMatrix());
 }

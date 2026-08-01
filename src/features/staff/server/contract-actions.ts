@@ -2,13 +2,13 @@
 
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
-import { canManageStaff } from "@/lib/auth/role-hierarchy";
+import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
 import { humanizeDbError } from "@/lib/supabase/db-error";
 import { logAction } from "@/features/audit/server/log";
 
 // 계약 연장·기입(원장 지시 2026-07-29) — 직원 상세 '계약현황'의 유일한 쓰기 경로.
-// 쓰기 자격은 사무실(master/admin/manager) — 0149a RLS와 같은 기준(화면·서버·DB 3중).
+// 쓰기 자격 = 직원관리 메뉴 쓰기 권한(개인 예외 포함, 2026-08-01) — 화면·서버·DB(auth_staff_can_read) 3중.
 
 export type ContractActionState = { ok?: true; error?: string; notice?: string } | undefined;
 
@@ -21,7 +21,7 @@ export async function extendStaffContract(
 ): Promise<ContractActionState> {
   const actor = await getCurrentUser();
   if (!actor) return { error: "로그인이 필요합니다" };
-  if (!canManageStaff(actor.systemRole)) return { error: "계약을 변경할 권한이 없습니다 (원장·관리자·매니저)" };
+  if (!(await canWriteTenant(actor.systemRole, "staff"))) return { error: "계약을 변경할 권한이 없습니다" };
 
   const userId = String(formData.get("userId") ?? "").trim();
   const startDate = String(formData.get("startDate") ?? "").trim();
@@ -85,7 +85,7 @@ export async function deleteLatestStaffContract(
 ): Promise<ContractActionState> {
   const actor = await getCurrentUser();
   if (!actor) return { error: "로그인이 필요합니다" };
-  if (!canManageStaff(actor.systemRole)) return { error: "계약을 변경할 권한이 없습니다 (원장·관리자·매니저)" };
+  if (!(await canWriteTenant(actor.systemRole, "staff"))) return { error: "계약을 변경할 권한이 없습니다" };
 
   const userId = String(formData.get("userId") ?? "").trim();
   const contractId = String(formData.get("contractId") ?? "").trim();

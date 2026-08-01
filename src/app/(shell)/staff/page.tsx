@@ -9,7 +9,8 @@ import { EmptyState } from "@/components/empty-state";
 import { Button } from "@/components/ui/button";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { requireAccess } from "@/lib/auth/require-access";
-import { canManageStaff, ROLE_HIERARCHY } from "@/lib/auth/role-hierarchy";
+import { ROLE_HIERARCHY } from "@/lib/auth/role-hierarchy";
+import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { getStaffList, type StaffRow } from "@/features/staff/server/queries";
 import { getSuperAdminIds, displayRoleFor } from "@/lib/auth/super-admin";
 import { getTenantSettings } from "@/features/owner/server/queries";
@@ -148,7 +149,7 @@ export default async function StaffPage({
 }) {
   await requireAccess("staff");
   const user = await getCurrentUser();
-  const canManage = !!user && canManageStaff(user.systemRole);
+  const canManage = !!user && (await canWriteTenant(user.systemRole, "staff"));
   const sp = await searchParams;
   // '직원 이력서' 면은 2026-07-28 목록에 통합(이름 클릭=이력서, 등록=이력서 작성) — 옛 링크는 목록으로.
 

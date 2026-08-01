@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { requireAccess } from "@/lib/auth/require-access";
-import { getTenantSettings, getSettingsMeta } from "@/features/owner/server/queries";
+import { getTenantSettings, getSettingsMeta, getUserDisplayNames } from "@/features/owner/server/queries";
 import { getClassroomsWithUsage } from "@/features/owner/server/classroom-queries";
 import { getTeacherLabelsBySubject } from "@/features/timetable/server/queries";
 import { FaceTabs, type Face } from "@/components/face-tabs";
@@ -120,6 +120,11 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
   const classrooms = tab === "operations" ? await getClassroomsWithUsage() : [];
   // 과목별 강사 라벨(과목 운영 '가로줄 제외 강사' 칩)은 해당 면에서만 로드.
   const teacherLabelsBySubject = tab === "subjects" ? await getTeacherLabelsBySubject() : {};
+  // 개인 예외(userOverrides) 이름 매핑 — 역할·권한 면에서만 로드(다른 면 진입 비용 0).
+  const userOverrideNames =
+    tab === "permissions" && settings.permissions.userOverrides.length > 0
+      ? await getUserDisplayNames(settings.permissions.userOverrides.map((o) => o.userId))
+      : {};
   // 관리 면(중복·감사) 페이지네이션용. 창(embed) 컨텍스트는 면 pageHref가 직접 유지.
   const page = Math.max(1, Number(sp.page) || 1);
   const isEmbed = sp.embed === "1";
@@ -152,7 +157,7 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
       {tab === "consultations" ? <ConsultationsSection initial={settings.consultations} /> : null}
       {tab === "permissions" ? (
         isMaster ? (
-          <PermissionsSection initial={settings.permissions} />
+          <PermissionsSection initial={settings.permissions} userOverrideNames={userOverrideNames} />
         ) : (
           <div className="bg-card border-line rounded-2xl border p-6">
             <p className="text-foreground text-sm font-bold">역할·권한은 원장(master)만 변경할 수 있습니다</p>

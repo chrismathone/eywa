@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { requireAccess } from "@/lib/auth/require-access";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
-import { assignableRoles, canManageStaff } from "@/lib/auth/role-hierarchy";
+import { assignableRoles } from "@/lib/auth/role-hierarchy";
 import { BackLink } from "@/components/back-link";
 import { emptyResume } from "@/features/staff/resume";
 import { isImportArtifactEmail } from "@/features/staff/email";
@@ -55,7 +55,7 @@ export default async function NewResumePage({
         startEditing
         staffUserId={staff?.id}
         // 원샷 직원 등록 옵션 — 기존 직원 연결 모드에선 계정이 이미 있으므로 미노출.
-        assignableRoles={!staff && canManageStaff(user.systemRole) ? assignableRoles(user.systemRole) : []}
+        assignableRoles={!staff ? assignableRoles(user.systemRole) : []}
       />
     </div>
   );

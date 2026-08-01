@@ -5,10 +5,10 @@ import type { SystemRole } from "@/lib/permissions";
 import { isHexColor, readableTextColor } from "@/lib/color-utils";
 import {
   canAssignRole,
-  canManageStaff,
   ROLE_HIERARCHY,
 } from "@/lib/auth/role-hierarchy";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logAction } from "@/features/audit/server/log";
 import { createClient } from "@/lib/supabase/server";
@@ -67,8 +67,10 @@ export async function createStaff(
 ): Promise<StaffFormState> {
   const actor = await getCurrentUser();
   if (!actor) return { error: "로그인이 필요합니다" };
-  if (!canManageStaff(actor.systemRole)) {
-    return { error: "직원 추가 권한이 없습니다 (master / admin / manager)" };
+  // 역할이 아니라 **직원관리 메뉴 권한**으로 게이트(개인 예외 포함, 2026-08-01) — 역할만 보면
+  // 메뉴가 잠긴 관리자가 서버 액션 직접 호출로 우회한다(#77).
+  if (!(await canWriteTenant(actor.systemRole, "staff"))) {
+    return { error: "직원 추가 권한이 없습니다" };
   }
 
   const input = readBaseForm(formData);
@@ -158,7 +160,7 @@ export async function updateStaff(
 ): Promise<StaffFormState> {
   const actor = await getCurrentUser();
   if (!actor) return { error: "로그인이 필요합니다" };
-  if (!canManageStaff(actor.systemRole)) {
+  if (!(await canWriteTenant(actor.systemRole, "staff"))) {
     return { error: "직원 정보 수정 권한이 없습니다" };
   }
 
@@ -258,8 +260,8 @@ export async function changeStaffRole(
   const actor = await getCurrentUser();
   if (!actor) return { error: "로그인이 필요합니다" };
   // 권한 게이트 — 형제 액션과 동일(누락 시 누구나 POST해 역할 상승·크로스테넌트 탈취 가능, #S1).
-  if (!canManageStaff(actor.systemRole)) {
-    return { error: "역할 변경 권한이 없습니다 (master / admin / manager)" };
+  if (!(await canWriteTenant(actor.systemRole, "staff"))) {
+    return { error: "역할 변경 권한이 없습니다" };
   }
 
   const id = String(formData.get("id") ?? "").trim();
@@ -323,7 +325,7 @@ export async function deactivateStaff(
 ): Promise<DeactivateState> {
   const actor = await getCurrentUser();
   if (!actor) return { error: "로그인이 필요합니다" };
-  if (!canManageStaff(actor.systemRole)) {
+  if (!(await canWriteTenant(actor.systemRole, "staff"))) {
     return { error: "권한이 없습니다" };
   }
 

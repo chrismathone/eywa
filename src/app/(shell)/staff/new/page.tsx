@@ -2,7 +2,8 @@ import { redirect } from "next/navigation";
 import { BackLink } from "@/components/back-link";
 import { requireAccess } from "@/lib/auth/require-access";
 import { getCurrentUser } from "@/lib/auth/current-user";
-import { assignableRoles, canManageStaff } from "@/lib/auth/role-hierarchy";
+import { assignableRoles } from "@/lib/auth/role-hierarchy";
+import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { StaffForm } from "../_components/staff-form";
 
@@ -11,7 +12,7 @@ export const metadata = { title: "직원 등록 — eywa" };
 export default async function NewStaffPage() {
   await requireAccess("staff");
   const user = await getCurrentUser();
-  if (!user || !canManageStaff(user.systemRole)) {
+  if (!user || !(await canWriteTenant(user.systemRole, "staff"))) {
     redirect("/staff");
   }
 

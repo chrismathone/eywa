@@ -213,5 +213,6 @@ export const DEFAULT_SETTINGS: TenantSettings = {
     classnoteSendWindowEnd: "", // 발송 허용 시간창 종료(KST HH:MM). 빈 값=무제한.
   },
   // 권한 override는 sparse(빈 배열) — 진짜 기본값은 permissions.ts의 MENU_ACCESS. 매트릭스 복제 금지.
-  permissions: { overrides: [] },
+  // userOverrides = 개인 예외(특정 사용자에게만 메뉴 셀 덮어쓰기, 2026-08-01) — 역시 sparse.
+  permissions: { overrides: [], userOverrides: [] },
 };

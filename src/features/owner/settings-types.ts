@@ -352,8 +352,21 @@ export const permissionOverrideSchema = z.object({
   role: z.enum(SYSTEM_ROLES as unknown as [SystemRole, ...SystemRole[]]),
   access: accessEnum,
 });
+// 개인 예외 — 특정 사용자(users.id)에게만 메뉴 셀을 덮어쓴다(역할 override보다 우선). 소비처 =
+// applyUserOverrides(perm-matrix)와 SQL 미러 auth_menu_access(0170a). 선례: 직원관리를 원장+개발팀
+// 4인으로 좁히기(2026-08-01 — 설현·이승엽은 admin이라 역할 축으론 다른 관리자와 구분 불가).
+export const userPermissionOverrideSchema = z.object({
+  userId: z.string().uuid(),
+  menu: z.enum(MENU_KEYS as unknown as [MenuKey, ...MenuKey[]]),
+  access: accessEnum,
+});
 export const permissionsSchema = z
-  .object({ overrides: z.array(permissionOverrideSchema).max(160) })
+  .object({
+    overrides: z.array(permissionOverrideSchema).max(160),
+    // .default([]) — 기존 저장분(키 없음)이 그대로 파싱되도록. 폼 저장 시엔 payload가 이 키를
+    // 관통시켜야 한다(permissions-section) — 빠뜨리면 매트릭스 저장 한 번에 개인 예외가 전멸한다.
+    userOverrides: z.array(userPermissionOverrideSchema).max(80).default([]),
+  })
   .superRefine((v, ctx) => {
     // 가드레일을 스키마에서 강제(저장 자체 거부) — resolveMatrix 적용 단계와 이중 방어.
     for (const r of v.overrides) {
@@ -365,6 +378,13 @@ export const permissionsSchema = z
       }
       if (r.role === "master" && (r.menu === "owner" || r.menu === "admin" || r.menu === "dashboard") && r.access === "none") {
         ctx.addIssue({ code: "custom", message: "원장(master)의 owner/admin/오늘 접근은 잠글 수 없습니다" });
+      }
+    }
+    for (const r of v.userOverrides) {
+      // 역할 전용 화면은 개인 예외로도 못 연다(applyUserOverrides의 isPermissionLocked와 동일 규약 —
+      // 역할별 가드는 적용 시점에 그 사용자의 실제 역할로 한 번 더 걸린다).
+      if (r.menu === "teacher_onescreen" || r.menu === "my_learning") {
+        ctx.addIssue({ code: "custom", message: "역할 전용 화면(원스크린/내 학습)은 개인 예외로 편집할 수 없습니다" });
       }
     }
   });

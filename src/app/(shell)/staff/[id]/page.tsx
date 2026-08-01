@@ -8,7 +8,6 @@ import { BackLink } from "@/components/back-link";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import {
   assignableRoles,
-  canManageStaff,
   canManageStaffMember,
   ROLE_LABEL,
 } from "@/lib/auth/role-hierarchy";
@@ -67,7 +66,7 @@ export default async function StaffDetailPage({
   // 표시 위장(fake admin) — 배지·버튼 노출 등 '보이는 것'에만. 위계/권한 판정엔 실제 staff.systemRole 사용.
   const displayRole = displayRoleFor(staff.id, staff.systemRole, superAdminIds);
 
-  const canManage = !!viewer && canManageStaff(viewer.systemRole);
+  const canManage = !!viewer && (await canWriteTenant(viewer.systemRole, "staff"));
   // 활동 로그 탭은 사무실 전용 — 비-사무실이 ?tab=activity로 직접 와도 기본정보로 폴백(RLS도 별도 방어).
   const tab = tabRaw === "activity" && !canManage ? "info" : tabRaw;
   const canManageThis = !!viewer && canManageStaffMember(viewer.systemRole, staff.systemRole);

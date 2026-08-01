@@ -16,7 +16,7 @@ import { getActivePopups } from "@/features/notices/server/queries";
 import { NoticePopupLayer } from "@/features/notices/components/notice-popup-layer";
 import { OperationsProvider } from "@/features/owner/operations-context";
 import { EditPresenceProvider } from "@/features/presence/edit-presence";
-import { getPermMatrix } from "@/lib/auth/perm-matrix";
+import { getUserPermMatrix } from "@/lib/auth/perm-matrix";
 import { getShellView, canUseTeacherView, isFullShellRole, effectiveTeacherScope } from "@/lib/auth/view-mode";
 import { ecsAssistantClassIds } from "@/features/class-sheets/server/access";
 import { canAccess, menuKeyForPath } from "@/lib/permissions";
@@ -73,10 +73,12 @@ export default async function ShellLayout({ children }: { children: ReactNode })
   // 공유. 미업로드/실패면 null → 각 표면이 학원 building 마크로 폴백. 임베드는 위에서 이미 return(크롬 없음).
   const logoSrc = await resolveBrandingSrc(settings.profile.logoUrl, user.tenantId);
 
-  // 테넌트 권한 override 반영 매트릭스 — 강사 '내 메뉴'·사이드바·팰릿·모바일내비 메뉴 필터에 주입(클라 소비처).
-  // getPermMatrix = getTenantSettings(위에서 이미 fetch, cache 공유) + override 적용 + **super_admin 우회**
-  // (super_admin은 owner override 무시 = 코드 기본값). 페이지 requireAccess와 같은 캐시를 공유해 추가 쿼리 0.
-  const permMatrix = await getPermMatrix();
+  // 테넌트 권한 override + **개인 예외(userOverrides)** 반영 매트릭스 — 강사 '내 메뉴'·사이드바·팰릿·
+  // 모바일내비 메뉴 필터에 주입(클라 소비처). getUserPermMatrix = getTenantSettings(위에서 이미 fetch,
+  // cache 공유) + override + 현재 사용자 예외 + **super_admin 우회**(owner override 무시 = 코드 기본값).
+  // 페이지 requireAccess와 같은 캐시를 공유해 추가 쿼리 0. 개인 예외는 자기 역할 행만 패치하므로
+  // 아래 강사뷰 가드(canAccess("teacher", …))는 겸직 관리자에게 영향 없음.
+  const permMatrix = await getUserPermMatrix();
 
   // 셸 크롬 결정 — student=학생 미니셸, teacher(실 강사 or 겸직-강사뷰)=강사 미니셸, 그 외=풀셸.
   // 겸직(관리자 계열 + 담당 반)이 '강사뷰' 쿠키를 켜면 view="teacher"라 아래 미니셸을 탄다(권한은 실 role 유지).

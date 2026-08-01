@@ -3,8 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { SystemRole } from "@/lib/permissions";
-import { canManageStaff, canManageStaffMember } from "@/lib/auth/role-hierarchy";
+import { canManageStaffMember } from "@/lib/auth/role-hierarchy";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sanitizeWorkSchedule } from "@/features/staff/work-schedule";
 import { logAction } from "@/features/audit/server/log";
@@ -18,11 +19,16 @@ type TargetInfo = { role: SystemRole; email: string; tenantId: string };
 /**
  * 대상 직원을 DB에서 직접 읽어 같은 테넌트인지 검증하고 권한 계층 판단에 필요한 값을 돌려준다.
  * 클라이언트가 보낸 값(role·email·tenant)은 신뢰하지 않는다(#S1).
+ * ⚠️ 이 파일의 모든 대상-지정 액션이 여기를 거치므로 **직원관리 메뉴 게이트(개인 예외 포함)도 여기서**
+ * 건다(2026-08-01) — canManageStaffMember는 역할 계층만 봐서, 메뉴가 잠긴 관리자의 직접 POST를 못 막는다(#77).
  */
 async function loadTarget(
   id: string,
   actor: { id: string; tenantId: string; systemRole: SystemRole },
 ): Promise<TargetInfo | { error: string }> {
+  if (!(await canWriteTenant(actor.systemRole, "staff"))) {
+    return { error: "직원 계정을 관리할 권한이 없습니다" };
+  }
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("users")
@@ -209,7 +215,7 @@ export async function updateWorkSchedule(
 ): Promise<AccountActionState> {
   const actor = await getCurrentUser();
   if (!actor) return { error: "로그인이 필요합니다" };
-  if (!canManageStaff(actor.systemRole)) {
+  if (!(await canWriteTenant(actor.systemRole, "staff"))) {
     return { error: "근무 일정 편집 권한이 없습니다" };
   }
 

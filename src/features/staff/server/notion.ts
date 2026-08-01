@@ -233,7 +233,7 @@ export async function fetchTaskContent(pageId: string): Promise<ContentLine[]> {
   return notionBlocksToLines(blocks);
 }
 
-// === 쓰기(eywa → Notion) — 명시적 편집만. 자동 양방향 동기화 아님. 권한 게이트는 액션(canManageStaff). ===
+// === 쓰기(eywa → Notion) — 명시적 편집만. 자동 양방향 동기화 아님. 권한 게이트는 액션(canWriteTenant staff). ===
 
 /** 업무완료 체크박스 토글 → Notion 반영. */
 export async function setTaskDoneRow(pageId: string, done: boolean): Promise<void> {

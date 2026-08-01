@@ -2,9 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
-import { getPermMatrix } from "@/lib/auth/perm-matrix";
+import { canWriteTenant, getUserPermMatrix } from "@/lib/auth/perm-matrix";
 import { canAccess } from "@/lib/permissions";
-import { canManageStaff } from "@/lib/auth/role-hierarchy";
 import { humanizeNotionError } from "@/features/staff/notion-tasks";
 import type { ContentLine } from "@/features/staff/notion-tasks";
 import { notionTasksDatabaseId } from "@/lib/notion/client";
@@ -24,11 +23,11 @@ import {
   type TaskComment,
 } from "./notion";
 
-// 쓰기 액션 공통 게이트 — 편집(완료/이동/생성)은 사무실(canManageStaff)만.
+// 쓰기 액션 공통 게이트 — 편집(완료/이동/생성)은 직원관리 쓰기 권한(개인 예외 포함)만.
 async function requireEditor(): Promise<{ ok: true } | { ok: false; error: string }> {
   const actor = await getCurrentUser();
   if (!actor) return { ok: false, error: "로그인이 필요합니다" };
-  if (!canManageStaff(actor.systemRole)) return { ok: false, error: "편집 권한이 없습니다" };
+  if (!(await canWriteTenant(actor.systemRole, "staff"))) return { ok: false, error: "편집 권한이 없습니다" };
   return { ok: true };
 }
 
@@ -41,7 +40,7 @@ export async function getStaffMonthlyTasks(
 ): Promise<MonthlyTasksResult> {
   const actor = await getCurrentUser();
   if (!actor) return { ok: false, error: "로그인이 필요합니다" };
-  const matrix = await getPermMatrix();
+  const matrix = await getUserPermMatrix();
   if (!canAccess(actor.systemRole, "staff", matrix)) return { ok: false, error: "권한이 없습니다" };
   try {
     return await resolveMonthlyTasks(staffId, month);
@@ -52,20 +51,20 @@ export async function getStaffMonthlyTasks(
 
 /**
  * 미매핑 직원의 매핑 준비(지연 호출) — 이메일 자동연결 시도(+저장) 또는 수동 후보 목록.
- * 담당자 스캔(수 초)이 여기서 돌므로 첫 페인트를 안 막는다. 후보 목록은 사무실(canManageStaff)만.
+ * 담당자 스캔(수 초)이 여기서 돌므로 첫 페인트를 안 막는다. 후보 목록은 직원관리 쓰기 권한만.
  */
 export async function prepareNotionMapping(
   staffId: string,
 ): Promise<{ ok: true; prep: MappingPrep } | { ok: false; error: string }> {
   const actor = await getCurrentUser();
   if (!actor) return { ok: false, error: "로그인이 필요합니다" };
-  const matrix = await getPermMatrix();
+  const matrix = await getUserPermMatrix();
   if (!canAccess(actor.systemRole, "staff", matrix)) return { ok: false, error: "권한이 없습니다" };
   try {
     const prep = await prepareStaffNotionMappingRow(
       staffId,
       actor.tenantId,
-      canManageStaff(actor.systemRole),
+      await canWriteTenant(actor.systemRole, "staff"),
     );
     if (prep.state === "matched") revalidatePath(`/staff/${staffId}`);
     return { ok: true, prep };
@@ -80,7 +79,7 @@ export async function getTaskComments(
 ): Promise<{ ok: true; comments: TaskComment[] } | { ok: false; error: string }> {
   const actor = await getCurrentUser();
   if (!actor) return { ok: false, error: "로그인이 필요합니다" };
-  const matrix = await getPermMatrix();
+  const matrix = await getUserPermMatrix();
   if (!canAccess(actor.systemRole, "staff", matrix)) return { ok: false, error: "권한이 없습니다" };
   try {
     return { ok: true, comments: await fetchTaskComments(pageId) };
@@ -149,7 +148,7 @@ export async function getTaskContent(
 ): Promise<{ ok: true; lines: ContentLine[] } | { ok: false; error: string }> {
   const actor = await getCurrentUser();
   if (!actor) return { ok: false, error: "로그인이 필요합니다" };
-  const matrix = await getPermMatrix();
+  const matrix = await getUserPermMatrix();
   if (!canAccess(actor.systemRole, "staff", matrix)) return { ok: false, error: "권한이 없습니다" };
   try {
     return { ok: true, lines: await fetchTaskContent(pageId) };
@@ -165,7 +164,7 @@ export async function addTaskCommentAction(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const actor = await getCurrentUser();
   if (!actor) return { ok: false, error: "로그인이 필요합니다" };
-  const matrix = await getPermMatrix();
+  const matrix = await getUserPermMatrix();
   if (!canAccess(actor.systemRole, "staff", matrix)) return { ok: false, error: "권한이 없습니다" };
   const t = text.trim();
   if (!t) return { ok: false, error: "댓글 내용을 입력하세요" };
@@ -183,7 +182,7 @@ export async function setStaffNotionUserId(
   notionUserId: string | null,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const actor = await getCurrentUser();
-  if (!actor || !canManageStaff(actor.systemRole)) return { ok: false, error: "권한이 없습니다" };
+  if (!actor || !(await canWriteTenant(actor.systemRole, "staff"))) return { ok: false, error: "권한이 없습니다" };
   const res = await setStaffNotionUserIdRow(staffId, notionUserId?.trim() || null, actor.tenantId);
   if (res.ok) revalidatePath(`/staff/${staffId}`);
   return res;

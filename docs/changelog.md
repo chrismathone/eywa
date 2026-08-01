@@ -4,6 +4,30 @@
 
 ## 진행 상황
 
+### 직원관리를 원장+개발팀 4인으로 — 개인 예외(userOverrides) 메커니즘 신설 (2026-08-01) - typecheck0/lint0/test3244/build✓ - 0170a
+
+원장 지시: *"직원 목록 원장 직급만 + 박소선·이승엽 예외, 관리자 직급도 직원관리 메뉴 자체가 안 보이게"* →
+확정 명단 **원일·박소선(master) + 설현·이승엽(admin)**. 설현·이승엽이 다른 관리자 5명과 같은 admin이라
+**역할 축으로 표현 불가** → 권한 시스템에 **개인 예외**를 신설했다.
+
+- **메커니즘**: `permissions.userOverrides`([{userId, menu, access}], tenant_settings jsonb — 새 테이블 없음,
+  getTenantSettings 캐시라 추가 쿼리 0). 우선순위 = master 상시 full > 개인 예외 > 역할 override > 코드 기본값.
+  TS = [`applyUserOverrides`](../src/lib/permissions.ts)(순수, Vitest 6케이스) + `getUserPermMatrix`(perm-matrix) —
+  requireAccess·셸 레이아웃(사이드바/팰릿/모바일내비)·canAccessTenant/canWriteTenant/accessLevelTenant가 전부 이걸 탄다.
+  SQL 미러 = **0170a** `auth_menu_access` 재정의(uov CTE — 미러 테스트가 이제 0170a를 파싱).
+- **#77 봉쇄**: staff 서버 액션(직원 CRUD·계정·계약·계약서 추출·업무 노션)과 페이지 버튼 게이트가 역할 하드코딩
+  `canManageStaff` → `canWriteTenant("staff")`로 전환(메뉴 잠긴 관리자의 직접 POST 우회 차단). 이력서 게이트
+  [`canViewResume`](../src/features/staff/server/resume-access.ts) = 본인 ∥ staff 메뉴 접근자(데이터베이스 탐색기
+  우회도 닫힘). DB 백스톱: 0170a가 academy_documents restricted 가드의 **이력서 행만** auth_staff_can_read로 교체
+  (비이력서 restricted는 종전 사무실 역할 유지). staff_leaves·payroll_records는 **의도적 제외**(브리핑·급여 소비처가
+  비-staff 세션에서 읽음 — 0170a 주석에 명기).
+- **데이터**: [`scripts/staff-access/narrow-staff-menu.mjs`](../scripts/staff-access/narrow-staff-menu.mjs)
+  (드라이런✓ — staff: admin/manager/accountant→none + counselor readonly 제거 + 설현·이승엽 개인 full, 로그·원복 포함).
+  ⚠️ **적용 순서 = 배포 → 0170a SQL → 스크립트 --apply**(옛 코드는 userOverrides를 몰라 순서 어기면 설현·이승엽 잠김).
+- **owner 역할·권한 면**: 저장 payload에 userOverrides 관통(매트릭스 저장 한 번에 개인 예외 전멸 방지) +
+  개인 예외 읽기 전용 목록 표시(이름 매핑 `getUserDisplayNames`). 편집 UI는 비채택 — 관리는 스크립트 경로.
+- 부수리: CLAUDE.md에 커밋돼 있던 **머지 충돌 마커**(#90 vs #91~93, 485-491행) 해소 — 양쪽 항목 전부 보존·번호순 정렬.
+
 ### ECS: 출석을 취소할 수 없었다 + 원본 시트만큼도 안 읽히던 대비 (2026-07-31) - typecheck0/lint0/test158 - 0169a
 
 원장 지적 2건. **"출석취소가 안 되네. 출석을 다시 누르면 출석 취소할 수 있게"** + **"가독성이 너무

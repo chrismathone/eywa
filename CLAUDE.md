@@ -350,7 +350,8 @@ key(DB 식별자)는 **자동 확정**: 과목명 입력 후 blur 시 1회 — �
 - **강사 = 원스크린 전용 미니셸** ('내 메뉴' 드롭다운). 사이드바 복원(A안) 비채택.
 - **수강료 계산기 = 신입생 상담 견적 도구** (`tuition_quotes`, invoices와 분리 — 재원생 청구는 별개).
 - **QR 등록상담 자동연결 = `student_id` 연결만, `outcome` 강제 안 함**(0113a, 2026-07-16). 기존 재원생이 QR로 다른 과목 상담을 내도 `pending`으로 큐 노출 + 연결로 학생탭 다건 노출. "배정 완료"는 **상담 과목의 실제 수강**으로 파생 판정(교차과목 오매몰 금지). **같은 학부모 반복 QR 접수 = 다중노출 + '상담 N건' 힌트, 자동병합 비채택**(제출=시점별 독립기록·병합은 손실/진행중 클로버링 위험·재제출↔새상담 자동구분 불가). 상세 = [[project_enrollment-qr-existing-student-bury]].
-- **커스텀 권한그룹(makeedu식 면/탭 전면 매트릭스) = 비채택.** "이 기능만 다른 권한" 요구는 **menuKey 승격**이 정석(textbook_requests·integrations 선례).
+- **커스텀 권한그룹(makeedu식 면/탭 전면 매트릭스) = 비채택.** "이 기능만 다른 권한" 요구는 **menuKey 승격**이 정석(textbook_requests·integrations 선례). 단 **"같은 역할인데 이 사람만" 요구는 개인 예외(`permissions.userOverrides`)**가 정석(2026-08-01 신설, 아래).
+- **직원관리(/staff) 접근 = 원장(master) + 개인 예외 4인 체제** (2026-08-01 원장 지시: "원일 박소선 설현 이승엽 예외, 나머지 다 막아줘"). 역할 override로 admin/manager/accountant=none + counselor readonly 제거, 설현·이승엽(admin)은 **개인 예외**(`userOverrides` — `applyUserOverrides`/`getUserPermMatrix`/SQL `auth_menu_access` 0170a가 같은 우선순위: master>개인>역할>기본값)로만 통과. staff 서버액션·이력서 게이트(canViewResume)도 역할 하드코딩 대신 이 메뉴 게이트를 본다(#77). 새 관리자에게 직원관리를 열 땐 역할 승격이 아니라 userOverrides에 추가(스크립트 `scripts/staff-access/narrow-staff-menu.mjs` 참조).
 - **과목 내부 키(`subjects[].key`) = 자동 확정·불변**, 학원장이 손대지 않음. key를 편집 input으로 되돌리지 말 것(orphan). 폐기·교체는 "삭제 → 다른 과목에 흡수"(`absorbSubject`).
 - **라이트 전용(Daylight)** — 다크모드 제거. 폰트 = Pretendard **정적 풀 한글 subset**(dynamic-subset 아님).
 - **앱 디자인 = "Injaewon Editorial" + 팔레트 v3 네이비 (2026-07-19 원장 확정).** injaewon.blog의 구성 문법(위계·빅 스탯·소프트 패널·사진 카드·알약)을 전 화면 표준으로, 브랜드색 = 딥 네이비 `#153e75` + 애플 뉴트럴(`#1d1d1f`/`#f5f5f7`) — "색감 대비 최대화" 지시 포함. 구 그린(v1 forest·v2 pine)은 color-utils LEGACY로 자동 추종(마이그 불필요). JetBrains Mono 시그니처는 폐기(숫자 `.num`·hex/URL/kbd만 mono). 상세 = `docs/design-conventions.md` Editorial 절.
@@ -482,13 +483,10 @@ key(DB 식별자)는 **자동 확정**: 과목명 입력 후 blur 시 1회 — �
 - **#87** `overflow-x: scroll`은 넘치지 않아도 트랙을 예약 → **꽉 찬 thumb의 가짜 스크롤바**("스크롤이 없는데도 스크롤이 있네"). 넘침 판정은 브라우저에 맡기고(`auto`) 굵기·색만 손댈 것 (⚠️ 진단 = `offsetHeight-clientHeight`≠0인데 `scrollWidth-clientWidth`=0)
 - **#88** `class_schedules`는 **운영 이력을 함께 담는다**(실측 1,068행 중 480행 만료) — 전 행을 그리면 끝난 교시가 현재로 보이고(반 상세 25줄 중 15줄) 미래 시작 교시도 현재로 샌다. 화면·AI·집계는 `summarizeSchedule`, 쿼리는 `liveValidTo` 절 (⚠️ 종강 반엔 걸지 말 것 — 요일이 통째로 사라진다)
 - **#89** 상한 걸린 미리보기의 **배열 길이를 건수로** 쓰면 34명이 영원히 "30"(냄새=숫자가 상한값과 같고 안 변함) · 창으로 좁힌 수치에서 창을 떼면 거짓말(13건 ↔ 실제 171건) · 후검증 가드가 **프롬프트가 사실로 준 영문**을 막아 정상 응답을 폐기 · `max_tokens` 절단이 "JSON 문법 오류"로 위장(진단=output_tokens가 한도와 같은지) · ⚠️ **폴백 있는 기능은 실패율을 따로 계측**해야 보인다(화면은 매일 멀쩡해 보임)
-<<<<<<< HEAD
 - **#90** 브라우저에 저장한 "사용자 설정"은 계정 설정이 아니다 — localStorage는 **포트까지 포함한 origin 단위**(쿠키는 호스트 단위라 "로그인은 그대로인데 설정만 리셋"으로 위장). 사람을 따라다녀야 할 값(안 보기·읽음·온보딩)은 DB에 계정 단위로 · 설정 토글은 **바꾸는 순간 저장**(닫기 버튼에 매달면 체크만 하고 이동 시 유실) · ⚠️ 마이그 번호는 **rebase 시점**에 확정되고, 개명 시 일괄 치환하면 남의 주석을 깨뜨린다(내 파일만 + `git diff origin/main` 확인)
-=======
 - **#91** RLS 정책에 **컬럼을 안 쓰는 게이트 함수를 맨몸으로** 쓰면 **행마다** 호출된다(`auth_billing_can_read()` 1회 14ms × 3,225행 = 2.1s). `STABLE`로는 안 접힌다 → **`(select f())`로 감쌀 것**(InitPlan, 권한 무변경). ⚠️ service_role 프로브는 RLS를 우회해 **정상으로 보인다** — 성능은 authenticated 롤로 잴 것. 🔑 판별은 "함수를 썼나"가 아니라 **"컬럼과 비교되나"** — `tenant_id = auth_tenant_id()`는 `Index Cond`(1회)라 감쌀 필요 없다(감싸도 무변화 실측). `EXPLAIN`에서 `Filter`인 것만 감싼다. 상관 서브쿼리는 감싸면 의미가 바뀐다
-- **#93** 이름이 비슷한 두 컬럼이 **다른 사실**일 수 있다 — `textbook_orders.created_by`(작성자) ≠ `teacher_name`(소유자). 대리 작성이 의도된 동작이라 사무실이 강사 앞으로 낸 요청은 작성자=사무실·소유자=그 강사다. ⚠️ **소유 판정을 created_by로 갈아끼우면 그 강사가 자기 요청을 못 고친다** · ⚠️ 소유자 이름으로 작성자 칸을 **백필하지 말 것**(사실 아닌 값이 남는다 — 모르면 null이 정직하다) · ⚠️ UPDATE의 `with check`는 OLD를 못 봐서 `col = auth.uid()`를 걸면 대리 작성분이 락아웃
 - **#92** RLS를 한 테이블에 걸었다고 **그 계열이 다 잠긴 게 아니다** — 0158a가 invoices·expenses만 잠근 사이 같은 계열 `invoice_teacher_splits`·`invoice_session_terms`(단가·분배액)와 `staff_contracts`(계약 조건 132행 중 54행이 급여성 문구)는 **역할을 안 보는 tenant_isolation 하나**로 강사·뷰어에게 PostgREST 직결로 열려 있었다(#77의 변종). ⚠️ **"의도적 제외"는 반드시 마이그레이션에 적어라** — 안 적힌 테이블은 닫힌 걸로 오인된다. ⚠️ 잠그기 전 `auth_menu_access` DEFAULTS에 그 메뉴가 있는지 확인(없으면 master 빼고 전부 'none' = fail-closed 락아웃)
->>>>>>> origin/main
+- **#93** 이름이 비슷한 두 컬럼이 **다른 사실**일 수 있다 — `textbook_orders.created_by`(작성자) ≠ `teacher_name`(소유자). 대리 작성이 의도된 동작이라 사무실이 강사 앞으로 낸 요청은 작성자=사무실·소유자=그 강사다. ⚠️ **소유 판정을 created_by로 갈아끼우면 그 강사가 자기 요청을 못 고친다** · ⚠️ 소유자 이름으로 작성자 칸을 **백필하지 말 것**(사실 아닌 값이 남는다 — 모르면 null이 정직하다) · ⚠️ UPDATE의 `with check`는 OLD를 못 봐서 `col = auth.uid()`를 걸면 대리 작성분이 락아웃
 - **#82** postgres.js에서 `${JSON.stringify(v)}::jsonb` = **이중 인코딩**(`"#153e75"` 9자 저장 → 검증 실패 → 설정 침묵 무시). 스칼라는 `to_jsonb(${v}::text)`·객체는 `sql.json(obj)`, 검증은 **길이까지** (⚠️ 눈으로 따옴표 구분 안 됨)
 
 ## 🎨 디자인 규칙 인덱스 (상세는 `docs/design-conventions.md`)

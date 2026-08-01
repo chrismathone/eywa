@@ -75,3 +75,17 @@ export async function getSettingsMeta(): Promise<{ updatedAt: string } | null> {
     .maybeSingle();
   return data?.updated_at ? { updatedAt: data.updated_at } : null;
 }
+
+/**
+ * 개인 예외(permissions.userOverrides) 표시용 이름 매핑 — 역할·권한 면에서 userId를 사람 이름으로.
+ * ids는 스키마상 최대 80개(권한 예외 규모)라 단일 .in()으로 충분(B3 청크 임계 미만). RLS가 테넌트 격리.
+ */
+export async function getUserDisplayNames(ids: readonly string[]): Promise<Record<string, string>> {
+  if (ids.length === 0) return {};
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("users")
+    .select("id, display_name")
+    .in("id", [...new Set(ids)]);
+  return Object.fromEntries((data ?? []).map((u) => [u.id as string, (u.display_name as string) ?? ""]));
+}

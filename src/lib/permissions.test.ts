@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { canWrite, canAccess, MENU_ACCESS, menuKeyForPath } from "./permissions";
+import {
+  applyUserOverrides,
+  canWrite,
+  canAccess,
+  MENU_ACCESS,
+  menuKeyForPath,
+  resolveMatrix,
+  type UserPermissionOverride,
+} from "./permissions";
 
 describe("canWrite — 쓰기 게이트(full|scoped만 통과, readonly/none 차단)", () => {
   it("full/scoped는 통과", () => {
@@ -64,5 +72,72 @@ describe("menuKeyForPath — 경로→MenuKey (뷰-경로 가드용)", () => {
       const menu = menuKeyForPath(p)!;
       expect(canAccess("teacher", menu)).toBe(true);
     }
+  });
+});
+
+describe("applyUserOverrides — 개인 예외(직원관리 4인 좁히기의 메커니즘, 2026-08-01)", () => {
+  // 실제 시나리오: staff를 역할 override로 admin=none 잠근 뒤, 설현·이승엽에게만 개인 full.
+  const base = resolveMatrix([
+    { menu: "staff", role: "admin", access: "none" },
+    { menu: "staff", role: "manager", access: "none" },
+    { menu: "staff", role: "accountant", access: "none" },
+  ]);
+  const grants: UserPermissionOverride[] = [
+    { userId: "u-sh", menu: "staff", access: "full" },
+    { userId: "u-lsy", menu: "staff", access: "full" },
+  ];
+
+  it("허용된 사용자는 자기 역할 행이 열린다", () => {
+    const m = applyUserOverrides(base, "u-sh", "admin", grants);
+    expect(m.staff.admin).toBe("full");
+    expect(canWrite("admin", "staff", m)).toBe(true);
+  });
+
+  it("허용 목록 밖 사용자는 그대로 잠긴다(같은 admin이어도)", () => {
+    const m = applyUserOverrides(base, "u-other", "admin", grants);
+    expect(m.staff.admin).toBe("none");
+    expect(canAccess("admin", "staff", m)).toBe(false);
+  });
+
+  it("자기 역할 행만 패치 — 다른 역할·다른 메뉴 행은 불변(강사뷰 가드 등 보호)", () => {
+    const m = applyUserOverrides(base, "u-sh", "admin", grants);
+    expect(m.staff.manager).toBe("none");
+    expect(m.staff.master).toBe("full");
+    expect(m.billing).toEqual(base.billing);
+  });
+
+  it("입력 매트릭스를 변형하지 않는다(요청 캐시 오염 방지) + 예외 없으면 같은 참조", () => {
+    const before = base.staff.admin;
+    applyUserOverrides(base, "u-sh", "admin", grants);
+    expect(base.staff.admin).toBe(before);
+    expect(applyUserOverrides(base, "u-none", "admin", grants)).toBe(base);
+    expect(applyUserOverrides(base, "u-sh", "admin", [])).toBe(base);
+  });
+
+  it("잠긴 셀은 개인 예외로도 못 연다(역할 전용 화면·student 컬럼)", () => {
+    const evil: UserPermissionOverride[] = [
+      { userId: "u-x", menu: "teacher_onescreen", access: "full" },
+      { userId: "u-x", menu: "my_learning", access: "full" },
+      { userId: "u-x", menu: "dashboard", access: "full" },
+    ];
+    // 관리자에게 원스크린/내 학습을 열려는 시도 → 무시
+    const m1 = applyUserOverrides(base, "u-x", "admin", evil);
+    expect(m1.teacher_onescreen.admin).toBe("none");
+    expect(m1.my_learning.admin).toBe("none");
+    // 학생 컬럼 전체 잠금 → 학생에게 일반 메뉴 부여 시도는 무시
+    const m2 = applyUserOverrides(base, "u-x", "student", [
+      { userId: "u-x", menu: "billing", access: "full" },
+    ]);
+    expect(m2.billing.student).toBe("none");
+    // 강사 대시보드 잠금도 유지
+    const m3 = applyUserOverrides(base, "u-x", "teacher", evil);
+    expect(m3.dashboard.teacher).toBe("none");
+  });
+
+  it("개인 예외가 역할 override를 이긴다(내리는 방향도 동작)", () => {
+    const narrowed = applyUserOverrides(base, "u-view", "viewer", [
+      { userId: "u-view", menu: "timetable", access: "none" },
+    ]);
+    expect(narrowed.timetable.viewer).toBe("none"); // 기본 readonly → 개인 none
   });
 });

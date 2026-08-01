@@ -10,8 +10,17 @@ import { MENU_ACCESS, SYSTEM_ROLES, type MenuKey } from "./permissions";
  *
  * 이 테스트가 마이그레이션 파일을 파싱해 두 소스가 같은지 잠근다.
  * 실패하면 **permissions.ts가 아니라 마이그레이션 SQL을 고쳐라**(SQL이 미러다).
+ *
+ * ⚠️ auth_menu_access의 **살아있는 정의는 0170a**(개인 예외 userOverrides 추가)로 이동했다 — DEFAULTS
+ * 미러 검사도 0169a를 본다. 0158a의 리터럴은 역사 기록(재적용 시 0169a를 다시 돌려야 함). 앞으로
+ * 이 함수를 또 재정의하면 MIGRATION 경로를 그 파일로 옮기고 이 주석을 갱신할 것.
  */
 const MIGRATION = join(
+  __dirname,
+  "../../supabase/migrations/0170a_user_permission_overrides.sql",
+);
+// 0158a 고유 검사(정책 생성 여부)는 계속 원파일을 본다.
+const MIGRATION_0158A = join(
   __dirname,
   "../../supabase/migrations/0158a_rls_role_gates_for_invoices_expenses.sql",
 );
@@ -58,7 +67,18 @@ describe("0158a RLS 기본 권한 = permissions.ts MENU_ACCESS 미러", () => {
   });
 
   it("textbook_orders는 잠그지 않는다(created_by 부재 — 강사 교재요청 락아웃 방지)", () => {
-    const sql = readFileSync(MIGRATION, "utf8");
+    const sql = readFileSync(MIGRATION_0158A, "utf8");
     expect(sql).not.toMatch(/create policy \w*textbook_orders\w*_role_gate/);
+  });
+
+  it("0170a — 개인 예외(uov)가 역할 override(ov)보다 먼저 coalesce된다", () => {
+    const sql = readFileSync(MIGRATION, "utf8");
+    // userOverrides 분기 존재 + 본인(auth.uid()) 한정
+    expect(sql).toMatch(/userOverrides/);
+    expect(sql).toMatch(/o->>'userId' = \(select auth\.uid\(\)\)::text/);
+    // coalesce 순서: uov → ov → defaults
+    const order = sql.indexOf("(select access from uov)");
+    expect(order).toBeGreaterThan(0);
+    expect(order).toBeLessThan(sql.indexOf("(select access from ov)", order));
   });
 });

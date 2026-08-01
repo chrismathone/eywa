@@ -91,9 +91,19 @@ function diffOverrides(matrix: AccessMatrix): PermissionOverride[] {
   return out;
 }
 
-export function PermissionsSection({ initial }: { initial: PermissionsSettings }) {
+export function PermissionsSection({
+  initial,
+  userOverrideNames = {},
+}: {
+  initial: PermissionsSettings;
+  /** 개인 예외 표시용 userId→이름(서버에서 해석). 이름 없는 id는 축약 id로 표시. */
+  userOverrideNames?: Record<string, string>;
+}) {
   const [matrix, setMatrix] = useState<AccessMatrix>(() => resolveMatrix(initial.overrides));
   const overrides = useMemo(() => diffOverrides(matrix), [matrix]);
+  // 개인 예외는 이 폼에서 편집하지 않는다(조회 전용) — 단 저장 payload에 **그대로 관통**시킨다.
+  // 빠뜨리면 permissionsSchema의 default([])가 채워져 매트릭스 저장 한 번에 개인 예외가 전멸한다.
+  const userOverrides = initial.userOverrides;
 
   function cycle(menu: MenuKey, role: SystemRole) {
     const next = CYCLE[(CYCLE.indexOf(matrix[menu][role]) + 1) % CYCLE.length];
@@ -127,7 +137,7 @@ export function PermissionsSection({ initial }: { initial: PermissionsSettings }
   }
 
   return (
-    <SectionForm section="permissions" payload={{ overrides }}>
+    <SectionForm section="permissions" payload={{ overrides, userOverrides }}>
       <>
       <section className="border-border bg-card rounded-2xl border p-5">
         <h3 className="text-foreground text-sm font-bold">강사 &lsquo;내 메뉴&rsquo; 표시</h3>
@@ -214,6 +224,30 @@ export function PermissionsSection({ initial }: { initial: PermissionsSettings }
             </tbody>
           </table>
         </DragScrollArea>
+        {userOverrides.length > 0 ? (
+          // 개인 예외 — 역할 표 위에 특정 사용자에게만 얹힌 셀(예: 직원관리를 원장+개발팀 4인으로 좁히며
+          // 설현·이승엽 admin에게만 개별 허용, 2026-08-01). 표의 역할 값과 다르게 동작하는 이유를 원장이
+          // 여기서 확인한다. 편집은 시스템 반영(스크립트) 경로만 — 이 폼은 저장 시 그대로 보존한다.
+          <div className="border-border bg-bg-soft mt-4 rounded-md border px-4 py-3">
+            <p className="text-foreground text-[12px] font-bold">개인 예외 {userOverrides.length}건</p>
+            <p className="text-text-dim mt-0.5 text-[11px] leading-relaxed">
+              아래 사용자는 역할과 무관하게 해당 메뉴가 개별 적용됩니다(위 표보다 우선).
+            </p>
+            <ul className="mt-1.5 space-y-0.5">
+              {userOverrides.map((o) => (
+                <li key={`${o.userId}-${o.menu}`} className="text-[12px]">
+                  <span className="text-foreground font-medium">
+                    {userOverrideNames[o.userId] || `${o.userId.slice(0, 8)}…`}
+                  </span>
+                  <span className="text-text-dim"> — {MENU_LABEL[o.menu]}: </span>
+                  <span className={`rounded px-1 py-0.5 text-[11px] font-medium ${ACCESS_CLS[o.access]}`}>
+                    {ACCESS_LABEL[o.access]}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
       </section>
       </>
     </SectionForm>
