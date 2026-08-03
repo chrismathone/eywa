@@ -147,6 +147,7 @@ export async function extractContractFromPdf(
         "규칙:",
         "- startDate/endDate: 계약 기간의 시작일·종료일을 YYYY-MM-DD로. 본문에 없으면 빈 문자열.",
         `- employmentType: ${EMPLOYMENT_TYPES.join("·")} 중 본문에 적힌 것 하나. 없으면 빈 문자열.`,
+        '- company: 계약서 서두 사용자(갑)의 회사/기관명을 본문 그대로 짧게(예: "주식회사 곰돌이", "EIE인재원"). 없으면 빈 문자열.',
         '- contractKind: 계약 종류를 본문 표현 그대로 짧게(예: "근로", "(시용)근로", "강의용역"). 없으면 빈 문자열.',
         '- payType: 급여 방식 — "월급"(월 고정급) | "시급" | "비율"(강의료 퍼센트 배분) 중 하나. 없으면 빈 문자열.',
         "- monthlyPay/hourlyPay: 해당 방식의 금액을 본문 숫자 그대로(쉼표 포함). 해당 없으면 빈 문자열.",
