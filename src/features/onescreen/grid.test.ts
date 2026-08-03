@@ -67,21 +67,49 @@ describe("rowInClass", () => {
   it("반 모호(className=null)는 어느 필터에서도 통과(같은 과목 두 반)", () => {
     expect(rowInClass(sub(null), "A반")).toBe(true);
   });
+
+  // 보강 행(반 없음) — 앵커가 있으면 그 수업에서만, 없으면 종전대로 어디서나(카드만 보이고 행이 사라지는 것 방지).
+  it("보강 행은 앵커 반에서만 (앵커 없으면 어디서나)", () => {
+    const mk = (anchor: string | null) => ({
+      name: "수학 (보강)",
+      prev: "",
+      today: "",
+      makeup: true,
+      classId: null,
+      makeupClassName: anchor,
+    });
+    expect(rowInClass(mk("A반"), "A반")).toBe(true);
+    expect(rowInClass(mk("A반"), "B반")).toBe(false);
+    expect(rowInClass(mk(null), "B반")).toBe(true);
+  });
 });
 
 // 2026-07-27 강사 제보(허다빈): 특정 반을 고른 채 보강 학생을 추가하면 "추가됨" 토스트만 뜨고 카드가 사라졌다.
 // 보강 학생은 buildMakeupStudent가 조립해 tags가 없어(tag:"보강") 어떤 반 이름과도 매칭되지 않는 게 원인.
-describe("studentInClass — 보강은 반 필터에 숨지 않는다", () => {
+describe("studentInClass — 보강은 '그 수업'에서만 보인다(앵커)", () => {
   const member = (tags: string[]): OneScreenStudent => ({ ...stu("m", [{ name: "수학" }]), tag: tags[0]!, tags });
   const makeupCard = (): OneScreenStudent => ({
     ...stu("mk", [{ name: "수학" }]),
     tag: "보강",
     isMakeup: true,
   });
+  /** 앵커(어느 수업 시간에 한 보강인가)가 붙은 보강 전용 카드. */
+  const anchoredCard = (cls: string): OneScreenStudent => ({
+    ...stu("mk", [{ name: "수학 (보강)" }]),
+    subjects: [{ name: "수학 (보강)", prev: "", today: "", makeup: true, classId: null, makeupClassName: cls }],
+    tag: cls,
+    isMakeup: true,
+  });
   /** 정규 카드에 병합된 보강 행(classId 없음·makeup) — 그 학생이 필터 반 소속이 아닌 상황. */
-  const merged = (): OneScreenStudent => {
+  const merged = (anchorClass: string | null): OneScreenStudent => {
     const s = member(["토일반"]);
-    return { ...s, subjects: [...s.subjects, { name: "수학 (보강)", prev: "", today: "", makeup: true, classId: null }] };
+    return {
+      ...s,
+      subjects: [
+        ...s.subjects,
+        { name: "수학 (보강)", prev: "", today: "", makeup: true, classId: null, makeupClassName: anchorClass },
+      ],
+    };
   };
 
   it("전체(null)면 항상 통과", () => {
@@ -100,13 +128,22 @@ describe("studentInClass — 보강은 반 필터에 숨지 않는다", () => {
     expect(studentInClass(s, "B반")).toBe(false);
   });
 
-  it("🔴 보강 전용 카드는 어느 반 필터에서도 통과(반 무관 수업)", () => {
-    expect(studentInClass(makeupCard(), "A반")).toBe(true);
-    expect(studentInClass(makeupCard(), "아무반")).toBe(true);
+  // 🔴 2026-08-03 원장 제보: 앵커가 없던 시절 보강 학생이 **모든 수업**에서 보였다. 이제 그 수업에서만.
+  it("🔴 보강 전용 카드는 **앵커 반**에서만 보인다", () => {
+    expect(studentInClass(anchoredCard("A반"), "A반")).toBe(true);
+    expect(studentInClass(anchoredCard("A반"), "B반")).toBe(false);
   });
 
-  it("🔴 정규 카드에 병합된 보강 행이 있으면, 그 반 소속이 아니어도 통과", () => {
-    expect(studentInClass(merged(), "평일반")).toBe(true);
+  it("앵커 없는 보강(옛 기록·전체에서 추가)은 '전체'에서만 보인다", () => {
+    expect(studentInClass(makeupCard(), null)).toBe(true);
+    expect(studentInClass(makeupCard(), "A반")).toBe(false);
+  });
+
+  it("정규 카드에 병합된 보강 행은 **그 앵커 반**에서도 카드를 남긴다(소속이 아니어도)", () => {
+    expect(studentInClass(merged("평일반"), "평일반")).toBe(true); // 보강을 한 수업
+    expect(studentInClass(merged("평일반"), "토일반")).toBe(true); // 원래 수강 반
+    expect(studentInClass(merged("평일반"), "다른반")).toBe(false);
+    expect(studentInClass(merged(null), "평일반")).toBe(false); // 앵커 없으면 남의 반에 안 낀다
   });
 
   it("⚠️ 정규 행에 켠 '보강' 토글(반 있음)은 필터를 우회시키지 않는다", () => {

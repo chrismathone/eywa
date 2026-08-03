@@ -55,6 +55,11 @@ export type SaveLessonReportInput = {
    * null 허용: 보강·수업외 수동 추가처럼 반이 없는 저장(그때는 예전대로 과목이 단위).
    */
   classId?: string | null;
+  /**
+   * 보강 행이 **어느 수업 시간에** 진행됐는가(0171a). 표시·반 필터 앵커 전용 —
+   * 🔴 `class_id`에 넣으면 안 된다(unit_key가 coalesce(class_id,subject)라 같은 반 정규 보고서와 충돌).
+   */
+  makeupClassId?: string | null;
   // 보강·수업외 학생(수동 추가) — true면 '내 담당 반 활성 수강생' 검사 대신 같은 학원(tenant) 학생이면 허용.
   // 원장 승인 정책(보강 저장=학원 전체). RLS가 테넌트 격리(cross-tenant는 select null) → 학원 밖 학생은 여전히 거부.
   outOfClass?: boolean;
@@ -156,6 +161,8 @@ export async function saveLessonReport(
         progress: input.progress || null,
         exam_info: input.examInfo || null,
         homework_score: normalizeNoneMarker(input.homeworkScore),
+        // 보강 행일 때만 앵커를 남긴다(정규 행에 들어가면 필터가 엉킨다). 미지정('전체'에서 추가)은 null.
+        makeup_class_id: input.makeup && !input.classId ? (input.makeupClassId ?? null) : null,
         daily_test: input.dailyTest || null,
         check_test: input.checkTest || null,
         attitude: input.attitude || null,

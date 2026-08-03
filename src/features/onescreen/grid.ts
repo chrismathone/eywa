@@ -59,6 +59,11 @@ export function isReportEligible(subject: Subject): boolean {
  */
 export function rowInClass(subject: Subject, classFilter: string | null): boolean {
   if (!classFilter) return true;
+  // 보강 행은 반이 없다 — **어느 수업 시간에 한 보강인지**(앵커)가 있으면 그 반에서만 보인다(원장 2026-08-03).
+  // ⚠️ 앵커가 없는 행(옛 기록·'전체'에서 추가)까지 숨기면 안 된다 — 카드는 보이는데 그 안의 보강 행만
+  //    사라져 "발송한 보고서가 또 없어졌다"가 된다. 앵커 없는 행은 종전대로(반 모호 = 어디서나 표시).
+  if (subject.makeup && !subject.classId)
+    return !subject.makeupClassName || subject.makeupClassName === classFilter;
   return subject.className == null || subject.className === classFilter;
 }
 
@@ -76,21 +81,24 @@ export function isClassMember(
 /**
  * 반 필터가 이 **학생 카드**를 남기는가(행 단위는 위 `rowInClass`).
  *
- * 🔴 **보강(수업외)은 반에 묶이지 않으므로 반 필터에 숨으면 안 된다** (2026-07-27 강사 제보 — 특정 반을
- *    고른 채 보강 학생을 추가하면 "추가됨" 토스트만 뜨고 카드가 사라졌다). 보강 학생은 로스터가 만든 게
- *    아니라 `buildMakeupStudent`가 조립하는데 거기엔 `tags`가 없어(`tag:"보강"`뿐) 어떤 반 이름과도
- *    매칭되지 않는다 → 필터가 걸린 동안 **영영 안 보인다**. 정규 카드에 병합된 보강 행도 같다: 그 학생이
- *    필터한 반 소속이 아니면 카드째 걸러져, 방금 붙인 보강 행에 손도 못 댄다.
+ * 🔴 2026-07-27엔 보강 학생을 **모든 반 필터에 통과**시켰다(특정 반을 고른 채 보강을 추가하면 카드가
+ *    사라져서). 그 우회가 이번엔 반대 불만이 됐다 — *"보강 추가한 학생이 모든 수업에서 보인다"*(원장
+ *    2026-08-03). 뿌리는 같다: **보강 행에 소속이 없었다.**
+ *    → 0171a `makeup_class_id`(어느 수업 시간에 한 보강인가)를 앵커로 두고, 앵커가 맞는 반에서만 보인다.
+ *    추가 시점의 반 필터가 그대로 앵커가 되므로 07-27의 "추가했는데 사라짐"은 재발하지 않는다.
  * ⚠️ 조건이 `su.makeup`만이면 안 된다 — 정규 행에도 강사가 "보강" 토글을 켤 수 있다(그 행은 `classId`가
- *    있고 그 반 소속이라 필터를 우회할 이유가 없다). **반이 없는(`classId` 없음) 보강 행만** 통과시킨다.
+ *    있고 그 반 소속이라 필터를 우회할 이유가 없다). **반이 없는(`classId` 없음) 보강 행만** 앵커로 판정한다.
  */
 export function studentInClass(
   student: Pick<OneScreenStudent, "tag" | "tags" | "isMakeup" | "subjects">,
   classFilter: string | null,
 ): boolean {
   if (!classFilter) return true;
-  if (student.isMakeup) return true;
-  if (student.subjects.some((su) => su.makeup && !su.classId)) return true;
+  // 이 반에서 한 보강 행이 있으면 카드를 남긴다(정규 카드에 병합된 보강 포함).
+  if (student.subjects.some((su) => su.makeup && !su.classId && su.makeupClassName === classFilter))
+    return true;
+  // 보강 전용 카드(담당 반 수강생이 아님)는 앵커가 맞을 때만 — 앵커가 없으면 '전체'에서만 보인다.
+  if (student.isMakeup) return false;
   return isClassMember(student, classFilter);
 }
 

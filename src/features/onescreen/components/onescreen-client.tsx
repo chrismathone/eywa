@@ -34,7 +34,7 @@ import {
 } from "../server/attachment-actions";
 import { uploadToTicket } from "@/lib/storage/upload-to-ticket";
 import { resizeImageForUpload } from "../resize-image";
-import type { AttendanceMark, CellState, OneScreenStudent } from "../types";
+import type { AttendanceMark, CellState, OneScreenStudent, Subject } from "../types";
 import { OneScreenTopBar } from "./top-bar";
 import { StudentList, type SendMark } from "./student-list";
 import type { TodayClass } from "../server/roster";
@@ -567,10 +567,23 @@ export function OneScreenClient({
       toast.error(res.error ?? "학생을 추가하지 못했습니다");
       return;
     }
-    const mk = res.student;
+    // 보강을 **어느 수업 시간에** 하는지 = 지금 보고 있는 반 필터. 이게 반 필터 앵커가 된다(0171a) —
+    // 앵커가 없으면(전체에서 추가·동명 반이라 특정 불가) 그 보강 행은 '전체'에서만 보인다.
+    // 🔴 예전엔 앵커가 없어 보강 학생이 **모든 반 필터**에 나왔다(원장 제보 2026-08-03).
+    const anchor = matchingClasses.length === 1 ? matchingClasses[0]! : null;
+    const withAnchor = (su: Subject): Subject => ({
+      ...su,
+      makeupClassId: anchor?.id ?? null,
+      makeupClassName: anchor?.name ?? null,
+    });
+    const mk = { ...res.student, subjects: res.student.subjects.map(withAnchor) };
     const existing = students.find((s) => s.id === studentId);
     if (!existing) {
-      // 목록에 없던 학생 → 종전대로 보강 카드로 추가(무변경).
+      // 목록에 없던 학생 → 보강 카드로 추가. 앵커가 있으면 그 수업 이름으로 묶어 보여 준다(로스터 복원과 같은 규약).
+      if (anchor) {
+        mk.tag = anchor.name;
+        mk.className = anchor.name;
+      }
       setStudents((prev) => [...prev, mk]);
       setReports((prev) => ({ ...prev, [mk.id]: initReports([mk])[mk.id] ?? {} }));
       setSelId(mk.id);
@@ -594,7 +607,7 @@ export function OneScreenClient({
         while (used.has(name)) name = `${su.name} (보강 ${n++})`;
         used.add(name);
         // ⚠️ classId=null·makeup=true 유지(반 무관 보강). subjectLabel은 깨끗한 라벨 — 진도 접두에 "(보강)" 누출 방지.
-        return { ...su, name, classId: null, makeup: true, subjectLabel: su.subjectLabel ?? su.name };
+        return withAnchor({ ...su, name, classId: null, makeup: true, subjectLabel: su.subjectLabel ?? su.name });
       });
     if (makeupRows.length === 0) {
       setSelId(existing.id);
@@ -1265,6 +1278,8 @@ export function OneScreenClient({
         // 보강(수업외) = 담당반·결석 게이트 우회. 카드 전체가 보강(isMakeup)이거나, **정규 카드에 병합된 보강 행**
         // (makeup=true·classId 없음)도 우회 — 그 학생의 담당반이 아닌 추가수업이라 담당반/결석 검사에 걸리면 안 된다.
         outOfClass: (student.isMakeup ?? false) || (!!su?.makeup && !su?.classId),
+        // 보강 행의 소속(어느 수업 시간에 한 보강인가) — 반 필터 앵커(0171a). 정규 행이면 서버가 무시한다.
+        makeupClassId: su?.makeupClassId ?? null,
       },
     };
   }
