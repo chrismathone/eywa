@@ -127,8 +127,10 @@ export async function extractContractFromPdf(
   }
 
   // 🔒 주민번호는 어떤 경로든 추출 프롬프트에 싣지 않는다(외부 AI 전송 금지 필드 — 텍스트 단계 마스킹).
-  const body = maskResidentRegNo(text).replace(/ /g, "").trim();
-  if (body.length < 30) {
+  // 공백은 한 칸으로 접되 **지우지 않는다** — 지우면 모델이 원문 인용(terms)을 공백 없이 돌려줘
+  // "월급여액은일금2,200,000원…"처럼 읽기 나쁜 조건 문구가 저장된다(2026-08-03 실측).
+  const body = maskResidentRegNo(text).replace(/\s+/g, " ").trim();
+  if (body.replace(/ /g, "").length < 30) {
     return {
       error: "PDF에서 글자를 찾지 못했습니다 — 스캔 상태가 흐리면 인식이 안 될 수 있습니다(선명한 스캔 또는 글자 PDF로 다시 시도)",
     };
