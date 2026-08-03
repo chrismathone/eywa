@@ -103,3 +103,86 @@ export function isEmptyExtract(e: ContractExtract): boolean {
 export function maskResidentRegNo(text: string): string {
   return String(text ?? "").replace(/(\d{6})\s*[-–]\s*\d{7}/g, "$1-*******");
 }
+
+// ── 구조화 조건(원장 지시 2026-08-03: "정규직·알바·프리랜서별로 다르게, 우다다 인용 금지") ──────
+// 모델은 급여 구조를 **필드로** 뽑고, 조건 문자열은 여기서 결정적으로 조립한다.
+// 시트 관례를 따른 형태: 비율제 "강의용역 : 초등(43%), 중등(44%)" · 시급 "(시용)근로 : 시용 3개월 / 시급 15,000원" ·
+// 월급 "근로 : 월급 2,200,000원 (포괄임금)". 각 숫자·라벨은 원문 등장 검증 통과분만 쓴다.
+
+export type RawPayRate = { label?: string | null; percent?: string | number | null };
+export type RawContractExtract = Partial<ContractExtract> & {
+  /** 계약 종류 — 본문 표현 그대로 짧게("근로", "(시용)근로", "강의용역" 등). */
+  contractKind?: string | null;
+  /** 급여 방식: "월급" | "시급" | "비율" | "". */
+  payType?: string | null;
+  monthlyPay?: string | number | null;
+  hourlyPay?: string | number | null;
+  /** 시용/수습 개월 수. */
+  probationMonths?: string | number | null;
+  /** 비율제 구간들 — label·percent 모두 본문 그대로. */
+  rates?: RawPayRate[] | null;
+};
+
+/** 숫자 문자열 정규화(쉼표 제거·숫자만). 금액 비교·표시용. */
+function digitsOf(v: string | number | null | undefined): string {
+  return String(v ?? "").replace(/[^0-9]/g, "");
+}
+
+/** 그 금액이 원문에 실제로 있는가(쉼표 유무 무시, 3자리 이상만 의미). */
+function amountAppears(body: string, v: string | number | null | undefined): boolean {
+  const d = digitsOf(v);
+  if (d.length < 3) return false;
+  return body.replace(/,/g, "").includes(d);
+}
+
+/** "43%"처럼 그 퍼센트가 원문에 있는가(1~3자리). */
+function percentAppears(body: string, v: string | number | null | undefined): boolean {
+  const d = digitsOf(v);
+  if (!d || d.length > 3) return false;
+  return new RegExp(`${d}\\s*%`).test(body);
+}
+
+function fmtAmount(v: string | number): string {
+  const d = digitsOf(v);
+  return d ? Number(d).toLocaleString("en-US") : "";
+}
+
+/**
+ * 검증 통과한 구조 필드로 조건 문자열을 조립한다. 조립할 게 없으면 "" — 호출부가 통짜 인용 폴백.
+ * 순수 함수(Vitest). body는 공백 1칸 정규화본.
+ */
+export function composeContractTerms(raw: RawContractExtract, body: string): string {
+  const compact = body.replace(/\s+/g, "");
+  const kindRaw = String(raw.contractKind ?? "").trim().replace(/\s+/g, "");
+  // 계약 종류는 본문에 실제 등장할 때만 접두로 쓴다(모델이 지어낸 분류 차단).
+  const kind = kindRaw && kindRaw.length <= 20 && compact.includes(kindRaw) ? kindRaw : "";
+  const prefix = kind ? `${kind} : ` : "";
+  const payType = String(raw.payType ?? "").trim();
+
+  if (payType === "비율") {
+    const parts: string[] = [];
+    for (const r of raw.rates ?? []) {
+      const label = String(r?.label ?? "").trim();
+      if (!label || label.length > 10 || !compact.includes(label.replace(/\s+/g, ""))) continue;
+      if (!percentAppears(body, r?.percent)) continue;
+      parts.push(`${label}(${digitsOf(r?.percent)}%)`);
+    }
+    if (parts.length > 0) return `${prefix}${parts.join(", ")}`;
+  }
+
+  if (payType === "시급" && amountAppears(body, raw.hourlyPay)) {
+    const prob = digitsOf(raw.probationMonths);
+    // 시용 개월 수는 본문에 그 숫자+개월이 있어야 붙인다.
+    const probOk = prob && new RegExp(`${prob}\\s*개\\s*월`).test(body);
+    const head = probOk ? `시용 ${prob}개월 / ` : "";
+    return `${prefix}${head}시급 ${fmtAmount(raw.hourlyPay!)}원`;
+  }
+
+  if (payType === "월급" && amountAppears(body, raw.monthlyPay)) {
+    // 포괄임금 여부는 모델이 아니라 원문 단어로 판정한다.
+    const inclusive = compact.includes("포괄임금") ? " (포괄임금)" : "";
+    return `${prefix}월급 ${fmtAmount(raw.monthlyPay!)}원${inclusive}`;
+  }
+
+  return "";
+}

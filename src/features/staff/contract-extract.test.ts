@@ -3,6 +3,7 @@ import {
   dateAppearsIn,
   groundContractExtract,
   isEmptyExtract,
+  composeContractTerms,
   maskResidentRegNo,
   normalizeContractDate,
 } from "./contract-extract";
@@ -104,5 +105,46 @@ describe("maskResidentRegNo", () => {
   });
   it("전화번호·날짜는 건드리지 않는다", () => {
     expect(maskResidentRegNo("010-2501-5783 / 2026-08-03")).toBe("010-2501-5783 / 2026-08-03");
+  });
+});
+
+describe("composeContractTerms — 계약 종류별 조건 조립", () => {
+  it("비율제: 라벨(퍼센트) 나열 — 시트 관례 형태", () => {
+    const body = "강의 용역 계약서 … 강의료는 초등 43%, 중등 44%, 고등 45% 로 배분한다";
+    const out = composeContractTerms(
+      { contractKind: "강의용역", payType: "비율", rates: [
+        { label: "초등", percent: 43 }, { label: "중등", percent: 44 }, { label: "고등", percent: 45 },
+      ] },
+      body,
+    );
+    expect(out).toBe("강의용역 : 초등(43%), 중등(44%), 고등(45%)");
+  });
+  it("시급제 + 시용기간", () => {
+    const body = "(시용)근로계약서 … 시용기간은 3개월 … 시급 15,000원을 지급한다";
+    const out = composeContractTerms(
+      { contractKind: "(시용)근로", payType: "시급", hourlyPay: "15,000", probationMonths: 3 },
+      body,
+    );
+    expect(out).toBe("(시용)근로 : 시용 3개월 / 시급 15,000원");
+  });
+  it("월급제 + 포괄임금(원문 단어로 판정)", () => {
+    const body = "근로계약서 … 월 급여액은 일금 2,200,000원으로 … 포괄임금제로 한다";
+    const out = composeContractTerms(
+      { contractKind: "근로", payType: "월급", monthlyPay: "2,200,000" },
+      body,
+    );
+    expect(out).toBe("근로 : 월급 2,200,000원 (포괄임금)");
+  });
+  it("원문에 없는 금액·퍼센트·종류는 버린다(지어낸 값 차단)", () => {
+    const body = "근로계약서 … 월 급여액은 일금 2,200,000원";
+    expect(composeContractTerms({ payType: "월급", monthlyPay: "9,999,999" }, body)).toBe("");
+    expect(composeContractTerms({ payType: "비율", rates: [{ label: "초등", percent: 43 }] }, body)).toBe("");
+    // 종류가 본문에 없으면 접두 없이 금액만
+    expect(composeContractTerms({ contractKind: "강의용역", payType: "월급", monthlyPay: "2,200,000" }, body)).toBe(
+      "월급 2,200,000원",
+    );
+  });
+  it("구조 필드가 비면 빈 문자열 — 호출부가 통짜 인용 폴백", () => {
+    expect(composeContractTerms({}, "아무 본문")).toBe("");
   });
 });
