@@ -11,6 +11,7 @@ import { isAssignableTeacherRole } from "@/lib/permissions";
 import { logAction } from "@/features/audit/server/log";
 import { notifyUsers } from "@/features/notifications/server/notify";
 import { getClassroomAssignmentData } from "./queries";
+import { moveLiveSlotTeacher } from "./handover";
 import { detectOverlaps } from "./overlap-detect";
 import {
   ARCHIVE_REASON,
@@ -614,7 +615,7 @@ export async function applyHandover(_prev: HandoverState, formData: FormData): P
   const supabase = await createClient();
   const { data: klass } = await supabase
     .from("classes")
-    .select("class_name, pending_teacher_id")
+    .select("class_name, teacher_id, pending_teacher_id")
     .eq("id", classId)
     .single();
   if (!klass) return { error: "반을 찾을 수 없습니다" };
@@ -637,11 +638,23 @@ export async function applyHandover(_prev: HandoverState, formData: FormData): P
     .eq("id", classId);
   if (updErr) return { error: updErr.message };
 
+  // 담임만 바꾸면 시간표엔 옛 강사가 그대로 남는다 — 이 반의 **유효한 교시 오버라이드**도 함께 옮긴다.
+  // (옛 담임을 가리키는 슬롯만. 원래 다른 사람이 맡던 교시는 그대로 두고, 만료 슬롯도 손대지 않는다.)
+  // 실패해도 담임 교체 자체는 성공으로 둔다 — 되돌리면 더 헷갈린다(로그에 slotsMoved로 남김).
+  const slots = klass.teacher_id
+    ? await moveLiveSlotTeacher(supabase, {
+        tenantId: user.tenantId,
+        classIds: [classId],
+        fromTeacherId: klass.teacher_id,
+        toTeacherId: klass.pending_teacher_id,
+      })
+    : { moved: 0 };
+
   await logAction({
     action: "class_handover_apply",
     targetType: "class",
     targetLabel: klass.class_name,
-    metadata: { newTeacherId: klass.pending_teacher_id },
+    metadata: { newTeacherId: klass.pending_teacher_id, slotsMoved: slots.moved },
   });
   revalidatePath(`/classes/${classId}`);
   revalidatePath("/classes");
