@@ -23,6 +23,7 @@ import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
+import { humanizeDbError } from "@/lib/supabase/db-error";
 import { kstToday } from "@/lib/date-kst";
 import { classKey, boardKey } from "../english-writing";
 import { birthYearMatches, kstSchoolYear, matchMembers } from "../board-roster-diff";
@@ -144,7 +145,7 @@ export async function linkClassnoteChild(input: {
     birth_year_at_link: child.birth_year as number | null,
     linked_by: user.id,
   });
-  if (error) return { ok: false, error: `저장하지 못했습니다: ${error.message}` };
+  if (error) return { ok: false, error: humanizeDbError(error.message, "저장") };
 
   // 누가 언제 무엇을 연결했는지 남긴다 — 오발송 조사 시 첫 단서.
   await supabase.from("audit_logs").insert({
@@ -174,7 +175,7 @@ export async function unlinkClassnoteChild(input: { studentId: string; boardId: 
     .delete()
     .eq("student_id", String(input.studentId))
     .eq("board_id", Number(input.boardId));
-  if (error) return { ok: false, error: `해제하지 못했습니다: ${error.message}` };
+  if (error) return { ok: false, error: humanizeDbError(error.message, "해제") };
 
   await supabase.from("audit_logs").insert({
     tenant_id: user.tenantId,

@@ -28,6 +28,26 @@ describe("humanizeDbError", () => {
     expect(msg).not.toContain("PGRST301");
   });
 
+  it("스키마/관계 오류는 사용자를 탓하지 않는다(입력·권한 문구로 새지 않음)", () => {
+    // 2026-08-03 실제 원문 — 0171a가 makeup_class_id를 더해 lesson_reports→classes FK가 2개가 됐을 때.
+    const msg = humanizeDbError(
+      "Could not embed because more than one relationship was found for 'lesson_reports' and 'classes'",
+      "조회",
+    );
+    expect(msg).toContain("입력하신 값 때문이 아니니");
+    expect(msg).not.toMatch(/lesson_reports|classes|embed|relationship/i);
+    // ⚠️ 배포로만 고쳐지는 오류라 "다시 시도"를 권하면 안 된다(원장이 같은 버튼을 계속 누르게 된다).
+    expect(msg).not.toMatch(/다시 시도|새로고침/);
+    expect(humanizeDbError("PGRST201", "조회")).toBe(msg);
+  });
+
+  it("스키마 오류가 '형식 확인'·'권한 없음'보다 먼저 잡힌다(문구 오진 방지)", () => {
+    // 'does not exist'는 아래 입력/권한 패턴과 겹칠 수 있는 원문이라 순서가 중요하다.
+    expect(humanizeDbError('column lesson_reports.foo does not exist', "조회")).toContain(
+      "데이터 설정에 문제가",
+    );
+  });
+
   it("빈 값·null도 안전하게 한글 문장을 반환한다", () => {
     expect(humanizeDbError(null)).toContain("저장하지 못했습니다");
     expect(humanizeDbError(undefined, "삭제")).toContain("삭제하지 못했습니다");
