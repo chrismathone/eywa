@@ -147,4 +147,21 @@ describe("composeContractTerms — 계약 종류별 조건 조립", () => {
   it("구조 필드가 비면 빈 문자열 — 호출부가 통짜 인용 폴백", () => {
     expect(composeContractTerms({}, "아무 본문")).toBe("");
   });
+  it("회사명 접두 — 시트 관례 '회사_종류 : 조건', 주식회사는 (주)로 축약", () => {
+    const body =
+      "주식회사 곰돌이(강의하는아이들 인재원학원)와 근로자는 … (시용)근로계약 … 시용기간 3개월 … 시급 15,000원";
+    const out = composeContractTerms(
+      { company: "주식회사 곰돌이", contractKind: "(시용)근로", payType: "시급", hourlyPay: "15,000", probationMonths: 3 },
+      body,
+    );
+    expect(out).toBe("(주)곰돌이_(시용)근로 : 시용 3개월 / 시급 15,000원");
+  });
+  it("본문에 없는 회사명은 접두에서 버린다", () => {
+    const body = "근로계약서 … 월 급여액은 일금 2,200,000원 … 포괄임금제";
+    const out = composeContractTerms(
+      { company: "주식회사 없는회사", contractKind: "근로", payType: "월급", monthlyPay: "2,200,000" },
+      body,
+    );
+    expect(out).toBe("근로 : 월급 2,200,000원 (포괄임금)");
+  });
 });

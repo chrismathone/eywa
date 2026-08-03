@@ -7,6 +7,8 @@ import { getTodaySchedule, getWeeklySchedule, getTeacherLabelsBySubject } from "
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { enrollmentAttendsOnDay, isEnrollmentActiveOn } from "@/features/enrollments/eligibility";
 import { needsAttention, summarizeQueue, type QueueSummary, HUMAN_RESOLVED_STATUSES } from "../classnote-queue";
+// 임시 위임(0173a) — 위임된 (반, 날짜)의 대상(분모)을 대체 강사로 옮기는 순수 규칙.
+import { buildDelegateAttribution, type DelegateAttribution } from "../writing-rate-delegation";
 import {
   extractWorkerEnv,
   formatWorkerResults,
@@ -270,6 +272,14 @@ function monthDates(month: string): string[] {
  *
  * ⚠️ 분모 = **현재 시간표 요일** − 공휴일(원장 확인). 실제 수업일과 어긋난 반이 있어 정확도 한계가 있다.
  */
+/*
+ * ⚠️ **임시 위임(0173a)은 이 영어 경로에 적용하지 않는다 — 빠뜨린 게 아니라 필요가 없다.**
+ * 여기 분자는 **반 단위 ClassNote 게시**(classnote_class_posts)라, 대신 들어간 강사가 올려도 그 반의
+ * 게시로 잡혀 담임의 분자가 채워진다 → 위임한 날 담임이 **0%로 빨갛게 남는 문제가 애초에 없다**
+ * (그 문제는 분자가 작성자 이름인 lesson_reports 경로에만 있다). 대체 강사에게 별도 크레딧이 안 가는 건
+ * 남지만, 그걸 주려면 "그 게시를 누가 올렸나"가 필요한데 피드에 그 정보가 없다.
+ * → 여기에 위임 귀속을 넣으면 **담임의 분모만 옮겨가고 분자는 그대로 남아** 멀쩡하던 담임이 갑자기 0%가 된다.
+ */
 async function getEnglishTeacherRates(
   supabase: Awaited<ReturnType<typeof createClient>>,
   since: string,
@@ -329,6 +339,46 @@ async function getEnglishTeacherRates(
   }));
 }
 
+/**
+ * 이 기간에 걸친 임시 위임(0173a) → (반, 날짜) 귀속 함수. 위임이 없으면(대부분의 주) 왕복 1회로 끝난다.
+ * 축이 **이름 문자열**이라(작성 기록이 이름으로만 남는다) 표시명이 없는 대체 강사는 귀속 대상에서 뺀다 —
+ * 그러면 종전대로 담임에게 남는다(fail-safe: 미작성이 조용히 사라지는 방향이 아니다).
+ * 조회 실패는 빈 귀속(= 위임 없던 것처럼) — 작성률 화면 전체를 죽이지 않는다.
+ */
+async function fetchDelegateAttribution(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  since: string,
+  until: string,
+): Promise<DelegateAttribution> {
+  const { data } = await supabase
+    .from("class_delegations")
+    .select("class_id, delegate_user_id, from_date, to_date")
+    .is("revoked_at", null)
+    .lte("from_date", until)
+    .gte("to_date", since)
+    .limit(500);
+  const rows = (data ?? []) as {
+    class_id: string;
+    delegate_user_id: string;
+    from_date: string;
+    to_date: string;
+  }[];
+  if (rows.length === 0) return buildDelegateAttribution([]);
+  const ids = [...new Set(rows.map((r) => r.delegate_user_id))];
+  const users = await fetchInChunks<{ id: string; display_name: string | null }>(ids, (chunk) =>
+    supabase.from("users").select("id, display_name").in("id", chunk),
+  );
+  const nameById = new Map(users.map((u) => [u.id, (u.display_name ?? "").trim()]));
+  return buildDelegateAttribution(
+    rows.map((r) => ({
+      classId: r.class_id,
+      teacherName: nameById.get(r.delegate_user_id) ?? "",
+      fromDate: r.from_date,
+      toDate: r.to_date,
+    })),
+  );
+}
+
 export async function getWeeklyWritingRates(month?: string): Promise<WritingRatesView | null> {
   const user = await getCurrentUser();
   if (!user) return null;
@@ -361,7 +411,8 @@ export async function getWeeklyWritingRates(month?: string): Promise<WritingRate
   const { data: testStudents } = await supabase.from("students").select("id").eq("is_test", true);
   const testStudentIds = new Set((testStudents ?? []).map((s) => s.id as string));
 
-  const [reps, schedule, weekly, settings, labelsBySubject, { data: inactiveStaff }] = await Promise.all([
+  const [reps, schedule, weekly, settings, labelsBySubject, { data: inactiveStaff }, delegateOn] =
+    await Promise.all([
     // ⚠️ 집계 기준은 **유효일 = covers_date ?? report_date**(0136a) — 미리/나중에 쓴 보고서를 실제 수업일로 귀속.
     //   그래서 범위 조회도 두 날짜 **중 하나라도** 걸치면 가져온 뒤(or) JS에서 유효일로 다시 거른다.
     //   report_date만으로 자르면 "6/28에 쓰고 7/2 수업분"인 보고서가 7월 뷰에서 통째로 사라진다.
@@ -389,6 +440,8 @@ export async function getWeeklyWritingRates(month?: string): Promise<WritingRate
     getTeacherLabelsBySubject(),
     // 퇴사자 = users.status 'inactive'(RLS 테넌트 스코프, 직원 표라 소량). 이름으로 작성률에서 자동 제외.
     supabase.from("users").select("display_name").eq("status", "inactive"),
+    // 임시 위임(0173a) — 위임된 (반, 날짜)의 **대상(분모)을 대체 강사로 옮긴다**(writing-rate-delegation.ts).
+    fetchDelegateAttribution(supabase, since, until),
   ]);
   // 작성 예외 강사 = 학원설정 report.writingExemptTeachers(수동 지정) + 퇴사(비활성) 처리된 직원(자동).
   // 퇴사자는 수동 등록 없이도 주간 기록·오늘 대상 모두에서 빠진다 — 재직 중 미작성만 미작성으로 집계.
@@ -447,7 +500,9 @@ export async function getWeeklyWritingRates(month?: string): Promise<WritingRate
   const started = schedule.filter((s) => s.status !== "upcoming" && measuredHere(s.subject));
   const teacherOfClass = new Map<string, string>();
   for (const s of started) {
-    const t = s.teacherName ?? s.slotTeacherLabel ?? "(미지정)";
+    // 위임된 날은 **대신 맡은 사람**이 그 반의 주인이다(0173a) — 그래야 결근한 담임이 0%로 빨갛게 남지 않고,
+    // 대신 쓴 강사의 작성이 대상 없이 "·"로 사라지지 않는다.
+    const t = delegateOn(s.classId, today) ?? s.teacherName ?? s.slotTeacherLabel ?? "(미지정)";
     if (exempt.has(t)) continue;
     teacherOfClass.set(s.classId, t);
   }
@@ -463,7 +518,8 @@ export async function getWeeklyWritingRates(month?: string): Promise<WritingRate
     // `김태건 14:20 수업 예정 (주간 ·)`이라는 **빈 eywa 행**을 하나 더 만들었다(rates는 강사 이름 집합으로
     // 행을 만들므로, pending만 있어도 행이 생긴다). 영어의 진실은 아래 ClassNote 행 하나뿐이다.
     if (!measuredHere(s.subject)) continue;
-    const t = s.teacherName ?? s.slotTeacherLabel ?? "(미지정)";
+    // '수업 예정'도 위임을 따른다 — 분모(started)만 옮기고 여기를 빼먹으면 결근한 담임에게 "수업 예정"이 남는다.
+    const t = delegateOn(s.classId, today) ?? s.teacherName ?? s.slotTeacherLabel ?? "(미지정)";
     if (exempt.has(t)) continue;
     const cur = pendingByTeacher.get(t);
     const start = s.startTime.slice(0, 5); // "20:10:00" → "20:10"
@@ -541,8 +597,9 @@ export async function getWeeklyWritingRates(month?: string): Promise<WritingRate
       for (const s of weekly) {
         if (s.dayOfWeek !== key) continue;
         if (!measuredHere(s.subject)) continue; // 영어는 ClassNote 경로가 잰다(중복·거짓 0% 방지)
-        // 오늘 로직과 동일: 반 담당 → 슬롯 라벨 폴백(반 담당 없는 영어반 "(미지정)" 방지).
-        const t = s.teacherName ?? s.slotTeacherLabel ?? "(미지정)";
+        // 오늘 로직과 동일: **그날 위임** → 반 담당 → 슬롯 라벨 폴백(반 담당 없는 영어반 "(미지정)" 방지).
+        // ⚠️ 위임은 날짜마다 다르다 — 여기서 `today`를 쓰면 지난 요일 귀속이 통째로 틀어진다.
+        const t = delegateOn(s.classId, d) ?? s.teacherName ?? s.slotTeacherLabel ?? "(미지정)";
         if (exempt.has(t)) continue;
         m.set(s.classId, t);
         weekClassIds.add(s.classId);

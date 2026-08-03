@@ -9,6 +9,10 @@
 //   node scripts/staff-access/narrow-staff-menu.mjs            # 드라이런(변경 없음, 계획 출력)
 //   node scripts/staff-access/narrow-staff-menu.mjs --apply    # 적용(이전 permissions를 로그로 보존)
 //
+// ⚠️ 반영 시점: tenant_settings는 서버에서 배포 시점까지 캐시된다(B6 unstable_cache) — 이 스크립트로
+//    DB만 바꾸면 **다음 배포(또는 owner 콘솔 저장의 updateTag)까지 앱에 안 보일 수 있다**(2026-08-03 실측:
+//    직접 PATCH한 override가 직전 배포 캐시에 가려짐). 적용 후 곧 배포가 없으면 owner 콘솔에서 아무
+//    섹션이나 한 번 저장해 캐시를 밀어낼 것.
 // ⚠️ 실행 순서: **새 코드(개인 예외 + 계약 admin-client 읽기) 배포 뒤에** 적용할 것 — 옛 코드는
 //    userOverrides를 몰라 적용 즉시 설현·이승엽이 잠긴다(역할 override는 옛 코드도 읽는다).
 //    0170a SQL은 보류 가능(코드가 계약 읽기를 admin client로 우회) — 접근 복구되면 실행해 DB 잔여 구멍을 닫는다.

@@ -111,6 +111,8 @@ export function maskResidentRegNo(text: string): string {
 
 export type RawPayRate = { label?: string | null; percent?: string | number | null };
 export type RawContractExtract = Partial<ContractExtract> & {
+  /** 계약서 서두 사용자(갑)의 회사/기관명 — 본문 표현 그대로 짧게("주식회사 곰돌이", "EIE인재원" 등). */
+  company?: string | null;
   /** 계약 종류 — 본문 표현 그대로 짧게("근로", "(시용)근로", "강의용역" 등). */
   contractKind?: string | null;
   /** 급여 방식: "월급" | "시급" | "비율" | "". */
@@ -156,7 +158,13 @@ export function composeContractTerms(raw: RawContractExtract, body: string): str
   const kindRaw = String(raw.contractKind ?? "").trim().replace(/\s+/g, "");
   // 계약 종류는 본문에 실제 등장할 때만 접두로 쓴다(모델이 지어낸 분류 차단).
   const kind = kindRaw && kindRaw.length <= 20 && compact.includes(kindRaw) ? kindRaw : "";
-  const prefix = kind ? `${kind} : ` : "";
+  // 회사명(사용자 갑)도 본문 등장 검증 후 접두 — 시트 관례 "(주)곰돌이_강의용역 : …"(원장 지시 2026-08-03).
+  // "주식회사 X"는 시트 표기처럼 "(주)X"로 줄인다(사실은 검증된 원문, 축약은 우리 표기 규칙).
+  const companyRaw = String(raw.company ?? "").trim().replace(/\s+/g, "");
+  const companyOk = companyRaw && companyRaw.length <= 20 && compact.includes(companyRaw);
+  const company = companyOk ? companyRaw.replace(/^주식회사/, "(주)") : "";
+  const head = [company, kind].filter(Boolean).join("_");
+  const prefix = head ? `${head} : ` : "";
   const payType = String(raw.payType ?? "").trim();
 
   if (payType === "비율") {
