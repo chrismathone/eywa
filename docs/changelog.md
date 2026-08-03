@@ -21,7 +21,7 @@
 
 ## 진행 상황
 
-### 남의 비밀번호를 바꾼 기록이 안 남던 것 + 감사로그에 영문 키가 그대로 뜨던 것 (2026-08-03) - typecheck0/lint0/test3313/build✓
+### 남의 비밀번호를 바꾼 기록이 안 남던 것 + 감사로그에 영문 키가 그대로 뜨던 것 (2026-08-03) - typecheck0/lint0/test3320/build✓
 
 원장 제보는 "비밀번호 재설정 버그인가?"(직접 설정에서 7자 입력 → 브라우저 기본 말풍선)였다. **그 말풍선 자체는
 정상**(`minLength={8}`, 서버도 8자로 일치)이고, 해당 계정(유형숙)은 이미 그날 17:19 스크립트 재설정 → 17:26
@@ -40,6 +40,9 @@
   근로계약 `seq/startDate`, 이메일 `from/to`).
   **재발 방지 = [actions-registry.test.ts](../src/features/audit/actions-registry.test.ts)** — src 전체에서
   `logAction({action})` 리터럴을 스캔해 미등록 키가 있으면 파일명과 함께 실패시킨다(주석으로만 있던 규칙을 테스트로).
+  🔑 **즉시 값을 했다** — push 직전 `origin/main`을 병합하자 같은 날 들어온 계약서 PDF 기능의 신규 액션 3개
+  (`staff_contract_update`·`staff_contract_file_add`·`staff_contract_file_delete`)를 테스트가 바로 잡아냈다.
+  그대로 갔으면 영문 코드가 또 새어나갔을 것(+ `kind:"note"`도 그대로 노출될 뻔).
 - **③ 로그인 계정이 없는 직원에게 재설정하면 영문 `User not found`가 떴다.** `deleteStaff`는 이 케이스(#31)를
   다루는데 비번·이메일만 빠져 있었다(실측 대상 3명 — `JJ`·`LAB`·`보조T`, 전부 비활성 자리/테스트). → `isMissingAuthUser`로
   한글 안내("로그인 계정이 없어 … 먼저 로그인 계정을 만들어 주세요").

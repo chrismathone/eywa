@@ -12,8 +12,11 @@ export const AUDIT_ACTIONS = {
   staff_password_reset: "직원 비밀번호 재설정",
   staff_email_change: "직원 이메일 변경",
   staff_contract_extend: "근로계약 기입",
+  staff_contract_update: "근로계약 수정",
   staff_contract_delete: "근로계약 삭제",
   staff_contract_pdf_extract: "근로계약 PDF 추출",
+  staff_contract_file_add: "계약서 파일 첨부",
+  staff_contract_file_delete: "계약서 파일 삭제",
   // 본인이 자기 계정을 바꾼 경우(/me) — 위의 staff_*(관리자가 남의 계정을 바꿈)와 구분해 읽힌다.
   self_password_change: "내 비밀번호 변경",
   self_email_change: "내 이메일 변경",

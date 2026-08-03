@@ -132,9 +132,25 @@ export function auditDetail(
       const end = str(m.endDate);
       return join(seq === null ? null : `${seq}차 계약`, start && end ? `${start} ~ ${end}` : null);
     }
+    case "staff_contract_update": {
+      // kind='note'(시트 이관 이력 줄)는 차수가 없다 — 영문 "note"를 그대로 내보내지 않는다.
+      const isNote = str(m.kind) === "note";
+      const seq = num(m.seq);
+      const start = str(m.startDate);
+      const end = str(m.endDate);
+      return join(
+        isNote ? "이력 줄" : seq === null ? null : `${seq}차 계약`,
+        start && end ? `${start} ~ ${end}` : null,
+      );
+    }
     case "staff_contract_delete": {
       const seq = num(m.seq);
       return seq === null ? null : `${seq}차 계약 삭제`;
+    }
+    case "staff_contract_file_add":
+    case "staff_contract_file_delete": {
+      const name = str(m.fileName);
+      return name ? `파일 ${name}` : null;
     }
     case "staff_contract_pdf_extract": {
       // metadata.filled = 추출된 필드 키 배열(영문) — 개수만 보여주고 키 자체는 노출하지 않는다.

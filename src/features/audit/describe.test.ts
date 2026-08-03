@@ -126,6 +126,14 @@ describe("collectAuditNameIds / auditTargetName", () => {
     expect(auditDetail("staff_contract_extend", { seq: 3, startDate: "2026-03-01", endDate: "2027-02-28" }, ctx()))
       .toBe("3차 계약 · 2026-03-01 ~ 2027-02-28");
     expect(auditDetail("staff_contract_delete", { contractId: SID, seq: 2 }, ctx())).toBe("2차 계약 삭제");
+    expect(
+      auditDetail("staff_contract_update", { contractId: SID, kind: "contract", seq: 1, startDate: "2026-03-01", endDate: "2027-02-28" }, ctx()),
+    ).toBe("1차 계약 · 2026-03-01 ~ 2027-02-28");
+    // kind='note'(시트 이관 이력)는 차수가 없다 — 영문 "note"가 새면 안 된다.
+    expect(auditDetail("staff_contract_update", { contractId: SID, kind: "note", seq: 0 }, ctx())).toBe("이력 줄");
+    expect(auditDetail("staff_contract_file_add", { fileName: "근로계약서_2026.pdf" }, ctx()))
+      .toBe("파일 근로계약서_2026.pdf");
+    expect(auditDetail("staff_contract_file_delete", { docId: SID, fileName: "old.pdf" }, ctx())).toBe("파일 old.pdf");
     // filled = 영문 필드 키 배열 → 개수만 노출
     expect(auditDetail("staff_contract_pdf_extract", { filled: ["startDate", "endDate"] }, ctx()))
       .toBe("PDF에서 항목 2개 추출");
