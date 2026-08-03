@@ -1,5 +1,22 @@
 # eywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-08-03 — 계약서 파일 보관 + 계약 히스토리 수정·삭제 (직원관리)
+
+- **계약서 원본 보관(원장 지시)**: 직원 상세 '계약현황' 카드에 **계약서 파일** 섹션 — PDF 올리기/내려받기/삭제.
+  저장은 `academy_documents`(kind='file' + `staff_user_id` + restricted) 재사용이라 **새 테이블·SQL 0**.
+  액션 [`contract-file-actions.ts`](../src/features/staff/server/contract-file-actions.ts)(등록·삭제·서명URL,
+  전부 앱 게이트(개인 예외 반영)+admin client+tenant 필터), 쿼리 `getStaffContractFiles`.
+- **PDF 기입 폼 채움과 한 업로드 공유**: 연장 폼의 'PDF 불러오기'가 이제 ① 원본 보관 → ② 기간·조건 추출
+  순서로 동작(추출 실패=스캔 PDF여도 보관은 됨). `extractContractFromPdf`에 keep 플래그.
+- **직원 목록 '계약서' 열**: 첨부 여부(📎 있음/—) — `getStaffList`에 병렬 probe 추가, 열 고르기에도 등장.
+- **계약 히스토리 수정·삭제(원장 지시)**: 전 줄(시트 이력 줄 포함) 연필/휴지통 —
+  [`contract-history.tsx`](../src/app/(shell)/staff/[id]/_components/contract-history.tsx) 분리,
+  `updateStaffContract` + `deleteStaffContract`(종전 "마지막 차수만 삭제" 제한 해제 — 중간 차수를 지우면
+  차수 빈 번호는 그대로 둔다: 차수는 시트에서 온 역사적 사실, 현재계약 판정은 최대 차수라 무영향).
+- **#77 벽**: 직원 연결 문서(이력서·계약서, staff_user_id 有)를 **데이터베이스(/documents) 표면에서 전면 제외**
+  (목록·상세·수정·삭제·서명·고정 6곳 `.is("staff_user_id", null)`) — 직원관리는 4인 체제인데 documents는
+  사무실 전역이라, 거기 뜨면 잠금이 우회된다. 이력서 삭제는 원래 전용 `deleteStaffResume`라 무영향.
+
 > CLAUDE.md에서 분리된 **Tier 1 참조 문서**. 날짜별 구현 로그 — 특정 기능을 다시 열 때만 훑어보세요. (CLAUDE.md는 이 내용을 매 세션 로드하지 않습니다.)
 
 ## 진행 상황
@@ -46,6 +63,67 @@
   "미작성"으로 읽힌다). 둘 다 필요해지면 그때 별건으로.
 - 🔴 **DB 반영 필요**: `supabase/migrations/0173a_class_delegations.sql`을 Supabase SQL Editor에서 실행해야
   동작한다. 실행 전엔 조회가 빈 배열로 떨어져 **기존 화면은 그대로**(무해)지만 위임은 걸리지 않는다.
+### 남의 비밀번호를 바꾼 기록이 안 남던 것 + 감사로그에 영문 키가 그대로 뜨던 것 (2026-08-03) - typecheck0/lint0/test3320/build✓
+
+원장 제보는 "비밀번호 재설정 버그인가?"(직접 설정에서 7자 입력 → 브라우저 기본 말풍선)였다. **그 말풍선 자체는
+정상**(`minLength={8}`, 서버도 8자로 일치)이고, 해당 계정(유형숙)은 이미 그날 17:19 스크립트 재설정 → 17:26
+본인 로그인 성공으로 해결돼 있었다. 다만 그 화면을 파다 **진짜 3건**이 나왔다.
+
+- **① 관리자가 남의 비밀번호·이메일을 바꾼 기록이 안 남았다.** 본인 변경(`/me` → `self_password_change`·
+  `self_email_change`)은 남기는데, **원장이 직원 계정을 여는 쪽**이 빠져 있었다(역할 변경·직원 삭제는 남긴다).
+  감사로그가 존재하는 이유가 정확히 후자다. → [account-actions.ts](../src/features/staff/server/account-actions.ts)의
+  `resetStaffPassword`·`changeStaffEmail`에 `staff_password_reset`·`staff_email_change` 기록 추가.
+  ⚠️ **발급된 비밀번호 자체는 metadata에 절대 넣지 않는다**(테스트로 고정).
+- **② 감사로그 화면에 영문 키가 그대로 노출됐다.** `auditActionLabel`이 미등록 키를 `?? a`로 폴백하는데
+  **8개가 미등록**이었고 그중 5종은 이미 프로덕션에 쌓여 있었다(`self_password_change`·`self_email_change`·
+  `class_archive`·`owner_integration_groups_update`·`staff_password_reset`, 실측 13행). `target_type`도
+  `user`(6행)·`users`(3행)·`academy_documents`(1행)가 영문 폴백 중이었다. → 라벨 전수 등록 + `describe.ts`에
+  상세 한글화(영문 metadata 키가 `키: 값`으로 새던 곳: 반 폐지 `affectedStudents`, 통합뷰 `subject`(raw 과목키!),
+  근로계약 `seq/startDate`, 이메일 `from/to`).
+  **재발 방지 = [actions-registry.test.ts](../src/features/audit/actions-registry.test.ts)** — src 전체에서
+  `logAction({action})` 리터럴을 스캔해 미등록 키가 있으면 파일명과 함께 실패시킨다(주석으로만 있던 규칙을 테스트로).
+  🔑 **즉시 값을 했다** — push 직전 `origin/main`을 병합하자 같은 날 들어온 계약서 PDF 기능의 신규 액션 3개
+  (`staff_contract_update`·`staff_contract_file_add`·`staff_contract_file_delete`)를 테스트가 바로 잡아냈다.
+  그대로 갔으면 영문 코드가 또 새어나갔을 것(+ `kind:"note"`도 그대로 노출될 뻔).
+- **③ 로그인 계정이 없는 직원에게 재설정하면 영문 `User not found`가 떴다.** `deleteStaff`는 이 케이스(#31)를
+  다루는데 비번·이메일만 빠져 있었다(실측 대상 3명 — `JJ`·`LAB`·`보조T`, 전부 비활성 자리/테스트). → `isMissingAuthUser`로
+  한글 안내("로그인 계정이 없어 … 먼저 로그인 계정을 만들어 주세요").
+- 경미: 8자 안내가 placeholder뿐이라 **타이핑을 시작하면 사라져** 브라우저 말풍선이 유일한 안내가 됐다 → 입력칸
+  아래 상시 안내로. (⚠️ `type="text"`로 보이게 두는 건 의도 — 원장이 직원에게 불러주는 값, 디자인 규약에 명시.)
+- 검증: 롤백 불필요(읽기 전용 진단) · 시각검증은 **로그인 없이** 공개 경로(`/intake/*`) 임시 하네스로 수행
+  (입력칸 속성·힌트 위치·모드 전환 시 잔상 없음 확인 후 하네스 삭제).
+
+### 하부탭이 하나뿐인 메뉴는 사이드바에 탭 줄을 안 낸다 (2026-08-03) - typecheck0/lint0/test3315/build✓
+
+원장 지시: *"직원관리 탭에 내부 탭이 1개만 남으므로 왼쪽 탭 표시에서 저렇게 표시될 이유가 없음."*
+(이력서 면이 07-28에 직원 목록으로 통합돼 `staff` 면이 '직원 목록' 하나만 남아 있었다.)
+
+- 판정은 [`subTabsForMenu`](../src/lib/navigation.ts) 한 곳 — **면이 하나뿐이면 빈 배열**. 그 한 줄은 부모
+  메뉴를 눌렀을 때 이미 열리는 바로 그 화면이라, 그려 봐야 갈 수 있는 곳이 늘지 않는다. 데이터(`SUBTABS_BY_MENU`)를
+  지우지 않고 **함수에서 판정**해, 면이 줄어든 메뉴가 또 생겨도(혹은 다시 늘어도) 자동으로 따라온다.
+- ⚠️ **독립 메뉴(`menuKey` 有)는 하나여도 남긴다** — `subOf` 자식은 최상위 목록에서 빠져 있어서 여기서 지우면
+  사이드바에서 그 메뉴로 갈 길이 통째로 사라진다(ECS). 사이드바에서 **권한으로 걸러 한 줄만 남은 경우**도 같은 규칙.
+- ⚠️ 실화면 확인은 못 했다(브라우저가 강사 계정 로그인 상태 — 강사에겐 직원관리 메뉴 자체가 없다). 순수 함수
+  테스트로 잠갔다(`subTabsForMenu("staff") === []`, ECS는 유지).
+
+### 보강 행 소유 키를 이름 문자열 → **계정 id**로 (2026-08-03) - typecheck0/lint0/test3313/build✓ - 0172a
+
+원장 지시: *"강사 이름 말고 계정 id로 바꿔줘."* 0171a 보강 복원이 "내가 쓴 것"을 `teacher_name`(표시 이름
+**문자열**)으로 찾고 있었다 — ① 강사가 이름을 바꾸면 그 전 보강이 **본인 화면에서도** 사라지고 ② 동명이인이
+생기면 남의 보강이 내 화면에 섞인다. 학부모에게 나가는 담임 표기와 화면 소유는 다른 축이라 분리했다.
+
+- **0172a `lesson_reports.created_by`**(작성 계정). 판정은 순수 함수
+  [`ownsMakeupReport`](../src/features/onescreen/makeup-owner.ts) 하나 — **id 우선**, `created_by`가 없는
+  **옛 행만** 이름 폴백(id가 있는데 이름으로 한 번 더 열어 주면 동명이인 누출이 뒷문으로 살아난다. Vitest 6).
+- 🔴 **갱신 시 원 작성자 보존은 DB 트리거로** 못박았다(`lesson_reports_keep_created_by_trg`). 앱이 upsert
+  한 문장으로 저장해 payload가 그대로 들어가므로, 관리자가 한 번 고치는 순간 그 보강 행이 **강사 화면에서
+  증발**한다 = 0171a가 고친 그 증상의 재발. 코드 규율이 아니라 스키마로 막는다.
+  · 관리자 작성 경로는 `created_by`를 **안 넣는다**(의도) — `teacher_name`을 강사로 지정해 저장하므로
+    옛 행과 같은 이름 폴백으로 **그 강사 화면**에 뜬다.
+- **백필**: 보강 171건 중 **151건**이 계정에 연결됐다(테넌트 안에서 표시 이름이 유일하게 맞는 경우만).
+  ⚠️ 남은 20건은 옛 표기/퇴직자('윤서영' 9·'수진' 5·'성우'·'정은'·'희영1', 전부 2026-02 이전)라 **이름 폴백으로도
+  안 맞는다 — 0171a 이전과 동일(회귀 아님)**. 추측으로 매핑하지 않았다.
+- 검증(실화면·프로덕션 DB): 08-03 하은결 `1/2`(보강 행 복원) · 담당 수업 없는 2026-01-23에도 보강 9명 `발송 9/9`.
 
 ### 보강 보고서가 새로고침 한 번에 사라지던 것 + 보강 학생이 모든 수업에 보이던 것 (2026-08-03) - typecheck0/lint0/test3302/build✓ - 0171a
 

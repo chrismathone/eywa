@@ -51,6 +51,8 @@ export const SUBTABS_BY_MENU: Partial<Record<MenuKey, SubTab[]>> = {
     { label: "환불 요청서", href: "/billing?tab=refunds" },
   ],
   // 직원 이력서 면은 2026-07-28 직원 목록에 통합(이름 클릭=이력서, 등록=이력서 작성) — 하위 메뉴 제거.
+  // ⚠️ 면이 이거 하나뿐이라 **사이드바엔 안 나온다**(subTabsForMenu의 "면 하나 = 하부탭 아님" 규칙).
+  //    면을 하나 더 만들면 그때 자동으로 다시 보인다.
   staff: [{ label: "직원 목록", href: "/staff" }],
   help: [
     { label: "도움말", href: "/help" },
@@ -186,6 +188,12 @@ export function findNavGroup(pathname: string): NavGroup | undefined {
  * 사이드바 하부탭 = 정적 면(`SUBTABS_BY_MENU`) + **부모를 지정한 독립 라우트 메뉴**(`subOf`).
  * subOf 항목은 `menuKey`를 달고 나오므로 사이드바가 그 키로 권한을 검사하고, 클릭 시 부모 창이
  * 아니라 자기 창(자기 크기)으로 열린다. 부모에 면이 하나도 없어도 subOf만으로 하부탭이 생긴다.
+ *
+ * 🔴 **면이 하나뿐이면 하부탭이 아니다**(원장 2026-08-03: 직원관리가 '직원 목록' 하나만 남은 뒤 그 줄이
+ *    노이즈가 됐다). 그 한 줄은 부모 메뉴를 눌렀을 때 이미 열리는 바로 그 화면이라, 그려 봐야 갈 수 있는
+ *    곳이 늘지 않는다. 면이 줄어든 메뉴가 또 생겨도 자동으로 사라지도록 데이터가 아니라 **여기서** 판정한다.
+ * ⚠️ 단 **독립 메뉴(`menuKey` 有)는 하나여도 남긴다** — subOf 자식은 최상위 목록에서 빠져 있어서,
+ *    여기서 지우면 사이드바에서 그 메뉴로 갈 길이 통째로 사라진다(ECS 같은 경우).
  */
 export function subTabsForMenu(menuKey: MenuKey): SubTab[] {
   const faces = SUBTABS_BY_MENU[menuKey] ?? [];
@@ -197,7 +205,8 @@ export function subTabsForMenu(menuKey: MenuKey): SubTab[] {
       }
     }
   }
-  if (childMenus.length === 0) return faces;
   // 부모 자신의 면이 있으면 그 뒤에 자식 메뉴를 붙인다(면 → 독립 메뉴 순).
-  return [...faces, ...childMenus];
+  const all = childMenus.length === 0 ? faces : [...faces, ...childMenus];
+  if (all.length <= 1 && !all.some((s) => s.menuKey)) return [];
+  return all;
 }

@@ -14,7 +14,16 @@ export type AccountActionState =
   | { error?: string; ok?: boolean; tempPassword?: string }
   | undefined;
 
-type TargetInfo = { role: SystemRole; email: string; tenantId: string };
+type TargetInfo = { role: SystemRole; email: string; tenantId: string; displayName: string | null };
+
+/**
+ * Supabase Auth의 "그 사용자 없음"(404) 판별 — 임포트/시드된 "데이터 전용" 직원은 auth.users가 없다(#31).
+ * deleteStaff는 이걸 "지울 로그인 계정이 애초에 없음"으로 보고 건너뛰지만, 비밀번호·이메일은 auth가 있어야만
+ * 가능하다. 그대로 두면 Supabase의 영문 "User not found"가 화면에 노출되므로 한글 안내로 바꾼다.
+ */
+function isMissingAuthUser(err: { status?: number; message: string }): boolean {
+  return err.status === 404 || /user not found/i.test(err.message);
+}
 
 /**
  * 대상 직원을 DB에서 직접 읽어 같은 테넌트인지 검증하고 권한 계층 판단에 필요한 값을 돌려준다.
@@ -32,7 +41,7 @@ async function loadTarget(
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("users")
-    .select("tenant_id, system_role, email")
+    .select("tenant_id, system_role, email, display_name")
     .eq("id", id)
     .single();
   if (error || !data) return { error: "대상 직원을 찾을 수 없습니다" };
@@ -41,6 +50,7 @@ async function loadTarget(
     role: data.system_role as SystemRole,
     email: data.email as string,
     tenantId: data.tenant_id as string,
+    displayName: (data.display_name as string | null) ?? null,
   };
 }
 
@@ -77,7 +87,21 @@ export async function resetStaffPassword(
 
   const admin = createAdminClient();
   const { error } = await admin.auth.admin.updateUserById(id, { password });
-  if (error) return { error: error.message };
+  if (error) {
+    if (isMissingAuthUser(error)) {
+      return { error: "이 직원은 로그인 계정이 없어 비밀번호를 설정할 수 없습니다. 먼저 로그인 계정을 만들어 주세요." };
+    }
+    return { error: `비밀번호 재설정 실패 — ${error.message}` };
+  }
+
+  // ⚠️ 남의 계정 비밀번호를 여는 행위 = 감사로그의 존재 이유. 본인 변경(self_password_change)은 남기는데
+  //    이쪽이 빠져 있었다(2026-08-03). 발급된 비밀번호 자체는 절대 metadata에 넣지 않는다.
+  await logAction({
+    action: "staff_password_reset",
+    targetType: "staff",
+    targetLabel: target.displayName ?? target.email,
+    metadata: { mode: mode === "custom" ? "custom" : "temp" },
+  });
 
   return { ok: true, tempPassword: issued };
 }
@@ -132,8 +156,19 @@ export async function changeStaffEmail(
   });
   if (authErr) {
     await admin.from("users").update({ email: target.email }).eq("id", id);
-    return { error: `Auth 이메일 변경 실패: ${authErr.message}` };
+    if (isMissingAuthUser(authErr)) {
+      return { error: "이 직원은 로그인 계정이 없어 이메일을 변경할 수 없습니다. 먼저 로그인 계정을 만들어 주세요." };
+    }
+    return { error: `로그인 계정 이메일 변경 실패 — ${authErr.message}` };
   }
+
+  // 로그인 아이디가 바뀌는 변경 — 비밀번호 재설정과 같은 이유로 남긴다(본인 변경은 self_email_change).
+  await logAction({
+    action: "staff_email_change",
+    targetType: "staff",
+    targetLabel: target.displayName ?? email,
+    metadata: { from: target.email, to: email },
+  });
 
   revalidatePath(`/staff/${id}`);
   revalidatePath("/staff");

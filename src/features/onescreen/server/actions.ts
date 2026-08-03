@@ -166,6 +166,9 @@ export async function saveLessonReport(
         check_test: input.checkTest || null,
         attitude: input.attitude || null,
         teacher_name: user.displayName ?? null,
+        // 소유(누구 원스크린에 뜨는가) = 계정 id(0172a). 표시용 담임 이름과 분리 —
+        // ⚠️ 갱신 때는 DB 트리거가 **원 작성자를 보존**한다(남이 고쳐도 작성자 화면에서 안 사라지게).
+        created_by: user.id,
         notes: input.notes || null,
         trend_note: input.trendNote || null,
         source: "onescreen",

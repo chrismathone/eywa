@@ -43,7 +43,10 @@ export async function getDocumentsPage(
     .select(
       "id, title, category, kind, form_type, description, file_name, file_size, mime_type, link_url, pinned, created_at, uploader:uploaded_by(display_name)",
       { count: "exact" },
-    );
+    )
+    // 직원 연결 문서(이력서·계약서, staff_user_id 有)는 직원관리(4인 게이트) 전용 — 이 탐색기(사무실
+    // 전역)에 뜨면 직원관리 잠금이 우회된다(#77, 2026-08-03). 열람·관리는 /staff 상세·이력서 탭에서.
+    .is("staff_user_id", null);
   // 분류 화이트리스트 검증은 호출부(페이지)가 담당 — 분류가 테넌트 데이터라 여기서 닫힌 목록으로
   // 못 거른다. 키가 존재하지 않으면 결과가 0건일 뿐 누출은 없다(RLS가 테넌트 격리).
   if (opts.category) qb = qb.eq("category", opts.category);
@@ -105,6 +108,7 @@ export async function getDocumentById(id: string): Promise<DocumentDetail | null
       "id, title, category, kind, form_type, description, file_path, file_name, file_size, mime_type, link_url, body, pinned, created_at, uploader:uploaded_by(display_name)",
     )
     .eq("id", id)
+    .is("staff_user_id", null) // 직원 연결 문서는 이 표면에서 제외(#77) — 목록과 같은 벽
     .maybeSingle();
   if (!data) return null;
   return {

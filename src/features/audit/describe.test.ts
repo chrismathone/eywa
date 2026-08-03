@@ -98,6 +98,47 @@ describe("collectAuditNameIds / auditTargetName", () => {
     expect(collectAuditNameIds(rows)).toEqual({ studentIds: [SID], userIds: [UID], classIds: [CID] });
   });
 
+  it("계정 조작(비밀번호·이메일): 영문 mode/키를 노출하지 않는다", () => {
+    expect(auditDetail("staff_password_reset", { mode: "temp" }, ctx())).toBe("임시 비밀번호 발급");
+    expect(auditDetail("staff_password_reset", { mode: "custom" }, ctx())).toBe("비밀번호 직접 설정");
+    expect(auditDetail("staff_password_reset", {}, ctx())).toBeNull();
+    // 비밀번호 값이 metadata에 실려도 상세에 새어나가면 안 된다(애초에 넣지 않지만 이중 방어).
+    expect(auditDetail("staff_password_reset", { mode: "temp", password: "hunter2" }, ctx())).toBe(
+      "임시 비밀번호 발급",
+    );
+    expect(auditDetail("self_password_change", {}, ctx())).toBeNull();
+    for (const a of ["staff_email_change", "self_email_change"]) {
+      expect(auditDetail(a, { from: "a@x.com", to: "b@x.com" }, ctx())).toBe("a@x.com → b@x.com");
+      expect(auditDetail(a, { to: "b@x.com" }, ctx())).toBe("b@x.com");
+      expect(auditDetail(a, {}, ctx())).toBeNull();
+    }
+  });
+
+  it("반 폐지/복원 · 통합뷰 그룹 · 근로계약: 영문 키가 상세에 남지 않는다", () => {
+    expect(auditDetail("class_archive", { classId: SID, affectedStudents: 7 }, ctx())).toBe("수강 7건 종료");
+    expect(auditDetail("class_unarchive", { classId: SID, affectedStudents: 7 }, ctx())).toBe("수강 7건 복원");
+    expect(auditDetail("class_archive", { classId: SID }, ctx())).toBeNull();
+    // 과목은 raw 키가 아니라 학원설정 라벨로(운영 enum 하드코딩 금지와 같은 축).
+    expect(auditDetail("owner_integration_groups_update", { subject: "english", enabled: true, groups: 3 }, ctx()))
+      .toBe("과목 「영어」 · 통합뷰 사용 · 그룹 3개");
+    expect(auditDetail("owner_integration_groups_update", { subject: "math", enabled: false, groups: 0 }, ctx()))
+      .toBe("과목 「수학」 · 통합뷰 미사용 · 그룹 0개");
+    expect(auditDetail("staff_contract_extend", { seq: 3, startDate: "2026-03-01", endDate: "2027-02-28" }, ctx()))
+      .toBe("3차 계약 · 2026-03-01 ~ 2027-02-28");
+    expect(auditDetail("staff_contract_delete", { contractId: SID, seq: 2 }, ctx())).toBe("2차 계약 삭제");
+    expect(
+      auditDetail("staff_contract_update", { contractId: SID, kind: "contract", seq: 1, startDate: "2026-03-01", endDate: "2027-02-28" }, ctx()),
+    ).toBe("1차 계약 · 2026-03-01 ~ 2027-02-28");
+    // kind='note'(시트 이관 이력)는 차수가 없다 — 영문 "note"가 새면 안 된다.
+    expect(auditDetail("staff_contract_update", { contractId: SID, kind: "note", seq: 0 }, ctx())).toBe("이력 줄");
+    expect(auditDetail("staff_contract_file_add", { fileName: "근로계약서_2026.pdf" }, ctx()))
+      .toBe("파일 근로계약서_2026.pdf");
+    expect(auditDetail("staff_contract_file_delete", { docId: SID, fileName: "old.pdf" }, ctx())).toBe("파일 old.pdf");
+    // filled = 영문 필드 키 배열 → 개수만 노출
+    expect(auditDetail("staff_contract_pdf_extract", { filled: ["startDate", "endDate"] }, ctx()))
+      .toBe("PDF에서 항목 2개 추출");
+  });
+
   it("auditTargetName: targetLabel 없는 행의 대상 이름 보충(학생→직원→반 순)", () => {
     expect(auditTargetName({ studentId: SID }, ctx({ [SID]: "이윤건" }).nameOf)).toBe("이윤건");
     expect(auditTargetName({ newTeacherId: UID }, ctx({ [UID]: "김강사" }).nameOf)).toBe("김강사");
@@ -108,10 +149,12 @@ describe("collectAuditNameIds / auditTargetName", () => {
 
 describe("AUDIT_TYPE_LABEL", () => {
   it("logAction 호출부의 모든 target_type이 한글 라벨을 가진다", () => {
-    // logAction 전수(2026-07-11 grep) — 새 targetType 추가 시 여기와 AUDIT_TYPE_LABEL에 함께 추가할 것.
+    // logAction 전수(2026-07-11 grep) + 실 DB target_type 전수(2026-08-03) — 후자에서 user·users·
+    // academy_documents가 라벨 없이 영문으로 노출되고 있었다. 새 targetType은 여기와 AUDIT_TYPE_LABEL에 함께 추가.
     const usedTypes = [
       "staff", "student", "invoice", "exam", "payroll", "class", "classroom",
       "tenant_settings", "staff_resume", "intake_token", "notice_popup",
+      "user", "users", "academy_documents", "classnote_notice",
     ];
     for (const t of usedTypes) expect(AUDIT_TYPE_LABEL[t], t).toBeTruthy();
   });

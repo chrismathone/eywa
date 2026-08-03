@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { Pill, type PillColor } from "@/components/atoms/pill";
+import { Paperclip } from "@/components/icons/eywa-icon-compat";
 import { WindowLink } from "@/components/workspace/window-link";
 import { EditingBadge } from "@/features/presence/editing-badge";
 import { useSubjectMaps } from "@/features/owner/operations-context";
@@ -77,6 +78,14 @@ export function StaffTable({ rows }: { rows: StaffRow[] }) {
       </span>
     ),
     contractEnd: (s) => <span className="num">{s.contractEnd ?? "—"}</span>,
+    contractFile: (s) =>
+      s.contractFile ? (
+        <span className="text-primary inline-flex items-center gap-1 text-xs font-medium">
+          <Paperclip className="size-3.5" /> 있음
+        </span>
+      ) : (
+        "—"
+      ),
     subjects: (s) => (
       <span className="flex flex-wrap gap-1">
         {s.subjects.length > 0
@@ -113,6 +122,7 @@ export function StaffTable({ rows }: { rows: StaffRow[] }) {
     contract: "현재 계약",
     contractTerms: "계약조건",
     contractEnd: "계약갱신일",
+    contractFile: "계약서",
     subjects: "과목",
     role: "역할",
     classes: "담당 반",

@@ -13,6 +13,7 @@ import { classnoteSendWindowLabel } from "../classnote-guard";
 import { applyStudentOrder } from "../student-order";
 import { rosterIncludesEnrollment } from "../roster-filter";
 import { matchReportsToRows } from "../report-unit";
+import { ownsMakeupReport } from "../makeup-owner";
 import { LEGACY_REPORT_SUBJECT, reportSubject } from "@/features/timetable/lib/report-subject";
 import { carryProgress } from "../progress-status";
 import {
@@ -141,7 +142,13 @@ type RosterConfig = Partial<RosterSettings & Pick<TeacherRoster, "noClassesToday
  * 그래서 기본값은 "설정을 아직 못 읽은 경우"(비로그인)용이고, 읽은 뒤엔 항상 config로 덮어쓴다.
  */
 /** 그날 **내가 쓴** 보강(수업외) 보고서 — 화면 행 복원 재료. */
-type MakeupReportRow = { student_id: string; subject: string | null; makeup_class_id: string | null };
+type MakeupReportRow = {
+  student_id: string;
+  subject: string | null;
+  makeup_class_id: string | null;
+  created_by: string | null; // 작성 계정(0172a) — 소유 판정의 1차 키
+  teacher_name: string | null; // 0172a 이전 행의 폴백 키(표시 이름 문자열)
+};
 
 /**
  * 🔴 보강 행은 반이 없어 수강생 로스터엔 **절대** 안 잡힌다. 예전엔 화면에서 '+ 보강 학생 추가'로 만든
@@ -154,17 +161,21 @@ type MakeupReportRow = { student_id: string; subject: string | null; makeup_clas
 async function fetchMyMakeupReports(
   supabase: Awaited<ReturnType<typeof createClient>>,
   date: string,
+  userId: string,
   teacherName: string,
 ): Promise<MakeupReportRow[]> {
-  if (!teacherName.trim()) return [];
   const { data, error } = await supabase
     .from("lesson_reports")
-    .select("student_id, subject, makeup_class_id")
+    .select("student_id, subject, makeup_class_id, created_by, teacher_name")
     .eq("report_date", date)
-    .eq("makeup", true)
-    .eq("teacher_name", teacherName);
+    .eq("makeup", true);
   if (error) throw new Error(`보강 보고서 조회 실패: ${error.message}`);
-  return (data ?? []) as MakeupReportRow[];
+  // 소유 판정은 순수 함수 [`ownsMakeupReport`](../makeup-owner.ts) 하나로 — 계정 id 우선, 옛 행만 이름 폴백.
+  // 하루치 보강은 학원 전체로도 수십 건(실측 9개월 171건)이라 서버에서 걸러도 비용이 없다 —
+  // PostgREST `.or()`에 이름 문자열을 끼워 넣는 것보다 이 편이 안전하다(따옴표·특수문자 이스케이프 위험 0).
+  return ((data ?? []) as MakeupReportRow[]).filter((r) =>
+    ownsMakeupReport({ createdBy: r.created_by, teacherName: r.teacher_name }, userId, teacherName),
+  );
 }
 
 function emptyRoster(today: string, date: string, teacherName: string, config: RosterConfig = {}): TeacherRoster {
@@ -282,7 +293,7 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
         .or(`valid_from.is.null,valid_from.lte.${targetDate}`)
         .or(`valid_to.is.null,valid_to.gte.${targetDate}`),
     ),
-    fetchMyMakeupReports(supabase, targetDate, teacherName),
+    fetchMyMakeupReports(supabase, targetDate, user.id, teacherName),
   ]);
   if (allClasses.length === 0 && makeupReports.length === 0)
     return emptyRoster(today, targetDate, teacherName, config);
