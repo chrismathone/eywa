@@ -1,38 +1,24 @@
 "use client";
 
-import { useActionState, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
+import { useActionState } from "react";
 import { toast } from "sonner";
-import { CalendarClock, Loader2, Plus, Trash2, X } from "@/components/icons/eywa-icon-compat";
+import { CalendarClock, Loader2, Plus, X } from "@/components/icons/eywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { Pill } from "@/components/atoms/pill";
-import {
-  deleteLatestStaffContract,
-  extendStaffContract,
-  type ContractActionState,
-} from "@/features/staff/server/contract-actions";
+import { extendStaffContract, type ContractActionState } from "@/features/staff/server/contract-actions";
+import type { ContractFileRow } from "@/features/staff/server/contract-queries";
 import { ContractPdfPicker } from "./contract-pdf-picker";
+import { ContractFiles } from "./contract-files";
+import { ContractHistory } from "./contract-history";
 import {
-  contractsOnly,
   currentContract,
   daysUntil,
   nextContractDefault,
   periodLabel,
   type ContractRow,
 } from "@/features/staff/contract";
-
-/**
- * 히스토리 정렬 — 최신이 위. 날짜가 있으면 날짜 내림차순, 날짜 없는 줄(인센티브 조항 등)은
- * 시트 원문 순서(line_no)를 따라 뒤에 붙인다. 원문 셀의 읽는 순서를 최대한 보존한다.
- */
-function sortHistory(a: ContractRow, b: ContractRow): number {
-  const ad = a.startDate ?? "";
-  const bd = b.startDate ?? "";
-  if (ad && bd && ad !== bd) return ad < bd ? 1 : -1;
-  if (ad && !bd) return -1;
-  if (!ad && bd) return 1;
-  return (a.lineNo ?? 0) - (b.lineNo ?? 0);
-}
 
 const inputClass =
   "border-line bg-card text-foreground placeholder:text-text-faint focus:border-primary w-full rounded-lg border px-3 py-2 text-sm outline-none transition";
@@ -48,19 +34,22 @@ function SubmitButton({ label }: { label: string }) {
 }
 
 /**
- * 계약현황 — 현재계약(첫 출근일 기준 1년, 차수만큼 증감) + 계약조건 히스토리 + 연장.
+ * 계약현황 — 현재계약(첫 출근일 기준 1년, 차수만큼 증감) + 계약서 파일 보관 + 히스토리(수정·삭제) + 연장.
  * 기간 계산은 순수 함수([`contract.ts`])가 단일 소스이고 여기선 그리기만 한다.
+ * 히스토리 편집은 [`contract-history.tsx`], 파일 보관은 [`contract-files.tsx`]가 담당(2026-08-03 분리).
  */
 export function ContractStatus({
   userId,
   hireDate,
   rows,
+  files,
   today,
   canWrite,
 }: {
   userId: string;
   hireDate: string | null;
   rows: ContractRow[];
+  files: ContractFileRow[];
   /** 서버가 넘긴 오늘 날짜("YYYY-MM-DD") — 클라에서 new Date()를 쓰면 시간대·하이드레이션이 어긋난다. */
   today: string;
   canWrite: boolean;
@@ -71,9 +60,7 @@ export function ContractStatus({
   const [end, setEnd] = useState("");
   const [terms, setTerms] = useState("");
   const [state, formAction] = useActionState<ContractActionState, FormData>(extendStaffContract, undefined);
-  const [delState, delAction] = useActionState<ContractActionState, FormData>(deleteLatestStaffContract, undefined);
   const seenRef = useRef<ContractActionState>(undefined);
-  const seenDelRef = useRef<ContractActionState>(undefined);
 
   // 성공하면 입력 패널을 접는다 — **렌더 단계**에서(effect 안 setState는 금지 [[#25]]).
   const [closedFor, setClosedFor] = useState<ContractActionState>(undefined);
@@ -89,12 +76,6 @@ export function ContractStatus({
     if (state.error) toast.error(state.error);
     else if (state.ok) toast.success(state.notice ?? "저장했습니다");
   }, [state]);
-  useEffect(() => {
-    if (!delState || delState === seenDelRef.current) return;
-    seenDelRef.current = delState;
-    if (delState.error) toast.error(delState.error);
-    else if (delState.ok) toast.success(delState.notice ?? "삭제했습니다");
-  }, [delState]);
 
   const current = currentContract(rows, hireDate);
   const next = nextContractDefault(rows, hireDate);
@@ -103,9 +84,6 @@ export function ContractStatus({
   // 기입된 계약이 없으면 만료 판정 자체가 무의미(계산값이라) → 갱신이 아니라 '기입'이다.
   const dueSoon = !!current?.stored && left !== null && left <= 60;
   const actionLabel = !current?.stored ? "계약 기입" : dueSoon ? "계약 갱신" : "계약 연장";
-  // 삭제 버튼은 **계약의 마지막 차수**에만(시트에서 온 이력 줄은 원문이라 화면에서 지우지 않는다).
-  const periods = contractsOnly(rows);
-  const latestId = periods.length > 0 ? [...periods].sort((a, b) => b.seq - a.seq)[0].id : null;
 
   return (
     <section className="border-line bg-card flex flex-col rounded-2xl border p-5 shadow-card">
@@ -190,8 +168,10 @@ export function ContractStatus({
           <input type="hidden" name="userId" value={userId} />
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
             <p className="micro">{next.seq}차 계약 기입</p>
-            {/* 계약서 PDF에서 기간·조건을 읽어 아래 칸을 채운다. **저장은 사람이** — 돈 정보라 확인 단계를 둔다. */}
+            {/* 계약서 PDF에서 기간·조건을 읽어 아래 칸을 채우고, 파일은 아래 '계약서 파일'에 함께 보관된다.
+                **저장은 사람이** — 돈 정보라 확인 단계를 둔다. */}
             <ContractPdfPicker
+              userId={userId}
               onExtract={(d) => {
                 if (d.startDate) setStart(d.startDate);
                 if (d.endDate) setEnd(d.endDate);
@@ -248,59 +228,11 @@ export function ContractStatus({
         </form>
       ) : null}
 
-      {/* 히스토리 */}
-      <div className="mt-4">
-        <p className="micro mb-2">계약조건 히스토리</p>
-        {rows.length === 0 ? (
-          <p className="text-text-faint text-xs">기입된 계약이 없습니다 — 연장할 때마다 여기에 쌓입니다.</p>
-        ) : (
-          <ul className="space-y-1.5">
-            {[...rows]
-              .sort(sortHistory)
-              .map((r) => (
-                <li
-                  key={r.id}
-                  className="border-line flex items-start justify-between gap-3 rounded-lg border px-3 py-2"
-                >
-                  <div className="min-w-0">
-                    {/* 기간 있는 계약은 'N차 + 기간', 시트에서 온 이력 줄은 날짜(있으면) + 원문 그대로. */}
-                    {r.kind === "contract" && r.startDate && r.endDate ? (
-                      <p className="text-foreground text-xs font-medium">
-                        <span className="text-text-dim">{r.seq}차</span>{" "}
-                        <span className="num">
-                          {periodLabel({ startDate: r.startDate, endDate: r.endDate })}
-                        </span>
-                      </p>
-                    ) : (
-                      <p className="text-text-dim text-xs">
-                        {r.startDate ? <span className="num">{r.startDate}</span> : "기록"}
-                      </p>
-                    )}
-                    {r.terms || r.memo ? (
-                      <p className="text-text-dim mt-0.5 text-[11px] break-keep">
-                        {[r.terms, r.memo].filter(Boolean).join(" · ")}
-                      </p>
-                    ) : null}
-                  </div>
-                  {canWrite && r.id === latestId ? (
-                    <form action={delAction}>
-                      <input type="hidden" name="userId" value={userId} />
-                      <input type="hidden" name="contractId" value={r.id} />
-                      <button
-                        type="submit"
-                        aria-label={`${r.seq}차 계약 삭제`}
-                        title="마지막 차수만 삭제할 수 있습니다"
-                        className="text-text-faint hover:text-danger shrink-0 transition"
-                      >
-                        <Trash2 className="size-3.5" />
-                      </button>
-                    </form>
-                  ) : null}
-                </li>
-              ))}
-          </ul>
-        )}
-      </div>
+      {/* 계약서 파일 보관 — 원본 PDF를 직원에게 붙여 둔다(2026-08-03). */}
+      <ContractFiles userId={userId} files={files} canWrite={canWrite} />
+
+      {/* 히스토리 — 전 줄 수정·삭제 가능(2026-08-03). */}
+      <ContractHistory userId={userId} rows={rows} canWrite={canWrite} />
     </section>
   );
 }

@@ -233,7 +233,12 @@ export async function updateDocument(
   }
 
   const supabase = await createClient();
-  const { error } = await supabase.from("academy_documents").update(patch).eq("id", id);
+  // 직원 연결 문서(이력서·계약서)는 이 표면에서 조작 불가(#77) — 관리도 /staff 쪽 전용 액션으로만.
+  const { error } = await supabase
+    .from("academy_documents")
+    .update(patch)
+    .eq("id", id)
+    .is("staff_user_id", null);
   if (error) return { error: `수정 실패: ${error.message}` };
   revalidatePath("/documents");
   revalidatePath(`/documents/${id}`);
@@ -250,6 +255,7 @@ export async function deleteDocument(id: string): Promise<{ ok?: boolean; error?
     .from("academy_documents")
     .select("file_path, form_type, uploaded_by")
     .eq("id", id)
+    .is("staff_user_id", null) // 직원 연결 문서는 여기서 안 지운다(#77) — 이력서는 deleteStaffResume 전용
     .maybeSingle();
 
   // ⚠️ 이력서는 같은 행이 여기(탐색기)에도 뜨지만 **열람은 원장·관리자로 잠겨 있다**(재인증 제거 2026-07-28) —
@@ -263,6 +269,7 @@ export async function deleteDocument(id: string): Promise<{ ok?: boolean; error?
     .from("academy_documents")
     .delete()
     .eq("id", id)
+    .is("staff_user_id", null)
     .select("id"); // select 없으면 0행 삭제도 성공으로 보고된다.
   if (error) return { error: humanizeDbError(error.message, "삭제") };
   if (!deleted?.length) return { error: "문서를 찾을 수 없습니다 — 이미 삭제되었을 수 있습니다" };
@@ -288,6 +295,7 @@ export async function signDocumentUrl(
     .from("academy_documents")
     .select("file_path, file_name")
     .eq("id", id)
+    .is("staff_user_id", null) // 직원 연결 문서는 전용 서명 경로(signStaffContractFileUrl)만(#77)
     .maybeSingle();
   if (!row?.file_path) return { error: "파일이 없는 문서입니다" };
   try {
@@ -313,7 +321,8 @@ export async function toggleDocumentPin(
   const { error } = await supabase
     .from("academy_documents")
     .update({ pinned, updated_at: new Date().toISOString() })
-    .eq("id", id);
+    .eq("id", id)
+    .is("staff_user_id", null);
   if (error) return { error: `고정 변경 실패: ${error.message}` };
   revalidatePath("/documents");
   return { ok: true };

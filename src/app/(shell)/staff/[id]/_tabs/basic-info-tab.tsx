@@ -5,7 +5,7 @@ import { CheckSquare, Pencil, Square } from "@/components/icons/eywa-icon-compat
 import { WindowLink } from "@/components/workspace/window-link";
 import { Button } from "@/components/ui/button";
 import { getActiveHomeroomClasses, type StaffDetail } from "@/features/staff/server/queries";
-import { getStaffContracts } from "@/features/staff/server/contract-queries";
+import { getStaffContractFiles, getStaffContracts } from "@/features/staff/server/contract-queries";
 import type { ResumeDetail } from "@/features/staff/server/resume-queries";
 import { RESUME_CHECKS, WORKDAYS } from "@/features/staff/resume";
 import { getTenantSettings } from "@/features/owner/server/queries";
@@ -82,10 +82,11 @@ export async function BasicInfoTab({
   resumePhotoUrls?: (string | null)[];
 }) {
   // 독립 조회 병렬(B4). 담임 반 목록은 계정 관리 패널(퇴사/삭제 경고)에서만 쓰여 canManageThis일 때만 조회.
-  const [settings, homeroomClasses, contracts] = await Promise.all([
+  const [settings, homeroomClasses, contracts, contractFiles] = await Promise.all([
     getTenantSettings(),
     canManageThis ? getActiveHomeroomClasses(staff.id) : Promise.resolve([]),
     getStaffContracts(staff.id),
+    getStaffContractFiles(staff.id),
   ]);
   // 오늘 날짜는 **서버에서** 확정해 내려보낸다 — 클라에서 new Date()를 쓰면 시간대·하이드레이션이 어긋난다.
   const today = new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
@@ -212,6 +213,7 @@ export async function BasicInfoTab({
           userId={staff.id}
           hireDate={hireDate || null}
           rows={contracts}
+          files={contractFiles}
           today={today}
           canWrite={canManageContracts}
         />

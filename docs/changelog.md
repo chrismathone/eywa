@@ -1,5 +1,22 @@
 # eywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-08-03 — 계약서 파일 보관 + 계약 히스토리 수정·삭제 (직원관리)
+
+- **계약서 원본 보관(원장 지시)**: 직원 상세 '계약현황' 카드에 **계약서 파일** 섹션 — PDF 올리기/내려받기/삭제.
+  저장은 `academy_documents`(kind='file' + `staff_user_id` + restricted) 재사용이라 **새 테이블·SQL 0**.
+  액션 [`contract-file-actions.ts`](../src/features/staff/server/contract-file-actions.ts)(등록·삭제·서명URL,
+  전부 앱 게이트(개인 예외 반영)+admin client+tenant 필터), 쿼리 `getStaffContractFiles`.
+- **PDF 기입 폼 채움과 한 업로드 공유**: 연장 폼의 'PDF 불러오기'가 이제 ① 원본 보관 → ② 기간·조건 추출
+  순서로 동작(추출 실패=스캔 PDF여도 보관은 됨). `extractContractFromPdf`에 keep 플래그.
+- **직원 목록 '계약서' 열**: 첨부 여부(📎 있음/—) — `getStaffList`에 병렬 probe 추가, 열 고르기에도 등장.
+- **계약 히스토리 수정·삭제(원장 지시)**: 전 줄(시트 이력 줄 포함) 연필/휴지통 —
+  [`contract-history.tsx`](../src/app/(shell)/staff/[id]/_components/contract-history.tsx) 분리,
+  `updateStaffContract` + `deleteStaffContract`(종전 "마지막 차수만 삭제" 제한 해제 — 중간 차수를 지우면
+  차수 빈 번호는 그대로 둔다: 차수는 시트에서 온 역사적 사실, 현재계약 판정은 최대 차수라 무영향).
+- **#77 벽**: 직원 연결 문서(이력서·계약서, staff_user_id 有)를 **데이터베이스(/documents) 표면에서 전면 제외**
+  (목록·상세·수정·삭제·서명·고정 6곳 `.is("staff_user_id", null)`) — 직원관리는 4인 체제인데 documents는
+  사무실 전역이라, 거기 뜨면 잠금이 우회된다. 이력서 삭제는 원래 전용 `deleteStaffResume`라 무영향.
+
 > CLAUDE.md에서 분리된 **Tier 1 참조 문서**. 날짜별 구현 로그 — 특정 기능을 다시 열 때만 훑어보세요. (CLAUDE.md는 이 내용을 매 세션 로드하지 않습니다.)
 
 ## 진행 상황

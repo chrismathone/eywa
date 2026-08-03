@@ -37,3 +37,36 @@ export async function getStaffContracts(userId: string): Promise<ContractRow[]> 
     lineNo: (r.line_no as number | null) ?? null,
   }));
 }
+
+/** 보관된 계약서 파일 한 건(직원 상세 '계약서 파일' 목록·직원 목록 첨부 여부의 원천). */
+export type ContractFileRow = {
+  id: string;
+  fileName: string;
+  fileSize: number | null;
+  createdAt: string;
+};
+
+/**
+ * 그 직원에게 보관된 계약서 파일 목록(최신 위). 게이트·클라이언트 규약은 getStaffContracts와 동일 —
+ * 앱 게이트(개인 예외 반영) + admin client + tenant 명시 필터.
+ */
+export async function getStaffContractFiles(userId: string): Promise<ContractFileRow[]> {
+  const viewer = await getCurrentUser();
+  if (!viewer || !(await canAccessTenant(viewer.systemRole, "staff"))) {
+    throw new Error("계약서를 열람할 권한이 없습니다");
+  }
+  const { data, error } = await createAdminClient()
+    .from("academy_documents")
+    .select("id, file_name, file_size, created_at")
+    .eq("tenant_id", viewer.tenantId)
+    .eq("staff_user_id", userId)
+    .eq("kind", "file")
+    .order("created_at", { ascending: false });
+  if (error) throw new Error(`계약서 목록 조회 실패: ${error.message}`);
+  return (data ?? []).map((r) => ({
+    id: r.id as string,
+    fileName: (r.file_name as string | null) ?? "계약서.pdf",
+    fileSize: (r.file_size as number | null) ?? null,
+    createdAt: r.created_at as string,
+  }));
+}
