@@ -4,7 +4,11 @@ import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { Download, Loader2, Paperclip, Trash2, Upload } from "@/components/icons/eywa-icon-compat";
 import { uploadToTicket } from "@/lib/storage/upload-to-ticket";
-import { issueContractPdfTicket } from "@/features/staff/server/contract-extract-actions";
+import {
+  extractContractFromPdf,
+  issueContractPdfTicket,
+} from "@/features/staff/server/contract-extract-actions";
+import type { ContractExtract } from "@/features/staff/contract-extract";
 import {
   deleteStaffContractFile,
   registerStaffContractFile,
@@ -20,16 +24,21 @@ function fmtSize(bytes: number | null): string {
 
 /**
  * 계약서 파일 보관(원장 지시 2026-08-03) — 상세 계약현황 카드의 파일 섹션.
- * 올리기(PDF)·다운로드·삭제. 폼 채움용 추출과 별개로, 여기서는 원본만 붙여 둔다.
+ * 올리기(PDF)·다운로드·삭제. **올리기는 보관에서 끝나지 않는다** — 보관 직후 기간·조건을 추출해
+ * onExtracted로 부모(계약현황)에 넘겨 기입 폼이 자동으로 열리게 한다(원장 제보 2026-08-03:
+ * "올렸는데 아무것도 업데이트 안 된다" — 버튼별로 보관/추출이 갈리면 그렇게 보인다. 어느 버튼이든 동일 동작).
  */
 export function ContractFiles({
   userId,
   files,
   canWrite,
+  onExtracted,
 }: {
   userId: string;
   files: ContractFileRow[];
   canWrite: boolean;
+  /** 추출값이 하나라도 있으면 호출 — 부모가 기입 폼을 열고 채운다(저장은 여전히 사람이). */
+  onExtracted?: (d: ContractExtract) => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
@@ -58,8 +67,25 @@ export function ContractFiles({
       rf.set("fileName", file.name);
       rf.set("fileSize", String(file.size));
       const res = await registerStaffContractFile(undefined, rf);
-      if (res?.error) toast.error(res.error);
-      else toast.success(res?.notice ?? "계약서를 보관했습니다");
+      if (res?.error) {
+        toast.error(res.error);
+        return;
+      }
+      toast.success(res?.notice ?? "계약서를 보관했습니다");
+
+      // 보관 직후 기간·조건 추출 — 실패해도 보관은 이미 끝났으니 그 사실을 함께 말한다.
+      const ef = new FormData();
+      ef.set("path", ticket.ticket.path);
+      ef.set("keep", "1");
+      const ex = await extractContractFromPdf(undefined, ef);
+      if (!ex?.ok || !ex.data) {
+        toast.error(ex?.error ? `보관은 됐습니다 — ${ex.error}` : "보관은 됐습니다 — 기간·조건은 직접 입력해 주세요");
+      } else if (Object.values(ex.data).some(Boolean) && onExtracted) {
+        onExtracted(ex.data);
+        if (ex.notice) toast.success(ex.notice);
+      } else {
+        toast.info(ex.notice ?? "기간·조건을 확실히 찾지 못했습니다 — 계약 기입에서 직접 입력해 주세요");
+      }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "업로드에 실패했습니다");
     } finally {
@@ -123,10 +149,10 @@ export function ContractFiles({
               onClick={() => inputRef.current?.click()}
               disabled={busy}
               className="border-line text-text-dim hover:border-primary/40 hover:text-primary inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-[11px] transition disabled:opacity-50"
-              title="계약서 PDF를 이 직원에게 보관합니다"
+              title="계약서 PDF를 보관하고, 기간·조건을 읽어 계약 기입 폼에 채웁니다 (저장은 확인 후)"
             >
               {busy ? <Loader2 className="size-3.5 animate-spin" /> : <Upload className="size-3.5" />}
-              {busy ? "올리는 중…" : "계약서 올리기"}
+              {busy ? "읽는 중…" : "계약서 올리기"}
             </button>
           </>
         ) : null}

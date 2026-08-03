@@ -228,8 +228,20 @@ export function ContractStatus({
         </form>
       ) : null}
 
-      {/* 계약서 파일 보관 — 원본 PDF를 직원에게 붙여 둔다(2026-08-03). */}
-      <ContractFiles userId={userId} files={files} canWrite={canWrite} />
+      {/* 계약서 파일 보관 — 원본 PDF를 직원에게 붙여 둔다(2026-08-03). 올리기가 추출까지 하면
+          기입 폼을 자동으로 열고 채운다(빈 칸은 다음 차수 기본값으로) — 저장은 여전히 사람이. */}
+      <ContractFiles
+        userId={userId}
+        files={files}
+        canWrite={canWrite}
+        onExtracted={(d) => {
+          if (!next) return; // 입사일이 없으면 기입 폼 자체가 없다 — 보관만 되고 안내는 파일 섹션 토스트가 한다.
+          setStart(d.startDate || next.startDate);
+          setEnd(d.endDate || next.endDate);
+          setTerms(d.terms || "");
+          setOpen(true);
+        }}
+      />
 
       {/* 히스토리 — 전 줄 수정·삭제 가능(2026-08-03). */}
       <ContractHistory userId={userId} rows={rows} canWrite={canWrite} />
