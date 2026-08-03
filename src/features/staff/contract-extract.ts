@@ -94,3 +94,12 @@ export function groundContractExtract(raw: Partial<ContractExtract>, text: strin
 export function isEmptyExtract(e: ContractExtract): boolean {
   return !e.startDate && !e.endDate && !e.employmentType && !e.terms;
 }
+
+/**
+ * 주민등록번호 마스킹 — 외부 AI로 나가는 계약서 본문에서 `######-#######` 패턴을 지운다
+ * (외부 AI 전송 금지 필드 원칙 — 스캔 OCR 승인(2026-08-03) 시에도 텍스트 단계에선 항상 가린다).
+ * 생년월일 6자리는 남긴다(계약 당사자 확인용으로 무해) — 뒤 7자리만 별표.
+ */
+export function maskResidentRegNo(text: string): string {
+  return String(text ?? "").replace(/(\d{6})\s*[-–]\s*\d{7}/g, "$1-*******");
+}

@@ -94,6 +94,11 @@ eywa는 메뉴=플로팅 창=same-origin iframe이라 **창마다 셸 레이아�
 - **외부 AI 전송 금지 필드(불변, 2026-07-16 명문화)**: 주민번호·계좌/카드번호·급여(`users.hourly_rate/monthly_base`·`payroll_records`)·
   이력서 `academy_documents.form_data`(restricted)·환불요청서 계좌 — **어떤 AI 프롬프트에도 넣지 않는다**(전송 전례 0,
   restricted RLS+재인증으로 잠근 대상). 학생 이름·학교·상담 내용 수준은 기존 관행상 전송 허용선.
+  - **승인된 예외(원장 2026-08-03)**: **직원 계약서 스캔 PDF의 Claude 비전 전사(OCR)** — 종이 계약서 자동 인식을 위해
+    스캔 이미지 전송을 원장이 명시 승인(질문·답변 로그 있음). 단 ① 전송은 전사 1회뿐, ② 이후 추출 프롬프트에 싣는
+    텍스트는 [`maskResidentRegNo`](src/features/staff/contract-extract.ts)로 **주민번호 뒤 7자리 항상 마스킹**(글자 PDF
+    경로 포함), ③ `generateJSON({ document })`는 Anthropic 한정(폴백 없음 — 다른 provider로 첨부가 새는 것 방지).
+    다른 스캔/이미지 전송을 새로 열 땐 이 예외를 근거로 확장하지 말고 다시 물을 것.
 - **usage 계측(0113a `ai_usage_logs`)**: 새 AI 호출부는 `generateJSON({ …, meta: { feature: "<호출부 식별자>", tenantId? } })`를
   넘긴다(비용 실측 — 키 분리만으로는 기능별 구분 불가). 기록은 best-effort라 본 호출을 절대 안 막는다.
 
