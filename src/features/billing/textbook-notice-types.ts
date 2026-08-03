@@ -20,7 +20,16 @@ export type TextbookNoticeOrder = {
 
 export type TextbookNoticeSkip = {
   name: string;
-  reason: "no_subject" | "no_student" | "subject_off" | "name_collision" | "no_name";
+  // 뒤 3개 = 중복 발송 차단(0174a, textbook-send-dedup.ts). 한글 라벨은 화면 SKIP_LABEL이 붙인다.
+  reason:
+    | "no_subject"
+    | "no_student"
+    | "subject_off"
+    | "name_collision"
+    | "no_name"
+    | "already_sent"
+    | "same_book_sent"
+    | "dup_in_batch";
 };
 
 export type PreparedTextbookNotice = {

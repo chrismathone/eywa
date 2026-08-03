@@ -29,16 +29,25 @@
  * 📌 ~~`created_by`가 생기면 그걸 1순위로~~ → **정정(2026-07-31, 0168a에서 컬럼 추가)**: `created_by`는
  *    **실제 작성자**라 여기서 필요한 **소유자**와 다른 사실이다. 대리 작성이 의도된 동작이라(위 참조)
  *    사무실이 강사 앞으로 낸 요청은 `created_by`=사무실인데 소유자는 그 강사다 — 1순위로 올리면
- *    **소유권이 작성자에게 넘어가 의미가 바뀐다**(그 강사가 자기 요청을 못 고치게 된다). 그래서
- *    이 함수는 그대로 `teacher_name` 기준을 유지한다. `created_by`는 감사·위조 방지용이다.
- *    별칭·개명 문제의 정답은 여전히 **데이터 정규화**이지, created_by로의 교체가 아니다.
- *    (소유자 uuid가 정말 필요해지면 `owner_user_id`를 따로 두고 저장 시점에 teacher_name → 계정을
- *     해석해 채우는 게 맞다 — 그건 별도 결정이다.)
+ *    **소유권이 작성자에게 넘어가 의미가 바뀐다**(그 강사가 자기 요청을 못 고치게 된다).
+ *
+ * ✅ **2026-08-03 해소 — 교체가 아니라 합집합.** 원장 제보: *"선생님이 본인 이름을 다르게 적었을 때
+ *    삭제가 안 된다"*, *"발송 안 한 요청서엔 애초에 삭제 버튼이 없다 — 이것도 이름 때문인가?"* → 그렇다.
+ *    이름이 안 맞으면 화면이 **버튼을 아예 안 그린다**(canManage=false). 그래서 `내가 만든 것`을
+ *    **더한다**(OR): 대리 작성 의미(위)는 그대로 두고, **본인이 자기 요청에서 잠기는 구멍만** 막는다.
+ *    자기가 만든 행을 자기 것으로 보는 건 누출이 아니다. RLS도 같은 조건으로 넓혔다(0174a).
+ *    ⚠️ `created_by`가 없는 옛 행(2026-08-03 실측 460건 중 447건)은 종전대로 이름 기준 —
+ *       안 맞으면 관리자 몫이고, 화면이 "관리자에게 문의"로 그렇게 안내한다.
  */
 export function ownsTextbookRequest(
   teacherName: string | null | undefined,
   viewerDisplayName: string | null | undefined,
+  /** 행의 `created_by`와 보는 사람의 계정 id — 둘 다 있고 같으면 이름과 무관하게 내 것. */
+  createdBy?: string | null,
+  viewerUserId?: string | null,
 ): boolean {
+  const mineByCreation = !!createdBy && !!viewerUserId && createdBy === viewerUserId;
+  if (mineByCreation) return true;
   const owner = teacherName?.trim();
   const me = viewerDisplayName?.trim();
   return !!owner && !!me && owner === me;

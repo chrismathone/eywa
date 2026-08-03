@@ -24,6 +24,10 @@ export type TextbookOrderRow = {
   statusByName: string | null; // 마지막 변경자
   statusAt: string | null; // 마지막 변경 시각
   createdAt: string; // 행 생성 시각 — 데이터베이스 연동 폴더의 등록일 폴백(request_date null 대비)
+  /** 실제 작성자 계정(0168a) — 소유 판정의 합집합 한쪽. 이름을 다르게 적어도 본인은 자기 요청을 다룬다(0174a). */
+  createdBy: string | null;
+  /** 학부모에게 이미 나갔는가(0174a) — 값이 있으면 재발송 차단 + 삭제 시 그 글을 되짚는다. */
+  classnoteNoticeId: string | null;
 };
 
 export type StudentOption = { id: string; name: string; grade: string | null };
@@ -46,7 +50,7 @@ function sanitize(q: string) {
 }
 
 const ORDER_COLS =
-  "id, book_name, book_detail, student_id, student_name, teacher_name, price, status, request_date, notes, registered_at, ordered_at, paid_at, status_by_name, status_at, created_at";
+  "id, book_name, book_detail, student_id, student_name, teacher_name, created_by, classnote_notice_id, price, status, request_date, notes, registered_at, ordered_at, paid_at, status_by_name, status_at, created_at";
 
 type DbOrderRow = {
   id: string;
@@ -65,6 +69,8 @@ type DbOrderRow = {
   status_by_name: string | null;
   status_at: string | null;
   created_at: string;
+  created_by: string | null;
+  classnote_notice_id: string | null;
 };
 
 function mapOrderRow(r: DbOrderRow): TextbookOrderRow {
@@ -88,6 +94,8 @@ function mapOrderRow(r: DbOrderRow): TextbookOrderRow {
     statusByName: r.status_by_name,
     statusAt: r.status_at,
     createdAt: r.created_at,
+    createdBy: r.created_by ?? null,
+    classnoteNoticeId: r.classnote_notice_id ?? null,
   };
 }
 
@@ -182,13 +190,13 @@ export async function getTextbookOrdersForStudents(studentIds: string[]): Promis
     student_name: string | null; teacher_name: string | null; price: number; status: string;
     request_date: string | null; notes: string | null; registered_at: string | null;
     ordered_at: string | null; paid_at: string | null; status_by_name: string | null; status_at: string | null;
-    created_at: string;
+    created_at: string; created_by: string | null; classnote_notice_id: string | null;
   };
   const data = await fetchInChunks<Raw>(studentIds, (chunk) =>
     supabase
       .from("textbook_orders")
       .select(
-        "id, book_name, book_detail, student_id, student_name, teacher_name, price, status, request_date, notes, registered_at, ordered_at, paid_at, status_by_name, status_at, created_at",
+        "id, book_name, book_detail, student_id, student_name, teacher_name, created_by, classnote_notice_id, price, status, request_date, notes, registered_at, ordered_at, paid_at, status_by_name, status_at, created_at",
       )
       .in("student_id", chunk),
   );
@@ -213,6 +221,8 @@ export async function getTextbookOrdersForStudents(studentIds: string[]): Promis
       statusByName: r.status_by_name,
       statusAt: r.status_at,
       createdAt: r.created_at,
+    createdBy: r.created_by ?? null,
+    classnoteNoticeId: r.classnote_notice_id ?? null,
     }))
     .sort((a, b) => (b.requestDate ?? "").localeCompare(a.requestDate ?? ""));
 }

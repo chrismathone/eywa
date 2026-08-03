@@ -6,6 +6,8 @@ import {
   fillMentTemplate,
   formatWon,
   mentHasTokens,
+  LEGACY_TEXTBOOK_MENTS,
+  resolveTextbookMent,
   TEXTBOOK_NOTICE_HEADER,
   textbookNoticeCommon,
   textbookNoticeIndividual,
@@ -44,15 +46,30 @@ describe("fillMentTemplate", () => {
       price: 12000,
     });
     expect(out).toBe(
-      "안녕하세요. 김민수가 쎈 중등수학 3-1 교재를 신청합니다. 금액은 12,000원이며 아래 계좌로 납부 부탁드립니다.",
+      "안녕하세요. 김민수 학생의 쎈 중등수학 3-1 교재를 신청합니다. 금액은 12,000원이며 아래 계좌로 납부 부탁드립니다.",
     );
     expect(out).not.toContain("{");
   });
 
+  // 🔴 2026-08-03 원장: "'이하준이'로 나가서 완전 어색해." 받침 판정은 맞았지만(준=받침 ㄴ → 이)
+  //    학부모가 읽기엔 아이 이름을 부르는 말투로 읽힌다 → 기본 문구는 **주어 조사를 아예 안 쓴다**.
+  it("기본 문구는 {학생} 뒤에 조사를 붙이지 않는다 — '~ 학생의'로 받는다", () => {
+    expect(DEFAULT_TEXTBOOK_MENT).toContain("{학생} 학생의");
+    // 어떤 이름이 와도 '이/가'가 붙지 않는다(받침 있는 이름·없는 이름 둘 다).
+    for (const name of ["이하준", "김지우"]) {
+      const out = fillMentTemplate(DEFAULT_TEXTBOOK_MENT, { studentName: name, bookName: "쎈", price: 1000 });
+      expect(out).toContain(`${name} 학생의`);
+      expect(out).not.toContain(`${name}이 `);
+      expect(out).not.toContain(`${name}가 `);
+    }
+  });
+
   // 🔴 2026-07-31 실사고: 템플릿의 `{학생}이`가 그대로 나가 "김지우이 …"가 학부모에게 발송됐다.
+  //    기본 문구에선 조사를 걷어냈지만(위) **원장이 화면에서 조사를 다시 쓸 수 있으므로** 규칙은 그대로 잠근다.
+  const JOSA_TEMPLATE = "{학생}이 {교재명} 교재를 신청합니다.";
   it("토큰 뒤 조사를 받침에 맞춘다 — 학부모가 읽는 글이다", () => {
     const of = (studentName: string) =>
-      fillMentTemplate(DEFAULT_TEXTBOOK_MENT, { studentName, bookName: "쎈", price: 1000 });
+      fillMentTemplate(JOSA_TEMPLATE, { studentName, bookName: "쎈", price: 1000 });
     expect(of("김지우")).toContain("김지우가 쎈 교재를"); // 받침 없음 → 가 (실제 사고 사례)
     expect(of("김민수")).toContain("김민수가 쎈 교재를");
     expect(of("박성혁")).toContain("박성혁이 쎈 교재를"); // 받침 있음 → 이
@@ -165,7 +182,7 @@ describe("composeTextbookNotice (공통/개별 분리)", () => {
   it("토큰 멘트는 학생마다 달라지므로 공통엔 머리말, 개별에 치환된 멘트", () => {
     const c = composeTextbookNotice(DEFAULT_TEXTBOOK_MENT, { ...base, studentName: "김민수" });
     expect(c.common).toBe(TEXTBOOK_NOTICE_HEADER);
-    expect(c.individual).toContain("김민수가 쎈 중등수학 3-1 교재를 신청합니다");
+    expect(c.individual).toContain("김민수 학생의 쎈 중등수학 3-1 교재를 신청합니다");
     expect(c.individual).toContain("[금액] 12,000원");
     // 워커가 게시하는 형태 = 공통 + 빈 줄 + 개별
     expect(c.full).toBe(`${c.common}\n\n${c.individual}`);
@@ -197,3 +214,23 @@ describe("composeTextbookNotice (공통/개별 분리)", () => {
     expect(a.split("[교재]")[1]).toBe(b.split("[교재]")[1]);
   });
 });
+
+describe("resolveTextbookMent — 옛 기본값이 굳은 저장값 흡수", () => {
+  it("비어 있으면 현재 기본 문구", () => {
+    for (const v of [null, undefined, "", "   "]) expect(resolveTextbookMent(v)).toBe(DEFAULT_TEXTBOOK_MENT);
+  });
+
+  it("옛 기본 문구 그대로면 현재 기본 문구로 — 이게 없으면 기본을 고쳐도 아무도 안 바뀐다", () => {
+    // 2026-08-03 실측: 저장값 보유 5명 중 4명이 옛 기본값과 완전히 동일한 복사본이었다
+    // (발송 다이얼로그가 멘트를 자동 중간저장하므로 손대지 않아도 저장된다).
+    for (const legacy of LEGACY_TEXTBOOK_MENTS) {
+      expect(resolveTextbookMent(legacy)).toBe(DEFAULT_TEXTBOOK_MENT);
+      expect(resolveTextbookMent(`  ${legacy}  `)).toBe(DEFAULT_TEXTBOOK_MENT); // 앞뒤 공백도 같은 것으로
+    }
+  });
+
+  it("직접 쓴 문구는 그대로 둔다 — 남의 저장값을 말없이 갈아치우지 않는다", () => {
+    const mine = "안녕하세요. {학생} 어머님, {교재명} 교재비 {금액}원 안내드립니다.";
+    expect(resolveTextbookMent(mine)).toBe(mine);
+  });
+})

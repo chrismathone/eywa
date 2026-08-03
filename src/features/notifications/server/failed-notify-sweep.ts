@@ -39,7 +39,7 @@ export async function sweepFailedReportNotifications(
   const since = new Date(Date.now() - WINDOW_DAYS * 86_400_000);
   const { data: failedRows, error } = await admin
     .from("lesson_reports")
-    .select("id, student_id, report_date, teacher_name, class_id, classnote_error, students(name, is_test)")
+    .select("id, student_id, report_date, teacher_name, class_id, classnote_error, students!lesson_reports_student_id_fkey(name, is_test)")
     .eq("tenant_id", tenantId)
     .eq("classnote_status", "failed")
     .is("revoked_at", null)

@@ -20,6 +20,10 @@ export type TextbookOrderRow = {
   student_id: string | null;
   student_name: string | null;
   teacher_name: string | null;
+  /** 실제 작성자 계정 — 소유 판정의 **합집합 한쪽**(이름을 다르게 적어도 본인은 자기 요청을 다룬다, 0174a). */
+  created_by: string | null;
+  /** 이미 학부모에게 나간 공지(0174a). 값이 있으면 **재발송 차단** 표식이다. */
+  classnote_notice_id: string | null;
   book_name: string;
   book_detail: string | null;
   price: string | number;
@@ -117,7 +121,7 @@ export async function loadScopedOrders(
   const rows = await fetchInChunks<TextbookOrderRow>(orderIds, (chunk) =>
     supabase
       .from("textbook_orders")
-      .select("id, student_id, student_name, teacher_name, book_name, book_detail, price, request_date")
+      .select("id, student_id, student_name, teacher_name, created_by, classnote_notice_id, book_name, book_detail, price, request_date")
       .in("id", chunk),
   );
   if (!rows.length) return { error: "교재 요청을 찾을 수 없습니다" };
@@ -128,7 +132,7 @@ export async function loadScopedOrders(
     const scoped = new Set(studentIds);
     if (!rows.every((r) => r.student_id && scoped.has(r.student_id)))
       return { error: "담당 학생의 요청만 학부모에게 보낼 수 있습니다" };
-    const notMine = rows.filter((r) => !ownsTextbookRequest(r.teacher_name, user?.displayName));
+    const notMine = rows.filter((r) => !ownsTextbookRequest(r.teacher_name, user?.displayName, r.created_by, user?.id));
     if (notMine.length)
       return {
         error: `본인이 낸 요청만 학부모에게 보낼 수 있습니다 — ${[...new Set(notMine.map((r) => r.teacher_name).filter(Boolean))].join(", ") || "다른 선생님"} 요청이 포함돼 있습니다`,

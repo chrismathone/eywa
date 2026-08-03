@@ -1234,6 +1234,13 @@ export const textbookOrders = pgTable(
     checkDismissedAt: timestamp("check_dismissed_at", { withTimezone: true }),
     statusByName: text("status_by_name"), // 마지막 변경자(이름 denormalize)
     statusAt: timestamp("status_at", { withTimezone: true }), // 마지막 변경 시각
+    // 학부모에게 이미 나간 공지(0174a). 한 컬럼이 두 일을 한다:
+    //  ① 삭제할 때 "이 요청서가 어느 글로 나갔나" 되짚기 ② **중복 발송 차단 표식**
+    //     (수업보고서 classnote_status='success'가 재발송을 막는 것과 같은 역할).
+    // ⚠️ 채우는 시점은 **발송 성공 직후**여야 한다 — 먼저 채우면 실패한 건이 영영 재발송 불가가 된다.
+    // ⚠️ 실제 FK(→ classnote_notices, on delete set null)는 0174a SQL에 있다 —
+    //    classnote_notices는 이 파일에 미러돼 있지 않아 참조를 걸 수 없다(문서용 선언).
+    classnoteNoticeId: uuid("classnote_notice_id"),
     notes: text("notes"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),

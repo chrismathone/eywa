@@ -23,6 +23,14 @@ export type TextbookState =
   | undefined;
 
 // ijw식 3개 독립 체크(등록/주문/납부) → 각자 타임스탬프 컬럼. status는 체크에서 파생.
+/**
+ * 삭제가 **0행**으로 끝났을 때의 문구. 원인은 거의 항상 RLS 소유 게이트(0168a/0174a)다 —
+ * 강사는 `내가 만든 것 OR 내 이름으로 된 것`만 지울 수 있고, 옛 요청서는 `created_by`가 없어
+ * 이름이 안 맞으면 여기로 떨어진다. 그때 할 수 있는 일(관리자 요청)을 같이 적는다.
+ */
+const DELETE_BLOCKED_MSG =
+  "이 요청서를 지울 권한이 없습니다 — 요청서에 적힌 담당 선생님 이름이 본인과 다르면 관리자에게 요청해주세요.";
+
 const CHECK_COLS: Record<string, string> = {
   registered: "registered_at",
   ordered: "ordered_at",
@@ -168,7 +176,7 @@ async function loadEditableRequest(
 ): Promise<{ error: string } | { ok: true }> {
   const { data: row } = await supabase
     .from("textbook_orders")
-    .select("student_id, teacher_name, registered_at, ordered_at, paid_at")
+    .select("student_id, teacher_name, created_by, registered_at, ordered_at, paid_at")
     .eq("id", id)
     .single();
   if (!row) return { error: "교재 요청을 찾을 수 없습니다" };
@@ -180,7 +188,7 @@ async function loadEditableRequest(
     const user = await getCurrentUser();
     const { studentIds } = await getTeacherScope(tId);
     if (!row.student_id || !studentIds.includes(row.student_id)) return { error: "담당 학생의 요청만 수정·삭제할 수 있습니다" };
-    if (!ownsTextbookRequest(row.teacher_name, user?.displayName))
+    if (!ownsTextbookRequest(row.teacher_name, user?.displayName, row.created_by, user?.id))
       return { error: `본인이 낸 요청만 수정·삭제할 수 있습니다${row.teacher_name ? ` (이 요청: ${row.teacher_name})` : ""}` };
   }
   // 사무실이 하나라도 처리(등록/주문/납부)했으면 잠금.
@@ -230,8 +238,12 @@ export async function deleteTextbookRequest(_prev: TextbookState, formData: Form
   const gate = await loadEditableRequest(supabase, id);
   if ("error" in gate) return { error: gate.error };
 
-  const { error } = await supabase.from("textbook_orders").delete().eq("id", id);
+  // 🔴 `.select("id")`가 핵심 — PostgREST는 **RLS에 막힌 행을 에러 없이 건너뛴다**(0행 삭제).
+  //    예전엔 error만 보고 ok를 돌려줘서, 권한에 막힌 삭제가 "성공했는데 목록은 그대로"로 보였다
+  //    (원장 2026-08-03 "삭제가 안 되는 것 같은데"). 지운 행 수를 직접 확인해야 진실을 말할 수 있다.
+  const { data: gone, error } = await supabase.from("textbook_orders").delete().eq("id", id).select("id");
   if (error) return { error: error.message };
+  if (!gone?.length) return { error: DELETE_BLOCKED_MSG };
   revalidatePath("/textbook-requests");
   revalidatePath("/billing");
   return { ok: true };
@@ -325,8 +337,10 @@ export async function deleteTextbookOrder(_prev: TextbookState, formData: FormDa
   if (!id) return { error: "교재신청 ID가 누락되었습니다" };
 
   const supabase = await createClient();
-  const { error } = await supabase.from("textbook_orders").delete().eq("id", id);
+  // 위와 같은 이유로 지운 행 수를 확인한다(0행 = 권한에 막힘, 에러는 안 난다).
+  const { data: gone, error } = await supabase.from("textbook_orders").delete().eq("id", id).select("id");
   if (error) return { error: error.message };
+  if (!gone?.length) return { error: DELETE_BLOCKED_MSG };
 
   revalidatePath("/billing");
   return { ok: true };

@@ -70,11 +70,14 @@ function RequestRow({
   onDownload,
   onSend,
   ownerName,
+  viewerUserId,
 }: {
   row: TextbookOrderRow;
   onDownload: (r: TextbookOrderRow) => void;
   /** 학부모 알림장 발송 다이얼로그 열기(없으면 버튼 미노출). */
   onSend?: (r: TextbookOrderRow) => void;
+  /** 보는 사람 계정 id — 소유 판정 합집합(0174a). 이름이 달라도 본인이 만든 요청은 본인 것. */
+  viewerUserId?: string;
   /** 강사일 때만 지정 — 본인 요청이 아니면 수정·삭제·발송을 숨긴다(서버 게이트 미러). */
   ownerName?: string;
 }) {
@@ -88,7 +91,9 @@ function RequestRow({
   const [price, setPrice] = useState<number | string>(row.price);
   // 소유 판정 = 서버 게이트와 **같은 순수 함수**. ownerName 미지정(사무실)이면 전부 내 것처럼 다룬다
   // (사무실은 effectiveTeacherId()가 null이라 서버에서도 이 게이트를 안 탄다 — 두 쪽이 같은 말을 한다).
-  const mine = !ownerName || ownsTextbookRequest(row.teacherName, ownerName);
+  // 🔴 이름이 안 맞아 버튼이 통째로 사라지던 자리(원장 2026-08-03 "삭제 버튼이 없다 … 이름 때문인가?").
+  //    합집합: **내가 만든 것** OR 내 이름으로 된 것(0174a). 대리 작성 의미는 그대로 둔다.
+  const mine = !ownerName || ownsTextbookRequest(row.teacherName, ownerName, row.createdBy, viewerUserId);
   const canManage = mine && isUntouched(row);
   const done = isDone(row);
 
@@ -208,6 +213,16 @@ function RequestRow({
             </button>
           </span>
         )
+      ) : mine ? (
+        /* 사무실이 이미 손댄 건(등록·주문·납부 중 하나라도) — 지우면 처리 이력이 사라지므로 강사가 못 지운다.
+           🔴 버튼만 없애고 아무 말도 안 하면 "왜 안 되지"로 끝난다(원장 2026-08-03 "삭제가 안 되는 것 같은데").
+           할 수 없는 이유와 다음 행동을 같이 적는다. */
+        <span
+          className="text-text-faint shrink-0 text-[11px] whitespace-nowrap"
+          title="등록·주문·납부 중 하나라도 처리되면 요청서를 지울 수 없습니다 — 사무실 장부와 어긋나기 때문입니다"
+        >
+          사무실 처리됨 · 관리자에게 문의
+        </span>
       ) : null}
     </li>
   );
@@ -219,6 +234,7 @@ export function RequestHistory({
   onSend,
   capNote,
   ownerName,
+  viewerUserId,
 }: {
   rows: TextbookOrderRow[];
   onDownload: (r: TextbookOrderRow) => void;
@@ -231,6 +247,8 @@ export function RequestHistory({
    * 서버 게이트(`ownsTextbookRequest`)와 **같은 함수**로 판정해 "눌리는데 서버가 거절"이 안 생기게 한다.
    */
   ownerName?: string;
+  /** 보는 사람 계정 id — 소유 판정 합집합(0174a). */
+  viewerUserId?: string;
 }) {
   // ijw 기본 탭 = 미완료(처리 중인 것부터). 탭·검색 변경 시 페이지 1 리셋(이벤트 핸들러에서).
   const [tab, setTab] = useState<"incomplete" | "complete">("incomplete");
@@ -313,7 +331,14 @@ export function RequestHistory({
           }`}
         >
           {pageRows.map((r) => (
-            <RequestRow key={r.id} row={r} onDownload={onDownload} onSend={onSend} ownerName={ownerName} />
+            <RequestRow
+              key={r.id}
+              row={r}
+              onDownload={onDownload}
+              onSend={onSend}
+              ownerName={ownerName}
+              viewerUserId={viewerUserId}
+            />
           ))}
         </ul>
       )}

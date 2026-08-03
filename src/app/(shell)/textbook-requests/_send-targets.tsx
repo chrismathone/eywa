@@ -13,6 +13,10 @@ const SKIP_LABEL: Record<TextbookNoticeSkip["reason"], string> = {
   name_collision: "동명이인 — 오발송 방지로 제외",
   subject_off: "학원설정에서 발송하지 않는 과목",
   no_name: "이름 없음",
+  // 중복 발송 차단(0174a) — 수업보고서가 이미 발송된 건을 다시 못 보내게 하는 것과 같은 규약.
+  already_sent: "이미 발송한 요청서 — 다시 보내려면 학부모 공지를 게시취소하세요",
+  same_book_sent: "같은 교재가 이미 발송됨 — 중복 요청서입니다",
+  dup_in_batch: "이번 발송에 같은 교재가 중복으로 담김 — 한 건만 보냅니다",
 };
 
 /** 발송 결과에서 빠진 학생 — "N명 발송" 뒤에 조용히 사라지지 않도록 사유까지 한글로 남긴다. */

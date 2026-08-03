@@ -61,6 +61,8 @@ export function TextbooksTable({
 }) {
   const [dialog, setDialog] = useState<{ order: TextbookOrderRow | null } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  /** 삭제 실패 사유(행별) — 버리면 "눌러도 아무 일 없음"이 된다. */
+  const [delError, setDelError] = useState<{ id: string; message: string } | null>(null);
   const [, startTransition] = useTransition();
   const openPrint = usePrintWindow();
 
@@ -77,13 +79,19 @@ export function TextbooksTable({
   }
 
   function handleDelete(r: TextbookOrderRow) {
+    setDelError(null);
     if (!confirm(`"${r.bookName}" 교재신청을 삭제할까요? 되돌릴 수 없습니다.`)) return;
     const fd = new FormData();
     fd.append("id", r.id);
     setBusy(r.id);
     startTransition(async () => {
-      await deleteTextbookOrder(undefined, fd);
+      // 🔴 결과를 버리면 **실패가 화면에서 사라진다**(원장 2026-08-03 "삭제가 안 되는 것 같은데").
+      //    RLS에 막힌 행은 PostgREST가 **에러 없이 0행**을 지우므로, 액션이 ok를 돌려줘도 행은 그대로다
+      //    → 서버가 "지웠다"고 말했는데 목록이 안 변하면 그것도 알린다(조용한 성공 = 조용한 실패다).
+      const res = await deleteTextbookOrder(undefined, fd);
       setBusy(null);
+      if (res?.error) setDelError({ id: r.id, message: res.error });
+      else setDelError(null);
     });
   }
 
@@ -219,6 +227,10 @@ export function TextbooksTable({
                         {isBusy ? <Loader2 className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}
                       </button>
                     </div>
+                    {/* 삭제 실패 사유 — 권한(RLS)에 막히면 예전엔 아무 표시 없이 행이 남아 "고장난 버튼"으로 읽혔다. */}
+                    {delError?.id === r.id ? (
+                      <p className="text-danger mt-1 text-[11px] whitespace-normal">{delError.message}</p>
+                    ) : null}
                   </td>
                 </tr>
               );

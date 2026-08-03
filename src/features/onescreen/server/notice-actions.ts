@@ -61,6 +61,11 @@ export type OnescreenNoticeResult = {
   skipped?: NoticeSkip[];
   dryRun?: boolean;
   error?: string;
+  /**
+   * 적재된 공지 행 id — 호출부가 "이 글이 어디로 나갔는지"를 되짚어야 할 때 쓴다(교재요청 연결 0174a:
+   * 삭제 시 학부모 글 되짚기 + 중복 발송 차단 표식). dry-run이면 적재를 안 하므로 없다.
+   */
+  noticeId?: string | null;
 };
 
 /**
@@ -234,7 +239,7 @@ export async function sendOnescreenNotice(input: OnescreenNoticeInput): Promise<
     },
   });
 
-  return { ok: true, queued: targets.length, skipped };
+  return { ok: true, queued: targets.length, skipped, noticeId: inserted?.id ?? null };
 }
 
 export type NoticeStudent = {
