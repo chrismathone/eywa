@@ -9,8 +9,7 @@ import type { OneScreenStudent, SubjectTone } from "./types";
 /** 상단 날짜 라벨 — 데모 고정값(셀프투어 결정성 보장) */
 export const TODAY = "2026년 6월 1일 (월)";
 
-/** 수업 태도 선택지 */
-export const ATTITUDE = ["아주 좋음", "좋음", "보통", "산만함", "피곤함"] as const;
+// 수업 태도 선택지는 [attitude.ts](./attitude.ts)가 단일 소스(문장 조각과 같은 자리에 둔다).
 
 // 과제 수행률은 선택지가 없다 — 강사가 직접 치는 퍼센트(homework-rate.ts·HomeworkRateInput, 원장 2026-08-03).
 
@@ -103,7 +102,7 @@ export const DEMO_ONESCREEN: OneScreenStudent[] = [
       daily: { score: 18, max: 20, prevScore: 16 },
       check: { score: 19, max: 20, prevScore: 17 },
     },
-    attitude: "아주 좋음",
+    attitude: "매우 좋음",
     homework: "100%",
     progressConfirmed: false,
     reportDraft: "",
@@ -181,7 +180,7 @@ export const DEMO_ONESCREEN: OneScreenStudent[] = [
       daily: { score: 11, max: 20, prevScore: 13 },
       check: { score: null, max: 20, prevScore: 12 },
     },
-    attitude: "피곤함",
+    attitude: "안좋음",
     homework: "0%",
     progressConfirmed: false,
     reportDraft: "",

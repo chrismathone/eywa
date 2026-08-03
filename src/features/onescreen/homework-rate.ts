@@ -18,10 +18,16 @@
  */
 import { isNoneValue, NONE_LABEL } from "./none-marker";
 
+/**
+ * **미제출** — 0%와 수행률은 같지만(그래프 0) 학부모에게 나가는 문장이 다르다(원장 2026-08-03).
+ * 입력칸의 '미제출' 칩이 이 값을 넣는다. 옛 원스크린 선택지에도 있던 표기라 이관분과 그대로 호환된다.
+ */
+export const NOT_SUBMITTED = "미제출";
+
 /** 뜻이 분명한 옛 표기 → 퍼센트. ⚠️ 정도를 모르는 값(`일부 미흡`·`상/중/하`)은 여기에 넣지 말 것. */
 const LEGACY_EXACT: Record<string, number> = {
   완료: 100,
-  미제출: 0,
+  [NOT_SUBMITTED]: 0,
 };
 
 const clamp = (n: number): number => Math.max(0, Math.min(100, Math.round(n)));
@@ -53,13 +59,14 @@ export function formatHomeworkRate(n: number): string {
 }
 
 /**
- * 옛 값 → **현재 표기**(이전 회차 가져오기용). 완료→"100%" · 미제출→"0%" · 없음→"없음".
+ * 옛 값 → **현재 표기**(이전 회차 가져오기용). 완료→"100%" · 없음→"없음" · 미제출→"미제출"(그대로).
  * 정도 미상(`일부 미흡` 등)은 null — 강사가 직접 치게 둔다(임의로 50%를 찍지 않는다).
  */
 export function toHomeworkRateChoice(raw: string | null | undefined): string | null {
   const s = (raw ?? "").trim();
   if (!s) return null;
   if (isNoneValue(s)) return NONE_LABEL;
+  if (s === NOT_SUBMITTED) return NOT_SUBMITTED; // 0%로 바꾸면 '안 내왔다'와 '못 했다'가 뭉개진다
   const n = parseHomeworkRate(s);
   return n == null ? null : formatHomeworkRate(n);
 }
@@ -67,12 +74,16 @@ export function toHomeworkRateChoice(raw: string | null | undefined): string | n
 /**
  * 폴백 템플릿 문장에 넣을 조각(주어 "지난 과제는" 뒤에 붙는다).
  *  · `"90%"`  → `"90% 해왔습니다"` (그냥 "90%입니다"로 두면 무엇의 90%인지 모호하다)
- *  · `"100%"` → `"다 해왔습니다"` · `"0%"` → `"하지 못했습니다"` (한국어로 자연스럽게)
- *  · 옛 정성값(`완료`) → `"완료입니다"` (기존 동작 보존)
- * ⚠️ 여기서 값을 **해석·평가하지 말 것** — 강사가 적은 숫자를 그대로 옮기는 자리다.
+ *  · `"100%"` → `"다 해왔습니다"` · `"0%"` → `"하지 못했습니다"`(손은 댔지만 한 게 없다)
+ *  · `"미제출"` → `"제출하지 않았습니다"` — 🔴 **0%와 다른 문장**(원장 2026-08-03). 그래프에선 둘 다 0이지만
+ *    학부모에게 전하는 말은 다르다: 0%는 "못 했다", 미제출은 "안 내왔다".
+ *    그리고 `없음`(과제가 없던 날)은 아예 **문장에 넣지 않는다**(호출부가 isNoneValue로 거른다).
+ *  · 그 밖의 옛 정성값(`완료`) → `"완료입니다"` (기존 동작 보존)
+ * ⚠️ 여기서 값을 **해석·평가하지 말 것** — 강사가 적은 값을 그대로 옮기는 자리다.
  */
 export function homeworkRateClause(raw: string): string {
   const s = raw.trim();
+  if (s === NOT_SUBMITTED) return "제출하지 않았습니다";
   if (!/^\d{1,3}\s*%$/.test(s)) return `${s}입니다`;
   const n = parseHomeworkRate(s);
   if (n === 0) return "하지 못했습니다";

@@ -417,7 +417,7 @@ describe("planPrevFill", () => {
 
   // 🔴 퍼센트 전환(2026-08-03) 이전 값 — 뜻이 분명한 것만 옮기고 '일부 미흡'은 채우지 않는다.
   //    (임의로 50%를 찍는 순간 강사가 하지 않은 판단이 학부모에게 나간다 = 이번 사고 그 자체.)
-  it("옛 정성값: 완료→100%·미제출→0%, '일부 미흡'은 채우지 않는다", () => {
+  it("옛 정성값: 완료→100%·미제출은 그대로, '일부 미흡'은 채우지 않는다", () => {
     const fill = (homeworkScore: string) =>
       planPrevFill({
         prev: prevReport({ homeworkScore }),
@@ -425,7 +425,7 @@ describe("planPrevFill", () => {
         attitudes: ATTITUDES,
       }).homework;
     expect(fill("완료")).toBe("100%");
-    expect(fill("미제출")).toBe("0%");
+    expect(fill("미제출")).toBe("미제출"); // 0%와 문장이 달라 뭉개지 않는다
     expect(fill("일부 미흡")).toBeUndefined();
   });
 

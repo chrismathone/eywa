@@ -59,10 +59,15 @@ describe("parseHomeworkRate", () => {
 });
 
 describe("toHomeworkRateChoice(이전 회차 가져오기)", () => {
-  it("옛 정성값 → 현재 선택지", () => {
+  it("옛 정성값 → 현재 표기", () => {
     expect(toHomeworkRateChoice("완료")).toBe("100%");
-    expect(toHomeworkRateChoice("미제출")).toBe("0%");
     expect(toHomeworkRateChoice("없음")).toBe("없음");
+  });
+
+  // 미제출을 0%로 바꾸면 "안 내왔다"와 "못 했다"가 뭉개진다(문장이 달라야 한다 — 원장 2026-08-03).
+  it("미제출은 미제출 그대로", () => {
+    expect(toHomeworkRateChoice("미제출")).toBe("미제출");
+    expect(parseHomeworkRate("미제출")).toBe(0); // 그래프에선 0
   });
 
   it("퍼센트는 그대로 옮긴다(눈금 없음 — 강사가 친 숫자가 값이다)", () => {
@@ -86,6 +91,11 @@ describe("homeworkRateClause(폴백 템플릿 문장)", () => {
 
   it("양 끝은 한국어답게 — 100%='다 해왔습니다' · 0%='하지 못했습니다'", () => {
     expect(homeworkRateClause("100%")).toBe("다 해왔습니다");
+    expect(homeworkRateClause("0%")).toBe("하지 못했습니다");
+  });
+
+  it("미제출은 0%와 다른 문장", () => {
+    expect(homeworkRateClause("미제출")).toBe("제출하지 않았습니다");
     expect(homeworkRateClause("0%")).toBe("하지 못했습니다");
   });
 

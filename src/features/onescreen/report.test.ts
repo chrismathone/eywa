@@ -148,7 +148,7 @@ describe("buildReport", () => {
 
   it("태도만 있고 과제 미입력이면 과제 문구 생략", () => {
     const r = buildReport(makeStudent({ attitude: "보통", homework: "" }));
-    expect(r).toContain("수업 태도는 보통입니다");
+    expect(r).toContain("수업 태도는 보통이었습니다");
     expect(r).not.toContain("과제는");
   });
 
@@ -297,7 +297,7 @@ describe("과제 '없음' 문장 처리", () => {
     expect(r).not.toContain("과제는 없음 상태입니다");
   });
 
-  it("'미제출'은 그대로 문장에 남는다(구분 유지)", () => {
+  it("'미제출'은 '없음'과 다른 문장으로 나간다(구분 유지)", () => {
     const st = makeStudent({
       name: "김담희",
       subjects: [{ name: "수학", prev: "", today: "미분계수" }],
@@ -305,7 +305,8 @@ describe("과제 '없음' 문장 처리", () => {
       attitude: "아주 좋음",
       homework: "미제출",
     });
-    expect(buildSubjectReport(st, 0)).toContain("지난 과제는 미제출입니다.");
+    // 🔴 0%("하지 못했습니다")와도 다른 문장 — 안 내온 것과 못 한 것은 다르다(원장 2026-08-03).
+    expect(buildSubjectReport(st, 0)).toContain("지난 과제는 제출하지 않았습니다.");
   });
 });
 

@@ -46,10 +46,10 @@ function clamp(n: number, lo: number, hi: number) {
 }
 
 function pickAttitude(check: number): string {
-  if (check >= 18) return "아주 좋음";
+  if (check >= 18) return "매우 좋음";
   if (check >= 15) return "좋음";
   if (check >= 12) return "보통";
-  return "피곤함";
+  return "안좋음";
 }
 
 /** 점수(0~max) → 백분율. 차트·진행바 공용. */
