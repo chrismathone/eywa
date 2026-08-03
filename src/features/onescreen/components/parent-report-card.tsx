@@ -143,8 +143,9 @@ export function ParentReportCard({
           {report.dailyTest ? <Field label="일일테스트" value={report.dailyTest} /> : null}
           {report.checkTest ? <Field label="확인테스트" value={report.checkTest} /> : null}
           {legacyTest ? <Field label="시험점수" value={legacyTest} /> : null}
+          {/* 값이 퍼센트(90%)라 라벨도 '수행률' — "지난 과제 90%"만 있으면 점수로 읽힌다(2026-08-03 사고). */}
           {rpt.showHomework && report.homeworkScore ? (
-            <Field label="지난 과제" value={report.homeworkScore} />
+            <Field label="지난 과제 수행률" value={report.homeworkScore} />
           ) : null}
           {rpt.showAttitude && report.attitude ? <Field label="수업 태도" value={report.attitude} /> : null}
         </Section>

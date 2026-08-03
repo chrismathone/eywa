@@ -27,6 +27,17 @@ describe("humanizeMakeeduSyncError", () => {
     expect(humanizeMakeeduSyncError(raw)).toContain("로그인 실패");
   });
 
+  it("0행 가드 — '세션 만료 의심'을 단정으로 승격하지 않는다(2026-08-03 partial 실행 재현)", () => {
+    const raw =
+      "invoices: import-invoices.cjs exited 1 — ✖ 스크랩 0행 — makeedu 상세수납 목록을 못 읽었다" +
+      "(세션 만료·URL/셀렉터 변경 의심). 이번 실행은 반영하지 않음.";
+    const out = humanizeMakeeduSyncError(raw);
+    expect(out).toContain("반영하지 않았습니다");
+    expect(out).toContain("의심"); // 추측은 추측으로
+    expect(out).not.toBe("makeedu 세션 만료 — 동기화 PC에서 다시 로그인이 필요합니다");
+    expect(out).not.toContain("exited");
+  });
+
   it("원인 없는 구(舊) 래퍼 문구(scrape.cjs exited 1) → 일반 안내", () => {
     const out = humanizeMakeeduSyncError("scrape.cjs exited 1");
     expect(out).toContain("동기화 실행 실패");

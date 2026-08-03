@@ -7,7 +7,8 @@ import { EyIcon } from "@/components/icons/eywa-icons";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { kstToday } from "@/lib/date-kst";
 import { usePrintWindow } from "@/components/workspace/print-window";
-import { ATTITUDE, CLASS_TAGS, HOMEWORK, TODAY } from "../data";
+import { CLASS_TAGS, TODAY } from "../data";
+import { ATTITUDE } from "../attitude";
 import type { OneScreenView } from "../view";
 import { buildSubjectReport, studentStatus } from "../report";
 import { applyTestScoreMode, buildReportCommentInput, formatTestScore } from "../report-comment";
@@ -1096,7 +1097,6 @@ export function OneScreenClient({
         homeworkToday: su.homeworkToday ?? "",
       },
       attitudes: ATTITUDE,
-      homeworks: HOMEWORK,
     });
     const count = Object.keys(fill).length;
     if (!count) {
@@ -1142,7 +1142,6 @@ export function OneScreenClient({
         ];
       }),
       ATTITUDE,
-      HOMEWORK,
     );
     // 멘트는 별도 계획 — 초안이 빈 행 중 직전 멘트가 있는 것만. 적용은 아래 확인 다이얼로그 뒤에.
     const commentPlan = planPrevComments(
@@ -1990,8 +1989,7 @@ export function OneScreenClient({
           reports={reports}
           config={{
             attitudes: ATTITUDE,
-            homeworks: HOMEWORK,
-            allowTestMax: allowTeacherTestMax,
+                  allowTestMax: allowTeacherTestMax,
             dailyEnabled: showDailyTest,
             checkEnabled: showCheckTest,
             attachmentUrls: attUrls,
@@ -2132,7 +2130,6 @@ export function OneScreenClient({
                 student={selected}
                 reports={reports[selected.id] ?? {}}
                 attitudes={ATTITUDE}
-                homeworks={HOMEWORK}
                 onAttitude={setAttitude}
                 onHomework={setHomework}
                 onTextbook={setTextbook}

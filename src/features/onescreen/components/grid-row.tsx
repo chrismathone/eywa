@@ -22,6 +22,7 @@ import { GridAttachButton, useRowFileDrop } from "./grid-attach";
 import { AttendancePills, type BasicAttendance } from "./attendance-pills";
 import { handleGridNavKey } from "./grid-nav";
 import { FieldSelect } from "./field-select";
+import { HomeworkRateInput } from "./homework-rate-input";
 import { ProgressSelector } from "./progress-selector";
 import { ScoreInput } from "./score-input";
 
@@ -68,7 +69,6 @@ export type GridRowActions = {
 /** 표 표시 설정(학원 설정 유래). */
 export type GridConfig = {
   attitudes: readonly string[];
-  homeworks: readonly string[];
   allowTestMax: boolean; // 강사 문항수 변경 허용
   dailyEnabled: boolean; // 일일테스트 사용(off면 일일 열 숨김)
   checkEnabled: boolean; // 확인테스트 사용(off면 확인 열 숨김)
@@ -360,12 +360,12 @@ export function GridBodyRow({
         />
       </td>
       <td className={td}>
-        <FieldSelect
-          radius="sm"
-          options={config.homeworks}
-          value={student.homework || null}
-          onSelect={(h) => fields.onHomework(student.id, h ?? "")}
-          ariaLabel={`${student.name} 과제`}
+        {/* 과제 수행률 — 숫자 칸 + % (드롭다운 폐지, 원장 2026-08-03). 옆 일일·확인 점수칸과 같은 모양. */}
+        <HomeworkRateInput
+          value={student.homework}
+          onChange={(h) => fields.onHomework(student.id, h)}
+          label={`${student.name} 과제 수행률`}
+          nav={{ col: "homework", row: nav.row }}
         />
       </td>
       <td className={td}>

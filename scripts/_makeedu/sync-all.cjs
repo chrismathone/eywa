@@ -100,7 +100,7 @@ let runId = null;
 let tenantIdG = null;
 const t0 = Date.now();
 
-async function finishRun(status, { failed = [], error = null } = {}) {
+async function finishRun(status, { failed = [], error = null, reasons = {} } = {}) {
   if (!runId) return;
   try {
     await withDb(async (sql) => {
@@ -110,6 +110,11 @@ async function finishRun(status, { failed = [], error = null } = {}) {
         where tenant_id = ${tenantIdG} and updated_at >= to_timestamp(${t0 / 1000})`;
       const domains = {};
       for (const r of rows) domains[r.domain] = { status: r.status, rows: r.row_count };
+      // 실패 사유를 도메인 칸에도 붙인다. sync_state는 **다음 성공 실행이 덮어쓰는 현재상태 테이블**이라
+      // 거기에만 두면 원인이 몇 시간 만에 증발한다 — run 행(이력)이 사유의 영구 보관처다.
+      for (const [d, reason] of Object.entries(reasons)) {
+        domains[d] = { status: "error", rows: null, ...(domains[d] ?? {}), reason };
+      }
       await sql`
         update makeedu_sync_runs
         set status = ${status}, finished_at = now(), duration_ms = ${Date.now() - t0},
@@ -156,25 +161,48 @@ async function finishRun(status, { failed = [], error = null } = {}) {
 
   // 3) 임포터(--apply) 순차 — 한 도메인 실패가 나머지를 막지 않게 격리.
   const flags = APPLY ? ["--apply"] : [];
+  // 🔴 사유(reason)를 도메인과 **함께** 들고 간다. 예전엔 도메인 이름만 모아서, 화면엔 "실패: invoices,
+  //    textbook_checks"만 뜨고 **왜인지는 어디에도 안 남았다**(2026-08-03 06:00 실행 — 원인 추적 불가).
+  //    run()이 자식 stderr에서 진짜 원인을 뽑아 e.message에 실어 주는데(lastMeaningfulLine) 그걸 버리고 있었다.
   const failed = [];
   for (const [domain, file] of IMPORTERS) {
     try {
       run(domain, file, flags);
     } catch (e) {
-      console.error(`✖ ${domain} 실패: ${e.message}`);
-      failed.push(domain);
+      const reason = ((e && e.message) || String(e)).slice(0, 300);
+      console.error(`✖ ${domain} 실패: ${reason}`);
+      failed.push({ domain, reason });
     }
   }
 
   // 4) 실패 도메인은 makeedu_sync_state에 error 기록(성공 도메인은 임포터가 ok로 기록함 → 화면 배지에 노출).
+  // ⚠️ **임포터가 이미 자기 진단을 남겼으면 덮지 않는다.** 예전엔 무조건 "sync-all 임포터 실패" 상수로
+  //    덮어써서, import-invoices의 0행 가드가 남긴 "스크랩 0행 — makeedu 상세수납 목록을 못 읽었다
+  //    (세션 만료·URL/셀렉터 변경 의심)"처럼 **원인을 특정한 문장이 지워졌다**. 오케스트레이터가 아는 것
+  //    (자식이 죽었다)보다 임포터가 아는 것(왜 죽었다)이 항상 더 구체적이다.
   if (APPLY && failed.length && tenantIdG) {
     await withDb(async (sql2) => {
-      for (const d of failed) await L.recordSync(sql2, tenantIdG, d, null, "error", "sync-all 임포터 실패");
+      const own = await sql2`
+        select domain from makeedu_sync_state
+        where tenant_id = ${tenantIdG} and status = 'error' and error is not null
+          and updated_at >= to_timestamp(${t0 / 1000})`;
+      const selfReported = new Set(own.map((r) => r.domain));
+      for (const f of failed) {
+        if (selfReported.has(f.domain)) continue;
+        await L.recordSync(sql2, tenantIdG, f.domain, null, "error", f.reason);
+      }
     });
   }
 
-  await finishRun(failed.length ? "partial" : "ok", { failed });
-  console.log(`\n✅ 동기화 완료. 실패 도메인: ${failed.length ? failed.join(", ") : "없음"}`);
+  // run 행의 error = 화면이 이미 한글로 풀어 보여주는 자리(humanizeMakeeduSyncError + 원문 툴팁)인데
+  // partial 경로에서만 null로 비어 있었다 — **소비처는 다 만들어 두고 아무도 안 쓰던 칸**이다.
+  const summary = L.summarizeFailures(failed);
+  await finishRun(failed.length ? "partial" : "ok", {
+    failed: summary.domains,
+    error: summary.error,
+    reasons: summary.reasons,
+  });
+  console.log(`\n✅ 동기화 완료. 실패 도메인: ${failed.length ? summary.domains.join(", ") : "없음"}`);
   if (failed.length) process.exit(1); // CI가 부분 실패를 인지(다음 cron이 멱등 재시도)
 })().catch(async (e) => {
   // 전체 실패(스크래핑 크래시 등)도 실행 로그에 남긴다.

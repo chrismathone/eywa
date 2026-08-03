@@ -40,11 +40,17 @@ describe("parseHomeworkPercent", () => {
     expect(parseHomeworkPercent("0%")).toBe(0);
     expect(parseHomeworkPercent("90")).toBe(90);
   });
-  it("정성 상태 → 퍼센트(온스크린 과제 칩: 완료=100·일부 미흡=50·미제출=0)", () => {
+  it("옛 정성값 중 뜻이 분명한 것만 숫자로(완료=100·미제출=0)", () => {
     expect(parseHomeworkPercent("완료")).toBe(100);
-    expect(parseHomeworkPercent("일부 미흡")).toBe(50);
     expect(parseHomeworkPercent("미제출")).toBe(0);
     expect(parseHomeworkPercent(" 완료 ")).toBe(100); // trim
+  });
+
+  // 🔴 회귀 잠금(2026-08-03): 여기서 50을 돌려주던 매핑이 사고를 냈다 — 90% 해온 학생이 학부모
+  //    그래프에 50으로 찍혔다. 정도를 모르는 값은 **점을 찍지 않는다.** 다시 50으로 바꾸지 말 것.
+  it("'일부 미흡'은 정도 미상 → null(그래프에 점을 찍지 않는다)", () => {
+    expect(parseHomeworkPercent("일부 미흡")).toBeNull();
+    expect(parseHomeworkPercent("미흡")).toBeNull();
   });
   it("매핑 밖 정성값·빈값은 null(그래프 제외)", () => {
     expect(parseHomeworkPercent("미확인")).toBeNull();

@@ -117,7 +117,9 @@ export function ReportTrendGraph({ points }: { points: TrendPoint[] }) {
   return (
     <div className="flex flex-col gap-5">
       <MetricBlock points={points} metric="exam" color="#153e75" title="시험 점수 추이" />
-      <MetricBlock points={points} metric="homework" color="#2d6be0" title="과제 점수 추이" />
+      {/* 🔴 "과제 점수"가 아니라 "수행률" — 학부모가 50을 **점수**로 읽고 학생을 혼낸 사고(2026-08-03).
+          축은 그대로 0~100이고 값의 뜻만 또렷해진다(= 지난 과제를 몇 % 해왔는가). */}
+      <MetricBlock points={points} metric="homework" color="#2d6be0" title="과제 수행률 추이" />
     </div>
   );
 }

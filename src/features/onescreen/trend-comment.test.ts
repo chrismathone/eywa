@@ -58,8 +58,11 @@ describe("buildTrendPrompt", () => {
     ])!;
     const p = buildTrendPrompt(input);
     expect(p).toContain('{"trend": "..."}'); // 출력 계약
-    expect(p).toContain("Y문제 중 X문제"); // 숫자 정확 규칙
-    expect(p).toContain("전망·격려·조언·추측은 넣지 마세요");
+    expect(p).toContain("Y문제 중 X개"); // 숫자 정확 규칙
+    // 🔴 추세는 "날짜 나열"이 아니라 방향을 풀어 쓴다 + 아쉬운 흐름은 완만하게(원장 2026-08-03).
+    expect(p).toContain("날짜와 점수를 차례로 늘어놓지 마세요");
+    expect(p).toContain("원색적인 표현 금지");
+    expect(p).toContain("성적 전망('다음엔 오를 겁니다')은 그대로 금지");
     expect(p).toContain("[06-01] 일일 6/10 -> [06-08] 일일 8/10"); // 기록 주입
     expect(p).toContain("과제 흐름(날짜순): [06-01~06-08] 완료(2회)");
   });
@@ -133,6 +136,6 @@ describe("시험 이름 환각 방지", () => {
     ])!;
     const p = buildTrendPrompt(input);
     expect(p).toContain("시험 이름을 지어내지 마세요");
-    expect(p).toContain("이름 없이 점수만 있으면 '테스트'라고만 쓰세요");
+    expect(p).toContain("없으면 '테스트'라고만 쓰세요");
   });
 });
