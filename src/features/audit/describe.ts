@@ -6,7 +6,11 @@ import { SECTION_LABELS } from "@/features/owner/settings-types";
 /** 대상 유형(target_type) → 한글 — 감사로그 '대상' 열 접두. 미등록 유형은 원문 폴백. */
 export const AUDIT_TYPE_LABEL: Record<string, string> = {
   staff: "직원",
+  // 같은 "직원"이지만 호출부마다 target_type 표기가 달라 실제로 쌓여 있다(user 6행·users 3행) — 셋 다 한글로.
+  user: "직원",
+  users: "직원",
   student: "학생",
+  academy_documents: "서식 문서",
   invoice: "청구서",
   exam: "시험",
   payroll: "급여",
@@ -108,6 +112,35 @@ export function auditDetail(
       const r = roleKo(m.role);
       return r ? `삭제 당시 역할: ${r}` : null;
     }
+    case "staff_password_reset": {
+      const mode = str(m.mode);
+      if (mode === "temp") return "임시 비밀번호 발급";
+      if (mode === "custom") return "비밀번호 직접 설정";
+      return null; // 비밀번호 자체는 metadata에 없다(있어서도 안 된다)
+    }
+    case "self_password_change":
+      return null; // metadata 없음 — 대상 열이 본인 이름을 보여준다
+    case "staff_email_change":
+    case "self_email_change": {
+      const from = str(m.from);
+      const to = str(m.to);
+      return from && to ? `${from} → ${to}` : (to ?? null);
+    }
+    case "staff_contract_extend": {
+      const seq = num(m.seq);
+      const start = str(m.startDate);
+      const end = str(m.endDate);
+      return join(seq === null ? null : `${seq}차 계약`, start && end ? `${start} ~ ${end}` : null);
+    }
+    case "staff_contract_delete": {
+      const seq = num(m.seq);
+      return seq === null ? null : `${seq}차 계약 삭제`;
+    }
+    case "staff_contract_pdf_extract": {
+      // metadata.filled = 추출된 필드 키 배열(영문) — 개수만 보여주고 키 자체는 노출하지 않는다.
+      const n = Array.isArray(m.filled) ? m.filled.length : null;
+      return n === null ? null : `PDF에서 항목 ${n}개 추출`;
+    }
     case "invoice_create": {
       const w = won(m.amountTotal);
       return join(ctx.nameOf(m.studentId), w ? `청구액 ${w}` : null);
@@ -159,6 +192,21 @@ export function auditDetail(
     case "class_reopen_term":
     case "class_handover_cancel":
       return null; // metadata = 반 uuid뿐(대상 열이 반 이름을 보여줌)
+    case "class_archive":
+    case "class_unarchive": {
+      const n = num(m.affectedStudents);
+      if (n === null) return null;
+      return action === "class_archive" ? `수강 ${n}건 종료` : `수강 ${n}건 복원`;
+    }
+    case "owner_integration_groups_update": {
+      const subject = str(m.subject);
+      const groups = num(m.groups);
+      return join(
+        subject ? `과목 「${ctx.subjectLabel(subject)}」` : null,
+        m.enabled === true ? "통합뷰 사용" : m.enabled === false ? "통합뷰 미사용" : null,
+        groups === null ? null : `그룹 ${groups}개`,
+      );
+    }
     case "classroom_auto_assign": {
       const applied = num(m.applied);
       const rooms = num(m.rooms);

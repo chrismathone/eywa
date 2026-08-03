@@ -4,6 +4,33 @@
 
 ## 진행 상황
 
+### 남의 비밀번호를 바꾼 기록이 안 남던 것 + 감사로그에 영문 키가 그대로 뜨던 것 (2026-08-03) - typecheck0/lint0/test3313/build✓
+
+원장 제보는 "비밀번호 재설정 버그인가?"(직접 설정에서 7자 입력 → 브라우저 기본 말풍선)였다. **그 말풍선 자체는
+정상**(`minLength={8}`, 서버도 8자로 일치)이고, 해당 계정(유형숙)은 이미 그날 17:19 스크립트 재설정 → 17:26
+본인 로그인 성공으로 해결돼 있었다. 다만 그 화면을 파다 **진짜 3건**이 나왔다.
+
+- **① 관리자가 남의 비밀번호·이메일을 바꾼 기록이 안 남았다.** 본인 변경(`/me` → `self_password_change`·
+  `self_email_change`)은 남기는데, **원장이 직원 계정을 여는 쪽**이 빠져 있었다(역할 변경·직원 삭제는 남긴다).
+  감사로그가 존재하는 이유가 정확히 후자다. → [account-actions.ts](../src/features/staff/server/account-actions.ts)의
+  `resetStaffPassword`·`changeStaffEmail`에 `staff_password_reset`·`staff_email_change` 기록 추가.
+  ⚠️ **발급된 비밀번호 자체는 metadata에 절대 넣지 않는다**(테스트로 고정).
+- **② 감사로그 화면에 영문 키가 그대로 노출됐다.** `auditActionLabel`이 미등록 키를 `?? a`로 폴백하는데
+  **8개가 미등록**이었고 그중 5종은 이미 프로덕션에 쌓여 있었다(`self_password_change`·`self_email_change`·
+  `class_archive`·`owner_integration_groups_update`·`staff_password_reset`, 실측 13행). `target_type`도
+  `user`(6행)·`users`(3행)·`academy_documents`(1행)가 영문 폴백 중이었다. → 라벨 전수 등록 + `describe.ts`에
+  상세 한글화(영문 metadata 키가 `키: 값`으로 새던 곳: 반 폐지 `affectedStudents`, 통합뷰 `subject`(raw 과목키!),
+  근로계약 `seq/startDate`, 이메일 `from/to`).
+  **재발 방지 = [actions-registry.test.ts](../src/features/audit/actions-registry.test.ts)** — src 전체에서
+  `logAction({action})` 리터럴을 스캔해 미등록 키가 있으면 파일명과 함께 실패시킨다(주석으로만 있던 규칙을 테스트로).
+- **③ 로그인 계정이 없는 직원에게 재설정하면 영문 `User not found`가 떴다.** `deleteStaff`는 이 케이스(#31)를
+  다루는데 비번·이메일만 빠져 있었다(실측 대상 3명 — `JJ`·`LAB`·`보조T`, 전부 비활성 자리/테스트). → `isMissingAuthUser`로
+  한글 안내("로그인 계정이 없어 … 먼저 로그인 계정을 만들어 주세요").
+- 경미: 8자 안내가 placeholder뿐이라 **타이핑을 시작하면 사라져** 브라우저 말풍선이 유일한 안내가 됐다 → 입력칸
+  아래 상시 안내로. (⚠️ `type="text"`로 보이게 두는 건 의도 — 원장이 직원에게 불러주는 값, 디자인 규약에 명시.)
+- 검증: 롤백 불필요(읽기 전용 진단) · 시각검증은 **로그인 없이** 공개 경로(`/intake/*`) 임시 하네스로 수행
+  (입력칸 속성·힌트 위치·모드 전환 시 잔상 없음 확인 후 하네스 삭제).
+
 ### 보강 보고서가 새로고침 한 번에 사라지던 것 + 보강 학생이 모든 수업에 보이던 것 (2026-08-03) - typecheck0/lint0/test3302/build✓ - 0171a
 
 강사 2건(원장 전달): *"보강 추가한 학생이 왜 모든 수업에서 보이지? 보강 추가한 수업에서만 보여야 할 것 같은데."*
