@@ -16,6 +16,7 @@ import {
   movePlanLine as movePlanLineAction,
   saveMemo,
   setMyEcsFontSize,
+  setMyEcsShowSpecialRooms,
   upsertGoal,
   upsertStudentMark,
   type PlanLineDTO,
@@ -154,6 +155,37 @@ export function SheetClient({
     });
   }, []);
   const fontZoom = ECS_FONT_SIZE_ZOOM[fontSize];
+
+  // ── 자리(LAB·JJ) 표시(내 계정) ─────────────────────────────────────────────
+  // 글씨 크기와 달리 **서버가 진실**이다 — 이 값이 그리드와 작성률(헤더 `계획 N/M교시`·랜딩 카드)을 함께
+  // 정하므로 클라에서 감추면 숫자가 갈린다. 저장 → refresh로 서버가 다시 그린다(페이지 key에 이 값이
+  // 들어 있어 SheetClient가 재마운트되고 state가 새 데이터로 재초기화된다).
+  // ⚠️ 왕복 전에 flush — 안 하면 아직 확정 안 된 입력이 재마운트로 날아간다(네비와 같은 계약).
+  const [specialRoomsPending, setSpecialRoomsPending] = useState(false);
+  const changeShowSpecialRooms = useCallback(
+    async (show: boolean) => {
+      if (show === data.showSpecialRooms || specialRoomsPending) return;
+      setSpecialRoomsPending(true);
+      try {
+        const flushed = await store.flush();
+        if (!flushed.ok) {
+          const go = window.confirm(
+            "아직 저장이 확정되지 않은 입력(또는 충돌)이 있습니다. 그래도 표시를 바꿀까요? (입력은 이 기기에 보관됩니다)",
+          );
+          if (!go) return;
+        }
+        const r = await setMyEcsShowSpecialRooms(show);
+        if (!r.ok) {
+          toast.error(r.error ?? "표시 설정을 저장하지 못했습니다");
+          return;
+        }
+        router.refresh();
+      } finally {
+        setSpecialRoomsPending(false);
+      }
+    },
+    [data.showSpecialRooms, router, specialRoomsPending, store],
+  );
 
   // ── 네비(주/반 이동) — flush 성공 후에만 이동, 실패·미확정 시 중단(저널 보존) ─
   const navigate = useCallback(
@@ -352,6 +384,9 @@ export function SheetClient({
         onNavigate={navigate}
         fontSize={fontSize}
         onFontSize={changeFontSize}
+        showSpecialRooms={data.showSpecialRooms}
+        onShowSpecialRooms={(show) => void changeShowSpecialRooms(show)}
+        specialRoomsPending={specialRoomsPending}
       />
 
       {doc.recoverable ? (
@@ -419,12 +454,12 @@ export function SheetClient({
         </div>
       ) : null}
 
-      {/* 랩실(LAB·JJ) 교시는 담임 수업이 아니라 표시하지 않는다. 그 자리에 남아 있는 기록이 있으면
-          건수만 각주로 — 화면에서 조용히 사라지면 "쓴 게 증발했다"가 된다(기록은 DB에 그대로). */}
+      {/* 상단 'LAB·JJ 숨김'을 골랐을 때만 뜬다 — 안 그린 자리에 쓴 기록이 남아 있으면 건수를 알린다.
+          화면에서 조용히 사라지면 "쓴 게 증발했다"가 된다(기록은 DB에 그대로, 표시로 되돌리면 다시 보인다). */}
       {data.grid.hiddenSpecial.records > 0 ? (
         <p className="text-text-dim px-1 text-[12px]">
-          랩실(LAB·JJ) 교시 {data.grid.hiddenSpecial.slots}개는 표시하지 않습니다 — 그 시간에 남아 있는 기록{" "}
-          {data.grid.hiddenSpecial.records}건은 지워지지 않았습니다.
+          LAB·JJ 교시 {data.grid.hiddenSpecial.slots}개를 숨겼습니다 — 그 시간에 남아 있는 기록{" "}
+          {data.grid.hiddenSpecial.records}건은 지워지지 않았습니다(상단 ‘표시’로 다시 볼 수 있습니다).
         </p>
       ) : null}
     </div>
