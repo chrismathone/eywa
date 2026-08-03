@@ -190,13 +190,17 @@ export async function getTextbookOrdersForStudents(studentIds: string[]): Promis
     student_name: string | null; teacher_name: string | null; price: number; status: string;
     request_date: string | null; notes: string | null; registered_at: string | null;
     ordered_at: string | null; paid_at: string | null; status_by_name: string | null; status_at: string | null;
-    created_at: string; created_by: string | null; classnote_notice_id: string | null;
+    created_at: string; created_by: string | null;
   };
   const data = await fetchInChunks<Raw>(studentIds, (chunk) =>
     supabase
       .from("textbook_orders")
       .select(
-        "id, book_name, book_detail, student_id, student_name, teacher_name, created_by, classnote_notice_id, price, status, request_date, notes, registered_at, ordered_at, paid_at, status_by_name, status_at, created_at",
+        // 🔴 **원스크린 로스터가 타는 경로다** — 여기에 새 컬럼을 넣으면 그 컬럼이 DB에 생기기 전까지
+        //    강사 화면이 통째로 죽는다(fetchInChunks는 에러를 삼키지 않고 throw). 실제로 2026-08-03에
+        //    `classnote_notice_id`를 넣고 마이그레이션보다 먼저 배포해 강사 원스크린이 멈췄다.
+        //    이 화면은 교재 자동입력 기본값만 쓰므로 **필요한 컬럼만** 조회한다.
+        "id, book_name, book_detail, student_id, student_name, teacher_name, created_by, price, status, request_date, notes, registered_at, ordered_at, paid_at, status_by_name, status_at, created_at",
       )
       .in("student_id", chunk),
   );
@@ -222,7 +226,8 @@ export async function getTextbookOrdersForStudents(studentIds: string[]): Promis
       statusAt: r.status_at,
       createdAt: r.created_at,
     createdBy: r.created_by ?? null,
-    classnoteNoticeId: r.classnote_notice_id ?? null,
+    // 이 경로는 위 주석대로 새 컬럼을 조회하지 않는다 — 쓰는 화면(수납 표)이 따로 읽는다.
+    classnoteNoticeId: null,
     }))
     .sort((a, b) => (b.requestDate ?? "").localeCompare(a.requestDate ?? ""));
 }
