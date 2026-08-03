@@ -99,10 +99,13 @@ export function matchReportsToRows<R extends ReportRowRef>(
     out[i] = take((r) => (r.classId?.trim() ?? "") === cls);
   });
   // 1.5차 — **보강 행 ↔ 보강 보고서**(둘 다 반이 없다). 과목이 같을 때만. 보강 행이 아니면 건너뛴다.
+  // 🔴 과목 미기재는 **양쪽 다 math로 정규화**한다(reportSubject와 같은 레거시 규약). 실측: 보강 보고서
+  //    171건 중 **143건이 `subject` NULL**(edutrix 계보)이라, 정규화 없이 문자열을 그대로 비교하면
+  //    로스터가 되살린 행에 그 보고서가 안 붙어 "발송했는데 미작성"이 그대로 재현된다(적대검수 2026-08-03).
+  const norm = (v: string | null | undefined) => (v?.trim() ? v.trim() : LEGACY_REPORT_SUBJECT);
   rows.forEach((row, i) => {
     if (out[i] || !row.isMakeup) return;
-    const key = row.subjectKey?.trim();
-    out[i] = take((r) => !!r.makeup && !r.classId?.trim() && (r.subject?.trim() ?? "") === (key ?? ""));
+    out[i] = take((r) => !!r.makeup && !r.classId?.trim() && norm(r.subject) === norm(row.subjectKey));
   });
   // 2차 — 반이 없는 보고서를 과목으로. ⚠️ **특강 행 + 보강 행 + 보강 보고서는 제외**(아래 규칙).
   //    보강 보고서(class_id NULL·makeup)는 과목만 같은 정규 행에 붙으면 그 행을 잠근다 → `!r.makeup`로 차단.

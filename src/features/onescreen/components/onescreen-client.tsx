@@ -570,19 +570,22 @@ export function OneScreenClient({
     // 보강을 **어느 수업 시간에** 하는지 = 지금 보고 있는 반 필터. 이게 반 필터 앵커가 된다(0171a) —
     // 앵커가 없으면(전체에서 추가·동명 반이라 특정 불가) 그 보강 행은 '전체'에서만 보인다.
     // 🔴 예전엔 앵커가 없어 보강 학생이 **모든 반 필터**에 나왔다(원장 제보 2026-08-03).
-    const anchor = matchingClasses.length === 1 ? matchingClasses[0]! : null;
+    // ⚠️ 이름은 **필터가 걸려 있으면 항상** 남긴다(id는 동명 반이면 특정 불가 → null). id가 없다고 이름까지
+    //    비우면, 동명 반을 고른 채 보강을 추가했을 때 카드가 그 자리에서 사라진다 = 2026-07-27 그 버그 재발.
+    const anchorName = classFilter === "전체" ? null : classFilter;
+    const anchorId = matchingClasses.length === 1 ? matchingClasses[0]!.id : null;
     const withAnchor = (su: Subject): Subject => ({
       ...su,
-      makeupClassId: anchor?.id ?? null,
-      makeupClassName: anchor?.name ?? null,
+      makeupClassId: anchorId,
+      makeupClassName: anchorName,
     });
     const mk = { ...res.student, subjects: res.student.subjects.map(withAnchor) };
     const existing = students.find((s) => s.id === studentId);
     if (!existing) {
       // 목록에 없던 학생 → 보강 카드로 추가. 앵커가 있으면 그 수업 이름으로 묶어 보여 준다(로스터 복원과 같은 규약).
-      if (anchor) {
-        mk.tag = anchor.name;
-        mk.className = anchor.name;
+      if (anchorName) {
+        mk.tag = anchorName;
+        mk.className = anchorName;
       }
       setStudents((prev) => [...prev, mk]);
       setReports((prev) => ({ ...prev, [mk.id]: initReports([mk])[mk.id] ?? {} }));

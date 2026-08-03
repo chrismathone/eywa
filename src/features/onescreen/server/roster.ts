@@ -113,9 +113,7 @@ type RosterSettings = Pick<
   | "canEditAttendance"
   | "fontSize"
 >;
-type RosterConfig = Partial<
-  RosterSettings & Pick<TeacherRoster, "noClassesToday" | "showingAll" | "students">
->;
+type RosterConfig = Partial<RosterSettings & Pick<TeacherRoster, "noClassesToday" | "showingAll">>;
 
 /**
  * 빈 로스터(학생 0명).
@@ -238,27 +236,28 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
     fontSize,
   };
 
-  // 그날 내가 쓴 보강(수업외) 보고서 — 반이 없어 아래 수강생 로스터엔 안 잡힌다. 행 복원의 유일한 원천.
-  const makeupReports = await fetchMyMakeupReports(supabase, targetDate, teacherName);
-
   const allClasses = classes ?? [];
-  if (allClasses.length === 0 && makeupReports.length === 0)
-    return emptyRoster(today, targetDate, teacherName, config);
-
   // 2) 오늘 요일에 수업 있는 반(없으면 전체 담당 반 폴백 — 주말/휴일에도 화면이 비지 않게)
   const allIds = allClasses.map((c) => c.id);
   // ⚠️ **그 날짜에 유효한 스케줄만**. 예전엔 valid_from/valid_to를 안 봐서 만료된 배치가 계속 "오늘 수업"으로
   //    잡혔다 — 특강처럼 기간이 정해진 반(실측: 특강 4반 전부 valid_to 08-07~08-31, 수강행은 대부분 무기한)이
   //    종료일 뒤에도 로스터에 영원히 남는다. 시간표(fetchSlots)와 같은 규약으로 맞춘다.
-  const scheds = await fetchInChunks<{ class_id: string; start_time: string | null }>(allIds, (chunk) =>
-    supabase
-      .from("class_schedules")
-      .select("class_id, start_time")
-      .eq("day_of_week", dow)
-      .in("class_id", chunk)
-      .or(`valid_from.is.null,valid_from.lte.${targetDate}`)
-      .or(`valid_to.is.null,valid_to.gte.${targetDate}`),
-  );
+  // ⚠️ 보강 보고서 조회는 반과 무관하다 — 스케줄과 **병렬**로(B4: 독립 await는 Promise.all).
+  //    그날 내가 쓴 보강(수업외) 보고서 = 아래 수강생 로스터엔 절대 안 잡히는 행들의 유일한 원천.
+  const [scheds, makeupReports] = await Promise.all([
+    fetchInChunks<{ class_id: string; start_time: string | null }>(allIds, (chunk) =>
+      supabase
+        .from("class_schedules")
+        .select("class_id, start_time")
+        .eq("day_of_week", dow)
+        .in("class_id", chunk)
+        .or(`valid_from.is.null,valid_from.lte.${targetDate}`)
+        .or(`valid_to.is.null,valid_to.gte.${targetDate}`),
+    ),
+    fetchMyMakeupReports(supabase, targetDate, teacherName),
+  ]);
+  if (allClasses.length === 0 && makeupReports.length === 0)
+    return emptyRoster(today, targetDate, teacherName, config);
   const todayIds = new Set(scheds.map((s) => s.class_id));
   // 반별 오늘 최초 시작시각(HH:MM)
   const startByClass = new Map<string, string | null>();
