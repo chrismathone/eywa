@@ -17,6 +17,7 @@ import type { SkillAreaSetting } from "@/features/owner/settings-types";
 import { effectiveAttendanceRecords } from "@/features/attendance/effective-records";
 import { isWithinAttendanceEditWindow } from "@/features/attendance/edit-window";
 import { readEcsFontSize, type EcsFontSize } from "../font-size";
+import { readEcsShowSpecialRooms } from "../view-prefs";
 import {
   buildWeekGrid,
   scheduledSlotKeySet,
@@ -78,6 +79,11 @@ export type ClassSheetWeekData = {
   fill: { totalSlots: number; filledSlots: number; orphanSlots: number };
   /** 내 글씨 크기(users.ui_prefs.ecs.fontSize) — 계정 귀속이라 다른 PC에서도 같은 크기로 열린다. */
   fontSize: EcsFontSize;
+  /**
+   * 자리(LAB·JJ) 교시 표시(users.ui_prefs.ecs.showSpecialRooms, 기본 표시) — 상단 헤더 토글의 현재 값.
+   * ⚠️ 이 값은 위 `grid`·`fill`에 **이미 반영돼 있다**(서버가 진실). 클라에서 따로 감추지 말 것.
+   */
+  showSpecialRooms: boolean;
 };
 
 export async function getClassSheetWeek(
@@ -242,6 +248,9 @@ export async function getClassSheetWeek(
     body: m.body as string,
   }));
 
+  // 자리(LAB·JJ) 표시 여부 — **그리드 조립 전에** 정해야 한다(작성률 분모까지 이 값이 정한다).
+  const showSpecialRooms = readEcsShowSpecialRooms(myPrefsRes.data?.ui_prefs);
+
   const grid = buildWeekGrid({
     weekMonday,
     schedules: (schedulesRes.data ?? []).map((s) => ({
@@ -272,6 +281,7 @@ export async function getClassSheetWeek(
       status: a.status,
     })),
     slotMemoKeys: memoRows.map((m) => m.memoKey).filter((k) => k.startsWith("slot:")),
+    includeSpecialRooms: showSpecialRooms,
   });
 
   // 학생 메타 — enrollment 조인분 + (마크·출석만 있는 historical) 부족분 보충 조회
@@ -392,6 +402,7 @@ export async function getClassSheetWeek(
       fill: sheetFillStats(grid),
       // 크기 조회 실패는 기본값으로 떨어진다(개인 취향값이라 시트 전체를 막을 이유가 없다).
       fontSize: readEcsFontSize(myPrefsRes.data?.ui_prefs),
+      showSpecialRooms,
     },
   };
 }
@@ -477,7 +488,7 @@ export async function getSheetLanding(
   }
 
   const admin = createAdminClient();
-  const [schedules, lines, teachers] = await Promise.all([
+  const [schedules, lines, teachers, myPrefs] = await Promise.all([
     fetchInChunks<{
       class_id: string;
       day_of_week: DowKey;
@@ -520,8 +531,11 @@ export async function getSheetLanding(
       [...new Set((classes ?? []).map((c) => c.teacher_id as string | null).filter((v): v is string => !!v))],
       (chunk) => supabase.from("users").select("id, display_name").in("id", chunk),
     ),
+    // 자리(LAB·JJ) 표시 설정 — 시트 화면과 **같은 값**으로 세야 두 화면의 작성률이 갈리지 않는다.
+    admin.from("users").select("ui_prefs").eq("id", user.id).eq("tenant_id", user.tenantId).maybeSingle(),
   ]);
 
+  const showSpecialRooms = readEcsShowSpecialRooms(myPrefs.data?.ui_prefs);
   const teacherName = new Map(teachers.map((t) => [t.id, t.display_name]));
   const schedulesByClass = new Map<string, typeof schedules>();
   for (const s of schedules) {
@@ -553,6 +567,7 @@ export async function getSheetLanding(
         validTo: s.valid_to,
         slotTeacherLabel: s.slot_teacher_label,
       })),
+      { includeSpecialRooms: showSpecialRooms },
     );
     const meaningful = meaningfulKeysByClass.get(c.id as string) ?? new Set<string>();
     const all = allKeysByClass.get(c.id as string) ?? new Set<string>();
