@@ -20,6 +20,7 @@ import {
 import { EMPLOYMENT_TYPES } from "../resume";
 
 // 계약서 PDF → 계약 기입 폼 자동 채움(원장 지시 2026-07-31, PDF만. 스캔 OCR 승인 2026-08-03).
+// 실측: 글자 PDF 경로는 실계약서(8쪽)로 프로덕션 검증 완료(2026-08-03, 직접 페이지·창 모두).
 // ⚠️ **저장하지 않는다** — 뽑은 값을 폼에 채워 보여주고, 사람이 확인해 저장한다.
 // 계약 기간·금액은 틀리면 그대로 돈 문제라 AI 결과를 DB에 직행시키지 않는다(등록상담 폼 자동입력과 같은 원칙).
 
@@ -93,8 +94,10 @@ export async function extractContractFromPdf(
     if (error || !data) return { error: `파일을 읽지 못했습니다 — ${error?.message ?? "unknown"}` };
     buf = new Uint8Array(await data.arrayBuffer());
     // unpdf = 서버리스용으로 번들된 pdfjs. 무거워서 **요청 시점에만** 불러온다(콜드스타트 비용 최소화).
+    // ⚠️ pdfjs는 받은 버퍼를 워커로 **이전(transfer)시켜 비워 버린다** — 원본(buf)을 그대로 주면 뒤의
+    // 스캔 OCR base64가 빈 값이 돼 Anthropic 400("PDF cannot be empty")이 난다(2026-08-03 실측). 복사본을 준다.
     const { extractText, getDocumentProxy } = await import("unpdf");
-    const pdf = await getDocumentProxy(buf);
+    const pdf = await getDocumentProxy(buf.slice());
     const res = await extractText(pdf, { mergePages: true });
     text = (Array.isArray(res.text) ? res.text.join("\n") : res.text) ?? "";
   } catch (e) {
