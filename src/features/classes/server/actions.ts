@@ -7,9 +7,11 @@ import { getTenantSettings } from "@/features/owner/server/queries";
 import { accessLevelTenant } from "@/lib/auth/perm-matrix";
 import { kstToday } from "@/lib/date-kst";
 import { isHexColor, readableTextColor } from "@/lib/color-utils";
+import { isAssignableTeacherRole } from "@/lib/permissions";
 import { logAction } from "@/features/audit/server/log";
 import { notifyUsers } from "@/features/notifications/server/notify";
 import { getClassroomAssignmentData } from "./queries";
+import { moveLiveSlotTeacher } from "./handover";
 import { detectOverlaps } from "./overlap-detect";
 import {
   ARCHIVE_REASON,
@@ -498,9 +500,13 @@ async function requireClassWrite() {
 }
 
 /**
- * 인계 대상이 이 학원의 활성 강사/실장/원장인지 검증 — 예약(schedule)·적용(apply) 공통.
+ * 인계 대상이 이 학원의 **배정 가능한 재직자**인지 검증 — 예약(schedule)·적용(apply) 공통.
  * RLS가 users SELECT를 자기 테넌트로 제한 → 타 테넌트 id는 null로 거부.
  * ⚠️ apply에서도 반드시 재검증할 것 — 예약~적용 사이에 대상이 퇴사/역할변경되면 schedule 검증이 무의미해진다.
+ *
+ * 🔴 역할 판정은 **선택지 쿼리(`getClassTeacherOptions`)와 같은 소스**([`ASSIGNABLE_TEACHER_ROLES`])를
+ *    써야 한다. 2026-08-03에 선택지만 고치고 여기를 빼먹어, **드롭다운엔 뜨는데 저장하면
+ *    "유효한 강사가 아닙니다"로 거절되는** 상태가 잠깐 있었다 — 두 벌로 적으면 반드시 갈라진다.
  */
 async function isAssignableTeacher(
   supabase: Awaited<ReturnType<typeof createClient>>,
@@ -511,9 +517,7 @@ async function isAssignableTeacher(
     .select("system_role, status")
     .eq("id", userId)
     .maybeSingle();
-  return (
-    !!data && ["teacher", "manager", "master"].includes(data.system_role) && data.status === "active"
-  );
+  return !!data && isAssignableTeacherRole(data.system_role) && data.status === "active";
 }
 
 /** 강사 인수인계 예약 — 예정 강사·적용일·사유를 classes에 저장(아직 teacher_id 미변경). */
@@ -611,7 +615,7 @@ export async function applyHandover(_prev: HandoverState, formData: FormData): P
   const supabase = await createClient();
   const { data: klass } = await supabase
     .from("classes")
-    .select("class_name, pending_teacher_id")
+    .select("class_name, teacher_id, pending_teacher_id")
     .eq("id", classId)
     .single();
   if (!klass) return { error: "반을 찾을 수 없습니다" };
@@ -634,11 +638,23 @@ export async function applyHandover(_prev: HandoverState, formData: FormData): P
     .eq("id", classId);
   if (updErr) return { error: updErr.message };
 
+  // 담임만 바꾸면 시간표엔 옛 강사가 그대로 남는다 — 이 반의 **유효한 교시 오버라이드**도 함께 옮긴다.
+  // (옛 담임을 가리키는 슬롯만. 원래 다른 사람이 맡던 교시는 그대로 두고, 만료 슬롯도 손대지 않는다.)
+  // 실패해도 담임 교체 자체는 성공으로 둔다 — 되돌리면 더 헷갈린다(로그에 slotsMoved로 남김).
+  const slots = klass.teacher_id
+    ? await moveLiveSlotTeacher(supabase, {
+        tenantId: user.tenantId,
+        classIds: [classId],
+        fromTeacherId: klass.teacher_id,
+        toTeacherId: klass.pending_teacher_id,
+      })
+    : { moved: 0 };
+
   await logAction({
     action: "class_handover_apply",
     targetType: "class",
     targetLabel: klass.class_name,
-    metadata: { newTeacherId: klass.pending_teacher_id },
+    metadata: { newTeacherId: klass.pending_teacher_id, slotsMoved: slots.moved },
   });
   revalidatePath(`/classes/${classId}`);
   revalidatePath("/classes");

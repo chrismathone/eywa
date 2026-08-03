@@ -324,11 +324,13 @@ describe("buildWeekGrid — 과거 데이터 보존(합집합 로스터·고아�
   });
 });
 
-describe("buildWeekGrid — 자리(LAB·JJ)는 수업 교시가 아니다", () => {
+// 자리(LAB·JJ)는 2026-07-31엔 코드가 **무조건 숨겼다가** 2026-08-03 원장 지시로 **상단 헤더 설정**이 됐다
+// (기본 표시). 아래는 그 계약을 잠근다 — 기본값을 숨김으로 되돌리거나, 표시/숨김이 작성률과 어긋나면 깨진다.
+describe("buildWeekGrid — 자리(LAB·JJ) 표시는 설정이 정한다(기본 표시)", () => {
   const lab = (dow: "mon" | "tue" | "wed" | "thu" | "fri", start: string, label = "LAB") =>
     sched(dow, start, { slotTeacherLabel: label, slotRoomLabel: "603" });
 
-  it("쓴 게 없는 LAB/JJ 교시는 아예 그리지 않는다", () => {
+  it("기본(미지정)은 표시 — 다른 교시와 똑같이 그린다", () => {
     const grid = buildWeekGrid({
       weekMonday: MON,
       schedules: [lab("mon", "16:20"), lab("tue", "16:20", "JJ"), sched("wed", "15:00")],
@@ -338,23 +340,40 @@ describe("buildWeekGrid — 자리(LAB·JJ)는 수업 교시가 아니다", () =
       attendance: [],
       slotMemoKeys: [],
     });
-    expect(grid.days.map((d) => d.dow)).toEqual(["wed"]); // 월·화(자리)는 통째로 빠진다
+    expect(grid.days.map((d) => d.dow)).toEqual(["mon", "tue", "wed"]);
+    expect(grid.days[0].slots[0]).toMatchObject({ teacherLabel: "LAB", roomLabel: "603" });
+    expect(grid.days[1].slots[0]).toMatchObject({ teacherLabel: "JJ" });
+    expect(grid.hiddenSpecial).toEqual({ slots: 0, records: 0 }); // 숨긴 게 없으니 각주도 없다
   });
 
-  it("원 라벨 '이주희'도 자리로 판정(해석 전 값이 와도 동일)", () => {
+  it("표시일 땐 그 자리에 쓴 계획·마크가 화면에 남는다", () => {
     const grid = buildWeekGrid({
       weekMonday: MON,
-      schedules: [lab("mon", "16:20", "이주희")],
+      schedules: [lab("mon", "16:20")],
+      enrollments: [enr("s1")],
+      planLines: [line({ slotStart: "16:20", textbook: "Power Voca" })],
+      marks: [{ studentId: "s1", markDate: MON, slotStart: "16:20", status: "완", progressNote: null }],
+      attendance: [],
+      slotMemoKeys: [],
+    });
+    expect(grid.days[0].slots[0].lines.map((l) => l.textbook)).toEqual(["Power Voca"]);
+  });
+
+  it("숨김이면 안 그린다 — 원 라벨 '이주희'(해석 전 값)도 같은 자리로 판정", () => {
+    const grid = buildWeekGrid({
+      weekMonday: MON,
+      schedules: [lab("mon", "16:20", "이주희"), lab("tue", "16:20", "JJ"), sched("wed", "15:00")],
       enrollments: [enr("s1")],
       planLines: [],
       marks: [],
       attendance: [],
       slotMemoKeys: [],
+      includeSpecialRooms: false,
     });
-    expect(grid.days).toHaveLength(0);
+    expect(grid.days.map((d) => d.dow)).toEqual(["wed"]);
   });
 
-  it("계획·마크가 있어도 숨긴다 — 대신 hiddenSpecial로 건수를 남긴다(침묵 금지)", () => {
+  it("숨김인데 기록이 남아 있으면 hiddenSpecial로 건수를 남긴다(침묵 금지)", () => {
     const grid = buildWeekGrid({
       weekMonday: MON,
       schedules: [lab("mon", "16:20"), lab("tue", "16:20", "JJ")],
@@ -363,12 +382,13 @@ describe("buildWeekGrid — 자리(LAB·JJ)는 수업 교시가 아니다", () =
       marks: [{ studentId: "s1", markDate: "2026-07-21", slotStart: "16:20", status: "완", progressNote: null }],
       attendance: [],
       slotMemoKeys: [],
+      includeSpecialRooms: false,
     });
-    expect(grid.days).toHaveLength(0); // 카드는 안 그린다
+    expect(grid.days).toHaveLength(0);
     expect(grid.hiddenSpecial).toEqual({ slots: 2, records: 2 });
   });
 
-  it("빈 계획 행(placeholder)만 있으면 기록으로 세지 않는다", () => {
+  it("숨김: 빈 계획 행(placeholder)만 있으면 기록으로 세지 않는다", () => {
     const grid = buildWeekGrid({
       weekMonday: MON,
       schedules: [lab("mon", "16:20")],
@@ -377,12 +397,13 @@ describe("buildWeekGrid — 자리(LAB·JJ)는 수업 교시가 아니다", () =
       marks: [],
       attendance: [],
       slotMemoKeys: [],
+      includeSpecialRooms: false,
     });
     expect(grid.days).toHaveLength(0);
     expect(grid.hiddenSpecial).toEqual({ slots: 0, records: 0 });
   });
 
-  it("자리 교시뿐인 날짜라도 출석 기록은 attendanceOnly로 보존", () => {
+  it("숨김: 자리 교시뿐인 날짜라도 출석 기록은 attendanceOnly로 보존", () => {
     const grid = buildWeekGrid({
       weekMonday: MON,
       schedules: [lab("mon", "16:20")],
@@ -391,12 +412,13 @@ describe("buildWeekGrid — 자리(LAB·JJ)는 수업 교시가 아니다", () =
       marks: [],
       attendance: [{ studentId: "s1", sessionDate: MON, status: "present" }],
       slotMemoKeys: [],
+      includeSpecialRooms: false,
     });
     expect(grid.days).toHaveLength(0);
     expect(grid.attendanceOnly).toEqual([{ date: MON, studentIds: ["s1"] }]);
   });
 
-  it("같은 시각에 강사 수업이 겹치면 수업이 이긴다(실수업이 증발하지 않는다)", () => {
+  it("숨김: 같은 시각에 강사 수업이 겹치면 수업이 이긴다(실수업이 증발하지 않는다)", () => {
     const grid = buildWeekGrid({
       weekMonday: MON,
       schedules: [lab("mon", "16:20"), sched("mon", "16:20")],
@@ -405,14 +427,15 @@ describe("buildWeekGrid — 자리(LAB·JJ)는 수업 교시가 아니다", () =
       marks: [],
       attendance: [],
       slotMemoKeys: [],
+      includeSpecialRooms: false,
     });
     expect(grid.days[0].slots[0]).toMatchObject({ teacherLabel: "Hannah" });
     expect(sheetFillStats(grid).totalSlots).toBe(1);
   });
 
-  it("작성률 분모·분자에서 빠진다(랜딩 scheduledSlotKeySet과 같은 규칙)", () => {
+  it("보이는 교시 = 세는 교시 — 작성률·랜딩 키셋이 설정을 같이 따른다", () => {
     const schedules = [lab("mon", "16:20"), sched("wed", "15:00")];
-    const grid = buildWeekGrid({
+    const input = {
       weekMonday: MON,
       schedules,
       enrollments: [],
@@ -420,11 +443,20 @@ describe("buildWeekGrid — 자리(LAB·JJ)는 수업 교시가 아니다", () =
       marks: [],
       attendance: [],
       slotMemoKeys: [],
-    });
-    // LAB 교시는 계획이 있어도 카드도 작성률도 없다(기록 건수만 각주로).
-    expect(sheetFillStats(grid)).toEqual({ totalSlots: 1, filledSlots: 1, orphanSlots: 0 });
-    expect(grid.hiddenSpecial.records).toBe(1);
-    expect([...scheduledSlotKeySet(MON, schedules)]).toEqual(["2026-07-22|15:00"]);
+    };
+    // 표시 = 분모에 들어간다(랜딩도 같은 키셋).
+    expect(sheetFillStats(buildWeekGrid(input))).toEqual({ totalSlots: 2, filledSlots: 2, orphanSlots: 0 });
+    expect([...scheduledSlotKeySet(MON, schedules)].sort()).toEqual([
+      "2026-07-20|16:20",
+      "2026-07-22|15:00",
+    ]);
+    // 숨김 = 분모에서도 빠진다(화면에서 뺀 교시를 분모에 남기면 100%에 못 닿는다).
+    const hidden = buildWeekGrid({ ...input, includeSpecialRooms: false });
+    expect(sheetFillStats(hidden)).toEqual({ totalSlots: 1, filledSlots: 1, orphanSlots: 0 });
+    expect(hidden.hiddenSpecial.records).toBe(1);
+    expect([...scheduledSlotKeySet(MON, schedules, { includeSpecialRooms: false })]).toEqual([
+      "2026-07-22|15:00",
+    ]);
   });
 });
 

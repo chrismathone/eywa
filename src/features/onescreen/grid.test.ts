@@ -67,21 +67,49 @@ describe("rowInClass", () => {
   it("반 모호(className=null)는 어느 필터에서도 통과(같은 과목 두 반)", () => {
     expect(rowInClass(sub(null), "A반")).toBe(true);
   });
+
+  // 보강 행(반 없음) — 앵커가 있으면 그 수업에서만, 없으면 종전대로 어디서나(카드만 보이고 행이 사라지는 것 방지).
+  it("보강 행은 앵커 반에서만 (앵커 없으면 어디서나)", () => {
+    const mk = (anchor: string | null) => ({
+      name: "수학 (보강)",
+      prev: "",
+      today: "",
+      makeup: true,
+      classId: null,
+      makeupClassName: anchor,
+    });
+    expect(rowInClass(mk("A반"), "A반")).toBe(true);
+    expect(rowInClass(mk("A반"), "B반")).toBe(false);
+    expect(rowInClass(mk(null), "B반")).toBe(true);
+  });
 });
 
 // 2026-07-27 강사 제보(허다빈): 특정 반을 고른 채 보강 학생을 추가하면 "추가됨" 토스트만 뜨고 카드가 사라졌다.
 // 보강 학생은 buildMakeupStudent가 조립해 tags가 없어(tag:"보강") 어떤 반 이름과도 매칭되지 않는 게 원인.
-describe("studentInClass — 보강은 반 필터에 숨지 않는다", () => {
+describe("studentInClass — 보강은 '그 수업'에서만 보인다(앵커)", () => {
   const member = (tags: string[]): OneScreenStudent => ({ ...stu("m", [{ name: "수학" }]), tag: tags[0]!, tags });
   const makeupCard = (): OneScreenStudent => ({
     ...stu("mk", [{ name: "수학" }]),
     tag: "보강",
     isMakeup: true,
   });
+  /** 앵커(어느 수업 시간에 한 보강인가)가 붙은 보강 전용 카드. */
+  const anchoredCard = (cls: string): OneScreenStudent => ({
+    ...stu("mk", [{ name: "수학 (보강)" }]),
+    subjects: [{ name: "수학 (보강)", prev: "", today: "", makeup: true, classId: null, makeupClassName: cls }],
+    tag: cls,
+    isMakeup: true,
+  });
   /** 정규 카드에 병합된 보강 행(classId 없음·makeup) — 그 학생이 필터 반 소속이 아닌 상황. */
-  const merged = (): OneScreenStudent => {
+  const merged = (anchorClass: string | null): OneScreenStudent => {
     const s = member(["토일반"]);
-    return { ...s, subjects: [...s.subjects, { name: "수학 (보강)", prev: "", today: "", makeup: true, classId: null }] };
+    return {
+      ...s,
+      subjects: [
+        ...s.subjects,
+        { name: "수학 (보강)", prev: "", today: "", makeup: true, classId: null, makeupClassName: anchorClass },
+      ],
+    };
   };
 
   it("전체(null)면 항상 통과", () => {
@@ -100,13 +128,22 @@ describe("studentInClass — 보강은 반 필터에 숨지 않는다", () => {
     expect(studentInClass(s, "B반")).toBe(false);
   });
 
-  it("🔴 보강 전용 카드는 어느 반 필터에서도 통과(반 무관 수업)", () => {
-    expect(studentInClass(makeupCard(), "A반")).toBe(true);
-    expect(studentInClass(makeupCard(), "아무반")).toBe(true);
+  // 🔴 2026-08-03 원장 제보: 앵커가 없던 시절 보강 학생이 **모든 수업**에서 보였다. 이제 그 수업에서만.
+  it("🔴 보강 전용 카드는 **앵커 반**에서만 보인다", () => {
+    expect(studentInClass(anchoredCard("A반"), "A반")).toBe(true);
+    expect(studentInClass(anchoredCard("A반"), "B반")).toBe(false);
   });
 
-  it("🔴 정규 카드에 병합된 보강 행이 있으면, 그 반 소속이 아니어도 통과", () => {
-    expect(studentInClass(merged(), "평일반")).toBe(true);
+  it("앵커 없는 보강(옛 기록·전체에서 추가)은 '전체'에서만 보인다", () => {
+    expect(studentInClass(makeupCard(), null)).toBe(true);
+    expect(studentInClass(makeupCard(), "A반")).toBe(false);
+  });
+
+  it("정규 카드에 병합된 보강 행은 **그 앵커 반**에서도 카드를 남긴다(소속이 아니어도)", () => {
+    expect(studentInClass(merged("평일반"), "평일반")).toBe(true); // 보강을 한 수업
+    expect(studentInClass(merged("평일반"), "토일반")).toBe(true); // 원래 수강 반
+    expect(studentInClass(merged("평일반"), "다른반")).toBe(false);
+    expect(studentInClass(merged(null), "평일반")).toBe(false); // 앵커 없으면 남의 반에 안 낀다
   });
 
   it("⚠️ 정규 행에 켠 '보강' 토글(반 있음)은 필터를 우회시키지 않는다", () => {
@@ -363,7 +400,6 @@ describe("planBulkApply", () => {
 });
 
 const ATTITUDES = ["아주 좋음", "좋음", "보통", "산만함", "피곤함"] as const;
-const HOMEWORKS = ["완료", "일부 미흡", "미제출"] as const;
 
 function prevReport(over: Partial<PrevReport> = {}): PrevReport {
   return {
@@ -371,7 +407,7 @@ function prevReport(over: Partial<PrevReport> = {}): PrevReport {
     progress: "1-1-1 받아올림",
     textbook: "쎈",
     homeworkToday: "p10~16",
-    homeworkScore: "완료",
+    homeworkScore: "100%",
     attitude: "좋음",
     examInfo: "일일 18/20",
     note: "학부모 발송 본문",
@@ -385,7 +421,6 @@ describe("planPrevFill", () => {
       prev: prevReport(),
       current: { today: "이미 입력", attitude: null, homework: "미제출", homeworkToday: "" },
       attitudes: ATTITUDES,
-      homeworks: HOMEWORKS,
     });
     expect(fill).toEqual({ attitude: "좋음", homeworkToday: "p10~16" });
   });
@@ -396,27 +431,39 @@ describe("planPrevFill", () => {
         prev: undefined,
         current: { today: "", attitude: null, homework: "", homeworkToday: "" },
         attitudes: ATTITUDES,
-        homeworks: HOMEWORKS,
       }),
     ).toEqual({});
     expect(
       planPrevFill({
         prev: prevReport(),
-        current: { today: "x", attitude: "보통", homework: "완료", homeworkToday: "y" },
+        current: { today: "x", attitude: "보통", homework: "100%", homeworkToday: "y" },
         attitudes: ATTITUDES,
-        homeworks: HOMEWORKS,
       }),
     ).toEqual({});
   });
 
-  it("현 선택지에 없는 옛 태도·과제 값은 스킵한다", () => {
+  it("현 선택지에 없는 옛 태도 값은 스킵한다", () => {
     const fill = planPrevFill({
-      prev: prevReport({ attitude: "옛선택지", homeworkScore: "90%" }),
+      prev: prevReport({ attitude: "옛선택지", homeworkScore: "48%" }),
       current: { today: "", attitude: null, homework: "", homeworkToday: "x" },
       attitudes: ATTITUDES,
-      homeworks: HOMEWORKS,
     });
-    expect(fill).toEqual({ today: "1-1-1 받아올림" });
+    // 과제 수행률은 자유입력이라 48%가 그대로 옮겨 온다 — 태도만 옛 선택지라 스킵.
+    expect(fill).toEqual({ today: "1-1-1 받아올림", homework: "48%" });
+  });
+
+  // 🔴 퍼센트 전환(2026-08-03) 이전 값 — 뜻이 분명한 것만 옮기고 '일부 미흡'은 채우지 않는다.
+  //    (임의로 50%를 찍는 순간 강사가 하지 않은 판단이 학부모에게 나간다 = 이번 사고 그 자체.)
+  it("옛 정성값: 완료→100%·미제출은 그대로, '일부 미흡'은 채우지 않는다", () => {
+    const fill = (homeworkScore: string) =>
+      planPrevFill({
+        prev: prevReport({ homeworkScore }),
+        current: { today: "x", attitude: "보통", homework: "", homeworkToday: "y" },
+        attitudes: ATTITUDES,
+      }).homework;
+    expect(fill("완료")).toBe("100%");
+    expect(fill("미제출")).toBe("미제출"); // 0%와 문장이 달라 뭉개지 않는다
+    expect(fill("일부 미흡")).toBeUndefined();
   });
 
   it("특이사항(note=발송 본문)은 어떤 경우에도 계획에 포함되지 않는다", () => {
@@ -424,13 +471,12 @@ describe("planPrevFill", () => {
       prev: prevReport(),
       current: { today: "", attitude: null, homework: "", homeworkToday: "" },
       attitudes: ATTITUDES,
-      homeworks: HOMEWORKS,
     });
     expect(Object.keys(fill)).not.toContain("note");
     expect(fill).toEqual({
       today: "1-1-1 받아올림",
       attitude: "좋음",
-      homework: "완료",
+      homework: "100%",
       homeworkToday: "p10~16",
     });
   });
@@ -452,13 +498,13 @@ describe("planBulkPrevFill", () => {
   });
 
   it("단일 과목 학생은 planPrevFill과 같은 결과", () => {
-    const plan = planBulkPrevFill([row("a", "수학", 0, prevReport())], ATTITUDES, HOMEWORKS);
+    const plan = planBulkPrevFill([row("a", "수학", 0, prevReport())], ATTITUDES);
     expect(plan).toEqual([
       {
         studentId: "a",
         subjectName: "수학",
         subjectIndex: 0,
-        set: { today: "1-1-1 받아올림", attitude: "좋음", homework: "완료", homeworkToday: "p10~16" },
+        set: { today: "1-1-1 받아올림", attitude: "좋음", homework: "100%", homeworkToday: "p10~16" },
       },
     ]);
   });
@@ -466,14 +512,13 @@ describe("planBulkPrevFill", () => {
   it("다과목 학생 — 학생 단위(태도·과제)는 **첫 과목 행**만, 둘째 과목이 덮어쓰지 않는다", () => {
     const plan = planBulkPrevFill(
       [
-        row("a", "수학", 0, prevReport({ attitude: "좋음", homeworkScore: "완료", progress: "수학진도" })),
-        row("a", "영어", 1, prevReport({ attitude: "산만함", homeworkScore: "미제출", progress: "영어진도" })),
+        row("a", "수학", 0, prevReport({ attitude: "좋음", homeworkScore: "100%", progress: "수학진도" })),
+        row("a", "영어", 1, prevReport({ attitude: "산만함", homeworkScore: "0%", progress: "영어진도" })),
       ],
       ATTITUDES,
-      HOMEWORKS,
     );
     expect(plan[0]!.set.attitude).toBe("좋음");
-    expect(plan[0]!.set.homework).toBe("완료");
+    expect(plan[0]!.set.homework).toBe("100%");
     expect(plan[1]!.set.attitude).toBeUndefined();
     expect(plan[1]!.set.homework).toBeUndefined();
     // 과목 단위(진도·오늘 과제)는 과목마다 그대로 채운다.
@@ -485,7 +530,6 @@ describe("planBulkPrevFill", () => {
     const plan = planBulkPrevFill(
       [row("a", "수학", 0, prevReport({ attitude: "좋음" })), row("b", "수학", 0, prevReport({ attitude: "보통" }))],
       ATTITUDES,
-      HOMEWORKS,
     );
     expect(plan[0]!.set.attitude).toBe("좋음");
     expect(plan[1]!.set.attitude).toBe("보통");
@@ -499,7 +543,6 @@ describe("planBulkPrevFill", () => {
         row("c", "수학", 0, prevReport()),
       ],
       ATTITUDES,
-      HOMEWORKS,
     );
     expect(plan.map((p) => p.studentId)).toEqual(["c"]);
   });
@@ -508,7 +551,6 @@ describe("planBulkPrevFill", () => {
     const plan = planBulkPrevFill(
       [row("a", "수학", 0, prevReport({ attitude: "폐기된태도", homeworkScore: "폐기된과제" }))],
       ATTITUDES,
-      HOMEWORKS,
     );
     expect(plan[0]!.set.attitude).toBeUndefined();
     expect(plan[0]!.set.homework).toBeUndefined();

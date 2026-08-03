@@ -31,6 +31,13 @@ export function reportUnitKey(
 export type SubjectRowRef = {
   classId?: string | null;
   subjectKey?: string | null;
+  /**
+   * 보강(수업외) 행인가. 보강 보고서는 `class_id`가 NULL이라 1차(반 매칭)로는 못 갈리고, 2·3차 과목
+   * 폴백에선 **일부러 제외**돼 있다(정규 행 오배정 방지) → 보강끼리 붙일 전용 단계가 필요하다.
+   * 🔴 이게 없으면 로스터가 되살린 보강 행에 그날 발송한 보고서가 안 붙어, 강사 화면에서 "발송한 보고서가
+   *    사라진 것"처럼 보인다(원장 제보 2026-08-03 하은결 건).
+   */
+  isMakeup?: boolean | null;
   /** 특강 반인가(`classes.is_special`). 켜지면 **그 반으로 확정된 보고서만** 붙는다(아래 2·3차 제외). */
   isSpecial?: boolean;
 };
@@ -91,10 +98,20 @@ export function matchReportsToRows<R extends ReportRowRef>(
     if (!cls) return;
     out[i] = take((r) => (r.classId?.trim() ?? "") === cls);
   });
-  // 2차 — 반이 없는 보고서를 과목으로. ⚠️ **특강 행 + 보강 보고서는 제외**(아래 규칙).
-  //    보강 보고서(class_id NULL·makeup)는 과목만 같은 정규 행에 붙으면 그 행을 잠근다 → `!r.makeup`로 차단.
+  // 1.5차 — **보강 행 ↔ 보강 보고서**(둘 다 반이 없다). 과목이 같을 때만. 보강 행이 아니면 건너뛴다.
+  // 🔴 과목 미기재는 **양쪽 다 math로 정규화**한다(reportSubject와 같은 레거시 규약). 실측: 보강 보고서
+  //    171건 중 **143건이 `subject` NULL**(edutrix 계보)이라, 정규화 없이 문자열을 그대로 비교하면
+  //    로스터가 되살린 행에 그 보고서가 안 붙어 "발송했는데 미작성"이 그대로 재현된다(적대검수 2026-08-03).
+  const norm = (v: string | null | undefined) => (v?.trim() ? v.trim() : LEGACY_REPORT_SUBJECT);
   rows.forEach((row, i) => {
-    if (out[i] || row.isSpecial) return;
+    if (out[i] || !row.isMakeup) return;
+    out[i] = take((r) => !!r.makeup && !r.classId?.trim() && norm(r.subject) === norm(row.subjectKey));
+  });
+  // 2차 — 반이 없는 보고서를 과목으로. ⚠️ **특강 행 + 보강 행 + 보강 보고서는 제외**(아래 규칙).
+  //    보강 보고서(class_id NULL·makeup)는 과목만 같은 정규 행에 붙으면 그 행을 잠근다 → `!r.makeup`로 차단.
+  //    반대로 보강 행이 정규 보고서를 집어가도 같은 사고가 난다 → `row.isMakeup`도 제외한다.
+  rows.forEach((row, i) => {
+    if (out[i] || row.isSpecial || row.isMakeup) return;
     const key = row.subjectKey?.trim();
     if (!key) return;
     out[i] = take((r) => !r.classId?.trim() && !r.makeup && (r.subject?.trim() ?? "") === key);
@@ -130,7 +147,7 @@ export function matchReportsToRows<R extends ReportRowRef>(
   // 행 과목 미지정("")은 math 간주 — 진도 입력 분기·G2 배지(grid-row.tsx)와 같은 규약.
   const onlyRowSubject = subjectKeys.size === 1 ? [...subjectKeys][0]! || LEGACY_REPORT_SUBJECT : null;
   if (opts?.legacyFallback && onlyRowSubject === LEGACY_REPORT_SUBJECT) {
-    const i = out.findIndex((v, idx) => !v && !rows[idx]!.isSpecial);
+    const i = out.findIndex((v, idx) => !v && !rows[idx]!.isSpecial && !rows[idx]!.isMakeup);
     // 보강 보고서는 과목·반 없이도 매칭 대상이 아니다(위 2차와 동일 이유) — `!r.makeup` 방어.
     if (i >= 0) out[i] = take((r) => !r.classId?.trim() && !r.subject?.trim() && !r.makeup);
   }

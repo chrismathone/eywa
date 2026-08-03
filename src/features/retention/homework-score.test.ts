@@ -13,10 +13,16 @@ describe("parseHomeworkScore", () => {
     expect(parseHomeworkScore("미제출")).toBe(0);
   });
 
-  it("원스크린 선택지(완료/일부 미흡/미제출)를 이행률로", () => {
+  it("옛 원스크린 선택지 중 뜻이 분명한 것만(완료=100·미제출=0)", () => {
     expect(parseHomeworkScore("완료")).toBe(100);
-    expect(parseHomeworkScore("일부 미흡")).toBe(50);
     expect(parseHomeworkScore("미제출")).toBe(0);
+  });
+
+  // 🔴 '일부 미흡'을 50으로 세면 강사가 하지 않은 판단이 숫자가 된다(2026-08-03 학부모 그래프 사고).
+  //    위험점수·학부모 문자의 이행률에서도 같은 규칙 — 모르는 값은 평균에서 빠진다.
+  it("'일부 미흡'은 정도 미상 → null(평균에서 제외)", () => {
+    expect(parseHomeworkScore("일부 미흡")).toBeNull();
+    expect(averageHomeworkScore(["100%", "일부 미흡"])).toBe(100);
   });
 
   it("% 없는 숫자·공백도 허용", () => {

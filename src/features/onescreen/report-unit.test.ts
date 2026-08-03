@@ -20,6 +20,38 @@ describe("reportUnitKey", () => {
 describe("matchReportsToRows", () => {
   const row = (classId: string | null, subjectKey: string | null) => ({ classId, subjectKey });
   const rep = (classId: string | null, subject: string | null, tag = "") => ({ classId, subject, tag });
+  const mkRow = (subjectKey: string | null) => ({ classId: null, subjectKey, isMakeup: true });
+  const mkRep = (subject: string | null, tag = "") => ({ classId: null, subject, makeup: true, tag });
+
+  // 🔴 2026-08-03 원장 제보(하은결): 보강 보고서를 발송했는데 강사 화면에서 찾을 수 없었다.
+  //    로스터가 보강 행을 되살려도 보고서가 안 붙으면 "미작성"으로 보인다 → 보강끼리 붙는 전용 단계.
+  it("보강 행에는 같은 과목 보강 보고서가 붙는다", () => {
+    expect(matchReportsToRows([mkRow("math")], [mkRep("math", "MK")]).map((r) => r?.tag)).toEqual(["MK"]);
+  });
+
+  // 🔴 실측: 보강 보고서 171건 중 **143건이 subject NULL**(edutrix 계보). 정규화 없이 비교하면 그 행들이
+  //    영영 안 붙어 "발송했는데 미작성"이 그대로 남는다(적대검수 2026-08-03에 잡힌 결함).
+  it("과목 미기재(NULL)는 math로 정규화해 붙는다", () => {
+    expect(matchReportsToRows([mkRow("math")], [mkRep(null, "OLD")]).map((r) => r?.tag)).toEqual(["OLD"]);
+    expect(matchReportsToRows([mkRow(null)], [mkRep(null, "OLD")]).map((r) => r?.tag)).toEqual(["OLD"]);
+    // 영어 보강 행이 과목 없는(=math로 읽히는) 보고서를 가져가지는 않는다.
+    expect(matchReportsToRows([mkRow("english")], [mkRep(null, "OLD")]).map((r) => r?.tag)).toEqual([undefined]);
+  });
+
+  it("보강 보고서가 정규 행을 잠그지 않는다(기존 방어 유지)", () => {
+    const rows = [row(null, "math")];
+    expect(matchReportsToRows(rows, [mkRep("math", "MK")]).map((r) => r?.tag)).toEqual([undefined]);
+  });
+
+  it("보강 행이 정규(반 없는) 보고서를 가져가지 않는다", () => {
+    expect(matchReportsToRows([mkRow("math")], [rep(null, "math", "N")]).map((r) => r?.tag)).toEqual([undefined]);
+  });
+
+  it("정규 행 + 보강 행이 한 학생에 있으면 각자 제 보고서를 가져간다", () => {
+    const rows = [row("c1", "math"), mkRow("math")];
+    const reports = [mkRep("math", "MK"), rep("c1", "math", "R")];
+    expect(matchReportsToRows(rows, reports).map((r) => r?.tag)).toEqual(["R", "MK"]);
+  });
 
   it("정규·특강 두 행이 각자의 보고서를 가져간다", () => {
     const rows = [row("정규", "math"), row("특강", "math")];

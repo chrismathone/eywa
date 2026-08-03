@@ -7,7 +7,7 @@ import { EmailIdField } from "@/components/forms/email-id-field";
 import { ROLE_LABEL } from "@/lib/auth/role-hierarchy";
 import type { SystemRole } from "@/lib/permissions";
 import { changeStaffRole } from "@/features/staff/server/actions";
-import type { HomeroomClassRow } from "@/features/staff/server/queries";
+import type { AssistClassRow, HomeroomClassRow } from "@/features/staff/server/queries";
 import {
   changeStaffEmail,
   deleteStaff,
@@ -15,6 +15,7 @@ import {
 } from "@/features/staff/server/account-actions";
 import { Footer, Modal, SubmitBtn } from "./dialog-bits";
 import { DeactivateButton } from "./deactivate-button";
+import type { HandoverTeacher } from "./offboard-dialog";
 
 const INPUT = "border-border bg-card text-foreground w-full rounded-md border px-2.5 py-1.5 text-sm";
 
@@ -206,6 +207,8 @@ export function AccountActions({
   currentStatus,
   roleOptions,
   homeroomClasses,
+  assistClasses,
+  handoverTeachers,
 }: {
   staffId: string;
   displayName: string;
@@ -213,8 +216,12 @@ export function AccountActions({
   currentRole: SystemRole;
   currentStatus: "active" | "inactive" | "pending";
   roleOptions: SystemRole[];
-  /** 이 직원이 담임인 진행중 반 — 퇴사/삭제 시 인수인계 경고에 사용 */
+  /** 이 직원이 담임인 진행중 반 — 퇴사/삭제 시 인수인계 경고·일괄 인계에 사용 */
   homeroomClasses: HomeroomClassRow[];
+  /** 담임은 아니지만 교시로 들어가는 진행중 반 — 퇴사 시 함께 인계 */
+  assistClasses: AssistClassRow[];
+  /** 퇴사 시 반을 넘겨받을 수 있는 재직 강사 후보 */
+  handoverTeachers: HandoverTeacher[];
 }) {
   const [open, setOpen] = useState<"email" | "password" | "role" | "delete" | null>(null);
   const close = () => setOpen(null);
@@ -244,6 +251,8 @@ export function AccountActions({
           displayName={displayName}
           currentStatus={currentStatus}
           homeroomClasses={homeroomClasses}
+          assistClasses={assistClasses}
+          teacherOptions={handoverTeachers}
         />
         <Button variant="destructive" size="sm" onClick={() => setOpen("delete")}>
           <Trash2 className="size-3.5" />

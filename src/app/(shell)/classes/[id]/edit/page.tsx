@@ -54,6 +54,13 @@ export default async function EditClassPage({
   ]);
 
   if (!klass) notFound();
+  // 🔴 현재 담임이 배정 후보 밖(퇴직·역할 변경)이어도 **선택지에 남긴다**. 담임 select는 컨트롤드라
+  // 값에 맞는 option이 없으면 빈 칸이 되고, 그대로 저장하면 `teacherId: get(...) || null`로 담임이
+  // **조용히 NULL이 된다**(반을 고치러 들어갔다가 담임을 지우는 사고). 이름은 이미 klass에 있어 추가 조회 없음.
+  const teacherOptions =
+    klass.teacherId && !teachers.some((t) => t.id === klass.teacherId)
+      ? [...teachers, { id: klass.teacherId, name: `${klass.teacherName ?? "이름 없음"} (현재 담임)`, subjects: [] }]
+      : teachers;
   const subjectOptions = buildSubjectMaps(settings.operations.subjects).options;
   const periodsConfig = settingsToPeriodsConfig(settings.operations);
   // 폼이 편집하는 대상 = **현재 유효한 슬롯만**. 운영 종료일이 지난 행은 지난 배치의 이력이라
@@ -99,7 +106,7 @@ export default async function EditClassPage({
             classroomId: s.classroomId,
           })),
         }}
-        teacherOptions={teachers}
+        teacherOptions={teacherOptions}
         classroomOptions={classrooms}
         subjectOptions={subjectOptions}
         periodsConfig={periodsConfig}

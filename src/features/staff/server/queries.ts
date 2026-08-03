@@ -240,6 +240,8 @@ export async function getStaffWorkSchedule(id: string): Promise<WorkSchedule> {
 export type HomeroomClassRow = {
   id: string;
   className: string;
+  /** 과목 키(라벨·색은 학원설정 단일 소스로 변환 — 여기 라벨을 굽지 말 것) */
+  subject: string;
   /** 강사 인수인계(0044a)가 예약돼 있으면 새 담임 이름·적용일 — 이미 조치된 반임을 표시 */
   pendingTeacherName: string | null;
   pendingTeacherDate: string | null;
@@ -254,7 +256,7 @@ export async function getActiveHomeroomClasses(teacherId: string): Promise<Homer
   const { data } = await supabase
     .from("classes")
     .select(
-      "id, class_name, pending_teacher_date, pending_teacher:pending_teacher_id ( display_name )",
+      "id, class_name, subject, pending_teacher_date, pending_teacher:pending_teacher_id ( display_name )",
     )
     .eq("tenant_id", actor.tenantId)
     .eq("teacher_id", teacherId)
@@ -269,11 +271,62 @@ export async function getActiveHomeroomClasses(teacherId: string): Promise<Homer
     return {
       id: c.id,
       className: c.class_name,
+      subject: c.subject,
       pendingTeacherName: pt?.display_name ?? null,
       pendingTeacherDate:
         (c as { pending_teacher_date?: string | null }).pending_teacher_date ?? null,
     };
   });
+}
+
+/**
+ * 담임은 아니지만 **교시로 들어가는** 진행중 반 — 퇴사 시 담임 목록만 보면 놓치는 두 번째 잔여.
+ *
+ * `class_schedules.teacher_id`는 셀 단위 오버라이드라 담임과 무관하게 사람을 가리킨다(실측 2026-08-03
+ * injaewon: 재직 강사 9명이 남의 반에서 유효 교시 총 58개를 맡고 있고, 그중 2명은 **담임 반이 0개**라
+ * 담임 기준 경고엔 아예 안 걸린다). 인계하지 않으면 시간표에 퇴직자가 그대로 남고, 그 반 시트를 열 수
+ * 있는 사람도 퇴직자 쪽에 묶인다(ECS 부담임 스코프).
+ *
+ * ⚠️ 만료된 교시는 세지 않는다 — 지난 시간표는 "그때 누가 가르쳤나"의 기록이라 인계 대상이 아니다.
+ */
+export type AssistClassRow = { id: string; className: string; subject: string; slotCount: number };
+
+export async function getActiveAssistSlotClasses(teacherId: string): Promise<AssistClassRow[]> {
+  const supabase = await createClient();
+  const actor = await getCurrentUser();
+  if (!actor) return [];
+  const today = new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
+
+  // 슬롯 수를 세므로 무페이징 select 금지(B2) — 페이지네이션으로 전건을 받는다.
+  type Cls = { class_name: string; subject: string; teacher_id: string | null };
+  type Row = { class_id: string; classes: Cls | Cls[] };
+  const rows = await fetchAllPaged<Row>((from, to) =>
+    supabase
+      .from("class_schedules")
+      .select("class_id, classes!inner(class_name, subject, teacher_id, is_active)")
+      .eq("tenant_id", actor.tenantId)
+      .eq("teacher_id", teacherId)
+      .eq("classes.is_active", true)
+      .or(`valid_to.is.null,valid_to.gte.${today}`)
+      .order("class_id")
+      .range(from, to),
+  );
+
+  const byClass = new Map<string, AssistClassRow>();
+  for (const r of rows) {
+    const c = (Array.isArray(r.classes) ? r.classes[0] : r.classes) as Cls | undefined;
+    if (!c || c.teacher_id === teacherId) continue; // 담임인 반은 위 목록이 담당
+    const hit = byClass.get(r.class_id);
+    if (hit) hit.slotCount += 1;
+    else
+      byClass.set(r.class_id, {
+        id: r.class_id,
+        className: c.class_name,
+        subject: c.subject,
+        slotCount: 1,
+      });
+  }
+  return [...byClass.values()].sort((a, b) => a.className.localeCompare(b.className, "ko"));
 }
 
 // === 강사 담당 수업 이력 ===

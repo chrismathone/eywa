@@ -46,10 +46,10 @@ function clamp(n: number, lo: number, hi: number) {
 }
 
 function pickAttitude(check: number): string {
-  if (check >= 18) return "아주 좋음";
+  if (check >= 18) return "매우 좋음";
   if (check >= 15) return "좋음";
   if (check >= 12) return "보통";
-  return "피곤함";
+  return "안좋음";
 }
 
 /** 점수(0~max) → 백분율. 차트·진행바 공용. */
@@ -101,7 +101,7 @@ export function buildLearning(base: OneScreenStudent, idx: number): StudentLearn
       Math.round(subjects.reduce((a, s) => a + s[k], 0) / subjects.length);
     const r = rand();
     let attendance: AttendanceMark = r > 0.93 ? "결석" : r > 0.88 ? "지각" : "출석";
-    let homework = rand() > 0.9 ? "일부 미흡" : "완료";
+    let homework = rand() > 0.9 ? "90%" : "100%";
     const dayAgg = avg("daily");
     const chkAgg = avg("check");
     let attitude = pickAttitude(chkAgg);

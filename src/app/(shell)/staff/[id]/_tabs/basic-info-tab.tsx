@@ -4,8 +4,13 @@ import { Pill } from "@/components/atoms/pill";
 import { CheckSquare, Pencil, Square } from "@/components/icons/eywa-icon-compat";
 import { WindowLink } from "@/components/workspace/window-link";
 import { Button } from "@/components/ui/button";
-import { getActiveHomeroomClasses, type StaffDetail } from "@/features/staff/server/queries";
+import {
+  getActiveAssistSlotClasses,
+  getActiveHomeroomClasses,
+  type StaffDetail,
+} from "@/features/staff/server/queries";
 import { getStaffContractFiles, getStaffContracts } from "@/features/staff/server/contract-queries";
+import { getClassTeacherOptions } from "@/features/classes/server/queries";
 import type { ResumeDetail } from "@/features/staff/server/resume-queries";
 import { RESUME_CHECKS, WORKDAYS } from "@/features/staff/resume";
 import { getTenantSettings } from "@/features/owner/server/queries";
@@ -81,12 +86,15 @@ export async function BasicInfoTab({
   /** 증명사진 signed URL(슬라이드) — 게이트 통과 시에만 서버가 resolve. */
   resumePhotoUrls?: (string | null)[];
 }) {
-  // 독립 조회 병렬(B4). 담임 반 목록은 계정 관리 패널(퇴사/삭제 경고)에서만 쓰여 canManageThis일 때만 조회.
-  const [settings, homeroomClasses, contracts, contractFiles] = await Promise.all([
+  // 독립 조회 병렬(B4). 담임 반 목록·인계 후보는 계정 관리 패널(퇴사 경고·일괄 인계)에서만 쓰여
+  // canManageThis일 때만 조회한다. 계약서 파일은 계약현황 카드용(2026-08-03).
+  const [settings, homeroomClasses, contracts, contractFiles, handoverTeachers, assistClasses] = await Promise.all([
     getTenantSettings(),
     canManageThis ? getActiveHomeroomClasses(staff.id) : Promise.resolve([]),
     getStaffContracts(staff.id),
     getStaffContractFiles(staff.id),
+    canManageThis ? getClassTeacherOptions() : Promise.resolve([]),
+    canManageThis ? getActiveAssistSlotClasses(staff.id) : Promise.resolve([]),
   ]);
   // 오늘 날짜는 **서버에서** 확정해 내려보낸다 — 클라에서 new Date()를 쓰면 시간대·하이드레이션이 어긋난다.
   const today = new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
@@ -331,6 +339,8 @@ export async function BasicInfoTab({
           currentStatus={staff.status}
           roleOptions={roleOptions}
           homeroomClasses={homeroomClasses}
+          assistClasses={assistClasses}
+          handoverTeachers={handoverTeachers}
         />
       ) : null}
     </div>

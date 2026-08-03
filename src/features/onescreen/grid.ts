@@ -2,6 +2,7 @@
  * 선생님 원스크린 — 표(스프레드시트) 뷰 순수 헬퍼.
  * 카드↔표 토글의 표 쪽 행 구성·발송대상 판정을 순수 함수로 분리(CLAUDE.md: 계산 함수 분리+Vitest).
  */
+import { toHomeworkRateChoice } from "./homework-rate";
 import type { OneScreenStudent, PrevReport, Subject } from "./types";
 
 /**
@@ -58,6 +59,11 @@ export function isReportEligible(subject: Subject): boolean {
  */
 export function rowInClass(subject: Subject, classFilter: string | null): boolean {
   if (!classFilter) return true;
+  // 보강 행은 반이 없다 — **어느 수업 시간에 한 보강인지**(앵커)가 있으면 그 반에서만 보인다(원장 2026-08-03).
+  // ⚠️ 앵커가 없는 행(옛 기록·'전체'에서 추가)까지 숨기면 안 된다 — 카드는 보이는데 그 안의 보강 행만
+  //    사라져 "발송한 보고서가 또 없어졌다"가 된다. 앵커 없는 행은 종전대로(반 모호 = 어디서나 표시).
+  if (subject.makeup && !subject.classId)
+    return !subject.makeupClassName || subject.makeupClassName === classFilter;
   return subject.className == null || subject.className === classFilter;
 }
 
@@ -75,21 +81,24 @@ export function isClassMember(
 /**
  * 반 필터가 이 **학생 카드**를 남기는가(행 단위는 위 `rowInClass`).
  *
- * 🔴 **보강(수업외)은 반에 묶이지 않으므로 반 필터에 숨으면 안 된다** (2026-07-27 강사 제보 — 특정 반을
- *    고른 채 보강 학생을 추가하면 "추가됨" 토스트만 뜨고 카드가 사라졌다). 보강 학생은 로스터가 만든 게
- *    아니라 `buildMakeupStudent`가 조립하는데 거기엔 `tags`가 없어(`tag:"보강"`뿐) 어떤 반 이름과도
- *    매칭되지 않는다 → 필터가 걸린 동안 **영영 안 보인다**. 정규 카드에 병합된 보강 행도 같다: 그 학생이
- *    필터한 반 소속이 아니면 카드째 걸러져, 방금 붙인 보강 행에 손도 못 댄다.
+ * 🔴 2026-07-27엔 보강 학생을 **모든 반 필터에 통과**시켰다(특정 반을 고른 채 보강을 추가하면 카드가
+ *    사라져서). 그 우회가 이번엔 반대 불만이 됐다 — *"보강 추가한 학생이 모든 수업에서 보인다"*(원장
+ *    2026-08-03). 뿌리는 같다: **보강 행에 소속이 없었다.**
+ *    → 0171a `makeup_class_id`(어느 수업 시간에 한 보강인가)를 앵커로 두고, 앵커가 맞는 반에서만 보인다.
+ *    추가 시점의 반 필터가 그대로 앵커가 되므로 07-27의 "추가했는데 사라짐"은 재발하지 않는다.
  * ⚠️ 조건이 `su.makeup`만이면 안 된다 — 정규 행에도 강사가 "보강" 토글을 켤 수 있다(그 행은 `classId`가
- *    있고 그 반 소속이라 필터를 우회할 이유가 없다). **반이 없는(`classId` 없음) 보강 행만** 통과시킨다.
+ *    있고 그 반 소속이라 필터를 우회할 이유가 없다). **반이 없는(`classId` 없음) 보강 행만** 앵커로 판정한다.
  */
 export function studentInClass(
   student: Pick<OneScreenStudent, "tag" | "tags" | "isMakeup" | "subjects">,
   classFilter: string | null,
 ): boolean {
   if (!classFilter) return true;
-  if (student.isMakeup) return true;
-  if (student.subjects.some((su) => su.makeup && !su.classId)) return true;
+  // 이 반에서 한 보강 행이 있으면 카드를 남긴다(정규 카드에 병합된 보강 포함).
+  if (student.subjects.some((su) => su.makeup && !su.classId && su.makeupClassName === classFilter))
+    return true;
+  // 보강 전용 카드(담당 반 수강생이 아님)는 앵커가 맞을 때만 — 앵커가 없으면 '전체'에서만 보인다.
+  if (student.isMakeup) return false;
   return isClassMember(student, classFilter);
 }
 
@@ -286,21 +295,24 @@ export type PrevFill = {
  * 이전 회차 → 오늘 행 "빈 칸만" 채움 계획.
  * ⚠️ 특이사항은 제외 — prevReport.note(lesson_reports.notes)는 **학부모 발송 본문**이라 특이사항이 아니다(오염 방지).
  * ⚠️ 교재는 제외 — roster가 이미 직전 교재를 자동 승계한다.
- * 태도·과제는 현 학원 선택지에 있는 값만(옛 선택지 잔존값은 스킵).
+ * 태도는 현 학원 선택지에 있는 값만(옛 선택지 잔존값은 스킵).
+ * 과제는 **퍼센트 전환(2026-08-03) 이전 값도 뜻이 분명하면 옮긴다** — 완료→100%·미제출→0%.
+ * 🔴 단 '일부 미흡'은 정도를 모르므로 **안 채운다**(임의로 50%를 찍지 않는다 — 그게 이번 사고였다).
  */
 export function planPrevFill(args: {
   prev: PrevReport | undefined;
   current: PrevFillCurrent;
   attitudes: readonly string[];
-  homeworks: readonly string[];
 }): PrevFill {
-  const { prev, current, attitudes, homeworks } = args;
+  const { prev, current, attitudes } = args;
   const out: PrevFill = {};
   if (!prev) return out;
   if (!current.today.trim() && prev.progress?.trim()) out.today = prev.progress;
   if (!current.attitude && prev.attitude && attitudes.includes(prev.attitude)) out.attitude = prev.attitude;
-  if (!current.homework && prev.homeworkScore && homeworks.includes(prev.homeworkScore))
-    out.homework = prev.homeworkScore;
+  if (!current.homework && prev.homeworkScore) {
+    const choice = toHomeworkRateChoice(prev.homeworkScore);
+    if (choice) out.homework = choice;
+  }
   if (!current.homeworkToday.trim() && prev.homeworkToday?.trim()) out.homeworkToday = prev.homeworkToday;
   return out;
 }
@@ -353,15 +365,11 @@ export type PrevFillPlan = { studentId: string; subjectName: string; subjectInde
  * 갱신되지 않는다 → dedup이 없으면 다과목 학생의 모든 과목 행이 "아직 비었다"고 보고 각자의 직전 태도로
  * 덮어써 **마지막 과목 행이 이기는** 비결정 결과가 된다(채운 칸 수도 중복 계수). 첫 과목 행 값으로 확정한다.
  */
-export function planBulkPrevFill(
-  rows: readonly PrevFillRow[],
-  attitudes: readonly string[],
-  homeworks: readonly string[],
-): PrevFillPlan[] {
+export function planBulkPrevFill(rows: readonly PrevFillRow[], attitudes: readonly string[]): PrevFillPlan[] {
   const studentFieldDone = new Set<string>();
   const out: PrevFillPlan[] = [];
   for (const r of rows) {
-    const set = planPrevFill({ prev: r.prev, current: r.current, attitudes, homeworks });
+    const set = planPrevFill({ prev: r.prev, current: r.current, attitudes });
     for (const f of ["attitude", "homework"] as const) {
       if (set[f] === undefined) continue;
       const k = `${r.studentId}::${f}`;

@@ -5,11 +5,11 @@ import { buildSubjectMaps } from "@/features/owner/subjects";
 
 // ijw StudentDetail ProgressTab 이식 — 최근 수업보고서 표(날짜·선생님·진도·시험·숙제).
 // + P2a/P3 보강: ClassNote 발송 상태 · 학부모 링크(열람수/취소/만료) — "저장한 보고서 확인"을 여기서.
-// 숙제: assignment_score>0 이면 완료, 아니면 미완료.
+// 숙제 = 저장된 **수행률 값 그대로**(90% 등).
+// 🔴 예전엔 `0보다 크면 완료`로 뭉갰다 — 50%도 '완료', 숫자가 아닌 '일부 미흡'도 NaN → '완료'였다.
+//    이 표를 보고 직원이 사실과 반대로 판단한다(2026-08-03 수행률 퍼센트 전환과 함께 정리).
 function homeworkMark(score: string | null): string {
-  if (score == null) return "—";
-  const n = parseInt(score, 10);
-  return isNaN(n) || n > 0 ? "완료" : "미완료";
+  return score?.trim() || "—";
 }
 
 /** ClassNote 발송 상태 → 라벨 + 색. null=미발송("—"). */

@@ -31,6 +31,7 @@ import {
   type BulkAttendanceStatus,
 } from "../bulk-attendance";
 import { FieldSelect } from "./field-select";
+import { HomeworkRateInput } from "./homework-rate-input";
 import { ProgressSelector } from "./progress-selector";
 
 /** 대상 행에 있는 과목 — 진도를 넣을 과목 선택지(행 수는 "몇 행에 들어가는지" 표시용). */
@@ -43,7 +44,6 @@ export function BulkApplyPopover({
   targetCount,
   selectedCount,
   attitudes,
-  homeworks,
   subjects,
   studyGrade,
   copySource,
@@ -55,7 +55,6 @@ export function BulkApplyPopover({
   targetCount: number; // 적용 대상 행 수(선택 없으면 표시 전체)
   selectedCount: number; // 체크된 행 수(라벨용)
   attitudes: readonly string[];
-  homeworks: readonly string[];
   /** 대상 행의 과목들 — 진도 대상 과목 선택. 첫 항목이 기본값(대상이 가장 많은 과목). */
   subjects: BulkSubjectOption[];
   /** 진도 차시 선택기의 기본 학년(대상 행에서 가장 흔한 진도 학년). */
@@ -80,7 +79,7 @@ export function BulkApplyPopover({
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<"input" | "copy">("input");
   const [attitude, setAttitude] = useState<string | null>(null);
-  const [homework, setHomework] = useState<string | null>(null);
+  const [homework, setHomework] = useState<string>("");
   const [textbook, setTextbook] = useState("");
   const [homeworkToday, setHomeworkToday] = useState("");
   const [progress, setProgress] = useState("");
@@ -106,7 +105,7 @@ export function BulkApplyPopover({
   const reset = () => {
     // 닫을 때 초기화 — 이전 입력 잔존이 다음 일괄 적용 실수로 이어지지 않게.
     setAttitude(null);
-    setHomework(null);
+    setHomework("");
     setTextbook("");
     setHomeworkToday("");
     setProgress("");
@@ -329,12 +328,12 @@ export function BulkApplyPopover({
                   />
                 </div>
                 <div>
-                  <p className="micro text-text-faint mb-1">과제</p>
-                  <FieldSelect
-                    options={homeworks}
+                  <p className="micro text-text-faint mb-1">과제 수행률</p>
+                  <HomeworkRateInput
                     value={homework}
-                    onSelect={setHomework}
-                    ariaLabel="일괄 과제"
+                    onChange={setHomework}
+                    label="일괄 과제 수행률"
+                    size="lg"
                   />
                 </div>
                 <input

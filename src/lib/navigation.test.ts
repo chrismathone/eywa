@@ -46,6 +46,18 @@ describe("하위 카테고리(subOf)", () => {
     expect(inNav).toBe(true);
   });
 
+  // 🔴 원장 2026-08-03: 직원관리가 '직원 목록' 하나만 남자 사이드바의 그 한 줄이 노이즈가 됐다.
+  //    "면 하나 = 하부탭 아님". 단 독립 메뉴는 하나여도 남는다(지우면 갈 길이 사라진다).
+  it("면이 하나뿐인 메뉴는 하부탭을 내지 않는다(직원관리)", () => {
+    expect(subTabsForMenu("staff")).toEqual([]);
+  });
+
+  it("독립 메뉴(menuKey)는 하나여도 남는다 — 최상위에서 빠져 있어 유일한 진입로다", () => {
+    const subs = subTabsForMenu("timetable");
+    expect(subs.length).toBeGreaterThan(0);
+    expect(subs.some((s) => s.menuKey === "ecs")).toBe(true);
+  });
+
   it("면(?tab=)만 있는 메뉴는 menuKey 없이 그대로 — 부모 창에서 면 전환", () => {
     const subs = subTabsForMenu("billing");
     expect(subs.length).toBeGreaterThan(0);

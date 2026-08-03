@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { NONE_LABEL, normalizeNoneMarker, isNoneValue } from "./none-marker";
 import { buildTrendInput, type TrendHistoryRow } from "./trend-comment";
 import { parseHomeworkPercent } from "./report-trend";
-import { HOMEWORK } from "./data";
+import { parseHomeworkRate } from "./homework-rate";
 
 const row = (date: string, examInfo: string | null, homeworkScore: string | null): TrendHistoryRow => ({
   date,
@@ -32,9 +32,11 @@ describe("normalizeNoneMarker — 자리표시자를 '없음' 하나로", () => 
   });
 });
 
-describe("'없음'은 과제 상태 정식 선택지", () => {
-  it("칩 목록에 있다", () => {
-    expect(HOMEWORK).toContain("없음");
+describe("'없음'은 과제 수행률의 정식 값", () => {
+  // 입력은 퍼센트 자유입력이라 선택지 배열이 없다(2026-08-03) — '없음' 토글이 이 값을 넣는다.
+  it("숫자로 환산되지 않는다(0%가 아니다)", () => {
+    expect(parseHomeworkRate(NONE_LABEL)).toBeNull();
+    expect(parseHomeworkRate("0%")).toBe(0);
   });
   it("미제출과 다른 값이다", () => {
     expect(isNoneValue("없음")).toBe(true);

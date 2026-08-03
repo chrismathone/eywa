@@ -44,6 +44,14 @@ export type Subject = {
   // 교재명·보강 — 0089a(edutrix 강사 필드 패리티). 과목별. textbook=학부모 카드에도 표시, makeup=보강 수업.
   textbook?: string;
   makeup?: boolean;
+  /**
+   * 보강 행이 **어느 수업 시간에** 진행됐는가(0171a `lesson_reports.makeup_class_id`) — 반 필터 앵커.
+   * 🔴 보강 행은 `classId`가 없어 반 필터가 가를 수 없었고, 그래서 화면이 보강 학생을 **모든 반 필터에**
+   *    노출하고 있었다(원장 제보 2026-08-03 "보강 추가한 수업에서만 보여야"). 이 값이 그 소속이다.
+   * null = 앵커 없음(옛 데이터·'전체'에서 추가) → **'전체'에서만** 보인다. name은 화면 표시·필터 비교용.
+   */
+  makeupClassId?: string | null;
+  makeupClassName?: string | null;
   // 오늘 과제(숙제 내용) — 0096a(edutrix homework_today 패리티). 과목별. 학부모 카드 표시(showHomeworkToday)
   // + AI 멘트 마무리 문장("오늘 과제는 ~입니다")의 재료. homework(수행 상태)와 별개.
   homeworkToday?: string;
@@ -127,8 +135,8 @@ export type OneScreenStudent = {
   attendance: AttendanceMark;
   subjects: Subject[];
   tests: Tests;
-  attitude: string | null; // "아주 좋음" | "좋음" | "보통" | "산만함" | "피곤함" | null
-  homework: string; // "완료" | "일부 미흡" | "미제출" | "—"
+  attitude: string | null; // "매우 좋음"~"매우 안좋음"(attitude.ts) | null. 옛 기록엔 "최고"·"아주 좋음"도 있다.
+  homework: string; // 과제 수행률 "100%" | "90%" | … | "0%" | "없음" | "" (옛 기록엔 "완료"·"일부 미흡"도 남아 있다)
   note?: string; // 특이사항(강사 메모) — 0093a. AI 멘트 입력(공지 모드 A/B). 학부모엔 생성 문구만. 미설정=빈 메모.
 
   // ── 로스터 신호(읽기 전용, roster가 채움) — 판정은 roster-signals.ts 순수 함수 ──

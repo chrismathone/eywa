@@ -47,20 +47,24 @@ export default async function EditStaffPage({
           <h1 className="font-bold tracking-tight text-foreground text-2xl">{staff.displayName}</h1>
           <p className="text-muted-foreground text-sm">기본 정보 수정 (역할 변경은 별도)</p>
         </div>
-        {(staff.systemRole === "teacher" || staff.systemRole === "master") ? (
-          <div className="flex flex-wrap items-center gap-2">
-            {PAYROLL_ENABLED ? (
-              <Button variant="outline" render={<WindowLink href={`/staff/${staff.id}/payroll`} title="급여 정산" />}>
-                <Wallet className="size-4" />
-                급여 정산
-              </Button>
-            ) : null}
-            <Button variant="outline" render={<WindowLink href={`/staff/${staff.id}/leaves`} title="휴가 관리" />}>
-              <CalendarDays className="size-4" />
-              휴가 관리
+        <div className="flex flex-wrap items-center gap-2">
+          {/* 급여 정산은 강사·원장 한정 유지 — 시급/월급 산식이 그 둘 전제다(PAYROLL_ENABLED 상위 결정 뒤). */}
+          {PAYROLL_ENABLED && (staff.systemRole === "teacher" || staff.systemRole === "master") ? (
+            <Button variant="outline" render={<WindowLink href={`/staff/${staff.id}/payroll`} title="급여 정산" />}>
+              <Wallet className="size-4" />
+              급여 정산
             </Button>
-          </div>
-        ) : null}
+          ) : null}
+          {/* 휴가는 **전 직원** 기능이라 대상의 역할로 가리지 않는다(2026-08-03 원장 지시).
+              예전엔 급여와 한 조건에 묶여 teacher|master만 보였고, 그 결과 반을 맡은 부원장(admin)·
+              행정 직원의 휴가를 아예 열 수 없었다. ⚠️ 이 버튼은 게이트가 아니다 — 실제 권한은
+              /staff/[id]/leaves가 requireAccess("staff") + canManageStaff·canWriteTenant로 잡는다
+              (버튼을 숨겨도 URL로 열렸다 = 숨김은 잠금이 아니다, gotcha #77). */}
+          <Button variant="outline" render={<WindowLink href={`/staff/${staff.id}/leaves`} title="휴가 관리" />}>
+            <CalendarDays className="size-4" />
+            휴가 관리
+          </Button>
+        </div>
       </header>
 
       <StaffForm

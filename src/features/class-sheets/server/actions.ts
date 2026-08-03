@@ -18,6 +18,7 @@ import { isEnrollmentActiveOn, enrollmentAttendsOnDay } from "@/features/enrollm
 import { logAction } from "@/features/audit/server/log";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { DEFAULT_ECS_FONT_SIZE, ECS_FONT_SIZES, type EcsFontSize } from "../font-size";
+import { DEFAULT_ECS_SHOW_SPECIAL_ROOMS } from "../view-prefs";
 import { normalizePlanText } from "../lib/plan-codec";
 import { validatePatchBatch, type PatchResult } from "../lib/save-keys";
 import { dowKeyOf, HHMM_RE, normalizePeriodStart, YMD_RE } from "../lib/week";
@@ -595,19 +596,16 @@ export async function clearPresentAttendance(input: {
 }
 
 /**
- * ECS '글씨 크기'를 **본인 계정**에 저장 — `users.ui_prefs.ecs.fontSize`(원스크린과 같은 규약).
+ * `users.ui_prefs.ecs`의 키 몇 개를 **본인 계정**에 부분 저장 — ECS 보기 설정 공용 경로.
  *
  * ⚠️ ui_prefs는 화면별 네임스페이스라 **`ecs` 키만 갈아끼우고 형제 키(onescreen·timetable)는 보존**한다.
- * ⚠️ 기본값('작음')이면 키를 지운다 — 빈 값이 쌓이지 않게.
- * ⚠️ `revalidatePath` 없음: 크기는 클라 state가 즉시 반영하고 이 저장은 다음 방문용 영속화일 뿐이다.
+ * ⚠️ 값이 `undefined`면 그 키를 **지운다** — 기본값은 저장하지 않아 빈 값이 쌓이지 않게.
  * ⚠️ 반 게이트(requireEcsClassAccess)가 아니라 **로그인만** 본다 — 내 계정의 표시 취향이라 반과 무관하다.
+ * 🔴 병합 로직을 설정마다 복붙하지 말 것 — 두 벌이 되면 한쪽만 고쳐 형제 키를 날리는 사고가 난다.
  */
-export async function setMyEcsFontSize(size: EcsFontSize): Promise<{ ok: boolean; error?: string }> {
+async function patchMyEcsPrefs(patch: Record<string, unknown>): Promise<{ ok: boolean; error?: string }> {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
-  if (!(ECS_FONT_SIZES as readonly string[]).includes(size)) {
-    return { ok: false, error: "잘못된 글씨 크기입니다" };
-  }
   const admin = createAdminClient();
   const { data: row, error: readErr } = await admin
     .from("users")
@@ -625,8 +623,10 @@ export async function setMyEcsFontSize(size: EcsFontSize): Promise<{ ok: boolean
     raw.ecs && typeof raw.ecs === "object" && !Array.isArray(raw.ecs)
       ? { ...(raw.ecs as Record<string, unknown>) }
       : {};
-  if (size === DEFAULT_ECS_FONT_SIZE) delete ns.fontSize;
-  else ns.fontSize = size;
+  for (const [key, value] of Object.entries(patch)) {
+    if (value === undefined) delete ns[key];
+    else ns[key] = value;
+  }
 
   const merged = { ...raw };
   if (Object.keys(ns).length === 0) delete merged.ecs;
@@ -639,4 +639,28 @@ export async function setMyEcsFontSize(size: EcsFontSize): Promise<{ ok: boolean
     .eq("tenant_id", user.tenantId);
   if (error) return { ok: false, error: error.message };
   return { ok: true };
+}
+
+/**
+ * ECS '글씨 크기'를 본인 계정에 저장 — `users.ui_prefs.ecs.fontSize`(원스크린과 같은 규약).
+ * ⚠️ `revalidatePath` 없음: 크기는 클라 state가 즉시 반영하고 이 저장은 다음 방문용 영속화일 뿐이다.
+ */
+export async function setMyEcsFontSize(size: EcsFontSize): Promise<{ ok: boolean; error?: string }> {
+  if (!(ECS_FONT_SIZES as readonly string[]).includes(size)) {
+    return { ok: false, error: "잘못된 글씨 크기입니다" };
+  }
+  return patchMyEcsPrefs({ fontSize: size === DEFAULT_ECS_FONT_SIZE ? undefined : size });
+}
+
+/**
+ * 자리(LAB·JJ) 교시 표시/숨김을 본인 계정에 저장 — `users.ui_prefs.ecs.showSpecialRooms`(기본 표시).
+ *
+ * ⚠️ 글씨 크기와 달리 **서버가 진실**이다 — 이 값이 그리드와 작성률(`계획 N/M교시`·랜딩 카드)을 함께
+ *    정하므로, 저장 후 화면을 다시 그려야 숫자가 맞는다(호출부가 `router.refresh()`).
+ */
+export async function setMyEcsShowSpecialRooms(show: boolean): Promise<{ ok: boolean; error?: string }> {
+  if (typeof show !== "boolean") return { ok: false, error: "잘못된 값입니다" };
+  return patchMyEcsPrefs({
+    showSpecialRooms: show === DEFAULT_ECS_SHOW_SPECIAL_ROOMS ? undefined : show,
+  });
 }

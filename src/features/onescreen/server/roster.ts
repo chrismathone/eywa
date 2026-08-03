@@ -11,6 +11,7 @@ import { classnoteSendWindowLabel } from "../classnote-guard";
 import { applyStudentOrder } from "../student-order";
 import { rosterIncludesEnrollment } from "../roster-filter";
 import { matchReportsToRows } from "../report-unit";
+import { ownsMakeupReport } from "../makeup-owner";
 import { LEGACY_REPORT_SUBJECT, reportSubject } from "@/features/timetable/lib/report-subject";
 import { carryProgress } from "../progress-status";
 import {
@@ -124,6 +125,43 @@ type RosterConfig = Partial<RosterSettings & Pick<TeacherRoster, "noClassesToday
  * 값을 하드코딩하면 **그 보강 행만** 학원설정을 무시한다(발송 시간대 안내 증발, 꺼둔 테스트칸·첨부칸 노출).
  * 그래서 기본값은 "설정을 아직 못 읽은 경우"(비로그인)용이고, 읽은 뒤엔 항상 config로 덮어쓴다.
  */
+/** 그날 **내가 쓴** 보강(수업외) 보고서 — 화면 행 복원 재료. */
+type MakeupReportRow = {
+  student_id: string;
+  subject: string | null;
+  makeup_class_id: string | null;
+  created_by: string | null; // 작성 계정(0172a) — 소유 판정의 1차 키
+  teacher_name: string | null; // 0172a 이전 행의 폴백 키(표시 이름 문자열)
+};
+
+/**
+ * 🔴 보강 행은 반이 없어 수강생 로스터엔 **절대** 안 잡힌다. 예전엔 화면에서 '+ 보강 학생 추가'로 만든
+ *    임시 클라 행이 전부라, 저장·발송까지 끝낸 보강이 **새로고침 한 번에 사라졌다**
+ *    (원장 제보 2026-08-03: "하은결 보강 보고서를 발송했는데 화면에서 찾을 수 없다" — DB엔 멀쩡히 있었다).
+ *    그날 보강 보고서를 읽어 행을 되살린다 = 보강 기록의 유일한 원천이 DB가 된다.
+ * 범위: (그 날짜, makeup=true, teacher_name=나). 날짜+본인으로 좁혀 수십 행(B2 무페이징 위험 없음).
+ * ⚠️ error를 `?? []`로 삼키지 않는다(B3) — 조용히 0건이면 "또 사라졌다"가 된다.
+ */
+async function fetchMyMakeupReports(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  date: string,
+  userId: string,
+  teacherName: string,
+): Promise<MakeupReportRow[]> {
+  const { data, error } = await supabase
+    .from("lesson_reports")
+    .select("student_id, subject, makeup_class_id, created_by, teacher_name")
+    .eq("report_date", date)
+    .eq("makeup", true);
+  if (error) throw new Error(`보강 보고서 조회 실패: ${error.message}`);
+  // 소유 판정은 순수 함수 [`ownsMakeupReport`](../makeup-owner.ts) 하나로 — 계정 id 우선, 옛 행만 이름 폴백.
+  // 하루치 보강은 학원 전체로도 수십 건(실측 9개월 171건)이라 서버에서 걸러도 비용이 없다 —
+  // PostgREST `.or()`에 이름 문자열을 끼워 넣는 것보다 이 편이 안전하다(따옴표·특수문자 이스케이프 위험 0).
+  return ((data ?? []) as MakeupReportRow[]).filter((r) =>
+    ownsMakeupReport({ createdBy: r.created_by, teacherName: r.teacher_name }, userId, teacherName),
+  );
+}
+
 function emptyRoster(today: string, date: string, teacherName: string, config: RosterConfig = {}): TeacherRoster {
   return {
     today,
@@ -210,22 +248,27 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
   };
 
   const allClasses = classes ?? [];
-  if (allClasses.length === 0) return emptyRoster(today, targetDate, teacherName, config);
-
   // 2) 오늘 요일에 수업 있는 반(없으면 전체 담당 반 폴백 — 주말/휴일에도 화면이 비지 않게)
   const allIds = allClasses.map((c) => c.id);
   // ⚠️ **그 날짜에 유효한 스케줄만**. 예전엔 valid_from/valid_to를 안 봐서 만료된 배치가 계속 "오늘 수업"으로
   //    잡혔다 — 특강처럼 기간이 정해진 반(실측: 특강 4반 전부 valid_to 08-07~08-31, 수강행은 대부분 무기한)이
   //    종료일 뒤에도 로스터에 영원히 남는다. 시간표(fetchSlots)와 같은 규약으로 맞춘다.
-  const scheds = await fetchInChunks<{ class_id: string; start_time: string | null }>(allIds, (chunk) =>
-    supabase
-      .from("class_schedules")
-      .select("class_id, start_time")
-      .eq("day_of_week", dow)
-      .in("class_id", chunk)
-      .or(`valid_from.is.null,valid_from.lte.${targetDate}`)
-      .or(`valid_to.is.null,valid_to.gte.${targetDate}`),
-  );
+  // ⚠️ 보강 보고서 조회는 반과 무관하다 — 스케줄과 **병렬**로(B4: 독립 await는 Promise.all).
+  //    그날 내가 쓴 보강(수업외) 보고서 = 아래 수강생 로스터엔 절대 안 잡히는 행들의 유일한 원천.
+  const [scheds, makeupReports] = await Promise.all([
+    fetchInChunks<{ class_id: string; start_time: string | null }>(allIds, (chunk) =>
+      supabase
+        .from("class_schedules")
+        .select("class_id, start_time")
+        .eq("day_of_week", dow)
+        .in("class_id", chunk)
+        .or(`valid_from.is.null,valid_from.lte.${targetDate}`)
+        .or(`valid_to.is.null,valid_to.gte.${targetDate}`),
+    ),
+    fetchMyMakeupReports(supabase, targetDate, user.id, teacherName),
+  ]);
+  if (allClasses.length === 0 && makeupReports.length === 0)
+    return emptyRoster(today, targetDate, teacherName, config);
   const todayIds = new Set(scheds.map((s) => s.class_id));
   // 반별 오늘 최초 시작시각(HH:MM)
   const startByClass = new Map<string, string | null>();
@@ -240,10 +283,17 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
   // 전체 보기는 남기되 **강사가 명시로 고를 때만**(showAll) — 그때는 화면이 "전체 보기 중"임을 밝힌다.
   // ⚠️ 빈 목록이어도 학원설정(config)은 그대로 실어 보낸다 — 이 화면에서도 '+ 보강 학생 추가'로 발송이 가능하다.
   const noClassesToday = todayIds.size === 0;
-  if (noClassesToday && !showAll) {
+  // 🔴 그날 보강 기록이 있으면 "수업 없음"이어도 화면을 비우지 않는다 — 보강만 있는 날엔 그게 유일한 기록이고,
+  //    비우면 강사가 방금 발송한 보고서를 찾을 길이 사라진다(원장 2026-08-03). 단 **담당반 전체 폴백은
+  //    여전히 금지**(2026-07-22 회귀 방지) — 반 목록은 비우고 보강 행만 싣는다.
+  if (noClassesToday && !showAll && makeupReports.length === 0) {
     return emptyRoster(today, targetDate, teacherName, { ...config, noClassesToday: true });
   }
-  const activeClasses = noClassesToday ? allClasses : allClasses.filter((c) => todayIds.has(c.id));
+  const activeClasses = noClassesToday
+    ? showAll
+      ? allClasses
+      : []
+    : allClasses.filter((c) => todayIds.has(c.id));
   const classById = new Map(activeClasses.map((c) => [c.id, c]));
   const activeIds = activeClasses.map((c) => c.id);
 
@@ -277,7 +327,10 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
       (startByClass.get(a.class_id) ?? "99:99").localeCompare(startByClass.get(b.class_id) ?? "99:99") ||
       a.class_id.localeCompare(b.class_id),
   );
-  const studentIds = [...new Set(enrollments.map((e) => e.student_id))];
+  // 보강 학생은 수강생이 아니어도 화면에 있어야 한다 — 아래 학생정보·보고서 조회가 이 id 집합을 쓴다.
+  const studentIds = [
+    ...new Set([...enrollments.map((e) => e.student_id), ...makeupReports.map((r) => r.student_id)]),
+  ];
   if (studentIds.length === 0)
     return emptyRoster(today, targetDate, teacherName, {
       ...config,
@@ -343,6 +396,61 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
       os.subjects.push({ name: label, subjectLabel: label, subjectKey: cls.subject, classId: cls.id, className: cls.class_name, isSpecial: !!cls.is_special, prev: "", today: "", textbook: "", makeup: false, homeworkToday: "" });
     }
   }
+  // 5-b) 보강(수업외) 행 복원 — DB의 그날 보강 보고서가 원천. 카드가 있으면 행만 덧붙이고, 없으면 보강 카드로.
+  // ⚠️ 여기서 만든 행은 `classId=null·makeup=true`라 정규 행과 저장 단위(unit_key)가 분리된다(0134a).
+  //    행 이름에 "(보강)"을 붙여 정규 행과 화면 state 키가 겹치지 않게 한다(아래 유일화가 한 번 더 보장).
+  if (makeupReports.length) {
+    const classNameById = new Map(allClasses.map((c) => [c.id, c.class_name]));
+    for (const mr of makeupReports) {
+      const stu = studById.get(mr.student_id);
+      if (!stu) continue; // 학생 조회 실패(삭제 등) — 행을 만들 수 없다
+      const key = (mr.subject ?? "").trim() || LEGACY_REPORT_SUBJECT;
+      const label = subjects.labelOf(key);
+      const anchorName = mr.makeup_class_id ? (classNameById.get(mr.makeup_class_id) ?? null) : null;
+      let os = byStudent.get(stu.id);
+      if (!os) {
+        const tmax = subjectTestMax.get(key) ?? 5;
+        os = {
+          id: stu.id,
+          name: stu.name,
+          grade: stu.grade ?? "",
+          // 앵커가 있으면 그 수업으로 묶어 보여 준다(사이드바 그룹·반 필터). 없으면 "보강".
+          tag: anchorName ?? "보강",
+          className: anchorName ?? "보강",
+          isMakeup: true,
+          attendance: "출석",
+          subjects: [],
+          tests: {
+            daily: { score: null, max: dailyModeDefault === "score" ? 100 : tmax, prevScore: null, mode: dailyModeDefault },
+            check: { score: null, max: checkModeDefault === "score" ? 100 : tmax, prevScore: null, mode: checkModeDefault },
+          },
+          attitude: null,
+          homework: "",
+          note: "",
+          progressConfirmed: false,
+          reportDraft: "",
+          reportSent: false,
+        };
+        byStudent.set(stu.id, os);
+      }
+      // 같은 과목 보강 행이 이미 있으면(중복 행) 건너뛴다 — 보고서는 unit_key로 과목당 1건이라 정상 경로엔 없다.
+      if (os.subjects.some((su) => su.makeup && !su.classId && (su.subjectKey ?? "") === key)) continue;
+      os.subjects.push({
+        name: `${label} (보강)`,
+        subjectLabel: label,
+        subjectKey: key,
+        classId: null,
+        makeup: true,
+        makeupClassId: mr.makeup_class_id,
+        makeupClassName: anchorName,
+        prev: "",
+        today: "",
+        textbook: "",
+        homeworkToday: "",
+      });
+    }
+  }
+
   // 표시명 유일화 — 화면 state가 (학생, 행 이름)을 키로 쓰므로 같은 이름 두 행은 서로를 덮는다.
   // 원장 선택(2026-07-22): **겹칠 때만** 반 이름을 덧붙인다("수학" → "수학 · 고1 특강"). 평소 화면은 그대로.
   // ⚠️ 반 이름까지 같은 경우(동명 반)엔 그래도 겹치므로 마지막에 순번을 붙여 유일성을 보장한다 —
@@ -674,7 +782,13 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
     // 행(반)별 오늘 보고서 — 반 정확매칭 우선, 반 없는 행은 과목으로 **1:1** 폴백(matchReportsToRows).
     // ⚠️ 한 보고서를 두 행에 붙이면 두 행의 저장이 서로를 덮는다 → 소비형 매칭이 불변식이다.
     const todayMatched = matchReportsToRows(
-      os.subjects.map((su) => ({ classId: su.classId ?? null, subjectKey: su.subjectKey ?? null, isSpecial: su.isSpecial })),
+      os.subjects.map((su) => ({
+        classId: su.classId ?? null,
+        subjectKey: su.subjectKey ?? null,
+        isSpecial: su.isSpecial,
+        // 보강 행은 전용 단계로만 매칭된다(반 없음 + 정규 보고서 오배정 금지) — report-unit.ts 1.5차.
+        isMakeup: !!su.makeup && !su.classId,
+      })),
       (todayByStudent.get(os.id) ?? []).map((r) => ({ ...r, classId: r.class_id })),
     );
     os.subjects.forEach((su, i) => {
@@ -730,7 +844,13 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
     // ⚠️ 이관분 폴백(과목·반 둘 다 없는 행)은 단일 과목 학생만 — matchReportsToRows 3차 규칙과 동일.
     //    ijw 이식분은 대부분 subject가 비어 있어(실측 17,337/17,345 NULL) 이 폴백이 없으면 참고행·교재 승계가 0건이 된다.
     const priorMatched = matchReportsToRows(
-      os.subjects.map((su) => ({ classId: su.classId ?? null, subjectKey: su.subjectKey ?? null, isSpecial: su.isSpecial })),
+      os.subjects.map((su) => ({
+        classId: su.classId ?? null,
+        subjectKey: su.subjectKey ?? null,
+        isSpecial: su.isSpecial,
+        // 보강 행은 전용 단계로만 매칭된다(반 없음 + 정규 보고서 오배정 금지) — report-unit.ts 1.5차.
+        isMakeup: !!su.makeup && !su.classId,
+      })),
       (priorByStudent.get(os.id) ?? []).map((r) => ({ ...r, classId: r.class_id })),
       // 이관분(반·과목 둘 다 없음) 폴백은 **직전 회차에서만** — 당일 행에 켜면 edutrix가 오늘 넣은
       // 남의 보고서가 "이미 저장됨"으로 붙는다(report-unit.ts 🔴 참조).

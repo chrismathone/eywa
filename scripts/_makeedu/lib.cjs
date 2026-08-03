@@ -215,8 +215,33 @@ function billingMonthRange({ anchor, months = 3, today } = {}) {
   };
 }
 
+/**
+ * 도메인별 실패 목록 → **DB에 남길 세 조각**(순수 함수).
+ *
+ * 🔴 2026-08-03 06:00 자동 실행이 `partial`(invoices·textbook_checks)로 끝났는데 **왜인지 아무데도
+ *    안 남아 있었다** — 오케스트레이터가 도메인 이름만 모으고 사유(자식 stderr에서 뽑은 진짜 원인)를
+ *    버렸고, `makeedu_sync_runs.error`는 전체 실패 경로에서만 채워졌다. 화면엔 "실패: invoices,
+ *    textbook_checks"만 뜨고 원인은 다음 성공 실행이 `sync_state`를 덮으면서 완전히 증발했다.
+ *    → 사유는 **덮이지 않는 run 이력 행**에 싣는다. 여기가 그 조립부(테스트로 잠금).
+ */
+function summarizeFailures(failed, { maxReason = 300, maxError = 1000 } = {}) {
+  const list = (failed ?? []).filter((f) => f && f.domain);
+  const clip = (s) => String(s ?? "").trim().slice(0, maxReason);
+  const reasons = {};
+  for (const f of list) reasons[f.domain] = clip(f.reason);
+  return {
+    domains: list.map((f) => f.domain),
+    reasons,
+    // 사유가 하나도 없으면 빈 문자열이 아니라 **null** — 화면이 "원인 있음"으로 오해하지 않게.
+    error: list.length
+      ? list.map((f) => `${f.domain}: ${clip(f.reason) || "원인 미상"}`).join(" · ").slice(0, maxError) || null
+      : null,
+  };
+}
+
 module.exports = {
   recordSync,
+  summarizeFailures,
   tieredMatcher,
   isNonClass,
   NONCLASS_RE,
