@@ -36,6 +36,8 @@ export type StaffRow = {
   contractEnd: string | null;
   contractTerms: string | null;
   contractSeq: number | null;
+  /** 계약서 파일 첨부 여부(academy_documents kind='file' + staff_user_id) — 목록 '계약서' 열. */
+  contractFile: boolean;
 };
 
 export async function getStaffList(): Promise<StaffRow[]> {
@@ -50,7 +52,7 @@ export async function getStaffList(): Promise<StaffRow[]> {
 
   // 세 쿼리는 서로 독립 → 병렬(3 round-trip → 1). users/classes/students 모두 단일 테넌트 ≤1000행이라
   // 절단 위험 없음(현재 users 39·classes 129·enrolled 524).
-  const [{ data: users }, { data: teaching }, contracts] = await Promise.all([
+  const [{ data: users }, { data: teaching }, contracts, contractFileRows] = await Promise.all([
     supabase
       .from("users")
       .select(
@@ -74,9 +76,21 @@ export async function getStaffList(): Promise<StaffRow[]> {
               .order("seq", { ascending: true })
               .range(from, to),
         ).catch(() => []),
+    // 계약서 파일 첨부 여부 — 직원 연결 파일 문서의 staff_user_id만 뽑는다(행 수 = 파일 수, 직원 41명
+    // 규모라 절단 위험 없음). 게이트·클라이언트 규약은 위 계약 열과 동일.
+    !canSeeContracts
+      ? Promise.resolve([] as { staff_user_id: string }[])
+      : admin
+          .from("academy_documents")
+          .select("staff_user_id")
+          .eq("tenant_id", viewer.tenantId)
+          .eq("kind", "file")
+          .not("staff_user_id", "is", null)
+          .then(({ data }) => (data ?? []) as { staff_user_id: string }[]),
   ]);
 
   if (!users) return [];
+  const hasContractFile = new Set(contractFileRows.map((r) => r.staff_user_id));
 
   // 사람별 현재 계약 = 가장 큰 차수(위에서 seq 오름차순이라 마지막 것이 최신).
   const currentContractOf = new Map<string, (typeof contracts)[number]>();
@@ -125,6 +139,7 @@ export async function getStaffList(): Promise<StaffRow[]> {
     contractEnd: currentContractOf.get(u.id)?.end_date ?? null,
     contractTerms: currentContractOf.get(u.id)?.terms ?? null,
     contractSeq: currentContractOf.get(u.id)?.seq ?? null,
+    contractFile: hasContractFile.has(u.id),
   }));
 }
 

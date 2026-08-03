@@ -9,7 +9,7 @@ import {
   getActiveHomeroomClasses,
   type StaffDetail,
 } from "@/features/staff/server/queries";
-import { getStaffContracts } from "@/features/staff/server/contract-queries";
+import { getStaffContractFiles, getStaffContracts } from "@/features/staff/server/contract-queries";
 import { getClassTeacherOptions } from "@/features/classes/server/queries";
 import type { ResumeDetail } from "@/features/staff/server/resume-queries";
 import { RESUME_CHECKS, WORKDAYS } from "@/features/staff/resume";
@@ -87,11 +87,12 @@ export async function BasicInfoTab({
   resumePhotoUrls?: (string | null)[];
 }) {
   // 독립 조회 병렬(B4). 담임 반 목록·인계 후보는 계정 관리 패널(퇴사 경고·일괄 인계)에서만 쓰여
-  // canManageThis일 때만 조회한다.
-  const [settings, homeroomClasses, contracts, handoverTeachers, assistClasses] = await Promise.all([
+  // canManageThis일 때만 조회한다. 계약서 파일은 계약현황 카드용(2026-08-03).
+  const [settings, homeroomClasses, contracts, contractFiles, handoverTeachers, assistClasses] = await Promise.all([
     getTenantSettings(),
     canManageThis ? getActiveHomeroomClasses(staff.id) : Promise.resolve([]),
     getStaffContracts(staff.id),
+    getStaffContractFiles(staff.id),
     canManageThis ? getClassTeacherOptions() : Promise.resolve([]),
     canManageThis ? getActiveAssistSlotClasses(staff.id) : Promise.resolve([]),
   ]);
@@ -220,6 +221,7 @@ export async function BasicInfoTab({
           userId={staff.id}
           hireDate={hireDate || null}
           rows={contracts}
+          files={contractFiles}
           today={today}
           canWrite={canManageContracts}
         />

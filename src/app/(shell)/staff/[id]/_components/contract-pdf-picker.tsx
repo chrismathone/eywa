@@ -8,6 +8,7 @@ import {
   extractContractFromPdf,
   issueContractPdfTicket,
 } from "@/features/staff/server/contract-extract-actions";
+import { registerStaffContractFile } from "@/features/staff/server/contract-file-actions";
 import type { ContractExtract } from "@/features/staff/contract-extract";
 
 /**
@@ -16,7 +17,13 @@ import type { ContractExtract } from "@/features/staff/contract-extract";
  * 이력서 자동입력과 같이 "AI가 채우고 사람이 확인"으로 둔다.
  * ⚠️ HWP는 지원하지 않는다(한글 전용 포맷 파서가 서버리스에서 불안정) — 한글에서 PDF로 저장해 올린다.
  */
-export function ContractPdfPicker({ onExtract }: { onExtract: (data: ContractExtract) => void }) {
+export function ContractPdfPicker({
+  userId,
+  onExtract,
+}: {
+  userId: string;
+  onExtract: (data: ContractExtract) => void;
+}) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
 
@@ -37,15 +44,29 @@ export function ContractPdfPicker({ onExtract }: { onExtract: (data: ContractExt
       }
       await uploadToTicket(ticket.ticket, file);
 
+      // ① 원본 보관 — 추출 성패와 무관하게 계약서는 직원에게 붙는다(원장 지시 2026-08-03).
+      const rf = new FormData();
+      rf.set("userId", userId);
+      rf.set("path", ticket.ticket.path);
+      rf.set("fileName", file.name);
+      rf.set("fileSize", String(file.size));
+      const reg = await registerStaffContractFile(undefined, rf);
+      if (reg?.error) {
+        toast.error(reg.error);
+        return;
+      }
+
+      // ② 기간·조건 추출 — keep=1이라 보관본을 지우지 않는다. 스캔 PDF면 보관만 되고 칸은 직접 입력.
       const ef = new FormData();
       ef.set("path", ticket.ticket.path);
+      ef.set("keep", "1");
       const res = await extractContractFromPdf(undefined, ef);
       if (!res?.ok || !res.data) {
-        toast.error(res?.error ?? "계약서를 읽지 못했습니다");
+        toast.error(res?.error ?? "계약서는 보관했습니다 — 글자를 읽지 못해 직접 입력해 주세요");
         return;
       }
       onExtract(res.data);
-      if (res.notice) toast.success(res.notice);
+      if (res.notice) toast.success(`보관 완료 · ${res.notice}`);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "계약서 읽기에 실패했습니다");
     } finally {

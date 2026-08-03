@@ -20,6 +20,7 @@ export type StaffColumnKey =
   | "contract"
   | "contractTerms"
   | "contractEnd"
+  | "contractFile"
   | "subjects"
   | "role"
   | "classes"
@@ -37,6 +38,7 @@ export const STAFF_COLUMNS: { key: StaffColumnKey; label: string; align?: "right
   { key: "contract", label: "현재 계약" },
   { key: "contractTerms", label: "계약조건" },
   { key: "contractEnd", label: "계약갱신일" },
+  { key: "contractFile", label: "계약서" },
   { key: "subjects", label: "과목" },
   { key: "role", label: "역할" },
   { key: "classes", label: "담당 반", align: "right" },
