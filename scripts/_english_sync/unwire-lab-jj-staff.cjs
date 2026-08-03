@@ -53,10 +53,13 @@ const REASSIGN = [
       log(`  - ${c.class_name} (현 담임 ${c.teacher}) → ${plan ? `${plan.teacherEnglishName} (${plan.why})` : "미배정(동률 — 원장 지정 대기)"}`);
     }
     for (const r of REASSIGN) {
+      // ⚠️ 역할 목록은 src/lib/permissions.ts의 ASSIGNABLE_TEACHER_ROLES와 **값을 맞춘다**(TS를 못 불러서 복제).
+      //    admin이 빠져 있었는데, 이 조회가 빈손이면 아래에서 담임을 null로 지우므로 관리자 겸 강사가
+      //    REASSIGN 대상이 되는 순간 조용히 미배정이 된다.
       const [t] = await sql`
         select id, display_name from users
         where tenant_id = ${tenantId} and english_name = ${r.teacherEnglishName} and status = 'active'
-          and system_role in ('teacher','manager','master')`;
+          and system_role in ('teacher','manager','master','admin')`;
       if (!t) { log(`  ⚠️ ${r.teacherEnglishName} 계정을 못 찾음 — ${r.className}은 미배정으로 둡니다.`); continue; }
       if (APPLY) {
         await sql`update classes set teacher_id = ${t.id}

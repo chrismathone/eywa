@@ -7,6 +7,11 @@ export function humanizeMakeeduSyncError(raw: string | null | undefined): string
   // 특정 → 일반 순서. 한 문자열에 "exited"와 실제 원인이 함께 있어도 원인 매칭이 먼저 잡히도록 아래에서 위로 우선.
   if (/MAKEEDU_ID|MAKEEDU_PW|\.env\.local[^]*없|로그인 정보[^]*없/i.test(r))
     return "동기화 PC에 makeedu 로그인 정보(ID/PW)가 없습니다 — 동기화 PC의 설정(.env.local) 확인";
+  // 임포터의 0행 가드가 남기는 문장(import-invoices) — 세션 만료 규칙보다 **먼저** 잡는다.
+  // 그 문장엔 "세션 만료 의심"이 들어 있어 아래 규칙에 걸리면 **추측이 단정으로 바뀐다**.
+  // 여기선 확실한 사실(못 읽어서 반영 안 함)을 말하고 원인은 의심으로만 남긴다.
+  if (/스크랩 0행|0행 가드|목록을 못 읽/i.test(r))
+    return "makeedu 목록을 못 읽어 이번 회차는 반영하지 않았습니다 — 세션 만료·화면 변경 의심(다음 자동 실행에서 재시도)";
   if (/재인증|loginReCert|reCert|CAPTCHA|캡차|보안문자/i.test(r))
     return "makeedu 보안 재인증(캡차) 벽 — 신뢰 PC에서 다시 로그인해야 합니다";
   if (/세션[^]*(무효|만료)|만료[^]*세션|storageState|STORAGE_STATE/i.test(r))
