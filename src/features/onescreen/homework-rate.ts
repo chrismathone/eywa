@@ -1,5 +1,5 @@
 /**
- * 과제 수행률 — **퍼센트 값의 단일 소스**(선택지 + 숫자 변환).
+ * 과제 수행률 — **퍼센트 값의 단일 소스**(숫자 변환 + 문장 조각).
  *
  * 🔴 왜 퍼센트인가(원장 지시 2026-08-03, 강사 제보):
  *    선택지가 `완료 / 일부 미흡 / 미제출` 세 단계였을 때, 과제를 **90% 해온 학생**을 강사가
@@ -9,28 +9,14 @@
  *    (2026-07-23~08-02에 '일부 미흡'으로 **발송된 보고서 56건**이 이 경로를 탔다.)
  *
  * 규약 세 줄:
- *  ① 입력은 **10% 눈금 퍼센트**(`HOMEWORK_RATES`). 강사가 고른 숫자가 그대로 학부모에게 간다.
+ *  ① 입력은 **강사가 직접 치는 퍼센트**([HomeworkRateInput](./components/homework-rate-input.tsx) —
+ *     숫자 칸 + `%`). 눈금·선택지 없음(10% 눈금 드롭다운은 *"고르기 너무 힘들다"*로 반려됐다).
  *  ② 옛 정성값은 **뜻이 분명한 것만** 숫자로 읽는다 — `완료`=100 · `미제출`=0.
  *     🔴 `일부 미흡`은 정도를 모르므로 **null**(그래프·평균에서 제외). **다시 50으로 되돌리지 말 것.**
  *  ③ 숫자로 바꾸는 곳은 **여기 하나**다. 그래프([report-trend.ts])도 재원위험([retention/homework-score.ts])도
  *     이 함수를 거친다 — 매핑이 흩어져 있으면 한 곳만 고쳐 다시 어긋난다(이 사고가 그랬다).
  */
-import { isNoneValue } from "./none-marker";
-
-/** 과제 수행률 선택지(높은 값 먼저 — 실측 최빈값이 100%·90%다). 10% 눈금. */
-export const HOMEWORK_RATES = [
-  "100%",
-  "90%",
-  "80%",
-  "70%",
-  "60%",
-  "50%",
-  "40%",
-  "30%",
-  "20%",
-  "10%",
-  "0%",
-] as const;
+import { isNoneValue, NONE_LABEL } from "./none-marker";
 
 /** 뜻이 분명한 옛 표기 → 퍼센트. ⚠️ 정도를 모르는 값(`일부 미흡`·`상/중/하`)은 여기에 넣지 말 것. */
 const LEGACY_EXACT: Record<string, number> = {
@@ -42,7 +28,7 @@ const clamp = (n: number): number => Math.max(0, Math.min(100, Math.round(n)));
 
 /**
  * 저장된 값 → 0~100 수행률 | null.
- *  · `"90%"`·`"90"` → 90 (edutrix 임포트 계보 + 새 선택지)
+ *  · `"90%"`·`"90"` → 90 (현재 입력 + edutrix 임포트 계보)
  *  · `완료` → 100 · `미제출` → 0
  *  · `일부 미흡`·`상`·`미확인` 등 **정도 미상** → null
  *  · `없음`·`-`·빈칸(= 과제가 없던 날/미기재) → null
@@ -61,36 +47,35 @@ export function parseHomeworkRate(raw: string | null | undefined): number | null
   return Number.isFinite(n) ? clamp(n) : null;
 }
 
-/** 값이 새 선택지(10% 눈금)에 그대로 있는가. */
-export function isHomeworkRate(raw: string | null | undefined): boolean {
-  const s = (raw ?? "").trim();
-  return (HOMEWORK_RATES as readonly string[]).includes(s);
+/** 숫자 → 저장·표시 문자열. 값의 표기는 이 함수 하나로 통일한다(`"90%"`). */
+export function formatHomeworkRate(n: number): string {
+  return `${clamp(n)}%`;
 }
 
 /**
- * 옛 값 → **현재 선택지 중 하나**(이전 회차 가져오기용). 10% 눈금으로 반올림한다.
- * 정도 미상(`일부 미흡` 등)은 null — 강사가 직접 고르게 둔다(임의로 50%를 찍지 않는다).
+ * 옛 값 → **현재 표기**(이전 회차 가져오기용). 완료→"100%" · 미제출→"0%" · 없음→"없음".
+ * 정도 미상(`일부 미흡` 등)은 null — 강사가 직접 치게 둔다(임의로 50%를 찍지 않는다).
  */
 export function toHomeworkRateChoice(raw: string | null | undefined): string | null {
   const s = (raw ?? "").trim();
   if (!s) return null;
-  if (isNoneValue(s)) return "없음";
-  if (isHomeworkRate(s)) return s;
+  if (isNoneValue(s)) return NONE_LABEL;
   const n = parseHomeworkRate(s);
-  if (n == null) return null;
-  const snapped = `${Math.round(n / 10) * 10}%`;
-  return isHomeworkRate(snapped) ? snapped : null;
+  return n == null ? null : formatHomeworkRate(n);
 }
 
 /**
  * 폴백 템플릿 문장에 넣을 조각(주어 "지난 과제는" 뒤에 붙는다).
- *  · `"90%"` → `"90% 해왔습니다"` (그냥 "90%입니다"로 두면 무엇의 90%인지 모호하다)
- *  · `"0%"`  → `"하지 못했습니다"` ("0% 해왔습니다"는 한국어가 아니다)
+ *  · `"90%"`  → `"90% 해왔습니다"` (그냥 "90%입니다"로 두면 무엇의 90%인지 모호하다)
+ *  · `"100%"` → `"다 해왔습니다"` · `"0%"` → `"하지 못했습니다"` (한국어로 자연스럽게)
  *  · 옛 정성값(`완료`) → `"완료입니다"` (기존 동작 보존)
- * ⚠️ 여기서 값을 **해석·평가하지 말 것** — 강사가 고른 숫자를 그대로 옮기는 자리다.
+ * ⚠️ 여기서 값을 **해석·평가하지 말 것** — 강사가 적은 숫자를 그대로 옮기는 자리다.
  */
 export function homeworkRateClause(raw: string): string {
   const s = raw.trim();
   if (!/^\d{1,3}\s*%$/.test(s)) return `${s}입니다`;
-  return parseHomeworkRate(s) === 0 ? "하지 못했습니다" : `${s} 해왔습니다`;
+  const n = parseHomeworkRate(s);
+  if (n === 0) return "하지 못했습니다";
+  if (n === 100) return "다 해왔습니다";
+  return `${s} 해왔습니다`;
 }

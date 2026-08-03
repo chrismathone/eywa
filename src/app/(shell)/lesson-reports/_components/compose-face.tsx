@@ -2,7 +2,8 @@
 
 // 직접 작성·발송 — 관리자가 임의 학생을 골라 수업보고서를 작성해 ClassNote로 발송(강사 원스크린과 동일 포맷·레일).
 // 발송 안전가드(dry-run·과목·동명이인·too_old)는 서버 액션(saveAndQueueAdminReport)이 최종 강제 — 여기선 안내·확인만.
-import { HOMEWORK } from "@/features/onescreen/data"; // 단일 소스 — 화면마다 다시 적지 않는다.
+import { HomeworkRateInput } from "@/features/onescreen/components/homework-rate-input";
+import { homeworkRateClause } from "@/features/onescreen/homework-rate";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
@@ -188,7 +189,7 @@ export function ComposeFace({
       const parts = [
         progress.trim() ? `오늘 ${curSubject.label} ${progress.trim()} 진행했습니다.` : "",
         attitude ? `수업 태도는 ${attitude}이었습니다.` : "",
-        homework ? `지난 과제는 ${homework} 상태입니다.` : "",
+        homework ? `지난 과제는 ${homeworkRateClause(homework)}.` : "",
       ].filter(Boolean);
       setBody(parts.join(" ") || `오늘 ${curSubject.label} 수업을 진행했습니다.`);
       toast.message("AI 생성에 실패해 기본 문구를 넣었습니다 — 직접 수정하세요");
@@ -409,12 +410,8 @@ export function ComposeFace({
             </div>
             <div>
               <div className={LABEL}>과제 수행률</div>
-              <div className="flex flex-wrap gap-1.5">
-                {HOMEWORK.map((h) => (
-                  <button key={h} type="button" onClick={() => setHomework(homework === h ? "" : h)} className={`rounded-full border px-2.5 py-1 text-[12px] ${homework === h ? "border-primary bg-primary/10 text-primary font-bold" : "border-line text-text-dim"}`}>
-                    {h}
-                  </button>
-                ))}
+              <div className="flex flex-wrap items-center gap-2">
+                <HomeworkRateInput value={homework} onChange={setHomework} label="과제 수행률" size="lg" />
                 <label className="text-text-dim ml-1 inline-flex items-center gap-1 text-[12px]">
                   <input type="checkbox" checked={makeup} onChange={(e) => setMakeup(e.target.checked)} /> 보강
                 </label>

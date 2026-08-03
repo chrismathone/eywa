@@ -295,16 +295,15 @@ export function planPrevFill(args: {
   prev: PrevReport | undefined;
   current: PrevFillCurrent;
   attitudes: readonly string[];
-  homeworks: readonly string[];
 }): PrevFill {
-  const { prev, current, attitudes, homeworks } = args;
+  const { prev, current, attitudes } = args;
   const out: PrevFill = {};
   if (!prev) return out;
   if (!current.today.trim() && prev.progress?.trim()) out.today = prev.progress;
   if (!current.attitude && prev.attitude && attitudes.includes(prev.attitude)) out.attitude = prev.attitude;
   if (!current.homework && prev.homeworkScore) {
     const choice = toHomeworkRateChoice(prev.homeworkScore);
-    if (choice && homeworks.includes(choice)) out.homework = choice;
+    if (choice) out.homework = choice;
   }
   if (!current.homeworkToday.trim() && prev.homeworkToday?.trim()) out.homeworkToday = prev.homeworkToday;
   return out;
@@ -358,15 +357,11 @@ export type PrevFillPlan = { studentId: string; subjectName: string; subjectInde
  * 갱신되지 않는다 → dedup이 없으면 다과목 학생의 모든 과목 행이 "아직 비었다"고 보고 각자의 직전 태도로
  * 덮어써 **마지막 과목 행이 이기는** 비결정 결과가 된다(채운 칸 수도 중복 계수). 첫 과목 행 값으로 확정한다.
  */
-export function planBulkPrevFill(
-  rows: readonly PrevFillRow[],
-  attitudes: readonly string[],
-  homeworks: readonly string[],
-): PrevFillPlan[] {
+export function planBulkPrevFill(rows: readonly PrevFillRow[], attitudes: readonly string[]): PrevFillPlan[] {
   const studentFieldDone = new Set<string>();
   const out: PrevFillPlan[] = [];
   for (const r of rows) {
-    const set = planPrevFill({ prev: r.prev, current: r.current, attitudes, homeworks });
+    const set = planPrevFill({ prev: r.prev, current: r.current, attitudes });
     for (const f of ["attitude", "homework"] as const) {
       if (set[f] === undefined) continue;
       const k = `${r.studentId}::${f}`;

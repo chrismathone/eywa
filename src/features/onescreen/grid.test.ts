@@ -363,7 +363,6 @@ describe("planBulkApply", () => {
 });
 
 const ATTITUDES = ["아주 좋음", "좋음", "보통", "산만함", "피곤함"] as const;
-const HOMEWORKS = ["100%", "90%", "50%", "0%", "없음"] as const;
 
 function prevReport(over: Partial<PrevReport> = {}): PrevReport {
   return {
@@ -385,7 +384,6 @@ describe("planPrevFill", () => {
       prev: prevReport(),
       current: { today: "이미 입력", attitude: null, homework: "미제출", homeworkToday: "" },
       attitudes: ATTITUDES,
-      homeworks: HOMEWORKS,
     });
     expect(fill).toEqual({ attitude: "좋음", homeworkToday: "p10~16" });
   });
@@ -396,7 +394,6 @@ describe("planPrevFill", () => {
         prev: undefined,
         current: { today: "", attitude: null, homework: "", homeworkToday: "" },
         attitudes: ATTITUDES,
-        homeworks: HOMEWORKS,
       }),
     ).toEqual({});
     expect(
@@ -404,7 +401,6 @@ describe("planPrevFill", () => {
         prev: prevReport(),
         current: { today: "x", attitude: "보통", homework: "100%", homeworkToday: "y" },
         attitudes: ATTITUDES,
-        homeworks: HOMEWORKS,
       }),
     ).toEqual({});
   });
@@ -414,10 +410,9 @@ describe("planPrevFill", () => {
       prev: prevReport({ attitude: "옛선택지", homeworkScore: "48%" }),
       current: { today: "", attitude: null, homework: "", homeworkToday: "x" },
       attitudes: ATTITUDES,
-      homeworks: HOMEWORKS,
     });
-    // 과제 48%는 10% 눈금(선택지)에 맞춰 50%로 옮긴다 — 태도는 옛 값이라 스킵.
-    expect(fill).toEqual({ today: "1-1-1 받아올림", homework: "50%" });
+    // 과제 수행률은 자유입력이라 48%가 그대로 옮겨 온다 — 태도만 옛 선택지라 스킵.
+    expect(fill).toEqual({ today: "1-1-1 받아올림", homework: "48%" });
   });
 
   // 🔴 퍼센트 전환(2026-08-03) 이전 값 — 뜻이 분명한 것만 옮기고 '일부 미흡'은 채우지 않는다.
@@ -428,7 +423,6 @@ describe("planPrevFill", () => {
         prev: prevReport({ homeworkScore }),
         current: { today: "x", attitude: "보통", homework: "", homeworkToday: "y" },
         attitudes: ATTITUDES,
-        homeworks: HOMEWORKS,
       }).homework;
     expect(fill("완료")).toBe("100%");
     expect(fill("미제출")).toBe("0%");
@@ -440,7 +434,6 @@ describe("planPrevFill", () => {
       prev: prevReport(),
       current: { today: "", attitude: null, homework: "", homeworkToday: "" },
       attitudes: ATTITUDES,
-      homeworks: HOMEWORKS,
     });
     expect(Object.keys(fill)).not.toContain("note");
     expect(fill).toEqual({
@@ -468,7 +461,7 @@ describe("planBulkPrevFill", () => {
   });
 
   it("단일 과목 학생은 planPrevFill과 같은 결과", () => {
-    const plan = planBulkPrevFill([row("a", "수학", 0, prevReport())], ATTITUDES, HOMEWORKS);
+    const plan = planBulkPrevFill([row("a", "수학", 0, prevReport())], ATTITUDES);
     expect(plan).toEqual([
       {
         studentId: "a",
@@ -486,7 +479,6 @@ describe("planBulkPrevFill", () => {
         row("a", "영어", 1, prevReport({ attitude: "산만함", homeworkScore: "0%", progress: "영어진도" })),
       ],
       ATTITUDES,
-      HOMEWORKS,
     );
     expect(plan[0]!.set.attitude).toBe("좋음");
     expect(plan[0]!.set.homework).toBe("100%");
@@ -501,7 +493,6 @@ describe("planBulkPrevFill", () => {
     const plan = planBulkPrevFill(
       [row("a", "수학", 0, prevReport({ attitude: "좋음" })), row("b", "수학", 0, prevReport({ attitude: "보통" }))],
       ATTITUDES,
-      HOMEWORKS,
     );
     expect(plan[0]!.set.attitude).toBe("좋음");
     expect(plan[1]!.set.attitude).toBe("보통");
@@ -515,7 +506,6 @@ describe("planBulkPrevFill", () => {
         row("c", "수학", 0, prevReport()),
       ],
       ATTITUDES,
-      HOMEWORKS,
     );
     expect(plan.map((p) => p.studentId)).toEqual(["c"]);
   });
@@ -524,7 +514,6 @@ describe("planBulkPrevFill", () => {
     const plan = planBulkPrevFill(
       [row("a", "수학", 0, prevReport({ attitude: "폐기된태도", homeworkScore: "폐기된과제" }))],
       ATTITUDES,
-      HOMEWORKS,
     );
     expect(plan[0]!.set.attitude).toBeUndefined();
     expect(plan[0]!.set.homework).toBeUndefined();

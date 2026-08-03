@@ -12,6 +12,7 @@ import { splitLessons } from "../curriculum";
 import { AttendancePills, type BasicAttendance } from "./attendance-pills";
 import { DeltaChip } from "./delta-chip";
 import { FieldSelect } from "./field-select";
+import { HomeworkRateInput } from "./homework-rate-input";
 import { isImageAttachment } from "../attachment-utils";
 import { splitComment, joinComment } from "../comment-paragraphs";
 import type { OneScreenStudent, Subject, TestScore } from "../types";
@@ -139,7 +140,6 @@ export function ReportCard({
   student,
   reports,
   attitudes,
-  homeworks,
   onAttitude,
   onHomework,
   onTextbook,
@@ -165,7 +165,6 @@ export function ReportCard({
   student: OneScreenStudent;
   reports: Record<string, SubjectReport>;
   attitudes: readonly string[];
-  homeworks: readonly string[];
   onAttitude: (a: string) => void;
   onHomework: (h: string) => void;
   onTextbook: (subjectName: string, text: string) => void; // 교재명(과목별) — 0089a
@@ -366,11 +365,11 @@ export function ReportCard({
 
         <div>
           <p className="micro text-text-faint mb-1.5">과제 수행률</p>
-          <FieldSelect
-            options={homeworks}
-            value={student.homework || null}
-            onSelect={(v) => onHomework(v ?? "")}
-            ariaLabel={`${student.name} 과제 수행`}
+          <HomeworkRateInput
+            value={student.homework}
+            onChange={onHomework}
+            label={`${student.name} 과제 수행률`}
+            size="lg"
           />
           {/* 오늘 과제(숙제 내용) — 0096a(edutrix 패리티, 사용률 90%). 위 칩은 '지난 과제 수행', 이건 '오늘 내줄 숙제'.
               AI 멘트 마무리("오늘 과제는 ~입니다") 재료 + 학부모 카드 표시(설정 토글). */}

@@ -1,30 +1,16 @@
 import { describe, it, expect } from "vitest";
 import {
-  HOMEWORK_RATES,
+  formatHomeworkRate,
   homeworkRateClause,
-  isHomeworkRate,
   parseHomeworkRate,
   toHomeworkRateChoice,
 } from "./homework-rate";
-import { HOMEWORK } from "./data";
 
-describe("HOMEWORK_RATES(선택지)", () => {
-  it("10% 눈금 11개 · 높은 값 먼저", () => {
-    expect(HOMEWORK_RATES).toEqual(["100%", "90%", "80%", "70%", "60%", "50%", "40%", "30%", "20%", "10%", "0%"]);
-  });
-
-  it("원스크린 과제 선택지 = 수행률 + '없음' — 옛 3단계는 선택지에서 사라졌다", () => {
-    expect([...HOMEWORK]).toEqual([...HOMEWORK_RATES, "없음"]);
-    expect(HOMEWORK).not.toContain("완료");
-    expect(HOMEWORK).not.toContain("일부 미흡");
-    expect(HOMEWORK).not.toContain("미제출");
-  });
-
-  it("isHomeworkRate", () => {
-    expect(isHomeworkRate("90%")).toBe(true);
-    expect(isHomeworkRate("95%")).toBe(false);
-    expect(isHomeworkRate("완료")).toBe(false);
-    expect(isHomeworkRate(null)).toBe(false);
+describe("formatHomeworkRate", () => {
+  it("숫자 → 저장·표시 문자열(범위 밖은 클램프)", () => {
+    expect(formatHomeworkRate(90)).toBe("90%");
+    expect(formatHomeworkRate(0)).toBe("0%");
+    expect(formatHomeworkRate(130)).toBe("100%");
   });
 });
 
@@ -79,10 +65,10 @@ describe("toHomeworkRateChoice(이전 회차 가져오기)", () => {
     expect(toHomeworkRateChoice("없음")).toBe("없음");
   });
 
-  it("눈금 밖 퍼센트는 10% 눈금으로 반올림", () => {
-    expect(toHomeworkRateChoice("85%")).toBe("90%");
-    expect(toHomeworkRateChoice("34%")).toBe("30%");
-    expect(toHomeworkRateChoice("90%")).toBe("90%");
+  it("퍼센트는 그대로 옮긴다(눈금 없음 — 강사가 친 숫자가 값이다)", () => {
+    expect(toHomeworkRateChoice("85%")).toBe("85%");
+    expect(toHomeworkRateChoice("34%")).toBe("34%");
+    expect(toHomeworkRateChoice("90")).toBe("90%");
   });
 
   it("정도 미상은 null — 임의로 50%를 찍지 않는다", () => {
@@ -95,10 +81,11 @@ describe("toHomeworkRateChoice(이전 회차 가져오기)", () => {
 describe("homeworkRateClause(폴백 템플릿 문장)", () => {
   it("퍼센트는 '해왔습니다'로 이어 무엇의 %인지 분명히", () => {
     expect(homeworkRateClause("90%")).toBe("90% 해왔습니다");
-    expect(homeworkRateClause("100%")).toBe("100% 해왔습니다");
+    expect(homeworkRateClause("45%")).toBe("45% 해왔습니다");
   });
 
-  it("0%는 '하지 못했습니다'", () => {
+  it("양 끝은 한국어답게 — 100%='다 해왔습니다' · 0%='하지 못했습니다'", () => {
+    expect(homeworkRateClause("100%")).toBe("다 해왔습니다");
     expect(homeworkRateClause("0%")).toBe("하지 못했습니다");
   });
 

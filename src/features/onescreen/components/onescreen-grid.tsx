@@ -212,7 +212,6 @@ export function OneScreenGrid({
               targetCount={selectedKeys.length || rows.length}
               selectedCount={selectedKeys.length}
               attitudes={config.attitudes}
-              homeworks={config.homeworks}
               subjects={bulkSubjects}
               studyGrade={bulkStudyGrade}
               copySource={
