@@ -1012,3 +1012,42 @@ origin/main 기준으로 0161a를 채번했는데 작업 중 다른 세션이 `0
   끝나면 **`git diff origin/main`에 `-`(삭제) 줄이 있는지**로 확인 — 있으면 남의 것을 건드린 것이다.
 - 📌 번호는 **push 직전에 한 번 더** 확인(`git ls-tree origin/main supabase/migrations/`). 병렬 세션이 많은 날엔
   머지 대기 중에도 채인다 — 2026-07-31엔 한 브랜치가 **3번**(0159a→0161a→0163a·0160a→0162a→0164a) 밀렸다.
+
+## #94 임베드에 FK를 안 적으면 **컬럼 하나 추가가 손도 안 댄 화면을 끈다** — 게다가 "0건"으로 위장한다 (2026-08-03)
+
+수업보고서 '목록' 탭이 8월 **51건**을 두고 "총 0건"이었고, 화면엔 영문 원문
+`Could not embed because more than one relationship was found for 'lesson_reports' and 'classes'`.
+원장 제보는 "뷰 설정 눌렀을 뿐인데"였고 **그 말이 맞았다** — 클릭과 무관하게 그 쿼리는 이미 죽어 있었다.
+
+원인은 그 화면이 아니라 **같은 날 다른 세션의 마이그레이션** 0171a(`lesson_reports.makeup_class_id`,
+보강 앵커)다. `lesson_reports → classes` FK가 2개가 된 순간, 목록이 쓰던 힌트 없는 `classes(class_name)`
+임베드를 PostgREST가 해석하지 못해 **HTTP 300 `PGRST201`로 쿼리 전체가 실패**했다.
+
+- 🔴 **컬럼을 더한 쪽엔 아무 신호가 없다.** 보고서 화면 코드는 한 줄도 안 바뀌었고, 마이그레이션 diff에
+  "이게 저 화면을 끈다"가 보일 자리가 없다 — 리뷰로 잡히는 종류가 아니다.
+- 🔴 **에러가 아니라 빈 목록으로 위장한다.** 쿼리가 통째로 실패하니 rows=[] → 화면은 "총 0건" = 데이터가
+  없는 것처럼 보인다. **같은 페이지의 다른 카드는 멀쩡하다**(그 쿼리는 임베드를 안 쓰므로). "일부만 안
+  나온다"는 제보가 오면 화면 상태가 아니라 **그 쿼리 하나만 죽은 것**을 먼저 의심할 것.
+
+**규칙**: `.select("… ident(…)")` 임베드는 **항상 `ident!<FK이름>(…)`** — 예:
+`classes!lesson_reports_class_id_fkey(class_name)`. 전수 가드 =
+[`postgrest-embed-hints.test.ts`](src/lib/supabase/postgrest-embed-hints.test.ts).
+
+- ⚠️ **정렬 문자열은 반대다.** `order=classes(class_name)`에 `!FK`를 넣으면 order 파서가 `!`를 못 읽어
+  **PGRST100(400)**. select만 힌트로 확정하면 정렬은 그 임베드를 가리켜 정상 동작한다(둘 다 프로덕션
+  REST 실측). 그래서 가드는 `.select(` 인자만 본다.
+- 📌 힌트를 붙여도 **응답 키는 테이블명 그대로**(`classes`/`students`) — 소비처는 안 바꿔도 된다.
+- 🔑 **이건 한 쌍의 문제가 아니다.** 프로덕션 실측: 같은 대상으로 **FK 2개 이상인 조합이 11쌍**이고 그중
+  **8쌍이 `→ users`**(classes·notifications·staff_contracts·lesson_reports·invoice_teacher_splits·
+  invoice_session_terms·staff_leaves·academy_documents·class_delegations). 그 조합에 맨몸 임베드를
+  새로 쓰면 **처음부터 깨진 채로 배포된다** — `.from("classes").select("…, users(display_name)")`은
+  지금 쓰면 바로 죽는다. 진단은 REST 상태코드(`300`=모호 / `400`=파스)로, service_role로도 재현되니
+  RLS를 의심하기 **전에** 확인할 것.
+
+### 곁가지 — "에러 전부 한글화했다"는 헬퍼 존재가 아니라 **배선 표면**을 세어야 한다
+같은 사고에서 영문 원문이 그대로 토스트에 떴다. 헬퍼가 없어서가 아니라
+[`humanizeDbError`](src/lib/supabase/db-error.ts)가 **staff·documents에만 배선**돼 있고 report-admin
+13곳은 `error.message`를 날것으로 반환하고 있었다.
+- **확인법**: `grep humanizeDbError` 개수 vs `grep "error.message"` 개수 대조. 헬퍼를 만든 것과 배선한 것은 다르다.
+- ⚠️ **스키마/관계 오류 분기는 입력·권한 패턴보다 먼저** 둘 것. 안 그러면 "입력한 값이 올바르지 않아…"로
+  흘러가 **원장이 자기 입력을 계속 고치게 된다**. 그리고 배포로만 고쳐지므로 "다시 시도" 안내도 하지 말 것.
