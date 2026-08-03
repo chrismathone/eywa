@@ -13,6 +13,13 @@
 - 재발 방지: `lesson-reports-embed.test.ts` — `from("lesson_reports")`를 쓰는 파일에 맨몸 `classes(`가
   남아 있으면 실패하는 전수 스캔(힌트를 떼고 실제로 빨간불이 되는지 확인함). 컬럼 하나 더한 **남의
   마이그레이션**이 이 화면을 끈 사고라 주석으로는 못 막는다.
+- **가드를 부류 전체로 넓힘(같은 날 후속)**: 위 가드가 lesson_reports→classes 한 쌍만 봤는데, 프로덕션
+  실측 결과 **같은 대상으로 FK 2개 이상인 조합이 11쌍**(8쌍이 `→ users`: classes·notifications·
+  staff_contracts·lesson_reports·invoice_teacher_splits·invoice_session_terms·staff_leaves·
+  academy_documents·class_delegations)이라, 그 조합에 맨몸 임베드를 새로 쓰면 **처음부터 깨진 채로
+  배포된다.** → `postgrest-embed-hints.test.ts`로 승격: `.select(` 안의 임베드는 전부 `!FK` 필수.
+  남아 있던 맨몸 2곳(`lesson_reports→students`, failed-notify-sweep·onescreen history)도 함께 명시
+  (현재 FK 1개라 안 깨지고 있었을 뿐). 정렬 스펙 문자열은 대상에서 제외(거기 `!FK`를 넣으면 400).
 - 🔴 **에러 한글화(같은 화면 전수)**: `humanizeDbError`가 이미 있었는데 report-admin은 안 쓰고 있었다
   (staff·documents에만 배선). 이 화면 13곳(`error.message` 그대로 반환)을 전부 경유시키고 동작 라벨을
   붙였다(조회·발송·재발송·복구·저장·해제). 헬퍼엔 **스키마/관계 오류 분기 신설** — 사용자 입력 탓이
