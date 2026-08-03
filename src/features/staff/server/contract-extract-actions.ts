@@ -94,8 +94,10 @@ export async function extractContractFromPdf(
     if (error || !data) return { error: `파일을 읽지 못했습니다 — ${error?.message ?? "unknown"}` };
     buf = new Uint8Array(await data.arrayBuffer());
     // unpdf = 서버리스용으로 번들된 pdfjs. 무거워서 **요청 시점에만** 불러온다(콜드스타트 비용 최소화).
+    // ⚠️ pdfjs는 받은 버퍼를 워커로 **이전(transfer)시켜 비워 버린다** — 원본(buf)을 그대로 주면 뒤의
+    // 스캔 OCR base64가 빈 값이 돼 Anthropic 400("PDF cannot be empty")이 난다(2026-08-03 실측). 복사본을 준다.
     const { extractText, getDocumentProxy } = await import("unpdf");
-    const pdf = await getDocumentProxy(buf);
+    const pdf = await getDocumentProxy(buf.slice());
     const res = await extractText(pdf, { mergePages: true });
     text = (Array.isArray(res.text) ? res.text.join("\n") : res.text) ?? "";
   } catch (e) {
