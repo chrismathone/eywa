@@ -15,6 +15,24 @@
   현 22실 전부 capacity null). 파일: `lib/room-grid.ts`·`lib/room-metrics.ts`·`_components/room-map-{view,grid}.tsx`·
   `room-week-panel.tsx`. ⚠️ 시각검증(브라우저) 미완 — typecheck0/lint0/전체 스위트 통과.
 
+## 2026-08-03 — 보고서 목록이 통째로 안 뜨던 것(PGRST201) + 이 화면 에러 한글화
+
+- 🔴 **증상**: 수업보고서 '목록' 탭이 8월 51건을 두고 "총 0건", 화면엔 영문 원문
+  `Could not embed because more than one relationship was found for 'lesson_reports' and 'classes'`.
+  **원인은 뷰 설정이 아니라 같은 날 다른 세션의 마이그레이션** — 0171a가 `makeup_class_id`(보강 앵커)를
+  더하면서 lesson_reports→classes FK가 2개가 됐고, 힌트 없는 `classes(class_name)` 임베드를 PostgREST가
+  해석하지 못해 **HTTP 300 PGRST201로 쿼리 전체가 실패**했다(목록만, 발송 큐·작성률은 무사).
+- 수정: select를 `classes!lesson_reports_class_id_fkey(class_name)`로 확정. ⚠️ **정렬 문자열엔 `!FK`를
+  넣으면 안 된다**(order 파서가 '!'를 못 읽어 PGRST100/400) — select만 확정하면 `order=classes(class_name)`이
+  그 임베드를 가리켜 정상 동작(둘 다 프로덕션 REST로 실측: 300→206, 8월 51건·반 정렬 모두 200).
+- 재발 방지: `lesson-reports-embed.test.ts` — `from("lesson_reports")`를 쓰는 파일에 맨몸 `classes(`가
+  남아 있으면 실패하는 전수 스캔(힌트를 떼고 실제로 빨간불이 되는지 확인함). 컬럼 하나 더한 **남의
+  마이그레이션**이 이 화면을 끈 사고라 주석으로는 못 막는다.
+- 🔴 **에러 한글화(같은 화면 전수)**: `humanizeDbError`가 이미 있었는데 report-admin은 안 쓰고 있었다
+  (staff·documents에만 배선). 이 화면 13곳(`error.message` 그대로 반환)을 전부 경유시키고 동작 라벨을
+  붙였다(조회·발송·재발송·복구·저장·해제). 헬퍼엔 **스키마/관계 오류 분기 신설** — 사용자 입력 탓이
+  아니므로 "형식을 확인하세요"로 새면 안 되고, 배포로만 고쳐지니 "다시 시도" 안내도 하지 않는다.
+
 ## 2026-08-03 — 스캔 계약서 OCR(후속, 같은 날 원장 승인)
 
 - 종이 계약서 스캔 PDF도 자동 채움: unpdf가 글자를 못 찾으면(<30자) **Claude 비전 전사(OCR)** 폴백 —

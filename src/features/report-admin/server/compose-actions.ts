@@ -10,6 +10,7 @@ import { getCurrentUser, type CurrentUser } from "@/lib/auth/current-user";
 import { canAccessTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
 import { fetchInChunks } from "@/lib/supabase/batch";
+import { humanizeDbError } from "@/lib/supabase/db-error";
 import { resolveReportDate } from "@/lib/date-kst";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
@@ -236,7 +237,7 @@ export async function saveAndQueueAdminReport(
       classnote_error: null,
     })
     .eq("id", saved.id);
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: humanizeDbError(error.message, "발송") };
   return { ok: true, id: saved.id, shareToken: saved.shareToken, status: allowed ? "queued" : "too_old" };
 }
 
@@ -463,7 +464,7 @@ export async function sendBulkAdminReports(input: BulkAdminReportInput): Promise
       .from("lesson_reports")
       .upsert(rowsToAuthor.slice(i, i + 100), { onConflict: "tenant_id,student_id,report_date,unit_key" })
       .select("id, student_id, subject");
-    if (error) return { ok: false, error: error.message };
+    if (error) return { ok: false, error: humanizeDbError(error.message, "조회") };
     authored.push(...((data ?? []) as typeof authored));
   }
 
@@ -499,7 +500,7 @@ export async function sendBulkAdminReports(input: BulkAdminReportInput): Promise
       .in("id", queueIds.slice(i, i + 100))
       .is("classnote_status", null)
       .select("id");
-    if (error) return { ok: false, error: error.message };
+    if (error) return { ok: false, error: humanizeDbError(error.message, "발송") };
     if (allowed) queued += (data ?? []).length;
     else tooOld += (data ?? []).length;
   }
