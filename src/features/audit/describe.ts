@@ -195,6 +195,18 @@ export function auditDetail(
       const n = ctx.nameOf(m.newTeacherId);
       return n ? `새 담임 ${n}` : null;
     }
+    // 반 임시 위임(0173a) — 담임은 안 바뀐다. "누가 · 언제까지" 둘 다 없으면 로그를 읽을 수 없으니 함께 적는다.
+    case "class_delegate": {
+      const n = ctx.nameOf(m.delegateUserId);
+      const from = str(m.fromDate);
+      const to = str(m.toDate);
+      const period = from && to ? (from === to ? from : `${from}~${to}`) : (from ?? to);
+      return join(n ? `대신 맡을 선생님 ${n}` : null, period ? `기간 ${period}` : null);
+    }
+    case "class_delegate_revoke": {
+      const n = ctx.nameOf(m.delegateUserId);
+      return n ? `위임 해제 ${n}` : null;
+    }
     case "class_handover_bulk": {
       const to = ctx.nameOf(m.newTeacherId);
       const cls = num(m.classCount);

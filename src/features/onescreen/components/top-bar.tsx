@@ -71,6 +71,9 @@ export function OneScreenTopBar({
   // 시각 칩으로 못 덮는 태그(todayClasses 없이 classTags만 오는 호출부 방어) — 보통은 빈 배열.
   const timedNames = new Set(todayClasses.map((c) => c.name));
   const extraTags = classTags.filter((t) => t !== "전체" && !timedNames.has(t));
+  // 내 반 / 위임받은 반(0173a) 분리 — 각 그룹 안의 시각순 정렬은 서버가 이미 해놨다(roster.ts).
+  const ownClasses = todayClasses.filter((c) => !c.delegated);
+  const delegatedClasses = todayClasses.filter((c) => c.delegated);
   const noticeOptions: { value: "A" | "B" | null; label: string }[] = [
     { value: null, label: `학원 기본(${academyNoticeMode})` },
     { value: "A", label: "단일 A" },
@@ -166,30 +169,26 @@ export function OneScreenTopBar({
         >
           전체
         </button>
-        {todayClasses.map((c) => {
-          const on = c.name === classFilter;
-          return (
-            <button
-              key={c.id}
-              type="button"
-              onClick={() => onFilter(c.name)}
-              aria-pressed={on}
-              className={`rounded-pill inline-flex items-center gap-1 px-2.5 py-1 text-[12px] font-bold whitespace-nowrap transition ${
-                on ? "bg-primary text-primary-foreground" : "border-line text-text-dim hover:bg-bg-soft border"
-              }`}
+        {ownClasses.map((c) => (
+          <ClassChip key={c.id} c={c} on={c.name === classFilter} onFilter={onFilter} />
+        ))}
+        {/* 위임받은 반(0173a)은 **내 반과 섞지 않는다** — 뒤로 모으고 앰버로 갈라 놓는다(원장 지시 2026-08-03
+            "기존 내 반과 구분해서 위임 반 목록이 나오도록 디자인적으로도 구분"). 같은 색으로 줄세우면
+            남의 반 학생에게 내 반처럼 보고서를 쓰게 되고, 그건 학부모에게 나간 뒤에야 드러난다. */}
+        {delegatedClasses.length > 0 ? (
+          <>
+            <span className="bg-line h-4 w-px shrink-0" aria-hidden />
+            <span
+              className="text-amber text-[11px] font-bold"
+              title="결근한 선생님 대신 이 기간에만 맡은 반입니다"
             >
-              <span
-                className={`font-mono text-[10px] font-bold ${on ? "text-primary-foreground/75" : "text-primary"}`}
-              >
-                {c.startTime ?? "—"}
-              </span>
-              <span className={on ? "" : "text-foreground"}>{c.name}</span>
-              <span className={on ? "text-primary-foreground/75" : "text-text-faint"}>
-                {c.studentCount}
-              </span>
-            </button>
-          );
-        })}
+              위임
+            </span>
+          </>
+        ) : null}
+        {delegatedClasses.map((c) => (
+          <ClassChip key={c.id} c={c} on={c.name === classFilter} onFilter={onFilter} />
+        ))}
         {extraTags.map((tag) => {
           const on = tag === classFilter;
           return (
@@ -334,5 +333,76 @@ export function OneScreenTopBar({
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * 반 필터 칩 한 개 — 내 반과 **위임받은 반**(0173a)이 같은 모양을 쓰되 색으로 갈린다.
+ * 위임 반은 앰버(주의색) + 원 담임 이름을 툴팁으로 밝힌다: 지금 보고 있는 학생들이 남의 반 학생이라는
+ * 사실이 화면에서 먼저 보여야, 내 반인 줄 알고 쓴 보고서가 학부모에게 나가는 일이 없다.
+ */
+function ClassChip({
+  c,
+  on,
+  onFilter,
+}: {
+  c: TodayClass;
+  on: boolean;
+  onFilter: (tag: string) => void;
+}) {
+  const base = "rounded-pill inline-flex items-center gap-1 px-2.5 py-1 text-[12px] font-bold whitespace-nowrap transition";
+  const tone = c.delegated
+    ? on
+      ? "bg-amber text-white"
+      : "border-amber bg-amber-soft text-amber hover:bg-amber/15 border"
+    : on
+      ? "bg-primary text-primary-foreground"
+      : "border-line text-text-dim hover:bg-bg-soft border";
+  const timeTone = on
+    ? c.delegated
+      ? "text-white/75"
+      : "text-primary-foreground/75"
+    : c.delegated
+      ? "text-amber"
+      : "text-primary";
+  const countTone = on
+    ? c.delegated
+      ? "text-white/75"
+      : "text-primary-foreground/75"
+    : c.delegated
+      ? "text-amber/70"
+      : "text-text-faint";
+  return (
+    <button
+      type="button"
+      onClick={() => onFilter(c.name)}
+      aria-pressed={on}
+      // 스크린리더도 색을 못 보는 대신 이 라벨로 안다 — 시각 구분과 같은 사실을 말한다.
+      aria-label={
+        c.delegated
+          ? `${c.name} — ${c.ownerName ? `${c.ownerName} 선생님 반` : "다른 선생님 반"}, 위임받음`
+          : c.delegatedAwayTo
+            ? `${c.name} — ${c.delegatedAwayTo} 선생님에게 위임 중`
+            : undefined
+      }
+      title={
+        c.delegated
+          ? `${c.ownerName ? `${c.ownerName} 선생님 반` : "다른 선생님 반"} — 이 기간에만 대신 맡은 위임 반입니다`
+          : c.delegatedAwayTo
+            ? `이 날짜에는 ${c.delegatedAwayTo} 선생님이 대신 맡습니다 — 직접 쓰실 수도 있지만 둘이 각자 쓰면 나중에 쓴 쪽이 남습니다`
+            : undefined
+      }
+      className={`${base} ${tone}`}
+    >
+      <span className={`font-mono text-[10px] font-bold ${timeTone}`}>{c.startTime ?? "—"}</span>
+      <span className={on ? "" : c.delegated ? "" : "text-foreground"}>{c.name}</span>
+      {/* 내 반이 남에게 넘어간 날 — 반을 숨기지 않고 표식만 단다(권한은 그대로, 원 담임도 쓸 수 있다). */}
+      {c.delegatedAwayTo ? (
+        <span className={on ? "text-primary-foreground/75" : "text-amber"} aria-hidden>
+          위임중
+        </span>
+      ) : null}
+      <span className={countTone}>{c.studentCount}</span>
+    </button>
   );
 }

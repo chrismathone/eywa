@@ -2162,7 +2162,41 @@ export const tenantSettings = pgTable("tenant_settings", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+// === class_delegations (반 임시 위임 — 결근 대체 수업, 0173a) ===
+// 이 기간 이 반이 대체 강사의 원스크린 로스터에도 실린다. 담임(classes.teacher_id)은 **불변** —
+// 영구 교체는 인수인계(classes.pending_teacher_*)가 담당한다(담임을 바꾸면 시간표·급여 splits·
+// ECS 스코프가 전부 따라 움직여 되돌리기 어렵다).
+// 🔒 RLS = SELECT 정책만(테넌트 내 읽기). 쓰기 정책 없음 → PostgREST 직접 쓰기 불가, 쓰기는 서버 액션
+//    (반 쓰기 권한 OR 그 반 담임 본인) → admin client 전용. 게이트 단일 소스 = classes/server/delegation.ts.
+export const classDelegations = pgTable(
+  "class_delegations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    classId: uuid("class_id").notNull(), // (tenant_id, class_id) 복합 FK → classes (0173a)
+    delegateUserId: uuid("delegate_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    fromDate: date("from_date").notNull(), // 포함 구간 [from_date, to_date] — 하루 위임이면 두 값이 같다
+    toDate: date("to_date").notNull(),
+    reason: text("reason"),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    // 해제는 행 삭제가 아니라 revoked_at 기록 — "누가 언제 대신 맡았는지"는 감사 대상이라 지우지 않는다.
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    revokedBy: uuid("revoked_by").references(() => users.id, { onDelete: "set null" }),
+  },
+  (t) => [
+    index("class_delegations_for_delegate_idx").on(t.tenantId, t.delegateUserId, t.fromDate, t.toDate),
+    index("class_delegations_for_class_idx").on(t.tenantId, t.classId, t.fromDate, t.toDate),
+  ],
+);
+
 // === Type exports ===
+export type ClassDelegation = typeof classDelegations.$inferSelect;
+export type NewClassDelegation = typeof classDelegations.$inferInsert;
 export type Tenant = typeof tenants.$inferSelect;
 export type NewTenant = typeof tenants.$inferInsert;
 export type TenantSettingsRow = typeof tenantSettings.$inferSelect;

@@ -5,6 +5,8 @@ import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
+// 담당 반 판정 단일 소스(담당 반 ∪ 그날 위임 반) — classes.teacher_id를 직접 비교하지 말 것(0173a).
+import { getTeachingClasses } from "@/features/classes/server/delegation";
 import { addDays, resolveReportDate, weekdayIndexOf, formatKoreanDate } from "@/lib/date-kst";
 import { parseExamScores, parseExamMaxes } from "../exam-info";
 import { classnoteSendWindowLabel } from "../classnote-guard";
@@ -39,6 +41,20 @@ export type TodayClass = {
   subject: string;
   startTime: string | null; // "16:20"
   studentCount: number;
+  /**
+   * 이 반이 **위임받은 반**인가(0173a — 결근 대체 수업). 내 담당 반이면 false.
+   * 반 칩이 '내 반'과 시각적으로 구분해야 한다(원장 지시 2026-08-03: "기존 내 반과 구분해서 위임 반 목록이
+   * 나오도록 디자인적으로도 구분") — 남의 반 학생에게 내 반처럼 보고서를 쓰는 사고를 화면이 먼저 막는다.
+   */
+  delegated: boolean;
+  /** 위임 반일 때 원 담임 표시명(모르면 null). 내 반이면 null. */
+  ownerName: string | null;
+  /**
+   * **내 반인데 지금 남이 대신 맡고 있음** — 그 대체 강사 표시명(아니면 null).
+   * 하루만 위임하고 나머지 날은 내가 하는 일이 흔해서, 위임 건 날에 내 화면이 침묵하면 같은 반 보고서를
+   * 둘이 각자 쓰게 된다. 권한은 그대로 두고 칩에 표식만 단다(원 담임은 여전히 자기 반을 쓸 수 있다).
+   */
+  delegatedAwayTo: string | null;
 };
 
 export type TeacherRoster = {
@@ -210,10 +226,12 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
   const checkModeDefault: "score" | "count" = settings.report.checkTestScoreMode ?? "count";
   const academyNoticeMode: "A" | "B" = settings.report.noticeMode ?? "A";
 
-  // 1) 강사 담당 활성 반 + 본인 멘트 모드 + 학생 표시 순서(0116a, 강사×반 개인 설정) + 출결 쓰기 권한
-  //    — 서로 독립이라 병렬(B4).
-  const [{ data: classes }, { data: meRow }, { data: orderRows }, canEditAttendance] = await Promise.all([
-    supabase.from("classes").select("id, class_name, subject, is_special").eq("teacher_id", user.id).eq("is_active", true),
+  // 1) 그 날짜에 내가 가르치는 활성 반(담당 반 ∪ **위임받은 반**, 0173a) + 본인 멘트 모드
+  //    + 학생 표시 순서(0116a, 강사×반 개인 설정) + 출결 쓰기 권한 — 서로 독립이라 병렬(B4).
+  //    ⚠️ `classes.teacher_id`를 여기서 직접 비교하지 말 것 — 판정은 getTeachingClasses 단일 소스다
+  //    (저장·발송·출결 게이트가 같은 함수를 쓴다. 갈라지면 "화면엔 뜨는데 저장하면 거절"이 난다).
+  const [teachingClasses, { data: meRow }, { data: orderRows }, canEditAttendance] = await Promise.all([
+    getTeachingClasses(supabase, user.id, targetDate),
     supabase.from("users").select("report_notice_mode, ui_prefs").eq("id", user.id).single(),
     supabase.from("onescreen_student_order").select("class_id, student_ids").eq("teacher_id", user.id),
     canWriteTenant(user.systemRole, "attendance"),
@@ -247,7 +265,17 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
     fontSize,
   };
 
-  const allClasses = classes ?? [];
+  // 아래 로직은 전부 DB 컬럼 이름(class_name/is_special)을 쓰던 코드라 여기서 한 번만 맞춘다.
+  // delegated/ownerName은 반 칩이 '내 반'과 위임 반을 시각적으로 가르는 데 쓴다(원장 지시 2026-08-03).
+  const allClasses = teachingClasses.map((c) => ({
+    id: c.id,
+    class_name: c.className,
+    subject: c.subject,
+    is_special: c.isSpecial,
+    delegated: c.delegated,
+    ownerName: c.ownerName,
+    delegatedAwayTo: c.delegatedAwayTo,
+  }));
   // 2) 오늘 요일에 수업 있는 반(없으면 전체 담당 반 폴백 — 주말/휴일에도 화면이 비지 않게)
   const allIds = allClasses.map((c) => c.id);
   // ⚠️ **그 날짜에 유효한 스케줄만**. 예전엔 valid_from/valid_to를 안 봐서 만료된 배치가 계속 "오늘 수업"으로
@@ -957,6 +985,9 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
       subject: subjects.labelOf(c.subject),
       startTime: startByClass.get(c.id) ?? null,
       studentCount: countByClass.get(c.id) ?? 0,
+      delegated: c.delegated,
+      ownerName: c.ownerName,
+      delegatedAwayTo: c.delegatedAwayTo,
     }))
     .filter((c) => c.studentCount > 0)
     .sort((a, b) => (a.startTime ?? "99:99").localeCompare(b.startTime ?? "99:99"));

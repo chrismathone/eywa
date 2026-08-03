@@ -17,6 +17,8 @@ import { fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { effectiveTeacherId } from "@/lib/auth/view-mode";
 import { hasClassnoteNameCollision } from "./scope";
+// 담당 반 판정 단일 소스(담당 반 ∪ 그날 위임 반) — classes.teacher_id를 직접 비교하지 말 것(0173a).
+import { getTeachingClassIds } from "@/features/classes/server/delegation";
 import {
   resolveNoticeTargets,
   type NoticeCandidate,
@@ -100,8 +102,8 @@ export async function sendOnescreenNotice(input: OnescreenNoticeInput): Promise<
     // 없으면 관리자뷰 = 위 게이트에서 canWriteTenant를 이미 통과했으므로 전체 허용.
     let allowedIds: Set<string>;
     if (teacherId) {
-      const { data: myClasses } = await supabase.from("classes").select("id").eq("teacher_id", teacherId);
-      const myClassIds = (myClasses ?? []).map((c) => c.id as string);
+      // 담당 반 ∪ 오늘 위임받은 반(0173a) — 대체 수업을 맡은 강사도 그 학생들에게 공지를 보낼 수 있어야 한다.
+      const { all: myClassIds } = await getTeachingClassIds(supabase, teacherId);
       if (!myClassIds.length) return { ok: false, error: "담당 반이 없습니다" };
       const enr = await fetchInChunks<{ student_id: string }>(studentIds, (chunk) =>
         supabase
@@ -279,7 +281,10 @@ export async function listMyNoticeStudents(): Promise<{
     .select("id, class_name, subject")
     .eq("is_active", true)
     .in("subject", allowed);
-  const { data: classes, error } = await (teacherId ? base.eq("teacher_id", teacherId) : base).order("class_name");
+  // 강사 스코프는 담당 반 ∪ 오늘 위임 반(0173a) — 위 발송 게이트(allowedIds)와 **같은 소스**여야
+  // "목록엔 뜨는데 보내면 거절"이 안 생긴다.
+  const myIds = teacherId ? (await getTeachingClassIds(supabase, teacherId)).all : null;
+  const { data: classes, error } = await (myIds ? base.in("id", myIds) : base).order("class_name");
   if (error) return { ok: false, error: error.message };
   const classById = new Map((classes ?? []).map((c) => [c.id as string, c]));
   const classIds = [...classById.keys()];

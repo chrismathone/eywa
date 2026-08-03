@@ -90,13 +90,16 @@ async function findReportRow(
  * 같은 게이트를 통과한다(#77): teacherOwnsStudent(활성 수강)나 canWriteTenant('lesson_reports') 중 하나면 허용.
  * ⚠️ admin 경로는 비수강 학생(예: 테스트 '학원이')에도 첨부 가능 — RLS가 tenant 격리, 행 존재 확인이 유효성 보강.
  */
-async function gate(studentId: string) {
+async function gate(studentId: string, reportDate?: string) {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" as const };
   if (!studentId) return { error: "학생 정보가 없습니다" as const };
   const supabase = await createClient();
+  // 🔴 담당 판정 기준일 = **그 보고서의 날짜**(오늘이 아니다). 임시 위임(0173a)은 기간이 있어서,
+  //    오늘로 판정하면 어제 위임받아 쓴 보고서에 오늘 사진을 못 단다 — 본문 저장(saveLessonReport)은
+  //    reportDate로 판정해 통과하는데 첨부만 거절되면 "저장은 되는데 사진만 안 붙는" 상태가 된다.
   const authorized =
-    (await teacherOwnsStudent(supabase, user.id, studentId)) ||
+    (await teacherOwnsStudent(supabase, user.id, studentId, reportDate)) ||
     (await canWriteTenant(user.systemRole, "lesson_reports"));
   if (!authorized) return { error: "권한이 없습니다" as const };
   return { user, supabase };
@@ -117,7 +120,7 @@ export type IssueAttachmentTicketInput = {
 export async function issueReportAttachmentUploadTicket(
   input: IssueAttachmentTicketInput,
 ): Promise<{ ticket?: UploadTicket; error?: string }> {
-  const g = await gate(input.studentId);
+  const g = await gate(input.studentId, input.reportDate);
   if ("error" in g) return { error: g.error };
   if (!MEDIA_KIND[KIND].allowCT(input.contentType))
     return { error: "사진·문서(pdf·hwp·office·mp3 등)만 첨부할 수 있습니다" };
@@ -153,7 +156,7 @@ export type RegisterAttachmentInput = {
 export async function registerReportAttachment(
   input: RegisterAttachmentInput,
 ): Promise<{ ok: boolean; attachments?: Attachment[]; error?: string }> {
-  const g = await gate(input.studentId);
+  const g = await gate(input.studentId, input.reportDate);
   if ("error" in g) return { ok: false, error: g.error };
   if (!isTenantReportAttachmentPath(input.path, g.user.tenantId))
     return { ok: false, error: "잘못된 파일 경로입니다" };
@@ -200,7 +203,7 @@ export type RemoveAttachmentInput = { studentId: string; subject?: string; class
 export async function removeReportAttachment(
   input: RemoveAttachmentInput,
 ): Promise<{ ok: boolean; attachments?: Attachment[]; error?: string }> {
-  const g = await gate(input.studentId);
+  const g = await gate(input.studentId, input.reportDate);
   if ("error" in g) return { ok: false, error: g.error };
   const row = await findReportRow(g.supabase, input.studentId, input.subject, input.reportDate, input.classId);
   if (!row) return { ok: false, error: "보고서를 찾을 수 없습니다" };
@@ -228,7 +231,7 @@ export async function signReportAttachmentUrls(input: {
   classId?: string | null;
   reportDate?: string;
 }): Promise<{ urls?: Record<string, string>; attachments?: Attachment[]; error?: string }> {
-  const g = await gate(input.studentId);
+  const g = await gate(input.studentId, input.reportDate);
   if ("error" in g) return { error: g.error };
   const row = await findReportRow(g.supabase, input.studentId, input.subject, input.reportDate, input.classId);
   const attachments = row?.attachments ?? [];

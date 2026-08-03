@@ -20,6 +20,8 @@ import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { classnoteSendWindowHint, isClassnoteAllowed, isClassnoteSubjectEnabled } from "../classnote-guard";
 import { hasClassnoteNameCollision, teacherOwnsStudent } from "./scope";
+// 담당 반 판정 단일 소스(담당 반 ∪ 그날 위임 반) — classes.teacher_id를 직접 비교하지 말 것(0173a).
+import { getTeachingClassIds, getTeachingClasses } from "@/features/classes/server/delegation";
 import { isStudentAbsentForSend } from "./absence-gate";
 import { ingestReport } from "@/features/progress/server/ingest";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -93,11 +95,8 @@ export async function saveLessonReport(
       .maybeSingle();
     if (!stu) return { ok: false, error: "학원 학생이 아닙니다" };
   } else {
-    const { data: myClasses } = await supabase
-      .from("classes")
-      .select("id")
-      .eq("teacher_id", user.id);
-    const myClassIds = (myClasses ?? []).map((c) => c.id);
+    // 담당 반 ∪ **그 날짜에 위임받은 반**(0173a) — 결근 대체 강사가 실제로 가르친 반의 보고서를 쓴다.
+    const { all: myClassIds } = await getTeachingClassIds(supabase, user.id, reportDate);
     if (myClassIds.length === 0) return { ok: false, error: "담당 반이 없습니다" };
     // 반이 지정되면 **그 반**이 내 담당인지까지 본다(0134a) — 예전엔 '내 담당 반 아무거나'만 봐서
     // 남의 반 id를 실어 보내면 그 반 보고서가 만들어졌다(반이 보고서 단위가 되면서 실제 영향이 생긴 구멍).
@@ -355,11 +354,12 @@ export async function revokeShareLink(shareToken: string): Promise<{ ok: boolean
   const supabase = await createClient();
   const { data: report } = await supabase
     .from("lesson_reports")
-    .select("id, student_id")
+    .select("id, student_id, report_date")
     .eq("share_token", shareToken)
     .maybeSingle();
   if (!report) return { ok: false, error: "보고서를 찾을 수 없습니다" };
-  if (!(await teacherOwnsStudent(supabase, user.id, report.student_id)))
+  // 담당 판정은 **그 보고서 날짜** 기준 — 임시 위임(0173a)은 기간이 있어 오늘로 보면 어제 위임분을 못 만진다.
+  if (!(await teacherOwnsStudent(supabase, user.id, report.student_id, report.report_date as string)))
     return { ok: false, error: "담당 학생이 아닙니다" };
   const { error } = await supabase
     .from("lesson_reports")
@@ -383,11 +383,12 @@ export async function reissueShareLink(
   const supabase = await createClient();
   const { data: report } = await supabase
     .from("lesson_reports")
-    .select("id, student_id")
+    .select("id, student_id, report_date")
     .eq("share_token", shareToken)
     .maybeSingle();
   if (!report) return { ok: false, error: "보고서를 찾을 수 없습니다" };
-  if (!(await teacherOwnsStudent(supabase, user.id, report.student_id)))
+  // 담당 판정은 **그 보고서 날짜** 기준 — 임시 위임(0173a)은 기간이 있어 오늘로 보면 어제 위임분을 못 만진다.
+  if (!(await teacherOwnsStudent(supabase, user.id, report.student_id, report.report_date as string)))
     return { ok: false, error: "담당 학생이 아닙니다" };
   const newToken = randomUUID(); // ⚠️ supabase-js update엔 SQL gen_random_uuid()를 못 씀 → Node에서 생성
   const { error } = await supabase
@@ -444,8 +445,9 @@ export async function saveOnescreenSession(
   const supabase = await createClient();
 
   const sessionDate = resolveReportDate(input.sessionDate);
-  const { data: myClasses } = await supabase.from("classes").select("id").eq("teacher_id", user.id);
-  const myClassIds = (myClasses ?? []).map((c) => c.id);
+  // 임시저장(세션)도 위임 반을 포함해야 한다 — 안 그러면 대체 강사가 표에 입력은 되는데 저장이 조용히
+  // 거절돼 새로고침에 전부 날아간다(원장 2026-08-03 "임시저장이 없어 불편"의 정반대 사고).
+  const { all: myClassIds } = await getTeachingClassIds(supabase, user.id, sessionDate);
   if (myClassIds.length === 0) return { ok: false, error: "담당 반이 없습니다" };
 
   const { data: enr } = await supabase
@@ -723,11 +725,12 @@ export async function buildMakeupStudent(
     .maybeSingle();
   if (!stu) return { ok: false, error: "학원 학생이 아닙니다" };
 
-  const [{ data: myClasses }, orders] = await Promise.all([
-    supabase.from("classes").select("subject").eq("teacher_id", user.id).eq("is_active", true),
+  // 과목 = 그 날짜에 내가 가르치는 반(담당 ∪ 위임)의 과목들 — 위임받은 반이 다른 과목이면 그 과목 행도 열린다.
+  const [myClasses, orders] = await Promise.all([
+    getTeachingClasses(supabase, user.id, resolveReportDate(reportDate)),
     getTextbookOrdersForStudents([studentId]),
   ]);
-  const subjectKeys = [...new Set((myClasses ?? []).map((c) => c.subject).filter(Boolean) as string[])];
+  const subjectKeys = [...new Set(myClasses.map((c) => c.subject).filter(Boolean) as string[])];
   if (subjectKeys.length === 0) return { ok: false, error: "담당 과목이 없습니다" };
 
   const bookPick = [...orders]
@@ -832,7 +835,7 @@ export async function loadMakeupHistory(
   // 대상 날짜 **이전**(직전) 보고서만, 최신순. RLS가 테넌트 격리. 한 학생이라 limit 소량.
   // ⚠️ 과거 백필 시 서버 오늘이 아니라 조회 중인 날짜 기준이어야 그 날짜 이후 회차를 '직전'으로 잘못 표시하지 않음.
   // 보강 행의 과목 = 강사 담당 반의 과목들(buildMakeupStudent와 같은 규약) — 아래 prevScore 게이트가 쓴다. 독립 조회라 병렬(B4).
-  const [{ data }, { data: myClasses }] = await Promise.all([
+  const [{ data }, myClasses] = await Promise.all([
     supabase
       .from("lesson_reports")
       .select("report_date, subject, progress, exam_info, textbook, homework_today, homework_score, attitude, notes")
@@ -840,10 +843,11 @@ export async function loadMakeupHistory(
       .lt("report_date", resolveReportDate(reportDate))
       .order("report_date", { ascending: false })
       .limit(50),
-    supabase.from("classes").select("subject").eq("teacher_id", user.id).eq("is_active", true),
+    // 과목 판정은 buildMakeupStudent와 같은 소스(담당 ∪ 그날 위임) — 갈라지면 추가된 행과 '이전 진도' 과목이 어긋난다.
+    getTeachingClasses(supabase, user.id, resolveReportDate(reportDate)),
   ]);
   const rows = data ?? [];
-  const subjectKeys = [...new Set((myClasses ?? []).map((c) => c.subject).filter(Boolean) as string[])];
+  const subjectKeys = [...new Set(myClasses.map((c) => c.subject).filter(Boolean) as string[])];
 
   const bySubject: Record<string, { prev: string; prevReport: PrevReport }> = {};
   for (const r of rows) {

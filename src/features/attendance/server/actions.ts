@@ -8,6 +8,8 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { accessLevelTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
 import { fetchInChunks } from "@/lib/supabase/batch";
+// 담당 반 판정 단일 소스(담당 반 ∪ 그날 위임 반) — classes.teacher_id를 직접 비교하지 말 것(0173a).
+import { getTeachingClassIds } from "@/features/classes/server/delegation";
 import { parseSessionUnits } from "../session-units";
 import { attendanceLockMessage, isWithinAttendanceEditWindow } from "../edit-window";
 import { kstToday } from "@/lib/date-kst";
@@ -93,12 +95,9 @@ export async function saveAttendance(
     // RLS는 tenant 격리뿐이라, 강사가 폼을 직접 POST하면 학원 내 아무 반 출결이나 쓸 수 있었다
     // (2026-07-21 적대검증 미수리분 "출석부 scoped 검증 부재=보안·돈"). 아래 보강 추가로 **임의 학생**까지
     // 폼에 실을 수 있게 되므로, 그 문을 열기 전에 이 게이트를 먼저 닫는다(#77).
-    const { count: ownClass } = await supabase
-      .from("classes")
-      .select("*", { count: "exact", head: true })
-      .eq("id", classId)
-      .eq("teacher_id", user.id);
-    if (!ownClass) return { error: "담당 반이 아닙니다" };
+    // 담당 반 ∪ 그날 위임받은 반(0173a) — 결근 대체로 그 반을 맡은 강사는 출결도 찍어야 한다.
+    const { all: myClassIds } = await getTeachingClassIds(supabase, user.id, date);
+    if (!myClassIds.includes(classId)) return { error: "담당 반이 아닙니다" };
   }
 
   const nowIso = new Date().toISOString();
@@ -201,12 +200,9 @@ export async function setAttendanceCell(input: {
     if (!isWithinAttendanceEditWindow(sessionDate, kstToday())) {
       return { error: attendanceLockMessage(sessionDate, kstToday()) };
     }
-    const [{ count: ownClass }, { count: enrolled }] = await Promise.all([
-      supabase
-        .from("classes")
-        .select("*", { count: "exact", head: true })
-        .eq("id", classId)
-        .eq("teacher_id", user.id),
+    const [teaching, { count: enrolled }] = await Promise.all([
+      // 담당 반 ∪ 그날 위임받은 반(0173a).
+      getTeachingClassIds(supabase, user.id, sessionDate),
       supabase
         .from("enrollments")
         .select("*", { count: "exact", head: true })
@@ -215,7 +211,7 @@ export async function setAttendanceCell(input: {
         .or(`start_date.is.null,start_date.lte.${sessionDate}`)
         .or(`end_date.is.null,end_date.gte.${sessionDate}`),
     ]);
-    if (!ownClass) return { error: "담당 반이 아닙니다" };
+    if (!teaching.all.includes(classId)) return { error: "담당 반이 아닙니다" };
     if (!enrolled) return { error: "이 반 수강생이 아닙니다" };
   }
 
@@ -334,10 +330,9 @@ export async function setAttendanceBulk(input: {
     const classIds = [...new Set(cells.map((c) => c.classId))];
     const studentIds = [...new Set(cells.map((c) => c.studentId))];
     // ⚠️ 수강 판정은 **세션 날짜 기준**(셀 액션과 동일 의미) — 반이동·종강 학생의 그날 기록을 막지 않는다.
-    const [ownClasses, enrolled] = await Promise.all([
-      fetchInChunks<{ id: string }>(classIds, (chunk) =>
-        supabase.from("classes").select("id").in("id", chunk).eq("teacher_id", user.id),
-      ),
+    const [teaching, enrolled] = await Promise.all([
+      // 담당 반 ∪ 그날 위임받은 반(0173a) — 셀 액션과 **같은 소스**여야 일괄이 개별과 다른 말을 하지 않는다.
+      getTeachingClassIds(supabase, user.id, sessionDate),
       fetchInChunks<{ class_id: string; student_id: string }>(studentIds, (chunk) =>
         supabase
           .from("enrollments")
@@ -348,7 +343,7 @@ export async function setAttendanceBulk(input: {
           .or(`end_date.is.null,end_date.gte.${sessionDate}`),
       ),
     ]);
-    const ownSet = new Set(ownClasses.map((c) => c.id));
+    const ownSet = new Set(teaching.all);
     const enrolledSet = new Set(enrolled.map((e) => `${e.student_id}::${e.class_id}`));
     allowed = cells.filter(
       (c) => ownSet.has(c.classId) && enrolledSet.has(`${c.studentId}::${c.classId}`),
@@ -444,12 +439,8 @@ export async function searchMakeupStudents(
   if (!q || !classId) return [];
   const supabase = await createClient();
   if ((await accessLevelTenant(user.systemRole, "attendance")) === "scoped") {
-    const { count: ownClass } = await supabase
-      .from("classes")
-      .select("*", { count: "exact", head: true })
-      .eq("id", classId)
-      .eq("teacher_id", user.id);
-    if (!ownClass) return [];
+    const { all: myClassIds } = await getTeachingClassIds(supabase, user.id);
+    if (!myClassIds.includes(classId)) return [];
   }
   const { data } = await supabase
     .from("students")

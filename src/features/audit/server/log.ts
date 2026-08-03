@@ -35,6 +35,8 @@ export const AUDIT_ACTIONS = {
   class_handover_cancel: "담임 인수인계 취소",
   class_handover_apply: "담임 인수인계 적용",
   class_handover_bulk: "담임 일괄 인계(퇴사)",
+  class_delegate: "반 임시 위임(결근 대체)",
+  class_delegate_revoke: "반 임시 위임 해제",
   classroom_auto_assign: "강의실 자동배정",
   owner_settings_update: "학원 설정 변경",
   owner_subject_absorb: "과목 흡수·삭제",

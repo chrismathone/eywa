@@ -1,21 +1,26 @@
 import "server-only";
 import type { createClient } from "@/lib/supabase/server";
+import { getTeachingClassIds } from "@/features/classes/server/delegation";
 import { COLLISION_STATUSES, isNameCollision } from "../classnote-collision";
 
 type ServerClient = Awaited<ReturnType<typeof createClient>>;
 
 /**
- * 강사 스코프 — 이 학생이 로그인 강사의 담당 반 활성 수강생인지(원스크린 보고서/첨부/링크 액션 공용 이중방어).
+ * 강사 스코프 — 이 학생이 로그인 강사가 **그 날짜에 가르치는 반**의 활성 수강생인지
+ * (원스크린 보고서/첨부/링크 액션 공용 이중방어).
  * ⚠️ `"use server"` 액션 파일이 아닌 순수 server-only 모듈 — actions.ts·attachment-actions.ts가 함께 import.
  * RLS가 tenant 격리를 담당하고, 이 함수가 강사-학생 소유를 추가로 확인(다른 반 학생 조작 차단).
+ *
+ * 반 판정은 `getTeachingClassIds`(담당 반 ∪ 그날 위임 반) 단일 소스 — 결근 대체 강사도 자기가 실제로
+ * 가르친 학생의 보고서를 쓸 수 있어야 한다(0173a 반 임시 위임). `date`는 그 판정의 기준일(기본 KST 오늘).
  */
 export async function teacherOwnsStudent(
   supabase: ServerClient,
   teacherId: string,
   studentId: string,
+  date?: string,
 ): Promise<boolean> {
-  const { data: myClasses } = await supabase.from("classes").select("id").eq("teacher_id", teacherId);
-  const myClassIds = (myClasses ?? []).map((c) => c.id);
+  const { all: myClassIds } = await getTeachingClassIds(supabase, teacherId, date);
   if (myClassIds.length === 0) return false;
   const { data: enr } = await supabase
     .from("enrollments")
