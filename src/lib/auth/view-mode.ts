@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import type { SystemRole } from "@/lib/permissions";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { getTeacherScope, type TeacherScope } from "@/lib/auth/teacher-scope";
+import { hasActiveDelegation } from "@/features/classes/server/delegation";
 import { createClient } from "@/lib/supabase/server";
 
 // 뷰 전환(겸직) 쿠키 — 관리자 계열 역할이 "강사뷰"를 켜면 세팅. 값 "teacher"만 의미 있음(그 외/부재=관리자뷰).
@@ -37,7 +38,11 @@ export const effectiveTeacherId = cache(async (): Promise<string | null> => {
   const jar = await cookies();
   if (jar.get(VIEW_MODE_COOKIE)?.value !== "teacher") return null;
   const { classIds } = await getTeacherScope(user.id);
-  return classIds.length > 0 ? user.id : null;
+  if (classIds.length > 0) return user.id;
+  // 담당 반이 0개여도 **오늘 위임받은 반**이 있으면 강사뷰에 들어올 수 있어야 한다(0173a).
+  // 안 그러면 담당 반 없는 관리자에게 위임을 걸었을 때 그 사람 화면엔 아무것도 안 뜬다 = 조용한 실패.
+  // ⚠️ 여는 것은 **진입 자격뿐** — getTeacherScope의 classIds(ECS·교재요청·시간표 스코프)는 그대로다.
+  return (await hasActiveDelegation(user.id)) ? user.id : null;
 });
 
 /** effectiveTeacherId 기반 스코프 객체(없으면 null). getTeacherScope와 동일 형태(요청당 캐시 공유). */
@@ -72,5 +77,7 @@ export const canUseTeacherView = cache(async (): Promise<boolean> => {
     .from("classes")
     .select("*", { count: "exact", head: true })
     .eq("teacher_id", user.id);
-  return (count ?? 0) > 0;
+  if ((count ?? 0) > 0) return true;
+  // 오늘 위임받은 반이 있으면 토글을 보여준다 — 안 그러면 위임받은 관리자가 전환 버튼조차 못 찾는다(0173a).
+  return hasActiveDelegation(user.id);
 });

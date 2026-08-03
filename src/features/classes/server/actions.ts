@@ -10,6 +10,8 @@ import { isHexColor, readableTextColor } from "@/lib/color-utils";
 import { isAssignableTeacherRole } from "@/lib/permissions";
 import { logAction } from "@/features/audit/server/log";
 import { notifyUsers } from "@/features/notifications/server/notify";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { delegationRangeLabel, validateDelegationRange } from "../delegation-window";
 import { getClassroomAssignmentData } from "./queries";
 import { moveLiveSlotTeacher } from "./handover";
 import { detectOverlaps } from "./overlap-detect";
@@ -725,3 +727,152 @@ export async function applyClassroomAssignments(
   return { ok: true, applied };
 }
 
+
+// ────────────────────── 반 임시 위임(결근 대체 수업, 0173a) ──────────────────────
+// 인수인계(위)와의 차이: **담임을 바꾸지 않는다.** 기간 동안 대체 강사의 원스크린 로스터에 반을 얹기만 한다.
+// 그래서 시간표·급여 splits·ECS 스코프가 따라 움직이지 않고, 기간이 끝나면 저절로 원상복귀된다.
+// 🔒 class_delegations에는 쓰기 RLS 정책이 없다(0173a) — 이 액션들이 게이트를 통과한 뒤 admin client로만 쓴다.
+export type DelegationState = { error?: string; ok?: boolean } | undefined;
+
+/**
+ * 위임 쓰기 게이트 — **모든 위임 쓰기 표면이 이 함수 하나를 지난다**(#77).
+ * · `full`(원장·부원장·실장) = 학원 전체 반.
+ * · `scoped`(강사) = **자기 담당 반만** — 결근을 아는 사람은 본인이라 미리 맡기고 갈 수 있어야 한다.
+ *   ⚠️ classes 메뉴는 강사가 scoped라 권한 검사만으론 남의 반까지 열린다. 담임 확인이 여기서 필수.
+ */
+type DelegationGate =
+  | { ok: false; error: string }
+  | {
+      ok: true;
+      user: NonNullable<Awaited<ReturnType<typeof getCurrentUser>>>;
+      klass: { class_name: string; teacher_id: string | null };
+    };
+
+async function requireDelegationWrite(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  classId: string,
+): Promise<DelegationGate> {
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, error: "로그인이 필요합니다" };
+  const lvl = await accessLevelTenant(user.systemRole, "classes");
+  if (lvl !== "full" && lvl !== "scoped") return { ok: false, error: "반 관리 권한이 없습니다" };
+  if (!classId) return { ok: false, error: "반 정보가 없습니다" };
+  const { data: klass } = await supabase
+    .from("classes")
+    .select("class_name, teacher_id")
+    .eq("id", classId)
+    .maybeSingle();
+  if (!klass) return { ok: false, error: "반을 찾을 수 없습니다" };
+  if (lvl === "scoped" && klass.teacher_id !== user.id)
+    return { ok: false, error: "담당 반만 위임할 수 있습니다 — 다른 반은 원장·실장에게 요청해주세요" };
+  return {
+    ok: true,
+    user,
+    klass: { class_name: klass.class_name as string, teacher_id: klass.teacher_id as string | null },
+  };
+}
+
+/** 반 임시 위임 생성 — 대체 강사·기간(양끝 포함)·사유. 담임(teacher_id)은 건드리지 않는다. */
+export async function createClassDelegation(
+  _prev: DelegationState,
+  formData: FormData,
+): Promise<DelegationState> {
+  const classId = String(formData.get("classId") ?? "").trim();
+  const delegateUserId = String(formData.get("delegateUserId") ?? "").trim();
+  const fromDate = String(formData.get("fromDate") ?? "").trim();
+  const toDate = String(formData.get("toDate") ?? "").trim() || fromDate; // 비우면 하루 위임
+  const reason = String(formData.get("reason") ?? "").trim().slice(0, 200) || null;
+
+  const supabase = await createClient();
+  const gate = await requireDelegationWrite(supabase, classId);
+  if (!gate.ok) return { error: gate.error };
+  const { user, klass } = gate;
+
+  if (!delegateUserId) return { error: "대신 맡을 선생님을 선택해주세요" };
+  if (delegateUserId === klass.teacher_id) return { error: "이미 이 반 담임입니다" };
+  // 기간 유효성은 폼과 **같은 순수함수**로 — 두 벌로 적으면 화면과 서버가 다른 말을 한다.
+  const rangeError = validateDelegationRange(fromDate, toDate);
+  if (rangeError) return { error: rangeError };
+  // 대상이 이 학원의 배정 가능한 재직자인지 — 인수인계와 같은 소스(ASSIGNABLE_TEACHER_ROLES).
+  if (!(await isAssignableTeacher(supabase, delegateUserId))) return { error: "유효한 강사가 아닙니다" };
+
+  // ⚠️ admin client = RLS 우회 → tenant_id를 **명시**로 싣는다(세션 테넌트, 클라 입력 아님).
+  const admin = createAdminClient();
+  const { error: insErr } = await admin.from("class_delegations").insert({
+    tenant_id: user.tenantId,
+    class_id: classId,
+    delegate_user_id: delegateUserId,
+    from_date: fromDate,
+    to_date: toDate,
+    reason,
+    created_by: user.id,
+  });
+  if (insErr) return { error: insErr.message };
+
+  await logAction({
+    action: "class_delegate",
+    targetType: "class",
+    targetLabel: klass.class_name,
+    metadata: { delegateUserId, fromDate, toDate },
+  });
+  // 대체 강사에게 알림 — best-effort(실패해도 위임은 성립). 링크는 원스크린(거기서 실제로 쓴다).
+  await notifyUsers([
+    {
+      tenantId: user.tenantId,
+      recipientId: delegateUserId,
+      type: "class_delegation",
+      title: "대신 맡을 수업이 생겼습니다",
+      body: `${klass.class_name} 반을 ${delegationRangeLabel(fromDate, toDate)}에 대신 맡습니다. 원스크린 반 목록의 '위임'에서 보입니다.`,
+      link: "/onescreen",
+      actorId: user.id,
+    },
+  ]);
+  revalidatePath(`/classes/${classId}`);
+  revalidatePath("/classes");
+  revalidatePath("/onescreen");
+  return { ok: true };
+}
+
+/** 위임 해제 — 행을 지우지 않고 revoked_at을 남긴다(누가 언제 대신 맡았는지는 감사 대상). */
+export async function revokeClassDelegation(
+  _prev: DelegationState,
+  formData: FormData,
+): Promise<DelegationState> {
+  const delegationId = String(formData.get("delegationId") ?? "").trim();
+  if (!delegationId) return { error: "위임 정보가 없습니다" };
+
+  const supabase = await createClient();
+  // 먼저 대상 위임을 읽어 **그 반 기준으로** 게이트를 태운다(강사는 자기 반 위임만 해제).
+  // RLS(select 정책 = 같은 테넌트)가 타 테넌트 행을 걸러낸다.
+  const { data: row } = await supabase
+    .from("class_delegations")
+    .select("id, class_id, delegate_user_id, from_date, to_date, revoked_at")
+    .eq("id", delegationId)
+    .maybeSingle();
+  if (!row) return { error: "위임을 찾을 수 없습니다" };
+  if (row.revoked_at) return { ok: true }; // 이미 해제됨 — 더블클릭·경합을 성공으로 흡수
+
+  const gate = await requireDelegationWrite(supabase, row.class_id as string);
+  if (!gate.ok) return { error: gate.error };
+  const { user, klass } = gate;
+
+  const admin = createAdminClient();
+  const { error: updErr } = await admin
+    .from("class_delegations")
+    .update({ revoked_at: new Date().toISOString(), revoked_by: user.id })
+    .eq("id", delegationId)
+    .eq("tenant_id", user.tenantId) // admin = RLS 우회 → 테넌트 필터 필수
+    .is("revoked_at", null);
+  if (updErr) return { error: updErr.message };
+
+  await logAction({
+    action: "class_delegate_revoke",
+    targetType: "class",
+    targetLabel: klass.class_name,
+    metadata: { delegationId, delegateUserId: row.delegate_user_id },
+  });
+  revalidatePath(`/classes/${row.class_id as string}`);
+  revalidatePath("/classes");
+  revalidatePath("/onescreen");
+  return { ok: true };
+}

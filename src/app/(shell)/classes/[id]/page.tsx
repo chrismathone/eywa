@@ -29,6 +29,8 @@ import { ClassLevelAction } from "./_components/class-level-action";
 import { ArchiveClassButton } from "./_components/archive-class-button";
 import { ClassTermButton } from "./_components/class-term-button";
 import { HandoverAction, HandoverBanner } from "./_components/teacher-handover";
+import { DelegateAction, DelegationBanner } from "./_components/class-delegation";
+import { getClassDelegationList } from "@/features/classes/server/delegation";
 import { ScheduleSummaryView } from "./_components/schedule-summary-view";
 
 export const metadata = { title: "수업 상세 — eywa" };
@@ -44,14 +46,17 @@ export default async function ClassDetailPage({
 }) {
   const user = await requireAccess("classes");
   const { id } = await params;
-  const [klass, students, stats, allEnrolledStudents, settings, teacherOptions] = await Promise.all([
-    getClassDetail(id),
-    getClassStudents(id),
-    getClassAttendanceStats(id, 30),
-    getStudentsList({ status: "enrolled" }),
-    getTenantSettings(),
-    getClassTeacherOptions(),
-  ]);
+  const [klass, students, stats, allEnrolledStudents, settings, teacherOptions, delegations] =
+    await Promise.all([
+      getClassDetail(id),
+      getClassStudents(id),
+      getClassAttendanceStats(id, 30),
+      getStudentsList({ status: "enrolled" }),
+      getTenantSettings(),
+      getClassTeacherOptions(),
+      // 임시 위임(0173a) — 아직 안 끝난 것만. 독립 조회라 같은 Promise.all(B4).
+      getClassDelegationList(id),
+    ]);
   if (!klass) notFound();
 
   // 수강 시작일 더블클릭 수정 = owner(원장) 권한 이상만(관리자 정정). 학생 상세 수업 탭과 동일 게이트.
@@ -83,6 +88,12 @@ export default async function ClassDetailPage({
     .sort((a, b) => Number(b.isSubjectMatch) - Number(a.isSubjectMatch));
   const today = todayIso();
   const handoverDue = !!klass.pendingTeacherDate && klass.pendingTeacherDate <= today;
+  // 위임 가능 판정 = 서버 게이트(requireDelegationWrite)와 **같은 모양**이어야 한다.
+  // full(원장·부원장·실장)은 학원 전체 반, scoped(강사)는 자기 담당 반만 — 결근을 아는 사람은 본인이라
+  // 미리 맡기고 갈 수 있어야 한다. 두 판정이 갈라지면 "버튼은 보이는데 누르면 거절"이 된다.
+  const classLevel = await accessLevelTenant(user.systemRole, "classes");
+  const canDelegate =
+    classLevel === "full" || (classLevel === "scoped" && klass.teacherId === user.id);
 
   // 이 반에 이미 활성 등록된 학생 제외
   const enrolledIds = new Set(students.map((s) => s.studentId));
@@ -169,6 +180,14 @@ export default async function ClassDetailPage({
             오늘 출석 입력
           </Button>
           <ClassLevelAction classId={klass.id} className={klass.className} subject={klass.subject} />
+          {canDelegate ? (
+            <DelegateAction
+              classId={klass.id}
+              className={klass.className}
+              currentTeacherName={klass.teacherName}
+              teacherOptions={handoverPool}
+            />
+          ) : null}
           {!klass.pendingTeacherId ? (
             <HandoverAction
               classId={klass.id}
@@ -187,6 +206,19 @@ export default async function ClassDetailPage({
           />
         </div>
       </header>
+
+      {/* 임시 위임(0173a) — 담임 교체(아래 인수인계)와 **다른 톤**으로 둔다. 기간이 항상 보여야 한다. */}
+      <DelegationBanner
+        rows={delegations.map((d) => ({
+          id: d.id,
+          delegateName: d.delegateName,
+          fromDate: d.fromDate,
+          toDate: d.toDate,
+          reason: d.reason,
+        }))}
+        todayYmd={today}
+        canRevoke={canDelegate}
+      />
 
       {klass.pendingTeacherId ? (
         <HandoverBanner
