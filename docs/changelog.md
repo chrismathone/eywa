@@ -4,6 +4,32 @@
 
 ## 진행 상황
 
+### 연동 "일부 실패"에 사유가 안 남던 것 — 소비처는 다 만들어 두고 아무도 안 쓰던 칸 (2026-08-03) - typecheck0/lint0/test3278/build✓
+
+원장 제보(화면): *8/3 06:00 [자동 실행] 일부 실패 203초 — 실패: invoices, textbook_checks*.
+DB를 뒤져보니 **왜 실패했는지가 어디에도 없었다** — `makeedu_sync_runs.error`는 null, 도메인 칸은
+`{rows:null,status:"error"}`, `makeedu_sync_state.error`는 그다음 성공 실행이 이미 덮어썼다.
+
+- **왜 사유가 증발했나(코드 3곳)**: ① 오케스트레이터가 `catch (e)`에서 **도메인 이름만** 모으고
+  `e.message`를 버렸다 — 정작 `run()`은 자식 stderr에서 진짜 원인을 뽑아 거기 실어 준다(`lastMeaningfulLine`,
+  이 기능은 그러라고 만든 것이다). ② 실패 도메인에 **`"sync-all 임포터 실패"` 상수**를 써서, 임포터가 남긴
+  구체적 진단("스크랩 0행 — makeedu 상세수납 목록을 못 읽었다…")을 **덮어썼다**. ③ `finishRun`을 사유 없이
+  불러 `makeedu_sync_runs.error`가 partial 경로에서만 항상 null이었다(전체 실패 경로에선 채워진다).
+  🔴 화면([`makeedu-sync-runs.tsx`](<../src/app/(shell)/owner/_components/makeedu-sync-runs.tsx>))은 이미
+  `run.error`를 한글로 풀어 보여줄 준비가 돼 있었다 — **소비처만 있고 생산자가 없던 칸**(orphan의 역방향).
+- **고친 것**: 사유를 도메인과 함께 들고 다니고, **임포터가 이미 자기 진단을 남겼으면 덮지 않는다**
+  (오케스트레이터가 아는 것 "자식이 죽었다"보다 임포터가 아는 것 "왜 죽었다"가 항상 구체적).
+  조립부는 순수 함수 [`summarizeFailures`](../scripts/_makeedu/lib.cjs)로 빼서 Vitest로 잠갔다(빈 사유=`원인 미상`,
+  실패 0건=`null`, 길이 컷). 사유는 **덮이지 않는 run 이력 행**에 싣는다(`sync_state`는 현재상태라 몇 시간이면 증발).
+- **한글 변환 추가**: [`humanizeMakeeduSyncError`](../src/features/integrations/sync-error.ts)에 0행 가드 규칙을
+  **세션 만료 규칙보다 먼저** 넣었다 — 그 문장엔 "세션 만료 의심"이 들어 있어 뒤 규칙에 걸리면 **추측이 단정으로
+  승격**된다. 확실한 사실(못 읽어서 반영 안 함)을 말하고 원인은 의심으로 남긴다.
+- **이번 실패의 추정 원인**(사유가 안 남아 확정 불가): invoices·textbook_checks는 **같은 `invoices.json`을
+  읽는 두 소비처**다. scrape가 상세수납 목록을 못 읽으면 exit 0 + 빈 JSON으로 넘기고 → import-invoices의
+  0행 가드가 걸리고(설계대로) → mirror-textbook-checks는 헤더 검증에서 throw한다. "둘만 같이" 실패한 게
+  이 경로와 정확히 일치한다. 다음 회차(13:35 relay)는 정상이라 일시적. **다음에 같은 일이 나면 화면에 원인이 뜬다.**
+- ⚠️ **연동 PC에 zip을 전달해야 적용된다**(`scripts/_makeedu`는 그 PC에서 도는 워커 — `build-makeedu-zip.ps1`).
+
 ### 담임 역할 목록 전수 감사 — 세 벌 복제 중 두 벌이 남아 있었다 (2026-08-03) - typecheck0/lint0/test3273/build✓
 
 앞 항목(허은진) 수정 뒤 원장 지시 *"다른 화면에도 같은 역할 누락 있는지 전수 확인"* → **같은 배열이 세 곳에

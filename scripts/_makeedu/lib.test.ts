@@ -10,7 +10,46 @@ const L = require_("./lib.cjs") as {
     months?: number;
     today?: string | Date;
   }) => { from: string; to: string };
+  summarizeFailures: (
+    failed: { domain: string; reason?: string }[] | null | undefined,
+    opts?: { maxReason?: number; maxError?: number },
+  ) => { domains: string[]; reasons: Record<string, string>; error: string | null };
 };
+
+// 실패했는데 **왜인지 안 남으면** 그 실패는 다음에 또 난다(2026-08-03 06:00 partial 실행 = 원인 추적 불가).
+describe("summarizeFailures — 부분 실패의 사유를 DB로 실어 보낸다", () => {
+  it("도메인·사유·합본 문자열 세 조각을 만든다", () => {
+    const out = L.summarizeFailures([
+      { domain: "invoices", reason: "import-invoices.cjs exited 1 — 스크랩 0행" },
+      { domain: "textbook_checks", reason: "mirror-textbook-checks.cjs exited 1 — invoices.json 필수 헤더 누락" },
+    ]);
+    expect(out.domains).toEqual(["invoices", "textbook_checks"]);
+    expect(out.reasons.invoices).toContain("스크랩 0행");
+    expect(out.error).toContain("invoices: ");
+    expect(out.error).toContain("textbook_checks: ");
+  });
+
+  it("실패가 없으면 error는 null — 빈 문자열이면 화면이 '원인 있음'으로 오해한다", () => {
+    expect(L.summarizeFailures([]).error).toBeNull();
+    expect(L.summarizeFailures(null).error).toBeNull();
+    expect(L.summarizeFailures(undefined).domains).toEqual([]);
+  });
+
+  it("사유가 비어도 도메인은 남기고 '원인 미상'으로 표기한다(조용히 빈칸 금지)", () => {
+    const out = L.summarizeFailures([{ domain: "invoices" }]);
+    expect(out.domains).toEqual(["invoices"]);
+    expect(out.error).toBe("invoices: 원인 미상");
+  });
+
+  it("긴 사유는 잘라 컬럼을 넘치지 않게 한다", () => {
+    const out = L.summarizeFailures([{ domain: "invoices", reason: "가".repeat(5000) }], {
+      maxReason: 50,
+      maxError: 80,
+    });
+    expect(out.reasons.invoices).toHaveLength(50);
+    expect(out.error!.length).toBeLessThanOrEqual(80);
+  });
+});
 
 // 이 범위가 곧 "동기화가 볼 수 있는 세계"다. 여기서 한 달을 놓치면 그 달이 통째로 동결된다.
 describe("billingMonthRange — 스크랩할 청구월 범위", () => {
