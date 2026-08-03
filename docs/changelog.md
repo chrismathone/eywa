@@ -31,6 +31,30 @@
 
 ## 진행 상황
 
+### 영어 ECS 시트도 위임을 따른다 — 위임받은 반의 주간 시트 열기·편집 (2026-08-03) - typecheck0/lint0/test3345/build✓
+
+원장: *"영어 ECS도 위임 따르게 해줘."* 바로 앞 항목(반 임시 위임)에서 **의도적으로 제외**했던 부분이다 —
+제외 이유는 ECS 스코프(`effectiveTeacherScope`)가 **교재요청 쓰기·시간표까지 함께 좌우**해서, 통째로 넓히면
+2026-07-29에 났던 교재요청 쓰기 누출(155건)이 재발할 수 있어서였다.
+
+- **해법 = 전역 스코프는 그대로 두고 ECS에만 세 번째 갈래를 붙인다.** ECS엔 이미 같은 이유로 만든 선례가 있다 —
+  `ecsAssistantClassIds`(부담임, 2026-07-29 "전역 teacher-scope.ts는 **불변** — ECS만 이 보조 스코프를 합집합").
+  그 옆에 [`ecsDelegatedClassIds`](../src/features/class-sheets/server/access.ts)를 나란히 둔다.
+- ⚠️ **'오늘'이 아니라 앞뒤 7일 유예로 판정한다** — ECS는 **주 단위 시트**라 화요일 하루를 대신 맡아도 월요일 밤에
+  미리 열어보고 수요일에 고치는 게 정상 업무다. '오늘만'으로 잠그면 방금 원스크린에서 고친
+  **"본문은 저장되는데 첨부만 거절"**과 같은 모양이 ECS에서 재현된다. 판정은 순수함수
+  [`delegationOverlapsRange`](../src/features/classes/delegation-window.ts)(양끝 포함, fail-closed).
+- ⚠️ **주차별로 자르지 않고 반 단위로 연다** — 부담임 확장과 **같은 의미론**(그 주석: "유효기간 지난 슬롯도 포함 …
+  과거 주차 시트 열람 유지"). 위임만 다른 규칙을 만들면 일관성이 깨진다. 감사 근거는 `updated_by`가 남긴다.
+- 🔴 **두 곳이 갈리면 "목록엔 뜨는데 열면 거절"** — 게이트(`requireEcsClassAccess`)와 목록(`ecsVisibleClassFilter`)이
+  같은 세 갈래(반담당·부담임·위임)를 봐야 한다. `ecs-scope-sources.test.ts`가 **두 함수 본문을 함께 스캔**해
+  하나만 고치는 걸 막고, 전역 `teacher-scope.ts`가 ECS 확장을 흡수하지 않았는지도 함께 확인한다.
+- **화면**: ECS 랜딩 카드에 `위임` 앰버 배지 + "○○ 선생님 반"(원스크린 반 칩과 같은 규약).
+  ⚠️ 시트를 **연 뒤에도** 보여야 해서 툴바에도 배지를 단다 — 창(embed)에선 상단 PageHeader가 통째로 숨겨져
+  (`compact-chrome:hidden`) 배지를 걸 자리가 툴바뿐이다.
+- ✅ 스코프 밖은 그대로: 시트 임포트(`listEcsImportTargets`)는 `canManageSheetSync` 관리자 전용이라 무관,
+  전역 teacher-scope(교재요청·시간표)는 불변.
+
 ### 결근한 선생님 수업을 대신 맡은 강사가 그 반을 표 모드로 마감 — 반 임시 위임 (2026-08-03) - typecheck0/lint0/test3335/build✓ - 0173a
 
 원장 질문에서 시작: *"개인사정으로 결석하시는 선생님의 수업보고서를 다른 선생님이 대신 발송하고 싶은데."*

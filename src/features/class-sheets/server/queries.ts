@@ -28,7 +28,7 @@ import {
 } from "../lib/grid";
 import { isMeaningfulPlanLine } from "../lib/plan-codec";
 import { normalizeSlotTime, weekDatesOf, YMD_RE, type DowKey } from "../lib/week";
-import { ecsVisibleClassFilter, requireEcsClassAccess } from "./access";
+import { ecsDelegatedClassIds, ecsVisibleClassFilter, requireEcsClassAccess } from "./access";
 
 /**
  * ECS 주간 시트 로더 — 게이트(requireEcsClassAccess) 통과 후 admin client(service_role)로만 읽는다
@@ -84,6 +84,12 @@ export type ClassSheetWeekData = {
    * ⚠️ 이 값은 위 `grid`·`fill`에 **이미 반영돼 있다**(서버가 진실). 클라에서 따로 감추지 말 것.
    */
   showSpecialRooms: boolean;
+  /**
+   * 임시 위임(0173a)으로 지금 **대신 맡은 반**의 시트인가 — 내 담당 반이면 false.
+   * 툴바가 이 값으로 앰버 배지를 단다. 창(embed)에선 상단 PageHeader가 숨겨져서, 열고 난 뒤 "남의 반을
+   * 고치는 중"임을 알 수 있는 자리가 툴바뿐이다.
+   */
+  delegated: boolean;
 };
 
 export async function getClassSheetWeek(
@@ -99,6 +105,8 @@ export async function getClassSheetWeek(
   const weekMonday = mondayOf(weekParam && YMD_RE.test(weekParam) ? weekParam : today);
   const weekSunday = shiftDays(weekMonday, 6);
   const monthStart = `${weekMonday.slice(0, 7)}-01`;
+  // 위임 배지용 — 게이트가 방금 같은 함수를 불렀고 react cache라 추가 왕복이 없다.
+  const delegatedIds = await ecsDelegatedClassIds();
   // 끝난 수강도 유예(30일) 안이면 하단 '퇴원' 섹션에 남는다 → 조회 창을 그만큼 넓힌다.
   // ⚠️ 이 창을 weekMonday로 좁히면 퇴원 섹션이 조용히 비어버린다(판정은 grid, 조회는 여기 — 같은 상수).
   const enrollmentFloor = withdrawnFloorOf(weekMonday);
@@ -403,6 +411,8 @@ export async function getClassSheetWeek(
       // 크기 조회 실패는 기본값으로 떨어진다(개인 취향값이라 시트 전체를 막을 이유가 없다).
       fontSize: readEcsFontSize(myPrefsRes.data?.ui_prefs),
       showSpecialRooms,
+      // 위임 배지 — 게이트와 **같은 소스**(cache라 추가 왕복 0). 담임이 나면 위임이 아니다.
+      delegated: delegatedIds.includes(classId) && access.teacherId !== access.user.id,
     },
   };
 }
@@ -416,6 +426,12 @@ export type SheetLandingCard = {
   totalSlots: number;
   filledSlots: number;
   orphanSlots: number;
+  /**
+   * 임시 위임(0173a)으로 지금 대신 맡은 반인가 — 내 담당 반이면 false.
+   * 원스크린 반 칩과 **같은 규약**으로 시각 구분한다(원장 지시 2026-08-03) — 남의 반 시트를 내 반인 줄
+   * 알고 고치는 일이 없게. 카드의 `teacherName`은 원 담임이라 배지와 함께 읽으면 관계가 분명해진다.
+   */
+  delegated: boolean;
 };
 
 /**
@@ -470,9 +486,12 @@ export async function getSheetLanding(
     .order("class_name");
   if (classError) return { ok: false, error: `반 목록을 불러오지 못했습니다: ${classError.message}` };
   // 강사 스코프는 JS 교집합(스코프 id를 .in에 넣지 않는다 — 대량 .in 상한/silent cap 회피, B3).
-  // 담당 반 ∪ 부담임 반(ecsVisibleClassFilter — 게이트 requireEcsClassAccess와 같은 확장 스코프).
+  // 담당 반 ∪ 부담임 반 ∪ **임시 위임 반**(ecsVisibleClassFilter — 게이트 requireEcsClassAccess와 같은
+  // 세 갈래. 갈라지면 "목록엔 뜨는데 열면 거절" → ecs-scope-sources.test.ts가 두 곳을 함께 잠근다).
   const { classIds: visibleIds } = await ecsVisibleClassFilter();
   const scopeSet = visibleIds ? new Set(visibleIds) : null;
+  // 카드에 '위임' 배지를 달기 위한 집합 — 게이트와 **같은 소스**(ecsDelegatedClassIds)라 배지와 접근이 안 갈린다.
+  const delegatedIdSet = new Set(await ecsDelegatedClassIds());
   const classes = (allClasses ?? []).filter((c) => !scopeSet || scopeSet.has(c.id as string));
   const classIds = classes.map((c) => c.id as string);
   if (classIds.length === 0) {
@@ -582,6 +601,8 @@ export async function getSheetLanding(
       totalSlots: scheduled.size,
       filledSlots: filled,
       orphanSlots: orphan,
+      // 담임이 나면 위임이 아니다 — 내 반이 남에게 위임돼 있어도 내 화면에선 그냥 내 반이다.
+      delegated: delegatedIdSet.has(c.id as string) && c.teacher_id !== user.id,
     };
   });
 

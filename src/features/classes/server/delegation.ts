@@ -2,7 +2,7 @@ import "server-only";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { kstToday } from "@/lib/date-kst";
 import { fetchInChunks } from "@/lib/supabase/batch";
-import { isDelegationActiveOn } from "../delegation-window";
+import { delegationOverlapsRange, isDelegationActiveOn } from "../delegation-window";
 
 type ServerClient = Awaited<ReturnType<typeof createServerClient>>;
 
@@ -265,4 +265,40 @@ export async function hasActiveDelegation(userId: string, date: string = kstToda
   return ((data ?? []) as DelegationRow[]).some((r) =>
     isDelegationActiveOn({ fromDate: r.from_date, toDate: r.to_date, revokedAt: r.revoked_at }, date),
   );
+}
+
+/**
+ * 이 사람에게 위임된 반 중, 위임 기간이 `[from, to]`와 **겹치는** 반 id.
+ *
+ * `getTeachingClassIds`(하루 단위)와 달리 **구간**으로 본다 — 소비처가 주 단위인 경우(ECS 시트)를 위해서다.
+ * 유예 폭은 **소비처가 정한다**(여기서 정하지 않는다): 원스크린은 하루, ECS는 앞뒤 여유를 둔다.
+ * ⚠️ SQL로 좁히고 **순수함수로 다시 확인**한다(조건이 두 벌이면 갈라진다 — delegation-window.ts 주석).
+ */
+export async function getDelegatedClassIdsInRange(
+  userId: string,
+  from: string,
+  to: string,
+): Promise<string[]> {
+  const supabase = await createServerClient();
+  const { data } = await supabase
+    .from("class_delegations")
+    .select("class_id, delegate_user_id, from_date, to_date, revoked_at")
+    .eq("delegate_user_id", userId)
+    .is("revoked_at", null)
+    .lte("from_date", to)
+    .gte("to_date", from)
+    .limit(200);
+  return [
+    ...new Set(
+      ((data ?? []) as DelegationRow[])
+        .filter((r) =>
+          delegationOverlapsRange(
+            { fromDate: r.from_date, toDate: r.to_date, revokedAt: r.revoked_at },
+            from,
+            to,
+          ),
+        )
+        .map((r) => r.class_id),
+    ),
+  ];
 }
