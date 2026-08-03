@@ -53,6 +53,8 @@ export default async function TextbookRequestsPage() {
       logoUrl={logoUrl}
       account={accountForTarget(settings.billing, "textbook")}
       requesterName={user.displayName}
+      // 소유 판정 합집합(0174a) — 이름을 다르게 적어도 본인이 만든 요청은 본인 것.
+      viewerUserId={user.id}
     />
   );
 }

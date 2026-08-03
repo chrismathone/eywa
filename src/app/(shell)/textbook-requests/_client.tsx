@@ -43,6 +43,7 @@ export function TextbookRequestClient({
   logoUrl,
   account,
   requesterName,
+  viewerUserId,
 }: {
   rows: TextbookOrderRow[];
   students: StudentOption[];
@@ -52,6 +53,8 @@ export function TextbookRequestClient({
   logoUrl: string | null;
   account: AccountSetting;
   requesterName: string;
+  /** 보는 사람 계정 id — 소유 판정 합집합(0174a). 이름이 달라도 본인이 만든 요청은 본인 것. */
+  viewerUserId: string;
 }) {
   // 성공 시 목록은 서버 액션 revalidatePath로 자동 갱신. 폼 값은 유지(같은 학생 다른 교재 연속 요청에 편함).
   const [state, formAction, pending] = useActionState(requestTextbook, undefined);
@@ -446,6 +449,7 @@ export function TextbookRequestClient({
         capNote={isTeacher ? undefined : "최근 100건 기준 — 전체는 수납관리 › 교재"}
         // 강사일 때만 소유 판정 — 사무실(master/accountant)은 서버에서도 이 게이트를 안 탄다.
         ownerName={isTeacher ? requesterName : undefined}
+        viewerUserId={viewerUserId}
       />
 
       {/* 학부모 발송 — 다이얼로그가 요청서 카드를 숨김 렌더해 PNG로 캡처하므로 카드 렌더 재료(학원명·로고·계좌)를 넘긴다. */}
