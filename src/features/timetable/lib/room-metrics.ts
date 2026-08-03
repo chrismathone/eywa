@@ -138,6 +138,70 @@ export function buildRoomWeekRows(buckets: readonly RoomBucket[], windows: DayWi
   });
 }
 
+// ── 시간대별 활성도(원장 요청 2026-08-03: "시간대별 활성도도 교실별로") ─────────
+// 주중(월~금) 1시간 밴드 × 교실 매트릭스 — "어느 교실이 어느 시간대에 노는가".
+// 분모는 밴드∩그 요일 운영 창(창 밖 구간은 안 센다 — 13:30 개원이면 13시 밴드 분모는 30분×5일).
+
+export type RoomHourBand = { startMin: number; endMin: number; label: string };
+
+/** 주중 운영 창(요일별 관측 확장 포함 합집합)을 1시간 밴드로 분할. 창이 없으면 []. */
+export function weekdayHourBands(windows: DayWindows): RoomHourBand[] {
+  let lo = Infinity;
+  let hi = -Infinity;
+  for (const d of WEEKDAYS) {
+    const w = windows[d];
+    if (!w) continue;
+    lo = Math.min(lo, w.startMin);
+    hi = Math.max(hi, w.endMin);
+  }
+  if (hi <= lo) return [];
+  const start = Math.floor(lo / 60) * 60;
+  const end = Math.ceil(hi / 60) * 60;
+  const out: RoomHourBand[] = [];
+  for (let m = start; m < end; m += 60) {
+    out.push({ startMin: m, endMin: m + 60, label: `${Math.floor(m / 60)}시` });
+  }
+  return out;
+}
+
+export type RoomHourRow = {
+  key: string;
+  name: string;
+  registered: boolean;
+  /** 밴드별 주중 점유율 % — null=그 밴드가 운영 창과 아예 안 겹침(0%로 속이지 않는다). */
+  cells: (number | null)[];
+};
+
+export function buildRoomHourRows(
+  buckets: readonly RoomBucket[],
+  windows: DayWindows,
+): { bands: RoomHourBand[]; rows: RoomHourRow[] } {
+  const bands = weekdayHourBands(windows);
+  const rows = buckets.map((b) => {
+    // 요일별 구간은 밴드 루프 밖에서 1회만 계산(밴드×요일 중복 계산 방지).
+    const byDay = WEEKDAYS.map((d) => ({ win: windows[d], intervals: dayIntervalsOf(b, d).intervals }));
+    const cells = bands.map((band) => {
+      let occ = 0;
+      let den = 0;
+      for (const { win, intervals } of byDay) {
+        if (!win) continue;
+        const clipLo = Math.max(band.startMin, win.startMin);
+        const clipHi = Math.min(band.endMin, win.endMin);
+        if (clipHi <= clipLo) continue;
+        den += clipHi - clipLo;
+        occ += occupiedMinutes(
+          intervals
+            .map((iv) => ({ startMin: Math.max(iv.startMin, clipLo), endMin: Math.min(iv.endMin, clipHi) }))
+            .filter((iv) => iv.endMin > iv.startMin),
+        );
+      }
+      return den > 0 ? Math.round((occ / den) * 100) : null;
+    });
+    return { key: b.key, name: b.name, registered: b.registered, cells };
+  });
+  return { bands, rows };
+}
+
 export type RoomDaySummary = {
   roomsTotal: number;
   /** 선택 요일에 수업이 1개라도 있는 등록 교실 수. */

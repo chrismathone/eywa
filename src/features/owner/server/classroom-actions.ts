@@ -80,6 +80,34 @@ export async function updateClassroom(
   return { ok: true };
 }
 
+/**
+ * 정원만 갱신 — 시간표 교실뷰의 인라인 정원 편집용(원장 요청 2026-08-03). 이름은 건드리지 않는다
+ * (교실뷰에서 stale 이름을 함께 보내면 owner 화면의 동시 개명을 덮는다). 게이트는 위와 동일(owner 쓰기).
+ */
+export async function updateClassroomCapacity(
+  _prev: ClassroomActionState,
+  formData: FormData,
+): Promise<ClassroomActionState> {
+  const g = await gate();
+  if ("error" in g) return g;
+  const id = String(formData.get("id") ?? "").trim();
+  if (!id) return { error: "강의실 ID가 누락되었습니다" };
+  const capRaw = String(formData.get("capacity") ?? "").trim();
+  const n = Number(capRaw);
+  const capacity = capRaw !== "" && Number.isFinite(n) ? Math.max(0, Math.min(9999, Math.round(n))) : null;
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("classrooms")
+    .update({ capacity })
+    .eq("id", id)
+    .eq("tenant_id", g.user.tenantId);
+  if (error) return { error: error.message };
+
+  refresh();
+  return { ok: true };
+}
+
 export async function deleteClassroom(
   _prev: ClassroomActionState,
   formData: FormData,
