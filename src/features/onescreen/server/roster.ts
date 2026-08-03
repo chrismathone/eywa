@@ -267,15 +267,22 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
 
   // 아래 로직은 전부 DB 컬럼 이름(class_name/is_special)을 쓰던 코드라 여기서 한 번만 맞춘다.
   // delegated/ownerName은 반 칩이 '내 반'과 위임 반을 시각적으로 가르는 데 쓴다(원장 지시 2026-08-03).
-  const allClasses = teachingClasses.map((c) => ({
-    id: c.id,
-    class_name: c.className,
-    subject: c.subject,
-    is_special: c.isSpecial,
-    delegated: c.delegated,
-    ownerName: c.ownerName,
-    delegatedAwayTo: c.delegatedAwayTo,
-  }));
+  // 🔴 '수업보고서 미발송' 반(0174a)은 **여기서 통째로 뺀다** — 원장 지시: "자동으로 수업보고서 발송에서
+  //    반목록이 출력되지 않으므로 선생님이 헷갈릴 필요가 없는거지." 아래 todayIds·activeClasses·수강생·
+  //    반 칩·표 모드가 전부 이 배열의 파생이라, **이 한 줄로 전 표면이 따라온다**.
+  //    ⚠️ 필터를 아래 `noClassesToday` 판정 **뒤로** 옮기지 말 것 — 제외 반만 있는 날이 "수업 있음"으로
+  //       읽혀 빈 화면 대신 담당 반 전체 폴백이 살아난다(2026-07-22 이수진 회귀).
+  const allClasses = teachingClasses
+    .filter((c) => !c.reportOptout)
+    .map((c) => ({
+      id: c.id,
+      class_name: c.className,
+      subject: c.subject,
+      is_special: c.isSpecial,
+      delegated: c.delegated,
+      ownerName: c.ownerName,
+      delegatedAwayTo: c.delegatedAwayTo,
+    }));
   // 2) 오늘 요일에 수업 있는 반(없으면 전체 담당 반 폴백 — 주말/휴일에도 화면이 비지 않게)
   const allIds = allClasses.map((c) => c.id);
   // ⚠️ **그 날짜에 유효한 스케줄만**. 예전엔 valid_from/valid_to를 안 봐서 만료된 배치가 계속 "오늘 수업"으로

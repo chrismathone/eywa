@@ -5,6 +5,7 @@ import { kstToday } from "@/lib/date-kst";
 import { fetchAllPaged, fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 import { getTodaySchedule, getWeeklySchedule, getTeacherLabelsBySubject } from "@/features/timetable/server/queries";
 import { getTenantSettings } from "@/features/owner/server/queries";
+import { fetchReportOptoutClassIds } from "@/features/classes/server/report-optout-ids";
 import { enrollmentAttendsOnDay, isEnrollmentActiveOn } from "@/features/enrollments/eligibility";
 import { needsAttention, summarizeQueue, type QueueSummary, HUMAN_RESOLVED_STATUSES } from "../classnote-queue";
 // 임시 위임(0173a) — 위임된 (반, 날짜)의 대상(분모)을 대체 강사로 옮기는 순수 규칙.
@@ -290,7 +291,9 @@ async function getEnglishTeacherRates(
     .from("classes")
     .select("id, class_name, teacher:teacher_id ( display_name ), class_schedules ( day_of_week, valid_from, valid_to )")
     .eq("subject", "english")
-    .eq("is_active", true);
+    .eq("is_active", true)
+    // 영어 반은 위 lesson_reports 경로 분모에 애초에 없다 — '미발송' 제외는 **여기서만** 걸린다(0174a).
+    .eq("report_optout", false);
   if (!classRows?.length) return [];
 
   const today = kstToday();
@@ -411,7 +414,7 @@ export async function getWeeklyWritingRates(month?: string): Promise<WritingRate
   const { data: testStudents } = await supabase.from("students").select("id").eq("is_test", true);
   const testStudentIds = new Set((testStudents ?? []).map((s) => s.id as string));
 
-  const [reps, schedule, weekly, settings, labelsBySubject, { data: inactiveStaff }, delegateOn] =
+  const [reps, schedule, weekly, settings, labelsBySubject, { data: inactiveStaff }, delegateOn, reportOptoutIds] =
     await Promise.all([
     // ⚠️ 집계 기준은 **유효일 = covers_date ?? report_date**(0136a) — 미리/나중에 쓴 보고서를 실제 수업일로 귀속.
     //   그래서 범위 조회도 두 날짜 **중 하나라도** 걸치면 가져온 뒤(or) JS에서 유효일로 다시 거른다.
@@ -421,10 +424,11 @@ export async function getWeeklyWritingRates(month?: string): Promise<WritingRate
       report_date: string;
       covers_date: string | null;
       student_id: string;
+      class_id: string | null;
     }>((from, to) =>
       supabase
         .from("lesson_reports")
-        .select("teacher_name, report_date, covers_date, student_id")
+        .select("teacher_name, report_date, covers_date, student_id, class_id")
         .or(
           `and(report_date.gte.${since},report_date.lte.${until}),and(covers_date.gte.${since},covers_date.lte.${until})`,
         )
@@ -442,6 +446,8 @@ export async function getWeeklyWritingRates(month?: string): Promise<WritingRate
     supabase.from("users").select("display_name").eq("status", "inactive"),
     // 임시 위임(0173a) — 위임된 (반, 날짜)의 **대상(분모)을 대체 강사로 옮긴다**(writing-rate-delegation.ts).
     fetchDelegateAttribution(supabase, since, until),
+    // '수업보고서 미발송' 반(0174a) — 대상(분모)에서 통째로 뺀다(원장: "괜히 작성률도 0%로 오해받지않고").
+    fetchReportOptoutClassIds(supabase),
   ]);
   // 작성 예외 강사 = 학원설정 report.writingExemptTeachers(수동 지정) + 퇴사(비활성) 처리된 직원(자동).
   // 퇴사자는 수동 등록 없이도 주간 기록·오늘 대상 모두에서 빠진다 — 재직 중 미작성만 미작성으로 집계.
@@ -460,10 +466,30 @@ export async function getWeeklyWritingRates(month?: string): Promise<WritingRate
    */
   const CLASSNOTE_MEASURED = new Set(["english"]);
   const measuredHere = (subject: string | null | undefined) => !CLASSNOTE_MEASURED.has(String(subject ?? ""));
+  /**
+   * 이 슬롯을 **분모에 넣는가** — 과목 갈래(measuredHere) + 반 단위 제외(0174a).
+   * 🔴 아래 세 곳(오늘 분모·오늘 수업예정·과거일 분모)에서 **전부** 써야 한다. 하나라도 빠지면
+   *    "표에선 사라졌는데 '18:20 수업 예정'만 남는" 유령 행이 생긴다(2026-07-23 영어 두 줄과 동형).
+   */
+  const countedHere = (s: { subject?: string | null; classId: string }) =>
+    measuredHere(s.subject) && !reportOptoutIds.has(s.classId);
   // 보고서는 **쓴 날(report_date)에 그대로** 집계한다. covers_date는 집계를 옮기는 게 아니라
   // "그 날 수업의 의무를 이 보고서가 대신했다"는 표시라, 아래에서 **분모(대상)에서 빼는** 데 쓴다(0136a).
   // ⚠️ 옮기면 연속수업(7/3에 2타임 몰아서 하고 보고서 1건)에서 7/3이 거꾸로 미작성이 된다.
-  const reports = (reps ?? [])
+  /**
+   * 🔴 **분자도 분모와 같은 반 집합을 봐야 한다**(0174a 적대검수에서 확정).
+   *
+   * 분모(countedHere)에서만 미발송 반을 빼면, 그 반에서 쓴 보고서가 **다른 반의 미작성을 메운다** —
+   * 과거일 근사가 `written = min(작성건수, 대상)`이라 초과분이 캡에 흡수되기 때문이다.
+   * 실패 방향이 최악이다: 진짜 미작성이 **100%로 가려진다**(원장 요구와 정반대). 재현 — 랩실 반에 4건
+   * 쓰고 정규 반 3명을 안 쓴 강사가 3/3 = 100%(토글 전엔 4/7 = 57%).
+   * ⚠️ `class_id`가 NULL인 건(이관분·보강)은 반을 특정할 수 없어 **그대로 둔다** — events.ts와 같은
+   *    규약("모르면 빼지 않는다"). 새로 쓰이는 보고서는 원스크린이 class_id를 채운다.
+   * ⚠️ 면제(discharged)도 같은 소스로 만든다 — 안 그러면 미발송 반 보고서의 covers_date가 **집계 대상
+   *    반의 의무를 잘못 면제**해 같은 방향(분모를 깎는 쪽)으로 거짓말한다.
+   */
+  const repsCounted = (reps ?? []).filter((r) => !r.class_id || !reportOptoutIds.has(r.class_id));
+  const reports = repsCounted
     .map((r) => ({
       teacher: (r.teacher_name as string | null) ?? "(미지정)",
       date: r.report_date as string,
@@ -487,7 +513,7 @@ export async function getWeeklyWritingRates(month?: string): Promise<WritingRate
   //    "부당하게 빠지는" 방향보다 안전하다(fail-safe).
   const dischargeKey = (studentId: string, date: string, teacher: string) => `${studentId}|${date}|${teacher}`;
   const discharged = new Set(
-    (reps ?? [])
+    repsCounted
       .filter((r) => r.covers_date)
       .map((r) =>
         dischargeKey(r.student_id, r.covers_date as string, (r.teacher_name as string | null) ?? "(미지정)"),
@@ -497,7 +523,7 @@ export async function getWeeklyWritingRates(month?: string): Promise<WritingRate
   // 2) 오늘 시작된 반 → 강사별 classIds (예외 강사 반 제외).
   // 귀속 = 반 담당(teacherName) 우선, 없으면 **슬롯 강사 라벨 폴백** — 반 담당 없이 슬롯 라벨로만 도는
   // 영어반(RTT2류)이 "(미지정)"으로 뭉치지 않게. 라벨 인물이 예외면 그 슬롯도 예외로 빠진다.
-  const started = schedule.filter((s) => s.status !== "upcoming" && measuredHere(s.subject));
+  const started = schedule.filter((s) => s.status !== "upcoming" && countedHere(s));
   const teacherOfClass = new Map<string, string>();
   for (const s of started) {
     // 위임된 날은 **대신 맡은 사람**이 그 반의 주인이다(0173a) — 그래야 결근한 담임이 0%로 빨갛게 남지 않고,
@@ -517,7 +543,7 @@ export async function getWeeklyWritingRates(month?: string): Promise<WritingRate
     // 분모(started)·주간(weekly)은 걸렀는데 '수업 예정'만 안 걸러, 오늘 수업이 남은 영어 강사가
     // `김태건 14:20 수업 예정 (주간 ·)`이라는 **빈 eywa 행**을 하나 더 만들었다(rates는 강사 이름 집합으로
     // 행을 만들므로, pending만 있어도 행이 생긴다). 영어의 진실은 아래 ClassNote 행 하나뿐이다.
-    if (!measuredHere(s.subject)) continue;
+    if (!countedHere(s)) continue;
     // '수업 예정'도 위임을 따른다 — 분모(started)만 옮기고 여기를 빼먹으면 결근한 담임에게 "수업 예정"이 남는다.
     const t = delegateOn(s.classId, today) ?? s.teacherName ?? s.slotTeacherLabel ?? "(미지정)";
     if (exempt.has(t)) continue;
@@ -596,7 +622,7 @@ export async function getWeeklyWritingRates(month?: string): Promise<WritingRate
       const m = new Map<string, string>();
       for (const s of weekly) {
         if (s.dayOfWeek !== key) continue;
-        if (!measuredHere(s.subject)) continue; // 영어는 ClassNote 경로가 잰다(중복·거짓 0% 방지)
+        if (!countedHere(s)) continue; // 영어는 ClassNote 경로가 잰다(중복·거짓 0% 방지) + 미발송 반 제외(0174a)
         // 오늘 로직과 동일: **그날 위임** → 반 담당 → 슬롯 라벨 폴백(반 담당 없는 영어반 "(미지정)" 방지).
         // ⚠️ 위임은 날짜마다 다르다 — 여기서 `today`를 쓰면 지난 요일 귀속이 통째로 틀어진다.
         const t = delegateOn(s.classId, d) ?? s.teacherName ?? s.slotTeacherLabel ?? "(미지정)";

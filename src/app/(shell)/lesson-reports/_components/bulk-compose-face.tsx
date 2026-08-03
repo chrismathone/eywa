@@ -11,11 +11,22 @@ import { useSubjectMaps } from "@/features/owner/operations-context";
 import { generateReportComment } from "@/features/onescreen/server/actions";
 import type { NoticeClassOption } from "@/features/report-admin/server/notice-actions";
 import { sendBulkAdminReports } from "@/features/report-admin/server/compose-actions";
+import { REPORT_OPTOUT_LABEL } from "@/features/classes/report-optout";
 
 const INPUT = "border-border bg-card text-foreground rounded-lg border px-2.5 py-1.5 text-sm w-full";
 const LABEL = "text-text-dim text-[11px] font-medium";
 
-export function BulkComposeFace({ classes, sendEnabled }: { classes: NoticeClassOption[]; sendEnabled: boolean }) {
+export function BulkComposeFace({
+  classes: allClasses,
+  sendEnabled,
+}: {
+  classes: NoticeClassOption[];
+  sendEnabled: boolean;
+}) {
+  // 🔴 직접 발송 = 리포트 카드(수업보고서)라 '수업보고서 미발송' 반(0174a)은 **목록에서 뺀다**.
+  //    반 공지 탭(notice-face)은 같은 배열을 받지만 **거르지 않는다** — 공지는 계속 보낼 수 있다.
+  //    (서버 sendBulkAdminReports도 같은 조건으로 재검증한다 — 화면만 숨기면 게이트가 아니다, #77.)
+  const classes = allClasses.filter((c) => !c.reportOptout);
   const router = useRouter();
   const subjects = useSubjectMaps();
   const [checked, setChecked] = useState<Set<string>>(new Set());
@@ -119,6 +130,8 @@ export function BulkComposeFace({ classes, sendEnabled }: { classes: NoticeClass
     if (res.absent) parts.push(`결석 기록이라 제외 ${res.absent}건`);
     if (res.tooOld) parts.push(`발송기한(전 달 1일) 지나 제외 ${res.tooOld}건`);
     if (res.subjectOff) parts.push(`발송 과목 아님 ${res.subjectOff}건`);
+    // 목록에서 이미 빠져 있어 평소엔 0이지만, 화면 밖 경로로 실려 온 반은 서버가 걸러 사유를 밝힌다(#77).
+    if (res.optoutSkipped) parts.push(`${REPORT_OPTOUT_LABEL} 반 제외 ${res.optoutSkipped}개`);
     if (res.overflow) parts.push(`상한 초과 ${res.overflow}건 제외`);
     (res.queued ? toast.success : toast.message)(parts.join(" · "));
     if (!test) {

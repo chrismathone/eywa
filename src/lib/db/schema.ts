@@ -315,6 +315,10 @@ export const classes = pgTable(
     // 특강(0133a): 방학 단기강좌. 폼 토글이 쓰는 컬럼 — false여도 반 이름에 '특강'이 있으면 특강으로 본다
     // (하위호환 폴백). 판정 단일소스 = src/features/classes/special-lecture.ts `isSpecialLecture`.
     isSpecial: boolean("is_special").notNull().default(false),
+    // 수업보고서 미발송(0174a): 랩실 등 보고서를 쓰지 않는 반. 보고서 작성/발송 화면의 반 목록·작성률
+    // 분모·미작성 재촉에서 빠진다. ⚠️ is_special과 달리 **이름 폴백이 없다**(반 이름 규칙이 없어서).
+    // 판정 단일소스 = src/features/classes/report-optout.ts `isReportOptout`.
+    reportOptout: boolean("report_optout").notNull().default(false),
     notes: text("notes"),
     // Cell color (ijw bgColor/textColor). Stored as #RRGGBB; ARGB normalized on import.
     bgColor: text("bg_color"),

@@ -26,6 +26,7 @@ import { getTenantSettingsByTenantId } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { isClassnoteAllowed, isClassnoteSubjectEnabled } from "@/features/onescreen/classnote-guard";
 import { absenceKeyOf, getAbsenceBlockedKeys } from "@/features/onescreen/server/absence-gate";
+import { fetchReportOptoutClassIds } from "@/features/classes/server/report-optout-ids";
 import {
   absenceDigestBody,
   buildAbsenceEvents,
@@ -533,10 +534,15 @@ async function detectUnsentReports(admin: SupabaseClient, tenantId: string): Pro
   if (error) throw new Error(`detectUnsentReports query: ${error.message}`);
 
   const subjects = buildSubjectMaps(settings.operations.subjects);
+  // '수업보고서 미발송' 반(0174a)은 재촉하지 않는다 — 그 반은 애초에 보고서를 안 쓰기로 한 반이고,
+  // 재촉을 줄이는 방향은 항상 안전하다(보낼 수 있는데 안 조르는 건 거짓말이 아니다).
+  // ⚠️ class_id가 NULL인 건(보강·이관분)은 반 판정이 불가능하니 그대로 둔다 — 모르면 빼지 않는다.
+  const optoutClassIds = await fetchReportOptoutClassIds(admin, tenantId);
   const gated = (data ?? []).filter(
     (row) =>
       isClassnoteAllowed(row.report_date as string, today) &&
-      isClassnoteSubjectEnabled(row.subject as string | null, settings.report.classnoteSubjects),
+      isClassnoteSubjectEnabled(row.subject as string | null, settings.report.classnoteSubjects) &&
+      !(row.class_id && optoutClassIds.has(row.class_id as string)),
   );
   // 결석 게이트(#77) — 발송 콘솔(sendClassnoteForUnsent)과 게이트 동일 불변식: 원스크린 save는 결석도
   // 저장하는 게 정책이라, 결석이라 **보낼 수 없는** 저장분을 '미발송'으로 재촉하면 거짓 알림이 된다.

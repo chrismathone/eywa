@@ -276,6 +276,7 @@ export async function sendBulkAdminReports(input: BulkAdminReportInput): Promise
   skippedExisting?: number; // 이미 오늘 보고서가 있어 제외된 학생 수
   absent?: number; // 그날 결석 기록이라 제외된 (학생,과목) 수 — 카드 작성 자체를 안 함(#77 결석 게이트)
   subjectOff?: number; // 발송 대상 과목이 아니라 제외된 (학생,과목) 수
+  optoutSkipped?: number; // '수업보고서 미발송' 반이라 제외된 반 수(0174a) — 조용히 무시하지 않고 화면이 사유를 밝힌다
   overflow?: number; // 타깃 상한 초과로 잘린 수
   tooOld?: number; // 전 달 1일 이전 날짜라 발송 차단(too_old)된 수 — 개별/원스크린 경로와 동일 가드
   wouldSend?: number; // dry-run 시 발송 예정 인원(상한)
@@ -297,6 +298,7 @@ export async function sendBulkAdminReports(input: BulkAdminReportInput): Promise
   // ── 1. 대상 (학생,과목,담당강사) 후보 해석 ──
   let targets: BulkTarget[] = [];
   let subjectOff = 0;
+  let optoutSkipped = 0;
   if (input.test) {
     // 테스트 학생(학원이) — 탈원 상태일 수 있어 이름으로 조회(반 해석 경로로 안 뽑힘). 발송 과목 첫 번째로.
     const firstSendable = allowedSubjects.find((k) => isClassnoteSubjectEnabled(k, allowedSubjects));
@@ -314,13 +316,17 @@ export async function sendBulkAdminReports(input: BulkAdminReportInput): Promise
   } else {
     const classIds = [...new Set(input.classIds ?? [])].slice(0, BULK_CLASS_CAP);
     if (!classIds.length) return { ok: false, error: "대상 반을 선택하세요" };
+    // 🔴 서버 재검증(#77) — 화면에서 숨겨도 classIds를 직접 실어 보내면 통과한다. '수업보고서 미발송'
+    //    반(0174a)은 **여기서 다시 거른다**. 조용히 빼지 않고 optoutSkipped로 사유를 돌려준다.
     const { data: classes } = await supabase
       .from("classes")
-      .select("id, subject, teacher_id")
+      .select("id, subject, teacher_id, report_optout")
       .in("id", classIds)
       .eq("is_active", true);
-    const subjectByClass = new Map((classes ?? []).map((c) => [c.id as string, c.subject as string | null]));
-    const teacherByClass = new Map((classes ?? []).map((c) => [c.id as string, c.teacher_id as string | null]));
+    optoutSkipped = (classes ?? []).filter((c) => c.report_optout === true).length;
+    const sendableClasses = (classes ?? []).filter((c) => c.report_optout !== true);
+    const subjectByClass = new Map(sendableClasses.map((c) => [c.id as string, c.subject as string | null]));
+    const teacherByClass = new Map(sendableClasses.map((c) => [c.id as string, c.teacher_id as string | null]));
     const teacherIds = [...new Set([...teacherByClass.values()].filter(Boolean))] as string[];
     const nameByTeacher = new Map<string, string | null>();
     if (teacherIds.length) {
@@ -366,11 +372,11 @@ export async function sendBulkAdminReports(input: BulkAdminReportInput): Promise
     overflow = targets.length - BULK_TARGET_CAP;
     targets = targets.slice(0, BULK_TARGET_CAP);
   }
-  if (!targets.length) return { ok: true, queued: 0, conflicts: 0, skippedExisting: 0, subjectOff, overflow };
+  if (!targets.length) return { ok: true, queued: 0, conflicts: 0, skippedExisting: 0, subjectOff, optoutSkipped, overflow };
 
   // ── 2. 발송 안전 스위치(기본 OFF) — dry-run이면 저장/큐잉 없이 예정 인원만 반환 ──
   if (!settings.report.classnoteSendEnabled) {
-    return { ok: true, dryRun: true, wouldSend: targets.length, queued: 0, conflicts: 0, skippedExisting: 0, subjectOff, overflow };
+    return { ok: true, dryRun: true, wouldSend: targets.length, queued: 0, conflicts: 0, skippedExisting: 0, subjectOff, optoutSkipped, overflow };
   }
 
   // ── 3. 오늘 그 과목 보고서가 이미 있는 학생 제외(덮어쓰기·중복 발송 방지) ──
@@ -399,7 +405,7 @@ export async function sendBulkAdminReports(input: BulkAdminReportInput): Promise
       !existingBySubject.has(`${t.studentId}|${t.subject}`),
   );
   const skippedExisting = targets.length - fresh.length;
-  if (!fresh.length) return { ok: true, queued: 0, conflicts: 0, skippedExisting, subjectOff, overflow };
+  if (!fresh.length) return { ok: true, queued: 0, conflicts: 0, skippedExisting, subjectOff, optoutSkipped, overflow };
 
   // ── 3.5 결석 게이트(#77) — 그날 결석 기록 학생에겐 "오늘 수업" 카드를 만들지도, 보내지도 않는다
   //    (원스크린 게이트와 동일 규약 — 결석 학생용 행을 안 만들어 미발송 재촉(unsent_report) 후보도 안 생김).
@@ -424,7 +430,7 @@ export async function sendBulkAdminReports(input: BulkAdminReportInput): Promise
     }
     absent = fresh.length - sendable.length;
   }
-  if (!sendable.length) return { ok: true, queued: 0, conflicts: 0, skippedExisting, absent, subjectOff, overflow };
+  if (!sendable.length) return { ok: true, queued: 0, conflicts: 0, skippedExisting, absent, subjectOff, optoutSkipped, overflow };
 
   // ── 4. 동명이인 감지 — 학생별 1회, 25명 청크(sendClassnoteForUnsent 패턴) ──
   const freshStudentIds = [...new Set(sendable.map((t) => t.studentId))];
@@ -524,7 +530,7 @@ export async function sendBulkAdminReports(input: BulkAdminReportInput): Promise
     );
   }
 
-  return { ok: true, queued, conflicts, skippedExisting, absent, subjectOff, overflow, tooOld };
+  return { ok: true, queued, conflicts, skippedExisting, absent, subjectOff, optoutSkipped, overflow, tooOld };
 }
 
 export type AdminComposeSubject = {

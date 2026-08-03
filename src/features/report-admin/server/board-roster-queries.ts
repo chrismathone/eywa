@@ -57,7 +57,10 @@ export async function getBoardRosterCheck(subject = "english"): Promise<BoardRos
         "id, class_name, teacher:teacher_id ( display_name ), enrollments ( end_date, students ( id, name, classnote_name, grade, status, is_test ) )",
       )
       .eq("subject", subject)
-      .eq("is_active", true),
+      .eq("is_active", true)
+      // '수업보고서 미발송' 반(0174a)은 보드 대조에서도 뺀다 — 보고서를 안 쓰기로 한 반을
+      // "보드가 없다"고 매일 지적하면 그게 곧 잡음이다.
+      .eq("report_optout", false),
     supabase.from("classnote_student_links").select("student_id, board_id, child_id, child_name_at_link"),
     canWriteTenant(user.systemRole, "lesson_reports"),
   ]);

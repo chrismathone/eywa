@@ -472,7 +472,7 @@ export async function getMonthlyAttendanceMatrix(
   //    대신 teacherActive로 내려 강사 필터에 "(퇴직)"을 표시한다(담임 재배정 전까지의 정직한 표시).
   let classesQuery = supabase
     .from("classes")
-    .select("id, class_name, subject, teacher:teacher_id ( id, display_name, status )")
+    .select("id, class_name, subject, report_optout, teacher:teacher_id ( id, display_name, status )")
     .eq("is_active", true)
     .order("class_name");
   if (tId) classesQuery = classesQuery.eq("teacher_id", tId);
@@ -486,6 +486,8 @@ export async function getMonthlyAttendanceMatrix(
       id: c.id,
       className: c.class_name,
       subject: c.subject,
+      // 수업보고서 미발송(0174a) — 아래 출결 파생이 "보고서 없음 = 결석" 규칙을 끄는 데 쓴다.
+      reportOptout: (c as { report_optout?: boolean | null }).report_optout === true,
       teacherId: teacher?.id ?? null,
       teacherName: teacher?.display_name ?? null,
       teacherActive: teacher ? teacher.status !== "inactive" : true,
@@ -622,7 +624,14 @@ export async function getMonthlyAttendanceMatrix(
   // 규칙·근거는 derive-from-reports.ts. 여기선 "등원일" 판정을 화면(page.tsx)과 **똑같이** 한다:
   // 학생 등원요일 ∩ 그 달 날짜, 공휴일 제외, 수강 구간 안. 어긋나면 화면과 파생이 서로 다른 말을 한다.
   const selectedClass = classes.find((c) => c.id === classId);
-  const derivedActive = isDerivedAttendanceSubject(selectedClass?.subject);
+  // 🔴 '수업보고서 미발송' 반(0174a)은 **파생을 통째로 끈다** — 반쪽만 끄면 화면이 거짓말을 한다:
+  //    보고서가 영구히 0건이라 '없음=결석'을 그대로 두면 지난 등원일이 전부 결석으로 뒤집히고,
+  //    반대로 '출석'만 남기면 통계가 **출석 일방**이 되어 출석률이 100%로 굳는다(둘 다 틀린 숫자).
+  //    끄면 수기 기록만 남고, 페이지가 이미 "수업보고서로 자동 표시되는 과목이 아니라서…" 안내를
+  //    띄운다(derivedActive=false 분기) — 왜 비었는지가 화면에 그대로 설명된다.
+  //    ⚠️ 파생은 **읽기 시점**이라 지워지는 게 아니다. 토글을 끄면 그 즉시 옛 표시가 그대로 돌아온다.
+  const derivedActive =
+    isDerivedAttendanceSubject(selectedClass?.subject) && selectedClass?.reportOptout !== true;
   if (derivedActive && selectedClass && studentIds.length > 0) {
     const [reports, settings] = await Promise.all([
       // 학생 수 × 최대 31일이라 청크당 1000행을 넘길 여지는 낮지만, 반 인원은 상한이 없다(B2).
@@ -703,6 +712,9 @@ export async function getMonthlyAttendanceMatrix(
         siblingReportDates: siblingByStudent.get(s.id),
         manualDates: new Set(Object.keys(marks[s.id] ?? {})),
         today: todayIso,
+        // 🔴 '수업보고서 미발송' 반(0174a) — 보고서가 영구히 0건이라 "없음 = 결석"을 적용하면
+        //    지난 등원일이 통째로 결석으로 뒤집힌다. 결석 규칙만 끄고 '출석'(기존 보고서)은 살린다.
+        reportOptoutClass: selectedClass?.reportOptout === true,
       });
       for (const [date, mark] of Object.entries(got)) {
         marks[s.id] ??= {};

@@ -87,6 +87,8 @@ function readForm(formData: FormData, allowedSubjects: ReadonlySet<string>) {
   // 특강 토글 — 폼은 hidden value="0" 뒤에 체크박스 value="1"을 둔다(체크 해제 시 필드가 통째로
   // 사라지는 HTML 기본 동작 때문). 키가 아예 없으면 '이 폼은 특강 필드를 모른다'로 보고 수정 시 건드리지 않는다.
   const specialValues = formData.getAll("isSpecial").map((v) => String(v));
+  // '수업보고서 미발송'(0174a) — 특강 토글과 **똑같은 hidden+체크박스 쌍 계약**(위 주석 참조).
+  const optoutValues = formData.getAll("reportOptout").map((v) => String(v));
   // 운영 기간(특강은 방학 한정 → 끝나면 시간표에서 자동으로 내려간다). periodProvided=1이면
   // 종료일을 **비운 것도 명시**(무기한으로 되돌리기)로 해석한다 — schedule-preserve.ts 참조.
   return {
@@ -100,6 +102,8 @@ function readForm(formData: FormData, allowedSubjects: ReadonlySet<string>) {
     textColor: bgColor ? readableTextColor(bgColor) || null : null,
     isSpecialProvided: specialValues.length > 0,
     isSpecial: specialValues.some((v) => v === "1" || v === "on" || v === "true"),
+    reportOptoutProvided: optoutValues.length > 0,
+    reportOptout: optoutValues.some((v) => v === "1" || v === "on" || v === "true"),
     periodProvided: get("periodProvided") === "1",
     // 교시마다 종료일이 갈려 폼이 칸을 비운 경우 — 빈 칸을 "무기한으로 되돌리기"가 아니라
     // "안 정함(교시별 기존값 유지)"으로 읽는다(조용한 일괄 삭제 방지).
@@ -194,6 +198,7 @@ export async function createClass(
       // 수강까지 함께 종료해 학생목록·학생상세와 어긋나지 않는다. 폼에서 끄는 문은 폐지했다.
       is_active: true,
       is_special: input.isSpecial,
+      report_optout: input.reportOptout,
       notes: input.notes,
       bg_color: input.bgColor,
       text_color: input.textColor,
@@ -277,6 +282,8 @@ export async function updateClass(
       // "수강중"으로 남는 사각지대가 생겼다. 폐지/재운영은 archiveClass 단일 경로.
       // 특강 토글은 **폼이 그 필드를 보냈을 때만** 쓴다 — 안 보내는 폼(구 폼·부분 저장)이 조용히 false로 되돌리지 않게.
       ...(input.isSpecialProvided ? { is_special: input.isSpecial } : {}),
+      // '수업보고서 미발송'(0174a)도 같은 계약 — 안 보내는 폼이 조용히 false로 되돌리지 않게.
+      ...(input.reportOptoutProvided ? { report_optout: input.reportOptout } : {}),
       notes: input.notes,
       bg_color: input.bgColor,
       text_color: input.textColor,
