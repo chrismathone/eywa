@@ -8,7 +8,8 @@ import { SheetClient } from "@/features/class-sheets/components/sheet-client";
 export const metadata: Metadata = { title: "English Class Sheet — eywa" };
 
 /**
- * ECS 주간 시트 — 반 1개 × 주 1개. key={classId:week}로 클라 상태를 재초기화한다(주/반 전환 = 재마운트).
+ * ECS 주간 시트 — 반 1개 × 주 1개. key={classId:week:자리표시}로 클라 상태를 재초기화한다
+ * (주/반 전환·LAB·JJ 표시 전환 = 재마운트).
  * 게이트는 getClassSheetWeek 내부의 requireEcsClassAccess(조회·액션 공용 — #77).
  */
 export default async function EcsSheetPage({
@@ -54,7 +55,9 @@ export default async function EcsSheetPage({
       </div>
       <div className="min-h-0 flex-1">
         <SheetClient
-          key={`${classId}:${res.data.weekMonday}`}
+          // 자리(LAB·JJ) 표시도 key에 넣는다 — 토글은 서버 재조회라, 재마운트하지 않으면 클라가 들고 있는
+          // 계획 행 state가 옛 슬롯 구성 그대로 남아 새로 열린 교시가 빈 칸으로 보인다.
+          key={`${classId}:${res.data.weekMonday}:${res.data.showSpecialRooms ? "rooms" : "norooms"}`}
           data={res.data}
           classOptions={classOptions}
           userId={user.id}

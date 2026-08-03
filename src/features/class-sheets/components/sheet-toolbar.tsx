@@ -34,6 +34,9 @@ export function SheetToolbar({
   onNavigate,
   fontSize,
   onFontSize,
+  showSpecialRooms,
+  onShowSpecialRooms,
+  specialRoomsPending,
 }: {
   data: ClassSheetWeekData;
   classOptions: { id: string; name: string }[];
@@ -46,6 +49,11 @@ export function SheetToolbar({
   /** 글씨 크기(내 계정) — 아래 계획 패널·주간 그리드를 통째로 확대. 상단 바는 그대로. */
   fontSize: EcsFontSize;
   onFontSize: (size: EcsFontSize) => void;
+  /** 자리(LAB·JJ) 교시 표시(내 계정). 끄면 카드도 작성률도 빠진다 — 서버가 다시 그린다. */
+  showSpecialRooms: boolean;
+  onShowSpecialRooms: (show: boolean) => void;
+  /** 표시 토글 저장·재조회 중 — 두 번 눌러 왕복이 겹치지 않게 잠근다. */
+  specialRoomsPending: boolean;
 }) {
   const { pending, conflicts } = useSaveIndicator(store);
   const hrefFor = (classId: string, monday: string) => `/ecs/${classId}?week=${monday}`;
@@ -121,6 +129,29 @@ export function SheetToolbar({
       </div>
 
       <span className="ml-auto flex items-center gap-2">
+        {/* 자리(LAB·JJ) 표시(내 계정) — 원장 2026-08-03: 코드가 정하지 말고 여기서 고른다.
+            ⚠️ 글씨 크기와 달리 **서버가 다시 그린다** — 이 값이 카드뿐 아니라 작성률 분모까지 정하기
+            때문(보이는 교시 = 세는 교시). 그래서 왕복 중엔 잠근다. */}
+        <span
+          className="border-line-strong flex items-center rounded-full border p-0.5"
+          title="LAB·JJ 자리 교시를 시트에 그릴지 — 숨기면 카드와 작성률에서 함께 빠집니다(쓴 기록은 지워지지 않습니다)"
+        >
+          <span className="text-text-dim px-1.5 text-[11px] font-bold">LAB·JJ</span>
+          {[true, false].map((v) => (
+            <button
+              key={String(v)}
+              type="button"
+              disabled={specialRoomsPending}
+              onClick={() => onShowSpecialRooms(v)}
+              aria-pressed={showSpecialRooms === v}
+              className={`cursor-pointer rounded-full px-1.5 py-0.5 text-[11px] font-bold transition disabled:cursor-wait disabled:opacity-60 ${
+                showSpecialRooms === v ? "bg-primary text-primary-foreground" : "text-text-dim hover:bg-bg-soft"
+              }`}
+            >
+              {v ? "표시" : "숨김"}
+            </button>
+          ))}
+        </span>
         {/* 글씨 크기(내 계정) — 수업보고서 강사뷰와 같은 컨트롤·같은 어휘(원장 지시 2026-07-31).
             지금 크기가 '작음'이라 기본은 화면 무변경. 저장은 계정이라 다른 PC에서도 같은 크기. */}
         <span
