@@ -103,14 +103,19 @@ function PasswordDialog({
           ))}
         </div>
         {mode === "custom" ? (
-          <input
-            name="password"
-            type="text"
-            minLength={8}
-            required
-            placeholder="새 비밀번호 (8자 이상)"
-            className={INPUT}
-          />
+          <div className="space-y-1">
+            {/* type=text는 의도 — 원장이 직원에게 불러주는 값이라 가리지 않는다(디자인 규약 '비밀번호 입력'). */}
+            <input
+              name="password"
+              type="text"
+              minLength={8}
+              required
+              placeholder="새 비밀번호"
+              className={INPUT}
+            />
+            {/* 안내를 placeholder로만 두면 타이핑을 시작하는 순간 사라져, 브라우저 기본 말풍선이 유일한 안내가 된다. */}
+            <p className="text-text-dim text-xs">8자 이상. 직원에게 그대로 불러주세요.</p>
+          </div>
         ) : (
           <p className="text-text-dim text-xs">무작위 임시 비밀번호를 생성해 1회 표시합니다.</p>
         )}
