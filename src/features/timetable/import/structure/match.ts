@@ -2,9 +2,10 @@
 // 기존 레코드가 구버전이라 신뢰 대상이 아니므로, 여기서는 "이름으로 찾히면 그 id, 없으면 null(신규 대상)"
 // 로 분류만 한다(생성/수정은 서버 apply 몫). 수업=className, 방=classrooms.name.
 // 강사: 특수 자리(LAB 603 · JJ 305) 선차단 → englishName 우선 → displayName 폴백 →
-//       복수 후보는 역할(teacher/manager/master)로 좁힘 →
+//       복수 후보는 배정 가능한 역할(ASSIGNABLE_TEACHER_ROLES)로 좁힘 →
 //       그래도 모호하면 null(라벨-only = slot_teacher_label 보존). (apply-english-schedules.cjs resolveTeacher 이식)
 
+import { isAssignableTeacherRole } from "@/lib/permissions";
 import { isSpecialSlotLabel } from "../../lib/teacher-label";
 import type {
   ExistingContext,
@@ -25,7 +26,6 @@ function roomKey(name: string): string {
   return m ? m[1]!.toLowerCase() : norm(name);
 }
 
-const TEACHER_ROLES = new Set(["teacher", "manager", "master"]);
 /**
  * 강사 라벨("Jane"·"부원장"·"LAB") → 기존 user. englishName·displayName 둘 다 대조,
  * 복수 후보는 역할로 좁히고, 그래도 모호하면 null(라벨-only). `existed` = 후보가 하나라도 있었는지
@@ -44,7 +44,10 @@ function resolveTeacher(
   const cands = teachers.filter((t) => norm(t.englishName ?? "") === n || norm(t.displayName) === n);
   if (cands.length === 0) return { ref: null, existed: false };
   if (cands.length === 1) return { ref: cands[0]!, existed: true };
-  const roled = cands.filter((t) => t.systemRole && TEACHER_ROLES.has(t.systemRole));
+  // 동명이인 → 배정 가능한 역할로 좁힌다. ⚠️ 목록은 [`ASSIGNABLE_TEACHER_ROLES`] 단일 소스 —
+  // 여기 따로 적어 두었더니 `admin`이 빠져, 관리자 겸 강사가 동명이인일 때 **상대 쪽으로 잘못 매칭**될
+  // 수 있었다(라벨-only로 떨어지는 것보다 나쁘다 — 남의 시간표에 슬롯이 붙는다).
+  const roled = cands.filter((t) => isAssignableTeacherRole(t.systemRole));
   return { ref: roled.length === 1 ? roled[0]! : null, existed: true }; // 모호 → 라벨-only
 }
 

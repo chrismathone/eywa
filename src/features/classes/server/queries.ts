@@ -5,6 +5,7 @@ import { effectiveTeacherId } from "@/lib/auth/view-mode";
 import { getTeacherScope } from "@/lib/auth/teacher-scope";
 import { attendanceRate } from "@/lib/calc/attendance";
 import { kstToday } from "@/lib/date-kst";
+import { ASSIGNABLE_TEACHER_ROLES } from "@/lib/permissions";
 import type { ClassroomAssignData } from "../lib/classroom-assign";
 
 /**
@@ -376,9 +377,8 @@ export async function getClassesPage(
  * ⚠️ 화이트리스트가 좁히는 건 **재직 여부**(`status=active`)다 — 퇴직자가 '새 반 담임' 후보로 뜨는 걸
  *    막는 게 목적. **역할로 좁히는 게 아니다.** 여기서 `admin`(관리자)이 빠져 있어 실제로 반을 맡고 있는
  *    관리자 3명이 배정·인수인계 드롭다운에서 통째로 사라졌다(2026-08-03 원장 제보 "강사 인수인계에
- *    허은진이 없음" — 실측 김민주 7반·정유진 2반·허은진 1반, 전부 admin/active).
- *    `master`(원장)를 넣으면서 `admin`만 뺄 이유가 없었고, 같은 성격의 다른 선택지 쿼리
- *    (`students` `getTeacherOptions`·등록상담 담당자)는 처음부터 admin을 넣고 있었다.
+ *    허은진이 없음" — 실측 김민주 3반·정유진 2반·허은진 1반 = 활성 6반, 전부 admin/active).
+ *    역할 목록은 [`ASSIGNABLE_TEACHER_ROLES`](../../../lib/permissions.ts) 단일 소스 — 여기 새로 적지 말 것.
  *
  * ⚠️ 역할을 더 좁히고 싶어지면 **화면에서 안 보이는 것과 데이터에서 없는 것은 다르다**는 걸 먼저 볼 것 —
  *    담임은 이미 데이터에 있고, 후보에서 빼도 그 반은 그대로다. 대신 그 반을 수정하면 컨트롤드 select가
@@ -391,7 +391,7 @@ export async function getClassTeacherOptions(): Promise<
   const { data } = await supabase
     .from("users")
     .select("id, display_name, system_role, subjects")
-    .in("system_role", ["teacher", "manager", "master", "admin"])
+    .in("system_role", [...ASSIGNABLE_TEACHER_ROLES])
     .eq("status", "active")
     .order("display_name");
   return (data ?? []).map((u) => ({

@@ -4,6 +4,30 @@
 
 ## 진행 상황
 
+### 담임 역할 목록 전수 감사 — 세 벌 복제 중 두 벌이 남아 있었다 (2026-08-03) - typecheck0/lint0/test3273/build✓
+
+앞 항목(허은진) 수정 뒤 원장 지시 *"다른 화면에도 같은 역할 누락 있는지 전수 확인"* → **같은 배열이 세 곳에
+복제**돼 있었고 앞 수정은 그중 **한 곳만** 고친 상태였다. `.in("system_role")`·`.eq`·역할 직접비교·역할 배열
+상수·`from("users")` 조회·마이그레이션·스크립트를 전수 훑어 아래를 확정.
+
+- 🔴 **[`isAssignableTeacher`](../src/features/classes/server/actions.ts)(서버 검증) — 실질 반쪽 배포였다.**
+  선택지에는 허은진이 뜨는데 예약을 누르면 **"유효한 강사가 아닙니다"로 거절**되는 상태였다(예약·적용 양쪽).
+  UI만 고치고 서버 게이트를 안 고치면 기능은 여전히 안 된다 — [[#77]]의 정확한 반대 방향.
+- 🟡 **[`match.ts`](../src/features/timetable/import/structure/match.ts) 시간표 구조 임포트** — 동명이인일 때
+  역할로 후보를 좁히는 tie-break에서 admin이 빠져, 관리자 겸 강사가 동명이인이면 **상대 쪽으로 잘못 매칭**될
+  수 있었다(라벨-only보다 나쁘다 — 남의 시간표에 슬롯이 붙는다). 지금 동명이인 0건이라 실피해 없음.
+- 🟡 **[`unwire-lab-jj-staff.cjs`](../scripts/_english_sync/unwire-lab-jj-staff.cjs)** — 재배정 대상 조회가
+  빈손이면 담임을 null로 지우는 구조라, 대상이 관리자면 조용히 미배정. 값만 맞춤(TS import 불가).
+- **재발 방지 = 단일 소스 + 복제 금지 테스트**: [`ASSIGNABLE_TEACHER_ROLES`](../src/lib/permissions.ts)
+  (+`isAssignableTeacherRole`)로 통합하고, [`assignable-teacher-roles.test.ts`](../src/lib/assignable-teacher-roles.test.ts)가
+  **src/ 전수 스캔**으로 "`teacher`+`master`를 적었는데 `admin`이 없는 역할 배열"을 잡는다(구버전 3곳 전부 검출 확인).
+  ⚠️ `admin`이 든 배열은 통과 — 상담 담당자처럼 **다른 질문**의 목록(counselor 포함)까지 막으면 거짓 경보다.
+- **살아있으나 안 고친 것(실피해 0, 판단이 필요한 것들)**: ① 직원 수정의 **휴가·급여 버튼**이 `teacher|master`
+  한정이라 부원장(admin) 제외 — `staff_leaves` 0행·급여 컬럼 전원 0·`PAYROLL_ENABLED=false`라 미사용.
+  ② 공지 audience `'teachers'`가 `role==='teacher'`만 → 겸직 관리자 제외인데 그 audience 사용 0건('office'2·'staff'1).
+  ③ super-admin KPI "강사"가 `system_role='teacher'` count(21) — 실제 가르치는 사람은 24명(플랫폼 통계 라벨 문제).
+- 📌 앞 항목의 실측치 정정: 김민주는 **7반이 아니라 3반**(활성 6반). 첫 집계 출력을 잘못 읽었다.
+
 ### 반을 맡은 관리자가 담임 배정 목록에서 통째로 빠짐 — 6주 만에 재발한 같은 뿌리 (2026-08-03) - typecheck0/lint0/test3269/build✓
 
 원장 제보: *"강사 인수인계에 '허은진'이 없음. 관리자인데 수업이 있는데 없어?"* → 맞다.
@@ -12,7 +36,7 @@
 
 - **범위는 인수인계만이 아니었다** — 이 함수는 **강사 인수인계 · 반 수정 · 새 반 만들기 3곳** 공용이라,
   관리자는 어디서도 담임으로 지정할 수 없었다. 실측(injaewon 프로덕션, 읽기전용): 활성 반 담임 중
-  **김민주 7반 · 정유진 2반 · 허은진 1반**이 전부 admin/active로 후보에서 누락(총 10개 반).
+  **김민주 3반 · 정유진 2반 · 허은진 1반**이 전부 admin/active로 후보에서 누락(활성 6반).
 - **🔴 조용한 데이터 손실이 딸려 있었다**: 담임 select는 컨트롤드인데 값에 맞는 option이 없으면 빈 칸이 되고,
   액션이 `teacherId: get("teacherId") || null`이라 **그 반을 수정만 해도 담임이 NULL로 지워진다**(반 이름을
   고치러 들어갔다가 담임을 잃는다). → 반 수정 페이지에서 **현재 담임을 후보 밖이어도 목록에 고정**

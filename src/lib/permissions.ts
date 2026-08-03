@@ -15,6 +15,26 @@ export const SYSTEM_ROLES = [
 ] as const;
 export type SystemRole = (typeof SYSTEM_ROLES)[number];
 
+/**
+ * 반 담임으로 **배정 가능한** 시스템 역할 — 강사 선택지·서버 검증·시간표 임포트 대조의 **단일 소스**.
+ *
+ * ⚠️ 이 목록이 좁히는 건 "가르칠 수 있는가"이지 **재직 여부가 아니다** — 퇴직자를 후보에서 빼는 건
+ *    `status='active'` 조건이 하는 일이다. 둘을 헷갈려 역할로 좁히면 **멀쩡히 운영 중인 반이 화면에서
+ *    사라진다**: injaewon은 관리자(admin)가 수업을 겸해 활성 반 6개(김민주 3·정유진 2·허은진 1)를 맡고 있고,
+ *    `admin` 누락으로 2026-07-22 수업목록 필터 → 08-03 인수인계·반 수정·새 반 순으로 두 번 터졌다.
+ *
+ * 🔴 **이 상수를 쓰지 않고 역할 배열을 새로 적지 말 것.** 같은 배열이 세 벌로 복제돼 있었고 한 벌만
+ *    고쳐져서 재발했다(선택지는 고쳤는데 서버 검증이 거절 = "목록엔 뜨는데 저장이 안 됨"). 복제 방지
+ *    테스트는 [`assignable-teacher-roles.test.ts`](./assignable-teacher-roles.test.ts).
+ *    ⚠️ TS 밖(스크립트 등)에서 같은 판정이 필요하면 이 상수를 주석으로 가리키고 값을 맞출 것.
+ */
+export const ASSIGNABLE_TEACHER_ROLES = ["teacher", "manager", "master", "admin"] as const;
+
+/** 위 목록 판정 — DB에서 온 임의 문자열(역할 컬럼)도 그대로 받는다. */
+export function isAssignableTeacherRole(role: string | null | undefined): boolean {
+  return !!role && (ASSIGNABLE_TEACHER_ROLES as readonly string[]).includes(role);
+}
+
 export const MENU_KEYS = [
   "dashboard",
   "timetable",
