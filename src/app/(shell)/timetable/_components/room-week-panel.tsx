@@ -20,12 +20,15 @@ export function RoomWeekPanel({
   rows,
   hourBands,
   hourRows,
+  hourDayLabel,
   unassigned,
   canEditCapacity,
 }: {
   rows: RoomWeekRow[];
   hourBands: RoomHourBand[];
   hourRows: RoomHourRow[];
+  /** 시간대별 표의 기준 요일 라벨 — 상단 요일 칩 선택을 따른다(평균 아님, 원장 확정 08-03). */
+  hourDayLabel: string;
   unassigned: RoomSlotLite[];
   canEditCapacity: boolean;
 }) {
@@ -93,7 +96,9 @@ export function RoomWeekPanel({
         <span className="text-foreground text-[12px] font-bold">주간 교실 활성도</span>
         {open ? (
           <span className="micro compact-chrome:hidden">
-            가동률 = 점유 ÷ 운영 시간(교시 설정) · 주중 = 월~금
+            {mode === "hour"
+              ? `${hourDayLabel}요일 시간대별 점유 — 위 요일 칩을 따라갑니다`
+              : "가동률 = 점유 ÷ 운영 시간(교시 설정) · 주중 = 월~금"}
           </span>
         ) : null}
         <div className="ml-auto flex items-center gap-1" onPointerDown={(e) => e.stopPropagation()}>
@@ -103,7 +108,7 @@ export function RoomWeekPanel({
                 요일별
               </button>
               <button type="button" onClick={() => setMode("hour")} className={chip(mode === "hour")}>
-                시간대별
+                시간대별({hourDayLabel})
               </button>
             </>
           ) : null}

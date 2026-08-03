@@ -58,7 +58,8 @@ export function RoomMapView({
   );
   const { buckets, unassigned } = useMemo(() => buildRoomBuckets(effSlots, rooms), [effSlots, rooms]);
   const weekRows = useMemo(() => buildRoomWeekRows(buckets, windows), [buckets, windows]);
-  const hourMatrix = useMemo(() => buildRoomHourRows(buckets, windows), [buckets, windows]);
+  // 시간대별 = **선택 요일의 절대 데이터**(요일 칩을 따라감) — 주중 평균 비채택(원장 확정 08-03).
+  const hourMatrix = useMemo(() => buildRoomHourRows(buckets, windows, [day]), [buckets, windows, day]);
   const summary = useMemo(
     () => summarizeDay(buckets, windows, day, nowMin),
     [buckets, windows, day, nowMin],
@@ -202,6 +203,7 @@ export function RoomMapView({
         rows={weekRows}
         hourBands={hourMatrix.bands}
         hourRows={hourMatrix.rows}
+        hourDayLabel={DAY_LABEL[day] ?? day}
         unassigned={unassigned}
         canEditCapacity={canEditCapacity}
       />
