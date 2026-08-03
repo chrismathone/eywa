@@ -6,6 +6,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { canAccessTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
 import { fetchInChunks } from "@/lib/supabase/batch";
+import { humanizeDbError } from "@/lib/supabase/db-error";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { hasClassnoteNameCollision } from "@/features/onescreen/server/scope";
 import { logAction } from "@/features/audit/server/log";
@@ -49,7 +50,7 @@ export async function getNoticeClassOptions(): Promise<{ ok: boolean; classes?: 
     .eq("is_active", true)
     .in("subject", allowed)
     .order("class_name");
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: humanizeDbError(error.message, "조회") };
   const ids = (classes ?? []).map((c) => c.id as string);
   // 반별 재원생 — 활성 수강 rows(선택 반 한정, 수백 행 규모). 학생 상태는 큐 적재 시 재검증.
   const enr = await fetchInChunks<{ class_id: string; student_id: string }>(ids, (chunk) =>
@@ -211,7 +212,7 @@ export async function sendClassNotice(input: {
     })
     .select("id")
     .single();
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: humanizeDbError(error.message, "발송") };
 
   // 감사 로그 — '발송 대기(큐 적재)'(실제 게시는 연동 PC 워커). best-effort. source=class(반 공지 경로).
   await logAction({
@@ -254,7 +255,7 @@ export async function listClassNotices(): Promise<{ ok: boolean; rows?: NoticeRo
     .select("id, body, targets, status, results, error, created_at, processed_at")
     .order("created_at", { ascending: false })
     .limit(20);
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: humanizeDbError(error.message, "조회") };
   return {
     ok: true,
     rows: (data ?? []).map((r) => {

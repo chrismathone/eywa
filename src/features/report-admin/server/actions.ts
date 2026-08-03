@@ -7,6 +7,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { canAccessTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
 import { fetchInChunks } from "@/lib/supabase/batch";
+import { humanizeDbError } from "@/lib/supabase/db-error";
 import { isClassnoteAllowed, isClassnoteSubjectEnabled } from "@/features/onescreen/classnote-guard";
 import { hasClassnoteNameCollision } from "@/features/onescreen/server/scope";
 import { absenceKeyOf, getAbsenceBlockedKeys } from "@/features/onescreen/server/absence-gate";
@@ -102,7 +103,7 @@ export async function retryClassnote(
       classnote_error: null,
     })
     .in("id", requeueIds);
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: humanizeDbError(error.message, "재발송") };
   return { ok: true, requeued: requeueIds.length, skipped, absentSkipped };
 }
 
@@ -223,7 +224,7 @@ export async function sendClassnoteForUnsent(ids: string[]): Promise<{
       .in("id", queueIds)
       .is("classnote_status", null) // 경합 이중 방어 — 그 사이 큐잉/발송된 행은 건드리지 않음
       .select("id");
-    if (error) return { ok: false, error: error.message };
+    if (error) return { ok: false, error: humanizeDbError(error.message, "발송") };
     queued = (data ?? []).length;
   }
   return {
@@ -255,7 +256,7 @@ export async function resetStuckClassnote(): Promise<{ ok: boolean; reset?: numb
     .eq("classnote_status", "processing")
     .lt("classnote_processing_at", cutoff)
     .select("id");
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: humanizeDbError(error.message, "복구") };
   return { ok: true, reset: (data ?? []).length };
 }
 
@@ -278,7 +279,7 @@ const REPORT_PAGE_SIZE = 30;
 /**
  * 보고서 목록 조회(수업보고서 Part C) — 강사·기간·상태·과목 필터 + 페이지네이션. 클라 필터 UI에서 호출(데이터 반환).
  * 읽기 게이트: lesson_reports 메뉴 접근(readonly 포함, canAccessTenant). RLS 테넌트 스코프.
- * 반(0134a class_id)은 **표시 + 정렬**까지 열려 있다(`classes(class_name)` to-one 임베드). 반 **필터**는
+ * 반(0134a class_id)은 **표시 + 정렬**까지 열려 있다(`classes!…class_id_fkey` to-one 임베드). 반 **필터**는
  * distinct 목록이 필요한데 B2상 전건 스캔 금지라 filter-options RPC 확장이 선행이다 — 후속.
  */
 export async function listReports(
@@ -294,9 +295,15 @@ export async function listReports(
 
   let q = supabase
     .from("lesson_reports")
-    // ⚠️ `classes(class_name)` = to-one 임베드(0134a class_id FK). 조인 1회라 별도 조회가 없고,
-    //    반 정렬(reportOrderSpecs "class")이 이 임베드를 그대로 정렬 키로 쓴다. 반 없는 행은 null.
-    .select("id, student_id, subject, report_date, covers_date, covers_by, covers_at, covers_note, created_at, classnote_sent_at, classnote_status, classnote_read_at, teacher_name, share_token, source, class_id, classes(class_name)", { count: "exact" });
+    // ⚠️ `classes!lesson_reports_class_id_fkey(...)` = to-one 임베드(0134a class_id FK). 조인 1회라 별도
+    //    조회가 없고, 반 정렬(reportOrderSpecs "class")이 이 임베드를 정렬 키로 쓴다. 반 없는 행은 null.
+    // ⚠️ **FK 이름을 반드시 붙일 것.** 0171a가 `makeup_class_id`(보강 앵커)를 더하면서 lesson_reports→classes
+    //    FK가 2개가 됐다 — 힌트 없는 `classes(...)`는 PostgREST가 어느 FK인지 못 정해 **HTTP 300 PGRST201로
+    //    쿼리 전체가 실패**한다("more than one relationship was found"). 2026-08-03 목록이 통째로 안 뜬 원인.
+    //    새 FK를 lesson_reports에 더할 땐 이 임베드가 여전히 유일하게 해석되는지 확인할 것.
+    // ⚠️ 반대로 **정렬 문자열엔 `!FK`를 넣으면 안 된다** — order 파서가 '!'를 못 읽어 PGRST100(400)이다.
+    //    select만 힌트로 확정하면 `order=classes(class_name)`은 그 임베드를 가리켜 정상 동작(둘 다 실측).
+    .select("id, student_id, subject, report_date, covers_date, covers_by, covers_at, covers_note, created_at, classnote_sent_at, classnote_status, classnote_read_at, teacher_name, share_token, source, class_id, classes!lesson_reports_class_id_fkey(class_name)", { count: "exact" });
   // 정렬은 **서버에서** — 30건씩 끊어 주는 목록이라 화면에서 정렬하면 그 페이지 안에서만 정렬된다.
   // 기본값·헤더 클릭 모두 순수 함수(reportOrderSpecs)가 결정(동률 tiebreak 포함 — 페이징 중복/누락 방지).
   for (const o of reportOrderSpecs(filters.sort, filters.dir)) {
@@ -331,7 +338,7 @@ export async function listReports(
   q = q.range(page * REPORT_PAGE_SIZE, page * REPORT_PAGE_SIZE + REPORT_PAGE_SIZE - 1);
 
   const { data, count, error } = await q;
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: humanizeDbError(error.message, "조회") };
   const list = data ?? [];
   const ids = [...new Set(list.map((r) => r.student_id as string))];
   const nameRows = await fetchInChunks<{ id: string; name: string }>(ids, (chunk) =>
@@ -411,7 +418,7 @@ export async function setReportCoversDate(
         : { covers_date: null, covers_by: null, covers_at: null, covers_note: null },
     )
     .eq("id", id);
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: humanizeDbError(error.message, "저장") };
 
   revalidatePath("/lesson-reports");
   return { ok: true };
