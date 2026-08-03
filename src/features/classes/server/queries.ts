@@ -370,6 +370,20 @@ export async function getClassesPage(
   return { rows: rows.slice(from, from + pageSize), total };
 }
 
+/**
+ * 담임 **배정** 선택지 — 반을 맡을 수 있는 재직자(새 반·반 수정·강사 인수인계 공용).
+ *
+ * ⚠️ 화이트리스트가 좁히는 건 **재직 여부**(`status=active`)다 — 퇴직자가 '새 반 담임' 후보로 뜨는 걸
+ *    막는 게 목적. **역할로 좁히는 게 아니다.** 여기서 `admin`(관리자)이 빠져 있어 실제로 반을 맡고 있는
+ *    관리자 3명이 배정·인수인계 드롭다운에서 통째로 사라졌다(2026-08-03 원장 제보 "강사 인수인계에
+ *    허은진이 없음" — 실측 김민주 7반·정유진 2반·허은진 1반, 전부 admin/active).
+ *    `master`(원장)를 넣으면서 `admin`만 뺄 이유가 없었고, 같은 성격의 다른 선택지 쿼리
+ *    (`students` `getTeacherOptions`·등록상담 담당자)는 처음부터 admin을 넣고 있었다.
+ *
+ * ⚠️ 역할을 더 좁히고 싶어지면 **화면에서 안 보이는 것과 데이터에서 없는 것은 다르다**는 걸 먼저 볼 것 —
+ *    담임은 이미 데이터에 있고, 후보에서 빼도 그 반은 그대로다. 대신 그 반을 수정하면 컨트롤드 select가
+ *    빈 칸이 되어 저장 한 번에 담임이 NULL로 지워진다(반 수정 페이지의 '현재 담임 고정' 참조).
+ */
 export async function getClassTeacherOptions(): Promise<
   { id: string; name: string; subjects: string[] }[]
 > {
@@ -377,7 +391,7 @@ export async function getClassTeacherOptions(): Promise<
   const { data } = await supabase
     .from("users")
     .select("id, display_name, system_role, subjects")
-    .in("system_role", ["teacher", "manager", "master"])
+    .in("system_role", ["teacher", "manager", "master", "admin"])
     .eq("status", "active")
     .order("display_name");
   return (data ?? []).map((u) => ({
@@ -391,12 +405,17 @@ export async function getClassTeacherOptions(): Promise<
  * 수업목록 **강사 필터** 선택지 — 배정 가능한 사람(위 `getClassTeacherOptions`) **∪ 실제로 담임인 사람**.
  *
  * 왜 배정용과 갈라놨나(2026-07-22 원장 제보 "수업목록에서 왜 허은진이 필터에 없지?"):
- *   배정용은 역할 화이트리스트(teacher/manager/master) + active로 좁혀야 한다 — 안 그러면 **퇴직자가
- *   '새 반 담임' 후보로 뜬다**. 그런데 필터는 정반대 질문이다: "이 목록에 실제로 있는 담임이 누구냐".
- *   화이트리스트를 그대로 필터에 쓰면 **역할이 admin이거나 퇴직 처리된 담임의 반이 필터에서 통째로
- *   사라진다**(실측 4명·12반: 김민주 admin 7 · 김태건 viewer 2 · 신명진 manager/inactive 2 · 허은진 admin 1).
+ *   배정용은 **재직자**(`status=active`)로 좁혀야 한다 — 안 그러면 **퇴직자가 '새 반 담임' 후보로 뜬다**.
+ *   그런데 필터는 정반대 질문이다: "이 목록에 실제로 있는 담임이 누구냐". 배정용을 그대로 필터에 쓰면
+ *   **퇴직 처리됐거나 역할이 다른 담임의 반이 필터에서 통째로 사라진다**
+ *   (실측 4명·12반: 김민주 7 · 김태건 viewer 2 · 신명진 manager/inactive 2 · 허은진 1).
  *
- * ⚠️ 이 함수는 **필터 전용**이다. 담임 배정·변경 드롭다운에 쓰지 말 것(퇴직자·비강사가 후보로 샌다).
+ * 🔴 그때 고친 건 **필터 한 쪽뿐**이었다. 같은 뿌리(배정용 화이트리스트에 `admin` 누락)가 배정·인수인계
+ *    드롭다운에 그대로 살아 있어서, 정확히 6주 뒤 같은 사람으로 같은 제보가 다시 왔다
+ *    (2026-08-03 "강사 인수인계에 허은진이 없음"). **한 화면에서 증상을 지웠다고 원인이 사라진 게 아니다** —
+ *    같은 값을 읽는 형제 표면(필터·배정·인수인계·새 반)을 함께 확인할 것.
+ *
+ * ⚠️ 이 함수는 **필터 전용**이다. 담임 배정·변경 드롭다운에 쓰지 말 것(퇴직자가 후보로 샌다).
  */
 export async function getClassTeacherFilterOptions(): Promise<
   { id: string; name: string; subjects: string[] }[]
