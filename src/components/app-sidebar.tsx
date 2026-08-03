@@ -296,7 +296,10 @@ export function AppSidebar({
                 const presentation = navPresentation(item);
                 const winId = windowId("route", item.menuKey);
                 const subsAll = subTabsFor(item.menuKey);
-                const subs = subsAll.length > 0 ? subsAll : undefined;
+                // ⚠️ 권한으로 걸러 **한 줄만 남은 경우**도 하부탭으로 그리지 않는다 — navigation.ts의
+                //    "면 하나 = 하부탭 아님"과 같은 규칙(독립 메뉴는 하나여도 남긴다: 유일한 진입로).
+                const subs =
+                  subsAll.length > 1 || subsAll.some((t) => t.menuKey) ? subsAll : undefined;
                 // subOf 자식(독립 메뉴 하부탭)의 창 상태는 부모 항목에 귀속시킨다 — 자식이 최상위에서
                 // 빠졌으므로 안 그러면 "ECS 창이 포커스인데 사이드바 어디에도 표시가 없다"가 된다.
                 // 부모가 켜지면 인라인 하부탭이 열리고, 거기서 자식 탭이 자기 창 포커스로 하이라이트된다.
