@@ -1,12 +1,13 @@
 import { ParamLink } from "./_components/param-link";
 import type { LucideIcon } from "@/components/icons/eywa-icon-compat";
-import { Columns3, LayoutGrid, Users } from "@/components/icons/eywa-icon-compat";
+import { Columns3, DoorOpen, LayoutGrid, Users } from "@/components/icons/eywa-icon-compat";
 import { PhotoCard } from "@/components/atoms/photo-card";
 import { PageHeader } from "@/components/page-header";
 import { cookies } from "next/headers";
 import { requireAccess } from "@/lib/auth/require-access";
 import { effectiveTeacherId } from "@/lib/auth/view-mode";
 import {
+  getClassroomsLite,
   getTeacherColorMap,
   getTeacherLabelMap,
   getTeacherScheduleBlocks,
@@ -36,7 +37,7 @@ import { EcsShortcut } from "./_components/ecs-shortcut";
 import { resolveIntegrationGroups } from "@/features/timetable/lib/integration-groups";
 import { GroupSettingsDialog } from "./_components/group-settings-dialog";
 import { getWeekReferenceDate, mondayOf, thisMonday, weekRelation } from "@/features/timetable/lib/week";
-import { kstToday } from "@/lib/date-kst";
+import { kstMinutesOfDay, kstToday, weekdayIndexOf } from "@/lib/date-kst";
 import { RichGridView } from "./_components/rich-grid-view";
 import {
   TimetableEditProvider,
@@ -64,14 +65,20 @@ import { StudentTally } from "./_components/student-tally";
 import { WeekNav } from "./_components/week-nav";
 import { WeekdayGroupTables } from "./_components/weekday-group-tables";
 import { TeacherGridView } from "./_components/teacher-grid";
+import { RoomMapView } from "./_components/room-map-view";
+import { resolveDayWindows } from "@/features/timetable/lib/room-metrics";
+import type { DayOfWeek } from "@/features/timetable/lib/periods";
 
 export const metadata = { title: "시간표 — eywa" };
 
-type ViewMode = "basic" | "integrated" | "teacher";
+type ViewMode = "basic" | "integrated" | "teacher" | "rooms";
 // 전부 과목별(과목칩으로 1개 선택·전환). 기본뷰 = 요일그룹밴드(교시×강사요일, 학생명단, 드래그 편집).
 // 통합뷰 = 반=단위 반응형 카드 그리드(반 카드: 헤더·학생명단·정원, 읽기전용 — 한눈에 반 단위로 본다).
 // 강사뷰 = 기본뷰와 같은 격자를 **슬롯 강사**(slot_teacher_label) 기준으로 재구성(시트 강사별 배치 패리티,
 // 읽기전용) — 영어처럼 한 반을 (요일,교시)마다 다른 강사가 가르치는 과목용. 칩은 english에서만 노출.
+// 교실뷰 = 강의실 × 시간 점유 지도(전 과목·특강 포함, 읽기전용) — 과목·구분 칩이 **적용되지 않는** 유일한
+// 뷰(한 과목만 그리면 다른 과목이 쓰는 교실이 비어 보이는 거짓 지도). 관리자 전용(강사 스코프는 담당 반만
+// 보여 지도가 거짓이 된다 — roomsViewAllowed로 서버 강등).
 // 과목 키·순서·라벨·색은 전부 학원설정(operations.subjects) 단일 소스(하드코딩 금지).
 
 export default async function TimetablePage({
@@ -101,7 +108,13 @@ export default async function TimetablePage({
             .map((s) => Number(s.trim()))
             .filter((n) => Number.isFinite(n) && n > 0);
   const view: ViewMode =
-    viewParam === "integrated" ? "integrated" : viewParam === "teacher" ? "teacher" : "basic";
+    viewParam === "integrated"
+      ? "integrated"
+      : viewParam === "teacher"
+        ? "teacher"
+        : viewParam === "rooms"
+          ? "rooms"
+          : "basic";
 
   // 주간 이동(타임머신) — week 파라미터(그 주 아무 날)를 월요일로 정규화. 미지정=이번 주.
   // 기준 '오늘'은 KST(서버 UTC라 새벽 시간대 하루 밀림 방지). week.ts 내부 날짜 산술은 UTC 결정적 유지.
@@ -121,7 +134,9 @@ export default async function TimetablePage({
 
   // 강사(또는 겸직-강사뷰)는 본인 담당 반만(intra-tenant PII 누수 차단). master/직원은 전체.
   const teacherId = (await effectiveTeacherId()) ?? undefined;
-  const [allSlots, settings, teacherColors, viewPrefs] = await Promise.all([
+  // 교실뷰 = 관리자 전용 — 강사 스코프 슬롯으로 그리면 남의 반이 쓰는 교실이 전부 비어 보인다(거짓 지도).
+  const roomsViewAllowed = !teacherId;
+  const [allSlots, settings, teacherColors, viewPrefs, classroomsForMap] = await Promise.all([
     getWeeklyScheduleWithStudents({ referenceDate, teacherId }),
     getTenantSettings(),
     // 강사색 맵은 통합뷰(셀·담임색)·강사뷰(헤더색)에서만 필요. 기본뷰는 생략.
@@ -129,6 +144,8 @@ export default async function TimetablePage({
     // 계정 귀속 뷰 설정(0146a) — 서버 첫 렌더에서 읽어야 필터 없는 화면을 그렸다가 학생이 사라지는
     // 깜빡임이 없다. 미로그인·깨진 값은 '설정 없음'으로 떨어져 무중단.
     getMyTimetableViewPrefs(),
+    // 강의실 목록(교실뷰 컬럼 축) — 그 뷰일 때만(소형 참조 쿼리, B4로 병렬).
+    view === "rooms" && roomsViewAllowed ? getClassroomsLite() : Promise.resolve([]),
   ]);
   // 표시 선호 해석 — 우선순위 **URL 파라미터 → 계정(0146a) → 쿠키(구 기기 저장) → 기본값**.
   // 계정을 쿠키보다 먼저 보는 게 이 배선의 핵심(원장 지시: 기기가 아니라 계정에 귀속). 쿠키는 계정에
@@ -232,7 +249,12 @@ export default async function TimetablePage({
     k === "english" ||
     ((settings.operations.subjects.find((s) => s.key === k)?.teacherViewLines?.length ?? 0) > 0);
   const teacherViewAllowed = allowsTeacherView(subject);
-  const effView: ViewMode = view === "teacher" && !teacherViewAllowed ? "basic" : view;
+  const effView: ViewMode =
+    view === "teacher" && !teacherViewAllowed
+      ? "basic"
+      : view === "rooms" && !roomsViewAllowed
+        ? "basic"
+        : view;
   // 통합뷰 '그룹 설정' = 학원설정(과목별)을 쓰므로 게이트도 **owner 쓰기**. 시간표에 있다고 시간표
   // 권한으로 열면 학원설정 우회 뒷문이 된다(서버 액션도 같은 게이트로 2차 방어, #77).
   const canEditGroups = effView === "integrated" && (await canWriteTenant(user.systemRole, "owner"));
@@ -254,6 +276,38 @@ export default async function TimetablePage({
   );
 
   const isIntegrated = effView === "integrated";
+  const isRooms = effView === "rooms";
+  // 교실뷰 데이터 — **전 과목·전 구분(특강 포함)** 슬롯을 경량화(학생 명단 대신 재원 수만 = PII·페이로드
+  // 축소). kind·과목·학년 필터를 일부러 안 태운다 — 어떤 필터든 "그 교실이 그 시간에 비어 있다"는 거짓을
+  // 만든다(위 ViewMode 주석). 실효 강의실 = 교시 override ?? 반 기본(overlap-detect와 같은 우선순위).
+  const roomSlots = isRooms
+    ? allSlots
+        .filter((s) => !s.blockKind)
+        .map((s) => ({
+          id: s.id,
+          classId: s.classId,
+          className: s.className,
+          subject: s.subject,
+          dayOfWeek: s.dayOfWeek,
+          startTime: s.startTime,
+          endTime: s.endTime,
+          teacherLabel: s.slotTeacherLabel ?? s.teacherName,
+          students: s.students.filter((st) => st.status === "active").length,
+          classBgColor: s.classBgColor,
+          classTextColor: s.classTextColor,
+          isSpecialLecture: s.isSpecialLecture,
+          roomId: s.slotRoomId ?? s.classRoomId,
+          roomLabel: s.slotRoomLabel ?? s.classroomName,
+        }))
+    : [];
+  const roomWindows = isRooms
+    ? resolveDayWindows([...new Set(roomSlots.map((s) => s.subject))], periodsConfig, roomSlots)
+    : null;
+  const todayDow: DayOfWeek = (["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const)[
+    weekdayIndexOf(today)
+  ]!;
+  // "지금" 표시(교실뷰) — 서버 렌더 시점 KST 고정(클라 타이머 없음, 새로고침·주 이동 시 갱신).
+  const nowMin = kstMinutesOfDay();
   // 섹션별 '1시간 단위' 토글 href — 그 sectionKey를 압축 집합에 넣고/빼기(다른 필터·주·과목은 유지).
   const hrefForSectionToggle = (sectionKey: number) =>
     buildHref({
@@ -324,18 +378,20 @@ export default async function TimetablePage({
         <PageHeader
           eyebrow="수업 운영"
           title="시간표"
-          description={`${subjectMaps.labelOf(subject)} 주간표`}
+          description={isRooms ? "교실 사용 현황 지도" : `${subjectMaps.labelOf(subject)} 주간표`}
           actions={
-            <>
-              {showEcsShortcut ? <EcsShortcut week={week} /> : null}
-              <StudentTally
-                enrolled={enrolledCount}
-                newCount={newCount}
-                transferCount={transferCount}
-                holdCount={holdCount}
-                withdrawnCount={withdrawnCount}
-              />
-            </>
+            isRooms ? null : (
+              <>
+                {showEcsShortcut ? <EcsShortcut week={week} /> : null}
+                <StudentTally
+                  enrolled={enrolledCount}
+                  newCount={newCount}
+                  transferCount={transferCount}
+                  holdCount={holdCount}
+                  withdrawnCount={withdrawnCount}
+                />
+              </>
+            )
           }
         />
       </div>
@@ -350,6 +406,10 @@ export default async function TimetablePage({
         />
         <span className="bg-line h-4 w-px" aria-hidden />
 
+        {/* 교실뷰는 과목·구분 칩을 접는다 — 전 과목·전 구분이 한 지도에 그려져야 참이다(요일·과목
+            하이라이트는 RoomMapView 안의 클라 칩이 담당). */}
+        {isRooms ? null : (
+        <>
         {/* 과목 chip — 전 뷰 과목별(클릭 = 과목 전환). 강사뷰 비허용 과목으로 전환 시 기본뷰로.
             ⚠️ flex-wrap 필수 — 과목이 많은 학원(과학·국어·사회…)에서 칩이 한 줄로 강제되면 툴바가
             가로로 넘친다(칩 자체가 shrink-0이라 줄지도 않음). 형제인 toolbar-actions와 동일 규약. */}
@@ -414,6 +474,8 @@ export default async function TimetablePage({
           ))}
         </div>
         <span className="bg-line h-4 w-px" aria-hidden />
+        </>
+        )}
 
         {/* 뷰 토글 — 강사뷰는 허용 과목(영어 또는 강사별시간표 설정 보유)에서만 노출. */}
         <div className="flex items-center gap-1">
@@ -423,6 +485,10 @@ export default async function TimetablePage({
             { key: "integrated", label: "통합뷰", icon: LayoutGrid },
             ...(teacherViewAllowed
               ? [{ key: "teacher" as ViewMode, label: "강사뷰", icon: Users }]
+              : []),
+            // 교실뷰 — 관리자 전용(강사 스코프 지도는 거짓, roomsViewAllowed 주석 참조).
+            ...(roomsViewAllowed
+              ? [{ key: "rooms" as ViewMode, label: "교실뷰", icon: DoorOpen }]
               : []),
           ] as { key: ViewMode; label: string; icon: LucideIcon }[]).map((v) => {
             const Icon = v.icon;
@@ -473,7 +539,10 @@ export default async function TimetablePage({
         {/* 뷰 설정 — 학제·학년 필터(계정 저장) + **표시 취향 3종**(색 강도·빈 교시 접기·미사용 요일).
             ⚠️ 인라인 토글이 아니라 팝오버인 이유·배지를 항상 띄우는 이유는 view-settings.tsx 주석 참조.
             전 뷰 공통(필터는 명단에 걸리므로 기본·강사·통합 어디서나 같은 뜻)이고, 표시 3종은 해당 뷰에서만
-            항목이 뜬다(색·빈 교시=기본뷰 / 미사용 요일=강사뷰). 링크는 그대로 URL 파라미터라 공유 링크도 보존. */}
+            항목이 뜬다(색·빈 교시=기본뷰 / 미사용 요일=강사뷰). 링크는 그대로 URL 파라미터라 공유 링크도 보존.
+            교실뷰는 명단 필터가 지도를 왜곡하므로(학년 필터=교실이 비어 보임) 통째로 접는다. */}
+        {isRooms ? null : (
+        <>
         <span className="bg-line h-4 w-px" aria-hidden />
         <TimetableViewSettings
           allGrades={settings.operations.gradeLevels ?? []}
@@ -532,6 +601,8 @@ export default async function TimetablePage({
           sheetUrl={sheetUrl}
           compact1h={compactList}
         />
+        </>
+        )}
 
         <div className="rail-spacer ml-auto" aria-hidden />
 
@@ -539,20 +610,22 @@ export default async function TimetablePage({
             여기 툴바 우측에 노출(StudentTally 공유, 순수 마크업이라 이중 마운트 안전). */}
         {/* 창(임베드)에선 위 헤더 줄이 통째로 접히므로 ECS 바로가기도 여기 한 번 더 — 안 그러면
             실사용(플로팅 창)에서 영영 안 보인다(StudentTally가 이중 렌더인 이유와 동일). */}
-        {showEcsShortcut ? (
+        {showEcsShortcut && !isRooms ? (
           <div className="hidden compact-chrome:block">
             <EcsShortcut week={week} />
           </div>
         ) : null}
-        <div className="hidden compact-chrome:block">
-          <StudentTally
-            enrolled={enrolledCount}
-            newCount={newCount}
-            transferCount={transferCount}
-            holdCount={holdCount}
-            withdrawnCount={withdrawnCount}
-          />
-        </div>
+        {isRooms ? null : (
+          <div className="hidden compact-chrome:block">
+            <StudentTally
+              enrolled={enrolledCount}
+              newCount={newCount}
+              transferCount={transferCount}
+              holdCount={holdCount}
+              withdrawnCount={withdrawnCount}
+            />
+          </div>
+        )}
 
         {/* 편집 컨트롤 — 기본뷰 + 이번/미래 주(통합뷰·강사뷰=읽기전용, 과거=조회 전용).
             미래 주 편집은 그 주에 이동 예약(Phase B). */}
@@ -567,7 +640,17 @@ export default async function TimetablePage({
         ) : null}
       </div>
 
-      {slots.length === 0 ? (
+      {isRooms && roomWindows ? (
+        <RoomMapView
+          slots={roomSlots}
+          rooms={classroomsForMap}
+          windows={roomWindows}
+          weekMonday={week}
+          todayDay={todayDow}
+          isCurrentWeek={week === thisWk}
+          nowMin={nowMin}
+        />
+      ) : slots.length === 0 ? (
         <div className="mx-auto max-w-xl py-4">
           {/* 특강 화면의 빈 상태는 "과목이 없다"가 아니라 "특강이 없다" — 원인이 다르면 문구도 달라야 한다. */}
           <PhotoCard

@@ -1,5 +1,20 @@
 # eywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-08-03 — 시간표 "교실뷰"(강의실 사용 현황 지도 + 활성도 지표)
+
+- 시간표 4번째 뷰 **교실뷰**(관리자 전용, `view=rooms`): 세로 10분 시각축 × 가로 강의실(22실) 점유 지도 —
+  어떤 교실이 어떤 시간에 비는지 한눈에. **전 과목·특강 포함**(과목/구분/학년 필터를 일부러 안 태움 —
+  어떤 필터든 "빈 교실" 거짓을 만든다), 과목 칩은 필터가 아니라 **하이라이트(딤)**. 요일 칩(기본=오늘)·
+  "지금" 행 표시(서버 KST 고정). 강사 스코프(겸직 강사뷰 포함)는 담당 반만 보여 지도가 거짓 → 칩 숨김+서버 강등.
+- 실효 강의실 = `class_schedules.classroom_id ?? classes.classroom_id`(overlap-detect와 동일 우선순위) —
+  `fetchSlots` select에 FK 2컬럼 추가(`slotRoomId`/`classRoomId`). 실측: 영어 316/316·수학 203/211 교시 배정.
+- **활성도 지표**(순수 함수 + Vitest 15): 요일 가동률(분모=교시 설정 운영 창 ∪ 관측 확장 — 창 밖 아침 특강에
+  100% 초과 방지), 주간 히트 테이블(교실×요일, 주중 가동률=월~금 한정 — 일요일 1실 사용이 전 교실을 끌어내리는
+  왜곡 방지), 주중 저활용 하위 3실 스포트라이트, 시간 겹침(동일 범위=합반 amber / 부분 겹침=이중예약 red,
+  강사뷰 packGroups와 같은 해석), 미배정 교시(반 링크), 정원 대비 최대 인원(정원 미입력 시 지표 잠금 안내 —
+  현 22실 전부 capacity null). 파일: `lib/room-grid.ts`·`lib/room-metrics.ts`·`_components/room-map-{view,grid}.tsx`·
+  `room-week-panel.tsx`. ⚠️ 시각검증(브라우저) 미완 — typecheck0/lint0/전체 스위트 통과.
+
 ## 2026-08-03 — 계약조건 구조 요약 + 회사명 접두(후속 2건)
 
 - **조건 문자열을 종류별 구조 요약으로**(원장: "우다다 인용 말고 정규직·알바·프리랜서별로") — 모델은 구조
@@ -25,6 +40,13 @@
 - 재발 방지: `lesson-reports-embed.test.ts` — `from("lesson_reports")`를 쓰는 파일에 맨몸 `classes(`가
   남아 있으면 실패하는 전수 스캔(힌트를 떼고 실제로 빨간불이 되는지 확인함). 컬럼 하나 더한 **남의
   마이그레이션**이 이 화면을 끈 사고라 주석으로는 못 막는다.
+- **가드를 부류 전체로 넓힘(같은 날 후속)**: 위 가드가 lesson_reports→classes 한 쌍만 봤는데, 프로덕션
+  실측 결과 **같은 대상으로 FK 2개 이상인 조합이 11쌍**(8쌍이 `→ users`: classes·notifications·
+  staff_contracts·lesson_reports·invoice_teacher_splits·invoice_session_terms·staff_leaves·
+  academy_documents·class_delegations)이라, 그 조합에 맨몸 임베드를 새로 쓰면 **처음부터 깨진 채로
+  배포된다.** → `postgrest-embed-hints.test.ts`로 승격: `.select(` 안의 임베드는 전부 `!FK` 필수.
+  남아 있던 맨몸 2곳(`lesson_reports→students`, failed-notify-sweep·onescreen history)도 함께 명시
+  (현재 FK 1개라 안 깨지고 있었을 뿐). 정렬 스펙 문자열은 대상에서 제외(거기 `!FK`를 넣으면 400).
 - 🔴 **에러 한글화(같은 화면 전수)**: `humanizeDbError`가 이미 있었는데 report-admin은 안 쓰고 있었다
   (staff·documents에만 배선). 이 화면 13곳(`error.message` 그대로 반환)을 전부 경유시키고 동작 라벨을
   붙였다(조회·발송·재발송·복구·저장·해제). 헬퍼엔 **스키마/관계 오류 분기 신설** — 사용자 입력 탓이

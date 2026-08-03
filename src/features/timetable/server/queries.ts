@@ -123,6 +123,10 @@ export type ScheduleSlot = {
   // 셀 단위 라벨(ijw slotTeachers/slotRooms) — 통합뷰 미니그리드. null=반 기본 상속.
   slotTeacherLabel: string | null;
   slotRoomLabel: string | null;
+  // 강의실 FK(교실뷰 버킷팅) — 실효 강의실 = slotRoomId ?? classRoomId(overlap-detect와 같은 우선순위).
+  // 표시 이름은 classroomName/slotRoomLabel이 계속 담당(라벨은 시트 원문이라 FK 이름과 다를 수 있다).
+  slotRoomId: string | null;
+  classRoomId: string | null;
   // 반 헤더색(ijw bgColor/textColor) — 통합뷰 수업명 헤더. null=과목색 폴백.
   classBgColor: string | null;
   classTextColor: string | null;
@@ -150,6 +154,7 @@ type SlotClassRef = {
   is_special?: boolean | null;
   pending_teacher_id?: string | null;
   pending_teacher_date?: string | null;
+  classroom_id?: string | null;
   teacher?: { display_name?: string } | { display_name?: string }[];
   pendingTeacher?: { display_name?: string } | { display_name?: string }[];
   classroom?: { name?: string } | { name?: string }[];
@@ -162,6 +167,7 @@ type SlotRow = {
   class_id: string;
   slot_teacher_label: string | null;
   slot_room_label: string | null;
+  classroom_id: string | null;
   class?: SlotClassRef | SlotClassRef[];
 };
 
@@ -196,10 +202,10 @@ async function fetchSlots(
       let q = supabase
         .from("class_schedules")
         .select(
-          `id, day_of_week, start_time, end_time, class_id, slot_teacher_label, slot_room_label,
+          `id, day_of_week, start_time, end_time, class_id, slot_teacher_label, slot_room_label, classroom_id,
        class:class_id!inner (
          id, class_name, subject, bg_color, text_color, is_active, closed_at, is_special,
-         pending_teacher_id, pending_teacher_date,
+         pending_teacher_id, pending_teacher_date, classroom_id,
          teacher:teacher_id ( display_name ),
          pendingTeacher:pending_teacher_id ( display_name ),
          classroom:classroom_id ( name )
@@ -250,6 +256,7 @@ async function fetchSlots(
           is_special?: boolean | null;
           pending_teacher_id?: string | null;
           pending_teacher_date?: string | null;
+          classroom_id?: string | null;
           teacher?: { display_name?: string } | { display_name?: string }[];
           pendingTeacher?: { display_name?: string } | { display_name?: string }[];
           classroom?: { name?: string } | { name?: string }[];
@@ -283,6 +290,8 @@ async function fetchSlots(
       studentCount: counts.get(r.class_id) ?? 0,
       slotTeacherLabel: resolveTeacherLabel((r.slot_teacher_label as string | null) ?? null, labelMap),
       slotRoomLabel: (r.slot_room_label as string | null) ?? null,
+      slotRoomId: (r.classroom_id as string | null) ?? null,
+      classRoomId: (klass?.classroom_id as string | null) ?? null,
       classBgColor: klass?.bg_color ?? null,
       classTextColor: klass?.text_color ?? null,
       pendingHandover: klass?.pending_teacher_id
@@ -774,6 +783,8 @@ export async function getTodaySchedule(): Promise<TodaySlot[]> {
         // 색·인수인계는 대시보드 오늘 일정 미사용 — 타입 충족용 null 유지.
         slotTeacherLabel: (r.slot_teacher_label as string | null) ?? null,
         slotRoomLabel: null,
+        slotRoomId: null,
+        classRoomId: null,
         classBgColor: null,
         classTextColor: null,
         pendingHandover: null,
@@ -867,11 +878,29 @@ export async function getTeacherScheduleBlocks(
     studentCount: 0,
     slotTeacherLabel: resolveTeacherLabel(r.teacher_label, labelMap),
     slotRoomLabel: null,
+    slotRoomId: null,
+    classRoomId: null,
     classBgColor: null,
     classTextColor: null,
     pendingHandover: null,
     isSpecialLecture: false,
     blockKind: r.kind as NonNullable<ScheduleSlot["blockKind"]>,
     students: [],
+  }));
+}
+
+/**
+ * 강의실 목록(교실뷰 컬럼 축) — 이름순. 학원당 수십 실 수준의 소형 참조 테이블이라 무페이징
+ * (owner 강의실 관리·자동배정 데이터 조회와 동일 관례). error는 삼키지 않는다(`?? []` 금지).
+ */
+export type ClassroomLite = { id: string; name: string; capacity: number | null };
+export async function getClassroomsLite(): Promise<ClassroomLite[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("classrooms").select("id, name, capacity").order("name");
+  if (error) throw error;
+  return (data ?? []).map((r) => ({
+    id: r.id as string,
+    name: r.name as string,
+    capacity: (r.capacity as number | null) ?? null,
   }));
 }

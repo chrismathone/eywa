@@ -56,7 +56,7 @@ export async function getMyPastReports(input?: {
   let q = supabase
     .from("lesson_reports")
     .select(
-      "id, report_date, student_id, subject, source, progress, exam_info, homework_score, classnote_status, share_token, revoked_at, students(name, school, grade)",
+      "id, report_date, student_id, subject, source, progress, exam_info, homework_score, classnote_status, share_token, revoked_at, students!lesson_reports_student_id_fkey(name, school, grade)",
     )
     .eq("teacher_name", teacherName)
     .order("report_date", { ascending: false })
