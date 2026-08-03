@@ -8,11 +8,15 @@ import {
   ROLE_HIERARCHY,
 } from "@/lib/auth/role-hierarchy";
 import { getCurrentUser } from "@/lib/auth/current-user";
-import { canWriteTenant } from "@/lib/auth/perm-matrix";
+import { accessLevelTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
+import { isAssignableTeacherRole } from "@/lib/permissions";
+import { moveLiveSlotTeacher, reassignHomeroom } from "@/features/classes/server/handover";
+import { notifyUsers } from "@/features/notifications/server/notify";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logAction } from "@/features/audit/server/log";
 import { createClient } from "@/lib/supabase/server";
 import { canEditLoginEmail, EMAIL_RE } from "@/features/staff/email";
+import { getActiveAssistSlotClasses } from "./queries";
 
 const ROLES = Object.keys(ROLE_HIERARCHY) as SystemRole[];
 const STATUSES = ["active", "inactive", "pending"] as const;
@@ -359,4 +363,167 @@ export async function deactivateStaff(
   revalidatePath("/staff");
   revalidatePath(`/staff/${id}`);
   return { ok: true, homeroomCount };
+}
+
+// ────────────────────── 퇴사 + 담임 일괄 인계 ──────────────────────
+// 원장 지적(2026-08-03): "퇴사할 때 담당 반을 한 명씩 옮기고 퇴사 처리하면 효율이 떨어진다."
+// 기존 흐름은 반 상세의 1건짜리 인수인계뿐이라 반 N개 = 화면 N번이었다. 여기서 **한 번에** 끝낸다.
+//
+// ⚠️ 인계를 먼저, 퇴사를 나중에 한다 — 인계가 실패하면 퇴사도 하지 않는다(그 반대는 "담임 없는 퇴직자"만
+//    남겨 원래 문제를 그대로 재현).
+// ⚠️ 대상 반은 **클라가 보낸 목록을 그대로 믿지 않는다** — 서버가 다시 조회한 "이 강사의 진행중 담임 반"과
+//    교집합만 처리한다(화면 목록은 stale할 수 있고, 남의 반 id를 밀어넣는 변조도 막는다).
+
+export type OffboardState =
+  | {
+      error?: string;
+      ok?: true;
+      /** 인계 후에도 이 강사에게 남은 진행중 담임 반 수(0이면 깨끗) */
+      homeroomCount?: number;
+      movedClasses?: number;
+      movedSlots?: number;
+      newTeacherName?: string;
+    }
+  | undefined;
+
+export async function handoverAndDeactivate(
+  _prev: OffboardState,
+  formData: FormData,
+): Promise<OffboardState> {
+  const actor = await getCurrentUser();
+  if (!actor) return { error: "로그인이 필요합니다" };
+  if (!(await canWriteTenant(actor.systemRole, "staff"))) return { error: "권한이 없습니다" };
+
+  const id = String(formData.get("id") ?? "").trim();
+  if (!id) return { error: "직원 ID가 누락되었습니다" };
+  // deactivateStaff와 같은 self 가드 — 본인을 퇴사시키면 그 자리에서 자기 접근이 끊긴다.
+  if (id === actor.id) return { error: "본인 계정의 재직 상태는 바꿀 수 없습니다" };
+
+  const supabase = await createClient();
+  const skip = String(formData.get("mode") ?? "") === "skip";
+  let movedClasses = 0;
+  let movedSlots = 0;
+  let newTeacherName: string | undefined;
+
+  if (!skip) {
+    // 담임 교체는 반 관리 쓰기다 — 직원 권한만으론 못 한다(권한이 없으면 '인계 없이 퇴사'로 안내).
+    const lvl = await accessLevelTenant(actor.systemRole, "classes");
+    if (lvl !== "full" && lvl !== "scoped") {
+      return { error: "반 담임을 바꿀 권한이 없습니다 — ‘인계 없이 퇴사 처리’만 가능합니다" };
+    }
+
+    const newTeacherId = String(formData.get("newTeacherId") ?? "").trim();
+    if (!newTeacherId) return { error: "인계받을 강사를 선택해주세요" };
+    if (newTeacherId === id) return { error: "퇴사하는 본인에게는 인계할 수 없습니다" };
+
+    // 대상이 이 학원의 배정 가능한 재직자인지 서버에서 못박는다(변조 payload·타 테넌트 id 방어).
+    // ⚠️ 역할 목록은 ASSIGNABLE_TEACHER_ROLES 단일 소스 — 여기 배열을 새로 적지 말 것.
+    const { data: target } = await supabase
+      .from("users")
+      .select("display_name, system_role, status")
+      .eq("id", newTeacherId)
+      .maybeSingle();
+    if (!target || !isAssignableTeacherRole(target.system_role) || target.status !== "active") {
+      return { error: "유효한 강사가 아닙니다" };
+    }
+    newTeacherName = target.display_name ?? undefined;
+
+    // 서버가 보는 진실 = 이 강사의 진행중 담임 반. 화면이 보낸 id와 교집합만 옮긴다.
+    const { data: ownRows, error: ownErr } = await supabase
+      .from("classes")
+      .select("id, class_name")
+      .eq("tenant_id", actor.tenantId)
+      .eq("teacher_id", id)
+      .eq("is_active", true);
+    if (ownErr) return { error: ownErr.message };
+    const owned = new Set((ownRows ?? []).map((c) => c.id as string));
+    const selected = [...new Set(formData.getAll("classIds").map(String))].filter((c) =>
+      owned.has(c),
+    );
+    // 담임은 아니지만 교시로 들어가던 반 — 슬롯만 옮긴다(담임은 남의 것이라 건드리지 않는다).
+    const assistable = new Set((await getActiveAssistSlotClasses(id)).map((c) => c.id));
+    const assist = [...new Set(formData.getAll("assistClassIds").map(String))].filter((c) =>
+      assistable.has(c),
+    );
+    if (selected.length === 0 && assist.length === 0) {
+      return { error: "인계할 반을 선택해주세요" };
+    }
+
+    // 두 표면을 함께 옮긴다: 교시별 강사 오버라이드(시간표·ECS가 읽는 값) → 담임.
+    const slots = await moveLiveSlotTeacher(supabase, {
+      tenantId: actor.tenantId,
+      classIds: [...selected, ...assist],
+      fromTeacherId: id,
+      toTeacherId: newTeacherId,
+    });
+    if (slots.error) return { error: slots.error };
+    const cls = await reassignHomeroom(supabase, {
+      tenantId: actor.tenantId,
+      classIds: selected,
+      fromTeacherId: id,
+      toTeacherId: newTeacherId,
+    });
+    if (cls.error) return { error: cls.error };
+    movedClasses = cls.moved;
+    movedSlots = slots.moved;
+
+    // 대상 = 퇴사하는 직원. `userId`로 넣어야 뷰어의 '대상' 열이 이름으로 풀린다(auditTargetName 규약).
+    await logAction({
+      action: "class_handover_bulk",
+      targetType: "staff",
+      metadata: {
+        userId: id,
+        newTeacherId,
+        classCount: movedClasses,
+        slotCount: movedSlots,
+        assistClassCount: assist.length,
+      },
+    });
+    // 넘겨받은 강사에게 알림 — best-effort(실패해도 인계는 성공).
+    if (movedClasses > 0 || movedSlots > 0) {
+      const what = [
+        movedClasses > 0 ? `반 ${movedClasses}개의 새 담임` : null,
+        assist.length > 0 ? `다른 반 교시 담당` : null,
+      ]
+        .filter(Boolean)
+        .join(" · ");
+      await notifyUsers([
+        {
+          tenantId: actor.tenantId,
+          recipientId: newTeacherId,
+          type: "teacher_handover",
+          title: "담임 인수인계",
+          body: `퇴사 처리에 따라 ${what}으로 지정되었습니다.`,
+          link: "/classes",
+          actorId: actor.id,
+        },
+      ]);
+    }
+  }
+
+  const { error: statusErr } = await supabase
+    .from("users")
+    .update({ status: "inactive" })
+    .eq("id", id);
+  if (statusErr) return { error: statusErr.message };
+
+  // 인계 후에도 남은 담임 반(화면이 stale했거나 일부만 선택한 경우) — 막지 않고 사후 안내용. head:true(B2).
+  const { count } = await supabase
+    .from("classes")
+    .select("*", { count: "exact", head: true })
+    .eq("tenant_id", actor.tenantId)
+    .eq("teacher_id", id)
+    .eq("is_active", true);
+
+  revalidatePath("/staff");
+  revalidatePath(`/staff/${id}`);
+  revalidatePath("/classes");
+  revalidatePath("/timetable");
+  return {
+    ok: true,
+    homeroomCount: count ?? 0,
+    movedClasses,
+    movedSlots,
+    newTeacherName,
+  };
 }

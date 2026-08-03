@@ -146,6 +146,16 @@ export function auditDetail(
       const n = ctx.nameOf(m.newTeacherId);
       return n ? `새 담임 ${n}` : null;
     }
+    case "class_handover_bulk": {
+      const to = ctx.nameOf(m.newTeacherId);
+      const cls = num(m.classCount);
+      const slots = num(m.slotCount);
+      return join(
+        to ? `새 담임 ${to}` : null,
+        cls === null ? null : `반 ${cls}개 인계`,
+        slots ? `교시 ${slots}개` : null,
+      );
+    }
     case "class_reopen_term":
     case "class_handover_cancel":
       return null; // metadata = 반 uuid뿐(대상 열이 반 이름을 보여줌)

@@ -10,11 +10,14 @@ export function Modal({
   title,
   desc,
   onClose,
+  width = "sm",
   children,
 }: {
   title: string;
   desc?: string;
   onClose: () => void;
+  /** 기본 sm. 목록·선택지가 함께 들어가는 다이얼로그(퇴사 인계 등)만 md. */
+  width?: "sm" | "md";
   children: ReactNode;
 }) {
   return (
@@ -23,7 +26,9 @@ export function Modal({
       onClick={onClose}
     >
       <div
-        className="bg-background border-border w-full max-w-sm rounded-lg border p-5 shadow-lg"
+        className={`bg-background border-border w-full rounded-lg border p-5 shadow-lg ${
+          width === "md" ? "max-w-md" : "max-w-sm"
+        }`}
         onClick={(e) => e.stopPropagation()}
       >
         <header className="mb-3 flex items-start justify-between gap-2">
