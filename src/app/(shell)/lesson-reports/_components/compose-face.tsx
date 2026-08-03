@@ -408,7 +408,7 @@ export function ComposeFace({
               </div>
             </div>
             <div>
-              <div className={LABEL}>과제 수행</div>
+              <div className={LABEL}>과제 수행률</div>
               <div className="flex flex-wrap gap-1.5">
                 {HOMEWORK.map((h) => (
                   <button key={h} type="button" onClick={() => setHomework(homework === h ? "" : h)} className={`rounded-full border px-2.5 py-1 text-[12px] ${homework === h ? "border-primary bg-primary/10 text-primary font-bold" : "border-line text-text-dim"}`}>

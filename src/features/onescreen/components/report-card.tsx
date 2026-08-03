@@ -365,7 +365,7 @@ export function ReportCard({
         </div>
 
         <div>
-          <p className="micro text-text-faint mb-1.5">과제</p>
+          <p className="micro text-text-faint mb-1.5">과제 수행률</p>
           <FieldSelect
             options={homeworks}
             value={student.homework || null}

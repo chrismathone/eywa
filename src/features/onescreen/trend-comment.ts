@@ -12,7 +12,7 @@ import { isNoneValue } from "./none-marker";
 export type TrendHistoryRow = {
   date: string; // YYYY-MM-DD
   examInfo: string | null; // "일일 15/20, 확인 18/20" | null
-  homeworkScore: string | null; // "완료" | "일부 미흡" | null
+  homeworkScore: string | null; // 과제 수행률 "90%" | 옛 표기 "완료" | null
 };
 
 export type TrendInput = {

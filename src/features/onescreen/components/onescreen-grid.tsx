@@ -316,7 +316,7 @@ export function OneScreenGrid({
               {config.dailyEnabled ? <th className={`${TH} text-center`}>일일</th> : null}
               {config.checkEnabled ? <th className={`${TH} text-center`}>확인</th> : null}
               <th className={TH}>태도</th>
-              <th className={TH}>과제</th>
+              <th className={TH}>과제 수행률</th>
               <th className={TH}>교재명 · 보강</th>
               <th className={TH}>학부모 문구</th>
               <th className={TH}>발송 · 편집</th>

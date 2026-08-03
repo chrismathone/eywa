@@ -8,6 +8,7 @@
 import type { CellState, OneScreenStudent, StudentStatus, TestScore } from "./types";
 import { formatTestScore } from "./report-comment";
 import { isNoneValue } from "./none-marker";
+import { homeworkRateClause } from "./homework-rate";
 import { isSkipStatus, skipStatusOf } from "./progress-status";
 
 /**
@@ -106,10 +107,11 @@ function testAndClosingLines(st: OneScreenStudent): string[] {
   // "없음"(과제가 없던 날, 원장 2026-07-23)도 문장에선 생략한다 — "과제는 없음 상태입니다"는 어색하고,
   //  없던 과제를 굳이 언급할 이유도 없다. 학부모 카드엔 '지난 과제: 없음'으로 그대로 보인다.
   const hasHomework = !!st.homework && st.homework !== "—" && !isNoneValue(st.homework);
-  if (st.attitude && hasHomework)
-    lines.push(`수업 태도는 ${st.attitude}, 지난 과제는 ${st.homework}입니다.`);
+  // 값이 퍼센트(90%)라 "지난 과제는 90%입니다"로는 무엇의 90%인지 모호하다 → homeworkRateClause 단일 소스.
+  const hwClause = hasHomework ? `지난 과제는 ${homeworkRateClause(st.homework)}` : null;
+  if (st.attitude && hwClause) lines.push(`수업 태도는 ${st.attitude}, ${hwClause}.`);
   else if (st.attitude) lines.push(`수업 태도는 ${st.attitude}입니다.`);
-  else if (hasHomework) lines.push(`지난 과제는 ${st.homework}입니다.`);
+  else if (hwClause) lines.push(`${hwClause}.`);
 
   return lines;
 }

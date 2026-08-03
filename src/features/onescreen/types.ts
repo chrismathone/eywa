@@ -128,7 +128,7 @@ export type OneScreenStudent = {
   subjects: Subject[];
   tests: Tests;
   attitude: string | null; // "아주 좋음" | "좋음" | "보통" | "산만함" | "피곤함" | null
-  homework: string; // "완료" | "일부 미흡" | "미제출" | "—"
+  homework: string; // 과제 수행률 "100%" | "90%" | … | "0%" | "없음" | "" (옛 기록엔 "완료"·"일부 미흡"도 남아 있다)
   note?: string; // 특이사항(강사 메모) — 0093a. AI 멘트 입력(공지 모드 A/B). 학부모엔 생성 문구만. 미설정=빈 메모.
 
   // ── 로스터 신호(읽기 전용, roster가 채움) — 판정은 roster-signals.ts 순수 함수 ──

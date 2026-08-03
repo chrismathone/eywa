@@ -2,6 +2,7 @@
  * 선생님 원스크린 — 표(스프레드시트) 뷰 순수 헬퍼.
  * 카드↔표 토글의 표 쪽 행 구성·발송대상 판정을 순수 함수로 분리(CLAUDE.md: 계산 함수 분리+Vitest).
  */
+import { toHomeworkRateChoice } from "./homework-rate";
 import type { OneScreenStudent, PrevReport, Subject } from "./types";
 
 /**
@@ -286,7 +287,9 @@ export type PrevFill = {
  * 이전 회차 → 오늘 행 "빈 칸만" 채움 계획.
  * ⚠️ 특이사항은 제외 — prevReport.note(lesson_reports.notes)는 **학부모 발송 본문**이라 특이사항이 아니다(오염 방지).
  * ⚠️ 교재는 제외 — roster가 이미 직전 교재를 자동 승계한다.
- * 태도·과제는 현 학원 선택지에 있는 값만(옛 선택지 잔존값은 스킵).
+ * 태도는 현 학원 선택지에 있는 값만(옛 선택지 잔존값은 스킵).
+ * 과제는 **퍼센트 전환(2026-08-03) 이전 값도 뜻이 분명하면 옮긴다** — 완료→100%·미제출→0%.
+ * 🔴 단 '일부 미흡'은 정도를 모르므로 **안 채운다**(임의로 50%를 찍지 않는다 — 그게 이번 사고였다).
  */
 export function planPrevFill(args: {
   prev: PrevReport | undefined;
@@ -299,8 +302,10 @@ export function planPrevFill(args: {
   if (!prev) return out;
   if (!current.today.trim() && prev.progress?.trim()) out.today = prev.progress;
   if (!current.attitude && prev.attitude && attitudes.includes(prev.attitude)) out.attitude = prev.attitude;
-  if (!current.homework && prev.homeworkScore && homeworks.includes(prev.homeworkScore))
-    out.homework = prev.homeworkScore;
+  if (!current.homework && prev.homeworkScore) {
+    const choice = toHomeworkRateChoice(prev.homeworkScore);
+    if (choice && homeworks.includes(choice)) out.homework = choice;
+  }
   if (!current.homeworkToday.trim() && prev.homeworkToday?.trim()) out.homeworkToday = prev.homeworkToday;
   return out;
 }

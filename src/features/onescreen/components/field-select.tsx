@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { SearchableSelect } from "@/components/ui/searchable-select";
+import { SearchableSelect, type ComboOption } from "@/components/ui/searchable-select";
 
 /**
  * 태도·과제처럼 **정해진 선택지 하나**를 고르는 칸의 공용 드롭다운 — 원장 지시(2026-07-23):
@@ -39,10 +39,18 @@ export function FieldSelect({
    */
   radius?: "sm" | "lg";
 }) {
-  const opts = useMemo(
-    () => [{ value: "", label: "선택 안 함" }, ...options.map((o) => ({ value: o, label: o }))],
-    [options],
-  );
+  const opts = useMemo(() => {
+    const base: ComboOption[] = [
+      { value: "", label: "선택 안 함" },
+      ...options.map((o) => ({ value: o, label: o })),
+    ];
+    // ⚠️ **선택지에 없는 저장값도 보이게 유지한다.** SearchableSelect는 옵션에서 못 찾은 값을 placeholder로
+    //    그리므로, 그냥 두면 옛 표기(과제 '완료' → 퍼센트 전환, 2026-08-03)나 학원설정에서 지운 태도값이
+    //    **빈 칸처럼 보인다** — 강사 눈엔 값이 사라진 것이고, 실제 DB엔 그대로 남아 학부모에게 나간다.
+    const v = (value ?? "").trim();
+    if (v && !options.includes(v)) base.push({ value: v, label: v, hint: "이전 표기" });
+    return base;
+  }, [options, value]);
   return (
     <SearchableSelect
       options={opts}

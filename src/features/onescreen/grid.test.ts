@@ -363,7 +363,7 @@ describe("planBulkApply", () => {
 });
 
 const ATTITUDES = ["아주 좋음", "좋음", "보통", "산만함", "피곤함"] as const;
-const HOMEWORKS = ["완료", "일부 미흡", "미제출"] as const;
+const HOMEWORKS = ["100%", "90%", "50%", "0%", "없음"] as const;
 
 function prevReport(over: Partial<PrevReport> = {}): PrevReport {
   return {
@@ -371,7 +371,7 @@ function prevReport(over: Partial<PrevReport> = {}): PrevReport {
     progress: "1-1-1 받아올림",
     textbook: "쎈",
     homeworkToday: "p10~16",
-    homeworkScore: "완료",
+    homeworkScore: "100%",
     attitude: "좋음",
     examInfo: "일일 18/20",
     note: "학부모 발송 본문",
@@ -402,21 +402,37 @@ describe("planPrevFill", () => {
     expect(
       planPrevFill({
         prev: prevReport(),
-        current: { today: "x", attitude: "보통", homework: "완료", homeworkToday: "y" },
+        current: { today: "x", attitude: "보통", homework: "100%", homeworkToday: "y" },
         attitudes: ATTITUDES,
         homeworks: HOMEWORKS,
       }),
     ).toEqual({});
   });
 
-  it("현 선택지에 없는 옛 태도·과제 값은 스킵한다", () => {
+  it("현 선택지에 없는 옛 태도 값은 스킵한다", () => {
     const fill = planPrevFill({
-      prev: prevReport({ attitude: "옛선택지", homeworkScore: "90%" }),
+      prev: prevReport({ attitude: "옛선택지", homeworkScore: "48%" }),
       current: { today: "", attitude: null, homework: "", homeworkToday: "x" },
       attitudes: ATTITUDES,
       homeworks: HOMEWORKS,
     });
-    expect(fill).toEqual({ today: "1-1-1 받아올림" });
+    // 과제 48%는 10% 눈금(선택지)에 맞춰 50%로 옮긴다 — 태도는 옛 값이라 스킵.
+    expect(fill).toEqual({ today: "1-1-1 받아올림", homework: "50%" });
+  });
+
+  // 🔴 퍼센트 전환(2026-08-03) 이전 값 — 뜻이 분명한 것만 옮기고 '일부 미흡'은 채우지 않는다.
+  //    (임의로 50%를 찍는 순간 강사가 하지 않은 판단이 학부모에게 나간다 = 이번 사고 그 자체.)
+  it("옛 정성값: 완료→100%·미제출→0%, '일부 미흡'은 채우지 않는다", () => {
+    const fill = (homeworkScore: string) =>
+      planPrevFill({
+        prev: prevReport({ homeworkScore }),
+        current: { today: "x", attitude: "보통", homework: "", homeworkToday: "y" },
+        attitudes: ATTITUDES,
+        homeworks: HOMEWORKS,
+      }).homework;
+    expect(fill("완료")).toBe("100%");
+    expect(fill("미제출")).toBe("0%");
+    expect(fill("일부 미흡")).toBeUndefined();
   });
 
   it("특이사항(note=발송 본문)은 어떤 경우에도 계획에 포함되지 않는다", () => {
@@ -430,7 +446,7 @@ describe("planPrevFill", () => {
     expect(fill).toEqual({
       today: "1-1-1 받아올림",
       attitude: "좋음",
-      homework: "완료",
+      homework: "100%",
       homeworkToday: "p10~16",
     });
   });
@@ -458,7 +474,7 @@ describe("planBulkPrevFill", () => {
         studentId: "a",
         subjectName: "수학",
         subjectIndex: 0,
-        set: { today: "1-1-1 받아올림", attitude: "좋음", homework: "완료", homeworkToday: "p10~16" },
+        set: { today: "1-1-1 받아올림", attitude: "좋음", homework: "100%", homeworkToday: "p10~16" },
       },
     ]);
   });
@@ -466,14 +482,14 @@ describe("planBulkPrevFill", () => {
   it("다과목 학생 — 학생 단위(태도·과제)는 **첫 과목 행**만, 둘째 과목이 덮어쓰지 않는다", () => {
     const plan = planBulkPrevFill(
       [
-        row("a", "수학", 0, prevReport({ attitude: "좋음", homeworkScore: "완료", progress: "수학진도" })),
-        row("a", "영어", 1, prevReport({ attitude: "산만함", homeworkScore: "미제출", progress: "영어진도" })),
+        row("a", "수학", 0, prevReport({ attitude: "좋음", homeworkScore: "100%", progress: "수학진도" })),
+        row("a", "영어", 1, prevReport({ attitude: "산만함", homeworkScore: "0%", progress: "영어진도" })),
       ],
       ATTITUDES,
       HOMEWORKS,
     );
     expect(plan[0]!.set.attitude).toBe("좋음");
-    expect(plan[0]!.set.homework).toBe("완료");
+    expect(plan[0]!.set.homework).toBe("100%");
     expect(plan[1]!.set.attitude).toBeUndefined();
     expect(plan[1]!.set.homework).toBeUndefined();
     // 과목 단위(진도·오늘 과제)는 과목마다 그대로 채운다.

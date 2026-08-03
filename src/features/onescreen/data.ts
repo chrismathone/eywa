@@ -4,6 +4,8 @@
  * 진도(prev/today)는 각 학생 학년의 커리큘럼(curriculum.ts) 차시 문자열을 그대로 쓴다.
  * 데모 충실 이식이므로 정적 스냅샷(DB·AI 없음). tag=학년 → 반 필터가 학년 필터로 동작.
  */
+import { HOMEWORK_RATES } from "./homework-rate";
+import { NONE_LABEL } from "./none-marker";
 import type { OneScreenStudent, SubjectTone } from "./types";
 
 /** 상단 날짜 라벨 — 데모 고정값(셀프투어 결정성 보장) */
@@ -13,11 +15,14 @@ export const TODAY = "2026년 6월 1일 (월)";
 export const ATTITUDE = ["아주 좋음", "좋음", "보통", "산만함", "피곤함"] as const;
 
 /**
- * 과제 상태 선택지. "없음" = **지난 과제가 존재하지 않았음**(신규생·특강 첫날 등) — 원장 2026-07-23.
- * 🔴 `없음`은 `미제출`이 아니다. 추세·그래프에서 제외된다(none-marker.ts 규약).
+ * 과제 수행률 선택지 — **퍼센트**(원장 2026-08-03). 값·변환 규약은 [`homework-rate.ts`](./homework-rate.ts).
+ * 🔴 옛 3단계(완료/일부 미흡/미제출)로 되돌리지 말 것 — '일부 미흡'이 학부모 그래프에 **50**으로 찍혀
+ *    90% 해온 학생이 혼나는 사고가 났다. 정도를 아는 사람은 강사뿐이라 강사가 숫자를 고른다.
+ * "없음" = **지난 과제가 존재하지 않았음**(신규생·특강 첫날 등) — 원장 2026-07-23.
+ * 🔴 `없음`은 `0%`가 아니다. 추세·그래프에서 제외된다(none-marker.ts 규약).
  * ⚠️ 이 배열이 단일 소스다 — 화면마다 다시 적지 말 것(관리자 작성 화면도 이걸 import).
  */
-export const HOMEWORK = ["완료", "일부 미흡", "미제출", "없음"] as const;
+export const HOMEWORK = [...HOMEWORK_RATES, NONE_LABEL] as const;
 
 /** 학년 필터 칩 (수학 강사가 맡는 학년) */
 export const CLASS_TAGS = ["전체", "초3", "초4", "초5", "초6", "중1", "중2", "중3"] as const;
@@ -109,7 +114,7 @@ export const DEMO_ONESCREEN: OneScreenStudent[] = [
       check: { score: 19, max: 20, prevScore: 17 },
     },
     attitude: "아주 좋음",
-    homework: "완료",
+    homework: "100%",
     progressConfirmed: false,
     reportDraft: "",
     reportSent: true,
@@ -133,7 +138,7 @@ export const DEMO_ONESCREEN: OneScreenStudent[] = [
       check: { score: null, max: 20, prevScore: 16 },
     },
     attitude: "보통",
-    homework: "일부 미흡",
+    homework: "90%",
     progressConfirmed: false,
     reportDraft: "",
     reportSent: false,
@@ -152,7 +157,7 @@ export const DEMO_ONESCREEN: OneScreenStudent[] = [
       check: { score: null, max: 20, prevScore: 18 },
     },
     attitude: null,
-    homework: "완료",
+    homework: "100%",
     progressConfirmed: false,
     reportDraft: "",
     reportSent: false,
@@ -170,7 +175,7 @@ export const DEMO_ONESCREEN: OneScreenStudent[] = [
       check: { score: 17, max: 20, prevScore: 19 },
     },
     attitude: "좋음",
-    homework: "완료",
+    homework: "100%",
     progressConfirmed: false,
     reportDraft: "",
     reportSent: false,
@@ -187,7 +192,7 @@ export const DEMO_ONESCREEN: OneScreenStudent[] = [
       check: { score: null, max: 20, prevScore: 12 },
     },
     attitude: "피곤함",
-    homework: "미제출",
+    homework: "0%",
     progressConfirmed: false,
     reportDraft: "",
     reportSent: false,
@@ -205,7 +210,7 @@ export const DEMO_ONESCREEN: OneScreenStudent[] = [
       check: { score: null, max: 20, prevScore: 16 },
     },
     attitude: null,
-    homework: "완료",
+    homework: "100%",
     progressConfirmed: false,
     reportDraft: "",
     reportSent: false,
@@ -224,7 +229,7 @@ export const DEMO_ONESCREEN: OneScreenStudent[] = [
       check: { score: 18, max: 20, prevScore: 15 },
     },
     attitude: "좋음",
-    homework: "완료",
+    homework: "100%",
     progressConfirmed: false,
     reportDraft: "",
     reportSent: false,
@@ -260,7 +265,7 @@ export const DEMO_ONESCREEN: OneScreenStudent[] = [
       check: { score: null, max: 20, prevScore: 11 },
     },
     attitude: "보통",
-    homework: "완료",
+    homework: "100%",
     progressConfirmed: false,
     reportDraft: "",
     reportSent: false,

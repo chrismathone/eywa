@@ -47,7 +47,7 @@ export type ReportCommentInput = {
   dailyTest: string; // "20문제 중 18개 (지난 회차 대비 ▲2)" | ""
   checkTest: string;
   attitude: string; // "" = 미입력
-  homework: string; // 지난 과제 수행 상태(완료/일부 미흡/미제출). "" = 미입력/—
+  homework: string; // 지난 과제 수행률("90%"). "" = 미입력/—. 옛 기록은 "완료"·"미제출"도 온다.
   homeworkToday: string; // 오늘 내준 과제(숙제 내용) — 0096a. 멘트 마무리 "오늘 과제는 ~입니다" 재료. "" = 미입력
   textbook: string; // 교재명 — 공지 모드 B의 P1(수업 내용)에 사용. "" = 미입력
   specialNote: string; // 특이사항(강사 메모) — 0093a. 모드 A는 종합, B는 P2에 사용. "" = 미입력
