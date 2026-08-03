@@ -3,6 +3,7 @@ import {
   dateAppearsIn,
   groundContractExtract,
   isEmptyExtract,
+  maskResidentRegNo,
   normalizeContractDate,
 } from "./contract-extract";
 
@@ -93,5 +94,15 @@ describe("groundContractExtract", () => {
   it("아무것도 못 뽑으면 빈 결과로 알린다", () => {
     expect(isEmptyExtract(groundContractExtract({}, PDF))).toBe(true);
     expect(isEmptyExtract(groundContractExtract({ employmentType: "정규직" }, PDF))).toBe(false);
+  });
+});
+
+describe("maskResidentRegNo", () => {
+  it("주민번호 뒤 7자리를 가린다(공백·다른 대시 포함)", () => {
+    expect(maskResidentRegNo("주민등록번호 900101-1234567 임")).toBe("주민등록번호 900101-******* 임");
+    expect(maskResidentRegNo("900101 - 1234567")).toBe("900101-*******");
+  });
+  it("전화번호·날짜는 건드리지 않는다", () => {
+    expect(maskResidentRegNo("010-2501-5783 / 2026-08-03")).toBe("010-2501-5783 / 2026-08-03");
   });
 });

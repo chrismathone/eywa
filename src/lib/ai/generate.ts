@@ -1,3 +1,4 @@
+import type Anthropic from "@anthropic-ai/sdk";
 import { withFactGuard } from "./fact-guard";
 import { getAnthropic } from "./anthropic";
 import { getUpstage } from "./upstage";
@@ -100,6 +101,12 @@ export type GenerateJSONOptions = {
    * tenantId = 테넌트 귀속(미상이면 생략 → null 기록). 기록은 best-effort — 실패해도 본 호출을 안 막는다.
    */
   meta?: { tenantId?: string | null; feature?: string };
+  /**
+   * 문서(PDF) 입력 — 스캔 계약서 OCR 전사용(원장 승인 2026-08-03). **Anthropic 전용**(Claude 비전이
+   * 스캔 페이지를 직접 읽는다) — 지정 시 후보를 anthropic으로 한정하고, 키가 없으면 명확히 throw
+   * (다른 provider의 chat API엔 PDF 입력이 없어 조용한 폴백이 불가능한 자리다).
+   */
+  document?: { mediaType: "application/pdf"; dataBase64: string };
 };
 
 /** provider 응답의 토큰 usage(제공 안 하면 null). */
@@ -281,12 +288,26 @@ async function callProvider(
     };
   }
   const client = getAnthropic(keyName);
+  // document(PDF)가 있으면 content를 블록 배열로 — 문서 블록 + 텍스트 지시(비전 OCR 경로).
+  const userContent = opts.document
+    ? ([
+        {
+          type: "document" as const,
+          source: {
+            type: "base64" as const,
+            media_type: opts.document.mediaType,
+            data: opts.document.dataBase64,
+          },
+        },
+        { type: "text" as const, text: opts.prompt },
+      ] satisfies Anthropic.ContentBlockParam[])
+    : opts.prompt;
   const anthropicParams = (withTemperature: boolean) => ({
     model,
     max_tokens: opts.maxTokens,
     ...(withTemperature && opts.temperature != null ? { temperature: opts.temperature } : {}),
     ...(opts.system ? { system: opts.system } : {}),
-    messages: [{ role: "user" as const, content: opts.prompt }],
+    messages: [{ role: "user" as const, content: userContent }],
   });
   // Claude 5 계열은 temperature가 deprecated(400) — 호출부의 temperature 지정(멘트 0.3 등)은
   // 지원 모델(Haiku 4.5 등)에선 유지하고, 거부하는 모델에서만 떼고 1회 재시도(자가 회복).
@@ -318,7 +339,15 @@ export async function generateJSON<T>(rawOpts: GenerateJSONOptions): Promise<{ d
   const keyName = opts.keyName ?? "default";
   const chain = resolveModelChain(tier, keyName, opts.provider);
   // 키가 하나도 없으면 기존 동작 보존: 모델 있는 첫 candidate로 시도(클라 생성 시 키 없음 throw → rethrowAi).
-  const candidates = chain.length > 0 ? chain : [resolveModel(tier, keyName, opts.provider)];
+  let candidates = chain.length > 0 ? chain : [resolveModel(tier, keyName, opts.provider)];
+  if (opts.document) {
+    // 문서(PDF) 입력은 Anthropic만 받는다 — 다른 provider로 폴백하면 첨부가 조용히 사라진 채
+    // "본문 없음" 응답이 나와 원인을 못 찾는다. 후보를 한정하고, 없으면 키 문제를 그대로 말한다.
+    candidates = candidates.filter((c) => c.provider === "anthropic");
+    if (candidates.length === 0) {
+      throw new Error("스캔 문서 인식은 Anthropic(Claude) API 키가 필요합니다 — 관리자가 ANTHROPIC_API_KEY를 확인하세요.");
+    }
+  }
 
   let lastErr: unknown;
   for (let i = 0; i < candidates.length; i++) {
