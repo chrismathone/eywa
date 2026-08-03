@@ -10,10 +10,12 @@ import { generateJSON } from "@/lib/ai/generate";
 import { logAction } from "@/features/audit/server/log";
 import {
   EMPTY_EXTRACT,
+  composeContractTerms,
   groundContractExtract,
   isEmptyExtract,
   maskResidentRegNo,
   type ContractExtract,
+  type RawContractExtract,
 } from "../contract-extract";
 import { EMPLOYMENT_TYPES } from "../resume";
 
@@ -136,22 +138,27 @@ export async function extractContractFromPdf(
     };
   }
 
-  let raw: Partial<ContractExtract> = {};
+  let raw: RawContractExtract = {};
   try {
-    const out = await generateJSON<Partial<ContractExtract>>({
+    const out = await generateJSON<RawContractExtract>({
       prompt: [
         "아래는 학원 직원 근로/용역 계약서의 본문이다. 계약 정보를 JSON으로만 뽑아라.",
         "",
         "규칙:",
         "- startDate/endDate: 계약 기간의 시작일·종료일을 YYYY-MM-DD로. 본문에 없으면 빈 문자열.",
         `- employmentType: ${EMPLOYMENT_TYPES.join("·")} 중 본문에 적힌 것 하나. 없으면 빈 문자열.`,
-        "- terms: 임금·비율 등 계약조건을 본문 표현 그대로 한 줄로. 금액은 본문 숫자를 그대로 옮길 것.",
+        '- contractKind: 계약 종류를 본문 표현 그대로 짧게(예: "근로", "(시용)근로", "강의용역"). 없으면 빈 문자열.',
+        '- payType: 급여 방식 — "월급"(월 고정급) | "시급" | "비율"(강의료 퍼센트 배분) 중 하나. 없으면 빈 문자열.',
+        "- monthlyPay/hourlyPay: 해당 방식의 금액을 본문 숫자 그대로(쉼표 포함). 해당 없으면 빈 문자열.",
+        '- rates: 비율제일 때 [{"label":"초등","percent":43}, …] — 구간 이름과 퍼센트를 본문 그대로. 아니면 빈 배열.',
+        "- probationMonths: 시용/수습 기간 개월 수(숫자만). 없으면 빈 문자열.",
+        "- terms: 위 구조 필드로 못 담는 핵심 계약조건이 있을 때만 본문 표현 그대로 한 줄. 금액은 본문 숫자를 그대로 옮길 것.",
         "- 본문에 없는 값은 절대 만들지 말고 빈 문자열로 둘 것.",
         "",
         "본문:",
         body.slice(0, TEXT_LIMIT),
       ].join("\n"),
-      maxTokens: 700, // 짧은 JSON 4필드 — 넉넉하되 절단(#89)이 안 나는 선.
+      maxTokens: 900, // 구조 필드 포함 짧은 JSON — 넉넉하되 절단(#89)이 안 나는 선.
       meta: { feature: "staff_contract_pdf", tenantId: gate.user.tenantId },
     });
     raw = out.data ?? {};
@@ -161,6 +168,11 @@ export async function extractContractFromPdf(
 
   // 🔴 후보정 가드 — 원문에 실제로 있는 값만 통과(지어낸 기간·금액 차단).
   const data = groundContractExtract(raw, body);
+  // 조건 문자열은 구조 필드가 검증을 통과하면 **우리가 조립**한다(원장 지시 2026-08-03 — 계약 종류별
+  // 시트 관례 형태: "강의용역 : 초등(43%), 중등(44%)" / "(시용)근로 : 시용 3개월 / 시급 15,000원" /
+  // "근로 : 월급 2,200,000원 (포괄임금)"). 조립 실패 시 기존 통짜 인용(grounded)이 그대로 남는다.
+  const composed = composeContractTerms(raw, body);
+  if (composed) data.terms = composed;
   await logAction({
     action: "staff_contract_pdf_extract",
     targetType: "user",
