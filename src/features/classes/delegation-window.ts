@@ -31,6 +31,21 @@ export function isDelegationActiveOn(d: DelegationWindow, date: string): boolean
   return d.fromDate <= date && date <= d.toDate;
 }
 
+/**
+ * 위임 기간이 `[from, to]` 구간과 **겹치는가**(양끝 포함).
+ *
+ * 하루 단위 판정(`isDelegationActiveOn`)으로는 부족한 소비처가 있다 — ECS는 **주 단위 시트**라
+ * "화요일만 대신 맡았는데 월요일 저녁에 미리 열어보기 / 수요일에 고치기"가 정상 업무다. 그래서 ECS는
+ * 위임 앞뒤로 유예를 두고 이 함수로 판정한다(유예 상수는 ECS 쪽 access.ts에 있다 — 소비처가 정한다).
+ * 형식이 깨진 값은 **false**(fail-closed) — 남의 반을 여는 판정이라 의심스러우면 닫는다.
+ */
+export function delegationOverlapsRange(d: DelegationWindow, from: string, to: string): boolean {
+  if (d.revokedAt) return false;
+  if (!YMD.test(d.fromDate) || !YMD.test(d.toDate) || !YMD.test(from) || !YMD.test(to)) return false;
+  if (from > to) return false;
+  return d.fromDate <= to && from <= d.toDate;
+}
+
 /** 두 날짜 사이 일수(양끝 포함). 형식이 깨졌으면 null. */
 export function inclusiveDayCount(from: string, to: string): number | null {
   if (!YMD.test(from) || !YMD.test(to)) return null;

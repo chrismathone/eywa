@@ -75,6 +75,16 @@ export function SheetToolbar({
           ariaLabel="반 전환"
         />
       </span>
+      {/* 임시 위임(0173a) — 지금 **남의 반 시트**를 고치는 중이라는 사실이 열고 나서도 보여야 한다.
+          창(embed)에선 상단 PageHeader가 통째로 숨겨지므로 배지 자리는 여기가 유일하다. */}
+      {data.delegated ? (
+        <span
+          className="border-amber bg-amber-soft text-amber shrink-0 rounded-pill border px-2 py-0.5 text-[11px] font-bold whitespace-nowrap"
+          title={`${data.classTeacherName ? `${data.classTeacherName} 선생님 반` : "다른 선생님 반"} — 이 기간에만 대신 맡은 위임 반입니다`}
+        >
+          위임{data.classTeacherName ? ` · ${data.classTeacherName} 선생님 반` : ""}
+        </span>
+      ) : null}
       <span className="bg-line h-4 w-px" aria-hidden />
 
       <div className="flex items-center gap-0.5">

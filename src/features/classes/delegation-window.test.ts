@@ -7,6 +7,7 @@
 import { describe, expect, it } from "vitest";
 import {
   DELEGATION_MAX_DAYS,
+  delegationOverlapsRange,
   delegationRangeLabel,
   inclusiveDayCount,
   isDelegationActiveOn,
@@ -45,6 +46,37 @@ describe("isDelegationActiveOn — 양끝 포함", () => {
     // 월 경계를 문자열로 비교해도 안전(YYYY-MM-DD는 사전순 = 시간순).
     expect(isDelegationActiveOn(win("2026-07-30", "2026-08-02"), "2026-08-01")).toBe(true);
     expect(isDelegationActiveOn(win("2026-07-30", "2026-08-02"), "2026-07-29")).toBe(false);
+  });
+});
+
+describe("delegationOverlapsRange — ECS(주 단위 시트)가 쓰는 구간 판정", () => {
+  it("한 칸이라도 겹치면 true — 화요일 하루 위임도 그 주 시트를 연다", () => {
+    const tue = win("2026-08-04", "2026-08-04");
+    expect(delegationOverlapsRange(tue, "2026-08-03", "2026-08-09")).toBe(true); // 그 주
+    expect(delegationOverlapsRange(tue, "2026-08-04", "2026-08-04")).toBe(true); // 그 날
+  });
+
+  it("경계(끝나는 날 = 구간 시작일)도 겹침으로 본다", () => {
+    expect(delegationOverlapsRange(win("2026-07-28", "2026-08-03"), "2026-08-03", "2026-08-09")).toBe(true);
+    expect(delegationOverlapsRange(win("2026-08-09", "2026-08-14"), "2026-08-03", "2026-08-09")).toBe(true);
+  });
+
+  it("하루라도 벗어나면 false — 유예 밖 주차는 안 열린다", () => {
+    expect(delegationOverlapsRange(win("2026-07-27", "2026-08-02"), "2026-08-03", "2026-08-09")).toBe(false);
+    expect(delegationOverlapsRange(win("2026-08-10", "2026-08-11"), "2026-08-03", "2026-08-09")).toBe(false);
+  });
+
+  it("해제된 위임 · 형식 오류 · 뒤집힌 구간은 false(fail-closed)", () => {
+    expect(delegationOverlapsRange(win("2026-08-04", "2026-08-04", "2026-08-04T01:00:00Z"), "2026-08-03", "2026-08-09")).toBe(false);
+    expect(delegationOverlapsRange(win("2026-8-4", "2026-08-04"), "2026-08-03", "2026-08-09")).toBe(false);
+    expect(delegationOverlapsRange(win("2026-08-04", "2026-08-04"), "2026-08-09", "2026-08-03")).toBe(false);
+  });
+
+  it("하루 판정(isDelegationActiveOn)과 모순되지 않는다 — 같은 날 구간이면 두 함수가 같은 답", () => {
+    const d = win("2026-08-03", "2026-08-07");
+    for (const day of ["2026-08-02", "2026-08-03", "2026-08-05", "2026-08-07", "2026-08-08"]) {
+      expect(delegationOverlapsRange(d, day, day)).toBe(isDelegationActiveOn(d, day));
+    }
   });
 });
 

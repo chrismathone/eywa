@@ -73,8 +73,20 @@ export default async function EcsLandingPage({
                 href={`/ecs/${card.classId}?week=${res.weekMonday}`}
                 className="bg-card shadow-card hover:shadow-md flex h-full flex-col rounded-2xl px-4 py-3 transition"
               >
-                <p className="text-foreground truncate text-[15px] font-bold">{card.className}</p>
-                <p className="text-text-dim mt-0.5 text-[13px]">{card.teacherName ?? "담임 미지정"}</p>
+                <p className="text-foreground flex items-center gap-1.5 truncate text-[15px] font-bold">
+                  <span className="truncate">{card.className}</span>
+                  {/* 임시 위임(0173a) — 원스크린 반 칩과 같은 앰버 규약. 남의 반 시트를 내 반인 줄 알고
+                      고치는 일이 없게, 목록에서부터 갈라 보인다(원장 지시 2026-08-03). */}
+                  {card.delegated ? (
+                    <span className="border-amber bg-amber-soft text-amber shrink-0 rounded-pill border px-1.5 py-0.5 text-[10px] font-bold">
+                      위임
+                    </span>
+                  ) : null}
+                </p>
+                <p className="text-text-dim mt-0.5 text-[13px]">
+                  {card.teacherName ?? "담임 미지정"}
+                  {card.delegated ? " 선생님 반" : ""}
+                </p>
                 {card.orphanSlots > 0 ? (
                   <p className="text-text-dim mt-1 text-[12px]">시간 변경된 기록 {card.orphanSlots}건</p>
                 ) : null}

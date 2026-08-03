@@ -3,6 +3,9 @@ import { cache } from "react";
 import { getCurrentUser, type CurrentUser } from "@/lib/auth/current-user";
 import { accessLevelTenant } from "@/lib/auth/perm-matrix";
 import { effectiveTeacherId, effectiveTeacherScope } from "@/lib/auth/view-mode";
+// 반 임시 위임(0173a) — ECS만 넓히는 확장(전역 teacher-scope는 불변, 아래 ecsDelegatedClassIds 주석 참조).
+import { getDelegatedClassIdsInRange } from "@/features/classes/server/delegation";
+import { addDays, kstToday } from "@/lib/date-kst";
 import { createClient } from "@/lib/supabase/server";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { resolveSkillAreas } from "@/features/owner/skill-areas";
@@ -50,11 +53,12 @@ export async function requireEcsClassAccess(
   const canWrite = level === "full" || level === "scoped";
   if (opts.write && !canWrite) return { ok: false, error: "편집 권한이 없습니다" };
 
-  // 강사 스코프 상시 적용(실 강사 + 겸직 강사뷰) — 반담당도 부담임(슬롯 강사)도 아니면 차단.
+  // 강사 스코프 상시 적용(실 강사 + 겸직 강사뷰) — 반담당·부담임(슬롯 강사)·임시 위임 셋 다 아니면 차단.
+  // ⚠️ 이 세 갈래는 `ecsVisibleClassFilter`(랜딩 목록)와 **같아야** 한다 — 갈라지면 목록엔 뜨는데 열면 거절된다.
   const scope = await effectiveTeacherScope();
   if (scope && !scope.classIds.includes(classId)) {
-    const assistant = await ecsAssistantClassIds();
-    if (!assistant.includes(classId)) {
+    const [assistant, delegated] = await Promise.all([ecsAssistantClassIds(), ecsDelegatedClassIds()]);
+    if (!assistant.includes(classId) && !delegated.includes(classId)) {
       return { ok: false, error: "담당 반이 아닙니다" };
     }
   }
@@ -119,12 +123,44 @@ export const ecsAssistantClassIds = cache(async (): Promise<string[]> => {
 });
 
 /**
+ * ECS 위임 스코프 — **임시 위임(0173a)으로 이 기간에 대신 맡은** english 반 id 목록.
+ *
+ * 🔴 왜 전역 `effectiveTeacherScope`를 넓히지 않는가: 그 스코프는 ECS뿐 아니라 **교재요청 쓰기·시간표**까지
+ *    함께 좌우한다(2026-07-29에 교재요청 쓰기 누출 155건이 났던 자리). 위임은 "누가 수업을 대신 하는가"라
+ *    ECS만 넓히는 게 맞다 — 위 `ecsAssistantClassIds`(부담임)가 이미 같은 이유로 ECS 전용 확장이다.
+ *
+ * ⚠️ **왜 '오늘'이 아니라 앞뒤 유예(±{@link ECS_DELEGATION_GRACE_DAYS}일)인가**: ECS는 **주 단위 시트**다.
+ *    화요일 하루를 대신 맡아도 월요일 밤에 미리 열어 계획을 보고, 수요일에 그날 기록을 고치는 게 정상 업무다.
+ *    '오늘만'으로 잠그면 원스크린에서 이미 한 번 터진 "본문은 저장되는데 첨부만 거절" 류가 ECS에서 재현된다.
+ * ⚠️ 반 단위로 연다(주차별로 자르지 않는다) — 부담임 확장과 **같은 의미론**(위 주석 "과거 주차 시트 열람 유지").
+ *    위임 중인 사람은 그 반의 지난 주차도 볼 수 있다. 감사 근거는 `updated_by`가 남긴다.
+ * - 조회 실패는 [](확장만 소실 = 기존 동작으로 강등, fail-closed).
+ */
+export const ECS_DELEGATION_GRACE_DAYS = 7;
+
+export const ecsDelegatedClassIds = cache(async (): Promise<string[]> => {
+  const teacherId = await effectiveTeacherId();
+  if (!teacherId) return [];
+  const today = kstToday();
+  try {
+    return await getDelegatedClassIdsInRange(
+      teacherId,
+      addDays(today, -ECS_DELEGATION_GRACE_DAYS),
+      addDays(today, ECS_DELEGATION_GRACE_DAYS),
+    );
+  } catch {
+    return [];
+  }
+});
+
+/**
  * ECS 랜딩 스코프 — 현재 사용자가 볼 수 있는 english 반 id 목록 필터.
- * 강사(스코프 有)면 담당 반 ∪ 부담임 반, 아니면 전체. 랜딩 쿼리·반 전환 드롭다운이 재사용.
+ * 강사(스코프 有)면 담당 반 ∪ 부담임 반 ∪ **위임 반**, 아니면 전체. 랜딩 쿼리·반 전환 드롭다운이 재사용.
+ * ⚠️ 게이트(`requireEcsClassAccess`)와 **같은 세 갈래**여야 한다 — 갈라지면 "목록엔 뜨는데 열면 거절"이 된다.
  */
 export async function ecsVisibleClassFilter(): Promise<{ classIds: string[] | null }> {
   const scope = await effectiveTeacherScope();
   if (!scope) return { classIds: null };
-  const assistant = await ecsAssistantClassIds();
-  return { classIds: [...new Set([...scope.classIds, ...assistant])] };
+  const [assistant, delegated] = await Promise.all([ecsAssistantClassIds(), ecsDelegatedClassIds()]);
+  return { classIds: [...new Set([...scope.classIds, ...assistant, ...delegated])] };
 }
