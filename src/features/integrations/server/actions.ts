@@ -16,6 +16,7 @@ import { overwriteTimetableSheet, applySheetFormulas } from "@/features/integrat
 import { buildMathTimetableBuffer } from "@/features/exports/math-timetable/build-buffer";
 import { buildEnglishTimetableBuffer, INTEGRATED_SHEET_NAME } from "@/features/exports/english-timetable/build-buffer";
 import type { FormulaCell } from "@/features/exports/english-timetable/injaewon-integrated-sheet";
+import { EDIT_SHEET_NAME } from "@/features/timetable/import/parse";
 import {
   isSheetExportSubject,
   sheetsProvider,
@@ -410,7 +411,9 @@ export async function syncSheetsNow(subject: string, compact1h?: number[]): Prom
     // 과목 익스포터 → 운영자가 미리 만들어 서비스계정에 공유한 기존 구글 시트에 통째 덮어쓰기
     // (서비스계정 용량 0이라 '생성' 불가 → '갱신'만). 대상 시트=과목당 전용 1개(수학·영어 분리).
     const { buffer, formulaCells } = await buildTimetableBufferFor(subject, new Set(compact1h ?? []));
-    await overwriteTimetableSheet(spreadsheetId, buffer);
+    // '수강편집'은 가져오기 라운드트립용 기계 탭이라 사람이 볼 일이 없다 → 숨김(원장 요청 2026-08-04).
+    // 데이터는 그대로 올라가므로 '시트에서 가져오기'는 계속 동작한다.
+    await overwriteTimetableSheet(spreadsheetId, buffer, { hiddenTabs: [EDIT_SHEET_NAME] });
     // 정적 값 업로드(변환) 후 구글시트 수식 주입(방 행 파생·인원/퇴원수 COUNTA). 영어만 수집됨.
     if (formulaCells.length) await applySheetFormulas(spreadsheetId, INTEGRATED_SHEET_NAME, formulaCells);
     await supabase.from("user_integrations").upsert(

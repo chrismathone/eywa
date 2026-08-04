@@ -69,6 +69,24 @@ export function isSpecialSlotLabel(label: string | null | undefined): boolean {
 }
 
 /**
+ * 시트 원문 라벨 → **저장할** 라벨. 자리(LAB·JJ)는 사람 이름 대신 **자리 이름으로 굳힌다**.
+ *
+ * 원장 지시 2026-08-04(불변): *"이주희 = 랩이 아니라 그냥 LAB으로 해. 이주희는 그냥 아르바이트생.
+ * 이건 앞으로도 쭉. 아르바이트생인 이주희가 그만두면 다른 사람이 랩실 이어야하기 때문."*
+ * → 마스터 시트가 담당자 이름으로 블록을 그려도 eywa엔 `LAB`으로 들어간다. **자리가 사람보다 오래 간다.**
+ *
+ * ⚠️ 이건 **앞으로 쓰는 값**에만 적용한다 — 기존 행의 `slot_teacher_label`을 UPDATE하지 말 것(위 📌).
+ *   컷오버가 옛 행을 마감하고 새 행을 넣으므로 이력은 원문대로 남고 지금부터가 `LAB`이 된다.
+ * ⚠️ 표시 해석(`resolveTeacherLabel`)과 **같은 별칭표**를 쓴다 — 한쪽만 고치면 열이 쪼개진다.
+ */
+export function canonicalSlotTeacherLabel(label: string | null | undefined): string | null {
+  const special = specialSlotLabel(label);
+  if (special) return special;
+  const raw = label?.trim();
+  return raw ? raw : null;
+}
+
+/**
  * 라벨 하나를 표시 이름으로. 우선순위 = **특수 자리 → users 해석 → 원본 그대로**.
  * 못 찾은 라벨(퇴사자 닉네임 등)은 **원본 유지** — 지어내지 않는다(빈 문자열·물음표 금지).
  */

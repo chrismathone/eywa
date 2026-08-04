@@ -154,6 +154,15 @@ function translateSheetsError(e: unknown): string {
 export async function overwriteTimetableSheet(
   spreadsheetId: string,
   buffer: ArrayBuffer,
+  opts?: {
+    /**
+     * 업로드 후 **숨길** 탭 이름들(원장 요청 2026-08-04: "시트 반영에서 수강편집 시트는 숨겨줘").
+     * ⚠️ **빼는 게 아니라 숨기는 것** — '수강편집'은 학생 반이동 가져오기의 라운드트립 앵커라 시트에서
+     *   빠지면 가져오기 경로가 통째로 닫힌다(build-buffer의 includeEditSheet 주석 참조). 사람 눈에만
+     *   안 보이게 하고 데이터는 그대로 둔다. 시트 UI에서 언제든 '숨기기 해제'로 되돌릴 수 있다.
+     */
+    hiddenTabs?: string[];
+  },
 ): Promise<void> {
   const auth = getServiceAccountAuth();
   await auth.authorize();
@@ -178,18 +187,28 @@ export async function overwriteTimetableSheet(
     // 시트가 무시하므로 여기서 wrapStrategy=CLIP을 시트 API로 못박는다.
     const sheets = google.sheets({ version: "v4", auth });
     const meta = await withSheetsRetry(() =>
-      sheets.spreadsheets.get({ spreadsheetId, fields: "sheets.properties(sheetId)" }),
+      sheets.spreadsheets.get({ spreadsheetId, fields: "sheets.properties(sheetId,title)" }),
     );
-    const requests = (meta.data.sheets ?? [])
-      .map((s) => s.properties?.sheetId)
-      .filter((id): id is number => typeof id === "number")
-      .map((sheetId) => ({
-        repeatCell: {
-          range: { sheetId },
-          cell: { userEnteredFormat: { wrapStrategy: "CLIP" } },
-          fields: "userEnteredFormat.wrapStrategy",
-        },
-      }));
+    const props = (meta.data.sheets ?? [])
+      .map((s) => s.properties)
+      .filter((p): p is { sheetId: number; title: string } => typeof p?.sheetId === "number");
+    const requests: object[] = props.map(({ sheetId }) => ({
+      repeatCell: {
+        range: { sheetId },
+        cell: { userEnteredFormat: { wrapStrategy: "CLIP" } },
+        fields: "userEnteredFormat.wrapStrategy",
+      },
+    }));
+    // 숨김 탭 — 같은 batchUpdate에 실어 왕복을 늘리지 않는다.
+    // ⚠️ 구글은 **모든 탭이 숨겨지는 것**을 거부한다(400) → 남는 탭이 있을 때만 건다.
+    const hide = new Set(opts?.hiddenTabs ?? []);
+    if (hide.size > 0 && props.some((p) => !hide.has(p.title))) {
+      for (const p of props.filter((x) => hide.has(x.title))) {
+        requests.push({
+          updateSheetProperties: { properties: { sheetId: p.sheetId, hidden: true }, fields: "hidden" },
+        });
+      }
+    }
     if (requests.length > 0) {
       await withSheetsRetry(() =>
         sheets.spreadsheets.batchUpdate({ spreadsheetId, requestBody: { requests } }),

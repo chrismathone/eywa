@@ -29,6 +29,7 @@ import type {
   SheetGrid,
 } from "../../src/features/timetable/import/structure/types";
 import type { DayOfWeek } from "../../src/features/timetable/lib/periods";
+import { canonicalSlotTeacherLabel } from "../../src/features/timetable/lib/teacher-label";
 
 const MASTER_ID = "1-1JHCw36iWPku782DXMhqYbEMBUFL7bElfJjSQekoWA";
 const TENANT = "becaa316-e636-42e9-9d09-08b133e0b094";
@@ -45,8 +46,21 @@ const APPLY = args.includes("--apply");
  * 시트엔 반명처럼 보이지만 실제 반이 아닌 셀(메모)이 섞여 있다 — 숫자·시각·"쉬는 시간"·사람 이름 등.
  * 원장 확인(2026-07-22): "메모라 넘겨도 된다". 그래서 **기존 반에 매칭되지 않는 이름은 기본적으로 버리고**,
  * 진짜 신설 반만 아래 화이트리스트로 **명시 생성**한다(자동 생성 금지 = 메모가 반으로 둔갑하는 걸 원천 차단).
+ *
+ * ⚠️ 색 규칙(parse-grid 3패스)이 메모 대부분을 이미 걸러내지만 **칠해진 메모**가 남는다(실측 1건:
+ *   Elsa "7, 8월만 4시 반 출근"). 그래서 화이트리스트는 색 규칙이 있어도 여전히 필요하다.
+ * 누적 기록(컷오버별로 무엇이 신설됐는지 git에 남긴다 — 이미 활성인 이름은 자동 skip이라 지울 필요 없음):
+ *   · 2026-07-09 컷오버: 중고E_중2 최상위 · 중등E_중2 정규 D
+ *   · 2026-08-03 컷오버: EiE 레벨 진급 13개(DP6·JP2·KW2·LS3a·LS3b·LS6·LT3·LT5·MEC1-4·PJ1·PJ6·PL3·RTT4)
+ * 임시 추가는 `--new-class=A,B` 로도 가능(코드 수정 없이 1회성).
  */
-const NEW_CLASSES_TO_CREATE = ["중고E_중2 최상위", "중등E_중2 정규 D"];
+const NEW_CLASSES_TO_CREATE = [
+  "중고E_중2 최상위",
+  "중등E_중2 정규 D",
+  "DP6", "JP2", "KW2", "LS3a", "LS3b", "LS6", "LT3", "LT5", "MEC1-4", "PJ1", "PJ6", "PL3", "RTT4",
+];
+const EXTRA_NEW_CLASSES = (args.find((a) => a.startsWith("--new-class="))?.split("=")[1] ?? "")
+  .split(",").map((s) => s.trim()).filter(Boolean);
 
 function creds(): { client_email: string; private_key: string } {
   let s = (process.env.GOOGLE_SERVICE_ACCOUNT_KEY || process.env.FIREBASE_SERVICE_ACCOUNT_KEY || "").trim();
@@ -66,12 +80,16 @@ async function readMasterGrid(tab: string): Promise<SheetGrid> {
     spreadsheetId: MASTER_ID,
     ranges: [tab],
     includeGridData: true,
-    fields: "sheets(properties(title),merges,data(rowData(values(formattedValue))))",
+    // 배경색까지 — 원장 규칙 "색 없는 건 다 수업이 아님"(parse-grid 3패스)이 이 값을 쓴다.
+    fields:
+      "sheets(properties(title),merges,data(rowData(values(formattedValue,effectiveFormat(backgroundColor,backgroundColorStyle)))))",
   });
   const sh = res.data.sheets![0]!;
+  const rowData = sh.data![0]!.rowData ?? [];
   return {
     tabName: sh.properties!.title!,
-    cells: (sh.data![0]!.rowData ?? []).map((r) => (r.values ?? []).map((v) => v.formattedValue ?? "")),
+    cells: rowData.map((r) => (r.values ?? []).map((v) => v.formattedValue ?? "")),
+    fills: rowData.map((r) => (r.values ?? []).map((v) => isFilled(v.effectiveFormat))),
     merges: (sh.merges ?? []).map((m) => ({
       startRowIndex: m.startRowIndex!,
       endRowIndex: m.endRowIndex!,
@@ -79,6 +97,23 @@ async function readMasterGrid(tab: string): Promise<SheetGrid> {
       endColumnIndex: m.endColumnIndex!,
     })),
   };
+}
+
+/**
+ * 셀에 배경색이 **칠해져 있는가**. 구글은 기본(무색)을 두 가지로 준다 — 테마색 `BACKGROUND` 또는
+ * 순백 `rgb(1,1,1)`. 둘 다 "안 칠함"으로 본다(실측 8월 탭: 무색 33칸 전부 메모).
+ */
+type CellFormatish = {
+  backgroundColor?: { red?: number | null; green?: number | null; blue?: number | null } | null;
+  backgroundColorStyle?: { themeColor?: string | null } | null;
+} | null | undefined;
+function isFilled(ef: CellFormatish): boolean {
+  const theme = ef?.backgroundColorStyle?.themeColor;
+  if (theme) return theme !== "BACKGROUND";
+  const bg = ef?.backgroundColor;
+  if (!bg) return false;
+  const r = bg.red ?? 0, g = bg.green ?? 0, b = bg.blue ?? 0;
+  return !(r >= 0.999 && g >= 0.999 && b >= 0.999);
 }
 
 const sql = postgres(process.env.DATABASE_URL!, { ssl: "require", max: 1 });
@@ -121,8 +156,19 @@ async function loadContext(): Promise<{ ctx: ExistingContext; existing: Existing
 
 // ── 1. 시트 파싱 ──────────────────────────────────────────────────────────────
 const grid = await readMasterGrid(TAB);
-const parsed = parseTeacherGrid(grid);
+const raw = parseTeacherGrid(grid);
+// 자리(LAB·JJ)는 담당자 이름이 아니라 **자리 이름으로 굳혀** 저장한다(원장 2026-08-04, canonicalSlotTeacherLabel).
+// 시트가 `이주희`(LAB 아르바이트)로 그려도 eywa엔 `LAB` — 담당이 바뀌어도 자리는 그대로다.
+// ⚠️ **diff 전에** 정규화해야 한다. 삽입 직전에 바꾸면 diff가 `이주희`(시트) = `이주희`(DB)로 보고
+//    'keep' 처리해 새 행 자체를 안 만들어 라벨이 영영 안 바뀐다.
+const parsed = {
+  ...raw,
+  slots: raw.slots.map((s) => ({ ...s, teacherName: canonicalSlotTeacherLabel(s.teacherName) ?? s.teacherName })),
+  blocks: raw.blocks.map((b) => ({ ...b, teacherName: canonicalSlotTeacherLabel(b.teacherName) ?? b.teacherName })),
+};
+const relabeled = raw.slots.filter((s, i) => s.teacherName !== parsed.slots[i]!.teacherName).length;
 console.log(`시트 "${grid.tabName}" — 강사블록 ${parsed.teachers.length} · 슬롯 ${parsed.slots.length}`);
+if (relabeled) console.log(`  자리 라벨 정규화: ${relabeled}슬롯(담당자 이름 → LAB/JJ)`);
 const dayBefore = new Date(`${CUTOVER}T00:00:00Z`);
 dayBefore.setUTCDate(dayBefore.getUTCDate() - 1);
 const CLOSE_AT = dayBefore.toISOString().slice(0, 10);
@@ -130,7 +176,8 @@ console.log(`컷오버: ~${CLOSE_AT} 옛 배치 마감 · ${CUTOVER}부터 새 �
 
 // ── 2. 신설 반 생성(화이트리스트만) ───────────────────────────────────────────
 const sheetNames = new Set(parsed.slots.map((s) => s.className));
-for (const name of NEW_CLASSES_TO_CREATE) {
+for (const w of parsed.warnings) console.log(`  · ${w}`);
+for (const name of [...NEW_CLASSES_TO_CREATE, ...EXTRA_NEW_CLASSES]) {
   if (!sheetNames.has(name)) {
     console.log(`  ⏭ 신설 예정 반 "${name}"이 이 탭에 없음 — 건너뜀`);
     continue;
@@ -158,8 +205,14 @@ const match = matchStructure(parsed, ctx);
 const report = computeStructureDiff(match, existing);
 
 console.log(`\n매칭: 반 ${match.matchedClasses} · 강사 ${match.matchedTeachers} · 방 ${match.matchedRooms}`);
+// 버려진 이름 = 색은 칠해졌는데 DB에 없는 이름. 슬롯 수를 함께 보여준다 — **메모는 보통 1~2칸,
+// 진짜 반은 6칸 이상**(주 6교시)이라 사람이 한눈에 가려낼 수 있다. 진짜 반이면 NEW_CLASSES_TO_CREATE에.
+const slotsByName = parsed.slots.reduce<Map<string, number>>((m, s) => m.set(s.className, (m.get(s.className) ?? 0) + 1), new Map());
 const dropped = match.newClassNames;
-if (dropped.length) console.log(`  버려진 이름 ${dropped.length}건(메모로 판단 — 반 생성 안 함): ${dropped.join(" / ")}`);
+if (dropped.length) {
+  console.log(`  버려진 이름 ${dropped.length}건(DB에 없어 반 생성 안 함 — 슬롯 6칸+면 진짜 반일 수 있으니 확인):`);
+  console.log(`    ${dropped.map((n) => `${n}(${slotsByName.get(n) ?? 0})`).join(" / ")}`);
+}
 console.log(`계획: 생성 ${report.plan.create} · 변경 ${report.plan.update} · 유지 ${report.plan.keep} · 마감 ${report.plan.remove}`);
 
 // ── 비수업 블록(감독·준비·회의·연차) — 반이 아니라 teacher_schedule_blocks(0138a) ─────────────

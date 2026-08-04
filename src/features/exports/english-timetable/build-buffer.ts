@@ -51,6 +51,15 @@ export async function buildEnglishTimetableBuffer(opts?: {
 
   const config = settingsToPeriodsConfig(settings.operations);
   const today = kstToday();
+  // 제목에 붙일 반영 시각 — "이 시트가 언제 동기화된 건지"(원장 요청 2026-08-04, 수학 합계행 '기준일' 대응).
+  // ⚠️ 서버는 UTC라 `new Date().getHours()`를 쓰면 9시간 어긋난다 → 항상 Asia/Seoul로 포맷(전역 KST 규칙).
+  // 구글시트 push는 이 버퍼를 만든 직후 올리므로 생성 시각 = 반영 시각. 다운로드 xlsx에도 같은 의미다.
+  const syncedAt = `${today} ${new Intl.DateTimeFormat("ko-KR", {
+    timeZone: "Asia/Seoul",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(new Date())}`;
   const weekMonday = thisMonday(today);
   const month = Number(today.slice(5, 7));
   const academyLabel =
@@ -93,7 +102,7 @@ export async function buildEnglishTimetableBuffer(opts?: {
     // 스마트 동기화: 미니그리드를 강사별 역조회 수식으로(구글시트만 — withFormulas일 때 sink와 함께).
     teacherGeometry: opts?.withFormulas ? teacherGeometry : undefined,
     sheetName: INTEGRATED_SHEET_NAME,
-    title: `${academyLabel} ${month}월 통합 영어시간표`,
+    title: `${academyLabel} ${month}월 통합 영어시간표    ·    ${syncedAt} 반영`,
   });
   appendTeacherGridSheet(wb, slots, {
     teacherColors,
