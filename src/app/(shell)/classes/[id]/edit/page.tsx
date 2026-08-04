@@ -106,6 +106,7 @@ export default async function EditClassPage({
             endTime: s.endTime,
             teacherId: s.teacherId,
             classroomId: s.classroomId,
+            slotTeacherLabel: s.slotTeacherLabel,
           })),
         }}
         teacherOptions={teacherOptions}

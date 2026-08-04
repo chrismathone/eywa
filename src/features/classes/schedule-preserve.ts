@@ -18,6 +18,9 @@
  *     incoming에서 빠지면 이 함수는 그 행을 볼 수 없고, 호출부의 delete에 그대로 지워진다.
  */
 
+// 자리(LAB·JJ) 판정 단일 소스. 순수 모듈이라 서버·클라 양쪽에서 안전하다([[#61]]).
+import { specialSlotLabel } from "@/features/timetable/lib/teacher-label";
+
 export type IncomingSlot = {
   dayOfWeek: string;
   startTime: string;
@@ -30,6 +33,8 @@ export type IncomingSlot = {
    * (아래 `endTime` 주석 참조 — 시수=돈이라 조용히 줄어드는 것을 막는다).
    */
   explicitTime?: boolean;
+  /** 담당 칸에서 **자리(LAB·JJ)** 를 골랐으면 그 이름. 없으면 사람 담당이거나 담임 상속. */
+  seatLabel?: string | null;
 };
 
 export type PriorSlot = {
@@ -235,7 +240,15 @@ export function preserveScheduleFields(input: {
       classroomId: s.classroomId,
       validFrom: String(validFrom).slice(0, 10),
       validTo: validTo ? String(validTo).slice(0, 10) : null,
-      slotTeacherLabel: prior?.slotTeacherLabel ?? null,
+      // 🔴 라벨은 **자리(LAB·JJ)일 때만** 폼이 건드린다. 그냥 폼 값으로 덮으면 시트 임포트가 넣은
+      //    강사 닉네임 라벨(Anna·Elsa… 실측 492행)이 반 메모 한 줄 수정에 통째로 날아간다 — 이 모듈이
+      //    존재하는 이유가 그 사고 방지다. 그래서 ① 자리를 골랐으면 그 자리로 ② 자리였는데 사람/담임으로
+      //    바꿨으면 지우고(안 지우면 화면엔 사람인데 라벨은 LAB인 유령이 남는다) ③ 그 외엔 승계.
+      slotTeacherLabel: s.seatLabel
+        ? s.seatLabel
+        : specialSlotLabel(prior?.slotTeacherLabel)
+          ? null
+          : (prior?.slotTeacherLabel ?? null),
       slotRoomLabel: prior?.slotRoomLabel ?? null,
       periodLabel: prior?.periodLabel ?? null,
       mergeGroup: prior?.mergeGroup ?? null,

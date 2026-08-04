@@ -48,6 +48,12 @@ export type OverlapCandidate = {
   validTo: string | null;
   teacherId: string | null;
   classroomId: string | null;
+  /**
+   * 이 슬롯이 **자리(LAB·JJ)** 면 그 이름. 원장 2026-08-04: *"JJ 또는 LAB은 스케줄 겹쳐도 괜찮으니까
+   * 경고 차단."* 자리는 병렬 레인이라 같은 방·같은 시각에 여러 반이 도는 게 **정상 운영**이다
+   * (시트도 그 열을 병렬로 그린다). 이걸 겹침으로 세면 경고가 상시 켜져 진짜 이중예약이 묻힌다.
+   */
+  seatLabel?: string | null;
 };
 
 /** 기존 슬롯(이름까지 조립된 상태). */
@@ -123,7 +129,10 @@ export function findOverlaps(input: {
   );
 
   for (const c of input.candidates) {
+    // 자리(LAB·JJ)는 겹쳐도 정상 — 한쪽이라도 자리면 이 쌍은 아예 안 센다(원장 2026-08-04).
+    if (c.seatLabel) continue;
     for (const e of live) {
+      if (e.seatLabel) continue;
       if (e.dayOfWeek !== c.dayOfWeek) continue;
       if (!timeRangesOverlap(c.startTime, c.endTime, e.startTime, e.endTime)) continue;
       // 기간이 안 겹치면 충돌이 아니다 — 여름 특강과 겨울 특강은 같은 교실·같은 시각이어도 무관.

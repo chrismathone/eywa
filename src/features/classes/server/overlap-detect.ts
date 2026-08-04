@@ -1,6 +1,7 @@
 import "server-only";
 import { fetchAllPaged } from "@/lib/supabase/batch";
 import { kstToday } from "@/lib/date-kst";
+import { specialSlotLabel } from "@/features/timetable/lib/teacher-label";
 import type { createClient } from "@/lib/supabase/server";
 import {
   findOverlaps,
@@ -105,6 +106,8 @@ export async function detectOverlaps(
       roomName: one(r.slotRoom)?.name ?? one(k?.classroom)?.name ?? r.slot_room_label ?? null,
       isActive: k?.is_active ?? true,
       closedAt: k?.closed_at ?? null,
+      // 자리(LAB·JJ) 슬롯은 겹침 계산에서 통째로 빠진다(overlap.ts 참조).
+      seatLabel: specialSlotLabel(r.slot_teacher_label),
     };
   });
 

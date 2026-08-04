@@ -8,6 +8,7 @@ import { accessLevelTenant } from "@/lib/auth/perm-matrix";
 import { kstToday } from "@/lib/date-kst";
 import { isHexColor, readableTextColor } from "@/lib/color-utils";
 import { isAssignableTeacherRole } from "@/lib/permissions";
+import { parseSeatValue } from "@/features/timetable/lib/teacher-label";
 import { logAction } from "@/features/audit/server/log";
 import { notifyUsers } from "@/features/notifications/server/notify";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -58,6 +59,11 @@ type ScheduleInput = {
   classroomId: string | null;
   /** 자유 시각 입력 행(교시표 밖 = 오전 특강·불규칙 시각)인가. 교시 클릭그리드 셀이면 false. */
   explicitTime?: boolean;
+  /**
+   * 담당 칸에서 **자리(LAB·JJ)** 를 골랐으면 그 이름. 자리는 계정이 없어 `teacherId`에 못 담는다 →
+   * `teacher_id = null` + `slot_teacher_label = <자리>`로 저장한다(teacher-label.ts 규칙).
+   */
+  seatLabel?: string | null;
 };
 
 /** DB 오류를 화면 문구로 — 영문 원문(PostgREST 메시지)을 그대로 내보내지 않는다(UI raw 노출 금지). */
@@ -138,9 +144,12 @@ function readSlotNamespace(
     const endTime = String(formData.get(`${prefix}end_${i}`) ?? "").trim().slice(0, 5);
     if (!dayOfWeek || !startTime || !endTime) continue;
     if (!DAYS.includes(dayOfWeek as (typeof DAYS)[number])) continue;
-    const teacherId = String(formData.get(`${prefix}teacher_${i}`) ?? "").trim() || null;
+    // 담당 칸은 uuid | "" | "seat:LAB"|"seat:JJ" 셋 중 하나 — 자리는 계정이 없어 uuid로 못 담는다.
+    const rawTeacher = String(formData.get(`${prefix}teacher_${i}`) ?? "").trim();
+    const seatLabel = parseSeatValue(rawTeacher);
+    const teacherId = seatLabel ? null : rawTeacher || null;
     const classroomId = String(formData.get(`${prefix}classroom_${i}`) ?? "").trim() || null;
-    result.push({ dayOfWeek, startTime, endTime, teacherId, classroomId, explicitTime });
+    result.push({ dayOfWeek, startTime, endTime, teacherId, classroomId, explicitTime, seatLabel });
   }
   return result;
 }
@@ -423,8 +432,10 @@ async function collectOverlaps(
         endTime: s.endTime,
         validFrom: input.validFrom,
         validTo: input.validTo,
-        teacherId: s.teacherId ?? input.teacherId,
+        // 자리 슬롯은 반 담임을 상속하지 않는다 — 상속하면 담임이 자기 자신과 겹친 것처럼 보고된다.
+        teacherId: s.seatLabel ? null : (s.teacherId ?? input.teacherId),
         classroomId: s.classroomId ?? input.classroomId,
+        seatLabel: s.seatLabel ?? null,
       })),
       ...(excludeClassId ? { excludeClassId } : {}),
     });

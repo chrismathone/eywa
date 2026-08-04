@@ -69,6 +69,21 @@ export function isSpecialSlotLabel(label: string | null | undefined): boolean {
 }
 
 /**
+ * 반 수정 폼의 '교시별 담당' 드롭다운에서 **자리(JJ·LAB)를 고를 때 쓰는 값**.
+ * 담당 칸은 원래 `users.id`(uuid)만 담는데 자리는 사람이 아니라 계정이 없다 → uuid와 절대 안 겹치는
+ * 접두사를 붙여 같은 칸에 태운다(별도 입력칸을 만들면 "담임 아니면 자리" 배타 관계가 UI에서 깨진다).
+ * 서버는 이 값을 보면 `teacher_id = null` + `slot_teacher_label = <자리>`로 저장한다 —
+ * 🔴 **자리를 users로 해석하면 안 된다**(가짜 강사가 직원명부·급여·알림 수신자에 붙는 사고, 위 🔴 참조).
+ */
+export const SEAT_VALUE_PREFIX = "seat:";
+export const seatSelectValue = (seat: SpecialSlotLabel): string => `${SEAT_VALUE_PREFIX}${seat}`;
+/** 폼 값이 자리면 그 자리 이름, 아니면 null(=uuid이거나 빈 값). */
+export function parseSeatValue(value: string | null | undefined): SpecialSlotLabel | null {
+  if (!value?.startsWith(SEAT_VALUE_PREFIX)) return null;
+  return specialSlotLabel(value.slice(SEAT_VALUE_PREFIX.length));
+}
+
+/**
  * 시트 원문 라벨 → **저장할** 라벨. 자리(LAB·JJ)는 사람 이름 대신 **자리 이름으로 굳힌다**.
  *
  * 원장 지시 2026-08-04(불변): *"이주희 = 랩이 아니라 그냥 LAB으로 해. 이주희는 그냥 아르바이트생.

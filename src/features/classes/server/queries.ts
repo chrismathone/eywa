@@ -61,6 +61,8 @@ export type ClassScheduleSlot = {
   // 교시별 오버라이드 — null이면 반의 담임/기본 강의실 상속.
   teacherId: string | null;
   classroomId: string | null;
+  /** 표시 라벨(시트 원문). 자리(LAB·JJ)는 `teacherId`가 비고 여기에만 있다. */
+  slotTeacherLabel: string | null;
 };
 
 export type ClassDetail = {
@@ -498,7 +500,9 @@ export async function getClassDetail(id: string): Promise<ClassDetail | null> {
   const [{ data: schedules }, { data: enrollRows }] = await Promise.all([
     supabase
       .from("class_schedules")
-      .select("id, day_of_week, start_time, end_time, valid_from, valid_to, teacher_id, classroom_id")
+      .select(
+        "id, day_of_week, start_time, end_time, valid_from, valid_to, teacher_id, classroom_id, slot_teacher_label",
+      )
       .eq("class_id", id)
       .order("day_of_week")
       .order("start_time"),
@@ -552,6 +556,8 @@ export async function getClassDetail(id: string): Promise<ClassDetail | null> {
       validTo: s.valid_to,
       teacherId: (s.teacher_id as string | null) ?? null,
       classroomId: (s.classroom_id as string | null) ?? null,
+      // 자리(LAB·JJ)는 teacher_id가 비고 이 라벨에만 있다 — 폼이 드롭다운을 그 자리로 열려면 필요.
+      slotTeacherLabel: (s.slot_teacher_label as string | null) ?? null,
     })),
     studentCount,
   };

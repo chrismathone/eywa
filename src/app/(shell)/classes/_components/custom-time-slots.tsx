@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { DAY_LABEL_KO, DAY_ORDER } from "@/features/classes/overlap";
+import { seatSelectValue, specialSlotLabel } from "@/features/timetable/lib/teacher-label";
 
 export type CustomSlot = {
   dayOfWeek: string;
@@ -10,6 +11,8 @@ export type CustomSlot = {
   endTime: string;
   teacherId?: string | null;
   classroomId?: string | null;
+  /** 저장된 표시 라벨 — 자리(LAB·JJ)면 그대로 다시 보내야 저장 때 안 지워진다. */
+  slotTeacherLabel?: string | null;
 };
 
 const inputClass =
@@ -75,7 +78,16 @@ export function CustomTimeSlots({ initial }: { initial: CustomSlot[] }) {
           {rows.map((r, i) => (
             // key에 인덱스를 쓴다 — 행에 안정적 id가 없고(신규 행 포함) 삭제 시 나머지가 재정렬된다.
             <li key={`custom-${i}`} className="flex flex-wrap items-center gap-1.5">
-              <input type="hidden" name={`custom_teacher_${i}`} value={r.teacherId ?? ""} />
+              {/* 자유 시각 행엔 담당 드롭다운이 없다 — 자리(LAB·JJ)는 저장된 라벨을 **그대로 되돌려 보내야**
+                  한다. 안 보내면 서버가 "자리를 해제한 것"으로 읽어(schedule-preserve) 라벨이 지워진다. */}
+              <input
+                type="hidden"
+                name={`custom_teacher_${i}`}
+                value={(() => {
+                  const seat = specialSlotLabel(r.slotTeacherLabel);
+                  return seat ? seatSelectValue(seat) : (r.teacherId ?? "");
+                })()}
+              />
               <input type="hidden" name={`custom_classroom_${i}`} value={r.classroomId ?? ""} />
               <select
                 name={`custom_day_${i}`}
