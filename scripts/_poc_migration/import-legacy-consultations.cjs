@@ -24,10 +24,12 @@ const argOf = (name) => {
   return i >= 0 ? process.argv[i + 1] : null;
 };
 const XLSX = (argOf("--xlsx") ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+const NOTION_DS = argOf("--notion"); // 노션 `입학 상담 카드 DB`의 data_source id
+const DUMP = argOf("--dump"); // 병합 결과를 JSON으로 (검토용, PII 포함 — 리포 밖에만)
 const TENANT_SLUG = argOf("--tenant") ?? "injaewon";
 
-if (!XLSX.length) {
-  console.error("사용법: --xlsx \"경로1.xlsx,경로2.xlsx\" [--tenant injaewon] [--apply]");
+if (!XLSX.length && !NOTION_DS) {
+  console.error("사용법: --xlsx \"경로1.xlsx,경로2.xlsx\" [--notion <data_source_id>] [--tenant injaewon] [--apply]");
   process.exit(1);
 }
 
@@ -192,9 +194,75 @@ async function extract() {
   return out;
 }
 
+/**
+ * 노션 `입학 상담 카드 DB` → 시트와 같은 중간 형태로. 2025-08·09는 **노션에만 있다**(시트에 탭이 없다).
+ * 시트가 콜 기록이라면 노션은 상담 카드라 축이 다르지만, "몇 건 상담했나"는 같은 사실을 센다.
+ */
+async function fetchNotion(dataSourceId) {
+  const token = process.env.NOTION_TOKEN;
+  if (!token) throw new Error("NOTION_TOKEN 없음 — .env.local 확인");
+  const headers = { Authorization: `Bearer ${token}`, "Notion-Version": "2025-09-03", "Content-Type": "application/json" };
+  const val = (p) => {
+    if (!p) return null;
+    switch (p.type) {
+      case "title": case "rich_text": return p[p.type].map((t) => t.plain_text).join("").trim() || null;
+      case "select": return (p.select && p.select.name) || null;
+      case "status": return (p.status && p.status.name) || null;
+      case "multi_select": return p.multi_select.map((s) => s.name).join(", ") || null;
+      case "phone_number": return p.phone_number || null;
+      case "number": return p.number;
+      case "date": return (p.date && p.date.start) || null;
+      case "created_time": return p.created_time;
+      case "formula": return (p.formula && (p.formula.string || p.formula.number)) || null;
+      default: return null;
+    }
+  };
+  const out = [];
+  let cursor = null;
+  do {
+    const res = await fetch(`https://api.notion.com/v1/data_sources/${dataSourceId}/query`, {
+      method: "POST", headers,
+      body: JSON.stringify(Object.assign({ page_size: 100 }, cursor ? { start_cursor: cursor } : {})),
+    });
+    const j = await res.json();
+    if (j.object === "error") throw new Error(`Notion: ${j.code} ${j.message}`);
+    for (const page of j.results) {
+      const P = page.properties;
+      const name = val(P["학생이름"]);
+      if (!name) continue;
+      const iso = val(P["접수 일시"]) || val(P["생성 일시"]) || page.created_time;
+      const kst = new Date(new Date(iso).getTime() + 9 * 3600 * 1000); // KST 날짜로 고정
+      const date = `${kst.getUTCFullYear()}-${String(kst.getUTCMonth() + 1).padStart(2, "0")}-${String(kst.getUTCDate()).padStart(2, "0")}`;
+      out.push({
+        src: "notion/입학 상담 카드 DB", month: date.slice(0, 7), name,
+        phone: val(P["부모님 연락처"]) || val(P["학생 연락처"]),
+        school: val(P["학교"]), grade: val(P["학년"]),
+        subject: val(P["상담 과목"]), receiver: null,
+        pathway: val(P["상담경로"]), counselor: val(P["⭐상담자⭐"]),
+        receivedDate: date, consultDate: null,
+        regStatus: val(P["등록현황"]), registrar: null,
+        amount: val(P["수강료"]) || null, payDate: null, score: null,
+        log: val(P["상담기록(통합)"]), nonRegReason: null,
+        followUpDate: null, followUpContent: null, statusFlag: null,
+      });
+    }
+    cursor = j.has_more ? j.next_cursor : null;
+  } while (cursor);
+  console.log(`노션 ${out.length}행 수집`);
+  return out;
+}
+
 // 등록 판정: 명시 컬럼 → 상태범례 → 결제흔적. 근거가 없으면 '상담완료'(등록으로 부풀리지 않는다).
 function deriveOutcome(r) {
   const reg = r.regStatus || "";
+  // 노션 `등록현황`은 과목별 다중값이라 "미등록-영어, 등록-수학"처럼 섞인다 → **한 과목이라도 등록이면 등록**.
+  // 단순 /등록/ 매칭은 "미등록"에도 걸리므로 토큰 단위로 본다.
+  if (/[-\s]/.test(reg) && reg.includes("등록-")) {
+    const tokens = reg.split(/\s*,\s*/);
+    if (tokens.some((t) => t.startsWith("등록-"))) return "enrolled";
+    if (tokens.some((t) => t.startsWith("미등록-"))) return "declined";
+  }
+  if (/입학거부/.test(reg)) return "declined";
   if (/미등록/.test(reg)) return "declined";
   if (/등록예정/.test(reg)) return "consulted";
   if (/등록/.test(reg)) return "enrolled";
@@ -207,8 +275,8 @@ function deriveOutcome(r) {
 }
 
 async function main() {
-  console.log(`${APPLY ? "★ 적용(--apply)" : "dry-run"} · xlsx ${XLSX.length}개 · tenant=${TENANT_SLUG}\n`);
-  const raw = await extract();
+  console.log(`${APPLY ? "★ 적용(--apply)" : "dry-run"} · xlsx ${XLSX.length}개${NOTION_DS ? " + 노션" : ""} · tenant=${TENANT_SLUG}\n`);
+  const raw = (await extract()).concat(NOTION_DS ? await fetchNotion(NOTION_DS) : []);
 
   // 워크북 간 중복 병합(같은 달·같은 이름·같은 전화) — 필드는 "채워진 쪽"을 취한다.
   const FIELDS = ["phone","school","grade","subject","receiver","pathway","counselor","receivedDate",
@@ -246,8 +314,35 @@ async function main() {
     absorbed++;
   }
 
+  // 3차: 🔴 같은 학생인데 한쪽은 **학부모 번호**, 한쪽은 **학생 번호**를 적어 1·2차를 다 빠져나가는 경우
+  // (실측: 시트 `010-9422-6788` ↔ 노션 `010-8608-6788` = 달성초1 김태빈 한 명). 전화가 다르면
+  // 학교+학년이 같을 때만 합친다 — 이래야 같은 달의 진짜 동명이인(경명여중1 박서진 ≠ 남산초6 박서진)이 안 뭉개진다.
+  const normSchool = (s) => String(s || "").replace(/\s/g, "").replace(/^대구/, "").replace(/등학교$|학교$/, "").trim();
+  const byNameMonth = new Map();
+  for (const e of merged.values()) {
+    const k = `${e.month}|${nName(e.name)}`;
+    byNameMonth.set(k, (byNameMonth.get(k) || []).concat(e));
+  }
+  let pairMerged = 0;
+  for (const list of byNameMonth.values()) {
+    if (list.length < 2) continue;
+    for (let i = 0; i < list.length; i++) {
+      for (let j = i + 1; j < list.length; j++) {
+        const a = list[i], b = list[j];
+        if (!a || !b || !merged.has(a.legacyKey) || !merged.has(b.legacyKey)) continue;
+        const sa = normSchool(a.school), sb = normSchool(b.school);
+        if (!sa || !sb || sa !== sb) continue;
+        const ga = norm(a.grade), gb = norm(b.grade);
+        if (ga && gb && ga !== gb) continue; // 학년이 둘 다 있고 다르면 남남
+        absorb(a, b);
+        merged.delete(b.legacyKey);
+        pairMerged++;
+      }
+    }
+  }
+
   const sheet = [...merged.values()];
-  console.log(`시트 원본 ${raw.length}행 → 중복 병합 ${sheet.length}행 (전화 결측 흡수 ${absorbed}건 포함)`);
+  console.log(`원본 ${raw.length}행 → 병합 ${sheet.length}행 (전화 결측 흡수 ${absorbed} + 학교·학년 일치 흡수 ${pairMerged})`);
 
   // 남은 동명이인(같은 달·같은 이름·다른 전화)은 진짜 별개일 수 있으니 지우지 않고 눈에 보이게만 한다.
   const sameNameMonth = new Map();
@@ -255,10 +350,24 @@ async function main() {
     const k = `${e.month}|${nName(e.name)}`;
     sameNameMonth.set(k, (sameNameMonth.get(k) || 0) + 1);
   }
-  const collisions = [...sameNameMonth].filter(([, n]) => n > 1);
-  if (collisions.length)
-    console.log(`  ↳ 같은 달·같은 이름이 ${collisions.length}쌍 남음(전화가 서로 달라 별개로 판단): ` +
-      collisions.slice(0, 6).map(([k, n]) => `${k}×${n}`).join(", ") + (collisions.length > 6 ? " …" : ""));
+  const collisions = [...sameNameMonth].filter(([, n]) => n > 1).map(([k]) => k);
+  if (collisions.length) {
+    // 🔴 같은 달·같은 이름인데 **출처가 시트와 노션으로 갈리면** 같은 상담을 두 번 셀 위험이 크다
+    //    (전화를 한쪽은 학생 번호, 한쪽은 부모 번호로 적어 키가 갈린 경우). 동명이인과 구별해 따로 센다.
+    let crossSource = 0;
+    for (const k of collisions) {
+      const group = sheet.filter((e) => `${e.month}|${nName(e.name)}` === k);
+      const srcKinds = new Set(group.map((e) => (e.srcs.some((s) => s.startsWith("notion/")) ? "notion" : "sheet")));
+      if (srcKinds.size > 1) crossSource++;
+    }
+    console.log(`  ↳ 같은 달·같은 이름 ${collisions.length}쌍(전화가 달라 별개로 판단) ` +
+      `— 그중 시트↔노션 교차 ${crossSource}쌍${crossSource ? " ⚠️ 같은 상담일 수 있음" : ""}: ` +
+      collisions.slice(0, 6).join(", ") + (collisions.length > 6 ? " …" : ""));
+  }
+  if (DUMP) {
+    require("node:fs").writeFileSync(DUMP, JSON.stringify(sheet, null, 1), "utf8");
+    console.log(`  ↳ 병합 결과 ${sheet.length}행을 ${DUMP} 에 덤프(검토용, PII 포함 — 리포에 넣지 말 것)`);
+  }
 
   const sql = postgres(process.env.DATABASE_URL, { max: 1, prepare: false, idle_timeout: 10 });
   try {
@@ -355,11 +464,47 @@ async function main() {
       for (const r of rows) m.set(f(r), (m.get(f(r)) || 0) + 1);
       return [...m].sort((a, b) => b[1] - a[1]);
     };
+    // 출처별 — 노션이 시트와 겹치는 달(2025-10~2026-05)에서 새 행을 많이 만들면 같은 상담을
+    // 두 번 세고 있다는 신호다. 겹치는 달은 0에 가까워야 정상.
+    const bySrc = new Map();
+    for (const r of fresh) {
+      const s = r.srcs.some((x) => x.startsWith("notion/")) ? "노션" : "시트";
+      const e = bySrc.get(s) || new Map();
+      e.set(r.month, (e.get(r.month) || 0) + 1);
+      bySrc.set(s, e);
+    }
+    for (const [s, m] of bySrc)
+      console.log(`출처 ${s}: ${[...m.values()].reduce((a, b) => a + b, 0)}행  ` +
+        [...m].sort().map(([k, v]) => `${k.slice(2)}:${v}`).join(" "));
+
     console.log("등록판정:", tally((r) => r.outcome).map(([k, v]) => `${k}=${v}`).join("  "));
     console.log("상담자 계정 연결:", rows.filter((r) => r.consultant_id).length, "/", rows.length);
     console.log("정확한 날짜:", rows.filter((r) => r.consultation_date || r.received_date).length,
       "/ 월만:", rows.filter((r) => !r.consultation_date && !r.received_date).length);
     console.log("상담 내용 본문:", rows.filter((r) => r.parent_request).length);
+    // 이관 후 월별 커버리지 — "빈 달이 언제인가"가 지표 신뢰의 전제다.
+    const exMonth = new Map();
+    for (const e of existing) if (e.m) exMonth.set(e.m, (exMonth.get(e.m) || 0) + 1);
+    const addMonth = new Map();
+    for (const r of rows) {
+      const m = r.consulted_at.slice(0, 7);
+      addMonth.set(m, (addMonth.get(m) || 0) + 1);
+    }
+    const all = [...new Set([...exMonth.keys(), ...addMonth.keys()])].sort();
+    const [first, last] = [all[0], all[all.length - 1]];
+    const empty = [];
+    let [y, mo] = first.split("-").map(Number);
+    console.log("\n이관 후 월별 (기존 → +이관 = 합계):");
+    while (`${y}-${String(mo).padStart(2, "0")}` <= last) {
+      const k = `${y}-${String(mo).padStart(2, "0")}`;
+      const cur = exMonth.get(k) || 0, add = addMonth.get(k) || 0;
+      if (cur + add === 0) empty.push(k);
+      console.log(`  ${k}  ${String(cur).padStart(4)} → +${String(add).padStart(4)} = ${String(cur + add).padStart(4)}${cur + add === 0 ? "   ⚠️ 비어 있음" : ""}`);
+      if (++mo > 12) { mo = 1; y++; }
+    }
+    console.log(empty.length ? `\n🔴 이관 후에도 비는 달 ${empty.length}개: ${empty.join(", ")}`
+      : `\n✅ ${first} ~ ${last} 전 구간에 빈 달 없음`);
+
     console.log("\n연도별:");
     for (const [y, n] of tally((r) => r.consulted_at.slice(0, 4)).sort()) {
       const e = rows.filter((r) => r.consulted_at.startsWith(y) && r.outcome === "enrolled").length;
