@@ -5,6 +5,8 @@
  */
 export type EnrollmentQuery = {
   month: string | null;
+  /** 기간 프리셋("3m"|"6m"|"1y"). month가 있으면 무시된다. 기본값(3m)은 URL에 안 싣는다. */
+  range: string | null;
   consultant: string | null;
   outcome: string | null;
   q: string | null;
@@ -14,6 +16,8 @@ export type EnrollmentQuery = {
 export function buildEnrollmentQuery(p: EnrollmentQuery): string {
   const params = new URLSearchParams();
   if (p.month) params.set("month", p.month);
+  // 특정 달을 고르면 기간 프리셋은 의미가 없다 — URL에서도 빼서 "무엇이 적용 중인지" 한눈에 보이게.
+  else if (p.range && p.range !== "3m") params.set("range", p.range);
   if (p.consultant) params.set("consultant", p.consultant);
   if (p.outcome) params.set("outcome", p.outcome);
   if (p.q) params.set("q", p.q);

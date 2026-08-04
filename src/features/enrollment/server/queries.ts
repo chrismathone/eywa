@@ -5,6 +5,7 @@ import { kstToday } from "@/lib/date-kst";
 import type { ExtractedConsultationForm } from "../form-fill";
 import type { IntakeChecklist } from "../intake-checklist";
 import type { PrepBriefRecord } from "../prep-brief";
+import { DEFAULT_RANGE, RANGE_MONTHS, type RangePreset } from "../range";
 
 /** prep_brief jsonb 방어 — 형태가 맞을 때만 통과(옛 스냅샷·수기 편집으로 깨진 값이 렌더를 죽이지 않게). */
 function isPrepBriefRecord(v: unknown): v is PrepBriefRecord {
@@ -125,8 +126,16 @@ export type ConsultationListRow = {
   personConsults: PersonConsultRef[];
 };
 
+/** 프리셋 시작 시각(그 달 1일 00:00). 월 경계로 잘라야 월별 집계가 반쪽 달로 시작하지 않는다. */
+function rangeStartIso(range: RangePreset): string {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth() - (RANGE_MONTHS[range] - 1), 1);
+  return start.toISOString();
+}
+
 export type ConsultationFilter = {
-  month?: string | null; // "YYYY-MM" or null/undefined for all
+  month?: string | null; // "YYYY-MM" — 특정 달만. 있으면 range보다 우선.
+  range?: RangePreset | null; // month가 없을 때 적용되는 기간 프리셋(기본 3개월)
   consultantId?: string | null; // UUID or null/undefined for all
   q?: string | null; // 이름·전화·학교 텍스트 검색
   outcome?: string | null; // 진행 상태(pending/scheduled/consulted/ai_done/enrolled/declined/no_show) or null=전체
@@ -152,6 +161,9 @@ function applyConsultationFilter<T extends { gte: unknown }>(q: T, filter?: Cons
   if (filter?.month) {
     const { startIso, endIso } = monthBounds(filter.month);
     out = out.gte("consulted_at", startIso).lt("consulted_at", endIso);
+  } else {
+    // 🔴 기간 하한이 **항상** 걸린다 — 무필터로 전건을 여는 경로를 남기지 않는다(전체 = 2,197행).
+    out = out.gte("consulted_at", rangeStartIso(filter?.range ?? DEFAULT_RANGE));
   }
   if (filter?.consultantId) out = out.eq("consultant_id", filter.consultantId);
   if (filter?.outcome) out = out.eq("outcome", filter.outcome);

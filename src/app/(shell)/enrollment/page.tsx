@@ -19,6 +19,7 @@ import {
 } from "@/features/enrollment/server/queries";
 import { Pagination } from "@/components/pagination";
 import { kstToday } from "@/lib/date-kst";
+import { parseRange } from "@/features/enrollment/range";
 import { KanbanFilters } from "./_components/kanban-filters";
 import { NewEnrollmentTrigger } from "./_components/new-enrollment-trigger";
 import { EnrollmentKanban, type KanbanColumn } from "./_components/enrollment-kanban";
@@ -62,18 +63,31 @@ export default async function EnrollmentPage({
     outcome?: string;
     view?: string;
     page?: string;
+    range?: string;
   }>;
 }) {
   const user = await requireAccess("enrollment");
-  const { month, consultant, q, outcome, view: viewParam, page: pageParam } = await searchParams;
+  const {
+    month,
+    consultant,
+    q,
+    outcome,
+    view: viewParam,
+    page: pageParam,
+    range: rangeParam,
+  } = await searchParams;
   const selectedMonth = month ?? null;
   const selectedConsultant = consultant ?? null;
   const selectedOutcome = outcome ?? null;
   const searchQuery = q?.trim() || null;
   const view: "kanban" | "table" = viewParam === "table" ? "table" : "kanban";
   const page = Math.max(1, Number(pageParam) || 1);
+  // 🔴 기본 = 최근 3개월. '전체'는 고를 수 없고 구간은 최대 1년(원장 2026-08-04) — 이관으로 3년치가
+  // 쌓여 전건을 열면 칸반이 카드 2,197장이 된다. 알 수 없는 값이 와도 parseRange가 3개월로 되돌린다.
+  const selectedRange = parseRange(rangeParam);
   const filter = {
     month: selectedMonth,
+    range: selectedRange,
     consultantId: selectedConsultant,
     outcome: selectedOutcome,
     q: searchQuery,
@@ -121,6 +135,9 @@ export default async function EnrollmentPage({
     if (selectedConsultant) params.set("consultant", selectedConsultant);
     if (selectedOutcome) params.set("outcome", selectedOutcome);
     if (searchQuery) params.set("q", searchQuery);
+    // 기간은 검색어와 **독립**이다(else로 묶으면 검색 중에 기간이 사라져 3개월로 되돌아간다).
+    // 특정 달을 보고 있을 때만 프리셋이 무의미해서 뺀다.
+    if (!selectedMonth && selectedRange !== "3m") params.set("range", selectedRange);
     params.set("view", "table");
     if (p > 1) params.set("page", String(p));
     return `/enrollment?${params.toString()}`;
@@ -201,6 +218,7 @@ export default async function EnrollmentPage({
         searchQuery={searchQuery}
         view={view}
         consultants={consultants}
+        selectedRange={selectedRange}
         todayMonth={todayMonth}
         minYear={minYear}
       />
