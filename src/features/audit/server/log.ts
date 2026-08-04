@@ -47,6 +47,7 @@ export const AUDIT_ACTIONS = {
   owner_subject_absorb: "과목 흡수·삭제",
   owner_subject_delete: "과목 삭제(미사용)",
   owner_integration_groups_update: "통합뷰 그룹 설정",
+  owner_teacher_view_order_update: "강사뷰 강사 순서",
   notice_popup_create: "팝업 공지 생성",
   notice_popup_delete: "팝업 공지 삭제",
   classroom_create: "강의실 추가",

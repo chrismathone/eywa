@@ -65,8 +65,10 @@ import { StudentTally } from "./_components/student-tally";
 import { WeekNav } from "./_components/week-nav";
 import { WeekdayGroupTables } from "./_components/weekday-group-tables";
 import { TeacherGridView } from "./_components/teacher-grid";
+import { TeacherOrderDialog } from "./_components/teacher-order-dialog";
 import { RoomMapView } from "./_components/room-map-view";
 import { resolveDayWindows } from "@/features/timetable/lib/room-metrics";
+import { buildTeacherComparator } from "@/features/timetable/lib/english-teacher-sheet";
 import type { DayOfWeek } from "@/features/timetable/lib/periods";
 
 export const metadata = { title: "시간표 — eywa" };
@@ -270,10 +272,31 @@ export default async function TimetablePage({
   const teacherViewBreaks = subjectRow?.teacherViewBreaks ?? [];
   // '가로줄 제외 강사'는 **라벨 문자열로** 열과 맞물린다 — 슬롯 라벨을 한글 이름으로 바꾼 뒤에도
   // 예전에 저장된 값("Hannah"·"이주희")이 계속 맞도록 같은 해석기를 통과시킨다(마이그레이션 불필요).
+  const teacherLabelMap = await getTeacherLabelMap();
   const teacherViewExcluded = resolveTeacherLabels(
     subjectRow?.teacherViewLineExcluded ?? [],
-    await getTeacherLabelMap(),
+    teacherLabelMap,
   );
+  // 강사 컬럼 순서도 **라벨 문자열로** 열과 맞물린다 — 제외 강사와 같은 해석기를 통과시켜야
+  // 예전에 닉네임으로 저장된 값도 계속 맞는다(마이그레이션 불필요).
+  const teacherViewOrder = resolveTeacherLabels(subjectRow?.teacherViewOrder ?? [], teacherLabelMap);
+  // '강사 순서' 창이 편집할 목록 = **지금 강사뷰에 실제 있는 강사**를 현재 표시 순서 그대로.
+  // (설정에 없던 강사도 포함해야 저장 한 번에 순서가 통째로 굳는다.)
+  const teacherViewNames =
+    effView === "teacher"
+      ? Array.from(
+          new Set(
+            // ⚠️ 컬럼 키 도출은 강사뷰(teacher-grid `teacherOf`)와 **똑같아야** 한다 —
+            //    다르면 창에 없는 열이 화면에 뜨거나 그 반대가 된다.
+            [...slots, ...scheduleBlocks]
+              .map((s2) => {
+                const r = s2 as { slotTeacherLabel?: string | null; teacherName?: string | null };
+                return r.slotTeacherLabel ?? r.teacherName ?? "—";
+              })
+              .filter(Boolean),
+          ),
+        ).sort(buildTeacherComparator(teacherViewOrder))
+      : [];
 
   const isIntegrated = effView === "integrated";
   const isRooms = effView === "rooms";
@@ -540,6 +563,19 @@ export default async function TimetablePage({
           </>
         ) : null}
 
+        {/* 강사뷰 '강사 순서' — 코드에 박힌 시트 미러 대신 사람이 정한다(자리 JJ·LAB은 기본 최우측).
+            그룹 설정과 같은 자리·같은 게이트(학원설정 쓰기)다. 강사뷰에서만 보인다. */}
+        {effView === "teacher" && canEditGroups ? (
+          <>
+            <span className="bg-line h-4 w-px" aria-hidden />
+            <TeacherOrderDialog
+              subject={subject}
+              subjectLabel={subjectMaps.labelOf(subject)}
+              teachers={teacherViewNames}
+            />
+          </>
+        ) : null}
+
         {/* 뷰 설정 — 학제·학년 필터(계정 저장) + **표시 취향 3종**(색 강도·빈 교시 접기·미사용 요일).
             ⚠️ 인라인 토글이 아니라 팝오버인 이유·배지를 항상 띄우는 이유는 view-settings.tsx 주석 참조.
             전 뷰 공통(필터는 명단에 걸리므로 기본·강사·통합 어디서나 같은 뜻)이고, 표시 3종은 해당 뷰에서만
@@ -700,6 +736,7 @@ export default async function TimetablePage({
               pxPerMin={teacherViewPxPerMin}
               breakRanges={teacherViewBreaks}
               excludedTeachers={teacherViewExcluded}
+              teacherOrder={teacherViewOrder}
               showUnusedDays={!hideEmptyDays}
             />
           </div>

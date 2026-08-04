@@ -76,6 +76,7 @@ export async function buildEnglishTimetableBuffer(opts?: {
   const stepMin = subjectRow?.teacherViewStep ?? 10;
   const breakRanges = subjectRow?.teacherViewBreaks ?? [];
   const excludedTeachers = subjectRow?.teacherViewLineExcluded ?? [];
+  const teacherOrder = subjectRow?.teacherViewOrder ?? [];
   // 통합 탭 섹션 = 화면 통합뷰와 **같은 해석기**. "시트가 화면 그대로"가 이 빌더의 계약이라, 커스텀
   // 그룹을 화면에서만 적용하면 계약이 깨진다(원장이 배치를 바꿔도 시트는 옛 섹션으로 나감).
   const customGroups = resolveIntegrationGroups(subjectRow);
@@ -86,7 +87,14 @@ export async function buildEnglishTimetableBuffer(opts?: {
   wb.created = new Date();
 
   // 강사뷰 모델 = 강사별 탭 + 통합 미니그리드 조회수식이 공유(같은 열/행 배치를 가리켜야 정합).
-  const teacherModel = buildTeacherGridModel(slots, { stepMin, breakRanges, excludedTeachers, teacherColors });
+  // ⚠️ 강사 순서도 넘긴다 — 안 넘기면 화면과 시트의 열 순서가 갈린다("시트가 화면 그대로"가 이 빌더의 계약).
+  const teacherModel = buildTeacherGridModel(slots, {
+    stepMin,
+    breakRanges,
+    excludedTeachers,
+    teacherColors,
+    ...(teacherOrder.length ? { teacherOrder } : {}),
+  });
   const teacherGeometry = computeTeacherGeometry(teacherModel, TEACHER_SHEET_NAME);
 
   // 탭 순서 = 원본 인재원 시트와 동일: 통합영어시간표(원장 손작업 형식 재현) → 강사별영어시간표(화면 강사뷰).

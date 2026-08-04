@@ -241,6 +241,14 @@ export function auditDetail(
         groups === null ? null : `그룹 ${groups}개`,
       );
     }
+    case "owner_teacher_view_order_update": {
+      const subject = str(m.subject);
+      const count = num(m.count);
+      return join(
+        subject ? `과목 「${ctx.subjectLabel(subject)}」` : null,
+        count === null ? null : count === 0 ? "순서 초기화" : `강사 ${count}명 순서 지정`,
+      );
+    }
     case "classroom_auto_assign": {
       const applied = num(m.applied);
       const rooms = num(m.rooms);

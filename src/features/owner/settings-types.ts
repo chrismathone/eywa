@@ -86,6 +86,9 @@ export const subjectSchema = z.object({
   teacherViewBreaks: z.array(breakRangeSchema).max(20).optional(),
   // 강사뷰 가로줄(큰 섹션 경계 진한 선)에서 제외할 강사 라벨 — 이 강사 컬럼엔 가로줄 미표시. 미설정=전원 표시.
   teacherViewLineExcluded: z.array(z.string().min(1).max(40)).max(80).optional(),
+  // 강사뷰 컬럼(강사) 순서 — 여기 적힌 라벨이 적힌 순서대로 왼쪽부터. 미설정/목록 밖 강사는 시트 미러
+  // 순서 → 이름순으로 뒤에 붙고, **자리(JJ·LAB)는 명시하지 않는 한 항상 최우측**(원장 2026-08-04).
+  teacherViewOrder: z.array(z.string().min(1).max(40)).max(80).optional(),
   // 강사뷰 세로 밀도(분당 px). 격자 한 칸(step분) 높이 = step × 이 값. 미설정 = DEFAULT_TEACHER_VIEW_PX_PER_MIN(1.4).
   teacherViewPxPerMin: z.number().min(0.5).max(6).optional(),
   // 통합뷰 커스텀 그룹(섹션) 정의. 비었으면 지금까지처럼 "N교시 시작" 자동 그룹.
