@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { EyIcon } from "@/components/icons/eywa-icons";
 import { PATH_BUCKET_COLOR } from "@/features/enrollment/path-bucket";
 import type { EnrollmentStats } from "@/features/enrollment/server/stats-queries";
 import { StatsTrend } from "./stats-trend";
@@ -23,9 +24,11 @@ function Delta({ cur, prev }: { cur: number; prev: number }) {
   const pct = Math.round(((cur - prev) / prev) * 100);
   if (pct === 0) return <span className="text-text-faint ml-1 text-xs">작년과 같음</span>;
   const up = pct > 0;
+  // 방향 표시는 EyIcon — 아이콘 자리에 ▲▼ 텍스트 글리프 금지(`eywa-icon-mapping` 테스트가 잡는다).
   return (
-    <span className={`ml-1 text-xs font-medium ${up ? "text-chart-2" : "text-danger"}`}>
-      {up ? "▲" : "▼"} {Math.abs(pct)}%
+    <span className={`ml-1 inline-flex items-center gap-0.5 text-xs font-medium ${up ? "text-chart-2" : "text-danger"}`}>
+      <EyIcon name={up ? "arrowUp" : "arrowDown"} size={11} strokeWidth={1.8} />
+      {Math.abs(pct)}%
     </span>
   );
 }

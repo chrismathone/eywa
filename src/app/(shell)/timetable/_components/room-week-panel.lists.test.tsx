@@ -1,6 +1,7 @@
-import { cleanup, render } from "@testing-library/react";
+import { cleanup, fireEvent, render } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { RoomWeekPanel } from "./room-week-panel";
+import { saveTimetableViewPrefs } from "@/features/timetable/server/view-prefs-actions";
 import type { RoomConflictRow, RoomSeatOverRow } from "@/features/timetable/lib/room-metrics";
 
 // 하단 경고 목록의 **모양** 회귀 가드 — 원장 2026-08-04: *"너무 나열되어있어 가독성 현저히 떨어짐"*.
@@ -51,6 +52,7 @@ const panel = (over: Partial<React.ComponentProps<typeof RoomWeekPanel>> = {}) =
       focusSubject={null}
       groupLines
       timeVertical={false}
+      showIssues
       conflicts={[]}
       seatOver={[]}
       unassigned={[]}
@@ -89,5 +91,33 @@ describe("교실뷰 하단 경고 목록 — 한 건 = 한 줄", () => {
     const { container } = panel();
     expect(container.textContent).not.toContain("정원 초과");
     expect(container.textContent).not.toContain("시간 겹침");
+  });
+});
+
+// 접기 토글 — 원장 2026-08-05: *"너무 공간차지 많이해서 오히려 방해되네"*.
+// 잠글 것: ① 접으면 목록이 사라진다 ② 접어도 **건수는 남는다**(숫자까지 지우면 은폐다) ③ 계정에 저장된다.
+describe("교실뷰 경고 목록 접기", () => {
+  const issueButton = (c: HTMLElement) =>
+    [...c.querySelectorAll("button")].find((b) => b.textContent?.startsWith("경고"));
+
+  it("접으면 목록은 사라지고 헤더 버튼에 총 건수가 남는다", () => {
+    const { container } = panel({ seatOver, conflicts, showIssues: false });
+    expect(container.querySelectorAll("li")).toHaveLength(0);
+    expect(container.textContent).not.toContain("본원205");
+    // 2건(정원 초과) + 1건(겹침)
+    expect(issueButton(container)?.textContent).toBe("경고 3");
+  });
+
+  it("누르면 즉시 접히고 계정에 저장된다(닫기 버튼에 매달지 않는다)", () => {
+    const { container } = panel({ seatOver, conflicts });
+    expect(container.querySelectorAll("li")).toHaveLength(3);
+    fireEvent.click(issueButton(container)!);
+    expect(container.querySelectorAll("li")).toHaveLength(0);
+    expect(saveTimetableViewPrefs).toHaveBeenCalledWith({ roomIssues: false });
+  });
+
+  it("경고가 0건이면 토글 자체를 안 그린다(숨길 게 없다)", () => {
+    const { container } = panel();
+    expect(issueButton(container)).toBeUndefined();
   });
 });

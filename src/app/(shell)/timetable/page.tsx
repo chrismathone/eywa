@@ -704,6 +704,7 @@ export default async function TimetablePage({
           canEditCapacity={canEditRoomCapacity}
           groupLines={viewPrefs.roomGroupLines ?? true}
           timeVertical={viewPrefs.roomTimeVertical ?? false}
+          showIssues={viewPrefs.roomIssues ?? true}
         />
       ) : slots.length === 0 ? (
         <div className="mx-auto max-w-xl py-4">
