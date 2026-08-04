@@ -73,7 +73,8 @@ export default async function ClassReviewDetailPage({ params }: { params: Promis
   ].filter(Boolean);
 
   return (
-    <div className="space-y-5 p-6">
+    // 폭 1000px 중앙 고정(원장 2026-08-04 — 넓은 창에서 좌측에 쏠려 휑함), 좁은 창은 그대로 반응형 축소.
+    <div className="mx-auto w-full max-w-[1000px] space-y-5 p-6">
       <div>
         <Link
           href="/class-review"
@@ -115,17 +116,17 @@ export default async function ClassReviewDetailPage({ params }: { params: Promis
         <table className="w-full min-w-[860px] border-collapse text-[13px]">
           <thead>
             <tr className="border-line bg-bg-soft/60 border-b text-left">
-              <th className="w-10 px-3 py-2 font-semibold">No.</th>
-              <th className="px-3 py-2 font-semibold">평가항목</th>
+              <th className="w-10 px-3 py-2.5 font-semibold">No.</th>
+              <th className="px-3 py-2.5 font-semibold">평가항목</th>
               {cols.map((c) => (
-                <th key={c.slot} className="w-20 px-2 py-2 text-center font-semibold">
+                <th key={c.slot} className="w-20 px-2 py-2.5 text-center font-semibold">
                   {c.label}
                   {c.totals.answered === 0 ? (
                     <span className="text-text-faint block text-[10px] font-normal">미제출</span>
                   ) : null}
                 </th>
               ))}
-              <th className="w-16 px-2 py-2 text-center font-semibold">평균</th>
+              <th className="w-16 px-2 py-2.5 text-center font-semibold">평균</th>
             </tr>
           </thead>
           <tbody>
@@ -133,7 +134,7 @@ export default async function ClassReviewDetailPage({ params }: { params: Promis
               const base = areas.slice(0, ai).reduce((n, a) => n + a.items.length, 0);
               return [
                 <tr key={area.key} className="bg-primary/5">
-                  <td colSpan={cols.length + 3} className="text-primary px-3 py-1.5 text-xs font-bold">
+                  <td colSpan={cols.length + 3} className="text-primary px-3 py-2 text-xs font-bold">
                     {area.title}
                     <span className="text-text-dim ml-2 font-normal">
                       소계 {cols.map((c) => c.totals.areaSubtotals[ai]).join(" · ")}
@@ -150,17 +151,17 @@ export default async function ClassReviewDetailPage({ params }: { params: Promis
                     : null;
                   return (
                     <tr key={`${area.key}-${i}`} className="border-line/50 border-b last:border-0">
-                      <td className="num text-text-dim px-3 py-1.5">{qi + 1}</td>
-                      <td className="px-3 py-1.5 break-keep">{item}</td>
+                      <td className="num text-text-dim px-3 py-2.5">{qi + 1}</td>
+                      <td className="px-3 py-2.5 leading-relaxed break-keep">{item}</td>
                       {rowVals.map((v, ci) => (
                         <td
                           key={ci}
-                          className={`num px-2 py-1.5 text-center font-semibold ${v === 0 ? "text-text-faint" : v <= 2 ? "text-danger" : ""}`}
+                          className={`num px-2 py-2.5 text-center font-semibold ${v === 0 ? "text-text-faint" : v <= 2 ? "text-danger" : ""}`}
                         >
                           {v || "—"}
                         </td>
                       ))}
-                      <td className="num text-text-dim px-2 py-1.5 text-center">{rowAvg ?? "—"}</td>
+                      <td className="num text-text-dim px-2 py-2.5 text-center">{rowAvg ?? "—"}</td>
                     </tr>
                   );
                 }),

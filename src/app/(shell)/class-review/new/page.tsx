@@ -14,7 +14,7 @@ export default async function NewClassReviewPage() {
   const subjects = buildSubjectMaps(settings.operations.subjects);
 
   return (
-    <div className="space-y-5 p-6">
+    <div className="mx-auto w-full max-w-[1000px] space-y-5 p-6">
       <PageHeader eyebrow="수업 평가" title="새 참관" description="참관 정보를 입력하고 평가자를 지정합니다." embedLabel="새 참관" />
       <NewReviewForm
         staff={staff.map((s) => ({ value: s.id, label: s.jobTitle ? `${s.name} · ${s.jobTitle}` : s.name }))}

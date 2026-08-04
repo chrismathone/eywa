@@ -16,7 +16,7 @@ export default async function ClassReviewTemplatePage() {
   const areas = await getChecklistAreas(viewer.tenantId);
 
   return (
-    <div className="space-y-5 p-6">
+    <div className="mx-auto w-full max-w-[1000px] space-y-5 p-6">
       <div>
         <Link
           href="/class-review"

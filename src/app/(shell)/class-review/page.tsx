@@ -26,7 +26,7 @@ export default async function ClassReviewPage() {
     GRADE_CUTS.map((c) => `${c.grade}≥${c.min}`).join(" · ") + ` · 미만 ${GRADE_FALLBACK}`;
 
   return (
-    <div className="space-y-5 p-6">
+    <div className="mx-auto w-full max-w-[1000px] space-y-5 p-6">
       <PageHeader
         eyebrow="운영"
         title="수업 평가 체크리스트"
