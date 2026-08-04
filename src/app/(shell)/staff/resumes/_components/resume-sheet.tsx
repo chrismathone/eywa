@@ -30,9 +30,13 @@ import { useJobTitleResolver, useSubjectMaps } from "@/features/owner/operations
 import { subjectsFromDepartment } from "@/features/staff/department-subjects";
 import { autoJobTitle } from "@/features/staff/department-job-titles";
 import {
+  CAREER_ROWS,
   DYNAMIC_ROWS_MAX,
+  EDU_ROWS,
   EMPLOYMENT_TYPES,
+  emptyCareer,
   emptyCert,
+  emptyEducation,
   emptyLanguage,
   INITIAL_STAFF_PASSWORD,
   RESUME_CHECKS,
@@ -41,8 +45,10 @@ import {
   RESUME_DRAFT_EXCLUDE,
   RESUME_PHOTO_SLOTS,
   WORKDAYS,
+  type ResumeCareer,
   type ResumeCert,
   type ResumeCheckKey,
+  type ResumeEducation,
   type ResumeLanguage,
   type StaffResumeData,
 } from "@/features/staff/resume";
@@ -122,6 +128,35 @@ function EditInput({
 }
 
 /**
+ * 동적 행(학력·경력)의 입력칸 — **컨트롤드**다. 값이 상태에 있어야 ① 마지막 행에 입력하면 행이
+ * 자동으로 늘고 ② 초안 복원이 행 수까지 되살릴 수 있다(비컨트롤드면 늘어난 행의 값이 갈 곳이 없다).
+ */
+function DynInput({
+  name,
+  value,
+  onChange,
+  placeholder,
+  align = "left",
+}: {
+  name: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  align?: "left" | "center" | "right";
+}) {
+  const a = align === "center" ? "text-center" : align === "right" ? "text-right" : "";
+  return (
+    <input
+      name={name}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      placeholder={placeholder}
+      className={`${inputBase} ${a}`}
+    />
+  );
+}
+
+/**
  * @param done 저장은 끝났고 새 이력서 뷰로 **이동 중**일 때 true — 계속 잠가 둔다.
  * `pending`은 액션 resolve 즉시 풀리는데 생성 경로는 router.push(RSC 네비)가 수백ms 더 걸려,
  * 그 사이 재클릭하면 id 없는 폼이 한 번 더 제출돼 **같은 사람 이력서가 2건** 생긴다.
@@ -143,6 +178,11 @@ const EDU_PLACEHOLDERS = ["고등학교", "대학교", "대학원"];
 /** photos 배열 → 고정 슬롯 배열(길이 RESUME_PHOTO_SLOTS, 빈 슬롯 null). */
 const slotify = <T,>(arr: readonly T[] | undefined): (T | null)[] =>
   Array.from({ length: RESUME_PHOTO_SLOTS }, (_, i) => arr?.[i] ?? null);
+
+/** 종이 서식 하한까지 빈 행 보충(학력 4·경력 3) — 그 아래로는 화면도 저장도 내려가지 않는다. */
+function padTo<T>(arr: T[], min: number, make: () => T): T[] {
+  return arr.length >= min ? arr : [...arr, ...Array.from({ length: min - arr.length }, make)];
+}
 
 /** 초안 vals에서 동적 행 배열 복원 — 인덱스가 존재하는 만큼(캡 DYNAMIC_ROWS_MAX). */
 function rowsFromDraft<T>(
@@ -204,7 +244,10 @@ export function ResumeSheet({
   const jobTitlesFor = useJobTitleResolver();
   const [jobTitle, setJobTitle] = useState(data.contract.jobTitle);
   const jobTitleOptions = jobTitlesFor(division);
-  // 동적 행(자격증·외국어)·서류 체크·사진은 컨트롤드 — 행 추가/삭제·복원이 상태 기준으로 돌아야 안전.
+  // 동적 행(학력·경력·자격증·외국어)·서류 체크·사진은 컨트롤드 — 행 추가/삭제·복원이 상태 기준으로 돌아야 안전.
+  // 학력·경력도 동적(원장 요청 2026-08-04 "경력을 3개밖에 못 적는다") — 종이 서식 행 수는 이제 **하한**이다.
+  const [edus, setEdus] = useState<ResumeEducation[]>(data.education);
+  const [careers, setCareers] = useState<ResumeCareer[]>(data.career);
   const [certs, setCerts] = useState<ResumeCert[]>(data.certificates);
   const [langs, setLangs] = useState<ResumeLanguage[]>(data.languages);
   const [checks, setChecks] = useState<Record<ResumeCheckKey, boolean>>(data.checks);
@@ -232,6 +275,34 @@ export function ResumeSheet({
       setCompany(vals.c_company ?? "");
       setDivision(vals.c_division ?? "");
       setJobTitle(vals.c_jobTitle ?? "");
+      // 학력·경력 — 초안에 담긴 행 수만큼 복원(하한 미달이면 종이 서식 행 수까지 빈 행 보충).
+      // ⚠️ 경력 급여(car_N_salary)는 초안에서 제외된 민감 칸이라 복원값이 항상 빈 칸이다(의도).
+      const re = rowsFromDraft<ResumeEducation>(
+        vals,
+        "edu",
+        ["period", "school", "major", "gpa", "location"],
+        (get) => ({
+          period: get("period"),
+          school: get("school"),
+          major: get("major"),
+          gpa: get("gpa"),
+          location: get("location"),
+        }),
+      );
+      setEdus(padTo(re, EDU_ROWS, emptyEducation));
+      const rr = rowsFromDraft<ResumeCareer>(
+        vals,
+        "car",
+        ["company", "period", "duties", "salary", "leaveReason"],
+        (get) => ({
+          company: get("company"),
+          period: get("period"),
+          duties: get("duties"),
+          salary: get("salary"),
+          leaveReason: get("leaveReason"),
+        }),
+      );
+      setCareers(padTo(rr, CAREER_ROWS, emptyCareer));
       const rc = rowsFromDraft<ResumeCert>(vals, "cert", ["name", "date", "issuer"], (get) => ({
         name: get("name"),
         date: get("date"),
@@ -288,6 +359,8 @@ export function ResumeSheet({
     setCompany(data.contract.company);
     setDivision(data.contract.division);
     setJobTitle(data.contract.jobTitle);
+    setEdus(data.education);
+    setCareers(data.career);
     setCerts(data.certificates);
     setLangs(data.languages);
     setChecks(data.checks);
@@ -324,8 +397,9 @@ export function ResumeSheet({
   }
   const addRow = <T,>(set: React.Dispatch<React.SetStateAction<T[]>>, make: () => T) =>
     set((prev) => (prev.length < DYNAMIC_ROWS_MAX ? [...prev, make()] : prev));
-  const removeLastRow = <T,>(set: React.Dispatch<React.SetStateAction<T[]>>) =>
-    set((prev) => (prev.length > 1 ? prev.slice(0, -1) : prev));
+  /** @param min 이 아래로는 줄지 않는다 — 학력·경력은 종이 서식 행 수(4·3)가 하한(normalizeResume 패딩과 일치). */
+  const removeLastRow = <T,>(set: React.Dispatch<React.SetStateAction<T[]>>, min = 1) =>
+    set((prev) => (prev.length > min ? prev.slice(0, -1) : prev));
 
   /** 증명사진 선택 → 티켓 발급 → 스토리지 PUT → 슬롯에 경로/미리보기 반영. 저장 전에는 DB에 안 남는다. */
   async function pickPhoto(slot: number, file: File | undefined) {
@@ -364,6 +438,51 @@ export function ResumeSheet({
     ) : (
       <>{V(value)}</>
     );
+  /** 학력·경력 칸 — 동적 행이라 컨트롤드(DynInput). 마지막 행에 입력하면 updateRow가 빈 행을 하나 붙인다. */
+  const dynField = <T extends Record<string, string>>(
+    set: React.Dispatch<React.SetStateAction<T[]>>,
+    make: () => T,
+    prefix: string,
+    index: number,
+    key: keyof T & string,
+    value: string,
+    opts: { ph?: string; align?: "left" | "center" | "right" } = {},
+  ) =>
+    editing ? (
+      <DynInput
+        name={`${prefix}_${index}_${key}`}
+        value={value}
+        onChange={(v) => updateRow(set, make, index, key, v)}
+        placeholder={opts.ph}
+        align={opts.align}
+      />
+    ) : (
+      <>{V(value)}</>
+    );
+  const eduField = (
+    i: number,
+    key: keyof ResumeEducation & string,
+    value: string,
+    opts: { ph?: string; align?: "left" | "center" | "right" } = {},
+  ) => dynField(setEdus, emptyEducation, "edu", i, key, value, opts);
+  const carField = (
+    i: number,
+    key: keyof ResumeCareer & string,
+    value: string,
+    opts: { ph?: string; align?: "left" | "center" | "right" } = {},
+  ) => dynField(setCareers, emptyCareer, "car", i, key, value, opts);
+  const certField = (
+    i: number,
+    key: keyof ResumeCert & string,
+    value: string,
+    opts: { ph?: string; align?: "left" | "center" | "right" } = {},
+  ) => dynField(setCerts, emptyCert, "cert", i, key, value, opts);
+  const langField = (
+    i: number,
+    key: keyof ResumeLanguage & string,
+    value: string,
+    opts: { ph?: string; align?: "left" | "center" | "right" } = {},
+  ) => dynField(setLangs, emptyLanguage, "lang", i, key, value, opts);
 
   const sheet = (
     <div className="resume-sheet border-line bg-card text-foreground mx-auto w-full max-w-[780px] rounded-2xl border shadow-card p-6 sm:p-8 print:rounded-none print:border-2 print:border-foreground/60 print:shadow-none print:p-3">
@@ -378,19 +497,23 @@ export function ResumeSheet({
             <th className={`${head} w-28`}>영문</th>
             <td className={cell}>{field("p_nameEn", p.nameEn, { ph: "영문 이름" })}</td>
             {/* 증명사진 2장 — 직원 얼굴 구별용. 한 칸에서 ‹ › 슬라이드로 넘긴다(원장 지시 2026-07-28). */}
-            <td className={`${cell} w-[104px] align-top print:w-[80px]`} rowSpan={4}>
+            <td className={`${cell} w-[104px] align-top print:w-[80px]`} rowSpan={4} data-label="증명사진">
               {(() => {
                 const slot = Math.min(photoSlide, RESUME_PHOTO_SLOTS - 1);
                 const url = editing ? previews[slot] : (photoUrls?.[slot] ?? null);
                 const hasPath = editing ? Boolean(photos[slot]) : Boolean(data.photos[slot]);
                 const step = (d: number) =>
                   setPhotoSlide((s) => (s + d + RESUME_PHOTO_SLOTS) % RESUME_PHOTO_SLOTS);
+                // 모바일에선 표가 카드로 쌓여 이 칸이 화면 폭만큼 넓어진다 — 사진만 거대해지지 않게 폭을 캡.
                 return (
-                  <div className="relative">
+                  <div className="relative mx-auto w-full max-w-[104px]">
                     <div className="border-foreground/25 bg-bg-soft/40 flex aspect-[3/4] w-full items-center justify-center overflow-hidden rounded-sm border">
                       {url ? (
+                        // 증명사진은 **전체가 보여야 한다**(원장 제보 2026-08-04: 모바일에서 얼굴이 잘려 확대돼 보임).
+                        // object-cover는 3:4 틀에 맞춰 원본을 잘라내므로 세로로 긴 원본(폰 카메라)에서 얼굴이 통째로
+                        // 날아간다 → contain으로 원본 비율을 유지해 잘림 0(남는 자리는 배경). PC·모바일 결과 동일.
                         // eslint-disable-next-line @next/next/no-img-element -- signed URL/objectURL 미리보기(최적화 불필요)
-                        <img src={url} alt={`증명사진 ${slot + 1}`} className="size-full object-cover" />
+                        <img src={url} alt={`증명사진 ${slot + 1}`} className="size-full object-contain" />
                       ) : hasPath ? (
                         <span className="text-text-faint px-1 text-center text-[10px]">사진 첨부됨</span>
                       ) : (
@@ -495,26 +618,37 @@ export function ResumeSheet({
           </tr>
         </thead>
         <tbody>
-          {data.education.map((r, i) => (
+          {(editing ? edus : data.education).map((r, i) => (
             <tr key={i}>
-              <td className={`${cell} num text-center`}>
-                {field(`edu_${i}_period`, r.period, { ph: "0000.00 ~ 0000.00", align: "center" })}
+              <td className={`${cell} num text-center`} data-label="재학 기간">
+                {eduField(i, "period", r.period, { ph: "0000.00 ~ 0000.00", align: "center" })}
               </td>
               {/* 위에서부터 시간순 — 고등학교 → 대학교 → 대학원(원장 지시 2026-07-29, 종전 역순에서 뒤집음).
                   남는 행은 일반 라벨(대학원 위 학력을 강요하지 않는다). */}
-              <td className={cell}>
-                {field(`edu_${i}_school`, r.school, { ph: EDU_PLACEHOLDERS[i] ?? "학교명" })}
+              <td className={cell} data-label="학교명">
+                {eduField(i, "school", r.school, { ph: EDU_PLACEHOLDERS[i] ?? "학교명" })}
               </td>
-              <td className={cell}>{field(`edu_${i}_major`, r.major, { ph: "전공" })}</td>
+              <td className={cell} data-label="전공">
+                {eduField(i, "major", r.major, { ph: "전공" })}
+              </td>
               {/* 학점만 placeholder가 없어 빈 상자로 보이고 보조기술에도 이름이 없었다 — ph로 이름 부여. */}
-              <td className={`${cell} text-center`}>
-                {field(`edu_${i}_gpa`, r.gpa, { ph: "학점", align: "center" })}
+              <td className={`${cell} text-center`} data-label="학점">
+                {eduField(i, "gpa", r.gpa, { ph: "학점", align: "center" })}
               </td>
-              <td className={cell}>{field(`edu_${i}_location`, r.location, { ph: "소재지" })}</td>
+              <td className={cell} data-label="소재지">
+                {eduField(i, "location", r.location, { ph: "소재지" })}
+              </td>
             </tr>
           ))}
         </tbody>
       </table>
+      {editing ? (
+        <RowButtons
+          label="학력"
+          onAdd={() => addRow(setEdus, emptyEducation)}
+          onRemove={() => removeLastRow(setEdus, EDU_ROWS)}
+        />
+      ) : null}
 
       <SectionHead>3. 경력사항</SectionHead>
       <table className={T}>
@@ -528,21 +662,34 @@ export function ResumeSheet({
           </tr>
         </thead>
         <tbody>
-          {data.career.map((r, i) => (
+          {(editing ? careers : data.career).map((r, i) => (
             <tr key={i}>
-              <td className={cell}>{field(`car_${i}_company`, r.company, { ph: "직장명" })}</td>
-              <td className={`${cell} num text-center`}>
-                {field(`car_${i}_period`, r.period, { ph: "0000.00 ~ 0000.00", align: "center" })}
+              <td className={cell} data-label="직장명">
+                {carField(i, "company", r.company, { ph: "직장명" })}
               </td>
-              <td className={cell}>{field(`car_${i}_duties`, r.duties, { ph: "담당 업무" })}</td>
-              <td className={`${cell} num text-right`}>
-                {field(`car_${i}_salary`, r.salary, { ph: "월급여", align: "right" })}
+              <td className={`${cell} num text-center`} data-label="근무 기간">
+                {carField(i, "period", r.period, { ph: "0000.00 ~ 0000.00", align: "center" })}
               </td>
-              <td className={cell}>{field(`car_${i}_leaveReason`, r.leaveReason, { ph: "퇴직 사유" })}</td>
+              <td className={cell} data-label="담당 업무">
+                {carField(i, "duties", r.duties, { ph: "담당 업무" })}
+              </td>
+              <td className={`${cell} num text-right`} data-label="월급여">
+                {carField(i, "salary", r.salary, { ph: "월급여", align: "right" })}
+              </td>
+              <td className={cell} data-label="퇴직 사유">
+                {carField(i, "leaveReason", r.leaveReason, { ph: "퇴직 사유" })}
+              </td>
             </tr>
           ))}
         </tbody>
       </table>
+      {editing ? (
+        <RowButtons
+          label="경력"
+          onAdd={() => addRow(setCareers, emptyCareer)}
+          onRemove={() => removeLastRow(setCareers, CAREER_ROWS)}
+        />
+      ) : null}
 
       <SectionHead>4. 자격증 및 외국어 능력</SectionHead>
       <table className={T}>
@@ -556,44 +703,14 @@ export function ResumeSheet({
         <tbody>
           {(editing ? certs : data.certificates).map((r, i) => (
             <tr key={i}>
-              <td className={cell}>
-                {editing ? (
-                  <input
-                    name={`cert_${i}_name`}
-                    value={r.name}
-                    onChange={(e) => updateRow(setCerts, emptyCert, i, "name", e.target.value)}
-                    placeholder="자격증명"
-                    className={inputBase}
-                  />
-                ) : (
-                  V(r.name)
-                )}
+              <td className={cell} data-label="자격증 취득사항">
+                {certField(i, "name", r.name, { ph: "자격증명" })}
               </td>
-              <td className={`${cell} num text-center`}>
-                {editing ? (
-                  <input
-                    name={`cert_${i}_date`}
-                    value={r.date}
-                    onChange={(e) => updateRow(setCerts, emptyCert, i, "date", e.target.value)}
-                    placeholder="취득년월일"
-                    className={`${inputBase} text-center`}
-                  />
-                ) : (
-                  V(r.date)
-                )}
+              <td className={`${cell} num text-center`} data-label="취득년월일">
+                {certField(i, "date", r.date, { ph: "취득년월일", align: "center" })}
               </td>
-              <td className={cell}>
-                {editing ? (
-                  <input
-                    name={`cert_${i}_issuer`}
-                    value={r.issuer}
-                    onChange={(e) => updateRow(setCerts, emptyCert, i, "issuer", e.target.value)}
-                    placeholder="발행처"
-                    className={inputBase}
-                  />
-                ) : (
-                  V(r.issuer)
-                )}
+              <td className={cell} data-label="발행처">
+                {certField(i, "issuer", r.issuer, { ph: "발행처" })}
               </td>
             </tr>
           ))}
@@ -613,44 +730,14 @@ export function ResumeSheet({
         <tbody>
           {(editing ? langs : data.languages).map((r, i) => (
             <tr key={i}>
-              <td className={cell}>
-                {editing ? (
-                  <input
-                    name={`lang_${i}_name`}
-                    value={r.name}
-                    onChange={(e) => updateRow(setLangs, emptyLanguage, i, "name", e.target.value)}
-                    placeholder="외국어 (시험명)"
-                    className={inputBase}
-                  />
-                ) : (
-                  V(r.name)
-                )}
+              <td className={cell} data-label="외국어 능력">
+                {langField(i, "name", r.name, { ph: "외국어 (시험명)" })}
               </td>
-              <td className={`${cell} num text-center`}>
-                {editing ? (
-                  <input
-                    name={`lang_${i}_testDate`}
-                    value={r.testDate}
-                    onChange={(e) => updateRow(setLangs, emptyLanguage, i, "testDate", e.target.value)}
-                    placeholder="시험일"
-                    className={`${inputBase} text-center`}
-                  />
-                ) : (
-                  V(r.testDate)
-                )}
+              <td className={`${cell} num text-center`} data-label="시험일">
+                {langField(i, "testDate", r.testDate, { ph: "시험일", align: "center" })}
               </td>
-              <td className={`${cell} text-center`}>
-                {editing ? (
-                  <input
-                    name={`lang_${i}_score`}
-                    value={r.score}
-                    onChange={(e) => updateRow(setLangs, emptyLanguage, i, "score", e.target.value)}
-                    placeholder="점수/등급"
-                    className={`${inputBase} text-center`}
-                  />
-                ) : (
-                  V(r.score)
-                )}
+              <td className={`${cell} text-center`} data-label="점수/등급">
+                {langField(i, "score", r.score, { ph: "점수/등급", align: "center" })}
               </td>
             </tr>
           ))}
