@@ -121,6 +121,45 @@ function sanitizeTerm(q: string): string {
   return q.replace(/[%,()*\\]/g, " ").trim();
 }
 
+/**
+ * 반 검색어 → PostgREST `.or()` 조각들. **반이름 · 강사명 · 강의실명**을 함께 본다.
+ *
+ * 강사·강의실은 classes에 이름이 없고 id만 있으므로, 이름으로 먼저 id를 풀어 `in.(…)`으로 좁힌다
+ * (null 강사·null 강의실 반이 안전하게 빠진다).
+ *
+ * ⚠️ **강의실은 두 곳에 산다** — `classes.classroom_id`(반 기본)와 `class_schedules.classroom_id`
+ * (교시별 오버라이드). 실측(injaewon) 반 164개 중 기본 지정 152개, 슬롯 지정 55개이고 그중 **6개는
+ * 기본이 비어 슬롯에만** 있다. 반 기본만 보면 그 6개가 검색에서 조용히 사라지므로 둘 다 본다.
+ * (교실뷰의 "실효 강의실 = 슬롯 ?? 반 기본"과 같은 관점.)
+ *
+ * id 목록 크기: 강의실 22개 · 슬롯 지정 반 55개 규모라 `.or()` URL이 안전하다. 테넌트가 커져
+ * 수백 단위가 되면 이 방식은 414 위험이 있으니 그때는 별도 조회+교집합으로 바꿀 것([[#53]]).
+ */
+async function classSearchOrParts(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  term: string,
+): Promise<string[]> {
+  // 강사·강의실 이름 조회는 서로 독립 → 병렬(B4).
+  const [teacherRes, roomRes] = await Promise.all([
+    supabase.from("users").select("id").ilike("display_name", `%${term}%`),
+    supabase.from("classrooms").select("id").ilike("name", `%${term}%`),
+  ]);
+  const teacherIds = (teacherRes.data ?? []).map((u) => u.id);
+  const roomIds = (roomRes.data ?? []).map((r) => r.id);
+
+  const parts = [`class_name.ilike.%${term}%`];
+  if (teacherIds.length) parts.push(`teacher_id.in.(${teacherIds.join(",")})`);
+  if (roomIds.length) {
+    parts.push(`classroom_id.in.(${roomIds.join(",")})`);
+    const slotRows = await fetchInChunks<{ class_id: string }>(roomIds, (chunk) =>
+      supabase.from("class_schedules").select("class_id").in("classroom_id", chunk),
+    );
+    const slotClassIds = [...new Set(slotRows.map((s) => s.class_id))];
+    if (slotClassIds.length) parts.push(`id.in.(${slotClassIds.join(",")})`);
+  }
+  return parts;
+}
+
 /** class_schedules 행들 → classId별 (요일→최초 시작시각) 맵. */
 function buildDaySlots(
   scheds: { class_id: string; day_of_week: string; start_time?: string | null }[] | null,
@@ -161,8 +200,10 @@ export async function getClassesList(options?: ClassListFilters): Promise<ClassL
   if (options?.active === "active") qb = qb.eq("is_active", true);
   if (options?.active === "closed") qb = qb.eq("is_active", false);
   if (options?.q) {
-    const term = options.q.trim();
-    if (term) qb = qb.ilike("class_name", `%${term}%`);
+    // 페이지 목록(getClassesPage)과 **같은 검색 범위**(반이름·강사·강의실)로 통일 — 같은 검색어가
+    // 화면에 따라 다른 결과를 내지 않게. sanitizeTerm도 여기서만 빠져 있던 것을 맞춘다.
+    const term = sanitizeTerm(options.q);
+    if (term) qb = qb.or((await classSearchOrParts(supabase, term)).join(","));
   }
 
   const { data: classes } = await qb;
@@ -311,15 +352,8 @@ export async function getClassesPage(
   if (options.q) {
     const term = sanitizeTerm(options.q);
     if (term) {
-      // 반이름 OR 강사명: 강사명에 매칭되는 강사 id를 먼저 풀어 teacher_id로 좁힌다(null 강사 안전).
-      const { data: matchTeachers } = await supabase
-        .from("users")
-        .select("id")
-        .ilike("display_name", `%${term}%`);
-      const teacherIds = (matchTeachers ?? []).map((u) => u.id);
-      const orParts = [`class_name.ilike.%${term}%`];
-      if (teacherIds.length) orParts.push(`teacher_id.in.(${teacherIds.join(",")})`);
-      qb = qb.or(orParts.join(","));
+      // 반이름 OR 강사명 OR 강의실명 — 단일 소스(classSearchOrParts).
+      qb = qb.or((await classSearchOrParts(supabase, term)).join(","));
     }
   }
   if (dayClassIds) qb = qb.in("id", dayClassIds);

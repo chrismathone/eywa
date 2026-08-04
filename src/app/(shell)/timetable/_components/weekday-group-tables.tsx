@@ -9,7 +9,13 @@ import {
   type PeriodsConfig,
   type TimetableSubject,
 } from "@/features/timetable/lib/periods";
-import { cellClassKey, computeBlocks, sortDaysByGroup } from "@/features/timetable/lib/grid";
+import {
+  cellClassKey,
+  computeBlocks,
+  expandHalfPeriodBlocks,
+  sortDaysByGroup,
+  type SubSlot,
+} from "@/features/timetable/lib/grid";
 import {
   PERIOD_ROW_H,
   periodRowHeight,
@@ -61,10 +67,12 @@ const DAY_COL_W = 60;
 // 단독(병합 안 되는) 요일은 2배 폭 — wide 집합은 호출부가 그룹 구성에서 도출(평일=단독 그룹 요일, 주말=토/일).
 const dayColW = (d: DayOfWeek, wide: Set<DayOfWeek>) => (wide.has(d) ? DAY_COL_W * 2 : DAY_COL_W);
 // 모든 교시 행을 동일 높이로 통일 → 평일·주말 표가 같은 격자선에 정렬(ijw식). 넘치면 셀 내부 스크롤.
-// 교시 1칸 높이 — 개별 교시 행(2026-07-07 ijw식). 수업은 실제 쓰는 연속 교시 수만큼 세로 rowSpan 병합(엑셀
-// 셀병합): 2교시 병합 = 2×222≈444(헤더+재원~10칸+대기+퇴원 여유), 1교시 수업 = 222(재원 ~7칸, 넘으면 스크롤).
-// 4-1만 하는 수업은 1칸(222)만 차지하고 4-2는 별도 빈칸 → "안 쓰는 교시까지 병합" 문제 해소. (주말도 교시 1칸 = ROW_H.)
-// 값은 empty-period-rows의 PERIOD_ROW_H 단일 소스 — '빈 교시 접기'의 편집 모드 확장(EmptyPeriodScope)이 같은 값을 쓴다.
+// 교시 1칸 높이 — 개별 교시 행(2026-07-07 ijw식). 수업은 실제 쓰는 연속 교시 수만큼 세로 rowSpan 병합(엑셀 셀병합).
+// ⚠️ 2026-08-04부터 **셀 높이가 기준**이다(CELL_H = 헤더 60 + 학생 12행 + 패딩 16 = 352):
+//   · 수학계열 평일 = 교시 2칸이 한 그룹 = 셀 1개 → 행 = CELL_H/2. 4-1만 하는 수업도 `expandHalfPeriodBlocks`가
+//     그룹 높이로 늘려(수업명만 위/아래 절반) **학생 명단 영역이 어느 셀이나 같다**.
+//   · 영어·주말 = 교시 1칸이 셀 1개 → 행 = CELL_H(SINGLE_PERIOD_ROW_H).
+// 값은 empty-period-rows 단일 소스 — '빈 교시 접기'의 편집 모드 확장(EmptyPeriodScope)이 같은 값을 쓴다.
 const ROW_H = PERIOD_ROW_H;
 // 격자선 — 전 격자를 **하나의 동일한 테두리**(색·굵기 통일)로. 얇은 --line(연회색)은 셀 경계가 뭉개져 가독성↓ → 진한 ink 1px.
 // ⚠️ 구조선/안쪽선 굵기 구분 없이 균일 + 셀 카드 중복 테두리 제거(사용자 요청). 색값은 아래 sticky 교시열 box-shadow와 동일.
@@ -160,9 +168,12 @@ function timeToMin(t: string): number {
 function SubSlotContent({
   slots,
   coveringDays,
+  subSlot = "full",
 }: {
   slots: ScheduleSlotWithStudents[];
   coveringDays: DayOfWeek[];
+  /** 그룹 한쪽 교시만 쓰는 수업이면 수업명을 그 절반에만(expandHalfPeriodBlocks가 판정). */
+  subSlot?: SubSlot;
 }) {
   const merged = mergeSlotsByClass(slots);
   const isHapban = merged.length >= 2;
@@ -178,9 +189,9 @@ function SubSlotContent({
         </span>
       ) : null}
       {isHapban ? (
-        <HapbanCell slots={merged} subSlot="full" coveringDays={coveringDays} />
+        <HapbanCell slots={merged} subSlot={subSlot} coveringDays={coveringDays} />
       ) : (
-        <ClassCell slot={merged[0]!} roster="names" subSlot="full" coveringDays={coveringDays} />
+        <ClassCell slot={merged[0]!} roster="names" subSlot={subSlot} coveringDays={coveringDays} />
       )}
     </div>
   );
@@ -273,19 +284,37 @@ function GroupTable({
     (cell.get(k) ?? cell.set(k, []).get(k)!).push(s);
   }
 
+  // 수학계열 교시 그룹 쌍([1교시 윗칸, 아랫칸] …) — 반교시 셀을 그룹 높이로 늘리는 데 쓴다.
+  // 영어·주말은 교시 1개가 곧 한 행이라 쌍이 없다(확장 대상 아님).
+  const groupPairs: [number, number][] = [];
+  if (isMathFamily) {
+    for (let ri = 0; ri + 1 < rows.length; ri++) {
+      const a = /^p-(\d+)$/.exec(rows[ri]!.key)?.[1];
+      const b = /^p-(\d+)$/.exec(rows[ri + 1]!.key)?.[1];
+      // 그룹 = 홀수 교시 + 그다음 짝수 교시(1·2 / 3·4 …). 라벨 rowSpan 판정과 같은 규칙.
+      if (a && b && Number(a) % 2 === 1 && Number(b) === Number(a) + 1) groupPairs.push([ri, ri + 1]);
+    }
+  }
+
   // 그룹×강사별 2D 병합 사전계산. cellAt(행,열)=그 교시·요일 슬롯, blocks=병합 블록(anchor만).
   const prepared = groups.map((g) => ({
     ...g,
     teachers: g.teachers.map((t) => {
       const cellAt = (ri: number, ci: number) =>
         cell.get(`${t.name}::${t.days[ci]}::${rows[ri]!.key}`) ?? [];
-      const blocks = computeBlocks(
+      const raw = computeBlocks(
         rows.length,
         t.days.length,
         (ri, ci) => cellClassKey(cellAt(ri, ci).map((s) => s.classId)),
         g.merge,
       );
-      return { ...t, cellAt, blocks };
+      // 반교시(그룹 한쪽 교시만) 수업은 셀을 그룹 전체 높이로 — 학생 명단 영역을 어느 셀이나 같게.
+      const { blocks, subSlots } = expandHalfPeriodBlocks({
+        blocks: raw,
+        pairs: groupPairs,
+        occupied: (ri, ci) => cellAt(ri, ci).length > 0,
+      });
+      return { ...t, cellAt, blocks, subSlots };
     }),
   }));
 
@@ -441,7 +470,11 @@ function GroupTable({
                       >
                         {acc.length === 0 ? null : (
                           <div className="flex flex-col" style={{ height: cellH }}>
-                            <SubSlotContent slots={acc} coveringDays={coveringDays} />
+                            <SubSlotContent
+                              slots={acc}
+                              coveringDays={coveringDays}
+                              subSlot={t.subSlots.get(`${ri}:${ci}`) ?? "full"}
+                            />
                           </div>
                         )}
                       </td>
@@ -481,7 +514,7 @@ export function WeekdayGroupTables({
   // 요일 헤더 날짜 라벨(스프레드시트처럼 "월 6/29"). weekMonday 없으면 요일만.
   const dayDates = weekMonday ? dayDateLabels(weekMonday) : {};
   const dateOf = (d: DayOfWeek) => dayDates[d];
-  // 행 높이 = 교시 1칸(ROW_H). 개별 교시 행이라 평일·주말 모두 교시당 ROW_H. 수업은 실제 연속 교시만큼 rowSpan 병합.
+  // 행 높이 = 교시 1칸(ROW_H), 과목 분기 없음. 수업은 실제 쓰는 연속 교시 수만큼 rowSpan 병합된다.
   const weekdayRowH = ROW_H;
   const weekdaySlots = slots.filter((s) => !WEEKEND_KEYS.has(s.dayOfWeek as DayOfWeek));
   const weekendSlots = slots.filter((s) => WEEKEND_KEYS.has(s.dayOfWeek as DayOfWeek));
