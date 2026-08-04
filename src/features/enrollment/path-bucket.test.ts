@@ -73,10 +73,10 @@ describe("pathBucket — 실제 원문 분류", () => {
 
 describe("bucketizePathStats", () => {
   const rows: PathStatRow[] = [
-    { path: "지인 소개", total: 10, enrolled: 7, paidSum: 700 },
-    { path: "재원생 추천", total: 5, enrolled: 4, paidSum: 400 },
-    { path: "인터넷 검색", total: 8, enrolled: 4, paidSum: 300 },
-    { path: null, total: 100, enrolled: 20, paidSum: 0 },
+    { path: "지인 소개", total: 10, enrolled: 7, paidSum: 700, paidCount: 5 },
+    { path: "재원생 추천", total: 5, enrolled: 4, paidSum: 400, paidCount: 3 },
+    { path: "인터넷 검색", total: 8, enrolled: 4, paidSum: 300, paidCount: 2 },
+    { path: null, total: 100, enrolled: 20, paidSum: 0, paidCount: 0 },
   ];
 
   it("합계가 입력 총합과 같다 — 어느 건도 집계에서 사라지지 않는다", () => {
@@ -103,5 +103,21 @@ describe("bucketizePathStats", () => {
   it("원문 표본을 많은 순으로 달아 둔다 — '무엇이 이렇게 묶였나'를 화면에서 열어볼 수 있게", () => {
     const refer = bucketizePathStats(rows).find((b) => b.bucket === "소개·추천")!;
     expect(refer.samples.map((s) => s.path)).toEqual(["지인 소개", "재원생 추천"]);
+  });
+
+  it("🔴 건당 평균의 분모는 등록 건수가 아니라 **금액이 적힌 건수**다", () => {
+    const refer = bucketizePathStats(rows).find((b) => b.bucket === "소개·추천")!;
+    expect(refer.paidSum).toBe(1100);
+    expect(refer.paidCount).toBe(8); // 5 + 3
+    expect(refer.avgPaid).toBe(138); // 1100/8 = 137.5 → 138. 등록 11건으로 나누면 100(27% 과소)
+  });
+
+  it("0179a 미적용(paidCount=null)이면 건당 평균을 만들지 않는다 — 모르는 걸 지어내지 않는다", () => {
+    const out = bucketizePathStats([
+      { path: "지인 소개", total: 10, enrolled: 7, paidSum: 700, paidCount: null },
+    ]);
+    expect(out[0].paidCount).toBeNull();
+    expect(out[0].avgPaid).toBeNull();
+    expect(out[0].paidSum).toBe(700); // 합계는 그대로 보여줄 수 있다
   });
 });

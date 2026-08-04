@@ -60,12 +60,26 @@ export function pathBucket(raw: string | null | undefined): PathBucket {
   return "기타";
 }
 
-export type PathStatRow = { path: string | null; total: number; enrolled: number; paidSum: number };
+export type PathStatRow = {
+  path: string | null;
+  total: number;
+  enrolled: number;
+  paidSum: number;
+  /** 등록 건 중 **금액이 적힌** 건수. 0179a 적용 전엔 null(그땐 건당 평균을 안 그린다). */
+  paidCount: number | null;
+};
 export type BucketStat = {
   bucket: PathBucket;
   total: number;
   enrolled: number;
   paidSum: number;
+  /** 금액이 적힌 등록 건수 — 건당 평균의 분모. null이면 알 수 없음(표시 생략). */
+  paidCount: number | null;
+  /**
+   * 건당 평균(원). 🔴 분모는 `enrolled`가 아니라 `paidCount`다 — 금액 기재율이 경로마다 달라
+   * (실측 소개 74% vs 인터넷 51%) 등록 건수로 나누면 건당이 실제보다 낮게 나온다(소개 34% 과소).
+   */
+  avgPaid: number | null;
   /** 등록 전환율(%). 분모가 0이면 null — 0%로 적으면 "다 놓쳤다"로 읽힌다. */
   rate: number | null;
   /** 이 버킷에 묶인 원문들(많은 순) — 화면에서 "무엇이 이렇게 묶였나"를 펼쳐 볼 수 있게. */
@@ -76,17 +90,29 @@ export type BucketStat = {
 export function bucketizePathStats(rows: PathStatRow[]): BucketStat[] {
   const map = new Map<PathBucket, BucketStat>();
   for (const b of PATH_BUCKETS)
-    map.set(b, { bucket: b, total: 0, enrolled: 0, paidSum: 0, rate: null, samples: [] });
+    map.set(b, {
+      bucket: b,
+      total: 0,
+      enrolled: 0,
+      paidSum: 0,
+      paidCount: null,
+      avgPaid: null,
+      rate: null,
+      samples: [],
+    });
 
   for (const r of rows) {
     const b = map.get(pathBucket(r.path))!;
     b.total += r.total;
     b.enrolled += r.enrolled;
     b.paidSum += r.paidSum;
+    // 하나라도 숫자를 알면 합산 시작. 전부 null(0179a 미적용)이면 null로 남아 화면이 건당을 안 그린다.
+    if (r.paidCount !== null) b.paidCount = (b.paidCount ?? 0) + r.paidCount;
     if (r.path) b.samples.push({ path: r.path, total: r.total });
   }
   for (const b of map.values()) {
     b.rate = b.total > 0 ? Math.round((b.enrolled / b.total) * 100) : null;
+    b.avgPaid = b.paidCount && b.paidCount > 0 ? Math.round(b.paidSum / b.paidCount) : null;
     b.samples.sort((a, c) => c.total - a.total);
   }
   // 건수 많은 순. '미기재'는 값이 있어도 항상 끝으로 — 지표가 아니라 데이터 품질 표시다.

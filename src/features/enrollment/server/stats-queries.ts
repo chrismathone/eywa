@@ -122,11 +122,19 @@ export async function getEnrollmentStats(year: number, months = 12): Promise<Enr
     prevYearMonths,
     paths: bucketizePathStats(
       (paths.data ?? []).map(
-        (r: { path: string | null; total: number | string; enrolled: number | string; paid_sum: number | string }): PathStatRow => ({
+        (r: {
+          path: string | null;
+          total: number | string;
+          enrolled: number | string;
+          paid_sum: number | string;
+          paid_cnt?: number | string | null;
+        }): PathStatRow => ({
           path: r.path,
           total: Number(r.total),
           enrolled: Number(r.enrolled),
           paidSum: Number(r.paid_sum),
+          // 0179a 적용 전엔 이 컬럼이 없다 → null로 두면 화면이 건당 평균을 안 그린다(옛/새 스키마 둘 다 동작).
+          paidCount: r.paid_cnt === undefined || r.paid_cnt === null ? null : Number(r.paid_cnt),
         }),
       ),
     ),

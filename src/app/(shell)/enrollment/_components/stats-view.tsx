@@ -138,6 +138,23 @@ export function StatsView({
                       ) : null}
                     </span>
                   </div>
+                  {/* 🔴 매출은 **기재분 기준**임을 매번 밝힌다. 금액 기재율이 경로마다 달라
+                      (실측 소개 74% vs 인터넷 51%) 합계만 나란히 놓으면 경로 비교가 왜곡된다.
+                      건당 평균의 분모도 등록 건수가 아니라 '금액이 적힌 등록 건수'다. */}
+                  {b.paidSum > 0 ? (
+                    <div className="text-text-dim num mt-0.5 text-[11px]">
+                      매출 <b className="text-foreground">{won(b.paidSum)}</b>
+                      {b.avgPaid !== null && b.paidCount ? (
+                        <>
+                          {" · "}건당 {won(b.avgPaid)}
+                          <span className="text-text-faint">
+                            {" "}
+                            (등록 {b.enrolled}건 중 {b.paidCount}건 금액 기재)
+                          </span>
+                        </>
+                      ) : null}
+                    </div>
+                  ) : null}
                   <div className="bg-bg-soft mt-1 h-2 overflow-hidden rounded-full">
                     <div
                       className="h-full rounded-full"
