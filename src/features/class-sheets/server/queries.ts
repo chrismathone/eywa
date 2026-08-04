@@ -17,7 +17,8 @@ import type { SkillAreaSetting } from "@/features/owner/settings-types";
 import { effectiveAttendanceRecords } from "@/features/attendance/effective-records";
 import { isWithinAttendanceEditWindow } from "@/features/attendance/edit-window";
 import { readEcsFontSize, type EcsFontSize } from "../font-size";
-import { readEcsShowSpecialRooms } from "../view-prefs";
+import { DEFAULT_ECS_ENGLISH_TRACK, readEcsEnglishTrack, readEcsShowSpecialRooms } from "../view-prefs";
+import { keepEnglishTrack, type EnglishTrackFilter } from "@/features/classes/english-track";
 import {
   buildWeekGrid,
   scheduledSlotKeySet,
@@ -438,7 +439,13 @@ export type SheetLandingCard = {
  * 카드가 0개인 **이유** — 화면이 원인을 정확히 말하게 하려고 구분한다.
  * 담당 영어 반이 없는 강사에게 "학원 설정을 확인하라"고 하면 고칠 수 없는 일을 시키는 거짓 안내다.
  */
-export type SheetLandingEmptyReason = "not-configured" | "no-scoped-classes" | "no-classes" | null;
+export type SheetLandingEmptyReason =
+  | "not-configured"
+  | "no-scoped-classes"
+  | "no-classes"
+  /** 반은 있는데 **보기 필터**(전체/EiE/인재원 영어) 때문에 빈 것 — 되돌릴 수 있는 원인이라 따로 안내한다. */
+  | "filtered"
+  | null;
 
 export async function getSheetLanding(
   weekParam?: string | null,
@@ -450,6 +457,10 @@ export async function getSheetLanding(
       today: string;
       cards: SheetLandingCard[];
       emptyReason: SheetLandingEmptyReason;
+      /** 프로그램 보기 필터(내 계정, 0176a) — 헤더 토글의 현재 값. */
+      trackFilter: EnglishTrackFilter;
+      /** 토글에 붙는 개수 — **필터 전** 내 스코프 기준(필터를 걸어도 숫자가 안 변해야 고를 수 있다). */
+      trackCounts: Record<EnglishTrackFilter, number>;
     }
   | { ok: false; error: string }
 > {
@@ -473,18 +484,27 @@ export async function getSheetLanding(
       today,
       cards: [],
       emptyReason: "not-configured",
+      trackFilter: DEFAULT_ECS_ENGLISH_TRACK,
+      trackCounts: { all: 0, eie: 0, injaewon: 0 },
     };
   }
 
   const supabase = await createClient();
-  const { data: allClasses, error: classError } = await supabase
-    .from("classes")
-    .select("id, class_name, teacher_id")
-    .eq("subject", "english")
-    .eq("is_active", true)
-    .or(`closed_at.is.null,closed_at.gte.${weekMonday}`)
-    .order("class_name");
+  const admin = createAdminClient();
+  // 반 목록과 내 보기 설정은 서로 독립 → 병렬(B4). 필터가 목록을 좁히므로 **뒤의 무거운 쿼리 전에** 읽는다.
+  const [{ data: allClasses, error: classError }, prefsRes] = await Promise.all([
+    supabase
+      .from("classes")
+      // english_track = 프로그램 구분(0176a). ⚠️ 이 컬럼은 마이그레이션이 **먼저** 적용돼야 한다(#95).
+      .select("id, class_name, teacher_id, english_track")
+      .eq("subject", "english")
+      .eq("is_active", true)
+      .or(`closed_at.is.null,closed_at.gte.${weekMonday}`)
+      .order("class_name"),
+    admin.from("users").select("ui_prefs").eq("id", user.id).eq("tenant_id", user.tenantId).maybeSingle(),
+  ]);
   if (classError) return { ok: false, error: `반 목록을 불러오지 못했습니다: ${classError.message}` };
+  const trackFilter = readEcsEnglishTrack(prefsRes.data?.ui_prefs);
   // 강사 스코프는 JS 교집합(스코프 id를 .in에 넣지 않는다 — 대량 .in 상한/silent cap 회피, B3).
   // 담당 반 ∪ 부담임 반 ∪ **임시 위임 반**(ecsVisibleClassFilter — 게이트 requireEcsClassAccess와 같은
   // 세 갈래. 갈라지면 "목록엔 뜨는데 열면 거절" → ecs-scope-sources.test.ts가 두 곳을 함께 잠근다).
@@ -492,7 +512,14 @@ export async function getSheetLanding(
   const scopeSet = visibleIds ? new Set(visibleIds) : null;
   // 카드에 '위임' 배지를 달기 위한 집합 — 게이트와 **같은 소스**(ecsDelegatedClassIds)라 배지와 접근이 안 갈린다.
   const delegatedIdSet = new Set(await ecsDelegatedClassIds());
-  const classes = (allClasses ?? []).filter((c) => !scopeSet || scopeSet.has(c.id as string));
+  const inScope = (allClasses ?? []).filter((c) => !scopeSet || scopeSet.has(c.id as string));
+  // 프로그램 보기 필터(전체/EiE/인재원 영어) — 개수는 **필터 전** 집합에서 세야 토글에 진짜 숫자가 뜬다.
+  const trackCounts = {
+    all: inScope.length,
+    eie: keepEnglishTrack(inScope, "eie").length,
+    injaewon: keepEnglishTrack(inScope, "injaewon").length,
+  };
+  const classes = keepEnglishTrack(inScope, trackFilter);
   const classIds = classes.map((c) => c.id as string);
   if (classIds.length === 0) {
     return {
@@ -501,13 +528,20 @@ export async function getSheetLanding(
       weekLabel: weekLabel(weekMonday),
       today,
       cards: [],
-      // 학원엔 영어 반이 있는데 내 스코프에 없다 = "내가 담당이 아니다"(설정 문제 아님).
-      emptyReason: scopeSet && (allClasses ?? []).length > 0 ? "no-scoped-classes" : "no-classes",
+      trackFilter,
+      trackCounts,
+      // 원인별로 갈라야 안내가 거짓말이 안 된다 — 필터 때문에 빈 것을 "담당 반이 없다"로 말하면
+      // 고칠 수 있는 일(필터 되돌리기)을 숨기고 못 고칠 일(반 배정)을 시키는 셈이다.
+      emptyReason:
+        inScope.length > 0
+          ? "filtered"
+          : scopeSet && (allClasses ?? []).length > 0
+            ? "no-scoped-classes"
+            : "no-classes",
     };
   }
 
-  const admin = createAdminClient();
-  const [schedules, lines, teachers, myPrefs] = await Promise.all([
+  const [schedules, lines, teachers] = await Promise.all([
     fetchInChunks<{
       class_id: string;
       day_of_week: DowKey;
@@ -550,11 +584,11 @@ export async function getSheetLanding(
       [...new Set((classes ?? []).map((c) => c.teacher_id as string | null).filter((v): v is string => !!v))],
       (chunk) => supabase.from("users").select("id, display_name").in("id", chunk),
     ),
-    // 자리(LAB·JJ) 표시 설정 — 시트 화면과 **같은 값**으로 세야 두 화면의 작성률이 갈리지 않는다.
-    admin.from("users").select("ui_prefs").eq("id", user.id).eq("tenant_id", user.tenantId).maybeSingle(),
   ]);
 
-  const showSpecialRooms = readEcsShowSpecialRooms(myPrefs.data?.ui_prefs);
+  // 자리(LAB·JJ) 표시 설정 — 시트 화면과 **같은 값**으로 세야 두 화면의 작성률이 갈리지 않는다.
+  // (프로그램 필터와 함께 위에서 한 번만 읽는다 — 같은 행을 두 번 조회하지 않게.)
+  const showSpecialRooms = readEcsShowSpecialRooms(prefsRes.data?.ui_prefs);
   const teacherName = new Map(teachers.map((t) => [t.id, t.display_name]));
   const schedulesByClass = new Map<string, typeof schedules>();
   for (const s of schedules) {
@@ -606,5 +640,14 @@ export async function getSheetLanding(
     };
   });
 
-  return { ok: true, weekMonday, weekLabel: weekLabel(weekMonday), today, cards, emptyReason: null };
+  return {
+    ok: true,
+    weekMonday,
+    weekLabel: weekLabel(weekMonday),
+    today,
+    cards,
+    emptyReason: null,
+    trackFilter,
+    trackCounts,
+  };
 }

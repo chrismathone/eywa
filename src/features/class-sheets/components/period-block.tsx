@@ -49,7 +49,13 @@ export const PeriodBlock = memo(function PeriodBlock({
     // 5px 넘게 끌면 팬으로 전환하며 `userSelect:none`을 걸어(drag-scroll-area.tsx:128) **드래그 선택이
     // 아예 불가능**하다 — I빔은 못 하는 일을 약속하는 거짓 어포던스가 된다. 중립적인 화살표가 정직하다.
     // 선택이 실제로 되는 곳(input·textarea)은 skip() 대상이라 UA I빔을 그대로 유지한다(실측 확인).
-    <article className="bg-card shadow-card cursor-default rounded-2xl p-3">
+    // `grid-rows-subgrid` + `row-span-3` — 부모(sheet-grid)가 교시 행마다 깔아 둔 세 트랙
+    // (머리 / 계획 / 로스터)에 이 카드의 세 구획을 그대로 올린다. 그래야 계획 줄 수가 달라도
+    // **같은 행의 모든 카드에서 학생 표가 같은 높이에서 시작**한다(원장 2026-08-04).
+    // ⚠️ 자식이 정확히 이 셋이어야 한다 — 여기에 형제 요소를 더하면 넷째가 다음 교시 행 트랙으로
+    //    흘러 카드가 겹친다. 새 구획이 필요하면 세 구획 **안에** 넣거나 부모 트랙 수를 함께 늘릴 것.
+    // ⚠️ `h-full`은 쓰지 않는다(부모가 span으로 높이를 정한다).
+    <article className="bg-card shadow-card row-span-3 grid cursor-default grid-rows-subgrid rounded-2xl p-3">
       {/* 카드 머리 — 원본 시트의 회색 교시 칸(1교시 / 03:00~03:40)과 같은 위계. 교시=칩, 시각=옆 숫자. */}
       <header className="border-line-strong flex flex-wrap items-center gap-x-2 gap-y-1 border-b pb-2">
         {periodLabel ? (

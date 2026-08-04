@@ -25,6 +25,7 @@ import { deleteCurrentSlots, loadCurrentSlots } from "./schedule-sync";
 import type { ClassroomAssignData } from "../lib/classroom-assign";
 import type { OverlapItem } from "../overlap";
 import { preserveScheduleFields } from "../schedule-preserve";
+import { normalizeEnglishTrack } from "../english-track";
 
 export type ClassFormState =
   | {
@@ -89,6 +90,13 @@ function readForm(formData: FormData, allowedSubjects: ReadonlySet<string>) {
   const specialValues = formData.getAll("isSpecial").map((v) => String(v));
   // '수업보고서 미발송'(0174a) — 특강 토글과 **똑같은 hidden+체크박스 쌍 계약**(위 주석 참조).
   const optoutValues = formData.getAll("reportOptout").map((v) => String(v));
+  // 영어 프로그램 구분(0176a) — 라디오라 hidden 마커가 필요 없다(체크된 하나만 온다). 다만 **키가 없으면**
+  // '이 폼은 이 칸을 모른다'로 보고 수정 시 건드리지 않는다(옛 폼·다른 진입점이 값을 지우지 않게).
+  const trackProvided = formData.has("englishTrack");
+  const englishTrack = normalizeEnglishTrack(
+    allowedSubjects.has(subject) ? subject : "etc",
+    formData.get("englishTrack"),
+  );
   // 운영 기간(특강은 방학 한정 → 끝나면 시간표에서 자동으로 내려간다). periodProvided=1이면
   // 종료일을 **비운 것도 명시**(무기한으로 되돌리기)로 해석한다 — schedule-preserve.ts 참조.
   return {
@@ -104,6 +112,8 @@ function readForm(formData: FormData, allowedSubjects: ReadonlySet<string>) {
     isSpecial: specialValues.some((v) => v === "1" || v === "on" || v === "true"),
     reportOptoutProvided: optoutValues.length > 0,
     reportOptout: optoutValues.some((v) => v === "1" || v === "on" || v === "true"),
+    trackProvided,
+    englishTrack,
     periodProvided: get("periodProvided") === "1",
     // 교시마다 종료일이 갈려 폼이 칸을 비운 경우 — 빈 칸을 "무기한으로 되돌리기"가 아니라
     // "안 정함(교시별 기존값 유지)"으로 읽는다(조용한 일괄 삭제 방지).
@@ -199,6 +209,8 @@ export async function createClass(
       is_active: true,
       is_special: input.isSpecial,
       report_optout: input.reportOptout,
+      // 영어 프로그램 구분(0176a) — 영어가 아니면 normalizeEnglishTrack이 이미 null로 만든다.
+      english_track: input.englishTrack,
       notes: input.notes,
       bg_color: input.bgColor,
       text_color: input.textColor,
@@ -284,6 +296,9 @@ export async function updateClass(
       ...(input.isSpecialProvided ? { is_special: input.isSpecial } : {}),
       // '수업보고서 미발송'(0174a)도 같은 계약 — 안 보내는 폼이 조용히 false로 되돌리지 않게.
       ...(input.reportOptoutProvided ? { report_optout: input.reportOptout } : {}),
+      // 영어 프로그램 구분(0176a) — 같은 계약(폼이 보냈을 때만). 과목을 영어에서 바꾸면 값은 null로
+      // 정리된다(normalizeEnglishTrack) — 수학 반에 남은 'eie'는 필터에서 거짓 분류가 된다.
+      ...(input.trackProvided ? { english_track: input.englishTrack } : {}),
       notes: input.notes,
       bg_color: input.bgColor,
       text_color: input.textColor,

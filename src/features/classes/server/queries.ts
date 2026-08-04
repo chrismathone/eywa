@@ -1,5 +1,6 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
+import { readEnglishTrack, type EnglishTrack } from "../english-track";
 import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
 import { effectiveTeacherId } from "@/lib/auth/view-mode";
 import { getTeacherScope } from "@/lib/auth/teacher-scope";
@@ -76,6 +77,8 @@ export type ClassDetail = {
   isSpecial: boolean;
   /** '수업보고서 미발송'(0174a) 토글값. 판정 = `isReportOptout()`(이름 폴백 없음 — 컬럼이 전부다). */
   reportOptout: boolean;
+  /** 영어 프로그램 구분(0176a) — 영어 반이 아니거나 미분류면 null. */
+  englishTrack: EnglishTrack | null;
   notes: string | null;
   bgColor: string | null;
   // 강사 인수인계 예약(0044a) — pendingTeacherId 있으면 예약 존재.
@@ -472,7 +475,7 @@ export async function getClassDetail(id: string): Promise<ClassDetail | null> {
   const { data: c } = await supabase
     .from("classes")
     .select(
-      `id, class_name, subject, is_active, closed_at, is_special, report_optout, notes, bg_color,
+      `id, class_name, subject, is_active, closed_at, is_special, report_optout, english_track, notes, bg_color,
        teacher_id, classroom_id,
        pending_teacher_id, pending_teacher_date, pending_teacher_reason,
        teacher:teacher_id ( display_name ),
@@ -521,6 +524,8 @@ export async function getClassDetail(id: string): Promise<ClassDetail | null> {
     closedAt: (c as { closed_at?: string | null }).closed_at ?? null,
     isSpecial: (c as { is_special?: boolean | null }).is_special ?? false,
     reportOptout: (c as { report_optout?: boolean | null }).report_optout ?? false,
+    // 영어 프로그램 구분(0176a) — 미분류(null)는 폼에서 기본값으로 떨어진다(english-track.ts).
+    englishTrack: readEnglishTrack(c as { english_track?: string | null }),
     notes: c.notes,
     bgColor: (c as { bg_color?: string | null }).bg_color ?? null,
     pendingTeacherId: (c as { pending_teacher_id?: string | null }).pending_teacher_id ?? null,

@@ -13,9 +13,30 @@
  * ⚠️ 계정 귀속이라 다른 PC에서도 같은 상태로 열린다. 서버가 진실이므로 토글은 저장 후 새로고침한다
  *    (헤더의 `계획 N/M교시`·랜딩 카드가 서버 계산이라 클라에서만 감추면 숫자가 갈린다).
  */
+import { normalizeEnglishTrackFilter, type EnglishTrackFilter } from "@/features/classes/english-track";
 
 /** 미설정 기본값 = 표시(원장 2026-08-03). 저장은 기본값이 아닐 때만 키를 남긴다. */
 export const DEFAULT_ECS_SHOW_SPECIAL_ROOMS = true;
+
+/**
+ * `ui_prefs.ecs.englishTrack` → 랜딩의 프로그램 보기 필터(전체/EiE/인재원 영어, 0176a).
+ *
+ * ⚠️ **`showSpecialRooms`와 축이 다르다** — 저쪽은 '자리(방)' 교시를 그릴지고, 이건 '반이 어느 프로그램인지'다.
+ *    두 값은 곱해져 걸린다(예: EiE만 보면서 LAB·JJ는 숨김). 하나로 합치지 말 것.
+ * ⚠️ 이 필터는 **작성률 분모를 바꾸지 않는다**(showSpecialRooms와 결정적으로 다른 점). 목록에서 눈으로
+ *    좁혀 보는 용도라 각 카드의 `N/M교시`는 필터와 무관하게 그 반의 값 그대로다.
+ * ⚠️ 계정 귀속(원장 2026-08-04 *"모든 뷰 세팅은 계정에 귀속"*) — 다른 PC에서도 같은 필터로 열린다.
+ */
+export const DEFAULT_ECS_ENGLISH_TRACK: EnglishTrackFilter = "all";
+
+/** `users.ui_prefs` → 프로그램 보기 필터(`ecs` 네임스페이스만 읽는다). 깨진 값은 '전체'로. */
+export function readEcsEnglishTrack(uiPrefs: unknown): EnglishTrackFilter {
+  if (!uiPrefs || typeof uiPrefs !== "object" || Array.isArray(uiPrefs)) return DEFAULT_ECS_ENGLISH_TRACK;
+  const scope = (uiPrefs as Record<string, unknown>).ecs;
+  if (!scope || typeof scope !== "object" || Array.isArray(scope)) return DEFAULT_ECS_ENGLISH_TRACK;
+  // 모르는 값이면 '전체' — 저장값이 깨졌다고 반 목록이 통째로 비면 "반이 사라졌다"가 된다.
+  return normalizeEnglishTrackFilter((scope as Record<string, unknown>).englishTrack);
+}
 
 /** `users.ui_prefs` → 자리(LAB·JJ) 표시 여부(`ecs` 네임스페이스만 읽는다 — 다른 화면 값 훔치기 금지). */
 export function readEcsShowSpecialRooms(uiPrefs: unknown): boolean {
