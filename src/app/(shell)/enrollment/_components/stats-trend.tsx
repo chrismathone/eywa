@@ -9,6 +9,6 @@ const Impl = dynamic(() => import("./stats-trend-impl").then((m) => m.StatsTrend
   loading: () => <div className="bg-bg-soft/40 h-[300px] animate-pulse rounded-2xl" />,
 });
 
-export function StatsTrend(props: { months: MonthStat[]; prevYearMonths: MonthStat[]; year: number }) {
+export function StatsTrend(props: { months: MonthStat[]; prevYearMonths: MonthStat[]; year: number | null }) {
   return <Impl {...props} />;
 }

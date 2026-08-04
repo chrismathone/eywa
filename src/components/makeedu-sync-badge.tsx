@@ -2,6 +2,7 @@ import { getMakeeduSyncState, type MakeeduSyncDomain } from "@/features/integrat
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { MakeeduSyncNowButton } from "@/components/makeedu-sync-now-button";
+import { EyIcon } from "@/components/icons/eywa-icons";
 
 function relativeKo(iso: string): string {
   const then = new Date(iso).getTime();
@@ -51,9 +52,9 @@ export async function MakeeduSyncBadge({ domain }: { domain: MakeeduSyncDomain }
           state.issue ? `\n확인 필요: ${state.issue}` : ""
         }`}
       >
-        <span className={failed || issue ? tone : ""} aria-hidden>
-          ↻
-        </span>
+        {/* 🔴 예전엔 텍스트 글리프 `↻`(U+21BB)였다 — Pretendard 서브셋에 없는 PC에서 두부(□)로
+            깨졌다(원장 2026-08-05 제보). 아이콘 자리엔 항상 EyIcon을 쓴다. */}
+        <EyIcon name="sync" size={11} strokeWidth={1.8} className={failed || issue ? tone : ""} />
         {failed ? "동기화 실패" : `동기화 ${relativeKo(state.syncedAt)}`}
         {issue ? <span className="font-medium">· 확인 필요</span> : null}
       </span>

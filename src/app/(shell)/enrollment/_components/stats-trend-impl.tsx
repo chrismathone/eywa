@@ -27,7 +27,7 @@ export function StatsTrendImpl({
 }: {
   months: MonthStat[];
   prevYearMonths: MonthStat[];
-  year: number;
+  year: number | null;
 }) {
   const data = months.map((m, i) => ({
     label: `${Number(m.month.slice(5))}월`,
@@ -87,7 +87,7 @@ export function StatsTrendImpl({
               yAxisId="cnt"
               type="monotone"
               dataKey="전년상담"
-              name={`${year - 1}년 상담`}
+              name={`${(year ?? 0) - 1}년 상담`}
               stroke="var(--color-text-faint)"
               strokeDasharray="4 4"
               strokeWidth={2}

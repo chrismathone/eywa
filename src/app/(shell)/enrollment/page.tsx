@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import Link from "next/link";
 import { QrCode } from "@/components/icons/eywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/page-header";
@@ -92,8 +93,10 @@ export default async function EnrollmentPage({
   const searchQuery = q?.trim() || null;
   const view: EnrollmentView =
     viewParam === "table" ? "table" : viewParam === "stats" ? "stats" : "kanban";
-  // 통계뷰 전용 — 연도 선택. 여기엔 "최대 1년" 상한이 없다(집계라 행을 안 가져온다).
-  const statsYear = Number(yearParam) || new Date(kstToday()).getFullYear();
+  // 통계뷰 전용 — 연도 선택. `all` = 전체 기간(원장 2026-08-05). 여기엔 "최대 1년" 상한이 없다
+  // (집계라 행을 안 가져온다 — 칸반·목록의 상한은 행 로딩 때문이라 여기와 무관).
+  const statsYear: number | null =
+    yearParam === "all" ? null : Number(yearParam) || new Date(kstToday()).getFullYear();
   const page = Math.max(1, Number(pageParam) || 1);
   // 🔴 기본 = 최근 3개월. '전체'는 고를 수 없고 구간은 최대 1년(원장 2026-08-04) — 이관으로 3년치가
   // 쌓여 전건을 열면 칸반이 카드 2,197장이 된다. 알 수 없는 값이 와도 parseRange가 3개월로 되돌린다.
@@ -112,16 +115,15 @@ export default async function EnrollmentPage({
   // 🔴 뷰마다 **가져오는 양이 다르다**. 목록은 한 페이지(50행)만 — 옛 시트 이관으로 2,251행이 되어
   // 전건 로드는 라운드트립 3회 + 배지 청크 20여 회로 불어난다(B2·B4). 칸반은 열별 집계가 필요해
   // 전건을 유지하되, 그래서 기간 필터 없이 열면 여전히 무겁다(별도 과제).
-  const [kanbanItems, tablePage, headerCounts, stats, statsYears, dist, schoolPrefs, consultants, minYear, pushCandidates, totalCount] =
+  const [kanbanItems, tablePage, headerCounts, statsYears, _unused, schoolPrefs, consultants, minYear, pushCandidates, totalCount] =
     await Promise.all([
       view === "kanban" ? getEnrollmentConsultations(filter) : Promise.resolve(null),
       view === "table" ? getEnrollmentConsultationsPage(filter, page, PAGE_SIZE) : Promise.resolve(null),
       // 헤더 스탯은 페이지가 아니라 **필터 전체** 기준(count만, 행 미수신).
       view === "table" ? getConsultationFilteredCounts(filter) : Promise.resolve(null),
-      view === "stats" ? getEnrollmentStats(statsYear) : Promise.resolve(null),
+      // 전체 기간이면 데이터가 있는 범위를 훑는다(연도 목록의 최소~최대).
       view === "stats" ? getStatsYears() : Promise.resolve([]),
-      // 🔴 상담 분포는 **연도가 적용된다**(재원생 기준이던 때는 연도를 바꿔도 안 변해 화면이 거짓말했다).
-      view === "stats" ? getConsultationDistribution(statsYear) : Promise.resolve(null),
+      Promise.resolve(null), // 자리 유지(아래에서 statsYears를 안 뒤 두 번째 단계로 조회)
       // 학교별 점유율 보기 설정(정렬·필터·기준)은 계정 귀속 — localStorage는 포트 단위라 조용히 리셋된다.
       view === "stats" ? loadSchoolStatsPrefs() : Promise.resolve(null),
       getConsultantOptions(),
@@ -131,6 +133,21 @@ export default async function EnrollmentPage({
       // 새 접수가 들어오면 화면을 갱신해야 하므로 필터된 items.length를 기준으로 쓰면 안 된다.
       getConsultationTotalCount(),
     ]);
+  // 연도 범위를 안 뒤에 통계를 조회한다(전체 기간이 어디부터인지 알아야 한다). 둘은 서로 독립이라 병렬.
+  const span =
+    statsYears.length > 0
+      ? { from: Math.min(...statsYears), to: Math.max(...statsYears) }
+      : undefined;
+  const [stats, dist] =
+    view === "stats"
+      ? await Promise.all([
+          getEnrollmentStats(statsYear, span),
+          // 🔴 상담 분포는 **연도가 적용된다**(재원생 기준이던 때는 연도를 바꿔도 안 변해 화면이 거짓말했다).
+          getConsultationDistribution(statsYear, span),
+        ])
+      : [null, null];
+  void _unused;
+
   const items = kanbanItems ?? [];
 
   // 상대시간 기준 시각 — 서버·클라 첫 렌더를 같은 기준으로 계산해 하이드레이션 불일치를 없앤다.
@@ -149,7 +166,7 @@ export default async function EnrollmentPage({
   // 필터는 보존하고 page만 갈아끼운다. p===1이면 page= 자체를 안 넣어야 필터 변경 href와 모양이 같아진다
   // (필터·검색·월이동 href는 page를 안 넣으므로 자동으로 1페이지로 리셋된다 — 페이지네이션 표준).
   // 통계뷰 연도 링크 — 목록 필터(월·기간·검색)는 통계와 무관해 싣지 않는다(섞이면 "무엇을 보고 있는지"가 흐려진다).
-  const yearHref = (y: number): string => `/enrollment?view=stats&year=${y}`;
+  const yearHref = (y: number | "all"): string => `/enrollment?view=stats&year=${y}`;
 
   const pageHref = (p: number): string => {
     const params = new URLSearchParams();
@@ -239,6 +256,38 @@ export default async function EnrollmentPage({
 
       <KanbanFilters
         syncBadge={<MakeeduSyncBadge domain="prospects" />}
+        yearChips={
+          view === "stats" && statsYears.length > 0 ? (
+            <div className="flex items-center gap-1.5">
+              <span className="micro shrink-0">연도</span>
+              <div className="border-line inline-flex items-center gap-0.5 rounded-full border p-0.5">
+                <Link
+                  href={yearHref("all")}
+                  className={`rounded-full px-2.5 py-1 text-xs transition ${
+                    statsYear === null
+                      ? "bg-foreground text-background font-medium"
+                      : "text-text-dim hover:text-foreground hover:bg-bg-soft"
+                  }`}
+                >
+                  전체
+                </Link>
+                {statsYears.map((y) => (
+                  <Link
+                    key={y}
+                    href={yearHref(y)}
+                    className={`num rounded-full px-2.5 py-1 text-xs transition ${
+                      y === statsYear
+                        ? "bg-foreground text-background font-medium"
+                        : "text-text-dim hover:text-foreground hover:bg-bg-soft"
+                    }`}
+                  >
+                    {y}
+                  </Link>
+                ))}
+              </div>
+            </div>
+          ) : null
+        }
         selectedMonth={selectedMonth}
         selectedConsultant={selectedConsultant}
         selectedOutcome={selectedOutcome}
@@ -263,8 +312,6 @@ export default async function EnrollmentPage({
         <StatsView
           stats={stats}
           year={statsYear}
-          years={statsYears}
-          hrefForYear={yearHref}
           dist={dist}
           schoolPrefs={schoolPrefs}
         />

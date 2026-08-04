@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { PATH_BUCKET_COLOR } from "@/features/enrollment/path-bucket";
 import type { ConsultationDistribution, EnrollmentStats } from "@/features/enrollment/server/stats-queries";
@@ -45,15 +44,12 @@ const KIND_COLOR: Record<string, string> = {
 export function StatsView({
   stats,
   year,
-  years,
-  hrefForYear,
   dist,
   schoolPrefs,
 }: {
   stats: EnrollmentStats;
-  year: number;
-  years: number[];
-  hrefForYear: (y: number) => string;
+  /** null = 전체 기간. 라벨로만 쓴다. */
+  year: number | null;
   dist: ConsultationDistribution;
   schoolPrefs: SchoolStatsPrefs;
 }) {
@@ -70,26 +66,6 @@ export function StatsView({
 
   return (
     <div className="space-y-4">
-      {/* 연도 선택 — 데이터가 있는 해만. 통계는 집계라 기간 상한(최대 1년)이 없다. */}
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="micro shrink-0">연도</span>
-        <div className="border-line inline-flex items-center gap-0.5 rounded-full border p-0.5">
-          {years.map((y) => (
-            <Link
-              key={y}
-              href={hrefForYear(y)}
-              className={`num rounded-full px-3 py-1 text-xs transition ${
-                y === year
-                  ? "bg-foreground text-background font-medium"
-                  : "text-text-dim hover:text-foreground hover:bg-bg-soft"
-              }`}
-            >
-              {y}
-            </Link>
-          ))}
-        </div>
-      </div>
-
       {/* 헤드라인 — 페이지 rows가 아니라 집계 원천에서 온 수치(#89) */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {[
@@ -116,11 +92,13 @@ export function StatsView({
       </div>
 
       <Card
-        title={`${year}년 월별 상담·등록`}
+        title={year === null ? "전체 기간 월별 상담·등록" : `${year}년 월별 상담·등록`}
         sub={
           stats.prevYearMonths.some((m) => m.total > 0)
-            ? `점선 = ${year - 1}년 상담 건수(전년 동월 비교) · 금색 선 = 전환율(오른쪽 축)`
-            : `금색 선 = 전환율(오른쪽 축) · ${year - 1}년 데이터가 없어 전년 비교는 표시하지 않습니다`
+            ? `점선 = ${(year ?? 0) - 1}년 상담 건수(전년 동월 비교) · 금색 선 = 전환율(오른쪽 축)`
+            : year === null
+              ? "금색 선 = 전환율(오른쪽 축) · 전체 기간에는 전년 동월 비교가 성립하지 않아 표시하지 않습니다"
+              : `금색 선 = 전환율(오른쪽 축) · ${year - 1}년 데이터가 없어 전년 비교는 표시하지 않습니다`
         }
       >
         <StatsTrend months={stats.months} prevYearMonths={stats.prevYearMonths} year={year} />
@@ -173,7 +151,7 @@ export function StatsView({
                   ) : null}
                   <div className="bg-bg-soft mt-1 h-2 overflow-hidden rounded-full">
                     <div
-                      className="h-full rounded-full"
+                      className="bar-grow h-full rounded-full"
                       style={{ width: `${share}%`, background: PATH_BUCKET_COLOR[b.bucket] }}
                     />
                   </div>
@@ -204,7 +182,7 @@ export function StatsView({
             title="학년별 상담"
             sub={(() => {
               const bad = dist.grades.find((g) => g.label === GRADE_UNKNOWN)?.n ?? 0;
-              return `${year}년 상담 ${dist.total}건 · 괄호는 등록 건수${
+              return `${year === null ? "전체 기간" : `${year}년`} 상담 ${dist.total}건 · 괄호는 등록 건수${
                 bad ? ` · 학년이나 학교급을 확정할 수 없는 ${bad}건은 '분류 불가'로 뺐습니다` : ""
               }`;
             })()}
@@ -218,7 +196,7 @@ export function StatsView({
                   <span className="text-text-dim num w-12 shrink-0 text-xs">{g.label}</span>
                   <div className="bg-bg-soft h-3 flex-1 overflow-hidden rounded-full">
                     <div
-                      className="h-full rounded-full"
+                      className="bar-grow h-full rounded-full"
                       style={{
                         width: `${(g.n / maxGrade) * 100}%`,
                         background: KIND_COLOR[g.label[0] ?? ""] ?? "var(--color-text-faint)",
@@ -240,7 +218,7 @@ export function StatsView({
                   <span className="text-text-dim w-12 shrink-0 text-xs">{r.label}</span>
                   <div className="bg-bg-soft h-3 flex-1 overflow-hidden rounded-full">
                     <div
-                      className="h-full rounded-full"
+                      className="bar-grow h-full rounded-full"
                       style={{
                         width: `${(r.n / maxRegion) * 100}%`,
                         background: r.label === "미상" ? "var(--color-text-faint)" : "var(--color-primary)",

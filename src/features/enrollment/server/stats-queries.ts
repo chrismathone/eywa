@@ -98,31 +98,40 @@ function fillMonths(rows: MonthStat[], startY: number, startM0: number, count: n
 }
 
 /**
- * @param year 보려는 연도
- * @param months 그 연도에서 볼 개월 수(12=한 해 전체). 화면 상단 토글이 준다.
+ * @param year 보려는 연도. `null` = **전체 기간**(원장 2026-08-05). 통계는 집계라 행을 안 가져와
+ *   기간 상한이 없다 — 칸반·목록의 "최대 1년"은 행 로딩 때문이지 여기와 무관하다.
+ * @param span 전체일 때 훑을 범위(가장 이른 해 ~ 올해). 연도별일 땐 무시.
  */
-export async function getEnrollmentStats(year: number, months = 12): Promise<EnrollmentStats> {
+export async function getEnrollmentStats(
+  year: number | null,
+  span?: { from: number; to: number },
+): Promise<EnrollmentStats> {
   const supabase = await createClient();
   const startM0 = 0;
-  const start = kstMonthStartIso(year, startM0);
-  const end = kstMonthStartIso(year, startM0 + months);
-  const prevStart = kstMonthStartIso(year - 1, startM0);
-  const prevEnd = kstMonthStartIso(year - 1, startM0 + months);
+  const isAll = year === null;
+  const fromY = isAll ? (span?.from ?? new Date().getFullYear()) : year;
+  const months = isAll ? ((span?.to ?? fromY) - fromY + 1) * 12 : 12;
+  const start = kstMonthStartIso(fromY, startM0);
+  const end = kstMonthStartIso(fromY, startM0 + months);
+  // 전체 기간엔 '전년 동월' 비교가 성립하지 않는다(비교 대상이 구간 안에 들어 있다) → 빈 배열로 둔다.
+  const prevStart = kstMonthStartIso(fromY - 1, startM0);
+  const prevEnd = kstMonthStartIso(fromY - 1, startM0 + months);
 
   // 독립 조회 3개 = 병렬(B4). 전년치는 비교용이라 없으면 빈 배열로 떨어져도 화면이 산다.
   const [cur, prev, paths] = await Promise.all([
     supabase.rpc("consultation_monthly_stats", { p_start: start, p_end: end }),
-    supabase.rpc("consultation_monthly_stats", { p_start: prevStart, p_end: prevEnd }),
+    isAll
+      ? Promise.resolve({ data: [], error: null })
+      : supabase.rpc("consultation_monthly_stats", { p_start: prevStart, p_end: prevEnd }),
     supabase.rpc("consultation_path_stats", { p_start: start, p_end: end }),
   ]);
   // 조회 실패를 '0건'으로 위장하지 않는다 — 빈 통계와 장애는 화면에서 구분돼야 한다.
   if (cur.error) throw cur.error;
   if (paths.error) throw paths.error;
 
-  const curMonths = fillMonths((cur.data ?? []).map(toMonthStat), year, startM0, months);
-  const prevYearMonths = prev.error
-    ? []
-    : fillMonths((prev.data ?? []).map(toMonthStat), year - 1, startM0, months);
+  const curMonths = fillMonths((cur.data ?? []).map(toMonthStat), fromY, startM0, months);
+  const prevYearMonths =
+    isAll || prev.error ? [] : fillMonths((prev.data ?? []).map(toMonthStat), fromY - 1, startM0, months);
 
   const total = curMonths.reduce((a, m) => a + m.total, 0);
   const enrolled = curMonths.reduce((a, m) => a + m.enrolled, 0);
@@ -179,10 +188,16 @@ export type ConsultationDistribution = {
  * ⚠️ 전교생 대비 비율은 **공시 연도와 보는 연도가 같을 때만** 낸다. 우리가 가진 학교알리미 공시는
  * 한 해치뿐이라, 2023년 상담을 2026년 전교생으로 나누면 그럴듯하지만 틀린 숫자가 된다.
  */
-export async function getConsultationDistribution(year: number): Promise<ConsultationDistribution> {
+export async function getConsultationDistribution(
+  year: number | null,
+  span?: { from: number; to: number },
+): Promise<ConsultationDistribution> {
   const supabase = await createClient();
-  const start = kstMonthStartIso(year, 0);
-  const end = kstMonthStartIso(year + 1, 0);
+  const isAll = year === null;
+  const fromY = isAll ? (span?.from ?? new Date().getFullYear()) : year;
+  const toY = isAll ? (span?.to ?? fromY) : year;
+  const start = kstMonthStartIso(fromY, 0);
+  const end = kstMonthStartIso(toY + 1, 0);
 
   const [rows, schoolStats] = await Promise.all([
     fetchAllPaged<{ prospect_school: string | null; prospect_grade: string | null; outcome: string }>(
@@ -202,7 +217,10 @@ export async function getConsultationDistribution(year: number): Promise<Consult
           // 해마다 한 번씩 들어와 마지막 것이 이겨 버린다 — 2023년 상담을 2026년 전교생으로 나누는
           // 바로 그 오류다. (`.eq`는 `.select` 뒤에만 온다 — 빌더 순서.)
           .select("name, name_key, kind, total_students, region, year")
-          .eq("year", year)
+          // 🔴 전체 기간이면 **어느 해 전교생으로 나눠야 할지 정할 수 없다** → 아예 안 받는다.
+          //    한 해를 골라 나누면 그럴듯하지만 틀린 비율이 된다(연도별로 전교생이 매년 준다:
+          //    대구칠성초 2023년 1,396명 → 2026년 1,207명).
+          .eq("year", isAll ? -1 : year)
           .order("name_key", { ascending: true })
           .range(from, to),
     ),

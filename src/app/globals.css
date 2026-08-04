@@ -433,6 +433,28 @@
     }
   }
 
+  /* 통계 막대가 0에서 자라나는 연출 — 연도를 눌러 화면이 새로 그려질 때마다 재생된다.
+     원장 2026-08-05: *"연도를 막 누르면서 변화하는것을 애니메이션으로 보고 싶기 때문."*
+     서버 내비라 DOM이 통째로 새로 만들어지므로 transition이 아니라 **mount 애니메이션**이어야 한다.
+     ⚠️ 접근성: 모션을 줄이도록 설정한 사용자에겐 재생하지 않는다(아래 media query). */
+  @keyframes eywa-bar-grow {
+    from {
+      transform: scaleX(0);
+    }
+    to {
+      transform: scaleX(1);
+    }
+  }
+  .bar-grow {
+    transform-origin: left center;
+    animation: eywa-bar-grow 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .bar-grow {
+      animation: none;
+    }
+  }
+
   @keyframes eywa-reveal-base {
     from {
       opacity: 0;

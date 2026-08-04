@@ -38,7 +38,7 @@ export function ConsultDistPanel({
 }: {
   rows: SchoolBar[];
   initial: SchoolStatsPrefs;
-  year: number;
+  year: number | null;
   hasTotals: boolean;
   totalsYear: number | null;
 }) {
@@ -88,10 +88,12 @@ export function ConsultDistPanel({
       <header className="mb-3">
         <h2 className="text-foreground text-sm font-bold">학교별 상담</h2>
         <p className="text-text-dim mt-0.5 text-xs">
-          {year}년 상담 {totalN}건 · 등록 {totalE}건 · {view.length}개 학교
+          {year === null ? "전체 기간" : `${year}년`} 상담 {totalN}건 · 등록 {totalE}건 · {view.length}개 학교
           {hasTotals
             ? ` · 전교생 대비 비율은 ${totalsYear}년 공시 기준`
-            : ` · 전교생 자료가 ${totalsYear ?? "—"}년치뿐이라 ${year}년 비율은 내지 않습니다`}
+            : year === null
+              ? " · 전체 기간에는 어느 해 전교생으로 나눌지 정할 수 없어 비율을 내지 않습니다"
+              : ` · ${year}년 전교생 공시가 없어 비율은 내지 않습니다`}
         </p>
       </header>
 
@@ -165,7 +167,7 @@ export function ConsultDistPanel({
                 </div>
                 <div className="bg-bg-soft mt-1 h-2 overflow-hidden rounded-full">
                   <div
-                    className="h-full rounded-full"
+                    className="bar-grow h-full rounded-full"
                     style={{
                       width: `${(v / max) * 100}%`,
                       background: KIND_COLOR[s.kind ?? ""] ?? "var(--color-text-faint)",

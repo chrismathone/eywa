@@ -25,6 +25,8 @@ type Props = {
   minYear: number;
   /** makeedu 동기화 배지 — 자기 줄을 쓰지 않게 이 바 오른쪽으로 들여온다. */
   syncBadge?: ReactNode;
+  /** 통계뷰 연도 칩 — 이 바에 얹어 sticky로 따라오게 한다(연도를 눌러가며 아래 변화를 보려면 늘 보여야 한다). */
+  yearChips?: ReactNode;
 };
 
 const buildQuery = buildEnrollmentQuery;
@@ -40,6 +42,7 @@ export function KanbanFilters({
   todayMonth,
   minYear,
   syncBadge,
+  yearChips,
 }: Props) {
   const displayMonth = selectedMonth ?? todayMonth;
   const base = {
@@ -57,10 +60,12 @@ export function KanbanFilters({
   const listFilters = view !== "stats";
 
   return (
-    // 통계뷰는 남는 컨트롤이 뷰 토글뿐이라 카드 여백을 줄인다 — 빈 카드가 한 줄을 통째로 먹던 걸 압축.
+    // 통계뷰는 남는 컨트롤이 뷰 토글뿐이라 여백을 줄이고, **상단에 고정**한다 —
+    // 연도를 눌러가며 아래 숫자가 바뀌는 걸 보려면 칩이 스크롤을 따라와야 한다(원장 2026-08-05).
+    // ⚠️ sticky는 창(iframe) 안에서도 동작한다(스크롤 컨테이너가 문서라서). 배경이 비치지 않게 불투명 카드.
     <div
       className={`bg-card shadow-card flex flex-wrap items-center gap-3 rounded-2xl px-4 ${
-        listFilters ? "py-3" : "py-2"
+        listFilters ? "py-3" : "sticky top-0 z-20 py-2"
       }`}
     >
       {listFilters ? (
@@ -144,6 +149,8 @@ export function KanbanFilters({
       </div>
         </>
       ) : null}
+
+      {yearChips}
 
       {/* 뷰 토글 — 칸반 · 목록 · 통계 (통계에선 이것과 대시보드 링크만 남는다) */}
       <div className="border-line inline-flex items-center gap-0.5 rounded-full border p-0.5">
