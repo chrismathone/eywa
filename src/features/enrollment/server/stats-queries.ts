@@ -3,7 +3,14 @@ import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged } from "@/lib/supabase/batch";
 import { normalizeSchoolName } from "@/features/schools/school-name";
 import { bucketizePathStats, type BucketStat, type PathStatRow } from "../path-bucket";
-import type { SchoolCounts, SchoolKind, SchoolRow } from "../school-view-prefs";
+import {
+  buildSchoolBars,
+  gradeLabel,
+  sortGradeBars,
+  type ConsultRow,
+  type DistBar,
+  type SchoolBar,
+} from "../consultation-dist";
 
 /**
  * 통계뷰 데이터. **행을 가져오지 않는다** — 0178a의 group-by RPC가 집계만 돌려준다(B2).
@@ -148,130 +155,101 @@ export async function getEnrollmentStats(year: number, months = 12): Promise<Enr
   };
 }
 
-export type DistBar = { label: string; n: number };
-export type StudentDistribution = {
-  /** 학교별 상태 카운트(재원·퇴원·예비). 정렬·필터·기준 전환은 화면이 이 raw를 가지고 한다. */
-  schools: SchoolRow[];
-  /** 학년별 — 초1…고3 순서로 정렬(문자 정렬하면 고1이 맨 앞으로 온다). */
+export type { DistBar, SchoolBar } from "../consultation-dist";
+
+export type ConsultationDistribution = {
+  /** 학년별 상담 — 급이 붙은 라벨(초4·중2). 급을 모르면 뒤로 밀린다. */
   grades: DistBar[];
-  /** 학교 소재 구별. 학생 주소가 61%뿐이라 **학교 위치**로 센다(주소보다 신뢰도가 높다). */
+  /** 학교 소재 구별. 상담에 주소가 없어도 **학교로** 지역을 안다. */
   regions: DistBar[];
+  schools: SchoolBar[];
   total: number;
+  /** 전교생 대비 비율을 낼 수 있는 해인지 — 공시가 이 해 것일 때만 true. */
+  hasTotals: boolean;
+  /** 우리가 가진 공시 연도(예 2026). 화면이 "왜 비율이 없는지" 설명할 때 쓴다. */
+  totalsYear: number | null;
 };
 
-// 초1…고3. 문자 정렬은 "고1 < 중1 < 초1"이 되어 학년 흐름이 뒤집힌다.
-const GRADE_ORDER = [
-  ...[1, 2, 3, 4, 5, 6].map((n) => `초${n}`),
-  ...[1, 2, 3].map((n) => `중${n}`),
-  ...[1, 2, 3].map((n) => `고${n}`),
-];
-
 /**
- * 재원생 현황 분포 3종 — 학교별 점유율 · 학년별 · 지역별.
+ * 그 해 **등록상담**을 학년·지역·학교로 나눈다.
  *
- * 세 개가 **같은 두 번의 조회**를 나눠 쓴다(학생 · 학교공시). 따로 만들면 같은 데이터를 세 번 읽는다.
+ * 🔴 재원생/퇴원생이 아니라 **상담**이다(원장 2026-08-05). 여기는 등록상담 화면이고, 재원생 축은
+ * 연도 선택과 무관해 화면이 거짓말을 했다. 재원생·퇴원생 분포는 학생목록에서 다룰 것.
  *
- * 🔴 정규화를 **JS 한 곳에서만** 한다. SQL로 조인하면 치환 규칙이 TS·cjs에 이어 세 번째 사본이 되고,
- * 규칙이 바뀔 때 한 곳만 고쳐 조용히 어긋난다(여학교 6종 47명이 통째로 빠졌던 게 그런 종류의 실수다).
- * 양쪽 다 수백 행이라 받아서 붙이는 편이 안전하다(각각 fetchAllPaged로 1000행 절단도 막는다).
+ * ⚠️ 전교생 대비 비율은 **공시 연도와 보는 연도가 같을 때만** 낸다. 우리가 가진 학교알리미 공시는
+ * 한 해치뿐이라, 2023년 상담을 2026년 전교생으로 나누면 그럴듯하지만 틀린 숫자가 된다.
  */
-export async function getStudentDistribution(): Promise<StudentDistribution> {
+export async function getConsultationDistribution(year: number): Promise<ConsultationDistribution> {
   const supabase = await createClient();
-  const [students, schools] = await Promise.all([
-    // 🔴 재원생만 받지 않는다 — 화면에서 '퇴원생 기준'으로 바꿀 수 있어야 하는데(원장 2026-08-05),
-    // 기준을 바꿀 때마다 서버를 다시 부르면 왕복이 늘고 정렬이 한 박자 늦는다. 세 상태를 한 번에
-    // 받아 클라가 골라 센다(전체 814행이라 부담이 없다).
-    fetchAllPaged<{ school: string | null; grade: string | null; status: string }>((from, to) =>
-      supabase
-        .from("students")
-        .select("school, grade, status")
-        .in("status", ["enrolled", "withdrawn", "prospect"])
-        .not("school", "is", null)
-        .range(from, to),
+  const start = kstMonthStartIso(year, 0);
+  const end = kstMonthStartIso(year + 1, 0);
+
+  const [rows, schoolStats] = await Promise.all([
+    fetchAllPaged<{ prospect_school: string | null; prospect_grade: string | null; outcome: string }>(
+      (from, to) =>
+        supabase
+          .from("enrollment_consultations")
+          .select("prospect_school, prospect_grade, outcome")
+          .gte("consulted_at", start)
+          .lt("consulted_at", end)
+          .range(from, to),
     ),
-    fetchAllPaged<{
-      name: string;
-      name_key: string;
-      kind: string;
-      total_students: number;
-      region: string | null;
-    }>((from, to) =>
-      supabase
-        .from("school_enrollment_stats")
-        .select("name, name_key, kind, total_students, region")
-        .order("name_key", { ascending: true })
-        .range(from, to),
+    fetchAllPaged<{ name: string; name_key: string; kind: string; total_students: number; region: string | null; year: number }>(
+      (from, to) =>
+        supabase
+          .from("school_enrollment_stats")
+          .select("name, name_key, kind, total_students, region, year")
+          .order("name_key", { ascending: true })
+          .range(from, to),
     ),
   ]);
 
-  const byKey = new Map(schools.map((s) => [s.name_key, s]));
-  const ours = new Map<string, { counts: SchoolCounts; raw: string }>();
-  const gradeCount = new Map<string, number>();
-  const regionCount = new Map<string, number>();
-  for (const s of students) {
-    const status = s.status as keyof SchoolCounts;
-    if (status !== "enrolled" && status !== "withdrawn" && status !== "prospect") continue;
+  const totalsYear = schoolStats.length ? Math.max(...schoolStats.map((s) => s.year)) : null;
+  const hasTotals = totalsYear === year;
+  const byKey = new Map(schoolStats.map((s) => [s.name_key, s]));
 
-    // 학년·지역 분포는 **재원생 현황**이라 지금 다니는 학생만 센다(퇴원생을 섞으면 '현황'이 아니다).
-    if (status === "enrolled") {
-      const g = (s.grade ?? "").trim() || "미상";
-      gradeCount.set(g, (gradeCount.get(g) ?? 0) + 1);
-    }
+  const consults: ConsultRow[] = rows.map((r) => ({
+    school: r.prospect_school,
+    grade: r.prospect_grade,
+    enrolled: r.outcome === "enrolled",
+  }));
 
-    const key = normalizeSchoolName(s.school);
-    if (!key) continue;
-    const cur = ours.get(key);
-    // 같은 학교의 두 표기("일중"·"대구일중")가 여기서 합쳐진다.
-    if (cur) cur.counts[status] += 1;
-    else
-      ours.set(key, {
-        raw: s.school ?? key,
-        counts: { enrolled: 0, withdrawn: 0, prospect: 0, [status]: 1 } as SchoolCounts,
-      });
+  const gradeAcc = new Map<string, { n: number; e: number }>();
+  const regionAcc = new Map<string, { n: number; e: number }>();
+  for (const c of consults) {
+    const g = gradeLabel(c.grade, c.school);
+    const gv = gradeAcc.get(g) ?? { n: 0, e: 0 };
+    gv.n += 1;
+    if (c.enrolled) gv.e += 1;
+    gradeAcc.set(g, gv);
 
-    if (status === "enrolled") {
-      // 지역은 **학교 소재지**로 센다 — 학생 주소는 61%만 있고 표기도 제각각이라 덜 믿을 만하다.
-      // 공시에 없는 학교면 '미상'(추측해서 아무 구에나 넣지 않는다).
-      const region = byKey.get(key)?.region?.replace(/^대구광역시\s*/, "").trim() || "미상";
-      regionCount.set(region, (regionCount.get(region) ?? 0) + 1);
-    }
+    // 지역은 학교 소재지로 — 상담에 주소가 거의 없고, 학교는 99% 채워져 있다.
+    const region =
+      byKey.get(normalizeSchoolName(c.school))?.region?.replace(/^대구광역시\s*/, "").trim() || "미상";
+    const rv = regionAcc.get(region) ?? { n: 0, e: 0 };
+    rv.n += 1;
+    if (c.enrolled) rv.e += 1;
+    regionAcc.set(region, rv);
   }
 
-  const rows: SchoolRow[] = [];
-  for (const [key, v] of ours) {
-    const s = byKey.get(key);
-    rows.push({
-      key,
-      label: s?.name ?? v.raw,
-      kind: (s?.kind as SchoolKind | undefined) ?? null,
-      // 전교생을 모르면 점유율도 만들지 않는다 — 0%로 적으면 "우리 학생이 없다"로 읽힌다.
-      total: s?.total_students ?? null,
-      counts: v.counts,
-    });
-  }
-  // 학년은 학년 흐름 순(초1→고3), 그 밖의 값(미상 등)은 뒤로.
-  const grades = [...gradeCount]
-    .map(([label, n]) => ({ label, n }))
-    .sort((a, b) => {
-      const ia = GRADE_ORDER.indexOf(a.label);
-      const ib = GRADE_ORDER.indexOf(b.label);
-      if (ia === -1 && ib === -1) return b.n - a.n;
-      if (ia === -1) return 1;
-      if (ib === -1) return -1;
-      return ia - ib;
-    });
-
-  // 지역은 많은 순, '미상'은 항상 끝(지표가 아니라 데이터 품질 표시).
-  const regions = [...regionCount]
-    .map(([label, n]) => ({ label, n }))
-    .sort((a, b) => (a.label === "미상" ? 1 : b.label === "미상" ? -1 : b.n - a.n));
+  const toBars = (m: Map<string, { n: number; e: number }>): DistBar[] =>
+    [...m].map(([label, v]) => ({ label, n: v.n, enrolled: v.e }));
 
   return {
-    // 정렬은 화면(applySchoolPrefs)이 한다 — 여기선 이름순으로만 안정화(매 렌더 순서가 흔들리지 않게).
-    schools: rows.sort((a, b) => a.label.localeCompare(b.label, "ko")),
-    grades,
-    regions,
-    total: students.length,
+    grades: sortGradeBars(toBars(gradeAcc)),
+    // 많은 순, '미상'은 항상 끝(지표가 아니라 데이터 품질 표시).
+    regions: toBars(regionAcc).sort((a, b) =>
+      a.label === "미상" ? 1 : b.label === "미상" ? -1 : b.n - a.n,
+    ),
+    schools: buildSchoolBars(
+      consults,
+      hasTotals
+        ? new Map([...byKey].map(([k, v]) => [k, { name: v.name, kind: v.kind, total: v.total_students }]))
+        : null,
+    ),
+    total: consults.length,
+    hasTotals,
+    totalsYear,
   };
 }
 

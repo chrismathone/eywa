@@ -22,7 +22,7 @@ import { kstToday } from "@/lib/date-kst";
 import { parseRange } from "@/features/enrollment/range";
 import {
   getEnrollmentStats,
-  getStudentDistribution,
+  getConsultationDistribution,
   getStatsYears,
 } from "@/features/enrollment/server/stats-queries";
 import { loadSchoolStatsPrefs } from "@/features/enrollment/server/school-prefs-actions";
@@ -120,8 +120,8 @@ export default async function EnrollmentPage({
       view === "table" ? getConsultationFilteredCounts(filter) : Promise.resolve(null),
       view === "stats" ? getEnrollmentStats(statsYear) : Promise.resolve(null),
       view === "stats" ? getStatsYears() : Promise.resolve([]),
-      // 재원생 분포(학교·학년·지역)는 연도와 무관한 **현재 재원생** 기준이라 statsYear를 안 받는다.
-      view === "stats" ? getStudentDistribution() : Promise.resolve(null),
+      // 🔴 상담 분포는 **연도가 적용된다**(재원생 기준이던 때는 연도를 바꿔도 안 변해 화면이 거짓말했다).
+      view === "stats" ? getConsultationDistribution(statsYear) : Promise.resolve(null),
       // 학교별 점유율 보기 설정(정렬·필터·기준)은 계정 귀속 — localStorage는 포트 단위라 조용히 리셋된다.
       view === "stats" ? loadSchoolStatsPrefs() : Promise.resolve(null),
       getConsultantOptions(),

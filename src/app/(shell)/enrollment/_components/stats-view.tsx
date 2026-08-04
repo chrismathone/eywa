@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { PATH_BUCKET_COLOR } from "@/features/enrollment/path-bucket";
-import type { EnrollmentStats, StudentDistribution } from "@/features/enrollment/server/stats-queries";
+import type { ConsultationDistribution, EnrollmentStats } from "@/features/enrollment/server/stats-queries";
 import { StatsTrend } from "./stats-trend";
-import { SchoolPenetrationPanel } from "./school-penetration-panel";
+import { ConsultDistPanel } from "./consult-dist-panel";
 import type { SchoolStatsPrefs } from "@/features/enrollment/school-view-prefs";
 
 const won = (n: number) => `${Math.round(n).toLocaleString("ko-KR")}원`;
@@ -53,10 +53,9 @@ export function StatsView({
   year: number;
   years: number[];
   hrefForYear: (y: number) => string;
-  dist: StudentDistribution;
+  dist: ConsultationDistribution;
   schoolPrefs: SchoolStatsPrefs;
 }) {
-  const schools = dist.schools;
   // 막대는 그 분포 안의 최대값을 가득 참으로 본다(전체 대비로 그리면 전부 납작해 비교가 안 된다).
   const maxGrade = Math.max(1, ...dist.grades.map((g) => g.n));
   const maxRegion = Math.max(1, ...dist.regions.map((r) => r.n));
@@ -196,14 +195,15 @@ export function StatsView({
         )}
       </Card>
 
-      {/* 재원생 현황 분포 — 학년·지역. 지도가 아니라 "지금 어떤 학생들이 다니는가"만 본다(원장 2026-08-05). */}
+      {/* 등록상담 분포 — 학년·지역. 🔴 재원생/퇴원생이 아니라 **상담**이다(원장 2026-08-05).
+          그래야 위의 연도 선택이 여기에도 적용된다(재원생 기준이던 때는 연도를 바꿔도 안 변했다). */}
       {dist.total > 0 ? (
         <div className="grid gap-4 lg:grid-cols-2">
-          <Card title="학년별 분포" sub={`재원생 ${dist.total}명`}>
+          <Card title="학년별 상담" sub={`${year}년 상담 ${dist.total}건 · 괄호는 등록 건수`}>
             <ul className="space-y-1.5">
               {dist.grades.map((g) => (
                 <li key={g.label} className="flex items-center gap-2">
-                  <span className="text-text-dim num w-9 shrink-0 text-xs">{g.label}</span>
+                  <span className="text-text-dim num w-12 shrink-0 text-xs">{g.label}</span>
                   <div className="bg-bg-soft h-3 flex-1 overflow-hidden rounded-full">
                     <div
                       className="h-full rounded-full"
@@ -213,16 +213,15 @@ export function StatsView({
                       }}
                     />
                   </div>
-                  <span className="text-foreground num w-10 shrink-0 text-right text-xs font-medium">
-                    {g.n}명
+                  <span className="text-foreground num w-16 shrink-0 text-right text-xs font-medium">
+                    {g.n}건<span className="text-text-faint ml-1">({g.enrolled})</span>
                   </span>
                 </li>
               ))}
             </ul>
           </Card>
 
-          {/* 화면 문구에 마크다운을 쓰지 않는다 — `**`가 그대로 별표로 보인다(sub는 평문 렌더). */}
-          <Card title="지역별 분포" sub="학생 주소가 아니라 학교 소재지 기준입니다 (주소는 61%만 기재돼 있어 덜 믿을 만합니다)">
+          <Card title="지역별 상담" sub="상담에 주소가 거의 없어 학교 소재지로 셉니다">
             <ul className="space-y-1.5">
               {dist.regions.map((r) => (
                 <li key={r.label} className="flex items-center gap-2">
@@ -236,11 +235,9 @@ export function StatsView({
                       }}
                     />
                   </div>
-                  <span className="text-foreground num w-16 shrink-0 text-right text-xs font-medium">
-                    {r.n}명
-                    <span className="text-text-faint ml-1">
-                      {Math.round((r.n / dist.total) * 100)}%
-                    </span>
+                  <span className="text-foreground num w-20 shrink-0 text-right text-xs font-medium">
+                    {r.n}건
+                    <span className="text-text-faint ml-1">{Math.round((r.n / dist.total) * 100)}%</span>
                   </span>
                 </li>
               ))}
@@ -249,9 +246,14 @@ export function StatsView({
         </div>
       ) : null}
 
-      {/* 학교별 점유율 — 기준·급 필터·정렬은 패널이 스스로 한다(계정 저장). */}
-      {schools.length > 0 ? (
-        <SchoolPenetrationPanel rows={schools} initial={schoolPrefs} />
+      {dist.schools.length > 0 ? (
+        <ConsultDistPanel
+          rows={dist.schools}
+          initial={schoolPrefs}
+          year={year}
+          hasTotals={dist.hasTotals}
+          totalsYear={dist.totalsYear}
+        />
       ) : null}
     </div>
   );
