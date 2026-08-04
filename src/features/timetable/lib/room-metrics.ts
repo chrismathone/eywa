@@ -299,6 +299,32 @@ export function buildRoomTimelineRows(
   return { axis, rows };
 }
 
+/**
+ * 축 전환(시간=세로)용 색인 — 한 교실의 셀 목록을 **격자 칸 수만큼의 배열**로 편다.
+ * 칸 i에는 "그 칸에서 시작하는 셀"만 들어가고, 병합에 덮인 칸은 `null`이다(= rowSpan이 이미 그린 자리라
+ * 거기 다시 `<td>`를 그리면 표가 오른쪽으로 밀린다).
+ *
+ * ⚠️ 빈 구간은 **10분마다 쪼개서** 넣는다 — 통째로 병합하면 그 구간엔 시간 눈금이 한 줄도 안 남는다
+ *    (가로 모드에서 gap을 colspan으로 묶지 않는 것과 같은 이유).
+ * ⚠️ 축만 뒤집는 것이라 원본 셀을 그대로 싣는다 — 수업 블록의 span·인원·인원률·겹침 표시는 두 축이 공유한다.
+ */
+export function timelineColumnCells(
+  cells: readonly RoomTimelineCell[],
+  slots: number,
+): (RoomTimelineCell | null)[] {
+  const out: (RoomTimelineCell | null)[] = Array.from({ length: slots }, () => null);
+  let i = 0;
+  for (const c of cells) {
+    if (c.kind === "gap") {
+      for (let k = 0; k < c.span && i + k < slots; k++) out[i + k] = { kind: "gap", span: 1 };
+    } else if (i < slots) {
+      out[i] = c;
+    }
+    i += c.span;
+  }
+  return out;
+}
+
 export type RoomDaySummary = {
   roomsTotal: number;
   /** 선택 요일에 수업이 1개라도 있는 등록 교실 수. */

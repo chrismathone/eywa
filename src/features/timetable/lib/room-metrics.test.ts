@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vitest";
 import type { PeriodsConfig } from "./periods";
 import { buildRoomBuckets, type RoomInfo, type RoomSlotLite } from "./room-grid";
-import { buildRoomWeekRows, resolveDayWindows, summarizeDay, utilPct } from "./room-metrics";
+import {
+  buildRoomWeekRows,
+  resolveDayWindows,
+  summarizeDay,
+  timelineColumnCells,
+  utilPct,
+  type RoomTimelineCell,
+} from "./room-metrics";
 
 const slot = (over: Partial<RoomSlotLite>): RoomSlotLite => ({
   id: over.id ?? Math.random().toString(36).slice(2),
@@ -225,5 +232,59 @@ describe("buildRoomTimelineRows — 수업 시간대로 병합", () => {
     const w = resolveDayWindows(["math"], CONFIG, []);
     const mon = buildRoomTimelineRows(buckets, w, "mon").rows.find((r) => r.key === "r1")!;
     expect(mon.cells).toEqual([{ kind: "gap", span: 12 }]);
+  });
+});
+
+describe("timelineColumnCells — 축 전환(시간=세로)용 색인", () => {
+  it("병합에 덮인 칸은 null(그 자리에 td를 또 그리면 표가 밀린다)", () => {
+    const cells = [
+      { kind: "gap", span: 2 },
+      { kind: "class", span: 3, classId: "c1" },
+      { kind: "gap", span: 1 },
+    ] as unknown as RoomTimelineCell[];
+    const at = timelineColumnCells(cells, 6);
+    expect(at.map((c) => (c == null ? "-" : c.kind))).toEqual([
+      "gap",
+      "gap",
+      "class",
+      "-",
+      "-",
+      "gap",
+    ]);
+    expect(at[2]).toMatchObject({ span: 3, classId: "c1" });
+  });
+
+  it("빈 구간은 10분마다 쪼갠다(통째 병합하면 그 구간에 눈금이 안 남는다)", () => {
+    const at = timelineColumnCells([{ kind: "gap", span: 4 }] as RoomTimelineCell[], 4);
+    expect(at).toEqual([
+      { kind: "gap", span: 1 },
+      { kind: "gap", span: 1 },
+      { kind: "gap", span: 1 },
+      { kind: "gap", span: 1 },
+    ]);
+  });
+
+  it("길이는 항상 격자 칸 수 — 축 끝을 넘는 셀은 잘라낸다(행 수와 어긋나지 않게)", () => {
+    const at = timelineColumnCells(
+      [{ kind: "gap", span: 2 }, { kind: "class", span: 5, classId: "c1" }] as unknown as RoomTimelineCell[],
+      4,
+    );
+    expect(at).toHaveLength(4);
+    expect(at.filter(Boolean)).toHaveLength(3);
+  });
+
+  it("실데이터 경로 — 15:00~16:20 수업 한 개는 시작 칸에만 서고 span 8을 유지", async () => {
+    const { buildRoomTimelineRows } = await import("./room-metrics");
+    const s = slot({ dayOfWeek: "mon", startTime: "15:00", endTime: "16:20", students: 8 });
+    const { buckets } = buildRoomBuckets([s], ROOMS);
+    // 창을 수업까지 넓혀서(관측 확장) 80분이 통째로 축 안에 들어오게 — 잘린 창은 위 케이스가 따로 본다.
+    const w = resolveDayWindows(["math"], CONFIG, [s]);
+    const { axis, rows } = buildRoomTimelineRows(buckets, w, "mon");
+    const at = timelineColumnCells(rows.find((r) => r.key === "r1")!.cells, axis.slots);
+    const starts = at.filter((c) => c?.kind === "class");
+    expect(starts).toHaveLength(1);
+    expect(starts[0]).toMatchObject({ span: 8 });
+    // 병합 뒤 8칸 중 시작 1칸만 td가 서고 나머지 7칸은 비어 있다.
+    expect(at.filter((c) => c == null)).toHaveLength(7);
   });
 });

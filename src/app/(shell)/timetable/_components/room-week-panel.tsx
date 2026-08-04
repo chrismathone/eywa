@@ -7,7 +7,16 @@ import { useSubjectMaps } from "@/features/owner/operations-context";
 import type { RoomSlotLite } from "@/features/timetable/lib/room-grid";
 import type { RoomTimelineRow, RoomWeekRow, TimelineAxis } from "@/features/timetable/lib/room-metrics";
 import { saveTimetableViewPrefs } from "@/features/timetable/server/view-prefs-actions";
-import { RoomHourTable } from "./room-panel-tables";
+import { RoomHourTable, RoomTimeColumnTable } from "./room-panel-tables";
+
+/**
+ * 시간축 방향 — 라벨이 **현재 상태를 그대로 말한다**("바꾸기" 같은 동작 이름은 지금이 어느 쪽인지 안 알려준다).
+ * 저장은 누르는 즉시(닫기 버튼에 매달면 체크만 하고 이동할 때 유실된다 — 뷰 세팅 규약).
+ */
+const AXIS_OPTIONS = [
+  { vertical: false, label: "시간 가로", title: "가로 = 시간 · 세로 = 강의실 (내 계정에 저장)" },
+  { vertical: true, label: "시간 세로", title: "가로 = 강의실 · 세로 = 시간 (내 계정에 저장)" },
+] as const;
 
 /**
  * 교실 활성도 — **교실뷰의 본체**(원장 2026-08-04: 점유 지도를 걷어내고 *"이제 2번 사진 하나만으로 할거니까"*).
@@ -26,6 +35,7 @@ export function RoomWeekPanel({
   hourDayLabel,
   focusSubject,
   groupLines,
+  timeVertical,
   unassigned,
   canEditCapacity,
 }: {
@@ -36,6 +46,8 @@ export function RoomWeekPanel({
   hourDayLabel: string;
   focusSubject: string | null;
   groupLines: boolean;
+  /** 시간축을 세로로 둘지 — 계정에 저장된 뷰 설정(users.ui_prefs)의 초기값. */
+  timeVertical: boolean;
   unassigned: RoomSlotLite[];
   canEditCapacity: boolean;
 }) {
@@ -44,6 +56,8 @@ export function RoomWeekPanel({
   // 저장 실패는 화면을 되돌리지 않는다: 선 하나 때문에 클릭이 씹히는 것보다, 다음 새로고침에 옛 값으로
   // 돌아가는 쪽이 덜 나쁘다(색 강도 토글과 같은 규약).
   const [lines, setLines] = useState(groupLines);
+  // 축 방향도 같은 규약(낙관적 반영 + 계정 저장). 데이터는 한 벌이라 전환은 순수 렌더 — 서버 왕복이 없다.
+  const [vertical, setVertical] = useState(timeVertical);
 
   const registered = rows.filter((r) => r.registered);
   const idle = registered
@@ -66,34 +80,74 @@ export function RoomWeekPanel({
         <span className="micro compact-chrome:hidden">
           인원률(인원 ÷ 정원) — 옅을수록 자리가 남습니다 · 요일은 위 칩에서 · 평일은 14시부터
         </span>
-        <button
-          type="button"
-          onClick={() => {
-            const next = !lines;
-            setLines(next);
-            void saveTimetableViewPrefs({ roomGroupLines: next });
-          }}
-          aria-pressed={lines}
-          title="건물·층이 바뀌는 자리에 구분선을 긋습니다 (내 계정에 저장)"
-          className={`ml-auto shrink-0 rounded-full border px-2 py-0 text-[11px] leading-5 transition ${
-            lines
-              ? "border-primary bg-primary text-primary-foreground font-medium"
-              : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
-          }`}
-        >
-          층 구분선
-        </button>
+        <div className="ml-auto flex shrink-0 items-center gap-1.5">
+          <div
+            role="group"
+            aria-label="시간축 방향"
+            className="border-line flex items-center gap-0.5 rounded-full border p-0.5"
+          >
+            {AXIS_OPTIONS.map((o) => (
+              <button
+                key={o.label}
+                type="button"
+                onClick={() => {
+                  if (o.vertical === vertical) return;
+                  setVertical(o.vertical);
+                  void saveTimetableViewPrefs({ roomTimeVertical: o.vertical });
+                }}
+                aria-pressed={vertical === o.vertical}
+                title={o.title}
+                className={`rounded-full px-2 py-0 text-[11px] leading-5 transition ${
+                  vertical === o.vertical
+                    ? "bg-primary text-primary-foreground font-medium"
+                    : "text-text-dim hover:text-foreground hover:bg-bg-soft"
+                }`}
+              >
+                {o.label}
+              </button>
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              const next = !lines;
+              setLines(next);
+              void saveTimetableViewPrefs({ roomGroupLines: next });
+            }}
+            aria-pressed={lines}
+            title="건물·층이 바뀌는 자리에 구분선을 긋습니다 (내 계정에 저장)"
+            className={`shrink-0 rounded-full border px-2 py-0 text-[11px] leading-5 transition ${
+              lines
+                ? "border-primary bg-primary text-primary-foreground font-medium"
+                : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
+            }`}
+          >
+            층 구분선
+          </button>
+        </div>
       </header>
 
-      {/* 열너비는 창을 채우되(원장: "창 크기를 활용") 10분 칸이 최소폭 아래로는 안 줄고, 그때만 잡고 끌기. */}
-      <DragScrollArea className="min-h-0 flex-1">
-        <RoomHourTable
-          axis={axis}
-          rows={hourRows}
-          canEditCapacity={canEditCapacity}
-          focusSubject={focusSubject}
-          groupLines={lines}
-        />
+      {/* 칸 크기는 창을 채우되(원장: "창 크기를 활용") 최소폭/최소높이 아래로는 안 줄고, 그때만 잡고 끌기.
+          ⚠️ `scrollY` — 세로 시간축은 표가 화면보다 길다(10분 × 8시간 = 48행). 이 패널은 높이가 이미
+          제한돼 있어(부모 min-h-0 flex-1) 세로를 페이지에 넘기면 넘친 만큼이 **잘려서 안 보인다**. */}
+      <DragScrollArea className="min-h-0 flex-1" scrollY>
+        {vertical ? (
+          <RoomTimeColumnTable
+            axis={axis}
+            rows={hourRows}
+            canEditCapacity={canEditCapacity}
+            focusSubject={focusSubject}
+            groupLines={lines}
+          />
+        ) : (
+          <RoomHourTable
+            axis={axis}
+            rows={hourRows}
+            canEditCapacity={canEditCapacity}
+            focusSubject={focusSubject}
+            groupLines={lines}
+          />
+        )}
       </DragScrollArea>
 
       <div className="mt-3 flex shrink-0 flex-col gap-1 text-[11px]">

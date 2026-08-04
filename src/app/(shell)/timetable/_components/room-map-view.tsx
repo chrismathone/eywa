@@ -36,6 +36,7 @@ export function RoomMapView({
   nowMin,
   canEditCapacity,
   groupLines,
+  timeVertical,
 }: {
   slots: RoomSlotLite[];
   rooms: RoomInfo[];
@@ -47,6 +48,8 @@ export function RoomMapView({
   canEditCapacity: boolean;
   /** 건물·층 구분선 초기값 — 계정에 저장된 뷰 설정(users.ui_prefs). */
   groupLines: boolean;
+  /** 시간축 방향 초기값(true=시간이 세로) — 같은 뷰 설정. */
+  timeVertical: boolean;
 }) {
   const subjects = useSubjectMaps();
   const [day, setDay] = useState<DayOfWeek>(isCurrentWeek ? todayDay : "mon");
@@ -199,6 +202,7 @@ export function RoomMapView({
         hourDayLabel={DAY_LABEL[day] ?? day}
         focusSubject={focusSubject}
         groupLines={groupLines}
+        timeVertical={timeVertical}
         unassigned={unassigned}
         canEditCapacity={canEditCapacity}
       />

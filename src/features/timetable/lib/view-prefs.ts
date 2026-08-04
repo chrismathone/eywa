@@ -47,6 +47,12 @@ export type TimetableViewPrefs = {
    * 뷰 세팅은 기기가 아니라 계정에 붙는다(원장 확정 2026-08-04) — 포트가 다른 로컬/배포를 오가도 따라온다.
    */
   roomGroupLines: boolean | null;
+  /**
+   * 교실뷰 활성도 표의 **축 방향**. `true` = 시간이 세로(강의실이 가로), 기본(null·false) = 시간이 가로.
+   * 어느 쪽이 한 화면에 들어오는지는 학원마다 다르다(강의실 22실 · 운영 8시간이면 뒤집는 쪽이 짧다) —
+   * 그래서 고르는 값으로 두고, 기기가 아니라 **계정**에 붙인다(roomGroupLines와 같은 규약).
+   */
+  roomTimeVertical: boolean | null;
 };
 
 /** 셀 색 강도 — workspace prefs 스토어의 TimetableColorMode와 같은 3값(런타임 소스는 그 스토어). */
@@ -62,6 +68,7 @@ export const EMPTY_VIEW_PREFS: TimetableViewPrefs = {
   compact1h: null,
   fontSize: null,
   roomGroupLines: null,
+  roomTimeVertical: null,
 };
 
 /**
@@ -193,6 +200,7 @@ export function parseViewPrefs(raw: unknown): TimetableViewPrefs {
         ? (o.fontSize as UiFontSize)
         : null,
     roomGroupLines: typeof o.roomGroupLines === "boolean" ? o.roomGroupLines : null,
+    roomTimeVertical: typeof o.roomTimeVertical === "boolean" ? o.roomTimeVertical : null,
   };
 }
 
@@ -213,6 +221,8 @@ export function serializeViewPrefs(prefs: TimetableViewPrefs): Record<string, un
   if (prefs.fontSize !== null && prefs.fontSize !== DEFAULT_UI_FONT_SIZE) out.fontSize = prefs.fontSize;
   // 기본값(켜짐)은 키를 지운다 — 빈 값이 쌓이지 않게(fontSize와 같은 규약).
   if (prefs.roomGroupLines === false) out.roomGroupLines = false;
+  // 기본값(시간 가로)은 키를 지운다 — 위와 같은 규약(기본값이 jsonb에 쌓이지 않게).
+  if (prefs.roomTimeVertical === true) out.roomTimeVertical = true;
   return out;
 }
 
@@ -235,6 +245,7 @@ export function mergeViewPrefs(
     collapseEmptyPeriods: pick("collapseEmptyPeriods"),
     colorMode: pick("colorMode"),
     roomGroupLines: pick("roomGroupLines"),
+    roomTimeVertical: pick("roomTimeVertical"),
     fontSize: pick("fontSize"),
     // compact1h는 과목별이라 통째 교체가 아니라 **과목 단위 병합**이다(아래 참조).
     compact1h: patch.compact1h !== undefined
