@@ -13,6 +13,8 @@ import {
   ROOM_DAY_ORDER,
   buildRoomTimelineRows,
   buildRoomWeekRows,
+  collectRoomConflicts,
+  collectSeatOver,
   summarizeDay,
   type DayWindows,
 } from "@/features/timetable/lib/room-metrics";
@@ -69,6 +71,10 @@ export function RoomMapView({
     () => summarizeDay(buckets, windows, day, nowMin),
     [buckets, windows, day, nowMin],
   );
+  // 하단 반 목록 = **주간**(정원 초과와 같은 결). 요일 칩을 안 따라가므로 day에 의존하지 않는다 —
+  // 요일을 바꿀 때마다 다시 계산하면 이중예약이 요일마다 나타났다 사라진다.
+  const conflicts = useMemo(() => collectRoomConflicts(buckets), [buckets]);
+  const seatOver = useMemo(() => collectSeatOver(buckets), [buckets]);
   const isToday = isCurrentWeek && day === todayDay;
   // 과목 칩 = 설정 순서 ∩ 데이터 존재(빈 칩 방지 — 시간표 툴바와 같은 규약).
   const presentSubjects = useMemo(() => {
@@ -183,8 +189,9 @@ export function RoomMapView({
             </span>
           </span>
           {summary.conflictPairs > 0 ? (
+            // ⚠️ 이 수치는 **선택 요일**이다(하단 목록은 주간) — 요일을 안 적으면 둘이 다른 말을 하는 것처럼 보인다.
             <span className="text-red-600">
-              시간 겹침 <span className="num font-semibold">{summary.conflictPairs}</span>건
+              {DAY_LABEL[day] ?? day} 겹침 <span className="num font-semibold">{summary.conflictPairs}</span>건
             </span>
           ) : null}
           {unassigned.length > 0 ? (
@@ -203,6 +210,8 @@ export function RoomMapView({
         focusSubject={focusSubject}
         groupLines={groupLines}
         timeVertical={timeVertical}
+        conflicts={conflicts}
+        seatOver={seatOver}
         unassigned={unassigned}
         canEditCapacity={canEditCapacity}
       />

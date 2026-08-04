@@ -5,7 +5,15 @@ import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import { WindowLink } from "@/components/workspace/window-link";
 import { useSubjectMaps } from "@/features/owner/operations-context";
 import type { RoomSlotLite } from "@/features/timetable/lib/room-grid";
-import type { RoomTimelineRow, RoomWeekRow, TimelineAxis } from "@/features/timetable/lib/room-metrics";
+import type {
+  RoomConflictRow,
+  RoomSeatOverRow,
+  RoomTimelineRow,
+  RoomWeekRow,
+  TimelineAxis,
+} from "@/features/timetable/lib/room-metrics";
+import { DAY_LABEL } from "@/features/timetable/lib/split-attendance";
+import { minToHM } from "@/features/timetable/lib/ten-minute-grid";
 import { saveTimetableViewPrefs } from "@/features/timetable/server/view-prefs-actions";
 import { RoomHourTable, RoomTimeColumnTable } from "./room-panel-tables";
 
@@ -13,6 +21,32 @@ import { RoomHourTable, RoomTimeColumnTable } from "./room-panel-tables";
  * 시간축 방향 — 라벨이 **현재 상태를 그대로 말한다**("바꾸기" 같은 동작 이름은 지금이 어느 쪽인지 안 알려준다).
  * 저장은 누르는 즉시(닫기 버튼에 매달면 체크만 하고 이동할 때 유실된다 — 뷰 세팅 규약).
  */
+/**
+ * 하단 목록 미리보기 상한 — 한 줄로 흐르는 요약이라 무한정 늘어나면 표를 밀어낸다.
+ * ⚠️ **배열 길이를 건수로 쓰지 않는다**([[#89]]: 상한만큼만 보여주면서 그 수를 "건수"로 적으면
+ * 34건이 영원히 "6건"이 된다) — 자른 만큼은 총계와 함께 명시한다.
+ */
+const LIST_MAX = 6;
+
+function Rest({ total }: { total: number }) {
+  const rest = total - LIST_MAX;
+  return rest > 0 ? (
+    <span className="text-text-dim">
+      {" "}
+      외 {rest}건 (총 <span className="num">{total}</span>건)
+    </span>
+  ) : null;
+}
+
+/** 반 이름 = 수업 상세로 가는 문(원장 2026-08-04 "누르면 수업상세 들어가도록"). 창 시스템이라 WindowLink. */
+function ClassLink({ id, name }: { id: string; name: string }) {
+  return (
+    <WindowLink href={`/classes/${id}`} className="underline underline-offset-2">
+      {name}
+    </WindowLink>
+  );
+}
+
 const AXIS_OPTIONS = [
   { vertical: false, label: "시간 가로", title: "가로 = 시간 · 세로 = 강의실 (내 계정에 저장)" },
   { vertical: true, label: "시간 세로", title: "가로 = 강의실 · 세로 = 시간 (내 계정에 저장)" },
@@ -36,6 +70,8 @@ export function RoomWeekPanel({
   focusSubject,
   groupLines,
   timeVertical,
+  conflicts,
+  seatOver,
   unassigned,
   canEditCapacity,
 }: {
@@ -48,6 +84,10 @@ export function RoomWeekPanel({
   groupLines: boolean;
   /** 시간축을 세로로 둘지 — 계정에 저장된 뷰 설정(users.ui_prefs)의 초기값. */
   timeVertical: boolean;
+  /** 주간 시간 겹침(이중예약 의심) 쌍 — 표엔 대표 반 하나만 서므로 **가려진 반**은 여기서만 보인다. */
+  conflicts: RoomConflictRow[];
+  /** 주간 정원 초과 — 방 이름만 말하던 옛 줄의 후신(반까지 짚어 준다). */
+  seatOver: RoomSeatOverRow[];
   unassigned: RoomSlotLite[];
   canEditCapacity: boolean;
 }) {
@@ -65,7 +105,6 @@ export function RoomWeekPanel({
     .sort((a, b) => (a.weekdayUtilPct ?? 0) - (b.weekdayUtilPct ?? 0))
     .slice(0, 3);
   const noCapacity = registered.length > 0 && registered.every((r) => r.capacity == null);
-  const seatOver = registered.filter((r) => r.seatOver);
   const byClass = new Map<string, { className: string; subject: string; count: number }>();
   for (const s of unassigned) {
     const cur = byClass.get(s.classId);
@@ -162,10 +201,43 @@ export function RoomWeekPanel({
             ))}
           </p>
         ) : null}
+        {/* 정원 초과 — 방 이름만 말하던 옛 줄을 **반 목록**으로(원장 2026-08-04). 반을 누르면 수업 상세. */}
         {seatOver.length > 0 ? (
           <p className="text-red-600">
-            정원 초과:{" "}
-            {seatOver.map((r) => `${r.name}(최대 ${r.maxStudents}명/정원 ${r.capacity}명)`).join(" · ")}
+            <span className="font-semibold">정원 초과</span>{" "}
+            {seatOver.slice(0, LIST_MAX).map((r, i) => (
+              <span key={r.key}>
+                {i > 0 ? " · " : ""}
+                <ClassLink id={r.classId} name={r.className} />
+                <span className="text-text-dim">
+                  {" "}
+                  {r.roomName} {DAY_LABEL[r.day] ?? r.day} {minToHM(r.startMin)}{" "}
+                </span>
+                <span className="num">
+                  {r.students}/{r.capacity}명
+                </span>
+              </span>
+            ))}
+            <Rest total={seatOver.length} />
+          </p>
+        ) : null}
+        {/* 시간 겹침 — 표엔 대표 반 하나만 서서 **가려진 반**이 어디에도 안 보였다. 쌍으로 적고 둘 다 링크. */}
+        {conflicts.length > 0 ? (
+          <p className="text-red-600">
+            <span className="font-semibold">시간 겹침</span>{" "}
+            <span className="text-text-dim">(주간 · 같은 방에 두 반)</span>{" "}
+            {conflicts.slice(0, LIST_MAX).map((c, i) => (
+              <span key={c.key}>
+                {i > 0 ? " · " : ""}
+                <span className="text-text-dim">
+                  {c.roomName} {DAY_LABEL[c.day] ?? c.day} {minToHM(c.startMin)}~{minToHM(c.endMin)}{" "}
+                </span>
+                <ClassLink id={c.classes[0].classId} name={c.classes[0].className} />
+                <span className="text-text-dim"> ↔ </span>
+                <ClassLink id={c.classes[1].classId} name={c.classes[1].className} />
+              </span>
+            ))}
+            <Rest total={conflicts.length} />
           </p>
         ) : null}
         {byClass.size > 0 ? (
@@ -174,10 +246,7 @@ export function RoomWeekPanel({
             {[...byClass.entries()].map(([classId, c], i) => (
               <span key={classId}>
                 {i > 0 ? " · " : ""}
-                <WindowLink href={`/classes/${classId}`} className="underline underline-offset-2">
-                  {c.className}
-                </WindowLink>{" "}
-                ({subjects.labelOf(c.subject)} {c.count}교시)
+                <ClassLink id={classId} name={c.className} /> ({subjects.labelOf(c.subject)} {c.count}교시)
               </span>
             ))}
             <span className="text-text-dim"> — 반 편집에서 강의실을 지정하면 표에 나타납니다</span>

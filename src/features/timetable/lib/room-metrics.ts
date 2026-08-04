@@ -8,6 +8,7 @@ import { timeToMin } from "./ten-minute-grid";
 import {
   annotateOverlaps,
   classIntervalsExact,
+  collectConflictPairs,
   occupiedMinutes,
   type RoomBucket,
   type RoomInterval,
@@ -136,6 +137,119 @@ export function buildRoomWeekRows(buckets: readonly RoomBucket[], windows: DayWi
       seatOver: b.capacity != null && b.capacity > 0 && maxStudents > b.capacity,
     };
   });
+}
+
+// ── 하단 반 목록(정원 초과 · 시간 겹침) ────────────────────────────────────────────────
+//
+// 원장 요청 2026-08-04: *"시간 겹침건도, 정원 초과건처럼 하단에 반목록 리스트"* ·
+// *"누르면 수업상세 들어가도록 상호작용"*.
+//
+// 표는 "어느 교실이 언제 붐비나"까지만 말하고 **반 이름을 못 준다** — 특히 겹침은 한 칸에 대표 반
+// 하나만 서므로(인원 많은 쪽) **가려진 반은 화면 어디에도 안 나온다**. 이 두 목록이 그 구멍을 메운다.
+//
+// ⚠️ 스코프는 **주간**이다(정원 초과와 같은 결 — 원장이 "정원 초과건처럼"이라고 했다). 이중예약은 요일을
+//    넘나들며 찾아야 해서, 요일 칩을 일곱 번 눌러야 보이는 목록은 쓸모가 없다. 대신 줄마다 요일을 적고,
+//    상단 요약의 겹침 수는 **선택 요일**이라 라벨에 요일을 박아 둘이 다른 말을 하는 것처럼 안 보이게 했다.
+
+export type RoomConflictRow = {
+  key: string;
+  roomName: string;
+  day: DayOfWeek;
+  /** 두 반이 실제로 같은 방에 있는 구간(교집합) — "언제부터 언제까지"가 이 줄의 핵심. */
+  startMin: number;
+  endMin: number;
+  classes: [RoomConflictClass, RoomConflictClass];
+};
+
+export type RoomConflictClass = {
+  classId: string;
+  className: string;
+  startMin: number;
+  endMin: number;
+};
+
+/**
+ * 주간 시간 겹침(부분 겹침 = 이중예약 의심) 목록. **합반(완전 동일 범위)은 제외** — 판정은
+ * [collectConflictPairs] 한 곳이라 상단 요약의 "N건"과 술어가 같다.
+ * 정렬 = 요일 → 시작 시각 → 강의실(사람이 시간표를 훑는 순서).
+ */
+export function collectRoomConflicts(buckets: readonly RoomBucket[]): RoomConflictRow[] {
+  const out: RoomConflictRow[] = [];
+  for (const b of buckets) {
+    for (const day of ROOM_DAY_ORDER) {
+      const intervals = classIntervalsExact(b.slots.filter((s) => s.dayOfWeek === day));
+      for (const [a, c] of collectConflictPairs(intervals)) {
+        out.push({
+          key: `${b.key}|${day}|${a.classId}|${c.classId}|${a.startMin}`,
+          roomName: b.name,
+          day,
+          startMin: Math.max(a.startMin, c.startMin),
+          endMin: Math.min(a.endMin, c.endMin),
+          classes: [ref(a), ref(c)],
+        });
+      }
+    }
+  }
+  return out.sort(
+    (x, y) =>
+      ROOM_DAY_ORDER.indexOf(x.day) - ROOM_DAY_ORDER.indexOf(y.day) ||
+      x.startMin - y.startMin ||
+      x.roomName.localeCompare(y.roomName, "ko"),
+  );
+}
+
+const ref = (iv: RoomInterval): RoomConflictClass => ({
+  classId: iv.classId,
+  className: iv.className,
+  startMin: iv.startMin,
+  endMin: iv.endMin,
+});
+
+export type RoomSeatOverRow = {
+  key: string;
+  roomName: string;
+  capacity: number;
+  day: DayOfWeek;
+  startMin: number;
+  endMin: number;
+  classId: string;
+  className: string;
+  students: number;
+};
+
+/**
+ * 주간 정원 초과 목록 — 어느 반이 어느 방에서 정원을 넘었는지(방 이름만 말하던 옛 줄의 후신).
+ * ⚠️ 정원이 없는 방은 애초에 판정 대상이 아니다(0으로 속이지 않는다 — `seatPct`가 null인 것과 같은 규약).
+ * 정렬 = 초과 폭이 큰 순(붐비는 순서가 곧 조치 순서) → 요일 → 시작 시각.
+ */
+export function collectSeatOver(buckets: readonly RoomBucket[]): RoomSeatOverRow[] {
+  const out: RoomSeatOverRow[] = [];
+  for (const b of buckets) {
+    const cap = b.capacity;
+    if (cap == null || cap <= 0) continue;
+    for (const day of ROOM_DAY_ORDER) {
+      for (const iv of classIntervalsExact(b.slots.filter((s) => s.dayOfWeek === day))) {
+        if (iv.students <= cap) continue;
+        out.push({
+          key: `${b.key}|${day}|${iv.classId}|${iv.startMin}`,
+          roomName: b.name,
+          capacity: cap,
+          day,
+          startMin: iv.startMin,
+          endMin: iv.endMin,
+          classId: iv.classId,
+          className: iv.className,
+          students: iv.students,
+        });
+      }
+    }
+  }
+  return out.sort(
+    (x, y) =>
+      y.students - y.capacity - (x.students - x.capacity) ||
+      ROOM_DAY_ORDER.indexOf(x.day) - ROOM_DAY_ORDER.indexOf(y.day) ||
+      x.startMin - y.startMin,
+  );
 }
 
 const isWeekendDay = (d: DayOfWeek): boolean => d === "sat" || d === "sun";
