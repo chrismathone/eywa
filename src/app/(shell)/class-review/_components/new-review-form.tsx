@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useRef } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { toast } from "sonner";
 import { Loader2 } from "@/components/icons/eywa-icon-compat";
@@ -21,7 +21,11 @@ function SubmitButton() {
   );
 }
 
-/** 새 참관 폼 — 시트 상단 헤더(참관일·강사·과목·반명·회차·수업시간·학생수) + 참관자 3명(선택). */
+/**
+ * 새 참관 폼 — 참관일·강사(필수) + 과목(선택) + 참관자 방식 두 가지(원장 지시 2026-08-04):
+ * ① 참관자 지정(최대 3명) ② 선착순 3명(지정 없이, 권한자 중 먼저 채점한 3명이 참관자).
+ * 반명·회차·수업시간·학생수는 입력받지 않는다(같은 지시 — 필요 없음).
+ */
 export function NewReviewForm({
   staff,
   subjects,
@@ -29,6 +33,7 @@ export function NewReviewForm({
   staff: { value: string; label: string }[];
   subjects: { value: string; label: string }[];
 }) {
+  const [mode, setMode] = useState<"assigned" | "open">("assigned");
   const [state, formAction] = useActionState<ReviewActionState, FormData>(createClassReview, undefined);
   const seenRef = useRef<ReviewActionState>(undefined);
   useEffect(() => {
@@ -39,6 +44,7 @@ export function NewReviewForm({
 
   return (
     <form action={formAction} className="border-line bg-card max-w-2xl space-y-4 rounded-2xl border p-5 shadow-card">
+      <input type="hidden" name="observerMode" value={mode} />
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div>
           <label htmlFor="cr-date" className="micro mb-1 block">
@@ -50,43 +56,55 @@ export function NewReviewForm({
           <label className="micro mb-1 block">평가 대상 강사 *</label>
           <SearchableSelect name="teacherId" options={staff} placeholder="강사 선택" ariaLabel="평가 대상 강사" />
         </div>
-        <div>
-          <label className="micro mb-1 block">과목</label>
+        <div className="sm:col-span-2">
+          <label className="micro mb-1 block">과목 (선택)</label>
           <SearchableSelect name="subject" options={subjects} placeholder="과목 선택" ariaLabel="과목" />
-        </div>
-        <div>
-          <label htmlFor="cr-class" className="micro mb-1 block">
-            반명
-          </label>
-          <input id="cr-class" name="className" placeholder="예: 중등M 중2 BS3B" className={inputClass} />
-        </div>
-        <div>
-          <label htmlFor="cr-session" className="micro mb-1 block">
-            회차
-          </label>
-          <input id="cr-session" name="session" placeholder="예: 3" className={inputClass} />
-        </div>
-        <div>
-          <label htmlFor="cr-time" className="micro mb-1 block">
-            수업시간
-          </label>
-          <input id="cr-time" name="classTime" placeholder="예: 16:20~17:50" className={inputClass} />
-        </div>
-        <div>
-          <label htmlFor="cr-students" className="micro mb-1 block">
-            학생수
-          </label>
-          <input id="cr-students" name="studentCount" placeholder="예: 8" className={inputClass} />
         </div>
       </div>
 
       <div className="border-line border-t pt-4">
-        <p className="micro mb-2">참관자 (최대 3명 — 평가 대상 본인은 자동으로 &lsquo;본인 평가&rsquo; 자리에 들어갑니다)</p>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <SearchableSelect name="observer1" options={staff} placeholder="참관자 A" ariaLabel="참관자 A" />
-          <SearchableSelect name="observer2" options={staff} placeholder="참관자 B" ariaLabel="참관자 B" />
-          <SearchableSelect name="observer3" options={staff} placeholder="참관자 C" ariaLabel="참관자 C" />
+        <p className="micro mb-2">참관자 방식</p>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          {(
+            [
+              { v: "assigned", t: "참관자 지정", d: "아래에서 최대 3명을 지정합니다" },
+              { v: "open", t: "선착순 3명", d: "지정 없이 — 먼저 채점한 3명이 참관자가 됩니다" },
+            ] as const
+          ).map((o) => (
+            <button
+              key={o.v}
+              type="button"
+              onClick={() => setMode(o.v)}
+              aria-pressed={mode === o.v}
+              className={`flex-1 rounded-xl border px-4 py-3 text-left transition ${
+                mode === o.v ? "border-primary bg-primary/5" : "border-line hover:border-primary/40"
+              }`}
+            >
+              <span className={`block text-sm font-bold ${mode === o.v ? "text-primary" : "text-foreground"}`}>
+                {o.t}
+              </span>
+              <span className="text-text-dim mt-0.5 block text-[11px]">{o.d}</span>
+            </button>
+          ))}
         </div>
+
+        {mode === "assigned" ? (
+          <div className="mt-3">
+            <p className="micro mb-2">
+              참관자 (최대 3명 — 평가 대상 본인은 자동으로 &lsquo;본인 평가&rsquo; 자리에 들어갑니다)
+            </p>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <SearchableSelect name="observer1" options={staff} placeholder="참관자 A" ariaLabel="참관자 A" />
+              <SearchableSelect name="observer2" options={staff} placeholder="참관자 B" ariaLabel="참관자 B" />
+              <SearchableSelect name="observer3" options={staff} placeholder="참관자 C" ariaLabel="참관자 C" />
+            </div>
+          </div>
+        ) : (
+          <p className="text-text-faint mt-3 text-[11px]">
+            이 화면에 접근 가능한 사람이라면 누구든 상세에서 바로 채점할 수 있고, 먼저 저장한 3명까지만
+            참관자로 집계됩니다. (평가 대상 본인은 인원 제한과 무관하게 &lsquo;본인 평가&rsquo;로 저장)
+          </p>
+        )}
       </div>
 
       <div className="flex justify-end">

@@ -80,6 +80,30 @@ export const CHECKLIST_AREAS: ChecklistArea[] = [
 export const TOTAL_ITEMS = CHECKLIST_AREAS.reduce((n, a) => n + a.items.length, 0); // 30
 export const MAX_TOTAL = TOTAL_ITEMS * SCALE_MAX; // 120
 
+/** 문항 수·만점 — 커스텀 템플릿(문항 편집) 대응. */
+export function itemCountOf(areas: ChecklistArea[]): number {
+  return areas.reduce((n, a) => n + a.items.length, 0);
+}
+
+/**
+ * 저장된 커스텀 템플릿 검증 — 구조가 어긋나면 null(내장 문항 폴백).
+ * 영역 1~10개, 영역당 문항 1~20개, 제목·문항은 비어 있지 않은 문자열(과도한 길이 컷).
+ */
+export function sanitizeAreas(raw: unknown): ChecklistArea[] | null {
+  if (!Array.isArray(raw) || raw.length < 1 || raw.length > 10) return null;
+  const out: ChecklistArea[] = [];
+  for (let i = 0; i < raw.length; i++) {
+    const a = raw[i] as { key?: unknown; title?: unknown; items?: unknown };
+    const title = String(a?.title ?? "").trim().slice(0, 60);
+    const items = Array.isArray(a?.items)
+      ? a.items.map((it) => String(it ?? "").trim().slice(0, 200)).filter(Boolean)
+      : [];
+    if (!title || items.length < 1 || items.length > 20) return null;
+    out.push({ key: String(a?.key ?? "").trim() || `area_${i + 1}`, title, items });
+  }
+  return out;
+}
+
 /**
  * 종합 등급 컷(환산 100점 기준) — 원장 시트 수식 그대로(2026-08-04 확정):
  * =IF(>=95,"S",IF(>=90,"A+",IF(>=85,"A",IF(>=80,"B+",IF(>=75,"B",IF(>=70,"C","재참관"))))))
@@ -101,9 +125,11 @@ export function gradeOf(percent: number): string {
 
 /** 한 사람의 채점 한 장 — scores[i]는 1~4, 0/결측은 미입력. */
 export type ScoreSheet = {
-  scores: number[]; // length 30 (부족하면 미입력 취급)
+  scores: number[]; // 문항 수만큼(부족하면 미입력 취급)
   comment?: string;
   submittedAt?: string;
+  /** 제출자 스냅샷(선착순 모드에서 열 이름 표시용). */
+  by?: { id: string | null; name: string };
 };
 
 export type SheetTotals = {
@@ -123,13 +149,16 @@ export function normalizeScore(v: unknown): number {
   return Number.isFinite(n) && n >= SCALE_MIN && n <= SCALE_MAX ? n : 0;
 }
 
-export function computeTotals(sheet: Pick<ScoreSheet, "scores"> | null | undefined): SheetTotals {
+export function computeTotals(
+  sheet: Pick<ScoreSheet, "scores"> | null | undefined,
+  areas: ChecklistArea[] = CHECKLIST_AREAS,
+): SheetTotals {
   const raw = sheet?.scores ?? [];
   const areaSubtotals: number[] = [];
   let idx = 0;
   let total = 0;
   let answered = 0;
-  for (const area of CHECKLIST_AREAS) {
+  for (const area of areas) {
     let sub = 0;
     for (let i = 0; i < area.items.length; i++, idx++) {
       const v = normalizeScore(raw[idx]);
@@ -139,23 +168,28 @@ export function computeTotals(sheet: Pick<ScoreSheet, "scores"> | null | undefin
     areaSubtotals.push(sub);
     total += sub;
   }
-  const percent = Math.round((total / MAX_TOTAL) * 1000) / 10;
+  const max = itemCountOf(areas) * SCALE_MAX;
+  const percent = max > 0 ? Math.round((total / max) * 1000) / 10 : 0;
   return {
     areaSubtotals,
     answered,
     total,
     percent,
     grade: gradeOf(percent),
-    complete: answered === TOTAL_ITEMS,
+    complete: answered === itemCountOf(areas),
   };
 }
 
 /** 여러 장의 평균(제출된 장만) — 상세 화면 '평균' 열. 장이 없으면 null. */
-export function averageTotals(sheets: ScoreSheet[]): SheetTotals | null {
-  const done = sheets.filter((s) => computeTotals(s).answered > 0);
+export function averageTotals(
+  sheets: ScoreSheet[],
+  areas: ChecklistArea[] = CHECKLIST_AREAS,
+): SheetTotals | null {
+  const done = sheets.filter((s) => computeTotals(s, areas).answered > 0);
   if (done.length === 0) return null;
+  const n = itemCountOf(areas);
   const avgScores: number[] = [];
-  for (let i = 0; i < TOTAL_ITEMS; i++) {
+  for (let i = 0; i < n; i++) {
     const vals = done.map((s) => normalizeScore(s.scores[i])).filter((v) => v > 0);
     avgScores.push(vals.length ? Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 10) / 10 : 0);
   }
@@ -163,13 +197,14 @@ export function averageTotals(sheets: ScoreSheet[]): SheetTotals | null {
   const areaSubtotals: number[] = [];
   let idx = 0;
   let total = 0;
-  for (const area of CHECKLIST_AREAS) {
+  for (const area of areas) {
     let sub = 0;
     for (let i = 0; i < area.items.length; i++, idx++) sub += avgScores[idx];
     areaSubtotals.push(Math.round(sub * 10) / 10);
     total += sub;
   }
   total = Math.round(total * 10) / 10;
-  const percent = Math.round((total / MAX_TOTAL) * 1000) / 10;
-  return { areaSubtotals, answered: TOTAL_ITEMS, total, percent, grade: gradeOf(percent), complete: true };
+  const max = n * SCALE_MAX;
+  const percent = max > 0 ? Math.round((total / max) * 1000) / 10 : 0;
+  return { areaSubtotals, answered: n, total, percent, grade: gradeOf(percent), complete: true };
 }

@@ -1,11 +1,12 @@
 import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
-import { Pill } from "@/components/atoms/pill";
 import { requireAccess } from "@/lib/auth/require-access";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
-import { listClassReviews } from "@/features/class-review/server/queries";
+import { getReviewPrivileges, listClassReviews } from "@/features/class-review/server/queries";
+import { GRADE_CUTS, GRADE_FALLBACK } from "@/features/class-review/checklist";
+import { ReviewTable } from "./_components/review-table";
 
 export const metadata = { title: "수업 평가 — eywa" };
 
@@ -14,21 +15,34 @@ export const metadata = { title: "수업 평가 — eywa" };
  * 접근은 class_review 메뉴 게이트(기본 전원 차단, 개인 예외로만 개방 — 테스트 단계).
  */
 export default async function ClassReviewPage() {
-  await requireAccess("class_review");
-  const [rows, settings] = await Promise.all([listClassReviews(), getTenantSettings()]);
+  const viewer = await requireAccess("class_review");
+  const [{ rows }, settings, priv] = await Promise.all([
+    listClassReviews(),
+    getTenantSettings(),
+    getReviewPrivileges(viewer),
+  ]);
   const subjects = buildSubjectMaps(settings.operations.subjects);
+  const cutsLabel =
+    GRADE_CUTS.map((c) => `${c.grade}≥${c.min}`).join(" · ") + ` · 미만 ${GRADE_FALLBACK}`;
 
   return (
     <div className="space-y-5 p-6">
       <PageHeader
         eyebrow="운영"
         title="수업 평가 체크리스트"
-        description="참관 30문항(4점 척도) — 참관자 3명과 본인이 각자 채점하고 나란히 비교합니다."
+        description="참관 문항(4점 척도)을 참관자와 본인이 각자 채점하고 나란히 비교합니다."
         embedLabel="수업 평가 체크리스트"
         actions={
-          <Button size="sm" render={<Link href="/class-review/new" />}>
-            + 새 참관
-          </Button>
+          <span className="flex items-center gap-2">
+            {priv.editTemplate ? (
+              <Button variant="outline" size="sm" render={<Link href="/class-review/template" />}>
+                문항 편집
+              </Button>
+            ) : null}
+            <Button size="sm" render={<Link href="/class-review/new" />}>
+              + 새 참관
+            </Button>
+          </span>
         }
       />
 
@@ -37,65 +51,22 @@ export default async function ClassReviewPage() {
           <p className="text-text-dim text-sm">아직 참관 건이 없습니다 — &lsquo;새 참관&rsquo;으로 시작하세요.</p>
         </div>
       ) : (
-        <div className="border-line bg-card overflow-x-auto rounded-2xl border shadow-card">
-          <table className="w-full min-w-[760px] border-collapse text-sm">
-            <thead>
-              <tr className="border-line bg-bg-soft/60 border-b text-left">
-                <th className="px-4 py-2.5 font-semibold">참관일</th>
-                <th className="px-4 py-2.5 font-semibold">강사</th>
-                <th className="px-4 py-2.5 font-semibold">과목</th>
-                <th className="px-4 py-2.5 font-semibold">반명 · 회차</th>
-                <th className="px-4 py-2.5 text-right font-semibold">제출</th>
-                <th className="px-4 py-2.5 text-right font-semibold">환산점수</th>
-                <th className="px-4 py-2.5 text-right font-semibold">등급</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => (
-                <tr key={r.id} className="border-line/60 hover:bg-bg-soft/40 border-b last:border-0">
-                  <td className="px-4 py-2.5">
-                    <Link href={`/class-review/${r.id}`} className="text-primary num font-medium hover:underline">
-                      {r.header.date || "—"}
-                    </Link>
-                  </td>
-                  <td className="px-4 py-2.5 font-medium">{r.header.teacherName || "—"}</td>
-                  <td className="px-4 py-2.5">
-                    {r.header.subject ? (
-                      <Pill color={subjects.colorOf(r.header.subject)} soft>
-                        {subjects.labelOf(r.header.subject)}
-                      </Pill>
-                    ) : (
-                      "—"
-                    )}
-                  </td>
-                  <td className="px-4 py-2.5">
-                    {[r.header.className, r.header.session && `${r.header.session}회차`].filter(Boolean).join(" · ") ||
-                      "—"}
-                  </td>
-                  <td className="num px-4 py-2.5 text-right">
-                    {r.submittedCount}/{r.evaluators.length}
-                  </td>
-                  <td className="num px-4 py-2.5 text-right font-semibold">
-                    {r.averages ? r.averages.percent.toFixed(1) : "—"}
-                  </td>
-                  <td className="px-4 py-2.5 text-right">
-                    {r.averages ? (
-                      <Pill color={r.averages.grade === "재참관" ? "danger" : "primary"} soft>
-                        {r.averages.grade}
-                      </Pill>
-                    ) : (
-                      "—"
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <ReviewTable
+          rows={rows.map((r) => ({
+            id: r.id,
+            date: r.header.date,
+            teacherName: r.header.teacherName,
+            subjectLabel: r.header.subject ? subjects.labelOf(r.header.subject) : null,
+            subjectColor: r.header.subject ? subjects.colorOf(r.header.subject) : null,
+            modeLabel: r.header.observerMode === "open" ? "선착순 3명" : "참관자 지정",
+            submitted: `${r.submittedCount}/${r.observerSlots}`,
+            percent: r.averages ? r.averages.percent.toFixed(1) : null,
+            grade: r.averages ? r.averages.grade : null,
+          }))}
+        />
       )}
       <p className="text-text-faint text-[11px]">
-        환산점수 = 제출된 채점들의 문항 평균으로 계산한 100점 기준 점수 · 등급 컷 S≥95 · A+≥90 · A≥85 · B+≥80 ·
-        B≥75 · C≥70 · 미만 재참관
+        환산점수 = 제출된 채점들의 문항 평균으로 계산한 100점 기준 점수 · 등급 컷 {cutsLabel}
       </p>
     </div>
   );

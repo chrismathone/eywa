@@ -6,12 +6,12 @@ import { toast } from "sonner";
 import { Loader2 } from "@/components/icons/eywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import {
-  CHECKLIST_AREAS,
   computeTotals,
+  itemCountOf,
   normalizeScore,
   SCALE_MAX,
   SCALE_MIN,
-  TOTAL_ITEMS,
+  type ChecklistArea,
 } from "@/features/class-review/checklist";
 import { submitClassReviewScores, type ReviewActionState } from "@/features/class-review/server/actions";
 
@@ -31,15 +31,18 @@ function SubmitButton() {
  */
 export function ScorePanel({
   docId,
+  areas,
   initialScores,
   initialComment,
 }: {
   docId: string;
+  areas: ChecklistArea[];
   initialScores: number[];
   initialComment: string;
 }) {
+  const totalItems = itemCountOf(areas);
   const [scores, setScores] = useState<number[]>(() =>
-    Array.from({ length: TOTAL_ITEMS }, (_, i) => normalizeScore(initialScores[i])),
+    Array.from({ length: totalItems }, (_, i) => normalizeScore(initialScores[i])),
   );
   const [state, formAction] = useActionState<ReviewActionState, FormData>(submitClassReviewScores, undefined);
   const seenRef = useRef<ReviewActionState>(undefined);
@@ -50,7 +53,7 @@ export function ScorePanel({
     else if (state.ok) toast.success(state.notice ?? "저장했습니다");
   }, [state]);
 
-  const totals = useMemo(() => computeTotals({ scores }), [scores]);
+  const totals = useMemo(() => computeTotals({ scores }, areas), [scores, areas]);
 
   return (
     <form action={formAction} className="border-line bg-card rounded-2xl border p-5 shadow-card">
@@ -62,7 +65,7 @@ export function ScorePanel({
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-foreground text-sm font-bold">내 채점</h2>
         <p className="text-text-dim num text-xs">
-          {totals.answered}/{TOTAL_ITEMS} 입력 · 총점 {totals.total} · 환산 {totals.percent.toFixed(1)} ·{" "}
+          {totals.answered}/{totalItems} 입력 · 총점 {totals.total} · 환산 {totals.percent.toFixed(1)} ·{" "}
           {totals.grade}
         </p>
       </div>
@@ -71,8 +74,8 @@ export function ScorePanel({
       </p>
 
       <div className="space-y-4">
-        {CHECKLIST_AREAS.map((area, ai) => {
-          const base = CHECKLIST_AREAS.slice(0, ai).reduce((n, a) => n + a.items.length, 0);
+        {areas.map((area, ai) => {
+          const base = areas.slice(0, ai).reduce((n, a) => n + a.items.length, 0);
           return (
             <section key={area.key}>
               <p className="text-primary mb-1.5 text-xs font-bold">{area.title}</p>

@@ -6,38 +6,70 @@ import { Pill } from "@/components/atoms/pill";
 import { requireAccess } from "@/lib/auth/require-access";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
-import { getClassReview } from "@/features/class-review/server/queries";
-import { averageTotals, CHECKLIST_AREAS, computeTotals, normalizeScore } from "@/features/class-review/checklist";
+import {
+  getClassReview,
+  getReviewPrivileges,
+  observerColumns,
+  OPEN_MODE_OBSERVER_LIMIT,
+} from "@/features/class-review/server/queries";
+import { averageTotals, computeTotals, itemCountOf, normalizeScore } from "@/features/class-review/checklist";
 import { ScorePanel } from "../_components/score-panel";
 
 export const metadata = { title: "수업 평가 상세 — eywa" };
 
-/** 참관 상세 — 시트 모양의 문항×평가자 매트릭스 + 영역 소계 + 총점/환산/등급 + 내 채점. */
+/**
+ * 참관 상세 — 시트 모양의 문항×평가자 매트릭스 + 영역 소계 + 총점/환산/등급 + 내 채점.
+ * 평가자 실명은 **원장·지정 인원만**(원장 지시 2026-08-04) — 그 외는 '참관자 A/B/C'로 익명화.
+ */
 export default async function ClassReviewDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const viewer = await requireAccess("class_review");
   const { id } = await params;
-  const [doc, settings] = await Promise.all([getClassReview(id), getTenantSettings()]);
-  if (!doc) notFound();
+  const [found, settings, priv] = await Promise.all([
+    getClassReview(id),
+    getTenantSettings(),
+    getReviewPrivileges(viewer),
+  ]);
+  if (!found) notFound();
+  const { doc, areas } = found;
   const subjects = buildSubjectMaps(settings.operations.subjects);
+  const openMode = doc.header.observerMode === "open";
 
-  // 열 = 지정 평가자 순서(관찰자 A/B/C → 본인). 슬롯 키: 관찰자=userId, 본인='self'.
-  const cols = doc.evaluators.map((e) => {
-    const slot = e.kind === "self" ? "self" : (e.id ?? e.name);
-    const sheet = doc.submissions[slot] ?? null;
-    return { ...e, slot, sheet, totals: computeTotals(sheet) };
+  // 열 = 관찰자들(지정 순서 또는 선착순 제출 순서) + 본인. 익명화 시 관찰자 이름 → 참관자 A/B/C.
+  const anon = (i: number) => `참관자 ${String.fromCharCode(65 + i)}`;
+  const observerCols = observerColumns(doc).map((c, i) => ({
+    slot: c.slot,
+    label: priv.seeNames ? c.name : anon(i),
+  }));
+  // 선착순 모드: 아직 안 찬 슬롯을 빈 열로 보여준다(자리가 남았음이 보이게).
+  const emptyOpenSlots = openMode
+    ? Math.max(0, OPEN_MODE_OBSERVER_LIMIT - observerCols.length)
+    : 0;
+  const cols = [
+    ...observerCols,
+    ...Array.from({ length: emptyOpenSlots }, (_, i) => ({
+      slot: `__empty${i}`,
+      label: anon(observerCols.length + i),
+    })),
+    { slot: "self", label: "본인" },
+  ].map((c) => {
+    const sheet = c.slot.startsWith("__empty") ? null : (doc.submissions[c.slot] ?? null);
+    return { ...c, sheet, totals: computeTotals(sheet, areas) };
   });
-  const avg = averageTotals(cols.map((c) => c.sheet ?? { scores: [] }));
-  const mine = doc.evaluators.find((e) => e.id === viewer.id);
-  const mySlot = mine ? (mine.kind === "self" ? "self" : viewer.id) : null;
-  const myScores = mySlot ? (doc.submissions[mySlot]?.scores ?? []) : [];
-  const myComment = mySlot ? (doc.submissions[mySlot]?.comment ?? "") : "";
+  const avg = averageTotals(
+    cols.filter((c) => !c.slot.startsWith("__empty")).map((c) => c.sheet ?? { scores: [] }),
+    areas,
+  );
+
+  // 내 채점 자격 — 본인('self') / 지정 관찰자 / 선착순(권한자, 마감 전 또는 이미 내 장 있음).
+  const isSelf = doc.header.teacherId === viewer.id;
+  const assignedMe = doc.evaluators.some((e) => e.id === viewer.id && e.kind === "observer");
+  const openSeatLeft = openMode && (observerCols.some((c) => c.slot === viewer.id) || observerCols.length < OPEN_MODE_OBSERVER_LIMIT);
+  const mySlot = isSelf ? "self" : assignedMe || openSeatLeft ? viewer.id : null;
+  const mySheet = mySlot ? (doc.submissions[mySlot] ?? null) : null;
 
   const headerBits = [
     doc.header.subject ? subjects.labelOf(doc.header.subject) : null,
-    doc.header.className || null,
-    doc.header.session ? `${doc.header.session}회차` : null,
-    doc.header.classTime || null,
-    doc.header.studentCount ? `학생 ${doc.header.studentCount}명` : null,
+    openMode ? "선착순 3명" : "참관자 지정",
   ].filter(Boolean);
 
   return (
@@ -52,7 +84,7 @@ export default async function ClassReviewDetailPage({ params }: { params: Promis
         <PageHeader
           eyebrow="수업 평가"
           title={`${doc.header.teacherName} · ${doc.header.date}`}
-          description={headerBits.join(" · ") || "참관 정보"}
+          description={headerBits.join(" · ")}
           embedLabel={`수업 평가 — ${doc.header.teacherName}`}
         />
       </div>
@@ -60,8 +92,11 @@ export default async function ClassReviewDetailPage({ params }: { params: Promis
       {/* 종합 — 평균 기준 빅스탯 */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {[
-          { label: "제출", value: `${cols.filter((c) => c.totals.answered > 0).length}/${cols.length}` },
-          { label: "총점(평균)", value: avg ? `${avg.total}` : "—", sub: "/ 120" },
+          {
+            label: "제출",
+            value: `${cols.filter((c) => c.totals.answered > 0).length}/${cols.length}`,
+          },
+          { label: "총점(평균)", value: avg ? `${avg.total}` : "—", sub: `/ ${itemCountOf(areas) * 4}` },
           { label: "환산점수", value: avg ? avg.percent.toFixed(1) : "—", sub: "/ 100" },
           { label: "종합 등급", value: avg ? avg.grade : "—" },
         ].map((s) => (
@@ -84,16 +119,18 @@ export default async function ClassReviewDetailPage({ params }: { params: Promis
               <th className="px-3 py-2 font-semibold">평가항목</th>
               {cols.map((c) => (
                 <th key={c.slot} className="w-20 px-2 py-2 text-center font-semibold">
-                  {c.kind === "self" ? "본인" : c.name}
-                  {c.totals.answered === 0 ? <span className="text-text-faint block text-[10px] font-normal">미제출</span> : null}
+                  {c.label}
+                  {c.totals.answered === 0 ? (
+                    <span className="text-text-faint block text-[10px] font-normal">미제출</span>
+                  ) : null}
                 </th>
               ))}
               <th className="w-16 px-2 py-2 text-center font-semibold">평균</th>
             </tr>
           </thead>
           <tbody>
-            {CHECKLIST_AREAS.map((area, ai) => {
-              const base = CHECKLIST_AREAS.slice(0, ai).reduce((n, a) => n + a.items.length, 0);
+            {areas.map((area, ai) => {
+              const base = areas.slice(0, ai).reduce((n, a) => n + a.items.length, 0);
               return [
                 <tr key={area.key} className="bg-primary/5">
                   <td colSpan={cols.length + 3} className="text-primary px-3 py-1.5 text-xs font-bold">
@@ -108,13 +145,18 @@ export default async function ClassReviewDetailPage({ params }: { params: Promis
                   const qi = base + i;
                   const rowVals = cols.map((c) => normalizeScore(c.sheet?.scores?.[qi]));
                   const done = rowVals.filter((v) => v > 0);
-                  const rowAvg = done.length ? Math.round((done.reduce((a, b) => a + b, 0) / done.length) * 10) / 10 : null;
+                  const rowAvg = done.length
+                    ? Math.round((done.reduce((a, b) => a + b, 0) / done.length) * 10) / 10
+                    : null;
                   return (
                     <tr key={`${area.key}-${i}`} className="border-line/50 border-b last:border-0">
                       <td className="num text-text-dim px-3 py-1.5">{qi + 1}</td>
                       <td className="px-3 py-1.5 break-keep">{item}</td>
                       {rowVals.map((v, ci) => (
-                        <td key={ci} className={`num px-2 py-1.5 text-center font-semibold ${v === 0 ? "text-text-faint" : v <= 2 ? "text-danger" : ""}`}>
+                        <td
+                          key={ci}
+                          className={`num px-2 py-1.5 text-center font-semibold ${v === 0 ? "text-text-faint" : v <= 2 ? "text-danger" : ""}`}
+                        >
                           {v || "—"}
                         </td>
                       ))}
@@ -128,7 +170,7 @@ export default async function ClassReviewDetailPage({ params }: { params: Promis
           <tfoot>
             <tr className="border-line bg-bg-soft/60 border-t font-bold">
               <td colSpan={2} className="px-3 py-2 text-right">
-                총점 (120점)
+                총점 ({itemCountOf(areas) * 4}점)
               </td>
               {cols.map((c) => (
                 <td key={c.slot} className="num px-2 py-2 text-center">
@@ -172,7 +214,7 @@ export default async function ClassReviewDetailPage({ params }: { params: Promis
         </table>
       </div>
 
-      {/* 참관자 코멘트 */}
+      {/* 참관자 코멘트 — 이름 익명화 규칙 동일 */}
       {cols.some((c) => c.sheet?.comment) ? (
         <div className="border-line bg-card rounded-2xl border p-5 shadow-card">
           <p className="micro mb-2">참관자 코멘트</p>
@@ -181,7 +223,7 @@ export default async function ClassReviewDetailPage({ params }: { params: Promis
               .filter((c) => c.sheet?.comment)
               .map((c) => (
                 <li key={c.slot} className="text-sm">
-                  <span className="text-text-dim font-medium">{c.kind === "self" ? "본인" : c.name}:</span>{" "}
+                  <span className="text-text-dim font-medium">{c.label}:</span>{" "}
                   <span className="whitespace-pre-wrap">{c.sheet!.comment}</span>
                 </li>
               ))}
@@ -189,11 +231,20 @@ export default async function ClassReviewDetailPage({ params }: { params: Promis
         </div>
       ) : null}
 
-      {/* 내 채점 — 평가자로 지정된 경우에만 */}
+      {/* 내 채점 */}
       {mySlot ? (
-        <ScorePanel docId={doc.id} initialScores={myScores} initialComment={myComment} />
+        <ScorePanel
+          docId={doc.id}
+          areas={areas}
+          initialScores={mySheet?.scores ?? []}
+          initialComment={mySheet?.comment ?? ""}
+        />
       ) : (
-        <p className="text-text-faint text-xs">이 참관 건의 평가자로 지정되어 있지 않아 채점은 열람만 가능합니다.</p>
+        <p className="text-text-faint text-xs">
+          {openMode
+            ? "선착순 참관자 3명이 이미 채점을 마쳐 열람만 가능합니다."
+            : "이 참관 건의 평가자로 지정되어 있지 않아 채점은 열람만 가능합니다."}
+        </p>
       )}
     </div>
   );
