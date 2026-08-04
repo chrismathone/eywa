@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { cellClassKey, computeBlocks, dayGroupOf, mergeRuns, sortDaysByGroup } from "./grid";
+import {
+  cellClassKey,
+  computeBlocks,
+  dayGroupOf,
+  expandHalfPeriodBlocks,
+  mergeRuns,
+  sortDaysByGroup,
+} from "./grid";
 import type { DayOfWeek } from "./periods";
 
 // 2D 그리드 배열 → keyAt 함수
@@ -102,5 +109,79 @@ describe("2D 셀 병합(computeBlocks)", () => {
     expect(b.get("0:0")).toEqual({ rowSpan: 1, colSpan: 2 });
     expect(b.get("1:0")).toEqual({ rowSpan: 1, colSpan: 1 });
     expect(b.get("1:1")).toEqual({ rowSpan: 1, colSpan: 1 });
+  });
+});
+
+describe("expandHalfPeriodBlocks (반교시 셀을 그룹 높이로)", () => {
+  // 2행(=1교시 그룹) × 2열 격자. grid[r][c] = 그 칸에 수업이 있는가.
+  const run = (grid: boolean[][], blocks: Map<string, { rowSpan: number; colSpan: number }>) =>
+    expandHalfPeriodBlocks({
+      blocks,
+      pairs: [[0, 1]],
+      occupied: (ri, ci) => grid[ri]?.[ci] ?? false,
+    });
+
+  it("윗 교시만 쓰는 수업 → 2칸으로 늘리고 수업명은 윗 절반", () => {
+    const blocks = new Map([
+      ["0:0", { rowSpan: 1, colSpan: 1 }],
+      ["1:0", { rowSpan: 1, colSpan: 1 }],
+    ]);
+    const out = run([[true], [false]], blocks);
+    expect(out.blocks.get("0:0")).toEqual({ rowSpan: 2, colSpan: 1 });
+    expect(out.blocks.has("1:0")).toBe(false); // 아랫 행은 피복 — 빈 칸이 따로 그려지지 않는다
+    expect(out.subSlots.get("0:0")).toBe("top");
+  });
+
+  it("아랫 교시만 쓰는 수업 → anchor가 윗 행으로 올라오고 수업명은 아랫 절반", () => {
+    const blocks = new Map([
+      ["0:0", { rowSpan: 1, colSpan: 1 }],
+      ["1:0", { rowSpan: 1, colSpan: 1 }],
+    ]);
+    const out = run([[false], [true]], blocks);
+    expect(out.blocks.get("0:0")).toEqual({ rowSpan: 2, colSpan: 1 });
+    expect(out.blocks.has("1:0")).toBe(false);
+    expect(out.subSlots.get("0:0")).toBe("bottom");
+  });
+
+  it("양쪽 교시에 서로 다른 수업 → 늘릴 자리가 없으니 그대로(각자 1칸)", () => {
+    const blocks = new Map([
+      ["0:0", { rowSpan: 1, colSpan: 1 }],
+      ["1:0", { rowSpan: 1, colSpan: 1 }],
+    ]);
+    const out = run([[true], [true]], blocks);
+    expect(out.blocks.get("0:0")).toEqual({ rowSpan: 1, colSpan: 1 });
+    expect(out.blocks.get("1:0")).toEqual({ rowSpan: 1, colSpan: 1 });
+    expect(out.subSlots.size).toBe(0);
+  });
+
+  it("이미 두 교시에 걸친 수업(완전체)은 손대지 않는다", () => {
+    const blocks = new Map([["0:0", { rowSpan: 2, colSpan: 1 }]]);
+    const out = run([[true], [true]], blocks);
+    expect(out.blocks.get("0:0")).toEqual({ rowSpan: 2, colSpan: 1 });
+    expect(out.subSlots.size).toBe(0);
+  });
+
+  it("가로 병합(월·목) 블록은 **두 열 모두** 반대쪽이 비어야 늘린다", () => {
+    const wide = () => new Map([["0:0", { rowSpan: 1, colSpan: 2 }], ["1:0", { rowSpan: 1, colSpan: 1 }], ["1:1", { rowSpan: 1, colSpan: 1 }]]);
+    // 아랫 행 한 열에 다른 수업이 있으면 확장 금지(그 칸을 덮어버리면 수업이 사라진다).
+    const blocked = run([[true, true], [false, true]], wide());
+    expect(blocked.blocks.get("0:0")).toEqual({ rowSpan: 1, colSpan: 2 });
+    expect(blocked.subSlots.size).toBe(0);
+    // 두 열 다 비었으면 확장.
+    const ok = run([[true, true], [false, false]], wide());
+    expect(ok.blocks.get("0:0")).toEqual({ rowSpan: 2, colSpan: 2 });
+    expect(ok.blocks.has("1:0")).toBe(false);
+    expect(ok.blocks.has("1:1")).toBe(false);
+  });
+
+  it("빈 칸만 있는 그룹은 아무것도 안 한다(입력 불변)", () => {
+    const blocks = new Map([
+      ["0:0", { rowSpan: 1, colSpan: 1 }],
+      ["1:0", { rowSpan: 1, colSpan: 1 }],
+    ]);
+    const out = run([[false], [false]], blocks);
+    expect(out.blocks.size).toBe(2);
+    expect(out.subSlots.size).toBe(0);
+    expect(blocks.get("0:0")).toEqual({ rowSpan: 1, colSpan: 1 }); // 원본 Map 안 건드림
   });
 });

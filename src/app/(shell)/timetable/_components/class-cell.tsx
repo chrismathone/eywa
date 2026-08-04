@@ -45,10 +45,34 @@ function shortTime(t: string) {
 // 명단 섹션 배치(2026-07-07 사용자 지정) — 재원은 이 영역만 스크롤(위/아래 페이드), 대기/퇴원은
 // 고정 박스로 각자 스크롤. 재원 10칸 기본 + 대기 2칸 + 퇴원 3칸에 맞춰 교시 행높이(weekday-group-tables
 // ROW_H)를 잡는다. 대기/퇴원은 내용 있을 때만 렌더(빈 슬롯 예약 안 함), 넘치면 그 박스만 스크롤.
-const STU_ROW_H = 23; // 학생 1행(실측 22.25 + divide-y 1px ≈ 23)
+export const STU_ROW_H = 23; // 학생 1행(실측 22.25 + divide-y 1px ≈ 23)
 const SEC_LABEL_H = 17; // 대기/퇴원 라벨행(실측 17)
 export const HOLD_MAX_H = 2 * STU_ROW_H + SEC_LABEL_H; // 대기 2칸 = 63px(합반 셀도 공유)
 export const WD_MAX_H = 3 * STU_ROW_H + SEC_LABEL_H; // 퇴원 3칸 = 86px
+
+/**
+ * 셀 헤더 존 — **모든 셀이 항상 2행(HEADER_H) 높이**를 쓴다(2026-08-04 사용자 지정).
+ *
+ * 반교시(1-1만·1-2만) 수업은 그중 위/아래 **한 행**에만 반이름을 놓고 나머지 한 행은 빈 밴드로 남긴다.
+ * 옛 구현은 라벨 높이는 그대로 두고 밴드를 바깥에 덧붙여서, 반교시 셀만 명단이 밴드만큼 아래로 밀려
+ * **이웃 셀과 학생 이름 줄이 어긋났다**. 존 높이를 고정하면 위치 표시는 유지하면서 명단 시작선이 통일된다.
+ *
+ * HEADER_ROW_H = 반이름 한 줄(14px bold, line-height ≈21px)에 상하 패딩(py-1 = 8)을 더한 값.
+ * ⚠️ 이 값을 줄이면 반교시 셀의 반이름이 잘린다(1행짜리라 여유가 없다).
+ */
+export const HEADER_ROW_H = 30;
+export const HEADER_H = HEADER_ROW_H * 2;
+
+/** 반교시 표시용 빈 밴드 — 반대쪽 서브슬롯 자리(합반 셀과 공유해 두 셀 높이가 항상 같게). */
+export function SubSlotBand() {
+  return (
+    <div
+      className="border-line bg-bg-soft/70 shrink-0 border-b"
+      style={{ height: HEADER_ROW_H }}
+      aria-hidden
+    />
+  );
+}
 
 /**
  * 시간표 셀 — 반이름 헤더 바 + 그 아래 학생 세로 나열(엑셀식 칸 안 행). ijw 시간표 패턴.
@@ -124,15 +148,14 @@ export function ClassCell({
         isOver ? "ring-primary ring-2" : ""
       }`}
     >
-        {/* ijw식 헤더 분할 — 1-2 수업이면 위에 빈 1-1 밴드를 둬 "이건 2번째 칸 수업"임을 한눈에. 학생 영역은 풀 유지. */}
-        {subSlot === "bottom" ? (
-          <div className="border-line bg-bg-soft/70 shrink-0 border-b" style={{ height: 26 }} aria-hidden />
-        ) : null}
+        {/* 헤더 존 — 어느 셀이든 항상 2행(HEADER_H). 반교시는 위/아래 한 행에만 라벨(상수 주석 참조). */}
+        <div className="shrink-0" style={{ height: HEADER_H }}>
+        {subSlot === "bottom" ? <SubSlotBand /> : null}
         {/* 반이름 헤더 바 — 반 색 우선(인라인), 없으면 과목색 클래스. WindowLink는 style 미지원이라 래퍼 div에 색.
             hover 시 수업 정보 카드, 클릭 시 반 정보 창 팝업(/classes/[classId]). */}
         <div
-          className={`shrink-0 transition hover:brightness-95 ${headerClass}`}
-          style={headerStyle}
+          className={`overflow-hidden transition hover:brightness-95 ${headerClass}`}
+          style={{ ...headerStyle, height: subSlot === "full" ? HEADER_H : HEADER_ROW_H }}
         >
           <HoverCard
             width={230}
@@ -150,29 +173,34 @@ export function ClassCell({
           >
             <WindowLink
               href={`/classes/${slot.classId ?? slot.id}`}
-              title={slot.className}
+              title={slot.classroomName ? `${slot.className} · ${slot.classroomName}` : slot.className}
               ariaLabel={`${slot.className} 반 정보`}
-              className="block w-full px-2 py-1 text-left"
+              className="block h-full w-full px-2 py-1 text-left"
             >
-              <div className="flex items-baseline justify-between gap-2">
-                <span className="overflow-hidden whitespace-nowrap text-clip text-[14px] font-bold">{slot.className}</span>
+              <div className="flex items-baseline justify-between gap-1.5">
+                <span className="min-w-0 overflow-hidden whitespace-nowrap text-clip text-[14px] font-bold">{slot.className}</span>
+                {/* 반교시(1행)면 아래 줄이 없으니 강의실을 이름과 같은 줄에 붙인다(정보 손실 방지). */}
+                {subSlot !== "full" && slot.classroomName ? (
+                  <span className="shrink-0 whitespace-nowrap text-[11px] opacity-75">{slot.classroomName}</span>
+                ) : null}
                 <span className="num shrink-0 text-[12px] opacity-70">{active.length}</span>
               </div>
               {/* 시각은 hover 카드에 나오므로 셀에선 생략(사용자 요청). 강의실만 표시.
                   ⚠️ 강의실 줄은 **항상 렌더**(없으면 nbsp 자리표시) — 셀마다 헤더 높이(2줄)를 일정하게 유지해
-                  인접 반의 학생 이름이 가로로 줄맞춤되게 한다(강의실 유무로 헤더가 1↔2줄 되며 명단이 17px 어긋나던 것 해소). */}
+                  인접 반의 학생 이름이 가로로 줄맞춤되게 한다(강의실 유무로 헤더가 1↔2줄 되며 명단이 17px 어긋나던 것 해소).
+                  ⚠️ 2행(full)일 때만 — 반교시(1행)는 위 이름 줄에 강의실을 붙인다. */}
+              {subSlot === "full" ? (
               <div className="flex items-center justify-end gap-1 text-[12px] opacity-75">
                 <span className="overflow-hidden whitespace-nowrap text-clip">
                   {slot.classroomName || " "}
                 </span>
               </div>
+              ) : null}
             </WindowLink>
           </HoverCard>
         </div>
-        {/* 1-1 수업이면 헤더 아래 빈 1-2 밴드 — "이건 첫째 칸 수업"임을 표시. */}
-        {subSlot === "top" ? (
-          <div className="border-line bg-bg-soft/70 shrink-0 border-b" style={{ height: 26 }} aria-hidden />
-        ) : null}
+        {subSlot === "top" ? <SubSlotBand /> : null}
+        </div>
 
         {/* 학생 명단 — 재원(이 영역만 스크롤+페이드) / 대기·퇴원(고정 박스, 각자 스크롤)을 분리.
             신입=빨강·전입=초록·퇴원=취소선. 컨테이너 자체는 스크롤 안 함(재원·대기·퇴원 박스가 각자). */}

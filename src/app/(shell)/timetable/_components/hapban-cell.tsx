@@ -8,7 +8,14 @@ import { useSubjectMaps } from "@/features/owner/operations-context";
 import { buildHapbanRoster, type HapbanMemberClass } from "@/features/timetable/lib/hapban";
 import { DAY_LABEL, incomingDayLabel } from "@/features/timetable/lib/split-attendance";
 import { readableTextColor } from "@/lib/color-utils";
-import { HOLD_MAX_H, WD_MAX_H, type ClassDetailQuick } from "./class-cell";
+import {
+  HEADER_H,
+  HEADER_ROW_H,
+  HOLD_MAX_H,
+  SubSlotBand,
+  WD_MAX_H,
+  type ClassDetailQuick,
+} from "./class-cell";
 import { useTimetableEdit } from "./edit-context";
 import { ClassInfoCard, HoverCard } from "./hover-cards";
 import { DraggableStudentRow, StudentRow, IndexBadge, metaLabel, ROW_CLASS } from "./student-rows";
@@ -108,10 +115,6 @@ function SegmentHeader({
   );
 }
 
-/** 1-1/1-2 빈 서브슬롯 밴드(ClassCell과 동일 시각). */
-function SubSlotBand() {
-  return <div className="border-line bg-bg-soft/70 shrink-0 border-b" style={{ height: 26 }} aria-hidden />;
-}
 
 export function HapbanCell({
   slots,
@@ -173,9 +176,14 @@ export function HapbanCell({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[2px] transition">
+      {/* 헤더 존 — 단일 반 셀(ClassCell)과 **같은 고정 높이**. 두 셀이 한 행에 섞여도 명단 시작선이 같아야 한다. */}
+      <div className="shrink-0" style={{ height: HEADER_H }}>
       {subSlot === "bottom" ? <SubSlotBand /> : null}
       {/* 헤더 가로 N등분 — 반마다 자기 색·인덱스·재원수. 클릭=그 반 상세 창, 드롭=그 반으로 이동. */}
-      <div className="flex shrink-0">
+      <div
+        className="flex shrink-0 overflow-hidden"
+        style={{ height: subSlot === "full" ? HEADER_H : HEADER_ROW_H }}
+      >
         {slots.map((s, i) => {
           const hf = subjectHeaderStyle(colorMode, subjects.colorOf(s.subject));
           return (
@@ -192,6 +200,7 @@ export function HapbanCell({
         })}
       </div>
       {subSlot === "top" ? <SubSlotBand /> : null}
+      </div>
 
       {showRoster ? (
         // 컨테이너 자체는 스크롤 안 함(재원·대기·퇴원 박스가 각자). setBodyRef=드롭존은 이 전체 영역.

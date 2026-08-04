@@ -249,8 +249,9 @@ export function ClassFilterBar({
                 type="search"
                 name="q"
                 defaultValue={current.q}
-                placeholder="수업명, 강사명 검색"
-                className="text-foreground placeholder:text-text-faint w-36 bg-transparent text-xs focus:outline-none"
+                placeholder="수업명, 강사, 강의실 검색"
+                title="수업명 · 강사명 · 강의실명으로 찾습니다(예: 본원602)"
+                className="text-foreground placeholder:text-text-faint w-44 bg-transparent text-xs focus:outline-none"
               />
             </div>
           </form>
