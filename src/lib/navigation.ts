@@ -131,6 +131,8 @@ export const NAV_GROUPS: NavGroup[] = [
       // 지출결의서(강사 제출) = 강사 '내 메뉴' 전용 진입. 사이드바엔 숨김(사무실은 /billing 지출 면), 창/타이틀 해석용 유지.
       { href: "/expense-requests", label: "지출결의서", icon: MENU_ICON.expense_requests, menuKey: "expense_requests", hidden: true },
       { href: "/meetings", label: "회의록", icon: MENU_ICON.meetings, menuKey: "meetings" },
+      // 수업 평가 체크리스트(참관) — 테스트 단계: 기본 전원 none이라 개인 예외(이승엽)에게만 보인다.
+      { href: "/class-review", label: "수업 평가", icon: MENU_ICON.class_review, menuKey: "class_review" },
       // 데이터베이스 = 학원 각종 서식(빈 양식 파일·앱 작성 문서) 저장소 — 윈도우 탐색기형 뷰.
       { href: "/documents", label: "데이터베이스", icon: MENU_ICON.documents, menuKey: "documents" },
     ],

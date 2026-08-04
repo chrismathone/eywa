@@ -835,8 +835,8 @@ export function ResumeSheet({
                 V(c.jobTitle)
               )}
             </td>
-            <th className={head}>담당자</th>
-            <td className={cell}>{field("c_manager", c.manager, { ph: "담당자" })}</td>
+            <th className={head}>처리담당자</th>
+            <td className={cell}>{field("c_manager", c.manager, { ph: "처리담당자" })}</td>
           </tr>
           <tr>
             <th className={head}>근무요일</th>

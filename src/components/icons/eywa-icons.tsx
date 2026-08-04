@@ -1139,6 +1139,7 @@ export const MENU_ICON = {
   expense_requests: "receipt",
   meetings: "note",
   documents: "folder",
+  class_review: "clipboardCheck", // 수업 평가 체크리스트 — 점검 정체성(출석부와 공유, ecs 선례)
   integrations: "sync",
   sheet_sync: "spreadsheet",
   help: "help",

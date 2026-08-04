@@ -54,6 +54,7 @@ export const MENU_KEYS = [
   "expense_requests",
   "meetings",
   "documents",
+  "class_review",
   "integrations",
   "sheet_sync",
   "help",
@@ -126,6 +127,9 @@ export const MENU_ACCESS: AccessMatrix = {
   meetings: { master: "full", admin: "full", manager: "full", teacher: "none", counselor: "full", accountant: "full", viewer: "readonly", student: "none" },
   // 데이터베이스(서식 저장소) — 사무실(master/admin/manager)이 업로드·작성, 나머지는 조회만. 학생은 미노출.
   documents: { master: "full", admin: "full", manager: "full", teacher: "readonly", counselor: "readonly", accountant: "readonly", viewer: "readonly", student: "none" },
+  // 수업 평가 체크리스트(참관 30문항, 원장 지시 2026-08-04) — **테스트 단계라 기본 전원 차단**,
+  // 이승엽 개인 예외(userOverrides)로만 개방. 확대는 owner 역할·권한 매트릭스에서 셀을 켜면 된다.
+  class_review: { master: "none", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", student: "none" },
   // makeedu 연동 조작 — '지금 동기화'(정방향 릴레이 트리거)·'makeedu로 보내기'(역동기화 큐잉) 실행 권한.
   // 사이드바 메뉴가 아니라 **액션 권한 키**(hidden) — 버튼 노출(목록 ↻ 배지 옆·등록상담 전송 카드)과 서버 액션
   // 게이트(canWriteTenant)가 함께 읽는다. 역할·권한 면에 행이 떠 원장이 조정 가능(예: 상담사에게 열기).
@@ -201,6 +205,7 @@ const PATH_SEGMENT_TO_MENU: Record<string, MenuKey> = {
   "expense-requests": "expense_requests",
   meetings: "meetings",
   documents: "documents",
+  "class-review": "class_review",
   help: "help",
   admin: "admin",
   owner: "owner",

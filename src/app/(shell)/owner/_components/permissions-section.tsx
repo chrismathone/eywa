@@ -37,6 +37,7 @@ const MENU_LABEL: Record<MenuKey, string> = {
   expense_requests: "지출결의서",
   meetings: "회의록",
   documents: "데이터베이스",
+  class_review: "수업 평가",
   integrations: "makeedu 연동",
   sheet_sync: "구글 시트 연동",
   help: "도움말",

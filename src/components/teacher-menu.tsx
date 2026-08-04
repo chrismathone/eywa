@@ -61,7 +61,7 @@ export function TeacherMenu({
     (l) => canAccess("teacher", l.menu, permMatrix) && (l.menu !== "ecs" || showEcs),
   );
   return (
-    <DropdownMenu>
+    <DropdownMenu modal={false}>
       <DropdownMenuTrigger
         render={<Button variant="outline" size="sm" className="gap-1.5" />}
       >

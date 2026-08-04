@@ -38,6 +38,8 @@ export type StaffRow = {
   contractSeq: number | null;
   /** 계약서 파일 첨부 여부(academy_documents kind='file' + staff_user_id) — 목록 '계약서' 열. */
   contractFile: boolean;
+  /** 직원 행 최근 수정 시각(users.updated_at) — 목록 '수정일' 열(원장 지시 2026-08-04). */
+  updatedAt: string | null;
 };
 
 export async function getStaffList(): Promise<StaffRow[]> {
@@ -56,7 +58,7 @@ export async function getStaffList(): Promise<StaffRow[]> {
     supabase
       .from("users")
       .select(
-        "id, display_name, email, phone, system_role, status, hire_date, job_title, subjects, department, employment_type",
+        "id, display_name, email, phone, system_role, status, hire_date, job_title, subjects, department, employment_type, updated_at",
       )
       .neq("status", "inactive")
       .order("system_role", { ascending: true })
@@ -140,6 +142,7 @@ export async function getStaffList(): Promise<StaffRow[]> {
     contractTerms: currentContractOf.get(u.id)?.terms ?? null,
     contractSeq: currentContractOf.get(u.id)?.seq ?? null,
     contractFile: hasContractFile.has(u.id),
+    updatedAt: ((u as { updated_at?: string | null }).updated_at ?? null),
   }));
 }
 

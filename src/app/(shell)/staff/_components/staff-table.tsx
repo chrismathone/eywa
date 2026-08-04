@@ -109,6 +109,7 @@ export function StaffTable({ rows }: { rows: StaffRow[] }) {
       const m = STATUS_META[s.status] ?? STATUS_META.active!;
       return <Pill color={m.color}>{m.label}</Pill>;
     },
+    updatedAt: (s) => <span className="num">{s.updatedAt ? s.updatedAt.slice(0, 10) : "—"}</span>,
   };
 
   const LABEL: Record<StaffColumnKey, string> = {
@@ -128,6 +129,7 @@ export function StaffTable({ rows }: { rows: StaffRow[] }) {
     classes: "담당 반",
     students: "담당 학생",
     status: "상태",
+    updatedAt: "수정일",
   };
   const rightAligned = new Set<StaffColumnKey>(["classes", "students"]);
 

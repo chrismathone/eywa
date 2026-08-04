@@ -25,7 +25,8 @@ export type StaffColumnKey =
   | "role"
   | "classes"
   | "students"
-  | "status";
+  | "status"
+  | "updatedAt";
 
 export const STAFF_COLUMNS: { key: StaffColumnKey; label: string; align?: "right" }[] = [
   { key: "department", label: "소속부서" },
@@ -44,6 +45,7 @@ export const STAFF_COLUMNS: { key: StaffColumnKey; label: string; align?: "right
   { key: "classes", label: "담당 반", align: "right" },
   { key: "students", label: "담당 학생", align: "right" },
   { key: "status", label: "상태" },
+  { key: "updatedAt", label: "수정일" },
 ];
 
 const ALL_KEYS = STAFF_COLUMNS.map((c) => c.key);
