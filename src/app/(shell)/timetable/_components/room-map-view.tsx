@@ -40,6 +40,7 @@ export function RoomMapView({
   canEditCapacity,
   groupLines,
   timeVertical,
+  showIssues,
 }: {
   slots: RoomSlotLite[];
   rooms: RoomInfo[];
@@ -55,6 +56,8 @@ export function RoomMapView({
   groupLines: boolean;
   /** 시간축 방향 초기값(true=시간이 세로) — 같은 뷰 설정. */
   timeVertical: boolean;
+  /** 하단 경고 목록(정원 초과·시간 겹침) 펼침 초기값 — 같은 뷰 설정. */
+  showIssues: boolean;
 }) {
   const subjects = useSubjectMaps();
   const [day, setDay] = useState<DayOfWeek>(isCurrentWeek ? todayDay : "mon");
@@ -201,7 +204,7 @@ export function RoomMapView({
             </span>
           </span>
           {summary.conflictPairs > 0 ? (
-            // ⚠️ 이 수치는 **선택 요일**이다(하단 목록은 주간) — 요일을 안 적으면 둘이 다른 말을 하는 것처럼 보인다.
+            // ⚠️ 이 수치는 **선택 요일**이다(하단 목록도 같은 하루) — 요일을 안 적으면 다른 스코프처럼 읽힌다.
             <span className="text-red-600">
               {DAY_LABEL[day] ?? day} 겹침 <span className="num font-semibold">{summary.conflictPairs}</span>건
             </span>
@@ -222,6 +225,7 @@ export function RoomMapView({
         focusSubject={focusSubject}
         groupLines={groupLines}
         timeVertical={timeVertical}
+        showIssues={showIssues}
         conflicts={conflicts}
         seatOver={seatOver}
         unassigned={unassigned}

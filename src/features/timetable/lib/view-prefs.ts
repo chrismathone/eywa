@@ -53,6 +53,13 @@ export type TimetableViewPrefs = {
    * 그래서 고르는 값으로 두고, 기기가 아니라 **계정**에 붙인다(roomGroupLines와 같은 규약).
    */
   roomTimeVertical: boolean | null;
+  /**
+   * 교실뷰 하단 **경고 목록**(정원 초과·시간 겹침) 펼침. null = 미설정(기본 펼침).
+   * 원장 2026-08-05: *"너무 공간차지 많이해서 오히려 방해되네"* — 접어도 **건수는 헤더 버튼에 남는다**
+   * (숫자까지 지우면 "경고가 없는 화면"이 되고, 그건 접기가 아니라 은폐다).
+   * ⚠️ 기본은 **펼침**이다. 경고 목록의 기본값을 '숨김'으로 두면 켜 본 적 없는 사람에겐 영영 안 보인다.
+   */
+  roomIssues: boolean | null;
 };
 
 /** 셀 색 강도 — workspace prefs 스토어의 TimetableColorMode와 같은 3값(런타임 소스는 그 스토어). */
@@ -69,6 +76,7 @@ export const EMPTY_VIEW_PREFS: TimetableViewPrefs = {
   fontSize: null,
   roomGroupLines: null,
   roomTimeVertical: null,
+  roomIssues: null,
 };
 
 /**
@@ -201,6 +209,7 @@ export function parseViewPrefs(raw: unknown): TimetableViewPrefs {
         : null,
     roomGroupLines: typeof o.roomGroupLines === "boolean" ? o.roomGroupLines : null,
     roomTimeVertical: typeof o.roomTimeVertical === "boolean" ? o.roomTimeVertical : null,
+    roomIssues: typeof o.roomIssues === "boolean" ? o.roomIssues : null,
   };
 }
 
@@ -223,6 +232,8 @@ export function serializeViewPrefs(prefs: TimetableViewPrefs): Record<string, un
   if (prefs.roomGroupLines === false) out.roomGroupLines = false;
   // 기본값(시간 가로)은 키를 지운다 — 위와 같은 규약(기본값이 jsonb에 쌓이지 않게).
   if (prefs.roomTimeVertical === true) out.roomTimeVertical = true;
+  // 기본값(펼침)은 키를 지운다 — 접은 사람만 값을 갖는다(위와 같은 규약).
+  if (prefs.roomIssues === false) out.roomIssues = false;
   return out;
 }
 
@@ -246,6 +257,7 @@ export function mergeViewPrefs(
     colorMode: pick("colorMode"),
     roomGroupLines: pick("roomGroupLines"),
     roomTimeVertical: pick("roomTimeVertical"),
+    roomIssues: pick("roomIssues"),
     fontSize: pick("fontSize"),
     // compact1h는 과목별이라 통째 교체가 아니라 **과목 단위 병합**이다(아래 참조).
     compact1h: patch.compact1h !== undefined

@@ -131,6 +131,7 @@ export function RoomWeekPanel({
   focusSubject,
   groupLines,
   timeVertical,
+  showIssues,
   conflicts,
   seatOver,
   unassigned,
@@ -145,6 +146,8 @@ export function RoomWeekPanel({
   groupLines: boolean;
   /** 시간축을 세로로 둘지 — 계정에 저장된 뷰 설정(users.ui_prefs)의 초기값. */
   timeVertical: boolean;
+  /** 하단 경고 목록을 펼칠지 — 같은 뷰 설정(기본 펼침). */
+  showIssues: boolean;
   /** 주간 시간 겹침(이중예약 의심) 쌍 — 표엔 대표 반 하나만 서므로 **가려진 반**은 여기서만 보인다. */
   conflicts: RoomConflictRow[];
   /** 주간 정원 초과 — 방 이름만 말하던 옛 줄의 후신(반까지 짚어 준다). */
@@ -159,6 +162,8 @@ export function RoomWeekPanel({
   const [lines, setLines] = useState(groupLines);
   // 축 방향도 같은 규약(낙관적 반영 + 계정 저장). 데이터는 한 벌이라 전환은 순수 렌더 — 서버 왕복이 없다.
   const [vertical, setVertical] = useState(timeVertical);
+  // 경고 목록 접기 — 같은 규약. 접어도 **건수는 헤더 버튼에 남는다**(아래 issueTotal).
+  const [issuesOpen, setIssuesOpen] = useState(showIssues);
 
   const registered = rows.filter((r) => r.registered);
   const idle = registered
@@ -166,6 +171,8 @@ export function RoomWeekPanel({
     .sort((a, b) => (a.weekdayUtilPct ?? 0) - (b.weekdayUtilPct ?? 0))
     .slice(0, 3);
   const noCapacity = registered.length > 0 && registered.every((r) => r.capacity == null);
+  // 경고 총계 = 접었을 때 **유일하게 남는 신호**. 0이면 토글 자체를 안 그린다(숨길 게 없다).
+  const issueTotal = seatOver.length + conflicts.length;
   const byClass = new Map<string, { className: string; subject: string; count: number }>();
   for (const s of unassigned) {
     const cur = byClass.get(s.classId);
@@ -207,6 +214,31 @@ export function RoomWeekPanel({
               </button>
             ))}
           </div>
+          {/* 경고 목록 접기 — 원장 2026-08-05: *"너무 공간차지 많이해서 오히려 방해되네"*.
+              🔴 접어도 **건수는 이 버튼에 남는다**. 숫자까지 지우면 접기가 아니라 은폐고, 표의 빨간
+              테두리만 남아 "몇 건인지 모르는 경고"가 된다. 경고가 0건이면 버튼 자체를 안 그린다. */}
+          {issueTotal > 0 ? (
+            <button
+              type="button"
+              onClick={() => {
+                const next = !issuesOpen;
+                setIssuesOpen(next);
+                void saveTimetableViewPrefs({ roomIssues: next });
+              }}
+              aria-pressed={issuesOpen}
+              aria-label={`경고 목록 ${issuesOpen ? "접기" : "펴기"}`}
+              title={`정원 초과 ${seatOver.length}건 · 시간 겹침 ${conflicts.length}건 — 목록을 ${
+                issuesOpen ? "접습니다" : "폅니다"
+              } (내 계정에 저장)`}
+              className={`shrink-0 rounded-full border px-2 py-0 text-[11px] leading-5 transition ${
+                issuesOpen
+                  ? "border-red-600 bg-red-600 font-medium text-white"
+                  : "border-red-300 text-red-600 hover:bg-red-50"
+              }`}
+            >
+              경고 <span className="num">{issueTotal}</span>
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={() => {
@@ -265,7 +297,7 @@ export function RoomWeekPanel({
         ) : null}
         {/* 정원 초과 — 방 이름만 말하던 옛 줄을 **반 목록**으로(원장 2026-08-04). 반을 누르면 수업 상세.
             🔴 인원은 그 시간 그 방의 **동시 수업 합**이다 — 반 하나씩 보면 8명+9명인 방이 "9명"이 된다. */}
-        {seatOver.length > 0 ? (
+        {issuesOpen && seatOver.length > 0 ? (
           <IssueBlock title="정원 초과" dayLabel={hourDayLabel} total={seatOver.length}>
             {seatOver.slice(0, LIST_MAX).map((r) => (
               <li key={r.key} className="flex flex-wrap items-baseline gap-x-2 text-red-600">
@@ -288,7 +320,7 @@ export function RoomWeekPanel({
           </IssueBlock>
         ) : null}
         {/* 시간 겹침 — 표엔 대표 반 하나만 서서 **가려진 반**이 어디에도 안 보였다. 쌍으로 적고 둘 다 링크. */}
-        {conflicts.length > 0 ? (
+        {issuesOpen && conflicts.length > 0 ? (
           <IssueBlock title="시간 겹침" dayLabel={hourDayLabel} total={conflicts.length}>
             {conflicts.slice(0, LIST_MAX).map((c) => (
               <li key={c.key} className="flex flex-wrap items-baseline gap-x-2 text-red-600">
