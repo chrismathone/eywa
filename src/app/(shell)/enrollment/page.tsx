@@ -117,7 +117,7 @@ export default async function EnrollmentPage({
       view === "stats" ? getStatsYears() : Promise.resolve([]),
       getConsultantOptions(),
       getConsultationMinYear(),
-      canPushMakeedu ? getUnpushedIntakeConsultations() : Promise.resolve([]),
+      canPushMakeedu && view !== "stats" ? getUnpushedIntakeConsultations() : Promise.resolve([]),
       // 자동 갱신 기준선 — 필터와 무관한 **전체 건수**(head 카운트라 행 미수신). 필터가 걸려 있어도
       // 새 접수가 들어오면 화면을 갱신해야 하므로 필터된 items.length를 기준으로 쓰면 안 된다.
       getConsultationTotalCount(),
@@ -197,7 +197,11 @@ export default async function EnrollmentPage({
             <NewEnrollmentTrigger />
           </>
         }
+        // 🔴 통계뷰에선 이 줄을 아예 안 그린다. 통계뷰는 목록을 안 불러오므로 여기 숫자가 전부 0이
+        // 되는데, 실제로는 2,197건이라 **화면이 거짓말을 한다**(2026-08-05 원장 스크린샷). 게다가
+        // 통계뷰는 바로 아래에 자기 헤드라인 카드(상담·등록·전환율·결제액)를 갖고 있어 중복이기도 하다.
         stats={
+          view === "stats" ? undefined : (
           <div className="flex flex-wrap items-baseline gap-x-3.5 gap-y-1 px-1 whitespace-nowrap">
             <span className="text-[13px]">
               <b className="num text-foreground text-[17px] font-bold">
@@ -220,11 +224,12 @@ export default async function EnrollmentPage({
               </span>
             )}
           </div>
+          )
         }
       />
-      <MakeeduSyncBadge domain="prospects" />
 
       <KanbanFilters
+        syncBadge={<MakeeduSyncBadge domain="prospects" />}
         selectedMonth={selectedMonth}
         selectedConsultant={selectedConsultant}
         selectedOutcome={selectedOutcome}
@@ -237,8 +242,12 @@ export default async function EnrollmentPage({
       />
 
       {/* 역동기화 — makeedu에 아직 없는 QR 접수 상담. 후보가 있을 때만(빈 상태는 owner 연동 면 담당),
-          integrations 쓰기 권한자에게만. 처리하면(전송/등록) 사라지는 액션 큐라 보드 위에 노출. */}
-      {pushCandidates.length > 0 ? <MakeeduPushCard candidates={pushCandidates} /> : null}
+          integrations 쓰기 권한자에게만. 처리하면(전송/등록) 사라지는 액션 큐라 보드 위에 노출.
+          🔴 통계뷰엔 안 그린다(원장 2026-08-05) — 통계는 집계를 읽는 화면이지 건별 처리를 하는
+          곳이 아니라, 액션 큐가 끼면 화면 목적이 흐려진다. 조회 자체도 건너뛴다(쿼리 1개 절약). */}
+      {view !== "stats" && pushCandidates.length > 0 ? (
+        <MakeeduPushCard candidates={pushCandidates} />
+      ) : null}
 
       {/* 통계뷰는 빈 상태 사진 대신 자기 안에서 "집계할 상담이 없습니다"를 말한다(연도 선택을 남겨야 하므로). */}
       {view === "stats" && stats ? (

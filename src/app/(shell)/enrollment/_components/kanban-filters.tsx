@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import Link from "next/link";
 import { WindowLink } from "@/components/workspace/window-link";
 import { BarChart3, LayoutGrid, List } from "@/components/icons/eywa-icon-compat";
@@ -22,6 +23,8 @@ type Props = {
   todayMonth: string;
   /** 데이터가 있는 가장 이른 연도 — 연도 이동 하한. */
   minYear: number;
+  /** makeedu 동기화 배지 — 자기 줄을 쓰지 않게 이 바 오른쪽으로 들여온다. */
+  syncBadge?: ReactNode;
 };
 
 const buildQuery = buildEnrollmentQuery;
@@ -36,6 +39,7 @@ export function KanbanFilters({
   selectedRange,
   todayMonth,
   minYear,
+  syncBadge,
 }: Props) {
   const displayMonth = selectedMonth ?? todayMonth;
   const base = {
@@ -53,7 +57,12 @@ export function KanbanFilters({
   const listFilters = view !== "stats";
 
   return (
-    <div className="bg-card shadow-card flex flex-wrap items-center gap-3 rounded-2xl px-4 py-3">
+    // 통계뷰는 남는 컨트롤이 뷰 토글뿐이라 카드 여백을 줄인다 — 빈 카드가 한 줄을 통째로 먹던 걸 압축.
+    <div
+      className={`bg-card shadow-card flex flex-wrap items-center gap-3 rounded-2xl px-4 ${
+        listFilters ? "py-3" : "py-2"
+      }`}
+    >
       {listFilters ? (
         <>
       {/* 월 navigator */}
@@ -180,14 +189,18 @@ export function KanbanFilters({
       {/* 이름·전화·학교 검색 — 클라 내비(SearchForm)라 화면 깜빡 없이 결과만 교체(다른 param 자동 보존) */}
       {listFilters ? <SearchForm placeholder="이름·전화·학교" defaultValue={searchQuery} /> : null}
 
-      <WindowLink
-        href="/enrollment/dashboard"
-        title="등록상담 대시보드"
-        className="text-text-dim hover:text-foreground inline-flex items-center gap-1.5 text-xs"
-      >
-        <BarChart3 className="size-3.5" />
-        대시보드 보기
-      </WindowLink>
+      {/* 오른쪽 묶음 — 동기화 배지가 자기 줄을 통째로 쓰던 걸 여기로 당겨 한 줄 줄였다(원장 2026-08-05). */}
+      <div className="ml-auto flex items-center gap-3">
+        <WindowLink
+          href="/enrollment/dashboard"
+          title="등록상담 대시보드"
+          className="text-text-dim hover:text-foreground inline-flex items-center gap-1.5 text-xs"
+        >
+          <BarChart3 className="size-3.5" />
+          대시보드 보기
+        </WindowLink>
+        {syncBadge}
+      </div>
     </div>
   );
 }
