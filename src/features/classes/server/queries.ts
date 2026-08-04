@@ -5,6 +5,7 @@ import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
 import { effectiveTeacherId } from "@/lib/auth/view-mode";
 import { getTeacherScope } from "@/lib/auth/teacher-scope";
 import { attendanceRate } from "@/lib/calc/attendance";
+import { isEnrollmentEndedOn } from "@/features/enrollments/eligibility";
 import { kstToday } from "@/lib/date-kst";
 import { ASSIGNABLE_TEACHER_ROLES } from "@/lib/permissions";
 import type { ClassroomAssignData } from "../lib/classroom-assign";
@@ -97,6 +98,8 @@ export type ClassStudentRow = {
   grade: string | null;
   school: string | null;
   enrolledAt: string;
+  /** 수강 종료일. null=무기한. **오늘 이후(당일 포함)** 는 아직 수강 중이라 목록에 남는다. */
+  endDate: string | null;
   onHold: boolean;
   /** 분리등원 요일 — []=수업 전 요일 등원, ['mon','thu']=월·목만. */
   attendanceDays: string[];
@@ -472,6 +475,7 @@ export async function getClassTeacherFilterOptions(): Promise<
 
 export async function getClassDetail(id: string): Promise<ClassDetail | null> {
   const supabase = await createClient();
+  const today = kstToday();
   const { data: c } = await supabase
     .from("classes")
     .select(
@@ -487,8 +491,11 @@ export async function getClassDetail(id: string): Promise<ClassDetail | null> {
 
   if (!c) return null;
 
-  // 독립 두 쿼리 병렬(2 round-trip → 1). count는 head:true라 행 미전송.
-  const [{ data: schedules }, { count: studentCount }] = await Promise.all([
+  // 독립 두 쿼리 병렬(2 round-trip → 1).
+  // ⚠️ 재원생 수는 `count:exact head:true`로 못 센다 — 전출 배타 판정(isEnrollmentEndedOn)이 행마다
+  // `is_transferred`를 봐야 해서다. 대신 **한 반의 현재·미래 수강만** 좁게 받아 센다(집계용 전건 아님).
+  // `is null`만 세던 옛 코드는 오늘이 마지막 날인 학생을 빠뜨려 `수강 중인 학생` 목록과 갈렸다.
+  const [{ data: schedules }, { data: enrollRows }] = await Promise.all([
     supabase
       .from("class_schedules")
       .select("id, day_of_week, start_time, end_time, valid_from, valid_to, teacher_id, classroom_id")
@@ -497,10 +504,13 @@ export async function getClassDetail(id: string): Promise<ClassDetail | null> {
       .order("start_time"),
     supabase
       .from("enrollments")
-      .select("*", { count: "exact", head: true })
+      .select("end_date, is_transferred")
       .eq("class_id", id)
-      .is("end_date", null),
+      .or(`end_date.is.null,end_date.gte.${today}`),
   ]);
+  const studentCount = (enrollRows ?? []).filter(
+    (e) => !isEnrollmentEndedOn(e.end_date as string | null, today, (e.is_transferred as boolean | null) ?? false),
+  ).length;
 
   const teacher = (Array.isArray(c.teacher) ? c.teacher[0] : c.teacher) as
     | { display_name?: string }
@@ -543,20 +553,32 @@ export async function getClassDetail(id: string): Promise<ClassDetail | null> {
       teacherId: (s.teacher_id as string | null) ?? null,
       classroomId: (s.classroom_id as string | null) ?? null,
     })),
-    studentCount: studentCount ?? 0,
+    studentCount,
   };
 }
 
+/**
+ * 이 반에 **오늘 기준 아직 수강 중인** 학생.
+ *
+ * ⚠️ `end_date is null`로 자르지 말 것 — 종료 규약은 [isEnrollmentEndedOn](../../enrollments/eligibility.ts)
+ * 단일 소스이고, **일반 종료는 종료일 당일까지 재원**(반이동만 당일 배타)이다. `is null`만 보면
+ * *오늘이 마지막 날인 학생*이 통째로 사라진다 — 실측(2026-08-04) `중등M 개별 JJ3M`은 시간표 셀에
+ * 5명이 뜨는데 반 상세는 "활성 재원생이 없습니다"였다(5명 전부 `end_date=오늘`, 전출 아님).
+ * 개별(JJ·BS) 반은 하루짜리 수강이 정상이라 이 갭이 그대로 "학생 0명"으로 보인다.
+ */
 export async function getClassStudents(classId: string): Promise<ClassStudentRow[]> {
   const supabase = await createClient();
+  const today = kstToday();
   const { data } = await supabase
     .from("enrollments")
     .select(
-      `id, start_date, on_hold, attendance_days,
+      `id, start_date, end_date, on_hold, is_transferred, attendance_days,
        student:student_id ( id, name, grade, school )`,
     )
     .eq("class_id", classId)
-    .is("end_date", null)
+    // 종료일 당일도 재원이라 `>= today`까지 받아 두고, 전출 배타 판정은 아래 단일 소스에 맡긴다.
+    // (한 반의 현재·미래 수강만이라 행이 적다 — 집계용 전건 fetch가 아니다.)
+    .or(`end_date.is.null,end_date.gte.${today}`)
     .order("start_date", { ascending: false });
 
   if (!data) return [];
@@ -567,6 +589,11 @@ export async function getClassStudents(classId: string): Promise<ClassStudentRow
         | { id: string; name: string; grade: string | null; school: string | null }
         | undefined;
       if (!s) return null;
+      const endDate = (e.end_date as string | null) ?? null;
+      // 반이동(전출)은 종료일 당일에 이미 새 반 소속 — 그날 이 반 명단에 남기면 두 반에 겹쳐 뜬다.
+      if (isEnrollmentEndedOn(endDate, today, (e.is_transferred as boolean | null) ?? false)) {
+        return null;
+      }
       return {
         enrollmentId: e.id,
         studentId: s.id,
@@ -574,6 +601,7 @@ export async function getClassStudents(classId: string): Promise<ClassStudentRow
         grade: s.grade,
         school: s.school,
         enrolledAt: e.start_date,
+        endDate,
         onHold: e.on_hold,
         attendanceDays: (e.attendance_days as string[] | null) ?? [],
       } satisfies ClassStudentRow;
