@@ -156,28 +156,53 @@ export type SchoolPenetration = {
   pct: number | null;
 };
 
+export type DistBar = { label: string; n: number };
+export type StudentDistribution = {
+  schools: SchoolPenetration[];
+  /** 학년별 — 초1…고3 순서로 정렬(문자 정렬하면 고1이 맨 앞으로 온다). */
+  grades: DistBar[];
+  /** 학교 소재 구별. 학생 주소가 61%뿐이라 **학교 위치**로 센다(주소보다 신뢰도가 높다). */
+  regions: DistBar[];
+  total: number;
+};
+
+// 초1…고3. 문자 정렬은 "고1 < 중1 < 초1"이 되어 학년 흐름이 뒤집힌다.
+const GRADE_ORDER = [
+  ...[1, 2, 3, 4, 5, 6].map((n) => `초${n}`),
+  ...[1, 2, 3].map((n) => `중${n}`),
+  ...[1, 2, 3].map((n) => `고${n}`),
+];
+
 /**
- * 학교별 점유율 = 우리 재원생 ÷ 전교생(학교알리미 공시).
+ * 재원생 현황 분포 3종 — 학교별 점유율 · 학년별 · 지역별.
+ *
+ * 세 개가 **같은 두 번의 조회**를 나눠 쓴다(학생 · 학교공시). 따로 만들면 같은 데이터를 세 번 읽는다.
  *
  * 🔴 정규화를 **JS 한 곳에서만** 한다. SQL로 조인하면 치환 규칙이 TS·cjs에 이어 세 번째 사본이 되고,
  * 규칙이 바뀔 때 한 곳만 고쳐 조용히 어긋난다(여학교 6종 47명이 통째로 빠졌던 게 그런 종류의 실수다).
  * 양쪽 다 수백 행이라 받아서 붙이는 편이 안전하다(각각 fetchAllPaged로 1000행 절단도 막는다).
  */
-export async function getSchoolPenetration(): Promise<SchoolPenetration[]> {
+export async function getStudentDistribution(): Promise<StudentDistribution> {
   const supabase = await createClient();
   const [students, schools] = await Promise.all([
-    fetchAllPaged<{ school: string | null }>((from, to) =>
+    fetchAllPaged<{ school: string | null; grade: string | null }>((from, to) =>
       supabase
         .from("students")
-        .select("school")
+        .select("school, grade")
         .eq("status", "enrolled")
         .not("school", "is", null)
         .range(from, to),
     ),
-    fetchAllPaged<{ name: string; name_key: string; kind: string; total_students: number }>((from, to) =>
+    fetchAllPaged<{
+      name: string;
+      name_key: string;
+      kind: string;
+      total_students: number;
+      region: string | null;
+    }>((from, to) =>
       supabase
         .from("school_enrollment_stats")
-        .select("name, name_key, kind, total_students")
+        .select("name, name_key, kind, total_students, region")
         .order("name_key", { ascending: true })
         .range(from, to),
     ),
@@ -185,13 +210,23 @@ export async function getSchoolPenetration(): Promise<SchoolPenetration[]> {
 
   const byKey = new Map(schools.map((s) => [s.name_key, s]));
   const ours = new Map<string, { n: number; raw: string }>();
+  const gradeCount = new Map<string, number>();
+  const regionCount = new Map<string, number>();
   for (const s of students) {
+    const g = (s.grade ?? "").trim() || "미상";
+    gradeCount.set(g, (gradeCount.get(g) ?? 0) + 1);
+
     const key = normalizeSchoolName(s.school);
     if (!key) continue;
     const cur = ours.get(key);
     // 같은 학교의 두 표기("일중"·"대구일중")가 여기서 합쳐진다.
     if (cur) cur.n += 1;
     else ours.set(key, { n: 1, raw: s.school ?? key });
+
+    // 지역은 **학교 소재지**로 센다 — 학생 주소는 61%만 있고 표기도 제각각이라 덜 믿을 만하다.
+    // 공시에 없는 학교면 '미상'(추측해서 아무 구에나 넣지 않는다).
+    const region = byKey.get(key)?.region?.replace(/^대구광역시\s*/, "").trim() || "미상";
+    regionCount.set(region, (regionCount.get(region) ?? 0) + 1);
   }
 
   const rows: SchoolPenetration[] = [];
@@ -208,8 +243,30 @@ export async function getSchoolPenetration(): Promise<SchoolPenetration[]> {
       pct: total && total > 0 ? Math.round((v.n / total) * 1000) / 10 : null,
     });
   }
-  // 우리 학생이 많은 순 = "우리 밭이 어디인가". 점유율은 막대로 따로 읽는다.
-  return rows.sort((a, b) => b.ours - a.ours);
+  // 학년은 학년 흐름 순(초1→고3), 그 밖의 값(미상 등)은 뒤로.
+  const grades = [...gradeCount]
+    .map(([label, n]) => ({ label, n }))
+    .sort((a, b) => {
+      const ia = GRADE_ORDER.indexOf(a.label);
+      const ib = GRADE_ORDER.indexOf(b.label);
+      if (ia === -1 && ib === -1) return b.n - a.n;
+      if (ia === -1) return 1;
+      if (ib === -1) return -1;
+      return ia - ib;
+    });
+
+  // 지역은 많은 순, '미상'은 항상 끝(지표가 아니라 데이터 품질 표시).
+  const regions = [...regionCount]
+    .map(([label, n]) => ({ label, n }))
+    .sort((a, b) => (a.label === "미상" ? 1 : b.label === "미상" ? -1 : b.n - a.n));
+
+  return {
+    // 우리 학생이 많은 순 = "우리 밭이 어디인가". 점유율은 막대로 따로 읽는다.
+    schools: rows.sort((a, b) => b.ours - a.ours),
+    grades,
+    regions,
+    total: students.length,
+  };
 }
 
 /** 통계 연도 선택지 — 데이터가 있는 연도만(없는 해를 고르면 빈 화면으로 걸어 들어간다). */

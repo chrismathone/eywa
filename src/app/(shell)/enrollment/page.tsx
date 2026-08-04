@@ -22,7 +22,7 @@ import { kstToday } from "@/lib/date-kst";
 import { parseRange } from "@/features/enrollment/range";
 import {
   getEnrollmentStats,
-  getSchoolPenetration,
+  getStudentDistribution,
   getStatsYears,
 } from "@/features/enrollment/server/stats-queries";
 import { StatsView } from "./_components/stats-view";
@@ -111,7 +111,7 @@ export default async function EnrollmentPage({
   // 🔴 뷰마다 **가져오는 양이 다르다**. 목록은 한 페이지(50행)만 — 옛 시트 이관으로 2,251행이 되어
   // 전건 로드는 라운드트립 3회 + 배지 청크 20여 회로 불어난다(B2·B4). 칸반은 열별 집계가 필요해
   // 전건을 유지하되, 그래서 기간 필터 없이 열면 여전히 무겁다(별도 과제).
-  const [kanbanItems, tablePage, headerCounts, stats, statsYears, schools, consultants, minYear, pushCandidates, totalCount] =
+  const [kanbanItems, tablePage, headerCounts, stats, statsYears, dist, consultants, minYear, pushCandidates, totalCount] =
     await Promise.all([
       view === "kanban" ? getEnrollmentConsultations(filter) : Promise.resolve(null),
       view === "table" ? getEnrollmentConsultationsPage(filter, page, PAGE_SIZE) : Promise.resolve(null),
@@ -119,8 +119,8 @@ export default async function EnrollmentPage({
       view === "table" ? getConsultationFilteredCounts(filter) : Promise.resolve(null),
       view === "stats" ? getEnrollmentStats(statsYear) : Promise.resolve(null),
       view === "stats" ? getStatsYears() : Promise.resolve([]),
-      // 학교별 점유율은 연도와 무관한 **현재 재원생** 기준이라 statsYear를 안 받는다.
-      view === "stats" ? getSchoolPenetration() : Promise.resolve([]),
+      // 재원생 분포(학교·학년·지역)는 연도와 무관한 **현재 재원생** 기준이라 statsYear를 안 받는다.
+      view === "stats" ? getStudentDistribution() : Promise.resolve(null),
       getConsultantOptions(),
       getConsultationMinYear(),
       canPushMakeedu && view !== "stats" ? getUnpushedIntakeConsultations() : Promise.resolve([]),
@@ -256,8 +256,8 @@ export default async function EnrollmentPage({
       ) : null}
 
       {/* 통계뷰는 빈 상태 사진 대신 자기 안에서 "집계할 상담이 없습니다"를 말한다(연도 선택을 남겨야 하므로). */}
-      {view === "stats" && stats ? (
-        <StatsView stats={stats} year={statsYear} years={statsYears} hrefForYear={yearHref} schools={schools} />
+      {view === "stats" && stats && dist ? (
+        <StatsView stats={stats} year={statsYear} years={statsYears} hrefForYear={yearHref} dist={dist} />
       ) : /* 빈 상태 판정은 rows.length이 아니라 total === 0 (2페이지가 비어 보이는 것과 진짜 0건은 다르다) */
       (view === "table" ? (headerCounts?.total ?? 0) === 0 : items.length === 0) ? (
         <div className="mx-auto max-w-xl py-4">
