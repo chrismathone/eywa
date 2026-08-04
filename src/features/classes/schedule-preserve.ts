@@ -38,6 +38,9 @@ export type PriorSlot = {
   endTime: string;
   validFrom: string | null;
   validTo: string | null;
+  /** 이력 보존용 — 담당/강의실이 바뀌면 옛 값을 마감 행으로 남긴다(planSlotArchives). */
+  teacherId?: string | null;
+  classroomId?: string | null;
   slotTeacherLabel: string | null;
   slotRoomLabel: string | null;
   periodLabel: string | null;
@@ -116,6 +119,81 @@ function take(
   return undefined;
 }
 
+/**
+ * incoming ↔ prior 1:1 짝짓기 — **정확 키(요일|시작|종료) 전부 → 그다음 느슨한 키(요일|시작)** 순서.
+ * `preserveScheduleFields`와 `planSlotArchives`가 **같은 짝**을 봐야 "새 행은 오늘부터"와
+ * "옛 행은 어제까지"가 짝이 맞는다(어긋나면 이력에 구멍이나 중복 구간이 생긴다).
+ */
+function matchIncomingToPrior(incoming: IncomingSlot[], prior: PriorSlot[]): (PriorSlot | undefined)[] {
+  const exact = new Map<string, PriorSlot[]>();
+  const loose = new Map<string, PriorSlot[]>();
+  for (const p of prior) {
+    enqueue(exact, slotKey(p), p);
+    enqueue(loose, startKey(p), p);
+  }
+  const used = new Set<PriorSlot>();
+  const matched: (PriorSlot | undefined)[] = incoming.map((s) => take(exact, slotKey(s), used));
+  incoming.forEach((s, i) => {
+    if (!matched[i]) matched[i] = take(loose, startKey(s), used);
+  });
+  return matched;
+}
+
+/** 이 슬롯의 **이력 있는 값**이 바뀌었나 — 담당·강의실·(직접 입력한) 종료시각. */
+function slotChanged(incoming: IncomingSlot, prior: PriorSlot): boolean {
+  if ((incoming.teacherId ?? null) !== (prior.teacherId ?? null)) return true;
+  if ((incoming.classroomId ?? null) !== (prior.classroomId ?? null)) return true;
+  // 종료시각은 explicitTime일 때만 폼 값이 이긴다(그때만 실제로 바뀐다).
+  if (incoming.explicitTime && hm(incoming.endTime) !== hm(prior.endTime)) return true;
+  return false;
+}
+
+/** `YYYY-MM-DD`의 전날. 마감일(valid_to)은 **바뀌기 전날**이라 새 행과 구간이 안 겹친다. */
+export function dayBefore(ymd: string): string {
+  const [y, m, d] = ymd.slice(0, 10).split("-").map(Number);
+  const dt = new Date(Date.UTC(y!, (m ?? 1) - 1, d ?? 1));
+  dt.setUTCDate(dt.getUTCDate() - 1);
+  return dt.toISOString().slice(0, 10);
+}
+
+/**
+ * 담당·강의실이 바뀌거나 슬롯이 사라질 때 **옛 배치를 마감 행으로 남긴다**(원장 2026-08-04:
+ * *"시간표에서 주차변경시에 실제로 일어났던 모든것이 반영되도록"*).
+ *
+ * 🔴 지금까지는 같은 행을 덮어써서 **지난 주를 봐도 지금 담당·강의실이 보였다**. 무기한 슬롯이 587행이라
+ *    대부분의 반이 여기 해당했다. 행을 쪼개면 시간표 쿼리(그 주 유효 구간 필터)가 그대로 과거를 그린다.
+ *
+ * ⚠️ **오늘 만들어진 행은 마감하지 않는다**(`validFrom >= today`) — 마감일이 시작일보다 빨라지는
+ *    거꾸로 된 구간이 생기고, 하루에 두 번 고치면 쓰레기 행이 쌓인다.
+ * ⚠️ 반환 행은 **그대로 insert**한다(호출부가 현재 유효 행을 delete한 뒤 재삽입하는 구조라, 마감 행도
+ *    같은 insert에 실어야 한 번의 왕복으로 끝난다).
+ */
+export function planSlotArchives(input: {
+  incoming: IncomingSlot[];
+  /** ⚠️ **현재 유효한 행만**(preserveScheduleFields와 같은 계약). */
+  prior: PriorSlot[];
+  /** KST 오늘 — 마감일은 이 날의 전날. */
+  today: string;
+}): (PriorSlot & { validTo: string })[] {
+  const matched = matchIncomingToPrior(input.incoming, input.prior);
+  const keptPairs = new Map<PriorSlot, IncomingSlot>();
+  input.incoming.forEach((s, i) => {
+    const p = matched[i];
+    if (p) keptPairs.set(p, s);
+  });
+  const cutoff = dayBefore(input.today);
+  const out: (PriorSlot & { validTo: string })[] = [];
+  for (const p of input.prior) {
+    // 오늘 시작한 행은 과거가 없다 — 마감하면 거꾸로 된 구간이 된다.
+    if (p.validFrom && String(p.validFrom).slice(0, 10) >= input.today) continue;
+    const pair = keptPairs.get(p);
+    // 짝이 없으면 '사라진 슬롯'(그 배치는 어제까지 있었다), 짝이 있어도 값이 바뀌었으면 옛 값을 남긴다.
+    if (pair && !slotChanged(pair, p)) continue;
+    out.push({ ...p, validTo: cutoff });
+  }
+  return out;
+}
+
 export function preserveScheduleFields(input: {
   incoming: IncomingSlot[];
   /** ⚠️ **현재 유효한 행만**(위 계약 ①). 만료 행을 섞으면 옛 라벨이 되살아난다. */
@@ -125,29 +203,21 @@ export function preserveScheduleFields(input: {
   today: string;
 }): PreservedSlot[] {
   // 같은 키가 여러 행일 수 있어(중복 슬롯) 큐로 두고 하나씩 소비 = 1:1 승계.
-  const exact = new Map<string, PriorSlot[]>();
-  const loose = new Map<string, PriorSlot[]>();
-  for (const p of input.prior) {
-    enqueue(exact, slotKey(p), p);
-    enqueue(loose, startKey(p), p);
-  }
-
   // 1차 = 정확 키(요일|시작|종료). 2차 = (요일|시작) — 폼이 보내는 종료시각은 교시표에서 파생되므로
   // 저장된 값과 다를 수 있다(실측: 살아있는 45행이 시작 일치·종료 불일치, **전부 라벨 보유**).
-  // 1차를 전부 끝낸 뒤 2차를 도는 순서가 중요하다(느슨한 짝짓기가 정확한 짝을 가로채지 않게).
-  const used = new Set<PriorSlot>();
-  const matched: (PriorSlot | undefined)[] = input.incoming.map((s) =>
-    take(exact, slotKey(s), used),
-  );
-  input.incoming.forEach((s, i) => {
-    if (!matched[i]) matched[i] = take(loose, startKey(s), used);
-  });
+  const matched = matchIncomingToPrior(input.incoming, input.prior);
 
   return input.incoming.map((s, i) => {
     const prior = matched[i];
+    // 🔴 담당·강의실이 바뀌었으면 **오늘부터 새 구간**이다(옛 값은 planSlotArchives가 어제까지로 마감).
+    //    기존값을 그대로 승계하면 같은 행을 덮어쓰는 셈이라 지난 주에도 새 담당이 보인다.
+    //    단 오늘 시작한 행은 쪼갤 과거가 없어 그대로 승계한다(하루 두 번 수정 시 구간 폭발 방지).
+    const splitToday =
+      !!prior && slotChanged(s, prior) && !(prior.validFrom && String(prior.validFrom).slice(0, 10) >= input.today);
+    const inheritedFrom = splitToday ? input.today : (prior?.validFrom ?? input.today);
     const validFrom = input.period.provided
-      ? (input.period.validFrom ?? prior?.validFrom ?? input.today)
-      : (prior?.validFrom ?? input.today);
+      ? (input.period.validFrom ?? inheritedFrom)
+      : inheritedFrom;
     // 종료일: 값이 들어오면 언제나 전 행에 적용(폼 안내 그대로). **비어 있을 때만** 해석이 갈린다 —
     // 평소엔 "명시적 무기한"(되돌리기), keepValidTo면 "안 정함"(교시별 기존값 유지).
     const keepTo = input.period.keepValidTo === true && input.period.validTo === null;

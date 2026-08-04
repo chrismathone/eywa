@@ -93,6 +93,32 @@ export function observerColumns(doc: ReviewDoc): { slot: string; name: string }[
     .map((e) => ({ slot: e.id ?? e.name, name: e.name }));
 }
 
+/**
+ * 내 채점 자격 — 본인('self') / 지정 관찰자 / 선착순(마감 전 또는 이미 내 장 있음).
+ * 반환: 슬롯 키 + 이미 제출했는지(수정하기/평가하기 버튼 분기). 자격 없으면 null.
+ */
+export function myScoreSlot(
+  doc: ReviewDoc,
+  viewerId: string,
+): { slot: string; submitted: boolean } | null {
+  const isSelf = doc.header.teacherId === viewerId;
+  if (isSelf) {
+    const sheet = doc.submissions["self"];
+    return { slot: "self", submitted: !!sheet?.scores?.some((v) => v > 0) };
+  }
+  const openMode = doc.header.observerMode === "open";
+  const observers = observerColumns(doc);
+  const mineSheet = doc.submissions[viewerId];
+  if (openMode) {
+    const seated = observers.some((o) => o.slot === viewerId) || !!mineSheet;
+    if (!seated && observers.length >= OPEN_MODE_OBSERVER_LIMIT) return null;
+    return { slot: viewerId, submitted: !!mineSheet?.scores?.some((v) => v > 0) };
+  }
+  const assigned = doc.evaluators.some((e) => e.id === viewerId && e.kind === "observer");
+  if (!assigned) return null;
+  return { slot: viewerId, submitted: !!mineSheet?.scores?.some((v) => v > 0) };
+}
+
 async function requireRead() {
   const user = await getCurrentUser();
   if (!user || !(await canAccessTenant(user.systemRole, "class_review"))) {

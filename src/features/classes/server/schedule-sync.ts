@@ -31,7 +31,9 @@ export async function loadCurrentSlots(
   const { data, error } = await supabase
     .from("class_schedules")
     .select(
-      "day_of_week, start_time, end_time, valid_from, valid_to, slot_teacher_label, slot_room_label, period_label, merge_group",
+      // teacher_id·classroom_id는 **이력 판정용**(담당·강의실이 바뀌면 옛 값을 마감 행으로 남긴다,
+      // planSlotArchives). 빠뜨리면 변경 감지가 항상 "안 바뀜"이 돼 이력이 조용히 안 쌓인다.
+      "day_of_week, start_time, end_time, valid_from, valid_to, teacher_id, classroom_id, slot_teacher_label, slot_room_label, period_label, merge_group",
     )
     .eq("class_id", classId)
     .or(currentFilter(today))
@@ -52,6 +54,8 @@ export async function loadCurrentSlots(
         endTime: String(r.end_time),
         validFrom: r.valid_from,
         validTo: r.valid_to,
+        teacherId: r.teacher_id ?? null,
+        classroomId: r.classroom_id ?? null,
         slotTeacherLabel: r.slot_teacher_label,
         slotRoomLabel: r.slot_room_label,
         periodLabel: r.period_label,

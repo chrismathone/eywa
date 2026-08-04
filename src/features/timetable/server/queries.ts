@@ -4,7 +4,9 @@ import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged, fetchAllPagedInChunks } from "@/lib/supabase/batch";
 import { kstToday, kstMinutesOfDay } from "@/lib/date-kst";
 import { getTeacherScope } from "@/lib/auth/teacher-scope";
-import { weekEndOf, weekSundayOf, shiftDays } from "../lib/week";
+import { dateOfDowInWeek, slotLiveOnDate, weekEndOf, weekSundayOf, shiftDays } from "../lib/week";
+import { getTeacherAsOfIndex } from "@/features/classes/server/teacher-as-of-queries";
+import { resolveTeacherAsOf } from "@/features/classes/teacher-as-of";
 // 보고서 과목 판정 규칙은 RPC(0150a) SQL에 내장 — 규칙 문서·테스트는 lib/report-subject.ts가 담당(동기 유지).
 import { compareStudentLines } from "../lib/student-sort";
 import type { TeacherColorMap } from "../lib/class-grid";
@@ -203,6 +205,7 @@ async function fetchSlots(
         .from("class_schedules")
         .select(
           `id, day_of_week, start_time, end_time, class_id, slot_teacher_label, slot_room_label, classroom_id,
+       valid_from, valid_to,
        class:class_id!inner (
          id, class_name, subject, bg_color, text_color, is_active, closed_at, is_special,
          pending_teacher_id, pending_teacher_date, classroom_id,
@@ -234,16 +237,34 @@ async function fetchSlots(
   ]);
 
   // 종강 반: closed_at < 기준일이면 그 주엔 이미 종강 → 제외(closed_at ≥ 기준일인 과거 주엔 표시).
+  // + 🔴 **날짜 단위 유효 판정**(2026-08-04): 위 SQL 필터는 "그 주와 겹치는 행"까지 넉넉히 가져온다.
+  //   담당·강의실이 바뀐 주에는 옛 행(어제까지)과 새 행(오늘부터)이 **둘 다** 그 주와 겹쳐 같은 칸이
+  //   두 번 그려진다. 요일 칸의 **실제 날짜**로 다시 걸러 그날 살아 있던 배치 하나만 남긴다
+  //   (월·화는 옛 담당, 수요일부터 새 담당 — 실제로 일어난 그대로).
   const visible = data.filter((r) => {
     const k = (Array.isArray(r.class) ? r.class[0] : r.class) as { closed_at?: string | null } | undefined;
     const closedAt = k?.closed_at ?? null;
-    return !closedAt || closedAt >= referenceDate;
+    if (closedAt && closedAt < referenceDate) return false;
+    return slotLiveOnDate(
+      {
+        dayOfWeek: r.day_of_week as string,
+        validFrom: (r as { valid_from?: string | null }).valid_from ?? null,
+        validTo: (r as { valid_to?: string | null }).valid_to ?? null,
+      },
+      referenceDate,
+    );
   });
 
   const counts = new Map<string, number>();
   for (const e of enrollments) {
     counts.set(e.class_id, (counts.get(e.class_id) ?? 0) + 1);
   }
+
+  // 🔴 지난 주를 볼 때는 **그때 담임**으로 되살린다(원장 2026-08-04 "이전주차가 되면 이전담임이 나오는걸로").
+  //    담임은 반 단위 속성이라 시간 축이 없어서, 그냥 두면 지난 주에도 현재 담임이 나온다(활성 반 62개는
+  //    슬롯에 담당이 아예 없어 슬롯 분할로도 안 잡힌다). 인수인계 로그(사실) → 그 달 보고서 작성자(추정) 순.
+  //    ⚠️ 이번 주·미래는 현재 담임이 정답이라 **조회 자체를 안 한다**(왕복 0).
+  const asOfIndex = weekSundayOf(referenceDate) < todayStr() ? await getTeacherAsOfIndex() : null;
 
   return visible.map((r) => {
     const klass = (Array.isArray(r.class) ? r.class[0] : r.class) as
@@ -285,7 +306,18 @@ async function fetchSlots(
       dayOfWeek: r.day_of_week,
       startTime: r.start_time,
       endTime: r.end_time,
-      teacherName: resolveTeacherLabel(teacher?.display_name ?? null, labelMap),
+      ...(() => {
+        // 셀 날짜 기준으로 그때 담임을 찾는다(주 단위가 아니라 날짜 — 주 중간 교체도 요일마다 갈린다).
+        const cellDate = asOfIndex ? dateOfDowInWeek(referenceDate, r.day_of_week as string) : null;
+        const asOf =
+          asOfIndex && cellDate ? resolveTeacherAsOf(asOfIndex, r.class_id as string, cellDate) : null;
+        return {
+          teacherName: asOf
+            ? resolveTeacherLabel(asOf.name, labelMap)
+            : resolveTeacherLabel(teacher?.display_name ?? null, labelMap),
+          ...(asOf?.inferred ? { teacherInferred: true } : {}),
+        };
+      })(),
       classroomName: room?.name ?? null,
       studentCount: counts.get(r.class_id) ?? 0,
       slotTeacherLabel: resolveTeacherLabel((r.slot_teacher_label as string | null) ?? null, labelMap),

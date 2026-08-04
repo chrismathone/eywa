@@ -6,14 +6,15 @@ import { Pill } from "@/components/atoms/pill";
 import { requireAccess } from "@/lib/auth/require-access";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
+import { Button } from "@/components/ui/button";
 import {
   getClassReview,
   getReviewPrivileges,
+  myScoreSlot,
   observerColumns,
   OPEN_MODE_OBSERVER_LIMIT,
 } from "@/features/class-review/server/queries";
 import { averageTotals, computeTotals, itemCountOf, normalizeScore } from "@/features/class-review/checklist";
-import { ScorePanel } from "../_components/score-panel";
 
 export const metadata = { title: "수업 평가 상세 — eywa" };
 
@@ -60,12 +61,8 @@ export default async function ClassReviewDetailPage({ params }: { params: Promis
     areas,
   );
 
-  // 내 채점 자격 — 본인('self') / 지정 관찰자 / 선착순(권한자, 마감 전 또는 이미 내 장 있음).
-  const isSelf = doc.header.teacherId === viewer.id;
-  const assignedMe = doc.evaluators.some((e) => e.id === viewer.id && e.kind === "observer");
-  const openSeatLeft = openMode && (observerCols.some((c) => c.slot === viewer.id) || observerCols.length < OPEN_MODE_OBSERVER_LIMIT);
-  const mySlot = isSelf ? "self" : assignedMe || openSeatLeft ? viewer.id : null;
-  const mySheet = mySlot ? (doc.submissions[mySlot] ?? null) : null;
+  // 내 채점 자격(공용 헬퍼) — 있으면 헤더에 평가하기/수정하기 버튼(채점은 별도 페이지, 원장 지시 2026-08-04).
+  const mine = myScoreSlot(doc, viewer.id);
 
   const headerBits = [
     doc.header.subject ? subjects.labelOf(doc.header.subject) : null,
@@ -87,6 +84,13 @@ export default async function ClassReviewDetailPage({ params }: { params: Promis
           title={`${doc.header.teacherName} · ${doc.header.date}`}
           description={headerBits.join(" · ")}
           embedLabel={`수업 평가 — ${doc.header.teacherName}`}
+          actions={
+            mine ? (
+              <Button render={<Link href={`/class-review/${doc.id}/score`} />}>
+                {mine.submitted ? "내 평가 수정하기" : "평가하기"}
+              </Button>
+            ) : undefined
+          }
         />
       </div>
 
@@ -232,14 +236,20 @@ export default async function ClassReviewDetailPage({ params }: { params: Promis
         </div>
       ) : null}
 
-      {/* 내 채점 */}
-      {mySlot ? (
-        <ScorePanel
-          docId={doc.id}
-          areas={areas}
-          initialScores={mySheet?.scores ?? []}
-          initialComment={mySheet?.comment ?? ""}
-        />
+      {/* 채점은 별도 페이지(/score) — 상세는 보기 전용(원장 지시 2026-08-04). */}
+      {mine ? (
+        <div className="border-line bg-bg-soft/40 flex flex-wrap items-center justify-between gap-3 rounded-2xl border p-4">
+          <p className="text-text-dim text-sm">
+            {mine.submitted
+              ? "내 채점이 저장돼 있습니다 — 필요하면 수정할 수 있습니다."
+              : mine.slot === "self"
+                ? "본인 평가가 아직 없습니다 — 지금 채점해 주세요."
+                : "내 채점이 아직 없습니다 — 참관 내용을 채점해 주세요."}
+          </p>
+          <Button render={<Link href={`/class-review/${doc.id}/score`} />}>
+            {mine.submitted ? "내 평가 수정하기" : "평가하기"}
+          </Button>
+        </div>
       ) : (
         <p className="text-text-faint text-xs">
           {openMode
