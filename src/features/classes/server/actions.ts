@@ -384,7 +384,13 @@ export async function updateClass(
       action: "class_update",
       targetType: "class",
       targetLabel: input.className,
-      metadata: { classId: id, changed },
+      // 담임이 바뀌었으면 **새 담임 id도** 남긴다 — 지난 주 담임 복원(teacher-as-of)이 인수인계 로그와
+      // 이 로그를 같은 전이 목록으로 읽는다. 안 남기면 폼으로 바꾼 교체가 이력에서 통째로 빠진다.
+      metadata: {
+        classId: id,
+        changed,
+        ...(before && before.teacher_id !== input.teacherId ? { newTeacherId: input.teacherId } : {}),
+      },
     });
   }
 
