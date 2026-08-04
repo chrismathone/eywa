@@ -131,13 +131,21 @@ function readCsv(file) {
     all.push(...rows);
   }
 
-  const dupKey = new Map();
-  for (const r of all) dupKey.set(r.name_key, (dupKey.get(r.name_key) ?? 0) + 1);
-  const dups = [...dupKey].filter(([, n]) => n > 1);
-  console.log(`\n총 ${all.length}개교 · 정규화 이름 ${dupKey.size}종`);
-  if (dups.length)
-    // 정규화 후 같은 키가 둘 이상이면 점유율이 어느 학교 것인지 모호해진다 — 조용히 넘기지 않는다.
-    console.log(`⚠️ 정규화 후 이름이 겹치는 ${dups.length}종: ${dups.slice(0, 8).map(([k, n]) => `${k}×${n}`).join(", ")}`);
+  // ⚠️ 중복 검사는 **연도별로** 한다. 여러 해를 한 번에 넣으면 같은 학교가 해마다 한 번씩 나오는데,
+  // 연도를 안 나누고 세면 전 학교가 "×4 중복"으로 잡혀 **오탐이 진짜 경고를 묻는다**(실측: 466종 경고).
+  const years = [...new Set(all.map((r) => r.year))].sort();
+  const dupAll = [];
+  for (const y of years) {
+    const m = new Map();
+    for (const r of all.filter((x) => x.year === y)) m.set(r.name_key, (m.get(r.name_key) ?? 0) + 1);
+    for (const [k, n] of m) if (n > 1) dupAll.push(`${y}:${k}×${n}`);
+  }
+  const keySet = new Set(all.map((r) => r.name_key));
+  console.log(`\n총 ${all.length}행 · 연도 ${years.join(", ")} · 정규화 이름 ${keySet.size}종`);
+  if (dupAll.length)
+    // 같은 해에 같은 키가 둘 이상이면 점유율이 어느 학교 것인지 모호해진다 — 조용히 넘기지 않는다.
+    console.log(`⚠️ 같은 해에 이름이 겹치는 ${dupAll.length}건: ${dupAll.slice(0, 8).join(", ")}`);
+  else console.log(`  ✅ 같은 해 안에서 이름 충돌 없음`);
 
   const sample = all.filter((r) => ["칠성초", "침산중", "경명여중"].includes(r.name_key));
   console.log("\n표본:");

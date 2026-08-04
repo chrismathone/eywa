@@ -198,14 +198,19 @@ export async function getConsultationDistribution(year: number): Promise<Consult
       (from, to) =>
         supabase
           .from("school_enrollment_stats")
+          // 🔴 **보는 해의 공시만** 받는다. 4개 연도(2023~2026)가 적재돼 있어 전부 받으면 같은 학교가
+          // 해마다 한 번씩 들어와 마지막 것이 이겨 버린다 — 2023년 상담을 2026년 전교생으로 나누는
+          // 바로 그 오류다. (`.eq`는 `.select` 뒤에만 온다 — 빌더 순서.)
           .select("name, name_key, kind, total_students, region, year")
+          .eq("year", year)
           .order("name_key", { ascending: true })
           .range(from, to),
     ),
   ]);
 
-  const totalsYear = schoolStats.length ? Math.max(...schoolStats.map((s) => s.year)) : null;
-  const hasTotals = totalsYear === year;
+  // 그 해 공시가 있으면 비율을 낸다. 없으면(예: 아직 안 받은 연도) 건수·전환율만 보여준다.
+  const hasTotals = schoolStats.length > 0;
+  const totalsYear = hasTotals ? year : null;
   const byKey = new Map(schoolStats.map((s) => [s.name_key, s]));
 
   const consults: ConsultRow[] = rows.map((r) => ({

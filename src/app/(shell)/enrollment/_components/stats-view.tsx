@@ -4,6 +4,7 @@ import { PATH_BUCKET_COLOR } from "@/features/enrollment/path-bucket";
 import type { ConsultationDistribution, EnrollmentStats } from "@/features/enrollment/server/stats-queries";
 import { StatsTrend } from "./stats-trend";
 import { ConsultDistPanel } from "./consult-dist-panel";
+import { GRADE_UNKNOWN } from "@/features/enrollment/consultation-dist";
 import type { SchoolStatsPrefs } from "@/features/enrollment/school-view-prefs";
 
 const won = (n: number) => `${Math.round(n).toLocaleString("ko-KR")}원`;
@@ -199,17 +200,28 @@ export function StatsView({
           그래야 위의 연도 선택이 여기에도 적용된다(재원생 기준이던 때는 연도를 바꿔도 안 변했다). */}
       {dist.total > 0 ? (
         <div className="grid gap-4 lg:grid-cols-2">
-          <Card title="학년별 상담" sub={`${year}년 상담 ${dist.total}건 · 괄호는 등록 건수`}>
+          <Card
+            title="학년별 상담"
+            sub={(() => {
+              const bad = dist.grades.find((g) => g.label === GRADE_UNKNOWN)?.n ?? 0;
+              return `${year}년 상담 ${dist.total}건 · 괄호는 등록 건수${
+                bad ? ` · 학년이나 학교급을 확정할 수 없는 ${bad}건은 '분류 불가'로 뺐습니다` : ""
+              }`;
+            })()}
+          >
             <ul className="space-y-1.5">
               {dist.grades.map((g) => (
-                <li key={g.label} className="flex items-center gap-2">
+                <li
+                  key={g.label}
+                  className={`flex items-center gap-2${g.label === GRADE_UNKNOWN ? " border-line mt-1 border-t pt-1.5 opacity-70" : ""}`}
+                >
                   <span className="text-text-dim num w-12 shrink-0 text-xs">{g.label}</span>
                   <div className="bg-bg-soft h-3 flex-1 overflow-hidden rounded-full">
                     <div
                       className="h-full rounded-full"
                       style={{
                         width: `${(g.n / maxGrade) * 100}%`,
-                        background: KIND_COLOR[g.label[0]] ?? "var(--color-text-faint)",
+                        background: KIND_COLOR[g.label[0] ?? ""] ?? "var(--color-text-faint)",
                       }}
                     />
                   </div>
