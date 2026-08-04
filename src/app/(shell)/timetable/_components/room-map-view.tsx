@@ -11,6 +11,7 @@ import {
 } from "@/features/timetable/lib/room-grid";
 import {
   ROOM_DAY_ORDER,
+  buildRoomHourRows,
   buildRoomWeekRows,
   summarizeDay,
   type DayWindows,
@@ -22,6 +23,9 @@ import { RoomWeekPanel } from "./room-week-panel";
 // 서버 왕복 불필요 = 즉시 전환). 과목 하이라이트는 필터가 아니라 **딤 처리** — 다른 과목 블록을 숨기면
 // 그 교실이 비어 보이는 거짓 지도가 된다. "지금" 표시는 서버 렌더 시점 KST 고정(타이머 없음 — 새로고침/
 // 주 이동 시 갱신, #11·#25 회피).
+// 예외: **특강 숨김 토글**(원장 요청 2026-08-03)만 진짜 필터 — 방학 단기강좌가 정규 운영 시야를 흐릴 때
+// 걷어내는 용도라, 지도·지표가 **함께** 제외돼 화면 안에서는 수치가 어긋나지 않는다(메인 시간표의
+// 기본값=정규(특강 제외)와도 결이 같다). 기본은 표시.
 
 export function RoomMapView({
   slots,
@@ -31,6 +35,7 @@ export function RoomMapView({
   todayDay,
   isCurrentWeek,
   nowMin,
+  canEditCapacity,
 }: {
   slots: RoomSlotLite[];
   rooms: RoomInfo[];
@@ -39,13 +44,22 @@ export function RoomMapView({
   todayDay: DayOfWeek;
   isCurrentWeek: boolean;
   nowMin: number;
+  canEditCapacity: boolean;
 }) {
   const subjects = useSubjectMaps();
   const [day, setDay] = useState<DayOfWeek>(isCurrentWeek ? todayDay : "mon");
   const [focusSubject, setFocusSubject] = useState<string | null>(null);
+  const [hideSpecial, setHideSpecial] = useState(false);
 
-  const { buckets, unassigned } = useMemo(() => buildRoomBuckets(slots, rooms), [slots, rooms]);
+  const hasSpecial = useMemo(() => slots.some((s) => s.isSpecialLecture), [slots]);
+  const effSlots = useMemo(
+    () => (hideSpecial ? slots.filter((s) => !s.isSpecialLecture) : slots),
+    [slots, hideSpecial],
+  );
+  const { buckets, unassigned } = useMemo(() => buildRoomBuckets(effSlots, rooms), [effSlots, rooms]);
   const weekRows = useMemo(() => buildRoomWeekRows(buckets, windows), [buckets, windows]);
+  // 시간대별 = **선택 요일의 절대 데이터**(요일 칩을 따라감) — 주중 평균 비채택(원장 확정 08-03).
+  const hourMatrix = useMemo(() => buildRoomHourRows(buckets, windows, [day]), [buckets, windows, day]);
   const summary = useMemo(
     () => summarizeDay(buckets, windows, day, nowMin),
     [buckets, windows, day, nowMin],
@@ -125,6 +139,23 @@ export function RoomMapView({
             </button>
           ))}
         </div>
+        {/* 특강 숨김 — 유일한 진짜 필터(지도·지표 동시 제외, 위 헤더 주석). 특강이 있을 때만 노출. */}
+        {hasSpecial ? (
+          <>
+            <span className="bg-line h-4 w-px" aria-hidden />
+            <button
+              type="button"
+              onClick={() => setHideSpecial((v) => !v)}
+              className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs transition ${
+                hideSpecial
+                  ? "border-primary bg-primary text-primary-foreground font-medium"
+                  : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
+              }`}
+            >
+              특강 숨김
+            </button>
+          </>
+        ) : null}
         <div className="rail-spacer ml-auto" aria-hidden />
         <div className="text-text-dim flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]">
           <span>
@@ -168,7 +199,14 @@ export function RoomMapView({
         focusSubject={focusSubject}
       />
 
-      <RoomWeekPanel rows={weekRows} unassigned={unassigned} />
+      <RoomWeekPanel
+        rows={weekRows}
+        hourBands={hourMatrix.bands}
+        hourRows={hourMatrix.rows}
+        hourDayLabel={DAY_LABEL[day] ?? day}
+        unassigned={unassigned}
+        canEditCapacity={canEditCapacity}
+      />
     </div>
   );
 }

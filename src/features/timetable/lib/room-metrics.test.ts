@@ -111,3 +111,60 @@ describe("summarizeDay", () => {
     expect(s.dayUtilPct).toBe(0);
   });
 });
+
+describe("buildRoomHourRows (시간대별 활성도)", () => {
+  it("주중 창을 1시간 밴드로 나누고, 셀 = 밴드∩창 분모 대비 주중 점유율", async () => {
+    const { buildRoomHourRows, weekdayHourBands } = await import("./room-metrics");
+    const { buckets } = buildRoomBuckets(
+      [
+        slot({ dayOfWeek: "mon", startTime: "14:00", endTime: "15:00" }),
+        slot({ dayOfWeek: "tue", startTime: "14:00", endTime: "14:30", classId: "c2" }),
+      ],
+      ROOMS,
+    );
+    const w = resolveDayWindows(["math"], CONFIG, []); // 평일 14:00~16:00
+    expect(weekdayHourBands(w).map((b) => b.label)).toEqual(["14시", "15시"]);
+    const { bands, rows } = buildRoomHourRows(buckets, w);
+    expect(bands).toHaveLength(2);
+    const r1 = rows.find((r) => r.key === "r1")!;
+    expect(r1.cells[0]).toBe(30); // (60+30)분 ÷ (60분×5일) = 30%
+    expect(r1.cells[1]).toBe(0); // 15시 밴드 수업 없음
+    const r2 = rows.find((r) => r.key === "r2")!;
+    expect(r2.cells).toEqual([0, 0]);
+  });
+
+  it("창을 반쯤 벗어난 밴드는 분모를 창과의 교집합만큼만 잡는다", async () => {
+    const { buildRoomHourRows } = await import("./room-metrics");
+    // 관측 확장으로 mon만 13:30 시작 → 13시 밴드 분모 = 30분(mon)뿐.
+    const { buckets } = buildRoomBuckets(
+      [slot({ dayOfWeek: "mon", startTime: "13:30", endTime: "14:00" })],
+      ROOMS,
+    );
+    const w = resolveDayWindows(["math"], CONFIG, [
+      slot({ dayOfWeek: "mon", startTime: "13:30", endTime: "14:00" }),
+    ]);
+    const { bands, rows } = buildRoomHourRows(buckets, w);
+    expect(bands[0]!.label).toBe("13시");
+    const r1 = rows.find((r) => r.key === "r1")!;
+    expect(r1.cells[0]).toBe(100); // 점유 30분 ÷ 분모 30분(창 교집합)
+  });
+});
+
+describe("buildRoomHourRows — 선택 요일 단일 기준(UI 기본, 평균 아님)", () => {
+  it("days=[mon]이면 월요일 점유만 절대값으로 — 다른 요일 수업은 안 섞인다", async () => {
+    const { buildRoomHourRows } = await import("./room-metrics");
+    const { buckets } = buildRoomBuckets(
+      [
+        slot({ dayOfWeek: "mon", startTime: "14:00", endTime: "14:30" }),
+        slot({ dayOfWeek: "tue", startTime: "14:00", endTime: "16:00", classId: "c2" }),
+      ],
+      ROOMS,
+    );
+    const w = resolveDayWindows(["math"], CONFIG, []); // 평일 14:00~16:00
+    const mon = buildRoomHourRows(buckets, w, ["mon"]);
+    const r1 = mon.rows.find((r) => r.key === "r1")!;
+    expect(r1.cells).toEqual([50, 0]); // 월 14시 30분/60분 — 화요일 풀가동은 안 섞임
+    const tue = buildRoomHourRows(buckets, w, ["tue"]);
+    expect(tue.rows.find((r) => r.key === "r1")!.cells).toEqual([100, 100]);
+  });
+});

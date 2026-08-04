@@ -25,6 +25,7 @@ import { DraftBanner } from "@/components/forms/draft-banner";
 import { splitGridSlots } from "@/features/classes/grid-slots";
 import { ScheduleGrid } from "./schedule-grid";
 import { ClassSpecialFields } from "./class-special-fields";
+import { ClassReportFields } from "./class-report-fields";
 import { CustomTimeSlots } from "./custom-time-slots";
 import { OverlapNotice } from "./overlap-notice";
 
@@ -57,6 +58,7 @@ export type ClassFormDefaults = {
   bgColor?: string | null;
   /** 특강 토글값(0133a 컬럼 그대로). 이름 폴백은 서버 판정용이라 폼 체크상태에 섞지 않는다. */
   isSpecial?: boolean;
+  reportOptout?: boolean;
   /** 운영 기간 프리필 — 스케줄 슬롯들의 공통값. 슬롯마다 다르면 그 칸은 **비워** 주고 periodMixed로 알린다. */
   validFrom?: string | null;
   validTo?: string | null;
@@ -132,6 +134,7 @@ export function ClassForm({
   const [bgColor, setBgColor] = useState(defaults?.bgColor ?? "");
   // 특강 토글 — 컨트롤드(초안 복원 시 onRestore로 rehydrate해야 하므로 state로 든다).
   const [isSpecial, setIsSpecial] = useState(defaults?.isSpecial ?? false);
+  const [reportOptout, setReportOptout] = useState(defaults?.reportOptout ?? false);
   // 초안 복원용 — 복원된 스케줄을 그리드 initial로 주고 key를 바꿔 remount(그리드는 initial을 마운트 1회만 읽음).
   const [gridKey, setGridKey] = useState(0);
   // 스케줄을 "교시 클릭그리드로 표현되는 것"과 "자유 시각 행"으로 나눈다 — 교시표에 없는 시각의 슬롯은
@@ -164,10 +167,16 @@ export function ClassForm({
       setBgColor(vals.bgColor ?? "");
       // 체크박스는 applyFormValues가 DOM만 건드려 컨트롤드 state와 갈라진다 → 여기서 함께 맞춘다.
       setIsSpecial(vals.isSpecial === "true");
+      // ⚠️ **키가 있을 때만** 반영한다 — 이 필드가 없던 시절의 초안(또는 이 칸을 안 그린 폼)을 복구할 때
+      //    무조건 false로 덮으면, 켜 두었던 토글이 사용자 모르게 꺼진 채 저장된다.
+      if (vals.reportOptout !== undefined) setReportOptout(vals.reportOptout === "true");
       // ⚠️ 같은 이름의 hidden("0")까지 applyFormValues가 초안값("true"/"")으로 덮어쓴다 → 복구 후 토글을
       // **끄고 저장해도** getAll에 "true"가 남아 특강으로 저장된다. 마커를 원래 값으로 되돌려 놓는다.
-      const marker = formRef.current?.querySelector('input[type="hidden"][name="isSpecial"]');
-      if (marker instanceof HTMLInputElement) marker.value = "0";
+      // (hidden+체크박스 쌍을 쓰는 토글은 **전부** 여기서 마커를 되돌려야 한다 — 새 토글 추가 시 함께.)
+      for (const name of ["isSpecial", "reportOptout"]) {
+        const marker = formRef.current?.querySelector(`input[type="hidden"][name="${name}"]`);
+        if (marker instanceof HTMLInputElement) marker.value = "0";
+      }
       // schedule_*_${i} / custom_*_${i} 인덱스 hidden을 스케줄 배열로 복원 → 그리드·자유행 remount.
       // (applyFormValues는 DOM만 건드려 컨트롤드 state와 갈라진다 — 두 컴포넌트 모두 initial로 다시 받는다.)
       const readNs = (prefix: string): Schedule[] => {
@@ -348,6 +357,8 @@ export function ClassForm({
         {...(defaults?.historyCount ? { historyCount: defaults.historyCount } : {})}
         {...(fieldErrs.validTo ? { validToError: fieldErrs.validTo } : {})}
       />
+
+      <ClassReportFields reportOptout={reportOptout} onReportOptoutChange={setReportOptout} />
 
       <section className="space-y-3 border-t pt-4">
         <header>

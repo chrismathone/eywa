@@ -134,3 +134,48 @@ describe("deriveMarksFromReports — 같은 과목 다른 반 보고서는 판�
     ).toEqual({});
   });
 });
+
+// 0174a — '수업보고서 미발송' 반. 보고서가 영구히 0건이라 "없음 = 결석"을 적용하면 지난 등원일이
+// 통째로 결석으로 뒤집힌다(토글 하나가 실데이터를 거짓말하게 만드는 최대 위험).
+describe("deriveMarksFromReports — 수업보고서 미발송 반(0174a)", () => {
+  const base = {
+    attendDates: ["2026-07-20", "2026-07-21"],
+    manualDates: new Set<string>(),
+    today: "2026-07-22",
+  };
+
+  it("🔴 결석을 만들지 않는다 — 보고서가 없는 게 정상인 반이다", () => {
+    expect(
+      deriveMarksFromReports({ ...base, reportDates: new Set(), reportOptoutClass: true }),
+    ).toEqual({});
+  });
+
+  it("같은 조건에서 일반 반이면 결석이 찍힌다(가드가 실제로 작동함을 대조)", () => {
+    expect(deriveMarksFromReports({ ...base, reportDates: new Set() })).toEqual({
+      "2026-07-20": "absent",
+      "2026-07-21": "absent",
+    });
+  });
+
+  it("⚠️ 토글 전에 쌓인 보고서의 '출석'은 그대로 살린다 — 아는 것을 지우지 않는다", () => {
+    expect(
+      deriveMarksFromReports({
+        ...base,
+        reportDates: new Set(["2026-07-20"]),
+        reportOptoutClass: true,
+      }),
+    ).toEqual({ "2026-07-20": "present" });
+  });
+
+  it("수기 기록은 여전히 최우선", () => {
+    expect(
+      deriveMarksFromReports({
+        ...base,
+        attendDates: ["2026-07-20"],
+        manualDates: new Set(["2026-07-20"]),
+        reportDates: new Set(["2026-07-20"]),
+        reportOptoutClass: true,
+      }),
+    ).toEqual({});
+  });
+});

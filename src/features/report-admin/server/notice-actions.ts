@@ -30,6 +30,13 @@ export type NoticeClassOption = {
   name: string;
   subject: string | null;
   studentCount: number;
+  /**
+   * '수업보고서 미발송' 반인가(0174a) — **여기서 거르지 않고 값만 싣는다.**
+   * 이 함수는 **반 공지 탭과 직접 발송 탭이 공유**하는데 둘의 뜻이 다르다:
+   * 직접 발송(리포트 카드 = 수업보고서)은 제외하고, **반 공지(학부모 공지)는 계속 보낼 수 있다**
+   * — 토글 이름 그대로 '수업보고서' 미발송이지 '이 반엔 아무것도 안 보냄'이 아니다.
+   */
+  reportOptout: boolean;
   // 반별 재원생 — 개별 내용 입력 UI가 학생별 박스를 그리는 데 사용(공통은 body, 개별은 이 학생들에게만).
   students: { id: string; name: string; grade: string | null }[];
 };
@@ -46,7 +53,7 @@ export async function getNoticeClassOptions(): Promise<{ ok: boolean; classes?: 
   const supabase = await createClient();
   const { data: classes, error } = await supabase
     .from("classes")
-    .select("id, class_name, subject")
+    .select("id, class_name, subject, report_optout")
     .eq("is_active", true)
     .in("subject", allowed)
     .order("class_name");
@@ -79,6 +86,7 @@ export async function getNoticeClassOptions(): Promise<{ ok: boolean; classes?: 
           id: c.id as string,
           name: c.class_name as string,
           subject: c.subject as string | null,
+          reportOptout: (c as { report_optout?: boolean | null }).report_optout === true,
           studentCount: roster.length,
           students: roster,
         };

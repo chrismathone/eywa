@@ -54,6 +54,15 @@ export function deriveMarksFromReports(input: {
    *    "모르면 아무 말도 하지 않는다" — 빈 칸으로 두고 사람이 채우게 한다.
    */
   siblingReportDates?: ReadonlySet<string>;
+  /**
+   * **'수업보고서 미발송' 반**(0174a)인가 — true면 "보고서 없음 = 결석" 규칙만 끈다.
+   *
+   * 🔴 왜 필요한가: 그 반은 앞으로 보고서가 **영구히 0건**이라, 이 가드가 없으면 지난 등원일이 전부
+   *    결석으로 뒤집히고 출석률이 0%로 표시된다 — 토글 하나가 실데이터를 거짓말하게 만든다.
+   * ⚠️ 반대로 **'출석'은 그대로 살린다** — 토글 켜기 전에 쌓인 보고서는 "그날 수업이 있었다"는 사실이고,
+   *    파생을 통째로 끄면 그 사실까지 빈칸으로 지워진다. 모르는 건 비우되, 아는 건 지우지 않는다.
+   */
+  reportOptoutClass?: boolean;
 }): Record<string, DerivedMark> {
   const out: Record<string, DerivedMark> = {};
   for (const date of input.attendDates) {
@@ -62,6 +71,9 @@ export function deriveMarksFromReports(input: {
       out[date] = "present";
     } else if (input.siblingReportDates?.has(date)) {
       // 같은 과목 다른 반에 그날 보고서가 있다 → 이 반의 결석을 단정하지 않는다(위 🔴).
+      continue;
+    } else if (input.reportOptoutClass) {
+      // 보고서를 안 쓰기로 한 반 — 없는 게 정상이라 결석의 근거가 되지 않는다(빈칸 = 사람이 채운다).
       continue;
     } else if (date < input.today) {
       out[date] = "absent";

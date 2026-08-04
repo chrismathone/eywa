@@ -277,9 +277,13 @@ export default async function TimetablePage({
 
   const isIntegrated = effView === "integrated";
   const isRooms = effView === "rooms";
+  // 교실뷰 인라인 정원 편집 — 강의실은 owner 도메인이라 게이트도 owner 쓰기(그룹 설정과 동일 논리,
+  // 서버 액션 updateClassroomCapacity가 같은 게이트로 2차 방어).
+  const canEditRoomCapacity = isRooms && (await canWriteTenant(user.systemRole, "owner"));
   // 교실뷰 데이터 — **전 과목·전 구분(특강 포함)** 슬롯을 경량화(학생 명단 대신 재원 수만 = PII·페이로드
   // 축소). kind·과목·학년 필터를 일부러 안 태운다 — 어떤 필터든 "그 교실이 그 시간에 비어 있다"는 거짓을
-  // 만든다(위 ViewMode 주석). 실효 강의실 = 교시 override ?? 반 기본(overlap-detect와 같은 우선순위).
+  // 만든다(위 ViewMode 주석. 유일한 예외 = 뷰 안 '특강 숨김' 토글, 원장 요청 08-03 — 지도·지표 동시 제외라
+  // 화면 내 수치는 일관). 실효 강의실 = 교시 override ?? 반 기본(overlap-detect와 같은 우선순위).
   const roomSlots = isRooms
     ? allSlots
         .filter((s) => !s.blockKind)
@@ -649,6 +653,7 @@ export default async function TimetablePage({
           todayDay={todayDow}
           isCurrentWeek={week === thisWk}
           nowMin={nowMin}
+          canEditCapacity={canEditRoomCapacity}
         />
       ) : slots.length === 0 ? (
         <div className="mx-auto max-w-xl py-4">

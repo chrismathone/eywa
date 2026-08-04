@@ -94,6 +94,7 @@ export default async function EditClassPage({
           notes: klass.notes,
           bgColor: klass.bgColor,
           isSpecial: klass.isSpecial,
+          reportOptout: klass.reportOptout,
           validFrom: period.validFrom,
           validTo: period.validTo,
           ...(period.mixed ? { periodMixed: period.mixed } : {}),

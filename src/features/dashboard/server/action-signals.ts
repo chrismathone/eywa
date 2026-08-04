@@ -130,8 +130,8 @@ type ScheduleRow = {
   class_id: string;
   start_time: string;
   class:
-    | { subject?: string; closed_at?: string | null }
-    | { subject?: string; closed_at?: string | null }[]
+    | { subject?: string; closed_at?: string | null; report_optout?: boolean | null }
+    | { subject?: string; closed_at?: string | null; report_optout?: boolean | null }[]
     | null;
 };
 
@@ -267,7 +267,7 @@ async function unwrittenReportsSignal(
       .from("class_schedules")
       .select(
         `class_id, start_time,
-       class:class_id!inner ( subject, is_active, closed_at )`,
+       class:class_id!inner ( subject, is_active, closed_at, report_optout )`,
       )
       .eq("day_of_week", dayKey)
       .eq("class.is_active", true)
@@ -280,7 +280,10 @@ async function unwrittenReportsSignal(
   const subjectByClass = new Map<string, string>();
   for (const row of scheduleRows) {
     const klass = (Array.isArray(row.class) ? row.class[0] : row.class) ?? undefined;
-    if (!klass?.subject || (klass.closed_at && klass.closed_at < today)) continue;
+    // 🔴 '수업보고서 미발송' 반(0174a)은 재촉하지 않는다. 이 신호는 작성률(report-admin/queries)과
+    //    **완전히 별도 경로**라, 여기를 빼먹으면 표에선 사라진 반을 대시보드·일일 브리핑이 계속 재촉해
+    //    두 화면이 서로 다른 말을 한다(2026-07-22 재발 패턴).
+    if (!klass?.subject || (klass.closed_at && klass.closed_at < today) || klass.report_optout) continue;
     const [hour, minute] = row.start_time.slice(0, 5).split(":").map(Number);
     const startMinutes = (hour ?? Number.NaN) * 60 + (minute ?? Number.NaN);
     if (!Number.isFinite(startMinutes) || nowMinutes < startMinutes) continue;

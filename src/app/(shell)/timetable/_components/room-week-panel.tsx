@@ -1,44 +1,50 @@
 "use client";
 
-import { AlertTriangle } from "@/components/icons/eywa-icon-compat";
+import { useRef, useState } from "react";
+import { ChevronDown, ChevronUp, GripVertical } from "@/components/icons/eywa-icon-compat";
 import { WindowLink } from "@/components/workspace/window-link";
 import { useSubjectMaps } from "@/features/owner/operations-context";
-import { DAY_LABEL } from "@/features/timetable/lib/split-attendance";
 import type { RoomSlotLite } from "@/features/timetable/lib/room-grid";
-import { ROOM_DAY_ORDER, type RoomWeekRow } from "@/features/timetable/lib/room-metrics";
+import type { RoomHourBand, RoomHourRow, RoomWeekRow } from "@/features/timetable/lib/room-metrics";
+import { RoomDayTable, RoomHourTable } from "./room-panel-tables";
 
-// 주간 활성도 패널 — 강의실 × 요일 가동률 히트 테이블 + 저활용 스포트라이트 + 미배정 교시.
-// "어느 교실이 효율적이지 못한가"를 지도 아래에서 숫자로 답한다. 셀 색 = 브랜드 단색 농도 스케일
-// (크기=농도 단일 인코딩 — 히트맵 정석). 창 없는 요일(일요일 등)은 0%로 속이지 않고 "—".
+// 주간 활성도 패널 — 지도와의 사이에 **리사이즈 경계선**(창 크기 조절처럼 위아래 드래그) + 접기 토글
+// (원장 피드백 2026-08-03: 패널이 거대해 지도를 잠식). 높이는 고정값 state — 접거나 줄이면 지도(flex-1)가
+// 그만큼 즉시 넓어진다. ⚠️ 드래그 중 height에 transition 금지(#57 얼음 함정 — 커서를 못 따라와 뻑뻑해진다).
+// 표는 요일별/시간대별 2모드(원장 요청: "시간대별 활성도도 교실별로").
 
-const heatCls = (pct: number | null): string => {
-  if (pct == null) return "text-text-faint";
-  if (pct >= 80) return "bg-primary/70 text-primary-foreground";
-  if (pct >= 60) return "bg-primary/50 text-primary-foreground";
-  if (pct >= 40) return "bg-primary/30";
-  if (pct >= 20) return "bg-primary/15";
-  if (pct > 0) return "bg-primary/8";
-  return "text-text-dim";
-};
+const MIN_H = 96;
+const DEFAULT_H = 224;
 
 export function RoomWeekPanel({
   rows,
+  hourBands,
+  hourRows,
+  hourDayLabel,
   unassigned,
+  canEditCapacity,
 }: {
   rows: RoomWeekRow[];
+  hourBands: RoomHourBand[];
+  hourRows: RoomHourRow[];
+  /** 시간대별 표의 기준 요일 라벨 — 상단 요일 칩 선택을 따른다(평균 아님, 원장 확정 08-03). */
+  hourDayLabel: string;
   unassigned: RoomSlotLite[];
+  canEditCapacity: boolean;
 }) {
   const subjects = useSubjectMaps();
+  const [open, setOpen] = useState(true);
+  const [panelH, setPanelH] = useState(DEFAULT_H);
+  const [mode, setMode] = useState<"day" | "hour">("day");
+  const dragging = useRef(false);
+
   const registered = rows.filter((r) => r.registered);
-  // 저활용 스포트라이트 — 주중 가동률 하위 3실(측정 가능한 실만). 이 한 줄이 이 화면의 결론이다.
   const idle = registered
     .filter((r) => r.weekdayUtilPct != null)
     .sort((a, b) => (a.weekdayUtilPct ?? 0) - (b.weekdayUtilPct ?? 0))
     .slice(0, 3);
   const noCapacity = registered.length > 0 && registered.every((r) => r.capacity == null);
   const seatOver = registered.filter((r) => r.seatOver);
-
-  // 미배정 교시 — 반 단위로 묶어 짧게(교시 나열은 클러터). 반 편집으로 바로 배정하러 갈 수 있게 링크.
   const byClass = new Map<string, { className: string; subject: string; count: number }>();
   for (const s of unassigned) {
     const cur = byClass.get(s.classId);
@@ -46,105 +52,133 @@ export function RoomWeekPanel({
     else byClass.set(s.classId, { className: s.className, subject: s.subject, count: 1 });
   }
 
+  // 경계선 드래그 — 포인터 캡처로 표/지도 위를 지나도 계속 추적. 위로 끌면 패널이 커진다.
+  const onDividerPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!open) return;
+    const startY = e.clientY;
+    const startH = panelH;
+    const el = e.currentTarget;
+    dragging.current = true;
+    el.setPointerCapture(e.pointerId);
+    const move = (ev: PointerEvent) => {
+      if (!dragging.current) return;
+      const max = Math.max(MIN_H, Math.round(window.innerHeight * 0.7));
+      setPanelH(Math.min(max, Math.max(MIN_H, startH + (startY - ev.clientY))));
+    };
+    const up = () => {
+      dragging.current = false;
+      el.removeEventListener("pointermove", move);
+    };
+    el.addEventListener("pointermove", move);
+    el.addEventListener("pointerup", up, { once: true });
+    el.addEventListener("pointercancel", up, { once: true });
+  };
+
+  const chip = (active: boolean) =>
+    `shrink-0 rounded-full border px-2 py-0 text-[11px] leading-5 transition ${
+      active
+        ? "border-primary bg-primary text-primary-foreground font-medium"
+        : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
+    }`;
+
   return (
-    <section className="bg-card border-line shadow-card shrink-0 rounded-2xl border p-4">
-      <div className="mb-2 flex flex-wrap items-baseline gap-x-3 gap-y-1">
-        <h2 className="text-foreground text-sm font-bold">주간 교실 활성도</h2>
-        <span className="text-text-dim text-[11px]">
-          가동률 = 수업 점유 시간 ÷ 그 요일 운영 시간(교시 설정 기준) · 주중 = 월~금 합산
-        </span>
+    <>
+      {/* 경계선 겸 패널 헤더 — 창 리사이즈처럼 위아래 드래그, 더블클릭/버튼으로 접기 */}
+      <div
+        onPointerDown={onDividerPointerDown}
+        onDoubleClick={() => setOpen((v) => !v)}
+        className={`bg-card shadow-card flex shrink-0 items-center gap-2 rounded-2xl px-3 py-1 select-none ${
+          open ? "cursor-row-resize" : ""
+        }`}
+        title={open ? "드래그해서 높이 조절 · 더블클릭으로 접기" : undefined}
+      >
+        <GripVertical size={12} strokeWidth={1.8} className="text-text-faint rotate-90" aria-hidden />
+        <span className="text-foreground text-[12px] font-bold">주간 교실 활성도</span>
+        {open ? (
+          <span className="micro compact-chrome:hidden">
+            {mode === "hour"
+              ? `${hourDayLabel}요일 시간대별 점유 — 위 요일 칩을 따라갑니다`
+              : "가동률 = 점유 ÷ 운영 시간(교시 설정) · 주중 = 월~금"}
+          </span>
+        ) : null}
+        <div className="ml-auto flex items-center gap-1" onPointerDown={(e) => e.stopPropagation()}>
+          {open ? (
+            <>
+              <button type="button" onClick={() => setMode("day")} className={chip(mode === "day")}>
+                요일별
+              </button>
+              <button type="button" onClick={() => setMode("hour")} className={chip(mode === "hour")}>
+                시간대별({hourDayLabel})
+              </button>
+            </>
+          ) : null}
+          <button
+            type="button"
+            onClick={() => setOpen((v) => !v)}
+            className="text-text-dim hover:text-foreground hover:bg-bg-soft rounded-full p-1"
+            aria-label={open ? "패널 접기" : "패널 펼치기"}
+          >
+            {open ? <ChevronDown size={14} strokeWidth={1.8} /> : <ChevronUp size={14} strokeWidth={1.8} />}
+          </button>
+        </div>
       </div>
 
-      <div className="overflow-x-auto">
-        <table className="min-w-full border-separate border-spacing-0 text-[11px]">
-          <thead>
-            <tr className="text-text-dim">
-              <th className="border-line border-b px-2 py-1 text-left font-medium">강의실</th>
-              {ROOM_DAY_ORDER.map((d) => (
-                <th key={d} className="border-line border-b px-1 py-1 text-center font-medium">
-                  {DAY_LABEL[d] ?? d}
-                </th>
-              ))}
-              <th className="border-line border-b px-2 py-1 text-right font-medium">주중 가동률</th>
-              <th className="border-line border-b px-2 py-1 text-right font-medium">최대 인원</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => (
-              <tr key={r.key}>
-                <td className="border-line text-foreground border-b px-2 py-1 font-medium whitespace-nowrap">
-                  {r.name}
-                  {r.registered ? "" : <span className="text-text-faint"> ※ 미등록</span>}
-                </td>
-                {ROOM_DAY_ORDER.map((d) => {
-                  const m = r.days[d];
-                  return (
-                    <td key={d} className={`border-line num border-b px-1 py-1 text-center ${heatCls(m.utilPct)}`}>
-                      {m.utilPct == null ? "—" : `${m.utilPct}%`}
-                      {m.conflictPairs > 0 ? (
-                        <AlertTriangle
-                          size={10}
-                          strokeWidth={2}
-                          className="ml-0.5 inline-block align-[-1px] text-red-500"
-                          aria-label="시간 겹침"
-                        />
-                      ) : null}
-                    </td>
-                  );
-                })}
-                <td className="border-line num text-foreground border-b px-2 py-1 text-right font-semibold">
-                  {r.weekdayUtilPct == null ? "—" : `${r.weekdayUtilPct}%`}
-                </td>
-                <td className="border-line num text-text-dim border-b px-2 py-1 text-right">
-                  {r.maxStudents > 0 ? r.maxStudents : "—"}
-                  {r.capacity != null ? `/${r.capacity}` : ""}
-                  {r.seatOver ? <span className="text-red-500"> 초과</span> : null}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      {open ? (
+        <section
+          className="bg-card border-line shadow-card shrink-0 overflow-auto rounded-2xl border px-4 py-3"
+          style={{ height: panelH }}
+        >
+          <div className="overflow-x-auto">
+            {mode === "day" ? (
+              <RoomDayTable rows={rows} canEditCapacity={canEditCapacity} />
+            ) : (
+              <RoomHourTable bands={hourBands} rows={hourRows} />
+            )}
+          </div>
 
-      <div className="mt-3 flex flex-col gap-1 text-[11px]">
-        {idle.length > 0 ? (
-          <p className="text-text-dim">
-            <span className="text-foreground font-semibold">주중 저활용</span>{" "}
-            {idle.map((r, i) => (
-              <span key={r.key}>
-                {i > 0 ? " · " : ""}
-                {r.name} <span className="num">{r.weekdayUtilPct}%</span>
-              </span>
-            ))}
-          </p>
-        ) : null}
-        {seatOver.length > 0 ? (
-          <p className="text-red-600">
-            정원 초과: {seatOver.map((r) => `${r.name}(최대 ${r.maxStudents}명/정원 ${r.capacity}명)`).join(" · ")}
-          </p>
-        ) : null}
-        {byClass.size > 0 ? (
-          <p className="text-amber-700">
-            강의실 미배정{" "}
-            {[...byClass.entries()].map(([classId, c], i) => (
-              <span key={classId}>
-                {i > 0 ? " · " : ""}
-                <WindowLink href={`/classes/${classId}`} className="underline underline-offset-2">
-                  {c.className}
-                </WindowLink>{" "}
-                ({subjects.labelOf(c.subject)} {c.count}교시)
-              </span>
-            ))}
-            <span className="text-text-dim"> — 반 편집에서 강의실을 지정하면 지도에 나타납니다</span>
-          </p>
-        ) : null}
-        {noCapacity ? (
-          <p className="text-text-faint">
-            강의실 정원이 아직 입력되지 않았습니다 — 학원설정 · 운영 체계 · 강의실에서 정원을 넣으면 좌석
-            활용(최대 인원/정원) 지표가 열립니다.
-          </p>
-        ) : null}
-      </div>
-    </section>
+          <div className="mt-3 flex flex-col gap-1 text-[11px]">
+            {idle.length > 0 ? (
+              <p className="text-text-dim">
+                <span className="text-foreground font-semibold">주중 저활용</span>{" "}
+                {idle.map((r, i) => (
+                  <span key={r.key}>
+                    {i > 0 ? " · " : ""}
+                    {r.name} <span className="num">{r.weekdayUtilPct}%</span>
+                  </span>
+                ))}
+              </p>
+            ) : null}
+            {seatOver.length > 0 ? (
+              <p className="text-red-600">
+                정원 초과:{" "}
+                {seatOver.map((r) => `${r.name}(최대 ${r.maxStudents}명/정원 ${r.capacity}명)`).join(" · ")}
+              </p>
+            ) : null}
+            {byClass.size > 0 ? (
+              <p className="text-amber-700">
+                강의실 미배정{" "}
+                {[...byClass.entries()].map(([classId, c], i) => (
+                  <span key={classId}>
+                    {i > 0 ? " · " : ""}
+                    <WindowLink href={`/classes/${classId}`} className="underline underline-offset-2">
+                      {c.className}
+                    </WindowLink>{" "}
+                    ({subjects.labelOf(c.subject)} {c.count}교시)
+                  </span>
+                ))}
+                <span className="text-text-dim"> — 반 편집에서 강의실을 지정하면 지도에 나타납니다</span>
+              </p>
+            ) : null}
+            {noCapacity ? (
+              <p className="text-text-faint">
+                {canEditCapacity
+                  ? "강의실 정원이 아직 없습니다 — 위 표의 '최대 인원/정원' 칸에서 바로 입력하면 좌석 활용 %가 열립니다."
+                  : "강의실 정원이 아직 입력되지 않았습니다 — 학원설정 · 운영 체계 · 강의실에서 정원을 넣으면 좌석 활용 지표가 열립니다."}
+              </p>
+            ) : null}
+          </div>
+        </section>
+      ) : null}
+    </>
   );
 }

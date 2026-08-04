@@ -74,6 +74,8 @@ export type ClassDetail = {
   closedAt: string | null;
   /** 특강(0133a) 토글값 **그대로**. ⚠️ "이 반이 특강인가"는 이름 폴백까지 보는 `isSpecialLecture()`로 판정할 것. */
   isSpecial: boolean;
+  /** '수업보고서 미발송'(0174a) 토글값. 판정 = `isReportOptout()`(이름 폴백 없음 — 컬럼이 전부다). */
+  reportOptout: boolean;
   notes: string | null;
   bgColor: string | null;
   // 강사 인수인계 예약(0044a) — pendingTeacherId 있으면 예약 존재.
@@ -470,7 +472,7 @@ export async function getClassDetail(id: string): Promise<ClassDetail | null> {
   const { data: c } = await supabase
     .from("classes")
     .select(
-      `id, class_name, subject, is_active, closed_at, is_special, notes, bg_color,
+      `id, class_name, subject, is_active, closed_at, is_special, report_optout, notes, bg_color,
        teacher_id, classroom_id,
        pending_teacher_id, pending_teacher_date, pending_teacher_reason,
        teacher:teacher_id ( display_name ),
@@ -518,6 +520,7 @@ export async function getClassDetail(id: string): Promise<ClassDetail | null> {
     isActive: c.is_active,
     closedAt: (c as { closed_at?: string | null }).closed_at ?? null,
     isSpecial: (c as { is_special?: boolean | null }).is_special ?? false,
+    reportOptout: (c as { report_optout?: boolean | null }).report_optout ?? false,
     notes: c.notes,
     bgColor: (c as { bg_color?: string | null }).bg_color ?? null,
     pendingTeacherId: (c as { pending_teacher_id?: string | null }).pending_teacher_id ?? null,

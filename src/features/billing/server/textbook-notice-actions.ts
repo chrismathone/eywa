@@ -16,13 +16,17 @@
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
+import { fetchInChunks } from "@/lib/supabase/batch";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { accountForTarget } from "@/features/owner/settings-types";
 import { BOARD_PREFIX } from "@/features/report-admin/notice-targets";
 import { sendOnescreenNotice } from "@/features/onescreen/server/notice-actions";
 import type { NoticeAttachment } from "@/features/onescreen/notice-attachments";
-import { DEFAULT_TEXTBOOK_MENT, textbookNoticeCommon } from "../textbook-notice";
+import { DEFAULT_TEXTBOOK_MENT, resolveTextbookMent, textbookNoticeCommon } from "../textbook-notice";
 import { groupTextbookNoticeStudents } from "../textbook-notice-group";
+// 중복 발송 차단 규칙(0174a) — 순수함수 단일 소스.
+import { partitionAlreadySent, textbookSendKey } from "../textbook-send-dedup";
 import type {
   PreparedTextbookNotice,
   SendTextbookNoticeResult,
@@ -61,7 +65,8 @@ export async function saveMyTextbookMent(text: string): Promise<{ ok: boolean }>
 export async function loadMyTextbookMent(): Promise<string> {
   const user = await getCurrentUser();
   if (!user) return DEFAULT_TEXTBOOK_MENT;
-  return (await getMyTextbookMent()) ?? DEFAULT_TEXTBOOK_MENT;
+  // 저장값이 옛 기본 문구 그대로면 현재 기본 문구로 흡수한다(resolveTextbookMent 주석 — 안 그러면 기본을 고쳐도 안 바뀐다).
+  return resolveTextbookMent(await getMyTextbookMent());
 }
 
 /** 발송 다이얼로그 진입 — 요청 행 + 학생별 발송 가능 과목 + 내 멘트 + 계좌 + 발송/첨부 스위치를 한 번에. */
@@ -97,7 +102,7 @@ export async function prepareTextbookNotice(orderIds: string[]): Promise<Prepare
       requestDate: r.request_date,
       subjects: (r.student_id ? subjects[r.student_id] : undefined) ?? [],
     })),
-    ment: savedMent ?? DEFAULT_TEXTBOOK_MENT,
+    ment: resolveTextbookMent(savedMent),
     account: { bank: acc.bank, holder: acc.holder, number: acc.number },
     sendEnabled: settings.report.classnoteSendEnabled,
     showAttachments: settings.report.showAttachments,
@@ -155,9 +160,39 @@ export async function sendTextbookNotice(input: SendTextbookNoticeInput): Promis
   const account = accountForTarget(settings.billing, "textbook");
   const ment = (input.ment ?? "").trim().slice(0, MENT_MAX);
 
+  // 🔴 **중복 발송 차단**(0174a, 원장 2026-08-03) — 수업보고서 success 차단과 같은 규약.
+  //    ① 이 요청서가 이미 나갔다 ② 같은 학생·같은 교재가 다른 요청서로 이미 나갔다 ③ 이 배치 안 중복.
+  //    ②의 조회는 **선택한 학생들만** 대상으로 좁힌다(전건 스캔 금지, B2).
+  const studentIds = [...new Set(loaded.rows.map((r) => r.student_id).filter(Boolean))] as string[];
+  const supabase = await createClient();
+  const sentRows = studentIds.length
+    ? await fetchInChunks<{ student_id: string | null; book_name: string }>(studentIds, (chunk) =>
+        supabase
+          .from("textbook_orders")
+          .select("student_id, book_name")
+          .in("student_id", chunk)
+          .not("classnote_notice_id", "is", null),
+      )
+    : [];
+  const alreadySentKeys = new Set(sentRows.map((r) => textbookSendKey(r.student_id, r.book_name)));
+  const dedup = partitionAlreadySent(
+    loaded.rows.map((r) => ({
+      id: r.id,
+      studentId: r.student_id,
+      studentName: r.student_name,
+      bookName: r.book_name,
+      classnoteNoticeId: r.classnote_notice_id,
+    })),
+    alreadySentKeys,
+  );
+  if (dedup.sendable.length === 0)
+    return { ok: false, error: "보낼 수 있는 요청서가 없습니다 — 아래 사유를 확인해주세요", skipped: dedup.skipped };
+  const sendableIds = new Set(dedup.sendable.map((r) => r.id));
+  const sendableRows = loaded.rows.filter((r) => sendableIds.has(r.id));
+
   // 학생별 묶음(같은 학생 여러 건 = 한 글) 조립은 순수 함수 — 액션은 인가·게이트·레일 호출만 책임진다.
   const { students, skipped } = groupTextbookNoticeStudents(
-    loaded.rows.map((r) => ({
+    sendableRows.map((r) => ({
       studentId: r.student_id,
       studentName: r.student_name,
       bookName: r.book_name,
@@ -188,10 +223,29 @@ export async function sendTextbookNotice(input: SendTextbookNoticeInput): Promis
       })
     : await sendOnescreenNotice({ body: textbookNoticeCommon(ment), students, attachments: common });
   const merged: TextbookNoticeSkip[] = [
+    ...dedup.skipped,
     ...skipped,
     ...(res.skipped ?? []).map((s) => ({ name: s.name, reason: s.reason })),
   ];
   if (!res.ok) return { ok: false, error: res.error, skipped: merged };
+
+  // 🔴 공지 연결 기록(0174a) — **발송 성공 직후에만**. 먼저 채우면 실패한 건이 영영 재발송 불가가 된다.
+  //    이 값이 곧 ① 삭제 시 학부모 글 되짚기 ② 다음 발송의 중복 차단 표식이다.
+  //    ⚠️ dry-run(발송 스위치 OFF)은 큐에 안 올라갔으므로 **연결하지 않는다** — 연결하면 실제로 안 나간 글이
+  //       "이미 발송함"으로 굳어 진짜 발송을 막는다.
+  //    ⚠️ 테스트 발송('학원이' 보드)도 연결하지 않는다 — 실 학부모에게 간 글이 아니다.
+  if (res.noticeId && !res.dryRun && !input.test) {
+    const linkIds = [...sendableIds];
+    const admin = createAdminClient(); // RLS 우회 → tenant_id 명시 필터 필수
+    const { error: linkErr } = await admin
+      .from("textbook_orders")
+      .update({ classnote_notice_id: res.noticeId })
+      .in("id", linkIds)
+      .eq("tenant_id", user.tenantId);
+    // 연결 실패는 발송을 되돌리지 않는다(글은 이미 큐에 올라갔다) — 다만 중복 차단이 약해지므로 기록은 남긴다.
+    if (linkErr) console.error("[textbook] 공지 연결 기록 실패 — 중복 차단이 약해집니다", linkErr.message);
+  }
+
   // 다음 발송의 기본값으로 남긴다(중간저장) — best-effort라 실패해도 발송 결과엔 영향 없음.
   await saveMyTextbookMent(ment);
   return { ok: true, queued: res.queued ?? 0, dryRun: res.dryRun, skipped: merged };

@@ -36,6 +36,12 @@ export type TeachingClassRow = {
   className: string;
   subject: string; // classes.subject는 NOT NULL — 과목 라벨/색 해석이 이 값에 걸린다(빈 문자열도 오지 않는다)
   isSpecial: boolean;
+  /**
+   * '수업보고서 미발송'(0174a) 반인가 — **값만 실어 나른다. 여기서 거르지 않는다.**
+   * 소비처마다 뜻이 달라서다: 로스터는 숨기고(원장 요구), 게이트(`getTeachingClassIds`)는 숨기면
+   * 그 반의 과거 보고서 수정·첨부·출결이 막힌다(위 is_active 규약과 같은 이유).
+   */
+  reportOptout: boolean;
   /** 위임받은 반인가 — 반 칩이 '내 반'과 시각적으로 구분한다(원장 지시 2026-08-03). */
   delegated: boolean;
   /** 위임 반일 때 원 담임 표시명(없거나 내 반이면 null) — 칩에 "○○ 선생님 반"으로 밝힌다. */
@@ -112,7 +118,7 @@ export async function getTeachingClasses(
   const [ownRes, active] = await Promise.all([
     supabase
       .from("classes")
-      .select("id, class_name, subject, is_special")
+      .select("id, class_name, subject, is_special, report_optout")
       .eq("teacher_id", userId)
       .eq("is_active", true),
     fetchActiveDelegations(supabase, date),
@@ -141,11 +147,12 @@ export async function getTeachingClasses(
           class_name: string;
           subject: string;
           is_special: boolean | null;
+          report_optout: boolean | null;
           teacher_id: string | null;
         }>(wanted, (chunk) =>
           supabase
             .from("classes")
-            .select("id, class_name, subject, is_special, teacher_id")
+            .select("id, class_name, subject, is_special, report_optout, teacher_id")
             .in("id", chunk)
             .eq("is_active", true),
         );
@@ -172,6 +179,7 @@ export async function getTeachingClasses(
       className: (c.class_name as string) ?? "",
       subject: c.subject as string,
       isSpecial: !!c.is_special,
+      reportOptout: !!c.report_optout,
       delegated: false,
       ownerName: null,
       delegatedAwayTo: awayTo ? (nameById.get(awayTo) ?? "다른 선생님") : null,
@@ -184,6 +192,7 @@ export async function getTeachingClasses(
       className: c.class_name ?? "",
       subject: c.subject,
       isSpecial: !!c.is_special,
+      reportOptout: !!c.report_optout,
       delegated: true,
       ownerName: (c.teacher_id && nameById.get(c.teacher_id)) || null,
       delegatedAwayTo: null, // 받은 반은 '넘긴' 방향이 없다(둘 다 참일 수 없게 위에서 갈랐다)

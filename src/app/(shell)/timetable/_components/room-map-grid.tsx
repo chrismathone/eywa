@@ -179,6 +179,10 @@ export function RoomMapGrid({
                               const iv = giv.slots[0]!;
                               const dim = focusSubject != null && iv.subject !== focusSubject;
                               const { className, style } = blockStyle(iv);
+                              // 좌석 활용(원장 요청 2026-08-03) — 정원 대비 학생 %(정원 미설정 방은 인원만).
+                              const cap = c.bucket.capacity;
+                              const seatPct =
+                                cap != null && cap > 0 ? Math.round((iv.students / cap) * 100) : null;
                               const ring =
                                 iv.overlap === "conflict"
                                   ? "ring-2 ring-inset ring-red-500"
@@ -188,7 +192,7 @@ export function RoomMapGrid({
                               return (
                                 <div
                                   key={iv.classId + giv.startMin}
-                                  title={`${iv.className} · ${minToHM(iv.startMin)}~${minToHM(iv.endMin)} · ${subjects.labelOf(iv.subject)}${iv.teacherLabel ? ` · ${iv.teacherLabel}` : ""} · 학생 ${iv.students}명${iv.overlap === "conflict" ? " · 시간 겹침 주의" : iv.overlap === "joint" ? " · 합반" : ""}`}
+                                  title={`${iv.className} · ${minToHM(iv.startMin)}~${minToHM(iv.endMin)} · ${subjects.labelOf(iv.subject)}${iv.teacherLabel ? ` · ${iv.teacherLabel}` : ""} · 학생 ${iv.students}명${seatPct != null ? ` (정원 ${cap}명의 ${seatPct}%)` : ""}${iv.overlap === "conflict" ? " · 시간 겹침 주의" : iv.overlap === "joint" ? " · 합반" : ""}`}
                                   className={`flex h-full min-w-0 flex-1 cursor-default flex-col overflow-hidden rounded-lg px-1 py-0.5 text-left ${className} ${ring} ${dim ? "opacity-25" : ""}`}
                                   style={style}
                                 >
@@ -198,8 +202,11 @@ export function RoomMapGrid({
                                   <span className="truncate text-[10px] leading-tight opacity-80">
                                     {iv.teacherLabel ?? ""}
                                   </span>
-                                  <span className="num mt-auto text-[10px] leading-tight opacity-80">
+                                  <span className="num mt-auto truncate text-[10px] leading-tight opacity-80">
                                     {iv.students}명
+                                    {seatPct != null ? (
+                                      <span className={seatPct > 100 ? "font-bold" : ""}> · {seatPct}%</span>
+                                    ) : null}
                                   </span>
                                 </div>
                               );
