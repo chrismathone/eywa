@@ -164,4 +164,49 @@ describe("parseTeacherGrid — 실 강사별 그리드", () => {
     expect(starred.className).toBe("MEC1-3");
     expect(starred.starred).toBe(true);
   });
+
+  // ── 색 규칙(원장 2026-08-04 "색 없는 건 다 수업이 아님") ──────────────────────
+  describe("fills — 색칠된 칸만 수업", () => {
+    // 5행부터 데이터. 월=col1: 색칠된 진짜 반 / 화=col2: 무색 메모 / 수=col3: 무색 비수업 블록.
+    const base = {
+      cells: [
+        ["", "1", "", ""],
+        ["", "Test 강사 301", "", ""],
+        ["", "", "", ""],
+        ["", "월", "화", "수"],
+        ["4:20~5:00", "DP6/606", "TEVO", "쉬는 시간"],
+      ],
+      merges: [],
+    };
+
+    it("fills 없으면 색 판정을 건너뛴다(기존 동작·eywa export 경로 보존)", () => {
+      const p = parseTeacherGrid(base as unknown as SheetGrid);
+      expect(p.slots.map((s) => s.className).sort()).toEqual(["DP6", "TEVO"]);
+    });
+
+    it("무색 칸은 수업에서 빠지고, 색칠된 칸만 남는다", () => {
+      const fills = [
+        [false, false, false, false],
+        [false, false, false, false],
+        [false, false, false, false],
+        [false, false, false, false],
+        [false, true, false, false], // 월(DP6)만 색칠
+      ];
+      const p = parseTeacherGrid({ ...base, fills } as unknown as SheetGrid);
+      expect(p.slots.map((s) => s.className)).toEqual(["DP6"]);
+      expect(p.warnings.some((w) => w.includes("TEVO"))).toBe(true);
+    });
+
+    it("⚠️ 비수업 블록(쉬는 시간·수업준비)은 무색이어도 살아남는다 — 색 필터보다 먼저 분류된다", () => {
+      const fills = [
+        [false, false, false, false],
+        [false, false, false, false],
+        [false, false, false, false],
+        [false, false, false, false],
+        [false, true, false, false],
+      ];
+      const p = parseTeacherGrid({ ...base, fills } as unknown as SheetGrid);
+      expect(p.blocks.map((b) => b.kind)).toContain("break");
+    });
+  });
 });
