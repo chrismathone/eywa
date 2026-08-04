@@ -602,6 +602,72 @@
 }
 
 /* ───────────────────────────────────────────────
+ * 이력서(.resume-sheet) **좁은 화면 재배치** — 종이 서식 5열 표를 그대로 두면 폰에서 못 쓴다.
+ * 원장 제보 2026-08-04: 모바일에서 이력서를 열면 열이 20~30px로 짜부라져 "박/소/선"처럼 **글자가
+ * 세로로 한 자씩** 쏟아졌다(스크린샷). 표 폭을 줄이는 방식(글씨 축소·가로 스크롤)은 입력이 불가능해
+ * **행을 카드로 쌓는다**: thead를 숨기고 각 칸을 `data-label`(=열 이름) 위, 값/입력칸 아래로 편다.
+ *
+ * ⚠️ `@media screen` 한정 — 인쇄(A4)는 종이 서식 그대로여야 한다(표 유지). print 미디어엔 절대 안 걸린다.
+ * ⚠️ 레이어 밖(unlayered)에 둬서 Tailwind 유틸(@layer utilities의 w-28·text-center 등)을 확실히 덮는다.
+ * ⚠️ 입력 글씨는 16px — iOS Safari는 16px 미만 입력에 포커스하면 페이지를 **자동 확대**해, 한 칸 채울
+ *    때마다 화면이 튀고 되돌아오지 않는다(모바일 작성이 사실상 불가). 화면 폭 기준이라 인쇄엔 무영향.
+ * ─────────────────────────────────────────────── */
+@media screen and (max-width: 639px) {
+  .resume-sheet table,
+  .resume-sheet tbody,
+  .resume-sheet tr,
+  .resume-sheet th,
+  .resume-sheet td {
+    display: block;
+    width: auto !important;
+    text-align: left !important;
+  }
+  .resume-sheet thead {
+    display: none; /* 열 이름은 각 칸의 data-label로 옮겨간다(아래 ::before) */
+  }
+  .resume-sheet table {
+    border: 0;
+  }
+  /* 행 = 카드. 표 테두리를 행 단위 테두리로 옮겨 어디까지가 한 항목인지 또렷하게. */
+  .resume-sheet tr {
+    border: 1px solid color-mix(in srgb, var(--foreground) 28%, transparent);
+    border-radius: 10px;
+    padding: 6px 10px 8px;
+    margin-bottom: 6px;
+  }
+  .resume-sheet th,
+  .resume-sheet td {
+    border: 0 !important;
+    padding: 3px 0 !important;
+    background: transparent !important;
+  }
+  /* 라벨(th) = 작은 회색 글씨. 종이에선 헤더 밴드지만 카드에선 값 위 캡션이 자연스럽다. */
+  .resume-sheet th {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-dim);
+    white-space: normal !important;
+  }
+  .resume-sheet td[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-dim);
+    margin-bottom: 2px;
+  }
+  /* 빈 칸도 카드 높이를 유지해 "여기 입력할 수 있다"가 보이게. */
+  .resume-sheet td {
+    min-height: 20px;
+  }
+  .resume-sheet input,
+  .resume-sheet textarea {
+    font-size: 16px !important; /* iOS 자동 확대 방지(위 주석) */
+    padding: 6px 8px;
+  }
+}
+
+/* ───────────────────────────────────────────────
  * 회의록(.meeting-doc) 인쇄 압축 — AI 8섹션이 여백이 넓어 적은 내용도 2페이지를 넘긴다.
  * 인쇄 시에만 글씨·섹션 간격·줄간격을 줄여 스마트하게 한 페이지에 담는다. 화면은 그대로.
  * ─────────────────────────────────────────────── */

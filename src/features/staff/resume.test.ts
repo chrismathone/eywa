@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   CAREER_ROWS,
+  DYNAMIC_ROWS_MAX,
   EDU_ROWS,
   emptyResume,
   normalizeResume,
@@ -54,6 +55,34 @@ describe("parseResumeForm", () => {
     // 부서는 화이트리스트로 자르지 않는다 — 시트 이관분의 실사용 부서(국어과·차량팀 등 지정 6종 밖)가
     // 이력서 저장 한 번에 사라지던 문제(원장 결정 2026-07-29: 드롭다운 6종 유지 + 기존 값 보존).
     expect(parseResumeForm(bad).contract.division).toBe("없는부서");
+  });
+
+  // 원장 요청 2026-08-04: "경력사항을 3개밖에 못 적는다" → 학력·경력도 동적 행.
+  // 종이 서식 행 수(학력 4·경력 3)는 이제 **하한**이고, 그 위로는 폼에 있는 만큼 저장된다.
+  it("학력·경력은 종이 서식 행 수를 하한으로, 그 이상은 폼에 있는 만큼 파싱한다", () => {
+    const fd = new FormData();
+    for (let i = 0; i < 6; i++) {
+      fd.set(`car_${i}_company`, `직장${i}`);
+      fd.set(`car_${i}_period`, "");
+      fd.set(`car_${i}_duties`, "");
+      fd.set(`car_${i}_salary`, "");
+      fd.set(`car_${i}_leaveReason`, "");
+    }
+    for (let i = 0; i < 5; i++) fd.set(`edu_${i}_school`, `학교${i}`);
+    const d = parseResumeForm(fd);
+    expect(d.career).toHaveLength(6);
+    expect(d.career[5].company).toBe("직장5");
+    expect(d.education).toHaveLength(5);
+    expect(d.education[4].school).toBe("학교4");
+    // 빈 FormData여도 하한만큼은 빈 행으로 나온다(빈 이력서가 종이 서식처럼 보이게).
+    expect(parseResumeForm(new FormData()).career).toHaveLength(CAREER_ROWS);
+    expect(parseResumeForm(new FormData()).education).toHaveLength(EDU_ROWS);
+  });
+
+  it("행 상한(DYNAMIC_ROWS_MAX)을 넘겨도 상한까지만 파싱한다(폼 변조 방어)", () => {
+    const fd = new FormData();
+    for (let i = 0; i < DYNAMIC_ROWS_MAX + 5; i++) fd.set(`car_${i}_company`, `직장${i}`);
+    expect(parseResumeForm(fd).career).toHaveLength(DYNAMIC_ROWS_MAX);
   });
 
   it("자격증·외국어는 폼에 있는 행 수만큼 동적 파싱, 없으면 빈 1행", () => {
@@ -129,6 +158,20 @@ describe("normalizeResume", () => {
     expect(tampered.contract.division).toBe(""); // 문자열이 아닌 값은 여전히 빈 값
   });
 
+  it("저장된 경력 6행은 6행 그대로 되살린다(하한만 채우고 자르지 않는다)", () => {
+    const d = normalizeResume({
+      career: Array.from({ length: 6 }, (_, i) => ({ company: `직장${i}` })),
+      education: Array.from({ length: 5 }, (_, i) => ({ school: `학교${i}` })),
+    });
+    expect(d.career).toHaveLength(6);
+    expect(d.career[5].company).toBe("직장5");
+    expect(d.education).toHaveLength(5);
+    // 상한 초과 저장분(변조·버그)은 상한까지만.
+    expect(normalizeResume({ career: Array.from({ length: 40 }, () => ({})) }).career).toHaveLength(
+      DYNAMIC_ROWS_MAX,
+    );
+  });
+
   it("동적 섹션(자격증)은 저장된 행 수 그대로, 체크박스는 true만 통과", () => {
     const d = normalizeResume({
       certificates: [{ name: "A" }, { name: "B" }, { name: "C" }, { name: "D" }, { name: "E" }],
@@ -163,9 +206,11 @@ describe("RESUME_DRAFT_EXCLUDE", () => {
     for (const name of ["p_residentId", "c_account", "c_bank", "c_salaryMonthly", "c_salaryAnnual"]) {
       expect(RESUME_DRAFT_EXCLUDE).toContain(name);
     }
-    // 경력 급여도 행마다 전부(행 수가 늘면 자동 확장돼야 한다).
+    // 경력 급여는 **행 상한까지 전부** — 경력행이 동적(하한 CAREER_ROWS, 최대 DYNAMIC_ROWS_MAX)이 되면서
+    // CAREER_ROWS까지만 제외하면 4번째 행부터의 급여가 IndexedDB에 평문으로 남는다([[#78]]).
     expect(RESUME_DRAFT_EXCLUDE).toContain("car_0_salary");
-    expect(RESUME_DRAFT_EXCLUDE.filter((n) => n.endsWith("_salary"))).toHaveLength(CAREER_ROWS);
+    expect(RESUME_DRAFT_EXCLUDE).toContain(`car_${DYNAMIC_ROWS_MAX - 1}_salary`);
+    expect(RESUME_DRAFT_EXCLUDE.filter((n) => n.endsWith("_salary"))).toHaveLength(DYNAMIC_ROWS_MAX);
   });
 });
 

@@ -4,10 +4,13 @@
 
 export const RESUME_FORM_TYPE = "staff_resume";
 
-// 종이 서식과 동일한 고정 행 수(학력 4·경력 3). 자격증·외국어는 동적 행(최소 1, 아래 MAX 캡).
+// 종이 서식과 같은 **기본(최소) 행 수** — 학력 4·경력 3. 빈 이력서가 종이 서식처럼 보이는 하한이고,
+// 상한이 아니다: 마지막 행에 입력하면 자동으로 늘고 +/− 버튼으로도 조절한다(원장 요청 2026-08-04
+// "경력사항을 3개밖에 못 적는다"). ⚠️ 이 하한 아래로는 줄지 않는다(UI의 −도 여기서 멈춘다) —
+// 그래야 normalizeResume의 패딩과 화면이 일치한다(패딩만 있으면 "지웠는데 되살아난다"로 보인다).
 export const EDU_ROWS = 4;
 export const CAREER_ROWS = 3;
-// 동적 섹션 상한 — 폼 변조·초안 폭주 방지용 안전 캡(정상 사용에선 닿지 않는다).
+// 동적 섹션 상한 — 폼 변조·초안 폭주 방지용 안전 캡(정상 사용에선 닿지 않는다). 학력·경력·자격증·외국어 공통.
 export const DYNAMIC_ROWS_MAX = 20;
 
 export const WORKDAYS = [
@@ -68,7 +71,9 @@ export const RESUME_DRAFT_EXCLUDE: string[] = [
   "c_account",
   "c_salaryMonthly",
   "c_salaryAnnual",
-  ...Array.from({ length: CAREER_ROWS }, (_, i) => `car_${i}_salary`),
+  // 경력 급여는 **행 상한까지 전부** — 경력행이 동적(3행 하한, 최대 DYNAMIC_ROWS_MAX)이 되면서
+  // CAREER_ROWS까지만 제외하면 4번째 행부터의 급여가 IndexedDB에 평문으로 남는다([[#78]]).
+  ...Array.from({ length: DYNAMIC_ROWS_MAX }, (_, i) => `car_${i}_salary`),
 ];
 
 export type ResumeEducation = { period: string; school: string; major: string; gpa: string; location: string };
@@ -103,6 +108,8 @@ export type StaffResumeData = {
 
 const rows = <T,>(n: number, make: () => T): T[] => Array.from({ length: n }, make);
 
+export const emptyEducation = (): ResumeEducation => ({ period: "", school: "", major: "", gpa: "", location: "" });
+export const emptyCareer = (): ResumeCareer => ({ company: "", period: "", duties: "", salary: "", leaveReason: "" });
 export const emptyCert = (): ResumeCert => ({ name: "", date: "", issuer: "" });
 export const emptyLanguage = (): ResumeLanguage => ({ name: "", testDate: "", score: "" });
 
@@ -113,8 +120,8 @@ export function emptyResume(): StaffResumeData {
   return {
     personal: { name: "", nameEn: "", residentId: "", address: "", phone: "", email: "" },
     photos: [],
-    education: rows(EDU_ROWS, () => ({ period: "", school: "", major: "", gpa: "", location: "" })),
-    career: rows(CAREER_ROWS, () => ({ company: "", period: "", duties: "", salary: "", leaveReason: "" })),
+    education: rows(EDU_ROWS, emptyEducation),
+    career: rows(CAREER_ROWS, emptyCareer),
     certificates: [emptyCert()],
     languages: [emptyLanguage()],
     checks: emptyChecks(),
@@ -148,24 +155,54 @@ const pickDept = (v: string) => (DEPT_LEGACY[v] ?? v).trim();
 /**
  * FormData → 구조화 데이터. 필드 name 규약: p_*, edu_N_*, car_N_*, cert_N_*, lang_N_*, c_*, chk_*, photo_N.
  * 근무요일·서류 체크박스는 초안 자동저장 round-trip을 위해 항목별 고유 name(`c_workday_mon`·`chk_sexCrime`, 값 "1").
- * 자격증·외국어는 동적 행 — 폼에 존재하는 인덱스만큼 파싱(캡 DYNAMIC_ROWS_MAX), 최소 1행 보장.
+ * 학력·경력·자격증·외국어는 **동적 행** — 폼에 존재하는 인덱스만큼 파싱(캡 DYNAMIC_ROWS_MAX).
+ * 학력·경력은 종이 서식 하한(EDU_ROWS·CAREER_ROWS)까지는 폼에 없어도 빈 행으로 채운다.
  */
 export function parseResumeForm(fd: FormData): StaffResumeData {
   const s = (k: string) => String(fd.get(k) ?? "").trim();
-  const dynamic = <T,>(prefix: string, probe: string, make: (i: number) => T): T[] => {
+  /**
+   * 행 파싱 — `min`행까지는 무조건 읽고, 그 뒤는 **행의 칸이 하나라도 폼에 있는 동안** 계속 읽는다.
+   * ⚠️ 단일 probe 칸으로 판정하지 않는 이유: 경력 급여처럼 특정 칸만 담긴 FormData(초안 exclude 검증)나
+   * 앞으로 칸이 바뀌는 경우에 행이 통째로 유실된다 — "칸 하나라도 있으면 그 행은 있다"가 안전한 쪽.
+   */
+  const dynamic = <T,>(prefix: string, keys: string[], make: (i: number) => T, min = 0): T[] => {
     const out: T[] = [];
     for (let i = 0; i < DYNAMIC_ROWS_MAX; i++) {
-      if (!fd.has(`${prefix}_${i}_${probe}`)) break;
+      if (i >= min && !keys.some((k) => fd.has(`${prefix}_${i}_${k}`))) break;
       out.push(make(i));
     }
     return out;
   };
-  const certificates = dynamic("cert", "name", (i) => ({
+  const education = dynamic(
+    "edu",
+    ["period", "school", "major", "gpa", "location"],
+    (i) => ({
+      period: s(`edu_${i}_period`),
+      school: s(`edu_${i}_school`),
+      major: s(`edu_${i}_major`),
+      gpa: s(`edu_${i}_gpa`),
+      location: s(`edu_${i}_location`),
+    }),
+    EDU_ROWS,
+  );
+  const career = dynamic(
+    "car",
+    ["company", "period", "duties", "salary", "leaveReason"],
+    (i) => ({
+      company: s(`car_${i}_company`),
+      period: s(`car_${i}_period`),
+      duties: s(`car_${i}_duties`),
+      salary: s(`car_${i}_salary`),
+      leaveReason: s(`car_${i}_leaveReason`),
+    }),
+    CAREER_ROWS,
+  );
+  const certificates = dynamic("cert", ["name", "date", "issuer"], (i) => ({
     name: s(`cert_${i}_name`),
     date: s(`cert_${i}_date`),
     issuer: s(`cert_${i}_issuer`),
   }));
-  const languages = dynamic("lang", "name", (i) => ({
+  const languages = dynamic("lang", ["name", "testDate", "score"], (i) => ({
     name: s(`lang_${i}_name`),
     testDate: s(`lang_${i}_testDate`),
     score: s(`lang_${i}_score`),
@@ -185,20 +222,8 @@ export function parseResumeForm(fd: FormData): StaffResumeData {
       email: s("p_email"),
     },
     photos,
-    education: rows(EDU_ROWS, () => 0).map((_, i) => ({
-      period: s(`edu_${i}_period`),
-      school: s(`edu_${i}_school`),
-      major: s(`edu_${i}_major`),
-      gpa: s(`edu_${i}_gpa`),
-      location: s(`edu_${i}_location`),
-    })),
-    career: rows(CAREER_ROWS, () => 0).map((_, i) => ({
-      company: s(`car_${i}_company`),
-      period: s(`car_${i}_period`),
-      duties: s(`car_${i}_duties`),
-      salary: s(`car_${i}_salary`),
-      leaveReason: s(`car_${i}_leaveReason`),
-    })),
+    education,
+    career,
     certificates: certificates.length ? certificates : [emptyCert()],
     languages: languages.length ? languages : [emptyLanguage()],
     checks: Object.fromEntries(RESUME_CHECKS.map((c) => [c.key, Boolean(fd.get(`chk_${c.key}`))])) as Record<
@@ -237,9 +262,15 @@ export function normalizeResume(v: unknown): StaffResumeData {
       return out as T;
     });
   };
-  // 동적 섹션: 저장된 행 수 그대로(최소 1·캡 DYNAMIC_ROWS_MAX) — 고정 패딩은 옛 3행 문서와 호환.
-  const dynRows = <T extends Record<string, string>>(arr: unknown, keys: (keyof T & string)[], make: () => T): T[] => {
-    const n = Array.isArray(arr) ? Math.min(Math.max(arr.length, 1), DYNAMIC_ROWS_MAX) : 1;
+  // 동적 섹션: 저장된 행 수 그대로(하한 min·캡 DYNAMIC_ROWS_MAX) — 고정 패딩은 옛 3행 문서와 호환.
+  // 학력·경력은 min=종이 서식 행 수(4·3)라 옛 문서·빈 문서가 지금과 똑같이 보이고, 그 이상 저장분은 전부 살아난다.
+  const dynRows = <T extends Record<string, string>>(
+    arr: unknown,
+    keys: (keyof T & string)[],
+    make: () => T,
+    min = 1,
+  ): T[] => {
+    const n = Array.isArray(arr) ? Math.min(Math.max(arr.length, min), DYNAMIC_ROWS_MAX) : min;
     const padded = padRows<T>(arr, n, keys);
     return padded.length ? padded : [make()];
   };
@@ -259,8 +290,18 @@ export function normalizeResume(v: unknown): StaffResumeData {
     photos: Array.isArray(o.photos)
       ? o.photos.map(String).filter(Boolean).slice(0, RESUME_PHOTO_SLOTS)
       : [],
-    education: padRows<ResumeEducation>(o.education, EDU_ROWS, ["period", "school", "major", "gpa", "location"]),
-    career: padRows<ResumeCareer>(o.career, CAREER_ROWS, ["company", "period", "duties", "salary", "leaveReason"]),
+    education: dynRows<ResumeEducation>(
+      o.education,
+      ["period", "school", "major", "gpa", "location"],
+      emptyEducation,
+      EDU_ROWS,
+    ),
+    career: dynRows<ResumeCareer>(
+      o.career,
+      ["company", "period", "duties", "salary", "leaveReason"],
+      emptyCareer,
+      CAREER_ROWS,
+    ),
     certificates: dynRows<ResumeCert>(o.certificates, ["name", "date", "issuer"], emptyCert),
     languages: dynRows<ResumeLanguage>(o.languages, ["name", "testDate", "score"], emptyLanguage),
     checks: Object.fromEntries(RESUME_CHECKS.map((k) => [k.key, checks[k.key] === true])) as Record<
