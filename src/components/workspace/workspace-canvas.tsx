@@ -219,7 +219,7 @@ export function WorkspaceCanvas({ owner }: { owner: string }) {
                       최소화한 창 {minimizedWins.length}개
                     </p>
                     <p className="text-text-dim mt-1 text-[13px]">
-                      눌러서 다시 열 수 있어요. 오른쪽 아래 독에도 있습니다.
+                      눌러서 다시 열 수 있어요. 왼쪽 아래 독에도 있습니다.
                     </p>
                     <div className="pointer-events-auto mt-3 flex flex-wrap items-center justify-center gap-1.5">
                       {minimizedWins.map((w) => (

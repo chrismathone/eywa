@@ -28,6 +28,13 @@ type PrefsState = {
   /** 멀티윈도우 워크스페이스 첫 진입 코치마크를 봤는가(1회용). false면 데스크톱에서 안내 오버레이 노출. */
   onboarded: boolean;
   setOnboarded: (v: boolean) => void;
+  /**
+   * 하단 왼쪽 창 전환 독을 **직접 접었는가**(기본 false=평소 동작). true면 자동 노출(최소화 창 있을 때)·
+   * 호버 노출이 모두 멈추고 작은 '펼치기' 버튼만 남는다 — 독이 화면 아래 버튼과 겹칠 때의 탈출구
+   * (window-switcher.tsx 참조). 화면·사람마다 방해 지점이 달라 개인 설정으로 두고 영속한다.
+   */
+  dockCollapsed: boolean;
+  setDockCollapsed: (v: boolean) => void;
   /** 시간표 기본뷰 셀 색 강도 — 상단 토글에서 3중1택. 기본 vivid(쨍하게). */
   timetableColor: TimetableColorMode;
   setTimetableColor: (v: TimetableColorMode) => void;
@@ -71,6 +78,8 @@ export const usePrefs = create<PrefsState>()(
       toggleSidebar: () => set((s) => ({ sidebarExpanded: !s.sidebarExpanded })),
       onboarded: false,
       setOnboarded: (onboarded) => set({ onboarded }),
+      dockCollapsed: false, // 기본은 펼침(지금 동작 그대로). 접으면 그 선택이 새로고침에도 유지.
+      setDockCollapsed: (dockCollapsed) => set({ dockCollapsed }),
       timetableColor: "vivid", // 기본 쨍하게(시트식). 개인이 상단 토글로 mid/pastel 선택 시 영속.
       setTimetableColor: (timetableColor) => set({ timetableColor }),
       timetableFontSize: DEFAULT_UI_FONT_SIZE, // 기본 '작음' = 배율 1(지금 화면 그대로).
