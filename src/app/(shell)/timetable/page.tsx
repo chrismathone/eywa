@@ -654,6 +654,7 @@ export default async function TimetablePage({
           isCurrentWeek={week === thisWk}
           nowMin={nowMin}
           canEditCapacity={canEditRoomCapacity}
+          groupLines={viewPrefs.roomGroupLines ?? true}
         />
       ) : slots.length === 0 ? (
         <div className="mx-auto max-w-xl py-4">

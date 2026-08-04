@@ -112,59 +112,118 @@ describe("summarizeDay", () => {
   });
 });
 
-describe("buildRoomHourRows (시간대별 활성도)", () => {
-  it("주중 창을 1시간 밴드로 나누고, 셀 = 밴드∩창 분모 대비 주중 점유율", async () => {
-    const { buildRoomHourRows, weekdayHourBands } = await import("./room-metrics");
-    const { buckets } = buildRoomBuckets(
-      [
-        slot({ dayOfWeek: "mon", startTime: "14:00", endTime: "15:00" }),
-        slot({ dayOfWeek: "tue", startTime: "14:00", endTime: "14:30", classId: "c2" }),
-      ],
-      ROOMS,
-    );
-    const w = resolveDayWindows(["math"], CONFIG, []); // 평일 14:00~16:00
-    expect(weekdayHourBands(w).map((b) => b.label)).toEqual(["14시", "15시"]);
-    const { bands, rows } = buildRoomHourRows(buckets, w);
-    expect(bands).toHaveLength(2);
-    const r1 = rows.find((r) => r.key === "r1")!;
-    expect(r1.cells[0]).toBe(30); // (60+30)분 ÷ (60분×5일) = 30%
-    expect(r1.cells[1]).toBe(0); // 15시 밴드 수업 없음
-    const r2 = rows.find((r) => r.key === "r2")!;
-    expect(r2.cells).toEqual([0, 0]);
+describe("timelineAxis — 10분 격자 축", () => {
+  it("평일은 오전 특강이 창을 넓혀도 14시부터 시작한다", async () => {
+    const { timelineAxis } = await import("./room-metrics");
+    // 실데이터 모양: 평일 오전 특강(10:00~13:00)이 관측 확장으로 창을 10시까지 끌어내린다.
+    const morning = slot({ dayOfWeek: "mon", startTime: "10:00", endTime: "13:00", classId: "special" });
+    const w = resolveDayWindows(["math"], CONFIG, [morning]);
+    expect(w.mon!.startMin).toBe(10 * 60); // 창 자체는 넓어진 채로 둔다(지도는 정직해야 하므로)
+    const axis = timelineAxis(w, "mon");
+    expect(axis.startMin).toBe(14 * 60);
+    expect(axis.hours.map((h) => h.label)).toEqual(["14~15시", "15~16시"]);
+    expect(axis.slots).toBe(12); // 2시간 ÷ 10분
   });
 
-  it("창을 반쯤 벗어난 밴드는 분모를 창과의 교집합만큼만 잡는다", async () => {
-    const { buildRoomHourRows } = await import("./room-metrics");
-    // 관측 확장으로 mon만 13:30 시작 → 13시 밴드 분모 = 30분(mon)뿐.
-    const { buckets } = buildRoomBuckets(
-      [slot({ dayOfWeek: "mon", startTime: "13:30", endTime: "14:00" })],
-      ROOMS,
-    );
-    const w = resolveDayWindows(["math"], CONFIG, [
-      slot({ dayOfWeek: "mon", startTime: "13:30", endTime: "14:00" }),
-    ]);
-    const { bands, rows } = buildRoomHourRows(buckets, w);
-    expect(bands[0]!.label).toBe("13시");
-    const r1 = rows.find((r) => r.key === "r1")!;
-    expect(r1.cells[0]).toBe(100); // 점유 30분 ÷ 분모 30분(창 교집합)
+  it("주말은 하한을 적용하지 않는다 — 토요일 오전엔 정규 수업이 실제로 돈다", async () => {
+    const { timelineAxis } = await import("./room-metrics");
+    const w = resolveDayWindows(["math"], CONFIG, []); // 주말 창 09:00~10:00
+    expect(timelineAxis(w, "sat")).toMatchObject({ startMin: 9 * 60, slots: 6 });
+  });
+
+  it("창이 14시보다 늦게 시작하면 그 시작을 그대로 쓴다(하한이지 고정값이 아니다)", async () => {
+    const { timelineAxis } = await import("./room-metrics");
+    const w = resolveDayWindows(["math"], { weekday: { "1": { startTime: "16:00", endTime: "18:00" } }, weekend: {} }, []);
+    expect(timelineAxis(w, "mon").hours.map((h) => h.label)).toEqual(["16~17시", "17~18시"]);
+  });
+
+  it("하한 뒤로 남는 시간이 없으면 빈 축(표를 안 그린다)", async () => {
+    const { timelineAxis } = await import("./room-metrics");
+    const w = resolveDayWindows(["math"], { weekday: { "1": { startTime: "10:00", endTime: "12:00" } }, weekend: {} }, []);
+    expect(timelineAxis(w, "mon").slots).toBe(0);
   });
 });
 
-describe("buildRoomHourRows — 선택 요일 단일 기준(UI 기본, 평균 아님)", () => {
-  it("days=[mon]이면 월요일 점유만 절대값으로 — 다른 요일 수업은 안 섞인다", async () => {
-    const { buildRoomHourRows } = await import("./room-metrics");
+describe("buildRoomTimelineRows — 수업 시간대로 병합", () => {
+  it("80분 수업(15:00~16:20)은 10분 칸 8개로 병합된다", async () => {
+    const { buildRoomTimelineRows } = await import("./room-metrics");
+    const { buckets } = buildRoomBuckets(
+      [slot({ dayOfWeek: "mon", startTime: "15:00", endTime: "16:20", students: 7 })],
+      ROOMS,
+    );
+    // 창을 16:20까지 넓히려 관측 확장을 태운다(교시표는 16:00까지라 그대로면 잘린다).
+    const w = resolveDayWindows(["math"], CONFIG, [
+      slot({ dayOfWeek: "mon", startTime: "15:00", endTime: "16:20" }),
+    ]);
+    const r1 = buildRoomTimelineRows(buckets, w, "mon").rows.find((r) => r.key === "r1")!;
+    const cls = r1.cells.find((c) => c.kind === "class")!;
+    expect(cls).toMatchObject({ span: 8, students: 7, seatPct: 70, startMin: 15 * 60, endMin: 16 * 60 + 20 });
+  });
+
+  it("빈 시간은 gap으로 이어 붙고, 칸 수 합은 축과 정확히 같다(colspan 어긋남 방지)", async () => {
+    const { buildRoomTimelineRows } = await import("./room-metrics");
+    const { buckets } = buildRoomBuckets(
+      [slot({ dayOfWeek: "mon", startTime: "14:30", endTime: "15:00" })],
+      ROOMS,
+    );
+    const w = resolveDayWindows(["math"], CONFIG, []); // 14:00~16:00 = 12칸
+    const { axis, rows } = buildRoomTimelineRows(buckets, w, "mon");
+    for (const r of rows) {
+      expect(r.cells.reduce((n, c) => n + c.span, 0)).toBe(axis.slots);
+    }
+    const r1 = rows.find((r) => r.key === "r1")!;
+    expect(r1.cells.map((c) => [c.kind, c.span])).toEqual([
+      ["gap", 3],
+      ["class", 3],
+      ["gap", 6],
+    ]);
+  });
+
+  it("같은 시간에 두 반이면 인원이 큰 쪽을 대표로 세운다(좌석 압박을 과소평가하지 않는다)", async () => {
+    const { buildRoomTimelineRows } = await import("./room-metrics");
     const { buckets } = buildRoomBuckets(
       [
-        slot({ dayOfWeek: "mon", startTime: "14:00", endTime: "14:30" }),
-        slot({ dayOfWeek: "tue", startTime: "14:00", endTime: "16:00", classId: "c2" }),
+        slot({ dayOfWeek: "mon", startTime: "14:00", endTime: "15:00", classId: "small", students: 3 }),
+        slot({ dayOfWeek: "mon", startTime: "14:00", endTime: "15:00", classId: "big", students: 9 }),
       ],
       ROOMS,
     );
-    const w = resolveDayWindows(["math"], CONFIG, []); // 평일 14:00~16:00
-    const mon = buildRoomHourRows(buckets, w, ["mon"]);
-    const r1 = mon.rows.find((r) => r.key === "r1")!;
-    expect(r1.cells).toEqual([50, 0]); // 월 14시 30분/60분 — 화요일 풀가동은 안 섞임
-    const tue = buildRoomHourRows(buckets, w, ["tue"]);
-    expect(tue.rows.find((r) => r.key === "r1")!.cells).toEqual([100, 100]);
+    const w = resolveDayWindows(["math"], CONFIG, []);
+    const r1 = buildRoomTimelineRows(buckets, w, "mon").rows.find((r) => r.key === "r1")!;
+    const cls = r1.cells.find((c) => c.kind === "class")!;
+    expect(cls).toMatchObject({ classId: "big", students: 9, overlap: "joint" });
+  });
+
+  it("정원 미입력이면 인원률은 null — 인원은 그대로 보여준다(0%로 속이지 않는다)", async () => {
+    const { buildRoomTimelineRows } = await import("./room-metrics");
+    const { buckets } = buildRoomBuckets(
+      [slot({ dayOfWeek: "mon", startTime: "14:00", endTime: "15:00", roomId: "r2", students: 5 })],
+      ROOMS,
+    );
+    const w = resolveDayWindows(["math"], CONFIG, []);
+    const r2 = buildRoomTimelineRows(buckets, w, "mon").rows.find((r) => r.key === "r2")!;
+    expect(r2.cells.find((c) => c.kind === "class")).toMatchObject({ students: 5, seatPct: null });
+  });
+
+  it("정원을 넘으면 100%를 넘겨 그대로 낸다(초과를 숨기지 않는다)", async () => {
+    const { buildRoomTimelineRows } = await import("./room-metrics");
+    const { buckets } = buildRoomBuckets(
+      [slot({ dayOfWeek: "mon", startTime: "14:00", endTime: "15:00", students: 13 })],
+      ROOMS,
+    );
+    const w = resolveDayWindows(["math"], CONFIG, []);
+    const r1 = buildRoomTimelineRows(buckets, w, "mon").rows.find((r) => r.key === "r1")!;
+    expect(r1.cells.find((c) => c.kind === "class")).toMatchObject({ seatPct: 130 });
+  });
+
+  it("다른 요일 수업은 안 섞인다(선택 요일 절대값)", async () => {
+    const { buildRoomTimelineRows } = await import("./room-metrics");
+    const { buckets } = buildRoomBuckets(
+      [slot({ dayOfWeek: "tue", startTime: "14:00", endTime: "16:00", students: 8 })],
+      ROOMS,
+    );
+    const w = resolveDayWindows(["math"], CONFIG, []);
+    const mon = buildRoomTimelineRows(buckets, w, "mon").rows.find((r) => r.key === "r1")!;
+    expect(mon.cells).toEqual([{ kind: "gap", span: 12 }]);
   });
 });

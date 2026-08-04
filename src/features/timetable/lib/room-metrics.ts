@@ -138,71 +138,165 @@ export function buildRoomWeekRows(buckets: readonly RoomBucket[], windows: DayWi
   });
 }
 
-// ── 시간대별 활성도(원장 요청 2026-08-03: "시간대별 활성도도 교실별로") ─────────
-// 1시간 밴드 × 교실 매트릭스 — "어느 교실이 어느 시간대에 노는가". 기준 요일 집합(days)을 받으며
-// **UI는 상단 요일 칩의 선택 요일 1개만 넘긴다**(원장 확정 2026-08-03: "평균같은 건 필요없어, 절대적인
-// 데이터" — 주중 평균 기준은 비채택. 여러 요일 합산 로직은 순수 함수 능력으로만 남김).
-// 분모는 밴드∩그 요일 운영 창의 합(창 밖 구간은 안 센다 — 13:30 개원이면 13시 밴드 분모는 30분).
+const isWeekendDay = (d: DayOfWeek): boolean => d === "sat" || d === "sun";
 
-export type RoomHourBand = { startMin: number; endMin: number; label: string };
+// ── 교실 활성도 타임라인 — 교실 × 10분 격자, 수업 시간대로 병합된 블록 ──────────────────────
+//
+// 원장 지시 2026-08-04: *"10분단위로 쪼개고 하단에 %를 수업 시간에 맞춰서 병합처리할 것"* ·
+// *"예를 들어 15:00~16:20인 수업은 16:20까지 병합시키면 됨 80분을"* ·
+// *"10분단위지만 열너비를 최소화하고 병합처리하면 80분수업이 적당한 너비가 될 것"*.
+//
+// 왜 1시간 밴드를 버렸나: 교시가 80·110분이라 시간 경계와 안 맞는다. 1시간 칸은 한 수업을 두 칸에
+// 쪼개 놓고 각 칸에 **다른 %**를 적어, 실제로는 하나인 수업이 둘로 보였다. 10분 격자 + colspan 병합은
+// **수업 하나 = 블록 하나**라 그 왜곡이 사라진다.
+//
+// 기준 요일은 **상단 요일 칩 1개**만 받는다(원장 확정 2026-08-03: "평균같은 건 필요없어, 절대적인 데이터").
 
-/** 기준 요일들의 운영 창(관측 확장 포함) 합집합을 1시간 밴드로 분할. 창이 없으면 []. */
-export function weekdayHourBands(windows: DayWindows, days: readonly DayOfWeek[] = WEEKDAYS): RoomHourBand[] {
-  let lo = Infinity;
-  let hi = -Infinity;
-  for (const d of days) {
-    const w = windows[d];
-    if (!w) continue;
-    lo = Math.min(lo, w.startMin);
-    hi = Math.max(hi, w.endMin);
-  }
-  if (hi <= lo) return [];
-  const start = Math.floor(lo / 60) * 60;
-  const end = Math.ceil(hi / 60) * 60;
-  const out: RoomHourBand[] = [];
-  for (let m = start; m < end; m += 60) {
-    out.push({ startMin: m, endMin: m + 60, label: `${Math.floor(m / 60)}시` });
-  }
-  return out;
-}
+/**
+ * **평일 시작 하한(14:00).** 평일 오전 슬롯은 실측상 전부 특강(본원204 여름 특강)이라, 관측 확장이
+ * 창을 10시까지 넓히면 표가 빈 칸으로 길어진다 — 원장 지시 2026-08-04
+ * *"평일수업만 14시 이전 숨김 / 주말은 여전히 9시부터"*.
+ *
+ * ⚠️ **주말엔 적용하지 않는다** — 토요일 09~14시엔 정규 개별반이 실제로 돈다(고등M 개별 토일·고등M 고1 BS4F 토).
+ * ⚠️ 평일 14시 이전에도 수업(특강)은 **실제로 있다** — 이 표에서 안 보일 뿐이다. 하한을 더 올리거나
+ *    다른 축으로 옮기기 전에, 그 시간대 수업이 어디서도 안 보이게 되는 건 아닌지 확인할 것.
+ */
+export const WEEKDAY_HOUR_FLOOR_MIN = 14 * 60;
 
-export type RoomHourRow = {
+/** 격자 한 칸 = 10분. 교시 시각이 전부 10분 배수라 스냅 손실이 없다(안 맞으면 바깥쪽으로 스냅). */
+export const TIMELINE_STEP_MIN = 10;
+
+export type RoomTimelineCell =
+  | { kind: "gap"; span: number }
+  | {
+      kind: "class";
+      /** 격자 칸 수 = colspan. */
+      span: number;
+      classId: string;
+      className: string;
+      teacherLabel: string | null;
+      subject: string;
+      /** 실제 수업 시각(격자 스냅 전) — 툴팁이 진실을 말하도록 원본을 싣는다. */
+      startMin: number;
+      endMin: number;
+      students: number;
+      /** 인원률 = 인원 ÷ 정원. 정원 미입력이면 null(0%로 속이지 않는다). */
+      seatPct: number | null;
+      isSpecialLecture: boolean;
+      /** conflict=부분 겹침(이중예약 의심), joint=완전 동일 범위(합반). */
+      overlap: "conflict" | "joint" | null;
+    };
+
+export type RoomTimelineRow = {
   key: string;
   name: string;
   registered: boolean;
-  /** 밴드별 점유율 %(기준 요일 집합 합산) — null=그 밴드가 운영 창과 아예 안 겹침(0%로 속이지 않는다). */
-  cells: (number | null)[];
+  capacity: number | null;
+  cells: RoomTimelineCell[];
 };
 
-export function buildRoomHourRows(
+export type TimelineAxis = {
+  startMin: number;
+  endMin: number;
+  /** 10분 칸 총 개수 = colgroup 열 수. */
+  slots: number;
+  /** 머리글용 1시간 묶음(각 6칸). 창 끝이 정시가 아니면 마지막 묶음만 짧다. */
+  hours: { startMin: number; label: string; span: number }[];
+};
+
+/**
+ * 그 요일의 격자 축. 평일은 [WEEKDAY_HOUR_FLOOR_MIN] 하한, 주말은 창 그대로(위 상수 주석 참조).
+ * 창이 없거나 하한 뒤로 남는 시간이 없으면 slots=0.
+ */
+export function timelineAxis(windows: DayWindows, day: DayOfWeek): TimelineAxis {
+  const win = windows[day];
+  const empty: TimelineAxis = { startMin: 0, endMin: 0, slots: 0, hours: [] };
+  if (!win) return empty;
+  const lo = isWeekendDay(day) ? win.startMin : Math.max(win.startMin, WEEKDAY_HOUR_FLOOR_MIN);
+  if (win.endMin <= lo) return empty;
+  const startMin = Math.floor(lo / 60) * 60;
+  const endMin = Math.ceil(win.endMin / TIMELINE_STEP_MIN) * TIMELINE_STEP_MIN;
+  const slots = Math.round((endMin - startMin) / TIMELINE_STEP_MIN);
+  const hours: TimelineAxis["hours"] = [];
+  for (let m = startMin; m < endMin; m += 60) {
+    const h = Math.floor(m / 60);
+    // 마지막 묶음은 창 끝에서 잘린다(6칸 고정으로 적으면 표가 축보다 길어져 열이 어긋난다).
+    const span = Math.round((Math.min(m + 60, endMin) - m) / TIMELINE_STEP_MIN);
+    hours.push({ startMin: m, label: `${h}~${h + 1}시`, span });
+  }
+  return { startMin, endMin, slots, hours };
+}
+
+/**
+ * 교실별 타임라인 행. 한 행 안에서 블록은 **겹치지 않는다** — 같은 시간에 두 반이 있으면(합반·이중예약)
+ * 칸마다 **인원이 큰 쪽**을 골라 대표로 세우고 `overlap`으로 표시한다(좌석 압박을 과소평가하지 않는 쪽).
+ * ⚠️ 겹침 자체를 지우는 게 아니다 — 블록에 `overlap` 테두리가 남고, 상단 요약이 "시간 겹침 N건"으로 센다.
+ *    다만 **가려진 반의 이름은 이 화면에 안 나온다** — 겹침을 파고들 땐 시간표 기본뷰/통합뷰로 갈 것.
+ */
+export function buildRoomTimelineRows(
   buckets: readonly RoomBucket[],
   windows: DayWindows,
-  days: readonly DayOfWeek[] = WEEKDAYS,
-): { bands: RoomHourBand[]; rows: RoomHourRow[] } {
-  const bands = weekdayHourBands(windows, days);
-  const rows = buckets.map((b) => {
-    // 요일별 구간은 밴드 루프 밖에서 1회만 계산(밴드×요일 중복 계산 방지).
-    const byDay = days.map((d) => ({ win: windows[d], intervals: dayIntervalsOf(b, d).intervals }));
-    const cells = bands.map((band) => {
-      let occ = 0;
-      let den = 0;
-      for (const { win, intervals } of byDay) {
-        if (!win) continue;
-        const clipLo = Math.max(band.startMin, win.startMin);
-        const clipHi = Math.min(band.endMin, win.endMin);
-        if (clipHi <= clipLo) continue;
-        den += clipHi - clipLo;
-        occ += occupiedMinutes(
-          intervals
-            .map((iv) => ({ startMin: Math.max(iv.startMin, clipLo), endMin: Math.min(iv.endMin, clipHi) }))
-            .filter((iv) => iv.endMin > iv.startMin),
-        );
+  day: DayOfWeek,
+): { axis: TimelineAxis; rows: RoomTimelineRow[] } {
+  const axis = timelineAxis(windows, day);
+  if (axis.slots === 0) return { axis, rows: [] };
+
+  const rows = buckets.map((b): RoomTimelineRow => {
+    const intervals = dayIntervalsOf(b, day).intervals;
+    const cells: RoomTimelineCell[] = [];
+    let run: { iv: (typeof intervals)[number] | null; span: number } = { iv: null, span: 0 };
+
+    const flush = () => {
+      if (run.span === 0) return;
+      const iv = run.iv;
+      if (!iv) {
+        cells.push({ kind: "gap", span: run.span });
+      } else {
+        cells.push({
+          kind: "class",
+          span: run.span,
+          classId: iv.classId,
+          className: iv.className,
+          teacherLabel: iv.teacherLabel,
+          subject: iv.subject,
+          startMin: iv.startMin,
+          endMin: iv.endMin,
+          students: iv.students,
+          seatPct:
+            b.capacity != null && b.capacity > 0 && iv.students > 0
+              ? Math.round((iv.students / b.capacity) * 100)
+              : null,
+          isSpecialLecture: iv.isSpecialLecture,
+          overlap: iv.overlap,
+        });
       }
-      return den > 0 ? Math.round((occ / den) * 100) : null;
-    });
-    return { key: b.key, name: b.name, registered: b.registered, cells };
+      run = { iv: null, span: 0 };
+    };
+
+    for (let i = 0; i < axis.slots; i++) {
+      const lo = axis.startMin + i * TIMELINE_STEP_MIN;
+      const hi = lo + TIMELINE_STEP_MIN;
+      // 이 칸을 덮는 수업 중 대표 하나 — 인원 많은 쪽, 같으면 먼저 시작한 쪽(결정적).
+      let best: (typeof intervals)[number] | null = null;
+      for (const iv of intervals) {
+        if (iv.startMin >= hi || iv.endMin <= lo) continue;
+        if (
+          !best ||
+          iv.students > best.students ||
+          (iv.students === best.students && iv.startMin < best.startMin)
+        ) {
+          best = iv;
+        }
+      }
+      if (run.iv?.classId !== best?.classId) flush();
+      run.iv = best;
+      run.span += 1;
+    }
+    flush();
+    return { key: b.key, name: b.name, registered: b.registered, capacity: b.capacity, cells };
   });
-  return { bands, rows };
+
+  return { axis, rows };
 }
 
 export type RoomDaySummary = {

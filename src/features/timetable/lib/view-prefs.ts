@@ -42,6 +42,11 @@ export type TimetableViewPrefs = {
    * 값·배율은 공용 규약(lib/ui-prefs/font-size) — 원스크린·ECS와 같은 어휘를 쓴다.
    */
   fontSize: UiFontSize | null;
+  /**
+   * 교실뷰 활성도 표의 **건물·층 구분선**. null = 미설정(기본 켜짐).
+   * 뷰 세팅은 기기가 아니라 계정에 붙는다(원장 확정 2026-08-04) — 포트가 다른 로컬/배포를 오가도 따라온다.
+   */
+  roomGroupLines: boolean | null;
 };
 
 /** 셀 색 강도 — workspace prefs 스토어의 TimetableColorMode와 같은 3값(런타임 소스는 그 스토어). */
@@ -56,6 +61,7 @@ export const EMPTY_VIEW_PREFS: TimetableViewPrefs = {
   colorMode: null,
   compact1h: null,
   fontSize: null,
+  roomGroupLines: null,
 };
 
 /**
@@ -186,6 +192,7 @@ export function parseViewPrefs(raw: unknown): TimetableViewPrefs {
       typeof o.fontSize === "string" && (UI_FONT_SIZES as readonly string[]).includes(o.fontSize)
         ? (o.fontSize as UiFontSize)
         : null,
+    roomGroupLines: typeof o.roomGroupLines === "boolean" ? o.roomGroupLines : null,
   };
 }
 
@@ -204,6 +211,8 @@ export function serializeViewPrefs(prefs: TimetableViewPrefs): Record<string, un
   if (prefs.compact1h && Object.keys(prefs.compact1h).length > 0) out.compact1h = prefs.compact1h;
   // 기본값('작음')은 키를 지운다 — 빈 값이 쌓이지 않게(ECS·원스크린과 같은 규약).
   if (prefs.fontSize !== null && prefs.fontSize !== DEFAULT_UI_FONT_SIZE) out.fontSize = prefs.fontSize;
+  // 기본값(켜짐)은 키를 지운다 — 빈 값이 쌓이지 않게(fontSize와 같은 규약).
+  if (prefs.roomGroupLines === false) out.roomGroupLines = false;
   return out;
 }
 
@@ -225,6 +234,7 @@ export function mergeViewPrefs(
     hideEmptyDays: pick("hideEmptyDays"),
     collapseEmptyPeriods: pick("collapseEmptyPeriods"),
     colorMode: pick("colorMode"),
+    roomGroupLines: pick("roomGroupLines"),
     fontSize: pick("fontSize"),
     // compact1h는 과목별이라 통째 교체가 아니라 **과목 단위 병합**이다(아래 참조).
     compact1h: patch.compact1h !== undefined

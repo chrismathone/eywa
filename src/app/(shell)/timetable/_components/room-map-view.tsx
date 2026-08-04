@@ -11,12 +11,11 @@ import {
 } from "@/features/timetable/lib/room-grid";
 import {
   ROOM_DAY_ORDER,
-  buildRoomHourRows,
+  buildRoomTimelineRows,
   buildRoomWeekRows,
   summarizeDay,
   type DayWindows,
 } from "@/features/timetable/lib/room-metrics";
-import { RoomMapGrid } from "./room-map-grid";
 import { RoomWeekPanel } from "./room-week-panel";
 
 // 교실뷰 컨테이너 — 요일 선택(기본=오늘)·과목 하이라이트는 **클라 상태**(주간 데이터가 이미 다 와 있어
@@ -36,6 +35,7 @@ export function RoomMapView({
   isCurrentWeek,
   nowMin,
   canEditCapacity,
+  groupLines,
 }: {
   slots: RoomSlotLite[];
   rooms: RoomInfo[];
@@ -45,6 +45,8 @@ export function RoomMapView({
   isCurrentWeek: boolean;
   nowMin: number;
   canEditCapacity: boolean;
+  /** 건물·층 구분선 초기값 — 계정에 저장된 뷰 설정(users.ui_prefs). */
+  groupLines: boolean;
 }) {
   const subjects = useSubjectMaps();
   const [day, setDay] = useState<DayOfWeek>(isCurrentWeek ? todayDay : "mon");
@@ -59,7 +61,7 @@ export function RoomMapView({
   const { buckets, unassigned } = useMemo(() => buildRoomBuckets(effSlots, rooms), [effSlots, rooms]);
   const weekRows = useMemo(() => buildRoomWeekRows(buckets, windows), [buckets, windows]);
   // 시간대별 = **선택 요일의 절대 데이터**(요일 칩을 따라감) — 주중 평균 비채택(원장 확정 08-03).
-  const hourMatrix = useMemo(() => buildRoomHourRows(buckets, windows, [day]), [buckets, windows, day]);
+  const timeline = useMemo(() => buildRoomTimelineRows(buckets, windows, day), [buckets, windows, day]);
   const summary = useMemo(
     () => summarizeDay(buckets, windows, day, nowMin),
     [buckets, windows, day, nowMin],
@@ -190,20 +192,13 @@ export function RoomMapView({
         </div>
       </div>
 
-      <RoomMapGrid
-        buckets={buckets}
-        day={day}
-        window={windows[day]}
-        nowMin={nowMin}
-        isToday={isToday}
-        focusSubject={focusSubject}
-      />
-
       <RoomWeekPanel
         rows={weekRows}
-        hourBands={hourMatrix.bands}
-        hourRows={hourMatrix.rows}
+        axis={timeline.axis}
+        hourRows={timeline.rows}
         hourDayLabel={DAY_LABEL[day] ?? day}
+        focusSubject={focusSubject}
+        groupLines={groupLines}
         unassigned={unassigned}
         canEditCapacity={canEditCapacity}
       />
