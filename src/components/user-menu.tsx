@@ -28,7 +28,7 @@ export function UserMenu({
   const animations = usePrefs((s) => s.animations);
   const setAnimations = usePrefs((s) => s.setAnimations);
   return (
-    <DropdownMenu>
+    <DropdownMenu modal={false}>
       <DropdownMenuTrigger
         render={
           <Button variant="ghost" size="icon" aria-label="사용자 메뉴" />
