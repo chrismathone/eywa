@@ -367,8 +367,16 @@ export function ConsultationFullForm({
             <L label="접수일" icon={Calendar}>
               <input name="receivedDate" type="date" defaultValue={v.receivedDate ?? (isCreate ? kstToday() : "")} className={`${input} num`} />
             </L>
-            <L label="상담 경로" icon={Globe}>
-              <select name="consultationPath" defaultValue={v.consultationPath ?? ""} className={input}>
+            {/* 🔴 신규일 때만 필수(원장 2026-08-04). 유입경로가 지금 31%만 기재돼 있어 "소개가 잘 붙는가"
+                같은 판단이 안 되는데, 옛 상담을 **수정할 때**까지 강제하면 모르는 값을 지어내게 된다
+                — 그건 미기재보다 나쁘다(틀린 값은 아무도 못 알아본다). 앞으로 들어오는 것만 막는다. */}
+            <L label="상담 경로" icon={Globe} required={isCreate}>
+              <select
+                name="consultationPath"
+                defaultValue={v.consultationPath ?? ""}
+                required={isCreate}
+                className={input}
+              >
                 <option value="">선택</option>
                 {CONSULTATION_PATHS.map((p) => (
                   <option key={p} value={p}>{p}</option>

@@ -148,6 +148,12 @@ export async function createEnrollmentConsultation(
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "enrollment"))) return { error: "등록상담 권한이 없습니다" };
 
+  // 🔴 유입경로는 **신규 생성일 때만** 필수(원장 2026-08-04). 화면 `required`는 게이트가 아니라서
+  // (#77) 서버에서도 막는다. 단 `createSchema`는 수정 액션과 공유하므로 스키마에 required를 넣지 않는다 —
+  // 넣으면 경로가 비어 있는 옛 상담(2023~2025, 기재율 31%)을 **수정할 때마다** 모르는 값을 고르게 되고,
+  // 지어낸 경로는 미기재보다 나쁘다(틀린 값은 아무도 못 알아본다).
+  if (!parsed.data.consultationPath) return { error: "상담 경로를 선택해주세요" };
+
   const learningHistory: Record<string, unknown> = {};
   if (parsed.data.prevAcademy) learningHistory.prevAcademy = parsed.data.prevAcademy;
   if (parsed.data.lastScore) learningHistory.lastScore = parsed.data.lastScore;
