@@ -155,8 +155,9 @@ export function RoomHourTable({
                   <TimelineTd
                     key={i}
                     cell={c}
-                    subjectLabel={subjects.labelOf(c.subject)}
-                    dim={focusSubject != null && c.subject !== focusSubject}
+                    labelOf={subjects.labelOf}
+                    // 블록에 여러 반이 있으면 과목도 여럿일 수 있다 — **하나라도** 맞으면 딤을 걸지 않는다.
+                    dim={focusSubject != null && !c.members.some((m) => m.subject === focusSubject)}
                     style={{ ...rowEdge, ...tick(at) }}
                   />,
                 ];
@@ -171,19 +172,20 @@ export function RoomHourTable({
 
 function TimelineTd({
   cell,
-  subjectLabel,
+  labelOf,
   dim,
   style,
 }: {
   cell: Extract<RoomTimelineCell, { kind: "class" }>;
-  subjectLabel: string;
+  /** 과목 키 → 한글 라벨(설정 단일 소스). 블록 안 반마다 과목이 다를 수 있어 함수로 받는다. */
+  labelOf: (subject: string) => string;
   dim: boolean;
   /** 행 테두리(교실/층 구분선) + 이 칸 시작 위치의 10분 눈금 — 행 전체가 같은 값을 받아야 선이 안 끊긴다. */
   style: React.CSSProperties;
 }) {
   const over = cell.seatPct != null && cell.seatPct > 100;
   const compact = cell.span < COMPACT_SPAN;
-  const tip = timelineTip(cell, subjectLabel);
+  const tip = timelineTip(cell, labelOf);
   return (
     <td colSpan={cell.span} className="p-px align-middle" style={style}>
       <div
@@ -214,16 +216,29 @@ function TimelineTd({
   );
 }
 
-/** 블록이 말하는 전부 — 좁거나 낮은 블록은 글자를 접으므로 툴팁이 진실의 단일 소스다(두 축이 공유). */
-function timelineTip(cell: Extract<RoomTimelineCell, { kind: "class" }>, subjectLabel: string): string {
-  return (
-    `${cell.className} · ${subjectLabel}` +
-    (cell.teacherLabel ? ` · ${cell.teacherLabel}` : "") +
-    ` · ${minToHM(cell.startMin)}~${minToHM(cell.endMin)}` +
-    ` · ${cell.students}명` +
-    (cell.seatPct != null ? ` (정원의 ${cell.seatPct}%)` : " (정원 미입력)") +
-    (cell.overlap === "conflict" ? " · 시간 겹침 주의" : cell.overlap === "joint" ? " · 합반" : "")
+/**
+ * 블록이 말하는 전부 — 좁거나 낮은 블록은 글자를 접으므로 툴팁이 진실의 단일 소스다(두 축이 공유).
+ * 🔑 같은 시간에 여러 반이 있으면 **전부 이름을 부른다** — 화면엔 합산 인원만 찍히므로, 여기서 안 부르면
+ *    그 반은 어디에도 안 남는다(2026-08-04 적대 리뷰: 합반 68쌍이 그렇게 사라져 있었다).
+ */
+function timelineTip(
+  cell: Extract<RoomTimelineCell, { kind: "class" }>,
+  labelOf: (subject: string) => string,
+): string {
+  const lines = cell.members.map(
+    (m) =>
+      `${m.className} · ${labelOf(m.subject)}` +
+      (m.teacherLabel ? ` · ${m.teacherLabel}` : "") +
+      ` · ${minToHM(m.startMin)}~${minToHM(m.endMin)} · ${m.students}명`,
   );
+  const head =
+    cell.members.length > 1
+      ? `이 시간 이 교실 ${cell.members.length}개 반 · 합계 ${cell.students}명`
+      : null;
+  const tail =
+    (cell.seatPct != null ? `정원의 ${cell.seatPct}%` : "정원 미입력") +
+    (cell.overlap === "conflict" ? " · 시간 겹침 주의" : cell.overlap === "joint" ? " · 합반" : "");
+  return [head, ...lines, tail].filter(Boolean).join("\n");
 }
 
 // ── 축 전환: 시간이 세로 ────────────────────────────────────────────────────────────────
@@ -339,8 +354,9 @@ export function RoomTimeColumnTable({
                   <TimelineTdVertical
                     key={room.key}
                     cell={c}
-                    subjectLabel={subjects.labelOf(c.subject)}
-                    dim={focusSubject != null && c.subject !== focusSubject}
+                    labelOf={subjects.labelOf}
+                    // 블록에 여러 반이 있으면 과목도 여럿일 수 있다 — **하나라도** 맞으면 딤을 걸지 않는다.
+                    dim={focusSubject != null && !c.members.some((m) => m.subject === focusSubject)}
                     style={style}
                   />
                 );
@@ -355,12 +371,13 @@ export function RoomTimeColumnTable({
 
 function TimelineTdVertical({
   cell,
-  subjectLabel,
+  labelOf,
   dim,
   style,
 }: {
   cell: Extract<RoomTimelineCell, { kind: "class" }>;
-  subjectLabel: string;
+  /** 과목 키 → 한글 라벨(설정 단일 소스). 블록 안 반마다 과목이 다를 수 있어 함수로 받는다. */
+  labelOf: (subject: string) => string;
   dim: boolean;
   /** 이 칸 시작 시각의 눈금(가로선) + 강의실 구분선(세로선). */
   style: React.CSSProperties;
@@ -370,7 +387,7 @@ function TimelineTdVertical({
   return (
     <td rowSpan={cell.span} className="p-px align-middle" style={style}>
       <div
-        title={timelineTip(cell, subjectLabel)}
+        title={timelineTip(cell, labelOf)}
         // ⚠️ 높이는 `h-full`에만 맡기지 않는다 — td 안 100%는 표 높이 계산에 기대는 값이라, 안 잡히면
         // 80분 수업이 한 줄짜리 막대로 쪼그라든다(가로 모드는 실패해도 행 높이와 비슷해 안 보였을 뿐).
         // 병합 칸 수 × 행 높이를 최소치로 박아 두 경로 중 어느 쪽이든 시간에 비례한 길이가 나오게 한다.

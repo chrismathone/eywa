@@ -26,6 +26,14 @@ export type RoomSlotLite = {
   roomId: string | null;
   /** 표시 폴백 라벨(slot_room_label ?? 반 기본 강의실명) — FK 없는 이식분 버킷명으로만 사용. */
   roomLabel: string | null;
+  /**
+   * 이 교시가 **자리(JJ·LAB)** 인가 — 사람이 아니라 같은 방 안의 병렬 레인이다
+   * ([`isSpecialSlotLabel`](./teacher-label.ts), 판정 근거는 `slot_teacher_label`).
+   * 🔑 겹침 판정에서 이 플래그가 결정적이다: 자리 수업이 다른 수업과 같은 시간 같은 방에 있는 건 **정상**이라
+   *    이중예약으로 세면 진짜 이중예약이 노이즈에 묻힌다(시간표 겹침 진단과 같은 규칙).
+   * ⚠️ 반 이름(개별·JJ…)으로 추측하지 말 것 — 이름을 고치는 날 판정이 조용히 뒤집힌다.
+   */
+  isSeat: boolean;
 };
 
 export type RoomInfo = { id: string; name: string; capacity: number | null };
@@ -106,6 +114,8 @@ export type RoomInterval = {
   classBgColor: string | null;
   classTextColor: string | null;
   isSpecialLecture: boolean;
+  /** 이 구간이 통째로 자리(JJ·LAB) 레인인가 — 겹침 판정에서 제외되는 근거. 보수적으로 **전 슬롯이 자리일 때만** true. */
+  isSeat: boolean;
   /** 다른 반과의 시간 겹침: conflict=부분 겹침(이중예약 의심), joint=완전 동일 범위(합반), null=단독. */
   overlap: "conflict" | "joint" | null;
 };
@@ -124,6 +134,9 @@ export function classIntervalsExact(slots: readonly RoomSlotLite[]): RoomInterva
     for (const { s, a, b } of parsed) {
       if (cur && a <= cur.endMin) {
         cur.endMin = Math.max(cur.endMin, b);
+        // 한 구간에 자리 교시와 강사 교시가 섞이면 자리로 보지 않는다(보수적 — 진짜 이중예약을 놓치는 쪽보다
+        // 정상 병렬을 한 번 더 보여주는 쪽이 낫다).
+        cur.isSeat = cur.isSeat && s.isSeat;
       } else {
         cur = {
           classId: s.classId,
@@ -136,6 +149,7 @@ export function classIntervalsExact(slots: readonly RoomSlotLite[]): RoomInterva
           classBgColor: s.classBgColor,
           classTextColor: s.classTextColor,
           isSpecialLecture: s.isSpecialLecture,
+          isSeat: s.isSeat,
           overlap: null,
         };
         out.push(cur);
@@ -154,12 +168,59 @@ export function classIntervalsExact(slots: readonly RoomSlotLite[]): RoomInterva
  * 목록은 3줄"이 된다.
  */
 export function overlapKind(
-  a: { startMin: number; endMin: number },
-  b: { startMin: number; endMin: number },
+  a: { startMin: number; endMin: number; isSeat?: boolean },
+  b: { startMin: number; endMin: number; isSeat?: boolean },
 ): "conflict" | "joint" | null {
+  // 🔴 한쪽이라도 **자리(JJ·LAB)** 면 겹침이 아니다 — 같은 방 안의 병렬 레인이 정상 운영이다.
+  //    (실측 2026-08-04: 이 규칙 없이 세면 부분 겹침 26건 중 12건이 개별/자리라 진짜 이중예약이 묻힌다.
+  //     시간표 겹침 진단이 이미 쓰는 규칙이라, 여기서 다르게 세면 화면마다 다른 답이 나온다.)
+  if (a.isSeat || b.isSeat) return null;
   if (!(a.startMin < b.endMin && b.startMin < a.endMin)) return null;
   return a.startMin === b.startMin && a.endMin === b.endMin ? "joint" : "conflict";
 }
+
+/**
+ * 같은 방·같은 요일의 구간들을 **동시에 있는 반 집합이 바뀌는 지점마다** 잘라 낸 세그먼트.
+ *
+ * 🔴 이 화면의 존재 이유가 "정원 대비 얼마나 붐비나"인데, 반 단위로만 보면 **동시 수업이 합산되지 않아
+ * 정확히 붐비는 순간에 침묵한다** — 실측 2026-08-04: 정원 10명 방에 8명+9명=17명인데 화면은 "9/10, 자리 남음"
+ * 이라고 말하는 경우가 **34건**이었다. 인원률·정원 초과는 전부 이 세그먼트의 **합계**를 본다.
+ *
+ * ⚠️ 자리(JJ·LAB) 레인도 **인원은 합산한다** — 겹침(이중예약)은 아니어도 그 방에 사람은 실제로 함께 있다.
+ *    "겹침이 아니다"와 "사람이 없다"는 다른 말이다.
+ */
+export type RoomConcurrencySegment = {
+  startMin: number;
+  endMin: number;
+  /** 이 구간에 동시에 있는 반들(시작 시각 순). */
+  members: RoomInterval[];
+  /** Σ members.students — 그 순간 그 방의 실제 인원. */
+  students: number;
+};
+
+export function concurrencySegments(intervals: readonly RoomInterval[]): RoomConcurrencySegment[] {
+  if (intervals.length === 0) return [];
+  const edges = [...new Set(intervals.flatMap((iv) => [iv.startMin, iv.endMin]))].sort((a, b) => a - b);
+  const raw: RoomConcurrencySegment[] = [];
+  for (let i = 0; i + 1 < edges.length; i++) {
+    const lo = edges[i]!;
+    const hi = edges[i + 1]!;
+    const members = intervals.filter((iv) => iv.startMin <= lo && iv.endMin >= hi);
+    if (members.length === 0) continue;
+    raw.push({ startMin: lo, endMin: hi, members, students: members.reduce((a, m) => a + m.students, 0) });
+  }
+  // 반 집합이 그대로면 인접 세그먼트를 다시 붙인다 — 안 붙이면 한 수업이 경계마다 토막 나 목록이 시끄러워진다.
+  const out: RoomConcurrencySegment[] = [];
+  for (const seg of raw) {
+    const prev = out[out.length - 1];
+    if (prev && prev.endMin === seg.startMin && sameMembers(prev.members, seg.members)) prev.endMin = seg.endMin;
+    else out.push({ ...seg });
+  }
+  return out;
+}
+
+const sameMembers = (a: readonly RoomInterval[], b: readonly RoomInterval[]): boolean =>
+  a.length === b.length && a.every((x, i) => x.classId === b[i]!.classId);
 
 /** 부분 겹침(이중예약 의심) 쌍 — 하단 반 목록이 "어느 반 ↔ 어느 반"을 말하려면 쌍이 필요하다. */
 export function collectConflictPairs(intervals: readonly RoomInterval[]): [RoomInterval, RoomInterval][] {

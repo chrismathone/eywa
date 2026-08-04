@@ -18,9 +18,9 @@ afterEach(cleanup);
 // 14:00~16:00 = 10분 12칸.
 const AXIS: TimelineAxis = { startMin: 840, endMin: 960, slots: 12, hours: [] };
 
-const cls = (span: number, over: Partial<Extract<RoomTimelineCell, { kind: "class" }>> = {}) =>
-  ({
-    kind: "class",
+const cls = (span: number, over: Partial<Extract<RoomTimelineCell, { kind: "class" }>> = {}) => {
+  const base = {
+    kind: "class" as const,
     span,
     classId: "c1",
     className: "중등M 중1",
@@ -33,7 +33,23 @@ const cls = (span: number, over: Partial<Extract<RoomTimelineCell, { kind: "clas
     isSpecialLecture: false,
     overlap: null,
     ...over,
-  }) satisfies RoomTimelineCell;
+  };
+  // members는 대표 반 하나로 채운다(동시 수업 케이스는 room-metrics 테스트가 따로 본다).
+  return {
+    ...base,
+    members: [
+      {
+        classId: base.classId,
+        className: base.className,
+        teacherLabel: base.teacherLabel,
+        subject: base.subject,
+        startMin: base.startMin,
+        endMin: base.endMin,
+        students: base.students,
+      },
+    ],
+  } satisfies RoomTimelineCell;
+};
 
 const gap = (span: number): RoomTimelineCell => ({ kind: "gap", span });
 

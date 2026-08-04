@@ -12,7 +12,6 @@ import type {
   RoomWeekRow,
   TimelineAxis,
 } from "@/features/timetable/lib/room-metrics";
-import { DAY_LABEL } from "@/features/timetable/lib/split-attendance";
 import { minToHM } from "@/features/timetable/lib/ten-minute-grid";
 import { saveTimetableViewPrefs } from "@/features/timetable/server/view-prefs-actions";
 import { RoomHourTable, RoomTimeColumnTable } from "./room-panel-tables";
@@ -22,19 +21,19 @@ import { RoomHourTable, RoomTimeColumnTable } from "./room-panel-tables";
  * 저장은 누르는 즉시(닫기 버튼에 매달면 체크만 하고 이동할 때 유실된다 — 뷰 세팅 규약).
  */
 /**
- * 하단 목록 미리보기 상한 — 한 줄로 흐르는 요약이라 무한정 늘어나면 표를 밀어낸다.
+ * 하단 목록 미리보기 상한 — 표를 밀어내지 않게. 실측(2026-08-04, 동시 인원 합산 도입 후) 정원 초과는
+ * **요일당 평균 7건**(주 37건), 겹침은 요일당 2~3건이다. 상한에 걸리면 아래 [Rest]가 남은 수를 말한다.
  * ⚠️ **배열 길이를 건수로 쓰지 않는다**([[#89]]: 상한만큼만 보여주면서 그 수를 "건수"로 적으면
- * 34건이 영원히 "6건"이 된다) — 자른 만큼은 총계와 함께 명시한다.
+ * 34건이 영원히 "6건"이 된다).
  */
-const LIST_MAX = 6;
+const LIST_MAX = 8;
 
 function Rest({ total }: { total: number }) {
   const rest = total - LIST_MAX;
   return rest > 0 ? (
-    <span className="text-text-dim">
-      {" "}
-      외 {rest}건 (총 <span className="num">{total}</span>건)
-    </span>
+    <li className="text-text-dim">
+      외 <span className="num">{rest}</span>건 (총 <span className="num">{total}</span>건)
+    </li>
   ) : null;
 }
 
@@ -44,6 +43,68 @@ function ClassLink({ id, name }: { id: string; name: string }) {
     <WindowLink href={`/classes/${id}`} className="underline underline-offset-2">
       {name}
     </WindowLink>
+  );
+}
+
+/**
+ * 경고 목록 한 덩어리 — **한 건 = 한 줄**(원장 2026-08-04: *"너무 나열되어있어 가독성 현저히 떨어짐"*).
+ *
+ * 가운뎃점으로 잇던 한 문단을 표처럼 세운다: `시각` `강의실`은 **고정폭 열**이라 눈이 세로로 훑을 수 있고
+ * (위 표를 보다 내려와도 자리를 안 잃는다), 반 이름만 색과 링크를 가져간다.
+ * ⚠️ 좁은 창에서는 `flex-wrap`으로 접힌다 — 고정폭 칸이 넘쳐 옆 칸을 덮는 사고를 막는다(디자인 규칙).
+ */
+function IssueBlock({
+  title,
+  dayLabel,
+  total,
+  children,
+}: {
+  title: string;
+  dayLabel: string;
+  total: number;
+  children: React.ReactNode;
+}) {
+  return (
+    <section>
+      <p className="text-red-600">
+        <span className="font-semibold">{title}</span>
+        <span className="text-text-dim"> · {dayLabel}요일</span> <span className="num font-semibold">{total}</span>건
+      </p>
+      <ul className="mt-0.5 flex flex-col gap-0.5 pl-0.5">{children}</ul>
+    </section>
+  );
+}
+
+/**
+ * 한 줄의 앞머리(시각·강의실) — 두 목록이 같은 자리에 같은 폭으로 찍혀야 세로로 훑힌다.
+ * ⚠️ `outside` = 위 표가 그리지 않는 시간대(평일 14시 이전). 숨기지 않고 **표시**한다 — 오전 특강의
+ *    이중예약·정원 초과를 목록에서까지 지우는 건 더 나쁘다(찾을 수 없다는 것만 알려 준다).
+ */
+function RowHead({
+  startMin,
+  endMin,
+  room,
+  outside,
+}: {
+  startMin: number;
+  endMin: number;
+  room: string;
+  outside?: boolean;
+}) {
+  return (
+    <>
+      <span className="num text-text-dim w-[86px] shrink-0">
+        {minToHM(startMin)}~{minToHM(endMin)}
+        {outside ? (
+          <span className="text-text-faint" title="위 표는 평일 14시부터만 그립니다 — 이 시간대는 표에 없습니다">
+            {" "}※
+          </span>
+        ) : null}
+      </span>
+      <span className="text-text-dim w-[58px] shrink-0 truncate" title={room}>
+        {room}
+      </span>
+    </>
   );
 }
 
@@ -189,10 +250,11 @@ export function RoomWeekPanel({
         )}
       </DragScrollArea>
 
-      <div className="mt-3 flex shrink-0 flex-col gap-1 text-[11px]">
+      <div className="mt-3 flex shrink-0 flex-col gap-2 text-[11px]">
         {idle.length > 0 ? (
           <p className="text-text-dim">
-            <span className="text-foreground font-semibold">주중 저활용</span>{" "}
+            <span className="text-foreground font-semibold">주중 저활용</span>
+            <span className="text-text-faint"> 하위 {idle.length}곳 (정원·운영 창 기준 {registered.length}실 중)</span>{" "}
             {idle.map((r, i) => (
               <span key={r.key}>
                 {i > 0 ? " · " : ""}
@@ -201,48 +263,49 @@ export function RoomWeekPanel({
             ))}
           </p>
         ) : null}
-        {/* 정원 초과 — 방 이름만 말하던 옛 줄을 **반 목록**으로(원장 2026-08-04). 반을 누르면 수업 상세. */}
+        {/* 정원 초과 — 방 이름만 말하던 옛 줄을 **반 목록**으로(원장 2026-08-04). 반을 누르면 수업 상세.
+            🔴 인원은 그 시간 그 방의 **동시 수업 합**이다 — 반 하나씩 보면 8명+9명인 방이 "9명"이 된다. */}
         {seatOver.length > 0 ? (
-          <p className="text-red-600">
-            <span className="font-semibold">정원 초과</span>{" "}
-            {seatOver.slice(0, LIST_MAX).map((r, i) => (
-              <span key={r.key}>
-                {i > 0 ? " · " : ""}
-                <ClassLink id={r.classId} name={r.className} />
-                <span className="text-text-dim">
-                  {" "}
-                  {r.roomName} {DAY_LABEL[r.day] ?? r.day} {minToHM(r.startMin)}{" "}
+          <IssueBlock title="정원 초과" dayLabel={hourDayLabel} total={seatOver.length}>
+            {seatOver.slice(0, LIST_MAX).map((r) => (
+              <li key={r.key} className="flex flex-wrap items-baseline gap-x-2 text-red-600">
+                <RowHead startMin={r.startMin} endMin={r.endMin} room={r.roomName} outside={r.startMin < axis.startMin} />
+                <span className="min-w-0">
+                  {r.classes.map((c, i) => (
+                    <span key={c.classId}>
+                      {i > 0 ? <span className="text-text-dim"> + </span> : null}
+                      <ClassLink id={c.classId} name={c.className} />
+                      {r.classes.length > 1 ? <span className="num text-text-dim"> {c.students}</span> : null}
+                    </span>
+                  ))}
                 </span>
-                <span className="num">
+                <span className="num ml-auto shrink-0 font-semibold">
                   {r.students}/{r.capacity}명
                 </span>
-              </span>
+              </li>
             ))}
             <Rest total={seatOver.length} />
-          </p>
+          </IssueBlock>
         ) : null}
         {/* 시간 겹침 — 표엔 대표 반 하나만 서서 **가려진 반**이 어디에도 안 보였다. 쌍으로 적고 둘 다 링크. */}
         {conflicts.length > 0 ? (
-          <p className="text-red-600">
-            <span className="font-semibold">시간 겹침</span>{" "}
-            <span className="text-text-dim">(주간 · 같은 방에 두 반)</span>{" "}
-            {conflicts.slice(0, LIST_MAX).map((c, i) => (
-              <span key={c.key}>
-                {i > 0 ? " · " : ""}
-                <span className="text-text-dim">
-                  {c.roomName} {DAY_LABEL[c.day] ?? c.day} {minToHM(c.startMin)}~{minToHM(c.endMin)}{" "}
+          <IssueBlock title="시간 겹침" dayLabel={hourDayLabel} total={conflicts.length}>
+            {conflicts.slice(0, LIST_MAX).map((c) => (
+              <li key={c.key} className="flex flex-wrap items-baseline gap-x-2 text-red-600">
+                <RowHead startMin={c.startMin} endMin={c.endMin} room={c.roomName} outside={c.startMin < axis.startMin} />
+                <span className="min-w-0">
+                  <ClassLink id={c.classes[0].classId} name={c.classes[0].className} />
+                  <span className="text-text-dim"> ↔ </span>
+                  <ClassLink id={c.classes[1].classId} name={c.classes[1].className} />
                 </span>
-                <ClassLink id={c.classes[0].classId} name={c.classes[0].className} />
-                <span className="text-text-dim"> ↔ </span>
-                <ClassLink id={c.classes[1].classId} name={c.classes[1].className} />
-              </span>
+              </li>
             ))}
             <Rest total={conflicts.length} />
-          </p>
+          </IssueBlock>
         ) : null}
         {byClass.size > 0 ? (
           <p className="text-amber-700">
-            강의실 미배정{" "}
+            강의실 미배정<span className="text-text-dim"> (주간)</span>{" "}
             {[...byClass.entries()].map(([classId, c], i) => (
               <span key={classId}>
                 {i > 0 ? " · " : ""}

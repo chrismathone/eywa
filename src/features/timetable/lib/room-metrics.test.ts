@@ -27,6 +27,7 @@ const slot = (over: Partial<RoomSlotLite>): RoomSlotLite => ({
   isSpecialLecture: false,
   roomId: "r1",
   roomLabel: null,
+  isSeat: false,
   ...over,
 });
 
@@ -109,7 +110,8 @@ describe("summarizeDay", () => {
     expect(s.roomsUsed).toBe(1); // r1만(라벨 버킷은 분모 밖)
     expect(s.dayUtilPct).toBe(50); // 120분 ÷ (120분 × 2실)
     expect(s.conflictPairs).toBe(1); // LAB 부분 겹침
-    expect(s.roomsInUseNow).toBe(2); // 14:10 현재 r1 + LAB
+    // ⚠️ **등록 교실만** 센다 — 미등록(라벨) 버킷까지 세면 "강의실 2실"인데 "지금 수업 중 3실"이 된다.
+    expect(s.roomsInUseNow).toBe(1);
   });
 
   it("수업 없는 요일은 사용 0·겹침 0", () => {
@@ -188,7 +190,7 @@ describe("buildRoomTimelineRows — 수업 시간대로 병합", () => {
     ]);
   });
 
-  it("같은 시간에 두 반이면 인원이 큰 쪽을 대표로 세운다(좌석 압박을 과소평가하지 않는다)", async () => {
+  it("같은 시간에 두 반이면 **인원을 합산**한다(반 하나만 보면 붐비는 방을 놓친다)", async () => {
     const { buildRoomTimelineRows } = await import("./room-metrics");
     const { buckets } = buildRoomBuckets(
       [
@@ -200,7 +202,11 @@ describe("buildRoomTimelineRows — 수업 시간대로 병합", () => {
     const w = resolveDayWindows(["math"], CONFIG, []);
     const r1 = buildRoomTimelineRows(buckets, w, "mon").rows.find((r) => r.key === "r1")!;
     const cls = r1.cells.find((c) => c.kind === "class")!;
-    expect(cls).toMatchObject({ classId: "big", students: 9, overlap: "joint" });
+    // 대표(classId)는 인원 많은 쪽이지만 students는 3+9 = 12 — 그 방에 실제로 있는 사람 수다.
+    expect(cls).toMatchObject({ classId: "big", students: 12, overlap: "joint" });
+    expect(cls.kind === "class" && cls.members.map((m) => m.classId)).toEqual(["big", "small"]);
+    // 정원 10명 방에 12명 → 화면이 "초과"라고 말해야 한다(옛 규약은 9/10 = 90%로 침묵했다).
+    expect(cls.kind === "class" && cls.seatPct).toBe(120);
   });
 
   it("정원 미입력이면 인원률은 null — 인원은 그대로 보여준다(0%로 속이지 않는다)", async () => {
@@ -291,7 +297,7 @@ describe("timelineColumnCells — 축 전환(시간=세로)용 색인", () => {
   });
 });
 
-describe("collectRoomConflicts — 하단 '시간 겹침' 반 목록(주간)", () => {
+describe("collectRoomConflicts — 하단 '시간 겹침' 반 목록", () => {
   it("부분 겹침만 잡고, 합반(완전 동일 범위)은 안 잡는다 — 요약의 '건수'와 같은 술어", () => {
     const { buckets } = buildRoomBuckets(
       [
@@ -323,7 +329,7 @@ describe("collectRoomConflicts — 하단 '시간 겹침' 반 목록(주간)", (
     expect(collectRoomConflicts(buckets)).toHaveLength(summarizeDay(buckets, w, "mon", 0).conflictPairs);
   });
 
-  it("요일을 넘나들며 모은다(요일 칩을 안 따라간다) + 요일·시각 순 정렬", () => {
+  it("요일을 주면 **그 요일만** 낸다(화면은 선택 요일만 보여준다, 원장 2026-08-04)", () => {
     const { buckets } = buildRoomBuckets(
       [
         slot({ id: "a", classId: "c1", dayOfWeek: "wed", startTime: "15:00", endTime: "16:00" }),
@@ -333,12 +339,15 @@ describe("collectRoomConflicts — 하단 '시간 겹침' 반 목록(주간)", (
       ],
       ROOMS,
     );
+    expect(collectRoomConflicts(buckets, "wed").map((r) => r.day)).toEqual(["wed"]);
+    expect(collectRoomConflicts(buckets, "tue")).toEqual([]);
+    // 요일을 안 주면 주간 전체(요일 → 시각 순).
     expect(collectRoomConflicts(buckets).map((r) => r.day)).toEqual(["mon", "wed"]);
   });
 });
 
-describe("collectSeatOver — 하단 '정원 초과' 반 목록(주간)", () => {
-  it("정원이 있는 방만, 넘은 반만 — 초과 폭이 큰 순", () => {
+describe("collectSeatOver — 하단 '정원 초과' 반 목록", () => {
+  it("정원이 있는 방만, 넘은 반만 — **시각 순**(위 표를 훑는 순서, 2026-08-04 가독성 지시)", () => {
     const { buckets } = buildRoomBuckets(
       [
         slot({ id: "a", classId: "c1", className: "1명 초과", students: 11, startTime: "14:00", endTime: "15:00" }),
@@ -350,8 +359,21 @@ describe("collectSeatOver — 하단 '정원 초과' 반 목록(주간)", () => 
       ROOMS,
     );
     const rows = collectSeatOver(buckets);
-    expect(rows.map((r) => r.className)).toEqual(["5명 초과", "1명 초과"]);
-    expect(rows[0]).toMatchObject({ roomName: "본원301", capacity: 10, students: 15, classId: "c2" });
+    expect(rows.map((r) => r.classes[0]!.className)).toEqual(["1명 초과", "5명 초과"]);
+    expect(rows[1]).toMatchObject({ roomName: "본원301", capacity: 10, students: 15 });
+    expect(rows[1]!.classes[0]!.classId).toBe("c2");
+  });
+
+  it("요일을 주면 그 요일만 — 다른 요일의 초과는 안 섞인다", () => {
+    const { buckets } = buildRoomBuckets(
+      [
+        slot({ id: "a", classId: "c1", className: "월 초과", students: 12, dayOfWeek: "mon" }),
+        slot({ id: "b", classId: "c2", className: "수 초과", students: 12, dayOfWeek: "wed" }),
+      ],
+      ROOMS,
+    );
+    expect(collectSeatOver(buckets, "mon").map((r) => r.classes[0]!.className)).toEqual(["월 초과"]);
+    expect(collectSeatOver(buckets, "sat")).toEqual([]);
   });
 
   it("반을 짚어 준다(수업 상세 링크의 근거) — classId가 비면 링크가 거짓말이 된다", () => {
@@ -359,6 +381,92 @@ describe("collectSeatOver — 하단 '정원 초과' 반 목록(주간)", () => 
       [slot({ id: "a", classId: "c9", className: "고등M 고1", students: 12 })],
       ROOMS,
     );
-    expect(collectSeatOver(buckets)[0]!.classId).toBe("c9");
+    expect(collectSeatOver(buckets)[0]!.classes[0]!.classId).toBe("c9");
+  });
+});
+
+// ── 2026-08-04 적대 리뷰 수리 회귀 가드 ──────────────────────────────────────────────
+describe("가동률 분모 = 화면이 그리는 범위", () => {
+  it("오전 특강이 창을 넓혀도 가동률은 **표가 그리는 14시부터**로 잰다(표로 검산되게)", () => {
+    const morning = slot({ dayOfWeek: "mon", startTime: "10:00", endTime: "13:00", classId: "sp" });
+    const w = resolveDayWindows(["math"], CONFIG, [morning]);
+    expect(w.mon).toEqual({ startMin: 600, endMin: 960 }); // 창 자체는 10:00~16:00로 넓어진다
+    const { buckets } = buildRoomBuckets(
+      [slot({ dayOfWeek: "mon", startTime: "14:00", endTime: "15:00" }), morning],
+      ROOMS,
+    );
+    // 보이는 창 = 14:00~16:00(120분) × 등록 2실 = 240분. 점유는 14~15시 60분만(오전은 표 밖이라 잘린다).
+    expect(summarizeDay(buckets, w, "mon", 0).dayUtilPct).toBe(25);
+  });
+
+  it("분자도 같이 잘린다 — 100%를 넘는 가동률이 나오지 않는다", () => {
+    const morning = slot({ dayOfWeek: "mon", startTime: "09:00", endTime: "16:00" });
+    const w = resolveDayWindows(["math"], CONFIG, [morning]);
+    const { buckets } = buildRoomBuckets([morning], ROOMS);
+    const pct = summarizeDay(buckets, w, "mon", 0).dayUtilPct!;
+    expect(pct).toBeLessThanOrEqual(100);
+    expect(pct).toBe(50); // 보이는 120분을 꽉 채운 방 1개 ÷ 등록 2실
+  });
+});
+
+describe("겹침 판정 — 자리(JJ·LAB) 레인은 이중예약이 아니다", () => {
+  const pair = (seat: boolean) =>
+    buildRoomBuckets(
+      [
+        slot({ id: "a", classId: "c1", className: "정규", startTime: "15:00", endTime: "16:00" }),
+        slot({ id: "b", classId: "c2", className: "개별", startTime: "15:30", endTime: "16:30", isSeat: seat }),
+      ],
+      ROOMS,
+    ).buckets;
+
+  it("한쪽이 자리면 겹침으로 세지 않는다(병렬 레인이 정상 — 진짜 이중예약이 묻히지 않게)", () => {
+    expect(collectRoomConflicts(pair(true))).toEqual([]);
+    expect(summarizeDay(pair(true), resolveDayWindows(["math"], CONFIG, []), "mon", 0).conflictPairs).toBe(0);
+  });
+
+  it("둘 다 사람이 가르치면 그대로 겹침이다", () => {
+    expect(collectRoomConflicts(pair(false))).toHaveLength(1);
+  });
+
+  it("겹침이 아니어도 **인원은 합산**한다 — 이중예약이 아닌 것과 사람이 없는 건 다른 말", () => {
+    const rows = collectSeatOver(
+      buildRoomBuckets(
+        [
+          slot({ id: "a", classId: "c1", className: "정규", students: 6, startTime: "15:00", endTime: "16:00" }),
+          slot({ id: "b", classId: "c2", className: "개별", students: 6, startTime: "15:00", endTime: "16:00", isSeat: true }),
+        ],
+        ROOMS,
+      ).buckets,
+      "mon",
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ students: 12, capacity: 10 });
+    expect(rows[0]!.classes.map((c) => c.className)).toEqual(["정규", "개별"]);
+  });
+});
+
+describe("정원 초과 = 동시 인원 합(적대 리뷰 F3)", () => {
+  it("반 하나씩 보면 둘 다 정원 이하지만 함께 있으면 초과 — 실측 34건이 이렇게 침묵했다", () => {
+    const { buckets } = buildRoomBuckets(
+      [
+        slot({ id: "a", classId: "c1", className: "브릿지 B", students: 8, startTime: "14:30", endTime: "16:00" }),
+        slot({ id: "b", classId: "c2", className: "개별 JJ1E", students: 9, startTime: "14:30", endTime: "16:00" }),
+      ],
+      ROOMS,
+    );
+    const rows = collectSeatOver(buckets, "mon");
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ students: 17, capacity: 10, startMin: 870, endMin: 960 });
+  });
+
+  it("겹치지 않는 두 반은 각자 판정 — 합산이 시간을 넘어 번지지 않는다", () => {
+    const { buckets } = buildRoomBuckets(
+      [
+        slot({ id: "a", classId: "c1", students: 6, startTime: "14:00", endTime: "15:00" }),
+        slot({ id: "b", classId: "c2", students: 6, startTime: "15:00", endTime: "16:00" }),
+      ],
+      ROOMS,
+    );
+    expect(collectSeatOver(buckets, "mon")).toEqual([]);
   });
 });
