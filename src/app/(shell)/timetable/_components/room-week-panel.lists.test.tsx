@@ -21,11 +21,13 @@ afterEach(cleanup);
 const seatOver: RoomSeatOverRow[] = [
   {
     key: "s1", roomName: "본원205", capacity: 8, day: "mon",
-    startMin: 900, endMin: 1010, classId: "cls-1", className: "중등M 초6 JJ2A", students: 9,
+    startMin: 900, endMin: 1010, students: 9,
+    classes: [{ classId: "cls-1", className: "중등M 초6 JJ2A", students: 9 }],
   },
   {
     key: "s2", roomName: "본원301", capacity: 10, day: "mon",
-    startMin: 1040, endMin: 1150, classId: "cls-2", className: "초등M 초5 MS1A", students: 12,
+    startMin: 1040, endMin: 1150, students: 12,
+    classes: [{ classId: "cls-2", className: "초등M 초5 MS1A", students: 12 }],
   },
 ];
 

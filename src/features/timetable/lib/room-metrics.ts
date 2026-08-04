@@ -9,6 +9,7 @@ import {
   annotateOverlaps,
   classIntervalsExact,
   collectConflictPairs,
+  concurrencySegments,
   occupiedMinutes,
   type RoomBucket,
   type RoomInterval,
@@ -70,6 +71,35 @@ export function utilPct(occupiedMin: number, window: DayWindow | null): number |
   return Math.round((occupiedMin / (window.endMin - window.startMin)) * 100);
 }
 
+/**
+ * **화면이 실제로 그리는 창** — 운영 창에 평일 하한([WEEKDAY_HOUR_FLOOR_MIN])을 적용한 것.
+ *
+ * 🔴 지표의 분모는 반드시 여기여야 한다(2026-08-04 적대 리뷰). 그 전에는 분모가 관측 확장까지 포함한
+ * 운영 창(실측 평일 09:00~22:00 = 780분)이었는데 표는 14:00부터(480분)만 그려서, 화면의 "가동률 26%"를
+ * 표로 세어봐도 절대 안 맞았다(보이는 범위로 계산하면 40%). 게다가 **한 방의 오전 특강 하나가 22개 방
+ * 전체의 가동률을 끌어내렸다** — 분모가 3시간 늘어나므로.
+ */
+export function visibleDayWindow(windows: DayWindows, day: DayOfWeek): DayWindow | null {
+  const win = windows[day];
+  if (!win) return null;
+  const lo = isWeekendDay(day) ? win.startMin : Math.max(win.startMin, WEEKDAY_HOUR_FLOOR_MIN);
+  return win.endMin > lo ? { startMin: lo, endMin: win.endMin } : null;
+}
+
+/** 창 밖으로 삐져나간 부분을 잘라 낸 구간들 — 분자(점유)도 분모와 같은 범위를 봐야 %가 참이 된다. */
+function clipTo(
+  intervals: readonly { startMin: number; endMin: number }[],
+  window: DayWindow | null,
+): { startMin: number; endMin: number }[] {
+  if (!window) return [];
+  return intervals
+    .map((iv) => ({
+      startMin: Math.max(iv.startMin, window.startMin),
+      endMin: Math.min(iv.endMin, window.endMin),
+    }))
+    .filter((iv) => iv.endMin > iv.startMin);
+}
+
 export type RoomDayMetric = {
   occupiedMin: number;
   utilPct: number | null;
@@ -108,12 +138,15 @@ export function buildRoomWeekRows(buckets: readonly RoomBucket[], windows: DayWi
     let maxStudents = 0;
     for (const day of ROOM_DAY_ORDER) {
       const { intervals, conflictPairs } = dayIntervalsOf(b, day);
-      const occupied = occupiedMinutes(intervals);
+      // 분자도 **보이는 창**으로 자른다 — 분모만 좁히면 100%를 넘는 가동률이 나온다.
+      const win = visibleDayWindow(windows, day);
+      const occupied = occupiedMinutes(clipTo(intervals, win));
       const students = intervals.reduce((a, iv) => a + iv.students, 0);
-      for (const iv of intervals) maxStudents = Math.max(maxStudents, iv.students);
+      // 좌석 압박은 **동시 인원 합**으로 본다(반 하나만 보면 8명+9명=17명인 방을 "9명"이라 말한다).
+      for (const seg of concurrencySegments(intervals)) maxStudents = Math.max(maxStudents, seg.students);
       days[day] = {
         occupiedMin: occupied,
-        utilPct: utilPct(occupied, windows[day]),
+        utilPct: utilPct(occupied, win),
         sessions: intervals.length,
         students,
         conflictPairs,
@@ -122,7 +155,7 @@ export function buildRoomWeekRows(buckets: readonly RoomBucket[], windows: DayWi
       if (WEEKDAYS.includes(day)) weekdayOccupied += occupied;
     }
     const weekdayDen = WEEKDAYS.reduce((a, d) => {
-      const w = windows[d];
+      const w = visibleDayWindow(windows, d);
       return a + (w ? w.endMin - w.startMin : 0);
     }, 0);
     return {
@@ -217,16 +250,25 @@ export type RoomSeatOverRow = {
   day: DayOfWeek;
   startMin: number;
   endMin: number;
-  classId: string;
-  className: string;
+  /** 그 시간 그 방에 **동시에** 있는 반들(인원 많은 순). 한 반만일 수도, 여럿일 수도 있다. */
+  classes: { classId: string; className: string; students: number }[];
+  /** Σ classes.students — 이 값이 정원과 비교되는 실제 인원. */
   students: number;
 };
 
 /**
- * 정원 초과 목록 — 어느 반이 어느 방에서 정원을 넘었는지(방 이름만 말하던 옛 줄의 후신).
+ * 정원 초과 목록 — 그 시간 그 방에 **실제로 몇 명이 있는지**로 판정한다.
+ *
+ * 🔴 반 단위 비교에서 **동시 인원 합**으로 바꿨다(2026-08-04 적대 리뷰). 정원 10명 방에 8명 반 + 9명 반이
+ * 같이 있으면 사람은 17명인데, 반 하나씩 보면 둘 다 정원 이하라 화면이 "자리 남음"이라고 말했다 —
+ * 실측 **34건**이 그렇게 침묵하고 있었다. 붐비는 순간을 못 잡으면 이 화면은 존재 이유가 없다.
+ * ⚠️ 자리(JJ·LAB) 레인도 **인원은 합산한다** — 이중예약이 아니라는 것과 사람이 없다는 건 다른 말이다.
  * ⚠️ 정원이 없는 방은 애초에 판정 대상이 아니다(0으로 속이지 않는다 — `seatPct`가 null인 것과 같은 규약).
- * 정렬 = 요일 → **시작 시각** → 강의실. 초과 폭 순이 아니다(2026-08-04 가독성 지시) — 하루치라 건수가
- * 적고(실측 요일당 0~2건), 위 표와 같은 순서로 읽히는 게 "심한 순"보다 찾기 쉽다. 심각도는 숫자가 말한다.
+ * 정렬 = 요일 → **시작 시각** → 강의실. 초과 폭 순이 아니다(2026-08-04 가독성 지시) — 위 표와 같은
+ * 순서로 읽히는 게 "심한 순"보다 찾기 쉽고, 심각도는 숫자가 말한다.
+ * 📌 실측 건수(2026-08-04, 합산 도입 후): 평일 주 37건 = 요일당 평균 7건. 전에는 반 단위라 8건뿐이었다.
+ *    ⚠️ 지금 이 학원 `classrooms.capacity`는 22실 전부 10(사실상 기본값)이라, 정원을 실제 좌석 수로
+ *    고쳐 넣기 전까지 이 목록은 "정원 입력이 부정확하다"는 신호도 함께 담고 있다.
  */
 export function collectSeatOver(buckets: readonly RoomBucket[], only?: DayOfWeek): RoomSeatOverRow[] {
   const out: RoomSeatOverRow[] = [];
@@ -235,18 +277,19 @@ export function collectSeatOver(buckets: readonly RoomBucket[], only?: DayOfWeek
     const cap = b.capacity;
     if (cap == null || cap <= 0) continue;
     for (const day of days) {
-      for (const iv of classIntervalsExact(b.slots.filter((s) => s.dayOfWeek === day))) {
-        if (iv.students <= cap) continue;
+      const intervals = classIntervalsExact(b.slots.filter((s) => s.dayOfWeek === day));
+      for (const seg of concurrencySegments(intervals)) {
+        if (seg.students <= cap) continue;
+        const members = [...seg.members].sort((x, y) => y.students - x.students || x.startMin - y.startMin);
         out.push({
-          key: `${b.key}|${day}|${iv.classId}|${iv.startMin}`,
+          key: `${b.key}|${day}|${seg.startMin}|${members.map((m) => m.classId).join(",")}`,
           roomName: b.name,
           capacity: cap,
           day,
-          startMin: iv.startMin,
-          endMin: iv.endMin,
-          classId: iv.classId,
-          className: iv.className,
-          students: iv.students,
+          startMin: seg.startMin,
+          endMin: seg.endMin,
+          classes: members.map((m) => ({ classId: m.classId, className: m.className, students: m.students })),
+          students: seg.students,
         });
       }
     }
@@ -287,24 +330,42 @@ export const WEEKDAY_HOUR_FLOOR_MIN = 14 * 60;
 /** 격자 한 칸 = 10분. 교시 시각이 전부 10분 배수라 스냅 손실이 없다(안 맞으면 바깥쪽으로 스냅). */
 export const TIMELINE_STEP_MIN = 10;
 
+/** 블록에 동시에 들어 있는 반 하나 — 툴팁이 "누가 몇 명"까지 말할 수 있게 원본을 싣는다. */
+export type RoomTimelineMember = {
+  classId: string;
+  className: string;
+  teacherLabel: string | null;
+  subject: string;
+  /** 실제 수업 시각(격자 스냅 전). */
+  startMin: number;
+  endMin: number;
+  students: number;
+};
+
 export type RoomTimelineCell =
   | { kind: "gap"; span: number }
   | {
       kind: "class";
       /** 격자 칸 수 = colspan. */
       span: number;
+      /**
+       * 이 시간대에 **동시에** 있는 반들(인원 많은 순). 보통 1개, 합반·병렬 레인이면 여럿.
+       * 🔑 여럿일 때 대표 하나만 그리면 나머지 반은 화면 어디에도 안 남는다 — 툴팁이 전부 말한다.
+       */
+      members: RoomTimelineMember[];
+      /** 대표(=인원 많은 쪽) — 좁은 칸에 한 줄만 쓸 때 쓴다. */
       classId: string;
       className: string;
       teacherLabel: string | null;
       subject: string;
-      /** 실제 수업 시각(격자 스냅 전) — 툴팁이 진실을 말하도록 원본을 싣는다. */
       startMin: number;
       endMin: number;
+      /** Σ members.students — 그 방에 실제로 있는 인원(동시 수업 합산). */
       students: number;
       /** 인원률 = 인원 ÷ 정원. 정원 미입력이면 null(0%로 속이지 않는다). */
       seatPct: number | null;
       isSpecialLecture: boolean;
-      /** conflict=부분 겹침(이중예약 의심), joint=완전 동일 범위(합반). */
+      /** conflict=부분 겹침(이중예약 의심), joint=완전 동일 범위(합반). 자리 레인은 겹침이 아니다. */
       overlap: "conflict" | "joint" | null;
     };
 
@@ -349,10 +410,12 @@ export function timelineAxis(windows: DayWindows, day: DayOfWeek): TimelineAxis 
 }
 
 /**
- * 교실별 타임라인 행. 한 행 안에서 블록은 **겹치지 않는다** — 같은 시간에 두 반이 있으면(합반·이중예약)
- * 칸마다 **인원이 큰 쪽**을 골라 대표로 세우고 `overlap`으로 표시한다(좌석 압박을 과소평가하지 않는 쪽).
- * ⚠️ 겹침 자체를 지우는 게 아니다 — 블록에 `overlap` 테두리가 남고, 상단 요약이 "시간 겹침 N건"으로 센다.
- *    다만 **가려진 반의 이름은 이 화면에 안 나온다** — 겹침을 파고들 땐 시간표 기본뷰/통합뷰로 갈 것.
+ * 교실별 타임라인 행. 한 행 안에서 블록은 겹치지 않는다 — 같은 시간에 여러 반이 있으면(합반·병렬 레인·
+ * 이중예약) **한 블록에 전부 담고 인원을 합산**한다(2026-08-04 적대 리뷰).
+ *
+ * 🔴 전에는 칸마다 인원 많은 반 하나만 골라 세웠다. 그러면 ① 8명+9명이 있는 방이 "9명"으로 보여 정원
+ * 초과를 놓치고(실측 34건) ② **가려진 반 이름이 화면 어디에도 안 남았다**(합반 68쌍). 지금은 블록이
+ * 그 시간대 방의 실제 인원을 말하고, `members`에 반이 전부 들어 있어 툴팁이 이름을 다 부른다.
  */
 export function buildRoomTimelineRows(
   buckets: readonly RoomBucket[],
@@ -365,52 +428,63 @@ export function buildRoomTimelineRows(
   const rows = buckets.map((b): RoomTimelineRow => {
     const intervals = dayIntervalsOf(b, day).intervals;
     const cells: RoomTimelineCell[] = [];
-    let run: { iv: (typeof intervals)[number] | null; span: number } = { iv: null, span: 0 };
+    let run: { key: string; members: RoomInterval[]; span: number } = { key: "", members: [], span: 0 };
 
     const flush = () => {
       if (run.span === 0) return;
-      const iv = run.iv;
-      if (!iv) {
+      const members = run.members;
+      if (members.length === 0) {
         cells.push({ kind: "gap", span: run.span });
       } else {
+        const students = members.reduce((a, m) => a + m.students, 0);
+        const lead = members[0]!;
         cells.push({
           kind: "class",
           span: run.span,
-          classId: iv.classId,
-          className: iv.className,
-          teacherLabel: iv.teacherLabel,
-          subject: iv.subject,
-          startMin: iv.startMin,
-          endMin: iv.endMin,
-          students: iv.students,
+          members: members.map((m) => ({
+            classId: m.classId,
+            className: m.className,
+            teacherLabel: m.teacherLabel,
+            subject: m.subject,
+            startMin: m.startMin,
+            endMin: m.endMin,
+            students: m.students,
+          })),
+          classId: lead.classId,
+          className: lead.className,
+          teacherLabel: lead.teacherLabel,
+          subject: lead.subject,
+          startMin: Math.min(...members.map((m) => m.startMin)),
+          endMin: Math.max(...members.map((m) => m.endMin)),
+          students,
           seatPct:
-            b.capacity != null && b.capacity > 0 && iv.students > 0
-              ? Math.round((iv.students / b.capacity) * 100)
+            b.capacity != null && b.capacity > 0 && students > 0
+              ? Math.round((students / b.capacity) * 100)
               : null,
-          isSpecialLecture: iv.isSpecialLecture,
-          overlap: iv.overlap,
+          isSpecialLecture: members.every((m) => m.isSpecialLecture),
+          // 겹침 표시는 가장 무거운 것으로(conflict > joint). 자리 레인은 애초에 겹침으로 안 센다.
+          overlap: members.some((m) => m.overlap === "conflict")
+            ? "conflict"
+            : members.some((m) => m.overlap === "joint")
+              ? "joint"
+              : null,
         });
       }
-      run = { iv: null, span: 0 };
+      run = { key: "", members: [], span: 0 };
     };
 
     for (let i = 0; i < axis.slots; i++) {
       const lo = axis.startMin + i * TIMELINE_STEP_MIN;
       const hi = lo + TIMELINE_STEP_MIN;
-      // 이 칸을 덮는 수업 중 대표 하나 — 인원 많은 쪽, 같으면 먼저 시작한 쪽(결정적).
-      let best: (typeof intervals)[number] | null = null;
-      for (const iv of intervals) {
-        if (iv.startMin >= hi || iv.endMin <= lo) continue;
-        if (
-          !best ||
-          iv.students > best.students ||
-          (iv.students === best.students && iv.startMin < best.startMin)
-        ) {
-          best = iv;
-        }
-      }
-      if (run.iv?.classId !== best?.classId) flush();
-      run.iv = best;
+      // 이 칸에 있는 반 **전부**(인원 많은 순, 같으면 먼저 시작한 쪽 → 결정적).
+      const here = intervals
+        .filter((iv) => iv.startMin < hi && iv.endMin > lo)
+        .sort((x, y) => y.students - x.students || x.startMin - y.startMin || x.classId.localeCompare(y.classId));
+      // 반 **집합**이 바뀔 때만 블록을 끊는다(대표 반이 같아도 옆 반이 들어오면 인원이 달라진다).
+      const key = here.map((iv) => iv.classId).sort().join("|");
+      if (key !== run.key) flush();
+      run.key = key;
+      run.members = here;
       run.span += 1;
     }
     flush();
@@ -457,7 +531,13 @@ export type RoomDaySummary = {
   roomsInUseNow: number;
 };
 
-/** 선택 요일 요약 — 미등록(라벨) 버킷은 지도에는 그리되 가동률 분모(등록 교실 수)에선 제외. */
+/**
+ * 선택 요일 요약 — 미등록(라벨) 버킷은 표에는 그리되 가동률 분모(등록 교실 수)에선 제외.
+ *
+ * 🔴 가동률의 분자·분모 모두 **[visibleDayWindow]**(표가 실제로 그리는 범위)를 쓴다 — 2026-08-04 적대
+ * 리뷰에서 "화면에 적힌 %를 표로 검산할 수 없다"가 확인됐다. 다만 **겹침 수는 안 자른다**: 하단 목록과
+ * 같은 수를 말해야 하고, 표 밖(오전) 이중예약을 숨기는 건 더 나쁘다(목록이 '표 범위 밖'으로 표시한다).
+ */
 export function summarizeDay(
   buckets: readonly RoomBucket[],
   windows: DayWindows,
@@ -465,7 +545,7 @@ export function summarizeDay(
   nowMin: number,
 ): RoomDaySummary {
   const registered = buckets.filter((b) => b.registered);
-  const win = windows[day];
+  const win = visibleDayWindow(windows, day);
   let occupiedTotal = 0;
   let roomsUsed = 0;
   let conflictPairs = 0;
@@ -474,11 +554,12 @@ export function summarizeDay(
     const { intervals, conflictPairs: pairs } = dayIntervalsOf(b, day);
     conflictPairs += pairs;
     if (b.registered) {
-      const occ = occupiedMinutes(intervals);
+      const occ = occupiedMinutes(clipTo(intervals, win));
       occupiedTotal += occ;
       if (occ > 0) roomsUsed++;
+      // ⚠️ 등록 교실만 센다 — 미등록(라벨) 버킷까지 세면 "강의실 22실"인데 "지금 수업 중 23실"이 된다.
+      if (intervals.some((iv) => iv.startMin <= nowMin && nowMin < iv.endMin)) roomsInUseNow++;
     }
-    if (intervals.some((iv) => iv.startMin <= nowMin && nowMin < iv.endMin)) roomsInUseNow++;
   }
   const den = win && registered.length > 0 ? (win.endMin - win.startMin) * registered.length : 0;
   return {

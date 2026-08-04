@@ -25,6 +25,7 @@ const slot = (over: Partial<RoomSlotLite>): RoomSlotLite => ({
   isSpecialLecture: false,
   roomId: null,
   roomLabel: null,
+  isSeat: false,
   ...over,
 });
 

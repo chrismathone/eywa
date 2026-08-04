@@ -21,8 +21,8 @@ import { RoomHourTable, RoomTimeColumnTable } from "./room-panel-tables";
  * 저장은 누르는 즉시(닫기 버튼에 매달면 체크만 하고 이동할 때 유실된다 — 뷰 세팅 규약).
  */
 /**
- * 하단 목록 미리보기 상한 — 표를 밀어내지 않게. 스코프가 **하루**라 실측 건수는 요일당 0~2건이고,
- * 이 상한에 걸리는 일은 사실상 없다(걸리면 아래 [Rest]가 남은 수를 정직하게 말한다).
+ * 하단 목록 미리보기 상한 — 표를 밀어내지 않게. 실측(2026-08-04, 동시 인원 합산 도입 후) 정원 초과는
+ * **요일당 평균 7건**(주 37건), 겹침은 요일당 2~3건이다. 상한에 걸리면 아래 [Rest]가 남은 수를 말한다.
  * ⚠️ **배열 길이를 건수로 쓰지 않는다**([[#89]]: 상한만큼만 보여주면서 그 수를 "건수"로 적으면
  * 34건이 영원히 "6건"이 된다).
  */
@@ -75,12 +75,31 @@ function IssueBlock({
   );
 }
 
-/** 한 줄의 앞머리(시각·강의실) — 두 목록이 같은 자리에 같은 폭으로 찍혀야 세로로 훑힌다. */
-function RowHead({ startMin, endMin, room }: { startMin: number; endMin: number; room: string }) {
+/**
+ * 한 줄의 앞머리(시각·강의실) — 두 목록이 같은 자리에 같은 폭으로 찍혀야 세로로 훑힌다.
+ * ⚠️ `outside` = 위 표가 그리지 않는 시간대(평일 14시 이전). 숨기지 않고 **표시**한다 — 오전 특강의
+ *    이중예약·정원 초과를 목록에서까지 지우는 건 더 나쁘다(찾을 수 없다는 것만 알려 준다).
+ */
+function RowHead({
+  startMin,
+  endMin,
+  room,
+  outside,
+}: {
+  startMin: number;
+  endMin: number;
+  room: string;
+  outside?: boolean;
+}) {
   return (
     <>
       <span className="num text-text-dim w-[86px] shrink-0">
         {minToHM(startMin)}~{minToHM(endMin)}
+        {outside ? (
+          <span className="text-text-faint" title="위 표는 평일 14시부터만 그립니다 — 이 시간대는 표에 없습니다">
+            {" "}※
+          </span>
+        ) : null}
       </span>
       <span className="text-text-dim w-[58px] shrink-0 truncate" title={room}>
         {room}
@@ -234,7 +253,8 @@ export function RoomWeekPanel({
       <div className="mt-3 flex shrink-0 flex-col gap-2 text-[11px]">
         {idle.length > 0 ? (
           <p className="text-text-dim">
-            <span className="text-foreground font-semibold">주중 저활용</span>{" "}
+            <span className="text-foreground font-semibold">주중 저활용</span>
+            <span className="text-text-faint"> 하위 {idle.length}곳 (정원·운영 창 기준 {registered.length}실 중)</span>{" "}
             {idle.map((r, i) => (
               <span key={r.key}>
                 {i > 0 ? " · " : ""}
@@ -243,13 +263,22 @@ export function RoomWeekPanel({
             ))}
           </p>
         ) : null}
-        {/* 정원 초과 — 방 이름만 말하던 옛 줄을 **반 목록**으로(원장 2026-08-04). 반을 누르면 수업 상세. */}
+        {/* 정원 초과 — 방 이름만 말하던 옛 줄을 **반 목록**으로(원장 2026-08-04). 반을 누르면 수업 상세.
+            🔴 인원은 그 시간 그 방의 **동시 수업 합**이다 — 반 하나씩 보면 8명+9명인 방이 "9명"이 된다. */}
         {seatOver.length > 0 ? (
           <IssueBlock title="정원 초과" dayLabel={hourDayLabel} total={seatOver.length}>
             {seatOver.slice(0, LIST_MAX).map((r) => (
               <li key={r.key} className="flex flex-wrap items-baseline gap-x-2 text-red-600">
-                <RowHead startMin={r.startMin} endMin={r.endMin} room={r.roomName} />
-                <ClassLink id={r.classId} name={r.className} />
+                <RowHead startMin={r.startMin} endMin={r.endMin} room={r.roomName} outside={r.startMin < axis.startMin} />
+                <span className="min-w-0">
+                  {r.classes.map((c, i) => (
+                    <span key={c.classId}>
+                      {i > 0 ? <span className="text-text-dim"> + </span> : null}
+                      <ClassLink id={c.classId} name={c.className} />
+                      {r.classes.length > 1 ? <span className="num text-text-dim"> {c.students}</span> : null}
+                    </span>
+                  ))}
+                </span>
                 <span className="num ml-auto shrink-0 font-semibold">
                   {r.students}/{r.capacity}명
                 </span>
@@ -263,7 +292,7 @@ export function RoomWeekPanel({
           <IssueBlock title="시간 겹침" dayLabel={hourDayLabel} total={conflicts.length}>
             {conflicts.slice(0, LIST_MAX).map((c) => (
               <li key={c.key} className="flex flex-wrap items-baseline gap-x-2 text-red-600">
-                <RowHead startMin={c.startMin} endMin={c.endMin} room={c.roomName} />
+                <RowHead startMin={c.startMin} endMin={c.endMin} room={c.roomName} outside={c.startMin < axis.startMin} />
                 <span className="min-w-0">
                   <ClassLink id={c.classes[0].classId} name={c.classes[0].className} />
                   <span className="text-text-dim"> ↔ </span>
@@ -276,7 +305,7 @@ export function RoomWeekPanel({
         ) : null}
         {byClass.size > 0 ? (
           <p className="text-amber-700">
-            강의실 미배정{" "}
+            강의실 미배정<span className="text-text-dim"> (주간)</span>{" "}
             {[...byClass.entries()].map(([classId, c], i) => (
               <span key={classId}>
                 {i > 0 ? " · " : ""}

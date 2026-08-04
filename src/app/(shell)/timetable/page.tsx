@@ -13,7 +13,7 @@ import {
   getTeacherScheduleBlocks,
   getWeeklyScheduleWithStudents,
 } from "@/features/timetable/server/queries";
-import { resolveTeacherLabels } from "@/features/timetable/lib/teacher-label";
+import { isSpecialSlotLabel, resolveTeacherLabels } from "@/features/timetable/lib/teacher-label";
 import { settingsToPeriodsConfig } from "@/features/timetable/lib/periods";
 import type { TeacherColorMap } from "@/features/timetable/lib/class-grid";
 import { getTenantSettings } from "@/features/owner/server/queries";
@@ -325,10 +325,21 @@ export default async function TimetablePage({
           isSpecialLecture: s.isSpecialLecture,
           roomId: s.slotRoomId ?? s.classRoomId,
           roomLabel: s.slotRoomLabel ?? s.classroomName,
+          // 자리(JJ·LAB) 여부 — 겹침 판정의 근거. ⚠️ 판정은 **`slot_teacher_label`만** 본다
+          // (teacherName이 우연히 같은 문자열일 수 있고, 반 이름 추측은 더 위험하다 — #93과 같은 이유).
+          isSeat: isSpecialSlotLabel(s.slotTeacherLabel),
         }))
     : [];
-  const roomWindows = isRooms
-    ? resolveDayWindows([...new Set(roomSlots.map((s) => s.subject))], periodsConfig, roomSlots)
+  // 운영 창 두 벌 — 전체 / 특강 제외. '특강 숨김' 토글이 **분자만** 줄이고 분모(창)는 그대로 두면
+  // 가동률이 거짓으로 떨어진다(2026-08-04 적대 리뷰). 뷰가 토글에 맞는 창을 골라 쓴다.
+  const roomSubjects = [...new Set(roomSlots.map((s) => s.subject))];
+  const roomWindows = isRooms ? resolveDayWindows(roomSubjects, periodsConfig, roomSlots) : null;
+  const roomWindowsNoSpecial = isRooms
+    ? resolveDayWindows(
+        roomSubjects,
+        periodsConfig,
+        roomSlots.filter((s) => !s.isSpecialLecture),
+      )
     : null;
   const todayDow: DayOfWeek = (["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const)[
     weekdayIndexOf(today)
@@ -685,6 +696,7 @@ export default async function TimetablePage({
           slots={roomSlots}
           rooms={classroomsForMap}
           windows={roomWindows}
+          windowsNoSpecial={roomWindowsNoSpecial ?? roomWindows}
           weekMonday={week}
           todayDay={todayDow}
           isCurrentWeek={week === thisWk}
