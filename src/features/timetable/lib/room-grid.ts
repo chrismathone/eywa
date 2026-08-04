@@ -146,9 +146,37 @@ export function classIntervalsExact(slots: readonly RoomSlotLite[]): RoomInterva
 }
 
 /**
- * 구간 간 겹침 판정 주석 달기 — **완전 동일 범위 = 합반(joint)**, 부분 겹침 = 이중예약 의심(conflict).
- * 강사뷰(packGroups)가 동일 범위 병렬을 합반 셀로 묶는 것과 같은 해석. conflict가 joint보다 우선.
- * 반환은 새 배열(입력 불변) + 부분 겹침 쌍 수.
+ * 두 구간의 관계 — **완전 동일 범위 = 합반(joint)**, 부분 겹침 = 이중예약 의심(conflict), 안 겹치면 null.
+ * 강사뷰(packGroups)가 동일 범위 병렬을 합반 셀로 묶는 것과 같은 해석.
+ *
+ * 🔑 겹침의 **판정은 여기 한 곳**이다 — 화면의 빨간 테두리(annotateOverlaps)·요약의 "N건"·하단 반 목록
+ * (collectConflictPairs)이 모두 이 술어를 쓴다. 세는 곳과 목록 만드는 곳이 각자 판정하면 "2건이라면서
+ * 목록은 3줄"이 된다.
+ */
+export function overlapKind(
+  a: { startMin: number; endMin: number },
+  b: { startMin: number; endMin: number },
+): "conflict" | "joint" | null {
+  if (!(a.startMin < b.endMin && b.startMin < a.endMin)) return null;
+  return a.startMin === b.startMin && a.endMin === b.endMin ? "joint" : "conflict";
+}
+
+/** 부분 겹침(이중예약 의심) 쌍 — 하단 반 목록이 "어느 반 ↔ 어느 반"을 말하려면 쌍이 필요하다. */
+export function collectConflictPairs(intervals: readonly RoomInterval[]): [RoomInterval, RoomInterval][] {
+  const out: [RoomInterval, RoomInterval][] = [];
+  for (let i = 0; i < intervals.length; i++) {
+    for (let j = i + 1; j < intervals.length; j++) {
+      const a = intervals[i]!;
+      const b = intervals[j]!;
+      if (overlapKind(a, b) === "conflict") out.push([a, b]);
+    }
+  }
+  return out;
+}
+
+/**
+ * 구간 간 겹침 판정 주석 달기. conflict가 joint보다 우선.
+ * 반환은 새 배열(입력 불변) + 부분 겹침 쌍 수(= `collectConflictPairs` 길이, 같은 술어라 항상 일치).
  */
 export function annotateOverlaps(intervals: readonly RoomInterval[]): {
   intervals: RoomInterval[];
@@ -160,15 +188,14 @@ export function annotateOverlaps(intervals: readonly RoomInterval[]): {
     for (let j = i + 1; j < out.length; j++) {
       const a = out[i]!;
       const b = out[j]!;
-      if (a.startMin < b.endMin && b.startMin < a.endMin) {
-        if (a.startMin === b.startMin && a.endMin === b.endMin) {
-          if (a.overlap !== "conflict") a.overlap = "joint";
-          if (b.overlap !== "conflict") b.overlap = "joint";
-        } else {
-          a.overlap = "conflict";
-          b.overlap = "conflict";
-          conflictPairs++;
-        }
+      const kind = overlapKind(a, b);
+      if (kind === "joint") {
+        if (a.overlap !== "conflict") a.overlap = "joint";
+        if (b.overlap !== "conflict") b.overlap = "joint";
+      } else if (kind === "conflict") {
+        a.overlap = "conflict";
+        b.overlap = "conflict";
+        conflictPairs++;
       }
     }
   }

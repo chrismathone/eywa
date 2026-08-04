@@ -23,6 +23,7 @@ export function DragScrollArea({
   fade = true,
   momentum = true,
   barX = false,
+  scrollY = false,
 }: {
   children: ReactNode;
   className?: string;
@@ -32,6 +33,12 @@ export function DragScrollArea({
   momentum?: boolean;
   /** 가로 스크롤바를 항상·또렷하게 노출(overflow-x:scroll + 굵은 thumb). 항상 넓은 표(시간표)용. */
   barX?: boolean;
+  /**
+   * 세로 넘침도 **이 컨테이너가** 맡는다(overflow-y:auto). 높이가 이미 제한된 표(부모가 min-h-0 flex-1)에서만
+   * 켤 것 — 기본(false)은 세로를 페이지에 넘기는데, 페이지가 h-full이라 안 늘어나면 넘친 행이 **잘려서
+   * 영영 안 보인다**. barX와 달리 가로 스크롤바 트랙을 미리 잡지 않는다(#87: overflow-x:scroll = 가짜 스크롤바).
+   */
+  scrollY?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [edges, setEdges] = useState({ left: false, right: false, top: false, bottom: false });
@@ -202,7 +209,9 @@ export function DragScrollArea({
           // (가로 contain은 유지 — 끝에서 가로 오버스크롤이 브라우저 뒤로가기로 새는 것 차단.)
           barX
             ? "scroll-x-always overflow-y-auto overscroll-x-contain"
-            : "overflow-x-auto overflow-y-hidden overscroll-x-contain"
+            : scrollY
+              ? "overflow-auto overscroll-x-contain"
+              : "overflow-x-auto overflow-y-hidden overscroll-x-contain"
         } ${grabbable ? "cursor-grab" : ""}`}
       >
         {children}

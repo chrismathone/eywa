@@ -6,6 +6,7 @@ import { groupRooms } from "@/features/timetable/lib/room-groups";
 import { useSubjectMaps } from "@/features/owner/operations-context";
 import {
   TIMELINE_STEP_MIN,
+  timelineColumnCells,
   type RoomTimelineCell,
   type RoomTimelineRow,
   type TimelineAxis,
@@ -48,14 +49,16 @@ const TH = "border-line border-b px-1 py-1 text-center font-medium whitespace-no
  *  ③ `--line`은 불투명도가 **9%**다. 토큰을 제대로 걸어도 1px 점선은 화면에서 안 보인다.
  * → 변마다 색·스타일을 따로 줘야 하고 농도도 직접 정해야 해서, 클래스보다 style이 정직하다.
  */
+const dottedTick = (i: number): string =>
+  `1px dotted color-mix(in srgb, var(--foreground) ${i % SLOTS_PER_HOUR === 0 ? 30 : 14}%, transparent)`;
+
+/** 시간이 가로일 때의 눈금 = 세로선. */
 const tick = (i: number): React.CSSProperties =>
-  i === 0
-    ? {}
-    : {
-        borderLeft: `1px dotted color-mix(in srgb, var(--foreground) ${
-          i % SLOTS_PER_HOUR === 0 ? 30 : 14
-        }%, transparent)`,
-      };
+  i === 0 ? {} : { borderLeft: dottedTick(i) };
+
+/** 시간이 세로일 때의 눈금 = 가로선(축을 뒤집으면 눈금도 같이 눕는다). */
+const tickY = (i: number): React.CSSProperties =>
+  i === 0 ? {} : { borderTop: dottedTick(i) };
 
 /** 건물·층이 바뀌는 자리 — **또렷하게**(원장 2026-08-04 "층 구분선은 더 진하게"). */
 const GROUP_SEP = "2px solid color-mix(in srgb, var(--foreground) 60%, transparent)";
@@ -180,13 +183,7 @@ function TimelineTd({
 }) {
   const over = cell.seatPct != null && cell.seatPct > 100;
   const compact = cell.span < COMPACT_SPAN;
-  const tip =
-    `${cell.className} · ${subjectLabel}` +
-    (cell.teacherLabel ? ` · ${cell.teacherLabel}` : "") +
-    ` · ${minToHM(cell.startMin)}~${minToHM(cell.endMin)}` +
-    ` · ${cell.students}명` +
-    (cell.seatPct != null ? ` (정원의 ${cell.seatPct}%)` : " (정원 미입력)") +
-    (cell.overlap === "conflict" ? " · 시간 겹침 주의" : cell.overlap === "joint" ? " · 합반" : "");
+  const tip = timelineTip(cell, subjectLabel);
   return (
     <td colSpan={cell.span} className="p-px align-middle" style={style}>
       <div
@@ -211,6 +208,189 @@ function TimelineTd({
               {cell.seatPct == null ? "정원?" : `${cell.seatPct}%`}
             </span>
           </>
+        )}
+      </div>
+    </td>
+  );
+}
+
+/** 블록이 말하는 전부 — 좁거나 낮은 블록은 글자를 접으므로 툴팁이 진실의 단일 소스다(두 축이 공유). */
+function timelineTip(cell: Extract<RoomTimelineCell, { kind: "class" }>, subjectLabel: string): string {
+  return (
+    `${cell.className} · ${subjectLabel}` +
+    (cell.teacherLabel ? ` · ${cell.teacherLabel}` : "") +
+    ` · ${minToHM(cell.startMin)}~${minToHM(cell.endMin)}` +
+    ` · ${cell.students}명` +
+    (cell.seatPct != null ? ` (정원의 ${cell.seatPct}%)` : " (정원 미입력)") +
+    (cell.overlap === "conflict" ? " · 시간 겹침 주의" : cell.overlap === "joint" ? " · 합반" : "")
+  );
+}
+
+// ── 축 전환: 시간이 세로 ────────────────────────────────────────────────────────────────
+//
+// 원장 요청 2026-08-04: *"지금 가로가 시간 세로가 강의실인데, 반대로 가로 세로 축을 전환하는 기능"*.
+// 같은 데이터를 그대로 눕힌다 — 위 표의 **colSpan 병합이 rowSpan 병합**이 되고, 10분 눈금(세로선)은
+// 가로선([tickY])으로, 교실 사이 구분선(가로선)은 세로선([colEdge])으로 자리를 바꾼다.
+// ⚠️ 데이터·정렬·색·툴팁은 한 벌을 공유한다(두 축이 다른 말을 하면 그게 곧 버그다).
+
+/** 왼쪽 시각 열 폭 — "14시"가 들어가는 최소치. */
+const TIME_W = 44;
+/** 강의실 열 최소폭 — 창이 넓으면 균등하게 퍼진다(가로 모드의 SLOT_MIN_W와 같은 역할). */
+const ROOM_MIN_W = 56;
+/** 10분 한 칸의 높이. 80분 수업 = 8칸 ≒ 104px. */
+const ROW_H = 13;
+/** 이보다 낮은 블록엔 인원만 — 인원과 %를 두 줄로 쌓을 높이가 안 나온다(가로의 COMPACT_SPAN과 같은 이유). */
+const VCOMPACT_SPAN = 3;
+
+/** 강의실(열) 사이 세로선 — 층이 바뀌는 자리는 굵게. 가로 모드의 행 테두리와 같은 두 농도. */
+const colEdge = (groupStart: boolean, groupLines: boolean): React.CSSProperties => ({
+  borderLeft: groupLines && groupStart ? GROUP_SEP : ROW_SEP,
+});
+
+export function RoomTimeColumnTable({
+  axis,
+  rows,
+  canEditCapacity,
+  focusSubject,
+  groupLines,
+}: {
+  axis: TimelineAxis;
+  rows: RoomTimelineRow[];
+  canEditCapacity: boolean;
+  focusSubject: string | null;
+  groupLines: boolean;
+}) {
+  const subjects = useSubjectMaps();
+  // 정렬은 가로 모드와 **같은 함수**(건물 → 층 → 호수) — 축만 바뀌지 순서가 바뀌면 자리를 잃는다.
+  const ordered = useMemo(() => groupRooms(rows), [rows]);
+  // 열마다 "이 10분 칸에서 시작하는 셀" 색인(순수 함수 + Vitest — 병합 건너뛰기가 이 표의 유일한 함정).
+  const columns = useMemo(
+    () => ordered.map((r) => ({ room: r, at: timelineColumnCells(r.cells, axis.slots) })),
+    [ordered, axis.slots],
+  );
+
+  if (axis.slots === 0) {
+    return <p className="text-text-dim px-2 py-3 text-[11px]">운영 시간이 없어 시간대별 표를 만들 수 없습니다.</p>;
+  }
+  return (
+    <table
+      className="w-full table-fixed border-separate border-spacing-0 text-[11px]"
+      style={{ minWidth: TIME_W + ordered.length * ROOM_MIN_W }}
+    >
+      <colgroup>
+        <col style={{ width: TIME_W }} />
+        {ordered.map((r) => (
+          <col key={r.key} />
+        ))}
+      </colgroup>
+      <thead>
+        <tr className="text-text-dim">
+          <th className={`${TH} text-left`}>시각</th>
+          {ordered.map((r) => (
+            <th
+              key={r.key}
+              className={`${TH} text-foreground overflow-hidden`}
+              style={colEdge(r.groupStart, groupLines)}
+              // 열이 좁아 이름이 잘린다 — 묶음(건물·층)과 미등록 여부까지 툴팁이 전부 말한다.
+              title={`${groupLines ? `${r.group.label} · ` : ""}${r.name}${r.registered ? "" : " · 미등록"}`}
+            >
+              <span className="block truncate">
+                {r.name}
+                {r.registered ? "" : <span className="text-text-faint"> ※</span>}
+              </span>
+            </th>
+          ))}
+        </tr>
+        <tr className="text-text-dim">
+          <th className={`${TH} text-left font-normal`} title="정원 — 인원률의 분모(클릭해서 수정)">
+            정원
+          </th>
+          {ordered.map((r) => (
+            <th key={r.key} className={`${TH} font-normal`} style={colEdge(r.groupStart, groupLines)}>
+              {r.registered ? (
+                <RoomCapacityCell roomId={r.key} capacity={r.capacity} canEdit={canEditCapacity} />
+              ) : (
+                <span className="text-text-faint">—</span>
+              )}
+            </th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {Array.from({ length: axis.slots }, (_, i) => {
+          const onHour = i % SLOTS_PER_HOUR === 0;
+          return (
+            // 행 높이를 고정한다 — 안 그러면 빈 칸만 있는 행이 눌려 수업 블록의 길이가 시간과 안 맞는다.
+            <tr key={i} style={{ height: ROW_H }}>
+              <td
+                className={`px-1 text-right align-top leading-none ${onHour ? "text-foreground font-bold" : ""}`}
+                style={tickY(i)}
+              >
+                {onHour ? (
+                  <span className="num text-[10px]">{Math.floor((axis.startMin + i * TIMELINE_STEP_MIN) / 60)}시</span>
+                ) : null}
+              </td>
+              {columns.map(({ room, at }) => {
+                const c = at[i];
+                if (!c) return null; // 위 칸의 rowSpan이 덮는다
+                const style = { ...tickY(i), ...colEdge(room.groupStart, groupLines) };
+                if (c.kind === "gap") return <td key={room.key} style={style} />;
+                return (
+                  <TimelineTdVertical
+                    key={room.key}
+                    cell={c}
+                    subjectLabel={subjects.labelOf(c.subject)}
+                    dim={focusSubject != null && c.subject !== focusSubject}
+                    style={style}
+                  />
+                );
+              })}
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
+  );
+}
+
+function TimelineTdVertical({
+  cell,
+  subjectLabel,
+  dim,
+  style,
+}: {
+  cell: Extract<RoomTimelineCell, { kind: "class" }>;
+  subjectLabel: string;
+  dim: boolean;
+  /** 이 칸 시작 시각의 눈금(가로선) + 강의실 구분선(세로선). */
+  style: React.CSSProperties;
+}) {
+  const over = cell.seatPct != null && cell.seatPct > 100;
+  const compact = cell.span < VCOMPACT_SPAN;
+  return (
+    <td rowSpan={cell.span} className="p-px align-middle" style={style}>
+      <div
+        title={timelineTip(cell, subjectLabel)}
+        // ⚠️ 높이는 `h-full`에만 맡기지 않는다 — td 안 100%는 표 높이 계산에 기대는 값이라, 안 잡히면
+        // 80분 수업이 한 줄짜리 막대로 쪼그라든다(가로 모드는 실패해도 행 높이와 비슷해 안 보였을 뿐).
+        // 병합 칸 수 × 행 높이를 최소치로 박아 두 경로 중 어느 쪽이든 시간에 비례한 길이가 나오게 한다.
+        style={{ minHeight: cell.span * ROW_H - 2 }}
+        className={`flex h-full min-w-0 flex-col items-center justify-center leading-none transition-opacity ${
+          dim ? "opacity-30" : ""
+        } ${seatFill(cell.seatPct)} ${
+          cell.overlap === "conflict"
+            ? "ring-1 ring-red-500"
+            : cell.overlap === "joint"
+              ? "ring-1 ring-amber-500"
+              : ""
+        } rounded-md px-0.5`}
+      >
+        {/* 낮은 블록은 인원만 — 세로로 쌓을 자리가 없다. 나머지는 툴팁이 말한다(가로 모드와 같은 규약). */}
+        <span className="num truncate font-semibold">{cell.students}{compact ? "" : "명"}</span>
+        {compact ? null : (
+          <span className={`num truncate text-[10px] ${over ? "font-bold text-red-600" : "opacity-70"}`}>
+            {cell.seatPct == null ? "정원?" : `${cell.seatPct}%`}
+          </span>
         )}
       </div>
     </td>

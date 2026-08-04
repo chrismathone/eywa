@@ -1,7 +1,16 @@
 import { describe, expect, it } from "vitest";
 import type { PeriodsConfig } from "./periods";
 import { buildRoomBuckets, type RoomInfo, type RoomSlotLite } from "./room-grid";
-import { buildRoomWeekRows, resolveDayWindows, summarizeDay, utilPct } from "./room-metrics";
+import {
+  buildRoomWeekRows,
+  collectRoomConflicts,
+  collectSeatOver,
+  resolveDayWindows,
+  summarizeDay,
+  timelineColumnCells,
+  utilPct,
+  type RoomTimelineCell,
+} from "./room-metrics";
 
 const slot = (over: Partial<RoomSlotLite>): RoomSlotLite => ({
   id: over.id ?? Math.random().toString(36).slice(2),
@@ -225,5 +234,131 @@ describe("buildRoomTimelineRows — 수업 시간대로 병합", () => {
     const w = resolveDayWindows(["math"], CONFIG, []);
     const mon = buildRoomTimelineRows(buckets, w, "mon").rows.find((r) => r.key === "r1")!;
     expect(mon.cells).toEqual([{ kind: "gap", span: 12 }]);
+  });
+});
+
+describe("timelineColumnCells — 축 전환(시간=세로)용 색인", () => {
+  it("병합에 덮인 칸은 null(그 자리에 td를 또 그리면 표가 밀린다)", () => {
+    const cells = [
+      { kind: "gap", span: 2 },
+      { kind: "class", span: 3, classId: "c1" },
+      { kind: "gap", span: 1 },
+    ] as unknown as RoomTimelineCell[];
+    const at = timelineColumnCells(cells, 6);
+    expect(at.map((c) => (c == null ? "-" : c.kind))).toEqual([
+      "gap",
+      "gap",
+      "class",
+      "-",
+      "-",
+      "gap",
+    ]);
+    expect(at[2]).toMatchObject({ span: 3, classId: "c1" });
+  });
+
+  it("빈 구간은 10분마다 쪼갠다(통째 병합하면 그 구간에 눈금이 안 남는다)", () => {
+    const at = timelineColumnCells([{ kind: "gap", span: 4 }] as RoomTimelineCell[], 4);
+    expect(at).toEqual([
+      { kind: "gap", span: 1 },
+      { kind: "gap", span: 1 },
+      { kind: "gap", span: 1 },
+      { kind: "gap", span: 1 },
+    ]);
+  });
+
+  it("길이는 항상 격자 칸 수 — 축 끝을 넘는 셀은 잘라낸다(행 수와 어긋나지 않게)", () => {
+    const at = timelineColumnCells(
+      [{ kind: "gap", span: 2 }, { kind: "class", span: 5, classId: "c1" }] as unknown as RoomTimelineCell[],
+      4,
+    );
+    expect(at).toHaveLength(4);
+    expect(at.filter(Boolean)).toHaveLength(3);
+  });
+
+  it("실데이터 경로 — 15:00~16:20 수업 한 개는 시작 칸에만 서고 span 8을 유지", async () => {
+    const { buildRoomTimelineRows } = await import("./room-metrics");
+    const s = slot({ dayOfWeek: "mon", startTime: "15:00", endTime: "16:20", students: 8 });
+    const { buckets } = buildRoomBuckets([s], ROOMS);
+    // 창을 수업까지 넓혀서(관측 확장) 80분이 통째로 축 안에 들어오게 — 잘린 창은 위 케이스가 따로 본다.
+    const w = resolveDayWindows(["math"], CONFIG, [s]);
+    const { axis, rows } = buildRoomTimelineRows(buckets, w, "mon");
+    const at = timelineColumnCells(rows.find((r) => r.key === "r1")!.cells, axis.slots);
+    const starts = at.filter((c) => c?.kind === "class");
+    expect(starts).toHaveLength(1);
+    expect(starts[0]).toMatchObject({ span: 8 });
+    // 병합 뒤 8칸 중 시작 1칸만 td가 서고 나머지 7칸은 비어 있다.
+    expect(at.filter((c) => c == null)).toHaveLength(7);
+  });
+});
+
+describe("collectRoomConflicts — 하단 '시간 겹침' 반 목록(주간)", () => {
+  it("부분 겹침만 잡고, 합반(완전 동일 범위)은 안 잡는다 — 요약의 '건수'와 같은 술어", () => {
+    const { buckets } = buildRoomBuckets(
+      [
+        // 부분 겹침(이중예약 의심) — 15:00~16:00 ∩ 15:30~16:30
+        slot({ id: "a", classId: "c1", className: "중등M 중1", startTime: "15:00", endTime: "16:00" }),
+        slot({ id: "b", classId: "c2", className: "중등M 중2", startTime: "15:30", endTime: "16:30" }),
+        // 합반 — 완전 동일 범위라 겹침이 아니다
+        slot({ id: "c", classId: "c3", className: "합반A", roomId: "r2", startTime: "15:00", endTime: "16:00" }),
+        slot({ id: "d", classId: "c4", className: "합반B", roomId: "r2", startTime: "15:00", endTime: "16:00" }),
+      ],
+      ROOMS,
+    );
+    const rows = collectRoomConflicts(buckets);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.roomName).toBe("본원301");
+    expect(rows[0]!.classes.map((c) => c.className)).toEqual(["중등M 중1", "중등M 중2"]);
+    // 줄이 말하는 시각 = 두 반이 **실제로 같은 방에 있는** 교집합(15:30~16:00).
+    expect([rows[0]!.startMin, rows[0]!.endMin]).toEqual([930, 960]);
+  });
+
+  it("요약의 conflictPairs와 목록 길이가 절대 어긋나지 않는다(같은 술어 회귀 가드)", () => {
+    const slots = [
+      slot({ id: "a", classId: "c1", startTime: "15:00", endTime: "16:00" }),
+      slot({ id: "b", classId: "c2", startTime: "15:30", endTime: "16:30" }),
+      slot({ id: "c", classId: "c3", startTime: "15:40", endTime: "17:00" }),
+    ];
+    const { buckets } = buildRoomBuckets(slots, ROOMS);
+    const w = resolveDayWindows(["math"], CONFIG, slots);
+    expect(collectRoomConflicts(buckets)).toHaveLength(summarizeDay(buckets, w, "mon", 0).conflictPairs);
+  });
+
+  it("요일을 넘나들며 모은다(요일 칩을 안 따라간다) + 요일·시각 순 정렬", () => {
+    const { buckets } = buildRoomBuckets(
+      [
+        slot({ id: "a", classId: "c1", dayOfWeek: "wed", startTime: "15:00", endTime: "16:00" }),
+        slot({ id: "b", classId: "c2", dayOfWeek: "wed", startTime: "15:30", endTime: "16:30" }),
+        slot({ id: "c", classId: "c3", dayOfWeek: "mon", startTime: "14:00", endTime: "15:00" }),
+        slot({ id: "d", classId: "c4", dayOfWeek: "mon", startTime: "14:30", endTime: "15:30" }),
+      ],
+      ROOMS,
+    );
+    expect(collectRoomConflicts(buckets).map((r) => r.day)).toEqual(["mon", "wed"]);
+  });
+});
+
+describe("collectSeatOver — 하단 '정원 초과' 반 목록(주간)", () => {
+  it("정원이 있는 방만, 넘은 반만 — 초과 폭이 큰 순", () => {
+    const { buckets } = buildRoomBuckets(
+      [
+        slot({ id: "a", classId: "c1", className: "1명 초과", students: 11, startTime: "14:00", endTime: "15:00" }),
+        slot({ id: "b", classId: "c2", className: "5명 초과", students: 15, startTime: "15:00", endTime: "16:00" }),
+        slot({ id: "c", classId: "c3", className: "딱 정원", students: 10, startTime: "16:00", endTime: "17:00" }),
+        // 정원 미입력(r2)은 판정 대상이 아니다 — 0으로 속이지 않는다.
+        slot({ id: "d", classId: "c4", className: "정원없는방", students: 99, roomId: "r2" }),
+      ],
+      ROOMS,
+    );
+    const rows = collectSeatOver(buckets);
+    expect(rows.map((r) => r.className)).toEqual(["5명 초과", "1명 초과"]);
+    expect(rows[0]).toMatchObject({ roomName: "본원301", capacity: 10, students: 15, classId: "c2" });
+  });
+
+  it("반을 짚어 준다(수업 상세 링크의 근거) — classId가 비면 링크가 거짓말이 된다", () => {
+    const { buckets } = buildRoomBuckets(
+      [slot({ id: "a", classId: "c9", className: "고등M 고1", students: 12 })],
+      ROOMS,
+    );
+    expect(collectSeatOver(buckets)[0]!.classId).toBe("c9");
   });
 });

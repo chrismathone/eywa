@@ -187,6 +187,33 @@ export function subjectWeekendPeriods(
 }
 
 /**
+ * 그 과목 **평일 '한 교시'의 길이(분)** — 수학계열은 세부교시 2개가 묶여 한 교시다(1교시 14:30~16:20 = 110분,
+ * [mathGroups]와 같은 묶음). 이 값이 곧 "완교시" 기준이고, 그보다 짧게 쓰면 화면에서 '반교시' 셀이 된다.
+ *
+ * ⚠️ 영어는 그룹이 없어(교시 = 표의 한 줄) **null**을 준다 — '반교시'라는 개념 자체가 없는 과목이다.
+ *    소비처는 null을 "판정하지 않음"으로 다뤄야 한다(0으로 떨어뜨리면 전 반이 반교시가 된다).
+ * ⚠️ 그룹 길이가 서로 다르면 **가장 짧은 그룹**을 기준으로 한다 — 기준을 넉넉히 잡아야 완교시 반을
+ *    반교시로 잘못 모는 일이 없다(빼는 쪽이 위험한 판정이라 오탐을 줄이는 방향으로 기운다).
+ */
+export function weekdayFullPeriodMinutes(
+  subject: string,
+  config: PeriodsConfig = DEFAULT_PERIODS_CONFIG,
+): number | null {
+  if (subject === "english") return null;
+  const table = weekdayTableFor(subject, config);
+  const ids = Object.keys(table).sort((a, b) => Number(a) - Number(b));
+  if (ids.length < 2) return null;
+  let shortest = Infinity;
+  for (let i = 0; i + 1 < ids.length; i += 2) {
+    const first = table[ids[i]!]!;
+    const second = table[ids[i + 1]!]!;
+    const span = toMin(second.endTime) - toMin(first.startTime);
+    if (span > 0) shortest = Math.min(shortest, span);
+  }
+  return Number.isFinite(shortest) ? shortest : null;
+}
+
+/**
  * periodId(통일 또는 레거시) + 과목 + 주말여부 → {startTime, endTime}. 알 수 없으면 null.
  * 주말이면 과목 무관 config.weekend, 평일이면 과목별 표(영어=상수, 그 외=config.weekday).
  */

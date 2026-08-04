@@ -15,6 +15,7 @@ import {
   checklistToPairs,
   formatSchedule,
   gradeToken,
+  isHalfPeriodClass,
   matchesSubjectCategory,
   normalizeSchool,
   phoneVariants,
@@ -23,6 +24,8 @@ import {
   type PrepFacts,
 } from "@/features/enrollment/prep-brief";
 import type { IntakeChecklist } from "@/features/enrollment/intake-checklist";
+import { settingsToPeriodsConfig, weekdayFullPeriodMinutes } from "@/features/timetable/lib/periods";
+import { kstToday } from "@/lib/date-kst";
 
 /**
  * 사전 브리프의 **사실 스냅샷 수집** — 상담 1건 기준으로 eywa DB에서 상담자가 알아야 할 것을 전부 모은다.
@@ -188,30 +191,56 @@ export async function collectPrepFacts(
     for (const e of enrollments) enrolledByClass.set(e.class_id, (enrolledByClass.get(e.class_id) ?? 0) + 1);
   }
 
-  // 요일·시작시각 — 후보로 좁히기 전 전체 반에 대해 한 번(같은 청크 규칙).
-  const scheduleByClass = new Map<string, { day: string; start: string | null }[]>();
+  // 요일·시각 — 후보로 좁히기 전 전체 반에 대해 한 번(같은 청크 규칙).
+  // ⚠️ `class_schedules`는 **운영 이력을 함께 담는다**([[#88]] 실측 1,068행 중 480행 만료) → 끝난 배치를
+  //    같이 읽으면 상담지에 **지금 안 하는 요일·시각**이 찍힌다. 살아 있는 행만 본다.
+  // ⚠️ end_time도 받는다 — 반교시 판정(교시 하나를 통째로 채우는 날이 있는가)이 길이를 봐야 한다.
+  const today = kstToday();
+  const slotsByClass = new Map<string, { day: string; start: string | null; end: string | null }[]>();
   if (classIds.length > 0) {
-    const scheds = await fetchInChunks<{ class_id: string; day_of_week: string; start_time: string | null }>(
-      classIds,
-      (chunk) =>
-        supabase
-          .from("class_schedules")
-          .select("class_id, day_of_week, start_time")
-          .eq("tenant_id", tenantId)
-          .in("class_id", chunk),
+    const scheds = await fetchInChunks<{
+      class_id: string;
+      day_of_week: string;
+      start_time: string | null;
+      end_time: string | null;
+    }>(classIds, (chunk) =>
+      supabase
+        .from("class_schedules")
+        .select("class_id, day_of_week, start_time, end_time")
+        .eq("tenant_id", tenantId)
+        .in("class_id", chunk)
+        .or(`valid_to.is.null,valid_to.gte.${today}`),
     );
     for (const s of scheds) {
-      const list = scheduleByClass.get(s.class_id) ?? [];
-      const prev = list.find((x) => x.day === s.day_of_week);
-      // ⚠️ 같은 요일에 연속 교시 슬롯이 여러 개다(실측 106반 중 102반). "첫 행 승자"로 두면 PostgREST
-      //    반환 순서에 따라 등원 시각이 17:15로 찍힐 수 있다 → 요일별 **가장 이른 시각**으로 고정.
-      if (!prev) list.push({ day: s.day_of_week, start: s.start_time });
-      else if (s.start_time && (!prev.start || s.start_time < prev.start)) prev.start = s.start_time;
-      scheduleByClass.set(s.class_id, list);
+      (slotsByClass.get(s.class_id) ?? slotsByClass.set(s.class_id, []).get(s.class_id)!).push({
+        day: s.day_of_week,
+        start: s.start_time,
+        end: s.end_time,
+      });
     }
   }
+  /** 라벨용 = 요일별 **가장 이른 시각** 1건. ⚠️ 같은 요일에 연속 교시 슬롯이 여러 개다(실측 106반 중 102반) —
+   *  "첫 행 승자"로 두면 PostgREST 반환 순서에 따라 등원 시각이 17:15로 찍힌다. */
+  const scheduleOf = (classId: string): { day: string; start: string | null }[] => {
+    const out: { day: string; start: string | null }[] = [];
+    for (const s of slotsByClass.get(classId) ?? []) {
+      const prev = out.find((x) => x.day === s.day);
+      if (!prev) out.push({ day: s.day, start: s.start });
+      else if (s.start && (!prev.start || s.start < prev.start)) prev.start = s.start;
+    }
+    return out;
+  };
+  // 완교시 기준(분)은 **과목별**로 다르다(영어는 그룹이 없어 null=판정 안 함) — 한 번만 계산해 재사용.
+  const fullPeriodCache = new Map<string, number | null>();
+  const fullPeriodMinOf = (subject: string): number | null => {
+    const hit = fullPeriodCache.get(subject);
+    if (hit !== undefined) return hit;
+    const v = weekdayFullPeriodMinutes(subject, settingsToPeriodsConfig(settings.operations));
+    fullPeriodCache.set(subject, v);
+    return v;
+  };
 
-  const candidates: Omit<PrepClassFact, "gradeMatched">[] = classes.map((row) => {
+  const candidates: (Omit<PrepClassFact, "gradeMatched"> & { halfPeriod: boolean })[] = classes.map((row) => {
     const teacher = (Array.isArray(row.teacher) ? row.teacher[0] : row.teacher) as
       | { display_name?: string }
       | undefined;
@@ -223,10 +252,12 @@ export async function collectPrepFacts(
       className: row.class_name,
       subjectLabel: subjectMaps.labelOf(row.subject),
       teacherName: teacher?.display_name ?? null,
-      scheduleLabel: formatSchedule(scheduleByClass.get(row.id) ?? []),
+      scheduleLabel: formatSchedule(scheduleOf(row.id)),
       seats: room?.capacity ?? null,
       enrolled: enrolledByClass.get(row.id) ?? 0,
       notes: row.notes ?? null,
+      // 반교시 반은 제안 후보에서 뺀다(원장 2026-08-04) — 판정 근거는 시간 길이뿐, 반 이름이 아니다.
+      halfPeriod: isHalfPeriodClass(slotsByClass.get(row.id) ?? [], fullPeriodMinOf(row.subject)),
     };
   });
 

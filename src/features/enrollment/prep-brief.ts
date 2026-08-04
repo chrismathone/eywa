@@ -30,6 +30,9 @@ import {
   type ChoiceOption,
   type IntakeChecklist,
 } from "./intake-checklist";
+// 시간 계산은 시간표 순수 모듈 재사용(server-only 없음) — 같은 셈을 두 번 구현하면 두 값이 갈린다.
+import { occupiedMinutes } from "@/features/timetable/lib/room-grid";
+import { timeToMin } from "@/features/timetable/lib/ten-minute-grid";
 
 // ── 사실(Facts) 스냅샷 ────────────────────────────────────────────────────────
 
@@ -248,21 +251,64 @@ export function conflictsSchoolLevel(className: string, studentToken: string | n
   return false;
 }
 
+/** 평일 요일 — 반교시 판정은 평일 교시 그룹에만 있는 개념이라 주말은 안 본다. */
+const WEEKDAYS_SET = new Set(["mon", "tue", "wed", "thu", "fri"]);
+
+/**
+ * **반교시 반** = 평일에 *교시 하나(그룹)를 통째로 채우는 날이 하루도 없는* 반.
+ *
+ * 원장 2026-08-04: *"반교시건은 추천하지마, 완교시만 추천"* · *"반교시들은 대부분 완교시+반교시
+ * (담당+부담당) 수업이므로 완전한 3시간짜리 수업임. 학생리스트가 완전히 일치하고 이어서 진행하는
+ * 수업임(일부 일치하지 않을수도 있으나 대부분 일치)"*.
+ *
+ * 🔑 그래서 반교시를 빼도 **그 시간대가 상담지에서 사라지지 않는다** — 짝인 완교시 반이 같은 학생·같은
+ * 흐름을 대표한다. 실측(2026-08-04, 활성 수학 반): 반교시는 4반뿐이고 3반이 짝을 갖는다.
+ * `초등M 초5 JJ1A`(월·목 16:20~17:15) ↔ `초등M 초5 MS1A`(월·목 14:30~16:20) 재원 6/6 완전 일치,
+ * `중등M 초6 JJ2A`(15:25~16:20) ↔ `중등M 초6 MS2A`(16:20~18:10) 9/9, `중등M 중2 JJPS` ↔ `PS2S` 5/5.
+ * 나머지 1반은 재원 0명이라 어차피 제안 대상이 아니다.
+ *
+ * ⚠️ **반 이름으로 판정하지 않는다**(JJ·PS 같은 접미사로 가르면 이름을 고치는 날 분류가 조용히
+ *    뒤집힌다 — english_track과 같은 교훈). 근거는 오직 **시간 길이**다.
+ * ⚠️ `fullPeriodMin`이 null인 과목(영어처럼 그룹이 없는 과목)은 **항상 false** — 반교시라는 개념이 없다.
+ * ⚠️ 평일 슬롯이 하나도 없으면(주말 전용 반·시각 미상) 판단하지 않는다(false) — 모르면 빼지 않는다.
+ */
+export function isHalfPeriodClass(
+  slots: readonly { day: string; start: string | null; end: string | null }[],
+  fullPeriodMin: number | null,
+): boolean {
+  if (fullPeriodMin == null || fullPeriodMin <= 0) return false;
+  const byDay = new Map<string, { startMin: number; endMin: number }[]>();
+  for (const s of slots) {
+    if (!WEEKDAYS_SET.has(s.day)) continue;
+    const a = timeToMin(s.start ?? "");
+    const b = timeToMin(s.end ?? "");
+    if (a == null || b == null || b <= a) continue;
+    (byDay.get(s.day) ?? byDay.set(s.day, []).get(s.day)!).push({ startMin: a, endMin: b });
+  }
+  if (byDay.size === 0) return false;
+  let longestDay = 0;
+  // 같은 날 여러 슬롯은 **합집합**으로 센다(붙어 있는 세부교시 2개 = 한 교시). occupiedMinutes 재사용.
+  for (const list of byDay.values()) longestDay = Math.max(longestDay, occupiedMinutes(list));
+  return longestDay > 0 && longestDay < fullPeriodMin;
+}
+
 /**
  * 상담 학생에게 제안할 반 후보 정렬 — ① 과목+학년 일치 ② 과목만 일치 순, 각 그룹 안에서는
  * **자리 있는 반 먼저**(상담 자리에서 바로 제안 가능한 순서). 과목 미상이면 학년만으로 좁힌다.
  *
  * ⚠️ 기존 `runAiAnalysis`의 매칭(반 이름에 학년 접두사 포함 여부)보다 과목 조건을 먼저 본다 —
  * 이름만 보면 "중1 영어"가 수학 상담에도 딸려 나온다.
+ * ⚠️ **반교시 반은 후보에서 아예 뺀다**(원장 2026-08-04, [isHalfPeriodClass] 주석 참조) — 짝인 완교시
+ *    반이 같은 학생·같은 흐름을 대표하므로 시간대가 사라지지 않는다.
  */
 export function rankPrepClasses(
-  all: Omit<PrepClassFact, "gradeMatched">[],
+  all: (Omit<PrepClassFact, "gradeMatched"> & { halfPeriod?: boolean })[],
   opts: { subjectKeyLabel: string | null; grade: string | null },
   limit = 6,
 ): PrepClassFact[] {
   const token = gradeToken(opts.grade);
   const subject = opts.subjectKeyLabel;
-  const scored = all.map((c) => {
+  const scored = all.filter((c) => !c.halfPeriod).map((c) => {
     // 다른 학제·학년이 이름에 명시된 반은 무조건 배제(중1 상담지에 "고등"·"중2" 반 금지).
     if (conflictsSchoolLevel(c.className, token)) return { ...c, gradeMatched: false, tier: 0 };
     const gradeMatched = !!token && c.className.includes(token);
