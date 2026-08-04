@@ -6,7 +6,7 @@ import { FilterSelect } from "@/components/filter-select";
 import { SearchForm } from "@/components/search-form";
 import { OUTCOME_OPTIONS } from "./outcome-meta";
 import { MonthPicker } from "./month-picker";
-import { buildEnrollmentQuery, shiftMonth } from "./enrollment-query";
+import { buildEnrollmentQuery, shiftMonth, type EnrollmentView } from "./enrollment-query";
 import { RANGE_LABEL, RANGE_PRESETS, type RangePreset } from "@/features/enrollment/range";
 
 type Props = {
@@ -14,7 +14,7 @@ type Props = {
   selectedConsultant: string | null;
   selectedOutcome: string | null;
   searchQuery: string | null;
-  view: "kanban" | "table";
+  view: EnrollmentView;
   consultants: { id: string; name: string }[];
   /** 적용 중인 기간 프리셋. selectedMonth가 있으면 표시상 해제된다. */
   selectedRange: RangePreset;
@@ -48,8 +48,14 @@ export function KanbanFilters({
   const prevMonth = shiftMonth(displayMonth, -1, todayMonth);
   const nextMonth = shiftMonth(displayMonth, 1, todayMonth);
 
+  // 통계뷰는 자기 안에서 연도를 고르고 집계만 본다 — 여기 필터(월·기간·상담사·상태·검색)는
+  // 하나도 적용되지 않으므로 **아예 안 그린다**. 눌러도 아무 일이 없는 컨트롤을 남기는 게 더 나쁘다.
+  const listFilters = view !== "stats";
+
   return (
     <div className="bg-card shadow-card flex flex-wrap items-center gap-3 rounded-2xl px-4 py-3">
+      {listFilters ? (
+        <>
       {/* 월 navigator */}
       <div className="flex items-center gap-1.5">
         <span className="micro mr-1 shrink-0">월</span>
@@ -127,8 +133,10 @@ export function KanbanFilters({
           className="w-32"
         />
       </div>
+        </>
+      ) : null}
 
-      {/* 뷰 토글 — 칸반 ↔ 목록 */}
+      {/* 뷰 토글 — 칸반 · 목록 · 통계 (통계에선 이것과 대시보드 링크만 남는다) */}
       <div className="border-line inline-flex items-center gap-0.5 rounded-full border p-0.5">
         <Link
           href={`/enrollment${buildQuery({ ...base, month: selectedMonth, view: "kanban" })}`}
@@ -154,10 +162,23 @@ export function KanbanFilters({
           <List className="size-3.5" />
           목록
         </Link>
+        {/* 통계는 집계 화면이라 월·기간·상담사 필터를 안 물려받는다 — 연도만 자기 안에서 고른다. */}
+        <Link
+          href="/enrollment?view=stats"
+          aria-label="통계 보기"
+          className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs transition ${
+            view === "stats"
+              ? "bg-foreground text-background font-medium"
+              : "text-text-dim hover:text-foreground"
+          }`}
+        >
+          <BarChart3 className="size-3.5" />
+          통계
+        </Link>
       </div>
 
       {/* 이름·전화·학교 검색 — 클라 내비(SearchForm)라 화면 깜빡 없이 결과만 교체(다른 param 자동 보존) */}
-      <SearchForm placeholder="이름·전화·학교" defaultValue={searchQuery} />
+      {listFilters ? <SearchForm placeholder="이름·전화·학교" defaultValue={searchQuery} /> : null}
 
       <WindowLink
         href="/enrollment/dashboard"

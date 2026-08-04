@@ -3,6 +3,9 @@
  * ⚠️ 일반 모듈이어야 한다: "use client" 모듈의 상수를 서버가 import하면 런타임 undefined가 되고
  * 타입체크는 통과해 침묵 버그가 된다(gotcha #81).
  */
+/** 등록상담 3뷰 — 칸반(운영 보드) · 목록(열람) · 통계(집계). */
+export type EnrollmentView = "kanban" | "table" | "stats";
+
 export type EnrollmentQuery = {
   month: string | null;
   /** 기간 프리셋("3m"|"6m"|"1y"). month가 있으면 무시된다. 기본값(3m)은 URL에 안 싣는다. */
@@ -10,7 +13,7 @@ export type EnrollmentQuery = {
   consultant: string | null;
   outcome: string | null;
   q: string | null;
-  view: "kanban" | "table";
+  view: EnrollmentView;
 };
 
 export function buildEnrollmentQuery(p: EnrollmentQuery): string {
@@ -21,7 +24,7 @@ export function buildEnrollmentQuery(p: EnrollmentQuery): string {
   if (p.consultant) params.set("consultant", p.consultant);
   if (p.outcome) params.set("outcome", p.outcome);
   if (p.q) params.set("q", p.q);
-  if (p.view === "table") params.set("view", "table");
+  if (p.view !== "kanban") params.set("view", p.view);
   // 🔴 page는 일부러 안 넣는다 — 월·필터를 바꾸면 1페이지로 돌아가야 한다(페이지네이션 표준).
   const s = params.toString();
   return s ? `?${s}` : "";

@@ -20,6 +20,9 @@ import {
 import { Pagination } from "@/components/pagination";
 import { kstToday } from "@/lib/date-kst";
 import { parseRange } from "@/features/enrollment/range";
+import { getEnrollmentStats, getStatsYears } from "@/features/enrollment/server/stats-queries";
+import { StatsView } from "./_components/stats-view";
+import type { EnrollmentView } from "./_components/enrollment-query";
 import { KanbanFilters } from "./_components/kanban-filters";
 import { NewEnrollmentTrigger } from "./_components/new-enrollment-trigger";
 import { EnrollmentKanban, type KanbanColumn } from "./_components/enrollment-kanban";
@@ -64,6 +67,7 @@ export default async function EnrollmentPage({
     view?: string;
     page?: string;
     range?: string;
+    year?: string;
   }>;
 }) {
   const user = await requireAccess("enrollment");
@@ -75,12 +79,16 @@ export default async function EnrollmentPage({
     view: viewParam,
     page: pageParam,
     range: rangeParam,
+    year: yearParam,
   } = await searchParams;
   const selectedMonth = month ?? null;
   const selectedConsultant = consultant ?? null;
   const selectedOutcome = outcome ?? null;
   const searchQuery = q?.trim() || null;
-  const view: "kanban" | "table" = viewParam === "table" ? "table" : "kanban";
+  const view: EnrollmentView =
+    viewParam === "table" ? "table" : viewParam === "stats" ? "stats" : "kanban";
+  // 통계뷰 전용 — 연도 선택. 여기엔 "최대 1년" 상한이 없다(집계라 행을 안 가져온다).
+  const statsYear = Number(yearParam) || new Date(kstToday()).getFullYear();
   const page = Math.max(1, Number(pageParam) || 1);
   // 🔴 기본 = 최근 3개월. '전체'는 고를 수 없고 구간은 최대 1년(원장 2026-08-04) — 이관으로 3년치가
   // 쌓여 전건을 열면 칸반이 카드 2,197장이 된다. 알 수 없는 값이 와도 parseRange가 3개월로 되돌린다.
@@ -99,12 +107,14 @@ export default async function EnrollmentPage({
   // 🔴 뷰마다 **가져오는 양이 다르다**. 목록은 한 페이지(50행)만 — 옛 시트 이관으로 2,251행이 되어
   // 전건 로드는 라운드트립 3회 + 배지 청크 20여 회로 불어난다(B2·B4). 칸반은 열별 집계가 필요해
   // 전건을 유지하되, 그래서 기간 필터 없이 열면 여전히 무겁다(별도 과제).
-  const [kanbanItems, tablePage, headerCounts, consultants, minYear, pushCandidates, totalCount] =
+  const [kanbanItems, tablePage, headerCounts, stats, statsYears, consultants, minYear, pushCandidates, totalCount] =
     await Promise.all([
       view === "kanban" ? getEnrollmentConsultations(filter) : Promise.resolve(null),
       view === "table" ? getEnrollmentConsultationsPage(filter, page, PAGE_SIZE) : Promise.resolve(null),
       // 헤더 스탯은 페이지가 아니라 **필터 전체** 기준(count만, 행 미수신).
       view === "table" ? getConsultationFilteredCounts(filter) : Promise.resolve(null),
+      view === "stats" ? getEnrollmentStats(statsYear) : Promise.resolve(null),
+      view === "stats" ? getStatsYears() : Promise.resolve([]),
       getConsultantOptions(),
       getConsultationMinYear(),
       canPushMakeedu ? getUnpushedIntakeConsultations() : Promise.resolve([]),
@@ -129,6 +139,9 @@ export default async function EnrollmentPage({
 
   // 필터는 보존하고 page만 갈아끼운다. p===1이면 page= 자체를 안 넣어야 필터 변경 href와 모양이 같아진다
   // (필터·검색·월이동 href는 page를 안 넣으므로 자동으로 1페이지로 리셋된다 — 페이지네이션 표준).
+  // 통계뷰 연도 링크 — 목록 필터(월·기간·검색)는 통계와 무관해 싣지 않는다(섞이면 "무엇을 보고 있는지"가 흐려진다).
+  const yearHref = (y: number): string => `/enrollment?view=stats&year=${y}`;
+
   const pageHref = (p: number): string => {
     const params = new URLSearchParams();
     if (selectedMonth) params.set("month", selectedMonth);
@@ -227,8 +240,11 @@ export default async function EnrollmentPage({
           integrations 쓰기 권한자에게만. 처리하면(전송/등록) 사라지는 액션 큐라 보드 위에 노출. */}
       {pushCandidates.length > 0 ? <MakeeduPushCard candidates={pushCandidates} /> : null}
 
-      {/* 빈 상태 판정은 rows.length이 아니라 total === 0 (2페이지가 비어 보이는 것과 진짜 0건은 다르다) */}
-      {(view === "table" ? (headerCounts?.total ?? 0) === 0 : items.length === 0) ? (
+      {/* 통계뷰는 빈 상태 사진 대신 자기 안에서 "집계할 상담이 없습니다"를 말한다(연도 선택을 남겨야 하므로). */}
+      {view === "stats" && stats ? (
+        <StatsView stats={stats} year={statsYear} years={statsYears} hrefForYear={yearHref} />
+      ) : /* 빈 상태 판정은 rows.length이 아니라 total === 0 (2페이지가 비어 보이는 것과 진짜 0건은 다르다) */
+      (view === "table" ? (headerCounts?.total ?? 0) === 0 : items.length === 0) ? (
         <div className="mx-auto max-w-xl py-4">
           <PhotoCard
             src="/photos/enrollment-hero.webp"
