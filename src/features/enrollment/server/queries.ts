@@ -153,7 +153,7 @@ function monthBounds(month: string): { startIso: string; endIso: string } {
 const LIST_COLS = `id, prospect_name, prospect_grade, prospect_school,
    parent_phone, parent_request, outcome, consulted_at, subject,
    processing_status, audio_path, from_public_intake, sync_added_at, student_id,
-   consultant:consultant_id!enrollment_consultations_consultant_id_users_id_fk ( display_name )`;
+   consultant:consultant_id ( display_name )`;
 
 /** 목록·칸반 공용 필터 적용. 두 경로가 갈라지면 "칸반엔 있는데 목록엔 없는 건"이 생긴다 — 한 함수로 묶는다. */
 function applyConsultationFilter<T extends { gte: unknown }>(q: T, filter?: ConsultationFilter): T {
@@ -213,7 +213,7 @@ async function loadRowBadges(
             // "배정 완료"는 상담 과목의 실제 수강으로 판정하므로 class subject까지 함께 조회(교차과목 오매몰 차단).
             supabase
               .from("enrollments")
-              .select("student_id, class:class_id!enrollments_class_id_classes_id_fk ( subject )")
+              .select("student_id, class:class_id ( subject )")
               .in("student_id", chunk)
               .or(`end_date.is.null,end_date.gte.${today}`),
         )
