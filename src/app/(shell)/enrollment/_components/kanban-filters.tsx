@@ -5,6 +5,9 @@ import { EyIcon } from "@/components/icons/eywa-icons";
 import { FilterSelect } from "@/components/filter-select";
 import { SearchForm } from "@/components/search-form";
 import { OUTCOME_OPTIONS } from "./outcome-meta";
+import { MonthPicker } from "./month-picker";
+import { buildEnrollmentQuery, shiftMonth } from "./enrollment-query";
+import { RANGE_LABEL, RANGE_PRESETS, type RangePreset } from "@/features/enrollment/range";
 
 type Props = {
   selectedMonth: string | null;
@@ -13,43 +16,15 @@ type Props = {
   searchQuery: string | null;
   view: "kanban" | "table";
   consultants: { id: string; name: string }[];
+  /** 적용 중인 기간 프리셋. selectedMonth가 있으면 표시상 해제된다. */
+  selectedRange: RangePreset;
+  /** 오늘이 속한 달 — 서버에서 계산해 내려받는다(클라에서 new Date()를 쓰면 하이드레이션이 어긋난다). */
+  todayMonth: string;
+  /** 데이터가 있는 가장 이른 연도 — 연도 이동 하한. */
+  minYear: number;
 };
 
-function formatMonth(key: string): string {
-  const [y, m] = key.split("-");
-  return `${y}년 ${Number(m)}월`;
-}
-
-function shiftMonth(key: string | null, delta: number): string {
-  const now = new Date();
-  const base = key
-    ? new Date(Number(key.slice(0, 4)), Number(key.slice(5, 7)) - 1, 1)
-    : new Date(now.getFullYear(), now.getMonth(), 1);
-  base.setMonth(base.getMonth() + delta);
-  return `${base.getFullYear()}-${String(base.getMonth() + 1).padStart(2, "0")}`;
-}
-
-function currentMonthKey(): string {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-}
-
-function buildQuery(p: {
-  month: string | null;
-  consultant: string | null;
-  outcome: string | null;
-  q: string | null;
-  view: "kanban" | "table";
-}): string {
-  const params = new URLSearchParams();
-  if (p.month) params.set("month", p.month);
-  if (p.consultant) params.set("consultant", p.consultant);
-  if (p.outcome) params.set("outcome", p.outcome);
-  if (p.q) params.set("q", p.q);
-  if (p.view === "table") params.set("view", "table");
-  const s = params.toString();
-  return s ? `?${s}` : "";
-}
+const buildQuery = buildEnrollmentQuery;
 
 export function KanbanFilters({
   selectedMonth,
@@ -58,16 +33,20 @@ export function KanbanFilters({
   searchQuery,
   view,
   consultants,
+  selectedRange,
+  todayMonth,
+  minYear,
 }: Props) {
-  const displayMonth = selectedMonth ?? currentMonthKey();
+  const displayMonth = selectedMonth ?? todayMonth;
   const base = {
     consultant: selectedConsultant,
     outcome: selectedOutcome,
     q: searchQuery,
     view,
+    range: selectedRange,
   };
-  const prevMonth = shiftMonth(displayMonth, -1);
-  const nextMonth = shiftMonth(displayMonth, 1);
+  const prevMonth = shiftMonth(displayMonth, -1, todayMonth);
+  const nextMonth = shiftMonth(displayMonth, 1, todayMonth);
 
   return (
     <div className="bg-card shadow-card flex flex-wrap items-center gap-3 rounded-2xl px-4 py-3">
@@ -81,9 +60,14 @@ export function KanbanFilters({
         >
           <EyIcon name="chevronLeft" size={14} />
         </Link>
-        <span className="text-foreground num min-w-[88px] text-center text-[13px] font-bold">
-          {formatMonth(displayMonth)}
-        </span>
+        {/* 라벨 자체가 연·월 피커 트리거 — 화살표만으론 2023년까지 40번 넘게 눌러야 했다. */}
+        <MonthPicker
+          displayMonth={displayMonth}
+          monthFilterActive={!!selectedMonth}
+          base={base}
+          minYear={minYear}
+          todayMonth={todayMonth}
+        />
         <Link
           href={`/enrollment${buildQuery({ ...base, month: nextMonth })}`}
           className="border-line hover:bg-bg-soft inline-flex size-7 items-center justify-center rounded-full border"
@@ -91,16 +75,32 @@ export function KanbanFilters({
         >
           <EyIcon name="chevronRight" size={14} />
         </Link>
-        <Link
-          href={`/enrollment${buildQuery({ ...base, month: null })}`}
-          className={`ml-1 shrink-0 rounded-full border px-2.5 py-0.5 text-xs transition ${
-            !selectedMonth
-              ? "border-foreground bg-foreground text-background font-medium"
-              : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
-          }`}
-        >
-          전체
-        </Link>
+      </div>
+
+      <span className="bg-line hidden h-4 w-px sm:block" aria-hidden />
+
+      {/* 기간 프리셋 — 🔴 '전체'는 없다(원장 2026-08-04). 이관으로 3년치가 쌓여 전건을 열면
+          칸반이 카드 2,197장이 된다. 구간 길이는 최대 1년. 특정 달을 고르면 이 칩은 해제된다. */}
+      <div className="flex items-center gap-1.5">
+        <span className="micro shrink-0">기간</span>
+        <div className="border-line inline-flex items-center gap-0.5 rounded-full border p-0.5">
+          {RANGE_PRESETS.map((r) => {
+            const active = !selectedMonth && selectedRange === r;
+            return (
+              <Link
+                key={r}
+                href={`/enrollment${buildQuery({ ...base, month: null, range: r })}`}
+                className={`rounded-full px-2.5 py-1 text-xs transition ${
+                  active
+                    ? "bg-foreground text-background font-medium"
+                    : "text-text-dim hover:text-foreground hover:bg-bg-soft"
+                }`}
+              >
+                {RANGE_LABEL[r]}
+              </Link>
+            );
+          })}
+        </div>
       </div>
 
       <span className="bg-line hidden h-4 w-px sm:block" aria-hidden />

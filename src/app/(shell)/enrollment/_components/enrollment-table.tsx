@@ -3,7 +3,7 @@
 import { WindowLink } from "@/components/workspace/window-link";
 import { Pill } from "@/components/atoms/pill";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
-import type { ConsultationListRow } from "@/features/enrollment/server/queries";
+import type { ConsultationTableRow } from "@/features/enrollment/server/queries";
 import { EditingBadge } from "@/features/presence/editing-badge";
 import { RelativeTime } from "@/components/relative-time";
 import { outcomePill } from "./outcome-meta";
@@ -13,8 +13,12 @@ function ymd(iso: string): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-/** 등록상담 목록(테이블) 뷰 — 칸반의 대안. 정렬은 상담일 내림차순(쿼리), 행 클릭=상세 창. ijw 테이블 뷰 이식. */
-export function EnrollmentTable({ rows, nowMs }: { rows: ConsultationListRow[]; nowMs: number }) {
+/**
+ * 등록상담 목록(테이블) 뷰 — 칸반의 대안. 정렬은 상담일 내림차순(쿼리), 행 클릭=상세 창. ijw 테이블 뷰 이식.
+ * 행은 **서버에서 한 페이지씩** 온다(ConsultationTableRow) — 반복접수 배지는 페이지 안에서 세면
+ * 거짓이 되므로 타입에 아예 없다(#89). 필요해지면 별도 count 쿼리로 받아올 것.
+ */
+export function EnrollmentTable({ rows, nowMs }: { rows: ConsultationTableRow[]; nowMs: number }) {
   return (
     <DragScrollArea className="bg-card border-line shadow-card rounded-2xl border">
       <table className="w-full text-sm [&_td]:whitespace-nowrap">

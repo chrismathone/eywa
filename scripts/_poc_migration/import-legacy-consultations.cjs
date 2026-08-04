@@ -160,7 +160,12 @@ async function extract() {
       for (let r = hdrRow + 1; r <= ws.rowCount; r++) {
         const row = ws.getRow(r);
         const name = get(row, "name");
-        if (!name || name.length > 12 || /^(합계|총계|계)$/.test(name)) continue;
+        if (!name || name.length > 12) continue;
+        // 🔴 이름 칸에 **월 합계 행**이 섞여 있다("1월 총 신규결제" 등 실측 54행, 금액 9,782만원이
+        //    결제금액으로 들어가고 15행이 '등록'으로 판정돼 전환율까지 오염됐다). 사람 이름엔
+        //    결제/합계 같은 낱말이 안 들어가므로 낱말로 거른다 — `^(합계|총계|계)$` 완전일치만으론
+        //    "1월 총 신규결제"가 그대로 통과한다.
+        if (/신규결제|합계|총계|누적|소계/.test(name)) continue;
 
         let school = get(row, "school"), grade = get(row, "grade");
         if (!school && cols.schoolGrade) {

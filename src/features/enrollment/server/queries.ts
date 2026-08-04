@@ -5,6 +5,7 @@ import { kstToday } from "@/lib/date-kst";
 import type { ExtractedConsultationForm } from "../form-fill";
 import type { IntakeChecklist } from "../intake-checklist";
 import type { PrepBriefRecord } from "../prep-brief";
+import { DEFAULT_RANGE, RANGE_MONTHS, type RangePreset } from "../range";
 
 /** prep_brief jsonb 방어 — 형태가 맞을 때만 통과(옛 스냅샷·수기 편집으로 깨진 값이 렌더를 죽이지 않게). */
 function isPrepBriefRecord(v: unknown): v is PrepBriefRecord {
@@ -125,8 +126,16 @@ export type ConsultationListRow = {
   personConsults: PersonConsultRef[];
 };
 
+/** 프리셋 시작 시각(그 달 1일 00:00). 월 경계로 잘라야 월별 집계가 반쪽 달로 시작하지 않는다. */
+function rangeStartIso(range: RangePreset): string {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth() - (RANGE_MONTHS[range] - 1), 1);
+  return start.toISOString();
+}
+
 export type ConsultationFilter = {
-  month?: string | null; // "YYYY-MM" or null/undefined for all
+  month?: string | null; // "YYYY-MM" — 특정 달만. 있으면 range보다 우선.
+  range?: RangePreset | null; // month가 없을 때 적용되는 기간 프리셋(기본 3개월)
   consultantId?: string | null; // UUID or null/undefined for all
   q?: string | null; // 이름·전화·학교 텍스트 검색
   outcome?: string | null; // 진행 상태(pending/scheduled/consulted/ai_done/enrolled/declined/no_show) or null=전체
@@ -141,39 +150,52 @@ function monthBounds(month: string): { startIso: string; endIso: string } {
   return { startIso: start.toISOString(), endIso: end.toISOString() };
 }
 
-export async function getEnrollmentConsultations(
-  filter?: ConsultationFilter,
-): Promise<ConsultationListRow[]> {
-  const supabase = await createClient();
-  // 무필터 기본 칸반은 enrollment_consultations 전건이라 무페이징 select면 1000행에서 silent 절단된다(B2).
-  // fetchAllPaged 콜백 안에서 매번 새 빌더로 필터·정렬을 재적용(range/filter 누적 방지).
-  const data = await fetchAllPaged((from, to) => {
-    let q = supabase
-      .from("enrollment_consultations")
-      .select(
-        `id, prospect_name, prospect_grade, prospect_school,
-         parent_phone, parent_request, outcome, consulted_at, subject,
-         processing_status, audio_path, from_public_intake, sync_added_at, student_id,
-         consultant:consultant_id ( display_name )`,
-      );
-    if (filter?.month) {
-      const { startIso, endIso } = monthBounds(filter.month);
-      q = q.gte("consulted_at", startIso).lt("consulted_at", endIso);
-    }
-    if (filter?.consultantId) q = q.eq("consultant_id", filter.consultantId);
-    if (filter?.outcome) q = q.eq("outcome", filter.outcome);
-    if (filter?.q) {
-      // 이름·전화·학교는 enrollment_consultations에 직접 있어 학생 id 조인 불필요(학생상담보다 단순).
-      const safe = filter.q.trim().replace(/[(),]/g, " ");
-      if (safe)
-        q = q.or(
-          `prospect_name.ilike.%${safe}%,parent_phone.ilike.%${safe}%,prospect_school.ilike.%${safe}%`,
-        );
-    }
-    return q.order("consulted_at", { ascending: false }).range(from, to);
-  });
-  if (data.length === 0) return [];
+const LIST_COLS = `id, prospect_name, prospect_grade, prospect_school,
+   parent_phone, parent_request, outcome, consulted_at, subject,
+   processing_status, audio_path, from_public_intake, sync_added_at, student_id,
+   consultant:consultant_id!enrollment_consultations_consultant_id_users_id_fk ( display_name )`;
 
+/** 목록·칸반 공용 필터 적용. 두 경로가 갈라지면 "칸반엔 있는데 목록엔 없는 건"이 생긴다 — 한 함수로 묶는다. */
+function applyConsultationFilter<T extends { gte: unknown }>(q: T, filter?: ConsultationFilter): T {
+  let out = q as unknown as PostgrestFilterLike;
+  if (filter?.month) {
+    const { startIso, endIso } = monthBounds(filter.month);
+    out = out.gte("consulted_at", startIso).lt("consulted_at", endIso);
+  } else {
+    // 🔴 기간 하한이 **항상** 걸린다 — 무필터로 전건을 여는 경로를 남기지 않는다(전체 = 2,197행).
+    out = out.gte("consulted_at", rangeStartIso(filter?.range ?? DEFAULT_RANGE));
+  }
+  if (filter?.consultantId) out = out.eq("consultant_id", filter.consultantId);
+  if (filter?.outcome) out = out.eq("outcome", filter.outcome);
+  if (filter?.q) {
+    // 이름·전화·학교는 enrollment_consultations에 직접 있어 학생 id 조인 불필요(학생상담보다 단순).
+    const safe = filter.q.trim().replace(/[(),]/g, " ");
+    if (safe)
+      out = out.or(
+        `prospect_name.ilike.%${safe}%,parent_phone.ilike.%${safe}%,prospect_school.ilike.%${safe}%`,
+      );
+  }
+  return out as unknown as T;
+}
+
+type PostgrestFilterLike = {
+  gte: (c: string, v: string) => PostgrestFilterLike;
+  lt: (c: string, v: string) => PostgrestFilterLike;
+  eq: (c: string, v: string) => PostgrestFilterLike;
+  or: (f: string) => PostgrestFilterLike;
+};
+
+type BadgeSourceRow = { id: string; student_id?: string | null };
+
+/**
+ * 목록 배지 재료(AI 분석 유무 · "반 배정 완료" 판정)를 로드된 행들에 대해서만 조회.
+ * 칸반(전건)과 목록(한 페이지)이 **같은 기준**으로 판정하도록 한 함수로 묶는다 —
+ * 갈라지면 같은 상담이 뷰마다 다른 상태로 보인다.
+ */
+async function loadRowBadges(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  data: BadgeSourceRow[],
+): Promise<{ hasAi: Set<string>; assignedCountFor: (s: string | null, subj: string | null) => number }> {
   const ids = data.map((c) => c.id);
   // id가 수백+ 가능 → 청크 분할(.in() URL 414 방지, error는 throw — 조용히 삼키지 않음, B3).
   // 연결 학생(student_id)의 미종료 수강 수 = "배정 완료" 판정 재료도 병렬로(독립 조회 = B4).
@@ -191,7 +213,7 @@ export async function getEnrollmentConsultations(
             // "배정 완료"는 상담 과목의 실제 수강으로 판정하므로 class subject까지 함께 조회(교차과목 오매몰 차단).
             supabase
               .from("enrollments")
-              .select("student_id, class:class_id ( subject )")
+              .select("student_id, class:class_id!enrollments_class_id_classes_id_fk ( subject )")
               .in("student_id", chunk)
               .or(`end_date.is.null,end_date.gte.${today}`),
         )
@@ -207,20 +229,47 @@ export async function getEnrollmentConsultations(
     if (klass?.subject) rec.bySubject.set(klass.subject, (rec.bySubject.get(klass.subject) ?? 0) + 1);
     enrByStudent.set(row.student_id, rec);
   }
-  const assignedCountFor = (studentId: string | null, subject: string | null): number => {
-    if (!studentId) return 0;
-    const rec = enrByStudent.get(studentId);
-    if (!rec) return 0;
-    // 상담 과목이 있으면 그 과목의 수강만 = "이 상담이 실제 배정됐는가". 과목 미상이면 전체 수강 폴백(기존 동작).
-    return subject ? (rec.bySubject.get(subject) ?? 0) : rec.total;
+  return {
+    hasAi,
+    assignedCountFor: (studentId, subject) => {
+      if (!studentId) return 0;
+      const rec = enrByStudent.get(studentId);
+      if (!rec) return 0;
+      // 상담 과목이 있으면 그 과목의 수강만 = "이 상담이 실제 배정됐는가". 과목 미상이면 전체 수강 폴백(기존 동작).
+      return subject ? (rec.bySubject.get(subject) ?? 0) : rec.total;
+    },
   };
+}
+
+export async function getEnrollmentConsultations(
+  filter?: ConsultationFilter,
+): Promise<ConsultationListRow[]> {
+  const supabase = await createClient();
+  // 무필터 기본 칸반은 enrollment_consultations 전건이라 무페이징 select면 1000행에서 silent 절단된다(B2).
+  // fetchAllPaged 콜백 안에서 매번 새 빌더로 필터·정렬을 재적용(range/filter 누적 방지).
+  const data = await fetchAllPaged((from, to) =>
+    applyConsultationFilter(
+      supabase.from("enrollment_consultations").select(LIST_COLS),
+      filter,
+    ).order("consulted_at", { ascending: false }).range(from, to),
+  );
+  if (data.length === 0) return [];
+
+  const { hasAi, assignedCountFor } = await loadRowBadges(supabase, data);
 
   // 같은 사람의 등록상담 반복 접수 힌트 — 학생 연결이 있으면 student_id, 없으면 자연키(정규화 이름+학교+학년)로
   // 묶는다(아직 학생 아닌 순수 접수자의 재방문도 감지). 로드된 목록 기준(무필터 기본 칸반=전건이라 정확).
-  const personKey = (c: { student_id?: string | null; prospect_name?: string | null; prospect_school?: string | null; prospect_grade?: string | null }) =>
-    c.student_id
-      ? `s:${c.student_id}`
-      : `n:${(c.prospect_name ?? "").toLowerCase().replace(/\s+/g, "")}|${c.prospect_school ?? ""}|${c.prospect_grade ?? ""}`;
+  // 🔴 자연키는 **학교·학년이 있어야** 성립한다. 둘 다 없으면 키가 사실상 이름뿐이라 남남을 한 사람으로
+  // 묶는다 — 옛 시트 이관분엔 이름 칸에 "영어문의"·"예비중1"처럼 사람이 아닌 접수 표기가 들어간 행이
+  // 316건 있어, 그 6건이 한 사람의 "상담 6건"으로 뜬다(실측). 못 믿는 키는 그룹을 만들지 않는다:
+  // 안 묶여서 놓치는 건 눈에 띄지만, 잘못 묶인 건 아무도 모른다.
+  const personKey = (c: { id: string; student_id?: string | null; prospect_name?: string | null; prospect_school?: string | null; prospect_grade?: string | null }) => {
+    if (c.student_id) return `s:${c.student_id}`;
+    // 자기 자신만 담는 키 = 그룹이 안 생긴다. personKey는 행마다 두 번 불리므로 **행 id로 고정**해야
+    // 한다(카운터처럼 부를 때마다 달라지면 count 조회가 조용히 빗나간다).
+    if (!c.prospect_school && !c.prospect_grade) return `x:${c.id}`;
+    return `n:${(c.prospect_name ?? "").toLowerCase().replace(/\s+/g, "")}|${c.prospect_school ?? ""}|${c.prospect_grade ?? ""}`;
+  };
   const personCount = new Map<string, number>();
   const personGroups = new Map<string, PersonConsultRef[]>();
   for (const c of data) {
@@ -267,6 +316,105 @@ export async function getEnrollmentConsultations(
       personConsults: (personCount.get(personKey(c)) ?? 1) > 1 ? (personGroups.get(personKey(c)) ?? []) : [],
     };
   });
+}
+
+/**
+ * 목록(표) 뷰 전용 — 한 페이지만 가져온다.
+ *
+ * 🔴 반복접수 배지(`personConsultCount`)를 **타입에서 뺀다**. 그 값은 "로드된 목록 안에서 같은 사람이
+ * 몇 번 나오나"를 세는 것이라, 50행짜리 페이지에서 세면 실제 3건인 사람이 1건으로 나온다(#89 —
+ * 상한 걸린 목록의 길이를 건수로 쓰면 영원히 거짓말). 표는 이 배지를 안 그리므로 아예 안 준다:
+ * 나중에 누가 표에 배지를 붙이려 하면 컴파일이 막는다(주석은 강제력이 없다).
+ */
+export type ConsultationTableRow = Omit<ConsultationListRow, "personConsultCount" | "personConsults">;
+
+/**
+ * 연·월 피커의 하한 — 데이터가 있는 가장 이른 연도. 1행만 받는다(정렬은 ec_tenant_consulted_idx가 덮는다).
+ * 이 값이 없으면 피커가 2000년까지 훑을 수 있어 "눌러도 빈 화면"인 연도를 걸어 다니게 된다.
+ */
+export async function getConsultationMinYear(): Promise<number> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("enrollment_consultations")
+    .select("consulted_at")
+    .order("consulted_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (!data?.consulted_at) return new Date().getFullYear();
+  // KST 기준 연도 — 1월 1일 00시 UTC 저장분이 전년으로 밀리지 않게.
+  return Number(
+    new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul", year: "numeric" }).format(
+      new Date(data.consulted_at),
+    ),
+  );
+}
+
+/**
+ * 헤더 스탯용 — **행을 받지 않고** count만(B2). 페이지 rows에서 도출하면 50행짜리 페이지에서
+ * "전체 50건"이라고 말하게 된다. 필터는 목록과 같은 것을 적용해야 "필터 결과 N건"이 맞는다.
+ */
+export async function getConsultationFilteredCounts(
+  filter?: ConsultationFilter,
+): Promise<{ total: number; aiDone: number }> {
+  const supabase = await createClient();
+  const head = (f?: ConsultationFilter) =>
+    applyConsultationFilter(
+      supabase.from("enrollment_consultations").select("*", { count: "exact", head: true }),
+      f,
+    );
+  const [all, ai] = await Promise.all([
+    head(filter),
+    head({ ...(filter ?? {}), outcome: "ai_done" }),
+  ]);
+  return { total: all.count ?? 0, aiDone: ai.count ?? 0 };
+}
+
+export async function getEnrollmentConsultationsPage(
+  filter: ConsultationFilter | undefined,
+  page = 1,
+  pageSize = 50,
+): Promise<{ rows: ConsultationTableRow[]; total: number }> {
+  const supabase = await createClient();
+  const from = Math.max(0, (page - 1) * pageSize);
+  const { data, count, error } = await applyConsultationFilter(
+    supabase.from("enrollment_consultations").select(LIST_COLS, { count: "exact" }),
+    filter,
+  )
+    .order("consulted_at", { ascending: false })
+    .range(from, from + pageSize - 1);
+  // 조회 실패를 '0건'으로 위장하지 않는다 — 빈 목록과 장애는 화면에서 구분돼야 한다.
+  if (error) throw error;
+  const rows = data ?? [];
+  if (rows.length === 0) return { rows: [], total: count ?? 0 };
+
+  const { hasAi, assignedCountFor } = await loadRowBadges(supabase, rows);
+
+  return {
+    total: count ?? rows.length,
+    rows: rows.map((c) => {
+      const consultant = (Array.isArray(c.consultant) ? c.consultant[0] : c.consultant) as
+        | { display_name?: string }
+        | undefined;
+      return {
+        id: c.id,
+        prospectName: c.prospect_name,
+        prospectGrade: c.prospect_grade,
+        prospectSchool: c.prospect_school,
+        parentPhone: c.parent_phone,
+        parentRequest: c.parent_request,
+        consultantName: consultant?.display_name ?? null,
+        outcome: c.outcome,
+        consultedAt: c.consulted_at,
+        hasAiAnalysis: hasAi.has(c.id),
+        processingStatus: c.processing_status as ConsultationProcessingStatus,
+        hasAudio: !!c.audio_path,
+        fromPublicIntake: !!c.from_public_intake,
+        syncAddedAt: c.sync_added_at ?? null,
+        studentId: c.student_id ?? null,
+        assignedClassCount: assignedCountFor(c.student_id, c.subject ?? null),
+      };
+    }),
+  };
 }
 
 /**
