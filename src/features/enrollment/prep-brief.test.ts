@@ -11,6 +11,7 @@ import {
   conflictsSchoolLevel,
   formatSchedule,
   gradeToken,
+  isHalfPeriodClass,
   rankPrepClasses,
   seatsLeft,
   validatePrepBrief,
@@ -454,5 +455,55 @@ describe("이미 재원 중인 학생", () => {
     const block = buildFactsBlock(f);
     expect(block).toContain("이미 우리 학원 재원생임");
     expect(block).toContain("중등M 중1 BS3E");
+  });
+});
+
+describe("isHalfPeriodClass — 반교시 반은 상담지에서 추천하지 않는다", () => {
+  // 실측 픽스처(2026-08-04 운영 DB). 수학계열 한 교시(그룹) = 14:30~16:20 = 110분.
+  const FULL = 110;
+  const day = (d: string, start: string, end: string) => ({ day: d, start, end });
+
+  it("하루 55분(세부교시 하나)만 쓰는 반 = 반교시", () => {
+    // 초등M 초5 JJ1A — 월·목 16:20~17:15, 짝인 완교시 반(MS1A 14:30~16:20)과 재원 6/6 일치.
+    expect(isHalfPeriodClass([day("mon", "16:20:00", "17:15:00"), day("thu", "16:20:00", "17:15:00")], FULL)).toBe(true);
+  });
+
+  it("붙어 있는 세부교시 두 개(=한 교시)를 채우면 완교시", () => {
+    // 초등M 초5 MS1A — 월 14:30~15:25 + 15:25~16:20 = 110분(합집합).
+    expect(
+      isHalfPeriodClass([day("mon", "14:30:00", "15:25:00"), day("mon", "15:25:00", "16:20:00")], FULL),
+    ).toBe(false);
+  });
+
+  it("한 행이 긴 특강(180분)도 완교시 — 행 수가 아니라 **길이**로 본다", () => {
+    expect(isHalfPeriodClass([day("mon", "11:00:00", "14:00:00")], FULL)).toBe(false);
+  });
+
+  it("어느 하루라도 교시를 채우면 반교시가 아니다(짧은 요일이 섞여 있어도)", () => {
+    expect(
+      isHalfPeriodClass([day("mon", "14:30:00", "16:20:00"), day("thu", "16:20:00", "17:15:00")], FULL),
+    ).toBe(false);
+  });
+
+  it("그룹이 없는 과목(영어 등, fullPeriodMin=null)은 판정하지 않는다", () => {
+    expect(isHalfPeriodClass([day("mon", "16:20:00", "17:00:00")], null)).toBe(false);
+  });
+
+  it("평일 슬롯이 없으면(주말 전용·시각 미상) 빼지 않는다 — 모르면 그대로 둔다", () => {
+    expect(isHalfPeriodClass([day("sat", "09:00:00", "10:00:00")], FULL)).toBe(false);
+    expect(isHalfPeriodClass([{ day: "mon", start: null, end: null }], FULL)).toBe(false);
+    expect(isHalfPeriodClass([], FULL)).toBe(false);
+  });
+
+  it("rankPrepClasses가 반교시 반을 후보에서 뺀다", () => {
+    const base = { subjectLabel: "수학", teacherName: null, scheduleLabel: null, seats: null, notes: null };
+    const out = rankPrepClasses(
+      [
+        { id: "half", className: "중1 수학 JJ", enrolled: 1, halfPeriod: true, ...base },
+        { id: "full", className: "중1 수학 MS", enrolled: 5, halfPeriod: false, ...base },
+      ],
+      { subjectKeyLabel: "수학", grade: "중1" },
+    );
+    expect(out.map((c) => c.id)).toEqual(["full"]);
   });
 });
