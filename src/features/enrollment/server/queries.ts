@@ -247,10 +247,17 @@ export async function getEnrollmentConsultations(
 
   // 같은 사람의 등록상담 반복 접수 힌트 — 학생 연결이 있으면 student_id, 없으면 자연키(정규화 이름+학교+학년)로
   // 묶는다(아직 학생 아닌 순수 접수자의 재방문도 감지). 로드된 목록 기준(무필터 기본 칸반=전건이라 정확).
-  const personKey = (c: { student_id?: string | null; prospect_name?: string | null; prospect_school?: string | null; prospect_grade?: string | null }) =>
-    c.student_id
-      ? `s:${c.student_id}`
-      : `n:${(c.prospect_name ?? "").toLowerCase().replace(/\s+/g, "")}|${c.prospect_school ?? ""}|${c.prospect_grade ?? ""}`;
+  // 🔴 자연키는 **학교·학년이 있어야** 성립한다. 둘 다 없으면 키가 사실상 이름뿐이라 남남을 한 사람으로
+  // 묶는다 — 옛 시트 이관분엔 이름 칸에 "영어문의"·"예비중1"처럼 사람이 아닌 접수 표기가 들어간 행이
+  // 316건 있어, 그 6건이 한 사람의 "상담 6건"으로 뜬다(실측). 못 믿는 키는 그룹을 만들지 않는다:
+  // 안 묶여서 놓치는 건 눈에 띄지만, 잘못 묶인 건 아무도 모른다.
+  const personKey = (c: { id: string; student_id?: string | null; prospect_name?: string | null; prospect_school?: string | null; prospect_grade?: string | null }) => {
+    if (c.student_id) return `s:${c.student_id}`;
+    // 자기 자신만 담는 키 = 그룹이 안 생긴다. personKey는 행마다 두 번 불리므로 **행 id로 고정**해야
+    // 한다(카운터처럼 부를 때마다 달라지면 count 조회가 조용히 빗나간다).
+    if (!c.prospect_school && !c.prospect_grade) return `x:${c.id}`;
+    return `n:${(c.prospect_name ?? "").toLowerCase().replace(/\s+/g, "")}|${c.prospect_school ?? ""}|${c.prospect_grade ?? ""}`;
+  };
   const personCount = new Map<string, number>();
   const personGroups = new Map<string, PersonConsultRef[]>();
   for (const c of data) {
