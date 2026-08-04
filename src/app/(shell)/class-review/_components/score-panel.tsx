@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useFormStatus } from "react-dom";
 import { toast } from "sonner";
 import { Loader2 } from "@/components/icons/eywa-icon-compat";
@@ -34,12 +35,16 @@ export function ScorePanel({
   areas,
   initialScores,
   initialComment,
+  backHref,
 }: {
   docId: string;
   areas: ChecklistArea[];
   initialScores: number[];
   initialComment: string;
+  /** 저장 성공 시 돌아갈 곳(채점 전용 페이지 → 상세). 미지정이면 제자리. */
+  backHref?: string;
 }) {
+  const router = useRouter();
   const totalItems = itemCountOf(areas);
   const [scores, setScores] = useState<number[]>(() =>
     Array.from({ length: totalItems }, (_, i) => normalizeScore(initialScores[i])),
@@ -50,8 +55,11 @@ export function ScorePanel({
     if (!state || state === seenRef.current) return;
     seenRef.current = state;
     if (state.error) toast.error(state.error);
-    else if (state.ok) toast.success(state.notice ?? "저장했습니다");
-  }, [state]);
+    else if (state.ok) {
+      toast.success(state.notice ?? "저장했습니다");
+      if (backHref) router.push(backHref);
+    }
+  }, [state, backHref, router]);
 
   const totals = useMemo(() => computeTotals({ scores }, areas), [scores, areas]);
 
