@@ -24,7 +24,8 @@ import {
 import { deleteCurrentSlots, loadCurrentSlots } from "./schedule-sync";
 import type { ClassroomAssignData } from "../lib/classroom-assign";
 import type { OverlapItem } from "../overlap";
-import { preserveScheduleFields } from "../schedule-preserve";
+import { planSlotArchives, preserveScheduleFields } from "../schedule-preserve";
+import { normalizeEnglishTrack } from "../english-track";
 
 export type ClassFormState =
   | {
@@ -89,6 +90,13 @@ function readForm(formData: FormData, allowedSubjects: ReadonlySet<string>) {
   const specialValues = formData.getAll("isSpecial").map((v) => String(v));
   // '수업보고서 미발송'(0174a) — 특강 토글과 **똑같은 hidden+체크박스 쌍 계약**(위 주석 참조).
   const optoutValues = formData.getAll("reportOptout").map((v) => String(v));
+  // 영어 프로그램 구분(0176a) — 라디오라 hidden 마커가 필요 없다(체크된 하나만 온다). 다만 **키가 없으면**
+  // '이 폼은 이 칸을 모른다'로 보고 수정 시 건드리지 않는다(옛 폼·다른 진입점이 값을 지우지 않게).
+  const trackProvided = formData.has("englishTrack");
+  const englishTrack = normalizeEnglishTrack(
+    allowedSubjects.has(subject) ? subject : "etc",
+    formData.get("englishTrack"),
+  );
   // 운영 기간(특강은 방학 한정 → 끝나면 시간표에서 자동으로 내려간다). periodProvided=1이면
   // 종료일을 **비운 것도 명시**(무기한으로 되돌리기)로 해석한다 — schedule-preserve.ts 참조.
   return {
@@ -104,6 +112,8 @@ function readForm(formData: FormData, allowedSubjects: ReadonlySet<string>) {
     isSpecial: specialValues.some((v) => v === "1" || v === "on" || v === "true"),
     reportOptoutProvided: optoutValues.length > 0,
     reportOptout: optoutValues.some((v) => v === "1" || v === "on" || v === "true"),
+    trackProvided,
+    englishTrack,
     periodProvided: get("periodProvided") === "1",
     // 교시마다 종료일이 갈려 폼이 칸을 비운 경우 — 빈 칸을 "무기한으로 되돌리기"가 아니라
     // "안 정함(교시별 기존값 유지)"으로 읽는다(조용한 일괄 삭제 방지).
@@ -199,6 +209,8 @@ export async function createClass(
       is_active: true,
       is_special: input.isSpecial,
       report_optout: input.reportOptout,
+      // 영어 프로그램 구분(0176a) — 영어가 아니면 normalizeEnglishTrack이 이미 null로 만든다.
+      english_track: input.englishTrack,
       notes: input.notes,
       bg_color: input.bgColor,
       text_color: input.textColor,
@@ -261,10 +273,15 @@ export async function updateClass(
 
   // 🔴 겹침은 저장을 막지 않는다(경고만). 자기 자신(id)은 제외.
   // 독립 조회 2건은 병렬(B4) — 겹침 진단과 "delete 전에 기존 스케줄 읽어두기"는 서로 안 쓴다.
-  const [overlaps, priorRes] = await Promise.all([
+  const [overlaps, priorRes, beforeRes] = await Promise.all([
     collectOverlaps(supabase, input, id),
     loadCurrentSlots(supabase, id, today),
+    // 감사로그용 **변경 전 스냅샷** — 무엇이 바뀌었는지는 바꾸기 전에만 알 수 있다(독립 조회라 병렬, B4).
+    supabase.from("classes").select("class_name, subject, teacher_id, classroom_id").eq("id", id).maybeSingle(),
   ]);
+  const before = beforeRes.data as
+    | { class_name: string; subject: string; teacher_id: string | null; classroom_id: string | null }
+    | null;
   // ⚠️ 승계 자료를 못 읽었으면 **아무것도 쓰기 전에** 멈춘다 — 빈 배열로 진행하면 delete 뒤 재insert가
   // 라벨·기간을 전부 null로 덮어쓰는데 그땐 복구가 불가능하다(규칙 B3: error를 `?? []`로 삼키지 않는다).
   if (priorRes.error || !priorRes.rows) return { error: priorRes.error ?? SAVE_FAILED };
@@ -284,6 +301,9 @@ export async function updateClass(
       ...(input.isSpecialProvided ? { is_special: input.isSpecial } : {}),
       // '수업보고서 미발송'(0174a)도 같은 계약 — 안 보내는 폼이 조용히 false로 되돌리지 않게.
       ...(input.reportOptoutProvided ? { report_optout: input.reportOptout } : {}),
+      // 영어 프로그램 구분(0176a) — 같은 계약(폼이 보냈을 때만). 과목을 영어에서 바꾸면 값은 null로
+      // 정리된다(normalizeEnglishTrack) — 수학 반에 남은 'eie'는 필터에서 거짓 분류가 된다.
+      ...(input.trackProvided ? { english_track: input.englishTrack } : {}),
       notes: input.notes,
       bg_color: input.bgColor,
       text_color: input.textColor,
@@ -297,7 +317,27 @@ export async function updateClass(
   const del = await deleteCurrentSlots(supabase, id, today);
   if (del.error) return { error: del.error };
 
-  if (input.schedules.length > 0) {
+  // 🔴 담당·강의실이 바뀌거나 슬롯이 사라지면 **옛 배치를 마감 행으로 남긴다**(원장 2026-08-04
+  //    "주차변경시에 실제로 일어났던 모든것이 반영되도록"). 지금까지는 같은 행을 덮어써서 지난 주를
+  //    봐도 현재 담당·강의실이 보였다(무기한 슬롯 587행이 전부 여기 해당). 마감 행은 아래 재삽입에
+  //    함께 실어 왕복을 늘리지 않는다 — delete가 이미 끝났으므로 이 insert가 유일한 복원 지점이다.
+  const archiveRows = planSlotArchives({ incoming: input.schedules, prior, today }).map((a) => ({
+    tenant_id: user.tenantId,
+    class_id: id,
+    day_of_week: a.dayOfWeek,
+    start_time: a.startTime,
+    end_time: a.endTime,
+    valid_from: a.validFrom,
+    valid_to: a.validTo,
+    teacher_id: a.teacherId ?? null,
+    classroom_id: a.classroomId ?? null,
+    slot_teacher_label: a.slotTeacherLabel,
+    slot_room_label: a.slotRoomLabel,
+    period_label: a.periodLabel,
+    merge_group: a.mergeGroup,
+  }));
+
+  if (input.schedules.length > 0 || archiveRows.length > 0) {
     // ⚠️ 재삽입 값은 **반드시** preserveScheduleFields를 거친다 — 폼이 안 보내는
     // valid_to·slot_teacher_label·slot_room_label·period_label·merge_group을 기존 행에서 되살리고
     // valid_from이 오늘로 리셋되는 것을 막는다(실측 위험분: 라벨 492/342행, valid_to 372행).
@@ -326,8 +366,26 @@ export async function updateClass(
       period_label: s.periodLabel,
       merge_group: s.mergeGroup,
     }));
-    const { error: schedErr } = await supabase.from("class_schedules").insert(rows);
+    const { error: schedErr } = await supabase.from("class_schedules").insert([...archiveRows, ...rows]);
     if (schedErr) return { error: "스케줄 저장에 실패했습니다. 잠시 후 다시 시도해주세요." };
+  }
+
+  // 🔴 반 수정에는 그동안 **감사로그가 아예 없었다**(2026-08-04 발견) — 담당·강의실이 언제 누구로
+  //    바뀌었는지 되살릴 근거가 여기서 끊겼다. 무엇이 바뀌었는지만 남긴다(값 자체는 배치 이력이 갖는다).
+  //    best-effort라 실패해도 저장을 막지 않는다.
+  const changed: string[] = [];
+  if (archiveRows.length > 0) changed.push("수업 배치");
+  if (before && before.teacher_id !== input.teacherId) changed.push("담임");
+  if (before && before.classroom_id !== input.classroomId) changed.push("강의실");
+  if (before && before.class_name !== input.className) changed.push("반 이름");
+  if (before && before.subject !== input.subject) changed.push("과목");
+  if (changed.length > 0) {
+    await logAction({
+      action: "class_update",
+      targetType: "class",
+      targetLabel: input.className,
+      metadata: { classId: id, changed },
+    });
   }
 
   revalidatePath("/classes");

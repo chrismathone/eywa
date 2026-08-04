@@ -26,6 +26,8 @@ import { splitGridSlots } from "@/features/classes/grid-slots";
 import { ScheduleGrid } from "./schedule-grid";
 import { ClassSpecialFields } from "./class-special-fields";
 import { ClassReportFields } from "./class-report-fields";
+import { ClassEnglishTrackField } from "./class-english-track-field";
+import { DEFAULT_ENGLISH_TRACK, normalizeEnglishTrack, type EnglishTrack } from "@/features/classes/english-track";
 import { CustomTimeSlots } from "./custom-time-slots";
 import { OverlapNotice } from "./overlap-notice";
 
@@ -59,6 +61,8 @@ export type ClassFormDefaults = {
   /** 특강 토글값(0133a 컬럼 그대로). 이름 폴백은 서버 판정용이라 폼 체크상태에 섞지 않는다. */
   isSpecial?: boolean;
   reportOptout?: boolean;
+  /** 영어 프로그램 구분(0176a) — 영어 반이 아니면 undefined. */
+  englishTrack?: EnglishTrack | null;
   /** 운영 기간 프리필 — 스케줄 슬롯들의 공통값. 슬롯마다 다르면 그 칸은 **비워** 주고 periodMixed로 알린다. */
   validFrom?: string | null;
   validTo?: string | null;
@@ -135,6 +139,8 @@ export function ClassForm({
   // 특강 토글 — 컨트롤드(초안 복원 시 onRestore로 rehydrate해야 하므로 state로 든다).
   const [isSpecial, setIsSpecial] = useState(defaults?.isSpecial ?? false);
   const [reportOptout, setReportOptout] = useState(defaults?.reportOptout ?? false);
+  // 영어 프로그램(0176a) — 과목이 영어일 때만 칸이 뜬다. 기본은 인재원 영어(미분류와 같은 칸에 보이게).
+  const [englishTrack, setEnglishTrack] = useState<EnglishTrack>(defaults?.englishTrack ?? DEFAULT_ENGLISH_TRACK);
   // 초안 복원용 — 복원된 스케줄을 그리드 initial로 주고 key를 바꿔 remount(그리드는 initial을 마운트 1회만 읽음).
   const [gridKey, setGridKey] = useState(0);
   // 스케줄을 "교시 클릭그리드로 표현되는 것"과 "자유 시각 행"으로 나눈다 — 교시표에 없는 시각의 슬롯은
@@ -170,6 +176,10 @@ export function ClassForm({
       // ⚠️ **키가 있을 때만** 반영한다 — 이 필드가 없던 시절의 초안(또는 이 칸을 안 그린 폼)을 복구할 때
       //    무조건 false로 덮으면, 켜 두었던 토글이 사용자 모르게 꺼진 채 저장된다.
       if (vals.reportOptout !== undefined) setReportOptout(vals.reportOptout === "true");
+      // 라디오도 applyFormValues가 DOM만 건드려 컨트롤드 state와 갈라진다 → 함께 맞춘다.
+      // ⚠️ 모르는 값이면 손대지 않는다(이 칸이 없던 초안이 선택을 되돌리지 않게).
+      const restoredTrack = normalizeEnglishTrack("english", vals.englishTrack);
+      if (restoredTrack) setEnglishTrack(restoredTrack);
       // ⚠️ 같은 이름의 hidden("0")까지 applyFormValues가 초안값("true"/"")으로 덮어쓴다 → 복구 후 토글을
       // **끄고 저장해도** getAll에 "true"가 남아 특강으로 저장된다. 마커를 원래 값으로 되돌려 놓는다.
       // (hidden+체크박스 쌍을 쓰는 토글은 **전부** 여기서 마커를 되돌려야 한다 — 새 토글 추가 시 함께.)
@@ -357,6 +367,10 @@ export function ClassForm({
         {...(defaults?.historyCount ? { historyCount: defaults.historyCount } : {})}
         {...(fieldErrs.validTo ? { validToError: fieldErrs.validTo } : {})}
       />
+
+      {subject === "english" ? (
+        <ClassEnglishTrackField value={englishTrack} onChange={setEnglishTrack} />
+      ) : null}
 
       <ClassReportFields reportOptout={reportOptout} onReportOptoutChange={setReportOptout} />
 

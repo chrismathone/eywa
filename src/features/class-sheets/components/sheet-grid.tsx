@@ -19,6 +19,8 @@ import { PeriodBlock } from "./period-block";
 const DOW_KO: Record<string, string> = { mon: "월", tue: "화", wed: "수", thu: "목", fri: "금", sat: "토", sun: "일" };
 const COL_W = 540;
 const GAP_X = 12; // gap-x-3 — 밴드가 열 사이 틈까지 덮어야 본문이 안 비친다
+// 교시 행 사이 간격(옛 gap-y-2). row-gap이 아니라 **행마다 붙는 전용 트랙**이다 — 아래 주석 참조.
+const GAP_Y = 8;
 
 export const SheetGrid = memo(function SheetGrid({
   days,
@@ -88,17 +90,30 @@ export const SheetGrid = memo(function SheetGrid({
         })}
       </div>
 
+      {/* 같은 행 카드의 **속살까지** 줄을 맞춘다(원장 2026-08-04: "상단의 평시/내신 없더라도 좌우 동일하게
+          학생 행 위치 맞출 것"). 카드 높이만 같으면(h-full) 계획 줄 수가 다른 순간 학생 표가 좌우로 어긋난다.
+          → 한 교시 행에 **트랙 4개**(머리 / 계획 / 로스터 / 간격)를 깔고 카드가 앞 3개에 subgrid로 올라탄다.
+          트랙 높이는 그 행에서 가장 큰 카드가 정하므로, 계획이 없는 카드는 계획 트랙이 빈 채로 늘어나
+          **로스터 시작선이 같아진다**(실측: 어긋남 42px → 0).
+          ⚠️ 간격을 `gap-y`로 주지 말 것 — row-gap은 **모든** 트랙 사이에 끼어 카드 **안쪽**(머리↔계획↔로스터)
+             까지 벌어진다. 그래서 행마다 4번째 트랙을 간격으로 두고 rowGap은 0이다.
+          ⚠️ subgrid 미지원 브라우저에선 선언이 무시돼 예전처럼 **각자 쌓인다**(정렬만 없어지고 안 깨진다). */}
       <div
-        className="grid content-start gap-y-2"
-        style={{ gridTemplateColumns: columns, columnGap: GAP_X }}
+        className="grid content-start"
+        style={{
+          gridTemplateColumns: columns,
+          columnGap: GAP_X,
+          gridTemplateRows: `repeat(${rows.length}, auto auto auto ${GAP_Y}px)`,
+          rowGap: 0,
+        }}
       >
         {rows.map((row, ri) =>
           row.map((slot, ci) =>
             slot ? (
               <div
                 key={`${days[ci]!.date}|${slot.slotStart}`}
-                className="min-w-0 [&>article]:h-full"
-                style={{ gridColumn: ci + 1, gridRow: ri + 1 }}
+                className="grid min-w-0 grid-rows-subgrid"
+                style={{ gridColumn: ci + 1, gridRow: `${ri * 4 + 1} / span 3` }}
               >
                 <PeriodBlock
                   date={days[ci]!.date}

@@ -1,6 +1,7 @@
 import "server-only";
 import { kstToday } from "@/lib/date-kst";
 import type { createClient } from "@/lib/supabase/server";
+import { dayBefore } from "../schedule-preserve";
 
 type Sb = Awaited<ReturnType<typeof createClient>>;
 
@@ -35,18 +36,65 @@ export async function moveLiveSlotTeacher(
   const { tenantId, classIds, fromTeacherId, toTeacherId } = args;
   if (classIds.length === 0) return { moved: 0 };
   const today = kstToday();
+  const yesterday = dayBefore(today);
   let moved = 0;
   for (const part of chunks(classIds)) {
-    const { data, error } = await supabase
+    // 🔴 **덮어쓰지 않고 쪼갠다**(원장 2026-08-04 "주차변경시에 실제로 일어났던 모든것이 반영되도록").
+    // 옛 담당으로 돌던 구간을 어제까지로 마감한 사본을 남기고, 원래 행은 오늘부터 새 담당으로 만든다.
+    // 그래야 지난 주 시간표에 그때의 담당이 그대로 남는다(예전엔 같은 행을 덮어써서 과거까지 바뀌었다).
+    const { data: targets, error: readErr } = await supabase
       .from("class_schedules")
-      .update({ teacher_id: toTeacherId })
+      .select(
+        "id, class_id, day_of_week, start_time, end_time, valid_from, valid_to, teacher_id, classroom_id, slot_teacher_label, slot_room_label, period_label, merge_group",
+      )
       .eq("tenant_id", tenantId)
       .in("class_id", part)
       .eq("teacher_id", fromTeacherId)
-      .or(`valid_to.is.null,valid_to.gte.${today}`)
+      .or(`valid_to.is.null,valid_to.gte.${today}`);
+    if (readErr) return { moved, error: readErr.message };
+    if (!targets || targets.length === 0) continue;
+
+    // 오늘 시작한 행은 쪼갤 과거가 없다(마감일이 시작일보다 빨라지는 거꾸로 된 구간 방지).
+    const splittable = targets.filter((t) => !t.valid_from || String(t.valid_from).slice(0, 10) < today);
+    if (splittable.length > 0) {
+      const archives = splittable.map((t) => ({
+        tenant_id: tenantId,
+        class_id: t.class_id,
+        day_of_week: t.day_of_week,
+        start_time: t.start_time,
+        end_time: t.end_time,
+        valid_from: t.valid_from,
+        valid_to: yesterday,
+        teacher_id: t.teacher_id,
+        classroom_id: t.classroom_id,
+        slot_teacher_label: t.slot_teacher_label,
+        slot_room_label: t.slot_room_label,
+        period_label: t.period_label,
+        merge_group: t.merge_group,
+      }));
+      const { error: archErr } = await supabase.from("class_schedules").insert(archives);
+      // 마감 사본을 못 남기면 **이력이 조용히 사라진 채 담당만 바뀐다** → 여기서 멈춘다.
+      if (archErr) return { moved, error: archErr.message };
+    }
+    const splitIds = new Set(splittable.map((t) => t.id as string));
+    // 쪼갠 행은 오늘부터, 오늘 만든 행은 시작일 그대로.
+    const { data, error } = await supabase
+      .from("class_schedules")
+      .update({ teacher_id: toTeacherId, valid_from: today })
+      .in("id", [...splitIds])
       .select("id");
     if (error) return { moved, error: error.message };
     moved += data?.length ?? 0;
+    const rest = targets.filter((t) => !splitIds.has(t.id as string)).map((t) => t.id as string);
+    if (rest.length > 0) {
+      const { data: d2, error: e2 } = await supabase
+        .from("class_schedules")
+        .update({ teacher_id: toTeacherId })
+        .in("id", rest)
+        .select("id");
+      if (e2) return { moved, error: e2.message };
+      moved += d2?.length ?? 0;
+    }
   }
   return { moved };
 }

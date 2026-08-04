@@ -7,6 +7,8 @@ import { getSheetLanding } from "@/features/class-sheets/server/queries";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canManageSheetSync } from "@/features/integrations/server/sheet-access";
 import { EcsSheetImportDialog } from "./_components/sheet-import-dialog";
+import { EcsTrackFilter } from "./_components/track-filter";
+import { ENGLISH_TRACK_FILTER_LABEL } from "@/features/classes/english-track";
 
 export const metadata: Metadata = { title: "English Class Sheet — eywa" };
 
@@ -45,6 +47,8 @@ export default async function EcsLandingPage({
 
       <div className="bg-card shadow-card flex flex-wrap items-center gap-3 rounded-2xl px-4 py-3">
         <WeekNav currentWeek={res.weekMonday} today={res.today} hrefForWeek={(monday) => `/ecs?week=${monday}`} />
+        {/* 프로그램 필터(EiE / 인재원 영어) — 계정 귀속. 시트 가져오기 왼쪽에 붙여 주 네비와 한 줄. */}
+        <EcsTrackFilter value={res.trackFilter} counts={res.trackCounts} />
         {canSync ? (
           <div className="ml-auto">
             <EcsSheetImportDialog />
@@ -56,11 +60,14 @@ export default async function EcsLandingPage({
         // 원인별로 다른 안내 — 담당 반이 없는 강사에게 "학원 설정을 확인하라"고 하면
         // 고칠 수 없는 일을 시키는 거짓 안내가 된다(원인 오표시 금지).
         <p className="bg-card shadow-card text-text-dim rounded-2xl px-4 py-6 text-sm">
-          {res.emptyReason === "no-scoped-classes"
-            ? "담당하고 계신 영어 반이 없습니다. 반 배정은 사무실에 문의하세요."
-            : res.emptyReason === "not-configured"
-              ? "영어 과목의 수업계획(English Class Sheet) 영역이 아직 설정되지 않았습니다. 학원 설정 → 과목 운영에서 영역을 지정하세요."
-              : "이 주에 운영 중인 영어 반이 없습니다."}
+          {res.emptyReason === "filtered"
+            ? // 되돌릴 수 있는 원인 — 무엇을 누르면 되는지까지 말한다(막다른 안내 금지).
+              `지금 보기가 '${ENGLISH_TRACK_FILTER_LABEL[res.trackFilter]}'로 좁혀져 있어 표시할 반이 없습니다. 위 '프로그램'에서 전체를 누르면 ${res.trackCounts.all}개 반이 모두 보입니다.`
+            : res.emptyReason === "no-scoped-classes"
+              ? "담당하고 계신 영어 반이 없습니다. 반 배정은 사무실에 문의하세요."
+              : res.emptyReason === "not-configured"
+                ? "영어 과목의 수업계획(English Class Sheet) 영역이 아직 설정되지 않았습니다. 학원 설정 → 과목 운영에서 영역을 지정하세요."
+                : "이 주에 운영 중인 영어 반이 없습니다."}
         </p>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">

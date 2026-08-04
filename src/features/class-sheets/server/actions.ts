@@ -18,7 +18,8 @@ import { isEnrollmentActiveOn, enrollmentAttendsOnDay } from "@/features/enrollm
 import { logAction } from "@/features/audit/server/log";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { DEFAULT_ECS_FONT_SIZE, ECS_FONT_SIZES, type EcsFontSize } from "../font-size";
-import { DEFAULT_ECS_SHOW_SPECIAL_ROOMS } from "../view-prefs";
+import { DEFAULT_ECS_ENGLISH_TRACK, DEFAULT_ECS_SHOW_SPECIAL_ROOMS } from "../view-prefs";
+import { normalizeEnglishTrackFilter, type EnglishTrackFilter } from "@/features/classes/english-track";
 import { normalizePlanText } from "../lib/plan-codec";
 import { validatePatchBatch, type PatchResult } from "../lib/save-keys";
 import { dowKeyOf, HHMM_RE, normalizePeriodStart, YMD_RE } from "../lib/week";
@@ -662,5 +663,20 @@ export async function setMyEcsShowSpecialRooms(show: boolean): Promise<{ ok: boo
   if (typeof show !== "boolean") return { ok: false, error: "잘못된 값입니다" };
   return patchMyEcsPrefs({
     showSpecialRooms: show === DEFAULT_ECS_SHOW_SPECIAL_ROOMS ? undefined : show,
+  });
+}
+
+/**
+ * 랜딩의 프로그램 보기 필터(전체/EiE/인재원 영어)를 본인 계정에 저장 — `users.ui_prefs.ecs.englishTrack`(0176a).
+ *
+ * ⚠️ 자리(LAB·JJ) 토글과 달리 **작성률 분모를 안 바꾼다** — 목록을 눈으로 좁혀 보는 용도라 각 카드의
+ *    `N/M교시`는 그 반 값 그대로다. 그래도 목록 자체가 서버 계산이라 저장 후 화면은 다시 그린다.
+ */
+export async function setMyEcsEnglishTrack(
+  filter: EnglishTrackFilter,
+): Promise<{ ok: boolean; error?: string }> {
+  if (normalizeEnglishTrackFilter(filter) !== filter) return { ok: false, error: "잘못된 값입니다" };
+  return patchMyEcsPrefs({
+    englishTrack: filter === DEFAULT_ECS_ENGLISH_TRACK ? undefined : filter,
   });
 }

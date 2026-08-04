@@ -32,6 +32,8 @@ import { HandoverAction, HandoverBanner } from "./_components/teacher-handover";
 import { DelegateAction, DelegationBanner } from "./_components/class-delegation";
 import { getClassDelegationList } from "@/features/classes/server/delegation";
 import { ScheduleSummaryView } from "./_components/schedule-summary-view";
+import { ClassHistorySection } from "./_components/history-section";
+import { getClassHistory } from "@/features/classes/server/history-queries";
 
 export const metadata = { title: "수업 상세 — eywa" };
 
@@ -46,7 +48,7 @@ export default async function ClassDetailPage({
 }) {
   const user = await requireAccess("classes");
   const { id } = await params;
-  const [klass, students, stats, allEnrolledStudents, settings, teacherOptions, delegations] =
+  const [klass, students, stats, allEnrolledStudents, settings, teacherOptions, delegations, history] =
     await Promise.all([
       getClassDetail(id),
       getClassStudents(id),
@@ -56,6 +58,8 @@ export default async function ClassDetailPage({
       getClassTeacherOptions(),
       // 임시 위임(0173a) — 아직 안 끝난 것만. 독립 조회라 같은 Promise.all(B4).
       getClassDelegationList(id),
+      // 이력(배치 구간·감사로그·위임) — 반 이름은 안에서 읽어 여기 병렬에 들어온다.
+      getClassHistory(id),
     ]);
   if (!klass) notFound();
 
@@ -311,7 +315,17 @@ export default async function ClassDetailPage({
                         ) : (
                           <span className="num">{s.enrolledAt}</span>
                         )}
-                        ~ 현재
+                        {/* 종료일이 있어도 **당일까지는 재원**이라 목록에 남는다(eligibility 단일 소스).
+                            그때 "~ 현재"라고 쓰면 거짓말이라 실제 종료일을 보여준다 — 개별(JJ·BS) 반은
+                            하루짜리 수강이 흔해 이 표기가 곧 "오늘까지"라는 뜻이 된다. */}
+                        {s.endDate ? (
+                          <>
+                            {"~"}
+                            <span className="num">{s.endDate}</span>
+                          </>
+                        ) : (
+                          "~ 현재"
+                        )}
                       </span>
                       {s.onHold ? (
                         <span className="text-chart-3 bg-chart-3/10 border-chart-3/20 rounded-md border px-2 py-0.5 text-xs font-medium">
@@ -326,6 +340,9 @@ export default async function ClassDetailPage({
           </section>
         </div>
       </div>
+
+      {/* 이력 — 이 반의 배치·담당·강의실이 바뀐 기록(원장 2026-08-04). 전 폭을 쓰는 마지막 블록. */}
+      <ClassHistorySection entries={history} />
     </div>
   );
 }

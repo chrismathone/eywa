@@ -95,6 +95,7 @@ export default async function EditClassPage({
           bgColor: klass.bgColor,
           isSpecial: klass.isSpecial,
           reportOptout: klass.reportOptout,
+          ...(klass.englishTrack ? { englishTrack: klass.englishTrack } : {}),
           validFrom: period.validFrom,
           validTo: period.validTo,
           ...(period.mixed ? { periodMixed: period.mixed } : {}),
