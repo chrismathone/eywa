@@ -13,10 +13,12 @@ import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import {
   getConsultantOptions,
   getConsultationFilteredCounts,
+  getConsultationMinYear,
   getEnrollmentConsultations,
   getEnrollmentConsultationsPage,
 } from "@/features/enrollment/server/queries";
 import { Pagination } from "@/components/pagination";
+import { kstToday } from "@/lib/date-kst";
 import { KanbanFilters } from "./_components/kanban-filters";
 import { NewEnrollmentTrigger } from "./_components/new-enrollment-trigger";
 import { EnrollmentKanban, type KanbanColumn } from "./_components/enrollment-kanban";
@@ -83,13 +85,14 @@ export default async function EnrollmentPage({
   // 🔴 뷰마다 **가져오는 양이 다르다**. 목록은 한 페이지(50행)만 — 옛 시트 이관으로 2,251행이 되어
   // 전건 로드는 라운드트립 3회 + 배지 청크 20여 회로 불어난다(B2·B4). 칸반은 열별 집계가 필요해
   // 전건을 유지하되, 그래서 기간 필터 없이 열면 여전히 무겁다(별도 과제).
-  const [kanbanItems, tablePage, headerCounts, consultants, pushCandidates, totalCount] =
+  const [kanbanItems, tablePage, headerCounts, consultants, minYear, pushCandidates, totalCount] =
     await Promise.all([
       view === "kanban" ? getEnrollmentConsultations(filter) : Promise.resolve(null),
       view === "table" ? getEnrollmentConsultationsPage(filter, page, PAGE_SIZE) : Promise.resolve(null),
       // 헤더 스탯은 페이지가 아니라 **필터 전체** 기준(count만, 행 미수신).
       view === "table" ? getConsultationFilteredCounts(filter) : Promise.resolve(null),
       getConsultantOptions(),
+      getConsultationMinYear(),
       canPushMakeedu ? getUnpushedIntakeConsultations() : Promise.resolve([]),
       // 자동 갱신 기준선 — 필터와 무관한 **전체 건수**(head 카운트라 행 미수신). 필터가 걸려 있어도
       // 새 접수가 들어오면 화면을 갱신해야 하므로 필터된 items.length를 기준으로 쓰면 안 된다.
@@ -100,6 +103,9 @@ export default async function EnrollmentPage({
   // 상대시간 기준 시각 — 서버·클라 첫 렌더를 같은 기준으로 계산해 하이드레이션 불일치를 없앤다.
   // eslint-disable-next-line react-hooks/purity -- 동적 페이지, 요청당 1회 렌더(intake page 선례)
   const nowMs = Date.now();
+  // 월 피커 기준 '이번 달' — KST로 서버에서 확정해 내려보낸다(클라가 자기 시계로 계산하면
+  // 자정 근처·해외 접속에서 하이드레이션이 어긋나고 미래 달 비활성화 기준도 흔들린다).
+  const todayMonth = kstToday().slice(0, 7);
   const aiDone = items.filter((i) => i.outcome === "ai_done").length;
   // "배정 완료" = 상담 → 수업 배정으로 학생이 생기고 수업이 1개 이상 붙은 진짜 완료(outcome 라벨과 별개).
   const assigned = items.filter((i) => i.assignedClassCount >= 1);
@@ -195,6 +201,8 @@ export default async function EnrollmentPage({
         searchQuery={searchQuery}
         view={view}
         consultants={consultants}
+        todayMonth={todayMonth}
+        minYear={minYear}
       />
 
       {/* 역동기화 — makeedu에 아직 없는 QR 접수 상담. 후보가 있을 때만(빈 상태는 owner 연동 면 담당),

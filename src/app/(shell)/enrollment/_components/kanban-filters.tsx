@@ -5,6 +5,8 @@ import { EyIcon } from "@/components/icons/eywa-icons";
 import { FilterSelect } from "@/components/filter-select";
 import { SearchForm } from "@/components/search-form";
 import { OUTCOME_OPTIONS } from "./outcome-meta";
+import { MonthPicker } from "./month-picker";
+import { buildEnrollmentQuery, shiftMonth } from "./enrollment-query";
 
 type Props = {
   selectedMonth: string | null;
@@ -13,43 +15,13 @@ type Props = {
   searchQuery: string | null;
   view: "kanban" | "table";
   consultants: { id: string; name: string }[];
+  /** 오늘이 속한 달 — 서버에서 계산해 내려받는다(클라에서 new Date()를 쓰면 하이드레이션이 어긋난다). */
+  todayMonth: string;
+  /** 데이터가 있는 가장 이른 연도 — 연도 이동 하한. */
+  minYear: number;
 };
 
-function formatMonth(key: string): string {
-  const [y, m] = key.split("-");
-  return `${y}년 ${Number(m)}월`;
-}
-
-function shiftMonth(key: string | null, delta: number): string {
-  const now = new Date();
-  const base = key
-    ? new Date(Number(key.slice(0, 4)), Number(key.slice(5, 7)) - 1, 1)
-    : new Date(now.getFullYear(), now.getMonth(), 1);
-  base.setMonth(base.getMonth() + delta);
-  return `${base.getFullYear()}-${String(base.getMonth() + 1).padStart(2, "0")}`;
-}
-
-function currentMonthKey(): string {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-}
-
-function buildQuery(p: {
-  month: string | null;
-  consultant: string | null;
-  outcome: string | null;
-  q: string | null;
-  view: "kanban" | "table";
-}): string {
-  const params = new URLSearchParams();
-  if (p.month) params.set("month", p.month);
-  if (p.consultant) params.set("consultant", p.consultant);
-  if (p.outcome) params.set("outcome", p.outcome);
-  if (p.q) params.set("q", p.q);
-  if (p.view === "table") params.set("view", "table");
-  const s = params.toString();
-  return s ? `?${s}` : "";
-}
+const buildQuery = buildEnrollmentQuery;
 
 export function KanbanFilters({
   selectedMonth,
@@ -58,16 +30,18 @@ export function KanbanFilters({
   searchQuery,
   view,
   consultants,
+  todayMonth,
+  minYear,
 }: Props) {
-  const displayMonth = selectedMonth ?? currentMonthKey();
+  const displayMonth = selectedMonth ?? todayMonth;
   const base = {
     consultant: selectedConsultant,
     outcome: selectedOutcome,
     q: searchQuery,
     view,
   };
-  const prevMonth = shiftMonth(displayMonth, -1);
-  const nextMonth = shiftMonth(displayMonth, 1);
+  const prevMonth = shiftMonth(displayMonth, -1, todayMonth);
+  const nextMonth = shiftMonth(displayMonth, 1, todayMonth);
 
   return (
     <div className="bg-card shadow-card flex flex-wrap items-center gap-3 rounded-2xl px-4 py-3">
@@ -81,9 +55,14 @@ export function KanbanFilters({
         >
           <EyIcon name="chevronLeft" size={14} />
         </Link>
-        <span className="text-foreground num min-w-[88px] text-center text-[13px] font-bold">
-          {formatMonth(displayMonth)}
-        </span>
+        {/* 라벨 자체가 연·월 피커 트리거 — 화살표만으론 2023년까지 40번 넘게 눌러야 했다. */}
+        <MonthPicker
+          displayMonth={displayMonth}
+          monthFilterActive={!!selectedMonth}
+          base={base}
+          minYear={minYear}
+          todayMonth={todayMonth}
+        />
         <Link
           href={`/enrollment${buildQuery({ ...base, month: nextMonth })}`}
           className="border-line hover:bg-bg-soft inline-flex size-7 items-center justify-center rounded-full border"

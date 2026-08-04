@@ -310,6 +310,27 @@ export async function getEnrollmentConsultations(
 export type ConsultationTableRow = Omit<ConsultationListRow, "personConsultCount" | "personConsults">;
 
 /**
+ * 연·월 피커의 하한 — 데이터가 있는 가장 이른 연도. 1행만 받는다(정렬은 ec_tenant_consulted_idx가 덮는다).
+ * 이 값이 없으면 피커가 2000년까지 훑을 수 있어 "눌러도 빈 화면"인 연도를 걸어 다니게 된다.
+ */
+export async function getConsultationMinYear(): Promise<number> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("enrollment_consultations")
+    .select("consulted_at")
+    .order("consulted_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (!data?.consulted_at) return new Date().getFullYear();
+  // KST 기준 연도 — 1월 1일 00시 UTC 저장분이 전년으로 밀리지 않게.
+  return Number(
+    new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul", year: "numeric" }).format(
+      new Date(data.consulted_at),
+    ),
+  );
+}
+
+/**
  * 헤더 스탯용 — **행을 받지 않고** count만(B2). 페이지 rows에서 도출하면 50행짜리 페이지에서
  * "전체 50건"이라고 말하게 된다. 필터는 목록과 같은 것을 적용해야 "필터 결과 N건"이 맞는다.
  */
