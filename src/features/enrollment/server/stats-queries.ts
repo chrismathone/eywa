@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged } from "@/lib/supabase/batch";
 import { normalizeSchoolName } from "@/features/schools/school-name";
 import { bucketizePathStats, type BucketStat, type PathStatRow } from "../path-bucket";
+import type { SchoolCounts, SchoolKind, SchoolRow } from "../school-view-prefs";
 
 /**
  * 통계뷰 데이터. **행을 가져오지 않는다** — 0178a의 group-by RPC가 집계만 돌려준다(B2).
@@ -147,18 +148,10 @@ export async function getEnrollmentStats(year: number, months = 12): Promise<Enr
   };
 }
 
-export type SchoolPenetration = {
-  key: string; // 정규화 이름
-  label: string; // 공시 학교명(없으면 우리 표기)
-  kind: "초" | "중" | "고" | null;
-  ours: number; // 우리 재원생 수
-  total: number | null; // 전교생 수 — null이면 공시에 없는 학교(추측하지 않는다)
-  pct: number | null;
-};
-
 export type DistBar = { label: string; n: number };
 export type StudentDistribution = {
-  schools: SchoolPenetration[];
+  /** 학교별 상태 카운트(재원·퇴원·예비). 정렬·필터·기준 전환은 화면이 이 raw를 가지고 한다. */
+  schools: SchoolRow[];
   /** 학년별 — 초1…고3 순서로 정렬(문자 정렬하면 고1이 맨 앞으로 온다). */
   grades: DistBar[];
   /** 학교 소재 구별. 학생 주소가 61%뿐이라 **학교 위치**로 센다(주소보다 신뢰도가 높다). */
@@ -185,11 +178,14 @@ const GRADE_ORDER = [
 export async function getStudentDistribution(): Promise<StudentDistribution> {
   const supabase = await createClient();
   const [students, schools] = await Promise.all([
-    fetchAllPaged<{ school: string | null; grade: string | null }>((from, to) =>
+    // 🔴 재원생만 받지 않는다 — 화면에서 '퇴원생 기준'으로 바꿀 수 있어야 하는데(원장 2026-08-05),
+    // 기준을 바꿀 때마다 서버를 다시 부르면 왕복이 늘고 정렬이 한 박자 늦는다. 세 상태를 한 번에
+    // 받아 클라가 골라 센다(전체 814행이라 부담이 없다).
+    fetchAllPaged<{ school: string | null; grade: string | null; status: string }>((from, to) =>
       supabase
         .from("students")
-        .select("school, grade")
-        .eq("status", "enrolled")
+        .select("school, grade, status")
+        .in("status", ["enrolled", "withdrawn", "prospect"])
         .not("school", "is", null)
         .range(from, to),
     ),
@@ -209,38 +205,48 @@ export async function getStudentDistribution(): Promise<StudentDistribution> {
   ]);
 
   const byKey = new Map(schools.map((s) => [s.name_key, s]));
-  const ours = new Map<string, { n: number; raw: string }>();
+  const ours = new Map<string, { counts: SchoolCounts; raw: string }>();
   const gradeCount = new Map<string, number>();
   const regionCount = new Map<string, number>();
   for (const s of students) {
-    const g = (s.grade ?? "").trim() || "미상";
-    gradeCount.set(g, (gradeCount.get(g) ?? 0) + 1);
+    const status = s.status as keyof SchoolCounts;
+    if (status !== "enrolled" && status !== "withdrawn" && status !== "prospect") continue;
+
+    // 학년·지역 분포는 **재원생 현황**이라 지금 다니는 학생만 센다(퇴원생을 섞으면 '현황'이 아니다).
+    if (status === "enrolled") {
+      const g = (s.grade ?? "").trim() || "미상";
+      gradeCount.set(g, (gradeCount.get(g) ?? 0) + 1);
+    }
 
     const key = normalizeSchoolName(s.school);
     if (!key) continue;
     const cur = ours.get(key);
     // 같은 학교의 두 표기("일중"·"대구일중")가 여기서 합쳐진다.
-    if (cur) cur.n += 1;
-    else ours.set(key, { n: 1, raw: s.school ?? key });
+    if (cur) cur.counts[status] += 1;
+    else
+      ours.set(key, {
+        raw: s.school ?? key,
+        counts: { enrolled: 0, withdrawn: 0, prospect: 0, [status]: 1 } as SchoolCounts,
+      });
 
-    // 지역은 **학교 소재지**로 센다 — 학생 주소는 61%만 있고 표기도 제각각이라 덜 믿을 만하다.
-    // 공시에 없는 학교면 '미상'(추측해서 아무 구에나 넣지 않는다).
-    const region = byKey.get(key)?.region?.replace(/^대구광역시\s*/, "").trim() || "미상";
-    regionCount.set(region, (regionCount.get(region) ?? 0) + 1);
+    if (status === "enrolled") {
+      // 지역은 **학교 소재지**로 센다 — 학생 주소는 61%만 있고 표기도 제각각이라 덜 믿을 만하다.
+      // 공시에 없는 학교면 '미상'(추측해서 아무 구에나 넣지 않는다).
+      const region = byKey.get(key)?.region?.replace(/^대구광역시\s*/, "").trim() || "미상";
+      regionCount.set(region, (regionCount.get(region) ?? 0) + 1);
+    }
   }
 
-  const rows: SchoolPenetration[] = [];
+  const rows: SchoolRow[] = [];
   for (const [key, v] of ours) {
     const s = byKey.get(key);
-    const total = s?.total_students ?? null;
     rows.push({
       key,
       label: s?.name ?? v.raw,
-      kind: (s?.kind as "초" | "중" | "고" | undefined) ?? null,
-      ours: v.n,
-      total,
-      // 전교생을 모르면 점유율도 모른다 — 0%로 적으면 "우리 학생이 없다"로 읽힌다.
-      pct: total && total > 0 ? Math.round((v.n / total) * 1000) / 10 : null,
+      kind: (s?.kind as SchoolKind | undefined) ?? null,
+      // 전교생을 모르면 점유율도 만들지 않는다 — 0%로 적으면 "우리 학생이 없다"로 읽힌다.
+      total: s?.total_students ?? null,
+      counts: v.counts,
     });
   }
   // 학년은 학년 흐름 순(초1→고3), 그 밖의 값(미상 등)은 뒤로.
@@ -261,8 +267,8 @@ export async function getStudentDistribution(): Promise<StudentDistribution> {
     .sort((a, b) => (a.label === "미상" ? 1 : b.label === "미상" ? -1 : b.n - a.n));
 
   return {
-    // 우리 학생이 많은 순 = "우리 밭이 어디인가". 점유율은 막대로 따로 읽는다.
-    schools: rows.sort((a, b) => b.ours - a.ours),
+    // 정렬은 화면(applySchoolPrefs)이 한다 — 여기선 이름순으로만 안정화(매 렌더 순서가 흔들리지 않게).
+    schools: rows.sort((a, b) => a.label.localeCompare(b.label, "ko")),
     grades,
     regions,
     total: students.length,

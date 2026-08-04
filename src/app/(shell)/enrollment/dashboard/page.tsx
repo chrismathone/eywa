@@ -5,6 +5,7 @@ import {
   getConsultantPerformance,
   getMonthlyConversionTrend,
   getMonthlyOutcomeDistribution,
+  getConsultationMinYear,
 } from "@/features/enrollment/server/queries";
 import { ConversionBars } from "./_components/conversion-bars";
 import { OutcomeDonut } from "./_components/outcome-donut";
@@ -16,7 +17,12 @@ function currentMonthKey(): string {
   return kstMonth();
 }
 
-function monthOptions(count = 6): { key: string; label: string }[] {
+/**
+ * 월 선택지. 🔴 6개월 고정이었다(원장 2026-08-05 지적: "왜 26.03~26.08 뿐이지? 데이터가 더 많을텐데").
+ * 옛 콜앤상담 이관으로 2023-01까지 생겼는데 화면은 최근 6개월만 고르게 해 그 앞이 없는 것처럼 보였다.
+ * 이제 **데이터가 있는 가장 이른 달**까지 만든다(없는 달을 고르면 빈 화면으로 걸어 들어가므로 상한도 둔다).
+ */
+function monthOptions(count: number): { key: string; label: string }[] {
   const [ay, am] = kstMonth().split("-").map(Number); // KST 당월 기준 앵커
   const out: { key: string; label: string }[] = [];
   for (let i = 0; i < count; i++) {
@@ -38,9 +44,14 @@ export default async function EnrollmentDashboardPage({
   const { month } = await searchParams;
   const selectedMonth = month ?? currentMonthKey();
 
+  // 추세 창 = 당월부터 데이터가 있는 가장 이른 달까지(최대 36개월). 6개월 고정이 원장 지적의 원인이었다.
+  const minYear = await getConsultationMinYear();
+  const [ny, nm] = kstMonth().split("-").map(Number);
+  const monthsBack = Math.min(36, Math.max(6, (ny! - minYear) * 12 + nm!));
+
   const [distribution, trend, consultants] = await Promise.all([
     getMonthlyOutcomeDistribution(selectedMonth),
-    getMonthlyConversionTrend(6),
+    getMonthlyConversionTrend(monthsBack),
     getConsultantPerformance(3),
   ]);
 
@@ -61,7 +72,7 @@ export default async function EnrollmentDashboardPage({
       {/* Month selector */}
       <div className="border-border bg-card flex flex-wrap items-center gap-1.5 rounded-2xl border px-4 py-2.5">
         <span className="text-muted-foreground shrink-0 text-xs">월 선택</span>
-        {monthOptions().map((m) => (
+        {monthOptions(monthsBack).map((m) => (
           <Link
             key={m.key}
             href={`/enrollment/dashboard?month=${m.key}`}

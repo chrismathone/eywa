@@ -3,6 +3,8 @@ import { EyIcon } from "@/components/icons/eywa-icons";
 import { PATH_BUCKET_COLOR } from "@/features/enrollment/path-bucket";
 import type { EnrollmentStats, StudentDistribution } from "@/features/enrollment/server/stats-queries";
 import { StatsTrend } from "./stats-trend";
+import { SchoolPenetrationPanel } from "./school-penetration-panel";
+import type { SchoolStatsPrefs } from "@/features/enrollment/school-view-prefs";
 
 const won = (n: number) => `${Math.round(n).toLocaleString("ko-KR")}원`;
 
@@ -45,12 +47,14 @@ export function StatsView({
   years,
   hrefForYear,
   dist,
+  schoolPrefs,
 }: {
   stats: EnrollmentStats;
   year: number;
   years: number[];
   hrefForYear: (y: number) => string;
   dist: StudentDistribution;
+  schoolPrefs: SchoolStatsPrefs;
 }) {
   const schools = dist.schools;
   // 막대는 그 분포 안의 최대값을 가득 참으로 본다(전체 대비로 그리면 전부 납작해 비교가 안 된다).
@@ -245,64 +249,9 @@ export function StatsView({
         </div>
       ) : null}
 
-      {/* 학교별 점유율 — 부산명지 지점 시트의 '주력학교 점유율'과 같은 지표.
-          분모는 학교알리미 공시 전교생 수(연 1회 CSV 적재, 0180a). */}
+      {/* 학교별 점유율 — 기준·급 필터·정렬은 패널이 스스로 한다(계정 저장). */}
       {schools.length > 0 ? (
-        <Card
-          title="학교별 점유율"
-          sub={(() => {
-            const known = schools.filter((s) => s.total !== null);
-            const unknown = schools.length - known.length;
-            const mine = schools.reduce((a, s) => a + s.ours, 0);
-            return `재원생 ${mine}명이 다니는 ${schools.length}개 학교 · 전교생 대비 비율은 공시 자료가 있는 ${known.length}개교만${unknown ? ` (${unknown}개교는 공시에 없어 비율 미산출)` : ""}`;
-          })()}
-        >
-          <ul className="space-y-2">
-            {schools.slice(0, 20).map((s) => {
-              // 막대는 점유율 자체를 그린다. 5%가 넘는 학교가 드물어 그대로 그리면 전부 납작하니
-              // 10%를 가득 찬 것으로 본다(스케일을 부제에 밝힌다).
-              const w = s.pct === null ? 0 : Math.min(100, (s.pct / 10) * 100);
-              return (
-                <li key={s.key}>
-                  <div className="flex items-baseline justify-between gap-3 text-sm">
-                    <span className="text-foreground font-medium">
-                      {s.label}
-                      {s.kind ? (
-                        <span className="text-text-faint ml-1.5 text-[11px]">{s.kind}</span>
-                      ) : null}
-                    </span>
-                    <span className="text-text-dim num shrink-0 text-xs">
-                      {s.ours}명
-                      {s.total !== null ? (
-                        <>
-                          {" / "}
-                          {s.total.toLocaleString("ko-KR")}명
-                          <b className="text-foreground ml-1.5 text-[13px]">{s.pct}%</b>
-                        </>
-                      ) : (
-                        // 🔴 모르는 걸 0%로 적지 않는다 — "우리 학생이 없다"로 읽힌다.
-                        <span className="text-text-faint ml-1.5">전교생 미상</span>
-                      )}
-                    </span>
-                  </div>
-                  <div className="bg-bg-soft mt-1 h-2 overflow-hidden rounded-full">
-                    <div
-                      className="h-full rounded-full"
-                      style={{ width: `${w}%`, background: KIND_COLOR[s.kind ?? ""] ?? "var(--color-text-faint)" }}
-                    />
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-          {schools.length > 20 ? (
-            <p className="text-text-faint mt-2 text-[11px]">
-              상위 20개교만 표시 · 전체 {schools.length}개교 (막대는 점유율 10%를 가득 참으로 봅니다)
-            </p>
-          ) : (
-            <p className="text-text-faint mt-2 text-[11px]">막대는 점유율 10%를 가득 참으로 봅니다</p>
-          )}
-        </Card>
+        <SchoolPenetrationPanel rows={schools} initial={schoolPrefs} />
       ) : null}
     </div>
   );

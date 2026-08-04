@@ -63,7 +63,14 @@ export function MakeeduSyncNowButton() {
         type="button"
         onClick={run}
         disabled={pending || cooling}
-        className="border-line text-text-dim hover:bg-bg-soft hover:text-foreground inline-flex shrink-0 items-center gap-1 rounded border px-1.5 py-0.5 text-[11px] whitespace-nowrap transition disabled:cursor-default disabled:opacity-60 disabled:hover:bg-transparent"
+        // 이 버튼이 무엇을 하는지 화면만 봐선 알 수 없다(원장 2026-08-05: "마우스 오버링할때 설명해놓을것").
+        // ⚠️ 시트·노션 동기화가 아니라 **makeedu** 동기화다 — 셋을 헷갈리면 "왜 시트가 안 바뀌지"가 된다.
+        title={
+          "makeedu에서 최신 자료를 가져옵니다 (예비원생·학생·청구 등).\n" +
+          "· 연동 PC가 실제 수집을 맡으므로 반영까지 1~2분 걸릴 수 있습니다.\n" +
+          "· eywa에서 입력한 내용을 makeedu로 보내는 기능이 아닙니다(가져오기 전용).\n" +
+          "· 구글시트·노션과는 무관합니다."
+        }
       >
         {pending ? (
           <Loader2 className="size-3 animate-spin" aria-hidden />
