@@ -388,7 +388,11 @@ export function GridBodyRow({
             value={subject.homeworkToday ?? ""}
             onChange={(e) => fields.onHomeworkToday(student.id, subject.name, e.target.value)}
             readOnly={alreadySent}
-            placeholder="오늘 과제 (예: 개념편 p10~16)"
+            // ⚠️ 이 칸은 고정 140px(colgroup) — 예시까지 넣은 긴 placeholder는 **한 줄짜리 input이라
+            // 줄바꿈이 안 되고 잘려서** "오늘 과제 (예: 개념편 p"로 끊겼다(원장 제보 2026-08-04).
+            // 칸 이름만 남기고 예시는 title(툴팁)로 — 카드 모드(폭 넉넉)는 예시를 그대로 쓴다.
+            placeholder="오늘 과제"
+            title="오늘 내준 과제 — 예: 개념편 p10~16"
             aria-label={`${student.name} ${subject.name} 오늘 과제`}
             data-nav-col="homeworkToday"
             data-nav-row={nav.row}
