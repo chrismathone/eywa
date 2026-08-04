@@ -47,10 +47,14 @@ export function ColumnCards({
 
   return (
     <div className="flex flex-1 flex-col">
-      {/* ⚠️ 위치 고정: 페이지가 있으면 목록 영역을 **고정 높이**로 둔다 → 페이지마다 카드 수·내용
-          높이가 달라도 컬럼 높이가 변하지 않아 아래 페이저(◀ 이전/다음 ▶)가 같은 자리에 머문다
-          ("페이지 이동 때마다 위치가 틀어짐" 해소). 한 페이지가 더 길면 내부 스크롤. */}
-      <ul className={`space-y-2 p-3 ${totalPages > 1 ? "h-[56vh] overflow-y-auto" : ""}`}>
+      {/* ⚠️ 위치: 목록은 **최소 56vh를 깔고 남는 높이를 채운다**(min-h + flex-1).
+          · min-h → 페이지마다 카드 수·내용 높이가 달라도 컬럼이 안 줄어 페이저가 같은 자리에 머문다
+            ("페이지 이동 때마다 위치가 틀어짐" 해소). 한 페이지가 더 길면 내부 스크롤.
+          · flex-1 → 🔴 **고정 높이(h-56vh)만 두면 페이저가 컬럼 한가운데에 뜬다.** 칸반은 grid라
+            컬럼이 **가장 긴 컬럼 높이로 늘어나는데**(페이지네이션이 없는 컬럼이 대개 더 길다) 목록만
+            56vh에서 멈춰서 그 아래가 통째로 빈다(원장 2026-08-05 스크린샷). 남는 공간을 목록이 먹고
+            페이저는 컬럼 바닥에 붙는다. */}
+      <ul className={`space-y-2 p-3 ${totalPages > 1 ? "min-h-[56vh] flex-1 overflow-y-auto" : ""}`}>
         {visible.map((c) => {
           // 수업이 1개 이상 배정된 카드는 outcome 라벨("재원생 등록") 대신 "반 배정 완료" 배지.
           const assigned = c.assignedClassCount >= 1;
