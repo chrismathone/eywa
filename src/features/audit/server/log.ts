@@ -16,6 +16,9 @@ export const AUDIT_ACTIONS = {
   staff_contract_delete: "근로계약 삭제",
   staff_contract_pdf_extract: "근로계약 PDF 추출",
   staff_contract_file_add: "계약서 파일 첨부",
+  class_review_create: "수업 평가 참관 생성",
+  class_review_submit: "수업 평가 채점 제출",
+  class_review_delete: "수업 평가 삭제",
   staff_contract_file_delete: "계약서 파일 삭제",
   // 본인이 자기 계정을 바꾼 경우(/me) — 위의 staff_*(관리자가 남의 계정을 바꿈)와 구분해 읽힌다.
   self_password_change: "내 비밀번호 변경",
