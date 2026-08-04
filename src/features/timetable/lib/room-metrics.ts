@@ -147,9 +147,10 @@ export function buildRoomWeekRows(buckets: readonly RoomBucket[], windows: DayWi
 // 표는 "어느 교실이 언제 붐비나"까지만 말하고 **반 이름을 못 준다** — 특히 겹침은 한 칸에 대표 반
 // 하나만 서므로(인원 많은 쪽) **가려진 반은 화면 어디에도 안 나온다**. 이 두 목록이 그 구멍을 메운다.
 //
-// ⚠️ 스코프는 **주간**이다(정원 초과와 같은 결 — 원장이 "정원 초과건처럼"이라고 했다). 이중예약은 요일을
-//    넘나들며 찾아야 해서, 요일 칩을 일곱 번 눌러야 보이는 목록은 쓸모가 없다. 대신 줄마다 요일을 적고,
-//    상단 요약의 겹침 수는 **선택 요일**이라 라벨에 요일을 박아 둘이 다른 말을 하는 것처럼 안 보이게 했다.
+// ⚠️ 스코프 = **선택 요일**(원장 2026-08-04 재지시: *"현재 요일 선택한것만 나오면 됨. 정원 초과건도 마찬가지"* —
+//    처음엔 주간으로 냈다가 뒤집혔다). 덕분에 위 표의 빨간 테두리·상단 요약의 "N건"·이 목록이 **전부 같은
+//    하루**를 말한다. 다른 요일은 요일 칩으로 넘어가서 본다.
+//    → `day`를 주면 그 요일만, 안 주면 주간 전체(테스트·미래 소비처용).
 
 export type RoomConflictRow = {
   key: string;
@@ -169,14 +170,18 @@ export type RoomConflictClass = {
 };
 
 /**
- * 주간 시간 겹침(부분 겹침 = 이중예약 의심) 목록. **합반(완전 동일 범위)은 제외** — 판정은
+ * 시간 겹침(부분 겹침 = 이중예약 의심) 목록. **합반(완전 동일 범위)은 제외** — 판정은
  * [collectConflictPairs] 한 곳이라 상단 요약의 "N건"과 술어가 같다.
- * 정렬 = 요일 → 시작 시각 → 강의실(사람이 시간표를 훑는 순서).
+ * 정렬 = 요일 → **시작 시각** → 강의실 = 위 표를 훑는 순서(눈이 표와 목록을 오갈 때 자리를 안 잃는다).
  */
-export function collectRoomConflicts(buckets: readonly RoomBucket[]): RoomConflictRow[] {
+export function collectRoomConflicts(
+  buckets: readonly RoomBucket[],
+  only?: DayOfWeek,
+): RoomConflictRow[] {
   const out: RoomConflictRow[] = [];
+  const days = only ? [only] : ROOM_DAY_ORDER;
   for (const b of buckets) {
-    for (const day of ROOM_DAY_ORDER) {
+    for (const day of days) {
       const intervals = classIntervalsExact(b.slots.filter((s) => s.dayOfWeek === day));
       for (const [a, c] of collectConflictPairs(intervals)) {
         out.push({
@@ -218,16 +223,18 @@ export type RoomSeatOverRow = {
 };
 
 /**
- * 주간 정원 초과 목록 — 어느 반이 어느 방에서 정원을 넘었는지(방 이름만 말하던 옛 줄의 후신).
+ * 정원 초과 목록 — 어느 반이 어느 방에서 정원을 넘었는지(방 이름만 말하던 옛 줄의 후신).
  * ⚠️ 정원이 없는 방은 애초에 판정 대상이 아니다(0으로 속이지 않는다 — `seatPct`가 null인 것과 같은 규약).
- * 정렬 = 초과 폭이 큰 순(붐비는 순서가 곧 조치 순서) → 요일 → 시작 시각.
+ * 정렬 = 요일 → **시작 시각** → 강의실. 초과 폭 순이 아니다(2026-08-04 가독성 지시) — 하루치라 건수가
+ * 적고(실측 요일당 0~2건), 위 표와 같은 순서로 읽히는 게 "심한 순"보다 찾기 쉽다. 심각도는 숫자가 말한다.
  */
-export function collectSeatOver(buckets: readonly RoomBucket[]): RoomSeatOverRow[] {
+export function collectSeatOver(buckets: readonly RoomBucket[], only?: DayOfWeek): RoomSeatOverRow[] {
   const out: RoomSeatOverRow[] = [];
+  const days = only ? [only] : ROOM_DAY_ORDER;
   for (const b of buckets) {
     const cap = b.capacity;
     if (cap == null || cap <= 0) continue;
-    for (const day of ROOM_DAY_ORDER) {
+    for (const day of days) {
       for (const iv of classIntervalsExact(b.slots.filter((s) => s.dayOfWeek === day))) {
         if (iv.students <= cap) continue;
         out.push({
@@ -246,9 +253,9 @@ export function collectSeatOver(buckets: readonly RoomBucket[]): RoomSeatOverRow
   }
   return out.sort(
     (x, y) =>
-      y.students - y.capacity - (x.students - x.capacity) ||
       ROOM_DAY_ORDER.indexOf(x.day) - ROOM_DAY_ORDER.indexOf(y.day) ||
-      x.startMin - y.startMin,
+      x.startMin - y.startMin ||
+      x.roomName.localeCompare(y.roomName, "ko"),
   );
 }
 

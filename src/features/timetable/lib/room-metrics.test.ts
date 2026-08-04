@@ -291,7 +291,7 @@ describe("timelineColumnCells — 축 전환(시간=세로)용 색인", () => {
   });
 });
 
-describe("collectRoomConflicts — 하단 '시간 겹침' 반 목록(주간)", () => {
+describe("collectRoomConflicts — 하단 '시간 겹침' 반 목록", () => {
   it("부분 겹침만 잡고, 합반(완전 동일 범위)은 안 잡는다 — 요약의 '건수'와 같은 술어", () => {
     const { buckets } = buildRoomBuckets(
       [
@@ -323,7 +323,7 @@ describe("collectRoomConflicts — 하단 '시간 겹침' 반 목록(주간)", (
     expect(collectRoomConflicts(buckets)).toHaveLength(summarizeDay(buckets, w, "mon", 0).conflictPairs);
   });
 
-  it("요일을 넘나들며 모은다(요일 칩을 안 따라간다) + 요일·시각 순 정렬", () => {
+  it("요일을 주면 **그 요일만** 낸다(화면은 선택 요일만 보여준다, 원장 2026-08-04)", () => {
     const { buckets } = buildRoomBuckets(
       [
         slot({ id: "a", classId: "c1", dayOfWeek: "wed", startTime: "15:00", endTime: "16:00" }),
@@ -333,12 +333,15 @@ describe("collectRoomConflicts — 하단 '시간 겹침' 반 목록(주간)", (
       ],
       ROOMS,
     );
+    expect(collectRoomConflicts(buckets, "wed").map((r) => r.day)).toEqual(["wed"]);
+    expect(collectRoomConflicts(buckets, "tue")).toEqual([]);
+    // 요일을 안 주면 주간 전체(요일 → 시각 순).
     expect(collectRoomConflicts(buckets).map((r) => r.day)).toEqual(["mon", "wed"]);
   });
 });
 
-describe("collectSeatOver — 하단 '정원 초과' 반 목록(주간)", () => {
-  it("정원이 있는 방만, 넘은 반만 — 초과 폭이 큰 순", () => {
+describe("collectSeatOver — 하단 '정원 초과' 반 목록", () => {
+  it("정원이 있는 방만, 넘은 반만 — **시각 순**(위 표를 훑는 순서, 2026-08-04 가독성 지시)", () => {
     const { buckets } = buildRoomBuckets(
       [
         slot({ id: "a", classId: "c1", className: "1명 초과", students: 11, startTime: "14:00", endTime: "15:00" }),
@@ -350,8 +353,20 @@ describe("collectSeatOver — 하단 '정원 초과' 반 목록(주간)", () => 
       ROOMS,
     );
     const rows = collectSeatOver(buckets);
-    expect(rows.map((r) => r.className)).toEqual(["5명 초과", "1명 초과"]);
-    expect(rows[0]).toMatchObject({ roomName: "본원301", capacity: 10, students: 15, classId: "c2" });
+    expect(rows.map((r) => r.className)).toEqual(["1명 초과", "5명 초과"]);
+    expect(rows[1]).toMatchObject({ roomName: "본원301", capacity: 10, students: 15, classId: "c2" });
+  });
+
+  it("요일을 주면 그 요일만 — 다른 요일의 초과는 안 섞인다", () => {
+    const { buckets } = buildRoomBuckets(
+      [
+        slot({ id: "a", classId: "c1", className: "월 초과", students: 12, dayOfWeek: "mon" }),
+        slot({ id: "b", classId: "c2", className: "수 초과", students: 12, dayOfWeek: "wed" }),
+      ],
+      ROOMS,
+    );
+    expect(collectSeatOver(buckets, "mon").map((r) => r.className)).toEqual(["월 초과"]);
+    expect(collectSeatOver(buckets, "sat")).toEqual([]);
   });
 
   it("반을 짚어 준다(수업 상세 링크의 근거) — classId가 비면 링크가 거짓말이 된다", () => {

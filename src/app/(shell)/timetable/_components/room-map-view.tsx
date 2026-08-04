@@ -71,10 +71,10 @@ export function RoomMapView({
     () => summarizeDay(buckets, windows, day, nowMin),
     [buckets, windows, day, nowMin],
   );
-  // 하단 반 목록 = **주간**(정원 초과와 같은 결). 요일 칩을 안 따라가므로 day에 의존하지 않는다 —
-  // 요일을 바꿀 때마다 다시 계산하면 이중예약이 요일마다 나타났다 사라진다.
-  const conflicts = useMemo(() => collectRoomConflicts(buckets), [buckets]);
-  const seatOver = useMemo(() => collectSeatOver(buckets), [buckets]);
+  // 하단 반 목록 = **선택 요일만**(원장 2026-08-04: "현재 요일 선택한것만 나오면 됨. 정원 초과건도 마찬가지").
+  // 덕분에 표의 빨간 테두리·위 요약의 "N건"·아래 목록이 전부 같은 하루를 말한다(스코프 혼선 제거).
+  const conflicts = useMemo(() => collectRoomConflicts(buckets, day), [buckets, day]);
+  const seatOver = useMemo(() => collectSeatOver(buckets, day), [buckets, day]);
   const isToday = isCurrentWeek && day === todayDay;
   // 과목 칩 = 설정 순서 ∩ 데이터 존재(빈 칩 방지 — 시간표 툴바와 같은 규약).
   const presentSubjects = useMemo(() => {
