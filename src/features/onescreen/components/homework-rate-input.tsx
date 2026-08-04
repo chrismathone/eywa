@@ -42,7 +42,13 @@ export function HomeworkRateInput({
     }`;
 
   return (
-    <div className="flex items-center gap-1">
+    // ⚠️ `flex-wrap` 필수 — 표 모드의 이 칸은 **고정 130px**(colgroup, table-fixed)이라 내용 폭
+    // (숫자 48 + % + 알약 2개 ≈ 161px)이 칸을 넘는다. 한 줄로 두면 넘친 알약이 옆 칸(교재명)으로
+    // 삐져나가고 그 칸의 **불투명 입력 배경에 덮여 글자가 잘린 것처럼 보였다**(원장 제보 2026-08-04
+    // "라벨이 가려진다"). 행 높이는 옆 칸(학부모 문구 3칸)이 정하므로 아래로 접히는 여백은 남아돈다 —
+    // 넘치면 다음 줄로 내리는 게 정답(학생·반 칸이 2026-07-30에 같은 이유로 이미 flex-wrap이다).
+    // 카드·일괄(size=lg)은 폭이 넓어 그대로 한 줄로 남는다.
+    <div className="flex flex-wrap items-center gap-1">
       <input
         inputMode="numeric"
         value={shown}
@@ -60,26 +66,30 @@ export function HomeworkRateInput({
         className={`border-line focus:border-primary tabular bg-card h-8 w-12 border px-1 text-center text-[13px] font-bold outline-none disabled:opacity-40 ${radius}`}
       />
       <span className="text-text-faint text-[11px]">%</span>
-      {/* 미제출 = **안 내왔다**(0%와 수행률은 같지만 학부모에게 나가는 문장이 다르다 — 원장 2026-08-03). */}
-      <button
-        type="button"
-        onClick={() => onChange(isNotSubmitted ? "" : NOT_SUBMITTED)}
-        aria-pressed={isNotSubmitted}
-        title="과제를 내주었으나 제출하지 않음 (0%와 다른 문구로 나갑니다)"
-        className={chip(isNotSubmitted)}
-      >
-        미제출
-      </button>
-      {/* 과제가 **없던 날** — 미제출과 다르다(내준 과제 자체가 없음). 다시 누르면 해제. */}
-      <button
-        type="button"
-        onClick={() => onChange(isNone ? "" : NONE_LABEL)}
-        aria-pressed={isNone}
-        title="내준 과제가 애초에 없던 날 (미제출 아님 — 문장에서 언급하지 않습니다)"
-        className={chip(isNone)}
-      >
-        없음
-      </button>
+      {/* 알약 2개는 **한 덩어리로** 접힌다 — 낱개로 두면 칸 폭이 1~2px 달라질 때마다 '미제출'만 남고
+          '없음'이 내려가는 등 행마다 모양이 달라진다. 묶어 두면 "숫자 / 알약" 두 줄로 항상 같다. */}
+      <span className="flex items-center gap-1">
+        {/* 미제출 = **안 내왔다**(0%와 수행률은 같지만 학부모에게 나가는 문장이 다르다 — 원장 2026-08-03). */}
+        <button
+          type="button"
+          onClick={() => onChange(isNotSubmitted ? "" : NOT_SUBMITTED)}
+          aria-pressed={isNotSubmitted}
+          title="과제를 내주었으나 제출하지 않음 (0%와 다른 문구로 나갑니다)"
+          className={chip(isNotSubmitted)}
+        >
+          미제출
+        </button>
+        {/* 과제가 **없던 날** — 미제출과 다르다(내준 과제 자체가 없음). 다시 누르면 해제. */}
+        <button
+          type="button"
+          onClick={() => onChange(isNone ? "" : NONE_LABEL)}
+          aria-pressed={isNone}
+          title="내준 과제가 애초에 없던 날 (미제출 아님 — 문장에서 언급하지 않습니다)"
+          className={chip(isNone)}
+        >
+          없음
+        </button>
+      </span>
     </div>
   );
 }
