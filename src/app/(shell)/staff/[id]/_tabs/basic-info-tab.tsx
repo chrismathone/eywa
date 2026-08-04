@@ -204,7 +204,7 @@ export async function BasicInfoTab({
                     ) : null
                   }
                 />
-                <Field label="담당자" value={c?.manager} />
+                <Field label="처리담당자" value={c?.manager} />
               </>
             ) : null}
           </div>
