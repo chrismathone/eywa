@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   isCurrentSlot,
+  planSlotArchives,
   preserveScheduleFields,
   slotKey,
   type IncomingSlot,
@@ -241,5 +242,91 @@ describe("운영 기간(periodProvided) — 특강 만료", () => {
     });
     expect(row!.validFrom).toBe("2026-12-20");
     expect(row!.validTo).toBe("2027-01-20");
+  });
+});
+
+describe("planSlotArchives — 담당·강의실 변경 이력(원장 2026-08-04)", () => {
+  const base = {
+    dayOfWeek: "mon",
+    startTime: "16:00",
+    endTime: "17:00",
+    validFrom: "2026-01-01",
+    validTo: null,
+    slotTeacherLabel: null,
+    slotRoomLabel: null,
+    periodLabel: null,
+    mergeGroup: null,
+  };
+
+  it("담당이 바뀌면 옛 배치를 어제까지로 마감한다", () => {
+    const archives = planSlotArchives({
+      incoming: [{ dayOfWeek: "mon", startTime: "16:00", endTime: "17:00", teacherId: "new", classroomId: null }],
+      prior: [{ ...base, teacherId: "old", classroomId: null }],
+      today: "2026-08-04",
+    });
+    expect(archives).toHaveLength(1);
+    expect(archives[0]).toMatchObject({ teacherId: "old", validFrom: "2026-01-01", validTo: "2026-08-03" });
+  });
+
+  it("강의실이 바뀌어도 마감 행을 남긴다", () => {
+    const archives = planSlotArchives({
+      incoming: [{ dayOfWeek: "mon", startTime: "16:00", endTime: "17:00", teacherId: "t", classroomId: "r2" }],
+      prior: [{ ...base, teacherId: "t", classroomId: "r1" }],
+      today: "2026-08-04",
+    });
+    expect(archives[0]).toMatchObject({ classroomId: "r1", validTo: "2026-08-03" });
+  });
+
+  it("바뀐 게 없으면 마감 행을 만들지 않는다(행이 무한히 불어나지 않게)", () => {
+    const archives = planSlotArchives({
+      incoming: [{ dayOfWeek: "mon", startTime: "16:00", endTime: "17:00", teacherId: "t", classroomId: "r1" }],
+      prior: [{ ...base, teacherId: "t", classroomId: "r1" }],
+      today: "2026-08-04",
+    });
+    expect(archives).toEqual([]);
+  });
+
+  it("사라진 슬롯도 어제까지로 마감한다(지웠다고 과거까지 없던 일이 되면 안 된다)", () => {
+    const archives = planSlotArchives({
+      incoming: [],
+      prior: [{ ...base, teacherId: "t", classroomId: "r1" }],
+      today: "2026-08-04",
+    });
+    expect(archives[0]).toMatchObject({ validTo: "2026-08-03" });
+  });
+
+  it("🔴 오늘 시작한 행은 마감하지 않는다 — 거꾸로 된 구간·쓰레기 행 방지", () => {
+    const archives = planSlotArchives({
+      incoming: [{ dayOfWeek: "mon", startTime: "16:00", endTime: "17:00", teacherId: "new", classroomId: null }],
+      prior: [{ ...base, validFrom: "2026-08-04", teacherId: "old", classroomId: null }],
+      today: "2026-08-04",
+    });
+    expect(archives).toEqual([]);
+  });
+
+  it("마감 행과 새 행의 구간이 맞물린다(구멍·중복 없이)", () => {
+    const incoming = [
+      { dayOfWeek: "mon", startTime: "16:00", endTime: "17:00", teacherId: "new", classroomId: null },
+    ];
+    const prior = [{ ...base, teacherId: "old", classroomId: null }];
+    const archives = planSlotArchives({ incoming, prior, today: "2026-08-04" });
+    const rows = preserveScheduleFields({
+      incoming,
+      prior,
+      period: { validFrom: null, validTo: null, provided: false },
+      today: "2026-08-04",
+    });
+    expect(archives[0]!.validTo).toBe("2026-08-03");
+    expect(rows[0]!.validFrom).toBe("2026-08-04"); // 어제까지 옛 담당 / 오늘부터 새 담당
+  });
+
+  it("안 바뀐 슬롯의 시작일은 그대로 승계한다(불필요한 구간 분할 금지)", () => {
+    const rows = preserveScheduleFields({
+      incoming: [{ dayOfWeek: "mon", startTime: "16:00", endTime: "17:00", teacherId: "t", classroomId: "r1" }],
+      prior: [{ ...base, teacherId: "t", classroomId: "r1" }],
+      period: { validFrom: null, validTo: null, provided: false },
+      today: "2026-08-04",
+    });
+    expect(rows[0]!.validFrom).toBe("2026-01-01");
   });
 });

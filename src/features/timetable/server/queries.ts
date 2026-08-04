@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged, fetchAllPagedInChunks } from "@/lib/supabase/batch";
 import { kstToday, kstMinutesOfDay } from "@/lib/date-kst";
 import { getTeacherScope } from "@/lib/auth/teacher-scope";
-import { weekEndOf, weekSundayOf, shiftDays } from "../lib/week";
+import { slotLiveOnDate, weekEndOf, weekSundayOf, shiftDays } from "../lib/week";
 // 보고서 과목 판정 규칙은 RPC(0150a) SQL에 내장 — 규칙 문서·테스트는 lib/report-subject.ts가 담당(동기 유지).
 import { compareStudentLines } from "../lib/student-sort";
 import type { TeacherColorMap } from "../lib/class-grid";
@@ -203,6 +203,7 @@ async function fetchSlots(
         .from("class_schedules")
         .select(
           `id, day_of_week, start_time, end_time, class_id, slot_teacher_label, slot_room_label, classroom_id,
+       valid_from, valid_to,
        class:class_id!inner (
          id, class_name, subject, bg_color, text_color, is_active, closed_at, is_special,
          pending_teacher_id, pending_teacher_date, classroom_id,
@@ -234,10 +235,22 @@ async function fetchSlots(
   ]);
 
   // 종강 반: closed_at < 기준일이면 그 주엔 이미 종강 → 제외(closed_at ≥ 기준일인 과거 주엔 표시).
+  // + 🔴 **날짜 단위 유효 판정**(2026-08-04): 위 SQL 필터는 "그 주와 겹치는 행"까지 넉넉히 가져온다.
+  //   담당·강의실이 바뀐 주에는 옛 행(어제까지)과 새 행(오늘부터)이 **둘 다** 그 주와 겹쳐 같은 칸이
+  //   두 번 그려진다. 요일 칸의 **실제 날짜**로 다시 걸러 그날 살아 있던 배치 하나만 남긴다
+  //   (월·화는 옛 담당, 수요일부터 새 담당 — 실제로 일어난 그대로).
   const visible = data.filter((r) => {
     const k = (Array.isArray(r.class) ? r.class[0] : r.class) as { closed_at?: string | null } | undefined;
     const closedAt = k?.closed_at ?? null;
-    return !closedAt || closedAt >= referenceDate;
+    if (closedAt && closedAt < referenceDate) return false;
+    return slotLiveOnDate(
+      {
+        dayOfWeek: r.day_of_week as string,
+        validFrom: (r as { valid_from?: string | null }).valid_from ?? null,
+        validTo: (r as { valid_to?: string | null }).valid_to ?? null,
+      },
+      referenceDate,
+    );
   });
 
   const counts = new Map<string, number>();

@@ -87,3 +87,33 @@ export function weekRelation(monday: string, today: string): "past" | "current" 
   if (monday === cur) return "current";
   return monday > cur ? "future" : "past";
 }
+
+/** 요일 키 → 그 주 월요일로부터의 오프셋(0=월 … 6=일). 시간표 축과 같은 순서. */
+const DOW_OFFSET: Record<string, number> = { mon: 0, tue: 1, wed: 2, thu: 3, fri: 4, sat: 5, sun: 6 };
+
+/** 기준일이 속한 주에서 그 요일 칸의 **실제 날짜**. 모르는 요일 키는 null. */
+export function dateOfDowInWeek(referenceDate: string, dow: string): string | null {
+  const off = DOW_OFFSET[dow];
+  return off === undefined ? null : shiftDays(mondayOf(referenceDate), off);
+}
+
+/**
+ * 이 스케줄 행이 **그 요일 칸의 날짜에** 유효한가 — 주 단위가 아니라 **날짜 단위** 판정.
+ *
+ * 🔴 왜 필요한가(2026-08-04): 담당·강의실이 바뀌면 옛 행을 어제까지로 마감하고 새 행을 오늘부터 여는데,
+ *    변경이 일어난 주에는 **두 행 모두 그 주와 겹친다**. 주 단위로만 거르면 같은 칸에 반이 두 번 그려진다.
+ *    날짜로 판정하면 월·화는 옛 담당, 수요일부터 새 담당 — **실제로 일어난 그대로** 그려진다.
+ * ⚠️ 유효기간이 없는(둘 다 null) 행은 항상 통과 — 판정 불가를 '없음'으로 바꾸지 않는다.
+ */
+export function slotLiveOnDate(
+  slot: { dayOfWeek: string; validFrom?: string | null; validTo?: string | null },
+  referenceDate: string,
+): boolean {
+  const date = dateOfDowInWeek(referenceDate, slot.dayOfWeek);
+  if (!date) return true; // 모르는 요일 키는 거르지 않는다(데이터가 사라지는 쪽으로 실패하지 않게)
+  const from = slot.validFrom ? String(slot.validFrom).slice(0, 10) : null;
+  const to = slot.validTo ? String(slot.validTo).slice(0, 10) : null;
+  if (from && date < from) return false;
+  if (to && date > to) return false;
+  return true;
+}

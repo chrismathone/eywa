@@ -186,6 +186,12 @@ export function auditDetail(
       const d = str(m.closedAt);
       return d ? `종강일 ${d}` : null;
     }
+    // 반 수정(2026-08-04 신설) — 그동안 **폼 저장에 로그가 아예 없어서** 담당·강의실이 언제 누구로
+    // 바뀌었는지 되살릴 근거가 없었다. 바뀐 항목만 적는다(안 바뀐 건 안 적는다).
+    case "class_update": {
+      const fields = Array.isArray(m.changed) ? m.changed.filter((v): v is string => typeof v === "string") : [];
+      return fields.length > 0 ? `변경: ${fields.join(", ")}` : null;
+    }
     case "class_handover_schedule": {
       const n = ctx.nameOf(m.newTeacherId);
       const d = str(m.effectiveDate);

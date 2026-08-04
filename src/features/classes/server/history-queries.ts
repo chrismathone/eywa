@@ -1,0 +1,142 @@
+import "server-only";
+import { createClient } from "@/lib/supabase/server";
+import { auditActionLabel } from "@/features/audit/server/log";
+import { auditDetail } from "@/features/audit/describe";
+import { fetchAllPaged } from "@/lib/supabase/batch";
+import { getTenantSettings } from "@/features/owner/server/queries";
+import { buildSubjectMaps } from "@/features/owner/subjects";
+import {
+  buildScheduleHistory,
+  mergeClassHistory,
+  type ClassHistoryEntry,
+  type HistorySlot,
+} from "../history";
+
+/**
+ * 반 상세 '이력' — 여러 기록을 한 줄기로(원장 2026-08-04 *"각 수업의 상세화면에 '이력'란을 추가해"* +
+ * *"로그 등 기록을 활용해서 최대한 이력 살릴 수 있는 부분은 전부 살릴것"*).
+ *
+ * 출처 3종(전부 **사실 기록**, 추론 없음):
+ *  ① `class_schedules` 유효 구간 — 마감된 행이 곧 지난 배치다(실측 1,080행 중 493행이 이미 마감).
+ *  ② `audit_logs` — 인수인계 예약/적용/취소, 종강·폐지·재운영, 위임, 강의실 자동배정(행위자 포함).
+ *  ③ `class_delegations` — 임시 위임 기간.
+ *
+ * ⚠️ **보고서 작성 기록은 아직 안 넣었다.** `lesson_reports.teacher_name`이 "그 달 누가 썼나"를 알려주지만
+ *    한 반의 보고서가 수천 행이라 상세 화면에서 전건을 끌면 느려진다(B2) — 월별 group-by RPC가 먼저다.
+ *    게다가 그 값은 **작성자이지 담당이 아니다**(사무실 대리 작성이 설계된 동작, [[#93]]) — 넣을 땐
+ *    '보고서 작성'으로 라벨을 갈라 담당 변경으로 읽히지 않게 할 것.
+ * ⚠️ 감사로그 매칭은 `metadata->>'classId'` **또는** `target_label = 반 이름`이다 — 인수인계 로그가
+ *    classId를 안 남기던 시절(실측: 반 로그 중 classId 보유 21건)이 있어서다. 이름 매칭은 개명하면
+ *    끊기지만, 끊겨도 **없는 줄이 생길 뿐** 남의 반 이력이 섞이지는 않는다(같은 이름 반이 없다는 전제).
+ */
+export async function getClassHistory(classId: string): Promise<ClassHistoryEntry[]> {
+  const supabase = await createClient();
+  // 반 이름은 **구 감사로그 매칭 키**라 여기서 직접 읽는다(호출부가 이름을 넘기게 하면 상세 페이지의
+  // Promise.all에 못 들어가 왕복이 직렬로 붙는다, B4).
+  const { data: klass } = await supabase.from("classes").select("class_name").eq("id", classId).maybeSingle();
+  const className = (klass?.class_name as string | null) ?? "";
+
+  const [slotRows, auditRows, delegations, nameRows] = await Promise.all([
+    // 한 반의 슬롯 = 요일×교시×구간이라 수십~수백 행 상한. 마감 행까지 **전부** 가져온다(그게 이력이다).
+    supabase
+      .from("class_schedules")
+      .select(
+        "day_of_week, start_time, end_time, valid_from, valid_to, teacher_id, classroom_id, slot_teacher_label, slot_room_label",
+      )
+      .eq("class_id", classId)
+      .order("valid_from", { ascending: false })
+      .order("day_of_week"),
+    // 이 반과 관련된 감사로그 — classId(신규) 또는 반 이름(구 로그) 매칭.
+    // ⚠️ **실패해도 페이지를 죽이지 않는다.** 이력은 보조 정보인데 이 조회 하나로 반 상세가 통째로
+    //    500이 나면 손해가 훨씬 크다(#95 계열). 대신 조용히 숨기지 않고 **아래에서 한 줄로 알린다**.
+    fetchAllPaged<{
+      action: string;
+      actor_name: string | null;
+      metadata: Record<string, unknown> | null;
+      created_at: string;
+    }>((from, to) =>
+      supabase
+        .from("audit_logs")
+        .select("action, actor_name, metadata, created_at")
+        .eq("target_type", "class")
+        // 이름이 비면 classId만으로 — 빈 문자열을 or에 넣으면 라벨이 빈 남의 로그가 딸려온다.
+        .or(
+          className
+            ? `metadata->>classId.eq.${classId},target_label.eq.${className}`
+            : `metadata->>classId.eq.${classId}`,
+        )
+        .order("created_at", { ascending: false })
+        .range(from, to),
+    ).catch(() => null),
+    supabase
+      .from("class_delegations")
+      .select("delegate_user_id, from_date, to_date, reason, revoked_at, created_at")
+      .eq("class_id", classId)
+      .order("from_date", { ascending: false }),
+    supabase.from("users").select("id, display_name"),
+  ]);
+
+  const nameOf = new Map((nameRows.data ?? []).map((u) => [u.id as string, (u.display_name as string) ?? ""]));
+  const roomRes = await supabase.from("classrooms").select("id, name");
+  const roomOf = new Map((roomRes.data ?? []).map((r) => [r.id as string, (r.name as string) ?? ""]));
+
+  // ① 배치 구간 — 표시 이름은 **슬롯 값 우선**(라벨이 시트 원문이라 FK 이름과 다를 수 있다).
+  const slots: HistorySlot[] = (slotRows.data ?? []).map((r) => ({
+    dayOfWeek: r.day_of_week as string,
+    startTime: String(r.start_time),
+    endTime: String(r.end_time),
+    validFrom: (r.valid_from as string | null) ?? null,
+    validTo: (r.valid_to as string | null) ?? null,
+    teacherName:
+      (r.slot_teacher_label as string | null) ??
+      (r.teacher_id ? (nameOf.get(r.teacher_id as string) ?? null) : null),
+    roomName:
+      (r.slot_room_label as string | null) ??
+      (r.classroom_id ? (roomOf.get(r.classroom_id as string) ?? null) : null),
+  }));
+
+  // ② 감사로그 — 한글 라벨·상세는 감사 화면과 **같은 단일 소스**(auditActionLabel/auditDetail)를 쓴다.
+  // 과목 라벨은 설정 단일 소스(하드코딩 금지 규칙) — 반 이력에 과목 키가 나오는 로그는 없지만
+  // auditDetail 계약이 요구하므로 같은 소스를 넘긴다.
+  const subjects = buildSubjectMaps((await getTenantSettings()).operations.subjects);
+  const ctx = {
+    nameOf: (id: unknown) => (typeof id === "string" ? (nameOf.get(id) ?? null) : null),
+    subjectLabel: (key: string) => subjects.labelOf(key),
+  };
+  const auditEntries: ClassHistoryEntry[] = (auditRows ?? []).map((l) => ({
+    date: String(l.created_at).slice(0, 10),
+    source: "audit" as const,
+    title: auditActionLabel(l.action),
+    detail: auditDetail(l.action, l.metadata ?? {}, ctx),
+    actor: l.actor_name,
+  }));
+
+  // ③ 임시 위임 — 담임은 안 바뀐 기간이라 배치 이력과 따로 읽혀야 한다.
+  const delegationEntries: ClassHistoryEntry[] = (delegations.data ?? []).map((d) => ({
+    date: String(d.from_date).slice(0, 10),
+    endDate: d.to_date ? String(d.to_date).slice(0, 10) : null,
+    source: "delegation" as const,
+    title: d.revoked_at ? "임시 위임(해제됨)" : "임시 위임",
+    detail: [
+      nameOf.get(d.delegate_user_id as string) ?? null,
+      d.reason ? String(d.reason) : null,
+    ]
+      .filter(Boolean)
+      .join(" · "),
+  }));
+
+  // 감사로그를 못 읽었으면 **그 사실을 적는다** — 빈 목록으로 두면 "변경이 없었다"는 거짓말이 된다.
+  const notice: ClassHistoryEntry[] =
+    auditRows === null
+      ? [
+          {
+            date: new Date().toISOString().slice(0, 10),
+            source: "audit" as const,
+            title: "변경 기록 일부를 불러오지 못했습니다",
+            detail: "배치 이력은 아래에 그대로 보입니다. 계속되면 알려주세요.",
+          },
+        ]
+      : [];
+
+  return mergeClassHistory([buildScheduleHistory(slots), auditEntries, delegationEntries, notice]);
+}
