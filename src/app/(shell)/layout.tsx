@@ -118,6 +118,10 @@ export default async function ShellLayout({ children }: { children: ReactNode })
     return (
       // print:h-auto/overflow-visible — 인쇄 시 h-screen+overflow-hidden 래퍼가 문서를 1페이지 높이로
       // 클리핑하는 것 방지(globals.css의 html/body/main 인쇄 리셋과 세트 — 래퍼 div는 셀렉터 밖이라 여기서).
+      // ⚠️ WorkspaceEnabledProvider(enabled=false)는 **셸 전체**를 감싼다 — 본문만 감쌌더니 헤더의
+      // 사용자 메뉴(WindowLink '내 정보')가 기본값 true를 보고 캔버스 없는 미니셸에서 유령 창만 열어
+      // "눌러도 아무 일 없음"이 났다(원장 제보 2026-08-04, 육소희 실측).
+      <WorkspaceEnabledProvider enabled={false}>
       <div style={brandStyle} className="bg-background text-foreground flex h-screen flex-col overflow-hidden print:h-auto print:overflow-visible">
         <header className="bg-background border-line sticky top-0 z-30 flex h-12 shrink-0 items-center justify-between border-b px-5 lg:px-7">
           <div className="flex items-center gap-2.5">
@@ -160,15 +164,13 @@ export default async function ShellLayout({ children }: { children: ReactNode })
         {/* 컴퓨터 알림 선제 안내 — 권한 미설정 강사에게만(허용/차단/닫음이면 스스로 사라짐). 학생은 알림 없음. */}
         {view === "teacher" ? <NotifyPermissionBanner /> : null}
         <main className="flex-1 overflow-auto px-3 pt-4 lg:px-6 lg:pt-5 [scrollbar-gutter:stable]">
-          {/* 미니멀 셸엔 WorkspaceCanvas가 없다 → WindowLink/새폼이 창을 열지 않고 드릴인(일반 네비)하게 false. */}
-          <WorkspaceEnabledProvider enabled={false}>
-            <EditPresenceProvider user={{ id: user.id, displayName: user.displayName, tenantId: user.tenantId }}><OperationsProvider subjects={settings.operations.subjects} gradeLevels={settings.operations.gradeLevels} jobTitles={settings.operations.jobTitles} jobTitlesByDepartment={settings.operations.jobTitlesByDepartment}>
-              {children}
-            </OperationsProvider></EditPresenceProvider>
-          </WorkspaceEnabledProvider>
+          <EditPresenceProvider user={{ id: user.id, displayName: user.displayName, tenantId: user.tenantId }}><OperationsProvider subjects={settings.operations.subjects} gradeLevels={settings.operations.gradeLevels} jobTitles={settings.operations.jobTitles} jobTitlesByDepartment={settings.operations.jobTitlesByDepartment}>
+            {children}
+          </OperationsProvider></EditPresenceProvider>
         </main>
         <NoticePopupLayer popups={popups} />
       </div>
+      </WorkspaceEnabledProvider>
     );
   }
 
