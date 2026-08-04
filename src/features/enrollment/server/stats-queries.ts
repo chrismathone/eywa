@@ -1,5 +1,7 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
+import { fetchAllPaged } from "@/lib/supabase/batch";
+import { normalizeSchoolName } from "@/features/schools/school-name";
 import { bucketizePathStats, type BucketStat, type PathStatRow } from "../path-bucket";
 
 /**
@@ -143,6 +145,71 @@ export async function getEnrollmentStats(year: number, months = 12): Promise<Enr
     rate: total > 0 ? Math.round((enrolled / total) * 100) : null,
     paidSum: curMonths.reduce((a, m) => a + m.paidSum, 0),
   };
+}
+
+export type SchoolPenetration = {
+  key: string; // 정규화 이름
+  label: string; // 공시 학교명(없으면 우리 표기)
+  kind: "초" | "중" | "고" | null;
+  ours: number; // 우리 재원생 수
+  total: number | null; // 전교생 수 — null이면 공시에 없는 학교(추측하지 않는다)
+  pct: number | null;
+};
+
+/**
+ * 학교별 점유율 = 우리 재원생 ÷ 전교생(학교알리미 공시).
+ *
+ * 🔴 정규화를 **JS 한 곳에서만** 한다. SQL로 조인하면 치환 규칙이 TS·cjs에 이어 세 번째 사본이 되고,
+ * 규칙이 바뀔 때 한 곳만 고쳐 조용히 어긋난다(여학교 6종 47명이 통째로 빠졌던 게 그런 종류의 실수다).
+ * 양쪽 다 수백 행이라 받아서 붙이는 편이 안전하다(각각 fetchAllPaged로 1000행 절단도 막는다).
+ */
+export async function getSchoolPenetration(): Promise<SchoolPenetration[]> {
+  const supabase = await createClient();
+  const [students, schools] = await Promise.all([
+    fetchAllPaged<{ school: string | null }>((from, to) =>
+      supabase
+        .from("students")
+        .select("school")
+        .eq("status", "enrolled")
+        .not("school", "is", null)
+        .range(from, to),
+    ),
+    fetchAllPaged<{ name: string; name_key: string; kind: string; total_students: number }>((from, to) =>
+      supabase
+        .from("school_enrollment_stats")
+        .select("name, name_key, kind, total_students")
+        .order("name_key", { ascending: true })
+        .range(from, to),
+    ),
+  ]);
+
+  const byKey = new Map(schools.map((s) => [s.name_key, s]));
+  const ours = new Map<string, { n: number; raw: string }>();
+  for (const s of students) {
+    const key = normalizeSchoolName(s.school);
+    if (!key) continue;
+    const cur = ours.get(key);
+    // 같은 학교의 두 표기("일중"·"대구일중")가 여기서 합쳐진다.
+    if (cur) cur.n += 1;
+    else ours.set(key, { n: 1, raw: s.school ?? key });
+  }
+
+  const rows: SchoolPenetration[] = [];
+  for (const [key, v] of ours) {
+    const s = byKey.get(key);
+    const total = s?.total_students ?? null;
+    rows.push({
+      key,
+      label: s?.name ?? v.raw,
+      kind: (s?.kind as "초" | "중" | "고" | undefined) ?? null,
+      ours: v.n,
+      total,
+      // 전교생을 모르면 점유율도 모른다 — 0%로 적으면 "우리 학생이 없다"로 읽힌다.
+      pct: total && total > 0 ? Math.round((v.n / total) * 1000) / 10 : null,
+    });
+  }
+  // 우리 학생이 많은 순 = "우리 밭이 어디인가". 점유율은 막대로 따로 읽는다.
+  return rows.sort((a, b) => b.ours - a.ours);
 }
 
 /** 통계 연도 선택지 — 데이터가 있는 연도만(없는 해를 고르면 빈 화면으로 걸어 들어간다). */
