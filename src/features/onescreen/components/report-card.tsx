@@ -13,7 +13,6 @@ import { AttendancePills, type BasicAttendance } from "./attendance-pills";
 import { DeltaChip } from "./delta-chip";
 import { FieldSelect } from "./field-select";
 import { HomeworkRateInput } from "./homework-rate-input";
-import { ReportPreview, type ReportPreviewContext } from "./report-preview";
 import { isImageAttachment } from "../attachment-utils";
 import { splitComment, joinComment } from "../comment-paragraphs";
 import type { OneScreenStudent, Subject, TestScore } from "../types";
@@ -162,7 +161,8 @@ export function ReportCard({
   attachmentsHidden,
   attendance,
   noticeMode = "A",
-  preview,
+  subjectIndex,
+  onSubjectIndex,
 }: {
   student: OneScreenStudent;
   reports: Record<string, SubjectReport>;
@@ -196,12 +196,15 @@ export function ReportCard({
   // 실효 멘트 모드(강사 오버라이드 ?? 학원 기본) — 상단 토글의 하단 반영. B=수업내용·태도 2칸 분리 입력.
   noticeMode?: "A" | "B";
   /**
-   * 학부모 미리보기 재료(학원설정·로고·담임·날짜). 있으면 카드 우측에 **발송물과 같은 화면**을 실시간으로 그린다.
-   * 없으면 미리보기 열 자체가 없다(레이아웃은 예전 그대로) — 미리보기는 표시일 뿐 저장·발송 판정에 관여하지 않는다.
+   * 선택된 과목 칩(다과목 학생) — **부모가 들고 있다**. 옆 열의 학부모 미리보기가 "지금 보고 있는 과목"을
+   * 그려야 하는데, 카드 안에 state로 숨어 있으면 미리보기가 알 수 없다. 미지정이면 카드가 자체 state를 쓴다.
    */
-  preview?: ReportPreviewContext;
+  subjectIndex?: number;
+  onSubjectIndex?: (idx: number) => void;
 }) {
-  const [selIdx, setSelIdx] = useState(0);
+  const [ownIdx, setOwnIdx] = useState(0);
+  const selIdx = subjectIndex ?? ownIdx;
+  const setSelIdx = onSubjectIndex ?? setOwnIdx;
   const idx = Math.min(selIdx, student.subjects.length - 1);
   const subject = student.subjects[idx];
   if (!subject) return null;
@@ -307,24 +310,11 @@ export function ReportCard({
         ) : null}
       </header>
 
-      {/* 넓은 카드는 **좌=입력 전부 / 우=학부모 미리보기**(2026-08-05 원장 요청). 미리보기 재료가 없으면
-          (구 경로·미리보기 비활성) 예전처럼 입력만 2열로 펼친다.
-          · @2xl(≥672px): 입력 2열(오늘 입력 / 문장·발송) — 07-21 원장 지적("보고서 열만 길어짐") 대응 유지.
-          · @5xl(≥1024px): 오른쪽에 미리보기 열을 하나 더 연다(입력 2열은 그대로 왼쪽 안에서).
-          좁으면 전부 한 줄로 접히고 미리보기는 입력 아래로 내려간다. */}
-      <div
-        className={`grid flex-1 grid-cols-1 items-start gap-3 px-4 py-3 @2xl:gap-x-4 ${
-          preview ? "@5xl:grid-cols-[minmax(0,1fr)_minmax(0,26rem)]" : ""
-        }`}
-      >
-        {/* 입력 묶음. 미리보기가 열려 있으면 왼쪽 열이 좁아지므로 입력 2열 분기를 더 넓은 폭(@7xl)으로 미룬다. */}
-        <div
-          className={`grid grid-cols-1 items-start gap-3 @2xl:gap-x-4 ${
-            preview
-              ? "@7xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]"
-              : "@2xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]"
-          }`}
-        >
+      {/* 넓은 카드(≥672px)는 **좌=오늘 입력 / 우=문장 작성·발송** 2열로 펼친다 — 좁으면 기존처럼 한 줄로 접힘.
+          세로로만 쌓으면 3열 레이아웃에서 보고서 열만 끝없이 길어지고 가운데 열이 텅 비었음(원장 지적 07-21).
+          ⚠️ **학부모 미리보기는 이 카드 안이 아니라 페이지 열이다**(2026-08-05 원장 재요청) — 카드 안에 두면
+             카드 폭을 입력과 나눠 써서, 보고서 열이 좁은 화면에선 입력까지 1열로 찌그러졌다. */}
+      <div className="grid flex-1 grid-cols-1 items-start gap-3 px-4 py-3 @2xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)] @2xl:gap-x-4">
         <div className="flex flex-col gap-3">
         <MiniSummary st={student} subject={subject} />
 
@@ -714,22 +704,6 @@ export function ReportCard({
           </div>
         ) : null}
         </div>
-        </div>
-
-        {/* 우측 — 학부모에게 나가는 화면 그대로(실시간). 스크롤해도 따라오게 상단 고정. */}
-        {preview ? (
-          <div className="@5xl:sticky @5xl:top-2">
-            <ReportPreview
-              ctx={preview}
-              student={student}
-              subject={subject}
-              draft={rep.draft}
-              trendDraft={rep.trendDraft}
-              attachments={atts}
-              attachmentUrls={attachmentUrls}
-            />
-          </div>
-        ) : null}
       </div>
     </div>
   );

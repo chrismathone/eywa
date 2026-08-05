@@ -88,4 +88,38 @@ describe("ReportPreview", () => {
     renderPreview({ draft: "   " });
     expect(screen.getByText("작성된 보고 내용이 없습니다.")).toBeTruthy();
   });
+
+  it("추이 이력이 오면 학습 추이 그래프도 그린다(발송본에 크게 들어가는 블록)", () => {
+    // 이력이 없으면 그래프 섹션 자체가 없다 — 실제 발송본과 같은 규약(유효점 2개 이상일 때만).
+    expect(screen.queryByText("학습 추이")).toBeNull();
+    cleanup();
+    renderPreview({
+      trendRows: [
+        { id: "r1", date: "2026-07-29", examInfo: "20문제 중 16개", homeworkScore: "100%" },
+        { id: "r2", date: "2026-08-03", examInfo: "20문제 중 12개", homeworkScore: "100%" },
+      ],
+    });
+    expect(screen.getByText("학습 추이")).toBeTruthy();
+  });
+
+  it("🔴 오늘 회차는 아직 저장 전이라 **지금 입력값**이 그래프의 마지막 점이 된다", () => {
+    // 일일 18/20 = 90% → 오늘(08-05) 점이 90으로 찍혀야 한다(저장 전에도 왼쪽 수정이 그래프에 반영).
+    renderPreview({
+      trendRows: [{ id: "r1", date: "2026-07-29", examInfo: "20문제 중 16개", homeworkScore: "100%" }],
+    });
+    const svg = document.querySelector("svg");
+    expect(svg).toBeTruthy();
+    expect(svg!.textContent).toContain("90");
+    // 같은 날짜의 저장분이 있어도 **입력값이 이긴다**(중복 점 방지 + 편집 중 값이 진실).
+    cleanup();
+    renderPreview({
+      trendRows: [
+        { id: "r1", date: "2026-07-29", examInfo: "20문제 중 16개", homeworkScore: "100%" },
+        { id: "r2", date: "2026-08-05", examInfo: "20문제 중 4개", homeworkScore: "0%" }, // 옛 저장분(20%)
+      ],
+    });
+    const svg2 = document.querySelector("svg");
+    expect(svg2!.textContent).toContain("90");
+    expect(svg2!.textContent).not.toContain("20문제");
+  });
 });
