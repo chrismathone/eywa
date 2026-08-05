@@ -4,10 +4,6 @@ import type { ConsultationDistribution, EnrollmentStats } from "@/features/enrol
 import { StatsTrend } from "./stats-trend";
 import { ConsultDistPanel } from "./consult-dist-panel";
 import { GRADE_UNKNOWN } from "@/features/enrollment/consultation-dist";
-import { pickGranularity } from "@/features/enrollment/trend-buckets";
-
-/** 추세 눈금 단위 표기 — 무엇을 보고 있는지 숨기지 않는다. */
-const GRAN_LABEL = { month: "월별", quarter: "분기별", year: "연별" } as const;
 import type { SchoolStatsPrefs } from "@/features/enrollment/school-view-prefs";
 
 const won = (n: number) => `${Math.round(n).toLocaleString("ko-KR")}원`;
@@ -96,18 +92,22 @@ export function StatsView({
       </div>
 
       <Card
-        title={year === null ? "전체 기간 월별 상담·등록" : `${year}년 월별 상담·등록`}
+        title={year === null ? "월별 상담·등록 (연도 비교)" : `${year}년 월별 상담·등록`}
+        // 가로축이 1월~12월 12칸이고 연도는 색이라, 무엇이 색으로 갈리는지 한 줄로 밝힌다.
         sub={
           year === null
-            ? `${GRAN_LABEL[pickGranularity(stats.months.length)]} 추세 · 상담·등록 선과 전환율(오른쪽 축)`
+            ? "가로축은 1월~12월 · 막대 색이 연도입니다(범례는 축 아래) — 같은 달끼리 해마다 견줍니다"
             : stats.prevYearMonths.some((m) => m.total > 0)
-            ? `점선 = ${(year ?? 0) - 1}년 상담 건수(전년 동월 비교) · 금색 선 = 전환율(오른쪽 축)`
-            : year === null
-              ? "금색 선 = 전환율(오른쪽 축) · 전체 기간에는 전년 동월 비교가 성립하지 않아 표시하지 않습니다"
-              : `금색 선 = 전환율(오른쪽 축) · ${year - 1}년 데이터가 없어 전년 비교는 표시하지 않습니다`
+              ? `같은 달 칸에 ${year - 1}년 상담(회색) · ${year}년 상담 · ${year}년 등록이 나란히 섭니다`
+              : `${year - 1}년 데이터가 없어 전년 막대는 표시하지 않습니다`
         }
       >
-        <StatsTrend months={stats.months} prevYearMonths={stats.prevYearMonths} year={year} />
+        <StatsTrend
+          months={stats.months}
+          prevYearMonths={stats.prevYearMonths}
+          year={year}
+          prefs={schoolPrefs}
+        />
       </Card>
 
       <Card
