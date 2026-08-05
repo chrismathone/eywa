@@ -18,7 +18,7 @@ export const metadata = { title: "수업 평가 — eywa" };
 /**
  * 수업 평가 체크리스트(참관) 목록 — 시트 "수업 상향화 체크리스트" 이식 초안(2026-08-04).
  * 접근은 class_review 메뉴 게이트(기본 전원 차단, 개인 예외로만 개방 — 테스트 단계).
- * 보기 필터(전체/내 평가 대기/내 평가 완료/미완료/선착순)는 계정 귀속(원장 지시 2026-08-05).
+ * 보기 필터(전체/내 평가 대기/완료/미완료/선착순 — 평가지 기준)는 계정 귀속(원장 지시 2026-08-05).
  */
 export default async function ClassReviewPage() {
   const viewer = await requireAccess("class_review");
@@ -76,7 +76,6 @@ export default async function ClassReviewPage() {
               mode: r.header.observerMode === "open" ? ("open" as const) : ("assigned" as const),
               modeLabel: r.header.observerMode === "open" ? "선착순 3명" : "평가자 지정",
               myTurn: !!mine && !mine.submitted,
-              myDone: !!mine?.submitted,
               incomplete: r.submittedCount < r.observerSlots,
               submitted: `${r.submittedCount}/${r.observerSlots}`,
               percent: r.averages ? r.averages.percent.toFixed(1) : null,
