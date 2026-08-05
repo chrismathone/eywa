@@ -59,11 +59,18 @@ export class GridStore {
   ) {
     this.rows = rows;
     this.cols = cols;
-    // 서버가 새 값을 보내오면 그것이 진실 — 낙관적 덮개는 벗긴다(저장이 끝났다는 뜻).
-    if (this.initial !== initial) {
-      this.pending.push(...this.overrides.keys());
-      this.initial = initial;
-      this.overrides.clear();
+    if (this.initial === initial) return;
+    this.initial = initial;
+    // 🔴 낙관적 덮개를 **통째로 벗기지 않는다.** 서버 갱신은 내 마지막 입력보다 늦게 도착할 수 있어
+    //    (조회가 그 입력 **전에** 시작됐으면 옛 값을 싣고 온다) 통째로 벗기면 방금 친 칸이 되돌아갔다가
+    //    다음 갱신에 다시 채워지는 **깜빡임**이 난다. 서버가 내 값과 **같아졌을 때만** 벗긴다 = 따라잡음.
+    // ⚠️ 트레이드오프: 다른 사람이 같은 칸을 고쳤다면 새로고침 전까지 내 값이 보인다(동시 편집은 드물다).
+    for (const [key, v] of [...this.overrides]) {
+      const server = initial[key] ?? null;
+      if ((server?.s ?? null) === (v?.s ?? null) && (server?.u ?? null) === (v?.u ?? null)) {
+        this.overrides.delete(key);
+        this.pending.push(key);
+      }
     }
   }
 

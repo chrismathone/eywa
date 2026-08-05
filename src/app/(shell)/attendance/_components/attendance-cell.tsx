@@ -48,19 +48,30 @@ export function AttendanceCell({
   const row = rowKey(classId, studentId);
   const key = cellKey(row, sessionDate);
   const { state, ctx } = useCellState(key);
-  const [noteVal, setNoteVal] = useState(note ?? "");
+  // 팝오버가 고친 메모(null = 아직 안 고침 → 서버 값 사용). effect로 state를 되쓰지 않는다(#25).
+  const [noteEdit, setNoteEdit] = useState<string | null>(null);
   const [popover, setPopover] = useState<PopoverAnchor | null>(null);
   const ref = useRef<HTMLDivElement>(null);
+  // 격자에 키보드로 들어올 수 있는 **단 하나의 탭 정거장**(첫 칸). 그 뒤로는 방향키가 받는다 —
+  // 칸마다 탭 정거장을 두면 31×N번을 눌러야 표를 지나칠 수 있다.
+  const isFirst = ctx?.store.rows[0] === row && ctx?.store.cols[0] === sessionDate;
 
   // 값은 격자(낙관적 반영)가 진실 — 격자가 없으면 서버가 그린 초기값.
   const status = (ctx ? ((state.value?.s ?? null) as AttendanceStatus | null) : initialStatus) ?? null;
   const units = ctx ? state.value?.u ?? null : initialUnits ?? null;
   const editing = state.active && state.buffer !== null;
 
-  // 활성 칸이 화면 밖이면 따라 스크롤(가로 31칸이라 방향키 이동에 필수).
+  // 활성 칸이 화면 밖이면 따라 스크롤(가로 31칸이라 방향키 이동에 필수) + 포커스도 함께 옮긴다
+  // (키보드만 쓰는 사용자가 격자 안에서 길을 잃지 않게).
   useEffect(() => {
-    if (state.active) ref.current?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    if (!state.active) return;
+    ref.current?.focus({ preventScroll: true });
+    ref.current?.scrollIntoView({ block: "nearest", inline: "nearest" });
   }, [state.active]);
+
+  // 기록이 지워진 칸엔 메모도 없다(행 자체가 삭제된다) — 접힌 모서리가 남으면 화면이 거짓말을 한다.
+  // 파생이라 effect가 필요 없다.
+  const noteVal = ctx && state.value === null ? "" : noteEdit ?? note ?? "";
 
   const display = cellDisplay(status, units, { attendDay, muted });
   const fromReport = derived && status === initialStatus;
@@ -70,13 +81,18 @@ export function AttendanceCell({
       .filter(Boolean)
       .join(" · ");
 
+  const openPopoverAt = (el: HTMLElement | null) => {
+    if (locked || !el) return;
+    const r = el.getBoundingClientRect();
+    const vh = typeof window !== "undefined" ? window.innerHeight : 9999;
+    // 아래 공간이 팝오버 높이(~300px)보다 좁으면 위로 뒤집는다 — 마지막 행에서 저장 버튼이 화면 밖으로 안 나가게.
+    const openUp = vh - r.bottom < 300 && r.top > vh - r.bottom;
+    setPopover(openUp ? { x: r.left, bottom: vh - r.top + 4 } : { x: r.left, top: r.bottom + 4 });
+  };
   const openPopover = (e: React.MouseEvent) => {
     if (locked) return;
     e.preventDefault();
-    const r = e.currentTarget.getBoundingClientRect();
-    const vh = typeof window !== "undefined" ? window.innerHeight : 9999;
-    const openUp = vh - r.bottom < 300 && r.top > vh - r.bottom;
-    setPopover(openUp ? { x: r.left, bottom: vh - r.top + 4 } : { x: r.left, top: r.bottom + 4 });
+    openPopoverAt(e.currentTarget as HTMLElement);
   };
 
   return (
@@ -85,11 +101,23 @@ export function AttendanceCell({
         ref={ref}
         data-cell-key={key}
         role="gridcell"
+        tabIndex={state.active || isFirst ? 0 : -1}
         aria-label={`${sessionDate} ${status ? STATUS_TEXT[status] : "미기록"}`}
         title={title || undefined}
         onMouseDown={(e) => {
           if (e.button !== 0) return;
-          ctx?.store.select({ row, col: sessionDate }, e.shiftKey);
+          ctx?.selectCell(row, sessionDate, e.shiftKey);
+        }}
+        // ⚠️ 이 칸 **안의 입력칸**이 포커스를 받아도 여기로 버블한다 — 이미 활성이면 손대지 않는다
+        //    (안 그러면 타이핑을 시작하는 순간 버퍼가 확정돼 버린다).
+        onFocus={() => {
+          if (!state.active) ctx?.selectCell(row, sessionDate, false);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === " " && !editing && !locked) {
+            e.preventDefault();
+            openPopoverAt(ref.current);
+          }
         }}
         onDoubleClick={openPopover}
         onContextMenu={openPopover}
@@ -186,7 +214,7 @@ export function AttendanceCell({
           anchor={popover}
           onClose={() => setPopover(null)}
           onSaved={(next) => {
-            setNoteVal(next.note);
+            setNoteEdit(next.note);
             ctx?.setLocal(key, next.status ? { s: next.status, u: next.units } : null);
           }}
         />

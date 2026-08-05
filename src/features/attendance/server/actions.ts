@@ -7,7 +7,7 @@ import { notifyIfClassAttendanceComplete } from "./complete-notify";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { accessLevelTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
-import { fetchInChunks } from "@/lib/supabase/batch";
+import { fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 // 담당 반 판정 단일 소스(담당 반 ∪ 그날 위임 반) — classes.teacher_id를 직접 비교하지 말 것(0173a).
 import { getTeachingClassIds } from "@/features/classes/server/delegation";
 import { parseSessionUnits } from "../session-units";
@@ -167,6 +167,8 @@ export async function setAttendanceCell(input: {
   status: Status | null;
   note?: string | null; // 전달 시 메모도 갱신(undefined면 기존 메모 유지)
   units?: string; // 전달 시 시수도 갱신(raw 입력 — 서버에서 파싱, ""=기본 1). undefined면 기존 유지.
+  /** 화면 갱신 생략 — 출석부 시트가 입력이 멎은 뒤 한 번만 새로고침한다(키 입력마다 재조회 방지). */
+  quiet?: boolean;
 }): Promise<CellResult> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
@@ -224,7 +226,7 @@ export async function setAttendanceCell(input: {
       .eq("student_id", studentId)
       .eq("session_date", sessionDate);
     if (error) return { error: error.message };
-    revalidatePath("/attendance");
+    if (!input.quiet) revalidatePath("/attendance");
     return { ok: true };
   }
 
@@ -264,7 +266,7 @@ export async function setAttendanceCell(input: {
   after(() =>
     notifyIfClassAttendanceComplete({ tenantId: user.tenantId, classId, date: sessionDate, actorId: user.id }),
   );
-  revalidatePath("/attendance");
+  if (!input.quiet) revalidatePath("/attendance");
   return { ok: true };
 }
 
@@ -423,6 +425,9 @@ export async function setAttendanceBulk(input: {
 export type RangeCell = { studentId: string; classId: string; sessionDate: string };
 export type RangeResult = { ok: true; applied: number; blocked: number } | { error: string };
 
+/** '전원 기록 완료' 전이 검사를 돌릴 (반×날짜) 조합 상한 — 넘으면 건너뛴다(아래 주석). */
+const NOTIFY_PAIR_LIMIT = 40;
+
 /**
  * 출석부 시트의 **범위 채우기·지우기** — 드래그 채우기, Ctrl+Enter, 범위 Delete가 이 액션 하나를 쓴다.
  *
@@ -439,6 +444,11 @@ export async function setAttendanceRange(input: {
   status: Status | null;
   /** 전달 시 시수도 갱신(raw — ""=기본 1). status=null이면 무시. */
   units?: string;
+  /**
+   * 화면 갱신을 이 액션이 하지 않는다 — 시트가 **입력이 멎은 뒤 한 번** 직접 새로고침한다.
+   * ⚠️ 켜지 않으면 칸을 칠 때마다 그 달 매트릭스를 통째로 다시 조회한다(수십 번 = 화면이 긴다).
+   */
+  quiet?: boolean;
 }): Promise<RangeResult> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
@@ -518,20 +528,26 @@ export async function setAttendanceRange(input: {
 
   const wanted = new Set(allowed.map((c) => `${c.studentId}::${c.classId}::${c.sessionDate}`));
   // 기존 기록 — (학생×반×날짜) 교차곱으로 받아 **정확한 칸만** JS로 골라낸다(칸마다 쿼리 금지).
-  const existingRows = await fetchInChunks<{
+  // 🔴 반드시 **페이지네이션**할 것: 교차곱이라 300칸 범위도 수천 행을 부를 수 있고, 그냥 청크만 하면
+  //    PostgREST가 1000행에서 **조용히 자른다**(#54). 잘리면 있는 행을 못 찾아 update 대신 insert →
+  //    같은 (학생·반·날짜)에 중복 출결이 쌓인다(시수·급여의 재료가 오염된다).
+  //    페이지가 흔들리지 않도록 order에 unique tie-break(id)를 함께 건다.
+  const existingRows = await fetchAllPagedInChunks<{
     id: string;
     class_id: string;
     student_id: string;
     session_date: string;
     recorded_at: string | null;
-  }>(studentIds, (chunk) =>
+  }>(studentIds, (chunk, from, to) =>
     supabase
       .from("attendance_records")
       .select("id, class_id, student_id, session_date, recorded_at")
       .in("session_date", dates)
       .in("class_id", classIds)
       .in("student_id", chunk)
-      .order("recorded_at", { ascending: false }),
+      .order("recorded_at", { ascending: false })
+      .order("id", { ascending: true })
+      .range(from, to),
   );
   const mine = existingRows.filter((r) => wanted.has(`${r.student_id}::${r.class_id}::${r.session_date}`));
   const CHUNK = 100;
@@ -587,16 +603,20 @@ export async function setAttendanceRange(input: {
   }
 
   // G4: (반·날짜) 조합마다 '전원 기록 완료' 전이 검사 — 셀·일괄 액션과 동일. 백그라운드라 응답을 안 막는다.
+  // ⚠️ 조합 수 상한: 한 달치를 통째로 끌면 (반×날짜)가 수백이 되어 백그라운드가 그만큼 쿼리를 돈다.
+  //    넘치면 검사를 건너뛴다 — 알림 하나 못 보내는 것보다 서버를 붙잡는 게 나쁘다(다음 셀 저장 때 다시 걸린다).
   const pairs = [...new Set(allowed.map((c) => `${c.classId}::${c.sessionDate}`))];
-  after(async () => {
-    for (const p of pairs) {
-      const [classId, date] = p.split("::");
-      if (classId && date) {
-        await notifyIfClassAttendanceComplete({ tenantId: user.tenantId, classId, date, actorId: user.id });
+  if (pairs.length <= NOTIFY_PAIR_LIMIT) {
+    after(async () => {
+      for (const p of pairs) {
+        const [classId, date] = p.split("::");
+        if (classId && date) {
+          await notifyIfClassAttendanceComplete({ tenantId: user.tenantId, classId, date, actorId: user.id });
+        }
       }
-    }
-  });
-  revalidatePath("/attendance");
+    });
+  }
+  if (!input.quiet) revalidatePath("/attendance");
   return { ok: true, applied: allowed.length, blocked: cells.length - allowed.length };
 }
 
