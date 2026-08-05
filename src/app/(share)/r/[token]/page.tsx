@@ -120,7 +120,8 @@ export default async function PublicLessonReportPage({
           attitude: report.attitude,
           notes: report.notes,
           trendNote: report.trend_note,
-          makeup: report.makeup === true, // 보강이면 제목에 "(보강)" — 정규 보고서와 구분
+          makeup: report.makeup === true, // 보강이면 제목에 접미사 — 반이 붙었으면 "(정규+보강)"(makeup-label.ts)
+          hasClass: report.class_id != null,
         }}
         student={student ?? null}
         academyName={academyName}

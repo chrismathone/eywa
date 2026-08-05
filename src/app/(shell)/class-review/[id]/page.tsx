@@ -69,6 +69,7 @@ export default async function ClassReviewDetailPage({ params }: { params: Promis
   const headerBits = [
     doc.header.subject ? subjects.labelOf(doc.header.subject) : null,
     openMode ? "선착순 3명" : "평가자 지정",
+    doc.templateName ?? null,
   ].filter(Boolean);
 
   return (
@@ -252,7 +253,7 @@ export default async function ClassReviewDetailPage({ params }: { params: Promis
               ? "내 채점이 저장돼 있습니다 — 필요하면 수정할 수 있습니다."
               : mine.slot === "self"
                 ? "본인 평가가 아직 없습니다 — 지금 채점해 주세요."
-                : "내 채점이 아직 없습니다 — 참관 내용을 채점해 주세요."}
+                : "내 채점이 아직 없습니다 — 수업 내용을 채점해 주세요."}
           </p>
           <Button render={<Link href={`/class-review/${doc.id}/score`} />}>
             {mine.submitted ? "내 평가 수정하기" : "평가하기"}
@@ -262,7 +263,7 @@ export default async function ClassReviewDetailPage({ params }: { params: Promis
         <p className="text-text-dim text-xs">
           {openMode
             ? "선착순 평가자 3명이 이미 채점을 마쳐 열람만 가능합니다."
-            : "이 참관 건의 평가자로 지정되어 있지 않아 채점은 열람만 가능합니다."}
+            : "이 평가 건의 평가자로 지정되어 있지 않아 채점은 열람만 가능합니다."}
         </p>
       )}
     </div>

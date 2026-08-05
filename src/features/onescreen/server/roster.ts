@@ -167,7 +167,13 @@ type MakeupReportRow = {
  *    임시 클라 행이 전부라, 저장·발송까지 끝낸 보강이 **새로고침 한 번에 사라졌다**
  *    (원장 제보 2026-08-03: "하은결 보강 보고서를 발송했는데 화면에서 찾을 수 없다" — DB엔 멀쩡히 있었다).
  *    그날 보강 보고서를 읽어 행을 되살린다 = 보강 기록의 유일한 원천이 DB가 된다.
- * 범위: (그 날짜, makeup=true, teacher_name=나). 날짜+본인으로 좁혀 수십 행(B2 무페이징 위험 없음).
+ * 범위: (그 날짜, makeup=true, **class_id IS NULL**, teacher_name=나). 날짜+본인으로 좁혀 수십 행(B2 안전).
+ *
+ * 🔴 **`class_id IS NULL`이 빠지면 안 된다**(2026-08-05 적대 리뷰에서 잡음). 같은 날 정규+보강을 합치면
+ *    **정규 보고서**가 `makeup=true`인데 반이 붙은 행이 된다 — 그것까지 여기서 집으면 아래 5-b가 그 과목의
+ *    "(보강)" 행을 **한 줄 더** 만들어 낸다(504의 중복 가드는 `!su.classId`인 보강 행만 본다). 그러면
+ *    새로고침 한 번에 빈 보강 행이 되살아나고, 강사가 그걸 채워 보내면 **결국 두 번 발송**된다 —
+ *    합치기 기능이 막으려던 바로 그 일이다. 여기서 되살릴 대상은 **반이 없는 순수 보강**뿐이다.
  * ⚠️ error를 `?? []`로 삼키지 않는다(B3) — 조용히 0건이면 "또 사라졌다"가 된다.
  */
 async function fetchMyMakeupReports(
@@ -180,7 +186,8 @@ async function fetchMyMakeupReports(
     .from("lesson_reports")
     .select("student_id, subject, makeup_class_id, created_by, teacher_name")
     .eq("report_date", date)
-    .eq("makeup", true);
+    .eq("makeup", true)
+    .is("class_id", null); // 순수 보강만 — 합쳐진 정규 보고서(반 있음)를 집으면 유령 보강 행이 생긴다(위 🔴)
   if (error) throw new Error(`보강 보고서 조회 실패: ${error.message}`);
   // 소유 판정은 순수 함수 [`ownsMakeupReport`](../makeup-owner.ts) 하나로 — 계정 id 우선, 옛 행만 이름 폴백.
   // 하루치 보강은 학원 전체로도 수십 건(실측 9개월 171건)이라 서버에서 걸러도 비용이 없다 —
@@ -588,12 +595,20 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
     // ⚠️ 옛 코드는 전체 이력을 무페이징 select(B2 위반) → PostgREST 1000행 silent 절단으로 오래된 학생부터 누락.
     // DISTINCT ON RPC(0117a)가 딱 필요한 만큼만 반환(절단 불가). studentIds 배열 파라미터라 청크 불필요(반환행 수백↓).
     supabase.rpc("onescreen_prior_reports", { p_student_ids: studentIds, p_before: todayIso }),
-    fetchInChunks<{ student_id: string; class_id: string; status: string; recorded_at: string }>(
+    fetchInChunks<{
+      student_id: string;
+      class_id: string;
+      status: string;
+      recorded_at: string;
+      // 사유 메모·시수 — 원스크린 출결 pill이 그 자리에서 읽고 고친다(2026-08-05). 출석부와 같은 칸.
+      note: string | null;
+      session_units: string | number | null;
+    }>(
       studentIds,
       (chunk) =>
         supabase
           .from("attendance_records")
-          .select("student_id, class_id, status, recorded_at")
+          .select("student_id, class_id, status, recorded_at, note, session_units")
           .eq("session_date", todayIso)
           .in("student_id", chunk)
           .order("recorded_at", { ascending: false }),
@@ -836,10 +851,15 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
   for (const a of attRows)
     if (myClassIdSet.has(a.class_id) && !attById.has(a.student_id)) attById.set(a.student_id, a.status);
   // (학생×반) 최신 raw — 출결 pill(2단계)의 행 단위 값. 축약(toMark)과 별개로 raw 보존(조퇴·보강 되쓰기 방지).
-  const attByRow = new Map<string, string>();
+  // 메모·시수도 **같은 최신 행에서** 함께 집는다(2026-08-05) — 상태만 최신 행에서, 메모는 다른 행에서
+  // 집으면 화면이 존재하지 않는 조합을 보여주고, 그걸 저장하면 실제 기록이 뒤섞인다.
+  const attByRow = new Map<string, { status: string; note: string | null; units: number | null }>();
   for (const a of attRows) {
     const k = `${a.student_id}::${a.class_id}`;
-    if (!attByRow.has(k)) attByRow.set(k, a.status);
+    if (attByRow.has(k)) continue;
+    // numeric은 postgres-js/PostgREST에서 문자열로 올 수 있다 — 숫자로 정규화(NaN은 기본값 취급).
+    const u = a.session_units == null ? null : Number(a.session_units);
+    attByRow.set(k, { status: a.status, note: a.note ?? null, units: Number.isFinite(u) ? u : null });
   }
   const toMark = (status: string | undefined): AttendanceMark =>
     status === "late" ? "지각" : status === "absent" || status === "early_leave" ? "결석" : "출석";
@@ -875,7 +895,11 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
     os.attendance = toMark(attById.get(os.id));
     // 행(반) 단위 raw 출결 — 출결 pill(2단계). classId 모호(null)면 미채움=pill 숨김.
     for (const su of os.subjects) {
-      if (su.classId) su.attendanceRaw = attByRow.get(`${os.id}::${su.classId}`) ?? null;
+      if (!su.classId) continue;
+      const rec = attByRow.get(`${os.id}::${su.classId}`);
+      su.attendanceRaw = rec?.status ?? null;
+      su.attendanceNote = rec?.note ?? null;
+      su.attendanceUnits = rec?.units ?? null;
     }
     const pr = priorReport.get(os.id);
     // 🔴 이 폴백은 **학생 단위**(반 무관) 직전 회차다 — 정규/특강을 구분하지 못한다(원장 2026-07-23).

@@ -74,22 +74,22 @@ export function MatrixRow({
   return (
     <tr className="hover:bg-bg-soft/40">
       {/* 이름 + 등원요일 — 같은 반이라도 학생마다 오는 요일이 다르다(분리등원). */}
-      <td className="border-line text-foreground sticky left-0 z-10 border-b border-r bg-card px-3 py-2 text-[12px] font-bold whitespace-nowrap">
+      <td className="border-line text-foreground sticky left-0 z-10 border-b border-r bg-card px-2 py-1 text-[12px] font-bold whitespace-nowrap">
         {student.name}
         {attendLabel ? (
           <span className="text-text-faint ml-1.5 text-[10px] font-medium">{attendLabel}</span>
         ) : null}
       </td>
-      <td className="border-line text-text-dim border-b border-r px-2 py-2 text-[11px] whitespace-nowrap">
+      <td className="border-line text-text-dim border-b border-r px-1.5 py-1 text-[11px] whitespace-nowrap">
         {student.grade ?? "—"}
       </td>
-      <td className="border-line text-text-dim border-b border-r px-2 py-2 text-[11px] whitespace-nowrap">
+      <td className="border-line text-text-dim border-b border-r px-1.5 py-1 text-[11px] whitespace-nowrap">
         {student.school ?? "—"}
       </td>
       {days.map((d) => {
         // 그 달에 없는 날(placeholder) — 빈 칸(입력 불가). 폭은 다른 칸과 동일(min-w)로 고정.
         if (d.placeholder) {
-          return <td key={d.date} className="border-line bg-bg-soft/20 min-w-[34px] border-b border-r" aria-hidden />;
+          return <td key={d.date} className="border-line bg-bg-soft/20 min-w-[30px] border-b border-r" aria-hidden />;
         }
         const holiday = holidays[d.date];
         // 등원요일 = 그 학생이 실제로 오는 날(분리등원 반영) — 공휴일은 휴원이라 제외.
@@ -97,7 +97,7 @@ export function MatrixRow({
         // 배경(음영·틴트)은 셀을 꽉 채우는 AttendanceCell 버튼이 그린다 — td는 relative 무대만
         // 제공한다(고정 크기 칩에 배경을 주면 셀을 못 채운다, gotcha #66).
         return (
-          <td key={d.date} className="border-line relative min-w-[34px] border-b border-r p-0 text-center align-middle">
+          <td key={d.date} className="border-line relative min-w-[30px] border-b border-r p-0 text-center align-middle">
             <AttendanceCell
               studentId={student.id}
               classId={classId}

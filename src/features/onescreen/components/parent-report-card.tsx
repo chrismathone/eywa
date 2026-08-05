@@ -5,6 +5,7 @@ import { hasTrend, type TrendPoint } from "../report-trend";
 import { isImageAttachment } from "../attachment-utils";
 import { isSkipStatusProgress } from "../progress-status";
 import { collapseProgressRanges } from "../progress-range";
+import { makeupTitleSuffix } from "../makeup-label";
 import { ReportTrendGraph } from "./report-trend-graph";
 
 // 학부모 수업 보고서 카드 — 공유 서버 컴포넌트(순수 프레젠테이션, 데이터는 props로만).
@@ -58,6 +59,11 @@ export type ParentReportCardProps = {
     notes: string | null;
     trendNote: string | null; // 학습 추세(종합분석) — 0091a(showTrendNote 토글)
     makeup?: boolean; // 보강(수업외 추가수업) — 제목에 "(보강)" 표시해 정규 보고서와 구분(2026-07-24 원장).
+    /**
+     * 이 보고서가 **반에 속하는가**(class_id IS NOT NULL). 보강 표시와 함께 "(보강)"과 "(정규+보강)"을
+     * 가른다 — 판정 규칙·근거는 [makeup-label.ts](../makeup-label.ts). 넘기지 않으면 "(보강)"로 본다.
+     */
+    hasClass?: boolean;
   };
   student: { name: string | null; school: string | null; grade: string | null } | null;
   academyName: string;
@@ -113,9 +119,10 @@ export function ParentReportCard({
         ) : null}
         {rpt.showAcademyName ? <p className="text-text-dim text-[15px]">{academyName}</p> : null}
         {/* 제목에 보고일 합체("2026년 07월 10일 수업 보고서") — 별도 보고일 필드 제거(2026-07-10 원장 요청).
-            보강(수업외 추가수업)이면 "(보강)"을 덧붙여 같은 날 정규 보고서와 학부모가 구분(2026-07-24 원장). */}
+            보강이면 접미사를 덧붙여 같은 날 정규 보고서와 학부모가 구분(2026-07-24 원장).
+            정규 수업까지 한 날의 보강은 "(정규+보강)"으로 합쳐 **한 번만** 나간다(2026-08-05 원장, makeup-label.ts). */}
         <h1 className="text-foreground text-2xl font-bold tracking-[0.05em]">
-          {[reportDate, `${rpt.title || "수업 보고서"}${report.makeup ? " (보강)" : ""}`].filter(Boolean).join(" ")}
+          {[reportDate, `${rpt.title || "수업 보고서"}${makeupTitleSuffix(report)}`].filter(Boolean).join(" ")}
         </h1>
       </header>
 

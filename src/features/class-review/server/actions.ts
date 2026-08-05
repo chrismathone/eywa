@@ -7,7 +7,8 @@ import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { humanizeDbError } from "@/lib/supabase/db-error";
 import { logAction } from "@/features/audit/server/log";
-import { itemCountOf, normalizeScore, sanitizeAreas } from "../checklist";
+import { kstToday } from "@/lib/date-kst";
+import { CHECKLIST_AREAS, itemCountOf, normalizeScore, sanitizeAreas } from "../checklist";
 import {
   DEFAULT_CLASS_REVIEW_FILTER,
   normalizeClassReviewFilter,
@@ -17,6 +18,7 @@ import {
   CLASS_REVIEW_FORM_TYPE,
   CLASS_REVIEW_TEMPLATE_FORM_TYPE,
   getChecklistAreas,
+  getChecklistTemplates,
   getReviewPrivileges,
   OPEN_MODE_OBSERVER_LIMIT,
   observerColumns,
@@ -31,8 +33,6 @@ import {
 
 export type ReviewActionState = { ok?: true; error?: string; notice?: string } | undefined;
 
-const YMD = /^\d{4}-\d{2}-\d{2}$/;
-
 async function requireWrite() {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" as const };
@@ -42,16 +42,20 @@ async function requireWrite() {
   return { user };
 }
 
-/** 새 참관 건 — 참관일·강사(필수) + 과목(선택) + 참관자 방식(지정/선착순 3명). */
+/**
+ * 새 평가 건 — 강사(필수) + 과목·문항 세트(선택) + 평가자 방식(지정/선착순 3명).
+ * 날짜는 입력받지 않고 **생성 당일(KST)** 로 박는다(원장 지시 2026-08-05 "참관일 따로 받지 말고").
+ * 문항은 선택한 세트를 **문서에 스냅샷** — 이후 세트를 고쳐도 이 평가지는 안 흔들린다.
+ */
 export async function createClassReview(_prev: ReviewActionState, formData: FormData): Promise<ReviewActionState> {
   const gate = await requireWrite();
   if ("error" in gate) return { error: gate.error };
 
-  const date = String(formData.get("date") ?? "").trim();
+  const date = kstToday();
   const teacherId = String(formData.get("teacherId") ?? "").trim();
   const subject = String(formData.get("subject") ?? "").trim();
+  const templateId = String(formData.get("templateId") ?? "").trim();
   const observerMode = String(formData.get("observerMode") ?? "") === "open" ? "open" : "assigned";
-  if (!YMD.test(date)) return { error: "참관일을 입력하세요" };
   if (!teacherId) return { error: "평가 대상 강사를 선택하세요" };
 
   const admin = createAdminClient();
@@ -77,6 +81,10 @@ export async function createClassReview(_prev: ReviewActionState, formData: Form
   }
   evaluators.push({ id: teacher.id, name: teacher.display_name, kind: "self" });
 
+  // 문항 세트 스냅샷 — 선택한 세트 > 첫 세트 > 내장 기본. 항상 문서에 동결한다.
+  const templates = await getChecklistTemplates(gate.user.tenantId);
+  const chosen = templates.find((t) => t.id === templateId) ?? templates[0] ?? null;
+
   const doc: Omit<ReviewDoc, "id" | "createdAt"> = {
     header: {
       date,
@@ -91,6 +99,8 @@ export async function createClassReview(_prev: ReviewActionState, formData: Form
     },
     evaluators,
     submissions: {},
+    areas: chosen?.areas ?? CHECKLIST_AREAS,
+    templateName: chosen?.name ?? "기본 문항",
   };
   const { data: row, error } = await admin
     .from("academy_documents")
@@ -113,7 +123,7 @@ export async function createClassReview(_prev: ReviewActionState, formData: Form
     action: "class_review_create",
     targetType: "user",
     targetLabel: teacher.display_name,
-    metadata: { date, observerMode, assigned: evaluators.length - 1 },
+    metadata: { date, observerMode, assigned: evaluators.length - 1, template: doc.templateName },
   });
   revalidatePath("/class-review");
   redirect(`/class-review/${row.id}`);
@@ -134,7 +144,7 @@ export async function submitClassReviewScores(
   if (!docId) return { error: "평가 건을 찾을 수 없습니다" };
 
   const admin = createAdminClient();
-  const [{ data: row, error: readErr }, areas] = await Promise.all([
+  const [{ data: row, error: readErr }, defaultAreas] = await Promise.all([
     admin
       .from("academy_documents")
       .select("id, form_data")
@@ -147,6 +157,9 @@ export async function submitClassReviewScores(
   if (readErr) return { error: humanizeDbError(readErr.message, "확인") };
   if (!row) return { error: "평가 건을 찾을 수 없습니다" };
 
+  // 문항 = 문서 스냅샷 우선(세트 복수화) — 구버전 문서만 테넌트 기본 세트.
+  const areas =
+    sanitizeAreas((row.form_data as { areas?: unknown } | null)?.areas) ?? defaultAreas;
   const total = itemCountOf(areas);
   const scores: number[] = [];
   for (let i = 0; i < total; i++) scores.push(normalizeScore(formData.get(`q${i}`)));
@@ -268,8 +281,10 @@ export async function deleteClassReview(_prev: ReviewActionState, formData: Form
 }
 
 /**
- * 문항 템플릿 저장 — **원장 + class_review 개인 예외 인원만**(원장 지시 2026-08-04).
- * ⚠️ 문항 수·순서를 바꾸면 기존 채점의 문항 매칭이 어긋난다 — 새 참관부터 적용 권장(편집 화면에 경고).
+ * 문항 세트 저장(복수화, 원장 지시 2026-08-05 — "1번 문항세트 2번 문항세트 여러 개") —
+ * **원장 + class_review 개인 예외 인원만**(원장 지시 2026-08-04).
+ * templateId 있으면 그 세트 수정, 없으면 새 세트 생성(생성 후 그 세트 편집 화면으로 이동).
+ * 기존 평가지는 생성 시점 스냅샷이라 세트를 고쳐도 안 흔들린다 — 새 평가부터 적용.
  */
 export async function saveChecklistTemplate(
   _prev: ReviewActionState,
@@ -280,6 +295,8 @@ export async function saveChecklistTemplate(
   const priv = await getReviewPrivileges(gate.user);
   if (!priv.editTemplate) return { error: "문항 편집은 원장·지정 인원만 가능합니다" };
 
+  const templateId = String(formData.get("templateId") ?? "").trim();
+  const name = String(formData.get("name") ?? "").trim();
   let parsed: unknown;
   try {
     parsed = JSON.parse(String(formData.get("areasJson") ?? "[]"));
@@ -290,39 +307,78 @@ export async function saveChecklistTemplate(
   if (!areas) return { error: "문항 형식이 올바르지 않습니다 — 영역 제목과 문항을 확인하세요(영역당 1~20문항)" };
 
   const admin = createAdminClient();
-  const { data: existing } = await admin
-    .from("academy_documents")
-    .select("id")
-    .eq("tenant_id", gate.user.tenantId)
-    .eq("form_type", CLASS_REVIEW_TEMPLATE_FORM_TYPE)
-    .order("updated_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
   const payload = {
     tenant_id: gate.user.tenantId,
-    title: "수업 평가 문항 템플릿",
+    title: `수업 평가 문항 세트${name ? ` — ${name}` : ""}`,
     category: "hr",
     kind: "form",
     form_type: CLASS_REVIEW_TEMPLATE_FORM_TYPE,
-    form_data: { areas },
+    form_data: { name, areas },
     restricted: true,
     // 직원 연결(#77 벽)로 /documents 표면에서 제외 — 대상 직원이 없어 편집자 본인에게 건다(내부 전용 행).
     staff_user_id: gate.user.id,
     uploaded_by: gate.user.id,
     updated_at: new Date().toISOString(),
   };
-  const { error } = existing
-    ? await admin.from("academy_documents").update(payload).eq("tenant_id", gate.user.tenantId).eq("id", existing.id)
-    : await admin.from("academy_documents").insert(payload);
-  if (error) return { error: humanizeDbError(error.message, "저장") };
+
+  let newId: string | null = null;
+  if (templateId) {
+    const { error, data: updated } = await admin
+      .from("academy_documents")
+      .update(payload)
+      .eq("tenant_id", gate.user.tenantId)
+      .eq("form_type", CLASS_REVIEW_TEMPLATE_FORM_TYPE)
+      .eq("id", templateId)
+      .select("id");
+    if (error) return { error: humanizeDbError(error.message, "저장") };
+    if (!updated?.length) return { error: "수정할 문항 세트를 찾을 수 없습니다" };
+  } else {
+    const { error, data: inserted } = await admin
+      .from("academy_documents")
+      .insert(payload)
+      .select("id")
+      .single();
+    if (error || !inserted) return { error: humanizeDbError(error?.message ?? "unknown", "저장") };
+    newId = inserted.id;
+  }
 
   await logAction({
     action: "class_review_template_save",
     targetType: "document",
-    metadata: { areas: areas.length, items: areas.reduce((n, a) => n + a.items.length, 0) },
+    targetLabel: name || null,
+    metadata: { areas: areas.length, items: areas.reduce((n, a) => n + a.items.length, 0), created: !templateId },
   });
   revalidatePath("/class-review");
   revalidatePath("/class-review/template");
-  return { ok: true, notice: "문항을 저장했습니다 — 새 채점부터 적용됩니다" };
+  if (newId) redirect(`/class-review/template?set=${newId}`);
+  return { ok: true, notice: "문항 세트를 저장했습니다 — 새 평가부터 적용됩니다" };
+}
+
+/** 문항 세트 삭제 — 기존 평가지는 스냅샷이라 영향 없음. 세트가 0개가 되면 내장 기본 문항으로 동작. */
+export async function deleteChecklistTemplate(
+  _prev: ReviewActionState,
+  formData: FormData,
+): Promise<ReviewActionState> {
+  const gate = await requireWrite();
+  if ("error" in gate) return { error: gate.error };
+  const priv = await getReviewPrivileges(gate.user);
+  if (!priv.editTemplate) return { error: "문항 편집은 원장·지정 인원만 가능합니다" };
+
+  const templateId = String(formData.get("templateId") ?? "").trim();
+  if (!templateId) return { error: "삭제할 세트를 찾을 수 없습니다" };
+
+  const { error, data: deleted } = await createAdminClient()
+    .from("academy_documents")
+    .delete()
+    .eq("tenant_id", gate.user.tenantId)
+    .eq("form_type", CLASS_REVIEW_TEMPLATE_FORM_TYPE)
+    .eq("id", templateId)
+    .select("id");
+  if (error) return { error: humanizeDbError(error.message, "삭제") };
+  if (!deleted?.length) return { error: "이미 삭제된 세트입니다" };
+
+  await logAction({ action: "class_review_template_delete", targetType: "document", metadata: { templateId } });
+  revalidatePath("/class-review");
+  revalidatePath("/class-review/template");
+  redirect("/class-review/template");
 }
