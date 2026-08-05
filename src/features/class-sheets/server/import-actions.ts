@@ -21,6 +21,7 @@ import {
 } from "@/features/integrations/server/sheet-sync-lease";
 import { sheetsProvider } from "@/features/integrations/sheets-provider";
 import { isEnrollmentActiveOn, enrollmentAttendsOnDay } from "@/features/enrollments/eligibility";
+import { ENGLISH_TRACK_LABEL } from "@/features/classes/english-track";
 import { fetchInChunks } from "@/lib/supabase/batch";
 import { buildWeekRows, splitStudentLabel, type BuildContext, type SlotRow } from "../import/build-rows";
 import { addIssue, type EcsClassImportReport, type EcsImportIssue, type EcsSheetTarget } from "../import/types";
@@ -79,14 +80,10 @@ export type ListTargetsResult =
   | Fail;
 
 /**
- * 1단계 — 마스터 시트의 반 시트 링크를 모아 eywa 반과 맞춘다(시트 읽기 2~수 콜, DB 쓰기 0).
+ * 마스터 시트 → eywa 반 매칭(순수 조회 코어). 게이트는 **호출부**가 이미 통과한 뒤 부른다.
  * 반 이름이 정확히 일치할 때만 대상. 못 맞춘 라벨은 `unmatched`로 올려 화면에 보여준다(자동 생성 금지).
  */
-export async function listEcsImportTargets(): Promise<ListTargetsResult> {
-  const user = await getCurrentUser();
-  if (!user) return { ok: false, error: "로그인이 필요합니다" };
-  if (!(await canManageSheetSync(user.systemRole))) return { ok: false, error: SHEET_ACCESS_DENIED_MSG };
-
+async function resolveMasterTargets(tenantId: string): Promise<ListTargetsResult> {
   let master: Awaited<ReturnType<typeof listMasterClassSheets>>;
   try {
     master = await listMasterClassSheets();
@@ -98,7 +95,7 @@ export async function listEcsImportTargets(): Promise<ListTargetsResult> {
   const { data: classes, error } = await admin
     .from("classes")
     .select("id, class_name")
-    .eq("tenant_id", user.tenantId)
+    .eq("tenant_id", tenantId)
     .eq("subject", "english");
   if (error) return { ok: false, error: `반 목록을 읽지 못했습니다: ${error.message}` };
   const byName = new Map((classes ?? []).map((c) => [c.class_name.trim(), c]));
@@ -136,6 +133,58 @@ export async function listEcsImportTargets(): Promise<ListTargetsResult> {
     year: master.year,
     targets: targets.filter((t) => t.classId && (seenClass.get(t.classId) ?? 0) === 1),
     unmatched,
+  };
+}
+
+/** 1단계(전 반) — 마스터 시트의 반 시트 링크를 모아 eywa 반과 맞춘다(시트 읽기 2~수 콜, DB 쓰기 0). */
+export async function listEcsImportTargets(): Promise<ListTargetsResult> {
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, error: "로그인이 필요합니다" };
+  if (!(await canManageSheetSync(user.systemRole))) return { ok: false, error: SHEET_ACCESS_DENIED_MSG };
+  return resolveMasterTargets(user.tenantId);
+}
+
+export type ClassTargetResult = { ok: true; year: number; target: EcsSheetTarget } | Fail;
+
+/**
+ * 1단계(반 1개) — ECS 반 시트 화면에서 **그 반만** 가져올 때 쓰는 대상 해석.
+ *
+ * 전 반 순회와 **같은 코어**를 쓰고 결과에서 내 반만 고른다. 마스터를 통째로 읽는 건 낭비처럼 보이지만,
+ * 반→시트 링크의 출처가 마스터뿐이라 다른 길이 없다(대신 반 시트 읽기가 1개로 줄어 총 콜이 28반 순회의
+ * 1/10 이하다). 링크를 DB에 캐시하지 않는 이유는 원장이 시트를 갈아끼워도 **다음 실행이 곧 진실**이어야
+ * 하기 때문 — 캐시는 죽은 시트를 조용히 계속 가리킨다.
+ *
+ * 게이트 2단(전 반 경로와 동일): 시트 경로 자격 + 그 반 ECS 쓰기 자격. 못 찾은 경우는 **왜**인지까지 말한다
+ * (이름 불일치 ↔ 시트 2개 연결은 원장이 할 일이 다르다).
+ */
+export async function listEcsImportTargetForClass(classId: string): Promise<ClassTargetResult> {
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, error: "로그인이 필요합니다" };
+  if (!(await canManageSheetSync(user.systemRole))) return { ok: false, error: SHEET_ACCESS_DENIED_MSG };
+  const gate = await requireEcsClassAccess(classId, { write: true });
+  if (!gate.ok) return { ok: false, error: gate.error };
+  // EiE 반은 구글 원본 수업계획서가 없다(원장 2026-08-05) — 마스터를 뒤져 "이름이 안 맞는다"고
+  // 답하면 원장이 고칠 수 없는 일을 시키는 거짓 원인이 된다. 사실대로 먼저 말하고 시트를 안 읽는다.
+  if (gate.access.englishTrack === "eie") {
+    return {
+      ok: false,
+      error: `${ENGLISH_TRACK_LABEL.eie} 반은 구글 원본 수업계획서가 없어 가져올 수 없습니다 — eywa에서 직접 작성합니다.`,
+    };
+  }
+
+  const listed = await resolveMasterTargets(user.tenantId);
+  if (!listed.ok) return listed;
+
+  const hit = listed.targets.find((t) => t.classId === classId);
+  if (hit) return { ok: true, year: listed.year, target: hit };
+
+  // 대상에서 빠진 이유를 그대로 전달 — `unmatched`엔 '시트 2개 연결' 문장이 반 이름으로 들어 있다.
+  const dup = listed.unmatched.find((u) => u.startsWith(`${gate.access.className} — 시트가 `));
+  return {
+    ok: false,
+    error:
+      dup ??
+      `마스터 시트에서 '${gate.access.className}' 반 시트 링크를 찾지 못했습니다. 마스터 시트의 반 이름이 eywa 반 이름과 정확히 같아야 합니다.`,
   };
 }
 

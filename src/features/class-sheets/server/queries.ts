@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 import { accessLevelTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
+import { canManageSheetSync } from "@/features/integrations/server/sheet-access";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { kstToday } from "@/lib/date-kst";
 import { mondayOf, shiftDays, weekLabel, weekRelation } from "@/features/timetable/lib/week";
@@ -91,6 +92,16 @@ export type ClassSheetWeekData = {
    * 고치는 중"임을 알 수 있는 자리가 툴바뿐이다.
    */
   delegated: boolean;
+  /**
+   * '시트 가져오기' 버튼을 띄울지 — 조건 둘을 곱한 값이다.
+   *  ① 시트 경로 자격 `sheet_sync "full"`(랜딩의 전 반 순회와 **같은 게이트**. 서버 액션도 같은 판정으로
+   *     이중 방어한다 — #77 "UI 조건은 게이트가 아니다").
+   *  ② **원본 시트가 있는 반**: EiE 반은 구글 원본 수업계획서가 아예 없다(원장 2026-08-05). 버튼을 띄우면
+   *     눌러야만 "시트를 못 찾았다"를 보게 되는 거짓 어포던스가 된다 — 애초에 안 띄운다.
+   *     ⚠️ 판정은 **컬럼(`english_track`)만** — 반 이름으로 EiE를 추측하지 말 것(english-track.ts 🔴).
+   *     미분류(null)는 인재원 영어와 같이 취급(비대칭 규약 그대로 — 사라지는 쪽으로 몰지 않는다).
+   */
+  showSheetImport: boolean;
 };
 
 export async function getClassSheetWeek(
@@ -337,7 +348,11 @@ export async function getClassSheetWeek(
   }
 
   // 출석 present 체크 가능 여부 — attendance 계약 그대로(권한 + 강사만 7일 창, 날짜별 판정)
-  const attendanceWrite = await canWriteTenant(access.user.systemRole, "attendance");
+  // 시트 가져오기 버튼 자격은 랜딩과 같은 게이트(sheet_sync full) — 독립 조회라 함께 태운다(B4).
+  const [attendanceWrite, canSheetSync] = await Promise.all([
+    canWriteTenant(access.user.systemRole, "attendance"),
+    canManageSheetSync(access.user.systemRole),
+  ]);
   const canMarkAttendanceByDate: Record<string, boolean> = {};
   for (const date of weekDatesOf(weekMonday)) {
     canMarkAttendanceByDate[date] =
@@ -414,6 +429,7 @@ export async function getClassSheetWeek(
       showSpecialRooms,
       // 위임 배지 — 게이트와 **같은 소스**(cache라 추가 왕복 0). 담임이 나면 위임이 아니다.
       delegated: delegatedIds.includes(classId) && access.teacherId !== access.user.id,
+      showSheetImport: canSheetSync && access.englishTrack !== "eie",
     },
   };
 }

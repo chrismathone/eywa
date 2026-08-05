@@ -44,7 +44,7 @@ export function NewReviewForm({
   }, [state]);
 
   return (
-    <form action={formAction} className="border-line bg-card max-w-2xl space-y-4 rounded-2xl border p-5 shadow-card">
+    <form action={formAction} className="bg-card max-w-2xl space-y-4 rounded-2xl p-5 shadow-card">
       <input type="hidden" name="observerMode" value={mode} />
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div>

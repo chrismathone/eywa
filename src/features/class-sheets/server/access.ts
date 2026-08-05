@@ -8,6 +8,7 @@ import { getDelegatedClassIdsInRange } from "@/features/classes/server/delegatio
 import { addDays, kstToday } from "@/lib/date-kst";
 import { createClient } from "@/lib/supabase/server";
 import { getTenantSettings } from "@/features/owner/server/queries";
+import { readEnglishTrack, type EnglishTrack } from "@/features/classes/english-track";
 import { resolveSkillAreas } from "@/features/owner/skill-areas";
 import type { SkillAreaSetting } from "@/features/owner/settings-types";
 
@@ -32,6 +33,11 @@ export type EcsClassAccess = {
   className: string;
   subject: string;
   teacherId: string | null; // classes.teacher_id(반 담임) — 표시·기본값용
+  /**
+   * 영어 프로그램 구분(0176a `classes.english_track`) — **컬럼이 유일한 진실**(반 이름으로 추측 금지).
+   * ECS에선 "원본 구글 시트가 있는 반인가"의 근거로 쓴다(EiE 반은 원본 시트가 없다 — 원장 2026-08-05).
+   */
+  englishTrack: EnglishTrack | null;
   /** 계획/마크/메모 편집 가능(full|scoped). 출석은 별도 attendance 게이트(actions에서 판정). */
   canWrite: boolean;
   skillAreas: SkillAreaSetting[];
@@ -67,7 +73,7 @@ export async function requireEcsClassAccess(
   const supabase = await createClient();
   const { data: cls } = await supabase
     .from("classes")
-    .select("id, tenant_id, class_name, subject, teacher_id")
+    .select("id, tenant_id, class_name, subject, teacher_id, english_track")
     .eq("id", classId)
     .maybeSingle();
   if (!cls || cls.tenant_id !== user.tenantId) {
@@ -91,6 +97,7 @@ export async function requireEcsClassAccess(
       className: cls.class_name,
       subject: cls.subject,
       teacherId: cls.teacher_id ?? null,
+      englishTrack: readEnglishTrack(cls),
       canWrite,
       skillAreas,
     },
