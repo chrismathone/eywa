@@ -49,7 +49,8 @@ export default async function EditClassPage({
   const [klass, teachers, classrooms, settings] = await Promise.all([
     getClassDetail(id),
     getClassTeacherOptions(),
-    getClassroomOptions(),
+    // 보관된 강의실이라도 **이 반에 배정돼 있으면** 선택지에 남긴다(안 그러면 저장 시 배정이 조용히 지워진다).
+    getClassroomOptions({ keepForClassId: id }),
     getTenantSettings(),
   ]);
 
@@ -106,6 +107,7 @@ export default async function EditClassPage({
             endTime: s.endTime,
             teacherId: s.teacherId,
             classroomId: s.classroomId,
+            slotTeacherLabel: s.slotTeacherLabel,
           })),
         }}
         teacherOptions={teacherOptions}

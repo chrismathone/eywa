@@ -11,10 +11,13 @@ import { CLASS_TAGS, TODAY } from "../data";
 import { ATTITUDE } from "../attitude";
 import type { OneScreenView } from "../view";
 import { buildSubjectReport, studentStatus } from "../report";
-import { applyTestScoreMode, buildReportCommentInput, formatTestScore } from "../report-comment";
+import { applyTestScoreMode, buildReportCommentInput } from "../report-comment";
+// 저장·미리보기 공용 필드 조립(단일 소스) — 미리보기가 발송본과 갈라지지 않게.
+import { buildExamInfo as buildExamInfoOf, buildReportFields } from "../report-fields";
 import {
   buildMakeupStudent,
   loadMakeupHistory,
+  loadReportTrend,
   generateReportComment,
   reissueShareLink,
   revokeShareLink,
@@ -41,6 +44,9 @@ import type { TodayClass } from "../server/roster";
 import { ProgressCard } from "./progress-card";
 import { TestCard } from "./test-card";
 import { ReportCard, type SubjectReport } from "./report-card";
+import { ReportPreview, type ReportPreviewContext } from "./report-preview";
+import type { TrendReportRow } from "../report-trend";
+import type { ReportSettings } from "@/features/owner/settings-types";
 import { OneScreenGrid } from "./onescreen-grid";
 import { StatusBoard } from "./status-board";
 import { SendCalendarBoard } from "./send-calendar";
@@ -141,14 +147,9 @@ function reportCell(map: Record<string, SubjectReport> | undefined, subjectCount
 }
 
 /** 오늘 시험·테스트 합본("일일 18/20, 확인 19/20") — exam_info 규격(추세 조립·prev-score 파싱 공용).
- * 미입력·**비활성 테스트(학원설정 off)** 항목은 생략 — 세션에서 복원된 옛 점수가 저장에 새는 것 차단. */
+ * 규격 자체는 report-fields.ts(저장·미리보기 공용 단일 소스)에 있고, 여기선 학생 shape에 맞춰 넘겨준다. */
 function buildExamInfo(st: OneScreenStudent, dailyOn: boolean, checkOn: boolean): string {
-  return [
-    dailyOn && st.tests.daily.score != null ? `일일 ${st.tests.daily.score}/${st.tests.daily.max}` : null,
-    checkOn && st.tests.check.score != null ? `확인 ${st.tests.check.score}/${st.tests.check.max}` : null,
-  ]
-    .filter(Boolean)
-    .join(", ");
+  return buildExamInfoOf(st.tests, dailyOn, checkOn);
 }
 
 /**
@@ -176,6 +177,10 @@ export function OneScreenClient({
   initialFontSize = DEFAULT_ONESCREEN_FONT_SIZE,
   noClassesToday = false,
   showingAll = false,
+  teacherName = "",
+  reportSettings,
+  academyName = "",
+  logoSrc = null,
 }: {
   initial: OneScreenStudent[];
   today?: string;
@@ -199,6 +204,12 @@ export function OneScreenClient({
   initialView?: OneScreenView; // URL(?view=)에서 온 초기 뷰 — 날짜 이동(재마운트) 후에도 보던 뷰 유지
   /** 글씨 크기(내 계정, users.ui_prefs.onescreen.fontSize) — 서버 확정값이라 첫 렌더부터 정확(#75 회피). */
   initialFontSize?: OnescreenFontSize;
+  // ── 카드 뷰 우측 '학부모 미리보기' 재료(2026-08-05) — 전부 서버가 확정해 내린다 ──
+  // reportSettings가 없으면 미리보기 열이 아예 안 열린다(레이아웃 예전 그대로) → 표시 전용 기능이라 안전한 폴백.
+  teacherName?: string;
+  reportSettings?: ReportSettings;
+  academyName?: string;
+  logoSrc?: string | null;
 }) {
   const router = useRouter();
   const [students, setStudents] = useState<OneScreenStudent[]>(initial);
@@ -217,6 +228,23 @@ export function OneScreenClient({
   // 대상 날짜(빈값=오늘). 날짜 이동 = searchParam 네비 → 서버가 그 날짜 로스터 재조회 + key로 클라 재초기화.
   const activeDate = date || kstToday();
   const todayYmd = kstToday();
+  // 카드 뷰 우측 '학부모 미리보기' 재료 — 렌더마다 새 객체를 만들면 카드가 매번 리렌더되므로 메모.
+  // 학원설정(reportSettings)이 안 내려온 경로에선 undefined = 미리보기 열 없음(기존 레이아웃 유지).
+  const previewCtx: ReportPreviewContext | undefined = useMemo(
+    () =>
+      reportSettings
+        ? {
+            settings: reportSettings,
+            academyName,
+            logoSrc,
+            teacherName,
+            reportDate: activeDate,
+            showDailyTest,
+            showCheckTest,
+          }
+        : undefined,
+    [reportSettings, academyName, logoSrc, teacherName, activeDate, showDailyTest, showCheckTest],
+  );
   // 반 공통 서술(G6) — 반 이름→서술. sessionStorage(날짜 키)+외부 스토어(#75 lazy 초기값·#25 effect setState 회피).
   // 생성 재료(기록 아님): 자동작성 시 그 행의 반 서술을 classContext로 동봉, 멘트 생성 후엔 잃어도 무해.
   const classNarratives = useSyncExternalStore(
@@ -418,6 +446,39 @@ export function OneScreenClient({
   const orderClass = matchingClasses.length === 1 ? matchingClasses[0] : undefined;
   const effectiveId = visible.some((s) => s.id === selId) ? selId : (visible[0]?.id ?? "");
   const selected = visible.find((s) => s.id === effectiveId) ?? null;
+
+  // ── 카드 뷰 학부모 미리보기 ──────────────────────────────────────────────
+  // 과목 칩 선택을 **여기서** 들고 있다 — 미리보기가 옆 열(형제)이라 카드 안 state로는 알 수 없다.
+  // 학생이 바뀌면 자동으로 0번으로 돌아간다(학생 id를 함께 저장해 불일치면 0으로 읽는다 → 리셋 effect 불필요).
+  const [cardSubject, setCardSubject] = useState<{ id: string; idx: number }>({ id: "", idx: 0 });
+  const subjectIdx =
+    selected && cardSubject.id === selected.id
+      ? Math.min(cardSubject.idx, Math.max(0, selected.subjects.length - 1))
+      : 0;
+  const previewSubject = selected?.subjects[subjectIdx];
+  const previewReport = selected && previewSubject ? reports[selected.id]?.[previewSubject.name] : undefined;
+  // 학습 추이 이력 — 선택된 (학생, 과목) 1건만 **지연 조회**(첫 페인트 비용 0, actions.loadReportTrend 주석).
+  // ⚠️ effect 본문에서 setState 금지(#25) → 요청 중복은 **ref**로 막고, state는 응답 콜백에서만 쓴다.
+  //    "지금 보는 대상의 결과인지"는 렌더 중 키 비교로 판정한다(옛 학생 그래프가 새 학생에 남지 않게).
+  const wantTrendKey =
+    previewCtx && selected && previewSubject
+      ? `${selected.id}::${previewSubject.subjectKey ?? previewSubject.subjectLabel ?? previewSubject.name}::${previewSubject.classId ?? ""}::${activeDate}`
+      : "";
+  const trendReqRef = useRef("");
+  const [trend, setTrend] = useState<{ key: string; rows: TrendReportRow[] } | null>(null);
+  useEffect(() => {
+    if (!wantTrendKey || trendReqRef.current === wantTrendKey) return;
+    trendReqRef.current = wantTrendKey;
+    const [sid, subj, cid] = wantTrendKey.split("::");
+    let alive = true;
+    void loadReportTrend(sid!, subj || null, cid || null, activeDate).then((res) => {
+      if (alive && res.ok) setTrend({ key: wantTrendKey, rows: res.rows ?? [] });
+    });
+    return () => {
+      alive = false;
+    };
+  }, [wantTrendKey, activeDate]);
+  const trendRows = trend?.key === wantTrendKey ? trend.rows : undefined;
 
   // 보고서 셀(과목별 발송 반영) + "오늘 마감" 카운트.
   // 테스트 사용 여부(showDailyTest/showCheckTest)를 넘겨 비활성 테스트가 마감 카운트를 0에 고정하지 않게(#25).
@@ -1240,39 +1301,24 @@ export function OneScreenClient({
     // ⚠️ 최신 초안은 ref에서(일괄 루프 중 사용자 편집·앞 행 patch 반영) — closure `reports`는 클릭 시점 스냅샷이라 유실 위험(#10).
     const existing = reportsRef.current[student.id]?.[subjectName];
     const draft = existing?.draft ?? "";
-    const trendNote = existing?.trendDraft?.trim() || undefined; // 추세 초안 있으면 함께 저장(없으면 미저장)
-    const examInfo = buildExamInfo(student, showDailyTest, showCheckTest);
-    // 학부모 보고서 일일/확인테스트 분리 표시용("N문제 중 M개"). exam_info(합본)는 roster prev-score 파싱용 별도 보존.
-    // 비활성 테스트(학원설정 off)는 세션에서 복원된 옛 점수가 남아 있어도 저장·발송하지 않는다(입력칸도 숨김 → 새 보고서엔 안 나감).
-    // 표기는 공유 순수함수(0148a) — testLine(AI 멘트)과 같은 포맷이라 "카드는 개수·멘트는 점수" 불일치가 없다.
-    const dailyTest =
-      showDailyTest && student.tests.daily.score != null
-        ? formatTestScore(student.tests.daily.score, student.tests.daily.max, student.tests.daily.mode)
-        : "";
-    const checkTest =
-      showCheckTest && student.tests.check.score != null
-        ? formatTestScore(student.tests.check.score, student.tests.check.max, student.tests.check.mode)
-        : "";
+    // 표시 필드(교재·진도·시험·태도·멘트…)는 **카드 미리보기와 같은 함수**로 만든다(report-fields.ts).
+    // 여기서 따로 조립하면 "화면에 보이던 것"과 "학부모가 받은 것"이 조용히 갈라진다.
+    const fields = buildReportFields({
+      subject: su,
+      homework: student.homework,
+      attitude: student.attitude,
+      tests: student.tests,
+      draft,
+      trendDraft: existing?.trendDraft,
+      showDailyTest,
+      showCheckTest,
+    });
     return {
       draft,
       input: {
         studentId: student.id,
         reportDate: date || undefined, // 대상 날짜(빈값=서버 오늘) — report_date가 곧 카드 표시일·ClassNote 게시일
-        textbook: su?.textbook || "",
-        makeup: su?.makeup ?? false,
-        homeworkToday: su?.homeworkToday || "",
-        // ⚠️ 진도 접두는 **순수 과목 라벨**(subjectLabel) — 행 이름(name)엔 반 이름이 붙을 수 있고
-        //    이 값은 학부모 카드에 그대로 나간다(원장 확정: 보고서에 반은 노출하지 않는다).
-        progress: su ? `${su.subjectLabel || su.name} ${su.today}`.trim() : "",
-        examInfo,
-        homeworkScore: student.homework,
-        dailyTest,
-        checkTest,
-        attitude: student.attitude ?? "",
-        // 모드 B에서 1문단만 비우면 초안이 "\n\n2문단"으로 유지된다(편집 중 글자가 위 칸으로 튀는 것 방지,
-        // comment-paragraphs.ts 불변식). 학부모에게 나가는 값은 여기서 다듬는다 — 앞 빈 줄 금지.
-        notes: draft.trim(),
-        trendNote, // 학습 추세(종합분석) — 4a
+        ...fields,
         // ⚠️ subject는 **과목키**(math)여야 한다 — 발송 과목 게이트·보드 매핑이 이 값을 본다.
         //    행 이름(name)엔 반 이름이 붙을 수 있으므로 폴백도 subjectLabel을 먼저 본다.
         subject: su?.subjectKey || su?.subjectLabel || su?.name || undefined,
@@ -2094,10 +2140,14 @@ export function OneScreenClient({
           onSent={() => setNoticeSeed(null)}
         />
       ) : (
-      /* 3열 폭 배분 — 콘텐츠 양에 비례하게. 예전 `1fr` + `380px 상한`은 정반대라, 짧은 진도·테스트 카드가
-         남는 폭을 다 먹고(넓은 화면에서 1000px+ 공백) 제일 긴 보고서가 380px에 갇혀 세로로만 늘어났다(원장 지적 07-21).
-         이제 보고서 열이 더 넓고, 카드 폭 ≥672px이면 보고서 내부가 2열로 펼쳐진다(@container). */
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[240px_minmax(0,1fr)_minmax(0,1.4fr)] lg:items-start 2xl:grid-cols-[260px_minmax(0,1fr)_minmax(0,2fr)]">
+      /* 열 = **학생 · 보고서 · 학부모 미리보기**(2026-08-05 통합).
+         진도·테스트를 따로 세우지 않는다 — 원장: *"이걸 하나의 섹션으로 합쳐버리면 안되나? 공간낭비
+         최소화할 수 있게? 굳이 따로 할 필요 있나?"* 그 열은 콘텐츠보다 훨씬 길어 아래가 통째로 비었고,
+         보고서 카드 맨 위 요약이 **같은 값을 두 번** 보여주고 있었다. 이제 보고서 카드 안에서
+         `@container` 폭에 따라 1 → 2 → 3열(진도·테스트 / 그 밖의 입력 / 문장·발송)로 펼쳐진다.
+         미리보기 열(≥1680px)은 **544px 고정** — 학부모가 받는 실제 이미지 폭(512px + 패딩)이라 늘리거나
+         줄이면 "실제 크기"가 거짓이 된다. 그보다 좁으면 미리보기는 아래 전체폭 행으로 내려간다. */
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[240px_minmax(0,1fr)] lg:items-start 2xl:grid-cols-[260px_minmax(0,1fr)] 3xl:grid-cols-[260px_minmax(0,1fr)_544px]">
         <StudentList
           students={visible}
           selId={effectiveId}
@@ -2111,25 +2161,6 @@ export function OneScreenClient({
 
         {selected ? (
           <>
-            {/* 중앙 그룹 — 좌측 학생목록·우측 보고서와 함께 3열 워크플로 영역을 그룹 제목으로 구분. */}
-            <div className="flex flex-col gap-3">
-              <header className="flex items-center gap-1.5">
-                <EyIcon name="chart" size={14} className="text-primary" />
-                <h2 className="text-foreground text-sm font-bold">오늘 진도 · 테스트</h2>
-              </header>
-              <ProgressCard
-                student={selected}
-                onConfirm={confirmProgress}
-                onProgress={setProgress}
-                onStudyGrade={setStudyGrade}
-                onLoadPrev={
-                  selected.isMakeup && !prevLoaded.has(selected.id)
-                    ? () => loadMakeupPrev(selected.id)
-                    : undefined
-                }
-              />
-              <TestCard student={selected} onScore={setScore} allowMax={allowTeacherTestMax} onMax={setMax} onMode={setMode} dailyEnabled={showDailyTest} checkEnabled={showCheckTest} />
-            </div>
             <div className="flex flex-col gap-3">
               <header className="flex items-center gap-1.5">
                 <EyIcon name="report" size={14} className="text-primary" />
@@ -2178,8 +2209,56 @@ export function OneScreenClient({
                 }}
                 // 실효 모드 = 강사 오버라이드 ?? 학원 기본 — 상단 토글이 하단 보고서 입력 구성을 실제로 바꾼다.
                 noticeMode={noticeMode ?? academyNoticeMode}
+                // 과목 칩 선택을 부모가 들고 있다 — 옆 열 미리보기가 "지금 보는 과목"을 그려야 하기 때문.
+                subjectIndex={subjectIdx}
+                onSubjectIndex={(i) => setCardSubject({ id: selected.id, idx: i })}
+                // 오늘 진도·테스트 = 이제 보고서 카드의 첫 열(2026-08-05 통합). 배선은 여기 그대로 두고
+                // 카드엔 **노드만** 넘긴다(카드가 콜백 7개를 더 받으면 props 규칙이 무너진다).
+                todayInputs={
+                  <>
+                    <ProgressCard
+                      embedded
+                      student={selected}
+                      onConfirm={confirmProgress}
+                      onProgress={setProgress}
+                      onStudyGrade={setStudyGrade}
+                      onLoadPrev={
+                        selected.isMakeup && !prevLoaded.has(selected.id)
+                          ? () => loadMakeupPrev(selected.id)
+                          : undefined
+                      }
+                    />
+                    <TestCard
+                      embedded
+                      student={selected}
+                      onScore={setScore}
+                      allowMax={allowTeacherTestMax}
+                      onMax={setMax}
+                      onMode={setMode}
+                      dailyEnabled={showDailyTest}
+                      checkEnabled={showCheckTest}
+                    />
+                  </>
+                }
               />
             </div>
+
+            {/* 4열째 — 학부모가 받는 화면 그대로(실시간). ≥1680px에서만 옆에 서고, 그보다 좁으면
+                아래 전체폭 행으로 내려간다(나란히 둘 자리가 없을 때 억지로 끼우면 양쪽 다 찌그러진다). */}
+            {previewCtx && previewSubject ? (
+              <div className="col-span-full 3xl:col-span-1 3xl:sticky 3xl:top-2">
+                <ReportPreview
+                  ctx={previewCtx}
+                  student={selected}
+                  subject={previewSubject}
+                  draft={previewReport?.draft ?? ""}
+                  trendDraft={previewReport?.trendDraft}
+                  attachments={previewReport?.attachments ?? []}
+                  attachmentUrls={attUrls}
+                  trendRows={trendRows}
+                />
+              </div>
+            ) : null}
           </>
         ) : (
           <div className="bg-card border-line shadow-card text-text-faint flex items-center justify-center rounded-2xl border p-10 text-sm lg:col-span-2">

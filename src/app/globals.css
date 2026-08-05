@@ -31,6 +31,19 @@
  * ⚠️ --primary 계열을 바꾸면 src/lib/color-utils.ts(DEFAULT_BRAND_COLOR·soft alpha 0.1/0.05)와 동기 필수.
  */
 
+/* 초대형 화면(≥1680px) — 원스크린 카드 뷰가 4열(학생·진도·보고서·학부모 미리보기)로 펼쳐지는 지점.
+   ⚠️ 두 번 걸렸다(2026-08-05 실측):
+     ① 임의값 변형(`min-[1680px]:`)으로 쓰면 **`2xl:`이 이긴다** — Tailwind v4가 임의 변형을 명명
+        브레이크포인트 뒤로 정렬해 주지 않아 2074px에서 2xl 규칙이 그대로 적용됐다.
+     ② 브레이크포인트는 **`@theme inline`이 아니라 일반 `@theme`**에 둬야 유틸리티가 생성된다
+        (inline 블록에 넣었더니 1680px 미디어쿼리가 CSS에 아예 없었다).
+     ③ 단위는 **rem이어야 한다** — Tailwind 기본 브레이크포인트가 `96rem`(2xl) 같은 rem이라, `1680px`로
+        적으면 단위가 달라 정렬이 어긋나 **3xl 규칙이 2xl보다 앞에** 깔린다(둘 다 매치되는 폭에서 2xl이 이김).
+        105rem = 1680px. 실측으로 세 번 만에 잡았다. */
+@theme {
+  --breakpoint-3xl: 105rem;
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -430,6 +443,28 @@
     100% {
       transform: scale(1);
       opacity: 1;
+    }
+  }
+
+  /* 통계 막대가 0에서 자라나는 연출 — 연도를 눌러 화면이 새로 그려질 때마다 재생된다.
+     원장 2026-08-05: *"연도를 막 누르면서 변화하는것을 애니메이션으로 보고 싶기 때문."*
+     서버 내비라 DOM이 통째로 새로 만들어지므로 transition이 아니라 **mount 애니메이션**이어야 한다.
+     ⚠️ 접근성: 모션을 줄이도록 설정한 사용자에겐 재생하지 않는다(아래 media query). */
+  @keyframes eywa-bar-grow {
+    from {
+      transform: scaleX(0);
+    }
+    to {
+      transform: scaleX(1);
+    }
+  }
+  .bar-grow {
+    transform-origin: left center;
+    animation: eywa-bar-grow 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .bar-grow {
+      animation: none;
     }
   }
 

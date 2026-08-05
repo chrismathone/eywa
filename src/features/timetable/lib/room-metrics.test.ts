@@ -1,7 +1,16 @@
 import { describe, expect, it } from "vitest";
 import type { PeriodsConfig } from "./periods";
 import { buildRoomBuckets, type RoomInfo, type RoomSlotLite } from "./room-grid";
-import { buildRoomWeekRows, resolveDayWindows, summarizeDay, utilPct } from "./room-metrics";
+import {
+  buildRoomWeekRows,
+  collectRoomConflicts,
+  collectSeatOver,
+  resolveDayWindows,
+  summarizeDay,
+  timelineColumnCells,
+  utilPct,
+  type RoomTimelineCell,
+} from "./room-metrics";
 
 const slot = (over: Partial<RoomSlotLite>): RoomSlotLite => ({
   id: over.id ?? Math.random().toString(36).slice(2),
@@ -18,6 +27,7 @@ const slot = (over: Partial<RoomSlotLite>): RoomSlotLite => ({
   isSpecialLecture: false,
   roomId: "r1",
   roomLabel: null,
+  isSeat: false,
   ...over,
 });
 
@@ -100,7 +110,8 @@ describe("summarizeDay", () => {
     expect(s.roomsUsed).toBe(1); // r1만(라벨 버킷은 분모 밖)
     expect(s.dayUtilPct).toBe(50); // 120분 ÷ (120분 × 2실)
     expect(s.conflictPairs).toBe(1); // LAB 부분 겹침
-    expect(s.roomsInUseNow).toBe(2); // 14:10 현재 r1 + LAB
+    // ⚠️ **등록 교실만** 센다 — 미등록(라벨) 버킷까지 세면 "강의실 2실"인데 "지금 수업 중 3실"이 된다.
+    expect(s.roomsInUseNow).toBe(1);
   });
 
   it("수업 없는 요일은 사용 0·겹침 0", () => {
@@ -112,59 +123,350 @@ describe("summarizeDay", () => {
   });
 });
 
-describe("buildRoomHourRows (시간대별 활성도)", () => {
-  it("주중 창을 1시간 밴드로 나누고, 셀 = 밴드∩창 분모 대비 주중 점유율", async () => {
-    const { buildRoomHourRows, weekdayHourBands } = await import("./room-metrics");
-    const { buckets } = buildRoomBuckets(
-      [
-        slot({ dayOfWeek: "mon", startTime: "14:00", endTime: "15:00" }),
-        slot({ dayOfWeek: "tue", startTime: "14:00", endTime: "14:30", classId: "c2" }),
-      ],
-      ROOMS,
-    );
-    const w = resolveDayWindows(["math"], CONFIG, []); // 평일 14:00~16:00
-    expect(weekdayHourBands(w).map((b) => b.label)).toEqual(["14시", "15시"]);
-    const { bands, rows } = buildRoomHourRows(buckets, w);
-    expect(bands).toHaveLength(2);
-    const r1 = rows.find((r) => r.key === "r1")!;
-    expect(r1.cells[0]).toBe(30); // (60+30)분 ÷ (60분×5일) = 30%
-    expect(r1.cells[1]).toBe(0); // 15시 밴드 수업 없음
-    const r2 = rows.find((r) => r.key === "r2")!;
-    expect(r2.cells).toEqual([0, 0]);
+describe("timelineAxis — 10분 격자 축", () => {
+  it("평일은 오전 특강이 창을 넓혀도 14시부터 시작한다", async () => {
+    const { timelineAxis } = await import("./room-metrics");
+    // 실데이터 모양: 평일 오전 특강(10:00~13:00)이 관측 확장으로 창을 10시까지 끌어내린다.
+    const morning = slot({ dayOfWeek: "mon", startTime: "10:00", endTime: "13:00", classId: "special" });
+    const w = resolveDayWindows(["math"], CONFIG, [morning]);
+    expect(w.mon!.startMin).toBe(10 * 60); // 창 자체는 넓어진 채로 둔다(지도는 정직해야 하므로)
+    const axis = timelineAxis(w, "mon");
+    expect(axis.startMin).toBe(14 * 60);
+    expect(axis.hours.map((h) => h.label)).toEqual(["14~15시", "15~16시"]);
+    expect(axis.slots).toBe(12); // 2시간 ÷ 10분
   });
 
-  it("창을 반쯤 벗어난 밴드는 분모를 창과의 교집합만큼만 잡는다", async () => {
-    const { buildRoomHourRows } = await import("./room-metrics");
-    // 관측 확장으로 mon만 13:30 시작 → 13시 밴드 분모 = 30분(mon)뿐.
-    const { buckets } = buildRoomBuckets(
-      [slot({ dayOfWeek: "mon", startTime: "13:30", endTime: "14:00" })],
-      ROOMS,
-    );
-    const w = resolveDayWindows(["math"], CONFIG, [
-      slot({ dayOfWeek: "mon", startTime: "13:30", endTime: "14:00" }),
-    ]);
-    const { bands, rows } = buildRoomHourRows(buckets, w);
-    expect(bands[0]!.label).toBe("13시");
-    const r1 = rows.find((r) => r.key === "r1")!;
-    expect(r1.cells[0]).toBe(100); // 점유 30분 ÷ 분모 30분(창 교집합)
+  it("주말은 하한을 적용하지 않는다 — 토요일 오전엔 정규 수업이 실제로 돈다", async () => {
+    const { timelineAxis } = await import("./room-metrics");
+    const w = resolveDayWindows(["math"], CONFIG, []); // 주말 창 09:00~10:00
+    expect(timelineAxis(w, "sat")).toMatchObject({ startMin: 9 * 60, slots: 6 });
+  });
+
+  it("창이 14시보다 늦게 시작하면 그 시작을 그대로 쓴다(하한이지 고정값이 아니다)", async () => {
+    const { timelineAxis } = await import("./room-metrics");
+    const w = resolveDayWindows(["math"], { weekday: { "1": { startTime: "16:00", endTime: "18:00" } }, weekend: {} }, []);
+    expect(timelineAxis(w, "mon").hours.map((h) => h.label)).toEqual(["16~17시", "17~18시"]);
+  });
+
+  it("하한 뒤로 남는 시간이 없으면 빈 축(표를 안 그린다)", async () => {
+    const { timelineAxis } = await import("./room-metrics");
+    const w = resolveDayWindows(["math"], { weekday: { "1": { startTime: "10:00", endTime: "12:00" } }, weekend: {} }, []);
+    expect(timelineAxis(w, "mon").slots).toBe(0);
   });
 });
 
-describe("buildRoomHourRows — 선택 요일 단일 기준(UI 기본, 평균 아님)", () => {
-  it("days=[mon]이면 월요일 점유만 절대값으로 — 다른 요일 수업은 안 섞인다", async () => {
-    const { buildRoomHourRows } = await import("./room-metrics");
+describe("buildRoomTimelineRows — 수업 시간대로 병합", () => {
+  it("80분 수업(15:00~16:20)은 10분 칸 8개로 병합된다", async () => {
+    const { buildRoomTimelineRows } = await import("./room-metrics");
+    const { buckets } = buildRoomBuckets(
+      [slot({ dayOfWeek: "mon", startTime: "15:00", endTime: "16:20", students: 7 })],
+      ROOMS,
+    );
+    // 창을 16:20까지 넓히려 관측 확장을 태운다(교시표는 16:00까지라 그대로면 잘린다).
+    const w = resolveDayWindows(["math"], CONFIG, [
+      slot({ dayOfWeek: "mon", startTime: "15:00", endTime: "16:20" }),
+    ]);
+    const r1 = buildRoomTimelineRows(buckets, w, "mon").rows.find((r) => r.key === "r1")!;
+    const cls = r1.cells.find((c) => c.kind === "class")!;
+    expect(cls).toMatchObject({ span: 8, students: 7, seatPct: 70, startMin: 15 * 60, endMin: 16 * 60 + 20 });
+  });
+
+  it("빈 시간은 gap으로 이어 붙고, 칸 수 합은 축과 정확히 같다(colspan 어긋남 방지)", async () => {
+    const { buildRoomTimelineRows } = await import("./room-metrics");
+    const { buckets } = buildRoomBuckets(
+      [slot({ dayOfWeek: "mon", startTime: "14:30", endTime: "15:00" })],
+      ROOMS,
+    );
+    const w = resolveDayWindows(["math"], CONFIG, []); // 14:00~16:00 = 12칸
+    const { axis, rows } = buildRoomTimelineRows(buckets, w, "mon");
+    for (const r of rows) {
+      expect(r.cells.reduce((n, c) => n + c.span, 0)).toBe(axis.slots);
+    }
+    const r1 = rows.find((r) => r.key === "r1")!;
+    expect(r1.cells.map((c) => [c.kind, c.span])).toEqual([
+      ["gap", 3],
+      ["class", 3],
+      ["gap", 6],
+    ]);
+  });
+
+  it("같은 시간에 두 반이면 **인원을 합산**한다(반 하나만 보면 붐비는 방을 놓친다)", async () => {
+    const { buildRoomTimelineRows } = await import("./room-metrics");
     const { buckets } = buildRoomBuckets(
       [
-        slot({ dayOfWeek: "mon", startTime: "14:00", endTime: "14:30" }),
-        slot({ dayOfWeek: "tue", startTime: "14:00", endTime: "16:00", classId: "c2" }),
+        slot({ dayOfWeek: "mon", startTime: "14:00", endTime: "15:00", classId: "small", students: 3 }),
+        slot({ dayOfWeek: "mon", startTime: "14:00", endTime: "15:00", classId: "big", students: 9 }),
       ],
       ROOMS,
     );
-    const w = resolveDayWindows(["math"], CONFIG, []); // 평일 14:00~16:00
-    const mon = buildRoomHourRows(buckets, w, ["mon"]);
-    const r1 = mon.rows.find((r) => r.key === "r1")!;
-    expect(r1.cells).toEqual([50, 0]); // 월 14시 30분/60분 — 화요일 풀가동은 안 섞임
-    const tue = buildRoomHourRows(buckets, w, ["tue"]);
-    expect(tue.rows.find((r) => r.key === "r1")!.cells).toEqual([100, 100]);
+    const w = resolveDayWindows(["math"], CONFIG, []);
+    const r1 = buildRoomTimelineRows(buckets, w, "mon").rows.find((r) => r.key === "r1")!;
+    const cls = r1.cells.find((c) => c.kind === "class")!;
+    // 대표(classId)는 인원 많은 쪽이지만 students는 3+9 = 12 — 그 방에 실제로 있는 사람 수다.
+    expect(cls).toMatchObject({ classId: "big", students: 12, overlap: "joint" });
+    expect(cls.kind === "class" && cls.members.map((m) => m.classId)).toEqual(["big", "small"]);
+    // 정원 10명 방에 12명 → 화면이 "초과"라고 말해야 한다(옛 규약은 9/10 = 90%로 침묵했다).
+    expect(cls.kind === "class" && cls.seatPct).toBe(120);
+  });
+
+  it("정원 미입력이면 인원률은 null — 인원은 그대로 보여준다(0%로 속이지 않는다)", async () => {
+    const { buildRoomTimelineRows } = await import("./room-metrics");
+    const { buckets } = buildRoomBuckets(
+      [slot({ dayOfWeek: "mon", startTime: "14:00", endTime: "15:00", roomId: "r2", students: 5 })],
+      ROOMS,
+    );
+    const w = resolveDayWindows(["math"], CONFIG, []);
+    const r2 = buildRoomTimelineRows(buckets, w, "mon").rows.find((r) => r.key === "r2")!;
+    expect(r2.cells.find((c) => c.kind === "class")).toMatchObject({ students: 5, seatPct: null });
+  });
+
+  it("정원을 넘으면 100%를 넘겨 그대로 낸다(초과를 숨기지 않는다)", async () => {
+    const { buildRoomTimelineRows } = await import("./room-metrics");
+    const { buckets } = buildRoomBuckets(
+      [slot({ dayOfWeek: "mon", startTime: "14:00", endTime: "15:00", students: 13 })],
+      ROOMS,
+    );
+    const w = resolveDayWindows(["math"], CONFIG, []);
+    const r1 = buildRoomTimelineRows(buckets, w, "mon").rows.find((r) => r.key === "r1")!;
+    expect(r1.cells.find((c) => c.kind === "class")).toMatchObject({ seatPct: 130 });
+  });
+
+  it("다른 요일 수업은 안 섞인다(선택 요일 절대값)", async () => {
+    const { buildRoomTimelineRows } = await import("./room-metrics");
+    const { buckets } = buildRoomBuckets(
+      [slot({ dayOfWeek: "tue", startTime: "14:00", endTime: "16:00", students: 8 })],
+      ROOMS,
+    );
+    const w = resolveDayWindows(["math"], CONFIG, []);
+    const mon = buildRoomTimelineRows(buckets, w, "mon").rows.find((r) => r.key === "r1")!;
+    expect(mon.cells).toEqual([{ kind: "gap", span: 12 }]);
+  });
+});
+
+describe("timelineColumnCells — 축 전환(시간=세로)용 색인", () => {
+  it("병합에 덮인 칸은 null(그 자리에 td를 또 그리면 표가 밀린다)", () => {
+    const cells = [
+      { kind: "gap", span: 2 },
+      { kind: "class", span: 3, classId: "c1" },
+      { kind: "gap", span: 1 },
+    ] as unknown as RoomTimelineCell[];
+    const at = timelineColumnCells(cells, 6);
+    expect(at.map((c) => (c == null ? "-" : c.kind))).toEqual([
+      "gap",
+      "gap",
+      "class",
+      "-",
+      "-",
+      "gap",
+    ]);
+    expect(at[2]).toMatchObject({ span: 3, classId: "c1" });
+  });
+
+  it("빈 구간은 10분마다 쪼갠다(통째 병합하면 그 구간에 눈금이 안 남는다)", () => {
+    const at = timelineColumnCells([{ kind: "gap", span: 4 }] as RoomTimelineCell[], 4);
+    expect(at).toEqual([
+      { kind: "gap", span: 1 },
+      { kind: "gap", span: 1 },
+      { kind: "gap", span: 1 },
+      { kind: "gap", span: 1 },
+    ]);
+  });
+
+  it("길이는 항상 격자 칸 수 — 축 끝을 넘는 셀은 잘라낸다(행 수와 어긋나지 않게)", () => {
+    const at = timelineColumnCells(
+      [{ kind: "gap", span: 2 }, { kind: "class", span: 5, classId: "c1" }] as unknown as RoomTimelineCell[],
+      4,
+    );
+    expect(at).toHaveLength(4);
+    expect(at.filter(Boolean)).toHaveLength(3);
+  });
+
+  it("실데이터 경로 — 15:00~16:20 수업 한 개는 시작 칸에만 서고 span 8을 유지", async () => {
+    const { buildRoomTimelineRows } = await import("./room-metrics");
+    const s = slot({ dayOfWeek: "mon", startTime: "15:00", endTime: "16:20", students: 8 });
+    const { buckets } = buildRoomBuckets([s], ROOMS);
+    // 창을 수업까지 넓혀서(관측 확장) 80분이 통째로 축 안에 들어오게 — 잘린 창은 위 케이스가 따로 본다.
+    const w = resolveDayWindows(["math"], CONFIG, [s]);
+    const { axis, rows } = buildRoomTimelineRows(buckets, w, "mon");
+    const at = timelineColumnCells(rows.find((r) => r.key === "r1")!.cells, axis.slots);
+    const starts = at.filter((c) => c?.kind === "class");
+    expect(starts).toHaveLength(1);
+    expect(starts[0]).toMatchObject({ span: 8 });
+    // 병합 뒤 8칸 중 시작 1칸만 td가 서고 나머지 7칸은 비어 있다.
+    expect(at.filter((c) => c == null)).toHaveLength(7);
+  });
+});
+
+describe("collectRoomConflicts — 하단 '시간 겹침' 반 목록", () => {
+  it("부분 겹침만 잡고, 합반(완전 동일 범위)은 안 잡는다 — 요약의 '건수'와 같은 술어", () => {
+    const { buckets } = buildRoomBuckets(
+      [
+        // 부분 겹침(이중예약 의심) — 15:00~16:00 ∩ 15:30~16:30
+        slot({ id: "a", classId: "c1", className: "중등M 중1", startTime: "15:00", endTime: "16:00" }),
+        slot({ id: "b", classId: "c2", className: "중등M 중2", startTime: "15:30", endTime: "16:30" }),
+        // 합반 — 완전 동일 범위라 겹침이 아니다
+        slot({ id: "c", classId: "c3", className: "합반A", roomId: "r2", startTime: "15:00", endTime: "16:00" }),
+        slot({ id: "d", classId: "c4", className: "합반B", roomId: "r2", startTime: "15:00", endTime: "16:00" }),
+      ],
+      ROOMS,
+    );
+    const rows = collectRoomConflicts(buckets);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.roomName).toBe("본원301");
+    expect(rows[0]!.classes.map((c) => c.className)).toEqual(["중등M 중1", "중등M 중2"]);
+    // 줄이 말하는 시각 = 두 반이 **실제로 같은 방에 있는** 교집합(15:30~16:00).
+    expect([rows[0]!.startMin, rows[0]!.endMin]).toEqual([930, 960]);
+  });
+
+  it("요약의 conflictPairs와 목록 길이가 절대 어긋나지 않는다(같은 술어 회귀 가드)", () => {
+    const slots = [
+      slot({ id: "a", classId: "c1", startTime: "15:00", endTime: "16:00" }),
+      slot({ id: "b", classId: "c2", startTime: "15:30", endTime: "16:30" }),
+      slot({ id: "c", classId: "c3", startTime: "15:40", endTime: "17:00" }),
+    ];
+    const { buckets } = buildRoomBuckets(slots, ROOMS);
+    const w = resolveDayWindows(["math"], CONFIG, slots);
+    expect(collectRoomConflicts(buckets)).toHaveLength(summarizeDay(buckets, w, "mon", 0).conflictPairs);
+  });
+
+  it("요일을 주면 **그 요일만** 낸다(화면은 선택 요일만 보여준다, 원장 2026-08-04)", () => {
+    const { buckets } = buildRoomBuckets(
+      [
+        slot({ id: "a", classId: "c1", dayOfWeek: "wed", startTime: "15:00", endTime: "16:00" }),
+        slot({ id: "b", classId: "c2", dayOfWeek: "wed", startTime: "15:30", endTime: "16:30" }),
+        slot({ id: "c", classId: "c3", dayOfWeek: "mon", startTime: "14:00", endTime: "15:00" }),
+        slot({ id: "d", classId: "c4", dayOfWeek: "mon", startTime: "14:30", endTime: "15:30" }),
+      ],
+      ROOMS,
+    );
+    expect(collectRoomConflicts(buckets, "wed").map((r) => r.day)).toEqual(["wed"]);
+    expect(collectRoomConflicts(buckets, "tue")).toEqual([]);
+    // 요일을 안 주면 주간 전체(요일 → 시각 순).
+    expect(collectRoomConflicts(buckets).map((r) => r.day)).toEqual(["mon", "wed"]);
+  });
+});
+
+describe("collectSeatOver — 하단 '정원 초과' 반 목록", () => {
+  it("정원이 있는 방만, 넘은 반만 — **시각 순**(위 표를 훑는 순서, 2026-08-04 가독성 지시)", () => {
+    const { buckets } = buildRoomBuckets(
+      [
+        slot({ id: "a", classId: "c1", className: "1명 초과", students: 11, startTime: "14:00", endTime: "15:00" }),
+        slot({ id: "b", classId: "c2", className: "5명 초과", students: 15, startTime: "15:00", endTime: "16:00" }),
+        slot({ id: "c", classId: "c3", className: "딱 정원", students: 10, startTime: "16:00", endTime: "17:00" }),
+        // 정원 미입력(r2)은 판정 대상이 아니다 — 0으로 속이지 않는다.
+        slot({ id: "d", classId: "c4", className: "정원없는방", students: 99, roomId: "r2" }),
+      ],
+      ROOMS,
+    );
+    const rows = collectSeatOver(buckets);
+    expect(rows.map((r) => r.classes[0]!.className)).toEqual(["1명 초과", "5명 초과"]);
+    expect(rows[1]).toMatchObject({ roomName: "본원301", capacity: 10, students: 15 });
+    expect(rows[1]!.classes[0]!.classId).toBe("c2");
+  });
+
+  it("요일을 주면 그 요일만 — 다른 요일의 초과는 안 섞인다", () => {
+    const { buckets } = buildRoomBuckets(
+      [
+        slot({ id: "a", classId: "c1", className: "월 초과", students: 12, dayOfWeek: "mon" }),
+        slot({ id: "b", classId: "c2", className: "수 초과", students: 12, dayOfWeek: "wed" }),
+      ],
+      ROOMS,
+    );
+    expect(collectSeatOver(buckets, "mon").map((r) => r.classes[0]!.className)).toEqual(["월 초과"]);
+    expect(collectSeatOver(buckets, "sat")).toEqual([]);
+  });
+
+  it("반을 짚어 준다(수업 상세 링크의 근거) — classId가 비면 링크가 거짓말이 된다", () => {
+    const { buckets } = buildRoomBuckets(
+      [slot({ id: "a", classId: "c9", className: "고등M 고1", students: 12 })],
+      ROOMS,
+    );
+    expect(collectSeatOver(buckets)[0]!.classes[0]!.classId).toBe("c9");
+  });
+});
+
+// ── 2026-08-04 적대 리뷰 수리 회귀 가드 ──────────────────────────────────────────────
+describe("가동률 분모 = 화면이 그리는 범위", () => {
+  it("오전 특강이 창을 넓혀도 가동률은 **표가 그리는 14시부터**로 잰다(표로 검산되게)", () => {
+    const morning = slot({ dayOfWeek: "mon", startTime: "10:00", endTime: "13:00", classId: "sp" });
+    const w = resolveDayWindows(["math"], CONFIG, [morning]);
+    expect(w.mon).toEqual({ startMin: 600, endMin: 960 }); // 창 자체는 10:00~16:00로 넓어진다
+    const { buckets } = buildRoomBuckets(
+      [slot({ dayOfWeek: "mon", startTime: "14:00", endTime: "15:00" }), morning],
+      ROOMS,
+    );
+    // 보이는 창 = 14:00~16:00(120분) × 등록 2실 = 240분. 점유는 14~15시 60분만(오전은 표 밖이라 잘린다).
+    expect(summarizeDay(buckets, w, "mon", 0).dayUtilPct).toBe(25);
+  });
+
+  it("분자도 같이 잘린다 — 100%를 넘는 가동률이 나오지 않는다", () => {
+    const morning = slot({ dayOfWeek: "mon", startTime: "09:00", endTime: "16:00" });
+    const w = resolveDayWindows(["math"], CONFIG, [morning]);
+    const { buckets } = buildRoomBuckets([morning], ROOMS);
+    const pct = summarizeDay(buckets, w, "mon", 0).dayUtilPct!;
+    expect(pct).toBeLessThanOrEqual(100);
+    expect(pct).toBe(50); // 보이는 120분을 꽉 채운 방 1개 ÷ 등록 2실
+  });
+});
+
+describe("겹침 판정 — 자리(JJ·LAB) 레인은 이중예약이 아니다", () => {
+  const pair = (seat: boolean) =>
+    buildRoomBuckets(
+      [
+        slot({ id: "a", classId: "c1", className: "정규", startTime: "15:00", endTime: "16:00" }),
+        slot({ id: "b", classId: "c2", className: "개별", startTime: "15:30", endTime: "16:30", isSeat: seat }),
+      ],
+      ROOMS,
+    ).buckets;
+
+  it("한쪽이 자리면 겹침으로 세지 않는다(병렬 레인이 정상 — 진짜 이중예약이 묻히지 않게)", () => {
+    expect(collectRoomConflicts(pair(true))).toEqual([]);
+    expect(summarizeDay(pair(true), resolveDayWindows(["math"], CONFIG, []), "mon", 0).conflictPairs).toBe(0);
+  });
+
+  it("둘 다 사람이 가르치면 그대로 겹침이다", () => {
+    expect(collectRoomConflicts(pair(false))).toHaveLength(1);
+  });
+
+  it("겹침이 아니어도 **인원은 합산**한다 — 이중예약이 아닌 것과 사람이 없는 건 다른 말", () => {
+    const rows = collectSeatOver(
+      buildRoomBuckets(
+        [
+          slot({ id: "a", classId: "c1", className: "정규", students: 6, startTime: "15:00", endTime: "16:00" }),
+          slot({ id: "b", classId: "c2", className: "개별", students: 6, startTime: "15:00", endTime: "16:00", isSeat: true }),
+        ],
+        ROOMS,
+      ).buckets,
+      "mon",
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ students: 12, capacity: 10 });
+    expect(rows[0]!.classes.map((c) => c.className)).toEqual(["정규", "개별"]);
+  });
+});
+
+describe("정원 초과 = 동시 인원 합(적대 리뷰 F3)", () => {
+  it("반 하나씩 보면 둘 다 정원 이하지만 함께 있으면 초과 — 실측 34건이 이렇게 침묵했다", () => {
+    const { buckets } = buildRoomBuckets(
+      [
+        slot({ id: "a", classId: "c1", className: "브릿지 B", students: 8, startTime: "14:30", endTime: "16:00" }),
+        slot({ id: "b", classId: "c2", className: "개별 JJ1E", students: 9, startTime: "14:30", endTime: "16:00" }),
+      ],
+      ROOMS,
+    );
+    const rows = collectSeatOver(buckets, "mon");
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ students: 17, capacity: 10, startMin: 870, endMin: 960 });
+  });
+
+  it("겹치지 않는 두 반은 각자 판정 — 합산이 시간을 넘어 번지지 않는다", () => {
+    const { buckets } = buildRoomBuckets(
+      [
+        slot({ id: "a", classId: "c1", students: 6, startTime: "14:00", endTime: "15:00" }),
+        slot({ id: "b", classId: "c2", students: 6, startTime: "15:00", endTime: "16:00" }),
+      ],
+      ROOMS,
+    );
+    expect(collectSeatOver(buckets, "mon")).toEqual([]);
   });
 });

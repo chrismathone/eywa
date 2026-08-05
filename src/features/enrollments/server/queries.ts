@@ -94,11 +94,27 @@ export type ClassroomOption = {
   capacity: number | null;
 };
 
-export async function getClassroomOptions(): Promise<ClassroomOption[]> {
+/**
+ * 반 폼의 강의실 **선택지** — 보관(숨김)된 강의실은 제외한다(0182a).
+ *
+ * ⚠️ 수정 화면은 반드시 `keepForClassId`를 넘길 것. 그 반에 **이미 배정된** 강의실이 보관됐을 때
+ *    선택지에서 빼 버리면, 컨트롤드 select가 값을 못 찾아 빈 칸이 되고 **그대로 저장하는 순간 배정이
+ *    조용히 사라진다** — "숨겨도 배정은 그대로"라는 이 기능의 전제를 화면이 깨는 셈이다
+ *    (담임 select가 같은 이유로 이미 같은 방어를 하고 있다: classes/[id]/edit 주석).
+ *    반 조회는 여기서 **병렬로** 처리하므로 호출부에 왕복이 추가되지 않는다.
+ */
+export async function getClassroomOptions(opts?: {
+  keepForClassId?: string;
+}): Promise<ClassroomOption[]> {
   const supabase = await createClient();
-  const { data } = await supabase
-    .from("classrooms")
-    .select("id, name, capacity")
-    .order("name");
-  return (data ?? []).map((r) => ({ id: r.id, name: r.name, capacity: r.capacity }));
+  const [{ data }, keepRes] = await Promise.all([
+    supabase.from("classrooms").select("id, name, capacity, archived_at").order("name"),
+    opts?.keepForClassId
+      ? supabase.from("classes").select("classroom_id").eq("id", opts.keepForClassId).maybeSingle()
+      : Promise.resolve({ data: null }),
+  ]);
+  const keepId = (keepRes.data as { classroom_id: string | null } | null)?.classroom_id ?? null;
+  return (data ?? [])
+    .filter((r) => r.archived_at == null || (keepId != null && r.id === keepId))
+    .map((r) => ({ id: r.id, name: r.name, capacity: r.capacity }));
 }

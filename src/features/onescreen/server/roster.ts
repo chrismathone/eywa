@@ -3,7 +3,10 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { getTenantSettings } from "@/features/owner/server/queries";
+import { DEFAULT_SETTINGS } from "@/features/owner/defaults";
+import type { ReportSettings } from "@/features/owner/settings-types";
 import { buildSubjectMaps } from "@/features/owner/subjects";
+import { resolveBrandingSrc } from "@/lib/storage/media-storage";
 import { fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 // 담당 반 판정 단일 소스(담당 반 ∪ 그날 위임 반) — classes.teacher_id를 직접 비교하지 말 것(0173a).
 import { getTeachingClasses } from "@/features/classes/server/delegation";
@@ -95,6 +98,12 @@ export type TeacherRoster = {
   // 강사 개인 '글씨 크기'(작음/보통/큼) — users.ui_prefs.onescreen.fontSize(계정 귀속, 기기 아님).
   // 미설정=작음(지금 화면 그대로)이라 아무도 손대지 않으면 렌더가 바뀌지 않는다.
   fontSize: OnescreenFontSize;
+  // ── 카드 뷰 '학부모 미리보기'(2026-08-05 원장 요청) — 오른쪽에 실제 발송물을 그대로 그린다 ──
+  // ⚠️ 미리보기는 /r·인쇄와 **같은 컴포넌트**(ParentReportCard)를 쓴다. 그래서 표시 토글도 같은 값이어야
+  //    한다 — 여기서 report 설정을 통째로 내려 "미리보기엔 있는데 학부모 화면엔 없는 항목"이 생기지 않게 한다.
+  reportSettings: ReportSettings;
+  academyName: string;
+  logoSrc: string | null; // 이미 해석된 로고 URL(showLogo가 꺼져 있거나 로고 미설정이면 null)
 };
 
 type OnescreenSessionRow = {
@@ -129,6 +138,9 @@ type RosterSettings = Pick<
   | "showAttachments"
   | "canEditAttendance"
   | "fontSize"
+  | "reportSettings"
+  | "academyName"
+  | "logoSrc"
 >;
 type RosterConfig = Partial<RosterSettings & Pick<TeacherRoster, "noClassesToday" | "showingAll">>;
 
@@ -198,6 +210,11 @@ function emptyRoster(today: string, date: string, teacherName: string, config: R
     showAttachments: true,
     canEditAttendance: false,
     fontSize: DEFAULT_ONESCREEN_FONT_SIZE,
+    // 미리보기 재료의 폴백 — 학원설정을 못 읽은 경로(비로그인)에서도 타입이 완전해야 한다.
+    // 실제 값은 위 config가 덮는다(학생 0명 로스터도 '보강 학생 추가'로 보고서를 쓰므로 하드코딩 금지).
+    reportSettings: DEFAULT_SETTINGS.report,
+    academyName: "",
+    logoSrc: null,
     ...config,
   };
 }
@@ -230,12 +247,18 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
   //    + 학생 표시 순서(0116a, 강사×반 개인 설정) + 출결 쓰기 권한 — 서로 독립이라 병렬(B4).
   //    ⚠️ `classes.teacher_id`를 여기서 직접 비교하지 말 것 — 판정은 getTeachingClasses 단일 소스다
   //    (저장·발송·출결 게이트가 같은 함수를 쓴다. 갈라지면 "화면엔 뜨는데 저장하면 거절"이 난다).
-  const [teachingClasses, { data: meRow }, { data: orderRows }, canEditAttendance] = await Promise.all([
-    getTeachingClasses(supabase, user.id, targetDate),
-    supabase.from("users").select("report_notice_mode, ui_prefs").eq("id", user.id).single(),
-    supabase.from("onescreen_student_order").select("class_id, student_ids").eq("teacher_id", user.id),
-    canWriteTenant(user.systemRole, "attendance"),
-  ]);
+  const [teachingClasses, { data: meRow }, { data: orderRows }, canEditAttendance, logoSrc] =
+    await Promise.all([
+      getTeachingClasses(supabase, user.id, targetDate),
+      supabase.from("users").select("report_notice_mode, ui_prefs").eq("id", user.id).single(),
+      supabase.from("onescreen_student_order").select("class_id, student_ids").eq("teacher_id", user.id),
+      canWriteTenant(user.systemRole, "attendance"),
+      // 학부모 보고서 미리보기의 로고 — /r·인쇄와 **같은 해석기**를 쓴다(미리보기가 발송본과 달라지지 않게).
+      // 로고를 안 쓰는 설정이면 서명 왕복 자체를 건너뛴다(원스크린은 전원이 매일 여는 경로 — 왕복 하나가 비싸다).
+      settings.report.showLogo
+        ? resolveBrandingSrc(settings.profile.logoUrl, user.tenantId).catch(() => null)
+        : Promise.resolve(null),
+    ]);
   const orderByClass = new Map(
     (orderRows ?? []).map((r) => [r.class_id as string, (r.student_ids ?? []) as string[]]),
   );
@@ -263,6 +286,11 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
     showAttachments: settings.report.showAttachments,
     canEditAttendance,
     fontSize,
+    // 카드 뷰 '학부모 미리보기'(2026-08-05) — /r·인쇄와 **같은 컴포넌트**(ParentReportCard)에 넘길 재료.
+    // 표시 토글까지 그대로 실어야 미리보기가 발송본과 같은 것을 보여준다(토글 off 항목은 미리보기에도 안 뜬다).
+    reportSettings: settings.report,
+    academyName: settings.profile.name || "",
+    logoSrc,
   };
 
   // 아래 로직은 전부 DB 컬럼 이름(class_name/is_special)을 쓰던 코드라 여기서 한 번만 맞춘다.
@@ -374,10 +402,13 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
     });
 
   // 4) 학생 기본 정보
-  const studentRows = await fetchInChunks<{ id: string; name: string; grade: string | null }>(
-    studentIds,
-    (chunk) => supabase.from("students").select("id, name, grade").in("id", chunk),
-  );
+  // school = 학부모 보고서 미리보기의 "학교 · 학년" 한 줄용(발송본 /r과 같은 표기 — fmtSchoolGrade).
+  const studentRows = await fetchInChunks<{
+    id: string;
+    name: string;
+    grade: string | null;
+    school: string | null;
+  }>(studentIds, (chunk) => supabase.from("students").select("id, name, grade, school").in("id", chunk));
   const studById = new Map(studentRows.map((s) => [s.id, s]));
 
   // 5) 학생별 OneScreenStudent — 과목 = 그 학생이 듣는 (강사 담당) 반의 과목들
@@ -401,6 +432,7 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
         id: stu.id,
         name: stu.name,
         grade,
+        school: stu.school ?? "",
         tag: cls.class_name, // 반별 필터(반 이름 기준)
         className: cls.class_name,
         classId: cls.id,

@@ -9,7 +9,10 @@ import {
 
 describe("empty-period-rows ('빈 교시 접기' 행 높이)", () => {
   it("점유 행 = 고정 px 숫자 그대로", () => {
-    expect(periodRowHeight(false, PERIOD_ROW_H)).toBe(222);
+    // ⚠️ 값을 리터럴로 박지 않는다 — 여기서 검증할 것은 "점유 행은 준 높이를 그대로 돌려준다"이지
+    // 교시 높이가 몇 px인가가 아니다(옛 222 리터럴은 높이를 튜닝할 때마다 무관한 실패를 냈다).
+    expect(periodRowHeight(false, PERIOD_ROW_H)).toBe(PERIOD_ROW_H);
+    expect(periodRowHeight(false, 100)).toBe(100);
   });
 
   it("접힌 빈 행 = CSS 변수(편집 모드 확장 통로) + 폴백은 접힌 높이", () => {

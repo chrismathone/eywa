@@ -3,6 +3,12 @@
 import { useMemo, useState } from "react";
 import { ChevronDown, ChevronUp } from "@/components/icons/eywa-icon-compat";
 import { SearchableSelect } from "@/components/ui/searchable-select";
+import {
+  SPECIAL_SLOT_LABELS,
+  parseSeatValue,
+  seatSelectValue,
+  specialSlotLabel,
+} from "@/features/timetable/lib/teacher-label";
 import { readableTextColor } from "@/lib/color-utils";
 
 type Period = { id: string; startTime: string; endTime: string };
@@ -11,6 +17,8 @@ type InitialSlot = {
   startTime: string;
   teacherId?: string | null;
   classroomId?: string | null;
+  /** 저장된 표시 라벨 — 자리(LAB·JJ)면 드롭다운이 그 자리로 열린다. */
+  slotTeacherLabel?: string | null;
 };
 type Opt = { id: string; name: string };
 
@@ -47,6 +55,7 @@ export function ScheduleGrid({
   teacherOptions,
   classroomOptions,
   bgColor,
+  allowSeats,
 }: {
   weekdayPeriods: Period[];
   weekendPeriods: Period[];
@@ -57,6 +66,11 @@ export function ScheduleGrid({
   classroomOptions: Opt[];
   /** 반 색(폼 라이브 값) — 선택 셀을 이 색으로 미리보기(시간표와 동일). 없으면 기본 초록. */
   bgColor?: string | null;
+  /**
+   * 담당 드롭다운에 **자리(JJ·LAB)** 를 선택지로 넣을지(영어 전용). 자리는 사람이 아니라 방이라
+   * 계정이 없다 — 고르면 담당은 비고 표시 라벨만 그 자리가 된다(teacher-label.ts).
+   */
+  allowSeats?: boolean;
 }) {
   const weekdayById = useMemo(() => new Map(weekdayPeriods.map((p) => [p.id, p])), [weekdayPeriods]);
   const weekendById = useMemo(() => new Map(weekendPeriods.map((p) => [p.id, p])), [weekendPeriods]);
@@ -77,7 +91,11 @@ export function ScheduleGrid({
       if (!id) continue;
       const k = cellKey(s.dayOfWeek, id);
       sel.add(k);
-      if (s.teacherId) st[k] = s.teacherId;
+      // 자리(LAB·JJ)는 teacher_id가 비어 있고 라벨에만 있다 — 라벨을 먼저 본다(안 그러면 화면이
+      // "담임 (미정)"으로 열리고, 그대로 저장하면 자리 배치가 조용히 지워진다).
+      const seat = specialSlotLabel(s.slotTeacherLabel);
+      if (seat) st[k] = seatSelectValue(seat);
+      else if (s.teacherId) st[k] = s.teacherId;
       if (s.classroomId) sc[k] = s.classroomId;
     }
     return { sel, st, sc };
@@ -89,8 +107,9 @@ export function ScheduleGrid({
   const [slotClassroom, setSlotClassroom] = useState<Record<string, string>>(initState.sc);
   const [showAdvanced, setShowAdvanced] = useState(false);
 
+  // 자리(LAB·JJ)면 그 이름 그대로 — users에 없으니 이름 조회는 실패한다(셀이 빈 채로 보임).
   const teacherNameOf = (id: string | null | undefined) =>
-    id ? (teacherOptions.find((t) => t.id === id)?.name ?? null) : null;
+    id ? (parseSeatValue(id) ?? teacherOptions.find((t) => t.id === id)?.name ?? null) : null;
   const homeTeacherName = teacherNameOf(teacherId);
   const classroomNameOf = (id: string | null | undefined) =>
     id ? (classroomOptions.find((c) => c.id === id)?.name ?? null) : null;
@@ -159,6 +178,10 @@ export function ScheduleGrid({
 
   const teacherSelectOptions = [
     { value: "", label: homeTeacherName ? `담임 · ${homeTeacherName}` : "담임 (미정)" },
+    // 자리(LAB·JJ)를 사람 위에 둔다 — 영어는 이 배치가 흔해서 목록 아래로 밀면 매번 스크롤해야 한다.
+    ...(allowSeats
+      ? SPECIAL_SLOT_LABELS.map((s) => ({ value: seatSelectValue(s), label: `${s} (자리)` }))
+      : []),
     ...teacherOptions.map((t) => ({ value: t.id, label: t.name })),
   ];
   const classroomSelectOptions = [

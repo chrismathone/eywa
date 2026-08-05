@@ -330,3 +330,43 @@ describe("planSlotArchives — 담당·강의실 변경 이력(원장 2026-08-04
     expect(rows[0]!.validFrom).toBe("2026-01-01");
   });
 });
+
+// ── 자리(LAB·JJ) 라벨 (원장 2026-08-04 "스케줄 배치에서 JJ 또는 LAB 배치가 가능하도록") ──────────
+describe("자리 라벨", () => {
+  const prior = (label: string | null) => [
+    {
+      dayOfWeek: "mon",
+      startTime: "14:20",
+      endTime: "15:00",
+      teacherId: null,
+      classroomId: null,
+      validFrom: "2026-07-03",
+      validTo: null,
+      slotTeacherLabel: label,
+      slotRoomLabel: null,
+      periodLabel: null,
+      mergeGroup: null,
+    },
+  ];
+  const incoming = (seatLabel?: string | null, teacherId: string | null = null) => [
+    { dayOfWeek: "mon", startTime: "14:20", endTime: "15:00", teacherId, classroomId: null, ...(seatLabel !== undefined ? { seatLabel } : {}) },
+  ];
+  const run = (inc: ReturnType<typeof incoming>, pri: ReturnType<typeof prior>) =>
+    preserveScheduleFields({ incoming: inc, prior: pri, period: { validFrom: null, validTo: null, provided: false }, today: "2026-08-04" })[0]!;
+
+  it("자리를 고르면 그 자리가 라벨이 된다", () => {
+    expect(run(incoming("LAB"), prior(null)).slotTeacherLabel).toBe("LAB");
+  });
+
+  it("🔴 시트가 넣은 강사 닉네임 라벨은 폼 저장에 안 지워진다(492행 보호)", () => {
+    expect(run(incoming(), prior("Anna")).slotTeacherLabel).toBe("Anna");
+  });
+
+  it("자리였다가 사람으로 바꾸면 라벨은 지워진다(유령 방지)", () => {
+    expect(run(incoming(null, "user-1"), prior("LAB")).slotTeacherLabel).toBeNull();
+  });
+
+  it("자리를 그대로 다시 보내면 유지된다", () => {
+    expect(run(incoming("JJ"), prior("JJ")).slotTeacherLabel).toBe("JJ");
+  });
+});

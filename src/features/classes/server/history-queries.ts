@@ -3,6 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 import { auditActionLabel } from "@/features/audit/server/log";
 import { auditDetail } from "@/features/audit/describe";
 import { fetchAllPaged } from "@/lib/supabase/batch";
+import { kstToday } from "@/lib/date-kst";
+import { historyWindowStart } from "../teacher-as-of";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import {
@@ -36,7 +38,7 @@ export async function getClassHistory(classId: string): Promise<ClassHistoryEntr
   const { data: klass } = await supabase.from("classes").select("class_name").eq("id", classId).maybeSingle();
   const className = (klass?.class_name as string | null) ?? "";
 
-  const [slotRows, auditRows, delegations, nameRows] = await Promise.all([
+  const [slotRows, auditRows, delegations, nameRows, reportRows] = await Promise.all([
     // 한 반의 슬롯 = 요일×교시×구간이라 수십~수백 행 상한. 마감 행까지 **전부** 가져온다(그게 이력이다).
     supabase
       .from("class_schedules")
@@ -74,6 +76,13 @@ export async function getClassHistory(classId: string): Promise<ClassHistoryEntr
       .eq("class_id", classId)
       .order("from_date", { ascending: false }),
     supabase.from("users").select("id, display_name"),
+    // 보고서 작성 기록(추정 근거) — 창 안(최근 2개월)만. 한 반 최대 33행(실측)이라 집계는 JS로 충분.
+    supabase
+      .from("lesson_reports")
+      .select("report_date, teacher_name")
+      .eq("class_id", classId)
+      .gte("report_date", historyWindowStart(kstToday()))
+      .order("report_date"),
   ]);
 
   const nameOf = new Map((nameRows.data ?? []).map((u) => [u.id as string, (u.display_name as string) ?? ""]));
@@ -125,6 +134,27 @@ export async function getClassHistory(classId: string): Promise<ClassHistoryEntr
       .join(" · "),
   }));
 
+  // ④ 보고서 작성 기록 — **추정 근거**라 라벨을 갈라 담당 변경으로 읽히지 않게 한다([[#93]]).
+  const byMonth = new Map<string, Map<string, number>>();
+  for (const r of reportRows.data ?? []) {
+    const name = String(r.teacher_name ?? "").trim();
+    if (!name) continue;
+    const ym = String(r.report_date).slice(0, 7);
+    const m = byMonth.get(ym) ?? new Map<string, number>();
+    m.set(name, (m.get(name) ?? 0) + 1);
+    byMonth.set(ym, m);
+  }
+  const reportEntries: ClassHistoryEntry[] = [...byMonth.entries()].map(([ym, names]) => {
+    const sorted = [...names.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "ko"));
+    return {
+      date: `${ym}-01`,
+      source: "report" as const,
+      title: "보고서 작성 기록",
+      // "담임"이라 쓰지 않는다 — 작성자다. 화면이 추정임을 알 수 있게 문구로 못박는다.
+      detail: `${sorted.map(([n, c]) => `${n} ${c}건`).join(" · ")} (담임 추정 근거)`,
+    };
+  });
+
   // 감사로그를 못 읽었으면 **그 사실을 적는다** — 빈 목록으로 두면 "변경이 없었다"는 거짓말이 된다.
   const notice: ClassHistoryEntry[] =
     auditRows === null
@@ -138,5 +168,11 @@ export async function getClassHistory(classId: string): Promise<ClassHistoryEntr
         ]
       : [];
 
-  return mergeClassHistory([buildScheduleHistory(slots), auditEntries, delegationEntries, notice]);
+  return mergeClassHistory([
+    buildScheduleHistory(slots),
+    auditEntries,
+    delegationEntries,
+    reportEntries,
+    notice,
+  ]);
 }

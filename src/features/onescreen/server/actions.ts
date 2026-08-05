@@ -15,7 +15,13 @@ import {
   type PromptSection,
 } from "../prompt-defaults";
 import { loadActivePrompt } from "./prompt-loader";
-import { fetchScoreHistory, fetchSpecialClassIds, hasLaterScoredReport } from "./score-history";
+import {
+  fetchReportTrendRows,
+  fetchScoreHistory,
+  fetchSpecialClassIds,
+  hasLaterScoredReport,
+} from "./score-history";
+import type { TrendReportRow } from "../report-trend";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { classnoteSendWindowHint, isClassnoteAllowed, isClassnoteSubjectEnabled } from "../classnote-guard";
@@ -881,4 +887,38 @@ export async function loadMakeupHistory(
   const first = rows.find((r) => mySubjects.has(reportSubject({ subject: r.subject as string | null })));
   const prevScore = first ? parseExamScores(first.exam_info as string | null) : { daily: null, check: null };
   return { ok: true, bySubject, prevScore };
+}
+
+/**
+ * 학부모 미리보기용 **성적 추이 이력** — 카드 뷰에서 선택된 (학생, 과목) 1건만 지연 조회한다.
+ *
+ * 🔴 로스터(첫 페인트)에 싣지 않는 이유: 원스크린은 전원이 매일 여는 경로고, 추이는 **학생마다** 별도
+ *    조회가 필요하다(30일 창 + 최근 7건). 로스터에 넣으면 학생 수만큼 왕복이 붙는다(B2·B4).
+ *    선택된 학생 1명분만, 카드를 열 때 뒤늦게 채운다 → 첫 페인트 비용 0.
+ * ⚠️ 표본은 /r·인쇄와 **같은 함수**(fetchReportTrendRows)로 잡는다 — 미리보기 그래프가 발송본과
+ *    다른 표본을 그리면 미리보기의 의미가 없다(정규/특강 분리 축까지 동일).
+ * 스코프는 형제 읽기 액션(loadMakeupHistory)과 같은 기준 — 로그인 + RLS 테넌트 격리.
+ */
+export async function loadReportTrend(
+  studentId: string,
+  subject: string | null,
+  classId: string | null,
+  reportDate?: string,
+): Promise<{ ok: boolean; rows?: TrendReportRow[]; error?: string }> {
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, error: "로그인이 필요합니다" };
+  if (!studentId) return { ok: false, error: "학생 정보가 없습니다" };
+  const supabase = await createClient();
+  const date = resolveReportDate(reportDate);
+  try {
+    const specialClassIds = await fetchSpecialClassIds(supabase).catch(() => [] as string[]);
+    const rows = await fetchReportTrendRows(supabase, studentId, subject, date, {
+      classId,
+      specialClassIds,
+    });
+    return { ok: true, rows };
+  } catch {
+    // 미리보기 보조 데이터라 실패해도 화면을 막지 않는다(그래프만 빈다).
+    return { ok: false, error: "추이를 불러오지 못했습니다" };
+  }
 }

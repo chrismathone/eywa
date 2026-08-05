@@ -168,6 +168,12 @@ export function parseTeacherGrid(grid: SheetGrid): ParsedStructure {
         // ⚠️ 요일로 못 읽은 헤더는 **반드시 경고로 남긴다** — 그 열의 수업이 전부 스킵되는데 조용히
         // 넘어가면 컷오버가 "시트에서 없어진 수업"으로 읽어 마감한다(2026-07-22 일요일 열 3칸 실측).
         // 데이터가 실제로 있는 열만 경고(빈 여백 열까지 경고하면 노이즈로 묻힌다).
+        //
+        // ⚠️ 단 **이미 배정된 열은 경고하지 않는다** — 가로 병합된 요일 헤더는 좌상단에만 값이 있어
+        //   2번째 열부터 여기로 떨어지지만, 그 열들은 바로 위 반복에서 병합 펼치기로 이미 요일을 받았다.
+        //   구분 없이 경고하면 LAB(JJ·이주희)처럼 레인이 넓은 블록에서 **정상인데 30줄 경고**가 쏟아져
+        //   (2026-08-04 실측) 진짜 유실 경고가 그 안에 묻힌다 — 경고의 목적이 정확히 그 반대다.
+        if (dayOfCol.has(c)) continue;
         const hasData = grid.cells.some((row, r) => r >= DATA_START_ROW && (row[c] ?? "") !== "");
         if (hasData) {
           warnings.push(
@@ -266,5 +272,23 @@ export function parseTeacherGrid(grid: SheetGrid): ParsedStructure {
     classSlots.push(s);
   }
 
-  return { tabName: grid.tabName, teachers, slots: classSlots, blocks, warnings };
+  // ── 3패스: 색 없는 칸 제거 ──────────────────────────────────────────────────
+  // 원장 규칙(2026-08-04): **"색 없는 건 다 수업이 아님."** 마스터 시트는 강사의 하루 전체를 그리므로
+  // 수업 칸 사이에 메모가 섞인다(`<-`·`얘네가`·`5.5`·`4:50`·`김동근 4:00-4:20`·`이준호`·`TEVO`…).
+  // 이름만 보면 메모와 **신설 반**이 구분되지 않는다 — 둘 다 "DB에 없는 이름"이라 한쪽을 살리면 다른 쪽도
+  // 산다. 실제로 8월 탭에서 `TEVO`(메모)와 `DP6`(진짜 신설 반)이 같은 취급을 받았다. 색이 유일한 구조적 신호.
+  // ⚠️ **블록·감독 판정 뒤에** 거른다 — `수업준비`·`쉬는 시간`·감독 칸도 색이 없어서, 앞에서 걸러버리면
+  //    teacher_schedule_blocks(0138a)가 통째로 빈다.
+  // ⚠️ 색이 곧 "반"은 아니다 — 칠해진 메모도 있다(실측 1건: Elsa "7, 8월만 4시 반 출근"). 색은 **거르는**
+  //    신호일 뿐이고, DB에 없는 이름을 반으로 **만드는** 건 여전히 호출부 화이트리스트만 할 수 있다.
+  const colored = grid.fills ? classSlots.filter((s) => grid.fills![s.grid.r1]?.[s.grid.c1] === true) : classSlots;
+  if (grid.fills && colored.length < classSlots.length) {
+    const droppedNames = [...new Set(classSlots.filter((s) => !colored.includes(s)).map((s) => s.className))];
+    warnings.push(
+      `색 없는 칸 ${classSlots.length - colored.length}개를 수업이 아닌 것으로 건너뜀(${droppedNames.length}종): ` +
+        droppedNames.slice(0, 20).join(" / ") + (droppedNames.length > 20 ? " …" : ""),
+    );
+  }
+
+  return { tabName: grid.tabName, teachers, slots: colored, blocks, warnings };
 }

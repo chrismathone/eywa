@@ -188,7 +188,23 @@ export function auditDetail(
     }
     // 반 수정(2026-08-04 신설) — 그동안 **폼 저장에 로그가 아예 없어서** 담당·강의실이 언제 누구로
     // 바뀌었는지 되살릴 근거가 없었다. 바뀐 항목만 적는다(안 바뀐 건 안 적는다).
+    // 🔴 2026-08-05: 예전엔 항목 이름만 적어 "변경: 강의실"이었다 — 어디서 어디로 바뀌었는지가 없어
+    //    이력으로 쓸 수가 없었다(원장 지시). 이제 `changes`에 이전값·이후값이 함께 온다.
+    //    ⚠️ 그 이전에 쌓인 행은 `changed`(이름만)뿐이다 — 없는 화살표를 지어내지 말고 그대로 보여준다.
     case "class_update": {
+      const changes = Array.isArray(m.changes) ? m.changes : [];
+      const parts = changes
+        .map((c) => {
+          if (!c || typeof c !== "object") return null;
+          const o = c as Meta;
+          const field = str(o.field);
+          if (!field) return null;
+          // 배치처럼 짝이 없는 항목은 이름만. 값이 비었으면 '없음'(빈칸으로 두면 화살표가 허공을 가리킨다).
+          if (!("from" in o) && !("to" in o)) return field;
+          return `${field} ${str(o.from) ?? "없음"} → ${str(o.to) ?? "없음"}`;
+        })
+        .filter((v): v is string => !!v);
+      if (parts.length > 0) return `변경: ${parts.join(" · ")}`;
       const fields = Array.isArray(m.changed) ? m.changed.filter((v): v is string => typeof v === "string") : [];
       return fields.length > 0 ? `변경: ${fields.join(", ")}` : null;
     }
@@ -239,6 +255,14 @@ export function auditDetail(
         subject ? `과목 「${ctx.subjectLabel(subject)}」` : null,
         m.enabled === true ? "통합뷰 사용" : m.enabled === false ? "통합뷰 미사용" : null,
         groups === null ? null : `그룹 ${groups}개`,
+      );
+    }
+    case "owner_teacher_view_order_update": {
+      const subject = str(m.subject);
+      const count = num(m.count);
+      return join(
+        subject ? `과목 「${ctx.subjectLabel(subject)}」` : null,
+        count === null ? null : count === 0 ? "순서 초기화" : `강사 ${count}명 순서 지정`,
       );
     }
     case "classroom_auto_assign": {

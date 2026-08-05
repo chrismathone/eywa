@@ -286,6 +286,61 @@ export type IntegrationGroupsInput = {
  * ⚠️ read-modify-write라 fresh 읽기(readFreshOperations) 후 **그 과목 행만** 교체한다. 폼 전체를
  * 덮어쓰면 같은 시각 과목 운영 탭에서 저장한 다른 설정이 날아간다.
  */
+/**
+ * 강사뷰 **컬럼(강사) 순서** 저장 — 학원설정(과목별). 원장 2026-08-04:
+ * *"강사뷰에서 JJ와 LAB은 최우측으로 디폴트값으로 넣고, 강사 순서(LAB/JJ 포함) 설정하는 곳 있으면 좋겠네."*
+ *
+ * 목록에 없는 강사는 지우지 않는다 — 순서는 **정렬 힌트**일 뿐이고, 안 적힌 사람은 뒤에 붙는다
+ * (`buildTeacherComparator`). 그래서 새 강사가 와도 화면에서 사라지지 않는다.
+ * 계정이 아니라 학원 설정에 두는 이유: 이건 취향이 아니라 **시트와 맞추는 운영 배치**라 전 직원이 같은
+ * 순서를 봐야 한다(통합뷰 그룹 설정과 같은 자리).
+ */
+export async function saveTeacherViewOrder(input: {
+  subject: string;
+  order: string[];
+}): Promise<AbsorbResult> {
+  const gate = await requireOwnerWrite();
+  if (gate.error !== undefined) return { error: gate.error };
+  if (!isValidSubjectKey(input.subject)) return { error: "잘못된 과목 키입니다" };
+  const supabase = await createClient();
+
+  let operations;
+  try {
+    operations = await readFreshOperations(supabase, gate.actor.tenantId);
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "설정 읽기 실패" };
+  }
+  if (!operations.subjects.some((s) => s.key === input.subject)) {
+    return { error: "학원 설정에 없는 과목입니다" };
+  }
+
+  // 빈 값·중복 제거(먼저 나온 것이 이긴다) — 중복이 있으면 정렬 인덱스가 갈려 순서가 흔들린다.
+  const seen = new Set<string>();
+  const order = input.order
+    .map((n) => n.trim())
+    .filter((n) => n && !seen.has(n) && (seen.add(n), true));
+
+  const nextOperations = {
+    ...operations,
+    subjects: operations.subjects.map((s) =>
+      s.key === input.subject ? { ...s, teacherViewOrder: order.length ? order : undefined } : s,
+    ),
+  };
+  const fd = new FormData();
+  fd.set("section", "operations");
+  fd.set("data", JSON.stringify(nextOperations));
+  const res = await saveOwnerSection(undefined, fd);
+  if (res?.error) return { error: res.error };
+
+  await logAction({
+    action: "owner_teacher_view_order_update",
+    targetType: "tenant_settings",
+    targetLabel: input.subject,
+    metadata: { subject: input.subject, count: order.length },
+  });
+  return { ok: true };
+}
+
 export async function saveIntegrationGroups(input: IntegrationGroupsInput): Promise<AbsorbResult> {
   const gate = await requireOwnerWrite();
   if (gate.error !== undefined) return { error: gate.error };

@@ -4,7 +4,9 @@ import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged, fetchAllPagedInChunks } from "@/lib/supabase/batch";
 import { kstToday, kstMinutesOfDay } from "@/lib/date-kst";
 import { getTeacherScope } from "@/lib/auth/teacher-scope";
-import { slotLiveOnDate, weekEndOf, weekSundayOf, shiftDays } from "../lib/week";
+import { dateOfDowInWeek, slotLiveOnDate, weekEndOf, weekSundayOf, shiftDays } from "../lib/week";
+import { getTeacherAsOfIndex } from "@/features/classes/server/teacher-as-of-queries";
+import { resolveTeacherAsOf } from "@/features/classes/teacher-as-of";
 // 보고서 과목 판정 규칙은 RPC(0150a) SQL에 내장 — 규칙 문서·테스트는 lib/report-subject.ts가 담당(동기 유지).
 import { compareStudentLines } from "../lib/student-sort";
 import type { TeacherColorMap } from "../lib/class-grid";
@@ -258,6 +260,12 @@ async function fetchSlots(
     counts.set(e.class_id, (counts.get(e.class_id) ?? 0) + 1);
   }
 
+  // 🔴 지난 주를 볼 때는 **그때 담임**으로 되살린다(원장 2026-08-04 "이전주차가 되면 이전담임이 나오는걸로").
+  //    담임은 반 단위 속성이라 시간 축이 없어서, 그냥 두면 지난 주에도 현재 담임이 나온다(활성 반 62개는
+  //    슬롯에 담당이 아예 없어 슬롯 분할로도 안 잡힌다). 인수인계 로그(사실) → 그 달 보고서 작성자(추정) 순.
+  //    ⚠️ 이번 주·미래는 현재 담임이 정답이라 **조회 자체를 안 한다**(왕복 0).
+  const asOfIndex = weekSundayOf(referenceDate) < todayStr() ? await getTeacherAsOfIndex() : null;
+
   return visible.map((r) => {
     const klass = (Array.isArray(r.class) ? r.class[0] : r.class) as
       | {
@@ -298,7 +306,18 @@ async function fetchSlots(
       dayOfWeek: r.day_of_week,
       startTime: r.start_time,
       endTime: r.end_time,
-      teacherName: resolveTeacherLabel(teacher?.display_name ?? null, labelMap),
+      ...(() => {
+        // 셀 날짜 기준으로 그때 담임을 찾는다(주 단위가 아니라 날짜 — 주 중간 교체도 요일마다 갈린다).
+        const cellDate = asOfIndex ? dateOfDowInWeek(referenceDate, r.day_of_week as string) : null;
+        const asOf =
+          asOfIndex && cellDate ? resolveTeacherAsOf(asOfIndex, r.class_id as string, cellDate) : null;
+        return {
+          teacherName: asOf
+            ? resolveTeacherLabel(asOf.name, labelMap)
+            : resolveTeacherLabel(teacher?.display_name ?? null, labelMap),
+          ...(asOf?.inferred ? { teacherInferred: true } : {}),
+        };
+      })(),
       classroomName: room?.name ?? null,
       studentCount: counts.get(r.class_id) ?? 0,
       slotTeacherLabel: resolveTeacherLabel((r.slot_teacher_label as string | null) ?? null, labelMap),
@@ -907,13 +926,37 @@ export async function getTeacherScheduleBlocks(
  * (owner 강의실 관리·자동배정 데이터 조회와 동일 관례). error는 삼키지 않는다(`?? []` 금지).
  */
 export type ClassroomLite = { id: string; name: string; capacity: number | null };
+/**
+ * ⚠️ 보관(숨김)된 강의실(0182a)은 **배정이 남아 있으면 계속 보여준다** — 여긴 선택지가 아니라 **지도**다.
+ *    숨겼다고 열을 지우면 그 방에서 도는 수업이 화면에서 통째로 사라진다(숨김의 뜻은 "새로 배정 못 함"이지
+ *    "지금 하는 수업을 감춘다"가 아니다). 참조가 0건인 보관 방만 열에서 뺀다(빈 열 = 노이즈).
+ */
 export async function getClassroomsLite(): Promise<ClassroomLite[]> {
   const supabase = await createClient();
-  const { data, error } = await supabase.from("classrooms").select("id, name, capacity").order("name");
+  const { data, error } = await supabase
+    .from("classrooms")
+    .select("id, name, capacity, archived_at")
+    .order("name");
   if (error) throw error;
-  return (data ?? []).map((r) => ({
-    id: r.id as string,
-    name: r.name as string,
-    capacity: (r.capacity as number | null) ?? null,
-  }));
+  const rows = data ?? [];
+  const archivedIds = rows.filter((r) => r.archived_at != null).map((r) => r.id as string);
+  const used = new Set<string>();
+  if (archivedIds.length) {
+    // 소수(보관 방)만 대상이라 단일 `.in()`으로 충분(414 위험 없음). 독립 조회라 병렬(B4).
+    const [cls, slots] = await Promise.all([
+      supabase.from("classes").select("classroom_id").in("classroom_id", archivedIds),
+      supabase.from("class_schedules").select("classroom_id").in("classroom_id", archivedIds),
+    ]);
+    for (const r of [...(cls.data ?? []), ...(slots.data ?? [])]) {
+      const id = r.classroom_id as string | null;
+      if (id) used.add(id);
+    }
+  }
+  return rows
+    .filter((r) => r.archived_at == null || used.has(r.id as string))
+    .map((r) => ({
+      id: r.id as string,
+      name: r.name as string,
+      capacity: (r.capacity as number | null) ?? null,
+    }));
 }

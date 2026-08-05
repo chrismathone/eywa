@@ -267,6 +267,50 @@ describe("mergeViewPrefs — 부분 저장이 서로를 덮지 않는다", () =>
   });
 });
 
+describe("roomTimeVertical — 교실뷰 시간축 방향(계정)", () => {
+  it("저장값을 읽고, 미설정·깨진 값은 null(= 기본 '시간 가로' 폴백)", () => {
+    expect(parseViewPrefs({ timetable: { roomTimeVertical: true } }).roomTimeVertical).toBe(true);
+    expect(parseViewPrefs({ timetable: { roomTimeVertical: false } }).roomTimeVertical).toBe(false);
+    expect(parseViewPrefs({ timetable: { roomTimeVertical: "yes" } }).roomTimeVertical).toBeNull();
+    expect(parseViewPrefs({ timetable: {} }).roomTimeVertical).toBeNull();
+  });
+
+  it("기본값(시간 가로)은 키를 안 적는다(빈 값이 쌓이지 않게)", () => {
+    expect(serializeViewPrefs(prefs({ roomTimeVertical: false })).roomTimeVertical).toBeUndefined();
+    expect(serializeViewPrefs(prefs({ roomTimeVertical: true })).roomTimeVertical).toBe(true);
+  });
+
+  it("축만 저장해도 층 구분선·학년 필터가 살아남는다(부분 병합 회귀 가드)", () => {
+    const current = prefs({ grades: ["고3"], roomGroupLines: false });
+    const next = mergeViewPrefs(current, { roomTimeVertical: true });
+    expect(next.roomTimeVertical).toBe(true);
+    expect(next.roomGroupLines).toBe(false);
+    expect(next.grades).toEqual(["고3"]);
+  });
+});
+
+describe("roomIssues — 교실뷰 경고 목록 접기(계정)", () => {
+  it("저장값을 읽고, 미설정·깨진 값은 null(= 기본 '펼침' 폴백)", () => {
+    expect(parseViewPrefs({ timetable: { roomIssues: false } }).roomIssues).toBe(false);
+    expect(parseViewPrefs({ timetable: { roomIssues: true } }).roomIssues).toBe(true);
+    expect(parseViewPrefs({ timetable: { roomIssues: 0 } }).roomIssues).toBeNull();
+    expect(parseViewPrefs({ timetable: {} }).roomIssues).toBeNull();
+  });
+
+  it("기본값(펼침)은 키를 안 적고, 접은 사람만 값을 갖는다", () => {
+    expect(serializeViewPrefs(prefs({ roomIssues: true })).roomIssues).toBeUndefined();
+    expect(serializeViewPrefs(prefs({ roomIssues: false })).roomIssues).toBe(false);
+  });
+
+  it("접기만 저장해도 축·층 구분선이 살아남는다(부분 병합 회귀 가드)", () => {
+    const current = prefs({ roomTimeVertical: true, roomGroupLines: false });
+    const next = mergeViewPrefs(current, { roomIssues: false });
+    expect(next.roomIssues).toBe(false);
+    expect(next.roomTimeVertical).toBe(true);
+    expect(next.roomGroupLines).toBe(false);
+  });
+});
+
 describe("fontSize — 모든 뷰 공통 글씨 크기(계정)", () => {
   it("저장값을 읽고, 모르는 값·미설정은 null(= 기본 '작음' 폴백)", () => {
     expect(parseViewPrefs({ timetable: { fontSize: "lg" } }).fontSize).toBe("lg");

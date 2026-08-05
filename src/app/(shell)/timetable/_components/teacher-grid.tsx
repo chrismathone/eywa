@@ -17,7 +17,7 @@ import type { TeacherColorMap } from "@/features/timetable/lib/class-grid";
 import { DAY_LABEL } from "@/features/timetable/lib/split-attendance";
 import {
   ENGLISH_SHEET_TEACHERS,
-  compareSheetTeachers,
+  buildTeacherComparator,
 } from "@/features/timetable/lib/english-teacher-sheet";
 import { TeacherChip } from "./teacher-chip";
 
@@ -95,6 +95,7 @@ export function TeacherGridView({
   pxPerMin,
   breakRanges,
   excludedTeachers,
+  teacherOrder,
   showUnusedDays = true,
 }: {
   slots: ScheduleSlotWithStudents[];
@@ -107,6 +108,8 @@ export function TeacherGridView({
   stepMin?: number;
   /** 세로 밀도(분당 px) — 과목 설정 teacherViewPxPerMin. 미설정 = 폴백 PX_PER_MIN(1.4). */
   pxPerMin?: number;
+  /** 강사 컬럼 순서 — 과목 설정 teacherViewOrder. 미설정 = 시트 미러 + 자리(JJ·LAB) 최우측. */
+  teacherOrder?: readonly string[];
   /** 쉬는 시간 범위(HH:MM~HH:MM) — 과목 설정 teacherViewBreaks. 앞뒤 수업 붙은 강사 컬럼에만 셀 표시. */
   breakRanges?: { start: string; end: string }[];
   /** 가로줄(큰 섹션 경계) 미표시 강사 라벨 — 과목 설정 teacherViewLineExcluded. */
@@ -126,7 +129,9 @@ export function TeacherGridView({
   const excludedSet = new Set(excludedTeachers ?? []);
 
   // 강사 목록 = 슬롯 강사 라벨, 시트 좌→우 순서. 각 강사의 요일은 실제 가르치는 요일만(자연순 월→토).
-  const teacherNames = Array.from(new Set(slots.map(teacherOf))).sort(compareSheetTeachers);
+  const teacherNames = Array.from(new Set(slots.map(teacherOf))).sort(
+    buildTeacherComparator(teacherOrder),
+  );
   const colorFor = (name: string): { bg: string; text: string } | null => {
     const db = teacherColors?.[name]; // 직원 등록 강사 = DB 저장색 우선
     if (db) return { bg: db.bg, text: db.text ?? readableTextColor(db.bg) };

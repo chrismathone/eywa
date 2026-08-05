@@ -170,3 +170,52 @@ describe("한글 경고 문장", () => {
     expect(overlapSummary([])).toBe("겹치는 반이 없습니다.");
   });
 });
+
+// ── 자리(LAB·JJ)는 겹쳐도 경고하지 않는다 (원장 2026-08-04) ─────────────────────────
+describe("자리 겹침 무시", () => {
+  const base = {
+    dayOfWeek: "mon",
+    startTime: "14:20",
+    endTime: "15:00",
+    validFrom: null,
+    validTo: null,
+    classroomId: "room-603",
+    teacherId: null,
+  };
+  const existing = (seat: string | null) => [
+    {
+      ...base,
+      classId: "c-other",
+      className: "다른 반",
+      teacherName: null,
+      roomName: "본원603",
+      isActive: true,
+      closedAt: null,
+      seatLabel: seat,
+    },
+  ];
+
+  it("자리끼리 같은 방·같은 시각이어도 겹침 0 (병렬 레인이 정상 운영)", () => {
+    const out = findOverlaps({
+      candidates: [{ ...base, seatLabel: "LAB" }],
+      existing: existing("LAB"),
+      today: "2026-08-04",
+    });
+    expect(out).toHaveLength(0);
+  });
+
+  it("한쪽만 자리여도 겹침 0", () => {
+    expect(
+      findOverlaps({ candidates: [{ ...base, seatLabel: "JJ" }], existing: existing(null), today: "2026-08-04" }),
+    ).toHaveLength(0);
+    expect(
+      findOverlaps({ candidates: [base], existing: existing("LAB"), today: "2026-08-04" }),
+    ).toHaveLength(0);
+  });
+
+  it("둘 다 자리가 아니면 종전대로 겹침을 낸다(경고가 통째로 죽지 않았는지)", () => {
+    const out = findOverlaps({ candidates: [base], existing: existing(null), today: "2026-08-04" });
+    expect(out).toHaveLength(1);
+    expect(out[0]!.kind).toBe("classroom");
+  });
+});

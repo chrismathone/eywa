@@ -11,12 +11,13 @@ import {
 } from "@/features/timetable/lib/room-grid";
 import {
   ROOM_DAY_ORDER,
-  buildRoomHourRows,
+  buildRoomTimelineRows,
   buildRoomWeekRows,
+  collectRoomConflicts,
+  collectSeatOver,
   summarizeDay,
   type DayWindows,
 } from "@/features/timetable/lib/room-metrics";
-import { RoomMapGrid } from "./room-map-grid";
 import { RoomWeekPanel } from "./room-week-panel";
 
 // 교실뷰 컨테이너 — 요일 선택(기본=오늘)·과목 하이라이트는 **클라 상태**(주간 데이터가 이미 다 와 있어
@@ -24,27 +25,39 @@ import { RoomWeekPanel } from "./room-week-panel";
 // 그 교실이 비어 보이는 거짓 지도가 된다. "지금" 표시는 서버 렌더 시점 KST 고정(타이머 없음 — 새로고침/
 // 주 이동 시 갱신, #11·#25 회피).
 // 예외: **특강 숨김 토글**(원장 요청 2026-08-03)만 진짜 필터 — 방학 단기강좌가 정규 운영 시야를 흐릴 때
-// 걷어내는 용도라, 지도·지표가 **함께** 제외돼 화면 안에서는 수치가 어긋나지 않는다(메인 시간표의
-// 기본값=정규(특강 제외)와도 결이 같다). 기본은 표시.
+// 걷어내는 용도. 🔴 이때 **분자(점유)와 분모(운영 창)를 함께** 바꿔야 한다(`windowsNoSpecial`) —
+// 2026-08-04 적대 리뷰 전까지는 분자만 줄어서 특강을 숨길수록 가동률이 거짓으로 떨어졌다. 기본은 표시.
 
 export function RoomMapView({
   slots,
   rooms,
   windows,
+  windowsNoSpecial,
   weekMonday,
   todayDay,
   isCurrentWeek,
   nowMin,
   canEditCapacity,
+  groupLines,
+  timeVertical,
+  showIssues,
 }: {
   slots: RoomSlotLite[];
   rooms: RoomInfo[];
   windows: DayWindows;
+  /** '특강 숨김'일 때 쓸 운영 창 — 분자만 줄고 분모가 그대로면 가동률이 거짓으로 떨어진다. */
+  windowsNoSpecial: DayWindows;
   weekMonday: string;
   todayDay: DayOfWeek;
   isCurrentWeek: boolean;
   nowMin: number;
   canEditCapacity: boolean;
+  /** 건물·층 구분선 초기값 — 계정에 저장된 뷰 설정(users.ui_prefs). */
+  groupLines: boolean;
+  /** 시간축 방향 초기값(true=시간이 세로) — 같은 뷰 설정. */
+  timeVertical: boolean;
+  /** 하단 경고 목록(정원 초과·시간 겹침) 펼침 초기값 — 같은 뷰 설정. */
+  showIssues: boolean;
 }) {
   const subjects = useSubjectMaps();
   const [day, setDay] = useState<DayOfWeek>(isCurrentWeek ? todayDay : "mon");
@@ -57,14 +70,27 @@ export function RoomMapView({
     [slots, hideSpecial],
   );
   const { buckets, unassigned } = useMemo(() => buildRoomBuckets(effSlots, rooms), [effSlots, rooms]);
-  const weekRows = useMemo(() => buildRoomWeekRows(buckets, windows), [buckets, windows]);
+  // 🔴 창(분모)도 토글을 따라간다 — 특강을 숨기면 분자만 줄고 창은 그대로여서 가동률이 거짓으로
+  //    떨어지고 있었다(2026-08-04 적대 리뷰: 주석은 "지표가 함께 제외된다"고 적혀 있었지만 사실이 아니었다).
+  const effWindows = hideSpecial ? windowsNoSpecial : windows;
+  const weekRows = useMemo(() => buildRoomWeekRows(buckets, effWindows), [buckets, effWindows]);
   // 시간대별 = **선택 요일의 절대 데이터**(요일 칩을 따라감) — 주중 평균 비채택(원장 확정 08-03).
-  const hourMatrix = useMemo(() => buildRoomHourRows(buckets, windows, [day]), [buckets, windows, day]);
-  const summary = useMemo(
-    () => summarizeDay(buckets, windows, day, nowMin),
-    [buckets, windows, day, nowMin],
+  const timeline = useMemo(
+    () => buildRoomTimelineRows(buckets, effWindows, day),
+    [buckets, effWindows, day],
   );
+  const summary = useMemo(
+    () => summarizeDay(buckets, effWindows, day, nowMin),
+    [buckets, effWindows, day, nowMin],
+  );
+  // 하단 반 목록 = **선택 요일만**(원장 2026-08-04: "현재 요일 선택한것만 나오면 됨. 정원 초과건도 마찬가지").
+  // 덕분에 표의 빨간 테두리·위 요약의 "N건"·아래 목록이 전부 같은 하루를 말한다(스코프 혼선 제거).
+  const conflicts = useMemo(() => collectRoomConflicts(buckets, day), [buckets, day]);
+  const seatOver = useMemo(() => collectSeatOver(buckets, day), [buckets, day]);
   const isToday = isCurrentWeek && day === todayDay;
+  // "지금"은 **서버 렌더 시점 고정**이다(타이머 없음 — #11·#25 회피). 창을 띄워 두면 몇 시간 전 사실을
+  // 계속 말하게 되므로, 기준 시각을 함께 적어 사용자가 낡음을 알아볼 수 있게 한다(2026-08-04 적대 리뷰).
+  const nowLabel = `${String(Math.floor(nowMin / 60)).padStart(2, "0")}:${String(nowMin % 60).padStart(2, "0")}`;
   // 과목 칩 = 설정 순서 ∩ 데이터 존재(빈 칩 방지 — 시간표 툴바와 같은 규약).
   const presentSubjects = useMemo(() => {
     const present = new Set(slots.map((s) => s.subject));
@@ -167,7 +193,7 @@ export function RoomMapView({
           </span>
           {isToday ? (
             <span>
-              지금 수업 중{" "}
+              지금({nowLabel}) 수업 중{" "}
               <span className="num text-primary font-semibold">{summary.roomsInUseNow}</span>실
             </span>
           ) : null}
@@ -178,8 +204,9 @@ export function RoomMapView({
             </span>
           </span>
           {summary.conflictPairs > 0 ? (
+            // ⚠️ 이 수치는 **선택 요일**이다(하단 목록도 같은 하루) — 요일을 안 적으면 다른 스코프처럼 읽힌다.
             <span className="text-red-600">
-              시간 겹침 <span className="num font-semibold">{summary.conflictPairs}</span>건
+              {DAY_LABEL[day] ?? day} 겹침 <span className="num font-semibold">{summary.conflictPairs}</span>건
             </span>
           ) : null}
           {unassigned.length > 0 ? (
@@ -190,20 +217,17 @@ export function RoomMapView({
         </div>
       </div>
 
-      <RoomMapGrid
-        buckets={buckets}
-        day={day}
-        window={windows[day]}
-        nowMin={nowMin}
-        isToday={isToday}
-        focusSubject={focusSubject}
-      />
-
       <RoomWeekPanel
         rows={weekRows}
-        hourBands={hourMatrix.bands}
-        hourRows={hourMatrix.rows}
+        axis={timeline.axis}
+        hourRows={timeline.rows}
         hourDayLabel={DAY_LABEL[day] ?? day}
+        focusSubject={focusSubject}
+        groupLines={groupLines}
+        timeVertical={timeVertical}
+        showIssues={showIssues}
+        conflicts={conflicts}
+        seatOver={seatOver}
         unassigned={unassigned}
         canEditCapacity={canEditCapacity}
       />

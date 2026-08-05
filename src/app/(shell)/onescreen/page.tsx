@@ -55,6 +55,11 @@ export default async function OneScreenPage({
       initialFontSize={roster.fontSize}
       noClassesToday={roster.noClassesToday}
       showingAll={roster.showingAll}
+      // 카드 뷰 우측 '학부모 미리보기'(2026-08-05) — /r·인쇄와 같은 컴포넌트에 넘길 재료. 표시 전용.
+      teacherName={roster.teacherName}
+      reportSettings={roster.reportSettings}
+      academyName={roster.academyName}
+      logoSrc={roster.logoSrc}
       // 다른 창/기기 동시 열림 경고(3-3) — teacherId는 서버 파생(user.id = 담당 반 소유자, 겸직 포함).
       presenceScope={`onescreen:${user.id}:${roster.date}`}
       // 날짜 이동은 위 key로 클라를 재마운트하므로 뷰(표·발송현황 등)는 URL로 넘겨받아야 유지된다.

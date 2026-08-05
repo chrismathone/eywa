@@ -48,6 +48,8 @@ type Schedule = {
   endTime: string;
   teacherId?: string | null;
   classroomId?: string | null;
+  /** 저장된 표시 라벨 — 자리(LAB·JJ)면 담당 드롭다운이 그 자리로 열린다. */
+  slotTeacherLabel?: string | null;
 };
 
 export type ClassFormDefaults = {
@@ -400,6 +402,7 @@ export function ClassForm({
           teacherOptions={teacherOptions}
           classroomOptions={classroomOptions.map((c) => ({ id: c.id, name: c.name }))}
           bgColor={bgColor || null}
+          allowSeats={subject === "english"}
         />
 
         {/* 교시표에 없는 시각(방학 오전 특강·불규칙 배치) — 클릭그리드가 표현 못 하는 슬롯의 유일한

@@ -39,7 +39,9 @@ function ScoreBlock({
   return (
     <div className="border-line rounded-md border px-3 py-2.5">
       <div className="flex items-center justify-between gap-2">
-        <span className="text-foreground text-[13px] font-bold">{kicker}</span>
+        {/* 보고서 카드로 합쳐지며 열이 좁아졌다(2026-08-05) — 라벨이 "확인테스 / 트"로 쪼개지므로 줄바꿈 금지.
+            길어서 밀리는 건 옆의 범위 텍스트(truncate)가 흡수한다. */}
+        <span className="text-foreground shrink-0 text-[13px] font-bold whitespace-nowrap">{kicker}</span>
         <div className="flex min-w-0 items-center gap-2">
           <span className="text-text-faint truncate text-[11px]">{range}</span>
           {onMode ? <TestModeToggle mode={mode} onMode={onMode} /> : null}
@@ -109,6 +111,7 @@ export function TestCard({
   onMode,
   dailyEnabled = true,
   checkEnabled = true,
+  embedded,
 }: {
   student: OneScreenStudent;
   onScore: (which: "daily" | "check", v: number | null) => void;
@@ -117,12 +120,14 @@ export function TestCard({
   onMode?: (which: "daily" | "check", m: TestScoreMode) => void; // 개수/점수 표기 전환(0148a)
   dailyEnabled?: boolean; // 일일테스트 사용(off면 입력창 숨김)
   checkEnabled?: boolean; // 확인테스트 사용(off면 입력창 숨김)
+  /** 보고서 카드 안에 들어간 상태 — 카드 속 카드로 겹쳐 보이지 않게 그림자·배경을 뺀 얇은 테두리로(2026-08-05 통합). */
+  embedded?: boolean;
 }) {
   // 다중 차시도 한 줄로 이어 표시(", "). '·'로 쪼개던 옛 로직은 다중차시(개행)에서 깨져 제거.
   const prevRange = student.subjects.map((s) => displayLessons(s.prev) || s.prev).filter(Boolean).join(" / ");
   const todayRange = student.subjects.map((s) => displayLessons(s.today) || s.today).filter(Boolean).join(" / ");
   return (
-    <div className="bg-card border-line shadow-card rounded-2xl border">
+    <div className={embedded ? "border-line rounded-lg border" : "bg-card border-line shadow-card rounded-2xl border"}>
       <header className="border-line flex items-center justify-between border-b px-4 py-3">
         <div>
           <p className="micro text-text-faint">데일리 · 확인 테스트</p>

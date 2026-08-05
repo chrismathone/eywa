@@ -51,6 +51,15 @@ export async function buildEnglishTimetableBuffer(opts?: {
 
   const config = settingsToPeriodsConfig(settings.operations);
   const today = kstToday();
+  // 제목에 붙일 반영 시각 — "이 시트가 언제 동기화된 건지"(원장 요청 2026-08-04, 수학 합계행 '기준일' 대응).
+  // ⚠️ 서버는 UTC라 `new Date().getHours()`를 쓰면 9시간 어긋난다 → 항상 Asia/Seoul로 포맷(전역 KST 규칙).
+  // 구글시트 push는 이 버퍼를 만든 직후 올리므로 생성 시각 = 반영 시각. 다운로드 xlsx에도 같은 의미다.
+  const syncedAt = `${today} ${new Intl.DateTimeFormat("ko-KR", {
+    timeZone: "Asia/Seoul",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(new Date())}`;
   const weekMonday = thisMonday(today);
   const month = Number(today.slice(5, 7));
   const academyLabel =
@@ -67,6 +76,7 @@ export async function buildEnglishTimetableBuffer(opts?: {
   const stepMin = subjectRow?.teacherViewStep ?? 10;
   const breakRanges = subjectRow?.teacherViewBreaks ?? [];
   const excludedTeachers = subjectRow?.teacherViewLineExcluded ?? [];
+  const teacherOrder = subjectRow?.teacherViewOrder ?? [];
   // 통합 탭 섹션 = 화면 통합뷰와 **같은 해석기**. "시트가 화면 그대로"가 이 빌더의 계약이라, 커스텀
   // 그룹을 화면에서만 적용하면 계약이 깨진다(원장이 배치를 바꿔도 시트는 옛 섹션으로 나감).
   const customGroups = resolveIntegrationGroups(subjectRow);
@@ -77,7 +87,14 @@ export async function buildEnglishTimetableBuffer(opts?: {
   wb.created = new Date();
 
   // 강사뷰 모델 = 강사별 탭 + 통합 미니그리드 조회수식이 공유(같은 열/행 배치를 가리켜야 정합).
-  const teacherModel = buildTeacherGridModel(slots, { stepMin, breakRanges, excludedTeachers, teacherColors });
+  // ⚠️ 강사 순서도 넘긴다 — 안 넘기면 화면과 시트의 열 순서가 갈린다("시트가 화면 그대로"가 이 빌더의 계약).
+  const teacherModel = buildTeacherGridModel(slots, {
+    stepMin,
+    breakRanges,
+    excludedTeachers,
+    teacherColors,
+    ...(teacherOrder.length ? { teacherOrder } : {}),
+  });
   const teacherGeometry = computeTeacherGeometry(teacherModel, TEACHER_SHEET_NAME);
 
   // 탭 순서 = 원본 인재원 시트와 동일: 통합영어시간표(원장 손작업 형식 재현) → 강사별영어시간표(화면 강사뷰).
@@ -93,7 +110,7 @@ export async function buildEnglishTimetableBuffer(opts?: {
     // 스마트 동기화: 미니그리드를 강사별 역조회 수식으로(구글시트만 — withFormulas일 때 sink와 함께).
     teacherGeometry: opts?.withFormulas ? teacherGeometry : undefined,
     sheetName: INTEGRATED_SHEET_NAME,
-    title: `${academyLabel} ${month}월 통합 영어시간표`,
+    title: `${academyLabel} ${month}월 통합 영어시간표    ·    ${syncedAt} 반영`,
   });
   appendTeacherGridSheet(wb, slots, {
     teacherColors,

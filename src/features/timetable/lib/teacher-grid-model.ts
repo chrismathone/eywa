@@ -17,7 +17,7 @@ import {
   type ClassInterval,
 } from "./ten-minute-grid";
 import type { DayOfWeek } from "./periods";
-import { ENGLISH_SHEET_TEACHERS, compareSheetTeachers } from "./english-teacher-sheet";
+import { ENGLISH_SHEET_TEACHERS, buildTeacherComparator } from "./english-teacher-sheet";
 import { readableTextColor } from "@/lib/color-utils";
 import type { TeacherColorMap } from "./class-grid";
 
@@ -97,6 +97,8 @@ export function buildTeacherGridModel<T extends TeacherGridSlot>(
     breakRanges?: { start: string; end: string }[];
     excludedTeachers?: string[];
     teacherColors?: TeacherColorMap;
+    /** 강사 컬럼 순서(학원설정). 미지정 = 시트 미러 순서 + 자리(JJ·LAB) 최우측. */
+    teacherOrder?: readonly string[];
   } = {},
 ): TeacherGridModel<T> {
   const stepMin = opts.stepMin ?? STEP_MIN;
@@ -104,7 +106,9 @@ export function buildTeacherGridModel<T extends TeacherGridSlot>(
   const excludedSet = new Set(opts.excludedTeachers ?? []);
 
   // 강사 목록 = 슬롯 강사 라벨, 시트 좌→우 순서. 각 강사의 요일은 실제 가르치는 요일만(자연순 월→토).
-  const teacherNames = Array.from(new Set(slots.map(teacherOf))).sort(compareSheetTeachers);
+  const teacherNames = Array.from(new Set(slots.map(teacherOf))).sort(
+    buildTeacherComparator(opts.teacherOrder),
+  );
   const teacherCols = teacherNames
     .map((name) => {
       const daySet = new Set(slots.filter((s) => teacherOf(s) === name).map((s) => s.dayOfWeek as DayOfWeek));

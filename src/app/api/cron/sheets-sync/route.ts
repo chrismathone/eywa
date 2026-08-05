@@ -10,6 +10,7 @@ import {
   getSheetLastModifier,
   overwriteTimetableSheet,
 } from "@/features/integrations/google-sheets";
+import { EDIT_SHEET_NAME } from "@/features/timetable/import/parse";
 import { subjectFromProvider } from "@/features/integrations/sheets-provider";
 import { claimSheetSyncLease } from "@/features/integrations/server/sheet-sync-lease";
 import { getWeeklyScheduleWithStudents } from "@/features/timetable/server/queries";
@@ -132,10 +133,10 @@ export async function GET(req: Request) {
       const db = { supabase, tenantId, settings };
       if (subject === "math") {
         const buffer = await buildMathTimetableBuffer({ db });
-        await overwriteTimetableSheet(spreadsheetId, buffer);
+        await overwriteTimetableSheet(spreadsheetId, buffer, { hiddenTabs: [EDIT_SHEET_NAME] });
       } else {
         const { buffer, formulaCells } = await buildEnglishTimetableBuffer({ withFormulas: true, db });
-        await overwriteTimetableSheet(spreadsheetId, buffer);
+        await overwriteTimetableSheet(spreadsheetId, buffer, { hiddenTabs: [EDIT_SHEET_NAME] });
         if (formulaCells.length) await applySheetFormulas(spreadsheetId, INTEGRATED_SHEET_NAME, formulaCells);
       }
 

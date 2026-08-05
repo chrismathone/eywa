@@ -125,7 +125,18 @@ export async function deleteClassroom(
     .eq("id", id)
     .eq("tenant_id", g.user.tenantId)
     .maybeSingle();
-  // onDelete:set null — 참조하던 반/스케줄의 classroom_id가 자동으로 NULL(미지정)이 된다(FK 위반 없음).
+
+  // 🔴 **참조가 하나라도 있으면 삭제하지 않는다**(원장 2026-08-05: "강의실 삭제하더라도 미지정으로
+  //    바뀌지않고 그대로 남겨져있어야해"). FK가 on delete set null이라 지우는 순간 그 반·슬롯이 전부
+  //    미지정이 되고 되돌릴 수단이 없다. 대신 **보관(archive)**을 쓴다 — 목록·선택지에서만 빠지고
+  //    배정은 그대로 남는다(0182a). 하드 삭제는 **참조 0건**(잘못 만든 방)에만 남겨 둔다.
+  const refs = await countClassroomRefs(supabase, id);
+  if (refs > 0) {
+    return {
+      error: `이 강의실을 쓰는 반·시간표가 ${refs}건 있어 삭제할 수 없습니다 — '숨기기'를 쓰면 배정은 그대로 두고 목록에서만 빠집니다`,
+    };
+  }
+
   const { error } = await supabase
     .from("classrooms")
     .delete()
@@ -135,6 +146,58 @@ export async function deleteClassroom(
 
   await logAction({
     action: "classroom_delete",
+    targetType: "classroom",
+    targetLabel: (room?.name as string | undefined) ?? id,
+  });
+  refresh();
+  return { ok: true };
+}
+
+/** 이 강의실을 가리키는 반·슬롯 수(만료 배치 포함 — **하나라도 있으면 미지정 전환이 일어나므로** 다 센다). */
+async function countClassroomRefs(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  roomId: string,
+): Promise<number> {
+  // 행을 받지 않는 count 조회(B2) — 두 표면이 독립이라 병렬(B4).
+  const [cls, slots] = await Promise.all([
+    supabase.from("classes").select("id", { count: "exact", head: true }).eq("classroom_id", roomId),
+    supabase.from("class_schedules").select("id", { count: "exact", head: true }).eq("classroom_id", roomId),
+  ]);
+  return (cls.count ?? 0) + (slots.count ?? 0);
+}
+
+/**
+ * 강의실 **보관/복원**(0182a) — 삭제 대신 숨긴다.
+ * 보관하면 새 배정 선택지에서 빠지지만 **이미 배정된 반·슬롯은 그 방을 그대로 가리킨다**(시간표에 계속 보인다).
+ * `archive=0`이면 복원. 되돌릴 수 있는 조작이라 참조 유무를 보지 않는다.
+ */
+export async function setClassroomArchived(
+  _prev: ClassroomActionState,
+  formData: FormData,
+): Promise<ClassroomActionState> {
+  const g = await gate();
+  if ("error" in g) return g;
+  const id = String(formData.get("id") ?? "").trim();
+  if (!id) return { error: "강의실 ID가 누락되었습니다" };
+  const archive = String(formData.get("archive") ?? "1") === "1";
+
+  const supabase = await createClient();
+  const { data: room } = await supabase
+    .from("classrooms")
+    .select("name")
+    .eq("id", id)
+    .eq("tenant_id", g.user.tenantId)
+    .maybeSingle();
+
+  const { error } = await supabase
+    .from("classrooms")
+    .update({ archived_at: archive ? new Date().toISOString() : null })
+    .eq("id", id)
+    .eq("tenant_id", g.user.tenantId);
+  if (error) return { error: error.message };
+
+  await logAction({
+    action: archive ? "classroom_archive" : "classroom_restore",
     targetType: "classroom",
     targetLabel: (room?.name as string | undefined) ?? id,
   });
