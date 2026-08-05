@@ -174,6 +174,9 @@ export class GridStore {
   }
 
   setFocus(pos: CellPos | null) {
+    // 드래그 채우기는 mousemove마다 부른다 — 같은 칸 위에서 움직이는 동안은 아무것도 하지 않는다.
+    // (이 가드가 없으면 초당 수십 번 사각형을 다시 만들고 범위 전체에 알린다.)
+    if (this.focus?.row === pos?.row && this.focus?.col === pos?.col) return;
     this.commitUi({ focus: pos });
   }
 
