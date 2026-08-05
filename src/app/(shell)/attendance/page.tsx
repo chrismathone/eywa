@@ -1,6 +1,5 @@
 import Link from "next/link";
-import { ChevronLeft, ChevronRight, Clock, UserCheck, Users, UserX } from "@/components/icons/eywa-icon-compat";
-import { BigStat } from "@/components/atoms/big-stat";
+import { ChevronLeft, ChevronRight, Users } from "@/components/icons/eywa-icon-compat";
 import { PhotoCard } from "@/components/atoms/photo-card";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
@@ -14,10 +13,15 @@ import { getTeacherMoney } from "@/features/attendance/server/teacher-money";
 import { buildHolidayMap } from "@/features/attendance/calendar";
 import { ATTENDANCE_EDIT_WINDOW_DAYS } from "@/features/attendance/edit-window";
 import { accessLevelTenant } from "@/lib/auth/perm-matrix";
+import { effectiveTeacherId } from "@/lib/auth/view-mode";
+import { loadAttendanceViewPrefs } from "@/features/attendance/server/prefs-actions";
 import { buildQuickOpen } from "@/features/attendance/quick-open";
+import { countMarks, sumCounts } from "@/features/attendance/grid/totals";
 import { QuickOpenPanel } from "./_components/quick-open-panel";
-import { MatrixTable, type MatrixGroup } from "./_components/matrix-table";
-import { attHref, type RangeKey, type ViewMode } from "./_components/att-href";
+import { MatrixTable, buildGridSource, type MatrixGroup } from "./_components/matrix-table";
+import { GridProvider } from "./_components/grid-context";
+import { LiveStats } from "./_components/live-totals";
+import { attHref, resolveViewMode, type RangeKey, type ViewMode } from "./_components/att-href";
 
 export const metadata = { title: "출석부 — eywa" };
 
@@ -70,13 +74,26 @@ export default async function AttendancePage({
   } = await searchParams;
   const month = monthParam ?? currentMonthKey();
   const range: RangeKey = rangeParam === "2w" ? "2w" : "month";
-  const requestedMode: ViewMode = modeParam === "teacher" ? "teacher" : "class";
+  // 강사(또는 강사뷰 겸직)인지 — 기본 진입 화면을 가른다. 캐시된 헬퍼라 쿼리가 늘지 않는다.
+  const myTeacherId = await effectiveTeacherId();
+  /**
+   * 기본 보기 — **강사는 자기 전체 출석부로 바로 들어간다**(구 출석부 D:\attendance와 같은 진입:
+   * 선생님 계정은 자기 시트가 통째로 열리고 반은 접었다 폈다 한다). 목록에서 자기 반을 하나씩 골라
+   * 들어가게 하면 매번 두 번 클릭이고, 반을 옮겨 다니며 출결을 찍는 실제 동선과도 안 맞는다.
+   * ⚠️ 반을 명시한 링크(`class=`)와 명시적 `mode=`는 그대로 존중한다. 관리자는 종전대로 선택 허브.
+   */
+  const requestedMode: ViewMode = resolveViewMode({
+    modeParam,
+    classParam,
+    isTeacher: !!myTeacherId,
+  });
 
   // 반 목록(경량) — classId 없이 부르면 무거운 출석 데이터는 안 불러온다(렉 방지). 과목→강사→반 계층·선택지 도출용.
-  // 학원설정과는 서로 독립이라 병렬로(B4 — 독립 await는 Promise.all).
-  const [base, { operations }] = await Promise.all([
+  // 학원설정·보기설정과는 서로 독립이라 병렬로(B4 — 독립 await는 Promise.all).
+  const [base, { operations }, viewPrefs] = await Promise.all([
     getMonthlyAttendanceMatrix(month, null),
     getTenantSettings(),
+    loadAttendanceViewPrefs(),
   ]);
   const allClasses = base.classes; // { id, className, subject, teacherId, teacherName }
   const subjectMaps = buildSubjectMaps(operations.subjects);
@@ -110,8 +127,14 @@ export default async function AttendancePage({
     .map(([value, t]) => ({ value, label: t.retired ? `${t.name} (퇴직)` : t.name, retired: t.retired }))
     .sort((a, b) => Number(a.retired) - Number(b.retired) || a.label.localeCompare(b.label, "ko"))
     .map(({ value, label }) => ({ value, label }));
+  // 강사는 자기 자신이 기본 선택 — 자기 이름을 드롭다운에서 다시 고르게 하지 않는다.
+  // (강사 계정의 반 목록은 이미 본인 반으로 좁혀져 있어 선택지도 자기 하나뿐이다.)
   const effectiveTeacher =
-    teacherParam && teacherOptions.some((t) => t.value === teacherParam) ? teacherParam : null;
+    teacherParam && teacherOptions.some((t) => t.value === teacherParam)
+      ? teacherParam
+      : myTeacherId && teacherOptions.some((t) => t.value === myTeacherId)
+        ? myTeacherId
+        : null;
 
   // 반 선택지 = 과목 + 강사로 좁힌 반. ⚠️ 첫 반 자동선택 안 함 — 반 미선택 = 안내문구(렉 방지 + '전체' 정상 동작).
   const classesForFilters = classesForSubject.filter(
@@ -138,8 +161,10 @@ export default async function AttendancePage({
   // ⚠️ 강사 전체 보기라도 **반별 보기와 같은 쿼리**(getMonthlyAttendanceMatrix)를 반마다 부른다 —
   //    급여에 쓰는 숫자라 두 화면이 다른 계산을 하면 안 된다(파생 규칙·시수 합 전부 한 소스).
   //    반 수만큼 병렬 호출이라 '전체 반'(108개)이 아니라 **한 강사분**(실측 최대 10반)일 때만 허용한다.
+  // ⚠️ `allClasses`가 아니라 **과목으로 좁힌 목록**에서 고른다 — 안 그러면 과목 칩을 눌러도 전체 보기엔
+  //    다른 과목 반이 그대로 남아 필터가 거짓말을 한다(강사가 기본으로 이 화면에 들어오면서 더 잘 보인다).
   const teacherClasses = effectiveTeacher
-    ? allClasses.filter((c) => c.teacherId === effectiveTeacher)
+    ? classesForSubject.filter((c) => c.teacherId === effectiveTeacher)
     : [];
   const mode: ViewMode = requestedMode === "teacher" && teacherClasses.length > 0 ? "teacher" : "class";
   const teacherMatrices =
@@ -183,24 +208,22 @@ export default async function AttendancePage({
         : [];
 
   // 상단 스탯 — 강사 전체 보기는 반들을 합산(학생은 반 중복을 제거한 실인원).
-  const stats =
+  // ⚠️ 출결 수치는 **격자와 같은 함수**(`countMarks`)로 센다. 화면이 입력 즉시 다시 셀 때 서버 첫 렌더가
+  //    다른 식을 쓰면 첫 타이핑에 숫자가 한 번 튄다 — 합계는 `grid/totals.ts` 한 곳만 거친다.
+  const statsCount = sumCounts(
+    groups.map((g) =>
+      sumCounts(
+        g.matrix.students.map((s) =>
+          countMarks(g.matrix.marks[s.id] ?? {}, g.matrix.units[s.id] ?? {}),
+        ),
+      ),
+    ),
+  );
+  // 등록 학생만 출결과 무관한 고정값 — 강사 전체 보기는 반 중복을 제거한 실인원.
+  const totalStudents =
     mode === "teacher"
-      ? (() => {
-          const ids = new Set(teacherMatrices.flatMap((m) => m.students.map((s) => s.id)));
-          const sum = (pick: (s: AttendanceMatrix["stats"]) => number) =>
-            teacherMatrices.reduce((acc, m) => acc + pick(m.stats), 0);
-          const total = sum((s) => s.totalRecords);
-          const present = sum((s) => s.presentCount);
-          return {
-            totalStudents: ids.size,
-            presentRate: total > 0 ? Math.round((present / total) * 1000) / 10 : 0,
-            absentCount: sum((s) => s.absentCount),
-            lateCount: sum((s) => s.lateCount),
-            // 합산에도 **기록 수**를 실어야 "0%"와 "기록 없음"을 화면이 구분할 수 있다(반 단위와 같은 규약).
-            totalRecords: total,
-          };
-        })()
-      : matrix.stats;
+      ? new Set(teacherMatrices.flatMap((m) => m.students.map((s) => s.id))).size
+      : matrix.stats.totalStudents;
 
   // 드롭다운 표시값 — 반 선택 시 그 반의 과목·강사를 강제로 채운다(누구 선생님인지 바로 보이게).
   const subjectValue = selectedClass ? selectedClass.subject : effectiveSubject;
@@ -212,6 +235,8 @@ export default async function AttendancePage({
   // 월 보기는 **항상 31칸**으로 패딩 — 28/30일 달도 뒤에 빈 칸(29~31)을 채워 컬럼 수를 일정하게 한다.
   // 그래야 셀 폭과 '출석률' 열 위치가 달마다 안 바뀐다(빈 칸은 여백). 패딩은 표시 전용(쿼리/집계 무관).
   const visibleDays = range === "2w" ? matrix.days.slice(-14) : padTo31(matrix.days);
+  // 시트 격자의 좌표·초기값 — 표보다 위(상단 스탯)까지 감싸야 해서 여기서 만든다.
+  const gridSource = buildGridSource(groups, visibleDays);
 
   // 수정 가능 기간 — 강사(scoped)는 KST 오늘 기준 7일 이내만. 관리자 이상(full)은 제한 없음(원장 2026-07-21).
   // ⚠️ 역할을 코드로 나열하지 않고 권한 매트릭스를 읽는다(#58) — 원장이 역할 권한을 조정하면 함께 따라간다.
@@ -291,7 +316,7 @@ export default async function AttendancePage({
         {/* 월 navigator */}
         <div className="flex items-center gap-1.5">
           <Link
-            href={attHref({ classId: effectiveClassId, month: prevMonth, range, teacherId: effectiveTeacher, subjectId: effectiveSubject })}
+            href={attHref({ classId: effectiveClassId, month: prevMonth, range, teacherId: effectiveTeacher, subjectId: effectiveSubject, mode })}
             className="border-line hover:bg-bg-soft inline-flex size-7 items-center justify-center rounded-full border"
             aria-label="이전 달"
           >
@@ -301,7 +326,7 @@ export default async function AttendancePage({
             {formatMonth(month)}
           </span>
           <Link
-            href={attHref({ classId: effectiveClassId, month: nextMonth, range, teacherId: effectiveTeacher, subjectId: effectiveSubject })}
+            href={attHref({ classId: effectiveClassId, month: nextMonth, range, teacherId: effectiveTeacher, subjectId: effectiveSubject, mode })}
             className="border-line hover:bg-bg-soft inline-flex size-7 items-center justify-center rounded-full border"
             aria-label="다음 달"
           >
@@ -341,7 +366,8 @@ export default async function AttendancePage({
           {effectiveTeacher ? (
             ([
               ["class", "반별"],
-              ["teacher", "강사 전체"],
+              // 강사 본인이 보고 있으면 "강사 전체"는 '다른 강사들까지'로 읽힌다 — 주어를 바꾼다.
+              ["teacher", myTeacherId && myTeacherId === effectiveTeacher ? "전체" : "강사 전체"],
             ] as const).map(([key, label]) => (
               <Link
                 key={key}
@@ -395,35 +421,19 @@ export default async function AttendancePage({
           />
         </section>
       ) : (
-        <>
-          {/* Stat 4 — 반(또는 강사 전체)을 열었을 때만 */}
-          <section className="grid grid-cols-2 gap-3.5 sm:grid-cols-4">
-            <BigStat label="등록 학생" value={stats.totalStudents} unit="명" tone="primary" icon={<Users size={16} strokeWidth={1.8} />} />
-            {/* 🔴 기록이 0건이면 "0%"는 **사실이 아니다** — 출석률이 0인 게 아니라 아직 아무도 안 찍은 것이다.
-                (2026-07-29 감사: 영어 반은 파생 미가동 + 수기 기록도 사실상 0이라 화면이 늘 빨간 0%를 단언했다.
-                 실측 attendance_records 영어 5건 / 수학 5,935건.) 과목을 하드코딩하지 않고 **데이터 유무**로 가른다 —
-                 데이터가 생기면 저절로 숫자로 돌아오고, 수학 반이 진짜 0%면 그대로 빨갛게 뜬다. */}
-            <BigStat
-              label="출석률"
-              value={stats.totalRecords > 0 ? stats.presentRate : "—"}
-              unit={stats.totalRecords > 0 ? "%" : undefined}
-              tone={
-                stats.totalRecords === 0
-                  ? "neutral"
-                  : stats.presentRate >= 90
-                    ? "primary"
-                    : stats.presentRate >= 80
-                      ? "amber"
-                      : "danger"
-              }
-              sub={stats.totalRecords > 0 ? undefined : "기록 없음"}
-              icon={<UserCheck size={16} strokeWidth={1.8} />}
-            />
-            <BigStat label="결석" value={stats.absentCount} unit="회" tone="danger" icon={<UserX size={16} strokeWidth={1.8} />} />
-            <BigStat label="지각" value={stats.lateCount} unit="회" tone="amber" icon={<Clock size={16} strokeWidth={1.8} />} />
-          </section>
+        // 격자(시트)는 상단 스탯까지 감싼다 — 칸을 치면 출석률·결석·지각이 **그 자리에서** 따라 움직인다.
+        // (표 안에만 두면 합계는 서버 재조회를 기다려야 해서 칸만 먼저 바뀌고 스탯이 1초쯤 뒤처진다.)
+        <GridProvider
+          rows={gridSource.rows}
+          cols={gridSource.cols}
+          initial={gridSource.initial}
+          lockBefore={lockBefore}
+          initialCollapsed={viewPrefs.collapsed}
+        >
+          {/* Stat 4 — 반(또는 강사 전체)을 열었을 때만. 서버 값은 첫 렌더 폴백이고 이후는 격자가 센다. */}
+          <LiveStats totalStudents={totalStudents} fallback={statsCount} />
 
-          {stats.totalStudents === 0 ? (
+          {totalStudents === 0 ? (
             <EmptyState
               image="students"
               icon={() => <Users size={32} strokeWidth={1.8} />}
@@ -442,7 +452,7 @@ export default async function AttendancePage({
               ) : null}
               {/* 기록이 하나도 없는 화면은 **왜 비어 있는지**를 말해야 한다 — 빈 표 + "—"만 두면 고장으로 읽힌다.
                   파생도 안 도는 과목(현재 영어)이 여기 해당한다. */}
-              {stats.totalRecords === 0 && !groups.some((g) => g.matrix.derivedActive) ? (
+              {statsCount.recorded === 0 && !groups.some((g) => g.matrix.derivedActive) ? (
                 <p className="text-text-dim bg-bg-soft/60 border-line rounded-2xl border px-4 py-2.5 text-xs break-keep">
                   {/* ⚠️ 강사 전체 보기는 반이 여럿이라 "이 반"이 거짓말이 된다(적대검증) — 모드에 맞춰 주어를 바꾼다. */}
                   {mode === "teacher" ? "담당 반에" : "이 반은"} 아직{" "}
@@ -469,7 +479,7 @@ export default async function AttendancePage({
               />
             </>
           )}
-        </>
+        </GridProvider>
       )}
     </div>
   );

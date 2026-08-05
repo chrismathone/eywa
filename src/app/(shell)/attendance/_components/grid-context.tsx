@@ -12,12 +12,19 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 import { setAttendanceCell, setAttendanceRange } from "@/features/attendance/server/actions";
-import { cellKey, parseCellKey } from "@/features/attendance/grid/model";
+import { saveAttendanceViewPrefs } from "@/features/attendance/server/prefs-actions";
+import { cellKey, classIdOfRow, parseCellKey } from "@/features/attendance/grid/model";
 import { GridStore, type CellState, type GridValue } from "@/features/attendance/grid/store";
+import { countCells, type Counted } from "@/features/attendance/grid/totals";
 import { appendChar, backspace, commitBuffer, copyValueOf, type TypedValue } from "@/features/attendance/grid/typing";
 
 type Ctx = {
   store: GridStore;
+  /** 접어 둔 반 id — 강사 전체 보기의 반 머리행 토글. 표시만 바꾼다(합계·저장은 그대로). */
+  collapsed: ReadonlySet<string>;
+  toggleCollapsed: (classId: string) => void;
+  /** 전부 접기/펼치기 — 표 머리의 이름 칸 토글. */
+  setAllCollapsed: (collapse: boolean) => void;
   isLocked: (date: string) => boolean;
   /** 팝오버가 저장한 값을 격자에도 즉시 반영(표기가 갈리지 않게). */
   setLocal: (key: string, v: GridValue) => void;
@@ -46,6 +53,37 @@ export function useCellState(key: string): { state: CellState; ctx: Ctx | null }
 const FALLBACK: CellState = { value: null, active: false, selected: false, copied: false, buffer: null };
 
 /**
+ * 한 행의 합계(시수·출석률) — **그 행의 값이 바뀔 때만** 다시 그린다(커서 이동·옆 행 입력엔 반응 X).
+ * 격자가 없으면 null → 호출부가 서버 값으로 그린다.
+ *
+ * ⚠️ 결과를 useMemo로 캐시하지 않는다. 서버 새로고침으로 부모가 다시 렌더될 때 버전은 그대로일 수 있어
+ *    (값은 저장소가 이미 갱신) 캐시가 옛 숫자를 붙든다. 한 행 = 칸 31개 남짓이라 매 렌더 다시 세는 게 싸다.
+ */
+export function useRowCount(row: string): Counted | null {
+  const ctx = useContext(GridCtx);
+  const store = ctx?.store;
+  const subscribe = useCallback((cb: () => void) => (store ? store.subscribeRow(row)(cb) : () => {}), [store, row]);
+  const get = useCallback(() => store?.getRowVersion(row) ?? 0, [store, row]);
+  useSyncExternalStore(subscribe, get, () => 0);
+  return store ? countCells(store.valuesOfRow(row)) : null;
+}
+
+/** 반 접기 상태 — 반 머리행·전체 토글이 쓴다. 격자가 없으면 null. */
+export function useGridCollapse(): Pick<Ctx, "collapsed" | "toggleCollapsed" | "setAllCollapsed"> | null {
+  return useContext(GridCtx);
+}
+
+/** 여러 행의 합계 — 반 머리행·총합·상단 스탯. rows 생략 = 표 전체. 값이 바뀔 때마다 다시 센다. */
+export function useRowsCount(rows?: readonly string[]): Counted | null {
+  const ctx = useContext(GridCtx);
+  const store = ctx?.store;
+  const subscribe = useCallback((cb: () => void) => (store ? store.subscribeValues(cb) : () => {}), [store]);
+  const get = useCallback(() => store?.getValueVersion() ?? 0, [store]);
+  useSyncExternalStore(subscribe, get, () => 0);
+  return store ? countCells(store.valuesOfRows(rows)) : null;
+}
+
+/**
  * 출석부 시트 컨트롤러 — 활성 칸·범위 선택·타이핑·복사/붙여넣기·되돌리기·드래그 채우기.
  * 구 출석부(D:\attendance)의 조작을 옮기되, 숫자→(상태·시수) 변환은 `grid/typing.ts` 한 곳만 거친다.
  *
@@ -57,6 +95,7 @@ export function GridProvider({
   cols,
   initial,
   lockBefore,
+  initialCollapsed,
   children,
 }: {
   /** 화면에 보이는 순서 그대로의 행 키(`classId|studentId`). 이동·범위가 이 순서를 따른다. */
@@ -66,10 +105,13 @@ export function GridProvider({
   /** 서버가 그린 초기값 — 셀 키 → {상태, 시수}. 빈 칸은 없음. */
   initial: Record<string, { s: string; u: number | null }>;
   lockBefore: string | null;
+  /** 지난번에 접어 둔 반(계정 설정). 없으면 전부 펼침. */
+  initialCollapsed?: string[];
   children: React.ReactNode;
 }) {
   const [store] = useState(() => new GridStore());
   const [error, setError] = useState<string | null>(null);
+  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => new Set(initialCollapsed ?? []));
   // 되돌리기는 **작업 단위**(칸 하나가 아니라 한 번의 채우기 전체) — 30칸을 채우고 Ctrl+Z를 30번 누르게 하지 않는다.
   const undoRef = useRef<{ key: string; prev: GridValue }[][]>([]);
   const router = useRouter();
@@ -77,11 +119,42 @@ export function GridProvider({
   const clipRef = useRef<TypedValue | null>(null);
   const fillSeedRef = useRef<TypedValue | null>(null);
 
+  // 접힌 반의 행은 격자 좌표에서도 뺀다 — 안 그러면 방향키가 **안 보이는 칸**으로 들어간다.
+  // ⚠️ 값(initial)은 그대로 전부 싣는다. 접기는 표시일 뿐이라 합계는 접어도 안 줄어야 한다.
+  const visibleRows = useMemo(
+    () => (collapsed.size === 0 ? rows : rows.filter((r) => !collapsed.has(classIdOfRow(r)))),
+    [rows, collapsed],
+  );
   // 렌더 중엔 값만 바꾸고(알림 없음), 렌더가 끝난 뒤 밀린 알림을 흘린다 — 렌더 도중 남의 setState 금지.
-  store.setSource(rows, cols, initial);
+  store.setSource(visibleRows, cols, initial);
   useEffect(() => {
     store.flushSource();
   });
+
+  const applyCollapsed = useCallback(
+    (next: Set<string>) => {
+      setCollapsed(next);
+      // 접힌 반 안에 활성 칸이 남아 있으면 놓는다 — 안 보이는 칸에 타이핑이 들어가지 않게.
+      const a = store.active;
+      if (a && next.has(classIdOfRow(a.row))) store.clearUi();
+      // 계정에 저장(다음 방문용). ⚠️ 실패해도 화면은 그대로 두고 조용히 넘어간다 — 표시 취향이라
+      //    다음 방문에 펼쳐져 있을 뿐이고, 여기서 빨간 토스트를 띄우면 출결 저장 실패와 구분이 안 된다.
+      void saveAttendanceViewPrefs({ collapsed: [...next] });
+    },
+    [store],
+  );
+  const toggleCollapsed = useCallback(
+    (classId: string) => {
+      const next = new Set(collapsed);
+      if (!next.delete(classId)) next.add(classId);
+      applyCollapsed(next);
+    },
+    [collapsed, applyCollapsed],
+  );
+  const setAllCollapsed = useCallback(
+    (collapse: boolean) => applyCollapsed(collapse ? new Set(rows.map(classIdOfRow)) : new Set()),
+    [rows, applyCollapsed],
+  );
 
   const isLocked = useCallback((date: string) => !!lockBefore && date < lockBefore, [lockBefore]);
 
@@ -227,7 +300,13 @@ export function GridProvider({
       const t = e.target as HTMLElement | null;
       // 칸의 인라인 input은 자기 onKeyDown이 처리한다. 그 밖의 입력칸·드롭다운·팝오버 안에서는 비켜선다 —
       // 안 그러면 활성 칸이 남아 있는 동안 필터 드롭다운의 방향키까지 격자가 가로챈다.
-      if (t?.closest('input, textarea, select, [contenteditable="true"], [role="listbox"], [role="menu"], [role="dialog"]'))
+      // 🔴 버튼·링크도 비켜야 한다: 여기서 Enter를 preventDefault하면 브라우저가 그 키로 만들던 click이
+      //    통째로 취소돼 **반 접기 버튼이 키보드로 안 눌린다**(활성 칸이 있는 동안 내내).
+      if (
+        t?.closest(
+          'input, textarea, select, button, a[href], [role="button"], [contenteditable="true"], [role="listbox"], [role="menu"], [role="dialog"]',
+        )
+      )
         return;
       const mod = e.ctrlKey || e.metaKey;
       const key = cellKey(active.row, active.col);
@@ -320,6 +399,9 @@ export function GridProvider({
   const ctx = useMemo<Ctx>(
     () => ({
       store,
+      collapsed,
+      toggleCollapsed,
+      setAllCollapsed,
       isLocked,
       setLocal: (key: string, v: GridValue) => store.setLocal([[key, v]]),
       commitAndMove: (dx: number, dy: number) => {
@@ -333,7 +415,7 @@ export function GridProvider({
       },
       startFill,
     }),
-    [store, isLocked, commit, startFill],
+    [store, collapsed, toggleCollapsed, setAllCollapsed, isLocked, commit, startFill],
   );
 
   return (

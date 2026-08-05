@@ -1,44 +1,19 @@
 import type { AttendanceMatrix, AttendanceStatus, MatrixStudent } from "@/features/attendance/server/queries";
 import type { StudentMoney } from "@/features/attendance/server/teacher-money";
-import { COUNTABLE_STATUSES, formatSessionUnits } from "@/features/attendance/session-units";
 import { formatDows } from "@/features/attendance/calendar";
+import { countMarks } from "@/features/attendance/grid/totals";
+import { rowKey } from "@/features/attendance/grid/model";
 import { AttendanceCell } from "./attendance-cell";
+import { RowTotalCells } from "./live-totals";
 
 /** 금액 표시 — 0원과 '자료 없음'을 구분한다(청구서가 없는 달은 "—"). */
 export function formatMoney(n: number | null | undefined): string {
   return n === null || n === undefined ? "—" : n.toLocaleString("ko-KR");
 }
 
-/** 한 학생 행의 집계(시수 합·출석률) — 그룹 합계도 같은 계산을 써야 표와 합계가 어긋나지 않는다. */
-export function rowTotals(
-  marks: Record<string, AttendanceStatus>,
-  units: Record<string, number>,
-): { unitsTotal: number; rate: number | null; recorded: number; present: number } {
-  const entries = Object.entries(marks);
-  const present = entries.filter(([, st]) => st === "present").length;
-  // 시수 합 = 소비 상태 셀의 배수 합(배수 미입력 = 1). 0.1 단위 반올림(부동소수 방어).
-  const unitsTotal =
-    Math.round(
-      entries
-        .filter(([, st]) => COUNTABLE_STATUSES.has(st))
-        .reduce((sum, [date]) => sum + (units[date] ?? 1), 0) * 10,
-    ) / 10;
-  return {
-    unitsTotal,
-    rate: entries.length > 0 ? Math.round((present / entries.length) * 100) : null,
-    recorded: entries.length,
-    present,
-  };
-}
-
 /** 잠긴 칸 툴팁 — 서버 응답과 같은 취지의 한글 문장(raw 코드 노출 금지). */
 function lockedMessage(date: string, lockBefore: string): string {
   return `${date} 출결은 수정 기간(7일)이 지나 고칠 수 없습니다 — ${lockBefore} 이후만 수정 가능, 그 전은 관리자에게 요청하세요`;
-}
-
-function rateColorOf(rate: number | null): string {
-  if (rate === null) return "text-text-faint";
-  return rate >= 90 ? "text-primary" : rate >= 80 ? "text-amber" : "text-danger";
 }
 
 /**
@@ -67,7 +42,6 @@ export function MatrixRow({
 }) {
   const marks = matrix.marks[student.id] ?? {};
   const units = matrix.units[student.id] ?? {};
-  const { unitsTotal, rate } = rowTotals(marks, units);
   const attendDows = new Set(student.attendDows);
   const attendLabel = formatDows(student.attendDows);
 
@@ -132,14 +106,8 @@ export function MatrixRow({
           </td>
         </>
       ) : null}
-      <td className="border-line text-foreground num sticky right-[64px] z-10 w-[52px] min-w-[52px] border-b border-l bg-card px-2 py-2 text-right text-[12px] whitespace-nowrap">
-        {unitsTotal > 0 ? formatSessionUnits(unitsTotal) : "—"}
-      </td>
-      <td
-        className={`border-line num sticky right-0 z-10 w-[64px] min-w-[64px] border-b bg-card px-2 py-2 text-right text-[12px] font-bold whitespace-nowrap ${rateColorOf(rate)}`}
-      >
-        {rate === null ? "—" : `${rate}%`}
-      </td>
+      {/* 시수·출석률은 **입력을 즉시 따라간다**(클라 집계) — 서버 값은 첫 렌더 폴백. */}
+      <RowTotalCells row={rowKey(classId, student.id)} fallback={countMarks(marks, units)} />
     </tr>
   );
 }

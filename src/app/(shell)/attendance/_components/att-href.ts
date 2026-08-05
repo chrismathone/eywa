@@ -14,6 +14,24 @@ export type RangeKey = "month" | "2w";
  */
 export type ViewMode = "class" | "teacher";
 
+/**
+ * 기본 보기 결정 — **강사는 자기 전체 시트로 바로**, 관리자는 반 선택 허브.
+ *
+ * 🔴 URL에 적힌 뜻이 언제나 이긴다. `mode=class`를 무시하면 강사가 '반별'을 눌러도 기본값이 다시
+ *    전체로 되돌려 **탈출구가 죽는다**(그래서 attHref는 class도 명시적으로 적는다).
+ * ⚠️ `class=`가 박힌 링크(원스크린·바로 열기·수업 상세)는 그 반만 여는 게 맞다 — 기본값을 얹지 않는다.
+ */
+export function resolveViewMode(p: {
+  modeParam?: string;
+  classParam?: string;
+  /** 강사 또는 겸직 강사뷰(= effectiveTeacherId가 있음). */
+  isTeacher: boolean;
+}): ViewMode {
+  if (p.modeParam === "teacher") return "teacher";
+  if (p.modeParam === "class") return "class";
+  return p.isTeacher && !p.classParam ? "teacher" : "class";
+}
+
 export function attHref(p: {
   classId: string | null;
   month: string;
@@ -28,6 +46,8 @@ export function attHref(p: {
   if (p.classId) sp.set("class", p.classId);
   sp.set("month", p.month);
   if (p.range === "2w") sp.set("range", "2w");
-  if (p.mode === "teacher") sp.set("mode", "teacher");
+  // 🔴 `class`도 **적어야** 한다. 강사의 기본 보기가 '전체'라, mode를 안 적으면 '반별' 링크가
+  //    기본값에 먹혀 그대로 전체로 되돌아온다(= 반별로 갈 방법이 사라진다).
+  if (p.mode) sp.set("mode", p.mode);
   return `/attendance?${sp.toString()}`;
 }
