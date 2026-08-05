@@ -22,9 +22,10 @@ function SubmitButton() {
 }
 
 /**
- * 새 참관 폼 — 참관일·강사(필수) + 과목(선택) + 참관자 방식 두 가지(원장 지시 2026-08-04):
- * ① 참관자 지정(최대 3명) ② 선착순 3명(지정 없이, 권한자 중 먼저 채점한 3명이 참관자).
+ * 새 참관 폼 — 참관일·강사(필수) + 과목(선택) + 평가자 방식 두 가지(원장 지시 2026-08-04):
+ * ① 평가자 지정(최대 3명) ② 선착순 3명(지정 없이, 권한자 중 먼저 채점한 3명이 평가자).
  * 반명·회차·수업시간·학생수는 입력받지 않는다(같은 지시 — 필요 없음).
+ * 호칭은 "평가자"(원장 지시 2026-08-05 — "참관자 아니고 평가자") — 데이터 키(observer*)는 불변.
  */
 export function NewReviewForm({
   staff,
@@ -63,12 +64,12 @@ export function NewReviewForm({
       </div>
 
       <div className="border-line border-t pt-4">
-        <p className="micro mb-2">참관자 방식</p>
+        <p className="micro mb-2">평가자 방식</p>
         <div className="flex flex-col gap-2 sm:flex-row">
           {(
             [
-              { v: "assigned", t: "참관자 지정", d: "아래에서 최대 3명을 지정합니다" },
-              { v: "open", t: "선착순 3명", d: "지정 없이 — 먼저 채점한 3명이 참관자가 됩니다" },
+              { v: "assigned", t: "평가자 지정", d: "아래에서 최대 3명을 지정합니다" },
+              { v: "open", t: "선착순 3명", d: "지정 없이 — 먼저 채점한 3명이 평가자가 됩니다" },
             ] as const
           ).map((o) => (
             <button
@@ -91,18 +92,18 @@ export function NewReviewForm({
         {mode === "assigned" ? (
           <div className="mt-3">
             <p className="micro mb-2">
-              참관자 (최대 3명 — 평가 대상 본인은 자동으로 &lsquo;본인 평가&rsquo; 자리에 들어갑니다)
+              평가자 (최대 3명 — 평가 대상 본인은 자동으로 &lsquo;본인 평가&rsquo; 자리에 들어갑니다)
             </p>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-              <SearchableSelect name="observer1" options={staff} placeholder="참관자 A" ariaLabel="참관자 A" />
-              <SearchableSelect name="observer2" options={staff} placeholder="참관자 B" ariaLabel="참관자 B" />
-              <SearchableSelect name="observer3" options={staff} placeholder="참관자 C" ariaLabel="참관자 C" />
+              <SearchableSelect name="observer1" options={staff} placeholder="평가자 A" ariaLabel="평가자 A" />
+              <SearchableSelect name="observer2" options={staff} placeholder="평가자 B" ariaLabel="평가자 B" />
+              <SearchableSelect name="observer3" options={staff} placeholder="평가자 C" ariaLabel="평가자 C" />
             </div>
           </div>
         ) : (
           <p className="text-text-faint mt-3 text-[11px]">
             이 화면에 접근 가능한 사람이라면 누구든 상세에서 바로 채점할 수 있고, 먼저 저장한 3명까지만
-            참관자로 집계됩니다. (평가 대상 본인은 인원 제한과 무관하게 &lsquo;본인 평가&rsquo;로 저장)
+            평가자로 집계됩니다. (평가 대상 본인은 인원 제한과 무관하게 &lsquo;본인 평가&rsquo;로 저장)
           </p>
         )}
       </div>

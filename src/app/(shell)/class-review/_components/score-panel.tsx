@@ -133,7 +133,7 @@ export function ScorePanel({
       </div>
 
       <label htmlFor="cr-comment" className="micro mt-4 mb-1 block">
-        참관자 코멘트
+        평가자 코멘트
       </label>
       <textarea
         id="cr-comment"
