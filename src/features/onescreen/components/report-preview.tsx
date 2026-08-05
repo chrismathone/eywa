@@ -118,6 +118,8 @@ export function ReportPreview({
             notes: fields.notes || null,
             trendNote: fields.trendNote ?? null,
             makeup: fields.makeup,
+            // 반이 붙은 행의 보강 = 그날 정규까지 한 "(정규+보강)" — 저장될 값과 같은 판정(makeup-label.ts).
+            hasClass: subject.classId != null,
           }}
           student={{ name: student.name, school: student.school ?? null, grade: student.grade }}
           academyName={ctx.academyName}

@@ -257,12 +257,22 @@ describe("폴백 템플릿 개행 접기 — 학부모 문장이 줄로 쪼개�
     tests: { daily: { score: null, max: 10, prevScore: null }, check: { score: null, max: 10, prevScore: null } },
   });
 
-  it("여러 줄 진도가 ', '로 접혀 한 문장이 된다", () => {
+  it("여러 줄 진도가 한 문장 안에 들어간다(연속 3차시는 물결로 축약)", () => {
     const r = buildSubjectReport(st, 0);
     // ⚠️ 검사 대상은 **값 안의** 개행이다 — 문장 사이 줄바꿈은 2026-07-30부터 정상(원장 "줄바꿈도 적절히").
-    expect(r).toContain(
-      "오늘은 수학 원과 직선의 위치 관계, 원의 접선의 방정식(1), 원의 접선의 방정식(2) 진도를 진행했습니다.",
-    );
+    // 2026-08-05: 같은 중단원 연속 3차시라 물결로 접힌다(원장 "진도를 전부 적으면 그것이야말로 스팸").
+    expect(r).toContain("오늘은 수학 원과 직선의 위치 관계 ~ 원의 접선의 방정식(2) 진도를 진행했습니다.");
+    expect(r.split("\n")[0]).not.toContain("원의 접선의 방정식(1)"); // 가운데 차시는 범위 안에 들어갔다
+  });
+
+  it("연속이 아닌 여러 줄 진도는 ', '로 접혀 한 문장이 된다(축약 없음)", () => {
+    // 공통수학2 1.도형의 방정식에서 서로 떨어진 두 차시 — 접으면 사이 차시를 나갔다고 거짓말이 된다.
+    const gap = makeStudent({
+      name: "김담희",
+      subjects: [{ name: "수학", prev: "", today: "평행이동\n원의 방정식", homeworkToday: "" }],
+      tests: { daily: { score: null, max: 10, prevScore: null }, check: { score: null, max: 10, prevScore: null } },
+    });
+    expect(buildSubjectReport(gap, 0)).toContain("오늘은 수학 평행이동, 원의 방정식 진도를 진행했습니다.");
   });
 
   it("여러 줄 오늘 과제도 한 문장 안에 접힌다", () => {
@@ -271,7 +281,8 @@ describe("폴백 템플릿 개행 접기 — 학부모 문장이 줄로 쪼개�
 
   it("합본(buildReport)도 같은 규약", () => {
     const r = buildReport(st);
-    expect(r).toContain("수학 원과 직선의 위치 관계, 원의 접선의 방정식(1), 원의 접선의 방정식(2)");
+    expect(r).toContain("수학 원과 직선의 위치 관계 ~ 원의 접선의 방정식(2)");
+    expect(r.split("\n")[0]).toContain("진도를 진행했습니다."); // 값 안 개행이 문장을 쪼개지 않는다
   });
 });
 

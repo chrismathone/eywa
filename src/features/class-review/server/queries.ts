@@ -49,6 +49,13 @@ export type ReviewDoc = {
   evaluators: ReviewEvaluator[];
   /** 평가자 키(관찰자=users.id, 본인='self') → 채점 한 장 */
   submissions: Record<string, ScoreSheet>;
+  /**
+   * 생성 시점의 문항 스냅샷(2026-08-05 문항 세트 복수화) — 이후 세트를 고쳐도 이 평가지는 안 흔들린다.
+   * 없으면(구버전 문서) 테넌트 기본 세트로 폴백.
+   */
+  areas?: ChecklistArea[];
+  /** 사용한 문항 세트 이름(표시용 스냅샷). */
+  templateName?: string;
 };
 
 export type ReviewListRow = ReviewDoc & {
@@ -77,6 +84,8 @@ function parseDoc(r: { id: string; created_at: string; form_data: unknown }): Re
     },
     evaluators: Array.isArray(d.evaluators) ? (d.evaluators as ReviewEvaluator[]) : [],
     submissions: (d.submissions ?? {}) as Record<string, ScoreSheet>,
+    areas: sanitizeAreas(d.areas) ?? undefined,
+    templateName: typeof d.templateName === "string" && d.templateName ? d.templateName : undefined,
   };
 }
 
@@ -165,18 +174,37 @@ export async function getMyClassReviewFilter(user: CurrentUser): Promise<ClassRe
   return normalizeClassReviewFilter(listFilter);
 }
 
-/** 현재 문항 세트 — 커스텀 템플릿이 있고 유효하면 그것, 아니면 내장 문항. */
-export async function getChecklistAreas(tenantId: string): Promise<ChecklistArea[]> {
+/** 문항 세트 하나(2026-08-05 복수화) — academy_documents 행 1개 = 세트 1개. */
+export type ChecklistTemplate = { id: string; name: string; areas: ChecklistArea[] };
+
+/**
+ * 테넌트의 문항 세트 전부(만든 순서) — 이름이 비어 있으면 "N번 문항 세트"로 표시.
+ * 깨진 행(areas 검증 실패)은 목록에서 제외한다(선택지로 내밀면 안 되는 값).
+ */
+export async function getChecklistTemplates(tenantId: string): Promise<ChecklistTemplate[]> {
   const { data } = await createAdminClient()
     .from("academy_documents")
-    .select("form_data")
+    .select("id, form_data, created_at")
     .eq("tenant_id", tenantId)
     .eq("form_type", CLASS_REVIEW_TEMPLATE_FORM_TYPE)
-    .order("updated_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  const custom = sanitizeAreas((data?.form_data as { areas?: unknown } | null)?.areas);
-  return custom ?? CHECKLIST_AREAS;
+    .order("created_at", { ascending: true })
+    .limit(50);
+  const out: ChecklistTemplate[] = [];
+  for (const r of data ?? []) {
+    const fd = (r.form_data ?? {}) as { name?: unknown; areas?: unknown };
+    const areas = sanitizeAreas(fd.areas);
+    if (!areas) continue;
+    const name =
+      typeof fd.name === "string" && fd.name.trim() ? fd.name.trim() : `${out.length + 1}번 문항 세트`;
+    out.push({ id: r.id, name, areas });
+  }
+  return out;
+}
+
+/** 기본 문항 세트 — 첫 세트가 있으면 그것, 없으면 내장 문항(구버전 문서·세트 미선택 폴백). */
+export async function getChecklistAreas(tenantId: string): Promise<ChecklistArea[]> {
+  const templates = await getChecklistTemplates(tenantId);
+  return templates[0]?.areas ?? CHECKLIST_AREAS;
 }
 
 export async function listClassReviews(): Promise<{ rows: ReviewListRow[]; areas: ChecklistArea[] }> {
@@ -194,14 +222,15 @@ export async function listClassReviews(): Promise<{ rows: ReviewListRow[]; areas
   if (error) throw new Error(`수업 평가 목록 조회 실패: ${error.message}`);
   const rows = (data ?? []).map((r) => {
     const doc = parseDoc(r);
+    const rowAreas = doc.areas ?? areas; // 스냅샷 우선(세트 복수화) — 구버전 문서만 테넌트 기본 세트
     const sheets = Object.values(doc.submissions);
     const observers = observerColumns(doc);
     return {
       ...doc,
-      submittedCount: sheets.filter((s) => computeTotals(s, areas).answered > 0).length,
+      submittedCount: sheets.filter((s) => computeTotals(s, rowAreas).answered > 0).length,
       observerSlots:
         (doc.header.observerMode === "open" ? OPEN_MODE_OBSERVER_LIMIT : observers.length) + 1, // +본인
-      averages: averageTotals(sheets, areas),
+      averages: averageTotals(sheets, rowAreas),
     };
   });
   return { rows, areas };
@@ -222,5 +251,8 @@ export async function getClassReview(
     getChecklistAreas(user.tenantId),
   ]);
   if (error) throw new Error(`수업 평가 조회 실패: ${error.message}`);
-  return data ? { doc: parseDoc(data), areas } : null;
+  if (!data) return null;
+  const doc = parseDoc(data);
+  // 반환 areas = 이 평가지의 유효 문항(스냅샷 우선) — 상세·채점이 그대로 쓴다.
+  return { doc, areas: doc.areas ?? areas };
 }

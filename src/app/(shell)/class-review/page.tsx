@@ -18,7 +18,7 @@ export const metadata = { title: "수업 평가 — eywa" };
 /**
  * 수업 평가 체크리스트(참관) 목록 — 시트 "수업 상향화 체크리스트" 이식 초안(2026-08-04).
  * 접근은 class_review 메뉴 게이트(기본 전원 차단, 개인 예외로만 개방 — 테스트 단계).
- * 보기 필터(전체/내 평가 대기/내 평가 완료/미완료/선착순)는 계정 귀속(원장 지시 2026-08-05).
+ * 보기 필터(전체/내 평가 대기/완료/미완료/선착순 — 평가지 기준)는 계정 귀속(원장 지시 2026-08-05).
  */
 export default async function ClassReviewPage() {
   const viewer = await requireAccess("class_review");
@@ -37,7 +37,7 @@ export default async function ClassReviewPage() {
       <PageHeader
         eyebrow="운영"
         title="수업 평가 체크리스트"
-        description="참관 문항(4점 척도)을 평가자와 본인이 각자 채점하고 나란히 비교합니다."
+        description="평가 문항(4점 척도)을 평가자와 본인이 각자 채점하고 나란히 비교합니다."
         embedLabel="수업 평가 체크리스트"
         actions={
           <span className="flex items-center gap-2">
@@ -52,7 +52,7 @@ export default async function ClassReviewPage() {
               </Button>
             ) : null}
             <Button size="sm" render={<Link href="/class-review/new" />}>
-              + 새 참관
+              + 새 평가
             </Button>
           </span>
         }
@@ -60,7 +60,7 @@ export default async function ClassReviewPage() {
 
       {rows.length === 0 ? (
         <div className="border-line rounded-2xl border border-dashed p-10 text-center">
-          <p className="text-text-dim text-sm">아직 참관 건이 없습니다 — &lsquo;새 참관&rsquo;으로 시작하세요.</p>
+          <p className="text-text-dim text-sm">아직 평가 건이 없습니다 — &lsquo;새 평가&rsquo;로 시작하세요.</p>
         </div>
       ) : (
         <ReviewTable
@@ -76,7 +76,6 @@ export default async function ClassReviewPage() {
               mode: r.header.observerMode === "open" ? ("open" as const) : ("assigned" as const),
               modeLabel: r.header.observerMode === "open" ? "선착순 3명" : "평가자 지정",
               myTurn: !!mine && !mine.submitted,
-              myDone: !!mine?.submitted,
               incomplete: r.submittedCount < r.observerSlots,
               submitted: `${r.submittedCount}/${r.observerSlots}`,
               percent: r.averages ? r.averages.percent.toFixed(1) : null,

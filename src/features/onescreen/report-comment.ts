@@ -8,6 +8,7 @@
 import type { OneScreenStudent, TestScore, TestScoreMode } from "./types";
 import { DEFAULT_PROMPTS, interpolate, assembleSingle } from "./prompt-defaults";
 import { isSkipStatus } from "./progress-status";
+import { progressInline } from "./progress-range";
 
 /**
  * 테스트 점수 → 사람이 읽는 문자열(순수, 0148a). **표시 단일 소스** — 학부모 카드(daily_test)와 AI 멘트(testLine)가
@@ -107,7 +108,10 @@ export function buildReportCommentInput(st: OneScreenStudent, subjectIndex: numb
  * 그대로 둔다 — 값에 괄호 설명을 달면 모델이 통째로 베낀다(아래 ⚠️ 주석의 실측 사고와 같은 벡터).
  */
 function progressFact(input: ReportCommentInput, label: string): string | null {
-  const prog = [input.subject, flatten(input.progress)].filter(Boolean).join(" ");
+  // 다중 차시는 **물결 축약**(progress-range.ts)으로 넘긴다 — 9차시를 그대로 주면 모델이 다 나열해
+  // 학부모 본문이 목록이 된다(원장 2026-08-05: "진도를 전부 적으면 그것이야말로 스팸").
+  // 접기는 사실 보존적(같은 중단원 연속만)이라 grounding이 안 깨지고, 카드 진도와 **같은 표기**가 된다.
+  const prog = [input.subject, progressInline(input.progress)].filter(Boolean).join(" ");
   if (!prog) return null;
   return `${isSkipStatus(input.progress) ? "오늘 수업" : label}: ${prog}`;
 }

@@ -21,9 +21,7 @@ export type ReviewTableRow = {
   modeLabel: string;
   /** 내가 평가할 자격이 있고 아직 미제출(본인 평가 포함 — '내 평가 대기' 필터 대상). */
   myTurn: boolean;
-  /** 내 채점이 이미 저장돼 있음('내 평가 완료' 필터 대상). */
-  myDone: boolean;
-  /** 건 단위 미완료 — 제출이 슬롯 수만큼 안 모임('미완료' 필터 대상). */
+  /** 건 단위 미완료 — 제출이 슬롯 수만큼 안 모임('미완료' 필터, 반대가 '완료'). */
   incomplete: boolean;
   submitted: string; // "2/4"
   percent: string | null;
@@ -32,7 +30,7 @@ export type ReviewTableRow = {
 
 function matches(r: ReviewTableRow, f: ClassReviewFilter): boolean {
   if (f === "todo") return r.myTurn;
-  if (f === "done") return r.myDone;
+  if (f === "complete") return !r.incomplete;
   if (f === "incomplete") return r.incomplete;
   if (f === "open") return r.mode === "open";
   return true;
@@ -40,7 +38,7 @@ function matches(r: ReviewTableRow, f: ClassReviewFilter): boolean {
 
 /**
  * 참관 목록 표 — 행 전체 클릭 = 상세 이동(원장 지시 2026-08-04: 날짜만 클릭되던 것).
- * 보기 필터(전체/내 평가 대기/내 평가 완료/미완료/선착순, 원장 지시 2026-08-05)는 계정 귀속 —
+ * 보기 필터(전체/내 평가 대기/완료/미완료/선착순, 원장 지시 2026-08-05)는 계정 귀속 —
  * 데이터는 이미 전부 내려와 있어 필터링은 클라에서 즉시, 저장은 다음 방문용 영속화(백그라운드).
  * 개수는 필터 전 집합 기준이라 무엇을 고르든 숫자가 안 변한다(0인 칸도 눌러 빈 목록 + 안내를 본다).
  * 표 위계(원장 2026-08-05 "색칠 말고 디자인"): 주인공 = 강사명(bold), 날짜·수치는 num dim 보조.
@@ -94,7 +92,7 @@ export function ReviewTable({
       {visible.length === 0 ? (
         <div className="border-line rounded-2xl border border-dashed p-10 text-center">
           <p className="text-text-dim text-sm">
-            &lsquo;{CLASS_REVIEW_FILTER_LABEL[filter]}&rsquo; 보기에 해당하는 참관 건이 없습니다.
+            &lsquo;{CLASS_REVIEW_FILTER_LABEL[filter]}&rsquo; 보기에 해당하는 평가 건이 없습니다.
           </p>
         </div>
       ) : (
@@ -103,7 +101,7 @@ export function ReviewTable({
             <thead>
               <tr className="border-line bg-bg-soft/60 border-b text-left">
                 <th className="text-text-dim px-4 py-2.5 text-xs font-medium">강사</th>
-                <th className="text-text-dim px-4 py-2.5 text-xs font-medium">참관일</th>
+                <th className="text-text-dim px-4 py-2.5 text-xs font-medium">생성일</th>
                 <th className="text-text-dim px-4 py-2.5 text-xs font-medium">과목</th>
                 <th className="text-text-dim px-4 py-2.5 text-xs font-medium">평가 방식</th>
                 <th className="text-text-dim px-4 py-2.5 text-right text-xs font-medium">제출</th>
