@@ -1,9 +1,10 @@
-// 직원관리(/staff)를 원장 2명 + 개발팀 설현·이승엽 4인으로 좁힌다 (원장 지시 2026-08-01).
+// 직원관리(/staff)를 원장 2명 + 개인 예외(설현·이승엽 + 김예원)로 좁힌다
+// (원장 지시 2026-08-01 4인 체제 → 2026-08-05 김예원 추가 "예외 직원으로 남겨줘").
 //
 //   tenant_settings.data.permissions 를 이렇게 바꾼다:
 //     overrides:      + {staff, admin→none} {staff, manager→none} {staff, accountant→none}
 //                     - {staff, counselor, readonly}  (기본값이 none이라 제거만으로 잠김)
-//     userOverrides:  + 설현(staff full) + 이승엽(staff full)   ← admin이지만 개별 허용
+//     userOverrides:  + 설현(staff full) + 이승엽(staff full) + 김예원(staff full) ← 역할과 무관 개별 허용
 //   (master 원일·박소선은 기본 full이라 손대지 않는다. teacher·viewer·student는 원래 none.)
 //
 //   node scripts/staff-access/narrow-staff-menu.mjs            # 드라이런(변경 없음, 계획 출력)
@@ -44,6 +45,7 @@ const H = {
 const GRANTEES = [
   { name: "설현", role: "admin" },
   { name: "이승엽", role: "admin" },
+  { name: "김예원", role: "manager" }, // 2026-08-05 원장 추가 지시
 ];
 // 역할 잠금 대상(코드 기본값이 full인 역할만; counselor는 기존 readonly override 제거로 잠김).
 const CLOSE_ROLES = ["admin", "manager", "accountant"];
@@ -91,7 +93,9 @@ console.log(`  이후: ${JSON.stringify(nextOverrides.filter((o) => o.menu === "
 console.log(`\n[개인 예외] (${nextUserOverrides.length}건):`);
 for (const g of grants) console.log(`  + ${g._name} (${g.userId}) — staff: full`);
 if (keepOthers.length) console.log(`  (기존 유지 ${keepOthers.length}건)`);
-console.log(`\n결과 요약 — 직원관리 접근: master 전원(원일·박소선) + 설현·이승엽 / 그 외 역할 전부 차단`);
+console.log(
+  `\n결과 요약 — 직원관리 접근: master 전원(원일·박소선) + ${grants.map((g) => g._name).join("·")} / 그 외 역할 전부 차단`,
+);
 
 if (!APPLY) {
   console.log("\n드라이런 — 변경 없음. 적용은 --apply.");
