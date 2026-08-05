@@ -1,11 +1,11 @@
 import type { AttendanceMatrix, AttendanceStatus } from "@/features/attendance/server/queries";
 import type { TeacherMoney } from "@/features/attendance/server/teacher-money";
-import { formatSessionUnits } from "@/features/attendance/session-units";
 import { DAY_TONE, STATUS_TEXT, cellDisplay } from "@/features/attendance/cell-display";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import { cellKey, rowKey } from "@/features/attendance/grid/model";
-import { GridProvider } from "./grid-context";
-import { MatrixRow, formatMoney, rowTotals } from "./matrix-row";
+import { countMarks, sumCounts, type Counted } from "@/features/attendance/grid/totals";
+import { LiveRecords, LiveUnits } from "./live-totals";
+import { MatrixRow, formatMoney } from "./matrix-row";
 
 /** 표에 쌓이는 한 덩어리 = 한 반. 반별 보기는 1개, 강사 전체 보기는 그 강사의 모든 반. */
 export type MatrixGroup = {
@@ -15,13 +15,32 @@ export type MatrixGroup = {
   matrix: AttendanceMatrix;
 };
 
-/** 그룹(반)의 시수 합 — 급여 계산의 기본 단위라 그룹 헤더에 그대로 노출한다. */
-function groupUnits(matrix: AttendanceMatrix): number {
-  const sum = matrix.students.reduce(
-    (acc, s) => acc + rowTotals(matrix.marks[s.id] ?? {}, matrix.units[s.id] ?? {}).unitsTotal,
-    0,
+/** 그룹(반)의 집계 — 시수는 급여 계산의 기본 단위라 그룹 헤더에 그대로 노출한다. */
+function groupCount(matrix: AttendanceMatrix): Counted {
+  return sumCounts(
+    matrix.students.map((s) => countMarks(matrix.marks[s.id] ?? {}, matrix.units[s.id] ?? {})),
   );
-  return Math.round(sum * 10) / 10;
+}
+
+/**
+ * 격자 좌표·초기값 — 이동·범위 선택이 **화면에 보이는 순서 그대로**를 따라야 하므로 렌더와 같은 순회로 만든다.
+ * ⚠️ `cols`는 보이는 날짜뿐이지만(2주 보기는 14칸) `initial`은 **그 달 전체**를 싣는다 — 합계(시수·출석률)는
+ *    보이는 열이 아니라 월 전체 기준이라, 안 보이는 날의 기록도 저장소에 있어야 한다.
+ */
+export function buildGridSource(groups: MatrixGroup[], days: AttendanceMatrix["days"]) {
+  const rows = groups.flatMap((g) => g.matrix.students.map((s) => rowKey(g.classId, s.id)));
+  const cols = days.filter((d) => !d.placeholder).map((d) => d.date);
+  const initial: Record<string, { s: string; u: number | null }> = {};
+  for (const g of groups) {
+    for (const s of g.matrix.students) {
+      const marks = g.matrix.marks[s.id] ?? {};
+      const units = g.matrix.units[s.id] ?? {};
+      for (const [date, st] of Object.entries(marks)) {
+        initial[cellKey(rowKey(g.classId, s.id), date)] = { s: st, u: units[date] ?? null };
+      }
+    }
+  }
+  return { rows, cols, initial };
 }
 
 /**
@@ -50,25 +69,9 @@ export function MatrixTable({
   // 헤더의 수업요일 하이라이트 = 표에 담긴 반들의 수업요일 합집합(강사 전체 보기는 반마다 다르다).
   const classDows = new Set(groups.flatMap((g) => g.matrix.classDows));
   const colSpan = days.length + 5 + (money ? 2 : 0);
-  const totalUnits = Math.round(groups.reduce((acc, g) => acc + groupUnits(g.matrix), 0) * 10) / 10;
-  const totalRecords = groups.reduce((acc, g) => acc + g.matrix.stats.totalRecords, 0);
-
-  // ── 시트 격자 좌표 ── 이동·범위 선택이 **화면에 보이는 순서 그대로**를 따라야 하므로 렌더와 같은 순회로 만든다.
-  const gridRows = groups.flatMap((g) => g.matrix.students.map((s) => rowKey(g.classId, s.id)));
-  const gridCols = days.filter((d) => !d.placeholder).map((d) => d.date);
-  const gridInitial: Record<string, { s: string; u: number | null }> = {};
-  for (const g of groups) {
-    for (const s of g.matrix.students) {
-      const marks = g.matrix.marks[s.id] ?? {};
-      const units = g.matrix.units[s.id] ?? {};
-      for (const [date, st] of Object.entries(marks)) {
-        gridInitial[cellKey(rowKey(g.classId, s.id), date)] = { s: st, u: units[date] ?? null };
-      }
-    }
-  }
+  const totalCount = sumCounts(groups.map((g) => groupCount(g.matrix)));
 
   return (
-    <GridProvider rows={gridRows} cols={gridCols} initial={gridInitial} lockBefore={lockBefore ?? null}>
     <DragScrollArea className="bg-card shadow-card rounded-2xl">
       <table className="w-full min-w-full border-collapse text-sm">
         <thead>
@@ -150,7 +153,13 @@ export function MatrixTable({
                     <span className="text-foreground text-[12px] font-bold">{g.className}</span>
                     <span className="text-text-faint text-[11px]">{g.subjectLabel}</span>
                     <span className="text-text-dim text-[11px]">{g.matrix.students.length}명</span>
-                    <span className="text-text-dim num text-[11px]">시수 {formatSessionUnits(groupUnits(g.matrix))}</span>
+                    <span className="text-text-dim num text-[11px]">
+                      시수{" "}
+                      <LiveUnits
+                        rows={g.matrix.students.map((s) => rowKey(g.classId, s.id))}
+                        fallback={groupCount(g.matrix)}
+                      />
+                    </span>
                   </div>
                 </td>
               </tr>
@@ -177,7 +186,7 @@ export function MatrixTable({
                   <span className="text-foreground text-[12px] font-bold">합계</span>
                   <span className="text-text-dim text-[11px]">{groups.length}개 반</span>
                   <span className="text-foreground num text-[12px] font-bold">
-                    시수 {formatSessionUnits(totalUnits)}
+                    시수 <LiveUnits fallback={totalCount} />
                   </span>
                   {money ? (
                     <>
@@ -214,7 +223,8 @@ export function MatrixTable({
               <div className="flex items-center gap-2 overflow-x-auto text-[11px] [&>*]:shrink-0 [&_*]:whitespace-nowrap">
                 {/* 조작법을 여기 한 줄로 — 시트처럼 쓰는 화면이라 "클릭해서 고르는 곳"으로 오해하면 느려진다. */}
                 <span className="text-text-faint text-[11px]">
-                  총 {totalRecords}회 기록 · 칸을 고르고 <b className="text-text-dim">숫자</b>를 치세요(0=결석, 1·1.5·2=출석
+                  총 <LiveRecords fallback={totalCount} />회 기록 · 칸을 고르고{" "}
+                  <b className="text-text-dim">숫자</b>를 치세요(0=결석, 1·1.5·2=출석
                   시수) · 방향키·Tab·Enter 이동 · Shift로 범위 · Ctrl+C/V · Ctrl+Z · 우하단 손잡이를 끌면 채우기 ·
                   지각·조퇴·보강·메모는 <b className="text-text-dim">더블클릭</b>
                 </span>
@@ -247,6 +257,5 @@ export function MatrixTable({
         </tfoot>
       </table>
     </DragScrollArea>
-    </GridProvider>
   );
 }

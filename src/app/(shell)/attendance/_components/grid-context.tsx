@@ -14,6 +14,7 @@ import { useRouter } from "next/navigation";
 import { setAttendanceCell, setAttendanceRange } from "@/features/attendance/server/actions";
 import { cellKey, parseCellKey } from "@/features/attendance/grid/model";
 import { GridStore, type CellState, type GridValue } from "@/features/attendance/grid/store";
+import { countCells, type Counted } from "@/features/attendance/grid/totals";
 import { appendChar, backspace, commitBuffer, copyValueOf, type TypedValue } from "@/features/attendance/grid/typing";
 
 type Ctx = {
@@ -44,6 +45,32 @@ export function useCellState(key: string): { state: CellState; ctx: Ctx | null }
 }
 
 const FALLBACK: CellState = { value: null, active: false, selected: false, copied: false, buffer: null };
+
+/**
+ * 한 행의 합계(시수·출석률) — **그 행의 값이 바뀔 때만** 다시 그린다(커서 이동·옆 행 입력엔 반응 X).
+ * 격자가 없으면 null → 호출부가 서버 값으로 그린다.
+ *
+ * ⚠️ 결과를 useMemo로 캐시하지 않는다. 서버 새로고침으로 부모가 다시 렌더될 때 버전은 그대로일 수 있어
+ *    (값은 저장소가 이미 갱신) 캐시가 옛 숫자를 붙든다. 한 행 = 칸 31개 남짓이라 매 렌더 다시 세는 게 싸다.
+ */
+export function useRowCount(row: string): Counted | null {
+  const ctx = useContext(GridCtx);
+  const store = ctx?.store;
+  const subscribe = useCallback((cb: () => void) => (store ? store.subscribeRow(row)(cb) : () => {}), [store, row]);
+  const get = useCallback(() => store?.getRowVersion(row) ?? 0, [store, row]);
+  useSyncExternalStore(subscribe, get, () => 0);
+  return store ? countCells(store.valuesOfRow(row)) : null;
+}
+
+/** 여러 행의 합계 — 반 머리행·총합·상단 스탯. rows 생략 = 표 전체. 값이 바뀔 때마다 다시 센다. */
+export function useRowsCount(rows?: readonly string[]): Counted | null {
+  const ctx = useContext(GridCtx);
+  const store = ctx?.store;
+  const subscribe = useCallback((cb: () => void) => (store ? store.subscribeValues(cb) : () => {}), [store]);
+  const get = useCallback(() => store?.getValueVersion() ?? 0, [store]);
+  useSyncExternalStore(subscribe, get, () => 0);
+  return store ? countCells(store.valuesOfRows(rows)) : null;
+}
 
 /**
  * 출석부 시트 컨트롤러 — 활성 칸·범위 선택·타이핑·복사/붙여넣기·되돌리기·드래그 채우기.
