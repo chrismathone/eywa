@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft } from "@/components/icons/eywa-icon-compat";
 import { PageHeader } from "@/components/page-header";
+import { BigStat } from "@/components/atoms/big-stat";
 import { Pill } from "@/components/atoms/pill";
 import { requireAccess } from "@/lib/auth/require-access";
 import { getTenantSettings } from "@/features/owner/server/queries";
@@ -21,6 +22,7 @@ export const metadata = { title: "수업 평가 상세 — eywa" };
 /**
  * 참관 상세 — 시트 모양의 문항×평가자 매트릭스 + 영역 소계 + 총점/환산/등급 + 내 채점.
  * 평가자 실명은 **원장·지정 인원만**(원장 지시 2026-08-04) — 그 외는 '평가자 A/B/C'로 익명화.
+ * 디자인은 구조·위계 위주(원장 2026-08-05 "색칠 말고") — 스탯은 공용 BigStat, 표는 소프트 패널.
  */
 export default async function ClassReviewDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const viewer = await requireAccess("class_review");
@@ -94,53 +96,57 @@ export default async function ClassReviewDetailPage({ params }: { params: Promis
         />
       </div>
 
-      {/* 종합 — 평균 기준 빅스탯 */}
+      {/* 종합 — 평균 기준 빅 스탯(공용 아톰, 화면 로컬 Stat 금지 규칙) */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        {[
-          {
-            label: "제출",
-            value: `${cols.filter((c) => c.totals.answered > 0).length}/${cols.length}`,
-          },
-          { label: "총점(평균)", value: avg ? `${avg.total}` : "—", sub: `/ ${itemCountOf(areas) * 4}` },
-          { label: "환산점수", value: avg ? avg.percent.toFixed(1) : "—", sub: "/ 100" },
-          { label: "종합 등급", value: avg ? avg.grade : "—" },
-        ].map((s) => (
-          <div key={s.label} className="border-line bg-card rounded-2xl border p-4 shadow-card">
-            <p className="micro">{s.label}</p>
-            <p className="num text-foreground mt-1 text-2xl font-bold">
-              {s.value}
-              {s.sub ? <span className="text-text-faint ml-1 text-xs font-normal">{s.sub}</span> : null}
-            </p>
-          </div>
-        ))}
+        <BigStat
+          label="제출"
+          value={cols.filter((c) => c.totals.answered > 0).length}
+          unit={`/ ${cols.length}`}
+          sub="평가자 + 본인"
+        />
+        <BigStat
+          label="총점(평균)"
+          value={avg ? avg.total : "—"}
+          unit={`/ ${itemCountOf(areas) * 4}`}
+          sub="제출된 채점 평균"
+        />
+        <BigStat label="환산점수" value={avg ? avg.percent.toFixed(1) : "—"} unit="/ 100" sub="100점 환산" />
+        <BigStat
+          label="종합 등급"
+          value={avg ? avg.grade : "—"}
+          sub={avg?.grade === "재참관" ? "기준 미달 — 재참관 대상" : "등급 컷 기준"}
+          valueClass={avg?.grade === "재참관" ? "text-danger" : undefined}
+        />
       </div>
 
       {/* 문항 × 평가자 매트릭스 */}
-      <div className="border-line bg-card overflow-x-auto rounded-2xl border shadow-card">
+      <div className="bg-card overflow-x-auto rounded-2xl shadow-card">
         <table className="w-full min-w-[860px] border-collapse text-[13px]">
           <thead>
             <tr className="border-line bg-bg-soft/60 border-b text-left">
-              <th className="w-10 px-3 py-2.5 font-semibold">No.</th>
-              <th className="px-3 py-2.5 font-semibold">평가항목</th>
+              <th className="text-text-dim w-10 px-3 py-2.5 text-xs font-medium">No.</th>
+              <th className="text-text-dim px-3 py-2.5 text-xs font-medium">평가항목</th>
               {cols.map((c) => (
-                <th key={c.slot} className="w-20 px-2 py-2.5 text-center font-semibold">
-                  {c.label}
+                <th key={c.slot} className="w-20 px-2 py-2.5 text-center text-xs font-medium">
+                  <span className="text-foreground font-bold">{c.label}</span>
                   {c.totals.answered === 0 ? (
-                    <span className="text-text-faint block text-[10px] font-normal">미제출</span>
+                    <span className="text-text-dim block text-[10px] font-normal">미제출</span>
                   ) : null}
                 </th>
               ))}
-              <th className="w-16 px-2 py-2.5 text-center font-semibold">평균</th>
+              <th className="text-text-dim bg-bg-soft/40 w-16 px-2 py-2.5 text-center text-xs font-medium">
+                평균
+              </th>
             </tr>
           </thead>
           <tbody>
             {areas.map((area, ai) => {
               const base = areas.slice(0, ai).reduce((n, a) => n + a.items.length, 0);
               return [
-                <tr key={area.key} className="bg-primary/5">
-                  <td colSpan={cols.length + 3} className="text-primary px-3 py-2 text-xs font-bold">
-                    {area.title}
-                    <span className="text-text-dim ml-2 font-normal">
+                <tr key={area.key} className="border-line/60 bg-bg-soft/50 border-y">
+                  <td colSpan={cols.length + 3} className="px-3 py-2">
+                    <span className="text-foreground text-xs font-bold">{area.title}</span>
+                    <span className="text-text-dim ml-2 text-xs">
                       소계 {cols.map((c) => c.totals.areaSubtotals[ai]).join(" · ")}
                       {avg ? ` · 평균 ${avg.areaSubtotals[ai]}` : ""}
                     </span>
@@ -160,12 +166,14 @@ export default async function ClassReviewDetailPage({ params }: { params: Promis
                       {rowVals.map((v, ci) => (
                         <td
                           key={ci}
-                          className={`num px-2 py-2.5 text-center font-semibold ${v === 0 ? "text-text-faint" : v <= 2 ? "text-danger" : ""}`}
+                          className={`num px-2 py-2.5 text-center ${
+                            v === 0 ? "text-text-dim/50" : v <= 2 ? "text-danger font-bold" : "font-medium"
+                          }`}
                         >
                           {v || "—"}
                         </td>
                       ))}
-                      <td className="num text-text-dim px-2 py-2.5 text-center">{rowAvg ?? "—"}</td>
+                      <td className="num bg-bg-soft/40 px-2 py-2.5 text-center font-bold">{rowAvg ?? "—"}</td>
                     </tr>
                   );
                 }),
@@ -173,26 +181,26 @@ export default async function ClassReviewDetailPage({ params }: { params: Promis
             })}
           </tbody>
           <tfoot>
-            <tr className="border-line bg-bg-soft/60 border-t font-bold">
-              <td colSpan={2} className="px-3 py-2 text-right">
+            <tr className="border-line bg-bg-soft/60 border-t">
+              <td colSpan={2} className="px-3 py-2.5 text-right text-xs font-bold">
                 총점 ({itemCountOf(areas) * 4}점)
               </td>
               {cols.map((c) => (
-                <td key={c.slot} className="num px-2 py-2 text-center">
+                <td key={c.slot} className="num px-2 py-2.5 text-center font-bold">
                   {c.totals.answered > 0 ? c.totals.total : "—"}
                 </td>
               ))}
-              <td className="num px-2 py-2 text-center">{avg ? avg.total : "—"}</td>
+              <td className="num bg-bg-soft/40 px-2 py-2.5 text-center font-bold">{avg ? avg.total : "—"}</td>
             </tr>
             <tr className="border-line bg-bg-soft/40 border-t">
-              <td colSpan={2} className="px-3 py-2 text-right font-semibold">
+              <td colSpan={2} className="px-3 py-2.5 text-right text-xs font-bold">
                 환산 (100점) · 등급
               </td>
               {cols.map((c) => (
-                <td key={c.slot} className="num px-2 py-2 text-center">
+                <td key={c.slot} className="num px-2 py-2.5 text-center">
                   {c.totals.answered > 0 ? (
                     <>
-                      {c.totals.percent.toFixed(1)}{" "}
+                      <span className="font-bold">{c.totals.percent.toFixed(1)}</span>{" "}
                       <Pill color={c.totals.grade === "재참관" ? "danger" : "primary"} soft>
                         {c.totals.grade}
                       </Pill>
@@ -202,10 +210,10 @@ export default async function ClassReviewDetailPage({ params }: { params: Promis
                   )}
                 </td>
               ))}
-              <td className="num px-2 py-2 text-center">
+              <td className="num bg-bg-soft/40 px-2 py-2.5 text-center">
                 {avg ? (
                   <>
-                    {avg.percent.toFixed(1)}{" "}
+                    <span className="font-bold">{avg.percent.toFixed(1)}</span>{" "}
                     <Pill color={avg.grade === "재참관" ? "danger" : "primary"} soft>
                       {avg.grade}
                     </Pill>
@@ -219,17 +227,17 @@ export default async function ClassReviewDetailPage({ params }: { params: Promis
         </table>
       </div>
 
-      {/* 평가자 코멘트 — 이름 익명화 규칙 동일 */}
+      {/* 평가자 코멘트 — 이름 익명화 규칙 동일, 인용 스타일(구조로 구분) */}
       {cols.some((c) => c.sheet?.comment) ? (
-        <div className="border-line bg-card rounded-2xl border p-5 shadow-card">
-          <p className="micro mb-2">평가자 코멘트</p>
-          <ul className="space-y-2">
+        <div className="bg-card rounded-2xl p-5 shadow-card">
+          <p className="micro mb-3">평가자 코멘트</p>
+          <ul className="space-y-3">
             {cols
               .filter((c) => c.sheet?.comment)
               .map((c) => (
-                <li key={c.slot} className="text-sm">
-                  <span className="text-text-dim font-medium">{c.label}:</span>{" "}
-                  <span className="whitespace-pre-wrap">{c.sheet!.comment}</span>
+                <li key={c.slot} className="border-line border-l-2 pl-3">
+                  <p className="text-foreground text-xs font-bold">{c.label}</p>
+                  <p className="mt-0.5 text-sm leading-relaxed whitespace-pre-wrap">{c.sheet!.comment}</p>
                 </li>
               ))}
           </ul>
@@ -238,7 +246,7 @@ export default async function ClassReviewDetailPage({ params }: { params: Promis
 
       {/* 채점은 별도 페이지(/score) — 상세는 보기 전용(원장 지시 2026-08-04). */}
       {mine ? (
-        <div className="border-line bg-bg-soft/40 flex flex-wrap items-center justify-between gap-3 rounded-2xl border p-4">
+        <div className="bg-bg-soft/40 flex flex-wrap items-center justify-between gap-3 rounded-2xl p-4">
           <p className="text-text-dim text-sm">
             {mine.submitted
               ? "내 채점이 저장돼 있습니다 — 필요하면 수정할 수 있습니다."
@@ -251,7 +259,7 @@ export default async function ClassReviewDetailPage({ params }: { params: Promis
           </Button>
         </div>
       ) : (
-        <p className="text-text-faint text-xs">
+        <p className="text-text-dim text-xs">
           {openMode
             ? "선착순 평가자 3명이 이미 채점을 마쳐 열람만 가능합니다."
             : "이 참관 건의 평가자로 지정되어 있지 않아 채점은 열람만 가능합니다."}

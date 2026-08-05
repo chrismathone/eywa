@@ -18,7 +18,7 @@ export const metadata = { title: "수업 평가 — eywa" };
 /**
  * 수업 평가 체크리스트(참관) 목록 — 시트 "수업 상향화 체크리스트" 이식 초안(2026-08-04).
  * 접근은 class_review 메뉴 게이트(기본 전원 차단, 개인 예외로만 개방 — 테스트 단계).
- * 보기 필터(전체/내 평가 대기/내 평가 완료/선착순)는 계정 귀속(원장 지시 2026-08-05).
+ * 보기 필터(전체/내 평가 대기/내 평가 완료/미완료/선착순)는 계정 귀속(원장 지시 2026-08-05).
  */
 export default async function ClassReviewPage() {
   const viewer = await requireAccess("class_review");
@@ -41,6 +41,11 @@ export default async function ClassReviewPage() {
         embedLabel="수업 평가 체크리스트"
         actions={
           <span className="flex items-center gap-2">
+            {priv.seeNames ? (
+              <Button variant="outline" size="sm" render={<Link href="/class-review/board" />}>
+                종합 보기
+              </Button>
+            ) : null}
             {priv.editTemplate ? (
               <Button variant="outline" size="sm" render={<Link href="/class-review/template" />}>
                 문항 편집
@@ -72,6 +77,7 @@ export default async function ClassReviewPage() {
               modeLabel: r.header.observerMode === "open" ? "선착순 3명" : "평가자 지정",
               myTurn: !!mine && !mine.submitted,
               myDone: !!mine?.submitted,
+              incomplete: r.submittedCount < r.observerSlots,
               submitted: `${r.submittedCount}/${r.observerSlots}`,
               percent: r.averages ? r.averages.percent.toFixed(1) : null,
               grade: r.averages ? r.averages.grade : null,
@@ -79,7 +85,7 @@ export default async function ClassReviewPage() {
           })}
         />
       )}
-      <p className="text-text-faint text-[11px]">
+      <p className="text-text-dim text-[11px]">
         환산점수 = 제출된 채점들의 문항 평균으로 계산한 100점 기준 점수 · 등급 컷 {cutsLabel}
       </p>
     </div>
