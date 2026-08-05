@@ -25,12 +25,21 @@ export type SchoolStatsPrefs = {
   sortDir: "asc" | "desc";
   /** 보이는 학교급. `null` = 전체. 빈 배열도 전체로 취급 — 전부 끄면 빈 화면이라 설정으로서 의미가 없다. */
   kinds: SchoolKind[] | null;
+  /** 월별 추이 차트에 막대를 그릴지. 기본 켜짐(원장 2026-08-05: *"기본적으로 막대그래프"*). */
+  bars: boolean;
+  /**
+   * 월별 추이 차트에 **전환율 추세곡선**을 겹쳐 그릴지. 기본 꺼짐
+   * (원장 2026-08-05: *"추세곡선을 on/off 토글하도록 · 기본적으로 막대그래프"*).
+   */
+  trendLine: boolean;
 };
 
 export const DEFAULT_SCHOOL_PREFS: SchoolStatsPrefs = {
   sortBy: "count",
   sortDir: "desc",
   kinds: null,
+  bars: true,
+  trendLine: false,
 };
 
 /** 저장된 jsonb → 안전한 설정값. 모르는 값은 기본값으로 되돌린다(손장난으로 화면이 깨지지 않게). */
@@ -48,6 +57,7 @@ export function parseSchoolStatsPrefs(raw: unknown): SchoolStatsPrefs {
     // 빈 배열 = 전체(스스로를 빈 화면에 가두지 못하게).
     kinds = picked.length > 0 && picked.length < SCHOOL_KINDS.length ? picked : null;
   }
-  return { sortBy, sortDir, kinds };
+  // 막대는 기본 켜짐이라 `!== false`, 추세선은 기본 꺼짐이라 `=== true` — 저장 전 계정도 각자의 기본값으로.
+  return { sortBy, sortDir, kinds, bars: o.bars !== false, trendLine: o.trendLine === true };
 }
 
