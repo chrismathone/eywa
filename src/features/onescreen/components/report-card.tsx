@@ -3,19 +3,16 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { Pill } from "@/components/atoms/pill";
-import { subjectTone, toneSoftClass } from "../data";
 import { effectiveClassnoteStatus, isAlreadySent, isReportEligible, isRowActionable } from "../grid";
 import { evaluateSendGate } from "../send-gate";
 import { checkMentConsistency, MENT_WARNING_HINT, MENT_WARNING_LABEL } from "../ment-consistency";
 import { parentUnreadBadge, progressAnomalyBadge } from "../roster-signals";
-import { splitLessons } from "../curriculum";
 import { AttendancePills, type BasicAttendance } from "./attendance-pills";
-import { DeltaChip } from "./delta-chip";
 import { FieldSelect } from "./field-select";
 import { HomeworkRateInput } from "./homework-rate-input";
 import { isImageAttachment } from "../attachment-utils";
 import { splitComment, joinComment } from "../comment-paragraphs";
-import type { OneScreenStudent, Subject, TestScore } from "../types";
+import type { OneScreenStudent } from "../types";
 
 // shareToken: 저장 시 발급되는 학부모 공개 링크(/r/[token]) 토큰. 세션 내 저장 후에만 존재.
 // classnoteStatus: ClassNote 발송 큐 상태(queued/processing/success/failed/too_old) — 발송 후에만.
@@ -77,60 +74,6 @@ export function readAtLabel(iso: string): string {
   });
 }
 
-function fmt(t: TestScore) {
-  return t.score == null ? "미입력" : `${t.score}/${t.max}`;
-}
-
-function Row({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className="flex items-start justify-between gap-3 py-1">
-      <span className="text-text-faint shrink-0 text-[12px]">{label}</span>
-      <span className="text-foreground flex flex-wrap items-center justify-end gap-1.5 text-[12px] font-bold">
-        {children}
-      </span>
-    </div>
-  );
-}
-
-/** 선택 과목 1개 기준 요약 — 오늘 진도는 그 과목만, 테스트·태도는 그날 공통. */
-function MiniSummary({ st, subject }: { st: OneScreenStudent; subject: Subject }) {
-  const { daily, check } = st.tests;
-  const { key, tone } = subjectTone(subject.name);
-  return (
-    <div className="border-line rounded-md border px-3 py-2">
-      <Row label="오늘 진도">
-        {/* 다중 차시는 한 줄로 쏟지 않고 **차시별 줄바꿈**(pill 스택). 첫 줄에만 과목 접두. */}
-        {(() => {
-          const lessons = splitLessons(subject.today);
-          if (lessons.length === 0)
-            return <span className="text-text-faint text-[12px]">미입력</span>;
-          return (
-            <span className="flex flex-col items-end gap-0.5">
-              {lessons.map((l, i) => (
-                <span
-                  key={i}
-                  className={`rounded-pill px-1.5 py-px text-[11px] font-bold ${toneSoftClass(tone)}`}
-                >
-                  {i === 0 ? `${key} · ${l}` : l}
-                </span>
-              ))}
-            </span>
-          );
-        })()}
-      </Row>
-      <Row label="일일테스트">
-        <span className="tabular">{fmt(daily)}</span>
-        <DeltaChip score={daily.score} prev={daily.prevScore} />
-      </Row>
-      <Row label="확인테스트">
-        <span className="tabular">{fmt(check)}</span>
-        <DeltaChip score={check.score} prev={check.prevScore} />
-      </Row>
-      <Row label="태도 · 과제">{(st.attitude ?? "—") + " · " + (st.homework || "—")}</Row>
-    </div>
-  );
-}
-
 /**
  * today 보고서 카드 — **과목별로 따로** 작성·발송.
  * 과목 칩으로 전환하면 그 과목 진도만 담긴 초안을 만들고 개별 발송한다.
@@ -163,6 +106,7 @@ export function ReportCard({
   noticeMode = "A",
   subjectIndex,
   onSubjectIndex,
+  todayInputs,
 }: {
   student: OneScreenStudent;
   reports: Record<string, SubjectReport>;
@@ -201,6 +145,12 @@ export function ReportCard({
    */
   subjectIndex?: number;
   onSubjectIndex?: (idx: number) => void;
+  /**
+   * 오늘 진도·테스트 입력(ProgressCard + TestCard) — **노드로 받는다**. 이 카드가 그 배선(진도 편집·점수·
+   * 문항수·표기모드 콜백 7개)까지 props로 받으면 카드 하나가 30개를 넘긴다(CLAUDE.md props 10개 규칙).
+   * 배선은 원래 있던 자리(onescreen-client)에 그대로 두고, 이 카드는 **자리만** 내준다.
+   */
+  todayInputs?: ReactNode;
 }) {
   const [ownIdx, setOwnIdx] = useState(0);
   const selIdx = subjectIndex ?? ownIdx;
@@ -310,13 +260,20 @@ export function ReportCard({
         ) : null}
       </header>
 
-      {/* 넓은 카드(≥672px)는 **좌=오늘 입력 / 우=문장 작성·발송** 2열로 펼친다 — 좁으면 기존처럼 한 줄로 접힘.
-          세로로만 쌓으면 3열 레이아웃에서 보고서 열만 끝없이 길어지고 가운데 열이 텅 비었음(원장 지적 07-21).
-          ⚠️ **학부모 미리보기는 이 카드 안이 아니라 페이지 열이다**(2026-08-05 원장 재요청) — 카드 안에 두면
-             카드 폭을 입력과 나눠 써서, 보고서 열이 좁은 화면에선 입력까지 1열로 찌그러졌다. */}
-      <div className="grid flex-1 grid-cols-1 items-start gap-3 px-4 py-3 @2xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)] @2xl:gap-x-4">
+      {/* 카드 폭(@container)에 따라 1 → 2 → 3열. 세로로만 쌓으면 보고서 열만 끝없이 길어진다(원장 지적 07-21).
+          3열(@5xl≥1024px) = **오늘 진도·테스트 / 그 밖의 입력 / 문장 작성·발송** — 진도·테스트가 이 카드로
+          합쳐지면서(2026-08-05) 열이 하나 늘었다. 2열(@2xl)에선 진도·테스트가 첫 열 위에 얹힌다.
+          ⚠️ **학부모 미리보기는 이 카드 안이 아니라 페이지 열이다** — 카드 안에 두면 카드 폭을 입력과
+             나눠 써서, 보고서 열이 좁은 화면에선 입력까지 1열로 찌그러졌다. */}
+      <div className="grid flex-1 grid-cols-1 items-start gap-3 px-4 py-3 @2xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)] @2xl:gap-x-4 @5xl:grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)_minmax(0,1.2fr)]">
+        {/* 1열 — 오늘 진도 · 테스트(옛 가운데 열). 원장 2026-08-05: *"이걸 하나의 섹션으로 합쳐버리면
+            안되나? 공간낭비 최소화할 수 있게? 굳이 따로 할 필요 있나?"* 카드를 따로 세우니 열 하나가
+            콘텐츠보다 훨씬 길어 아래가 통째로 비었고, 게다가 이 카드 맨 위 요약(오늘 진도/일일/확인/
+            태도·과제)이 **그 카드와 같은 값을 두 번** 보여주고 있었다 → 요약(MiniSummary)은 삭제하고
+            진짜 입력을 여기로 들였다. */}
+        {todayInputs ? <div className="flex flex-col gap-3">{todayInputs}</div> : null}
+
         <div className="flex flex-col gap-3">
-        <MiniSummary st={student} subject={subject} />
 
         {/* 교재명·보강·출결 — edutrix 강사 필드 패리티(0089a). 교재명은 학부모 카드에도 표시(설정 토글). */}
         <div className="flex flex-col gap-1.5">
