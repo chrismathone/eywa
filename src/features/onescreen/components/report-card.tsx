@@ -7,7 +7,7 @@ import { effectiveClassnoteStatus, isAlreadySent, isReportEligible, isRowActiona
 import { evaluateSendGate } from "../send-gate";
 import { checkMentConsistency, MENT_WARNING_HINT, MENT_WARNING_LABEL } from "../ment-consistency";
 import { parentUnreadBadge, progressAnomalyBadge } from "../roster-signals";
-import { AttendancePills, type BasicAttendance } from "./attendance-pills";
+import { AttendancePills, type AttendanceExtra, type BasicAttendance } from "./attendance-pills";
 import { FieldSelect } from "./field-select";
 import { HomeworkRateInput } from "./homework-rate-input";
 import { isImageAttachment } from "../attachment-utils";
@@ -134,7 +134,7 @@ export function ReportCard({
   // 출결 인라인 입력(2-2) — 표뷰와 동일 pill. pendingKeys=(학생::반) 저장 중 잠금.
   attendance?: {
     pendingKeys: ReadonlySet<string>;
-    onSet: (classId: string, status: BasicAttendance) => void;
+    onSet: (classId: string, status: BasicAttendance, extra?: AttendanceExtra) => void;
     readOnly?: boolean; // 출결 쓰기 권한 없음 — pill 대신 표시 전용 배지
   };
   // 실효 멘트 모드(강사 오버라이드 ?? 학원 기본) — 상단 토글의 하단 반영. B=수업내용·태도 2칸 분리 입력.
@@ -233,6 +233,41 @@ export function ReportCard({
           {/* 실발송이 아니라 lesson_reports 기록 저장(PDF만 실제 인쇄). "발송 완료" 거짓 약속 방지. */}
           {rep.sent ? <Pill color="primary">기록 저장</Pill> : null}
         </div>
+        {/* 출결·수업타임 — **이름 바로 아래**(표뷰와 같은 자리). 원장 2026-08-05: *"표 모드에서는 출석/지각/
+            결석이 바로 이름 아래에 보이는데 카드에서는 못찾겠"* — 예전엔 아래 교재명 블록 안에 묻혀 있었다.
+            행(반) 단위(subject.classId)라 과목 알약 아래에 둔다(선택 과목이 바뀌면 이 값도 바뀐다).
+            보강 행·반 모호(같은 과목 2반)는 기록할 자리가 없어 배지만(출석부에서 기록). */}
+        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+          <span className="micro text-text-faint">출결</span>
+          {attendance && !student.isMakeup && subject.classId ? (
+            <AttendancePills
+              value={subject.attendanceRaw}
+              note={subject.attendanceNote}
+              units={subject.attendanceUnits}
+              pending={attendance.pendingKeys.has(`${student.id}::${subject.classId}`)}
+              onSet={(s, extra) => attendance.onSet(subject.classId!, s, extra)}
+              studentName={student.name}
+              readOnly={attendance.readOnly}
+            />
+          ) : (
+            <span
+              className={`rounded-pill px-2 py-0.5 text-[11px] font-bold ${
+                student.attendance === "지각"
+                  ? "bg-amber-soft text-amber"
+                  : student.attendance === "결석"
+                    ? "bg-danger text-white"
+                    : "bg-bg-soft text-text-dim"
+              }`}
+              title={
+                student.isMakeup || !subject.classId
+                  ? "이 행은 반이 없어 출석부에 기록할 자리가 없습니다 — 출결·수업타임은 출석부에서 입력하세요"
+                  : undefined
+              }
+            >
+              {student.attendance}
+            </span>
+          )}
+        </div>
         {/* 과목 선택 (여러 과목일 때만) — 발송한 과목엔 체크 */}
         {student.subjects.length > 1 ? (
           <div className="mt-2.5 flex flex-wrap gap-1.5">
@@ -302,27 +337,8 @@ export function ReportCard({
               보강
             </button>
           </div>
-          {/* 출결 인라인 입력(2-2) — 행(반) 단위(subject.classId). 보강·반 모호는 배지만(출석부에서 기록). */}
-          {attendance && !student.isMakeup && subject.classId ? (
-            <div className="flex items-center gap-1.5">
-              <span className="micro text-text-faint">출결</span>
-              <AttendancePills
-                value={subject.attendanceRaw}
-                pending={attendance.pendingKeys.has(`${student.id}::${subject.classId}`)}
-                onSet={(s) => attendance.onSet(subject.classId!, s)}
-                studentName={student.name}
-                readOnly={attendance.readOnly}
-              />
-            </div>
-          ) : student.attendance !== "출석" ? (
-            <span
-              className={`self-start rounded-pill px-2 py-0.5 text-[11px] font-bold ${
-                student.attendance === "지각" ? "bg-amber-soft text-amber" : "bg-danger text-white"
-              }`}
-            >
-              오늘 {student.attendance}
-            </span>
-          ) : null}
+          {/* 출결·수업타임은 **카드 헤더(이름 아래)**로 올렸다(2026-08-05) — 여기 두면 교재명 블록에 묻혀
+              강사가 못 찾는다(원장 제보). 같은 값을 두 번 보여주지 않는다. */}
         </div>
 
         <div>

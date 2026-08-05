@@ -588,12 +588,20 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
     // ⚠️ 옛 코드는 전체 이력을 무페이징 select(B2 위반) → PostgREST 1000행 silent 절단으로 오래된 학생부터 누락.
     // DISTINCT ON RPC(0117a)가 딱 필요한 만큼만 반환(절단 불가). studentIds 배열 파라미터라 청크 불필요(반환행 수백↓).
     supabase.rpc("onescreen_prior_reports", { p_student_ids: studentIds, p_before: todayIso }),
-    fetchInChunks<{ student_id: string; class_id: string; status: string; recorded_at: string }>(
+    fetchInChunks<{
+      student_id: string;
+      class_id: string;
+      status: string;
+      recorded_at: string;
+      // 사유 메모·시수 — 원스크린 출결 pill이 그 자리에서 읽고 고친다(2026-08-05). 출석부와 같은 칸.
+      note: string | null;
+      session_units: string | number | null;
+    }>(
       studentIds,
       (chunk) =>
         supabase
           .from("attendance_records")
-          .select("student_id, class_id, status, recorded_at")
+          .select("student_id, class_id, status, recorded_at, note, session_units")
           .eq("session_date", todayIso)
           .in("student_id", chunk)
           .order("recorded_at", { ascending: false }),
@@ -836,10 +844,15 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
   for (const a of attRows)
     if (myClassIdSet.has(a.class_id) && !attById.has(a.student_id)) attById.set(a.student_id, a.status);
   // (학생×반) 최신 raw — 출결 pill(2단계)의 행 단위 값. 축약(toMark)과 별개로 raw 보존(조퇴·보강 되쓰기 방지).
-  const attByRow = new Map<string, string>();
+  // 메모·시수도 **같은 최신 행에서** 함께 집는다(2026-08-05) — 상태만 최신 행에서, 메모는 다른 행에서
+  // 집으면 화면이 존재하지 않는 조합을 보여주고, 그걸 저장하면 실제 기록이 뒤섞인다.
+  const attByRow = new Map<string, { status: string; note: string | null; units: number | null }>();
   for (const a of attRows) {
     const k = `${a.student_id}::${a.class_id}`;
-    if (!attByRow.has(k)) attByRow.set(k, a.status);
+    if (attByRow.has(k)) continue;
+    // numeric은 postgres-js/PostgREST에서 문자열로 올 수 있다 — 숫자로 정규화(NaN은 기본값 취급).
+    const u = a.session_units == null ? null : Number(a.session_units);
+    attByRow.set(k, { status: a.status, note: a.note ?? null, units: Number.isFinite(u) ? u : null });
   }
   const toMark = (status: string | undefined): AttendanceMark =>
     status === "late" ? "지각" : status === "absent" || status === "early_leave" ? "결석" : "출석";
@@ -875,7 +888,11 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
     os.attendance = toMark(attById.get(os.id));
     // 행(반) 단위 raw 출결 — 출결 pill(2단계). classId 모호(null)면 미채움=pill 숨김.
     for (const su of os.subjects) {
-      if (su.classId) su.attendanceRaw = attByRow.get(`${os.id}::${su.classId}`) ?? null;
+      if (!su.classId) continue;
+      const rec = attByRow.get(`${os.id}::${su.classId}`);
+      su.attendanceRaw = rec?.status ?? null;
+      su.attendanceNote = rec?.note ?? null;
+      su.attendanceUnits = rec?.units ?? null;
     }
     const pr = priorReport.get(os.id);
     // 🔴 이 폴백은 **학생 단위**(반 무관) 직전 회차다 — 정규/특강을 구분하지 못한다(원장 2026-07-23).

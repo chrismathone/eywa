@@ -80,6 +80,16 @@ export type Subject = {
   // 이 반의 대상 날짜 raw status(present/late/absent/early_leave/excused/makeup). null=기록 없음.
   // ⚠️ 표시 축약(toMark)과 별개로 raw를 보존 — 조퇴·공결·보강을 pill이 축약값으로 되쓰는 사고 방지.
   attendanceRaw?: string | null;
+  /**
+   * 이 반의 대상 날짜 출석부 메모(`attendance_records.note`) — 지각·결석 사유 창의 초기값(2026-08-05).
+   * 출석부와 **같은 칸**이라 여기서 고치면 출석부에도 그대로 반영된다.
+   */
+  attendanceNote?: string | null;
+  /**
+   * 이 반의 대상 날짜 시수(`attendance_records.session_units`, null=기본 1) — 화면 '타임' 칸의 값.
+   * ⚠️ **학부모 보고서엔 안 나간다**(발송물이 아니라 기록). 급여 정산·청구 회차 소비는 이 값을 읽는다.
+   */
+  attendanceUnits?: number | null;
 
   // ── 오늘 보고서 발송 상태(과목별) — roster가 오늘 lesson_reports를 subject로 매칭해 채움 ──
   // 학생단위로 뭉개면 다과목(수학만 저장해도 영어까지 sent)이 오카운트되므로 과목별로 분리.

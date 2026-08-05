@@ -6,9 +6,29 @@
  * - raw가 3종 외(조퇴/공결/보강)면 pill 대신 한글 배지 — 축약값 되쓰기로 raw를 파괴하지 않게, 변경은 출석부에서.
  * - pending(in-flight) 동안 잠금 — 연속 클릭 응답 역전 방지.
  * (출결 status는 코드 고정 enum(운영 enum 아님) — 라벨 맵은 출석부 UI와 동일 관례.)
+ *
+ * **2026-08-05 원장 요청 2종을 여기 얹었다**(표뷰·카드뷰 공용이라 한 곳만 고치면 둘 다 따라온다):
+ *  ① **지각·결석 사유 메모** — 고르면 작은 입력창이 뜨고, 저장하면 출석부 메모(`attendance_records.note`)로
+ *     들어간다. 이미 찍힌 라벨에 **마우스를 올리면** 같은 창이 열려 고쳐 쓸 수 있다.
+ *     (출석은 사유가 없으니 즉시 저장 — 가장 자주 누르는 버튼에 창을 끼우지 않는다.)
+ *  ② **수업타임(시수)** — 기본 1. 한 타임 더 했으면 2로 고쳐 출석부에 그대로 반영한다
+ *     (`attendance_records.session_units`). ⚠️ **학부모 보고서엔 안 나간다** — 발송물이 아니라 기록이다
+ *     (원장: "메타데이터로 '수업보고서에 발송되지 않는' 수업타임").
+ *
+ * 🔴 시수는 **급여 정산·청구 회차 소비가 읽는 값**이다(0115a·settlement-queries). 원장 확인 후 강사가 직접
+ *    고치도록 열었고, 화면 툴팁도 그 사실을 숨기지 않는다.
  */
+import { useEffect, useRef, useState } from "react";
+import { Popover } from "@base-ui/react/popover";
+import { effectiveUnits, formatSessionUnits } from "@/features/attendance/session-units";
+
 export type BasicAttendance = "present" | "late" | "absent";
+/** 저장 부가값 — 넘기지 않은 필드는 서버가 기존 값을 유지한다(setAttendanceCell 규약). */
+export type AttendanceExtra = { note?: string | null; units?: string };
+
 const BASIC: readonly BasicAttendance[] = ["present", "late", "absent"];
+/** 사유 메모를 물어보는 상태. */
+const NEEDS_NOTE: ReadonlySet<string> = new Set(["late", "absent"]);
 const LABEL: Record<string, string> = {
   present: "출석",
   late: "지각",
@@ -25,17 +45,26 @@ const ON_CLS: Record<BasicAttendance, string> = {
 
 export function AttendancePills({
   value,
+  note,
+  units,
   pending,
   onSet,
   studentName,
   readOnly,
+  showUnits = true,
 }: {
   value: string | null | undefined; // raw status(null=기록 없음)
+  /** 현재 출석부 메모 — 지각·결석 팝업의 초기값. */
+  note?: string | null;
+  /** 현재 시수(null=기본 1). */
+  units?: number | null;
   pending: boolean; // 이 (학생×반) 저장 중 — 잠금
-  onSet: (status: BasicAttendance) => void;
+  onSet: (status: BasicAttendance, extra?: AttendanceExtra) => void;
   studentName: string;
   /** 출결 쓰기 권한 없음(학원설정 역할·권한) — 누를 수 있는 것처럼 보이지 않게 표시만 한다. */
   readOnly?: boolean;
+  /** 수업타임 입력 노출 — 칸이 좁은 자리에서 끌 수 있게. */
+  showUnits?: boolean;
 }) {
   // ⚠️ 권한이 없으면 **버튼을 아예 내보내지 않는다**(2026-07-21 원장 제보) — 예전엔 pill이 그대로 눌려서
   // 서버가 "출석 관리 권한이 없습니다"로 거절했고, 강사는 왜 안 되는지 모른 채 계속 눌렀다.
@@ -61,27 +90,235 @@ export function AttendancePills({
     );
   }
   return (
-    <span className="inline-flex gap-0.5" role="group" aria-label={`${studentName} 출결`}>
-      {BASIC.map((s) => {
-        const on = value === s;
-        return (
-          <button
+    <span className="inline-flex flex-wrap items-center gap-x-1 gap-y-0.5">
+      <span className="inline-flex gap-0.5" role="group" aria-label={`${studentName} 출결`}>
+        {BASIC.map((s) => (
+          <StatusPill
             key={s}
-            type="button"
-            disabled={pending}
-            onClick={() => {
-              if (!on) onSet(s); // 재클릭 no-op
-            }}
-            aria-pressed={on}
-            title={on ? `${LABEL[s]} (기록 지우기는 출석부에서)` : `${LABEL[s]}로 기록`}
-            className={`rounded-pill px-1.5 py-px text-[10px] font-bold transition disabled:opacity-50 ${
-              on ? ON_CLS[s] : "border-line text-text-faint hover:bg-bg-soft hover:text-text-dim border"
-            }`}
-          >
-            {LABEL[s]}
-          </button>
-        );
-      })}
+            status={s}
+            active={value === s}
+            note={note ?? ""}
+            pending={pending}
+            studentName={studentName}
+            onSet={onSet}
+          />
+        ))}
+      </span>
+      {showUnits ? (
+        <UnitsInput
+          units={units}
+          status={(value as BasicAttendance | null | undefined) ?? null}
+          pending={pending}
+          studentName={studentName}
+          onSet={onSet}
+        />
+      ) : null}
+    </span>
+  );
+}
+
+/**
+ * pill 1개. 지각·결석은 **사유 창을 거쳐** 저장하고, 이미 그 상태로 찍힌 라벨은 **마우스를 올리면** 다시 열려
+ * 고칠 수 있다(원장: "다시 라벨에 마우스 올리면 수정 저장 가능하게").
+ *
+ * ⚠️ hover로 여는 건 **활성 라벨만** — 안 찍힌 pill까지 열리면 마우스가 지나가기만 해도 창이 따라붙어
+ *    표가 어지럽다. 상태를 **바꾸는** 클릭은 창을 거치므로 오작동으로 상태가 먼저 바뀌는 일도 없다.
+ */
+function StatusPill({
+  status,
+  active,
+  note,
+  pending,
+  studentName,
+  onSet,
+}: {
+  status: BasicAttendance;
+  active: boolean;
+  note: string;
+  pending: boolean;
+  studentName: string;
+  onSet: (status: BasicAttendance, extra?: AttendanceExtra) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const asks = NEEDS_NOTE.has(status);
+
+  const pill = (
+    <button
+      type="button"
+      disabled={pending}
+      onClick={() => {
+        if (asks) return setOpen(true); // 활성 재클릭도 '사유 수정'으로(재클릭 no-op은 상태 변경에만 해당)
+        if (!active) onSet(status);
+      }}
+      onMouseEnter={asks && active ? () => setOpen(true) : undefined}
+      aria-pressed={active}
+      title={
+        asks
+          ? active
+            ? `${LABEL[status]} — 사유 메모 수정 (기록 지우기는 출석부에서)`
+            : `${LABEL[status]}로 기록 — 사유 메모를 적을 수 있습니다`
+          : active
+            ? `${LABEL[status]} (기록 지우기는 출석부에서)`
+            : `${LABEL[status]}로 기록`
+      }
+      className={`rounded-pill px-1.5 py-px text-[10px] font-bold transition disabled:opacity-50 ${
+        active ? ON_CLS[status] : "border-line text-text-faint hover:bg-bg-soft hover:text-text-dim border"
+      }`}
+    >
+      {LABEL[status]}
+      {/* 메모가 있으면 점 하나 — 열어보지 않아도 "사유가 적혀 있다"가 보인다. */}
+      {active && note ? (
+        <span aria-hidden className="ml-0.5 align-middle text-[8px]">
+          ●
+        </span>
+      ) : null}
+    </button>
+  );
+
+  if (!asks) return pill;
+
+  return (
+    <Popover.Root open={open} onOpenChange={setOpen}>
+      <Popover.Trigger render={pill} />
+      <Popover.Portal>
+        <Popover.Positioner side="bottom" align="start" sideOffset={4} className="z-50">
+          <Popover.Popup className="bg-card border-line shadow-card w-[240px] rounded-lg border p-2 outline-none">
+            {/* key=열릴 때마다 서버 값으로 다시 시작(남이 고친 메모가 반영되게). */}
+            <NoteForm
+              key={note}
+              initial={note}
+              label={`${studentName} · ${LABEL[status]} 사유`}
+              onCancel={() => setOpen(false)}
+              onSave={(text) => {
+                onSet(status, { note: text.trim() || null });
+                setOpen(false);
+              }}
+            />
+          </Popover.Popup>
+        </Popover.Positioner>
+      </Popover.Portal>
+    </Popover.Root>
+  );
+}
+
+/** 사유 메모 입력 — Enter 저장(줄바꿈은 Shift+Enter), Esc 취소. 한 줄 사유가 대부분이라 손이 덜 간다. */
+function NoteForm({
+  initial,
+  label,
+  onSave,
+  onCancel,
+}: {
+  initial: string;
+  label: string;
+  onSave: (text: string) => void;
+  onCancel: () => void;
+}) {
+  const [text, setText] = useState(initial);
+  const ref = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    ref.current?.focus();
+    ref.current?.select();
+  }, []);
+  return (
+    <div className="space-y-1.5">
+      <p className="text-text-faint text-[10px] font-bold">{label}</p>
+      <textarea
+        ref={ref}
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault();
+            onSave(text);
+          }
+          if (e.key === "Escape") onCancel();
+        }}
+        rows={2}
+        placeholder="예: 학원버스 지연 / 병결(부모 연락)"
+        className="border-line bg-card focus:border-primary w-full resize-none rounded-md border px-1.5 py-1 text-[11px] outline-none"
+      />
+      <div className="flex items-center justify-end gap-1">
+        <button
+          type="button"
+          onClick={onCancel}
+          className="text-text-faint hover:text-foreground cursor-pointer px-1.5 py-0.5 text-[11px]"
+        >
+          취소
+        </button>
+        <button
+          type="button"
+          onClick={() => onSave(text)}
+          className="bg-primary text-primary-foreground cursor-pointer rounded-md px-2 py-0.5 text-[11px] font-bold"
+        >
+          저장
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * 수업타임(시수) — 기본 1. 1이면 흐리게, 고치면 진하게 남아 "손댄 칸"이 눈에 띈다.
+ *
+ * ⚠️ 출결 기록이 없는 칸에 시수만 넣을 수는 없다(원장 키가 상태 행이다) → 상태가 비어 있으면 **출석으로**
+ *    함께 찍는다. "수업타임을 적었다 = 그 수업을 했다"가 사실에 가장 가깝고, 아무 일도 안 일어나
+ *    "적었는데 무반응"이 되는 것보다 낫다(툴팁으로 밝힌다).
+ * ⚠️ **결석에는 안 보인다** — 결석은 시수 소비 대상이 아니다(COUNTABLE_STATUSES). 보이면 적을 수 있는 것처럼
+ *    보이고, 적어도 집계에 안 잡혀 거짓 어포던스가 된다.
+ */
+function UnitsInput({
+  units,
+  status,
+  pending,
+  studentName,
+  onSet,
+}: {
+  units: number | null | undefined;
+  status: BasicAttendance | null;
+  pending: boolean;
+  studentName: string;
+  onSet: (status: BasicAttendance, extra?: AttendanceExtra) => void;
+}) {
+  const saved = effectiveUnits(units);
+  const [draft, setDraft] = useState<string | null>(null); // null = 편집 중 아님(서버 값 표시)
+  if (status === "absent") return null;
+  const savedText = formatSessionUnits(saved);
+
+  return (
+    <span
+      className="inline-flex items-center gap-0.5"
+      title={
+        `${studentName} 수업타임 — 기본 1타임. 한 타임 더 했으면 2로 고치면 출석부에 그대로 들어갑니다.` +
+        (status ? "" : " (지금 출결이 비어 있어 '출석'으로 함께 기록됩니다)") +
+        " ※ 학부모 보고서에는 나가지 않습니다. 급여 시수에는 반영됩니다."
+      }
+    >
+      <span className="text-text-faint text-[9px] font-bold">타임</span>
+      <input
+        type="text"
+        inputMode="decimal"
+        value={draft ?? savedText}
+        disabled={pending}
+        aria-label={`${studentName} 수업타임`}
+        onChange={(e) => setDraft(e.target.value)}
+        onFocus={(e) => e.currentTarget.select()}
+        onBlur={(e) => {
+          const next = e.target.value.trim();
+          setDraft(null);
+          if (!next || next === savedText) return; // 무변경이면 왕복 안 함
+          onSet(status ?? "present", { units: next });
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") e.currentTarget.blur();
+          if (e.key === "Escape") {
+            setDraft(null);
+            e.currentTarget.blur();
+          }
+        }}
+        className={`border-line focus:border-primary h-[18px] w-7 rounded border bg-transparent text-center text-[10px] outline-none disabled:opacity-50 ${
+          saved === 1 ? "text-text-faint" : "text-foreground font-bold"
+        }`}
+      />
     </span>
   );
 }
