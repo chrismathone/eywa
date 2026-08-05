@@ -16,10 +16,11 @@ import {
 import { evaluateSendGate } from "../send-gate";
 import { checkMentConsistency, MENT_WARNING_HINT, MENT_WARNING_LABEL } from "../ment-consistency";
 import { parentUnreadBadge, progressAnomalyBadge } from "../roster-signals";
+import { makeupBadgeLabel } from "../makeup-label";
 import type { OneScreenStudent } from "../types";
 import { classnoteBadge, readAtLabel, type SubjectReport } from "./report-card";
 import { GridAttachButton, useRowFileDrop } from "./grid-attach";
-import { AttendancePills, type BasicAttendance } from "./attendance-pills";
+import { AttendancePills, type AttendanceExtra, type BasicAttendance } from "./attendance-pills";
 import { handleGridNavKey } from "./grid-nav";
 import { FieldSelect } from "./field-select";
 import { HomeworkRateInput } from "./homework-rate-input";
@@ -38,7 +39,13 @@ const AUTOSIZE = TEXTAREA_AUTOSIZE_RESIZABLE;
 
 /** 필드 편집 핸들러(카드뷰와 같은 state·저장로직 공유 — studentId 파라미터 버전). */
 export type GridFieldHandlers = {
-  onAttendance: (studentId: string, classId: string, status: BasicAttendance) => void; // 출결 pill(2-2) — 출석부 기록에 저장
+  // 출결 pill(2-2) — 출석부 기록에 저장. extra=지각·결석 사유 메모·수업타임(2026-08-05, 같은 행 한 왕복).
+  onAttendance: (
+    studentId: string,
+    classId: string,
+    status: BasicAttendance,
+    extra?: AttendanceExtra,
+  ) => void;
   onProgress: (studentId: string, subjectIndex: number, today: string) => void;
   onStudyGrade: (studentId: string, grade: string) => void;
   onScore: (studentId: string, which: "daily" | "check", v: number | null) => void;
@@ -285,9 +292,11 @@ export function GridBodyRow({
                  `isMakeup`, 모든 과목 행에 `makeup:true`(classId 없음)를 함께 세워서 위 이름 옆 배지와
                  **같은 '보강'이 두 번** 찍혔다(원장 제보 2026-08-05). 이 배지의 존재 이유는 "정규 학생 카드에
                  섞여 들어온 보강 행"을 가르는 것이라, 학생 전체가 보강이면 이름 옆 배지 하나로 충분하다. */}
-          {subject.makeup && !subject.classId && !student.isMakeup ? (
+          {/* 반이 붙은 행의 보강 = 그날 정규까지 한 "정규+보강"(2026-08-05 합치기) — 라벨을 갈라 적어야
+              강사가 "왜 보강인데 보고서가 하나지?"를 화면에서 바로 이해한다. 판정은 makeup-label.ts 단일 소스. */}
+          {subject.makeup && !student.isMakeup ? (
             <span className="bg-amber-soft text-amber shrink-0 rounded-pill px-1 py-px text-[9px] font-bold">
-              보강
+              {makeupBadgeLabel({ makeup: true, hasClass: !!subject.classId })}
             </span>
           ) : null}
           {subject.subjectLabel && subject.name !== subject.subjectLabel && subject.className ? (
@@ -300,8 +309,10 @@ export function GridBodyRow({
           {!student.isMakeup && subject.classId ? (
             <AttendancePills
               value={subject.attendanceRaw}
+              note={subject.attendanceNote}
+              units={subject.attendanceUnits}
               pending={gen.attPending.has(`${student.id}::${subject.classId}`)}
-              onSet={(s) => fields.onAttendance(student.id, subject.classId!, s)}
+              onSet={(s, extra) => fields.onAttendance(student.id, subject.classId!, s, extra)}
               studentName={student.name}
               readOnly={gen.attReadOnly}
             />
@@ -403,7 +414,16 @@ export function GridBodyRow({
             onKeyDown={handleGridNavKey}
             className="border-line bg-card focus:border-primary h-8 w-full rounded-sm border px-2 text-[12px] outline-none"
           />
-          <label className="text-text-dim flex w-fit cursor-pointer items-center gap-1 text-[11px]">
+          {/* 뜻이 행 종류에 따라 갈린다(2026-08-05) — 반이 붙은 행이면 "정규까지 하고 보강도 했다"라
+              제목이 "(정규+보강)"이 된다. 켜는 사람이 무엇을 켜는지 알 수 있게 툴팁으로 밝힌다. */}
+          <label
+            className="text-text-dim flex w-fit cursor-pointer items-center gap-1 text-[11px]"
+            title={
+              subject.classId
+                ? "그날 정규 수업에 더해 보강까지 한 경우 — 학부모 보고서 제목이 '(정규+보강)'이 되고 한 건만 나갑니다"
+                : "보강(수업외) 수업 — 학부모 보고서 제목이 '(보강)'이 됩니다"
+            }
+          >
             <input
               type="checkbox"
               checked={!!subject.makeup}

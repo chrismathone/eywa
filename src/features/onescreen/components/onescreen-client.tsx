@@ -104,6 +104,17 @@ import type { BasicAttendance } from "./attendance-pills";
 import { useEditPresence, useEditingOthers } from "@/features/presence/edit-presence";
 import { dedupeEditors } from "@/features/presence/presence-state";
 
+/**
+ * 보강 합치기(정규+보강)로 **시수를 올려도 되는 출결 상태** — 기록 없음 · 출석 · 지각뿐이다.
+ *  · 결석·공결: 정규를 빠지고 보강만 한 것이라 "정규+보강"이 아니고, 애초에 시수 소비 대상도 아니다.
+ *  · 조퇴·보강 등 3종 밖 raw: 시수를 올리려면 status를 함께 써야 하는데 pill 3종으로는 그 값을 되쓸 수
+ *    없다 — 되쓰면 조퇴가 출석으로 조용히 바뀐다(이 코드베이스가 반복해 막아 온 '축약 되쓰기').
+ * 대상에서 빠지면 종전대로 **별도 보강 행**이 생긴다(합치기만 안 될 뿐 기록은 남는다).
+ */
+const MERGEABLE_RAW: ReadonlySet<string> = new Set(["", "present", "late"]);
+const mergeStatusOf = (raw: string | null | undefined): BasicAttendance =>
+  raw === "late" ? "late" : "present";
+
 type ReportsState = Record<string, Record<string, SubjectReport>>; // studentId → 과목명 → {draft, sent}
 
 function initReports(students: OneScreenStudent[]): ReportsState {
@@ -654,7 +665,76 @@ export function OneScreenClient({
       toast.success(`${mk.name} (보강) 추가됨`);
       return;
     }
-    // 이미 목록에 있음 → 그 카드에 '보강' 행 병합. 이름 유일화(reports 키 충돌 방지)로 초안 덮어쓰기 차단.
+    // 🔴 **그 과목 정규 행이 이미 있으면 보고서를 새로 만들지 않는다**(원장 2026-08-05):
+    //    *"정규수업이 있는 학생이 수업까지했는데 같은날에 보강수업 → 수업보고서가 한번더 발송되지 않고
+    //    기존 정규수업에 보강수업까지 합쳐서 (정규+보강)으로 발송. 수업타임은 1+1이라 2로 입력될것."*
+    //    별도 보강 행을 만들면 같은 날 같은 학부모에게 보고서가 **두 번** 나간다(그게 지금 동작이었다).
+    //    → 정규 행에 보강 표시를 켜고(제목이 "(정규+보강)"이 된다 — makeup-label.ts) 출석부 시수를 +1 한다.
+    //
+    // 합칠 대상을 고르는 규칙 — 셋 다 필요하다(하나라도 빠지면 **돈이 틀린다**):
+    //  ① `!su.makeup && su.classId` — 이미 보강으로 표시된 행·반 없는 행은 대상 아님.
+    //  ② **이 강사가 오늘 이 학생에게 가르치는 과목만**(mk.subjects) — 안 걸면 그 학생의 다른 과목 정규 행까지
+    //     보강으로 찍히고 **시수가 같이 2배**가 된다(급여 반영 값이라 조용한 과지급).
+    //  ③ **시수를 올려도 되는 상태만**(MERGEABLE_RAW: 기록없음·출석·지각) — 결석/조퇴 등은 위 상수 주석 참조.
+    const teacherSubjectKeys = new Set(mk.subjects.map((su) => su.subjectKey));
+    // 이미 합쳐 둔 과목이 있으면 **또 만들지 않는다** — 두 번 누르면 별도 "(보강)" 행이 생겨 보고서가
+    // 결국 두 번 나간다(이 기능이 막으려던 바로 그 일). 예전 "이미 보강 행이 추가되어 있습니다"와 같은 규약.
+    const alreadyMerged = existing.subjects.filter(
+      (su) => su.makeup && su.classId && teacherSubjectKeys.has(su.subjectKey),
+    );
+    if (alreadyMerged.length > 0) {
+      setSelId(existing.id);
+      toast.message(
+        `${existing.name} — ${alreadyMerged.map((su) => su.name).join("·")}는 이미 보강이 합쳐져 있습니다(정규+보강). 한 타임 더 했다면 수업타임을 올려 주세요.`,
+      );
+      return;
+    }
+    const combinable = existing.subjects.filter(
+      (su) =>
+        !su.makeup &&
+        su.classId &&
+        teacherSubjectKeys.has(su.subjectKey) &&
+        MERGEABLE_RAW.has(su.attendanceRaw ?? ""),
+    );
+    // 후보가 둘 이상이면 **어느 과목 보강인지 알 수 없다**(보강 추가는 학생만 고른다). 추측해서 시수를 올리면
+    // 안 한 과목까지 급여가 붙는다 → 아무것도 하지 않고, 강사가 그 과목 행에서 직접 누르게 안내한다.
+    if (combinable.length > 1) {
+      setSelId(existing.id);
+      toast.warning(
+        `${existing.name}은 오늘 ${combinable.map((su) => su.name).join("·")}를 듣습니다 — 어느 과목 보강인지 알 수 없어 자동으로 합치지 않았습니다. 해당 과목 행의 '보강'을 누르고 수업타임을 2로 고쳐 주세요.`,
+        { duration: 10000 },
+      );
+      return;
+    }
+    const merge = combinable[0];
+    if (merge?.classId) {
+      patch(studentId, (s) => ({
+        ...s,
+        subjects: s.subjects.map((x) => (x.name === merge.name ? { ...x, makeup: true } : x)),
+      }));
+      // 수업타임 = 지금 값 + 1(정규 1 + 보강 1 = 2가 기본). 출결이 비어 있으면 '출석'으로 함께 찍힌다.
+      void setAttendanceFor(studentId, merge.classId, mergeStatusOf(merge.attendanceRaw), {
+        units: String((merge.attendanceUnits ?? 1) + 1),
+      });
+      setSelId(existing.id);
+      // ⚠️ 이미 발송된 정규 보고서는 수정이 막혀 있다(발송본 잠금) — 보강 내용을 못 싣는다는 사실을
+      //    **그 자리에서** 알린다(원장 2026-08-05: "강사에게 이미 정규보고서가 발송되어서 보강 보고서는
+      //    발송되지 않는다고 경고"). 출석부 수업타임은 위에서 이미 올라갔다.
+      const sent = isAlreadySent(
+        effectiveClassnoteStatus(reports[studentId]?.[merge.name]?.classnoteStatus, merge.classnoteStatus),
+      );
+      if (sent) {
+        toast.warning(
+          `${existing.name} — ${merge.name} 보고서가 이미 발송되어 보강 내용은 보고서에 실리지 않습니다. 수업타임만 올렸습니다(출석부).`,
+          { duration: 10000 },
+        );
+      } else {
+        toast.success(`${existing.name} 보강 합침 — ${merge.name} 보고서 1건(정규+보강) · 수업타임 2`);
+      }
+      return;
+    }
+    // 정규 행이 없는(또는 그날 결석인) 과목 → 종전대로 별도 보강 행. 그건 진짜 "보강만"이다.
+    // 이름 유일화(reports 키 충돌 방지)로 초안 덮어쓰기 차단.
     const used = new Set(existing.subjects.map((su) => su.name));
     // mk.subjects는 강사의 **모든 담당 과목**이라, 그대로 병합하면 math만 듣는 학생 카드에 '영어 (보강)' 잡행까지
     // 붙는다(2026-07-24 적대검수). 학생이 실제 수강하는 과목(정규+특강 행)으로 좁히되, 겹치는 과목이 하나도 없으면
@@ -739,11 +819,28 @@ export function OneScreenClient({
   // ── 출결 인라인 입력(2-2) — 출석부와 같은 기록(setAttendanceCell 재사용). 행(반) 단위 raw 보존 ──
   const markOf = (s: string): AttendanceMark =>
     s === "late" ? "지각" : s === "absent" || s === "early_leave" ? "결석" : "출석";
-  function applyAttendanceLocal(studentId: string, classId: string, raw: string | null, mark?: AttendanceMark) {
+  function applyAttendanceLocal(
+    studentId: string,
+    classId: string,
+    raw: string | null,
+    extra?: { note?: string | null; units?: number | null },
+    mark?: AttendanceMark,
+  ) {
     patch(studentId, (s) => ({
       ...s,
       attendance: mark ?? (raw ? markOf(raw) : s.attendance),
-      subjects: s.subjects.map((su) => (su.classId === classId ? { ...su, attendanceRaw: raw } : su)),
+      subjects: s.subjects.map((su) =>
+        su.classId === classId
+          ? {
+              ...su,
+              attendanceRaw: raw,
+              // 안 넘긴 필드는 **건드리지 않는다** — 서버 규약(undefined=기존 유지)과 같게 맞춰야
+              // 낙관 화면과 실제 기록이 갈리지 않는다(메모만 고쳤는데 시수가 1로 되돌아가는 일 방지).
+              ...(extra && "note" in extra ? { attendanceNote: extra.note ?? null } : {}),
+              ...(extra && "units" in extra ? { attendanceUnits: extra.units ?? null } : {}),
+            }
+          : su,
+      ),
     }));
   }
   // 실패 롤백 — 행 raw는 되돌리되, 배지(학생단위)는 **내 낙관값이 아직 살아있을 때만** 복원(compare-and-swap).
@@ -751,36 +848,75 @@ export function OneScreenClient({
   function rollbackAttendance(
     studentId: string,
     classId: string,
-    prevRaw: string | null,
+    prev: { raw: string | null; note: string | null; units: number | null },
     myMark: AttendanceMark,
     prevMark: AttendanceMark,
   ) {
     patch(studentId, (s) => ({
       ...s,
       attendance: s.attendance === myMark ? prevMark : s.attendance,
-      subjects: s.subjects.map((su) => (su.classId === classId ? { ...su, attendanceRaw: prevRaw } : su)),
+      subjects: s.subjects.map((su) =>
+        su.classId === classId
+          ? { ...su, attendanceRaw: prev.raw, attendanceNote: prev.note, attendanceUnits: prev.units }
+          : su,
+      ),
     }));
   }
   // 재클릭 no-op(삭제는 출석부에서만) + (학생×반) in-flight 잠금(연속 클릭 응답 역전 방지) + 실패 롤백.
   // 낙관 갱신으로 pill 즉시 반응(반응속도 1순위) — 서버 검증(담당 반·수강생)은 setAttendanceCell이 강제.
-  async function setAttendanceFor(studentId: string, classId: string, status: BasicAttendance) {
+  //
+  // extra(2026-08-05) = 지각·결석 **사유 메모**·**수업타임(시수)**. 셋 다 출석부의 같은 행이라 한 왕복으로
+  // 저장한다. ⚠️ 상태가 그대로여도 메모·시수만 바꾸는 호출은 **통과시켜야** 한다(예전 재클릭 no-op을 그대로
+  // 두면 "지각 사유만 고치기"가 조용히 무시된다).
+  async function setAttendanceFor(
+    studentId: string,
+    classId: string,
+    status: BasicAttendance,
+    extra?: { note?: string | null; units?: string },
+  ) {
     const key = `${studentId}::${classId}`;
     if (attPending.has(key)) return;
     const stu = studentsRef.current.find((s) => s.id === studentId);
-    const prevRaw = stu?.subjects.find((su) => su.classId === classId)?.attendanceRaw ?? null;
+    const row = stu?.subjects.find((su) => su.classId === classId);
+    const prev = {
+      raw: row?.attendanceRaw ?? null,
+      note: row?.attendanceNote ?? null,
+      units: row?.attendanceUnits ?? null,
+    };
     const prevMark = stu?.attendance ?? "출석";
-    if (prevRaw === status) return;
+    const changesExtra = extra !== undefined && ("note" in extra || "units" in extra);
+    if (prev.raw === status && !changesExtra) return; // 상태 재클릭 no-op(삭제는 출석부에서)
     const myMark = markOf(status);
     setAttPending((p) => new Set(p).add(key));
-    applyAttendanceLocal(studentId, classId, status);
+    // 낙관 표시용 시수 — 서버가 "1이면 null로 정규화"하므로 화면도 같은 규칙으로 미리 접는다.
+    const optimisticUnits =
+      extra && "units" in extra
+        ? // ⚠️ 서버 parseSessionUnits는 쉼표 소수점("1,5")도 받는다 — 여기서 Number()에 그대로 넣으면 NaN이
+          //    되어 화면만 1로 접히고 DB엔 1.5가 저장된다(화면과 기록이 조용히 갈린다).
+          (() => {
+            const n = Number(String(extra.units ?? "").replace(",", "."));
+            return !Number.isFinite(n) || n === 1 ? null : n;
+          })()
+        : undefined;
+    applyAttendanceLocal(studentId, classId, status, {
+      ...(extra && "note" in extra ? { note: extra.note ?? null } : {}),
+      ...(optimisticUnits !== undefined ? { units: optimisticUnits } : {}),
+    });
     try {
-      const res = await setAttendanceCell({ studentId, classId, sessionDate: activeDate, status });
+      const res = await setAttendanceCell({
+        studentId,
+        classId,
+        sessionDate: activeDate,
+        status,
+        ...(extra && "note" in extra ? { note: extra.note ?? null } : {}),
+        ...(extra && "units" in extra ? { units: extra.units } : {}),
+      });
       if ("error" in res) {
-        rollbackAttendance(studentId, classId, prevRaw, myMark, prevMark);
+        rollbackAttendance(studentId, classId, prev, myMark, prevMark);
         toast.error(res.error);
       }
     } catch {
-      rollbackAttendance(studentId, classId, prevRaw, myMark, prevMark);
+      rollbackAttendance(studentId, classId, prev, myMark, prevMark);
       toast.error("출결 저장에 실패했습니다 — 네트워크를 확인해 주세요");
     } finally {
       setAttPending((p) => {
@@ -2212,7 +2348,7 @@ export function OneScreenClient({
                 attendance={{
                   readOnly: !canEditAttendance,
                   pendingKeys: attPending,
-                  onSet: (classId, s) => setAttendanceFor(selected.id, classId, s),
+                  onSet: (classId, s, extra) => setAttendanceFor(selected.id, classId, s, extra),
                 }}
                 // 실효 모드 = 강사 오버라이드 ?? 학원 기본 — 상단 토글이 하단 보고서 입력 구성을 실제로 바꾼다.
                 noticeMode={noticeMode ?? academyNoticeMode}

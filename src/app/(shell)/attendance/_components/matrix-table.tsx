@@ -3,6 +3,8 @@ import type { TeacherMoney } from "@/features/attendance/server/teacher-money";
 import { formatSessionUnits } from "@/features/attendance/session-units";
 import { DAY_TONE, STATUS_TEXT, cellDisplay } from "@/features/attendance/cell-display";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
+import { cellKey, rowKey } from "@/features/attendance/grid/model";
+import { GridProvider } from "./grid-context";
 import { MatrixRow, formatMoney, rowTotals } from "./matrix-row";
 
 /** 표에 쌓이는 한 덩어리 = 한 반. 반별 보기는 1개, 강사 전체 보기는 그 강사의 모든 반. */
@@ -51,24 +53,39 @@ export function MatrixTable({
   const totalUnits = Math.round(groups.reduce((acc, g) => acc + groupUnits(g.matrix), 0) * 10) / 10;
   const totalRecords = groups.reduce((acc, g) => acc + g.matrix.stats.totalRecords, 0);
 
+  // ── 시트 격자 좌표 ── 이동·범위 선택이 **화면에 보이는 순서 그대로**를 따라야 하므로 렌더와 같은 순회로 만든다.
+  const gridRows = groups.flatMap((g) => g.matrix.students.map((s) => rowKey(g.classId, s.id)));
+  const gridCols = days.filter((d) => !d.placeholder).map((d) => d.date);
+  const gridInitial: Record<string, { s: string; u: number | null }> = {};
+  for (const g of groups) {
+    for (const s of g.matrix.students) {
+      const marks = g.matrix.marks[s.id] ?? {};
+      const units = g.matrix.units[s.id] ?? {};
+      for (const [date, st] of Object.entries(marks)) {
+        gridInitial[cellKey(rowKey(g.classId, s.id), date)] = { s: st, u: units[date] ?? null };
+      }
+    }
+  }
+
   return (
+    <GridProvider rows={gridRows} cols={gridCols} initial={gridInitial} lockBefore={lockBefore ?? null}>
     <DragScrollArea className="bg-card shadow-card rounded-2xl">
-      <table className="min-w-full border-collapse text-sm">
+      <table className="w-full min-w-full border-collapse text-sm">
         <thead>
           <tr>
-            <th className="bg-bg-soft border-line sticky left-0 z-10 border-b border-r px-3 py-2 text-left whitespace-nowrap">
+            <th className="bg-bg-soft border-line sticky left-0 z-10 border-b border-r px-2 py-1 text-left whitespace-nowrap">
               <span className="micro">이름</span>
             </th>
-            <th className="bg-bg-soft border-line border-b border-r px-2 py-2 text-left whitespace-nowrap">
+            <th className="bg-bg-soft border-line border-b border-r px-1.5 py-1 text-left whitespace-nowrap">
               <span className="micro">학년</span>
             </th>
-            <th className="bg-bg-soft border-line border-b border-r px-2 py-2 text-left whitespace-nowrap">
+            <th className="bg-bg-soft border-line border-b border-r px-1.5 py-1 text-left whitespace-nowrap">
               <span className="micro">학교</span>
             </th>
             {days.map((d) => {
               // 그 달에 없는 날 — 빈 여백(번호·요일 없음). 폭은 다른 날 칸과 동일(min-w)로 고정.
               if (d.placeholder) {
-                return <th key={d.date} className="border-line bg-bg-soft/30 min-w-[34px] border-b border-r" aria-hidden />;
+                return <th key={d.date} className="border-line bg-bg-soft/30 min-w-[30px] border-b border-r" aria-hidden />;
               }
               const holiday = holidays[d.date];
               const isClassDay = classDows.has(d.dow) && !holiday;
@@ -94,7 +111,7 @@ export function MatrixTable({
                 <th
                   key={d.date}
                   title={holiday ?? undefined}
-                  className={`border-line num min-w-[34px] border-b border-r px-1 py-2 text-center text-[10px] ${bg} ${fg}`}
+                  className={`border-line num min-w-[30px] border-b border-r px-0.5 py-1 text-center text-[10px] ${bg} ${fg}`}
                 >
                   <div className="font-bold">{d.day}</div>
                   <div className="opacity-70">{d.label}</div>
@@ -195,8 +212,11 @@ export function MatrixTable({
             {/* 범례 1행: 좌측 요약 노트 + 우측(ml-auto) 범례 나열(좁으면 가로 스크롤, 줄바꿈 X) */}
             <td colSpan={colSpan} className="bg-bg-soft border-line border-t px-3 py-2">
               <div className="flex items-center gap-2 overflow-x-auto text-[11px] [&>*]:shrink-0 [&_*]:whitespace-nowrap">
+                {/* 조작법을 여기 한 줄로 — 시트처럼 쓰는 화면이라 "클릭해서 고르는 곳"으로 오해하면 느려진다. */}
                 <span className="text-text-faint text-[11px]">
-                  총 {totalRecords}회 기록 · 셀 클릭 시 즉시 변경 (출석·지각·조퇴·보강 = 시수, 결석 = 0)
+                  총 {totalRecords}회 기록 · 칸을 고르고 <b className="text-text-dim">숫자</b>를 치세요(0=결석, 1·1.5·2=출석
+                  시수) · 방향키·Tab·Enter 이동 · Shift로 범위 · Ctrl+C/V · Ctrl+Z · 우하단 손잡이를 끌면 채우기 ·
+                  지각·조퇴·보강·메모는 <b className="text-text-dim">더블클릭</b>
                 </span>
                 <span className="micro ml-auto">범례</span>
                 {/* 범례 칩은 셀과 **같은 함수**로 그린다 — 색·숫자가 실제 셀과 어긋날 수 없게. */}
@@ -227,5 +247,6 @@ export function MatrixTable({
         </tfoot>
       </table>
     </DragScrollArea>
+    </GridProvider>
   );
 }

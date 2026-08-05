@@ -7,7 +7,7 @@ import { notifyIfClassAttendanceComplete } from "./complete-notify";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { accessLevelTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
-import { fetchInChunks } from "@/lib/supabase/batch";
+import { fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 // 담당 반 판정 단일 소스(담당 반 ∪ 그날 위임 반) — classes.teacher_id를 직접 비교하지 말 것(0173a).
 import { getTeachingClassIds } from "@/features/classes/server/delegation";
 import { parseSessionUnits } from "../session-units";
@@ -167,6 +167,8 @@ export async function setAttendanceCell(input: {
   status: Status | null;
   note?: string | null; // 전달 시 메모도 갱신(undefined면 기존 메모 유지)
   units?: string; // 전달 시 시수도 갱신(raw 입력 — 서버에서 파싱, ""=기본 1). undefined면 기존 유지.
+  /** 화면 갱신 생략 — 출석부 시트가 입력이 멎은 뒤 한 번만 새로고침한다(키 입력마다 재조회 방지). */
+  quiet?: boolean;
 }): Promise<CellResult> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
@@ -224,7 +226,7 @@ export async function setAttendanceCell(input: {
       .eq("student_id", studentId)
       .eq("session_date", sessionDate);
     if (error) return { error: error.message };
-    revalidatePath("/attendance");
+    if (!input.quiet) revalidatePath("/attendance");
     return { ok: true };
   }
 
@@ -264,7 +266,7 @@ export async function setAttendanceCell(input: {
   after(() =>
     notifyIfClassAttendanceComplete({ tenantId: user.tenantId, classId, date: sessionDate, actorId: user.id }),
   );
-  revalidatePath("/attendance");
+  if (!input.quiet) revalidatePath("/attendance");
   return { ok: true };
 }
 
@@ -418,6 +420,204 @@ export async function setAttendanceBulk(input: {
   });
   revalidatePath("/attendance");
   return { ok: true, applied: allowed, blocked: cells.length - allowed.length };
+}
+
+export type RangeCell = { studentId: string; classId: string; sessionDate: string };
+export type RangeResult = { ok: true; applied: number; blocked: number } | { error: string };
+
+/** '전원 기록 완료' 전이 검사를 돌릴 (반×날짜) 조합 상한 — 넘으면 건너뛴다(아래 주석). */
+const NOTIFY_PAIR_LIMIT = 40;
+
+/**
+ * 출석부 시트의 **범위 채우기·지우기** — 드래그 채우기, Ctrl+Enter, 범위 Delete가 이 액션 하나를 쓴다.
+ *
+ * `setAttendanceBulk`와 다른 점은 **날짜가 칸마다 다르다**는 것뿐이다(시트 범위는 가로로도 끌린다).
+ * 게이트는 셀 액션·일괄 액션과 **같은 규칙을 같은 순서로** 통과한다(#77 — 화면이 아니라 액션이 게이트):
+ *   권한 → (강사면) 수정 가능 기간 → 담당 반 → 그 **날짜 기준** 수강생.
+ *
+ * ⚠️ 기간·담당·수강에 걸린 칸은 **그 칸만 건너뛴다**(`blocked`). 범위 한 귀퉁이가 8일 전이라고
+ *    나머지 수십 칸이 통째로 날아가면 안 된다. 권한처럼 요청 전체에 해당하는 사유만 조기 반환한다.
+ * ⚠️ 지우기(status=null)는 그 칸의 기록을 **전부** 지운다 — 셀 액션의 '지우기'와 같은 계약.
+ */
+export async function setAttendanceRange(input: {
+  cells: RangeCell[];
+  status: Status | null;
+  /** 전달 시 시수도 갱신(raw — ""=기본 1). status=null이면 무시. */
+  units?: string;
+  /**
+   * 화면 갱신을 이 액션이 하지 않는다 — 시트가 **입력이 멎은 뒤 한 번** 직접 새로고침한다.
+   * ⚠️ 켜지 않으면 칸을 칠 때마다 그 달 매트릭스를 통째로 다시 조회한다(수십 번 = 화면이 긴다).
+   */
+  quiet?: boolean;
+}): Promise<RangeResult> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "로그인이 필요합니다" };
+  if (!(await canWriteTenant(user.systemRole, "attendance"))) return { error: "출석 관리 권한이 없습니다" };
+
+  const { status } = input;
+  if (status !== null && !STATUSES.includes(status)) return { error: "잘못된 상태입니다" };
+
+  const unitsProvided = input.units !== undefined;
+  let unitsVal: number | null = null;
+  if (unitsProvided) {
+    const parsed = parseSessionUnits(input.units);
+    if (!parsed.ok) return { error: parsed.error };
+    unitsVal = parsed.value;
+  }
+
+  // 같은 (학생·반·날짜)가 두 번 오면 한 번만 — 출결 원장은 그 조합에 한 칸이다.
+  const seen = new Set<string>();
+  const cells: RangeCell[] = [];
+  for (const c of input.cells ?? []) {
+    if (!c?.studentId || !c?.classId || !/^\d{4}-\d{2}-\d{2}$/.test(c.sessionDate ?? "")) continue;
+    const k = `${c.studentId}::${c.classId}::${c.sessionDate}`;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    cells.push({ studentId: c.studentId, classId: c.classId, sessionDate: c.sessionDate });
+  }
+  if (cells.length === 0) return { error: "기록할 대상이 없습니다" };
+  if (cells.length > BULK_CELL_LIMIT)
+    return { error: `한 번에 ${BULK_CELL_LIMIT}칸까지만 채울 수 있습니다 — 범위를 좁혀 주세요` };
+
+  const supabase = await createClient();
+  const classIds = [...new Set(cells.map((c) => c.classId))];
+  const studentIds = [...new Set(cells.map((c) => c.studentId))];
+  const dates = [...new Set(cells.map((c) => c.sessionDate))];
+  let allowed = cells;
+
+  if ((await accessLevelTenant(user.systemRole, "attendance")) === "scoped") {
+    const today = kstToday();
+    // 담당 반은 **날짜마다** 다를 수 있다(그날 위임, 0173a) → 날짜별로 병렬 조회(B4).
+    // 수강 여부는 기간이라 한 번에 받아 칸마다 JS로 판정한다(날짜별 쿼리 반복 금지).
+    const [teachingByDate, enrollments] = await Promise.all([
+      Promise.all(
+        dates.map(async (d) => [d, new Set((await getTeachingClassIds(supabase, user.id, d)).all)] as const),
+      ),
+      fetchInChunks<{ class_id: string; student_id: string; start_date: string | null; end_date: string | null }>(
+        studentIds,
+        (chunk) =>
+          supabase
+            .from("enrollments")
+            .select("class_id, student_id, start_date, end_date")
+            .in("class_id", classIds)
+            .in("student_id", chunk),
+      ),
+    ]);
+    const teaching = new Map(teachingByDate);
+    const spans = new Map<string, { start: string | null; end: string | null }[]>();
+    for (const e of enrollments) {
+      const k = `${e.student_id}::${e.class_id}`;
+      const list = spans.get(k) ?? [];
+      list.push({ start: e.start_date, end: e.end_date });
+      spans.set(k, list);
+    }
+    allowed = cells.filter((c) => {
+      if (!isWithinAttendanceEditWindow(c.sessionDate, today)) return false;
+      if (!teaching.get(c.sessionDate)?.has(c.classId)) return false;
+      // 수강 판정은 **그 칸의 날짜 기준** — 반이동·종강 학생의 그날 기록을 막지 않는다(셀 액션과 동일 의미).
+      return (spans.get(`${c.studentId}::${c.classId}`) ?? []).some(
+        (s) => (!s.start || s.start <= c.sessionDate) && (!s.end || s.end >= c.sessionDate),
+      );
+    });
+    if (allowed.length === 0) {
+      // 조용한 0건 금지 — 가장 흔한 사유(기간)를 그대로 말해 준다.
+      const late = cells.find((c) => !isWithinAttendanceEditWindow(c.sessionDate, today));
+      return { error: late ? attendanceLockMessage(late.sessionDate, today) : "담당 반 수강생이 아니어서 기록할 수 없습니다" };
+    }
+  }
+
+  const wanted = new Set(allowed.map((c) => `${c.studentId}::${c.classId}::${c.sessionDate}`));
+  // 기존 기록 — (학생×반×날짜) 교차곱으로 받아 **정확한 칸만** JS로 골라낸다(칸마다 쿼리 금지).
+  // 🔴 반드시 **페이지네이션**할 것: 교차곱이라 300칸 범위도 수천 행을 부를 수 있고, 그냥 청크만 하면
+  //    PostgREST가 1000행에서 **조용히 자른다**(#54). 잘리면 있는 행을 못 찾아 update 대신 insert →
+  //    같은 (학생·반·날짜)에 중복 출결이 쌓인다(시수·급여의 재료가 오염된다).
+  //    페이지가 흔들리지 않도록 order에 unique tie-break(id)를 함께 건다.
+  const existingRows = await fetchAllPagedInChunks<{
+    id: string;
+    class_id: string;
+    student_id: string;
+    session_date: string;
+    recorded_at: string | null;
+  }>(studentIds, (chunk, from, to) =>
+    supabase
+      .from("attendance_records")
+      .select("id, class_id, student_id, session_date, recorded_at")
+      .in("session_date", dates)
+      .in("class_id", classIds)
+      .in("student_id", chunk)
+      .order("recorded_at", { ascending: false })
+      .order("id", { ascending: true })
+      .range(from, to),
+  );
+  const mine = existingRows.filter((r) => wanted.has(`${r.student_id}::${r.class_id}::${r.session_date}`));
+  const CHUNK = 100;
+
+  // 지우기 — 그 칸의 기록을 전부(정정 이력 포함) 삭제. 셀 액션의 '지우기'와 같은 계약.
+  if (status === null) {
+    const ids = mine.map((r) => r.id);
+    for (let i = 0; i < ids.length; i += CHUNK) {
+      const { error } = await supabase.from("attendance_records").delete().in("id", ids.slice(i, i + CHUNK));
+      if (error) return { error: error.message };
+    }
+    revalidatePath("/attendance");
+    return { ok: true, applied: allowed.length, blocked: cells.length - allowed.length };
+  }
+
+  const latestId = new Map<string, string>();
+  for (const r of mine) {
+    const k = `${r.student_id}::${r.class_id}::${r.session_date}`;
+    if (!latestId.has(k)) latestId.set(k, r.id); // 청크별 desc 정렬 → 각 조합의 첫 행이 최신
+  }
+  const nowIso = new Date().toISOString();
+  const updateIds = allowed
+    .map((c) => latestId.get(`${c.studentId}::${c.classId}::${c.sessionDate}`))
+    .filter((id): id is string => !!id);
+  const inserts = allowed.filter((c) => !latestId.has(`${c.studentId}::${c.classId}::${c.sessionDate}`));
+
+  if (updateIds.length > 0) {
+    const patch: Record<string, unknown> = { status, recorded_by: user.id, recorded_at: nowIso };
+    if (unitsProvided) patch.session_units = unitsVal;
+    for (let i = 0; i < updateIds.length; i += CHUNK) {
+      const { error } = await supabase
+        .from("attendance_records")
+        .update(patch)
+        .in("id", updateIds.slice(i, i + CHUNK));
+      if (error) return { error: error.message };
+    }
+  }
+  if (inserts.length > 0) {
+    for (let i = 0; i < inserts.length; i += CHUNK) {
+      const { error } = await supabase.from("attendance_records").insert(
+        inserts.slice(i, i + CHUNK).map((c) => ({
+          tenant_id: user.tenantId,
+          class_id: c.classId,
+          student_id: c.studentId,
+          session_date: c.sessionDate,
+          status,
+          session_units: unitsProvided ? unitsVal : null,
+          recorded_by: user.id,
+        })),
+      );
+      if (error) return { error: error.message };
+    }
+  }
+
+  // G4: (반·날짜) 조합마다 '전원 기록 완료' 전이 검사 — 셀·일괄 액션과 동일. 백그라운드라 응답을 안 막는다.
+  // ⚠️ 조합 수 상한: 한 달치를 통째로 끌면 (반×날짜)가 수백이 되어 백그라운드가 그만큼 쿼리를 돈다.
+  //    넘치면 검사를 건너뛴다 — 알림 하나 못 보내는 것보다 서버를 붙잡는 게 나쁘다(다음 셀 저장 때 다시 걸린다).
+  const pairs = [...new Set(allowed.map((c) => `${c.classId}::${c.sessionDate}`))];
+  if (pairs.length <= NOTIFY_PAIR_LIMIT) {
+    after(async () => {
+      for (const p of pairs) {
+        const [classId, date] = p.split("::");
+        if (classId && date) {
+          await notifyIfClassAttendanceComplete({ tenantId: user.tenantId, classId, date, actorId: user.id });
+        }
+      }
+    });
+  }
+  if (!input.quiet) revalidatePath("/attendance");
+  return { ok: true, applied: allowed.length, blocked: cells.length - allowed.length };
 }
 
 /**
