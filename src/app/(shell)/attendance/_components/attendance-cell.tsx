@@ -1,23 +1,22 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { setAttendanceCell } from "@/features/attendance/server/actions";
+import { useEffect, useRef, useState } from "react";
 import type { AttendanceStatus } from "@/features/attendance/server/queries";
-import { parseSessionUnits } from "@/features/attendance/session-units";
-import { STATUS_TEXT, STATUS_TONE, cellDisplay } from "@/features/attendance/cell-display";
-
-const OPTIONS: { value: AttendanceStatus; name: string }[] = [
-  { value: "present", name: "출석" },
-  { value: "absent", name: "결석" },
-  { value: "late", name: "지각" },
-  { value: "early_leave", name: "조퇴" },
-  { value: "makeup", name: "보강" },
-];
+import { STATUS_TEXT, cellDisplay } from "@/features/attendance/cell-display";
+import { cellKey, rowKey } from "@/features/attendance/grid/model";
+import { useCellState } from "./grid-context";
+import { CellPopover, type PopoverAnchor } from "./cell-popover";
 
 /**
- * 출석부 매트릭스 인라인 셀 — 클릭 시 상태 팝오버, 낙관적 업데이트 후 단일 셀 저장.
- * 페이지 이동 없이 빠르게 출결을 찍는다(반응속도 1순위). 숙제 상세는 일자 입력 화면에서.
- * 표기는 숫자 + 배경색(출석·지각·조퇴·보강 = 시수, 결석 = 0) — 규칙은 cell-display.ts 단일 소스.
+ * 출석부 시트의 한 칸.
+ *
+ * 조작은 시트와 같다: 클릭=선택 · 숫자 타이핑=입력(0 결석 / 1·1.5·2 출석+시수) · 방향키·Tab·Enter 이동 ·
+ * Shift로 범위 · Ctrl+C/V · Ctrl+Z · 우하단 손잡이 드래그=채우기 · Delete=지우기.
+ * 숫자로 표현할 수 없는 것(지각·조퇴·보강·메모)만 **더블클릭/우클릭 팝오버**가 맡는다.
+ *
+ * ⚠️ 표기(숫자·배경색)는 `cell-display.ts` 단일 소스를 그대로 쓴다 — 격자에서 다시 그리지 않는다.
+ * ⚠️ 이 칸은 **자기 상태만 구독**한다(`useCellState`). 옆 칸이 바뀌어도 다시 그리지 않는다 — 표가
+ *    수천 칸이라 전역 구독으로 만들면 방향키가 밀린다.
  */
 export function AttendanceCell({
   studentId,
@@ -41,197 +40,156 @@ export function AttendanceCell({
   attendDay?: boolean;
   /** 주말·공휴일 등 수업이 없는 날(회색). */
   muted?: boolean;
-  /** 수기 기록이 아니라 수업보고서에서 파생한 값 — 툴팁에 출처 표시(derive-from-reports.ts). */
+  /** 수기 기록이 아니라 수업보고서에서 파생한 값 — 툴팁에 출처 표시. */
   derived?: boolean;
-  /** 수정 기간(7일)이 지나 강사가 못 고치는 칸 — 이유를 담은 문장. 없으면 편집 가능. */
+  /** 수정 기간(7일)이 지나 강사가 못 고치는 칸 — 이유를 담은 문장. */
   locked?: string | null;
 }) {
-  const [status, setStatus] = useState<AttendanceStatus | null>(initialStatus);
-  const [units, setUnits] = useState<number | null>(initialUnits ?? null);
+  const row = rowKey(classId, studentId);
+  const key = cellKey(row, sessionDate);
+  const { state, ctx } = useCellState(key);
   const [noteVal, setNoteVal] = useState(note ?? "");
-  const [draft, setDraft] = useState(note ?? "");
-  const [unitsDraft, setUnitsDraft] = useState("");
-  const [unitsError, setUnitsError] = useState(false);
-  const [open, setOpen] = useState(false);
-  // top(아래로 열기) 또는 bottom(위로 플립) 중 하나만 설정 — 하단 행에서 저장 버튼이 뷰포트 밖으로 나가는 것 방지.
-  const [pos, setPos] = useState<{ x: number; top?: number; bottom?: number } | null>(null);
-  const [, startTransition] = useTransition();
+  const [popover, setPopover] = useState<PopoverAnchor | null>(null);
+  const ref = useRef<HTMLDivElement>(null);
 
-  // noteArg/unitsArg 전달 시 함께 갱신(undefined면 기존 유지). 상태/메모/시수 모두 낙관적.
-  const apply = (next: AttendanceStatus | null, noteArg?: string, unitsArg?: string) => {
-    // 시수는 클라에서 선검증 — 서버 왕복 전에 잘못된 입력을 붙잡는다(서버도 동일 파서로 재검증).
-    let optimisticUnits: number | null | undefined = undefined;
-    if (unitsArg !== undefined) {
-      const parsed = parseSessionUnits(unitsArg);
-      if (!parsed.ok) {
-        setUnitsError(true);
-        return;
-      }
-      optimisticUnits = parsed.value;
-    }
-    setUnitsError(false);
-    const prevStatus = status;
-    const prevNote = noteVal;
-    const prevUnits = units;
-    setStatus(next);
-    if (noteArg !== undefined) setNoteVal(noteArg.trim());
-    if (next === null) setUnits(null);
-    else if (optimisticUnits !== undefined) setUnits(optimisticUnits);
-    setOpen(false);
-    startTransition(async () => {
-      const res = await setAttendanceCell({
-        studentId,
-        classId,
-        sessionDate,
-        status: next,
-        note: noteArg,
-        units: unitsArg,
-      });
-      if ("error" in res) {
-        setStatus(prevStatus);
-        setNoteVal(prevNote);
-        setUnits(prevUnits);
-      }
-    });
-  };
+  // 값은 격자(낙관적 반영)가 진실 — 격자가 없으면 서버가 그린 초기값.
+  const status = (ctx ? ((state.value?.s ?? null) as AttendanceStatus | null) : initialStatus) ?? null;
+  const units = ctx ? state.value?.u ?? null : initialUnits ?? null;
+  const editing = state.active && state.buffer !== null;
+
+  // 활성 칸이 화면 밖이면 따라 스크롤(가로 31칸이라 방향키 이동에 필수).
+  useEffect(() => {
+    if (state.active) ref.current?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [state.active]);
 
   const display = cellDisplay(status, units, { attendDay, muted });
-  // 파생 칸은 **사람이 찍은 게 아니라 수업보고서에서 나온 값**이다 — 툴팁에 출처를 밝힌다(화면이 사실과
-  // 다른 말을 하지 않도록). 한 번 수기로 덮으면 `derived`가 꺼져 이 표시도 사라진다.
   const fromReport = derived && status === initialStatus;
-  const titleText =
-    [
-      status ? STATUS_TEXT[status] : null,
-      fromReport ? "수업보고서 자동 판정 (클릭해 직접 수정)" : null,
-      noteVal || null,
-    ]
+  const title =
+    locked ||
+    [status ? STATUS_TEXT[status] : null, fromReport ? "수업보고서 자동 판정" : null, noteVal || null]
       .filter(Boolean)
-      .join(" · ") || undefined;
+      .join(" · ");
+
+  const openPopover = (e: React.MouseEvent) => {
+    if (locked) return;
+    e.preventDefault();
+    const r = e.currentTarget.getBoundingClientRect();
+    const vh = typeof window !== "undefined" ? window.innerHeight : 9999;
+    const openUp = vh - r.bottom < 300 && r.top > vh - r.bottom;
+    setPopover(openUp ? { x: r.left, bottom: vh - r.top + 4 } : { x: r.left, top: r.bottom + 4 });
+  };
 
   return (
     <>
-      <button
-        type="button"
-        disabled={!!locked}
-        onClick={(e) => {
-          if (locked) return; // 서버에서도 막지만(#77) 클릭 자체를 죽여 헛수고를 없앤다
-          const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
-          // 아래 공간이 팝오버 높이(시수·메모 포함 ~300px)보다 좁으면 위로 플립.
-          const EST_HEIGHT = 300;
-          const spaceBelow = (typeof window !== "undefined" ? window.innerHeight : 9999) - r.bottom;
-          const openUp = spaceBelow < EST_HEIGHT && r.top > spaceBelow;
-          setPos(
-            openUp
-              ? { x: r.left, bottom: (typeof window !== "undefined" ? window.innerHeight : 0) - r.top + 4 }
-              : { x: r.left, top: r.bottom + 4 },
-          );
-          setDraft(noteVal);
-          setUnitsDraft(units !== null && units !== 1 ? String(units) : "");
-          setUnitsError(false);
-          setOpen(true);
+      <div
+        ref={ref}
+        data-cell-key={key}
+        role="gridcell"
+        aria-label={`${sessionDate} ${status ? STATUS_TEXT[status] : "미기록"}`}
+        title={title || undefined}
+        onMouseDown={(e) => {
+          if (e.button !== 0) return;
+          ctx?.store.select({ row, col: sessionDate }, e.shiftKey);
         }}
-        title={locked ?? titleText}
-        // 셀 전체를 채우는 배경색이 곧 상태 표시 — 부모 td는 relative + p-0.
-        // ⚠️ 고정 크기 칩에 배경을 주면 셀을 못 채운다(gotcha #66).
-        className={`absolute inset-0 flex items-center justify-center text-[11px] font-bold transition ${display.className} ${
-          locked ? "cursor-not-allowed" : status ? "" : "hover:bg-bg-soft"
+        onDoubleClick={openPopover}
+        onContextMenu={openPopover}
+        className={`absolute inset-0 flex items-center justify-center text-[11px] font-bold select-none ${display.className} ${
+          locked ? "cursor-not-allowed" : "cursor-cell"
         }`}
-        aria-label={[
-          `출결 상태 변경 (현재: ${status ? STATUS_TEXT[status] : "미기록"})`,
-          noteVal ? `메모: ${noteVal}` : null,
-        ]
-          .filter(Boolean)
-          .join(" ")}
       >
-        {display.text}
-        {noteVal ? (
+        {editing ? (
+          <input
+            autoFocus
+            type="text"
+            inputMode="decimal"
+            aria-label="시수 입력"
+            value={state.buffer ?? ""}
+            onChange={(e) => {
+              const v = e.target.value;
+              if (v === "" || /^[0-9]*[.,]?[0-9]*$/.test(v)) ctx?.store.setBuffer(v.replace(",", "."));
+            }}
+            onKeyDown={(e) => {
+              // 인라인 input 안에서는 문서 리스너가 비켜 있으므로(입력칸 무시) 여기서 직접 처리한다.
+              const moves: Record<string, [number, number]> = {
+                Enter: [0, e.shiftKey ? -1 : 1],
+                Tab: [e.shiftKey ? -1 : 1, 0],
+                ArrowUp: [0, -1],
+                ArrowDown: [0, 1],
+              };
+              const d = moves[e.key];
+              if (d) {
+                e.preventDefault();
+                ctx?.commitAndMove(d[0], d[1]);
+              } else if (e.key === "Escape") {
+                e.preventDefault();
+                ctx?.store.setBuffer(null);
+              }
+            }}
+            className="text-primary absolute inset-0 h-full w-full border-0 bg-white/90 p-0 text-center text-[12px] font-bold outline-none"
+          />
+        ) : (
+          display.text
+        )}
+
+        {/* 범위 선택 — 반투명 파란 덮개(시트 selection). */}
+        {state.selected && !state.active ? (
           <span
-            className="border-t-danger absolute top-0 right-0 size-0 border-t-[5px] border-l-[5px] border-l-transparent"
             aria-hidden
+            className="ring-primary/40 pointer-events-none absolute inset-0 z-20 bg-blue-500/20 ring-1 ring-inset"
           />
         ) : null}
-      </button>
-
-      {open && pos ? (
-        <>
-          {/* 바깥 클릭 닫기 */}
-          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} aria-hidden />
-          <div
-            className="bg-card border-line fixed z-50 flex flex-col gap-0.5 rounded-lg border p-1 shadow-lg"
-            style={{
-              // 팝오버 실폭 ≈ 입력칸 w-40(160) + 패딩·테두리 — 오른쪽 끝 셀에서 잘리지 않게 클램프.
-              left: Math.min(pos.x, (typeof window !== "undefined" ? window.innerWidth : 9999) - 176),
-              top: pos.top,
-              bottom: pos.bottom,
+        {/* 활성 칸 테두리 */}
+        {state.active && !editing ? (
+          <span aria-hidden className="ring-primary pointer-events-none absolute inset-0 z-30 ring-2 ring-inset" />
+        ) : null}
+        {/* Ctrl+C 복사 표시 — 시트의 점선 */}
+        {state.copied && !state.active ? (
+          <span
+            aria-hidden
+            className="border-primary pointer-events-none absolute inset-0 z-30 border-2 border-dashed"
+          />
+        ) : null}
+        {/* 드래그 채우기 손잡이 — 활성 칸 우하단 */}
+        {state.active && !editing && !locked ? (
+          <span
+            role="button"
+            aria-label="드래그하여 옆 칸에 같은 값 채우기"
+            title="드래그하여 옆 칸에 같은 값 채우기"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              ctx?.startFill();
             }}
-          >
-            {OPTIONS.map((o) => (
-              <button
-                key={o.value}
-                type="button"
-                // 시수 초안을 함께 커밋 — "시수 타이핑 → 상태 클릭" 순서에서 초안이 조용히 버려지는 것 방지.
-                // (초안이 잘못된 값이면 apply가 에러 표시 후 중단 — 팝오버 유지)
-                onClick={() => apply(o.value, undefined, unitsDraft)}
-                className={`flex items-center justify-between gap-3 rounded-md px-2 py-1 text-left text-xs transition hover:bg-bg-soft ${
-                  status === o.value ? "font-bold" : ""
-                }`}
-              >
-                {o.name}
-                {/* 표기가 숫자·배경색이라 좌측 O/X 글자 대신 우측 색칩으로 "어떤 색이 칠해지는지"를 보여준다.
-                    셀과 같은 STATUS_TONE을 써서 칩 색이 실제 셀과 어긋날 수 없다. */}
-                <span className={`border-line size-4 shrink-0 rounded-sm border ${STATUS_TONE[o.value]}`} aria-hidden />
-              </button>
-            ))}
-            {/* 시수(배수)·메모 — 현재 상태와 함께 저장. 상태 없으면 비활성(단독 저장 불가). */}
-            <div className="border-line mt-0.5 flex w-40 flex-col gap-1 border-t pt-1">
-              {/* 시수·메모는 같은 폼(플레이스홀더 인풋·동일 폭) — 라벨을 왼쪽에 두면 두 칸이 좌우로 어긋난다. */}
-              <input
-                type="text"
-                inputMode="decimal"
-                value={unitsDraft}
-                onChange={(e) => {
-                  setUnitsDraft(e.target.value);
-                  setUnitsError(false);
-                }}
-                placeholder="시수(기본 1)"
-                aria-label="시수"
-                title="정규 수업 1회 = 1. 보강 연장 1.5·2, 부분 출석 0.5 등"
-                className={`bg-bg-soft text-foreground placeholder:text-text-faint w-full rounded-md border px-2 py-1 text-xs focus:outline-none ${
-                  unitsError ? "border-danger" : "border-line"
-                }`}
-              />
-              {unitsError ? (
-                <p className="text-danger text-[10px] leading-tight">숫자(소수 한 자리)만 — 예: 1, 1.5, 2</p>
-              ) : null}
-              <input
-                type="text"
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                placeholder="메모(사유)"
-                aria-label="메모(사유)"
-                className="border-line bg-bg-soft text-foreground placeholder:text-text-faint w-full rounded-md border px-2 py-1 text-xs focus:outline-none"
-              />
-              <button
-                type="button"
-                onClick={() => apply(status, draft, unitsDraft)}
-                disabled={!status}
-                className="bg-foreground text-background rounded-md px-2 py-1 text-xs font-medium transition disabled:opacity-40"
-                title={status ? undefined : "상태를 먼저 선택하세요"}
-              >
-                저장
-              </button>
-            </div>
-            {status ? (
-              <button
-                type="button"
-                onClick={() => apply(null)}
-                className="text-text-dim hover:bg-bg-soft rounded-md border-t px-2 py-1 text-left text-xs"
-              >
-                지우기
-              </button>
-            ) : null}
-          </div>
-        </>
+            className="bg-primary absolute right-[-2px] bottom-[-2px] z-40 size-1.5 cursor-crosshair ring-1 ring-white"
+          />
+        ) : null}
+        {/* 메모 — 포스트잇 모서리 접힘(구 출석부 표기) */}
+        {noteVal ? (
+          <span
+            aria-hidden
+            className="pointer-events-none absolute top-0 right-0 size-2"
+            style={{
+              background: "linear-gradient(225deg,#fbbf24 0%,#f59e0b 48%,rgba(0,0,0,0.25) 50%,transparent 51%)",
+            }}
+          />
+        ) : null}
+      </div>
+
+      {popover ? (
+        <CellPopover
+          studentId={studentId}
+          classId={classId}
+          sessionDate={sessionDate}
+          status={status}
+          units={units}
+          note={noteVal}
+          anchor={popover}
+          onClose={() => setPopover(null)}
+          onSaved={(next) => {
+            setNoteVal(next.note);
+            ctx?.setLocal(key, next.status ? { s: next.status, u: next.units } : null);
+          }}
+        />
       ) : null}
     </>
   );
