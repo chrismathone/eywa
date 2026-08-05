@@ -13,6 +13,8 @@ import { getTeacherMoney } from "@/features/attendance/server/teacher-money";
 import { buildHolidayMap } from "@/features/attendance/calendar";
 import { ATTENDANCE_EDIT_WINDOW_DAYS } from "@/features/attendance/edit-window";
 import { accessLevelTenant } from "@/lib/auth/perm-matrix";
+import { effectiveTeacherId } from "@/lib/auth/view-mode";
+import { loadAttendanceViewPrefs } from "@/features/attendance/server/prefs-actions";
 import { buildQuickOpen } from "@/features/attendance/quick-open";
 import { countMarks, sumCounts } from "@/features/attendance/grid/totals";
 import { QuickOpenPanel } from "./_components/quick-open-panel";
@@ -72,13 +74,29 @@ export default async function AttendancePage({
   } = await searchParams;
   const month = monthParam ?? currentMonthKey();
   const range: RangeKey = rangeParam === "2w" ? "2w" : "month";
-  const requestedMode: ViewMode = modeParam === "teacher" ? "teacher" : "class";
+  // 강사(또는 강사뷰 겸직)인지 — 기본 진입 화면을 가른다. 캐시된 헬퍼라 쿼리가 늘지 않는다.
+  const myTeacherId = await effectiveTeacherId();
+  /**
+   * 기본 보기 — **강사는 자기 전체 출석부로 바로 들어간다**(구 출석부 D:\attendance와 같은 진입:
+   * 선생님 계정은 자기 시트가 통째로 열리고 반은 접었다 폈다 한다). 목록에서 자기 반을 하나씩 골라
+   * 들어가게 하면 매번 두 번 클릭이고, 반을 옮겨 다니며 출결을 찍는 실제 동선과도 안 맞는다.
+   * ⚠️ 반을 명시한 링크(`class=`)와 명시적 `mode=`는 그대로 존중한다. 관리자는 종전대로 선택 허브.
+   */
+  const requestedMode: ViewMode =
+    modeParam === "teacher"
+      ? "teacher"
+      : modeParam === "class"
+        ? "class"
+        : myTeacherId && !classParam
+          ? "teacher"
+          : "class";
 
   // 반 목록(경량) — classId 없이 부르면 무거운 출석 데이터는 안 불러온다(렉 방지). 과목→강사→반 계층·선택지 도출용.
-  // 학원설정과는 서로 독립이라 병렬로(B4 — 독립 await는 Promise.all).
-  const [base, { operations }] = await Promise.all([
+  // 학원설정·보기설정과는 서로 독립이라 병렬로(B4 — 독립 await는 Promise.all).
+  const [base, { operations }, viewPrefs] = await Promise.all([
     getMonthlyAttendanceMatrix(month, null),
     getTenantSettings(),
+    loadAttendanceViewPrefs(),
   ]);
   const allClasses = base.classes; // { id, className, subject, teacherId, teacherName }
   const subjectMaps = buildSubjectMaps(operations.subjects);
@@ -112,8 +130,14 @@ export default async function AttendancePage({
     .map(([value, t]) => ({ value, label: t.retired ? `${t.name} (퇴직)` : t.name, retired: t.retired }))
     .sort((a, b) => Number(a.retired) - Number(b.retired) || a.label.localeCompare(b.label, "ko"))
     .map(({ value, label }) => ({ value, label }));
+  // 강사는 자기 자신이 기본 선택 — 자기 이름을 드롭다운에서 다시 고르게 하지 않는다.
+  // (강사 계정의 반 목록은 이미 본인 반으로 좁혀져 있어 선택지도 자기 하나뿐이다.)
   const effectiveTeacher =
-    teacherParam && teacherOptions.some((t) => t.value === teacherParam) ? teacherParam : null;
+    teacherParam && teacherOptions.some((t) => t.value === teacherParam)
+      ? teacherParam
+      : myTeacherId && teacherOptions.some((t) => t.value === myTeacherId)
+        ? myTeacherId
+        : null;
 
   // 반 선택지 = 과목 + 강사로 좁힌 반. ⚠️ 첫 반 자동선택 안 함 — 반 미선택 = 안내문구(렉 방지 + '전체' 정상 동작).
   const classesForFilters = classesForSubject.filter(
@@ -343,7 +367,8 @@ export default async function AttendancePage({
           {effectiveTeacher ? (
             ([
               ["class", "반별"],
-              ["teacher", "강사 전체"],
+              // 강사 본인이 보고 있으면 "강사 전체"는 '다른 강사들까지'로 읽힌다 — 주어를 바꾼다.
+              ["teacher", myTeacherId && myTeacherId === effectiveTeacher ? "전체" : "강사 전체"],
             ] as const).map(([key, label]) => (
               <Link
                 key={key}
@@ -404,6 +429,7 @@ export default async function AttendancePage({
           cols={gridSource.cols}
           initial={gridSource.initial}
           lockBefore={lockBefore}
+          initialCollapsed={viewPrefs.collapsed}
         >
           {/* Stat 4 — 반(또는 강사 전체)을 열었을 때만. 서버 값은 첫 렌더 폴백이고 이후는 격자가 센다. */}
           <LiveStats totalStudents={totalStudents} fallback={statsCount} />

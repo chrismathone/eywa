@@ -4,6 +4,7 @@ import { DAY_TONE, STATUS_TEXT, cellDisplay } from "@/features/attendance/cell-d
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import { cellKey, rowKey } from "@/features/attendance/grid/model";
 import { countMarks, sumCounts, type Counted } from "@/features/attendance/grid/totals";
+import { ClassGroupBody, CollapseAllButton } from "./class-group";
 import { LiveRecords, LiveUnits } from "./live-totals";
 import { MatrixRow, formatMoney } from "./matrix-row";
 
@@ -77,6 +78,8 @@ export function MatrixTable({
         <thead>
           <tr>
             <th className="bg-bg-soft border-line sticky left-0 z-10 border-b border-r px-2 py-1 text-left whitespace-nowrap">
+              {/* 반 접기가 있는 보기에서만 — 별도 줄 없이 이름 열 머리에 얹는다. */}
+              {showGroups ? <CollapseAllButton classIds={groups.map((g) => g.classId)} /> : null}
               <span className="micro">이름</span>
             </th>
             <th className="bg-bg-soft border-line border-b border-r px-1.5 py-1 text-left whitespace-nowrap">
@@ -143,41 +146,45 @@ export function MatrixTable({
             </th>
           </tr>
         </thead>
-        {groups.map((g) => (
-          <tbody key={g.classId}>
-            {showGroups ? (
-              <tr className="bg-bg-soft">
-                <td colSpan={colSpan} className="border-line border-y p-0">
-                  {/* 가로 스크롤 중에도 반 이름이 보이도록 sticky left(구 출석부 그룹 헤더 관행). */}
-                  <div className="sticky left-0 flex w-fit max-w-[calc(100vw-40px)] items-center gap-2 px-3 py-1.5">
-                    <span className="text-foreground text-[12px] font-bold">{g.className}</span>
-                    <span className="text-text-faint text-[11px]">{g.subjectLabel}</span>
-                    <span className="text-text-dim text-[11px]">{g.matrix.students.length}명</span>
-                    <span className="text-text-dim num text-[11px]">
-                      시수{" "}
-                      <LiveUnits
-                        rows={g.matrix.students.map((s) => rowKey(g.classId, s.id))}
-                        fallback={groupCount(g.matrix)}
-                      />
-                    </span>
-                  </div>
-                </td>
-              </tr>
-            ) : null}
-            {g.matrix.students.map((s) => (
-              <MatrixRow
-                key={`${g.classId}:${s.id}`}
-                student={s}
-                classId={g.classId}
-                matrix={g.matrix}
-                days={days}
-                holidays={holidays}
-                money={money ? money.byStudent[s.id] ?? null : undefined}
-                lockBefore={lockBefore}
-              />
-            ))}
-          </tbody>
-        ))}
+        {groups.map((g) => {
+          const rows = g.matrix.students.map((s) => (
+            <MatrixRow
+              key={`${g.classId}:${s.id}`}
+              student={s}
+              classId={g.classId}
+              matrix={g.matrix}
+              days={days}
+              holidays={holidays}
+              money={money ? money.byStudent[s.id] ?? null : undefined}
+              lockBefore={lockBefore}
+            />
+          ));
+          // 반별 보기(반 1개)는 머리행이 없다 — 접을 것도 없으니 평범한 tbody.
+          if (!showGroups) return <tbody key={g.classId}>{rows}</tbody>;
+          return (
+            <ClassGroupBody
+              key={g.classId}
+              classId={g.classId}
+              colSpan={colSpan}
+              summary={
+                <>
+                  <span className="text-foreground text-[12px] font-bold">{g.className}</span>
+                  <span className="text-text-faint text-[11px]">{g.subjectLabel}</span>
+                  <span className="text-text-dim text-[11px]">{g.matrix.students.length}명</span>
+                  <span className="text-text-dim num text-[11px]">
+                    시수{" "}
+                    <LiveUnits
+                      rows={g.matrix.students.map((s) => rowKey(g.classId, s.id))}
+                      fallback={groupCount(g.matrix)}
+                    />
+                  </span>
+                </>
+              }
+            >
+              {rows}
+            </ClassGroupBody>
+          );
+        })}
         <tfoot>
           {showGroups ? (
             <tr className="bg-bg-soft">

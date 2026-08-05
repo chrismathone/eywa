@@ -16,6 +16,9 @@ vi.mock("@/features/attendance/server/actions", () => ({
   setAttendanceCell: vi.fn(async () => ({ ok: true })),
   setAttendanceRange: vi.fn(async () => ({ ok: true, applied: 0, blocked: 0 })),
 }));
+vi.mock("@/features/attendance/server/prefs-actions", () => ({
+  saveAttendanceViewPrefs: vi.fn(async () => ({ ok: true })),
+}));
 
 const C = "11111111-1111-1111-1111-111111111111";
 const R1 = rowKey(C, "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");

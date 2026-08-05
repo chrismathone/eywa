@@ -150,6 +150,20 @@ describe("합계 구독 — 값이 바뀔 때만, 바뀐 행에게만", () => {
     expect(all).toHaveBeenCalledTimes(1);
   });
 
+  it("🔴 반을 접어도(보이는 행이 줄어도) 총합은 그대로 — 접기는 표시일 뿐이다", () => {
+    const initial = {
+      [K(R1, D1)]: { s: "present", u: null },
+      [K(R2, D1)]: { s: "present", u: 2 },
+    };
+    store.setSource([R1, R2], [D1, D2], initial);
+    const before = [...store.valuesOfRows()];
+    // R2가 속한 반을 접었다 = 보이는 행에서 빠졌다(같은 initial 객체를 그대로 다시 넘긴다).
+    store.setSource([R1], [D1, D2], initial);
+    expect([...store.valuesOfRows()]).toEqual(before);
+    // 반면 명시한 행만 셀 땐 그 행만.
+    expect([...store.valuesOfRows([R1])]).toHaveLength(1);
+  });
+
   it("서버 갱신 뒤에도 아직 안 실려온 내 입력은 합계에 남는다", () => {
     const k = K(R1, D2);
     store.setLocal([[k, { s: "present", u: null }]]);
