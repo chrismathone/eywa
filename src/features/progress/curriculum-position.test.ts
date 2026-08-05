@@ -10,18 +10,31 @@ import {
   classifyTrack,
 } from "./curriculum-position";
 
-const FIRST_LESSON = "1-1-1 받아올림이 없는, 한 번 있는 (세 자리 수)+(세 자리 수)"; // 초3 첫 차시
+const FIRST_LESSON = "1-1-1 1부터 5까지의 수 알아보기"; // 초1 첫 차시(= 글로벌 위치 1)
+const E3_FIRST = "1-1-1 받아올림이 없는, 한 번 있는 (세 자리 수)+(세 자리 수)"; // 초3 첫 차시
+/**
+ * 초1·초2 차시 수(2026-08-05 신설분). 초3 이후 위치가 이만큼 뒤로 밀렸고, **저장된 위치도 0181a가
+ * 같은 값만큼 시프트**했다 — 이 상수가 마이그레이션과 어긋나면 진도 이력이 통째로 어긋난다.
+ */
+const ELEM12_LESSONS = 130;
 
 describe("ALL_LESSONS / flatten", () => {
-  it("1-based 연속 위치, 학년순(초3 먼저)", () => {
+  it("1-based 연속 위치, 학년순(초1 먼저)", () => {
     expect(TOTAL_LESSONS).toBeGreaterThan(300);
     expect(ALL_LESSONS[0]!.position).toBe(1);
-    expect(ALL_LESSONS[0]!.grade).toBe("초3");
+    expect(ALL_LESSONS[0]!.grade).toBe("초1");
     expect(ALL_LESSONS[0]!.lesson).toBe(FIRST_LESSON);
     expect(ALL_LESSONS[TOTAL_LESSONS - 1]!.position).toBe(TOTAL_LESSONS);
     expect(ALL_LESSONS[TOTAL_LESSONS - 1]!.grade).toBe("중3");
     // 위치가 1..N 연속
     ALL_LESSONS.forEach((l, i) => expect(l.position).toBe(i + 1));
+  });
+
+  // 🔴 0181a(저장된 위치 +130 시프트)의 근거 — 초1·초2 차시 수가 바뀌면 이 테스트가 먼저 깨진다.
+  it("초1·초2가 앞에 오고, 초3 첫 차시는 그만큼 밀린 위치", () => {
+    expect(ALL_LESSONS.filter((l) => l.grade === "초1" || l.grade === "초2").length).toBe(ELEM12_LESSONS);
+    expect(positionOf(`수학 ${E3_FIRST}`)?.position).toBe(ELEM12_LESSONS + 1);
+    expect(gradeOfPosition(ELEM12_LESSONS + 1)).toBe("초3");
   });
 
   it("차시 문자열이 커리큘럼 전체에서 유일(Map 크기 == 전체 수)", () => {
@@ -30,7 +43,7 @@ describe("ALL_LESSONS / flatten", () => {
 });
 
 describe("positionOf", () => {
-  it("'수학 <차시>'에서 차시를 정확 조회(초3 첫 차시 = 1)", () => {
+  it("'수학 <차시>'에서 차시를 정확 조회(초1 첫 차시 = 1)", () => {
     expect(positionOf(`수학 ${FIRST_LESSON}`)?.position).toBe(1);
   });
 
@@ -73,7 +86,7 @@ describe("describePosition / gradeOfPosition", () => {
   it("범위 밖 → null", () => {
     expect(describePosition(0)).toBeNull();
     expect(describePosition(TOTAL_LESSONS + 1)).toBeNull();
-    expect(gradeOfPosition(1)).toBe("초3");
+    expect(gradeOfPosition(1)).toBe("초1");
   });
 });
 
