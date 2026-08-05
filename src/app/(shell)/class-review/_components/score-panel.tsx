@@ -27,7 +27,9 @@ function SubmitButton() {
 }
 
 /**
- * 내 채점 패널 — 30문항 × 1·2·3·4 세그먼트(클릭 1번). 상단에 진행률과 실시간 합계.
+ * 내 채점 패널 — 30문항 × 1·2·3·4 세그먼트(클릭 1번).
+ * 30문항을 스크롤하는 동안에도 보이도록 **진행 헤더는 상단 sticky, 저장은 하단 고정 바**
+ * (창 데이터입력 폼 하우스 규약 + 원장 2026-08-05 "사용자 친화"). 미입력 문항은 점프 버튼으로 찾아간다.
  * 값은 컨트롤드 + hidden input으로 서버 액션에 전달(q0..q29).
  */
 export function ScorePanel({
@@ -62,23 +64,41 @@ export function ScorePanel({
   }, [state, backHref, router]);
 
   const totals = useMemo(() => computeTotals({ scores }, areas), [scores, areas]);
+  const missing = totalItems - totals.answered;
+
+  // 첫 미입력 문항으로 스크롤 — 30문항에서 빼먹은 칸을 눈으로 찾지 않게(원장 2026-08-05).
+  const jumpToMissing = () => {
+    const idx = scores.findIndex((v) => v === 0);
+    if (idx < 0) return;
+    document.getElementById(`cr-q-${idx}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+  };
 
   return (
-    <form action={formAction} className="border-line bg-card rounded-2xl border p-5 shadow-card">
+    <form action={formAction} className="bg-card rounded-2xl p-5 shadow-card">
       <input type="hidden" name="docId" value={docId} />
       {scores.map((v, i) => (
         <input key={i} type="hidden" name={`q${i}`} value={v || ""} />
       ))}
 
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-foreground text-sm font-bold">내 채점</h2>
-        <p className="text-text-dim num text-xs">
-          {totals.answered}/{totalItems} 입력 · 총점 {totals.total} · 환산 {totals.percent.toFixed(1)} ·{" "}
-          {totals.grade}
-        </p>
+      {/* 진행 헤더 — 스크롤해도 따라온다(현재 위치·합계·등급을 잃지 않게). */}
+      <div className="border-line/60 bg-card sticky top-0 z-10 -mx-5 -mt-5 rounded-t-2xl border-b px-5 pt-4 pb-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-foreground text-sm font-bold">내 채점</h2>
+          <p className="text-text-dim num text-xs">
+            {totals.answered}/{totalItems} 입력 · 총점 {totals.total} · 환산 {totals.percent.toFixed(1)} ·{" "}
+            {totals.grade}
+          </p>
+        </div>
+        <div className="bg-bg-soft mt-2 h-1 overflow-hidden rounded-full">
+          <div
+            className="bg-primary h-full rounded-full transition-all"
+            style={{ width: `${totalItems ? Math.round((totals.answered / totalItems) * 100) : 0}%` }}
+          />
+        </div>
       </div>
-      <p className="text-text-faint mb-3 text-[11px]">
-        4점 척도 — 1점(미흡) / 2점(기준 이하) / 3점(기준 충족) / 4점(우수)
+
+      <p className="text-text-faint mt-3 mb-3 text-[11px]">
+        4점 척도 — 1점(미흡) / 2점(기준 이하) / 3점(기준 충족) / 4점(우수) · 같은 점수를 다시 누르면 해제
       </p>
 
       <div className="space-y-4">
@@ -86,17 +106,23 @@ export function ScorePanel({
           const base = areas.slice(0, ai).reduce((n, a) => n + a.items.length, 0);
           return (
             <section key={area.key}>
-              <p className="text-primary mb-1.5 text-xs font-bold">{area.title}</p>
+              <p className="text-foreground mb-1.5 text-xs font-bold">
+                {area.title}
+                <span className="num text-text-dim ml-2 font-medium">
+                  {area.items.filter((_, i) => scores[base + i] > 0).length}/{area.items.length}
+                </span>
+              </p>
               <ul className="space-y-1">
                 {area.items.map((item, i) => {
                   const qi = base + i;
                   return (
                     <li
                       key={qi}
+                      id={`cr-q-${qi}`}
                       className="border-line/60 flex flex-col gap-1.5 rounded-lg border px-3 py-2 sm:flex-row sm:items-center sm:justify-between"
                     >
                       <span className="min-w-0 text-[13px] break-keep">
-                        <span className="num text-text-faint mr-1.5">{qi + 1}.</span>
+                        <span className="num text-text-dim mr-1.5">{qi + 1}.</span>
                         {item}
                       </span>
                       <span className="flex shrink-0 gap-1" role="radiogroup" aria-label={`${qi + 1}번 점수`}>
@@ -113,10 +139,10 @@ export function ScorePanel({
                                 return next;
                               })
                             }
-                            className={`num size-8 rounded-lg border text-sm font-semibold transition ${
+                            className={`num size-8 rounded-lg border text-sm transition ${
                               scores[qi] === n
-                                ? "border-primary bg-primary text-white"
-                                : "border-line text-text-dim hover:border-primary/40 hover:text-primary"
+                                ? "border-primary bg-primary font-bold text-white"
+                                : "border-line text-text-dim hover:border-primary/40 hover:text-primary font-medium"
                             }`}
                           >
                             {n}
@@ -144,7 +170,19 @@ export function ScorePanel({
         className="border-line bg-card text-foreground placeholder:text-text-faint focus:border-primary w-full rounded-lg border px-3 py-2 text-sm outline-none transition"
       />
 
-      <div className="mt-3 flex justify-end">
+      {/* 저장 바 — 하단 고정(창 데이터입력 폼 규약). 미입력이 있으면 개수 + 점프를 함께 보여준다. */}
+      <div className="border-line/60 bg-card sticky bottom-0 z-10 -mx-5 -mb-5 mt-4 flex flex-wrap items-center justify-between gap-2 rounded-b-2xl border-t px-5 py-3">
+        {missing > 0 ? (
+          <button
+            type="button"
+            onClick={jumpToMissing}
+            className="text-text-dim hover:text-primary text-xs font-medium underline-offset-2 transition hover:underline"
+          >
+            미입력 {missing}문항 — 눌러서 이동
+          </button>
+        ) : (
+          <span className="text-text-dim text-xs">모든 문항을 입력했습니다.</span>
+        )}
         <SubmitButton />
       </div>
     </form>
