@@ -32,10 +32,22 @@ export function ProgressCard({
 
   return (
     <div className={embedded ? "border-line rounded-lg border" : "bg-card border-line shadow-card rounded-2xl border"}>
-      <header className="border-line flex items-center justify-between border-b px-4 py-3">
+      {/* 보고서 카드 안(embedded)에선 제목을 **한 줄**로 줄인다 — 원장 2026-08-05 "공간 절약가능한곳은
+          최대한 극한으로". 단독 카드로 쓸 때는 기존 2줄 제목 그대로. */}
+      <header
+        className={`border-line flex items-center justify-between gap-2 border-b ${
+          embedded ? "px-3 py-2" : "px-4 py-3"
+        }`}
+      >
         <div>
-          <p className="micro text-text-faint">진도 확인</p>
-          <p className="text-foreground text-[15px] font-bold">오늘 어디까지 나갔나요</p>
+          {embedded ? (
+            <p className="text-foreground text-[13px] font-bold">오늘 진도</p>
+          ) : (
+            <>
+              <p className="micro text-text-faint">진도 확인</p>
+              <p className="text-foreground text-[15px] font-bold">오늘 어디까지 나갔나요</p>
+            </>
+          )}
         </div>
         <div className="flex items-center gap-2">
           {onLoadPrev && (
@@ -55,7 +67,7 @@ export function ProgressCard({
         </div>
       </header>
 
-      <div className="flex flex-col gap-3 px-4 py-3">
+      <div className={`flex flex-col gap-2 ${embedded ? "px-3 py-2" : "px-4 py-3"}`}>
         {student.subjects.map((su, i) => {
           const { tone } = subjectTone(su.name);
           const isMath = isMathSubject(su.subjectKey);

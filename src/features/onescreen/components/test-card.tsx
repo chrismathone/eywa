@@ -128,14 +128,25 @@ export function TestCard({
   const todayRange = student.subjects.map((s) => displayLessons(s.today) || s.today).filter(Boolean).join(" / ");
   return (
     <div className={embedded ? "border-line rounded-lg border" : "bg-card border-line shadow-card rounded-2xl border"}>
-      <header className="border-line flex items-center justify-between border-b px-4 py-3">
+      {/* embedded = 보고서 카드 안 → 제목 한 줄 + 안내문구 생략(토글이 바로 옆에 있어 자명하다). */}
+      <header
+        className={`border-line flex items-center justify-between gap-2 border-b ${
+          embedded ? "px-3 py-2" : "px-4 py-3"
+        }`}
+      >
         <div>
-          <p className="micro text-text-faint">데일리 · 확인 테스트</p>
-          <p className="text-foreground text-[15px] font-bold">점수 입력</p>
+          {embedded ? (
+            <p className="text-foreground text-[13px] font-bold">테스트 점수</p>
+          ) : (
+            <>
+              <p className="micro text-text-faint">데일리 · 확인 테스트</p>
+              <p className="text-foreground text-[15px] font-bold">점수 입력</p>
+            </>
+          )}
         </div>
-        <span className="text-text-faint text-[11px]">개/점 토글로 표기 전환</span>
+        {embedded ? null : <span className="text-text-faint text-[11px]">개/점 토글로 표기 전환</span>}
       </header>
-      <div className="flex flex-col gap-2.5 px-4 py-3">
+      <div className={`flex flex-col gap-2 ${embedded ? "px-3 py-2" : "px-4 py-3"}`}>
         {dailyEnabled ? (
           <ScoreBlock
             kicker="일일테스트"
