@@ -17,6 +17,7 @@ import { buildExamInfo as buildExamInfoOf, buildReportFields } from "../report-f
 import {
   buildMakeupStudent,
   loadMakeupHistory,
+  loadReportTrend,
   generateReportComment,
   reissueShareLink,
   revokeShareLink,
@@ -43,7 +44,8 @@ import type { TodayClass } from "../server/roster";
 import { ProgressCard } from "./progress-card";
 import { TestCard } from "./test-card";
 import { ReportCard, type SubjectReport } from "./report-card";
-import type { ReportPreviewContext } from "./report-preview";
+import { ReportPreview, type ReportPreviewContext } from "./report-preview";
+import type { TrendReportRow } from "../report-trend";
 import type { ReportSettings } from "@/features/owner/settings-types";
 import { OneScreenGrid } from "./onescreen-grid";
 import { StatusBoard } from "./status-board";
@@ -444,6 +446,39 @@ export function OneScreenClient({
   const orderClass = matchingClasses.length === 1 ? matchingClasses[0] : undefined;
   const effectiveId = visible.some((s) => s.id === selId) ? selId : (visible[0]?.id ?? "");
   const selected = visible.find((s) => s.id === effectiveId) ?? null;
+
+  // ── 카드 뷰 학부모 미리보기 ──────────────────────────────────────────────
+  // 과목 칩 선택을 **여기서** 들고 있다 — 미리보기가 옆 열(형제)이라 카드 안 state로는 알 수 없다.
+  // 학생이 바뀌면 자동으로 0번으로 돌아간다(학생 id를 함께 저장해 불일치면 0으로 읽는다 → 리셋 effect 불필요).
+  const [cardSubject, setCardSubject] = useState<{ id: string; idx: number }>({ id: "", idx: 0 });
+  const subjectIdx =
+    selected && cardSubject.id === selected.id
+      ? Math.min(cardSubject.idx, Math.max(0, selected.subjects.length - 1))
+      : 0;
+  const previewSubject = selected?.subjects[subjectIdx];
+  const previewReport = selected && previewSubject ? reports[selected.id]?.[previewSubject.name] : undefined;
+  // 학습 추이 이력 — 선택된 (학생, 과목) 1건만 **지연 조회**(첫 페인트 비용 0, actions.loadReportTrend 주석).
+  // ⚠️ effect 본문에서 setState 금지(#25) → 요청 중복은 **ref**로 막고, state는 응답 콜백에서만 쓴다.
+  //    "지금 보는 대상의 결과인지"는 렌더 중 키 비교로 판정한다(옛 학생 그래프가 새 학생에 남지 않게).
+  const wantTrendKey =
+    previewCtx && selected && previewSubject
+      ? `${selected.id}::${previewSubject.subjectKey ?? previewSubject.subjectLabel ?? previewSubject.name}::${previewSubject.classId ?? ""}::${activeDate}`
+      : "";
+  const trendReqRef = useRef("");
+  const [trend, setTrend] = useState<{ key: string; rows: TrendReportRow[] } | null>(null);
+  useEffect(() => {
+    if (!wantTrendKey || trendReqRef.current === wantTrendKey) return;
+    trendReqRef.current = wantTrendKey;
+    const [sid, subj, cid] = wantTrendKey.split("::");
+    let alive = true;
+    void loadReportTrend(sid!, subj || null, cid || null, activeDate).then((res) => {
+      if (alive && res.ok) setTrend({ key: wantTrendKey, rows: res.rows ?? [] });
+    });
+    return () => {
+      alive = false;
+    };
+  }, [wantTrendKey, activeDate]);
+  const trendRows = trend?.key === wantTrendKey ? trend.rows : undefined;
 
   // 보고서 셀(과목별 발송 반영) + "오늘 마감" 카운트.
   // 테스트 사용 여부(showDailyTest/showCheckTest)를 넘겨 비활성 테스트가 마감 카운트를 0에 고정하지 않게(#25).
@@ -2105,10 +2140,16 @@ export function OneScreenClient({
           onSent={() => setNoticeSeed(null)}
         />
       ) : (
-      /* 3열 폭 배분 — 콘텐츠 양에 비례하게. 예전 `1fr` + `380px 상한`은 정반대라, 짧은 진도·테스트 카드가
+      /* 열 폭 배분 — 콘텐츠 양에 비례하게. 예전 `1fr` + `380px 상한`은 정반대라, 짧은 진도·테스트 카드가
          남는 폭을 다 먹고(넓은 화면에서 1000px+ 공백) 제일 긴 보고서가 380px에 갇혀 세로로만 늘어났다(원장 지적 07-21).
-         이제 보고서 열이 더 넓고, 카드 폭 ≥672px이면 보고서 내부가 2열로 펼쳐진다(@container). */
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[240px_minmax(0,1fr)_minmax(0,1.4fr)] lg:items-start 2xl:grid-cols-[260px_minmax(0,1fr)_minmax(0,2fr)]">
+         이제 보고서 열이 더 넓고, 카드 폭 ≥672px이면 보고서 내부가 2열로 펼쳐진다(@container).
+
+         **4열(≥1680px) = 학생 · 진도·테스트 · 보고서 · 학부모 미리보기**(원장 2026-08-05: 3열일 때
+         오른쪽이 통째로 비는 "공간낭비가 너무 심해"). 미리보기 열은 **544px 고정** — 학부모가 받는 실제
+         이미지 폭(512px + 패딩)이라 늘리거나 줄이면 "실제 크기"가 거짓이 된다. 나머지 폭은 진도:보고서를
+         0.75:1.25로 나눠, 흔한 화면(≈2000px+)에서 보고서가 672px를 넘겨 내부 2열까지 펼쳐지게 뒀다.
+         1680px 미만에선 3열 그대로 + 미리보기는 아래 전체폭 행으로 내려간다(그땐 나란히 둘 자리가 없다). */
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[240px_minmax(0,1fr)_minmax(0,1.4fr)] lg:items-start 2xl:grid-cols-[260px_minmax(0,1fr)_minmax(0,2fr)] 3xl:grid-cols-[260px_minmax(0,0.75fr)_minmax(0,1.25fr)_544px]">
         <StudentList
           students={visible}
           selId={effectiveId}
@@ -2189,10 +2230,28 @@ export function OneScreenClient({
                 }}
                 // 실효 모드 = 강사 오버라이드 ?? 학원 기본 — 상단 토글이 하단 보고서 입력 구성을 실제로 바꾼다.
                 noticeMode={noticeMode ?? academyNoticeMode}
-                // 우측 학부모 미리보기(2026-08-05) — 표시 재료만. 저장·발송 판정엔 관여하지 않는다.
-                preview={previewCtx}
+                // 과목 칩 선택을 부모가 들고 있다 — 옆 열 미리보기가 "지금 보는 과목"을 그려야 하기 때문.
+                subjectIndex={subjectIdx}
+                onSubjectIndex={(i) => setCardSubject({ id: selected.id, idx: i })}
               />
             </div>
+
+            {/* 4열째 — 학부모가 받는 화면 그대로(실시간). ≥1680px에서만 옆에 서고, 그보다 좁으면
+                아래 전체폭 행으로 내려간다(나란히 둘 자리가 없을 때 억지로 끼우면 양쪽 다 찌그러진다). */}
+            {previewCtx && previewSubject ? (
+              <div className="col-span-full 3xl:col-span-1 3xl:sticky 3xl:top-2">
+                <ReportPreview
+                  ctx={previewCtx}
+                  student={selected}
+                  subject={previewSubject}
+                  draft={previewReport?.draft ?? ""}
+                  trendDraft={previewReport?.trendDraft}
+                  attachments={previewReport?.attachments ?? []}
+                  attachmentUrls={attUrls}
+                  trendRows={trendRows}
+                />
+              </div>
+            ) : null}
           </>
         ) : (
           <div className="bg-card border-line shadow-card text-text-faint flex items-center justify-center rounded-2xl border p-10 text-sm lg:col-span-2">
