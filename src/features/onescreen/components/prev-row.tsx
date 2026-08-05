@@ -45,6 +45,11 @@ export function PrevRow({
       <td className={td}>
         <span className="whitespace-nowrap">이전 {shortDate(p.date)}</span>
       </td>
+      {/* 수업타임 열(2026-08-05 신설) — 지난 회차엔 보여줄 값이 없지만 **칸은 반드시 차지해야 한다**.
+          이 행은 위치로만 열을 맞추는 구조라, 빠뜨리면 아래 모든 칸이 한 칸씩 왼쪽으로 밀린다(조용한 오정렬). */}
+      <td className={`${td} text-center`} aria-hidden>
+        <span className="text-text-faint/70">·</span>
+      </td>
       <td className={td}>
         <span className="line-clamp-3 whitespace-pre-line">{prog}</span>
       </td>

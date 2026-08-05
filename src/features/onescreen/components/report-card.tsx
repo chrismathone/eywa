@@ -7,7 +7,12 @@ import { effectiveClassnoteStatus, isAlreadySent, isReportEligible, isRowActiona
 import { evaluateSendGate } from "../send-gate";
 import { checkMentConsistency, MENT_WARNING_HINT, MENT_WARNING_LABEL } from "../ment-consistency";
 import { parentUnreadBadge, progressAnomalyBadge } from "../roster-signals";
-import { AttendancePills, type AttendanceExtra, type BasicAttendance } from "./attendance-pills";
+import {
+  AttendancePills,
+  SessionUnitsField,
+  type AttendanceExtra,
+  type BasicAttendance,
+} from "./attendance-pills";
 import { FieldSelect } from "./field-select";
 import { HomeworkRateInput } from "./homework-rate-input";
 import { isImageAttachment } from "../attachment-utils";
@@ -240,15 +245,27 @@ export function ReportCard({
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
           <span className="micro text-text-faint">출결</span>
           {attendance && !student.isMakeup && subject.classId ? (
-            <AttendancePills
-              value={subject.attendanceRaw}
-              note={subject.attendanceNote}
-              units={subject.attendanceUnits}
-              pending={attendance.pendingKeys.has(`${student.id}::${subject.classId}`)}
-              onSet={(s, extra) => attendance.onSet(subject.classId!, s, extra)}
-              studentName={student.name}
-              readOnly={attendance.readOnly}
-            />
+            <>
+              <AttendancePills
+                value={subject.attendanceRaw}
+                note={subject.attendanceNote}
+                pending={attendance.pendingKeys.has(`${student.id}::${subject.classId}`)}
+                onSet={(s, extra) => attendance.onSet(subject.classId!, s, extra)}
+                studentName={student.name}
+                readOnly={attendance.readOnly}
+              />
+              {/* 수업타임 — pill 옆이지만 **읽을 수 있는 크기**로(원장 2026-08-05 "타임이 너무 작다"). */}
+              {attendance.readOnly ? null : (
+                <SessionUnitsField
+                  units={subject.attendanceUnits}
+                  status={(subject.attendanceRaw as BasicAttendance | null | undefined) ?? null}
+                  pending={attendance.pendingKeys.has(`${student.id}::${subject.classId}`)}
+                  onSet={(s, extra) => attendance.onSet(subject.classId!, s, extra)}
+                  studentName={student.name}
+                  label="수업타임"
+                />
+              )}
+            </>
           ) : (
             <span
               className={`rounded-pill px-2 py-0.5 text-[11px] font-bold ${

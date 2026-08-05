@@ -273,7 +273,7 @@ export function OneScreenGrid({
 
       <div className="bg-card border-line shadow-card overflow-x-auto rounded-2xl border">
         {/* table-fixed + colgroup 고정 폭 — 헤더/본문 열 정렬 결정적, 표는 내용 폭(좌측 정렬)이라 진도가 남는 폭을 독식하지 않음. */}
-        <table className="w-full min-w-[1240px] table-fixed border-collapse text-[12px]">
+        <table className="w-full min-w-[1304px] table-fixed border-collapse text-[12px]">
           {/* ⚠️ 주석을 `<col />`과 **같은 줄**에 두지 말 것 — 사이의 공백이 JSX 텍스트 노드로 남아
               "whitespace text nodes cannot be a child of <colgroup>" 하이드레이션 에러가 난다(표뷰 전체가
               클라 재렌더로 떨어져 클릭이 먹통처럼 보임, #75류). 줄바꿈이 낀 공백만 컴파일러가 제거한다. */}
@@ -282,6 +282,10 @@ export function OneScreenGrid({
             <col className="w-[34px]" />
             {/* 학생·반 */}
             <col className="w-[128px]" />
+            {/* 수업타임(시수) — 전용 열(원장 2026-08-05 "타임이 너무 작다 … 열을 하나 더 추가해서라도").
+                이름칸 안에 끼워 넣으면 pill과 자리를 다퉈 계속 작아진다. 늘어난 폭은 아래 '학부모 문구'
+                (유일한 가변 열)가 내준다 — 원장: "우측 입력창의 열너비를 줄이면 될". */}
+            <col className="w-[64px]" />
             {/* 진도 */}
             <col className="w-[200px]" />
             {/* 일일 */}
@@ -311,6 +315,9 @@ export function OneScreenGrid({
                 />
               </th>
               <th className={TH}>학생 · 반</th>
+              <th className={`${TH} text-center`} title="수업타임(시수) — 기본 1. 출석부에 그대로 들어갑니다(학부모 보고서엔 미표시)">
+                타임
+              </th>
               <th className={TH}>진도(오늘)</th>
               {config.dailyEnabled ? <th className={`${TH} text-center`}>일일</th> : null}
               {config.checkEnabled ? <th className={`${TH} text-center`}>확인</th> : null}

@@ -20,7 +20,12 @@ import { makeupBadgeLabel } from "../makeup-label";
 import type { OneScreenStudent } from "../types";
 import { classnoteBadge, readAtLabel, type SubjectReport } from "./report-card";
 import { GridAttachButton, useRowFileDrop } from "./grid-attach";
-import { AttendancePills, type AttendanceExtra, type BasicAttendance } from "./attendance-pills";
+import {
+  AttendancePills,
+  SessionUnitsField,
+  type AttendanceExtra,
+  type BasicAttendance,
+} from "./attendance-pills";
 import { handleGridNavKey } from "./grid-nav";
 import { FieldSelect } from "./field-select";
 import { HomeworkRateInput } from "./homework-rate-input";
@@ -326,6 +331,31 @@ export function GridBodyRow({
             </span>
           ) : null}
         </div>
+      </td>
+      {/* 수업타임(시수) — **전용 열**(원장 2026-08-05 "타임이 너무 작다"). 이름칸 안에서 pill과 자리를
+          다투면 계속 작아진다. 기록할 자리가 없는 행(보강·반 모호)은 왜 없는지 밝힌다(빈 칸 금지). */}
+      <td className={`${td} text-center`}>
+        {!student.isMakeup && subject.classId && !gen.attReadOnly ? (
+          <SessionUnitsField
+            units={subject.attendanceUnits}
+            status={(subject.attendanceRaw as BasicAttendance | null | undefined) ?? null}
+            pending={gen.attPending.has(`${student.id}::${subject.classId}`)}
+            onSet={(s, extra) => fields.onAttendance(student.id, subject.classId!, s, extra)}
+            studentName={student.name}
+            size="lg"
+          />
+        ) : (
+          <span
+            className="text-text-faint text-[13px]"
+            title={
+              gen.attReadOnly
+                ? "출결 입력 권한이 없어 수업타임을 고칠 수 없습니다"
+                : "이 행은 반이 없어 출석부에 기록할 자리가 없습니다 — 수업타임은 출석부에서 입력하세요"
+            }
+          >
+            —
+          </span>
+        )}
       </td>
       <td className={td}>
         <GridProgressCell
