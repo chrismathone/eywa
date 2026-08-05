@@ -24,6 +24,7 @@ import { stateDirLabel, stateFile } from "./classnote-paths.mjs";
 import { DEFAULT_KEEP_DAYS, DEFAULT_MAX_BYTES, archiveName, needsRotation, pruneList, uniqueArchiveName } from "./log-rotation.mjs";
 import { BATCH, closeClassnoteAdminSession, launchBrowser, processQueueOnce, resolveTenant } from "./classnote-core.mjs";
 import { processNoticesOnce } from "./classnote-notice-core.mjs";
+import { processRecallsOnce } from "./classnote-recall-core.mjs";
 import { provisionDailyOnce } from "./classnote-provision-core.mjs";
 import { pollParentCommentsOnce, pollParentPostsOnce } from "./classnote-feed-core.mjs";
 import { pollReportReadsOnce } from "./classnote-read-core.mjs";
@@ -216,6 +217,17 @@ async function main() {
       if (nres.processed) {
         log(`[notice] 공지 ${nres.processed}건 처리 완료`);
         noteResult("notice", nres);
+      }
+      // 2-b) 수업보고서 회수(recall_requested) — 학부모 게시글 삭제. 발송 큐와 독립(실패해도 발송은 계속).
+      //      ⚠️ 발송 킬스위치엔 걸지 않는다(회수는 사고 수습이라 스위치를 내린 상황에서 가장 급하다).
+      const rres = await processRecallsOnce(db(), b, { tenant, post: POST, log }).catch((e) => {
+        log(`[recall] 처리 오류(다음 폴에서 재시도): ${e.message}`);
+        noteResult("recall", { error: e.message });
+        return { claimed: 0, recalled: 0, failed: 0 };
+      });
+      if (rres.claimed) {
+        log(`[recall] 회수 ${rres.recalled}건 완료 · 실패 ${rres.failed}건`);
+        noteResult("recall", rres);
       }
       // 3) 일일 프로비저닝(신규생 보드 생성 + 가입자 자동 배정) — KST 05시 이후 하루 1회(가드 내장).
       const pres = await provisionDailyOnce(db(), b, { tenant, post: POST, log }).catch((e) => {

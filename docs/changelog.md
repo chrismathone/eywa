@@ -1,5 +1,42 @@
 # eywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-08-05 — 수업보고서 **회수**(학부모 게시글 삭제) — 관리자 전체 / 강사 본인
+
+원장: *"관리자 수업보고서 회수 있어야겠다. 일일이 너에게 요청하기도 힘든것 같고"* ·
+*"관리자는 전체 수업보고서 검색 후 회수 가능, 담당은 본인 보고서 재발급 → 회수"* ·
+*"바로 회수 하지말고 '회수하겠습니까?'라는 이중확인장치"* ·
+*"회수 → 링크 차단(재발급효과) → 클래스노트 글까지 삭제"*.
+
+- 🔴🔴 **"ClassNote는 게시글 삭제가 안 된다"는 전제가 틀렸다.** 그 문장이 [report-card](src/features/onescreen/components/report-card.tsx)
+  경고문·[textbook-send-dedup](src/features/billing/textbook-send-dedup.ts) 주석에 사실처럼 적혀 있어 회수가
+  오랫동안 "불가능한 것"으로 취급됐는데, **`DELETE /api/v1_2/reports/{id}/` → 204**는 실동작한다(반 공지 회수가
+  이미 그 경로를 쓰고 있었다). 두 곳의 옛 전제를 정정했다.
+- 🔴 **링크 취소 ≠ 회수.** 수업보고서는 본문이 **공유 링크 + 보고서 스크린샷 이미지**로 게시된다
+  (`classnote-core` `content: shareUrl`) → **링크만 막으면 이미지가 게시판에 그대로 남는다.** 오발송 수습에는
+  글 삭제만이 답이다. 그래서 회수 = ① 링크 즉시 차단(앱) → ② 게시글 삭제(연동 PC 워커) → ③ `recalled`.
+- 🔴 **특정 못 하면 지우지 않는다** — 대상 글은 본문 **완전 일치**(`{base}/r/{share_token}`)로만 찾는다.
+  공유 토큰이 전역 유니크라 이 일치가 곧 "그 학생의 그 보고서"의 증명. 이름·날짜로 근사해서 지우면 **남의 글을
+  지운다**. 조회 실패(확인 불가)는 '없음'과 구분해 **실패로 남기고 지우지 않는다**. 삭제 직전 cls/child 재대조.
+- 🔴 **회수 중 '재발급' 차단**([onescreen/server/actions.ts](src/features/onescreen/server/actions.ts)) — 재발급은
+  `share_token`을 갈아치우는데 그 토큰이 워커가 게시글을 찾는 **유일한 키**다. 중간에 바뀌면 학부모 게시판에
+  **지울 수 없는 고아 게시글**(죽은 링크 + 이미지)이 영구히 남는다.
+- **마이그레이션 0** — `classnote_status`에 CHECK 제약이 없음을 실 DB로 확인하고(0개) 새 상태 3종
+  (`recall_requested`·`recalled`·`recall_failed`)을 값으로만 추가. 링크 차단은 기존 `revoked_at`/`revoked_by`(0085a) 재사용.
+  → SQL 적용과 앱 배포 사이의 창이 없다([[#95]] 회피).
+- 판정은 순수 모듈 [report-recall.ts](src/features/report-admin/report-recall.ts)(Vitest 8) 단일 소스 —
+  강사 카드·관리자 목록·서버 액션이 같은 함수를 쓴다. 경고 문구와 이중확인도 **공용 컴포넌트**
+  [RecallButton](src/features/report-admin/components/recall-button.tsx) 하나라 한쪽만 약해지지 않는다(#77의 UI판).
+- 게이트: 관리자(`lesson_reports` 쓰기)는 테넌트 전체, 그 외는 **보고서 날짜 기준 담당 학생**만(임시 위임 0173a 반영).
+  감사로그 `classnote_report_recall`(관리자 회수/담당 강사 회수 구분 + 학생명).
+- 워커 = [classnote-recall-core.mjs](scripts/_classnote/classnote-recall-core.mjs) + 데몬 배선 + 원샷
+  [process-classnote-recalls.mjs](scripts/_classnote/process-classnote-recalls.mjs). ⚠️ **발송 킬스위치·최근 7일 창에
+  일부러 걸지 않았다** — 회수는 사고 수습이라 발송을 끈 상황에서 가장 급하고, 오발송은 며칠 뒤 발견된다.
+- 🔴 겸사: `server-only` vitest alias가 **연결돼 있지 않았다**(shim 파일은 "테스트 러너 alias 전용"이라 적힌 채
+  고아). 서버 액션을 쓰는 클라 컴포넌트를 렌더하는 테스트가 전부 죽는 구조라 [vitest.config.ts](vitest.config.ts)에 배선.
+- 검증: typecheck 0(마케팅 `_img` 노이즈 제외) · lint 0 · **test 306파일 3,724건 통과** · build ✓.
+  ⏳ **연동 PC에 zip 적용 전까지 게시글 삭제는 대기**(링크 차단은 이미 동작) — 안내
+  [워커수정-안내-2026-08-05-보고서회수.md](scripts/_classnote/워커수정-안내-2026-08-05-보고서회수.md).
+
 ## 2026-08-05 — 학부모 보고서 진도 물결(~) 축약 — 같은 중단원 연속 차시를 한 줄로
 
 원장: *"진도를 너무 많이 선택하면 공간을 많이 잡아먹는 것 같은데 물결 표시하는 건 어때 /
