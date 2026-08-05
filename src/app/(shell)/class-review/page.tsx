@@ -37,7 +37,7 @@ export default async function ClassReviewPage() {
       <PageHeader
         eyebrow="운영"
         title="수업 평가 체크리스트"
-        description="참관 문항(4점 척도)을 평가자와 본인이 각자 채점하고 나란히 비교합니다."
+        description="평가 문항(4점 척도)을 평가자와 본인이 각자 채점하고 나란히 비교합니다."
         embedLabel="수업 평가 체크리스트"
         actions={
           <span className="flex items-center gap-2">
@@ -52,7 +52,7 @@ export default async function ClassReviewPage() {
               </Button>
             ) : null}
             <Button size="sm" render={<Link href="/class-review/new" />}>
-              + 새 참관
+              + 새 평가
             </Button>
           </span>
         }
@@ -60,7 +60,7 @@ export default async function ClassReviewPage() {
 
       {rows.length === 0 ? (
         <div className="border-line rounded-2xl border border-dashed p-10 text-center">
-          <p className="text-text-dim text-sm">아직 참관 건이 없습니다 — &lsquo;새 참관&rsquo;으로 시작하세요.</p>
+          <p className="text-text-dim text-sm">아직 평가 건이 없습니다 — &lsquo;새 평가&rsquo;로 시작하세요.</p>
         </div>
       ) : (
         <ReviewTable

@@ -42,7 +42,7 @@ export function BoardTable({
       <table className="w-full min-w-[900px] border-collapse text-[13px]">
         <thead>
           <tr className="border-line bg-bg-soft/60 border-b text-left">
-            <th className="text-text-dim px-4 py-2.5 text-xs font-medium">참관일</th>
+            <th className="text-text-dim px-4 py-2.5 text-xs font-medium">생성일</th>
             <th className="text-text-dim px-3 py-2.5 text-xs font-medium">과목</th>
             <th className="text-text-dim px-3 py-2.5 text-right text-xs font-medium">제출</th>
             {areaHeads.map((h) => (
@@ -65,7 +65,7 @@ export function BoardTable({
               <td colSpan={colCount} className="px-4 py-2">
                 <span className="text-foreground text-sm font-bold">{g.teacherName}</span>
                 <span className="text-text-dim ml-2 text-xs">
-                  참관 <span className="num">{g.rows.length}</span>회
+                  평가 <span className="num">{g.rows.length}</span>회
                   {g.avgPercent !== null ? (
                     <>
                       {" "}
@@ -103,7 +103,7 @@ export function BoardTable({
                 </td>
                 {areaHeads.map((h, i) => (
                   <td key={h.short} className="num text-text-dim px-2 py-2.5 text-center">
-                    {r.areaSubs ? r.areaSubs[i] : "—"}
+                    {r.areaSubs?.[i] ?? "—"}
                   </td>
                 ))}
                 <td className="num px-3 py-2.5 text-right font-medium">{r.total ?? "—"}</td>

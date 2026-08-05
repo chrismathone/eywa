@@ -92,7 +92,7 @@ export function ReviewTable({
       {visible.length === 0 ? (
         <div className="border-line rounded-2xl border border-dashed p-10 text-center">
           <p className="text-text-dim text-sm">
-            &lsquo;{CLASS_REVIEW_FILTER_LABEL[filter]}&rsquo; 보기에 해당하는 참관 건이 없습니다.
+            &lsquo;{CLASS_REVIEW_FILTER_LABEL[filter]}&rsquo; 보기에 해당하는 평가 건이 없습니다.
           </p>
         </div>
       ) : (
@@ -101,7 +101,7 @@ export function ReviewTable({
             <thead>
               <tr className="border-line bg-bg-soft/60 border-b text-left">
                 <th className="text-text-dim px-4 py-2.5 text-xs font-medium">강사</th>
-                <th className="text-text-dim px-4 py-2.5 text-xs font-medium">참관일</th>
+                <th className="text-text-dim px-4 py-2.5 text-xs font-medium">생성일</th>
                 <th className="text-text-dim px-4 py-2.5 text-xs font-medium">과목</th>
                 <th className="text-text-dim px-4 py-2.5 text-xs font-medium">평가 방식</th>
                 <th className="text-text-dim px-4 py-2.5 text-right text-xs font-medium">제출</th>

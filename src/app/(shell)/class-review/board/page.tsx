@@ -56,10 +56,12 @@ export default async function ClassReviewBoardPage() {
     return { ...g, avgPercent: avg, avgGrade: avg !== null ? gradeOf(avg) : null };
   });
 
-  const areaHeads = areas.map((a, i) => ({
+  // 열 수 = 기본 세트와 실제 평가지들 중 가장 긴 영역 수(세트 복수화 — 세트마다 영역 수가 다를 수 있다).
+  const maxAreaCount = Math.max(areas.length, ...rows.map((r) => r.averages?.areaSubtotals.length ?? 0));
+  const areaHeads = Array.from({ length: maxAreaCount }, (_, i) => ({
     short: String.fromCharCode(0x2460 + i), // ①②③…
-    title: a.title,
-    max: a.items.length * 4,
+    title: areas[i]?.title ?? `영역 ${i + 1}`,
+    max: areas[i] ? areas[i].items.length * 4 : 0,
   }));
 
   return (
@@ -74,21 +76,23 @@ export default async function ClassReviewBoardPage() {
         <PageHeader
           eyebrow="수업 평가"
           title="종합 보기"
-          description="강사별 참관 결과(영역 소계·총점·환산·등급)를 한 화면에서 비교합니다."
+          description="강사별 평가 결과(영역 소계·총점·환산·등급)를 한 화면에서 비교합니다."
           embedLabel="수업 평가 종합"
         />
       </div>
 
       {groups.length === 0 ? (
         <div className="border-line rounded-2xl border border-dashed p-10 text-center">
-          <p className="text-text-dim text-sm">아직 참관 건이 없습니다.</p>
+          <p className="text-text-dim text-sm">아직 평가 건이 없습니다.</p>
         </div>
       ) : (
         <BoardTable groups={groups} areaHeads={areaHeads} />
       )}
 
       <p className="text-text-dim text-[11px]">
-        영역 소계는 제출된 채점들의 문항 평균 기준 · {areaHeads.map((h) => `${h.short} ${h.title}(${h.max}점)`).join(" · ")}
+        영역 소계는 제출된 채점들의 문항 평균 기준 ·{" "}
+        {areaHeads.map((h) => `${h.short} ${h.title}${h.max ? `(${h.max}점)` : ""}`).join(" · ")} — 다른 문항
+        세트로 만든 평가지의 영역 구성은 각 건 상세에서 확인하세요.
       </p>
     </div>
   );
