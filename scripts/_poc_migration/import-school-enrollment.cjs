@@ -37,14 +37,32 @@ const SUFFIX_RULES = [
   [/초등학교$/, "초"],
   [/중학교$/, "중"],
   [/고등학교$/, "고"],
+  [/초등$/, "초"],
+  [/중등$/, "중"],
+  [/고등$/, "고"],
 ];
+const BARE_KIND_RE = /^(초|중|고|여초|여중|여고|여상)$/;
+const ALIASES = { 달산: "달산초" };
+const applySuffix = (s) => {
+  for (const [re, to] of SUFFIX_RULES) if (re.test(s)) return s.replace(re, to);
+  return s;
+};
+// 🔴 지역 접두를 지우면 급만 남는 학교가 있다(대구초등학교→"초", 대구중학교→"중", 대구여자고등학교→"여고").
+// 그러면 상담 입력의 쓰레기 값 "초"(43건)·"중"(17건)이 그 학교에 붙어 없는 점유율을 만든다 — 지우지 않는다.
+function stripRegionPrefix(s) {
+  const stripped = s.replace(/^대구광역시/, "").replace(/^대구/, "");
+  if (stripped === s) return s;
+  if (!stripped || BARE_KIND_RE.test(applySuffix(stripped))) return s;
+  return stripped;
+}
 function normalizeSchoolName(raw) {
   let s = String(raw ?? "").replace(/\s+/g, "");
   if (!s) return "";
   s = s.replace(/（.*?）|\(.*?\)/g, "");
-  s = s.replace(/^대구광역시/, "").replace(/^대구/, "");
-  for (const [re, to] of SUFFIX_RULES) if (re.test(s)) return s.replace(re, to);
-  return s;
+  s = s.replace(/\d+$/, "");
+  s = stripRegionPrefix(s);
+  s = applySuffix(s);
+  return ALIASES[s] ?? s;
 }
 
 const KIND_BY_CODE = { "02": "초", "03": "중", "04": "고" };
