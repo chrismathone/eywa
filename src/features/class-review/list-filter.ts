@@ -6,10 +6,12 @@
 export const CLASS_REVIEW_FILTERS = ["all", "todo", "done", "open"] as const;
 export type ClassReviewFilter = (typeof CLASS_REVIEW_FILTERS)[number];
 
+// 라벨은 인사평가 표준 어휘 "평가 대기/평가 완료"(원장 2026-08-05 — "내가 평가할 것/함"이 어색하다) +
+// 문서 전체 상태(제출 N/M)와 혼동되지 않게 '내'를 붙인다. 키(todo/done)는 저장값이라 불변.
 export const CLASS_REVIEW_FILTER_LABEL: Record<ClassReviewFilter, string> = {
   all: "전체",
-  todo: "내가 평가할 것",
-  done: "내가 평가함",
+  todo: "내 평가 대기",
+  done: "내 평가 완료",
   open: "선착순",
 };
 
