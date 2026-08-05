@@ -17,18 +17,21 @@ export function ProgressCard({
   onProgress,
   onStudyGrade,
   onLoadPrev,
+  embedded,
 }: {
   student: OneScreenStudent;
   onConfirm: () => void;
   onProgress: (subjectIndex: number, today: string) => void;
   onStudyGrade: (grade: string) => void;
   onLoadPrev?: () => void; // 보강 학생 '이전 진도 불러오기'(있을 때만 노출) — 직전 회차를 당겨온다.
+  /** 보고서 카드 안에 들어간 상태 — 카드 속 카드로 겹쳐 보이지 않게 그림자·배경을 뺀 얇은 테두리로(2026-08-05 통합). */
+  embedded?: boolean;
 }) {
   const studyGrade = resolveStudyGrade(student.studyGrade ?? student.grade);
   const isMathSubject = (key: string | undefined) => (key ?? "math") === "math";
 
   return (
-    <div className="bg-card border-line shadow-card rounded-2xl border">
+    <div className={embedded ? "border-line rounded-lg border" : "bg-card border-line shadow-card rounded-2xl border"}>
       <header className="border-line flex items-center justify-between border-b px-4 py-3">
         <div>
           <p className="micro text-text-faint">진도 확인</p>

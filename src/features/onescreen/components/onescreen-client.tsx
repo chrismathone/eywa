@@ -2140,16 +2140,14 @@ export function OneScreenClient({
           onSent={() => setNoticeSeed(null)}
         />
       ) : (
-      /* 열 폭 배분 — 콘텐츠 양에 비례하게. 예전 `1fr` + `380px 상한`은 정반대라, 짧은 진도·테스트 카드가
-         남는 폭을 다 먹고(넓은 화면에서 1000px+ 공백) 제일 긴 보고서가 380px에 갇혀 세로로만 늘어났다(원장 지적 07-21).
-         이제 보고서 열이 더 넓고, 카드 폭 ≥672px이면 보고서 내부가 2열로 펼쳐진다(@container).
-
-         **4열(≥1680px) = 학생 · 진도·테스트 · 보고서 · 학부모 미리보기**(원장 2026-08-05: 3열일 때
-         오른쪽이 통째로 비는 "공간낭비가 너무 심해"). 미리보기 열은 **544px 고정** — 학부모가 받는 실제
-         이미지 폭(512px + 패딩)이라 늘리거나 줄이면 "실제 크기"가 거짓이 된다. 나머지 폭은 진도:보고서를
-         0.75:1.25로 나눠, 흔한 화면(≈2000px+)에서 보고서가 672px를 넘겨 내부 2열까지 펼쳐지게 뒀다.
-         1680px 미만에선 3열 그대로 + 미리보기는 아래 전체폭 행으로 내려간다(그땐 나란히 둘 자리가 없다). */
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[240px_minmax(0,1fr)_minmax(0,1.4fr)] lg:items-start 2xl:grid-cols-[260px_minmax(0,1fr)_minmax(0,2fr)] 3xl:grid-cols-[260px_minmax(0,0.75fr)_minmax(0,1.25fr)_544px]">
+      /* 열 = **학생 · 보고서 · 학부모 미리보기**(2026-08-05 통합).
+         진도·테스트를 따로 세우지 않는다 — 원장: *"이걸 하나의 섹션으로 합쳐버리면 안되나? 공간낭비
+         최소화할 수 있게? 굳이 따로 할 필요 있나?"* 그 열은 콘텐츠보다 훨씬 길어 아래가 통째로 비었고,
+         보고서 카드 맨 위 요약이 **같은 값을 두 번** 보여주고 있었다. 이제 보고서 카드 안에서
+         `@container` 폭에 따라 1 → 2 → 3열(진도·테스트 / 그 밖의 입력 / 문장·발송)로 펼쳐진다.
+         미리보기 열(≥1680px)은 **544px 고정** — 학부모가 받는 실제 이미지 폭(512px + 패딩)이라 늘리거나
+         줄이면 "실제 크기"가 거짓이 된다. 그보다 좁으면 미리보기는 아래 전체폭 행으로 내려간다. */
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[240px_minmax(0,1fr)] lg:items-start 2xl:grid-cols-[260px_minmax(0,1fr)] 3xl:grid-cols-[260px_minmax(0,1fr)_544px]">
         <StudentList
           students={visible}
           selId={effectiveId}
@@ -2163,25 +2161,6 @@ export function OneScreenClient({
 
         {selected ? (
           <>
-            {/* 중앙 그룹 — 좌측 학생목록·우측 보고서와 함께 3열 워크플로 영역을 그룹 제목으로 구분. */}
-            <div className="flex flex-col gap-3">
-              <header className="flex items-center gap-1.5">
-                <EyIcon name="chart" size={14} className="text-primary" />
-                <h2 className="text-foreground text-sm font-bold">오늘 진도 · 테스트</h2>
-              </header>
-              <ProgressCard
-                student={selected}
-                onConfirm={confirmProgress}
-                onProgress={setProgress}
-                onStudyGrade={setStudyGrade}
-                onLoadPrev={
-                  selected.isMakeup && !prevLoaded.has(selected.id)
-                    ? () => loadMakeupPrev(selected.id)
-                    : undefined
-                }
-              />
-              <TestCard student={selected} onScore={setScore} allowMax={allowTeacherTestMax} onMax={setMax} onMode={setMode} dailyEnabled={showDailyTest} checkEnabled={showCheckTest} />
-            </div>
             <div className="flex flex-col gap-3">
               <header className="flex items-center gap-1.5">
                 <EyIcon name="report" size={14} className="text-primary" />
@@ -2233,6 +2212,34 @@ export function OneScreenClient({
                 // 과목 칩 선택을 부모가 들고 있다 — 옆 열 미리보기가 "지금 보는 과목"을 그려야 하기 때문.
                 subjectIndex={subjectIdx}
                 onSubjectIndex={(i) => setCardSubject({ id: selected.id, idx: i })}
+                // 오늘 진도·테스트 = 이제 보고서 카드의 첫 열(2026-08-05 통합). 배선은 여기 그대로 두고
+                // 카드엔 **노드만** 넘긴다(카드가 콜백 7개를 더 받으면 props 규칙이 무너진다).
+                todayInputs={
+                  <>
+                    <ProgressCard
+                      embedded
+                      student={selected}
+                      onConfirm={confirmProgress}
+                      onProgress={setProgress}
+                      onStudyGrade={setStudyGrade}
+                      onLoadPrev={
+                        selected.isMakeup && !prevLoaded.has(selected.id)
+                          ? () => loadMakeupPrev(selected.id)
+                          : undefined
+                      }
+                    />
+                    <TestCard
+                      embedded
+                      student={selected}
+                      onScore={setScore}
+                      allowMax={allowTeacherTestMax}
+                      onMax={setMax}
+                      onMode={setMode}
+                      dailyEnabled={showDailyTest}
+                      checkEnabled={showCheckTest}
+                    />
+                  </>
+                }
               />
             </div>
 
