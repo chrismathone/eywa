@@ -2,6 +2,7 @@
 
 // ECS 툴바 — 주 네비(flush 후 이동)·반 전환·요일 알약·패널 토글·저장 인디케이터·동시편집 배지.
 // WeekNav(ParamLink)를 안 쓰는 이유: 이동 전 store.flush()를 await해야 해서(§F) 버튼+onNavigate로 처리.
+import type { ReactNode } from "react";
 import { ChevronLeft, ChevronRight } from "@/components/icons/eywa-icon-compat";
 import { addWeeks, thisMonday } from "@/features/timetable/lib/week";
 import { EditingBadge } from "@/features/presence/editing-badge";
@@ -37,6 +38,7 @@ export function SheetToolbar({
   showSpecialRooms,
   onShowSpecialRooms,
   specialRoomsPending,
+  trailing,
 }: {
   data: ClassSheetWeekData;
   classOptions: { id: string; name: string }[];
@@ -54,6 +56,12 @@ export function SheetToolbar({
   onShowSpecialRooms: (show: boolean) => void;
   /** 표시 토글 저장·재조회 중 — 두 번 눌러 왕복이 겹치지 않게 잠근다. */
   specialRoomsPending: boolean;
+  /**
+   * 우측 끝 추가 컨트롤(현재 = '시트 가져오기'). **노드로 받는 이유**: 그 버튼은 저장 큐 flush와
+   * classId를 함께 써야 해서 콜백 2~3개를 props로 더 받아야 한다 — 이미 props가 많은 툴바를 더
+   * 부풀리지 않으려고 소유자(SheetClient)가 만들어 꽂는다(수업보고서 카드 `todayInputs` 선례).
+   */
+  trailing?: ReactNode;
 }) {
   const { pending, conflicts } = useSaveIndicator(store);
   const hrefFor = (classId: string, monday: string) => `/ecs/${classId}?week=${monday}`;
@@ -139,6 +147,7 @@ export function SheetToolbar({
       </div>
 
       <span className="ml-auto flex items-center gap-2">
+        {trailing}
         {/* 자리(LAB·JJ) 표시(내 계정) — 원장 2026-08-03: 코드가 정하지 말고 여기서 고른다.
             ⚠️ 글씨 크기와 달리 **서버가 다시 그린다** — 이 값이 카드뿐 아니라 작성률 분모까지 정하기
             때문(보이는 교시 = 세는 교시). 그래서 왕복 중엔 잠근다. */}
