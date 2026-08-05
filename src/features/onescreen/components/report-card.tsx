@@ -329,7 +329,11 @@ export function ReportCard({
               type="button"
               onClick={() => onMakeup(subjectName)}
               aria-pressed={!!subject.makeup}
-              title="보강 수업 표시"
+              title={
+                subject.classId
+                  ? "그날 정규 수업에 더해 보강까지 한 경우 — 학부모 보고서 제목이 '(정규+보강)'이 되고 한 건만 나갑니다"
+                  : "보강(수업외) 수업 — 학부모 보고서 제목이 '(보강)'이 됩니다"
+              }
               className={`shrink-0 rounded-pill px-2.5 py-1 text-[12px] font-bold transition ${
                 subject.makeup ? "bg-amber-soft text-amber" : "border-line text-text-dim hover:bg-bg-soft border"
               }`}

@@ -167,7 +167,13 @@ type MakeupReportRow = {
  *    임시 클라 행이 전부라, 저장·발송까지 끝낸 보강이 **새로고침 한 번에 사라졌다**
  *    (원장 제보 2026-08-03: "하은결 보강 보고서를 발송했는데 화면에서 찾을 수 없다" — DB엔 멀쩡히 있었다).
  *    그날 보강 보고서를 읽어 행을 되살린다 = 보강 기록의 유일한 원천이 DB가 된다.
- * 범위: (그 날짜, makeup=true, teacher_name=나). 날짜+본인으로 좁혀 수십 행(B2 무페이징 위험 없음).
+ * 범위: (그 날짜, makeup=true, **class_id IS NULL**, teacher_name=나). 날짜+본인으로 좁혀 수십 행(B2 안전).
+ *
+ * 🔴 **`class_id IS NULL`이 빠지면 안 된다**(2026-08-05 적대 리뷰에서 잡음). 같은 날 정규+보강을 합치면
+ *    **정규 보고서**가 `makeup=true`인데 반이 붙은 행이 된다 — 그것까지 여기서 집으면 아래 5-b가 그 과목의
+ *    "(보강)" 행을 **한 줄 더** 만들어 낸다(504의 중복 가드는 `!su.classId`인 보강 행만 본다). 그러면
+ *    새로고침 한 번에 빈 보강 행이 되살아나고, 강사가 그걸 채워 보내면 **결국 두 번 발송**된다 —
+ *    합치기 기능이 막으려던 바로 그 일이다. 여기서 되살릴 대상은 **반이 없는 순수 보강**뿐이다.
  * ⚠️ error를 `?? []`로 삼키지 않는다(B3) — 조용히 0건이면 "또 사라졌다"가 된다.
  */
 async function fetchMyMakeupReports(
@@ -180,7 +186,8 @@ async function fetchMyMakeupReports(
     .from("lesson_reports")
     .select("student_id, subject, makeup_class_id, created_by, teacher_name")
     .eq("report_date", date)
-    .eq("makeup", true);
+    .eq("makeup", true)
+    .is("class_id", null); // 순수 보강만 — 합쳐진 정규 보고서(반 있음)를 집으면 유령 보강 행이 생긴다(위 🔴)
   if (error) throw new Error(`보강 보고서 조회 실패: ${error.message}`);
   // 소유 판정은 순수 함수 [`ownsMakeupReport`](../makeup-owner.ts) 하나로 — 계정 id 우선, 옛 행만 이름 폴백.
   // 하루치 보강은 학원 전체로도 수십 건(실측 9개월 171건)이라 서버에서 걸러도 비용이 없다 —

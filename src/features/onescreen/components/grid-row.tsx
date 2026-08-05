@@ -414,7 +414,16 @@ export function GridBodyRow({
             onKeyDown={handleGridNavKey}
             className="border-line bg-card focus:border-primary h-8 w-full rounded-sm border px-2 text-[12px] outline-none"
           />
-          <label className="text-text-dim flex w-fit cursor-pointer items-center gap-1 text-[11px]">
+          {/* 뜻이 행 종류에 따라 갈린다(2026-08-05) — 반이 붙은 행이면 "정규까지 하고 보강도 했다"라
+              제목이 "(정규+보강)"이 된다. 켜는 사람이 무엇을 켜는지 알 수 있게 툴팁으로 밝힌다. */}
+          <label
+            className="text-text-dim flex w-fit cursor-pointer items-center gap-1 text-[11px]"
+            title={
+              subject.classId
+                ? "그날 정규 수업에 더해 보강까지 한 경우 — 학부모 보고서 제목이 '(정규+보강)'이 되고 한 건만 나갑니다"
+                : "보강(수업외) 수업 — 학부모 보고서 제목이 '(보강)'이 됩니다"
+            }
+          >
             <input
               type="checkbox"
               checked={!!subject.makeup}
