@@ -280,8 +280,12 @@ export function GridBodyRow({
             {subject.subjectLabel || subject.name}
           </span>
           {/* 병합된 보강 행(classId 없음·makeup) — 알약엔 순수 과목 라벨('수학')만 칠해 정규 행과 똑같아 보이므로,
-              행 단위 '보강' 배지로 구분한다(2026-07-24). 정규 반에 보강 토글만 켠 행(classId 있음)은 대상 아님. */}
-          {subject.makeup && !subject.classId ? (
+              행 단위 '보강' 배지로 구분한다(2026-07-24). 정규 반에 보강 토글만 켠 행(classId 있음)은 대상 아님.
+              🔴 **학생 자체가 보강 추가분(isMakeup)이면 여기선 안 붙인다** — buildMakeupStudent가 학생에
+                 `isMakeup`, 모든 과목 행에 `makeup:true`(classId 없음)를 함께 세워서 위 이름 옆 배지와
+                 **같은 '보강'이 두 번** 찍혔다(원장 제보 2026-08-05). 이 배지의 존재 이유는 "정규 학생 카드에
+                 섞여 들어온 보강 행"을 가르는 것이라, 학생 전체가 보강이면 이름 옆 배지 하나로 충분하다. */}
+          {subject.makeup && !subject.classId && !student.isMakeup ? (
             <span className="bg-amber-soft text-amber shrink-0 rounded-pill px-1 py-px text-[9px] font-bold">
               보강
             </span>
