@@ -662,7 +662,8 @@ export async function getClassroomAssignmentData(): Promise<ClassroomAssignData>
       .select("id, class_name, subject, classroom_id")
       .eq("is_active", true)
       .order("class_name"),
-    supabase.from("classrooms").select("id, name, capacity").order("name"),
+    // 자동배정은 **새로 방을 고르는** 기능 → 보관(숨김)된 강의실은 후보에서 뺀다(0182a).
+    supabase.from("classrooms").select("id, name, capacity").is("archived_at", null).order("name"),
   ]);
 
   const classes = cls ?? [];

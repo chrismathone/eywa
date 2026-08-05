@@ -52,6 +52,8 @@ export const AUDIT_ACTIONS = {
   notice_popup_delete: "팝업 공지 삭제",
   classroom_create: "강의실 추가",
   classroom_delete: "강의실 삭제",
+  classroom_archive: "강의실 숨김",
+  classroom_restore: "강의실 복원",
   intake_token_create: "QR 접수 링크 생성",
   resume_view_unlock: "이력서 열람(재인증)",
   staff_create_from_resume: "이력서 → 직원 등록",

@@ -926,13 +926,37 @@ export async function getTeacherScheduleBlocks(
  * (owner 강의실 관리·자동배정 데이터 조회와 동일 관례). error는 삼키지 않는다(`?? []` 금지).
  */
 export type ClassroomLite = { id: string; name: string; capacity: number | null };
+/**
+ * ⚠️ 보관(숨김)된 강의실(0182a)은 **배정이 남아 있으면 계속 보여준다** — 여긴 선택지가 아니라 **지도**다.
+ *    숨겼다고 열을 지우면 그 방에서 도는 수업이 화면에서 통째로 사라진다(숨김의 뜻은 "새로 배정 못 함"이지
+ *    "지금 하는 수업을 감춘다"가 아니다). 참조가 0건인 보관 방만 열에서 뺀다(빈 열 = 노이즈).
+ */
 export async function getClassroomsLite(): Promise<ClassroomLite[]> {
   const supabase = await createClient();
-  const { data, error } = await supabase.from("classrooms").select("id, name, capacity").order("name");
+  const { data, error } = await supabase
+    .from("classrooms")
+    .select("id, name, capacity, archived_at")
+    .order("name");
   if (error) throw error;
-  return (data ?? []).map((r) => ({
-    id: r.id as string,
-    name: r.name as string,
-    capacity: (r.capacity as number | null) ?? null,
-  }));
+  const rows = data ?? [];
+  const archivedIds = rows.filter((r) => r.archived_at != null).map((r) => r.id as string);
+  const used = new Set<string>();
+  if (archivedIds.length) {
+    // 소수(보관 방)만 대상이라 단일 `.in()`으로 충분(414 위험 없음). 독립 조회라 병렬(B4).
+    const [cls, slots] = await Promise.all([
+      supabase.from("classes").select("classroom_id").in("classroom_id", archivedIds),
+      supabase.from("class_schedules").select("classroom_id").in("classroom_id", archivedIds),
+    ]);
+    for (const r of [...(cls.data ?? []), ...(slots.data ?? [])]) {
+      const id = r.classroom_id as string | null;
+      if (id) used.add(id);
+    }
+  }
+  return rows
+    .filter((r) => r.archived_at == null || used.has(r.id as string))
+    .map((r) => ({
+      id: r.id as string,
+      name: r.name as string,
+      capacity: (r.capacity as number | null) ?? null,
+    }));
 }
