@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { createClient } from "@/lib/supabase/server";
 import { getTenantSettings } from "@/features/owner/server/queries";
+import { buildSubjectMaps } from "@/features/owner/subjects";
 import { accessLevelTenant } from "@/lib/auth/perm-matrix";
 import { kstToday } from "@/lib/date-kst";
 import { isHexColor, readableTextColor } from "@/lib/color-utils";
@@ -380,15 +381,61 @@ export async function updateClass(
   }
 
   // 🔴 반 수정에는 그동안 **감사로그가 아예 없었다**(2026-08-04 발견) — 담당·강의실이 언제 누구로
-  //    바뀌었는지 되살릴 근거가 여기서 끊겼다. 무엇이 바뀌었는지만 남긴다(값 자체는 배치 이력이 갖는다).
-  //    best-effort라 실패해도 저장을 막지 않는다.
-  const changed: string[] = [];
-  if (archiveRows.length > 0) changed.push("수업 배치");
-  if (before && before.teacher_id !== input.teacherId) changed.push("담임");
-  if (before && before.classroom_id !== input.classroomId) changed.push("강의실");
-  if (before && before.class_name !== input.className) changed.push("반 이름");
-  if (before && before.subject !== input.subject) changed.push("과목");
-  if (changed.length > 0) {
+  //    바뀌었는지 되살릴 근거가 여기서 끊겼다. best-effort라 실패해도 저장을 막지 않는다.
+  //
+  // 🔴 2026-08-05: 항목 이름만 남겨서 이력이 "변경: 강의실"이었다 — **어디서 어디로 바뀌었는지가 없어**
+  //    이력으로서 거의 쓸모가 없었다(원장: *"강의실만 딸랑 남기지말고 어디서 → 어디로 이렇게. 담당도"*).
+  //    이제 항목마다 이전값·이후값을 함께 남긴다.
+  const teacherChanged = !!before && before.teacher_id !== input.teacherId;
+  const roomChanged = !!before && before.classroom_id !== input.classroomId;
+  const nameChanged = !!before && before.class_name !== input.className;
+  const subjectChanged = !!before && before.subject !== input.subject;
+
+  // ⚠️ 이름은 **바뀌는 이 시점에 박아 둔다**(denormalize). id만 남기면 나중에 강의실이 지워지거나
+  //    개명됐을 때 그날의 사실이 사라지고, 읽는 화면마다 별도 조회를 달아야 한다(감사 화면엔 강의실
+  //    이름 맵이 아예 없다). 감사로그는 "그때 그랬다"를 적는 곳이라 당시 이름이 옳다.
+  const userIds = [before?.teacher_id, input.teacherId].filter((v): v is string => !!v);
+  const roomIds = [before?.classroom_id, input.classroomId].filter((v): v is string => !!v);
+  const [userRes, roomRes] = await Promise.all([
+    teacherChanged && userIds.length > 0
+      ? supabase.from("users").select("id, display_name").in("id", userIds)
+      : Promise.resolve(null),
+    roomChanged && roomIds.length > 0
+      ? supabase.from("classrooms").select("id, name").in("id", roomIds)
+      : Promise.resolve(null),
+  ]);
+  const userName = new Map((userRes?.data ?? []).map((u) => [u.id as string, (u.display_name as string) || ""]));
+  const roomName = new Map((roomRes?.data ?? []).map((r) => [r.id as string, (r.name as string) || ""]));
+  const pick = (map: Map<string, string>, key: string | null | undefined) =>
+    key ? (map.get(key) ?? null) : null;
+
+  const changes: Array<{ field: string; from?: string | null; to?: string | null }> = [];
+  // 배치는 짝이 되는 한 쌍이 아니다(교시 여러 개가 한꺼번에 바뀐다) — 상세는 배치 구간 이력이 갖는다.
+  if (archiveRows.length > 0) changes.push({ field: "수업 배치" });
+  if (teacherChanged)
+    changes.push({
+      field: "담임",
+      from: pick(userName, before?.teacher_id),
+      to: pick(userName, input.teacherId),
+    });
+  if (roomChanged)
+    changes.push({
+      field: "강의실",
+      from: pick(roomName, before?.classroom_id),
+      to: pick(roomName, input.classroomId),
+    });
+  if (nameChanged) changes.push({ field: "반 이름", from: before?.class_name ?? null, to: input.className });
+  if (subjectChanged) {
+    // 과목 라벨은 학원설정이 단일 소스(하드코딩 금지). 캐시된 조회라 저장 경로에 부담이 없다.
+    const subjects = buildSubjectMaps((await getTenantSettings()).operations.subjects);
+    changes.push({
+      field: "과목",
+      from: before?.subject ? subjects.labelOf(before.subject) : null,
+      to: input.subject ? subjects.labelOf(input.subject) : null,
+    });
+  }
+
+  if (changes.length > 0) {
     await logAction({
       action: "class_update",
       targetType: "class",
@@ -397,8 +444,10 @@ export async function updateClass(
       // 이 로그를 같은 전이 목록으로 읽는다. 안 남기면 폼으로 바꾼 교체가 이력에서 통째로 빠진다.
       metadata: {
         classId: id,
-        changed,
-        ...(before && before.teacher_id !== input.teacherId ? { newTeacherId: input.teacherId } : {}),
+        // `changed`(항목 이름만)는 옛 형식 — 이미 쌓인 행과 모양이 같아야 하므로 그대로 함께 남긴다.
+        changed: changes.map((c) => c.field),
+        changes,
+        ...(teacherChanged ? { newTeacherId: input.teacherId } : {}),
       },
     });
   }
