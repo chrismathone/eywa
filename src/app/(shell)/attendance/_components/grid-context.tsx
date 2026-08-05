@@ -300,7 +300,13 @@ export function GridProvider({
       const t = e.target as HTMLElement | null;
       // 칸의 인라인 input은 자기 onKeyDown이 처리한다. 그 밖의 입력칸·드롭다운·팝오버 안에서는 비켜선다 —
       // 안 그러면 활성 칸이 남아 있는 동안 필터 드롭다운의 방향키까지 격자가 가로챈다.
-      if (t?.closest('input, textarea, select, [contenteditable="true"], [role="listbox"], [role="menu"], [role="dialog"]'))
+      // 🔴 버튼·링크도 비켜야 한다: 여기서 Enter를 preventDefault하면 브라우저가 그 키로 만들던 click이
+      //    통째로 취소돼 **반 접기 버튼이 키보드로 안 눌린다**(활성 칸이 있는 동안 내내).
+      if (
+        t?.closest(
+          'input, textarea, select, button, a[href], [role="button"], [contenteditable="true"], [role="listbox"], [role="menu"], [role="dialog"]',
+        )
+      )
         return;
       const mod = e.ctrlKey || e.metaKey;
       const key = cellKey(active.row, active.col);

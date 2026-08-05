@@ -21,7 +21,7 @@ import { QuickOpenPanel } from "./_components/quick-open-panel";
 import { MatrixTable, buildGridSource, type MatrixGroup } from "./_components/matrix-table";
 import { GridProvider } from "./_components/grid-context";
 import { LiveStats } from "./_components/live-totals";
-import { attHref, type RangeKey, type ViewMode } from "./_components/att-href";
+import { attHref, resolveViewMode, type RangeKey, type ViewMode } from "./_components/att-href";
 
 export const metadata = { title: "출석부 — eywa" };
 
@@ -82,14 +82,11 @@ export default async function AttendancePage({
    * 들어가게 하면 매번 두 번 클릭이고, 반을 옮겨 다니며 출결을 찍는 실제 동선과도 안 맞는다.
    * ⚠️ 반을 명시한 링크(`class=`)와 명시적 `mode=`는 그대로 존중한다. 관리자는 종전대로 선택 허브.
    */
-  const requestedMode: ViewMode =
-    modeParam === "teacher"
-      ? "teacher"
-      : modeParam === "class"
-        ? "class"
-        : myTeacherId && !classParam
-          ? "teacher"
-          : "class";
+  const requestedMode: ViewMode = resolveViewMode({
+    modeParam,
+    classParam,
+    isTeacher: !!myTeacherId,
+  });
 
   // 반 목록(경량) — classId 없이 부르면 무거운 출석 데이터는 안 불러온다(렉 방지). 과목→강사→반 계층·선택지 도출용.
   // 학원설정·보기설정과는 서로 독립이라 병렬로(B4 — 독립 await는 Promise.all).
@@ -164,8 +161,10 @@ export default async function AttendancePage({
   // ⚠️ 강사 전체 보기라도 **반별 보기와 같은 쿼리**(getMonthlyAttendanceMatrix)를 반마다 부른다 —
   //    급여에 쓰는 숫자라 두 화면이 다른 계산을 하면 안 된다(파생 규칙·시수 합 전부 한 소스).
   //    반 수만큼 병렬 호출이라 '전체 반'(108개)이 아니라 **한 강사분**(실측 최대 10반)일 때만 허용한다.
+  // ⚠️ `allClasses`가 아니라 **과목으로 좁힌 목록**에서 고른다 — 안 그러면 과목 칩을 눌러도 전체 보기엔
+  //    다른 과목 반이 그대로 남아 필터가 거짓말을 한다(강사가 기본으로 이 화면에 들어오면서 더 잘 보인다).
   const teacherClasses = effectiveTeacher
-    ? allClasses.filter((c) => c.teacherId === effectiveTeacher)
+    ? classesForSubject.filter((c) => c.teacherId === effectiveTeacher)
     : [];
   const mode: ViewMode = requestedMode === "teacher" && teacherClasses.length > 0 ? "teacher" : "class";
   const teacherMatrices =
@@ -317,7 +316,7 @@ export default async function AttendancePage({
         {/* 월 navigator */}
         <div className="flex items-center gap-1.5">
           <Link
-            href={attHref({ classId: effectiveClassId, month: prevMonth, range, teacherId: effectiveTeacher, subjectId: effectiveSubject })}
+            href={attHref({ classId: effectiveClassId, month: prevMonth, range, teacherId: effectiveTeacher, subjectId: effectiveSubject, mode })}
             className="border-line hover:bg-bg-soft inline-flex size-7 items-center justify-center rounded-full border"
             aria-label="이전 달"
           >
@@ -327,7 +326,7 @@ export default async function AttendancePage({
             {formatMonth(month)}
           </span>
           <Link
-            href={attHref({ classId: effectiveClassId, month: nextMonth, range, teacherId: effectiveTeacher, subjectId: effectiveSubject })}
+            href={attHref({ classId: effectiveClassId, month: nextMonth, range, teacherId: effectiveTeacher, subjectId: effectiveSubject, mode })}
             className="border-line hover:bg-bg-soft inline-flex size-7 items-center justify-center rounded-full border"
             aria-label="다음 달"
           >
