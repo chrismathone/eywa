@@ -71,6 +71,9 @@ export function MakeeduSyncNowButton() {
           "· eywa에서 입력한 내용을 makeedu로 보내는 기능이 아닙니다(가져오기 전용).\n" +
           "· 구글시트·노션과는 무관합니다."
         }
+        // 🔴 이 className을 지우지 말 것 — title을 추가하면서 통째로 날렸다가 버튼이 깨졌다
+        // (2026-08-05: 테두리·크기가 사라지고 `inline-flex`가 빠져 아이콘이 라벨 위로 올라갔다).
+        className="border-line text-text-dim hover:bg-bg-soft hover:text-foreground inline-flex shrink-0 items-center gap-1 rounded border px-1.5 py-0.5 text-[11px] whitespace-nowrap transition disabled:cursor-default disabled:opacity-60 disabled:hover:bg-transparent"
       >
         {pending ? (
           <Loader2 className="size-3 animate-spin" aria-hidden />

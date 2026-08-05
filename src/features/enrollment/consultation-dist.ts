@@ -73,6 +73,47 @@ export type ConsultRow = {
   enrolled: boolean;
 };
 
+/**
+ * 학교를 특정할 수 없는 표기를 **버킷 하나로** 모은다(원장 2026-08-05: *"예비초는 하나로 묶고,
+ * 미상(기타)도 하나로 묶자. 예비중등도 하나로 묶고 그런식으로"*).
+ *
+ * 안 묶으면 `예비칠성초`·`예비침산초`·`XX초`·`아무개`·`.`가 **각각 한 줄씩** 차지해 진짜 학교가
+ * 목록 아래로 밀린다(실측: 매칭 실패 74종 220건, 그중 `XX초` 하나가 62건).
+ *
+ * ⚠️ **실제 학교는 절대 여기로 보내지 않는다** — `사대부초`(7건)·`대구공고`(3건)처럼 약칭이라
+ * 공시에 못 붙는 것들은 그대로 남겨야 한다. 묶어 버리면 진짜 학교가 '미상'에 숨는다.
+ * 그래서 판정은 **이름 모양**으로만 한다(예비/미취학/익명 자리표시), "공시에 없으면 미상"이 아니다.
+ */
+export function schoolBucket(raw: string | null): string | null {
+  const s = String(raw ?? "").replace(/\s+/g, "");
+  if (!s || s === "." || /^[.\-_]+$/.test(s)) return "학교 미상";
+  // 미취학 — 7세·6세·유치·유아
+  if (/^\d세$/.test(s) || /^(유치|유아|미취학)/.test(s)) return "미취학";
+  // 예비(입학 예정) — 급까지 갈라 준다
+  if (s.startsWith("예비")) {
+    const rest = s.slice(2);
+    if (/고/.test(rest)) return "예비 고등";
+    if (/중/.test(rest)) return "예비 중등";
+    if (/초/.test(rest)) return "예비 초등";
+    return "예비 (급 미상)";
+  }
+  // 익명 자리표시 — "XX초"·"xx중"·"아무개". 급이 붙어 있어도 학교를 모르는 건 마찬가지다.
+  if (/^(xx|XX|ㅇㅇ|00|--)/.test(s) || /^아무개/.test(s)) return "학교 미상";
+  // 급만 적힌 것 — "초등"·"중등"(어느 학교인지 없다)
+  if (/^(초등|중등|고등)$/.test(s)) return "학교 미상";
+  return null; // 실제 학교로 본다
+}
+
+/** 묶음 버킷은 지표가 아니라 데이터 품질 표시 — 목록 맨 뒤로 보낸다. */
+export const SCHOOL_BUCKETS = new Set([
+  "학교 미상",
+  "미취학",
+  "예비 초등",
+  "예비 중등",
+  "예비 고등",
+  "예비 (급 미상)",
+]);
+
 export type SchoolBar = {
   key: string;
   label: string;
@@ -99,7 +140,8 @@ export function buildSchoolBars(
 ): SchoolBar[] {
   const acc = new Map<string, { label: string; n: number; enrolled: number }>();
   for (const r of rows) {
-    const key = normalizeSchoolName(r.school);
+    // 예비/미취학/익명 자리표시는 버킷 하나로 — 안 묶으면 각각 한 줄씩 차지해 진짜 학교를 밀어낸다.
+    const key = schoolBucket(r.school) ?? normalizeSchoolName(r.school);
     if (!key) continue;
     const cur = acc.get(key);
     if (cur) {
@@ -114,14 +156,33 @@ export function buildSchoolBars(
     const t = totals?.get(key) ?? null;
     out.push({
       key,
-      // 공시명이 있으면 정식 명칭으로("침산초" → "대구침산초등학교") — 같은 학교를 한 이름으로 부른다.
-      label: t?.name ?? v.label,
-      kind: (t?.kind as "초" | "중" | "고" | undefined) ?? null,
+      // 🔴 공시가 없을 땐 **원문이 아니라 정규화 키**를 쓴다. 원문을 쓰면 같은 목록에 `침산초등학교`와
+      // `달성초`가 섞여 나온다 — 집계는 이미 합쳐져 있는데 이름만 그때그때 처음 본 표기를 따라간 것
+      // (원장 2026-08-05 지적). 키는 항상 짧은 형태(`침산초`)라 목록이 한 규칙으로 읽힌다.
+      // 공시가 있으면 정식 명칭이 더 정확하므로 그걸 우선한다.
+      label: t?.name ?? (SCHOOL_BUCKETS.has(key) ? key : key),
+      // 공시가 없어도 급은 이름 끝 글자로 안다 — 안 그러면 막대가 전부 회색이 된다.
+      kind: (t?.kind as "초" | "중" | "고" | undefined) ?? kindFromKey(key),
       n: v.n,
       enrolled: v.enrolled,
       total: t?.total ?? null,
       rate: t?.total ? Math.round((v.n / t.total) * 1000) / 10 : null,
     });
   }
-  return out;
+  // 묶음 버킷(미상·예비·미취학)은 지표가 아니라 데이터 품질 표시 — 항상 맨 뒤로.
+  return out.sort((a, b) => {
+    const ab = SCHOOL_BUCKETS.has(a.key) ? 1 : 0;
+    const bb = SCHOOL_BUCKETS.has(b.key) ? 1 : 0;
+    return ab - bb;
+  });
+}
+
+/** 정규화 키 끝 글자로 학교급 추론(`침산초`→초). 묶음 버킷·판단 불가는 null. */
+function kindFromKey(key: string): "초" | "중" | "고" | null {
+  if (SCHOOL_BUCKETS.has(key)) return null;
+  const last = key.at(-1);
+  if (last === "초") return "초";
+  if (last === "중") return "중";
+  if (last === "고" || key.endsWith("여상")) return "고";
+  return null;
 }

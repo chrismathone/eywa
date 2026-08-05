@@ -20,7 +20,7 @@ import {
 } from "@/features/enrollment/server/queries";
 import { Pagination } from "@/components/pagination";
 import { kstToday } from "@/lib/date-kst";
-import { parseRange } from "@/features/enrollment/range";
+import { parseRange, parseStatsPeriod, periodRange } from "@/features/enrollment/range";
 import {
   getEnrollmentStats,
   getConsultationDistribution,
@@ -95,8 +95,9 @@ export default async function EnrollmentPage({
     viewParam === "table" ? "table" : viewParam === "stats" ? "stats" : "kanban";
   // 통계뷰 전용 — 연도 선택. `all` = 전체 기간(원장 2026-08-05). 여기엔 "최대 1년" 상한이 없다
   // (집계라 행을 안 가져온다 — 칸반·목록의 상한은 행 로딩 때문이라 여기와 무관).
-  const statsYear: number | null =
-    yearParam === "all" ? null : Number(yearParam) || new Date(kstToday()).getFullYear();
+  const statsPeriod = parseStatsPeriod(yearParam, Number(kstToday().slice(0, 4)));
+  // 단일 연도면 그 해, 기간 프리셋이면 null(라벨·비율 판정에 쓴다).
+  const statsYear: number | null = statsPeriod.kind === "year" ? statsPeriod.year : null;
   const page = Math.max(1, Number(pageParam) || 1);
   // 🔴 기본 = 최근 3개월. '전체'는 고를 수 없고 구간은 최대 1년(원장 2026-08-04) — 이관으로 3년치가
   // 쌓여 전건을 열면 칸반이 카드 2,197장이 된다. 알 수 없는 값이 와도 parseRange가 3개월로 되돌린다.
@@ -134,10 +135,11 @@ export default async function EnrollmentPage({
       getConsultationTotalCount(),
     ]);
   // 연도 범위를 안 뒤에 통계를 조회한다(전체 기간이 어디부터인지 알아야 한다). 둘은 서로 독립이라 병렬.
-  const span =
+  const available =
     statsYears.length > 0
       ? { from: Math.min(...statsYears), to: Math.max(...statsYears) }
-      : undefined;
+      : { from: Number(kstToday().slice(0, 4)), to: Number(kstToday().slice(0, 4)) };
+  const span = periodRange(statsPeriod, available);
   const [stats, dist] =
     view === "stats"
       ? await Promise.all([
@@ -166,7 +168,7 @@ export default async function EnrollmentPage({
   // 필터는 보존하고 page만 갈아끼운다. p===1이면 page= 자체를 안 넣어야 필터 변경 href와 모양이 같아진다
   // (필터·검색·월이동 href는 page를 안 넣으므로 자동으로 1페이지로 리셋된다 — 페이지네이션 표준).
   // 통계뷰 연도 링크 — 목록 필터(월·기간·검색)는 통계와 무관해 싣지 않는다(섞이면 "무엇을 보고 있는지"가 흐려진다).
-  const yearHref = (y: number | "all"): string => `/enrollment?view=stats&year=${y}`;
+  const yearHref = (v: string | number): string => `/enrollment?view=stats&year=${v}`;
 
   const pageHref = (p: number): string => {
     const params = new URLSearchParams();
@@ -261,16 +263,22 @@ export default async function EnrollmentPage({
             <div className="flex items-center gap-1.5">
               <span className="micro shrink-0">연도</span>
               <div className="border-line inline-flex items-center gap-0.5 rounded-full border p-0.5">
-                <Link
-                  href={yearHref("all")}
-                  className={`rounded-full px-2.5 py-1 text-xs transition ${
-                    statsYear === null
-                      ? "bg-foreground text-background font-medium"
-                      : "text-text-dim hover:text-foreground hover:bg-bg-soft"
-                  }`}
-                >
-                  전체
-                </Link>
+                {/* 기간 프리셋 — 최대 3개년(원장 2026-08-05). '전체'는 없앴다: 해가 갈수록 구간이
+                    무한히 길어져 화면이 계속 빽빽해진다. 상한을 두면 눈금 압축(월→분기)과 맞물려
+                    몇 년이 지나도 같은 밀도로 읽힌다. */}
+                {[2, 3].map((n) => (
+                  <Link
+                    key={`${n}y`}
+                    href={yearHref(`${n}y`)}
+                    className={`rounded-full px-2.5 py-1 text-xs transition ${
+                      statsPeriod.kind === "span" && statsPeriod.years === n
+                        ? "bg-foreground text-background font-medium"
+                        : "text-text-dim hover:text-foreground hover:bg-bg-soft"
+                    }`}
+                  >
+                    {n}개년
+                  </Link>
+                ))}
                 {statsYears.map((y) => (
                   <Link
                     key={y}

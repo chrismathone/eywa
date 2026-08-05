@@ -4,6 +4,10 @@ import type { ConsultationDistribution, EnrollmentStats } from "@/features/enrol
 import { StatsTrend } from "./stats-trend";
 import { ConsultDistPanel } from "./consult-dist-panel";
 import { GRADE_UNKNOWN } from "@/features/enrollment/consultation-dist";
+import { pickGranularity } from "@/features/enrollment/trend-buckets";
+
+/** 추세 눈금 단위 표기 — 무엇을 보고 있는지 숨기지 않는다. */
+const GRAN_LABEL = { month: "월별", quarter: "분기별", year: "연별" } as const;
 import type { SchoolStatsPrefs } from "@/features/enrollment/school-view-prefs";
 
 const won = (n: number) => `${Math.round(n).toLocaleString("ko-KR")}원`;
@@ -94,7 +98,9 @@ export function StatsView({
       <Card
         title={year === null ? "전체 기간 월별 상담·등록" : `${year}년 월별 상담·등록`}
         sub={
-          stats.prevYearMonths.some((m) => m.total > 0)
+          year === null
+            ? `${GRAN_LABEL[pickGranularity(stats.months.length)]} 추세 · 상담·등록 선과 전환율(오른쪽 축)`
+            : stats.prevYearMonths.some((m) => m.total > 0)
             ? `점선 = ${(year ?? 0) - 1}년 상담 건수(전년 동월 비교) · 금색 선 = 전환율(오른쪽 축)`
             : year === null
               ? "금색 선 = 전환율(오른쪽 축) · 전체 기간에는 전년 동월 비교가 성립하지 않아 표시하지 않습니다"
