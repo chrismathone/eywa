@@ -202,7 +202,7 @@ export function ReportCard({
   return (
     // @container — 아래 본문 2열 분기는 **창 폭이 아니라 이 카드 폭** 기준(3열 그리드 안이라 브레이크포인트가 안 맞음).
     <div className="bg-card border-line shadow-card @container flex flex-col rounded-2xl border">
-      <header className="border-line border-b px-4 py-3">
+      <header className="border-line border-b px-3 py-2.5">
         <div className="flex items-center justify-between">
           <div>
             <p className="micro text-text-faint">
@@ -261,19 +261,23 @@ export function ReportCard({
       </header>
 
       {/* 카드 폭(@container)에 따라 1 → 2 → 3열. 세로로만 쌓으면 보고서 열만 끝없이 길어진다(원장 지적 07-21).
-          3열(@5xl≥1024px) = **오늘 진도·테스트 / 그 밖의 입력 / 문장 작성·발송** — 진도·테스트가 이 카드로
-          합쳐지면서(2026-08-05) 열이 하나 늘었다. 2열(@2xl)에선 진도·테스트가 첫 열 위에 얹힌다.
+          2열(@2xl≥672px) = **입력 전부(진도·테스트·교재·태도·과제·메모) / 문장 작성·발송**.
+          🔴 3열이었다가 2열로 되돌렸다(2026-08-05 원장): 열을 셋으로 벌리면 카드가 넓어야 해서
+             **미리보기가 우측에 설 폭이 안 나온다**. 문장·발송 열은 0.78fr로 **좁게** 둔다(원장:
+             "멘트 자동완성 및 첨부 섹션은 가로 너비를 좀 줄여서") — 그만큼이 미리보기 몫이 된다.
           ⚠️ **학부모 미리보기는 이 카드 안이 아니라 페이지 열이다** — 카드 안에 두면 카드 폭을 입력과
              나눠 써서, 보고서 열이 좁은 화면에선 입력까지 1열로 찌그러졌다. */}
-      <div className="grid flex-1 grid-cols-1 items-start gap-3 px-4 py-3 @2xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)] @2xl:gap-x-4 @5xl:grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)_minmax(0,1.2fr)]">
+      <div className="grid flex-1 grid-cols-1 items-start gap-2.5 px-3 py-2.5 @[560px]:grid-cols-[minmax(0,1fr)_minmax(0,0.78fr)] @[560px]:gap-x-3">
         {/* 1열 — 오늘 진도 · 테스트(옛 가운데 열). 원장 2026-08-05: *"이걸 하나의 섹션으로 합쳐버리면
             안되나? 공간낭비 최소화할 수 있게? 굳이 따로 할 필요 있나?"* 카드를 따로 세우니 열 하나가
             콘텐츠보다 훨씬 길어 아래가 통째로 비었고, 게다가 이 카드 맨 위 요약(오늘 진도/일일/확인/
             태도·과제)이 **그 카드와 같은 값을 두 번** 보여주고 있었다 → 요약(MiniSummary)은 삭제하고
             진짜 입력을 여기로 들였다. */}
-        {todayInputs ? <div className="flex flex-col gap-3">{todayInputs}</div> : null}
-
         <div className="flex flex-col gap-3">
+        {/* 오늘 진도·테스트 — **입력 열의 맨 위**. 원장 2026-08-05: *"메모 입력파트까지 1개의 섹션으로
+            합쳐도 될거같고"* — 진도·테스트를 따로 세우면 열이 하나 더 필요해 미리보기가 우측에 설 폭이
+            안 나온다. 입력은 진도→테스트→교재→태도→과제→메모까지 **한 열**로 세로 흐름. */}
+        {todayInputs}
 
         {/* 교재명·보강·출결 — edutrix 강사 필드 패리티(0089a). 교재명은 학부모 카드에도 표시(설정 토글). */}
         <div className="flex flex-col gap-1.5">

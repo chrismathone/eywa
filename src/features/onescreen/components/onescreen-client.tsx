@@ -2147,7 +2147,14 @@ export function OneScreenClient({
          `@container` 폭에 따라 1 → 2 → 3열(진도·테스트 / 그 밖의 입력 / 문장·발송)로 펼쳐진다.
          미리보기 열(≥1680px)은 **544px 고정** — 학부모가 받는 실제 이미지 폭(512px + 패딩)이라 늘리거나
          줄이면 "실제 크기"가 거짓이 된다. 그보다 좁으면 미리보기는 아래 전체폭 행으로 내려간다. */
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[240px_minmax(0,1fr)] lg:items-start 2xl:grid-cols-[260px_minmax(0,1fr)] 3xl:grid-cols-[260px_minmax(0,1fr)_544px]">
+      /* 🔴 **미리보기는 항상 우측**(원장 2026-08-05: 좁은 창에서 아래로 밀리는 게 싫다 — "아래쪽보다
+         우측에 있어서 스크롤처리하고싶네"). 그래서 `lg` 이상에선 3열을 **고정 폭으로 유지**하고, 창이
+         좁으면 열을 접는 대신 **가로로 스크롤**된다(`lg:min-w`). 세로로 접히는 건 진짜 작은 화면(<lg)뿐.
+         ⚠️ 스크롤 래퍼를 새로 만들면 안 된다 — 셸의 `<main>`이 이미 `overflow-auto` 스크롤 컨테이너라
+            여기에 `overflow-x-auto`를 하나 더 두면 **학생목록의 `lg:sticky`가 그 래퍼 기준이 되어 깨진다**
+            (높이가 콘텐츠만큼이라 붙을 자리가 없다). min-w만 주면 main이 알아서 가로 스크롤한다.
+         최소폭 = 학생 240 + 보고서 590(카드 좌우 패딩 24 + 내부 2열 분기 560) + 미리보기 544 + gap 32 + 여유. */
+      <div className="grid grid-cols-1 gap-4 lg:min-w-[1420px] lg:grid-cols-[240px_minmax(590px,1fr)_544px] lg:items-start">
         <StudentList
           students={visible}
           selId={effectiveId}
@@ -2246,7 +2253,7 @@ export function OneScreenClient({
             {/* 4열째 — 학부모가 받는 화면 그대로(실시간). ≥1680px에서만 옆에 서고, 그보다 좁으면
                 아래 전체폭 행으로 내려간다(나란히 둘 자리가 없을 때 억지로 끼우면 양쪽 다 찌그러진다). */}
             {previewCtx && previewSubject ? (
-              <div className="col-span-full 3xl:col-span-1 3xl:sticky 3xl:top-2">
+              <div>
                 <ReportPreview
                   ctx={previewCtx}
                   student={selected}
