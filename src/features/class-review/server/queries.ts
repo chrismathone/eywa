@@ -12,6 +12,7 @@ import {
   type ScoreSheet,
   type SheetTotals,
 } from "../checklist";
+import { normalizeClassReviewFilter, type ClassReviewFilter } from "../list-filter";
 
 // 수업 평가(참관) 저장 = academy_documents 행(kind='form', form_type='class_review') 재사용 — 새 테이블·SQL 0.
 // staff_user_id = 평가 대상 강사(직원 연결이라 /documents 표면에선 자동 제외, #77 벽 공유), restricted=true.
@@ -86,7 +87,7 @@ export function observerColumns(doc: ReviewDoc): { slot: string; name: string }[
       .filter(([slot]) => slot !== "self")
       .sort((a, b) => String(a[1].submittedAt ?? "").localeCompare(String(b[1].submittedAt ?? "")))
       .slice(0, OPEN_MODE_OBSERVER_LIMIT)
-      .map(([slot, sheet]) => ({ slot, name: sheet.by?.name ?? "참관자" }));
+      .map(([slot, sheet]) => ({ slot, name: sheet.by?.name ?? "평가자" }));
   }
   return doc.evaluators
     .filter((e) => e.kind === "observer")
@@ -129,7 +130,7 @@ async function requireRead() {
 
 /**
  * 실명 열람·문항 편집 자격 — **원장(master) + class_review 개인 예외 인원**(원장 지시 2026-08-04).
- * 그 외(향후 역할 개방 시 강사 등)는 평가자 이름이 '참관자 A/B/C'로 익명화된다.
+ * 그 외(향후 역할 개방 시 강사 등)는 평가자 이름이 '평가자 A/B/C'로 익명화된다.
  */
 export async function getReviewPrivileges(user: CurrentUser): Promise<{ seeNames: boolean; editTemplate: boolean }> {
   if (user.systemRole === "master") return { seeNames: true, editTemplate: true };
@@ -142,6 +143,26 @@ export async function getReviewPrivileges(user: CurrentUser): Promise<{ seeNames
   } catch {
     return { seeNames: false, editTemplate: false };
   }
+}
+
+/**
+ * 목록 보기 필터 — 계정 귀속(users.ui_prefs.classReview.listFilter, 뷰 세팅 계정 귀속 원칙).
+ * 조회 실패·깨진 값은 기본값(전체)으로 — 설정 하나 때문에 목록이 안 열리면 안 된다.
+ */
+export async function getMyClassReviewFilter(user: CurrentUser): Promise<ClassReviewFilter> {
+  const { data } = await createAdminClient()
+    .from("users")
+    .select("ui_prefs")
+    .eq("id", user.id)
+    .eq("tenant_id", user.tenantId)
+    .maybeSingle();
+  const raw = data?.ui_prefs as Record<string, unknown> | null;
+  const ns = raw?.classReview;
+  const listFilter =
+    ns && typeof ns === "object" && !Array.isArray(ns)
+      ? (ns as Record<string, unknown>).listFilter
+      : undefined;
+  return normalizeClassReviewFilter(listFilter);
 }
 
 /** 현재 문항 세트 — 커스텀 템플릿이 있고 유효하면 그것, 아니면 내장 문항. */

@@ -9,6 +9,11 @@ import { humanizeDbError } from "@/lib/supabase/db-error";
 import { logAction } from "@/features/audit/server/log";
 import { itemCountOf, normalizeScore, sanitizeAreas } from "../checklist";
 import {
+  DEFAULT_CLASS_REVIEW_FILTER,
+  normalizeClassReviewFilter,
+  type ClassReviewFilter,
+} from "../list-filter";
+import {
   CLASS_REVIEW_FORM_TYPE,
   CLASS_REVIEW_TEMPLATE_FORM_TYPE,
   getChecklistAreas,
@@ -159,7 +164,7 @@ export async function submitClassReviewScores(
     const observers = observerColumns({ ...doc, id: docId, createdAt: "" });
     const mineAlready = observers.some((o) => o.slot === gate.user.id) || !!doc.submissions?.[gate.user.id];
     if (!mineAlready && observers.length >= OPEN_MODE_OBSERVER_LIMIT) {
-      return { error: `참관자 ${OPEN_MODE_OBSERVER_LIMIT}명이 이미 채점을 마쳤습니다 (선착순 마감)` };
+      return { error: `평가자 ${OPEN_MODE_OBSERVER_LIMIT}명이 이미 채점을 마쳤습니다 (선착순 마감)` };
     }
     slot = gate.user.id;
   } else {
@@ -191,6 +196,53 @@ export async function submitClassReviewScores(
   revalidatePath(`/class-review/${docId}`);
   revalidatePath("/class-review");
   return { ok: true, notice: "채점을 저장했습니다" };
+}
+
+/**
+ * 목록 보기 필터를 본인 계정에 저장 — users.ui_prefs.classReview.listFilter(뷰 세팅 계정 귀속 원칙).
+ * 필터링은 클라가 즉시 하므로 revalidate 없음 — 이 저장은 다음 방문용 영속화일 뿐이다.
+ * 게이트는 로그인만(개인 표시 취향 — ECS setMyEcsEnglishTrack과 같은 규약).
+ * ⚠️ ui_prefs는 화면별 네임스페이스 — classReview 키만 갈아끼우고 형제 키(timetable·ecs…)는 보존한다.
+ */
+export async function setMyClassReviewFilter(
+  filter: ClassReviewFilter,
+): Promise<{ ok: boolean; error?: string }> {
+  if (normalizeClassReviewFilter(filter) !== filter) return { ok: false, error: "잘못된 값입니다" };
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, error: "로그인이 필요합니다" };
+
+  const admin = createAdminClient();
+  const { data: row, error: readErr } = await admin
+    .from("users")
+    .select("ui_prefs")
+    .eq("id", user.id)
+    .eq("tenant_id", user.tenantId)
+    .maybeSingle();
+  if (readErr) return { ok: false, error: readErr.message };
+
+  const raw =
+    row?.ui_prefs && typeof row.ui_prefs === "object" && !Array.isArray(row.ui_prefs)
+      ? (row.ui_prefs as Record<string, unknown>)
+      : {};
+  const ns =
+    raw.classReview && typeof raw.classReview === "object" && !Array.isArray(raw.classReview)
+      ? { ...(raw.classReview as Record<string, unknown>) }
+      : {};
+  // 기본값(전체)은 저장하지 않는다 — 빈 값이 쌓이지 않게(타임테이블·ECS와 같은 규약).
+  if (filter === DEFAULT_CLASS_REVIEW_FILTER) delete ns.listFilter;
+  else ns.listFilter = filter;
+
+  const merged = { ...raw };
+  if (Object.keys(ns).length === 0) delete merged.classReview;
+  else merged.classReview = ns;
+
+  const { error } = await admin
+    .from("users")
+    .update({ ui_prefs: merged })
+    .eq("id", user.id)
+    .eq("tenant_id", user.tenantId);
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
 }
 
 /** 참관 건 삭제 — 잘못 만든 건 정리(초안: 쓰기 권한자 누구나). */

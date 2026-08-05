@@ -20,7 +20,7 @@ export const metadata = { title: "수업 평가 상세 — eywa" };
 
 /**
  * 참관 상세 — 시트 모양의 문항×평가자 매트릭스 + 영역 소계 + 총점/환산/등급 + 내 채점.
- * 평가자 실명은 **원장·지정 인원만**(원장 지시 2026-08-04) — 그 외는 '참관자 A/B/C'로 익명화.
+ * 평가자 실명은 **원장·지정 인원만**(원장 지시 2026-08-04) — 그 외는 '평가자 A/B/C'로 익명화.
  */
 export default async function ClassReviewDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const viewer = await requireAccess("class_review");
@@ -35,8 +35,8 @@ export default async function ClassReviewDetailPage({ params }: { params: Promis
   const subjects = buildSubjectMaps(settings.operations.subjects);
   const openMode = doc.header.observerMode === "open";
 
-  // 열 = 관찰자들(지정 순서 또는 선착순 제출 순서) + 본인. 익명화 시 관찰자 이름 → 참관자 A/B/C.
-  const anon = (i: number) => `참관자 ${String.fromCharCode(65 + i)}`;
+  // 열 = 관찰자들(지정 순서 또는 선착순 제출 순서) + 본인. 익명화 시 관찰자 이름 → 평가자 A/B/C.
+  const anon = (i: number) => `평가자 ${String.fromCharCode(65 + i)}`;
   const observerCols = observerColumns(doc).map((c, i) => ({
     slot: c.slot,
     label: priv.seeNames ? c.name : anon(i),
@@ -66,7 +66,7 @@ export default async function ClassReviewDetailPage({ params }: { params: Promis
 
   const headerBits = [
     doc.header.subject ? subjects.labelOf(doc.header.subject) : null,
-    openMode ? "선착순 3명" : "참관자 지정",
+    openMode ? "선착순 3명" : "평가자 지정",
   ].filter(Boolean);
 
   return (
@@ -219,10 +219,10 @@ export default async function ClassReviewDetailPage({ params }: { params: Promis
         </table>
       </div>
 
-      {/* 참관자 코멘트 — 이름 익명화 규칙 동일 */}
+      {/* 평가자 코멘트 — 이름 익명화 규칙 동일 */}
       {cols.some((c) => c.sheet?.comment) ? (
         <div className="border-line bg-card rounded-2xl border p-5 shadow-card">
-          <p className="micro mb-2">참관자 코멘트</p>
+          <p className="micro mb-2">평가자 코멘트</p>
           <ul className="space-y-2">
             {cols
               .filter((c) => c.sheet?.comment)
@@ -253,7 +253,7 @@ export default async function ClassReviewDetailPage({ params }: { params: Promis
       ) : (
         <p className="text-text-faint text-xs">
           {openMode
-            ? "선착순 참관자 3명이 이미 채점을 마쳐 열람만 가능합니다."
+            ? "선착순 평가자 3명이 이미 채점을 마쳐 열람만 가능합니다."
             : "이 참관 건의 평가자로 지정되어 있지 않아 채점은 열람만 가능합니다."}
         </p>
       )}
