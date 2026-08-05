@@ -1,12 +1,19 @@
 -- 0181a — 진도 글로벌 위치 +130 시프트 (초1·초2 커리큘럼 신설, 2026-08-05).
 --
--- 배경: 진도 위치(`progress_containers.start_position`/`last_position`, `progress_events.global_position`/
--- `from_position`/`to_position`)는 **커리큘럼을 학년순으로 flatten한 1-based 인덱스**다
+-- 배경: 진도 위치는 **커리큘럼을 학년순으로 flatten한 1-based 인덱스**다
 -- (`src/features/progress/curriculum-position.ts`). 즉 **커리큘럼 앞쪽에 학년을 끼워 넣으면 이미 저장된
 -- 숫자가 통째로 다른 차시를 가리킨다.**
 --
 -- 2026-08-05 원장 요청으로 **초1·초2를 맨 앞에 신설**(130차시) → 초3 이후 모든 차시가 +130 밀렸다.
--- 실측 대상: progress_containers 266행 · progress_events 1,236행(전부 초3 이상 = 시프트 대상).
+--
+-- 🔴 위치를 담는 컬럼은 **세 테이블에 흩어져 있다**(드라이런으로 확인 — 처음엔 `progress_entries`를
+--    통째로 빠뜨렸고 컬럼 이름도 틀렸다. 한 곳이라도 빠지면 그 테이블만 옛 좌표계로 남는다):
+--      · progress_containers.start_position / last_position   (266행)
+--      · progress_entries.global_position                     (606행)    ← 회차별 진도 위치
+--      · progress_events.from_position / to_position          (1,236행)  ← 상태 전이 이벤트
+--        (from_position NULL 532건 = 시작 이벤트라 출발점이 없다 — `is not null` 가드로 건너뛴다)
+--    information_schema 기준 위치 컬럼은 이 5개가 전부다(expenses.position·notice_popups.position은 text·무관).
+-- 실측: 전부 1..360(구 커리큘럼 총 차시) 범위 = 전부 시프트 대상, 시프트 후에도 신 총차시 490 이내.
 -- 컨테이너의 `max_jump`·`chapter_count`는 **차이값**이라 시프트해도 불변 → 건드리지 않는다.
 --
 -- 🔴 **재실행 금지 성질의 데이터 마이그레이션**이다(두 번 돌면 +260). alpha는 `pnpm db:alphas`가
@@ -31,6 +38,7 @@ do $$
 declare
   v_shift constant integer := 130;   -- 초1(57) + 초2(73). curriculum-position.test.ts의 ELEM12_LESSONS와 동일해야 한다.
   v_containers integer;
+  v_entries integer;
   v_events integer;
 begin
   insert into migration_data_marks (key, note)
@@ -51,18 +59,21 @@ begin
      set last_position = last_position + v_shift
    where last_position is not null;
 
-  update progress_events
+  update progress_entries
      set global_position = global_position + v_shift
    where global_position is not null;
-  get diagnostics v_events = row_count;
+  get diagnostics v_entries = row_count;
 
   update progress_events
      set from_position = from_position + v_shift
    where from_position is not null;
 
+  -- 건수 보고는 to_position 쪽으로 잰다 — from_position은 시작 이벤트가 NULL이라 전체 건수와 다르다.
   update progress_events
      set to_position = to_position + v_shift
    where to_position is not null;
+  get diagnostics v_events = row_count;
 
-  raise notice '0181a: 진도 위치 +% 시프트 완료 (containers %, events %)', v_shift, v_containers, v_events;
+  raise notice '0181a: 진도 위치 +% 시프트 완료 (containers %, entries %, events %)',
+    v_shift, v_containers, v_entries, v_events;
 end $$;
