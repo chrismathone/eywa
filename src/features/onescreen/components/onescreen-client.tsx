@@ -11,7 +11,9 @@ import { CLASS_TAGS, TODAY } from "../data";
 import { ATTITUDE } from "../attitude";
 import type { OneScreenView } from "../view";
 import { buildSubjectReport, studentStatus } from "../report";
-import { applyTestScoreMode, buildReportCommentInput, formatTestScore } from "../report-comment";
+import { applyTestScoreMode, buildReportCommentInput } from "../report-comment";
+// 저장·미리보기 공용 필드 조립(단일 소스) — 미리보기가 발송본과 갈라지지 않게.
+import { buildExamInfo as buildExamInfoOf, buildReportFields } from "../report-fields";
 import {
   buildMakeupStudent,
   loadMakeupHistory,
@@ -41,6 +43,8 @@ import type { TodayClass } from "../server/roster";
 import { ProgressCard } from "./progress-card";
 import { TestCard } from "./test-card";
 import { ReportCard, type SubjectReport } from "./report-card";
+import type { ReportPreviewContext } from "./report-preview";
+import type { ReportSettings } from "@/features/owner/settings-types";
 import { OneScreenGrid } from "./onescreen-grid";
 import { StatusBoard } from "./status-board";
 import { SendCalendarBoard } from "./send-calendar";
@@ -141,14 +145,9 @@ function reportCell(map: Record<string, SubjectReport> | undefined, subjectCount
 }
 
 /** 오늘 시험·테스트 합본("일일 18/20, 확인 19/20") — exam_info 규격(추세 조립·prev-score 파싱 공용).
- * 미입력·**비활성 테스트(학원설정 off)** 항목은 생략 — 세션에서 복원된 옛 점수가 저장에 새는 것 차단. */
+ * 규격 자체는 report-fields.ts(저장·미리보기 공용 단일 소스)에 있고, 여기선 학생 shape에 맞춰 넘겨준다. */
 function buildExamInfo(st: OneScreenStudent, dailyOn: boolean, checkOn: boolean): string {
-  return [
-    dailyOn && st.tests.daily.score != null ? `일일 ${st.tests.daily.score}/${st.tests.daily.max}` : null,
-    checkOn && st.tests.check.score != null ? `확인 ${st.tests.check.score}/${st.tests.check.max}` : null,
-  ]
-    .filter(Boolean)
-    .join(", ");
+  return buildExamInfoOf(st.tests, dailyOn, checkOn);
 }
 
 /**
@@ -176,6 +175,10 @@ export function OneScreenClient({
   initialFontSize = DEFAULT_ONESCREEN_FONT_SIZE,
   noClassesToday = false,
   showingAll = false,
+  teacherName = "",
+  reportSettings,
+  academyName = "",
+  logoSrc = null,
 }: {
   initial: OneScreenStudent[];
   today?: string;
@@ -199,6 +202,12 @@ export function OneScreenClient({
   initialView?: OneScreenView; // URL(?view=)에서 온 초기 뷰 — 날짜 이동(재마운트) 후에도 보던 뷰 유지
   /** 글씨 크기(내 계정, users.ui_prefs.onescreen.fontSize) — 서버 확정값이라 첫 렌더부터 정확(#75 회피). */
   initialFontSize?: OnescreenFontSize;
+  // ── 카드 뷰 우측 '학부모 미리보기' 재료(2026-08-05) — 전부 서버가 확정해 내린다 ──
+  // reportSettings가 없으면 미리보기 열이 아예 안 열린다(레이아웃 예전 그대로) → 표시 전용 기능이라 안전한 폴백.
+  teacherName?: string;
+  reportSettings?: ReportSettings;
+  academyName?: string;
+  logoSrc?: string | null;
 }) {
   const router = useRouter();
   const [students, setStudents] = useState<OneScreenStudent[]>(initial);
@@ -217,6 +226,23 @@ export function OneScreenClient({
   // 대상 날짜(빈값=오늘). 날짜 이동 = searchParam 네비 → 서버가 그 날짜 로스터 재조회 + key로 클라 재초기화.
   const activeDate = date || kstToday();
   const todayYmd = kstToday();
+  // 카드 뷰 우측 '학부모 미리보기' 재료 — 렌더마다 새 객체를 만들면 카드가 매번 리렌더되므로 메모.
+  // 학원설정(reportSettings)이 안 내려온 경로에선 undefined = 미리보기 열 없음(기존 레이아웃 유지).
+  const previewCtx: ReportPreviewContext | undefined = useMemo(
+    () =>
+      reportSettings
+        ? {
+            settings: reportSettings,
+            academyName,
+            logoSrc,
+            teacherName,
+            reportDate: activeDate,
+            showDailyTest,
+            showCheckTest,
+          }
+        : undefined,
+    [reportSettings, academyName, logoSrc, teacherName, activeDate, showDailyTest, showCheckTest],
+  );
   // 반 공통 서술(G6) — 반 이름→서술. sessionStorage(날짜 키)+외부 스토어(#75 lazy 초기값·#25 effect setState 회피).
   // 생성 재료(기록 아님): 자동작성 시 그 행의 반 서술을 classContext로 동봉, 멘트 생성 후엔 잃어도 무해.
   const classNarratives = useSyncExternalStore(
@@ -1240,39 +1266,24 @@ export function OneScreenClient({
     // ⚠️ 최신 초안은 ref에서(일괄 루프 중 사용자 편집·앞 행 patch 반영) — closure `reports`는 클릭 시점 스냅샷이라 유실 위험(#10).
     const existing = reportsRef.current[student.id]?.[subjectName];
     const draft = existing?.draft ?? "";
-    const trendNote = existing?.trendDraft?.trim() || undefined; // 추세 초안 있으면 함께 저장(없으면 미저장)
-    const examInfo = buildExamInfo(student, showDailyTest, showCheckTest);
-    // 학부모 보고서 일일/확인테스트 분리 표시용("N문제 중 M개"). exam_info(합본)는 roster prev-score 파싱용 별도 보존.
-    // 비활성 테스트(학원설정 off)는 세션에서 복원된 옛 점수가 남아 있어도 저장·발송하지 않는다(입력칸도 숨김 → 새 보고서엔 안 나감).
-    // 표기는 공유 순수함수(0148a) — testLine(AI 멘트)과 같은 포맷이라 "카드는 개수·멘트는 점수" 불일치가 없다.
-    const dailyTest =
-      showDailyTest && student.tests.daily.score != null
-        ? formatTestScore(student.tests.daily.score, student.tests.daily.max, student.tests.daily.mode)
-        : "";
-    const checkTest =
-      showCheckTest && student.tests.check.score != null
-        ? formatTestScore(student.tests.check.score, student.tests.check.max, student.tests.check.mode)
-        : "";
+    // 표시 필드(교재·진도·시험·태도·멘트…)는 **카드 미리보기와 같은 함수**로 만든다(report-fields.ts).
+    // 여기서 따로 조립하면 "화면에 보이던 것"과 "학부모가 받은 것"이 조용히 갈라진다.
+    const fields = buildReportFields({
+      subject: su,
+      homework: student.homework,
+      attitude: student.attitude,
+      tests: student.tests,
+      draft,
+      trendDraft: existing?.trendDraft,
+      showDailyTest,
+      showCheckTest,
+    });
     return {
       draft,
       input: {
         studentId: student.id,
         reportDate: date || undefined, // 대상 날짜(빈값=서버 오늘) — report_date가 곧 카드 표시일·ClassNote 게시일
-        textbook: su?.textbook || "",
-        makeup: su?.makeup ?? false,
-        homeworkToday: su?.homeworkToday || "",
-        // ⚠️ 진도 접두는 **순수 과목 라벨**(subjectLabel) — 행 이름(name)엔 반 이름이 붙을 수 있고
-        //    이 값은 학부모 카드에 그대로 나간다(원장 확정: 보고서에 반은 노출하지 않는다).
-        progress: su ? `${su.subjectLabel || su.name} ${su.today}`.trim() : "",
-        examInfo,
-        homeworkScore: student.homework,
-        dailyTest,
-        checkTest,
-        attitude: student.attitude ?? "",
-        // 모드 B에서 1문단만 비우면 초안이 "\n\n2문단"으로 유지된다(편집 중 글자가 위 칸으로 튀는 것 방지,
-        // comment-paragraphs.ts 불변식). 학부모에게 나가는 값은 여기서 다듬는다 — 앞 빈 줄 금지.
-        notes: draft.trim(),
-        trendNote, // 학습 추세(종합분석) — 4a
+        ...fields,
         // ⚠️ subject는 **과목키**(math)여야 한다 — 발송 과목 게이트·보드 매핑이 이 값을 본다.
         //    행 이름(name)엔 반 이름이 붙을 수 있으므로 폴백도 subjectLabel을 먼저 본다.
         subject: su?.subjectKey || su?.subjectLabel || su?.name || undefined,
@@ -2178,6 +2189,8 @@ export function OneScreenClient({
                 }}
                 // 실효 모드 = 강사 오버라이드 ?? 학원 기본 — 상단 토글이 하단 보고서 입력 구성을 실제로 바꾼다.
                 noticeMode={noticeMode ?? academyNoticeMode}
+                // 우측 학부모 미리보기(2026-08-05) — 표시 재료만. 저장·발송 판정엔 관여하지 않는다.
+                preview={previewCtx}
               />
             </div>
           </>

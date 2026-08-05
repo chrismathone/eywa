@@ -122,7 +122,9 @@ export type AttendanceMark = "출석" | "지각" | "결석";
 export type OneScreenStudent = {
   id: string;
   name: string;
-  grade: string; // 실제 학년 — "초3" ~ "중3"
+  grade: string; // 실제 학년 — "초1" ~ "중3"
+  /** 학교명 — 학부모 보고서 "학교 · 학년" 표기 전용(fmtSchoolGrade). 미상=빈 문자열. */
+  school?: string;
   tag: string; // 필터용 태그 (실데이터=대표 반 이름=최초 반, 데모=학년) — 좌측 그룹 대표
   tags?: string[]; // 이 학생이 수강 중인 담당 반 전체 — 반 필터가 다과목/다반 학생을 양쪽에서 잡도록(누락 방지)
   className?: string; // 강사 담당 반 이름 — 원스크린 좌측 반별 그룹/필터
