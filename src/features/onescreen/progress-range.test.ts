@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { collapseProgressRanges } from "./progress-range";
+import { collapseProgressRanges, progressInline } from "./progress-range";
 import { MONTHLY_EXAM_LABEL } from "./progress-status";
 
 /** 실제 저장 포맷 — 첫 줄만 과목 라벨 접두(buildReportFields). */
@@ -107,5 +107,30 @@ describe("collapseProgressRanges", () => {
   it("접을 게 없으면 입력 문자열을 그대로 돌려준다(개행·공백 보존)", () => {
     const raw = "수학 1-5-1 진분수의 덧셈";
     expect(collapseProgressRanges(raw)).toBe(raw);
+  });
+});
+
+// 멘트(AI 사실 블록 + 폴백 템플릿)용 — 원장 2026-08-05 "진도를 전부 적으면 그것이야말로 스팸".
+describe("progressInline", () => {
+  it("축약 후 남은 줄을 ', '로 이어 한 문장 재료로 만든다", () => {
+    // 라벨 없는 값(su.today) — 멘트 입력은 과목 라벨을 따로 붙인다.
+    const today = 초5_9차시.replace(/^수학 /, "");
+    expect(progressInline(today)).toBe("1-5-1~1-5-4 분수의 덧셈과 뺄셈, 1-6-1~1-6-5 다각형의 둘레와 넓이");
+  });
+
+  it("개행을 절대 남기지 않는다 — 한 문장이 여러 줄로 쪼개지던 회귀(2026-07-22)", () => {
+    expect(progressInline(초5_9차시)).not.toContain("\n");
+    expect(progressInline("평행이동\n원의 방정식")).toBe("평행이동, 원의 방정식");
+  });
+
+  it("축약 대상이 아니면 기존처럼 전부 나열한다(사실 보존)", () => {
+    expect(progressInline("1-6-1 정다각형과 사각형의 둘레\n1-6-5 마름모와 사다리꼴의 넓이")).toBe(
+      "1-6-1 정다각형과 사각형의 둘레, 1-6-5 마름모와 사다리꼴의 넓이",
+    );
+  });
+
+  it("빈 값은 빈 문자열", () => {
+    expect(progressInline(null)).toBe("");
+    expect(progressInline("")).toBe("");
   });
 });

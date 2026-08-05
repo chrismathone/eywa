@@ -145,3 +145,23 @@ export function collapseProgressRanges(progress: string | null | undefined): str
 
   return [head.label, out.join("\n")].filter(Boolean).join(" ");
 }
+
+/**
+ * **한 문장 안에** 넣을 진도 — 물결로 접은 뒤 남은 줄을 `", "`로 잇는다.
+ *
+ * 학부모 멘트(AI 사실 블록 + 폴백 템플릿)용. 원장 2026-08-05: *"멘트도 비슷하게 스마트하게.
+ * 진도를 전부 적으면 그것이야말로 스팸."* — 카드는 접었는데 멘트가 9개를 다 나열하면 같은 스팸이 본문에 남는다.
+ *
+ * 🔴 **적용은 '앞으로 작성되는 멘트'뿐이다**(원장: *"이전 보고서는 이미 발송되었음"*). 멘트는 카드 진도와
+ *    달리 **생성 시점에 문장으로 `lesson_reports.notes`에 저장**되므로, 이미 나간 본문은 그대로 둔다
+ *    (표시할 때 남의 문장을 다시 쓰지 않는다 — 발송된 것과 화면이 달라지면 그게 더 나쁘다).
+ * ⚠️ AI에 넘기는 값이라 접힌 문자열이 곧 모델이 쓸 사실이다. 접기 규칙이 사실을 보존하므로(연속만·모호 제외)
+ *    grounding은 깨지지 않고, **카드와 멘트가 같은 표기**가 된다.
+ */
+export function progressInline(today: string | null | undefined): string {
+  return collapseProgressRanges(today)
+    .split(/\n+/)
+    .map((v) => v.trim())
+    .filter(Boolean)
+    .join(", ");
+}
