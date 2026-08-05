@@ -153,7 +153,8 @@ export function ConsultDistPanel({
             return (
               <li key={s.key}>
                 <div className="flex items-baseline justify-between gap-3 text-sm">
-                  <span className="text-foreground font-medium break-keep">
+                  {/* 라벨은 짧은 표기 하나로 통일(병행표기 금지) — 공시 정식명은 툴팁으로만 남긴다. */}
+                  <span className="text-foreground font-medium break-keep" title={s.officialName ?? undefined}>
                     {s.label}
                     {s.kind ? <span className="text-text-faint ml-1.5 text-[11px]">{s.kind}</span> : null}
                   </span>

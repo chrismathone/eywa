@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { buildSchoolBars, gradeLabel, GRADE_UNKNOWN, sortGradeBars } from "./consultation-dist";
+import {
+  buildSchoolBars,
+  gradeLabel,
+  GRADE_UNKNOWN,
+  SCHOOL_OTHER,
+  schoolBucket,
+  sortGradeBars,
+} from "./consultation-dist";
 
 // 값은 전부 프로덕션 실제 표기(2026 상담 251건에서 발췌).
 describe("gradeLabel — 확실할 때만 분류한다", () => {
@@ -67,13 +74,60 @@ describe("buildSchoolBars", () => {
     expect(bars.every((b) => b.rate === null && b.total === null)).toBe(true);
   });
 
-  it("전교생을 주면 비율과 정식 명칭이 붙는다", () => {
+  it("전교생을 주면 비율이 붙고, 정식 명칭은 **라벨이 아니라 툴팁**으로 간다", () => {
     const totals = new Map([["침산초", { name: "대구침산초등학교", kind: "초", total: 1000 }]]);
     const bars = buildSchoolBars(rows, totals);
     const chimsan = bars.find((b) => b.key === "침산초")!;
-    expect(chimsan.label).toBe("대구침산초등학교");
+    // 🔴 병행표기 금지(원장 2026-08-05) — 공시 학교만 `…초등학교`로 길어지면 한 목록에 표기가 두 가지가 된다.
+    expect(chimsan.label).toBe("침산초");
+    expect(chimsan.officialName).toBe("대구침산초등학교");
     expect(chimsan.rate).toBe(0.3); // 3/1000
     // 공시에 없는 학교는 비율 없이 건수만 — 목록에서 빼지는 않는다(실제 있었던 상담이다).
     expect(bars.find((b) => b.key === "칠성고")!.rate).toBeNull();
+  });
+
+  it("🔴 라벨 표기가 목록 전체에서 한 가지다 — 긴 표기가 섞이면 안 된다", () => {
+    const totals = new Map([["침산초", { name: "대구침산초등학교", kind: "초", total: 1000 }]]);
+    const bars = buildSchoolBars([...rows, { school: "왜관동부초등학교", grade: "2", enrolled: false }], totals);
+    for (const b of bars) expect(b.label, b.key).not.toMatch(/(초등학교|중학교|고등학교)$/);
+  });
+});
+
+describe("schoolBucket — 학교가 존재하는 것만 학교로", () => {
+  it("급으로 끝나지 않으면 기타 — 학교가 아닌 값이 학교 행세를 못 하게", () => {
+    // 전부 프로덕션 실제 값이다.
+    for (const s of ["테스트 06-04", "영선", "폴리", "국제학교 (중국)", ".", "", "   "])
+      expect(schoolBucket(s), s).toBe(SCHOOL_OTHER);
+  });
+
+  it("🔴 급만 적힌 값도 기타 — `초`(43건)·`중`(17건)은 학교가 아니라 '초등학생'이라는 뜻이다", () => {
+    for (const s of ["초", "중", "고", "초등", "중등", "중학교", "고등학교"])
+      expect(schoolBucket(s), s).toBe(SCHOOL_OTHER);
+  });
+
+  it("익명 자리표시·미취학은 각자의 칸으로", () => {
+    for (const s of ["XX초", "xx중", "ㅇㅇ초", "아무개"]) expect(schoolBucket(s), s).toBe(SCHOOL_OTHER);
+    for (const s of ["7세", "6세", "유치", "유아", "Ing유치원"]) expect(schoolBucket(s), s).toBe("미취학");
+  });
+
+  it("예비는 급까지 갈라 묶는다 — 괄호·후치·오타(에비)까지", () => {
+    expect(schoolBucket("예비칠성초")).toBe("예비 초");
+    expect(schoolBucket("예비 대구일중")).toBe("예비 중");
+    expect(schoolBucket("성광고 예비")).toBe("예비 고");
+    expect(schoolBucket("북중 (예비)")).toBe("예비 중");
+    expect(schoolBucket("계성초 입학예정")).toBe("예비 초");
+    expect(schoolBucket("에비 경명여중")).toBe("예비 중");
+    expect(schoolBucket("예비")).toBe("예비 (급 미상)");
+  });
+
+  it("⚠️ 실재 학교는 공시에 없어도 학교로 남긴다 — 묶으면 진짜 학교가 '기타'에 숨는다", () => {
+    // 공시는 대구뿐이라 칠곡(왜관)·약칭은 매칭이 안 된다. 그렇다고 미상이 아니다.
+    for (const s of ["왜관동부초", "사대부초", "대구공고", "구미 해마루중", "경북예고", "칠성초등", "달성초1"])
+      expect(schoolBucket(s), s).toBeNull();
+  });
+
+  it("원장이 확정한 예외만 별칭 — '달산'은 달산초(달산초등학교가 실재)", () => {
+    expect(schoolBucket("달산")).toBeNull();
+    expect(buildSchoolBars([{ school: "달산", grade: "3", enrolled: false }], null)[0]!.key).toBe("달산초");
   });
 });
