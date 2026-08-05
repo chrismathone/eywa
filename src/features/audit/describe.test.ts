@@ -77,6 +77,38 @@ describe("auditDetail — 액션별 한글 상세", () => {
     );
   });
 
+  it("class_update: 어디서 → 어디로를 항목마다 적는다", () => {
+    // 원장 2026-08-05: "강의실만 딸랑 남기지말고 어디서 → 어디로 이렇게. 담당도 마찬가지."
+    expect(
+      auditDetail(
+        "class_update",
+        {
+          changed: ["담임", "강의실"],
+          changes: [
+            { field: "담임", from: "박소선", to: "이수진" },
+            { field: "강의실", from: "301호", to: "205호" },
+          ],
+        },
+        ctx(),
+      ),
+    ).toBe("변경: 담임 박소선 → 이수진 · 강의실 301호 → 205호");
+  });
+
+  it("class_update: 비어 있던 쪽은 '없음' · 짝이 없는 항목(수업 배치)은 이름만", () => {
+    expect(
+      auditDetail(
+        "class_update",
+        { changes: [{ field: "수업 배치" }, { field: "강의실", from: null, to: "205호" }] },
+        ctx(),
+      ),
+    ).toBe("변경: 수업 배치 · 강의실 없음 → 205호");
+  });
+
+  it("🔴 class_update 옛 행(항목 이름만)은 그대로 — 없는 화살표를 지어내지 않는다", () => {
+    // 2026-08-05 이전에 쌓인 행에는 이전값이 아예 없다. "강의실 없음 → 없음"으로 보이면 거짓말이 된다.
+    expect(auditDetail("class_update", { changed: ["강의실"] }, ctx())).toBe("변경: 강의실");
+  });
+
   it("미등록 액션 폴백: uuid는 이름 해석(실패 시 숨김), 나머지는 키: 값", () => {
     expect(auditDetail("future_action", { foo: "bar", id: SID }, ctx())).toBe("foo: bar");
     expect(auditDetail("future_action", { foo: "bar", id: SID }, ctx({ [SID]: "이윤건" }))).toBe("foo: bar · 이윤건");
