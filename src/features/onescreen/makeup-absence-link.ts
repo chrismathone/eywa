@@ -51,10 +51,13 @@ export function hasMemoLine(existing: string | null | undefined, line: string): 
 }
 
 /**
- * 보강 시수 = 그 칸의 현재 시수(미입력=1) + 1.
- * ⚠️ 반마다 1회가 1.5인 곳이 있다(시트 실측) — 그래도 **+1**이 원장 사양이다. 값이 다르면 강사가
- *    출석부/타임 칸에서 고친다(자동으로 1.5를 추측해 얹으면 틀린 급여가 조용히 생긴다).
+ * 보강 뒤 그 칸의 시수 = 현재 시수(미입력=1) + 이번 보강 시수.
+ *
+ * 🔴 **보강분을 1로 박지 말 것** (원장 2026-08-06: *"1.5는 3시간 수업건에 대해서 1.5로 입력되고 있음 —
+ *    즉 0.5당 1시간이라 생각하면 됨. 수학은"*). 시수는 **수업 길이**다. 3시간짜리 수학 반의 보강을 1로
+ *    적으면 그 반 급여가 매번 0.5씩 모자란다. 그래서 강사가 다이얼로그에서 값을 고르고(기본 = 그 반
+ *    정규 1회와 같은 값) 그 값이 여기로 온다. 부동소수 오차(0.1+0.2)는 0.5 단위 입력이라 나지 않는다.
  */
-export function unitsAfterMakeup(current: number | null | undefined): number {
-  return (current ?? 1) + 1;
+export function unitsAfterMakeup(current: number | null | undefined, addUnits: number): number {
+  return (current ?? 1) + addUnits;
 }

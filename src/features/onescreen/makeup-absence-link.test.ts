@@ -62,13 +62,18 @@ describe("hasMemoLine — 시수 이중 가산 방지", () => {
 });
 
 describe("unitsAfterMakeup", () => {
-  it("미입력은 1로 보고 +1 — 정규 1 + 보강 1 = 2", () => {
-    expect(unitsAfterMakeup(null)).toBe(2);
-    expect(unitsAfterMakeup(1)).toBe(2);
+  it("미입력은 1로 보고 더한다 — 정규 1 + 보강 1 = 2", () => {
+    expect(unitsAfterMakeup(null, 1)).toBe(2);
+    expect(unitsAfterMakeup(1, 1)).toBe(2);
   });
 
-  it("이미 고쳐 둔 값에도 +1(1.5짜리 반은 2.5 — 다르면 강사가 고친다)", () => {
-    expect(unitsAfterMakeup(1.5)).toBe(2.5);
-    expect(unitsAfterMakeup(2)).toBe(3);
+  it("🔴 보강분은 1 고정이 아니다 — 3시간 반(1.5)의 보강은 1.5라 합이 3", () => {
+    // 원장 2026-08-06: 0.5 = 1시간. 1로 박으면 그 반 급여가 매번 0.5씩 모자란다.
+    expect(unitsAfterMakeup(1.5, 1.5)).toBe(3);
+    expect(unitsAfterMakeup(0.5, 0.5)).toBe(1);
+  });
+
+  it("일부만 보강했으면 그만큼만 — 3시간 반에 1시간 보강 = 1.5 + 0.5", () => {
+    expect(unitsAfterMakeup(1.5, 0.5)).toBe(2);
   });
 });

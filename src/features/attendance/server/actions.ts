@@ -305,16 +305,23 @@ export async function linkMakeupToAbsence(input: {
   absentDate: string;
   /** 보강을 실제로 한 날(YYYY-MM-DD) — 시수가 여기에 얹힌다. 보통 오늘. */
   makeupDate: string;
+  /**
+   * 이번 보강의 시수. 🔴 **1 고정이 아니다** — 수학은 **0.5당 1시간**이라 3시간 반의 1회는 1.5다
+   * (원장 2026-08-06). 1로 박으면 그 반 급여가 매번 0.5씩 모자란다. 강사가 다이얼로그에서 고른 값.
+   */
+  addUnits: number;
 }): Promise<MakeupLinkResult> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "attendance"))) return { error: "출석 관리 권한이 없습니다" };
 
-  const { studentId, classId, absentDate, makeupDate } = input;
+  const { studentId, classId, absentDate, makeupDate, addUnits } = input;
   if (!studentId || !classId || !absentDate || !makeupDate) return { error: "필수 값이 누락되었습니다" };
   const isDate = (d: string) => /^\d{4}-\d{2}-\d{2}$/.test(d);
   if (!isDate(absentDate) || !isDate(makeupDate)) return { error: "잘못된 날짜입니다" };
   if (absentDate >= makeupDate) return { error: "결석한 날은 보강한 날보다 앞서야 합니다" };
+  // 시수는 클라 값을 그대로 믿지 않는다 — 0·음수는 급여를 깎고, 과한 값은 조용한 과지급이 된다.
+  if (!Number.isFinite(addUnits) || addUnits <= 0 || addUnits > 24) return { error: "보강 시수가 올바르지 않습니다" };
 
   const supabase = await createClient();
 
@@ -359,7 +366,7 @@ export async function linkMakeupToAbsence(input: {
   const alreadyLinked = hasMemoLine(makeupCell?.note, memoOnMakeup);
   const units = alreadyLinked
     ? (makeupCell?.session_units ?? 1)
-    : unitsAfterMakeup(makeupCell?.session_units);
+    : unitsAfterMakeup(makeupCell?.session_units, addUnits);
 
   const nowIso = new Date().toISOString();
   const writes: PromiseLike<{ error: { message: string } | null }>[] = [];

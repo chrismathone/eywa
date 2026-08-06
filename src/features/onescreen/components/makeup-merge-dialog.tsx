@@ -15,7 +15,6 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import type { MergeCandidate } from "../makeup-merge-plan";
-import { mergedUnits } from "../makeup-merge-plan";
 import { absenceMemo, shortDate } from "../makeup-absence-link";
 
 /**
@@ -24,10 +23,23 @@ import { absenceMemo, shortDate } from "../makeup-absence-link";
  *    1+1로 2로 계산되도록 자동화되어야함."* 보강 행은 반이 없어(`classId=null`) 출석부에 시수를 못 적는다 —
  *    그래서 **보강분 1시수는 그 정규 반 행에 얹는다**. 어느 반에 얹을지가 곧 급여 귀속이라 추측하면 안 된다.
  */
-export type MakeupMergeChoice =
-  | { mode: "merge"; candidate: MergeCandidate }
-  /** 분리 — 어느 반의 **며칠자 결석분**인지까지 받는다(원장 2026-08-06). */
-  | { mode: "separate"; candidate: MergeCandidate; absentDate: string };
+export type MakeupMergeChoice = {
+  mode: "merge" | "separate";
+  candidate: MergeCandidate;
+  /** 이번 보강이 몇 시수인가 — 그 반 정규 1회와 같은 게 기본이고 강사가 고칠 수 있다. */
+  addUnits: number;
+  /** 분리일 때만 — 며칠자 결석분인지(원장 2026-08-06). */
+  absentDate?: string;
+};
+
+/**
+ * 보강 시수 입력 파싱 — 쉼표 소수점("1,5")도 받는다(서버 parseSessionUnits와 같은 관용).
+ * 0 이하·숫자 아님은 null(확인이 안 열린다) — 0시수 보강은 기록할 이유가 없고, 음수는 급여를 깎는다.
+ */
+function parseAddUnits(raw: string): number | null {
+  const n = Number(raw.trim().replace(",", "."));
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
 
 export function MakeupMergeDialog({
   studentName,
@@ -54,12 +66,23 @@ export function MakeupMergeDialog({
    * 결석 칸에 남길 메모("N/N 보강 예정")를 만들 수 없고, 출석부 두 칸이 서로를 못 가리킨다.
    */
   const [absentDate, setAbsentDate] = useState("");
+  /**
+   * 이번 보강의 시수. 🔴 **1로 박으면 안 된다**(원장 2026-08-06: *"1.5는 3시간 수업건에 대해서 1.5로 입력되고
+   * 있음 — 즉 0.5당 1시간"*). 수학 3시간 반의 보강을 1로 적으면 급여가 0.5 모자란다.
+   * 기본값 = **그 반 정규 1회 시수**(그 행의 현재 값, 미입력이면 1) — 같은 수업을 한 번 더 한 것이니 그게 맞다.
+   * ⚠️ 그래도 **강사가 고칠 수 있게** 연다: 행에 값이 없으면(오늘 출결 미입력) 1로 보이는데 3시간 반이면 1.5가
+   *    맞고, 일부만 보강했으면 0.5일 수도 있다 — 화면이 추측한 값을 그대로 급여로 흘리지 않는다.
+   */
+  const [addUnitsRaw, setAddUnitsRaw] = useState("");
 
   const chosen = candidates.find((c) => c.name === pick) ?? null;
-  // ⚠️ 분리도 고르기 전엔 못 누른다 — 분리 역시 그 반에 보강 1시수를 얹으므로 귀속이 정해져야 한다.
+  // 고른 반이 바뀌면 기본값도 그 반 것을 따른다 — 강사가 직접 친 값이 있으면 그게 이긴다.
+  const addUnits = addUnitsRaw.trim() ? parseAddUnits(addUnitsRaw) : (chosen?.attendanceUnits ?? 1);
+  // ⚠️ 분리도 고르기 전엔 못 누른다 — 분리 역시 그 반에 시수를 얹으므로 귀속이 정해져야 한다.
   const dateBad = mode === "separate" && (!absentDate || absentDate >= makeupDate);
-  const blocked = !chosen || dateBad;
+  const blocked = !chosen || dateBad || addUnits === null;
   const sent = !!chosen && sentSubjects.includes(chosen.name);
+  const total = chosen && addUnits !== null ? (chosen.attendanceUnits ?? 1) + addUnits : null;
 
   return (
     <div
@@ -152,18 +175,42 @@ export function MakeupMergeDialog({
           </div>
         ) : null}
 
+        {/* 보강 시수 — 🔴 1로 박지 않는다. 수학은 **0.5당 1시간**이라 3시간 반의 1회는 1.5다(원장 2026-08-06).
+            기본값은 그 반 정규 1회와 같게 두되, 화면이 추측한 값을 그대로 급여로 흘리지 않도록 열어 둔다. */}
+        {chosen ? (
+          <div className="mt-3">
+            <label htmlFor="makeup-add-units" className="text-text-faint mb-1.5 block text-[12px]">
+              이번 보강 시수
+            </label>
+            <div className="flex items-center gap-2">
+              <input
+                id="makeup-add-units"
+                inputMode="decimal"
+                value={addUnitsRaw}
+                placeholder={String(chosen.attendanceUnits ?? 1)}
+                onChange={(e) => setAddUnitsRaw(e.target.value)}
+                aria-invalid={addUnits === null}
+                className="border-line bg-bg-soft focus:border-primary h-8 w-20 rounded-lg border px-2 text-[13px] outline-none"
+              />
+              <span className="text-text-faint text-[11px]">0.5 = 1시간 (수학 기준)</span>
+            </div>
+          </div>
+        ) : null}
+
         {/* 고른 대로 무슨 일이 벌어지는지 — 발송 건수·수업타임·출석부 두 칸까지 밝힌다. */}
         <p className="text-text-faint mt-3 text-[12px] leading-relaxed">
           {!chosen
             ? "어느 수업의 보강인지 골라 주세요."
-            : mode === "merge"
-              ? // ⚠️ 숫자 뒤에 조사(이/가·로/으로)를 붙이지 말 것 — 받침이 값마다 달라(2=이, 3=삼) 틀린 조사가 나온다.
-                // ⚠️ "정규 1"로 박지 말 것 — 강사가 이미 2로 고쳐 뒀을 수 있다(그러면 3이 맞다). 현재값을 읽어 보인다.
-                `${chosen.name} 보고서 1건에 합쳐 "(정규+보강)"으로 한 번만 발송합니다. 출석부 수업타임은 ${chosen.name} 행에 ${chosen.attendanceUnits ?? 1} + 보강 1 = ${mergedUnits(chosen.attendanceUnits)}.`
-              : dateBad
-                ? "결석한 날짜를 골라 주세요(보강한 날보다 앞선 날)."
-                : // 출석부 두 칸이 서로를 가리키게 된다 — 결석 칸은 0 그대로(메모만), 시수는 보강한 날에.
-                  `보강 보고서를 따로 만듭니다 — 정규 1건 + 보강 1건, 모두 2건이 발송됩니다. 출석부는 ${shortDate(absentDate)} ${chosen.name} 칸에 "${absenceMemo(makeupDate)}" 메모만 붙고(결석 0은 그대로), ${shortDate(makeupDate)} 칸이 ${chosen.attendanceUnits ?? 1} + 보강 1 = ${mergedUnits(chosen.attendanceUnits)}.`}
+            : addUnits === null
+              ? "보강 시수는 0보다 큰 숫자로 적어 주세요(0.5 = 1시간)."
+              : mode === "merge"
+                ? // ⚠️ 숫자 뒤에 조사(이/가·로/으로)를 붙이지 말 것 — 받침이 값마다 달라(2=이, 3=삼) 틀린 조사가 나온다.
+                  // ⚠️ "정규 1"로 박지 말 것 — 강사가 이미 고쳐 뒀을 수 있다. 현재값 + 입력값을 그대로 보인다.
+                  `${chosen.name} 보고서 1건에 합쳐 "(정규+보강)"으로 한 번만 발송합니다. 출석부 수업타임은 ${chosen.name} 행에 ${chosen.attendanceUnits ?? 1} + 보강 ${addUnits} = ${total}.`
+                : dateBad
+                  ? "결석한 날짜를 골라 주세요(보강한 날보다 앞선 날)."
+                  : // 출석부 두 칸이 서로를 가리키게 된다 — 결석 칸은 0 그대로(메모만), 시수는 보강한 날에.
+                    `보강 보고서를 따로 만듭니다 — 정규 1건 + 보강 1건, 모두 2건이 발송됩니다. 출석부는 ${shortDate(absentDate)} ${chosen.name} 칸에 "${absenceMemo(makeupDate)}" 메모만 붙고(결석 0은 그대로), ${shortDate(makeupDate)} 칸이 ${chosen.attendanceUnits ?? 1} + 보강 ${addUnits} = ${total}.`}
         </p>
         {mode === "merge" && sent ? (
           // ⚠️ 한 덩어리 문자열로 — `{chosen?.name} 보고서는`처럼 식과 텍스트를 섞으면 사이 공백이 사라진다
@@ -183,11 +230,13 @@ export function MakeupMergeDialog({
             disabled={blocked}
             onClick={() =>
               chosen &&
-              onConfirm(
-                mode === "merge"
-                  ? { mode: "merge", candidate: chosen }
-                  : { mode: "separate", candidate: chosen, absentDate },
-              )
+              addUnits !== null &&
+              onConfirm({
+                mode,
+                candidate: chosen,
+                addUnits,
+                ...(mode === "separate" ? { absentDate } : {}),
+              })
             }
           >
             {mode === "merge" ? "합쳐서 발송" : "분리해서 발송"}

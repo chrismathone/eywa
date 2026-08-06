@@ -47,7 +47,7 @@ describe("MakeupMergeDialog — 합침/분리 확인", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "합쳐서 발송" }));
 
-    expect(onConfirm).toHaveBeenCalledWith({ mode: "merge", candidate: expect.objectContaining({ classId: "c1" }) });
+    expect(onConfirm).toHaveBeenCalledWith({ mode: "merge", candidate: expect.objectContaining({ classId: "c1" }), addUnits: 1 });
   });
 
   it("후보가 둘이면 과목을 고르기 전엔 합칠 수 없다(시수 오지급 차단)", async () => {
@@ -58,7 +58,7 @@ describe("MakeupMergeDialog — 합침/분리 확인", () => {
     await userEvent.click(screen.getByRole("radio", { name: "수학 특강" }));
     await userEvent.click(screen.getByRole("button", { name: "합쳐서 발송" }));
 
-    expect(onConfirm).toHaveBeenCalledWith({ mode: "merge", candidate: expect.objectContaining({ classId: "c2" }) });
+    expect(onConfirm).toHaveBeenCalledWith({ mode: "merge", candidate: expect.objectContaining({ classId: "c2" }), addUnits: 1 });
   });
 
   it("이미 발송된 정규 행이면 합치기 전에 경고한다", async () => {
@@ -100,6 +100,7 @@ describe("분리 — 며칠자 결석분인지까지 받는다", () => {
     expect(onConfirm).toHaveBeenCalledWith({
       mode: "separate",
       candidate: expect.objectContaining({ classId: "c1" }),
+      addUnits: 1,
       absentDate: "2026-07-16",
     });
   });
@@ -129,6 +130,7 @@ describe("분리 — 며칠자 결석분인지까지 받는다", () => {
     expect(onConfirm).toHaveBeenCalledWith({
       mode: "separate",
       candidate: expect.objectContaining({ classId: "c2" }),
+      addUnits: 1,
       absentDate: "2026-07-16",
     });
   });
@@ -154,9 +156,41 @@ describe("고른 결과를 문장으로 밝힌다", () => {
     expect(line).toHaveTextContent("7/31 칸이 1 + 보강 1 = 2");
   });
 
-  it("이미 2로 고쳐 둔 행이면 3으로 안내한다(1로 박지 않는다)", () => {
-    setup({ candidates: [cand({ attendanceUnits: 2 })] });
+  it("기본 보강 시수 = 그 반 정규 1회와 같은 값(1로 박지 않는다)", () => {
+    // 🔴 원장 2026-08-06: 수학은 **0.5당 1시간** — 3시간 반은 1.5다. 1로 박으면 급여가 매번 0.5 모자란다.
+    setup({ candidates: [cand({ attendanceUnits: 1.5 })] });
 
-    expect(screen.getByText(/1건에 합쳐/)).toHaveTextContent("2 + 보강 1 = 3");
+    expect(screen.getByLabelText("이번 보강 시수")).toHaveAttribute("placeholder", "1.5");
+    expect(screen.getByText(/1건에 합쳐/)).toHaveTextContent("1.5 + 보강 1.5 = 3");
+  });
+});
+
+describe("보강 시수 — 강사가 고칠 수 있다", () => {
+  it("일부만 보강했으면 그만큼만(3시간 반에 1시간 = 0.5)", async () => {
+    const { onConfirm } = setup({ candidates: [cand({ attendanceUnits: 1.5 })] });
+
+    await userEvent.type(screen.getByLabelText("이번 보강 시수"), "0.5");
+    expect(screen.getByText(/1건에 합쳐/)).toHaveTextContent("1.5 + 보강 0.5 = 2");
+
+    await userEvent.click(screen.getByRole("button", { name: "합쳐서 발송" }));
+    expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({ addUnits: 0.5 }));
+  });
+
+  it("쉼표 소수점도 받는다 — 화면만 접히고 DB엔 다른 값이 남는 사고 방지", async () => {
+    const { onConfirm } = setup();
+
+    await userEvent.type(screen.getByLabelText("이번 보강 시수"), "1,5");
+    await userEvent.click(screen.getByRole("button", { name: "합쳐서 발송" }));
+
+    expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({ addUnits: 1.5 }));
+  });
+
+  it.each(["0", "-1", "abc"])("0 이하·숫자 아님(%s)이면 확인이 안 열린다", async (bad) => {
+    setup();
+
+    await userEvent.type(screen.getByLabelText("이번 보강 시수"), bad);
+
+    expect(screen.getByRole("button", { name: "합쳐서 발송" })).toBeDisabled();
+    expect(screen.getByText(/0보다 큰 숫자로 적어 주세요/)).toBeInTheDocument();
   });
 });
