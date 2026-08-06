@@ -77,6 +77,19 @@ export const MEETING_WORD_BOOST = [
   "전달",
 ];
 
+/**
+ * 전사 요청에 싣는 모델 목록 — **한국어를 실제로 지원하는 모델만** 넣는다.
+ *
+ * ⚠️ 한국어는 `universal-2`(99개 언어)에만 있다. 상위 모델 `universal-3-pro`(2026-02)·
+ * `universal-3.5-pro`는 18개 언어(영·스·불·독·이·포·아랍·덴마크·네덜란드·핀란드·히브리·힌디·
+ * 일본어·중국어·노르웨이·스웨덴·터키·베트남)만 지원하고 **한국어가 빠져 있다.**
+ *
+ * 새 모델을 여기 추가하기 전에 지원 언어표에서 `ko`를 **직접 확인**할 것 — 미지원 모델은
+ * 에러 없이 무시되고 뒤 모델로 폴백한다(= 조용한 무효과). 가드는 `assemblyai-models.test.ts`.
+ * https://www.assemblyai.com/docs/pre-recorded-audio/supported-languages
+ */
+export const KOREAN_SPEECH_MODELS = ["universal-2"] as const;
+
 export type AssemblySubmitResult = {
   id: string;
   status: "queued" | "processing" | "completed" | "error";
@@ -91,9 +104,11 @@ export async function submitTranscript(args: {
     audio_url: args.audioUrl,
     language_code: "ko",
     speaker_labels: true,
-    // AssemblyAI가 단수 `speech_model`을 폐기(400 거부) → 신형 다중모델 폴백 배열로.
-    // pro 우선, 미지원/실패 시 universal-2로 폴백(ijw functions/index.js와 동일).
-    speech_models: ["universal-3-pro", "universal-2"],
+    // AssemblyAI가 단수 `speech_model`을 폐기(400 거부) → 다중모델 배열로 보낸다.
+    // 🔴 2026-08-06까지 `["universal-3-pro", "universal-2"]`를 보내며 주석엔 "pro 우선"이라
+    // 적어뒀는데, pro는 한국어 미지원이라 **실제 전사 전건이 universal-2로 조용히 폴백**하고
+    // 있었다(응답 `speech_model_used` 실측 확인). 착각만 남기므로 상위 모델은 빼둔다.
+    speech_models: KOREAN_SPEECH_MODELS,
     word_boost: MEETING_WORD_BOOST,
     boost_param: "high",
   };
