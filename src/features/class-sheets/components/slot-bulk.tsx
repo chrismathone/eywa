@@ -27,8 +27,13 @@ import {
 } from "../lib/bulk";
 // 태도 선택지는 수학 수업보고서와 **같은 단일 소스**(원장 2026-08-06 "수학 수업보고서처럼").
 import { ATTITUDE } from "@/features/onescreen/attitude";
+import { FieldSelect } from "@/features/onescreen/components/field-select";
+import type { BasicAttendance } from "./attendance-select";
 
 const TERM_LABEL: Record<"regular" | "exam", string> = { regular: "평시", exam: "내신" };
+/** 출결 일괄 선택지 — 셀 드롭다운과 **같은 어휘**(라벨→enum 변환도 한 곳에서). */
+const ATT_OPTIONS = ["출석", "지각", "결석"] as const;
+const ATT_TO_STATUS: Record<string, BasicAttendance> = { 출석: "present", 지각: "late", 결석: "absent" };
 
 const miniBtn = (on: boolean) =>
   `cursor-pointer rounded-full border px-2 py-0.5 text-[12px] transition ${
@@ -62,7 +67,7 @@ export function SlotBulk({
   canMarkDate: boolean;
   /** '내신' 시기를 제안할지 — EiE(초등) 반은 내신이 없다(plan-table과 **같은 값**). */
   showExamTerm: boolean;
-  onBulkAttendance: (studentIds: string[]) => void;
+  onBulkAttendance: (studentIds: string[], status: BasicAttendance) => void;
   onBulkStatus: (studentIds: string[], status: string | null) => void;
   onBulkPlanCells: (lineIds: string[], field: PlanBulkField, value: string) => void;
 }) {
@@ -74,6 +79,7 @@ export function SlotBulk({
   const [planField, setPlanField] = useState<PlanBulkField>("textbook");
   const [planValue, setPlanValue] = useState("");
   const [planOnlyEmpty, setPlanOnlyEmpty] = useState(false);
+  const [att, setAtt] = useState<string | null>(null);
 
   // 권한 없으면 컨트롤을 아예 렌더하지 않는다(누를 수 있는 것처럼 보였다가 서버가 거절하는 게 최악).
   if (!canEdit) return null;
@@ -134,6 +140,8 @@ export function SlotBulk({
           setFree("");
           setPicked(null);
           setPlanValue("");
+          // 출결은 특히 — 남아 있다가 다음에 열었을 때 딸려 나가면 출석부에 그대로 박힌다(원스크린 선례).
+          setAtt(null);
         }
       }}
     >
@@ -215,47 +223,55 @@ export function SlotBulk({
               ) : null}
             </div>
 
+            {/* 출결 — 셀과 **같은 컨트롤**(드롭다운). 대상은 언제나 **아직 기록이 없는 학생만**이라
+                (planBulkAttendance) 이미 찍힌 출결·사유·시수를 덮지 않는다. 그래서 지각·결석을 골라도
+                "전원 결석" 사고가 안 난다 — 이 비파괴 계약을 풀지 말 것. */}
             <div className="border-line-strong border-t pt-2">
-              <p className="text-text-dim mb-1 text-[11px] font-bold">출석</p>
+              <p className="text-text-dim mb-1 text-[11px] font-bold">출결</p>
+              <FieldSelect
+                options={ATT_OPTIONS}
+                value={att}
+                ariaLabel="일괄 출결"
+                placeholder="출결 선택"
+                onSelect={setAtt}
+              />
               <Button
                 type="button"
                 size="sm"
                 variant="outline"
-                className="w-full"
-                disabled={attendanceTargets.length === 0}
+                className="mt-1.5 w-full"
+                disabled={attendanceTargets.length === 0 || att === null}
                 onClick={() => {
-                  onBulkAttendance(attendanceTargets);
+                  if (att === null) return;
+                  onBulkAttendance(attendanceTargets, ATT_TO_STATUS[att]);
                   setOpen(false);
+                  setAtt(null);
                 }}
               >
-                미체크 {attendanceTargets.length}명 출석
+                {att === null ? "출결을 선택하세요" : `기록 없는 ${attendanceTargets.length}명에 "${att}"`}
               </Button>
               <p className="text-text-dim mt-1 text-[11px]">
                 {canMarkDate
                   ? "이미 기록된 학생은 그대로 둡니다(출석부 기록 보존)."
                   : // canMarkAttendanceByDate = 권한 AND 기간 — 원인을 단정하면 오표시(개별 툴팁과 동일 문구)
-                    "출석 입력 권한이 없거나 수정 기간이 지났습니다."}
+                    "출결 입력 권한이 없거나 수정 기간이 지났습니다."}
               </p>
             </div>
 
+            {/* 태도 — 셀과 같은 드롭다운. 자유입력은 남긴다(옛 표기·학원 고유 어휘가 실제로 쓰인다). */}
             <div className="border-line-strong border-t pt-2">
               <p className="text-text-dim mb-1 text-[11px] font-bold">태도</p>
-              <div className="flex flex-wrap gap-1">
-                {ATTITUDE.map((chip) => (
-                  <button
-                    key={chip}
-                    type="button"
-                    className={`cursor-pointer rounded-full border px-2 py-0.5 text-[12px] ${
-                      picked === chip
-                        ? "border-foreground bg-foreground text-background font-bold"
-                        : "border-line-strong text-text-dim hover:text-foreground hover:bg-bg-soft"
-                    }`}
-                    onClick={() => setPicked((v) => (v === chip ? null : chip))}
-                  >
-                    {chip}
-                  </button>
-                ))}
-              </div>
+              <FieldSelect
+                options={ATTITUDE}
+                value={picked}
+                ariaLabel="일괄 태도"
+                placeholder="태도 선택"
+                onSelect={(v) => {
+                  setPicked(v);
+                  // 드롭다운을 고르면 자유입력이 우선 적용되는 규칙 때문에 값이 안 바뀌는 착시가 생긴다
+                  if (v !== null) setFree("");
+                }}
+              />
               <input
                 className="border-line-strong text-foreground focus:border-primary mt-1.5 w-full rounded-lg border bg-transparent px-1.5 py-1 text-[12px] outline-none"
                 placeholder="직접 입력"
@@ -263,7 +279,7 @@ export function SlotBulk({
                 aria-label="태도 직접 입력"
                 onChange={(e) => {
                   setFree(e.target.value);
-                  // 자유입력이 우선 적용되므로 칩 하이라이트가 남으면 "칩이 적용된다"는 거짓 표시가 된다
+                  // 자유입력이 우선 적용되므로 드롭다운 값이 남으면 "그게 적용된다"는 거짓 표시가 된다
                   if (e.target.value.trim() !== "") setPicked(null);
                 }}
               />
@@ -288,7 +304,7 @@ export function SlotBulk({
             </div>
 
             <p className="text-text-dim text-[11px]">
-              학생별 ‘개인 진도 · 과제’는 학생마다 다른 기록이라 일괄 대상이 아닙니다.
+              학생별 ‘과제 및 특이사항’은 학생마다 다른 기록이라 일괄 대상이 아닙니다.
             </p>
           </Popover.Popup>
         </Popover.Positioner>

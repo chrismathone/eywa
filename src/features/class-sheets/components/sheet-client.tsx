@@ -12,6 +12,7 @@ import type { ClassSheetWeekData } from "../server/queries";
 // clearPresentAttendance)는 화면에서 빠졌다(취소는 출석부에서 — pill은 지우지 않는다).
 import { setAttendanceCell } from "@/features/attendance/server/actions";
 import {
+  clearPresentAttendance,
   deletePlanLine as deletePlanLineAction,
   copySlotFromPrevious,
   createPlanLine as createPlanLineAction,
@@ -57,6 +58,12 @@ export type SheetHandlers = {
     status: "present" | "late" | "absent",
     note?: string | null,
   ) => void;
+  /**
+   * 출결 '선택 안 함' — 드롭다운에만 있는 지우기. **plain present만** 지워진다(0169a `ecs_clear_present`).
+   * 사유·시수가 붙은 기록이나 결석·지각은 서버가 거절하고 사유를 띄운다 — 화면에서 지워진 것처럼
+   * 보였다가 새로고침하면 돌아오는 거짓 성공을 만들지 않는다.
+   */
+  clearAttendance: (studentId: string, date: string) => void;
   saveMark: (studentId: string, date: string, slotStart: string, status: string | null, note: string | null) => void;
 };
 
@@ -352,6 +359,23 @@ export function SheetClient({
               else next[key] = before;
               return next;
             });
+            toast.error(r.error);
+          }
+        });
+      },
+      clearAttendance: (studentId, date) => {
+        if (!data.canMarkAttendanceByDate[date]) return;
+        const key = `${studentId}|${date}`;
+        const before = attendanceRef.current[key];
+        if (before === undefined) return; // 이미 비어 있으면 왕복할 이유가 없다
+        setAttendance((prev) => {
+          const next = { ...prev };
+          delete next[key];
+          return next;
+        });
+        void clearPresentAttendance({ classId, studentId, date }).then((r) => {
+          if (!r.ok) {
+            setAttendance((prev) => ({ ...prev, [key]: before }));
             toast.error(r.error);
           }
         });

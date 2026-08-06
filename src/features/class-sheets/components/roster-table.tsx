@@ -30,7 +30,7 @@ import { handleGridNavKey } from "@/features/onescreen/components/grid-nav";
 import type { ClassSheetWeekData } from "../server/queries";
 import type { RosterEntry } from "../lib/grid";
 import { groupRosterRows, type RosterGroupKey } from "../lib/roster-order";
-import { AttendancePills } from "@/features/onescreen/components/attendance-pills";
+import { AttendanceSelect } from "./attendance-select";
 import { FieldSelect } from "@/features/onescreen/components/field-select";
 import { ATTITUDE } from "@/features/onescreen/attitude";
 import type { SheetHandlers } from "./sheet-client";
@@ -228,17 +228,15 @@ export const RosterTable = memo(function RosterTable({
                   ) : null}
                 </td>
                 <td className="py-1 pr-1">
-                  {/* 수학 수업보고서와 **같은 컴포넌트** — 출석/지각/결석 + 사유 메모. 시수(showUnits)는
-                      안 켠다: ECS는 교시 카드라 자리가 없고, 시수는 출석부·원스크린에서 다룬다. */}
-                  <AttendancePills
-                    value={att?.status ?? null}
+                  {/* 태도와 **같은 컨트롤**(드롭다운, 원장 2026-08-06) — 알약 3개는 한 줄에서 폭을 먹고
+                      두 칸이 서로 다른 모양으로 읽혔다. 시수·사유 편집은 출석부·원스크린 쪽에 남는다. */}
+                  <AttendanceSelect
+                    status={att?.status ?? null}
                     note={att?.note ?? null}
-                    pending={false}
-                    readOnly={!(canMarkDate && rowEditable)}
                     studentName={meta?.name ?? ""}
-                    onSet={(status, extra) =>
-                      handlers.setAttendance(entry.studentId, date, status, extra?.note)
-                    }
+                    canMark={canMarkDate && rowEditable}
+                    onSet={(status) => handlers.setAttendance(entry.studentId, date, status)}
+                    onClear={() => handlers.clearAttendance(entry.studentId, date)}
                   />
                 </td>
                 <td className="py-1 pr-1">

@@ -105,9 +105,11 @@ export const PeriodBlock = memo(function PeriodBlock({
             canEdit={canEdit && slot.scheduled}
             canMarkDate={data.canMarkAttendanceByDate[date] ?? false}
             showExamTerm={!data.isEie}
-            // 일괄 출석은 **빈 칸만** 채운다(planBulkAttendance가 기록 있는 학생을 이미 뺀다). 그래서
-            // 일괄에는 지각·결석을 두지 않는다 — 전원 결석을 한 번에 찍는 버튼은 급여 사고로 직결된다.
-            onBulkAttendance={(ids) => ids.forEach((id) => handlers.setAttendance(id, date, "present"))}
+            // 일괄 출결은 **빈 칸만** 채운다(planBulkAttendance가 기록 있는 학생을 이미 뺀다) — 그래서
+            // 지각·결석을 골라도 이미 찍힌 기록·사유·시수를 덮지 않는다.
+            onBulkAttendance={(ids, status) =>
+              ids.forEach((id) => handlers.setAttendance(id, date, status))
+            }
             onBulkStatus={(ids, status) =>
               ids.forEach((id) =>
                 handlers.saveMark(
