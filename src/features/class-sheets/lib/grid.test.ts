@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { buildWeekGrid, scheduledSlotKeySet, sheetFillStats, type GridPlanLine } from "./grid";
+import {
+  buildWeekGrid,
+  hiddenSeatOf,
+  scheduledSlotKeySet,
+  sheetFillStats,
+  type GridPlanLine,
+} from "./grid";
 
 // 2026-07-20(월) 주. 화=2026-07-21, 수=07-22, 금=07-24, 토=07-25.
 const MON = "2026-07-20";
@@ -324,13 +330,14 @@ describe("buildWeekGrid — 과거 데이터 보존(합집합 로스터·고아�
   });
 });
 
-// 자리(LAB·JJ)는 2026-07-31엔 코드가 **무조건 숨겼다가** 2026-08-03 원장 지시로 **상단 헤더 설정**이 됐다
-// (기본 표시). 아래는 그 계약을 잠근다 — 기본값을 숨김으로 되돌리거나, 표시/숨김이 작성률과 어긋나면 깨진다.
-describe("buildWeekGrid — 자리(LAB·JJ) 표시는 설정이 정한다(기본 표시)", () => {
+// 자리 표시 규약의 3세대: 2026-07-31 코드가 **무조건 숨김** → 08-03 원장 지시로 **헤더 설정**(기본 표시)
+// → 08-06 *"lab은 전용 출석부를 만들 예정이라 LAB은 빼버릴 것"* 으로 **LAB만 상시 제외 + 토글은 JJ 전용**.
+// 아래는 그 계약을 잠근다 — LAB이 다시 그려지거나, JJ 기본값이 숨김으로 뒤집히거나, 표시/작성률이 어긋나면 깨진다.
+describe("buildWeekGrid — LAB은 항상 제외, JJ만 설정이 정한다(기본 표시)", () => {
   const lab = (dow: "mon" | "tue" | "wed" | "thu" | "fri", start: string, label = "LAB") =>
     sched(dow, start, { slotTeacherLabel: label, slotRoomLabel: "603" });
 
-  it("기본(미지정)은 표시 — 다른 교시와 똑같이 그린다", () => {
+  it("기본(미지정): JJ는 그리고 LAB은 안 그린다", () => {
     const grid = buildWeekGrid({
       weekMonday: MON,
       schedules: [lab("mon", "16:20"), lab("tue", "16:20", "JJ"), sched("wed", "15:00")],
@@ -340,16 +347,29 @@ describe("buildWeekGrid — 자리(LAB·JJ) 표시는 설정이 정한다(기본
       attendance: [],
       slotMemoKeys: [],
     });
-    expect(grid.days.map((d) => d.dow)).toEqual(["mon", "tue", "wed"]);
-    expect(grid.days[0].slots[0]).toMatchObject({ teacherLabel: "LAB", roomLabel: "603" });
-    expect(grid.days[1].slots[0]).toMatchObject({ teacherLabel: "JJ" });
-    expect(grid.hiddenSpecial).toEqual({ slots: 0, records: 0 }); // 숨긴 게 없으니 각주도 없다
+    expect(grid.days.map((d) => d.dow)).toEqual(["tue", "wed"]);
+    expect(grid.days[0].slots[0]).toMatchObject({ teacherLabel: "JJ" });
+    expect(grid.hiddenSpecial).toEqual([]); // 뺐어도 기록이 없으면 각주도 없다
   });
 
-  it("표시일 땐 그 자리에 쓴 계획·마크가 화면에 남는다", () => {
+  it("🔴 LAB은 토글을 켜도 안 나온다 — 원 라벨 '이주희'(해석 전 값)도 같은 자리로 판정", () => {
     const grid = buildWeekGrid({
       weekMonday: MON,
-      schedules: [lab("mon", "16:20")],
+      schedules: [lab("mon", "16:20", "이주희"), sched("wed", "15:00")],
+      enrollments: [enr("s1")],
+      planLines: [],
+      marks: [],
+      attendance: [],
+      slotMemoKeys: [],
+      includeSelfStudy: true,
+    });
+    expect(grid.days.map((d) => d.dow)).toEqual(["wed"]);
+  });
+
+  it("표시일 땐 JJ 자리에 쓴 계획·마크가 화면에 남는다", () => {
+    const grid = buildWeekGrid({
+      weekMonday: MON,
+      schedules: [lab("mon", "16:20", "JJ")],
       enrollments: [enr("s1")],
       planLines: [line({ slotStart: "16:20", textbook: "Power Voca" })],
       marks: [{ studentId: "s1", markDate: MON, slotStart: "16:20", status: "완", progressNote: null }],
@@ -359,21 +379,21 @@ describe("buildWeekGrid — 자리(LAB·JJ) 표시는 설정이 정한다(기본
     expect(grid.days[0].slots[0].lines.map((l) => l.textbook)).toEqual(["Power Voca"]);
   });
 
-  it("숨김이면 안 그린다 — 원 라벨 '이주희'(해석 전 값)도 같은 자리로 판정", () => {
+  it("JJ 숨김이면 안 그린다", () => {
     const grid = buildWeekGrid({
       weekMonday: MON,
-      schedules: [lab("mon", "16:20", "이주희"), lab("tue", "16:20", "JJ"), sched("wed", "15:00")],
+      schedules: [lab("mon", "16:20", "JJ"), sched("wed", "15:00")],
       enrollments: [enr("s1")],
       planLines: [],
       marks: [],
       attendance: [],
       slotMemoKeys: [],
-      includeSpecialRooms: false,
+      includeSelfStudy: false,
     });
     expect(grid.days.map((d) => d.dow)).toEqual(["wed"]);
   });
 
-  it("숨김인데 기록이 남아 있으면 hiddenSpecial로 건수를 남긴다(침묵 금지)", () => {
+  it("안 그린 자리에 기록이 남아 있으면 hiddenSpecial에 **자리별로** 건수를 남긴다(침묵 금지)", () => {
     const grid = buildWeekGrid({
       weekMonday: MON,
       schedules: [lab("mon", "16:20"), lab("tue", "16:20", "JJ")],
@@ -382,13 +402,31 @@ describe("buildWeekGrid — 자리(LAB·JJ) 표시는 설정이 정한다(기본
       marks: [{ studentId: "s1", markDate: "2026-07-21", slotStart: "16:20", status: "완", progressNote: null }],
       attendance: [],
       slotMemoKeys: [],
-      includeSpecialRooms: false,
+      includeSelfStudy: false,
     });
     expect(grid.days).toHaveLength(0);
-    expect(grid.hiddenSpecial).toEqual({ slots: 2, records: 2 });
+    // 되돌리는 방법이 자리마다 달라(LAB=불가·JJ=토글) 한 덩어리로 못 센다 — 순서는 LAB→JJ 고정.
+    expect(grid.hiddenSpecial).toEqual([
+      { seat: "LAB", slots: 1, records: 1 },
+      { seat: "JJ", slots: 1, records: 1 },
+    ]);
   });
 
-  it("숨김: 빈 계획 행(placeholder)만 있으면 기록으로 세지 않는다", () => {
+  it("JJ를 켜 둬도 LAB 기록은 각주에 남는다(전용 출석부 전까지 볼 곳이 없다)", () => {
+    const grid = buildWeekGrid({
+      weekMonday: MON,
+      schedules: [lab("mon", "16:20"), lab("tue", "16:20", "JJ")],
+      enrollments: [enr("s1")],
+      planLines: [line({ slotStart: "16:20", textbook: "Power Voca" }), line({ planDate: "2026-07-21", slotStart: "16:20", textbook: "JJ 자율" })],
+      marks: [],
+      attendance: [],
+      slotMemoKeys: [],
+      includeSelfStudy: true,
+    });
+    expect(grid.hiddenSpecial).toEqual([{ seat: "LAB", slots: 1, records: 1 }]);
+  });
+
+  it("빈 계획 행(placeholder)만 있으면 기록으로 세지 않는다", () => {
     const grid = buildWeekGrid({
       weekMonday: MON,
       schedules: [lab("mon", "16:20")],
@@ -397,13 +435,12 @@ describe("buildWeekGrid — 자리(LAB·JJ) 표시는 설정이 정한다(기본
       marks: [],
       attendance: [],
       slotMemoKeys: [],
-      includeSpecialRooms: false,
     });
     expect(grid.days).toHaveLength(0);
-    expect(grid.hiddenSpecial).toEqual({ slots: 0, records: 0 });
+    expect(grid.hiddenSpecial).toEqual([]);
   });
 
-  it("숨김: 자리 교시뿐인 날짜라도 출석 기록은 attendanceOnly로 보존", () => {
+  it("자리 교시뿐인 날짜라도 출석 기록은 attendanceOnly로 보존", () => {
     const grid = buildWeekGrid({
       weekMonday: MON,
       schedules: [lab("mon", "16:20")],
@@ -412,13 +449,12 @@ describe("buildWeekGrid — 자리(LAB·JJ) 표시는 설정이 정한다(기본
       marks: [],
       attendance: [{ studentId: "s1", sessionDate: MON, status: "present" }],
       slotMemoKeys: [],
-      includeSpecialRooms: false,
     });
     expect(grid.days).toHaveLength(0);
     expect(grid.attendanceOnly).toEqual([{ date: MON, studentIds: ["s1"] }]);
   });
 
-  it("숨김: 같은 시각에 강사 수업이 겹치면 수업이 이긴다(실수업이 증발하지 않는다)", () => {
+  it("같은 시각에 강사 수업이 겹치면 수업이 이긴다(실수업이 증발하지 않는다)", () => {
     const grid = buildWeekGrid({
       weekMonday: MON,
       schedules: [lab("mon", "16:20"), sched("mon", "16:20")],
@@ -427,14 +463,14 @@ describe("buildWeekGrid — 자리(LAB·JJ) 표시는 설정이 정한다(기본
       marks: [],
       attendance: [],
       slotMemoKeys: [],
-      includeSpecialRooms: false,
+      includeSelfStudy: false,
     });
     expect(grid.days[0].slots[0]).toMatchObject({ teacherLabel: "Hannah" });
     expect(sheetFillStats(grid).totalSlots).toBe(1);
   });
 
-  it("보이는 교시 = 세는 교시 — 작성률·랜딩 키셋이 설정을 같이 따른다", () => {
-    const schedules = [lab("mon", "16:20"), sched("wed", "15:00")];
+  it("보이는 교시 = 세는 교시 — 작성률·랜딩 키셋이 같은 판정을 쓴다", () => {
+    const schedules = [lab("mon", "16:20", "JJ"), sched("wed", "15:00")];
     const input = {
       weekMonday: MON,
       schedules,
@@ -451,12 +487,35 @@ describe("buildWeekGrid — 자리(LAB·JJ) 표시는 설정이 정한다(기본
       "2026-07-22|15:00",
     ]);
     // 숨김 = 분모에서도 빠진다(화면에서 뺀 교시를 분모에 남기면 100%에 못 닿는다).
-    const hidden = buildWeekGrid({ ...input, includeSpecialRooms: false });
+    const hidden = buildWeekGrid({ ...input, includeSelfStudy: false });
     expect(sheetFillStats(hidden)).toEqual({ totalSlots: 1, filledSlots: 1, orphanSlots: 0 });
-    expect(hidden.hiddenSpecial.records).toBe(1);
-    expect([...scheduledSlotKeySet(MON, schedules, { includeSpecialRooms: false })]).toEqual([
+    expect(hidden.hiddenSpecial).toEqual([{ seat: "JJ", slots: 1, records: 1 }]);
+    expect([...scheduledSlotKeySet(MON, schedules, { includeSelfStudy: false })]).toEqual([
       "2026-07-22|15:00",
     ]);
+  });
+
+  it("🔴 LAB은 작성률 분모에서도 항상 빠진다(켜도 못 채우는 교시가 분모에 남으면 100%에 못 닿는다)", () => {
+    const schedules = [lab("mon", "16:20"), sched("wed", "15:00")];
+    expect([...scheduledSlotKeySet(MON, schedules, { includeSelfStudy: true })]).toEqual([
+      "2026-07-22|15:00",
+    ]);
+  });
+});
+
+describe("hiddenSeatOf — 자리 판정 단일 소스", () => {
+  it("LAB은 설정과 무관하게 제외, JJ만 설정을 따른다", () => {
+    expect(hiddenSeatOf("LAB", true)).toBe("LAB");
+    expect(hiddenSeatOf("LAB", false)).toBe("LAB");
+    expect(hiddenSeatOf("이주희", true)).toBe("LAB"); // 원 라벨 별칭
+    expect(hiddenSeatOf("JJ", true)).toBeNull();
+    expect(hiddenSeatOf("JJ", false)).toBe("JJ");
+  });
+
+  it("사람 강사·빈 라벨은 언제나 그린다", () => {
+    expect(hiddenSeatOf("Hannah", false)).toBeNull();
+    expect(hiddenSeatOf(null, false)).toBeNull();
+    expect(hiddenSeatOf("", false)).toBeNull();
   });
 });
 

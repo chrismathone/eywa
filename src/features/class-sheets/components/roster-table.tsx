@@ -6,15 +6,20 @@
 //
 // 명단은 시간표 셀처럼 **섹션으로 나뉜다**: 재원(기본) → 퇴원(유예 30일) → 기록(그 외 보존 행).
 // 퇴원·기록 섹션은 전부 읽기 전용이고 일괄 입력 대상도 아니다(bulk.ts editableRows).
+//
+// 섹션 머리는 **접기/펼치기 버튼**이다(원장 2026-08-06 "학생 목록 / 퇴원생 목록 접기/펼치기").
+// ⚠️ 접힘은 **시트 전체 공유 상태**(계정 저장)라 이 컴포넌트가 들고 있지 않다 — 카드마다 따로 접히면
+//    같은 일을 교시 수만큼 반복해야 하고, 나란한 카드의 로스터 높이가 어긋나 subgrid 줄맞춤이 깨진다.
+// ⚠️ 접어도 **건수는 머리에 남긴다** — 숨기면서 숫자까지 지우면 "몇 명인지 모를 뿐 아니라 있는지도 모름"이 된다.
 import { memo, useMemo } from "react";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
+import { EyIcon } from "@/components/icons/eywa-icons";
 import { handleGridNavKey } from "@/features/onescreen/components/grid-nav";
 import type { ClassSheetWeekData } from "../server/queries";
 import type { RosterEntry } from "../lib/grid";
 import { groupRosterRows, type RosterGroupKey } from "../lib/roster-order";
 import type { SheetHandlers } from "./sheet-client";
 import { AttendanceCheck, StatusCell } from "./status-cell";
-import { RosterBulk } from "./roster-bulk";
 
 // 입력칸 테두리는 헤어라인(--line 9%)이 아니라 line-strong(18%) — 9%는 흰 카드 위에서 "칸이 있는지"가
 // 안 보여 표 전체가 흐릿하게 읽혔다(원장 지적 2026-07-31). 글자도 12→13px.
@@ -28,6 +33,53 @@ const GROUP_HINT: Record<RosterGroupKey, string> = {
   record: "현재 수강 대상이 아니지만 이 교시에 기록이 있어 표시(읽기 전용)",
 };
 
+/** 접기 버튼의 접근성 이름 — `active`는 라벨 행이 없어 표 머리('학생')가 그 자리다. */
+const GROUP_TOGGLE_LABEL: Record<RosterGroupKey, string> = {
+  active: "학생 목록",
+  withdrawn: "퇴원생 목록",
+  record: "기록 목록",
+};
+
+/** 섹션 접기/펼치기 셰브런 — 표 머리(active)와 라벨 행(withdrawn·record)이 같은 어포던스를 쓴다. */
+function GroupToggle({
+  group,
+  collapsed,
+  count,
+  onToggle,
+}: {
+  group: RosterGroupKey;
+  collapsed: boolean;
+  count: number;
+  onToggle: () => void;
+}) {
+  const name = GROUP_TOGGLE_LABEL[group];
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-expanded={!collapsed}
+      aria-label={`${name} ${collapsed ? "펼치기" : "접기"}`}
+      title={`${name} ${collapsed ? "펼치기" : "접기"}`}
+      className="hover:text-foreground inline-flex cursor-pointer items-center gap-1"
+    >
+      <EyIcon
+        name="chevronRight"
+        size={10}
+        className={`shrink-0 transition-transform ${collapsed ? "" : "rotate-90"}`}
+      />
+      <span>{group === "active" ? "학생" : GROUP_LABEL_OF[group]}</span>
+      {/* 접었든 폈든 건수는 남긴다 — 접힌 섹션이 "없는 섹션"으로 보이면 안 된다. */}
+      <span className="num opacity-70">{count}</span>
+    </button>
+  );
+}
+
+const GROUP_LABEL_OF: Record<RosterGroupKey, string> = {
+  active: "학생",
+  withdrawn: "퇴원",
+  record: "기록",
+};
+
 export const RosterTable = memo(function RosterTable({
   date,
   slotStart,
@@ -37,6 +89,8 @@ export const RosterTable = memo(function RosterTable({
   attendance,
   handlers,
   canEdit,
+  collapsedGroups,
+  onToggleGroup,
 }: {
   date: string;
   slotStart: string;
@@ -46,49 +100,34 @@ export const RosterTable = memo(function RosterTable({
   attendance: Record<string, string>;
   handlers: SheetHandlers;
   canEdit: boolean;
+  collapsedGroups: readonly RosterGroupKey[];
+  onToggleGroup: (key: RosterGroupKey) => void;
 }) {
   const canMarkDate = data.canMarkAttendanceByDate[date] ?? false;
   // 섹션(재원/퇴원/기록)으로 나눠 이름·종료일 순으로 정렬한 뒤 라벨 행과 함께 한 줄로 편다.
   // 표를 나누지 않고 한 <table> 안에서 라벨 행으로 가르는 이유: 열 폭(이름/출석/학교/상태/진도)이
   // 섹션마다 어긋나면 같은 명단으로 안 읽힌다. 키보드 이동(data-nav-row)은 렌더 순서로 다시 매긴다.
-  const rows = useMemo(() => {
+  //
+  // ⚠️ 접힌 섹션의 행은 **아예 안 만든다**(CSS로 감추지 않는다) — 감추기만 하면 접은 채로 Tab·↑↓이
+  //    안 보이는 입력칸으로 들어간다. navRow도 보이는 행만으로 다시 매겨 이동이 건너뛰지 않는다.
+  const { rows, counts } = useMemo(() => {
     const out: (
-      | { kind: "label"; key: RosterGroupKey; label: string }
+      | { kind: "label"; key: RosterGroupKey; count: number }
       | { kind: "row"; entry: RosterEntry; navRow: number }
     )[] = [];
+    const sizes = {} as Record<RosterGroupKey, number>;
     let navRow = 0;
     for (const group of groupRosterRows(roster, (id) => data.students[id]?.name ?? "")) {
-      if (group.label) out.push({ kind: "label", key: group.key, label: group.label });
+      sizes[group.key] = group.rows.length;
+      const collapsed = collapsedGroups.includes(group.key);
+      if (group.label) out.push({ kind: "label", key: group.key, count: group.rows.length });
+      if (collapsed) continue;
       for (const entry of group.rows) out.push({ kind: "row", entry, navRow: navRow++ });
     }
-    return out;
-  }, [roster, data.students]);
+    return { rows: out, counts: sizes };
+  }, [roster, data.students, collapsedGroups]);
   return (
     <div className="border-line mt-2 border-t pt-1.5">
-      {/* 일괄 입력 — 대상은 이 카드에 보이는 로스터 그 집합(표시=일괄 대상). 권한 없으면 렌더 안 함. */}
-      <div className="flex justify-end pb-1">
-        <RosterBulk
-          date={date}
-          slotStart={slotStart}
-          roster={roster}
-          marks={marks}
-          attendance={attendance}
-          canEdit={canEdit}
-          canMarkDate={canMarkDate}
-          onBulkAttendance={(ids) => ids.forEach((id) => handlers.markPresent(id, date))}
-          onBulkStatus={(ids, status) =>
-            ids.forEach((id) =>
-              handlers.saveMark(
-                id,
-                date,
-                slotStart,
-                status,
-                marks[`${id}|${date}|${slotStart}`]?.progressNote ?? null,
-              ),
-            )
-          }
-        />
-      </div>
       <table className="w-full border-collapse text-[13px]" style={{ tableLayout: "fixed" }}>
         <colgroup>
           <col style={{ width: 100 }} />
@@ -100,7 +139,15 @@ export const RosterTable = memo(function RosterTable({
         <thead>
           {/* 헤더 밴드 — 원본 시트의 노란 머리글 줄이 하던 일(본문과 확실히 구분). 회색 밴드 + dim 굵은 글씨. */}
           <tr className="bg-bg-soft text-text-dim text-left text-[11px]">
-            <th className="rounded-l-md py-1 pl-1 font-semibold">학생</th>
+            {/* '학생' 머리가 곧 재원 섹션의 접기 버튼(이 섹션엔 라벨 행이 없다). */}
+            <th className="rounded-l-md py-1 pl-1 font-semibold">
+              <GroupToggle
+                group="active"
+                collapsed={collapsedGroups.includes("active")}
+                count={counts.active ?? 0}
+                onToggle={() => onToggleGroup("active")}
+              />
+            </th>
             <th className="py-1 font-semibold">출석</th>
             <th className="py-1 font-semibold">학교</th>
             <th className="py-1 font-semibold">상태</th>
@@ -117,7 +164,12 @@ export const RosterTable = memo(function RosterTable({
                     className="text-text-dim px-1 py-1 text-[11px] font-semibold"
                     title={GROUP_HINT[row.key]}
                   >
-                    {row.label}
+                    <GroupToggle
+                      group={row.key}
+                      collapsed={collapsedGroups.includes(row.key)}
+                      count={row.count}
+                      onToggle={() => onToggleGroup(row.key)}
+                    />
                   </td>
                 </tr>
               );

@@ -10,6 +10,7 @@
 import { memo, useMemo } from "react";
 import type { ClassSheetWeekData } from "../server/queries";
 import type { GridDay } from "../lib/grid";
+import type { RosterGroupKey } from "../lib/roster-order";
 import { buildGridRows } from "../lib/grid-rows";
 import type { PlanLineDTO } from "../server/actions";
 import type { SheetHandlers } from "./sheet-client";
@@ -31,6 +32,8 @@ export const SheetGrid = memo(function SheetGrid({
   store,
   handlers,
   canEdit,
+  collapsedGroups,
+  onToggleGroup,
 }: {
   days: GridDay[];
   data: ClassSheetWeekData;
@@ -40,6 +43,9 @@ export const SheetGrid = memo(function SheetGrid({
   store: SheetSaveStore;
   handlers: SheetHandlers;
   canEdit: boolean;
+  /** 로스터 섹션 접힘 — 카드가 아니라 시트가 소유한다(나란한 카드의 줄맞춤 유지). */
+  collapsedGroups: readonly RosterGroupKey[];
+  onToggleGroup: (key: RosterGroupKey) => void;
 }) {
   const rows = useMemo(() => buildGridRows(days), [days]);
   const columns = `repeat(${days.length}, ${COL_W}px)`;
@@ -125,6 +131,8 @@ export const SheetGrid = memo(function SheetGrid({
                   store={store}
                   handlers={handlers}
                   canEdit={canEdit}
+                  collapsedGroups={collapsedGroups}
+                  onToggleGroup={onToggleGroup}
                 />
               </div>
             ) : null,
