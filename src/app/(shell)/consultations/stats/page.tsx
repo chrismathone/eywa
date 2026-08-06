@@ -28,27 +28,35 @@ export default async function ConsultationStatsPage() {
     <div className="space-y-6">
       <BackLink href="/consultations" label="학생상담으로" />
 
+      {/* 스코프를 화면에 밝힌다 — 같은 제목 아래 사람마다 다른 수치가 나오면 "숫자가 틀렸다"로 읽힌다. */}
       <header className="border-border border-b pb-5">
         <p className="eyebrow">상담 통계</p>
         <h1 className="font-bold tracking-tight text-foreground text-2xl">최근 6개월</h1>
-        <p className="text-muted-foreground mt-1 text-sm">전환율 · 사유 분포 · 월별 추세</p>
+        <p className="text-muted-foreground mt-1 text-sm">
+          {funnel.teacherScoped
+            ? "내가 기록한 상담 · 담당 학생 기준"
+            : "전환율 · 사유 분포 · 월별 추세"}
+        </p>
       </header>
 
-      <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Stat label="등록상담" value={funnel.enrollmentConsultations} unit="건" />
-        <Stat label="학생상담" value={funnel.studentConsultations} unit="건" />
-        <Stat
-          label="학생 전환"
-          value={funnel.enrolled}
-          unit="건"
-          highlight="text-chart-2"
-        />
-        <Stat
-          label="전환율"
-          value={Math.round(funnel.conversionRate * 10) / 10}
-          unit="%"
-          highlight="text-chart-2"
-        />
+      {/* ⚠️ 강사 스코프에선 등록상담·전환 카드를 **감춘다** — 상담실 지표라 강사에겐 늘 0인데, 0을 그리면
+          "전환율 0%"라는 거짓 사실이 된다(쿼리도 아예 조회하지 않는다 — 화면과 데이터 양쪽에서 차단). */}
+      <section className={`grid gap-3 ${funnel.teacherScoped ? "grid-cols-1" : "grid-cols-2 sm:grid-cols-4"}`}>
+        {funnel.teacherScoped ? null : (
+          <Stat label="등록상담" value={funnel.enrollmentConsultations} unit="건" />
+        )}
+        <Stat label={funnel.teacherScoped ? "내 학생상담" : "학생상담"} value={funnel.studentConsultations} unit="건" />
+        {funnel.teacherScoped ? null : (
+          <>
+            <Stat label="학생 전환" value={funnel.enrolled} unit="건" highlight="text-chart-2" />
+            <Stat
+              label="전환율"
+              value={Math.round(funnel.conversionRate * 10) / 10}
+              unit="%"
+              highlight="text-chart-2"
+            />
+          </>
+        )}
       </section>
 
       <StatsCharts byCategory={byCategory} trend={trend} />
@@ -57,7 +65,7 @@ export default async function ConsultationStatsPage() {
       <section className="bg-card border-border rounded-2xl border p-5">
         <header className="mb-3 flex items-baseline justify-between">
           <h2 className="text-foreground text-sm font-bold">
-            상담 필요 학생
+            {funnel.teacherScoped ? "상담 필요 학생 (담당)" : "상담 필요 학생"}
             <span className="text-muted-foreground num ml-2 text-xs font-normal">
               30일+ 미상담 {needed.total}명
             </span>

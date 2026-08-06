@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import {
   addIsoDateDays,
   followUpUrgency,
@@ -6,7 +7,7 @@ import {
 } from "@/features/consultations/follow-up-urgency";
 import { kstToday } from "@/lib/date-kst";
 import { createClient } from "@/lib/supabase/server";
-import { fetchAllPaged } from "@/lib/supabase/batch";
+import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
 import { effectiveTeacherId, effectiveTeacherScope } from "@/lib/auth/view-mode";
 
 export { followUpUrgency, type FollowUpUrgency };
@@ -311,29 +312,51 @@ export type ConsultationNeededRow = {
 /**
  * 상담 필요 학생 — 재원생 중 마지막 학생상담이 thresholdDays 초과(또는 한 번도 없음).
  * 상담 1340건을 전건 안전 수집(fetchAllPaged, 1000행 절단 회피) 후 학생별 최신만 집계.
+ *
+ * 🔴 **강사는 담당 학생만**(2026-08-06 수리 전엔 전교생 230명 명단이 그대로 떴다 — 담당도 아닌 학생의
+ *    이름·학년·마지막 상담일 노출). 담당 판정은 `effectiveTeacherScope().studentIds` 단일 소스.
+ * ⚠️ '마지막 상담'은 **작성자를 가리지 않는다** — 다른 상담사가 어제 상담한 학생을 "상담 필요"로 재촉하면
+ *    거짓 할 일이 된다. 좁히는 건 *학생 집합*이지 상담 이력이 아니다.
  */
 export async function getStudentsNeedingConsultation(
   thresholdDays = 30,
   limit = 20,
 ): Promise<{ rows: ConsultationNeededRow[]; total: number }> {
   const supabase = await createClient();
-  const enrolled = await fetchAllPaged<{ id: string; name: string; grade: string | null }>((from, to) =>
-    supabase
-      .from("students")
-      .select("id, name, grade")
-      .eq("status", "enrolled")
-      .order("name", { ascending: true })
-      .range(from, to),
-  );
+  const scope = await effectiveTeacherScope();
+  // 강사인데 담당 학생이 0명이면 조회할 것도 없다(전체로 새지 않게 여기서 끊는다).
+  if (scope && scope.studentIds.length === 0) return { rows: [], total: 0 };
+
+  const enrolled = scope
+    ? // ⚠️ 담당 학생이 수십~수백이라 raw `.in()`은 URL 414(#53) → fetchInChunks.
+      await fetchInChunks<{ id: string; name: string; grade: string | null }>(
+        scope.studentIds,
+        (chunk) =>
+          supabase.from("students").select("id, name, grade").eq("status", "enrolled").in("id", chunk),
+      )
+    : await fetchAllPaged<{ id: string; name: string; grade: string | null }>((from, to) =>
+        supabase
+          .from("students")
+          .select("id, name, grade")
+          .eq("status", "enrolled")
+          .order("name", { ascending: true })
+          .range(from, to),
+      );
   if (enrolled.length === 0) return { rows: [], total: 0 };
 
-  const consults = await fetchAllPaged<{ student_id: string; consulted_at: string }>((from, to) =>
-    supabase
-      .from("student_consultations")
-      .select("student_id, consulted_at")
-      .order("consulted_at", { ascending: false })
-      .range(from, to),
-  );
+  const consults = scope
+    ? await fetchInChunks<{ student_id: string; consulted_at: string }>(scope.studentIds, (chunk) =>
+        supabase.from("student_consultations").select("student_id, consulted_at").in("student_id", chunk),
+      )
+    : await fetchAllPaged<{ student_id: string; consulted_at: string }>((from, to) =>
+        supabase
+          .from("student_consultations")
+          .select("student_id, consulted_at")
+          .order("consulted_at", { ascending: false })
+          .range(from, to),
+      );
+  // 청크 경로는 정렬이 청크별이라 전역 최신 보장이 없다 → 아래 Map은 '첫 등장'이 아니라 '최대값'으로 잡는다.
+  consults.sort((a, b) => (a.consulted_at < b.consulted_at ? 1 : -1));
   const last = new Map<string, string>();
   for (const c of consults) {
     if (!last.has(c.student_id)) last.set(c.student_id, c.consulted_at); // desc → 첫 등장이 최신
@@ -364,12 +387,47 @@ export async function getStudentsNeedingConsultation(
 }
 
 // ────────────────────── 통계뷰 ──────────────────────
+//
+// 🔴 **통계도 목록과 같은 스코프를 탄다** (2026-08-06 원장 제보로 수리 — 그 전엔 스코프가 아예 없었다).
+//    실 강사 계정에서 목록은 110건인데 통계는 1313건(학원 전체)·'상담 필요 학생'엔 담당도 아닌 전교생
+//    230명 명단이 떴다. 한 화면이 서로 다른 두 우주를 보여준 것이자, 담당 밖 학생 정보의 노출이다
+//    (#77 "한 표면만 잠갔다"의 전형 — 목록/카운트만 좁히고 통계 4함수를 빠뜨렸다).
+// ⚠️ 새 통계 함수를 추가하면 **여기 스코프 규약을 반드시 태울 것.**
+//    · 학생상담 = `counselor_id = 나`(목록·Stat 카드와 동일 기준 — "내가 한 것만")
+//    · 상담 필요 학생 = **담당 학생(scope.studentIds)** 안에서만
+//    · 등록상담·전환율 = 강사 도메인이 아니다 → 강사 스코프에선 0으로 내리고 화면에서도 감춘다
+//      (`consultant_id`는 상담실 담당자라 강사와 무관하다. 0을 그냥 그리면 "전환율 0%"라는 거짓말이 된다.)
+
+/**
+ * 강사 본인이 작성한 상담(category·consulted_at만) — 카테고리 분포·월별 추세가 공유한다.
+ * RPC(`consultation_category_counts`/`consultation_monthly_trend`)는 **상담자 인자가 없어** 강사 경로에
+ * 못 쓴다. RPC에 인자를 추가하려면 마이그레이션이 필요한데, eywa는 SQL을 손으로 적용하므로 앱을 먼저
+ * 배포하면 그 화면이 죽는다(#95) → 강사 경로만 앱에서 집계한다.
+ * ⚠️ 본인 것만이라 행 수가 작다(실측 110건). 그래도 bare select 금지 규약대로 `fetchAllPaged`(#54).
+ * React cache로 요청당 1회 — 두 함수가 같은 데이터를 두 번 읽지 않는다.
+ */
+const teacherOwnConsultations = cache(
+  async (teacherId: string, sinceIso: string): Promise<{ category: string | null; consulted_at: string }[]> => {
+    const supabase = await createClient();
+    return fetchAllPaged<{ category: string | null; consulted_at: string }>((from, to) =>
+      supabase
+        .from("student_consultations")
+        .select("category, consulted_at")
+        .eq("counselor_id", teacherId)
+        .gte("consulted_at", sinceIso)
+        .order("consulted_at", { ascending: false })
+        .range(from, to),
+    );
+  },
+);
 
 export type ConsultationFunnelPoint = {
   enrollmentConsultations: number; // 등록상담 전체
   studentConsultations: number; // 학생상담 전체
   enrolled: number; // 등록상담 → 학생전환된 수 (linked_student_id 채워진 row)
   conversionRate: number; // enrolled / enrollmentConsultations
+  /** 강사 스코프라 등록상담·전환 지표가 성립하지 않음 — 화면은 그 카드를 감춘다(0을 그리면 거짓말). */
+  teacherScoped: boolean;
 };
 
 export async function getConsultationFunnel(
@@ -379,6 +437,23 @@ export async function getConsultationFunnel(
   const since = new Date();
   since.setMonth(since.getMonth() - monthCount);
   const sinceIso = since.toISOString();
+  const teacherId = await effectiveTeacherId();
+
+  // 강사: 자기가 쓴 학생상담 건수만. 등록상담·전환은 상담실 지표라 **조회 자체를 안 한다**(노출 0).
+  if (teacherId) {
+    const { count: sc } = await supabase
+      .from("student_consultations")
+      .select("*", { count: "exact", head: true })
+      .eq("counselor_id", teacherId)
+      .gte("consulted_at", sinceIso);
+    return {
+      enrollmentConsultations: 0,
+      studentConsultations: sc ?? 0,
+      enrolled: 0,
+      conversionRate: 0,
+      teacherScoped: true,
+    };
+  }
 
   const [
     { count: ec },
@@ -408,6 +483,7 @@ export async function getConsultationFunnel(
     enrolled,
     conversionRate:
       enrollmentConsultations > 0 ? (enrolled / enrollmentConsultations) * 100 : 0,
+    teacherScoped: false,
   };
 }
 
@@ -419,6 +495,17 @@ export async function getConsultationByCategory(
   const supabase = await createClient();
   const since = new Date();
   since.setMonth(since.getMonth() - monthCount);
+  const teacherId = await effectiveTeacherId();
+
+  // 강사: 본인 상담만 집계(RPC는 상담자 인자가 없다 — 위 teacherOwnConsultations 주석 참조).
+  if (teacherId) {
+    const counts = new Map<string, number>();
+    for (const r of await teacherOwnConsultations(teacherId, since.toISOString())) {
+      const k = r.category ?? "other";
+      counts.set(k, (counts.get(k) ?? 0) + 1);
+    }
+    return [...counts].map(([category, count]) => ({ category, count }));
+  }
 
   // DB group-by RPC(0040a) — 전건 fetch + JS Map 집계는 PostgREST ~1000행에서 잘려(#54) 데모 상담 1340행 중
   // 340행을 잃고 카테고리 분포가 과소집계됐다. 집계를 DB로 내려 1쿼리·무절단.
@@ -437,15 +524,26 @@ export async function getConsultationTrend(monthCount = 6): Promise<MonthlyBucke
   const supabase = await createClient();
   const now = new Date();
   const start = new Date(now.getFullYear(), now.getMonth() - monthCount + 1, 1);
+  const teacherId = await effectiveTeacherId();
 
-  // DB group-by RPC(0040a) — 양 테이블 전건 fetch + JS 버킷팅은 ~1000행에서 잘려(#54) 추세 student 라인이
-  // 과소집계됐다(데모 student_consultations 1340행/6개월). 월별 집계를 DB로 내려 무절단.
-  const { data } = await supabase.rpc("consultation_monthly_trend", {
-    p_start: start.toISOString(),
-  });
   const byMonth = new Map<string, { enrollment: number; student: number }>();
-  for (const r of (data ?? []) as { month: string; enrollment: number; student: number }[]) {
-    byMonth.set(r.month, { enrollment: Number(r.enrollment), student: Number(r.student) });
+  if (teacherId) {
+    // 강사: 본인 학생상담만. 등록상담 라인은 강사 도메인이 아니라 0으로 남긴다(조회도 안 한다).
+    for (const r of await teacherOwnConsultations(teacherId, start.toISOString())) {
+      const d = new Date(r.consulted_at);
+      const k = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      const cur = byMonth.get(k) ?? { enrollment: 0, student: 0 };
+      byMonth.set(k, { enrollment: 0, student: cur.student + 1 });
+    }
+  } else {
+    // DB group-by RPC(0040a) — 양 테이블 전건 fetch + JS 버킷팅은 ~1000행에서 잘려(#54) 추세 student 라인이
+    // 과소집계됐다(데모 student_consultations 1340행/6개월). 월별 집계를 DB로 내려 무절단.
+    const { data } = await supabase.rpc("consultation_monthly_trend", {
+      p_start: start.toISOString(),
+    });
+    for (const r of (data ?? []) as { month: string; enrollment: number; student: number }[]) {
+      byMonth.set(r.month, { enrollment: Number(r.enrollment), student: Number(r.student) });
+    }
   }
 
   // 데이터 없는 달도 0으로 채워 monthCount개 버킷 유지(기존 출력 형태 보존).
