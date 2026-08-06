@@ -14,6 +14,7 @@ import { getActivePrompts } from "@/features/onescreen/server/prompt-actions";
 import { ClassnoteQueueCard } from "./_components/classnote-queue-card";
 import { WritingRateCard } from "./_components/writing-rate-card";
 import { ReportList } from "./_components/report-list";
+import { RecallFace } from "./_components/recall-face";
 import { ComposeTab } from "./_components/compose-tab";
 import { NoticeFace } from "./_components/notice-face";
 import { BoardRosterCard } from "./_components/board-roster-card";
@@ -26,7 +27,7 @@ export const metadata = { title: "수업보고서 — eywa" };
 type Sp = Record<string, string | undefined>;
 // 관리 5면(작성률·반 구성·목록·공지·직접발송) + 설정 2면(보고서 표시·AI 멘트, owner 쓰기 권한 있을 때만).
 // (미매핑 탭은 2026-07-29 제거 — Edutrix 소등으로 원본이 사라져 매핑 자체가 불가능해졌다.)
-type Tab = "writing" | "boards" | "list" | "notice" | "compose" | "report" | "ai_ment";
+type Tab = "writing" | "boards" | "list" | "notice" | "compose" | "recall" | "report" | "ai_ment";
 
 // 설정 2탭(report·ai_ment)은 saveOwnerSection/savePrompt가 owner 쓰기 게이트라 — owner를 못 쓰는
 // 계정(위임 안 받은 admin/manager)에겐 폼을 보여주면 '저장 거부'가 된다. canOwner일 때만 탭을 노출.
@@ -34,7 +35,9 @@ type Tab = "writing" | "boards" | "list" | "notice" | "compose" | "report" | "ai
 function resolveTab(sp: Sp, canOwner: boolean, canSend: boolean): Tab {
   const t = sp.tab;
   if (t === "list" || t === "writing" || t === "notice" || t === "boards") return t;
-  if (t === "compose" && canSend) return t;
+  // 회수(recall)는 **되돌릴 수 없는 파괴적 동작**이라 발송과 같은 쓰기 게이트(canSend)로 잠근다.
+  // 서버 액션(requestReportRecall)이 최종 게이트 — 탭을 숨기는 건 게이트가 아니다(#77).
+  if ((t === "compose" || t === "recall") && canSend) return t;
   if ((t === "report" || t === "ai_ment") && canOwner) return t;
   return "writing";
 }
@@ -60,7 +63,10 @@ export default async function LessonReportsPage({ searchParams }: { searchParams
     { key: "list", label: "목록", href: "/lesson-reports?tab=list", group: "관리" },
     { key: "notice", label: "반 공지", href: "/lesson-reports?tab=notice", group: "관리" },
     ...(canSendReports
-      ? ([{ key: "compose", label: "직접 발송", href: "/lesson-reports?tab=compose", group: "관리" }] as Face[])
+      ? ([
+          { key: "compose", label: "직접 발송", href: "/lesson-reports?tab=compose", group: "관리" },
+          { key: "recall", label: "회수", href: "/lesson-reports?tab=recall", group: "관리" },
+        ] as Face[])
       : []),
     ...(canOwner
       ? ([
@@ -102,6 +108,9 @@ export default async function LessonReportsPage({ searchParams }: { searchParams
                   composeShowAttachments: settings.report.showAttachments,
                 }),
               )
+          : tab === "recall"
+            ? // 회수는 **검색해서 찾는** 화면이라 첫 페인트에 목록을 싣지 않는다(전건을 띄우면 오클릭 거리만 는다).
+              getReportFilterOptions().then((filterOptions) => ({ recallOptions: filterOptions }))
           : tab === "ai_ment"
             ? getActivePrompts().then((r) => ({ aiPrompts: r.prompts ?? [] }))
             : // 첫 페인트도 클라 초기 state와 **같은 기본 범위**(이번 달)로 — 안 맞추면 열자마자 목록이 한 번 바뀐다.
@@ -154,6 +163,10 @@ export default async function LessonReportsPage({ searchParams }: { searchParams
 
       {tab === "list" && "filterOptions" in tabData && "initialList" in tabData ? (
         <ReportList options={tabData.filterOptions} initial={tabData.initialList} canSend={canSendReports} todayYmd={kstToday()} />
+      ) : null}
+
+      {tab === "recall" && "recallOptions" in tabData ? (
+        <RecallFace options={tabData.recallOptions} todayYmd={kstToday()} />
       ) : null}
 
       {tab === "notice" && "noticeClasses" in tabData && "noticeRows" in tabData ? (

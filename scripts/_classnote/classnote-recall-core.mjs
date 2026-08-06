@@ -24,6 +24,7 @@ import {
   fetchChildren,
   fetchCenterId,
   findChildReportId,
+  loginClassnote,
   resolveBoardChildEnrollments,
   CLASSNOTE_BASE,
 } from "./classnote-admin-core.mjs";
@@ -155,6 +156,9 @@ export async function processRecallsOnce(sql, browser, opts) {
 
   const page = await browser.newPage();
   try {
+    // 🔴 로그인 먼저 — 새 페이지는 `about:blank`라 **상대경로 fetch가 갈 곳이 없다**(2026-08-06 실패 원인).
+    //    아래 조회들은 전부 `/api/...` 상대경로라 ClassNote 도메인 위에서만 동작한다(notice-core와 같은 순서).
+    await loginClassnote(page);
     const centerId = await fetchCenterId(page);
     const boards = await fetchBoards(page, centerId);
     const children = await fetchChildren(page, centerId);
