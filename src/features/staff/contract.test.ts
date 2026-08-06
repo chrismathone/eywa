@@ -81,8 +81,20 @@ describe("currentContract", () => {
 });
 
 describe("nextContractDefault", () => {
-  it("현재 계약이 끝나는 날부터 1년, 차수는 +1", () => {
+  // 🔴 회귀 가드(2026-08-06 실측 버그) — 저장된 계약이 0건이면 **1차 = 입사일~+1년**을 제안해야 한다.
+  // 예전엔 가상 현재계약의 다음(2차·입사 1년 뒤)을 제안해, 화면은 "2차"인데 서버는 1차로 저장하고
+  // 첫 계약 기간이 통째로 1년 밀렸다.
+  it("저장된 계약이 없으면 1차 = 입사일부터 1년", () => {
     expect(nextContractDefault([], "2026-06-06")).toEqual({
+      seq: 1,
+      startDate: "2026-06-06",
+      endDate: "2027-06-06",
+    });
+  });
+
+  it("1차만 저장돼 있으면 2차는 그 종료일부터", () => {
+    const rows = [row(1, "2026-06-06", "2027-06-06")];
+    expect(nextContractDefault(rows, "2026-06-06")).toEqual({
       seq: 2,
       startDate: "2027-06-06",
       endDate: "2028-06-06",
