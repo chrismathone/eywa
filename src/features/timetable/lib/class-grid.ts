@@ -121,6 +121,12 @@ export type RichClassCard = {
    * 원장 시트의 좌우 순서를 그대로 재현하기 위한 값이라 **정의 순서가 곧 화면 순서**다.
    */
   groupSeq?: number;
+  /**
+   * 이 카드를 가져간 **커스텀 그룹(줄)의 id** — 미배정('기타' 섹션)은 `OTHERS_GROUP_ID`, 자동 그룹은 undefined.
+   * 통합뷰 '배치 편집'이 "이 섹션 = 설정의 어느 줄인가"를 groupOrder 산수(BASE+i*10)로 되짚지 않게
+   * 못박아 둔다(그 산수는 주말 하위 섹션·기타에서 쉽게 어긋난다).
+   */
+  groupCustomId?: string;
 };
 
 /**
@@ -165,7 +171,15 @@ export type RichCardGroup = {
    * 0이면 그 섹션은 **아예 안 그린다**(대기 0명인 그룹에서 '대기 —' 빈 줄이 사라진다).
    */
   rosterRows: { active: number; hold: number; withdrawn: number };
+  /**
+   * 이 섹션이 속한 커스텀 그룹(줄)의 id — 미배정('기타')은 `OTHERS_GROUP_ID`, 자동 그룹은 undefined.
+   * 한 줄이 평일/주말 두 섹션으로 갈라져도 **같은 id**다(줄은 하나이고 축만 둘이다).
+   */
+  customGroupId?: string;
 };
+
+/** 미배정('기타 수업') 섹션의 `customGroupId` — 실제 그룹 id(uuid)와 절대 안 겹치게 예약어로 둔다. */
+export const OTHERS_GROUP_ID = "__others__";
 
 const DAY_ORDER: DayOfWeek[] = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
 const WEEKEND = new Set<string>(["sat", "sun"]);
@@ -353,6 +367,7 @@ function applyCustomGroups(
         ...c,
         groupOrder: CUSTOM_OTHERS + (c.weekendOnly ? 1 : 0),
         groupLabel: othersLabel(custom, c.weekendOnly),
+        groupCustomId: OTHERS_GROUP_ID,
       });
       continue;
     }
@@ -362,6 +377,7 @@ function applyCustomGroups(
       groupOrder: CUSTOM_BASE + idx * 10 + (c.weekendOnly ? 1 : 0),
       groupLabel: c.weekendOnly ? `${title} (주말)` : title,
       groupSeq: seqOf.get(c.classId),
+      groupCustomId: groups[idx].id,
     });
   }
   return out;
@@ -388,6 +404,18 @@ export function buildRichCardGroups(
   /** 커스텀 그룹(학원설정 과목별). 미지정·빈 그룹이면 지금까지처럼 "N교시 시작" 자동 그룹. */
   custom?: IntegrationGroupsConfig | null,
 ): RichCardGroup[] {
+  return groupRichCards(buildRichClassCards(slots, config), config, compactSections, custom);
+}
+
+/**
+ * 1단계 — 슬롯 → **반 카드**(셀·명단·요일축까지 완성). 그룹 배정과 무관한 부분만 한다.
+ *
+ * 🔴 왜 2단계로 쪼갰나(2026-08-06): 통합뷰 '배치 편집'이 반을 다른 줄로 끌 때마다 **그 자리에서**
+ * 진짜 표를 다시 그려야 하는데(줄이 바뀌면 교시축·요일축·명단 행수가 같이 바뀐다), 서버 왕복 없이
+ * 하려면 2단계(`groupRichCards`)만 클라에서 다시 돌리면 된다. 카드 빌드(무거운 쪽)는 서버 1회.
+ * 두 단계를 합친 `buildRichCardGroups`는 그대로 남겨 기존 소비처·테스트는 무변경.
+ */
+export function buildRichClassCards(slots: GridSlot[], config: PeriodsConfig): RichClassCard[] {
   const subject = (slots[0]?.subject ?? "math") as TimetableSubject;
   const byClass = new Map<string, GridSlot[]>();
   for (const s of slots) (byClass.get(s.classId) ?? byClass.set(s.classId, []).get(s.classId)!).push(s);
@@ -481,6 +509,20 @@ export function buildRichCardGroups(
       weekendOnly: weekend,
     });
   }
+  return cards;
+}
+
+/**
+ * 2단계 — 반 카드 → **섹션(줄)**. 커스텀 그룹 배정·'1시간 단위' 압축·교시축/요일축/명단 행수 계산.
+ * 순수 함수라 서버(첫 렌더)와 클라(배치 편집 중 즉시 재계산)가 **같은 입력에 같은 결과**를 낸다.
+ */
+export function groupRichCards(
+  cards: RichClassCard[],
+  config: PeriodsConfig,
+  compactSections: Set<number> = new Set(),
+  custom?: IntegrationGroupsConfig | null,
+): RichCardGroup[] {
+  const subject = (cards[0]?.subject ?? "math") as TimetableSubject;
 
   // 커스텀 그룹 — 카드의 소속(groupOrder·groupLabel)만 갈아끼운다. 아래 클러스터링·압축·정렬은
   // 그 두 값만 보고 돌아가므로 자동 그룹과 완전히 같은 경로를 탄다(분기 없음).
@@ -631,6 +673,7 @@ export function buildRichCardGroups(
         sectionKey: cluster[0].groupOrder,
         compacted: sectionCompact,
         compactable: !weekend,
+        customGroupId: cluster[0].groupCustomId,
         cards: cluster,
         periodRows,
         days,

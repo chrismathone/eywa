@@ -1105,3 +1105,30 @@ pro로 돈 적이 **한 번도 없었다**(2026-07-14·07-16·07-30 전수, conf
 `<div hidden id="S:0">`에 남는다(하이드레이션 미완). 이때 `getBoundingClientRect`는 전부 **0**이고
 `.click()`도 안 먹는다 → `document.querySelector('main table')`로 잡을 것(숨은 사본이 먼저 잡힌다).
 창은 사이드바 링크를 `.click()`해 열면 정상 하이드레이션된다.
+
+---
+
+## #98 `transform`이 걸린 조상은 **`position:fixed` 자손의 좌표계를 갈아탄다** — 끌고 있는 칩이 엉뚱한 데 그려진다 (2026-08-06)
+
+원장 제보: *"그룹설정 드래그드랍이 이상한데서 렌더링됨"* — 반 칩을 끌면 **다이얼로그 바깥 오른쪽**에
+칩이 떠 있었다(스크린샷상 커서와 900px 넘게 벌어짐).
+
+**원인은 dnd-kit이 아니라 다이얼로그의 센터링이다.** dnd-kit `DragOverlay`는
+`position:fixed; top:<rect.top>; left:<rect.left>` + `transform: translate3d(delta)`로 그린다 —
+**뷰포트 좌표를 그대로 쓴다는 전제**다. 그런데 CSS 명세상 **`transform`(그리고 `filter`·`perspective`·
+`will-change`·`contain:paint`)이 걸린 요소는 `position:fixed` 자손의 containing block이 된다.**
+모달을 관용구대로 `fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2`로 가운데 놓으면
+그 `-translate-*`가 바로 그 transform이라, 오버레이의 `left: 355px`가 **뷰포트가 아니라 패널 좌상단**
+기준이 된다 → 패널 원점(여기선 ~+290,+90)만큼 통째로 밀린다.
+
+- **규칙**: **드래그·팝오버 등 `position:fixed` 자손을 품는 컨테이너는 `transform`으로 센터링하지 말 것.**
+  `fixed inset-0 flex items-center justify-center`(+ 래퍼 `pointer-events-none` / 패널
+  `pointer-events-auto`)로 바꾸면 transform이 사라져 자손이 뷰포트 기준으로 돌아온다. 래퍼에
+  `pointer-events-none`을 안 주면 그 칸이 backdrop 클릭(닫기)을 통째로 가로챈다.
+- **판별(1줄)**: 조상을 타고 올라가며 `getComputedStyle(n).transform !== 'none'`을 찾는다. 하나라도
+  있으면 그게 범인이다. 고쳤는지 확인은 **오버레이 좌상단 ≈ 포인터 − 잡은 지점**(실측 2px 이내).
+- 🔑 같은 뿌리의 사촌 함정: **`zoom`은 fixed 자손의 좌표를 배율만큼 곱한다**(gotcha 없음, 코드 주석에만
+  있었음) → 시간표 글씨 크기(zoom) 래퍼는 반드시 **`DndContext` 안쪽**에 둔다. 즉 드래그를 붙일 땐
+  **transform 조상 0개 + zoom 조상 0개**가 오버레이의 전제 조건이다.
+- ⚠️ 합성 PointerEvent로 검증할 땐 **한 스크립트 안에서 재지 말 것** — React 커밋이 비동기라 같은 틱에선
+  오버레이가 아직 DOM에 없다(호출을 시작/측정/놓기 3번으로 쪼갠다).

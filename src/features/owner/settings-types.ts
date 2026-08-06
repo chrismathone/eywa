@@ -49,6 +49,19 @@ export const integrationGroupSchema = z.object({
 });
 export type IntegrationGroupSetting = z.infer<typeof integrationGroupSchema>;
 
+// 통합뷰 그룹 배치 **프리셋**(과목별 여러 벌) — "학기 배치"·"방학 배치"처럼 묶음을 여러 개 저장해 두고
+// 골라 불러온다(원장 2026-08-06 "여러가지 그룹화로 저장/불러오기"). 지금 적용 중인 배치는 여전히
+// integrationGroups 한 벌뿐이고, 프리셋은 **보관함**이다 — 불러오기 = 그 내용을 지금 배치에 복사.
+// (프리셋을 '현재'와 링크로 묶지 않는 이유: 링크면 프리셋을 고른 뒤의 임시 수정이 보관본까지 오염시킨다.)
+export const integrationGroupPresetSchema = z.object({
+  id: z.string().min(1).max(36),
+  name: z.string().min(1).max(30),
+  groups: z.array(integrationGroupSchema).max(40),
+  showOthers: z.boolean().optional(),
+  othersTitle: z.string().max(30).optional(),
+});
+export type IntegrationGroupPresetSetting = z.infer<typeof integrationGroupPresetSchema>;
+
 // ECS(English Class Sheet) 수업계획 '구분' 영역 — 저장은 영문 slug(key), 라벨은 설정(라벨을 바꿔도
 // 저장된 계획 행의 key는 불변 = orphan 방지, subjects[].key와 동일 원칙). english는 미설정 시
 // resolveSkillAreas(skill-areas.ts)가 기본 6영역(Vocab~Speaking)을 프리필한다.
@@ -98,6 +111,8 @@ export const subjectSchema = z.object({
   // 어느 그룹에도 없는 반을 맨 아래 '기타' 섹션으로 보여줄지. 미설정 = 보여줌(반이 조용히 사라지면 안 된다).
   integrationShowOthers: z.boolean().optional(),
   integrationOthersTitle: z.string().max(30).optional(),
+  // 저장해 둔 그룹 배치들(보관함). 현재 적용 배치(integrationGroups)와 별개 — 불러오기로 복사해 쓴다.
+  integrationGroupPresets: z.array(integrationGroupPresetSchema).max(12).optional(),
   // ECS 수업계획 '구분' 영역 목록(과목별). 미설정 = english만 기본 6영역 프리필(resolveSkillAreas),
   // 그 외 과목은 빈 목록(= ECS 진입 대상 아님). (.optional() — 예외 필드 관례, weekdayPeriods와 동일.)
   skillAreas: z.array(skillAreaSchema).max(20).optional(),
