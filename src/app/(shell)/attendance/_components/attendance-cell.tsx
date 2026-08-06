@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { AttendanceStatus } from "@/features/attendance/server/queries";
-import { STATUS_TEXT, cellDisplay } from "@/features/attendance/cell-display";
+import { CELL_SCROLL_MARGIN, STATUS_TEXT, cellDisplay } from "@/features/attendance/cell-display";
 import { cellKey, rowKey } from "@/features/attendance/grid/model";
 import { useCellState } from "./grid-context";
 import { CellPopover, type PopoverAnchor } from "./cell-popover";
@@ -121,7 +121,8 @@ export function AttendanceCell({
         }}
         onDoubleClick={openPopover}
         onContextMenu={openPopover}
-        className={`absolute inset-0 flex items-center justify-center text-[11px] font-bold select-none ${display.className} ${
+        // `scroll-mt` — 방향키 이동 시 활성 칸이 고정 헤더 뒤로 숨지 않게(cell-display.ts 주석 참조).
+        className={`absolute inset-0 flex items-center justify-center text-[11px] font-bold select-none ${CELL_SCROLL_MARGIN} ${display.className} ${
           locked ? "cursor-not-allowed" : "cursor-cell"
         }`}
       >
