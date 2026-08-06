@@ -118,7 +118,8 @@ export default async function StudentsPage({
   };
 
   return (
-    <div className="space-y-5">
+    // 컴팩트 크롬(창·모바일·강사 미니셸)에선 섹션 간격을 좁힌다(원장 지시 2026-08-06 "남는 공간 많음").
+    <div className="space-y-5 compact-chrome:space-y-3">
       {/* Editorial 문법 ① — eyebrow→헤드라인→서브 + 우측 액션(엑셀·가져오기·신규) */}
       <PageHeader
         eyebrow="학생 관리"
@@ -126,6 +127,8 @@ export default async function StudentsPage({
         description={`재원 ${enrolled}명 · 학원설정 과목 기준`}
         actions={
           <>
+            {/* ⚠️ 동기화 배지도 이 행 안에 — 따로 두면 배지 하나가 한 줄을 통째로 먹는다(우측 텅 빔). */}
+            <MakeeduSyncBadge domain="students" />
             <Button
               variant="outline"
               render={
@@ -147,7 +150,6 @@ export default async function StudentsPage({
           </>
         }
       />
-      <MakeeduSyncBadge domain="students" />
       {/* 히어로 카드 — 재원 총원 + 과목별 재원생 비중(전체/퇴원은 상태 필터로). 과목이 늘어도 카드 1장 고정.
           재원생 0명 과목은 숨김(미운영 과목 노이즈 방지), 인원 내림차순. */}
       <EnrolledStatCard

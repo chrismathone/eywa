@@ -1,7 +1,5 @@
 "use client";
 
-import { Clock, UserCheck, Users, UserX } from "@/components/icons/eywa-icon-compat";
-import { BigStat } from "@/components/atoms/big-stat";
 import { formatSessionUnits } from "@/features/attendance/session-units";
 import { rateDecimal, ratePercent, type Counted } from "@/features/attendance/grid/totals";
 import { useRowCount, useRowsCount } from "./grid-context";
@@ -52,10 +50,36 @@ export function LiveRecords({ rows, fallback }: { rows?: string[]; fallback: Cou
   return <>{(live ?? fallback).recorded}</>;
 }
 
+/** 툴바에 실리는 지표 한 칸 — 라벨 + 숫자 + 단위. */
+function CompactMetric({
+  label,
+  value,
+  unit,
+  valueClass = "text-foreground",
+}: {
+  label: string;
+  value: string | number;
+  unit?: string;
+  valueClass?: string;
+}) {
+  return (
+    <span className="flex items-baseline gap-1 whitespace-nowrap">
+      <span className="text-text-dim text-[12px] font-medium">{label}</span>
+      <span className={`num text-[17px] leading-none font-bold tracking-tight ${valueClass}`}>{value}</span>
+      {unit ? <span className="text-text-faint text-[11px] font-medium">{unit}</span> : null}
+    </span>
+  );
+}
+
 /**
  * 상단 스탯 4개 — 출석률·결석·지각은 입력을 즉시 따라간다. '등록 학생'만 서버 값(출결과 무관하게 고정).
  * ⚠️ 기록이 0건이면 "0%"는 **사실이 아니다** — 출석률이 0인 게 아니라 아직 아무도 안 찍은 것이다.
  *    과목을 하드코딩하지 않고 **데이터 유무**로 가른다(데이터가 생기면 저절로 숫자로 돌아온다).
+ *
+ * 🔴 **BigStat 카드 4장에서 툴바 한 줄로 강등**(원장 지시 2026-08-06 "상단 공간낭비 심한 것부터"):
+ * 출석부는 화면 높이가 고정이라 위에서 먹는 1px이 그대로 학생 행 1px이다. 카드는 세로 110px을 쓰는데
+ * 여기서 필요한 건 숫자 4개뿐이라, 툴바 오른쪽에 실어 **세로 0px**로 만들었다.
+ * ⚠️ 이 화면에서 BigStat 카드로 되돌리지 말 것 — Editorial 빅 스탯은 대시보드용이고, 여기선 행이 곧 정보다.
  */
 export function LiveStats({
   totalStudents,
@@ -66,25 +90,23 @@ export function LiveStats({
 }) {
   const c = useRowsCount() ?? fallback;
   const rate = rateDecimal(c);
+
   return (
-    <section className="grid grid-cols-2 gap-3.5 sm:grid-cols-4">
-      <BigStat
-        label="등록 학생"
-        value={totalStudents}
-        unit="명"
-        tone="primary"
-        icon={<Users size={16} strokeWidth={1.8} />}
-      />
-      <BigStat
+    <div className="flex items-center gap-x-3">
+      <CompactMetric label="등록" value={totalStudents} unit="명" />
+      <span className="bg-line h-4 w-px shrink-0" aria-hidden />
+      {/* ⚠️ 기록 0건에 "0%"를 쓰지 않는다 — 출석률이 0인 게 아니라 아직 아무도 안 찍은 것이다.
+          압축 바에서도 "—"만 두면 고장으로 읽히므로 단위 자리에 사유를 적는다. */}
+      <CompactMetric
         label="출석률"
         value={c.recorded > 0 ? rate : "—"}
-        unit={c.recorded > 0 ? "%" : undefined}
-        tone={c.recorded === 0 ? "neutral" : rate >= 90 ? "primary" : rate >= 80 ? "amber" : "danger"}
-        sub={c.recorded > 0 ? undefined : "기록 없음"}
-        icon={<UserCheck size={16} strokeWidth={1.8} />}
+        unit={c.recorded > 0 ? "%" : "기록 없음"}
+        valueClass={rateColorOf(c.recorded > 0 ? rate : null)}
       />
-      <BigStat label="결석" value={c.absent} unit="회" tone="danger" icon={<UserX size={16} strokeWidth={1.8} />} />
-      <BigStat label="지각" value={c.late} unit="회" tone="amber" icon={<Clock size={16} strokeWidth={1.8} />} />
-    </section>
+      <span className="bg-line h-4 w-px shrink-0" aria-hidden />
+      <CompactMetric label="결석" value={c.absent} unit="회" valueClass="text-danger" />
+      <span className="bg-line h-4 w-px shrink-0" aria-hidden />
+      <CompactMetric label="지각" value={c.late} unit="회" valueClass="text-amber" />
+    </div>
   );
 }

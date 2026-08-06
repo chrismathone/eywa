@@ -1,12 +1,29 @@
 import type { AttendanceMatrix, AttendanceStatus } from "@/features/attendance/server/queries";
 import type { TeacherMoney } from "@/features/attendance/server/teacher-money";
-import { DAY_TONE, STATUS_TEXT, cellDisplay } from "@/features/attendance/cell-display";
+import { DAY_TONE, HEAD_ROW_H, STATUS_TEXT, cellDisplay } from "@/features/attendance/cell-display";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import { cellKey, rowKey } from "@/features/attendance/grid/model";
 import { countMarks, sumCounts, type Counted } from "@/features/attendance/grid/totals";
 import { ClassGroupBody, CollapseAllButton } from "./class-group";
 import { LiveRecords, LiveUnits } from "./live-totals";
 import { MatrixRow, formatMoney } from "./matrix-row";
+
+/**
+ * sticky 헤더의 선 — `border-collapse` 표에선 테두리 소유권이 **표**에 있어 sticky 셀만 남고 선은 밀려 사라진다(#71).
+ * box-shadow도 병합모드 th에선 불안정 → **셀 자식 가상요소 1px 실선**으로 그린다(셀과 함께 고정).
+ * ⚠️ sticky 셀은 그 자체가 positioned라 이게 기준이 된다 — `relative`를 덧붙이면 position이 덮여 sticky가 깨진다.
+ */
+const HEAD_UNDERLINE =
+  "after:absolute after:inset-x-0 after:bottom-0 after:h-px after:bg-line after:content-['']";
+/** 가로 스크롤에도 남아야 하는 세로 divider(좌/우 고정 열의 경계). */
+const EDGE_RIGHT = "before:absolute before:inset-y-0 before:right-0 before:w-px before:bg-line before:content-['']";
+const EDGE_LEFT = "before:absolute before:inset-y-0 before:left-0 before:w-px before:bg-line before:content-['']";
+/**
+ * 헤더 z단계 — 본문 셀의 선택 오버레이·채우기 손잡이가 z-20~40을 쓰므로(attendance-cell) 헤더는 **그 위**여야
+ * 스크롤로 밀려 들어온 칸이 헤더를 뚫고 나오지 않는다. 좌우까지 고정된 모서리 칸은 한 단계 더 위.
+ */
+const HEAD_Z = "z-50";
+const HEAD_CORNER_Z = "z-[60]";
 
 /** 표에 쌓이는 한 덩어리 = 한 반. 반별 보기는 1개, 강사 전체 보기는 그 강사의 모든 반. */
 export type MatrixGroup = {
@@ -28,8 +45,13 @@ function groupCount(matrix: AttendanceMatrix): Counted {
  * ⚠️ `cols`는 보이는 날짜뿐이지만(2주 보기는 14칸) `initial`은 **그 달 전체**를 싣는다 — 합계(시수·출석률)는
  *    보이는 열이 아니라 월 전체 기준이라, 안 보이는 날의 기록도 저장소에 있어야 한다.
  */
-export function buildGridSource(groups: MatrixGroup[], days: AttendanceMatrix["days"]) {
-  const rows = groups.flatMap((g) => g.matrix.students.map((s) => rowKey(g.classId, s.id)));
+export function buildGridSource(
+  groups: MatrixGroup[],
+  days: AttendanceMatrix["days"],
+  /** 화면에 그릴 **정렬된 순서**. 방향키·범위 선택이 이 배열의 인덱스로 움직이므로 렌더와 반드시 같아야 한다. */
+  ordered: readonly { classId: string; studentId: string }[],
+) {
+  const rows = ordered.map((r) => rowKey(r.classId, r.studentId));
   const cols = days.filter((d) => !d.placeholder).map((d) => d.date);
   const initial: Record<string, { s: string; u: number | null }> = {};
   for (const g of groups) {
@@ -55,9 +77,12 @@ export function MatrixTable({
   showGroups,
   money,
   lockBefore,
+  ordered,
 }: {
   groups: MatrixGroup[];
   days: AttendanceMatrix["days"];
+  /** 정렬된 행 순서(sort-rows.ts). 반별이 아니면 반 머리행 없이 이 순서 그대로 한 덩어리로 그린다. */
+  ordered: readonly { classId: string; studentId: string }[];
   /** "YYYY-MM-DD" → 휴일명(학원설정). 헤더는 빨간 날짜 + 툴팁, 본문은 회색(수업 없음). */
   holidays: Record<string, string>;
   /** 반 머리행·총합 행 표시(강사 전체 보기). */
@@ -73,25 +98,41 @@ export function MatrixTable({
   const totalCount = sumCounts(groups.map((g) => groupCount(g.matrix)));
 
   return (
-    <DragScrollArea className="bg-card shadow-card rounded-2xl">
+    // 격자가 **화면의 유일한 세로 스크롤**이다(scrollY) — 그래야 `thead sticky top-0`이 실제로 붙고
+    // 스크롤바도 하나만 생긴다. 높이는 부모(page.tsx의 `min-h-0 flex-1`)가 정해 준다 — 상수·vh 계산 없음.
+    <DragScrollArea scrollY className="bg-card shadow-card h-full rounded-2xl">
       <table className="w-full min-w-full border-collapse text-sm">
         <thead>
-          <tr>
-            <th className="bg-bg-soft border-line sticky left-0 z-10 border-b border-r px-2 py-1 text-left whitespace-nowrap">
+          {/* 높이 고정 — 칸의 scroll-margin-top과 짝을 이룬다(cell-display.ts `HEAD_ROW_H` 주석). */}
+          <tr className={HEAD_ROW_H}>
+            <th
+              className={`bg-bg-soft sticky top-0 left-0 ${HEAD_CORNER_Z} ${HEAD_UNDERLINE} ${EDGE_RIGHT} px-2 py-1 text-left whitespace-nowrap`}
+            >
               {/* 반 접기가 있는 보기에서만 — 별도 줄 없이 이름 열 머리에 얹는다. */}
               {showGroups ? <CollapseAllButton classIds={groups.map((g) => g.classId)} /> : null}
               <span className="micro">이름</span>
             </th>
-            <th className="bg-bg-soft border-line border-b border-r px-1.5 py-1 text-left whitespace-nowrap">
+            <th
+              className={`bg-bg-soft border-line sticky top-0 ${HEAD_Z} ${HEAD_UNDERLINE} border-r px-1.5 py-1 text-left whitespace-nowrap`}
+            >
               <span className="micro">학년</span>
             </th>
-            <th className="bg-bg-soft border-line border-b border-r px-1.5 py-1 text-left whitespace-nowrap">
+            <th
+              className={`bg-bg-soft border-line sticky top-0 ${HEAD_Z} ${HEAD_UNDERLINE} border-r px-1.5 py-1 text-left whitespace-nowrap`}
+            >
               <span className="micro">학교</span>
             </th>
             {days.map((d) => {
               // 그 달에 없는 날 — 빈 여백(번호·요일 없음). 폭은 다른 날 칸과 동일(min-w)로 고정.
               if (d.placeholder) {
-                return <th key={d.date} className="border-line bg-bg-soft/30 min-w-[30px] border-b border-r" aria-hidden />;
+                // ⚠️ 불투명이어야 한다(#74) — sticky 헤더가 반투명이면 밑으로 지나가는 학생 행이 비쳐 보인다.
+                return (
+                  <th
+                    key={d.date}
+                    className={`bg-bg-soft border-line sticky top-0 ${HEAD_Z} ${HEAD_UNDERLINE} min-w-[30px] border-r`}
+                    aria-hidden
+                  />
+                );
               }
               const holiday = holidays[d.date];
               const isClassDay = classDows.has(d.dow) && !holiday;
@@ -117,7 +158,7 @@ export function MatrixTable({
                 <th
                   key={d.date}
                   title={holiday ?? undefined}
-                  className={`border-line num min-w-[30px] border-b border-r px-0.5 py-1 text-center text-[10px] ${bg} ${fg}`}
+                  className={`border-line num sticky top-0 ${HEAD_Z} ${HEAD_UNDERLINE} min-w-[30px] border-r px-0.5 py-1 text-center text-[10px] ${bg} ${fg}`}
                 >
                   <div className="font-bold">{d.day}</div>
                   <div className="opacity-70">{d.label}</div>
@@ -127,26 +168,53 @@ export function MatrixTable({
             {money ? (
               <>
                 <th
-                  className="bg-bg-soft border-line border-b border-l px-2 py-2 text-right whitespace-nowrap"
+                  className={`bg-bg-soft border-line sticky top-0 ${HEAD_Z} ${HEAD_UNDERLINE} border-l px-2 py-2 text-right whitespace-nowrap`}
                   title="그 학생의 이 달 청구서 총액(다른 과목 포함) — 반별 배분이 아닙니다"
                 >
                   <span className="micro">청구</span>
                 </th>
-                <th className="bg-bg-soft border-line border-b px-2 py-2 text-right whitespace-nowrap">
+                <th className={`bg-bg-soft sticky top-0 ${HEAD_Z} ${HEAD_UNDERLINE} px-2 py-2 text-right whitespace-nowrap`}>
                   <span className="micro">납입</span>
                 </th>
               </>
             ) : null}
             {/* 시수 합 — 소비 상태(출석·지각·조퇴·보강) 셀의 배수 합(기본 1). 구 출석부 '합계' 관행. */}
-            <th className="bg-bg-soft border-line sticky right-[64px] z-10 w-[52px] min-w-[52px] border-b border-l px-2 py-2 text-right whitespace-nowrap">
+            <th
+              className={`bg-bg-soft sticky top-0 right-[64px] ${HEAD_CORNER_Z} ${HEAD_UNDERLINE} ${EDGE_LEFT} w-[52px] min-w-[52px] px-2 py-2 text-right whitespace-nowrap`}
+            >
               <span className="micro">시수</span>
             </th>
-            <th className="bg-bg-soft border-line sticky right-0 z-10 w-[64px] min-w-[64px] border-b px-2 py-2 text-right whitespace-nowrap">
+            <th
+              className={`bg-bg-soft sticky top-0 right-0 ${HEAD_CORNER_Z} ${HEAD_UNDERLINE} w-[64px] min-w-[64px] px-2 py-2 text-right whitespace-nowrap`}
+            >
               <span className="micro">출석률</span>
             </th>
           </tr>
         </thead>
-        {groups.map((g) => {
+        {/* 반별이 아닌 정렬(가나다·학년·담임순)은 **반 구분을 없애고** 정렬된 순서 그대로 한 덩어리로.
+            행마다 classId를 들고 있어 저장 대상 반은 그대로 유지된다(칸을 쳐도 옳은 반에 기록된다). */}
+        {showGroups ? null : (
+          <tbody>
+            {ordered.map((r) => {
+              const g = groups.find((x) => x.classId === r.classId);
+              const s = g?.matrix.students.find((x) => x.id === r.studentId);
+              if (!g || !s) return null;
+              return (
+                <MatrixRow
+                  key={`${g.classId}:${s.id}`}
+                  student={s}
+                  classId={g.classId}
+                  matrix={g.matrix}
+                  days={days}
+                  holidays={holidays}
+                  money={money ? money.byStudent[s.id] ?? null : undefined}
+                  lockBefore={lockBefore}
+                />
+              );
+            })}
+          </tbody>
+        )}
+        {!showGroups ? null : groups.map((g) => {
           const rows = g.matrix.students.map((s) => (
             <MatrixRow
               key={`${g.classId}:${s.id}`}
@@ -159,8 +227,6 @@ export function MatrixTable({
               lockBefore={lockBefore}
             />
           ));
-          // 반별 보기(반 1개)는 머리행이 없다 — 접을 것도 없으니 평범한 tbody.
-          if (!showGroups) return <tbody key={g.classId}>{rows}</tbody>;
           return (
             <ClassGroupBody
               key={g.classId}
@@ -186,7 +252,9 @@ export function MatrixTable({
           );
         })}
         <tfoot>
-          {showGroups ? (
+          {/* ⚠️ 합계는 **반이 여럿이면 항상** 그린다 — `showGroups`(반 머리행 여부)에 묶으면 가나다·학년·
+              담임순으로 바꾸는 순간 시수 총합·정산 안내가 통째로 사라진다(적대 리뷰 2026-08-06). */}
+          {groups.length > 1 ? (
             <tr className="bg-bg-soft">
               <td colSpan={colSpan} className="border-line border-t p-0">
                 <div className="sticky left-0 flex w-fit flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2">

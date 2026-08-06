@@ -6,6 +6,7 @@ import {
   parseAttendanceViewPrefs,
   type AttendanceViewPrefs,
 } from "../view-prefs";
+import { parseAttendanceSortKey, type AttendanceSortKey } from "../sort-rows";
 
 /**
  * 출석부 보기 설정을 **본인 계정**에 저장 — `users.ui_prefs.attendance`.
@@ -42,6 +43,62 @@ export async function saveAttendanceViewPrefs(
   const { error } = await admin
     .from("users")
     .update({ ui_prefs: { ...raw, attendance: safe } })
+    .eq("id", user.id)
+    .eq("tenant_id", user.tenantId);
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
+/**
+ * 접힌 반 목록만 저장 — 정렬 기준은 **건드리지 않는다**.
+ * ⚠️ 반을 접을 때마다 클라가 들고 있는 `sort`를 함께 쓰면, 다른 탭·다른 창에서 바꾼 정렬이 되돌아간다.
+ */
+export async function saveAttendanceCollapsed(
+  collapsed: string[],
+): Promise<{ ok: boolean; error?: string }> {
+  return mergeAttendancePrefs((prev) => ({ ...prev, collapsed: parseAttendanceViewPrefs({ collapsed }).collapsed }));
+}
+
+/**
+ * 정렬 기준만 저장 — 접힌 반 목록은 **건드리지 않는다**.
+ * ⚠️ 통째 저장(`saveAttendanceViewPrefs`)을 쓰면 안 되는 자리다: 정렬 드롭다운이 들고 있는 collapsed는
+ *    서버 렌더 시점 값이라, 그 사이 사용자가 접은 반이 되돌아간다(마지막 쓰기가 이긴다).
+ */
+export async function saveAttendanceSort(
+  sort: AttendanceSortKey,
+): Promise<{ ok: boolean; error?: string }> {
+  const safe = parseAttendanceSortKey(sort);
+  return mergeAttendancePrefs((prev) => ({ ...prev, sort: safe }));
+}
+
+/**
+ * `ui_prefs.attendance`를 **필드 단위로** 갱신 — 읽고 → 고칠 필드만 바꿔 → 되쓴다.
+ * ⚠️ 형제 키(ecs·timetable·onescreen…)는 물론 **같은 attendance 안의 다른 필드도** 보존한다.
+ *    화면마다 통째로 덮으면 마지막에 저장한 쪽이 나머지를 되돌린다.
+ */
+async function mergeAttendancePrefs(
+  update: (prev: AttendanceViewPrefs) => AttendanceViewPrefs,
+): Promise<{ ok: boolean; error?: string }> {
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, error: "로그인이 필요합니다" };
+
+  const admin = createAdminClient();
+  const { data: row, error: readErr } = await admin
+    .from("users")
+    .select("ui_prefs")
+    .eq("id", user.id)
+    .eq("tenant_id", user.tenantId)
+    .maybeSingle();
+  if (readErr) return { ok: false, error: readErr.message };
+
+  const raw =
+    row?.ui_prefs && typeof row.ui_prefs === "object" && !Array.isArray(row.ui_prefs)
+      ? (row.ui_prefs as Record<string, unknown>)
+      : {};
+
+  const { error } = await admin
+    .from("users")
+    .update({ ui_prefs: { ...raw, attendance: update(parseAttendanceViewPrefs(raw.attendance)) } })
     .eq("id", user.id)
     .eq("tenant_id", user.tenantId);
   if (error) return { ok: false, error: error.message };

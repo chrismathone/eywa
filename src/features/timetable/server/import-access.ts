@@ -1,5 +1,5 @@
 import "server-only";
-import { accessLevelTenant } from "@/lib/auth/perm-matrix";
+import { canManageTenant } from "@/lib/auth/perm-matrix";
 import type { SystemRole } from "@/lib/permissions";
 
 export const TIMETABLE_IMPORT_DENIED_MSG = "시간표 일괄 가져오기 권한이 없습니다";
@@ -19,5 +19,7 @@ export const TIMETABLE_IMPORT_DENIED_MSG = "시간표 일괄 가져오기 권한
  * UI(가져오기 버튼) 노출도 같은 함수를 거쳐야 한다 — 화면에서만 숨기는 건 게이트가 아니다(#77).
  */
 export async function canManageTimetableImport(role: SystemRole): Promise<boolean> {
-  return (await accessLevelTenant(role, "classes")) === "full";
+  // 판정은 공용 `canManageTenant`(= classes full)로 위임 — 같은 뜻의 게이트가 파일마다 재구현되면
+  // 한 곳만 고쳐지고 나머지가 남는다(이 함수가 생긴 원인 자체가 시트/파일 경로 비대칭이었다).
+  return canManageTenant(role, "classes");
 }

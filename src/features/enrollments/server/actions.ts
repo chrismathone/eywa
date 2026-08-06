@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { createClient } from "@/lib/supabase/server";
-import { accessLevelTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
+import { accessLevelTenant, canManageTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { kstToday } from "@/lib/date-kst";
 import { notifyClassAssignment } from "@/features/notifications/server/notify";
 
@@ -199,7 +199,11 @@ export async function moveEnrollment(
 ): Promise<MoveEnrollmentState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  if (!(await canWriteTenant(user.systemRole, "classes"))) return { error: "반 배정 권한이 없습니다" };
+  // 반 이동 = **남의 반 명단까지 바뀐다** → 관리자만(canWriteTenant는 scoped 강사도 통과 — perm-matrix
+  // `canManageTenant` 주석). 학생 상세의 '반 이동' 버튼은 이미 full 전용(canEndEnrollment)이라 죽는 화면 없음.
+  if (!(await canManageTenant(user.systemRole, "classes"))) {
+    return { error: "반 이동은 관리자만 할 수 있습니다" };
+  }
 
   const enrollmentId = String(formData.get("enrollmentId") ?? "").trim();
   const newClassId = String(formData.get("newClassId") ?? "").trim();
@@ -275,7 +279,10 @@ export async function moveEnrollmentsBatch(
 ): Promise<MoveEnrollmentsBatchState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  if (!(await canWriteTenant(user.systemRole, "classes"))) return { error: "반 배정 권한이 없습니다" };
+  // 시간표 '편집'(드래그 반 이동)이 실제로 쓰는 자리 — 화면에서 버튼만 감추면 우회가 남는다(#77).
+  if (!(await canManageTenant(user.systemRole, "classes"))) {
+    return { error: "반 이동은 관리자만 할 수 있습니다" };
+  }
   if (!Array.isArray(moves) || moves.length === 0) return { results: [] };
 
   const eff =
