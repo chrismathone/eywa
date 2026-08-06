@@ -97,22 +97,27 @@ export default async function ClassesPage({
   };
 
   return (
-    <div className="space-y-5">
-      {/* Editorial 문법 ① — eyebrow→헤드라인→서브 + 우측 액션(강의실 배정·신규 반) */}
+    // 컴팩트 크롬(창·모바일·강사 미니셸)에선 섹션 간격도 좁힌다 — 제목을 접어도 5단 여백(20px×N)이
+    // 그대로면 절약분이 여백으로 되돌아간다(원장 지시 2026-08-06 "너무 남는 공간 많음").
+    <div className="space-y-5 compact-chrome:space-y-3">
+      {/* Editorial 문법 ① — eyebrow→헤드라인→서브 + 우측 액션(강의실 배정·신규 반).
+          ⚠️ 동기화 배지도 **이 행 안**에 둔다 — 따로 두면 배지 하나가 한 줄을 통째로 먹는다(우측이 텅 빈 채로). */}
       <PageHeader
         eyebrow="수업 운영"
         title="수업목록"
         description={`운영 ${active}개 반 · 등록 학생 ${totalSeats}명`}
         actions={
-          canManageClasses ? (
-            <>
-              <ClassroomAssignButton />
-              <NewClassTrigger />
-            </>
-          ) : null
+          <>
+            <MakeeduSyncBadge domain="classes" />
+            {canManageClasses ? (
+              <>
+                <ClassroomAssignButton />
+                <NewClassTrigger />
+              </>
+            ) : null}
+          </>
         }
       />
-      <MakeeduSyncBadge domain="classes" />
       {/* Stat strip — Editorial 문법 ②(BigStat). "운영 중"은 보존 대상 EyIcon `check` 유지. */}
       <section className="grid grid-cols-2 gap-3.5 sm:grid-cols-4">
         <BigStat label="전체 반" value={stats.total} unit="개" tone="primary" icon={<BookOpen size={16} strokeWidth={1.8} />} />
@@ -130,8 +135,9 @@ export default async function ClassesPage({
       {/* 과목·요일·강사·정렬 드롭다운 + 검색/뷰 — 선택값 localStorage 영속(클라이언트) */}
       <ClassFilterBar current={current} teachers={teachers} subjectFilters={subjects.filters} />
 
-      {/* 결과 카운트 — 액션은 PageHeader 우측으로 이동(문법 ①), 여기는 맥락 라인만 */}
-      <p className="text-text-dim px-1 text-[13px]">
+      {/* 결과 카운트 — 액션은 PageHeader 우측으로 이동(문법 ①), 여기는 맥락 라인만.
+          컴팩트에선 위 필터 바에 바짝 붙여(-mt) 한 줄을 새로 만들지 않는다. */}
+      <p className="text-text-dim px-1 text-[13px] compact-chrome:-mt-1.5">
         결과 <span className="text-foreground font-bold">{total}</span>개
         {totalPages > 1 ? (
           <span className="ml-2">

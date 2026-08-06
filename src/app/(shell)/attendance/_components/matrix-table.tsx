@@ -45,8 +45,13 @@ function groupCount(matrix: AttendanceMatrix): Counted {
  * ⚠️ `cols`는 보이는 날짜뿐이지만(2주 보기는 14칸) `initial`은 **그 달 전체**를 싣는다 — 합계(시수·출석률)는
  *    보이는 열이 아니라 월 전체 기준이라, 안 보이는 날의 기록도 저장소에 있어야 한다.
  */
-export function buildGridSource(groups: MatrixGroup[], days: AttendanceMatrix["days"]) {
-  const rows = groups.flatMap((g) => g.matrix.students.map((s) => rowKey(g.classId, s.id)));
+export function buildGridSource(
+  groups: MatrixGroup[],
+  days: AttendanceMatrix["days"],
+  /** 화면에 그릴 **정렬된 순서**. 방향키·범위 선택이 이 배열의 인덱스로 움직이므로 렌더와 반드시 같아야 한다. */
+  ordered: readonly { classId: string; studentId: string }[],
+) {
+  const rows = ordered.map((r) => rowKey(r.classId, r.studentId));
   const cols = days.filter((d) => !d.placeholder).map((d) => d.date);
   const initial: Record<string, { s: string; u: number | null }> = {};
   for (const g of groups) {
@@ -72,9 +77,12 @@ export function MatrixTable({
   showGroups,
   money,
   lockBefore,
+  ordered,
 }: {
   groups: MatrixGroup[];
   days: AttendanceMatrix["days"];
+  /** 정렬된 행 순서(sort-rows.ts). 반별이 아니면 반 머리행 없이 이 순서 그대로 한 덩어리로 그린다. */
+  ordered: readonly { classId: string; studentId: string }[];
   /** "YYYY-MM-DD" → 휴일명(학원설정). 헤더는 빨간 날짜 + 툴팁, 본문은 회색(수업 없음). */
   holidays: Record<string, string>;
   /** 반 머리행·총합 행 표시(강사 전체 보기). */
@@ -183,7 +191,30 @@ export function MatrixTable({
             </th>
           </tr>
         </thead>
-        {groups.map((g) => {
+        {/* 반별이 아닌 정렬(가나다·학년·담임순)은 **반 구분을 없애고** 정렬된 순서 그대로 한 덩어리로.
+            행마다 classId를 들고 있어 저장 대상 반은 그대로 유지된다(칸을 쳐도 옳은 반에 기록된다). */}
+        {showGroups ? null : (
+          <tbody>
+            {ordered.map((r) => {
+              const g = groups.find((x) => x.classId === r.classId);
+              const s = g?.matrix.students.find((x) => x.id === r.studentId);
+              if (!g || !s) return null;
+              return (
+                <MatrixRow
+                  key={`${g.classId}:${s.id}`}
+                  student={s}
+                  classId={g.classId}
+                  matrix={g.matrix}
+                  days={days}
+                  holidays={holidays}
+                  money={money ? money.byStudent[s.id] ?? null : undefined}
+                  lockBefore={lockBefore}
+                />
+              );
+            })}
+          </tbody>
+        )}
+        {!showGroups ? null : groups.map((g) => {
           const rows = g.matrix.students.map((s) => (
             <MatrixRow
               key={`${g.classId}:${s.id}`}
@@ -196,8 +227,6 @@ export function MatrixTable({
               lockBefore={lockBefore}
             />
           ));
-          // 반별 보기(반 1개)는 머리행이 없다 — 접을 것도 없으니 평범한 tbody.
-          if (!showGroups) return <tbody key={g.classId}>{rows}</tbody>;
           return (
             <ClassGroupBody
               key={g.classId}
@@ -223,7 +252,9 @@ export function MatrixTable({
           );
         })}
         <tfoot>
-          {showGroups ? (
+          {/* ⚠️ 합계는 **반이 여럿이면 항상** 그린다 — `showGroups`(반 머리행 여부)에 묶으면 가나다·학년·
+              담임순으로 바꾸는 순간 시수 총합·정산 안내가 통째로 사라진다(적대 리뷰 2026-08-06). */}
+          {groups.length > 1 ? (
             <tr className="bg-bg-soft">
               <td colSpan={colSpan} className="border-line border-t p-0">
                 <div className="sticky left-0 flex w-fit flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2">

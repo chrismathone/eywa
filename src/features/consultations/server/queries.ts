@@ -7,7 +7,7 @@ import {
 } from "@/features/consultations/follow-up-urgency";
 import { kstToday } from "@/lib/date-kst";
 import { createClient } from "@/lib/supabase/server";
-import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
+import { fetchAllPaged, fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 import { effectiveTeacherId, effectiveTeacherScope } from "@/lib/auth/view-mode";
 
 export { followUpUrgency, type FollowUpUrgency };
@@ -345,8 +345,20 @@ export async function getStudentsNeedingConsultation(
   if (enrolled.length === 0) return { rows: [], total: 0 };
 
   const consults = scope
-    ? await fetchInChunks<{ student_id: string; consulted_at: string }>(scope.studentIds, (chunk) =>
-        supabase.from("student_consultations").select("student_id, consulted_at").in("student_id", chunk),
+    ? // 🔴 `fetchInChunks`를 쓰면 안 된다 — 청크(100명) **안에서는 페이지네이션을 안 해서** 그 청크 결과가
+      // 1000행을 넘으면 조용히 잘린다(#54). 상담은 학생당 수십 건이라 실제로 넘고, 잘리면 '마지막 상담일'이
+      // 옛 날짜로 남아 **엉뚱한 학생이 '상담 필요'로 뜬다**. 청크+페이지네이션을 함께 하는 헬퍼를 쓴다.
+      // ⚠️ OFFSET 페이지가 흔들리지 않게 unique tie-break(id)까지 정렬에 넣는다(헬퍼 규약).
+      await fetchAllPagedInChunks<{ student_id: string; consulted_at: string }>(
+        scope.studentIds,
+        (chunk, from, to) =>
+          supabase
+            .from("student_consultations")
+            .select("student_id, consulted_at, id")
+            .in("student_id", chunk)
+            .order("consulted_at", { ascending: false })
+            .order("id", { ascending: true })
+            .range(from, to),
       )
     : await fetchAllPaged<{ student_id: string; consulted_at: string }>((from, to) =>
         supabase

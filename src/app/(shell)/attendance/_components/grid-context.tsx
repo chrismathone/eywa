@@ -12,7 +12,7 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 import { setAttendanceCell, setAttendanceRange } from "@/features/attendance/server/actions";
-import { saveAttendanceViewPrefs } from "@/features/attendance/server/prefs-actions";
+import { saveAttendanceCollapsed } from "@/features/attendance/server/prefs-actions";
 import { cellKey, classIdOfRow, parseCellKey } from "@/features/attendance/grid/model";
 import { GridStore, type CellState, type GridValue } from "@/features/attendance/grid/store";
 import { countCells, type Counted } from "@/features/attendance/grid/totals";
@@ -139,7 +139,8 @@ export function GridProvider({
       if (a && next.has(classIdOfRow(a.row))) store.clearUi();
       // 계정에 저장(다음 방문용). ⚠️ 실패해도 화면은 그대로 두고 조용히 넘어간다 — 표시 취향이라
       //    다음 방문에 펼쳐져 있을 뿐이고, 여기서 빨간 토스트를 띄우면 출결 저장 실패와 구분이 안 된다.
-      void saveAttendanceViewPrefs({ collapsed: [...next] });
+      // ⚠️ 접힘만 저장하는 전용 액션 — 통째 저장을 쓰면 이 컴포넌트가 모르는 정렬 설정이 되돌아간다.
+      void saveAttendanceCollapsed([...next]);
     },
     [store],
   );

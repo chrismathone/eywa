@@ -112,8 +112,8 @@ export default async function ConsultationsPage({
   };
 
   return (
-    <div className="space-y-5">
-      <MakeeduSyncBadge domain="consultations" />
+    // 컴팩트 크롬(창·모바일·강사 미니셸)에선 섹션 간격을 좁힌다(원장 지시 2026-08-06 "남는 공간 많음").
+    <div className="space-y-5 compact-chrome:space-y-3">
       {/* Stat strip — Editorial 문법 ②(공용 BigStat, 구 로컬 Stat 대체) */}
       <section className="grid grid-cols-2 gap-3.5 sm:grid-cols-4">
         <BigStat label="전체 상담" value={totalAll} unit="건" tone="primary" icon={<MessagesSquare size={16} strokeWidth={1.8} />} />
@@ -187,7 +187,8 @@ export default async function ConsultationsPage({
         </div>
       </div>
 
-      <div className="flex items-center justify-between">
+      {/* ⚠️ 동기화 배지를 이 행에 태운다 — 맨 위에 따로 두면 배지 하나가 한 줄을 통째로 먹는다(우측 텅 빔). */}
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-text-dim px-1 text-[13px]">
           결과 <span className="text-foreground font-bold">{total}</span>건
           {totalPages > 1 ? (
@@ -197,6 +198,7 @@ export default async function ConsultationsPage({
           ) : null}
         </p>
         <div className="flex items-center gap-2">
+          <MakeeduSyncBadge domain="consultations" />
           <Button
             variant="outline"
             render={<WindowLink href="/consultations/stats" title="상담 통계" />}

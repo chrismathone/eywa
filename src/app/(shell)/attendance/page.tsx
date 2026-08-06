@@ -16,6 +16,9 @@ import { effectiveTeacherId } from "@/lib/auth/view-mode";
 import { loadAttendanceViewPrefs } from "@/features/attendance/server/prefs-actions";
 import { buildQuickOpen } from "@/features/attendance/quick-open";
 import { countMarks, sumCounts } from "@/features/attendance/grid/totals";
+import { isGroupedSort, sortAttendanceRows } from "@/features/attendance/sort-rows";
+import { getSubjectSessionsByStudent, roleFor } from "@/features/attendance/server/subject-sessions";
+import { AttendanceSortSelect } from "./_components/sort-select";
 import { QuickOpenPanel } from "./_components/quick-open-panel";
 import { MatrixTable, buildGridSource, type MatrixGroup } from "./_components/matrix-table";
 import { GridProvider } from "./_components/grid-context";
@@ -248,8 +251,49 @@ export default async function AttendancePage({
   // 28/30일 달도 뒤에 빈 칸(29~31)을 채운다 → 셀 폭과 '출석률' 열 위치가 달마다 안 바뀐다.
   // 패딩은 표시 전용(쿼리/집계 무관). ⚠️ 범위 축소 옵션을 다시 넣지 말 것.
   const visibleDays = padTo31(matrix.days);
+
+  /**
+   * 행 정렬(원장 지시 2026-08-06) — 계정 설정이 단일 소스(URL 파라미터 아님, `ui_prefs.attendance.sort`).
+   * ⚠️ 정렬은 **서버에서** 확정해 `buildGridSource`와 표에 **같은 배열**로 넘긴다. 표만 다르게 그리면
+   *    격자 좌표(방향키·Shift 범위·드래그 채우기)가 화면과 어긋난다(sort-rows.ts 주석).
+   */
+  const sortKey = viewPrefs.sort;
+  const subjectOfClass = new Map(
+    (mode === "teacher" ? teacherClasses : selectedClass ? [selectedClass] : []).map((c) => [c.id, c.subject]),
+  );
+  /**
+   * 담임/부담임은 **누구 기준인지**가 있어야 성립한다. 강사(또는 강사 필터)면 그 사람, 관리자가 반만
+   * 골랐으면 **그 반의 담당**이 기준이다.
+   * ⚠️ 기준을 못 정하면 전원이 판정 불가가 되어 '담임순'이 사실상 가나다순으로 동작한다 — 이름만 있고
+   *    하는 일이 없는 거짓 옵션이 된다(적대 리뷰 2026-08-06).
+   */
+  const roleAnchorTeacher = effectiveTeacher ?? selectedClass?.teacherId ?? null;
+  // 담임·부담임 정렬일 때만 남의 반까지 조회한다 — 평소 출석부에 쿼리 3개를 얹지 않는다(반응속도 1순위).
+  const roleSessions =
+    sortKey === "role" && roleAnchorTeacher && groups.length > 0
+      ? await getSubjectSessionsByStudent(
+          [...new Set(groups.flatMap((g) => g.matrix.students.map((s) => s.id)))],
+          kstToday(),
+        )
+      : null;
+  const orderedRows = sortAttendanceRows(
+    groups.flatMap((g) =>
+      g.matrix.students.map((s) => ({
+        classId: g.classId,
+        className: g.className,
+        studentId: s.id,
+        name: s.name,
+        grade: s.grade,
+        role: roleSessions
+          ? roleFor(roleSessions, s.id, subjectOfClass.get(g.classId) ?? null, roleAnchorTeacher)
+          : null,
+      })),
+    ),
+    sortKey,
+  );
+
   // 시트 격자의 좌표·초기값 — 표보다 위(상단 스탯)까지 감싸야 해서 여기서 만든다.
-  const gridSource = buildGridSource(groups, visibleDays);
+  const gridSource = buildGridSource(groups, visibleDays, orderedRows);
 
   // 수정 가능 기간 — 강사(scoped)는 KST 오늘 기준 7일 이내만. 관리자 이상(full)은 제한 없음(원장 2026-07-21).
   // ⚠️ 역할을 코드로 나열하지 않고 권한 매트릭스를 읽는다(#58) — 원장이 역할 권한을 조정하면 함께 따라간다.
@@ -443,6 +487,17 @@ export default async function AttendancePage({
           </>
         ) : null}
 
+        {/* 정렬 — 계정 귀속 설정(URL 아님). 반별 외엔 반 구분 없이 한 덩어리로 그린다. */}
+        {groups.length > 0 ? (
+          <>
+            <span className="bg-line h-4 w-px" aria-hidden />
+            <div className="flex items-center gap-1.5">
+              <span className="micro mr-1">정렬</span>
+              <AttendanceSortSelect value={sortKey} />
+            </div>
+          </>
+        ) : null}
+
         {/* 대상 표기 — PageHeader의 서브라인이 하던 몫(반 이름 / N개 반). 세로 줄 대신 툴바 한 칸으로. */}
         {selectedClassLabel ? (
           <>
@@ -511,7 +566,9 @@ export default async function AttendancePage({
           <MatrixTable
             groups={groups}
             days={visibleDays}
-            showGroups={mode === "teacher"}
+            ordered={orderedRows}
+            // 반 머리행은 **반별 정렬 + 강사 전체 보기**일 때만. 가나다·학년·담임순은 반 구분을 없앤다.
+            showGroups={mode === "teacher" && isGroupedSort(sortKey)}
             money={money}
             lockBefore={lockBefore}
             // 공휴일은 학원설정(operations.holidays)이 단일 소스 — 헤더 빨간 날짜·셀 회색 처리에 동기화.

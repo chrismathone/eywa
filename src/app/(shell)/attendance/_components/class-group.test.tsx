@@ -12,7 +12,9 @@ vi.mock("@/features/attendance/server/actions", () => ({
   setAttendanceRange: vi.fn(async () => ({ ok: true, applied: 0, blocked: 0 })),
 }));
 const { savePrefs } = vi.hoisted(() => ({ savePrefs: vi.fn(async () => ({ ok: true })) }));
-vi.mock("@/features/attendance/server/prefs-actions", () => ({ saveAttendanceViewPrefs: savePrefs }));
+// ⚠️ 접기는 **전용 액션**(saveAttendanceCollapsed)으로 저장한다 — 통째 저장(saveAttendanceViewPrefs)을
+// 쓰면 이 컴포넌트가 모르는 정렬 설정(ui_prefs.attendance.sort)이 함께 덮여 되돌아간다(2026-08-06).
+vi.mock("@/features/attendance/server/prefs-actions", () => ({ saveAttendanceCollapsed: savePrefs }));
 
 const A = "aaaaaaaa-1111-1111-1111-111111111111";
 const B = "bbbbbbbb-2222-2222-2222-222222222222";
@@ -97,7 +99,8 @@ describe("반 접기", () => {
     savePrefs.mockClear();
     renderTable();
     fireEvent.click(screen.getByRole("button", { name: /나반/ }));
-    expect(savePrefs).toHaveBeenCalledWith({ collapsed: [B] });
+    // 🔴 접힌 반 목록**만** 넘긴다 — 정렬 등 다른 설정을 함께 실어 보내면 그 값이 되돌아간다.
+    expect(savePrefs).toHaveBeenCalledWith([B]);
   });
 
   it("전체 토글 — 한 번에 다 접고 다시 다 편다", () => {
