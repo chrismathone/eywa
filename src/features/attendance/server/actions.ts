@@ -11,6 +11,13 @@ import { fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 // 담당 반 판정 단일 소스(담당 반 ∪ 그날 위임 반) — classes.teacher_id를 직접 비교하지 말 것(0173a).
 import { getTeachingClassIds } from "@/features/classes/server/delegation";
 import { parseSessionUnits } from "../session-units";
+import {
+  absenceMemo,
+  appendMemo,
+  hasMemoLine,
+  makeupMemo,
+  unitsAfterMakeup,
+} from "@/features/onescreen/makeup-absence-link";
 import { attendanceLockMessage, isWithinAttendanceEditWindow } from "../edit-window";
 import { kstToday } from "@/lib/date-kst";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
@@ -268,6 +275,154 @@ export async function setAttendanceCell(input: {
   );
   if (!input.quiet) revalidatePath("/attendance");
   return { ok: true };
+}
+
+export type MakeupLinkResult =
+  | { ok: true; units: number; absenceNoted: boolean; alreadyLinked: boolean }
+  | { error: string };
+
+/**
+ * 보강을 **결석분에 연결**한다 — 원스크린 '보강 추가 → 분리'에서 부른다(원장 2026-08-06, 현재 구글시트
+ * 출석부 운영과 같은 모양):
+ *
+ *   A반을 7/16에 결석 → 7/31에 보강
+ *   · 7/16 칸: 결석(0) **그대로** + 메모 "7/31 보강 예정"
+ *   · 7/31 칸: 시수 **+1**(미입력=1 기준) + 메모 "7/16 결석분 보강"
+ *
+ * 🔴 결석 칸의 **상태·시수는 절대 안 바꾼다.** 소급해서 0을 1로 올리면 그 달 출석률·시수가 뒤로 움직인다
+ *    (이미 마감한 급여·청구가 어긋난다). 시수는 보강을 실제로 한 날에만 얹는다.
+ * 🔴 **멱등** — 보강한 날 칸 메모에 그 줄이 이미 있으면 시수를 또 올리지 않는다(두 번 눌러 급여 과지급 방지).
+ * ⚠️ 결석 칸은 **7일 편집창(강사) 제한을 적용하지 않는다.** 보강은 보통 2주 뒤라(원장 예시 15일) 창을
+ *    걸면 기능이 실제 케이스에서 거의 안 돈다. 안전한 이유는 **메모만 쓰기 때문** — 상태·시수를 안 건드리니
+ *    급여·출석률이 움직이지 않는다. 반대로 **보강한 날 칸은 시수를 바꾸므로 창 제한을 그대로 받는다.**
+ * ⚠️ 결석 칸에 기록이 아예 없으면 메모를 남기지 않는다(`absenceNoted:false`) — 없는 결석에 행을 새로
+ *    만들면 '결석하지 않은 날의 결석 메모'라는 사실 아닌 기록이 생긴다. 호출부가 그 사실을 알린다.
+ */
+export async function linkMakeupToAbsence(input: {
+  studentId: string;
+  classId: string;
+  /** 결석했던 날(YYYY-MM-DD) — 메모만 붙는다. */
+  absentDate: string;
+  /** 보강을 실제로 한 날(YYYY-MM-DD) — 시수가 여기에 얹힌다. 보통 오늘. */
+  makeupDate: string;
+  /**
+   * 이번 보강의 시수. 🔴 **1 고정이 아니다** — 수학은 **0.5당 1시간**이라 3시간 반의 1회는 1.5다
+   * (원장 2026-08-06). 1로 박으면 그 반 급여가 매번 0.5씩 모자란다. 강사가 다이얼로그에서 고른 값.
+   */
+  addUnits: number;
+}): Promise<MakeupLinkResult> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "로그인이 필요합니다" };
+  if (!(await canWriteTenant(user.systemRole, "attendance"))) return { error: "출석 관리 권한이 없습니다" };
+
+  const { studentId, classId, absentDate, makeupDate, addUnits } = input;
+  if (!studentId || !classId || !absentDate || !makeupDate) return { error: "필수 값이 누락되었습니다" };
+  const isDate = (d: string) => /^\d{4}-\d{2}-\d{2}$/.test(d);
+  if (!isDate(absentDate) || !isDate(makeupDate)) return { error: "잘못된 날짜입니다" };
+  if (absentDate >= makeupDate) return { error: "결석한 날은 보강한 날보다 앞서야 합니다" };
+  // 시수는 클라 값을 그대로 믿지 않는다 — 0·음수는 급여를 깎고, 과한 값은 조용한 과지급이 된다.
+  if (!Number.isFinite(addUnits) || addUnits <= 0 || addUnits > 24) return { error: "보강 시수가 올바르지 않습니다" };
+
+  const supabase = await createClient();
+
+  // 게이트 — 셀 액션과 같은 규칙(#77: 화면이 아니라 액션이 게이트). 창 제한은 **시수가 바뀌는 보강일에만**.
+  if ((await accessLevelTenant(user.systemRole, "attendance")) === "scoped") {
+    if (!isWithinAttendanceEditWindow(makeupDate, kstToday())) {
+      return { error: attendanceLockMessage(makeupDate, kstToday()) };
+    }
+    const [teaching, { count: enrolled }] = await Promise.all([
+      getTeachingClassIds(supabase, user.id, makeupDate),
+      supabase
+        .from("enrollments")
+        .select("*", { count: "exact", head: true })
+        .eq("class_id", classId)
+        .eq("student_id", studentId)
+        .or(`start_date.is.null,start_date.lte.${makeupDate}`)
+        .or(`end_date.is.null,end_date.gte.${makeupDate}`),
+    ]);
+    if (!teaching.all.includes(classId)) return { error: "담당 반이 아닙니다" };
+    if (!enrolled) return { error: "이 반 수강생이 아닙니다" };
+  }
+
+  const latestCell = (sessionDate: string) =>
+    supabase
+      .from("attendance_records")
+      .select("id, status, note, session_units")
+      .eq("class_id", classId)
+      .eq("student_id", studentId)
+      .eq("session_date", sessionDate)
+      .order("recorded_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+  // 두 칸은 서로 독립 조회 — 직렬 워터폴 금지(B4).
+  const [{ data: absentCell }, { data: makeupCell }] = await Promise.all([
+    latestCell(absentDate),
+    latestCell(makeupDate),
+  ]);
+
+  const memoOnMakeup = makeupMemo(absentDate);
+  // 이미 연결돼 있으면 시수를 또 올리지 않는다 — 메모도 그대로다(appendMemo가 멱등).
+  const alreadyLinked = hasMemoLine(makeupCell?.note, memoOnMakeup);
+  const units = alreadyLinked
+    ? (makeupCell?.session_units ?? 1)
+    : unitsAfterMakeup(makeupCell?.session_units, addUnits);
+
+  const nowIso = new Date().toISOString();
+  const writes: PromiseLike<{ error: { message: string } | null }>[] = [];
+
+  // ① 결석한 날 — **메모만**. 기록이 없으면 아무것도 만들지 않는다.
+  if (absentCell?.id) {
+    writes.push(
+      supabase
+        .from("attendance_records")
+        .update({ note: appendMemo(absentCell.note, absenceMemo(makeupDate)) })
+        .eq("id", absentCell.id),
+    );
+  }
+
+  // ② 보강한 날 — 시수 +1 + 메모. 기록이 없으면 새로 만든다(보강만 하러 온 날).
+  if (!alreadyLinked) {
+    if (makeupCell?.id) {
+      writes.push(
+        supabase
+          .from("attendance_records")
+          .update({
+            session_units: units,
+            note: appendMemo(makeupCell.note, memoOnMakeup),
+            recorded_by: user.id,
+            recorded_at: nowIso,
+          })
+          .eq("id", makeupCell.id),
+      );
+    } else {
+      writes.push(
+        supabase.from("attendance_records").insert({
+          tenant_id: user.tenantId,
+          class_id: classId,
+          student_id: studentId,
+          session_date: makeupDate,
+          // 기록이 없던 날 = 정규를 아직 안 찍었거나 보강만 온 날 → 출석으로 연다(결석을 되쓰는 경로가 아니다).
+          status: "present",
+          session_units: units,
+          note: memoOnMakeup,
+          recorded_by: user.id,
+        }),
+      );
+    }
+  }
+
+  for (const res of await Promise.all(writes)) {
+    if (res.error) return { error: res.error.message };
+  }
+  // 셀 액션과 같은 계약 — 기록이 늘거나 바뀐 날에만 완료 전이 검사(결석일은 메모만이라 미발화).
+  if (!alreadyLinked) {
+    after(() =>
+      notifyIfClassAttendanceComplete({ tenantId: user.tenantId, classId, date: makeupDate, actorId: user.id }),
+    );
+  }
+  revalidatePath("/attendance");
+  return { ok: true, units, absenceNoted: !!absentCell?.id, alreadyLinked };
 }
 
 /** 일괄로 찍을 수 있는 상태 — 인라인 pill과 같은 3종. 조퇴·공결·보강은 출석부 전용(축약 되쓰기 방지). */
