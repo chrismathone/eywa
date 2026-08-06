@@ -72,7 +72,6 @@ export function SlotBulk({
   onBulkPlanCells: (lineIds: string[], field: PlanBulkField, value: string) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const [free, setFree] = useState("");
   const [picked, setPicked] = useState<string | null>(null);
   const [onlyEmpty, setOnlyEmpty] = useState(false);
   const [term, setTerm] = useState<"regular" | "exam">("regular");
@@ -87,7 +86,7 @@ export function SlotBulk({
   const attendanceTargets = planBulkAttendance(roster, attendance, date, { canEdit, canMarkDate });
   const statusTargets = planBulkStatus(roster, marks, date, slotStart, { canEdit, onlyEmpty });
   const overwrites = countStatusOverwrites(roster, marks, date, slotStart, canEdit);
-  const value = free.trim() !== "" ? free.trim() : picked;
+  const value = picked;
 
   // 내신을 안 그리는 반에서 term이 'exam'으로 굳으면 대상 0건인 채로 잠긴다 → 항상 평시로 되돌린다.
   const effectiveTerm = showExamTerm ? term : "regular";
@@ -112,7 +111,6 @@ export function SlotBulk({
     }
     onBulkStatus(statusTargets, value);
     setOpen(false);
-    setFree("");
     setPicked(null);
   };
 
@@ -137,7 +135,6 @@ export function SlotBulk({
       onOpenChange={(o) => {
         setOpen(o);
         if (!o) {
-          setFree("");
           setPicked(null);
           setPlanValue("");
           // 출결은 특히 — 남아 있다가 다음에 열었을 때 딸려 나가면 출석부에 그대로 박힌다(원스크린 선례).
@@ -261,27 +258,16 @@ export function SlotBulk({
             {/* 태도 — 셀과 같은 드롭다운. 자유입력은 남긴다(옛 표기·학원 고유 어휘가 실제로 쓰인다). */}
             <div className="border-line-strong border-t pt-2">
               <p className="text-text-dim mb-1 text-[11px] font-bold">태도</p>
+              {/* ⚠️ 자유입력은 **없앴다**(원장 2026-08-06 "태도 직접 입력은 없애버려. ecs").
+                  ECS 태도는 5단 눈금으로 고정 — 자유입력이 있으면 눈금 밖 값이 계속 새로 생겨
+                  집계도 학부모 문장도 갈린다. 셀(FieldSelect)도 원래 자유입력이 없어 두 곳이 같아졌다.
+                  옛 저장값('완'·'안침' 등)은 셀에서 '이전 표기'로 계속 보인다(쓴 게 사라지지 않는다). */}
               <FieldSelect
                 options={ATTITUDE}
                 value={picked}
                 ariaLabel="일괄 태도"
                 placeholder="태도 선택"
-                onSelect={(v) => {
-                  setPicked(v);
-                  // 드롭다운을 고르면 자유입력이 우선 적용되는 규칙 때문에 값이 안 바뀌는 착시가 생긴다
-                  if (v !== null) setFree("");
-                }}
-              />
-              <input
-                className="border-line-strong text-foreground focus:border-primary mt-1.5 w-full rounded-lg border bg-transparent px-1.5 py-1 text-[12px] outline-none"
-                placeholder="직접 입력"
-                value={free}
-                aria-label="태도 직접 입력"
-                onChange={(e) => {
-                  setFree(e.target.value);
-                  // 자유입력이 우선 적용되므로 드롭다운 값이 남으면 "그게 적용된다"는 거짓 표시가 된다
-                  if (e.target.value.trim() !== "") setPicked(null);
-                }}
+                onSelect={setPicked}
               />
               <label className="text-text-dim mt-1.5 flex cursor-pointer items-center gap-1.5 text-[12px]">
                 <input
@@ -303,8 +289,11 @@ export function SlotBulk({
               </Button>
             </div>
 
-            <p className="text-text-dim text-[11px]">
-              학생별 ‘과제 및 특이사항’은 학생마다 다른 기록이라 일괄 대상이 아닙니다.
+            {/* 각주 — 위 입력칸과 **붙어 보이지 않게** 구분한다. 안 그러면 바로 위 '태도 직접 입력'의
+                설명(=그 칸에 과제를 적는 것)으로 읽힌다. 배경 있는 블록 + '※'로 성격을 못박는다. */}
+            <p className="bg-bg-soft text-text-dim rounded-md px-2 py-1.5 text-[11px]">
+              ※ ‘과제 및 특이사항’은 <b className="text-foreground">여기서 입력하지 않습니다</b> — 학생마다
+              다른 기록이라 일괄 대상이 아니며, 학생 행의 맨 오른쪽 칸에 직접 적습니다.
             </p>
           </Popover.Popup>
         </Popover.Positioner>
