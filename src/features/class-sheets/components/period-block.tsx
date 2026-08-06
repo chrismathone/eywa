@@ -31,7 +31,7 @@ export const PeriodBlock = memo(function PeriodBlock({
   data: ClassSheetWeekData;
   lines: PlanLineDTO[];
   marks: Record<string, { status: string | null; progressNote: string | null }>;
-  attendance: Record<string, string>;
+  attendance: Record<string, { status: string; note: string | null }>;
   store: SheetSaveStore;
   handlers: SheetHandlers;
   canEdit: boolean;
@@ -105,7 +105,9 @@ export const PeriodBlock = memo(function PeriodBlock({
             canEdit={canEdit && slot.scheduled}
             canMarkDate={data.canMarkAttendanceByDate[date] ?? false}
             showExamTerm={!data.isEie}
-            onBulkAttendance={(ids) => ids.forEach((id) => handlers.markPresent(id, date))}
+            // 일괄 출석은 **빈 칸만** 채운다(planBulkAttendance가 기록 있는 학생을 이미 뺀다). 그래서
+            // 일괄에는 지각·결석을 두지 않는다 — 전원 결석을 한 번에 찍는 버튼은 급여 사고로 직결된다.
+            onBulkAttendance={(ids) => ids.forEach((id) => handlers.setAttendance(id, date, "present"))}
             onBulkStatus={(ids, status) =>
               ids.forEach((id) =>
                 handlers.saveMark(

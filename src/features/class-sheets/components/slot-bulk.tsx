@@ -3,7 +3,7 @@
 // 교시 카드의 일괄 입력 — 원스크린 '일괄 입력' 팝오버의 계약을 그대로 따른다.
 //  · 대상 = **이 카드에 보이는 것**(로스터 = 표시 집합, 계획 = 그 카드에 이미 있는 줄).
 //  · 라벨에 **실제 동작 대상 수**를 밝힌다("전원"이라 써놓고 5명 중 2명만 되는 거짓말 금지).
-//  · 출석 일괄은 언제나 빈 칸만(비파괴) → 확인 불필요. 상태·계획 일괄은 덮어쓰기가 기본이라
+//  · 출결 일괄은 언제나 빈 칸만(비파괴) → 확인 불필요. 태도·계획 일괄은 덮어쓰기가 기본이라
 //    덮일 값이 있으면 확인을 받고, 몇 건이 덮이는지 숫자로 밝힌다(침묵 금지).
 //  · 개별 사실(학생별 개인 진도·과제)은 일괄 대상이 아니다 — 학생마다 다른 기록이라 복제하면 거짓이 된다.
 //    반대로 **수업계획(평시/내신)은 반 전체의 사실**이라 6영역에 같은 교재를 넣는 게 정상 작업이다.
@@ -21,12 +21,12 @@ import {
   planBulkStatus,
   planLinesOfTerm,
   PLAN_BULK_FIELDS,
-  STATUS_CHIPS,
   type BulkPlanRow,
   type BulkRosterRow,
   type PlanBulkField,
 } from "../lib/bulk";
-import { statusTone, STATUS_TONE_CLASS } from "../lib/status-tone";
+// 태도 선택지는 수학 수업보고서와 **같은 단일 소스**(원장 2026-08-06 "수학 수업보고서처럼").
+import { ATTITUDE } from "@/features/onescreen/attitude";
 
 const TERM_LABEL: Record<"regular" | "exam", string> = { regular: "평시", exam: "내신" };
 
@@ -57,7 +57,7 @@ export function SlotBulk({
   /** 이 교시의 계획 줄 — 계획 일괄의 대상. 줄이 없으면 그 시기 버튼은 0건으로 잠긴다. */
   lines: BulkPlanRow[];
   marks: Record<string, { status: string | null; progressNote: string | null }>;
-  attendance: Record<string, string>;
+  attendance: Record<string, { status: string; note: string | null }>;
   canEdit: boolean;
   canMarkDate: boolean;
   /** '내신' 시기를 제안할지 — EiE(초등) 반은 내신이 없다(plan-table과 **같은 값**). */
@@ -94,13 +94,13 @@ export function SlotBulk({
   const planFieldLabel = PLAN_BULK_FIELDS.find((f) => f.key === planField)?.label ?? "";
 
   const applyStatus = () => {
-    // 값이 없으면 적용 자체가 안 된다(버튼 disabled) — "아무것도 안 골랐는데 전원 상태 삭제"가
+    // 값이 없으면 적용 자체가 안 된다(버튼 disabled) — "아무것도 안 골랐는데 전원 태도 삭제"가
     // 기본 액션이 되면 안 된다. 일괄 지우기는 의도적으로 미제공(지우기는 개별 셀에서).
     if (statusTargets.length === 0 || value === null) return;
     // 덮어쓰기 + 실제로 덮일 값이 있을 때만 확인(마찰 최소화 — 빈 칸만 채우기는 확인 없음).
     if (!onlyEmpty && overwrites > 0) {
       const ok = window.confirm(
-        `이미 입력된 상태 ${overwrites}건을 "${value}"(으)로 덮어씁니다. 계속할까요?\n(기존 값을 남기려면 '빈 칸만 채우기'를 켜세요)`,
+        `이미 입력된 태도 ${overwrites}건을 "${value}"(으)로 덮어씁니다. 계속할까요?\n(기존 값을 남기려면 '빈 칸만 채우기'를 켜세요)`,
       );
       if (!ok) return;
     }
@@ -112,7 +112,7 @@ export function SlotBulk({
 
   const applyPlan = () => {
     const v = planValue.trim();
-    // 빈 값으로 적용 = 전 줄 지우기 — 상태 일괄과 같은 이유로 막는다(지우기는 개별 셀에서).
+    // 빈 값으로 적용 = 전 줄 지우기 — 태도 일괄과 같은 이유로 막는다(지우기는 개별 셀에서).
     if (planTargets.length === 0 || v === "") return;
     if (!planOnlyEmpty && planOverwrites > 0) {
       const ok = window.confirm(
@@ -139,7 +139,7 @@ export function SlotBulk({
     >
       <Popover.Trigger
         className="border-line-strong text-text-dim hover:text-primary hover:border-primary shrink-0 cursor-pointer rounded-full border px-2 py-0.5 text-[12px] font-bold"
-        title="이 교시의 출석·상태와 수업계획(평시/내신)을 한 번에 입력"
+        title="이 교시의 출결·태도와 수업계획(평시/내신)을 한 번에 입력"
       >
         일괄 입력
       </Popover.Trigger>
@@ -239,16 +239,16 @@ export function SlotBulk({
             </div>
 
             <div className="border-line-strong border-t pt-2">
-              <p className="text-text-dim mb-1 text-[11px] font-bold">상태</p>
+              <p className="text-text-dim mb-1 text-[11px] font-bold">태도</p>
               <div className="flex flex-wrap gap-1">
-                {STATUS_CHIPS.map((chip) => (
+                {ATTITUDE.map((chip) => (
                   <button
                     key={chip}
                     type="button"
                     className={`cursor-pointer rounded-full border px-2 py-0.5 text-[12px] ${
                       picked === chip
                         ? "border-foreground bg-foreground text-background font-bold"
-                        : STATUS_TONE_CLASS[statusTone(chip)]
+                        : "border-line-strong text-text-dim hover:text-foreground hover:bg-bg-soft"
                     }`}
                     onClick={() => setPicked((v) => (v === chip ? null : chip))}
                   >
@@ -260,7 +260,7 @@ export function SlotBulk({
                 className="border-line-strong text-foreground focus:border-primary mt-1.5 w-full rounded-lg border bg-transparent px-1.5 py-1 text-[12px] outline-none"
                 placeholder="직접 입력"
                 value={free}
-                aria-label="상태 직접 입력"
+                aria-label="태도 직접 입력"
                 onChange={(e) => {
                   setFree(e.target.value);
                   // 자유입력이 우선 적용되므로 칩 하이라이트가 남으면 "칩이 적용된다"는 거짓 표시가 된다
@@ -283,7 +283,7 @@ export function SlotBulk({
                 disabled={statusTargets.length === 0 || value === null}
                 onClick={applyStatus}
               >
-                {value === null ? "상태를 선택하세요" : `"${value}" 적용 ${statusTargets.length}명`}
+                {value === null ? "태도를 선택하세요" : `"${value}" 적용 ${statusTargets.length}명`}
               </Button>
             </div>
 

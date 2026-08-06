@@ -7,13 +7,15 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { useEditPresence } from "@/features/presence/edit-presence";
 import type { ClassSheetWeekData } from "../server/queries";
+// 출결은 ECS 전용 액션을 만들지 않고 **출석부·원스크린과 같은 것**을 쓴다 — 권한·담당 반·7일 창 게이트를
+// 화면마다 다시 짜면 한쪽만 느슨해진다(#77). 그 대신 ECS의 옛 전용 경로 2개(markPresentIfAbsent·
+// clearPresentAttendance)는 화면에서 빠졌다(취소는 출석부에서 — pill은 지우지 않는다).
+import { setAttendanceCell } from "@/features/attendance/server/actions";
 import {
-  clearPresentAttendance,
   deletePlanLine as deletePlanLineAction,
   copySlotFromPrevious,
   createPlanLine as createPlanLineAction,
   flushSheetPatches,
-  markPresentIfAbsent,
   movePlanLine as movePlanLineAction,
   saveMemo,
   setMyEcsCollapsedRosterGroups,
@@ -43,8 +45,18 @@ export type SheetHandlers = {
   copySlot: (planDate: string, slotStart: string, termMode: "regular" | "exam") => void;
   removeLine: (lineId: string, planDate: string, slotStart: string) => void;
   moveLineTerm: (lineId: string, planDate: string, slotStart: string, termMode: "regular" | "exam") => void;
-  markPresent: (studentId: string, date: string) => void;
-  clearAttendance: (studentId: string, date: string) => void;
+  /**
+   * 출결 저장(출석/지각/결석) — 원스크린·출석부와 **같은 서버 액션**(`setAttendanceCell`)을 쓴다.
+   * 🔴 결석이 찍히면 시수·급여에 닿는다. 그래서 게이트를 ECS가 따로 만들지 않고 그 액션을 그대로 통과시킨다
+   *    (권한·담당 반·강사 7일 창 — #77 "UI 조건은 게이트가 아니다").
+   * ⚠️ `note`는 **넘길 때만** 갱신된다(undefined면 서버가 기존 사유를 유지) — 출석 pill이 사유를 지우지 않게.
+   */
+  setAttendance: (
+    studentId: string,
+    date: string,
+    status: "present" | "late" | "absent",
+    note?: string | null,
+  ) => void;
   saveMark: (studentId: string, date: string, slotStart: string, status: string | null, note: string | null) => void;
 };
 
@@ -133,6 +145,12 @@ export function SheetClient({
   useEffect(() => {
     marksRef.current = marks;
   }, [marks]);
+  // 출결도 같은 이유로 미러 — 핸들러가 useMemo로 고정돼 있어 클로저의 attendance는 낡는다(롤백이 옛 값을
+  // 되살리면 "실패했는데 화면은 그대로"가 된다).
+  const attendanceRef = useRef(attendance);
+  useEffect(() => {
+    attendanceRef.current = attendance;
+  }, [attendance]);
 
   // ── 요일 필터(같은 주 전환 = flush·재조회 없이 History API) ────────────────
   const [dayFilter, setDayFilter] = useState<string | null>(() => {
@@ -308,38 +326,32 @@ export function SheetClient({
           setLinesBySlot((prev) => ({ ...prev, [`${planDate}|${slotStart}`]: r.lines }));
         });
       },
-      markPresent: (studentId, date) => {
-        if (!data.canMarkAttendanceByDate[date]) return;
-        // 낙관적 반영 → 실패 롤백
-        setAttendance((prev) => ({ ...prev, [`${studentId}|${date}`]: prev[`${studentId}|${date}`] ?? "present" }));
-        void markPresentIfAbsent({ classId, studentId, date }).then((r) => {
-          if (!r.ok) {
-            setAttendance((prev) => {
-              const next = { ...prev };
-              if (next[`${studentId}|${date}`] === "present") delete next[`${studentId}|${date}`];
-              return next;
-            });
-            toast.error(r.error);
-            return;
-          }
-          setAttendance((prev) => ({ ...prev, [`${studentId}|${date}`]: r.status }));
-        });
-      },
-      // 체크를 다시 누르면 취소(0169a). 서버가 거부하는 경우(결석·지각·출석부 메모/시수)는 낙관 반영을
-      // 되돌리고 사유를 띄운다 — "지워진 것처럼 보였다가 새로고침하면 돌아오는" 거짓 성공을 막는다.
-      clearAttendance: (studentId, date) => {
+      // 출결(출석/지각/결석) — 출석부·원스크린과 **같은 액션**을 호출한다(게이트를 여기서 다시 짜지 않는다).
+      // 낙관 반영 후 실패하면 직전 값으로 되돌린다 — 화면엔 남고 서버엔 없는 상태를 만들지 않기 위해
+      // (툴바가 "저장됨"이라 말하는 동안 기록을 잃는 사고, 2026-07-29 적대검증).
+      setAttendance: (studentId, date, status, note) => {
         if (!data.canMarkAttendanceByDate[date]) return;
         const key = `${studentId}|${date}`;
-        let before: string | undefined;
-        setAttendance((prev) => {
-          before = prev[key];
-          const next = { ...prev };
-          delete next[key];
-          return next;
-        });
-        void clearPresentAttendance({ classId, studentId, date }).then((r) => {
-          if (!r.ok) {
-            setAttendance((prev) => (before === undefined ? prev : { ...prev, [key]: before }));
+        const before = attendanceRef.current[key];
+        setAttendance((prev) => ({
+          ...prev,
+          // note를 안 넘긴 저장(출석 pill)은 기존 사유를 그대로 둔다 — 서버 규약(undefined=유지)과 일치시킨다.
+          [key]: { status, note: note === undefined ? (before?.note ?? null) : note },
+        }));
+        void setAttendanceCell({
+          classId,
+          studentId,
+          sessionDate: date,
+          status,
+          ...(note === undefined ? {} : { note }),
+        }).then((r) => {
+          if ("error" in r) {
+            setAttendance((prev) => {
+              const next = { ...prev };
+              if (before === undefined) delete next[key];
+              else next[key] = before;
+              return next;
+            });
             toast.error(r.error);
           }
         });

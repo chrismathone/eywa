@@ -35,7 +35,8 @@ function editableRows(roster: BulkRosterRow[], canEdit: boolean): BulkRosterRow[
  */
 export function planBulkAttendance(
   roster: BulkRosterRow[],
-  attendance: Record<string, string>,
+  /** `${studentId}|${date}` → 출결(값의 모양은 안 본다 — **있으면 건드리지 않는다**가 계약). */
+  attendance: Record<string, unknown>,
   date: string,
   opts: { canEdit: boolean; canMarkDate: boolean },
 ): string[] {

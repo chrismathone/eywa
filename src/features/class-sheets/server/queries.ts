@@ -75,8 +75,12 @@ export type ClassSheetWeekData = {
   teacherNames: Record<string, string>;
   classTeacherName: string | null;
   students: Record<string, SheetStudentMeta>;
-  /** `${studentId}|${date}` → attendance_status(effective). */
-  attendanceByStudentDate: Record<string, string>;
+  /**
+   * `${studentId}|${date}` → 출결(effective) — 상태 + **사유 메모**.
+   * ⚠️ 메모를 같이 싣는 이유: 출결 pill(지각·결석)이 사유 창을 띄우는데, 초기값이 없으면 창이 빈 채로
+   *    열리고 저장 시 **출석부에 이미 적힌 사유를 null로 덮는다**(setAttendanceCell은 넘긴 note를 쓴다).
+   */
+  attendanceByStudentDate: Record<string, { status: string; note: string | null }>;
   /** `${studentId}|${date}|${HH:MM}` → 마크. */
   marks: Record<string, { status: string | null; progressNote: string | null }>;
   goals: SheetGoalDTO[];
@@ -204,7 +208,8 @@ export async function getClassSheetWeek(
       .lte("mark_date", weekSunday),
     admin
       .from("attendance_records")
-      .select("id, student_id, class_id, session_date, status, recorded_at")
+      // note = 지각·결석 사유. 출결 pill의 사유 창 초기값이라 **반드시 함께** 읽는다(없으면 저장 시 null로 덮음).
+      .select("id, student_id, class_id, session_date, status, note, recorded_at")
       .eq("tenant_id", tenantId)
       .eq("class_id", classId)
       .gte("session_date", weekMonday)
@@ -277,6 +282,8 @@ export async function getClassSheetWeek(
       session_date: a.session_date as string,
       recorded_at: a.recorded_at as string,
       status: a.status as string,
+      // 지각·결석 사유 — 출결 pill의 사유 창 초기값. 여기서 흘리면 저장 시 기존 사유가 null로 덮인다.
+      note: (a.note as string | null) ?? null,
     })),
   );
 
@@ -395,8 +402,10 @@ export async function getClassSheetWeek(
     }
   }
 
-  const attendanceByStudentDate: Record<string, string> = {};
-  for (const a of effAttendance) attendanceByStudentDate[`${a.student_id}|${a.session_date}`] = a.status;
+  const attendanceByStudentDate: Record<string, { status: string; note: string | null }> = {};
+  for (const a of effAttendance) {
+    attendanceByStudentDate[`${a.student_id}|${a.session_date}`] = { status: a.status, note: a.note ?? null };
+  }
 
   const marksMap: Record<string, { status: string | null; progressNote: string | null }> = {};
   for (const m of marks) {
