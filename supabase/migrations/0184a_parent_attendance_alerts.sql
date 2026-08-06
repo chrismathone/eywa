@@ -47,6 +47,8 @@ comment on column users.attendance_alert_optin is
 -- ── 2. ClassNote 원아 ID ─────────────────────────────────────────────────────
 alter table students add column if not exists classnote_child_id bigint;
 
+-- ⚠️ 이 컬럼은 **0185a에서 `classnote_child_links` 표로 대체·제거**된다 — 실데이터에서 같은 아이가
+--    ClassNote 계정을 2개 갖는 경우가 16쌍 32명 나왔고(수학·영어 따로 가입), 단일 컬럼으로는 담기지 않는다.
 comment on column students.classnote_child_id is
   'ClassNote 원아(child) ID. 피드 행의 child로 학생을 특정하는 결정적 키 — 보드명 매칭과 달리 그룹반(영어)에서도 통한다. 보호자 전화·원아명·생년 3겹 대조로 채우되 전화값은 저장하지 않는다. 0184a.';
 

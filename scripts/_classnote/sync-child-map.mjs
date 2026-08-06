@@ -6,9 +6,9 @@
  *
  * 실행:
  *   node --env-file=.env.local scripts/_classnote/sync-child-map.mjs           # 점검(기본) — DB 변경 없음
- *   node --env-file=.env.local scripts/_classnote/sync-child-map.mjs --apply   # students.classnote_child_id 채움
+ *   node --env-file=.env.local scripts/_classnote/sync-child-map.mjs --apply   # classnote_child_links 채움
  *
- * ⚠️ ClassNote엔 **아무것도 쓰지 않는다**(GET만). --apply가 건드리는 것은 eywa students 한 컬럼뿐이다.
+ * ⚠️ ClassNote엔 **아무것도 쓰지 않는다**(GET만). --apply가 건드리는 것은 eywa classnote_child_links 한 표뿐이다.
  * 🔴 보호자 전화는 대조에만 쓰고 저장·출력하지 않는다(0184a·classnote-integration.md §11).
  */
 import postgres from "postgres";

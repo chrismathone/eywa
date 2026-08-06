@@ -61,14 +61,18 @@ describe("resolveChildStudent — 3겹 확정", () => {
   });
 });
 
-describe("planChildMap — 멱등·충돌 보류", () => {
-  it("이미 붙은 원아는 계획에 넣지 않는다", () => {
-    const withMapped = students.map((s) => (s.id === "s-solo" ? { ...s, classnote_child_id: 1 } : s));
-    const { plan } = planChildMap([{ childId: 1, name: "박지호", phones: ["01033334444"] }], withMapped, { schoolYear: YEAR });
+describe("planChildMap — 멱등·다계정", () => {
+  it("이미 링크된 원아는 계획에 넣지 않는다", () => {
+    const { plan } = planChildMap([{ childId: 1, name: "박지호", phones: ["01033334444"] }], students, {
+      schoolYear: YEAR,
+      linkedChildIds: [1],
+    });
     expect(plan).toEqual([]);
   });
 
-  it("한 학생에 두 원아가 몰리면 둘 다 보류한다", () => {
+  // 🔴 실데이터에서 16쌍 32명이 이 모양이었다(수학·영어 따로 가입). 한쪽만 붙이면 나머지 계정으로 들어온
+  //    연락이 학생을 못 찾아 그 아이가 출결 명단에서 통째로 빠진다.
+  it("같은 아이의 계정이 여럿이면 **전부** 같은 학생에 붙인다", () => {
     const { plan, skipped } = planChildMap(
       [
         { childId: 10, name: "박지호", phones: ["01033334444"] },
@@ -77,17 +81,18 @@ describe("planChildMap — 멱등·충돌 보류", () => {
       students,
       { schoolYear: YEAR },
     );
-    expect(plan).toEqual([]);
-    expect(skipped.map((s) => s.childId).sort()).toEqual([10, 11]);
+    expect(plan).toEqual([
+      { childId: 10, studentId: "s-solo", by: "phone" },
+      { childId: 11, studentId: "s-solo", by: "phone" },
+    ]);
+    expect(skipped).toEqual([]);
   });
 
-  it("그 학생에 이미 다른 원아가 붙어 있으면 새 원아는 보류(이유를 남긴다)", () => {
-    const withMapped = students.map((s) => (s.id === "s-solo" ? { ...s, classnote_child_id: 99 } : s));
-    const { plan, skipped } = planChildMap([{ childId: 12, name: "박지호", phones: ["01033334444"] }], withMapped, {
+  it("이름 표기가 달라도(영어 별칭) 전화가 같으면 같은 학생에 붙는다", () => {
+    const { plan } = planChildMap([{ childId: 13, name: "Jay(박지호)", phones: ["01033334444"] }], students, {
       schoolYear: YEAR,
     });
-    expect(plan).toEqual([]);
-    expect(skipped[0].why).toContain("이미 다른 원아");
+    expect(plan).toEqual([{ childId: 13, studentId: "s-solo", by: "phone" }]);
   });
 
   it("확정된 것만 계획에 담는다", () => {

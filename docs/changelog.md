@@ -16,6 +16,14 @@
   이 학생에 확정된다. ⚠️ **전화는 대조에만 쓰고 저장하지 않는다** — 남는 건 원아 id 하나뿐.
   판정=순수 [`child-map.mjs`](scripts/_classnote/child-map.mjs)(Vitest 12) · 동기화=데몬 하루 1회 + 수동
   [`sync-child-map.mjs`](scripts/_classnote/sync-child-map.mjs)(dry-run 기본).
+- 🔴 **`0185a` — "한 학생 = 원아 하나"가 틀렸다(0184a 직후 실데이터가 뒤집음).** 처음엔 단일 컬럼
+  `students.classnote_child_id`로 붙였는데, 돌려보니 **16쌍 32명이 같은 아이의 계정 2개**였다(수학·영어를
+  따로 가입 / 학부모·학생 각자 가입 — `이재용` ↔ `Lincoln(이재용)`처럼 표기만 다른 경우 포함). 단일 컬럼이면
+  한쪽만 붙고 **나머지 계정으로 온 연락은 그 아이를 출결 명단에서 통째로 빠뜨린다**(확정 461→429명으로 감소).
+  → `classnote_child_links`(PK `(tenant, child_id)`)로 교체: **여러 원아 → 한 학생은 허용, 한 원아 → 두 학생은
+  금지**(그건 남의 집 연락이 섞이는 방향). 0184a 컬럼은 백필 후 제거 — 매핑이 두 군데 있으면 한쪽만 고치는
+  순간 조용히 어긋난다. 실행 결과 **461/474(97%) 확정**, 남은 13건은 테스트 계정 6 · 형제 합산 이름 4
+  (`하수빈&하준수`) · 진짜 모호 3으로 **전부 보류가 맞는 것들**이다.
 - **원문은 워커가 저장(`classnote_parent_messages`), 분류는 앱이 한다.** AI 호출은 `generateJSON()` 단일
   진입점을 거쳐야 하고(CLAUDE.md) 연동 PC에 AI 키를 두지 않기 위해서다 — 워커가 저장 후 내부 API
   (`/api/internal/parent-messages/classify`, `x-eywa-internal` 게이트)를 **킥**하고, 실패해도 미분류로 남아

@@ -10,19 +10,20 @@
  * 못갈것같아요"가 올라왔지만 수학 전용 폴러는 그 글을 보지도 못했다.
  *
  * 왜 원아 id인가: 그룹반 보드명(`[EIE] Let's Speak 6 …`)엔 학생이 없다. 반면 피드 행의 `child`는
- * **그룹반 포함 100%** 채워진다(실측 43/43). 매핑은 `students.classnote_child_id`(sync-child-map이 채움).
+ * **그룹반 포함 100%** 채워진다(실측 43/43). 매핑은 `classnote_child_links`(sync-child-map이 채움).
  *
  * ⚠️ 분류(AI)는 여기서 하지 않는다 — 앱의 `generateJSON()` 단일 진입점을 거쳐야 하고(CLAUDE.md),
  *    연동 PC에 AI 키를 두지 않기 위해서다. 저장 후 앱 내부 API를 **킥**만 한다(best-effort).
  * ⚠️ 저장 실패·킥 실패 모두 발송·강사 알림과 **독립**이다. 미분류 행은 다음 폴의 킥에서 다시 잡힌다.
  */
 
-/** 매핑표(원아 id → 학생 id) — 폴마다 1회 조회. 미매핑 원아는 그냥 없는 키다(그래도 원문은 저장한다). */
+/**
+ * 매핑표(원아 id → 학생 id) — 폴마다 1회 조회. 미매핑 원아는 그냥 없는 키다(그래도 원문은 저장한다).
+ * ⚠️ 원아는 학생보다 많다(같은 아이의 다계정) — 표가 **원아 기준**인 이유(0185a).
+ */
 export async function loadChildStudentMap(sql, tenant) {
-  const rows = await sql`
-    select id, classnote_child_id from students
-    where tenant_id = ${tenant} and classnote_child_id is not null`;
-  return new Map(rows.map((r) => [Number(r.classnote_child_id), r.id]));
+  const rows = await sql`select child_id, student_id from classnote_child_links where tenant_id = ${tenant}`;
+  return new Map(rows.map((r) => [Number(r.child_id), r.student_id]));
 }
 
 /**

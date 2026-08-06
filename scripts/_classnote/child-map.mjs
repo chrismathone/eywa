@@ -88,50 +88,33 @@ export function resolveChildStudent(child, students, { schoolYear }) {
 }
 
 /**
- * 전건 계획 — 이미 붙어 있는 매핑은 건드리지 않고(멱등) **새로 확정된 것만** 돌려준다.
+ * 전건 계획 — 이미 붙어 있는 원아는 건드리지 않고(멱등) **새로 확정된 것만** 돌려준다.
  *
- * ⚠️ 한 학생에 두 원아가 붙으려 하면 **둘 다 보류**한다. 유니크 인덱스가 뒤에서 막아주긴 하지만,
- *    막힌 쪽이 조용히 사라지면 "왜 저 아이만 안 오지"를 아무도 못 찾는다 — 여기서 이유를 남긴다.
+ * ⚠️⚠️ **한 학생에 원아가 여럿인 건 정상이다**(0185a). 처음엔 "한 학생 = 원아 하나"로 잠갔는데
+ *    실데이터에서 **16쌍 32명**이 같은 아이의 두 계정이었다(수학·영어 따로 가입 / 학부모·학생 각자 가입 —
+ *    `이재용` ↔ `Lincoln(이재용)`처럼 이름 표기만 다른 경우 포함). 그 제약 때문에 확정이 461→429명으로
+ *    줄었고, 못 붙은 계정으로 들어온 연락은 **그 아이를 출결 명단에서 통째로 빠뜨린다.**
+ *    → 막아야 하는 건 그 반대 방향뿐이다: **한 원아가 두 학생에** 붙는 것(남의 집 연락이 섞인다).
  *
+ * @param {Array<object>} children ClassNote 원아
+ * @param {Array<object>} students eywa 학생(퇴원 포함)
+ * @param {{ schoolYear:number, linkedChildIds?: Iterable<number> }} opts
+ *   linkedChildIds = 이미 링크된 원아 id들(멱등 판정용).
  * @returns {{ plan: Array<{childId:number, studentId:string, by:string}>, skipped: Array<{childId:number, why:string}> }}
  */
-export function planChildMap(children, students, { schoolYear }) {
-  const alreadyByChild = new Map();
-  const takenByStudent = new Map();
-  for (const s of students ?? []) {
-    if (s?.classnote_child_id != null) {
-      alreadyByChild.set(Number(s.classnote_child_id), s.id);
-      takenByStudent.set(s.id, Number(s.classnote_child_id));
-    }
-  }
+export function planChildMap(children, students, { schoolYear, linkedChildIds = [] }) {
+  const already = new Set([...linkedChildIds].map(Number));
   const plan = [];
   const skipped = [];
-  const claimed = new Map(); // studentId → childId (이번 계획 안에서의 충돌 감지)
   for (const c of children ?? []) {
     const childId = Number(c?.childId);
     if (!Number.isFinite(childId)) continue;
-    if (alreadyByChild.has(childId)) continue; // 이미 붙어 있다 = 할 일 없음
+    if (already.has(childId)) continue; // 이미 붙어 있다 = 할 일 없음
     const r = resolveChildStudent(c, students, { schoolYear });
     if (!r.studentId) {
       skipped.push({ childId, why: r.why });
       continue;
     }
-    const existing = takenByStudent.get(r.studentId);
-    if (existing != null && existing !== childId) {
-      skipped.push({ childId, why: `그 학생엔 이미 다른 원아(${existing})가 붙어 있음` });
-      continue;
-    }
-    const dup = claimed.get(r.studentId);
-    if (dup != null) {
-      skipped.push({ childId, why: `같은 학생에 원아 ${dup}와 동시 매칭 — 둘 다 보류` });
-      const at = plan.findIndex((p) => p.childId === dup);
-      if (at >= 0) {
-        plan.splice(at, 1);
-        skipped.push({ childId: dup, why: `같은 학생에 원아 ${childId}와 동시 매칭 — 둘 다 보류` });
-      }
-      continue;
-    }
-    claimed.set(r.studentId, childId);
     plan.push({ childId, studentId: r.studentId, by: r.by });
   }
   return { plan, skipped };
