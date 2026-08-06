@@ -1,6 +1,6 @@
 import { ParamLink } from "./_components/param-link";
 import type { LucideIcon } from "@/components/icons/eywa-icon-compat";
-import { Columns3, DoorOpen, LayoutGrid, Users } from "@/components/icons/eywa-icon-compat";
+import { Columns3, DoorOpen, Layers, LayoutGrid, Users } from "@/components/icons/eywa-icon-compat";
 import { PhotoCard } from "@/components/atoms/photo-card";
 import { PageHeader } from "@/components/page-header";
 import { cookies } from "next/headers";
@@ -15,13 +15,13 @@ import {
 } from "@/features/timetable/server/queries";
 import { isSpecialSlotLabel, resolveTeacherLabels } from "@/features/timetable/lib/teacher-label";
 import { settingsToPeriodsConfig } from "@/features/timetable/lib/periods";
-import type { TeacherColorMap } from "@/features/timetable/lib/class-grid";
+import { buildRichClassCards, type TeacherColorMap } from "@/features/timetable/lib/class-grid";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { getGoogleSheetsStatus } from "@/features/integrations/server/queries";
 import { canManageSheetSync } from "@/features/integrations/server/sheet-access";
 import { canManageTimetableImport } from "@/features/timetable/server/import-access";
 import { isSheetExportSubject } from "@/features/integrations/sheets-provider";
-import { buildSubjectMaps } from "@/features/owner/subjects";
+import { SUBJECT_SOFT, buildSubjectMaps } from "@/features/owner/subjects";
 import { normalizeWeekdayGrouping } from "@/features/timetable/lib/weekday-groups";
 import {
   DEFAULT_TIMETABLE_KIND,
@@ -35,10 +35,11 @@ import { canAccessTenant, canManageTenant, canWriteTenant } from "@/lib/auth/per
 import { resolveSkillAreas } from "@/features/owner/skill-areas";
 import { EcsShortcut } from "./_components/ecs-shortcut";
 import { resolveIntegrationGroups } from "@/features/timetable/lib/integration-groups";
-import { GroupSettingsDialog } from "./_components/group-settings-dialog";
+import { normalizePresets } from "@/features/timetable/lib/group-presets";
 import { getWeekReferenceDate, mondayOf, thisMonday, weekRelation } from "@/features/timetable/lib/week";
 import { kstMinutesOfDay, kstToday, weekdayIndexOf } from "@/lib/date-kst";
 import { RichGridView } from "./_components/rich-grid-view";
+import { IntegratedEditBoard } from "./_components/integrated-edit-board";
 import {
   TimetableEditProvider,
   TimetableEditControls,
@@ -86,10 +87,10 @@ type ViewMode = "basic" | "integrated" | "teacher" | "rooms";
 export default async function TimetablePage({
   searchParams,
 }: {
-  searchParams: Promise<{ view?: ViewMode; subject?: string; kind?: string; week?: string; compact1h?: string; emptydays?: string; emptyperiods?: string }>;
+  searchParams: Promise<{ view?: ViewMode; subject?: string; kind?: string; week?: string; compact1h?: string; emptydays?: string; emptyperiods?: string; gedit?: string }>;
 }) {
   const user = await requireAccess("timetable");
-  const { view: viewParam, subject: subjectParam, kind: kindRaw, week: weekRaw, compact1h: compact1hRaw, emptydays: emptydaysRaw, emptyperiods: emptyperiodsRaw } = await searchParams;
+  const { view: viewParam, subject: subjectParam, kind: kindRaw, week: weekRaw, compact1h: compact1hRaw, emptydays: emptydaysRaw, emptyperiods: emptyperiodsRaw, gedit: geditRaw } = await searchParams;
   // 정규/특강/전체 — 기본 = 정규(특강 제외). 특강은 방학 단기강좌라 정규 주간표에 섞이면 시야가 흐려진다.
   const kind = parseTimetableKind(kindRaw);
   const cookieStore = await cookies();
@@ -242,11 +243,11 @@ export default async function TimetablePage({
   // 통합뷰 섹션 = 커스텀 그룹(학원설정 과목별)이 켜져 있으면 그것, 아니면 "N교시 시작" 자동 그룹.
   // 엑셀·시트 빌더도 같은 해석기를 쓴다(화면과 배치 일치가 이 기능의 존재 이유).
   const customGroups = resolveIntegrationGroups(subjectRow);
-  // '그룹 설정' 창의 배정 대상 = 이 과목·이 주 시간표에 실제 있는 반(가나다). 반 목록을 따로 조회하지
-  // 않고 slots에서 뽑는다 — 화면에 보이는 것과 창이 보여주는 것이 어긋나지 않게.
-  const groupClassOptions = [...new Map(slots.map((s) => [s.classId, s.className])).entries()]
-    .map(([classId, className]) => ({ classId, className }))
-    .sort((a, b) => a.className.localeCompare(b.className, "ko"));
+  // 저장해 둔 배치 보관함(과목별) — 그룹 설정(배치 편집) 모드가 읽는다.
+  const groupPresets = normalizePresets(
+    subjectRow?.integrationGroupPresets,
+    subjectRow?.integrationOthersTitle ?? "",
+  );
   // 과목별 요일 병합 프리셋(설정) — 미설정/구데이터는 mon-thu 폴백(resolve가 스키마 미통과).
   const weekdayGrouping = normalizeWeekdayGrouping(subjectRow?.weekdayGrouping);
 
@@ -265,6 +266,9 @@ export default async function TimetablePage({
   // 통합뷰 '그룹 설정' = 학원설정(과목별)을 쓰므로 게이트도 **owner 쓰기**. 시간표에 있다고 시간표
   // 권한으로 열면 학원설정 우회 뒷문이 된다(서버 액션도 같은 게이트로 2차 방어, #77).
   const canEditGroups = effView === "integrated" && (await canWriteTenant(user.systemRole, "owner"));
+  // 통합뷰 '배치 편집' 모드 — 실제 표 위에서 반을 끌어 줄을 바꾼다. URL 파라미터라 창을 다시 열면
+  // 자동으로 읽기 전용으로 돌아온다(편집 상태가 눌러앉지 않게). 권한 없으면 파라미터를 무시.
+  const groupEditing = canEditGroups && geditRaw === "1";
   // 강사뷰 커스터마이징(과목 설정) — 가로줄 시각(분)·격자 단위. english는 resolve가 기본 프리필.
   const sectionLineMins = (subjectRow?.teacherViewLines ?? [])
     .map((t) => {
@@ -563,19 +567,21 @@ export default async function TimetablePage({
         {canEditGroups ? (
           <>
             <span className="bg-line h-4 w-px" aria-hidden />
-            <GroupSettingsDialog
-              subject={subject}
-              subjectLabel={subjectMaps.labelOf(subject)}
-              classes={groupClassOptions}
-              initialGroups={(subjectRow?.integrationGroups ?? []).map((g) => ({
-                id: g.id,
-                title: g.title,
-                classIds: g.classIds ?? [],
-              }))}
-              initialEnabled={subjectRow?.integrationGroupsEnabled === true}
-              initialShowOthers={subjectRow?.integrationShowOthers !== false}
-              initialOthersTitle={subjectRow?.integrationOthersTitle ?? ""}
-            />
+            {/* 🔴 별도 창(칩 보드)이 아니라 **통합뷰 그 자체**가 편집 표면이다(원장 2026-08-06 —
+                *"통합뷰에서 편집모드를 누르고, 통합뷰의 그 자체를 드래그하고 싶은거야"*).
+                누르면 같은 서식 그대로 **수업명 행만** 남고 그 위에서 반을 끌어 줄을 바꾼다. */}
+            <ParamLink
+              href={buildHref({ view: effView, subject, defaultSubject, kind, week, thisWk, compact1h: compactList, hideEmptyDays, collapseEmptyPeriods, gedit: !groupEditing })}
+              title="통합뷰를 수업명만 남긴 상태로 바꿔 반을 끌어 옮깁니다"
+              className={`inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-2 py-0.5 text-xs transition ${
+                groupEditing
+                  ? "border-primary bg-primary text-primary-foreground font-medium"
+                  : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
+              }`}
+            >
+              <Layers size={11} strokeWidth={1.8} />
+              그룹 설정
+            </ParamLink>
           </>
         ) : null}
 
@@ -729,6 +735,26 @@ export default async function TimetablePage({
             sizes="(max-width: 768px) 100vw, 576px"
           />
         </div>
+      ) : isIntegrated && groupEditing ? (
+        // ⚠️ 여기엔 TimetableZoomArea를 감싸지 않는다 — 편집 보드가 **DndContext 안쪽에서** 직접 감싼다
+        //    (바깥이면 fixed인 DragOverlay가 zoom 좌표계로 들어가 커서와 어긋난다).
+        <IntegratedEditBoard
+          subject={subject}
+          cards={buildRichClassCards(slots, periodsConfig)}
+          config={periodsConfig}
+          teacherColors={teacherColors}
+          subjectSoftClass={SUBJECT_SOFT[subjectMaps.colorOf(subject)]}
+          initialGroups={(subjectRow?.integrationGroups ?? []).map((g) => ({
+            id: g.id,
+            title: g.title,
+            classIds: g.classIds ?? [],
+          }))}
+          initialEnabled={subjectRow?.integrationGroupsEnabled === true}
+          initialShowOthers={subjectRow?.integrationShowOthers !== false}
+          initialOthersTitle={subjectRow?.integrationOthersTitle ?? ""}
+          initialPresets={groupPresets}
+          doneHref={buildHref({ view: effView, subject, defaultSubject, kind, week, thisWk, compact1h: compactList, hideEmptyDays, collapseEmptyPeriods })}
+        />
       ) : isIntegrated ? (
         <TimetableZoomArea>
           <RichGridView
@@ -812,6 +838,11 @@ function buildHref(opts: {
    * (collapse/expand), 미지정(undefined)만 생략(=쿠키 기본). 인앱 링크는 전부 현재 상태를 명시로 넘긴다.
    */
   collapseEmptyPeriods?: boolean;
+  /**
+   * 통합뷰 '배치 편집' 모드. **true일 때만** 직렬화한다 — 위 두 표시 설정과 달리 '기억할 취향'이 아니라
+   * 지금 켠 작업 모드라, 다른 링크(주 이동·과목 전환)는 파라미터를 안 실어 자연스럽게 읽기 전용으로 돌아간다.
+   */
+  gedit?: boolean;
 }): string {
   const params = new URLSearchParams();
   if (opts.view !== "basic") params.set("view", opts.view);
@@ -824,6 +855,7 @@ function buildHref(opts: {
   if (opts.hideEmptyDays !== undefined) params.set("emptydays", opts.hideEmptyDays ? "hide" : "show");
   if (opts.collapseEmptyPeriods !== undefined)
     params.set("emptyperiods", opts.collapseEmptyPeriods ? "collapse" : "expand");
+  if (opts.gedit) params.set("gedit", "1");
   const q = params.toString();
   return q ? `/timetable?${q}` : "/timetable";
 }

@@ -62,8 +62,13 @@ export function currentContract(rows: readonly ContractRow[], hireDate: string |
 }
 
 /**
- * 다음 차수 연장의 **기본 제안값** — 현재 계약이 끝나는 날부터 1년.
- * 저장된 계약이 없으면 입사일 기준 2차(입사일+1년 ~ +2년)가 된다.
+ * 다음 차수 기입의 **기본 제안값**.
+ *
+ * 🔴 저장된 계약이 **하나도 없으면 1차(입사일 ~ +1년)** 를 제안한다 — 화면의 '현재 계약'은 계약이 없을 때
+ * 입사일에서 파생한 **가상 1차**를 보여줄 뿐 DB엔 없다(`stored:false`). 그 가상값의 "다음"을 제안하면
+ * 화면은 "2차 기입"이라 하고 서버는 실제 행 기준 max+1 = **1차로 저장**해 라벨이 어긋나고, 첫 계약 기간이
+ * 입사 1년 뒤로 통째로 밀린다(2026-08-06 점검에서 실측 재현: 라벨 2차 → 저장 "1차 2027-08-03~2028-08-03").
+ * 저장된 계약이 있을 때만 그 끝에 이어 붙인다.
  */
 export function nextContractDefault(
   rows: readonly ContractRow[],
@@ -71,6 +76,8 @@ export function nextContractDefault(
 ): { seq: number; startDate: string; endDate: string } | null {
   const cur = currentContract(rows, hireDate);
   if (!cur) return null;
+  // 가상 현재계약(입사일 파생) = 아직 1차가 없다는 뜻 → 그 자리를 그대로 1차로 제안.
+  if (!cur.stored) return { seq: cur.seq, startDate: cur.startDate, endDate: cur.endDate };
   return { seq: cur.seq + 1, startDate: cur.endDate, endDate: addYears(cur.endDate, 1) };
 }
 

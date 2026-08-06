@@ -274,6 +274,11 @@ export type IntegrationGroupsInput = {
   groups: { id: string; title: string; classIds: string[] }[];
   showOthers: boolean;
   othersTitle: string;
+  /**
+   * 보관함(프리셋) 전체. **넘기면 통째로 교체**, 안 넘기면(undefined) 저장된 것을 그대로 둔다 —
+   * 프리셋을 안 건드리는 화면이 실수로 보관함을 비우지 않게(부분 갱신 아님을 호출부가 알도록 명시).
+   */
+  presets?: { id: string; name: string; groups: { id: string; title: string; classIds: string[] }[]; showOthers?: boolean; othersTitle?: string }[];
 };
 
 /**
@@ -341,6 +346,23 @@ export async function saveTeacherViewOrder(input: {
   return { ok: true };
 }
 
+/**
+ * 빈 제목 줄은 저장 단계에서 버린다(화면에서 이름 없는 섹션이 생기지 않게). 반 중복 배정도 여기서
+ * 정리 — 먼저 나온 줄이 갖는다(렌더 규칙 applyCustomGroups와 같은 순서라 화면·저장이 안 어긋난다).
+ * 현재 배치와 보관함(프리셋)이 **같은 규칙**을 타야 불러왔을 때 화면이 달라지지 않는다.
+ */
+function sanitizeGroups(groups: { id: string; title: string; classIds: string[] }[]) {
+  const seen = new Set<string>();
+  return groups
+    .map((g) => ({ ...g, title: g.title.trim() }))
+    .filter((g) => g.title)
+    .map((g) => ({
+      id: g.id,
+      title: g.title,
+      classIds: g.classIds.filter((id) => (seen.has(id) ? false : (seen.add(id), true))),
+    }));
+}
+
 export async function saveIntegrationGroups(input: IntegrationGroupsInput): Promise<AbsorbResult> {
   const gate = await requireOwnerWrite();
   if (gate.error !== undefined) return { error: gate.error };
@@ -357,17 +379,17 @@ export async function saveIntegrationGroups(input: IntegrationGroupsInput): Prom
     return { error: "학원 설정에 없는 과목입니다" };
   }
 
-  // 빈 제목 그룹은 저장 단계에서 버린다(화면에서 이름 없는 섹션이 생기지 않게). 반 중복 배정도 여기서
-  // 정리 — 먼저 나온 그룹이 갖는다(렌더 규칙 applyCustomGroups와 같은 순서라 화면·저장이 안 어긋난다).
-  const seen = new Set<string>();
-  const groups = input.groups
-    .map((g) => ({ ...g, title: g.title.trim() }))
-    .filter((g) => g.title)
-    .map((g) => ({
-      id: g.id,
-      title: g.title,
-      classIds: g.classIds.filter((id) => (seen.has(id) ? false : (seen.add(id), true))),
-    }));
+  const groups = sanitizeGroups(input.groups);
+
+  // 보관함(프리셋) — 저장 시점에 같은 위생 규칙을 태운다(빈 제목 줄 제거·줄 안 반 중복 제거).
+  // 이름 없는 프리셋은 버린다(목록에서 고를 수 없는 유령 항목이 된다).
+  const presets = input.presets?.map((p) => ({
+    id: p.id,
+    name: p.name.trim(),
+    groups: sanitizeGroups(p.groups),
+    showOthers: p.showOthers,
+    othersTitle: p.othersTitle?.trim() || undefined,
+  })).filter((p) => p.name);
 
   const nextOperations = {
     ...operations,
@@ -379,6 +401,8 @@ export async function saveIntegrationGroups(input: IntegrationGroupsInput): Prom
             integrationGroupsEnabled: input.enabled,
             integrationShowOthers: input.showOthers,
             integrationOthersTitle: input.othersTitle.trim() || undefined,
+            // undefined = "안 넘겼다" → 기존 보관함 보존. 빈 배열은 "다 지웠다"라 그대로 반영.
+            integrationGroupPresets: presets ?? s.integrationGroupPresets,
           }
         : s,
     ),
@@ -393,7 +417,12 @@ export async function saveIntegrationGroups(input: IntegrationGroupsInput): Prom
     action: "owner_integration_groups_update",
     targetType: "tenant_settings",
     targetLabel: input.subject,
-    metadata: { subject: input.subject, enabled: input.enabled, groups: groups.length },
+    metadata: {
+      subject: input.subject,
+      enabled: input.enabled,
+      groups: groups.length,
+      ...(presets ? { presets: presets.length } : null),
+    },
   });
   return { ok: true };
 }
