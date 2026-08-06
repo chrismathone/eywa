@@ -153,7 +153,9 @@ export const RosterTable = memo(function RosterTable({
           {/* 출결·태도는 드롭다운 — 태도는 가장 긴 선택지('매우 안좋음')가 잘리지 않는 폭이어야 한다.
               유닛은 숫자 한두 자리라 좁게(수학은 '타임', 영어는 '유닛' — 원장 어휘 그대로). */}
           <col style={{ width: 96 }} />
-          <col style={{ width: 44 }} />
+          {/* ⚠️ 유닛 칸 입력폭은 46px 고정(SessionUnitsField) — 열을 그보다 좁히면 입력칸이 넘쳐
+              양옆 드롭다운 위로 **겹쳐 그려진다**(원장 2026-08-06 "너무 겹치네"). 좌우 여백까지 포함해 둘 것. */}
+          <col style={{ width: 58 }} />
           <col style={{ width: 100 }} />
           <col />
         </colgroup>
@@ -251,10 +253,20 @@ export const RosterTable = memo(function RosterTable({
                     onClear={() => handlers.clearAttendance(entry.studentId, date)}
                   />
                 </td>
-                <td className="py-1 pr-1">
+                <td className="px-1 py-1 text-center">
                   {/* 유닛 = 수학의 '타임'과 같은 값(session_units). 결석이면 컴포넌트가 '—'로 잠근다
-                      (결석은 시수를 안 쓴다). 기록이 없으면 아직 자동값이 안 박혔으므로 빈 칸으로 둔다. */}
-                  {canMarkDate && rowEditable && att ? (
+                      (결석은 시수를 안 쓴다). **출결 기록이 없으면 '—'** — 아직 유닛이라는 값 자체가
+                      없는 상태라 0이나 1을 보여주면 "이미 잡혀 있다"는 거짓 표시가 된다(원장 "없는 경우 -"). */}
+                  {att?.status === "absent" ? (
+                    // 결석은 시수를 안 쓴다. size="md"의 SessionUnitsField는 이 경우 **null을 반환**해
+                    // 칸이 통째로 비므로(빈 칸 = "입력이 안 되나?") 여기서 직접 '—'를 그린다.
+                    <span
+                      className="text-text-faint text-[12px]"
+                      title="결석은 유닛(시수)을 쓰지 않습니다 — 출석·지각으로 바꾸면 입력할 수 있습니다"
+                    >
+                      —
+                    </span>
+                  ) : canMarkDate && rowEditable && att ? (
                     <SessionUnitsField
                       units={att.units}
                       status={(att.status as "present" | "late" | "absent" | null) ?? null}

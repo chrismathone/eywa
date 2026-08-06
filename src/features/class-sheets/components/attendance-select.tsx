@@ -15,6 +15,7 @@
  *    덮으면 출석부에서만 쓸 수 있는 상태가 조용히 사라진다(알약 구현과 같은 판단).
  */
 import { useRef, useState } from "react";
+import { toast } from "sonner";
 import { Popover } from "@base-ui/react/popover";
 import { FieldSelect } from "@/features/onescreen/components/field-select";
 import { NoteForm } from "@/features/onescreen/components/attendance-pills";
@@ -109,7 +110,16 @@ export function AttendanceSelect({
             value={label}
             ariaLabel={`${studentName} 출결`}
             onSelect={(v) => {
-              if (v === null) return onClear();
+              // FieldSelect는 '선택 안 함'을 **항상** 끼워 넣는데, 0169a 취소는 plain present만 지운다.
+              // 지각·결석에서 그대로 호출하면 낙관 삭제 → 서버 거절 → 롤백이 매번 반복되는 **죽은 컨트롤**이
+              // 된다(지워진 것처럼 보였다 돌아오는 거짓 성공). 왕복 없이 이유부터 말한다.
+              if (v === null) {
+                if (status && status !== "present") {
+                  toast.info("지각·결석 기록은 출석부에서 지워 주세요(사유·시수가 함께 지워집니다)");
+                  return;
+                }
+                return onClear();
+              }
               const next = TO_STATUS[v];
               if (!next) return;
               // 지각·결석은 **같은 값을 다시 골라도** 사유 창을 연다(= 사유 수정 경로). 알약이

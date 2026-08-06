@@ -16,6 +16,7 @@ import { getTenantSettings } from "@/features/owner/server/queries";
 import { resolveSkillAreas } from "@/features/owner/skill-areas";
 import type { SkillAreaSetting } from "@/features/owner/settings-types";
 import { effectiveAttendanceRecords } from "@/features/attendance/effective-records";
+import { getTeachingClassIds } from "@/features/classes/server/delegation";
 import { isWithinAttendanceEditWindow } from "@/features/attendance/edit-window";
 import { readEcsFontSize, type EcsFontSize } from "../font-size";
 import {
@@ -29,7 +30,7 @@ import { keepEnglishTrack, type EnglishTrackFilter } from "@/features/classes/en
 import {
   buildWeekGrid,
   scheduledSlotKeySet,
-  scheduledUnitsByDate,
+  seatSlotKeySet,
   sheetFillStats,
   withdrawnFloorOf,
   type GridPlanLine,
@@ -82,13 +83,6 @@ export type ClassSheetWeekData = {
    *    열리고 저장 시 **출석부에 이미 적힌 사유를 null로 덮는다**(setAttendanceCell은 넘긴 note를 쓴다).
    */
   attendanceByStudentDate: Record<string, { status: string; note: string | null; units: number | null }>;
-  /**
-   * 날짜 → 그 날 **수업 교시 수**. 출결을 새로 찍을 때 시수(유닛)의 **자동값**이다(원장 2026-08-06:
-   * *"수학은 타임, 영어는 유닛… 2개분을 진행할 수도 있어서"*). 영어는 하루 3~4교시인 반이 흔한데
-   * 출결은 (학생,반,날짜) 한 행이라 그냥 두면 4교시가 1유닛으로 잡힌다.
-   * ⚠️ 표시 설정(JJ 토글)과 **무관**하게 센다 — 보기 설정이 급여를 바꾸면 안 된다(`scheduledUnitsByDate`).
-   */
-  unitsByDate: Record<string, number>;
   /** `${studentId}|${date}|${HH:MM}` → 마크. */
   marks: Record<string, { status: string | null; progressNote: string | null }>;
   goals: SheetGoalDTO[];
@@ -386,15 +380,29 @@ export async function getClassSheetWeek(
 
   // 출석 present 체크 가능 여부 — attendance 계약 그대로(권한 + 강사만 7일 창, 날짜별 판정)
   // 시트 가져오기 버튼 자격은 랜딩과 같은 게이트(sheet_sync full) — 독립 조회라 함께 태운다(B4).
-  const [attendanceWrite, canSheetSync] = await Promise.all([
+  const [attendanceWrite, canSheetSync, attendanceScope] = await Promise.all([
     canWriteTenant(access.user.systemRole, "attendance"),
     canManageSheetSync(access.user.systemRole),
+    accessLevelTenant(access.user.systemRole, "attendance"),
   ]);
+  // 🔴 출결 저장은 **출석부와 같은 액션**(`setAttendanceCell`)을 타는데, 그 액션의 담당 반 판정은
+  //    `getTeachingClassIds`(= `classes.teacher_id` ∪ 위임)라 **ECS 접근 범위보다 좁다**. ECS는 원장 승인
+  //    2026-07-29로 교시 담당(부담임, `ecsAssistantClassIds` — `class_schedules.teacher_id`)까지 열어 뒀다.
+  //    그래서 부담임은 시트를 열 수는 있지만 출결 저장은 서버가 거절한다 → **컨트롤을 미리 잠근다.**
+  //    안 잠그면 "눌리는데 매번 거절"이 되어 이 프로젝트가 반복해 밟은 거짓 어포던스가 된다(#77 반대편).
+  // ⚠️ 여기서 범위를 넓히지 말 것 — 출결은 시수·급여에 닿으므로 게이트는 출석부 쪽이 단일 소스다.
+  //    부담임에게도 열어야 한다면 그 액션의 담당 판정을 바꾸는 게 맞다(원장 결정 필요).
+  const attendanceClassIds =
+    attendanceWrite && attendanceScope === "scoped"
+      ? (await getTeachingClassIds(await createClient(), access.user.id, today)).all
+      : null;
+  const attendanceClassOk = attendanceClassIds === null || attendanceClassIds.includes(classId);
   const canMarkAttendanceByDate: Record<string, boolean> = {};
   for (const date of weekDatesOf(weekMonday)) {
     canMarkAttendanceByDate[date] =
       attendanceWrite &&
-      (access.user.systemRole !== "teacher" || isWithinAttendanceEditWindow(date, today));
+      attendanceClassOk &&
+      (attendanceScope !== "scoped" || isWithinAttendanceEditWindow(date, today));
   }
 
   // 교시 라벨(표시 전용) — **요일별 표**로 슬롯마다 확정한다. 주말은 평일과 시각이 다른 별도 교시표를
@@ -414,9 +422,6 @@ export async function getClassSheetWeek(
       if (label) periodLabelBySlot[`${day.date}|${slot.slotStart}`] = label;
     }
   }
-
-  // 유닛 자동값 — **그리드와 무관하게** 원본 스케줄에서 센다(자리 제외, 표시 설정 불문).
-  const unitsByDate = scheduledUnitsByDate(weekMonday, scheduleRows);
 
   const attendanceByStudentDate: Record<
     string,
@@ -467,7 +472,6 @@ export async function getClassSheetWeek(
       classTeacherName: access.teacherId ? (teacherNames[access.teacherId] ?? null) : null,
       students,
       attendanceByStudentDate,
-      unitsByDate,
       marks: marksMap,
       goals,
       monthStart,
@@ -694,8 +698,22 @@ export async function getSheetLanding(
     const all = allKeysByClass.get(c.id as string) ?? new Set<string>();
     let filled = 0;
     for (const key of scheduled) if (meaningful.has(key)) filled += 1;
+    // 🔴 고아 = "시간표가 바뀌어 스케줄에 없는 기록". **안 그리기로 한 자리(LAB·숨긴 JJ)는 고아가 아니다** —
+    //    스케줄엔 멀쩡히 있고 우리가 화면에서 뺐을 뿐이다. 빼면 `scheduled`에서 사라지므로 그냥 세면 LAB
+    //    기록 전부가 "시간 변경된 기록 N건"으로 둔갑한다(시트 상세는 같은 걸 'LAB 각주'로 말한다 —
+    //    두 화면이 같은 데이터를 다르게 설명하면 하나는 반드시 거짓말이다).
+    const seatKeys = seatSlotKeySet(
+      weekMonday,
+      (schedulesByClass.get(c.id as string) ?? []).map((s) => ({
+        dayOfWeek: s.day_of_week,
+        startTime: s.start_time,
+        validFrom: s.valid_from,
+        validTo: s.valid_to,
+        slotTeacherLabel: s.slot_teacher_label,
+      })),
+    );
     let orphan = 0;
-    for (const key of all) if (!scheduled.has(key)) orphan += 1;
+    for (const key of all) if (!scheduled.has(key) && !seatKeys.has(key)) orphan += 1;
     return {
       classId: c.id as string,
       className: c.class_name as string,

@@ -198,34 +198,31 @@ export function scheduledSlotKeySet(
 }
 
 /**
- * 날짜별 **수업 교시 수** — ECS 출결의 시수(유닛) 자동값(원장 2026-08-06: *"수학은 타임, 영어는 유닛…
- * 선생님이 2개분을 진행할 수도 있어서"*). 영어는 하루 3~4교시인 반이 흔한데 `attendance_records`는
- * **(학생,반,날짜) 한 행**이라, 그냥 두면 4교시 수업이 1유닛으로 잡힌다(실측: 영어 출결 전건 units=1).
+ * 그 주의 **자리(LAB·JJ) 슬롯 키** 집합 — 랜딩이 "고아(시간 변경됨)"를 셀 때 빼기 위한 것.
  *
- * 🔴 **표시 설정(JJ 토글)과 무관해야 한다.** 화면에 보이는 교시로 세면 *보기 설정이 급여를 바꾼다.*
- *    그래서 `hiddenSeatOf`가 아니라 `specialSlotLabel`로 **자리(LAB·JJ)를 언제나 제외**한다 —
- *    자리는 담당 강사가 없는 방(teacher_id=null)이라 강사의 수업 시수가 아니다.
- * ⚠️ 같은 (날짜,시각)에 자리와 수업이 겹치면 1로 센다(중복 계상 금지 — buildWeekGrid의 '수업이 이긴다'와 동일).
+ * 🔴 자리 교시는 스케줄에 **있다**. 우리가 화면에서 안 그릴 뿐이다. 그래서 `scheduledSlotKeySet`에서
+ *    빠지는데, 그걸 그대로 "스케줄에 없는 기록 = 고아"로 세면 LAB에 남은 계획이 통째로
+ *    *"시간 변경된 기록 N건"* 으로 둔갑한다(같은 데이터를 시트 상세는 'LAB 각주'라 부른다).
+ * ⚠️ 표시 설정과 무관하게 **자리면 전부** 담는다 — JJ를 켜 둔 계정에선 JJ 키가 `scheduled`에도 있어
+ *    어차피 고아 판정에 안 걸리므로, 여기서 굳이 토글을 볼 이유가 없다(볼수록 갈릴 여지만 는다).
  */
-export function scheduledUnitsByDate(
+export function seatSlotKeySet(
   weekMonday: string,
   schedules: readonly Pick<
     GridScheduleRow,
     "dayOfWeek" | "startTime" | "validFrom" | "validTo" | "slotTeacherLabel"
   >[],
-): Record<string, number> {
-  const out: Record<string, number> = {};
+): Set<string> {
+  const out = new Set<string>();
   for (const date of weekDatesOf(weekMonday)) {
     const dow = dowKeyOf(date);
-    const starts = new Set<string>();
     for (const s of schedules) {
       if (s.dayOfWeek !== dow) continue;
       if (s.validFrom > date) continue;
       if (s.validTo && s.validTo < date) continue;
-      if (specialSlotLabel(s.slotTeacherLabel)) continue; // 자리는 수업 시수가 아니다
-      starts.add(normalizeSlotTime(s.startTime));
+      if (!specialSlotLabel(s.slotTeacherLabel)) continue;
+      out.add(slotKey(date, normalizeSlotTime(s.startTime)));
     }
-    if (starts.size > 0) out[date] = starts.size;
   }
   return out;
 }
