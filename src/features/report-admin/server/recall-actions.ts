@@ -23,7 +23,12 @@ import { createClient } from "@/lib/supabase/server";
 import { humanizeDbError } from "@/lib/supabase/db-error";
 import { logAction } from "@/features/audit/server/log";
 import { teacherOwnsStudent } from "@/features/onescreen/server/scope";
-import { RECALL_FAILED, RECALL_REQUESTED, partitionRecallTargets } from "../report-recall";
+import {
+  RECALL_FAILED,
+  RECALL_REOPEN_REQUESTED,
+  RECALL_REQUESTED,
+  partitionRecallTargets,
+} from "../report-recall";
 
 /** 한 번에 처리할 상한 — 실수로 전체 선택해 대량 삭제가 나가는 것을 구조적으로 막는다. */
 const MAX_PER_CALL = 100;
@@ -43,7 +48,10 @@ export type RecallResult = {
  * 공유 토큰으로 회수(강사 카드 경로) — 원스크린 카드는 보고서 id를 모르고 공유 토큰만 안다
  * (revokeShareLink·reissueShareLink와 같은 키). **게이트는 아래 본체 하나뿐** — 진입점만 둘이다.
  */
-export async function requestReportRecallByShareToken(shareToken: string): Promise<RecallResult> {
+export async function requestReportRecallByShareToken(
+  shareToken: string,
+  opts?: { reopen?: boolean },
+): Promise<RecallResult> {
   if (!shareToken) return { ok: false, error: "링크 정보가 없습니다" };
   const supabase = await createClient();
   const { data } = await supabase
@@ -52,10 +60,18 @@ export async function requestReportRecallByShareToken(shareToken: string): Promi
     .eq("share_token", shareToken)
     .maybeSingle();
   if (!data) return { ok: false, error: "보고서를 찾을 수 없습니다" };
-  return requestReportRecall([data.id as string]);
+  return requestReportRecall([data.id as string], opts);
 }
 
-export async function requestReportRecall(ids: string[]): Promise<RecallResult> {
+/**
+ * `reopen`(재발송) = 회수 후 그 행을 **미발송으로 되돌린다** — 원장 정의(2026-08-06):
+ * *"회수(삭제) = 그냥 삭제만 / 재발송 = 회수 후에 수정본으로 재업로드"*.
+ * 되돌리는 시점은 **워커가 게시글을 지운 뒤**다(먼저 토큰을 바꾸면 지울 글을 못 찾는다).
+ */
+export async function requestReportRecall(
+  ids: string[],
+  opts?: { reopen?: boolean },
+): Promise<RecallResult> {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
   if (!ids?.length) return { ok: false, error: "대상이 없습니다" };
@@ -104,7 +120,7 @@ export async function requestReportRecall(ids: string[]): Promise<RecallResult> 
   const { data: updated, error } = await supabase
     .from("lesson_reports")
     .update({
-      classnote_status: RECALL_REQUESTED,
+      classnote_status: opts?.reopen ? RECALL_REOPEN_REQUESTED : RECALL_REQUESTED,
       classnote_error: null,
       classnote_processing_at: null,
       // 링크 즉시 차단 — 워커 폴을 기다리는 동안 학부모가 여는 창을 없앤다(위 주석).
@@ -124,7 +140,12 @@ export async function requestReportRecall(ids: string[]): Promise<RecallResult> 
     action: "classnote_report_recall",
     targetType: "lesson_report",
     targetLabel: names.slice(0, 5).join(", ") || null,
-    metadata: { reportCount: (updated ?? []).length, studentNames: names.slice(0, 20), byAdmin: isAdmin },
+    metadata: {
+      reportCount: (updated ?? []).length,
+      studentNames: names.slice(0, 20),
+      byAdmin: isAdmin,
+      reopen: !!opts?.reopen,
+    },
   });
 
   revalidatePath("/lesson-reports");

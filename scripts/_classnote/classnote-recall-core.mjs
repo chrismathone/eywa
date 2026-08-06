@@ -32,8 +32,14 @@ import { boardClassName, subjectLabel } from "./classnote-core.mjs";
 
 /** 클레임 배치 — 회수는 드문 동작이라 작게(한 폴에 5건). */
 const BATCH = 5;
-/** `recalling`에 10분 이상 머문 행은 죽은 폴로 보고 되돌린다(발송 워커 STALE_MIN과 같은 규약). */
+/**
+ * `recalling`에 10분 이상 머문 행은 죽은 폴로 보고 되돌린다(발송 워커 STALE_MIN과 같은 규약).
+ * ⚠️ 이건 **프로세스가 통째로 죽은 경우**의 마지막 그물이다 — 평범한 예외는 아래 catch가 즉시 되돌리므로
+ *    여기까지 오면 안 된다(오면 "10분 멈춘 것처럼" 보인다).
+ */
 const STALE_MIN = 10;
+/** 준비 실패 재시도 상한 — 넘으면 recall_failed로 확정(무한 재시도·로그인 폭풍 방지). */
+const RETRY_MAX = 3;
 
 /** 리포트 단건 조회 — 삭제 전 대조(cls/child)용. notice-core getReport와 같은 계약. */
 async function getReport(page, id) {
@@ -133,7 +139,7 @@ export async function processRecallsOnce(sql, browser, opts) {
   if (stale.length) log(`[recall] stale 복구 ${stale.length}건`);
 
   const [{ n }] = await sql`select count(*)::int as n from lesson_reports
-    where tenant_id=${tenant} and classnote_status='recall_requested'`;
+    where tenant_id=${tenant} and classnote_status in ('recall_requested','recall_reopen_requested')`;
   if (!n) return { claimed: 0, recalled: 0, failed: 0 };
   if (!post) {
     log(`[recall] 회수 대기 ${n}건 — dry-run이라 삭제하지 않음(--post 필요)`);
@@ -142,14 +148,15 @@ export async function processRecallsOnce(sql, browser, opts) {
 
   const claimed = await sql`
     with cte as (
-      select id from lesson_reports
-      where tenant_id = ${tenant} and classnote_status='recall_requested'
+      select id, classnote_status as prev from lesson_reports
+      where tenant_id = ${tenant} and classnote_status in ('recall_requested','recall_reopen_requested')
       order by revoked_at nulls first limit ${BATCH}
       for update skip locked
     )
     update lesson_reports lr set classnote_status='recalling', classnote_processing_at=now()
     from cte where lr.id=cte.id
-    returning lr.id, lr.share_token, lr.subject, lr.student_id, lr.report_date::text as report_date`;
+    returning lr.id, lr.share_token, lr.subject, lr.student_id, lr.report_date::text as report_date,
+              cte.prev, lr.classnote_retry_count`;
   const summary = { claimed: claimed.length, recalled: 0, failed: 0 };
   if (!claimed.length) return summary;
   log(`[recall] 클레임 ${claimed.length}건`);
@@ -189,7 +196,18 @@ export async function processRecallsOnce(sql, browser, opts) {
         log,
       }).catch((e) => ({ ok: false, note: `회수 중 오류: ${String(e?.message ?? e).slice(0, 120)}`, deletedIds: [] }));
 
-      if (res.ok) {
+      if (res.ok && r.prev === 'recall_reopen_requested') {
+        // **재발송** — 게시글을 지웠으니 이제 안전하게 미발송으로 되돌린다(새 토큰 + 발송 상태 초기화).
+        // 🔴 토큰 교체는 반드시 **삭제 성공 뒤에** — 먼저 바꾸면 지울 글을 못 찾아 고아 게시글이 남는다.
+        await sql`update lesson_reports set
+            classnote_status=null, classnote_error=null, classnote_sent_at=null, classnote_queued_at=null,
+            classnote_processing_at=null, classnote_retry_count=0,
+            share_token=gen_random_uuid(), revoked_at=null, revoked_by=null
+          where id=${r.id}`;
+        summary.recalled++;
+        summary.reopened = (summary.reopened ?? 0) + 1;
+        log(`  → 재발송 준비 완료(옛 글 삭제 + 미발송으로 되돌림)${res.note ? ` (${res.note})` : ""}`);
+      } else if (res.ok) {
         await sql`update lesson_reports set classnote_status='recalled', classnote_error=${res.note ?? null},
           classnote_processing_at=null where id=${r.id}`;
         summary.recalled++;
@@ -199,6 +217,26 @@ export async function processRecallsOnce(sql, browser, opts) {
           classnote_processing_at=null where id=${r.id}`;
         summary.failed++;
         log(`  → 회수 실패: ${res.note}`);
+      }
+    }
+  } catch (e) {
+    // 🔴 **클레임을 붙든 채로 죽지 않는다**(2026-08-06 실측 수정). 예전엔 여기서 예외가 나면 행이
+    //    `recalling`에 남아 **stale 복구(10분)** 전까지 아무 일도 안 일어났다 — 실사고에서 회수 한 건이
+    //    "10분 걸린" 이유가 이것이다(느린 조회가 아니라 **실패를 10분 묻어둔 것**). 즉시 되돌려
+    //    다음 폴(15초)에 재시도하고, 사유를 행에 남겨 화면에서 보이게 한다.
+    // ⚠️ 무한 재시도 방지 — RETRY_MAX회 실패하면 `recall_failed`로 확정(관리자가 다시 누를 수 있다).
+    const reason = `회수 준비 실패: ${String(e?.message ?? e).slice(0, 120)}`;
+    log(`[recall] 처리 중단 — ${reason} (클레임 ${claimed.length}건 되돌림)`);
+    for (const r of claimed) {
+      const tries = Number(r.classnote_retry_count ?? 0) + 1;
+      if (tries >= RETRY_MAX) {
+        await sql`update lesson_reports set classnote_status='recall_failed', classnote_error=${reason},
+          classnote_processing_at=null, classnote_retry_count=${tries} where id=${r.id} and classnote_status='recalling'`;
+        summary.failed++;
+      } else {
+        await sql`update lesson_reports set classnote_status=${r.prev}, classnote_error=${reason},
+          classnote_processing_at=null, classnote_retry_count=${tries} where id=${r.id} and classnote_status='recalling'`;
+        summary.requeued = (summary.requeued ?? 0) + 1;
       }
     }
   } finally {
