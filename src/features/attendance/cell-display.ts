@@ -33,6 +33,12 @@ export const STATUS_TONE: Record<AttendanceMark, string> = {
 export const DAY_TONE = {
   classDay: "bg-att-classday",
   weekend: "bg-att-weekend",
+  /**
+   * 재원 기간 밖(아직 안 왔거나 이미 나간 날) — 구 출석부의 빗금 자리.
+   * 사선 무늬는 31칸 격자에서 눈이 아파 **한 톤 낮은 회색 + 옅은 글자**로 대신한다.
+   * ⚠️ 주말 회색보다 진해야 한다 — 같은 회색이면 "쉬는 날"과 "소속 아님"이 구분되지 않는다.
+   */
+  outside: "bg-att-outside",
 } as const;
 
 /**
@@ -74,9 +80,12 @@ export type CellDisplay = { text: string; className: string };
 export function cellDisplay(
   status: AttendanceMark | null,
   units: number | null | undefined,
-  opts: { attendDay?: boolean; muted?: boolean } = {},
+  opts: { attendDay?: boolean; muted?: boolean; outside?: boolean } = {},
 ): CellDisplay {
+  // 🔴 기록이 있으면 재원 기간 밖이라도 **값이 먼저**다 — 퇴원 뒤 보강 출석이 실제로 있고,
+  //    그걸 회색으로 덮으면 급여에 잡히는 시수가 화면에서 사라진다(구 출석부도 값을 그렸다).
   if (status) return { text: markNumber(status, units), className: STATUS_TONE[status] };
+  if (opts.outside) return { text: "", className: `text-text-faint ${DAY_TONE.outside}` };
   if (opts.muted) return { text: "·", className: `text-text-faint ${DAY_TONE.weekend}` };
   if (opts.attendDay) return { text: "·", className: `text-text-faint ${DAY_TONE.classDay}` };
   return { text: "·", className: "text-text-faint" };

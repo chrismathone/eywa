@@ -28,6 +28,7 @@ export function AttendanceCell({
   initialUnits,
   attendDay,
   muted,
+  outside,
   derived,
   locked,
 }: {
@@ -41,6 +42,11 @@ export function AttendanceCell({
   attendDay?: boolean;
   /** 주말·공휴일 등 수업이 없는 날(회색). */
   muted?: boolean;
+  /**
+   * 그 날 이 반 소속이 아니었다(입원 전·퇴원 후) — 진한 회색.
+   * ⚠️ **입력을 막지 않는다** — 퇴원 뒤 보강 출석이 실제로 있고, 막으면 이미 들어온 기록을 고칠 길이 사라진다.
+   */
+  outside?: boolean;
   /** 수기 기록이 아니라 수업보고서에서 파생한 값 — 툴팁에 출처 표시. */
   derived?: boolean;
   /** 수정 기간(7일)이 지나 강사가 못 고치는 칸 — 이유를 담은 문장. */
@@ -74,11 +80,13 @@ export function AttendanceCell({
   // 파생이라 effect가 필요 없다.
   const noteVal = ctx && state.value === null ? "" : noteEdit ?? note ?? "";
 
-  const display = cellDisplay(status, units, { attendDay, muted });
+  const display = cellDisplay(status, units, { attendDay, muted, outside });
   const fromReport = derived && status === initialStatus;
   // 잠긴 칸이라도 **메모는 보여 준다** — 잠금 사유만 남기고 메모를 감추면 왜 잠겼는지만 알고 뭐라 적혔는지는 못 본다.
   const title = [
     locked || (status ? STATUS_TEXT[status] : null),
+    // 회색 칸의 뜻을 말해 준다 — 색만 다르면 "왜 여기만 회색이지"로 끝난다.
+    outside ? (status ? "재원 기간 밖 기록(보강 등)" : "이 반 재원 기간이 아닙니다") : null,
     fromReport ? "수업보고서 자동 판정" : null,
     noteVal || null,
   ]

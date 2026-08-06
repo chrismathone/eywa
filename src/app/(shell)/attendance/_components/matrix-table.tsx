@@ -247,6 +247,7 @@ export function MatrixTable({
                   holidays={holidays}
                   money={money ? money.byStudent[s.id] ?? null : undefined}
                   lockBefore={lockBefore}
+                  classLabel={g.className}
                 />
               );
             })}
@@ -263,6 +264,7 @@ export function MatrixTable({
               holidays={holidays}
               money={money ? money.byStudent[s.id] ?? null : undefined}
               lockBefore={lockBefore}
+              classLabel={g.className}
             />
           ));
           return (
