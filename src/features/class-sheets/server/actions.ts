@@ -18,7 +18,11 @@ import { isEnrollmentActiveOn, enrollmentAttendsOnDay } from "@/features/enrollm
 import { logAction } from "@/features/audit/server/log";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { DEFAULT_ECS_FONT_SIZE, ECS_FONT_SIZES, type EcsFontSize } from "../font-size";
-import { DEFAULT_ECS_ENGLISH_TRACK, DEFAULT_ECS_SHOW_SPECIAL_ROOMS } from "../view-prefs";
+import {
+  DEFAULT_ECS_ENGLISH_TRACK,
+  DEFAULT_ECS_SHOW_SELF_STUDY,
+  normalizeCollapsedRosterGroups,
+} from "../view-prefs";
 import { normalizeEnglishTrackFilter, type EnglishTrackFilter } from "@/features/classes/english-track";
 import { normalizePlanText } from "../lib/plan-codec";
 import { validatePatchBatch, type PatchResult } from "../lib/save-keys";
@@ -272,6 +276,65 @@ export async function copyWeekFromPrevious(input: {
     goalsCopied: r.goalsCopied ?? 0,
     skippedSlots: r.skippedSlots ?? [],
     unmapped: r.unmapped ?? [],
+  };
+}
+
+/**
+ * 직전 교시 복사(0183a `ecs_copy_slot`) — 원장 2026-08-06 *"이전 교시의 ecs를 복사하는 기능 추가."*
+ *
+ * 주 복사(`copyWeekFromPrevious`)와 **같은 계약**: 대상 교시에 의미 있는 행이 있으면 아무것도 안 하고,
+ * 학생 기록은 안 옮기며, 원본도 의미 있는 행이 있는 교시만 본다. 원본 = 같은 시기(term)에서 이 교시보다
+ * 앞선 것 중 가장 최근(56일 내) — 같은 날 앞 교시도 지난 수업일도 자연히 잡힌다.
+ *
+ * ⚠️ 마이그레이션이 아직 안 돌았으면 PostgREST가 "함수를 못 찾겠다"로 떨어진다([[#95]]). 그때도 **화면은
+ *    안 죽고** 이 액션만 실패해야 하므로(호출부는 토스트) 사유를 한글로 바꿔서 돌려준다.
+ */
+export async function copySlotFromPrevious(input: {
+  classId: string;
+  planDate: string;
+  slotStart: string;
+  termMode: "regular" | "exam";
+}): Promise<
+  | { ok: true; copied: number; sourceLabel: string | null; reason: string | null; lines: PlanLineDTO[] }
+  | ActionError
+> {
+  const gate = await requireEcsClassAccess(input.classId, { write: true });
+  if (!gate.ok) return { ok: false, error: gate.error };
+  if (!YMD_RE.test(input.planDate) || !HHMM_RE.test(input.slotStart)) {
+    return { ok: false, error: "잘못된 요청입니다(날짜/시각)" };
+  }
+  if (input.termMode !== "regular" && input.termMode !== "exam") {
+    return { ok: false, error: "잘못된 요청입니다(시기)" };
+  }
+  const admin = createAdminClient();
+  const { data, error } = await admin.rpc("ecs_copy_slot", {
+    p_tenant: gate.access.tenantId,
+    p_actor: gate.access.user.id,
+    p_class: input.classId,
+    p_plan_date: input.planDate,
+    p_slot_start: input.slotStart,
+    p_term_mode: input.termMode,
+  });
+  if (error) {
+    // 스키마 미적용(배포가 SQL보다 앞선 구간) — raw 원문 대신 사람이 읽을 수 있는 안내로.
+    if (/could not find|does not exist|schema cache/i.test(error.message)) {
+      return { ok: false, error: "이 기능은 아직 준비 중입니다(DB 반영 대기)" };
+    }
+    return { ok: false, error: `직전 교시 복사에 실패했습니다: ${error.message}` };
+  }
+  const r = (data ?? {}) as {
+    copied?: number;
+    reason?: string;
+    sourceDate?: string;
+    sourceSlot?: string;
+    lines?: Record<string, unknown>[];
+  };
+  return {
+    ok: true,
+    copied: r.copied ?? 0,
+    sourceLabel: r.sourceDate ? `${r.sourceDate.slice(5)} ${r.sourceSlot ?? ""}`.trim() : null,
+    reason: r.reason ?? null,
+    lines: (r.lines ?? []).map(toLineDTO),
   };
 }
 
@@ -654,16 +717,31 @@ export async function setMyEcsFontSize(size: EcsFontSize): Promise<{ ok: boolean
 }
 
 /**
- * 자리(LAB·JJ) 교시 표시/숨김을 본인 계정에 저장 — `users.ui_prefs.ecs.showSpecialRooms`(기본 표시).
+ * **JJ** 교시 표시/숨김을 본인 계정에 저장 — `users.ui_prefs.ecs.showSpecialRooms`(기본 표시).
+ * (저장 키가 옛 이름 그대로인 이유는 [`view-prefs.ts`](../view-prefs.ts) `SELF_STUDY_PREF_KEY` 주석 참조.)
  *
  * ⚠️ 글씨 크기와 달리 **서버가 진실**이다 — 이 값이 그리드와 작성률(`계획 N/M교시`·랜딩 카드)을 함께
  *    정하므로, 저장 후 화면을 다시 그려야 숫자가 맞는다(호출부가 `router.refresh()`).
+ * ⚠️ LAB은 이 액션으로 못 켠다(항상 제외 — `hiddenSeatOf`). 되살리는 스위치를 여기 추가하지 말 것.
  */
-export async function setMyEcsShowSpecialRooms(show: boolean): Promise<{ ok: boolean; error?: string }> {
+export async function setMyEcsShowSelfStudy(show: boolean): Promise<{ ok: boolean; error?: string }> {
   if (typeof show !== "boolean") return { ok: false, error: "잘못된 값입니다" };
   return patchMyEcsPrefs({
-    showSpecialRooms: show === DEFAULT_ECS_SHOW_SPECIAL_ROOMS ? undefined : show,
+    showSpecialRooms: show === DEFAULT_ECS_SHOW_SELF_STUDY ? undefined : show,
   });
+}
+
+/**
+ * 로스터 섹션 접힘(학생 목록·퇴원생 목록)을 본인 계정에 저장 — `users.ui_prefs.ecs.collapsedRosterGroups`.
+ *
+ * ⚠️ 글씨 크기와 같은 부류다(**클라가 진실**) — 접기는 표시만 바꾸고 작성률·일괄 대상은 안 건드리므로
+ *    호출부가 즉시 반영하고 이 저장은 다음 방문용 영속화일 뿐이다(`router.refresh()` 불필요).
+ */
+export async function setMyEcsCollapsedRosterGroups(
+  groups: string[],
+): Promise<{ ok: boolean; error?: string }> {
+  const normalized = normalizeCollapsedRosterGroups(groups);
+  return patchMyEcsPrefs({ collapsedRosterGroups: normalized.length === 0 ? undefined : normalized });
 }
 
 /**

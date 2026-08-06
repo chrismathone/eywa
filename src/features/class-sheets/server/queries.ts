@@ -18,7 +18,13 @@ import type { SkillAreaSetting } from "@/features/owner/settings-types";
 import { effectiveAttendanceRecords } from "@/features/attendance/effective-records";
 import { isWithinAttendanceEditWindow } from "@/features/attendance/edit-window";
 import { readEcsFontSize, type EcsFontSize } from "../font-size";
-import { DEFAULT_ECS_ENGLISH_TRACK, readEcsEnglishTrack, readEcsShowSpecialRooms } from "../view-prefs";
+import {
+  DEFAULT_ECS_ENGLISH_TRACK,
+  readEcsCollapsedRosterGroups,
+  readEcsEnglishTrack,
+  readEcsShowSelfStudy,
+} from "../view-prefs";
+import type { RosterGroupKey } from "../lib/roster-order";
 import { keepEnglishTrack, type EnglishTrackFilter } from "@/features/classes/english-track";
 import {
   buildWeekGrid,
@@ -82,10 +88,21 @@ export type ClassSheetWeekData = {
   /** 내 글씨 크기(users.ui_prefs.ecs.fontSize) — 계정 귀속이라 다른 PC에서도 같은 크기로 열린다. */
   fontSize: EcsFontSize;
   /**
-   * 자리(LAB·JJ) 교시 표시(users.ui_prefs.ecs.showSpecialRooms, 기본 표시) — 상단 헤더 토글의 현재 값.
+   * **JJ** 교시 표시(users.ui_prefs.ecs, 기본 표시) — 상단 헤더 토글의 현재 값.
    * ⚠️ 이 값은 위 `grid`·`fill`에 **이미 반영돼 있다**(서버가 진실). 클라에서 따로 감추지 말 것.
+   * ⚠️ LAB은 이 값과 무관하게 항상 빠져 있다(`hiddenSeatOf`) — 켜도 안 나온다.
    */
-  showSpecialRooms: boolean;
+  showSelfStudy: boolean;
+  /**
+   * 접어 둔 로스터 섹션(재원·퇴원·기록) — 표시 전용이라 클라가 즉시 반영하고 계정에 뒤따라 저장한다.
+   * ⚠️ 작성률·일괄 입력 대상은 안 바꾼다(접어도 그 학생들은 여전히 대상).
+   */
+  collapsedRosterGroups: RosterGroupKey[];
+  /**
+   * 이 반이 EiE 프로그램인가 — **컬럼(`english_track`)만** 본다(반 이름 추측 금지, english-track.ts 🔴).
+   * 소비처: 수업계획 표의 '내신' 구획을 안 그린다(원장 2026-08-06 "EiE 수업의 경우 내신 제거 — 초등수업이므로").
+   */
+  isEie: boolean;
   /**
    * 임시 위임(0173a)으로 지금 **대신 맡은 반**의 시트인가 — 내 담당 반이면 false.
    * 툴바가 이 값으로 앰버 배지를 단다. 창(embed)에선 상단 PageHeader가 숨겨져서, 열고 난 뒤 "남의 반을
@@ -268,8 +285,8 @@ export async function getClassSheetWeek(
     body: m.body as string,
   }));
 
-  // 자리(LAB·JJ) 표시 여부 — **그리드 조립 전에** 정해야 한다(작성률 분모까지 이 값이 정한다).
-  const showSpecialRooms = readEcsShowSpecialRooms(myPrefsRes.data?.ui_prefs);
+  // JJ 표시 여부 — **그리드 조립 전에** 정해야 한다(작성률 분모까지 이 값이 정한다). LAB은 항상 제외.
+  const showSelfStudy = readEcsShowSelfStudy(myPrefsRes.data?.ui_prefs);
 
   const grid = buildWeekGrid({
     weekMonday,
@@ -301,7 +318,7 @@ export async function getClassSheetWeek(
       status: a.status,
     })),
     slotMemoKeys: memoRows.map((m) => m.memoKey).filter((k) => k.startsWith("slot:")),
-    includeSpecialRooms: showSpecialRooms,
+    includeSelfStudy: showSelfStudy,
   });
 
   // 학생 메타 — enrollment 조인분 + (마크·출석만 있는 historical) 부족분 보충 조회
@@ -426,7 +443,9 @@ export async function getClassSheetWeek(
       fill: sheetFillStats(grid),
       // 크기 조회 실패는 기본값으로 떨어진다(개인 취향값이라 시트 전체를 막을 이유가 없다).
       fontSize: readEcsFontSize(myPrefsRes.data?.ui_prefs),
-      showSpecialRooms,
+      showSelfStudy,
+      collapsedRosterGroups: readEcsCollapsedRosterGroups(myPrefsRes.data?.ui_prefs),
+      isEie: access.englishTrack === "eie",
       // 위임 배지 — 게이트와 **같은 소스**(cache라 추가 왕복 0). 담임이 나면 위임이 아니다.
       delegated: delegatedIds.includes(classId) && access.teacherId !== access.user.id,
       showSheetImport: canSheetSync && access.englishTrack !== "eie",
@@ -602,9 +621,9 @@ export async function getSheetLanding(
     ),
   ]);
 
-  // 자리(LAB·JJ) 표시 설정 — 시트 화면과 **같은 값**으로 세야 두 화면의 작성률이 갈리지 않는다.
+  // JJ 표시 설정 — 시트 화면과 **같은 값**으로 세야 두 화면의 작성률이 갈리지 않는다(LAB은 양쪽 다 제외).
   // (프로그램 필터와 함께 위에서 한 번만 읽는다 — 같은 행을 두 번 조회하지 않게.)
-  const showSpecialRooms = readEcsShowSpecialRooms(prefsRes.data?.ui_prefs);
+  const showSelfStudy = readEcsShowSelfStudy(prefsRes.data?.ui_prefs);
   const teacherName = new Map(teachers.map((t) => [t.id, t.display_name]));
   const schedulesByClass = new Map<string, typeof schedules>();
   for (const s of schedules) {
@@ -636,7 +655,7 @@ export async function getSheetLanding(
         validTo: s.valid_to,
         slotTeacherLabel: s.slot_teacher_label,
       })),
-      { includeSpecialRooms: showSpecialRooms },
+      { includeSelfStudy: showSelfStudy },
     );
     const meaningful = meaningfulKeysByClass.get(c.id as string) ?? new Set<string>();
     const all = allKeysByClass.get(c.id as string) ?? new Set<string>();

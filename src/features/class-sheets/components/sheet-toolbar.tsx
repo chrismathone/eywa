@@ -35,9 +35,9 @@ export function SheetToolbar({
   onNavigate,
   fontSize,
   onFontSize,
-  showSpecialRooms,
-  onShowSpecialRooms,
-  specialRoomsPending,
+  showSelfStudy,
+  onShowSelfStudy,
+  selfStudyPending,
   trailing,
 }: {
   data: ClassSheetWeekData;
@@ -51,11 +51,14 @@ export function SheetToolbar({
   /** 글씨 크기(내 계정) — 아래 계획 패널·주간 그리드를 통째로 확대. 상단 바는 그대로. */
   fontSize: EcsFontSize;
   onFontSize: (size: EcsFontSize) => void;
-  /** 자리(LAB·JJ) 교시 표시(내 계정). 끄면 카드도 작성률도 빠진다 — 서버가 다시 그린다. */
-  showSpecialRooms: boolean;
-  onShowSpecialRooms: (show: boolean) => void;
+  /**
+   * **JJ** 교시 표시(내 계정). 끄면 카드도 작성률도 빠진다 — 서버가 다시 그린다.
+   * ⚠️ LAB은 여기 없다(항상 제외, 원장 2026-08-06 "전용 출석부를 만들 예정") — 스위치를 되살리지 말 것.
+   */
+  showSelfStudy: boolean;
+  onShowSelfStudy: (show: boolean) => void;
   /** 표시 토글 저장·재조회 중 — 두 번 눌러 왕복이 겹치지 않게 잠근다. */
-  specialRoomsPending: boolean;
+  selfStudyPending: boolean;
   /**
    * 우측 끝 추가 컨트롤(현재 = '시트 가져오기'). **노드로 받는 이유**: 그 버튼은 저장 큐 flush와
    * classId를 함께 써야 해서 콜백 2~3개를 props로 더 받아야 한다 — 이미 props가 많은 툴바를 더
@@ -81,6 +84,9 @@ export function SheetToolbar({
           }}
           placeholder="반 선택"
           ariaLabel="반 전환"
+          // 반이 수십 개라 목록에서 **지금 보고 있는 반**을 눈으로 못 찾겠다는 지적(원장 2026-08-06).
+          // 체크 아이콘만으론 약해서 노란 배경 + 굵은 글씨로 또렷하게.
+          highlightSelected
         />
       </span>
       {/* 임시 위임(0173a) — 지금 **남의 반 시트**를 고치는 중이라는 사실이 열고 나서도 보여야 한다.
@@ -148,23 +154,25 @@ export function SheetToolbar({
 
       <span className="ml-auto flex items-center gap-2">
         {trailing}
-        {/* 자리(LAB·JJ) 표시(내 계정) — 원장 2026-08-03: 코드가 정하지 말고 여기서 고른다.
+        {/* JJ 표시(내 계정) — 원장 2026-08-03: 코드가 정하지 말고 여기서 고른다.
+            ⚠️ 2026-08-06부터 **LAB은 여기서 빠졌다**(항상 제외 — 전용 출석부로 이관 예정). 라벨이 'LAB·JJ'
+               면 켜도 LAB이 안 나오는 거짓 스위치가 된다.
             ⚠️ 글씨 크기와 달리 **서버가 다시 그린다** — 이 값이 카드뿐 아니라 작성률 분모까지 정하기
-            때문(보이는 교시 = 세는 교시). 그래서 왕복 중엔 잠근다. */}
+               때문(보이는 교시 = 세는 교시). 그래서 왕복 중엔 잠근다. */}
         <span
           className="border-line-strong flex items-center rounded-full border p-0.5"
-          title="LAB·JJ 자리 교시를 시트에 그릴지 — 숨기면 카드와 작성률에서 함께 빠집니다(쓴 기록은 지워지지 않습니다)"
+          title="JJ(집중자율수업실) 교시를 시트에 그릴지 — 숨기면 카드와 작성률에서 함께 빠집니다(쓴 기록은 지워지지 않습니다). LAB은 전용 출석부로 옮길 예정이라 항상 빠집니다."
         >
-          <span className="text-text-dim px-1.5 text-[11px] font-bold">LAB·JJ</span>
+          <span className="text-text-dim px-1.5 text-[11px] font-bold">JJ</span>
           {[true, false].map((v) => (
             <button
               key={String(v)}
               type="button"
-              disabled={specialRoomsPending}
-              onClick={() => onShowSpecialRooms(v)}
-              aria-pressed={showSpecialRooms === v}
+              disabled={selfStudyPending}
+              onClick={() => onShowSelfStudy(v)}
+              aria-pressed={showSelfStudy === v}
               className={`cursor-pointer rounded-full px-1.5 py-0.5 text-[11px] font-bold transition disabled:cursor-wait disabled:opacity-60 ${
-                showSpecialRooms === v ? "bg-primary text-primary-foreground" : "text-text-dim hover:bg-bg-soft"
+                showSelfStudy === v ? "bg-primary text-primary-foreground" : "text-text-dim hover:bg-bg-soft"
               }`}
             >
               {v ? "표시" : "숨김"}

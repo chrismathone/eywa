@@ -10,18 +10,21 @@ import type { ClassSheetWeekData } from "../server/queries";
 import {
   clearPresentAttendance,
   deletePlanLine as deletePlanLineAction,
+  copySlotFromPrevious,
   createPlanLine as createPlanLineAction,
   flushSheetPatches,
   markPresentIfAbsent,
   movePlanLine as movePlanLineAction,
   saveMemo,
+  setMyEcsCollapsedRosterGroups,
   setMyEcsFontSize,
-  setMyEcsShowSpecialRooms,
+  setMyEcsShowSelfStudy,
   upsertGoal,
   upsertStudentMark,
   type PlanLineDTO,
 } from "../server/actions";
 import { ECS_FONT_SIZE_ZOOM, type EcsFontSize } from "../font-size";
+import type { RosterGroupKey } from "../lib/roster-order";
 import { buildSaveKey, type PlanFieldPatch } from "../lib/save-keys";
 import { PLAN_PATCH_FIELDS, isMeaningfulPlanLine } from "../lib/plan-codec";
 import { useSheetDoc } from "./use-sheet-doc";
@@ -37,6 +40,7 @@ export type SheetHandlers = {
   editCell: (lineId: string, field: (typeof PLAN_PATCH_FIELDS)[number], value: string) => void;
   resolveConflict: (saveKey: string, choice: "server" | "mine") => void;
   addLine: (planDate: string, slotStart: string, termMode: "regular" | "exam", skillArea: string) => void;
+  copySlot: (planDate: string, slotStart: string, termMode: "regular" | "exam") => void;
   removeLine: (lineId: string, planDate: string, slotStart: string) => void;
   moveLineTerm: (lineId: string, planDate: string, slotStart: string, termMode: "regular" | "exam") => void;
   markPresent: (studentId: string, date: string) => void;
@@ -157,16 +161,16 @@ export function SheetClient({
   }, []);
   const fontZoom = ECS_FONT_SIZE_ZOOM[fontSize];
 
-  // ── 자리(LAB·JJ) 표시(내 계정) ─────────────────────────────────────────────
+  // ── JJ 표시(내 계정) ───────────────────────────────────────────────────────
   // 글씨 크기와 달리 **서버가 진실**이다 — 이 값이 그리드와 작성률(헤더 `계획 N/M교시`·랜딩 카드)을 함께
   // 정하므로 클라에서 감추면 숫자가 갈린다. 저장 → refresh로 서버가 다시 그린다(페이지 key에 이 값이
   // 들어 있어 SheetClient가 재마운트되고 state가 새 데이터로 재초기화된다).
   // ⚠️ 왕복 전에 flush — 안 하면 아직 확정 안 된 입력이 재마운트로 날아간다(네비와 같은 계약).
-  const [specialRoomsPending, setSpecialRoomsPending] = useState(false);
-  const changeShowSpecialRooms = useCallback(
+  const [selfStudyPending, setSelfStudyPending] = useState(false);
+  const changeShowSelfStudy = useCallback(
     async (show: boolean) => {
-      if (show === data.showSpecialRooms || specialRoomsPending) return;
-      setSpecialRoomsPending(true);
+      if (show === data.showSelfStudy || selfStudyPending) return;
+      setSelfStudyPending(true);
       try {
         const flushed = await store.flush();
         if (!flushed.ok) {
@@ -175,17 +179,37 @@ export function SheetClient({
           );
           if (!go) return;
         }
-        const r = await setMyEcsShowSpecialRooms(show);
+        const r = await setMyEcsShowSelfStudy(show);
         if (!r.ok) {
           toast.error(r.error ?? "표시 설정을 저장하지 못했습니다");
           return;
         }
         router.refresh();
       } finally {
-        setSpecialRoomsPending(false);
+        setSelfStudyPending(false);
       }
     },
-    [data.showSpecialRooms, router, specialRoomsPending, store],
+    [data.showSelfStudy, router, selfStudyPending, store],
+  );
+
+  // ── 로스터 섹션 접기(내 계정) ──────────────────────────────────────────────
+  // JJ 토글과 달리 **클라가 진실**이다 — 접기는 표시만 바꾸고 작성률·일괄 대상은 그대로라 서버를 다시
+  // 부를 이유가 없다(글씨 크기와 같은 부류). 화면은 즉시, 계정 저장은 뒤따른다.
+  const [collapsedGroups, setCollapsedGroups] = useState<RosterGroupKey[]>(data.collapsedRosterGroups);
+  // ⚠️ 다음 값을 **업데이터 밖에서** 계산한다. setState(prev => …) 콜백은 렌더 중에 실행되므로 그 안에서
+  //    서버 액션을 부르면 렌더 도중 Router를 갱신하게 되고("Cannot update a component while rendering a
+  //    different component" — 실측 2026-08-06), StrictMode에선 저장이 두 번 나간다. 부수효과는 항상 바깥.
+  const toggleRosterGroup = useCallback(
+    (key: RosterGroupKey) => {
+      const next = collapsedGroups.includes(key)
+        ? collapsedGroups.filter((k) => k !== key)
+        : [...collapsedGroups, key];
+      setCollapsedGroups(next);
+      void setMyEcsCollapsedRosterGroups(next).then((r) => {
+        if (!r.ok) toast.error("접기 상태를 계정에 저장하지 못했습니다 — 이 화면에서는 적용됩니다");
+      });
+    },
+    [collapsedGroups],
   );
 
   // ── 네비(주/반 이동) — flush 성공 후에만 이동, 실패·미확정 시 중단(저널 보존) ─
@@ -243,6 +267,33 @@ export function SheetClient({
             store.seed(l.id, "homework", l.homework);
             store.seed(l.id, "skill_area", l.skillArea);
           }
+        });
+      },
+      // 직전 교시 복사 — 서버가 canonical 행을 돌려주므로 addLine과 **같은 방식**으로 state를 갈아끼우고
+      // CAS 시드도 다시 심는다(안 심으면 복사된 칸을 처음 고칠 때 expectedValue가 어긋나 충돌로 뜬다).
+      copySlot: (planDate, slotStart, termMode) => {
+        void copySlotFromPrevious({ classId, planDate, slotStart, termMode }).then((r) => {
+          if (!r.ok) return toast.error(r.error);
+          if (r.copied === 0) {
+            // 서버가 "왜 아무것도 안 했는지"를 돌려준다 — 조용히 성공한 척하면 사람이 버튼을 계속 누른다.
+            toast.info(
+              r.reason === "target_not_empty"
+                ? "이미 계획이 있는 교시라 복사하지 않았습니다(덮어쓰기 없음)"
+                : "복사할 직전 교시가 없습니다(최근 8주 안에 작성된 같은 시기 계획이 없습니다)",
+            );
+            return;
+          }
+          setLinesBySlot((prev) => ({ ...prev, [`${planDate}|${slotStart}`]: r.lines }));
+          for (const l of r.lines) {
+            store.seed(l.id, "textbook", l.textbook);
+            store.seed(l.id, "page_range", l.pageRange);
+            store.seed(l.id, "progress", l.progress);
+            store.seed(l.id, "homework", l.homework);
+            store.seed(l.id, "skill_area", l.skillArea);
+          }
+          toast.success(
+            r.sourceLabel ? `${r.sourceLabel} 교시에서 ${r.copied}줄 복사` : `${r.copied}줄 복사`,
+          );
         });
       },
       removeLine: (lineId, planDate, slotStart) => {
@@ -397,9 +448,9 @@ export function SheetClient({
         onNavigate={navigate}
         fontSize={fontSize}
         onFontSize={changeFontSize}
-        showSpecialRooms={data.showSpecialRooms}
-        onShowSpecialRooms={(show) => void changeShowSpecialRooms(show)}
-        specialRoomsPending={specialRoomsPending}
+        showSelfStudy={data.showSelfStudy}
+        onShowSelfStudy={(show) => void changeShowSelfStudy(show)}
+        selfStudyPending={selfStudyPending}
         trailing={
           data.showSheetImport ? (
             <ClassSheetImportButton
@@ -461,6 +512,8 @@ export function SheetClient({
             store={store}
             handlers={handlers}
             canEdit={canEdit}
+            collapsedGroups={collapsedGroups}
+            onToggleGroup={toggleRosterGroup}
           />
         </DragScrollArea>
       </div>
@@ -476,14 +529,18 @@ export function SheetClient({
         </div>
       ) : null}
 
-      {/* 상단 'LAB·JJ 숨김'을 골랐을 때만 뜬다 — 안 그린 자리에 쓴 기록이 남아 있으면 건수를 알린다.
-          화면에서 조용히 사라지면 "쓴 게 증발했다"가 된다(기록은 DB에 그대로, 표시로 되돌리면 다시 보인다). */}
-      {data.grid.hiddenSpecial.records > 0 ? (
-        <p className="text-text-dim px-1 text-[12px]">
-          LAB·JJ 교시 {data.grid.hiddenSpecial.slots}개를 숨겼습니다 — 그 시간에 남아 있는 기록{" "}
-          {data.grid.hiddenSpecial.records}건은 지워지지 않았습니다(상단 ‘표시’로 다시 볼 수 있습니다).
+      {/* 안 그린 자리에 쓴 기록이 남아 있으면 건수를 알린다 — 조용히 사라지면 "쓴 게 증발했다"가 된다.
+          ⚠️ 자리마다 **문장이 다르다**: JJ는 상단 토글로 되돌릴 수 있지만 LAB은 화면에서 되돌릴 길이 없다
+             (항상 제외). 한 문장으로 뭉치면 둘 중 하나는 반드시 거짓말이 된다. */}
+      {data.grid.hiddenSpecial.map((h) => (
+        <p key={h.seat} className="text-text-dim px-1 text-[12px]">
+          {h.seat} 교시 {h.slots}개는 이 시트에 표시하지 않습니다 — 그 시간에 남아 있는 기록 {h.records}건은
+          지워지지 않았습니다
+          {h.seat === "JJ"
+            ? "(상단 ‘JJ 표시’로 다시 볼 수 있습니다)."
+            : "(LAB 전용 출석부가 열리면 그쪽에서 볼 수 있습니다)."}
         </p>
-      ) : null}
+      ))}
     </div>
   );
 }
