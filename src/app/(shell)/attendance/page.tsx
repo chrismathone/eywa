@@ -22,6 +22,7 @@ import { AttendanceSortSelect } from "./_components/sort-select";
 import { QuickOpenPanel } from "./_components/quick-open-panel";
 import { MatrixTable, buildGridSource, type MatrixGroup } from "./_components/matrix-table";
 import { GridProvider } from "./_components/grid-context";
+import { CollapseAllChip } from "./_components/class-group";
 import { LiveStats } from "./_components/live-totals";
 import { attHref, resolveViewMode, type ViewMode } from "./_components/att-href";
 
@@ -258,6 +259,9 @@ export default async function AttendancePage({
    *    격자 좌표(방향키·Shift 범위·드래그 채우기)가 화면과 어긋난다(sort-rows.ts 주석).
    */
   const sortKey = viewPrefs.sort;
+  // 반 머리행(=접기)이 있는 보기인가 — 표와 툴바가 **같은 값**을 봐야 한다(한쪽만 그리면 접어 놓고
+  // 펼칠 버튼이 없거나, 접을 게 없는데 버튼만 선다).
+  const showGroups = mode === "teacher" && isGroupedSort(sortKey);
   const subjectOfClass = new Map(
     (mode === "teacher" ? teacherClasses : selectedClass ? [selectedClass] : []).map((c) => [c.id, c.subject]),
   );
@@ -494,6 +498,9 @@ export default async function AttendancePage({
             <div className="flex items-center gap-1.5">
               <span className="micro mr-1">정렬</span>
               <AttendanceSortSelect value={sortKey} />
+              {/* 반 머리행이 있는 보기에서만 — 이름 칸의 작은 화살표와 같은 동작을 글자로 한 번 더 낸다
+                  (아이콘만 있으면 있는 줄 모른다). 접힌 수까지 적어 "몇 개가 숨었는지"를 감추지 않는다. */}
+              {showGroups ? <CollapseAllChip classIds={groups.map((g) => g.classId)} /> : null}
             </div>
           </>
         ) : null}
@@ -568,7 +575,7 @@ export default async function AttendancePage({
             days={visibleDays}
             ordered={orderedRows}
             // 반 머리행은 **반별 정렬 + 강사 전체 보기**일 때만. 가나다·학년·담임순은 반 구분을 없앤다.
-            showGroups={mode === "teacher" && isGroupedSort(sortKey)}
+            showGroups={showGroups}
             money={money}
             lockBefore={lockBefore}
             // 공휴일은 학원설정(operations.holidays)이 단일 소스 — 헤더 빨간 날짜·셀 회색 처리에 동기화.

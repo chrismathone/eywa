@@ -2,7 +2,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { cellKey, rowKey } from "@/features/attendance/grid/model";
 import { EMPTY_COUNT } from "@/features/attendance/grid/totals";
-import { ClassGroupBody, CollapseAllButton } from "./class-group";
+import { ClassGroupBody, CollapseAllButton, CollapseAllChip } from "./class-group";
 import { GridProvider } from "./grid-context";
 import { LiveUnits } from "./live-totals";
 
@@ -26,7 +26,10 @@ const D1 = "2026-07-01";
 
 function Table() {
   return (
-    <table>
+    <>
+      {/* 툴바에 서는 글자 버튼 — 표 밖이지만 같은 GridProvider 안이라 상태를 공유한다. */}
+      <CollapseAllChip classIds={[A, B]} />
+      <table>
       <thead>
         <tr>
           <th>
@@ -52,7 +55,8 @@ function Table() {
           </td>
         </tr>
       </tfoot>
-    </table>
+      </table>
+    </>
   );
 }
 
@@ -103,17 +107,51 @@ describe("반 접기", () => {
     expect(savePrefs).toHaveBeenCalledWith([B]);
   });
 
+  // 같은 동작을 두 곳(툴바 칩·이름 칸 아이콘)이 내므로 이름이 겹친다. DOM 순서 = [0] 칩, [1] 아이콘.
+  const chip = () => screen.getAllByRole("button", { name: /전체 (접기|펼치기)/ })[0]!;
+  const icon = () => screen.getAllByRole("button", { name: /전체 (접기|펼치기)/ })[1]!;
+
   it("전체 토글 — 한 번에 다 접고 다시 다 편다", () => {
     renderTable();
-    fireEvent.click(screen.getByRole("button", { name: "모든 반 접기" }));
+    fireEvent.click(icon());
     expect(screen.queryByText("가반 학생")).not.toBeInTheDocument();
     expect(screen.queryByText("나반 학생")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "모든 반 펼치기" }));
+    fireEvent.click(icon());
     expect(screen.getByText("가반 학생")).toBeInTheDocument();
   });
 
   it("접힌 반의 머리행은 남는다 — 다시 펼 길이 사라지면 안 된다", () => {
     renderTable([A]);
     expect(screen.getByRole("button", { name: /가반/ })).toBeInTheDocument();
+  });
+
+  it("🔴 하나만 접혀 있어도 다음 동작은 '펼치기'다 — 되돌리기가 두 번이면 안 된다", () => {
+    renderTable([A]);
+    // 예전엔 `every`(전부 접혔을 때만)라 여기서 '접기'가 떴다 → 전부 접었다 다시 펴는 두 번이 필요했다.
+    expect(chip().textContent).toContain("전체 펼치기");
+    fireEvent.click(chip());
+    expect(screen.getByText("가반 학생")).toBeInTheDocument();
+    expect(screen.getByText("나반 학생")).toBeInTheDocument();
+  });
+
+  it("툴바 칩은 접힌 개수를 적는다 — 몇 개가 숨었는지까지 감추면 은폐다", () => {
+    renderTable([A]);
+    expect(chip().textContent).toContain("전체 펼치기");
+    expect(chip().textContent).toContain("1");
+  });
+
+  it("아이콘 버튼과 툴바 칩은 같은 판정을 쓴다 — 두 버튼이 다른 말을 하면 안 된다", () => {
+    renderTable([A]);
+    // 아이콘 쪽은 aria-label, 칩은 본문 — 둘 다 '펼치기'여야 한다.
+    expect(screen.getAllByRole("button", { name: /전체 펼치기/ })).toHaveLength(2);
+  });
+
+  it("반이 없으면 툴바 칩을 안 그린다 — 접을 게 없는데 버튼만 서지 않게", () => {
+    render(
+      <GridProvider rows={[]} cols={[]} initial={{}} lockBefore={null}>
+        <CollapseAllChip classIds={[]} />
+      </GridProvider>,
+    );
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
   });
 });
