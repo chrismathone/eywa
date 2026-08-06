@@ -166,6 +166,11 @@ export type StaffDetail = {
   defaultClassroom: string | null;
   memo: string | null;
   bgColor: string | null;
+  /**
+   * 학생 출결 알림(클래스노트) 받기 — true면 **담당 반과 무관하게 전 학생**의 학부모 결석·지각·조퇴 연락이
+   * 이 계정 벨에 온다(0184a). 차량(셔틀)·사무실이 담임에게 일일이 묻지 않게 하는 스위치.
+   */
+  attendanceAlertOptin: boolean;
   hourlyRate: number;
   monthlyBase: number;
   department: string | null; // 0147a — 이력서 프리필·상세 표시용
@@ -177,7 +182,7 @@ export async function getStaffById(id: string): Promise<StaffDetail | null> {
   const { data } = await supabase
     .from("users")
     .select(
-      "id, display_name, email, phone, system_role, status, hire_date, job_title, english_name, subjects, default_classroom, memo, bg_color, hourly_rate, monthly_base, department, employment_type",
+      "id, display_name, email, phone, system_role, status, hire_date, job_title, english_name, subjects, default_classroom, memo, bg_color, hourly_rate, monthly_base, department, employment_type, attendance_alert_optin",
     )
     .eq("id", id)
     .single();
@@ -187,6 +192,8 @@ export async function getStaffById(id: string): Promise<StaffDetail | null> {
   return {
     id: data.id,
     displayName: data.display_name,
+    // 학생 출결 알림(클래스노트) 받기 — 켜면 담당 반과 무관하게 전 학생의 학부모 출결 연락을 받는다(0184a).
+    attendanceAlertOptin: data.attendance_alert_optin === true,
     email: data.email,
     phone: data.phone ?? null,
     systemRole: data.system_role as SystemRole,
