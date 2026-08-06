@@ -3,7 +3,7 @@
 // 배열형 설정(과목·직급·학년·교시·학기·공휴일) 편집기 — 행 추가/삭제 + 인라인 입력.
 import { useRef } from "react";
 import { Plus, X } from "@/components/icons/eywa-icon-compat";
-import { SUBJECT_COLORS, type ConsultationTemplate, type HolidaySetting, type PeriodTimeRow, type ShuttleSetting, type SubjectSetting, type TermSetting } from "@/features/owner/settings-types";
+import { SUBJECT_COLORS, SUBJECT_DEFAULT_VIEW_OPTIONS, type ConsultationTemplate, type HolidaySetting, type PeriodTimeRow, type ShuttleSetting, type SubjectSetting, type TermSetting } from "@/features/owner/settings-types";
 import { SUBJECT_SOLID, KNOWN_SUBJECT_KEYS } from "@/features/owner/subjects";
 import { WEEKDAY_GROUPING_OPTIONS } from "@/features/timetable/lib/weekday-groups";
 
@@ -123,6 +123,7 @@ export function SubjectListEditor({
           <span className="w-[110px]">과목명</span>
           <span className="w-[122px]">색</span>
           <span className="w-[160px]">시간표 요일 병합</span>
+          <span className="w-[104px]">처음 보이는 뷰</span>
           <span className="w-[92px]">QR 접수 노출</span>
           <span className="w-[70px]">내부 ID</span>
         </div>
@@ -165,6 +166,25 @@ export function SubjectListEditor({
                 aria-label="시간표 요일 병합"
               >
                 {WEEKDAY_GROUPING_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+              {/* 처음 보이는 시간표 뷰 — 과목마다 주로 보는 뷰가 다르다(원장 2026-08-06 "영어는 기본뷰를
+                  잘 안 쓴다"). 코드에 과목 키를 박지 않고 여기서 고른다. 시간표에서 다른 뷰를 누르면
+                  그 뷰로 가고(URL에 실린다), 링크 없이 열면 여기 값으로 열린다.
+                  ⚠️ 강사뷰는 허용 과목(영어·강사별시간표 설정 보유)에서만 유효 — 아니면 기본뷰로 강등된다. */}
+              <select
+                className={`${cellCls} w-[104px]`}
+                value={s.defaultView ?? "basic"}
+                onChange={(e) =>
+                  set(i, { defaultView: e.target.value as SubjectSetting["defaultView"] })
+                }
+                aria-label="처음 보이는 시간표 뷰"
+                title="이 과목의 시간표를 열 때 처음 보이는 뷰"
+              >
+                {SUBJECT_DEFAULT_VIEW_OPTIONS.map((o) => (
                   <option key={o.value} value={o.value}>
                     {o.label}
                   </option>

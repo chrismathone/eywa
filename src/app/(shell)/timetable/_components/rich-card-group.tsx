@@ -19,7 +19,7 @@ import { ClassInfoCard, HoverCard, StudentInfoCard } from "./hover-cards";
 import { timetableStudentTone, useTimetableColorMode, withdrawnTone } from "./timetable-color";
 
 // 라벨열·카드가 공유하는 고정 섹션 높이(px) — 같은 y에서 행이 맞물려 "행=라벨, 열=수업" 스프레드시트 정렬.
-const NAME_H = 40;
+export const NAME_H = 40;
 const TEACHER_H = 24;
 const ROOM_H = 34;
 const DAYHEAD_H = 22;
@@ -50,6 +50,13 @@ export type ColumnCommon = {
   activeH: number;
   holdH: number;
   wdH: number;
+  /**
+   * **수업명 행만** 그린다(그룹 설정 = 배치 편집 모드). 담임·강의실·교시 격자·명단을 통째로 접어
+   * 반 하나가 40px 한 칸이 된다 — 42반이면 원래 2만 칸 넘는 격자를 매 드롭마다 다시 그려야 해서
+   * 끌 때 렉이 걸린다(원장 2026-08-06 *"수업명만 보여주던가"*). 서식은 통합뷰와 **같은 컴포넌트**라
+   * 색·폭·모서리가 저절로 일치한다(따로 그리면 두 화면이 갈라진다).
+   */
+  namesOnly?: boolean;
 };
 
 /** 편집 모드에서 한 열에 붙는 드래그 배선 — 없으면(평소) 열은 지금까지와 완전히 동일하게 그려진다. */
@@ -72,6 +79,7 @@ export function RichCardGroupBoard({
   teacherColors,
   renderCard,
   trailing,
+  namesOnly,
 }: {
   group: RichCardGroup;
   subjectSoftClass: string;
@@ -80,17 +88,19 @@ export function RichCardGroupBoard({
   renderCard?: (card: RichClassCard, common: ColumnCommon) => ReactNode;
   /** 마지막 열 뒤에 붙는 칸(편집 모드의 '맨 뒤에 놓기' 자리). 미지정=없음. */
   trailing?: ReactNode;
+  /** 수업명 행만(배치 편집) — ColumnCommon.namesOnly 주석 참조. */
+  namesOnly?: boolean;
 }) {
   // 섹션 안에서는 모든 카드가 같은 높이(행이 맞물려 시트처럼 읽힌다) — 높이는 그 섹션의 최대 인원.
   const activeH = sectionH(group.rosterRows.active);
   const holdH = sectionH(group.rosterRows.hold);
   const wdH = sectionH(group.rosterRows.withdrawn);
-  const common: ColumnCommon = { group, subjectSoftClass, teacherColors, activeH, holdH, wdH };
+  const common: ColumnCommon = { group, subjectSoftClass, teacherColors, activeH, holdH, wdH, namesOnly };
 
   return (
     <DragScrollArea barX className="border-line border-t">
       <div className="flex w-max items-stretch">
-        <LabelColumn group={group} activeH={activeH} holdH={holdH} wdH={wdH} />
+        <LabelColumn group={group} activeH={activeH} holdH={holdH} wdH={wdH} namesOnly={namesOnly} />
         {group.cards.map((c) =>
           renderCard ? renderCard(c, common) : <ClassColumn key={c.classId} card={c} {...common} />,
         )}
@@ -106,13 +116,24 @@ function LabelColumn({
   activeH,
   holdH,
   wdH,
+  namesOnly,
 }: {
   group: RichCardGroup;
   activeH: number;
   holdH: number;
   wdH: number;
+  namesOnly?: boolean;
 }) {
   const cell = "border-line text-text-dim flex items-center justify-center border-b text-[10px] font-bold";
+  if (namesOnly)
+    return (
+      <div
+        className="bg-bg-soft border-line sticky left-0 z-20 flex shrink-0 flex-col self-stretch border-r shadow-[4px_0_10px_-6px_rgba(29,29,31,0.18)]"
+        style={{ width: LABEL_W }}
+      >
+        <div className={cell} style={{ height: NAME_H }}>수업명</div>
+      </div>
+    );
   return (
     <div
       className="bg-bg-soft border-line sticky left-0 z-20 flex shrink-0 flex-col self-stretch border-r shadow-[4px_0_10px_-6px_rgba(29,29,31,0.18)]"
@@ -159,6 +180,7 @@ export function ClassColumn({
   activeH,
   holdH,
   wdH,
+  namesOnly,
   edit,
 }: ColumnCommon & {
   card: RichClassCard;
@@ -230,6 +252,9 @@ export function ClassColumn({
           </HoverCard>
         )}
       </div>
+      {/* 배치 편집(수업명만) — 여기서 끝. 아래 담임·강의실·격자·명단을 안 그려야 42반을 끌 때 안 버벅인다. */}
+      {namesOnly ? null : (
+      <>
       {/* 담임 — 저장된 강사색이 있으면 색칩, 없으면 plain */}
       <div className="border-line flex items-center justify-center border-b" style={{ height: TEACHER_H }}>
         {!card.teacherName ? (
@@ -290,6 +315,8 @@ export function ClassColumn({
           card.withdrawn.map((s, i) => <RosterRow key={s.studentId ?? `w-${i}`} s={s} />)
         )}
       </RosterSection>
+      </>
+      )}
     </div>
   );
 }

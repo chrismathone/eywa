@@ -19,7 +19,10 @@ export type NotificationType =
   | "report_send_failed" // 수업 보고서 ClassNote 발송 최종 실패 → 담당 강사 폴백 master(0143a, DB 트리거)
   | "notice_send_failed" // 학부모 공지 게시 실패/일부실패 → 담당 강사(자기 학생) + 발송자(0144a, DB 트리거)
   | "makeedu_login_failed" // makeedu 접속(로그인) 실패 → master(연동 PC 헬스체크 check-session.mjs, 하루 1회)
-  | "class_delegation"; // 결근 대체로 반을 임시 위임받음 → 대체 강사(0173a, createClassDelegation)
+  | "class_delegation" // 결근 대체로 반을 임시 위임받음 → 대체 강사(0173a, createClassDelegation)
+  // 학부모의 결석·지각·조퇴 연락(클래스노트) → **직원 설정에서 토글을 켠 계정 전원**(0184a).
+  // ⚠️ 담당 반과 무관하다 — 차량(셔틀)·사무실이 "오늘 누가 안 오는지"를 담임에게 묻지 않게 하는 게 목적.
+  | "student_attendance_notice";
 
 export type NotificationItem = {
   id: string;
@@ -49,4 +52,5 @@ export const NOTIFICATION_ICON: Record<string, EywaIconName> = {
   report_send_failed: "alert",
   notice_send_failed: "alert",
   makeedu_login_failed: "alert",
+  student_attendance_notice: "userMinus",
 };

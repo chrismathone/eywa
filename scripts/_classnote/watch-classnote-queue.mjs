@@ -26,6 +26,7 @@ import { BATCH, closeClassnoteAdminSession, launchBrowser, processQueueOnce, res
 import { processNoticesOnce } from "./classnote-notice-core.mjs";
 import { processRecallsOnce } from "./classnote-recall-core.mjs";
 import { provisionDailyOnce } from "./classnote-provision-core.mjs";
+import { syncChildMapOnce } from "./classnote-childmap-core.mjs";
 import { pollParentCommentsOnce, pollParentPostsOnce } from "./classnote-feed-core.mjs";
 import { pollReportReadsOnce } from "./classnote-read-core.mjs";
 import { snapshotBoardRosterOnce } from "./classnote-roster-core.mjs";
@@ -244,6 +245,15 @@ async function main() {
         log(`[provision] 일일 프로비저닝 완료 — 보드 생성 ${pres.created} · 배정 ${pres.assigned}${pres.held ? ` · 보류 ${pres.held}` : ""}`);
         noteResult("provision", pres);
       }
+      // 3.5) 원아 ID 매핑(0184a, 읽기 전용 GET) — 학부모 연락에서 **그룹반(영어) 학생까지** 특정하려면 선행돼야 한다.
+      //      KST 하루 1회 가드 내장. ⚠️ `--post`와 무관하게 돈다 — ClassNote에 쓰지 않고 eywa 한 컬럼만 채우는
+      //      사실 데이터라(프로비저닝 스냅샷·읽음 동기화와 같은 취지), 발송이 꺼져 있어도 매핑은 최신이어야 한다.
+      const mres = await syncChildMapOnce(db(), b, { tenant, apply: true, log }).catch((e) => {
+        log(`[원아매핑] 오류(내일 재시도): ${e.message}`);
+        noteResult("childmap", { error: e.message });
+        return { ran: false };
+      });
+      if (mres.ran) noteResult("childmap", { ...mres, samples: undefined });
       // 4) 학부모 새 글 감지(인바운드, 읽기 전용) → 담당 강사 eywa 알림. 1분 가드 내장이라 대부분 즉시 no-op.
       //    ClassNote에 아무것도 쓰지 않는다. 실패해도 발송 큐와 독립.
       const fres = await pollParentPostsOnce(db(), b, { tenant, post: POST, log }).catch((e) => {

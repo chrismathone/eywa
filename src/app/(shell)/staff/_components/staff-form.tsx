@@ -37,6 +37,11 @@ export type StaffFormValue = {
   memo: string | null;
   /** 시간표 강사 헤더 색(ijw Teacher.bgColor 패리티). 글자색은 저장 시 자동 도출. */
   bgColor: string | null;
+  /**
+   * 학생 출결 알림(클래스노트) 받기 — 켜면 **담당 반과 무관하게 전 학생**의 학부모 출결 연락이 이 계정 벨에 온다.
+   * 차량팀·사무실처럼 "누가 오늘 안 오는지"를 통째로 알아야 하는 자리를 위한 스위치(0184a). 미지정=꺼짐.
+   */
+  attendanceAlertOptin?: boolean;
 };
 
 function SubmitButton({ mode }: { mode: Mode }) {
@@ -382,6 +387,27 @@ export function StaffForm({
           시간표 강사 헤더 밴드 색(ijw 패리티). 글자색은 자동.
         </p>
       </Field>
+
+      {/* 출결 알림 수신 — 담임에게 일일이 묻지 않고 모아 보게 하는 스위치(원장 2026-08-06).
+          ⚠️ 이 계정에는 **전 학생**의 학부모 출결 연락이 들어온다. 반 담당과 무관하다. */}
+      <div className="border-border bg-surface-soft rounded-2xl border p-4">
+        <label htmlFor="attendanceAlertOptin" className="flex cursor-pointer items-start gap-3">
+          <input
+            id="attendanceAlertOptin"
+            name="attendanceAlertOptin"
+            type="checkbox"
+            defaultChecked={v.attendanceAlertOptin === true}
+            className="border-border text-primary focus-visible:ring-ring mt-0.5 size-4 shrink-0 rounded"
+          />
+          <span className="space-y-1">
+            <span className="text-foreground block text-sm font-medium">학생 출결 알림 (클래스노트) 받기</span>
+            <span className="text-muted-foreground block text-xs">
+              학부모가 클래스노트에 남긴 결석·지각·조퇴 연락을 <b>담당 반과 상관없이 전부</b> 이 계정 알림으로
+              받습니다. 차량(셔틀)·사무실처럼 오늘 누가 안 오는지 모아 봐야 하는 자리에 켜세요.
+            </span>
+          </span>
+        </label>
+      </div>
 
       <Field label="메모" htmlFor="memo">
         <textarea

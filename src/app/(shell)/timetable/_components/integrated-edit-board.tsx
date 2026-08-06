@@ -34,21 +34,23 @@ import { DEFAULT_OTHERS_TITLE } from "@/features/timetable/lib/integration-group
 import type { PeriodsConfig } from "@/features/timetable/lib/periods";
 import { TimetableZoomArea } from "./font-size-toggle";
 import { GroupPresetBar } from "./group-preset-bar";
-import { RichCardGroupBoard, ClassColumn, type ColumnCommon } from "./rich-card-group";
+import { RichCardGroupBoard, ClassColumn, NAME_H, type ColumnCommon } from "./rich-card-group";
 
 /**
- * 통합뷰 **배치 편집 모드** — 실제 표 위에서 반(=열)을 잡아 다른 줄로 끌어 옮긴다
- * (원장 2026-08-06 "이 상태에서 드래그드랍 할 수 없나? 편집 모드를 만들어서").
+ * 통합뷰 **'그룹 설정'(배치 편집) 모드** — 통합뷰 그 자체에서 반(=열)을 잡아 다른 줄로 끌어 옮긴다
+ * (원장 2026-08-06 *"따로 그룹 설정 모드가 있는 게 아니라, 통합뷰에서 편집모드를 누르고 통합뷰의
+ * 그 자체를 드래그하고 싶은거야"* → 별도 창(칩 보드)은 폐지했다).
  *
- * 왜 창(‘그룹 설정’)이 아니라 표 위인가: 창의 칩 보드는 **결과를 상상해야** 했다 — 어느 줄에 놓으면
- * 표가 어떻게 되는지는 저장하고 닫아 봐야 알았다. 여기선 놓는 순간 그 자리에서 진짜 표가 다시 그려진다
+ * 왜 창이 아니라 표 위인가: 칩 보드는 **결과를 상상해야** 했다 — 어느 줄에 놓으면 표가 어떻게 되는지는
+ * 저장하고 닫아 봐야 알았다. 여기선 놓는 순간 그 자리에서 진짜 표가 다시 그려진다
  * (교시축·요일축·명단 행수까지 줄 구성에 따라 바뀌므로 "칩만 옮기는 미리보기"로는 대체가 안 된다).
- * 칩 보드(창)는 그대로 둔다 — 반이 많을 때 전체 배치를 한눈에 보는 용도로는 그쪽이 낫다.
  *
  * 구현 요점:
+ * · 편집 중엔 **수업명 행만** 그린다(`namesOnly`) — 원장이 먼저 짚은 렉 때문. 서식은 읽기 화면과
+ *   **같은 컴포넌트**라 색·폭·모서리가 저절로 일치한다(따로 그리면 설정 화면과 실제 통합뷰가 갈라진다).
  * · 드롭마다 서버 왕복 없이 [`groupRichCards`](src/features/timetable/lib/class-grid.ts)(순수)를 **클라에서
  *   다시 돌린다**. 카드(무거운 쪽)는 서버가 1회 만들어 넘긴다.
- * · 상태 전이는 창 보드와 **같은 순수 함수**(group-assign.ts) — 두 입구가 다른 규칙을 갖지 않게.
+ * · 상태 전이는 순수 모듈 [group-assign.ts](src/features/timetable/lib/group-assign.ts)에 있다.
  * · ⚠️ zoom 래퍼는 **DndContext 안쪽**에 둔다. 바깥이면 `position:fixed`인 DragOverlay가 zoom 좌표계로
  *   들어가 커서와 어긋난다(font-size-toggle.tsx 주석 참조).
  * · ⚠️ 편집 중엔 '기타(미배정)' 줄을 **항상 보여준다**(저장된 설정이 숨김이어도). 줄에서 뺀 반이
@@ -61,6 +63,7 @@ export function IntegratedEditBoard({
   teacherColors,
   subjectSoftClass,
   initialGroups,
+  initialEnabled,
   initialShowOthers,
   initialOthersTitle,
   initialPresets,
@@ -73,6 +76,8 @@ export function IntegratedEditBoard({
   teacherColors: TeacherColorMap;
   subjectSoftClass: string;
   initialGroups: GroupDraft[];
+  /** 지금 커스텀 줄을 실제로 쓰고 있는지. 끄면 'N교시 시작' 자동 묶음으로 돌아간다(줄 정의는 보관). */
+  initialEnabled: boolean;
   initialShowOthers: boolean;
   initialOthersTitle: string;
   initialPresets: GroupPreset[];
@@ -98,6 +103,9 @@ export function IntegratedEditBoard({
           classIds: g.cards.map((c) => c.classId),
         })),
   );
+  // 처음 짜는 경우(저장된 줄이 아예 없음)는 켠 상태로 시작한다 — 안 그러면 줄을 다 짜고 저장해도
+  // 화면이 자동 묶음 그대로라 "저장이 안 됐네"가 된다. 이미 설정을 가진 과목은 저장된 값을 존중.
+  const [enabled, setEnabled] = useState(initialEnabled || initialGroups.length === 0);
   const [showOthers, setShowOthers] = useState(initialShowOthers);
   const [othersTitle, setOthersTitle] = useState(initialOthersTitle);
   const [presets, setPresets] = useState<GroupPreset[]>(initialPresets);
@@ -109,11 +117,23 @@ export function IntegratedEditBoard({
 
   const dirty = useMemo(
     () =>
+      enabled !== initialEnabled ||
       showOthers !== initialShowOthers ||
       othersTitle !== initialOthersTitle ||
       JSON.stringify(presets) !== JSON.stringify(initialPresets) ||
       JSON.stringify(groups) !== JSON.stringify(dedupeGroups(initialGroups)),
-    [groups, showOthers, othersTitle, presets, initialGroups, initialShowOthers, initialOthersTitle, initialPresets],
+    [
+      groups,
+      enabled,
+      showOthers,
+      othersTitle,
+      presets,
+      initialGroups,
+      initialEnabled,
+      initialShowOthers,
+      initialOthersTitle,
+      initialPresets,
+    ],
   );
 
   // 화면에 쓸 제목 = 비어 있으면 자리표시("줄 N"). 저장도 같은 값을 쓴다(입력칸 placeholder와 일치).
@@ -176,7 +196,7 @@ export function IntegratedEditBoard({
     startSave(async () => {
       const res = await saveIntegrationGroups({
         subject,
-        enabled: true, // 줄을 짜 놓고 자동 묶음으로 남아 있으면 "저장했는데 그대로"가 된다
+        enabled,
         groups: titled,
         showOthers,
         othersTitle,
@@ -209,13 +229,19 @@ export function IntegratedEditBoard({
     >
       <div className="flex min-h-0 flex-1 flex-col gap-3">
         <div className="border-primary/40 bg-primary-soft/40 flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-xl border px-3 py-2">
-          <span className="text-primary text-[12px] font-bold">배치 편집 중</span>
+          <span className="text-primary text-[12px] font-bold">그룹 설정 중</span>
           <span className="text-text-dim text-[11px]">
-            반 이름 칸을 <b>잡고 끌어</b> 다른 줄에 놓으세요. 줄 안에서 놓으면 좌우 순서가 바뀝니다.
+            반 이름을 <b>잡고 끌어</b> 다른 줄에 놓으세요(줄 안에서 놓으면 좌우 순서). 담임·교시·명단은
+            끄는 동안만 접어 둡니다 — 저장하면 원래 통합뷰로 돌아갑니다.
           </span>
           <label className="text-text-dim ml-auto flex items-center gap-1.5 text-[11px]">
+            <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />
+            커스텀 줄 사용
+            <span className="text-text-faint">(끄면 ‘N교시 시작’ 자동 묶음)</span>
+          </label>
+          <label className="text-text-dim flex items-center gap-1.5 text-[11px]">
             <input type="checkbox" checked={showOthers} onChange={(e) => setShowOthers(e.target.checked)} />
-            미배정 줄을 통합뷰에 표시
+            미배정 줄 표시
           </label>
           <input
             value={othersTitle}
@@ -223,7 +249,7 @@ export function IntegratedEditBoard({
             placeholder={DEFAULT_OTHERS_TITLE}
             maxLength={30}
             aria-label="미배정 묶음 제목"
-            className="border-line focus:border-primary bg-card w-36 rounded-lg border px-2 py-0.5 text-[11px] outline-none"
+            className="border-line focus:border-primary bg-card w-32 rounded-lg border px-2 py-0.5 text-[11px] outline-none"
           />
         </div>
 
@@ -417,6 +443,7 @@ function EditSection({
         group={section}
         subjectSoftClass={subjectSoftClass}
         teacherColors={teacherColors}
+        namesOnly
         renderCard={(card, common) => (
           <DraggableColumn
             key={card.classId}
@@ -431,6 +458,7 @@ function EditSection({
             className={`border-line text-text-faint flex w-14 shrink-0 items-center justify-center border-l border-dashed text-center text-[10px] leading-tight ${
               boxActive ? "bg-primary-soft text-primary" : ""
             }`}
+            style={{ height: NAME_H }}
           >
             맨 뒤
           </div>

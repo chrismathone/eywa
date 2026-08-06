@@ -1,6 +1,6 @@
 import { ParamLink } from "./_components/param-link";
 import type { LucideIcon } from "@/components/icons/eywa-icon-compat";
-import { Columns3, DoorOpen, LayoutGrid, Pencil, Users } from "@/components/icons/eywa-icon-compat";
+import { Columns3, DoorOpen, Layers, LayoutGrid, Users } from "@/components/icons/eywa-icon-compat";
 import { PhotoCard } from "@/components/atoms/photo-card";
 import { PageHeader } from "@/components/page-header";
 import { cookies } from "next/headers";
@@ -36,7 +36,7 @@ import { resolveSkillAreas } from "@/features/owner/skill-areas";
 import { EcsShortcut } from "./_components/ecs-shortcut";
 import { resolveIntegrationGroups } from "@/features/timetable/lib/integration-groups";
 import { normalizePresets } from "@/features/timetable/lib/group-presets";
-import { GroupSettingsDialog } from "./_components/group-settings-dialog";
+import { shouldSerializeView, subjectDefaultView, viewForSubjectSwitch } from "@/features/timetable/lib/view-default";
 import { getWeekReferenceDate, mondayOf, thisMonday, weekRelation } from "@/features/timetable/lib/week";
 import { kstMinutesOfDay, kstToday, weekdayIndexOf } from "@/lib/date-kst";
 import { RichGridView } from "./_components/rich-grid-view";
@@ -111,14 +111,20 @@ export default async function TimetablePage({
             .split(",")
             .map((s) => Number(s.trim()))
             .filter((n) => Number.isFinite(n) && n > 0);
-  const view: ViewMode =
+  // URL이 뷰를 **명시**했는지 — 없으면 아래에서 **그 과목의 기본 뷰**(학원설정)로 정한다.
+  // 🔴 과목마다 주로 보는 뷰가 다르다(원장 2026-08-06 *"영어는 기본뷰를 잘 안 쓴다"*). 과목 키를 코드에
+  //    박지 않고 `subjects[].defaultView`에서 읽는다(운영 enum 하드코딩 금지 규칙).
+  //    ⚠️ 과목은 slots가 있어야 확정되므로(아래 `available`) 최종 view는 Promise.all **뒤**에 정해진다.
+  const paramView: ViewMode | null =
     viewParam === "integrated"
       ? "integrated"
       : viewParam === "teacher"
         ? "teacher"
         : viewParam === "rooms"
           ? "rooms"
-          : "basic";
+          : viewParam === "basic"
+            ? "basic"
+            : null;
 
   // 주간 이동(타임머신) — week 파라미터(그 주 아무 날)를 월요일로 정규화. 미지정=이번 주.
   // 기준 '오늘'은 KST(서버 UTC라 새벽 시간대 하루 밀림 방지). week.ts 내부 날짜 산술은 UTC 결정적 유지.
@@ -148,13 +154,16 @@ export default async function TimetablePage({
   const [allSlots, settings, teacherColors, viewPrefs, classroomsForMap] = await Promise.all([
     getWeeklyScheduleWithStudents({ referenceDate, teacherId }),
     getTenantSettings(),
-    // 강사색 맵은 통합뷰(셀·담임색)·강사뷰(헤더색)에서만 필요. 기본뷰는 생략.
-    view !== "basic" ? getTeacherColorMap() : Promise.resolve({} as TeacherColorMap),
+    // 강사색 맵은 통합뷰(셀·담임색)·강사뷰(헤더색)에서만 필요. **명시적으로** 기본뷰일 때만 생략한다 —
+    // 파라미터가 없으면 이 시점엔 과목(=그 과목의 기본 뷰)을 아직 모르기 때문. 여기서 아끼려고 나중에
+    // 따로 조회하면 직렬 워터폴이 되므로(B4), 병렬인 이 자리에서 넉넉히 받는 편이 체감이 낫다.
+    paramView !== "basic" ? getTeacherColorMap() : Promise.resolve({} as TeacherColorMap),
     // 계정 귀속 뷰 설정(0146a) — 서버 첫 렌더에서 읽어야 필터 없는 화면을 그렸다가 학생이 사라지는
     // 깜빡임이 없다. 미로그인·깨진 값은 '설정 없음'으로 떨어져 무중단.
     getMyTimetableViewPrefs(),
     // 강의실 목록(교실뷰 컬럼 축) — 그 뷰일 때만(소형 참조 쿼리, B4로 병렬).
-    view === "rooms" && roomsViewAllowed ? getClassroomsLite() : Promise.resolve([]),
+    // 교실뷰는 과목의 기본 뷰가 될 수 없으므로(전 과목 지도) 파라미터로만 들어온다 = 여기서 확정 가능.
+    paramView === "rooms" && roomsViewAllowed ? getClassroomsLite() : Promise.resolve([]),
   ]);
   // 표시 선호 해석 — 우선순위 **URL 파라미터 → 계정(0146a) → 쿠키(구 기기 저장) → 기본값**.
   // 계정을 쿠키보다 먼저 보는 게 이 배선의 핵심(원장 지시: 기기가 아니라 계정에 귀속). 쿠키는 계정에
@@ -188,6 +197,11 @@ export default async function TimetablePage({
   const defaultSubject = available[0] ?? "";
   const subject =
     subjectParam && available.includes(subjectParam) ? subjectParam : defaultSubject;
+  /** 그 과목을 열 때 처음 보이는 뷰(학원설정, 미설정·모르는 값=기본뷰). 과목 칩은 상대 과목 것도 묻는다. */
+  const defaultViewOf = (key: string): ViewMode =>
+    subjectDefaultView(settings.operations.subjects, key);
+  const thisSubjectDefaultView = defaultViewOf(subject);
+  const view: ViewMode = paramView ?? thisSubjectDefaultView;
   // '1시간 단위' 최종 해석 — 파라미터(공유 링크 존중) → 이 **과목의** 쿠키 → 빈 값(전부 펼침).
   // 쓰기는 Compact1hPrefSync(클라). 과목별이라 영어에서 접어둔 섹션이 수학에 새지 않는다.
   // ⚠️ 과목별이라 **그 과목 키가 계정에 있을 때만** 계정을 쓴다 — 계정 맵이 있어도 아직 그 과목을
@@ -244,12 +258,7 @@ export default async function TimetablePage({
   // 통합뷰 섹션 = 커스텀 그룹(학원설정 과목별)이 켜져 있으면 그것, 아니면 "N교시 시작" 자동 그룹.
   // 엑셀·시트 빌더도 같은 해석기를 쓴다(화면과 배치 일치가 이 기능의 존재 이유).
   const customGroups = resolveIntegrationGroups(subjectRow);
-  // '그룹 설정' 창의 배정 대상 = 이 과목·이 주 시간표에 실제 있는 반(가나다). 반 목록을 따로 조회하지
-  // 않고 slots에서 뽑는다 — 화면에 보이는 것과 창이 보여주는 것이 어긋나지 않게.
-  const groupClassOptions = [...new Map(slots.map((s) => [s.classId, s.className])).entries()]
-    .map(([classId, className]) => ({ classId, className }))
-    .sort((a, b) => a.className.localeCompare(b.className, "ko"));
-  // 저장해 둔 배치 보관함(과목별) — '그룹 설정' 창과 통합뷰 '배치 편집'이 같은 목록을 본다.
+  // 저장해 둔 배치 보관함(과목별) — 그룹 설정(배치 편집) 모드가 읽는다.
   const groupPresets = normalizePresets(
     subjectRow?.integrationGroupPresets,
     subjectRow?.integrationOthersTitle ?? "",
@@ -365,6 +374,7 @@ export default async function TimetablePage({
   const hrefForSectionToggle = (sectionKey: number) =>
     buildHref({
       view: effView,
+      defaultView: thisSubjectDefaultView,
       subject,
       defaultSubject,
       kind,
@@ -455,7 +465,7 @@ export default async function TimetablePage({
         <WeekNav
           currentWeek={week}
           today={today}
-          hrefForWeek={(monday) => buildHref({ view: effView, subject, defaultSubject, kind, week: monday, thisWk, compact1h: compactList, hideEmptyDays, collapseEmptyPeriods })}
+          hrefForWeek={(monday) => buildHref({ view: effView, subject, defaultSubject, kind, week: monday, thisWk, compact1h: compactList, hideEmptyDays, collapseEmptyPeriods, defaultView: thisSubjectDefaultView })}
         />
         <span className="bg-line h-4 w-px" aria-hidden />
 
@@ -472,7 +482,15 @@ export default async function TimetablePage({
             <ParamLink
               key={k}
               href={buildHref({
-                view: effView === "teacher" && !allowsTeacherView(k) ? "basic" : effView,
+                // 🔴 과목마다 기본 뷰가 다르다 — **일부러 바꿔 보던 중이 아니면** 새 과목의 기본 뷰를 따른다
+                //    (그게 이 설정의 뜻이다: "영어를 열면 통합뷰"). 벗어나 있었다면 그 선택을 실어 나른다.
+                //    ⚠️ '벗어났나' 판정은 강등 전(`view`)으로 한다 — 강등된 effView로 재면 설정이 강사뷰인
+                //    과목에서 "안 벗어났는데 벗어난 것"으로 잡힌다. 강등은 **결과값에** 적용한다.
+                view: (() => {
+                  const carried = viewForSubjectSwitch(view, thisSubjectDefaultView, defaultViewOf(k));
+                  return carried === "teacher" && !allowsTeacherView(k) ? "basic" : carried;
+                })(),
+                defaultView: defaultViewOf(k),
                 subject: k,
                 defaultSubject,
                 kind,
@@ -507,6 +525,7 @@ export default async function TimetablePage({
               key={k}
               href={buildHref({
                 view: effView,
+                defaultView: thisSubjectDefaultView,
                 subject,
                 defaultSubject,
                 kind: k,
@@ -548,7 +567,7 @@ export default async function TimetablePage({
             return (
               <ParamLink
                 key={v.key}
-                href={buildHref({ view: v.key, subject, defaultSubject, kind, week, thisWk, compact1h: compactList, hideEmptyDays, collapseEmptyPeriods })}
+                href={buildHref({ view: v.key, subject, defaultSubject, kind, week, thisWk, compact1h: compactList, hideEmptyDays, collapseEmptyPeriods, defaultView: thisSubjectDefaultView })}
                 className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs transition ${
                   effView === v.key
                     ? "border-primary bg-primary text-primary-foreground font-medium"
@@ -573,34 +592,21 @@ export default async function TimetablePage({
         {canEditGroups ? (
           <>
             <span className="bg-line h-4 w-px" aria-hidden />
-            {/* 표 위에서 바로 옮기는 길(원장 2026-08-06). 창(그룹 설정)은 칩으로 전체 배치를 한눈에 보는 길 —
-                둘 다 같은 설정을 쓰므로 어느 쪽으로 해도 결과가 같다. */}
+            {/* 🔴 별도 창(칩 보드)이 아니라 **통합뷰 그 자체**가 편집 표면이다(원장 2026-08-06 —
+                *"통합뷰에서 편집모드를 누르고, 통합뷰의 그 자체를 드래그하고 싶은거야"*).
+                누르면 같은 서식 그대로 **수업명 행만** 남고 그 위에서 반을 끌어 줄을 바꾼다. */}
             <ParamLink
-              href={buildHref({ view: effView, subject, defaultSubject, kind, week, thisWk, compact1h: compactList, hideEmptyDays, collapseEmptyPeriods, gedit: true })}
-              title="실제 표에서 반을 끌어 다른 줄로 옮깁니다"
+              href={buildHref({ view: effView, subject, defaultSubject, kind, week, thisWk, compact1h: compactList, hideEmptyDays, collapseEmptyPeriods, gedit: !groupEditing, defaultView: thisSubjectDefaultView })}
+              title="통합뷰를 수업명만 남긴 상태로 바꿔 반을 끌어 옮깁니다"
               className={`inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-2 py-0.5 text-xs transition ${
                 groupEditing
                   ? "border-primary bg-primary text-primary-foreground font-medium"
                   : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
               }`}
             >
-              <Pencil size={11} strokeWidth={1.8} />
-              배치 편집
+              <Layers size={11} strokeWidth={1.8} />
+              그룹 설정
             </ParamLink>
-            <GroupSettingsDialog
-              subject={subject}
-              subjectLabel={subjectMaps.labelOf(subject)}
-              classes={groupClassOptions}
-              initialGroups={(subjectRow?.integrationGroups ?? []).map((g) => ({
-                id: g.id,
-                title: g.title,
-                classIds: g.classIds ?? [],
-              }))}
-              initialEnabled={subjectRow?.integrationGroupsEnabled === true}
-              initialShowOthers={subjectRow?.integrationShowOthers !== false}
-              initialOthersTitle={subjectRow?.integrationOthersTitle ?? ""}
-              initialPresets={groupPresets}
-            />
           </>
         ) : null}
 
@@ -633,6 +639,7 @@ export default async function TimetablePage({
             effView === "basic"
               ? buildHref({
                   view: effView,
+                  defaultView: thisSubjectDefaultView,
                   subject,
                   defaultSubject,
                   kind,
@@ -649,6 +656,7 @@ export default async function TimetablePage({
             effView === "teacher"
               ? buildHref({
                   view: effView,
+                  defaultView: thisSubjectDefaultView,
                   subject,
                   defaultSubject,
                   kind,
@@ -768,10 +776,11 @@ export default async function TimetablePage({
             title: g.title,
             classIds: g.classIds ?? [],
           }))}
+          initialEnabled={subjectRow?.integrationGroupsEnabled === true}
           initialShowOthers={subjectRow?.integrationShowOthers !== false}
           initialOthersTitle={subjectRow?.integrationOthersTitle ?? ""}
           initialPresets={groupPresets}
-          doneHref={buildHref({ view: effView, subject, defaultSubject, kind, week, thisWk, compact1h: compactList, hideEmptyDays, collapseEmptyPeriods })}
+          doneHref={buildHref({ view: effView, subject, defaultSubject, kind, week, thisWk, compact1h: compactList, hideEmptyDays, collapseEmptyPeriods, defaultView: thisSubjectDefaultView })}
         />
       ) : isIntegrated ? (
         <TimetableZoomArea>
@@ -861,9 +870,17 @@ function buildHref(opts: {
    * 지금 켠 작업 모드라, 다른 링크(주 이동·과목 전환)는 파라미터를 안 실어 자연스럽게 읽기 전용으로 돌아간다.
    */
   gedit?: boolean;
+  /**
+   * 이 링크가 가리키는 **과목의 기본 뷰**(학원설정 `subjects[].defaultView`). 같으면 `view`를 생략해
+   * URL을 깨끗이 둔다. 미지정=basic(설정이 없던 시절과 같은 URL).
+   */
+  defaultView?: ViewMode;
 }): string {
   const params = new URLSearchParams();
-  if (opts.view !== "basic") params.set("view", opts.view);
+  // 🔴 생략 기준은 "basic이냐"가 아니라 **그 링크가 가리키는 과목의 기본 뷰냐**다. 예전처럼 basic만
+  //    생략하면, 영어 기본 뷰가 통합뷰인 순간 '기본뷰' 칩이 파라미터 없는 URL이 되어 다시 통합뷰로
+  //    되돌아온다 = **기본뷰를 영영 못 고른다**(과목 칩의 defaultSubject 생략과 같은 규약).
+  if (shouldSerializeView(opts.view, opts.defaultView ?? "basic")) params.set("view", opts.view);
   if (opts.kind !== DEFAULT_TIMETABLE_KIND) params.set("kind", opts.kind);
   if (opts.subject !== opts.defaultSubject) params.set("subject", opts.subject);
   if (opts.week !== opts.thisWk) params.set("week", opts.week);
