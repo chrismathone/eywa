@@ -125,7 +125,6 @@ export function RecallFace({ options, todayYmd }: { options: ReportFilterOptions
         >
           <option value="success">발송 완료(회수 가능)</option>
           <option value="recall_requested">회수 처리 중</option>
-          <option value="recall_reopen_requested">재발송 준비 중</option>
           <option value="recalled">회수됨</option>
           <option value="recall_failed">회수 실패</option>
         </select>

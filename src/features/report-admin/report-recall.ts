@@ -20,29 +20,13 @@
 
 /** 회수 요청됨 — 연동 PC 워커가 아직 안 지움. 완료되면 `recalled`(거둬들이고 끝). */
 export const RECALL_REQUESTED = "recall_requested";
-/**
- * **회수 후 다시 작성** 요청 — 옛 게시글을 지우고, 삭제가 끝나면 그 행을 **미발송으로 되돌린다**
- * (새 공유 토큰 + 발송 상태 초기화). 원장 지시 2026-08-06: *"재발송의 의도는 (수정 후 다시 발송)"*.
- *
- * 🔴 왜 '재발급'만으로는 안 되는가: 게시글은 **이미지**로 올라가 있어서 링크를 새로 내도 학부모는 옛 이미지를
- *    그대로 본다(원장 지적: *"학부모는 현재 주소보다 이미지를 볼 것"*). 즉 옛 방식의 "재발급 → 다시 작성 →
- *    발송"은 **틀린 보고서를 남긴 채 맞는 보고서를 하나 더 붙이는** 동작이었다. 다시 쓰려면 먼저 지워야 한다.
- * 🔴 왜 토큰 교체를 **삭제 후에** 하는가: 워커가 게시글을 찾는 유일한 키가 그 토큰이다. 먼저 바꾸면
- *    지울 글을 영영 못 찾아 게시판에 **고아 게시글**이 남는다.
- */
-export const RECALL_REOPEN_REQUESTED = "recall_reopen_requested";
 /** 회수 완료 — ClassNote 게시글 삭제됨. */
 export const RECALLED = "recalled";
 /** 회수 실패 — 사유는 `classnote_error`(한글). 다시 시도할 수 있다. */
 export const RECALL_FAILED = "recall_failed";
 
 /** 회수 계열 상태 집합 — 발송 큐 집계·필터가 "발송 상태"와 섞지 않도록. */
-export const RECALL_STATUSES: readonly string[] = [
-  RECALL_REQUESTED,
-  RECALL_REOPEN_REQUESTED,
-  RECALLED,
-  RECALL_FAILED,
-];
+export const RECALL_STATUSES: readonly string[] = [RECALL_REQUESTED, RECALLED, RECALL_FAILED];
 
 export type RecallableRow = {
   classnoteStatus: string | null;
@@ -65,8 +49,7 @@ export function isRecallable(row: RecallableRow): boolean {
 export function recallBlockReason(row: RecallableRow): string | null {
   const s = row.classnoteStatus;
   if (isRecallable(row)) return null;
-  if (s === RECALL_REQUESTED || s === RECALL_REOPEN_REQUESTED)
-    return "이미 회수 요청됨 — 연동 PC가 순차 처리합니다";
+  if (s === RECALL_REQUESTED) return "이미 회수 요청됨 — 연동 PC가 순차 처리합니다";
   if (s === RECALLED) return "이미 회수된 보고서입니다";
   if (s === "queued" || s === "processing") return "발송 처리 중입니다 — 끝난 뒤에 회수할 수 있습니다";
   if (!s) return "아직 학부모에게 발송되지 않은 보고서입니다";
@@ -81,7 +64,7 @@ export function recallBlockReason(row: RecallableRow): string | null {
  * ⚠️ **재발급 차단도 이 판정을 쓴다** — 진행 중에 토큰이 바뀌면 워커가 게시글을 못 찾는다(고아 게시글).
  */
 export function isRecallInFlight(status: string | null): boolean {
-  return status === RECALL_REQUESTED || status === RECALL_REOPEN_REQUESTED;
+  return status === RECALL_REQUESTED;
 }
 
 /**

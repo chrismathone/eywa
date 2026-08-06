@@ -16,7 +16,7 @@
  */
 
 /** 발송을 막는 사유. sent·absent는 **상태**(고칠 게 아니라 그런 행), progress·ment는 **필요한 입력**. */
-export type SendBlockReason = "sent" | "absent" | "progress" | "ment";
+export type SendBlockReason = "sent" | "absent" | "progress" | "ment" | "recall_pending";
 
 /** 입력이 필요한 사유의 짧은 이름 — 라벨에서 "진도 · 멘트 입력 필요"로 이어 붙인다. */
 const NEED_LABEL: Record<"progress" | "ment", string> = {
@@ -46,7 +46,20 @@ export function evaluateSendGate(args: {
   isAbsent: boolean;
   hasProgress: boolean;
   hasDraft: boolean;
+  /**
+   * 회수 요청됐지만 워커가 아직 옛 글을 안 지웠다 — 지금 보내면 **옛 글 옆에 새 글이 하나 더** 붙고,
+   * 새 토큰을 내면 워커가 지울 글을 못 찾아 **고아 게시글**이 된다. 삭제가 끝난 뒤에만 보낸다.
+   */
+  recallPending?: boolean;
 }): SendGate {
+  if (args.recallPending) {
+    return {
+      canSend: false,
+      reasons: ["recall_pending"],
+      label: "회수 처리 중",
+      hint: "학부모 게시글을 지우는 중입니다 — 끝나면 수정해서 다시 보낼 수 있습니다",
+    };
+  }
   if (args.alreadySent) {
     return {
       canSend: false,

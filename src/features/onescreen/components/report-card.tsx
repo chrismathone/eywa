@@ -57,9 +57,6 @@ export function classnoteBadge(status?: string | null): { label: string; cls: st
     // 실제 삭제는 연동 PC 워커가 하므로 요청 → 완료 사이에 대기 상태가 보인다(report-recall.ts).
     case "recall_requested":
       return { label: "회수 처리 중 — 게시글 삭제 대기", cls: "text-amber" };
-    case "recall_reopen_requested":
-      // 재발송 = 회수 후 미발송으로 되돌리는 중. 끝나면 상태가 아예 사라진다(미발송).
-      return { label: "재발송 준비 중 — 옛 게시글 삭제 대기", cls: "text-amber" };
     case "recalled":
       return { label: "회수됨 — 학부모 게시글 삭제", cls: "text-danger" };
     case "recall_failed":
@@ -195,6 +192,7 @@ export function ReportCard({
   // 발송 게이트 = 표뷰와 **같은 단일 소스**(send-gate.ts) — 카드만 다른 판정을 쓰면 한쪽에서만
   // "왜 안 눌리지"가 생긴다(#77). 멘트 미작성도 여기서 막는다(빈 멘트 절대 가드가 어차피 거절).
   const sendGate = evaluateSendGate({
+    recallPending: isRecallInFlight(liveStatus ?? null),
     alreadySent,
     isAbsent: subject.attendanceRaw === "absent",
     hasProgress: isReportEligible(subject),
@@ -574,9 +572,21 @@ export function ReportCard({
             <EyIcon name="alert" size={13} className="mt-0.5 shrink-0" />
             <span>
               이미 학부모 게시판에 올라간 보고서라 <b>입력이 잠겨 있습니다</b>. 게시글은 이미지로 올라가 있어,
-              여기서 내용만 바꿔도 학부모가 보는 화면은 그대로이고 기록만 갈라집니다. 아래에서 고르세요 —{" "}
-              <b>회수</b>는 학부모 게시글을 지우고 끝내고, <b>재발송</b>은 지운 뒤 수정본을 다시 올릴 수 있게
-              입력을 열어 줍니다.
+              여기서 내용만 바꿔도 학부모가 보는 화면은 그대로이고 기록만 갈라집니다. 고치려면 아래{" "}
+              <b>회수</b>로 학부모 게시글을 지우세요 — 삭제가 끝나면 입력이 열리고,{" "}
+              <b>ClassNote 발송</b>으로 수정본을 다시 보낼 수 있습니다.
+            </span>
+          </p>
+        ) : null}
+
+        {/* 회수 완료 — '발송'이 곧 재발송이다(별도 버튼을 두지 않는다, 원장 2026-08-06:
+            *"회수하고 클래스노트 발송 버튼 누르면 그게 재발송 아닌가"*). 발송 시 새 토큰이 발급된다. */}
+        {liveStatus === "recalled" ? (
+          <p className="border-line bg-bg-soft text-text-dim flex items-start gap-1 rounded-md border px-2.5 py-1.5 text-[11px] leading-relaxed">
+            <EyIcon name="check" size={13} className="text-primary mt-0.5 shrink-0" />
+            <span>
+              학부모 게시글을 <b>회수했습니다</b>. 내용을 고친 뒤 <b>ClassNote 발송</b>을 누르면 수정본이 다시
+              올라갑니다(새 공유 링크가 발급됩니다).
             </span>
           </p>
         ) : null}
@@ -736,13 +746,6 @@ export function ReportCard({
                   {postedToBoard ? (
                     <>
                       <RecallButton
-                        shareToken={rep.shareToken ?? null}
-                        classnoteStatus={liveStatus ?? null}
-                        studentName={student.name}
-                        readAt={subject.classnoteReadAt ?? null}
-                      />
-                      <RecallButton
-                        reopen
                         shareToken={rep.shareToken ?? null}
                         classnoteStatus={liveStatus ?? null}
                         studentName={student.name}

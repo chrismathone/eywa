@@ -1580,6 +1580,14 @@ export function OneScreenClient({
       toast.error(res.error ?? "ClassNote 발송 큐 적재에 실패했습니다");
       return;
     }
+    if (res.status === "recall_pending") {
+      toast.error(`${subjectName} — 회수 처리 중입니다. 게시글 삭제가 끝난 뒤에 보내세요`);
+      return;
+    }
+    if (res.status === "recall_pending") {
+      toast.error(`${subjectName} — 회수 처리 중입니다. 게시글 삭제가 끝난 뒤에 보내세요`);
+      return;
+    }
     if (res.status === "revoked") {
       toast.error(`${subjectName} — 취소된 링크입니다. 재발급 후 발송하세요`);
       return;
@@ -1645,6 +1653,10 @@ export function OneScreenClient({
     }
     if (res.status === "name_conflict") {
       toast.error(`${student.name} — 동명이인이 있어 발송을 막았습니다(학생 관리에서 ClassNote 이름 지정)`);
+    } else if (res.status === "recall_pending") {
+      toast.error(`${student.name} — 회수 처리 중입니다(삭제 후 발송)`);
+    } else if (res.status === "recall_pending") {
+      toast.error(`${student.name} — 회수 처리 중입니다(삭제 후 발송)`);
     } else if (res.status === "revoked") {
       toast.error(`${student.name} — 취소된 링크입니다(재발급 필요)`);
     } else if (res.status === "too_old") {
@@ -1798,7 +1810,7 @@ export function OneScreenClient({
           if (res.sendWindowHint) windowHint = res.sendWindowHint;
         } else if (res.status === "dry_run") dry++;
         else if (res.status === "subject_off") subjectOff++;
-        else if (res.status === "name_conflict" || res.status === "revoked") blocked++;
+        else if (res.status === "name_conflict" || res.status === "revoked" || res.status === "recall_pending") blocked++;
         else if (res.status === "absent") absentSkip++; // 서버 결석 게이트(클라 사전 필터를 지난 반 모호 행 등)
         else if (res.status === "already_sent") sentSkip++; // 서버 중복 게시 가드(클라 게이트를 지난 stale 행)
         else skipped++; // processing/too_old

@@ -252,8 +252,35 @@ export async function saveAndQueueClassnote(
       : base.is("class_id", null).is("subject", null);
   const { data: priorRows } = await scoped.limit(1);
   const prior = priorRows?.[0];
-  // 취소된 링크는 재큐잉 안 함 — 옛 링크가 死링크라 재발송하려면 먼저 재발급(새 토큰·취소 해제)해야 함.
-  if (prior?.revoked_at) {
+  // 🔴 회수 처리 중 — 워커가 옛 게시글을 아직 안 지웠다. 지금 보내면 **옛 글 옆에 새 글이 하나 더** 붙고,
+  //    새 토큰을 내면 워커가 지울 글을 못 찾아 **고아 게시글**이 된다. 삭제가 끝난 뒤에만 보낸다.
+  if (isRecallInFlight((prior?.classnote_status as string | null) ?? null)) {
+    return { ok: true, id: prior!.id, status: "recall_pending" };
+  }
+  // 🔴 **회수 완료분의 재발송 = 그냥 '발송'**(원장 2026-08-06: *"회수하고 클래스노트 발송 버튼 누르면
+  //    그게 재발송 아닌가"*). 별도 '재발송' 버튼을 두지 않는다. 옛 글은 이미 지워졌고 옛 링크는 죽었으니
+  //    **새 토큰**을 내고 취소를 풀어 평범한 첫 발송과 같은 상태로 되돌린 뒤 아래 정상 경로를 탄다.
+  //    ⚠️ 되돌리는 건 여기(사람이 발송을 누른 시점)뿐이다 — 회수 직후 자동으로 되돌리면 그 행이
+  //    '미발송'이 되어 **관리자 일괄 발송**(isAdminSendable = 상태 없음)에 딸려 들어간다. 잘못돼서
+  //    거둬들인 내용이 다음 일괄 발송에 그대로 다시 나가는 사고가 된다.
+  if (prior?.classnote_status === "recalled") {
+    await supabase
+      .from("lesson_reports")
+      .update({
+        share_token: randomUUID(),
+        revoked_at: null,
+        revoked_by: null,
+        classnote_status: null,
+        classnote_error: null,
+        classnote_sent_at: null,
+        classnote_queued_at: null,
+        classnote_processing_at: null,
+        classnote_retry_count: 0,
+      })
+      .eq("id", prior.id)
+      .eq("classnote_status", "recalled"); // 동시 클릭 경합 — 한 번만 되돌린다
+  } else if (prior?.revoked_at) {
+    // 취소된 링크(회수와 무관 — 링크만 막은 건)는 재큐잉 안 함. 재발급으로 새 토큰을 내야 한다.
     return { ok: true, id: prior.id, status: "revoked" };
   }
   // 워커 게시 중이면 내용 덮어쓰지 않고 그대로 반환(in-flight 보호).

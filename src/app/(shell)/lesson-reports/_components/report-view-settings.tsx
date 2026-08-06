@@ -25,7 +25,6 @@ const STATUS_OPTIONS = [
   "name_conflict",
   "blocked_shared",
   "recall_requested",
-  "recall_reopen_requested",
   "recalled",
   "recall_failed",
 ];

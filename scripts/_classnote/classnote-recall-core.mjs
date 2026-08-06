@@ -139,7 +139,7 @@ export async function processRecallsOnce(sql, browser, opts) {
   if (stale.length) log(`[recall] stale 복구 ${stale.length}건`);
 
   const [{ n }] = await sql`select count(*)::int as n from lesson_reports
-    where tenant_id=${tenant} and classnote_status in ('recall_requested','recall_reopen_requested')`;
+    where tenant_id=${tenant} and classnote_status='recall_requested'`;
   if (!n) return { claimed: 0, recalled: 0, failed: 0 };
   if (!post) {
     log(`[recall] 회수 대기 ${n}건 — dry-run이라 삭제하지 않음(--post 필요)`);
@@ -149,7 +149,7 @@ export async function processRecallsOnce(sql, browser, opts) {
   const claimed = await sql`
     with cte as (
       select id, classnote_status as prev from lesson_reports
-      where tenant_id = ${tenant} and classnote_status in ('recall_requested','recall_reopen_requested')
+      where tenant_id = ${tenant} and classnote_status='recall_requested'
       order by revoked_at nulls first limit ${BATCH}
       for update skip locked
     )
@@ -196,18 +196,7 @@ export async function processRecallsOnce(sql, browser, opts) {
         log,
       }).catch((e) => ({ ok: false, note: `회수 중 오류: ${String(e?.message ?? e).slice(0, 120)}`, deletedIds: [] }));
 
-      if (res.ok && r.prev === 'recall_reopen_requested') {
-        // **재발송** — 게시글을 지웠으니 이제 안전하게 미발송으로 되돌린다(새 토큰 + 발송 상태 초기화).
-        // 🔴 토큰 교체는 반드시 **삭제 성공 뒤에** — 먼저 바꾸면 지울 글을 못 찾아 고아 게시글이 남는다.
-        await sql`update lesson_reports set
-            classnote_status=null, classnote_error=null, classnote_sent_at=null, classnote_queued_at=null,
-            classnote_processing_at=null, classnote_retry_count=0,
-            share_token=gen_random_uuid(), revoked_at=null, revoked_by=null
-          where id=${r.id}`;
-        summary.recalled++;
-        summary.reopened = (summary.reopened ?? 0) + 1;
-        log(`  → 재발송 준비 완료(옛 글 삭제 + 미발송으로 되돌림)${res.note ? ` (${res.note})` : ""}`);
-      } else if (res.ok) {
+      if (res.ok) {
         await sql`update lesson_reports set classnote_status='recalled', classnote_error=${res.note ?? null},
           classnote_processing_at=null where id=${r.id}`;
         summary.recalled++;
