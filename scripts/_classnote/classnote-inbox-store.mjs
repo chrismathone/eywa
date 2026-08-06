@@ -80,7 +80,13 @@ export async function storeParentMessages(sql, tenant, items, childToStudent) {
  *
  * 워커가 이걸 치명으로 다루면 안 되는 이유: 분류는 늦어도 되지만(다음 폴이 재시도) 발송·강사 알림은
  * 늦으면 안 된다. 한 축의 네트워크 문제로 다른 축을 세우지 않는다.
+ *
+ * 🔴 **응답을 오래 기다리면 안 된다** — 데몬의 한 tick은 순차라서, 여기서 60초를 붙들면 **그만큼 발송 큐
+ * 처리가 밀린다**(글 폴·댓글 폴에서 각각 부르므로 최악 두 배). 분류는 최대 60건×AI라 실제로 수십 초가 걸린다.
+ * → **짧게 끊는다.** 연결을 끊어도 **서버는 계속 처리하고 결과를 DB에 쓴다**(행 단위 저장). 우리가 잃는 건
+ * 로그 한 줄뿐이다. 중복 알림은 앱의 선점(`notified_at` compare-and-set)이 막는다.
  */
+const KICK_TIMEOUT_MS = 8_000;
 export async function kickClassify(log = console.log) {
   const base = process.env.CLASSNOTE_SHARE_BASE || process.env.CLASSNOTE_SCREENSHOT_BASE;
   const secret = process.env.CLASSNOTE_INTERNAL_SECRET;
@@ -92,7 +98,7 @@ export async function kickClassify(log = console.log) {
     const res = await fetch(`${base.replace(/\/$/, "")}/api/internal/parent-messages/classify`, {
       method: "POST",
       headers: { "x-eywa-internal": secret },
-      signal: AbortSignal.timeout(60_000),
+      signal: AbortSignal.timeout(KICK_TIMEOUT_MS),
     });
     const body = await res.json().catch(() => ({}));
     if (!res.ok) {
@@ -104,7 +110,14 @@ export async function kickClassify(log = console.log) {
     }
     return { ok: true, ...body };
   } catch (e) {
-    log(`[출결분류] 킥 오류 — 다음 폴에서 재시도(원문은 저장됨): ${e.message}`);
-    return { ok: false };
+    // 타임아웃은 **실패가 아니다** — 서버가 계속 처리 중이라는 뜻이다(위 주석 참조). 발송을 붙들지 않으려고
+    // 일부러 짧게 끊었으므로, 여기서 "실패"라고 적으면 로그를 보는 사람이 헛다리를 짚는다.
+    const aborted = e?.name === "TimeoutError" || e?.name === "AbortError";
+    log(
+      aborted
+        ? "[출결분류] 요청 접수 — 결과는 기다리지 않는다(서버에서 계속 처리·다음 폴 로그에서 확인)"
+        : `[출결분류] 킥 오류 — 다음 폴에서 재시도(원문은 저장됨): ${e.message}`,
+    );
+    return { ok: aborted };
   }
 }
