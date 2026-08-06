@@ -99,12 +99,13 @@ import { applyStudentOrder } from "../student-order";
 import { saveStudentOrder } from "../server/order-actions";
 import { useClassnoteStatusSync } from "./use-classnote-status-sync";
 import { mergeClassnoteStatuses, pendingSendStudentIds, type ClassnoteStatusRow } from "../classnote-status";
-import { setAttendanceBulk, setAttendanceCell } from "@/features/attendance/server/actions";
+import { linkMakeupToAbsence, setAttendanceBulk, setAttendanceCell } from "@/features/attendance/server/actions";
 import type { BasicAttendance } from "./attendance-pills";
 import { useEditPresence, useEditingOthers } from "@/features/presence/edit-presence";
 import { dedupeEditors } from "@/features/presence/presence-state";
 import { MakeupMergeDialog, type MakeupMergeChoice } from "./makeup-merge-dialog";
 import { mergeStatusOf, mergedUnits, planMakeupMerge, type MergeCandidate } from "../makeup-merge-plan";
+import { shortDate } from "../makeup-absence-link";
 
 type ReportsState = Record<string, Record<string, SubjectReport>>; // studentId → 과목명 → {draft, sent}
 
@@ -721,10 +722,47 @@ export function OneScreenClient({
       return;
     }
     if (choice.mode === "separate") {
-      addSeparateMakeupRows(existing, ask.mk);
+      // ⚠️ 행이 실제로 생겼을 때만 결석분 연결(시수 +1)을 건다 — 이미 보강 행이 있는데 또 누르면
+      //    행은 안 늘고 시수만 올라 **급여가 조용히 과지급**된다(서버도 메모로 멱등이지만 여기서 먼저 막는다).
+      if (addSeparateMakeupRows(existing, ask.mk, true)) {
+        void linkMakeupToAbsence_(existing, choice.candidate, choice.absentDate);
+      }
       return;
     }
     mergeMakeupIntoRegular(existing, choice.candidate, ask.sentSubjects.includes(choice.candidate.name));
+  }
+  /**
+   * 분리 보강을 **결석분에 연결** — 결석한 날 칸엔 메모만("N/N 보강 예정", 결석 0은 그대로),
+   * 보강한 날(=보고 있는 날짜) 칸엔 시수 +1 + 메모("N/N 결석분 보강"). 원장 2026-08-06 사양이자
+   * 현재 구글시트 출석부 운영과 같은 모양. 낙관 표시는 보강한 날 행에만 반영한다.
+   */
+  async function linkMakeupToAbsence_(existing: OneScreenStudent, target: MergeCandidate, absentDate: string) {
+    const res = await linkMakeupToAbsence({
+      studentId: existing.id,
+      classId: target.classId,
+      absentDate,
+      makeupDate: activeDate,
+    });
+    if ("error" in res) {
+      toast.error(`보강 시수를 기록하지 못했습니다 — ${res.error}`);
+      return;
+    }
+    // 화면의 그 행 시수도 서버 결과로 맞춘다(1이면 서버가 null로 접으므로 같은 규칙으로).
+    // ⚠️ 기록이 없던 날엔 서버가 '출석'으로 열었다 — 화면 raw도 같이 present로 맞춰야 표시가 안 갈린다.
+    applyAttendanceLocal(existing.id, target.classId, target.attendanceRaw ?? "present", {
+      units: res.units === 1 ? null : res.units,
+    });
+    if (res.alreadyLinked) {
+      toast.message(`${shortDate(absentDate)} 결석분 보강은 이미 기록돼 있습니다 — 수업타임을 다시 올리지 않았습니다.`);
+      return;
+    }
+    // ⚠️ 결석 기록이 없던 날이면 메모를 안 남긴다 — 조용히 넘기지 말고 그 사실을 밝힌다.
+    toast.success(
+      res.absenceNoted
+        ? `${existing.name} 보강 추가 — ${shortDate(absentDate)} 칸에 메모, ${target.name} 수업타임 ${res.units}`
+        : `${existing.name} 보강 추가 — ${target.name} 수업타임 ${res.units}. 단 ${shortDate(absentDate)}엔 출결 기록이 없어 메모는 남기지 않았습니다.`,
+      { duration: 8000 },
+    );
   }
   /** 합침 — 정규 행에 보강 표시를 켜고(제목 "(정규+보강)", makeup-label.ts) 출석부 수업타임을 +1 한다. */
   function mergeMakeupIntoRegular(existing: OneScreenStudent, merge: MergeCandidate, sent: boolean) {
@@ -749,8 +787,11 @@ export function OneScreenClient({
       toast.success(`${existing.name} 보강 합침 — ${merge.name} 보고서 1건(정규+보강) · 수업타임 ${units}`);
     }
   }
-  /** 분리 — 종전(2026-08-05 이전)대로 별도 "(보강)" 행. 정규와 별개 보고서라 발송도 따로 나간다. */
-  function addSeparateMakeupRows(existing: OneScreenStudent, mk: OneScreenStudent) {
+  /**
+   * 분리 — 종전(2026-08-05 이전)대로 별도 "(보강)" 행. 정규와 별개 보고서라 발송도 따로 나간다.
+   * @returns 행이 실제로 늘었는가 — 호출부가 이 값으로 결석분 연결(시수 +1)을 걸지 판단한다.
+   */
+  function addSeparateMakeupRows(existing: OneScreenStudent, mk: OneScreenStudent, silent = false): boolean {
     const studentId = existing.id;
     // 이름 유일화(reports 키 충돌 방지)로 초안 덮어쓰기 차단.
     const used = new Set(existing.subjects.map((su) => su.name));
@@ -776,13 +817,15 @@ export function OneScreenClient({
     if (makeupRows.length === 0) {
       setSelId(existing.id);
       toast.message("이미 보강 행이 추가되어 있습니다");
-      return;
+      return false;
     }
     patch(studentId, (s) => ({ ...s, subjects: [...s.subjects, ...makeupRows] }));
     const slots = initReports([{ ...existing, subjects: makeupRows }])[existing.id] ?? {};
     setReports((prev) => ({ ...prev, [studentId]: { ...(prev[studentId] ?? {}), ...slots } }));
     setSelId(studentId);
-    toast.success(`${existing.name} 보강 추가됨`);
+    // 결석분 연결이 뒤따르는 경로(다이얼로그 '분리')는 그쪽 토스트가 시수까지 밝히므로 여기선 조용히(silent).
+    if (!silent) toast.success(`${existing.name} 보강 추가됨`);
+    return true;
   }
   // 보강 학생 '이전 진도 불러오기' — 직전 회차를 당겨 prev/prevReport/prevScore를 채운다(세션 저장 없음).
   async function loadMakeupPrev(studentId: string) {
@@ -2453,6 +2496,7 @@ export function OneScreenClient({
           studentName={makeupAsk.studentName}
           candidates={makeupAsk.candidates}
           sentSubjects={makeupAsk.sentSubjects}
+          makeupDate={activeDate}
           onConfirm={resolveMakeupAsk}
           onCancel={() => setMakeupAsk(null)}
         />
