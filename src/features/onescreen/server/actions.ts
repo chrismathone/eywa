@@ -26,6 +26,7 @@ import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { classnoteSendWindowHint, isClassnoteAllowed, isClassnoteSubjectEnabled } from "../classnote-guard";
 import { hasClassnoteNameCollision, teacherOwnsStudent } from "./scope";
+import { isRecallInFlight } from "@/features/report-admin/report-recall";
 // 담당 반 판정 단일 소스(담당 반 ∪ 그날 위임 반) — classes.teacher_id를 직접 비교하지 말 것(0173a).
 import { getTeachingClassIds, getTeachingClasses } from "@/features/classes/server/delegation";
 import { isStudentAbsentForSend } from "./absence-gate";
@@ -389,13 +390,19 @@ export async function reissueShareLink(
   const supabase = await createClient();
   const { data: report } = await supabase
     .from("lesson_reports")
-    .select("id, student_id, report_date")
+    .select("id, student_id, report_date, classnote_status")
     .eq("share_token", shareToken)
     .maybeSingle();
   if (!report) return { ok: false, error: "보고서를 찾을 수 없습니다" };
   // 담당 판정은 **그 보고서 날짜** 기준 — 임시 위임(0173a)은 기간이 있어 오늘로 보면 어제 위임분을 못 만진다.
   if (!(await teacherOwnsStudent(supabase, user.id, report.student_id, report.report_date as string)))
     return { ok: false, error: "담당 학생이 아닙니다" };
+  // 🔴 회수 진행 중엔 재발급을 막는다 — **재발급은 share_token을 갈아치우는데, 그 토큰이 회수 워커가
+  //    ClassNote 게시글을 찾는 유일한 키**다(본문 완전 일치). 여기서 토큰이 바뀌면 워커가 글을 영영 못 찾아
+  //    학부모 게시판에 **지울 수 없는 고아 게시글**이 남는다(죽은 링크 + 스크린샷 이미지).
+  //    회수가 끝난 뒤(recalled)엔 정상적으로 재발급할 수 있다.
+  if (isRecallInFlight((report.classnote_status as string | null) ?? null))
+    return { ok: false, error: "회수 처리 중입니다 — 게시글 삭제가 끝난 뒤에 재발급하세요" };
   const newToken = randomUUID(); // ⚠️ supabase-js update엔 SQL gen_random_uuid()를 못 씀 → Node에서 생성
   const { error } = await supabase
     .from("lesson_reports")

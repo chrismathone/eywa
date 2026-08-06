@@ -3,6 +3,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { Pill } from "@/components/atoms/pill";
+import { RecallButton } from "@/features/report-admin/components/recall-button";
 import { effectiveClassnoteStatus, isAlreadySent, isReportEligible, isRowActionable } from "../grid";
 import { evaluateSendGate } from "../send-gate";
 import { checkMentConsistency, MENT_WARNING_HINT, MENT_WARNING_LABEL } from "../ment-consistency";
@@ -51,6 +52,14 @@ export function classnoteBadge(status?: string | null): { label: string; cls: st
       return { label: "ClassNote 발송 제외(오래됨)", cls: "text-text-dim" };
     case "revoked":
       return { label: "링크 취소됨 — 재발급 필요", cls: "text-danger" };
+    // 회수 3종(2026-08-05) — **링크 취소와 다르다**: 회수는 ClassNote 학부모 게시글 자체를 지운다.
+    // 실제 삭제는 연동 PC 워커가 하므로 요청 → 완료 사이에 대기 상태가 보인다(report-recall.ts).
+    case "recall_requested":
+      return { label: "회수 처리 중 — 게시글 삭제 대기", cls: "text-amber" };
+    case "recalled":
+      return { label: "회수됨 — 학부모 게시글 삭제", cls: "text-danger" };
+    case "recall_failed":
+      return { label: "회수 실패 — 다시 시도하세요", cls: "text-danger" };
     case "name_conflict":
       return { label: "동명이인 — 자동 발송 차단", cls: "text-danger" };
     case "blocked_shared":
@@ -546,9 +555,9 @@ export function ReportCard({
           <p className="border-amber/40 bg-amber-soft text-amber flex items-start gap-1 rounded-md border px-2.5 py-1.5 text-[11px] leading-relaxed">
             <EyIcon name="alert" size={13} className="mt-0.5 shrink-0" />
             <span>
-              이미 학부모 게시판에 올라간 보고서라 <b>수정도 재발송도 할 수 없습니다</b>. ClassNote는 게시글 수정·삭제가
-              안 되므로, 여기서 내용을 바꾸면 학부모가 받은 것과 기록이 갈라집니다. 정말 고쳐야 하면 아래{" "}
-              <b>공유 링크 재발급</b>으로 이 건을 무효화한 뒤 다시 작성하세요.
+              이미 학부모 게시판에 올라간 보고서라 <b>수정도 재발송도 할 수 없습니다</b>. 여기서 내용을 바꾸면
+              학부모가 받은 것과 기록이 갈라집니다. 잘못 나갔으면 아래 <b>회수</b>로 학부모 게시글을 삭제한 뒤,{" "}
+              <b>공유 링크 재발급</b>으로 새로 작성하세요.
             </span>
           </p>
         ) : null}
@@ -670,9 +679,18 @@ export function ReportCard({
             {rep.revoked ? (
               <div className="flex items-center justify-between gap-2">
                 <p className="text-text-dim text-[11px]">이 링크는 열람이 차단됐습니다.</p>
-                <Button variant="outline" size="sm" onClick={() => onReissue(subjectName)}>
-                  재발급
-                </Button>
+                <div className="flex items-center gap-1.5">
+                  {/* ⚠️ 링크를 막아도 **ClassNote 게시글(스크린샷)은 남아 있다** — 지우려면 회수해야 한다. */}
+                  <RecallButton
+                    shareToken={rep.shareToken ?? null}
+                    classnoteStatus={liveStatus ?? null}
+                    studentName={student.name}
+                    readAt={subject.classnoteReadAt ?? null}
+                  />
+                  <Button variant="outline" size="sm" onClick={() => onReissue(subjectName)}>
+                    재발급
+                  </Button>
+                </div>
               </div>
             ) : (
               <>
@@ -696,6 +714,14 @@ export function ReportCard({
                   <Button variant="ghost" size="sm" onClick={() => onRevoke(subjectName)}>
                     취소
                   </Button>
+                  {/* 회수 = 학부모 게시글 삭제(링크 '취소'와 다르다 — 취소는 링크만 막고 글은 남는다).
+                      게시 완료건에만 뜬다(RecallButton이 판정) + 이중확인은 그 안에 있다. */}
+                  <RecallButton
+                    shareToken={rep.shareToken ?? null}
+                    classnoteStatus={liveStatus ?? null}
+                    studentName={student.name}
+                    readAt={subject.classnoteReadAt ?? null}
+                  />
                 </div>
               </>
             )}

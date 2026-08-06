@@ -65,6 +65,7 @@ export const AUDIT_ACTIONS = {
   classnote_notice_edit: "학부모 공지 수정",
   classnote_notice_delete: "학부모 공지 삭제",
   classnote_notice_revoke: "학부모 공지 게시취소",
+  classnote_report_recall: "수업보고서 회수",
   ecs_attendance_clear: "출석 취소(ECS)",
 } as const;
 export type AuditActionKey = keyof typeof AUDIT_ACTIONS;

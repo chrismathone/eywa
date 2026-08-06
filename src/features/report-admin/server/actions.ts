@@ -275,6 +275,8 @@ export async function refreshClassnoteQueue(days = 3): Promise<ClassnoteQueueVie
 }
 
 const REPORT_PAGE_SIZE = 30;
+/** 이름 검색이 한 번에 받아들이는 학생 수 상한 — 넘으면 자르지 않고 "더 좁히라"고 되돌린다(위 주석). */
+const STUDENT_SEARCH_CAP = 100;
 
 /**
  * 보고서 목록 조회(수업보고서 Part C) — 강사·기간·상태·과목 필터 + 페이지네이션. 클라 필터 UI에서 호출(데이터 반환).
@@ -308,6 +310,23 @@ export async function listReports(
   // 기본값·헤더 클릭 모두 순수 함수(reportOrderSpecs)가 결정(동률 tiebreak 포함 — 페이징 중복/누락 방지).
   for (const o of reportOrderSpecs(filters.sort, filters.dir)) {
     q = q.order(o.column, { ascending: o.ascending, nullsFirst: o.nullsFirst });
+  }
+  // 학생 이름 검색 — 이름은 이 표에 없는 값(students 조인)이라 **먼저 id로 해석**한 뒤 거른다.
+  // ⚠️ 상한을 두고 **넘치면 조용히 자르지 않고 되돌려 말한다** — 잘라 버리면 "그 학생 보고서가 없다"는
+  //    거짓 결과가 되고([[#89]]), 거대 `.in()`은 URL 414로 실패한다(B3).
+  if (filters.student?.trim()) {
+    const term = filters.student.trim();
+    const { data: matched, error: nameError } = await supabase
+      .from("students")
+      .select("id")
+      .ilike("name", `%${term}%`)
+      .limit(STUDENT_SEARCH_CAP + 1);
+    if (nameError) return { ok: false, error: humanizeDbError(nameError.message, "학생 검색") };
+    const sids = (matched ?? []).map((s) => s.id as string);
+    if (sids.length > STUDENT_SEARCH_CAP)
+      return { ok: false, error: `"${term}"에 해당하는 학생이 너무 많습니다 — 이름을 더 입력해 주세요` };
+    if (!sids.length) return { ok: true, rows: [], total: 0, page, pageSize: REPORT_PAGE_SIZE };
+    q = q.in("student_id", sids);
   }
   if (filters.from) q = q.gte("report_date", filters.from);
   if (filters.to) q = q.lte("report_date", filters.to);

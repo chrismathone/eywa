@@ -34,6 +34,12 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
+      // `server-only`은 **Next 번들러 전용 가드**(클라 번들에 서버 코드가 섞이면 빌드를 깨뜨리는 마커, #61).
+      // Next는 클라 컴포넌트의 서버 액션 import를 빌드 때 클라 참조로 치환하지만 vitest는 실제로 따라가므로,
+      // 서버 액션을 쓰는 클라 컴포넌트를 렌더하는 테스트가 전부 "Cannot resolve server-only"로 죽었다.
+      // 빈 모듈로 치환해 **테스트에서만** 통과시킨다 — 프로덕션 가드는 그대로다(빌드는 여전히 Next가 막는다).
+      // 이 shim은 원래 이 용도로 만들어졌는데 어디에도 연결돼 있지 않았다(2026-08-05 배선).
+      "server-only": path.resolve(__dirname, "./scripts/_oneoff/_server-only-shim.ts"),
     },
   },
 });

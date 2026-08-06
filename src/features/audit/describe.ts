@@ -285,6 +285,14 @@ export function auditDetail(
       const c = num(m.reportCount);
       return c === null ? "게시된 공지 게시취소(회수)" : `게시된 공지 ${c}건 게시취소(회수)`;
     }
+    case "classnote_report_recall": {
+      const c = num(m.reportCount);
+      // 누가 지웠는지만큼 "관리자 강제 회수인지 담당 강사 본인 회수인지"가 감사에서 중요하다.
+      const who = m.byAdmin === true ? "관리자 회수" : "담당 강사 회수";
+      const names = Array.isArray(m.studentNames) ? m.studentNames.filter((x) => typeof x === "string") : [];
+      const label = names.length ? `(${names.slice(0, 3).join(", ")}${names.length > 3 ? " 외" : ""})` : "";
+      return join(c === null ? `수업보고서 회수 — ${who}` : `수업보고서 ${c}건 회수 — ${who}`, label || null);
+    }
     case "ecs_attendance_clear": {
       const rows = num(m.rows);
       const date = typeof m.date === "string" ? m.date.slice(5) : null;
