@@ -31,7 +31,7 @@ export const PeriodBlock = memo(function PeriodBlock({
   data: ClassSheetWeekData;
   lines: PlanLineDTO[];
   marks: Record<string, { status: string | null; progressNote: string | null }>;
-  attendance: Record<string, { status: string; note: string | null }>;
+  attendance: Record<string, { status: string; note: string | null; units: number | null }>;
   store: SheetSaveStore;
   handlers: SheetHandlers;
   canEdit: boolean;

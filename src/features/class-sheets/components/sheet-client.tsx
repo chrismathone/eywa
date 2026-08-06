@@ -57,6 +57,8 @@ export type SheetHandlers = {
     date: string,
     status: "present" | "late" | "absent",
     note?: string | null,
+    /** 시수(유닛) raw 입력 — 넘기면 그 값으로, 안 넘기면 새 기록일 때만 자동값(그 날 교시 수). */
+    units?: string,
   ) => void;
   /**
    * 출결 '선택 안 함' — 드롭다운에만 있는 지우기. **plain present만** 지워진다(0169a `ecs_clear_present`).
@@ -336,14 +338,28 @@ export function SheetClient({
       // 출결(출석/지각/결석) — 출석부·원스크린과 **같은 액션**을 호출한다(게이트를 여기서 다시 짜지 않는다).
       // 낙관 반영 후 실패하면 직전 값으로 되돌린다 — 화면엔 남고 서버엔 없는 상태를 만들지 않기 위해
       // (툴바가 "저장됨"이라 말하는 동안 기록을 잃는 사고, 2026-07-29 적대검증).
-      setAttendance: (studentId, date, status, note) => {
+      setAttendance: (studentId, date, status, note, units) => {
         if (!data.canMarkAttendanceByDate[date]) return;
         const key = `${studentId}|${date}`;
         const before = attendanceRef.current[key];
+        // 유닛 자동값 — **처음 기록을 만들 때만** 넣는다(원장 2026-08-06 "3번: 자동 제안 + 수정 가능").
+        // 이미 있는 기록에 자동값을 다시 밀어 넣으면 강사가 고쳐 둔 유닛이 클릭 한 번에 되돌아간다.
+        const autoUnits =
+          units === undefined && before === undefined ? (data.unitsByDate[date] ?? null) : null;
+        const nextUnits =
+          units !== undefined
+            ? Number(units) || null
+            : autoUnits !== null
+              ? autoUnits
+              : (before?.units ?? null);
         setAttendance((prev) => ({
           ...prev,
-          // note를 안 넘긴 저장(출석 pill)은 기존 사유를 그대로 둔다 — 서버 규약(undefined=유지)과 일치시킨다.
-          [key]: { status, note: note === undefined ? (before?.note ?? null) : note },
+          // note를 안 넘긴 저장은 기존 사유를 그대로 둔다 — 서버 규약(undefined=유지)과 일치시킨다.
+          [key]: {
+            status,
+            note: note === undefined ? (before?.note ?? null) : note,
+            units: nextUnits,
+          },
         }));
         void setAttendanceCell({
           classId,
@@ -351,6 +367,8 @@ export function SheetClient({
           sessionDate: date,
           status,
           ...(note === undefined ? {} : { note }),
+          // 유닛은 **사람이 고쳤거나(units) 새 기록의 자동값일 때만** 보낸다(그 외엔 서버가 기존 유지).
+          ...(units !== undefined ? { units } : autoUnits !== null ? { units: String(autoUnits) } : {}),
         }).then((r) => {
           if ("error" in r) {
             setAttendance((prev) => {
@@ -407,7 +425,8 @@ export function SheetClient({
         });
       },
     }),
-    [classId, data.canMarkAttendanceByDate, store],
+    // unitsByDate가 빠지면 주를 넘긴 뒤에도 **옛 주의 교시 수**로 유닛이 박힌다(시수=급여라 조용한 오기록).
+    [classId, data.canMarkAttendanceByDate, data.unitsByDate, store],
   );
 
   const saveGoal = useCallback(

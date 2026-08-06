@@ -29,6 +29,7 @@ import { keepEnglishTrack, type EnglishTrackFilter } from "@/features/classes/en
 import {
   buildWeekGrid,
   scheduledSlotKeySet,
+  scheduledUnitsByDate,
   sheetFillStats,
   withdrawnFloorOf,
   type GridPlanLine,
@@ -80,7 +81,14 @@ export type ClassSheetWeekData = {
    * ⚠️ 메모를 같이 싣는 이유: 출결 pill(지각·결석)이 사유 창을 띄우는데, 초기값이 없으면 창이 빈 채로
    *    열리고 저장 시 **출석부에 이미 적힌 사유를 null로 덮는다**(setAttendanceCell은 넘긴 note를 쓴다).
    */
-  attendanceByStudentDate: Record<string, { status: string; note: string | null }>;
+  attendanceByStudentDate: Record<string, { status: string; note: string | null; units: number | null }>;
+  /**
+   * 날짜 → 그 날 **수업 교시 수**. 출결을 새로 찍을 때 시수(유닛)의 **자동값**이다(원장 2026-08-06:
+   * *"수학은 타임, 영어는 유닛… 2개분을 진행할 수도 있어서"*). 영어는 하루 3~4교시인 반이 흔한데
+   * 출결은 (학생,반,날짜) 한 행이라 그냥 두면 4교시가 1유닛으로 잡힌다.
+   * ⚠️ 표시 설정(JJ 토글)과 **무관**하게 센다 — 보기 설정이 급여를 바꾸면 안 된다(`scheduledUnitsByDate`).
+   */
+  unitsByDate: Record<string, number>;
   /** `${studentId}|${date}|${HH:MM}` → 마크. */
   marks: Record<string, { status: string | null; progressNote: string | null }>;
   goals: SheetGoalDTO[];
@@ -209,7 +217,7 @@ export async function getClassSheetWeek(
     admin
       .from("attendance_records")
       // note = 지각·결석 사유. 출결 pill의 사유 창 초기값이라 **반드시 함께** 읽는다(없으면 저장 시 null로 덮음).
-      .select("id, student_id, class_id, session_date, status, note, recorded_at")
+      .select("id, student_id, class_id, session_date, status, note, session_units, recorded_at")
       .eq("tenant_id", tenantId)
       .eq("class_id", classId)
       .gte("session_date", weekMonday)
@@ -282,8 +290,10 @@ export async function getClassSheetWeek(
       session_date: a.session_date as string,
       recorded_at: a.recorded_at as string,
       status: a.status as string,
-      // 지각·결석 사유 — 출결 pill의 사유 창 초기값. 여기서 흘리면 저장 시 기존 사유가 null로 덮인다.
+      // 지각·결석 사유 — 출결 드롭다운의 사유 창 초기값. 여기서 흘리면 저장 시 기존 사유가 null로 덮인다.
       note: (a.note as string | null) ?? null,
+      // 시수(유닛) — null = 기본 1(effectiveUnits). 화면의 유닛 칸이 이 값을 보여주고 고친다.
+      session_units: (a.session_units as number | null) ?? null,
     })),
   );
 
@@ -295,19 +305,22 @@ export async function getClassSheetWeek(
   // JJ 표시 여부 — **그리드 조립 전에** 정해야 한다(작성률 분모까지 이 값이 정한다). LAB은 항상 제외.
   const showSelfStudy = readEcsShowSelfStudy(myPrefsRes.data?.ui_prefs);
 
+  // 스케줄 행은 **한 번만** 만들어 그리드와 유닛 계산이 같은 입력을 본다(두 벌이면 라벨 해석이 갈린다).
+  const scheduleRows = (schedulesRes.data ?? []).map((s) => ({
+    dayOfWeek: s.day_of_week as DowKey,
+    startTime: s.start_time as string,
+    endTime: s.end_time as string,
+    validFrom: s.valid_from as string,
+    validTo: (s.valid_to as string | null) ?? null,
+    teacherId: (s.teacher_id as string | null) ?? null,
+    // 해석은 여기(슬롯이 만들어지는 지점) 한 곳에서 — 컴포넌트마다 하면 표기가 갈린다(시간표 규약 동일).
+    slotTeacherLabel: resolveTeacherLabel((s.slot_teacher_label as string | null) ?? null, labelMap),
+    slotRoomLabel: (s.slot_room_label as string | null) ?? null,
+  }));
+
   const grid = buildWeekGrid({
     weekMonday,
-    schedules: (schedulesRes.data ?? []).map((s) => ({
-      dayOfWeek: s.day_of_week as DowKey,
-      startTime: s.start_time as string,
-      endTime: s.end_time as string,
-      validFrom: s.valid_from as string,
-      validTo: (s.valid_to as string | null) ?? null,
-      teacherId: (s.teacher_id as string | null) ?? null,
-      // 해석은 여기(슬롯이 만들어지는 지점) 한 곳에서 — 컴포넌트마다 하면 표기가 갈린다(시간표 규약 동일).
-      slotTeacherLabel: resolveTeacherLabel((s.slot_teacher_label as string | null) ?? null, labelMap),
-      slotRoomLabel: (s.slot_room_label as string | null) ?? null,
-    })),
+    schedules: scheduleRows,
     enrollments: enrollments.map((e) => ({
       studentId: e.student_id,
       startDate: e.start_date,
@@ -402,9 +415,19 @@ export async function getClassSheetWeek(
     }
   }
 
-  const attendanceByStudentDate: Record<string, { status: string; note: string | null }> = {};
+  // 유닛 자동값 — **그리드와 무관하게** 원본 스케줄에서 센다(자리 제외, 표시 설정 불문).
+  const unitsByDate = scheduledUnitsByDate(weekMonday, scheduleRows);
+
+  const attendanceByStudentDate: Record<
+    string,
+    { status: string; note: string | null; units: number | null }
+  > = {};
   for (const a of effAttendance) {
-    attendanceByStudentDate[`${a.student_id}|${a.session_date}`] = { status: a.status, note: a.note ?? null };
+    attendanceByStudentDate[`${a.student_id}|${a.session_date}`] = {
+      status: a.status,
+      note: a.note ?? null,
+      units: a.session_units ?? null,
+    };
   }
 
   const marksMap: Record<string, { status: string | null; progressNote: string | null }> = {};
@@ -444,6 +467,7 @@ export async function getClassSheetWeek(
       classTeacherName: access.teacherId ? (teacherNames[access.teacherId] ?? null) : null,
       students,
       attendanceByStudentDate,
+      unitsByDate,
       marks: marksMap,
       goals,
       monthStart,

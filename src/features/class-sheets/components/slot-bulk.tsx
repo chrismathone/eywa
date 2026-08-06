@@ -62,7 +62,7 @@ export function SlotBulk({
   /** 이 교시의 계획 줄 — 계획 일괄의 대상. 줄이 없으면 그 시기 버튼은 0건으로 잠긴다. */
   lines: BulkPlanRow[];
   marks: Record<string, { status: string | null; progressNote: string | null }>;
-  attendance: Record<string, { status: string; note: string | null }>;
+  attendance: Record<string, { status: string; note: string | null; units: number | null }>;
   canEdit: boolean;
   canMarkDate: boolean;
   /** '내신' 시기를 제안할지 — EiE(초등) 반은 내신이 없다(plan-table과 **같은 값**). */
@@ -292,7 +292,7 @@ export function SlotBulk({
             {/* 각주 — 위 입력칸과 **붙어 보이지 않게** 구분한다. 안 그러면 바로 위 '태도 직접 입력'의
                 설명(=그 칸에 과제를 적는 것)으로 읽힌다. 배경 있는 블록 + '※'로 성격을 못박는다. */}
             <p className="bg-bg-soft text-text-dim rounded-md px-2 py-1.5 text-[11px]">
-              ※ ‘과제 및 특이사항’은 <b className="text-foreground">여기서 입력하지 않습니다</b> — 학생마다
+              ※ ‘특이사항’은 <b className="text-foreground">여기서 입력하지 않습니다</b> — 학생마다
               다른 기록이라 일괄 대상이 아니며, 학생 행의 맨 오른쪽 칸에 직접 적습니다.
             </p>
           </Popover.Popup>

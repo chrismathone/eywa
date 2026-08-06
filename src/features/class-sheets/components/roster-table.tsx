@@ -1,6 +1,6 @@
 "use client";
 
-// 학생 로스터 표 — [이름 | 출결(일 단위 공유) | 학교학년 | 태도 | 과제 및 특이사항].
+// 학생 로스터 표 — [이름 | 출결(일 단위 공유) | 학교학년 | 유닛 | 태도 | 특이사항].
 // 출결은 (학생,날짜) 하나의 상태를 모든 교시 블록이 미러(하루 1건 — attendance_records).
 // 태도·과제는 교시별(class_sheet_student_marks — 키에 slot_start 포함). 아바타 금지(이름 텍스트만).
 //
@@ -13,7 +13,7 @@
 //  · '상태' 열 → **'태도'** + 자유입력 칩 → **5단 눈금**([ATTITUDE] 재사용, 매우 좋음~매우 안좋음).
 //    ⚠️ 옛 값('완' 736·'결석' 49·'지각' 12·'안침' 7 — 출결 대용으로 쓰이던 것)은 **안 지운다**.
 //       FieldSelect가 선택지 밖 저장값을 '이전 표기'로 그대로 보여 준다(쓴 게 안 보이면 안 된다).
-//  · '개인 진도 · 과제' → **'과제 및 특이사항'**(라벨만 — 저장 필드는 그대로 `progressNote`).
+//  · '개인 진도 · 과제' → **'특이사항'**(라벨만 — 저장 필드는 그대로 `progressNote`).
 //
 // 명단은 시간표 셀처럼 **섹션으로 나뉜다**: 재원(기본) → 퇴원(유예 30일) → 기록(그 외 보존 행).
 // 퇴원·기록 섹션은 전부 읽기 전용이고 일괄 입력 대상도 아니다(bulk.ts editableRows).
@@ -31,6 +31,7 @@ import type { ClassSheetWeekData } from "../server/queries";
 import type { RosterEntry } from "../lib/grid";
 import { groupRosterRows, type RosterGroupKey } from "../lib/roster-order";
 import { AttendanceSelect } from "./attendance-select";
+import { SessionUnitsField } from "@/features/onescreen/components/attendance-pills";
 import { FieldSelect } from "@/features/onescreen/components/field-select";
 import { ATTITUDE } from "@/features/onescreen/attitude";
 import type { SheetHandlers } from "./sheet-client";
@@ -111,7 +112,7 @@ export const RosterTable = memo(function RosterTable({
   roster: RosterEntry[];
   data: ClassSheetWeekData;
   marks: Record<string, { status: string | null; progressNote: string | null }>;
-  attendance: Record<string, { status: string; note: string | null }>;
+  attendance: Record<string, { status: string; note: string | null; units: number | null }>;
   handlers: SheetHandlers;
   canEdit: boolean;
   collapsedGroups: readonly RosterGroupKey[];
@@ -143,14 +144,17 @@ export const RosterTable = memo(function RosterTable({
   return (
     <div className="border-line mt-2 border-t pt-1.5">
       <table className="w-full border-collapse text-[13px]" style={{ tableLayout: "fixed" }}>
-        {/* ⚠️ 학교 열은 뺐다(원장 2026-08-06) — 남은 폭은 전부 '과제 및 특이사항'이 가져간다.
+        {/* ⚠️ 학교 열은 뺐다(원장 2026-08-06) — 남은 폭은 전부 '특이사항'이 가져간다.
             학교·학년은 학생 이름 툴팁과 학생목록에 있고, 교시 카드에서 매일 보는 값이 아니다. */}
+        {/* 폭은 **꼭 필요한 만큼만** 고정하고 남는 건 전부 '특이사항'이 가져간다(원장 2026-08-06
+            "특이사항 열너비를 남은 열너비로"). `table-fixed`라 width 없는 마지막 <col>이 잔여를 받는다. */}
         <colgroup>
+          <col style={{ width: 92 }} />
+          {/* 출결·태도는 드롭다운 — 태도는 가장 긴 선택지('매우 안좋음')가 잘리지 않는 폭이어야 한다.
+              유닛은 숫자 한두 자리라 좁게(수학은 '타임', 영어는 '유닛' — 원장 어휘 그대로). */}
+          <col style={{ width: 96 }} />
+          <col style={{ width: 44 }} />
           <col style={{ width: 100 }} />
-          {/* 출결 = pill 3개(출석·지각·결석)라 체크박스 시절(46px)로는 못 담는다.
-              태도는 가장 긴 선택지('매우 안좋음')가 잘리지 않는 폭 — 좁히면 값이 "매우 안…"으로 읽힌다. */}
-          <col style={{ width: 116 }} />
-          <col style={{ width: 108 }} />
           <col />
         </colgroup>
         <thead>
@@ -165,9 +169,17 @@ export const RosterTable = memo(function RosterTable({
                 onToggle={() => onToggleGroup("active")}
               />
             </th>
-            <th className="py-1 font-semibold">출결</th>
-            <th className="py-1 font-semibold">태도</th>
-            <th className="rounded-r-md py-1 pr-1 font-semibold">과제 및 특이사항</th>
+            {/* 가운데 세 열은 라벨을 **칸 가운데**로(원장 2026-08-06 "라벨 중앙정렬") — 값(드롭다운·숫자)이
+                칸을 꽉 채우거나 가운데 있어서 라벨만 왼쪽에 붙으면 열이 어긋나 보인다. */}
+            <th className="py-1 text-center font-semibold">출결</th>
+            <th
+              className="py-1 text-center font-semibold"
+              title="이 날 수업 유닛 수 — 출결을 처음 찍을 때 그 날 교시 수로 자동 입력되고, 다르면 고칠 수 있습니다. 급여 시수에 반영됩니다."
+            >
+              유닛
+            </th>
+            <th className="py-1 text-center font-semibold">태도</th>
+            <th className="rounded-r-md py-1 pr-1 font-semibold">특이사항</th>
           </tr>
         </thead>
         <tbody className="divide-line divide-y">
@@ -176,7 +188,7 @@ export const RosterTable = memo(function RosterTable({
               return (
                 <tr key={`label:${row.key}`} className="bg-bg-soft">
                   <td
-                    colSpan={4}
+                    colSpan={5}
                     className="text-text-dim px-1 py-1 text-[11px] font-semibold"
                     title={GROUP_HINT[row.key]}
                   >
@@ -227,7 +239,7 @@ export const RosterTable = memo(function RosterTable({
                     </span>
                   ) : null}
                 </td>
-                <td className="py-1 pr-1">
+                <td className="py-1">
                   {/* 태도와 **같은 컨트롤**(드롭다운, 원장 2026-08-06) — 알약 3개는 한 줄에서 폭을 먹고
                       두 칸이 서로 다른 모양으로 읽혔다. 시수·사유 편집은 출석부·원스크린 쪽에 남는다. */}
                   <AttendanceSelect
@@ -235,9 +247,26 @@ export const RosterTable = memo(function RosterTable({
                     note={att?.note ?? null}
                     studentName={meta?.name ?? ""}
                     canMark={canMarkDate && rowEditable}
-                    onSet={(status) => handlers.setAttendance(entry.studentId, date, status)}
+                    onSet={(status, n) => handlers.setAttendance(entry.studentId, date, status, n)}
                     onClear={() => handlers.clearAttendance(entry.studentId, date)}
                   />
+                </td>
+                <td className="py-1 pr-1">
+                  {/* 유닛 = 수학의 '타임'과 같은 값(session_units). 결석이면 컴포넌트가 '—'로 잠근다
+                      (결석은 시수를 안 쓴다). 기록이 없으면 아직 자동값이 안 박혔으므로 빈 칸으로 둔다. */}
+                  {canMarkDate && rowEditable && att ? (
+                    <SessionUnitsField
+                      units={att.units}
+                      status={(att.status as "present" | "late" | "absent" | null) ?? null}
+                      pending={false}
+                      studentName={meta?.name ?? ""}
+                      onSet={(status, extra) =>
+                        handlers.setAttendance(entry.studentId, date, status, undefined, extra?.units)
+                      }
+                    />
+                  ) : (
+                    <span className="text-text-faint text-[12px]">—</span>
+                  )}
                 </td>
                 <td className="py-1 pr-1">
                   {rowEditable ? (
@@ -259,7 +288,7 @@ export const RosterTable = memo(function RosterTable({
                     className={noteCls}
                     defaultValue={mark?.progressNote ?? ""}
                     disabled={!rowEditable}
-                    aria-label={`${meta?.name ?? ""} 과제 및 특이사항`}
+                    aria-label={`${meta?.name ?? ""} 특이사항`}
                     data-nav-col="ecs-note"
                     data-nav-row={navRow}
                     onKeyDown={handleGridNavKey}

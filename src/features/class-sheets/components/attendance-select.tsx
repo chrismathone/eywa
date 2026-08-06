@@ -14,7 +14,7 @@
  * ⚠️ 조퇴·공결·보강처럼 3종 밖 상태는 **바꾸지 않고 보여만 준다** — 드롭다운이 그 값을 3종 중 하나로
  *    덮으면 출석부에서만 쓸 수 있는 상태가 조용히 사라진다(알약 구현과 같은 판단).
  */
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Popover } from "@base-ui/react/popover";
 import { FieldSelect } from "@/features/onescreen/components/field-select";
 import { NoteForm } from "@/features/onescreen/components/attendance-pills";
@@ -58,6 +58,7 @@ export function AttendanceSelect({
 }) {
   // 지각·결석을 고르면 사유를 먼저 받는다(저장은 확인 후) — 알약과 같은 계약.
   const [noteFor, setNoteFor] = useState<BasicAttendance | null>(null);
+  const anchorRef = useRef<HTMLSpanElement | null>(null);
   const label = status ? (TO_LABEL[status] ?? status) : null;
 
   // 권한·기간이 없으면 **컨트롤을 안 그린다** — 누를 수 있는 것처럼 보였다가 서버가 거절하는 게 최악이다
@@ -90,35 +91,34 @@ export function AttendanceSelect({
 
   return (
     <Popover.Root open={noteFor !== null} onOpenChange={(o) => !o && setNoteFor(null)}>
+      {/* ⚠️ `Popover.Trigger`를 쓰지 않는다 — 트리거는 **네이티브 <button>** 을 요구하는데(base-ui 경고),
+          이 칸의 실제 컨트롤은 드롭다운이라 버튼 안에 콤보박스를 넣는 잘못된 중첩이 된다.
+          여는 주체는 드롭다운 선택이므로 위치만 `anchor`로 이 칸에 붙인다. */}
       <span
-        className="inline-flex items-center gap-0.5"
+        ref={anchorRef}
+        className="inline-flex w-full items-center gap-0.5"
         title={
           note
             ? `${studentName} · ${label ?? ""} 사유: ${note} — 같은 값을 다시 고르면 사유를 고칠 수 있습니다`
             : undefined
         }
       >
-        <Popover.Trigger
-          // 트리거는 드롭다운을 감싸기만 한다(자체 클릭 없음) — 팝오버 위치를 이 칸에 붙이기 위한 앵커다.
-          render={
-            <span className="min-w-0 flex-1">
-              <FieldSelect
-                options={OPTIONS}
-                value={label}
-                ariaLabel={`${studentName} 출결`}
-                onSelect={(v) => {
-                  if (v === null) return onClear();
-                  const next = TO_STATUS[v];
-                  if (!next) return;
-                  // 지각·결석은 **같은 값을 다시 골라도** 사유 창을 연다(= 사유 수정 경로). 알약이
-                  // 활성 재클릭으로 하던 일을 드롭다운에선 이렇게 남긴다.
-                  if (NEEDS_NOTE.has(next)) return setNoteFor(next);
-                  if (next !== status) onSet(next);
-                }}
-              />
-            </span>
-          }
-        />
+        <span className="min-w-0 flex-1">
+          <FieldSelect
+            options={OPTIONS}
+            value={label}
+            ariaLabel={`${studentName} 출결`}
+            onSelect={(v) => {
+              if (v === null) return onClear();
+              const next = TO_STATUS[v];
+              if (!next) return;
+              // 지각·결석은 **같은 값을 다시 골라도** 사유 창을 연다(= 사유 수정 경로). 알약이
+              // 활성 재클릭으로 하던 일을 드롭다운에선 이렇게 남긴다.
+              if (NEEDS_NOTE.has(next)) return setNoteFor(next);
+              if (next !== status) onSet(next);
+            }}
+          />
+        </span>
         {/* 사유가 있으면 점 하나 — 열어보지 않아도 "사유가 적혀 있다"가 보인다(원스크린 알약과 같은 신호). */}
         {note ? (
           <span aria-hidden className="text-text-faint text-[8px]">
@@ -127,7 +127,13 @@ export function AttendanceSelect({
         ) : null}
       </span>
       <Popover.Portal>
-        <Popover.Positioner side="bottom" align="start" sideOffset={4} className="z-50">
+        <Popover.Positioner
+          anchor={anchorRef}
+          side="bottom"
+          align="start"
+          sideOffset={4}
+          className="z-50"
+        >
           <Popover.Popup className="bg-card border-line shadow-card w-[240px] rounded-lg border p-2 outline-none">
             {/* key=열 때마다 서버 값으로 다시 시작(남이 고친 사유가 반영되게) — 알약과 동일. */}
             <NoteForm

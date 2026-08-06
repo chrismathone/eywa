@@ -3,6 +3,7 @@ import {
   buildWeekGrid,
   hiddenSeatOf,
   scheduledSlotKeySet,
+  scheduledUnitsByDate,
   sheetFillStats,
   type GridPlanLine,
 } from "./grid";
@@ -565,5 +566,41 @@ describe("sheetFillStats — 작성률(placeholder 제외·고아 분모 제외)
       slotMemoKeys: [],
     });
     expect(grid.days[0].slots[0].lines.map((l) => l.progress)).toEqual(["r1", "r2", "내신"]);
+  });
+});
+
+describe("scheduledUnitsByDate — 출결 유닛 자동값(표시 설정과 무관)", () => {
+  const lab = (dow: "mon" | "tue" | "wed" | "thu" | "fri", start: string, label = "LAB") =>
+    sched(dow, start, { slotTeacherLabel: label });
+
+  it("그 날 수업 교시 수를 센다", () => {
+    expect(
+      scheduledUnitsByDate(MON, [sched("mon", "15:00"), sched("mon", "16:00"), sched("wed", "15:00")]),
+    ).toEqual({ "2026-07-20": 2, "2026-07-22": 1 });
+  });
+
+  it("🔴 자리(LAB·JJ)는 **언제나** 뺀다 — 보기 토글이 급여를 바꾸면 안 된다", () => {
+    expect(
+      scheduledUnitsByDate(MON, [sched("mon", "15:00"), lab("mon", "16:00"), lab("mon", "17:00", "JJ")]),
+    ).toEqual({ "2026-07-20": 1 });
+  });
+
+  it("같은 시각에 자리와 수업이 겹쳐도 1로 센다(중복 계상 금지)", () => {
+    expect(scheduledUnitsByDate(MON, [sched("mon", "15:00"), lab("mon", "15:00")])).toEqual({
+      "2026-07-20": 1,
+    });
+  });
+
+  it("만료·미시작 배치는 그 날짜에 안 센다", () => {
+    expect(
+      scheduledUnitsByDate(MON, [
+        sched("mon", "15:00", { validTo: "2026-07-19" }),
+        sched("mon", "16:00", { validFrom: "2026-07-21" }),
+      ]),
+    ).toEqual({});
+  });
+
+  it("수업이 없는 날은 키 자체를 안 만든다(0을 넣으면 '유닛 0'으로 읽힌다)", () => {
+    expect(scheduledUnitsByDate(MON, [sched("wed", "15:00")])).toEqual({ "2026-07-22": 1 });
   });
 });

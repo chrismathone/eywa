@@ -197,6 +197,39 @@ export function scheduledSlotKeySet(
   return out;
 }
 
+/**
+ * 날짜별 **수업 교시 수** — ECS 출결의 시수(유닛) 자동값(원장 2026-08-06: *"수학은 타임, 영어는 유닛…
+ * 선생님이 2개분을 진행할 수도 있어서"*). 영어는 하루 3~4교시인 반이 흔한데 `attendance_records`는
+ * **(학생,반,날짜) 한 행**이라, 그냥 두면 4교시 수업이 1유닛으로 잡힌다(실측: 영어 출결 전건 units=1).
+ *
+ * 🔴 **표시 설정(JJ 토글)과 무관해야 한다.** 화면에 보이는 교시로 세면 *보기 설정이 급여를 바꾼다.*
+ *    그래서 `hiddenSeatOf`가 아니라 `specialSlotLabel`로 **자리(LAB·JJ)를 언제나 제외**한다 —
+ *    자리는 담당 강사가 없는 방(teacher_id=null)이라 강사의 수업 시수가 아니다.
+ * ⚠️ 같은 (날짜,시각)에 자리와 수업이 겹치면 1로 센다(중복 계상 금지 — buildWeekGrid의 '수업이 이긴다'와 동일).
+ */
+export function scheduledUnitsByDate(
+  weekMonday: string,
+  schedules: readonly Pick<
+    GridScheduleRow,
+    "dayOfWeek" | "startTime" | "validFrom" | "validTo" | "slotTeacherLabel"
+  >[],
+): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const date of weekDatesOf(weekMonday)) {
+    const dow = dowKeyOf(date);
+    const starts = new Set<string>();
+    for (const s of schedules) {
+      if (s.dayOfWeek !== dow) continue;
+      if (s.validFrom > date) continue;
+      if (s.validTo && s.validTo < date) continue;
+      if (specialSlotLabel(s.slotTeacherLabel)) continue; // 자리는 수업 시수가 아니다
+      starts.add(normalizeSlotTime(s.startTime));
+    }
+    if (starts.size > 0) out[date] = starts.size;
+  }
+  return out;
+}
+
 const TERM_ORDER: Record<string, number> = { regular: 0, exam: 1 };
 
 export function buildWeekGrid(input: {
