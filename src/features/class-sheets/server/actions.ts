@@ -613,6 +613,11 @@ export async function clearPresentAttendance(input: {
   classId: string;
   studentId: string;
   date: string;
+  /**
+   * 그 날의 유닛 자동값(ECS가 출결 생성 시 넣는 값) — 0187a. 저장된 시수가 **기본 1이거나 이 값과 같을
+   * 때만** 삭제된다. 안 넘기면 0169a와 동일(기본 1만). 사람이 다른 값으로 고친 기록은 여전히 거절.
+   */
+  autoUnits?: number | null;
 }): Promise<{ ok: true; cleared: number } | ActionError> {
   const gate = await requireEcsClassAccess(input.classId);
   if (!gate.ok) return { ok: false, error: gate.error };
@@ -632,6 +637,8 @@ export async function clearPresentAttendance(input: {
     p_class: input.classId,
     p_student: input.studentId,
     p_date: input.date,
+    // 0187a — ECS가 넣은 자동값 그대로인 시수는 '손 안 댄 기록'으로 보고 취소를 허용한다.
+    p_auto_units: input.autoUnits ?? null,
   });
   if (error) return { ok: false, error: `출석 취소에 실패했습니다: ${error.message}` };
   const res = (data ?? {}) as { cleared?: number; blocked?: string | null };

@@ -30,6 +30,7 @@ import { keepEnglishTrack, type EnglishTrackFilter } from "@/features/classes/en
 import {
   buildWeekGrid,
   scheduledSlotKeySet,
+  scheduledUnitsByDate,
   seatSlotKeySet,
   sheetFillStats,
   withdrawnFloorOf,
@@ -83,6 +84,15 @@ export type ClassSheetWeekData = {
    *    열리고 저장 시 **출석부에 이미 적힌 사유를 null로 덮는다**(setAttendanceCell은 넘긴 note를 쓴다).
    */
   attendanceByStudentDate: Record<string, { status: string; note: string | null; units: number | null }>;
+  /**
+   * 날짜 → 그 날 **유닛(시수) 자동값**. 출결을 *처음 찍을 때만* 기본값으로 들어간다.
+   * 규칙이 트랙마다 다르다(원장 2026-08-06): **EiE = 교시 수**(40분 균일 — "3은 2시간"),
+   * **인재원 = 총 수업 분 ÷ 60**("1을 1시간이라 생각하면 된다" — 배치가 50·60·40분으로 섞여 있어
+   * 교시 수로 세면 같은 1유닛이 40분이었다 60분이었다 한다).
+   * ⚠️ 표시 설정(JJ 토글)과 **무관**하게 센다 — 보기 설정이 급여를 바꾸면 안 된다.
+   * ⚠️ 기본값 1인 날은 키가 없다(굳이 1을 써 넣지 않는다).
+   */
+  unitsByDate: Record<string, number>;
   /** `${studentId}|${date}|${HH:MM}` → 마크. */
   marks: Record<string, { status: string | null; progressNote: string | null }>;
   goals: SheetGoalDTO[];
@@ -423,6 +433,14 @@ export async function getClassSheetWeek(
     }
   }
 
+  // 유닛 자동값 — **그리드와 무관하게** 원본 스케줄에서 센다(자리 제외, 표시 설정 불문).
+  // 트랙 판정은 `english_track` 컬럼뿐(반 이름 추측 금지). 미분류는 인재원과 같이 취급(비대칭 규약).
+  const unitsByDate = scheduledUnitsByDate(
+    weekMonday,
+    scheduleRows,
+    access.englishTrack === "eie" ? "periods" : "hours",
+  );
+
   const attendanceByStudentDate: Record<
     string,
     { status: string; note: string | null; units: number | null }
@@ -472,6 +490,7 @@ export async function getClassSheetWeek(
       classTeacherName: access.teacherId ? (teacherNames[access.teacherId] ?? null) : null,
       students,
       attendanceByStudentDate,
+      unitsByDate,
       marks: marksMap,
       goals,
       monthStart,

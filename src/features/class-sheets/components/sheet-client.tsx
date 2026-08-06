@@ -418,12 +418,11 @@ export function SheetClient({
         if (!data.canMarkAttendanceByDate[date]) return;
         const key = `${studentId}|${date}`;
         const before = attendanceRef.current[key];
-        // 🔴 **유닛 자동값은 넣지 않는다**(2026-08-06 적대 리뷰로 보류). 원장은 "3안(자동+수정)"을 골랐지만,
-        //    구현 뒤 검증에서 **자동값의 단위가 틀렸다**는 게 드러났다: 0115a가 유닛을 *"EiE 40분 유닛,
-        //    인재원 2시간 유닛"* 으로 정의하는데, 그 날 스케줄 행(40분)을 세면 인재원 영어에서 1이어야 할
-        //    것이 3이 된다(3배 부풀림 → 급여·청구 직결). 단위 정의가 확정될 때까지 **사람이 적는다**.
-        //    부수 효과로 0169a 취소 가드(`session_units=1`)도 그대로 살아 있다 — 자동값을 박으면 방금 잘못
-        //    누른 출석을 ECS에서 못 지우고 "출석부에서 시수를 적어 둔 기록"이라는 거짓 사유가 떴다.
+        // 유닛 자동값 — **처음 기록을 만들 때만** 넣는다(원장 2026-08-06 "3안: 자동 제안 + 수정 가능").
+        // 규칙은 트랙마다 다르고 서버가 이미 정해서 내려 준다(`unitsByDate` — EiE=교시 수, 인재원=시간).
+        // ⚠️ 이미 있는 기록엔 다시 안 민다 — 강사가 고쳐 둔 유닛이 클릭 한 번에 되돌아가면 안 된다.
+        const autoUnits =
+          units === undefined && before === undefined ? (data.unitsByDate[date] ?? null) : null;
         // ⚠️ 낙관 표시값은 **서버와 같은 파서**로 만든다. `Number(units)`로 대충 바꾸면 쉼표 소수점("2,5" —
         //    parseSessionUnits가 허용한다)이 NaN→1로 보여, DB엔 2.5인데 화면엔 1인 채로 굳는다.
         const parsedUnits =
@@ -433,7 +432,7 @@ export function SheetClient({
             ? parsedUnits.ok
               ? parsedUnits.value
               : (before?.units ?? null) // 형식 오류는 서버가 거절한다 → 화면은 안 건드린다
-            : (before?.units ?? null);
+            : (autoUnits ?? before?.units ?? null);
         setAttendance((prev) => ({
           ...prev,
           // note를 안 넘긴 저장은 기존 사유를 그대로 둔다 — 서버 규약(undefined=유지)과 일치시킨다.
@@ -449,8 +448,12 @@ export function SheetClient({
           sessionDate: date,
           status,
           ...(note === undefined ? {} : { note }),
-          // 유닛은 **사람이 고쳤을 때만** 보낸다 — 안 보내면 서버가 기존 값을 유지한다(자동 주입 없음).
-          ...(units !== undefined ? { units } : {}),
+          // 유닛은 **사람이 고쳤거나(units) 새 기록의 자동값일 때만** 보낸다(그 외엔 서버가 기존 값 유지).
+          ...(units !== undefined
+            ? { units }
+            : autoUnits !== null
+              ? { units: String(autoUnits) }
+              : {}),
         }).then((r) => {
           if ("error" in r) {
             setAttendance((prev) => {
@@ -479,7 +482,13 @@ export function SheetClient({
           delete next[key];
           return next;
         });
-        void clearPresentAttendance({ classId, studentId, date }).then((r) => {
+        void clearPresentAttendance({
+          classId,
+          studentId,
+          date,
+          // 자동값과 같은 시수는 'ECS가 넣은 그대로'라 되돌릴 수 있다(0187a) — 사람이 고쳤으면 서버가 거절.
+          autoUnits: data.unitsByDate[date] ?? null,
+        }).then((r) => {
           if (!r.ok) {
             setAttendance((prev) => ({ ...prev, [key]: before }));
             toast.error(r.error);
@@ -516,7 +525,8 @@ export function SheetClient({
         });
       },
     }),
-    [classId, data.canMarkAttendanceByDate, store],
+    // unitsByDate가 빠지면 주를 넘긴 뒤에도 **옛 주의 유닛**이 박힌다(시수=급여라 조용한 오기록).
+    [classId, data.canMarkAttendanceByDate, data.unitsByDate, store],
   );
 
   const saveGoal = useCallback(
