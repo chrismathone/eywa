@@ -40,6 +40,7 @@ import {
   loginClassnote,
   norm,
 } from "./classnote-admin-core.mjs";
+import { kickClassify, loadChildStudentMap, storeParentMessages } from "./classnote-inbox-store.mjs";
 import {
   buildCommentNotificationText,
   pruneCounts,
@@ -389,13 +390,38 @@ export async function pollParentPostsOnce(sql, browser, { tenant, post, log = co
       return { ran: true, detected: 0, notified: 0 };
     }
 
-    const { picked, tooOld } = selectNewParentPosts(rows, {
-      lastSeenId,
-      prefix: group.prefix,
-      maxAgeDays: MAX_AGE_DAYS,
-    });
+    // ⚠️ **prefix 없이** 고른다(0184a) — 출결 연락 저장은 **전 보드**가 대상이다. 영어만 다니는 재원생이
+    //    149명(44%)이라 수학 보드만 보면 셔틀·출결 명단의 절반이 빈다. 강사 벨은 아래에서 다시 수학으로 좁힌다.
+    const { picked, tooOld } = selectNewParentPosts(rows, { lastSeenId, maxAgeDays: MAX_AGE_DAYS });
     if (tooOld.length) log(`[feed] ${MAX_AGE_DAYS}일 지난 학부모 글 ${tooOld.length}건 건너뜀(밀린 알림 폭주 방지)`);
-    if (!picked.length) {
+
+    // ── 출결 연락 원문 저장(전 보드) — 강사 알림과 독립. 실패해도 아래 경로를 막지 않는다.
+    //    매핑은 **원아 id**(그룹반 보드명엔 학생이 없다). 학생 미확정이어도 원문은 남긴다.
+    if (picked.length && !dryRun) {
+      const childToStudent = await loadChildStudentMap(sql, tenant);
+      const stored = await storeParentMessages(
+        sql,
+        tenant,
+        picked.map((p) => ({
+          source: "post",
+          postId: p.id,
+          childId: p.child,
+          className: p.class_name,
+          content: p.content,
+          postedAt: p.created,
+        })),
+        childToStudent,
+      );
+      if (stored) {
+        log(`[출결] 학부모 글 ${stored}건 저장(전 보드) — 분류 요청`);
+        await kickClassify(log);
+      }
+    }
+
+    // 기존 경로(담당 강사 벨)는 **수학 1인 보드 한정 유지** — 원장 결정 2026-07-15(영어는 강사들이
+    // ClassNote를 양방향 채널로 쓰는 중이라 중복 알림 우려). 범위를 넓히는 건 별도 결정이다.
+    const mathPicked = picked.filter((p) => String(p?.class_name ?? "").startsWith(group.prefix));
+    if (!mathPicked.length) {
       if (!dryRun && watermark > lastSeenId) await saveWatermark(sql, tenant, watermark);
       return { ran: true, detected: 0, notified: 0, tooOld: tooOld.length };
     }
@@ -409,12 +435,12 @@ export async function pollParentPostsOnce(sql, browser, { tenant, post, log = co
     } catch (e) {
       // 보드 확인 실패 = 공유 보드인지 모름 → 알리지 않는다(오배달보다 미알림이 낫다). 워터마크도 안 전진 → 다음 폴 재시도.
       log(`[feed] ⚠️ 보드 안전 확인 실패 — 이번 폴은 알림 보류(다음 폴 재시도): ${e.message}`);
-      return { ran: true, detected: picked.length, notified: 0, held: picked.length };
+      return { ran: true, detected: mathPicked.length, notified: 0, held: mathPicked.length };
     }
 
     const { board, collisions } = await boardsToStudents(sql, tenant, keys, group.prefix);
     const hits = [];
-    for (const p of picked) {
+    for (const p of mathPicked) {
       const g = await gateBoard(gate, board, p.class_name);
       if (!g.ok) {
         held.push(g.reason);
@@ -445,10 +471,10 @@ export async function pollParentPostsOnce(sql, browser, { tenant, post, log = co
     }
 
     if (dryRun) {
-      log(`[feed] (점검) 새 학부모 글 ${picked.length}건 → 알림 ${plan.length}건 예정 · 보류 ${held.length}건`);
+      log(`[feed] (점검) 새 학부모 글 ${mathPicked.length}건 → 알림 ${plan.length}건 예정 · 보류 ${held.length}건`);
       for (const h of held) log(`[feed]   보류: ${h}`);
       if (collisions.length) log(`[feed]   동명이인 보드(전역 보류): ${collisions.length}건`);
-      return { ran: true, detected: picked.length, notified: 0, held: held.length, tooOld: tooOld.length, plan };
+      return { ran: true, detected: mathPicked.length, notified: 0, held: held.length, tooOld: tooOld.length, plan };
     }
 
     // 알림 insert와 워터마크 전진을 **한 트랜잭션**으로 — 중간에 죽어도 같은 글을 두 번 알리지 않는다.
@@ -475,11 +501,11 @@ export async function pollParentPostsOnce(sql, browser, { tenant, post, log = co
 
     if (raced) {
       log(`[feed] 다른 러너가 이 구간을 이미 처리함 — 중복 알림 방지로 ${plan.length}건 생략(워터마크만 전진)`);
-      return { ran: true, detected: picked.length, notified: 0, held: held.length, tooOld: tooOld.length };
+      return { ran: true, detected: mathPicked.length, notified: 0, held: held.length, tooOld: tooOld.length };
     }
-    log(`[feed] 학부모 새 글 ${picked.length}건 감지 → 강사 알림 ${plan.length}건${held.length ? ` · 보류 ${held.length}건` : ""}`);
+    log(`[feed] 학부모 새 글 ${mathPicked.length}건 감지 → 강사 알림 ${plan.length}건${held.length ? ` · 보류 ${held.length}건` : ""}`);
     for (const h of held) log(`[feed]   보류: ${h}`);
-    return { ran: true, detected: picked.length, notified: plan.length, held: held.length, tooOld: tooOld.length };
+    return { ran: true, detected: mathPicked.length, notified: plan.length, held: held.length, tooOld: tooOld.length };
   } catch (e) {
     await dropFeedPage(); // 다음 폴은 깨끗한 세션으로
     throw e;
@@ -547,12 +573,21 @@ export async function pollParentCommentsOnce(sql, browser, { tenant, post, log =
     );
     if (!rows.length) return { ran: true, changed: 0, notified: 0 };
 
-    const { changed, nextCounts, firstSeen } = selectChangedReports(rows, counts, { prefix: group.prefix });
+    // ⚠️ **prefix 없이** 추적한다(0184a) — 출결 연락의 대부분이 **댓글**로 오고(실측 103건 중 88건),
+    //    영어만 다니는 재원생이 149명(44%)이라 수학 보드만 보면 절반을 못 본다. 강사 벨은 아래에서 다시 좁힌다.
+    //    스냅샷이 전 보드로 커지지만 창(10일) 기준 실측 1,913행이라 상한(3,500) 안이다.
+    const { changed, nextCounts, firstSeen } = selectChangedReports(rows, counts, {});
+    // 피드 행에만 있는 정보(원아 id·보드명)를 글 id로 되찾는 표 — 댓글 자체엔 원아가 없다.
+    const feedInfo = new Map(
+      rows.map((r) => [Number(r?.id), { childId: r?.child ?? null, className: String(r?.class_name ?? "") }]),
+    );
 
     // 콜드 스타트 — 기준선만 잡고 알림 0건. 댓글 수가 피드 행에 이미 있어 **추가 요청 0**이다(글 폴러의 워터마크 초기화와 같은 역할).
+    // ⚠️ 전 보드로 넓힌 첫 폴에서도 같은 보호가 걸린다: 새로 보이는 영어·그룹반 글은 "처음 보는 글"이라
+    //    기준선만 잡고 지나간다(과거 댓글 수백 건이 한꺼번에 쏟아지지 않는다).
     if (counts === null) {
       if (!dryRun) await saveCounts(sql, tenant, pruneCounts(nextCounts, COMMENT_COUNTS_CAP));
-      log(`[comment] 첫 실행 — 수학 글 ${firstSeen}개의 댓글 수 기준선 기록(과거 댓글은 알리지 않음)`);
+      log(`[comment] 첫 실행 — 글 ${firstSeen}개의 댓글 수 기준선 기록(과거 댓글은 알리지 않음)`);
       return { ran: true, changed: 0, notified: 0 };
     }
 
@@ -573,6 +608,7 @@ export async function pollParentCommentsOnce(sql, browser, { tenant, post, log =
 
     const held = [];
     const hits = [];
+    const inbox = []; // 전 보드 학부모 댓글 원문(출결 분류용, 0184a) — 강사 벨 경로와 독립적으로 쌓인다
     let detected = 0;
     let tooOldCount = 0;
     for (const ch of changed) {
@@ -600,6 +636,22 @@ export async function pollParentCommentsOnce(sql, browser, { tenant, post, log =
       // 강사 답글만 늘었거나 삭제된 경우 — 정상. 게이트(원아 조회)를 태울 이유가 없다.
       if (!picked.length) continue;
       detected += picked.length;
+      // ── 출결 연락 원문 저장(전 보드, 0184a) — 보드 게이트와 무관하다.
+      //    게이트는 "이 보드 글을 **저 강사에게 보내도 되나**"를 보는 장치인데, 여기 저장은 발송이 아니라
+      //    **원아 id로 확정한 그 학생 본인의 기록**이라 오배달 경로가 없다(보드가 공유돼도 child는 하나다).
+      inbox.push(
+        ...picked.map((k) => ({
+          source: "comment",
+          postId: ch.id,
+          commentId: k.id,
+          childId: feedInfo.get(Number(ch.id))?.childId ?? null,
+          className: ch.className,
+          content: k.content,
+          postedAt: k.created,
+        })),
+      );
+      // 강사 벨은 **수학 1인 보드 한정 유지**(원장 결정 2026-07-15) — 영어는 강사들이 ClassNote를 직접 쓴다.
+      if (!ch.className.startsWith(group.prefix)) continue;
       const g = await gateBoard(gate, board, ch.className);
       if (!g.ok) {
         // 게이트 차단은 안정적인 판정이라 스냅샷은 그대로 전진시킨다(매 폴 재조회해도 결론이 같다).
@@ -607,6 +659,20 @@ export async function pollParentCommentsOnce(sql, browser, { tenant, post, log =
         continue;
       }
       for (const k of picked) hits.push({ comment: k, student: g.student, reportId: ch.id });
+    }
+
+    // ── 출결 연락 저장 + 분류 킥(0184a). 스냅샷 갱신 트랜잭션 **밖**에서 한다 — 저장은 멱등(유니크 인덱스)이라
+    //    같은 댓글이 다음 폴에 다시 잡혀도 중복이 안 생기고, 여기서 실패해도 강사 벨 경로를 막지 않는다.
+    if (inbox.length && !dryRun) {
+      const childToStudent = await loadChildStudentMap(sql, tenant);
+      const stored = await storeParentMessages(sql, tenant, inbox, childToStudent).catch((e) => {
+        log(`[출결] 댓글 원문 저장 실패(다음 폴 재시도): ${e.message}`);
+        return 0;
+      });
+      if (stored) {
+        log(`[출결] 학부모 댓글 ${stored}건 저장(전 보드) — 분류 요청`);
+        await kickClassify(log);
+      }
     }
 
     const byTeacher = await teachersFor(sql, tenant, [...new Set(hits.map((h) => h.student.id))], keys);

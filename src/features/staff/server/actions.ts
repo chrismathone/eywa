@@ -50,6 +50,8 @@ function readBaseForm(formData: FormData) {
     memo: get("memo") || null,
     bgColor,
     textColor,
+    // 학생 출결 알림(클래스노트) 받기 — 체크박스라 미체크면 formData에 키 자체가 없다(빈 문자열 = false).
+    attendanceAlertOptin: get("attendanceAlertOptin") === "on",
   };
 }
 
@@ -138,6 +140,7 @@ export async function createStaff(
       memo: input.memo,
       bg_color: input.bgColor,
       text_color: input.textColor,
+      attendance_alert_optin: input.attendanceAlertOptin,
     })
     .eq("id", authData.user.id);
 
@@ -245,6 +248,7 @@ export async function updateStaff(
       memo: input.memo,
       bg_color: input.bgColor,
       text_color: input.textColor,
+      attendance_alert_optin: input.attendanceAlertOptin,
     })
     .eq("id", id);
 

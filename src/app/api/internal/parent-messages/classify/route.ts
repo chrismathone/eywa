@@ -1,0 +1,31 @@
+import { NextResponse } from "next/server";
+import { classifyPendingParentMessages } from "@/features/attendance/parent-alerts/server/classify";
+
+/**
+ * ClassNote 인바운드 워커 전용 — 방금 저장한 학부모 연락의 **출결 의도 분류 킥**.
+ *
+ * 워커(연동 PC)는 원문만 `classnote_parent_messages`에 넣고 이 라우트를 두드린다. 분류(AI)를 앱이 하는 이유:
+ *  ① 모든 AI(JSON) 호출은 `generateJSON()` 단일 진입점을 거쳐야 한다(CLAUDE.md) — 그건 앱 코드다.
+ *  ② 연동 PC에 AI API 키를 두지 않는다.
+ *
+ * ⚠️ 게이트: `x-eywa-internal` === `CLASSNOTE_INTERNAL_SECRET`(워커 스샷·첨부 라우트와 동일 시크릿).
+ * ⚠️ **실패해도 유실되지 않는다** — 분류 못 한 행은 미분류로 남아 다음 폴의 킥에서 다시 잡힌다.
+ *    그래서 워커는 이 응답을 기다리되 실패를 치명으로 다루지 않는다(best-effort).
+ * ⚠️ 이 라우트는 **AI를 실제로 호출**한다 → 페이지에서 부르지 말 것(명시 트리거 원칙).
+ */
+export const dynamic = "force-dynamic";
+export const maxDuration = 60;
+
+export async function POST(request: Request) {
+  const secret = process.env.CLASSNOTE_INTERNAL_SECRET;
+  if (!secret || request.headers.get("x-eywa-internal") !== secret) {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
+  try {
+    const result = await classifyPendingParentMessages();
+    return NextResponse.json({ ok: true, ...result });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    return NextResponse.json({ ok: false, error: message }, { status: 500 });
+  }
+}
