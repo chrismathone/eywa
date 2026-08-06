@@ -2162,7 +2162,11 @@ export function OneScreenClient({
   }
 
   return (
-    <div className="space-y-4">
+    // 🔴 한 화면 고정(2026-08-06 원장): *"전체 창 크기를 가운데 보고서에 맞추고, 넘치는 부분은 스크롤 처리하도록
+    //    각 섹션을 3개화"*. 셸 <main>이 이미 높이가 확정된 스크롤 컨테이너라 여기서 `h-full`로 그 높이를 받고,
+    //    아래 3열이 남은 높이를 통째로 가져간 뒤 **열마다 따로** 스크롤한다(출석부 '한 화면 시트'와 같은 배치).
+    //    ⚠️ `min-h-0`이 없으면 flex 아이템의 최소 크기가 콘텐츠라 열이 창을 넘겨 밀어낸다.
+    <div className="flex h-full min-h-0 flex-col gap-4">
       <OneScreenTopBar
         today={today}
         date={activeDate}
@@ -2393,7 +2397,7 @@ export function OneScreenClient({
             여기에 `overflow-x-auto`를 하나 더 두면 **학생목록의 `lg:sticky`가 그 래퍼 기준이 되어 깨진다**
             (높이가 콘텐츠만큼이라 붙을 자리가 없다). min-w만 주면 main이 알아서 가로 스크롤한다.
          최소폭 = 학생 240 + 보고서 590(카드 좌우 패딩 24 + 내부 2열 분기 560) + 미리보기 544 + gap 32 + 여유. */
-      <div className="grid grid-cols-1 gap-4 lg:min-w-[1420px] lg:grid-cols-[240px_minmax(590px,1fr)_544px] lg:items-start">
+      <div className="grid grid-cols-1 gap-4 lg:min-h-0 lg:min-w-[1420px] lg:flex-1 lg:grid-cols-[240px_minmax(590px,1fr)_544px] lg:items-stretch">
         <StudentList
           students={visible}
           selId={effectiveId}
@@ -2407,7 +2411,9 @@ export function OneScreenClient({
 
         {selected ? (
           <>
-            <div className="flex flex-col gap-3">
+            {/* 가운데(보고서 작성) — 넘치면 **이 열만** 스크롤. 좁은 화면(<lg)에선 열이 세로로 쌓이므로
+                높이를 묶지 않는다(그땐 페이지가 통째로 스크롤되는 게 자연스럽다). */}
+            <div className="scrollbar-thin flex flex-col gap-3 lg:min-h-0 lg:overflow-y-auto lg:pr-1">
               <header className="flex items-center gap-1.5">
                 <EyIcon name="report" size={14} className="text-primary" />
                 <h2 className="text-foreground text-sm font-bold">보고서</h2>
@@ -2492,7 +2498,7 @@ export function OneScreenClient({
             {/* 4열째 — 학부모가 받는 화면 그대로(실시간). ≥1680px에서만 옆에 서고, 그보다 좁으면
                 아래 전체폭 행으로 내려간다(나란히 둘 자리가 없을 때 억지로 끼우면 양쪽 다 찌그러진다). */}
             {previewCtx && previewSubject ? (
-              <div>
+              <div className="scrollbar-thin lg:min-h-0 lg:overflow-y-auto lg:pr-1">
                 <ReportPreview
                   ctx={previewCtx}
                   student={selected}

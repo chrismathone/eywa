@@ -166,9 +166,10 @@ export function StudentList({
     /* 높이 = 창에 맞춤(2026-07-27 원장: "하단 공간이 이렇게 많은데 왜 저기서 잘라버리나").
        예전엔 안쪽 스크롤러에 `max-h-[calc(100vh-220px)]` 고정값을 박아, 화면을 아래로 굴려 상단 바가
        사라진 뒤에도 그 220px을 계속 비워 둬 목록만 일찍 잘렸다.
-       → 넓은 화면에선 **sticky로 붙여 창 높이만큼** 쓰고(스크롤해도 목록이 늘 보인다), 좁은 화면(세로 적층)
-       에선 60vh까지만 차지하고 나머지는 페이지가 스크롤한다. */
-    <div className="bg-card border-line shadow-card flex flex-col rounded-2xl border lg:sticky lg:top-2 lg:max-h-[calc(100dvh-6rem)]">
+       → 2026-08-06부터 넓은 화면은 **3열 한 화면 배치**라 이 카드가 열 높이를 그대로 채우고(`lg:h-full`)
+       안쪽 목록만 스크롤한다(sticky 불필요 — 페이지가 아예 안 굴러간다). 좁은 화면(세로 적층)에선
+       60vh까지만 차지하고 나머지는 페이지가 스크롤한다. */
+    <div className="bg-card border-line shadow-card flex flex-col rounded-2xl border lg:h-full lg:min-h-0">
       <header className="border-line flex items-center justify-between gap-2 border-b px-3 py-2.5">
         <p className="micro text-text-faint">학생 · 반별</p>
         <div className="flex items-center gap-2">
