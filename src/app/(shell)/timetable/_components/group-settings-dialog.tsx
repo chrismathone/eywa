@@ -11,6 +11,8 @@ import {
   type ClassOption,
   type GroupDraft,
 } from "@/features/timetable/lib/group-assign";
+import type { GroupPreset } from "@/features/timetable/lib/group-presets";
+import { GroupPresetBar } from "./group-preset-bar";
 import { GroupSettingsBoard } from "./group-settings-board";
 
 /**
@@ -30,6 +32,7 @@ export function GroupSettingsDialog({
   initialEnabled,
   initialShowOthers,
   initialOthersTitle,
+  initialPresets,
 }: {
   subject: string;
   subjectLabel: string;
@@ -39,6 +42,8 @@ export function GroupSettingsDialog({
   initialEnabled: boolean;
   initialShowOthers: boolean;
   initialOthersTitle: string;
+  /** 저장된 배치 보관함(과목별). 불러오면 지금 배치에 복사된다. */
+  initialPresets: GroupPreset[];
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -47,6 +52,7 @@ export function GroupSettingsDialog({
   const [groups, setGroups] = useState<GroupDraft[]>(() => dedupeGroups(initialGroups));
   const [showOthers, setShowOthers] = useState(initialShowOthers);
   const [othersTitle, setOthersTitle] = useState(initialOthersTitle);
+  const [presets, setPresets] = useState<GroupPreset[]>(initialPresets);
   const [error, setError] = useState<string | null>(null);
   const [confirmClose, setConfirmClose] = useState(false);
   const [saving, startSave] = useTransition();
@@ -57,6 +63,7 @@ export function GroupSettingsDialog({
     enabled !== initialEnabled ||
     showOthers !== initialShowOthers ||
     othersTitle !== initialOthersTitle ||
+    JSON.stringify(presets) !== JSON.stringify(initialPresets) ||
     JSON.stringify(groups) !== JSON.stringify(dedupeGroups(initialGroups));
 
   function requestClose() {
@@ -71,6 +78,7 @@ export function GroupSettingsDialog({
     setEnabled(initialEnabled);
     setShowOthers(initialShowOthers);
     setOthersTitle(initialOthersTitle);
+    setPresets(initialPresets);
     setError(null);
     setConfirmClose(false);
     setOpen(false);
@@ -86,7 +94,7 @@ export function GroupSettingsDialog({
   function save() {
     setError(null);
     startSave(async () => {
-      const res = await saveIntegrationGroups({ subject, enabled, groups, showOthers, othersTitle });
+      const res = await saveIntegrationGroups({ subject, enabled, groups, showOthers, othersTitle, presets });
       if (res.error) {
         setError(res.error);
         return;
@@ -111,8 +119,14 @@ export function GroupSettingsDialog({
       {open ? (
         <>
           <div className="fixed inset-0 z-40 bg-black/30" onClick={requestClose} aria-hidden />
+          {/* 🔴 센터링을 `left-1/2 -translate-x-1/2`로 하지 말 것 — **transform이 걸린 조상은 position:fixed
+              자손의 containing block이 된다**. 그러면 dnd-kit DragOverlay(fixed + top/left = 뷰포트 좌표)가
+              패널 좌상단만큼 통째로 밀려 **끌고 있는 칩이 다이얼로그 밖 엉뚱한 자리**에 그려진다
+              (2026-08-06 원장 제보). flex 센터링은 transform이 없어 fixed 자손이 뷰포트 기준으로 남는다.
+              래퍼는 pointer-events-none — 안 그러면 backdrop 클릭(닫기)을 이 칸이 가로챈다. */}
+          <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center p-4">
           <div
-            className="bg-card border-line shadow-modal fixed top-1/2 left-1/2 z-50 flex max-h-[88vh] w-full max-w-3xl -translate-x-1/2 -translate-y-1/2 flex-col rounded-xl border"
+            className="bg-card border-line shadow-modal pointer-events-auto flex max-h-[88vh] w-full max-w-3xl flex-col rounded-xl border"
             role="dialog"
             aria-label="통합뷰 그룹 설정"
           >
@@ -139,6 +153,19 @@ export function GroupSettingsDialog({
                 <span className="text-foreground font-medium">커스텀 그룹 사용</span>
                 <span className="text-text-faint text-[11px]">끄면 자동 묶음으로 돌아갑니다(줄 정의는 그대로 보관).</span>
               </label>
+
+              {/* 보관함 — 여러 배치를 이름 붙여 두고 골라 불러온다. 여기서의 변경도 아래 '저장'이 함께 쓴다. */}
+              <GroupPresetBar
+                presets={presets}
+                onChange={setPresets}
+                current={{ groups, showOthers, othersTitle }}
+                onLoad={(body) => {
+                  setGroups(dedupeGroups(body.groups));
+                  setShowOthers(body.showOthers);
+                  setOthersTitle(body.othersTitle);
+                  setEnabled(true); // 불러왔는데 화면이 그대로면 "안 먹었나" 오해한다.
+                }}
+              />
 
               <GroupSettingsBoard
                 classes={classes}
@@ -220,6 +247,7 @@ export function GroupSettingsDialog({
                 저장
               </button>
             </footer>
+          </div>
           </div>
         </>
       ) : null}

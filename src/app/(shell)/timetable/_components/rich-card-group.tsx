@@ -1,5 +1,7 @@
 "use client";
+import type { CSSProperties, HTMLAttributes, ReactNode } from "react";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
+import { GripVertical } from "@/components/icons/eywa-icon-compat";
 import { WindowLink } from "@/components/workspace/window-link";
 import { SUBJECT_SOLID } from "@/features/owner/subjects";
 import { enumDayToKo, type DayOfWeek } from "@/features/timetable/lib/periods";
@@ -37,37 +39,62 @@ function abbrev(label: string): string {
   return label.length > 4 ? label.slice(0, 4) : label;
 }
 
+/**
+ * 반=열 카드가 공유하는 렌더 재료 — 편집 모드가 열마다 dnd 훅 컴포넌트를 끼울 때 그대로 넘겨받는다.
+ * (훅은 열마다 하나씩 필요한데 `.map` 안에서 직접 부르면 훅 규칙 위반이라, 부모가 컴포넌트를 준다.)
+ */
+export type ColumnCommon = {
+  group: RichCardGroup;
+  subjectSoftClass: string;
+  teacherColors: TeacherColorMap;
+  activeH: number;
+  holdH: number;
+  wdH: number;
+};
+
+/** 편집 모드에서 한 열에 붙는 드래그 배선 — 없으면(평소) 열은 지금까지와 완전히 동일하게 그려진다. */
+export type ColumnEdit = {
+  setNodeRef: (el: HTMLElement | null) => void;
+  /** 헤더(반명 칸)에 뿌릴 dnd 손잡이 속성 — `aria-roledescription="draggable"`이 들어 있어야
+   *  DragScrollArea의 '잡고 끌기'가 이 위에서는 팬을 시작하지 않는다(둘이 같은 포인터를 다투는 것 방지). */
+  handleProps: HTMLAttributes<HTMLElement>;
+  style?: CSSProperties;
+  /** 지금 끌고 있는 열(원본은 흐리게). */
+  dragging?: boolean;
+  /** 이 열 **앞**에 끼워진다는 자리 표시(왼쪽 세로 막대). */
+  insertBefore?: boolean;
+};
+
 /** 통합뷰 한 섹션(시작 교시 그룹) — 가로 드래그 + 좌측 sticky 라벨열 + 반=열 카드. */
 export function RichCardGroupBoard({
   group,
   subjectSoftClass,
   teacherColors,
+  renderCard,
+  trailing,
 }: {
   group: RichCardGroup;
   subjectSoftClass: string;
   teacherColors: TeacherColorMap;
+  /** 편집 모드 — 열을 dnd 훅 컴포넌트로 감싸 그린다(key도 호출부가 준다). 미지정=평소 렌더. */
+  renderCard?: (card: RichClassCard, common: ColumnCommon) => ReactNode;
+  /** 마지막 열 뒤에 붙는 칸(편집 모드의 '맨 뒤에 놓기' 자리). 미지정=없음. */
+  trailing?: ReactNode;
 }) {
   // 섹션 안에서는 모든 카드가 같은 높이(행이 맞물려 시트처럼 읽힌다) — 높이는 그 섹션의 최대 인원.
   const activeH = sectionH(group.rosterRows.active);
   const holdH = sectionH(group.rosterRows.hold);
   const wdH = sectionH(group.rosterRows.withdrawn);
+  const common: ColumnCommon = { group, subjectSoftClass, teacherColors, activeH, holdH, wdH };
 
   return (
     <DragScrollArea barX className="border-line border-t">
       <div className="flex w-max items-stretch">
         <LabelColumn group={group} activeH={activeH} holdH={holdH} wdH={wdH} />
-        {group.cards.map((c) => (
-          <ClassColumn
-            key={c.classId}
-            card={c}
-            group={group}
-            subjectSoftClass={subjectSoftClass}
-            teacherColors={teacherColors}
-            activeH={activeH}
-            holdH={holdH}
-            wdH={wdH}
-          />
-        ))}
+        {group.cards.map((c) =>
+          renderCard ? renderCard(c, common) : <ClassColumn key={c.classId} card={c} {...common} />,
+        )}
+        {trailing}
       </div>
     </DragScrollArea>
   );
@@ -124,7 +151,7 @@ function LabelColumn({
 }
 
 /** 반=열 카드 — 헤더(반명·담임·강의실) + 요일×교시 미니그리드 + 재원/대기/퇴원. */
-function ClassColumn({
+export function ClassColumn({
   card,
   group,
   subjectSoftClass,
@@ -132,14 +159,11 @@ function ClassColumn({
   activeH,
   holdH,
   wdH,
-}: {
+  edit,
+}: ColumnCommon & {
   card: RichClassCard;
-  group: RichCardGroup;
-  subjectSoftClass: string;
-  teacherColors: TeacherColorMap;
-  activeH: number;
-  holdH: number;
-  wdH: number;
+  /** 있으면 편집 모드 — 헤더가 '반 창 열기 링크'가 아니라 **드래그 손잡이**가 된다. */
+  edit?: ColumnEdit;
 }) {
   // ⚠️ 요일축은 **카드별 5칸 고정**(월~금 기준, `buildAxisDays`) — 열 수가 카드마다 다르면 한 칸
   //    너비도 달라져 시트처럼 안 읽힌다(원장 2026-07-27). 토요일은 "그 반이 안 쓰는 평일" 칸을
@@ -156,33 +180,55 @@ function ClassColumn({
   const damimColor = card.teacherName ? teacherColors[card.teacherName] : undefined;
 
   return (
-    <div className="border-line flex shrink-0 flex-col border-r" style={{ width: CARD_W }}>
-      {/* 수업명 (클릭=반 창) — 헤더색은 래퍼 div(WindowLink는 style 미지원). */}
+    <div
+      ref={edit?.setNodeRef}
+      className={`border-line flex shrink-0 flex-col border-r ${edit ? "relative" : ""} ${
+        edit?.dragging ? "opacity-35" : ""
+      }`}
+      style={{ width: CARD_W, ...edit?.style }}
+    >
+      {/* 끼워질 자리 — 끌고 있는 열이 **이 열 앞**에 들어간다는 표시(놓기 전에 결과를 보여준다). */}
+      {edit?.insertBefore ? (
+        <span aria-hidden className="bg-primary absolute inset-y-0 -left-px z-10 w-[3px] rounded-full" />
+      ) : null}
+      {/* 수업명 — 평소엔 클릭=반 창, 편집 모드엔 **드래그 손잡이**(같은 자리에서 뜻만 바뀐다).
+          헤더색은 래퍼 div(WindowLink는 style 미지원). */}
       <div
         className={`border-line border-b ${card.bgColor ? "" : subjectSoftClass}`}
         style={{ height: NAME_H, ...headerStyle }}
       >
-        <HoverCard
-          width={230}
-          card={
-            <ClassInfoCard
-              className={card.className}
-              subject={card.subject}
-              teacherName={card.teacherName}
-              room={card.classroomLabel}
-              counts={{ active: card.activeCount, hold: card.hold.length, withdrawn: card.withdrawn.length }}
-            />
-          }
-        >
-          <WindowLink
-            href={`/classes/${card.classId}`}
-            title={card.className}
-            ariaLabel={`${card.className} 반 정보`}
-            className="flex h-full w-full items-center justify-center px-1 text-center text-[13px] font-bold transition hover:brightness-95"
+        {edit ? (
+          <div
+            {...edit.handleProps}
+            title={`${card.className} — 끌어서 다른 줄로 옮기기`}
+            className="flex h-full w-full cursor-grab items-center justify-center gap-1 px-1 text-center text-[13px] font-bold select-none active:cursor-grabbing"
           >
+            <GripVertical className="size-3 shrink-0 opacity-45" />
             <span className="overflow-hidden whitespace-nowrap text-clip">{card.className}</span>
-          </WindowLink>
-        </HoverCard>
+          </div>
+        ) : (
+          <HoverCard
+            width={230}
+            card={
+              <ClassInfoCard
+                className={card.className}
+                subject={card.subject}
+                teacherName={card.teacherName}
+                room={card.classroomLabel}
+                counts={{ active: card.activeCount, hold: card.hold.length, withdrawn: card.withdrawn.length }}
+              />
+            }
+          >
+            <WindowLink
+              href={`/classes/${card.classId}`}
+              title={card.className}
+              ariaLabel={`${card.className} 반 정보`}
+              className="flex h-full w-full items-center justify-center px-1 text-center text-[13px] font-bold transition hover:brightness-95"
+            >
+              <span className="overflow-hidden whitespace-nowrap text-clip">{card.className}</span>
+            </WindowLink>
+          </HoverCard>
+        )}
       </div>
       {/* 담임 — 저장된 강사색이 있으면 색칩, 없으면 plain */}
       <div className="border-line flex items-center justify-center border-b" style={{ height: TEACHER_H }}>
