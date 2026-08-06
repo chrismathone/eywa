@@ -50,8 +50,18 @@ const GROUP: MatrixGroup = {
   className: "고등개별",
   subjectLabel: "수학",
   matrix: matrix([
-    { id: S1, name: "이도윤", grade: "고1", school: "경명여자중학교", enrolledAt: null, attendDows: [3, 5] },
-    { id: S2, name: "박서준", grade: "중2", school: "대구중", enrolledAt: null, attendDows: [] },
+    // spans 빈 배열 = 구간 모름 → 재원 외 음영을 안 칠한다(자료 없음을 회색으로 칠하지 않는다).
+    { id: S1, name: "이도윤", grade: "고1", school: "경명여자중학교", enrolledAt: null, attendDows: [3, 5], spans: [], badges: [] },
+    {
+      id: S2,
+      name: "박서준",
+      grade: "중2",
+      school: "대구중",
+      enrolledAt: null,
+      attendDows: [],
+      spans: [],
+      badges: [{ kind: "left" as const, date: "2026-07-15" }],
+    },
   ]),
 };
 
@@ -99,15 +109,34 @@ describe("출석부 표 골격", () => {
     const nameCell = screen.getByText("이도윤").closest("td")!;
     const lines = [...nameCell.children];
     expect(lines).toHaveLength(2);
-    expect(lines[0]!.textContent).toBe("이도윤");
+    expect(lines[0]!.textContent).toBe("이도윤"); // 이름 줄(+표식이 있으면 같은 줄)
     expect(lines[1]!.textContent).toBe("수·금"); // 등원요일
     // 고정 폭이라 넘치는 글자는 잘려야 한다(안 자르면 옆 칸을 덮는다).
-    expect(lines[0]!.className).toContain("truncate");
+    expect(screen.getByText("이도윤").className).toContain("truncate");
   });
 
   it("등원요일이 없으면 이름 한 줄만 — 빈 줄을 만들지 않는다", () => {
     renderTable();
     expect(screen.getByText("박서준").closest("td")!.children).toHaveLength(1);
+  });
+
+  it("그 달에 나간 학생은 이름 옆에 '퇴원' 표식이 붙는다", () => {
+    renderTable();
+    const badge = screen.getByText("퇴원");
+    expect(badge.closest("td")).toBe(screen.getByText("박서준").closest("td"));
+    expect(badge).toHaveAttribute("title", "2026-07-15 퇴원");
+  });
+
+  it("🔴 표식이 이름을 밀어내지 않는다 — 열 폭이 고정이라 이름이 먼저 잘린다", () => {
+    renderTable();
+    expect(screen.getByText("퇴원").className).toContain("shrink-0");
+    expect(screen.getByText("박서준").className).toContain("min-w-0");
+  });
+
+  it("표식이 없는 학생에겐 아무것도 안 붙는다 — 대부분의 행", () => {
+    renderTable();
+    const nameLine = screen.getByText("이도윤").parentElement!;
+    expect(nameLine.textContent).toBe("이도윤");
   });
 
   it("학교 이름은 잘리되 원문은 툴팁에 남는다 — 화면에서 사라지면 안 된다", () => {

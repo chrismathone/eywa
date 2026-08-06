@@ -1,0 +1,157 @@
+/**
+ * 수강 구간(재원 기간) 판정 — 출석부가 "이 학생이 그날 이 반 소속이었나"와
+ * "이번 달에 들어왔나·나갔나·옮겼나"를 정하는 단일 소스. 순수 함수 + Vitest.
+ *
+ * 구 출석부(D:\attendance)는 칸마다 재원 기간을 보고 밖이면 빗금을 치고, 그 경계 칸에
+ * `첫수업`·`퇴원`·`반이동` 뱃지를 얹었다. eywa 매트릭스엔 이 개념이 통째로 없어서
+ * **8월 5일에 그만둔 학생과 계속 다니는 학생이 화면에서 구분되지 않았다**(원장 2026-08-06).
+ *
+ * 🔴 이 판정은 **표시 전용**이다. 재원 외 칸이라고 입력을 막지 않는다 —
+ *    퇴원 뒤 보강 출석이 실제로 있고(구 출석부도 `value>0`이면 빗금 위에 값을 그렸다),
+ *    막으면 이미 들어와 있는 기록을 고칠 길이 사라진다.
+ */
+
+import { addDays } from "@/lib/date-kst";
+
+export type EnrollSpan = { start: string; end: string | null };
+
+/** 반이동으로 볼 최대 공백(일). 이보다 벌어지면 '쉬었다 재등록'이지 이동이 아니다. */
+export const TRANSFER_GAP_DAYS = 14;
+
+/**
+ * 그 날짜에 이 반 소속이었나.
+ *
+ * ⚠️ 구간이 **하나도 없으면 true**(=아무 표시도 안 한다). 모르는 걸 "재원 아님"으로 칠하면
+ *    표 전체가 회색이 되고, 그건 사실이 아니라 자료 없음이다.
+ */
+export function isEnrolledOn(date: string, spans: readonly EnrollSpan[]): boolean {
+  if (spans.length === 0) return true;
+  return spans.some((s) => s.start <= date && (s.end === null || date <= s.end));
+}
+
+/** "2026-08" → 그 달의 첫날·마지막날. 말일은 다음 달 0일로 구해 28/29/30/31을 안 따진다. */
+export function monthBounds(month: string): { first: string; last: string } {
+  const [y, m] = month.split("-").map(Number);
+  const lastDay = new Date(Date.UTC(y!, m!, 0)).getUTCDate();
+  return { first: `${month}-01`, last: `${month}-${String(lastDay).padStart(2, "0")}` };
+}
+
+/**
+ * 그 달에 **새로 들어온** 날 — 없으면 null.
+ * ⚠️ 그 달이 시작되기 전날에 이미 소속이었으면 신입이 아니다(달 중에 반이 잠깐 끊긴 재등록 방어).
+ */
+export function joinedInMonth(month: string, spans: readonly EnrollSpan[]): string | null {
+  const { first } = monthBounds(month);
+  if (spans.length === 0) return null;
+  if (isEnrolledOn(addDays(first, -1), spans)) return null;
+  const starts = spans.map((s) => s.start).filter((s) => s >= first && s <= monthBounds(month).last);
+  return starts.length > 0 ? starts.slice().sort()[0]! : null;
+}
+
+/**
+ * 그 달에 **나간** 날 — 없으면 null.
+ * ⚠️ 그 달 마지막 날에 아직 소속이면 나간 게 아니다(같은 반 재등록으로 구간이 이어진 경우).
+ */
+export function leftInMonth(month: string, spans: readonly EnrollSpan[]): string | null {
+  const { first, last } = monthBounds(month);
+  if (spans.length === 0) return null;
+  if (isEnrolledOn(last, spans)) return null;
+  const ends = spans
+    .map((s) => s.end)
+    .filter((e): e is string => !!e && e >= first && e <= last);
+  return ends.length > 0 ? ends.slice().sort().at(-1)! : null;
+}
+
+/** 다른 반의 수강 구간 — 반이동 판정에 쓴다. */
+export type OtherSpan = EnrollSpan & { classId: string; className: string; subject: string | null };
+
+/**
+ * 나간 다음 **같은 과목의 다른 반이 이어받았으면** 퇴원이 아니라 반이동이다.
+ *
+ * 🔴 조건 셋을 모두 만족해야 한다 — 라벨이 틀리면 없느니만 못하다:
+ *   ① 같은 과목(수학 그만두고 영어 시작한 건 이동이 아니다)
+ *   ② 나간 **다음날 이후** 시작(겹치면 두 반을 같이 다닌 것이지 옮긴 게 아니다)
+ *   ③ 공백이 14일 이내
+ */
+export function transferTo(
+  leftOn: string,
+  subject: string | null,
+  others: readonly OtherSpan[],
+): OtherSpan | null {
+  const limit = addDays(leftOn, TRANSFER_GAP_DAYS);
+  const hit = others
+    .filter((o) => o.subject === subject && o.start > leftOn && o.start <= limit)
+    .sort((a, b) => a.start.localeCompare(b.start));
+  return hit[0] ?? null;
+}
+
+/** 들어오기 직전 **같은 과목의 다른 반이 끝났으면** 신입이 아니라 반이동이다(위 규칙의 반대 방향). */
+export function transferFrom(
+  joinedOn: string,
+  subject: string | null,
+  others: readonly OtherSpan[],
+): OtherSpan | null {
+  const floor = addDays(joinedOn, -TRANSFER_GAP_DAYS);
+  const hit = others
+    .filter((o) => o.subject === subject && !!o.end && o.end < joinedOn && o.end >= floor)
+    .sort((a, b) => (b.end ?? "").localeCompare(a.end ?? ""));
+  return hit[0] ?? null;
+}
+
+/**
+ * 이름 옆에 다는 표식. 보통 빈 배열이고, 그 달에 경계가 있는 학생만 1~2개를 갖는다.
+ * (들어왔다 나간 달이면 둘 다 — 드물지만 감추지 않는다.)
+ */
+export type LifecycleBadge = {
+  kind: "new" | "left" | "transferIn" | "transferOut";
+  /** 기준 날짜(시작일 또는 종료일). */
+  date: string;
+  /** 반이동 상대 반 이름 — 툴팁에 "A반 → B반"으로 쓴다. */
+  otherClassName?: string;
+};
+
+/**
+ * 한 학생의 그 달 표식 — 신입/퇴원, 그리고 이어받은 반이 있으면 반이동으로 승격.
+ * @param others **다른 반**의 수강 구간(이 반은 빼고 넘길 것)
+ */
+export function lifecycleBadges(
+  month: string,
+  spans: readonly EnrollSpan[],
+  subject: string | null,
+  others: readonly OtherSpan[] = [],
+): LifecycleBadge[] {
+  const out: LifecycleBadge[] = [];
+  const joined = joinedInMonth(month, spans);
+  if (joined) {
+    const from = transferFrom(joined, subject, others);
+    out.push(
+      from
+        ? { kind: "transferIn", date: joined, otherClassName: from.className }
+        : { kind: "new", date: joined },
+    );
+  }
+  const left = leftInMonth(month, spans);
+  if (left) {
+    const to = transferTo(left, subject, others);
+    out.push(
+      to ? { kind: "transferOut", date: left, otherClassName: to.className } : { kind: "left", date: left },
+    );
+  }
+  return out;
+}
+
+/** 화면 문구 — DB 값·영문 키를 그대로 내보내지 않는다. */
+export const BADGE_LABEL: Record<LifecycleBadge["kind"], string> = {
+  new: "신입",
+  left: "퇴원",
+  transferIn: "반이동",
+  transferOut: "반이동",
+};
+
+/** 툴팁 문장 — 언제·어디서/어디로인지까지 말한다(뱃지 두 글자만으론 사유를 모른다). */
+export function badgeTitle(b: LifecycleBadge, className: string): string {
+  if (b.kind === "new") return `${b.date} 첫 수업`;
+  if (b.kind === "left") return `${b.date} 퇴원`;
+  if (b.kind === "transferIn") return `반이동: ${b.otherClassName} → ${className} (${b.date}부터)`;
+  return `반이동: ${className} → ${b.otherClassName} (${b.date}까지)`;
+}

@@ -1,7 +1,7 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged, fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
-import { kstToday } from "@/lib/date-kst";
+import { addDays, kstToday } from "@/lib/date-kst";
 import { effectiveTeacherId } from "@/lib/auth/view-mode";
 import { attendanceRate } from "@/lib/calc/attendance";
 import {
@@ -10,6 +10,13 @@ import {
 } from "@/features/enrollments/eligibility";
 import { includeInAttendanceInput, makeupStudentIds } from "@/features/attendance/input-roster";
 import { buildHolidayMap, dowsFromKeys, resolveAttendDows } from "@/features/attendance/calendar";
+import {
+  lifecycleBadges,
+  TRANSFER_GAP_DAYS,
+  type EnrollSpan,
+  type LifecycleBadge,
+  type OtherSpan,
+} from "@/features/attendance/enrollment-span";
 import {
   deriveMarksFromReports,
   isDerivedAttendanceSubject,
@@ -391,6 +398,13 @@ export type MatrixStudent = {
   enrolledAt: string | null;
   // 등원요일(0=일~6=토) — 분리등원(enrollments.attendance_days)이 있으면 그 요일, 없으면 반 수업요일 전체.
   attendDows: number[];
+  /**
+   * 이 반에서의 수강 구간(재등록이면 여러 개) — 칸이 재원 기간 밖인지 판정한다.
+   * ⚠️ 표시 전용이다. 재원 외라고 입력을 막지 않는다(퇴원 뒤 보강 출석이 실제로 있다).
+   */
+  spans: EnrollSpan[];
+  /** 그 달의 신입·퇴원·반이동 표식 — 대부분의 학생은 빈 배열. */
+  badges: LifecycleBadge[];
 };
 
 export type AttendanceMatrix = {
@@ -458,6 +472,76 @@ function buildMonthDays(month: string): MatrixDay[] {
  * 한 반의 한 달치 모든 학생 출석 — 매트릭스 형태로.
  * classId 없으면 모든 반의 통계만 반환 (학생 없음).
  */
+/**
+ * 학생별 신입·퇴원·반이동 표식을 채운다(제자리 변경).
+ *
+ * 🔴 **경계가 있는 학생이 있을 때만** 다른 반을 조회한다 — 평범한 달엔 쿼리가 0이다.
+ *    반이동 판정만을 위해 매달 전 학생의 타 반 수강을 긁으면 강사 전체 보기(반 10개)에서
+ *    쿼리가 반 수만큼 늘어난다(B4·반응속도 1순위).
+ * ⚠️ 다른 반 조회는 임베드를 쓰지 않는다 — enrollments→classes FK가 늘어나는 순간
+ *    손도 안 댄 이 화면이 PGRST201로 죽는다(#94). 두 번 나눠 받고 코드에서 잇는다.
+ */
+async function attachLifecycleBadges(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  month: string,
+  studentMap: Map<string, MatrixStudent>,
+  classId: string,
+  subject: string | null,
+): Promise<void> {
+  const students = [...studentMap.values()];
+  // 1차 판정(다른 반 모름) — 여기서 아무것도 안 나오면 추가 조회 자체를 안 한다.
+  const plain = new Map<string, LifecycleBadge[]>();
+  for (const s of students) {
+    const b = lifecycleBadges(month, s.spans, subject);
+    if (b.length > 0) plain.set(s.id, b);
+  }
+  if (plain.size === 0) return;
+
+  // 경계가 있는 학생만, 경계 ±14일과 겹치는 **다른 반** 수강을 본다.
+  const ids = [...plain.keys()];
+  const dates = [...plain.values()].flat().map((b) => b.date).sort();
+  const from = addDays(dates[0]!, -TRANSFER_GAP_DAYS);
+  const to = addDays(dates[dates.length - 1]!, TRANSFER_GAP_DAYS);
+  const rows = await fetchInChunks(ids, (chunk) =>
+    supabase
+      .from("enrollments")
+      .select("student_id, class_id, start_date, end_date")
+      .in("student_id", chunk)
+      .neq("class_id", classId)
+      .lte("start_date", to)
+      .or(`end_date.is.null,end_date.gte.${from}`),
+  );
+  const otherClassIds = [...new Set(rows.map((r) => r.class_id as string))];
+  const metaRows = otherClassIds.length
+    ? await fetchInChunks(otherClassIds, (chunk) =>
+        supabase.from("classes").select("id, class_name, subject").in("id", chunk),
+      )
+    : [];
+  const meta = new Map(
+    metaRows.map((c) => [c.id as string, { name: c.class_name as string, subject: c.subject as string | null }]),
+  );
+
+  const othersById = new Map<string, OtherSpan[]>();
+  for (const r of rows) {
+    const m = meta.get(r.class_id as string);
+    if (!m) continue;
+    const list = othersById.get(r.student_id as string) ?? [];
+    list.push({
+      classId: r.class_id as string,
+      className: m.name,
+      subject: m.subject,
+      start: r.start_date as string,
+      end: (r.end_date as string | null) ?? null,
+    });
+    othersById.set(r.student_id as string, list);
+  }
+
+  for (const id of ids) {
+    const st = studentMap.get(id);
+    if (st) st.badges = lifecycleBadges(month, st.spans, subject, othersById.get(id) ?? []);
+  }
+}
+
 export async function getMonthlyAttendanceMatrix(
   month: string,
   requestedClassId: string | null,
@@ -571,9 +655,24 @@ export async function getMonthlyAttendanceMatrix(
         school: s.school,
         enrolledAt: e.start_date,
         attendDows: resolveAttendDows(e.attendance_days as string[] | null, classDows),
+        spans: [],
+        badges: [],
       });
     }
   }
+  // 구간을 학생에 붙인다 — 화면이 "그날 이 반 소속이었나"를 판정할 유일한 근거.
+  for (const [id, list] of rangesById) {
+    const st = studentMap.get(id);
+    if (st) st.spans = list;
+  }
+  await attachLifecycleBadges(
+    supabase,
+    month,
+    studentMap,
+    classId,
+    classes.find((c) => c.id === classId)?.subject ?? null,
+  );
+
   const students = Array.from(studentMap.values()).sort((a, b) => {
     const ga = a.grade ?? "";
     const gb = b.grade ?? "";

@@ -1,10 +1,27 @@
 import type { AttendanceMatrix, AttendanceStatus, MatrixStudent } from "@/features/attendance/server/queries";
 import type { StudentMoney } from "@/features/attendance/server/teacher-money";
 import { formatDows } from "@/features/attendance/calendar";
+import {
+  BADGE_LABEL,
+  badgeTitle,
+  isEnrolledOn,
+  type LifecycleBadge,
+} from "@/features/attendance/enrollment-span";
 import { countMarks } from "@/features/attendance/grid/totals";
 import { rowKey } from "@/features/attendance/grid/model";
 import { AttendanceCell } from "./attendance-cell";
 import { RowTotalCells } from "./live-totals";
+
+/**
+ * 표식 색 — 신입은 눈에 띄게(초록), 퇴원은 경고(빨강), 반이동은 중립적 이동(보라).
+ * ⚠️ 출결 팔레트(`--att-*`)를 쓰지 않는다 — 그 색은 칸의 출결 값 전용이라 이름 옆에 쓰면 뜻이 겹친다.
+ */
+const BADGE_TONE: Record<LifecycleBadge["kind"], string> = {
+  new: "bg-emerald-100 text-emerald-800",
+  left: "bg-rose-100 text-rose-700",
+  transferIn: "bg-violet-100 text-violet-800",
+  transferOut: "bg-violet-100 text-violet-800",
+};
 
 /** 금액 표시 — 0원과 '자료 없음'을 구분한다(청구서가 없는 달은 "—"). */
 export function formatMoney(n: number | null | undefined): string {
@@ -28,10 +45,13 @@ export function MatrixRow({
   holidays,
   money,
   lockBefore,
+  classLabel,
 }: {
   student: MatrixStudent;
   /** 이 행이 속한 반 — 셀 저장 대상. 강사 전체 보기에선 행마다 다르다. */
   classId: string;
+  /** 반 이름 — 반이동 툴팁("가반 → 나반")에만 쓴다. 없으면 중립 표기로 떨어진다. */
+  classLabel?: string;
   matrix: AttendanceMatrix;
   days: AttendanceMatrix["days"];
   holidays: Record<string, string>;
@@ -52,8 +72,22 @@ export function MatrixRow({
           "세로폭은 조금 더 키우더라도 요일을 이름 아래로"). 행이 한 줄 높아지는 건 감수한 트레이드오프.
           ⚠️ 열 폭이 고정(colgroup)이라 넘치는 글자는 잘린다 — 원문은 `title`에 남긴다. */}
       <td className="border-line text-foreground sticky left-0 z-10 border-b border-r bg-card px-2 py-1">
-        <span className="block truncate text-[12px] leading-tight font-bold" title={student.name}>
-          {student.name}
+        <span className="flex items-center gap-1">
+          <span className="min-w-0 truncate text-[12px] leading-tight font-bold" title={student.name}>
+            {student.name}
+          </span>
+          {/* 신입·퇴원·반이동 — 그 달에 경계가 있는 학생만. 대부분의 행엔 아무것도 안 붙는다.
+              🔴 이름을 밀어내지 않는다(`shrink-0` + 이름이 `min-w-0 truncate`) — 열 폭이 고정이라
+                 뱃지가 자리를 뺏으면 이름이 먼저 잘린다. */}
+          {student.badges.map((b) => (
+            <span
+              key={`${b.kind}-${b.date}`}
+              title={badgeTitle(b, classLabel ?? "이 반")}
+              className={`shrink-0 rounded-sm px-1 text-[9px] leading-[14px] font-bold ${BADGE_TONE[b.kind]}`}
+            >
+              {BADGE_LABEL[b.kind]}
+            </span>
+          ))}
         </span>
         {attendLabel ? (
           <span
@@ -80,8 +114,11 @@ export function MatrixRow({
           return <td key={d.date} className="border-line bg-bg-soft/20 min-w-[30px] border-b border-r" aria-hidden />;
         }
         const holiday = holidays[d.date];
+        // 그 날 이 반 소속이 아니었나 — 8월 5일에 그만둔 학생의 나머지 26칸을 "수업하는 날"로
+        // 그리면 표가 거짓말을 한다. ⚠️ **표시만** 바꾼다(입력은 그대로) — 퇴원 뒤 보강 출석이 실제로 있다.
+        const outside = !isEnrolledOn(d.date, student.spans);
         // 등원요일 = 그 학생이 실제로 오는 날(분리등원 반영) — 공휴일은 휴원이라 제외.
-        const attend = attendDows.has(d.dow) && !holiday;
+        const attend = attendDows.has(d.dow) && !holiday && !outside;
         // 배경(음영·틴트)은 셀을 꽉 채우는 AttendanceCell 버튼이 그린다 — td는 relative 무대만
         // 제공한다(고정 크기 칩에 배경을 주면 셀을 못 채운다, gotcha #66).
         return (
@@ -95,6 +132,7 @@ export function MatrixRow({
               initialUnits={units[d.date] ?? null}
               attendDay={attend}
               muted={!!holiday || (!attend && d.isWeekend)}
+              outside={outside}
               locked={lockBefore && d.date < lockBefore ? lockedMessage(d.date, lockBefore) : null}
               derived={!!matrix.derived[student.id]?.[d.date]}
             />
