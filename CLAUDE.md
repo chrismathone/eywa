@@ -122,7 +122,8 @@ provider/모델 레지스트리는 `src/lib/ai/models.ts`의 `AI_MODELS`(티어�
   [analyzeStudentConsultation](src/features/consultations/server/ai.ts) 기본값 + 웹훅 인라인). form-extract·멘트(Haiku)·care는 불변.
 
 ### 녹음 분석 = Solar 유지 + 폼 자동입력은 후보정 하네스로 방어 (2026-06-24)
-실 ijw 녹음 3건을 eywa 파이프라인에 흘려 ijw(Claude) 저장 결과와 대조한 결론: **전사(AssemblyAI `universal-3-pro`)는
+실 ijw 녹음 3건을 eywa 파이프라인에 흘려 ijw(Claude) 저장 결과와 대조한 결론: **전사(AssemblyAI `universal-2`
+— ⚠️ 2026-08-06 정정, 원래 `universal-3-pro`라 적혀 있었으나 실측상 그 모델은 한국어 미지원이라 한 번도 쓰인 적이 없다 [[#96]])는
 ijw와 동일 엔진이라 품질 차 없음**(12분 회의 재전사 4,880자 vs ijw 4,869자), **회의록 8섹션·학생상담 7섹션·등록상담 분석문
 (서술형)도 Solar로 충분**. 유일한 약점은 **등록상담 "폼 자동입력"(구조화 추출)** — Solar(solar-pro3)가 ① 스키마 보기값을
 그대로 베끼고(`parentRelation=부/모/조부/조모/기타`, 이미 `pickEnum`이 폐기) ② 학생이름을 학교명에 복사(`schoolName=이윤건`)
@@ -341,6 +342,7 @@ key(DB 식별자)는 **자동 확정**: 과목명 입력 후 blur 시 1회 — �
 
 - **AI provider 전역 기본 = Anthropic Claude Sonnet 5** (2026-07-13 품질 A/B로 Solar Pro 3에서 전환 — Solar가 상담 분석 warnings를 놓치고 잡담을 섞음). 운영 전환은 env: **Vercel+로컬 `AI_PROVIDER=anthropic` 필수**(코드 기본값 미설정은 여전히 upstage=Solar이므로 안 걸면 프로덕션이 Solar로 동작). 모든 AI(JSON) 호출은 `src/lib/ai/generate.ts`의 `generateJSON()` 단일 진입점. 롤백 = `AI_PROVIDER=upstage`(전역, Solar로) 또는 호출부 `provider:"upstage"`. `reasoning` 티어(Opus)는 **금지**(명시 요청 시만), Anthropic 고정.
 - **전사 분석 3종(회의록·등록상담·재원생 상담) = DeepSeek v4-pro** (2026-07-16, 위 전역 기본과 별개로 코드에서 `provider:"deepseek"` 우선). 실측 A/B(injaewon 실전사 5건)에서 v4-pro만 warnings를 5/5 Sonnet급 생성, 경량 v4-flash·레거시 chat·Solar는 warnings 2~3/5 붕괴(Solar 탈락 사유 재현). 비용 압도적 우위가 채택 근거. ⚠️ v4-pro는 추론형이라 ~1.2배 느림(백그라운드라 감수). **Vercel `DEEPSEEK_API_KEY` 필요**(없으면 anthropic/upstage 무중단 폴백 = 키 추가 전까지 Sonnet 유지, 롤백=키 제거 또는 호출부 provider 교체). form-extract(grounding 가드)·멘트(Haiku)·care insights는 불변. **재제안 금지** — 스왑 범위·모델은 확정.
+- **음성 전사 엔진 = AssemblyAI `universal-2` 유지** (2026-08-06 원장 결정: *"assembly가 매우 저렴하고 크게 문제 없으니 그대로 가는게 맞긴하겠네"*). 국내 엔진 교체(리턴제로/VITO·네이버 클로바) **재제안 금지** — 조사는 이미 했다: [rtzr 벤치마크](https://github.com/rtzr/Awesome-Korean-Speech-Recognition)는 **모델이 아니라 CER 순위표**(가중치·코드 없음, 게다가 1위가 주최사 본인이라 자기보고 편향)이고 AssemblyAI는 그 표에 **아예 없어** 직접 비교 자체가 불가능하다. 리턴제로는 화자분리·키워드(500개)는 되지만 **콜백이 없어 폴링 전용** = 지금의 웹훅(`/api/webhooks/assemblyai`) 대비 후퇴. ⚠️ **한국어는 `universal-2`에만 있다** — 상위 라인(`universal-3-pro`·`universal-3.5-pro`)은 18개 언어에 한국어가 빠져 있어 배열에 넣어도 조용히 폴백할 뿐이다([[#96]], 가드 `assemblyai-models.test.ts`). 즉 **AssemblyAI 쪽 "상위 모델로 올리기"는 한국어엔 존재하지 않는 선택지**다.
 - **분석 화면에 AI 모델 라벨 노출** (2026-07-16, 기존 "모델명 노출 금지" 반전). 모델을 번갈아 쓰므로 어떤 모델로 분석됐는지 직원이 보게 함. `modelDisplayLabel`(친화적 라벨, raw id 아님)로 등록상담·회의록·재원생 상담 '펼치기' 옆에 표시. 다시 "숨김"으로 되돌리지 말 것.
 - **테넌트 `injaewon` = 프로덕션 실데이터** (ijw-calander 은퇴·전체 이식). 데모 아님 → **`db:seed` 절대 금지**, 검증 중 무심한 mutation 금지(읽기 전용·국소·원복 우선). "데모=일회용" 전제 폐기.
 - **의도적 비이식(영구 제외)**: 캘린더/간트/시간표 시뮬레이션(시나리오)/계약서/양방향 자동 동기화. 마케팅·셔틀·자료실·역할관리 원본탭·매출분석·시간표배포·학부모포털도 12메뉴 정체성상 제외. (인앱 알림은 경량 `notifications`만 신설했고 ijw "알림센터"는 아님.) ~~챗봇~~ → **2026-07-16 명시 재검토로 갱신**: ijw 챗봇(ChatbotFAB+Gemini) '이식'은 여전히 제외이나, **운영실 대화형 비서는 자체 설계로 도입 승인**(아래 '학원 매니저 팀' 항목).
@@ -498,6 +500,7 @@ key(DB 식별자)는 **자동 확정**: 과목명 입력 후 blur 시 1회 — �
 - **#93** 이름이 비슷한 두 컬럼이 **다른 사실**일 수 있다 — `textbook_orders.created_by`(작성자) ≠ `teacher_name`(소유자). 대리 작성이 의도된 동작이라 사무실이 강사 앞으로 낸 요청은 작성자=사무실·소유자=그 강사다. ⚠️ **소유 판정을 created_by로 갈아끼우면 그 강사가 자기 요청을 못 고친다** · ⚠️ 소유자 이름으로 작성자 칸을 **백필하지 말 것**(사실 아닌 값이 남는다 — 모르면 null이 정직하다) · ⚠️ UPDATE의 `with check`는 OLD를 못 봐서 `col = auth.uid()`를 걸면 대리 작성분이 락아웃
 - **#94** PostgREST 임베드에 **FK 이름을 안 적으면**, 남이 컬럼 하나 더한 날 **손도 안 댄 화면이 죽는다**(0171a가 `makeup_class_id`를 더해 lesson_reports→classes FK가 2개 → `classes(...)`가 PGRST201/HTTP 300 → 51건이 **"총 0건"으로 위장**). `.select(`의 임베드는 항상 `ident!<FK이름>(…)` — ⚠️ **정렬 문자열엔 넣으면 400**(select만 확정하면 정렬은 따라온다) · 🔑 위험 조합이 이미 **11쌍(8쌍이 →users)** 이라 `classes.select("…, users(...)")`류는 **지금 쓰면 바로 죽는다** · 진단은 REST 상태코드(RLS 의심보다 먼저) · 전수 가드 `postgrest-embed-hints.test.ts`
 - **#95** 🔴🔴 **마이그레이션보다 앱을 먼저 배포하면 그 화면이 통째로 죽는다** — eywa는 SQL을 **원장이 손으로** 실행하므로 push와 적용 사이에 **항상 간격**이 있다. 2026-08-03 실사고: `classnote_notice_id`(0174a)를 `.select()`에 넣고 앱만 먼저 배포 → 컬럼 부재로 PostgREST 400 → `fetchInChunks`가 (규약대로) throw → **강사 전원의 원스크린이 먹통**. ⚠️ **모든 배포는 옛 스키마·새 스키마 둘 다에서 돌아야 한다**(expand/contract) — 새 컬럼을 읽는 코드는 ① SQL 적용을 **확인한 뒤** 푸시하거나 ② 컬럼이 없어도 안 죽게 짠다. 🔑 특히 **전원이 매일 쓰는 경로**(원스크린 로스터·시간표)엔 새 컬럼을 **넣지 말 것** — 사무실 화면 하나가 에러 나는 것과 급이 다르다(가드: `textbook-onescreen-hotpath.test.ts`)
+- **#96** 지원 안 하는 모델을 요청 배열에 넣어도 **에러가 안 난다** — 조용히 폴백해서 주석·문서만 거짓이 된다(`universal-3-pro`를 몇 달간 보냈지만 실제는 전건 `universal-2`). 🔑 판별은 요청값이 아니라 **응답의 `speech_model_used`** · ⚠️ "상위 모델=더 좋다"는 언어별로 안 통한다(AssemblyAI 상위 라인 18개 언어에 **한국어만 빠짐**, 일·중은 있다) · 가드 `assemblyai-models.test.ts`
 - **#82** postgres.js에서 `${JSON.stringify(v)}::jsonb` = **이중 인코딩**(`"#153e75"` 9자 저장 → 검증 실패 → 설정 침묵 무시). 스칼라는 `to_jsonb(${v}::text)`·객체는 `sql.json(obj)`, 검증은 **길이까지** (⚠️ 눈으로 따옴표 구분 안 됨)
 
 ## 🎨 디자인 규칙 인덱스 (상세는 `docs/design-conventions.md`)
