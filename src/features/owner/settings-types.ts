@@ -18,6 +18,20 @@ export const SUBJECT_COLORS = [
 export const WEEKDAY_GROUPINGS = ["mon-thu", "mon-tue", "mon-wed-fri", "none"] as const;
 export type WeekdayGrouping = (typeof WEEKDAY_GROUPINGS)[number];
 
+// 과목을 열 때 처음 보이는 시간표 뷰(과목별). 원장 2026-08-06: *"영어는 기본뷰를 잘 안 쓴다"* —
+// 과목마다 주로 보는 뷰가 다르므로 **코드에 과목 키를 박지 않고** 학원 설정에서 고른다(운영 enum 규칙).
+// ⚠️ 교실뷰(rooms)는 전 과목 지도라 '과목의 기본 뷰'가 될 수 없다 → 선택지에서 뺀다.
+// ⚠️ 강사뷰는 허용 과목(영어·강사별시간표 설정 보유)에서만 유효 — 아니면 페이지가 기본뷰로 강등한다.
+export const SUBJECT_DEFAULT_VIEWS = ["basic", "integrated", "teacher"] as const;
+export type SubjectDefaultView = (typeof SUBJECT_DEFAULT_VIEWS)[number];
+export const SUBJECT_DEFAULT_VIEW_LABEL: Record<SubjectDefaultView, string> = {
+  basic: "기본뷰",
+  integrated: "통합뷰",
+  teacher: "강사뷰",
+};
+export const SUBJECT_DEFAULT_VIEW_OPTIONS: { value: SubjectDefaultView; label: string }[] =
+  SUBJECT_DEFAULT_VIEWS.map((v) => ({ value: v, label: SUBJECT_DEFAULT_VIEW_LABEL[v] }));
+
 export const periodTimeSchema = z.object({
   label: z.string().min(1).max(20),
   startTime: z.string().regex(HHMM, "HH:MM 형식"),
@@ -81,6 +95,9 @@ export const subjectSchema = z.object({
   color: z.enum(SUBJECT_COLORS).default("neutral"),
   // 시간표 기본뷰 요일 병합 방식(과목별). 미설정 저장 데이터는 읽을 때 mon-thu로 폴백(resolve는 스키마 미통과).
   weekdayGrouping: z.enum(WEEKDAY_GROUPINGS).default("mon-thu"),
+  // 이 과목을 열 때 처음 보이는 시간표 뷰. 미설정 = 기본뷰(지금까지의 동작).
+  // (.optional() — 예외 플래그 관례. 안 적은 과목은 지금과 완전히 같게 동작한다.)
+  defaultView: z.enum(SUBJECT_DEFAULT_VIEWS).optional(),
   // 일일·확인테스트 문항수(만점) — 원스크린 점수 입력의 /N. 기본 5. (강사 변경 허용은 report.allowTeacherTestMax.)
   testMax: z.number().int().min(1).max(100).default(5),
   // 과목 전용 평일 교시(미설정/빈 배열 = 폴백: 영어=내장 11교시, 그 외=전역 평일 교시). 주말은 전역 공통.

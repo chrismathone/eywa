@@ -19,7 +19,7 @@ import { ClassInfoCard, HoverCard, StudentInfoCard } from "./hover-cards";
 import { timetableStudentTone, useTimetableColorMode, withdrawnTone } from "./timetable-color";
 
 // 라벨열·카드가 공유하는 고정 섹션 높이(px) — 같은 y에서 행이 맞물려 "행=라벨, 열=수업" 스프레드시트 정렬.
-const NAME_H = 40;
+export const NAME_H = 40;
 const TEACHER_H = 24;
 const ROOM_H = 34;
 const DAYHEAD_H = 22;

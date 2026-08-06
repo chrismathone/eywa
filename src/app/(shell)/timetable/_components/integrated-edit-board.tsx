@@ -34,29 +34,28 @@ import { DEFAULT_OTHERS_TITLE } from "@/features/timetable/lib/integration-group
 import type { PeriodsConfig } from "@/features/timetable/lib/periods";
 import { TimetableZoomArea } from "./font-size-toggle";
 import { GroupPresetBar } from "./group-preset-bar";
-import { RichCardGroupBoard, ClassColumn, type ColumnCommon } from "./rich-card-group";
+import { RichCardGroupBoard, ClassColumn, NAME_H, type ColumnCommon } from "./rich-card-group";
 
 /**
- * 통합뷰 **배치 편집 모드** — 실제 표 위에서 반(=열)을 잡아 다른 줄로 끌어 옮긴다
- * (원장 2026-08-06 "이 상태에서 드래그드랍 할 수 없나? 편집 모드를 만들어서").
+ * 통합뷰 **'그룹 설정'(배치 편집) 모드** — 통합뷰 그 자체에서 반(=열)을 잡아 다른 줄로 끌어 옮긴다
+ * (원장 2026-08-06 *"따로 그룹 설정 모드가 있는 게 아니라, 통합뷰에서 편집모드를 누르고 통합뷰의
+ * 그 자체를 드래그하고 싶은거야"* → 별도 창(칩 보드)은 폐지했다).
  *
- * 왜 창(‘그룹 설정’)이 아니라 표 위인가: 창의 칩 보드는 **결과를 상상해야** 했다 — 어느 줄에 놓으면
- * 표가 어떻게 되는지는 저장하고 닫아 봐야 알았다. 여기선 놓는 순간 그 자리에서 진짜 표가 다시 그려진다
+ * 왜 창이 아니라 표 위인가: 칩 보드는 **결과를 상상해야** 했다 — 어느 줄에 놓으면 표가 어떻게 되는지는
+ * 저장하고 닫아 봐야 알았다. 여기선 놓는 순간 그 자리에서 진짜 표가 다시 그려진다
  * (교시축·요일축·명단 행수까지 줄 구성에 따라 바뀌므로 "칩만 옮기는 미리보기"로는 대체가 안 된다).
- * 칩 보드(창)는 그대로 둔다 — 반이 많을 때 전체 배치를 한눈에 보는 용도로는 그쪽이 낫다.
  *
  * 구현 요점:
+ * · 편집 중엔 **수업명 행만** 그린다(`namesOnly`) — 원장이 먼저 짚은 렉 때문. 서식은 읽기 화면과
+ *   **같은 컴포넌트**라 색·폭·모서리가 저절로 일치한다(따로 그리면 설정 화면과 실제 통합뷰가 갈라진다).
  * · 드롭마다 서버 왕복 없이 [`groupRichCards`](src/features/timetable/lib/class-grid.ts)(순수)를 **클라에서
  *   다시 돌린다**. 카드(무거운 쪽)는 서버가 1회 만들어 넘긴다.
- * · 상태 전이는 창 보드와 **같은 순수 함수**(group-assign.ts) — 두 입구가 다른 규칙을 갖지 않게.
+ * · 상태 전이는 순수 모듈 [group-assign.ts](src/features/timetable/lib/group-assign.ts)에 있다.
  * · ⚠️ zoom 래퍼는 **DndContext 안쪽**에 둔다. 바깥이면 `position:fixed`인 DragOverlay가 zoom 좌표계로
  *   들어가 커서와 어긋난다(font-size-toggle.tsx 주석 참조).
  * · ⚠️ 편집 중엔 '기타(미배정)' 줄을 **항상 보여준다**(저장된 설정이 숨김이어도). 줄에서 뺀 반이
  *   화면에서 사라지면 "반이 없어졌다"가 된다 — 숨김 설정은 배지로 알린다.
  */
-/** 수업명 행 높이 — rich-card-group의 `NAME_H`와 같은 값(‘맨 뒤’ 칸이 행에 맞물리게). */
-const NAMES_ONLY_ROW_H = 40;
-
 export function IntegratedEditBoard({
   subject,
   cards,
@@ -459,7 +458,7 @@ function EditSection({
             className={`border-line text-text-faint flex w-14 shrink-0 items-center justify-center border-l border-dashed text-center text-[10px] leading-tight ${
               boxActive ? "bg-primary-soft text-primary" : ""
             }`}
-            style={{ height: NAMES_ONLY_ROW_H }}
+            style={{ height: NAME_H }}
           >
             맨 뒤
           </div>
