@@ -31,7 +31,7 @@ export const PeriodBlock = memo(function PeriodBlock({
   data: ClassSheetWeekData;
   lines: PlanLineDTO[];
   marks: Record<string, { status: string | null; progressNote: string | null }>;
-  attendance: Record<string, string>;
+  attendance: Record<string, { status: string; note: string | null; units: number | null }>;
   store: SheetSaveStore;
   handlers: SheetHandlers;
   canEdit: boolean;
@@ -105,7 +105,11 @@ export const PeriodBlock = memo(function PeriodBlock({
             canEdit={canEdit && slot.scheduled}
             canMarkDate={data.canMarkAttendanceByDate[date] ?? false}
             showExamTerm={!data.isEie}
-            onBulkAttendance={(ids) => ids.forEach((id) => handlers.markPresent(id, date))}
+            // 일괄 출결은 **빈 칸만** 채운다(planBulkAttendance가 기록 있는 학생을 이미 뺀다) — 그래서
+            // 지각·결석을 골라도 이미 찍힌 기록·사유·시수를 덮지 않는다.
+            onBulkAttendance={(ids, status) =>
+              ids.forEach((id) => handlers.setAttendance(id, date, status))
+            }
             onBulkStatus={(ids, status) =>
               ids.forEach((id) =>
                 handlers.saveMark(

@@ -16,6 +16,7 @@ import { getTenantSettings } from "@/features/owner/server/queries";
 import { resolveSkillAreas } from "@/features/owner/skill-areas";
 import type { SkillAreaSetting } from "@/features/owner/settings-types";
 import { effectiveAttendanceRecords } from "@/features/attendance/effective-records";
+import { getTeachingClassIds } from "@/features/classes/server/delegation";
 import { isWithinAttendanceEditWindow } from "@/features/attendance/edit-window";
 import { readEcsFontSize, type EcsFontSize } from "../font-size";
 import {
@@ -29,6 +30,7 @@ import { keepEnglishTrack, type EnglishTrackFilter } from "@/features/classes/en
 import {
   buildWeekGrid,
   scheduledSlotKeySet,
+  seatSlotKeySet,
   sheetFillStats,
   withdrawnFloorOf,
   type GridPlanLine,
@@ -75,8 +77,12 @@ export type ClassSheetWeekData = {
   teacherNames: Record<string, string>;
   classTeacherName: string | null;
   students: Record<string, SheetStudentMeta>;
-  /** `${studentId}|${date}` → attendance_status(effective). */
-  attendanceByStudentDate: Record<string, string>;
+  /**
+   * `${studentId}|${date}` → 출결(effective) — 상태 + **사유 메모**.
+   * ⚠️ 메모를 같이 싣는 이유: 출결 pill(지각·결석)이 사유 창을 띄우는데, 초기값이 없으면 창이 빈 채로
+   *    열리고 저장 시 **출석부에 이미 적힌 사유를 null로 덮는다**(setAttendanceCell은 넘긴 note를 쓴다).
+   */
+  attendanceByStudentDate: Record<string, { status: string; note: string | null; units: number | null }>;
   /** `${studentId}|${date}|${HH:MM}` → 마크. */
   marks: Record<string, { status: string | null; progressNote: string | null }>;
   goals: SheetGoalDTO[];
@@ -204,7 +210,8 @@ export async function getClassSheetWeek(
       .lte("mark_date", weekSunday),
     admin
       .from("attendance_records")
-      .select("id, student_id, class_id, session_date, status, recorded_at")
+      // note = 지각·결석 사유. 출결 pill의 사유 창 초기값이라 **반드시 함께** 읽는다(없으면 저장 시 null로 덮음).
+      .select("id, student_id, class_id, session_date, status, note, session_units, recorded_at")
       .eq("tenant_id", tenantId)
       .eq("class_id", classId)
       .gte("session_date", weekMonday)
@@ -277,6 +284,10 @@ export async function getClassSheetWeek(
       session_date: a.session_date as string,
       recorded_at: a.recorded_at as string,
       status: a.status as string,
+      // 지각·결석 사유 — 출결 드롭다운의 사유 창 초기값. 여기서 흘리면 저장 시 기존 사유가 null로 덮인다.
+      note: (a.note as string | null) ?? null,
+      // 시수(유닛) — null = 기본 1(effectiveUnits). 화면의 유닛 칸이 이 값을 보여주고 고친다.
+      session_units: (a.session_units as number | null) ?? null,
     })),
   );
 
@@ -288,19 +299,22 @@ export async function getClassSheetWeek(
   // JJ 표시 여부 — **그리드 조립 전에** 정해야 한다(작성률 분모까지 이 값이 정한다). LAB은 항상 제외.
   const showSelfStudy = readEcsShowSelfStudy(myPrefsRes.data?.ui_prefs);
 
+  // 스케줄 행은 **한 번만** 만들어 그리드와 유닛 계산이 같은 입력을 본다(두 벌이면 라벨 해석이 갈린다).
+  const scheduleRows = (schedulesRes.data ?? []).map((s) => ({
+    dayOfWeek: s.day_of_week as DowKey,
+    startTime: s.start_time as string,
+    endTime: s.end_time as string,
+    validFrom: s.valid_from as string,
+    validTo: (s.valid_to as string | null) ?? null,
+    teacherId: (s.teacher_id as string | null) ?? null,
+    // 해석은 여기(슬롯이 만들어지는 지점) 한 곳에서 — 컴포넌트마다 하면 표기가 갈린다(시간표 규약 동일).
+    slotTeacherLabel: resolveTeacherLabel((s.slot_teacher_label as string | null) ?? null, labelMap),
+    slotRoomLabel: (s.slot_room_label as string | null) ?? null,
+  }));
+
   const grid = buildWeekGrid({
     weekMonday,
-    schedules: (schedulesRes.data ?? []).map((s) => ({
-      dayOfWeek: s.day_of_week as DowKey,
-      startTime: s.start_time as string,
-      endTime: s.end_time as string,
-      validFrom: s.valid_from as string,
-      validTo: (s.valid_to as string | null) ?? null,
-      teacherId: (s.teacher_id as string | null) ?? null,
-      // 해석은 여기(슬롯이 만들어지는 지점) 한 곳에서 — 컴포넌트마다 하면 표기가 갈린다(시간표 규약 동일).
-      slotTeacherLabel: resolveTeacherLabel((s.slot_teacher_label as string | null) ?? null, labelMap),
-      slotRoomLabel: (s.slot_room_label as string | null) ?? null,
-    })),
+    schedules: scheduleRows,
     enrollments: enrollments.map((e) => ({
       studentId: e.student_id,
       startDate: e.start_date,
@@ -366,15 +380,29 @@ export async function getClassSheetWeek(
 
   // 출석 present 체크 가능 여부 — attendance 계약 그대로(권한 + 강사만 7일 창, 날짜별 판정)
   // 시트 가져오기 버튼 자격은 랜딩과 같은 게이트(sheet_sync full) — 독립 조회라 함께 태운다(B4).
-  const [attendanceWrite, canSheetSync] = await Promise.all([
+  const [attendanceWrite, canSheetSync, attendanceScope] = await Promise.all([
     canWriteTenant(access.user.systemRole, "attendance"),
     canManageSheetSync(access.user.systemRole),
+    accessLevelTenant(access.user.systemRole, "attendance"),
   ]);
+  // 🔴 출결 저장은 **출석부와 같은 액션**(`setAttendanceCell`)을 타는데, 그 액션의 담당 반 판정은
+  //    `getTeachingClassIds`(= `classes.teacher_id` ∪ 위임)라 **ECS 접근 범위보다 좁다**. ECS는 원장 승인
+  //    2026-07-29로 교시 담당(부담임, `ecsAssistantClassIds` — `class_schedules.teacher_id`)까지 열어 뒀다.
+  //    그래서 부담임은 시트를 열 수는 있지만 출결 저장은 서버가 거절한다 → **컨트롤을 미리 잠근다.**
+  //    안 잠그면 "눌리는데 매번 거절"이 되어 이 프로젝트가 반복해 밟은 거짓 어포던스가 된다(#77 반대편).
+  // ⚠️ 여기서 범위를 넓히지 말 것 — 출결은 시수·급여에 닿으므로 게이트는 출석부 쪽이 단일 소스다.
+  //    부담임에게도 열어야 한다면 그 액션의 담당 판정을 바꾸는 게 맞다(원장 결정 필요).
+  const attendanceClassIds =
+    attendanceWrite && attendanceScope === "scoped"
+      ? (await getTeachingClassIds(await createClient(), access.user.id, today)).all
+      : null;
+  const attendanceClassOk = attendanceClassIds === null || attendanceClassIds.includes(classId);
   const canMarkAttendanceByDate: Record<string, boolean> = {};
   for (const date of weekDatesOf(weekMonday)) {
     canMarkAttendanceByDate[date] =
       attendanceWrite &&
-      (access.user.systemRole !== "teacher" || isWithinAttendanceEditWindow(date, today));
+      attendanceClassOk &&
+      (attendanceScope !== "scoped" || isWithinAttendanceEditWindow(date, today));
   }
 
   // 교시 라벨(표시 전용) — **요일별 표**로 슬롯마다 확정한다. 주말은 평일과 시각이 다른 별도 교시표를
@@ -395,8 +423,17 @@ export async function getClassSheetWeek(
     }
   }
 
-  const attendanceByStudentDate: Record<string, string> = {};
-  for (const a of effAttendance) attendanceByStudentDate[`${a.student_id}|${a.session_date}`] = a.status;
+  const attendanceByStudentDate: Record<
+    string,
+    { status: string; note: string | null; units: number | null }
+  > = {};
+  for (const a of effAttendance) {
+    attendanceByStudentDate[`${a.student_id}|${a.session_date}`] = {
+      status: a.status,
+      note: a.note ?? null,
+      units: a.session_units ?? null,
+    };
+  }
 
   const marksMap: Record<string, { status: string | null; progressNote: string | null }> = {};
   for (const m of marks) {
@@ -661,8 +698,22 @@ export async function getSheetLanding(
     const all = allKeysByClass.get(c.id as string) ?? new Set<string>();
     let filled = 0;
     for (const key of scheduled) if (meaningful.has(key)) filled += 1;
+    // 🔴 고아 = "시간표가 바뀌어 스케줄에 없는 기록". **안 그리기로 한 자리(LAB·숨긴 JJ)는 고아가 아니다** —
+    //    스케줄엔 멀쩡히 있고 우리가 화면에서 뺐을 뿐이다. 빼면 `scheduled`에서 사라지므로 그냥 세면 LAB
+    //    기록 전부가 "시간 변경된 기록 N건"으로 둔갑한다(시트 상세는 같은 걸 'LAB 각주'로 말한다 —
+    //    두 화면이 같은 데이터를 다르게 설명하면 하나는 반드시 거짓말이다).
+    const seatKeys = seatSlotKeySet(
+      weekMonday,
+      (schedulesByClass.get(c.id as string) ?? []).map((s) => ({
+        dayOfWeek: s.day_of_week,
+        startTime: s.start_time,
+        validFrom: s.valid_from,
+        validTo: s.valid_to,
+        slotTeacherLabel: s.slot_teacher_label,
+      })),
+    );
     let orphan = 0;
-    for (const key of all) if (!scheduled.has(key)) orphan += 1;
+    for (const key of all) if (!scheduled.has(key) && !seatKeys.has(key)) orphan += 1;
     return {
       classId: c.id as string,
       className: c.class_name as string,

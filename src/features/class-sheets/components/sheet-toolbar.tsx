@@ -7,6 +7,7 @@ import { ChevronLeft, ChevronRight } from "@/components/icons/eywa-icon-compat";
 import { addWeeks, thisMonday } from "@/features/timetable/lib/week";
 import { EditingBadge } from "@/features/presence/editing-badge";
 import { SearchableSelect } from "@/components/ui/searchable-select";
+import { WindowLink } from "@/components/workspace/window-link";
 import type { ClassSheetWeekData } from "../server/queries";
 import { ECS_FONT_SIZES, ECS_FONT_SIZE_LABEL, type EcsFontSize } from "../font-size";
 import { useSaveIndicator, type SheetSaveStore } from "./use-sheet-saves";
@@ -89,6 +90,16 @@ export function SheetToolbar({
           highlightSelected
         />
       </span>
+      {/* 반 정보 보기(원장 2026-08-06) — 시트에서 보던 반의 상세로 바로 간다. 드롭다운 **바로 옆**이라
+          "지금 고른 그 반"이라는 게 자리로 읽힌다. WindowLink라 창 안에선 드릴인, 최상위에선 새 창. */}
+      <WindowLink
+        href={`/classes/${data.classId}`}
+        title={data.className}
+        className={`${pill(false)} inline-flex items-center`}
+        ariaLabel={`${data.className} 반 정보 보기`}
+      >
+        반 정보 보기
+      </WindowLink>
       {/* 임시 위임(0173a) — 지금 **남의 반 시트**를 고치는 중이라는 사실이 열고 나서도 보여야 한다.
           창(embed)에선 상단 PageHeader가 통째로 숨겨지므로 배지 자리는 여기가 유일하다. */}
       {data.delegated ? (

@@ -567,3 +567,4 @@ describe("sheetFillStats — 작성률(placeholder 제외·고아 분모 제외)
     expect(grid.days[0].slots[0].lines.map((l) => l.progress)).toEqual(["r1", "r2", "내신"]);
   });
 });
+

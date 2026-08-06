@@ -197,6 +197,36 @@ export function scheduledSlotKeySet(
   return out;
 }
 
+/**
+ * 그 주의 **자리(LAB·JJ) 슬롯 키** 집합 — 랜딩이 "고아(시간 변경됨)"를 셀 때 빼기 위한 것.
+ *
+ * 🔴 자리 교시는 스케줄에 **있다**. 우리가 화면에서 안 그릴 뿐이다. 그래서 `scheduledSlotKeySet`에서
+ *    빠지는데, 그걸 그대로 "스케줄에 없는 기록 = 고아"로 세면 LAB에 남은 계획이 통째로
+ *    *"시간 변경된 기록 N건"* 으로 둔갑한다(같은 데이터를 시트 상세는 'LAB 각주'라 부른다).
+ * ⚠️ 표시 설정과 무관하게 **자리면 전부** 담는다 — JJ를 켜 둔 계정에선 JJ 키가 `scheduled`에도 있어
+ *    어차피 고아 판정에 안 걸리므로, 여기서 굳이 토글을 볼 이유가 없다(볼수록 갈릴 여지만 는다).
+ */
+export function seatSlotKeySet(
+  weekMonday: string,
+  schedules: readonly Pick<
+    GridScheduleRow,
+    "dayOfWeek" | "startTime" | "validFrom" | "validTo" | "slotTeacherLabel"
+  >[],
+): Set<string> {
+  const out = new Set<string>();
+  for (const date of weekDatesOf(weekMonday)) {
+    const dow = dowKeyOf(date);
+    for (const s of schedules) {
+      if (s.dayOfWeek !== dow) continue;
+      if (s.validFrom > date) continue;
+      if (s.validTo && s.validTo < date) continue;
+      if (!specialSlotLabel(s.slotTeacherLabel)) continue;
+      out.add(slotKey(date, normalizeSlotTime(s.startTime)));
+    }
+  }
+  return out;
+}
+
 const TERM_ORDER: Record<string, number> = { regular: 0, exam: 1 };
 
 export function buildWeekGrid(input: {
