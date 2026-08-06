@@ -12,7 +12,8 @@ import { CellPopover, type PopoverAnchor } from "./cell-popover";
  *
  * 조작은 시트와 같다: 클릭=선택 · 숫자 타이핑=입력(0 결석 / 1·1.5·2 출석+시수) · 방향키·Tab·Enter 이동 ·
  * Shift로 범위 · Ctrl+C/V · Ctrl+Z · 우하단 손잡이 드래그=채우기 · Delete=지우기.
- * 숫자로 표현할 수 없는 것(지각·조퇴·보강·메모)만 **더블클릭/우클릭 팝오버**가 맡는다.
+ * 숫자로 표현할 수 없는 것(지각·조퇴·보강·메모)만 **우클릭(=더블클릭) 팝오버**가 맡는다.
+ * 7일이 지나 잠긴 칸에서도 팝오버는 열린다 — 상태·시수는 잠기고 **메모만** 고칠 수 있다.
  *
  * ⚠️ 표기(숫자·배경색)는 `cell-display.ts` 단일 소스를 그대로 쓴다 — 격자에서 다시 그리지 않는다.
  * ⚠️ 이 칸은 **자기 상태만 구독**한다(`useCellState`). 옆 칸이 바뀌어도 다시 그리지 않는다 — 표가
@@ -75,22 +76,27 @@ export function AttendanceCell({
 
   const display = cellDisplay(status, units, { attendDay, muted });
   const fromReport = derived && status === initialStatus;
-  const title =
-    locked ||
-    [status ? STATUS_TEXT[status] : null, fromReport ? "수업보고서 자동 판정" : null, noteVal || null]
-      .filter(Boolean)
-      .join(" · ");
+  // 잠긴 칸이라도 **메모는 보여 준다** — 잠금 사유만 남기고 메모를 감추면 왜 잠겼는지만 알고 뭐라 적혔는지는 못 본다.
+  const title = [
+    locked || (status ? STATUS_TEXT[status] : null),
+    fromReport ? "수업보고서 자동 판정" : null,
+    noteVal || null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   const openPopoverAt = (el: HTMLElement | null) => {
-    if (locked || !el) return;
+    if (!el) return;
     const r = el.getBoundingClientRect();
     const vh = typeof window !== "undefined" ? window.innerHeight : 9999;
     // 아래 공간이 팝오버 높이(~300px)보다 좁으면 위로 뒤집는다 — 마지막 행에서 저장 버튼이 화면 밖으로 안 나가게.
     const openUp = vh - r.bottom < 300 && r.top > vh - r.bottom;
     setPopover(openUp ? { x: r.left, bottom: vh - r.top + 4 } : { x: r.left, top: r.bottom + 4 });
   };
+  // 🔴 **잠긴 칸도 연다** — 메모는 7일 창의 적용을 받지 않는다(원장 2026-08-06: "메모는 언제든 추가할 수 있어야").
+  //    팝오버가 잠금 사유를 띄우고 메모만 열어 준다. 예전엔 아무 반응이 없어 "더블클릭이 안 된다"로 보였다.
+  // ⚠️ 우클릭은 **항상** 기본 메뉴를 막는다 — 안 막으면 잠긴 칸에서 브라우저 메뉴가 튀어나온다.
   const openPopover = (e: React.MouseEvent) => {
-    if (locked) return;
     e.preventDefault();
     openPopoverAt(e.currentTarget as HTMLElement);
   };
@@ -114,7 +120,7 @@ export function AttendanceCell({
           if (!state.active) ctx?.selectCell(row, sessionDate, false);
         }}
         onKeyDown={(e) => {
-          if (e.key === " " && !editing && !locked) {
+          if (e.key === " " && !editing) {
             e.preventDefault();
             openPopoverAt(ref.current);
           }
@@ -212,6 +218,7 @@ export function AttendanceCell({
           status={status}
           units={units}
           note={noteVal}
+          locked={locked ?? null}
           anchor={popover}
           onClose={() => setPopover(null)}
           onSaved={(next) => {

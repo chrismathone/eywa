@@ -1,0 +1,124 @@
+import { render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+import type { AttendanceMatrix } from "@/features/attendance/server/queries";
+import { MatrixTable, type MatrixGroup } from "./matrix-table";
+
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
+vi.mock("@/features/attendance/server/actions", () => ({
+  setAttendanceCell: vi.fn(async () => ({ ok: true })),
+  setAttendanceRange: vi.fn(async () => ({ ok: true, applied: 0, blocked: 0 })),
+}));
+vi.mock("@/features/attendance/server/prefs-actions", () => ({
+  saveAttendanceCollapsed: vi.fn(async () => ({ ok: true })),
+}));
+
+const C = "aaaaaaaa-1111-1111-1111-111111111111";
+const S1 = "11111111-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+const S2 = "22222222-bbbb-bbbb-bbbb-bbbbbbbbbbbb";
+const DAYS: AttendanceMatrix["days"] = [
+  { date: "2026-07-01", day: 1, dow: 3, label: "수", isWeekend: false, isToday: false },
+  { date: "2026-07-02", day: 2, dow: 4, label: "목", isWeekend: false, isToday: false },
+];
+
+function matrix(students: AttendanceMatrix["students"]): AttendanceMatrix {
+  return {
+    classes: [],
+    selectedClassId: C,
+    month: "2026-07",
+    days: DAYS,
+    classDows: [3],
+    students,
+    marks: {},
+    notes: {},
+    units: {},
+    derived: {},
+    derivedActive: false,
+    stats: {
+      totalStudents: students.length,
+      presentRate: 0,
+      presentCount: 0,
+      absentCount: 0,
+      lateCount: 0,
+      makeupCount: 0,
+      totalRecords: 0,
+    },
+  };
+}
+
+const GROUP: MatrixGroup = {
+  classId: C,
+  className: "고등개별",
+  subjectLabel: "수학",
+  matrix: matrix([
+    { id: S1, name: "이도윤", grade: "고1", school: "경명여자중학교", enrolledAt: null, attendDows: [3, 5] },
+    { id: S2, name: "박서준", grade: "중2", school: "대구중", enrolledAt: null, attendDows: [] },
+  ]),
+};
+
+function renderTable() {
+  return render(
+    <MatrixTable
+      groups={[GROUP]}
+      days={DAYS}
+      holidays={{}}
+      showGroups
+      ordered={[
+        { classId: C, studentId: S1 },
+        { classId: C, studentId: S2 },
+      ]}
+    />,
+  );
+}
+
+describe("출석부 표 골격", () => {
+  // 🔴 열 폭이 내용에서 나오면 반을 접을 때마다(긴 학교 이름이 사라질 때마다) 표가 출렁인다.
+  //    폭의 단일 소스는 colgroup이고, 표는 table-fixed여야 그 값이 실제로 쓰인다.
+  it("🔴 열 폭은 colgroup이 정한다 — 내용이 아니라(table-fixed)", () => {
+    const { container } = renderTable();
+    const table = container.querySelector("table")!;
+    expect(table.className).toContain("table-fixed");
+    const cols = container.querySelectorAll("colgroup col");
+    // 이름·학년·학교 + 날짜 2 + 시수·출석률
+    expect(cols.length).toBe(3 + DAYS.length + 2);
+    expect((cols[0] as HTMLElement).style.width).toBeTruthy(); // 이름
+    expect((cols[1] as HTMLElement).style.width).toBeTruthy(); // 학년
+    expect((cols[2] as HTMLElement).style.width).toBeTruthy(); // 학교
+    // 날짜 칸만 폭이 비어 있다 — 남는 가로 폭을 이 칸들이 나눠 갖는다.
+    expect((cols[3] as HTMLElement).style.width).toBe("");
+  });
+
+  it("🔴 마지막 두 열(시수·출석률)은 sticky right 오프셋과 짝이라 폭이 고정이다", () => {
+    const { container } = renderTable();
+    const cols = container.querySelectorAll("colgroup col");
+    expect((cols[cols.length - 1] as HTMLElement).style.width).toBe("64px"); // 출석률
+    expect(container.querySelector("th.right-\\[64px\\]")).toBeTruthy(); // 시수 헤더가 그 폭만큼 띄워 붙는다
+  });
+
+  it("등원요일은 이름 **아래 줄**에 온다 — 한 줄에 이으면 이름 열이 그만큼 넓어져야 한다", () => {
+    renderTable();
+    const nameCell = screen.getByText("이도윤").closest("td")!;
+    const lines = [...nameCell.children];
+    expect(lines).toHaveLength(2);
+    expect(lines[0]!.textContent).toBe("이도윤");
+    expect(lines[1]!.textContent).toBe("수·금"); // 등원요일
+    // 고정 폭이라 넘치는 글자는 잘려야 한다(안 자르면 옆 칸을 덮는다).
+    expect(lines[0]!.className).toContain("truncate");
+  });
+
+  it("등원요일이 없으면 이름 한 줄만 — 빈 줄을 만들지 않는다", () => {
+    renderTable();
+    expect(screen.getByText("박서준").closest("td")!.children).toHaveLength(1);
+  });
+
+  it("학교 이름은 잘리되 원문은 툴팁에 남는다 — 화면에서 사라지면 안 된다", () => {
+    renderTable();
+    const school = screen.getByText("경명여자중학교");
+    expect(school.className).toContain("truncate");
+    expect(school).toHaveAttribute("title", "경명여자중학교");
+  });
+
+  it("상세 입력은 우클릭으로 연다고 안내한다", () => {
+    const { container } = renderTable();
+    expect(container.textContent).toContain("지각·조퇴·보강·메모는 우클릭");
+  });
+});

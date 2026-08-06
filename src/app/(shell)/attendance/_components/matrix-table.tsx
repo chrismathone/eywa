@@ -25,6 +25,18 @@ const EDGE_LEFT = "before:absolute before:inset-y-0 before:left-0 before:w-px be
 const HEAD_Z = "z-50";
 const HEAD_CORNER_Z = "z-[60]";
 
+/**
+ * 열 폭 — **고정**이다(px). 자동 폭이면 열 너비가 **내용**에서 나오므로, 반을 접어 그 반의 긴 학교 이름이
+ * 사라지는 순간 이름·학교 열이 줄고 표 전체가 출렁인다(원장 지적 2026-08-06: "접을 때마다 열너비가 변경").
+ * `table-fixed` + `<colgroup>`으로 폭을 내용에서 떼어내면 접든 펼치든 같은 자리에 선다.
+ *
+ * ⚠️ 날짜 칸만 폭을 **안 준다**(auto) — 남는 가로 폭을 날짜 칸들이 똑같이 나눠 갖는다. 표에 `minWidth`를
+ *    걸어 두므로 아무리 좁아져도 한 칸 30px 아래로는 안 내려간다(좁으면 가로 스크롤).
+ * ⚠️ 시수·출석률에 폭을 주는 건 sticky `right-[64px]`이 **출석률 폭과 짝**이기 때문 — 이 값이 늘면 두 열이 겹친다.
+ * ⚠️ 폭을 넘는 글자는 잘리고 `title`에 원문이 남는다(`truncate`) — 넓히면 그만큼 날짜 칸이 줄어든다.
+ */
+const COL_W = { name: 116, grade: 48, school: 120, money: 76, units: 52, rate: 64, day: 30 } as const;
+
 /** 표에 쌓이는 한 덩어리 = 한 반. 반별 보기는 1개, 강사 전체 보기는 그 강사의 모든 반. */
 export type MatrixGroup = {
   classId: string;
@@ -96,12 +108,38 @@ export function MatrixTable({
   const classDows = new Set(groups.flatMap((g) => g.matrix.classDows));
   const colSpan = days.length + 5 + (money ? 2 : 0);
   const totalCount = sumCounts(groups.map((g) => groupCount(g.matrix)));
+  // 표 최소 폭 = 고정 열 합 + 날짜 칸 최소치. 화면이 이보다 넓으면 남는 폭은 날짜 칸이 나눠 갖는다.
+  const tableMinWidth =
+    COL_W.name +
+    COL_W.grade +
+    COL_W.school +
+    days.length * COL_W.day +
+    (money ? COL_W.money * 2 : 0) +
+    COL_W.units +
+    COL_W.rate;
 
   return (
     // 격자가 **화면의 유일한 세로 스크롤**이다(scrollY) — 그래야 `thead sticky top-0`이 실제로 붙고
     // 스크롤바도 하나만 생긴다. 높이는 부모(page.tsx의 `min-h-0 flex-1`)가 정해 준다 — 상수·vh 계산 없음.
     <DragScrollArea scrollY className="bg-card shadow-card h-full rounded-2xl">
-      <table className="w-full min-w-full border-collapse text-sm">
+      <table className="w-full table-fixed border-collapse text-sm" style={{ minWidth: tableMinWidth }}>
+        {/* 열 폭의 단일 소스 — 셀의 `w-*`가 아니라 여기가 정한다(table-fixed). 접기와 무관하게 불변. */}
+        <colgroup>
+          <col style={{ width: COL_W.name }} />
+          <col style={{ width: COL_W.grade }} />
+          <col style={{ width: COL_W.school }} />
+          {days.map((d) => (
+            <col key={d.date} />
+          ))}
+          {money ? (
+            <>
+              <col style={{ width: COL_W.money }} />
+              <col style={{ width: COL_W.money }} />
+            </>
+          ) : null}
+          <col style={{ width: COL_W.units }} />
+          <col style={{ width: COL_W.rate }} />
+        </colgroup>
         <thead>
           {/* 높이 고정 — 칸의 scroll-margin-top과 짝을 이룬다(cell-display.ts `HEAD_ROW_H` 주석). */}
           <tr className={HEAD_ROW_H}>
@@ -301,7 +339,9 @@ export function MatrixTable({
                   총 <LiveRecords fallback={totalCount} />회 기록 · 칸을 고르고{" "}
                   <b className="text-text-dim">숫자</b>를 치세요(0=결석, 1·1.5·2=출석
                   시수) · 방향키·Tab·Enter 이동 · Shift로 범위 · Ctrl+C/V · Ctrl+Z · 우하단 손잡이를 끌면 채우기 ·
-                  지각·조퇴·보강·메모는 <b className="text-text-dim">더블클릭</b>
+                  {/* ⚠️ 요소와 텍스트를 줄바꿈으로 나누면 사이 공백이 사라진다 — `{" "}`로 명시. */}
+                  지각·조퇴·보강·메모는 <b className="text-text-dim">우클릭</b>{" "}
+                  (7일 지난 칸도 메모는 고칠 수 있습니다)
                 </span>
                 <span className="micro ml-auto">범례</span>
                 {/* 범례 칩은 셀과 **같은 함수**로 그린다 — 색·숫자가 실제 셀과 어긋날 수 없게. */}

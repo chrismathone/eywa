@@ -174,6 +174,14 @@ export async function setAttendanceCell(input: {
   status: Status | null;
   note?: string | null; // 전달 시 메모도 갱신(undefined면 기존 메모 유지)
   units?: string; // 전달 시 시수도 갱신(raw 입력 — 서버에서 파싱, ""=기본 1). undefined면 기존 유지.
+  /**
+   * 메모만 고친다 — 상태·시수는 **읽지도 쓰지도 않는다**.
+   * 🔴 이 경로만 7일 편집창을 면제한다(원장 2026-08-06: "메모는 언제든 추가할 수 있어야"). 근거는
+   *    메모가 **돈에 안 닿는다**는 것 — 시수·출석률은 그대로라 마감한 급여·청구가 흔들리지 않는다.
+   *    담당 반·수강생 게이트는 그대로 받는다(면제는 '기간'뿐이다).
+   * ⚠️ 기록이 없는 칸엔 만들지 않는다 — 메모를 붙이려고 없는 출결을 지어내는 게 된다.
+   */
+  noteOnly?: boolean;
   /** 화면 갱신 생략 — 출석부 시트가 입력이 멎은 뒤 한 번만 새로고침한다(키 입력마다 재조회 방지). */
   quiet?: boolean;
 }): Promise<CellResult> {
@@ -182,10 +190,12 @@ export async function setAttendanceCell(input: {
   if (!(await canWriteTenant(user.systemRole, "attendance"))) return { error: "출석 관리 권한이 없습니다" };
 
   const { studentId, classId, sessionDate, status } = input;
+  const noteOnly = input.noteOnly === true;
   const noteProvided = input.note !== undefined;
   const noteVal = (input.note ?? "").trim() || null;
   if (!studentId || !classId || !sessionDate) return { error: "필수 값이 누락되었습니다" };
-  if (status !== null && !STATUSES.includes(status)) return { error: "잘못된 상태입니다" };
+  if (noteOnly && !noteProvided) return { error: "메모가 없습니다" };
+  if (!noteOnly && status !== null && !STATUSES.includes(status)) return { error: "잘못된 상태입니다" };
 
   const unitsProvided = input.units !== undefined;
   let unitsVal: number | null = null;
@@ -206,7 +216,8 @@ export async function setAttendanceCell(input: {
   if ((await accessLevelTenant(user.systemRole, "attendance")) === "scoped") {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(sessionDate)) return { error: "잘못된 날짜입니다" }; // .or() 보간 안전
     // 7일 지난 출결은 강사가 못 고친다(원장 2026-07-21). 기준일은 항상 KST 오늘.
-    if (!isWithinAttendanceEditWindow(sessionDate, kstToday())) {
+    // ⚠️ 단 **메모만** 고치는 저장은 면제(2026-08-06) — 시수·상태가 안 움직여 돈에 닿지 않는다.
+    if (!noteOnly && !isWithinAttendanceEditWindow(sessionDate, kstToday())) {
       return { error: attendanceLockMessage(sessionDate, kstToday()) };
     }
     const [teaching, { count: enrolled }] = await Promise.all([
@@ -222,6 +233,26 @@ export async function setAttendanceCell(input: {
     ]);
     if (!teaching.all.includes(classId)) return { error: "담당 반이 아닙니다" };
     if (!enrolled) return { error: "이 반 수강생이 아닙니다" };
+  }
+
+  // 메모만 — 있는 기록의 note만 갈아끼운다. 🔴 **지우기 분기보다 먼저** 온다(status가 null로 와도
+  // 기록을 지우면 안 된다). 상태·시수는 patch에 넣지 않는다 = 급여 재료 불변.
+  // ⚠️ `recorded_by`/`recorded_at`도 안 건드린다 — 그건 "누가 출결을 찍었나"라 메모 수정으로 덮으면 사실이 바뀐다.
+  if (noteOnly) {
+    const { data: row } = await supabase
+      .from("attendance_records")
+      .select("id")
+      .eq("class_id", classId)
+      .eq("student_id", studentId)
+      .eq("session_date", sessionDate)
+      .order("recorded_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (!row?.id) return { error: "그날 출결 기록이 없어 메모만 남길 수 없습니다 — 먼저 출결을 입력하세요" };
+    const { error } = await supabase.from("attendance_records").update({ note: noteVal }).eq("id", row.id);
+    if (error) return { error: error.message };
+    if (!input.quiet) revalidatePath("/attendance");
+    return { ok: true };
   }
 
   // 지우기 — 해당 (반·학생·날짜) 기록 전부 삭제.

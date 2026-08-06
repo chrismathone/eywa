@@ -19,7 +19,12 @@ export type PopoverAnchor = { x: number; top?: number; bottom?: number };
 /**
  * 칸 상세 입력 — **숫자로 표현할 수 없는 것**(지각·조퇴·보강·메모)을 담당한다.
  * 출석(1)·결석(0)·시수는 격자에서 그냥 타이핑하는 게 빠르므로 여기 오지 않아도 된다.
- * 여는 법: 칸 더블클릭 또는 우클릭.
+ * 여는 법: 칸 우클릭(더블클릭도 같음).
+ *
+ * 🔴 **잠긴 칸(7일 초과)에서도 열린다 — 단 메모만.** 메모는 돈(시수·출석률)을 안 건드리므로 기간 제한의
+ *    이유가 없고, 뒤늦게 사유를 적어 두는 게 운영이다(원장 2026-08-06: "메모는 언제든 추가할 수 있어야").
+ *    상태·시수·지우기는 그대로 잠근다 — 그건 급여·출석률이 읽는 값이다.
+ * ⚠️ 기록이 **아예 없는** 잠긴 칸엔 메모를 못 붙인다(메모가 붙을 행이 없다 — 없는 출결을 지어내지 않는다).
  */
 export function CellPopover({
   studentId,
@@ -28,6 +33,7 @@ export function CellPopover({
   status,
   units,
   note,
+  locked,
   anchor,
   onClose,
   onSaved,
@@ -38,6 +44,8 @@ export function CellPopover({
   status: AttendanceStatus | null;
   units: number | null;
   note: string;
+  /** 수정 기간(7일)이 지나 상태·시수를 못 고치는 칸 — 이유를 담은 문장. null = 제한 없음. */
+  locked?: string | null;
   anchor: PopoverAnchor;
   onClose: () => void;
   onSaved: (next: { status: AttendanceStatus | null; units: number | null; note: string }) => void;
@@ -45,7 +53,38 @@ export function CellPopover({
   const [unitsDraft, setUnitsDraft] = useState(units !== null && units !== 1 ? String(units) : "");
   const [noteDraft, setNoteDraft] = useState(note);
   const [err, setErr] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
   const [, startTransition] = useTransition();
+  // 잠겼는데 기록도 없으면 손댈 게 없다 — 사유만 알리고 입력은 안 연다.
+  const noteOnly = !!locked;
+  const nothingToEdit = noteOnly && !status;
+
+  /**
+   * 메모만 저장 — 상태·시수는 서버에서도 건드리지 않는다(`noteOnly`).
+   * ⚠️ 여기선 낙관적으로 닫지 **않는다** — 잠긴 칸은 서버가 거절할 수 있는 경우가 남아 있어(기록 없음 등)
+   *    조용히 되돌리면 "적었는데 사라졌다"가 된다. 성공했을 때만 닫는다.
+   */
+  const applyNoteOnly = () => {
+    setErr(null);
+    setSaving(true);
+    startTransition(async () => {
+      const res = await setAttendanceCell({
+        studentId,
+        classId,
+        sessionDate,
+        status,
+        note: noteDraft,
+        noteOnly: true,
+      });
+      setSaving(false);
+      if (res && "error" in res) {
+        setErr(res.error);
+        return;
+      }
+      onSaved({ status, units, note: noteDraft.trim() });
+      onClose();
+    });
+  };
 
   const apply = (next: AttendanceStatus | null, withNote: boolean) => {
     let parsedUnits: number | null = null;
@@ -87,63 +126,114 @@ export function CellPopover({
           bottom: anchor.bottom,
         }}
       >
-        {OPTIONS.map((o) => (
-          <button
-            key={o.value}
-            type="button"
-            onClick={() => apply(o.value, false)}
-            className={`hover:bg-bg-soft flex items-center justify-between gap-3 rounded-md px-2 py-1 text-left text-xs transition ${
-              status === o.value ? "font-bold" : ""
-            }`}
-          >
-            {o.name}
-            <span className={`border-line size-4 shrink-0 rounded-sm border ${STATUS_TONE[o.value]}`} aria-hidden />
-          </button>
-        ))}
-        <div className="border-line mt-0.5 flex flex-col gap-1 border-t pt-1">
-          <input
-            type="text"
-            inputMode="decimal"
-            value={unitsDraft}
-            onChange={(e) => {
-              setUnitsDraft(e.target.value);
-              setErr(null);
-            }}
-            placeholder="시수(기본 1)"
-            aria-label="시수"
-            title="정규 수업 1회 = 1. 보강 연장 1.5·2, 부분 출석 0.5 등"
-            className={`bg-bg-soft text-foreground placeholder:text-text-faint w-full rounded-md border px-2 py-1 text-xs focus:outline-none ${
-              err ? "border-danger" : "border-line"
-            }`}
-          />
-          {err ? <p className="text-danger text-[10px] leading-tight">{err}</p> : null}
-          <input
-            type="text"
-            value={noteDraft}
-            onChange={(e) => setNoteDraft(e.target.value)}
-            placeholder="메모(사유)"
-            aria-label="메모(사유)"
-            className="border-line bg-bg-soft text-foreground placeholder:text-text-faint w-full rounded-md border px-2 py-1 text-xs focus:outline-none"
-          />
-          <button
-            type="button"
-            onClick={() => apply(status, true)}
-            disabled={!status}
-            className="bg-foreground text-background rounded-md px-2 py-1 text-xs font-medium transition disabled:opacity-40"
-            title={status ? undefined : "상태를 먼저 선택하세요"}
-          >
-            저장
-          </button>
-        </div>
-        {status ? (
-          <button
-            type="button"
-            onClick={() => apply(null, false)}
-            className="text-text-dim hover:bg-bg-soft rounded-md border-t px-2 py-1 text-left text-xs"
-          >
-            지우기
-          </button>
+        {noteOnly ? (
+          <div className="flex flex-col gap-1 p-0.5">
+            <p className="text-amber text-[10px] leading-tight">{locked}</p>
+            {nothingToEdit ? (
+              // 붙일 행이 없다 — 없는 출결을 지어내지 않는다(#메모는 기록에 딸린 것).
+              <p className="text-text-dim text-[11px] leading-tight">
+                기록이 없는 날이라 메모만 남길 수는 없습니다 — 관리자에게 요청하세요
+              </p>
+            ) : (
+              <>
+                <p className="text-text-dim text-[10px] leading-tight">메모는 기간과 무관하게 고칠 수 있습니다</p>
+                <input
+                  autoFocus
+                  type="text"
+                  value={noteDraft}
+                  onChange={(e) => {
+                    setNoteDraft(e.target.value);
+                    setErr(null);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      applyNoteOnly();
+                    }
+                  }}
+                  placeholder="메모(사유)"
+                  aria-label="메모(사유)"
+                  className={`bg-bg-soft text-foreground placeholder:text-text-faint w-full rounded-md border px-2 py-1 text-xs focus:outline-none ${
+                    err ? "border-danger" : "border-line"
+                  }`}
+                />
+                {err ? <p className="text-danger text-[10px] leading-tight">{err}</p> : null}
+                <button
+                  type="button"
+                  onClick={applyNoteOnly}
+                  disabled={saving}
+                  className="bg-foreground text-background rounded-md px-2 py-1 text-xs font-medium transition disabled:opacity-40"
+                >
+                  {saving ? "저장 중…" : "메모 저장"}
+                </button>
+              </>
+            )}
+          </div>
         ) : null}
+        {noteOnly ? null : (
+          <>
+            {OPTIONS.map((o) => (
+              <button
+                key={o.value}
+                type="button"
+                onClick={() => apply(o.value, false)}
+                className={`hover:bg-bg-soft flex items-center justify-between gap-3 rounded-md px-2 py-1 text-left text-xs transition ${
+                  status === o.value ? "font-bold" : ""
+                }`}
+              >
+                {o.name}
+                <span
+                  className={`border-line size-4 shrink-0 rounded-sm border ${STATUS_TONE[o.value]}`}
+                  aria-hidden
+                />
+              </button>
+            ))}
+            <div className="border-line mt-0.5 flex flex-col gap-1 border-t pt-1">
+              <input
+                type="text"
+                inputMode="decimal"
+                value={unitsDraft}
+                onChange={(e) => {
+                  setUnitsDraft(e.target.value);
+                  setErr(null);
+                }}
+                placeholder="시수(기본 1)"
+                aria-label="시수"
+                title="정규 수업 1회 = 1. 보강 연장 1.5·2, 부분 출석 0.5 등"
+                className={`bg-bg-soft text-foreground placeholder:text-text-faint w-full rounded-md border px-2 py-1 text-xs focus:outline-none ${
+                  err ? "border-danger" : "border-line"
+                }`}
+              />
+              {err ? <p className="text-danger text-[10px] leading-tight">{err}</p> : null}
+              <input
+                type="text"
+                value={noteDraft}
+                onChange={(e) => setNoteDraft(e.target.value)}
+                placeholder="메모(사유)"
+                aria-label="메모(사유)"
+                className="border-line bg-bg-soft text-foreground placeholder:text-text-faint w-full rounded-md border px-2 py-1 text-xs focus:outline-none"
+              />
+              <button
+                type="button"
+                onClick={() => apply(status, true)}
+                disabled={!status}
+                className="bg-foreground text-background rounded-md px-2 py-1 text-xs font-medium transition disabled:opacity-40"
+                title={status ? undefined : "상태를 먼저 선택하세요"}
+              >
+                저장
+              </button>
+            </div>
+            {status ? (
+              <button
+                type="button"
+                onClick={() => apply(null, false)}
+                className="text-text-dim hover:bg-bg-soft rounded-md border-t px-2 py-1 text-left text-xs"
+              >
+                지우기
+              </button>
+            ) : null}
+          </>
+        )}
       </div>
     </>
   );

@@ -47,18 +47,32 @@ export function MatrixRow({
 
   return (
     <tr className="hover:bg-bg-soft/40">
-      {/* 이름 + 등원요일 — 같은 반이라도 학생마다 오는 요일이 다르다(분리등원). */}
-      <td className="border-line text-foreground sticky left-0 z-10 border-b border-r bg-card px-2 py-1 text-[12px] font-bold whitespace-nowrap">
-        {student.name}
+      {/* 이름 **위**, 등원요일 **아래** — 같은 반이라도 학생마다 오는 요일이 다르다(분리등원).
+          한 줄에 이어 붙이면 이름 열이 이름+요일만큼 넓어져야 해 날짜 칸을 잡아먹는다(원장 2026-08-06:
+          "세로폭은 조금 더 키우더라도 요일을 이름 아래로"). 행이 한 줄 높아지는 건 감수한 트레이드오프.
+          ⚠️ 열 폭이 고정(colgroup)이라 넘치는 글자는 잘린다 — 원문은 `title`에 남긴다. */}
+      <td className="border-line text-foreground sticky left-0 z-10 border-b border-r bg-card px-2 py-1">
+        <span className="block truncate text-[12px] leading-tight font-bold" title={student.name}>
+          {student.name}
+        </span>
         {attendLabel ? (
-          <span className="text-text-faint ml-1.5 text-[10px] font-medium">{attendLabel}</span>
+          <span
+            className="text-text-faint block truncate text-[10px] leading-tight font-medium"
+            title={`등원 ${attendLabel}`}
+          >
+            {attendLabel}
+          </span>
         ) : null}
       </td>
-      <td className="border-line text-text-dim border-b border-r px-1.5 py-1 text-[11px] whitespace-nowrap">
-        {student.grade ?? "—"}
+      <td className="border-line text-text-dim border-b border-r px-1.5 py-1 text-[11px]">
+        <span className="block truncate" title={student.grade ?? undefined}>
+          {student.grade ?? "—"}
+        </span>
       </td>
-      <td className="border-line text-text-dim border-b border-r px-1.5 py-1 text-[11px] whitespace-nowrap">
-        {student.school ?? "—"}
+      <td className="border-line text-text-dim border-b border-r px-1.5 py-1 text-[11px]">
+        <span className="block truncate" title={student.school ?? undefined}>
+          {student.school ?? "—"}
+        </span>
       </td>
       {days.map((d) => {
         // 그 달에 없는 날(placeholder) — 빈 칸(입력 불가). 폭은 다른 칸과 동일(min-w)로 고정.
