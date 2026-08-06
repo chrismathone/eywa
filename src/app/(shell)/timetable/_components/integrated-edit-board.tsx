@@ -18,7 +18,7 @@ import {
   type DragOverEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
-import { AlertTriangle, ChevronDown, ChevronUp, Loader2, Plus, Trash2 } from "@/components/icons/eywa-icon-compat";
+import { AlertTriangle, ChevronDown, ChevronUp, Loader2, Plus, RotateCcw, Trash2 } from "@/components/icons/eywa-icon-compat";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { saveIntegrationGroups } from "@/features/owner/server/subject-actions";
 import {
@@ -109,10 +109,12 @@ export function IntegratedEditBoard({
   const [showOthers, setShowOthers] = useState(initialShowOthers);
   const [othersTitle, setOthersTitle] = useState(initialOthersTitle);
   const [presets, setPresets] = useState<GroupPreset[]>(initialPresets);
-  const [dragLabel, setDragLabel] = useState<string | null>(null);
+  // 고스트를 원본 헤더와 똑같이 그리려면 라벨만으론 부족하다(반 저장색). 카드를 통째로 들고 있는다.
+  const [dragCard, setDragCard] = useState<RichClassCard | null>(null);
   const [over, setOver] = useState<{ containerId: string; classId: string | null } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [confirmLeave, setConfirmLeave] = useState(false);
+  const [confirmReset, setConfirmReset] = useState(false);
   const [saving, startSave] = useTransition();
 
   const dirty = useMemo(
@@ -152,14 +154,14 @@ export function IntegratedEditBoard({
   );
 
   function onDragStart({ active }: DragStartEvent) {
-    setDragLabel(String(active.data.current?.label ?? ""));
+    setDragCard((active.data.current?.card as RichClassCard | undefined) ?? null);
   }
   function onDragOver({ over: o }: DragOverEvent) {
     const d = o?.data.current;
     setOver(d ? { containerId: String(d.containerId), classId: d.type === "class" ? String(d.classId) : null } : null);
   }
   function onDragEnd({ active, over: o }: DragEndEvent) {
-    setDragLabel(null);
+    setDragCard(null);
     setOver(null);
     const a = active.data.current;
     const d = o?.data.current;
@@ -189,6 +191,31 @@ export function IntegratedEditBoard({
       return;
     }
     router.push(doneHref, { scroll: false });
+  }
+
+  /**
+   * 초기화 — **저장돼 있던 상태**로 되돌린다(원장 2026-08-06 "처음상태로 갈 수 있도록").
+   * ⚠️ '자동 묶음으로 리셋'이 아니다: 저장된 배치가 있으면 그 배치로, 아직 없으면 진입할 때 씨뿌린
+   * 자동 섹션으로 — 어느 쪽이든 **이 창을 열었을 때 보던 화면**으로 돌아온다(사람이 기대하는 '처음').
+   * 되돌리기는 화면에서만 일어나고 저장은 안 한다 — 실수로 눌러도 '저장' 전엔 DB가 안 바뀐다.
+   */
+  function resetToInitial() {
+    setGroups(
+      initialGroups.length
+        ? dedupeGroups(initialGroups)
+        : groupRichCards(cards, config).map((g, i) => ({
+            id: `seed-${i}`,
+            title: g.label,
+            classIds: g.cards.map((c) => c.classId),
+          })),
+    );
+    setEnabled(initialEnabled || initialGroups.length === 0);
+    setShowOthers(initialShowOthers);
+    setOthersTitle(initialOthersTitle);
+    setPresets(initialPresets);
+    setError(null);
+    setConfirmLeave(false);
+    setConfirmReset(false);
   }
 
   function save() {
@@ -223,7 +250,7 @@ export function IntegratedEditBoard({
       onDragOver={onDragOver}
       onDragEnd={onDragEnd}
       onDragCancel={() => {
-        setDragLabel(null);
+        setDragCard(null);
         setOver(null);
       }}
     >
@@ -367,10 +394,38 @@ export function IntegratedEditBoard({
           <span className="text-text-faint text-[11px]">
             줄 {groups.length}개 · 반 {cards.length}개
           </span>
+          {/* 초기화 — 화면만 되돌린다(저장 전이라 DB 무변). 되돌릴 게 없으면 아예 안 보인다. */}
+          {dirty ? (
+            confirmReset ? (
+              <span className="text-warning ml-auto inline-flex items-center gap-2 text-[12px]">
+                지금까지 옮긴 걸 버리고 처음 상태로?
+                <button type="button" onClick={resetToInitial} className="text-danger font-bold hover:underline">
+                  초기화
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmReset(false)}
+                  className="text-text-dim hover:text-foreground"
+                >
+                  취소
+                </button>
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setConfirmReset(true)}
+                title="이 창을 열었을 때 보던 배치로 되돌립니다(저장은 하지 않습니다)"
+                className="text-text-dim hover:text-foreground ml-auto inline-flex items-center gap-1 px-2 py-1 text-xs"
+              >
+                <RotateCcw className="size-3" />
+                초기화
+              </button>
+            )
+          ) : null}
           <button
             type="button"
             onClick={leave}
-            className="text-text-dim hover:text-foreground ml-auto px-3 py-1 text-xs"
+            className={`text-text-dim hover:text-foreground px-3 py-1 text-xs ${dirty ? "" : "ml-auto"}`}
           >
             {confirmLeave ? "그냥 나가기" : "편집 끝내기"}
           </button>
@@ -386,13 +441,26 @@ export function IntegratedEditBoard({
         </div>
       </div>
 
-      {/* ⚠️ 끌고 있는 열은 실제 카드(176px)가 아니라 **이름 알약**으로 그린다 — 카드를 통째로 띄우면
-          커서 아래가 다 가려 어디에 놓는지가 안 보인다. */}
+      {/* 🔴 고스트는 **끌고 있는 칸을 꽉 채워야** 커서와 안 어긋난다(원장 2026-08-06 "마우스 위치와
+          드래그할때 위치가 서로 어긋나는데"). dnd-kit `DragOverlay`의 상자는 **원본 열의 rect**
+          (176×40)인데 그 안에 작은 알약을 그리면 알약이 상자 **좌상단**에 붙어, 이름 가운데를 잡았을 때
+          잡은 만큼(최대 176px) 왼쪽에 뜬다. `h-full w-full`이면 잡은 지점이 고스트 안에서 그대로라
+          "잡은 자리를 그대로 들고 있는" 느낌이 된다. 색도 원본 헤더와 같게(어느 반인지 즉시 읽힌다).
+          ⚠️ 카드 전체(수백 px)를 띄우던 시절의 '커서가 가려진다' 걱정은 수업명만 그리는 지금은 없다. */}
       <DragOverlay dropAnimation={null}>
-        {dragLabel ? (
-          <span className="border-primary bg-card text-foreground pointer-events-none inline-flex cursor-grabbing items-center rounded-full border px-2.5 py-1 text-[12px] font-bold shadow-lg">
-            {dragLabel}
-          </span>
+        {dragCard ? (
+          <div
+            className={`border-primary text-foreground pointer-events-none flex h-full w-full cursor-grabbing items-center justify-center rounded-sm border-2 px-1 text-center text-[13px] font-bold shadow-lg ${
+              dragCard.bgColor ? "" : `${subjectSoftClass} bg-card`
+            }`}
+            style={
+              dragCard.bgColor
+                ? { background: dragCard.bgColor, color: dragCard.textColor ?? "#1d1d1f" }
+                : undefined
+            }
+          >
+            <span className="overflow-hidden whitespace-nowrap text-clip">{dragCard.className}</span>
+          </div>
         ) : null}
       </DragOverlay>
     </DndContext>
@@ -480,7 +548,7 @@ function DraggableColumn({
   containerId: string;
   insertBefore: boolean;
 }) {
-  const data = { type: "class", classId: card.classId, containerId, label: card.className };
+  const data = { type: "class", classId: card.classId, containerId, card };
   const { attributes, listeners, setNodeRef: setDragRef, isDragging } = useDraggable({
     id: `col:${card.classId}`,
     data,
