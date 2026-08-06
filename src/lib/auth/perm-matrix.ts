@@ -89,3 +89,18 @@ export async function canWriteTenant(role: SystemRole, menu: MenuKey): Promise<b
 export async function accessLevelTenant(role: SystemRole, menu: MenuKey): Promise<Access> {
   return accessLevel(role, menu, await getUserPermMatrix());
 }
+
+/**
+ * **학원 전체를 바꾸는 관리 작업**인가 — `full`(관리자 계열)만 통과.
+ *
+ * 🔴 `canWriteTenant`와 헷갈리지 말 것. 그건 `scoped`(강사)도 true다 — 뜻이 *"내 담당 것은 쓸 수 있다"*이지
+ *    *"학원 전체를 건드려도 된다"*가 아니다. 반 생성·강의실 자동배정·학생 반 이동처럼 **남의 반까지 바뀌는**
+ *    조작에 canWriteTenant를 걸면 강사가 통과한다(2026-08-06 원장 제보로 실측 확인: 강사 화면에 '새 반'·
+ *    '강의실 자동배정'·시간표 '편집'이 그대로 떴고 서버 게이트도 열려 있었다).
+ * ⚠️ 판정 기준은 **"담당(scoped) 개념이 성립하는 작업인가"**다. 성립하면 canWriteTenant + 담당 반 좁히기,
+ *    성립하지 않으면(전체/없음만 의미 있으면) 이 함수. UI 노출도 **같은 함수**를 거쳐야 한다 — 화면에서만
+ *    숨기는 건 게이트가 아니다(#77).
+ */
+export async function canManageTenant(role: SystemRole, menu: MenuKey): Promise<boolean> {
+  return (await accessLevelTenant(role, menu)) === "full";
+}

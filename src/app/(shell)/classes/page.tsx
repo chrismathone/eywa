@@ -8,6 +8,7 @@ import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
 import { MakeeduSyncBadge } from "@/components/makeedu-sync-badge";
 import { requireAccess } from "@/lib/auth/require-access";
+import { canManageTenant } from "@/lib/auth/perm-matrix";
 import {
   getClassesPage,
   getClassesStats,
@@ -56,7 +57,10 @@ export default async function ClassesPage({
     page?: string;
   }>;
 }) {
-  await requireAccess("classes");
+  const user = await requireAccess("classes");
+  // 반 생성·강의실 자동배정은 **학원 전체를 바꾸는 작업**이라 관리자만(원장 지시 2026-08-06 "강사에게
+  // 강의실 자동배정·새 반은 필요없음"). 서버 액션도 같은 게이트(requireClassManage) — 여기 숨김은 표시일 뿐.
+  const canManageClasses = await canManageTenant(user.systemRole, "classes");
   const sp = await searchParams;
   const subject = sp.subject ?? "all";
   const teacherId = sp.teacher ?? "all";
@@ -100,10 +104,12 @@ export default async function ClassesPage({
         title="수업목록"
         description={`운영 ${active}개 반 · 등록 학생 ${totalSeats}명`}
         actions={
-          <>
-            <ClassroomAssignButton />
-            <NewClassTrigger />
-          </>
+          canManageClasses ? (
+            <>
+              <ClassroomAssignButton />
+              <NewClassTrigger />
+            </>
+          ) : null
         }
       />
       <MakeeduSyncBadge domain="classes" />

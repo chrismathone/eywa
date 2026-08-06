@@ -5,7 +5,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { createClient } from "@/lib/supabase/server";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
-import { accessLevelTenant } from "@/lib/auth/perm-matrix";
+import { accessLevelTenant, canManageTenant } from "@/lib/auth/perm-matrix";
 import { kstToday } from "@/lib/date-kst";
 import { isHexColor, readableTextColor } from "@/lib/color-utils";
 import { isAssignableTeacherRole } from "@/lib/permissions";
@@ -192,7 +192,8 @@ export async function createClass(
   _prev: ClassFormState,
   formData: FormData,
 ): Promise<ClassFormState> {
-  const { user, error: gateError } = await requireClassWrite();
+  // 새 반 생성 = 관리자만(위 requireClassManage 주석). 수정(updateClass)은 담당 반 개념이 성립해 write 유지.
+  const { user, error: gateError } = await requireClassManage();
   if (gateError || !user) return { error: gateError };
 
   const allowed = await allowedSubjectSet();
@@ -633,6 +634,24 @@ async function requireClassWrite() {
 }
 
 /**
+ * **학원 전체를 바꾸는 반 작업**(반 생성·강의실 자동배정) 게이트 — 관리자(full)만.
+ *
+ * 🔴 `requireClassWrite`를 쓰면 안 되는 자리다 — 그건 `scoped`(강사)도 통과시킨다(뜻: "내 담당 반은 쓸 수
+ *    있다"). 새 반 생성은 담당이라는 개념 자체가 없고(아직 반이 없다), 강의실 자동배정은 **전 반의**
+ *    classroom_id를 한 번에 바꾼다. 둘 다 "전체/없음"만 의미가 있다.
+ * ⚠️ 2026-08-06 원장 지시("강사에게 강의실 자동배정·새 반은 필요없음 — 관리자만 필요한 것") + 실측:
+ *    강사 화면에 두 버튼이 그대로 떴고, 서버도 scoped를 통과시켜 화면만 숨겨선 우회가 남았을 자리다(#77).
+ */
+async function requireClassManage() {
+  const user = await getCurrentUser();
+  if (!user) return { user: null, error: "로그인이 필요합니다" };
+  if (!(await canManageTenant(user.systemRole, "classes"))) {
+    return { user: null, error: "학원 전체 반 설정은 관리자만 할 수 있습니다" };
+  }
+  return { user, error: undefined as string | undefined };
+}
+
+/**
  * 인계 대상이 이 학원의 **배정 가능한 재직자**인지 검증 — 예약(schedule)·적용(apply) 공통.
  * RLS가 users SELECT를 자기 테넌트로 제한 → 타 테넌트 id는 null로 거부.
  * ⚠️ apply에서도 반드시 재검증할 것 — 예약~적용 사이에 대상이 퇴사/역할변경되면 schedule 검증이 무의미해진다.
@@ -804,7 +823,8 @@ export async function loadClassroomAssignmentData(): Promise<{
   data?: ClassroomAssignData;
   error?: string;
 }> {
-  const { user, error } = await requireClassWrite();
+  // 자동배정은 전 반의 강의실을 한 번에 바꾼다 — 조회 단계부터 관리자만(대상 목록 자체가 학원 전체다).
+  const { user, error } = await requireClassManage();
   if (error || !user) return { error };
   return { data: await getClassroomAssignmentData() };
 }
@@ -816,7 +836,7 @@ export async function applyClassroomAssignments(
   _prev: ApplyAssignState,
   formData: FormData,
 ): Promise<ApplyAssignState> {
-  const { user, error } = await requireClassWrite();
+  const { user, error } = await requireClassManage();
   if (error || !user) return { error };
 
   let parsed: { classId: string; roomId: string }[];
