@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { AttendanceStatus } from "@/features/attendance/server/queries";
-import { STATUS_TEXT, cellDisplay } from "@/features/attendance/cell-display";
+import { CELL_SCROLL_MARGIN, STATUS_TEXT, cellDisplay } from "@/features/attendance/cell-display";
 import { cellKey, rowKey } from "@/features/attendance/grid/model";
 import { useCellState } from "./grid-context";
 import { CellPopover, type PopoverAnchor } from "./cell-popover";
@@ -12,7 +12,8 @@ import { CellPopover, type PopoverAnchor } from "./cell-popover";
  *
  * 조작은 시트와 같다: 클릭=선택 · 숫자 타이핑=입력(0 결석 / 1·1.5·2 출석+시수) · 방향키·Tab·Enter 이동 ·
  * Shift로 범위 · Ctrl+C/V · Ctrl+Z · 우하단 손잡이 드래그=채우기 · Delete=지우기.
- * 숫자로 표현할 수 없는 것(지각·조퇴·보강·메모)만 **더블클릭/우클릭 팝오버**가 맡는다.
+ * 숫자로 표현할 수 없는 것(지각·조퇴·보강·메모)만 **우클릭(=더블클릭) 팝오버**가 맡는다.
+ * 7일이 지나 잠긴 칸에서도 팝오버는 열린다 — 상태·시수는 잠기고 **메모만** 고칠 수 있다.
  *
  * ⚠️ 표기(숫자·배경색)는 `cell-display.ts` 단일 소스를 그대로 쓴다 — 격자에서 다시 그리지 않는다.
  * ⚠️ 이 칸은 **자기 상태만 구독**한다(`useCellState`). 옆 칸이 바뀌어도 다시 그리지 않는다 — 표가
@@ -27,6 +28,7 @@ export function AttendanceCell({
   initialUnits,
   attendDay,
   muted,
+  outside,
   derived,
   locked,
 }: {
@@ -40,6 +42,11 @@ export function AttendanceCell({
   attendDay?: boolean;
   /** 주말·공휴일 등 수업이 없는 날(회색). */
   muted?: boolean;
+  /**
+   * 그 날 이 반 소속이 아니었다(입원 전·퇴원 후) — 진한 회색.
+   * ⚠️ **입력을 막지 않는다** — 퇴원 뒤 보강 출석이 실제로 있고, 막으면 이미 들어온 기록을 고칠 길이 사라진다.
+   */
+  outside?: boolean;
   /** 수기 기록이 아니라 수업보고서에서 파생한 값 — 툴팁에 출처 표시. */
   derived?: boolean;
   /** 수정 기간(7일)이 지나 강사가 못 고치는 칸 — 이유를 담은 문장. */
@@ -73,24 +80,31 @@ export function AttendanceCell({
   // 파생이라 effect가 필요 없다.
   const noteVal = ctx && state.value === null ? "" : noteEdit ?? note ?? "";
 
-  const display = cellDisplay(status, units, { attendDay, muted });
+  const display = cellDisplay(status, units, { attendDay, muted, outside });
   const fromReport = derived && status === initialStatus;
-  const title =
-    locked ||
-    [status ? STATUS_TEXT[status] : null, fromReport ? "수업보고서 자동 판정" : null, noteVal || null]
-      .filter(Boolean)
-      .join(" · ");
+  // 잠긴 칸이라도 **메모는 보여 준다** — 잠금 사유만 남기고 메모를 감추면 왜 잠겼는지만 알고 뭐라 적혔는지는 못 본다.
+  const title = [
+    locked || (status ? STATUS_TEXT[status] : null),
+    // 회색 칸의 뜻을 말해 준다 — 색만 다르면 "왜 여기만 회색이지"로 끝난다.
+    outside ? (status ? "재원 기간 밖 기록(보강 등)" : "이 반 재원 기간이 아닙니다") : null,
+    fromReport ? "수업보고서 자동 판정" : null,
+    noteVal || null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   const openPopoverAt = (el: HTMLElement | null) => {
-    if (locked || !el) return;
+    if (!el) return;
     const r = el.getBoundingClientRect();
     const vh = typeof window !== "undefined" ? window.innerHeight : 9999;
     // 아래 공간이 팝오버 높이(~300px)보다 좁으면 위로 뒤집는다 — 마지막 행에서 저장 버튼이 화면 밖으로 안 나가게.
     const openUp = vh - r.bottom < 300 && r.top > vh - r.bottom;
     setPopover(openUp ? { x: r.left, bottom: vh - r.top + 4 } : { x: r.left, top: r.bottom + 4 });
   };
+  // 🔴 **잠긴 칸도 연다** — 메모는 7일 창의 적용을 받지 않는다(원장 2026-08-06: "메모는 언제든 추가할 수 있어야").
+  //    팝오버가 잠금 사유를 띄우고 메모만 열어 준다. 예전엔 아무 반응이 없어 "더블클릭이 안 된다"로 보였다.
+  // ⚠️ 우클릭은 **항상** 기본 메뉴를 막는다 — 안 막으면 잠긴 칸에서 브라우저 메뉴가 튀어나온다.
   const openPopover = (e: React.MouseEvent) => {
-    if (locked) return;
     e.preventDefault();
     openPopoverAt(e.currentTarget as HTMLElement);
   };
@@ -114,14 +128,15 @@ export function AttendanceCell({
           if (!state.active) ctx?.selectCell(row, sessionDate, false);
         }}
         onKeyDown={(e) => {
-          if (e.key === " " && !editing && !locked) {
+          if (e.key === " " && !editing) {
             e.preventDefault();
             openPopoverAt(ref.current);
           }
         }}
         onDoubleClick={openPopover}
         onContextMenu={openPopover}
-        className={`absolute inset-0 flex items-center justify-center text-[11px] font-bold select-none ${display.className} ${
+        // `scroll-mt` — 방향키 이동 시 활성 칸이 고정 헤더 뒤로 숨지 않게(cell-display.ts 주석 참조).
+        className={`absolute inset-0 flex items-center justify-center text-[11px] font-bold select-none ${CELL_SCROLL_MARGIN} ${display.className} ${
           locked ? "cursor-not-allowed" : "cursor-cell"
         }`}
       >
@@ -211,6 +226,7 @@ export function AttendanceCell({
           status={status}
           units={units}
           note={noteVal}
+          locked={locked ?? null}
           anchor={popover}
           onClose={() => setPopover(null)}
           onSaved={(next) => {

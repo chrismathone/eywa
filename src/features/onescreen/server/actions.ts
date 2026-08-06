@@ -26,6 +26,7 @@ import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { classnoteSendWindowHint, isClassnoteAllowed, isClassnoteSubjectEnabled } from "../classnote-guard";
 import { hasClassnoteNameCollision, teacherOwnsStudent } from "./scope";
+import { isRecallInFlight } from "@/features/report-admin/report-recall";
 // 담당 반 판정 단일 소스(담당 반 ∪ 그날 위임 반) — classes.teacher_id를 직접 비교하지 말 것(0173a).
 import { getTeachingClassIds, getTeachingClasses } from "@/features/classes/server/delegation";
 import { isStudentAbsentForSend } from "./absence-gate";
@@ -251,8 +252,35 @@ export async function saveAndQueueClassnote(
       : base.is("class_id", null).is("subject", null);
   const { data: priorRows } = await scoped.limit(1);
   const prior = priorRows?.[0];
-  // 취소된 링크는 재큐잉 안 함 — 옛 링크가 死링크라 재발송하려면 먼저 재발급(새 토큰·취소 해제)해야 함.
-  if (prior?.revoked_at) {
+  // 🔴 회수 처리 중 — 워커가 옛 게시글을 아직 안 지웠다. 지금 보내면 **옛 글 옆에 새 글이 하나 더** 붙고,
+  //    새 토큰을 내면 워커가 지울 글을 못 찾아 **고아 게시글**이 된다. 삭제가 끝난 뒤에만 보낸다.
+  if (isRecallInFlight((prior?.classnote_status as string | null) ?? null)) {
+    return { ok: true, id: prior!.id, status: "recall_pending" };
+  }
+  // 🔴 **회수 완료분의 재발송 = 그냥 '발송'**(원장 2026-08-06: *"회수하고 클래스노트 발송 버튼 누르면
+  //    그게 재발송 아닌가"*). 별도 '재발송' 버튼을 두지 않는다. 옛 글은 이미 지워졌고 옛 링크는 죽었으니
+  //    **새 토큰**을 내고 취소를 풀어 평범한 첫 발송과 같은 상태로 되돌린 뒤 아래 정상 경로를 탄다.
+  //    ⚠️ 되돌리는 건 여기(사람이 발송을 누른 시점)뿐이다 — 회수 직후 자동으로 되돌리면 그 행이
+  //    '미발송'이 되어 **관리자 일괄 발송**(isAdminSendable = 상태 없음)에 딸려 들어간다. 잘못돼서
+  //    거둬들인 내용이 다음 일괄 발송에 그대로 다시 나가는 사고가 된다.
+  if (prior?.classnote_status === "recalled") {
+    await supabase
+      .from("lesson_reports")
+      .update({
+        share_token: randomUUID(),
+        revoked_at: null,
+        revoked_by: null,
+        classnote_status: null,
+        classnote_error: null,
+        classnote_sent_at: null,
+        classnote_queued_at: null,
+        classnote_processing_at: null,
+        classnote_retry_count: 0,
+      })
+      .eq("id", prior.id)
+      .eq("classnote_status", "recalled"); // 동시 클릭 경합 — 한 번만 되돌린다
+  } else if (prior?.revoked_at) {
+    // 취소된 링크(회수와 무관 — 링크만 막은 건)는 재큐잉 안 함. 재발급으로 새 토큰을 내야 한다.
     return { ok: true, id: prior.id, status: "revoked" };
   }
   // 워커 게시 중이면 내용 덮어쓰지 않고 그대로 반환(in-flight 보호).
@@ -389,13 +417,19 @@ export async function reissueShareLink(
   const supabase = await createClient();
   const { data: report } = await supabase
     .from("lesson_reports")
-    .select("id, student_id, report_date")
+    .select("id, student_id, report_date, classnote_status")
     .eq("share_token", shareToken)
     .maybeSingle();
   if (!report) return { ok: false, error: "보고서를 찾을 수 없습니다" };
   // 담당 판정은 **그 보고서 날짜** 기준 — 임시 위임(0173a)은 기간이 있어 오늘로 보면 어제 위임분을 못 만진다.
   if (!(await teacherOwnsStudent(supabase, user.id, report.student_id, report.report_date as string)))
     return { ok: false, error: "담당 학생이 아닙니다" };
+  // 🔴 회수 진행 중엔 재발급을 막는다 — **재발급은 share_token을 갈아치우는데, 그 토큰이 회수 워커가
+  //    ClassNote 게시글을 찾는 유일한 키**다(본문 완전 일치). 여기서 토큰이 바뀌면 워커가 글을 영영 못 찾아
+  //    학부모 게시판에 **지울 수 없는 고아 게시글**이 남는다(죽은 링크 + 스크린샷 이미지).
+  //    회수가 끝난 뒤(recalled)엔 정상적으로 재발급할 수 있다.
+  if (isRecallInFlight((report.classnote_status as string | null) ?? null))
+    return { ok: false, error: "회수 처리 중입니다 — 게시글 삭제가 끝난 뒤에 재발급하세요" };
   const newToken = randomUUID(); // ⚠️ supabase-js update엔 SQL gen_random_uuid()를 못 씀 → Node에서 생성
   const { error } = await supabase
     .from("lesson_reports")

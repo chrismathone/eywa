@@ -1,29 +1,34 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_ECS_SHOW_SPECIAL_ROOMS, readEcsEnglishTrack, readEcsShowSpecialRooms } from "./view-prefs";
+import {
+  DEFAULT_ECS_SHOW_SELF_STUDY,
+  readEcsCollapsedRosterGroups,
+  readEcsEnglishTrack,
+  readEcsShowSelfStudy,
+} from "./view-prefs";
 
-describe("readEcsShowSpecialRooms", () => {
-  it("기본은 표시 — 원장 2026-08-03 'LAB과 JJ 오픈시켜'(숨김으로 되돌리지 말 것)", () => {
-    expect(DEFAULT_ECS_SHOW_SPECIAL_ROOMS).toBe(true);
-    expect(readEcsShowSpecialRooms(undefined)).toBe(true);
-    expect(readEcsShowSpecialRooms({})).toBe(true);
-    expect(readEcsShowSpecialRooms({ ecs: {} })).toBe(true);
+describe("readEcsShowSelfStudy — JJ 표시(LAB은 대상 아님)", () => {
+  it("기본은 표시 — 원장 2026-08-03 '오픈시켜'(숨김으로 되돌리지 말 것)", () => {
+    expect(DEFAULT_ECS_SHOW_SELF_STUDY).toBe(true);
+    expect(readEcsShowSelfStudy(undefined)).toBe(true);
+    expect(readEcsShowSelfStudy({})).toBe(true);
+    expect(readEcsShowSelfStudy({ ecs: {} })).toBe(true);
   });
 
   it("저장된 false만 숨김", () => {
-    expect(readEcsShowSpecialRooms({ ecs: { showSpecialRooms: false } })).toBe(false);
-    expect(readEcsShowSpecialRooms({ ecs: { showSpecialRooms: true } })).toBe(true);
+    expect(readEcsShowSelfStudy({ ecs: { showSpecialRooms: false } })).toBe(false);
+    expect(readEcsShowSelfStudy({ ecs: { showSpecialRooms: true } })).toBe(true);
   });
 
   it("다른 화면 네임스페이스 값은 훔쳐 읽지 않는다", () => {
-    expect(readEcsShowSpecialRooms({ onescreen: { showSpecialRooms: false } })).toBe(true);
+    expect(readEcsShowSelfStudy({ onescreen: { showSpecialRooms: false } })).toBe(true);
   });
 
   it("깨진 값(문자열·배열·null)은 기본값 — 교시가 통째로 사라지지 않게", () => {
-    expect(readEcsShowSpecialRooms({ ecs: { showSpecialRooms: "false" } })).toBe(true);
-    expect(readEcsShowSpecialRooms({ ecs: null })).toBe(true);
-    expect(readEcsShowSpecialRooms({ ecs: [] })).toBe(true);
-    expect(readEcsShowSpecialRooms([])).toBe(true);
-    expect(readEcsShowSpecialRooms("nope")).toBe(true);
+    expect(readEcsShowSelfStudy({ ecs: { showSpecialRooms: "false" } })).toBe(true);
+    expect(readEcsShowSelfStudy({ ecs: null })).toBe(true);
+    expect(readEcsShowSelfStudy({ ecs: [] })).toBe(true);
+    expect(readEcsShowSelfStudy([])).toBe(true);
+    expect(readEcsShowSelfStudy("nope")).toBe(true);
   });
 });
 
@@ -52,6 +57,43 @@ describe("readEcsEnglishTrack — 프로그램 보기 필터(계정 귀속)", ()
   it("자리(LAB·JJ) 설정과 서로 간섭하지 않는다(축이 다르다)", () => {
     const prefs = { ecs: { englishTrack: "eie", showSpecialRooms: false } };
     expect(readEcsEnglishTrack(prefs)).toBe("eie");
-    expect(readEcsShowSpecialRooms(prefs)).toBe(false);
+    expect(readEcsShowSelfStudy(prefs)).toBe(false);
+  });
+});
+
+describe("readEcsCollapsedRosterGroups — 로스터 섹션 접힘(계정 귀속)", () => {
+  it("기본은 전부 펼침", () => {
+    expect(readEcsCollapsedRosterGroups(undefined)).toEqual([]);
+    expect(readEcsCollapsedRosterGroups({})).toEqual([]);
+    expect(readEcsCollapsedRosterGroups({ ecs: {} })).toEqual([]);
+  });
+
+  it("저장된 그룹만 접힌다 — 순서는 항상 재원→퇴원→기록으로 고정", () => {
+    expect(readEcsCollapsedRosterGroups({ ecs: { collapsedRosterGroups: ["record", "active"] } })).toEqual([
+      "active",
+      "record",
+    ]);
+  });
+
+  it("모르는 키는 버리고 아는 키는 살린다(통째로 무시하지 않는다)", () => {
+    expect(
+      readEcsCollapsedRosterGroups({ ecs: { collapsedRosterGroups: ["withdrawn", "무엇", 7] } }),
+    ).toEqual(["withdrawn"]);
+  });
+
+  it("깨진 값은 전부 펼침 — 명단이 통째로 접혀 '학생이 없다'로 보이지 않게", () => {
+    expect(readEcsCollapsedRosterGroups({ ecs: { collapsedRosterGroups: "active" } })).toEqual([]);
+    expect(readEcsCollapsedRosterGroups({ ecs: { collapsedRosterGroups: null } })).toEqual([]);
+  });
+
+  it("다른 화면 네임스페이스 값은 훔쳐 읽지 않는다", () => {
+    expect(readEcsCollapsedRosterGroups({ onescreen: { collapsedRosterGroups: ["active"] } })).toEqual([]);
+  });
+
+  it("형제 설정과 서로 간섭하지 않는다", () => {
+    const prefs = { ecs: { collapsedRosterGroups: ["withdrawn"], showSpecialRooms: false, englishTrack: "eie" } };
+    expect(readEcsCollapsedRosterGroups(prefs)).toEqual(["withdrawn"]);
+    expect(readEcsShowSelfStudy(prefs)).toBe(false);
+    expect(readEcsEnglishTrack(prefs)).toBe("eie");
   });
 });

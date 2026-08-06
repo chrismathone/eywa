@@ -97,7 +97,7 @@ describe("RoomTimeColumnTable — 시간이 세로, 강의실이 가로", () => 
     expect(labels.filter(Boolean)).toEqual(["14시", "15시"]);
   });
 
-  it("블록은 인원·인원률을 그대로 싣고, 낮은 블록(3칸 미만)은 인원만 남긴다", () => {
+  it("블록은 인원·인원률을 그대로 싣고, 낮은 블록(3칸 미만)은 **%만** 접는다", () => {
     const rows: RoomTimelineRow[] = [
       { key: "r1", name: "본원201", registered: true, capacity: 10, cells: [cls(6, { students: 9, seatPct: 90 }), gap(6)] },
       { key: "r3", name: "본원202", registered: true, capacity: 10, cells: [cls(2, { students: 4, seatPct: 40 }), gap(10)] },
@@ -108,7 +108,9 @@ describe("RoomTimeColumnTable — 시간이 세로, 강의실이 가로", () => 
     const first = body(container)[0]!.querySelectorAll("td");
     expect(first[1]!.textContent).toContain("9명");
     expect(first[1]!.textContent).toContain("90%");
-    expect(first[2]!.textContent).toBe("4"); // 낮은 블록 = 인원만(나머지는 툴팁)
+    // 🔴 접는 건 %뿐이고 단위('명')는 남는다 — 옆 칸이 `9명 90%`인데 홀로 `4`만 있으면
+    //    사람 수인지 퍼센트인지 알 수 없다(원장 지적 2026-08-06).
+    expect(first[2]!.textContent).toBe("4명");
     // 접힌 %는 툴팁이 말한다(글자를 접어도 정보가 사라지면 안 된다).
     expect(first[2]!.querySelector("div")!.getAttribute("title")).toContain("정원의 40%");
   });

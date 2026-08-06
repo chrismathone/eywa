@@ -1,5 +1,13 @@
 import { describe, it, expect } from "vitest";
-import { planBulkAttendance, planBulkStatus, countStatusOverwrites, type BulkRosterRow } from "./bulk";
+import {
+  countPlanCellOverwrites,
+  countStatusOverwrites,
+  planBulkAttendance,
+  planBulkPlanCells,
+  planBulkStatus,
+  type BulkPlanRow,
+  type BulkRosterRow,
+} from "./bulk";
 
 const roster: BulkRosterRow[] = [
   { studentId: "a", eligible: true, historical: false },
@@ -62,5 +70,61 @@ describe("countStatusOverwrites", () => {
       [`c|${DATE}|${SLOT}`]: { status: "결석", progressNote: null }, // historical → 대상 아님
     };
     expect(countStatusOverwrites(roster, marks, DATE, SLOT, true)).toBe(1);
+  });
+});
+
+// ── 수업계획(평시/내신) 일괄 ───────────────────────────────────────────────────
+describe("planBulkPlanCells / countPlanCellOverwrites", () => {
+  const ln = (over: Partial<BulkPlanRow> & { id: string }): BulkPlanRow => ({
+    termMode: "regular",
+    textbook: null,
+    pageRange: null,
+    progress: null,
+    homework: null,
+    ...over,
+  });
+  const lines: BulkPlanRow[] = [
+    ln({ id: "r1", textbook: "Power Voca" }),
+    ln({ id: "r2" }),
+    ln({ id: "r3", textbook: "   " }), // 공백만 = 빈 칸(plan-codec 저장 규약)
+    ln({ id: "e1", termMode: "exam", textbook: "내신 교재" }),
+  ];
+
+  it("고른 시기의 줄만 대상 — 평시를 고르면 내신 줄은 안 건드린다", () => {
+    expect(planBulkPlanCells(lines, "regular", "textbook", { canEdit: true, onlyEmpty: false })).toEqual([
+      "r1",
+      "r2",
+      "r3",
+    ]);
+    expect(planBulkPlanCells(lines, "exam", "textbook", { canEdit: true, onlyEmpty: false })).toEqual(["e1"]);
+  });
+
+  it("onlyEmpty면 그 칸이 빈 줄만(공백만 있는 칸도 빈 칸)", () => {
+    expect(planBulkPlanCells(lines, "regular", "textbook", { canEdit: true, onlyEmpty: true })).toEqual([
+      "r2",
+      "r3",
+    ]);
+  });
+
+  it("칸마다 따로 판정한다 — 교재가 찬 줄도 '진도'는 비어 있다", () => {
+    expect(planBulkPlanCells(lines, "regular", "progress", { canEdit: true, onlyEmpty: true })).toEqual([
+      "r1",
+      "r2",
+      "r3",
+    ]);
+  });
+
+  it("편집 권한이 없으면 0건", () => {
+    expect(planBulkPlanCells(lines, "regular", "textbook", { canEdit: false, onlyEmpty: false })).toEqual([]);
+  });
+
+  it("줄이 없으면 0건 — 일괄이 줄을 새로 만들지 않는다(구조 변경은 '+ 줄 추가'만)", () => {
+    expect(planBulkPlanCells([], "regular", "textbook", { canEdit: true, onlyEmpty: false })).toEqual([]);
+  });
+
+  it("덮어쓰기로 사라질 칸 수를 센다(확인 문구용)", () => {
+    expect(countPlanCellOverwrites(lines, "regular", "textbook", true)).toBe(1); // r1만 값이 있다
+    expect(countPlanCellOverwrites(lines, "regular", "progress", true)).toBe(0);
+    expect(countPlanCellOverwrites(lines, "exam", "textbook", true)).toBe(1);
   });
 });

@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { classnoteBadge } from "@/features/onescreen/components/report-card";
+import { RecallButton } from "@/features/report-admin/components/recall-button";
 import { useSubjectMaps } from "@/features/owner/operations-context";
 import { listReports, sendClassnoteForUnsent, setReportCoversDate } from "@/features/report-admin/server/actions";
 import {
@@ -291,6 +292,19 @@ export function ReportList({
                   <td className="px-3 py-2 text-right">
                     <div className="flex items-center justify-end gap-1.5">
                       <CoversDateControl row={r} canEdit={canSend} onSaved={() => run(filters)} />
+                      {/* 관리자 강제 회수(2026-08-05 원장 지시) — 위 필터로 **전체 보고서를 검색한 뒤**
+                          그 자리에서 회수한다. 게시 완료건에만 뜨고(RecallButton 판정), 경고 + 이중확인은
+                          강사 카드와 **같은 컴포넌트**를 써서 한쪽만 약해지지 않는다. */}
+                      {canSend ? (
+                        <RecallButton
+                          reportId={r.id}
+                          studentName={r.studentName}
+                          classnoteStatus={r.classnoteStatus}
+                          shareToken={r.shareToken}
+                          readAt={r.readAt}
+                          onDone={() => run(filters)}
+                        />
+                      ) : null}
                       <Button size="sm" variant="outline" onClick={() => openReport(r)}>
                         열람
                       </Button>

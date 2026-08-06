@@ -10,6 +10,8 @@ import type { SheetHandlers } from "./sheet-client";
 import type { SheetSaveStore } from "./use-sheet-saves";
 import { PlanTable } from "./plan-table";
 import { RosterTable } from "./roster-table";
+import { SlotBulk } from "./slot-bulk";
+import type { RosterGroupKey } from "../lib/roster-order";
 
 export const PeriodBlock = memo(function PeriodBlock({
   date,
@@ -21,6 +23,8 @@ export const PeriodBlock = memo(function PeriodBlock({
   store,
   handlers,
   canEdit,
+  collapsedGroups,
+  onToggleGroup,
 }: {
   date: string;
   slot: GridSlot;
@@ -31,6 +35,9 @@ export const PeriodBlock = memo(function PeriodBlock({
   store: SheetSaveStore;
   handlers: SheetHandlers;
   canEdit: boolean;
+  /** 접어 둔 로스터 섹션 — **시트 전체 공유**(카드마다 따로면 나란한 카드의 줄맞춤이 어긋난다). */
+  collapsedGroups: readonly RosterGroupKey[];
+  onToggleGroup: (key: RosterGroupKey) => void;
 }) {
   // 키에 날짜 포함 — 같은 시각이라도 평일/주말 교시 번호가 다르다(주말은 별도 교시표).
   const periodLabel = data.periodLabelBySlot[`${date}|${slot.slotStart}`] ?? null;
@@ -56,33 +63,65 @@ export const PeriodBlock = memo(function PeriodBlock({
     //    흘러 카드가 겹친다. 새 구획이 필요하면 세 구획 **안에** 넣거나 부모 트랙 수를 함께 늘릴 것.
     // ⚠️ `h-full`은 쓰지 않는다(부모가 span으로 높이를 정한다).
     <article className="bg-card shadow-card row-span-3 grid cursor-default grid-rows-subgrid rounded-2xl p-3">
-      {/* 카드 머리 — 원본 시트의 회색 교시 칸(1교시 / 03:00~03:40)과 같은 위계. 교시=칩, 시각=옆 숫자. */}
+      {/* 카드 머리 — 원본 시트의 회색 교시 칸(1교시 / 03:00~03:40)과 같은 위계. 교시=칩, 시각=옆 숫자.
+          ⚠️ 글자는 **전부 굵게 + foreground**(원장 2026-08-06 "전체 텍스트를 굵게할것 (잘보이게)").
+             시각·강의실이 dim 보통굵기라 한 발짝만 떨어져도 안 읽혔다 — 여기서 위계를 다시 낮추지 말 것. */}
       <header className="border-line-strong flex flex-wrap items-center gap-x-2 gap-y-1 border-b pb-2">
         {periodLabel ? (
           <span className="bg-bg-soft text-foreground rounded-md px-1.5 py-0.5 text-[13px] font-bold">
             {periodLabel}
           </span>
         ) : null}
-        <span className="text-text-dim num text-[13px] font-medium whitespace-nowrap">
+        <span className="text-foreground num text-[13px] font-bold whitespace-nowrap">
           {slot.slotStart}
           {slot.slotEnd ? ` ~ ${slot.slotEnd}` : ""}
         </span>
         {teacher ? (
-          <span className="border-line-strong text-foreground rounded-full border px-2 py-0.5 text-[12px] font-medium whitespace-nowrap">
+          <span className="border-line-strong text-foreground rounded-full border px-2 py-0.5 text-[12px] font-bold whitespace-nowrap">
             {teacher}
           </span>
         ) : null}
         {slot.roomLabel ? (
-          <span className="text-text-dim text-[12px] whitespace-nowrap">{slot.roomLabel}</span>
+          <span className="text-foreground text-[12px] font-bold whitespace-nowrap">{slot.roomLabel}</span>
         ) : null}
         {!slot.scheduled ? (
           <span
-            className="border-amber/50 bg-amber-soft text-amber ml-auto rounded-full border px-2 py-0.5 text-[11px] font-medium whitespace-nowrap"
+            className="border-amber/50 bg-amber-soft text-amber rounded-full border px-2 py-0.5 text-[11px] font-bold whitespace-nowrap"
             title="시간표가 바뀌어 현재 스케줄에 없는 시각입니다 — 기록 보존을 위해 표시"
           >
             시간 변경됨
           </span>
         ) : null}
+        {/* 일괄 입력 = 카드 머리 오른쪽 끝(원장 2026-08-06). 계획·로스터 **둘 다**의 일괄이라 두 표보다
+            위에 있어야 순서가 맞는다. 권한 없으면 컴포넌트가 스스로 아무것도 안 그린다. */}
+        <span className="ml-auto">
+          <SlotBulk
+            date={date}
+            slotStart={slot.slotStart}
+            roster={slot.roster}
+            lines={lines}
+            marks={marks}
+            attendance={attendance}
+            canEdit={canEdit && slot.scheduled}
+            canMarkDate={data.canMarkAttendanceByDate[date] ?? false}
+            showExamTerm={!data.isEie}
+            onBulkAttendance={(ids) => ids.forEach((id) => handlers.markPresent(id, date))}
+            onBulkStatus={(ids, status) =>
+              ids.forEach((id) =>
+                handlers.saveMark(
+                  id,
+                  date,
+                  slot.slotStart,
+                  status,
+                  marks[`${id}|${date}|${slot.slotStart}`]?.progressNote ?? null,
+                ),
+              )
+            }
+            onBulkPlanCells={(lineIds, field, value) =>
+              lineIds.forEach((id) => handlers.editCell(id, field, value))
+            }
+          />
+        </span>
       </header>
 
       <PlanTable
@@ -93,6 +132,7 @@ export const PeriodBlock = memo(function PeriodBlock({
         store={store}
         handlers={handlers}
         canEdit={canEdit && slot.scheduled}
+        showExamTerm={!data.isEie}
       />
 
       {slot.roster.length > 0 ? (
@@ -105,6 +145,8 @@ export const PeriodBlock = memo(function PeriodBlock({
           attendance={attendance}
           handlers={handlers}
           canEdit={canEdit}
+          collapsedGroups={collapsedGroups}
+          onToggleGroup={onToggleGroup}
         />
       ) : null}
     </article>

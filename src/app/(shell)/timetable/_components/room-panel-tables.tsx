@@ -201,8 +201,10 @@ function TimelineTd({
         }`}
       >
         {compact ? (
-          // 좁은 블록은 인원만 — %까지 넣으면 글자가 잘려 **아무것도 못 읽는다**. 나머지는 툴팁이 말한다.
-          <span className="num truncate font-semibold">{cell.students}</span>
+          // 좁은 블록은 **%를 뺀다** — 둘 다 넣으면 글자가 잘려 아무것도 못 읽는다. 나머지는 툴팁이 말한다.
+          // 🔴 단위('명')는 빼지 않는다. 옆 칸이 `13명 130%`인 표에서 홀로 `5`만 있으면 사람 수인지
+          //    퍼센트인지 알 수 없다 — 단위 한 글자가 %를 뺀 것보다 폭을 훨씬 덜 먹는다.
+          <span className="num truncate font-semibold">{cell.students}명</span>
         ) : (
           <>
             <span className="num truncate font-semibold">{cell.students}명</span>
@@ -402,8 +404,11 @@ function TimelineTdVertical({
               : ""
         } rounded-md px-0.5`}
       >
-        {/* 낮은 블록은 인원만 — 세로로 쌓을 자리가 없다. 나머지는 툴팁이 말한다(가로 모드와 같은 규약). */}
-        <span className="num truncate font-semibold">{cell.students}{compact ? "" : "명"}</span>
+        {/* 낮은 블록은 **%를 뺀다** — 세로로 쌓을 자리가 없다. 나머지는 툴팁이 말한다(가로 모드와 같은 규약).
+            🔴 단위('명')는 세로 모드에서 특히 뺄 이유가 없다 — 여기서 좁은 건 **높이**고 폭은 강의실 열
+               (≥56px)이 그대로 남는다. 가로 모드의 '폭이 없다'는 사정을 그대로 베껴 와서 `5`만 남았고,
+               옆 칸이 `13명 130%`인 표에서 그 `5`는 사람 수인지 %인지 알 수 없었다(원장 지적 2026-08-06). */}
+        <span className="num truncate font-semibold">{cell.students}명</span>
         {compact ? null : (
           <span className={`num truncate text-[10px] ${over ? "font-bold text-red-600" : "opacity-70"}`}>
             {cell.seatPct == null ? "정원?" : `${cell.seatPct}%`}

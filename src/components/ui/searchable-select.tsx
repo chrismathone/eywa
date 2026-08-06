@@ -25,6 +25,7 @@ export function SearchableSelect({
   className,
   triggerClassName,
   ariaLabel,
+  highlightSelected = false,
 }: {
   options: ComboOption[];
   value?: string;
@@ -44,6 +45,12 @@ export function SearchableSelect({
   triggerClassName?: string;
   /** 트리거 버튼의 접근성 이름 — 선택값만으론 무엇의 드롭다운인지 불명할 때(필터 등) 서술 라벨 제공. */
   ariaLabel?: string;
+  /**
+   * 목록에서 **지금 선택된 줄**을 노란 배경 + 굵은 글씨로 강조(원장 2026-08-06, ECS 반 전환).
+   * 기본은 꺼둔다 — 옵션이 대여섯 개인 폼 셀렉트에선 체크 아이콘으로 충분하고, 전 드롭다운을 한꺼번에
+   * 물들이면 요청받지 않은 화면까지 바뀐다. **길고 자주 갈아타는 목록**(반·학생 전환)에서만 켤 것.
+   */
+  highlightSelected?: boolean;
 }) {
   const isControlled = value !== undefined;
   const [internal, setInternal] = useState(defaultValue);
@@ -79,6 +86,16 @@ export function SearchableSelect({
     setQ("");
   }
 
+  // 강조는 **고른 게 있을 때만** — 아무것도 안 골랐는데 노랗게 칠하면 placeholder가 선택값처럼 보인다.
+  const highlightOn = highlightSelected && selected !== null;
+  // ⚠️ 톤은 **분기해서 한 벌만** 내보낸다. `bg-card`와 `bg-amber-soft`를 같이 적으면 어느 쪽이 이길지는
+  //    class 문자열 순서가 아니라 Tailwind가 CSS를 찍은 순서가 정해서, 눈으로 못 읽는 버그가 된다.
+  const triggerBox =
+    triggerClassName ??
+    `rounded-md border px-3 py-2 text-sm ${
+      highlightOn ? "border-amber/60 bg-amber-soft text-amber" : "border-border bg-card text-foreground"
+    }`;
+
   return (
     <div ref={ref} className={`relative ${className ?? ""}`}>
       {name ? <input type="hidden" name={name} value={current} /> : null}
@@ -86,12 +103,12 @@ export function SearchableSelect({
         type="button"
         aria-label={ariaLabel}
         onClick={() => setOpen((o) => !o)}
-        className={`flex w-full cursor-pointer items-center justify-between gap-2 ${
-          triggerClassName ??
-          "border-border bg-card text-foreground rounded-md border px-3 py-2 text-sm"
-        }`}
+        className={`flex w-full cursor-pointer items-center justify-between gap-2 ${triggerBox}`}
       >
-        <span className={`truncate ${selected ? "" : "text-text-faint"}`}>
+        {/* 굵기는 박스 스타일과 안 겹쳐서 triggerClassName을 넘긴 호출부에서도 안전하게 붙는다. */}
+        <span
+          className={`truncate ${selected ? "" : "text-text-faint"} ${highlightOn ? "font-bold" : ""}`}
+        >
           {selected ? selected.label : placeholder}
         </span>
         <EyIcon name="chevronDown" size={16} className="size-4 shrink-0 opacity-50" />
@@ -124,23 +141,36 @@ export function SearchableSelect({
             {shown.length === 0 ? (
               <li className="text-text-faint px-3 py-2 text-xs">결과 없음</li>
             ) : (
-              shown.map((o) => (
-                <li key={o.value}>
-                  <button
-                    type="button"
-                    onClick={() => choose(o.value)}
-                    className="hover:bg-bg-soft flex w-full cursor-pointer items-center justify-between gap-2 px-3 py-1.5 text-left text-sm"
-                  >
-                    <span className="truncate">
-                      {o.label}
-                      {o.hint ? <span className="text-text-faint ml-1 text-xs">{o.hint}</span> : null}
-                    </span>
-                    {o.value === current ? (
-                      <EyIcon name="check" size={14} className="text-primary size-3.5 shrink-0" />
-                    ) : null}
-                  </button>
-                </li>
-              ))
+              shown.map((o) => {
+                const isCurrent = o.value === current;
+                // 강조는 **선택된 줄에만** — hover는 그대로 둔다(마우스가 지나간 줄이 선택된 줄처럼 보이면
+                // 강조가 무의미해진다). amber-soft/amber는 전역 토큰이라 라이트 팔레트와 어긋나지 않는다.
+                const rowTone =
+                  highlightSelected && isCurrent
+                    ? "bg-amber-soft text-amber font-bold"
+                    : "hover:bg-bg-soft";
+                return (
+                  <li key={o.value}>
+                    <button
+                      type="button"
+                      onClick={() => choose(o.value)}
+                      className={`flex w-full cursor-pointer items-center justify-between gap-2 px-3 py-1.5 text-left text-sm ${rowTone}`}
+                    >
+                      <span className="truncate">
+                        {o.label}
+                        {o.hint ? <span className="text-text-faint ml-1 text-xs">{o.hint}</span> : null}
+                      </span>
+                      {isCurrent ? (
+                        <EyIcon
+                          name="check"
+                          size={14}
+                          className={`size-3.5 shrink-0 ${highlightSelected ? "text-amber" : "text-primary"}`}
+                        />
+                      ) : null}
+                    </button>
+                  </li>
+                );
+              })
             )}
             {overflow > 0 ? (
               <li className="text-text-faint px-3 py-1.5 text-[11px]">

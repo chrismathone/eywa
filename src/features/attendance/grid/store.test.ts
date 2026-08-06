@@ -92,6 +92,86 @@ describe("칸별 구독 — 바뀐 칸에게만 알린다", () => {
   });
 });
 
+describe("합계 구독 — 값이 바뀔 때만, 바뀐 행에게만", () => {
+  it("🔴 합계는 **보이는 열이 아니라 그 달 전체**를 센다 — 2주 보기에서 시수가 반토막 나면 안 된다", () => {
+    // 열은 7/20 하나만 보이지만 기록은 7/01에도 있다(2주 보기).
+    store.setSource([R1], [D2], {
+      [K(R1, "2026-07-01")]: { s: "present", u: null },
+      [K(R1, "2026-07-20")]: { s: "present", u: 1.5 },
+    });
+    expect(store.valuesOfRow(R1)).toHaveLength(2);
+  });
+
+  it("낙관적 입력이 즉시 합계에 들어간다(서버 왕복 전)", () => {
+    const k = K(R1, D1);
+    store.setLocal([[k, { s: "present", u: 2 }]]);
+    expect(store.valuesOfRow(R1)).toEqual([{ s: "present", u: 2 }]);
+  });
+
+  it("지운 칸은 값이 null — 세는 쪽이 건너뛴다(색인엔 남아도 무해)", () => {
+    const k = K(R1, D1);
+    store.setSource([R1, R2], [D1, D2], { [k]: { s: "present", u: null } });
+    store.setLocal([[k, null]]);
+    expect(store.valuesOfRow(R1)).toEqual([null]);
+  });
+
+  it("한 행을 고치면 그 행 구독자만 깨운다 — 옆 행은 안 다시 그린다", () => {
+    const a = vi.fn();
+    const b = vi.fn();
+    store.subscribeRow(R1)(a);
+    store.subscribeRow(R2)(b);
+    store.setLocal([[K(R1, D1), { s: "present", u: null }]]);
+    expect(a).toHaveBeenCalledTimes(1);
+    expect(b).not.toHaveBeenCalled();
+    expect(store.getRowVersion(R1)).toBe(1);
+    expect(store.getRowVersion(R2)).toBe(0);
+  });
+
+  it("커서 이동·범위 선택은 합계를 건드리지 않는다(값이 안 바뀌었으니까)", () => {
+    const all = vi.fn();
+    store.subscribeValues(all);
+    store.select({ row: R1, col: D1 }, false);
+    store.extend(1, 1);
+    store.setBuffer("1");
+    expect(all).not.toHaveBeenCalled();
+  });
+
+  it("서버가 새 값을 싣고 오면(flush) 합계 구독자를 깨운다", () => {
+    const all = vi.fn();
+    const row = vi.fn();
+    store.subscribeValues(all);
+    store.subscribeRow(R1)(row);
+    store.setSource([R1, R2], [D1, D2], { [K(R1, D1)]: { s: "absent", u: null } });
+    expect(all).not.toHaveBeenCalled(); // 렌더 중엔 조용히
+    store.flushSource();
+    expect(all).toHaveBeenCalledTimes(1);
+    expect(row).toHaveBeenCalledTimes(1);
+    store.flushSource(); // 두 번째 flush는 아무 일도 없다(무한 루프 방지)
+    expect(all).toHaveBeenCalledTimes(1);
+  });
+
+  it("🔴 반을 접어도(보이는 행이 줄어도) 총합은 그대로 — 접기는 표시일 뿐이다", () => {
+    const initial = {
+      [K(R1, D1)]: { s: "present", u: null },
+      [K(R2, D1)]: { s: "present", u: 2 },
+    };
+    store.setSource([R1, R2], [D1, D2], initial);
+    const before = [...store.valuesOfRows()];
+    // R2가 속한 반을 접었다 = 보이는 행에서 빠졌다(같은 initial 객체를 그대로 다시 넘긴다).
+    store.setSource([R1], [D1, D2], initial);
+    expect([...store.valuesOfRows()]).toEqual(before);
+    // 반면 명시한 행만 셀 땐 그 행만.
+    expect([...store.valuesOfRows([R1])]).toHaveLength(1);
+  });
+
+  it("서버 갱신 뒤에도 아직 안 실려온 내 입력은 합계에 남는다", () => {
+    const k = K(R1, D2);
+    store.setLocal([[k, { s: "present", u: null }]]);
+    store.setSource([R1, R2], [D1, D2], { [K(R1, D1)]: { s: "present", u: null } });
+    expect(store.valuesOfRow(R1)).toHaveLength(2);
+  });
+});
+
 describe("범위 선택", () => {
   it("Shift 이동은 anchor를 두고 focus만 넓힌다", () => {
     store.select({ row: R1, col: D1 }, false);

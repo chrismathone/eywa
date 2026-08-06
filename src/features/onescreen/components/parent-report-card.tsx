@@ -4,6 +4,7 @@ import { EyIcon } from "@/components/icons/eywa-icons";
 import { hasTrend, type TrendPoint } from "../report-trend";
 import { isImageAttachment } from "../attachment-utils";
 import { isSkipStatusProgress } from "../progress-status";
+import { collapseProgressRanges } from "../progress-range";
 import { makeupTitleSuffix } from "../makeup-label";
 import { ReportTrendGraph } from "./report-trend-graph";
 
@@ -134,9 +135,14 @@ export function ParentReportCard({
       {showToday ? (
         <Section title="오늘 수업">
           {rpt.showTextbook && report.textbook ? <Field label="교재" value={report.textbook} /> : null}
-          {/* 진도가 중단된 날(시험 등)은 나간 차시가 없다 — '진도' 라벨로 내보내면 학부모에게 거짓이라 라벨만 바꾼다. */}
+          {/* 진도가 중단된 날(시험 등)은 나간 차시가 없다 — '진도' 라벨로 내보내면 학부모에게 거짓이라 라벨만 바꾼다.
+              다중 차시는 **같은 중단원 안에서 연속인 것만** 물결 범위로 접어 보여준다(원장 2026-08-05 — 9차시를
+              나간 날 카드가 9줄로 부풀었다). 접기는 표시 전용 = 저장값은 차시 그대로다(progress-range.ts). */}
           {rpt.showProgress && report.progress ? (
-            <Field label={isSkipStatusProgress(report.progress) ? "수업" : "진도"} value={report.progress} />
+            <Field
+              label={isSkipStatusProgress(report.progress) ? "수업" : "진도"}
+              value={collapseProgressRanges(report.progress)}
+            />
           ) : null}
           {rpt.showHomeworkToday && report.homeworkToday ? (
             <Field label="오늘 과제" value={report.homeworkToday} />

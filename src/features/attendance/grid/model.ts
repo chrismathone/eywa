@@ -15,6 +15,12 @@ export function cellKey(row: string, date: string): string {
   return `${row}|${date}`;
 }
 
+/** 행 키에서 반 id만 — 반 접기(그룹 토글)가 행을 반별로 가를 때 쓴다. */
+export function classIdOfRow(row: string): string {
+  const i = row.indexOf("|");
+  return i < 0 ? row : row.slice(0, i);
+}
+
 export type ParsedCell = { classId: string; studentId: string; date: string; row: string };
 
 /** 셀 키 → 구성요소. 형태가 어긋나면 null(호출부가 조용히 건너뛴다). */

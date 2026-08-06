@@ -24,6 +24,7 @@ import { stateDirLabel, stateFile } from "./classnote-paths.mjs";
 import { DEFAULT_KEEP_DAYS, DEFAULT_MAX_BYTES, archiveName, needsRotation, pruneList, uniqueArchiveName } from "./log-rotation.mjs";
 import { BATCH, closeClassnoteAdminSession, launchBrowser, processQueueOnce, resolveTenant } from "./classnote-core.mjs";
 import { processNoticesOnce } from "./classnote-notice-core.mjs";
+import { processRecallsOnce } from "./classnote-recall-core.mjs";
 import { provisionDailyOnce } from "./classnote-provision-core.mjs";
 import { pollParentCommentsOnce, pollParentPostsOnce } from "./classnote-feed-core.mjs";
 import { pollReportReadsOnce } from "./classnote-read-core.mjs";
@@ -81,7 +82,10 @@ const recentIssues = [];
  */
 // nativePublish=이 워커가 Cloud Run 없이 자체 게시하는 버전인가(2026-07-29). 구버전엔 이 키가 없어
 // **키 부재 = 구워커**로 판정할 수 있다 — zip 이관 여부를 원격에서 확인하는 유일한 신호다.
-const WORKER_CAPS = { noticeAttachments: true, nativePublish: true };
+// ⚠️ **새 기능을 워커에 넣으면 여기 cap을 함께 올릴 것.** 연동 PC는 물리적으로 다른 컴퓨터라, 이 값이
+// "지금 도는 코드가 그 기능을 아는가"를 웹에서 확인할 유일한 수단이다. 2026-08-06에 회수를 넣고 cap을
+// 안 올린 탓에, 옛 프로세스가 그대로 돌고 있는데도(started_at 7일 전) 하트비트만 보고는 알 수 없었다.
+const WORKER_CAPS = { noticeAttachments: true, nativePublish: true, reportRecall: true };
 
 // 로그 타임스탬프 = KST(UTC+9) 고정 오프셋 — 연동 PC의 시스템 로케일/타임존과 무관하게 "YYYY-MM-DD HH:MM:SS".
 // watch.log이 UTC(…Z)로 찍혀 실제 시각과 9시간 어긋나 보이던 문제(2026-07-22 원장 제보). DB/하트비트는 ISO 유지(기계용).
@@ -216,6 +220,19 @@ async function main() {
       if (nres.processed) {
         log(`[notice] 공지 ${nres.processed}건 처리 완료`);
         noteResult("notice", nres);
+      }
+      // 2-b) 수업보고서 회수(recall_requested) — 학부모 게시글 삭제. 발송 큐와 독립(실패해도 발송은 계속).
+      //      ⚠️ 발송 킬스위치엔 걸지 않는다(회수는 사고 수습이라 스위치를 내린 상황에서 가장 급하다).
+      // ⚠️ 변수명은 `recallRes` — 아래 읽음 동기화가 이미 `rres`를 쓴다(같은 블록 스코프라 중복 선언 =
+      //    **파일 전체 문법 오류**로 데몬이 아예 기동 못 한다. 2026-08-06 실측으로 걸렀다).
+      const recallRes = await processRecallsOnce(db(), b, { tenant, post: POST, log }).catch((e) => {
+        log(`[recall] 처리 오류(다음 폴에서 재시도): ${e.message}`);
+        noteResult("recall", { error: e.message });
+        return { claimed: 0, recalled: 0, failed: 0 };
+      });
+      if (recallRes.claimed) {
+        log(`[recall] 회수 ${recallRes.recalled}건 완료 · 실패 ${recallRes.failed}건`);
+        noteResult("recall", recallRes);
       }
       // 3) 일일 프로비저닝(신규생 보드 생성 + 가입자 자동 배정) — KST 05시 이후 하루 1회(가드 내장).
       const pres = await provisionDailyOnce(db(), b, { tenant, post: POST, log }).catch((e) => {

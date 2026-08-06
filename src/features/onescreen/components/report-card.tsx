@@ -3,11 +3,18 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { Pill } from "@/components/atoms/pill";
+import { RecallButton } from "@/features/report-admin/components/recall-button";
+import { isRecallInFlight, isRecallable } from "@/features/report-admin/report-recall";
 import { effectiveClassnoteStatus, isAlreadySent, isReportEligible, isRowActionable } from "../grid";
 import { evaluateSendGate } from "../send-gate";
 import { checkMentConsistency, MENT_WARNING_HINT, MENT_WARNING_LABEL } from "../ment-consistency";
 import { parentUnreadBadge, progressAnomalyBadge } from "../roster-signals";
-import { AttendancePills, type AttendanceExtra, type BasicAttendance } from "./attendance-pills";
+import {
+  AttendancePills,
+  SessionUnitsField,
+  type AttendanceExtra,
+  type BasicAttendance,
+} from "./attendance-pills";
 import { FieldSelect } from "./field-select";
 import { HomeworkRateInput } from "./homework-rate-input";
 import { isImageAttachment } from "../attachment-utils";
@@ -46,6 +53,14 @@ export function classnoteBadge(status?: string | null): { label: string; cls: st
       return { label: "ClassNote 발송 제외(오래됨)", cls: "text-text-dim" };
     case "revoked":
       return { label: "링크 취소됨 — 재발급 필요", cls: "text-danger" };
+    // 회수 3종(2026-08-05) — **링크 취소와 다르다**: 회수는 ClassNote 학부모 게시글 자체를 지운다.
+    // 실제 삭제는 연동 PC 워커가 하므로 요청 → 완료 사이에 대기 상태가 보인다(report-recall.ts).
+    case "recall_requested":
+      return { label: "회수 처리 중 — 게시글 삭제 대기", cls: "text-amber" };
+    case "recalled":
+      return { label: "회수됨 — 학부모 게시글 삭제", cls: "text-danger" };
+    case "recall_failed":
+      return { label: "회수 실패 — 다시 시도하세요", cls: "text-danger" };
     case "name_conflict":
       return { label: "동명이인 — 자동 발송 차단", cls: "text-danger" };
     case "blocked_shared":
@@ -170,9 +185,14 @@ export function ReportCard({
   //    `??`면 스냅샷의 옛 "success"가 되살아나 잠금이 안 풀린다(적대 검수 확정).
   const liveStatus = effectiveClassnoteStatus(rep.classnoteStatus, subject.classnoteStatus);
   const alreadySent = isAlreadySent(liveStatus);
+  // 학부모 게시판에 **글이 실제로 올라간** 건인가 — 회수/재발송이 의미 있는 대상(회수 진행 중·실패 포함).
+  // 이 판정으로 '취소·재발급'(링크만 건드림)을 감춘다: 게시글은 이미지라 링크를 만져도 학부모 화면은 그대로다.
+  const postedToBoard = isRecallable({ classnoteStatus: liveStatus ?? null, shareToken: rep.shareToken ?? null })
+    || isRecallInFlight(liveStatus ?? null);
   // 발송 게이트 = 표뷰와 **같은 단일 소스**(send-gate.ts) — 카드만 다른 판정을 쓰면 한쪽에서만
   // "왜 안 눌리지"가 생긴다(#77). 멘트 미작성도 여기서 막는다(빈 멘트 절대 가드가 어차피 거절).
   const sendGate = evaluateSendGate({
+    recallPending: isRecallInFlight(liveStatus ?? null),
     alreadySent,
     isAbsent: subject.attendanceRaw === "absent",
     hasProgress: isReportEligible(subject),
@@ -240,15 +260,27 @@ export function ReportCard({
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
           <span className="micro text-text-faint">출결</span>
           {attendance && !student.isMakeup && subject.classId ? (
-            <AttendancePills
-              value={subject.attendanceRaw}
-              note={subject.attendanceNote}
-              units={subject.attendanceUnits}
-              pending={attendance.pendingKeys.has(`${student.id}::${subject.classId}`)}
-              onSet={(s, extra) => attendance.onSet(subject.classId!, s, extra)}
-              studentName={student.name}
-              readOnly={attendance.readOnly}
-            />
+            <>
+              <AttendancePills
+                value={subject.attendanceRaw}
+                note={subject.attendanceNote}
+                pending={attendance.pendingKeys.has(`${student.id}::${subject.classId}`)}
+                onSet={(s, extra) => attendance.onSet(subject.classId!, s, extra)}
+                studentName={student.name}
+                readOnly={attendance.readOnly}
+              />
+              {/* 수업타임 — pill 옆이지만 **읽을 수 있는 크기**로(원장 2026-08-05 "타임이 너무 작다"). */}
+              {attendance.readOnly ? null : (
+                <SessionUnitsField
+                  units={subject.attendanceUnits}
+                  status={(subject.attendanceRaw as BasicAttendance | null | undefined) ?? null}
+                  pending={attendance.pendingKeys.has(`${student.id}::${subject.classId}`)}
+                  onSet={(s, extra) => attendance.onSet(subject.classId!, s, extra)}
+                  studentName={student.name}
+                  label="수업타임"
+                />
+              )}
+            </>
           ) : (
             <span
               className={`rounded-pill px-2 py-0.5 text-[11px] font-bold ${
@@ -308,6 +340,10 @@ export function ReportCard({
             콘텐츠보다 훨씬 길어 아래가 통째로 비었고, 게다가 이 카드 맨 위 요약(오늘 진도/일일/확인/
             태도·과제)이 **그 카드와 같은 값을 두 번** 보여주고 있었다 → 요약(MiniSummary)은 삭제하고
             진짜 입력을 여기로 들였다. */}
+        <fieldset
+          disabled={alreadySent}
+          className="contents [&_input:disabled]:opacity-50 [&_textarea:disabled]:opacity-50 [&_select:disabled]:opacity-50 [&_button:disabled]:opacity-50 [&:disabled_*]:cursor-not-allowed"
+        >
         <div className="flex flex-col gap-3">
         {/* 오늘 진도·테스트 — **입력 열의 맨 위**. 원장 2026-08-05: *"메모 입력파트까지 1개의 섹션으로
             합쳐도 될거같고"* — 진도·테스트를 따로 세우면 열이 하나 더 필요해 미리보기가 우측에 설 폭이
@@ -387,9 +423,14 @@ export function ReportCard({
           />
         </div>
         </div>
+        </fieldset>
 
         {/* 우측 열 — 문장 작성(멘트·추세) + 발송·첨부·공유링크. */}
         <div className="flex flex-1 flex-col gap-3">
+        <fieldset
+          disabled={alreadySent}
+          className="contents [&_input:disabled]:opacity-50 [&_textarea:disabled]:opacity-50 [&_select:disabled]:opacity-50 [&_button:disabled]:opacity-50 [&:disabled_*]:cursor-not-allowed"
+        >
         <div className="flex flex-1 flex-col gap-1.5">
           <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
             <div className="flex flex-wrap items-center gap-1.5">
@@ -466,6 +507,7 @@ export function ReportCard({
             className="border-line focus:border-primary scrollbar-thin min-h-[64px] resize-none rounded-lg border bg-background px-3 py-2 text-[13px] leading-relaxed outline-none"
           />
         </div>
+        </fieldset>
 
         {/* ClassNote 자동 발송 — 저장 + 큐 적재(로컬 워커가 자동 게시). 상태는 배지로 표시.
             ⚠️ 결석 게이트는 표뷰와 동일(isRowActionable send) — 카드만 우회되는 구멍 방지(#77, 리뷰 확정). */}
@@ -529,9 +571,22 @@ export function ReportCard({
           <p className="border-amber/40 bg-amber-soft text-amber flex items-start gap-1 rounded-md border px-2.5 py-1.5 text-[11px] leading-relaxed">
             <EyIcon name="alert" size={13} className="mt-0.5 shrink-0" />
             <span>
-              이미 학부모 게시판에 올라간 보고서라 <b>수정도 재발송도 할 수 없습니다</b>. ClassNote는 게시글 수정·삭제가
-              안 되므로, 여기서 내용을 바꾸면 학부모가 받은 것과 기록이 갈라집니다. 정말 고쳐야 하면 아래{" "}
-              <b>공유 링크 재발급</b>으로 이 건을 무효화한 뒤 다시 작성하세요.
+              이미 학부모 게시판에 올라간 보고서라 <b>입력이 잠겨 있습니다</b>. 게시글은 이미지로 올라가 있어,
+              여기서 내용만 바꿔도 학부모가 보는 화면은 그대로이고 기록만 갈라집니다. 고치려면 아래{" "}
+              <b>회수</b>로 학부모 게시글을 지우세요 — 삭제가 끝나면 입력이 열리고,{" "}
+              <b>ClassNote 발송</b>으로 수정본을 다시 보낼 수 있습니다.
+            </span>
+          </p>
+        ) : null}
+
+        {/* 회수 완료 — '발송'이 곧 재발송이다(별도 버튼을 두지 않는다, 원장 2026-08-06:
+            *"회수하고 클래스노트 발송 버튼 누르면 그게 재발송 아닌가"*). 발송 시 새 토큰이 발급된다. */}
+        {liveStatus === "recalled" ? (
+          <p className="border-line bg-bg-soft text-text-dim flex items-start gap-1 rounded-md border px-2.5 py-1.5 text-[11px] leading-relaxed">
+            <EyIcon name="check" size={13} className="text-primary mt-0.5 shrink-0" />
+            <span>
+              학부모 게시글을 <b>회수했습니다</b>. 내용을 고친 뒤 <b>ClassNote 발송</b>을 누르면 수정본이 다시
+              올라갑니다(새 공유 링크가 발급됩니다).
             </span>
           </p>
         ) : null}
@@ -567,7 +622,11 @@ export function ReportCard({
         </div>
 
         {/* P2b: 학생 사진 첨부 — 항상 노출. 미저장 상태에서 추가하면 첫 첨부 시 자동저장(핸들러). */}
-        {/* /r·ClassNote 스샷에 실림. 변경 시 재발송 필요. */}
+        {/* /r·ClassNote 스샷에 실림 → **발송분은 함께 잠근다**(첨부만 바꾸면 학부모가 본 이미지와 갈라진다). */}
+        <fieldset
+          disabled={alreadySent}
+          className="contents [&_input:disabled]:opacity-50 [&_button:disabled]:opacity-50 [&:disabled_*]:cursor-not-allowed"
+        >
         <div className="border-line bg-bg-soft rounded-md border px-3 py-2">
             <div className="mb-1.5 flex items-center justify-between gap-2">
               <p className="text-text-faint text-[11px] font-bold">
@@ -636,6 +695,7 @@ export function ReportCard({
               </p>
             )}
           </div>
+        </fieldset>
 
         {/* 저장 후 발급된 학부모 공개 링크 — 강사가 복사해 카톡/문자로 직접 전달(발송 시스템 P0). */}
         {/* P2a: 열람 수 배지 + 취소(열람 차단)/재발급(새 토큰). 취소된 링크는 재발급만 노출. */}
@@ -653,9 +713,18 @@ export function ReportCard({
             {rep.revoked ? (
               <div className="flex items-center justify-between gap-2">
                 <p className="text-text-dim text-[11px]">이 링크는 열람이 차단됐습니다.</p>
-                <Button variant="outline" size="sm" onClick={() => onReissue(subjectName)}>
-                  재발급
-                </Button>
+                <div className="flex items-center gap-1.5">
+                  {/* ⚠️ 링크를 막아도 **ClassNote 게시글(스크린샷)은 남아 있다** — 지우려면 회수해야 한다. */}
+                  <RecallButton
+                    shareToken={rep.shareToken ?? null}
+                    classnoteStatus={liveStatus ?? null}
+                    studentName={student.name}
+                    readAt={subject.classnoteReadAt ?? null}
+                  />
+                  <Button variant="outline" size="sm" onClick={() => onReissue(subjectName)}>
+                    재발급
+                  </Button>
+                </div>
               </div>
             ) : (
               <>
@@ -672,13 +741,32 @@ export function ReportCard({
                     복사
                   </Button>
                 </div>
+                {/* 🔴 게시된 보고서에는 **회수·재발송만** 노출한다(2026-08-06 원장).
+                    게시글은 **이미지**로 올라가므로 '취소'(링크 차단)·'재발급'(새 토큰)은 학부모 눈에
+                    아무 변화도 만들지 못한다 — 원장 지적: *"학부모는 현재 주소보다 이미지를 볼 것"*.
+                    반쪽 수습을 고를 수 있게 두면 "취소했으니 됐다"는 오해를 부른다.
+                    ClassNote로 안 나가고 링크만 카톡으로 보낸 보고서(게시 이력 없음)에서는 아래 else로
+                    기존 취소·재발급이 그대로 뜬다 — 그쪽은 링크가 곧 내용이라 여전히 유효하다. */}
                 <div className="mt-1.5 flex flex-wrap gap-1.5">
-                  <Button variant="ghost" size="sm" onClick={() => onReissue(subjectName)}>
-                    재발급
-                  </Button>
-                  <Button variant="ghost" size="sm" onClick={() => onRevoke(subjectName)}>
-                    취소
-                  </Button>
+                  {postedToBoard ? (
+                    <>
+                      <RecallButton
+                        shareToken={rep.shareToken ?? null}
+                        classnoteStatus={liveStatus ?? null}
+                        studentName={student.name}
+                        readAt={subject.classnoteReadAt ?? null}
+                      />
+                    </>
+                  ) : (
+                    <>
+                      <Button variant="ghost" size="sm" onClick={() => onReissue(subjectName)}>
+                        재발급
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={() => onRevoke(subjectName)}>
+                        취소
+                      </Button>
+                    </>
+                  )}
                 </div>
               </>
             )}

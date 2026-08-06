@@ -15,7 +15,19 @@ import { monthOf, monthRange } from "@/lib/date-kst";
 import type { ReportFilterOptions } from "@/features/report-admin/server/queries";
 
 // 라벨은 classnoteBadge가 해석(한글) — 여기엔 상태 키만. blocked_shared = 프리플라이트 게이트 보류.
-const STATUS_OPTIONS = ["queued", "processing", "success", "failed", "too_old", "name_conflict", "blocked_shared"];
+// 회수 3종(2026-08-05)도 넣는다 — 관리자가 "회수한 건"·"회수 실패한 건"을 검색으로 찾아야 뒤처리가 된다.
+const STATUS_OPTIONS = [
+  "queued",
+  "processing",
+  "success",
+  "failed",
+  "too_old",
+  "name_conflict",
+  "blocked_shared",
+  "recall_requested",
+  "recalled",
+  "recall_failed",
+];
 
 /**
  * 보고서 목록 '뷰 설정' — 기간·강사·과목·상태·읽음을 **한 팝오버에** 모은다

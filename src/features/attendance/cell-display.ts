@@ -33,7 +33,26 @@ export const STATUS_TONE: Record<AttendanceMark, string> = {
 export const DAY_TONE = {
   classDay: "bg-att-classday",
   weekend: "bg-att-weekend",
+  /**
+   * 재원 기간 밖(아직 안 왔거나 이미 나간 날) — 구 출석부의 빗금 자리.
+   * 사선 무늬는 31칸 격자에서 눈이 아파 **한 톤 낮은 회색 + 옅은 글자**로 대신한다.
+   * ⚠️ 주말 회색보다 진해야 한다 — 같은 회색이면 "쉬는 날"과 "소속 아님"이 구분되지 않는다.
+   */
+  outside: "bg-att-outside",
 } as const;
+
+/**
+ * 고정 표 헤더의 높이 — **이 두 값은 반드시 같아야 한다.**
+ *
+ * 🔴 방향키로 위로 이동하면 `scrollIntoView({block:"nearest"})`가 활성 칸을 스크롤포트 **맨 위**에 붙이는데,
+ *    그 자리는 sticky 헤더가 덮고 있다 → 활성 칸이 헤더 뒤로 **통째로 사라진다**(2026-08-06 실측: 37px 겹침,
+ *    화면상 "방향키를 눌렀는데 커서가 없어짐"). `scroll-margin-top`을 헤더 높이만큼 주면 브라우저가 그만큼
+ *    더 스크롤해 칸을 **헤더 바로 아래**에 세운다.
+ * ⚠️ 헤더 높이를 바꾸면 `CELL_SCROLL_MARGIN`도 같이 바꿀 것. Tailwind가 스캔하도록 **리터럴 문자열**로 둔다
+ *    (템플릿 조합 `scroll-mt-[${n}px]`은 JIT가 못 잡아 클래스가 생성되지 않는다).
+ */
+export const HEAD_ROW_H = "h-[38px]";
+export const CELL_SCROLL_MARGIN = "scroll-mt-[38px]";
 
 export const STATUS_TEXT: Record<AttendanceMark, string> = {
   present: "출석",
@@ -61,9 +80,12 @@ export type CellDisplay = { text: string; className: string };
 export function cellDisplay(
   status: AttendanceMark | null,
   units: number | null | undefined,
-  opts: { attendDay?: boolean; muted?: boolean } = {},
+  opts: { attendDay?: boolean; muted?: boolean; outside?: boolean } = {},
 ): CellDisplay {
+  // 🔴 기록이 있으면 재원 기간 밖이라도 **값이 먼저**다 — 퇴원 뒤 보강 출석이 실제로 있고,
+  //    그걸 회색으로 덮으면 급여에 잡히는 시수가 화면에서 사라진다(구 출석부도 값을 그렸다).
   if (status) return { text: markNumber(status, units), className: STATUS_TONE[status] };
+  if (opts.outside) return { text: "", className: `text-text-faint ${DAY_TONE.outside}` };
   if (opts.muted) return { text: "·", className: `text-text-faint ${DAY_TONE.weekend}` };
   if (opts.attendDay) return { text: "·", className: `text-text-faint ${DAY_TONE.classDay}` };
   return { text: "·", className: "text-text-faint" };

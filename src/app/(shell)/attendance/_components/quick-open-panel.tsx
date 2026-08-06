@@ -3,7 +3,7 @@ import { ChevronRight } from "@/components/icons/eywa-icon-compat";
 import { Pill } from "@/components/atoms/pill";
 import type { PillColor } from "@/components/atoms/pill";
 import type { QuickOpenGroup } from "@/features/attendance/quick-open";
-import { attHref, type RangeKey } from "./att-href";
+import { attHref } from "./att-href";
 
 export type QuickOpenClass = {
   id: string;
@@ -30,7 +30,6 @@ export function QuickOpenPanel({
   truncated,
   colorOf,
   month,
-  range,
   teacherId,
   subjectId,
 }: {
@@ -40,7 +39,6 @@ export function QuickOpenPanel({
   /** 과목 색 = 학원설정 단일 소스(buildSubjectMaps.colorOf). 로컬 과목 색 맵 신설 금지. */
   colorOf: (key: string) => PillColor;
   month: string;
-  range: RangeKey;
   teacherId: string | null;
   subjectId: string | null;
 }) {
@@ -80,7 +78,7 @@ export function QuickOpenPanel({
                       아니라 눌러도 무시되므로 링크를 걸지 않는다. */}
                   {g.total > limit && !g.unassigned ? (
                     <Link
-                      href={attHref({ classId: null, month, range, teacherId, subjectId: g.key })}
+                      href={attHref({ classId: null, month, teacherId, subjectId: g.key })}
                       aria-label={`${g.label} 반 더 보기`}
                       className="text-text-dim hover:text-foreground hover:bg-bg-soft ml-auto inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[11.5px] font-medium transition"
                     >
@@ -97,7 +95,7 @@ export function QuickOpenPanel({
                 {g.classes.map((c) => (
                   <li key={c.id}>
                     <Link
-                      href={attHref({ classId: c.id, month, range, teacherId, subjectId })}
+                      href={attHref({ classId: c.id, month, teacherId, subjectId })}
                       className="hover:bg-bg-soft -mx-2 flex items-center gap-2.5 rounded-xl px-2 py-2 transition"
                     >
                       <span className="text-foreground shrink-0 text-[13.5px] font-bold">{c.className}</span>

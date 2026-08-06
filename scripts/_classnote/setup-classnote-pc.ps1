@@ -30,11 +30,27 @@ function Write-Head($t) { Write-Host "`n== $t ==" -ForegroundColor Cyan }
 function Stop-Worker {
   # 실행 중 데몬을 확실히 내린다 — Stop-ScheduledTask는 래퍼(powershell)만 죽이고 자식 node가 orphan으로
   # 남을 수 있어(makeedu 2026-07-03 실측) 커맨드라인 매칭으로 node까지 명시 종료. 재등록/-Remove 시 fresh 보장.
+  #
+  # 🔴🔴 **죽었는지 반드시 확인한다**(2026-08-06 실사고). 예전엔 `Stop-Process -ErrorAction SilentlyContinue`가
+  #     끝이라, 권한 부족 등으로 종료에 실패해도 스크립트는 "✓ 데몬 시작됨"을 찍었다. 그 결과 zip을 풀고
+  #     재지정까지 "성공"으로 끝냈는데 **일주일 전 프로세스가 그대로 살아 있었다**(하트비트 started_at으로 발각).
+  #     `-MultipleInstances IgnoreNew`라 Start-ScheduledTask도 조용히 무시돼 **새 코드가 영영 안 뜬다.**
+  #     조용한 실패는 "적용했다"는 착각을 만들므로, 남아 있으면 **빨간 글씨로 막고** 해결책을 알려준다.
   Stop-ScheduledTask -TaskName $TASK -ErrorAction SilentlyContinue
   Start-Sleep -Seconds 1
   Get-CimInstance Win32_Process -Filter "Name='node.exe'" -ErrorAction SilentlyContinue |
     Where-Object { $_.CommandLine -match "watch-classnote-queue" } |
     ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+  Start-Sleep -Seconds 2
+  $alive = @(Get-CimInstance Win32_Process -Filter "Name='node.exe'" -ErrorAction SilentlyContinue |
+    Where-Object { $_.CommandLine -match "watch-classnote-queue" })
+  if ($alive.Count -gt 0) {
+    Write-Host "  ✖ 옛 워커가 아직 살아 있습니다(PID: $($alive.ProcessId -join ', '))" -ForegroundColor Red
+    Write-Host "    → 이 창을 '관리자 권한으로 실행'해서 다시 돌리거나, PC를 재부팅하세요." -ForegroundColor Yellow
+    Write-Host "    (그대로 두면 압축을 풀어도 옛 코드가 계속 돕니다 — 적용이 안 됩니다)" -ForegroundColor Yellow
+    return $false
+  }
+  return $true
 }
 
 function Show-Status {
@@ -109,9 +125,14 @@ Register-ScheduledTask -TaskName $TASK -Action $action -Trigger $triggers -Setti
 Write-Host "  ✓ $TASK (로그온 시 상주 + 10분마다 자동 부활 — 발송 큐 자동 처리)" -ForegroundColor Green
 
 # ③ 데몬 시작 — 옛 인스턴스(옛 env)를 먼저 내려 fresh 재시작(크리덴셜 교체 재실행에도 안전).
-Stop-Worker
+# ⚠️ 옛 인스턴스를 못 내렸으면 **여기서 멈춘다**. 그대로 진행하면 IgnoreNew라 새 코드가 안 뜨는데
+#    화면엔 "완료"만 남아, 압축을 풀고도 옛 코드가 도는 상태를 아무도 눈치채지 못한다(2026-08-06 실사고).
+if (-not (Stop-Worker)) {
+  Write-Host "`n적용 중단 — 옛 워커를 내리지 못했습니다. 위 안내대로 조치 후 다시 실행하세요." -ForegroundColor Red
+  exit 1
+}
 Start-ScheduledTask -TaskName $TASK
-Write-Host "  ✓ 데몬 시작됨(기존 인스턴스가 있었으면 fresh 재시작)"
+Write-Host "  ✓ 데몬 시작됨(옛 인스턴스 종료 확인 후 fresh 재시작)"
 
 # ④ dry-run 파이프라인 검사(게시 안 함).
 $ok = Test-Pipeline

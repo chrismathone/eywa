@@ -9,17 +9,22 @@
 //  · 과거 데이터 보존: 로스터 = eligible ∪ 퇴원 유예 ∪ 그 슬롯 mark 보유 ∪ 그 날짜 effective 출석 보유
 //    (비eligible은 historical 읽기 전용). 스케줄 없는 날짜의 출석은 가짜 슬롯 없이 attendanceOnly로 분리.
 //  · 고아 슬롯: 계획·마크·슬롯 메모가 있는데 그 날짜 스케줄에 없는 (date,slot) — 표시는 유지(소실 금지).
-//  · 자리(LAB·JJ): **그릴지 말지는 원장이 상단 헤더에서 고른다**(`includeSpecialRooms`, 기본 표시 —
-//    2026-08-03 "LAB과 JJ 오픈시켜"로 07-31의 무조건 숨김을 설정으로 바꿨다). 숨김일 때만 슬롯에서 빼고,
-//    그 자리에 기록이 남아 있으면 `hiddenSpecial` 건수로 알린다(조용히 사라지면 "쓴 게 증발했다"가 된다).
-//    같은 시각에 강사 수업이 겹치면 수업이 이긴다(숨김일 때 실수업까지 사라지지 않게).
+//  · 자리(LAB·JJ): 판정은 `hiddenSeatOf` 하나 — **LAB은 항상 제외**(전용 출석부로 이관 예정, 원장
+//    2026-08-06)이고 상단 토글이 정하는 건 **JJ뿐**이다. 안 그린 자리에 기록이 남아 있으면 `hiddenSpecial`에
+//    자리별 건수로 알린다(조용히 사라지면 "쓴 게 증발했다"가 된다 — 07-31에 실제로 밟은 함정).
+//    같은 시각에 강사 수업이 겹치면 수업이 이긴다(자리를 빼면서 실수업까지 사라지지 않게).
 import {
   isEnrollmentActiveOn,
   isEnrollmentEndedOn,
   enrollmentAttendsOnDay,
 } from "@/features/enrollments/eligibility";
 import { shiftDays } from "@/features/timetable/lib/week";
-import { specialSlotLabel } from "@/features/timetable/lib/teacher-label";
+import {
+  LAB_ROOM_LABEL,
+  SPECIAL_SLOT_LABELS,
+  specialSlotLabel,
+  type SpecialSlotLabel,
+} from "@/features/timetable/lib/teacher-label";
 import { isMeaningfulPlanLine } from "./plan-codec";
 import { dowKeyOf, normalizeSlotTime, weekDatesOf, type DowKey } from "./week";
 
@@ -126,15 +131,40 @@ export type WeekGrid = {
   /** 스케줄이 전혀 없는 날짜의 출석 기록 — 별도 영역 표시(가짜 슬롯 금지). */
   attendanceOnly: { date: string; studentIds: string[] }[];
   /**
-   * 안 그린 자리(LAB·JJ) 교시 중 **기록이 남아 있는** 것의 건수 — 화면 하단 각주용.
-   * "여기 쓴 게 있었는데 화면엔 없다"를 **침묵하지 않기 위한** 숫자다(0이면 아무것도 표시하지 않는다).
-   * 표시 설정이 켜져 있으면(기본) 애초에 숨기는 게 없으므로 항상 0이다.
+   * 안 그린 자리 교시 중 **기록이 남아 있는** 것의 건수 — 화면 하단 각주용, **자리별로 나눠** 담는다.
+   * "여기 쓴 게 있었는데 화면엔 없다"를 **침묵하지 않기 위한** 숫자다(빈 배열이면 아무것도 표시하지 않는다).
+   *
+   * ⚠️ 자리별로 나누는 이유 = **되돌리는 방법이 다르다.** JJ는 상단 토글로 다시 볼 수 있지만 LAB은
+   *    화면에서 되돌릴 길이 없다(항상 제외) — 한 문장으로 뭉치면 둘 중 한쪽이 반드시 거짓말이 된다.
    */
-  hiddenSpecial: { slots: number; records: number };
+  hiddenSpecial: HiddenSeatCount[];
 };
+
+/** 안 그린 자리 하나의 기록 요약(기록이 0건인 자리는 담지 않는다). */
+export type HiddenSeatCount = { seat: SpecialSlotLabel; slots: number; records: number };
 
 function slotKey(date: string, slot: string): string {
   return `${date}|${slot}`;
+}
+
+/**
+ * 이 슬롯을 ECS에서 **안 그린다면** 그 자리 이름, 그린다면 null — 화면·작성률 분모·각주가 공유하는 단일 판정.
+ *
+ * 🔴 **LAB은 설정과 무관하게 언제나 제외**한다. 원장 2026-08-06: *"ecs에서 lab은 전용 출석부를 만들 예정이라
+ *    LAB은 빼버릴 것."* 그래서 상단 토글이 정하는 건 **JJ(집중자율수업실)뿐**이다.
+ * ⚠️ LAB엔 실기록이 남아 있다(2026-08-06 실측: 최근 90일 계획 67행·마크 306건). 빼는 건 원장 지시지만
+ *    **건수는 반드시 각주로 알린다**(`hiddenSpecial`) — 화면에서 지우는 것과 DB에서 지우는 건 다르고,
+ *    전용 출석부가 생기기 전까지 그 기록을 볼 곳이 없다는 사실을 사람이 알아야 한다.
+ * ⚠️ 자리 판정 자체(`specialSlotLabel`)는 손대지 않는다 — 라벨 원문·권한(FK)은 불변(teacher-label.ts 🔴).
+ */
+export function hiddenSeatOf(
+  slotTeacherLabel: string | null | undefined,
+  includeSelfStudy: boolean,
+): SpecialSlotLabel | null {
+  const seat = specialSlotLabel(slotTeacherLabel);
+  if (seat === null) return null;
+  if (seat === LAB_ROOM_LABEL) return seat; // 항상 제외(토글 대상 아님)
+  return includeSelfStudy ? null : seat;
 }
 
 /**
@@ -147,10 +177,10 @@ export function scheduledSlotKeySet(
     GridScheduleRow,
     "dayOfWeek" | "startTime" | "validFrom" | "validTo" | "slotTeacherLabel"
   >[],
-  /** 자리(LAB·JJ) 교시를 분모에 넣을지 — 시트 화면과 **같은 값**을 넘긴다(보이는 교시 = 세는 교시). */
-  opts: { includeSpecialRooms?: boolean } = {},
+  /** JJ 교시를 분모에 넣을지 — 시트 화면과 **같은 값**을 넘긴다(보이는 교시 = 세는 교시). LAB은 항상 제외. */
+  opts: { includeSelfStudy?: boolean } = {},
 ): Set<string> {
-  const includeSpecial = opts.includeSpecialRooms ?? true;
+  const includeSelfStudy = opts.includeSelfStudy ?? true;
   const out = new Set<string>();
   for (const date of weekDatesOf(weekMonday)) {
     const dow = dowKeyOf(date);
@@ -158,9 +188,9 @@ export function scheduledSlotKeySet(
       if (s.dayOfWeek !== dow) continue;
       if (s.validFrom > date) continue;
       if (s.validTo && s.validTo < date) continue;
-      // 숨김일 때만 자리를 뺀다 — 화면에서 뺀 교시를 분모에 남기면 작성률이 영영 100%에 못 닿는다.
+      // 안 그리는 자리는 분모에서도 뺀다 — 화면에서 뺀 교시를 분모에 남기면 작성률이 영영 100%에 못 닿는다.
       // 같은 시각에 진짜 강사 슬롯이 겹치면 그쪽이 키를 넣으므로 수업은 그대로 세어진다.
-      if (!includeSpecial && specialSlotLabel(s.slotTeacherLabel)) continue;
+      if (hiddenSeatOf(s.slotTeacherLabel, includeSelfStudy)) continue;
       out.add(slotKey(date, normalizeSlotTime(s.startTime)));
     }
   }
@@ -179,12 +209,13 @@ export function buildWeekGrid(input: {
   /** 슬롯 메모 키("slot:<date>:<HH:MM>") — 고아 판정 합집합에 포함. */
   slotMemoKeys: string[];
   /**
-   * 자리(LAB·JJ) 교시를 그릴지 — 계정 설정([`view-prefs.ts`](../view-prefs.ts) `showSpecialRooms`, 기본 표시).
+   * **JJ** 교시를 그릴지 — 계정 설정([`view-prefs.ts`](../view-prefs.ts) `showSelfStudy`, 기본 표시).
    * 끄면 슬롯에서 빠지고 작성률 분모에서도 빠진다(보이는 교시 = 세는 교시).
+   * ⚠️ LAB은 이 값과 무관하게 **항상 제외**된다(`hiddenSeatOf` 참조) — 켠다고 다시 나오지 않는다.
    */
-  includeSpecialRooms?: boolean;
+  includeSelfStudy?: boolean;
 }): WeekGrid {
-  const includeSpecial = input.includeSpecialRooms ?? true;
+  const includeSelfStudy = input.includeSelfStudy ?? true;
   const dates = weekDatesOf(input.weekMonday);
   const dateSet = new Set(dates);
 
@@ -288,7 +319,8 @@ export function buildWeekGrid(input: {
 
   const days: GridDay[] = [];
   const attendanceOnly: { date: string; studentIds: string[] }[] = [];
-  const hiddenSpecial = { slots: 0, records: 0 };
+  // 자리별 누계 — 되돌리는 방법이 자리마다 달라 한 덩어리로 못 센다(WeekGrid.hiddenSpecial 주석).
+  const hiddenBySeat = new Map<SpecialSlotLabel, { slots: number; records: number }>();
 
   for (const date of dates) {
     const dow = dowKeyOf(date);
@@ -305,14 +337,14 @@ export function buildWeekGrid(input: {
     const { eligible, endedOn } = rosterStateOn(date);
     const attToday = attendanceByDate.get(date) ?? new Set<string>();
 
-    // 자리(LAB·JJ) 교시 — **설정이 '숨김'일 때만** 뺀다(기본은 표시, 원장 2026-08-03 "오픈시켜").
-    // ⚠️ 숨기면 그 자리에 남아 있는 계획·마크가 화면에서 안 보인다(DB엔 그대로) → 아래 hiddenSpecial로
+    // 안 그릴 자리(LAB 항상 · JJ는 설정) — 판정은 hiddenSeatOf 단일 소스.
+    // ⚠️ 안 그리면 그 자리에 남아 있는 계획·마크가 화면에서 사라진다(DB엔 그대로) → 아래에서 자리별로
     //    건수를 세어 각주에 남긴다. 조용히 사라지면 "쓴 게 증발했다"가 된다.
-    const isSpecialStart = (slot: string) =>
-      !includeSpecial &&
-      specialSlotLabel(scheduledByKey.get(slotKey(date, slot))?.slotTeacherLabel ?? null) != null;
+    const hiddenSeatAt = (slot: string) =>
+      hiddenSeatOf(scheduledByKey.get(slotKey(date, slot))?.slotTeacherLabel ?? null, includeSelfStudy);
     for (const slot of slotStarts) {
-      if (!isSpecialStart(slot)) continue;
+      const seat = hiddenSeatAt(slot);
+      if (!seat) continue;
       const key = slotKey(date, slot);
       const records =
         (linesByKey.get(key) ?? []).filter((l) =>
@@ -326,13 +358,15 @@ export function buildWeekGrid(input: {
         (marksByKey.get(key)?.length ?? 0) +
         (memoSlotKeys.has(key) ? 1 : 0);
       if (records > 0) {
-        hiddenSpecial.slots += 1;
-        hiddenSpecial.records += records;
+        const cur = hiddenBySeat.get(seat) ?? { slots: 0, records: 0 };
+        cur.slots += 1;
+        cur.records += records;
+        hiddenBySeat.set(seat, cur);
       }
     }
 
     const slots: GridSlot[] = [...slotStarts]
-      .filter((slot) => !isSpecialStart(slot))
+      .filter((slot) => !hiddenSeatAt(slot))
       .sort()
       .map((slot) => {
       const key = slotKey(date, slot);
@@ -373,14 +407,20 @@ export function buildWeekGrid(input: {
     days.push({ date, dow, slots });
   }
 
+  // 표시 순서 = SPECIAL_SLOT_LABELS(LAB → JJ) 고정 — Map 삽입순(요일 순회 결과)이면 주마다 문장이 뒤바뀐다.
+  const hiddenSpecial: HiddenSeatCount[] = SPECIAL_SLOT_LABELS.flatMap((seat) => {
+    const c = hiddenBySeat.get(seat);
+    return c ? [{ seat, slots: c.slots, records: c.records }] : [];
+  });
+
   return { weekMonday: input.weekMonday, days, attendanceOnly, hiddenSpecial };
 }
 
 /**
  * 작성률 — 분모 = 그 주 **스케줄된** 교시 수(고아 슬롯 제외 — 별도 경고 표시), 분자 = '의미 있는 행' ≥ 1개인
  * 스케줄 교시 수. placeholder-only 슬롯은 미작성으로 센다.
- * 자리(LAB·JJ)는 표시 설정을 따른다 — 그리면 분모에 들어가고, 숨기면 애초에 `days`에 없어 빠진다.
- * 랜딩 카드의 `scheduledSlotKeySet`에도 **같은 설정값**을 넘겨야 두 화면의 숫자가 갈리지 않는다.
+ * 자리는 `hiddenSeatOf`를 따른다 — 그린 자리만 분모에 들어가고, 안 그린 자리(LAB 항상·JJ 설정)는 애초에
+ * `days`에 없어 빠진다. 랜딩 카드의 `scheduledSlotKeySet`에도 **같은 설정값**을 넘겨야 숫자가 안 갈린다.
  */
 export function sheetFillStats(grid: WeekGrid): {
   totalSlots: number;

@@ -51,7 +51,7 @@ export function AttendancePills({
   onSet,
   studentName,
   readOnly,
-  showUnits = true,
+  showUnits = false,
 }: {
   value: string | null | undefined; // raw status(null=기록 없음)
   /** 현재 출석부 메모 — 지각·결석 팝업의 초기값. */
@@ -63,7 +63,11 @@ export function AttendancePills({
   studentName: string;
   /** 출결 쓰기 권한 없음(학원설정 역할·권한) — 누를 수 있는 것처럼 보이지 않게 표시만 한다. */
   readOnly?: boolean;
-  /** 수업타임 입력 노출 — 칸이 좁은 자리에서 끌 수 있게. */
+  /**
+   * 수업타임을 이 컴포넌트가 **함께** 그릴지. 기본은 끔 — 표뷰는 **전용 열**, 카드는 헤더 옆에
+   * [SessionUnitsField]를 따로 배치한다(원장 2026-08-05: "타임이 너무 작다. 표 모드에서는 열을 하나 더
+   * 추가해서라도 넣어"). pill 옆에 붙이면 자리가 없어 계속 작아진다.
+   */
   showUnits?: boolean;
 }) {
   // ⚠️ 권한이 없으면 **버튼을 아예 내보내지 않는다**(2026-07-21 원장 제보) — 예전엔 pill이 그대로 눌려서
@@ -105,7 +109,7 @@ export function AttendancePills({
         ))}
       </span>
       {showUnits ? (
-        <UnitsInput
+        <SessionUnitsField
           units={units}
           status={(value as BasicAttendance | null | undefined) ?? null}
           pending={pending}
@@ -266,59 +270,81 @@ function NoteForm({
  * ⚠️ **결석에는 안 보인다** — 결석은 시수 소비 대상이 아니다(COUNTABLE_STATUSES). 보이면 적을 수 있는 것처럼
  *    보이고, 적어도 집계에 안 잡혀 거짓 어포던스가 된다.
  */
-function UnitsInput({
+export function SessionUnitsField({
   units,
   status,
   pending,
   studentName,
   onSet,
+  size = "md",
+  label,
 }: {
   units: number | null | undefined;
   status: BasicAttendance | null;
   pending: boolean;
   studentName: string;
   onSet: (status: BasicAttendance, extra?: AttendanceExtra) => void;
+  /** md=칸 옆(카드) · lg=전용 열(표). 둘 다 읽을 수 있는 크기다 — 예전 10px는 원장이 "너무 작다"고 지적. */
+  size?: "md" | "lg";
+  /** 앞에 붙일 라벨. 전용 열처럼 머리글이 이미 '타임'이면 생략한다(같은 말 두 번 금지). */
+  label?: string;
 }) {
   const saved = effectiveUnits(units);
   const [draft, setDraft] = useState<string | null>(null); // null = 편집 중 아님(서버 값 표시)
-  if (status === "absent") return null;
   const savedText = formatSessionUnits(saved);
+  const big = size === "lg";
+  // 결석은 시수를 소비하지 않는다 — 전용 열에선 **빈 칸으로 두지 않고** 왜 못 적는지 보여준다
+  // (열이 비면 "입력이 안 되나?"가 되고, 인라인이면 자리만 먹으므로 아예 지운다).
+  if (status === "absent") {
+    return big ? (
+      <span
+        className="text-text-faint block text-center text-[13px]"
+        title="결석은 수업타임(시수)을 쓰지 않습니다 — 출석·지각으로 바꾸면 입력할 수 있습니다"
+      >
+        —
+      </span>
+    ) : null;
+  }
+
+  const field = (
+    <input
+      type="text"
+      inputMode="decimal"
+      value={draft ?? savedText}
+      disabled={pending}
+      aria-label={`${studentName} 수업타임`}
+      onChange={(e) => setDraft(e.target.value)}
+      onFocus={(e) => e.currentTarget.select()}
+      onBlur={(e) => {
+        const next = e.target.value.trim();
+        setDraft(null);
+        if (!next || next === savedText) return; // 무변경이면 왕복 안 함
+        onSet(status ?? "present", { units: next });
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") e.currentTarget.blur();
+        if (e.key === "Escape") {
+          setDraft(null);
+          e.currentTarget.blur();
+        }
+      }}
+      className={`border-line focus:border-primary rounded-md border bg-transparent text-center outline-none transition-colors disabled:opacity-50 ${
+        big ? "h-8 w-[54px] text-[15px]" : "h-7 w-[46px] text-[13px]"
+      } ${saved === 1 ? "text-text-dim" : "text-foreground font-bold"}`}
+    />
+  );
 
   return (
     <span
-      className="inline-flex items-center gap-0.5"
+      className={`inline-flex items-center gap-1 ${big ? "justify-center" : ""}`}
       title={
         `${studentName} 수업타임 — 기본 1타임. 한 타임 더 했으면 2로 고치면 출석부에 그대로 들어갑니다.` +
         (status ? "" : " (지금 출결이 비어 있어 '출석'으로 함께 기록됩니다)") +
         " ※ 학부모 보고서에는 나가지 않습니다. 급여 시수에는 반영됩니다."
       }
     >
-      <span className="text-text-faint text-[9px] font-bold">타임</span>
-      <input
-        type="text"
-        inputMode="decimal"
-        value={draft ?? savedText}
-        disabled={pending}
-        aria-label={`${studentName} 수업타임`}
-        onChange={(e) => setDraft(e.target.value)}
-        onFocus={(e) => e.currentTarget.select()}
-        onBlur={(e) => {
-          const next = e.target.value.trim();
-          setDraft(null);
-          if (!next || next === savedText) return; // 무변경이면 왕복 안 함
-          onSet(status ?? "present", { units: next });
-        }}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") e.currentTarget.blur();
-          if (e.key === "Escape") {
-            setDraft(null);
-            e.currentTarget.blur();
-          }
-        }}
-        className={`border-line focus:border-primary h-[18px] w-7 rounded border bg-transparent text-center text-[10px] outline-none disabled:opacity-50 ${
-          saved === 1 ? "text-text-faint" : "text-foreground font-bold"
-        }`}
-      />
+      {label ? <span className="text-text-faint text-[11px] font-bold whitespace-nowrap">{label}</span> : null}
+      {field}
     </span>
   );
 }

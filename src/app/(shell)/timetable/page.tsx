@@ -31,7 +31,7 @@ import {
   parseTimetableKind,
   type TimetableKind,
 } from "@/features/timetable/lib/class-kind";
-import { canAccessTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
+import { canAccessTenant, canManageTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { resolveSkillAreas } from "@/features/owner/skill-areas";
 import { EcsShortcut } from "./_components/ecs-shortcut";
 import { resolveIntegrationGroups } from "@/features/timetable/lib/integration-groups";
@@ -130,7 +130,12 @@ export default async function TimetablePage({
   // 편집 = 이번 주(즉시 이동) 또는 미래 주(그 주에 예약). 과거 주는 조회 전용(소급 금지).
   // ⚠️ 이 값은 편집 *컨트롤* 노출뿐 아니라 **provider에도** 넘겨야 한다 — 컨트롤만 숨기면 주 이동이
   // soft nav라 provider의 editing state가 살아남아 과거 주에서도 그리드가 계속 편집 가능했다(적대 감사 F1).
-  const canEdit = rel !== "past";
+  //
+  // 🔴 **역할 게이트가 빠져 있었다**(2026-08-06 원장 제보로 수리): 조건이 시간(rel)뿐이라 실 강사에게도
+  //    '편집'이 그대로 떴다. 시간표 편집은 드래그로 **학생을 반 사이로 옮기는 것**(moveEnrollmentsBatch)이라
+  //    남의 반 명단까지 바뀐다 → 관리자(classes=full)만. `canWriteTenant`는 scoped 강사도 통과하므로
+  //    쓰면 안 된다(perm-matrix `canManageTenant` 주석). 서버 액션도 같은 게이트로 잠갔다(#77).
+  const canEdit = rel !== "past" && (await canManageTenant(user.systemRole, "classes"));
   // 이동 적용일 — 미래 주면 그 주 월요일에 예약, 이번 주면 오늘 즉시(undefined→RPC current_date).
   const effectiveDate = isFutureWeek ? week : undefined;
 

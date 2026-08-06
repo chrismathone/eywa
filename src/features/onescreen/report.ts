@@ -11,6 +11,7 @@ import { isNoneValue } from "./none-marker";
 import { homeworkRateClause } from "./homework-rate";
 import { attitudeClause } from "./attitude";
 import { isSkipStatus, skipStatusOf } from "./progress-status";
+import { progressInline } from "./progress-range";
 
 /**
  * 템플릿 문장 사이 구분자 — **줄바꿈**(원장 2026-07-30: "줄바꿈도 필요하면 적절히 반영").
@@ -128,7 +129,8 @@ export function buildReport(st: OneScreenStudent): string {
   const labelOf = (s: OneScreenStudent["subjects"][number]) => s.subjectLabel || s.name;
   const progressed = st.subjects.filter((s) => !isSkipStatus(s.today));
   const exams = st.subjects.filter((s) => isSkipStatus(s.today));
-  const progText = progressed.map((s) => `${labelOf(s)} ${flatten(s.today)}`).join(", ");
+  // 진도는 **물결 축약**(progress-range.ts) — 9차시를 다 나열하면 학부모 문장이 목록이 된다(원장 2026-08-05).
+  const progText = progressed.map((s) => `${labelOf(s)} ${progressInline(s.today)}`).join(", ");
   const examText = exams.map((s) => `${labelOf(s)} ${skipStatusOf(s.today)}`).join(", ");
   // ⚠️ 학생 호칭('○○ 학생,')을 쓰지 않는다 — AI 멘트 프롬프트가 금지한 것과 같은 규칙(수신인은 학부모).
   const head = exams.length
@@ -149,7 +151,7 @@ export function buildSubjectReport(st: OneScreenStudent, subjectIndex: number): 
     // 진도가 중단된 날은 차시가 없어 "진도를 진행했습니다"가 거짓 — 전용 문장으로 간다.
     isSkipStatus(su.today)
       ? `오늘은 ${label} ${skipStatusOf(su.today)}를 진행했습니다.`
-      : `오늘은 ${label} ${flatten(su.today)} 진도를 진행했습니다.`,
+      : `오늘은 ${label} ${progressInline(su.today)} 진도를 진행했습니다.`,
     ...testAndClosingLines(st),
   ];
   // 오늘 과제(0096a) — AI 멘트 프롬프트의 마무리 규칙("오늘 과제는 ~입니다")과 폴백 템플릿 대칭 유지.
