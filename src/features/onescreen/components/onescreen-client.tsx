@@ -103,17 +103,8 @@ import { setAttendanceBulk, setAttendanceCell } from "@/features/attendance/serv
 import type { BasicAttendance } from "./attendance-pills";
 import { useEditPresence, useEditingOthers } from "@/features/presence/edit-presence";
 import { dedupeEditors } from "@/features/presence/presence-state";
-
-/**
- * 보강 합치기(정규+보강)로 **시수를 올려도 되는 출결 상태** — 기록 없음 · 출석 · 지각뿐이다.
- *  · 결석·공결: 정규를 빠지고 보강만 한 것이라 "정규+보강"이 아니고, 애초에 시수 소비 대상도 아니다.
- *  · 조퇴·보강 등 3종 밖 raw: 시수를 올리려면 status를 함께 써야 하는데 pill 3종으로는 그 값을 되쓸 수
- *    없다 — 되쓰면 조퇴가 출석으로 조용히 바뀐다(이 코드베이스가 반복해 막아 온 '축약 되쓰기').
- * 대상에서 빠지면 종전대로 **별도 보강 행**이 생긴다(합치기만 안 될 뿐 기록은 남는다).
- */
-const MERGEABLE_RAW: ReadonlySet<string> = new Set(["", "present", "late"]);
-const mergeStatusOf = (raw: string | null | undefined): BasicAttendance =>
-  raw === "late" ? "late" : "present";
+import { MakeupMergeDialog, type MakeupMergeChoice } from "./makeup-merge-dialog";
+import { mergeStatusOf, mergedUnits, planMakeupMerge, type MergeCandidate } from "../makeup-merge-plan";
 
 type ReportsState = Record<string, Record<string, SubjectReport>>; // studentId → 과목명 → {draft, sent}
 
@@ -283,6 +274,18 @@ export function OneScreenClient({
   const [noticeSeed, setNoticeSeed] = useState<string[] | null>(null);
   // '이전값 일괄 가져오기' 뒤 멘트 확인 대기 계획(null=다이얼로그 닫힘) — 확인해야만 학부모 문구를 채운다.
   const [prevCommentPlan, setPrevCommentPlan] = useState<PrevCommentPlan[] | null>(null);
+  /**
+   * 보강 추가 시 "정규 보고서에 합칠까 / 따로 낼까" 확인 대기(null=다이얼로그 닫힘).
+   * 🔴 합침은 **여기서 확인해야만** 일어난다 — 자동 합치기는 강사가 결과를 예측 못 해 혼란을 낳았다(08-06).
+   * `mk`는 '추가'를 누른 시점의 조립 결과(반 필터 앵커 포함)라 그대로 들고 있다가 '분리'에 쓴다.
+   */
+  const [makeupAsk, setMakeupAsk] = useState<{
+    studentId: string;
+    studentName: string;
+    mk: OneScreenStudent;
+    candidates: MergeCandidate[];
+    sentSubjects: string[];
+  } | null>(null);
   const [reports, setReports] = useState<ReportsState>(() => initReports(initial));
   const [genSubject, setGenSubject] = useState<string | null>(null); // AI 멘트 생성 중인 과목(카드 버튼 로딩)
   const [genKey, setGenKey] = useState<string | null>(null); // 표 행별 자동작성 로딩 키(studentId::과목)
@@ -665,75 +668,90 @@ export function OneScreenClient({
       toast.success(`${mk.name} (보강) 추가됨`);
       return;
     }
-    // 🔴 **그 과목 정규 행이 이미 있으면 보고서를 새로 만들지 않는다**(원장 2026-08-05):
-    //    *"정규수업이 있는 학생이 수업까지했는데 같은날에 보강수업 → 수업보고서가 한번더 발송되지 않고
-    //    기존 정규수업에 보강수업까지 합쳐서 (정규+보강)으로 발송. 수업타임은 1+1이라 2로 입력될것."*
-    //    별도 보강 행을 만들면 같은 날 같은 학부모에게 보고서가 **두 번** 나간다(그게 지금 동작이었다).
-    //    → 정규 행에 보강 표시를 켜고(제목이 "(정규+보강)"이 된다 — makeup-label.ts) 출석부 시수를 +1 한다.
-    //
-    // 합칠 대상을 고르는 규칙 — 셋 다 필요하다(하나라도 빠지면 **돈이 틀린다**):
-    //  ① `!su.makeup && su.classId` — 이미 보강으로 표시된 행·반 없는 행은 대상 아님.
-    //  ② **이 강사가 오늘 이 학생에게 가르치는 과목만**(mk.subjects) — 안 걸면 그 학생의 다른 과목 정규 행까지
-    //     보강으로 찍히고 **시수가 같이 2배**가 된다(급여 반영 값이라 조용한 과지급).
-    //  ③ **시수를 올려도 되는 상태만**(MERGEABLE_RAW: 기록없음·출석·지각) — 결석/조퇴 등은 위 상수 주석 참조.
-    const teacherSubjectKeys = new Set(mk.subjects.map((su) => su.subjectKey));
-    // 이미 합쳐 둔 과목이 있으면 **또 만들지 않는다** — 두 번 누르면 별도 "(보강)" 행이 생겨 보고서가
-    // 결국 두 번 나간다(이 기능이 막으려던 바로 그 일). 예전 "이미 보강 행이 추가되어 있습니다"와 같은 규약.
-    const alreadyMerged = existing.subjects.filter(
-      (su) => su.makeup && su.classId && teacherSubjectKeys.has(su.subjectKey),
-    );
-    if (alreadyMerged.length > 0) {
+    // 🔴 **자동으로 합치지 않는다 — 묻는다**(원장 2026-08-06: *"선생님들이 헷갈린대"*).
+    //    2026-08-05엔 정규 행이 있으면 말없이 합쳤는데(제목이 "(정규+보강)"이 되고 수업타임이 2가 된다),
+    //    보강을 추가한 강사는 그 결과만 보게 돼 무슨 일이 일어난 건지 몰랐다.
+    //    → `planMakeupMerge`가 후보를 고르고, 다이얼로그가 **합침 ↔ 분리 토글**로 물어본 뒤 고른 대로만 한다.
+    //      · 합침 = 정규 행 1건에 합쳐 "(정규+보강)" 한 번만 발송(수업타임 +1)
+    //      · 분리 = 종전(08-05 이전)대로 별도 "(보강)" 행 → 정규 1건 + 보강 1건, 2건 발송
+    //    ⚠️ 후보를 고르는 3조건(내 과목·반 있는 정규 행·시수 올려도 되는 상태)은 그대로다 — 판정은
+    //       [makeup-merge-plan.ts](../makeup-merge-plan.ts) 단일 소스(순수+Vitest).
+    const teacherSubjectKeys = new Set(mk.subjects.map((su) => su.subjectKey).filter((k): k is string => !!k));
+    const plan = planMakeupMerge(existing.subjects, teacherSubjectKeys);
+    if (plan.kind === "already") {
+      // 이미 합쳐 둔 과목이 있으면 **또 만들지 않는다** — 두 번 누르면 별도 "(보강)" 행이 생겨 보고서가
+      // 결국 두 번 나간다. 예전 "이미 보강 행이 추가되어 있습니다"와 같은 규약.
       setSelId(existing.id);
       toast.message(
-        `${existing.name} — ${alreadyMerged.map((su) => su.name).join("·")}는 이미 보강이 합쳐져 있습니다(정규+보강). 한 타임 더 했다면 수업타임을 올려 주세요.`,
+        `${existing.name} — ${plan.subjects.join("·")}는 이미 보강이 합쳐져 있습니다(정규+보강). 한 타임 더 했다면 수업타임을 올려 주세요.`,
       );
       return;
     }
-    const combinable = existing.subjects.filter(
-      (su) =>
-        !su.makeup &&
-        su.classId &&
-        teacherSubjectKeys.has(su.subjectKey) &&
-        MERGEABLE_RAW.has(su.attendanceRaw ?? ""),
-    );
-    // 후보가 둘 이상이면 **어느 과목 보강인지 알 수 없다**(보강 추가는 학생만 고른다). 추측해서 시수를 올리면
-    // 안 한 과목까지 급여가 붙는다 → 아무것도 하지 않고, 강사가 그 과목 행에서 직접 누르게 안내한다.
-    if (combinable.length > 1) {
+    if (plan.kind === "ask") {
+      // ⚠️ 이미 발송된 정규 보고서는 수정이 막혀 있다(발송본 잠금) — 합치면 보강 내용이 안 실린다는 사실을
+      //    **고르기 전에** 다이얼로그에서 알린다(원장 2026-08-05 경고 요구를 선택 시점으로 앞당긴 것).
+      const sentSubjects = plan.candidates
+        .filter((c) =>
+          isAlreadySent(
+            effectiveClassnoteStatus(
+              reports[studentId]?.[c.name]?.classnoteStatus,
+              existing.subjects.find((su) => su.name === c.name)?.classnoteStatus,
+            ),
+          ),
+        )
+        .map((c) => c.name);
       setSelId(existing.id);
+      setMakeupAsk({ studentId, studentName: existing.name, mk, candidates: plan.candidates, sentSubjects });
+      return;
+    }
+    // 합칠 정규 행이 없다(그날 결석·다른 강사 과목 등) → 묻지 않고 별도 보강 행. 그건 진짜 "보강만"이다.
+    addSeparateMakeupRows(existing, mk);
+  }
+  /**
+   * 다이얼로그 응답 처리 — 고른 대로만 한다. 취소는 아무것도 하지 않는다(보강 행도 안 생긴다).
+   * ⚠️ 학생은 **id로 다시 찾는다** — 다이얼로그가 열려 있는 동안 실시간 갱신이 카드를 바꿨을 수 있다.
+   */
+  function resolveMakeupAsk(choice: MakeupMergeChoice) {
+    const ask = makeupAsk;
+    setMakeupAsk(null);
+    if (!ask) return;
+    const existing = studentsRef.current.find((s) => s.id === ask.studentId);
+    if (!existing) {
+      toast.error("학생 카드를 찾지 못했습니다 — 새로고침 후 다시 시도해 주세요");
+      return;
+    }
+    if (choice.mode === "separate") {
+      addSeparateMakeupRows(existing, ask.mk);
+      return;
+    }
+    mergeMakeupIntoRegular(existing, choice.candidate, ask.sentSubjects.includes(choice.candidate.name));
+  }
+  /** 합침 — 정규 행에 보강 표시를 켜고(제목 "(정규+보강)", makeup-label.ts) 출석부 수업타임을 +1 한다. */
+  function mergeMakeupIntoRegular(existing: OneScreenStudent, merge: MergeCandidate, sent: boolean) {
+    patch(existing.id, (s) => ({
+      ...s,
+      subjects: s.subjects.map((x) => (x.name === merge.name ? { ...x, makeup: true } : x)),
+    }));
+    // 수업타임 = 지금 값 + 1(정규 1 + 보강 1 = 2가 기본). 출결이 비어 있으면 '출석'으로 함께 찍힌다.
+    const units = mergedUnits(merge.attendanceUnits);
+    void setAttendanceFor(existing.id, merge.classId, mergeStatusOf(merge.attendanceRaw), {
+      units: String(units),
+    });
+    setSelId(existing.id);
+    if (sent) {
+      // 발송본 잠금이라 보강 내용은 못 싣는다 — 다이얼로그에서 이미 알렸지만 결과도 그대로 밝힌다.
       toast.warning(
-        `${existing.name}은 오늘 ${combinable.map((su) => su.name).join("·")}를 듣습니다 — 어느 과목 보강인지 알 수 없어 자동으로 합치지 않았습니다. 해당 과목 행의 '보강'을 누르고 수업타임을 2로 고쳐 주세요.`,
+        // ⚠️ 숫자 뒤 조사 금지(받침이 값마다 다르다 — 2=이/3=삼) → 수치는 괄호로 뗀다.
+        `${existing.name} — ${merge.name} 보고서가 이미 발송되어 보강 내용은 보고서에 실리지 않습니다. 출석부 수업타임만 올렸습니다(수업타임 ${units}).`,
         { duration: 10000 },
       );
-      return;
+    } else {
+      toast.success(`${existing.name} 보강 합침 — ${merge.name} 보고서 1건(정규+보강) · 수업타임 ${units}`);
     }
-    const merge = combinable[0];
-    if (merge?.classId) {
-      patch(studentId, (s) => ({
-        ...s,
-        subjects: s.subjects.map((x) => (x.name === merge.name ? { ...x, makeup: true } : x)),
-      }));
-      // 수업타임 = 지금 값 + 1(정규 1 + 보강 1 = 2가 기본). 출결이 비어 있으면 '출석'으로 함께 찍힌다.
-      void setAttendanceFor(studentId, merge.classId, mergeStatusOf(merge.attendanceRaw), {
-        units: String((merge.attendanceUnits ?? 1) + 1),
-      });
-      setSelId(existing.id);
-      // ⚠️ 이미 발송된 정규 보고서는 수정이 막혀 있다(발송본 잠금) — 보강 내용을 못 싣는다는 사실을
-      //    **그 자리에서** 알린다(원장 2026-08-05: "강사에게 이미 정규보고서가 발송되어서 보강 보고서는
-      //    발송되지 않는다고 경고"). 출석부 수업타임은 위에서 이미 올라갔다.
-      const sent = isAlreadySent(
-        effectiveClassnoteStatus(reports[studentId]?.[merge.name]?.classnoteStatus, merge.classnoteStatus),
-      );
-      if (sent) {
-        toast.warning(
-          `${existing.name} — ${merge.name} 보고서가 이미 발송되어 보강 내용은 보고서에 실리지 않습니다. 수업타임만 올렸습니다(출석부).`,
-          { duration: 10000 },
-        );
-      } else {
-        toast.success(`${existing.name} 보강 합침 — ${merge.name} 보고서 1건(정규+보강) · 수업타임 2`);
-      }
-      return;
-    }
-    // 정규 행이 없는(또는 그날 결석인) 과목 → 종전대로 별도 보강 행. 그건 진짜 "보강만"이다.
+  }
+  /** 분리 — 종전(2026-08-05 이전)대로 별도 "(보강)" 행. 정규와 별개 보고서라 발송도 따로 나간다. */
+  function addSeparateMakeupRows(existing: OneScreenStudent, mk: OneScreenStudent) {
+    const studentId = existing.id;
     // 이름 유일화(reports 키 충돌 방지)로 초안 덮어쓰기 차단.
     const used = new Set(existing.subjects.map((su) => su.name));
     // mk.subjects는 강사의 **모든 담당 과목**이라, 그대로 병합하면 math만 듣는 학생 카드에 '영어 (보강)' 잡행까지
@@ -751,7 +769,9 @@ export function OneScreenClient({
         while (used.has(name)) name = `${su.name} (보강 ${n++})`;
         used.add(name);
         // ⚠️ classId=null·makeup=true 유지(반 무관 보강). subjectLabel은 깨끗한 라벨 — 진도 접두에 "(보강)" 누출 방지.
-        return withAnchor({ ...su, name, classId: null, makeup: true, subjectLabel: su.subjectLabel ?? su.name });
+        // 반 필터 앵커(makeupClassId/Name)는 `mk`에 이미 실려 있다 — **'추가'를 누른 시점**의 반 필터라,
+        // 다이얼로그를 띄워 두는 동안 강사가 필터를 바꿔도 보강이 엉뚱한 수업에 붙지 않는다.
+        return { ...su, name, classId: null, makeup: true, subjectLabel: su.subjectLabel ?? su.name };
       });
     if (makeupRows.length === 0) {
       setSelId(existing.id);
@@ -2423,6 +2443,20 @@ export function OneScreenClient({
         onConfirm={applyPrevComments}
         onCancel={() => setPrevCommentPlan(null)}
       />
+
+      {/* 보강 추가 — 합침(정규+보강 1건) ↔ 분리(보강 따로 1건) 확인. 취소하면 아무것도 안 생긴다.
+          ⚠️ 조건부 렌더 + key: 다이얼로그 안 선택 상태를 열 때마다 초기화하기 위한 것이다(effect에서
+             setState 금지 — React 19 룰). key가 없으면 직전 학생의 선택이 다음 학생에 새어든다. */}
+      {makeupAsk ? (
+        <MakeupMergeDialog
+          key={makeupAsk.studentId}
+          studentName={makeupAsk.studentName}
+          candidates={makeupAsk.candidates}
+          sentSubjects={makeupAsk.sentSubjects}
+          onConfirm={resolveMakeupAsk}
+          onCancel={() => setMakeupAsk(null)}
+        />
+      ) : null}
     </div>
   );
 }
