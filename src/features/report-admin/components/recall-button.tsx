@@ -6,6 +6,12 @@
  * 두 화면이 같은 컴포넌트를 쓰는 이유: 경고 문구와 이중확인이 한 곳에만 있어야 한쪽만 약해지지 않는다
  * (#77의 UI판 — 같은 파괴적 동작이 표면마다 다른 관문을 가지면 약한 쪽이 곧 구멍이다).
  *
+ * ## 두 가지 의도 (원장 정의 2026-08-06)
+ *  - **회수** = 그냥 삭제만 한다(다시 안 보낸다).
+ *  - **재발송** = 회수한 뒤 그 보고서를 **미발송으로 되돌려** 수정본을 다시 올릴 수 있게 한다.
+ * 🔴 게시글은 **이미지**로 올라가므로 링크만 새로 내는 '재발급'은 학부모 눈에 아무 변화가 없다 —
+ *    수정본을 올리려면 **반드시 옛 글을 지운 뒤** 올려야 한다(안 그러면 틀린 글과 맞는 글이 나란히 남는다).
+ *
  * ## 이중확인 (원장 지시 2026-08-05 — "바로 회수하지 말고 '회수하겠습니까?'")
  * 1단계 = **무슨 일이 일어나는지** 알리는 경고(되돌릴 수 없음 · 이미 읽었을 수 있음 · 재발송 불가).
  * 2단계 = "정말 회수하겠습니까?" 최종 확인. 한 번의 오클릭으로 학부모 게시글이 사라지지 않게 한다.
@@ -27,7 +33,8 @@ export function RecallButton({
   classnoteStatus,
   shareToken,
   readAt,
-  label = "회수",
+  reopen = false,
+  label,
   size = "sm",
   onDone,
 }: {
@@ -38,6 +45,8 @@ export function RecallButton({
   shareToken: string | null;
   /** 학부모 읽음 시각 — 있으면 "이미 읽었다"를 경고에 명시(양성 신호만, 없음 = 미읽음이 아님). */
   readAt?: string | null;
+  /** true = **재발송**(회수 후 미발송으로 되돌림). false = **회수**(삭제만). */
+  reopen?: boolean;
   label?: string;
   size?: "sm" | "default";
   onDone?: () => void;
@@ -59,18 +68,23 @@ export function RecallButton({
   if (!isRecallable(row)) return null; // 회수할 게 없는 행엔 버튼 자체를 안 만든다(거짓 약속 방지)
 
   const who = studentName ? `${studentName} 학생의 ` : "";
+  const verb = reopen ? "재발송" : "회수";
 
   function submit() {
     start(async () => {
       const res = reportId
-        ? await requestReportRecall([reportId])
-        : await requestReportRecallByShareToken(shareToken ?? "");
+        ? await requestReportRecall([reportId], { reopen })
+        : await requestReportRecallByShareToken(shareToken ?? "", { reopen });
       setStep(0);
       if (!res.ok) {
         toast.error(res.error ?? "회수하지 못했습니다");
         return;
       }
-      toast.success("회수를 요청했습니다 — 연동 PC가 학부모 게시글을 삭제합니다");
+      toast.success(
+        reopen
+          ? "재발송 준비 중 — 옛 게시글을 지운 뒤 다시 작성할 수 있게 됩니다"
+          : "회수를 요청했습니다 — 연동 PC가 학부모 게시글을 삭제합니다",
+      );
       onDone?.();
     });
   }
@@ -81,25 +95,32 @@ export function RecallButton({
         variant="ghost"
         size={size}
         disabled={pending || !!blocked}
-        title={blocked ?? "학부모 게시판에서 이 보고서 글을 삭제(회수)합니다"}
+        title={
+          blocked ??
+          (reopen
+            ? "옛 게시글을 지운 뒤, 수정본을 다시 올릴 수 있게 미발송으로 되돌립니다"
+            : "학부모 게시판에서 이 보고서 글을 삭제합니다(다시 보내지 않음)")
+        }
         onClick={() => setStep(1)}
-        className="text-danger"
+        className={reopen ? undefined : "text-danger"}
       >
-        {pending ? "요청 중…" : label}
+        {pending ? "요청 중…" : (label ?? verb)}
       </Button>
 
       {/* 1단계 — 무슨 일이 일어나는지. */}
       <ConfirmDialog
         open={step === 1}
         danger
-        title="보고서를 회수합니다"
+        title={reopen ? "수정본으로 다시 보냅니다" : "보고서를 회수합니다"}
         message={
           `${who}학부모 게시판에 올라간 이 보고서 글을 삭제합니다. ` +
           `공유 링크는 즉시 차단되고, 게시글은 연동 PC가 순차적으로 지웁니다. ` +
           (readAt ? "주의: 이 보고서는 학부모가 이미 열람했습니다 — 지워도 본 내용은 되돌릴 수 없습니다. " : "") +
-          "회수한 보고서는 되돌릴 수 없으며, 다시 보내려면 링크 재발급 후 새로 작성해야 합니다."
+          (reopen
+            ? "삭제가 끝나면 이 보고서가 미발송으로 돌아가, 수정해서 다시 보낼 수 있습니다."
+            : "회수한 보고서는 되돌릴 수 없고, 다시 보내지 않습니다.")
         }
-        confirmLabel="회수 진행"
+        confirmLabel={reopen ? "재발송 진행" : "회수 진행"}
         cancelLabel="그만두기"
         onConfirm={() => setStep(2)}
         onCancel={() => setStep(0)}
@@ -109,9 +130,9 @@ export function RecallButton({
       <ConfirmDialog
         open={step === 2}
         danger
-        title="회수하겠습니까?"
+        title={reopen ? "재발송하겠습니까?" : "회수하겠습니까?"}
         message={`${who}보고서를 학부모 게시판에서 삭제합니다. 이 동작은 되돌릴 수 없습니다.`}
-        confirmLabel="회수하겠습니다"
+        confirmLabel={reopen ? "재발송하겠습니다" : "회수하겠습니다"}
         cancelLabel="취소"
         onConfirm={submit}
         onCancel={() => setStep(0)}

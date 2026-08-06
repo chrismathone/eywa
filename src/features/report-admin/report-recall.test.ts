@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   RECALLED,
   RECALL_FAILED,
+  RECALL_REOPEN_REQUESTED,
   RECALL_REQUESTED,
   isRecallInFlight,
   isRecallable,
@@ -48,8 +49,14 @@ describe("회수 가능 판정", () => {
     expect(isRecallInFlight("success")).toBe(false);
   });
 
+  it("🔴 재발송(회수 후 되돌리기)도 '진행 중'이다 — 이 판정이 재발급을 막아 고아 게시글을 방지한다", () => {
+    expect(isRecallInFlight(RECALL_REOPEN_REQUESTED)).toBe(true);
+    expect(isRecallable(row(RECALL_REOPEN_REQUESTED))).toBe(false);
+    expect(recallBlockReason(row(RECALL_REOPEN_REQUESTED))).toContain("이미 회수 요청됨");
+  });
+
   it("사유 문구에 raw 상태 코드를 노출하지 않는다(UI 규칙)", () => {
-    for (const s of [null, "queued", "failed", RECALLED, RECALL_REQUESTED]) {
+    for (const s of [null, "queued", "failed", RECALLED, RECALL_REQUESTED, RECALL_REOPEN_REQUESTED]) {
       const reason = recallBlockReason(row(s)) ?? "";
       expect(reason).not.toMatch(/queued|processing|success|failed|too_old|recall/);
     }
