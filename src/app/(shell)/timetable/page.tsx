@@ -1,6 +1,6 @@
 import { ParamLink } from "./_components/param-link";
 import type { LucideIcon } from "@/components/icons/eywa-icon-compat";
-import { Columns3, DoorOpen, LayoutGrid, Pencil, Users } from "@/components/icons/eywa-icon-compat";
+import { Columns3, DoorOpen, Layers, LayoutGrid, Users } from "@/components/icons/eywa-icon-compat";
 import { PhotoCard } from "@/components/atoms/photo-card";
 import { PageHeader } from "@/components/page-header";
 import { cookies } from "next/headers";
@@ -36,7 +36,6 @@ import { resolveSkillAreas } from "@/features/owner/skill-areas";
 import { EcsShortcut } from "./_components/ecs-shortcut";
 import { resolveIntegrationGroups } from "@/features/timetable/lib/integration-groups";
 import { normalizePresets } from "@/features/timetable/lib/group-presets";
-import { GroupSettingsDialog } from "./_components/group-settings-dialog";
 import { getWeekReferenceDate, mondayOf, thisMonday, weekRelation } from "@/features/timetable/lib/week";
 import { kstMinutesOfDay, kstToday, weekdayIndexOf } from "@/lib/date-kst";
 import { RichGridView } from "./_components/rich-grid-view";
@@ -244,12 +243,7 @@ export default async function TimetablePage({
   // 통합뷰 섹션 = 커스텀 그룹(학원설정 과목별)이 켜져 있으면 그것, 아니면 "N교시 시작" 자동 그룹.
   // 엑셀·시트 빌더도 같은 해석기를 쓴다(화면과 배치 일치가 이 기능의 존재 이유).
   const customGroups = resolveIntegrationGroups(subjectRow);
-  // '그룹 설정' 창의 배정 대상 = 이 과목·이 주 시간표에 실제 있는 반(가나다). 반 목록을 따로 조회하지
-  // 않고 slots에서 뽑는다 — 화면에 보이는 것과 창이 보여주는 것이 어긋나지 않게.
-  const groupClassOptions = [...new Map(slots.map((s) => [s.classId, s.className])).entries()]
-    .map(([classId, className]) => ({ classId, className }))
-    .sort((a, b) => a.className.localeCompare(b.className, "ko"));
-  // 저장해 둔 배치 보관함(과목별) — '그룹 설정' 창과 통합뷰 '배치 편집'이 같은 목록을 본다.
+  // 저장해 둔 배치 보관함(과목별) — 그룹 설정(배치 편집) 모드가 읽는다.
   const groupPresets = normalizePresets(
     subjectRow?.integrationGroupPresets,
     subjectRow?.integrationOthersTitle ?? "",
@@ -573,34 +567,21 @@ export default async function TimetablePage({
         {canEditGroups ? (
           <>
             <span className="bg-line h-4 w-px" aria-hidden />
-            {/* 표 위에서 바로 옮기는 길(원장 2026-08-06). 창(그룹 설정)은 칩으로 전체 배치를 한눈에 보는 길 —
-                둘 다 같은 설정을 쓰므로 어느 쪽으로 해도 결과가 같다. */}
+            {/* 🔴 별도 창(칩 보드)이 아니라 **통합뷰 그 자체**가 편집 표면이다(원장 2026-08-06 —
+                *"통합뷰에서 편집모드를 누르고, 통합뷰의 그 자체를 드래그하고 싶은거야"*).
+                누르면 같은 서식 그대로 **수업명 행만** 남고 그 위에서 반을 끌어 줄을 바꾼다. */}
             <ParamLink
-              href={buildHref({ view: effView, subject, defaultSubject, kind, week, thisWk, compact1h: compactList, hideEmptyDays, collapseEmptyPeriods, gedit: true })}
-              title="실제 표에서 반을 끌어 다른 줄로 옮깁니다"
+              href={buildHref({ view: effView, subject, defaultSubject, kind, week, thisWk, compact1h: compactList, hideEmptyDays, collapseEmptyPeriods, gedit: !groupEditing })}
+              title="통합뷰를 수업명만 남긴 상태로 바꿔 반을 끌어 옮깁니다"
               className={`inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-2 py-0.5 text-xs transition ${
                 groupEditing
                   ? "border-primary bg-primary text-primary-foreground font-medium"
                   : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
               }`}
             >
-              <Pencil size={11} strokeWidth={1.8} />
-              배치 편집
+              <Layers size={11} strokeWidth={1.8} />
+              그룹 설정
             </ParamLink>
-            <GroupSettingsDialog
-              subject={subject}
-              subjectLabel={subjectMaps.labelOf(subject)}
-              classes={groupClassOptions}
-              initialGroups={(subjectRow?.integrationGroups ?? []).map((g) => ({
-                id: g.id,
-                title: g.title,
-                classIds: g.classIds ?? [],
-              }))}
-              initialEnabled={subjectRow?.integrationGroupsEnabled === true}
-              initialShowOthers={subjectRow?.integrationShowOthers !== false}
-              initialOthersTitle={subjectRow?.integrationOthersTitle ?? ""}
-              initialPresets={groupPresets}
-            />
           </>
         ) : null}
 
@@ -768,6 +749,7 @@ export default async function TimetablePage({
             title: g.title,
             classIds: g.classIds ?? [],
           }))}
+          initialEnabled={subjectRow?.integrationGroupsEnabled === true}
           initialShowOthers={subjectRow?.integrationShowOthers !== false}
           initialOthersTitle={subjectRow?.integrationOthersTitle ?? ""}
           initialPresets={groupPresets}
