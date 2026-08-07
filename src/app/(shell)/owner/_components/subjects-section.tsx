@@ -1,6 +1,7 @@
 "use client";
 
-// 과목 운영 면 — 좌: 과목 목록(이름·색·요일병합) ┃ 우: 과목별 설정(접이식 — 평일 교시 전용표·강사뷰 가로줄/격자).
+// 과목 운영 면 — 한 카드에 과목 목록(이름·색·요일병합) + 과목별 상세(접이식: 평일 교시·강사뷰·**세션 기간**).
+// 2026-08-07 원장 지시로 두 카드를 합치고 세션 기간을 여기로 들였다(별도 탭 폐지).
 // 운영 체계 면과 **같은 operations 섹션**에 저장(face→section 매핑은 UI 레벨) — payload는 full
 // operations(여기선 subjects만 편집, 나머지는 initial 통과). 동시편집 가드 scope도 동일해 두 면 커버.
 // 과목별 편집기는 native <details>(기본 접힘 + 요약 배지) — 과목 수만큼 빈 풀폭 카드가 늘어지는 것 방지.
@@ -29,6 +30,8 @@ import { Button } from "@/components/ui/button";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { SectionForm, SettingsCard } from "./section-form";
 import { PeriodListEditor, SubjectListEditor } from "./list-editors";
+import { SubjectSessionEditor } from "./subject-session-editor";
+import type { PeriodDef } from "@/features/periods/resolve";
 
 const cellCls =
   "border-line text-foreground rounded-md border bg-transparent px-2.5 py-1.5 text-[13px] outline-none focus:border-primary";
@@ -40,10 +43,18 @@ const badgeCls =
 export function SubjectsSection({
   initial,
   teacherLabels = {},
+  periodDefs = [],
+  sessionYear,
+  holidays = [],
 }: {
   initial: OperationsSettings;
   /** 과목별 강사 라벨(강사뷰 '가로줄 제외 강사' 칩 선택지) — getTeacherLabelsBySubject. */
   teacherLabels?: Record<string, string[]>;
+  /** 그 해 세션 기간(0189a) — 과목별 상세에서 달력으로 편집한다. */
+  periodDefs?: PeriodDef[];
+  sessionYear: number;
+  /** 공휴일·휴원일(운영 체계 탭) — 세션 수업 횟수 검산에서 뺀다. */
+  holidays?: string[];
 }) {
   const [o, setO] = useState<OperationsSettings>(initial);
   const setSubjects = (v: SubjectSetting[]) => setO((prev) => ({ ...prev, subjects: v }));
@@ -55,13 +66,17 @@ export function SubjectsSection({
     setO((prev) => ({ ...prev, subjects: prev.subjects.filter((_, j) => j !== index) }));
   // 흡수/미사용 삭제는 서버 즉시 확정 → SectionForm baseline 재스냅샷 신호(거짓 '미저장' 확인 방지).
   const [savedNonce, setSavedNonce] = useState(0);
+  // 펼쳐진 과목 — 세션 달력을 그 과목에만 마운트하기 위해(성능).
+  const [openSubjects, setOpenSubjects] = useState<Set<string>>(new Set());
 
   return (
     <SectionForm section="operations" payload={o} savedNonce={savedNonce}>
-      <div className="grid items-start gap-5 xl:grid-cols-2">
+      <div className="space-y-5">
+        {/* 원장 지시(2026-08-07): *"운영 과목-과목 설정도 하나로 합쳐도 되겠는데 굳이 다른 섹션으로 있을 필요 없을듯."*
+            과목 목록과 그 과목의 상세 설정은 같은 대상이라 한 카드에서 위(목록) → 아래(과목별 상세)로 잇는다. */}
         <SettingsCard
-          title="운영 과목"
-          description="과목명과 색만 정하면 됩니다. 색은 전 화면의 과목 배지·시간표·엑셀에 적용됩니다. 내부 ID는 데이터 보존용으로 자동 생성·고정(편집 불가). 삭제 시 그 과목의 데이터를 다른 과목에 흡수시킵니다."
+          title="과목 운영"
+          description="과목명과 색만 정하면 됩니다. 색은 전 화면의 과목 배지·시간표·엑셀에 적용됩니다. 내부 ID는 데이터 보존용으로 자동 생성·고정(편집 불가). 삭제 시 그 과목의 데이터를 다른 과목에 흡수시킵니다. 아래에서 과목을 펼치면 그 과목의 교시·강사뷰·세션 기간을 설정합니다."
         >
           <SubjectListEditor
             value={o.subjects}
@@ -71,15 +86,24 @@ export function SubjectsSection({
               setRemoving({ index: i, key: s.key, label: s.label.trim() || s.key });
             }}
           />
-        </SettingsCard>
 
-        <SettingsCard
-          title="과목별 설정"
-          description="과목을 펼쳐 그 과목에만 적용되는 평일 교시와 강사별시간표(강사뷰) 표시를 설정합니다."
-        >
-          <div className="divide-line divide-y">
+          <div className="border-line divide-line mt-5 divide-y border-t pt-2">
             {o.subjects.map((s, i) => (
-              <details key={s.key || `row-${i}`} className="group py-1">
+              <details
+                key={s.key || `row-${i}`}
+                className="group py-1"
+                onToggle={(e) => {
+                  // 🔴 펼친 과목만 세션 달력을 마운트한다 — 12판 × 42칸 = 504개 버튼이라
+                  //    과목 5개면 2,520개가 접힌 채로도 렌더·하이드레이션된다(반응속도 1순위).
+                  const open = (e.currentTarget as HTMLDetailsElement).open;
+                  setOpenSubjects((prev) => {
+                    const next = new Set(prev);
+                    if (open) next.add(s.key);
+                    else next.delete(s.key);
+                    return next;
+                  });
+                }}
+              >
                 <summary className="flex cursor-pointer list-none flex-wrap items-center gap-2 rounded px-1 py-2 select-none [&::-webkit-details-marker]:hidden">
                   <EyIcon name="chevronRight" size={12} className="text-text-faint transition-transform group-open:rotate-90" />
                   <span className="text-foreground text-[13px] font-bold">{s.label.trim() || s.key}</span>
@@ -299,6 +323,27 @@ export function SubjectsSection({
                         칸으로 표시됩니다(수업 사이). 앞뒤가 비어 있으면 표시되지 않습니다.
                       </p>
                     </div>
+                  </div>
+
+                  {/* 세션 기간 — 이 과목이 실제로 운영되는 구간(달력월이 아니다). 원장 지시로 과목 운영 안에 둔다. */}
+                  <div className="space-y-2">
+                    <h4 className="text-foreground text-[12px] font-bold">
+                      세션 기간 <span className="text-text-faint font-normal">· {sessionYear}년</span>
+                    </h4>
+                    {openSubjects.has(s.key) ? (
+                      // key에 연도 — 연도 칩(searchParam 소프트 네비)은 클라 컴포넌트를 **재사용**하므로
+                      // 키가 없으면 작년에 칠한 날짜가 새 해 세션으로 저장된다(적대 리뷰 확인).
+                      <SubjectSessionEditor
+                        key={`${s.key}:${sessionYear}`}
+                        subjectKey={s.key}
+                        subjectLabel={s.label.trim() || s.key}
+                        year={sessionYear}
+                        defs={periodDefs}
+                        holidays={holidays}
+                      />
+                    ) : (
+                      <p className="text-text-faint text-[12px]">달력을 불러오는 중…</p>
+                    )}
                   </div>
                 </div>
               </details>

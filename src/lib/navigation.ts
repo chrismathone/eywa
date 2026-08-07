@@ -1,6 +1,7 @@
 import type { LucideIcon } from "@/components/icons/eywa-icon-compat";
 import { MENU_ICON, type EywaIconName } from "@/components/icons/eywa-icons";
 import type { MenuKey } from "@/lib/permissions";
+import { OWNER_TABS } from "@/features/owner/tabs";
 
 export type NavItem = {
   href: string;
@@ -58,19 +59,10 @@ export const SUBTABS_BY_MENU: Partial<Record<MenuKey, SubTab[]>> = {
     { label: "도움말", href: "/help" },
     { label: "아이콘 시스템", href: "/help/icons" },
   ],
-  owner: [
-    { label: "프로필·브랜드", href: "/owner" },
-    { label: "운영 체계", href: "/owner?tab=operations" },
-    { label: "과목 운영", href: "/owner?tab=subjects" },
-    { label: "수납·청구", href: "/owner?tab=billing" },
-    { label: "알림·약관", href: "/owner?tab=notifications" },
-    { label: "역할·권한", href: "/owner?tab=permissions" },
-    // 관리 그룹(구 /admin 흡수) — 팝업 공지·데이터 정리(고아+중복 통합)·감사·연동.
-    { label: "팝업 공지", href: "/owner?tab=popups" },
-    { label: "데이터 정리", href: "/owner?tab=data" },
-    { label: "감사로그", href: "/owner?tab=audit" },
-    { label: "연동", href: "/owner?tab=sheets" },
-  ],
+  // 🔴 여기에 면 목록을 다시 적지 말 것 — 상단 FaceTabs와 **같은 배열**(features/owner/tabs.ts)에서
+  //    파생한다. 예전엔 양쪽을 각각 하드코딩해 한쪽만 고치면 사이드바가 stale이었고, 실제로
+  //    '상담 양식'이 오래 빠져 있었다(원장 지적 2026-08-07).
+  owner: OWNER_TABS.map((t) => ({ label: t.label, href: t.href })),
 };
 
 /**
