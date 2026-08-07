@@ -7,7 +7,6 @@ import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { createClient } from "@/lib/supabase/client";
-import { resolveLoginLanding } from "@/features/shell/landing-action";
 
 export function LoginForm({ next }: { next?: string }) {
   const [error, setError] = useState<string | null>(null);
@@ -34,7 +33,7 @@ export function LoginForm({ next }: { next?: string }) {
     }
 
     const supabase = createClient();
-    const { data, error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+    const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
 
     if (signInError) {
       const message = /invalid login credentials/i.test(signInError.message)
@@ -45,33 +44,16 @@ export function LoginForm({ next }: { next?: string }) {
       return;
     }
 
-    // 역할별 기본 착지 지점: 강사=원스크린, 학생=내 학습 현황, 그 외(원장 등)=대시보드.
-    // ⚠️ 이건 **폴백**이다 — 강사 홈은 담당 과목으로 갈리는데(영어 전담=ECS) 그건 DB에만 있어
-    // 클라의 JWT role만으론 못 정한다. 서버에 물어보고(resolveLoginLanding), 세션 쿠키가 아직
-    // 안 실렸거나 실패하면 여기로 떨어진다(로그인 자체는 절대 안 막는다).
-    const role = data.user?.app_metadata?.system_role as string | undefined;
-    const fallback =
-      role === "teacher" ? "/onescreen" : role === "student" ? "/my-learning" : "/dashboard";
-    // 🔴 **타임아웃 필수** — 이 질문이 안 돌아오면 버튼이 '로그인 중…'에서 영영 멈춘다(입력칸도 disabled).
-    // 착지 지점을 못 정하는 것보다 덜 정확한 곳에 착지하는 게 낫다. 응답 실측은 ~300ms.
-    let home = fallback;
-    try {
-      home =
-        (await Promise.race([
-          resolveLoginLanding(),
-          new Promise<null>((r) => setTimeout(() => r(null), 3000)),
-        ])) ?? fallback;
-    } catch {
-      home = fallback;
-    }
-    const target = next && next.startsWith("/") ? next : home;
-    // 🔴 **`router.push`가 아니라 풀 문서 네비게이션**이어야 한다(2026-08-07 실측 버그).
-    // 바로 위에서 **서버 액션**을 부르는데, 그 응답은 *현재 페이지(/login)* 의 RSC 트리를 다시 적용한다.
-    // 그게 push로 시작한 이동보다 늦게 도착하면 라우터가 /login으로 되돌아가, 목적지 RSC를 이미 받아놓고도
-    // (네트워크에 `GET /ecs?_rsc=…` 200이 찍힌 채) 화면은 '로그인 중…'에서 멈춘다.
-    // 뷰 전환(switchToTeacherView·switchToAdminView)이 같은 이유로 이미 window.location을 쓴다 — 동일 규약.
-    // 부수 효과로 풀 로드라 모든 서버 컴포넌트가 새 세션 쿠키를 확실히 본다(router.refresh 불필요).
-    window.location.assign(target);
+    // 🔑 **착지 지점을 클라에서 정하지 않는다.** 강사 홈은 담당 과목(DB)으로 갈리는데(영어 전담=ECS)
+    // 클라는 JWT의 role까지밖에 못 본다. 예전엔 여기서 서버 액션에 물었는데, **그 요청엔 세션 쿠키가
+    // 아직 안 실릴 때가 있어**(getClaims 빈손) 같은 코드가 어떤 때는 ECS로 어떤 때는 원스크린으로 가는
+    // 경합이 났다(2026-08-07 실측). 그래서 판정을 **목적지 문서 요청으로 미룬다** → `/home`(리다이렉터).
+    //
+    // 🔴 **`router.push`가 아니라 풀 문서 네비게이션**이어야 한다 — 이 핸들러가 서버와 주고받은 뒤
+    // 클라 라우터로 이동하면, 늦게 도착한 응답이 현재 페이지 트리를 다시 적용하면서 이동을 덮는다
+    // (목적지 RSC를 200으로 받아놓고도 화면은 '로그인 중…'에서 멈췄다). 뷰 전환도 같은 이유로
+    // window.location을 쓴다 — 동일 규약. 부수 효과로 모든 서버 컴포넌트가 새 세션 쿠키를 확실히 본다.
+    window.location.assign(next && next.startsWith("/") ? next : "/home");
   }
 
   return (

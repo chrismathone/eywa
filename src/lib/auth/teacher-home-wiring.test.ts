@@ -12,11 +12,8 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-/**
- * 착지 지점 → 그 파일이 반드시 통과해야 하는 단일 소스 심볼.
- * `literalOk`는 **의도된 하드코딩 폴백**이 있는 자리(현재 로그인 폼 하나) — 이유는 그 항목 주석에.
- */
-const LANDING_SURFACES: { file: string[]; via: string; what: string; literalOk?: true }[] = [
+/** 착지 지점 → 그 파일이 반드시 통과해야 하는 단일 소스 심볼. */
+const LANDING_SURFACES: { file: string[]; via: string; what: string }[] = [
   {
     file: ["src", "lib", "auth", "require-access.ts"],
     via: "landingPath",
@@ -38,12 +35,17 @@ const LANDING_SURFACES: { file: string[]; via: string; what: string; literalOk?:
     what: "관리자 → 강사뷰 전환 착지",
   },
   {
+    file: ["src", "app", "home", "route.ts"],
+    via: "landingPath",
+    what: "로그인 착지 리다이렉터(/home)",
+  },
+  {
+    // 🔴 로그인 폼은 **목적지를 스스로 정하면 안 된다** — 담당 과목을 모르는 데다, 로그인 직후엔
+    // 세션 쿠키가 서버 요청에 아직 안 실릴 수 있어 클라가 물어봐도 답이 왔다갔다 한다(2026-08-07 경합).
+    // 판정은 /home이 문서 요청에서 한다. 여기 있어야 할 것은 그리로 보내는 한 줄뿐이다.
     file: ["src", "app", "(auth)", "login", "login-form.tsx"],
-    via: "resolveLoginLanding",
+    via: '"/home"',
     what: "로그인 직후 착지",
-    // 클라라 서버에 물어보는 것 외엔 방법이 없고, 세션 쿠키가 아직 안 실린 찰나엔 그 질문이 빈손으로
-    // 돌아온다. 그때의 최후 폴백만 role 기반 리터럴로 남는다 — **로그인을 절대 막지 않기 위한** 자리다.
-    literalOk: true,
   },
   {
     file: ["src", "app", "(shell)", "me", "page.tsx"],
@@ -67,9 +69,7 @@ describe("강사 홈 착지 지점 배선", () => {
     // 문자열 리터럴 "/onescreen"을 직접 들고 있으면 영어 강사가 그 경로로 새 원스크린에 떨어진다.
     // (알림 링크·prefetch 목록 등 "원스크린 그 화면을 가리키는" 용도는 대상이 아니다 — 여기 목록은
     //  '홈이 어디냐'를 정하는 자리뿐이다.)
-    const offenders = LANDING_SURFACES.filter(
-      ({ file, literalOk }) => !literalOk && read(file).includes('"/onescreen"'),
-    );
+    const offenders = LANDING_SURFACES.filter(({ file }) => read(file).includes('"/onescreen"'));
     expect(
       offenders.map((o) => o.file.join("/")),
       "착지 지점이 강사 홈을 하드코딩했다 — 영어 전담 강사가 빈 원스크린으로 떨어진다",
