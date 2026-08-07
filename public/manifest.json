@@ -1,0 +1,15 @@
+{
+  "name": "eywa 학원 관리",
+  "short_name": "eywa",
+  "description": "학원 운영 화면 — 출결·시간표·수납",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#153e75",
+  "lang": "ko",
+  "icons": [
+    { "src": "/eywa-mark.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/eywa-mark.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

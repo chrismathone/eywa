@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { generateJSON } from "@/lib/ai/generate";
 import { kstToday } from "@/lib/date-kst";
 import { fetchInChunks } from "@/lib/supabase/batch";
+import { sendPushToUsers } from "@/lib/push/web-push";
 import {
   ATTENDANCE_ALERT_TYPE,
   buildAttendanceAlert,
@@ -239,7 +240,14 @@ async function notifyOptedIn(
   const targets = (recipients ?? []).map((u) => u.id as string);
   if (!targets.length) return 0;
 
-  const { title, body } = buildAttendanceAlert({ studentName: studentName || "학생", intent, content: row.content });
+  const { title, body } = buildAttendanceAlert({
+    studentName: studentName || "학생",
+    intent,
+    content: row.content,
+    // 원문 날짜("8월 11일")를 푸는 축 — 판정이 못 담은 날이 있으면 벨이 그 사실을 적는다.
+    messageDate: messageDateOf(row),
+  });
+  const link = row.student_id ? `/students/${row.student_id}` : null;
   const { error } = await db.from("notifications").insert(
     targets.map((recipientId) => ({
       tenant_id: row.tenant_id,
@@ -247,9 +255,12 @@ async function notifyOptedIn(
       type: ATTENDANCE_ALERT_TYPE,
       title,
       body,
-      link: row.student_id ? `/students/${row.student_id}` : null,
+      link,
     })),
   );
   if (error) return 0;
+  // 휴대폰(웹 푸시) — 셔틀은 사무실 PC 앞에 없다(0188a). 벨이 진실이고 이건 "빨리 알려주는 수단"이라
+  // **best-effort**다: 키·구독·표가 없으면 조용히 0을 돌려주고 절대 throw하지 않는다.
+  await sendPushToUsers(row.tenant_id, targets, { title, body, link, tag: row.id });
   return targets.length;
 }
