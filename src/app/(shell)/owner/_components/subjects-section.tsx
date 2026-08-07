@@ -133,7 +133,7 @@ export function SubjectsSection({
                   {/* 수업계획(ECS) '구분' 영역 — English Class Sheet 계획 행의 영역 선택지. 저장은 영문 ID(불변),
                       라벨만 편집. english는 미설정 시 기본 6영역(Vocab~Speaking) 자동 사용(resolveSkillAreas). */}
                   <div className="space-y-2">
-                    <h4 className="text-foreground text-[12px] font-bold">수업계획(English Class Sheet) 영역</h4>
+                    <h4 className="text-foreground text-[12px] font-bold">수업계획(영어 강사 시트) 영역</h4>
                     {s.skillAreas?.length ? (
                       <>
                         <SkillAreaListEditor
