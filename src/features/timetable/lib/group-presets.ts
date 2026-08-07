@@ -7,6 +7,15 @@
 
 import type { GroupDraft } from "./group-assign";
 
+/**
+ * 과목당 보관 가능한 배치 수 — **스키마와 화면이 같은 값을 본다.**
+ * ⚠️ 여기(순수 모듈)에 두는 이유: 화면(클라 컴포넌트)이 이 값을 읽는데, zod가 있는 settings-types에
+ *    두면 그걸 import하는 순간 **zod가 시간표 클라 번들에 딸려 온다**(B5 정신). 스키마 쪽이 이걸 읽는다.
+ * (넘치면 저장이 zod에서 거부되는데 그 에러는 영문 경로가 섞인 원문이라 화면에 그대로 못 내보낸다
+ *  = 화면에서 먼저 막아야 한다.)
+ */
+export const MAX_GROUP_PRESETS = 12;
+
 export type GroupPreset = {
   id: string;
   name: string;

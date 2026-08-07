@@ -409,8 +409,21 @@ export async function saveIntegrationGroups(input: IntegrationGroupsInput): Prom
   const prevPresets = operations.subjects.find((s) => s.key === input.subject)?.integrationGroupPresets ?? [];
   const prevById = new Map(prevPresets.map((p) => [p.id, p]));
   const stampedAt = new Date().toISOString();
-  const bodyOf = (p: { name: string; groups: unknown; showOthers?: boolean; othersTitle?: string }) =>
-    JSON.stringify([p.name, p.groups, p.showOthers !== false, p.othersTitle ?? ""]);
+  // ⚠️ 객체를 그대로 stringify하면 **키 순서**에 걸린다 — 저장본은 jsonb라 Postgres가 키를 재정렬해
+  //    돌려주므로, JS 리터럴 순서와 우연히 같지 않으면 "안 바뀐 프리셋"이 매번 바뀐 걸로 잡혀
+  //    저장 시각이 계속 갱신된다. 배열로 눕혀 순서를 못박는다.
+  const bodyOf = (p: {
+    name: string;
+    groups?: { id: string; title: string; classIds?: string[] }[];
+    showOthers?: boolean;
+    othersTitle?: string;
+  }) =>
+    JSON.stringify([
+      p.name,
+      (p.groups ?? []).map((g) => [g.id, g.title, g.classIds ?? []]),
+      p.showOthers !== false,
+      p.othersTitle ?? "",
+    ]);
   const presets = input.presets
     ?.map((p) => {
       const cleaned = {
@@ -461,5 +474,7 @@ export async function saveIntegrationGroups(input: IntegrationGroupsInput): Prom
       ...(presets ? { presets: presets.length } : null),
     },
   });
-  return { ok: true };
+  // 🔴 도장이 찍힌 보관함을 **돌려준다** — 안 돌려주면 화면이 방금 저장한 항목을 "저장자 미상 ·
+  //    시각 없음"으로 그린다(클라엔 도장이 없다). 새로고침해야 보이는 값은 없는 값이나 마찬가지.
+  return { ok: true, presets: presets ?? undefined };
 }

@@ -3,6 +3,8 @@
 // 섹션별 부분 저장(saveOwnerSection)이라 SECTION_SCHEMAS로 섹션 단위 검증.
 import { z } from "zod";
 import { MENU_KEYS, SYSTEM_ROLES, type MenuKey, type SystemRole } from "@/lib/permissions";
+// 보관 가능한 배치 수는 **화면도 읽는 값**이라 zod 없는 순수 모듈에 산다(클라 번들에 zod 유입 방지).
+import { MAX_GROUP_PRESETS } from "@/features/timetable/lib/group-presets";
 
 const HHMM = /^\d{2}:\d{2}$/;
 const YMD = /^\d{4}-\d{2}-\d{2}$/;
@@ -135,7 +137,7 @@ export const subjectSchema = z.object({
   integrationShowOthers: z.boolean().optional(),
   integrationOthersTitle: z.string().max(30).optional(),
   // 저장해 둔 그룹 배치들(보관함). 현재 적용 배치(integrationGroups)와 별개 — 불러오기로 복사해 쓴다.
-  integrationGroupPresets: z.array(integrationGroupPresetSchema).max(12).optional(),
+  integrationGroupPresets: z.array(integrationGroupPresetSchema).max(MAX_GROUP_PRESETS).optional(),
   // ECS 수업계획 '구분' 영역 목록(과목별). 미설정 = english만 기본 6영역 프리필(resolveSkillAreas),
   // 그 외 과목은 빈 목록(= ECS 진입 대상 아님). (.optional() — 예외 필드 관례, weekdayPeriods와 동일.)
   skillAreas: z.array(skillAreaSchema).max(20).optional(),

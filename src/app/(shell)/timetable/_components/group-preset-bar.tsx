@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { BookMarked, Check, ChevronUp, Download, Loader2, Save, Trash2, X } from "@/components/icons/eywa-icon-compat";
 import {
+  MAX_GROUP_PRESETS,
   loadPreset,
   removePreset,
   upsertPreset,
@@ -48,12 +49,20 @@ export function GroupPresetBar({
   const [name, setName] = useState("");
   const [listOpen, setListOpen] = useState(false);
   const [confirmDel, setConfirmDel] = useState<string | null>(null);
+  const [limitMsg, setLimitMsg] = useState<string | null>(null);
 
   const overwriting = presets.some((p) => p.name.trim() === name.trim() && name.trim());
 
   function commit() {
     const trimmed = name.trim();
     if (!trimmed) return;
+    // ⚠️ 화면에서 먼저 막는다 — 넘겨서 저장하면 zod가 거부하는데 그 에러는 영문 경로가 섞인 원문이라
+    //    그대로 내보낼 수 없다(raw 코드 노출 금지). 같은 이름 덮어쓰기는 개수가 안 늘어 통과시킨다.
+    if (!overwriting && presets.length >= MAX_GROUP_PRESETS) {
+      setLimitMsg(`배치는 과목당 ${MAX_GROUP_PRESETS}개까지 저장할 수 있습니다 — 쓰지 않는 배치를 먼저 지워 주세요.`);
+      return;
+    }
+    setLimitMsg(null);
     // id는 새로 만들지만, 같은 이름이 있으면 upsertPreset이 기존 id를 지켜 덮어쓴다.
     const id = typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `p${Date.now()}`;
     onChange(upsertPreset(presets, { id, name: trimmed, ...current }));
@@ -75,6 +84,7 @@ export function GroupPresetBar({
           {saving ? <Loader2 className="text-primary size-3 animate-spin" /> : null}
         </span>
         {error ? <span className="text-danger text-[11px]">{error}</span> : null}
+        {limitMsg ? <span className="text-danger text-[11px]">{limitMsg}</span> : null}
 
         {naming ? (
           <span className="inline-flex items-center gap-1">
