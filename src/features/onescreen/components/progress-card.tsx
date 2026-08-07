@@ -2,6 +2,7 @@ import { Button } from "@/components/ui/button";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { subjectTone, toneSolidClass, toneTextClass } from "../data";
 import { displayLessons, resolveStudyGrade } from "../curriculum";
+import { ProgressModePills } from "./progress-mode-pills";
 import { ProgressSelector } from "./progress-selector";
 import type { OneScreenStudent } from "../types";
 
@@ -108,6 +109,17 @@ export function ProgressCard({
                       />
                     )}
                   </div>
+                  {/* 자유 입력 과목(영어 등)은 팝오버가 없어 성격 알약이 갈 곳이 없다 → 입력칸 **바로 아래**에
+                      (원장 2026-08-07). 수학은 팝오버 안에 이미 있으므로 여기선 안 그린다(같은 것이 두 번). */}
+                  {!isMath ? (
+                    <div className="mt-1">
+                      <ProgressModePills
+                        mode={su.progressMode}
+                        onMode={(m) => onProgressMode(i, m)}
+                        ariaLabel={`${su.name} 오늘 수업 성격`}
+                      />
+                    </div>
+                  ) : null}
                 </div>
               </div>
             </div>

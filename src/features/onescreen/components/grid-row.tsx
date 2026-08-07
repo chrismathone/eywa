@@ -30,6 +30,7 @@ import {
 import { handleGridNavKey } from "./grid-nav";
 import { FieldSelect } from "./field-select";
 import { HomeworkRateInput } from "./homework-rate-input";
+import { ProgressModePills } from "./progress-mode-pills";
 import { ProgressSelector } from "./progress-selector";
 import { ScoreInput } from "./score-input";
 
@@ -118,18 +119,29 @@ function GridProgressCell({
   const su = student.subjects[subjectIndex];
   if (!su) return null;
   if (!isMathSubject(su.subjectKey)) {
+    // 자유 입력 과목(영어 등) — 커리큘럼 팝오버가 없어 성격 알약을 **입력칸 바로 아래**에 둔다
+    // (원장 2026-08-07 *"영어 진도에도 복습·문제풀이 붙여줘"*). 알약은 수학 팝오버 안과 같은 컴포넌트.
     return (
-      <input
-        type="text"
-        value={su.today}
-        onChange={(e) => onProgress(student.id, subjectIndex, e.target.value)}
-        readOnly={locked}
-        placeholder="오늘 진도 (예: Unit 8 · p.90)"
-        aria-label={`${student.name} ${su.name} 오늘 진도`}
-        className={`border-line focus:border-primary h-8 w-full rounded-sm border px-2 text-[12px] outline-none ${
-          locked ? "bg-bg-soft text-text-dim" : "bg-card"
-        }`}
-      />
+      <div className="flex flex-col gap-1">
+        <input
+          type="text"
+          value={su.today}
+          onChange={(e) => onProgress(student.id, subjectIndex, e.target.value)}
+          readOnly={locked}
+          placeholder="오늘 진도 (예: Unit 8 · p.90)"
+          aria-label={`${student.name} ${su.name} 오늘 진도`}
+          className={`border-line focus:border-primary h-8 w-full rounded-sm border px-2 text-[12px] outline-none ${
+            locked ? "bg-bg-soft text-text-dim" : "bg-card"
+          }`}
+        />
+        <ProgressModePills
+          mode={su.progressMode}
+          onMode={(m) => onProgressMode(student.id, subjectIndex, m)}
+          disabled={locked}
+          compact
+          ariaLabel={`${student.name} ${su.name} 오늘 수업 성격`}
+        />
+      </div>
     );
   }
   return (
