@@ -7,13 +7,16 @@ import {
   getTuitionCatalogStats,
   TUITION_CATEGORIES,
 } from "@/features/billing/server/tuition-catalog-queries";
-import { PRICING_MODES } from "@/features/billing/tuition-catalog";
+import { PMODE_UNSET, PRICING_MODES } from "@/features/billing/tuition-catalog";
 import { TuitionPricesTable } from "./tuition-prices-table";
 
 const CATEGORY_FILTERS = [{ key: "all", label: "전체" }, ...TUITION_CATEGORIES.map((c) => ({ key: c, label: c }))];
+// 🔴 '미지정'이 필터에 없으면 **아직 안 고른 항목을 화면에서 골라낼 방법이 아예 없다**(전체·회당·월·할인
+//    어디에도 안 잡힌다). 남은 것을 세고 고르는 게 이 화면의 실제 용무라 마지막 칸으로 넣는다.
 const PMODE_FILTERS = [
   { key: "all", label: "전체" },
   ...PRICING_MODES.map((m) => ({ key: m.value, label: m.label })),
+  { key: PMODE_UNSET, label: "미지정" },
 ];
 const ACTIVE_FILTERS = [
   { key: "all", label: "전체" },
@@ -56,6 +59,25 @@ export async function TuitionPricesPanel({ sp }: { sp: Sp }) {
         <Kpi label="등록 단가" value={`${stats.total}개`} icon={Coins} color="primary" />
         <Kpi label="사용 중" value={`${stats.active}개`} icon={CheckCircle2} color="primary" />
       </section>
+
+      {/* 🔴 아직 단가 종류를 안 고른 항목 — **숫자가 보여야 이 일이 끝난다.** 종류가 없으면 계산기가
+          안전하게 월 고정으로 넣는데, 회당 수업이 그렇게 들어가면 한 달치가 한 회차 금액으로 줄고,
+          반대로 월정액을 회당으로 바꾸면 EiE 27만원 × N회가 된다(원장 2026-08-07). 바로 걸러 볼 수 있게
+          링크를 건다. 남은 게 0이면 배너 자체가 사라진다(끝난 일을 계속 재촉하지 않는다). */}
+      {stats.unset > 0 ? (
+        <Link
+          href={build({ cpmode: PMODE_UNSET, cactive: "active", cpage: "1" })}
+          className="border-amber/40 bg-amber-soft text-amber flex flex-wrap items-center gap-x-1.5 rounded-2xl border px-4 py-2.5 text-[12.5px] transition hover:brightness-95"
+        >
+          <span className="font-bold">
+            단가 종류를 안 고른 항목이 <span className="num">{stats.unset}</span>개 있습니다
+          </span>
+          <span className="text-amber/80">
+            — 계산기가 이 항목을 <b>월 고정</b>으로 넣습니다. 회당 수업이면 금액이 한 회차분으로 줄어드니
+            눌러서 골라 주세요.
+          </span>
+        </Link>
+      ) : null}
 
       {/* 필터 바 */}
       <div className="bg-card border-line shadow-card flex flex-wrap items-center gap-3 rounded-2xl border px-4 py-3">

@@ -26,6 +26,23 @@ export function pricingModeLabel(mode: string | null | undefined): string {
   return mode && mode in PRICING_LABELS ? PRICING_LABELS[mode as PricingMode] : "미지정";
 }
 
+/**
+ * "미지정만 보기" 필터 키 — DB의 `null`을 **URL 파라미터로 표현**하는 값이다(빈 문자열은 '전체'와
+ * 구분이 안 돼 쓸 수 없다). 목록 쿼리는 이 값일 때 `is null`로 간다.
+ * 🔴 `PricingMode`가 아니다 — 저장값으로 쓰지 말 것(저장은 null).
+ */
+export const PMODE_UNSET = "none";
+
+/**
+ * 단가 종류가 계산기에서 **무엇이 되는가** — 단가표와 계산기가 서로 다른 말을 쓰면(여긴 '월 단가',
+ * 저긴 '월 고정') 같은 것을 두 이름으로 배우게 된다. 화면에 이 연결을 적어 둔다.
+ */
+export const PRICING_MODE_EFFECT: Record<PricingMode, string> = {
+  per_session: "계산기에서 '회당' — 단가 × 시수",
+  monthly: "계산기에서 '월 고정' — 금액을 그대로",
+  discount: "계산기 할인 항목",
+};
+
 /** 폼 입력값을 안전한 PricingMode|null로 정규화(허용값 외 = null). */
 export function normalizePricingMode(raw: string | null | undefined): PricingMode | null {
   const v = (raw ?? "").trim();

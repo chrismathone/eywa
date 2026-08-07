@@ -10,6 +10,7 @@ import {
   createTuitionItem,
   updateTuitionItem,
   deleteTuitionItem,
+  setTuitionPricingMode,
   toggleTuitionActive,
   type TuitionCatalogActionState,
 } from "@/features/billing/server/tuition-catalog-actions";
@@ -17,7 +18,7 @@ import {
   TUITION_CATEGORIES,
   DISCOUNT_CATEGORY,
   PRICING_MODES,
-  pricingModeLabel,
+  PRICING_MODE_EFFECT,
   type TuitionCatalogRow,
 } from "@/features/billing/tuition-catalog";
 
@@ -119,9 +120,15 @@ function TuitionDialog({ item, onClose }: { item?: TuitionCatalogRow; onClose: (
               />
             </Field>
           </div>
+          {/* 단가표와 계산기가 서로 다른 말을 쓰면(여긴 '월 단가', 저긴 '월 고정') 같은 것을 두 이름으로
+              배우게 된다 — 여기서 고른 종류가 **계산기에서 무엇이 되는지**를 적어 둔다. */}
           <p className="text-text-faint -mt-1 text-[11px] leading-snug">
-            <span className="text-primary font-medium">회당 단가</span>로 지정한 항목만 수납 ·{" "}
-            <span className="font-medium">회차 확정</span>에서 단가 후보로 나타납니다.
+            <span className="text-primary font-medium">회당 단가</span> → 계산기에서 &lsquo;회당&rsquo;(단가 ×
+            시수) · <span className="font-medium">월 단가</span> → &lsquo;월 고정&rsquo;(금액을 그대로).
+            <br />
+            비워 두면(미지정) 계산기가 안전하게 <b>월 고정</b>으로 넣고 &lsquo;구분을 골라 주세요&rsquo;라고
+            표시합니다. 회당 단가로 지정한 항목만 수납 · <span className="font-medium">회차 확정</span>의 단가
+            후보로도 나타납니다.
           </p>
           <Field label="비고">
             <input name="note" defaultValue={item?.note ?? ""} placeholder="시수·조건" className={inputCls} />
@@ -169,6 +176,47 @@ function TuitionDialog({ item, onClose }: { item?: TuitionCatalogRow; onClose: (
           </form>
         ) : null}
       </div>
+    </div>
+  );
+}
+
+/**
+ * 단가 종류를 **목록에서 바로** 바꾸는 칩 묶음. 고른 것을 다시 누르면 미지정으로 되돌아간다.
+ *
+ * 🔴 미지정은 흐린 글씨가 아니라 **경고색**으로 둔다 — 이 화면에서 "아직 안 정한 것"이 가장 중요한
+ *    정보다(계산기가 그 항목을 월 고정으로 넣고, 회당 수업이면 한 달치가 한 회차 금액으로 줄어든다).
+ */
+function PricingModeCell({ id, mode }: { id: string; mode: string | null }) {
+  const [, action] = useActionState<TuitionCatalogActionState, FormData>(setTuitionPricingMode, undefined);
+  return (
+    <div className="flex flex-wrap items-center gap-1">
+      {PRICING_MODES.map((m) => {
+        const on = mode === m.value;
+        return (
+          <form key={m.value} action={action}>
+            <input type="hidden" name="id" value={id} />
+            {/* 켜진 것을 다시 누르면 빈 값 → 미지정으로 되돌린다(잘못 고른 값을 되돌릴 문). */}
+            <input type="hidden" name="pricing_mode" value={on ? "" : m.value} />
+            <button
+              type="submit"
+              aria-pressed={on}
+              title={on ? `${m.label} — 다시 누르면 미지정으로` : PRICING_MODE_EFFECT[m.value]}
+              className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] transition ${
+                on
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : "border-line text-text-dim hover:bg-bg-soft hover:text-foreground"
+              }`}
+            >
+              {m.label}
+            </button>
+          </form>
+        );
+      })}
+      {!mode ? (
+        <span className="border-amber/40 bg-amber-soft text-amber rounded-full border px-2 py-0.5 text-[11px] font-bold">
+          미지정
+        </span>
+      ) : null}
     </div>
   );
 }
@@ -222,20 +270,14 @@ export function TuitionPricesTable({ rows }: { rows: TuitionCatalogRow[] }) {
             </thead>
             <tbody className="divide-line divide-y">
               {rows.map((r) => (
-                <tr key={r.id} className="hover:bg-bg-soft/50">
+                <tr key={r.id} className={r.pricingMode ? "hover:bg-bg-soft/50" : "bg-amber-soft/20 hover:bg-amber-soft/30"}>
                   <td className="px-4 py-2.5">
                     <Pill color={r.category === DISCOUNT_CATEGORY ? "rose" : "neutral"} soft>
                       {r.category}
                     </Pill>
                   </td>
                   <td className="px-4 py-2.5">
-                    {r.pricingMode === "per_session" ? (
-                      <Pill color="primary" soft>
-                        {pricingModeLabel(r.pricingMode)}
-                      </Pill>
-                    ) : (
-                      <span className="text-text-faint text-[11px]">{pricingModeLabel(r.pricingMode)}</span>
-                    )}
+                    <PricingModeCell id={r.id} mode={r.pricingMode} />
                   </td>
                   <td className="px-4 py-2.5">
                     <span className="text-foreground text-[13px] font-bold">{r.name}</span>

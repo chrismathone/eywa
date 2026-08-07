@@ -1,6 +1,6 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
-import { normalizePricingMode } from "@/features/billing/tuition-catalog";
+import { normalizePricingMode, PMODE_UNSET } from "@/features/billing/tuition-catalog";
 import type { TuitionCatalogRow, TuitionCatalogOption } from "@/features/billing/tuition-catalog";
 
 // 수강료 단가표 DB 쿼리(server-only) — 과목 단가 + 기타 항목 + 할인 프리셋 통합 레지스트리(category로 구분).
@@ -31,7 +31,10 @@ export async function getTuitionCatalogPage(
     .range(from, from + pageSize - 1);
 
   if (opts.category && opts.category !== "all") q = q.eq("category", opts.category);
-  if (opts.pmode && opts.pmode !== "all") q = q.eq("pricing_mode", opts.pmode);
+  // 🔴 `none` = **미지정만**. 이 갈래가 없으면 "아직 안 고른 항목"을 화면에서 골라낼 방법이 아예 없다
+  //    (전체·회당·월·할인 어디에도 안 잡힌다). 남은 것을 세고 고르는 일이 이 화면의 실제 용무다.
+  if (opts.pmode === PMODE_UNSET) q = q.is("pricing_mode", null);
+  else if (opts.pmode && opts.pmode !== "all") q = q.eq("pricing_mode", opts.pmode);
   if (opts.active === "active") q = q.eq("is_active", true);
   else if (opts.active === "inactive") q = q.eq("is_active", false);
   if (opts.q) {
@@ -75,11 +78,24 @@ export async function getTuitionCatalogActive(): Promise<TuitionCatalogOption[]>
   }));
 }
 
-export async function getTuitionCatalogStats(): Promise<{ total: number; active: number }> {
+/**
+ * 단가표 요약. `unset` = **사용 중인데 단가 종류가 안 정해진 항목 수**.
+ *
+ * 🔴 이 숫자가 화면에 있어야 하는 이유: 종류가 없으면 계산기가 안전한 쪽(월 고정)으로 넣는데,
+ *    회당 수업이 그렇게 들어가면 한 달치가 한 회차 금액으로 줄어든다(반대로 월정액을 회당으로 바꾸면
+ *    EiE 27만원 × N회). 남은 건수가 안 보이면 이 일은 영영 안 끝난다.
+ * ⚠️ 세는 것만 한다 — `count: exact, head: true`라 행을 안 받는다(B2 규칙).
+ */
+export async function getTuitionCatalogStats(): Promise<{ total: number; active: number; unset: number }> {
   const supabase = await createClient();
-  const [{ count: total }, { count: active }] = await Promise.all([
+  const [{ count: total }, { count: active }, { count: unset }] = await Promise.all([
     supabase.from("tuition_catalog").select("*", { count: "exact", head: true }),
     supabase.from("tuition_catalog").select("*", { count: "exact", head: true }).eq("is_active", true),
+    supabase
+      .from("tuition_catalog")
+      .select("*", { count: "exact", head: true })
+      .eq("is_active", true)
+      .is("pricing_mode", null),
   ]);
-  return { total: total ?? 0, active: active ?? 0 };
+  return { total: total ?? 0, active: active ?? 0, unset: unset ?? 0 };
 }

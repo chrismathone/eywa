@@ -101,6 +101,36 @@ export async function deleteTuitionItem(
   return { ok: true };
 }
 
+/**
+ * 단가 종류만 바꾼다 — **목록에서 한 번에**(원장 2026-08-07 *"단가표에도 구분해줘야겠는걸"*).
+ *
+ * 🔴 수정 다이얼로그를 열어 고치게 두면 안 된다: 아직 안 고른 항목이 31건 남아 있는데(수학 18·영어 11·
+ *    국어 2, 2026-08-07 실측) 한 건에 다이얼로그 한 번이면 그 일은 끝나지 않는다. 목록 행에서 바로 누른다.
+ * ⚠️ `updateTuitionItem`을 재사용하지 않는다 — 그건 분류·항목명·단가·비고를 **전부** 받아 덮으므로,
+ *    행에서 부르려면 숨은 input에 전 필드를 실어야 하고 하나만 어긋나도 다른 칸이 조용히 덮인다.
+ * ⚠️ 빈 값("")은 **미지정으로 되돌리기**다(normalizePricingMode가 null로 정규화) — 잘못 고른 값을
+ *    되돌릴 문이 있어야 한다.
+ */
+export async function setTuitionPricingMode(
+  _prev: TuitionCatalogActionState,
+  formData: FormData,
+): Promise<TuitionCatalogActionState> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "로그인이 필요합니다" };
+  if (!(await canWrite(user.systemRole))) return { error: "단가표 관리 권한이 없습니다" };
+
+  const id = String(formData.get("id") ?? "").trim();
+  if (!id) return { error: "항목 ID가 누락되었습니다" };
+  const pricingMode = normalizePricingMode(String(formData.get("pricing_mode") ?? ""));
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("tuition_catalog").update({ pricing_mode: pricingMode }).eq("id", id);
+  if (error) return { error: error.message };
+
+  revalidatePath("/billing");
+  return { ok: true };
+}
+
 export async function toggleTuitionActive(
   _prev: TuitionCatalogActionState,
   formData: FormData,
