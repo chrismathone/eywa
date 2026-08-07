@@ -45,6 +45,20 @@ function SaveBtn({ disabled }: { disabled: boolean }) {
   );
 }
 
+/**
+ * 불러온 행들의 uid를 **유일하게** 만든다. 이미 저장된 견적에 중복 uid가 들어 있으면(과거 버전이
+ * 만든 데이터) 한 칸을 고칠 때 두 행이 함께 바뀐다 — 화면에 들이기 전에 여기서 끊는다.
+ * ⚠️ 인덱스 기반이라 서버·클라 결과가 같다(Date.now/random을 쓰면 hydration이 어긋난다).
+ */
+function dedupeUids<T extends { uid: string }>(list: readonly T[], prefix: string): T[] {
+  const seen = new Set<string>();
+  return list.map((x, i) => {
+    const uid = x.uid && !seen.has(x.uid) ? x.uid : `${prefix}${i}`;
+    seen.add(uid);
+    return uid === x.uid ? x : { ...x, uid };
+  });
+}
+
 export function TuitionCalculator({
   academyName,
   logoSrc,
@@ -64,8 +78,33 @@ export function TuitionCalculator({
   textbooks?: CatalogOption[]; // 교재 단가표(146권) — 교재/기타 picker에 합침
   initial?: QuoteDetail;
 }) {
-  const uidRef = useRef(0);
-  const nextUid = () => `q${++uidRef.current}`;
+  /**
+   * 행 uid — 🔴 **절대 겹치면 안 된다.** patchCourse/patchExtra 등이 uid로 대상을 고르므로
+   * 두 행이 같은 uid를 가지면 한 칸을 고칠 때 **두 행이 함께 바뀐다**(원장 제보 2026-08-07:
+   * "2개의 수강과목이 있으면 별개로 계산되어야 하는데 요일입력이 같이 작동한다").
+   *
+   * 원인은 카운터 시드였다 — 저장된 견적을 열면(`initial`) courses에 이미 q1·q2가 들어 있는데
+   * 카운터는 0에서 시작해, 과목을 추가하면 q1을 다시 발급했다. 초안 복구 경로엔 재시드가 있었지만
+   * (restoreDraft) `initial` 경로엔 없었다.
+   *
+   * 두 겹으로 막는다: ① 카운터를 initial 최대값에서 시작 ② 발급할 때 **현재 목록과 대조**해
+   * 이미 쓰는 값이면 건너뛴다(어떤 경로로 들어오든 구조적으로 충돌 불가).
+   */
+  const uidRef = useRef(
+    [...(initial?.courses ?? []), ...(initial?.extras ?? []), ...(initial?.discounts ?? [])]
+      .map((x) => Number(String(x.uid).replace(/\D/g, "")) || 0)
+      .reduce((a, b) => Math.max(a, b), 0),
+  );
+  const nextUid = (used: readonly { uid: string }[] = []) => {
+    const taken = new Set(used.map((x) => x.uid));
+    let n = uidRef.current;
+    let uid: string;
+    do {
+      uid = `q${++n}`;
+    } while (taken.has(uid));
+    uidRef.current = n;
+    return uid;
+  };
 
   const [student, setStudent] = useState<QuoteStudent>({
     name: initial?.studentName ?? "",
@@ -75,9 +114,9 @@ export function TuitionCalculator({
     startDate: initial?.startDate ?? `${defaultPeriod}-01`,
     endDate: initial?.endDate ?? monthLastDay(defaultPeriod),
   });
-  const [courses, setCourses] = useState<QuoteCourse[]>(initial?.courses ?? []);
-  const [extras, setExtras] = useState<QuoteExtra[]>(initial?.extras ?? []);
-  const [discounts, setDiscounts] = useState<QuoteDiscount[]>(initial?.discounts ?? []);
+  const [courses, setCourses] = useState<QuoteCourse[]>(() => dedupeUids(initial?.courses ?? [], "c"));
+  const [extras, setExtras] = useState<QuoteExtra[]>(() => dedupeUids(initial?.extras ?? [], "e"));
+  const [discounts, setDiscounts] = useState<QuoteDiscount[]>(() => dedupeUids(initial?.discounts ?? [], "d"));
   const [createdLabel] = useState(() => todayLabel(initial?.createdAt));
   // 안내문 헤더 로고/학원명 표시 토글 — 로고 이미지에 학원명 워드마크가 있으면 하나만 켜서 중복 제거.
   // 표시 전용(견적 데이터 아님)이라 저장/복구엔 미포함.
@@ -130,7 +169,7 @@ export function TuitionCalculator({
       ...cs,
       recompute(
         {
-          uid: nextUid(),
+          uid: nextUid(cs),
           category: o.category,
           name: o.name,
           days: "",
@@ -254,21 +293,21 @@ export function TuitionCalculator({
           <CatalogPicker
             options={extraOpts}
             placeholder="+ 교재·항목 추가 (단가표 검색)"
-            onPick={(o) => setExtras((es) => [...es, { uid: nextUid(), name: o.note ? `${o.name} ${o.note}` : o.name, price: o.price, note: "" }])}
+            onPick={(o) => setExtras((es) => [...es, { uid: nextUid(es), name: o.note ? `${o.name} ${o.note}` : o.name, price: o.price, note: "" }])}
           />
           {extras.map((e) => (
             <ExtraEditor key={e.uid} extra={e} onPatch={(p) => setExtras((es) => es.map((x) => (x.uid === e.uid ? { ...x, ...p } : x)))} onRemove={() => setExtras((es) => es.filter((x) => x.uid !== e.uid))} />
           ))}
-          <AddManual label="직접 입력 항목 추가" onAdd={() => setExtras((es) => [...es, { uid: nextUid(), name: "", price: 0, note: "" }])} />
+          <AddManual label="직접 입력 항목 추가" onAdd={() => setExtras((es) => [...es, { uid: nextUid(es), name: "", price: 0, note: "" }])} />
         </Group>
 
         {/* 할인 */}
         <Group title="할인 적용">
-          <CatalogPicker options={discountOpts} placeholder="+ 할인 추가 (프리셋)" onPick={(o) => setDiscounts((ds) => [...ds, { uid: nextUid(), name: o.name, amount: o.price }])} />
+          <CatalogPicker options={discountOpts} placeholder="+ 할인 추가 (프리셋)" onPick={(o) => setDiscounts((ds) => [...ds, { uid: nextUid(ds), name: o.name, amount: o.price }])} />
           {discounts.map((d) => (
             <DiscountEditor key={d.uid} discount={d} onPatch={(p) => setDiscounts((ds) => ds.map((x) => (x.uid === d.uid ? { ...x, ...p } : x)))} onRemove={() => setDiscounts((ds) => ds.filter((x) => x.uid !== d.uid))} />
           ))}
-          <AddManual label="직접 입력 할인 추가" onAdd={() => setDiscounts((ds) => [...ds, { uid: nextUid(), name: "", amount: 0 }])} />
+          <AddManual label="직접 입력 할인 추가" onAdd={() => setDiscounts((ds) => [...ds, { uid: nextUid(ds), name: "", amount: 0 }])} />
         </Group>
 
         {/* 입금 계좌 안내 — 안내문(우측 최종 납부 금액 위)에 표시. 기본값=학원설정(수납) 계좌, 여기서 수정 가능. */}
