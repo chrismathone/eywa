@@ -535,6 +535,9 @@ export default async function AttendancePage({
         // 빈 화면 대신 사진 카드 + 반 바로가기 행 목록으로 "진입 허브"가 되게 한다.
         // 허브도 같은 규칙 — 넘치면 이 영역만 스크롤한다(페이지 스크롤을 되살리지 않는다).
         <section className="grid min-h-0 flex-1 gap-4 overflow-auto lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] lg:items-stretch">
+          {/* 사진 높이 — 넓은 창은 좌측 칸을 꽉 채우고(우측 목록과 높이 균형), 한 열로 접히는 좁은 창은
+              **띠 사진**으로 눌러 둔다(높이를 안 잡으면 폭=창 전체에서 비율로 커져 목록이 화면 밖으로 밀린다).
+              폭이 열을 넘어 옆 칸을 덮는 것은 PhotoCard의 `w-full`이 막는다. */}
           <PhotoCard
             src="/photos/attendance-empty.webp"
             alt=""
@@ -542,7 +545,7 @@ export default async function AttendancePage({
             sub="전체 반은 학생이 많아 한 번에 표시하지 않아요"
             aspect="3/2"
             sizes="(max-width: 1024px) 100vw, 40vw"
-            className="h-full"
+            className="h-40 lg:h-full"
           />
           {/* ⚠️ 과목별 섹션 + 과목당 상한. 옛 코드는 `classesForFilters.slice(0, 8)`이었는데 반 목록이
               class_name 오름차순이라 로마자 영어반이 한글 수학반보다 항상 앞서 **수학반이 하나도 안 떴다**.
