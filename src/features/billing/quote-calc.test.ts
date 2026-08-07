@@ -5,6 +5,11 @@ import {
   splitCoursesByMonth,
   quoteTotal,
   autoSessions,
+  feeKindOf,
+  feeKindFromPricingMode,
+  needsFeeKindCheck,
+  groupByFeeKind,
+  FEE_KIND_LABEL,
   type QuoteCourse,
 } from "./quote-calc";
 
@@ -261,5 +266,65 @@ describe("parseDays — 묶음·범위 표현", () => {
   it("정리 표기도 뜻이 보존된다", () => {
     expect(formatDays("평일")).toBe("월,화,수,목,금");
     expect(formatDays("월~금")).toBe("월,화,수,목,금");
+  });
+});
+
+/**
+ * 수강료 구분(월 고정 / 회당) — 원장 2026-08-07:
+ * *"EiE 수업이 전부 27만원으로 잡혀있는데 까딱하다가 1회당 27만원으로 계산되기 때문"*.
+ * 🔴 이 스위트가 지키는 것은 **모르는 것을 안다고 하지 않는 성질**이다: 단가표에 종류가 없으면
+ *    회당으로 단정하지 않고(=곱하지 않고) 사람에게 묻는다.
+ */
+describe("수강료 구분", () => {
+  it("저장은 fixedMonthly 하나로 한다(새 필드를 만들지 않는다 — 옛 견적이 이 키만 갖고 있다)", () => {
+    expect(feeKindOf({ fixedMonthly: true })).toBe("monthly");
+    expect(feeKindOf({ fixedMonthly: false })).toBe("per_session");
+    expect(FEE_KIND_LABEL.monthly).toBe("월 고정");
+    expect(FEE_KIND_LABEL.per_session).toBe("회당");
+  });
+
+  it("단가표 종류 → 구분. **미지정·할인은 null**(모르는 것을 안다고 하지 않는다)", () => {
+    expect(feeKindFromPricingMode("per_session")).toBe("per_session");
+    expect(feeKindFromPricingMode("monthly")).toBe("monthly");
+    expect(feeKindFromPricingMode(null)).toBeNull();
+    expect(feeKindFromPricingMode(undefined)).toBeNull();
+    expect(feeKindFromPricingMode("discount")).toBeNull();
+    expect(feeKindFromPricingMode("아무거나")).toBeNull();
+  });
+
+  // 🔴 EiE 27만원(단가표 미지정 12건, 실측)이 바로 이 경로다 — 조용히 넘어가면 회당 27만원이 된다.
+  it("단가표 종류가 없는 행은 '구분 확인 필요'로 표시된다", () => {
+    expect(needsFeeKindCheck({ pricingMode: null })).toBe(true);
+    expect(needsFeeKindCheck({ pricingMode: undefined })).toBe(true);
+    expect(needsFeeKindCheck({ pricingMode: "monthly" })).toBe(false);
+    expect(needsFeeKindCheck({ pricingMode: "per_session" })).toBe(false);
+  });
+
+  it("구분별로 나누고 각각 합계를 낸다", () => {
+    const cs = [
+      course({ uid: "a", name: "EiE", fixedMonthly: true, price: 270000 }),
+      course({ uid: "b", name: "수학", fixedMonthly: false, price: 350000 }),
+      course({ uid: "c", name: "국어", fixedMonthly: true, price: 100000 }),
+    ];
+    const g = groupByFeeKind(cs);
+    expect(g.monthly.map((c) => c.uid)).toEqual(["a", "c"]);
+    expect(g.perSession.map((c) => c.uid)).toEqual(["b"]);
+    expect(g.monthlyTotal).toBe(370000);
+    expect(g.perSessionTotal).toBe(350000);
+  });
+
+  // ⚠️ 화면만 나눈다 — 안내문은 courses 배열 순서대로 인쇄되므로 여기서 정렬하면 두 화면이 어긋난다.
+  it("원본 순서를 바꾸지 않는다", () => {
+    const cs = [
+      course({ uid: "a", fixedMonthly: false }),
+      course({ uid: "b", fixedMonthly: true }),
+      course({ uid: "c", fixedMonthly: false }),
+    ];
+    expect(groupByFeeKind(cs).perSession.map((c) => c.uid)).toEqual(["a", "c"]);
+    expect(cs.map((c) => c.uid)).toEqual(["a", "b", "c"]); // 입력 배열은 그대로
+  });
+
+  it("합계는 음수를 0으로 막는다(총액과 같은 규약)", () => {
+    expect(groupByFeeKind([course({ fixedMonthly: true, price: -5000 })]).monthlyTotal).toBe(0);
   });
 });

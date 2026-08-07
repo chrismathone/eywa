@@ -9,7 +9,12 @@ import { DraftBanner } from "@/components/forms/draft-banner";
 import { saveTuitionQuote, type SaveQuoteState } from "@/features/billing/server/tuition-quote-actions";
 import { DISCOUNT_CATEGORY, type TuitionCatalogOption } from "@/features/billing/tuition-catalog";
 import { koreanHolidayDatesForRange } from "@/features/billing/holidays-data";
-import { autoSessions, quoteTotal } from "@/features/billing/quote-calc";
+import {
+  autoSessions,
+  feeKindFromPricingMode,
+  groupByFeeKind,
+  quoteTotal,
+} from "@/features/billing/quote-calc";
 import type { QuoteStudent, QuoteCourse, QuoteExtra, QuoteDiscount } from "@/features/billing/quote-calc";
 import type { QuoteDetail } from "@/features/billing/server/tuition-quote-queries";
 import type { CatalogOption } from "@/features/billing/server/catalog-queries";
@@ -157,7 +162,10 @@ export function TuitionCalculator({
   const recompute = (c: QuoteCourse, s: QuoteStudent): QuoteCourse => {
     if (c.fixedMonthly) return c;
     const sessions = autoSessions(c.days, s.startDate, s.endDate, c.excludeHolidays ? unionHol(s) : []);
-    return { ...c, sessions, price: Math.round(c.perSession * sessions) };
+    // 🔴 **회당 단가가 없으면 금액을 건드리지 않는다.** 단가표에 종류가 없는 항목은 perSession이 0으로
+    //    들어오는데, 예전엔 그대로 곱해 **금액이 0원으로 죽었다**(요일을 고칠 때마다 다시 0으로 덮였다).
+    //    시수는 그대로 갱신하고 금액은 사람이 넣은 값을 지킨다 — 단가를 채우면 그때부터 자동 계산된다.
+    return { ...c, sessions, price: c.perSession > 0 ? Math.round(c.perSession * sessions) : c.price };
   };
 
   const setPeriod = (key: "startDate" | "endDate", value: string) => {
@@ -171,7 +179,7 @@ export function TuitionCalculator({
       // 🔴 **회당 단가일 때만 시수를 곱한다.** 단가표의 price는 "회당/월/할인"이 섞여 있어서
       //    (0102a pricing_mode) 무조건 곱하면 월 20만원짜리가 9회 곱해져 180만원이 된다.
       //    회당이 아니면(월 단가·미지정) '월 N회 고정'으로 넣어 금액을 그대로 쓴다 — 곱셈 금지.
-      const perSessionPriced = o.pricingMode === "per_session";
+      const perSessionPriced = feeKindFromPricingMode(o.pricingMode) === "per_session";
       const row: QuoteCourse = {
         uid: nextUid(cs),
         category: o.category,
@@ -183,6 +191,8 @@ export function TuitionCalculator({
         note: o.note ?? "",
         excludeHolidays: true,
         fixedMonthly: !perSessionPriced,
+        // 어디서 온 단가인지 남긴다 — 미지정이면 행에 "구분을 골라 주세요"가 뜬다(EiE 27만원 사고 방지).
+        pricingMode: o.pricingMode ?? null,
       };
       return [...cs, recompute(row, student)];
     });
@@ -195,14 +205,18 @@ export function TuitionCalculator({
         if (!next.fixedMonthly && ("days" in patch || "excludeHolidays" in patch || "fixedMonthly" in patch)) {
           return recompute(next, student);
         }
-        if (!next.fixedMonthly && "sessions" in patch) {
-          return { ...next, price: Math.round(next.perSession * next.sessions) };
+        // 시수·회당 단가를 고치면 금액을 다시 곱한다. ⚠️ 단가가 0이면(=미지정 항목) **금액을 지키고**
+        //    곱하지 않는다 — 위 recompute와 같은 규약(0원으로 죽는 것 방지).
+        if (!next.fixedMonthly && ("sessions" in patch || "perSession" in patch)) {
+          return next.perSession > 0 ? { ...next, price: Math.round(next.perSession * next.sessions) } : next;
         }
         return next;
       }),
     );
 
   const totals = quoteTotal(courses, extras, discounts);
+  // 수강료 구분별 묶음 — 입력 목록을 두 부류로 갈라 보여준다(원본 순서 보존, quote-calc 주석 참조).
+  const byKind = groupByFeeKind(courses);
   const docHolidays = unionHol(student);
 
   const payload = (k: "courses" | "extras" | "discounts") =>
@@ -284,11 +298,44 @@ export function TuitionCalculator({
         </section>
 
         {/* 수강 과목 */}
-        <Group required title="수강 과목" hint="단가표에서 고르면 회당 단가가 채워집니다. 요일을 입력하면 시수·금액 자동 계산.">
+        <Group
+          required
+          title="수강 과목"
+          hint="단가표에서 고르면 단가 종류(회당/월)에 맞게 들어갑니다. 회당은 요일을 넣으면 시수·금액이 자동 계산되고, 월 고정은 금액을 그대로 청구합니다."
+        >
           <CatalogPicker options={courseOpts} placeholder="+ 과목 추가 (단가표)" onPick={addCourse} />
-          {courses.map((c) => (
-            <CourseEditor key={c.uid} course={c} onPatch={(p) => patchCourse(c.uid, p)} onRemove={() => setCourses((cs) => cs.filter((x) => x.uid !== c.uid))} />
-          ))}
+          {/* 🔴 **두 부류를 갈라 보여준다**(원장 2026-08-07: *"월 고정 금액을 받는 수업과 회당 수업을 받는
+              수업으로 분리"*). 섞여 있으면 27만원이 월 금액인지 회당 단가인지 목록만 봐서는 알 수 없다.
+              ⚠️ 화면에서만 나눈다 — `courses` 배열 순서는 안 건드린다(안내문이 그 순서로 인쇄된다). */}
+          {byKind.monthly.length && byKind.perSession.length ? (
+            <p className="text-text-faint text-[11px]">
+              월 고정 {byKind.monthly.length}건 <b className="num">{won(byKind.monthlyTotal)}</b> · 회당{" "}
+              {byKind.perSession.length}건 <b className="num">{won(byKind.perSessionTotal)}</b>
+            </p>
+          ) : null}
+          {(
+            [
+              ["월 고정 금액", byKind.monthly, "금액을 그대로 청구합니다(월 정액)"],
+              ["회당", byKind.perSession, "회당 단가 × 시수로 계산합니다"],
+            ] as const
+          ).map(([label, list, hint]) =>
+            list.length ? (
+              <div key={label} className="space-y-2">
+                <div className="border-line flex items-baseline gap-2 border-b pb-1">
+                  <span className="text-foreground text-[12px] font-bold">{label}</span>
+                  <span className="text-text-faint text-[11px]">{hint}</span>
+                </div>
+                {list.map((c) => (
+                  <CourseEditor
+                    key={c.uid}
+                    course={c}
+                    onPatch={(p) => patchCourse(c.uid, p)}
+                    onRemove={() => setCourses((cs) => cs.filter((x) => x.uid !== c.uid))}
+                  />
+                ))}
+              </div>
+            ) : null,
+          )}
         </Group>
 
         {/* 교재 및 기타 */}

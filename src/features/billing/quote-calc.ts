@@ -22,8 +22,68 @@ export type QuoteCourse = {
   price: number; // 총 금액(자동=perSession×sessions 또는 수기)
   note: string; // 비고
   excludeHolidays: boolean; // 공휴일 제외(자동 시수 계산 시)
-  fixedMonthly: boolean; // 월 N회 고정(보강 등 — 자동분할 우회)
+  /**
+   * **수강료 구분**의 저장 형태 — true=월 고정 금액, false=회당(원장 2026-08-07:
+   * *"월 고정 금액을 받는 수업과 회당 수업을 받는 수업으로 분리"*).
+   *
+   * ⚠️ 필드를 새로 만들지 않고 **이 불리언을 그대로 쓴다** — 이미 저장된 견적이 이 키만 갖고 있어서
+   *    새 필드를 두면 두 진실(옛 행은 A, 새 행은 B)이 생긴다. 화면에서만 2지 선택으로 보여준다
+   *    (`feeKindOf`/`FEE_KIND_LABEL`).
+   */
+  fixedMonthly: boolean;
+  /**
+   * 이 행이 **단가표의 어떤 단가에서 왔는가**(`tuition_catalog.pricing_mode`) — 판정이 아니라 **출처**다.
+   * 🔴 미지정(null) 항목을 조용히 '월 고정'으로 삼키면 **회당 단가가 월 금액으로 들어간다**(실측:
+   *    수학·영어·국어 31건이 미지정인데 금액대는 회당 단가 범위 = 8배 축소 위험). 그래서 출처를 남겨
+   *    화면이 "구분을 골라 주세요"라고 말할 수 있게 한다. 사람이 구분을 고치면 `fixedMonthly`만 바뀌고
+   *    이 값은 그대로다(어디서 왔는지는 사실이라 안 바뀐다).
+   */
+  pricingMode?: string | null;
 };
+
+/** 수강료 구분 — 화면·집계 공용. 저장은 `fixedMonthly` 불리언 하나로 한다(위 주석). */
+export type QuoteFeeKind = "monthly" | "per_session";
+
+export const FEE_KIND_LABEL: Record<QuoteFeeKind, string> = {
+  monthly: "월 고정",
+  per_session: "회당",
+};
+
+/** 이 과목의 수강료 구분. */
+export function feeKindOf(c: Pick<QuoteCourse, "fixedMonthly">): QuoteFeeKind {
+  return c.fixedMonthly ? "monthly" : "per_session";
+}
+
+/**
+ * 단가표의 단가 종류 → 수강료 구분. **미지정·할인은 null**(모르는 것을 안다고 하지 않는다).
+ * 호출부는 null이면 안전한 쪽(월 고정 = 곱셈 없음)으로 넣되 화면에 "구분 필요"를 띄운다.
+ */
+export function feeKindFromPricingMode(mode: string | null | undefined): QuoteFeeKind | null {
+  if (mode === "per_session") return "per_session";
+  if (mode === "monthly") return "monthly";
+  return null;
+}
+
+/** 단가표 출처가 비어 있어 구분을 사람이 확인해야 하는 행인가(화면 경고용). */
+export function needsFeeKindCheck(c: Pick<QuoteCourse, "pricingMode">): boolean {
+  return feeKindFromPricingMode(c.pricingMode) === null;
+}
+
+/**
+ * 구분별로 나눈 목록 + 각 합계 — 입력 화면이 두 묶음으로 보여주는 근거(원장 *"…으로 분리"*).
+ * ⚠️ **원본 순서를 보존**한다(안내문은 courses 순서대로 인쇄되므로, 여기서 정렬하면 두 화면이 어긋난다).
+ */
+export function groupByFeeKind(courses: readonly QuoteCourse[]): {
+  monthly: QuoteCourse[];
+  perSession: QuoteCourse[];
+  monthlyTotal: number;
+  perSessionTotal: number;
+} {
+  const monthly = courses.filter((c) => feeKindOf(c) === "monthly");
+  const perSession = courses.filter((c) => feeKindOf(c) === "per_session");
+  const sum = (list: QuoteCourse[]) => list.reduce((a, c) => a + Math.max(0, Math.round(c.price)), 0);
+  return { monthly, perSession, monthlyTotal: sum(monthly), perSessionTotal: sum(perSession) };
+}
 
 export type QuoteExtra = { uid: string; name: string; price: number; note: string };
 export type QuoteDiscount = { uid: string; name: string; amount: number };
@@ -37,6 +97,12 @@ export type MonthlyLine = {
   price: number;
   note: string;
   isSubtotal?: boolean;
+  /**
+   * 이 행의 수강료 구분 — 안내문이 회차 칸을 어떻게 적을지 가른다.
+   * 🔴 월 고정 과목은 회차를 안 적는 경우가 많아 `sessions`가 0이다. 구분 없이 그리면 학부모 안내문에
+   *    **"0회"**가 찍힌다(27만원인데 0회 = 읽는 사람이 계산을 못 한다). 구분을 실어 "월 정액"으로 적는다.
+   */
+  feeKind?: QuoteFeeKind;
 };
 
 const DAY_INDEX: Record<string, number> = { 일: 0, 월: 1, 화: 2, 수: 3, 목: 4, 금: 5, 토: 6 };
@@ -155,7 +221,7 @@ export function splitCoursesByMonth(
   const out: MonthlyLine[] = [];
 
   for (const c of courses) {
-    const base = { category: c.category, name: c.name, days: c.days, note: c.note };
+    const base = { category: c.category, name: c.name, days: c.days, note: c.note, feeKind: feeKindOf(c) };
 
     if (c.fixedMonthly) {
       out.push({ month: startMonthLabel, ...base, sessions: c.sessions, price: c.price });

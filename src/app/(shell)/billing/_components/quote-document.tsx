@@ -128,7 +128,11 @@ export function QuoteDocument({
                   <td className={CELL}>{[l.month, l.category].filter(Boolean).join(" ")}</td>
                   <td className={CELL}>{l.name}</td>
                   <td className={`${CELL} text-center`}>{l.days}</td>
-                  <td className={`${CELL} text-center`}>{l.sessions}회</td>
+                  {/* 🔴 월 고정 과목은 회차를 안 적는 경우가 많다 — 그대로 그리면 학부모 종이에 **"0회"**가
+                      찍힌다(27만원인데 0회 = 읽는 사람이 계산을 못 한다). 회차가 없으면 '월 정액'으로 적는다. */}
+                  <td className={`${CELL} text-center`}>
+                    {l.feeKind === "monthly" && !l.sessions ? "월 정액" : `${l.sessions}회`}
+                  </td>
                   <td className={`${CELL} num text-right`}>{won(l.price)}</td>
                   <td className={`${CELL} text-text-dim text-[11px]`}>{l.note}</td>
                 </tr>
