@@ -53,7 +53,13 @@ function usedActions(): Map<string, Set<string>> {
         j++;
       }
       for (const m of src.slice(i, j).matchAll(/action:\s*([^,\n]+)/g)) {
-        for (const q of m[1].matchAll(/"([a-z][a-z0-9_]*)"/g)) {
+        // 🔴 **비교 피연산자는 액션이 아니다** — `action: kind === "rotate" ? "a_create" : "a_toggle"`처럼
+        //    삼항의 **조건**에 문자열이 있으면 그것까지 액션으로 오인해 "미등록"이라 오탐한다
+        //    (2026-08-07 실제 발생: intake-token-actions의 "rotate"로 main이 빨개졌다. 실제 기록값은
+        //    staff_intake_token_create로 정상 등록돼 있었고 화면엔 아무 문제가 없었다).
+        //    ⚠️ 가드를 느슨하게 하는 게 아니다 — **기록되는 값**(? 뒤의 분기)은 그대로 전부 검사한다.
+        const expr = m[1].replace(/[=!]==?\s*"[^"]*"/g, "");
+        for (const q of expr.matchAll(/"([a-z][a-z0-9_]*)"/g)) {
           const rel = path.relative(process.cwd(), file).split(path.sep).join("/");
           if (!found.has(q[1])) found.set(q[1], new Set());
           found.get(q[1])!.add(rel);
