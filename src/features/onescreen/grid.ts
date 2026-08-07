@@ -161,20 +161,25 @@ export function isRowActionable(
 }
 
 /**
- * 학부모 문구(멘트)·학습 추세를 **편집할 수 있나** — 표·카드 모드 **공용 단일 소스**
- * (원장 2026-08-07: *"카드뷰 모드에서도 비활성화 되니까 일관성이 있어야함"*).
+ * 이 행의 **보고서 입력**을 열어도 되는가 — 표·카드 모드 **공용 단일 소스**
+ * (원장 2026-08-07: *"카드뷰 모드에서도 비활성화 되니까 일관성이 있어야함"* → 같은 날
+ *  *"결석을 눌렀는데 진도 같은거 전부다 적을 수 있던데? 완전히 차단되어있지 않은것 같은데"*).
  *
  * 잠그는 경우는 둘뿐이다:
  *  · **이미 발송** — 수정 금지(2026-07-22). ClassNote는 게시글 수정이 없어 여기서 고치면 기록과
  *    학부모가 본 것이 갈라진다.
- *  · **결석** — 발송이 구조적으로 막히는 행이라(`isRowActionable` send·autowrite + 서버 게이트 +
- *    일괄 발송 사전 필터) 여기 쓴 문장은 **어디로도 나가지 않는다**. 다 써놓고 발송에서 막히는 헛수고.
+ *  · **결석** — 그 학생은 그 수업에 없었다. 진도·테스트·태도·과제는 **일어나지 않은 일**이고,
+ *    멘트·추세는 발송이 구조적으로 막히는 행이라(`isRowActionable` send·autowrite + 서버 게이트 +
+ *    일괄 발송 사전 필터) 어디로도 나가지 않는다. 둘 다 적어봐야 헛수고이자 거짓 기록이다.
  *
+ * 🔴 **출결 계열(출결 알약·수업타임·결석 사유 메모)은 이 판정의 대상이 아니다** — 잘못 누른 결석을
+ *    되돌릴 **유일한 문**이라 함께 잠그면 강사가 스스로 빠져나올 수 없다(그 행이 영영 잠긴다).
+ *    결석한 날에도 사유·시수는 남겨야 하는 기록이기도 하다.
  * ⚠️ **진도 미입력은 잠그지 않는다** — 멘트를 먼저 쓰고 진도를 채우는 순서가 실제로 있다.
  *    그래서 `isRowActionable`을 재사용하면 안 된다(그건 `isReportEligible`을 먼저 본다 — 회귀 선례 #167 주석).
  * ⚠️ 이건 **입력 잠금**이지 게이트가 아니다 — 저장·발송 판정은 위 함수와 서버가 따로 잡는다(#77).
  */
-export function isMentEditable(subject: Subject, statusOverride?: string | null): boolean {
+export function isRowInputEditable(subject: Subject, statusOverride?: string | null): boolean {
   // ⚠️ `??`가 아니라 `!== undefined` — **null은 "이번 세션에서 명시적으로 지워짐"**(재발급·첨부변경)이라
   //    스냅샷의 옛 "success"를 되살리면 안 된다(effectiveClassnoteStatus와 같은 규약). `??`로 쓰면
   //    링크를 재발급해 잠금을 푼 행이 다시 잠긴다.
@@ -191,11 +196,13 @@ export function isMentEditable(subject: Subject, statusOverride?: string | null)
  *    그런데 진도가 빈 행이야말로 복사로 채우려는 대상이라, 기능이 사실상 항상 0건이 됐다.
  *    (실제 증상: 보고서가 한 건도 없는 반에서 "복사할 칸이 없습니다 — 발송 완료 6행".)
  *
- * 결석 행은 **대상이 맞다** — 복사가 채우는 건 진도·교재·오늘 과제 = 수업 단위 기록이고,
- * save는 결석 행도 허용한다(기록은 언제든 보존). 발송 단계에서 결석은 따로 걸러진다.
+ * 🔴 **결석 행도 제외한다**(2026-08-07 확대) — 예전엔 대상이었다("기록은 언제든 보존"). 그런데 이제
+ *    결석 행은 입력이 잠기므로, 복사가 값을 밀어 넣으면 **강사가 지울 수 없는 값**이 남는다(잠근 문 옆의
+ *    뒷문 = #77의 뒤집힌 꼴). 게다가 그 학생은 그 수업에 없었으니 진도·교재를 채우는 것 자체가 거짓이다.
+ *    되돌리려면 출결을 되돌리면 된다 — 그러면 이 판정도 함께 열린다.
  */
 export function isCopyTargetRow(subject: Subject, statusOverride?: string | null): boolean {
-  return !isAlreadySent(statusOverride ?? subject.classnoteStatus);
+  return isRowInputEditable(subject, statusOverride);
 }
 
 /**
@@ -245,6 +252,12 @@ export type BulkTarget = {
   homework: string;
   textbook: string;
   homeworkToday: string;
+  /**
+   * 입력이 잠긴 행(발송 완료·결석) — 값을 **밀어 넣지 않는다**.
+   * ⚠️ 행 자체를 목록에서 빼는 게 아니라 값 적용만 건너뛴다 — 같은 목록을 출결 일괄 적용이 함께 쓰는데,
+   *    거기서 빠지면 잘못 찍은 결석을 일괄로 되돌릴 수 없다.
+   */
+  locked?: boolean;
 };
 
 const normPatchField = (v: string | undefined): string | undefined => {
@@ -276,6 +289,7 @@ export function planBulkApply(
   const out: Array<{ studentId: string; subjectName: string; subjectIndex: number; set: BulkPatch }> = [];
   const studentDone = new Set<string>(); // 학생 단위 필드(태도·과제) 중복 방지
   for (const t of targets) {
+    if (t.locked) continue; // 잠긴 행엔 아무 값도 넣지 않는다(지울 수 없는 값이 남는다)
     const set: BulkPatch = {};
     const firstRowOfStudent = !studentDone.has(t.studentId);
     if (p.attitude !== undefined && firstRowOfStudent && (!onlyEmpty || !t.attitude)) set.attitude = p.attitude;
@@ -376,6 +390,8 @@ export type PrevFillRow = {
   subjectIndex: number;
   prev: PrevReport | undefined;
   current: PrevFillCurrent;
+  /** 입력이 잠긴 행(발송 완료·결석) — 채우지 않는다(위 BulkTarget.locked와 같은 이유). */
+  locked?: boolean;
 };
 
 /** 일괄 채우기 계획 1건 — 그 행에 실제로 적용할 필드만 담긴다(빈 fill 행은 결과에서 제외). */
@@ -392,6 +408,7 @@ export function planBulkPrevFill(rows: readonly PrevFillRow[], attitudes: readon
   const studentFieldDone = new Set<string>();
   const out: PrevFillPlan[] = [];
   for (const r of rows) {
+    if (r.locked) continue;
     const set = planPrevFill({ prev: r.prev, current: r.current, attitudes });
     for (const f of ["attitude", "homework"] as const) {
       if (set[f] === undefined) continue;

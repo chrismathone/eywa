@@ -119,7 +119,16 @@ type OnescreenSessionRow = {
   study_grade: string | null;
   subject_progress: Record<
     string,
-    { today?: string; draft?: string; trendDraft?: string; textbook?: string; makeup?: boolean; homeworkToday?: string }
+    {
+      today?: string;
+      /** 오늘 수업 성격(복습·문제풀이) — progress-mode.ts. 없으면 평소대로 '진도'. */
+      mode?: string;
+      draft?: string;
+      trendDraft?: string;
+      textbook?: string;
+      makeup?: boolean;
+      homeworkToday?: string;
+    }
   > | null;
   daily_score: number | null;
   daily_max: number | null;
@@ -1153,6 +1162,9 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
           if (entry) legacyTaken.add(legacyKey);
         }
         if (entry?.today) su.today = entry.today;
+        // 오늘 수업 성격(복습·문제풀이) — 진도와 함께 세션에 실린다(progress-mode.ts, 마이그 0).
+        // ⚠️ `!= null`이라 빈 문자열(해제)도 복원한다 — 켰다가 끈 상태가 새로고침에 되살아나면 안 된다.
+        if (entry?.mode != null) su.progressMode = entry.mode || null;
         if (entry?.textbook != null) su.textbook = entry.textbook;
         if (entry?.makeup != null) su.makeup = entry.makeup;
         if (entry?.homeworkToday != null) su.homeworkToday = entry.homeworkToday;

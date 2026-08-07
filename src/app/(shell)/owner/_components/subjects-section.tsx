@@ -66,6 +66,8 @@ export function SubjectsSection({
     setO((prev) => ({ ...prev, subjects: prev.subjects.filter((_, j) => j !== index) }));
   // 흡수/미사용 삭제는 서버 즉시 확정 → SectionForm baseline 재스냅샷 신호(거짓 '미저장' 확인 방지).
   const [savedNonce, setSavedNonce] = useState(0);
+  // 펼쳐진 과목 — 세션 달력을 그 과목에만 마운트하기 위해(성능).
+  const [openSubjects, setOpenSubjects] = useState<Set<string>>(new Set());
 
   return (
     <SectionForm section="operations" payload={o} savedNonce={savedNonce}>
@@ -87,7 +89,21 @@ export function SubjectsSection({
 
           <div className="border-line divide-line mt-5 divide-y border-t pt-2">
             {o.subjects.map((s, i) => (
-              <details key={s.key || `row-${i}`} className="group py-1">
+              <details
+                key={s.key || `row-${i}`}
+                className="group py-1"
+                onToggle={(e) => {
+                  // 🔴 펼친 과목만 세션 달력을 마운트한다 — 12판 × 42칸 = 504개 버튼이라
+                  //    과목 5개면 2,520개가 접힌 채로도 렌더·하이드레이션된다(반응속도 1순위).
+                  const open = (e.currentTarget as HTMLDetailsElement).open;
+                  setOpenSubjects((prev) => {
+                    const next = new Set(prev);
+                    if (open) next.add(s.key);
+                    else next.delete(s.key);
+                    return next;
+                  });
+                }}
+              >
                 <summary className="flex cursor-pointer list-none flex-wrap items-center gap-2 rounded px-1 py-2 select-none [&::-webkit-details-marker]:hidden">
                   <EyIcon name="chevronRight" size={12} className="text-text-faint transition-transform group-open:rotate-90" />
                   <span className="text-foreground text-[13px] font-bold">{s.label.trim() || s.key}</span>
@@ -314,13 +330,20 @@ export function SubjectsSection({
                     <h4 className="text-foreground text-[12px] font-bold">
                       세션 기간 <span className="text-text-faint font-normal">· {sessionYear}년</span>
                     </h4>
-                    <SubjectSessionEditor
-                      subjectKey={s.key}
-                      subjectLabel={s.label.trim() || s.key}
-                      year={sessionYear}
-                      defs={periodDefs}
-                      holidays={holidays}
-                    />
+                    {openSubjects.has(s.key) ? (
+                      // key에 연도 — 연도 칩(searchParam 소프트 네비)은 클라 컴포넌트를 **재사용**하므로
+                      // 키가 없으면 작년에 칠한 날짜가 새 해 세션으로 저장된다(적대 리뷰 확인).
+                      <SubjectSessionEditor
+                        key={`${s.key}:${sessionYear}`}
+                        subjectKey={s.key}
+                        subjectLabel={s.label.trim() || s.key}
+                        year={sessionYear}
+                        defs={periodDefs}
+                        holidays={holidays}
+                      />
+                    ) : (
+                      <p className="text-text-faint text-[12px]">달력을 불러오는 중…</p>
+                    )}
                   </div>
                 </div>
               </details>

@@ -78,6 +78,108 @@ describe("대단원 아코디언 — 기본 접힘(원장 2026-07-28)", () => {
   });
 });
 
+// 원장 2026-08-07: *"진도 선택시에 드래그로 주르륵 선택할 수는 없나? 지금은 일일이 클릭해야되네"*
+describe("드래그로 연속 선택", () => {
+  const lessons = FIRST_UNIT.lessons;
+
+  it("누른 채 지나간 차시가 전부 선택된다", () => {
+    const { onChange } = open();
+    fireEvent.click(unitHeader(FIRST_UNIT.unit)!);
+    fireEvent.pointerDown(lessonBox(lessons[0]!)!, { button: 0 });
+    fireEvent.pointerEnter(lessonBox(lessons[1]!)!);
+    fireEvent.pointerEnter(lessonBox(lessons[2]!)!);
+    // 🔴 부모가 value를 되돌려주기 전에도 누적돼야 한다(작업본을 ref로 들고 다니는 이유).
+    expect(onChange).toHaveBeenLastCalledWith(`${lessons[0]}\n${lessons[1]}\n${lessons[2]}`);
+  });
+
+  it("켜진 차시에서 시작하면 지나간 칸을 끈다(방향은 첫 칸이 정한다)", () => {
+    const { onChange } = open({ value: `${lessons[0]}\n${lessons[1]}` });
+    fireEvent.pointerDown(lessonBox(lessons[0]!)!, { button: 0 });
+    fireEvent.pointerEnter(lessonBox(lessons[1]!)!);
+    expect(onChange).toHaveBeenLastCalledWith("");
+  });
+
+  it("손을 뗀 뒤 지나가는 건 아무 일도 없다", () => {
+    const { onChange } = open();
+    fireEvent.click(unitHeader(FIRST_UNIT.unit)!);
+    fireEvent.pointerDown(lessonBox(lessons[0]!)!, { button: 0 });
+    fireEvent.pointerUp(window);
+    fireEvent.pointerEnter(lessonBox(lessons[1]!)!);
+    expect(onChange).toHaveBeenLastCalledWith(lessons[0]); // 첫 칸까지만
+  });
+
+  // 같은 칸에 다시 들어와도 방금 한 일이 뒤집히면 안 된다(손이 흔들리는 것은 정상이다).
+  it("같은 칸을 다시 지나가도 뒤집히지 않는다", () => {
+    const { onChange } = open();
+    fireEvent.click(unitHeader(FIRST_UNIT.unit)!);
+    fireEvent.pointerDown(lessonBox(lessons[0]!)!, { button: 0 });
+    fireEvent.pointerEnter(lessonBox(lessons[1]!)!);
+    fireEvent.pointerEnter(lessonBox(lessons[0]!)!);
+    fireEvent.pointerEnter(lessonBox(lessons[1]!)!);
+    expect(onChange).toHaveBeenLastCalledWith(`${lessons[0]}\n${lessons[1]}`);
+  });
+
+  it("키보드(스페이스)로도 고를 수 있다 — 드래그가 마우스 전용 기능이 되지 않게", () => {
+    const { onChange } = open();
+    fireEvent.click(unitHeader(FIRST_UNIT.unit)!);
+    fireEvent.keyDown(lessonBox(lessons[0]!)!, { key: " " });
+    expect(onChange).toHaveBeenLastCalledWith(lessons[0]);
+  });
+});
+
+// 원장 2026-08-07: *"내신대비 기간이라 한시간은 선행, 한시간은 현행 하고 싶을 수도 있으니까"*
+describe("여러 학년에 걸친 선택", () => {
+  const OTHER = "중2";
+  const otherLesson = curriculumForGrade(OTHER)[0]!.lessons[0]!;
+
+  it("다른 학년에서 고른 차시는 지워지지 않고 밴드로 밝혀진다", () => {
+    open({ value: otherLesson });
+    // 지금 학년 목록엔 없는 선택이라, 이 밴드가 없으면 강사 눈엔 "고른 게 사라진" 것이 된다.
+    const band = screen.getByText(/함께 선택됨/);
+    expect(band.textContent).toContain(otherLesson);
+  });
+
+  it("'다른 학년만 해제'는 지금 학년 선택은 남긴다", () => {
+    const mine = FIRST_UNIT.lessons[0]!;
+    const { onChange } = open({ value: `${otherLesson}\n${mine}` });
+    fireEvent.click(screen.getByRole("button", { name: "다른 학년만 해제" }));
+    expect(onChange).toHaveBeenLastCalledWith(mine);
+  });
+
+  it("같은 학년만 고르면 밴드가 안 뜬다", () => {
+    open({ value: FIRST_UNIT.lessons[0]! });
+    expect(screen.queryByText(/다른 학년/)).toBeNull();
+  });
+});
+
+// 원장 2026-08-07: *"문제풀이가 없으니까 그냥 진도를 적고 문제풀이를 했다고해도 진도를 나갔다고 멘트가 나오더라고"*
+describe("오늘 수업 성격 — 복습·문제풀이", () => {
+  it("두 알약이 노출되고 고르면 값이 올라간다", () => {
+    const onMode = vi.fn();
+    open({ onMode });
+    fireEvent.click(screen.getByRole("button", { name: "복습" }));
+    expect(onMode).toHaveBeenCalledWith("복습");
+  });
+
+  it("같은 것을 다시 누르면 해제된다(되돌릴 문)", () => {
+    const onMode = vi.fn();
+    open({ mode: "문제풀이", onMode });
+    fireEvent.click(screen.getByRole("button", { name: "문제풀이" }));
+    expect(onMode).toHaveBeenCalledWith(null);
+  });
+
+  // 🔴 시험 친 날은 나간 차시가 없으니 그 차시의 복습도 성립하지 않는다.
+  it("진도 없이 제출을 고르면 성격 알약이 사라진다", () => {
+    open({ value: "월말평가", onMode: vi.fn() });
+    expect(screen.queryByRole("button", { name: "복습" })).toBeNull();
+  });
+
+  it("onMode를 안 주는 화면(읽기 전용 등)에는 아예 안 그린다", () => {
+    open();
+    expect(screen.queryByRole("button", { name: "복습" })).toBeNull();
+  });
+});
+
 describe("진도 없이 제출 — 특수 상태 알약", () => {
   it("네 상태가 모두 알약으로 노출된다", () => {
     open();

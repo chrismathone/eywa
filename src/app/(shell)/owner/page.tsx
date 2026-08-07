@@ -64,6 +64,8 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
   // 보고서 표시·AI 멘트 설정 면은 수업보고서 탭으로 이관(2026-07-10) — 옛 ?tab=report·ai_ment 북마크 리다이렉트.
   if (sp.tab === "report") redirect("/lesson-reports?tab=report");
   if (sp.tab === "ai_ment") redirect("/lesson-reports?tab=ai_ment");
+  // 세션 기간 면은 과목 운영 안으로 들어갔다(2026-08-07 원장 지시) — 옛 북마크가 프로필로 떨어지지 않게.
+  if (sp.tab === "sessions") redirect("/owner?tab=subjects");
   const tab = resolveTab(sp);
   const [settings, meta] = await Promise.all([getTenantSettings(), getSettingsMeta()]);
   // 강의실(관계형 테이블)은 운영 체계 면에서만 로드 — 다른 면 진입 비용 0.

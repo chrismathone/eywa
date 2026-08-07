@@ -15,6 +15,7 @@ export function ProgressCard({
   student,
   onConfirm,
   onProgress,
+  onProgressMode,
   onStudyGrade,
   onLoadPrev,
   embedded,
@@ -22,6 +23,8 @@ export function ProgressCard({
   student: OneScreenStudent;
   onConfirm: () => void;
   onProgress: (subjectIndex: number, today: string) => void;
+  /** 오늘 수업 성격(복습·문제풀이) 토글 — 진도와 함께 사는 축(progress-mode.ts). */
+  onProgressMode: (subjectIndex: number, mode: string | null) => void;
   onStudyGrade: (grade: string) => void;
   onLoadPrev?: () => void; // 보강 학생 '이전 진도 불러오기'(있을 때만 노출) — 직전 회차를 당겨온다.
   /** 보고서 카드 안에 들어간 상태 — 카드 속 카드로 겹쳐 보이지 않게 그림자·배경을 뺀 얇은 테두리로(2026-08-05 통합). */
@@ -86,6 +89,8 @@ export function ProgressCard({
                       <ProgressSelector
                         value={su.today}
                         onChange={(joined) => onProgress(i, joined)}
+                        mode={su.progressMode}
+                        onMode={(m) => onProgressMode(i, m)}
                         studyGrade={studyGrade}
                         onStudyGrade={onStudyGrade}
                         studentGrade={student.grade}

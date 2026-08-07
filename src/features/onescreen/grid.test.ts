@@ -6,7 +6,7 @@ import {
   effectiveClassnoteStatus,
   isAlreadySent,
   isClassMember,
-  isMentEditable,
+  isRowInputEditable,
   isRowActionable,
   planBulkApply,
   planPrevFill,
@@ -184,20 +184,29 @@ describe("isRowActionable", () => {
 
   // 🔴 표·카드 모드가 **같은 판정**을 써야 한다(원장 2026-08-07 "일관성이 있어야함") — 예전엔 표 모드만
   //    멘트 칸이 열려 있어, 결석 학생 문구를 다 써놓고 발송에서 막히는 헛수고가 났다.
-  it("멘트 편집 — 결석·발송완료면 잠기고, 진도가 비어도 열려 있다", () => {
-    expect(isMentEditable(sub())).toBe(true);
+  //    같은 날 확대: *"결석을 눌렀는데 진도 같은거 전부다 적을 수 있던데?"* → 기록 칸까지 같은 판정으로.
+  it("행 입력 — 결석·발송완료면 잠기고, 진도가 비어도 열려 있다", () => {
+    expect(isRowInputEditable(sub())).toBe(true);
     // 진도 미입력은 잠금 사유가 아니다(멘트 먼저 쓰고 진도를 채우는 순서가 실제로 있다).
-    expect(isMentEditable(sub({ today: "" }))).toBe(true);
-    expect(isMentEditable(sub({ attendanceRaw: "absent" }))).toBe(false);
-    expect(isMentEditable(sub({ classnoteStatus: "success" }))).toBe(false);
+    expect(isRowInputEditable(sub({ today: "" }))).toBe(true);
+    expect(isRowInputEditable(sub({ attendanceRaw: "absent" }))).toBe(false);
+    expect(isRowInputEditable(sub({ classnoteStatus: "success" }))).toBe(false);
     // 세션 내 최신 상태(statusOverride)가 스냅샷을 이긴다 — 재발급으로 잠금이 풀리는 경로와 같은 규약.
-    expect(isMentEditable(sub({ classnoteStatus: "success" }), null)).toBe(true);
+    expect(isRowInputEditable(sub({ classnoteStatus: "success" }), null)).toBe(true);
   });
 
-  it("출석 계열(지각·조퇴)은 멘트를 잠그지 않는다 — 수업을 들었다", () => {
+  it("출석 계열(지각·조퇴)은 잠그지 않는다 — 수업을 들었다", () => {
     for (const st of ["present", "late", "early_leave", "makeup"]) {
-      expect(isMentEditable(sub({ attendanceRaw: st }))).toBe(true);
+      expect(isRowInputEditable(sub({ attendanceRaw: st }))).toBe(true);
     }
+  });
+
+  // 🔴 잠금이 **출결까지 먹으면 안 된다**: 결석은 오클릭이 잦은데 출결을 함께 잠그면 되돌릴 문이 없어
+  //    그 행이 영영 잠긴다. 판정 함수는 출결을 보지 않으므로, 출결을 바꾸는 순간 잠금이 풀리는지로 잠근다.
+  it("결석을 되돌리면 곧바로 다시 열린다(출결은 잠금 대상이 아님)", () => {
+    const absent = sub({ attendanceRaw: "absent" });
+    expect(isRowInputEditable(absent)).toBe(false);
+    expect(isRowInputEditable({ ...absent, attendanceRaw: "present" })).toBe(true);
   });
 
   it("결석 행 — save는 포함(기록 보존), send/autowrite는 제외", () => {
