@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { useRouter } from "next/navigation";
 import { AlertCircle, ArrowRight } from "@/components/icons/eywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,7 +10,6 @@ import { createClient } from "@/lib/supabase/client";
 import { resolveLoginLanding } from "@/features/shell/landing-action";
 
 export function LoginForm({ next }: { next?: string }) {
-  const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
@@ -54,15 +52,26 @@ export function LoginForm({ next }: { next?: string }) {
     const role = data.user?.app_metadata?.system_role as string | undefined;
     const fallback =
       role === "teacher" ? "/onescreen" : role === "student" ? "/my-learning" : "/dashboard";
+    // 🔴 **타임아웃 필수** — 이 질문이 안 돌아오면 버튼이 '로그인 중…'에서 영영 멈춘다(입력칸도 disabled).
+    // 착지 지점을 못 정하는 것보다 덜 정확한 곳에 착지하는 게 낫다. 응답 실측은 ~300ms.
     let home = fallback;
     try {
-      home = (await resolveLoginLanding()) ?? fallback;
+      home =
+        (await Promise.race([
+          resolveLoginLanding(),
+          new Promise<null>((r) => setTimeout(() => r(null), 3000)),
+        ])) ?? fallback;
     } catch {
       home = fallback;
     }
     const target = next && next.startsWith("/") ? next : home;
-    router.push(target);
-    router.refresh();
+    // 🔴 **`router.push`가 아니라 풀 문서 네비게이션**이어야 한다(2026-08-07 실측 버그).
+    // 바로 위에서 **서버 액션**을 부르는데, 그 응답은 *현재 페이지(/login)* 의 RSC 트리를 다시 적용한다.
+    // 그게 push로 시작한 이동보다 늦게 도착하면 라우터가 /login으로 되돌아가, 목적지 RSC를 이미 받아놓고도
+    // (네트워크에 `GET /ecs?_rsc=…` 200이 찍힌 채) 화면은 '로그인 중…'에서 멈춘다.
+    // 뷰 전환(switchToTeacherView·switchToAdminView)이 같은 이유로 이미 window.location을 쓴다 — 동일 규약.
+    // 부수 효과로 풀 로드라 모든 서버 컴포넌트가 새 세션 쿠키를 확실히 본다(router.refresh 불필요).
+    window.location.assign(target);
   }
 
   return (
