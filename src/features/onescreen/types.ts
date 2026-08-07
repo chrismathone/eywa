@@ -56,6 +56,20 @@ export type Subject = {
   // + AI 멘트 마무리 문장("오늘 과제는 ~입니다")의 재료. homework(수행 상태)와 별개.
   homeworkToday?: string;
 
+  /**
+   * **ECS 시트에 적힌 그날 그 반 계획**(2026-08-07) — 교재·진도·오늘 과제의 출처.
+   * roster가 이 값으로 위 `textbook`/`today`/`homeworkToday`의 **초안**을 채웠고, 화면은 같은 값을
+   * "시트에서 가져옴"으로 밝히고 '다시 가져오기'를 제공한다(강사가 고친 뒤에도 원본을 되찾을 수 있게).
+   * 없음(undefined) = 그 반의 그날 시트가 비었거나 시트를 안 쓰는 반.
+   */
+  sheetDraft?: { textbook: string; progress: string; homework: string };
+  /**
+   * 시트의 **학생별 기록**(`class_sheet_student_marks.progress_note`, 교시 순 개행) — 표시 전용.
+   * 🔴 보고서 칸에 **자동으로 넣지 않는다**: "PL 7, 20개 / PV 4" 같은 개인 메모라 문맥이 제각각이고,
+   *    그대로 학부모에게 나가면 안 되는 것이 섞일 수 있다. 강사가 보고 직접 옮긴다.
+   */
+  sheetStudentNote?: string;
+
   // 직전 회차(이전 작성) 참고용 — roster가 (학생×과목)별 직전 lesson_reports를 담아 표뷰 '이전 회차 참고행'에 렌더.
   // 읽기 전용(편집 불가). 없으면(첫 수업) undefined.
   prevReport?: PrevReport;

@@ -42,6 +42,7 @@ import { OneScreenTopBar } from "./top-bar";
 import { StudentList, type SendMark } from "./student-list";
 import type { TodayClass } from "../server/roster";
 import { ProgressCard } from "./progress-card";
+import { SheetSourceCard } from "./sheet-source-card";
 import { TestCard } from "./test-card";
 import { ReportCard, type SubjectReport } from "./report-card";
 import { ReportPreview, type ReportPreviewContext } from "./report-preview";
@@ -178,6 +179,8 @@ export function OneScreenClient({
   presenceScope,
   initialView = "card",
   initialFontSize = DEFAULT_ONESCREEN_FONT_SIZE,
+  initialClassName = null,
+  initialStudentId = null,
   noClassesToday = false,
   showingAll = false,
   teacherName = "",
@@ -207,6 +210,14 @@ export function OneScreenClient({
   initialView?: OneScreenView; // URL(?view=)에서 온 초기 뷰 — 날짜 이동(재마운트) 후에도 보던 뷰 유지
   /** 글씨 크기(내 계정, users.ui_prefs.onescreen.fontSize) — 서버 확정값이라 첫 렌더부터 정확(#75 회피). */
   initialFontSize?: OnescreenFontSize;
+  /**
+   * 진입 시 고를 반 이름(`?class=<반 id>`를 서버가 이름으로 해석해 내림) — '오늘 ECS' 카드에서 넘어올 때
+   * 그 반에서 시작한다. null = 전체. ⚠️ **id가 아니라 이름**인 건 반 필터 state가 이름 기반이기 때문
+   * (todayClasses·태그·행 판정이 전부 이름 축). 그 날짜에 없는 반이면 서버가 null로 내린다.
+   */
+  initialClassName?: string | null;
+  /** 진입 시 고를 학생(`?student=`) — 그 날짜 로스터에 없으면 서버가 null로 내린다. */
+  initialStudentId?: string | null;
   // ── 카드 뷰 우측 '학부모 미리보기' 재료(2026-08-05) — 전부 서버가 확정해 내린다 ──
   // reportSettings가 없으면 미리보기 열이 아예 안 열린다(레이아웃 예전 그대로) → 표시 전용 기능이라 안전한 폴백.
   teacherName?: string;
@@ -222,8 +233,10 @@ export function OneScreenClient({
   const fontZoom = ONESCREEN_FONT_SIZE_ZOOM[fontSize];
   // 보강 학생 중 '이전 진도'를 이미 불러온 학생 id — 버튼 숨김·재요청 방지.
   const [prevLoaded, setPrevLoaded] = useState<Set<string>>(new Set());
-  const [selId, setSelId] = useState<string>(initial[0]?.id ?? "");
-  const [classFilter, setClassFilter] = useState<string>("전체");
+  // 진입 시 반·학생 지정(2026-08-07) — '오늘 ECS' 카드에서 넘어올 때 그 반(·그 학생)에서 시작한다.
+  // ⚠️ 값 검증은 **서버**가 한다(그 날짜 로스터에 실제로 있는 반/학생만 내려온다) — 여기선 그대로 쓴다.
+  const [selId, setSelId] = useState<string>(initialStudentId ?? initial[0]?.id ?? "");
+  const [classFilter, setClassFilter] = useState<string>(initialClassName ?? "전체");
   // 작성 상태 필터(전체/작성/미작성) + 그 필터를 누른 시점의 대상 고정 — 입력 중 카드·행이 사라지지 않게.
   // (판정·합집합 규칙은 write-filter.ts. 날짜 이동은 클라 재마운트라 필터도 '전체'로 초기화된다.)
   const [writeFilter, setWriteFilter] = useState<WriteFilter>("all");
@@ -1106,6 +1119,20 @@ export function OneScreenClient({
   function setHomeworkToday(subjectName: string, text: string) {
     if (!selected) return;
     setHomeworkTodayFor(selected.id, subjectName, text);
+  }
+  /**
+   * ECS 시트 값으로 진도·교재·오늘 과제를 되채운다(2026-08-07).
+   * ⚠️ **비어 있는 항목은 건드리지 않는다** — 시트에 과제가 없다고 강사가 손으로 쓴 과제를 지우면 안 된다.
+   *    학생별 기록(`sheetStudentNote`)은 대상이 아니다(개인 메모 자동 삽입 금지).
+   */
+  function applySheetDraft(subjectIndex: number) {
+    if (!selected) return;
+    const su = selected.subjects[subjectIndex];
+    const sheet = su?.sheetDraft;
+    if (!su || !sheet) return;
+    if (sheet.progress) setProgressFor(selected.id, subjectIndex, sheet.progress);
+    if (sheet.textbook) setTextbookFor(selected.id, su.name, sheet.textbook);
+    if (sheet.homework) setHomeworkTodayFor(selected.id, su.name, sheet.homework);
   }
   // AI 학부모 멘트 + 학습 추세 생성 코어(카드·표 공용) — 멘트 실패 시 결정적 템플릿 폴백,
   // 추세는 표본 부족/실패면 조용히 생략(기존 값 유지). 둘을 학생별 병렬(Promise.all)로 생성해 지연 최소화.
@@ -2468,6 +2495,13 @@ export function OneScreenClient({
                 // 카드엔 **노드만** 넘긴다(카드가 콜백 7개를 더 받으면 props 규칙이 무너진다).
                 todayInputs={
                   <>
+                    {/* 이 값들이 **어디서 왔는지**를 입력 바로 위에서 밝힌다(ECS 시트 초안). */}
+                    {previewSubject ? (
+                      <SheetSourceCard
+                        subject={previewSubject}
+                        onApply={() => applySheetDraft(subjectIdx)}
+                      />
+                    ) : null}
                     <ProgressCard
                       embedded
                       student={selected}

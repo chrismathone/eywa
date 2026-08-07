@@ -93,13 +93,16 @@ export function ProgressCard({
                         ariaLabel={`${su.name} 오늘 진도`}
                       />
                     ) : (
-                      <input
-                        type="text"
+                      // 🔴 한 줄 `<input>`이면 **개행이 뭉개져** "Vocab 41 42Reading section 5-1"으로 읽힌다
+                      //    (2026-08-07 실화면 — ECS 시트 초안은 교시가 여럿이면 줄이 여럿이고, 학부모
+                      //    보고서는 그 줄바꿈을 살려 그린다). 값에 줄이 있으면 그만큼 보여 준다.
+                      <textarea
+                        rows={Math.min(4, (su.today.match(/\n/g)?.length ?? 0) + 1)}
                         value={su.today}
                         onChange={(e) => onProgress(i, e.target.value)}
                         placeholder="오늘 진도 입력 (예: Unit 8 · p.90)"
                         aria-label={`${su.name} 오늘 진도 입력`}
-                        className="border-line bg-card focus:border-primary h-8 w-full min-w-0 flex-1 rounded-lg border px-2 text-[12px] outline-none transition-colors"
+                        className="border-line bg-card focus:border-primary scrollbar-thin w-full min-w-0 flex-1 resize-none rounded-lg border px-2 py-1.5 text-[12px] leading-relaxed outline-none transition-colors"
                       />
                     )}
                   </div>

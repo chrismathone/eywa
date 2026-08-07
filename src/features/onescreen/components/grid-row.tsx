@@ -115,14 +115,18 @@ function GridProgressCell({
   if (!su) return null;
   if (!isMathSubject(su.subjectKey)) {
     return (
-      <input
-        type="text"
+      // 🔴 한 줄 `<input>`은 개행을 **뭉갠다**(ECS 시트 초안은 교시마다 줄이 하나 — "Vocab 41 42Reading…").
+      //    표는 행 높이가 곧 밀도라 카드처럼 늘릴 수 없으니 **한 줄 높이 textarea**로 둔다: 첫 줄이 보이고
+      //    나머지는 셀 안에서 스크롤·툴팁으로 확인한다(값은 그대로, 붙어 보이지만 않게).
+      <textarea
+        rows={1}
         value={su.today}
         onChange={(e) => onProgress(student.id, subjectIndex, e.target.value)}
         readOnly={locked}
         placeholder="오늘 진도 (예: Unit 8 · p.90)"
         aria-label={`${student.name} ${su.name} 오늘 진도`}
-        className={`border-line focus:border-primary h-8 w-full rounded-sm border px-2 text-[12px] outline-none ${
+        title={su.today.includes("\n") ? su.today : undefined}
+        className={`border-line focus:border-primary scrollbar-thin h-8 w-full resize-none rounded-sm border px-2 py-[0.3rem] text-[12px] leading-[1.2] outline-none ${
           locked ? "bg-bg-soft text-text-dim" : "bg-card"
         }`}
       />
@@ -443,21 +447,26 @@ export function GridBodyRow({
             className="border-line bg-card focus:border-primary h-8 w-full rounded-sm border px-2 text-[12px] outline-none"
           />
           {/* 오늘 과제(숙제 내용) — 0096a. 과제 셀렉트(수행 상태)와 별개, AI 멘트·학부모 카드 재료. */}
-          <input
-            type="text"
+          {/* 진도 셀과 같은 처방 — 시트 초안은 교시마다 과제가 있어 한 줄 input이면 붙어 보인다(2026-08-07). */}
+          <textarea
+            rows={1}
             value={subject.homeworkToday ?? ""}
             onChange={(e) => fields.onHomeworkToday(student.id, subject.name, e.target.value)}
             readOnly={alreadySent}
-            // ⚠️ 이 칸은 고정 140px(colgroup) — 예시까지 넣은 긴 placeholder는 **한 줄짜리 input이라
-            // 줄바꿈이 안 되고 잘려서** "오늘 과제 (예: 개념편 p"로 끊겼다(원장 제보 2026-08-04).
+            // ⚠️ 이 칸은 고정 140px(colgroup) — 예시까지 넣은 긴 placeholder는 **좁아서 잘려서**
+            // "오늘 과제 (예: 개념편 p"로 끊겼다(원장 제보 2026-08-04).
             // 칸 이름만 남기고 예시는 title(툴팁)로 — 카드 모드(폭 넉넉)는 예시를 그대로 쓴다.
             placeholder="오늘 과제"
-            title="오늘 내준 과제 — 예: 개념편 p10~16"
+            title={
+              (subject.homeworkToday ?? "").includes("\n")
+                ? subject.homeworkToday!
+                : "오늘 내준 과제 — 예: 개념편 p10~16"
+            }
             aria-label={`${student.name} ${subject.name} 오늘 과제`}
             data-nav-col="homeworkToday"
             data-nav-row={nav.row}
             onKeyDown={handleGridNavKey}
-            className="border-line bg-card focus:border-primary h-8 w-full rounded-sm border px-2 text-[12px] outline-none"
+            className="border-line bg-card focus:border-primary scrollbar-thin h-8 w-full resize-none rounded-sm border px-2 py-[0.3rem] text-[12px] leading-[1.2] outline-none"
           />
           {/* 뜻이 행 종류에 따라 갈린다(2026-08-05) — 반이 붙은 행이면 "정규까지 하고 보강도 했다"라
               제목이 "(정규+보강)"이 된다. 켜는 사람이 무엇을 켜는지 알 수 있게 툴팁으로 밝힌다. */}

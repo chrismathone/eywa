@@ -76,6 +76,12 @@ export type TodayStudent = {
   reportWritten: boolean;
   /** ClassNote 발송 상태(성공만 true — 대기·실패는 false). */
   reportSent: boolean;
+  /**
+   * 그 날 이 학생의 **교시별 태도·특이사항**(`class_sheet_student_marks`) — 키는 `slot_start`.
+   * 🔴 반 카드는 학생 한 줄인데 기록은 **교시마다** 있다(그날 2~3교시가 흔하다) — 한 칸으로 뭉개면
+   *    어느 교시 기록인지 잃는다. 그래서 교시별로 들고 다니고, 입력도 교시별로 받는다(주간 시트와 같은 축).
+   */
+  marks: Record<string, { status: string | null; progressNote: string | null }>;
 };
 
 export type TodayClassCard = {
@@ -193,8 +199,8 @@ export async function getEcsToday(dateParam?: string | null): Promise<EcsTodayRe
     return { ok: true, date, today, weekMonday: mondayOf(date), cards: [], hasAnyClass: true, canWrite, skillAreas, userId: user.id, tenantId: user.tenantId };
   }
 
-  // ── 계획·수강·출결·보고서·강의실·담당자 — 서로 독립이라 한 번에(B4) ────────────────────────────
-  const [planLines, enrollments, attendanceRaw, rooms, teachers] = await Promise.all([
+  // ── 계획·학생기록·수강·출결·보고서·강의실·담당자 — 서로 독립이라 한 번에(B4) ────────────────────
+  const [planLines, marks, enrollments, attendanceRaw, rooms, teachers] = await Promise.all([
     fetchAllPagedInChunks<{
       id: string;
       class_id: string;
@@ -218,6 +224,24 @@ export async function getEcsToday(dateParam?: string | null): Promise<EcsTodayRe
         .eq("tenant_id", user.tenantId)
         .in("class_id", chunk)
         .eq("plan_date", date)
+        .order("id")
+        .range(from, to),
+    ),
+    // 학생별 태도·특이사항(교시별) — 주간 시트가 쓰는 바로 그 표(`class_sheet_student_marks`).
+    // 오늘 화면에서도 **같은 행**을 고친다(사본을 만들지 않는다 — 두 화면이 갈리면 어느 쪽이 진실인지 모른다).
+    fetchAllPagedInChunks<{
+      class_id: string;
+      student_id: string;
+      slot_start: string;
+      status: string | null;
+      progress_note: string | null;
+    }>(todayIds, (chunk, from, to) =>
+      admin
+        .from("class_sheet_student_marks")
+        .select("class_id, student_id, slot_start, status, progress_note")
+        .eq("tenant_id", user.tenantId)
+        .in("class_id", chunk)
+        .eq("mark_date", date)
         .order("id")
         .range(from, to),
     ),
@@ -366,6 +390,16 @@ export async function getEcsToday(dateParam?: string | null): Promise<EcsTodayRe
     (await canWriteTenant(user.systemRole, "attendance")) &&
     (user.systemRole !== "teacher" || isWithinAttendanceEditWindow(date, today));
 
+  // 학생 기록 — (반|학생)당 교시별. 시각은 배치와 **같은 정규화**를 거쳐야 키가 맞는다("15:00:00" ↔ "15:00").
+  const marksByStudent = new Map<string, Record<string, { status: string | null; progressNote: string | null }>>();
+  for (const m of marks) {
+    const key = `${m.class_id}|${m.student_id}`;
+    const slot = normalizeSlotTime(m.slot_start);
+    const cur = marksByStudent.get(key) ?? {};
+    cur[slot] = { status: m.status, progressNote: m.progress_note };
+    marksByStudent.set(key, cur);
+  }
+
   const linesByKey = new Map<string, typeof planLines>();
   for (const l of planLines) {
     const key = `${l.class_id}|${normalizeSlotTime(l.slot_start)}`;
@@ -445,6 +479,7 @@ export async function getEcsToday(dateParam?: string | null): Promise<EcsTodayRe
             attendanceNote: att?.note ?? null,
             reportWritten: (rep?.written ?? false) || (subjRep?.written ?? false),
             reportSent: (rep?.sent ?? false) || (subjRep?.sent ?? false),
+            marks: marksByStudent.get(`${classId}|${e.student_id}`) ?? {},
           };
         })
         .sort((a, b) => a.name.localeCompare(b.name, "ko"));

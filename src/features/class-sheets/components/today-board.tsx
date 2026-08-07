@@ -18,6 +18,7 @@ import { EyIcon } from "@/components/icons/eywa-icons";
 import { setAttendanceCell } from "@/features/attendance/server/actions";
 import { clearPresentAttendance } from "../server/actions";
 import { AttendanceSelect, type BasicAttendance } from "./attendance-select";
+import { TodayMarkPopover, type MarkMap, type StudentMark } from "./today-mark-popover";
 import type { SkillAreaSetting } from "@/features/owner/settings-types";
 import { TodayPlanEditor } from "./today-plan-editor";
 import type { TodayClassCard, TodayStudent } from "../server/today";
@@ -30,6 +31,19 @@ function initialAtt(cards: TodayClassCard[]): AttState {
   for (const c of cards) {
     for (const s of c.students) {
       out[`${c.classId}|${s.studentId}`] = { status: s.attendance, note: s.attendanceNote };
+    }
+  }
+  return out;
+}
+
+/** 학생 기록(태도·특이사항) 로컬 상태 — `${classId}|${studentId}|${slotStart}`. 교시별이라 키에 시각까지. */
+type MarkState = Record<string, StudentMark>;
+
+function initialMarks(cards: TodayClassCard[]): MarkState {
+  const out: MarkState = {};
+  for (const c of cards) {
+    for (const s of c.students) {
+      for (const [slot, m] of Object.entries(s.marks)) out[`${c.classId}|${s.studentId}|${slot}`] = m;
     }
   }
   return out;
@@ -56,12 +70,24 @@ function Badge({ done, title, children }: { done: boolean; title: string; childr
 function StudentRow({
   card,
   student,
+  date,
+  slotLabels,
+  marks,
+  onMark,
+  canEdit,
   att,
   onSet,
   onClear,
 }: {
   card: TodayClassCard;
   student: TodayStudent;
+  date: string;
+  /** 그 반의 그날 교시(시각·라벨) — 학생 기록은 교시별로 저장된다. */
+  slotLabels: { slotStart: string; label: string }[];
+  marks: MarkMap;
+  onMark: (slotStart: string, next: StudentMark | null) => void;
+  /** 학생 기록 편집 가능 — 계획 편집과 **같은 게이트**(ecs full|scoped). */
+  canEdit: boolean;
   att: { status: string | null; note: string | null };
   onSet: (status: BasicAttendance, note?: string | null) => void;
   onClear: () => void;
@@ -70,7 +96,7 @@ function StudentRow({
     // ⚠️ 이름 칸을 `1fr`로 두고 행을 화면 폭에 맡기면 넓은 창에서 이름은 왼쪽 끝, 컨트롤은 오른쪽 끝으로
     // **벌어져** 한 줄을 눈으로 잇기 어렵다(2026-08-07 실화면). 폭은 목록 컨테이너(`max-w`)가 잡고,
     // 행은 그 안을 채운다 — 그래야 밑줄도 컨트롤 있는 데까지만 그어진다.
-    <div className="border-line grid grid-cols-[minmax(0,1fr)_5.75rem_auto] items-center gap-2 border-b py-1.5 last:border-b-0">
+    <div className="border-line grid grid-cols-[minmax(0,1fr)_5.75rem_auto_auto] items-center gap-2 border-b py-1.5 last:border-b-0">
       <span className="min-w-0 truncate text-[13px]">
         {/* 구조화 행 목록(Editorial 문법 ⑤) — 이름 bold 13.5px + 설명 dim 12.5px. */}
         <span className="text-foreground text-[13.5px] font-bold">{student.name}</span>
@@ -86,10 +112,23 @@ function StudentRow({
           onClear={onClear}
         />
       </span>
+      {/* 태도·특이사항 — 주간 시트의 두 칸을 **교시별로** 담은 팝오버(행을 넓히지 않으면서 같은 표를 고친다). */}
+      <TodayMarkPopover
+        classId={card.classId}
+        date={date}
+        studentId={student.studentId}
+        studentName={student.name}
+        slots={slotLabels}
+        marks={marks}
+        canEdit={canEdit}
+        onChange={onMark}
+      />
       {/* 보고서는 **상태만** 보여주고 작성은 원스크린으로 — 발송 파이프라인(ClassNote)이 그쪽에 있다.
-          여기서 다시 만들면 발송 게이트가 두 벌이 된다(#77 "행동을 재촉하는 이벤트는 그 행동의 기존 게이트를"). */}
-      <span
-        className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-bold whitespace-nowrap ${
+          여기서 다시 만들면 발송 게이트가 두 벌이 된다(#77 "행동을 재촉하는 이벤트는 그 행동의 기존 게이트를").
+          배지는 **그 학생 보고서로 가는 링크**다(2026-08-07) — 상태를 보고 바로 손대는 게 자연스럽다. */}
+      <Link
+        href={`/onescreen?date=${date}&class=${card.classId}&student=${student.studentId}`}
+        className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-bold whitespace-nowrap transition hover:opacity-80 ${
           student.reportSent
             ? "bg-primary-soft text-primary"
             : student.reportWritten
@@ -98,14 +137,14 @@ function StudentRow({
         }`}
         title={
           student.reportSent
-            ? "학부모에게 발송됨"
+            ? `학부모에게 발송됨 — ${student.name} 보고서 열기`
             : student.reportWritten
-              ? "작성됨 · 아직 발송 전"
-              : "아직 작성 전"
+              ? `작성됨 · 아직 발송 전 — ${student.name} 보고서 열기`
+              : `아직 작성 전 — ${student.name} 보고서 쓰기`
         }
       >
         {student.reportSent ? "발송" : student.reportWritten ? "작성" : "미작성"}
-      </span>
+      </Link>
     </div>
   );
 }
@@ -117,6 +156,8 @@ function ClassCard({
   date,
   att,
   setAtt,
+  marks,
+  setMarks,
   skillAreas,
   canWrite,
   userId,
@@ -127,12 +168,19 @@ function ClassCard({
   date: string;
   att: AttState;
   setAtt: React.Dispatch<React.SetStateAction<AttState>>;
+  marks: MarkState;
+  setMarks: React.Dispatch<React.SetStateAction<MarkState>>;
   skillAreas: SkillAreaSetting[];
   canWrite: boolean;
   userId: string;
   tenantId: string;
 }) {
   const [open, setOpen] = useState(true);
+  // 학생 기록의 교시 축 = **화면에 그려진 교시 그대로**(안 그린 자리·만료 슬롯엔 저장할 자리가 없다).
+  const slotLabels = card.slots.map((s) => ({
+    slotStart: s.slotStart,
+    label: s.periodLabel ?? s.slotStart,
+  }));
   const marked = card.students.filter((s) => att[`${card.classId}|${s.studentId}`]?.status).length;
   const written = card.students.filter((s) => s.reportWritten).length;
   const planMissing = card.fill.total - card.fill.filled;
@@ -152,6 +200,20 @@ function ClassCard({
         setAtt((p) => ({ ...p, [key]: before ?? { status: null, note: null } }));
         toast.error(r.error);
       }
+    });
+  }
+
+  /**
+   * 학생 기록 낙관 갱신 — 저장 자체는 팝오버가 `upsertStudentMark`로 하고, 여기선 화면 상태만 옮긴다
+   * (실패 시 팝오버가 이전 값으로 다시 부른다). null = 그 칸을 비움.
+   */
+  function saveMark(studentId: string, slotStart: string, next: StudentMark | null) {
+    const key = `${card.classId}|${studentId}|${slotStart}`;
+    setMarks((p) => {
+      const copy = { ...p };
+      if (next === null) delete copy[key];
+      else copy[key] = next;
+      return copy;
     });
   }
 
@@ -252,14 +314,25 @@ function ClassCard({
                   key={s.studentId}
                   card={card}
                   student={s}
+                  date={date}
+                  slotLabels={slotLabels}
+                  marks={Object.fromEntries(
+                    slotLabels
+                      .map((sl) => [sl.slotStart, marks[`${card.classId}|${s.studentId}|${sl.slotStart}`]])
+                      .filter(([, m]) => !!m),
+                  )}
+                  onMark={(slotStart, next) => saveMark(s.studentId, slotStart, next)}
+                  canEdit={canWrite}
                   att={att[`${card.classId}|${s.studentId}`] ?? { status: null, note: null }}
                   onSet={(status, note) => save(s.studentId, status, note)}
                   onClear={() => clear(s.studentId)}
                 />
               ))
             )}
+            {/* 🔴 날짜만 넘기면 원스크린이 '전체'로 열려 강사가 반 칩을 **다시 고른다** — 카드에서 넘어온
+                맥락(그 반)을 URL에 싣는다. 없는 반이면 서버가 조용히 '전체'로 떨군다(2026-08-07). */}
             <Link
-              href={`/onescreen?date=${date}`}
+              href={`/onescreen?date=${date}&class=${card.classId}`}
               className="text-primary mt-2 inline-block text-[13px] font-bold underline-offset-2 hover:underline"
             >
               수업보고서 쓰기 →
@@ -289,6 +362,7 @@ export function TodayBoard({
   tenantId: string;
 }) {
   const [att, setAtt] = useState<AttState>(() => initialAtt(cards));
+  const [marks, setMarks] = useState<MarkState>(() => initialMarks(cards));
   return (
     <div className="space-y-3">
       {cards.map((card) => (
@@ -299,6 +373,8 @@ export function TodayBoard({
           date={date}
           att={att}
           setAtt={setAtt}
+          marks={marks}
+          setMarks={setMarks}
           skillAreas={skillAreas}
           canWrite={canWrite}
           userId={userId}
