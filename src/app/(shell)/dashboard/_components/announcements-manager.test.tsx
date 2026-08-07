@@ -36,7 +36,8 @@ describe("AnnouncementsManager", () => {
       />,
     );
 
-    await user.click(screen.getByRole("button", { name: "관리" }));
+    // 트리거 라벨 = 열리는 다이얼로그 제목과 같은 말("공지 관리") — 확성기 아이콘만으론 무엇을 관리하는지 안 보인다.
+    await user.click(screen.getByRole("button", { name: "공지 관리" }));
     const dialog = await screen.findByRole("dialog", { name: "공지 관리" });
     expect(within(dialog).getAllByText("운영진 (강사 제외)")).toHaveLength(2);
     expect(within(dialog).getByRole("option", { name: "운영진 (강사 제외)" })).toBeInTheDocument();
@@ -70,7 +71,8 @@ describe("AnnouncementsManager", () => {
       />,
     );
 
-    await user.click(screen.getByRole("button", { name: "관리" }));
+    // 트리거 라벨 = 열리는 다이얼로그 제목과 같은 말("공지 관리") — 확성기 아이콘만으론 무엇을 관리하는지 안 보인다.
+    await user.click(screen.getByRole("button", { name: "공지 관리" }));
     const dialog = await screen.findByRole("dialog", { name: "공지 관리" });
     expect(within(dialog).getByRole("button", { name: "“시험 일정” 공지 상단 고정" })).toBeInTheDocument();
     await user.click(within(dialog).getByRole("button", { name: "“시험 일정” 공지 삭제" }));

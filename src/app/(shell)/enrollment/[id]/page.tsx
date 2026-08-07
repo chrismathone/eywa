@@ -154,9 +154,11 @@ export default async function EnrollmentDetailPage({
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {/* ⚠️ "수정" 단독 금지 — 아래 AI 분석 리포트에도 섹션마다 '수정'(그 섹션 문장)이 있다.
+              여기는 **상담 내용 폼 전체**를 연다. */}
           <Button variant="outline" render={<Link href={`/enrollment/${id}/edit`} />}>
             <Pencil className="size-4" />
-            수정
+            상담 수정
           </Button>
           <ConsultationManageButtons values={{ id: consult.id, outcome: consult.outcome }} />
           {consult.aiAnalysis ? (
