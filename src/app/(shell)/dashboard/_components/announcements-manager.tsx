@@ -269,7 +269,8 @@ export function AnnouncementsManager({
         }
       >
         <Megaphone className="size-3" />
-        관리
+        {/* 아이콘만으론 무엇을 관리하는지 안 보인다 — 대시보드엔 관리할 것이 여럿이다. */}
+        공지 관리
       </DialogTrigger>
       <DialogContent
         showCloseButton={false}

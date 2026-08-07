@@ -29,6 +29,7 @@ import { windowIdForHref } from "@/components/workspace/window-link";
 import { useIsDesktop } from "@/components/workspace/use-is-desktop";
 import { useWorkspaceEnabled } from "@/components/workspace/workspace-enabled";
 import { NotificationAlertDialog } from "./notification-alert-dialog";
+import { MobilePushRow } from "./mobile-push-row";
 
 const POLL_MS = 60_000;
 
@@ -288,6 +289,9 @@ export function NotificationBell() {
             컴퓨터 알림이 차단돼 있습니다 — 주소창의 자물쇠 &gt; 알림에서 &lsquo;허용&rsquo;으로 바꿔주세요.
           </p>
         ) : null}
+        {/* 휴대폰(웹 푸시) 알림 — **셔틀 토글을 켠 계정에만** 뜬다(0188a). 위 컴퓨터 알림과 별개 경로:
+            그쪽은 창이 열려 있을 때만이고, 이쪽은 브라우저를 닫아도 잠금화면에 뜬다. */}
+        {view === "active" ? <MobilePushRow /> : null}
         {items.length === 0 ? (
           <div className="text-text-dim px-2 py-8 text-center text-xs">
             {view === "archived" ? "보관한 알림이 없습니다" : "새 알림이 없습니다"}

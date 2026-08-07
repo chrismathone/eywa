@@ -6,6 +6,7 @@ import {
   describeWhen,
   isAttendanceIntent,
   normalizeIntent,
+  uncoveredDatesIn,
 } from "./intent";
 
 const DAY = "2026-08-06";
@@ -115,6 +116,81 @@ describe("알림 문구", () => {
   it("none은 알림 대상이 아니다", () => {
     expect(isAttendanceIntent({ category: "none" })).toBe(false);
     expect(isAttendanceIntent({ category: "late" })).toBe(true);
+  });
+});
+
+// 🔴 2026-08-07 실사고 — "8월 7일 (오늘) 이랑 8월 11일, 8월 12일"이 `8/12` 하나로 굳어
+//    벨 제목에서 **오늘 결석이 사라졌다**. 표가 단일 구간이라 흩어진 날짜를 못 담는다.
+describe("판정이 못 담은 원문 날짜(uncoveredDatesIn)", () => {
+  const FRI = "2026-08-07";
+
+  it("흩어진 복수 날짜 중 판정 밖의 날을 이른 순으로 돌려준다", () => {
+    const r = uncoveredDatesIn("저 8월 7일 (오늘) 이랑 8월 11일, 8월 12일에 개인일정으로 학원 못 옵니다.", {
+      startsOn: "2026-08-12",
+      endsOn: "2026-08-12",
+    }, { messageDate: FRI });
+    expect(r).toEqual(["8/7", "8/11"]);
+  });
+
+  it("판정이 그 날들을 이미 담고 있으면 조용하다", () => {
+    expect(
+      uncoveredDatesIn("8월 7일부터 8월 12일까지 못 갑니다", { startsOn: "2026-08-07", endsOn: "2026-08-12" }, { messageDate: FRI }),
+    ).toEqual([]);
+  });
+
+  it("달 없는 맨 '3일'은 날짜로 보지 않는다 — 실제 문장 \"보강은 3일을 해야되니\"", () => {
+    expect(
+      uncoveredDatesIn("오늘도 아파서 결석해야될 것 같아요. 그리고 보강은 3일을 해야되니 어떻게 할까요?", {
+        startsOn: FRI,
+        endsOn: FRI,
+      }, { messageDate: FRI }),
+    ).toEqual([]);
+  });
+
+  it("앞에 달이 나온 뒤의 '12일'은 그 달을 승계한다", () => {
+    expect(uncoveredDatesIn("8월 11일, 12일 결석합니다", { startsOn: "2026-08-11", endsOn: "2026-08-11" }, { messageDate: FRI })).toEqual([
+      "8/12",
+    ]);
+  });
+
+  it("8/12 같은 슬래시 표기도 읽는다", () => {
+    expect(uncoveredDatesIn("8/11, 8/12 못 가요", { startsOn: "2026-08-11", endsOn: "2026-08-11" }, { messageDate: FRI })).toEqual(["8/12"]);
+  });
+
+  it("지난 일·먼 미래(연도 환각)는 셔틀에 쓸모없으므로 버린다", () => {
+    expect(uncoveredDatesIn("지난 7월 3일에 못 갔었는데", { startsOn: FRI, endsOn: FRI }, { messageDate: FRI })).toEqual([]);
+    expect(uncoveredDatesIn("12월 25일 크리스마스", { startsOn: FRI, endsOn: FRI }, { messageDate: FRI })).toEqual([]);
+  });
+
+  it("연락일이 없으면(형식 밖) 아무것도 지어내지 않는다", () => {
+    expect(uncoveredDatesIn("8월 11일", { startsOn: null, endsOn: null }, { messageDate: "" })).toEqual([]);
+  });
+
+  // 🔴 날짜를 **고쳐 쓰지 않는다** — 판정을 원문의 이른 날로 당기면 "7일 보강 될까요? 12일은 결석"에서
+  //    오늘을 결석으로 만들어 셔틀이 아이를 두고 간다. 알리기만 한다.
+  it("알림은 판정 날짜를 바꾸지 않고 '확인'만 붙인다", () => {
+    const intent = normalizeIntent({ category: "absence", startsOn: "2026-08-12", endsOn: "2026-08-12", detail: "개인일정" }, { messageDate: FRI });
+    const { title, body } = buildAttendanceAlert({
+      studentName: "이수빈",
+      intent,
+      content: "저 8월 7일 (오늘) 이랑 8월 11일, 8월 12일에 개인일정으로 학원 못 옵니다.",
+      messageDate: FRI,
+    });
+    expect(title).toContain("이수빈 결석 8/12");
+    expect(title).toContain("8/7·8/11 확인");
+    expect(body).toContain("원문에 8/7·8/11 날짜도 있음");
+    expect(body).toContain("학부모: “"); // 원문은 그대로
+  });
+
+  it("담을 게 없으면 제목이 지금까지와 같다(잡음 안 늘린다)", () => {
+    const intent = normalizeIntent({ category: "absence", startsOn: FRI, endsOn: FRI, detail: "가족여행" }, { messageDate: FRI });
+    const { title } = buildAttendanceAlert({
+      studentName: "최연재",
+      intent,
+      content: "가족여행일정이 늘어나서 부득이하게 오늘 학원에 못갈것같아요",
+      messageDate: FRI,
+    });
+    expect(title).toBe("최연재 결석 8/7");
   });
 });
 

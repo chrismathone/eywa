@@ -112,15 +112,19 @@ export default async function StudentDetailPage({
           >
             {STATUS_LABEL[student.status] ?? student.status}
           </span>
-          <div className="flex items-center gap-2">
+          {/* ⚠️ 감기게 둔다 — 이 줄엔 상태 변경·수정·AI·삭제가 함께 서고, 라벨에 목적어를 붙이면
+              (수정 → 학생 수정) 좁은 화면에서 가로로 넘친다. 넘치는 대신 다음 줄로 내려간다. */}
+          <div className="flex flex-wrap items-center justify-end gap-2">
             <StatusAction
               studentId={student.id}
               studentName={student.name}
               currentStatus={student.status}
             />
+            {/* ⚠️ "수정" 단독 금지 — 상담 탭을 열면 상담 카드마다 '수정'(그 상담 기록)이 함께 보인다.
+                여기는 **학생 정보**를 연다. 반 상세('반 수정')와 같은 규칙. */}
             <Button variant="outline" render={<WindowLink href={`/students/${student.id}/edit`} title="학생 수정" />}>
               <Pencil className="size-3.5" />
-              수정
+              학생 수정
             </Button>
             {student.status === "enrolled" ? (
               <RunCareAiButton studentId={student.id} hasExisting={hasCareAi} />

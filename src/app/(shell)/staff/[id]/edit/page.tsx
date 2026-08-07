@@ -12,7 +12,7 @@ import { canEditLoginEmail } from "@/features/staff/email";
 import { StaffForm } from "../../_components/staff-form";
 import { PAYROLL_ENABLED } from "@/features/payroll/config";
 
-export const metadata = { title: "직원 수정 — eywa" };
+export const metadata = { title: "직원 정보 수정 — eywa" };
 
 export default async function EditStaffPage({
   params,
@@ -43,9 +43,13 @@ export default async function EditStaffPage({
 
       <header className="border-border flex flex-wrap items-end justify-between gap-3 border-b pb-5">
         <div className="space-y-1">
-          <p className="eyebrow">직원 수정</p>
+          {/* 들어온 버튼('직원 정보 수정')과 같은 말로 — 열고 나서 "여기가 거기 맞나" 하지 않게. */}
+          <p className="eyebrow">직원 정보 수정</p>
           <h1 className="font-bold tracking-tight text-foreground text-2xl">{staff.displayName}</h1>
-          <p className="text-muted-foreground text-sm">기본 정보 수정 (역할 변경은 별도)</p>
+          {/* 무엇이 여기 있고 무엇이 없는지 적는다 — 없는 걸 찾다가 되돌아 나가는 게 가장 큰 낭비다. */}
+          <p className="text-muted-foreground text-sm">
+            이름·연락처·직급·담당 과목·시간표 색 등 (이메일·비밀번호·역할 변경과 이력서는 직원 상세에서)
+          </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {/* 급여 정산은 강사·원장 한정 유지 — 시급/월급 산식이 그 둘 전제다(PAYROLL_ENABLED 상위 결정 뒤). */}
