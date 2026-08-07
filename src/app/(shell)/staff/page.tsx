@@ -40,6 +40,9 @@ type RoleKey =
   | "accountant";
 type StatusKey = "all" | "active" | "inactive" | "pending";
 
+/** 상태 필터 기본값 — 일상 화면은 재직만(퇴사자는 '퇴사'·'전체'에서 본다). */
+const DEFAULT_STATUS: StatusKey = "active";
+
 const ROLE_FILTERS: { key: RoleKey; label: string }[] = [
   { key: "all", label: "전체" },
   { key: "master", label: "원장" },
@@ -79,7 +82,10 @@ function buildStaffHref(p: {
 }): string {
   const sp = new URLSearchParams();
   if (p.role !== "all") sp.set("role", p.role);
-  if (p.status !== "all") sp.set("status", p.status);
+  // 🔴 상태만 기본값이 'all'이 아니라 **'재직'** 이다(2026-08-07) — 여기서 'all'을 생략하면 URL에
+  // status가 사라지고, 페이지가 그걸 다시 '재직'으로 읽어 **'전체'를 영원히 못 고른다**(원장 제보).
+  // 생략할 값은 "기본값"이지 "all"이 아니다.
+  if (p.status !== DEFAULT_STATUS) sp.set("status", p.status);
   if (p.subject !== "all") sp.set("subject", p.subject);
   if (p.emp !== "all") sp.set("emp", p.emp);
   if (p.q) sp.set("q", p.q);
@@ -158,7 +164,8 @@ export default async function StaffPage({
   const role: RoleKey = (sp.role as RoleKey) ?? "all";
   // 기본 상태 = **재직**(원장 2026-08-07). 목록 쿼리가 이제 퇴사자까지 내려주므로(그래야 '퇴사' 칩이
   // 동작한다) 기본값을 all로 두면 평소 화면에 퇴사자가 섞인다 — 일상 화면은 종전과 같게 재직만.
-  const status: StatusKey = (sp.status as StatusKey) ?? "active";
+  // '전체'(재직+퇴사+대기 동시)는 ?status=all로 명시된다(buildStaffHref 주석 참조).
+  const status: StatusKey = (sp.status as StatusKey) ?? DEFAULT_STATUS;
   const q = sp.q ?? "";
   const sort: SortKey = SORT_FILTERS.some((f) => f.key === sp.sort) ? (sp.sort as SortKey) : "role";
   const per = (PER_OPTIONS as readonly number[]).includes(Number(sp.per)) ? Number(sp.per) : DEFAULT_PER;
