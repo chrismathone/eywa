@@ -98,12 +98,13 @@ export function CourseEditor({
           {course.fixedMonthly ? "· 금액을 그대로 청구(월 정액)" : "· 회당 단가 × 시수"}
         </span>
       </div>
-      {/* 단가표에 구분이 안 적힌 항목 — 안전하게 '월 고정'으로 넣되 **말은 해 준다**. 침묵하면
-          회당 단가가 월 금액으로(또는 그 반대로) 조용히 굳는다. */}
+      {/* 단가표에서 가져왔는데 그 항목에 종류가 안 적혀 있던 경우 — 안전하게 '월 고정'으로 넣되 **말은
+          해 준다**. 침묵하면 회당 단가가 월 금액으로(또는 그 반대로) 조용히 굳는다.
+          ⚠️ **옛 견적(출처 기록 없음)에는 안 뜬다** — 모르는 것을 "없다"고 말하면 안 된다(needsFeeKindCheck). */}
       {needsFeeKindCheck(course) ? (
         <p className="border-amber/40 bg-amber-soft text-amber rounded-md border px-2 py-1 text-[11px] leading-snug">
-          단가표에 <b>단가 종류</b>가 없는 항목이라 <b>월 고정</b>으로 넣었습니다 — 회당 수업이면 위에서 바꿔
-          주세요. (단가표에서 종류를 채워 두면 다음부터 자동으로 잡힙니다.)
+          이 항목은 단가표에 <b>단가 종류</b>가 정해져 있지 않아 <b>월 고정</b>으로 넣었습니다 — 회당
+          수업이면 위에서 바꿔 주세요. (단가표에서 종류를 채워 두면 다음부터 자동으로 잡힙니다.)
         </p>
       ) : null}
       <div className={`grid gap-2 ${course.fixedMonthly ? "grid-cols-[1.4fr_0.8fr_1fr]" : "grid-cols-[1.2fr_0.9fr_0.7fr_1fr]"}`}>

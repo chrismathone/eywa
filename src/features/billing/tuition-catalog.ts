@@ -14,6 +14,10 @@ export const DISCOUNT_CATEGORY = "할인";
 export const PRICING_MODES = [
   { value: "per_session", label: "회당 단가" },
   { value: "monthly", label: "월 단가" },
+  // 수업 단가가 아닌 부대비용(원장 2026-08-07: *"레벨 테스트 비용 및 셔틀버스비 스터디케어, 시스템
+  // 사용료는 기타비용"*). 회당도 월도 아니라서 예전엔 **미지정으로 남을 수밖에 없었고**, 그 탓에
+  // "아직 안 골랐다"는 경고를 영영 달고 있었다. 성격을 값으로 적어 그 경고를 끝낸다.
+  { value: "extra", label: "기타비용" },
   { value: "discount", label: "할인액" },
 ] as const;
 export type PricingMode = (typeof PRICING_MODES)[number]["value"];
@@ -40,8 +44,17 @@ export const PMODE_UNSET = "none";
 export const PRICING_MODE_EFFECT: Record<PricingMode, string> = {
   per_session: "계산기에서 '회당' — 단가 × 시수",
   monthly: "계산기에서 '월 고정' — 금액을 그대로",
+  extra: "수업이 아닌 부대비용 — 계산기 '교재 및 기타'로, 금액을 그대로",
   discount: "계산기 할인 항목",
 };
+
+/**
+ * **수업 단가**인 종류만 — 계산기의 수강 과목이 될 수 있는 값(회당/월).
+ * 기타비용·할인은 수업이 아니라서 여기 없다(수강 과목 picker도 그 분류를 아예 안 싣는다).
+ */
+export function isClassPricingMode(mode: string | null | undefined): boolean {
+  return mode === "per_session" || mode === "monthly";
+}
 
 /** 폼 입력값을 안전한 PricingMode|null로 정규화(허용값 외 = null). */
 export function normalizePricingMode(raw: string | null | undefined): PricingMode | null {

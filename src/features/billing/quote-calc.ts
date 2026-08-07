@@ -64,9 +64,21 @@ export function feeKindFromPricingMode(mode: string | null | undefined): QuoteFe
   return null;
 }
 
-/** 단가표 출처가 비어 있어 구분을 사람이 확인해야 하는 행인가(화면 경고용). */
+/**
+ * 구분을 사람이 확인해야 하는 행인가(화면 경고용).
+ *
+ * 🔴 **`undefined`와 `null`을 반드시 가른다**(이 저장소의 다른 곳과 같은 규약 —
+ *    `effectiveClassnoteStatus` 주석 참조):
+ *   · `undefined` = 이 행에 **단가표 출처 기록 자체가 없다**. 오늘(2026-08-07) 이 필드를 만들기 전에
+ *     저장된 견적이 전부 여기 해당한다 → **아무 말도 하지 않는다.**
+ *   · `null` = 단가표에서 왔는데 **그 항목에 종류가 안 적혀 있었다** → 그때만 묻는다.
+ *
+ *    처음엔 둘을 뭉뚱그려 "종류 없음"으로 봤고, 그 결과 **저장된 옛 견적을 열면 모든 과목 행에**
+ *    "단가표에 단가 종류가 없는 항목"이라는 경고가 떴다(원장 제보: *"기존 청구서들이 왜 단가표에 없는
+ *    항목이라 나오지?"*). 모르는 것을 "없다"고 단정한 셈이라, 사실이 아닌 말을 화면에 띄운 것이다.
+ */
 export function needsFeeKindCheck(c: Pick<QuoteCourse, "pricingMode">): boolean {
-  return feeKindFromPricingMode(c.pricingMode) === null;
+  return c.pricingMode === null;
 }
 
 /**

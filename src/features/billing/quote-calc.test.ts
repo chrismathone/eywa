@@ -295,9 +295,10 @@ describe("수강료 구분", () => {
   // 🔴 EiE 27만원(단가표 미지정 12건, 실측)이 바로 이 경로다 — 조용히 넘어가면 회당 27만원이 된다.
   it("단가표 종류가 없는 행은 '구분 확인 필요'로 표시된다", () => {
     expect(needsFeeKindCheck({ pricingMode: null })).toBe(true);
-    expect(needsFeeKindCheck({ pricingMode: undefined })).toBe(true);
     expect(needsFeeKindCheck({ pricingMode: "monthly" })).toBe(false);
     expect(needsFeeKindCheck({ pricingMode: "per_session" })).toBe(false);
+    // ⚠️ undefined(=출처 기록 없음, 옛 견적)는 **경고하지 않는다** — 아래 전용 describe 참조.
+    expect(needsFeeKindCheck({ pricingMode: undefined })).toBe(false);
   });
 
   it("구분별로 나누고 각각 합계를 낸다", () => {
@@ -326,5 +327,27 @@ describe("수강료 구분", () => {
 
   it("합계는 음수를 0으로 막는다(총액과 같은 규약)", () => {
     expect(groupByFeeKind([course({ fixedMonthly: true, price: -5000 })]).monthlyTotal).toBe(0);
+  });
+});
+
+/**
+ * 🔴 옛 견적 회귀(원장 제보 2026-08-07: *"기존 청구서들이 왜 단가표에 없는 항목이라 나오지?"*).
+ * 출처 기록이 없는 행(`pricingMode` 키 자체가 없다 = 이 필드를 만들기 전 저장분)에까지 경고를 띄웠다.
+ * **모르는 것을 "없다"고 말한 것**이라 화면에 사실이 아닌 문장이 떴다.
+ */
+describe("needsFeeKindCheck — undefined(모름) ≠ null(없음)", () => {
+  it("옛 견적(출처 기록 없음)에는 경고하지 않는다", () => {
+    expect(needsFeeKindCheck({})).toBe(false);
+    expect(needsFeeKindCheck({ pricingMode: undefined })).toBe(false);
+  });
+
+  it("단가표에서 왔는데 종류가 안 적혀 있던 행에만 경고한다", () => {
+    expect(needsFeeKindCheck({ pricingMode: null })).toBe(true);
+  });
+
+  it("종류가 있으면 경고하지 않는다", () => {
+    for (const m of ["per_session", "monthly", "extra", "discount"]) {
+      expect(needsFeeKindCheck({ pricingMode: m })).toBe(false);
+    }
   });
 });
