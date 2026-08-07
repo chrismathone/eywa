@@ -9,6 +9,7 @@ import { subjectTone, toneSoftClass, toneSolidClass } from "../data";
 import {
   effectiveClassnoteStatus,
   isAlreadySent,
+  isMentEditable,
   isReportEligible,
   isRowActionable,
   type GridRow,
@@ -218,6 +219,20 @@ export function GridBodyRow({
   // 발송 완료건은 자동작성도 막는다 — 멘트를 새로 만들어 봐야 저장이 서버에서 거부된다(입력 유실).
   const canAutoWrite = isRowActionable(subject, "autowrite", liveStatus);
   const isAbsent = subject.attendanceRaw === "absent";
+  /**
+   * 학부모 문구(멘트)·학습 추세는 **결석이면 잠근다**(원장 2026-08-07: 표·카드 모드가 일관돼야 함).
+   *
+   * 왜 이 두 칸만인가: 결석 행은 발송 게이트가 구조적으로 막으므로(`isRowActionable` send·autowrite)
+   * 여기에 쓴 문장은 **어디로도 나가지 않는다** — 다 쓰고 발송에서 막히는 헛수고가 된다.
+   * ⚠️ 반대로 **기록 칸(진도·테스트·태도·과제·특이사항·결석 사유·수업타임)은 그대로 연다** —
+   *    그건 발송물이 아니라 기록이라, 결석해도 남겨야 한다(이 행의 원래 설계 의도).
+   * ⚠️ 잠금은 행 전체를 흐리는 방식이 아니다(gotcha #20) — 잠긴 칸만 톤을 바꾸고 이유를 placeholder로 적는다.
+   */
+  const mentLocked = !isMentEditable(subject, liveStatus);
+  const mentPlaceholder = isAbsent ? "결석 — 학부모 문구는 발송되지 않습니다" : null;
+  const mentBase =
+    "border-line focus:border-primary scrollbar-thin w-full rounded-sm border px-2 py-1 text-[11px] leading-snug outline-none";
+  const lockedTone = isAbsent ? "bg-bg-soft text-text-faint cursor-not-allowed" : "";
   // 파일을 행 위에 놓으면 그 행에 바로 첨부(가장 빠른 경로). 진도 미입력 등 게이트는 부모 핸들러가 안내한다.
   // 발송 완료건은 파일을 행에 떨어뜨려도 첨부되지 않는다(위 버튼 잠금과 같은 이유).
   const drop = useRowFileDrop((files) => {
@@ -483,37 +498,37 @@ export function GridBodyRow({
               <textarea
                 value={draftParas.p1}
                 onChange={(e) => fields.onDraft(student.id, subject.name, joinComment(e.target.value, draftParas.p2))}
-                readOnly={alreadySent}
-                placeholder={genRowBusy ? "자동작성 중…" : "1문단 · 수업 내용(교재·진도·과제)"}
+                readOnly={mentLocked}
+                placeholder={mentPlaceholder ?? (genRowBusy ? "자동작성 중…" : "1문단 · 수업 내용(교재·진도·과제)")}
                 aria-label={`${student.name} ${subject.name} 학부모 문구 1문단 수업 내용`}
-                className={`border-line focus:border-primary scrollbar-thin min-h-[52px] w-full rounded-sm border bg-background px-2 py-1 text-[11px] leading-snug outline-none ${AUTOSIZE}`}
+                className={`${mentBase} ${AUTOSIZE} ${lockedTone || "bg-background"} min-h-[52px]`}
               />
               <textarea
                 value={draftParas.p2}
                 onChange={(e) => fields.onDraft(student.id, subject.name, joinComment(draftParas.p1, e.target.value))}
-                readOnly={alreadySent}
-                placeholder={genRowBusy ? "자동작성 중…" : "2문단 · 태도 · 특이사항"}
+                readOnly={mentLocked}
+                placeholder={mentPlaceholder ?? (genRowBusy ? "자동작성 중…" : "2문단 · 태도 · 특이사항")}
                 aria-label={`${student.name} ${subject.name} 학부모 문구 2문단 태도 특이사항`}
-                className={`border-line focus:border-primary scrollbar-thin min-h-[52px] w-full rounded-sm border bg-background px-2 py-1 text-[11px] leading-snug outline-none ${AUTOSIZE}`}
+                className={`${mentBase} ${AUTOSIZE} ${lockedTone || "bg-background"} min-h-[52px]`}
               />
             </>
           ) : (
             <textarea
               value={rep?.draft ?? ""}
               onChange={(e) => fields.onDraft(student.id, subject.name, e.target.value)}
-              readOnly={alreadySent}
-              placeholder={genRowBusy ? "자동작성 중…" : "'자동작성'으로 생성 · 직접 편집·확인 후 발송"}
+              readOnly={mentLocked}
+              placeholder={mentPlaceholder ?? (genRowBusy ? "자동작성 중…" : "'자동작성'으로 생성 · 직접 편집·확인 후 발송")}
               aria-label={`${student.name} ${subject.name} 학부모 문구`}
-              className={`border-line focus:border-primary scrollbar-thin min-h-[72px] w-full rounded-sm border bg-background px-2 py-1 text-[11px] leading-snug outline-none ${AUTOSIZE}`}
+              className={`${mentBase} ${AUTOSIZE} ${lockedTone || "bg-background"} min-h-[72px]`}
             />
           )}
           <textarea
             value={rep?.trendDraft ?? ""}
             onChange={(e) => fields.onTrend(student.id, subject.name, e.target.value)}
-            readOnly={alreadySent}
-            placeholder="학습 추세(종합분석) · 기록 적으면 비어 있음"
+            readOnly={mentLocked}
+            placeholder={mentPlaceholder ?? "학습 추세(종합분석) · 기록 적으면 비어 있음"}
             aria-label={`${student.name} ${subject.name} 학습 추세`}
-            className={`border-line focus:border-primary scrollbar-thin min-h-[48px] w-full rounded-sm border bg-bg-soft px-2 py-1 text-[11px] leading-snug outline-none ${AUTOSIZE}`}
+            className={`${mentBase} ${AUTOSIZE} ${lockedTone || "bg-bg-soft"} min-h-[48px]`}
           />
         </div>
       </td>
