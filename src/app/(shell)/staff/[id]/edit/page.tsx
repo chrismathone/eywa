@@ -86,6 +86,7 @@ export default async function EditStaffPage({
           defaultClassroom: staff.defaultClassroom,
           memo: staff.memo,
           bgColor: staff.bgColor,
+          attendanceAlertOptin: staff.attendanceAlertOptin,
         }}
       />
     </div>

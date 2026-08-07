@@ -3,6 +3,7 @@ import {
   buildWeekGrid,
   hiddenSeatOf,
   scheduledSlotKeySet,
+  scheduledUnitsByDate,
   sheetFillStats,
   type GridPlanLine,
 } from "./grid";
@@ -565,5 +566,54 @@ describe("sheetFillStats — 작성률(placeholder 제외·고아 분모 제외)
       slotMemoKeys: [],
     });
     expect(grid.days[0].slots[0].lines.map((l) => l.progress)).toEqual(["r1", "r2", "내신"]);
+  });
+});
+
+
+describe("scheduledUnitsByDate — 유닛 자동값(트랙별 규칙·표시 설정 무관)", () => {
+  const p = (dow: "mon" | "tue", start: string, end: string, over?: object) =>
+    sched(dow, start, { endTime: `${end}:00`, ...over });
+
+  it("EiE(periods): 40분 3교시 = 3유닛(원장 '3은 2시간')", () => {
+    const s = [p("mon", "14:20", "15:00"), p("mon", "15:00", "15:40"), p("mon", "15:40", "16:20")];
+    expect(scheduledUnitsByDate(MON, s, "periods")).toEqual({ "2026-07-20": 3 });
+  });
+
+  it("인재원(hours): 50분 2교시 = 1.7유닛(교시 수로 세면 2가 되어 부풀었다)", () => {
+    const s = [p("mon", "15:00", "15:50"), p("mon", "15:50", "16:40")];
+    expect(scheduledUnitsByDate(MON, s, "hours")).toEqual({ "2026-07-20": 1.7 });
+  });
+
+  it("인재원(hours): 60분 2교시 = 정확히 2유닛", () => {
+    const s = [p("mon", "15:00", "16:00"), p("mon", "16:00", "17:00")];
+    expect(scheduledUnitsByDate(MON, s, "hours")).toEqual({ "2026-07-20": 2 });
+  });
+
+  it("기본값 1과 같은 날은 키를 안 만든다(굳이 1을 써 넣지 않는다)", () => {
+    expect(scheduledUnitsByDate(MON, [p("mon", "15:00", "16:00")], "hours")).toEqual({});
+    expect(scheduledUnitsByDate(MON, [p("mon", "14:20", "15:00")], "periods")).toEqual({});
+  });
+
+  it("🔴 자리(LAB·JJ)는 두 모드 모두에서 **언제나** 뺀다 — 보기 토글이 급여를 바꾸면 안 된다", () => {
+    const s = [
+      p("mon", "14:20", "15:00"),
+      p("mon", "15:00", "15:40"),
+      p("mon", "16:00", "16:40", { slotTeacherLabel: "LAB" }),
+      p("mon", "17:00", "17:40", { slotTeacherLabel: "JJ" }),
+    ];
+    expect(scheduledUnitsByDate(MON, s, "periods")).toEqual({ "2026-07-20": 2 });
+  });
+
+  it("같은 시각이 두 번 있어도 한 번만 센다", () => {
+    const s = [p("mon", "15:00", "15:40"), p("mon", "15:00", "15:40"), p("mon", "16:00", "16:40")];
+    expect(scheduledUnitsByDate(MON, s, "periods")).toEqual({ "2026-07-20": 2 });
+  });
+
+  it("만료·미시작 배치는 그 날짜에 안 센다", () => {
+    const s = [
+      p("mon", "14:20", "15:00", { validTo: "2026-07-19" }),
+      p("mon", "15:00", "15:40", { validFrom: "2026-07-21" }),
+    ];
+    expect(scheduledUnitsByDate(MON, s, "periods")).toEqual({});
   });
 });

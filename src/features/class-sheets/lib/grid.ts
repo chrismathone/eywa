@@ -197,6 +197,106 @@ export function scheduledSlotKeySet(
   return out;
 }
 
+/**
+ * 유닛(시수) 세는 법 — **프로그램마다 다르다**(원장 2026-08-06).
+ *  · `periods`(EiE) — *"eie는 유닛카운트라 1을 40분 단위로 체크하면 된다. 3은 2시간이 되는 것."*
+ *    → 그 날 **교시 수**가 곧 유닛. 실측상 EiE 배치는 40분(73행)·30분(10행)로 균일해 교시=유닛이 성립한다.
+ *  · `hours`(인재원 영어·미분류) — *"인재원 수업의 경우 1을 1시간이라 생각하면 되고."*
+ *    → 그 날 **총 수업 분 ÷ 60**. 인재원 배치는 50·60·40·20분이 섞여 있어(실측) 교시 수로 세면
+ *      같은 1유닛이 40분이었다 60분이었다 한다 — 길이로 재야 "1 = 1시간"이 지켜진다.
+ *
+ * 🔴 두 트랙을 한 규칙으로 뭉치지 말 것. 인재원을 교시 수로 세면 50분 2교시(=1.7시간)가 2유닛이 되어
+ *    시수·급여가 부풀고, EiE를 시간으로 재면 40분 3교시(=2시간)가 2유닛이 되어 원장이 말한 3과 어긋난다.
+ * ⚠️ 미분류(null)는 **인재원과 같이** 취급한다 — `english-track.ts`의 비대칭 규약 그대로(EiE만 정확 일치).
+ */
+export type UnitCountMode = "periods" | "hours";
+
+/**
+ * 날짜별 **유닛(시수) 자동값** — ECS 출결을 *처음 찍을 때* 넣는 기본값.
+ *
+ * 배경: `attendance_records`는 **(학생,반,날짜) 한 행**인데 영어는 하루 2~4교시인 반이 흔하다. 그냥 두면
+ * 4교시 수업이 1유닛으로 잡힌다(실측: 영어 출결 전건 units=1).
+ *
+ * 🔴 **표시 설정(JJ 토글)과 무관해야 한다.** 화면에 보이는 교시로 세면 *보기 설정이 급여를 바꾼다.*
+ *    그래서 `hiddenSeatOf`가 아니라 `specialSlotLabel`로 자리(LAB·JJ)를 **언제나** 뺀다 — 자리는 담당
+ *    강사가 없는 방(teacher_id=null)이라 강사의 수업 시수가 아니다.
+ * ⚠️ 같은 시각이 두 번 있으면(자리와 겹침 등) 한 번만 센다. 자리는 위에서 이미 빠진다.
+ * ⚠️ 기본값 1과 같은 날은 **키를 안 만든다** — 굳이 1을 써 넣으면 0169a 취소 가드가 걸리는 것도 없고
+ *    저장 규약(`parseSessionUnits`가 1을 null로 정규화)과도 어긋나지 않는다.
+ */
+export function scheduledUnitsByDate(
+  weekMonday: string,
+  schedules: readonly Pick<
+    GridScheduleRow,
+    "dayOfWeek" | "startTime" | "endTime" | "validFrom" | "validTo" | "slotTeacherLabel"
+  >[],
+  mode: UnitCountMode,
+): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const date of weekDatesOf(weekMonday)) {
+    const dow = dowKeyOf(date);
+    const byStart = new Map<string, number>(); // 시각 → 분(중복 시각은 한 번만)
+    for (const s of schedules) {
+      if (s.dayOfWeek !== dow) continue;
+      if (s.validFrom > date) continue;
+      if (s.validTo && s.validTo < date) continue;
+      if (specialSlotLabel(s.slotTeacherLabel)) continue; // 자리는 수업 시수가 아니다
+      const start = normalizeSlotTime(s.startTime);
+      if (byStart.has(start)) continue;
+      byStart.set(start, slotMinutes(start, normalizeSlotTime(s.endTime)));
+    }
+    if (byStart.size === 0) continue;
+    const raw =
+      mode === "periods"
+        ? byStart.size
+        : [...byStart.values()].reduce((sum, m) => sum + m, 0) / 60;
+    // 저장 규약과 같은 반올림(소수 한 자리). 1이면 기본값이라 키를 안 남긴다.
+    const units = Math.round(raw * 10) / 10;
+    if (units > 0 && units !== 1) out[date] = units;
+  }
+  return out;
+}
+
+/** "HH:MM" 두 개의 분 차이(음수·비정상은 0 — 시수를 지어내지 않는다). */
+function slotMinutes(start: string, end: string): number {
+  const toMin = (v: string) => {
+    const [h, m] = v.split(":").map(Number);
+    return Number.isFinite(h) && Number.isFinite(m) ? h * 60 + m : NaN;
+  };
+  const diff = toMin(end) - toMin(start);
+  return Number.isFinite(diff) && diff > 0 ? diff : 0;
+}
+
+/**
+ * 그 주의 **자리(LAB·JJ) 슬롯 키** 집합 — 랜딩이 "고아(시간 변경됨)"를 셀 때 빼기 위한 것.
+ *
+ * 🔴 자리 교시는 스케줄에 **있다**. 우리가 화면에서 안 그릴 뿐이다. 그래서 `scheduledSlotKeySet`에서
+ *    빠지는데, 그걸 그대로 "스케줄에 없는 기록 = 고아"로 세면 LAB에 남은 계획이 통째로
+ *    *"시간 변경된 기록 N건"* 으로 둔갑한다(같은 데이터를 시트 상세는 'LAB 각주'라 부른다).
+ * ⚠️ 표시 설정과 무관하게 **자리면 전부** 담는다 — JJ를 켜 둔 계정에선 JJ 키가 `scheduled`에도 있어
+ *    어차피 고아 판정에 안 걸리므로, 여기서 굳이 토글을 볼 이유가 없다(볼수록 갈릴 여지만 는다).
+ */
+export function seatSlotKeySet(
+  weekMonday: string,
+  schedules: readonly Pick<
+    GridScheduleRow,
+    "dayOfWeek" | "startTime" | "validFrom" | "validTo" | "slotTeacherLabel"
+  >[],
+): Set<string> {
+  const out = new Set<string>();
+  for (const date of weekDatesOf(weekMonday)) {
+    const dow = dowKeyOf(date);
+    for (const s of schedules) {
+      if (s.dayOfWeek !== dow) continue;
+      if (s.validFrom > date) continue;
+      if (s.validTo && s.validTo < date) continue;
+      if (!specialSlotLabel(s.slotTeacherLabel)) continue;
+      out.add(slotKey(date, normalizeSlotTime(s.startTime)));
+    }
+  }
+  return out;
+}
+
 const TERM_ORDER: Record<string, number> = { regular: 0, exam: 1 };
 
 export function buildWeekGrid(input: {

@@ -3,6 +3,8 @@
 // 섹션별 부분 저장(saveOwnerSection)이라 SECTION_SCHEMAS로 섹션 단위 검증.
 import { z } from "zod";
 import { MENU_KEYS, SYSTEM_ROLES, type MenuKey, type SystemRole } from "@/lib/permissions";
+// 보관 가능한 배치 수는 **화면도 읽는 값**이라 zod 없는 순수 모듈에 산다(클라 번들에 zod 유입 방지).
+import { MAX_GROUP_PRESETS } from "@/features/timetable/lib/group-presets";
 
 const HHMM = /^\d{2}:\d{2}$/;
 const YMD = /^\d{4}-\d{2}-\d{2}$/;
@@ -17,6 +19,20 @@ export const SUBJECT_COLORS = [
 // 실제 요일 분할·라벨은 features/timetable/lib/weekday-groups.ts(단일 소스). 미설정 행은 코드에서 mon-thu 폴백.
 export const WEEKDAY_GROUPINGS = ["mon-thu", "mon-tue", "mon-wed-fri", "none"] as const;
 export type WeekdayGrouping = (typeof WEEKDAY_GROUPINGS)[number];
+
+// 과목을 열 때 처음 보이는 시간표 뷰(과목별). 원장 2026-08-06: *"영어는 기본뷰를 잘 안 쓴다"* —
+// 과목마다 주로 보는 뷰가 다르므로 **코드에 과목 키를 박지 않고** 학원 설정에서 고른다(운영 enum 규칙).
+// ⚠️ 교실뷰(rooms)는 전 과목 지도라 '과목의 기본 뷰'가 될 수 없다 → 선택지에서 뺀다.
+// ⚠️ 강사뷰는 허용 과목(영어·강사별시간표 설정 보유)에서만 유효 — 아니면 페이지가 기본뷰로 강등한다.
+export const SUBJECT_DEFAULT_VIEWS = ["basic", "integrated", "teacher"] as const;
+export type SubjectDefaultView = (typeof SUBJECT_DEFAULT_VIEWS)[number];
+export const SUBJECT_DEFAULT_VIEW_LABEL: Record<SubjectDefaultView, string> = {
+  basic: "기본뷰",
+  integrated: "통합뷰",
+  teacher: "강사뷰",
+};
+export const SUBJECT_DEFAULT_VIEW_OPTIONS: { value: SubjectDefaultView; label: string }[] =
+  SUBJECT_DEFAULT_VIEWS.map((v) => ({ value: v, label: SUBJECT_DEFAULT_VIEW_LABEL[v] }));
 
 export const periodTimeSchema = z.object({
   label: z.string().min(1).max(20),
@@ -49,6 +65,25 @@ export const integrationGroupSchema = z.object({
 });
 export type IntegrationGroupSetting = z.infer<typeof integrationGroupSchema>;
 
+// 통합뷰 그룹 배치 **프리셋**(과목별 여러 벌) — "학기 배치"·"방학 배치"처럼 묶음을 여러 개 저장해 두고
+// 골라 불러온다(원장 2026-08-06 "여러가지 그룹화로 저장/불러오기"). 지금 적용 중인 배치는 여전히
+// integrationGroups 한 벌뿐이고, 프리셋은 **보관함**이다 — 불러오기 = 그 내용을 지금 배치에 복사.
+// (프리셋을 '현재'와 링크로 묶지 않는 이유: 링크면 프리셋을 고른 뒤의 임시 수정이 보관본까지 오염시킨다.)
+export const integrationGroupPresetSchema = z.object({
+  id: z.string().min(1).max(36),
+  name: z.string().min(1).max(30),
+  groups: z.array(integrationGroupSchema).max(40),
+  showOthers: z.boolean().optional(),
+  othersTitle: z.string().max(30).optional(),
+  // 누가·언제 저장했나 — 불러오기 목록에서 "이거 누가 언제 만든 배치더라"를 알 수 있어야 고를 수 있다
+  // (원장 2026-08-06). ⚠️ 이 두 값은 **서버가 찍는다**(saveIntegrationGroups) — 클라가 보낸 값을
+  // 그대로 믿으면 남의 이름으로 저장한 것처럼 꾸밀 수 있다. optional인 이유는 이 필드 도입 전 저장분.
+  savedBy: z.string().max(40).optional(),
+  /** 저장 시각(ISO, UTC). 표시는 Asia/Seoul로 포맷한다. */
+  savedAt: z.string().max(40).optional(),
+});
+export type IntegrationGroupPresetSetting = z.infer<typeof integrationGroupPresetSchema>;
+
 // ECS(English Class Sheet) 수업계획 '구분' 영역 — 저장은 영문 slug(key), 라벨은 설정(라벨을 바꿔도
 // 저장된 계획 행의 key는 불변 = orphan 방지, subjects[].key와 동일 원칙). english는 미설정 시
 // resolveSkillAreas(skill-areas.ts)가 기본 6영역(Vocab~Speaking)을 프리필한다.
@@ -68,6 +103,9 @@ export const subjectSchema = z.object({
   color: z.enum(SUBJECT_COLORS).default("neutral"),
   // 시간표 기본뷰 요일 병합 방식(과목별). 미설정 저장 데이터는 읽을 때 mon-thu로 폴백(resolve는 스키마 미통과).
   weekdayGrouping: z.enum(WEEKDAY_GROUPINGS).default("mon-thu"),
+  // 이 과목을 열 때 처음 보이는 시간표 뷰. 미설정 = 기본뷰(지금까지의 동작).
+  // (.optional() — 예외 플래그 관례. 안 적은 과목은 지금과 완전히 같게 동작한다.)
+  defaultView: z.enum(SUBJECT_DEFAULT_VIEWS).optional(),
   // 일일·확인테스트 문항수(만점) — 원스크린 점수 입력의 /N. 기본 5. (강사 변경 허용은 report.allowTeacherTestMax.)
   testMax: z.number().int().min(1).max(100).default(5),
   // 과목 전용 평일 교시(미설정/빈 배열 = 폴백: 영어=내장 11교시, 그 외=전역 평일 교시). 주말은 전역 공통.
@@ -98,6 +136,8 @@ export const subjectSchema = z.object({
   // 어느 그룹에도 없는 반을 맨 아래 '기타' 섹션으로 보여줄지. 미설정 = 보여줌(반이 조용히 사라지면 안 된다).
   integrationShowOthers: z.boolean().optional(),
   integrationOthersTitle: z.string().max(30).optional(),
+  // 저장해 둔 그룹 배치들(보관함). 현재 적용 배치(integrationGroups)와 별개 — 불러오기로 복사해 쓴다.
+  integrationGroupPresets: z.array(integrationGroupPresetSchema).max(MAX_GROUP_PRESETS).optional(),
   // ECS 수업계획 '구분' 영역 목록(과목별). 미설정 = english만 기본 6영역 프리필(resolveSkillAreas),
   // 그 외 과목은 빈 목록(= ECS 진입 대상 아님). (.optional() — 예외 필드 관례, weekdayPeriods와 동일.)
   skillAreas: z.array(skillAreaSchema).max(20).optional(),

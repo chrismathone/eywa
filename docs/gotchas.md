@@ -1105,3 +1105,52 @@ pro로 돈 적이 **한 번도 없었다**(2026-07-14·07-16·07-30 전수, conf
 `<div hidden id="S:0">`에 남는다(하이드레이션 미완). 이때 `getBoundingClientRect`는 전부 **0**이고
 `.click()`도 안 먹는다 → `document.querySelector('main table')`로 잡을 것(숨은 사본이 먼저 잡힌다).
 창은 사이드바 링크를 `.click()`해 열면 정상 하이드레이션된다.
+
+---
+
+## #98 `transform`이 걸린 조상은 **`position:fixed` 자손의 좌표계를 갈아탄다** — 끌고 있는 칩이 엉뚱한 데 그려진다 (2026-08-06)
+
+원장 제보: *"그룹설정 드래그드랍이 이상한데서 렌더링됨"* — 반 칩을 끌면 **다이얼로그 바깥 오른쪽**에
+칩이 떠 있었다(스크린샷상 커서와 900px 넘게 벌어짐).
+
+**원인은 dnd-kit이 아니라 다이얼로그의 센터링이다.** dnd-kit `DragOverlay`는
+`position:fixed; top:<rect.top>; left:<rect.left>` + `transform: translate3d(delta)`로 그린다 —
+**뷰포트 좌표를 그대로 쓴다는 전제**다. 그런데 CSS 명세상 **`transform`(그리고 `filter`·`perspective`·
+`will-change`·`contain:paint`)이 걸린 요소는 `position:fixed` 자손의 containing block이 된다.**
+모달을 관용구대로 `fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2`로 가운데 놓으면
+그 `-translate-*`가 바로 그 transform이라, 오버레이의 `left: 355px`가 **뷰포트가 아니라 패널 좌상단**
+기준이 된다 → 패널 원점(여기선 ~+290,+90)만큼 통째로 밀린다.
+
+- **규칙**: **드래그·팝오버 등 `position:fixed` 자손을 품는 컨테이너는 `transform`으로 센터링하지 말 것.**
+  `fixed inset-0 flex items-center justify-center`(+ 래퍼 `pointer-events-none` / 패널
+  `pointer-events-auto`)로 바꾸면 transform이 사라져 자손이 뷰포트 기준으로 돌아온다. 래퍼에
+  `pointer-events-none`을 안 주면 그 칸이 backdrop 클릭(닫기)을 통째로 가로챈다.
+- **판별(1줄)**: 조상을 타고 올라가며 `getComputedStyle(n).transform !== 'none'`을 찾는다. 하나라도
+  있으면 그게 범인이다. 고쳤는지 확인은 **오버레이 좌상단 ≈ 포인터 − 잡은 지점**(실측 2px 이내).
+- 🔑 같은 뿌리의 사촌 함정: **`zoom`은 fixed 자손의 좌표를 배율만큼 곱한다**(gotcha 없음, 코드 주석에만
+  있었음) → 시간표 글씨 크기(zoom) 래퍼는 반드시 **`DndContext` 안쪽**에 둔다. 즉 드래그를 붙일 땐
+  **transform 조상 0개 + zoom 조상 0개**가 오버레이의 전제 조건이다.
+- ⚠️ 합성 PointerEvent로 검증할 땐 **한 스크립트 안에서 재지 말 것** — React 커밋이 비동기라 같은 틱에선
+  오버레이가 아직 DOM에 없다(호출을 시작/측정/놓기 3번으로 쪼갠다).
+
+## #99 `aspect-ratio` 박스에 높이를 주면 **폭이 열을 넘어 옆 칸을 덮는다** — 창을 넓혀도 안 줄어든다 (2026-08-07)
+
+**증상**: 관리자가 출석부(반 미선택 허브)를 열면 좌측 사진이 우측 '바로 열기' 목록 **위로 넘어와 가린다**.
+원장: *"사진이 너무 커서 우측 목록을 덮어버리는데, 사진 크기가 고정인가? 창 크기에 따라 변하지 않고?"*
+실측(웨일, 실화면 DOM): 창을 **1280 → 1536으로 넓혀도 사진 폭은 926px 그대로**였다(가린 폭만 368 → 253으로 줄 뿐).
+
+**원인은 사진도 이미지 최적화도 아니라 정렬 규칙이다.** [`PhotoCard`](src/components/atoms/photo-card.tsx)는
+`style={{aspectRatio}}`가 붙은 `figure`인데, 호출부가 `h-full`을 주고 부모 격자가 `items-stretch`라 **높이가
+확정**됐다. CSS Box Alignment는 **비율이 있는 아이템에 한해 `justify-self:normal`을 stretch가 아니라 `start`로**
+해석한다(비율을 지키려는 규칙) → 폭이 열에 맞춰 늘어나는 대신 **높이×비율로 되계산**된다:
+618 × 3/2 = **927px**인데 열은 **658px**. 넘친 268px은 잘리지도 않고(부모는 `overflow-auto`지만 격자 아이템은
+그냥 그려진다), `figure`엔 캡션 오버레이 때문에 **`relative`**가 붙어 있어 정적 요소인 목록보다 **위에** 칠해진다.
+
+- **규칙**: **`aspect-ratio`를 쓰는 카드/사진은 폭을 `w-full`로 확정한다.** 두 축이 다 정해지면 비율은
+  폴백이 되고(높이를 안 주는 호출부에선 그대로 산다) 박스는 제 칸을 못 벗어난다. 크롭은 `object-cover`가 한다.
+  아톰이 항상 붙이도록 못박았다(`photo-card.test.tsx`가 클래스를 잠근다 — happy-dom엔 레이아웃이 없어 폭은 못 잰다).
+- **판별(1줄)**: `figure.getBoundingClientRect().right > 옆칸.left`. 🔑 그보다 빠른 지문은 **"창을 넓혀도
+  안 변한다"** — 폭이 폭에서 안 나오고 **높이에서** 나온다는 뜻이다. 반대로 창을 낮추면 사진이 좁아진다.
+- ⚠️ **한 열로 접히는 좁은 창은 반대 사고**가 난다: 높이를 안 주면 폭(=창 전체)에서 비율로 커져 목록을
+  화면 밖으로 밀고, `h-full`만 주면 남는 높이가 0이라 도리어 **손톱만 한 사진**(실측 232×155)이 된다 →
+  접히는 쪽은 `h-40 lg:h-full`처럼 **띠 높이를 명시**할 것(실측 855×160, 목록 402/407px 보임).

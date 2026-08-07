@@ -10,7 +10,7 @@ import { EcsSheetImportDialog } from "./_components/sheet-import-dialog";
 import { EcsTrackFilter } from "./_components/track-filter";
 import { ENGLISH_TRACK_FILTER_LABEL } from "@/features/classes/english-track";
 
-export const metadata: Metadata = { title: "English Class Sheet — eywa" };
+export const metadata: Metadata = { title: "영어 강사 시트 — eywa" };
 
 /**
  * ECS 랜딩 — 영어 반 카드 + 주간 작성 상태. 반 카드를 누르면 같은 창에서 주간 시트로 드릴인.
@@ -30,7 +30,7 @@ export default async function EcsLandingPage({
   if (!res.ok) {
     return (
       <div className="space-y-4">
-        <PageHeader eyebrow="수업 운영" title="English Class Sheet" description="영어 반별 주간 수업계획서/출석부" />
+        <PageHeader eyebrow="수업 운영" title="영어 강사 시트" description="영어 반별 주간 수업계획서/출석부" />
         <p className="bg-card shadow-card text-text-dim rounded-2xl px-4 py-6 text-sm">{res.error}</p>
       </div>
     );
@@ -40,9 +40,9 @@ export default async function EcsLandingPage({
     <div className="space-y-4">
       <PageHeader
         eyebrow="수업 운영"
-        title="English Class Sheet"
+        title="영어 강사 시트"
         description={`영어 반별 주간 수업계획서/출석부 · ${res.weekLabel}`}
-        embedLabel={`English Class Sheet · ${res.weekLabel}`}
+        embedLabel={`영어 강사 시트 · ${res.weekLabel}`}
       />
 
       <div className="bg-card shadow-card flex flex-wrap items-center gap-3 rounded-2xl px-4 py-3">
@@ -66,7 +66,7 @@ export default async function EcsLandingPage({
             : res.emptyReason === "no-scoped-classes"
               ? "담당하고 계신 영어 반이 없습니다. 반 배정은 사무실에 문의하세요."
               : res.emptyReason === "not-configured"
-                ? "영어 과목의 수업계획(English Class Sheet) 영역이 아직 설정되지 않았습니다. 학원 설정 → 과목 운영에서 영역을 지정하세요."
+                ? "영어 과목의 수업계획(영어 강사 시트) 영역이 아직 설정되지 않았습니다. 학원 설정 → 과목 운영에서 영역을 지정하세요."
                 : "이 주에 운영 중인 영어 반이 없습니다."}
         </p>
       ) : (

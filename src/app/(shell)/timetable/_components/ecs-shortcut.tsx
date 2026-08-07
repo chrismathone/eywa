@@ -10,7 +10,7 @@ export function EcsShortcut({ week }: { week: string }) {
   return (
     <Button
       variant="outline"
-      render={<WindowLink href={`/ecs?week=${week}`} title="English Class Sheet" />}
+      render={<WindowLink href={`/ecs?week=${week}`} title="영어 강사 시트" />}
     >
       ECS 바로가기
     </Button>

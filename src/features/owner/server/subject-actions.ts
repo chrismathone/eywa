@@ -22,6 +22,7 @@ import { fetchAllPaged } from "@/lib/supabase/batch";
 import { logAction } from "@/features/audit/server/log";
 import { resolveSettings } from "../resolve";
 import { isValidSubjectKey } from "../subject-absorb";
+import type { IntegrationGroupPresetSetting } from "../settings-types";
 import { saveOwnerSection } from "./actions";
 
 const SCALAR_TABLES = [
@@ -138,6 +139,15 @@ async function removeSubjectRowFromSettings(supabase: Supabase, tenantId: string
 }
 
 export type AbsorbResult = { ok?: boolean; moved?: number; error?: string };
+
+/**
+ * 보관함 저장 결과 — **서버가 찍은 '누가·언제'를 그대로 돌려준다.**
+ * 🔴 안 돌려주면 화면이 방금 저장한 항목을 "저장자 미상 · 시각 없음"으로 그린다(클라엔 도장이 없다).
+ *    새로고침해야 보이는 값은 없는 값이나 마찬가지다.
+ */
+export type IntegrationGroupsResult = AbsorbResult & {
+  presets?: IntegrationGroupPresetSetting[];
+};
 
 /**
  * 과목 흡수 실행: from 키의 전 데이터 → to 키로 이동 후, 설정에서 from 과목 행 제거.
@@ -274,6 +284,20 @@ export type IntegrationGroupsInput = {
   groups: { id: string; title: string; classIds: string[] }[];
   showOthers: boolean;
   othersTitle: string;
+  /**
+   * 보관함(프리셋) 전체. **넘기면 통째로 교체**, 안 넘기면(undefined) 저장된 것을 그대로 둔다 —
+   * 프리셋을 안 건드리는 화면이 실수로 보관함을 비우지 않게(부분 갱신 아님을 호출부가 알도록 명시).
+   */
+  presets?: {
+    id: string;
+    name: string;
+    groups: { id: string; title: string; classIds: string[] }[];
+    showOthers?: boolean;
+    othersTitle?: string;
+    /** ⚠️ 보내도 무시된다 — '누가·언제'는 서버가 찍는다(위조 방지). 타입만 받아 준다(왕복 편의). */
+    savedBy?: string;
+    savedAt?: string;
+  }[];
 };
 
 /**
@@ -341,7 +365,24 @@ export async function saveTeacherViewOrder(input: {
   return { ok: true };
 }
 
-export async function saveIntegrationGroups(input: IntegrationGroupsInput): Promise<AbsorbResult> {
+/**
+ * 빈 제목 줄은 저장 단계에서 버린다(화면에서 이름 없는 섹션이 생기지 않게). 반 중복 배정도 여기서
+ * 정리 — 먼저 나온 줄이 갖는다(렌더 규칙 applyCustomGroups와 같은 순서라 화면·저장이 안 어긋난다).
+ * 현재 배치와 보관함(프리셋)이 **같은 규칙**을 타야 불러왔을 때 화면이 달라지지 않는다.
+ */
+function sanitizeGroups(groups: { id: string; title: string; classIds: string[] }[]) {
+  const seen = new Set<string>();
+  return groups
+    .map((g) => ({ ...g, title: g.title.trim() }))
+    .filter((g) => g.title)
+    .map((g) => ({
+      id: g.id,
+      title: g.title,
+      classIds: g.classIds.filter((id) => (seen.has(id) ? false : (seen.add(id), true))),
+    }));
+}
+
+export async function saveIntegrationGroups(input: IntegrationGroupsInput): Promise<IntegrationGroupsResult> {
   const gate = await requireOwnerWrite();
   if (gate.error !== undefined) return { error: gate.error };
   if (!isValidSubjectKey(input.subject)) return { error: "잘못된 과목 키입니다" };
@@ -357,17 +398,48 @@ export async function saveIntegrationGroups(input: IntegrationGroupsInput): Prom
     return { error: "학원 설정에 없는 과목입니다" };
   }
 
-  // 빈 제목 그룹은 저장 단계에서 버린다(화면에서 이름 없는 섹션이 생기지 않게). 반 중복 배정도 여기서
-  // 정리 — 먼저 나온 그룹이 갖는다(렌더 규칙 applyCustomGroups와 같은 순서라 화면·저장이 안 어긋난다).
-  const seen = new Set<string>();
-  const groups = input.groups
-    .map((g) => ({ ...g, title: g.title.trim() }))
-    .filter((g) => g.title)
-    .map((g) => ({
-      id: g.id,
-      title: g.title,
-      classIds: g.classIds.filter((id) => (seen.has(id) ? false : (seen.add(id), true))),
-    }));
+  const groups = sanitizeGroups(input.groups);
+
+  // 보관함(프리셋) — 저장 시점에 같은 위생 규칙을 태운다(빈 제목 줄 제거·줄 안 반 중복 제거).
+  // 이름 없는 프리셋은 버린다(목록에서 고를 수 없는 유령 항목이 된다).
+  //
+  // 🔴 '누가·언제'는 **서버가 찍는다** — 클라가 보낸 savedBy를 그대로 믿으면 남의 이름으로 저장한 것처럼
+  //    꾸밀 수 있다. 내용이 그대로인 프리셋은 **기존 도장을 유지**한다(다른 프리셋을 하나 만들었다고
+  //    나머지 전부의 저장 시각이 오늘로 바뀌면 "언제 만든 배치인지"가 통째로 거짓이 된다).
+  const prevPresets = operations.subjects.find((s) => s.key === input.subject)?.integrationGroupPresets ?? [];
+  const prevById = new Map(prevPresets.map((p) => [p.id, p]));
+  const stampedAt = new Date().toISOString();
+  // ⚠️ 객체를 그대로 stringify하면 **키 순서**에 걸린다 — 저장본은 jsonb라 Postgres가 키를 재정렬해
+  //    돌려주므로, JS 리터럴 순서와 우연히 같지 않으면 "안 바뀐 프리셋"이 매번 바뀐 걸로 잡혀
+  //    저장 시각이 계속 갱신된다. 배열로 눕혀 순서를 못박는다.
+  const bodyOf = (p: {
+    name: string;
+    groups?: { id: string; title: string; classIds?: string[] }[];
+    showOthers?: boolean;
+    othersTitle?: string;
+  }) =>
+    JSON.stringify([
+      p.name,
+      (p.groups ?? []).map((g) => [g.id, g.title, g.classIds ?? []]),
+      p.showOthers !== false,
+      p.othersTitle ?? "",
+    ]);
+  const presets = input.presets
+    ?.map((p) => {
+      const cleaned = {
+        id: p.id,
+        name: p.name.trim(),
+        groups: sanitizeGroups(p.groups),
+        showOthers: p.showOthers,
+        othersTitle: p.othersTitle?.trim() || undefined,
+      };
+      const before = prevById.get(p.id);
+      const unchanged = before && bodyOf(before) === bodyOf(cleaned);
+      return unchanged
+        ? { ...cleaned, savedBy: before.savedBy, savedAt: before.savedAt }
+        : { ...cleaned, savedBy: gate.actor.displayName ?? undefined, savedAt: stampedAt };
+    })
+    .filter((p) => p.name);
 
   const nextOperations = {
     ...operations,
@@ -379,6 +451,8 @@ export async function saveIntegrationGroups(input: IntegrationGroupsInput): Prom
             integrationGroupsEnabled: input.enabled,
             integrationShowOthers: input.showOthers,
             integrationOthersTitle: input.othersTitle.trim() || undefined,
+            // undefined = "안 넘겼다" → 기존 보관함 보존. 빈 배열은 "다 지웠다"라 그대로 반영.
+            integrationGroupPresets: presets ?? s.integrationGroupPresets,
           }
         : s,
     ),
@@ -393,7 +467,14 @@ export async function saveIntegrationGroups(input: IntegrationGroupsInput): Prom
     action: "owner_integration_groups_update",
     targetType: "tenant_settings",
     targetLabel: input.subject,
-    metadata: { subject: input.subject, enabled: input.enabled, groups: groups.length },
+    metadata: {
+      subject: input.subject,
+      enabled: input.enabled,
+      groups: groups.length,
+      ...(presets ? { presets: presets.length } : null),
+    },
   });
-  return { ok: true };
+  // 🔴 도장이 찍힌 보관함을 **돌려준다** — 안 돌려주면 화면이 방금 저장한 항목을 "저장자 미상 ·
+  //    시각 없음"으로 그린다(클라엔 도장이 없다). 새로고침해야 보이는 값은 없는 값이나 마찬가지.
+  return { ok: true, presets: presets ?? undefined };
 }

@@ -30,9 +30,9 @@ describe("navigation presentation", () => {
 });
 
 describe("하위 카테고리(subOf)", () => {
-  it("English Class Sheet는 시간표의 하부탭으로 나오고 자기 menuKey를 갖는다(자기 창으로 열림)", () => {
+  it("영어 강사 시트는 시간표의 하부탭으로 나오고 자기 menuKey를 갖는다(자기 창으로 열림)", () => {
     const subs = subTabsForMenu("timetable");
-    expect(subs).toContainEqual({ label: "English Class Sheet", href: "/ecs", menuKey: "ecs" });
+    expect(subs).toContainEqual({ label: "영어 강사 시트", href: "/ecs", menuKey: "ecs" });
   });
 
   it("subOf 항목은 창 해석(findNavItem)에 그대로 남는다 — 지우면 WindowLink가 창을 못 연다", () => {

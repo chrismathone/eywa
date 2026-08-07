@@ -103,7 +103,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: "/attendance", label: "출석부", icon: MENU_ICON.attendance, menuKey: "attendance" },
       // English Class Sheet(ECS) — 영어 반별 주간 수업계획서/출석부(구글시트 이식). 라벨은 원장 확정 명칭.
       // subOf: 사이드바에선 시간표 하위 카테고리로 표시(원장 지시 2026-07-29). 팰릿·모바일내비엔 그대로 노출.
-      { href: "/ecs", label: "English Class Sheet", icon: MENU_ICON.ecs, menuKey: "ecs", subOf: "timetable" },
+      { href: "/ecs", label: "영어 강사 시트", icon: MENU_ICON.ecs, menuKey: "ecs", subOf: "timetable" },
       { href: "/classes", label: "수업목록", icon: MENU_ICON.classes, menuKey: "classes" },
       // 수업보고서 = 학원 전체 보고서 발송 총괄(구 학원설정 ?tab=report_mgmt에서 승격, 옛 Edutrix 외부링크 대체).
       { href: "/lesson-reports", label: "수업보고서", icon: MENU_ICON.lesson_reports, menuKey: "lesson_reports" },
