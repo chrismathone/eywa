@@ -31,6 +31,7 @@ export function OffboardDialog({
   classes,
   assistClasses,
   teacherOptions,
+  defaultResignDate,
   onClose,
 }: {
   staffId: string;
@@ -39,11 +40,14 @@ export function OffboardDialog({
   /** 담임은 아니지만 교시로 들어가는 진행중 반 — 인계 안 하면 시간표에 퇴직자가 남는다. */
   assistClasses: AssistClassRow[];
   teacherOptions: HandoverTeacher[];
+  /** 퇴사일 기본값(오늘) — 부모가 클라에서 계산해 넘긴다(렌더 중 Date 호출 회피). */
+  defaultResignDate: string;
   onClose: () => void;
 }) {
   const [state, action] = useActionState<OffboardState, FormData>(handoverAndDeactivate, undefined);
   const subjects = useSubjectMaps();
   const [newTeacherId, setNewTeacherId] = useState("");
+  const [resignDate, setResignDate] = useState(defaultResignDate);
   // 기본 = 전부 선택("전부 넘기기"가 이 화면의 목적). 체크를 풀어 일부만 남길 수 있다.
   const [picked, setPicked] = useState<string[]>(() => classes.map((c) => c.id));
   const [pickedAssist, setPickedAssist] = useState<string[]>(() => assistClasses.map((c) => c.id));
@@ -125,6 +129,18 @@ export function OffboardDialog({
     <Modal title="퇴사 처리" desc={displayName} width="md" onClose={onClose}>
       <form action={action} className="space-y-3">
         <input type="hidden" name="id" value={staffId} />
+
+        {/* 퇴사일(원장 지시 2026-08-07) — 계약 이력에 '퇴사 (날짜)' 줄로 남는다. 인계 여부와 무관하게 받는다. */}
+        <label className="flex items-center gap-2">
+          <span className="text-foreground text-sm font-medium">퇴사일</span>
+          <input
+            type="date"
+            name="resignDate"
+            value={resignDate}
+            onChange={(e) => setResignDate(e.target.value)}
+            className="border-line bg-card num rounded-lg border px-2.5 py-1.5 text-sm outline-none"
+          />
+        </label>
 
         <p className="text-amber inline-flex items-start gap-1.5 text-sm font-medium">
           <TriangleAlert className="mt-0.5 size-4 shrink-0" />

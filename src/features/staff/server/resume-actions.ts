@@ -14,7 +14,7 @@ import type { UploadTicket } from "@/lib/storage/types";
 import { logAction } from "@/features/audit/server/log";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
-import { EMAIL_RE } from "@/features/staff/email";
+import { autoStaffEmail, EMAIL_RE } from "@/features/staff/email";
 import { subjectsFromDepartment } from "../department-subjects";
 import {
   INITIAL_STAFF_PASSWORD,
@@ -139,8 +139,30 @@ export async function issueResumePhotoTicket(
 }
 
 /**
+ * 이미 쓰이는 로그인 이메일 전부(소문자) — 자동 생성 주소가 기존 계정과 부딪히지 않게.
+ * users(테넌트 안) + auth.users(전역, 다른 테넌트 주소와도 부딪히면 createUser가 실패한다) 양쪽을 본다.
+ */
+async function takenEmails(
+  admin: ReturnType<typeof createAdminClient>,
+  tenantId: string,
+): Promise<Set<string>> {
+  const taken = new Set<string>();
+  const { data } = await admin.from("users").select("email").eq("tenant_id", tenantId).limit(2000);
+  for (const u of data ?? []) if (u.email) taken.add(String(u.email).toLowerCase());
+  // auth 목록은 페이지네이션 — 학원 규모(수십~수백)라 몇 페이지면 끝난다.
+  for (let page = 1; page <= 10; page++) {
+    const { data: list } = await admin.auth.admin.listUsers({ page, perPage: 200 });
+    const users = list?.users ?? [];
+    for (const u of users) if (u.email) taken.add(u.email.toLowerCase());
+    if (users.length < 200) break;
+  }
+  return taken;
+}
+
+/**
  * 이력서 원샷 직원 등록(2026-07-28 원장 지시) — 신규 이력서 저장 시 이메일로 로그인 계정까지 생성.
  * 실패해도 이력서 저장은 유효(부분 성공) — 결과는 notice/warning 토스트로만.
+ * - 이메일이 없거나 형식이 틀리면 **이름 이니셜로 자동 생성**(2026-08-07) — 계정이 안 만들어지는 일이 없게.
  * - 같은 이메일 직원이 이미 있으면 **생성 대신 연결**(시트 이관 직원과의 병합 경로) + 빈 인사 필드만 보강.
  * - 계정 생성은 createStaff와 동일 순서: auth createUser(미러 트리거가 users 최소 행 생성) → UPDATE 보강 → 실패 시 양쪽 롤백.
  */
@@ -158,12 +180,19 @@ async function registerStaffFromResume(
   if (ROLE_HIERARCHY[actor.systemRole] >= ROLE_HIERARCHY[role]) {
     return { warning: `'${role}' 역할은 본인 권한으로 부여할 수 없어 이력서만 저장했습니다` };
   }
-  const email = data.personal.email.trim();
-  if (!email || !EMAIL_RE.test(email)) {
-    return { warning: "이메일이 없거나 형식이 잘못돼 직원 계정을 만들지 못했습니다 — 인적사항 E-mail을 확인하세요" };
-  }
-
   const admin = createAdminClient();
+  // 이메일 = 인적사항 E-mail. 비었거나 형식이 잘못됐으면 **이름 이니셜로 자동 생성**한다
+  // (원장 지시 2026-08-07 "이메일 비밀번호는 eywa123으로 자동생성" — 종전엔 여기서 경고만 내고
+  // 계정을 안 만들어, 이력서만 저장되고 아이디가 안 생기는 일이 실제로 났다).
+  let email = data.personal.email.trim().toLowerCase();
+  let autoEmail = false;
+  if (!email || !EMAIL_RE.test(email)) {
+    const taken = await takenEmails(admin, actor.tenantId);
+    const made = autoStaffEmail(data.personal.name, taken);
+    if (!made) return { warning: "로그인 이메일을 자동으로 만들지 못했습니다 — 인적사항 E-mail을 직접 입력하세요" };
+    email = made;
+    autoEmail = true;
+  }
   const derivedSubjects = await subjectsForDivision(data.contract.division);
   const profile = {
     phone: data.personal.phone || null,
@@ -226,14 +255,25 @@ async function registerStaffFromResume(
     await admin.from("users").delete().eq("id", authData.user.id);
     return { warning: `이력서는 저장됐지만 직원 정보 저장에 실패했습니다 — ${dbErr.message}` };
   }
-  await admin.from("academy_documents").update({ staff_user_id: authData.user.id }).eq("id", resumeId);
+  // 이력서 연결 + 자동 생성한 주소는 **이력서 E-mail 칸에도 적어 둔다** — 화면 토스트는 사라지지만
+  // 이력서는 남는다. 안 적으면 나중에 "이 사람 아이디가 뭐였지"를 auth에서 찾아야 한다.
+  const docPatch: Record<string, unknown> = { staff_user_id: authData.user.id };
+  if (autoEmail) {
+    docPatch.form_data = { ...data, personal: { ...data.personal, email } };
+  }
+  await admin.from("academy_documents").update(docPatch).eq("id", resumeId);
   await logAction({
     action: "staff_create_from_resume",
     targetType: "user",
     targetLabel: data.personal.name,
-    metadata: { resumeId, userId: authData.user.id, role, email },
+    metadata: { resumeId, userId: authData.user.id, role, email, autoEmail },
   });
-  return { notice: `직원 계정을 등록했습니다 (초기 비밀번호 ${INITIAL_STAFF_PASSWORD} — 본인이 로그인 후 변경)` };
+  // 자동 생성 주소는 **화면에 반드시 알려준다** — 안 알려주면 본인이 로그인할 방법이 없다.
+  return {
+    notice: `직원 계정을 등록했습니다 — 아이디 ${email} / 초기 비밀번호 ${INITIAL_STAFF_PASSWORD}${
+      autoEmail ? " (이메일이 없어 이름으로 자동 생성)" : ""
+    }`,
+  };
 }
 
 /** 생성/수정 겸용 — formData에 id가 있으면 해당 이력서 갱신, 없으면 신규 작성. */

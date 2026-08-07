@@ -20,6 +20,7 @@ import { SearchForm } from "@/components/search-form";
 import { NewStaffTrigger } from "./_components/new-staff-trigger";
 import { StaffTableScaleBox, StaffTableScaleControl } from "./_components/table-scale";
 import { StaffColumnPicker } from "./_components/staff-column-picker";
+import { StaffQrSection } from "./_components/staff-qr-section";
 import { StaffTable } from "./_components/staff-table";
 import { PAYROLL_ENABLED } from "@/features/payroll/config";
 
@@ -155,7 +156,9 @@ export default async function StaffPage({
 
   const invited = sp.invited;
   const role: RoleKey = (sp.role as RoleKey) ?? "all";
-  const status: StatusKey = (sp.status as StatusKey) ?? "all";
+  // 기본 상태 = **재직**(원장 2026-08-07). 목록 쿼리가 이제 퇴사자까지 내려주므로(그래야 '퇴사' 칩이
+  // 동작한다) 기본값을 all로 두면 평소 화면에 퇴사자가 섞인다 — 일상 화면은 종전과 같게 재직만.
+  const status: StatusKey = (sp.status as StatusKey) ?? "active";
   const q = sp.q ?? "";
   const sort: SortKey = SORT_FILTERS.some((f) => f.key === sp.sort) ? (sp.sort as SortKey) : "role";
   const per = (PER_OPTIONS as readonly number[]).includes(Number(sp.per)) ? Number(sp.per) : DEFAULT_PER;
@@ -200,15 +203,18 @@ export default async function StaffPage({
   if (emp !== "all") staff = staff.filter((s) => s.employmentType === emp);
   staff = sortStaff(staff, sort);
 
-  // 대시보드(원장 요청 2026-07-28): 전직원 수 · 근무형태별 · 과목별 — 전체(all, 재직+대기) 기준.
-  const empCount = (t: string) => all.filter((s) => s.employmentType === t).length;
-  const empUnset = all.filter((s) => !s.employmentType).length;
+  // 대시보드(원장 요청 2026-07-28): 전직원 수 · 근무형태별 · 과목별 — **재직+대기** 기준.
+  // ⚠️ `all`에는 이제 퇴사자도 들어 있다(상태 '퇴사' 필터를 살리려고 쿼리에서 안 자른다) —
+  //    집계에 그대로 쓰면 "전직원 수"가 퇴직자까지 세서 갑자기 부풀어 오른다.
+  const onDuty = all.filter((s) => s.status !== "inactive");
+  const empCount = (t: string) => onDuty.filter((s) => s.employmentType === t).length;
+  const empUnset = onDuty.filter((s) => !s.employmentType).length;
   const subjectStats = subjectMaps.options
     .map((o) => ({
       key: o.value,
       label: o.label,
       color: subjectMaps.colorOf(o.value),
-      count: all.filter((s) => s.subjects.includes(o.value)).length,
+      count: onDuty.filter((s) => s.subjects.includes(o.value)).length,
     }))
     .filter((s) => s.count > 0);
   const current = { role, status, subject, emp, q, sort, per };
@@ -230,7 +236,7 @@ export default async function StaffPage({
 
       {/* 직원 대시보드(원장 요청 2026-07-28) — 전직원 수 · 근무형태별 · 과목별 */}
       <section className="grid grid-cols-2 gap-3.5 sm:grid-cols-4">
-        <BigStat label="전직원" value={all.length} unit="명" tone="primary" icon={<Users size={16} strokeWidth={1.8} />} />
+        <BigStat label="전직원" value={onDuty.length} unit="명" tone="primary" icon={<Users size={16} strokeWidth={1.8} />} />
         {EMPLOYMENT_TYPES.map((t) => (
           <BigStat key={t} label={t} value={empCount(t)} unit="명" tone="neutral" />
         ))}
@@ -403,6 +409,7 @@ export default async function StaffPage({
               휴가 관리
             </Button>
           ) : null}
+          {canManage && user ? <StaffQrSection tenantId={user.tenantId} /> : null}
           {canManage && user ? (
             <NewStaffTrigger />
           ) : null}

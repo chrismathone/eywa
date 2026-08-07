@@ -323,6 +323,51 @@ export async function changeStaffRole(
   return { ok: true };
 }
 
+const YMD_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * 퇴사일을 계약 이력에 한 줄로 남긴다(원장 지시 2026-08-07 "캘린더로 날짜 받아서 퇴사일 저장").
+ *
+ * ⚠️ `users`에 퇴사일 컬럼이 없다 — 원장이 Supabase SQL을 실행할 수 없어 컬럼 추가가 보류 중이라,
+ *    이미 있는 `staff_contracts`(kind='note' = 기간 없는 이력 줄)에 기록한다. 직원 상세 '계약조건
+ *    히스토리'에 그대로 보이고, 수정·삭제도 기존 UI로 된다. 컬럼이 생기면 그때 승격하면 된다.
+ * ⚠️ note는 seq=0이라 차수 계산(contractsOnly = kind 'contract'만)에 영향이 없다.
+ * best-effort — 실패해도 퇴사 처리 자체는 유효(상태가 진실, 이 줄은 기록).
+ */
+async function recordResignNote(
+  userId: string,
+  rawDate: string,
+  actor: { id: string; tenantId: string },
+): Promise<void> {
+  const date = rawDate.trim();
+  if (!YMD_RE.test(date)) return; // 날짜를 안 받았으면 줄을 만들지 않는다(빈 이력 줄은 노이즈).
+  try {
+    const admin = createAdminClient();
+    // 같은 날짜의 퇴사 줄이 이미 있으면 다시 넣지 않는다(퇴사→복구→퇴사 반복 시 중복 방지).
+    const { data: dup } = await admin
+      .from("staff_contracts")
+      .select("id")
+      .eq("tenant_id", actor.tenantId)
+      .eq("user_id", userId)
+      .eq("kind", "note")
+      .eq("start_date", date)
+      .ilike("terms", "퇴사%")
+      .maybeSingle();
+    if (dup) return;
+    await admin.from("staff_contracts").insert({
+      tenant_id: actor.tenantId,
+      user_id: userId,
+      seq: 0,
+      kind: "note",
+      start_date: date,
+      terms: `퇴사 (${date})`,
+      created_by: actor.id,
+    });
+  } catch {
+    // 기록 실패가 퇴사 처리를 막지 않는다.
+  }
+}
+
 export type DeactivateState =
   | { error?: string; ok?: true; homeroomCount?: number }
   | undefined;
@@ -349,6 +394,10 @@ export async function deactivateStaff(
   const supabase = await createClient();
   const { error } = await supabase.from("users").update({ status: next }).eq("id", id);
   if (error) return { error: error.message };
+
+  // 퇴사일 기록(원장 지시 2026-08-07) — users에 퇴사일 컬럼이 없어(SQL 접근 보류) **계약 이력 한 줄**로 남긴다.
+  // kind='note'는 기간 없는 이력 줄이라 현재계약·차수 계산을 건드리지 않는다(contract.ts contractsOnly).
+  if (next === "inactive") await recordResignNote(id, String(formData.get("resignDate") ?? ""), actor);
 
   // 퇴사 시 담임으로 남는 진행중 반 수 — 퇴사를 막지 않고 알림용으로만 반환.
   // (status 변경은 classes.teacher_id에 아무 전파가 없어 "(퇴직)" 담임이 시간표·출석부에 남는다.
@@ -510,6 +559,7 @@ export async function handoverAndDeactivate(
     .update({ status: "inactive" })
     .eq("id", id);
   if (statusErr) return { error: statusErr.message };
+  await recordResignNote(id, String(formData.get("resignDate") ?? ""), actor);
 
   // 인계 후에도 남은 담임 반(화면이 stale했거나 일부만 선택한 경우) — 막지 않고 사후 안내용. head:true(B2).
   const { count } = await supabase

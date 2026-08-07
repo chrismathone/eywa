@@ -55,12 +55,15 @@ export async function getStaffList(): Promise<StaffRow[]> {
   // 세 쿼리는 서로 독립 → 병렬(3 round-trip → 1). users/classes/students 모두 단일 테넌트 ≤1000행이라
   // 절단 위험 없음(현재 users 39·classes 129·enrolled 524).
   const [{ data: users }, { data: teaching }, contracts, contractFileRows] = await Promise.all([
+    // 🔴 퇴사자(inactive)도 가져온다 — 종전 `.neq("status","inactive")`가 목록에서 통째로 빼는 바람에
+    // 상태 칩 '퇴사'를 눌러도 **항상 0명**이었다(원장 제보 2026-08-07, 필터가 아니라 데이터가 없던 것).
+    // 기본 화면은 페이지 쪽 기본 상태 필터(재직)가 좁힌다 — 여기서 자르면 필터가 영원히 못 본다.
     supabase
       .from("users")
       .select(
         "id, display_name, email, phone, system_role, status, hire_date, job_title, subjects, department, employment_type, updated_at",
       )
-      .neq("status", "inactive")
+      .neq("system_role", "student")
       .order("system_role", { ascending: true })
       .order("display_name", { ascending: true }),
     supabase.from("classes").select("id, teacher_id").eq("is_active", true),

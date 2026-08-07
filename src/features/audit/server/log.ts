@@ -21,6 +21,10 @@ export const AUDIT_ACTIONS = {
   class_review_delete: "수업 평가 삭제",
   class_review_template_save: "수업 평가 문항 편집",
   class_review_template_delete: "수업 평가 문항 세트 삭제",
+  staff_intake_token_create: "직원 등록 QR 생성",
+  staff_intake_token_toggle: "직원 등록 QR 열기·닫기",
+  staff_intake_token_delete: "직원 등록 QR 삭제",
+  staff_create_from_intake: "QR로 직원 등록",
   staff_contract_file_delete: "계약서 파일 삭제",
   // 본인이 자기 계정을 바꾼 경우(/me) — 위의 staff_*(관리자가 남의 계정을 바꿈)와 구분해 읽힌다.
   self_password_change: "내 비밀번호 변경",
