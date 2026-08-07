@@ -53,7 +53,11 @@ function usedActions(): Map<string, Set<string>> {
         j++;
       }
       for (const m of src.slice(i, j).matchAll(/action:\s*([^,\n]+)/g)) {
-        for (const q of m[1].matchAll(/"([a-z][a-z0-9_]*)"/g)) {
+        // 삼항이면 **분기만** 본다 — 조건부에 있는 문자열은 액션 이름이 아니다.
+        // (2026-08-07: `action: action === "rotate" ? "staff_..._create" : "staff_..._toggle"`에서
+        //  조건의 `"rotate"`를 액션으로 걷어 가 **미등록으로 오탐**했다. 두 분기는 둘 다 등록돼 있었다.)
+        const expr = m[1].includes("?") ? m[1].slice(m[1].indexOf("?") + 1) : m[1];
+        for (const q of expr.matchAll(/"([a-z][a-z0-9_]*)"/g)) {
           const rel = path.relative(process.cwd(), file).split(path.sep).join("/");
           if (!found.has(q[1])) found.set(q[1], new Set());
           found.get(q[1])!.add(rel);
