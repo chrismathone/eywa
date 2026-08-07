@@ -8,7 +8,11 @@ import { isImportArtifactEmail } from "@/features/staff/email";
 import { getStaffById } from "@/features/staff/server/queries";
 import { ResumeSheet } from "../_components/resume-sheet";
 
-export const metadata = { title: "직원 이력서 작성 — eywa" };
+// 명칭(원장 지시 2026-08-07): **직원등록(신규, 연결 없음) 때만 "직원 명부"**, 그 외(기존 직원 연결·열람·수정)는 "이력서".
+export async function generateMetadata({ searchParams }: { searchParams: Promise<{ staff?: string }> }) {
+  const { staff } = await searchParams;
+  return { title: staff ? "직원 이력서 작성 — eywa" : "직원 명부 작성 — eywa" };
+}
 
 export default async function NewResumePage({
   searchParams,
@@ -40,12 +44,12 @@ export default async function NewResumePage({
       <header className="print:hidden">
         <BackLink href="/staff" label="직원관리로" />
         <h1 className="text-foreground mt-1 text-lg font-bold">
-          직원 이력서 작성{staff ? ` — ${staff.displayName}` : ""}
+          {staff ? `직원 이력서 작성 — ${staff.displayName}` : "직원 명부 작성"}
         </h1>
         <p className="text-text-dim mt-1 text-sm">
           {staff
             ? "직원 정보로 미리 채워진 서식입니다 — 저장하면 이 직원과 이력서가 연결됩니다."
-            : "종이 서식의 각 칸에 바로 입력하세요 — 저장하면 데이터베이스(인사·직원)에 보관되고 언제든 다시 수정·A4 인쇄할 수 있습니다."}
+            : "종이 서식의 각 칸에 바로 입력하세요 — 저장하면 직원 계정까지 함께 만들어지고(하단 옵션), 이후엔 그 직원의 이력서로 보관됩니다."}
         </p>
       </header>
       <ResumeSheet

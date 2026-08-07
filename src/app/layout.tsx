@@ -29,6 +29,12 @@ export async function generateMetadata(): Promise<Metadata> {
   return {
     title: academyName ? `eywa — ${academyName} 학원관리` : "eywa",
     description: "원장님이 가장 먼저 켜는 학원관리 프로그램.",
+    // 휴대폰 푸시(0188a) 전제 — **iOS는 홈 화면에 추가된 앱에만 푸시를 준다**(16.4+). 그 "추가"가
+    // 성립하려면 manifest(display:standalone)와 apple-touch-icon이 있어야 한다. 안드로이드는 manifest
+    // 없이도 푸시가 오지만, 같은 파일이 홈 화면 아이콘·이름을 함께 챙긴다.
+    manifest: "/manifest.json",
+    appleWebApp: { capable: true, title: academyName ? `${academyName} eywa` : "eywa", statusBarStyle: "default" },
+    icons: { icon: "/eywa-mark.png", apple: "/eywa-mark.png" },
   };
 }
 

@@ -161,6 +161,29 @@ export function isRowActionable(
 }
 
 /**
+ * 학부모 문구(멘트)·학습 추세를 **편집할 수 있나** — 표·카드 모드 **공용 단일 소스**
+ * (원장 2026-08-07: *"카드뷰 모드에서도 비활성화 되니까 일관성이 있어야함"*).
+ *
+ * 잠그는 경우는 둘뿐이다:
+ *  · **이미 발송** — 수정 금지(2026-07-22). ClassNote는 게시글 수정이 없어 여기서 고치면 기록과
+ *    학부모가 본 것이 갈라진다.
+ *  · **결석** — 발송이 구조적으로 막히는 행이라(`isRowActionable` send·autowrite + 서버 게이트 +
+ *    일괄 발송 사전 필터) 여기 쓴 문장은 **어디로도 나가지 않는다**. 다 써놓고 발송에서 막히는 헛수고.
+ *
+ * ⚠️ **진도 미입력은 잠그지 않는다** — 멘트를 먼저 쓰고 진도를 채우는 순서가 실제로 있다.
+ *    그래서 `isRowActionable`을 재사용하면 안 된다(그건 `isReportEligible`을 먼저 본다 — 회귀 선례 #167 주석).
+ * ⚠️ 이건 **입력 잠금**이지 게이트가 아니다 — 저장·발송 판정은 위 함수와 서버가 따로 잡는다(#77).
+ */
+export function isMentEditable(subject: Subject, statusOverride?: string | null): boolean {
+  // ⚠️ `??`가 아니라 `!== undefined` — **null은 "이번 세션에서 명시적으로 지워짐"**(재발급·첨부변경)이라
+  //    스냅샷의 옛 "success"를 되살리면 안 된다(effectiveClassnoteStatus와 같은 규약). `??`로 쓰면
+  //    링크를 재발급해 잠금을 푼 행이 다시 잠긴다.
+  const status = statusOverride !== undefined ? statusOverride : subject.classnoteStatus;
+  if (isAlreadySent(status)) return false;
+  return subject.attendanceRaw !== "absent";
+}
+
+/**
  * '맨 위 행 복사'의 **대상** 판정 — 제외 사유는 **발송 완료 하나뿐**이다.
  *
  * 🔴 여기에 `isRowActionable(…,"save")`를 쓰면 안 된다(2026-07-23 회귀). 그 판정은

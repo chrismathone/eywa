@@ -209,6 +209,9 @@ export function ResumeSheet({
   assignableRoles,
   staffUserId,
   returnHref = "/staff",
+  submitAction,
+  publicToken,
+  onSaved,
 }: {
   data: StaffResumeData;
   id?: string;
@@ -224,9 +227,22 @@ export function ResumeSheet({
   staffUserId?: string;
   /** 취소·작성완료 후 돌아갈 곳. 본인 이력서(/me)는 /staff가 차단이라 여기로 되돌린다. */
   returnHref?: string;
+  /**
+   * 제출 액션 교체 — **QR 공개 등록**(비인증)이 같은 서식을 그대로 쓰기 위한 주입점(2026-08-07).
+   * 서식을 복제하면 칸이 갈라져 한쪽만 늘어난다(직원 명부는 70칸이 넘는다) → 액션만 바꾼다.
+   */
+  submitAction?: (prev: ResumeActionState, fd: FormData) => Promise<ResumeActionState>;
+  /** 공개 등록 모드 — 이 값이 있으면 사진 첨부·초안 저장·계정 옵션·이동을 끄고 토큰을 함께 제출한다. */
+  publicToken?: string;
+  /** 저장 성공 시 부모에게 알림(공개 모드의 완료 화면 전환) — 있으면 자체 이동을 하지 않는다. */
+  onSaved?: (state: NonNullable<ResumeActionState>) => void;
 }) {
+  const isPublic = !!publicToken;
   const [editing, setEditing] = useState(startEditing);
-  const [state, formAction] = useActionState<ResumeActionState, FormData>(saveStaffResume, undefined);
+  const [state, formAction] = useActionState<ResumeActionState, FormData>(
+    submitAction ?? saveStaffResume,
+    undefined,
+  );
   const router = useRouter();
   const formRef = useRef<HTMLFormElement>(null);
 
@@ -258,15 +274,20 @@ export function ResumeSheet({
   // 사진 슬라이드(원장 지시 2026-07-28) — 2칸을 세로로 쌓지 않고 한 칸에서 ‹ › 로 넘긴다.
   const [photoSlide, setPhotoSlide] = useState(0);
   // 원샷 직원 등록(생성 화면 전용) — 서버가 권한·역할을 재검증한다.
-  // '직원 등록' 진입이 이 서식으로 통합(2026-07-28)돼 기본 ON — 역할 미선택 저장은 이력서만 저장+경고.
+  // '직원 등록' 진입이 이 서식으로 통합(2026-07-28)돼 기본 ON. 🔴 역할도 기본값(강사)을 채운다
+  // (2026-08-07 원장 지시 "체크 안 해도 만들어지게" — 실사고는 체크는 켜져 있었는데 **역할이 비어**
+  // '역할 미선택 → 이력서만 저장' 경고로 빠진 것. 기본값이 있으면 아무것도 안 만져도 저장=계정 생성).
+  const defaultAcctRole = assignableRoles?.includes("teacher") ? "teacher" : (assignableRoles?.[0] ?? "");
   const [acctRegister, setAcctRegister] = useState(!id && (assignableRoles?.length ?? 0) > 0);
-  const [acctRole, setAcctRole] = useState("");
+  const [acctRole, setAcctRole] = useState(defaultAcctRole);
 
   const draft = useFormDraft({
     // 스코프에 userId 포함 — 사무실 공용 PC에서 앞사람 초안이 뒷사람에게 복구 제안되면 안 된다.
     scope: `staff-resume:${userId}:${id ?? "new"}`,
     formRef,
-    enabled: editing,
+    // 🔴 공개 등록(QR)은 초안을 남기지 않는다 — 지원자 개인정보가 **학원 공용 태블릿 IDB**에 남아
+    //    다음 사람에게 복구 제안되면 그게 유출이다(#78의 같은 축).
+    enabled: editing && !isPublic,
     // 주민번호·계좌·급여는 IDB에 아예 안 남긴다(재인증 잠금 우회 차단) — 복구 시 그 칸만 비어 있다.
     exclude: RESUME_DRAFT_EXCLUDE,
     onRestore: (vals) => {
@@ -324,7 +345,8 @@ export function ResumeSheet({
       // 사진 경로 복원 — 미리보기 URL은 복원 불가(로컬 objectURL 소멸)라 자리표시로만 보인다.
       setPhotos(Array.from({ length: RESUME_PHOTO_SLOTS }, (_, i) => vals[`photo_${i}`] || null));
       setAcctRegister(vals.acct_register === "true");
-      setAcctRole(vals.acct_role ?? "");
+      // 옛 초안엔 역할이 비어 있을 수 있다 — 빈 값 복원이 기본값(강사)을 지우면 같은 사고가 재발한다.
+      setAcctRole(vals.acct_role || defaultAcctRole);
     },
   });
   const clearDraft = draft.clear;
@@ -345,12 +367,17 @@ export function ResumeSheet({
     doneNonce.current = state.nonce;
     clearDraft();
     markSaved();
+    // 공개 등록(QR): 부모가 완료 화면으로 바꾼다 — 로그인 화면으로 밀어내지 않는다.
+    if (onSaved) {
+      onSaved(state);
+      return;
+    }
     // 부가 효과(직원명부 시트 기입) 결과는 토스트로 — 생성 경로는 곧장 새 뷰로 떠나므로 인라인 표시 불가.
     if (state.notice) toast.success(state.notice);
     if (state.warning) toast.warning(state.warning, { duration: 10000 });
     if (id) router.refresh(); // 수정: 배경 서버 데이터 재조회 → 뷰에 반영.
     else if (state.redirectTo) router.push(state.redirectTo); // 생성: 새 이력서 뷰로 이동.
-  }, [state, router, clearDraft, markSaved, id]);
+  }, [state, router, clearDraft, markSaved, id, onSaved]);
 
 
   function startEdit() {
@@ -484,9 +511,15 @@ export function ResumeSheet({
     opts: { ph?: string; align?: "left" | "center" | "right" } = {},
   ) => dynField(setLangs, emptyLanguage, "lang", i, key, value, opts);
 
+  // 서식 제목(원장 지시 2026-08-07) — **직원등록일 때만 "직원 명부"**, 저장된 이력서 열람·수정과
+  // 기존 직원 연결 작성은 종전대로 "이력서".
+  // ⚠️ 직원등록 = ① 사무실 '직원 등록'(계정 섹션이 있는 신규) ② **QR 공개 등록**(isPublic) 둘 다다 —
+  //    공개 경로는 assignableRoles를 안 넘겨서(역할이 토큰에 박혀 있다) 조건에서 빠져 "이력서"가 떴다(실측).
+  const sheetTitle =
+    !id && !staffUserId && (isPublic || (assignableRoles?.length ?? 0) > 0) ? "직원 명부" : "이력서";
   const sheet = (
     <div className="resume-sheet border-line bg-card text-foreground mx-auto w-full max-w-[780px] rounded-2xl border shadow-card p-6 sm:p-8 print:rounded-none print:border-2 print:border-foreground/60 print:shadow-none print:p-3">
-      <h1 className="text-center text-[26px] font-bold tracking-[0.6em] print:text-[20px]">이력서</h1>
+      <h1 className="text-center text-[26px] font-bold tracking-[0.6em] print:text-[20px]">{sheetTitle}</h1>
 
       <SectionHead>1. 인적사항</SectionHead>
       <table className={T}>
@@ -550,7 +583,8 @@ export function ResumeSheet({
                         </button>
                       </div>
                     ) : null}
-                    {editing ? (
+                    {/* 공개 등록(QR)은 사진 첨부를 받지 않는다 — 업로드 티켓 발급이 인증 경로다(입사 후 사무실에서). */}
+                    {editing && !isPublic ? (
                       <div className="print:hidden mt-0.5 flex items-center justify-center gap-1.5">
                         <label className="text-primary relative cursor-pointer text-[10px] font-bold hover:underline">
                           {uploadingSlot === slot ? "올리는 중…" : hasPath ? "변경" : "첨부"}
@@ -1021,9 +1055,13 @@ export function ResumeSheet({
     <form action={formAction} ref={formRef} className="space-y-4">
       {id ? <input type="hidden" name="id" value={id} /> : null}
       {!id && staffUserId ? <input type="hidden" name="staff_user_id" value={staffUserId} /> : null}
-      {toolbar}
+      {/* 공개 등록(QR) — 이 토큰이 유일한 자격증명이다(서버가 활성·만료·상한을 재검증). */}
+      {publicToken ? <input type="hidden" name="intake_token" value={publicToken} /> : null}
+      {isPublic ? null : toolbar}
       {id ? <EditingBanner scope={`staff-resume:${id}`} /> : null}
-      <DraftBanner savedAt={draft.draftSavedAt} onRestore={draft.restore} onDiscard={draft.discard} />
+      {isPublic ? null : (
+        <DraftBanner savedAt={draft.draftSavedAt} onRestore={draft.restore} onDiscard={draft.discard} />
+      )}
       {state?.error ? (
         // 한글 요약만 노출 — 기술 원문(detail)은 title 툴팁으로만(UI에 raw 에러 금지).
         <p className="text-danger flex items-center gap-1.5 text-sm" title={state.detail}>
@@ -1064,17 +1102,21 @@ export function ResumeSheet({
               <p className="text-text-dim w-full text-[12px]">
                 인적사항의 E-mail로 로그인 계정을 만들고, 초기 비밀번호는{" "}
                 <span className="num font-bold">{INITIAL_STAFF_PASSWORD}</span> — 본인이 로그인 후 변경합니다. 같은
-                이메일 직원이 이미 있으면 새로 만들지 않고 그 직원과 이력서를 연결합니다.
+                이메일 직원이 이미 있으면 새로 만들지 않고 그 직원과 이력서를 연결합니다. 역할은 기본
+                &lsquo;강사&rsquo; — 다르면 위에서 바꿔 주세요.
               </p>
             </div>
           ) : null}
         </div>
       ) : null}
       <FormActionBar>
-        <Button type="button" variant="outline" onClick={cancel}>
-          <X className="size-4" />
-          취소
-        </Button>
+        {/* 공개 등록엔 '취소'로 돌아갈 화면이 없다(로그인 없이 링크로 들어온 사람) — 제출만 남긴다. */}
+        {isPublic ? null : (
+          <Button type="button" variant="outline" onClick={cancel}>
+            <X className="size-4" />
+            취소
+          </Button>
+        )}
         {/* 생성 성공 후 새 뷰로 이동할 때까지 잠금 유지 → 중복 INSERT 방지 */}
         <SaveButton done={!id && !!state?.ok} />
       </FormActionBar>

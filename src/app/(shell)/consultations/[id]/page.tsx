@@ -96,7 +96,8 @@ export default async function ConsultationDetailPage({
             }
           >
             <Pencil className="size-4" />
-            수정
+            {/* 상세 화면 헤더의 편집 버튼은 여는 대상을 적는다(반 수정·학생 수정·이력서 수정과 같은 규칙). */}
+            상담 수정
           </Button>
           <ConsultationDeleteButton
             id={item.id}

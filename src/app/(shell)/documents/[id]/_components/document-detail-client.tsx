@@ -127,7 +127,8 @@ export function DocumentDetailClient({
         ) : null}
         {canWrite ? (
           <Button variant="outline" onClick={() => setEditing(true)}>
-            <Pencil className="size-4" /> 수정
+            {/* 옆의 '링크 열기'·'다운로드'와 나란히 서므로 무엇을 고치는지 적는다(문서 자체의 정보). */}
+            <Pencil className="size-4" /> 문서 수정
           </Button>
         ) : null}
       </div>

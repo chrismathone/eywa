@@ -33,6 +33,12 @@ export function DeactivateButton({
   const [state, action] = useActionState(deactivateStaff, undefined);
   const [open, setOpen] = useState(false);
   const isInactive = currentStatus === "inactive";
+  // 퇴사일(원장 지시 2026-08-07) — 기본값 오늘. 계약 이력에 '퇴사 (날짜)' 줄로 남는다.
+  // ⚠️ new Date()를 렌더 중 부르면 RSC lint(#11)에 걸리므로 클라 컴포넌트인 여기서 lazy 초기값으로.
+  const [resignDate, setResignDate] = useState(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  });
 
   if (!isInactive && homeroomClasses.length + assistClasses.length > 0) {
     return (
@@ -48,6 +54,7 @@ export function DeactivateButton({
             classes={homeroomClasses}
             assistClasses={assistClasses}
             teacherOptions={teacherOptions}
+            defaultResignDate={resignDate}
             onClose={() => setOpen(false)}
           />
         ) : null}
@@ -67,6 +74,19 @@ export function DeactivateButton({
     >
       <input type="hidden" name="id" value={staffId} />
       <input type="hidden" name="next" value={isInactive ? "active" : "inactive"} />
+      {/* 퇴사일 — 계약 이력에 '퇴사 (날짜)' 줄로 남는다. 복구 때는 받지 않는다. */}
+      {isInactive ? null : (
+        <label className="mr-2 inline-flex items-center gap-1.5">
+          <span className="text-text-dim text-[11px]">퇴사일</span>
+          <input
+            type="date"
+            name="resignDate"
+            value={resignDate}
+            onChange={(e) => setResignDate(e.target.value)}
+            className="border-line bg-card num rounded-lg border px-2 py-1 text-[12px] outline-none"
+          />
+        </label>
+      )}
       <Button type="submit" variant="outline" size="sm">
         {isInactive ? <UserCheck className="size-3.5" /> : <UserMinus className="size-3.5" />}
         {isInactive ? "재직 복구" : "퇴사 처리"}

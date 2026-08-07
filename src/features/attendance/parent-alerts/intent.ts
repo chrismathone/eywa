@@ -129,28 +129,95 @@ export function describeWhen(intent: Pick<ParentIntent, "startsOn" | "endsOn">):
 }
 
 /**
+ * 원문에 적힌 날짜 중 **판정 구간이 못 담은 날**을 찾는다 (2026-08-07 실사고).
+ *
+ * 🔴 실제로 이렇게 샜다: *"8월 7일 (오늘) 이랑 8월 11일, 8월 12일에 개인일정으로 학원 못 옵니다"* →
+ * 판정 `8/12~8/12`, 벨 제목 "이수빈 결석 8/12". **오늘 결석이 제목에서 사라졌다.** 표가 단일 구간
+ * (starts~ends)이라 흩어진 복수 날짜를 담을 수 없고, 그래서 모델은 그중 하나만 남긴다.
+ *
+ * 🔴 **날짜를 고쳐 쓰지 않는다.** 원문에서 뽑은 날짜로 판정을 당기면 *"8월 7일에 보강 될까요? 8월 12일은
+ * 결석입니다"* 같은 문장에서 오늘을 결석으로 만들어 **셔틀이 아이를 두고 간다**(이 기능이 가장 피해야 할
+ * 방향). 그래서 여기서는 **"원문에 다른 날짜도 있다"고 사람에게 알리기만** 한다 — 최종 판단은 원문으로.
+ *
+ * 뽑는 표기: `8월 7일` · `8/7` · 그리고 앞에 달이 나온 뒤의 `12일`(달을 승계). 달 없는 맨 `3일`은
+ * 뽑지 않는다 — "보강은 **3일**을 해야되니"(실제 문장)를 날짜로 오인하기 때문이다.
+ *
+ * @returns "8/7"·"8/11" 형태의 짧은 라벨(이른 순, 중복 제거). 없으면 빈 배열.
+ */
+export function uncoveredDatesIn(
+  content: string,
+  intent: Pick<ParentIntent, "startsOn" | "endsOn">,
+  { messageDate }: { messageDate: string },
+): string[] {
+  const text = String(content ?? "");
+  if (!ISO_DATE.test(messageDate)) return [];
+  const baseYear = Number(messageDate.slice(0, 4));
+  const baseDay = toDayNumber(messageDate);
+
+  const found: number[] = [];
+  let lastMonth: number | null = null;
+  // 한 번의 스캔으로 세 표기를 순서대로 훑는다 — 달 승계(`8월 11일, 12일`)를 하려면 등장 순서가 필요하다.
+  const token = /(\d{1,2})\s*월\s*(\d{1,2})\s*일|(\d{1,2})\s*\/\s*(\d{1,2})|(\d{1,2})\s*일/g;
+  for (const m of text.matchAll(token)) {
+    let month: number | null = null;
+    let day: number | null = null;
+    if (m[1] && m[2]) [month, day] = [Number(m[1]), Number(m[2])];
+    else if (m[3] && m[4]) [month, day] = [Number(m[3]), Number(m[4])];
+    else if (m[5] && lastMonth !== null) [month, day] = [lastMonth, Number(m[5])];
+    if (month === null || day === null) continue;
+    lastMonth = month;
+    if (month < 1 || month > 12 || day < 1 || day > 31) continue;
+    // 연도는 원문에 거의 안 적힌다 → 연락일의 해로 보되, 그러면 한참 과거가 되는 경우(12월 연락 ↔ 1월 일정)만 다음 해로.
+    let iso = `${baseYear}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    if (toDayNumber(iso) < baseDay - 60) iso = `${baseYear + 1}-${iso.slice(5)}`;
+    if (!cleanDate(iso, messageDate)) continue; // 지난 일·먼 미래는 셔틀에 쓸모없다(같은 상식 가드 재사용)
+    found.push(toDayNumber(iso));
+  }
+  if (!found.length) return [];
+
+  const from = intent.startsOn && ISO_DATE.test(intent.startsOn) ? toDayNumber(intent.startsOn) : null;
+  const to = intent.endsOn && ISO_DATE.test(intent.endsOn) ? toDayNumber(intent.endsOn) : from;
+  const covered = (d: number) => from !== null && to !== null && d >= from && d <= to;
+
+  const out = [...new Set(found.filter((d) => !covered(d)))].sort((a, b) => a - b);
+  return out.map((d) => {
+    const date = new Date(d * 86_400_000);
+    return `${date.getUTCMonth() + 1}/${date.getUTCDate()}`;
+  });
+}
+
+/**
  * 벨 알림 문구 — **원문을 반드시 싣는다.**
  * 강사·차량팀이 클래스노트를 열지 않고도 판단할 수 있어야 한다는 게 인바운드 알림의 원칙이고,
  * 여기선 한 겹 더해서 "분류가 틀렸을 때 사람이 알아챌 수 있어야 한다"는 이유도 있다.
+ *
+ * ⚠️ 판정이 못 담은 날짜가 원문에 있으면 제목·본문에 그 사실을 적는다(`uncoveredDatesIn` 주석 참조) —
+ *    제목만 훑는 차량팀이 "오늘"을 놓치지 않게. 단정하지 않고 "원문 확인"으로만 말한다.
  */
 export function buildAttendanceAlert({
   studentName,
   intent,
   content,
+  messageDate,
 }: {
   studentName: string;
   intent: ParentIntent;
   content: string;
+  /** 연락일(KST). 원문 날짜를 푸는 축 — 없으면 다른 날짜 안내를 생략한다(지어내지 않는다). */
+  messageDate?: string;
 }): { title: string; body: string } {
   const when = describeWhen(intent);
   const assumed = intent.dateAssumed ? "(연락일 기준)" : "";
-  const title = `${studentName} ${attendanceCategoryLabel(intent.category)}${when ? ` ${when}${assumed}` : ""}`;
+  const others = messageDate ? uncoveredDatesIn(content, intent, { messageDate }) : [];
+  const alsoTitle = others.length ? ` ⚠️${others.join("·")} 확인` : "";
+  const title = `${studentName} ${attendanceCategoryLabel(intent.category)}${when ? ` ${when}${assumed}` : ""}${alsoTitle}`;
   const text = String(content ?? "")
     .replace(/\s+/g, " ")
     .trim();
   const head = intent.detail ? `${intent.detail} · ` : "";
+  const also = others.length ? `원문에 ${others.join("·")} 날짜도 있음 · ` : "";
   const quoted = text.length > 180 ? `${text.slice(0, 180)}…` : text;
-  return { title, body: `${head}학부모: “${quoted}”` };
+  return { title, body: `${head}${also}학부모: “${quoted}”` };
 }
 
 /**
@@ -183,9 +250,12 @@ export function buildClassifyPrompt(items: Array<{ id: string; studentName: stri
     "날짜(startsOn/endsOn, YYYY-MM-DD):",
     "- 반드시 **연락일 기준**으로 상대 표현을 풀어라(오늘=연락일, 내일=연락일+1, 이번주 금요일 등).",
     "- '8월 2일부터 8월 6일까지'처럼 기간이면 startsOn·endsOn을 각각 채운다. 하루면 둘을 같게.",
+    "- 날짜가 **띄엄띄엄 여러 개**면(예 \"7일이랑 11일, 12일\") 그건 기간이 아니다 → **가장 이른 날**을",
+    "  startsOn·endsOn에 같이 넣고, 나머지 날짜는 detail에 적어라(예 \"개인일정 8/11·8/12\").",
+    "  가장 늦은 날을 endsOn에 넣으면 **사이에 오는 날까지 결석으로 만들어** 아이가 학원에 못 온다.",
     "- 날짜를 알 수 없으면 **null**로 둬라. 지어내지 말 것.",
     "",
-    "detail: 사유나 시각을 원문 표현 그대로 20자 이내로(예: \"감기\", \"가족여행\", \"10시 등원\"). 없으면 null.",
+    "detail: 사유나 시각을 원문 표현 그대로 30자 이내로(예: \"감기\", \"가족여행\", \"10시 등원\"). 없으면 null.",
     "",
     "아래 메시지들을 각각 분류해 JSON으로만 답하라:",
     '{"results":[{"id":"<주어진 id 그대로>","category":"absence|late|early_leave|none","startsOn":"YYYY-MM-DD|null","endsOn":"YYYY-MM-DD|null","detail":"…|null"}]}',

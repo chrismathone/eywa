@@ -115,14 +115,21 @@ export default async function StaffDetailPage({
             </Pill>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2">
+            {/* ⚠️ 라벨을 그냥 "수정"으로 두지 말 것 — 이 화면엔 여는 대상이 다른 편집 진입점이 **셋**이다
+                (원장 지적 2026-08-07, 모바일에서 특히 붙어 보인다):
+                  · 여기 = **직원 정보**(이름·연락처·직급·담당 과목·시간표 색·기본 강의실·채용일·메모)
+                  · 인적사항 카드 = **이력서**(종이 서식 전체)
+                  · 아래 '계정 관리' 패널 = 이메일 변경·비밀번호 재설정·역할 변경·직원 삭제
+                🔴 그래서 여기를 "계정 수정"이라 부르면 안 된다 — 이 폼엔 이메일·비밀번호·역할이 **없다**
+                (역할은 생성 때만, 수정 모드엔 필드 자체가 없음). 이름이 실제로 여는 것과 맞아야 한다. */}
             {canManage ? (
               <Button
                 variant="outline"
                 size="sm"
-                render={<WindowLink href={`/staff/${staff.id}/edit`} title={`${staff.displayName} 수정`} />}
+                render={<WindowLink href={`/staff/${staff.id}/edit`} title={`${staff.displayName} 직원 정보 수정`} />}
               >
                 <Pencil className="size-3.5" />
-                수정
+                직원 정보 수정
               </Button>
             ) : null}
             {isTeacherLike ? (
