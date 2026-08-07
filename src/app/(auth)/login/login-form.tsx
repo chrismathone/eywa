@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { useRouter } from "next/navigation";
 import { AlertCircle, ArrowRight } from "@/components/icons/eywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,7 +9,6 @@ import { Label } from "@/components/ui/label";
 import { createClient } from "@/lib/supabase/client";
 
 export function LoginForm({ next }: { next?: string }) {
-  const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
@@ -35,7 +33,7 @@ export function LoginForm({ next }: { next?: string }) {
     }
 
     const supabase = createClient();
-    const { data, error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+    const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
 
     if (signInError) {
       const message = /invalid login credentials/i.test(signInError.message)
@@ -46,13 +44,16 @@ export function LoginForm({ next }: { next?: string }) {
       return;
     }
 
-    // 역할별 기본 착지 지점: 강사=원스크린, 학생=내 학습 현황, 그 외(원장 등)=대시보드.
-    const role = data.user?.app_metadata?.system_role as string | undefined;
-    const home =
-      role === "teacher" ? "/onescreen" : role === "student" ? "/my-learning" : "/dashboard";
-    const target = next && next.startsWith("/") ? next : home;
-    router.push(target);
-    router.refresh();
+    // 🔑 **착지 지점을 클라에서 정하지 않는다.** 강사 홈은 담당 과목(DB)으로 갈리는데(영어 전담=ECS)
+    // 클라는 JWT의 role까지밖에 못 본다. 예전엔 여기서 서버 액션에 물었는데, **그 요청엔 세션 쿠키가
+    // 아직 안 실릴 때가 있어**(getClaims 빈손) 같은 코드가 어떤 때는 ECS로 어떤 때는 원스크린으로 가는
+    // 경합이 났다(2026-08-07 실측). 그래서 판정을 **목적지 문서 요청으로 미룬다** → `/home`(리다이렉터).
+    //
+    // 🔴 **`router.push`가 아니라 풀 문서 네비게이션**이어야 한다 — 이 핸들러가 서버와 주고받은 뒤
+    // 클라 라우터로 이동하면, 늦게 도착한 응답이 현재 페이지 트리를 다시 적용하면서 이동을 덮는다
+    // (목적지 RSC를 200으로 받아놓고도 화면은 '로그인 중…'에서 멈췄다). 뷰 전환도 같은 이유로
+    // window.location을 쓴다 — 동일 규약. 부수 효과로 모든 서버 컴포넌트가 새 세션 쿠키를 확실히 본다.
+    window.location.assign(next && next.startsWith("/") ? next : "/home");
   }
 
   return (

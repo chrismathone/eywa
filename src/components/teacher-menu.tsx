@@ -44,6 +44,7 @@ export function TeacherMenu({
   permMatrix,
   canReturnToAdmin = false,
   showEcs = true,
+  home = null,
 }: {
   permMatrix: AccessMatrix;
   /** 겸직(관리자 계열)이 강사뷰에 있을 때 → 드롭다운 하단에 '관리자뷰로 전환'. 실 강사는 false. */
@@ -54,12 +55,21 @@ export function TeacherMenu({
    * 있으므로(`effectiveTeacherScope`·`ecsAssistantClassIds`) 레이아웃이 계산해 내려준다. 모르면 표시(fail-open).
    */
   showEcs?: boolean;
+  /**
+   * 이 강사의 홈 경로([teacherViewHome](src/lib/auth/teacher-home.ts)) — 그 항목이 **맨 위**로 올라온다.
+   * 영어 전담은 `/ecs`, 그 외는 `/onescreen`(원장 지시 2026-08-07 "영어 강사는 ECS 기반 원스크린").
+   * ⚠️ 홈이 아닌 쪽을 **숨기지는 않는다** — 영어 강사도 보강·대타로 원스크린이 필요할 수 있고, 안 보이면
+   * "쓴 게 안 보임"이 된다. 순서만 바꾼다. 모르면(null) 기존 순서 그대로.
+   */
+  home?: string | null;
 }) {
   // 학원 권한 매트릭스에서 강사 접근이 '없음'인 탭은 숨긴다(설정 반영). teacher_onescreen은 항상 통과(locked full).
   // 수업보고서 오버사이트(/lesson-reports)는 teacher=none — 작성은 /onescreen. 옛 Edutrix 외부링크는 제거됨.
-  const links = LINKS.filter(
+  const visible = LINKS.filter(
     (l) => canAccess("teacher", l.menu, permMatrix) && (l.menu !== "ecs" || showEcs),
   );
+  // 홈을 첫 줄로. 나머지는 원래 순서를 그대로 보존한다(가장 위 한 줄만 바뀌는 최소 변화).
+  const links = home ? [...visible.filter((l) => l.href === home), ...visible.filter((l) => l.href !== home)] : visible;
   return (
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger

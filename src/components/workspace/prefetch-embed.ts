@@ -26,6 +26,8 @@ const PREFETCH_ROOTS = new Set([
   "/consultations",
   "/billing",
   "/onescreen",
+  // ECS = 영어 강사의 홈(2026-08-07) — 원스크린과 같은 급의 상시 진입점이라 함께 예열한다.
+  "/ecs",
   "/exams",
   "/meetings",
   "/owner",

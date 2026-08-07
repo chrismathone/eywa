@@ -18,6 +18,7 @@ import { OperationsProvider } from "@/features/owner/operations-context";
 import { EditPresenceProvider } from "@/features/presence/edit-presence";
 import { getUserPermMatrix } from "@/lib/auth/perm-matrix";
 import { getShellView, canUseTeacherView, isFullShellRole, effectiveTeacherScope } from "@/lib/auth/view-mode";
+import { teacherViewHome } from "@/lib/auth/teacher-home";
 import { ecsAssistantClassIds } from "@/features/class-sheets/server/access";
 import { canAccess, menuKeyForPath } from "@/lib/permissions";
 import { findNavItem } from "@/lib/navigation";
@@ -95,7 +96,8 @@ export default async function ShellLayout({ children }: { children: ReactNode })
     const pathname = (await headers()).get("x-pathname") ?? "";
     const menu = menuKeyForPath(pathname);
     if (menu && !canAccess("teacher", menu, permMatrix)) {
-      redirect("/onescreen");
+      // 강사 홈은 담당 과목으로 갈린다(영어 전담=ECS·그 외=원스크린, 2026-08-07) — 하드코딩 금지.
+      redirect(await teacherViewHome());
     }
   }
 
@@ -108,6 +110,10 @@ export default async function ShellLayout({ children }: { children: ReactNode })
       ? (((await effectiveTeacherScope())?.subjects.includes("english") ?? true) ||
         (await ecsAssistantClassIds()).length > 0)
       : false;
+
+  // 강사 홈(= '내 메뉴'에서 맨 위로 올릴 항목) — 영어 전담이면 ECS, 그 외 원스크린(원장 지시 2026-08-07).
+  // 위 ecsForTeacher와 **같은 캐시**(effectiveTeacherScope·ecsAssistantClassIds)를 재사용하므로 추가 쿼리 0.
+  const teacherHome = view === "teacher" ? await teacherViewHome() : null;
 
   // 강사·학생: 사이드바·네비 없는 단일 화면 셸 — 미니멀 헤더(브랜드 + 로그아웃) + 풀폭 본문.
   // 강사=원스크린, 학생=내 학습 현황. (원장 등 나머지는 아래 12메뉴 풀 셸 그대로.)
@@ -152,6 +158,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
                 permMatrix={permMatrix}
                 canReturnToAdmin={isFullShellRole(user.systemRole)}
                 showEcs={ecsForTeacher}
+                home={teacherHome}
               />
             ) : null}
             {/* 강사가 알림 1차 수신자(반 배정·전입·인수인계) — 미니셸에도 벨 필수(적대리뷰). 학생은 미노출. */}

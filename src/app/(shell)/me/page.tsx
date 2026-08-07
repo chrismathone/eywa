@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ArrowLeft } from "@/components/icons/eywa-icon-compat";
 import { PageHeader } from "@/components/page-header";
-import { roleHome } from "@/lib/permissions";
+import { landingPath } from "@/lib/auth/teacher-home";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { resolveTenantReadUrls } from "@/lib/storage/media-storage";
 import { emptyResume } from "@/features/staff/resume";
@@ -49,8 +49,8 @@ export default async function MyPage() {
     : [];
 
   // 미니셸(강사 등)에서 팝업으로 들어온 사람은 '내 메뉴'를 몰라 여기 갇힌다(원장 제보 2026-08-04)
-  // — 역할별 홈으로 돌아가는 길을 페이지 안에 직접 둔다(강사=/onescreen, 그 외=/dashboard).
-  const home = roleHome(user.systemRole);
+  // — 역할별 홈으로 돌아가는 길을 페이지 안에 직접 둔다(강사=원스크린 or ECS, 그 외=/dashboard).
+  const home = await landingPath(user.systemRole);
 
   return (
     <div className="print-portrait space-y-5 p-6">
