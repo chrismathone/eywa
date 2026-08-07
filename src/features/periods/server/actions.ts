@@ -54,7 +54,13 @@ function validate(raw: unknown, year: number): { rows: IncomingRow[] } | { error
     // 시작은 전해 말(1월 세션), 끝은 다음 해 초(12월 세션)까지가 정상 범위다.
     const sy = Number(startDate.slice(0, 4));
     const ey = Number(endDate.slice(0, 4));
-    if (sy < year - 1 || sy > year) return { error: `${m}월 시작 날짜가 ${year}년과 너무 멉니다 — 연도를 확인해주세요` };
+    // 🔴 **라벨(연,월)과 시작일의 정합**을 본다 — 연도만 따로 보면 "2027년 3월 세션"에 2026년 3월
+    //    날짜가 그대로 통과한다(적대 리뷰 확인: 연도 칩 이동 후 저장 시 실제로 샜다).
+    //    정상 범위: 라벨월 기준 한 달 전(1월 세션이 전해 12월에 시작) ~ 두 달 뒤(방학으로 밀린 달).
+    const monthsApart = (sy - year) * 12 + (Number(startDate.slice(5, 7)) - m);
+    if (monthsApart < -1 || monthsApart > 2) {
+      return { error: `${m}월 세션인데 시작 날짜가 ${startDate}입니다 — 연도나 월을 확인해주세요` };
+    }
     if (ey < sy || ey > year + 1) return { error: `${m}월 끝 날짜가 ${year}년과 너무 멉니다 — 연도를 확인해주세요` };
     // 자릿수·월 오타는 길이로 걸린다(공휴일로 늘어난 세션도 6주를 넘지 않는다).
     const days = Math.round((Date.parse(`${endDate}T00:00:00Z`) - Date.parse(`${startDate}T00:00:00Z`)) / 86_400_000);

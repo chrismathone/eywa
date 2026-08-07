@@ -5,7 +5,6 @@ import {
   monthGrid,
   overlappingMonths,
   paintedMonthOf,
-  yearGrids,
 } from "./calendar-grid";
 
 describe("monthGrid — 42칸 고정", () => {
@@ -75,15 +74,6 @@ describe("monthGrid — 42칸 고정", () => {
     const g = monthGrid(2026, 1);
     expect(g.find((c) => c.iso === "2025-12-31")?.day).toBe(31);
     expect(g.find((c) => c.iso === "2026-01-01")?.day).toBe(1);
-  });
-});
-
-describe("yearGrids", () => {
-  it("12판", () => {
-    const y = yearGrids(2026);
-    expect(y).toHaveLength(12);
-    expect(y.map((x) => x.month)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
-    expect(y.every((x) => x.cells.length === 42)).toBe(true);
   });
 });
 
@@ -157,5 +147,31 @@ describe("overlappingMonths — 저장 전 겹침 경고", () => {
 
   it("양끝이 맞닿기만 해도 겹침이다(양끝 포함 구간)", () => {
     expect(overlappingMonths({ labelMonth: 3, start: "2026-03-05", end: "2026-03-20" }, ranges)).toEqual([2]);
+  });
+});
+
+// 🔴 해를 넘는 칸에서 시작한 드래그 — 이걸 안 되감으면 1월을 칠하려던 드래그가 12월 세션을 덮어쓴다.
+describe("labelMonthOf — 해 넘김 되감기", () => {
+  it("전해 12월 시작은 1월 세션", () => {
+    expect(labelMonthOf("2025-12-29", 2026)).toBe(1);
+    expect(labelMonthOf("2025-12-01", 2026)).toBe(1);
+  });
+
+  it("다음 해 1월 시작은 12월 세션", () => {
+    expect(labelMonthOf("2027-01-05", 2026)).toBe(12);
+  });
+
+  it("같은 해는 그대로 시작일의 달", () => {
+    expect(labelMonthOf("2026-03-06", 2026)).toBe(3);
+    expect(labelMonthOf("2026-12-28", 2026)).toBe(12); // 그 해 12월 세션
+    expect(labelMonthOf("2026-01-05", 2026)).toBe(1);
+  });
+
+  it("편집 연도를 안 주면 되감지 않는다(하위 호환)", () => {
+    expect(labelMonthOf("2025-12-29")).toBe(12);
+  });
+
+  it("두 해 넘게 벌어지면 되감지 않는다(오타는 서버가 거른다)", () => {
+    expect(labelMonthOf("2024-12-29", 2026)).toBe(12);
   });
 });

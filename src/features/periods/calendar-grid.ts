@@ -75,11 +75,6 @@ export function monthGrid(year: number, month: number): GridCell[] {
   return cells;
 }
 
-/** 한 해 12판. */
-export function yearGrids(year: number): { month: number; cells: GridCell[] }[] {
-  return Array.from({ length: 12 }, (_, i) => ({ month: i + 1, cells: monthGrid(year, i + 1) }));
-}
-
 export type PaintedRange = { labelMonth: number; start: string; end: string };
 
 /**
@@ -99,12 +94,24 @@ export function dragRange(anchor: string, cursor: string): { start: string; end:
 }
 
 /**
- * 드래그로 칠한 구간의 **라벨월** — 시작일의 달.
+ * 드래그로 칠한 구간의 **라벨월** — 기본은 시작일의 달이다.
  * 원장 규칙과 같다(2월 세션이 3/5에 끝나도 라벨은 2월). 구 출석부처럼 "드래그를 시작한 달력"에
  * 귀속시키지 않는다 — 3월 달력의 후행 4월 칸에서 끌기 시작하면 그건 4월 세션이다.
+ *
+ * 🔴 단, **해를 넘는 두 경우는 되감는다**(`editYear`를 넘길 때만):
+ *   · 전해 12월 시작 → **1월 세션**. 1월 판의 앞칸은 전해 12월이고, 세션이 28~30일 단위로 흘러가
+ *     1월 세션이 전해 말에 시작하는 건 정상이다(붙여넣기 파서도 "1월 12/28~1/24"를 그렇게 읽는다).
+ *     이걸 안 되감으면 1월을 칠하려던 드래그가 **12월 세션을 덮어쓴다**.
+ *   · 다음 해 1월 시작 → **12월 세션**. 12월 판의 뒷칸에서 시작한 경우.
+ * 규칙 자체는 parse.ts의 wrap 추론과 같다 — 두 입력 경로(드래그·붙여넣기)가 같은 값을 만들어야 한다.
  */
-export function labelMonthOf(start: string): number {
-  return Number(start.slice(5, 7));
+export function labelMonthOf(start: string, editYear?: number): number {
+  const month = Number(start.slice(5, 7));
+  if (editYear === undefined) return month;
+  const year = Number(start.slice(0, 4));
+  if (year === editYear - 1 && month === 12) return 1;
+  if (year === editYear + 1 && month === 1) return 12;
+  return month;
 }
 
 /** 새 구간이 **다른 달** 세션과 겹치는지 — 겹치면 그 라벨월들(저장 전 경고용). */

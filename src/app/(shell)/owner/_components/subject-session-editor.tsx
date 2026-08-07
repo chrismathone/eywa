@@ -12,7 +12,13 @@ import type { PeriodDef } from "@/features/periods/resolve";
 import { SessionCalendar, type PaintedMonth } from "./session-calendar";
 
 const MONTHS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] as const;
-const short = (iso: string) => `${Number(iso.slice(5, 7))}/${Number(iso.slice(8, 10))}`;
+/**
+ * 요약 칩 표기 — 편집 연도와 **다른 해**면 연도까지 찍는다.
+ * 안 그러면 정상 12월 세션(12/1~12/26)과 전해 12월에 시작한 1월 세션(12/28~1/24)이 화면에서
+ * 구분되지 않는다(formatPeriodLines가 같은 이유로 이미 그렇게 한다).
+ */
+const short = (iso: string, year: number) =>
+  Number(iso.slice(0, 4)) === year ? `${Number(iso.slice(5, 7))}/${Number(iso.slice(8, 10))}` : iso;
 
 /**
  * 한 과목의 세션 기간 편집 — 구 출석부(D:\attendance) 세션 설정과 같은 모양:
@@ -187,7 +193,7 @@ export function SubjectSessionEditor({
                 >
                   <b className="text-foreground">{r.labelMonth}월</b>
                   <span className="num">
-                    {short(r.start)}~{short(r.end)}
+                    {short(r.start, year)}~{short(r.end, year)}
                   </span>
                   {!v.ok ? <TriangleAlert className="size-3" aria-hidden /> : null}
                 </span>
