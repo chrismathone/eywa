@@ -41,12 +41,38 @@ export type MonthlyLine = {
 
 const DAY_INDEX: Record<string, number> = { 일: 0, 월: 1, 화: 2, 수: 3, 목: 4, 금: 5, 토: 6 };
 
-/** "월,수,금" → [1,3,5] (0=일~6=토). 빈/오타 토큰 무시. */
+/**
+ * "월,수,금" · "월수금" · "월 수 금" · "월/수/금" → [1,3,5] (0=일~6=토).
+ *
+ * 🔴 예전엔 `split(",")`만 해서 **쉼표를 안 쓰면 통째로 오타 취급**됐다 — "월수목"을 넣으면
+ *    요일이 0개로 읽혀 시수가 0이 됐다(원장 제보 2026-08-07: *"월수목 등 요일을 넣어도 시수가 0"*).
+ *    placeholder가 "월,수,금"이라 쉼표를 기대했지만, 사람은 붙여 쓰는 게 자연스럽다.
+ *    → **글자 단위로 훑는다**. 구분자가 무엇이든(쉼표·공백·중점·슬래시) 상관없고, 요일 글자가 아닌
+ *    문자는 그냥 무시된다. 같은 요일을 두 번 써도 한 번만 센다(시수가 부풀지 않게).
+ */
 export function parseDays(s: string): number[] {
-  return s
-    .split(",")
-    .map((d) => DAY_INDEX[d.trim()])
-    .filter((n): n is number => n !== undefined);
+  // ⚠️ "월요일"처럼 쓰면 '요일'의 **'일'이 일요일로** 잡힌다 — 글자 단위로 읽기 전에 걷어낸다.
+  const cleaned = s.replace(/요일/g, "");
+  const out: number[] = [];
+  for (const ch of cleaned) {
+    const n = DAY_INDEX[ch];
+    if (n !== undefined && !out.includes(n)) out.push(n);
+  }
+  return out;
+}
+
+const DAY_LABEL = ["일", "월", "화", "수", "목", "금", "토"] as const;
+
+/**
+ * 사람이 친 요일을 표준 표기로 — "월수목" → "월,수,목" (원장 지시 2026-08-07 *"자동으로 쉼표처리"*).
+ * 입력 칸 blur에서 쓴다. 읽은 요일이 하나도 없으면 **빈 문자열**을 돌려주므로, 호출부는 그때
+ * 원래 입력을 그대로 둬야 한다(오타를 통째로 지워 버리면 사용자가 뭘 쳤는지 잃는다).
+ * 순서는 사람이 친 순서를 유지한다(시수 계산은 순서와 무관하다).
+ */
+export function formatDays(s: string): string {
+  return parseDays(s)
+    .map((n) => DAY_LABEL[n])
+    .join(",");
 }
 
 function lastDayOfMonth(y: number, m: number): number {

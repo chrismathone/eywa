@@ -2,6 +2,7 @@
 
 import { Trash2 } from "@/components/icons/eywa-icon-compat";
 import { SearchableSelect } from "@/components/ui/searchable-select";
+import { formatDays } from "@/features/billing/quote-calc";
 import { Pill } from "@/components/atoms/pill";
 import type { QuoteCourse, QuoteExtra, QuoteDiscount } from "@/features/billing/quote-calc";
 import type { TuitionCatalogOption } from "@/features/billing/tuition-catalog";
@@ -77,7 +78,13 @@ export function CourseEditor({
             className={input}
             value={course.days}
             onChange={(e) => onPatch({ days: e.target.value })}
-            placeholder="월,수,금"
+            // 칸을 벗어날 때 "월수목" → "월,수,목"으로 정리한다(원장 2026-08-07).
+            // ⚠️ 읽은 요일이 하나도 없으면(오타) **그대로 둔다** — 지워 버리면 뭘 쳤는지 잃는다.
+            onBlur={(e) => {
+              const tidy = formatDays(e.target.value);
+              if (tidy && tidy !== e.target.value) onPatch({ days: tidy });
+            }}
+            placeholder="월,수,금 (월수금처럼 붙여 써도 됩니다)"
           />
         </label>
         <label className="space-y-0.5">
