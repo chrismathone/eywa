@@ -144,22 +144,33 @@ export function splitCoursesByMonth(
       if (s > 0) monthly.push({ month: `${mo.month}월`, ...base, sessions: s, price: 0 });
     }
 
-    const per = c.sessions > 0 ? c.price / c.sessions : c.perSession;
-    monthly.forEach((ml) => (ml.price = Math.round(per * ml.sessions)));
+    // 🔴 이 표는 **학부모에게 나가는 안내문**이다. 행의 합은 반드시 그 과목의 금액(c.price)과
+    //    같아야 한다 — 같은 종이에 소계와 최종 납부 금액이 나란히 인쇄되기 때문이다.
+    const totalS = monthly.reduce((a, b) => a + b.sessions, 0);
 
-    if (monthly.length === 0) {
+    // 다시 센 시수 합이 화면의 시수와 다르면 **월별로 쪼개지 않는다.**
+    // 갈리는 경로가 둘 다 실사용이다: ① 상담자가 시수 칸을 수기로 고쳤다(그게 합의된 회차다)
+    // ② 저장 뒤 휴원일·공휴일이 바뀌어 지금 세면 다른 수가 나온다.
+    // 쪼개면 표의 회차·금액이 화면과 달라진다 — 한 줄로 보여주는 편이 정직하다.
+    if (monthly.length === 0 || totalS !== c.sessions) {
       out.push({ month: startMonthLabel, ...base, sessions: c.sessions, price: c.price });
-    } else if (monthly.length === 1) {
+      continue;
+    }
+
+    // 비례 분배 — **마지막 달이 반올림 잔돈을 흡수**해 Σ(행) === c.price를 보장한다.
+    // (예전엔 달마다 독립 반올림이라 100,000원이 35,714+28,571+35,714 = 99,999원으로 새어
+    //  소계와 총액이 1원 어긋났다. 위로도 아래로도 새서 규칙조차 없었다.)
+    let acc = 0;
+    monthly.forEach((ml, i) => {
+      ml.price = i === monthly.length - 1 ? c.price - acc : Math.round((c.price * ml.sessions) / totalS);
+      acc += ml.price;
+    });
+
+    if (monthly.length === 1) {
       out.push(monthly[0]);
     } else {
       out.push(...monthly);
-      out.push({
-        month: "",
-        ...base,
-        sessions: monthly.reduce((a, b) => a + b.sessions, 0),
-        price: monthly.reduce((a, b) => a + b.price, 0),
-        isSubtotal: true,
-      });
+      out.push({ month: "", ...base, sessions: totalS, price: c.price, isSubtotal: true });
     }
   }
   return out;

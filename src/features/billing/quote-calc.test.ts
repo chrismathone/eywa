@@ -152,3 +152,78 @@ describe("quoteTotal", () => {
     expect(t.total).toBe(0);
   });
 });
+
+// 🔴🔴 학부모에게 나가는 안내문의 **불변식**: 과목 표의 행 합 === 그 과목 금액.
+//     같은 A4 한 장에 소계와 최종 납부 금액이 나란히 인쇄되므로 1원도 어긋나면 안 된다.
+//     (2026-08-07 적대 리뷰 실측: 612조합 중 214건이 어긋났다 — 달마다 독립 반올림 때문.)
+describe("splitCoursesByMonth — 행 합 ≡ 과목 금액 (불변식)", () => {
+  const sum = (lines: ReturnType<typeof splitCoursesByMonth>) =>
+    lines.filter((l) => !l.isSubtotal).reduce((a, b) => a + b.price, 0);
+
+  it("총액을 수기로 넣어 나누어떨어지지 않아도 합이 정확하다", () => {
+    // 월요일반 2026-06-01~08-31 = 14회, 총액 100,000 → per가 7142.857…
+    const lines = splitCoursesByMonth(
+      [course({ days: "월", sessions: 14, price: 100_000 })],
+      "2026-06-01",
+      "2026-08-31",
+      [],
+    );
+    expect(sum(lines)).toBe(100_000);
+    expect(lines.find((l) => l.isSubtotal)?.price).toBe(100_000);
+  });
+
+  it("금액 스윕 — 어떤 금액·기간이든 합이 총액과 같다", () => {
+    for (let price = 100_000; price <= 600_000; price += 10_000) {
+      for (const [s, e] of [
+        ["2026-06-01", "2026-07-31"],
+        ["2026-06-01", "2026-08-31"],
+        ["2026-03-01", "2026-06-30"],
+      ] as const) {
+        for (const days of ["월", "월,수", "월,수,금", "화,목"]) {
+          const auto = autoSessions(days, s, e, []);
+          if (auto === 0) continue;
+          const lines = splitCoursesByMonth([course({ days, sessions: auto, price })], s, e, []);
+          expect(sum(lines), `${price}원 ${s}~${e} ${days}`).toBe(price);
+        }
+      }
+    }
+  });
+
+  // 🔴 상담자가 시수를 수기로 고치면 그게 합의된 회차다 — 표가 제멋대로 다시 세면 안 된다.
+  it("시수를 수기로 고치면 월별로 쪼개지 않고 화면 값 그대로 한 줄", () => {
+    // 자동 9회인데 8회로 합의한 경우(단가 50,000 → 400,000원)
+    const lines = splitCoursesByMonth(
+      [course({ days: "월,수", sessions: 8, price: 400_000, perSession: 50_000 })],
+      "2026-09-01",
+      "2026-09-30",
+      [],
+    );
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toMatchObject({ sessions: 8, price: 400_000 });
+  });
+
+  // 🔴 시수 0 + 금액 있음: 예전엔 c.price를 버리고 perSession으로 딴 금액을 만들어 냈다.
+  it("시수가 0이면 입력된 금액을 그대로 쓴다(단가로 만들어내지 않는다)", () => {
+    const lines = splitCoursesByMonth(
+      [course({ days: "월,수", sessions: 0, price: 300_000, perSession: 50_000 })],
+      "2026-06-01",
+      "2026-07-31",
+      [],
+    );
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toMatchObject({ sessions: 0, price: 300_000 });
+  });
+
+  // 🔴 저장 뒤 휴원일이 추가돼 다시 센 시수가 달라져도, 학부모가 받은 금액은 안 바뀐다.
+  it("휴원일이 늘어 재계산 시수가 달라져도 금액은 저장값 그대로", () => {
+    const lines = splitCoursesByMonth(
+      [course({ days: "월,수", sessions: 9, price: 450_000 })],
+      "2026-09-01",
+      "2026-09-30",
+      ["2026-09-30"], // 나중에 추가된 휴원일
+    );
+    expect(sum(lines)).toBe(450_000);
+    expect(lines).toHaveLength(1);
+    expect(lines[0].sessions).toBe(9);
+  });
+});
