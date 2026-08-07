@@ -29,12 +29,13 @@ import {
   type TeacherColorMap,
 } from "@/features/timetable/lib/class-grid";
 import { POOL_ID, dedupeGroups, moveClass, reorderGroups, type GroupDraft } from "@/features/timetable/lib/group-assign";
-import type { GroupPreset } from "@/features/timetable/lib/group-presets";
+import { normalizePresets, type GroupPreset } from "@/features/timetable/lib/group-presets";
 import { DEFAULT_OTHERS_TITLE } from "@/features/timetable/lib/integration-groups";
 import type { PeriodsConfig } from "@/features/timetable/lib/periods";
 import { TimetableZoomArea } from "./font-size-toggle";
 import { GroupPresetBar } from "./group-preset-bar";
 import { RichCardGroupBoard, ClassColumn, NAME_H, type ColumnCommon } from "./rich-card-group";
+import { clearTimetableUnsaved, useTimetableUnsavedGuard } from "./timetable-unsaved";
 
 /**
  * 통합뷰 **'그룹 설정'(배치 편집) 모드** — 통합뷰 그 자체에서 반(=열)을 잡아 다른 줄로 끌어 옮긴다
@@ -115,27 +116,51 @@ export function IntegratedEditBoard({
   const [error, setError] = useState<string | null>(null);
   const [confirmLeave, setConfirmLeave] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
+  const [confirmApply, setConfirmApply] = useState(false);
   const [saving, startSave] = useTransition();
+  const [presetSaving, startPresetSave] = useTransition();
+  const [presetError, setPresetError] = useState<string | null>(null);
 
+  /**
+   * 보관함(저장된 배치) 추가·삭제 — **그 자리에서 서버에 쓴다**.
+   *
+   * 🔴 버튼이 "이름 붙여 저장"이라고 말해 놓고 하단 '저장'을 눌러야 남는 구조였더니, 이름만 짓고
+   * 나간 사용자에겐 **저장했다고 해놓고 안 남는** 거짓말이 됐다(원장 2026-08-06 "저장한 걸 어디서
+   * 불러오나?").
+   * ⚠️ 이때 함께 쓰는 배치는 **지금 편집 중인 것이 아니라 저장돼 있던 것**(initial*)이다 — 보관함만
+   * 만지는 동작이라, 아직 확정 안 한 편집이 딸려 저장되면 "저장 안 눌렀는데 적용됨"이 된다.
+   */
+  function persistPresets(next: GroupPreset[]) {
+    setPresets(next); // 화면은 즉시
+    setPresetError(null);
+    startPresetSave(async () => {
+      const res = await saveIntegrationGroups({
+        subject,
+        enabled: initialEnabled,
+        groups: initialGroups,
+        showOthers: initialShowOthers,
+        othersTitle: initialOthersTitle,
+        presets: next,
+      });
+      if (res.error) {
+        setPresetError(res.error);
+        return;
+      }
+      // 🔴 서버가 찍은 '누가·언제'를 받아 목록에 반영한다 — 안 하면 방금 저장한 항목이
+      //    "저장자 미상 · 시각 없음"으로 남는다(새로고침해야 보이는 값 = 없는 값).
+      if (res.presets) setPresets(normalizePresets(res.presets, othersTitle));
+    });
+  }
+
+  // ⚠️ 보관함(presets)은 여기 안 넣는다 — 그쪽은 **즉시 저장**되므로(persistPresets) 비교에 넣으면
+  //    프리셋 하나 만든 뒤 영영 '미저장' 상태로 남고, '초기화'가 이미 저장된 보관함을 되돌리려 든다.
   const dirty = useMemo(
     () =>
       enabled !== initialEnabled ||
       showOthers !== initialShowOthers ||
       othersTitle !== initialOthersTitle ||
-      JSON.stringify(presets) !== JSON.stringify(initialPresets) ||
       JSON.stringify(groups) !== JSON.stringify(dedupeGroups(initialGroups)),
-    [
-      groups,
-      enabled,
-      showOthers,
-      othersTitle,
-      presets,
-      initialGroups,
-      initialEnabled,
-      initialShowOthers,
-      initialOthersTitle,
-      initialPresets,
-    ],
+    [groups, enabled, showOthers, othersTitle, initialGroups, initialEnabled, initialShowOthers, initialOthersTitle],
   );
 
   // 화면에 쓸 제목 = 비어 있으면 자리표시("줄 N"). 저장도 같은 값을 쓴다(입력칸 placeholder와 일치).
@@ -190,6 +215,7 @@ export function IntegratedEditBoard({
       setConfirmLeave(true);
       return;
     }
+    clearTimetableUnsaved(); // 내 네비에 내 경고가 또 뜨지 않게 먼저 푼다
     router.push(doneHref, { scroll: false });
   }
 
@@ -212,7 +238,8 @@ export function IntegratedEditBoard({
     setEnabled(initialEnabled || initialGroups.length === 0);
     setShowOthers(initialShowOthers);
     setOthersTitle(initialOthersTitle);
-    setPresets(initialPresets);
+    // ⚠️ 보관함(presets)은 되돌리지 않는다 — 이미 서버에 저장된 것이라, 되돌리면 화면만 옛 목록으로
+    //    어긋난다(초기화는 '아직 반영 안 한 배치'를 버리는 동작이지 저장된 걸 지우는 게 아니다).
     setError(null);
     setConfirmLeave(false);
     setConfirmReset(false);
@@ -233,10 +260,14 @@ export function IntegratedEditBoard({
         setError(res.error);
         return;
       }
+      clearTimetableUnsaved(); // 반영했으니 미저장 아님
       router.push(doneHref, { scroll: false });
       router.refresh();
     });
   }
+
+  // 주·과목·구분·뷰 전환(ParamLink)·창 닫기·새로고침에 확인을 붙인다 — 편집이 조용히 사라지던 것.
+  useTimetableUnsavedGuard(dirty);
 
   const rowIndexOf = (id: string | undefined) => groups.findIndex((g) => g.id === id);
   const seenRows = new Set<string>(); // 한 줄이 평일/주말 두 섹션으로 갈릴 때 머리글 컨트롤은 첫 섹션에만
@@ -255,20 +286,20 @@ export function IntegratedEditBoard({
       }}
     >
       <div className="flex min-h-0 flex-1 flex-col gap-3">
+        {/* 편집 바 = **한 줄**(원장 2026-08-06 "2행으로 존재하는데 1개로 개편"). 보관함 컨트롤은
+            래퍼 없이 여기 얹히고, 목록만 열렸을 때 `w-full`로 아랫줄에 펼쳐진다. */}
         <div className="border-primary/40 bg-primary-soft/40 flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-xl border px-3 py-2">
-          <span className="text-primary text-[12px] font-bold">그룹 설정 중</span>
+          <span className="text-primary shrink-0 text-[12px] font-bold">그룹 설정 중</span>
           <span className="text-text-dim text-[11px]">
-            반 이름을 <b>잡고 끌어</b> 다른 줄에 놓으세요(줄 안에서 놓으면 좌우 순서). 담임·교시·명단은
-            끄는 동안만 접어 둡니다 — 저장하면 원래 통합뷰로 돌아갑니다.
+            반 이름을 <b>잡고 끌어</b> 다른 줄에 놓으세요.
           </span>
-          <label className="text-text-dim ml-auto flex items-center gap-1.5 text-[11px]">
+          <label className="text-text-dim flex shrink-0 items-center gap-1.5 text-[11px]" title="끄면 ‘N교시 시작’ 자동 묶음으로 돌아갑니다(줄 정의는 보관)">
             <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />
-            커스텀 줄 사용
-            <span className="text-text-faint">(끄면 ‘N교시 시작’ 자동 묶음)</span>
+            커스텀 줄
           </label>
-          <label className="text-text-dim flex items-center gap-1.5 text-[11px]">
+          <label className="text-text-dim flex shrink-0 items-center gap-1.5 text-[11px]">
             <input type="checkbox" checked={showOthers} onChange={(e) => setShowOthers(e.target.checked)} />
-            미배정 줄 표시
+            미배정 줄
           </label>
           <input
             value={othersTitle}
@@ -276,20 +307,22 @@ export function IntegratedEditBoard({
             placeholder={DEFAULT_OTHERS_TITLE}
             maxLength={30}
             aria-label="미배정 묶음 제목"
-            className="border-line focus:border-primary bg-card w-32 rounded-lg border px-2 py-0.5 text-[11px] outline-none"
+            title="미배정 줄의 제목"
+            className="border-line focus:border-primary bg-card w-24 shrink-0 rounded-lg border px-2 py-0.5 text-[11px] outline-none"
+          />
+          <GroupPresetBar
+            presets={presets}
+            onChange={persistPresets}
+            saving={presetSaving}
+            error={presetError}
+            current={{ groups: titled, showOthers, othersTitle }}
+            onLoad={(body) => {
+              setGroups(dedupeGroups(body.groups));
+              setShowOthers(body.showOthers);
+              setOthersTitle(body.othersTitle);
+            }}
           />
         </div>
-
-        <GroupPresetBar
-          presets={presets}
-          onChange={setPresets}
-          current={{ groups: titled, showOthers, othersTitle }}
-          onLoad={(body) => {
-            setGroups(dedupeGroups(body.groups));
-            setShowOthers(body.showOthers);
-            setOthersTitle(body.othersTitle);
-          }}
-        />
 
         {/* ⚠️ zoom은 DndContext 안쪽 — 바깥이면 fixed인 DragOverlay가 커서와 어긋난다. */}
         <TimetableZoomArea>
@@ -389,7 +422,7 @@ export function IntegratedEditBoard({
         <div className="border-line bg-card/95 sticky bottom-0 z-30 flex flex-wrap items-center gap-2 rounded-t-xl border-t px-3 py-2 backdrop-blur">
           {error ? <span className="text-danger text-[12px]">{error}</span> : null}
           {confirmLeave ? (
-            <span className="text-warning text-[12px]">저장하지 않은 변경이 있습니다 — 한 번 더 누르면 버립니다.</span>
+            <span className="text-warning text-[12px]">아직 반영하지 않은 변경이 있습니다 — 한 번 더 누르면 버립니다.</span>
           ) : null}
           <span className="text-text-faint text-[11px]">
             줄 {groups.length}개 · 반 {cards.length}개
@@ -414,7 +447,7 @@ export function IntegratedEditBoard({
               <button
                 type="button"
                 onClick={() => setConfirmReset(true)}
-                title="이 창을 열었을 때 보던 배치로 되돌립니다(저장은 하지 않습니다)"
+                title="이 창을 열었을 때 보던 배치로 되돌립니다(통합뷰에는 아직 반영되지 않습니다)"
                 className="text-text-dim hover:text-foreground ml-auto inline-flex items-center gap-1 px-2 py-1 text-xs"
               >
                 <RotateCcw className="size-3" />
@@ -429,15 +462,40 @@ export function IntegratedEditBoard({
           >
             {confirmLeave ? "그냥 나가기" : "편집 끝내기"}
           </button>
-          <button
-            type="button"
-            onClick={save}
-            disabled={saving}
-            className="bg-foreground text-background inline-flex items-center gap-1.5 rounded-lg px-3 py-1 text-xs font-medium transition disabled:opacity-40"
-          >
-            {saving ? <Loader2 className="size-3 animate-spin" /> : null}
-            저장
-          </button>
+          {/* 🔴 이름이 '저장'이면 위 보관함의 '저장'과 같은 말이 되어 헷갈린다(원장 2026-08-06) →
+              **'실제 반영'**. 이쪽만 통합뷰를 바꾸고, 위쪽은 보관함에만 넣는다. 되돌릴 수 없는
+              유일한 동작이라 확인을 한 번 받는다. */}
+          {confirmApply ? (
+            <span className="text-warning inline-flex items-center gap-2 text-[12px]">
+              이 배치를 통합뷰에 반영할까요?
+              <button
+                type="button"
+                onClick={save}
+                disabled={saving}
+                className="bg-foreground text-background inline-flex items-center gap-1.5 rounded-lg px-3 py-1 text-xs font-medium transition disabled:opacity-40"
+              >
+                {saving ? <Loader2 className="size-3 animate-spin" /> : null}
+                반영
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirmApply(false)}
+                className="text-text-dim hover:text-foreground"
+              >
+                취소
+              </button>
+            </span>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setConfirmApply(true)}
+              disabled={saving}
+              title="지금 화면의 배치를 실제 통합뷰에 반영합니다"
+              className="bg-foreground text-background inline-flex items-center gap-1.5 rounded-lg px-3 py-1 text-xs font-medium transition disabled:opacity-40"
+            >
+              실제 반영
+            </button>
+          )}
         </div>
       </div>
 

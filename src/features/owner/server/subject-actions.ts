@@ -22,6 +22,7 @@ import { fetchAllPaged } from "@/lib/supabase/batch";
 import { logAction } from "@/features/audit/server/log";
 import { resolveSettings } from "../resolve";
 import { isValidSubjectKey } from "../subject-absorb";
+import type { IntegrationGroupPresetSetting } from "../settings-types";
 import { saveOwnerSection } from "./actions";
 
 const SCALAR_TABLES = [
@@ -138,6 +139,15 @@ async function removeSubjectRowFromSettings(supabase: Supabase, tenantId: string
 }
 
 export type AbsorbResult = { ok?: boolean; moved?: number; error?: string };
+
+/**
+ * 보관함 저장 결과 — **서버가 찍은 '누가·언제'를 그대로 돌려준다.**
+ * 🔴 안 돌려주면 화면이 방금 저장한 항목을 "저장자 미상 · 시각 없음"으로 그린다(클라엔 도장이 없다).
+ *    새로고침해야 보이는 값은 없는 값이나 마찬가지다.
+ */
+export type IntegrationGroupsResult = AbsorbResult & {
+  presets?: IntegrationGroupPresetSetting[];
+};
 
 /**
  * 과목 흡수 실행: from 키의 전 데이터 → to 키로 이동 후, 설정에서 from 과목 행 제거.
@@ -278,7 +288,16 @@ export type IntegrationGroupsInput = {
    * 보관함(프리셋) 전체. **넘기면 통째로 교체**, 안 넘기면(undefined) 저장된 것을 그대로 둔다 —
    * 프리셋을 안 건드리는 화면이 실수로 보관함을 비우지 않게(부분 갱신 아님을 호출부가 알도록 명시).
    */
-  presets?: { id: string; name: string; groups: { id: string; title: string; classIds: string[] }[]; showOthers?: boolean; othersTitle?: string }[];
+  presets?: {
+    id: string;
+    name: string;
+    groups: { id: string; title: string; classIds: string[] }[];
+    showOthers?: boolean;
+    othersTitle?: string;
+    /** ⚠️ 보내도 무시된다 — '누가·언제'는 서버가 찍는다(위조 방지). 타입만 받아 준다(왕복 편의). */
+    savedBy?: string;
+    savedAt?: string;
+  }[];
 };
 
 /**
@@ -363,7 +382,7 @@ function sanitizeGroups(groups: { id: string; title: string; classIds: string[] 
     }));
 }
 
-export async function saveIntegrationGroups(input: IntegrationGroupsInput): Promise<AbsorbResult> {
+export async function saveIntegrationGroups(input: IntegrationGroupsInput): Promise<IntegrationGroupsResult> {
   const gate = await requireOwnerWrite();
   if (gate.error !== undefined) return { error: gate.error };
   if (!isValidSubjectKey(input.subject)) return { error: "잘못된 과목 키입니다" };
@@ -383,13 +402,31 @@ export async function saveIntegrationGroups(input: IntegrationGroupsInput): Prom
 
   // 보관함(프리셋) — 저장 시점에 같은 위생 규칙을 태운다(빈 제목 줄 제거·줄 안 반 중복 제거).
   // 이름 없는 프리셋은 버린다(목록에서 고를 수 없는 유령 항목이 된다).
-  const presets = input.presets?.map((p) => ({
-    id: p.id,
-    name: p.name.trim(),
-    groups: sanitizeGroups(p.groups),
-    showOthers: p.showOthers,
-    othersTitle: p.othersTitle?.trim() || undefined,
-  })).filter((p) => p.name);
+  //
+  // 🔴 '누가·언제'는 **서버가 찍는다** — 클라가 보낸 savedBy를 그대로 믿으면 남의 이름으로 저장한 것처럼
+  //    꾸밀 수 있다. 내용이 그대로인 프리셋은 **기존 도장을 유지**한다(다른 프리셋을 하나 만들었다고
+  //    나머지 전부의 저장 시각이 오늘로 바뀌면 "언제 만든 배치인지"가 통째로 거짓이 된다).
+  const prevPresets = operations.subjects.find((s) => s.key === input.subject)?.integrationGroupPresets ?? [];
+  const prevById = new Map(prevPresets.map((p) => [p.id, p]));
+  const stampedAt = new Date().toISOString();
+  const bodyOf = (p: { name: string; groups: unknown; showOthers?: boolean; othersTitle?: string }) =>
+    JSON.stringify([p.name, p.groups, p.showOthers !== false, p.othersTitle ?? ""]);
+  const presets = input.presets
+    ?.map((p) => {
+      const cleaned = {
+        id: p.id,
+        name: p.name.trim(),
+        groups: sanitizeGroups(p.groups),
+        showOthers: p.showOthers,
+        othersTitle: p.othersTitle?.trim() || undefined,
+      };
+      const before = prevById.get(p.id);
+      const unchanged = before && bodyOf(before) === bodyOf(cleaned);
+      return unchanged
+        ? { ...cleaned, savedBy: before.savedBy, savedAt: before.savedAt }
+        : { ...cleaned, savedBy: gate.actor.displayName ?? undefined, savedAt: stampedAt };
+    })
+    .filter((p) => p.name);
 
   const nextOperations = {
     ...operations,

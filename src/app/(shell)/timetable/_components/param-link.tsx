@@ -1,6 +1,7 @@
 "use client";
 import { useRouter } from "next/navigation";
 import { useTransition, type ReactNode } from "react";
+import { confirmTimetableNav } from "./timetable-unsaved";
 
 /**
  * 시간표 searchParam 토글(과목·구분·뷰·주·표시설정) 전용 무플래시 네비.
@@ -42,6 +43,9 @@ export function ParamLink({
       onClick={(e) => {
         if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return; // 새 탭 등 보존
         e.preventDefault();
+        // 그룹 설정에서 아직 반영 안 한 배치가 있으면 확인부터 — 주·과목·구분·뷰 전환이 전부 여기를
+        // 지나므로 한 곳만 막으면 된다(원장 2026-08-06 "편집중에 주 과목 뷰 바꿀때도 경고").
+        if (!confirmTimetableNav()) return;
         start(() => router.push(href, { scroll: false }));
       }}
     >
