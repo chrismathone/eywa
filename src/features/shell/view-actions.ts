@@ -5,6 +5,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { getTeacherScope } from "@/lib/auth/teacher-scope";
 import { roleHome } from "@/lib/permissions";
 import { isFullShellRole, VIEW_MODE_COOKIE } from "@/lib/auth/view-mode";
+import { teacherHomeForSubjects } from "@/lib/auth/teacher-home";
 
 // 겸직(관리자 계열 + 담당 반 보유)의 셸 뷰 전환 — 쿠키만 바꾼다.
 // ⚠️ 권한 변경이 아니다: 실 system_role은 그대로라 RLS·requireAccess는 관리자 권한 유지(락아웃 불가).
@@ -18,8 +19,9 @@ const COOKIE_OPTS = {
 };
 
 /**
- * 관리자 → 강사뷰. 겸직(풀셸 역할 + 실제 담당 반)만 허용. **착지 경로("/onescreen")를 반환** — 네비게이션은
+ * 관리자 → 강사뷰. 겸직(풀셸 역할 + 실제 담당 반)만 허용. **착지 경로(강사 홈)를 반환** — 네비게이션은
  * 호출부(클라)가 `window.location`으로 확정한다(switchToAdminView와 대칭). 자격 미달이면 null(무동작).
+ * 강사 홈은 담당 과목으로 갈린다(영어 전담=`/ecs`·그 외=`/onescreen`, 2026-08-07).
  *
  * ⚠️ 여기서 redirect()(서버액션=soft nav)를 쓰지 않는 이유: soft nav은 **공유 (shell) 레이아웃을 Next
  * 라우터 캐시에 강사 미니셸로 남긴다** → 뒤로가기 시 그 캐시가 관리자 페이지를 강사 미니셸 크롬으로 감싸
@@ -29,10 +31,13 @@ const COOKIE_OPTS = {
 export async function switchToTeacherView(): Promise<string | null> {
   const user = await getCurrentUser();
   if (!user || !isFullShellRole(user.systemRole)) return null; // 실 강사·학생은 애초에 토글 미노출
-  const { classIds } = await getTeacherScope(user.id);
+  const { classIds, subjects } = await getTeacherScope(user.id);
   if (classIds.length === 0) return null; // 담당 반 없으면 강사뷰가 무의미 — 무시
   (await cookies()).set(VIEW_MODE_COOKIE, "teacher", COOKIE_OPTS);
-  return "/onescreen";
+  // 착지 = 그 사람의 강사 홈(영어 전담이면 ECS, 2026-08-07). ⚠️ 여기서 `teacherViewHome()`을 쓰지 않는 이유:
+  // 그건 방금 **이 응답에서 세팅한** 쿠키를 다시 읽어야 하는데, 그 요청의 cookies()엔 아직 없다. 담당 반
+  // 과목은 이미 손에 있으므로 그걸 받는 갈래를 쓴다(규칙·ECS 접근 가드는 teacher-home 한 곳뿐).
+  return teacherHomeForSubjects(subjects);
 }
 
 /**

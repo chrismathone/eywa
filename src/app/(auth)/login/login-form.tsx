@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { createClient } from "@/lib/supabase/client";
+import { resolveLoginLanding } from "@/features/shell/landing-action";
 
 export function LoginForm({ next }: { next?: string }) {
   const router = useRouter();
@@ -47,9 +48,18 @@ export function LoginForm({ next }: { next?: string }) {
     }
 
     // 역할별 기본 착지 지점: 강사=원스크린, 학생=내 학습 현황, 그 외(원장 등)=대시보드.
+    // ⚠️ 이건 **폴백**이다 — 강사 홈은 담당 과목으로 갈리는데(영어 전담=ECS) 그건 DB에만 있어
+    // 클라의 JWT role만으론 못 정한다. 서버에 물어보고(resolveLoginLanding), 세션 쿠키가 아직
+    // 안 실렸거나 실패하면 여기로 떨어진다(로그인 자체는 절대 안 막는다).
     const role = data.user?.app_metadata?.system_role as string | undefined;
-    const home =
+    const fallback =
       role === "teacher" ? "/onescreen" : role === "student" ? "/my-learning" : "/dashboard";
+    let home = fallback;
+    try {
+      home = (await resolveLoginLanding()) ?? fallback;
+    } catch {
+      home = fallback;
+    }
     const target = next && next.startsWith("/") ? next : home;
     router.push(target);
     router.refresh();
