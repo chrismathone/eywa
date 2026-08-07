@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  formatDays,
   parseDays,
   splitCoursesByMonth,
   quoteTotal,
@@ -28,6 +29,48 @@ describe("parseDays", () => {
   });
   it("빈/오타 토큰 무시", () => {
     expect(parseDays("월,,X")).toEqual([1]);
+  });
+
+  // 🔴 쉼표 없이 붙여 쓰는 게 사람에겐 더 자연스럽다. 예전엔 split(",")만 해서 "월수목"이
+  //    통째로 오타 취급 → 요일 0개 → **시수가 0**이 됐다(원장 제보 2026-08-07).
+  it("쉼표 없이 붙여 써도 읽는다", () => {
+    expect(parseDays("월수목")).toEqual([1, 3, 4]);
+    expect(parseDays("월수금")).toEqual([1, 3, 5]);
+    expect(parseDays("화목")).toEqual([2, 4]);
+  });
+
+  it("구분자가 무엇이든 상관없다", () => {
+    expect(parseDays("월 수 금")).toEqual([1, 3, 5]);
+    expect(parseDays("월/수/금")).toEqual([1, 3, 5]);
+    expect(parseDays("월·수·금")).toEqual([1, 3, 5]);
+    // ⚠️ "월요일"은 '요일'의 '일'이 일요일로 잡히면 안 된다 — 파서가 '요일'을 먼저 걷어낸다.
+    expect(parseDays("월요일, 수요일")).toEqual([1, 3]);
+  });
+
+  it("같은 요일을 두 번 써도 한 번만 센다(시수 부풀림 방지)", () => {
+    expect(parseDays("월,월,수")).toEqual([1, 3]);
+    expect(parseDays("월월")).toEqual([1]);
+  });
+});
+
+describe("formatDays — 입력 칸 자동 정리", () => {
+  it("붙여 쓴 요일을 쉼표 표기로", () => {
+    expect(formatDays("월수목")).toBe("월,수,목");
+    expect(formatDays("화목")).toBe("화,목");
+  });
+
+  it("이미 정리된 값은 그대로", () => {
+    expect(formatDays("월,수,금")).toBe("월,수,금");
+  });
+
+  it("사람이 친 순서를 유지한다(시수는 순서와 무관)", () => {
+    expect(formatDays("금월")).toBe("금,월");
+  });
+
+  // 🔴 읽을 요일이 없으면 빈 문자열 — 호출부는 그때 원래 입력을 지우지 않는다.
+  it("요일이 하나도 없으면 빈 문자열", () => {
+    expect(formatDays("dnjftn")).toBe("");
+    expect(formatDays("")).toBe("");
   });
 });
 
