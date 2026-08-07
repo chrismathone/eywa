@@ -15,14 +15,18 @@ import { isTokenOpen, parseIntakeToken, STAFF_INTAKE_FORM_TYPE, type StaffIntake
 
 // 직원 등록 QR 토큰 관리 — 게이트 = 직원관리 쓰기(개인 예외 반영) + admin client + tenant 필터.
 // ⚠️ 이 토큰을 아는 사람은 **로그인 없이 직원 계정을 만들 수 있다**(원장 결정 2026-08-07 '제출 즉시 생성').
-//    그래서 ① 기본 90일 만료 ② 다 쓰면 닫기 ③ 새어 나갔으면 재발급(새 링크)을 UI가 한 번에 제공한다.
 //
 // 원장 지시 2026-08-07(재확인): **입력칸으로 QR을 "설계"하지 않는다** — 채용 이름·역할·유효일을 묻던 폼을 없애고
 // 버튼 한 번에 QR이 나오게 했다. 그래서 생성 파라미터는 전부 아래 상수로 고정한다.
+//
+// 🔴 **만료 없음**(원장 2026-08-07 "90일 만료 이유가 있나? 계속 쓰게 하면 안 되나"): 이 QR은 인쇄해
+//    붙여두고 계속 쓰는 물건이라 기한을 걸면 어느 날 조용히 죽고, 지원자 화면엔 "종료된 링크"만 떠서
+//    원장은 이유를 모른다. 위험 통제는 **기한이 아니라 직접 조작**으로 한다 — 다 쓰면 '닫기',
+//    새어 나갔으면 '새 링크'(토큰 교체), 그리고 링크당 등록 상한(public-intake-actions MAX_SUBMISSIONS)과
+//    동명 재등록 차단이 남용을 막는다. ⚠️ 만료를 다시 넣지 말 것(되돌리면 같은 함정).
 
 /** QR로 만들어지는 계정의 역할 — 고정. 다른 역할이 필요하면 등록 뒤 직원 상세에서 바꾼다(권한 상승 통로 차단). */
 const DEFAULT_ROLE: SystemRole = "teacher";
-const DEFAULT_DAYS = 90;
 const TOKEN_NAME = "직원 등록";
 
 export type IntakeTokenActionState =
@@ -36,10 +40,6 @@ async function requireStaffWrite() {
     return { error: "직원 등록 QR을 관리할 권한이 없습니다" as const };
   }
   return { user };
-}
-
-function expiryFromNow(days = DEFAULT_DAYS): string {
-  return new Date(Date.now() + days * 86400000).toISOString();
 }
 
 /** 이 학원의 직원 등록 QR 전부(만든 순). */
@@ -85,7 +85,7 @@ export async function ensureStaffIntakeToken(): Promise<IntakeTokenActionState> 
         token: randomBytes(16).toString("hex"),
         name: TOKEN_NAME,
         active: true,
-        expiresAt: expiryFromNow(),
+        expiresAt: null, // 만료 없음 — 인쇄해 두고 계속 쓴다(파일 상단 주석)
         role: DEFAULT_ROLE,
         submissionCount: 0,
       },
@@ -104,7 +104,7 @@ export async function ensureStaffIntakeToken(): Promise<IntakeTokenActionState> 
     action: "staff_intake_token_create",
     targetType: "document",
     targetLabel: TOKEN_NAME,
-    metadata: { role: DEFAULT_ROLE, expiresAt: created.expiresAt },
+    metadata: { role: DEFAULT_ROLE },
   });
   revalidatePath("/staff");
   return { ok: true, view: await buildStaffQrView(created), notice: "직원 등록 QR을 만들었습니다" };
@@ -113,7 +113,7 @@ export async function ensureStaffIntakeToken(): Promise<IntakeTokenActionState> 
 /**
  * 닫기 / 다시 열기 / 새 링크(재발급) / 이전 링크 모두 닫기.
  * - `close`  : 지금 링크로는 더 못 들어온다(가장 빠른 차단).
- * - `reopen` : 같은 링크를 다시 열고 만료를 90일 미룬다(인쇄해 둔 QR을 그대로 쓰는 경우).
+ * - `reopen` : 같은 링크를 다시 연다(인쇄해 둔 QR을 그대로 쓰는 경우) — 기한 없이 재개.
  * - `rotate` : **같은 행의 토큰 문자열만 교체** — 옛 링크는 즉시 죽고 행이 늘지 않는다(제출 수는 새로 센다).
  * - `closeOthers` : 예전에 여러 개 만들어 둔 링크를 한 번에 닫는다(화면에 안 보이는 열린 링크 = 구멍).
  */
@@ -168,12 +168,12 @@ export async function updateStaffIntakeToken(
     action === "close"
       ? { active: false }
       : action === "reopen"
-        ? { active: true, expiresAt: expiryFromNow() }
+        ? { active: true, expiresAt: null } // 다시 열기 = 기한 없이 재개(옛 만료값도 지운다)
         : action === "rotate"
           ? {
               token: randomBytes(16).toString("hex"),
               active: true,
-              expiresAt: expiryFromNow(),
+              expiresAt: null,
               submissionCount: 0,
             }
           : null;
