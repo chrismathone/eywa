@@ -8,7 +8,7 @@ import { isRecallInFlight, isRecallable } from "@/features/report-admin/report-r
 import {
   effectiveClassnoteStatus,
   isAlreadySent,
-  isMentEditable,
+  isRowInputEditable,
   isReportEligible,
   isRowActionable,
 } from "../grid";
@@ -198,6 +198,9 @@ export function ReportCard({
   // 발송 게이트 = 표뷰와 **같은 단일 소스**(send-gate.ts) — 카드만 다른 판정을 쓰면 한쪽에서만
   // "왜 안 눌리지"가 생긴다(#77). 멘트 미작성도 여기서 막는다(빈 멘트 절대 가드가 어차피 거절).
   const isAbsent = subject.attendanceRaw === "absent";
+  // 이 행의 입력을 잠그나 — 발송 완료 **또는 결석**(표 모드와 같은 단일 소스, grid.ts).
+  // 2026-08-07 확대: 예전엔 왼쪽 기록 열이 `alreadySent`만 봐서, 결석을 눌러도 진도·태도가 그대로 열려 있었다.
+  const locked = !isRowInputEditable(subject, liveStatus);
   const sendGate = evaluateSendGate({
     recallPending: isRecallInFlight(liveStatus ?? null),
     alreadySent,
@@ -341,6 +344,16 @@ export function ReportCard({
              "멘트 자동완성 및 첨부 섹션은 가로 너비를 좀 줄여서") — 그만큼이 미리보기 몫이 된다.
           ⚠️ **학부모 미리보기는 이 카드 안이 아니라 페이지 열이다** — 카드 안에 두면 카드 폭을 입력과
              나눠 써서, 보고서 열이 좁은 화면에선 입력까지 1열로 찌그러졌다. */}
+      {/* 결석 잠금 사유 — **잠긴 칸 바로 위**에 적는다(2026-07-30 "왜 비활성화됐는지 알 방법이 없다").
+          출결 알약은 이 위에 살아 있으므로, 되돌리는 법까지 한 줄로 안내한다. */}
+      {isAbsent && !alreadySent ? (
+        <p className="border-danger/30 bg-danger-soft/40 text-text-dim mx-3 mt-2 rounded-md border px-2.5 py-1.5 text-[11px] leading-relaxed">
+          <b className="text-danger">결석</b>이라 이 수업의 입력이 잠겨 있습니다 — 진도·테스트·태도·과제와 학부모
+          문구는 일어나지 않은 일이라 적지 않습니다. 사유·수업타임은 위 <b>출결</b>에서 적을 수 있고, 잘못
+          눌렀다면 출결을 바꾸면 바로 열립니다.
+        </p>
+      ) : null}
+
       <div className="grid flex-1 grid-cols-1 items-start gap-2.5 px-3 py-2.5 @[560px]:grid-cols-[minmax(0,1fr)_minmax(0,0.78fr)] @[560px]:gap-x-3">
         {/* 1열 — 오늘 진도 · 테스트(옛 가운데 열). 원장 2026-08-05: *"이걸 하나의 섹션으로 합쳐버리면
             안되나? 공간낭비 최소화할 수 있게? 굳이 따로 할 필요 있나?"* 카드를 따로 세우니 열 하나가
@@ -348,7 +361,7 @@ export function ReportCard({
             태도·과제)이 **그 카드와 같은 값을 두 번** 보여주고 있었다 → 요약(MiniSummary)은 삭제하고
             진짜 입력을 여기로 들였다. */}
         <fieldset
-          disabled={alreadySent}
+          disabled={locked}
           className="contents [&_input:disabled]:opacity-50 [&_textarea:disabled]:opacity-50 [&_select:disabled]:opacity-50 [&_button:disabled]:opacity-50 [&:disabled_*]:cursor-not-allowed"
         >
         <div className="flex flex-col gap-3">
@@ -438,7 +451,7 @@ export function ReportCard({
             구조적으로 막으므로 여기 쓴 문장은 어디로도 안 나간다(다 쓰고 발송에서 막히는 헛수고).
             왼쪽 열(진도·테스트·태도·과제·메모)은 **기록**이라 결석해도 계속 입력할 수 있어야 한다. */}
         <fieldset
-          disabled={!isMentEditable(subject, liveStatus)}
+          disabled={locked}
           className="contents [&_input:disabled]:opacity-50 [&_textarea:disabled]:opacity-50 [&_select:disabled]:opacity-50 [&_button:disabled]:opacity-50 [&:disabled_*]:cursor-not-allowed"
         >
         <div className="flex flex-1 flex-col gap-1.5">
@@ -644,7 +657,7 @@ export function ReportCard({
         {/* P2b: 학생 사진 첨부 — 항상 노출. 미저장 상태에서 추가하면 첫 첨부 시 자동저장(핸들러). */}
         {/* /r·ClassNote 스샷에 실림 → **발송분은 함께 잠근다**(첨부만 바꾸면 학부모가 본 이미지와 갈라진다). */}
         <fieldset
-          disabled={alreadySent}
+          disabled={locked}
           className="contents [&_input:disabled]:opacity-50 [&_button:disabled]:opacity-50 [&:disabled_*]:cursor-not-allowed"
         >
         <div className="border-line bg-bg-soft rounded-md border px-3 py-2">

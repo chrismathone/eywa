@@ -10,21 +10,25 @@
  *   차시와 상호배타라 고르면 아래 차시 선택을 통째로 잠근다(규약·목록 = progress-status.ts).
  * (edutrix '상태 선택'의 나머지 6개 = 진도와 **병행**하는 별개 축이라 미포함 — progress-status.ts 🔴 참조.)
  */
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Popover } from "@base-ui/react/popover";
 import { ChevronDown } from "@/components/icons/eywa-icon-compat";
 import {
   CURRICULUM_GRADES,
   curriculumForGrade,
+  flatLessons,
   splitLessons,
   joinLessons,
   displayLessons,
 } from "../curriculum";
 import { SKIP_PROGRESS_STATUSES, skipStatusOf } from "../progress-status";
+import { PROGRESS_MODES, PROGRESS_MODE_HINT, asProgressMode } from "../progress-mode";
 
 export function ProgressSelector({
   value,
   onChange,
+  mode,
+  onMode,
   studyGrade,
   onStudyGrade,
   studentGrade,
@@ -34,12 +38,15 @@ export function ProgressSelector({
 }: {
   value: string; // today(합본, 개행)
   onChange: (joined: string) => void; // 선택 변경 → 합본 문자열
+  /** 오늘 수업 성격(복습·문제풀이) — 차시와 **함께** 사는 별개 축(progress-mode.ts). 미지정이면 알약을 안 그린다. */
+  mode?: string | null;
+  onMode?: (mode: string | null) => void;
   studyGrade: string; // 진도 학년
   onStudyGrade: (grade: string) => void; // 진도 학년 변경(선행/후행)
   studentGrade: string; // 실제 학년(선행/후행 배지)
   prev?: string; // 이전 진도(합본) — 참고 표시용
   ariaLabel?: string;
-  /** 발송 완료된 보고서 — 수정 금지(0134a/2026-07-22 원장 지시). 선택 UI를 열지 않는다. */
+  /** 발송 완료·결석 — 수정 금지(isRowInputEditable). 선택 UI를 열지 않는다. */
   locked?: boolean;
 }) {
   const [open, setOpen] = useState(false);
@@ -55,6 +62,14 @@ export function ProgressSelector({
   const selected = skip ? [] : splitLessons(value);
   const selectedSet = new Set(selected);
   const units = curriculumForGrade(studyGrade);
+  const activeMode = asProgressMode(mode);
+  /**
+   * **다른 학년에서 고른 차시** — 학년 드롭다운을 바꿔도 선택은 지우지 않으므로(원장 2026-08-07:
+   * *"내신대비 기간이라 한시간은 선행, 한시간은 현행"*) 지금 목록엔 없는 선택이 생긴다.
+   * 그걸 조용히 숨기면 "고른 게 사라졌다"가 되므로 아래 메타 밴드에 건수와 해제 버튼을 남긴다.
+   */
+  const gradeLessons = new Set(flatLessons(studyGrade));
+  const otherGrade = selected.filter((l) => !gradeLessons.has(l));
   const q = search.trim();
   const filteredUnits = q
     ? units
@@ -65,6 +80,41 @@ export function ProgressSelector({
 
   const toggle = (lesson: string) =>
     onChange(joinLessons(selectedSet.has(lesson) ? selected.filter((l) => l !== lesson) : [...selected, lesson]));
+
+  /**
+   * **드래그로 주르륵 선택**(원장 2026-08-07: *"지금은 일일이 클릭해야되네"*).
+   * 첫 칸을 누른 순간의 상태로 방향을 정하고(꺼져 있었으면 켜기, 켜져 있었으면 끄기) 지나가는 칸에
+   * 같은 방향을 적용한다 — 스프레드시트의 그것과 같은 동작.
+   *
+   * ⚠️ 작업본을 **ref에 들고 다닌다**: `value`는 부모가 되돌려주는 값이라 한 번의 드래그 안에서 여러 번
+   *    onChange가 나가는 동안 최신 선택을 props로 다시 못 받는다(스냅샷으로 계산하면 마지막 칸만 남는다).
+   * ⚠️ 지나간 칸은 `touched`로 기억한다 — 손이 흔들려 같은 칸에 다시 들어오면 방금 한 일이 뒤집힌다.
+   * ⚠️ 시작 칸도 **pointerdown에서 즉시** 토글한다. click에 맡기면, 드래그가 다른 칸에서 끝났을 때
+   *    click은 두 칸의 공통 조상에서 발생해 **시작 칸엔 영영 안 온다**(눌렀는데 안 켜진 것처럼 보인다).
+   *    그래서 행은 label+input(클릭→onChange)이 아니라 role="checkbox"로 그린다 — 그래야 pointerdown과
+   *    click이 같은 칸을 두 번 토글하지 않는다(키보드는 아래 onKeyDown이 담당).
+   */
+  const drag = useRef<{ add: boolean; sel: string[]; touched: Set<string> } | null>(null);
+
+  const applyDrag = (lesson: string) => {
+    const d = drag.current;
+    if (!d || d.touched.has(lesson)) return;
+    d.touched.add(lesson);
+    const has = d.sel.includes(lesson);
+    if (d.add === has) return; // 이미 원하는 상태 — 건드리지 않는다
+    d.sel = d.add ? [...d.sel, lesson] : d.sel.filter((l) => l !== lesson);
+    onChange(joinLessons(d.sel));
+  };
+
+  const startDrag = (lesson: string) => {
+    drag.current = { add: !selectedSet.has(lesson), sel: [...selected], touched: new Set() };
+    applyDrag(lesson);
+    // 팝오버 밖에서 손을 떼도 드래그가 끝나야 한다(once라 해제도 자동).
+    if (typeof window !== "undefined")
+      window.addEventListener("pointerup", () => {
+        drag.current = null;
+      }, { once: true });
+  };
 
   const toggleUnit = (unit: string) =>
     setOpenUnits((prev) => {
@@ -105,6 +155,11 @@ export function ProgressSelector({
         aria-label={ariaLabel ?? "진도"}
         aria-readonly="true"
       >
+        {activeMode && !skip ? (
+          <span className="bg-primary-soft text-primary shrink-0 rounded-pill px-1.5 py-px text-[10px] font-bold">
+            {activeMode}
+          </span>
+        ) : null}
         <span className={`min-w-0 flex-1 truncate ${skip ? "text-amber font-bold" : ""}`}>
           {skip ?? (selected.length ? displayLessons(value) : "—")}
         </span>
@@ -124,6 +179,13 @@ export function ProgressSelector({
         }`}
         aria-label={ariaLabel ?? "진도 선택"}
       >
+        {/* 성격(복습·문제풀이)은 **닫힌 상태에서도** 보여야 한다 — 안 보이면 강사가 켠 줄 모르고,
+            그게 곧 학부모 문장의 뜻을 바꾼다(진도 나감 ↔ 복습). */}
+        {activeMode && !skip ? (
+          <span className="bg-primary-soft text-primary shrink-0 rounded-pill px-1.5 py-px text-[10px] font-bold">
+            {activeMode}
+          </span>
+        ) : null}
         <span className="min-w-0 flex-1 truncate">
           {skip ?? (selected.length ? displayLessons(value) : "진도 선택…")}
         </span>
@@ -164,6 +226,39 @@ export function ProgressSelector({
                 })}
               </div>
             </div>
+
+            {/* ── 오늘 수업 성격(복습·문제풀이) — **차시와 함께** 고르는 축이라 위 '진도 없이 제출'과 다른 밴드.
+                   원장 2026-08-07: 성격이 없으니 복습을 한 날도 멘트가 "진도를 나갔다"로 나갔다.
+                   ⚠️ 진도가 중단된 날(skip)엔 안 그린다 — 나간 차시가 없으니 그 차시의 복습도 성립하지 않는다. ── */}
+            {onMode && !skip ? (
+              <div className="border-line border-b px-3 py-2">
+                <p className="text-text-faint mb-1.5 text-[11px]">
+                  오늘 수업 성격 <span className="text-text-faint/70">· 안 고르면 새 진도로 나갑니다</span>
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {PROGRESS_MODES.map((m) => {
+                    const on = activeMode === m;
+                    return (
+                      <button
+                        key={m}
+                        type="button"
+                        // 같은 것을 다시 누르면 해제(알약의 기본 규약) — 잘못 고른 성격을 되돌릴 문.
+                        onClick={() => onMode(on ? null : m)}
+                        aria-pressed={on}
+                        title={PROGRESS_MODE_HINT[m]}
+                        className={`rounded-pill border px-2.5 py-1 text-[11px] font-bold transition-colors ${
+                          on
+                            ? "border-primary bg-primary-soft text-primary"
+                            : "border-line text-text-dim hover:border-primary/60 hover:text-primary"
+                        }`}
+                      >
+                        {m}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : null}
 
             {skip ? (
               <p className="text-text-dim bg-amber-soft/50 border-line border-b px-3 py-2 text-[11px]">
@@ -238,6 +333,26 @@ export function ProgressSelector({
                 </div>
               ) : null}
 
+              {/* 다른 학년에서 고른 차시 — 학년을 바꿔도 선택을 지우지 않으므로(내신대비 기간의 선행+현행)
+                  지금 목록엔 안 보이는 선택이 생긴다. **보이지 않는 선택은 반드시 여기서 밝힌다**
+                  (안 그러면 학년을 바꿔 본 강사가 "고른 게 사라졌다"고 읽고, 그대로 저장돼 학부모에게 나간다). */}
+              {otherGrade.length ? (
+                <div className="border-line bg-primary-soft/30 flex items-center gap-2 border-b px-3 py-1.5">
+                  <p className="text-text-dim min-w-0 flex-1 truncate text-[11px]" title={otherGrade.join(", ")}>
+                    다른 학년 <b className="text-primary">{otherGrade.length}</b>차시도 함께 선택됨:{" "}
+                    <span className="text-text-faint">{otherGrade.join(", ")}</span>
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => onChange(joinLessons(selected.filter((l) => gradeLessons.has(l))))}
+                    disabled={!!skip}
+                    className="text-text-faint hover:text-danger shrink-0 text-[11px]"
+                  >
+                    다른 학년만 해제
+                  </button>
+                </div>
+              ) : null}
+
               {/* 단원별 체크리스트 — **대단원 단위 아코디언, 기본 접힘**(2026-07-28 원장: "진도가 너무 펼쳐져
                   있으니 눌러서 펼치는 형식으로"). 한 학년 차시가 수십 개라 전부 펼쳐두면 원하는 단원까지
                   스크롤이 길다. ⚠️ 접었다고 **선택이 숨지 않아야 한다** — 접힌 단원엔 '선택 N' 배지를 달고,
@@ -290,21 +405,39 @@ export function ProgressSelector({
                           ? u.lessons.map((l) => {
                               const on = selectedSet.has(l);
                               return (
-                                <label
+                                <div
                                   key={l}
-                                  className={`hover:bg-bg-soft flex cursor-pointer items-start gap-2 rounded-md px-2 py-1 ${
+                                  role="checkbox"
+                                  aria-checked={on}
+                                  tabIndex={skip ? -1 : 0}
+                                  onPointerDown={(e) => {
+                                    if (e.button !== 0 || skip) return;
+                                    e.preventDefault(); // 드래그가 글자 선택으로 새는 것 차단
+                                    startDrag(l);
+                                  }}
+                                  onPointerEnter={() => {
+                                    if (drag.current) applyDrag(l);
+                                  }}
+                                  onKeyDown={(e) => {
+                                    if (skip || (e.key !== " " && e.key !== "Enter")) return;
+                                    e.preventDefault();
+                                    toggle(l);
+                                  }}
+                                  className={`hover:bg-bg-soft focus-visible:ring-primary flex cursor-pointer items-start gap-2 rounded-md px-2 py-1 outline-none select-none focus-visible:ring-1 ${
                                     on ? "text-primary font-bold" : "text-text-dim"
                                   }`}
                                 >
+                                  {/* 체크 표시는 **그림만** — 판정·조작은 위 행이 한다(중복 토글 방지). */}
                                   <input
                                     type="checkbox"
                                     checked={on}
-                                    onChange={() => toggle(l)}
-                                    disabled={!!skip}
-                                    className="accent-primary mt-0.5 size-3.5 shrink-0"
+                                    readOnly
+                                    tabIndex={-1}
+                                    aria-hidden
+                                    className="accent-primary pointer-events-none mt-0.5 size-3.5 shrink-0"
                                   />
                                   <span className="leading-snug">{l}</span>
-                                </label>
+                                </div>
                               );
                             })
                           : null}

@@ -9,8 +9,8 @@ import { subjectTone, toneSoftClass, toneSolidClass } from "../data";
 import {
   effectiveClassnoteStatus,
   isAlreadySent,
-  isMentEditable,
   isReportEligible,
+  isRowInputEditable,
   isRowActionable,
   type GridRow,
 } from "../grid";
@@ -53,6 +53,8 @@ export type GridFieldHandlers = {
     extra?: AttendanceExtra,
   ) => void;
   onProgress: (studentId: string, subjectIndex: number, today: string) => void;
+  /** 오늘 수업 성격(복습·문제풀이) — 진도와 함께 사는 별개 축(progress-mode.ts). */
+  onProgressMode: (studentId: string, subjectIndex: number, mode: string | null) => void;
   onStudyGrade: (studentId: string, grade: string) => void;
   onScore: (studentId: string, which: "daily" | "check", v: number | null) => void;
   onMax: (studentId: string, which: "daily" | "check", v: number) => void;
@@ -101,14 +103,16 @@ function GridProgressCell({
   student,
   subjectIndex,
   onProgress,
+  onProgressMode,
   onStudyGrade,
   locked,
 }: {
   student: OneScreenStudent;
   subjectIndex: number;
   onProgress: GridFieldHandlers["onProgress"];
+  onProgressMode: GridFieldHandlers["onProgressMode"];
   onStudyGrade: GridFieldHandlers["onStudyGrade"];
-  /** 발송 완료된 보고서 — 수정 금지(읽기 전용). */
+  /** 발송 완료 또는 결석 — 수정 금지(읽기 전용). 판정은 `isRowInputEditable` 단일 소스. */
   locked?: boolean;
 }) {
   const su = student.subjects[subjectIndex];
@@ -132,6 +136,8 @@ function GridProgressCell({
     <ProgressSelector
       value={su.today}
       onChange={(joined) => onProgress(student.id, subjectIndex, joined)}
+      mode={su.progressMode}
+      onMode={(m) => onProgressMode(student.id, subjectIndex, m)}
       studyGrade={resolveStudyGrade(student.studyGrade ?? student.grade)}
       onStudyGrade={(g) => onStudyGrade(student.id, g)}
       studentGrade={student.grade}
@@ -220,26 +226,33 @@ export function GridBodyRow({
   const canAutoWrite = isRowActionable(subject, "autowrite", liveStatus);
   const isAbsent = subject.attendanceRaw === "absent";
   /**
-   * 학부모 문구(멘트)·학습 추세는 **결석이면 잠근다**(원장 2026-08-07: 표·카드 모드가 일관돼야 함).
+   * 이 행의 **보고서 입력 전체**를 잠그나 — 발송 완료 또는 결석(`isRowInputEditable` 단일 소스).
    *
-   * 왜 이 두 칸만인가: 결석 행은 발송 게이트가 구조적으로 막으므로(`isRowActionable` send·autowrite)
-   * 여기에 쓴 문장은 **어디로도 나가지 않는다** — 다 쓰고 발송에서 막히는 헛수고가 된다.
-   * ⚠️ 반대로 **기록 칸(진도·테스트·태도·과제·특이사항·결석 사유·수업타임)은 그대로 연다** —
-   *    그건 발송물이 아니라 기록이라, 결석해도 남겨야 한다(이 행의 원래 설계 의도).
-   * ⚠️ 잠금은 행 전체를 흐리는 방식이 아니다(gotcha #20) — 잠긴 칸만 톤을 바꾸고 이유를 placeholder로 적는다.
+   * 🔴 2026-08-07 확대: 처음엔 멘트·추세만 잠갔는데 원장 제보 *"결석을 눌렀는데 진도 같은거 전부다
+   *    적을 수 있던데?"* — 결석은 그 학생이 그 수업에 **없었던** 것이라 진도·테스트·태도·과제도
+   *    일어나지 않은 일이다. 발송물만이 아니라 기록 칸도 함께 잠근다(카드 모드와 같은 판정).
+   * 🔴 단 **출결 알약·수업타임·결석 사유는 잠그지 않는다** — 잘못 누른 결석을 되돌릴 유일한 문이고,
+   *    결석한 날에도 사유·시수는 남겨야 할 기록이다(grid.ts 주석 참조).
+   * ⚠️ 잠금은 행 전체를 흐리는 방식이 아니다(gotcha #20) — 잠긴 칸만 톤을 바꾸고 이유를 밝힌다.
    */
-  const mentLocked = !isMentEditable(subject, liveStatus);
+  const rowLocked = !isRowInputEditable(subject, liveStatus);
+  /** 잠긴 칸 묶음(td 안에서만 쓴다 — tr의 자식은 td여야 하므로 행 전체를 fieldset으로 감쌀 수 없다). */
+  const LOCK_FS =
+    "contents [&_input:disabled]:opacity-50 [&_textarea:disabled]:opacity-50 [&_button:disabled]:opacity-50 [&:disabled_*]:cursor-not-allowed";
   const mentPlaceholder = isAbsent ? "결석 — 학부모 문구는 발송되지 않습니다" : null;
+  /** 특이사항 자리 — 막기만 하지 말고 **갈 곳**을 알려준다(결석 사유는 출결 알약 안에 적는 칸이 있다). */
+  const rowPlaceholder = isAbsent ? "결석 — 사유는 왼쪽 출결에서 적어 주세요" : null;
   const mentBase =
     "border-line focus:border-primary scrollbar-thin w-full rounded-sm border px-2 py-1 text-[11px] leading-snug outline-none";
   const lockedTone = isAbsent ? "bg-bg-soft text-text-faint cursor-not-allowed" : "";
   // 파일을 행 위에 놓으면 그 행에 바로 첨부(가장 빠른 경로). 진도 미입력 등 게이트는 부모 핸들러가 안내한다.
   // 발송 완료건은 파일을 행에 떨어뜨려도 첨부되지 않는다(위 버튼 잠금과 같은 이유).
   const drop = useRowFileDrop((files) => {
-    if (alreadySent) return;
+    if (rowLocked) return;
     actions.onAttach(student, subject.name, files);
   });
-  // 결석 행은 배경 톤으로 표시(입력은 여전히 가능=기록 보존). opacity로 전체를 흐리면 활성 입력칸이 disabled로 오인된다(#20).
+  // 결석 행은 배경 톤으로도 표시 — 잠긴 칸(disabled)만으로는 "왜 안 써지지"가 되기 쉽다.
+  // ⚠️ 행 전체에 opacity를 걸지는 않는다(#20) — 출결·수업타임은 살아 있는 입력이라 함께 흐리면 안 된다.
   return (
     <tr
       {...drop.handlers}
@@ -377,56 +390,68 @@ export function GridBodyRow({
           student={student}
           subjectIndex={subjectIndex}
           onProgress={fields.onProgress}
+          onProgressMode={fields.onProgressMode}
           onStudyGrade={fields.onStudyGrade}
-          locked={alreadySent}
+          locked={rowLocked}
         />
       </td>
+      {/* 점수·태도·과제 칸은 자체 잠금 prop이 없다 → **td 안에서** fieldset으로 묶어 잠근다(카드 모드와 같은 방식).
+          ⚠️ `<tr>`의 자식은 `<td>`여야 해서 행 전체를 fieldset으로 감쌀 수 없다 — 칸마다 감싼다.
+          ⚠️ `contents`라 레이아웃은 그대로(칸 정렬·폭 불변). */}
       {config.dailyEnabled ? (
         <td className={`${td} text-center`}>
-          <ScoreInput
-            value={student.tests.daily.score}
-            max={student.tests.daily.max}
-            onChange={(v) => fields.onScore(student.id, "daily", v)}
-            label={`${student.name} 일일테스트`}
-            allowMax={config.allowTestMax}
-            onMax={(v) => fields.onMax(student.id, "daily", v)}
-            mode={student.tests.daily.mode}
-            nav={nav.studentRow !== undefined ? { col: "daily", row: nav.studentRow } : undefined}
-          />
+          <fieldset disabled={rowLocked} className={LOCK_FS}>
+            <ScoreInput
+              value={student.tests.daily.score}
+              max={student.tests.daily.max}
+              onChange={(v) => fields.onScore(student.id, "daily", v)}
+              label={`${student.name} 일일테스트`}
+              allowMax={config.allowTestMax}
+              onMax={(v) => fields.onMax(student.id, "daily", v)}
+              mode={student.tests.daily.mode}
+              nav={nav.studentRow !== undefined ? { col: "daily", row: nav.studentRow } : undefined}
+            />
+          </fieldset>
         </td>
       ) : null}
       {config.checkEnabled ? (
         <td className={`${td} text-center`}>
-          <ScoreInput
-            value={student.tests.check.score}
-            max={student.tests.check.max}
-            onChange={(v) => fields.onScore(student.id, "check", v)}
-            label={`${student.name} 확인테스트`}
-            allowMax={config.allowTestMax}
-            onMax={(v) => fields.onMax(student.id, "check", v)}
-            mode={student.tests.check.mode}
-            nav={nav.studentRow !== undefined ? { col: "check", row: nav.studentRow } : undefined}
-          />
+          <fieldset disabled={rowLocked} className={LOCK_FS}>
+            <ScoreInput
+              value={student.tests.check.score}
+              max={student.tests.check.max}
+              onChange={(v) => fields.onScore(student.id, "check", v)}
+              label={`${student.name} 확인테스트`}
+              allowMax={config.allowTestMax}
+              onMax={(v) => fields.onMax(student.id, "check", v)}
+              mode={student.tests.check.mode}
+              nav={nav.studentRow !== undefined ? { col: "check", row: nav.studentRow } : undefined}
+            />
+          </fieldset>
         </td>
       ) : null}
       <td className={td}>
         {/* 원장 2026-07-23: 알약 → 드롭다운. 선택지가 늘어(과제 '없음' 추가) 표 가로가 터졌다. */}
-        <FieldSelect
-          radius="sm"
-          options={config.attitudes}
-          value={student.attitude}
-          onSelect={(a) => fields.onAttitude(student.id, a)}
-          ariaLabel={`${student.name} 태도`}
-        />
+        <fieldset disabled={rowLocked} className={LOCK_FS}>
+          <FieldSelect
+            radius="sm"
+            options={config.attitudes}
+            value={student.attitude}
+            onSelect={(a) => fields.onAttitude(student.id, a)}
+            ariaLabel={`${student.name} 태도`}
+          />
+        </fieldset>
       </td>
       <td className={td}>
         {/* 과제 수행률 — 숫자 칸 + % (드롭다운 폐지, 원장 2026-08-03). 옆 일일·확인 점수칸과 같은 모양. */}
-        <HomeworkRateInput
-          value={student.homework}
-          onChange={(h) => fields.onHomework(student.id, h)}
-          label={`${student.name} 과제 수행률`}
-          nav={{ col: "homework", row: nav.row }}
-        />
+        <fieldset disabled={rowLocked} className={LOCK_FS}>
+          <HomeworkRateInput
+            value={student.homework}
+            onChange={(h) => fields.onHomework(student.id, h)}
+            label={`${student.name} 과제 수행률`}
+            nav={{ col: "homework", row: nav.row }}
+          />
+        </fieldset>
       </td>
       <td className={td}>
         <div className="flex flex-col gap-1">
@@ -434,7 +459,7 @@ export function GridBodyRow({
             type="text"
             value={subject.textbook ?? ""}
             onChange={(e) => fields.onTextbook(student.id, subject.name, e.target.value)}
-            readOnly={alreadySent}
+            readOnly={rowLocked}
             placeholder="교재명"
             aria-label={`${student.name} ${subject.name} 교재명`}
             data-nav-col="textbook"
@@ -447,7 +472,7 @@ export function GridBodyRow({
             type="text"
             value={subject.homeworkToday ?? ""}
             onChange={(e) => fields.onHomeworkToday(student.id, subject.name, e.target.value)}
-            readOnly={alreadySent}
+            readOnly={rowLocked}
             // ⚠️ 이 칸은 고정 140px(colgroup) — 예시까지 넣은 긴 placeholder는 **한 줄짜리 input이라
             // 줄바꿈이 안 되고 잘려서** "오늘 과제 (예: 개념편 p"로 끊겼다(원장 제보 2026-08-04).
             // 칸 이름만 남기고 예시는 title(툴팁)로 — 카드 모드(폭 넉넉)는 예시를 그대로 쓴다.
@@ -473,7 +498,7 @@ export function GridBodyRow({
               type="checkbox"
               checked={!!subject.makeup}
               onChange={() => fields.onMakeup(student.id, subject.name)}
-              disabled={alreadySent}
+              disabled={rowLocked}
               className="accent-primary size-3.5 disabled:opacity-50"
               aria-label={`${student.name} ${subject.name} 보강`}
             />
@@ -484,12 +509,17 @@ export function GridBodyRow({
       <td className={td}>
         {/* 특이사항(입력) + 학부모 문구(멘트) + 학습 추세 — 자동작성이 특이사항을 문장으로 풀어 씀. 우측 남는 폭 활용. */}
         <div className="flex flex-col gap-1">
+          {/* 특이사항도 이 행의 기록이라 함께 잠근다 — 카드 모드는 처음부터 잠겨 있었고(왼쪽 fieldset)
+              표만 열려 있어 같은 값이 한쪽에선 써지고 한쪽에선 안 써졌다. */}
           <textarea
             value={student.note ?? ""}
             onChange={(e) => fields.onNote(student.id, e.target.value)}
-            placeholder="특이사항(메모) · 예: 조퇴함 / 개념 어려워함"
+            readOnly={rowLocked}
+            placeholder={rowPlaceholder ?? "특이사항(메모) · 예: 조퇴함 / 개념 어려워함"}
             aria-label={`${student.name} 특이사항`}
-            className={`border-amber/40 focus:border-primary scrollbar-thin min-h-[40px] w-full rounded-sm border bg-amber-soft/30 px-2 py-1 text-[11px] leading-snug outline-none ${AUTOSIZE}`}
+            className={`border-amber/40 focus:border-primary scrollbar-thin min-h-[40px] w-full rounded-sm border px-2 py-1 text-[11px] leading-snug outline-none ${AUTOSIZE} ${
+              lockedTone || "bg-amber-soft/30"
+            }`}
           />
           {config.noticeMode === "B" ? (
             // 모드 B — 카드 모드와 동일 계약: 화면만 2칸, 값은 joinComment이 빈 줄로 합친 **단일 문자열**
@@ -498,7 +528,7 @@ export function GridBodyRow({
               <textarea
                 value={draftParas.p1}
                 onChange={(e) => fields.onDraft(student.id, subject.name, joinComment(e.target.value, draftParas.p2))}
-                readOnly={mentLocked}
+                readOnly={rowLocked}
                 placeholder={mentPlaceholder ?? (genRowBusy ? "자동작성 중…" : "1문단 · 수업 내용(교재·진도·과제)")}
                 aria-label={`${student.name} ${subject.name} 학부모 문구 1문단 수업 내용`}
                 className={`${mentBase} ${AUTOSIZE} ${lockedTone || "bg-background"} min-h-[52px]`}
@@ -506,7 +536,7 @@ export function GridBodyRow({
               <textarea
                 value={draftParas.p2}
                 onChange={(e) => fields.onDraft(student.id, subject.name, joinComment(draftParas.p1, e.target.value))}
-                readOnly={mentLocked}
+                readOnly={rowLocked}
                 placeholder={mentPlaceholder ?? (genRowBusy ? "자동작성 중…" : "2문단 · 태도 · 특이사항")}
                 aria-label={`${student.name} ${subject.name} 학부모 문구 2문단 태도 특이사항`}
                 className={`${mentBase} ${AUTOSIZE} ${lockedTone || "bg-background"} min-h-[52px]`}
@@ -516,7 +546,7 @@ export function GridBodyRow({
             <textarea
               value={rep?.draft ?? ""}
               onChange={(e) => fields.onDraft(student.id, subject.name, e.target.value)}
-              readOnly={mentLocked}
+              readOnly={rowLocked}
               placeholder={mentPlaceholder ?? (genRowBusy ? "자동작성 중…" : "'자동작성'으로 생성 · 직접 편집·확인 후 발송")}
               aria-label={`${student.name} ${subject.name} 학부모 문구`}
               className={`${mentBase} ${AUTOSIZE} ${lockedTone || "bg-background"} min-h-[72px]`}
@@ -525,7 +555,7 @@ export function GridBodyRow({
           <textarea
             value={rep?.trendDraft ?? ""}
             onChange={(e) => fields.onTrend(student.id, subject.name, e.target.value)}
-            readOnly={mentLocked}
+            readOnly={rowLocked}
             placeholder={mentPlaceholder ?? "학습 추세(종합분석) · 기록 적으면 비어 있음"}
             aria-label={`${student.name} ${subject.name} 학습 추세`}
             className={`${mentBase} ${AUTOSIZE} ${lockedTone || "bg-bg-soft"} min-h-[48px]`}

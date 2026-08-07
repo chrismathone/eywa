@@ -58,6 +58,7 @@ import {
   isAlreadySent,
   isClassMember,
   isCopyTargetRow,
+  isRowInputEditable,
   isRowActionable,
   planBulkApply,
   planPrevFill,
@@ -349,6 +350,9 @@ export function OneScreenClient({
             su.classId || su.subjectKey || su.name,
             {
               today: su.today,
+              // 오늘 수업 성격(복습·문제풀이) — 빈 문자열로 보내 **해제도 저장**한다(undefined면 로스터가
+              // `!= null` 복원에서 건너뛰어 껐던 상태가 새로고침에 되살아난다).
+              mode: su.progressMode ?? "",
               draft: r?.[su.name]?.draft ?? "",
               trendDraft: r?.[su.name]?.trendDraft ?? "",
               textbook: su.textbook ?? "",
@@ -594,17 +598,21 @@ export function OneScreenClient({
       subjects: s.subjects.map((su, i) => (i === subjectIndex ? { ...su, today } : su)),
     }));
   }
-  function setStudyGradeFor(studentId: string, grade: string) {
-    // 진도 학년 변경(선행/후행) → 그 학년 차시로 다시 고르도록 오늘 진도 초기화. ⚠️ **math(커리큘럼 피커) 과목만** —
-    // studyGrade는 math 진도선택창에서만 쓰이는데 전 과목을 지우면 다과목 학생의 영어 등 자유텍스트 진도가
-    // 소리 없이 삭제·영속된다(#6 확정). isMathSubject와 동일 규칙(미지정=math).
+  /** 오늘 수업 성격(복습·문제풀이) 토글 — 진도와 **함께** 사는 축이라 진도 값은 건드리지 않는다. */
+  function setProgressModeFor(studentId: string, subjectIndex: number, mode: string | null) {
     patch(studentId, (s) => ({
       ...s,
-      studyGrade: grade,
-      subjects: s.subjects.map((su) =>
-        (su.subjectKey ?? "math") === "math" ? { ...su, today: "" } : su,
-      ),
+      subjects: s.subjects.map((su, i) => (i === subjectIndex ? { ...su, progressMode: mode } : su)),
     }));
+  }
+  function setStudyGradeFor(studentId: string, grade: string) {
+    // 진도 학년 변경(선행/현행) — **고른 차시는 지우지 않는다**(원장 2026-08-07: *"진도를 여러 학년에
+    // 걸쳐 선택하는건 불가능한가? 내신대비 기간이라 한시간은 선행, 한시간은 현행 하고 싶을 수도 있으니까"*).
+    // 예전엔 학년을 바꾸는 순간 math 과목의 `today`를 통째로 비웠다 → 두 학년을 섞는 것이 **구조적으로 불가능**했고,
+    // 학년만 확인하려고 드롭다운을 건드려도 고른 차시가 통째로 날아갔다.
+    // ⚠️ 차시 이름은 커리큘럼 전체에서 유일하므로(curriculum.ts 주석) 두 학년 차시가 한 값에 섞여도
+    //    위치 매핑(positionOf)이 흔들리지 않는다. 선택기는 다른 학년 선택분을 '다른 학년 N차시'로 보여준다.
+    patch(studentId, (s) => ({ ...s, studyGrade: grade }));
   }
   // 강사 본인 AI 멘트 모드(단일 A / 2문단 B / 학원 기본 null) 저장 — 낙관적 반영 + 실패 롤백.
   async function changeNoticeMode(mode: "A" | "B" | null) {
@@ -1036,6 +1044,10 @@ export function OneScreenClient({
     if (!selected) return;
     setProgressFor(selected.id, subjectIndex, today);
   }
+  function setProgressMode(subjectIndex: number, mode: string | null) {
+    if (!selected) return;
+    setProgressModeFor(selected.id, subjectIndex, mode);
+  }
   function setStudyGrade(grade: string) {
     if (!selected) return;
     setStudyGradeFor(selected.id, grade);
@@ -1242,6 +1254,13 @@ export function OneScreenClient({
         homework: r.student.homework,
         textbook: r.subject.textbook ?? "",
         homeworkToday: r.subject.homeworkToday ?? "",
+        // 잠긴 행(발송 완료·결석)엔 값을 밀어 넣지 않는다 — 넣으면 강사가 **지울 수 없는 값**이 남는다.
+        // ⚠️ 행 목록(rows)에서 빼지는 않는다: 아래 출결 일괄 적용이 같은 목록을 쓰는데 거기서 빠지면
+        //    잘못 찍은 결석을 일괄로 되돌릴 수 없다(잠금의 유일한 탈출구를 막는 꼴).
+        locked: !isRowInputEditable(
+          r.subject,
+          effectiveClassnoteStatus(liveClassnoteStatus(r.student.id, r.subject.name), r.subject.classnoteStatus),
+        ),
       })),
       patchFields,
       onlyEmpty,
@@ -1360,7 +1379,8 @@ export function OneScreenClient({
     if (res.plan.length === 0) {
       // 왜 아무 일도 안 일어났는지 말해준다 — "눌렀는데 무반응"이 되지 않게.
       const why = [
-        res.skippedSent ? `발송 완료 ${res.skippedSent}행` : "",
+        // ⚠️ 이 카운터엔 결석 행도 들어온다(2026-08-07) — "발송 완료 N행"만 적으면 거짓말이 된다.
+        res.skippedSent ? `발송 완료·결석 ${res.skippedSent}행` : "",
         res.skippedSubject ? `다른 과목 ${res.skippedSubject}행` : "",
         res.skippedFilled ? `이미 입력됨 ${res.skippedFilled}행` : "",
       ].filter(Boolean);
@@ -1377,7 +1397,7 @@ export function OneScreenClient({
       `${first.student.name} 행을 ${res.plan.length}행에 복사했습니다` +
         (skipped
           ? ` · 건너뜀 ${skipped}행(${[
-              res.skippedSent ? `발송완료 ${res.skippedSent}` : "",
+              res.skippedSent ? `발송완료·결석 ${res.skippedSent}` : "",
               res.skippedSubject ? `다른 과목 ${res.skippedSubject}` : "",
               res.skippedFilled ? `이미 입력 ${res.skippedFilled}` : "",
             ]
@@ -1442,6 +1462,11 @@ export function OneScreenClient({
               homework: r.student.homework,
               homeworkToday: su.homeworkToday ?? "",
             },
+            // 잠긴 행(발송 완료·결석)은 채우지 않는다(위 일괄 적용과 같은 이유).
+            locked: !isRowInputEditable(
+              su,
+              effectiveClassnoteStatus(liveClassnoteStatus(r.student.id, r.subject.name), su.classnoteStatus),
+            ),
           },
         ];
       }),
@@ -2232,10 +2257,14 @@ export function OneScreenClient({
           <span className="font-bold">
             이 날짜는 이미 학부모에게 발송된 보고서가 {sentRowCount}건 있습니다
           </span>
+          {/* ⚠️ 탈출구를 **실제로 화면에 있는 것**으로 적는다. 2026-08-06부터 게시된 보고서에는
+              '공유 링크 재발급'이 아예 안 뜬다(게시글은 이미지라 링크를 만져도 학부모 화면이 그대로여서
+              반쪽 수습을 고를 수 없게 감췄다) — 그런데 이 안내만 옛 경로를 가리키고 있었다.
+              문구는 카드 안 배너(report-card.tsx)와 **같은 말**로 맞춘다(두 곳이 다르면 어느 쪽이 맞는지 모른다). */}
           <span className="text-text-dim">
-            — 발송 완료된 건은 <b>수정도 재발송도 할 수 없습니다</b>. ClassNote는 게시글 수정·삭제가 없어
-            학부모가 받은 것과 기록이 갈라지기 때문입니다. 정말 고쳐야 하면 카드에서 <b>공유 링크 재발급</b>
-            으로 그 건을 무효화한 뒤 다시 작성하세요.
+            — 발송 완료된 건은 <b>그대로는 수정할 수 없습니다</b>. ClassNote는 게시글 수정이 없어 학부모가
+            받은 것과 기록이 갈라지기 때문입니다. 고쳐야 하면 카드에서 <b>회수</b>로 학부모 게시글을 지우세요
+            — 삭제가 끝나면 입력이 열리고 <b>ClassNote 발송</b>으로 수정본을 다시 보낼 수 있습니다.
           </span>
         </div>
       ) : null}
@@ -2308,6 +2337,7 @@ export function OneScreenClient({
           fields={{
             onAttendance: setAttendanceFor,
             onProgress: setProgressFor,
+            onProgressMode: setProgressModeFor,
             onStudyGrade: setStudyGradeFor,
             onScore: setScoreFor,
             onMax: setMaxFor,
@@ -2473,6 +2503,7 @@ export function OneScreenClient({
                       student={selected}
                       onConfirm={confirmProgress}
                       onProgress={setProgress}
+                      onProgressMode={setProgressMode}
                       onStudyGrade={setStudyGrade}
                       onLoadPrev={
                         selected.isMakeup && !prevLoaded.has(selected.id)

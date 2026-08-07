@@ -8,6 +8,7 @@
 import type { OneScreenStudent, TestScore, TestScoreMode } from "./types";
 import { DEFAULT_PROMPTS, interpolate, assembleSingle } from "./prompt-defaults";
 import { isSkipStatus } from "./progress-status";
+import { asProgressMode, progressFactLabel } from "./progress-mode";
 import { progressInline } from "./progress-range";
 
 /**
@@ -45,6 +46,12 @@ export type ReportCommentInput = {
   studentName: string;
   subject: string;
   progress: string; // 오늘 진도(subject.today)
+  /**
+   * 오늘 수업 성격(복습·문제풀이) — 없으면 평소대로 '진도'(progress-mode.ts).
+   * 🔴 값이 아니라 **라벨**을 바꾸는 데 쓴다: "오늘 복습: 수학 다항식의 곱셈".
+   *    값에 "(복습)"을 달면 모델이 괄호째 베껴 학부모 문장에 넣는다(2026-07-22 실측 누출과 같은 벡터).
+   */
+  progressMode?: string | null;
   dailyTest: string; // "20문제 중 18개 (지난 회차 대비 ▲2)" | ""
   checkTest: string;
   attitude: string; // "" = 미입력
@@ -92,6 +99,7 @@ export function buildReportCommentInput(st: OneScreenStudent, subjectIndex: numb
     //    `su.name`엔 반 이름이 붙을 수 있다(같은 과목 두 반 = "수학 · 고1 특강"). 보고서에 반 노출 금지.
     subject: su?.subjectLabel || su?.name || "",
     progress: su?.today ?? "",
+    progressMode: su?.progressMode ?? null,
     dailyTest: testLine(st.tests.daily.score, st.tests.daily.max, st.tests.daily.prevScore, st.tests.daily.mode),
     checkTest: testLine(st.tests.check.score, st.tests.check.max, st.tests.check.prevScore, st.tests.check.mode),
     attitude: st.attitude ?? "",
@@ -113,7 +121,12 @@ function progressFact(input: ReportCommentInput, label: string): string | null {
   // 접기는 사실 보존적(같은 중단원 연속만)이라 grounding이 안 깨지고, 카드 진도와 **같은 표기**가 된다.
   const prog = [input.subject, progressInline(input.progress)].filter(Boolean).join(" ");
   if (!prog) return null;
-  return `${isSkipStatus(input.progress) ? "오늘 수업" : label}: ${prog}`;
+  // 진도 중단일 > 수업 성격(복습·문제풀이) > 평소 '진도' 순으로 라벨이 정해진다.
+  // (중단일엔 성격이 붙을 수 없다 — 나간 차시가 없으니 그 차시의 복습도 성립하지 않는다.)
+  const head = isSkipStatus(input.progress)
+    ? "오늘 수업"
+    : progressFactLabel(label, asProgressMode(input.progressMode));
+  return `${head}: ${prog}`;
 }
 
 /** 입력의 **채워진 사실만** 모은 [입력] 블록(빈 값은 침묵). 모드 A 프롬프트 {{facts}}에 주입. */
