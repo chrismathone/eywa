@@ -227,3 +227,39 @@ describe("splitCoursesByMonth — 행 합 ≡ 과목 금액 (불변식)", () => 
     expect(lines[0].sessions).toBe(9);
   });
 });
+
+// 🔴 글자 단위 파싱의 함정 — '일'이 든 단어가 일요일로 오인된다.
+//    blur의 formatDays가 원문을 덮어쓰므로 잘못 읽으면 **사용자가 뭘 쳤는지 흔적도 안 남는다**.
+describe("parseDays — 묶음·범위 표현", () => {
+  it("'평일'은 월~금이지, 일요일이 아니다", () => {
+    expect(parseDays("평일")).toEqual([1, 2, 3, 4, 5]);
+  });
+
+  it("'매일'은 이레 전부", () => {
+    expect(parseDays("매일")).toEqual([1, 2, 3, 4, 5, 6, 0]);
+  });
+
+  it("'주말'은 토·일", () => {
+    expect(parseDays("주말")).toEqual([6, 0]);
+  });
+
+  it("'월~금' 범위는 다섯 요일로 펼친다(양 끝 2일이 아니라)", () => {
+    expect(parseDays("월~금")).toEqual([1, 2, 3, 4, 5]);
+    expect(parseDays("화~목")).toEqual([2, 3, 4]);
+    expect(parseDays("월-금")).toEqual([1, 2, 3, 4, 5]);
+    expect(parseDays("월 ~ 금")).toEqual([1, 2, 3, 4, 5]);
+  });
+
+  it("범위와 낱개를 섞어 써도 된다", () => {
+    expect(parseDays("월~수,금")).toEqual([1, 2, 3, 5]);
+  });
+
+  it("거꾸로 된 범위는 펼치지 않는다(양 끝만 읽힌다)", () => {
+    expect(parseDays("금~월")).toEqual([5, 1]);
+  });
+
+  it("정리 표기도 뜻이 보존된다", () => {
+    expect(formatDays("평일")).toBe("월,화,수,목,금");
+    expect(formatDays("월~금")).toBe("월,화,수,목,금");
+  });
+});

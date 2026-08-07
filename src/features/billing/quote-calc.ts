@@ -50,9 +50,36 @@ const DAY_INDEX: Record<string, number> = { 일: 0, 월: 1, 화: 2, 수: 3, 목:
  *    → **글자 단위로 훑는다**. 구분자가 무엇이든(쉼표·공백·중점·슬래시) 상관없고, 요일 글자가 아닌
  *    문자는 그냥 무시된다. 같은 요일을 두 번 써도 한 번만 센다(시수가 부풀지 않게).
  */
+const DAY_CHARS = "일월화수목금토";
+
+/** "월~금" → "월화수목금". 주 순서(일=0)를 따라 채운다. 역방향(금~월)은 감싸지 않고 무시. */
+function expandRanges(s: string): string {
+  return s.replace(/([일월화수목금토])\s*[~～-]\s*([일월화수목금토])/g, (_m, a: string, b: string) => {
+    const from = DAY_CHARS.indexOf(a);
+    const to = DAY_CHARS.indexOf(b);
+    if (from < 0 || to < 0 || to < from) return _m;
+    return DAY_CHARS.slice(from, to + 1);
+  });
+}
+
+/**
+ * 요일 문자열 → 인덱스 배열.
+ *
+ * ⚠️ 글자 단위로 읽기 때문에 **'일'이 들어간 단어가 일요일로 오인된다** — 읽기 전에 펼치고 걷어낸다:
+ *   · "월요일" → '요일' 제거(안 그러면 일요일이 섞인다)
+ *   · "매일"·"평일"·"주말" → 뜻하는 요일 묶음으로 먼저 치환
+ *   · "월~금" → "월화수목금" (범위를 안 펼치면 **양 끝 2일만** 읽혀 시수가 절반 이하가 된다)
+ * 🔴 blur에서 formatDays가 원문을 덮어쓰므로, 잘못 읽으면 **사용자가 뭘 쳤는지 흔적도 안 남는다**.
+ *    그래서 오인 케이스는 파서에서 끝내야 한다(적대 리뷰 2026-08-07).
+ */
 export function parseDays(s: string): number[] {
-  // ⚠️ "월요일"처럼 쓰면 '요일'의 **'일'이 일요일로** 잡힌다 — 글자 단위로 읽기 전에 걷어낸다.
-  const cleaned = s.replace(/요일/g, "");
+  const cleaned = expandRanges(
+    s
+      .replace(/매일/g, "월화수목금토일")
+      .replace(/평일/g, "월화수목금")
+      .replace(/주말/g, "토일")
+      .replace(/요일/g, ""),
+  );
   const out: number[] = [];
   for (const ch of cleaned) {
     const n = DAY_INDEX[ch];

@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { humanizeDbError } from "@/lib/supabase/db-error";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import type { SystemRole } from "@/lib/permissions";
 import { accessLevelTenant } from "@/lib/auth/perm-matrix";
@@ -48,25 +49,47 @@ export async function saveTuitionQuote(
   const discounts = parseArr(formData.get("discounts"));
   const totalAmount = won(formData.get("totalAmount"));
 
+  const row = {
+    student_name: studentName,
+    school,
+    grade,
+    consultant,
+    start_date: startDate,
+    end_date: endDate,
+    courses,
+    extras,
+    discounts,
+    total_amount: totalAmount,
+  };
+
   const supabase = await createClient();
+
+  // 🔴 저장된 견적을 고쳐 저장하면 **덮어쓴다**. 예전엔 무조건 insert라 수정할 때마다 사본이
+  //    하나씩 쌓였고, 목록에 같은 학생 견적이 여러 개 남아 어느 것이 학부모에게 나간 것인지
+  //    알 수 없었다(적대 리뷰 2026-08-07).
+  //    ⚠️ tenant_id를 함께 걸어 남의 학원 견적을 id만으로 고치지 못하게 한다.
+  const quoteId = String(formData.get("quoteId") ?? "").trim();
+  if (quoteId) {
+    const { data, error } = await supabase
+      .from("tuition_quotes")
+      .update(row)
+      .eq("id", quoteId)
+      .eq("tenant_id", user.tenantId)
+      .select("id")
+      .maybeSingle();
+    if (error) return { error: humanizeDbError(error.message, "저장") };
+    // 그 사이 지워졌거나 남의 테넌트 id면 0행 — 조용히 사라지지 않게 알린다.
+    if (!data) return { error: "저장할 견적을 찾지 못했습니다 — 목록에서 다시 열어주세요" };
+    revalidatePath("/billing");
+    return { ok: true, id: data.id };
+  }
+
   const { data, error } = await supabase
     .from("tuition_quotes")
-    .insert({
-      tenant_id: user.tenantId,
-      student_name: studentName,
-      school,
-      grade,
-      consultant,
-      start_date: startDate,
-      end_date: endDate,
-      courses,
-      extras,
-      discounts,
-      total_amount: totalAmount,
-    })
+    .insert({ tenant_id: user.tenantId, ...row })
     .select("id")
     .single();
-  if (error) return { error: error.message };
+  if (error) return { error: humanizeDbError(error.message, "저장") };
 
   revalidatePath("/billing");
   return { ok: true, id: data.id };

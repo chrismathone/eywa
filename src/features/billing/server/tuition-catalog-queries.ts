@@ -1,5 +1,6 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
+import { normalizePricingMode } from "@/features/billing/tuition-catalog";
 import type { TuitionCatalogRow, TuitionCatalogOption } from "@/features/billing/tuition-catalog";
 
 // 수강료 단가표 DB 쿼리(server-only) — 과목 단가 + 기타 항목 + 할인 프리셋 통합 레지스트리(category로 구분).
@@ -59,7 +60,7 @@ export async function getTuitionCatalogActive(): Promise<TuitionCatalogOption[]>
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("tuition_catalog")
-    .select("id, category, name, price, note")
+    .select("id, category, name, price, pricing_mode, note")
     .eq("is_active", true)
     .order("category", { ascending: true })
     .order("name", { ascending: true });
@@ -69,6 +70,7 @@ export async function getTuitionCatalogActive(): Promise<TuitionCatalogOption[]>
     category: r.category,
     name: r.name,
     price: num(r.price),
+    pricingMode: normalizePricingMode(r.pricing_mode),
     note: r.note,
   }));
 }

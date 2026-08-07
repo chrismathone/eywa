@@ -143,6 +143,8 @@ export function TuitionCalculator({
         category: "교재",
         name: b.title,
         price: b.price,
+        // 교재는 권당 가격이라 회당 단가가 아니다 — 시수를 곱하면 안 된다(기타 항목으로만 쓰인다).
+        pricingMode: null,
         note: b.bookDetail,
       })),
     ],
@@ -165,24 +167,25 @@ export function TuitionCalculator({
   };
 
   const addCourse = (o: TuitionCatalogOption) =>
-    setCourses((cs) => [
-      ...cs,
-      recompute(
-        {
-          uid: nextUid(cs),
-          category: o.category,
-          name: o.name,
-          days: "",
-          perSession: o.price,
-          sessions: 0,
-          price: 0,
-          note: o.note ?? "",
-          excludeHolidays: true,
-          fixedMonthly: false,
-        },
-        student,
-      ),
-    ]);
+    setCourses((cs) => {
+      // 🔴 **회당 단가일 때만 시수를 곱한다.** 단가표의 price는 "회당/월/할인"이 섞여 있어서
+      //    (0102a pricing_mode) 무조건 곱하면 월 20만원짜리가 9회 곱해져 180만원이 된다.
+      //    회당이 아니면(월 단가·미지정) '월 N회 고정'으로 넣어 금액을 그대로 쓴다 — 곱셈 금지.
+      const perSessionPriced = o.pricingMode === "per_session";
+      const row: QuoteCourse = {
+        uid: nextUid(cs),
+        category: o.category,
+        name: o.name,
+        days: "",
+        perSession: perSessionPriced ? o.price : 0,
+        sessions: 0,
+        price: perSessionPriced ? 0 : o.price,
+        note: o.note ?? "",
+        excludeHolidays: true,
+        fixedMonthly: !perSessionPriced,
+      };
+      return [...cs, recompute(row, student)];
+    });
 
   const patchCourse = (uid: string, patch: Partial<QuoteCourse>) =>
     setCourses((cs) =>
@@ -362,6 +365,8 @@ export function TuitionCalculator({
           <form onSubmit={(e) => submitAction(e, formAction)} className="flex items-center justify-end gap-2">
             <input type="hidden" name="studentName" value={student.name} />
             <input type="hidden" name="school" value={student.school} />
+            {/* 저장된 견적을 열었으면 그 행을 **덮어쓴다** — 없으면 새로 만든다(사본 증식 방지). */}
+            {initial?.id ? <input type="hidden" name="quoteId" value={initial.id} /> : null}
             <input type="hidden" name="grade" value={student.grade} />
             <input type="hidden" name="consultant" value={student.consultant} />
             <input type="hidden" name="startDate" value={student.startDate} />

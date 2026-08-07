@@ -43,10 +43,14 @@ export type TuitionCatalogRow = {
 };
 
 // 계산기 picker용 경량 옵션(활성 단가표).
+// 🔴 `pricingMode`가 반드시 따라와야 한다 — 없으면 계산기가 price를 **무조건 회당 단가로 보고
+//    시수를 곱한다**. 월 단가 20만원짜리를 9회 곱하면 180만원이 학부모 안내문에 찍힌다
+//    (0102a가 "곱셈 금지"로 못박은 바로 그 사고. 적대 리뷰 2026-08-07).
 export type TuitionCatalogOption = {
   id: string;
   category: string;
   name: string;
   price: number;
+  pricingMode: PricingMode | null;
   note: string | null;
 };
