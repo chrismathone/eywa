@@ -53,7 +53,11 @@ function usedActions(): Map<string, Set<string>> {
         j++;
       }
       for (const m of src.slice(i, j).matchAll(/action:\s*([^,\n]+)/g)) {
-        for (const q of m[1].matchAll(/"([a-z][a-z0-9_]*)"/g)) {
+        // ⚠️ 값 자리에 **비교**가 섞이면(`action: x === "rotate" ? "a" : "b"`) 그 비교 문자열까지
+        //    액션 키로 오인해 "미등록"으로 신고한다(2026-08-07 실측: rotate 오탐으로 main이 빨간불).
+        //    비교식을 먼저 걷어내고 남은 문자열만 액션 후보로 본다 — 삼항의 두 갈래는 그대로 수집된다.
+        const expr = m[1].replace(/[\w$.]+\s*[=!]==?\s*"[^"]*"/g, "");
+        for (const q of expr.matchAll(/"([a-z][a-z0-9_]*)"/g)) {
           const rel = path.relative(process.cwd(), file).split(path.sep).join("/");
           if (!found.has(q[1])) found.set(q[1], new Set());
           found.get(q[1])!.add(rel);
