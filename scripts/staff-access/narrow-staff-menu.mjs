@@ -46,6 +46,7 @@ const GRANTEES = [
   { name: "설현", role: "admin" },
   { name: "이승엽", role: "admin" },
   { name: "김예원", role: "manager" }, // 2026-08-05 원장 추가 지시
+  { name: "오은진", role: "admin" }, // 2026-08-06 원장 추가 지시
 ];
 // 역할 잠금 대상(코드 기본값이 full인 역할만; counselor는 기존 readonly override 제거로 잠김).
 const CLOSE_ROLES = ["admin", "manager", "accountant"];
