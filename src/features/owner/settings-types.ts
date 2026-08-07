@@ -73,6 +73,12 @@ export const integrationGroupPresetSchema = z.object({
   groups: z.array(integrationGroupSchema).max(40),
   showOthers: z.boolean().optional(),
   othersTitle: z.string().max(30).optional(),
+  // 누가·언제 저장했나 — 불러오기 목록에서 "이거 누가 언제 만든 배치더라"를 알 수 있어야 고를 수 있다
+  // (원장 2026-08-06). ⚠️ 이 두 값은 **서버가 찍는다**(saveIntegrationGroups) — 클라가 보낸 값을
+  // 그대로 믿으면 남의 이름으로 저장한 것처럼 꾸밀 수 있다. optional인 이유는 이 필드 도입 전 저장분.
+  savedBy: z.string().max(40).optional(),
+  /** 저장 시각(ISO, UTC). 표시는 Asia/Seoul로 포맷한다. */
+  savedAt: z.string().max(40).optional(),
 });
 export type IntegrationGroupPresetSetting = z.infer<typeof integrationGroupPresetSchema>;
 

@@ -67,3 +67,22 @@ describe("통합뷰 그룹 배치 보관함(프리셋)", () => {
     expect(normalizePresets([{ id: "p2", name: "x", showOthers: false }])[0].showOthers).toBe(false);
   });
 });
+
+describe("누가·언제 저장했나(도장)", () => {
+  it("불러오기는 도장을 실어 나르지 않는다 — 불러온 배치를 다시 저장하면 **그때 그 사람이** 저장한 것", () => {
+    const p: GroupPreset = { ...preset("p1", "학기"), savedBy: "박소선", savedAt: "2026-08-01T00:00:00.000Z" };
+    const body = loadPreset(p);
+    expect("savedBy" in body).toBe(false);
+    expect("savedAt" in body).toBe(false);
+  });
+
+  it("저장된 도장은 정규화에서 그대로 살아남는다(옛 저장분은 없어도 무방)", () => {
+    const out = normalizePresets([
+      { id: "p1", name: "학기", savedBy: "박소선", savedAt: "2026-08-01T00:00:00.000Z" },
+      { id: "p2", name: "옛것" },
+    ]);
+    expect(out[0].savedBy).toBe("박소선");
+    expect(out[0].savedAt).toBe("2026-08-01T00:00:00.000Z");
+    expect(out[1].savedBy).toBeUndefined();
+  });
+});

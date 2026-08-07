@@ -14,10 +14,14 @@ export type GroupPreset = {
   /** 저장 당시의 '기타' 표시 여부·제목 — 배치는 이 둘까지 같아야 화면이 똑같이 재현된다. */
   showOthers: boolean;
   othersTitle: string;
+  /** 누가 저장했나(표시용). **서버가 찍는다** — 클라 값은 무시된다(위조 방지). 옛 저장분은 없음. */
+  savedBy?: string;
+  /** 언제 저장했나(ISO, UTC). 표시는 Asia/Seoul. 서버가 찍는다. */
+  savedAt?: string;
 };
 
 /** 현재 편집 중인 배치 = 프리셋 1벌로 얼릴 재료(이름·id는 호출부가 정한다 — id 생성은 순수하지 않다). */
-export type PresetBody = Omit<GroupPreset, "id" | "name">;
+export type PresetBody = Omit<GroupPreset, "id" | "name" | "savedBy" | "savedAt">;
 
 /**
  * 같은 이름이면 **덮어쓴다**(자리 유지), 없으면 뒤에 붙인다.
@@ -69,6 +73,8 @@ export function normalizePresets(
     groups?: { id: string; title: string; classIds?: string[] }[];
     showOthers?: boolean;
     othersTitle?: string;
+    savedBy?: string;
+    savedAt?: string;
   }[] = [],
   fallbackOthersTitle = "",
 ): GroupPreset[] {
@@ -78,5 +84,7 @@ export function normalizePresets(
     groups: (p.groups ?? []).map((g) => ({ id: g.id, title: g.title, classIds: [...(g.classIds ?? [])] })),
     showOthers: p.showOthers !== false,
     othersTitle: p.othersTitle ?? fallbackOthersTitle,
+    savedBy: p.savedBy,
+    savedAt: p.savedAt,
   }));
 }
