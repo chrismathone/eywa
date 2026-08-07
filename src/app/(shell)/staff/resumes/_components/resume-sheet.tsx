@@ -511,10 +511,12 @@ export function ResumeSheet({
     opts: { ph?: string; align?: "left" | "center" | "right" } = {},
   ) => dynField(setLangs, emptyLanguage, "lang", i, key, value, opts);
 
-  // 서식 제목(원장 지시 2026-08-07) — **직원등록(신규·연결 없음·계정 등록 섹션 있음) 때만 "직원 명부"**,
-  // 저장된 이력서 열람·수정과 기존 직원 연결 작성은 종전대로 "이력서".
+  // 서식 제목(원장 지시 2026-08-07) — **직원등록일 때만 "직원 명부"**, 저장된 이력서 열람·수정과
+  // 기존 직원 연결 작성은 종전대로 "이력서".
+  // ⚠️ 직원등록 = ① 사무실 '직원 등록'(계정 섹션이 있는 신규) ② **QR 공개 등록**(isPublic) 둘 다다 —
+  //    공개 경로는 assignableRoles를 안 넘겨서(역할이 토큰에 박혀 있다) 조건에서 빠져 "이력서"가 떴다(실측).
   const sheetTitle =
-    !id && !staffUserId && (assignableRoles?.length ?? 0) > 0 ? "직원 명부" : "이력서";
+    !id && !staffUserId && (isPublic || (assignableRoles?.length ?? 0) > 0) ? "직원 명부" : "이력서";
   const sheet = (
     <div className="resume-sheet border-line bg-card text-foreground mx-auto w-full max-w-[780px] rounded-2xl border shadow-card p-6 sm:p-8 print:rounded-none print:border-2 print:border-foreground/60 print:shadow-none print:p-3">
       <h1 className="text-center text-[26px] font-bold tracking-[0.6em] print:text-[20px]">{sheetTitle}</h1>
