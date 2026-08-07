@@ -75,8 +75,16 @@ export function SessionMonthTable({
                   ) : err ? (
                     <span className="text-danger">{err}</span>
                   ) : check?.ok ? (
-                    <span className="text-green inline-flex items-center gap-1">
-                      <Check className="size-3.5" /> 월·화·수·목·금 각 4회
+                    // 넘침(공휴일 보정으로 5회가 된 요일)은 결함이 아니라 사실 안내 — 통과로 두고 회색 설명만.
+                    <span className="text-green inline-flex items-start gap-1">
+                      <Check className="mt-0.5 size-3.5 shrink-0" />
+                      {check.note ? (
+                        <span>
+                          모든 요일 4회 이상 <span className="text-text-faint">· {check.note}</span>
+                        </span>
+                      ) : (
+                        <span>월·화·수·목·금 각 4회</span>
+                      )}
                     </span>
                   ) : check ? (
                     <span className="text-amber inline-flex items-start gap-1">

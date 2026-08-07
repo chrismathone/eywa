@@ -76,16 +76,27 @@ export function suggestEndDate(
 }
 
 export type PeriodShapeCheck = {
+  /** 부족한 요일이 없으면 true. **넘침은 ok를 깨뜨리지 않는다**(아래 설명). */
   ok: boolean;
   counts: Record<TeachingDow, number>;
-  /** 사람이 읽는 한 줄. ok면 null. */
+  /** 목표에 **못 미치는** 요일이 있을 때만 채워지는 경고. */
   warning: string | null;
-  /** 부족하거나 넘치는 요일(라벨). */
-  offDows: string[];
+  /** 목표를 **넘는** 요일 설명(경고가 아니라 사실 안내). */
+  note: string | null;
+  /** 부족한 요일(라벨). */
+  shortDows: string[];
+  /** 넘치는 요일(라벨). */
+  overDows: string[];
 };
 
 /**
- * 저장 전 인라인 경고용. **ok=false여도 저장은 허용한다**(경고일 뿐).
+ * 저장 전 인라인 안내용. **어떤 경우에도 저장은 허용한다.**
+ *
+ * 🔴 **넘침은 결함이 아니다.** 공휴일로 어떤 요일이 빠지면 그 요일을 4회 채우려고 기간을 늘려야 하는데,
+ *    그 사이 다른 요일은 자연히 5회가 된다 — 즉 공휴일이 낀 달에는 "월~금 모두 정확히 4회"가
+ *    **수학적으로 성립하지 않는다**. 원장이 든 실제 예(2월 세션 2/2~3/5)도 목요일이 5회다.
+ *    2026-08-07 실화면 검증에서 '빈 달 이어서 채우기'가 만든 6·7월 구간이 자기 검산에 걸린 게 이 때문이다.
+ *    → 부족만 경고(주황)하고, 넘침은 회색 설명으로 내린다.
  * 메시지는 한글 — raw 코드·영문 enum을 화면에 내보내지 않는다.
  */
 export function verifyPeriodShape(
@@ -95,24 +106,23 @@ export function verifyPeriodShape(
   target = DEFAULT_TARGET_PER_DOW,
 ): PeriodShapeCheck {
   const counts = countTeachingDays(start, end, holidays);
-  const offDows = TEACHING_DOW.filter((d) => counts[d] !== target).map((d) => DOW_LABEL[d]);
-  if (offDows.length === 0) {
-    return { ok: true, counts, warning: null, offDows: [] };
-  }
-
   const detail = TEACHING_DOW.map((d) => `${DOW_LABEL[d]} ${counts[d]}`).join(" · ");
-  const short = TEACHING_DOW.filter((d) => counts[d] < target).map((d) => DOW_LABEL[d]);
-  const over = TEACHING_DOW.filter((d) => counts[d] > target).map((d) => DOW_LABEL[d]);
-
-  const parts: string[] = [];
-  if (short.length > 0) parts.push(`${short.join("·")}요일이 ${target}회에 못 미칩니다`);
-  if (over.length > 0) parts.push(`${over.join("·")}요일이 ${target}회를 넘습니다`);
+  const shortDows = TEACHING_DOW.filter((d) => counts[d] < target).map((d) => DOW_LABEL[d]);
+  const overDows = TEACHING_DOW.filter((d) => counts[d] > target).map((d) => DOW_LABEL[d]);
 
   return {
-    ok: false,
+    ok: shortDows.length === 0,
     counts,
-    offDows,
-    warning: `${parts.join(", ")} (${detail}). 휴원일 설정을 확인하거나, 의도한 기간이면 그대로 저장하세요.`,
+    shortDows,
+    overDows,
+    warning:
+      shortDows.length > 0
+        ? `${shortDows.join("·")}요일이 ${target}회에 못 미칩니다 (${detail}). 휴원일 설정을 확인하거나, 의도한 기간이면 그대로 저장하세요.`
+        : null,
+    note:
+      shortDows.length === 0 && overDows.length > 0
+        ? `${overDows.join("·")}요일 ${target + 1}회 — 공휴일을 채우느라 늘어난 구간입니다 (${detail})`
+        : null,
   };
 }
 

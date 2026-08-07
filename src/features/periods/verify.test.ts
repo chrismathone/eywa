@@ -58,21 +58,38 @@ describe("verifyPeriodShape — 경고만, 저장은 막지 않는다", () => {
     const r = verifyPeriodShape("2026-01-05", "2026-01-30");
     expect(r.ok).toBe(true);
     expect(r.warning).toBeNull();
-    expect(r.offDows).toEqual([]);
+    expect(r.shortDows).toEqual([]);
+    expect(r.overDows).toEqual([]);
   });
 
   it("부족한 요일을 한글로 알린다", () => {
     const r = verifyPeriodShape("2026-02-02", "2026-02-27", ["2026-02-16", "2026-02-17"]);
     expect(r.ok).toBe(false);
-    expect(r.offDows).toEqual(["월", "화"]);
+    expect(r.shortDows).toEqual(["월", "화"]);
     expect(r.warning).toContain("월·화요일이 4회에 못 미칩니다");
     expect(r.warning).toContain("그대로 저장하세요"); // 막지 않는다는 안내
   });
 
-  it("넘치는 요일도 알린다", () => {
+  // 🔴 넘침은 결함이 아니다 — 공휴일로 빠진 요일을 채우려 기간을 늘리면 다른 요일은 반드시 5회가 된다.
+  //    (2026-08-07 실화면: '빈 달 이어서 채우기'가 만든 6·7월이 이 규칙 때문에 경고로 잡혔었다.)
+  it("넘치는 요일은 통과시키되 사실만 설명한다", () => {
     const r = verifyPeriodShape("2026-01-05", "2026-02-06");
-    expect(r.ok).toBe(false);
-    expect(r.warning).toContain("넘습니다");
+    expect(r.ok).toBe(true); // 부족한 요일이 없으므로 통과
+    expect(r.warning).toBeNull();
+    expect(r.note).toContain("공휴일을 채우느라");
+    expect(r.overDows.length).toBeGreaterThan(0);
+  });
+
+  it("자동 제안(suggestEndDate)이 만든 구간은 절대 '부족'으로 잡히지 않는다", () => {
+    // 설 연휴가 낀 2월: 월·화·수가 3월로 밀리면서 목·금은 5회가 된다 — 그래도 통과해야 한다.
+    const holidays = ["2026-02-16", "2026-02-17", "2026-02-18"];
+    for (const start of ["2026-01-05", "2026-02-02", "2026-05-25", "2026-06-25"]) {
+      const end = suggestEndDate(start, holidays);
+      expect(end).not.toBeNull();
+      const r = verifyPeriodShape(start, end!, holidays);
+      expect(r.ok, `${start}~${end} 가 부족으로 잡혔다: ${r.warning}`).toBe(true);
+      expect(r.shortDows).toEqual([]);
+    }
   });
 
   it("경고 메시지에 영문 코드가 새지 않는다", () => {
