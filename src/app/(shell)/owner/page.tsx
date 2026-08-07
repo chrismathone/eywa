@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { requireAccess } from "@/lib/auth/require-access";
+import { kstToday } from "@/lib/date-kst";
 import { getTenantSettings, getSettingsMeta, getUserDisplayNames } from "@/features/owner/server/queries";
 import { getClassroomsWithUsage } from "@/features/owner/server/classroom-queries";
 import { getTeacherLabelsBySubject } from "@/features/timetable/server/queries";
@@ -8,6 +9,7 @@ import { PageHeader } from "@/components/page-header";
 import { ProfileSection } from "./_components/profile-section";
 import { OperationsSection } from "./_components/operations-section";
 import { SubjectsSection } from "./_components/subjects-section";
+import { SessionsSection } from "./_components/sessions-section";
 import { BillingSection } from "./_components/billing-section";
 import { NotificationsSection } from "./_components/notifications-section";
 import { ConsultationsSection } from "./_components/consultations-section";
@@ -25,6 +27,7 @@ type OwnerTab =
   | "profile"
   | "operations"
   | "subjects"
+  | "sessions"
   | "billing"
   | "notifications"
   | "consultations"
@@ -38,6 +41,7 @@ const TAB_LABEL: Record<OwnerTab, string> = {
   profile: "프로필·브랜드",
   operations: "운영 체계",
   subjects: "과목 운영",
+  sessions: "세션 기간",
   billing: "수납·청구",
   notifications: "알림·약관",
   consultations: "상담 양식",
@@ -52,6 +56,7 @@ const VALID_TABS: OwnerTab[] = [
   "profile",
   "operations",
   "subjects",
+  "sessions",
   "billing",
   "notifications",
   "consultations",
@@ -74,6 +79,7 @@ const FACES: Face[] = [
   { key: "profile", label: TAB_LABEL.profile, href: "/owner", group: "설정" },
   { key: "operations", label: TAB_LABEL.operations, href: "/owner?tab=operations", group: "설정" },
   { key: "subjects", label: TAB_LABEL.subjects, href: "/owner?tab=subjects", group: "설정" },
+  { key: "sessions", label: TAB_LABEL.sessions, href: "/owner?tab=sessions", group: "설정" },
   { key: "billing", label: TAB_LABEL.billing, href: "/owner?tab=billing", group: "설정" },
   { key: "notifications", label: TAB_LABEL.notifications, href: "/owner?tab=notifications", group: "설정" },
   { key: "consultations", label: TAB_LABEL.consultations, href: "/owner?tab=consultations", group: "설정" },
@@ -125,6 +131,10 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
     tab === "permissions" && settings.permissions.userOverrides.length > 0
       ? await getUserDisplayNames(settings.permissions.userOverrides.map((o) => o.userId))
       : {};
+  // 세션 기간 면의 연도. 기본은 KST 올해(세션은 연 단위로 편집한다).
+  const thisYear = Number(kstToday().slice(0, 4));
+  const yearParam = Number(sp.year);
+  const sessionYear = Number.isInteger(yearParam) && yearParam >= 2000 && yearParam <= 2100 ? yearParam : thisYear;
   // 관리 면(중복·감사) 페이지네이션용. 창(embed) 컨텍스트는 면 pageHref가 직접 유지.
   const page = Math.max(1, Number(sp.page) || 1);
   const isEmbed = sp.embed === "1";
@@ -152,6 +162,7 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
       {tab === "subjects" ? (
         <SubjectsSection initial={settings.operations} teacherLabels={teacherLabelsBySubject} />
       ) : null}
+      {tab === "sessions" ? <SessionsSection year={sessionYear} /> : null}
       {tab === "billing" ? <BillingSection initial={settings.billing} /> : null}
       {tab === "notifications" ? <NotificationsSection initial={settings.notifications} /> : null}
       {tab === "consultations" ? <ConsultationsSection initial={settings.consultations} /> : null}

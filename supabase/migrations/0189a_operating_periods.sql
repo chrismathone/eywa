@@ -122,6 +122,57 @@ alter table operating_periods enable row level security;
 revoke all on table operating_periods from public, anon, authenticated;
 grant all on table operating_periods to service_role;
 
+-- ── 원자 저장 RPC ─────────────────────────────────────────────────────────
+-- 한 (과목, 반, 연도)의 12개월을 **통째로 교체**한다. delete + insert를 앱에서 두 번 부르면
+-- 그 사이에 실패했을 때 "세션이 통째로 사라진 상태"가 남는다. 게다가 겹침 EXCLUDE 때문에
+-- 순서가 강제되므로(기존 행이 있는 채로 새 행을 넣으면 위반) 반드시 한 트랜잭션이어야 한다.
+--
+-- p_rows 예: '[{"labelMonth":3,"startDate":"2026-03-06","endDate":"2026-04-02"}, …]'
+-- 빈 배열 = 그 해 그 과목의 세션을 전부 지움(= 달력월로 복귀).
+--
+-- ⚠️ 권한: 서버 액션이 admin(service_role)으로만 호출한다. authenticated에 실행권을 주지 않는다
+--    — 주면 RLS 정책 0개인 표를 클라가 PostgREST로 직접 갈아엎을 수 있다.
+create or replace function public.save_operating_periods(
+  p_tenant uuid,
+  p_subject text,
+  p_class uuid,
+  p_year int,
+  p_rows jsonb,
+  p_user uuid default null
+) returns int
+language plpgsql
+as $$
+declare
+  v_count int;
+begin
+  delete from operating_periods
+  where tenant_id = p_tenant
+    and subject_key = p_subject
+    and label_year = p_year
+    and coalesce(class_id, '00000000-0000-0000-0000-000000000000'::uuid)
+      = coalesce(p_class, '00000000-0000-0000-0000-000000000000'::uuid);
+
+  insert into operating_periods
+    (tenant_id, subject_key, class_id, label_year, label_month, start_date, end_date, updated_by)
+  select
+    p_tenant,
+    p_subject,
+    p_class,
+    p_year,
+    (r->>'labelMonth')::int,
+    (r->>'startDate')::date,
+    (r->>'endDate')::date,
+    p_user
+  from jsonb_array_elements(coalesce(p_rows, '[]'::jsonb)) as r;
+
+  get diagnostics v_count = row_count;
+  return v_count;
+end;
+$$;
+
+revoke all on function public.save_operating_periods(uuid, text, uuid, int, jsonb, uuid) from public, anon, authenticated;
+grant execute on function public.save_operating_periods(uuid, text, uuid, int, jsonb, uuid) to service_role;
+
 comment on table operating_periods is
   '세션 기간(운영 기간) — 학원이 정한 과목별 수업 구간. 달력월이 아니다. UI 라벨은 "세션"(0189a). '
   '주의: session_units(시수)·invoice_session_terms(회차)와 다른 개념이다.';
