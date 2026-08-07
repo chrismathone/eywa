@@ -74,7 +74,7 @@ const MENUS: { id: MenuKey; label: string; href: string; description: string }[]
   },
   {
     id: "ecs",
-    label: "English Class Sheet",
+    label: "영어 강사 시트",
     href: "/ecs",
     description:
       "영어 반별 주간 수업계획서/출석부. 요일×교시 블록에 시기(평시/내신)·영역(Vocab 등)별 교재·페이지·진도·과제를 적고, 학생 출석 체크와 상태(완/결석 등)·개인 진도를 함께 기록합니다. 담임/부담임 월간·주간 목표와 지난주 계획 가져오기 지원.",

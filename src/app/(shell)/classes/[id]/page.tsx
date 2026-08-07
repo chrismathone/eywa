@@ -174,7 +174,7 @@ export default async function ClassDetailPage({
             // English Class Sheet — 영어 반만(진입 조건은 requireEcsClassAccess가 재검증: skillAreas 설정 기반)
             <Button
               variant="outline"
-              render={<WindowLink href={`/ecs/${klass.id}`} title="English Class Sheet" />}
+              render={<WindowLink href={`/ecs/${klass.id}`} title="영어 강사 시트" />}
             >
               Class Sheet
             </Button>

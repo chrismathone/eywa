@@ -52,7 +52,7 @@ export function ClassEnglishTrackField({
 
       {/* 무엇이 바뀌고 무엇이 안 바뀌는지 정직하게(거짓 약속 금지) — 이건 보기 필터용 분류지 권한·집계가 아니다. */}
       <p className="text-muted-foreground text-xs break-keep">
-        English Class Sheet 목록의 <span className="text-foreground">프로그램 필터</span>가 이 값을 씁니다.
+        영어 강사 시트 목록의 <span className="text-foreground">프로그램 필터</span>가 이 값을 씁니다.
         시간표·출석부·수업보고서·수강료에는 영향이 없습니다.
       </p>
     </section>

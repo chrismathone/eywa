@@ -85,7 +85,7 @@ export async function requireEcsClassAccess(
   const subjectRow = settings.operations.subjects.find((s) => s.key === cls.subject);
   const skillAreas = resolveSkillAreas(subjectRow);
   if (cls.subject !== "english" || skillAreas.length === 0) {
-    return { ok: false, error: "이 반은 English Class Sheet 대상이 아닙니다" };
+    return { ok: false, error: "이 반은 영어 강사 시트 대상이 아닙니다" };
   }
 
   return {

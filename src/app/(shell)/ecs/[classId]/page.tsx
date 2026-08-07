@@ -5,7 +5,7 @@ import { PageHeader } from "@/components/page-header";
 import { getClassSheetWeek, getSheetLanding } from "@/features/class-sheets/server/queries";
 import { SheetClient } from "@/features/class-sheets/components/sheet-client";
 
-export const metadata: Metadata = { title: "English Class Sheet — eywa" };
+export const metadata: Metadata = { title: "영어 강사 시트 — eywa" };
 
 /**
  * ECS 주간 시트 — 반 1개 × 주 1개. key={classId:week:JJ표시}로 클라 상태를 재초기화한다
@@ -30,7 +30,7 @@ export default async function EcsSheetPage({
   if (!user || !res.ok) {
     return (
       <div className="space-y-4">
-        <PageHeader eyebrow="수업 운영" title="English Class Sheet" description="영어 반별 주간 수업계획서/출석부" />
+        <PageHeader eyebrow="수업 운영" title="영어 강사 시트" description="영어 반별 주간 수업계획서/출석부" />
         <div className="bg-card shadow-card space-y-2 rounded-2xl px-4 py-6 text-sm">
           <p className="text-text-dim">{!user ? "로그인이 필요합니다" : !res.ok ? res.error : ""}</p>
           <Link href="/ecs" className="text-primary font-bold underline-offset-2 hover:underline">
@@ -49,7 +49,7 @@ export default async function EcsSheetPage({
       <div className="shrink-0 compact-chrome:hidden">
         <PageHeader
           eyebrow="수업 운영"
-          title={`English Class Sheet — ${res.data.className}`}
+          title={`영어 강사 시트 — ${res.data.className}`}
           description={`${res.data.weekLabel} · 계획 ${res.data.fill.filledSlots}/${res.data.fill.totalSlots}교시`}
         />
       </div>
