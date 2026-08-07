@@ -422,13 +422,15 @@ export function ReportCard({
           />
           {/* 오늘 과제(숙제 내용) — 0096a(edutrix 패리티, 사용률 90%). 위 칩은 '지난 과제 수행', 이건 '오늘 내줄 숙제'.
               AI 멘트 마무리("오늘 과제는 ~입니다") 재료 + 학부모 카드 표시(설정 토글). */}
-          <input
-            type="text"
+          {/* 진도 입력과 같은 이유로 여러 줄을 보여 준다 — ECS 시트 초안은 교시마다 과제가 따로 있다
+              (한 줄 input이면 "Vocab 43 44Reading section 5-2 풀기"로 붙어 보인다, 2026-08-07). */}
+          <textarea
+            rows={Math.min(4, ((subject.homeworkToday ?? "").match(/\n/g)?.length ?? 0) + 1)}
             value={subject.homeworkToday ?? ""}
             onChange={(e) => onHomeworkToday(subjectName, e.target.value)}
             placeholder="오늘 과제 (예: 개념편 p10~16, 유형편 p6~11)"
             aria-label={`${subjectName} 오늘 과제`}
-            className="border-line bg-card focus:border-primary mt-1.5 h-8 w-full min-w-0 rounded-lg border px-2 text-[12px] outline-none transition-colors"
+            className="border-line bg-card focus:border-primary scrollbar-thin mt-1.5 w-full min-w-0 resize-none rounded-lg border px-2 py-1.5 text-[12px] leading-relaxed outline-none transition-colors"
           />
         </div>
 

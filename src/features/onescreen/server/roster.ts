@@ -1,11 +1,19 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { DEFAULT_SETTINGS } from "@/features/owner/defaults";
 import type { ReportSettings } from "@/features/owner/settings-types";
 import { buildSubjectMaps } from "@/features/owner/subjects";
+import { resolveSkillAreas } from "@/features/owner/skill-areas";
+import {
+  buildSheetDraft,
+  hasSheetDraft,
+  type SheetDraft,
+  type SheetPlanLine,
+} from "@/features/class-sheets/sheet-report-draft";
 import { resolveBrandingSrc } from "@/lib/storage/media-storage";
 import { fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 // 담당 반 판정 단일 소스(담당 반 ∪ 그날 위임 반) — classes.teacher_id를 직접 비교하지 말 것(0173a).
@@ -247,6 +255,8 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
   const teacherName = user.displayName ?? "";
 
   const supabase = await createClient();
+  // ECS 시트 표(`class_sheet_*`)는 RLS 정책이 없어 사용자 클라이언트로는 못 읽는다 — 그 조회에만 쓴다.
+  const admin = createAdminClient();
   const settings = await getTenantSettings();
   const subjects = buildSubjectMaps(settings.operations.subjects);
   const gradeOrder = settings.operations.gradeLevels;
@@ -569,6 +579,8 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
     priorReports,
     attRows,
     sessionRows,
+    sheetPlanRows,
+    sheetMarkRows,
     textbookRows,
     readStats,
     anomalyEvents,
@@ -634,6 +646,74 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
         .eq("updated_by", user.id)
         .in("student_id", chunk),
     ),
+    // (i) **ECS 시트 계획**(2026-08-07) — 그날 그 반에 강사가 이미 적어 둔 교재·진도·과제.
+    //     보고서 진도/교재/오늘 과제의 초안이 된다(세션 입력이 있으면 그쪽이 이긴다 — 아래 병합 순서).
+    //     🔴 여기서 안 당겨오면 강사가 시트에 쓴 것을 보고서에 **두 번 친다**(실측: 시트가 채워진 257
+    //     (반,날짜) 중 보고서가 있는 날 0). 반 id 기준이라 studentIds와 독립 → 같은 Promise.all(B4).
+    //     ⚠️ 실패해도 로스터는 떠야 한다(초안 편의 기능이 본 화면을 죽이면 안 됨) — 로그만 남기고 빈 배열.
+    fetchAllPagedInChunks<{
+      class_id: string;
+      slot_start: string;
+      line_no: number;
+      skill_area: string | null;
+      textbook: string | null;
+      page_range: string | null;
+      progress: string | null;
+      homework: string | null;
+    }>(activeIds, (chunk, from, to) =>
+      // 🔴 **admin 클라이언트로 읽는다** — `class_sheet_*`엔 RLS 정책이 **하나도 없다**(정책 0 = 전부 거부).
+      //    사용자 클라이언트로 읽으면 에러 없이 **0행**이 돌아와 초안이 조용히 사라진다(2026-08-07 실측).
+      //    ECS 화면(`today.ts`)도 같은 이유로 admin을 쓴다. ⚠️ RLS를 우회하므로 **tenant 필터 필수**
+      //    (반 id는 이미 내 담당 반으로 좁혀져 있지만, 격리는 tenant 조건이 진짜 방벽이다).
+      admin
+        .from("class_sheet_plan_lines")
+        .select("class_id, slot_start, line_no, skill_area, textbook, page_range, progress, homework")
+        .eq("tenant_id", user.tenantId)
+        .in("class_id", chunk)
+        .eq("plan_date", todayIso)
+        .order("id")
+        .range(from, to),
+    ).catch((e) => {
+      console.error("[roster] ECS 시트 계획 조회 실패 — 보고서 초안 생략:", e instanceof Error ? e.message : e);
+      return [] as {
+        class_id: string;
+        slot_start: string;
+        line_no: number;
+        skill_area: string | null;
+        textbook: string | null;
+        page_range: string | null;
+        progress: string | null;
+        homework: string | null;
+      }[];
+    }),
+    // (j) 시트 **학생별 기록**(`progress_note` = "PL 7, 20개 / PV 4") — 보고서에 자동으로 넣지 않고
+    //     화면에 **참고로만** 보여준다(개인 기록은 문맥이 제각각이라 발송물에 자동 삽입하면 위험).
+    fetchAllPagedInChunks<{
+      class_id: string;
+      student_id: string;
+      slot_start: string;
+      status: string | null;
+      progress_note: string | null;
+    }>(activeIds, (chunk, from, to) =>
+      // 위와 같은 이유로 admin + tenant 필터(정책 0인 표라 사용자 클라이언트는 0행).
+      admin
+        .from("class_sheet_student_marks")
+        .select("class_id, student_id, slot_start, status, progress_note")
+        .eq("tenant_id", user.tenantId)
+        .in("class_id", chunk)
+        .eq("mark_date", todayIso)
+        .order("id")
+        .range(from, to),
+    ).catch((e) => {
+      console.error("[roster] ECS 시트 학생 기록 조회 실패 — 참고 표시 생략:", e instanceof Error ? e.message : e);
+      return [] as {
+        class_id: string;
+        student_id: string;
+        slot_start: string;
+        status: string | null;
+        progress_note: string | null;
+      }[];
+    }),
     // 교재 자동입력 기본값 — 본인 담당 학생의 교재요청서(fetchInChunks, B3). studentIds 독립 → 같은 Promise.all(B4).
     getTextbookOrdersForStudents(studentIds),
     // (f) G3 학부모 읽음 통계 — 학생별 group-by RPC(0124a, 반환 = 학생 수 행이라 절단 불가, B2).
@@ -706,6 +786,48 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
       }[];
     }),
   ]);
+
+  // ── ECS 시트 → 보고서 초안(2026-08-07) ────────────────────────────────────────────────────────
+  // 접는 규칙은 순수 함수 하나(`buildSheetDraft`, Vitest) — 화면·서버가 같은 문자열을 본다.
+  // 영역 라벨은 **학원설정 단일 소스**(운영 enum 하드코딩 금지) — 미등록 키는 라벨 없이 값만 남는다.
+  const sheetAreaLabel = new Map(
+    resolveSkillAreas(settings.operations.subjects.find((s) => s.key === "english")).map((a) => [
+      a.key,
+      a.label,
+    ]),
+  );
+  const sheetLinesByClass = new Map<string, SheetPlanLine[]>();
+  for (const r of sheetPlanRows) {
+    const arr = sheetLinesByClass.get(r.class_id) ?? [];
+    arr.push({
+      slotStart: r.slot_start,
+      lineNo: r.line_no,
+      skillArea: r.skill_area,
+      textbook: r.textbook,
+      pageRange: r.page_range,
+      progress: r.progress,
+      homework: r.homework,
+    });
+    sheetLinesByClass.set(r.class_id, arr);
+  }
+  const sheetDraftByClass = new Map<string, SheetDraft>();
+  for (const [classId, lines] of sheetLinesByClass) {
+    const draft = buildSheetDraft(lines, (k) => sheetAreaLabel.get(k) ?? null);
+    if (hasSheetDraft(draft)) sheetDraftByClass.set(classId, draft);
+  }
+  // 학생별 기록 — (반|학생)당 교시 순으로 한 줄씩. 표시 전용이라 상태('완'·'결석')는 싣지 않는다
+  // (출결은 attendance_records가 진실이고, 시트 상태 라벨을 옆에 두면 두 값이 다툰다).
+  const sheetMarkByKey = new Map<string, string>();
+  for (const r of [...sheetMarkRows].sort(
+    (a, b) => a.slot_start.localeCompare(b.slot_start) || a.student_id.localeCompare(b.student_id),
+  )) {
+    const note = (r.progress_note ?? "").trim();
+    if (!note) continue;
+    const key = `${r.class_id}|${r.student_id}`;
+    const prev = sheetMarkByKey.get(key);
+    sheetMarkByKey.set(key, prev ? `${prev}\n${note}` : note);
+  }
+
   const seededDailyMax = new Set<string>();
   const seededCheckMax = new Set<string>();
   // ⚠️ 모드용 가드 Set은 max와 **분리**한다 — max는 있는데 mode가 null인 과거 행에서 max Set을 재사용하면
@@ -986,6 +1108,27 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
       //    교재명 칸에 **미리 채워진 채** 저장·발송된다(실측: 영어 행에 '초5-2 발전 1권'·'가우스 중1-1 2권').
       if (reqBook && (su.subjectKey?.trim() || LEGACY_REPORT_SUBJECT) === LEGACY_REPORT_SUBJECT)
         su.textbook = reqBook;
+      // ④ **ECS 시트**(2026-08-07) — 그날 그 반 계획이 있으면 진도·과제·교재의 초안이 된다.
+      //    · 진도·오늘 과제는 보고서에 **원래 값이 없다**(직전 회차는 prev로만 들어간다) → 시트가 채운다.
+      //    · 교재는 직전 교재(③)를 덮는다 — 그날 실제로 편 책이 어제 것보다 정확하다. 단 math 행에서
+      //      교재요청서(②)가 이미 채웠으면 그건 **학생별** 맞춤이라 건드리지 않는다.
+      //    ⚠️ 세션(오늘 작업중 입력)은 아래 sess 블록이 최종으로 덮는다 — 강사가 고친 값이 항상 이긴다.
+      const sheet = su.classId ? sheetDraftByClass.get(su.classId) : undefined;
+      if (sheet) {
+        su.sheetDraft = sheet;
+        // 🔴 **이미 저장된 오늘 보고서 행에는 채우지 않는다**(적대적 리뷰 2026-08-07). 그 행은 편집이
+        //    잠겨 있고(fieldset disabled) 값도 발송본에서 복원되지 않는데, 거기에 시트 값을 넣으면
+        //    **발송한 내용과 다른 글이 잠긴 칸에 떠서** 강사가 그걸 보낸 줄 안다. 참고 패널(sheetDraft)만 남긴다.
+        if (!su.reportSent) {
+          if (sheet.progress && !su.today) su.today = sheet.progress;
+          if (sheet.homework && !su.homeworkToday) su.homeworkToday = sheet.homework;
+          const isMathRow = (su.subjectKey?.trim() || LEGACY_REPORT_SUBJECT) === LEGACY_REPORT_SUBJECT;
+          if (sheet.textbook && !(isMathRow && reqBook)) su.textbook = sheet.textbook;
+        }
+      }
+      // 학생별 시트 기록은 **참고 표시 전용**(자동 삽입 금지 — 개인 기록은 문맥이 제각각이다).
+      const mark = su.classId ? sheetMarkByKey.get(`${su.classId}|${os.id}`) : undefined;
+      if (mark) su.sheetStudentNote = mark;
     });
     // Phase3: 오늘 세션(작업중) 복원 — 점수/진도/태도/과제/확정을 하드코딩 기본값 위에 덮어씀.
     const sess = sessionById.get(os.id);
