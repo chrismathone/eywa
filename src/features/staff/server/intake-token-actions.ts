@@ -5,16 +5,29 @@ import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { ROLE_HIERARCHY } from "@/lib/auth/role-hierarchy";
+import type { SystemRole } from "@/lib/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { humanizeDbError } from "@/lib/supabase/db-error";
 import { logAction } from "@/features/audit/server/log";
-import { parseIntakeToken, STAFF_INTAKE_FORM_TYPE, type StaffIntakeToken } from "./intake-token";
+import type { StaffQrView } from "../intake-view";
+import { buildStaffQrView } from "./intake-qr";
+import { isTokenOpen, parseIntakeToken, STAFF_INTAKE_FORM_TYPE, type StaffIntakeToken } from "./intake-token";
 
-// 직원 등록 QR 토큰 관리(생성·활성토글·삭제) — 게이트 = 직원관리 쓰기(개인 예외 반영) + admin client + tenant 필터.
+// 직원 등록 QR 토큰 관리 — 게이트 = 직원관리 쓰기(개인 예외 반영) + admin client + tenant 필터.
 // ⚠️ 이 토큰을 아는 사람은 **로그인 없이 직원 계정을 만들 수 있다**(원장 결정 2026-08-07 '제출 즉시 생성').
-//    그래서 ① 링크는 필요할 때만 켜고 ② 기본 90일 만료 ③ 다 쓰면 끄거나 지우는 운영을 전제한다.
+//    그래서 ① 기본 90일 만료 ② 다 쓰면 닫기 ③ 새어 나갔으면 재발급(새 링크)을 UI가 한 번에 제공한다.
+//
+// 원장 지시 2026-08-07(재확인): **입력칸으로 QR을 "설계"하지 않는다** — 채용 이름·역할·유효일을 묻던 폼을 없애고
+// 버튼 한 번에 QR이 나오게 했다. 그래서 생성 파라미터는 전부 아래 상수로 고정한다.
 
-export type IntakeTokenActionState = { ok?: true; error?: string; notice?: string } | undefined;
+/** QR로 만들어지는 계정의 역할 — 고정. 다른 역할이 필요하면 등록 뒤 직원 상세에서 바꾼다(권한 상승 통로 차단). */
+const DEFAULT_ROLE: SystemRole = "teacher";
+const DEFAULT_DAYS = 90;
+const TOKEN_NAME = "직원 등록";
+
+export type IntakeTokenActionState =
+  | { ok?: true; error?: string; notice?: string; view?: StaffQrView }
+  | undefined;
 
 async function requireStaffWrite() {
   const user = await getCurrentUser();
@@ -23,6 +36,10 @@ async function requireStaffWrite() {
     return { error: "직원 등록 QR을 관리할 권한이 없습니다" as const };
   }
   return { user };
+}
+
+function expiryFromNow(days = DEFAULT_DAYS): string {
+  return new Date(Date.now() + days * 86400000).toISOString();
 }
 
 /** 이 학원의 직원 등록 QR 전부(만든 순). */
@@ -39,49 +56,68 @@ export async function listStaffIntakeTokens(tenantId: string): Promise<StaffInta
     .filter((t): t is StaffIntakeToken => t !== null);
 }
 
-/** QR 새로 만들기 — 이름·역할·만료일. 토큰은 서버가 만든다(추측 불가 32자 hex). */
-export async function createStaffIntakeToken(
-  _prev: IntakeTokenActionState,
-  formData: FormData,
-): Promise<IntakeTokenActionState> {
+/**
+ * 패널을 열 때 쓰는 QR을 **보장**한다 — 입력 0. 이미 있으면 그대로 보여주고(닫혀 있어도 그 상태로),
+ * 하나도 없을 때만 기본값으로 만든다. ⚠️ 닫아 둔 QR을 여기서 자동으로 열지 않는다(원장이 닫은 건 닫힌 채로).
+ */
+export async function ensureStaffIntakeToken(): Promise<IntakeTokenActionState> {
   const gate = await requireStaffWrite();
   if ("error" in gate) return { error: gate.error };
 
-  const name = String(formData.get("name") ?? "").trim().slice(0, 60) || "직원 등록";
-  const role = String(formData.get("role") ?? "teacher").trim();
-  if (!(role in ROLE_HIERARCHY) || role === "student") return { error: "역할을 선택하세요" };
-  // 만든 사람보다 강한 역할은 QR로도 못 만든다(직접 등록과 같은 위계 — 우회 통로가 되면 안 된다).
-  if (ROLE_HIERARCHY[gate.user.systemRole] >= ROLE_HIERARCHY[role as keyof typeof ROLE_HIERARCHY]) {
-    return { error: "본인 권한으로 부여할 수 없는 역할입니다" };
-  }
-  const days = Number(formData.get("days") ?? 90);
-  const expiresAt = new Date(Date.now() + (Number.isFinite(days) && days > 0 ? days : 90) * 86400000).toISOString();
+  const tokens = await listStaffIntakeTokens(gate.user.tenantId);
+  const existing = tokens.find((t) => isTokenOpen(t)) ?? tokens[0];
+  if (existing) return { ok: true, view: await buildStaffQrView(existing) };
 
-  const { error } = await createAdminClient().from("academy_documents").insert({
-    tenant_id: gate.user.tenantId,
-    title: `직원 등록 QR — ${name}`,
-    category: "hr",
-    kind: "form",
-    form_type: STAFF_INTAKE_FORM_TYPE,
-    form_data: { token: randomBytes(16).toString("hex"), name, active: true, expiresAt, role, submissionCount: 0 },
-    restricted: true,
-    staff_user_id: gate.user.id, // /documents 표면 제외(#77 벽) — 내부 전용 행
-    uploaded_by: gate.user.id,
-  });
-  if (error) return { error: humanizeDbError(error.message, "저장") };
+  // 만든 사람보다 강한 역할은 QR로도 못 만든다(직접 등록과 같은 위계 — 우회 통로가 되면 안 된다).
+  if (ROLE_HIERARCHY[gate.user.systemRole] >= ROLE_HIERARCHY[DEFAULT_ROLE]) {
+    return { error: "본인 권한으로는 직원 등록 QR을 만들 수 없습니다" };
+  }
+
+  const { data, error } = await createAdminClient()
+    .from("academy_documents")
+    .insert({
+      tenant_id: gate.user.tenantId,
+      title: `직원 등록 QR — ${TOKEN_NAME}`,
+      category: "hr",
+      kind: "form",
+      form_type: STAFF_INTAKE_FORM_TYPE,
+      form_data: {
+        token: randomBytes(16).toString("hex"),
+        name: TOKEN_NAME,
+        active: true,
+        expiresAt: expiryFromNow(),
+        role: DEFAULT_ROLE,
+        submissionCount: 0,
+      },
+      restricted: true,
+      staff_user_id: gate.user.id, // /documents 표면 제외(#77 벽) — 내부 전용 행
+      uploaded_by: gate.user.id,
+    })
+    .select("id, created_at, form_data")
+    .single();
+  if (error || !data) return { error: humanizeDbError(error?.message ?? "", "저장") };
+
+  const created = parseIntakeToken(data.id as string, data.created_at as string, data.form_data);
+  if (!created) return { error: "QR을 만들지 못했습니다" };
 
   await logAction({
     action: "staff_intake_token_create",
     targetType: "document",
-    targetLabel: name,
-    metadata: { role, expiresAt },
+    targetLabel: TOKEN_NAME,
+    metadata: { role: DEFAULT_ROLE, expiresAt: created.expiresAt },
   });
   revalidatePath("/staff");
-  return { ok: true, notice: "직원 등록 QR을 만들었습니다" };
+  return { ok: true, view: await buildStaffQrView(created), notice: "직원 등록 QR을 만들었습니다" };
 }
 
-/** 활성/비활성 토글 또는 삭제 — 다 쓴 링크를 즉시 닫는 경로. */
-export async function setStaffIntakeToken(
+/**
+ * 닫기 / 다시 열기 / 새 링크(재발급) / 이전 링크 모두 닫기.
+ * - `close`  : 지금 링크로는 더 못 들어온다(가장 빠른 차단).
+ * - `reopen` : 같은 링크를 다시 열고 만료를 90일 미룬다(인쇄해 둔 QR을 그대로 쓰는 경우).
+ * - `rotate` : **같은 행의 토큰 문자열만 교체** — 옛 링크는 즉시 죽고 행이 늘지 않는다(제출 수는 새로 센다).
+ * - `closeOthers` : 예전에 여러 개 만들어 둔 링크를 한 번에 닫는다(화면에 안 보이는 열린 링크 = 구멍).
+ */
+export async function updateStaffIntakeToken(
   _prev: IntakeTokenActionState,
   formData: FormData,
 ): Promise<IntakeTokenActionState> {
@@ -89,10 +125,34 @@ export async function setStaffIntakeToken(
   if ("error" in gate) return { error: gate.error };
 
   const id = String(formData.get("id") ?? "").trim();
-  const action = String(formData.get("action") ?? "toggle");
+  const action = String(formData.get("action") ?? "");
   if (!id) return { error: "대상을 찾을 수 없습니다" };
 
   const admin = createAdminClient();
+
+  if (action === "closeOthers") {
+    const others = (await listStaffIntakeTokens(gate.user.tenantId)).filter(
+      (t) => t.id !== id && isTokenOpen(t),
+    );
+    for (const t of others) {
+      await admin
+        .from("academy_documents")
+        .update({ form_data: { ...rawOf(t), active: false } })
+        .eq("tenant_id", gate.user.tenantId)
+        .eq("id", t.id);
+    }
+    if (others.length) {
+      await logAction({
+        action: "staff_intake_token_toggle",
+        targetType: "document",
+        targetLabel: "이전 링크 일괄 닫기",
+        metadata: { closed: others.length },
+      });
+      revalidatePath("/staff");
+    }
+    return { ok: true, notice: `이전 링크 ${others.length}개를 닫았습니다` };
+  }
+
   const { data: row } = await admin
     .from("academy_documents")
     .select("id, created_at, form_data")
@@ -101,37 +161,60 @@ export async function setStaffIntakeToken(
     .eq("id", id)
     .maybeSingle();
   if (!row) return { error: "이미 삭제된 QR입니다" };
-
-  if (action === "delete") {
-    const { error, data: deleted } = await admin
-      .from("academy_documents")
-      .delete()
-      .eq("tenant_id", gate.user.tenantId)
-      .eq("id", id)
-      .select("id"); // select 없으면 0행 삭제도 성공으로 보인다
-    if (error) return { error: humanizeDbError(error.message, "삭제") };
-    if (!deleted?.length) return { error: "이미 삭제된 QR입니다" };
-    await logAction({ action: "staff_intake_token_delete", targetType: "document", metadata: { id } });
-    revalidatePath("/staff");
-    return { ok: true, notice: "삭제했습니다" };
-  }
-
   const cur = parseIntakeToken(row.id as string, row.created_at as string, row.form_data);
   if (!cur) return { error: "QR 정보를 읽을 수 없습니다" };
-  const next = String(formData.get("active") ?? "false") === "true";
+
+  const patch =
+    action === "close"
+      ? { active: false }
+      : action === "reopen"
+        ? { active: true, expiresAt: expiryFromNow() }
+        : action === "rotate"
+          ? {
+              token: randomBytes(16).toString("hex"),
+              active: true,
+              expiresAt: expiryFromNow(),
+              submissionCount: 0,
+            }
+          : null;
+  if (!patch) return { error: "알 수 없는 요청입니다" };
+
   const { error } = await admin
     .from("academy_documents")
-    .update({ form_data: { ...(row.form_data as object), active: next } })
+    .update({ form_data: { ...(row.form_data as object), ...patch } })
     .eq("tenant_id", gate.user.tenantId)
     .eq("id", id);
   if (error) return { error: humanizeDbError(error.message, "저장") };
 
   await logAction({
-    action: "staff_intake_token_toggle",
+    action: action === "rotate" ? "staff_intake_token_create" : "staff_intake_token_toggle",
     targetType: "document",
     targetLabel: cur.name,
-    metadata: { active: next },
+    metadata: { action },
   });
   revalidatePath("/staff");
-  return { ok: true, notice: next ? "QR을 열었습니다" : "QR을 닫았습니다" };
+
+  const next = parseIntakeToken(cur.id, cur.createdAt, { ...(row.form_data as object), ...patch });
+  return {
+    ok: true,
+    view: next ? await buildStaffQrView(next) : undefined,
+    notice:
+      action === "close"
+        ? "QR을 닫았습니다"
+        : action === "rotate"
+          ? "새 링크를 발급했습니다 — 옛 링크는 더 이상 열리지 않습니다"
+          : "QR을 다시 열었습니다",
+  };
+}
+
+/** 토큰을 저장 모양(form_data)으로 되돌린다 — 일괄 닫기에서 다른 필드를 지우지 않으려고. */
+function rawOf(t: StaffIntakeToken) {
+  return {
+    token: t.token,
+    name: t.name,
+    active: t.active,
+    expiresAt: t.expiresAt,
+    role: t.role,
+    submissionCount: t.submissionCount,
+  };
 }
