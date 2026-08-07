@@ -29,6 +29,46 @@ export function canEditLoginEmail(email: string, everSignedIn: boolean): boolean
 /** 이메일 편집 기본 도메인 — 학원 계정 대부분이 여기라 새로 만들 땐 이걸 고정으로 쓴다. */
 export const DEFAULT_EMAIL_DOMAIN = "gmail.com";
 
+// ── 이름 → 로그인 아이디(이니셜) 자동 생성 ────────────────────────────────
+// 원장 지시 2026-08-07: 직원 등록 시 "이메일·비밀번호는 자동 생성". 비밀번호는 INITIAL_STAFF_PASSWORD,
+// 이메일은 여기서 만든다. 규칙은 이관 스크립트(create-logins-for-staff.mjs)와 **같은 이니셜 표기**를
+// 쓴다 — 그때 만든 30명과 새 직원의 주소 모양이 달라지면 명부가 두 종류로 갈린다.
+// 초성 로마자(관용: 김=K, 최=C). ㅇ은 소리가 없어 중성(모음) 첫 글자를 쓴다(육→y, 원→w).
+const CHO = ["k", "k", "n", "d", "d", "r", "m", "b", "b", "s", "s", "", "j", "j", "c", "k", "t", "p", "h"];
+const JUNG = ["a", "a", "y", "y", "e", "e", "y", "y", "o", "w", "w", "o", "y", "u", "w", "w", "w", "y", "e", "e", "i"];
+
+/** 한글 이름 → 이니셜 소문자("김주현"→"kjh"). 한글이 없으면 영문자만 추려 쓰고, 그래도 없으면 "staff". */
+export function initialsOf(name: string): string {
+  const letters: string[] = [];
+  const chars = [...name.replace(/\s+/g, "")];
+  for (let i = 0; i < chars.length; i++) {
+    const code = chars[i].charCodeAt(0) - 0xac00;
+    if (code < 0 || code > 11171) {
+      if (/[a-zA-Z]/.test(chars[i])) letters.push(chars[i].toLowerCase());
+      continue;
+    }
+    const cho = Math.floor(code / 588);
+    const jung = Math.floor((code % 588) / 28);
+    // 성씨 '이'는 관용상 L(Lee) — 규칙대로면 i가 되어 알아보기 어렵다.
+    if (i === 0 && chars[i] === "이") letters.push("l");
+    else letters.push(CHO[cho] || JUNG[jung]);
+  }
+  return letters.join("") || "staff";
+}
+
+/**
+ * 이름으로 만들 로그인 이메일 후보 — 이미 쓰는 주소(taken)를 피해 `kjh`, `kjh2`, `kjh3`… 순으로.
+ * 순수 함수(중복 집합은 호출부가 DB·auth에서 모아 넘긴다) — Vitest로 규칙을 잠근다.
+ */
+export function autoStaffEmail(name: string, taken: ReadonlySet<string>): string | null {
+  const base = initialsOf(name);
+  for (let n = 0; n < 50; n++) {
+    const candidate = `${base}${n === 0 ? "" : n + 1}@${DEFAULT_EMAIL_DOMAIN}`.toLowerCase();
+    if (!taken.has(candidate)) return candidate;
+  }
+  return null; // 50개까지 다 찼다 = 사람이 개입할 상황(호출부가 경고).
+}
+
 /**
  * 이메일을 "아이디 + 도메인"으로 쪼갠다 — 화면에서 **아이디만 고치게** 하기 위한 것(원장 지시 2026-07-30).
  *

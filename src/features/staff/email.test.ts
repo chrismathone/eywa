@@ -1,5 +1,38 @@
 import { describe, expect, it } from "vitest";
-import { canEditLoginEmail, isImportArtifactEmail, splitEmailForEdit } from "./email";
+import {
+  autoStaffEmail,
+  canEditLoginEmail,
+  initialsOf,
+  isImportArtifactEmail,
+  splitEmailForEdit,
+} from "./email";
+
+describe("initialsOf / autoStaffEmail (직원 등록 이메일 자동 생성, 2026-08-07)", () => {
+  it("한글 이름 → 초성 로마자('이'씨는 L, ㅇ은 모음)", () => {
+    expect(initialsOf("김주현")).toBe("kjh");
+    expect(initialsOf("이승엽")).toBe("lsy"); // 성씨 이 = l(Lee)
+    expect(initialsOf("육소희")).toBe("ysh"); // 육: ㅇ → 모음 ㅠ → y
+    // 원: ㅇ → 모음 ㅝ → w / 일: ㅇ → ㅣ → i. '이=l' 예외는 **첫 글자(성씨)** 에만 적용된다.
+    expect(initialsOf("원일")).toBe("wi");
+    expect(initialsOf("최수호")).toBe("csh"); // 최 = c
+  });
+
+  it("한글이 없으면 영문자만, 그것도 없으면 staff", () => {
+    expect(initialsOf("Florence Park")).toBe("florencepark");
+    expect(initialsOf("...")).toBe("staff");
+  });
+
+  it("이미 쓰는 주소는 피해 숫자를 붙인다", () => {
+    expect(autoStaffEmail("김주현", new Set())).toBe("kjh@gmail.com");
+    expect(autoStaffEmail("김주현", new Set(["kjh@gmail.com"]))).toBe("kjh2@gmail.com");
+    expect(autoStaffEmail("김주현", new Set(["kjh@gmail.com", "kjh2@gmail.com"]))).toBe("kjh3@gmail.com");
+  });
+
+  it("후보가 다 차면 null(사람이 개입)", () => {
+    const taken = new Set(["kjh@gmail.com", ...Array.from({ length: 49 }, (_, i) => `kjh${i + 2}@gmail.com`)]);
+    expect(autoStaffEmail("김주현", taken)).toBeNull();
+  });
+});
 
 describe("isImportArtifactEmail", () => {
   it("형식 불량·@imported.local = 임포트 산물", () => {
