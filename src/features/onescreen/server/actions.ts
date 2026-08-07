@@ -456,7 +456,16 @@ export type SaveOnescreenSessionInput = {
   studyGrade?: string | null;
   subjectProgress?: Record<
     string,
-    { today?: string; draft?: string; trendDraft?: string; textbook?: string; makeup?: boolean; homeworkToday?: string }
+    {
+      today?: string;
+      /** 오늘 수업 성격(복습·문제풀이) — 진도 차시와 별개 축(progress-mode.ts). 빈 문자열=해제. */
+      mode?: string;
+      draft?: string;
+      trendDraft?: string;
+      textbook?: string;
+      makeup?: boolean;
+      homeworkToday?: string;
+    }
   >;
   dailyScore?: number | null;
   dailyMax?: number | null;

@@ -36,6 +36,12 @@ export type Subject = {
   subjectLabel?: string;
   prev: string; // 이전 진도 — "Unit 7 · p.82"
   today: string; // 오늘 진도 — "Unit 8 · p.90"
+  /**
+   * 오늘 수업의 **성격**(복습·문제풀이) — 진도 차시와 **함께** 기록되는 별개 축(progress-mode.ts).
+   * 없으면(undefined·null) 평소대로 "진도를 진행했다".
+   * ⚠️ 진도 문자열(`today`)에 섞어 넣지 말 것 — 진도 위치 매핑이 마지막 줄을 차시로 읽는다.
+   */
+  progressMode?: string | null;
   // 운영 과목 키(operations.subjects) — 진도 입력 방식 분기에 사용.
   // "math"면 커리큘럼 드롭다운(curriculum.ts), 그 외(영어 등)면 freeform 텍스트.
   // 미지정(데모)이면 "math"로 간주 → 기존 커리큘럼 동작 보존.

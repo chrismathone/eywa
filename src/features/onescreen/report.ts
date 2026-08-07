@@ -11,6 +11,7 @@ import { isNoneValue } from "./none-marker";
 import { homeworkRateClause } from "./homework-rate";
 import { attitudeClause } from "./attitude";
 import { isSkipStatus, skipStatusOf } from "./progress-status";
+import { PROGRESS_MODES, asProgressMode, progressPredicate } from "./progress-mode";
 import { progressInline } from "./progress-range";
 
 /**
@@ -130,15 +131,20 @@ export function buildReport(st: OneScreenStudent): string {
   const progressed = st.subjects.filter((s) => !isSkipStatus(s.today));
   const exams = st.subjects.filter((s) => isSkipStatus(s.today));
   // 진도는 **물결 축약**(progress-range.ts) — 9차시를 다 나열하면 학부모 문장이 목록이 된다(원장 2026-08-05).
-  const progText = progressed.map((s) => `${labelOf(s)} ${progressInline(s.today)}`).join(", ");
+  const listOf = (subs: typeof progressed) =>
+    subs.map((s) => `${labelOf(s)} ${progressInline(s.today)}`).join(", ");
+  // 수업 성격(복습·문제풀이)이 과목마다 다를 수 있어(수학은 복습, 영어는 새 진도) **성격별로 묶어** 절을 만든다.
+  // 한 절로 뭉뚱그리면 복습한 과목까지 "진도를 진행했다"가 되어 거짓이 된다(이 축을 만든 이유 그 자체).
+  const clauses: string[] = [];
+  for (const m of [null, ...PROGRESS_MODES] as const) {
+    const group = progressed.filter((s) => (asProgressMode(s.progressMode) ?? null) === m);
+    if (group.length) clauses.push(`${listOf(group)} ${progressPredicate(m)}`);
+  }
   const examText = exams.map((s) => `${labelOf(s)} ${skipStatusOf(s.today)}`).join(", ");
+  if (exams.length) clauses.push(`${examText}를 진행했`);
   // ⚠️ 학생 호칭('○○ 학생,')을 쓰지 않는다 — AI 멘트 프롬프트가 금지한 것과 같은 규칙(수신인은 학부모).
-  const head = exams.length
-    ? progressed.length
-      ? `오늘은 ${progText} 진도를 진행했고, ${examText}를 진행했습니다.`
-      : `오늘은 ${examText}를 진행했습니다.`
-    : `오늘은 ${progText} 진도를 진행했습니다.`;
-  return [head, ...testAndClosingLines(st)].join(LINE_BREAK);
+  const head = clauses.length ? `오늘은 ${clauses.join("고, ")}습니다.` : "";
+  return [head, ...testAndClosingLines(st)].filter(Boolean).join(LINE_BREAK);
 }
 
 /** 과목별 학부모 보고서 초안 — 해당 과목 진도만 언급(과목별로 따로 발송용). */
@@ -151,7 +157,8 @@ export function buildSubjectReport(st: OneScreenStudent, subjectIndex: number): 
     // 진도가 중단된 날은 차시가 없어 "진도를 진행했습니다"가 거짓 — 전용 문장으로 간다.
     isSkipStatus(su.today)
       ? `오늘은 ${label} ${skipStatusOf(su.today)}를 진행했습니다.`
-      : `오늘은 ${label} ${progressInline(su.today)} 진도를 진행했습니다.`,
+      : // 성격(복습·문제풀이)이 붙으면 술어가 바뀐다 — "진도를 진행했" ↔ "복습을 진행했".
+        `오늘은 ${label} ${progressInline(su.today)} ${progressPredicate(asProgressMode(su.progressMode))}습니다.`,
     ...testAndClosingLines(st),
   ];
   // 오늘 과제(0096a) — AI 멘트 프롬프트의 마무리 규칙("오늘 과제는 ~입니다")과 폴백 템플릿 대칭 유지.

@@ -100,7 +100,12 @@ describe("isCopyTargetRow — 제외 사유는 '발송 완료' 하나뿐", () =>
     expect(isCopyTargetRow(su({ classnoteStatus: undefined }), "success")).toBe(false);
   });
 
-  it("결석 행도 대상이다 — 복사는 수업 단위 기록(진도·교재·과제)이라 결석과 무관", () => {
-    expect(isCopyTargetRow(su({ attendanceRaw: "absent" } as Partial<Subject>))).toBe(true);
+  // 🔴 2026-08-07 뒤집힘: 예전엔 "결석 행도 대상"이었다(기록은 언제든 보존). 그런데 같은 날 결석 행의
+  //    **입력이 잠기면서**, 복사가 값을 넣으면 강사가 지울 수 없는 값이 남게 됐다(잠근 문 옆 뒷문).
+  //    되돌리는 법은 그대로다 — 출결을 되돌리면 이 판정도 함께 열린다(아래 두 번째 단언).
+  it("결석 행은 제외 — 입력이 잠긴 행에 값을 밀어 넣지 않는다", () => {
+    const absent = su({ attendanceRaw: "absent" } as Partial<Subject>);
+    expect(isCopyTargetRow(absent)).toBe(false);
+    expect(isCopyTargetRow({ ...absent, attendanceRaw: "present" })).toBe(true);
   });
 });
