@@ -7,6 +7,7 @@ import { Loader2, TriangleAlert } from "@/components/icons/eywa-icon-compat";
 import { savePeriodsForSubject } from "@/features/periods/server/actions";
 import { parsePeriodLines, formatPeriodLines } from "@/features/periods/parse";
 import { suggestEndDate, verifyPeriodShape } from "@/features/periods/verify";
+import { overlappingMonths } from "@/features/periods/calendar-grid";
 import type { PeriodDef } from "@/features/periods/resolve";
 import { SessionCalendar, type PaintedMonth } from "./session-calendar";
 
@@ -54,6 +55,16 @@ export function SubjectSessionEditor({
   const dirty = key(rows) !== key(saved);
 
   const paint = (labelMonth: number, s: string, e: string) => {
+    // 겹치면 **칠하지 않고** 먼저 알린다 — DB가 EXCLUDE로 막으므로(0189a) 그대로 두면 저장 단계에서야
+    // 실패한다. 같은 달을 다시 칠하는 건 교체라 겹침이 아니다.
+    const clash = overlappingMonths({ labelMonth, start: s, end: e }, rows);
+    if (clash.length > 0) {
+      setMsg({
+        ok: false,
+        text: `${clash.join("·")}월 세션과 겹칩니다 — 그 달을 먼저 지우거나 시작·끝을 조정해주세요`,
+      });
+      return;
+    }
     setMsg(null);
     setPainted([...rows.filter((r) => r.labelMonth !== labelMonth), { labelMonth, start: s, end: e }]);
   };
