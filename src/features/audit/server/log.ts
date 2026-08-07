@@ -71,6 +71,7 @@ export const AUDIT_ACTIONS = {
   classnote_notice_revoke: "학부모 공지 게시취소",
   classnote_report_recall: "수업보고서 회수",
   ecs_attendance_clear: "출석 취소(ECS)",
+  operating_periods_save: "세션 기간 저장",
 } as const;
 export type AuditActionKey = keyof typeof AUDIT_ACTIONS;
 

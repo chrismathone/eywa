@@ -20,6 +20,7 @@ import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged } from "@/lib/supabase/batch";
 import { logAction } from "@/features/audit/server/log";
+import { countPeriodsForSubject, moveSubjectPeriods } from "@/features/periods/server/queries";
 import { resolveSettings } from "../resolve";
 import { isValidSubjectKey } from "../subject-absorb";
 import type { IntegrationGroupPresetSetting } from "../settings-types";
@@ -88,7 +89,17 @@ async function countSubjectUsage(supabase: Supabase, tenantId: string, key: stri
     .eq("tenant_id", tenantId)
     .not(`subject_progress->${key}`, "is", null);
 
-  const [scalars, tc, dc, oc] = await Promise.all([scalarCounts, teacherCount, detailsCount, onescreenCount]);
+  // 세션 기간(operating_periods)은 컬럼명이 subject_key라 SCALAR_TABLES에 못 넣고,
+  // RLS 정책 0개(service_role 전용)라 이 supabase로는 0행으로 보인다 → admin 헬퍼로 따로 센다.
+  const periodCount = countPeriodsForSubject(tenantId, key);
+
+  const [scalars, tc, dc, oc, pc] = await Promise.all([
+    scalarCounts,
+    teacherCount,
+    detailsCount,
+    onescreenCount,
+    periodCount,
+  ]);
   if (tc.error) throw new Error(`users: ${tc.error.message}`);
   if (dc.error) throw new Error(`subject_details: ${dc.error.message}`);
   if (oc.error) throw new Error(`subject_progress: ${oc.error.message}`);
@@ -97,6 +108,7 @@ async function countSubjectUsage(supabase: Supabase, tenantId: string, key: stri
     { label: "담당 강사", count: tc.count ?? 0 },
     { label: "상담 과목별 점수", count: dc.count ?? 0 },
     { label: "원스크린 세션", count: oc.count ?? 0 },
+    { label: "세션 기간", count: pc },
   ].filter((i) => i.count > 0);
   return { total: items.reduce((a, b) => a + b.count, 0), items };
 }
@@ -226,6 +238,27 @@ export async function absorbSubject(input: { from: string; to: string }): Promis
         moved += n;
         detail[k] = n;
       }
+    }
+  }
+
+  // 2-b) 세션 기간(operating_periods) — RLS 정책 0개라 admin 헬퍼로 옮긴다(0189a).
+  // 한 (과목, 연·월)에 세션은 하나뿐이라, 흡수 대상에 같은 달이 이미 있으면 update가 통째로 실패한다
+  // → 먼저 충돌을 짚어 사람이 정리하게 한다(설정 행을 지우기 **전에** 멈춰야 되돌릴 수 있다).
+  {
+    let periods: Awaited<ReturnType<typeof moveSubjectPeriods>>;
+    try {
+      periods = await moveSubjectPeriods(t, from, to);
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : "세션 기간 이동 실패" };
+    }
+    if ("conflicts" in periods) {
+      return {
+        error: `흡수 대상 과목에 ${periods.conflicts.join("·")} 세션이 이미 있습니다 — 세션 기간 탭에서 먼저 정리해 주세요.`,
+      };
+    }
+    if (periods.moved > 0) {
+      moved += periods.moved;
+      detail.operating_periods = periods.moved;
     }
   }
 
