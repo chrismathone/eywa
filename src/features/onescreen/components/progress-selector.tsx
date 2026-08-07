@@ -22,7 +22,8 @@ import {
   displayLessons,
 } from "../curriculum";
 import { SKIP_PROGRESS_STATUSES, skipStatusOf } from "../progress-status";
-import { PROGRESS_MODES, PROGRESS_MODE_HINT, asProgressMode } from "../progress-mode";
+import { asProgressMode } from "../progress-mode";
+import { ProgressModePills } from "./progress-mode-pills";
 
 export function ProgressSelector({
   value,
@@ -235,28 +236,9 @@ export function ProgressSelector({
                 <p className="text-text-faint mb-1.5 text-[11px]">
                   오늘 수업 성격 <span className="text-text-faint/70">· 안 고르면 새 진도로 나갑니다</span>
                 </p>
-                <div className="flex flex-wrap gap-1.5">
-                  {PROGRESS_MODES.map((m) => {
-                    const on = activeMode === m;
-                    return (
-                      <button
-                        key={m}
-                        type="button"
-                        // 같은 것을 다시 누르면 해제(알약의 기본 규약) — 잘못 고른 성격을 되돌릴 문.
-                        onClick={() => onMode(on ? null : m)}
-                        aria-pressed={on}
-                        title={PROGRESS_MODE_HINT[m]}
-                        className={`rounded-pill border px-2.5 py-1 text-[11px] font-bold transition-colors ${
-                          on
-                            ? "border-primary bg-primary-soft text-primary"
-                            : "border-line text-text-dim hover:border-primary/60 hover:text-primary"
-                        }`}
-                      >
-                        {m}
-                      </button>
-                    );
-                  })}
-                </div>
+                {/* 알약 자체는 공용 컴포넌트 — 자유 입력 과목(영어)이 입력칸 아래에 쓰는 것과 **같은 물건**이라
+                    라벨·해제 규약·툴팁이 두 자리에서 갈라지지 않는다. */}
+                <ProgressModePills mode={mode} onMode={onMode} ariaLabel={`${ariaLabel ?? "진도"} 오늘 수업 성격`} />
               </div>
             ) : null}
 
