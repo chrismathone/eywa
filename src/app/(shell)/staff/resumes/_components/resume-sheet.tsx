@@ -258,9 +258,12 @@ export function ResumeSheet({
   // 사진 슬라이드(원장 지시 2026-07-28) — 2칸을 세로로 쌓지 않고 한 칸에서 ‹ › 로 넘긴다.
   const [photoSlide, setPhotoSlide] = useState(0);
   // 원샷 직원 등록(생성 화면 전용) — 서버가 권한·역할을 재검증한다.
-  // '직원 등록' 진입이 이 서식으로 통합(2026-07-28)돼 기본 ON — 역할 미선택 저장은 이력서만 저장+경고.
+  // '직원 등록' 진입이 이 서식으로 통합(2026-07-28)돼 기본 ON. 🔴 역할도 기본값(강사)을 채운다
+  // (2026-08-07 원장 지시 "체크 안 해도 만들어지게" — 실사고는 체크는 켜져 있었는데 **역할이 비어**
+  // '역할 미선택 → 이력서만 저장' 경고로 빠진 것. 기본값이 있으면 아무것도 안 만져도 저장=계정 생성).
+  const defaultAcctRole = assignableRoles?.includes("teacher") ? "teacher" : (assignableRoles?.[0] ?? "");
   const [acctRegister, setAcctRegister] = useState(!id && (assignableRoles?.length ?? 0) > 0);
-  const [acctRole, setAcctRole] = useState("");
+  const [acctRole, setAcctRole] = useState(defaultAcctRole);
 
   const draft = useFormDraft({
     // 스코프에 userId 포함 — 사무실 공용 PC에서 앞사람 초안이 뒷사람에게 복구 제안되면 안 된다.
@@ -324,7 +327,8 @@ export function ResumeSheet({
       // 사진 경로 복원 — 미리보기 URL은 복원 불가(로컬 objectURL 소멸)라 자리표시로만 보인다.
       setPhotos(Array.from({ length: RESUME_PHOTO_SLOTS }, (_, i) => vals[`photo_${i}`] || null));
       setAcctRegister(vals.acct_register === "true");
-      setAcctRole(vals.acct_role ?? "");
+      // 옛 초안엔 역할이 비어 있을 수 있다 — 빈 값 복원이 기본값(강사)을 지우면 같은 사고가 재발한다.
+      setAcctRole(vals.acct_role || defaultAcctRole);
     },
   });
   const clearDraft = draft.clear;
@@ -484,9 +488,13 @@ export function ResumeSheet({
     opts: { ph?: string; align?: "left" | "center" | "right" } = {},
   ) => dynField(setLangs, emptyLanguage, "lang", i, key, value, opts);
 
+  // 서식 제목(원장 지시 2026-08-07) — **직원등록(신규·연결 없음·계정 등록 섹션 있음) 때만 "직원 명부"**,
+  // 저장된 이력서 열람·수정과 기존 직원 연결 작성은 종전대로 "이력서".
+  const sheetTitle =
+    !id && !staffUserId && (assignableRoles?.length ?? 0) > 0 ? "직원 명부" : "이력서";
   const sheet = (
     <div className="resume-sheet border-line bg-card text-foreground mx-auto w-full max-w-[780px] rounded-2xl border shadow-card p-6 sm:p-8 print:rounded-none print:border-2 print:border-foreground/60 print:shadow-none print:p-3">
-      <h1 className="text-center text-[26px] font-bold tracking-[0.6em] print:text-[20px]">이력서</h1>
+      <h1 className="text-center text-[26px] font-bold tracking-[0.6em] print:text-[20px]">{sheetTitle}</h1>
 
       <SectionHead>1. 인적사항</SectionHead>
       <table className={T}>
@@ -1064,7 +1072,8 @@ export function ResumeSheet({
               <p className="text-text-dim w-full text-[12px]">
                 인적사항의 E-mail로 로그인 계정을 만들고, 초기 비밀번호는{" "}
                 <span className="num font-bold">{INITIAL_STAFF_PASSWORD}</span> — 본인이 로그인 후 변경합니다. 같은
-                이메일 직원이 이미 있으면 새로 만들지 않고 그 직원과 이력서를 연결합니다.
+                이메일 직원이 이미 있으면 새로 만들지 않고 그 직원과 이력서를 연결합니다. 역할은 기본
+                &lsquo;강사&rsquo; — 다르면 위에서 바꿔 주세요.
               </p>
             </div>
           ) : null}
