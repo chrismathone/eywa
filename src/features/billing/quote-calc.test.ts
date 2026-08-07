@@ -9,6 +9,8 @@ import {
   feeKindFromPricingMode,
   needsFeeKindCheck,
   groupByFeeKind,
+  normalizeLoadedCourse,
+  normalizeLoadedCourses,
   FEE_KIND_LABEL,
   type QuoteCourse,
 } from "./quote-calc";
@@ -349,5 +351,52 @@ describe("needsFeeKindCheck — undefined(모름) ≠ null(없음)", () => {
     for (const m of ["per_session", "monthly", "extra", "discount"]) {
       expect(needsFeeKindCheck({ pricingMode: m })).toBe(false);
     }
+  });
+});
+
+/**
+ * 🔴 저장된 견적 속 지뢰(원장 제보 2026-08-07: *"EiE가 회당 단가 처리되어있는 청구서가 있는데?
+ * 금액은 정상인데 회당 단가 27만원, 시수12, 총금액 27만원"*).
+ * 그 화면에서 날짜·요일·시수를 하나만 건드리면 자동 계산이 돌아 **270,000 × 12 = 3,240,000원**이 된다.
+ */
+describe("normalizeLoadedCourse — 월 정액이 '회당'으로 저장된 행", () => {
+  const eie = (over: Partial<QuoteCourse> = {}) =>
+    course({ name: "Let's Speak", perSession: 270000, sessions: 12, price: 270000, fixedMonthly: false, ...over });
+
+  it("총액 = 회당 단가인데 시수가 1이 아니면 산수가 성립하지 않는다 → 월 고정으로 바로잡는다", () => {
+    const fixed = normalizeLoadedCourse(eie());
+    expect(fixed.fixedMonthly).toBe(true);
+    expect(fixed.perSession).toBe(0);
+  });
+
+  // ⚠️ 이미 학부모에게 안내된 숫자다 — 구분만 고치고 **금액·시수는 그대로** 둔다.
+  it("금액·시수는 절대 바꾸지 않는다", () => {
+    const fixed = normalizeLoadedCourse(eie());
+    expect(fixed.price).toBe(270000);
+    expect(fixed.sessions).toBe(12);
+  });
+
+  it("시수 0(요일 미입력)도 같은 지뢰라 바로잡는다", () => {
+    expect(normalizeLoadedCourse(eie({ sessions: 0 })).fixedMonthly).toBe(true);
+  });
+
+  it("시수 1은 총액=단가가 정상이라 건드리지 않는다", () => {
+    const one = eie({ sessions: 1 });
+    expect(normalizeLoadedCourse(one)).toBe(one); // 같은 객체 그대로
+  });
+
+  it("정상적인 회당 행(단가×시수=총액)은 건드리지 않는다", () => {
+    const ok = course({ perSession: 21250, sessions: 9, price: 191250, fixedMonthly: false });
+    expect(normalizeLoadedCourse(ok)).toBe(ok);
+  });
+
+  it("이미 월 고정인 행은 건드리지 않는다", () => {
+    const m = course({ perSession: 0, sessions: 12, price: 270000, fixedMonthly: true });
+    expect(normalizeLoadedCourse(m)).toBe(m);
+  });
+
+  it("목록 전체에 적용된다", () => {
+    const out = normalizeLoadedCourses([eie(), course({ perSession: 0, price: 100000, fixedMonthly: true })]);
+    expect(out.map((c) => c.fixedMonthly)).toEqual([true, true]);
   });
 });

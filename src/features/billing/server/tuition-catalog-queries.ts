@@ -26,6 +26,10 @@ export async function getTuitionCatalogPage(
   let q = supabase
     .from("tuition_catalog")
     .select("id, category, name, price, pricing_mode, note, is_active", { count: "exact" })
+    // 🔴 **중지 항목을 맨 뒤로**(원장 2026-08-07: *"중지된것들은 전부 아래쪽으로 몰아서 보여"*).
+    //    정렬을 서버에서 해야 페이지가 넘어가도 규칙이 유지된다 — 화면에서만 나누면 2페이지에 중지 항목이
+    //    다시 섞여 나온다. 그 안에서는 종전대로 분류 → 이름 순.
+    .order("is_active", { ascending: false })
     .order("category", { ascending: true })
     .order("name", { ascending: true })
     .range(from, from + pageSize - 1);

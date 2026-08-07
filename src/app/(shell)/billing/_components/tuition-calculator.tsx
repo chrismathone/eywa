@@ -13,6 +13,7 @@ import {
   autoSessions,
   feeKindFromPricingMode,
   groupByFeeKind,
+  normalizeLoadedCourses,
   quoteTotal,
 } from "@/features/billing/quote-calc";
 import type { QuoteStudent, QuoteCourse, QuoteExtra, QuoteDiscount } from "@/features/billing/quote-calc";
@@ -119,7 +120,11 @@ export function TuitionCalculator({
     startDate: initial?.startDate ?? `${defaultPeriod}-01`,
     endDate: initial?.endDate ?? monthLastDay(defaultPeriod),
   });
-  const [courses, setCourses] = useState<QuoteCourse[]>(() => dedupeUids(initial?.courses ?? [], "c"));
+  // 🔴 열 때 **월 정액이 '회당'으로 저장돼 있던 행**을 바로잡는다(normalizeLoadedCourses 주석 참조) —
+  //    그대로 두면 날짜·요일을 한 번만 건드려도 27만원이 27만원 × 12회가 된다(실측 4행).
+  const [courses, setCourses] = useState<QuoteCourse[]>(() =>
+    normalizeLoadedCourses(dedupeUids(initial?.courses ?? [], "c")),
+  );
   const [extras, setExtras] = useState<QuoteExtra[]>(() => dedupeUids(initial?.extras ?? [], "e"));
   const [discounts, setDiscounts] = useState<QuoteDiscount[]>(() => dedupeUids(initial?.discounts ?? [], "d"));
   const [createdLabel] = useState(() => todayLabel(initial?.createdAt));
@@ -243,7 +248,7 @@ export function TuitionCalculator({
     const d = draft.restore();
     if (!d) return;
     setStudent(d.student);
-    setCourses(d.courses);
+    setCourses(normalizeLoadedCourses(d.courses)); // 초안 복구도 같은 자리(옛 초안이 같은 모양일 수 있다)
     setExtras(d.extras);
     setDiscounts(d.discounts);
     // uid 카운터를 복원 행들의 최대치 이상으로 → 이후 nextUid()가 기존 행과 충돌 안 함.

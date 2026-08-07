@@ -236,12 +236,24 @@ function ToggleActive({ id, isActive }: { id: string; isActive: boolean }) {
   );
 }
 
-export function TuitionPricesTable({ rows }: { rows: TuitionCatalogRow[] }) {
+export function TuitionPricesTable({
+  rows,
+  summary,
+}: {
+  rows: TuitionCatalogRow[];
+  /** 좌측에 놓을 요약(건수·페이지) — 서버 패널이 넘긴다. 이 줄과 '항목 추가'가 **한 행**을 나눠 쓴다
+   *  (원장 2026-08-07: *"단가 104개·1/3 페이지 랑 항목 추가 버튼이 2개 행으로 공간차지하고 있는데 한개 행으로"*). */
+  summary?: React.ReactNode;
+}) {
   const [open, setOpen] = useState<TuitionCatalogRow | "new" | null>(null);
+  // 중지 항목은 아래로 몬다 — 서버가 이미 그 순서로 주므로(is_active desc) 여기서는 **가르기만** 한다.
+  const active = rows.filter((r) => r.isActive);
+  const stopped = rows.filter((r) => !r.isActive);
 
   return (
     <div className="space-y-3">
-      <div className="flex justify-end">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="min-w-0">{summary}</div>
         <Button size="sm" onClick={() => setOpen("new")}>
           <Plus className="size-4" />
           항목 추가
@@ -269,7 +281,7 @@ export function TuitionPricesTable({ rows }: { rows: TuitionCatalogRow[] }) {
               </tr>
             </thead>
             <tbody className="divide-line divide-y">
-              {rows.map((r) => (
+              {active.map((r) => (
                 <tr key={r.id} className={r.pricingMode ? "hover:bg-bg-soft/50" : "bg-amber-soft/20 hover:bg-amber-soft/30"}>
                   <td className="px-4 py-2.5">
                     <Pill color={r.category === DISCOUNT_CATEGORY ? "rose" : "neutral"} soft>
@@ -303,6 +315,56 @@ export function TuitionPricesTable({ rows }: { rows: TuitionCatalogRow[] }) {
                 </tr>
               ))}
             </tbody>
+            {/* ── 중지된 항목 — **아래로 몰아 섹션으로 가른다**(원장 2026-08-07). 계산기 과목·교재/기타·할인
+                   picker와 수납 '회차 확정' 단가 후보 어디에도 안 나오는 것들이라, 살아 있는 목록과 섞여
+                   있으면 "왜 계산기엔 없지?"가 된다. 지우진 않으므로 되살릴 수 있다는 것도 함께 적는다. ── */}
+            {stopped.length ? (
+              <tbody className="divide-line divide-y">
+                <tr className="bg-bg-soft">
+                  <td colSpan={6} className="px-4 py-2">
+                    <span className="text-text-dim text-[12px] font-bold">
+                      중지됨 <span className="num">{stopped.length}</span>개
+                    </span>
+                    <span className="text-text-faint ml-1.5 text-[11px]">
+                      — 계산기·수납 어디에도 나오지 않습니다. &lsquo;중지&rsquo;를 누르면 다시 사용합니다.
+                    </span>
+                  </td>
+                </tr>
+                {stopped.map((r) => (
+                  <tr key={r.id} className="hover:bg-bg-soft/50 opacity-60">
+                    <td className="px-4 py-2.5">
+                      <Pill color={r.category === DISCOUNT_CATEGORY ? "rose" : "neutral"} soft>
+                        {r.category}
+                      </Pill>
+                    </td>
+                    <td className="px-4 py-2.5">
+                      <PricingModeCell id={r.id} mode={r.pricingMode} />
+                    </td>
+                    <td className="px-4 py-2.5">
+                      <span className="text-foreground text-[13px] font-bold">{r.name}</span>
+                      {r.note ? <span className="text-text-faint ml-1.5 text-[11px]">{r.note}</span> : null}
+                    </td>
+                    <td className="text-foreground num px-4 py-2.5 text-right text-[12px] font-bold">
+                      {r.category === DISCOUNT_CATEGORY ? "−" : ""}
+                      {KRW.format(r.price)}
+                    </td>
+                    <td className="px-4 py-2.5">
+                      <ToggleActive id={r.id} isActive={r.isActive} />
+                    </td>
+                    <td className="px-4 py-2.5 text-right">
+                      <button
+                        type="button"
+                        onClick={() => setOpen(r)}
+                        className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs transition"
+                      >
+                        <Pencil className="size-3.5" />
+                        수정
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            ) : null}
           </table>
         </div>
       )}

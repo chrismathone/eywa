@@ -82,6 +82,34 @@ export function needsFeeKindCheck(c: Pick<QuoteCourse, "pricingMode">): boolean 
 }
 
 /**
+ * 저장된 견적을 **열 때** 바로잡는다 — 월 정액이 '회당'으로 저장돼 있던 행(원장 제보 2026-08-07:
+ * *"저장된 청구서들 중에 EiE가 회당 단가 처리되어있는 청구서가 있는데? 금액은 정상인데 회당 단가 27만원,
+ * 시수12, 총금액 27만원"*).
+ *
+ * 🔴 **이건 지뢰였다.** 그 화면에서 날짜·요일·시수를 **아무거나 하나만** 건드리면 자동 계산이 돌아
+ *    `270,000 × 12 = 3,240,000원`이 된다. 원장이 계산기 구분을 만들라고 한 바로 그 사고가,
+ *    이미 저장된 견적 안에서 격발 대기 중이었다(실측 4행 / 견적 15건·과목 22행).
+ *
+ * 판별은 **산수로 불가능한 조합** 하나만 본다: 회당인데 `총액 = 회당 단가`이면서 시수가 1이 아니다.
+ * (시수 1이면 총액과 단가가 같은 게 정상이라 제외한다.)
+ * ⚠️ **금액은 절대 건드리지 않는다** — 이미 학부모에게 안내된 숫자다. 바꾸는 것은 구분(fixedMonthly)과
+ *    회당 단가뿐이고, 그 결과 총액·합계는 그대로다.
+ * ⚠️ 저장값을 미리 고치는 마이그레이션 대신 **읽는 자리**에서 바로잡는다 — 옛 견적을 언제 열든 같은
+ *    결과가 되고, 아직 안 열어 본 견적도 자동으로 안전해진다.
+ */
+export function normalizeLoadedCourse(c: QuoteCourse): QuoteCourse {
+  const perSession = Math.round(Number(c.perSession) || 0);
+  const price = Math.round(Number(c.price) || 0);
+  const sessions = Number(c.sessions) || 0;
+  if (c.fixedMonthly || perSession <= 0 || price !== perSession || sessions === 1) return c;
+  return { ...c, fixedMonthly: true, perSession: 0 };
+}
+
+export function normalizeLoadedCourses(courses: readonly QuoteCourse[]): QuoteCourse[] {
+  return courses.map(normalizeLoadedCourse);
+}
+
+/**
  * 구분별로 나눈 목록 + 각 합계 — 입력 화면이 두 묶음으로 보여주는 근거(원장 *"…으로 분리"*).
  * ⚠️ **원본 순서를 보존**한다(안내문은 courses 순서대로 인쇄되므로, 여기서 정렬하면 두 화면이 어긋난다).
  */

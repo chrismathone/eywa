@@ -110,14 +110,16 @@ export async function TuitionPricesPanel({ sp }: { sp: Sp }) {
         <SearchForm placeholder="항목명·분류" defaultValue={q} resetParams={["cpage"]} />
       </div>
 
-      <div className="flex items-center justify-between">
-        <p className="text-text-dim text-xs">
-          단가 <span className="num text-foreground font-bold">{total}</span>개
-          {totalPages > 1 ? <span className="ml-2">· {page}/{totalPages} 페이지</span> : null}
-        </p>
-      </div>
-
-      <TuitionPricesTable rows={rows} />
+      {/* 건수 줄과 '항목 추가' 버튼이 각자 한 행씩 쓰고 있었다(원장 2026-08-07) → 표 툴바 한 행으로 합친다. */}
+      <TuitionPricesTable
+        rows={rows}
+        summary={
+          <p className="text-text-dim text-xs">
+            단가 <span className="num text-foreground font-bold">{total}</span>개
+            {totalPages > 1 ? <span className="ml-2">· {page}/{totalPages} 페이지</span> : null}
+          </p>
+        }
+      />
       {totalPages > 1 ? (
         <Pagination page={page} totalPages={totalPages} hrefForPage={(n) => build({ cpage: String(n) })} />
       ) : null}
