@@ -5,6 +5,7 @@ import {
   joinedInMonth,
   leftInMonth,
   lifecycleBadges,
+  lifecycleBadgesInRange,
   monthBounds,
   transferFrom,
   transferTo,
@@ -164,5 +165,45 @@ describe("lifecycleBadges", () => {
     expect(
       badgeTitle({ kind: "transferIn", date: "2026-08-13", otherClassName: "나반" }, "가반"),
     ).toBe("반이동: 나반 → 가반 (2026-08-13부터)");
+  });
+});
+
+// ── 세션 기간(0189a) 판정 ─────────────────────────────────────────────────
+// 🔴 표가 세션으로 그려지면 뱃지도 **같은 기간**으로 판정해야 한다. 날짜축만 세션으로 바꾸고
+//    판정을 달력월로 두면 표는 그 칸을 그리는데 뱃지만 사라진다 — 눈에 안 띄는 종류의 실패다.
+describe("lifecycleBadgesInRange — 세션은 달력월을 넘긴다", () => {
+  // 2026년 2월 세션 = 2/2~3/5 (설 연휴로 밀려 3월 초까지)
+  const FEB_SESSION = { first: "2026-02-02", last: "2026-03-05" };
+
+  it("세션 끝이 다음 달이면 그 달 퇴원도 잡는다", () => {
+    const spans = [{ start: "2025-09-01", end: "2026-03-03" }];
+    const badges = lifecycleBadgesInRange(FEB_SESSION, spans, "math");
+    expect(badges).toEqual([{ kind: "left", date: "2026-03-03" }]);
+    // 같은 학생을 '2026-02' 달력월로 보면 3/3은 범위 밖이라 안 잡힌다(그래서 기간 판정이 필요하다).
+    expect(lifecycleBadges("2026-02", spans, "math")).toEqual([]);
+  });
+
+  it("세션 시작이 전달이면 그 시작일의 신입도 잡는다", () => {
+    const badges = lifecycleBadgesInRange(FEB_SESSION, [{ start: "2026-02-02", end: null }], "math");
+    expect(badges).toEqual([{ kind: "new", date: "2026-02-02" }]);
+  });
+
+  it("세션 시작 전날에 이미 소속이면 신입이 아니다", () => {
+    expect(
+      lifecycleBadgesInRange(FEB_SESSION, [{ start: "2026-02-01", end: null }], "math"),
+    ).toEqual([]);
+  });
+
+  it("세션 마지막 날에 아직 소속이면 퇴원이 아니다", () => {
+    expect(
+      lifecycleBadgesInRange(FEB_SESSION, [{ start: "2025-09-01", end: "2026-03-05" }], "math"),
+    ).toEqual([]);
+  });
+
+  it("달력월 진입점은 기간판의 래퍼라 결과가 같다", () => {
+    const spans = [{ start: "2026-08-05", end: null }];
+    expect(lifecycleBadges("2026-08", spans, "math")).toEqual(
+      lifecycleBadgesInRange({ first: "2026-08-01", last: "2026-08-31" }, spans, "math"),
+    );
   });
 });

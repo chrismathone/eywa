@@ -18,9 +18,25 @@ export type AttendanceViewPrefs = {
   collapsed: string[];
   /** 행 정렬 기준(반별·가나다·학년·담임순). 반별 외엔 반 구분 없이 한 덩어리로 그린다. */
   sort: AttendanceSortKey;
+  /**
+   * 날짜축을 무엇으로 그릴지 — 세션 기간(0189a) / 달력월.
+   * 기본은 세션이고, 그 과목·달에 세션이 정의돼 있지 않으면 **자동으로 달력월**로 떨어진다.
+   * ⚠️ 이건 **표시 렌즈일 뿐**이다. 청구·시수검증·급여는 이 설정을 읽지 않는다(저장되는 진실은 하나).
+   */
+  periodMode: PeriodMode;
 };
 
-export const DEFAULT_ATTENDANCE_PREFS: AttendanceViewPrefs = { collapsed: [], sort: "class" };
+export type PeriodMode = "session" | "month";
+
+export const DEFAULT_ATTENDANCE_PREFS: AttendanceViewPrefs = {
+  collapsed: [],
+  sort: "class",
+  periodMode: "session",
+};
+
+export function parsePeriodMode(raw: unknown): PeriodMode {
+  return raw === "month" ? "month" : "session";
+}
 
 /**
  * 저장된 jsonb → 안전한 설정값. 모르는 값은 버린다(설정 한 줄이 화면을 깨뜨리지 않게).
@@ -35,5 +51,6 @@ export function parseAttendanceViewPrefs(raw: unknown): AttendanceViewPrefs {
   return {
     collapsed: [...new Set(ids)].slice(0, MAX_COLLAPSED),
     sort: parseAttendanceSortKey(o.sort),
+    periodMode: parsePeriodMode(o.periodMode),
   };
 }

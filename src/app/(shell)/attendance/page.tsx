@@ -15,6 +15,7 @@ import { accessLevelTenant } from "@/lib/auth/perm-matrix";
 import { effectiveTeacherId } from "@/lib/auth/view-mode";
 import { loadAttendanceViewPrefs } from "@/features/attendance/server/prefs-actions";
 import { buildQuickOpen } from "@/features/attendance/quick-open";
+import { PeriodModeToggle } from "./_components/period-mode-toggle";
 import { countMarks, sumCounts } from "@/features/attendance/grid/totals";
 import { isGroupedSort, sortAttendanceRows } from "@/features/attendance/sort-rows";
 import { getSubjectSessionsByStudent, roleFor } from "@/features/attendance/server/subject-sessions";
@@ -169,7 +170,10 @@ export default async function AttendancePage({
   const mode: ViewMode = requestedMode === "teacher" && teacherClasses.length > 0 ? "teacher" : "class";
   const teacherMatrices =
     mode === "teacher"
-      ? await Promise.all(teacherClasses.map((c) => getMonthlyAttendanceMatrix(month, c.id)))
+      // ⚠️ 강사 전체 보기는 여러 반을 **한 표**에 그리는데 세션은 과목별이라 반마다 기간이 다를 수 있다.
+      //    첫 반의 날짜축으로 나머지를 그리면 엉뚱한 칸에 출결이 찍히므로 1단계는 달력월로 고정한다
+      //    (화면 라벨에 그 사실을 적는다 — 조용히 다르게 보이면 안 된다).
+      ? await Promise.all(teacherClasses.map((c) => getMonthlyAttendanceMatrix(month, c.id, "month")))
       : [];
   // 금액 열은 **원장 전용**(급여 PII 규율) — 강사가 자기 학생들의 청구·납입을 보게 하지 않는다.
   const money =
@@ -185,7 +189,7 @@ export default async function AttendancePage({
     mode === "teacher"
       ? teacherMatrices[0] ?? base
       : effectiveClassId
-        ? await getMonthlyAttendanceMatrix(month, effectiveClassId)
+        ? await getMonthlyAttendanceMatrix(month, effectiveClassId, viewPrefs.periodMode)
         : base;
 
   const groups: MatrixGroup[] =
@@ -453,6 +457,19 @@ export default async function AttendancePage({
             <ChevronRight className="size-3.5" />
           </Link>
         </div>
+
+        {/* 날짜축(세션/월) — 같은 줄에 붙인다. ⚠️ 새 줄을 얹지 말 것(그 높이는 학생 행에서 빼 온다). */}
+        <PeriodModeToggle
+          mode={viewPrefs.periodMode}
+          windowLabel={matrix.window.label}
+          disabledReason={
+            mode === "teacher"
+              ? "강사 전체 보기는 반마다 세션이 달라 달력월로 표시합니다"
+              : !effectiveClassId
+                ? "반을 고르면 세션으로 볼 수 있습니다"
+                : undefined
+          }
+        />
 
         {/* 보기 토글 — **관리자 전용**. '강사 전체'는 그 강사의 모든 반을 반별로 묶어 한 표에(급여 계산용).
             강사 본인에겐 반 드롭다운과 뜻이 겹쳐(그리고 '반별'이 사진 허브로 보내서) 감춘다. */}

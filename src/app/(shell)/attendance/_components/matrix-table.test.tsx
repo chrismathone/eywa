@@ -25,6 +25,7 @@ function matrix(students: AttendanceMatrix["students"]): AttendanceMatrix {
     classes: [],
     selectedClassId: C,
     month: "2026-07",
+    window: { kind: "month", scope: null, start: "2026-07-01", end: "2026-07-31", label: "2026년 7월", defId: null },
     days: DAYS,
     classDows: [3],
     students,

@@ -11,12 +11,16 @@ import {
 import { includeInAttendanceInput, makeupStudentIds } from "@/features/attendance/input-roster";
 import { buildHolidayMap, dowsFromKeys, resolveAttendDows } from "@/features/attendance/calendar";
 import {
-  lifecycleBadges,
+  lifecycleBadgesInRange,
   TRANSFER_GAP_DAYS,
   type EnrollSpan,
   type LifecycleBadge,
   type OtherSpan,
+  type SpanRange,
 } from "@/features/attendance/enrollment-span";
+import { getPeriodWindow } from "@/features/periods/server/queries";
+import type { PeriodWindow } from "@/features/periods/resolve";
+import type { PeriodMode } from "@/features/attendance/view-prefs";
 import {
   deriveMarksFromReports,
   isDerivedAttendanceSubject,
@@ -418,7 +422,9 @@ export type AttendanceMatrix = {
     teacherActive: boolean;
   }[];
   selectedClassId: string | null;
-  month: string; // "2026-05"
+  month: string; // "2026-05" — **라벨월**이다. 세션은 이 달을 넘길 수 있다(window.end 참조).
+  /** 표가 실제로 그린 기간. kind="session"이면 학원이 정한 구간, "month"면 달력월(폴백 포함). */
+  window: PeriodWindow;
   days: MatrixDay[];
   // 선택한 반의 수업요일(0=일~6=토) — 그 달에 유효한 class_schedules 기준. 헤더 하이라이트용.
   classDows: number[];
@@ -447,23 +453,31 @@ export type AttendanceMatrix = {
 
 const DOW_LABEL = ["일", "월", "화", "수", "목", "금", "토"];
 
-function buildMonthDays(month: string): MatrixDay[] {
-  const [y, m] = month.split("-").map(Number);
-  if (!y || !m) return [];
-  const lastDay = new Date(y, m, 0).getDate();
+/**
+ * 표의 날짜축 — 기간(세션 또는 달력월)의 모든 날.
+ *
+ * ⚠️ 세션은 달력월을 넘길 수 있어(2월 세션이 3/5까지) `day`가 1..31 순서가 아니다.
+ *    화면이 날짜 칸을 `day`로 식별하면 3/1과 2/1이 같은 칸이 된다 — 식별은 항상 `date`(ISO)로.
+ */
+function buildPeriodDays(startIso: string, endIso: string): MatrixDay[] {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(startIso) || !/^\d{4}-\d{2}-\d{2}$/.test(endIso) || startIso > endIso) return [];
   const todayIso = kstToday();
   const days: MatrixDay[] = [];
-  for (let d = 1; d <= lastDay; d++) {
-    const dateStr = `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
-    const dow = new Date(y, m - 1, d).getDay();
+  const cur = new Date(`${startIso}T00:00:00Z`);
+  const end = new Date(`${endIso}T00:00:00Z`);
+  // 가드: 어떤 세션도 1년을 넘지 않는다(깨진 행이 무한 루프가 되지 않게).
+  for (let guard = 0; cur <= end && guard < 400; guard++) {
+    const dateStr = cur.toISOString().slice(0, 10);
+    const dow = cur.getUTCDay();
     days.push({
       date: dateStr,
-      day: d,
+      day: cur.getUTCDate(),
       dow,
       label: DOW_LABEL[dow] ?? "?",
       isWeekend: dow === 0 || dow === 6,
       isToday: dateStr === todayIso,
     });
+    cur.setUTCDate(cur.getUTCDate() + 1);
   }
   return days;
 }
@@ -483,7 +497,7 @@ function buildMonthDays(month: string): MatrixDay[] {
  */
 async function attachLifecycleBadges(
   supabase: Awaited<ReturnType<typeof createClient>>,
-  month: string,
+  range: SpanRange,
   studentMap: Map<string, MatrixStudent>,
   classId: string,
   subject: string | null,
@@ -492,7 +506,7 @@ async function attachLifecycleBadges(
   // 1차 판정(다른 반 모름) — 여기서 아무것도 안 나오면 추가 조회 자체를 안 한다.
   const plain = new Map<string, LifecycleBadge[]>();
   for (const s of students) {
-    const b = lifecycleBadges(month, s.spans, subject);
+    const b = lifecycleBadgesInRange(range, s.spans, subject);
     if (b.length > 0) plain.set(s.id, b);
   }
   if (plain.size === 0) return;
@@ -538,13 +552,20 @@ async function attachLifecycleBadges(
 
   for (const id of ids) {
     const st = studentMap.get(id);
-    if (st) st.badges = lifecycleBadges(month, st.spans, subject, othersById.get(id) ?? []);
+    if (st) st.badges = lifecycleBadgesInRange(range, st.spans, subject, othersById.get(id) ?? []);
   }
 }
 
 export async function getMonthlyAttendanceMatrix(
   month: string,
   requestedClassId: string | null,
+  /**
+   * 날짜축을 세션(0189a)으로 그릴지 달력월로 그릴지 — 개인 보기 설정(`ui_prefs.attendance.periodMode`).
+   * ⚠️ 세션은 **과목별**이라 반이 확정됐을 때만 적용된다. 여러 반을 한 표에 그리는 강사 전체 보기는
+   *    반마다 기간이 달라 축이 어긋나므로 호출부가 "month"를 넘긴다(1단계 한계, 화면에 명시).
+   * ⚠️ 세션이 정의돼 있지 않으면 조용히 달력월로 떨어진다(정상 경로).
+   */
+  periodMode: PeriodMode = "month",
 ): Promise<AttendanceMatrix> {
   const supabase = await createClient();
 
@@ -583,12 +604,21 @@ export async function getMonthlyAttendanceMatrix(
     ? null
     : requestedClassId;
 
-  const days = buildMonthDays(month);
+  // 날짜축 = 세션 기간(반이 정해졌고 그 과목에 세션이 있을 때) 또는 달력월. 폴백은 resolve가 책임진다.
+  const selectedSubject = classId ? (classes.find((c) => c.id === classId)?.subject ?? null) : null;
+  const periodWindow = await getPeriodWindow({
+    period: month,
+    subjectKey: selectedSubject,
+    mode: classId ? periodMode : "month",
+    todayIso: kstToday(),
+  });
+  const days = buildPeriodDays(periodWindow.start, periodWindow.end);
   if (!classId || days.length === 0) {
     return {
       classes,
       selectedClassId: classId,
       month,
+      window: periodWindow,
       days,
       classDows: [],
       students: [],
@@ -665,12 +695,14 @@ export async function getMonthlyAttendanceMatrix(
     const st = studentMap.get(id);
     if (st) st.spans = list;
   }
+  // ⚠️ 뱃지는 **표가 그린 기간**으로 판정해야 한다 — 날짜축만 세션으로 바꾸고 여기를 월로 두면
+  //    세션이 3/5까지인데 3월 퇴원 뱃지가 사라진다(표는 그 칸을 그리므로 눈에 안 띈다).
   await attachLifecycleBadges(
     supabase,
-    month,
+    { first: periodWindow.start, last: periodWindow.end },
     studentMap,
     classId,
-    classes.find((c) => c.id === classId)?.subject ?? null,
+    selectedSubject,
   );
 
   const students = Array.from(studentMap.values()).sort((a, b) => {
@@ -688,18 +720,33 @@ export async function getMonthlyAttendanceMatrix(
   const derived: Record<string, Record<string, true>> = {};
 
   if (studentIds.length > 0) {
-    const { data: records } = await supabase
-      .from("attendance_records")
-      .select("student_id, session_date, status, note, session_units, recorded_at")
-      .eq("class_id", classId)
-      .in("student_id", studentIds)
-      .gte("session_date", startIso)
-      .lte("session_date", endIso)
-      .order("recorded_at", { ascending: false });
+    // 🔴 무페이징 select + raw .in() + `data ?? []`였다. 달력월(최대 31일)일 땐 여유가 있었지만
+    //    세션은 공휴일로 6주까지 늘어날 수 있어(30명 × 45일 = 1,350행) **1000행에서 조용히 잘린다**
+    //    — 잘린 만큼 출석이 화면에서 사라지고 에러도 안 난다(B2·B3, gotcha #54).
+    //    같은 파일 아래 보고서 조회와 같은 헬퍼로 통일한다(페이지네이션 + 100개 청크 + error는 throw).
+    const records = await fetchAllPagedInChunks<{
+      student_id: string;
+      session_date: string;
+      status: AttendanceStatus;
+      note: string | null;
+      session_units: number | string | null;
+      recorded_at: string;
+    }>(studentIds, (chunk, from, to) =>
+      supabase
+        .from("attendance_records")
+        .select("student_id, session_date, status, note, session_units, recorded_at")
+        .eq("class_id", classId)
+        .in("student_id", chunk)
+        .gte("session_date", startIso)
+        .lte("session_date", endIso)
+        .order("recorded_at", { ascending: false })
+        .range(from, to),
+    );
 
     // 같은 (student, date) 중 최신 record만 채택
+    // 페이지는 같은 order의 슬라이스라 이어붙여도 recorded_at 내림차순이 유지된다(청크는 학생 단위).
     const seen = new Set<string>();
-    for (const r of records ?? []) {
+    for (const r of records) {
       const k = `${r.student_id}::${r.session_date}`;
       if (seen.has(k)) continue;
       seen.add(k);
@@ -847,6 +894,7 @@ export async function getMonthlyAttendanceMatrix(
     classes,
     selectedClassId: classId,
     month,
+    window: periodWindow,
     days,
     classDows,
     students,

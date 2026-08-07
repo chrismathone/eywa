@@ -4,7 +4,9 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import {
   parseAttendanceViewPrefs,
+  parsePeriodMode,
   type AttendanceViewPrefs,
+  type PeriodMode,
 } from "../view-prefs";
 import { parseAttendanceSortKey, type AttendanceSortKey } from "../sort-rows";
 
@@ -69,6 +71,17 @@ export async function saveAttendanceSort(
 ): Promise<{ ok: boolean; error?: string }> {
   const safe = parseAttendanceSortKey(sort);
   return mergeAttendancePrefs((prev) => ({ ...prev, sort: safe }));
+}
+
+/**
+ * 날짜축 모드만 저장 — 접힌 반·정렬은 건드리지 않는다.
+ * ⚠️ 이건 **표시 렌즈**다. 청구·시수검증·급여는 이 값을 읽지 않는다(계정마다 금액이 달라 보이면 안 된다).
+ */
+export async function saveAttendancePeriodMode(
+  mode: PeriodMode,
+): Promise<{ ok: boolean; error?: string }> {
+  const safe = parsePeriodMode(mode);
+  return mergeAttendancePrefs((prev) => ({ ...prev, periodMode: safe }));
 }
 
 /**

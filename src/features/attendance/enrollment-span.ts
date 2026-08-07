@@ -37,29 +37,44 @@ export function monthBounds(month: string): { first: string; last: string } {
 }
 
 /**
- * 그 달에 **새로 들어온** 날 — 없으면 null.
- * ⚠️ 그 달이 시작되기 전날에 이미 소속이었으면 신입이 아니다(달 중에 반이 잠깐 끊긴 재등록 방어).
+ * 표가 그리는 **기간**. 달력월이면 monthBounds가 만들고, 세션이면 그 세션의 시작·끝이다(0189a).
+ * ⚠️ 세션은 달력월을 넘길 수 있으므로(2월 세션이 3/5까지) 판정을 월 문자열에 묶으면 안 된다 —
+ *    날짜축만 세션으로 바꾸고 이 판정을 월로 두면, 표는 그 칸을 그리는데 뱃지만 사라진다.
  */
-export function joinedInMonth(month: string, spans: readonly EnrollSpan[]): string | null {
-  const { first } = monthBounds(month);
+export type SpanRange = { first: string; last: string };
+
+/**
+ * 그 기간에 **새로 들어온** 날 — 없으면 null.
+ * ⚠️ 기간이 시작되기 전날에 이미 소속이었으면 신입이 아니다(중간에 반이 잠깐 끊긴 재등록 방어).
+ */
+export function joinedInRange(range: SpanRange, spans: readonly EnrollSpan[]): string | null {
   if (spans.length === 0) return null;
-  if (isEnrolledOn(addDays(first, -1), spans)) return null;
-  const starts = spans.map((s) => s.start).filter((s) => s >= first && s <= monthBounds(month).last);
+  if (isEnrolledOn(addDays(range.first, -1), spans)) return null;
+  const starts = spans.map((s) => s.start).filter((s) => s >= range.first && s <= range.last);
   return starts.length > 0 ? starts.slice().sort()[0]! : null;
 }
 
 /**
- * 그 달에 **나간** 날 — 없으면 null.
- * ⚠️ 그 달 마지막 날에 아직 소속이면 나간 게 아니다(같은 반 재등록으로 구간이 이어진 경우).
+ * 그 기간에 **나간** 날 — 없으면 null.
+ * ⚠️ 마지막 날에 아직 소속이면 나간 게 아니다(같은 반 재등록으로 구간이 이어진 경우).
  */
-export function leftInMonth(month: string, spans: readonly EnrollSpan[]): string | null {
-  const { first, last } = monthBounds(month);
+export function leftInRange(range: SpanRange, spans: readonly EnrollSpan[]): string | null {
   if (spans.length === 0) return null;
-  if (isEnrolledOn(last, spans)) return null;
+  if (isEnrolledOn(range.last, spans)) return null;
   const ends = spans
     .map((s) => s.end)
-    .filter((e): e is string => !!e && e >= first && e <= last);
+    .filter((e): e is string => !!e && e >= range.first && e <= range.last);
   return ends.length > 0 ? ends.slice().sort().at(-1)! : null;
+}
+
+/** 달력월 진입점(기존 호출부·테스트 유지). */
+export function joinedInMonth(month: string, spans: readonly EnrollSpan[]): string | null {
+  return joinedInRange(monthBounds(month), spans);
+}
+
+/** 달력월 진입점(기존 호출부·테스트 유지). */
+export function leftInMonth(month: string, spans: readonly EnrollSpan[]): string | null {
+  return leftInRange(monthBounds(month), spans);
 }
 
 /** 다른 반의 수강 구간 — 반이동 판정에 쓴다. */
@@ -120,8 +135,18 @@ export function lifecycleBadges(
   subject: string | null,
   others: readonly OtherSpan[] = [],
 ): LifecycleBadge[] {
+  return lifecycleBadgesInRange(monthBounds(month), spans, subject, others);
+}
+
+/** 기간판 — 세션(달력월을 넘길 수 있다)에서 쓴다. 판정 규칙은 위와 완전히 같다. */
+export function lifecycleBadgesInRange(
+  range: SpanRange,
+  spans: readonly EnrollSpan[],
+  subject: string | null,
+  others: readonly OtherSpan[] = [],
+): LifecycleBadge[] {
   const out: LifecycleBadge[] = [];
-  const joined = joinedInMonth(month, spans);
+  const joined = joinedInRange(range, spans);
   if (joined) {
     const from = transferFrom(joined, subject, others);
     out.push(
@@ -130,7 +155,7 @@ export function lifecycleBadges(
         : { kind: "new", date: joined },
     );
   }
-  const left = leftInMonth(month, spans);
+  const left = leftInRange(range, spans);
   if (left) {
     const to = transferTo(left, subject, others);
     out.push(
