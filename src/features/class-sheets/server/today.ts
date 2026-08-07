@@ -8,6 +8,7 @@ import { kstToday } from "@/lib/date-kst";
 import { settingsToPeriodsConfig, weekdayTableFor } from "@/features/timetable/lib/periods";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { resolveSkillAreas } from "@/features/owner/skill-areas";
+import type { SkillAreaSetting } from "@/features/owner/settings-types";
 import { effectiveAttendanceRecords } from "@/features/attendance/effective-records";
 import { isWithinAttendanceEditWindow } from "@/features/attendance/edit-window";
 import { enrollmentAttendsOnDay } from "@/features/enrollments/eligibility";
@@ -33,12 +34,22 @@ import { ecsVisibleClassFilter } from "./access";
  *    `hiddenSeatOf`·`isMeaningfulPlanLine`) — 여기서 다시 구현하면 주간 시트와 숫자가 갈린다.
  */
 
+/**
+ * 계획 한 줄 — **주간 시트와 같은 모양**(`PlanLineDTO`)이다. 오늘 보드가 그 줄을 그대로 편집하고
+ * 같은 CAS 경로로 저장하므로, 화면만 다르고 데이터·충돌 처리는 한 벌이다.
+ */
 export type TodayPlanLine = {
+  id: string;
+  planDate: string;
+  slotStart: string;
+  termMode: string;
+  lineNo: number;
   skillArea: string | null;
   textbook: string | null;
   pageRange: string | null;
   progress: string | null;
   homework: string | null;
+  updatedAt: string;
   /** 이 줄에 실제 내용이 있는가(작성률과 **같은 판정**). */
   filled: boolean;
 };
@@ -91,6 +102,13 @@ export type EcsTodayResult =
       cards: TodayClassCard[];
       /** 내 스코프에 영어 반이 아예 없는가 — 빈 화면 문구를 원인별로 가르기 위한 값. */
       hasAnyClass: boolean;
+      /** 계획 편집 가능(ecs full|scoped) — 출결과 별개 게이트다. */
+      canWrite: boolean;
+      /** 영역(구분) 정의 — 라벨·색의 **단일 소스는 학원설정**(주간 시트와 같은 값). */
+      skillAreas: SkillAreaSetting[];
+      /** 저널·presence 식별자(주간 시트와 같은 키를 써야 같은 문서로 인식된다). */
+      userId: string;
+      tenantId: string;
     }
   | { ok: false; error: string };
 
@@ -99,6 +117,8 @@ export async function getEcsToday(dateParam?: string | null): Promise<EcsTodayRe
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
   const level = await accessLevelTenant(user.systemRole, "ecs");
   if (level === "none") return { ok: false, error: "접근 권한이 없습니다" };
+  // 계획 편집 게이트는 주간 시트와 동일(full|scoped). 출결은 별도 게이트(아래 attendanceWritable).
+  const canWrite = level === "full" || level === "scoped";
 
   const today = kstToday();
   const date = dateParam && YMD_RE.test(dateParam) ? dateParam : today;
@@ -106,8 +126,9 @@ export async function getEcsToday(dateParam?: string | null): Promise<EcsTodayRe
 
   const settings = await getTenantSettings();
   const english = settings.operations.subjects.find((s) => s.key === "english");
-  if (resolveSkillAreas(english).length === 0) {
-    return { ok: true, date, today, weekMonday: mondayOf(date), cards: [], hasAnyClass: false };
+  const skillAreas = resolveSkillAreas(english);
+  if (skillAreas.length === 0) {
+    return { ok: true, date, today, weekMonday: mondayOf(date), cards: [], hasAnyClass: false, canWrite, skillAreas, userId: user.id, tenantId: user.tenantId };
   }
 
   const supabase = await createClient();
@@ -132,7 +153,7 @@ export async function getEcsToday(dateParam?: string | null): Promise<EcsTodayRe
   const scoped = (allClasses ?? []).filter((c) => !scopeSet || scopeSet.has(c.id as string));
   const showSelfStudy = readEcsShowSelfStudy(prefsRes.data?.ui_prefs);
   if (scoped.length === 0) {
-    return { ok: true, date, today, weekMonday: mondayOf(date), cards: [], hasAnyClass: false };
+    return { ok: true, date, today, weekMonday: mondayOf(date), cards: [], hasAnyClass: false, canWrite, skillAreas, userId: user.id, tenantId: user.tenantId };
   }
   const scopedIds = scoped.map((c) => c.id as string);
 
@@ -163,23 +184,31 @@ export async function getEcsToday(dateParam?: string | null): Promise<EcsTodayRe
   }
   const todayIds = scopedIds.filter((id) => (slotsByClass.get(id)?.length ?? 0) > 0);
   if (todayIds.length === 0) {
-    return { ok: true, date, today, weekMonday: mondayOf(date), cards: [], hasAnyClass: true };
+    return { ok: true, date, today, weekMonday: mondayOf(date), cards: [], hasAnyClass: true, canWrite, skillAreas, userId: user.id, tenantId: user.tenantId };
   }
 
   // ── 계획·수강·출결·보고서·강의실·담당자 — 서로 독립이라 한 번에(B4) ────────────────────────────
   const [planLines, enrollments, attendanceRaw, rooms, teachers] = await Promise.all([
     fetchAllPagedInChunks<{
+      id: string;
       class_id: string;
+      plan_date: string;
       slot_start: string;
+      term_mode: string;
+      line_no: number;
       skill_area: string | null;
       textbook: string | null;
       page_range: string | null;
       progress: string | null;
       homework: string | null;
+      updated_at: string;
     }>(todayIds, (chunk, from, to) =>
       admin
         .from("class_sheet_plan_lines")
-        .select("class_id, slot_start, skill_area, textbook, page_range, progress, homework")
+        // id·updated_at은 **CAS 저장의 열쇠**다(주간 시트와 같은 경로로 고치려면 없어선 안 된다).
+        .select(
+          "id, class_id, plan_date, slot_start, term_mode, line_no, skill_area, textbook, page_range, progress, homework, updated_at",
+        )
         .eq("tenant_id", user.tenantId)
         .in("class_id", chunk)
         .eq("plan_date", date)
@@ -309,19 +338,28 @@ export async function getEcsToday(dateParam?: string | null): Promise<EcsTodayRe
       const slots: TodaySlot[] = slotRows.map((s) => {
         const start = normalizeSlotTime(s.start_time);
         const end = s.end_time ? normalizeSlotTime(s.end_time) : null;
-        const lines = (linesByKey.get(`${classId}|${start}`) ?? []).map((l) => ({
-          skillArea: l.skill_area,
-          textbook: l.textbook,
-          pageRange: l.page_range,
-          progress: l.progress,
-          homework: l.homework,
-          filled: isMeaningfulPlanLine({
+        const lines = (linesByKey.get(`${classId}|${start}`) ?? [])
+          .slice()
+          .sort((a, b) => a.line_no - b.line_no)
+          .map((l) => ({
+            id: l.id,
+            planDate: l.plan_date,
+            slotStart: start,
+            termMode: l.term_mode,
+            lineNo: l.line_no,
+            skillArea: l.skill_area,
             textbook: l.textbook,
             pageRange: l.page_range,
             progress: l.progress,
             homework: l.homework,
-          }),
-        }));
+            updatedAt: l.updated_at,
+            filled: isMeaningfulPlanLine({
+              textbook: l.textbook,
+              pageRange: l.page_range,
+              progress: l.progress,
+              homework: l.homework,
+            }),
+          }));
         return {
           slotStart: start,
           slotEnd: end,
@@ -366,5 +404,5 @@ export async function getEcsToday(dateParam?: string | null): Promise<EcsTodayRe
     // 시간표 순서 = 그 날 일과 순서. 같은 시각이면 반 이름으로 안정 정렬.
     .sort((a, b) => a.startsAt.localeCompare(b.startsAt) || a.className.localeCompare(b.className, "ko"));
 
-  return { ok: true, date, today, weekMonday: mondayOf(date), cards, hasAnyClass: true };
+  return { ok: true, date, today, weekMonday: mondayOf(date), cards, hasAnyClass: true, canWrite, skillAreas, userId: user.id, tenantId: user.tenantId };
 }

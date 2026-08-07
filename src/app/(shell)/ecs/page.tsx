@@ -172,7 +172,15 @@ function EcsTodayFace({ res, scoped }: { res: EcsTodayResult; scoped: boolean })
             : `${isToday ? "오늘은" : "이 날은"} 수업이 없습니다. 다른 날짜를 보시거나 '주간 시트'에서 이번 주 전체를 확인하세요.`}
         </p>
       ) : (
-        <TodayBoard cards={res.cards} date={res.date} weekMonday={res.weekMonday} />
+        <TodayBoard
+          cards={res.cards}
+          date={res.date}
+          weekMonday={res.weekMonday}
+          skillAreas={res.skillAreas}
+          canWrite={res.canWrite}
+          userId={res.userId}
+          tenantId={res.tenantId}
+        />
       )}
     </div>
   );

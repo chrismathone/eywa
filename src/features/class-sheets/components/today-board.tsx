@@ -18,6 +18,8 @@ import { EyIcon } from "@/components/icons/eywa-icons";
 import { setAttendanceCell } from "@/features/attendance/server/actions";
 import { clearPresentAttendance } from "../server/actions";
 import { AttendanceSelect, type BasicAttendance } from "./attendance-select";
+import type { SkillAreaSetting } from "@/features/owner/settings-types";
+import { TodayPlanEditor } from "./today-plan-editor";
 import type { TodayClassCard, TodayStudent } from "../server/today";
 
 /** 낙관 갱신용 로컬 출결 상태 — `${classId}|${studentId}` → 상태·메모. */
@@ -115,12 +117,20 @@ function ClassCard({
   date,
   att,
   setAtt,
+  skillAreas,
+  canWrite,
+  userId,
+  tenantId,
 }: {
   card: TodayClassCard;
   weekMonday: string;
   date: string;
   att: AttState;
   setAtt: React.Dispatch<React.SetStateAction<AttState>>;
+  skillAreas: SkillAreaSetting[];
+  canWrite: boolean;
+  userId: string;
+  tenantId: string;
 }) {
   const [open, setOpen] = useState(true);
   const marked = card.students.filter((s) => att[`${card.classId}|${s.studentId}`]?.status).length;
@@ -204,33 +214,22 @@ function ClassCard({
         // 계획은 읽는 칸, 학생은 손대는 칸이라 폭을 같게 줄 이유가 없다 — 학생 쪽을 조금 넓게.
         <div className="grid gap-4 px-4 py-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
           <div className="min-w-0">
-            <p className="editorial-eyebrow mb-1.5">수업계획</p>
-            {card.slots.map((slot) => (
-              <div key={slot.slotStart} className="border-line mb-2 border-b pb-2 last:mb-0 last:border-b-0 last:pb-0">
-                <p className="text-text-dim mb-0.5 text-[12px] font-bold">
-                  {slot.periodLabel ?? slot.slotStart}
-                  {slot.roomLabel ? <span className="font-medium"> · {slot.roomLabel}</span> : null}
-                </p>
-                {slot.lines.filter((l) => l.filled).length === 0 ? (
-                  <p className="text-text-faint text-[13px]">아직 계획이 없습니다</p>
-                ) : (
-                  slot.lines
-                    .filter((l) => l.filled)
-                    .map((l, i) => (
-                      <p key={i} className="text-foreground text-[13px] leading-relaxed">
-                        {l.skillArea ? <span className="text-text-dim">{l.skillArea} · </span> : null}
-                        {[l.textbook, l.pageRange, l.progress].filter(Boolean).join(" · ")}
-                        {l.homework ? <span className="text-text-dim"> / 과제 {l.homework}</span> : null}
-                      </p>
-                    ))
-                )}
-              </div>
-            ))}
+            {/* 계획은 **여기서 바로 고친다** — 주간 시트와 같은 저널·CAS·presence를 그대로 쓴다. */}
+            <TodayPlanEditor
+              classId={card.classId}
+              className={card.className}
+              weekMonday={weekMonday}
+              slots={card.slots}
+              skillAreas={skillAreas}
+              canEdit={canWrite}
+              userId={userId}
+              tenantId={tenantId}
+            />
             <Link
               href={`/ecs/${card.classId}?week=${weekMonday}`}
               className="text-primary mt-1 inline-block text-[13px] font-bold underline-offset-2 hover:underline"
             >
-              주간 시트에서 계획 쓰기 →
+              주간 시트 열기 →
             </Link>
           </div>
 
@@ -268,10 +267,18 @@ export function TodayBoard({
   cards,
   date,
   weekMonday,
+  skillAreas,
+  canWrite,
+  userId,
+  tenantId,
 }: {
   cards: TodayClassCard[];
   date: string;
   weekMonday: string;
+  skillAreas: SkillAreaSetting[];
+  canWrite: boolean;
+  userId: string;
+  tenantId: string;
 }) {
   const [att, setAtt] = useState<AttState>(() => initialAtt(cards));
   return (
@@ -284,6 +291,10 @@ export function TodayBoard({
           date={date}
           att={att}
           setAtt={setAtt}
+          skillAreas={skillAreas}
+          canWrite={canWrite}
+          userId={userId}
+          tenantId={tenantId}
         />
       ))}
     </div>
