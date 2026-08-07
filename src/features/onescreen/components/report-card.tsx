@@ -5,7 +5,13 @@ import { EyIcon } from "@/components/icons/eywa-icons";
 import { Pill } from "@/components/atoms/pill";
 import { RecallButton } from "@/features/report-admin/components/recall-button";
 import { isRecallInFlight, isRecallable } from "@/features/report-admin/report-recall";
-import { effectiveClassnoteStatus, isAlreadySent, isReportEligible, isRowActionable } from "../grid";
+import {
+  effectiveClassnoteStatus,
+  isAlreadySent,
+  isMentEditable,
+  isReportEligible,
+  isRowActionable,
+} from "../grid";
 import { evaluateSendGate } from "../send-gate";
 import { checkMentConsistency, MENT_WARNING_HINT, MENT_WARNING_LABEL } from "../ment-consistency";
 import { parentUnreadBadge, progressAnomalyBadge } from "../roster-signals";
@@ -191,10 +197,11 @@ export function ReportCard({
     || isRecallInFlight(liveStatus ?? null);
   // 발송 게이트 = 표뷰와 **같은 단일 소스**(send-gate.ts) — 카드만 다른 판정을 쓰면 한쪽에서만
   // "왜 안 눌리지"가 생긴다(#77). 멘트 미작성도 여기서 막는다(빈 멘트 절대 가드가 어차피 거절).
+  const isAbsent = subject.attendanceRaw === "absent";
   const sendGate = evaluateSendGate({
     recallPending: isRecallInFlight(liveStatus ?? null),
     alreadySent,
-    isAbsent: subject.attendanceRaw === "absent",
+    isAbsent,
     hasProgress: isReportEligible(subject),
     hasDraft: !!rep.draft?.trim(),
   });
@@ -427,8 +434,11 @@ export function ReportCard({
 
         {/* 우측 열 — 문장 작성(멘트·추세) + 발송·첨부·공유링크. */}
         <div className="flex flex-1 flex-col gap-3">
+        {/* ⚠️ 결석이면 이 열만 잠근다(원장 2026-08-07, 표 모드와 같은 계약) — 결석 행은 발송 게이트가
+            구조적으로 막으므로 여기 쓴 문장은 어디로도 안 나간다(다 쓰고 발송에서 막히는 헛수고).
+            왼쪽 열(진도·테스트·태도·과제·메모)은 **기록**이라 결석해도 계속 입력할 수 있어야 한다. */}
         <fieldset
-          disabled={alreadySent}
+          disabled={!isMentEditable(subject, liveStatus)}
           className="contents [&_input:disabled]:opacity-50 [&_textarea:disabled]:opacity-50 [&_select:disabled]:opacity-50 [&_button:disabled]:opacity-50 [&:disabled_*]:cursor-not-allowed"
         >
         <div className="flex flex-1 flex-col gap-1.5">
@@ -446,6 +456,16 @@ export function ReportCard({
               >
                 {para ? "2문단 B" : "단일 A"}
               </span>
+              {/* 🔴 잠근 이유를 **잠긴 칸 옆에** 적는다 — 발송 버튼 옆 사유 알약은 한참 아래라, 문구를 쓰려다
+                  막힌 사람은 그걸 못 본다(원장 2026-07-30 "왜 비활성화됐는지 알 방법이 없다"와 같은 함정). */}
+              {isAbsent && !alreadySent ? (
+                <span
+                  className="border-danger/40 bg-danger-soft text-danger rounded-pill border px-1.5 py-px text-[10px] font-bold"
+                  title="결석 행은 학부모에게 발송되지 않습니다. 진도·태도 등 기록은 왼쪽에서 계속 입력할 수 있습니다."
+                >
+                  결석 — 발송 제외
+                </span>
+              ) : null}
             </div>
             <Button
               variant="ghost"
