@@ -116,6 +116,22 @@ export function verifyPeriodShape(
   };
 }
 
+/**
+ * 인접 세션 사이에 낀 **수업일**(주말·공휴일 제외). 비어 있으면 알릴 것이 없다.
+ * 주말만 뜨는 틈(금요일 끝 → 다음 월요일 시작)은 정상이라 경고하지 않는다.
+ */
+export function findTeachingGapDays(
+  prevEnd: string,
+  nextStart: string,
+  holidays: readonly string[] = [],
+): string[] {
+  const skip = new Set(holidays);
+  return findGapDays(prevEnd, nextStart).filter((d) => {
+    const dow = dowOf(d);
+    return dow >= 1 && dow <= 5 && !skip.has(d);
+  });
+}
+
 /** 인접 세션 사이의 빈 날(어느 세션에도 안 속하는 날). 저장 전 경고용. */
 export function findGapDays(
   prevEnd: string,

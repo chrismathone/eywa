@@ -19,7 +19,12 @@ export type ParseError = {
   lineNo: number;
   raw: string;
   error: string; // 한글 — 화면에 그대로 노출된다
-  labelMonth?: undefined;
+  /**
+   * 월 라벨이 확정된 뒤 난 오류면 그 월. 표 편집기는 12행을 한 줄씩 조립해 넣으므로
+   * **사용자에게 "2번째 줄"은 아무 의미가 없다** — 그 화면은 월로 짚어야 한다.
+   * (붙여넣기 상자는 사용자가 실제로 줄을 보므로 거기서만 lineNo를 쓴다.)
+   */
+  labelMonth?: number;
 };
 
 export type ParseResult = {
@@ -90,40 +95,54 @@ export function parsePeriodLines(year: number, text: string): ParseResult {
 
     const parts = body.split(/\s*[~]\s*|\s+-\s+/);
     if (parts.length !== 2) {
-      errors.push({ lineNo, raw, error: "시작과 끝을 '~'로 이어주세요 (예: 3/6~4/2)" });
+      errors.push({ lineNo, raw, error: "시작과 끝을 '~'로 이어주세요 (예: 3/6~4/2)", labelMonth: forcedMonth ?? undefined });
       return;
     }
 
     const a = parseOneDate(parts[0]);
     const b = parseOneDate(parts[1]);
     if (!a || !b) {
-      errors.push({ lineNo, raw, error: "날짜를 읽을 수 없습니다 (예: 3/6~4/2)" });
+      errors.push({ lineNo, raw, error: "날짜를 읽을 수 없습니다 (예: 3/6~4/2)", labelMonth: forcedMonth ?? undefined });
       return;
     }
 
-    const startYear = a.year ?? year;
+    // 라벨월과 시작월이 **반년 넘게** 벌어지면 해를 넘나든 것이다:
+    //   "1월 12/28~1/24" → 시작은 전해 12/28 (1월 세션이 전해 말에 시작하는 건 정상이다.
+    //    세션이 28~30일 단위로 흘러가므로 해가 바뀔 때마다 반복된다)
+    //   "12월 1/5~1/30"  → 시작은 다음 해 1/5 (방학으로 크게 밀린 경우)
+    // ⚠️ 단순히 "라벨월 < 시작월"로 판정하면 안 된다 — "3월 4/6~5/1"(방학으로 한 달 밀린 정상 입력)까지
+    //    전해로 되감겨 1년이 통째로 어긋난다. 인접한 달 이동은 건드리지 않는 간격 조건이어야 한다.
+    const wrap =
+      forcedMonth === null || a.year !== undefined
+        ? 0
+        : a.month - forcedMonth > 6
+          ? -1
+          : forcedMonth - a.month > 6
+            ? 1
+            : 0;
+    const startYear = a.year ?? year + wrap;
     if (!valid(startYear, a.month, a.day)) {
-      errors.push({ lineNo, raw, error: `시작 날짜가 실제로 없는 날입니다 (${a.month}/${a.day})` });
+      errors.push({ lineNo, raw, error: `시작 날짜가 실제로 없는 날입니다 (${a.month}/${a.day})`, labelMonth: forcedMonth ?? a.month });
       return;
     }
 
     // 끝 연도: 명시가 없으면 시작보다 앞선 달일 때만 다음 해(12/28~1/24).
     const endYear = b.year ?? (b.month < a.month ? startYear + 1 : startYear);
     if (!valid(endYear, b.month, b.day)) {
-      errors.push({ lineNo, raw, error: `끝 날짜가 실제로 없는 날입니다 (${b.month}/${b.day})` });
+      errors.push({ lineNo, raw, error: `끝 날짜가 실제로 없는 날입니다 (${b.month}/${b.day})`, labelMonth: forcedMonth ?? a.month });
       return;
     }
 
     const startDate = `${startYear}-${pad(a.month)}-${pad(a.day)}`;
     const endDate = `${endYear}-${pad(b.month)}-${pad(b.day)}`;
     if (startDate > endDate) {
-      errors.push({ lineNo, raw, error: "끝 날짜가 시작 날짜보다 빠릅니다" });
+      errors.push({ lineNo, raw, error: "끝 날짜가 시작 날짜보다 빠릅니다", labelMonth: forcedMonth ?? a.month });
       return;
     }
 
     const labelMonth = forcedMonth ?? a.month;
     if (seenMonths.has(labelMonth)) {
-      errors.push({ lineNo, raw, error: `${labelMonth}월이 두 번 나옵니다 — 한 달에 세션은 하나입니다` });
+      errors.push({ lineNo, raw, error: `${labelMonth}월이 두 번 나옵니다 — 한 달에 세션은 하나입니다`, labelMonth });
       return;
     }
     seenMonths.add(labelMonth);
@@ -134,16 +153,24 @@ export function parsePeriodLines(year: number, text: string): ParseResult {
   return { rows, errors };
 }
 
-/** 저장된 행들 → 붙여넣기 텍스트(복사·재편집용). "3/6~4/2" 한 줄씩. */
+/**
+ * 저장된 행들 → 붙여넣기 텍스트(복사·재편집용). "3/6~4/2" 한 줄씩.
+ *
+ * 🔴 `labelYear`를 넘기면 **그 해가 아닌 날짜는 연도까지** 찍는다("1월 2025-12-28~1/24").
+ *    안 그러면 왕복(저장→표시→재파싱)에서 연도가 사라져, 다른 달 한 줄만 고쳐 저장해도
+ *    1월 세션이 한 해 뒤로 밀려 재작성된다(파서의 wrap 추론은 보조일 뿐 — 표기가 무손실이어야 한다).
+ */
 export function formatPeriodLines(
   rows: readonly { labelMonth: number; startDate: string; endDate: string }[],
+  labelYear?: number,
 ): string {
-  const short = (iso: string) => {
+  const cell = (iso: string) => {
+    if (labelYear !== undefined && Number(iso.slice(0, 4)) !== labelYear) return iso;
     const [, mm, dd] = iso.split("-");
     return `${Number(mm)}/${Number(dd)}`;
   };
   return [...rows]
     .sort((a, b) => a.labelMonth - b.labelMonth)
-    .map((r) => `${r.labelMonth}월 ${short(r.startDate)}~${short(r.endDate)}`)
+    .map((r) => `${r.labelMonth}월 ${cell(r.startDate)}~${cell(r.endDate)}`)
     .join("\n");
 }

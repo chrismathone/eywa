@@ -106,3 +106,67 @@ export async function getPeriodDefsForYears(years: readonly number[]): Promise<P
 export async function getPeriodDefsForEditor(year: number): Promise<PeriodDef[]> {
   return getPeriodDefs(year);
 }
+
+/**
+ * 과목 삭제·흡수 표면이 쓰는 사용량 카운트.
+ *
+ * ⚠️ operating_periods는 RLS 정책 0개(service_role 전용)라 **사용자 클라이언트로는 0행으로 보인다** —
+ *    그대로 두면 세션이 잔뜩 있는 과목이 "미사용"으로 잡혀 조용히 지워지고, 남은 행은 어느 화면에도
+ *    안 보이는 유령이 된다(subject_key는 FK가 아니라 자유 텍스트다). 그래서 admin으로 센다.
+ *    (CLAUDE.md: "새 subject 컬럼을 추가하면 subject-actions.ts에도 추가")
+ */
+export async function countPeriodsForSubject(tenantId: string, subjectKey: string): Promise<number> {
+  try {
+    const admin = createAdminClient();
+    const { count, error } = await admin
+      .from("operating_periods")
+      .select("*", { count: "exact", head: true }) // 행을 받지 않는다(B2)
+      .eq("tenant_id", tenantId)
+      .eq("subject_key", subjectKey);
+    if (error) {
+      // 표가 아직 없으면(SQL 미적용) 0으로 본다 — 없는 표에 세션이 있을 리 없다.
+      console.warn("[periods] 과목별 세션 수 조회 실패", error.message);
+      return 0;
+    }
+    return count ?? 0;
+  } catch (e) {
+    console.warn("[periods] 과목별 세션 수 조회 예외", e);
+    return 0;
+  }
+}
+
+/**
+ * 과목 흡수(from → to) 시 세션 기간을 옮긴다. 옮기기 전에 **라벨월 충돌**을 먼저 본다 —
+ * 한 (과목, 반, 연·월)에 세션은 하나뿐이라(0189a unique) 겹치면 update가 통째로 실패한다.
+ * 충돌하면 옮기지 않고 그 달 목록을 돌려준다(호출부가 사람에게 안내).
+ */
+export async function moveSubjectPeriods(
+  tenantId: string,
+  fromKey: string,
+  toKey: string,
+): Promise<{ moved: number } | { conflicts: string[] }> {
+  const admin = createAdminClient();
+  const [fromRes, toRes] = await Promise.all([
+    admin.from("operating_periods").select("id, label_year, label_month").eq("tenant_id", tenantId).eq("subject_key", fromKey),
+    admin.from("operating_periods").select("label_year, label_month").eq("tenant_id", tenantId).eq("subject_key", toKey),
+  ]);
+  if (fromRes.error) throw new Error(`세션 기간: ${fromRes.error.message}`);
+  if (toRes.error) throw new Error(`세션 기간: ${toRes.error.message}`);
+
+  const fromRows = fromRes.data ?? [];
+  if (fromRows.length === 0) return { moved: 0 };
+
+  const taken = new Set((toRes.data ?? []).map((r) => `${r.label_year}-${r.label_month}`));
+  const conflicts = fromRows
+    .filter((r) => taken.has(`${r.label_year}-${r.label_month}`))
+    .map((r) => `${r.label_year}년 ${r.label_month}월`);
+  if (conflicts.length > 0) return { conflicts: [...new Set(conflicts)] };
+
+  const { error } = await admin
+    .from("operating_periods")
+    .update({ subject_key: toKey })
+    .eq("tenant_id", tenantId)
+    .eq("subject_key", fromKey);
+  if (error) throw new Error(`세션 기간: ${error.message}`);
+  return { moved: fromRows.length };
+}

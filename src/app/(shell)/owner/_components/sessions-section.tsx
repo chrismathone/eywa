@@ -14,9 +14,9 @@ import { SessionYearEditor } from "./session-year-editor";
  *    "설정은 owner 단일 진입점" 규칙은 tenant_settings 직접 쓰기 금지(#59)에 대한 것이라 충돌하지 않는다.
  */
 export async function SessionsSection({ year }: { year: number }) {
-  const settings = await getTenantSettings();
+  // 서로 독립인 조회 — 직렬로 두면 왕복이 합산된다(B4).
+  const [settings, defs] = await Promise.all([getTenantSettings(), getPeriodDefsForEditor(year)]);
   const subjects = buildSubjectMaps(settings.operations.subjects).options;
-  const defs = await getPeriodDefsForEditor(year);
   const holidays = settings.operations.holidays.map((h) => h.date);
 
   const years = [year - 1, year, year + 1];

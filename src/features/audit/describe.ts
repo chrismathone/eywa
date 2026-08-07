@@ -21,6 +21,7 @@ export const AUDIT_TYPE_LABEL: Record<string, string> = {
   intake_token: "QR 접수 링크",
   notice_popup: "팝업 공지",
   classnote_notice: "학부모 공지",
+  operating_periods: "세션 기간",
 };
 
 // 시험유형은 운영 enum이 아니라 코드 고정(CLAUDE.md) — exams 화면과 동일 라벨.
