@@ -35,6 +35,7 @@ import type { PeriodsConfig } from "@/features/timetable/lib/periods";
 import { TimetableZoomArea } from "./font-size-toggle";
 import { GroupPresetBar } from "./group-preset-bar";
 import { RichCardGroupBoard, ClassColumn, NAME_H, type ColumnCommon } from "./rich-card-group";
+import { clearTimetableUnsaved, useTimetableUnsavedGuard } from "./timetable-unsaved";
 
 /**
  * 통합뷰 **'그룹 설정'(배치 편집) 모드** — 통합뷰 그 자체에서 반(=열)을 잡아 다른 줄로 끌어 옮긴다
@@ -214,6 +215,7 @@ export function IntegratedEditBoard({
       setConfirmLeave(true);
       return;
     }
+    clearTimetableUnsaved(); // 내 네비에 내 경고가 또 뜨지 않게 먼저 푼다
     router.push(doneHref, { scroll: false });
   }
 
@@ -258,10 +260,14 @@ export function IntegratedEditBoard({
         setError(res.error);
         return;
       }
+      clearTimetableUnsaved(); // 반영했으니 미저장 아님
       router.push(doneHref, { scroll: false });
       router.refresh();
     });
   }
+
+  // 주·과목·구분·뷰 전환(ParamLink)·창 닫기·새로고침에 확인을 붙인다 — 편집이 조용히 사라지던 것.
+  useTimetableUnsavedGuard(dirty);
 
   const rowIndexOf = (id: string | undefined) => groups.findIndex((g) => g.id === id);
   const seenRows = new Set<string>(); // 한 줄이 평일/주말 두 섹션으로 갈릴 때 머리글 컨트롤은 첫 섹션에만
