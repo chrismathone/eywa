@@ -1,6 +1,6 @@
 // 수강료 안내문 — ijw `TuitionInvoicePreview` 문서부 이식. 계산기 우측 라이브 미리보기 + 인쇄.
 // 순수 표시 컴포넌트(훅 없음 → 클라이언트 트리에서 사용 가능). 계산은 quote-calc 순수함수.
-import { splitCoursesByMonth, quoteTotal } from "@/features/billing/quote-calc";
+import { sessionsLabel, splitCoursesByMonth, quoteTotal } from "@/features/billing/quote-calc";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 import type { QuoteStudent, QuoteCourse, QuoteExtra, QuoteDiscount } from "@/features/billing/quote-calc";
 import type { AccountSetting } from "@/features/owner/settings-types";
@@ -119,7 +119,7 @@ export function QuoteDocument({
                   <td className={CELL} />
                   <td className={CELL}>{l.name} 소계</td>
                   <td className={CELL} />
-                  <td className={`${CELL} text-center`}>{l.sessions}회</td>
+                  <td className={`${CELL} text-center`}>{sessionsLabel(l)}</td>
                   <td className={`${CELL} num text-right`}>{won(l.price)}</td>
                   <td className={CELL} />
                 </tr>
@@ -128,11 +128,9 @@ export function QuoteDocument({
                   <td className={CELL}>{[l.month, l.category].filter(Boolean).join(" ")}</td>
                   <td className={CELL}>{l.name}</td>
                   <td className={`${CELL} text-center`}>{l.days}</td>
-                  {/* 🔴 월 고정 과목은 회차를 안 적는 경우가 많다 — 그대로 그리면 학부모 종이에 **"0회"**가
-                      찍힌다(27만원인데 0회 = 읽는 사람이 계산을 못 한다). 회차가 없으면 '월 정액'으로 적는다. */}
-                  <td className={`${CELL} text-center`}>
-                    {l.feeKind === "monthly" && !l.sessions ? "월 정액" : `${l.sessions}회`}
-                  </td>
+                  {/* 🔴 학부모 종이에 **"0회"**를 찍지 않는다(원장: *"시수가 0으로 출력되면 학부모는 '?'를
+                      생각할듯"*). 판정은 `sessionsLabel` 단일 소스 — 월 고정은 '월 정액', 회당은 '—'. */}
+                  <td className={`${CELL} text-center`}>{sessionsLabel(l)}</td>
                   <td className={`${CELL} num text-right`}>{won(l.price)}</td>
                   <td className={`${CELL} text-text-dim text-[11px]`}>{l.note}</td>
                 </tr>

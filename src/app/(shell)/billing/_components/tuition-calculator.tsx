@@ -11,6 +11,7 @@ import { DISCOUNT_CATEGORY, type TuitionCatalogOption } from "@/features/billing
 import { koreanHolidayDatesForRange } from "@/features/billing/holidays-data";
 import {
   autoSessions,
+  monthlySessionsFor,
   feeKindFromPricingMode,
   groupByFeeKind,
   normalizeLoadedCourses,
@@ -165,8 +166,13 @@ export function TuitionCalculator({
   const unionHol = (s: QuoteStudent) =>
     Array.from(new Set([...holidays, ...koreanHolidayDatesForRange(s.startDate, s.endDate)]));
   const recompute = (c: QuoteCourse, s: QuoteStudent): QuoteCourse => {
-    if (c.fixedMonthly) return c;
-    const sessions = autoSessions(c.days, s.startDate, s.endDate, c.excludeHolidays ? unionHol(s) : []);
+    const hol = c.excludeHolidays ? unionHol(s) : [];
+    // 🔴 월 고정도 **회차는 센다**(원장 2026-08-07) — 고정된 건 금액이지 회차가 아니다. 예전엔 여기서
+    //    통째로 돌아가 요일을 적어도 '월 N회'가 0으로 남았고, 그대로 학부모 안내문에 실렸다.
+    //    ⚠️ 금액은 손대지 않는다(월 정액은 회차와 무관하게 사람이 정한 값).
+    // 요일이 없으면 사람이 적은 '월 N회'를 지킨다(monthlySessionsFor 주석 — 자동 계산이 0으로 지워 버린다).
+    if (c.fixedMonthly) return { ...c, sessions: monthlySessionsFor(c, s.startDate, s.endDate, hol) };
+    const sessions = autoSessions(c.days, s.startDate, s.endDate, hol);
     // 🔴 **회당 단가가 없으면 금액을 건드리지 않는다.** 단가표에 종류가 없는 항목은 perSession이 0으로
     //    들어오는데, 예전엔 그대로 곱해 **금액이 0원으로 죽었다**(요일을 고칠 때마다 다시 0으로 덮였다).
     //    시수는 그대로 갱신하고 금액은 사람이 넣은 값을 지킨다 — 단가를 채우면 그때부터 자동 계산된다.
@@ -207,7 +213,8 @@ export function TuitionCalculator({
       cs.map((c) => {
         if (c.uid !== uid) return c;
         const next = { ...c, ...patch };
-        if (!next.fixedMonthly && ("days" in patch || "excludeHolidays" in patch || "fixedMonthly" in patch)) {
+        // 요일·공휴일·구분이 바뀌면 회차를 다시 센다 — **월 고정도 포함**(recompute가 구분에 맞게 갈라 준다).
+        if ("days" in patch || "excludeHolidays" in patch || "fixedMonthly" in patch) {
           return recompute(next, student);
         }
         // 시수·회당 단가를 고치면 금액을 다시 곱한다. ⚠️ 단가가 0이면(=미지정 항목) **금액을 지키고**
@@ -311,13 +318,9 @@ export function TuitionCalculator({
           <CatalogPicker options={courseOpts} placeholder="+ 과목 추가 (단가표)" onPick={addCourse} />
           {/* 🔴 **두 부류를 갈라 보여준다**(원장 2026-08-07: *"월 고정 금액을 받는 수업과 회당 수업을 받는
               수업으로 분리"*). 섞여 있으면 27만원이 월 금액인지 회당 단가인지 목록만 봐서는 알 수 없다.
-              ⚠️ 화면에서만 나눈다 — `courses` 배열 순서는 안 건드린다(안내문이 그 순서로 인쇄된다). */}
-          {byKind.monthly.length && byKind.perSession.length ? (
-            <p className="text-text-faint text-[11px]">
-              월 고정 {byKind.monthly.length}건 <b className="num">{won(byKind.monthlyTotal)}</b> · 회당{" "}
-              {byKind.perSession.length}건 <b className="num">{won(byKind.perSessionTotal)}</b>
-            </p>
-          ) : null}
+              ⚠️ 화면에서만 나눈다 — `courses` 배열 순서는 안 건드린다(안내문이 그 순서로 인쇄된다).
+              ⚠️ 구분별 건수·합계 줄은 **두지 않는다**(원장 2026-08-07: *"상단에 이건 필요없을듯. 어차피
+                 우측에 나오잖아"*) — 같은 숫자를 안내문이 이미 보여준다. */}
           {(
             [
               ["월 고정 금액", byKind.monthly, "금액을 그대로 청구합니다(월 정액)"],

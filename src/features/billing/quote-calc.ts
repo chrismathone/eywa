@@ -309,6 +309,37 @@ export function splitCoursesByMonth(
   return out;
 }
 
+/**
+ * 월 고정 행의 **적용할 회차** — 요일이 있으면 세고, 없으면 **사람이 적은 값을 지킨다**.
+ *
+ * 🔴 요일 없이 '월 N회'만 손으로 적는 쓰임이 실제로 있다. 거기에 자동 계산을 무조건 걸면 0이 나와
+ *    **사람이 적은 숫자를 지워 버린다**(기간을 바꾸거나 공휴일 칩을 누르는 순간 조용히). 자동 계산은
+ *    셀 근거가 있을 때만 한다 — 회당 행의 "단가가 0이면 금액을 안 건드린다"와 같은 규약.
+ */
+export function monthlySessionsFor(
+  course: Pick<QuoteCourse, "days" | "sessions">,
+  startDate: string,
+  endDate: string,
+  holidays: string[],
+): number {
+  if (!course.days.trim()) return course.sessions;
+  return autoMonthlySessions(course.days, startDate, endDate, holidays);
+}
+
+/**
+ * 안내문 회차 칸 표기 — 🔴 **학부모에게 "0회"를 보여주지 않는다**(원장 2026-08-07:
+ * *"학부모에게 시수가 0으로 출력되면 학부모는 '?'를 생각할듯"*).
+ *
+ * 0이 나오는 경로가 둘이라 답도 둘이다:
+ *  · **월 고정인데 요일을 안 적었다** → 회차가 없는 게 아니라 **금액이 회차와 무관**한 것 → "월 정액".
+ *  · **회당인데 아직 요일·시수가 없다** → 그냥 **아직 안 정해진 것** → "—"(비었다고 정직하게).
+ * 회차가 있으면 두 구분 모두 "N회".
+ */
+export function sessionsLabel(line: Pick<MonthlyLine, "sessions" | "feeKind">): string {
+  if (line.sessions > 0) return `${line.sessions}회`;
+  return line.feeKind === "monthly" ? "월 정액" : "—";
+}
+
 export type QuoteTotals = {
   courseTotal: number;
   extraTotal: number;
@@ -341,4 +372,27 @@ export function autoSessions(
   holidays: string[],
 ): number {
   return countSessions(startDate, endDate, parseDays(days), holidays);
+}
+
+/**
+ * **월 고정 과목의 '월 N회'** — 요일로 세되 **첫 달 구간만** 센다(원장 2026-08-07:
+ * *"월고정일때는 요일을 적어도 월N회가 카운트 처리 안되고 0으로 가만히 있는걸?"*).
+ *
+ * 🔴 월 고정이라고 **회차가 없는 게 아니다.** 고정된 것은 금액이고, 주 몇 회인지는 여전히 사실이다.
+ *    예전엔 `fixedMonthly`면 자동 계산을 통째로 건너뛰어서 요일을 적어도 0회로 남았고, 그대로 저장하면
+ *    학부모 안내문에 회차가 안 찍혔다.
+ * 🔴 **기간 전체가 아니라 첫 달**인 이유: 칸 이름이 '월 N회'다. 3개월짜리 견적에서 기간 전체를 세면
+ *    36회가 들어가 라벨과 어긋난다(회당 과목은 기간 전체가 맞다 — 그쪽은 '시수'다).
+ *    기간이 한 달이면(기본값) 둘은 같은 수다.
+ * ⚠️ **금액은 절대 안 건드린다** — 월 고정의 금액은 회차와 무관하게 사람이 정한 값이다.
+ */
+export function autoMonthlySessions(
+  days: string,
+  startDate: string,
+  endDate: string,
+  holidays: string[],
+): number {
+  const first = monthsBetween(startDate, endDate)[0];
+  if (!first) return 0;
+  return countSessions(first.start, first.end, parseDays(days), holidays);
 }

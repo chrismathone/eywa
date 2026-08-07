@@ -16,6 +16,15 @@ const KRW = new Intl.NumberFormat("ko-KR");
 const input =
   "border-line bg-background text-foreground placeholder:text-text-faint w-full rounded-md border px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary/40";
 const num = (v: string) => Math.max(0, Number(v.replace(/[,\s]/g, "")) || 0);
+/**
+ * 숫자 칸 표시값 — **0이면 빈 칸**(원장 2026-08-07: *"시수를 전부 지우면 0이 되는데 12를 적으면 012가 됨"*).
+ *
+ * 🔴 뿌리는 "지웠는데 0이 남는 것"이다. 칸을 비우면 `0`이 박혀 있고, 거기에 이어 쓰면 `012`가 된다
+ *    (값은 12로 읽히지만 눈에는 012라 사람이 자기 입력을 못 믿는다). 빈 칸을 빈 칸으로 두면 그 일이 없다.
+ * ⚠️ 여기서 0과 미입력은 **같은 뜻**이다(시수 0 = 아직 안 정함, 금액 0 = 아직 안 적음) — 둘을 가를
+ *    필요가 없으므로 표시만 비운다. 저장값은 그대로 0.
+ */
+const numValue = (n: number) => (n ? String(n) : "");
 
 /** 단가표(활성)에서 항목을 골라 추가 — value=""로 리셋되는 picker. */
 export function CatalogPicker({
@@ -134,7 +143,8 @@ export function CourseEditor({
               min="0"
               step="1000"
               className={`${input} num text-right`}
-              value={course.perSession}
+              value={numValue(course.perSession)}
+            placeholder="0"
               onChange={(e) => onPatch({ perSession: num(e.target.value) })}
             />
           </label>
@@ -145,7 +155,8 @@ export function CourseEditor({
             type="number"
             min="0"
             className={`${input} num text-right`}
-            value={course.sessions}
+            value={numValue(course.sessions)}
+            placeholder="0"
             onChange={(e) => onPatch({ sessions: num(e.target.value) })}
           />
         </label>
@@ -156,7 +167,8 @@ export function CourseEditor({
             min="0"
             step="1000"
             className={`${input} num text-right`}
-            value={course.price}
+            value={numValue(course.price)}
+            placeholder="0"
             onChange={(e) => onPatch({ price: num(e.target.value) })}
           />
         </label>
@@ -198,7 +210,8 @@ export function ExtraEditor({
           min="0"
           step="1000"
           className={`${input} num text-right`}
-          value={extra.price}
+          value={numValue(extra.price)}
+            placeholder="0"
           onChange={(e) => onPatch({ price: num(e.target.value) })}
         />
       </label>
@@ -233,7 +246,8 @@ export function DiscountEditor({
             min="0"
             step="1000"
             className={`${input} num pl-5 text-right`}
-            value={discount.amount}
+            value={numValue(discount.amount)}
+            placeholder="0"
             onChange={(e) => onPatch({ amount: num(e.target.value) })}
           />
         </div>

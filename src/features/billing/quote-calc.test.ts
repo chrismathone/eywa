@@ -5,12 +5,15 @@ import {
   splitCoursesByMonth,
   quoteTotal,
   autoSessions,
+  autoMonthlySessions,
+  monthlySessionsFor,
   feeKindOf,
   feeKindFromPricingMode,
   needsFeeKindCheck,
   groupByFeeKind,
   normalizeLoadedCourse,
   normalizeLoadedCourses,
+  sessionsLabel,
   FEE_KIND_LABEL,
   type QuoteCourse,
 } from "./quote-calc";
@@ -398,5 +401,92 @@ describe("normalizeLoadedCourse — 월 정액이 '회당'으로 저장된 행",
   it("목록 전체에 적용된다", () => {
     const out = normalizeLoadedCourses([eie(), course({ perSession: 0, price: 100000, fixedMonthly: true })]);
     expect(out.map((c) => c.fixedMonthly)).toEqual([true, true]);
+  });
+});
+
+/**
+ * 월 고정 과목의 '월 N회'(원장 2026-08-07: *"월고정일때는 요일을 적어도 월N회가 카운트 처리 안되고
+ * 0으로 가만히 있는걸?"*). 고정된 것은 **금액**이지 회차가 아니다.
+ */
+describe("autoMonthlySessions — 첫 달만 센다", () => {
+  const HOL: string[] = [];
+
+  it("기간이 한 달이면 전체 기간 계산과 같다", () => {
+    const days = "월,수,금";
+    expect(autoMonthlySessions(days, "2026-08-01", "2026-08-31", HOL)).toBe(
+      autoSessions(days, "2026-08-01", "2026-08-31", HOL),
+    );
+  });
+
+  // 🔴 칸 이름이 '월 N회'다 — 3개월 견적에서 기간 전체를 세면 36회가 들어가 라벨과 어긋난다.
+  it("여러 달이면 첫 달 몫만 — 기간 전체(회당 '시수')보다 적다", () => {
+    const days = "월,수,금";
+    const month = autoMonthlySessions(days, "2026-08-01", "2026-10-31", HOL);
+    const whole = autoSessions(days, "2026-08-01", "2026-10-31", HOL);
+    expect(month).toBe(autoSessions(days, "2026-08-01", "2026-08-31", HOL));
+    expect(month).toBeLessThan(whole);
+  });
+
+  it("달 중간에 시작하면 그 달의 남은 날만 센다(지어내지 않는다)", () => {
+    const days = "월,수,금";
+    expect(autoMonthlySessions(days, "2026-08-20", "2026-09-19", HOL)).toBe(
+      autoSessions(days, "2026-08-20", "2026-08-31", HOL),
+    );
+  });
+
+  it("요일이 없거나 기간이 뒤집혔으면 0", () => {
+    expect(autoMonthlySessions("", "2026-08-01", "2026-08-31", HOL)).toBe(0);
+    expect(autoMonthlySessions("월", "2026-08-31", "2026-08-01", HOL)).toBe(0);
+  });
+
+  it("공휴일 제외가 반영된다", () => {
+    const days = "월,화,수,목,금";
+    const base = autoMonthlySessions(days, "2026-08-01", "2026-08-31", []);
+    const less = autoMonthlySessions(days, "2026-08-01", "2026-08-31", ["2026-08-03", "2026-08-04"]);
+    expect(less).toBe(base - 2);
+  });
+});
+
+// 🔴 학부모 종이에 "0회"를 찍지 않는다(원장 2026-08-07: *"학부모에게 시수가 0으로 출력되면 학부모는
+//    '?'를 생각할듯"*). 0이 나오는 경로가 둘이라 답도 둘이다.
+describe("sessionsLabel — 안내문 회차 칸", () => {
+  it("회차가 있으면 두 구분 모두 'N회'", () => {
+    expect(sessionsLabel({ sessions: 12, feeKind: "monthly" })).toBe("12회");
+    expect(sessionsLabel({ sessions: 9, feeKind: "per_session" })).toBe("9회");
+  });
+
+  it("월 고정인데 회차가 없으면 '월 정액'(금액이 회차와 무관하다는 뜻)", () => {
+    expect(sessionsLabel({ sessions: 0, feeKind: "monthly" })).toBe("월 정액");
+  });
+
+  it("회당인데 회차가 없으면 '—'(아직 안 정해진 것을 지어내지 않는다)", () => {
+    expect(sessionsLabel({ sessions: 0, feeKind: "per_session" })).toBe("—");
+    expect(sessionsLabel({ sessions: 0 })).toBe("—"); // 구분 미상(옛 행)도 같은 취급
+  });
+
+  it("어떤 경우에도 '0회'는 나오지 않는다", () => {
+    for (const k of ["monthly", "per_session", undefined] as const) {
+      expect(sessionsLabel({ sessions: 0, feeKind: k })).not.toContain("0회");
+    }
+  });
+});
+
+// 🔴 요일 없이 '월 N회'만 손으로 적는 쓰임이 실제로 있다 — 자동 계산이 그 숫자를 지우면 안 된다
+//    (기간을 바꾸거나 공휴일 칩을 누르는 순간 조용히 0이 됐다. 적대 리뷰 2026-08-07에서 잡음).
+describe("monthlySessionsFor — 셀 근거가 없으면 사람 값을 지킨다", () => {
+  it("요일이 있으면 첫 달 기준으로 센다", () => {
+    expect(monthlySessionsFor({ days: "월,수,금", sessions: 4 }, "2026-08-01", "2026-08-31", [])).toBe(
+      autoMonthlySessions("월,수,금", "2026-08-01", "2026-08-31", []),
+    );
+  });
+
+  it("요일이 비어 있으면 손으로 적은 회차를 그대로 둔다", () => {
+    expect(monthlySessionsFor({ days: "", sessions: 4 }, "2026-08-01", "2026-09-30", [])).toBe(4);
+    expect(monthlySessionsFor({ days: "   ", sessions: 12 }, "2026-08-01", "2026-08-31", [])).toBe(12);
+  });
+
+  it("요일이 있는데 공휴일로 0이 되면 0이 맞다(그건 계산 결과다)", () => {
+    const hol = ["2026-08-03", "2026-08-10", "2026-08-17", "2026-08-24", "2026-08-31"];
+    expect(monthlySessionsFor({ days: "월", sessions: 9 }, "2026-08-01", "2026-08-31", hol)).toBe(0);
   });
 });
