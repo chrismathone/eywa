@@ -32,9 +32,12 @@ export default async function EcsLandingPage({
 }) {
   await requireAccess("ecs");
   const { week, view, date } = await searchParams;
-  // 강사(스코프 有)는 '오늘'이 기본, 관리자는 '주간'이 기본. `?view=`가 있으면 그게 이긴다.
+  // 🔴 '오늘' 면은 **강사 스코프 전용**이다. 스코프가 없는 사람(사무실)에게 이 면은 그 날 운영 중인
+  // 영어 반 **전부**(실측 24반)를 편집기·저널·presence 채널과 함께 펼친다 — 쓸 일도 없는 화면에
+  // IndexedDB 문서 24개와 realtime 채널 24개를 여는 셈이다(2026-08-07 적대적 리뷰).
+  // 학원 전체의 하루를 보는 건 시간표의 일이다. `?view=today`를 손으로 넣어도 주간으로 떨어뜨린다.
   const scoped = (await effectiveTeacherScope()) !== null;
-  const face: "today" | "week" = view === "week" ? "week" : view === "today" ? "today" : scoped ? "today" : "week";
+  const face: "today" | "week" = scoped ? (view === "week" ? "week" : "today") : "week";
 
   if (face === "today") {
     const todayRes = await getEcsToday(date ?? null);
@@ -63,7 +66,8 @@ export default async function EcsLandingPage({
       />
 
       <div className="bg-card shadow-card flex flex-wrap items-center gap-3 rounded-2xl px-4 py-3">
-        <EcsFaceTabs face="week" />
+        {/* 면 전환은 **'오늘'을 쓸 수 있는 사람에게만** 보인다 — 눌러도 주간으로 돌아오는 탭은 거짓 어포던스다. */}
+        {scoped ? <EcsFaceTabs face="week" /> : null}
         <WeekNav currentWeek={res.weekMonday} today={res.today} hrefForWeek={(monday) => `/ecs?view=week&week=${monday}`} />
         {/* 프로그램 필터(EiE / 인재원 영어) — 계정 귀속. 시트 가져오기 왼쪽에 붙여 주 네비와 한 줄. */}
         <EcsTrackFilter value={res.trackFilter} counts={res.trackCounts} />
@@ -172,7 +176,11 @@ function EcsTodayFace({ res, scoped }: { res: EcsTodayResult; scoped: boolean })
             : `${isToday ? "오늘은" : "이 날은"} 수업이 없습니다. 다른 날짜를 보시거나 '주간 시트'에서 이번 주 전체를 확인하세요.`}
         </p>
       ) : (
+        // 🔴 `key={date}` — 날짜 이동은 searchParam 네비라 React가 이 클라 컴포넌트를 **재사용**한다.
+        // 출결 낙관 상태는 `useState` 초기값으로만 만들어져, 같은 반이 두 요일에 걸치면 **어제 찍은 값이
+        // 오늘 칸에 그대로 보인다**(2026-08-07 적대적 리뷰). 원스크린이 같은 이유로 `key={roster.date}`를 쓴다.
         <TodayBoard
+          key={res.date}
           cards={res.cards}
           date={res.date}
           weekMonday={res.weekMonday}

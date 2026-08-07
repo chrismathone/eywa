@@ -11,7 +11,7 @@ import { resolveSkillAreas } from "@/features/owner/skill-areas";
 import type { SkillAreaSetting } from "@/features/owner/settings-types";
 import { effectiveAttendanceRecords } from "@/features/attendance/effective-records";
 import { isWithinAttendanceEditWindow } from "@/features/attendance/edit-window";
-import { enrollmentAttendsOnDay } from "@/features/enrollments/eligibility";
+import { enrollmentAttendsOnDay, isEnrollmentActiveOn } from "@/features/enrollments/eligibility";
 import { mondayOf } from "@/features/timetable/lib/week";
 import { resolvePeriodLabel, tableToEntries } from "../lib/period-label";
 import { isWeekendDow } from "../lib/grid-rows";
@@ -91,6 +91,12 @@ export type TodayClassCard = {
   fill: { total: number; filled: number };
   /** 출석 입력 가능(권한 + 강사 7일 창) — false면 화면이 체크를 잠그고 이유를 말한다. */
   canMarkAttendance: boolean;
+  /**
+   * 오늘 화면이 **안 그리는** 계획 행 수 — 살아있는 배치에 없는 시각(시간 변경된 기록)이거나 자리(LAB·숨긴 JJ).
+   * ⚠️ 0이 아니면 반드시 각주로 알린다. 화면에서 빼는 것과 DB에서 지우는 건 다르고, 침묵하면
+   *    **"분명히 썼는데 안 보인다"**가 된다(주간 시트가 같은 것을 '시간 변경된 기록 N건'으로 말한다).
+   */
+  hiddenLines: number;
 };
 
 export type EcsTodayResult =
@@ -215,14 +221,26 @@ export async function getEcsToday(dateParam?: string | null): Promise<EcsTodayRe
         .order("id")
         .range(from, to),
     ),
+    // 🔴 **출결 게이트(`checkStudentEligibleOn`)와 같은 조건이어야 한다** — 날짜·요일만 보고 명단을 만들면
+    //    보류(on_hold)·전출(is_transferred)·퇴원(students.withdrawn_at) 학생이 목록에 뜨고, 출결을 찍는
+    //    순간 서버가 "그 날짜에 이 반을 수강하지 않는 학생입니다"로 거절한다 = **"목록엔 뜨는데 못 찍음"**.
+    //    (2026-08-07 적대적 리뷰. 실측 당시 해당 학생 0명이라 화면상 멀쩡했지만, 한 명만 생기면 바로 터진다.)
     fetchAllPagedInChunks<{
       class_id: string;
       student_id: string;
       attendance_days: string[] | null;
+      start_date: string;
+      end_date: string | null;
+      on_hold: boolean;
+      is_transferred: boolean | null;
+      // PostgREST 임베드는 **배열**로 타이핑된다(!inner라 실제론 0~1개) — 아래에서 [0]로 읽는다.
+      students: { withdrawn_at: string | null }[] | null;
     }>(todayIds, (chunk, from, to) =>
       supabase
         .from("enrollments")
-        .select("class_id, student_id, attendance_days")
+        .select(
+          "class_id, student_id, attendance_days, start_date, end_date, on_hold, is_transferred, students!inner(withdrawn_at)",
+        )
         .in("class_id", chunk)
         .lte("start_date", date)
         .or(`end_date.is.null,end_date.gte.${date}`)
@@ -278,20 +296,37 @@ export async function getEcsToday(dateParam?: string | null): Promise<EcsTodayRe
     grade: string | null;
   }>(studentIds, (chunk) => supabase.from("students").select("id, name, school, grade").in("id", chunk));
 
-  // 보고서 상태 — 그 날짜·그 학생들. 영어 반 보고서만 보면 되므로 class_id로 좁힌다.
-  const reports = await fetchAllPagedInChunks<{
-    student_id: string;
-    class_id: string | null;
-    classnote_status: string | null;
-  }>(todayIds, (chunk, from, to) =>
-    supabase
-      .from("lesson_reports")
-      .select("student_id, class_id, classnote_status")
-      .in("class_id", chunk)
-      .eq("report_date", date)
-      .order("id")
-      .range(from, to),
-  );
+  // 보고서 상태 — 그 날짜·그 학생들.
+  // ⚠️ **`class_id`로만 매칭하면 보강 보고서를 놓친다** — 원스크린은 보강을 `class_id=null` + `subject`로
+  //    저장한다(unit_key가 `coalesce(class_id, subject)`라 같은 반 정규 보고서와 충돌하기 때문).
+  //    그래서 학생 기준으로 한 번 더 훑어 `class_id is null AND subject='english'`도 '작성'으로 센다
+  //    (2026-08-07 적대적 리뷰 — 안 그러면 보강을 써 놓고도 배지가 '미작성'이라 다시 쓰게 만든다).
+  const [reports, subjectReports] = await Promise.all([
+    fetchAllPagedInChunks<{ student_id: string; class_id: string | null; classnote_status: string | null }>(
+      todayIds,
+      (chunk, from, to) =>
+        supabase
+          .from("lesson_reports")
+          .select("student_id, class_id, classnote_status")
+          .in("class_id", chunk)
+          .eq("report_date", date)
+          .order("id")
+          .range(from, to),
+    ),
+    fetchAllPagedInChunks<{ student_id: string; classnote_status: string | null }>(
+      studentIds,
+      (chunk, from, to) =>
+        supabase
+          .from("lesson_reports")
+          .select("student_id, classnote_status")
+          .in("student_id", chunk)
+          .is("class_id", null)
+          .eq("subject", "english")
+          .eq("report_date", date)
+          .order("id")
+          .range(from, to),
+    ),
+  ]);
 
   const roomName = new Map(rooms.map((r) => [r.id, r.name]));
   const teacherName = new Map(teachers.map((t) => [t.id, t.display_name]));
@@ -312,6 +347,16 @@ export async function getEcsToday(dateParam?: string | null): Promise<EcsTodayRe
     const key = `${r.class_id}|${r.student_id}`;
     const prev = reportByKey.get(key);
     reportByKey.set(key, {
+      written: true,
+      sent: (prev?.sent ?? false) || r.classnote_status === "success",
+    });
+  }
+  // 반이 없는(보강) 영어 보고서 — 학생 단위라 그 학생이 오늘 듣는 **모든 영어 반**에 같은 상태를 얹는다.
+  // 과목 단위 저장이라 그게 그 값의 의미다(어느 반의 보강인지 DB가 구분하지 않는다).
+  const subjectReportByStudent = new Map<string, { written: boolean; sent: boolean }>();
+  for (const r of subjectReports) {
+    const prev = subjectReportByStudent.get(r.student_id);
+    subjectReportByStudent.set(r.student_id, {
       written: true,
       sent: (prev?.sent ?? false) || r.classnote_status === "success",
     });
@@ -369,13 +414,28 @@ export async function getEcsToday(dateParam?: string | null): Promise<EcsTodayRe
         };
       });
 
-      // 그 날 실제 수강 대상(분리등원 요일 반영) — 화면에 안 오는 학생을 출석 목록에 올리지 않는다.
+      // 그 날 실제 수강 대상 — **출결 게이트와 같은 판정**(기간·보류·전출·퇴원 + 분리등원 요일).
       const roster = enrollments
-        .filter((e) => e.class_id === classId && enrollmentAttendsOnDay(e.attendance_days, dow))
+        .filter(
+          (e) =>
+            e.class_id === classId &&
+            !((e.students?.[0]?.withdrawn_at ?? null) !== null && e.students![0]!.withdrawn_at! < date) &&
+            isEnrollmentActiveOn(
+              {
+                startDate: e.start_date,
+                endDate: e.end_date,
+                onHold: e.on_hold,
+                isTransferred: e.is_transferred ?? undefined,
+              },
+              date,
+            ) &&
+            enrollmentAttendsOnDay(e.attendance_days, dow),
+        )
         .map((e) => {
           const meta = studentMeta.get(e.student_id);
           const att = attByKey.get(`${classId}|${e.student_id}`);
           const rep = reportByKey.get(`${classId}|${e.student_id}`);
+          const subjRep = subjectReportByStudent.get(e.student_id);
           return {
             studentId: e.student_id,
             name: meta?.name ?? "(이름 없음)",
@@ -383,8 +443,8 @@ export async function getEcsToday(dateParam?: string | null): Promise<EcsTodayRe
             grade: meta?.grade ?? null,
             attendance: att?.status ?? null,
             attendanceNote: att?.note ?? null,
-            reportWritten: rep?.written ?? false,
-            reportSent: rep?.sent ?? false,
+            reportWritten: (rep?.written ?? false) || (subjRep?.written ?? false),
+            reportSent: (rep?.sent ?? false) || (subjRep?.sent ?? false),
           };
         })
         .sort((a, b) => a.name.localeCompare(b.name, "ko"));
@@ -399,6 +459,10 @@ export async function getEcsToday(dateParam?: string | null): Promise<EcsTodayRe
         students: roster,
         fill: { total: slots.length, filled: slots.filter((s) => s.lines.some((l) => l.filled)).length },
         canMarkAttendance: attendanceWritable,
+        // 그 반의 오늘 계획 행 중 위 slots에 실리지 않은 것 = 안 그리는 기록(고아 시각 or 자리).
+        hiddenLines:
+          planLines.filter((l) => l.class_id === classId).length -
+          slots.reduce((n, s) => n + s.lines.length, 0),
       };
     })
     // 시간표 순서 = 그 날 일과 순서. 같은 시각이면 반 이름으로 안정 정렬.

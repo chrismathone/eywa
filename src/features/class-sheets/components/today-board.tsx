@@ -225,6 +225,14 @@ function ClassCard({
               userId={userId}
               tenantId={tenantId}
             />
+            {/* 🔴 안 그린 기록은 **침묵하지 않는다** — "분명히 썼는데 안 보인다"를 막는 각주(주간 시트의
+                '시간 변경된 기록 N건'과 같은 규약). 되돌릴 곳(주간 시트)까지 함께 가리킨다. */}
+            {card.hiddenLines > 0 ? (
+              <p className="text-text-dim mt-1 text-[12px]">
+                이 화면에 안 나오는 기록 {card.hiddenLines}건 — 시간이 바뀌었거나 자리(LAB·JJ) 교시입니다. 주간
+                시트에서 확인하세요.
+              </p>
+            ) : null}
             <Link
               href={`/ecs/${card.classId}?week=${weekMonday}`}
               className="text-primary mt-1 inline-block text-[13px] font-bold underline-offset-2 hover:underline"
