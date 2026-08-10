@@ -452,6 +452,13 @@ export const attendanceRecords = pgTable(
       .notNull()
       .references(() => students.id, { onDelete: "cascade" }),
     sessionDate: date("session_date").notNull(),
+    /**
+     * 이 출결이 가리키는 **교시**(class_schedules.start_time과 같은 값, 0196a).
+     * null = "그날 전체" — 2026-08-10 이전 기록과 교시 구분이 없는 화면의 기본값.
+     * ⚠️ 같은 날 한 반이 두 교시면 **교시마다 한 행**이다(그전엔 하루 1건이라 ECS의 4교시·6교시 카드가
+     *    같은 행을 비춰 한쪽을 고르면 다른 쪽도 바뀌었다 — 원장 2026-08-10 제보).
+     */
+    slotStart: time("slot_start"),
     status: attendanceStatusEnum("status").notNull(),
     // 시수(정규 수업 1회 기준 배수, 0115a). null=1(기본). 보강 연장=1.5/2, 부분 출석=0.5 등.
     sessionUnits: numeric("session_units", { precision: 4, scale: 1 }),
