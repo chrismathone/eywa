@@ -91,13 +91,12 @@ describe("출석부 표 골격", () => {
     const table = container.querySelector("table")!;
     expect(table.className).toContain("table-fixed");
     const cols = container.querySelectorAll("colgroup col");
-    // 이름·학년·학교 + 날짜 2 + 시수·출석률
-    expect(cols.length).toBe(3 + DAYS.length + 2);
+    // 이름·학교·학년(압축 한 열, 2026-08-10) + 날짜 2 + 시수·출석률
+    expect(cols.length).toBe(2 + DAYS.length + 2);
     expect((cols[0] as HTMLElement).style.width).toBeTruthy(); // 이름
-    expect((cols[1] as HTMLElement).style.width).toBeTruthy(); // 학년
-    expect((cols[2] as HTMLElement).style.width).toBeTruthy(); // 학교
+    expect((cols[1] as HTMLElement).style.width).toBeTruthy(); // 학교·학년
     // 날짜 칸만 폭이 비어 있다 — 남는 가로 폭을 이 칸들이 나눠 갖는다.
-    expect((cols[3] as HTMLElement).style.width).toBe("");
+    expect((cols[2] as HTMLElement).style.width).toBe("");
   });
 
   it("🔴 마지막 두 열(시수·출석률)은 sticky right 오프셋과 짝이라 폭이 고정이다", () => {
@@ -142,11 +141,12 @@ describe("출석부 표 골격", () => {
     expect(nameLine.textContent).toBe("이도윤");
   });
 
-  it("학교 이름은 잘리되 원문은 툴팁에 남는다 — 화면에서 사라지면 안 된다", () => {
+  it("학교·학년은 압축 한 열('경명여자중학교1') — 잘리되 원문은 툴팁에 남는다", () => {
     renderTable();
-    const school = screen.getByText("경명여자중학교");
+    // schoolGradeLabel: "경명여자중학교"+"고1" → "경명여자중학교1" (표시 표준, school-grade.ts)
+    const school = screen.getByText("경명여자중학교1");
     expect(school.className).toContain("truncate");
-    expect(school).toHaveAttribute("title", "경명여자중학교");
+    expect(school).toHaveAttribute("title", "경명여자중학교 · 고1");
   });
 
   it("상세 입력은 우클릭으로 연다고 안내한다", () => {

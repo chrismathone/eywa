@@ -1,5 +1,6 @@
 import type { AttendanceMatrix, AttendanceStatus, MatrixStudent } from "@/features/attendance/server/queries";
 import type { StudentMoney } from "@/features/attendance/server/teacher-money";
+import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { formatDows } from "@/features/attendance/calendar";
 import {
   BADGE_LABEL,
@@ -46,6 +47,7 @@ export function MatrixRow({
   money,
   lockBefore,
   classLabel,
+  tierMissing,
 }: {
   student: MatrixStudent;
   /** 이 행이 속한 반 — 셀 저장 대상. 강사 전체 보기에선 행마다 다르다. */
@@ -59,6 +61,8 @@ export function MatrixRow({
   money?: StudentMoney | null;
   /** 이 날짜 **이전**은 강사가 수정 못 함(7일 창). null = 제한 없음(관리자 이상). */
   lockBefore?: string | null;
+  /** 단가(수업 티어) 미지정 — 정산액에서 빠진 학생. 이름 칸에 배경으로 드러낸다(합계 뱃지만으론 누군지 안 보임). */
+  tierMissing?: boolean;
 }) {
   const marks = matrix.marks[student.id] ?? {};
   const units = matrix.units[student.id] ?? {};
@@ -71,7 +75,12 @@ export function MatrixRow({
           한 줄에 이어 붙이면 이름 열이 이름+요일만큼 넓어져야 해 날짜 칸을 잡아먹는다(원장 2026-08-06:
           "세로폭은 조금 더 키우더라도 요일을 이름 아래로"). 행이 한 줄 높아지는 건 감수한 트레이드오프.
           ⚠️ 열 폭이 고정(colgroup)이라 넘치는 글자는 잘린다 — 원문은 `title`에 남긴다. */}
-      <td className="border-line text-foreground sticky left-0 z-10 border-b border-r bg-card px-2 py-1">
+      {/* 단가 미지정(정산 제외) 학생은 이름 칸을 호박색으로 — 합계 줄 뱃지("2명 제외")만으론 누가
+          빠졌는지 표에서 찾을 수 없다(원장 2026-08-10). ⚠️ sticky 칸이라 배경은 불투명이어야 한다(#74). */}
+      <td
+        className={`border-line text-foreground sticky left-0 z-10 border-b border-r px-2 py-1 ${tierMissing ? "bg-amber-50" : "bg-card"}`}
+        title={tierMissing ? `${student.name} — 단가(수업 티어) 미지정이라 정산액에서 빠져 있습니다` : undefined}
+      >
         <span className="flex items-center gap-1">
           <span className="min-w-0 truncate text-[12px] leading-tight font-bold" title={student.name}>
             {student.name}
@@ -98,14 +107,14 @@ export function MatrixRow({
           </span>
         ) : null}
       </td>
+      {/* 학교·학년 = 표시 표준 압축("경명여중2", school-grade.ts) — 두 열로 나누던 것을 합쳐 날짜 칸에
+          폭을 돌려준다(원장 2026-08-10). 원문(학교·학년 따로)은 title에 남긴다. */}
       <td className="border-line text-text-dim border-b border-r px-1.5 py-1 text-[11px]">
-        <span className="block truncate" title={student.grade ?? undefined}>
-          {student.grade ?? "—"}
-        </span>
-      </td>
-      <td className="border-line text-text-dim border-b border-r px-1.5 py-1 text-[11px]">
-        <span className="block truncate" title={student.school ?? undefined}>
-          {student.school ?? "—"}
+        <span
+          className="block truncate"
+          title={[student.school, student.grade].filter(Boolean).join(" · ") || undefined}
+        >
+          {schoolGradeLabel(student.school, student.grade) || "—"}
         </span>
       </td>
       {days.map((d) => {

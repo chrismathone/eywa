@@ -56,6 +56,8 @@ export type TierSettlementResult = {
   unitsTotal: number;
   /** 단가 미지정(티어 없음) 학생 이름 — 시수가 있는데 산정에서 빠진 사람들(0 지어내기 금지). */
   missingTierStudents: string[];
+  /** 같은 학생들의 id — 화면이 **행 단위로**(이름 칸 배경) 누가 빠졌는지 가리키기 위한 값(동명이인 안전). */
+  missingTierStudentIds: string[];
   /** 단가표에 없는 티어 라벨(오타·미등록). */
   missingPriceTiers: string[];
   /** 비율을 못 정한 과정(그룹 비율·기본 비율 둘 다 없음). */
@@ -78,6 +80,7 @@ export function computeTierSettlement(
   let unitsTotal = 0;
   let excludedUnits = 0;
   const missingTierStudents = new Set<string>();
+  const missingTierStudentIds = new Set<string>();
   const missingPriceTiers = new Set<string>();
   const missingRateGroups = new Set<string>();
 
@@ -85,6 +88,7 @@ export function computeTierSettlement(
     if (row.units <= 0) continue;
     if (!row.tierLabel) {
       missingTierStudents.add(row.studentName);
+      missingTierStudentIds.add(row.studentId);
       excludedUnits += row.units;
       continue;
     }
@@ -113,6 +117,7 @@ export function computeTierSettlement(
     rowCount,
     unitsTotal,
     missingTierStudents: [...missingTierStudents].sort((a, b) => a.localeCompare(b, "ko")),
+    missingTierStudentIds: [...missingTierStudentIds],
     missingPriceTiers: [...missingPriceTiers].sort((a, b) => a.localeCompare(b, "ko")),
     missingRateGroups: [...missingRateGroups],
     excludedUnits,
