@@ -175,6 +175,16 @@ export async function setAttendanceCell(input: {
   note?: string | null; // 전달 시 메모도 갱신(undefined면 기존 메모 유지)
   units?: string; // 전달 시 시수도 갱신(raw 입력 — 서버에서 파싱, ""=기본 1). undefined면 기존 유지.
   /**
+   * 교시(0196a, "HH:MM[:SS]") — **넘기면 그 교시 한 칸만** 읽고 쓴다(ECS: 같은 날 4교시·6교시가
+   * 서로 다른 기록). 안 넘기면(출석부·원스크린·키오스크) 종전대로 **그날 전체**를 다룬다.
+   *
+   * ⚠️ 안 넘긴 저장이 교시별 기록을 만난 경우: 그날의 **교시별 유효행을 전부** 같은 상태로 고친다.
+   *    (a) 최신 1건만 고치면 같은 날 다른 교시가 조용히 옛 상태로 남아 화면마다 다른 답이 되고,
+   *    (b) 새 null 행을 하나 더 만들면 "그날 전체" 1건 + 교시별 N건이 함께 살아 **시수가 이중 계상**된다.
+   *    출석부에서 하루를 통째로 바꾸는 건 "그날 수업 전부 그렇다"는 뜻이므로 (전부 고치기)가 맞다.
+   */
+  slotStart?: string | null;
+  /**
    * 메모만 고친다 — 상태·시수는 **읽지도 쓰지도 않는다**.
    * 🔴 이 경로만 7일 편집창을 면제한다(원장 2026-08-06: "메모는 언제든 추가할 수 있어야"). 근거는
    *    메모가 **돈에 안 닿는다**는 것 — 시수·출석률은 그대로라 마감한 급여·청구가 흔들리지 않는다.
@@ -238,13 +248,18 @@ export async function setAttendanceCell(input: {
   // 메모만 — 있는 기록의 note만 갈아끼운다. 🔴 **지우기 분기보다 먼저** 온다(status가 null로 와도
   // 기록을 지우면 안 된다). 상태·시수는 patch에 넣지 않는다 = 급여 재료 불변.
   // ⚠️ `recorded_by`/`recorded_at`도 안 건드린다 — 그건 "누가 출결을 찍었나"라 메모 수정으로 덮으면 사실이 바뀐다.
+  // 교시 지정(0196a) — 넘어온 값만 그 교시로 좁힌다. `slot`은 아래 세 경로가 공유한다.
+  const slot = input.slotStart ?? null;
+
   if (noteOnly) {
-    const { data: row } = await supabase
+    let q = supabase
       .from("attendance_records")
       .select("id")
       .eq("class_id", classId)
       .eq("student_id", studentId)
-      .eq("session_date", sessionDate)
+      .eq("session_date", sessionDate);
+    if (slot !== null) q = q.eq("slot_start", slot);
+    const { data: row } = await q
       .order("recorded_at", { ascending: false })
       .limit(1)
       .maybeSingle();
@@ -255,36 +270,48 @@ export async function setAttendanceCell(input: {
     return { ok: true };
   }
 
-  // 지우기 — 해당 (반·학생·날짜) 기록 전부 삭제.
+  // 지우기 — 해당 (반·학생·날짜) 기록 삭제. 교시를 넘겼으면 **그 교시만**(다른 교시 기록은 남는다).
   if (status === null) {
-    const { error } = await supabase
+    let del = supabase
       .from("attendance_records")
       .delete()
       .eq("class_id", classId)
       .eq("student_id", studentId)
       .eq("session_date", sessionDate);
+    if (slot !== null) del = del.eq("slot_start", slot);
+    const { error } = await del;
     if (error) return { error: error.message };
     if (!input.quiet) revalidatePath("/attendance");
     return { ok: true };
   }
 
-  // 최신 기록 1건 조회 → 있으면 update, 없으면 insert (매트릭스는 최신본을 보여줌).
-  const { data: existing } = await supabase
+  // 그날(또는 그 교시)의 기록을 훑는다 — append-only라 정정 이력이 함께 나오므로 **교시별 최신 1건**만
+  // 유효행으로 고른다(effectiveAttendanceRecords와 같은 규칙: recorded_at 최신, 동률이면 id 큰 쪽).
+  let find = supabase
     .from("attendance_records")
-    .select("id")
+    .select("id, slot_start, recorded_at")
     .eq("class_id", classId)
     .eq("student_id", studentId)
-    .eq("session_date", sessionDate)
-    .order("recorded_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .eq("session_date", sessionDate);
+  if (slot !== null) find = find.eq("slot_start", slot);
+  const { data: rows } = await find.order("recorded_at", { ascending: false });
+
+  // 이미 recorded_at 내림차순이라 **교시마다 처음 만난 행이 최신**이다.
+  const latestBySlot = new Map<string, string>(); // slot(또는 "" = 그날 전체) → id
+  for (const r of rows ?? []) {
+    const k = (r.slot_start as string | null) ?? "";
+    if (!latestBySlot.has(k)) latestBySlot.set(k, r.id as string);
+  }
 
   const nowIso = new Date().toISOString();
-  if (existing?.id) {
+  const targetIds = [...latestBySlot.values()];
+  if (targetIds.length > 0) {
     const patch: Record<string, unknown> = { status, recorded_by: user.id, recorded_at: nowIso };
     if (noteProvided) patch.note = noteVal;
     if (unitsProvided) patch.session_units = unitsVal;
-    const { error } = await supabase.from("attendance_records").update(patch).eq("id", existing.id);
+    // ⚠️ 교시를 안 넘긴 저장(출석부)은 그날 **모든 교시**를 함께 고친다 — 위 slotStart 주석의 (a)(b) 참조.
+    //    교시를 넘긴 저장(ECS)은 애초에 그 교시 1건만 조회했으므로 여기서도 1건이다.
+    const { error } = await supabase.from("attendance_records").update(patch).in("id", targetIds);
     if (error) return { error: error.message };
   } else {
     const { error } = await supabase.from("attendance_records").insert({
@@ -292,6 +319,7 @@ export async function setAttendanceCell(input: {
       class_id: classId,
       student_id: studentId,
       session_date: sessionDate,
+      slot_start: slot,
       status,
       note: noteProvided ? noteVal : null,
       session_units: unitsProvided ? unitsVal : null,
