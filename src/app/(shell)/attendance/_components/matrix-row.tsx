@@ -75,11 +75,12 @@ export function MatrixRow({
           한 줄에 이어 붙이면 이름 열이 이름+요일만큼 넓어져야 해 날짜 칸을 잡아먹는다(원장 2026-08-06:
           "세로폭은 조금 더 키우더라도 요일을 이름 아래로"). 행이 한 줄 높아지는 건 감수한 트레이드오프.
           ⚠️ 열 폭이 고정(colgroup)이라 넘치는 글자는 잘린다 — 원문은 `title`에 남긴다. */}
-      {/* 단가 미지정(정산 제외) 학생은 이름 칸을 호박색으로 — 합계 줄 뱃지("2명 제외")만으론 누가
-          빠졌는지 표에서 찾을 수 없다(원장 2026-08-10). ⚠️ sticky 칸이라 배경은 불투명이어야 한다(#74). */}
+      {/* 단가 미지정(정산 제외) 학생은 이름 칸을 호박색 + 「단가 미지정」 뱃지로 — 합계 줄 뱃지("2명 제외")
+          만으론 누가 빠졌는지 표에서 찾을 수 없고, 연한 배경만으론 뜻이 안 읽힌다(원장 2026-08-10 ×2).
+          ⚠️ sticky 칸이라 배경은 불투명이어야 한다(#74). */}
       <td
-        className={`border-line text-foreground sticky left-0 z-10 border-b border-r px-2 py-1 ${tierMissing ? "bg-amber-50" : "bg-card"}`}
-        title={tierMissing ? `${student.name} — 단가(수업 티어) 미지정이라 정산액에서 빠져 있습니다` : undefined}
+        className={`border-line text-foreground sticky left-0 z-10 border-b border-r px-2 py-1 ${tierMissing ? "bg-amber-100" : "bg-card"}`}
+        title={tierMissing ? `${student.name} — 단가(수업 티어) 미지정이라 정산액에서 빠져 있습니다. 수강의 티어를 지정하면 계산에 들어갑니다` : undefined}
       >
         <span className="flex items-center gap-1">
           <span className="min-w-0 truncate text-[12px] leading-tight font-bold" title={student.name}>
@@ -98,12 +99,24 @@ export function MatrixRow({
             </span>
           ))}
         </span>
-        {attendLabel ? (
-          <span
-            className="text-text-faint block truncate text-[10px] leading-tight font-medium"
-            title={`등원 ${attendLabel}`}
-          >
-            {attendLabel}
+        {/* 「단가 미지정」 뱃지는 **아랫줄**(등원요일 옆) — 첫 줄에 붙이면 신입 뱃지와 겹칠 때
+            이름이 "김.."으로 잘린다(실측 2026-08-10). 아랫줄은 요일 두 글자뿐이라 자리가 남는다. */}
+        {attendLabel || tierMissing ? (
+          <span className="flex items-center gap-1">
+            {attendLabel ? (
+              <span
+                className="text-text-faint min-w-0 truncate text-[10px] leading-tight font-medium"
+                title={`등원 ${attendLabel}`}
+              >
+                {attendLabel}
+              </span>
+            ) : null}
+            {tierMissing ? (
+              // 라벨은 짧게 「단가」 + 우측 정렬(ml-auto) — 셀 오른쪽 끝에 붙어 요일과 안 섞인다(원장 2026-08-10).
+              <span className="ml-auto shrink-0 rounded-sm bg-amber-300 px-1 text-[9px] leading-[14px] font-bold text-amber-950">
+                단가
+              </span>
+            ) : null}
           </span>
         ) : null}
       </td>
