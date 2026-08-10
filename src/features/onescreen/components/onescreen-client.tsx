@@ -793,7 +793,11 @@ export function OneScreenClient({
     toast.success(
       res.absenceNoted
         ? `${existing.name} 보강 추가 — ${shortDate(absentDate)} 칸에 메모, ${target.name} 수업타임 ${res.units}`
-        : `${existing.name} 보강 추가 — ${target.name} 수업타임 ${res.units}. 단 ${shortDate(absentDate)}엔 출결 기록이 없어 메모는 남기지 않았습니다.`,
+        : // 선보강(아직 안 지난 날)이면 "기록이 없다"가 아니라 **아직 오지 않았다**가 사실이다 —
+          //    같은 문장으로 뭉뚱그리면 강사가 "왜 기록이 없지?" 하고 출석부를 뒤진다.
+          absentDate > activeDate
+          ? `${existing.name} 보강 추가 — ${target.name} 수업타임 ${res.units}. ${shortDate(absentDate)}은 아직 오지 않은 날이라 그 칸엔 메모를 남기지 않았습니다(그날 출결을 입력할 때 적어 주세요).`
+          : `${existing.name} 보강 추가 — ${target.name} 수업타임 ${res.units}. 단 ${shortDate(absentDate)}엔 출결 기록이 없어 메모는 남기지 않았습니다.`,
       { duration: 8000 },
     );
   }

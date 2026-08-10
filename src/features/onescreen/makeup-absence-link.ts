@@ -20,14 +20,26 @@ export function shortDate(iso: string): string {
   return `${Number(m[2])}/${Number(m[3])}`;
 }
 
-/** 결석한 날 칸에 남길 메모 — "7/31 보강 예정". */
-export function absenceMemo(makeupDate: string): string {
-  return `${shortDate(makeupDate)} 보강 예정`;
+/**
+ * 결석한 날 칸에 남길 메모 — "7/31 보강 예정" / "8/10 보강 완료".
+ *
+ * 🔴 **순서를 보고 말을 바꾼다.** 결석을 먼저 하고 나중에 보강하는 게 보통이지만, 반대도 있다
+ *    (원장 2026-08-07: *"미래에 결석할 예정으로 미리 수업할 경우"* — 선보강). 그때 "보강 예정"이라고
+ *    적으면 **이미 한 수업을 안 한 것처럼** 적는 셈이라 출석부에 사실 아닌 문장이 남는다.
+ * ⚠️ `absentDate`를 안 주면 종전대로 "예정"(대다수 경로가 결석 → 보강 순서다).
+ */
+export function absenceMemo(makeupDate: string, absentDate?: string): string {
+  const done = !!absentDate && makeupDate < absentDate; // 보강을 먼저 했다
+  return `${shortDate(makeupDate)} 보강 ${done ? "완료" : "예정"}`;
 }
 
-/** 보강한 날 칸에 남길 메모 — "7/16 결석분 보강". */
-export function makeupMemo(absentDate: string): string {
-  return `${shortDate(absentDate)} 결석분 보강`;
+/**
+ * 보강한 날 칸에 남길 메모 — "7/16 결석분 보강" / "8/14 결석 예정분 보강".
+ * 위와 같은 이유로 순서를 본다 — 아직 결석하지 않았는데 "결석분"이라고 적으면 그것도 사실이 아니다.
+ */
+export function makeupMemo(absentDate: string, makeupDate?: string): string {
+  const beforehand = !!makeupDate && makeupDate < absentDate; // 결석은 아직 오지 않았다
+  return `${shortDate(absentDate)} 결석${beforehand ? " 예정" : ""}분 보강`;
 }
 
 /**

@@ -105,13 +105,26 @@ describe("분리 — 며칠자 결석분인지까지 받는다", () => {
     });
   });
 
-  it("보강한 날 이후는 못 고른다 — 아직 결석하지 않은 날의 보강은 없다", async () => {
+  // 🔴 뒤집힘(원장 2026-08-07: *"미래에 결석할 예정으로 미리 수업할 경우 추가할 방법이 없네"*).
+  //    예전엔 상한(max=보강일)으로 미래를 아예 못 골랐다 — **선보강**이라는 실제 쓰임을 막고 있었다.
+  it("미래 결석 예정일도 고를 수 있다 — 선보강", async () => {
     const { onConfirm } = setup();
 
     await pickSeparate();
-    expect(absentDateInput()).toHaveAttribute("max", TODAY);
+    expect(absentDateInput()).not.toHaveAttribute("max"); // 상한 없음
 
-    // 상한을 우회해 같은 날을 넣어도 확인이 열리지 않는다(입력 max는 방어선이 아니다).
+    await userEvent.type(absentDateInput(), "2026-08-14"); // 보강일(TODAY)보다 뒤
+    const confirm = screen.getByRole("button", { name: "분리해서 발송" });
+    expect(confirm).toBeEnabled();
+    await userEvent.click(confirm);
+    expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({ absentDate: "2026-08-14" }));
+  });
+
+  // 같은 날은 결석과 보강이 한 칸에서 만나 '분리'가 성립하지 않는다 — 그건 '합침'이다.
+  it("보강한 날과 같은 날은 여전히 못 고른다", async () => {
+    const { onConfirm } = setup();
+
+    await pickSeparate();
     await userEvent.type(absentDateInput(), TODAY);
     expect(screen.getByRole("button", { name: "분리해서 발송" })).toBeDisabled();
     expect(onConfirm).not.toHaveBeenCalled();

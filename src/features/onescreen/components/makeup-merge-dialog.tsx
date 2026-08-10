@@ -79,7 +79,11 @@ export function MakeupMergeDialog({
   // 고른 반이 바뀌면 기본값도 그 반 것을 따른다 — 강사가 직접 친 값이 있으면 그게 이긴다.
   const addUnits = addUnitsRaw.trim() ? parseAddUnits(addUnitsRaw) : (chosen?.attendanceUnits ?? 1);
   // ⚠️ 분리도 고르기 전엔 못 누른다 — 분리 역시 그 반에 시수를 얹으므로 귀속이 정해져야 한다.
-  const dateBad = mode === "separate" && (!absentDate || absentDate >= makeupDate);
+  // 🔴 미래 날짜를 막지 않는다 — **선보강**(아직 안 한 결석을 미리 메운다)이 실제로 있다(원장 2026-08-07).
+  //    같은 날만 막는다: 결석과 보강이 한 칸에서 만나면 '분리'가 성립하지 않는다(그건 '합침'이다).
+  const dateBad = mode === "separate" && (!absentDate || absentDate === makeupDate);
+  /** 아직 오지 않은 결석을 미리 메우는 경우 — 문구와 메모가 달라진다. */
+  const beforehand = mode === "separate" && !!absentDate && makeupDate < absentDate;
   const blocked = !chosen || dateBad || addUnits === null;
   const sent = !!chosen && sentSubjects.includes(chosen.name);
   const total = chosen && addUnits !== null ? (chosen.attendanceUnits ?? 1) + addUnits : null;
@@ -158,17 +162,20 @@ export function MakeupMergeDialog({
         ) : null}
 
         {/* 분리 = 며칠자 결석분인지. 그 날짜 칸엔 **메모만** 붙고 결석(0)은 그대로 — 시수는 보강한 날에 얹힌다.
-            ⚠️ 오늘 이후는 못 고른다(아직 결석하지 않은 날의 보강은 없다). */}
+            ⚠️ 미래 날짜도 고를 수 있다(선보강). 아직 출결 행이 없는 날이면 메모는 안 붙고 그 사실을 알린다. */}
         {mode === "separate" ? (
           <div className="mt-3">
             <label htmlFor="makeup-absent-date" className="text-text-faint mb-1.5 block text-[12px]">
               며칠자 결석분 보강인가요?
             </label>
+            {/* 앞으로 결석할 날도 고를 수 있다는 것을 적어 둔다 — 안 적으면 달력에서 미래가 눌리는 줄 모른다. */}
+            <p className="text-text-faint mb-1.5 text-[11px]">
+              아직 결석 전이면 <b>결석 예정일</b>을 고르세요(미리 보강한 경우).
+            </p>
             <input
               id="makeup-absent-date"
               type="date"
               value={absentDate}
-              max={makeupDate}
               onChange={(e) => setAbsentDate(e.target.value)}
               className="border-line bg-bg-soft focus:border-primary h-8 rounded-lg border px-2 text-[13px] outline-none"
             />
@@ -208,9 +215,9 @@ export function MakeupMergeDialog({
                   // ⚠️ "정규 1"로 박지 말 것 — 강사가 이미 고쳐 뒀을 수 있다. 현재값 + 입력값을 그대로 보인다.
                   `${chosen.name} 보고서 1건에 합쳐 "(정규+보강)"으로 한 번만 발송합니다. 출석부 수업타임은 ${chosen.name} 행에 ${chosen.attendanceUnits ?? 1} + 보강 ${addUnits} = ${total}.`
                 : dateBad
-                  ? "결석한 날짜를 골라 주세요(보강한 날보다 앞선 날)."
+                  ? "결석한(또는 결석 예정인) 날짜를 골라 주세요 — 보강한 날과 같은 날은 '합침'입니다."
                   : // 출석부 두 칸이 서로를 가리키게 된다 — 결석 칸은 0 그대로(메모만), 시수는 보강한 날에.
-                    `보강 보고서를 따로 만듭니다 — 정규 1건 + 보강 1건, 모두 2건이 발송됩니다. 출석부는 ${shortDate(absentDate)} ${chosen.name} 칸에 "${absenceMemo(makeupDate)}" 메모만 붙고(결석 0은 그대로), ${shortDate(makeupDate)} 칸이 ${chosen.attendanceUnits ?? 1} + 보강 ${addUnits} = ${total}.`}
+                    `보강 보고서를 따로 만듭니다 — 정규 1건 + 보강 1건, 모두 2건이 발송됩니다. 출석부는 ${shortDate(absentDate)} ${chosen.name} 칸에 "${absenceMemo(makeupDate, absentDate)}" 메모만 붙고(결석 0은 그대로), ${shortDate(makeupDate)} 칸이 ${chosen.attendanceUnits ?? 1} + 보강 ${addUnits} = ${total}.${beforehand ? " 아직 지나지 않은 날이라 그 칸에 출결 기록이 없으면 메모는 남지 않습니다." : ""}`}
         </p>
         {mode === "merge" && sent ? (
           // ⚠️ 한 덩어리 문자열로 — `{chosen?.name} 보고서는`처럼 식과 텍스트를 섞으면 사이 공백이 사라진다

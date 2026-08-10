@@ -350,7 +350,10 @@ export async function linkMakeupToAbsence(input: {
   if (!studentId || !classId || !absentDate || !makeupDate) return { error: "필수 값이 누락되었습니다" };
   const isDate = (d: string) => /^\d{4}-\d{2}-\d{2}$/.test(d);
   if (!isDate(absentDate) || !isDate(makeupDate)) return { error: "잘못된 날짜입니다" };
-  if (absentDate >= makeupDate) return { error: "결석한 날은 보강한 날보다 앞서야 합니다" };
+  // 🔴 **결석일이 보강일보다 뒤여도 된다**(원장 2026-08-07: *"미래에 결석할 예정으로 미리 수업할 경우"*
+  //    — 선보강). 예전엔 `>=`로 막아 그 경우를 아예 넣을 수 없었다. 같은 날만 막는다 — 그건 결석과 보강이
+  //    한 칸에서 만나는 것이라 '분리'가 성립하지 않는다(그 경우는 '합침'이 맞다).
+  if (absentDate === makeupDate) return { error: "결석한 날과 보강한 날이 같습니다 — 그때는 '합침'을 쓰세요" };
   // 시수는 클라 값을 그대로 믿지 않는다 — 0·음수는 급여를 깎고, 과한 값은 조용한 과지급이 된다.
   if (!Number.isFinite(addUnits) || addUnits <= 0 || addUnits > 24) return { error: "보강 시수가 올바르지 않습니다" };
 
@@ -392,7 +395,7 @@ export async function linkMakeupToAbsence(input: {
     latestCell(makeupDate),
   ]);
 
-  const memoOnMakeup = makeupMemo(absentDate);
+  const memoOnMakeup = makeupMemo(absentDate, makeupDate);
   // 이미 연결돼 있으면 시수를 또 올리지 않는다 — 메모도 그대로다(appendMemo가 멱등).
   const alreadyLinked = hasMemoLine(makeupCell?.note, memoOnMakeup);
   const units = alreadyLinked
@@ -407,7 +410,7 @@ export async function linkMakeupToAbsence(input: {
     writes.push(
       supabase
         .from("attendance_records")
-        .update({ note: appendMemo(absentCell.note, absenceMemo(makeupDate)) })
+        .update({ note: appendMemo(absentCell.note, absenceMemo(makeupDate, absentDate)) })
         .eq("id", absentCell.id),
     );
   }
