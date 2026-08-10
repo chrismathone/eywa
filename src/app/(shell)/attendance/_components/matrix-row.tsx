@@ -75,16 +75,22 @@ export function MatrixRow({
           한 줄에 이어 붙이면 이름 열이 이름+요일만큼 넓어져야 해 날짜 칸을 잡아먹는다(원장 2026-08-06:
           "세로폭은 조금 더 키우더라도 요일을 이름 아래로"). 행이 한 줄 높아지는 건 감수한 트레이드오프.
           ⚠️ 열 폭이 고정(colgroup)이라 넘치는 글자는 잘린다 — 원문은 `title`에 남긴다. */}
-      {/* 단가 미지정(정산 제외) 학생은 이름 칸을 호박색으로 — 합계 줄 뱃지("2명 제외")만으론 누가
-          빠졌는지 표에서 찾을 수 없다(원장 2026-08-10). ⚠️ sticky 칸이라 배경은 불투명이어야 한다(#74). */}
+      {/* 단가 미지정(정산 제외) 학생은 이름 칸을 호박색 + 「단가 미지정」 뱃지로 — 합계 줄 뱃지("2명 제외")
+          만으론 누가 빠졌는지 표에서 찾을 수 없고, 연한 배경만으론 뜻이 안 읽힌다(원장 2026-08-10 ×2).
+          ⚠️ sticky 칸이라 배경은 불투명이어야 한다(#74). */}
       <td
-        className={`border-line text-foreground sticky left-0 z-10 border-b border-r px-2 py-1 ${tierMissing ? "bg-amber-50" : "bg-card"}`}
-        title={tierMissing ? `${student.name} — 단가(수업 티어) 미지정이라 정산액에서 빠져 있습니다` : undefined}
+        className={`border-line text-foreground sticky left-0 z-10 border-b border-r px-2 py-1 ${tierMissing ? "bg-amber-100" : "bg-card"}`}
+        title={tierMissing ? `${student.name} — 단가(수업 티어) 미지정이라 정산액에서 빠져 있습니다. 수강의 티어를 지정하면 계산에 들어갑니다` : undefined}
       >
         <span className="flex items-center gap-1">
           <span className="min-w-0 truncate text-[12px] leading-tight font-bold" title={student.name}>
             {student.name}
           </span>
+          {tierMissing ? (
+            <span className="shrink-0 rounded-sm bg-amber-300 px-1 text-[9px] leading-[14px] font-bold text-amber-950">
+              단가 미지정
+            </span>
+          ) : null}
           {/* 신입·퇴원·반이동 — 그 달에 경계가 있는 학생만. 대부분의 행엔 아무것도 안 붙는다.
               🔴 이름을 밀어내지 않는다(`shrink-0` + 이름이 `min-w-0 truncate`) — 열 폭이 고정이라
                  뱃지가 자리를 뺏으면 이름이 먼저 잘린다. */}
