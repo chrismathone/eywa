@@ -334,6 +334,12 @@ export async function listReports(
   if (filters.status === IMPORT_FILTER) q = q.eq("source", "edutrix_import");
   else if (filters.status) q = q.eq("classnote_status", filters.status);
   if (filters.teacher) q = q.eq("teacher_name", filters.teacher);
+  // 담임 이름 부분검색 — 이름이 이 표의 컬럼(teacher_name)이라 조인·id 해석 없이 한 줄이다.
+  // ⚠️ `%`·`_`는 ilike 와일드카드라 그대로 넣으면 "김_정"이 뜻밖의 이름을 긁는다 → 이스케이프.
+  if (filters.teacherName?.trim()) {
+    const term = filters.teacherName.trim().replace(/[\\%_]/g, (c) => `\\${c}`);
+    q = q.ilike("teacher_name", `%${term}%`);
+  }
   if (filters.subject) q = q.eq("subject", filters.subject);
   // 반 필터(0134a class_id) — 옵션은 0147a RPC가 "실제 보고서가 붙은 반"만 준다.
   // ⚠️ uuid 형식을 먼저 검사한다: 잘못된 값이 오면 PostgREST가 22P02(invalid input syntax) **영문 원문**을
