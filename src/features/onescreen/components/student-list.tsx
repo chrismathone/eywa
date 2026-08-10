@@ -20,10 +20,16 @@ const CELL_CLASS: Record<CellState, string> = {
   todo: "bg-bg-soft text-text-faint",
 };
 
-const CELLS: { key: "prog" | "test" | "rep"; label: string }[] = [
-  { key: "prog", label: "진" },
-  { key: "test", label: "테" },
-  { key: "rep", label: "보" },
+/**
+ * 진행 상태 칸 — 🔴 **한 글자로 줄이지 않는다**(원장 2026-08-07: *"한글자만 적으니까 잘 이해도 안되게
+ * 보이네. 공간 충분한거 같으니까 라벨 확장"*). '진'·'테'·'보'는 쓴 사람만 아는 축약이고, 옆에 툴팁을
+ * 달아 봐야 같은 한 글자라 도움이 안 됐다. 자리가 있으니 낱말로 적는다.
+ * ⚠️ `title`은 라벨을 되풀이하지 말고 **그 칸이 무엇을 기다리는지**를 적는다(라벨과 같은 말이면 무의미).
+ */
+const CELLS: { key: "prog" | "test" | "rep"; label: string; title: string }[] = [
+  { key: "prog", label: "진도", title: "오늘 진도 입력 여부" },
+  { key: "test", label: "테스트", title: "테스트 점수 입력 여부" },
+  { key: "rep", label: "보고서", title: "학부모 보고서 작성·발송 여부" },
 ];
 
 function StudentRow({
@@ -104,8 +110,10 @@ function StudentRow({
         {CELLS.map((c) => (
           <span
             key={c.key}
-            title={c.label}
-            className={`flex size-5 items-center justify-center rounded-sm text-[10px] font-bold ${CELL_CLASS[cellState(c.key)]}`}
+            title={c.title}
+            // 낱말이 들어가므로 정사각(size-5)이 아니라 **글자 폭을 따라가는 알약**으로. shrink-0 =
+            // 이름이 길어도 이 칸이 찌그러져 글자가 깨지지 않게(찌그러지면 축약보다 못하다).
+            className={`shrink-0 rounded-sm px-1.5 py-0.5 text-[10px] font-bold whitespace-nowrap ${CELL_CLASS[cellState(c.key)]}`}
           >
             {c.label}
           </span>

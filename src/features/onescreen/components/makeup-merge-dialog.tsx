@@ -79,9 +79,14 @@ export function MakeupMergeDialog({
   // 고른 반이 바뀌면 기본값도 그 반 것을 따른다 — 강사가 직접 친 값이 있으면 그게 이긴다.
   const addUnits = addUnitsRaw.trim() ? parseAddUnits(addUnitsRaw) : (chosen?.attendanceUnits ?? 1);
   // ⚠️ 분리도 고르기 전엔 못 누른다 — 분리 역시 그 반에 시수를 얹으므로 귀속이 정해져야 한다.
-  // 🔴 미래 날짜를 막지 않는다 — **선보강**(아직 안 한 결석을 미리 메운다)이 실제로 있다(원장 2026-08-07).
-  //    같은 날만 막는다: 결석과 보강이 한 칸에서 만나면 '분리'가 성립하지 않는다(그건 '합침'이다).
-  const dateBad = mode === "separate" && (!absentDate || absentDate === makeupDate);
+  /**
+   * 🔴 **날짜는 선택이다**(원장 2026-08-07: *"오늘 날짜에 추가 보강할 수도 있잖아.. 근데 추가가 안된다니?"*).
+   *    분리 보강이 반드시 결석분인 건 아니다 — 결석과 무관한 **추가 보강**도 있고, 그건 메울 결석이 없다.
+   *    필수로 두는 바람에 그 경우를 적을 칸이 없어 강사가 보강일(오늘)을 넣었고, 그게 다시 막혔다.
+   * ⚠️ 막는 것은 **보강일과 같은 날** 하나뿐 — 출석부가 한 칸이라 "결석 0 그대로 + 시수 얹기"를 동시에
+   *    적을 자리가 없다. 그 경우가 곧 '추가 보강'이므로 **비워 두면** 된다(아래 문구가 그 길을 가리킨다).
+   */
+  const dateBad = mode === "separate" && !!absentDate && absentDate === makeupDate;
   /** 아직 오지 않은 결석을 미리 메우는 경우 — 문구와 메모가 달라진다. */
   const beforehand = mode === "separate" && !!absentDate && makeupDate < absentDate;
   const blocked = !chosen || dateBad || addUnits === null;
@@ -166,11 +171,12 @@ export function MakeupMergeDialog({
         {mode === "separate" ? (
           <div className="mt-3">
             <label htmlFor="makeup-absent-date" className="text-text-faint mb-1.5 block text-[12px]">
-              며칠자 결석분 보강인가요?
+              며칠자 결석분 보강인가요? <span className="text-text-faint">(결석분일 때만)</span>
             </label>
-            {/* 앞으로 결석할 날도 고를 수 있다는 것을 적어 둔다 — 안 적으면 달력에서 미래가 눌리는 줄 모른다. */}
+            {/* 두 갈래를 다 적는다 — 안 적으면 "필수인가?" 하고 아무 날짜나 넣게 된다(그게 이번 제보였다). */}
             <p className="text-text-faint mb-1.5 text-[11px]">
-              아직 결석 전이면 <b>결석 예정일</b>을 고르세요(미리 보강한 경우).
+              결석과 무관한 <b>추가 보강</b>이면 <b>비워 두세요</b>. 아직 결석 전이면 <b>결석 예정일</b>을
+              고르면 됩니다(미리 보강한 경우).
             </p>
             <input
               id="makeup-absent-date"
@@ -204,8 +210,14 @@ export function MakeupMergeDialog({
           </div>
         ) : null}
 
-        {/* 고른 대로 무슨 일이 벌어지는지 — 발송 건수·수업타임·출석부 두 칸까지 밝힌다. */}
-        <p className="text-text-faint mt-3 text-[12px] leading-relaxed">
+        {/* 고른 대로 무슨 일이 벌어지는지 — 발송 건수·수업타임·출석부 두 칸까지 밝힌다.
+            🔴 **막힌 상태면 색을 바꾼다** — 흐린 회색 한 줄로는 안 읽힌다(원장이 이유가 적혀 있는데도
+               "왜 활성화 안되지?"라고 물었다). 버튼이 안 눌리는 이유는 눈에 띄어야 한다. */}
+        <p
+          className={`mt-3 text-[12px] leading-relaxed ${
+            !chosen || addUnits === null || dateBad ? "text-amber font-medium" : "text-text-faint"
+          }`}
+        >
           {!chosen
             ? "어느 수업의 보강인지 골라 주세요."
             : addUnits === null
@@ -214,9 +226,18 @@ export function MakeupMergeDialog({
                 ? // ⚠️ 숫자 뒤에 조사(이/가·로/으로)를 붙이지 말 것 — 받침이 값마다 달라(2=이, 3=삼) 틀린 조사가 나온다.
                   // ⚠️ "정규 1"로 박지 말 것 — 강사가 이미 고쳐 뒀을 수 있다. 현재값 + 입력값을 그대로 보인다.
                   `${chosen.name} 보고서 1건에 합쳐 "(정규+보강)"으로 한 번만 발송합니다. 출석부 수업타임은 ${chosen.name} 행에 ${chosen.attendanceUnits ?? 1} + 보강 ${addUnits} = ${total}.`
-                : dateBad
-                  ? "결석한(또는 결석 예정인) 날짜를 골라 주세요 — 보강한 날과 같은 날은 '합침'입니다."
-                  : // 출석부 두 칸이 서로를 가리키게 된다 — 결석 칸은 0 그대로(메모만), 시수는 보강한 날에.
+                : // 🔴 **막힌 이유를 그 자리에서 이름 붙여 말한다.** 예전엔 날짜를 이미 골랐는데도 "골라
+                  //    주세요"라고만 해서, 강사가 "골랐는데 왜 안 되지?" 하고 멈췄다(원장 제보 2026-08-07
+                  //    *"이거 왜 발송 버튼이 활성화 안되지?"* — 그 화면의 날짜는 보강일과 같은 8/10이었다).
+                  //    비었을 때와 같은 날일 때는 **다른 문제**이므로 다른 문장으로 가른다.
+                  absentDate === makeupDate
+                    ? // 출석부가 한 칸이라 "결석 0 그대로 + 시수 얹기"를 동시에 적을 수 없다 — 나눌 수 없는 게
+                      // 규칙이 아니라 **자리가 없다**는 사실이다. 두 갈래 출구를 함께 준다.
+                    `${shortDate(absentDate)}은 보강한 날과 같은 날입니다 — 출석부가 한 칸이라 결석분으로 이을 수 없습니다. 오늘 한 추가 보강이면 날짜를 비워 두세요.`
+                  : !absentDate
+                    ? // 추가 보강 — 메울 결석이 없으니 연결도 없다. 무엇이 일어나는지는 똑같이 다 적는다.
+                      `보강 보고서를 따로 만듭니다 — 정규 1건 + 보강 1건, 모두 2건이 발송됩니다. 결석분 연결은 없고(추가 보강), 출석부는 ${shortDate(makeupDate)} ${chosen.name} 칸이 ${chosen.attendanceUnits ?? 1} + 보강 ${addUnits} = ${total}.`
+                    : // 출석부 두 칸이 서로를 가리키게 된다 — 결석 칸은 0 그대로(메모만), 시수는 보강한 날에.
                     `보강 보고서를 따로 만듭니다 — 정규 1건 + 보강 1건, 모두 2건이 발송됩니다. 출석부는 ${shortDate(absentDate)} ${chosen.name} 칸에 "${absenceMemo(makeupDate, absentDate)}" 메모만 붙고(결석 0은 그대로), ${shortDate(makeupDate)} 칸이 ${chosen.attendanceUnits ?? 1} + 보강 ${addUnits} = ${total}.${beforehand ? " 아직 지나지 않은 날이라 그 칸에 출결 기록이 없으면 메모는 남지 않습니다." : ""}`}
         </p>
         {mode === "merge" && sent ? (

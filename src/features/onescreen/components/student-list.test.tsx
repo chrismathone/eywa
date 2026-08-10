@@ -30,10 +30,17 @@ const student = (over: Partial<OneScreenStudent>): OneScreenStudent =>
     ...over,
   }) as OneScreenStudent;
 
-/** 이름 옆 발송 표시 배지(title로 식별) — 없으면 null. */
+/**
+ * 이름 옆 발송 표시 배지 — 없으면 null.
+ *
+ * ⚠️ 예전엔 `[title*="발송"]`으로 **행 안의 아무 요소나** 잡았다. title에 '발송'이 들어가는 다른 것이
+ *    생기면(2026-08-07 진행 상태 칸이 '보고서 작성·발송 여부'가 됐다) 배지가 없어도 걸려 **엉뚱한 실패**가
+ *    난다. 이 배지의 고유한 표시는 **"라벨 n/m" 꼴의 분수**이므로 그걸로 좁힌다.
+ */
 function sendBadge(name: string): HTMLElement | null {
   const row = screen.getByText(name).closest("button");
-  return row?.querySelector<HTMLElement>('[title*="발송"], [title*="저장"]') ?? null;
+  const withTitle = [...(row?.querySelectorAll<HTMLElement>("[title]") ?? [])];
+  return withTitle.find((el) => /\d+\/\d+\s*$/.test(el.getAttribute("title") ?? "")) ?? null;
 }
 
 describe("StudentList 이름 옆 발송 표시", () => {

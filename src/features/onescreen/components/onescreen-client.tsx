@@ -742,12 +742,16 @@ export function OneScreenClient({
       toast.error("학생 카드를 찾지 못했습니다 — 새로고침 후 다시 시도해 주세요");
       return;
     }
-    if (choice.mode === "separate" && choice.absentDate) {
+    if (choice.mode === "separate") {
       // 🔴 **고른 과목의 보강 행만** 만든다. 안 좁히면 그 강사가 가르치는 학생의 다른 과목까지 "(보강)" 행이
       //    딸려 붙어(예: 영어가 오늘 결석이라 후보엔 없어도 행은 생겼다) 보고서가 2건이 아니라 3건 나간다 —
       //    다이얼로그가 "모두 2건" 이라고 약속한 것과 어긋난다. 강사가 어느 수업인지 이미 골랐으니 추측할 게 없다.
       if (addSeparateMakeupRows(existing, ask.mk, true, choice.candidate.subjectKey)) {
-        void linkMakeupAbsence(existing, choice.candidate, choice.absentDate, choice.addUnits);
+        // 🔴 결석일은 **선택**이다(원장 2026-08-07 *"오늘 날짜에 추가 보강할 수도 있잖아"*). 없으면
+        //    결석분 연결 없이 시수만 얹는다. 예전엔 이 분기가 없어 날짜가 비면 **조용히 '합침'으로**
+        //    떨어졌다 — 강사는 '분리'를 골랐는데 보고서가 1건만 나가는, 화면과 다른 결과였다.
+        if (choice.absentDate) void linkMakeupAbsence(existing, choice.candidate, choice.absentDate, choice.addUnits);
+        else void addMakeupUnitsOnly(existing, choice.candidate, choice.addUnits);
       }
       return;
     }
@@ -802,6 +806,23 @@ export function OneScreenClient({
     );
   }
   /** 합침 — 정규 행에 보강 표시를 켜고(제목 "(정규+보강)", makeup-label.ts) 출석부 수업타임을 얹는다. */
+  /**
+   * 추가 보강(결석분 연결 없음) — 보강 행은 이미 따로 만들었고, 여기서는 **그 날 칸의 시수만** 올린다.
+   * ⚠️ 정규 행에 `makeup: true`를 켜지 않는다 — 그건 '합침'(제목 "(정규+보강)", 보고서 1건)의 표시다.
+   *    분리는 보고서가 2건이므로 정규 행은 정규 그대로 둔다.
+   */
+  function addMakeupUnitsOnly(existing: OneScreenStudent, target: MergeCandidate, addUnits: number) {
+    const units = (target.attendanceUnits ?? 1) + addUnits;
+    void setAttendanceFor(existing.id, target.classId, mergeStatusOf(target.attendanceRaw), {
+      units: String(units),
+    });
+    setSelId(existing.id);
+    toast.success(
+      `${existing.name} 보강 추가 — ${target.name} 보고서 2건(정규·보강 따로) · 수업타임 ${units}. 결석분 연결은 없습니다(추가 보강).`,
+      { duration: 8000 },
+    );
+  }
+
   function mergeMakeupIntoRegular(
     existing: OneScreenStudent,
     merge: MergeCandidate,

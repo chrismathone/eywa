@@ -39,7 +39,8 @@ const setup = (props: Partial<Parameters<typeof MakeupMergeDialog>[0]> = {}) => 
 };
 
 const pickSeparate = () => userEvent.click(screen.getByRole("radio", { name: "분리 (보강 따로)" }));
-const absentDateInput = () => screen.getByLabelText("며칠자 결석분 보강인가요?");
+// 라벨에 "(결석분일 때만)" 보조 문구가 붙어 있어 정확 일치가 아니라 부분 일치로 잡는다.
+const absentDateInput = () => screen.getByLabelText(/며칠자 결석분 보강인가요\?/);
 
 describe("MakeupMergeDialog — 합침/분리 확인", () => {
   it("후보가 하나면 바로 '합쳐서 발송'할 수 있다", async () => {
@@ -82,12 +83,23 @@ describe("MakeupMergeDialog — 합침/분리 확인", () => {
 });
 
 describe("분리 — 며칠자 결석분인지까지 받는다", () => {
-  it("날짜를 비워 두면 확인을 못 누른다", async () => {
-    setup();
+  // 🔴 뒤집힘(원장 2026-08-07: *"오늘 날짜에 추가 보강할 수도 있잖아.. 근데 추가가 안된다니?"*).
+  //    분리 보강이 반드시 결석분인 건 아니다 — 결석과 무관한 **추가 보강**은 메울 결석이 없다.
+  //    필수로 두는 바람에 그 경우를 적을 칸이 없었고, 강사가 보강일(오늘)을 넣었다가 다시 막혔다.
+  it("날짜를 비워 두면 '추가 보강'으로 보낼 수 있다", async () => {
+    const { onConfirm } = setup();
 
     await pickSeparate();
 
-    expect(screen.getByRole("button", { name: "분리해서 발송" })).toBeDisabled();
+    const confirm = screen.getByRole("button", { name: "분리해서 발송" });
+    expect(confirm).toBeEnabled();
+    expect(screen.getByText(/결석분 연결은 없고\(추가 보강\)/)).toBeInTheDocument();
+
+    await userEvent.click(confirm);
+    // 결석일 없이 넘어간다 — 호출부가 이 값으로 '연결할지'를 가른다.
+    expect(onConfirm).toHaveBeenCalledWith(
+      expect.objectContaining({ mode: "separate", absentDate: "" }),
+    );
   });
 
   it("날짜를 고르면 결석일과 함께 넘긴다", async () => {
@@ -120,13 +132,15 @@ describe("분리 — 며칠자 결석분인지까지 받는다", () => {
     expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({ absentDate: "2026-08-14" }));
   });
 
-  // 같은 날은 결석과 보강이 한 칸에서 만나 '분리'가 성립하지 않는다 — 그건 '합침'이다.
-  it("보강한 날과 같은 날은 여전히 못 고른다", async () => {
+  // 같은 날은 출석부가 한 칸이라 "결석 0 그대로 + 시수 얹기"를 동시에 적을 자리가 없다.
+  // ⚠️ 막되 **출구를 가리켜야** 한다 — 그 경우가 곧 '추가 보강'이므로 비워 두면 된다.
+  it("보강한 날과 같은 날은 막고, 비워 두라고 알려 준다", async () => {
     const { onConfirm } = setup();
 
     await pickSeparate();
     await userEvent.type(absentDateInput(), TODAY);
     expect(screen.getByRole("button", { name: "분리해서 발송" })).toBeDisabled();
+    expect(screen.getByText(/추가 보강이면 날짜를 비워 두세요/)).toBeInTheDocument();
     expect(onConfirm).not.toHaveBeenCalled();
   });
 
