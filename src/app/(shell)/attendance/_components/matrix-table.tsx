@@ -318,14 +318,52 @@ export function MatrixTable({
                           공유 {money.totals.sharedStudents}명 포함
                         </span>
                       ) : null}
-                      {/* 강사 몫(정산액)은 반×강사 배분(회차 확정)이 있어야 나온다 — 없으면 0을 지어내지 않는다. */}
-                      <span className="text-text-faint text-[11px]">
-                        {money.splitRows === 0
-                          ? "정산액 — 회차 확정이 없어 반별 배분을 낼 수 없습니다(수납관리 > 회차)"
-                          : money.commissionRate === null
-                            ? "정산액 — 배분율 미설정(수납관리 > 강사 정산)"
-                            : `배분율 ${money.commissionRate}% · 정산액은 수납관리 > 강사 정산에서`}
-                      </span>
+                      {/* 강사 몫(정산액) — 1순위는 티어 단가(0198a, 시트 산식 Σ floor1(단가×시수×0.911×비율)).
+                          티어 미배선이면 종전 안내(회차 확정/배분율)로 폴백. 없으면 0을 지어내지 않는다. */}
+                      {money.tierSettlement.status === "ready" ? (
+                        <span className="text-foreground num text-[12px] font-bold">
+                          정산액 {formatMoney(money.tierSettlement.total)}
+                          <span className="text-text-faint ml-1 text-[11px] font-normal">
+                            (시수 {money.tierSettlement.unitsTotal} · 단가×시수×0.911×비율)
+                          </span>
+                          {money.tierSettlement.missingTierStudents.length > 0 ? (
+                            <span
+                              className="text-amber ml-1 text-[11px] font-normal"
+                              title={`단가(수업 티어)가 지정되지 않아 정산액에서 빠진 학생입니다: ${money.tierSettlement.missingTierStudents.join(", ")}`}
+                            >
+                              단가 미지정 {money.tierSettlement.missingTierStudents.length}명 ·{" "}
+                              {money.tierSettlement.excludedUnits}시수 제외
+                            </span>
+                          ) : null}
+                          {money.tierSettlement.missingPriceTiers.length > 0 ? (
+                            <span
+                              className="text-amber ml-1 text-[11px] font-normal"
+                              title={`단가표(salary_tiers)에 없는 티어입니다: ${money.tierSettlement.missingPriceTiers.join(", ")}`}
+                            >
+                              단가표 미등록 티어 {money.tierSettlement.missingPriceTiers.length}건
+                            </span>
+                          ) : null}
+                        </span>
+                      ) : money.tierSettlement.status === "hold" ? (
+                        <span
+                          className="text-amber text-[11px]"
+                          title={
+                            money.tierSettlement.missingTierStudents.length > 0
+                              ? `단가 미지정: ${money.tierSettlement.missingTierStudents.join(", ")}`
+                              : undefined
+                          }
+                        >
+                          정산액 보류 — 단가·비율이 지정된 학생이 없습니다
+                        </span>
+                      ) : (
+                        <span className="text-text-faint text-[11px]">
+                          {money.splitRows === 0
+                            ? "정산액 — 회차 확정이 없어 반별 배분을 낼 수 없습니다(수납관리 > 회차)"
+                            : money.commissionRate === null
+                              ? "정산액 — 배분율 미설정(수납관리 > 강사 정산)"
+                              : `배분율 ${money.commissionRate}% · 정산액은 수납관리 > 강사 정산에서`}
+                        </span>
+                      )}
                     </>
                   ) : null}
                 </div>

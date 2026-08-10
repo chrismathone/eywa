@@ -182,6 +182,7 @@ export default async function AttendancePage({
           month,
           effectiveTeacher,
           [...new Set(teacherMatrices.flatMap((m) => m.students.map((s) => s.id)))],
+          teacherClasses.map((c) => c.id), // 티어 정산(0198a) — 시수·티어를 이 반들에서 읽는다
         )
       : null;
   // 매트릭스(무거운 출석 데이터)는 반을 골랐을 때만 로드. 미선택이면 base(빈 매트릭스) 재사용.

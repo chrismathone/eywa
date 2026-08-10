@@ -727,6 +727,7 @@ export async function getMonthlyAttendanceMatrix(
     const records = await fetchAllPagedInChunks<{
       student_id: string;
       session_date: string;
+      slot_start: string | null;
       status: AttendanceStatus;
       note: string | null;
       session_units: number | string | null;
@@ -734,7 +735,7 @@ export async function getMonthlyAttendanceMatrix(
     }>(studentIds, (chunk, from, to) =>
       supabase
         .from("attendance_records")
-        .select("student_id, session_date, status, note, session_units, recorded_at")
+        .select("student_id, session_date, slot_start, status, note, session_units, recorded_at")
         .eq("class_id", classId)
         .in("student_id", chunk)
         .gte("session_date", startIso)
@@ -743,25 +744,45 @@ export async function getMonthlyAttendanceMatrix(
         .range(from, to),
     );
 
-    // 같은 (student, date) 중 최신 record만 채택
+    // 같은 (student, date, **교시**) 중 최신 record만 채택(0196a — 같은 날 두 교시면 서로 다른 기록).
     // 페이지는 같은 order의 슬라이스라 이어붙여도 recorded_at 내림차순이 유지된다(청크는 학생 단위).
     const seen = new Set<string>();
+    const slotRowsByDay = new Map<string, typeof records>();
     for (const r of records) {
-      const k = `${r.student_id}::${r.session_date}`;
+      const k = `${r.student_id}::${r.session_date}::${r.slot_start ?? ""}`;
       if (seen.has(k)) continue;
       seen.add(k);
-      const status = r.status as AttendanceStatus;
-      marks[r.student_id] ??= {};
-      marks[r.student_id]![r.session_date] = status;
-      if (r.note) {
-        notes[r.student_id] ??= {};
-        notes[r.student_id]![r.session_date] = r.note as string;
+      const dayKey = `${r.student_id}::${r.session_date}`;
+      const list = slotRowsByDay.get(dayKey) ?? [];
+      list.push(r); // recorded_at 내림차순 순서 유지(하루 한 기록 = 종전과 동일 경로)
+      slotRowsByDay.set(dayKey, list);
+    }
+    for (const [dayKey, list] of slotRowsByDay) {
+      const sep = dayKey.indexOf("::");
+      const studentId = dayKey.slice(0, sep);
+      const date = dayKey.slice(sep + 2);
+      // 하루 여러 교시(0196a 분리 기록)면: 상태는 **출석형 우선**(하나라도 나왔으면 결석이 아니다),
+      // 시수는 출석형 기록의 합. 기록이 1건이면 종전과 완전히 같은 결과다(대부분의 경로).
+      const countable = list.filter((r) => r.status !== "absent" && r.status !== "excused");
+      const chosen = countable[0] ?? list[0]!;
+      marks[studentId] ??= {};
+      marks[studentId]![date] = chosen.status as AttendanceStatus;
+      const noted = list.find((r) => r.note);
+      if (noted?.note) {
+        notes[studentId] ??= {};
+        notes[studentId]![date] = noted.note as string;
       }
       // 시수(배수) — null=기본 1이라 저장 안 함(키 없음 = 1). numeric은 문자열로 올 수 있어 Number 변환.
-      const u = r.session_units === null || r.session_units === undefined ? null : Number(r.session_units);
+      const u =
+        countable.length > 0
+          ? countable.reduce((acc, r) => {
+              const v = r.session_units === null || r.session_units === undefined ? 1 : Number(r.session_units);
+              return acc + (Number.isFinite(v) ? v : 1);
+            }, 0)
+          : null;
       if (u !== null && Number.isFinite(u) && u !== 1) {
-        units[r.student_id] ??= {};
-        units[r.student_id]![r.session_date] = u;
+        units[studentId] ??= {};
+        units[studentId]![date] = u;
       }
     }
   }
