@@ -172,7 +172,7 @@ async function computeTierSettlementInfo(
   const to = new Date(Date.UTC(y!, m!, 0)).toISOString().slice(0, 10);
 
   try {
-    const [tiers, tierEnrollments, records] = await Promise.all([
+    const [tiers, tierEnrollments, records, dowSettings] = await Promise.all([
       // 단가표 — master 전용 RLS(0199a). 비-master는 RLS가 0행을 돌려주고(정책 없음이 아니라 미매치),
       // 그 경우 아래 "단가표 비어 있음" 분기로 unwired가 된다(급여 정보 비노출과 화면 안전이 같이 성립).
       supabase.from("salary_tiers").select("label, unit_price"),
@@ -199,6 +199,12 @@ async function computeTierSettlementInfo(
           .order("id", { ascending: true }) // OFFSET 페이지 안정용 unique 정렬(B2)
           .range(f, t),
       ),
+      // 급여 적용 요일(0132a class_salary_settings.applies_dows) — "주말 수업분만 비율제"(이성우: 평일
+      // 수업은 급여 밖, 토·일 시수만). 지정된 반은 그 요일 날짜의 출결만 정산에 넣는다.
+      // splits 경로(settlement-queries dowApportionRatio)와 **같은 설정을 같은 의미로** 소비한다.
+      fetchInChunks<{ class_id: string; applies_dows: string[] | null }>(classIds, (chunk) =>
+        supabase.from("class_salary_settings").select("class_id, applies_dows").in("class_id", chunk),
+      ),
     ]);
     if (tiers.error) return { status: "unwired" };
     const priceByTier = new Map<string, number>(
@@ -212,11 +218,21 @@ async function computeTierSettlementInfo(
       if (e.salary_tier) enrollTier.set(`${e.student_id}|${e.class_id}`, e.salary_tier);
     }
 
+    // 반별 급여 적용 요일 — 지정 없는 반은 전 요일. 키는 DOW_KEYS("sun"~"sat", getDay() 인덱스와 동일).
+    const appliesDowsByClass = new Map<string, Set<string>>();
+    for (const s of dowSettings) {
+      if (s.applies_dows && s.applies_dows.length > 0) appliesDowsByClass.set(s.class_id, new Set(s.applies_dows));
+    }
+    const DOW_KEYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
+
     // 교시별 유효행 → 출석 시수를 (학생 × 반 × 티어)로 합산. 결석·excused는 시수를 소비하지 않는다.
     const effective = effectiveAttendanceRecords(records);
     const unitsByRow = new Map<string, { studentId: string; classId: string; tierLabel: string | null; units: number }>();
     for (const r of effective) {
       if (r.status === "absent" || r.status === "excused") continue;
+      // 급여 적용 요일 밖의 출결은 정산에 넣지 않는다(출결 자체는 진실로 남는다 — 급여만 거른다).
+      const applies = appliesDowsByClass.get(r.class_id);
+      if (applies && !applies.has(DOW_KEYS[new Date(`${r.session_date}T00:00:00Z`).getUTCDay()]!)) continue;
       const u = r.session_units === null || r.session_units === undefined ? 1 : Number(r.session_units);
       if (!Number.isFinite(u) || u <= 0) continue;
       const tierLabel = r.salary_tier ?? enrollTier.get(`${r.student_id}|${r.class_id}`) ?? null;
