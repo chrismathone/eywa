@@ -132,16 +132,33 @@ describe("분리 — 며칠자 결석분인지까지 받는다", () => {
     expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({ absentDate: "2026-08-14" }));
   });
 
-  // 같은 날은 출석부가 한 칸이라 "결석 0 그대로 + 시수 얹기"를 동시에 적을 자리가 없다.
-  // ⚠️ 막되 **출구를 가리켜야** 한다 — 그 경우가 곧 '추가 보강'이므로 비워 두면 된다.
-  it("보강한 날과 같은 날은 막고, 비워 두라고 알려 준다", async () => {
-    const { onConfirm } = setup();
+  /**
+   * 같은 날은 출석부가 한 칸이라 "결석 0 그대로 + 시수 얹기"를 동시에 적을 자리가 없다.
+   * 🔴 **값 자체를 안 받는다**(원장 2026-08-07: *"처음부터 오늘 날짜 선택 못하게"*) — 예전엔 받아 두고
+   *    발송 버튼만 잠갔더니 "골랐는데 왜 안 되지"가 됐다. 칸은 비어 있고 = 그대로 '추가 보강'이라
+   *    **막다른 길이 아니다**(확인 버튼은 살아 있다).
+   */
+  it("보강한 날은 칸에 들어가지 않고, 갈 길을 알려 준다", async () => {
+    setup();
 
     await pickSeparate();
     await userEvent.type(absentDateInput(), TODAY);
-    expect(screen.getByRole("button", { name: "분리해서 발송" })).toBeDisabled();
-    expect(screen.getByText(/추가 보강이면 날짜를 비워 두세요/)).toBeInTheDocument();
-    expect(onConfirm).not.toHaveBeenCalled();
+
+    expect(absentDateInput()).toHaveValue(""); // 값이 안 들어간다
+    expect(screen.getByText(/보강한 날이라 결석분으로 고를 수 없습니다/)).toBeInTheDocument();
+    // 비어 있는 상태 = 추가 보강 → 막히지 않는다.
+    expect(screen.getByRole("button", { name: "분리해서 발송" })).toBeEnabled();
+  });
+
+  it("다른 날을 다시 고르면 안내가 사라진다", async () => {
+    setup();
+
+    await pickSeparate();
+    await userEvent.type(absentDateInput(), TODAY);
+    await userEvent.type(absentDateInput(), "2026-07-16");
+
+    expect(absentDateInput()).toHaveValue("2026-07-16");
+    expect(screen.queryByText(/보강한 날이라 결석분으로 고를 수 없습니다/)).not.toBeInTheDocument();
   });
 
   it("후보가 둘이면 분리도 어느 반인지 골라야 한다(그 반에 시수가 얹힌다)", async () => {

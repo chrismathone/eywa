@@ -67,6 +67,15 @@ export function MakeupMergeDialog({
    */
   const [absentDate, setAbsentDate] = useState("");
   /**
+   * 보강일과 같은 날을 고르려 한 순간 띄우는 한 줄 — **값은 받지 않는다**(원장 2026-08-07:
+   * *"처음부터 오늘 날짜 선택 못하게 하는건 어때? 오늘 날짜 선택할 이유가 없어보이네"*).
+   *
+   * 🔴 `input[type=date]`는 **하루만 빼는 상한/하한을 표현할 수 없다**(min·max는 구간뿐). 그래서
+   *    달력에서 그 날을 지울 수는 없고, **골라도 칸에 들어가지 않게** 막고 이유를 그 자리에 적는다.
+   *    예전엔 값을 받아 두고 발송 버튼만 잠갔는데, 그러면 "골랐는데 왜 안 되지"가 된다(실제 제보).
+   */
+  const [sameDayNote, setSameDayNote] = useState<string | null>(null);
+  /**
    * 이번 보강의 시수. 🔴 **1로 박으면 안 된다**(원장 2026-08-06: *"1.5는 3시간 수업건에 대해서 1.5로 입력되고
    * 있음 — 즉 0.5당 1시간"*). 수학 3시간 반의 보강을 1로 적으면 급여가 0.5 모자란다.
    * 기본값 = **그 반 정규 1회 시수**(그 행의 현재 값, 미입력이면 1) — 같은 수업을 한 번 더 한 것이니 그게 맞다.
@@ -182,9 +191,21 @@ export function MakeupMergeDialog({
               id="makeup-absent-date"
               type="date"
               value={absentDate}
-              onChange={(e) => setAbsentDate(e.target.value)}
+              onChange={(e) => {
+                const v = e.target.value;
+                // 보강한 날은 결석분이 될 수 없다(출석부가 한 칸) — 값을 받지 않고 갈 길을 알려 준다.
+                if (v && v === makeupDate) {
+                  setSameDayNote(
+                    `${shortDate(makeupDate)}은 보강한 날이라 결석분으로 고를 수 없습니다 — 그날 한 추가 보강이면 비워 두세요.`,
+                  );
+                  return;
+                }
+                setSameDayNote(null);
+                setAbsentDate(v);
+              }}
               className="border-line bg-bg-soft focus:border-primary h-8 rounded-lg border px-2 text-[13px] outline-none"
             />
+            {sameDayNote ? <p className="text-amber mt-1.5 text-[11px] leading-snug">{sameDayNote}</p> : null}
           </div>
         ) : null}
 
