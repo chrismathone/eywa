@@ -112,8 +112,9 @@ export function MatrixRow({
               </span>
             ) : null}
             {tierMissing ? (
-              <span className="shrink-0 rounded-sm bg-amber-300 px-1 text-[9px] leading-[14px] font-bold text-amber-950">
-                단가 미지정
+              // 라벨은 짧게 「단가」 + 우측 정렬(ml-auto) — 셀 오른쪽 끝에 붙어 요일과 안 섞인다(원장 2026-08-10).
+              <span className="ml-auto shrink-0 rounded-sm bg-amber-300 px-1 text-[9px] leading-[14px] font-bold text-amber-950">
+                단가
               </span>
             ) : null}
           </span>
