@@ -135,6 +135,7 @@ export function MatrixRow({
               outside={outside}
               locked={lockBefore && d.date < lockBefore ? lockedMessage(d.date, lockBefore) : null}
               derived={!!matrix.derived[student.id]?.[d.date]}
+              daySlots={matrix.slots[student.id]?.[d.date]}
             />
           </td>
         );

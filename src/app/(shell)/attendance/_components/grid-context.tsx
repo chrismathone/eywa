@@ -16,6 +16,7 @@ import { saveAttendanceCollapsed } from "@/features/attendance/server/prefs-acti
 import { cellKey, classIdOfRow, parseCellKey } from "@/features/attendance/grid/model";
 import { GridStore, type CellState, type GridValue } from "@/features/attendance/grid/store";
 import { countCells, type Counted } from "@/features/attendance/grid/totals";
+import { COUNTABLE_STATUSES } from "@/features/attendance/session-units";
 import { appendChar, backspace, commitBuffer, copyValueOf, type TypedValue } from "@/features/attendance/grid/typing";
 
 type Ctx = {
@@ -94,6 +95,7 @@ export function GridProvider({
   rows,
   cols,
   initial,
+  slotCounts,
   lockBefore,
   initialCollapsed,
   children,
@@ -104,6 +106,13 @@ export function GridProvider({
   cols: string[];
   /** 서버가 그린 초기값 — 셀 키 → {상태, 시수}. 빈 칸은 없음. */
   initial: Record<string, { s: string; u: number | null }>;
+  /**
+   * 하루에 교시가 **둘 이상**인 칸만(셀 키 → 교시 수, 0196a). 없으면 전부 1로 본다.
+   * 🔴 이 칸에 숫자를 치면 서버는 그날 **모든 교시**를 같은 값으로 고친다 → 다시 읽은 합계는 교시 수만큼
+   *    커진다. 화면 값만 친 그대로 두면 "1을 쳤는데 새로고침하면 2"가 되고, 그 사이 행 시수 합이
+   *    급여와 다른 숫자를 말한다(totals.ts의 서버·클라 동일 숫자 규약 위반). 그래서 **여기서 미리 곱한다**.
+   */
+  slotCounts?: Record<string, number>;
   lockBefore: string | null;
   /** 지난번에 접어 둔 반(계정 설정). 없으면 전부 펼침. */
   initialCollapsed?: string[];
@@ -169,15 +178,28 @@ export function GridProvider({
     refreshTimer.current = setTimeout(() => router.refresh(), 900);
   }, [router]);
   useEffect(() => () => { if (refreshTimer.current) clearTimeout(refreshTimer.current); }, []);
-  const toValue = (v: TypedValue | null): GridValue =>
-    v ? { s: v.status, u: v.units === "" ? null : Number(v.units) } : null;
+  /**
+   * 타이핑 값 → 칸에 보여 줄 값.
+   * ⚠️ 교시가 여럿인 칸은 시수를 **교시 수만큼 곱한다** — 서버가 그날 모든 교시에 같은 값을 쓰므로
+   *    다시 읽으면 합이 그만큼이다(위 slotCounts 주석). 결석(시수 없음)은 곱할 게 없다.
+   */
+  const toValue = useCallback(
+    (key: string, v: TypedValue | null): GridValue => {
+      if (!v) return null;
+      const raw = v.units === "" ? null : Number(v.units);
+      const n = slotCounts?.[key] ?? 1;
+      if (n <= 1 || !COUNTABLE_STATUSES.has(v.status)) return { s: v.status, u: raw };
+      return { s: v.status, u: Math.round((raw ?? 1) * n * 10) / 10 };
+    },
+    [slotCounts],
+  );
 
   /** 한 칸 저장(되돌리기 기록 없이) — 되돌리기 자체가 되쓸 때도 쓴다. */
   const pushCell = useCallback(
     (key: string, val: TypedValue | null, prev: GridValue) => {
       const p = parseCellKey(key);
       if (!p) return;
-      store.setLocal([[key, toValue(val)]]);
+      store.setLocal([[key, toValue(key, val)]]);
       void setAttendanceCell({
         studentId: p.studentId,
         classId: p.classId,
@@ -192,7 +214,7 @@ export function GridProvider({
         } else scheduleRefresh();
       });
     },
-    [store, scheduleRefresh],
+    [store, scheduleRefresh, toValue],
   );
 
   /** 한 칸 저장. */
@@ -230,7 +252,7 @@ export function GridProvider({
       // 한 번의 채우기 = 되돌리기 한 칸(Ctrl+Z 한 번이면 통째로 돌아온다).
       undoRef.current.push(prevs.map(([key, prev]) => ({ key, prev })));
       if (undoRef.current.length > 50) undoRef.current.shift();
-      store.setLocal(prevs.map(([k]) => [k, toValue(val)] as [string, GridValue]));
+      store.setLocal(prevs.map(([k]) => [k, toValue(k, val)] as [string, GridValue]));
       void setAttendanceRange({
         cells: targets.map((t) => ({ studentId: t.studentId, classId: t.classId, sessionDate: t.date })),
         status: (val?.status ?? null) as never,
@@ -247,7 +269,7 @@ export function GridProvider({
         if (skipped > 0) setError(`${skipped}칸은 수정 기간이 지났거나 담당 반이 아니어서 건너뛰었습니다`);
       });
     },
-    [store, isLocked, writeOne, scheduleRefresh],
+    [store, isLocked, writeOne, scheduleRefresh, toValue],
   );
 
   /** 버퍼 확정 — 범위가 잡혀 있으면 전체에. 확정할 수 없는 입력이면 아무 일도 없다. */

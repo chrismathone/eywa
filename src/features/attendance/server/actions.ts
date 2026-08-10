@@ -48,7 +48,11 @@ export async function saveAttendance(
   type Row = {
     studentId: string;
     status: Status;
-    existingId: string | null;
+    /**
+     * 그날 이 학생의 유효 기록 **전부**(교시별 1건씩, 0196a) — 쉼표로 이어 온다.
+     * 최근 1건만 고치면 같은 날 다른 교시가 조용히 옛 상태로 남는다("저장했는데 안 바뀐" 칸).
+     */
+    existingIds: string[];
     note: string | null;
     homeworkRequired: boolean;
     homeworkDone: boolean;
@@ -62,8 +66,10 @@ export async function saveAttendance(
     const status = String(value);
     if (!status) continue;
     if (!STATUSES.includes(status as Status)) continue;
-    const existingId =
-      String(formData.get(`existing:${studentId}`) ?? "").trim() || null;
+    const existingIds = String(formData.get(`existing:${studentId}`) ?? "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
     const note =
       String(formData.get(`note:${studentId}`) ?? "").trim() || null;
     const homeworkRequired =
@@ -79,7 +85,7 @@ export async function saveAttendance(
     rows.push({
       studentId,
       status: status as Status,
-      existingId,
+      existingIds,
       note,
       homeworkRequired,
       homeworkDone,
@@ -110,24 +116,29 @@ export async function saveAttendance(
   const nowIso = new Date().toISOString();
 
   // Split into updates (existing row) and inserts (new)
-  const updates = rows.filter((r) => r.existingId);
-  const inserts = rows.filter((r) => !r.existingId);
+  const updates = rows.filter((r) => r.existingIds.length > 0);
+  const inserts = rows.filter((r) => r.existingIds.length === 0);
 
   let saved = 0;
 
   for (const r of updates) {
+    // 교시가 여럿인 학생은 그날 **전 교시**를 같은 상태로 고친다(이 화면은 학생당 한 줄 = "그날 전체").
+    const multi = r.existingIds.length > 1;
+    const patch: Record<string, unknown> = {
+      status: r.status,
+      note: r.note,
+      homework_required: r.homeworkRequired,
+      homework_done: r.homeworkDone,
+      recorded_by: user.id,
+      recorded_at: nowIso,
+    };
+    // 🔴 교시가 여럿이면 시수는 **건드리지 않는다** — 화면이 보여 준 값은 그날 **합**이라 그대로 각
+    //    교시에 쓰면 교시 수만큼 부풀려진다(2교시 합 2 → 각 2 → 합 4). 교시별 시수는 영어 수업 시트에서.
+    if (!multi) patch.session_units = r.sessionUnits;
     const { error } = await supabase
       .from("attendance_records")
-      .update({
-        status: r.status,
-        note: r.note,
-        homework_required: r.homeworkRequired,
-        homework_done: r.homeworkDone,
-        session_units: r.sessionUnits,
-        recorded_by: user.id,
-        recorded_at: nowIso,
-      })
-      .eq("id", r.existingId!);
+      .update(patch)
+      .in("id", r.existingIds);
     if (error) return { error: error.message };
     saved++;
   }

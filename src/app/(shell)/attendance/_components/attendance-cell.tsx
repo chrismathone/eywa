@@ -2,7 +2,14 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { AttendanceStatus } from "@/features/attendance/server/queries";
-import { CELL_SCROLL_MARGIN, STATUS_TEXT, cellDisplay } from "@/features/attendance/cell-display";
+import {
+  CELL_SCROLL_MARGIN,
+  STATUS_TEXT,
+  cellDisplay,
+  rollupDay,
+  slotBreakdown,
+  type SlotMark,
+} from "@/features/attendance/cell-display";
 import { cellKey, rowKey } from "@/features/attendance/grid/model";
 import { useCellState } from "./grid-context";
 import { CellPopover, type PopoverAnchor } from "./cell-popover";
@@ -31,6 +38,7 @@ export function AttendanceCell({
   outside,
   derived,
   locked,
+  daySlots,
 }: {
   studentId: string;
   classId: string;
@@ -51,6 +59,11 @@ export function AttendanceCell({
   derived?: boolean;
   /** 수정 기간(7일)이 지나 강사가 못 고치는 칸 — 이유를 담은 문장. */
   locked?: string | null;
+  /**
+   * 그날 교시가 **둘 이상**일 때만 오는 교시별 기록(0196a) — 숫자(합)·줄무늬·툴팁의 근거.
+   * 대부분의 칸은 undefined라 종전과 완전히 같이 그려진다.
+   */
+  daySlots?: SlotMark[];
 }) {
   const row = rowKey(classId, studentId);
   const key = cellKey(row, sessionDate);
@@ -80,11 +93,19 @@ export function AttendanceCell({
   // 파생이라 effect가 필요 없다.
   const noteVal = ctx && state.value === null ? "" : noteEdit ?? note ?? "";
 
-  const display = cellDisplay(status, units, { attendDay, muted, outside });
+  // 하루에 교시가 둘 이상인 칸 — 합계·줄무늬는 **서버가 준 값 그대로일 때만** 사실이다.
+  // 값을 고치는 순간(status·시수가 초기값과 달라짐) 접었던 근거가 무너지므로 평범한 한 칸으로 돌아간다.
+  // ⚠️ 파생 뱃지(fromReport)가 쓰는 것과 같은 관용구다 — 서버 값과 같을 때만 출처를 말한다.
+  const dayRollup = daySlots && daySlots.length > 1 ? rollupDay(daySlots) : null;
+  const pristine = status === initialStatus && (units ?? null) === (initialUnits ?? null);
+  const day = pristine ? dayRollup : null;
+  const display = cellDisplay(status, units, { attendDay, muted, outside, day });
   const fromReport = derived && status === initialStatus;
   // 잠긴 칸이라도 **메모는 보여 준다** — 잠금 사유만 남기고 메모를 감추면 왜 잠겼는지만 알고 뭐라 적혔는지는 못 본다.
   const title = [
     locked || (status ? STATUS_TEXT[status] : null),
+    // 교시가 여럿인 날 — 칸엔 합계 하나뿐이라, 무엇을 접었는지 여기서 펼쳐 준다.
+    day ? `${day.count}교시 · ${slotBreakdown(day.slots)}` : null,
     // 회색 칸의 뜻을 말해 준다 — 색만 다르면 "왜 여기만 회색이지"로 끝난다.
     outside ? (status ? "재원 기간 밖 기록(보강 등)" : "이 반 재원 기간이 아닙니다") : null,
     fromReport ? "수업보고서 자동 판정" : null,
@@ -116,8 +137,10 @@ export function AttendanceCell({
         data-cell-key={key}
         role="gridcell"
         tabIndex={state.active || isFirst ? 0 : -1}
-        aria-label={`${sessionDate} ${status ? STATUS_TEXT[status] : "미기록"}`}
+        aria-label={`${sessionDate} ${status ? STATUS_TEXT[status] : "미기록"}${day ? ` 외 ${day.count - 1}교시` : ""}`}
         title={title || undefined}
+        // 색이 갈린 교시가 섞인 날만 — 인라인 배경이 클래스 배경을 이긴다(글자색은 클래스 그대로).
+        style={display.style}
         onMouseDown={(e) => {
           if (e.button !== 0) return;
           ctx?.selectCell(row, sessionDate, e.shiftKey);

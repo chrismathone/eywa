@@ -380,6 +380,7 @@ export default async function AttendancePage({
       rows={gridSource.rows}
       cols={gridSource.cols}
       initial={gridSource.initial}
+      slotCounts={gridSource.slotCounts}
       lockBefore={lockBefore}
       initialCollapsed={viewPrefs.collapsed}
     >

@@ -66,16 +66,22 @@ export function buildGridSource(
   const rows = ordered.map((r) => rowKey(r.classId, r.studentId));
   const cols = days.filter((d) => !d.placeholder).map((d) => d.date);
   const initial: Record<string, { s: string; u: number | null }> = {};
+  // 하루에 교시가 둘 이상인 칸만(0196a) — 한 칸에 친 숫자가 그날 **몇 건**을 고치는지.
+  const slotCounts: Record<string, number> = {};
   for (const g of groups) {
     for (const s of g.matrix.students) {
       const marks = g.matrix.marks[s.id] ?? {};
       const units = g.matrix.units[s.id] ?? {};
+      const slots = g.matrix.slots[s.id] ?? {};
       for (const [date, st] of Object.entries(marks)) {
-        initial[cellKey(rowKey(g.classId, s.id), date)] = { s: st, u: units[date] ?? null };
+        const key = cellKey(rowKey(g.classId, s.id), date);
+        initial[key] = { s: st, u: units[date] ?? null };
+        const n = slots[date]?.length ?? 1;
+        if (n > 1) slotCounts[key] = n;
       }
     }
   }
-  return { rows, cols, initial };
+  return { rows, cols, initial, slotCounts };
 }
 
 /**

@@ -26,6 +26,7 @@ import type {
   AttendanceInputRow,
   AttendanceStatus,
 } from "@/features/attendance/server/queries";
+import { slotBreakdown } from "@/features/attendance/cell-display";
 import { formatSessionUnits } from "@/features/attendance/session-units";
 import { submitAction } from "@/components/forms/submit-action";
 import { AttendanceMakeupAdder } from "./makeup-adder";
@@ -136,12 +137,16 @@ export function AttendanceInputForm({
         studentGrade: s.label || null,
         enrollmentId: null,
         isMakeup: true,
+        // 아직 저장 전이라 기록이 없다 — 저장하면 서버 rows에 교시 정보와 함께 합류한다.
+        recordIds: [],
         existingRecordId: null,
         status: "makeup",
         note: null,
         homeworkRequired: false,
         homeworkDone: false,
         sessionUnits: null,
+        slotCount: 0,
+        slots: [],
       },
     ]);
     setPending((p) => ({
@@ -290,6 +295,16 @@ export function AttendanceInputForm({
                     {r.existingRecordId ? (
                       <span className="text-text-dim text-[10px]">· 이전 기록 있음</span>
                     ) : null}
+                    {/* 하루에 교시가 둘 이상인 학생(0196a) — 이 화면은 학생당 한 줄이라 접어서 보여 준다.
+                        접었다는 사실과 무엇을 접었는지를 밝히지 않으면 "왜 시수가 2지?"로만 남는다. */}
+                    {r.slotCount > 1 ? (
+                      <span
+                        className="bg-bg-soft text-text-dim border-line rounded-full border px-1.5 py-0.5 text-[10px] font-medium"
+                        title={`${slotBreakdown(r.slots)} — 저장하면 이 날 ${r.slotCount}개 교시가 모두 같은 상태가 됩니다. 교시별로 다르게 두려면 영어 수업 시트에서 고치세요.`}
+                      >
+                        {r.slotCount}교시
+                      </span>
+                    ) : null}
                     {/* 저장 전 취소 — 서버에 이미 기록이 있는 보강 행은 여기 안 걸린다(그건 상태를 지워 반영). */}
                     {added.some((a) => a.studentId === r.studentId) ? (
                       <button
@@ -311,10 +326,11 @@ export function AttendanceInputForm({
                     ) : null}
                   </div>
 
+                  {/* 그날 유효 기록 **전부**(쉼표) — 교시가 여럿이면 저장이 전 교시를 함께 고친다. */}
                   <input
                     type="hidden"
                     name={`existing:${r.studentId}`}
-                    value={r.existingRecordId ?? ""}
+                    value={r.recordIds.join(",")}
                   />
                   {/* 서버 에러 메시지용 학생 이름(시수 검증 실패 시 누구인지 표시) */}
                   <input type="hidden" name={`name:${r.studentId}`} value={r.studentName} />
@@ -394,16 +410,27 @@ export function AttendanceInputForm({
                     <label className="text-foreground flex items-center gap-2 text-xs">
                       <Clock className="text-text-dim size-3" />
                       시수
+                      {/* 🔴 교시가 여럿이면 이 값은 그날 **합**이라 고칠 수 없다 — 되쓰면 각 교시에 합이
+                          들어가 교시 수만큼 부풀려진다. 교시별 시수는 영어 수업 시트가 맡는다. */}
                       <input
                         type="text"
                         inputMode="decimal"
                         value={cell.units}
+                        readOnly={r.slotCount > 1}
                         onChange={(e) => patchOne(r.studentId, { units: e.target.value })}
                         placeholder="1"
-                        title="정규 수업 1회 = 1 (빈 칸). 보강 연장 1.5·2, 부분 출석 0.5 등"
-                        className="border-line bg-card text-foreground w-16 rounded-md border px-2 py-1.5 text-xs"
+                        title={
+                          r.slotCount > 1
+                            ? `${r.slotCount}개 교시의 합입니다 — 교시별 시수는 영어 수업 시트에서 고치세요`
+                            : "정규 수업 1회 = 1 (빈 칸). 보강 연장 1.5·2, 부분 출석 0.5 등"
+                        }
+                        className={`border-line bg-card text-foreground w-16 rounded-md border px-2 py-1.5 text-xs ${
+                          r.slotCount > 1 ? "text-text-dim cursor-not-allowed" : ""
+                        }`}
                       />
-                      <span className="text-text-dim">회분 (빈 칸 = 1)</span>
+                      <span className="text-text-dim">
+                        {r.slotCount > 1 ? `회분 (${r.slotCount}개 교시 합)` : "회분 (빈 칸 = 1)"}
+                      </span>
                     </label>
                     <div className="flex flex-wrap items-center gap-3">
                       <label className="text-foreground inline-flex items-center gap-1.5 text-xs">
