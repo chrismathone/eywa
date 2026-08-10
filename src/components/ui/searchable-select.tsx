@@ -26,6 +26,7 @@ export function SearchableSelect({
   triggerClassName,
   ariaLabel,
   highlightSelected = false,
+  compact = false,
 }: {
   options: ComboOption[];
   value?: string;
@@ -51,6 +52,12 @@ export function SearchableSelect({
    * 물들이면 요청받지 않은 화면까지 바뀐다. **길고 자주 갈아타는 목록**(반·학생 전환)에서만 켤 것.
    */
   highlightSelected?: boolean;
+  /**
+   * 촘촘한 표 안(높이 24px 안팎)에 놓일 때 — 화살표와 좌우 간격을 줄인다. 기본 화살표(16px)는 24px 박스에서
+   * 글자 자리를 먹어 값이 잘린다. ⚠️ 레이아웃 클래스를 **분기해서 한 벌만** 내보낼 것(`gap-2`와 `gap-1`을
+   * 같이 적으면 이기는 쪽을 Tailwind가 CSS를 찍은 순서가 정한다 — 아래 톤 분기와 같은 이유).
+   */
+  compact?: boolean;
 }) {
   const isControlled = value !== undefined;
   const [internal, setInternal] = useState(defaultValue);
@@ -103,7 +110,7 @@ export function SearchableSelect({
         type="button"
         aria-label={ariaLabel}
         onClick={() => setOpen((o) => !o)}
-        className={`flex w-full cursor-pointer items-center justify-between gap-2 ${triggerBox}`}
+        className={`flex w-full cursor-pointer items-center justify-between ${compact ? "gap-1" : "gap-2"} ${triggerBox}`}
       >
         {/* 굵기는 박스 스타일과 안 겹쳐서 triggerClassName을 넘긴 호출부에서도 안전하게 붙는다. */}
         <span
@@ -111,7 +118,11 @@ export function SearchableSelect({
         >
           {selected ? selected.label : placeholder}
         </span>
-        <EyIcon name="chevronDown" size={16} className="size-4 shrink-0 opacity-50" />
+        {compact ? (
+          <EyIcon name="chevronDown" size={12} className="size-3 shrink-0 opacity-60" />
+        ) : (
+          <EyIcon name="chevronDown" size={16} className="size-4 shrink-0 opacity-50" />
+        )}
       </button>
       {open ? (
         <div className="border-border bg-card absolute z-50 mt-1 w-full min-w-[12rem] overflow-hidden rounded-md border shadow-lg">

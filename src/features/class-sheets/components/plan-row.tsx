@@ -5,17 +5,14 @@
 import { memo } from "react";
 import { X } from "@/components/icons/eywa-icon-compat";
 import { skillAreaColorOf, skillAreaLabelOf } from "@/features/owner/skill-areas";
-import { SUBJECT_BORDER, SUBJECT_SOFT } from "@/features/owner/subjects";
+import { SUBJECT_SOFT } from "@/features/owner/subjects";
 import type { SkillAreaSetting } from "@/features/owner/settings-types";
 import { buildSaveKey } from "../lib/save-keys";
 import type { PlanPatchField } from "../lib/plan-codec";
 import type { PlanLineDTO } from "../server/actions";
+import { SHEET_BOX_FRAME, SHEET_INPUT } from "../ui-box";
 import type { SheetHandlers } from "./sheet-client";
 import { useCellState, type SheetSaveStore } from "./use-sheet-saves";
-
-// 테두리 = line-strong(18%) — 헤어라인 9%는 흰 카드 위에서 칸 경계가 거의 안 보인다(가독성 지적 07-31).
-const cellCls =
-  "border-line-strong text-foreground w-full rounded-lg border bg-transparent px-1.5 py-1 text-[13px] outline-none focus:border-primary disabled:opacity-60";
 
 function CasInput({
   lineId,
@@ -39,7 +36,7 @@ function CasInput({
   const value = cell ? (cell.value ?? "") : (fallback ?? "");
   if (cell?.conflict) {
     return (
-      <div className="border-danger bg-danger/5 space-y-1 rounded-lg border px-1.5 py-1">
+      <div className="border-danger bg-danger/5 space-y-1 rounded-md border px-1.5 py-1">
         <p className="text-danger text-[11px] leading-tight">
           다른 강사가 수정: <b>{cell.conflict.serverValue ?? "(비움)"}</b>
         </p>
@@ -47,7 +44,7 @@ function CasInput({
         <div className="flex gap-1">
           <button
             type="button"
-            className="border-line-strong text-foreground cursor-pointer rounded-full border px-1.5 text-[11px]"
+            className="border-foreground text-foreground cursor-pointer rounded-full border px-1.5 text-[11px] font-semibold"
             onClick={() => handlers.resolveConflict(saveKey, "server")}
           >
             서버값 사용
@@ -65,7 +62,7 @@ function CasInput({
   }
   return (
     <input
-      className={cellCls}
+      className={SHEET_INPUT}
       value={value}
       disabled={!canEdit}
       aria-label={ariaLabel}
@@ -98,7 +95,9 @@ export const PlanRow = memo(function PlanRow({
   // 영역 고유색 — 계획 표에서도 패널과 **같은 색**이라 "보카 줄"을 색으로 찾는다(단일 소스: 학원설정).
   const areaTone = skillAreaColorOf(skillAreas, areaValue ?? "");
   // 셀렉트도 알약처럼 — 닫힌 상태(평소 보이는 모습)에 색·굵기가 그대로 실린다.
-  const areaCls = `w-full cursor-pointer rounded-lg border px-1.5 py-1 text-[13px] font-bold outline-none focus:border-primary ${SUBJECT_BORDER[areaTone]} ${SUBJECT_SOFT[areaTone]}`;
+  // ⚠️ 테두리는 영역색이 아니라 **잉크 고정**(원장 2026-08-10 "모든 박스에 진한 검은색 테두리") —
+  //    영역 구분은 바탕색(SUBJECT_SOFT)이 그대로 지고 있어서, 테두리를 검게 해도 "아 보카네!"는 안 사라진다.
+  const areaCls = `${SHEET_BOX_FRAME} h-6 w-full cursor-pointer px-1 text-[13px] font-bold outline-none focus:border-primary ${SUBJECT_SOFT[areaTone]}`;
 
   return (
     <tr className="align-top">
@@ -121,7 +120,7 @@ export const PlanRow = memo(function PlanRow({
           </select>
         ) : (
           <span
-            className={`inline-block rounded-full px-2 py-0.5 text-[12px] font-bold ${SUBJECT_SOFT[areaTone]}`}
+            className={`${SHEET_BOX_FRAME} inline-flex h-6 w-full items-center justify-center truncate px-1 text-[13px] font-bold ${SUBJECT_SOFT[areaTone]}`}
           >
             {areaLabel}
           </span>

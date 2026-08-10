@@ -41,7 +41,7 @@ export function PlanTable({
 }) {
   const defaultArea = skillAreas[0]?.key ?? "vocab";
   return (
-    <div className="space-y-1.5">
+    <div className="space-y-1">
       {TERMS.map((term) => {
         const rows = lines.filter((l) => l.termMode === term.key);
         // 내신을 안 쓰는 반: **빈 구획만** 숨긴다. 줄이 남아 있으면(과거 입력·시트 임포트) 그대로 보여
@@ -58,7 +58,7 @@ export function PlanTable({
               {canEdit ? (
                 <button
                   type="button"
-                  className="border-line-strong text-text-dim hover:text-primary hover:border-primary cursor-pointer rounded-full border px-2 py-0.5 text-[12px] font-medium"
+                  className="border-foreground text-foreground hover:text-primary hover:border-primary cursor-pointer rounded-full border px-2 py-0.5 text-[12px] font-bold"
                   onClick={() => handlers.addLine(date, slotStart, term.key, defaultArea)}
                 >
                   + 줄 추가
@@ -69,7 +69,7 @@ export function PlanTable({
               {canEdit && !rows.some((l) => isMeaningfulPlanLine(l)) ? (
                 <button
                   type="button"
-                  className="border-line-strong text-text-dim hover:text-primary hover:border-primary cursor-pointer rounded-full border px-2 py-0.5 text-[12px] font-medium"
+                  className="border-foreground text-foreground hover:text-primary hover:border-primary cursor-pointer rounded-full border px-2 py-0.5 text-[12px] font-bold"
                   title={`같은 ${term.label} 계획 중 이 교시보다 앞선 가장 최근 교시에서 복사합니다(학생 기록은 복사하지 않습니다)`}
                   onClick={() => handlers.copySlot(date, slotStart, term.key)}
                 >
@@ -89,12 +89,12 @@ export function PlanTable({
                 </colgroup>
                 <thead>
                   {/* 헤더 밴드 — 원본 시트의 노란 머리글(시기·구분·교재·페이지·진도·과제)과 같은 역할. */}
-                  <tr className="bg-bg-soft text-text-dim text-left text-[11px]">
-                    <th className="rounded-l-md py-1 pl-1 font-semibold">구분</th>
-                    <th className="py-1 font-semibold">교재 / 내신교과서</th>
-                    <th className="py-1 font-semibold">페이지</th>
-                    <th className="py-1 font-semibold">진도</th>
-                    <th className="py-1 font-semibold">과제</th>
+                  <tr className="bg-bg-soft text-foreground text-left text-[11px]">
+                    <th className="rounded-l-md py-0.5 pl-1 font-bold">구분</th>
+                    <th className="py-0.5 font-bold">교재 / 내신교과서</th>
+                    <th className="py-0.5 font-bold">페이지</th>
+                    <th className="py-0.5 font-bold">진도</th>
+                    <th className="py-0.5 font-bold">과제</th>
                     <th className="rounded-r-md" aria-hidden />
                   </tr>
                 </thead>
@@ -114,7 +114,7 @@ export function PlanTable({
                 </tbody>
               </table>
             ) : (
-              <p className="text-text-dim px-1 py-1 text-[12px]">
+              <p className="text-text-dim px-1 py-0.5 text-[12px] font-semibold">
                 {term.key === "regular" ? "계획이 없습니다" : ""}
               </p>
             )}

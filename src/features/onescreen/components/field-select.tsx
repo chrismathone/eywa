@@ -24,6 +24,7 @@ export function FieldSelect({
   placeholder = "선택",
   className,
   radius = "lg",
+  box,
 }: {
   options: readonly string[];
   /** 현재 값. 빈 문자열·null 모두 "미선택"으로 본다. */
@@ -38,6 +39,12 @@ export function FieldSelect({
    * 카드·일괄 팝오버는 `rounded-lg`다. 높이·padding·글자크기는 세 표면이 동일해서 상수로 고정.
    */
   radius?: "sm" | "lg";
+  /**
+   * 박스 스타일(테두리·높이·라운드·글자)을 **통째로** 교체 — 그 표면의 다른 입력칸과 반드시 같아야 하는
+   * 자리에서만 넘긴다(ECS 시트 = `SHEET_INPUT`). 넘기면 `radius`는 무시되고, 촘촘한 표라는 뜻이므로
+   * 화살표도 함께 작아진다. 미지정이면 기존 기본값 그대로 — **다른 화면 영향 0**.
+   */
+  box?: string;
 }) {
   const opts = useMemo(() => {
     const base: ComboOption[] = [
@@ -61,13 +68,18 @@ export function FieldSelect({
       // 선택지가 5개 안팎이라 검색 입력은 실질 무용 — 안내 문구만 짧게(컴포넌트가 항상 그린다).
       searchPlaceholder="찾기"
       className={className}
+      // 박스를 통째로 받은 자리(ECS)는 그 표면의 입력칸과 한 벌이라는 뜻 → 화살표도 촘촘하게.
+      compact={box !== undefined}
       // ⚠️ 이웃 텍스트 입력과 **완전히 같은 치수**(원장 2026-07-23 "네모박스 크기가 너무 다름").
       //    표·카드·일괄 세 표면의 입력칸이 모두 `border-line bg-card h-8 px-2 text-[12px]`이고
       //    라운드만 다르다. 기본 트리거(py-2·px-3·text-sm)를 그대로 쓰면 한 줄에서 이 칸만 커진다.
       //    ⚠️ 새 표면에 FieldSelect를 놓을 땐 그 자리 입력칸 클래스와 대조해볼 것.
-      triggerClassName={`border-line bg-card text-foreground focus:border-primary h-8 border px-2 text-[12px] outline-none ${
-        radius === "sm" ? "rounded-sm" : "rounded-lg"
-      }`}
+      triggerClassName={
+        box ??
+        `border-line bg-card text-foreground focus:border-primary h-8 border px-2 text-[12px] outline-none ${
+          radius === "sm" ? "rounded-sm" : "rounded-lg"
+        }`
+      }
     />
   );
 }

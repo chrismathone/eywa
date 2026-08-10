@@ -282,6 +282,7 @@ export function SessionUnitsField({
   onSet,
   size = "md",
   label,
+  box,
 }: {
   units: number | null | undefined;
   status: BasicAttendance | null;
@@ -292,6 +293,12 @@ export function SessionUnitsField({
   size?: "md" | "lg";
   /** 앞에 붙일 라벨. 전용 열처럼 머리글이 이미 '타임'이면 생략한다(같은 말 두 번 금지). */
   label?: string;
+  /**
+   * 박스 스타일(테두리·높이·폭)을 통째로 교체 — 이웃 칸과 테두리가 반드시 같아야 하는 표에서만
+   * (ECS 시트 = `SHEET_BOX_UNITS`). 넘겨도 **글자 굵기는 여기가 정한다**(기본 1은 흐리게, 고치면 굵게 =
+   * "손댄 칸" 신호). 미지정이면 기존 `size` 치수 그대로 — 다른 화면 영향 0.
+   */
+  box?: string;
 }) {
   const saved = effectiveUnits(units);
   const [draft, setDraft] = useState<string | null>(null); // null = 편집 중 아님(서버 값 표시)
@@ -332,8 +339,11 @@ export function SessionUnitsField({
           e.currentTarget.blur();
         }
       }}
-      className={`border-line focus:border-primary rounded-md border bg-transparent text-center outline-none transition-colors disabled:opacity-50 ${
-        big ? "h-8 w-[54px] text-[15px]" : "h-7 w-[46px] text-[13px]"
+      className={`bg-transparent text-center outline-none transition-colors disabled:opacity-50 ${
+        box ??
+        `border-line focus:border-primary rounded-md border ${
+          big ? "h-8 w-[54px] text-[15px]" : "h-7 w-[46px] text-[13px]"
+        }`
       } ${saved === 1 ? "text-text-dim" : "text-foreground font-bold"}`}
     />
   );

@@ -34,12 +34,8 @@ import { AttendanceSelect } from "./attendance-select";
 import { SessionUnitsField } from "@/features/onescreen/components/attendance-pills";
 import { FieldSelect } from "@/features/onescreen/components/field-select";
 import { ATTITUDE } from "@/features/onescreen/attitude";
+import { SHEET_BOX_READONLY, SHEET_BOX_UNITS, SHEET_INPUT } from "../ui-box";
 import type { SheetHandlers } from "./sheet-client";
-
-// 입력칸 테두리는 헤어라인(--line 9%)이 아니라 line-strong(18%) — 9%는 흰 카드 위에서 "칸이 있는지"가
-// 안 보여 표 전체가 흐릿하게 읽혔다(원장 지적 2026-07-31). 글자도 12→13px.
-const noteCls =
-  "border-line-strong text-foreground w-full rounded-lg border bg-transparent px-1.5 py-1 text-[13px] outline-none focus:border-primary disabled:opacity-60";
 
 /** 섹션 라벨 행의 설명(툴팁) — 왜 이 학생이 아직 보이는지 화면이 스스로 답한다. */
 const GROUP_HINT: Record<RosterGroupKey, string> = {
@@ -142,7 +138,7 @@ export const RosterTable = memo(function RosterTable({
     return { rows: out, counts: sizes };
   }, [roster, data.students, collapsedGroups]);
   return (
-    <div className="border-line mt-2 border-t pt-1.5">
+    <div className="border-line-strong mt-1.5 border-t pt-1">
       <table className="w-full border-collapse text-[13px]" style={{ tableLayout: "fixed" }}>
         {/* ⚠️ 학교 열은 뺐다(원장 2026-08-06) — 남은 폭은 전부 '특이사항'이 가져간다.
             학교·학년은 학생 이름 툴팁과 학생목록에 있고, 교시 카드에서 매일 보는 값이 아니다. */}
@@ -161,9 +157,11 @@ export const RosterTable = memo(function RosterTable({
         </colgroup>
         <thead>
           {/* 헤더 밴드 — 원본 시트의 노란 머리글 줄이 하던 일(본문과 확실히 구분). 회색 밴드 + dim 굵은 글씨. */}
-          <tr className="bg-bg-soft text-text-dim text-left text-[11px]">
+          {/* 머리글도 **굵게 + foreground**(원장 2026-08-06 "전체 텍스트를 굵게할것") — dim 보통굵기는
+              한 발짝만 떨어져도 안 읽혔다. */}
+          <tr className="bg-bg-soft text-foreground text-left text-[11px]">
             {/* '학생' 머리가 곧 재원 섹션의 접기 버튼(이 섹션엔 라벨 행이 없다). */}
-            <th className="rounded-l-md py-1 pl-1 font-semibold">
+            <th className="rounded-l-md py-0.5 pl-1 font-bold">
               <GroupToggle
                 group="active"
                 collapsed={collapsedGroups.includes("active")}
@@ -173,15 +171,15 @@ export const RosterTable = memo(function RosterTable({
             </th>
             {/* 가운데 세 열은 라벨을 **칸 가운데**로(원장 2026-08-06 "라벨 중앙정렬") — 값(드롭다운·숫자)이
                 칸을 꽉 채우거나 가운데 있어서 라벨만 왼쪽에 붙으면 열이 어긋나 보인다. */}
-            <th className="py-1 text-center font-semibold">출결</th>
+            <th className="py-0.5 text-center font-bold">출결</th>
             <th
-              className="py-1 text-center font-semibold"
+              className="py-0.5 text-center font-bold"
               title="이 날 수업 유닛 수 — 출결을 처음 찍을 때 그 날 교시 수로 자동 입력되고, 다르면 고칠 수 있습니다. 급여 시수에 반영됩니다."
             >
               유닛
             </th>
-            <th className="py-1 text-center font-semibold">태도</th>
-            <th className="rounded-r-md py-1 pr-1 font-semibold">특이사항</th>
+            <th className="py-0.5 text-center font-bold">태도</th>
+            <th className="rounded-r-md py-0.5 pr-1 font-bold">특이사항</th>
           </tr>
         </thead>
         <tbody className="divide-line divide-y">
@@ -191,7 +189,7 @@ export const RosterTable = memo(function RosterTable({
                 <tr key={`label:${row.key}`} className="bg-bg-soft">
                   <td
                     colSpan={5}
-                    className="text-text-dim px-1 py-1 text-[11px] font-semibold"
+                    className="text-foreground px-1 py-0.5 text-[11px] font-bold"
                     title={GROUP_HINT[row.key]}
                   >
                     <GroupToggle
@@ -213,14 +211,14 @@ export const RosterTable = memo(function RosterTable({
               // ⚠️ 읽기 전용 행을 opacity로 흐리지 않는다 — 흐린 회색은 "가독성이 떨어진다"의 본체였다.
               //    회색조(text-dim)와 은은한 배경으로 구분하고 **글자 대비는 유지**한다.
               <tr key={entry.studentId} className={entry.historical ? "bg-bg-soft/40" : ""}>
-                <td className="py-1 pr-1">
+                <td className="py-0.5 pr-1">
                   {/* 이름 클릭 = 학생 정보(원장 2026-08-06). WindowLink라 창(embed) 안에서는 그 창에서
                       드릴인하고, 최상위 프레임에서는 새 플로팅 창으로 뜬다([[#86]] — 배경이 창에 가려
                       "아무 일도 안 일어난 것처럼" 보이는 사고를 이 컴포넌트가 이미 막아 준다). */}
                   <WindowLink
                     href={`/students/${entry.studentId}`}
                     title={meta?.name}
-                    className={`truncate text-[13px] font-semibold underline-offset-2 hover:underline ${
+                    className={`truncate text-[13px] font-bold underline-offset-2 hover:underline ${
                       entry.historical ? "text-text-dim" : "text-foreground"
                     } ${entry.endedOn ? "line-through" : ""}`}
                     // 학교 열을 뺐으므로 학교·학년은 **이름 툴팁으로 옮긴다** — 열이 사라졌다고 정보까지
@@ -241,7 +239,7 @@ export const RosterTable = memo(function RosterTable({
                     </span>
                   ) : null}
                 </td>
-                <td className="py-1">
+                <td className="py-0.5">
                   {/* 태도와 **같은 컨트롤**(드롭다운, 원장 2026-08-06) — 알약 3개는 한 줄에서 폭을 먹고
                       두 칸이 서로 다른 모양으로 읽혔다. 시수·사유 편집은 출석부·원스크린 쪽에 남는다. */}
                   <AttendanceSelect
@@ -253,7 +251,7 @@ export const RosterTable = memo(function RosterTable({
                     onClear={() => handlers.clearAttendance(entry.studentId, date)}
                   />
                 </td>
-                <td className="px-1 py-1 text-center">
+                <td className="px-1 py-0.5 text-center">
                   {/* 유닛 = 수학의 '타임'과 같은 값(session_units). 결석이면 컴포넌트가 '—'로 잠근다
                       (결석은 시수를 안 쓴다). **출결 기록이 없으면 '—'** — 아직 유닛이라는 값 자체가
                       없는 상태라 0이나 1을 보여주면 "이미 잡혀 있다"는 거짓 표시가 된다(원장 "없는 경우 -"). */}
@@ -261,7 +259,7 @@ export const RosterTable = memo(function RosterTable({
                     // 결석은 시수를 안 쓴다. size="md"의 SessionUnitsField는 이 경우 **null을 반환**해
                     // 칸이 통째로 비므로(빈 칸 = "입력이 안 되나?") 여기서 직접 '—'를 그린다.
                     <span
-                      className="text-text-faint text-[12px]"
+                      className="text-text-faint text-[13px] font-semibold"
                       title="결석은 유닛(시수)을 쓰지 않습니다 — 출석·지각으로 바꾸면 입력할 수 있습니다"
                     >
                       —
@@ -272,32 +270,36 @@ export const RosterTable = memo(function RosterTable({
                       status={(att.status as "present" | "late" | "absent" | null) ?? null}
                       pending={false}
                       studentName={meta?.name ?? ""}
+                      // 이웃 칸(출결·태도 드롭다운)과 **같은 잉크 테두리·같은 높이**로 — 이 칸만 얇은
+                      // 헤어라인이면 한 줄에서 칸 하나가 비어 보인다(원장 2026-08-10 "모든 박스에 테두리").
+                      box={SHEET_BOX_UNITS}
                       onSet={(status, extra) =>
                         handlers.setAttendance(entry.studentId, date, status, undefined, extra?.units)
                       }
                     />
                   ) : (
-                    <span className="text-text-faint text-[12px]">—</span>
+                    <span className="text-text-faint text-[13px] font-semibold">—</span>
                   )}
                 </td>
-                <td className="py-1 pr-1">
+                <td className="py-0.5 pr-1">
                   {rowEditable ? (
                     <FieldSelect
                       options={ATTITUDE}
                       value={mark?.status ?? null}
                       ariaLabel={`${meta?.name ?? ""} 태도`}
+                      box={SHEET_INPUT}
                       onSelect={(v) =>
                         handlers.saveMark(entry.studentId, date, slotStart, v, mark?.progressNote ?? null)
                       }
                     />
                   ) : (
                     // 읽기 전용 행도 **값은 보여준다**(옛 '완'·'결석' 같은 이전 표기 포함) — 숨기면 기록이 증발한다.
-                    <span className="text-text-dim truncate text-[12px]">{mark?.status ?? "—"}</span>
+                    <span className={SHEET_BOX_READONLY}>{mark?.status ?? "—"}</span>
                   )}
                 </td>
-                <td className="py-1">
+                <td className="py-0.5">
                   <input
-                    className={noteCls}
+                    className={SHEET_INPUT}
                     defaultValue={mark?.progressNote ?? ""}
                     disabled={!rowEditable}
                     aria-label={`${meta?.name ?? ""} 특이사항`}

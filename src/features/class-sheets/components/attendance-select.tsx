@@ -19,6 +19,7 @@ import { toast } from "sonner";
 import { Popover } from "@base-ui/react/popover";
 import { FieldSelect } from "@/features/onescreen/components/field-select";
 import { NoteForm } from "@/features/onescreen/components/attendance-pills";
+import { SHEET_BOX_READONLY, SHEET_INPUT } from "../ui-box";
 
 export type BasicAttendance = "present" | "late" | "absent";
 
@@ -67,7 +68,8 @@ export function AttendanceSelect({
   if (!canMark) {
     return (
       <span
-        className="bg-bg-soft text-text-dim rounded-pill inline-block truncate px-1.5 py-0.5 text-[11px] font-bold"
+        // 알약이 아니라 **같은 박스**(회색 바탕) — 편집 가능한 줄과 높이가 달라지면 열이 들쭉날쭉해진다.
+        className={SHEET_BOX_READONLY}
         title={
           note
             ? `${label ?? "출결 없음"} · ${note} — 출결 입력 권한이 없거나 수정 기간이 지났습니다`
@@ -82,7 +84,7 @@ export function AttendanceSelect({
   if (!isEditableStatus(status)) {
     return (
       <span
-        className="bg-bg-soft text-text-dim rounded-pill inline-block truncate px-1.5 py-0.5 text-[11px] font-bold"
+        className={SHEET_BOX_READONLY}
         title="조퇴·공결·보강은 출석부에서 변경하세요(여기서 바꾸면 그 상태가 사라집니다)"
       >
         {label}
@@ -109,6 +111,8 @@ export function AttendanceSelect({
             options={OPTIONS}
             value={label}
             ariaLabel={`${studentName} 출결`}
+            // 이름 한 줄과 같은 크기·같은 잉크 테두리(원장 2026-08-10) — 시트의 다른 칸과 한 벌.
+            box={SHEET_INPUT}
             onSelect={(v) => {
               // FieldSelect는 '선택 안 함'을 **항상** 끼워 넣는데, 0169a 취소는 plain present만 지운다.
               // 지각·결석에서 그대로 호출하면 낙관 삭제 → 서버 거절 → 롤백이 매번 반복되는 **죽은 컨트롤**이
