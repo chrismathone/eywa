@@ -86,11 +86,6 @@ export function MatrixRow({
           <span className="min-w-0 truncate text-[12px] leading-tight font-bold" title={student.name}>
             {student.name}
           </span>
-          {tierMissing ? (
-            <span className="shrink-0 rounded-sm bg-amber-300 px-1 text-[9px] leading-[14px] font-bold text-amber-950">
-              단가 미지정
-            </span>
-          ) : null}
           {/* 신입·퇴원·반이동 — 그 달에 경계가 있는 학생만. 대부분의 행엔 아무것도 안 붙는다.
               🔴 이름을 밀어내지 않는다(`shrink-0` + 이름이 `min-w-0 truncate`) — 열 폭이 고정이라
                  뱃지가 자리를 뺏으면 이름이 먼저 잘린다. */}
@@ -104,12 +99,23 @@ export function MatrixRow({
             </span>
           ))}
         </span>
-        {attendLabel ? (
-          <span
-            className="text-text-faint block truncate text-[10px] leading-tight font-medium"
-            title={`등원 ${attendLabel}`}
-          >
-            {attendLabel}
+        {/* 「단가 미지정」 뱃지는 **아랫줄**(등원요일 옆) — 첫 줄에 붙이면 신입 뱃지와 겹칠 때
+            이름이 "김.."으로 잘린다(실측 2026-08-10). 아랫줄은 요일 두 글자뿐이라 자리가 남는다. */}
+        {attendLabel || tierMissing ? (
+          <span className="flex items-center gap-1">
+            {attendLabel ? (
+              <span
+                className="text-text-faint min-w-0 truncate text-[10px] leading-tight font-medium"
+                title={`등원 ${attendLabel}`}
+              >
+                {attendLabel}
+              </span>
+            ) : null}
+            {tierMissing ? (
+              <span className="shrink-0 rounded-sm bg-amber-300 px-1 text-[9px] leading-[14px] font-bold text-amber-950">
+                단가 미지정
+              </span>
+            ) : null}
           </span>
         ) : null}
       </td>
