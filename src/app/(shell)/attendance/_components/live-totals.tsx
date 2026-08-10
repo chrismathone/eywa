@@ -26,7 +26,7 @@ export function RowTotalCells({ row, fallback }: { row: string; fallback: Counte
   const rate = ratePercent(c);
   return (
     <>
-      <td className="border-line text-foreground num sticky right-[64px] z-10 w-[52px] min-w-[52px] border-b border-l bg-card px-2 py-2 text-right text-[12px] whitespace-nowrap">
+      <td className="border-line text-foreground num sticky right-[64px] z-10 w-[40px] min-w-[40px] border-b border-l bg-card px-1.5 py-2 text-right text-[12px] whitespace-nowrap">
         {c.units > 0 ? formatSessionUnits(c.units) : "—"}
       </td>
       <td

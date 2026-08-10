@@ -39,10 +39,12 @@ export type TierSettlementInfo =
       unitsTotal: number;
       rowCount: number;
       missingTierStudents: string[];
-      /** 미지정 학생 id — 이름 칸 배경 표시용(동명이인 안전). */
+      /** 미지정 학생 id — 이름 칸 「단가」 라벨 표시용(동명이인 안전). */
       missingTierStudentIds: string[];
       missingPriceTiers: string[];
       excludedUnits: number;
+      /** 학생별 티어 라벨(여럿이면 " · " join) — 학교·학년 열 아랫줄 표시용(라벨만, 금액 아님). */
+      tierByStudent: Record<string, string>;
     }
   | {
       status: "hold";
@@ -50,6 +52,7 @@ export type TierSettlementInfo =
       missingTierStudentIds: string[];
       missingPriceTiers: string[];
       missingRateGroups: string[];
+      tierByStudent: Record<string, string>;
     };
 
 export type TeacherMoney = {
@@ -222,8 +225,16 @@ async function computeTierSettlementInfo(
 
     // 수강 티어: 같은 (학생, 반)에 재등록 행이 여럿이면 티어가 지정된 행 우선(백필은 전 행에 같은 값을 쓴다).
     const enrollTier = new Map<string, string>();
+    // 학생별 티어 라벨(표시용) — 수강 티어 + 기록 예외를 전부 모은다(여럿이면 " · " join).
+    const tierSetByStudent = new Map<string, Set<string>>();
+    const addTier = (studentId: string, tier: string) => {
+      (tierSetByStudent.get(studentId) ?? tierSetByStudent.set(studentId, new Set()).get(studentId)!).add(tier);
+    };
     for (const e of tierEnrollments) {
-      if (e.salary_tier) enrollTier.set(`${e.student_id}|${e.class_id}`, e.salary_tier);
+      if (e.salary_tier) {
+        enrollTier.set(`${e.student_id}|${e.class_id}`, e.salary_tier);
+        addTier(e.student_id, e.salary_tier);
+      }
     }
 
     // 반별 급여 적용 요일 — 지정 없는 반은 전 요일. 키는 DOW_KEYS("sun"~"sat", getDay() 인덱스와 동일).
@@ -244,6 +255,7 @@ async function computeTierSettlementInfo(
       const u = r.session_units === null || r.session_units === undefined ? 1 : Number(r.session_units);
       if (!Number.isFinite(u) || u <= 0) continue;
       const tierLabel = r.salary_tier ?? enrollTier.get(`${r.student_id}|${r.class_id}`) ?? null;
+      if (r.salary_tier) addTier(r.student_id, r.salary_tier); // 기록 예외(교시 분리 0.5T)도 표시에 포함
       const key = `${r.student_id}|${r.class_id}|${tierLabel ?? ""}`;
       const cur = unitsByRow.get(key) ?? { studentId: r.student_id, classId: r.class_id, tierLabel, units: 0 };
       cur.units += u;
@@ -269,6 +281,9 @@ async function computeTierSettlementInfo(
     }));
 
     const result = computeTierSettlement(rows, priceByTier, rates);
+    const tierByStudent = Object.fromEntries(
+      [...tierSetByStudent].map(([id, set]) => [id, [...set].join(" · ")]),
+    );
     if (result.total === null)
       return {
         status: "hold",
@@ -276,6 +291,7 @@ async function computeTierSettlementInfo(
         missingTierStudentIds: result.missingTierStudentIds,
         missingPriceTiers: result.missingPriceTiers,
         missingRateGroups: result.missingRateGroups,
+        tierByStudent,
       };
     return {
       status: "ready",
@@ -286,6 +302,7 @@ async function computeTierSettlementInfo(
       missingTierStudentIds: result.missingTierStudentIds,
       missingPriceTiers: result.missingPriceTiers,
       excludedUnits: result.excludedUnits,
+      tierByStudent,
     };
   } catch {
     // 0199a 미적용(칼럼·표 없음 = PostgREST 400 → 헬퍼 throw) — 정산액만 접고 화면은 산다.

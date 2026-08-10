@@ -24,6 +24,9 @@ const BADGE_TONE: Record<LifecycleBadge["kind"], string> = {
   transferOut: "bg-violet-100 text-violet-800",
 };
 
+/** 이름 칸 라벨 공통 크기 — 신입·퇴원·반이동·「단가」 전부 이 하나를 쓴다(크기 제각각 금지, 원장 2026-08-10). */
+const BADGE_BASE = "shrink-0 rounded-sm px-1 text-[9px] leading-[14px] font-bold";
+
 /** 금액 표시 — 0원과 '자료 없음'을 구분한다(청구서가 없는 달은 "—"). */
 export function formatMoney(n: number | null | undefined): string {
   return n === null || n === undefined ? "—" : n.toLocaleString("ko-KR");
@@ -48,6 +51,7 @@ export function MatrixRow({
   lockBefore,
   classLabel,
   tierMissing,
+  tierLabel,
 }: {
   student: MatrixStudent;
   /** 이 행이 속한 반 — 셀 저장 대상. 강사 전체 보기에선 행마다 다르다. */
@@ -61,8 +65,10 @@ export function MatrixRow({
   money?: StudentMoney | null;
   /** 이 날짜 **이전**은 강사가 수정 못 함(7일 창). null = 제한 없음(관리자 이상). */
   lockBefore?: string | null;
-  /** 단가(수업 티어) 미지정 — 정산액에서 빠진 학생. 이름 칸에 배경으로 드러낸다(합계 뱃지만으론 누군지 안 보임). */
+  /** 단가(수업 티어) 미지정 — 정산액에서 빠진 학생. 이름 칸 「단가」 라벨로 드러낸다. */
   tierMissing?: boolean;
+  /** 이 학생의 단가 티어 라벨(원장 전용 금액 열이 있을 때만) — 학교·학년 열 아랫줄에 표시. */
+  tierLabel?: string | null;
 }) {
   const marks = matrix.marks[student.id] ?? {};
   const units = matrix.units[student.id] ?? {};
@@ -75,29 +81,30 @@ export function MatrixRow({
           한 줄에 이어 붙이면 이름 열이 이름+요일만큼 넓어져야 해 날짜 칸을 잡아먹는다(원장 2026-08-06:
           "세로폭은 조금 더 키우더라도 요일을 이름 아래로"). 행이 한 줄 높아지는 건 감수한 트레이드오프.
           ⚠️ 열 폭이 고정(colgroup)이라 넘치는 글자는 잘린다 — 원문은 `title`에 남긴다. */}
-      {/* 단가 미지정(정산 제외) 학생은 이름 칸을 호박색 + 「단가 미지정」 뱃지로 — 합계 줄 뱃지("2명 제외")
-          만으론 누가 빠졌는지 표에서 찾을 수 없고, 연한 배경만으론 뜻이 안 읽힌다(원장 2026-08-10 ×2).
-          ⚠️ sticky 칸이라 배경은 불투명이어야 한다(#74). */}
-      <td
-        className={`border-line text-foreground sticky left-0 z-10 border-b border-r px-2 py-1 ${tierMissing ? "bg-amber-100" : "bg-card"}`}
-        title={tierMissing ? `${student.name} — 단가(수업 티어) 미지정이라 정산액에서 빠져 있습니다. 수강의 티어를 지정하면 계산에 들어갑니다` : undefined}
-      >
+      {/* 단가 미지정(정산 제외)은 「단가」 라벨 **하나로만** 표시 — 셀 배경까지 칠하면 이중 표기로
+          읽힌다(원장 2026-08-10: "배경색 노란건 지워"). 설명은 라벨 툴팁이 담당. */}
+      <td className="border-line text-foreground sticky left-0 z-10 border-b border-r bg-card px-2 py-1">
         <span className="flex items-center gap-1">
           <span className="min-w-0 truncate text-[12px] leading-tight font-bold" title={student.name}>
             {student.name}
           </span>
           {/* 신입·퇴원·반이동 — 그 달에 경계가 있는 학생만. 대부분의 행엔 아무것도 안 붙는다.
-              🔴 이름을 밀어내지 않는다(`shrink-0` + 이름이 `min-w-0 truncate`) — 열 폭이 고정이라
-                 뱃지가 자리를 뺏으면 이름이 먼저 잘린다. */}
-          {student.badges.map((b) => (
-            <span
-              key={`${b.kind}-${b.date}`}
-              title={badgeTitle(b, classLabel ?? "이 반")}
-              className={`shrink-0 rounded-sm px-1 text-[9px] leading-[14px] font-bold ${BADGE_TONE[b.kind]}`}
-            >
-              {BADGE_LABEL[b.kind]}
+              🔴 모든 라벨은 **우측 정렬**(원장 2026-08-10 "모든 라벨들 우정렬. 자리 부족하면 왼쪽으로")
+                 — 셀 오른쪽 끝에 붙어 왼쪽으로 자라고(ml-auto + shrink-0), 자리가 부족하면
+                 이름(`min-w-0 truncate`)이 줄임표로 양보한다. 아랫줄 「단가」 라벨과 같은 문법. */}
+          {student.badges.length > 0 ? (
+            <span className="ml-auto flex shrink-0 items-center gap-1">
+              {student.badges.map((b) => (
+                <span
+                  key={`${b.kind}-${b.date}`}
+                  title={badgeTitle(b, classLabel ?? "이 반")}
+                  className={`${BADGE_BASE} ${BADGE_TONE[b.kind]}`}
+                >
+                  {BADGE_LABEL[b.kind]}
+                </span>
+              ))}
             </span>
-          ))}
+          ) : null}
         </span>
         {/* 「단가 미지정」 뱃지는 **아랫줄**(등원요일 옆) — 첫 줄에 붙이면 신입 뱃지와 겹칠 때
             이름이 "김.."으로 잘린다(실측 2026-08-10). 아랫줄은 요일 두 글자뿐이라 자리가 남는다. */}
@@ -112,8 +119,11 @@ export function MatrixRow({
               </span>
             ) : null}
             {tierMissing ? (
-              // 라벨은 짧게 「단가」 + 우측 정렬(ml-auto) — 셀 오른쪽 끝에 붙어 요일과 안 섞인다(원장 2026-08-10).
-              <span className="ml-auto shrink-0 rounded-sm bg-amber-300 px-1 text-[9px] leading-[14px] font-bold text-amber-950">
+              // 라벨은 짧게 「단가」 + 우측 정렬(ml-auto) — 셀 오른쪽 끝. 크기는 신입·퇴원과 동일(BADGE_BASE).
+              <span
+                className={`${BADGE_BASE} ml-auto bg-amber-300 text-amber-950`}
+                title={`${student.name} — 단가(수업 티어) 미지정이라 정산액에서 빠져 있습니다. 수강의 티어를 지정하면 계산에 들어갑니다`}
+              >
                 단가
               </span>
             ) : null}
@@ -129,6 +139,12 @@ export function MatrixRow({
         >
           {schoolGradeLabel(student.school, student.grade) || "—"}
         </span>
+        {/* 단가 티어(라벨만, 금액 아님) — 열의 남는 폭을 채운다(원장 2026-08-10). 원장 전용 금액 열이 있을 때만. */}
+        {tierLabel ? (
+          <span className="text-text-faint block truncate text-[10px] leading-tight" title={`단가 티어 ${tierLabel}`}>
+            {tierLabel}
+          </span>
+        ) : null}
       </td>
       {days.map((d) => {
         // 그 달에 없는 날(placeholder) — 빈 칸(입력 불가). 폭은 다른 칸과 동일(min-w)로 고정.
@@ -165,18 +181,11 @@ export function MatrixRow({
       {money !== undefined ? (
         <>
           {/* 청구·납입은 **학생 단위 총액**(다른 과목 포함) — 반 몫이 아니다. 여러 강사에 걸친 학생은 '공유' 표식. */}
-          <td className="border-line text-text-dim num border-b border-l px-2 py-2 text-right text-[11px] whitespace-nowrap">
+          {/* '공유' 행 라벨은 제거(원장 2026-08-10) — 공유 규모는 합계 줄의 "공유 N명 포함"이 계속 알린다. */}
+          <td className="border-line text-text-dim num border-b border-l px-2 py-1 text-right text-[11px] whitespace-nowrap">
             {formatMoney(money?.billed ?? null)}
-            {money?.shared ? (
-              <span
-                className="text-text-faint ml-1 text-[10px]"
-                title="다른 과목·강사와 함께 쓰는 청구서입니다 — 반별 배분은 회차 확정(수납관리) 후에만 정확합니다"
-              >
-                공유
-              </span>
-            ) : null}
           </td>
-          <td className="border-line text-foreground num border-b px-2 py-2 text-right text-[11px] whitespace-nowrap">
+          <td className="border-line text-foreground num border-b px-2 py-1 text-right text-[11px] whitespace-nowrap">
             {formatMoney(money?.paid ?? null)}
           </td>
         </>

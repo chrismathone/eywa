@@ -37,7 +37,9 @@ const HEAD_CORNER_Z = "z-[60]";
  */
 // 학교·학년은 압축 표기("경명여중2", school-grade.ts) **한 열** — 두 열이던 것을 합쳐 날짜 칸에 폭을
 // 돌려줬다(원장 2026-08-10). 되돌려 나누지 말 것.
-const COL_W = { name: 116, school: 96, money: 76, units: 52, rate: 64, day: 30 } as const;
+// 컴팩트(원장 2026-08-10 "최대한 컴팩트. 날짜열은 현재가 아주 좋으니 건드리지말것") — 날짜 칸은 그대로,
+// 고정 열만 조인다. ⚠️ rate(64)는 시수 열의 sticky right-[64px]와 짝이라 함께 고치지 않으면 겹친다.
+const COL_W = { name: 104, school: 84, money: 68, units: 40, rate: 64, day: 30 } as const;
 
 /** 표에 쌓이는 한 덩어리 = 한 반. 반별 보기는 1개, 강사 전체 보기는 그 강사의 모든 반. */
 export type MatrixGroup = {
@@ -119,6 +121,9 @@ export function MatrixTable({
   const tierMissingIds = new Set(
     money && money.tierSettlement.status !== "unwired" ? money.tierSettlement.missingTierStudentIds : [],
   );
+  // 학생별 단가 티어 라벨(학교·학년 열 아랫줄) — 라벨만이라 금액 비노출. 원장 전용 금액 보기에서만 존재.
+  const tierByStudent: Record<string, string> =
+    money && money.tierSettlement.status !== "unwired" ? money.tierSettlement.tierByStudent : {};
   const totalCount = sumCounts(groups.map((g) => groupCount(g.matrix)));
   // 표 최소 폭 = 고정 열 합 + 날짜 칸 최소치. 화면이 이보다 넓으면 남는 폭은 날짜 칸이 나눠 갖는다.
   const tableMinWidth =
@@ -154,14 +159,14 @@ export function MatrixTable({
           {/* 높이 고정 — 칸의 scroll-margin-top과 짝을 이룬다(cell-display.ts `HEAD_ROW_H` 주석). */}
           <tr className={HEAD_ROW_H}>
             <th
-              className={`bg-bg-soft sticky top-0 left-0 ${HEAD_CORNER_Z} ${HEAD_UNDERLINE} ${EDGE_RIGHT} px-2 py-1 text-left whitespace-nowrap`}
+              className={`bg-bg-soft sticky top-0 left-0 ${HEAD_CORNER_Z} ${HEAD_UNDERLINE} ${EDGE_RIGHT} px-2 py-1 text-center whitespace-nowrap`}
             >
               {/* 반 접기가 있는 보기에서만 — 별도 줄 없이 이름 열 머리에 얹는다. */}
               {showGroups ? <CollapseAllButton classIds={groups.map((g) => g.classId)} /> : null}
               <span className="micro">이름</span>
             </th>
             <th
-              className={`bg-bg-soft border-line sticky top-0 ${HEAD_Z} ${HEAD_UNDERLINE} border-r px-1.5 py-1 text-left whitespace-nowrap`}
+              className={`bg-bg-soft border-line sticky top-0 ${HEAD_Z} ${HEAD_UNDERLINE} border-r px-1.5 py-1 text-center whitespace-nowrap`}
             >
               <span className="micro">학교·학년</span>
             </th>
@@ -216,19 +221,19 @@ export function MatrixTable({
                 >
                   <span className="micro">청구</span>
                 </th>
-                <th className={`bg-bg-soft sticky top-0 ${HEAD_Z} ${HEAD_UNDERLINE} px-2 py-2 text-right whitespace-nowrap`}>
+                <th className={`bg-bg-soft sticky top-0 ${HEAD_Z} ${HEAD_UNDERLINE} px-2 py-2 text-center whitespace-nowrap`}>
                   <span className="micro">납입</span>
                 </th>
               </>
             ) : null}
             {/* 시수 합 — 소비 상태(출석·지각·조퇴·보강) 셀의 배수 합(기본 1). 구 출석부 '합계' 관행. */}
             <th
-              className={`bg-bg-soft sticky top-0 right-[64px] ${HEAD_CORNER_Z} ${HEAD_UNDERLINE} ${EDGE_LEFT} w-[52px] min-w-[52px] px-2 py-2 text-right whitespace-nowrap`}
+              className={`bg-bg-soft sticky top-0 right-[64px] ${HEAD_CORNER_Z} ${HEAD_UNDERLINE} ${EDGE_LEFT} w-[40px] min-w-[40px] px-1.5 py-2 text-center whitespace-nowrap`}
             >
               <span className="micro">시수</span>
             </th>
             <th
-              className={`bg-bg-soft sticky top-0 right-0 ${HEAD_CORNER_Z} ${HEAD_UNDERLINE} w-[64px] min-w-[64px] px-2 py-2 text-right whitespace-nowrap`}
+              className={`bg-bg-soft sticky top-0 right-0 ${HEAD_CORNER_Z} ${HEAD_UNDERLINE} w-[64px] min-w-[64px] px-2 py-2 text-center whitespace-nowrap`}
             >
               <span className="micro">출석률</span>
             </th>
@@ -254,6 +259,7 @@ export function MatrixTable({
                   lockBefore={lockBefore}
                   classLabel={g.className}
                   tierMissing={tierMissingIds.has(s.id)}
+                  tierLabel={tierByStudent[s.id] ?? null}
                 />
               );
             })}
@@ -272,6 +278,7 @@ export function MatrixTable({
               lockBefore={lockBefore}
               classLabel={g.className}
               tierMissing={tierMissingIds.has(s.id)}
+              tierLabel={tierByStudent[s.id] ?? null}
             />
           ));
           return (
