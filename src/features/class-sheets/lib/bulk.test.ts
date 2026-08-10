@@ -21,23 +21,23 @@ const SLOT = "16:20";
 
 describe("planBulkAttendance", () => {
   it("기록 없는 학생만 — 이미 기록된 학생은 건드리지 않는다(비파괴)", () => {
-    const attendance = { [`a|${DATE}`]: "absent" };
-    expect(planBulkAttendance(roster, attendance, DATE, { canEdit: true, canMarkDate: true })).toEqual(["b"]);
+    const attendance = { [`a|${DATE}|${SLOT}`]: "absent" };
+    expect(planBulkAttendance(roster, attendance, DATE, SLOT, { canEdit: true, canMarkDate: true })).toEqual(["b"]);
   });
 
   it("🔴 빈 행을 채우는 기능이므로 '기록이 있어야 통과'하는 게이트가 없다 — 전원 미기록이면 전원 대상", () => {
-    expect(planBulkAttendance(roster, {}, DATE, { canEdit: true, canMarkDate: true })).toEqual(["a", "b"]);
+    expect(planBulkAttendance(roster, {}, DATE, SLOT, { canEdit: true, canMarkDate: true })).toEqual(["a", "b"]);
   });
 
   it("읽기 전용 행(historical)·비수강 행은 제외", () => {
-    const ids = planBulkAttendance(roster, {}, DATE, { canEdit: true, canMarkDate: true });
+    const ids = planBulkAttendance(roster, {}, DATE, SLOT, { canEdit: true, canMarkDate: true });
     expect(ids).not.toContain("c");
     expect(ids).not.toContain("d");
   });
 
   it("편집 권한 없거나 출결 수정 기간이 지나면 0건", () => {
-    expect(planBulkAttendance(roster, {}, DATE, { canEdit: false, canMarkDate: true })).toEqual([]);
-    expect(planBulkAttendance(roster, {}, DATE, { canEdit: true, canMarkDate: false })).toEqual([]);
+    expect(planBulkAttendance(roster, {}, DATE, SLOT, { canEdit: false, canMarkDate: true })).toEqual([]);
+    expect(planBulkAttendance(roster, {}, DATE, SLOT, { canEdit: true, canMarkDate: false })).toEqual([]);
   });
 });
 

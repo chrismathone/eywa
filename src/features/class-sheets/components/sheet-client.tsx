@@ -75,6 +75,8 @@ export type SheetHandlers = {
   setAttendance: (
     studentId: string,
     date: string,
+    /** 이 칸의 **교시**(HH:MM) — 같은 날 교시가 둘이면 각각 따로 찍힌다(0196a). */
+    slotStart: string,
     status: "present" | "late" | "absent",
     note?: string | null,
     /** 시수(유닛) raw 입력 — **넘길 때만** 갱신된다(안 넘기면 서버가 기존 값 유지, 자동 주입 없음). */
@@ -85,7 +87,7 @@ export type SheetHandlers = {
    * 사유·시수가 붙은 기록이나 결석·지각은 서버가 거절하고 사유를 띄운다 — 화면에서 지워진 것처럼
    * 보였다가 새로고침하면 돌아오는 거짓 성공을 만들지 않는다.
    */
-  clearAttendance: (studentId: string, date: string) => void;
+  clearAttendance: (studentId: string, date: string, slotStart: string) => void;
   saveMark: (
     studentId: string,
     date: string,
@@ -414,10 +416,14 @@ export function SheetClient({
       // 출결(출석/지각/결석) — 출석부·원스크린과 **같은 액션**을 호출한다(게이트를 여기서 다시 짜지 않는다).
       // 낙관 반영 후 실패하면 직전 값으로 되돌린다 — 화면엔 남고 서버엔 없는 상태를 만들지 않기 위해
       // (툴바가 "저장됨"이라 말하는 동안 기록을 잃는 사고, 2026-07-29 적대검증).
-      setAttendance: (studentId, date, status, note, units) => {
+      setAttendance: (studentId, date, slotStart, status, note, units) => {
         if (!data.canMarkAttendanceByDate[date]) return;
-        const key = `${studentId}|${date}`;
+        const key = `${studentId}|${date}|${slotStart}`;
         const before = attendanceRef.current[key];
+        // DB에 보낼 교시 — 이미 기록이 있으면 **그 행이 들고 있는 값**(옛 기록은 null)을 그대로 써서
+        // 제자리에서 고친다. 없으면 이 칸의 교시로 새로 만든다.
+        // ⚠️ 옛 null 행에 칸의 교시를 보내면 새 행이 하나 더 생겨 같은 날 시수가 두 번 잡힌다.
+        const dbSlot = before ? before.slot : slotStart;
         // 🔴 유닛 자동값은 **쓰지 않는다**(원장 2026-08-10: *"eie든 인재원 수업이든 다 1 / 분에 상관없이
         //    다 1로 처리할것"*). 2026-08-06의 트랙별 자동값(EiE=교시 수, 인재원=총 분÷60)은 폐기 —
         //    60분+50분짜리 날이 1.8로 찍혀 "하나당 1"이라는 셈과 어긋났다. 이제 새 기록은 전부 기본 1(=null).
@@ -440,12 +446,14 @@ export function SheetClient({
             status,
             note: note === undefined ? (before?.note ?? null) : note,
             units: nextUnits,
+            slot: dbSlot,
           },
         }));
         void setAttendanceCell({
           classId,
           studentId,
           sessionDate: date,
+          slotStart: dbSlot,
           status,
           ...(note === undefined ? {} : { note }),
           // 유닛은 **사람이 고쳤을 때만** 보낸다(그 외엔 서버가 기존 값 유지 — 새 기록은 기본 1).
@@ -468,9 +476,9 @@ export function SheetClient({
       //    정정 이력이 쌓여 있으면(예: 09시 '결석+병결' → 10시 '출석' 정정) 사유가 붙은 옛 행까지 함께
       //    날아간다. RPC는 정확히 그 경우를 `v_plain <> v_total`로 거절하고 있었다. 클라가 들고 있는 건
       //    **effective 한 행뿐**이라 이 판정을 클라에서 흉내낼 수 없다 — 서버 가드를 그대로 통과시킨다.
-      clearAttendance: (studentId, date) => {
+      clearAttendance: (studentId, date, slotStart) => {
         if (!data.canMarkAttendanceByDate[date]) return;
-        const key = `${studentId}|${date}`;
+        const key = `${studentId}|${date}|${slotStart}`;
         const before = attendanceRef.current[key];
         if (before === undefined) return; // 이미 비어 있으면 왕복할 이유가 없다
         setAttendance((prev) => {
@@ -484,6 +492,8 @@ export function SheetClient({
           date,
           // 자동값과 같은 시수는 'ECS가 넣은 그대로'라 되돌릴 수 있다(0187a) — 사람이 고쳤으면 서버가 거절.
           autoUnits: data.unitsByDate[date] ?? null,
+          // 그 칸이 실제로 보고 있던 행의 교시(옛 기록이면 null) — 0197a가 그 행만 지운다.
+          slot: before.slot,
         }).then((r) => {
           if (!r.ok) {
             setAttendance((prev) => ({ ...prev, [key]: before }));

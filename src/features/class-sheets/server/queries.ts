@@ -79,11 +79,22 @@ export type ClassSheetWeekData = {
   classTeacherName: string | null;
   students: Record<string, SheetStudentMeta>;
   /**
-   * `${studentId}|${date}` → 출결(effective) — 상태 + **사유 메모**.
+   * `${studentId}|${date}|${HH:MM}` → 출결(effective) — 상태 + **사유 메모** + 그 행의 교시.
+   * ⚠️ 키의 교시는 **화면 칸**(교시 카드)이고, 값의 `slot`은 **DB 행이 실제로 들고 있는 값**이다.
+   *    옛 기록(null="그날 전체")은 그 날 첫 교시 칸에 붙지만 저장 땐 null로 돌려줘야 제자리에서 고쳐진다.
    * ⚠️ 메모를 같이 싣는 이유: 출결 pill(지각·결석)이 사유 창을 띄우는데, 초기값이 없으면 창이 빈 채로
    *    열리고 저장 시 **출석부에 이미 적힌 사유를 null로 덮는다**(setAttendanceCell은 넘긴 note를 쓴다).
    */
-  attendanceByStudentDate: Record<string, { status: string; note: string | null; units: number | null }>;
+  attendanceByStudentDate: Record<
+    string,
+    {
+      status: string;
+      note: string | null;
+      units: number | null;
+      /** 이 기록이 실제로 들고 있는 교시 — null = 옛 "그날 전체" 행(저장·취소 때 그대로 돌려준다). */
+      slot: string | null;
+    }
+  >;
   /**
    * 날짜 → 그 날 **옛 유닛 자동값**(2026-08-06~08-10에만 쓰이던 값).
    *
@@ -223,7 +234,7 @@ export async function getClassSheetWeek(
     admin
       .from("attendance_records")
       // note = 지각·결석 사유. 출결 pill의 사유 창 초기값이라 **반드시 함께** 읽는다(없으면 저장 시 null로 덮음).
-      .select("id, student_id, class_id, session_date, status, note, session_units, recorded_at")
+      .select("id, student_id, class_id, session_date, slot_start, status, note, session_units, recorded_at")
       .eq("tenant_id", tenantId)
       .eq("class_id", classId)
       .gte("session_date", weekMonday)
@@ -294,6 +305,8 @@ export async function getClassSheetWeek(
       student_id: a.student_id as string,
       class_id: a.class_id as string,
       session_date: a.session_date as string,
+      // 교시(0196a) — effectiveAttendanceRecords의 키에 들어간다(빠뜨리면 4교시·6교시 중 하나가 사라진다).
+      slot_start: (a.slot_start as string | null) ?? null,
       recorded_at: a.recorded_at as string,
       status: a.status as string,
       // 지각·결석 사유 — 출결 드롭다운의 사유 창 초기값. 여기서 흘리면 저장 시 기존 사유가 null로 덮인다.
@@ -443,15 +456,28 @@ export async function getClassSheetWeek(
     access.englishTrack === "eie" ? "periods" : "hours",
   );
 
+  // 교시별 출결(0196a) — 키에 교시가 들어간다. 옛 기록(slot_start null = "그날 전체")은 **그 날의 첫
+  // 교시에만** 붙인다: 모든 교시에 붙이면 예전처럼 한 칸을 고쳤을 때 다른 칸이 함께 바뀐 것처럼 보인다
+  // (원장 2026-08-10 제보의 바로 그 증상). 나머지 교시는 빈 칸으로 시작해 각자 찍힌다.
+  const firstSlotByDate: Record<string, string> = {};
+  for (const day of grid.days) {
+    const first = day.slots[0]?.slotStart;
+    if (first) firstSlotByDate[day.date] = normalizeSlotTime(first);
+  }
   const attendanceByStudentDate: Record<
     string,
-    { status: string; note: string | null; units: number | null }
+    { status: string; note: string | null; units: number | null; slot: string | null }
   > = {};
   for (const a of effAttendance) {
-    attendanceByStudentDate[`${a.student_id}|${a.session_date}`] = {
+    const raw = (a.slot_start as string | null) ?? null;
+    // 화면 키는 그 칸의 교시. 저장 시엔 `slot`(행이 실제로 들고 있는 값)을 그대로 돌려줘야
+    // 옛 null 행을 **제자리에서** 고칠 수 있다(새 교시 행을 하나 더 만들면 시수가 이중 계상된다).
+    const cell = raw ? normalizeSlotTime(raw) : (firstSlotByDate[a.session_date] ?? "");
+    attendanceByStudentDate[`${a.student_id}|${a.session_date}|${cell}`] = {
       status: a.status,
       note: a.note ?? null,
       units: a.session_units ?? null,
+      slot: raw ? normalizeSlotTime(raw) : null,
     };
   }
 

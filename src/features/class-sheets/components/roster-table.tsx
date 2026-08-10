@@ -1,7 +1,9 @@
 "use client";
 
 // 학생 로스터 표 — [이름 | 출결(일 단위 공유) | 학교학년 | 유닛 | 태도 | 특이사항].
-// 출결은 (학생,날짜) 하나의 상태를 모든 교시 블록이 미러(하루 1건 — attendance_records).
+// 출결은 **교시별**(0196a, 원장 2026-08-10) — 같은 날 4교시·6교시가 서로 다른 기록이다.
+//   ⚠️ 그전엔 (학생,날짜) 하루 1건이라 모든 교시 카드가 같은 행을 비췄고, 한 칸을 고치면 다른 칸도
+//      함께 바뀌었다. 옛 기록(slot_start null)은 서버가 그 날 **첫 교시 칸에만** 붙여 준다.
 // 태도·과제는 교시별(class_sheet_student_marks — 키에 slot_start 포함). 아바타 금지(이름 텍스트만).
 //
 // **2026-08-06 원장 지시 — 수학 수업보고서와 같은 어휘·같은 컨트롤로 통일**:
@@ -108,7 +110,10 @@ export const RosterTable = memo(function RosterTable({
   roster: RosterEntry[];
   data: ClassSheetWeekData;
   marks: Record<string, { status: string | null; progressNote: string | null }>;
-  attendance: Record<string, { status: string; note: string | null; units: number | null }>;
+  attendance: Record<
+    string,
+    { status: string; note: string | null; units: number | null; slot: string | null }
+  >;
   handlers: SheetHandlers;
   canEdit: boolean;
   collapsedGroups: readonly RosterGroupKey[];
@@ -207,7 +212,10 @@ export const RosterTable = memo(function RosterTable({
             const { entry, navRow } = row;
             const meta = data.students[entry.studentId];
             const mark = marks[`${entry.studentId}|${date}|${slotStart}`] ?? null;
-            const att = attendance[`${entry.studentId}|${date}`] ?? null;
+            // 출결은 이제 **교시별**(0196a) — 같은 날 4교시·6교시가 서로 다른 칸이다.
+            // (옛 "그날 전체" 기록은 서버가 그 날 첫 교시 칸에만 붙여 준다 — 모든 칸에 붙이면
+            //  예전처럼 한 칸을 고쳤을 때 다른 칸도 바뀐 것처럼 보인다.)
+            const att = attendance[`${entry.studentId}|${date}|${slotStart}`] ?? null;
             const rowEditable = canEdit && entry.eligible;
             return (
               // ⚠️ 읽기 전용 행을 opacity로 흐리지 않는다 — 흐린 회색은 "가독성이 떨어진다"의 본체였다.
@@ -251,8 +259,10 @@ export const RosterTable = memo(function RosterTable({
                     note={att?.note ?? null}
                     studentName={meta?.name ?? ""}
                     canMark={canMarkDate && rowEditable}
-                    onSet={(status, n) => handlers.setAttendance(entry.studentId, date, status, n)}
-                    onClear={() => handlers.clearAttendance(entry.studentId, date)}
+                    onSet={(status, n) =>
+                      handlers.setAttendance(entry.studentId, date, slotStart, status, n)
+                    }
+                    onClear={() => handlers.clearAttendance(entry.studentId, date, slotStart)}
                   />
                 </td>
                 <td className="px-1 py-px text-center">
@@ -278,7 +288,14 @@ export const RosterTable = memo(function RosterTable({
                       // 헤어라인이면 한 줄에서 칸 하나가 비어 보인다(원장 2026-08-10 "모든 박스에 테두리").
                       box={SHEET_BOX_UNITS}
                       onSet={(status, extra) =>
-                        handlers.setAttendance(entry.studentId, date, status, undefined, extra?.units)
+                        handlers.setAttendance(
+                          entry.studentId,
+                          date,
+                          slotStart,
+                          status,
+                          undefined,
+                          extra?.units,
+                        )
                       }
                     />
                   ) : (

@@ -35,14 +35,16 @@ function editableRows(roster: BulkRosterRow[], canEdit: boolean): BulkRosterRow[
  */
 export function planBulkAttendance(
   roster: BulkRosterRow[],
-  /** `${studentId}|${date}` → 출결(값의 모양은 안 본다 — **있으면 건드리지 않는다**가 계약). */
+  /** `${studentId}|${date}|${slotStart}` → 출결(값의 모양은 안 본다 — **있으면 건드리지 않는다**가 계약). */
   attendance: Record<string, unknown>,
   date: string,
+  /** 이 교시(0196a) — 빈 칸 판정은 **그 교시 기준**이다(같은 날 다른 교시가 찍혔어도 여긴 빈 칸). */
+  slotStart: string,
   opts: { canEdit: boolean; canMarkDate: boolean },
 ): string[] {
   if (!opts.canMarkDate) return [];
   return editableRows(roster, opts.canEdit)
-    .filter((r) => !attendance[`${r.studentId}|${date}`])
+    .filter((r) => !attendance[`${r.studentId}|${date}|${slotStart}`])
     .map((r) => r.studentId);
 }
 

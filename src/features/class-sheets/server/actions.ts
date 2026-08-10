@@ -618,6 +618,12 @@ export async function clearPresentAttendance(input: {
    * 때만** 삭제된다. 안 넘기면 0169a와 동일(기본 1만). 사람이 다른 값으로 고친 기록은 여전히 거절.
    */
   autoUnits?: number | null;
+  /**
+   * 지울 **교시**(0196a·0197a). null = 옛 "그날 전체" 행(slot_start null)만 — 다른 교시는 안 지운다.
+   * ⚠️ 화면이 보여주던 그 행의 실제 값을 그대로 넘겨야 한다(칸의 교시가 아니라). 옛 기록은 첫 교시
+   *    칸에 붙어 보이지만 DB 값은 null이라, 칸의 교시를 넘기면 아무것도 안 지워진다.
+   */
+  slot?: string | null;
 }): Promise<{ ok: true; cleared: number } | ActionError> {
   const gate = await requireEcsClassAccess(input.classId);
   if (!gate.ok) return { ok: false, error: gate.error };
@@ -631,7 +637,7 @@ export async function clearPresentAttendance(input: {
     return { ok: false, error: attendanceLockMessage(input.date, today) };
   }
   const admin = createAdminClient();
-  const { data, error } = await admin.rpc("ecs_clear_present", {
+  const base = {
     p_tenant: tenantId,
     p_actor: user.id,
     p_class: input.classId,
@@ -639,7 +645,15 @@ export async function clearPresentAttendance(input: {
     p_date: input.date,
     // 0187a — ECS가 넣은 자동값 그대로인 시수는 '손 안 댄 기록'으로 보고 취소를 허용한다.
     p_auto_units: input.autoUnits ?? null,
-  });
+  };
+  // 0197a — 그 교시만. null이면 '그날 전체' 행(옛 기록)만 지운다(`is not distinct from`).
+  // ⚠️ **옛 스키마에서도 돌아야 한다**([[#95]]): SQL은 사람이 손으로 돌리므로 앱이 먼저 뜰 수 있다.
+  //    0197a 적용 전이면 p_slot을 받는 함수가 없어 PostgREST가 PGRST202("함수를 못 찾음")를 낸다 →
+  //    그때만 옛 시그니처로 한 번 더 부른다(그 시점 DB엔 교시별 행이 없으니 결과가 같다).
+  let { data, error } = await admin.rpc("ecs_clear_present", { ...base, p_slot: input.slot ?? null });
+  if (error && /PGRST202|Could not find the function|does not exist/i.test(error.message ?? "")) {
+    ({ data, error } = await admin.rpc("ecs_clear_present", base));
+  }
   if (error) return { ok: false, error: `출석 취소에 실패했습니다: ${error.message}` };
   const res = (data ?? {}) as { cleared?: number; blocked?: string | null };
   if (res.blocked === "rich") {

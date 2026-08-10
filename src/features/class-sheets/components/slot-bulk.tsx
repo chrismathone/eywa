@@ -62,7 +62,10 @@ export function SlotBulk({
   /** 이 교시의 계획 줄 — 계획 일괄의 대상. 줄이 없으면 그 시기 버튼은 0건으로 잠긴다. */
   lines: BulkPlanRow[];
   marks: Record<string, { status: string | null; progressNote: string | null }>;
-  attendance: Record<string, { status: string; note: string | null; units: number | null }>;
+  attendance: Record<
+    string,
+    { status: string; note: string | null; units: number | null; slot: string | null }
+  >;
   canEdit: boolean;
   canMarkDate: boolean;
   /** '내신' 시기를 제안할지 — EiE(초등) 반은 내신이 없다(plan-table과 **같은 값**). */
@@ -83,7 +86,10 @@ export function SlotBulk({
   // 권한 없으면 컨트롤을 아예 렌더하지 않는다(누를 수 있는 것처럼 보였다가 서버가 거절하는 게 최악).
   if (!canEdit) return null;
 
-  const attendanceTargets = planBulkAttendance(roster, attendance, date, { canEdit, canMarkDate });
+  const attendanceTargets = planBulkAttendance(roster, attendance, date, slotStart, {
+    canEdit,
+    canMarkDate,
+  });
   const statusTargets = planBulkStatus(roster, marks, date, slotStart, { canEdit, onlyEmpty });
   const overwrites = countStatusOverwrites(roster, marks, date, slotStart, canEdit);
   const value = picked;
