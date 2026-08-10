@@ -44,7 +44,7 @@ function isConsulted(r: { metadata: { consultation?: { adminCalledParent: boolea
   return !!c && (c.adminCalledParent || c.teacherCalledParent || c.talkedWithStudent);
 }
 
-/** 최근 12개월 퇴원 추이(전체 기준) — 모듈 함수라 RSC 본문 아님(new Date 허용, #11). */
+/** 최근 12개월 퇴원 추이(기간 축 제외 모집단) — 모듈 함수라 RSC 본문 아님(new Date 허용, #11). */
 function monthlyWithdrawals(rows: { withdrawnAt: string | null }[]): WithdrawalMonthPoint[] {
   const now = new Date();
   const months: { key: string; point: WithdrawalMonthPoint }[] = [];
@@ -62,7 +62,7 @@ function monthlyWithdrawals(rows: { withdrawnAt: string | null }[]): WithdrawalM
   return months.map((m) => m.point);
 }
 
-/** 과목별 퇴원 분포(전체 기준) 상위 N. 라벨은 학원설정(operations.subjects)에서 — labelOf 주입. */
+/** 과목별 퇴원 분포(과목 축 제외 모집단) 상위 N. 라벨은 학원설정(operations.subjects)에서 — labelOf 주입. */
 function subjectBreakdown(
   rows: { lastClassSubject: string | null }[],
   labelOf: (key: string) => string,
@@ -138,38 +138,46 @@ export default async function WithdrawalsPage({
   const subjectMaps = buildSubjectMaps(settings.operations.subjects);
   // 수강종료 집계는 재원 전수 + enrollment 조회라 무거워, 해당 탭일 때만 계산.
   const subjectEnded = viewType === "subject-ended" ? await getSubjectEndedStudents() : [];
-  let rows = all;
-  if (q) {
-    const term = q.toLowerCase();
-    rows = rows.filter((r) => r.name.toLowerCase().includes(term));
-  }
-  if (range !== "all") {
-    const days = range === "30d" ? 30 : range === "90d" ? 90 : 365;
-    rows = rows.filter((r) => {
-      const since = daysSince(r.withdrawnAt);
-      return since !== null && since <= days;
-    });
-  }
-  if (reason !== "all") {
-    rows = rows.filter((r) => {
-      const k = r.metadata?.reason ?? "unspecified";
-      return k === reason;
-    });
-  }
-  if (subject !== "all") {
-    rows = rows.filter((r) => r.lastClassSubject === subject);
-  }
-  if (consult !== "all") {
-    rows = rows.filter((r) => (consult === "done" ? isConsulted(r) : !isConsulted(r)));
-  }
+  /**
+   * 필터를 **축별 술어**로 쪼갠다 — 카드마다 "자기 축만 빼고" 나머지를 적용하기 위해서다(패싯).
+   *
+   * 🔴 왜 축을 빼나: 필터를 통째로 걸면 그 카드가 스스로를 부정한다 —
+   *    · 월별 추이에 **기간**을 걸면 "최근 30일"에서 막대가 1~2개만 남아 12개월 추이가 사라진다.
+   *    · 과목별 분포에 **과목**을 걸면 막대가 자기 자신 하나만 남는다.
+   *    · 상담률에 **상담**을 걸면 0% 아니면 100%밖에 안 나온다.
+   * ⚠️ 반대로 아무것도 안 걸면(예전 동작) 사유 카드만 필터를 따라 움직여 **한 화면이 서로 다른 모집단을
+   *    말한다** — 원장 지적(2026-08-10)의 실체가 그것이었다.
+   */
+  const term = q.toLowerCase();
+  const rangeDays = range === "30d" ? 30 : range === "90d" ? 90 : 365;
+  type Wd = (typeof all)[number];
+  const byName = (r: Wd) => !q || r.name.toLowerCase().includes(term);
+  const byRange = (r: Wd) => {
+    if (range === "all") return true;
+    const since = daysSince(r.withdrawnAt);
+    return since !== null && since <= rangeDays;
+  };
+  const byReason = (r: Wd) => reason === "all" || (r.metadata?.reason ?? "unspecified") === reason;
+  const bySubject = (r: Wd) => subject === "all" || r.lastClassSubject === subject;
+  const byConsult = (r: Wd) => consult === "all" || (consult === "done" ? isConsulted(r) : !isConsulted(r));
 
-  // 상담 미완료 worklist 집계(전체 기준) — 재등록 평가용 사후상담 추적.
-  const consultPending = all.filter((r) => !isConsulted(r)).length;
-  const consultRate = all.length ? Math.round(((all.length - consultPending) / all.length) * 100) : 0;
+  // 목록·사유 카드 = **전 축** 적용(사용자가 고른 그대로).
+  const rows = all.filter((r) => byName(r) && byRange(r) && byReason(r) && bySubject(r) && byConsult(r));
+  // 카드별 모집단 — 자기 축 하나만 뺀다.
+  const trendRows = all.filter((r) => byName(r) && byReason(r) && bySubject(r) && byConsult(r)); // 기간 제외
+  const subjectRows = all.filter((r) => byName(r) && byRange(r) && byReason(r) && byConsult(r)); // 과목 제외
+  const consultRows = all.filter((r) => byName(r) && byRange(r) && byReason(r) && bySubject(r)); // 상담 제외
+  const reasonRows = all.filter((r) => byName(r) && byRange(r) && bySubject(r) && byConsult(r)); // 사유 제외
 
-  // 사유 통계 (필터 후 결과 기준)
+  // 상담 미완료 worklist 집계 — **상담 축만 뺀** 모집단(상담 필터를 걸면 0%/100%밖에 안 나온다).
+  const consultPending = consultRows.filter((r) => !isConsulted(r)).length;
+  const consultRate = consultRows.length
+    ? Math.round(((consultRows.length - consultPending) / consultRows.length) * 100)
+    : 0;
+
+  // 사유 통계 — **사유 축만 뺀** 모집단(사유를 고르면 막대가 자기 자신 하나만 남는다).
   const reasonCounts = new Map<string, number>();
-  for (const r of rows) {
+  for (const r of reasonRows) {
     const key =
       (r.metadata?.reason
         ? REASON_LABEL[r.metadata.reason as WithdrawalReason]
@@ -179,19 +187,19 @@ export default async function WithdrawalsPage({
   const topReasons = Array.from(reasonCounts.entries()).sort((a, b) => b[1] - a[1]);
   const maxCount = topReasons[0]?.[1] ?? 1;
 
-  // 최근 30일 (전체 기준)
-  const recent = all.filter((r) => {
+  // 최근 30일 — **기간 축만 뺀** 모집단(자기 기간을 이미 30일로 못박은 수치라 기간 필터를 또 걸 수 없다).
+  const recent = trendRows.filter((r) => {
     const d = daysSince(r.withdrawnAt);
     return d !== null && d <= 30;
   }).length;
 
-  // 통계(전체 기준) — 월별 추이 + 과목별 분포
+  // 월별 추이 = 기간 축 제외 · 과목별 분포 = 과목 축 제외(위 술어 주석 참조).
   // ⚠️ **시스템 정리(날짜 미상)는 월별 추이에서 뺀다** — 퇴원일이 실제 시점이 아니라 일괄 처리된 장부 날짜라
   //    그대로 세면 그 달이 부풀어 "7월 퇴원 N명"이 사실과 달라진다(교정 전 152명이 그렇게 나왔다).
   //    목록에서는 숨기지 않는다(실제로 퇴원한 게 맞고 날짜만 모른다) — [system-bulk.ts](@/features/withdrawals/system-bulk) 참조.
-  const systemBulkCount = all.filter((r) => r.systemBulk).length;
-  const trend = monthlyWithdrawals(all.filter((r) => !r.systemBulk));
-  const subjects = subjectBreakdown(all, subjectMaps.labelOf);
+  const systemBulkCount = trendRows.filter((r) => r.systemBulk).length;
+  const trend = monthlyWithdrawals(trendRows.filter((r) => !r.systemBulk));
+  const subjects = subjectBreakdown(subjectRows, subjectMaps.labelOf);
   const subjMax = subjects[0]?.count ?? 1;
 
   const reasonChips: { key: ReasonKey; label: string }[] = [
@@ -340,14 +348,16 @@ export default async function WithdrawalsPage({
         </div>
       </div>
 
-      {/* 통계(전체 기준) — 월별 추이 + 과목별 분포 */}
+      {/* 통계 — 카드마다 **자기 축만 빼고** 필터 반영(패싯). 위 술어 주석 참조. */}
       {all.length > 0 ? (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.6fr_1fr]">
           <section className="bg-card shadow-card rounded-2xl p-5">
             <header className="mb-2 flex items-baseline justify-between">
               <h2 className="text-foreground text-[15px] font-bold">월별 퇴원 추이</h2>
               <span className="text-text-faint text-[11px]">
-                최근 12개월 · 전체 {all.length}명
+                {/* 무엇을 센 건지 말해 준다 — 필터가 걸렸는데 "전체"라고 적으면 화면이 거짓말을 한다. */}
+                최근 12개월 · {trendRows.length}명
+                {range !== "all" ? " (기간 필터는 이 축이라 제외)" : ""}
                 {systemBulkCount > 0 ? ` (시스템 정리 ${systemBulkCount}명 제외 — 퇴원일 미상)` : ""}
               </span>
             </header>
@@ -356,7 +366,10 @@ export default async function WithdrawalsPage({
           <section className="bg-card shadow-card rounded-2xl p-5">
             <header className="mb-3">
               <h2 className="text-foreground text-[15px] font-bold">과목별 분포</h2>
-              <span className="text-text-faint text-[11px]">전체 기준</span>
+              <span className="text-text-faint text-[11px]">
+                {subjectRows.length}명
+                {subject !== "all" ? " (과목 필터는 이 축이라 제외)" : ""}
+              </span>
             </header>
             <div className="space-y-3">
               {subjects.map((s) => (
