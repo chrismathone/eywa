@@ -43,7 +43,15 @@ export type ReportListFilters = {
   from?: string;
   to?: string;
   status?: string;
+  /** 강사 **정확 일치**(뷰 설정 드롭다운 — 옵션은 최근 60일 보고서에서 뽑는다). */
   teacher?: string;
+  /**
+   * 담임 이름 **부분검색**(목록 툴바 입력칸). `teacher`(드롭다운 정확일치)와 **따로 둔다** —
+   * 드롭다운까지 부분일치로 바꾸면 "김은정"을 골랐는데 "김은수"가 함께 걸린다.
+   * 이름은 `lesson_reports.teacher_name` 컬럼에 그대로 있어 조인 없이 ilike 한 줄이면 된다
+   * (학생 이름과 달리 id 해석이 필요 없다 = `.in()` 상한 문제도 없다).
+   */
+  teacherName?: string;
   subject?: string;
   /**
    * 학생 이름 부분검색(회수 탭의 주 진입점 — "주준호 건 회수"처럼 **이름으로 먼저 찾는다**).

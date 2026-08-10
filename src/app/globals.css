@@ -109,6 +109,7 @@
   --color-primary-softer: var(--primary-softer);
   --color-line: var(--line);
   --color-line-strong: var(--line-strong);
+  --color-line-faint: var(--line-faint);
 
   /* 출석부 전용 팔레트(att-*) — 아래 :root 정의 참조. 앱 표준 -soft 토큰(8~11%)보다 훨씬 쨍하다. */
   --color-att-present: var(--att-present);
@@ -170,6 +171,9 @@
   --border: rgba(29, 29, 31, 0.09);
   --line: rgba(29, 29, 31, 0.09);
   --line-strong: rgba(29, 29, 31, 0.18);
+  /* 표 **열 구분**용 — 행 구분선(--line)보다 옅다(원장 2026-08-05: "아주 미세한 세로선, 거의 보일랑말랑").
+     세로선은 행 높이만큼 길어 같은 농도면 가로선보다 훨씬 세게 읽힌다 → 한 단계 아래로 둔다. */
+  --line-faint: rgba(29, 29, 31, 0.05);
   --input: rgba(29, 29, 31, 0.12);
 
   /* shadcn semantic — map to eywa */

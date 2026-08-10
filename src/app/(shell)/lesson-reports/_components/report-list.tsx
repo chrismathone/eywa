@@ -2,7 +2,7 @@
 
 // 원장 보고서 관리 > 보고서 목록/필터(5단계-2 Part C) — 강사·기간·상태·과목 필터 + 열람(/r·/print)
 // + 관리자 최초 발송(미발송 native만 선택 가능 — 이미 발송·이관분은 서버·UI 이중 차단, 2026-07-10).
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -107,6 +107,25 @@ export function ReportList({
   }
   const set = (patch: Partial<ReportListFilters>) => run({ ...filters, ...patch, page: 0 });
 
+  // 이름 검색(학생·담임) — 입력은 즉시 반응하고 조회만 늦춘다. 글자마다 서버를 때리면 523건짜리
+  // count 쿼리가 타이핑 수만큼 날아간다.
+  // ⚠️ 타이머 콜백에 **두 값을 다 실어 보낸다** — `filters`를 클로저로 읽으면 학생 → 담임을 빠르게
+  //    이어 칠 때 앞 입력이 아직 filters에 없어 조용히 지워진다.
+  const [studentQ, setStudentQ] = useState(filters.student ?? "");
+  const [teacherQ, setTeacherQ] = useState(filters.teacherName ?? "");
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const fireSearch = (s: string, t: string) => {
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    set({ student: s.trim() || undefined, teacherName: t.trim() || undefined });
+  };
+  const onSearchChange = (s: string, t: string) => {
+    setStudentQ(s);
+    setTeacherQ(t);
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    searchTimer.current = setTimeout(() => fireSearch(s, t), 350);
+  };
+  useEffect(() => () => { if (searchTimer.current) clearTimeout(searchTimer.current); }, []);
+
   // 헤더 클릭 정렬 — **서버 정렬**이라 정렬을 바꾸면 1페이지부터 다시 받는다(현재 페이지만 뒤섞는 게 아니라
   // 전체가 다시 줄 선다). 상태는 화면 표(SortableTh)와 같은 3단 순환(오름 → 내림 → 해제) 규약을 그대로 쓴다.
   const sortState: SortState<ReportSortKey> = filters.sort ? { key: filters.sort, dir: filters.dir ?? "asc" } : null;
@@ -191,6 +210,32 @@ export function ReportList({
             <EyIcon name="chevronRight" size={14} />
           </button>
         </div>
+        {/* 이름 검색 — 목록에서 가장 잦은 진입이 "그 학생 건 찾기"·"그 선생님 건 찾기"라 **팝오버 밖**에 둔다
+            (뷰 설정 안에 넣으면 걸린 줄 모르고 "왜 3건뿐이지"가 된다 — 그래서 배지에도 안 센다: 여기 글자가
+            그대로 보이는 게 곧 표시다). 서버 필터라 페이지 전체(총 N건) 기준으로 걸린다 — 현재 페이지만
+            걸러 "없다"고 말하는 화면이 되지 않게. */}
+        <input
+          type="search"
+          value={studentQ}
+          onChange={(e) => onSearchChange(e.target.value, teacherQ)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") fireSearch(studentQ, teacherQ);
+          }}
+          placeholder="학생 이름"
+          aria-label="학생 이름 검색"
+          className="border-line focus:border-primary w-[104px] rounded-lg border px-2 py-1 text-[11px] outline-none"
+        />
+        <input
+          type="search"
+          value={teacherQ}
+          onChange={(e) => onSearchChange(studentQ, e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") fireSearch(studentQ, teacherQ);
+          }}
+          placeholder="담임 이름"
+          aria-label="담임 이름 검색"
+          className="border-line focus:border-primary w-[104px] rounded-lg border px-2 py-1 text-[11px] outline-none"
+        />
         <ReportViewSettings options={options} filters={filters} todayYmd={todayYmd} onApply={run} />
         {/* 관리자 발송 — 미발송(native)만 대상. 이미 발송된 건은 선택 자체가 안 되고 서버도 거부(중복발송 차단).
             안내 문구는 비활성 체크박스의 title이 이미 같은 말을 하므로 줄을 따로 쓰지 않는다(공간 절약). */}
