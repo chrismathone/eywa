@@ -62,11 +62,15 @@ export const PeriodBlock = memo(function PeriodBlock({
     // ⚠️ 자식이 정확히 이 셋이어야 한다 — 여기에 형제 요소를 더하면 넷째가 다음 교시 행 트랙으로
     //    흘러 카드가 겹친다. 새 구획이 필요하면 세 구획 **안에** 넣거나 부모 트랙 수를 함께 늘릴 것.
     // ⚠️ `h-full`은 쓰지 않는다(부모가 span으로 높이를 정한다).
-    <article className="bg-card shadow-card row-span-3 grid cursor-default grid-rows-subgrid rounded-2xl p-2.5">
+    // 🔴 카드 외곽선 = **진한 잉크 테두리**(원장 2026-08-10: *"모든 박스에 진한 검은색 테두리 …
+    //    사진 하나가 수업카드 1개"*). shadow만으로는 흰 배경 위에서 카드가 어디서 끝나는지 안 보였고,
+    //    가로로 여러 요일이 늘어선 시트에선 그게 곧 "어느 교시 얘기인지"가 안 보인다는 뜻이었다.
+    // ⚠️ 이 테두리는 **카드에만**. 안쪽 입력칸까지 잉크로 두르면 격자가 검게 뒤덮여 카드 경계가 묻힌다.
+    <article className="bg-card border-foreground shadow-card row-span-3 grid cursor-default grid-rows-subgrid rounded-2xl border p-2.5">
       {/* 카드 머리 — 원본 시트의 회색 교시 칸(1교시 / 03:00~03:40)과 같은 위계. 교시=칩, 시각=옆 숫자.
           ⚠️ 글자는 **전부 굵게 + foreground**(원장 2026-08-06 "전체 텍스트를 굵게할것 (잘보이게)").
              시각·강의실이 dim 보통굵기라 한 발짝만 떨어져도 안 읽혔다 — 여기서 위계를 다시 낮추지 말 것. */}
-      <header className="border-foreground flex flex-wrap items-center gap-x-2 gap-y-1 border-b pb-1.5">
+      <header className="border-line-strong flex flex-wrap items-center gap-x-2 gap-y-1 border-b pb-1.5">
         {periodLabel ? (
           <span className="bg-bg-soft text-foreground rounded-md px-1.5 py-0.5 text-[13px] font-bold">
             {periodLabel}
@@ -77,7 +81,7 @@ export const PeriodBlock = memo(function PeriodBlock({
           {slot.slotEnd ? ` ~ ${slot.slotEnd}` : ""}
         </span>
         {teacher ? (
-          <span className="border-foreground text-foreground rounded-full border px-2 py-0.5 text-[12px] font-bold whitespace-nowrap">
+          <span className="border-line-strong text-foreground rounded-full border px-2 py-0.5 text-[12px] font-bold whitespace-nowrap">
             {teacher}
           </span>
         ) : null}

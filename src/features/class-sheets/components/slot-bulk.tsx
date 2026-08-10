@@ -143,7 +143,7 @@ export function SlotBulk({
       }}
     >
       <Popover.Trigger
-        className="border-foreground text-foreground hover:text-primary hover:border-primary shrink-0 cursor-pointer rounded-full border px-2 py-0.5 text-[12px] font-bold"
+        className="border-line-strong text-foreground hover:text-primary hover:border-primary shrink-0 cursor-pointer rounded-full border px-2 py-0.5 text-[12px] font-bold"
         title="이 교시의 출결·태도와 수업계획(평시/내신)을 한 번에 입력"
       >
         일괄 입력

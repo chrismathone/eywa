@@ -418,11 +418,11 @@ export function SheetClient({
         if (!data.canMarkAttendanceByDate[date]) return;
         const key = `${studentId}|${date}`;
         const before = attendanceRef.current[key];
-        // 유닛 자동값 — **처음 기록을 만들 때만** 넣는다(원장 2026-08-06 "3안: 자동 제안 + 수정 가능").
-        // 규칙은 트랙마다 다르고 서버가 이미 정해서 내려 준다(`unitsByDate` — EiE=교시 수, 인재원=시간).
-        // ⚠️ 이미 있는 기록엔 다시 안 민다 — 강사가 고쳐 둔 유닛이 클릭 한 번에 되돌아가면 안 된다.
-        const autoUnits =
-          units === undefined && before === undefined ? (data.unitsByDate[date] ?? null) : null;
+        // 🔴 유닛 자동값은 **쓰지 않는다**(원장 2026-08-10: *"eie든 인재원 수업이든 다 1 / 분에 상관없이
+        //    다 1로 처리할것"*). 2026-08-06의 트랙별 자동값(EiE=교시 수, 인재원=총 분÷60)은 폐기 —
+        //    60분+50분짜리 날이 1.8로 찍혀 "하나당 1"이라는 셈과 어긋났다. 이제 새 기록은 전부 기본 1(=null).
+        // ⚠️ `unitsByDate`는 **취소 경로에만** 남는다(아래 clearAttendance) — 옛 자동값(1.8·4 등)이 박힌
+        //    기록을 계속 되돌릴 수 있어야 하기 때문(0187a 계약). 여기서 되살려 쓰지 말 것.
         // ⚠️ 낙관 표시값은 **서버와 같은 파서**로 만든다. `Number(units)`로 대충 바꾸면 쉼표 소수점("2,5" —
         //    parseSessionUnits가 허용한다)이 NaN→1로 보여, DB엔 2.5인데 화면엔 1인 채로 굳는다.
         const parsedUnits =
@@ -432,7 +432,7 @@ export function SheetClient({
             ? parsedUnits.ok
               ? parsedUnits.value
               : (before?.units ?? null) // 형식 오류는 서버가 거절한다 → 화면은 안 건드린다
-            : (autoUnits ?? before?.units ?? null);
+            : (before?.units ?? null);
         setAttendance((prev) => ({
           ...prev,
           // note를 안 넘긴 저장은 기존 사유를 그대로 둔다 — 서버 규약(undefined=유지)과 일치시킨다.
@@ -448,12 +448,8 @@ export function SheetClient({
           sessionDate: date,
           status,
           ...(note === undefined ? {} : { note }),
-          // 유닛은 **사람이 고쳤거나(units) 새 기록의 자동값일 때만** 보낸다(그 외엔 서버가 기존 값 유지).
-          ...(units !== undefined
-            ? { units }
-            : autoUnits !== null
-              ? { units: String(autoUnits) }
-              : {}),
+          // 유닛은 **사람이 고쳤을 때만** 보낸다(그 외엔 서버가 기존 값 유지 — 새 기록은 기본 1).
+          ...(units !== undefined ? { units } : {}),
         }).then((r) => {
           if ("error" in r) {
             setAttendance((prev) => {

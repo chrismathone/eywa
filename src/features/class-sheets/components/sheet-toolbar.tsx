@@ -19,12 +19,12 @@ const DOW_KO: Record<string, string> = { mon: "월", tue: "화", wed: "수", thu
 // ⚠️ 테두리는 잉크 고정(원장 2026-08-10 "모든 박스에 진한 검은색 테두리") — line-strong(18%)조차 흰 카드
 // 위에선 "눌 수 있는 알약인지 글자인지" 구분이 안 됐다(07-31 가독성 지적의 연장). 글자도 dim→foreground 굵게.
 const iconBtn =
-  "border-foreground text-foreground hover:bg-bg-soft inline-flex shrink-0 cursor-pointer items-center rounded-full border p-1 transition";
+  "border-line-strong text-foreground hover:bg-bg-soft inline-flex shrink-0 cursor-pointer items-center rounded-full border p-1 transition";
 const pill = (on: boolean) =>
   `shrink-0 cursor-pointer rounded-full border px-2.5 py-0.5 text-[12px] font-bold transition ${
     on
       ? "border-foreground bg-foreground text-background"
-      : "border-foreground text-foreground hover:bg-bg-soft"
+      : "border-line-strong text-foreground hover:bg-bg-soft"
   }`;
 
 export function SheetToolbar({
@@ -91,7 +91,7 @@ export function SheetToolbar({
           // (원장 2026-08-10 "드랍박스가 너무 거대해서 컴팩트해지지 못하는 부분"). 알약과 같은 높이·같은
           // 잉크 테두리로 낮추고, **수업명은 굵게**(원장 "수업명 … 진하게").
           compact
-          triggerClassName="border-foreground text-foreground focus:border-primary h-7 rounded-full border px-2.5 text-[13px] font-bold outline-none"
+          triggerClassName="border-line-strong text-foreground focus:border-primary h-7 rounded-full border px-2.5 text-[13px] font-bold outline-none"
           // 반이 수십 개라 목록에서 **지금 보고 있는 반**을 눈으로 못 찾겠다는 지적(원장 2026-08-06).
           // 체크 아이콘만으론 약해서 노란 배경 + 굵은 글씨로 또렷하게.
           highlightSelected
@@ -146,7 +146,7 @@ export function SheetToolbar({
       </div>
       <span className="text-foreground text-[13px] font-bold whitespace-nowrap">{data.weekLabel}</span>
       {rel !== "current" ? (
-        <span className="border-foreground text-foreground rounded-full border px-2 py-0.5 text-[12px] font-bold whitespace-nowrap">
+        <span className="border-line-strong text-foreground rounded-full border px-2 py-0.5 text-[12px] font-bold whitespace-nowrap">
           {rel === "past" ? "지난 주 조회" : "다음 주 조회"}
         </span>
       ) : null}
@@ -178,7 +178,7 @@ export function SheetToolbar({
             ⚠️ 글씨 크기와 달리 **서버가 다시 그린다** — 이 값이 카드뿐 아니라 작성률 분모까지 정하기
                때문(보이는 교시 = 세는 교시). 그래서 왕복 중엔 잠근다. */}
         <span
-          className="border-foreground flex items-center rounded-full border p-0.5"
+          className="border-line-strong flex items-center rounded-full border p-0.5"
           title="JJ(집중자율수업실) 교시를 시트에 그릴지 — 숨기면 카드와 작성률에서 함께 빠집니다(쓴 기록은 지워지지 않습니다). LAB은 전용 출석부로 옮길 예정이라 항상 빠집니다."
         >
           <span className="text-foreground px-1.5 text-[11px] font-bold">JJ</span>
@@ -200,7 +200,7 @@ export function SheetToolbar({
         {/* 글씨 크기(내 계정) — 수업보고서 강사뷰와 같은 컨트롤·같은 어휘(원장 지시 2026-07-31).
             지금 크기가 '작음'이라 기본은 화면 무변경. 저장은 계정이라 다른 PC에서도 같은 크기. */}
         <span
-          className="border-foreground flex items-center rounded-full border p-0.5"
+          className="border-line-strong flex items-center rounded-full border p-0.5"
           title="계획 패널·주간 시트의 글씨 크기(내 계정) — 다른 PC에서도 같은 크기로 열립니다"
         >
           <span className="text-foreground px-1.5 text-[11px] font-bold">글씨</span>

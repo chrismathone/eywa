@@ -58,7 +58,7 @@ export function PlanTable({
               {canEdit ? (
                 <button
                   type="button"
-                  className="border-foreground text-foreground hover:text-primary hover:border-primary cursor-pointer rounded-full border px-2 py-0.5 text-[12px] font-bold"
+                  className="border-line-strong text-foreground hover:text-primary hover:border-primary cursor-pointer rounded-full border px-2 py-0.5 text-[12px] font-bold"
                   onClick={() => handlers.addLine(date, slotStart, term.key, defaultArea)}
                 >
                   + 줄 추가
@@ -69,7 +69,7 @@ export function PlanTable({
               {canEdit && !rows.some((l) => isMeaningfulPlanLine(l)) ? (
                 <button
                   type="button"
-                  className="border-foreground text-foreground hover:text-primary hover:border-primary cursor-pointer rounded-full border px-2 py-0.5 text-[12px] font-bold"
+                  className="border-line-strong text-foreground hover:text-primary hover:border-primary cursor-pointer rounded-full border px-2 py-0.5 text-[12px] font-bold"
                   title={`같은 ${term.label} 계획 중 이 교시보다 앞선 가장 최근 교시에서 복사합니다(학생 기록은 복사하지 않습니다)`}
                   onClick={() => handlers.copySlot(date, slotStart, term.key)}
                 >
@@ -113,11 +113,11 @@ export function PlanTable({
                   ))}
                 </tbody>
               </table>
-            ) : (
-              <p className="text-text-dim px-1 py-0.5 text-[12px] font-semibold">
-                {term.key === "regular" ? "계획이 없습니다" : ""}
-              </p>
-            )}
+            ) : term.key === "regular" ? (
+              <p className="text-text-dim px-1 py-0.5 text-[12px] font-semibold">계획이 없습니다</p>
+            ) : null}
+            {/* ⚠️ 내신이 비었을 땐 **아무것도 안 그린다**(원장 2026-08-10 "이런 trash 공간 제거") —
+                예전엔 빈 문자열을 담은 <p>가 남아 '내신' 칩 밑에 padding만큼 빈 띠가 깔렸다. */}
           </div>
         );
       })}

@@ -145,14 +145,16 @@ export const RosterTable = memo(function RosterTable({
         {/* 폭은 **꼭 필요한 만큼만** 고정하고 남는 건 전부 '특이사항'이 가져간다(원장 2026-08-06
             "특이사항 열너비를 남은 열너비로"). `table-fixed`라 width 없는 마지막 <col>이 잔여를 받는다. */}
         <colgroup>
-          <col style={{ width: 92 }} />
+          <col style={{ width: 84 }} />
           {/* 출결·태도는 드롭다운 — 태도는 가장 긴 선택지('매우 안좋음')가 잘리지 않는 폭이어야 한다.
-              유닛은 숫자 한두 자리라 좁게(수학은 '타임', 영어는 '유닛' — 원장 어휘 그대로). */}
+              유닛은 숫자 한두 자리라 좁게(수학은 '타임', 영어는 '유닛' — 원장 어휘 그대로).
+              ⚠️ 폭은 13px 글자 + 좌우 px-1(8) + 간격(4) + 화살표(10) 기준 — 더 좁히면 값이 잘린다
+                 ('선택 안 함' ≈ 56 + 22 = 78, '매우 안좋음' ≈ 69 + 22 = 91). */}
+          <col style={{ width: 88 }} />
+          {/* ⚠️ 유닛 칸은 이제 열 폭을 그대로 채운다(w-full) — 예전 46px 고정 입력이 열보다 넓어
+              양옆 드롭다운 위로 겹쳐 그려지던 문제(원장 2026-08-06 "너무 겹치네")가 구조적으로 사라졌다. */}
+          <col style={{ width: 46 }} />
           <col style={{ width: 96 }} />
-          {/* ⚠️ 유닛 칸 입력폭은 46px 고정(SessionUnitsField) — 열을 그보다 좁히면 입력칸이 넘쳐
-              양옆 드롭다운 위로 **겹쳐 그려진다**(원장 2026-08-06 "너무 겹치네"). 좌우 여백까지 포함해 둘 것. */}
-          <col style={{ width: 58 }} />
-          <col style={{ width: 100 }} />
           <col />
         </colgroup>
         <thead>
@@ -174,7 +176,7 @@ export const RosterTable = memo(function RosterTable({
             <th className="py-0.5 text-center font-bold">출결</th>
             <th
               className="py-0.5 text-center font-bold"
-              title="이 날 수업 유닛 수 — 출결을 처음 찍을 때 그 날 교시 수로 자동 입력되고, 다르면 고칠 수 있습니다. 급여 시수에 반영됩니다."
+              title="수업 1회 = 1유닛(기본). 시간·교시 길이와 상관없이 1이고, 다르면 여기서 고칠 수 있습니다. 급여 시수에 반영됩니다."
             >
               유닛
             </th>
@@ -211,7 +213,7 @@ export const RosterTable = memo(function RosterTable({
               // ⚠️ 읽기 전용 행을 opacity로 흐리지 않는다 — 흐린 회색은 "가독성이 떨어진다"의 본체였다.
               //    회색조(text-dim)와 은은한 배경으로 구분하고 **글자 대비는 유지**한다.
               <tr key={entry.studentId} className={entry.historical ? "bg-bg-soft/40" : ""}>
-                <td className="py-0.5 pr-1">
+                <td className="py-px pr-1">
                   {/* 이름 클릭 = 학생 정보(원장 2026-08-06). WindowLink라 창(embed) 안에서는 그 창에서
                       드릴인하고, 최상위 프레임에서는 새 플로팅 창으로 뜬다([[#86]] — 배경이 창에 가려
                       "아무 일도 안 일어난 것처럼" 보이는 사고를 이 컴포넌트가 이미 막아 준다). */}
@@ -229,17 +231,19 @@ export const RosterTable = memo(function RosterTable({
                       {meta?.name ?? "?"}
                     </span>
                   </WindowLink>
+                  {/* 행 안의 글자는 **전부 같은 크기**(원장 2026-08-10 "이 행은 모든 글자 크기 통일") —
+                      영어이름·퇴원일만 11px면 같은 줄이 두 위계로 읽힌다. 구분은 색(dim)이 진다. */}
                   {meta?.englishName ? (
-                    <span className="text-text-dim ml-1 text-[11px]">({meta.englishName})</span>
+                    <span className="text-text-dim ml-1 text-[13px]">({meta.englishName})</span>
                   ) : null}
                   {/* 퇴원일 — 섹션 라벨이 '퇴원'이라 날짜만(월-일). 전체 날짜는 툴팁. */}
                   {entry.endedOn ? (
-                    <span className="text-text-dim num ml-1 text-[11px]" title={`${entry.endedOn} 수강 종료`}>
+                    <span className="text-text-dim num ml-1 text-[13px]" title={`${entry.endedOn} 수강 종료`}>
                       {entry.endedOn.slice(5)}
                     </span>
                   ) : null}
                 </td>
-                <td className="py-0.5">
+                <td className="py-px">
                   {/* 태도와 **같은 컨트롤**(드롭다운, 원장 2026-08-06) — 알약 3개는 한 줄에서 폭을 먹고
                       두 칸이 서로 다른 모양으로 읽혔다. 시수·사유 편집은 출석부·원스크린 쪽에 남는다. */}
                   <AttendanceSelect
@@ -251,7 +255,7 @@ export const RosterTable = memo(function RosterTable({
                     onClear={() => handlers.clearAttendance(entry.studentId, date)}
                   />
                 </td>
-                <td className="px-1 py-0.5 text-center">
+                <td className="px-1 py-px text-center">
                   {/* 유닛 = 수학의 '타임'과 같은 값(session_units). 결석이면 컴포넌트가 '—'로 잠근다
                       (결석은 시수를 안 쓴다). **출결 기록이 없으면 '—'** — 아직 유닛이라는 값 자체가
                       없는 상태라 0이나 1을 보여주면 "이미 잡혀 있다"는 거짓 표시가 된다(원장 "없는 경우 -"). */}
@@ -281,7 +285,7 @@ export const RosterTable = memo(function RosterTable({
                     <span className="text-text-faint text-[13px] font-semibold">—</span>
                   )}
                 </td>
-                <td className="py-0.5 pr-1">
+                <td className="py-px pr-1">
                   {rowEditable ? (
                     <FieldSelect
                       options={ATTITUDE}
@@ -297,7 +301,7 @@ export const RosterTable = memo(function RosterTable({
                     <span className={SHEET_BOX_READONLY}>{mark?.status ?? "—"}</span>
                   )}
                 </td>
-                <td className="py-0.5">
+                <td className="py-px">
                   <input
                     className={SHEET_INPUT}
                     defaultValue={mark?.progressNote ?? ""}

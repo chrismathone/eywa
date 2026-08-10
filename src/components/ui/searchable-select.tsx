@@ -119,7 +119,7 @@ export function SearchableSelect({
           {selected ? selected.label : placeholder}
         </span>
         {compact ? (
-          <EyIcon name="chevronDown" size={12} className="size-3 shrink-0 opacity-60" />
+          <EyIcon name="chevronDown" size={10} className="size-2.5 shrink-0 opacity-60" />
         ) : (
           <EyIcon name="chevronDown" size={16} className="size-4 shrink-0 opacity-50" />
         )}
