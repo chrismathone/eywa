@@ -1,26 +1,24 @@
 import Link from "next/link";
 import { ChevronLeft, ChevronRight, Users } from "@/components/icons/eywa-icon-compat";
-import { PhotoCard } from "@/components/atoms/photo-card";
 import { EmptyState } from "@/components/empty-state";
 import { FilterSelect } from "@/components/filter-select";
 import { kstMonth, kstToday } from "@/lib/date-kst";
 import { requireAccess } from "@/lib/auth/require-access";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
-import { getMonthlyAttendanceMatrix, type AttendanceMatrix } from "@/features/attendance/server/queries";
+import { getDailyProcessingStatus, getMonthlyAttendanceMatrix, type AttendanceMatrix } from "@/features/attendance/server/queries";
 import { getTeacherMoney } from "@/features/attendance/server/teacher-money";
 import { buildHolidayMap } from "@/features/attendance/calendar";
 import { ATTENDANCE_EDIT_WINDOW_DAYS } from "@/features/attendance/edit-window";
 import { accessLevelTenant } from "@/lib/auth/perm-matrix";
 import { effectiveTeacherId } from "@/lib/auth/view-mode";
 import { loadAttendanceViewPrefs } from "@/features/attendance/server/prefs-actions";
-import { buildQuickOpen } from "@/features/attendance/quick-open";
 import { PeriodModeToggle } from "./_components/period-mode-toggle";
 import { countMarks, sumCounts } from "@/features/attendance/grid/totals";
 import { isGroupedSort, sortAttendanceRows } from "@/features/attendance/sort-rows";
 import { getSubjectSessionsByStudent, roleFor } from "@/features/attendance/server/subject-sessions";
 import { AttendanceSortSelect } from "./_components/sort-select";
-import { QuickOpenPanel } from "./_components/quick-open-panel";
+import { AttendanceHub, type HubTeacher } from "./_components/attendance-hub";
 import { MatrixTable, buildGridSource, type MatrixGroup } from "./_components/matrix-table";
 import { GridProvider } from "./_components/grid-context";
 import { CollapseAllChip } from "./_components/class-group";
@@ -55,6 +53,62 @@ function padTo31(days: AttendanceMatrix["days"]): AttendanceMatrix["days"] {
   return out;
 }
 
+/**
+ * 요약 허브(강사 미선택)의 강사 목록 — 담임별 반 수·과목·**오늘 입력 현황**.
+ * 오늘 현황은 getDailyProcessingStatus(일별 처리 현황과 같은 소스) 한 번 — 허브가 뜰 때만 부른다.
+ * ⚠️ 그 조회는 테넌트 전체(오늘 수업 반)라, 화면의 과목 필터로 좁힌 `classes`에 든 반만 집계에 넣는다.
+ */
+async function buildHubTeachers(
+  classes: AttendanceMatrix["classes"],
+  subjectOrder: { value: string; label: string }[],
+): Promise<HubTeacher[]> {
+  const today = await getDailyProcessingStatus(kstToday());
+  const classTeacher = new Map(classes.map((c) => [c.id, c.teacherId]));
+  const order = subjectOrder.map((s) => s.value);
+
+  type Acc = HubTeacher & { subjectSet: Set<string> };
+  const byTeacher = new Map<string, Acc>();
+  for (const c of classes) {
+    if (!c.teacherId || !c.teacherName) continue;
+    const cur =
+      byTeacher.get(c.teacherId) ??
+      ({
+        id: c.teacherId,
+        name: c.teacherName,
+        retired: !c.teacherActive,
+        classCount: 0,
+        subjects: [],
+        today: null,
+        subjectSet: new Set<string>(),
+      } as Acc);
+    cur.classCount++;
+    if (c.subject) cur.subjectSet.add(c.subject);
+    byTeacher.set(c.teacherId, cur);
+  }
+  for (const r of today) {
+    const tId = classTeacher.get(r.classId);
+    const t = tId ? byTeacher.get(tId) : undefined;
+    if (!t) continue;
+    const cur = t.today ?? { classes: 0, doneClasses: 0, expected: 0, recorded: 0 };
+    cur.classes++;
+    cur.expected += r.expected;
+    cur.recorded += r.recorded;
+    if (r.expected > 0 && r.unprocessed === 0) cur.doneClasses++;
+    t.today = cur;
+  }
+  return [...byTeacher.values()]
+    .map(({ subjectSet, ...t }) => ({
+      ...t,
+      // 과목 순서 = 학원설정 순서(subjectOrder). 설정에 없는 키는 뒤에.
+      subjects: [...subjectSet].sort((a, b) => {
+        const ia = order.indexOf(a);
+        const ib = order.indexOf(b);
+        return (ia === -1 ? order.length : ia) - (ib === -1 ? order.length : ib);
+      }),
+    }))
+    .sort((a, b) => Number(a.retired) - Number(b.retired) || a.name.localeCompare(b.name, "ko"));
+}
+
 export default async function AttendancePage({
   searchParams,
 }: {
@@ -77,17 +131,7 @@ export default async function AttendancePage({
   const month = monthParam ?? currentMonthKey();
   // 강사(또는 강사뷰 겸직)인지 — 기본 진입 화면을 가른다. 캐시된 헬퍼라 쿼리가 늘지 않는다.
   const myTeacherId = await effectiveTeacherId();
-  /**
-   * 기본 보기 — **강사는 자기 전체 출석부로 바로 들어간다**(구 출석부 D:\attendance와 같은 진입:
-   * 선생님 계정은 자기 시트가 통째로 열리고 반은 접었다 폈다 한다). 목록에서 자기 반을 하나씩 골라
-   * 들어가게 하면 매번 두 번 클릭이고, 반을 옮겨 다니며 출결을 찍는 실제 동선과도 안 맞는다.
-   * ⚠️ 반을 명시한 링크(`class=`)와 명시적 `mode=`는 그대로 존중한다. 관리자는 종전대로 선택 허브.
-   */
-  const requestedMode: ViewMode = resolveViewMode({
-    modeParam,
-    classParam,
-    isTeacher: !!myTeacherId,
-  });
+  // 보기 모드 판정(resolveViewMode)은 **검증된 반**(effectiveClassId)이 나온 뒤에 한다 — 아래 참조.
 
   // 반 목록(경량) — classId 없이 부르면 무거운 출석 데이터는 안 불러온다(렉 방지). 과목→강사→반 계층·선택지 도출용.
   // 학원설정·보기설정과는 서로 독립이라 병렬로(B4 — 독립 await는 Promise.all).
@@ -156,6 +200,22 @@ export default async function AttendancePage({
   const selectedClass = effectiveClassId
     ? allClasses.find((c) => c.id === effectiveClassId) ?? null
     : null;
+
+  /**
+   * 기본 보기 — **모두 강사 전체가 기본**(원장 2026-08-10 "디폴트를 강사전체"), 반을 골랐을 때만 반별.
+   * · 강사: 자기 전체 시트로 바로(2026-08-06, 반 선택은 반 드롭다운 하나).
+   * · 관리자: 강사 드롭다운에서 고르면 바로 그 강사 전체 출석부. 강사 미선택이면 아래 mode 폴백이
+   *   요약 허브(반별)로 되돌린다. 명시적 '반별'(mode=class)은 존중.
+   * 🔴 raw `classParam`이 아니라 **검증된 반**(effectiveClassId)을 넘긴다 — 강사를 바꾸면 이전 강사의
+   *    반이 URL에 남는데(FilterSelect는 다른 param 보존), 그 죽은 값으로 반별에 갇히면 안 된다.
+   *    (2026-08-10 버그 제보: mode=teacher가 남아 반 선택이 안 먹히던 것도 이 재배선으로 함께 해소 —
+   *    이제 반이 정해지면 mode보다 반이 이긴다.)
+   */
+  const requestedMode: ViewMode = resolveViewMode({
+    modeParam,
+    classParam: effectiveClassId ?? undefined,
+    isTeacher: !!myTeacherId,
+  });
 
   // ── 보기 모드 ──
   // class(기본) = 반 하나. teacher = 그 강사의 모든 반을 반별 그룹으로 한 표에(급여 계산용, 구 출석부 관행).
@@ -550,33 +610,21 @@ export default async function AttendancePage({
       </div>
 
       {groups.length === 0 ? (
-        // 반 미선택 허브(Editorial 문법 ④+⑤) — 무거운 출석 데이터를 안 불러오는 원칙은 유지하되,
-        // 빈 화면 대신 사진 카드 + 반 바로가기 행 목록으로 "진입 허브"가 되게 한다.
-        // 허브도 같은 규칙 — 넘치면 이 영역만 스크롤한다(페이지 스크롤을 되살리지 않는다).
-        <section className="grid min-h-0 flex-1 gap-4 overflow-auto lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] lg:items-stretch">
-          {/* 사진 높이 — 넓은 창은 좌측 칸을 꽉 채우고(우측 목록과 높이 균형), 한 열로 접히는 좁은 창은
-              **띠 사진**으로 눌러 둔다(높이를 안 잡으면 폭=창 전체에서 비율로 커져 목록이 화면 밖으로 밀린다).
-              폭이 열을 넘어 옆 칸을 덮는 것은 PhotoCard의 `w-full`이 막는다. */}
-          <PhotoCard
-            src="/photos/attendance-empty.webp"
-            alt=""
-            caption="한 반을 선택하면 출석부가 열립니다"
-            sub="전체 반은 학생이 많아 한 번에 표시하지 않아요"
-            aspect="3/2"
-            sizes="(max-width: 1024px) 100vw, 40vw"
-            className="h-40 lg:h-full"
-          />
-          {/* ⚠️ 과목별 섹션 + 과목당 상한. 옛 코드는 `classesForFilters.slice(0, 8)`이었는데 반 목록이
-              class_name 오름차순이라 로마자 영어반이 한글 수학반보다 항상 앞서 **수학반이 하나도 안 떴다**.
-              그룹핑·상한은 `buildQuickOpen` 순수함수(Vitest)로 고정 — 어떤 과목도 0이 되지 않는다. */}
-          <QuickOpenPanel
-            {...buildQuickOpen(classesForFilters, subjectOptions)}
-            colorOf={subjectMaps.colorOf}
-            month={month}
-            teacherId={effectiveTeacher}
-            subjectId={effectiveSubject}
-          />
-        </section>
+        // 강사 미선택 허브 = **출석부 요약**(원장 2026-08-10). 무거운 매트릭스는 여전히 안 불러온다.
+        // 강사를 고르면 바로 그 강사 전체 출석부(기본 보기 = 강사 전체, resolveViewMode).
+        <AttendanceHub
+          teachers={await buildHubTeachers(classesForFilters, subjectOptions)}
+          month={month}
+          subjectId={effectiveSubject}
+          colorOf={subjectMaps.colorOf}
+          labelOf={subjectMaps.labelOf}
+          todayLabel={new Intl.DateTimeFormat("ko-KR", {
+            timeZone: "Asia/Seoul",
+            month: "long",
+            day: "numeric",
+            weekday: "short",
+          }).format(new Date())}
+        />
       ) : totalStudents === 0 ? (
         <div className="min-h-0 flex-1 overflow-auto">
           <EmptyState

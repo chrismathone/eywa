@@ -6,15 +6,16 @@ describe("resolveViewMode — 기본 보기", () => {
     expect(resolveViewMode({ isTeacher: true })).toBe("teacher");
   });
 
-  it("관리자는 종전대로 반 선택 허브 — 반 108개를 한 번에 열지 않는다", () => {
-    expect(resolveViewMode({ isTeacher: false })).toBe("class");
+  it("관리자도 기본은 강사 전체 — 강사를 고르면 바로 전체 출석부(원장 2026-08-10), 강사 미선택은 호출부가 요약 허브로 폴백", () => {
+    expect(resolveViewMode({ isTeacher: false })).toBe("teacher");
   });
 
   it("🔴 강사에겐 mode가 없다 — 반 미지정은 언제나 자기 전체(사진 허브로 보내지 않는다)", () => {
     expect(resolveViewMode({ isTeacher: true, modeParam: "class" })).toBe("teacher");
   });
 
-  it("관리자는 종전대로 mode가 뜻을 정한다", () => {
+  it("관리자의 명시적 '반별'(mode=class)은 존중한다", () => {
+    expect(resolveViewMode({ isTeacher: false, modeParam: "class" })).toBe("class");
     expect(resolveViewMode({ isTeacher: false, modeParam: "teacher" })).toBe("teacher");
   });
 
@@ -22,8 +23,9 @@ describe("resolveViewMode — 기본 보기", () => {
     expect(resolveViewMode({ isTeacher: true, classParam: "c1" })).toBe("class");
   });
 
-  it("🔴 강사는 반 선택이 mode를 이긴다 — URL에 남은 mode=teacher가 드롭다운 선택을 먹으면 안 된다", () => {
+  it("🔴 반 선택이 mode를 이긴다 — URL에 남은 mode=teacher가 드롭다운 선택을 먹으면 안 된다(강사·관리자 공통, 2026-08-10 버그)", () => {
     expect(resolveViewMode({ isTeacher: true, classParam: "c1", modeParam: "teacher" })).toBe("class");
+    expect(resolveViewMode({ isTeacher: false, classParam: "c1", modeParam: "teacher" })).toBe("class");
   });
 });
 

@@ -14,7 +14,7 @@
 | ② | 빅 스탯 | [`BigStat`](../src/components/atoms/big-stat.tsx)(label/value/unit/sub/icon/tone/size). **화면 로컬 Stat 신설 금지** — 이걸 쓴다 |
 | ③ | 소프트 패널 | 카드·필터바 = `bg-card shadow-card rounded-2xl`(보더 제거). 대형 구획은 rounded-3xl |
 | ④ | 사진 캡션 카드 | [`PhotoCard`](../src/components/atoms/photo-card.tsx)(Server, `alt`·`sizes` 필수, LCP만 `preload` — Next16에서 `priority` 폐기). 이미지 = `public/photos/*.webp`(placeholder→실사 덮어쓰기, [photo-generation-prompts.md](photo-generation-prompts.md)) |
-| ⑤ | 구조화 행 목록 | 이름 bold(13.5px) + 설명 dim(12.5px, truncate) + 우측 액션 알약. 레퍼런스: 운영실 살펴볼 학생·출석부 바로 열기 |
+| ⑤ | 구조화 행 목록 | 이름 bold(13.5px) + 설명 dim(12.5px, truncate) + 우측 액션 알약. 레퍼런스: 운영실 살펴볼 학생·출석부 요약 허브(attendance-hub.tsx) |
 | ⑥ | 여백 리듬 | 섹션 그룹 간 space-y-5~6, 그룹 내 촘촘(운영 밀도 유지) |
 | ⑦ | 알약 | 필터 칩·토글·세그먼트 = `rounded-full`. 사각 칩(rounded-sm/md) 신설 금지 |
 

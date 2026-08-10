@@ -13,24 +13,27 @@
 export type ViewMode = "class" | "teacher";
 
 /**
- * 기본 보기 결정 — **강사는 자기 전체 시트로 바로**, 관리자는 반 선택 허브.
+ * 기본 보기 결정 — **모두 강사 전체가 기본**, 반을 골랐을 때만 반별.
  *
- * 🔴 **강사에겐 `mode`가 없다**(원장 지시 2026-08-06: "반별 → 드롭다운 리스트로"). 반 선택은 툴바의
- *    반 드롭다운 **하나**가 맡는다 — 반을 고르면 그 반, '전체 반'이면 자기 전체 시트. 예전엔 '반별' 버튼이
- *    반 미선택 상태(=사진 허브)로 보냈는데, 자기 반 대여섯 개를 아는 강사에게 큰 사진 허브는 한 단계 낭비였다.
- *    ⚠️ 그래서 여기서 `modeParam`을 보면 안 된다 — URL에 `mode=teacher`가 남아 있을 때 드롭다운으로 반을
- *    골라도 그 반이 안 열린다(반 선택이 먹히지 않는 버그).
- * ⚠️ 관리자는 종전대로 — `mode`가 뜻을 정하고, 반 미선택은 허브다(반 108개를 한 번에 열지 않는 렉 방지).
+ * 🔴 **반이 정해졌으면 누구든 그 반이다**(원장 버그 제보 2026-08-10: 옛 관리자 분기가 `mode`만 봐서,
+ *    강사 전체 보기 URL에 `mode=teacher`가 남은 채 반 드롭다운으로 반을 골라도 강사 전체에 갇혔다).
+ *    ⚠️ 호출부는 raw param이 아니라 **검증된 반**(effectiveClassId)을 넘겨야 한다 — 강사를 바꾸면 이전
+ *    강사의 반이 URL에 남는데(FilterSelect는 다른 param을 보존), 그 죽은 값으로 반별에 갇히면 안 된다.
+ * 🔴 관리자 기본 = **강사 전체**(원장 지시 2026-08-10: "디폴트를 강사전체. 김윤하 선생님 고르면 바로
+ *    강사 전체 출석부로"). 명시적 '반별'(mode=class)만 반별. 강사 미선택이면 호출부가 요약 허브로 되돌린다.
+ * 🔴 강사에겐 여전히 `mode`가 없다(2026-08-06: "반별 → 드롭다운 리스트로") — 반 드롭다운 하나가 반 선택을
+ *    맡고, '전체 반'은 자기 전체 시트다.
  */
 export function resolveViewMode(p: {
   modeParam?: string;
+  /** ⚠️ 검증된 반(effectiveClassId) — raw URL param을 넣지 말 것(위 🔴). */
   classParam?: string;
   /** 강사 또는 겸직 강사뷰(= effectiveTeacherId가 있음). */
   isTeacher: boolean;
 }): ViewMode {
-  if (p.isTeacher) return p.classParam ? "class" : "teacher";
-  if (p.modeParam === "teacher") return "teacher";
-  return "class";
+  if (p.classParam) return "class";
+  if (p.isTeacher) return "teacher";
+  return p.modeParam === "class" ? "class" : "teacher";
 }
 
 /**
