@@ -26,8 +26,8 @@ export type StudentMoney = {
 };
 
 /**
- * 티어(수업 단가) 기반 정산액(0198a) — 시트 산식: Σ floor1(단가 × 시수 × 0.911 × 비율).
- * · unwired = 0198a 스키마 미적용 또는 단가표(salary_tiers)가 비어 있음 → 기존 안내 문구 유지.
+ * 티어(수업 단가) 기반 정산액(0199a) — 시트 산식: Σ floor1(단가 × 시수 × 0.911 × 비율).
+ * · unwired = 0199a 스키마 미적용 또는 단가표(salary_tiers)가 비어 있음 → 기존 안내 문구 유지.
  * · ready   = 산정 완료. 단가 미지정 학생이 있으면 **부분합 + 명단**(조용히 0으로 치지 않는다).
  * · hold    = 시수는 있는데 산정 가능한 행이 0(전원 단가·비율 미지정) — 숫자를 지어내지 않는다.
  */
@@ -52,7 +52,7 @@ export type TeacherMoney = {
   splitRows: number;
   /** 강사 배분율(%). null = 급여정책 미설정. */
   commissionRate: number | null;
-  /** 티어 단가 기반 정산액(0198a) — 하단 합계 줄이 소비. */
+  /** 티어 단가 기반 정산액(0199a) — 하단 합계 줄이 소비. */
   tierSettlement: TierSettlementInfo;
 };
 
@@ -60,7 +60,7 @@ export async function getTeacherMoney(
   month: string,
   teacherId: string,
   studentIds: string[],
-  /** 이 강사의 반 id — 티어 정산(0198a)의 시수·티어 조회 범위. 생략하면 정산액을 계산하지 않는다. */
+  /** 이 강사의 반 id — 티어 정산(0199a)의 시수·티어 조회 범위. 생략하면 정산액을 계산하지 않는다. */
   classIds: string[] = [],
 ): Promise<TeacherMoney> {
   const supabase = await createClient();
@@ -152,12 +152,12 @@ export async function getTeacherMoney(
 }
 
 /**
- * 티어 단가 기반 정산액(0198a) — 시트 산식 그대로: (학생×반×티어) 행별 floor1(단가×시수×0.911×비율) 합.
+ * 티어 단가 기반 정산액(0199a) — 시트 산식 그대로: (학생×반×티어) 행별 floor1(단가×시수×0.911×비율) 합.
  *
  * · 시수 = attendance_records **교시별 유효행**(0196a slot_start — 같은 날 두 교시면 두 행 다 센다.
  *   이수진 4명의 "고등 3T 1T + 중등 3T 0.5T 같은 날"이 정확히 이 경로로 살아난다).
  * · 티어 = 기록 예외(attendance_records.salary_tier) ?? 수강(enrollments.salary_tier).
- * · 🔴 0198a 스키마가 아직 없거나(선-SQL 배포 안전, [[#95]] expand/contract) 단가표가 비어 있으면
+ * · 🔴 0199a 스키마가 아직 없거나(선-SQL 배포 안전, [[#95]] expand/contract) 단가표가 비어 있으면
  *   조용히 `unwired` — 기존 화면 문구가 그대로 나온다. 여기서 throw하면 출석부 전체가 죽는다.
  */
 async function computeTierSettlementInfo(
@@ -173,7 +173,7 @@ async function computeTierSettlementInfo(
 
   try {
     const [tiers, tierEnrollments, records] = await Promise.all([
-      // 단가표 — master 전용 RLS(0198a). 비-master는 RLS가 0행을 돌려주고(정책 없음이 아니라 미매치),
+      // 단가표 — master 전용 RLS(0199a). 비-master는 RLS가 0행을 돌려주고(정책 없음이 아니라 미매치),
       // 그 경우 아래 "단가표 비어 있음" 분기로 unwired가 된다(급여 정보 비노출과 화면 안전이 같이 성립).
       supabase.from("salary_tiers").select("label, unit_price"),
       fetchInChunks<{ student_id: string; class_id: string; salary_tier: string | null }>(classIds, (chunk) =>
@@ -262,7 +262,7 @@ async function computeTierSettlementInfo(
       excludedUnits: result.excludedUnits,
     };
   } catch {
-    // 0198a 미적용(칼럼·표 없음 = PostgREST 400 → 헬퍼 throw) — 정산액만 접고 화면은 산다.
+    // 0199a 미적용(칼럼·표 없음 = PostgREST 400 → 헬퍼 throw) — 정산액만 접고 화면은 산다.
     return { status: "unwired" };
   }
 }

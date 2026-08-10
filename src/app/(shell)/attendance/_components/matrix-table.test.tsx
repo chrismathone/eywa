@@ -1,6 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { AttendanceMatrix } from "@/features/attendance/server/queries";
+import { rollupDay, type SlotMark } from "@/features/attendance/cell-display";
 import { MatrixTable, type MatrixGroup } from "./matrix-table";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
@@ -32,6 +33,7 @@ function matrix(students: AttendanceMatrix["students"]): AttendanceMatrix {
     marks: {},
     notes: {},
     units: {},
+    slots: {},
     derived: {},
     derivedActive: false,
     stats: {
@@ -150,5 +152,74 @@ describe("출석부 표 골격", () => {
   it("상세 입력은 우클릭으로 연다고 안내한다", () => {
     const { container } = renderTable();
     expect(container.textContent).toContain("지각·조퇴·보강·메모는 우클릭");
+  });
+});
+
+/**
+ * 하루 2교시(0196a) — 출석부는 학생×날짜 격자라 칸이 하나뿐이다.
+ * 🔴 예전엔 그날 최신 1건만 살아남아 **다른 교시가 화면에서 통째로 사라졌다**(기록·급여엔 있는데).
+ */
+describe("교시 롤업 칸", () => {
+  const D1 = "2026-07-01";
+  function renderWithSlots(slots: SlotMark[]) {
+    const m = matrix([
+      { id: S1, name: "이도윤", grade: "고1", school: "경명여중", enrolledAt: null, attendDows: [3], spans: [], badges: [] },
+    ]);
+    const day = rollupDay(slots)!;
+    m.marks = { [S1]: { [D1]: day.status as never } };
+    if (day.units !== 1) m.units = { [S1]: { [D1]: day.units } };
+    m.slots = { [S1]: { [D1]: day.slots } };
+    return render(
+      <MatrixTable
+        groups={[{ ...GROUP, matrix: m }]}
+        days={DAYS}
+        holidays={{}}
+        showGroups
+        ordered={[{ classId: C, studentId: S1 }]}
+      />,
+    );
+  }
+  const cellOf = (c: HTMLElement) => c.querySelector<HTMLElement>(`[data-cell-key$="${D1}"]`)!;
+
+  it("🔴 2교시 출석은 '2' — 한 건만 세면 급여(회차 소비)보다 적게 말한다", () => {
+    const { container } = renderWithSlots([
+      { slot: "12:30:00", status: "present", units: null },
+      { slot: "14:10:00", status: "present", units: null },
+    ]);
+    const cell = cellOf(container);
+    expect(cell.textContent).toContain("2");
+    expect(cell.className).toContain("bg-att-present");
+    expect(cell.getAttribute("title")).toContain("2교시");
+    expect(cell.getAttribute("title")).toContain("12:30 출석 1 · 14:10 출석 1");
+  });
+
+  it("🔴 출석+결석이 섞인 날은 줄무늬 — 빠진 교시가 칸에서 사라지지 않는다", () => {
+    const { container } = renderWithSlots([
+      { slot: "12:30:00", status: "present", units: null },
+      { slot: "14:10:00", status: "absent", units: null },
+    ]);
+    const cell = cellOf(container);
+    expect(cell.textContent).toContain("1"); // 들은 1시수만
+    expect(cell.style.background).toContain("var(--att-present)");
+    expect(cell.style.background).toContain("var(--att-absent)");
+    expect(cell.getAttribute("title")).toContain("14:10 결석 0");
+  });
+
+  it("행 시수 합은 칸 숫자와 같다 — 화면 두 곳이 다른 말을 하면 안 된다", () => {
+    const { container } = renderWithSlots([
+      { slot: "12:30:00", status: "present", units: null },
+      { slot: "14:10:00", status: "present", units: null },
+    ]);
+    // 마지막 두 열 = 시수·출석률. 시수 칸이 2를 말해야 한다.
+    const totals = [...container.querySelectorAll("tbody tr td")].slice(-2);
+    expect(totals[0]!.textContent).toContain("2");
+  });
+
+  it("교시가 하나면 종전과 같다 — 줄무늬도 '교시' 툴팁도 없다", () => {
+    const { container } = renderWithSlots([{ slot: null, status: "present", units: null }]);
+    const cell = cellOf(container);
+    expect(cell.textContent).toContain("1");
+    expect(cell.style.background).toBe("");
+    expect(cell.getAttribute("title") ?? "").not.toContain("교시");
   });
 });

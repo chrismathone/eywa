@@ -1,4 +1,4 @@
--- 0198a — 강사 급여용 **수업 단가 티어** 배선 1단계 (스키마만, 순수 가산)
+-- 0199a — 강사 급여용 **수업 단가 티어** 배선 1단계 (스키마만, 순수 가산)
 --
 -- 원장 방향(2026-08-10): *"출석만 여기서 하고 계산은 같은 방식으로 한다면 급여자동화가 충분히 가능"*
 -- 산식(3인 시트 실측으로 확정): 급여 행 = floor1(단가 × 실제시수 × 0.911 × 비율[강사×과정]).
@@ -38,7 +38,7 @@ create table if not exists public.salary_tiers (
 );
 
 comment on table public.salary_tiers is
-  '강사 급여용 수업 단가표(티어 라벨 → 회당 단가) — 원장 전용. 급여 = floor1(단가×시수×0.911×비율). 0198a';
+  '강사 급여용 수업 단가표(티어 라벨 → 회당 단가) — 원장 전용. 급여 = floor1(단가×시수×0.911×비율). 0199a';
 
 create index if not exists salary_tiers_tenant_idx on public.salary_tiers (tenant_id);
 
@@ -73,13 +73,13 @@ alter table public.enrollments
   add column if not exists salary_tier text;
 
 comment on column public.enrollments.salary_tier is
-  '이 수강의 급여 단가 티어 라벨(salary_tiers.label 참조, FK 아님). null = 미지정(급여 산정에서 그 학생을 "단가 미지정"으로 표시). 0198a';
+  '이 수강의 급여 단가 티어 라벨(salary_tiers.label 참조, FK 아님). null = 미지정(급여 산정에서 그 학생을 "단가 미지정"으로 표시). 0199a';
 
 -- ③ 출결 행 단위 티어 예외(라벨만)
 alter table public.attendance_records
   add column if not exists salary_tier text;
 
 comment on column public.attendance_records.salary_tier is
-  '이 출결 1건에만 적용하는 급여 티어 예외. null = 수강(enrollments.salary_tier)을 따름. 같은 반에서 두 티어를 소비하는 드문 사례(교시 분리 0.5T)용. 0198a';
+  '이 출결 1건에만 적용하는 급여 티어 예외. null = 수강(enrollments.salary_tier)을 따름. 같은 반에서 두 티어를 소비하는 드문 사례(교시 분리 0.5T)용. 0199a';
 
 notify pgrst, 'reload schema';

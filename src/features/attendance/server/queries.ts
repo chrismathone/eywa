@@ -9,6 +9,7 @@ import {
   isEnrollmentActiveOn,
 } from "@/features/enrollments/eligibility";
 import { includeInAttendanceInput, makeupStudentIds } from "@/features/attendance/input-roster";
+import { rollupDay, type SlotMark } from "@/features/attendance/cell-display";
 import { buildHolidayMap, dowsFromKeys, resolveAttendDows } from "@/features/attendance/calendar";
 import {
   lifecycleBadgesInRange,
@@ -191,13 +192,20 @@ export type AttendanceInputRow = {
    * 원스크린 '+ 보강 학생 추가'(보고서)와 같은 개념의 출결판. 처리현황 '예정' 분모엔 안 들어간다.
    */
   isMakeup: boolean;
+  /** 그날 이 학생의 **유효 기록 전부**(교시별 최신 1건씩, 0196a). 저장이 고칠 대상 = 이 목록 전체. */
+  recordIds: string[];
+  /** 하위호환용 최신 1건 — 표시·판정은 아래 slots/slotCount를 볼 것. */
   existingRecordId: string | null;
   status: AttendanceStatus | null;
   note: string | null;
   homeworkRequired: boolean;
   homeworkDone: boolean;
-  // 시수(정규 1회 기준 배수, 0115a). null=기본 1.
+  // 시수(정규 1회 기준 배수, 0115a). null=기본 1. 교시가 여럿이면 **그날 합**(출석부 칸과 같은 숫자).
   sessionUnits: number | null;
+  /** 그날 찍힌 교시 수. 1이면 종전과 완전히 같다. */
+  slotCount: number;
+  /** 교시가 둘 이상일 때의 교시별 내역 — 화면 툴팁용. */
+  slots: SlotMark[];
 };
 
 export async function getClassMeta(classId: string): Promise<ClassMeta | null> {
@@ -255,33 +263,48 @@ export async function getAttendanceInputRows(
       .lte("start_date", date),
     supabase
       .from("attendance_records")
-      .select("id, student_id, status, note, homework_required, homework_done, session_units, recorded_at")
+      .select(
+        "id, student_id, slot_start, status, note, homework_required, homework_done, session_units, recorded_at",
+      )
       .eq("class_id", classId)
       .eq("session_date", date)
       .order("recorded_at", { ascending: false }),
   ]);
 
-  // Keep the latest record per student (records are sorted desc by recorded_at)
+  // 유효 기록 = (학생·**교시**)별 최신 1건(0196a, records는 recorded_at 내림차순). 이 화면은 학생당
+  // 한 줄이라 교시가 여럿이면 **한 줄로 접는다**(출석부 칸과 같은 규칙 — rollupDay 단일 소스).
+  // ⚠️ 접는 건 표시뿐이고 저장은 recordIds **전부**를 고친다 — 안 그러면 최근 1건만 바뀌고 나머지 교시가
+  //    조용히 옛 상태로 남는다("저장했는데 안 바뀐" 칸).
+  const seen = new Set<string>();
   const recordMap = new Map<
     string,
     {
-      id: string;
-      status: AttendanceStatus;
+      ids: string[];
+      slots: SlotMark[];
       note: string | null;
       homeworkRequired: boolean;
       homeworkDone: boolean;
-      sessionUnits: number | null;
     }
   >();
   for (const r of records ?? []) {
-    if (!recordMap.has(r.student_id)) {
+    const slot = (r.slot_start as string | null) ?? null;
+    const k = `${r.student_id}|${slot ?? ""}`;
+    if (seen.has(k)) continue; // 같은 교시의 옛 정정본
+    seen.add(k);
+    const raw = r.session_units === null ? null : Number(r.session_units);
+    const cur = recordMap.get(r.student_id);
+    if (cur) {
+      cur.ids.push(r.id);
+      cur.slots.push({ slot, status: r.status as AttendanceStatus, units: raw });
+      if (cur.note === null && r.note) cur.note = r.note;
+    } else {
+      // 메모·숙제는 **가장 최근 기록**의 것(칸이 하나뿐이라 교시별로 다 못 싣는다).
       recordMap.set(r.student_id, {
-        id: r.id,
-        status: r.status as AttendanceStatus,
+        ids: [r.id],
+        slots: [{ slot, status: r.status as AttendanceStatus, units: raw }],
         note: r.note,
         homeworkRequired: r.homework_required,
         homeworkDone: r.homework_done,
-        sessionUnits: r.session_units === null ? null : Number(r.session_units),
       });
     }
   }
@@ -302,25 +325,44 @@ export async function getAttendanceInputRows(
     );
   });
 
+  /** 한 학생의 기록들 → 행의 출결 칸(정규·보강 두 목록이 **같은 규칙**을 쓰게 한 곳에 둔다). */
+  const recordFieldsOf = (studentId: string) => {
+    const existing = recordMap.get(studentId);
+    const day = existing ? rollupDay(existing.slots) : null;
+    return {
+      recordIds: existing?.ids ?? [],
+      existingRecordId: existing?.ids[0] ?? null,
+      status: (day?.status as AttendanceStatus | undefined) ?? null,
+      note: existing?.note ?? null,
+      homeworkRequired: existing?.homeworkRequired ?? false,
+      homeworkDone: existing?.homeworkDone ?? false,
+      // 교시가 하나면 그 기록의 값 그대로(1·null 구분 유지), 여럿이면 그날 합.
+      // ⚠️ 합이 0(전부 결석)이면 null — 폼의 시수 칸에 "0"이 실리면 parseSessionUnits가 저장을 반려한다.
+      sessionUnits: day
+        ? day.count > 1
+          ? day.units > 0
+            ? day.units
+            : null
+          : (existing?.slots[0]?.units ?? null)
+        : null,
+      slotCount: day?.count ?? 0,
+      slots: day?.count && day.count > 1 ? day.slots : [],
+    };
+  };
+
   const rosterRows = active
     .map((e) => {
       const s = (Array.isArray(e.student) ? e.student[0] : e.student) as
         | { id: string; name: string; grade: string | null }
         | undefined;
       if (!s) return null;
-      const existing = recordMap.get(s.id);
       const row: AttendanceInputRow = {
         studentId: s.id,
         studentName: s.name,
         studentGrade: s.grade,
         enrollmentId: e.id,
         isMakeup: false,
-        existingRecordId: existing?.id ?? null,
-        status: existing?.status ?? null,
-        note: existing?.note ?? null,
-        homeworkRequired: existing?.homeworkRequired ?? false,
-        homeworkDone: existing?.homeworkDone ?? false,
-        sessionUnits: existing?.sessionUnits ?? null,
+        ...recordFieldsOf(s.id),
       };
       return row;
     })
@@ -343,22 +385,14 @@ export async function getAttendanceInputRows(
       makeupIds,
       (chunk) => supabase.from("students").select("id, name, grade").in("id", chunk),
     );
-    makeupRows = students.map((s): AttendanceInputRow => {
-      const existing = recordMap.get(s.id);
-      return {
-        studentId: s.id,
-        studentName: s.name,
-        studentGrade: s.grade,
-        enrollmentId: null,
-        isMakeup: true,
-        existingRecordId: existing?.id ?? null,
-        status: existing?.status ?? null,
-        note: existing?.note ?? null,
-        homeworkRequired: existing?.homeworkRequired ?? false,
-        homeworkDone: existing?.homeworkDone ?? false,
-        sessionUnits: existing?.sessionUnits ?? null,
-      };
-    });
+    makeupRows = students.map((s): AttendanceInputRow => ({
+      studentId: s.id,
+      studentName: s.name,
+      studentGrade: s.grade,
+      enrollmentId: null,
+      isMakeup: true,
+      ...recordFieldsOf(s.id),
+    }));
   }
 
   const byName = (a: AttendanceInputRow, b: AttendanceInputRow) => {
@@ -434,7 +468,15 @@ export type AttendanceMatrix = {
   // studentId → date → note (사유) — 매트릭스 인디케이터/툴팁용
   notes: Record<string, Record<string, string>>;
   // studentId → date → 시수(배수, 0115a). 기록이 없거나 기본(1)이면 키 없음 — 셀 표시·시수 합계용.
+  // ⚠️ 하루에 교시가 여럿이면 **그날 합**이다(교시 2개 출석 = 2). 회차 소비·급여가 세는 값과 같다.
   units: Record<string, Record<string, number>>;
+  /**
+   * studentId → date → 그날의 **교시별 기록**(0196a). 교시가 **둘 이상인 날만** 담는다 —
+   * 대부분의 칸은 여기 없고 종전과 완전히 같이 그려진다.
+   * 🔴 있는 이유: 격자는 학생×날짜라 칸이 하나뿐인데, 접고 나면 "몇 교시였는지"가 사라진다.
+   *    칸의 줄무늬·툴팁·저장(한 칸 입력이 그날 몇 건을 고치는지)이 전부 이 수를 근거로 한다.
+   */
+  slots: Record<string, Record<string, SlotMark[]>>;
   // studentId → date → true. **수기 기록이 아니라 수업보고서에서 파생한 칸**(derive-from-reports.ts).
   // 화면이 사실과 다른 말을 하지 않도록 셀 툴팁에 출처를 밝히는 용도 — 수기로 덮으면 이 표시는 사라진다.
   derived: Record<string, Record<string, true>>;
@@ -625,6 +667,7 @@ export async function getMonthlyAttendanceMatrix(
       marks: {},
       notes: {},
       units: {},
+      slots: {},
       derived: {},
       derivedActive: false,
       stats: {
@@ -717,6 +760,7 @@ export async function getMonthlyAttendanceMatrix(
   const marks: Record<string, Record<string, AttendanceStatus>> = {};
   const notes: Record<string, Record<string, string>> = {};
   const units: Record<string, Record<string, number>> = {};
+  const slots: Record<string, Record<string, SlotMark[]>> = {};
   const derived: Record<string, Record<string, true>> = {};
 
   if (studentIds.length > 0) {
@@ -744,45 +788,57 @@ export async function getMonthlyAttendanceMatrix(
         .range(from, to),
     );
 
-    // 같은 (student, date, **교시**) 중 최신 record만 채택(0196a — 같은 날 두 교시면 서로 다른 기록).
+    // 🔴 유효 기록 = (student, date, **교시**)별 최신 1건(0196a). 예전엔 교시를 안 봐서 같은 날
+    //    4교시·6교시 중 **한 건만 살아남고 나머지는 화면에서 사라졌다** — 기록은 남아 있는데
+    //    출석부만 모른 채 급여·회차는 둘 다 세는, 화면과 돈이 어긋나는 상태였다.
     // 페이지는 같은 order의 슬라이스라 이어붙여도 recorded_at 내림차순이 유지된다(청크는 학생 단위).
     const seen = new Set<string>();
-    const slotRowsByDay = new Map<string, typeof records>();
+    const byCell = new Map<
+      string,
+      { studentId: string; date: string; note: string | null; slots: SlotMark[] }
+    >();
     for (const r of records) {
-      const k = `${r.student_id}::${r.session_date}::${r.slot_start ?? ""}`;
-      if (seen.has(k)) continue;
+      const slot = (r.slot_start as string | null) ?? null;
+      const k = `${r.student_id}::${r.session_date}::${slot ?? ""}`;
+      if (seen.has(k)) continue; // 같은 교시의 옛 정정본(append-only)
       seen.add(k);
-      const dayKey = `${r.student_id}::${r.session_date}`;
-      const list = slotRowsByDay.get(dayKey) ?? [];
-      list.push(r); // recorded_at 내림차순 순서 유지(하루 한 기록 = 종전과 동일 경로)
-      slotRowsByDay.set(dayKey, list);
+      const cellKey = `${r.student_id}::${r.session_date}`;
+      const cell =
+        byCell.get(cellKey) ??
+        { studentId: r.student_id, date: r.session_date, note: null, slots: [] as SlotMark[] };
+      // 시수(배수) — null=기본 1. numeric은 문자열로 올 수 있어 Number 변환.
+      const raw = r.session_units === null || r.session_units === undefined ? null : Number(r.session_units);
+      cell.slots.push({
+        slot,
+        status: r.status as AttendanceStatus,
+        units: raw !== null && Number.isFinite(raw) ? raw : null,
+      });
+      // 메모는 **가장 최근에 찍힌 것** 하나(순회가 recorded_at 내림차순이라 처음 만난 것).
+      // ⚠️ 교시마다 메모가 다를 수 있지만 칸이 하나라 다 못 적는다 — 교시별 메모는 영어 수업 시트에서 본다.
+      if (cell.note === null && r.note) cell.note = r.note as string;
+      byCell.set(cellKey, cell);
     }
-    for (const [dayKey, list] of slotRowsByDay) {
-      const sep = dayKey.indexOf("::");
-      const studentId = dayKey.slice(0, sep);
-      const date = dayKey.slice(sep + 2);
-      // 하루 여러 교시(0196a 분리 기록)면: 상태는 **출석형 우선**(하나라도 나왔으면 결석이 아니다),
-      // 시수는 출석형 기록의 합. 기록이 1건이면 종전과 완전히 같은 결과다(대부분의 경로).
-      const countable = list.filter((r) => r.status !== "absent" && r.status !== "excused");
-      const chosen = countable[0] ?? list[0]!;
-      marks[studentId] ??= {};
-      marks[studentId]![date] = chosen.status as AttendanceStatus;
-      const noted = list.find((r) => r.note);
-      if (noted?.note) {
-        notes[studentId] ??= {};
-        notes[studentId]![date] = noted.note as string;
+
+    // 하루치를 한 칸으로 접는다 — 숫자는 시수 **합**, 색은 대표 상태(cell-display.rollupDay 단일 소스).
+    for (const cell of byCell.values()) {
+      const day = rollupDay(cell.slots);
+      if (!day) continue;
+      marks[cell.studentId] ??= {};
+      marks[cell.studentId]![cell.date] = day.status as AttendanceStatus;
+      if (cell.note) {
+        notes[cell.studentId] ??= {};
+        notes[cell.studentId]![cell.date] = cell.note;
       }
-      // 시수(배수) — null=기본 1이라 저장 안 함(키 없음 = 1). numeric은 문자열로 올 수 있어 Number 변환.
-      const u =
-        countable.length > 0
-          ? countable.reduce((acc, r) => {
-              const v = r.session_units === null || r.session_units === undefined ? 1 : Number(r.session_units);
-              return acc + (Number.isFinite(v) ? v : 1);
-            }, 0)
-          : null;
-      if (u !== null && Number.isFinite(u) && u !== 1) {
-        units[studentId] ??= {};
-        units[studentId]![date] = u;
+      // 기본(1)이면 키 없음 — 종전 규약 그대로. 교시가 여럿이면 합이 들어간다(2교시 출석 = 2).
+      // ⚠️ 0(전부 결석)도 키를 만들지 않는다 — 결석 칸의 시수는 원래 없는 값이고, 0을 실으면
+      //    격자 값이 `{u:0}`이 되어 복사·붙여넣기가 시수 "0"을 보내 저장이 반려된다(실측 773칸).
+      if (day.units !== 1 && day.units > 0) {
+        units[cell.studentId] ??= {};
+        units[cell.studentId]![cell.date] = day.units;
+      }
+      if (day.count > 1) {
+        slots[cell.studentId] ??= {};
+        slots[cell.studentId]![cell.date] = day.slots;
       }
     }
   }
@@ -922,6 +978,7 @@ export async function getMonthlyAttendanceMatrix(
     marks,
     notes,
     units,
+    slots,
     derived,
     derivedActive,
     stats: {

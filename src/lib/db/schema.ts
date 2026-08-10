@@ -429,7 +429,7 @@ export const enrollments = pgTable(
     // 반이동 흔적: is_transferred = 이동으로 종료(퇴원 집계 제외), is_transferred_in = 이동으로 들어옴.
     isTransferred: boolean("is_transferred").notNull().default(false),
     isTransferredIn: boolean("is_transferred_in").notNull().default(false),
-    // 급여 단가 티어 라벨(salary_tiers.label 참조, FK 아님 — 라벨만이라 금액 비노출, 0198a).
+    // 급여 단가 티어 라벨(salary_tiers.label 참조, FK 아님 — 라벨만이라 금액 비노출, 0199a).
     salaryTier: text("salary_tier"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
@@ -464,7 +464,7 @@ export const attendanceRecords = pgTable(
     status: attendanceStatusEnum("status").notNull(),
     // 시수(정규 수업 1회 기준 배수, 0115a). null=1(기본). 보강 연장=1.5/2, 부분 출석=0.5 등.
     sessionUnits: numeric("session_units", { precision: 4, scale: 1 }),
-    // 이 출결 1건에만 적용하는 급여 티어 예외(0198a). null = 수강(enrollments.salary_tier)을 따른다.
+    // 이 출결 1건에만 적용하는 급여 티어 예외(0199a). null = 수강(enrollments.salary_tier)을 따른다.
     // 같은 반에서 두 티어를 소비하는 드문 사례(교시 분리 0.5T)용 — 라벨만이라 금액 비노출.
     salaryTier: text("salary_tier"),
     note: text("note"),

@@ -66,16 +66,22 @@ export function buildGridSource(
   const rows = ordered.map((r) => rowKey(r.classId, r.studentId));
   const cols = days.filter((d) => !d.placeholder).map((d) => d.date);
   const initial: Record<string, { s: string; u: number | null }> = {};
+  // 하루에 교시가 둘 이상인 칸만(0196a) — 한 칸에 친 숫자가 그날 **몇 건**을 고치는지.
+  const slotCounts: Record<string, number> = {};
   for (const g of groups) {
     for (const s of g.matrix.students) {
       const marks = g.matrix.marks[s.id] ?? {};
       const units = g.matrix.units[s.id] ?? {};
+      const slots = g.matrix.slots[s.id] ?? {};
       for (const [date, st] of Object.entries(marks)) {
-        initial[cellKey(rowKey(g.classId, s.id), date)] = { s: st, u: units[date] ?? null };
+        const key = cellKey(rowKey(g.classId, s.id), date);
+        initial[key] = { s: st, u: units[date] ?? null };
+        const n = slots[date]?.length ?? 1;
+        if (n > 1) slotCounts[key] = n;
       }
     }
   }
-  return { rows, cols, initial };
+  return { rows, cols, initial, slotCounts };
 }
 
 /**
@@ -318,7 +324,7 @@ export function MatrixTable({
                           공유 {money.totals.sharedStudents}명 포함
                         </span>
                       ) : null}
-                      {/* 강사 몫(정산액) — 1순위는 티어 단가(0198a, 시트 산식 Σ floor1(단가×시수×0.911×비율)).
+                      {/* 강사 몫(정산액) — 1순위는 티어 단가(0199a, 시트 산식 Σ floor1(단가×시수×0.911×비율)).
                           티어 미배선이면 종전 안내(회차 확정/배분율)로 폴백. 없으면 0을 지어내지 않는다. */}
                       {money.tierSettlement.status === "ready" ? (
                         <span className="text-foreground num text-[12px] font-bold">

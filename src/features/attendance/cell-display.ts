@@ -5,9 +5,15 @@
 //   색은 전부 **배경색**으로 — 출석 민트 / 지각 주황 / 결석 빨강 / 조퇴 파랑 / 보강 보라.
 // ⚠️ O·X·L 같은 글자 표기로 되돌리지 말 것(원장 지시로 폐기).
 
-import { formatSessionUnits } from "./session-units";
+import { COUNTABLE_STATUSES, formatSessionUnits } from "./session-units";
 
 export type AttendanceMark = "present" | "absent" | "late" | "excused" | "makeup" | "early_leave";
+
+/**
+ * 한 날짜에 남은 **교시별 유효 기록** 하나(0196a).
+ * `slot`이 null이면 교시가 없던 옛 기록(= 그날 전체) — 섞여 있어도 그대로 한 건으로 센다.
+ */
+export type SlotMark = { slot: string | null; status: AttendanceMark; units: number | null };
 
 /**
  * 상태별 배경(+글자색) = **쨍한 파스텔 원색**(`--att-*`, globals.css).
@@ -63,14 +69,108 @@ export const STATUS_TEXT: Record<AttendanceMark, string> = {
   makeup: "보강",
 };
 
-/** 결석은 시수를 소비하지 않으므로 언제나 0. 나머지는 시수(미입력=1). */
-export function markNumber(status: AttendanceMark, units: number | null | undefined): string {
-  if (status === "absent" || status === "excused") return "0";
+/** 결석은 시수를 소비하지 않으므로 0. 나머지는 시수(미입력·이상값=1). 급여로 흘러가는 그 숫자다. */
+export function consumedUnits(status: AttendanceMark, units: number | null | undefined): number {
+  if (status === "absent" || status === "excused") return 0;
   const u = units ?? 1;
-  return Number.isFinite(u) && u > 0 ? formatSessionUnits(u) : "1";
+  return Number.isFinite(u) && u > 0 ? u : 1;
 }
 
-export type CellDisplay = { text: string; className: string };
+/** 결석은 시수를 소비하지 않으므로 언제나 0. 나머지는 시수(미입력=1). */
+export function markNumber(status: AttendanceMark, units: number | null | undefined): string {
+  return formatSessionUnits(consumedUnits(status, units));
+}
+
+/** 대표 상태 우선순위 — 소비 상태끼리 비교할 때 **눈에 띄어야 할 쪽**이 이긴다(지각 > 조퇴 > 보강 > 출석). */
+const SEVERITY: Record<AttendanceMark, number> = {
+  absent: 0,
+  excused: 0,
+  late: 4,
+  early_leave: 3,
+  makeup: 2,
+  present: 1,
+};
+
+/** 줄무늬 배경용 CSS 변수(globals.css `--att-*`) — 클래스로는 두 색을 한 칸에 못 칠한다. */
+const STATUS_VAR: Record<AttendanceMark, string> = {
+  present: "--att-present",
+  absent: "--att-absent",
+  excused: "--att-absent",
+  late: "--att-late",
+  early_leave: "--att-leave",
+  makeup: "--att-makeup",
+};
+
+export type DayRollup = {
+  /** 대표 상태(가장 무거운 것) — 칸 글자색·단색 배경. */
+  status: AttendanceMark;
+  /** 그날 소비 시수 **합**(결석은 0). 칸에 적히는 숫자이자 행 시수 합의 재료. */
+  units: number;
+  /** 유효 기록 수 = 그날 찍힌 교시 수. 1이면 종전과 완전히 같다. */
+  count: number;
+  /** 색이 서로 다른 기록이 섞였나 — 줄무늬로 그린다(결석·사유결석은 같은 색이라 섞인 게 아니다). */
+  mixed: boolean;
+  /** 교시 순서(오전→오후, 교시 없는 옛 기록이 맨 앞). */
+  slots: SlotMark[];
+};
+
+/** 0.1 단위 반올림 — 1.5를 여러 번 더할 때 생기는 부동소수 꼬리를 자른다(totals.ts와 같은 규약). */
+function round1(n: number): number {
+  return Math.round(n * 10) / 10;
+}
+
+/**
+ * 하루치 교시 기록들을 **한 칸**으로 접는다(출석부는 학생×날짜 격자라 칸이 하나뿐이다).
+ *
+ * 🔴 숫자는 **합**이다 — 하루 2교시를 들으면 2. 회차 소비·급여가 세는 값(session_term_attendance,
+ *    0198a)과 같아야 한다. 대표 1건의 시수만 적으면 화면이 급여보다 적게 말한다.
+ * ⚠️ 접는 것은 **표시**뿐이다. 기록은 교시별로 그대로 있고, 교시별 수정은 영어 수업 시트(ECS)가 맡는다.
+ */
+export function rollupDay(slots: readonly SlotMark[]): DayRollup | null {
+  if (slots.length === 0) return null;
+  // 교시 순서 = 시각 오름차순. 교시 없는 옛 기록(null)은 맨 앞.
+  const ordered = [...slots].sort((a, b) => (a.slot ?? "").localeCompare(b.slot ?? ""));
+  // 🔴 대표는 **소비 상태 중에서** 고른다(하나라도 들었으면 결석을 대표로 세우지 않는다).
+  //    이유는 표시가 아니라 **합계**다: 행 시수 합(countCells)은 대표 상태가 소비 상태일 때만
+  //    시수를 더하므로, 출석+결석인 날의 대표를 결석으로 두면 화면 합계가 급여보다 1시수 적어진다.
+  //    빠진 교시는 색이 갈린 **줄무늬**와 툴팁이 드러낸다 — 숨기는 게 아니다.
+  const consumedSlots = ordered.filter((s) => COUNTABLE_STATUSES.has(s.status));
+  const pool = consumedSlots.length > 0 ? consumedSlots : ordered;
+  let status = pool[0]!.status;
+  let units = 0;
+  for (const s of pool) {
+    if (SEVERITY[s.status] > SEVERITY[status]) status = s.status;
+  }
+  for (const s of ordered) {
+    units += consumedUnits(s.status, s.units);
+  }
+  // '섞임' 판정은 상태 키가 아니라 **색**으로 — absent/excused는 같은 빨강이라 줄무늬로 나눌 게 없다.
+  const mixed = new Set(ordered.map((s) => STATUS_VAR[s.status])).size > 1;
+  return { status, units: round1(units), count: ordered.length, mixed, slots: ordered };
+}
+
+/** 섞인 날의 배경 — 교시 순서대로 색을 나눠 칠한다. 칸 하나가 곧 "그날 몇 교시였는지"를 말한다. */
+function slotStripes(slots: readonly SlotMark[]): string {
+  const n = slots.length;
+  const stops = slots.map((s, i) => {
+    const from = round1((i / n) * 100);
+    const to = round1(((i + 1) / n) * 100);
+    return `var(${STATUS_VAR[s.status]}) ${from}% ${to}%`;
+  });
+  return `linear-gradient(90deg, ${stops.join(", ")})`;
+}
+
+/** 툴팁 한 줄 — "12:30 출석 1 · 14:10 결석 0". 교시가 없던 옛 기록은 시각 없이 상태만. */
+export function slotBreakdown(slots: readonly SlotMark[]): string {
+  return slots
+    .map((s) => {
+      const time = s.slot ? `${s.slot.slice(0, 5)} ` : "";
+      return `${time}${STATUS_TEXT[s.status]} ${markNumber(s.status, s.units)}`;
+    })
+    .join(" · ");
+}
+
+export type CellDisplay = { text: string; className: string; style?: { background: string } };
 
 /**
  * 셀 한 칸의 배경 = 그 날의 성격(원장 규칙 2026-07-21): **수업하는 요일 민트 · 수업 없는 평일 흰색 · 주말 회색**.
@@ -80,8 +180,18 @@ export type CellDisplay = { text: string; className: string };
 export function cellDisplay(
   status: AttendanceMark | null,
   units: number | null | undefined,
-  opts: { attendDay?: boolean; muted?: boolean; outside?: boolean } = {},
+  opts: { attendDay?: boolean; muted?: boolean; outside?: boolean; day?: DayRollup | null } = {},
 ): CellDisplay {
+  // 하루에 교시가 둘 이상 찍힌 칸(0196a) — 숫자는 **합**, 색이 갈리면 교시 순서대로 줄무늬.
+  // ⚠️ 대표 상태가 결석이어도 숫자는 0이 아니다(한 교시라도 들었으면 그 시수가 살아 있어야 한다).
+  const day = opts.day;
+  if (day && day.count > 1) {
+    return {
+      text: formatSessionUnits(day.units),
+      className: STATUS_TONE[day.status],
+      ...(day.mixed ? { style: { background: slotStripes(day.slots) } } : {}),
+    };
+  }
   // 🔴 기록이 있으면 재원 기간 밖이라도 **값이 먼저**다 — 퇴원 뒤 보강 출석이 실제로 있고,
   //    그걸 회색으로 덮으면 급여에 잡히는 시수가 화면에서 사라진다(구 출석부도 값을 그렸다).
   if (status) return { text: markNumber(status, units), className: STATUS_TONE[status] };
