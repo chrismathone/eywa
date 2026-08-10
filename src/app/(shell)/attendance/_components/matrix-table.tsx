@@ -35,7 +35,9 @@ const HEAD_CORNER_Z = "z-[60]";
  * ⚠️ 시수·출석률에 폭을 주는 건 sticky `right-[64px]`이 **출석률 폭과 짝**이기 때문 — 이 값이 늘면 두 열이 겹친다.
  * ⚠️ 폭을 넘는 글자는 잘리고 `title`에 원문이 남는다(`truncate`) — 넓히면 그만큼 날짜 칸이 줄어든다.
  */
-const COL_W = { name: 116, grade: 48, school: 120, money: 76, units: 52, rate: 64, day: 30 } as const;
+// 학교·학년은 압축 표기("경명여중2", school-grade.ts) **한 열** — 두 열이던 것을 합쳐 날짜 칸에 폭을
+// 돌려줬다(원장 2026-08-10). 되돌려 나누지 말 것.
+const COL_W = { name: 116, school: 96, money: 76, units: 52, rate: 64, day: 30 } as const;
 
 /** 표에 쌓이는 한 덩어리 = 한 반. 반별 보기는 1개, 강사 전체 보기는 그 강사의 모든 반. */
 export type MatrixGroup = {
@@ -112,12 +114,15 @@ export function MatrixTable({
 }) {
   // 헤더의 수업요일 하이라이트 = 표에 담긴 반들의 수업요일 합집합(강사 전체 보기는 반마다 다르다).
   const classDows = new Set(groups.flatMap((g) => g.matrix.classDows));
-  const colSpan = days.length + 5 + (money ? 2 : 0);
+  const colSpan = days.length + 4 + (money ? 2 : 0);
+  // 단가(티어) 미지정으로 정산에서 빠진 학생 — 이름 칸 배경으로 행 단위 표시(합계 뱃지만으론 못 찾는다).
+  const tierMissingIds = new Set(
+    money && money.tierSettlement.status !== "unwired" ? money.tierSettlement.missingTierStudentIds : [],
+  );
   const totalCount = sumCounts(groups.map((g) => groupCount(g.matrix)));
   // 표 최소 폭 = 고정 열 합 + 날짜 칸 최소치. 화면이 이보다 넓으면 남는 폭은 날짜 칸이 나눠 갖는다.
   const tableMinWidth =
     COL_W.name +
-    COL_W.grade +
     COL_W.school +
     days.length * COL_W.day +
     (money ? COL_W.money * 2 : 0) +
@@ -132,7 +137,6 @@ export function MatrixTable({
         {/* 열 폭의 단일 소스 — 셀의 `w-*`가 아니라 여기가 정한다(table-fixed). 접기와 무관하게 불변. */}
         <colgroup>
           <col style={{ width: COL_W.name }} />
-          <col style={{ width: COL_W.grade }} />
           <col style={{ width: COL_W.school }} />
           {days.map((d) => (
             <col key={d.date} />
@@ -159,12 +163,7 @@ export function MatrixTable({
             <th
               className={`bg-bg-soft border-line sticky top-0 ${HEAD_Z} ${HEAD_UNDERLINE} border-r px-1.5 py-1 text-left whitespace-nowrap`}
             >
-              <span className="micro">학년</span>
-            </th>
-            <th
-              className={`bg-bg-soft border-line sticky top-0 ${HEAD_Z} ${HEAD_UNDERLINE} border-r px-1.5 py-1 text-left whitespace-nowrap`}
-            >
-              <span className="micro">학교</span>
+              <span className="micro">학교·학년</span>
             </th>
             {days.map((d) => {
               // 그 달에 없는 날 — 빈 여백(번호·요일 없음). 폭은 다른 날 칸과 동일(min-w)로 고정.
@@ -254,6 +253,7 @@ export function MatrixTable({
                   money={money ? money.byStudent[s.id] ?? null : undefined}
                   lockBefore={lockBefore}
                   classLabel={g.className}
+                  tierMissing={tierMissingIds.has(s.id)}
                 />
               );
             })}
@@ -271,6 +271,7 @@ export function MatrixTable({
               money={money ? money.byStudent[s.id] ?? null : undefined}
               lockBefore={lockBefore}
               classLabel={g.className}
+              tierMissing={tierMissingIds.has(s.id)}
             />
           ));
           return (

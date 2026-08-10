@@ -39,10 +39,18 @@ export type TierSettlementInfo =
       unitsTotal: number;
       rowCount: number;
       missingTierStudents: string[];
+      /** 미지정 학생 id — 이름 칸 배경 표시용(동명이인 안전). */
+      missingTierStudentIds: string[];
       missingPriceTiers: string[];
       excludedUnits: number;
     }
-  | { status: "hold"; missingTierStudents: string[]; missingPriceTiers: string[]; missingRateGroups: string[] };
+  | {
+      status: "hold";
+      missingTierStudents: string[];
+      missingTierStudentIds: string[];
+      missingPriceTiers: string[];
+      missingRateGroups: string[];
+    };
 
 export type TeacherMoney = {
   byStudent: Record<string, StudentMoney>;
@@ -265,6 +273,7 @@ async function computeTierSettlementInfo(
       return {
         status: "hold",
         missingTierStudents: result.missingTierStudents,
+        missingTierStudentIds: result.missingTierStudentIds,
         missingPriceTiers: result.missingPriceTiers,
         missingRateGroups: result.missingRateGroups,
       };
@@ -274,6 +283,7 @@ async function computeTierSettlementInfo(
       unitsTotal: result.unitsTotal,
       rowCount: result.rowCount,
       missingTierStudents: result.missingTierStudents,
+      missingTierStudentIds: result.missingTierStudentIds,
       missingPriceTiers: result.missingPriceTiers,
       excludedUnits: result.excludedUnits,
     };
