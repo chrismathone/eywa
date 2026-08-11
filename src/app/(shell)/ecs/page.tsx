@@ -162,7 +162,8 @@ function EcsTodayFace({ res, scoped }: { res: EcsTodayResult; scoped: boolean })
         embedLabel={`영어 강사 시트 · ${isToday ? "오늘" : res.date.slice(5)}`}
       />
 
-      <div className="bg-card shadow-card flex flex-wrap items-center gap-3 rounded-2xl px-4 py-3">
+      {/* 좁은 화면(모바일·좁은 창)은 칩 툴바를 가로 레일로 — 시간표 툴바와 같은 .toolbar-rail 규약. */}
+      <div className="bg-card shadow-card toolbar-rail flex flex-wrap items-center gap-3 rounded-2xl px-4 py-3">
         <EcsFaceTabs face="today" />
         <EcsDayNav date={res.date} today={res.today} />
       </div>
@@ -188,6 +189,8 @@ function EcsTodayFace({ res, scoped }: { res: EcsTodayResult; scoped: boolean })
           canWrite={res.canWrite}
           userId={res.userId}
           tenantId={res.tenantId}
+          fontSize={res.fontSize}
+          isToday={isToday}
         />
       )}
     </div>
