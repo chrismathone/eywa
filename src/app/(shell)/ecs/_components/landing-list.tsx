@@ -51,11 +51,10 @@ export function EcsLandingList({ cards, weekMonday }: { cards: readonly SheetLan
         <p className="micro ml-auto hidden sm:block">반 · 담임 · 작성 교시</p>
       </div>
 
-      {/* 열 수는 **옛 카드 그리드와 같은 브레이크포인트**(1→2→3→4)로 둔다 — 같은 창에서 열 개수가 바뀌면
-          "압축했다"가 아니라 "레이아웃이 뒤집혔다"로 읽힌다. 실측(1024px 3열=309px/열, 1280px 4열=291px/열)
-          기준으로 담임 이름이 잘리는 행은 42반 중 1건(위임 반의 '… 선생님 반')뿐이라 이 폭이 하한이다.
-          한 단계 더 좁히면(5열 229px) 32행이 잘린다. */}
-      <ul className="grid grid-cols-1 gap-x-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+      {/* 🔴 **3열이 상한**(원장 2026-08-11 "4열 빼고 3열까지만"). 4열은 열 폭이 291px로 떨어져 담임 이름이
+          잘리기 시작했다 — 이름이 잘리면 담임으로 훑는 일이 안 된다(같은 날 '담임 진하게'와 한 뭉치의 지시).
+          넓은 창에선 열을 더 늘리는 대신 각 행이 넉넉해진다. 한 단계 더 좁히면(4열) 잘리는 행 1 → (5열) 32. */}
+      <ul className="grid grid-cols-1 gap-x-5 sm:grid-cols-2 lg:grid-cols-3">
         {cards.map((card) => {
           const pct = landingCardPct(card);
           const idle = card.totalSlots === 0;
@@ -100,7 +99,15 @@ export function EcsLandingList({ cards, weekMonday }: { cards: readonly SheetLan
                     시간변경 <span className="num">{card.orphanSlots}</span>
                   </span>
                 ) : null}
-                <span className="text-text-dim min-w-0 flex-1 truncate text-[12px]">
+                {/* 담임 이름은 **진하게**(원장 2026-08-11) — 이 목록을 담임 기준으로 훑는 일이 실제로
+                    많아서다(같은 날 담임 필터도 함께 붙었다). 반 이름과는 **크기**로 갈린다(13px/12px)
+                    — 굵기까지 같으면 두 글자 덩어리가 붙어 보여 행이 도로 시끄러워진다.
+                    ⚠️ 담임이 없는 반의 '담임 미지정'은 사람 이름이 아니라 상태라 진하게 하지 않는다. */}
+                <span
+                  className={`min-w-0 flex-1 truncate text-[12px] ${
+                    card.teacherName ? "text-foreground font-semibold" : "text-text-dim"
+                  }`}
+                >
                   {card.teacherName ?? "담임 미지정"}
                   {card.delegated ? " 선생님 반" : ""}
                 </span>

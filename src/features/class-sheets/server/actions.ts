@@ -18,6 +18,7 @@ import { isEnrollmentActiveOn, enrollmentAttendsOnDay } from "@/features/enrollm
 import { logAction } from "@/features/audit/server/log";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { DEFAULT_ECS_FONT_SIZE, ECS_FONT_SIZES, type EcsFontSize } from "../font-size";
+import { ECS_TEACHER_ALL, normalizeEcsTeacher } from "../landing-teacher";
 import {
   DEFAULT_ECS_ENGLISH_TRACK,
   DEFAULT_ECS_SHOW_SELF_STUDY,
@@ -778,4 +779,17 @@ export async function setMyEcsEnglishTrack(
   return patchMyEcsPrefs({
     englishTrack: filter === DEFAULT_ECS_ENGLISH_TRACK ? undefined : filter,
   });
+}
+
+/**
+ * 랜딩의 **담임 보기 필터**를 본인 계정에 저장 — `users.ui_prefs.ecs.teacher`(2026-08-11).
+ *
+ * ⚠️ 프로그램 필터와 같은 부류다(**서버가 목록을 좁혀 내려준다**) → 호출부가 저장 후 `router.refresh()`.
+ * ⚠️ 여기선 **모양만** 검증한다(`all`·`none`·uuid). "그 담임이 이 주에 반이 있나"는 저장 시점이 아니라
+ *    **읽는 시점**의 질문이라 `getSheetLanding`이 판정한다 — 저장을 그때 막으면 다음 주에 돌아올 필터를
+ *    지금 못 고르게 하는 셈이다.
+ */
+export async function setMyEcsTeacher(value: string): Promise<{ ok: boolean; error?: string }> {
+  if (normalizeEcsTeacher(value) !== value) return { ok: false, error: "잘못된 값입니다" };
+  return patchMyEcsPrefs({ teacher: value === ECS_TEACHER_ALL ? undefined : value });
 }

@@ -16,7 +16,7 @@ export default function EcsLandingLoading() {
         <div className="border-line border-b px-1 pb-2">
           <div className="bg-bg-soft h-4 w-64 animate-pulse rounded" />
         </div>
-        <div className="grid grid-cols-1 gap-x-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        <div className="grid grid-cols-1 gap-x-5 sm:grid-cols-2 lg:grid-cols-3">
           {Array.from({ length: 12 }).map((_, i) => (
             <div key={i} className="border-line-faint flex items-center gap-2 border-b px-1.5 py-[7px]">
               <div className="bg-bg-soft h-4 flex-1 animate-pulse rounded" />
