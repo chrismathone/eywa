@@ -6,7 +6,8 @@
  * setAttendanceCell/clearPresentAttendance 두 경로만, 보고서는 원스크린 링크만).
  */
 import Link from "next/link";
-import { AttendanceSelect, type BasicAttendance } from "./attendance-select";
+import type { BasicAttendance } from "./attendance-select";
+import { TodayAttendancePills } from "./today-attendance-pills";
 import { TodayMarkPopover, type MarkMap, type StudentMark } from "./today-mark-popover";
 import type { TodayClassCard, TodayStudent } from "../server/today";
 
@@ -39,14 +40,17 @@ export function StudentRow({
     // ⚠️ 이름 칸을 `1fr`로 두고 행을 화면 폭에 맡기면 넓은 창에서 이름은 왼쪽 끝, 컨트롤은 오른쪽 끝으로
     // **벌어져** 한 줄을 눈으로 잇기 어렵다(2026-08-07 실화면). 폭은 목록 컨테이너(`max-w`)가 잡고,
     // 행은 그 안을 채운다 — 그래야 밑줄도 컨트롤 있는 데까지만 그어진다.
-    <div className="border-line grid grid-cols-[minmax(0,1fr)_5.75rem_auto_auto] items-center gap-2 border-b py-1.5 last:border-b-0">
+    // 출결 칸 폭 = 알약 3개(출석·지각·결석)가 정확히 앉는 고정폭 — auto로 두면 읽기전용 행(배지 하나)과
+    // 알약 행의 칸 폭이 달라져 열이 들쭉날쭉해진다.
+    <div className="border-line grid grid-cols-[minmax(0,1fr)_7.25rem_auto_auto] items-center gap-2 border-b py-1.5 last:border-b-0">
       <span className="min-w-0 truncate text-[13px]">
         {/* 구조화 행 목록(Editorial 문법 ⑤) — 이름 bold 13.5px + 설명 dim 12.5px. */}
         <span className="text-foreground text-[13.5px] font-bold">{student.name}</span>
         {student.grade ? <span className="text-text-dim ml-1 text-[12.5px]">{student.grade}</span> : null}
       </span>
       <span>
-        <AttendanceSelect
+        {/* 드롭다운 배제(원장 2026-08-11) — 1클릭 알약. 저장 경로(onSet/onClear)는 그대로다. */}
+        <TodayAttendancePills
           status={att.status}
           note={att.note}
           studentName={student.name}
