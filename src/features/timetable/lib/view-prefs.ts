@@ -15,6 +15,10 @@
 // 학년 미입력 학생이 시간표에서 통째로 증발한다 — 조용한 소실보다 한 명 더 보이는 쪽이 안전하다.
 
 import { DEFAULT_UI_FONT_SIZE, UI_FONT_SIZES, type UiFontSize } from "@/lib/ui-prefs/font-size";
+import {
+  normalizeEnglishTrackFilter,
+  type EnglishTrackFilter,
+} from "@/features/classes/english-track";
 
 /** 학년 목록은 학원설정(operations.gradeLevels)이 단일 소스 — 여기에 학년을 하드코딩하지 말 것. */
 export type TimetableViewPrefs = {
@@ -60,6 +64,16 @@ export type TimetableViewPrefs = {
    * ⚠️ 기본은 **펼침**이다. 경고 목록의 기본값을 '숨김'으로 두면 켜 본 적 없는 사람에겐 영영 안 보인다.
    */
   roomIssues: boolean | null;
+  /**
+   * 영어 프로그램 보기 필터(전체/EiE/인재원 영어, 0176a `classes.english_track`). null = 미설정(=전체).
+   *
+   * ECS 랜딩의 같은 필터(`ui_prefs.ecs.englishTrack`)와 **같은 어휘·같은 비대칭 계약**을 쓴다
+   * ([`english-track.ts`](../../classes/english-track.ts)) — 인재원 영어 = "EiE가 아닌 전부"(미분류 포함).
+   * 화면만 다를 뿐 뜻이 같아야 두 화면을 오갈 때 같은 반이 같은 칸에 있다.
+   * ⚠️ 저장은 화면별로 분리한다(ECS 값을 훔쳐 읽지 않는다) — 한쪽에서 좁힌 게 다른 쪽에 번지면
+   *    "왜 반이 없지"가 된다. 축이 같다고 저장까지 합치지 말 것.
+   */
+  englishTrack: EnglishTrackFilter | null;
 };
 
 /** 셀 색 강도 — workspace prefs 스토어의 TimetableColorMode와 같은 3값(런타임 소스는 그 스토어). */
@@ -77,6 +91,7 @@ export const EMPTY_VIEW_PREFS: TimetableViewPrefs = {
   roomGroupLines: null,
   roomTimeVertical: null,
   roomIssues: null,
+  englishTrack: null,
 };
 
 /**
@@ -210,6 +225,11 @@ export function parseViewPrefs(raw: unknown): TimetableViewPrefs {
     roomGroupLines: typeof o.roomGroupLines === "boolean" ? o.roomGroupLines : null,
     roomTimeVertical: typeof o.roomTimeVertical === "boolean" ? o.roomTimeVertical : null,
     roomIssues: typeof o.roomIssues === "boolean" ? o.roomIssues : null,
+    // 깨진 값은 '전체'가 아니라 **미설정(null)** — 둘 다 결과는 전체지만, null이어야 저장 때 키가 안 남는다.
+    englishTrack:
+      o.englishTrack === undefined || o.englishTrack === null
+        ? null
+        : normalizeEnglishTrackFilter(o.englishTrack),
   };
 }
 
@@ -234,6 +254,8 @@ export function serializeViewPrefs(prefs: TimetableViewPrefs): Record<string, un
   if (prefs.roomTimeVertical === true) out.roomTimeVertical = true;
   // 기본값(펼침)은 키를 지운다 — 접은 사람만 값을 갖는다(위와 같은 규약).
   if (prefs.roomIssues === false) out.roomIssues = false;
+  // 기본값('전체')은 키를 지운다 — 좁혀 본 사람만 값을 갖는다(위와 같은 규약).
+  if (prefs.englishTrack !== null && prefs.englishTrack !== "all") out.englishTrack = prefs.englishTrack;
   return out;
 }
 
@@ -258,6 +280,7 @@ export function mergeViewPrefs(
     roomGroupLines: pick("roomGroupLines"),
     roomTimeVertical: pick("roomTimeVertical"),
     roomIssues: pick("roomIssues"),
+    englishTrack: pick("englishTrack"),
     fontSize: pick("fontSize"),
     // compact1h는 과목별이라 통째 교체가 아니라 **과목 단위 병합**이다(아래 참조).
     compact1h: patch.compact1h !== undefined
