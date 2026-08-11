@@ -10,7 +10,7 @@ import { useRef } from "react";
 import { useRouter } from "next/navigation";
 import { EyIcon } from "@/components/icons/eywa-icons";
 
-export function EcsDatePicker({ date }: { date: string }) {
+export function EcsDatePicker({ date, mode }: { date: string; mode?: "sheet" | "cards" }) {
   const ref = useRef<HTMLInputElement>(null);
   const router = useRouter();
   return (
@@ -32,7 +32,8 @@ export function EcsDatePicker({ date }: { date: string }) {
         type="date"
         value={date}
         onChange={(e) => {
-          if (e.target.value) router.push(`/ecs?view=today&date=${e.target.value}`);
+          if (e.target.value)
+            router.push(`/ecs?view=today&date=${e.target.value}${mode === "cards" ? "&mode=cards" : ""}`);
         }}
         aria-label="날짜 선택"
         className="absolute inset-0 h-full w-full cursor-pointer opacity-0 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:inset-0 [&::-webkit-calendar-picker-indicator]:h-full [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:cursor-pointer"

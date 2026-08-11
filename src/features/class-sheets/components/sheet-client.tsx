@@ -102,11 +102,21 @@ export function SheetClient({
   classOptions,
   userId,
   tenantId,
+  initialDay = null,
+  initialPanelOpen = true,
 }: {
   data: ClassSheetWeekData;
   classOptions: { id: string; name: string }[];
   userId: string;
   tenantId: string;
+  /**
+   * 요일 필터 초기값 — ECS '오늘' 면이 시트를 **그 날짜 열만** 필터해 쌓을 때 쓴다(2026-08-11).
+   * URL `?day=`가 있으면 그쪽이 이긴다(단일 시트 화면의 기존 계약 불변). SSR·클라 초기값이 같아야
+   * 하이드레이션이 안 어긋나므로 서버가 이 prop으로 확정해 내려준다.
+   */
+  initialDay?: string | null;
+  /** 목표·메모 패널 초기 접힘 — 오늘 면은 시트가 N개 쌓여 패널까지 다 열면 화면이 무너진다. */
+  initialPanelOpen?: boolean;
 }) {
   const router = useRouter();
   const { classId, weekMonday } = data;
@@ -194,8 +204,8 @@ export function SheetClient({
 
   // ── 요일 필터(같은 주 전환 = flush·재조회 없이 History API) ────────────────
   const [dayFilter, setDayFilter] = useState<string | null>(() => {
-    if (typeof window === "undefined") return null;
-    return new URLSearchParams(window.location.search).get("day");
+    if (typeof window === "undefined") return initialDay;
+    return new URLSearchParams(window.location.search).get("day") ?? initialDay;
   });
   const changeDayFilter = useCallback((day: string | null) => {
     setDayFilter(day);
@@ -205,7 +215,7 @@ export function SheetClient({
     window.history.replaceState(null, "", url.toString());
   }, []);
 
-  const [panelOpen, setPanelOpen] = useState(true);
+  const [panelOpen, setPanelOpen] = useState(initialPanelOpen);
 
   // ── 글씨 크기(내 계정) ─────────────────────────────────────────────────────
   // 서버 확정값으로 시작(첫 렌더부터 정확 — localStorage 초기값은 하이드레이션 크래시 #75).
