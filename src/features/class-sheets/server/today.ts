@@ -1,10 +1,11 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-import { fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
+import { fetchAllPaged, fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 import { accessLevelTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { getCurrentUser } from "@/lib/auth/current-user";
-import { kstToday } from "@/lib/date-kst";
+import { getTeachingClassIds } from "@/features/classes/server/delegation";
+import { addDays, kstToday } from "@/lib/date-kst";
 import { settingsToPeriodsConfig, weekdayTableFor } from "@/features/timetable/lib/periods";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { resolveSkillAreas } from "@/features/owner/skill-areas";
@@ -19,7 +20,12 @@ import { hiddenSeatOf } from "../lib/grid";
 import { isMeaningfulPlanLine } from "../lib/plan-codec";
 import { dowKeyOf, normalizeSlotTime, YMD_RE } from "../lib/week";
 import { readEcsShowSelfStudy } from "../view-prefs";
-import { ecsVisibleClassFilter } from "./access";
+import { DEFAULT_ECS_FONT_SIZE, readEcsFontSize, type EcsFontSize } from "../font-size";
+// 영어 알림장은 eywa가 아니라 ClassNote 반 보드에 직접 올라간다(2026-08-11 전수 검사: 35일 5,680건 중
+// 영어 lesson_reports 0건). "이 날짜에 알림장이 나갔나"의 진실은 워커가 적재하는 classnote_class_posts
+// (0140a)이고, 반↔보드 매칭은 작성률 화면과 **같은 키**(classKey/boardKey)를 쓴다 — 따로 만들면 갈린다.
+import { boardKey, classKey } from "@/features/report-admin/english-writing";
+import { ecsDelegatedClassIds, ecsVisibleClassFilter } from "./access";
 
 /**
  * **오늘 ECS** — 영어 강사의 원스크린(원장 지시 2026-08-07 "영어 강사는 ECS를 기반으로 한 원스크린").
@@ -68,10 +74,16 @@ export type TodayStudent = {
   name: string;
   school: string | null;
   grade: string | null;
-  /** 출결 effective 상태(없으면 null=미기록). */
+  /** 출결 effective 상태(없으면 null=미기록). 교시별 행이 여러 개면 가장 최근 기록의 상태. */
   attendance: string | null;
   /** 사유 메모가 붙어 있으면 여기(있으면 ECS에서 취소 못 함 — 출석부가 진실). */
   attendanceNote: string | null;
+  /**
+   * 이 학생의 그 날 유효 출결 행들의 `slot_start` **원본값**(0196a — 주간 시트가 만든 교시별 행 + 옛
+   * '그날 전체' null 행). 취소(`clearPresentAttendance`)는 이 값을 그대로 넘겨야 실제 행이 지워진다 —
+   * 안 넘기면 RPC가 null-slot 행만 세어 cleared:0 = "지운 척"이 된다(적대 리뷰 2026-08-11).
+   */
+  attendanceSlots: (string | null)[];
   /** 이 학생의 그 날 수업보고서가 작성됐는가(lesson_reports 존재). */
   reportWritten: boolean;
   /** ClassNote 발송 상태(성공만 true — 대기·실패는 false). */
@@ -98,11 +110,28 @@ export type TodayClassCard = {
   /** 출석 입력 가능(권한 + 강사 7일 창) — false면 화면이 체크를 잠그고 이유를 말한다. */
   canMarkAttendance: boolean;
   /**
+   * 임시 위임(0173a)으로 지금 대신 맡은 반인가 — 내 담당 반이면 false. 주간 랜딩·원스크린 반 칩과
+   * 같은 앰버 규약으로 구분한다(남의 반을 내 반인 줄 알고 고치는 사고 방지, 원장 2026-08-03).
+   */
+  delegated: boolean;
+  /**
+   * ClassNote 반 보드에 **이 날짜** 알림장이 올라왔는가(0140a classnote_class_posts, 워커 30분 주기 적재).
+   * 영어 보고서는 eywa 밖(ClassNote 직접 게시)이라 lesson_reports 기반 '보고서' 배지만으로는 영어 강사의
+   * 실제 마감이 안 보인다 — 이 값이 그 현실을 배지로 잇는다.
+   *
+   * 3상인 이유(적대 리뷰 2026-08-11): ① 보드가 아예 없는 반(실측 2개)에 '미게시' 앰버를 달면 **지울 수
+   * 없는 거짓 할 일**이 된다 ② boardKey가 두 보드에 걸리는 반(실측 "Let's Speak 5" 월수목/화목금)은
+   * 남의 반 게시로 '게시됨'이 켜져 **그날 알림장을 건너뛰게 만든다** → 둘 다 `untracked`(배지 미표시).
+   */
+  classnoteToday: "posted" | "pending" | "untracked";
+  /**
    * 오늘 화면이 **안 그리는** 계획 행 수 — 살아있는 배치에 없는 시각(시간 변경된 기록)이거나 자리(LAB·숨긴 JJ).
    * ⚠️ 0이 아니면 반드시 각주로 알린다. 화면에서 빼는 것과 DB에서 지우는 건 다르고, 침묵하면
    *    **"분명히 썼는데 안 보인다"**가 된다(주간 시트가 같은 것을 '시간 변경된 기록 N건'으로 말한다).
    */
   hiddenLines: number;
+  /** 위와 같은 이유로 안 그리는 **학생 기록**(태도·특이사항) 수 — 교시 축이 화면 슬롯뿐이라 생기는 실종. */
+  hiddenMarks: number;
 };
 
 export type EcsTodayResult =
@@ -121,6 +150,8 @@ export type EcsTodayResult =
       /** 저널·presence 식별자(주간 시트와 같은 키를 써야 같은 문서로 인식된다). */
       userId: string;
       tenantId: string;
+      /** 내 글씨 크기(users.ui_prefs.ecs.fontSize) — 주간 시트와 같은 계정 귀속 값·같은 배율. */
+      fontSize: EcsFontSize;
     }
   | { ok: false; error: string };
 
@@ -140,7 +171,8 @@ export async function getEcsToday(dateParam?: string | null): Promise<EcsTodayRe
   const english = settings.operations.subjects.find((s) => s.key === "english");
   const skillAreas = resolveSkillAreas(english);
   if (skillAreas.length === 0) {
-    return { ok: true, date, today, weekMonday: mondayOf(date), cards: [], hasAnyClass: false, canWrite, skillAreas, userId: user.id, tenantId: user.tenantId };
+    // 카드 0개 조기 반환 — 보드가 안 그려지므로 글씨 크기는 기본값이면 충분(ui_prefs 조회 전이다).
+    return { ok: true, date, today, weekMonday: mondayOf(date), cards: [], hasAnyClass: false, canWrite, skillAreas, userId: user.id, tenantId: user.tenantId, fontSize: DEFAULT_ECS_FONT_SIZE };
   }
 
   const supabase = await createClient();
@@ -160,12 +192,18 @@ export async function getEcsToday(dateParam?: string | null): Promise<EcsTodayRe
   if (classError) return { ok: false, error: `반 목록을 불러오지 못했습니다: ${classError.message}` };
 
   // 강사 스코프는 JS 교집합(스코프 id를 .in에 넣지 않는다 — 대량 .in 회피, B3). 게이트와 같은 세 갈래.
-  const { classIds: visibleIds } = await ecsVisibleClassFilter();
+  // 위임 배지도 게이트와 **같은 소스**(ecsDelegatedClassIds, react cache라 추가 왕복 0 — 주간 랜딩과 동일).
+  const [{ classIds: visibleIds }, delegatedIds] = await Promise.all([
+    ecsVisibleClassFilter(),
+    ecsDelegatedClassIds(),
+  ]);
+  const delegatedSet = new Set(delegatedIds);
   const scopeSet = visibleIds ? new Set(visibleIds) : null;
   const scoped = (allClasses ?? []).filter((c) => !scopeSet || scopeSet.has(c.id as string));
   const showSelfStudy = readEcsShowSelfStudy(prefsRes.data?.ui_prefs);
+  const fontSize = readEcsFontSize(prefsRes.data?.ui_prefs);
   if (scoped.length === 0) {
-    return { ok: true, date, today, weekMonday: mondayOf(date), cards: [], hasAnyClass: false, canWrite, skillAreas, userId: user.id, tenantId: user.tenantId };
+    return { ok: true, date, today, weekMonday: mondayOf(date), cards: [], hasAnyClass: false, canWrite, skillAreas, userId: user.id, tenantId: user.tenantId, fontSize };
   }
   const scopedIds = scoped.map((c) => c.id as string);
 
@@ -196,11 +234,11 @@ export async function getEcsToday(dateParam?: string | null): Promise<EcsTodayRe
   }
   const todayIds = scopedIds.filter((id) => (slotsByClass.get(id)?.length ?? 0) > 0);
   if (todayIds.length === 0) {
-    return { ok: true, date, today, weekMonday: mondayOf(date), cards: [], hasAnyClass: true, canWrite, skillAreas, userId: user.id, tenantId: user.tenantId };
+    return { ok: true, date, today, weekMonday: mondayOf(date), cards: [], hasAnyClass: true, canWrite, skillAreas, userId: user.id, tenantId: user.tenantId, fontSize };
   }
 
   // ── 계획·학생기록·수강·출결·보고서·강의실·담당자 — 서로 독립이라 한 번에(B4) ────────────────────
-  const [planLines, marks, enrollments, attendanceRaw, rooms, teachers] = await Promise.all([
+  const [planLines, marks, enrollments, attendanceRaw, rooms, teachers, classnotePosts, classnoteBoards] = await Promise.all([
     fetchAllPagedInChunks<{
       id: string;
       class_id: string;
@@ -279,10 +317,12 @@ export async function getEcsToday(dateParam?: string | null): Promise<EcsTodayRe
       recorded_at: string;
       id: string;
       session_date: string;
+      // slot_start를 실어야 effective가 교시별로 갈리고, 취소가 실제 행의 slot을 넘길 수 있다(0196a).
+      slot_start: string | null;
     }>(todayIds, (chunk, from, to) =>
       supabase
         .from("attendance_records")
-        .select("id, class_id, student_id, status, note, recorded_at, session_date")
+        .select("id, class_id, student_id, status, note, recorded_at, session_date, slot_start")
         .in("class_id", chunk)
         .eq("session_date", date)
         .order("id")
@@ -309,6 +349,27 @@ export async function getEcsToday(dateParam?: string | null): Promise<EcsTodayRe
       ],
       (chunk) => supabase.from("users").select("id, display_name").in("id", chunk),
     ),
+    // 그 날짜의 ClassNote 반 알림장(0140a — 워커가 피드에서 적재, 반 보드만 담긴다). 하루치는 보드당
+    // 최대 1행이라 전량이어도 수십 행(#54 절단 아님 — 상한은 반 보드 수). 조회 실패는 배지만 잃으면 되므로
+    // fail-soft(빈 목록) — 알림장 배지 때문에 오늘 보드 전체가 죽으면 안 된다.
+    supabase
+      .from("classnote_class_posts")
+      .select("board_name")
+      .eq("tenant_id", user.tenantId)
+      .eq("posted_on", date)
+      .then((r): { board_name: string }[] => (r.error ? [] : ((r.data ?? []) as { board_name: string }[]))),
+    // 최근 45일 보드 우주 — "이 반에 연동된 보드가 있나 · 같은 키에 보드가 둘 아닌가"(3상 판정 재료).
+    // 보드×날짜 행이라 무페이징이면 곧 1,000행을 넘겨 조용히 잘린다(B2) → fetchAllPaged. 45일이면
+    // 활성 반 보드는 전부 잡히고(주 2~5회 게시) 폐강 보드는 자연히 빠진다. 실패는 위와 같은 fail-soft.
+    fetchAllPaged<{ board_name: string }>((from, to) =>
+      supabase
+        .from("classnote_class_posts")
+        .select("board_name")
+        .eq("tenant_id", user.tenantId)
+        .gte("posted_on", addDays(today, -45))
+        .order("board_name")
+        .range(from, to),
+    ).catch(() => [] as { board_name: string }[]),
   ]);
 
   // 학생 이름은 수강 목록이 나온 뒤에야 알 수 있다(위 병렬의 결과에 의존) — 여기만 순차.
@@ -354,6 +415,24 @@ export async function getEcsToday(dateParam?: string | null): Promise<EcsTodayRe
 
   const roomName = new Map(rooms.map((r) => [r.id, r.name]));
   const teacherName = new Map(teachers.map((t) => [t.id, t.display_name]));
+  // 보드명 → 비교키. 매칭은 작성률 화면(english-writing.ts)과 같은 키라 두 화면의 판정이 갈리지 않는다.
+  // 단 **판정의 쓰임이 다르다** — 작성률은 주간 합계라 다대일 키가 값을 부풀릴 뿐이지만, 여기는 "오늘
+  // 올렸나"는 당일 행동 트리거라 남의 반 게시가 내 배지를 끄면 그 반 알림장이 그날 안 나간다. 그래서
+  // 한 키에 보드가 2개 이상이면(실측 "Let's Speak 5" 두 요일그룹) 판정 불가로 뺀다(untracked).
+  const postedBoardKeys = new Set(classnotePosts.map((p) => boardKey(p.board_name)));
+  const boardsByKey = new Map<string, Set<string>>();
+  for (const b of classnoteBoards) {
+    const k = boardKey(b.board_name);
+    const set = boardsByKey.get(k) ?? new Set<string>();
+    set.add(b.board_name.trim());
+    boardsByKey.set(k, set);
+  }
+  const classnoteStateOf = (className: string): "posted" | "pending" | "untracked" => {
+    const k = classKey(className);
+    const boards = boardsByKey.get(k);
+    if (!boards || boards.size >= 2) return "untracked"; // 연동 이력 없음 또는 키 모호 — 배지 미표시
+    return postedBoardKeys.has(k) ? "posted" : "pending";
+  };
   const studentMeta = new Map(studentRows.map((s) => [s.id, s]));
   // 교시 라벨 표 — 주간 시트(queries.ts)와 **같은 폴백 체인**(과목 전용 → english 내장 → 전역).
   const periodsConfig = settingsToPeriodsConfig(settings.operations);
@@ -364,8 +443,25 @@ export async function getEcsToday(dateParam?: string | null): Promise<EcsTodayRe
   const weekend = isWeekendDow(dow);
 
   // 출결 effective(최신 recorded_at, tie는 id) — 출석부·시트와 **같은 축약 함수**를 쓴다.
+  // slot_start를 실었으므로 교시별 행이 각각 살아남는다(0196a). 화면은 하루 한 값이라
+  // (반|학생)별 **가장 최근** 행을 표시값으로 고르고, 취소를 위해 전 행의 slot 원본을 함께 나른다.
   const effective = effectiveAttendanceRecords(attendanceRaw);
-  const attByKey = new Map(effective.map((r) => [`${r.class_id}|${r.student_id}`, r]));
+  const attByKey = new Map<string, (typeof effective)[number]>();
+  const attSlotsByKey = new Map<string, (string | null)[]>();
+  for (const r of effective) {
+    const key = `${r.class_id}|${r.student_id}`;
+    const prev = attByKey.get(key);
+    if (
+      !prev ||
+      r.recorded_at > prev.recorded_at ||
+      (r.recorded_at === prev.recorded_at && r.id > prev.id)
+    ) {
+      attByKey.set(key, r);
+    }
+    const slots = attSlotsByKey.get(key) ?? [];
+    slots.push(r.slot_start ?? null);
+    attSlotsByKey.set(key, slots);
+  }
   const reportByKey = new Map<string, { written: boolean; sent: boolean }>();
   for (const r of reports) {
     const key = `${r.class_id}|${r.student_id}`;
@@ -389,6 +485,15 @@ export async function getEcsToday(dateParam?: string | null): Promise<EcsTodayRe
   const attendanceWritable =
     (await canWriteTenant(user.systemRole, "attendance")) &&
     (user.systemRole !== "teacher" || isWithinAttendanceEditWindow(date, today));
+  // 담당 반 게이트를 **서버 액션과 같은 소스**(getTeachingClassIds = 담임∪그날 위임)로 미리 반영 —
+  // ECS 가시성(부담임·±7일 유예 위임 포함)이 출결 액션의 담당 판정보다 넓어서, 이걸 안 가르면
+  // 부담임 반에서 눌러도 서버가 전량 거절하는 거짓 어포던스가 된다(주간 시트 canMarkAttendanceByDate와
+  // 같은 처방 — 적대 리뷰 2026-08-11). full(관리자 계열)은 반 제한 없음.
+  const attendanceScoped = (await accessLevelTenant(user.systemRole, "attendance")) === "scoped";
+  const teachingSet =
+    attendanceWritable && attendanceScoped
+      ? new Set((await getTeachingClassIds(supabase, user.id, date)).all)
+      : null;
 
   // 학생 기록 — (반|학생)당 교시별. 시각은 배치와 **같은 정규화**를 거쳐야 키가 맞는다("15:00:00" ↔ "15:00").
   const marksByStudent = new Map<string, Record<string, { status: string | null; progressNote: string | null }>>();
@@ -477,6 +582,7 @@ export async function getEcsToday(dateParam?: string | null): Promise<EcsTodayRe
             grade: meta?.grade ?? null,
             attendance: att?.status ?? null,
             attendanceNote: att?.note ?? null,
+            attendanceSlots: attSlotsByKey.get(`${classId}|${e.student_id}`) ?? [],
             reportWritten: (rep?.written ?? false) || (subjRep?.written ?? false),
             reportSent: (rep?.sent ?? false) || (subjRep?.sent ?? false),
             marks: marksByStudent.get(`${classId}|${e.student_id}`) ?? {},
@@ -493,15 +599,24 @@ export async function getEcsToday(dateParam?: string | null): Promise<EcsTodayRe
         slots,
         students: roster,
         fill: { total: slots.length, filled: slots.filter((s) => s.lines.some((l) => l.filled)).length },
-        canMarkAttendance: attendanceWritable,
+        canMarkAttendance: attendanceWritable && (teachingSet === null || teachingSet.has(classId)),
+        // 담임이 나면 위임이 아니다 — 주간 시트·랜딩 카드와 같은 판정.
+        delegated: delegatedSet.has(classId) && cls.teacher_id !== user.id,
+        classnoteToday: classnoteStateOf(cls.class_name as string),
         // 그 반의 오늘 계획 행 중 위 slots에 실리지 않은 것 = 안 그리는 기록(고아 시각 or 자리).
         hiddenLines:
           planLines.filter((l) => l.class_id === classId).length -
           slots.reduce((n, s) => n + s.lines.length, 0),
+        // 학생 기록도 같은 실종이 가능하다(교시가 바뀐 날의 태도·특이사항) — 각주로만 알린다.
+        hiddenMarks: marks.filter(
+          (m) =>
+            m.class_id === classId &&
+            !slots.some((s) => s.slotStart === normalizeSlotTime(m.slot_start)),
+        ).length,
       };
     })
     // 시간표 순서 = 그 날 일과 순서. 같은 시각이면 반 이름으로 안정 정렬.
     .sort((a, b) => a.startsAt.localeCompare(b.startsAt) || a.className.localeCompare(b.className, "ko"));
 
-  return { ok: true, date, today, weekMonday: mondayOf(date), cards, hasAnyClass: true, canWrite, skillAreas, userId: user.id, tenantId: user.tenantId };
+  return { ok: true, date, today, weekMonday: mondayOf(date), cards, hasAnyClass: true, canWrite, skillAreas, userId: user.id, tenantId: user.tenantId, fontSize };
 }

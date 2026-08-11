@@ -56,6 +56,48 @@
 - 검증: typecheck0 · lint0 · **test4342**(신규 16) · `next build` ✓ · 실브라우저 실측(1440/1024/375px,
   드롭다운 옵션 11개·개수 합 42 = 반 수 일치).
 
+## 2026-08-11 — ECS 오늘 보드 고도화(영어 전담 강사뷰) + 영어 ClassNote 발송 전수 검사
+
+원장: *"영어 강사가 처음 로그인하면 보이는 화면을 좀 더 고도화 + 일일이 드랍다운하면 힘드니까 자동
+입력 · 영어선생님만의 강사뷰가 되도록 · 영어 선생님이 발송한 클래스노트 전수 검사."*
+
+- **전수 검사(읽기 전용, [scan-english-posts.mjs](../scripts/_classnote/scan-english-posts.mjs) 신설)**:
+  피드 35일 5,680건 GET 스캔 — 영어는 강사 9명이 ClassNote 그룹 보드에 직접 게시(읽음률 67~93%,
+  `lesson_reports` 영어 전 기간 0건 재확인). 활성 영어 반 42개 중 **40개 보드 매칭·게시 실존**,
+  나머지 2개(고2 심화·고3 정규)는 그 반 가족이 아무것도 못 받는다(기존 알려진 갭).
+  작성률 하위: PJ6 33%·초등 브릿지C2 44%(08-03 이후 침묵)·DP6 46%.
+  - **정정+후속(같은 날, 원장 "보드 생성해줘" 확인 작업)**: 두 반은 "보드 없음"이 아니라 **보드 실존 +
+    연결 가족 0 + 게시 0**("Jane 고2 심화 (수토)"·"Charlie 고3 정규 (목토)", API 실측 — 위 스캔은
+    게시 이력 기반이라 무게시 보드를 못 봤다). `childKeys` 매칭으로도 **두 반 학생 11명 전원 ClassNote
+    미가입** → 생성이 아니라 **학부모 초대(수동, 외부 발신 정책)**가 블로커. 초대 명단은 원장에게 전달.
+    ⚠️ "Jane 고2 심화" 보드명의 요일 표기(수토)는 현 시간표(수일)와 다르다 — 매칭·발송엔 무영향(표기만).
+- **오늘 보드([today-board](../src/features/class-sheets/components/today-board.tsx))**:
+  ① **일괄 출석** — '나머지 N명 출석' 버튼, `setAttendanceBulk` 1왕복. 🔴 '빈 칸만' 비파괴를 클라가 아니라
+  **서버가 강제**(`fillEmptyOnly` 신설 — 그 날짜에 기록이 하나라도 있으면 건너뜀·절대 update 안 탐).
+  ② 빈 교시 **'평시 직전 교시 복사'**(주간 시트와 같은 `ecs_copy_slot` RPC 재사용, [today-copy-slot](../src/features/class-sheets/components/today-copy-slot.tsx))
+  ③ 하루 요약 스트립([today-summary](../src/features/class-sheets/components/today-summary.tsx) — 수업·계획·출결·보고서·알림장 합산 + 글씨 크기 토글, 주간 시트와 같은 `ui_prefs.ecs.fontSize`·zoom)
+  ④ **알림장 배지** — ClassNote 반 보드의 그 날짜 게시 여부(`classnote_class_posts` 0140a 소비, 워커 30분 지연).
+  3상(`posted/pending/untracked`) — 보드 없는 반·boardKey 모호 반(실측 "Let's Speak 5" 요일그룹 2개)은
+  배지 미표시(거짓 할 일·오탐 게시됨 방지) ⑤ 위임(0173a) 앰버 배지 + '진행 중' 표시 ⑥ 달력 점프
+  ([today-date-picker](../src/app/(shell)/ecs/_components/today-date-picker.tsx)) + 툴바 `.toolbar-rail`.
+- **적대적 리뷰(에이전트 40, 유지 18건)에서 잡아 고친 것**: 🔴 일괄 비파괴가 클라 낙관 상태에만 있어
+  낡은 탭이 남의 결석을 '출석'으로 뒤집는 경로(→ `fillEmptyOnly` 서버 강제) · 🔴 `clear()`가 slot을 안
+  넘겨 주간 시트가 만든 교시별 출석 행에 "지운 척"(cleared:0) — `TodayStudent.attendanceSlots`로 실제
+  slot 원본을 날라 행마다 취소 · 🔴 `canMarkAttendance`가 반 무관 전역이라 부담임·유예 위임 반에서
+  눌러도 전량 거절되는 거짓 어포던스(→ `getTeachingClassIds` 반 단위 게이트) · boardKey 다대일 오탐 ·
+  프라미스 체인 .catch 부재(네트워크 실패 시 낙관 잔류) · 일괄 중 개별 조작 레이스(카드 출결 잠금) ·
+  낙관 갱신으로 버튼 즉시 언마운트 · 숨은 학생기록 각주 없음 · 읽기 전용 사용자에게 지시문.
+- 검증: typecheck 0(마케팅 `_img` 노이즈 제외)·lint 0·test 4,320 전체 통과. ⚠️ 시각 검증은 영어 강사
+  계정 자격증명이 없어 미실시(typecheck+테스트+적대 리뷰로 대체) — 실사용 첫 피드백 주시.
+- ⚠️ 남긴 한계: 알림장 배지 30분 지연 고지가 툴팁뿐(모바일에선 안 보임 — 라벨 재촉 강도가 낮아 수용) ·
+  원스크린 표뷰의 기존 `setAttendanceBulk`(덮어쓰기 모드)는 불변(그쪽 계약은 의도된 덮어쓰기+confirm).
+- **후속(같은 날, 원장 "드랍다운 배제")**: 학생별 출결을 드롭다운에서 **1클릭 알약**(출석/지각/결석,
+  [today-attendance-pills](../src/features/class-sheets/components/today-attendance-pills.tsx))으로 교체 —
+  원스크린 알약 문법 + ECS 제스처(활성 '출석' 재클릭=0169a 안전 취소). 지각·결석은 사유 창 유지.
+  🔴 **화면마다 지시가 다르다**: 오늘 보드=알약(08-11), **주간 시트=드롭다운 유지(08-06 "출결도
+  드랍다운으로")** — 어느 쪽도 임의로 통일하지 말 것.
+
+
 ## 2026-08-11 — 수업보고서 점수 표기: '점' 제거 + "맞음" 명시 · 과제 쪽수 후보정
 
 원장 3건: *"수학 수업보고서에서 개/점 두가지 점수 체계가 있지? 점은 제거하고 갯수로만"* /

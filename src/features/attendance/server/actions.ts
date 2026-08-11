@@ -526,6 +526,13 @@ export async function setAttendanceBulk(input: {
   sessionDate: string;
   status: (typeof BULK_STATUSES)[number];
   cells: { studentId: string; classId: string }[];
+  /**
+   * true면 그 날짜에 기록이 **하나라도 있는** (학생·반)은 덮지 않고 건너뛴다(`blocked`로 집계) —
+   * "빈 칸만 채우기"의 **서버 강제**. 클라 필터에만 맡기면 화면이 낡았을 때(딴 곳에서 방금 찍은 결석)
+   * 기존 기록이 조용히 '출석'으로 뒤집힌다(적대 리뷰 2026-08-11 — ECS 오늘 보드 일괄이 이 모드를 쓴다).
+   * 기존 행을 절대 update하지 않으므로 교시별(0196a) 행이 섞인 날에도 부분 갱신·시수 이중 계상이 없다.
+   */
+  fillEmptyOnly?: boolean;
 }): Promise<BulkCellResult> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
@@ -602,6 +609,14 @@ export async function setAttendanceBulk(input: {
   for (const r of existingRows) {
     const k = `${r.student_id}::${r.class_id}`;
     if (!latestId.has(k)) latestId.set(k, r.id); // 청크별 desc 정렬 → 각 조합의 첫 행이 최신
+  }
+
+  // '빈 칸만' 모드 — 기존 기록이 있는 셀은 **여기서**(서버) 걸러 절대 update 경로를 안 탄다.
+  // 이 필터가 클라에 있으면 낡은 탭이 남의 결석을 덮는다(위 fillEmptyOnly 주석). blocked로 집계돼
+  // 호출부가 "건너뛴 N명"을 사용자에게 밝힌다(조용한 스킵 금지).
+  if (input.fillEmptyOnly) {
+    allowed = allowed.filter((c) => !latestId.has(`${c.studentId}::${c.classId}`));
+    if (allowed.length === 0) return { ok: true, applied: [], blocked: cells.length };
   }
 
   const nowIso = new Date().toISOString();

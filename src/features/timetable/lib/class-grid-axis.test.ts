@@ -32,6 +32,10 @@ function slot(classId: string, day: string, start = "16:20"): GridSlot {
   } as unknown as GridSlot;
 }
 
+/** 영어 반 슬롯 — 영어는 평일 교시가 40분 단위 11교시라 "저녁 반 + 토요일" 실데이터를 재현할 수 있다. */
+const engSlot = (classId: string, day: string, start: string): GridSlot =>
+  ({ ...slot(classId, day, start), subject: "english" }) as GridSlot;
+
 const cardOf = (slots: GridSlot[], classId: string) =>
   buildRichCardGroups(slots, DEFAULT_PERIODS_CONFIG)
     .flatMap((g) => g.cards)
@@ -118,6 +122,49 @@ describe("rosterRows — 명단 섹션 행수", () => {
 });
 
 /**
+ * 🔴 **혼합 반이 6행을 먹던 실사고**(원장 2026-08-11 "행을 6개가 아닌 3개만 하고 싶다니까?").
+ *
+ * 실데이터(영어 고등 3반): 평일 수업 19:20·20:20·21:10(= 9·10·11교시) + 토요일 14:20·15:00·15:40.
+ * 토요일 시각이 **영어 평일 1·2·3교시와 정확히 같아서** `weekdayPeriodRowOrNull`이 그 슬롯을 평일
+ * 1교시 행에 앉히고 시프트 대상에서 뺐고, 게다가 그 슬롯이 평일 앵커 계산에도 섞여 앵커를 1교시로
+ * 끌어내렸다 → 한 반이 1·2·3교시 + 9·10·11교시 = **6행**.
+ * 이제 주말 블록을 통째로 그 반의 평일 시작(9교시)으로 옮겨 **3행**이 된다.
+ */
+describe("혼합 반의 주말 수업은 그 반의 평일 교시 행에 겹친다 — 6행 → 3행", () => {
+  // 영어 평일 교시표: 1교시 14:20 … 9교시 19:20 · 10교시 20:20 · 11교시 21:10.
+  const evening = (id: string) => [
+    engSlot(id, "mon", "19:20"), engSlot(id, "tue", "20:20"), engSlot(id, "thu", "21:10"),
+    engSlot(id, "sat", "14:20"), engSlot(id, "sat", "15:00"), engSlot(id, "sat", "15:40"),
+  ];
+  const groupsOf = (slots: GridSlot[]) => buildRichCardGroups(slots, DEFAULT_PERIODS_CONFIG);
+
+  it("🔴 3행만 쓴다(9·10·11교시) — 토요일이 1·2·3교시로 따로 앉지 않는다", () => {
+    const g = groupsOf(evening("e1"))[0];
+    expect(g.periodRows.map((r) => r.label)).toEqual(["9교시", "10교시", "11교시"]);
+  });
+
+  it("토요일 열은 그대로 살아 있다 — 겹치는 것이지 버리는 게 아니다(2026-07-23 회귀 방지)", () => {
+    const card = groupsOf(evening("e1"))[0].cards[0];
+    expect(card.days).toContain("sat");
+    const satOrders = Object.keys(card.cells)
+      .filter((k) => k.endsWith(":sat"))
+      .map((k) => Number(k.split(":")[0]))
+      .sort((a, b) => a - b);
+    // 토요일 3개 슬롯이 평일 9·10·11교시 행 위에 얹혔다 = 평일 셀과 같은 order 집합.
+    const monOrder = Number(
+      Object.keys(card.cells).find((k) => k.endsWith(":mon"))!.split(":")[0],
+    );
+    expect(satOrders).toHaveLength(3);
+    expect(satOrders[0]).toBe(monOrder);
+  });
+
+  it("이른 평일 반은 그대로 — 옮길 이유가 없으면 안 옮긴다", () => {
+    const early = [engSlot("e2", "mon", "14:20"), engSlot("e2", "sat", "14:20")];
+    expect(groupsOf(early)[0].periodRows.map((r) => r.label)).toEqual(["1교시"]);
+  });
+});
+
+/**
  * 평일+토 혼합 반의 토요일 표현 = ijw `weekendShift` — 주말 교시를 **평일 교시 행으로 끌어올려** 행을 공유한다.
  * 예전엔 주말 order를 축에 **행으로 추가**해서 같은 섹션의 모든 카드가 세로로 늘어났다(원장 2026-07-27 지적:
  * "토요일을 있는 그대로 표현하지 않고 ijw-calander에서 표현하는 방법이 있었을 것").
@@ -173,6 +220,10 @@ describe("주말 전용 반은 1교시부터 시작하게 당긴다 — 섹션 �
     buildRichCardGroups(weekendOnly, DEFAULT_PERIODS_CONFIG).find((g) => g.label === "주말")!;
 
   it("🔴 합집합이면 6행이던 것이 3행", () => {
+    expect(section().periodRows).toHaveLength(3);
+  });
+
+  it("행 라벨은 '그 반의 몇 번째 교시' — 시계(9시·10시)로 적으면 14시 반에 거짓말이 된다", () => {
     expect(section().periodRows.map((r) => r.label)).toEqual(["1교시", "2교시", "3교시"]);
   });
 
@@ -187,7 +238,7 @@ describe("주말 전용 반은 1교시부터 시작하게 당긴다 — 섹션 �
     expect(cells("short")).toEqual([540, 600]);
   });
 
-  it("행 라벨엔 시각을 안 적는다 — 같은 행에 09시 반과 14시 반이 함께 앉는다", () => {
+  it("시각 범위 부제는 안 붙인다 — 같은 행에 09시 반과 14시 반이 함께 앉으므로 범위까지 적으면 거짓이 된다", () => {
     expect(section().periodRows.every((r) => r.time === "")).toBe(true);
   });
 

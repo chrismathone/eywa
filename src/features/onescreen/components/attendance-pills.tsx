@@ -207,7 +207,7 @@ function StatusPill({
 
 /**
  * 사유 메모 입력 — Enter 저장(줄바꿈은 Shift+Enter), Esc 취소. 한 줄 사유가 대부분이라 손이 덜 간다.
- * ECS 출결 드롭다운([attendance-select.tsx](src/features/class-sheets/components/attendance-select.tsx))도
+ * ECS 출결 체크 순환([attendance-check.tsx](src/features/class-sheets/components/attendance-check.tsx))도
  * **이 폼을 그대로** 쓴다 — 컨트롤(알약/드롭다운)은 달라도 "지각·결석엔 사유를 받는다"는 계약은 하나다.
  */
 export function NoteForm({

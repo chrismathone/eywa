@@ -25,6 +25,7 @@ import { dedupeEditors } from "@/features/presence/presence-state";
 import { flushSheetPatches } from "../server/actions";
 import { buildSaveKey } from "../lib/save-keys";
 import type { PlanPatchField } from "../lib/plan-codec";
+import { TodayCopySlot } from "./today-copy-slot";
 import { useSheetDoc } from "./use-sheet-doc";
 import {
   useCellState,
@@ -126,6 +127,7 @@ export function TodayPlanEditor({
   classId,
   className,
   weekMonday,
+  date,
   slots,
   skillAreas,
   canEdit,
@@ -135,6 +137,8 @@ export function TodayPlanEditor({
   classId: string;
   className: string;
   weekMonday: string;
+  /** 보드가 보는 날짜 — 빈 교시 '직전 교시 복사'의 대상 날짜(주차가 아니라 그 날 계획 행이다). */
+  date: string;
   slots: TodaySlot[];
   skillAreas: SkillAreaSetting[];
   canEdit: boolean;
@@ -193,10 +197,19 @@ export function TodayPlanEditor({
             {slot.roomLabel ? <span className="font-medium"> · {slot.roomLabel}</span> : null}
           </p>
           {slot.lines.length === 0 ? (
-            // 줄 자체가 없으면 여기서 만들 수 없다(구조 변경은 주간 시트) — 왜인지·어디로 가야 하는지 말한다.
-            <p className="text-text-faint text-[13px]">
-              계획 줄이 아직 없습니다 — 아래 &lsquo;주간 시트&rsquo;에서 줄을 추가하세요.
-            </p>
+            // 줄 자체가 없으면 여기서 새로 만들 수 없다(구조 변경은 주간 시트) — 대신 **직전 교시 복사**
+            // (0183a, 주간 시트와 같은 RPC)가 한 클릭 지름길이다. 그 외 구조 편집은 여전히 주간 시트로.
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              {/* ⚠️ 읽기 전용 사용자에겐 지시문을 붙이지 않는다 — 권한상 할 수 없는 행동("주간 시트에서
+                  추가하세요")을 시키는 거짓 안내가 된다(적대 리뷰 2026-08-11). */}
+              <p className="text-text-faint text-[13px]">계획 줄이 아직 없습니다{canEdit ? " —" : ""}</p>
+              {canEdit ? (
+                <TodayCopySlot classId={classId} date={date} slotStart={slot.slotStart} store={store} />
+              ) : null}
+              {canEdit ? (
+                <span className="text-text-faint text-[12px]">또는 ‘주간 시트’에서 줄 추가</span>
+              ) : null}
+            </div>
           ) : (
             slot.lines.map((l) => (
               <div key={l.id} className="mb-1 flex flex-wrap items-start gap-1.5 last:mb-0">

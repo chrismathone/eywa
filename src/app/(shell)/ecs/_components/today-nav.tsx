@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "@/components/icons/eywa-icon-compat";
 import { addDays, formatKoreanDate } from "@/lib/date-kst";
+import { EcsDatePicker } from "./today-date-picker";
 
 /**
  * ECS 면 전환(오늘 / 주간) + 날짜 이동 — 둘 다 **URL 파라미터**라 서버 컴포넌트로 충분하다.
@@ -53,6 +54,8 @@ export function EcsDayNav({ date, today }: { date: string; today: string }) {
         <Link href={`/ecs?view=today&date=${addDays(date, 1)}`} aria-label="다음 날" className={iconBtn}>
           <ChevronRight size={13} strokeWidth={2.5} />
         </Link>
+        {/* 달력 점프 — 하루씩 이동의 보완(원스크린 top-bar와 같은 showPicker 패턴). */}
+        <EcsDatePicker date={date} />
       </div>
       <span className="text-text-dim num text-[11px] whitespace-nowrap">{formatKoreanDate(date)}</span>
       {/* 오늘이 아니면 무슨 날을 보는지 명시 — WeekNav의 '과거/미래 조회' 배지와 같은 규약. */}
