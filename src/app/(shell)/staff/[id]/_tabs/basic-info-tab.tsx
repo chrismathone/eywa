@@ -73,7 +73,7 @@ export async function BasicInfoTab({
   // 권한/위계 로직(AccountActions)엔 실제 staff.systemRole 유지.
   displayRole: SystemRole;
   canManageThis: boolean;
-  /** 계약 갱신 권한 = 직원관리 쓰기(사무실). canManageThis(나보다 낮은 직급만)와 축이 다르다. */
+  /** 계약 갱신 권한 = 직원관리 쓰기(사무실). canManageThis(쓰기 AND 자신 권한 이하 대상)와 축이 다르다. */
   canManageContracts?: boolean;
   showSalary: boolean;
   roleOptions: SystemRole[];

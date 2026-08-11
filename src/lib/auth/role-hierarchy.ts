@@ -55,17 +55,23 @@ export function canManageStaff(actor: SystemRole): boolean {
 }
 
 /**
- * actor가 특정 직원(target)의 민감 계정 작업(비번 재설정·이메일 변경·삭제)을 할 수 있는지.
- * 직원 관리 권한 + actor가 target보다 엄격히 강해야 함(동급·상위 계정은 못 건드림).
+ * actor가 특정 직원(target)의 민감 계정 작업(비번 재설정·이메일 변경·삭제·역할 변경)을 할 수 있는지.
+ *
+ * 🔴 이 함수는 **대상 보호선만** 판정한다. "누가 직원관리 담당인가"는 여기가 아니라 **직원관리 메뉴
+ * 게이트**(`canWriteTenant(role, "staff")` — 개인 예외 `userOverrides` 반영)가 정하며, 호출부는 반드시
+ * **둘을 함께** 통과시켜야 한다(서버 = account-actions `loadTarget`, 화면 = staff/[id] `canManage &&`).
+ * 이 함수만 단독으로 쓰면 메뉴가 잠긴 사람도 통과한다(#77).
+ *
+ * 규칙 = **자신 권한 이하(동급 포함) 전부**(원장 지시 2026-08-11) — `rank(actor) <= rank(target)`.
+ *   · 원장  → 전원(원장 계정 포함)   · 관리자 → 관리자 이하   · 매니저 → 매니저 이하(관리자·원장 불가)
+ *
+ * 종전엔 동급 개방이 master·admin **에게만** 있어서(2026-07-29), 직원관리를 개인 예외로 받은 데스크
+ * 매니저(김예원)가 매니저 동급 3명까지 못 봐 데스크 업무가 막혔다. 축을 하나로 통일한 것이다.
+ * 🔴 **상위는 여전히 불가** — 비번 재설정으로 상위 계정을 탈취하는 권한 상승 경로를 막는 보호선이다.
+ * ⚠️ 역할 **부여**는 이 함수가 아니라 `canAssignRole`(엄격히 아래만)이 막는다 — 동급 계정을 만질 수 있어도
+ *    자기와 같은 등급으로 **승급**시키지는 못한다.
+ * ⚠️ 자기 계정 파괴(삭제·퇴사)는 각 액션의 self 가드가 따로 막는다.
  */
 export function canManageStaffMember(actor: SystemRole, target: SystemRole): boolean {
-  if (!canManageStaff(actor)) return false;
-  // 원장·관리자는 **동급까지** 관리한다(원장 지시 2026-07-29: "관리자급들까지는 풀어줘 — 어차피
-  // 관리자부터는 계약이나 이런 수정이 되어야 함"). 종전 '엄격히 상위만'이라 원장이 원장을,
-  // 관리자가 관리자를 손댈 수 없어 계약·이메일·비번 버튼이 통째로 사라졌다.
-  // ⚠️ **상위는 여전히 불가**(관리자 → 원장 X) — 아래로 향한 권한만 넓힌 것이다.
-  // 매니저는 종전대로 자기보다 낮은 직급만(관리 계열 중 가장 약한 축이라 동급 개방 대상 아님).
-  // 자기 계정 파괴(삭제·퇴사)는 각 액션의 self 가드가 따로 막는다.
-  if (actor === "master" || actor === "admin") return ROLE_HIERARCHY[actor] <= ROLE_HIERARCHY[target];
-  return ROLE_HIERARCHY[actor] < ROLE_HIERARCHY[target];
+  return ROLE_HIERARCHY[actor] <= ROLE_HIERARCHY[target];
 }

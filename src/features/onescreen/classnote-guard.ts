@@ -26,6 +26,38 @@ export function isClassnoteAllowed(reportDate: string, todayKst: string = kstTod
   return reportDate >= classnoteMinDate(todayKst);
 }
 
+/** 재발송 기한 판정 결과 — 화면 배지("오늘까지"·"D-2"·"기한 만료")와 재발송 대상 산정이 함께 쓴다. */
+export type ClassnoteRetryDeadline = {
+  /** 다시 보낼 수 있는 **마지막 날**(YYYY-MM-DD). 빈 report_date면 "". */
+  lastDate: string;
+  /** 오늘 포함 남은 날 수 — 0이면 오늘이 마지막 날, 음수면 이미 만료. */
+  daysLeft: number;
+  /** 이미 창 밖이라 어떤 경로로도 못 나간다(too_old). `isClassnoteAllowed`의 부정과 항상 같다. */
+  expired: boolean;
+};
+
+/**
+ * 이 보고서를 **언제까지** 다시 보낼 수 있나(순수).
+ *
+ * 발송 창이 "오늘 포함 7일"이라 report_date 기준 **6일 뒤가 마지막 날**이고 그 뒤엔 어떤 경로로도 못 나간다.
+ * 🔴 이 값을 화면에 띄우는 이유: 실패한 보고서는 **사람이 원인을 고쳐야만** 풀리는데(보드 배정·구분 이름 지정)
+ * 기한이 안 보이면 "나중에 고치지" 하는 사이 조용히 만료된다 — 2026-08-11 실측으로 실패 16건 중 **11건이
+ * 이미 만료**(학부모에게 영영 못 나감)였다. 남은 날을 숫자로 보여 주는 것이 유일한 방어다.
+ * ⚠️ 만료 판정은 반드시 `isClassnoteAllowed`에서 파생할 것 — 따로 계산하면 두 규칙이 조용히 어긋난다.
+ */
+export function classnoteRetryDeadline(
+  reportDate: string,
+  todayKst: string = kstToday(),
+): ClassnoteRetryDeadline {
+  if (!reportDate) return { lastDate: "", daysLeft: -1, expired: true };
+  const [y, m, d] = reportDate.split("-").map(Number);
+  const t = new Date(Date.UTC(y!, m! - 1, d!));
+  t.setUTCDate(t.getUTCDate() + (ALLOW_WINDOW_DAYS - 1));
+  const lastDate = `${t.getUTCFullYear()}-${String(t.getUTCMonth() + 1).padStart(2, "0")}-${String(t.getUTCDate()).padStart(2, "0")}`;
+  const daysLeft = Math.round((t.getTime() - Date.parse(`${todayKst}T00:00:00Z`)) / 86_400_000);
+  return { lastDate, daysLeft, expired: !isClassnoteAllowed(reportDate, todayKst) };
+}
+
 /**
  * ClassNote로 발송 가능한 과목 키 화이트리스트 — 실보드 명명 관례가 `(수학)학생명`/`(영어)학생명` 둘뿐이라
  * 보드 라벨 매핑이 있는 과목만 발송할 수 있다(math·subject_1→수학 보드, english→영어 보드).

@@ -1,5 +1,5 @@
-// 직원관리(/staff)를 원장 2명 + 개인 예외(설현·이승엽 + 김예원)로 좁힌다
-// (원장 지시 2026-08-01 4인 체제 → 2026-08-05 김예원 추가 "예외 직원으로 남겨줘").
+// 직원관리(/staff)를 원장 2명 + 개인 예외(설현·이승엽 + 김예원·오은진·엄소윤)로 좁힌다
+// (원장 지시 2026-08-01 4인 체제 → 08-05 김예원 → 08-06 오은진 → 08-11 엄소윤 "데스크 직원이여서 필요함").
 //
 //   tenant_settings.data.permissions 를 이렇게 바꾼다:
 //     overrides:      + {staff, admin→none} {staff, manager→none} {staff, accountant→none}
@@ -19,6 +19,10 @@
 //    0170a SQL은 보류 가능(코드가 계약 읽기를 admin client로 우회) — 접근 복구되면 실행해 DB 잔여 구멍을 닫는다.
 // 원복: node scripts/staff-access/revert-narrow-staff-menu.mjs logs/narrow-staff-menu-<ts>.json --apply
 //
+// 🔴 GRANTEES에서 사람을 **빼기 전에 반드시 원장에게 다시 물을 것**(원장 지시 2026-08-11):
+//    김예원·오은진·엄소윤은 **데스크 직원**이라 계정 관리(역할·이메일·비번 재설정)가 업무에 필요하다.
+//    "예외가 많으니 정리하자"류로 조용히 지우면 데스크 업무가 막힌다 — 사유를 상기시키고 확인받은 뒤에만 뺀다.
+//
 // 대상 사용자는 이름+역할로 찾되 **정확히 1명씩** 매칭돼야 진행한다(동명이인·오타 방어).
 // 쓰기는 service_role(0038a master-guard 트리거는 auth.uid() null → 통과 — 정당한 운영 경로).
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
@@ -32,7 +36,15 @@ const env = Object.fromEntries(
   readFileSync(join(HERE, "../../.env.local"), "utf-8")
     .split(/\r?\n/)
     .filter((l) => l.includes("=") && !l.startsWith("#"))
-    .map((l) => [l.slice(0, l.indexOf("=")).trim(), l.slice(l.indexOf("=") + 1).trim()]),
+    // 값의 감싸는 따옴표는 벗긴다 — .env.local이 따옴표로 저장돼 있으면 URL이 `"https://…"`가 돼
+    // fetch가 ERR_INVALID_URL로 죽는다(2026-08-11 실측).
+    .map((l) => [
+      l.slice(0, l.indexOf("=")).trim(),
+      l
+        .slice(l.indexOf("=") + 1)
+        .trim()
+        .replace(/^["']|["']$/g, ""),
+    ]),
 );
 const SB = env.NEXT_PUBLIC_SUPABASE_URL;
 const H = {
@@ -45,8 +57,11 @@ const H = {
 const GRANTEES = [
   { name: "설현", role: "admin" },
   { name: "이승엽", role: "admin" },
-  { name: "김예원", role: "manager" }, // 2026-08-05 원장 추가 지시
+  // ⚠️ role은 **매칭 조건**이다 — 이 사람의 역할이 바뀌면 여기도 같이 고쳐야 재실행이 안 죽는다
+  //    (김예원: 2026-08-11 manager → admin 승급).
+  { name: "김예원", role: "admin" }, // 2026-08-05 원장 추가 지시
   { name: "오은진", role: "admin" }, // 2026-08-06 원장 추가 지시
+  { name: "엄소윤", role: "admin" }, // 2026-08-11 원장 추가 지시("데스크 직원이여서 필요함")
 ];
 // 역할 잠금 대상(코드 기본값이 full인 역할만; counselor는 기존 readonly override 제거로 잠김).
 const CLOSE_ROLES = ["admin", "manager", "accountant"];

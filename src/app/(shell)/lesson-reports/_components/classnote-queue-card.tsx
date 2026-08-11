@@ -14,6 +14,7 @@ import { sanitizeErrorText } from "@/lib/text/sanitize-error";
 import { useSubjectMaps } from "@/features/owner/operations-context";
 import { refreshClassnoteQueue, resetStuckClassnote, retryClassnote } from "@/features/report-admin/server/actions";
 import { attentionCount, queuePollIntervalMs, shouldAutoRefreshQueue } from "@/features/report-admin/classnote-queue";
+import { classnoteRetryDeadline } from "@/features/onescreen/classnote-guard";
 import type { ClassnoteQueueView } from "@/features/report-admin/server/queries";
 
 // 자동 갱신 상한 — **"변화가 없는 채로" 10분**이면 중지(창을 열어둔 채 밤새 폴링 금지).
@@ -24,6 +25,22 @@ const MAX_IDLE_MS = 10 * 60_000;
 const MIN_GAP_MS = 3_000;
 // 알림이 '지난 기록'으로 보이기 시작하는 나이(시간) — 판정은 worker-log.ts WORKER_LOG_STALE_MS.
 const WORKER_STALE_HOURS = 2;
+
+/**
+ * 재발송 기한 배지 — "이 건은 언제까지 손 쓸 수 있나".
+ *
+ * 🔴 실패 건은 사람이 ClassNote에서 원인을 고쳐야만 풀리는데(보드 배정·구분 이름), 발송 창이 7일이라
+ * 고치는 사이 조용히 만료된다. 2026-08-11 실측: 실패 16건 중 11건이 이미 만료(영영 못 나감).
+ * 그래서 **임박할수록 세게** 표시한다 — 남은 날이 곧 원장이 움직여야 하는 이유다.
+ */
+function deadlineBadge(reportDate: string, todayKst: string): { text: string; cls: string } | null {
+  const d = classnoteRetryDeadline(reportDate, todayKst);
+  if (d.expired) return { text: "기한 만료", cls: "text-text-faint" };
+  if (d.daysLeft === 0) return { text: "오늘까지", cls: "text-danger font-bold" };
+  if (d.daysLeft === 1) return { text: "내일까지", cls: "text-danger" };
+  const [, m, day] = d.lastDate.split("-");
+  return { text: `${Number(m)}/${Number(day)}까지`, cls: "text-text-faint" };
+}
 
 // 처리 시작 시각의 시:분(KST) — 대기·처리중 목록에서 언제 잡혔는지 표시. 값 없으면 "—".
 function hhmmKst(iso: string | null): string {
@@ -174,7 +191,7 @@ export function ClassnoteQueueCard({ view: served }: { view: ClassnoteQueueView 
   // 거짓 완료를 띄우고 자동 갱신까지 꺼 버린다(적대 검수 확정 결함).
   const [epoch, setEpoch] = useState(0);
   const view = live && live.base === served ? live.data : served;
-  const { summary, items, pending, workers, days } = view;
+  const { summary, items, pending, workers, days, expiredUnsent, todayKst } = view;
 
   // 자동 갱신 조건·주기는 순수 함수 단일 소스 — 표시 문구도 같은 판정을 쓴다.
   const workerOnline = workers.some((w) => w.online);
@@ -276,7 +293,14 @@ export function ClassnoteQueueCard({ view: served }: { view: ClassnoteQueueView 
   // ⚠️ 단 **개별 '선택 재발송'은 열어둔다**(체크박스 활성) — 원장이 원인을 고친 뒤 보류된 건을 내보낼 길이
   // 없으면 그 보고서는 영영 못 나가는 막다른 길이 된다. 공유 보드 게이트는 **매 시도마다 재평가**하므로
   // 아직 안 고쳐졌으면 안전하게 다시 막힌다 = 개별 재발송을 열어둬도 위험하지 않다.
-  const retriable = items.filter((i) => i.status !== "name_conflict" && i.status !== "blocked_shared");
+  // ⚠️ 기한이 지난 건도 뺀다 — 눌러도 서버(too_old 게이트)가 거부해 헛돌 뿐이다. 개별 체크박스는
+  //    그대로 열어 둔다(규칙·예외가 바뀌어도 화면이 길을 막지 않게. 최종 판단은 언제나 서버).
+  const retriable = items.filter(
+    (i) =>
+      i.status !== "name_conflict" &&
+      i.status !== "blocked_shared" &&
+      !classnoteRetryDeadline(i.reportDate, todayKst).expired,
+  );
   const toggle = (id: string) =>
     setChecked((prev) => {
       const n = new Set(prev);
@@ -336,7 +360,12 @@ export function ClassnoteQueueCard({ view: served }: { view: ClassnoteQueueView 
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div>
           <h2 className="text-foreground text-[15px] font-bold">ClassNote 발송 큐</h2>
-          <p className="text-text-faint text-[12px]">최근 {days}일 · 발송 요청된 보고서 상태</p>
+          {/* ⚠️ 창을 정직하게 적는다 — 집계는 최근 N일이지만 **아직 손 쓸 수 있는 실패·보류는 창과 무관하게**
+              전부 싣는다(그러라고 만든 예외다). 예전 문구는 "최근 3일"만 말해, 창 밖으로 밀려난 실패가
+              화면에서 사라진 것을 원장이 "미발송분이 사라졌다"로 겪게 했다(2026-08-11). */}
+          <p className="text-text-faint text-[12px]">
+            최근 {days}일 집계 · 조치가 필요한 건은 기간과 무관하게 모두 표시
+          </p>
         </div>
         {/* 발송 담당 PC(워커) 상태 — 큐가 실제로 처리될지 한눈에. */}
         <div className="flex flex-col items-end gap-0.5 text-[11px]">
@@ -416,7 +445,7 @@ export function ClassnoteQueueCard({ view: served }: { view: ClassnoteQueueView 
           variant="outline"
           disabled={busy || retriable.length === 0}
           onClick={() => doRetry(retriable.map((i) => i.id))}
-          title="실패·오래됨·멈춤 전체를 재발송 대기로"
+          title="아직 기한이 남은 실패·멈춤 전체를 재발송 대기로(기한 지난 건은 보낼 수 없어 제외)"
         >
           주의 항목 전체 재발송 ({retriable.length})
         </Button>
@@ -426,6 +455,15 @@ export function ClassnoteQueueCard({ view: served }: { view: ClassnoteQueueView 
           </Button>
         ) : null}
       </div>
+
+      {/* 기한을 넘겨 잃은 건 — 되살릴 수 없으므로 목록이 아니라 한 줄 경고로만(원장이 볼 곳은 위 주의 목록).
+          같은 학생이 계속 쌓인다면 원인(ClassNote 보드 배정·구분 이름)이 아직 안 고쳐졌다는 뜻이다. */}
+      {expiredUnsent > 0 ? (
+        <p className="bg-amber-soft text-amber mt-3 rounded-md px-3 py-2 text-[12px]">
+          최근 30일 <b>{expiredUnsent}건</b>은 재발송 기한(7일)을 넘겨 학부모에게 나가지 못했습니다 — 같은 학생이
+          반복된다면 ClassNote 보드 배정·구분 이름을 먼저 바로잡아 주세요.
+        </p>
+      ) : null}
 
       {/* 주의 목록 */}
       {items.length === 0 ? (
@@ -445,6 +483,7 @@ export function ClassnoteQueueCard({ view: served }: { view: ClassnoteQueueView 
             <tbody>
               {items.map((it) => {
                 const badge = classnoteBadge(it.status ?? undefined);
+                const dl = deadlineBadge(it.reportDate, todayKst);
                 return (
                   <tr key={it.id} className="border-line border-b last:border-b-0">
                     <td className="px-2 py-2.5">
@@ -468,7 +507,11 @@ export function ClassnoteQueueCard({ view: served }: { view: ClassnoteQueueView 
                         <span className="text-text-faint ml-1.5">{subjects.labelOf(it.subject)}</span>
                       ) : null}
                     </td>
-                    <td className="text-text-dim px-3 py-2.5">{it.reportDate}</td>
+                    <td className="text-text-dim px-3 py-2.5">
+                      <span className="block">{it.reportDate}</span>
+                      {/* 재발송 기한 — 이 줄이 없으면 "나중에 고치지"가 곧 영구 미발송이 된다(위 deadlineBadge 주석). */}
+                      {dl ? <span className={`mt-0.5 block text-[11px] ${dl.cls}`}>{dl.text}</span> : null}
+                    </td>
                     <td className="px-3 py-2.5">
                       {/* 미지의 상태 코드도 raw 노출 금지 — 원문은 툴팁으로만. */}
                       {badge ? (
@@ -496,6 +539,14 @@ export function ClassnoteQueueCard({ view: served }: { view: ClassnoteQueueView 
               })}
             </tbody>
           </table>
+          {/* ⚠️ 목록은 상한 100 — 넘치면 **조용히 잘린다**(빅스탯 '주의' 숫자는 전건이라 둘이 어긋난다).
+              말없이 자르면 표에 보이는 게 전부인 줄 알게 된다(#89) → 잘린 수를 그 자리에서 밝힌다. */}
+          {attention > items.length ? (
+            <p className="text-text-faint border-line border-t px-3 py-2 text-[11px]">
+              주의 {attention}건 중 {items.length}건만 표시했습니다 — 나머지 {attention - items.length}건은 위 항목을
+              처리하면 이어서 나타납니다.
+            </p>
+          ) : null}
         </div>
       )}
 

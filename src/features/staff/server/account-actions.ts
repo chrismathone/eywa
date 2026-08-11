@@ -176,7 +176,8 @@ export async function changeStaffEmail(
 }
 
 /**
- * 직원 완전 삭제 — auth.users + public.users 제거. 본인·동급·상위 계정은 불가.
+ * 직원 완전 삭제 — auth.users + public.users 제거. **본인·상위 계정은 불가**(동급은 가능 —
+ * canManageStaffMember가 '자신 권한 이하 전부'라, 2026-08-11부터 매니저도 동급 매니저를 지울 수 있다).
  * 순서: ① 출결 기록자(restrict FK)면 사전 차단 → ② auth 먼저(실패 시 public 보존) → ③ public.
  */
 export async function deleteStaff(
