@@ -69,7 +69,10 @@ export default async function StaffDetailPage({
   const canManage = !!viewer && (await canWriteTenant(viewer.systemRole, "staff"));
   // 활동 로그 탭은 사무실 전용 — 비-사무실이 ?tab=activity로 직접 와도 기본정보로 폴백(RLS도 별도 방어).
   const tab = tabRaw === "activity" && !canManage ? "info" : tabRaw;
-  const canManageThis = !!viewer && canManageStaffMember(viewer.systemRole, staff.systemRole);
+  // 계정 관리 카드 = **메뉴 쓰기 권한(개인 예외 포함) AND 대상 보호선** 둘 다(2026-08-11).
+  // canManageStaffMember는 이제 대상만 본다(원장 계정만 차단) — canManage를 빼면 staff=readonly인
+  // 사람에게도 카드가 떠서 "버튼은 보이는데 누르면 거부"가 된다(서버 loadTarget이 막긴 하지만 거짓 UI).
+  const canManageThis = canManage && !!viewer && canManageStaffMember(viewer.systemRole, staff.systemRole);
   // 역할 변경 옵션 — actor가 부여할 수 있는(본인보다 약한) 역할만. 패널 자체가 canManageThis로 게이트됨.
   const roleOptions = canManageThis && viewer ? assignableRoles(viewer.systemRole) : [];
   // 급여 노출은 원장(master) + 본인만 (schema.ts 주석). admin/manager에게도 보이면 안 됨.

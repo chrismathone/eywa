@@ -1,11 +1,27 @@
 import { describe, expect, it } from "vitest";
+import type { SystemRole } from "@/lib/permissions";
 import { canAssignRole, canManageStaff, canManageStaffMember } from "./role-hierarchy";
 
-// 위계 규칙은 권한의 바닥이라 테스트로 못박는다 — 특히 "아래로만 넓힌다"는 불변식.
+const ROLES = [
+  "master",
+  "admin",
+  "manager",
+  "accountant",
+  "counselor",
+  "teacher",
+  "viewer",
+  "student",
+] as const satisfies readonly SystemRole[];
+
+// 위계 규칙은 권한의 바닥이라 테스트로 못박는다 — 규칙 = 자신 권한 이하(동급 포함) 전부.
 describe("canManageStaffMember", () => {
-  it("원장·관리자는 동급까지 관리한다(2026-07-29 원장 지시)", () => {
-    expect(canManageStaffMember("master", "master")).toBe(true);
-    expect(canManageStaffMember("admin", "admin")).toBe(true);
+  it("원장은 전원 관리한다(원장 계정 포함)", () => {
+    for (const target of ROLES) expect(canManageStaffMember("master", target)).toBe(true);
+  });
+
+  it("동급은 관리한다 — 역할마다 예외 없이(2026-08-11 '자신 권한 이하 전부')", () => {
+    for (const actor of ROLES) expect(canManageStaffMember(actor, actor)).toBe(true);
+    expect(canManageStaffMember("manager", "manager")).toBe(true); // 종전 false였던 자리
   });
 
   it("아래 직급은 당연히 관리한다", () => {
@@ -14,21 +30,19 @@ describe("canManageStaffMember", () => {
     expect(canManageStaffMember("manager", "teacher")).toBe(true);
   });
 
-  it("🔴 상위는 여전히 불가 — 아래로 향한 권한만 넓혔다(권한 상승 차단)", () => {
+  it("🔴 상위는 불가 — 비번 재설정으로 상위 계정을 탈취하는 권한 상승 경로 차단", () => {
     expect(canManageStaffMember("admin", "master")).toBe(false);
     expect(canManageStaffMember("manager", "admin")).toBe(false);
     expect(canManageStaffMember("manager", "master")).toBe(false);
+    expect(canManageStaffMember("teacher", "manager")).toBe(false);
   });
 
-  it("매니저는 동급 개방 대상이 아니다(관리 계열 중 가장 약한 축)", () => {
-    expect(canManageStaffMember("manager", "manager")).toBe(false);
-  });
-
-  it("직원관리 권한이 없는 역할은 전부 불가", () => {
+  it("🔴 담당 여부는 이 함수가 아니라 직원관리 메뉴 게이트가 정한다 — 단독 사용 금지", () => {
+    // 역할만으로는 강사도 동급(강사)까지 통과한다(의도) — 호출부가 canWriteTenant("staff")와 **함께** 써야 안전.
+    expect(canManageStaffMember("teacher", "teacher")).toBe(true);
+    // canManageStaff(대시보드·급여용 역할 판정)는 별개 축이며 종전 그대로다.
     for (const actor of ["accountant", "counselor", "teacher", "viewer", "student"] as const) {
       expect(canManageStaff(actor)).toBe(false);
-      expect(canManageStaffMember(actor, "teacher")).toBe(false);
-      expect(canManageStaffMember(actor, actor)).toBe(false);
     }
   });
 });
