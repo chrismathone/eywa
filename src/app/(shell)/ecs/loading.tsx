@@ -16,12 +16,20 @@ export default function EcsLandingLoading() {
         <div className="border-line border-b px-1 pb-2">
           <div className="bg-bg-soft h-4 w-64 animate-pulse rounded" />
         </div>
-        <div className="grid grid-cols-1 gap-x-5 sm:grid-cols-2 lg:grid-cols-3">
-          {Array.from({ length: 12 }).map((_, i) => (
-            <div key={i} className="border-line-faint flex items-center gap-2 border-b px-1.5 py-[7px]">
-              <div className="bg-bg-soft h-4 flex-1 animate-pulse rounded" />
-              <div className="bg-bg-soft h-4 w-11 shrink-0 animate-pulse rounded" />
-              <div className="bg-bg-soft h-1.5 w-10 shrink-0 animate-pulse rounded-full" />
+        {/* 본문은 담임 묶음이 다단으로 흐른다 — 스켈레톤도 같은 골격이라야 로딩→본문에서 안 튄다. */}
+        <div className="columns-1 gap-x-5 sm:columns-2 lg:columns-3">
+          {Array.from({ length: 6 }).map((_, g) => (
+            <div key={g} className="mb-3 break-inside-avoid">
+              <div className="border-line-strong border-b px-1 pb-0.5">
+                <div className="bg-bg-soft h-4 w-24 animate-pulse rounded" />
+              </div>
+              {Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="border-line-faint flex items-center gap-2 border-b px-1.5 py-[7px]">
+                  <div className="bg-bg-soft h-4 flex-1 animate-pulse rounded" />
+                  <div className="bg-bg-soft h-4 w-11 shrink-0 animate-pulse rounded" />
+                  <div className="bg-bg-soft h-1.5 w-10 shrink-0 animate-pulse rounded-full" />
+                </div>
+              ))}
             </div>
           ))}
         </div>

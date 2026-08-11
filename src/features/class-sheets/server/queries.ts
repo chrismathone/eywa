@@ -559,6 +559,11 @@ export async function getClassSheetWeek(
 export type SheetLandingCard = {
   classId: string;
   className: string;
+  /**
+   * 담임 **id** — 목록을 담임별로 묶을 때 쓴다(2026-08-11 "열마다 담임 구분해서 놓자").
+   * ⚠️ 이름으로 묶지 말 것: 동명이인이면 두 사람의 반이 한 덩어리가 된다(이름은 표시용 라벨일 뿐).
+   */
+  teacherId: string | null;
   teacherName: string | null;
   totalSlots: number;
   filledSlots: number;
@@ -811,6 +816,7 @@ export async function getSheetLanding(
     return {
       classId: c.id as string,
       className: c.class_name as string,
+      teacherId: (c.teacher_id as string | null) ?? null,
       teacherName: c.teacher_id ? (teacherName.get(c.teacher_id as string) ?? null) : null,
       totalSlots: scheduled.size,
       filledSlots: filled,
