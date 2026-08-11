@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { TEXTAREA_AUTOSIZE_RESIZABLE } from "@/lib/ui/textarea";
 import { joinComment, splitComment } from "../comment-paragraphs";
+import { normalizeHomeworkPages } from "../homework-pages";
 import { resolveStudyGrade } from "../curriculum";
 import { subjectTone, toneSoftClass, toneSolidClass } from "../data";
 import {
@@ -424,7 +425,6 @@ export function GridBodyRow({
               label={`${student.name} 일일테스트`}
               allowMax={config.allowTestMax}
               onMax={(v) => fields.onMax(student.id, "daily", v)}
-              mode={student.tests.daily.mode}
               nav={nav.studentRow !== undefined ? { col: "daily", row: nav.studentRow } : undefined}
             />
           </fieldset>
@@ -440,7 +440,6 @@ export function GridBodyRow({
               label={`${student.name} 확인테스트`}
               allowMax={config.allowTestMax}
               onMax={(v) => fields.onMax(student.id, "check", v)}
-              mode={student.tests.check.mode}
               nav={nav.studentRow !== undefined ? { col: "check", row: nav.studentRow } : undefined}
             />
           </fieldset>
@@ -489,6 +488,15 @@ export function GridBodyRow({
             rows={1}
             value={subject.homeworkToday ?? ""}
             onChange={(e) => fields.onHomeworkToday(student.id, subject.name, e.target.value)}
+            // 쪽수 후보정(homework-pages.ts) — **입력이 끝났을 때만**. 타이핑 중에 붙이면 "42-6"에서 한 번,
+            // "42-60"에서 또 한 번 끼어들어 커서가 튄다. 저장 경로(report-fields)도 같은 함수를 한 번 더 통과한다.
+            // 🔴 잠긴 행에서는 절대 쓰지 않는다 — 이 칸은 `disabled`가 아니라 `readOnly`라 **포커스가 잡히고
+            //    blur도 뜬다**. 가드가 없으면 잠근 행을 클릭했다 빠져나오는 것만으로 값이 바뀐다(#103).
+            onBlur={(e) => {
+              if (rowLocked) return;
+              const fixed = normalizeHomeworkPages(e.target.value);
+              if (fixed !== e.target.value) fields.onHomeworkToday(student.id, subject.name, fixed);
+            }}
             readOnly={rowLocked}
             // ⚠️ 이 칸은 고정 140px(colgroup) — 예시까지 넣은 긴 placeholder는 **좁아서 잘려서**
             // "오늘 과제 (예: 개념편 p"로 끊겼다(원장 제보 2026-08-04).

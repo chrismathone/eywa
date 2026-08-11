@@ -4,6 +4,8 @@
 // 발송 안전가드(dry-run·과목·동명이인·too_old)는 서버 액션(saveAndQueueAdminReport)이 최종 강제 — 여기선 안내·확인만.
 import { HomeworkRateInput } from "@/features/onescreen/components/homework-rate-input";
 import { homeworkRateClause } from "@/features/onescreen/homework-rate";
+import { formatTestScore } from "@/features/onescreen/report-comment";
+import { normalizeHomeworkPages } from "@/features/onescreen/homework-pages";
 import { ATTITUDE, attitudeClause } from "@/features/onescreen/attitude";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
@@ -126,8 +128,14 @@ export function ComposeFace({
     setConfirmSend(false);
   }
 
+  // 표기는 원스크린과 **같은 순수함수**(report-comment.ts) — 여기서 문자열을 따로 만들면 같은 학원에서
+  // 화면마다 다른 문장이 학부모에게 나간다. 만점 미입력분만 옛 표기("?문제 중")로 남긴다.
   function testStr(score: string, max: string): string {
-    return score.trim() ? `${max.trim() || "?"}문제 중 ${score.trim()}개` : "";
+    if (!score.trim()) return "";
+    const n = Number(score.trim());
+    const m = Number(max.trim());
+    if (!Number.isFinite(n) || !Number.isFinite(m) || !max.trim()) return `${max.trim() || "?"}문제 중 ${score.trim()}개 맞음`;
+    return formatTestScore(n, m);
   }
   function buildInput(): AdminSaveReportInput {
     const dailyTest = testStr(dScore, dMax);
@@ -145,7 +153,7 @@ export function ComposeFace({
       teacherName: teacherName.trim() || undefined,
       textbook: textbook.trim() || undefined,
       makeup,
-      homeworkToday: homeworkToday.trim() || undefined,
+      homeworkToday: normalizeHomeworkPages(homeworkToday.trim()) || undefined,
       progress: progress.trim(),
       examInfo,
       homeworkScore: homework,
@@ -168,7 +176,7 @@ export function ComposeFace({
       checkTest: testStr(cScore, cMax),
       attitude,
       homework,
-      homeworkToday: homeworkToday.trim(),
+      homeworkToday: normalizeHomeworkPages(homeworkToday.trim()),
       textbook: textbook.trim(),
       specialNote: note.trim(),
     };

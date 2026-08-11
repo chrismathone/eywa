@@ -3,8 +3,8 @@ import { buildExamInfo, buildReportFields, type ReportFieldSource } from "./repo
 import type { Subject, Tests } from "./types";
 
 const tests: Tests = {
-  daily: { score: 18, max: 20, prevScore: null, mode: "count" },
-  check: { score: 95, max: 100, prevScore: null, mode: "score" },
+  daily: { score: 18, max: 20, prevScore: null },
+  check: { score: 95, max: 100, prevScore: null },
 };
 
 const subject: Subject = {
@@ -37,10 +37,10 @@ describe("buildReportFields", () => {
     expect(buildReportFields({ ...base, draft: "   " }).notes).toBe("");
   });
 
-  it("테스트 표기는 모드별 포맷, 비활성 테스트는 값이 있어도 제외", () => {
+  it("테스트 표기는 개수 + '맞음', 비활성 테스트는 값이 있어도 제외", () => {
     const on = buildReportFields(base);
-    expect(on.dailyTest).toBe("20문제 중 18개");
-    expect(on.checkTest).toBe("95점");
+    expect(on.dailyTest).toBe("20문제 중 18개 맞음");
+    expect(on.checkTest).toBe("100문제 중 95개 맞음");
     // 학원설정에서 끈 테스트는 세션에 옛 점수가 남아 있어도 저장·표시 둘 다에서 빠진다.
     const off = buildReportFields({ ...base, showDailyTest: false, showCheckTest: false });
     expect(off.dailyTest).toBe("");

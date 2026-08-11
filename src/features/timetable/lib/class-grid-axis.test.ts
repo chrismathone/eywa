@@ -1,18 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_PERIODS_CONFIG } from "./periods";
-import {
-  AXIS_COLS,
-  ROSTER_ROW_CAP,
-  buildAxisDays,
-  buildRichCardGroups,
-  type GridSlot,
-} from "./class-grid";
+import { ROSTER_ROW_CAP, buildRichCardGroups, type GridSlot } from "./class-grid";
 
 /**
- * 통합뷰 카드 요일축 = **월~금 5칸 고정**(원장 지시 2026-07-27).
- * 예전엔 실제 수업 요일만 열로 그려서 2요일 반은 한 칸 88px·5요일 반은 35px로 카드마다 열 너비가 달랐다.
- * ⚠️ 동시에 2026-07-23 회귀(평일+토 혼합 반의 토요일 증발)를 되살리면 안 된다 —
- *    ijw 영어 규약대로 주말 요일이 "그 반이 안 쓰는 평일" 칸을 대체하므로 열 수는 5, 토 열은 생긴다.
+ * 통합뷰 카드 요일축 = **그 반이 실제 수업하는 요일만**(원장 지시 2026-08-11 "수업없는 요일 열도 숨겨버리고").
+ *
+ * 🔴 이건 2026-07-27의 "항상 월~금 5칸"(`buildAxisDays`/`AXIS_COLS`) 규약을 **뒤집은 것**이다. 그때의 근거는
+ *    "한 칸 너비가 카드마다 같아야 시트처럼 읽힌다"였는데, 실측(영어 활성 42반)이 **2일 12반·3일 29반·5일 1반** —
+ *    거의 모든 카드의 격자 40~60%가 빈 칸이었다. 카드 폭(CARD_W)은 그대로라 남은 칸이 넓어질 뿐이고,
+ *    카드 간 **세로** 정렬(시트로 읽히는 성질)은 그대로다.
+ * ⚠️ 되살리면 안 되는 회귀는 그대로다(2026-07-23): 평일+토 **혼합 반의 토요일이 증발**하면 안 된다.
+ *    이제는 "실제 요일만 그린다"라서 구조적으로 사라질 수가 없다 — 그래도 가드는 남긴다.
  */
 function slot(classId: string, day: string, start = "16:20"): GridSlot {
   return {
@@ -39,64 +37,36 @@ const cardOf = (slots: GridSlot[], classId: string) =>
     .flatMap((g) => g.cards)
     .find((c) => c.classId === classId)!;
 
-describe("buildAxisDays — 5칸 고정 요일축", () => {
-  it("평일 반은 실제 요일 수와 무관하게 항상 월~금 5칸", () => {
-    expect(buildAxisDays(["mon", "thu"], false)).toEqual(["mon", "tue", "wed", "thu", "fri"]);
-    expect(buildAxisDays(["wed"], false)).toEqual(["mon", "tue", "wed", "thu", "fri"]);
-    expect(buildAxisDays(["mon", "tue", "wed", "thu", "fri"], false)).toEqual([
-      "mon",
-      "tue",
-      "wed",
-      "thu",
-      "fri",
-    ]);
-  });
-
-  it("요일 수가 1개든 5개든 열 수는 늘 같다(= 한 칸 너비 불변)", () => {
-    for (const days of [["mon"], ["mon", "thu"], ["tue", "wed", "fri"], ["mon", "tue", "wed", "thu", "fri"]]) {
-      expect(buildAxisDays(days as never, false)).toHaveLength(AXIS_COLS);
-    }
-  });
-
-  it("토요일은 '그 반이 안 쓰는 평일' 칸을 대체한다 — 열 수 5 유지, 토 열은 생김", () => {
-    // 수·토 반: 월이 비어 있으므로 월 칸을 토가 가져간다 → 정렬 후 화수목금토
-    const axis = buildAxisDays(["wed", "sat"], false);
-    expect(axis).toHaveLength(AXIS_COLS);
-    expect(axis).toContain("sat");
-    expect(axis).toEqual(["tue", "wed", "thu", "fri", "sat"]);
-  });
-
-  it("평일을 꽉 채운 반의 토요일은 금요일 칸을 대체한다(ijw 폴백)", () => {
-    const axis = buildAxisDays(["mon", "tue", "wed", "thu", "fri", "sat"], false);
-    expect(axis).toHaveLength(AXIS_COLS);
-    expect(axis).toEqual(["mon", "tue", "wed", "thu", "sat"]);
-  });
-
-  it("주말 전용 반은 평일 라벨 없이 주말 요일 + 빈 칸 패딩(열 수는 그대로 5)", () => {
-    expect(buildAxisDays(["sat"], true)).toEqual(["sat", null, null, null, null]);
-    expect(buildAxisDays(["sat", "sun"], true)).toEqual(["sat", "sun", null, null, null]);
-  });
-});
-
-describe("buildRichCardGroups — 카드에 axisDays가 실린다", () => {
-  it("2요일 반과 5요일 반의 축 길이가 같다", () => {
+describe("카드 요일축 — 빈 요일 열은 그리지 않는다", () => {
+  it("2요일 반은 2열, 5요일 반은 5열 — 축이 실제 요일을 그대로 따른다", () => {
     const slots = [
       slot("two", "mon"),
       slot("two", "thu"),
       ...(["mon", "tue", "wed", "thu", "fri"] as const).map((d) => slot("five", d)),
     ];
-    expect(cardOf(slots, "two").axisDays).toHaveLength(AXIS_COLS);
-    expect(cardOf(slots, "five").axisDays).toHaveLength(AXIS_COLS);
+    expect(cardOf(slots, "two").days).toEqual(["mon", "thu"]);
+    expect(cardOf(slots, "five").days).toEqual(["mon", "tue", "wed", "thu", "fri"]);
   });
 
-  it("혼합 반(평일+토)의 축에 토요일이 남아 있다 — 2026-07-23 회귀 방지", () => {
-    const mixed = [slot("m1", "wed"), slot("m1", "sat", "12:00")];
-    expect(cardOf(mixed, "m1").axisDays).toContain("sat");
+  it("한 요일뿐인 반도 한 열 — 빈 칸 패딩 없음", () => {
+    expect(cardOf([slot("one", "wed")], "one").days).toEqual(["wed"]);
   });
 
-  it("`days`(실제 수업 요일)는 그대로 — 축과 사실을 분리해 둔다", () => {
+  it("🔴 혼합 반(평일+토)의 토요일이 남아 있다 — 2026-07-23 회귀 방지", () => {
     const mixed = [slot("m1", "wed"), slot("m1", "sat", "12:00")];
     expect(cardOf(mixed, "m1").days).toEqual(["wed", "sat"]);
+  });
+
+  it("주말 전용 반은 주말 요일만(평일 라벨 노이즈 없음)", () => {
+    const weekendOnly = [slot("w1", "sat", "09:00"), slot("w1", "sun", "09:00")];
+    const c = cardOf(weekendOnly, "w1");
+    expect(c.weekendOnly).toBe(true);
+    expect(c.days).toEqual(["sat", "sun"]);
+  });
+
+  it("요일 순서는 항상 월→일(입력 순서와 무관)", () => {
+    const shuffled = [slot("s1", "fri"), slot("s1", "tue"), slot("s1", "wed")];
+    expect(cardOf(shuffled, "s1").days).toEqual(["tue", "wed", "fri"]);
   });
 });
 
@@ -173,15 +143,64 @@ describe("weekendShift — 혼합 반 토요일은 평일 교시 행에 얹는�
   });
 
   it("토요일 열은 그대로 유지된다(2026-07-23 회귀 방지 — 시프트는 '행'만 바꾼다)", () => {
-    expect(card().axisDays).toContain("sat");
+    expect(card().days).toContain("sat");
     expect(card().days).toEqual(["wed", "sat"]);
   });
 
-  it("주말 전용 반은 시프트 대상이 아니다(평일이 없어 기준이 없다)", () => {
+  it("주말 전용 반은 평일 기준이 없어 평일 표로 옮겨가지 않는다(자기 주말 표 안에서만 당겨진다)", () => {
     const weekendOnly = [slot("w1", "sat", "09:00"), slot("w1", "sat", "10:00")];
     const c = cardOf(weekendOnly, "w1");
     expect(c.weekendOnly).toBe(true);
-    expect(c.periodRows).toHaveLength(2); // 주말 교시표 그대로
+    expect(c.periodRows).toHaveLength(2); // 주말 교시표 그대로(이미 1교시부터라 당길 것도 없다)
+    expect(c.periodRows.map((r) => r.label)).toEqual(["1교시", "2교시"]);
+  });
+});
+
+/**
+ * 주말 섹션 = 반마다 시작 시각이 제각각이라 합집합 축이 금세 불어난다(실측 수학 주말전용 3반 =
+ * 09~11시 / 14~16시 / 15~16시 → **6행**인데 어느 반도 3교시를 안 넘었다).
+ * 원장 2026-08-11: *"주말 수업은 6행이나 차지하게 두지말고, 그냥 3행으로 처리해 보기 편하게 강제로
+ * … 평일수업에 맞춰서"* → 카드마다 **자기 1교시부터** 시작하게 당긴다.
+ */
+describe("주말 전용 반은 1교시부터 시작하게 당긴다 — 섹션 행수 = 가장 긴 반의 교시 수", () => {
+  // 09~11시(3교시) / 14~16시(3교시) / 15~16시(2교시) — 주말 표에서 idx 0·1·2 / 5·6·7 / 6·7.
+  const weekendOnly = [
+    slot("early", "sat", "09:00"), slot("early", "sat", "10:00"), slot("early", "sat", "11:00"),
+    slot("late", "sat", "14:00"), slot("late", "sat", "15:00"), slot("late", "sat", "16:00"),
+    slot("short", "sun", "15:00"), slot("short", "sun", "16:00"),
+  ];
+  const section = () =>
+    buildRichCardGroups(weekendOnly, DEFAULT_PERIODS_CONFIG).find((g) => g.label === "주말")!;
+
+  it("🔴 합집합이면 6행이던 것이 3행", () => {
+    expect(section().periodRows.map((r) => r.label)).toEqual(["1교시", "2교시", "3교시"]);
+  });
+
+  it("늦게 시작하는 반도 1교시 행부터 채운다(2교시짜리는 두 칸)", () => {
+    const cells = (id: string) =>
+      Object.keys(section().cards.find((c) => c.classId === id)!.cells)
+        .map((k) => Number(k.split(":")[0]))
+        .sort((a, b) => a - b);
+    // 주말 1·2·3교시 order = 자정 기준 분(09:00=540, 10:00=600, 11:00=660).
+    expect(cells("early")).toEqual([540, 600, 660]);
+    expect(cells("late")).toEqual([540, 600, 660]);
+    expect(cells("short")).toEqual([540, 600]);
+  });
+
+  it("행 라벨엔 시각을 안 적는다 — 같은 행에 09시 반과 14시 반이 함께 앉는다", () => {
+    expect(section().periodRows.every((r) => r.time === "")).toBe(true);
+  });
+
+  it("🔴 실제 시각은 셀이 들고 간다(정보 손실 0)", () => {
+    const late = section().cards.find((c) => c.classId === "late")!;
+    const times = Object.values(late.cells).map((c) => c.time);
+    expect(times.some((t) => t?.startsWith("14:00~"))).toBe(true);
+    expect(times.some((t) => t?.startsWith("16:00~"))).toBe(true);
+  });
+
+  it("평일 셀엔 시각을 안 싣는다 — 행 라벨이 곧 사실이라 중복이다", () => {
+    const c = cardOf([slot("wd", "mon", "16:20")], "wd");
+    expect(Object.values(c.cells)[0].time).toBeUndefined();
   });
 
   it("평일이 주말보다 이르면 시프트하지 않는다(ijw 조건 동일)", () => {

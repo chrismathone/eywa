@@ -8,68 +8,22 @@ import {
   buildCommentP1Prompt,
   buildCommentP2Prompt,
   formatTestScore,
-  applyTestScoreMode,
   type ReportCommentInput,
 } from "./report-comment";
-import type { OneScreenStudent, TestScore } from "./types";
+import { parseExamPercent } from "./report-trend";
+import type { OneScreenStudent } from "./types";
 
-// 모드 전환 순수 로직(0148a) — 적대검수가 잡은 2건(왕복 문항수 유실·척도경계 허위 delta) 방어.
-describe("applyTestScoreMode", () => {
-  const base: TestScore = { score: 18, max: 20, prevScore: 15, mode: "count" };
-
-  it("개수→점수: 만점 100 고정 + 개수 문항수를 countMax에 기억 + 점수 재클램프", () => {
-    const r = applyTestScoreMode(base, "score");
-    expect(r.mode).toBe("score");
-    expect(r.max).toBe(100);
-    expect(r.countMax).toBe(20); // 복원용 기억
-    expect(r.score).toBe(18); // 18 ≤ 100
-  });
-
-  it("점수→개수 왕복: **기억해둔 문항수(20)로 복원** — 100으로 굳지 않는다(핵심 버그)", () => {
-    const toScore = applyTestScoreMode(base, "score"); // max=100, countMax=20
-    const backToCount = applyTestScoreMode(toScore, "count");
-    expect(backToCount.mode).toBe("count");
-    expect(backToCount.max).toBe(20); // ← 복원됨(버그였으면 100)
-  });
-
-  it("점수 모드에서 점수>새 만점이면 클램프 — 개수(95/문항수5)에서 점수로 갈 때 max=100이라 유지, 반대는 클램프", () => {
-    const big: TestScore = { score: 95, max: 100, prevScore: null, mode: "score", countMax: 5 };
-    const toCount = applyTestScoreMode(big, "count"); // max=countMax=5
-    expect(toCount.max).toBe(5);
-    expect(toCount.score).toBe(5); // 95 → clamp 5
-  });
-
-  it("모드가 바뀌면 prevScore를 버린다 — 개수(18)와 점수(95)를 섞어 빼는 허위 증감 방지", () => {
-    expect(applyTestScoreMode(base, "score").prevScore).toBeNull();
-    expect(applyTestScoreMode({ ...base, mode: "score" }, "count").prevScore).toBeNull();
-  });
-
-  it("같은 모드로 재적용하면 prevScore 유지(불필요한 폐기 없음)", () => {
-    expect(applyTestScoreMode(base, "count").prevScore).toBe(15);
-  });
-});
-
-// 표기 모드(0148a) — 학부모 카드·AI 멘트가 공유하는 단일 표시 포맷.
+// 표기 = **맞은 개수 하나뿐**(원장 2026-08-11 "점은 제거하고 갯수로만" + "마지막에 '맞음' 추가").
 describe("formatTestScore", () => {
-  it("count 모드(기본) = 'N문제 중 M개'", () => {
-    expect(formatTestScore(18, 20, "count")).toBe("20문제 중 18개");
-    expect(formatTestScore(18, 20)).toBe("20문제 중 18개"); // mode 미지정 = count(기존 동작 보존)
+  it("'N문제 중 M개 맞음' — 끝의 '맞음'이 빠지면 무엇이 M개인지 학부모가 되짚어야 한다", () => {
+    expect(formatTestScore(18, 20)).toBe("20문제 중 18개 맞음");
+    expect(formatTestScore(10, 10)).toBe("10문제 중 10개 맞음"); // 원장이 지적한 바로 그 값
+    expect(formatTestScore(0, 5)).toBe("5문제 중 0개 맞음");
   });
 
-  it("score 모드 + 만점 100 = 'X점'", () => {
-    expect(formatTestScore(95, 100, "score")).toBe("95점");
-    expect(formatTestScore(100, 100, "score")).toBe("100점");
-    expect(formatTestScore(0, 100, "score")).toBe("0점");
-  });
-
-  it("score 모드 + 만점≠100 = 'X/만점점'(정보 손실 방지)", () => {
-    expect(formatTestScore(45, 50, "score")).toBe("45/50점");
-  });
-
-  it("같은 (score,max)라도 모드로 뜻이 갈린다 — 100점 vs 100문제 중 1개 뒤바뀜 방지", () => {
-    // 인재원 사건: 100점을 넣으려다 개수(100문제 중 1개)로 저장되던 것 — 모드가 표기를 확정한다.
-    expect(formatTestScore(100, 100, "score")).toBe("100점");
-    expect(formatTestScore(1, 100, "count")).toBe("100문제 중 1개");
+  it("추세 파서가 계속 읽는다 — 접미사가 붙어도 N·M을 잃지 않는 형식", () => {
+    expect(parseExamPercent(formatTestScore(18, 20))).toBe(90);
+    expect(parseExamPercent(formatTestScore(10, 10))).toBe(100);
   });
 });
 
@@ -100,8 +54,8 @@ describe("buildReportCommentInput", () => {
     expect(input.studentName).toBe("김민승");
     expect(input.subject).toBe("수학(상)");
     expect(input.progress).toBe("이차함수");
-    expect(input.dailyTest).toBe("20문제 중 16개 (지난 회차 대비 ▲2)");
-    expect(input.checkTest).toBe("20문제 중 18개"); // prev 없으면 증감 미부기
+    expect(input.dailyTest).toBe("20문제 중 16개 맞음 (지난 회차 대비 ▲2)");
+    expect(input.checkTest).toBe("20문제 중 18개 맞음"); // prev 없으면 증감 미부기
     expect(input.attitude).toBe("좋음");
     expect(input.homework).toBe("완료");
   });
@@ -131,7 +85,7 @@ describe("buildReportCommentPrompt", () => {
     const prompt = buildReportCommentPrompt(buildReportCommentInput(student(), 0));
     const sec = inputSection(prompt);
     expect(sec).toContain("오늘 진도: 수학(상) 이차함수");
-    expect(sec).toContain("일일테스트: 20문제 중 16개 (지난 회차 대비 ▲2)");
+    expect(sec).toContain("일일테스트: 20문제 중 16개 맞음 (지난 회차 대비 ▲2)");
     expect(sec).toContain("수업 태도: 좋음");
     expect(sec).toContain("과제: 완료");
     expect(prompt).toContain("JSON"); // Upstage JSON mode 필수 토큰
