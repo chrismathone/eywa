@@ -66,6 +66,8 @@ function waitingView(over: Partial<ClassnoteQueueView> = {}): ClassnoteQueueView
     days: 3,
     nowMs: Date.parse("2026-07-22T12:00:00+09:00"),
     sendEnabled: true,
+    expiredUnsent: 0,
+    todayKst: "2026-07-22",
     ...over,
   };
 }
@@ -81,6 +83,8 @@ function drainedView(over: Partial<ClassnoteQueueView> = {}): ClassnoteQueueView
     days: 3,
     nowMs: Date.parse("2026-07-22T12:00:00+09:00"),
     sendEnabled: true,
+    expiredUnsent: 0,
+    todayKst: "2026-07-22",
     ...over,
   };
 }
@@ -359,6 +363,76 @@ describe("ClassnoteQueueCard 자동 갱신", () => {
 
     expect(screen.getByText(/갱신에 실패해 다시 시도하는 중입니다/)).toBeInTheDocument();
     expect(screen.getByText("학원이")).toBeInTheDocument(); // 직전 값은 유지(빈 화면 금지)
+  });
+});
+
+// 🔴 2026-08-11 원장 제보("어제는 미발송분이 있었는데 날이 바뀌니 사라졌다")로 추가된 계약.
+//    실패는 3일 창 밖으로 밀려도 **아직 기한이 남았으면** 카드에 남아야 하고, 남은 날이 보여야 한다.
+describe("재발송 기한 표시", () => {
+  const failedItem = (id: string, reportDate: string) => ({
+    id,
+    studentName: id,
+    subject: "math",
+    reportDate,
+    status: "failed",
+    error: "ClassNote 보드에 연결된 원아가 없습니다",
+    processingAt: null,
+    shareToken: null,
+  });
+  // todayKst 2026-07-22 → 발송 창 07-16~07-22. 07-16=오늘이 마지막 날 / 07-10=이미 만료.
+  const view = () =>
+    drainedView({
+      summary: { ...emptySummary, failed: 2, total: 12 },
+      items: [failedItem("r-today", "2026-07-16"), failedItem("r-old", "2026-07-10")],
+      expiredUnsent: 5,
+    });
+
+  it("마지막 날은 '오늘까지', 기한 지난 건은 '기한 만료'로 표시한다", () => {
+    render(<ClassnoteQueueCard view={view()} />);
+    expect(screen.getByText("오늘까지")).toBeInTheDocument();
+    expect(screen.getByText("기한 만료")).toBeInTheDocument();
+  });
+
+  it("만료건은 '주의 항목 전체 재발송' 대상에서 빠진다 — 눌러도 서버가 거부해 헛돌기 때문", () => {
+    render(<ClassnoteQueueCard view={view()} />);
+    expect(screen.getByRole("button", { name: /주의 항목 전체 재발송 \(1\)/ })).toBeInTheDocument();
+  });
+
+  it("만료건도 개별 선택은 열어 둔다 — 화면이 길을 막지 않는다(최종 판단은 서버)", () => {
+    render(<ClassnoteQueueCard view={view()} />);
+    expect(screen.getByLabelText("r-old 선택")).not.toBeDisabled();
+  });
+
+  it("기한을 넘겨 못 나간 건수를 경고로 알린다", () => {
+    render(<ClassnoteQueueCard view={view()} />);
+    expect(screen.getByText(/재발송 기한\(7일\)을 넘겨/)).toBeInTheDocument();
+  });
+
+  // #89 — 상한에 걸려 잘린 목록을 말없이 두면 "보이는 게 전부"로 읽힌다.
+  it("주의 목록이 상한에 걸려 잘리면 잘린 수를 밝힌다", () => {
+    render(
+      <ClassnoteQueueCard
+        view={drainedView({
+          summary: { ...emptySummary, failed: 5, total: 15 },
+          items: [failedItem("r-1", "2026-07-20")],
+        })}
+      />,
+    );
+    expect(screen.getByText(/주의 5건 중 1건만 표시했습니다/)).toBeInTheDocument();
+  });
+
+  it("잘리지 않았으면 안내를 띄우지 않는다", () => {
+    render(
+      <ClassnoteQueueCard
+        view={drainedView({ summary: { ...emptySummary, failed: 1, total: 11 }, items: [failedItem("r-1", "2026-07-20")] })}
+      />,
+    );
+    expect(screen.queryByText(/건만 표시했습니다/)).toBeNull();
+  });
+
+  it("잃은 건이 없으면 경고를 띄우지 않는다", () => {
+    render(<ClassnoteQueueCard view={drainedView()} />);
+    expect(screen.queryByText(/재발송 기한\(7일\)을 넘겨/)).toBeNull();
   });
 });
 

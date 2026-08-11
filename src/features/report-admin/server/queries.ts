@@ -8,6 +8,7 @@ import { getTenantSettings } from "@/features/owner/server/queries";
 import { fetchReportOptoutClassIds } from "@/features/classes/server/report-optout-ids";
 import { enrollmentAttendsOnDay, isEnrollmentActiveOn } from "@/features/enrollments/eligibility";
 import { needsAttention, summarizeQueue, type QueueSummary, HUMAN_RESOLVED_STATUSES } from "../classnote-queue";
+import { classnoteMinDate } from "@/features/onescreen/classnote-guard";
 // 임시 위임(0173a) — 위임된 (반, 날짜)의 대상(분모)을 대체 강사로 옮기는 순수 규칙.
 import { buildDelegateAttribution, type DelegateAttribution } from "../writing-rate-delegation";
 import {
@@ -137,10 +138,21 @@ export type ClassnoteQueueView = {
   since: string; // 집계 시작일
   days: number;
   sendEnabled: boolean; // ClassNote 실제 발송 스위치(false=dry-run, 재발송이 실제 전송 안 함)
+  /**
+   * 최근 30일 안에서 **재발송 기한(7일)까지 넘겨** 영영 못 나간 실패 건수. 0이면 화면에 안 띄운다.
+   * 🔴 이 숫자는 "이미 잃은 것"이라 되살릴 수 없다 — 그래서 목록이 아니라 **경고 한 줄**로만 띄우고,
+   * 원장이 볼 곳은 아직 살릴 수 있는 위 주의 목록이다(같은 학생이 계속 실패하면 원인이 안 고쳐진 것).
+   */
+  expiredUnsent: number;
+  /** 오늘(KST) — 화면이 각 행의 재발송 남은 날을 계산하는 기준. 클라 시계를 믿지 않는다(nowMs와 같은 취지). */
+  todayKst: string;
 };
 
 // 워커 하트비트가 이 분(minutes) 이상 끊기면 오프라인(watch 데몬 15초 폴 → 넉넉히 3분).
 const WORKER_OFFLINE_MINUTES = 3;
+
+/** 재발송 기한이 지난 실패를 목록에 더 남겨 두는 날수 — '기한 만료'라는 결말을 보고 나서 사라지게. */
+const EXPIRED_GRACE_DAYS = 3;
 
 /**
  * ClassNote 발송 큐 현황(원장 보고서 관리 Part A) — 최근 N일 발송요청 보고서의 상태 집계 + 주의목록 + 워커 상태.
@@ -156,10 +168,13 @@ export async function getClassnoteQueue(days = 3): Promise<ClassnoteQueueView | 
 
   const COLS =
     "id, student_id, subject, report_date, classnote_status, classnote_error, classnote_processing_at, share_token";
+  // 발송 기한(오늘 포함 7일) 시작일 — **아직 손 쓸 수 있는가**의 경계. 3일 창보다 넓다.
+  const minDate = classnoteMinDate(today);
   // 창 안 전체 + **창 무관 '사람이 풀어야 하는' 잔여분**(blocked_shared·name_conflict)을 함께 본다.
   // 후자는 원장이 조치할 때까지 며칠이고 남는데, 창에 걸려 사라지면 재발송 UI(이 카드가 유일)도 같이 사라져
   // 해소 불가능한 막다른 길이 된다(HUMAN_RESOLVED_STATUSES 주석 참조). 독립 조회라 병렬(B4).
-  const [{ data: rowsRaw }, { data: stuckRaw }] = await Promise.all([
+  const [{ data: rowsRaw }, { data: stuckRaw }, { data: failedRaw }, { count: expiredUnsentCount }] =
+    await Promise.all([
     supabase
       .from("lesson_reports")
       .select(COLS)
@@ -173,11 +188,42 @@ export async function getClassnoteQueue(days = 3): Promise<ClassnoteQueueView | 
       .in("classnote_status", [...HUMAN_RESOLVED_STATUSES])
       .order("report_date", { ascending: false })
       .limit(200), // 사람 조치 대기분이 200을 넘을 일은 없다(넘으면 운영이 이미 무너진 것)
+    // 🔴 실패(failed)도 **아직 기한 안이면 3일 창과 무관하게** 싣는다(2026-08-11 원장 제보로 추가).
+    //    이유는 위 blocked_shared·name_conflict와 정확히 같다: 실측된 실패는 전부 "보드에 연결된 원아가
+    //    없습니다"류로 **워커가 몇 번을 재시도해도 안 풀리고 사람이 ClassNote에서 배정해야** 끝난다.
+    //    그런데 3일 창이 지나면 카드에서 사라지고 재발송 버튼도 함께 사라져(재발송 UI는 이 카드가 유일)
+    //    "어제는 있었는데 오늘 없다"가 된다 — 실측 2026-08-11: 실패 16건 중 **15건이 창 밖**이었고
+    //    11건은 그 사이 기한까지 넘겨 학부모에게 영영 못 나갔다.
+    //    ⚠️ 기한이 지난 뒤에도 **{EXPIRED_GRACE_DAYS}일은 더 남긴다**(적대 검토로 추가): 기한 당일까지
+    //    "오늘까지"로 보이던 행이 다음 날 흔적 없이 사라지면 원장이 겪는 일은 처음 문제와 똑같다
+    //    ("어제는 있었는데 오늘 없다"). 며칠 남겨 **'기한 만료'라는 결말을 보여 준 뒤** 내린다.
+    //    영구히 두지 않는 이유는 되살릴 수단이 없어 그때부턴 순수한 잡음이기 때문 — 총량은 아래 카운트가 맡는다.
+    supabase
+      .from("lesson_reports")
+      .select(COLS)
+      .eq("classnote_status", "failed")
+      .gte("report_date", daysBefore(minDate, EXPIRED_GRACE_DAYS))
+      .order("report_date", { ascending: false })
+      .limit(200),
+    // 기한까지 넘겨 **영영 못 나간** 건 — 최근 30일. **행을 받지 않는다**(count exact + head, B2).
+    // ⚠️ `too_old`도 함께 센다 — 재시도하다 창 밖으로 나가면 상태가 too_old로 갈아끼워지므로,
+    //    failed만 세면 "잃은 건"의 일부가 조용히 빠진다(같은 사건의 다른 이름일 뿐).
+    supabase
+      .from("lesson_reports")
+      .select("*", { count: "exact", head: true })
+      .in("classnote_status", ["failed", "too_old"])
+      .lt("report_date", minDate)
+      .gte("report_date", daysBefore(today, 30)),
   ]);
   // 창 안/밖이 겹치므로 id로 중복 제거 — 안 그러면 집계가 두 번 세어진다.
   const byId = new Map<string, (typeof rowsRaw extends null ? never : NonNullable<typeof rowsRaw>)[number]>();
-  for (const r of [...(rowsRaw ?? []), ...(stuckRaw ?? [])]) byId.set(r.id as string, r);
-  const rows = [...byId.values()];
+  for (const r of [...(rowsRaw ?? []), ...(stuckRaw ?? []), ...(failedRaw ?? [])]) byId.set(r.id as string, r);
+  // ⚠️ 세 조회를 합치면 **삽입 순서**(창 안 → 사람조치 → 실패)가 남아 날짜가 뒤죽박죽 섞인다
+  //    — 각 조회는 정렬돼 있어도 합집합은 아니다. 목록이 최신순이 아니면 원장이 "어느 게 급한 건지"를
+  //    날짜로 훑을 수 없으므로 여기서 한 번 더 최신순으로 세운다(집계는 순서 무관).
+  const rows = [...byId.values()].sort((a, b) =>
+    String(b.report_date ?? "").localeCompare(String(a.report_date ?? "")),
+  );
 
   const summary = summarizeQueue(
     rows.map((r) => ({ status: r.classnote_status as string | null, processingAt: r.classnote_processing_at as string | null })),
@@ -230,7 +276,18 @@ export async function getClassnoteQueue(days = 3): Promise<ClassnoteQueueView | 
   });
 
   const settings = await getTenantSettings();
-  return { summary, items, pending, workers, nowMs, since, days, sendEnabled: settings.report.classnoteSendEnabled };
+  return {
+    summary,
+    items,
+    pending,
+    workers,
+    nowMs,
+    since,
+    days,
+    sendEnabled: settings.report.classnoteSendEnabled,
+    expiredUnsent: expiredUnsentCount ?? 0,
+    todayKst: today,
+  };
 }
 
 // 강사 행 + 과목 태그(반 담당·슬롯 라벨 기준) — 카드의 [전체/과목] 분류 칩 소스.

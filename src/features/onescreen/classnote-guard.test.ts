@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   classnoteMinDate,
+  classnoteRetryDeadline,
   classnoteSendWindowHint,
   classnoteSendWindowLabel,
   isClassnoteAllowed,
@@ -39,6 +40,37 @@ describe("isClassnoteAllowed (KST 문자열 비교)", () => {
     expect(isClassnoteAllowed("2025-12-27", "2026-01-02")).toBe(true);
     expect(isClassnoteAllowed("2025-12-26", "2026-01-02")).toBe(false);
     expect(isClassnoteAllowed("2025-12-01", "2026-01-10")).toBe(false); // 구 '전 달 1일' 규칙에선 허용이었음
+  });
+});
+
+// 재발송 기한 — 실패 건이 "언제까지 손 쓸 수 있나". 만료 판정은 isClassnoteAllowed에서 파생(두 규칙 동치).
+describe("classnoteRetryDeadline", () => {
+  const today = "2026-08-11";
+  it("report_date + 6일이 마지막 날", () => {
+    expect(classnoteRetryDeadline("2026-08-07", today).lastDate).toBe("2026-08-13");
+    expect(classnoteRetryDeadline("2026-08-11", today).lastDate).toBe("2026-08-17");
+  });
+  it("오늘이 마지막 날이면 daysLeft=0 (아직 만료 아님)", () => {
+    const d = classnoteRetryDeadline("2026-08-05", today);
+    expect(d.daysLeft).toBe(0);
+    expect(d.expired).toBe(false);
+  });
+  it("하루 지나면 만료 — 재발송 경로가 없다", () => {
+    const d = classnoteRetryDeadline("2026-08-04", today);
+    expect(d.daysLeft).toBe(-1);
+    expect(d.expired).toBe(true);
+  });
+  it("만료 판정은 isClassnoteAllowed와 항상 동치", () => {
+    for (const d of ["2026-08-01", "2026-08-04", "2026-08-05", "2026-08-08", "2026-08-11"]) {
+      expect(classnoteRetryDeadline(d, today).expired).toBe(!isClassnoteAllowed(d, today));
+    }
+  });
+  it("월·연 경계를 넘는다", () => {
+    expect(classnoteRetryDeadline("2026-07-29", "2026-08-01").lastDate).toBe("2026-08-04");
+    expect(classnoteRetryDeadline("2025-12-30", "2026-01-02").lastDate).toBe("2026-01-05");
+  });
+  it("빈 날짜는 만료 취급(발송 경로 없음)", () => {
+    expect(classnoteRetryDeadline("", today)).toEqual({ lastDate: "", daysLeft: -1, expired: true });
   });
 });
 
