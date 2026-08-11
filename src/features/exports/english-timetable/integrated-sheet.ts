@@ -182,7 +182,9 @@ export function appendIntegratedSheet(
     // ── 요일×교시 미니그리드 ──
     for (const p of group.periodRows) {
       const pr = cursor++;
-      setCell(pr, 1, `${p.label}\n${p.time}`, { bg: "FFF7F9F8", bold: true, size: 8, wrap: true });
+      // 주말 섹션은 시각이 비어 온다(카드마다 시각이 달라 행에 못 적는다 — class-grid `weekendSelfShift`).
+      // 그대로 이으면 셀에 개행만 남으니 라벨만 쓴다.
+      setCell(pr, 1, p.time ? `${p.label}\n${p.time}` : p.label, { bg: "FFF7F9F8", bold: true, size: 8, wrap: true });
       cards.forEach((c, i) => {
         const st = cardStart[i];
         days.forEach((d, di) => {

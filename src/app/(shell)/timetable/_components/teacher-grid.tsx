@@ -312,11 +312,14 @@ export function TeacherGridView({
                     if (col.covered.has(`${ri}:${li}`)) continue; // 그룹 셀에 피복됨
                     const anchor = col.anchors.get(`${ri}:${li}`);
                     // 빈 1×1 셀 — 균일 격자 프레임(수학 기본뷰와 동일 border-line).
+                    // ⚠️ 배경은 **흰색**(bg-card) — 원장 2026-08-11 *"셀 색상을 흰색으로 현재 너무 회색임"*.
+                    //    예전엔 `bg-bg-soft/40`이라 빈 칸이 표 전체를 회색으로 덮어, 정작 수업 칩이
+                    //    떠 보이지 않았다. 격자는 선(GRID)이 그리고, 면은 비워 둔다.
                     if (!anchor) {
                       cells.push(
                         <td
                           key={key}
-                          className={`bg-bg-soft/40 ${bottomEdge(ri + 1, excluded).cls} ${GRID} ${
+                          className={`bg-card ${bottomEdge(ri + 1, excluded).cls} ${GRID} ${
                             isTeacherBoundary(col, isLastDay, li + 1) ? TEACHER_EDGE : "border-r"
                           }`}
                         />,

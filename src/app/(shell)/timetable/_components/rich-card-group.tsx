@@ -8,7 +8,6 @@ import { enumDayToKo, type DayOfWeek } from "@/features/timetable/lib/periods";
 import { LAB_ROOM_LABEL } from "@/features/timetable/lib/teacher-label";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 import {
-  AXIS_COLS,
   teacherColor,
   type GridStudent,
   type RichCardGroup,
@@ -18,13 +17,24 @@ import {
 import { ClassInfoCard, HoverCard, StudentInfoCard } from "./hover-cards";
 import { timetableStudentTone, useTimetableColorMode, withdrawnTone } from "./timetable-color";
 
+/**
+ * 표 격자선 — 통합뷰는 **격자 자체가 정보**라 데이터 표(열=`--line-faint`)와 규약이 다르다.
+ * 원장 2026-08-11 *"구분선 더 진하게"* → `--line`(9%) → `--line-strong`(18%).
+ * ⚠️ 한 곳에서만 정한다(셀마다 `border-line`을 흩뿌리면 다음에 또 전수 치환해야 한다).
+ */
+const GRID = "border-line-strong";
+
 // 라벨열·카드가 공유하는 고정 섹션 높이(px) — 같은 y에서 행이 맞물려 "행=라벨, 열=수업" 스프레드시트 정렬.
+/** 수업명만 있는 헤더(배치 편집 모드). 정상 모드는 강의실 줄이 붙어 `NAME_ROOM_H`. */
 export const NAME_H = 40;
+/**
+ * 정상 모드 헤더 = **수업명 + 그 아래 강의실**(원장 2026-08-11 *"강의실을 수업명 아래로 넣고 강의실 행 제거"*).
+ * 전용 강의실 행(34px)을 없앤 대신 헤더가 14px 늘어 카드마다 순 20px을 회수한다.
+ */
+const NAME_ROOM_H = 54;
 const TEACHER_H = 24;
-const ROOM_H = 34;
 const DAYHEAD_H = 22;
 const PERIOD_H = 26;
-const GAP_H = 12; // 축 생략(물결) 행 — 교시 행보다 얕게 둬서 "여기는 접힌 자리"로 읽히게.
 // 학생 1행 높이 — 기본뷰 StudentRow 실측(13px × leading-tight + py-[3px] = 23.1px)에 맞춘 값.
 // ⚠️ 서식을 기본뷰와 동일하게 두는 한 이 값도 함께 따라가야 한다(안 그러면 행이 잘린다).
 const STU_H = 24;
@@ -98,7 +108,7 @@ export function RichCardGroupBoard({
   const common: ColumnCommon = { group, subjectSoftClass, teacherColors, activeH, holdH, wdH, namesOnly };
 
   return (
-    <DragScrollArea barX className="border-line border-t">
+    <DragScrollArea barX className={`${GRID} border-t`}>
       <div className="flex w-max items-stretch">
         <LabelColumn group={group} activeH={activeH} holdH={holdH} wdH={wdH} namesOnly={namesOnly} />
         {group.cards.map((c) =>
@@ -124,46 +134,39 @@ function LabelColumn({
   wdH: number;
   namesOnly?: boolean;
 }) {
-  const cell = "border-line text-text-dim flex items-center justify-center border-b text-[10px] font-bold";
+  const cell = `${GRID} text-text-dim flex items-center justify-center border-b text-[10px] font-bold`;
+  const rail = `bg-bg-soft ${GRID} sticky left-0 z-20 flex shrink-0 flex-col self-stretch border-r shadow-[4px_0_10px_-6px_rgba(29,29,31,0.18)]`;
   if (namesOnly)
     return (
-      <div
-        className="bg-bg-soft border-line sticky left-0 z-20 flex shrink-0 flex-col self-stretch border-r shadow-[4px_0_10px_-6px_rgba(29,29,31,0.18)]"
-        style={{ width: LABEL_W }}
-      >
+      <div className={rail} style={{ width: LABEL_W }}>
         <div className={cell} style={{ height: NAME_H }}>수업명</div>
       </div>
     );
   return (
-    <div
-      className="bg-bg-soft border-line sticky left-0 z-20 flex shrink-0 flex-col self-stretch border-r shadow-[4px_0_10px_-6px_rgba(29,29,31,0.18)]"
-      style={{ width: LABEL_W }}
-    >
-      <div className={cell} style={{ height: NAME_H }}>수업명</div>
+    <div className={rail} style={{ width: LABEL_W }}>
+      {/* 강의실 라벨은 없앴다 — 카드 쪽에서 수업명 아래 둘째 줄로 들어가 별도 행이 사라졌다(NAME_ROOM_H). */}
+      <div className={cell} style={{ height: NAME_ROOM_H }}>수업명</div>
       <div className={cell} style={{ height: TEACHER_H }}>담임</div>
-      <div className={cell} style={{ height: ROOM_H }}>강의실</div>
       <div className={cell} style={{ height: DAYHEAD_H }}>교시</div>
-      {group.periodRows.map((p) =>
-        p.gapRows ? (
-          <AxisBreak key={p.order} label={p.label} />
-        ) : (
-          <div
-            key={p.order}
-            className="border-line text-text-faint flex flex-col items-center justify-center border-b num leading-none"
-            style={{ height: PERIOD_H }}
-          >
-            <span className="text-foreground text-[10px] font-bold">{p.label}</span>
-            <span className="text-[7px]">{p.time}</span>
-          </div>
-        ),
-      )}
-      <div className="text-primary border-line flex items-center justify-center border-b text-[10px] font-bold" style={{ height: activeH }}>
+      {group.periodRows.map((p) => (
+        <div
+          key={p.order}
+          className={`${GRID} text-text-faint flex flex-col items-center justify-center border-b num leading-none`}
+          style={{ height: PERIOD_H }}
+        >
+          <span className="text-foreground text-[10px] font-bold">{p.label}</span>
+          {/* 주말 섹션은 시각이 비어 온다(카드마다 시각이 달라 행에 못 적는다 — class-grid `weekendSelfShift`).
+              교시표에 없는 시각의 행은 라벨 자체가 시각이라 같은 값을 두 번 적지 않는다(`slotPeriodRow` 폴백). */}
+          {p.time && p.time !== p.label ? <span className="text-[7px]">{p.time}</span> : null}
+        </div>
+      ))}
+      <div className={`text-primary ${GRID} flex items-center justify-center border-b text-[10px] font-bold`} style={{ height: activeH }}>
         재원
       </div>
       {/* 대기·퇴원은 그 섹션에 한 명도 없으면 라벨까지 통째로 접는다 — 카드 쪽과 같은 높이라 정렬이 유지된다. */}
       {holdH > 0 ? <div className={`${cell} text-rose`} style={{ height: holdH }}>대기</div> : null}
       {wdH > 0 ? (
-        <div className="border-line text-text-dim flex items-center justify-center text-[10px] font-bold" style={{ height: wdH }}>
+        <div className={`${GRID} text-text-dim flex items-center justify-center text-[10px] font-bold`} style={{ height: wdH }}>
           퇴원
         </div>
       ) : null}
@@ -187,13 +190,11 @@ export function ClassColumn({
   /** 있으면 편집 모드 — 헤더가 '반 창 열기 링크'가 아니라 **드래그 손잡이**가 된다. */
   edit?: ColumnEdit;
 }) {
-  // ⚠️ 요일축은 **카드별 5칸 고정**(월~금 기준, `buildAxisDays`) — 열 수가 카드마다 다르면 한 칸
-  //    너비도 달라져 시트처럼 안 읽힌다(원장 2026-07-27). 토요일은 "그 반이 안 쓰는 평일" 칸을
-  //    대체해 들어오므로 2026-07-23 혼합 반 회귀도 없다. 축을 못 주는 구데이터만 그룹 축 폴백.
-  const days: (DayOfWeek | null)[] = card.axisDays?.length
-    ? card.axisDays
-    : (card.days?.length ? card.days : group.days);
-  const gridCols = { gridTemplateColumns: `repeat(${AXIS_COLS}, 1fr)` };
+  // 요일축 = **이 반이 실제 수업하는 요일만**(원장 2026-08-11 "수업없는 요일 열도 숨겨버리고").
+  // 카드 폭(CARD_W)은 그대로라 남은 칸이 넓어질 뿐, 카드 간 세로 정렬은 유지된다. 2026-07-27의
+  // "항상 월~금 5칸" 규약을 뒤집은 배경은 class-grid.ts `days` 주석 참조(실측 42반 중 41반이 2~3일).
+  const days: DayOfWeek[] = card.days?.length ? card.days : group.days;
+  const gridCols = { gridTemplateColumns: `repeat(${Math.max(1, days.length)}, 1fr)` };
   // 반 헤더색 — ijw bgColor 우선(인라인), 없으면 과목색 클래스.
   const headerStyle = card.bgColor
     ? { background: card.bgColor, color: card.textColor ?? "#1d1d1f" }
@@ -204,7 +205,7 @@ export function ClassColumn({
   return (
     <div
       ref={edit?.setNodeRef}
-      className={`border-line flex shrink-0 flex-col border-r ${edit ? "relative" : ""} ${
+      className={`${GRID} flex shrink-0 flex-col border-r ${edit ? "relative" : ""} ${
         edit?.dragging ? "opacity-35" : ""
       }`}
       style={{ width: CARD_W, ...edit?.style }}
@@ -216,8 +217,8 @@ export function ClassColumn({
       {/* 수업명 — 평소엔 클릭=반 창, 편집 모드엔 **드래그 손잡이**(같은 자리에서 뜻만 바뀐다).
           헤더색은 래퍼 div(WindowLink는 style 미지원). */}
       <div
-        className={`border-line border-b ${card.bgColor ? "" : subjectSoftClass}`}
-        style={{ height: NAME_H, ...headerStyle }}
+        className={`${GRID} border-b ${card.bgColor ? "" : subjectSoftClass}`}
+        style={{ height: namesOnly ? NAME_H : NAME_ROOM_H, ...headerStyle }}
       >
         {edit ? (
           <div
@@ -245,18 +246,28 @@ export function ClassColumn({
               href={`/classes/${card.classId}`}
               title={card.className}
               ariaLabel={`${card.className} 반 정보`}
-              className="flex h-full w-full items-center justify-center px-1 text-center text-[13px] font-bold transition hover:brightness-95"
+              className="flex h-full w-full flex-col items-center justify-center gap-0.5 px-1 text-center transition hover:brightness-95"
             >
-              <span className="overflow-hidden whitespace-nowrap text-clip">{card.className}</span>
+              <span className="w-full overflow-hidden text-[13px] leading-tight font-bold whitespace-nowrap text-clip">
+                {card.className}
+              </span>
+              {/* 강의실 — 전용 행 대신 수업명 바로 아래(원장 2026-08-11 "LS6 / 화 602 / 금 603 이렇게").
+                  헤더색 위에 얹히므로 색을 따로 주지 않고 투명도만 낮춘다(반색이 어두우면 흰 글자가 유지된다).
+                  ⚠️ namesOnly(배치 편집)에선 헤더가 NAME_H(40px)로 좁아 두 줄이 안 들어간다 → 안 그린다. */}
+              {namesOnly ? null : (
+                <span className="line-clamp-2 w-full text-[9px] leading-tight font-normal opacity-70" title={card.classroomLabel}>
+                  {card.classroomLabel}
+                </span>
+              )}
             </WindowLink>
           </HoverCard>
         )}
       </div>
-      {/* 배치 편집(수업명만) — 여기서 끝. 아래 담임·강의실·격자·명단을 안 그려야 42반을 끌 때 안 버벅인다. */}
+      {/* 배치 편집(수업명만) — 여기서 끝. 아래 담임·격자·명단을 안 그려야 42반을 끌 때 안 버벅인다. */}
       {namesOnly ? null : (
       <>
       {/* 담임 — 저장된 강사색이 있으면 색칩, 없으면 plain */}
-      <div className="border-line flex items-center justify-center border-b" style={{ height: TEACHER_H }}>
+      <div className={`${GRID} flex items-center justify-center border-b`} style={{ height: TEACHER_H }}>
         {!card.teacherName ? (
           <span className="text-text-faint text-[11px]">-</span>
         ) : damimColor ? (
@@ -270,37 +281,29 @@ export function ClassColumn({
           <span className="text-foreground text-[11px] font-bold">{card.teacherName}</span>
         )}
       </div>
-      {/* 강의실(요일별) */}
-      <div className="border-line text-text-dim flex items-center justify-center border-b px-1 text-center text-[10px] leading-tight" style={{ height: ROOM_H }}>
-        <span className="line-clamp-2" title={card.classroomLabel}>{card.classroomLabel}</span>
-      </div>
-      {/* 요일 헤더 — 항상 5칸(빈 칸은 라벨 없는 자리표시자, 열 너비 유지용) */}
-      <div className="border-line grid border-b" style={{ ...gridCols, height: DAYHEAD_H }}>
-        {days.map((d, i) => (
-          <DayHead key={d ?? `pad-${i}`} day={d} />
+      {/* 요일 헤더 — 이 반이 실제 수업하는 요일만(빈 열 없음). */}
+      <div className={`${GRID} grid border-b`} style={{ ...gridCols, height: DAYHEAD_H }}>
+        {days.map((d) => (
+          <DayHead key={d} day={d} />
         ))}
       </div>
-      {/* 요일×교시 미니그리드 — 축 생략 행은 셀 대신 물결 띠 하나로(라벨열과 같은 높이라 행이 맞물린다). */}
-      {group.periodRows.map((p) =>
-        p.gapRows ? (
-          <AxisBreak key={p.order} label={p.label} />
-        ) : (
-          <div key={p.order} className="border-line grid border-b" style={{ ...gridCols, height: PERIOD_H }}>
-            {days.map((d, i) => (
-              <Cell key={d ?? `pad-${i}`} card={card} order={p.order} day={d} teacherColors={teacherColors} />
-            ))}
-          </div>
-        ),
-      )}
+      {/* 요일×교시 미니그리드 — 행은 섹션이 실제 쓰는 교시만(keepUsedRows). */}
+      {group.periodRows.map((p) => (
+        <div key={p.order} className={`${GRID} grid border-b`} style={{ ...gridCols, height: PERIOD_H }}>
+          {days.map((d) => (
+            <Cell key={d} card={card} order={p.order} day={d} teacherColors={teacherColors} wide={days.length <= 3} />
+          ))}
+        </div>
+      ))}
       {/* 재원생 — 섹션 최대 인원(상한 12행). 넘치면 카드 안에서 스크롤하되 스크롤바는 숨기고 하단 페이드. */}
-      <RosterSection h={activeH} rows={group.rosterRows.active} count={card.active.length} className="bg-card border-line border-b">
+      <RosterSection h={activeH} rows={group.rosterRows.active} count={card.active.length} className={`bg-card ${GRID} border-b`}>
         {card.activeCount === 0 ? (
           <div className="text-text-faint py-2 text-center text-[10px]">-</div>
         ) : (
           card.active.map((s, i) => <RosterRow key={s.studentId ?? `a-${i}`} s={s} />)
         )}
       </RosterSection>
-      <RosterSection h={holdH} rows={group.rosterRows.hold} count={card.hold.length} className="bg-rose-soft/30 border-line border-b">
+      <RosterSection h={holdH} rows={group.rosterRows.hold} count={card.hold.length} className={`bg-rose-soft/30 ${GRID} border-b`}>
         {card.hold.length === 0 ? (
           <div className="text-text-faint text-center text-[10px]">-</div>
         ) : (
@@ -362,38 +365,15 @@ function RosterSection({
   );
 }
 
-/**
- * 축 생략(물결) 행 — 아무도 안 쓰는 중간 교시 구간을 접은 자리.
- * 막대그래프에서 최대·최소 차가 클 때 축을 끊고 물결을 넣는 것과 같은 표기(원장 2026-07-27).
- * ⚠️ 라벨열과 카드가 **같은 컴포넌트·같은 높이**를 써야 행이 어긋나지 않는다(시트처럼 읽히는 성질).
- * 접힌 교시는 `title`로 확인할 수 있게 남긴다(정보를 숨기되 잃지는 않는다).
- */
-function AxisBreak({ label }: { label: string }) {
-  return (
-    <div
-      className="border-line bg-bg-soft/60 flex items-center justify-center overflow-hidden border-b"
-      style={{ height: GAP_H }}
-      title={`${label} 생략(수업 없음)`}
-    >
-      <span
-        className="text-text-faint/70 w-full text-center text-[9px] leading-none tracking-[0.25em] select-none"
-        aria-label={`${label} 생략`}
-      >
-        〜〜〜
-      </span>
-    </div>
-  );
-}
-
-function DayHead({ day }: { day: DayOfWeek | null }) {
+function DayHead({ day }: { day: DayOfWeek }) {
   const weekend = day === "sat" || day === "sun";
   return (
     <div
-      className={`border-line flex items-center justify-center border-r text-[10px] font-bold last:border-r-0 ${
+      className={`${GRID} flex items-center justify-center border-r text-[10px] font-bold last:border-r-0 ${
         weekend ? "text-rose" : "text-text-dim"
       }`}
     >
-      {day ? enumDayToKo(day) : null}
+      {enumDayToKo(day)}
     </div>
   );
 }
@@ -403,50 +383,58 @@ function Cell({
   order,
   day,
   teacherColors,
+  wide,
 }: {
   card: RichClassCard;
   order: number;
-  day: DayOfWeek | null;
+  day: DayOfWeek;
   teacherColors: TeacherColorMap;
+  /** 열이 적어 칸이 넉넉한 카드(3열 이하) — 글자를 줄일 이유가 없다(cellFont 주석). */
+  wide: boolean;
 }) {
-  const base = "border-line flex items-center justify-center overflow-hidden border-r font-bold last:border-r-0";
-  if (!day) return <div className={base} />;
+  const base = `${GRID} flex items-center justify-center overflow-hidden border-r font-bold last:border-r-0`;
   const c = card.cells[`${order}:${day}`];
   if (!c) return <div className={base} />;
+  // 주말 셀은 행 라벨이 그 반의 시각이 아니다(class-grid `weekendSelfShift`) → 툴팁에 실제 시각을 붙인다.
+  const tip = c.time ? `${c.label} · ${c.time}` : c.label;
   // 특수 자리(사람 아님) — LAB(603호)=파랑, JJ(305호)=보라. 서로 다른 방이라 색까지 갈라 둔다.
   if (c.isLab) {
     const tone = c.label === LAB_ROOM_LABEL ? "bg-blue-soft text-blue" : "bg-purple-soft text-purple";
     return (
-      <div className={`${base} ${tone} ${cellFont(c.label)}`} title={c.label}>
+      <div className={`${base} ${tone} ${cellFont(c.label, wide)}`} title={tip}>
         {c.label}
       </div>
     );
   }
-  if (!c.label) return <div className={base} />;
+  if (!c.label) return <div className={base} title={c.time || undefined} />;
   // 저장된 강사색(ijw) 우선 — 라벨(한글명·영문닉네임)이 users 맵에 있으면 그 hex. 없으면 라벨 해시색.
   const tc = teacherColors[c.label];
   const text = abbrev(c.label);
-  const cls = `${base} ${cellFont(text)}`;
+  const cls = `${base} ${cellFont(text, wide)}`;
   if (tc)
     return (
-      <div className={cls} style={{ background: tc.bg, color: tc.text }} title={c.label}>
+      <div className={cls} style={{ background: tc.bg, color: tc.text }} title={tip}>
         {text}
       </div>
     );
   return (
-    <div className={`${cls} ${SUBJECT_SOLID[teacherColor(c.label)]} text-white`} title={c.label}>
+    <div className={`${cls} ${SUBJECT_SOLID[teacherColor(c.label)]} text-white`} title={tip}>
       {text}
     </div>
   );
 }
 
 /**
- * 셀 강사명 글자 크기 — 칸 너비는 35px(CARD_W/5) 고정인데 라벨은 길이가 제각각이라 길면 줄인다.
+ * 셀 강사명 글자 크기 — 칸이 좁으면 줄인다.
  * ⚠️ 한글 이름 배선(2026-07-27) 전엔 라벨이 "Kris"·"Sam" 같은 짧은 닉네임이라 10px 한 줄로 충분했는데,
  * "크리스틴"·"플로렌스"(4자)가 들어오면서 35px 칸에서 **두 줄로 쪼개져** 행 높이가 들쭉날쭉해졌다.
  * 자르지 않고(사람 이름을 클립하면 누군지 모른다) 줄여서 한 줄에 넣는다 — 전체 이름은 title 툴팁에도 있다.
+ *
+ * `wide`(3열 이하 = 칸 ≥58px)면 줄일 이유가 없다 — 빈 요일 열을 없앤 뒤(2026-08-11) 영어 반 42개 중
+ * 41개가 이 경우라, 4자 이름이 8px로 쪼그라들던 게 사라진다.
  */
-function cellFont(text: string): string {
+function cellFont(text: string, wide: boolean): string {
+  if (wide) return "text-[10px] whitespace-nowrap";
   if (text.length >= 4) return "text-[8px] tracking-tight whitespace-nowrap";
   if (text.length === 3) return "text-[9px] tracking-tight whitespace-nowrap";
   return "text-[10px] whitespace-nowrap";

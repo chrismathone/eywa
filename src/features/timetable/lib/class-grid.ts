@@ -55,19 +55,15 @@ export type GridSlot = {
   students: GridStudent[];
 };
 
-/** 셀 하나 — `label`은 해석된 표시 이름(강사명 또는 자리명), `isLab`은 **특수 자리**(LAB·JJ) 여부. */
-export type GridCell = { label: string; isLab: boolean };
-export type GridPeriodRow = {
-  order: number;
-  label: string;
-  time: string;
-  /**
-   * 이 행이 **축 생략(물결) 마커**면 접힌 교시 수. 일반 교시 행이면 undefined.
-   * 막대그래프에서 최대·최소 차가 클 때 축을 끊고 물결을 넣는 것과 같은 표기(원장 2026-07-27).
-   * `label`엔 접힌 교시 목록("7·8교시")이 들어가 툴팁으로 쓰인다.
-   */
-  gapRows?: number;
-};
+/**
+ * 셀 하나 — `label`은 해석된 표시 이름(강사명 또는 자리명), `isLab`은 **특수 자리**(LAB·JJ) 여부.
+ *
+ * `time`(="15:00~16:00")은 **주말 셀에만** 실린다. 주말 슬롯은 행 라벨을 못 믿기 때문이다 —
+ * 주말 셀은 평일 교시 행에 얹히거나(혼합 반) 1교시부터 시작하도록 당겨지므로(주말 전용 반,
+ * 아래 `weekendSelfShift`) **행의 시각 ≠ 그 수업의 시각**이다. 잃으면 안 되는 사실이라 셀이 들고 간다.
+ */
+export type GridCell = { label: string; isLab: boolean; time?: string };
+export type GridPeriodRow = { order: number; label: string; time: string };
 
 /**
  * 강사 라벨(display_name·영문닉네임) → 저장된 색(#RRGGBB). 통합뷰 셀·담임색 배선용.
@@ -99,23 +95,22 @@ export type RichClassCard = {
    */
   weekendOnly: boolean;
   /**
-   * 이 **카드**가 실제 수업하는 요일축(ijw `finalDays` 이식, 2026-07-23 원장 지시).
+   * 이 **카드**가 실제 수업하는 요일축(ijw `finalDays` 이식, 2026-07-23 원장 지시). **렌더도 이걸 쓴다.**
    *
    * 🔴 왜 카드별인가: 예전엔 섹션 공통 요일축이 평일=월~금 **고정**이라, 평일+토 **혼합 반**의
    * 토요일 수업이 통합뷰에서 **통째로 사라졌다**(실측 4개 반·주말 슬롯 21개 — 반 이름이
    * "고등M 고1 BS4F 토"인데 정작 토요일이 안 보였다). 주말 **전용** 반만 별도 섹션으로 잘 나왔다.
    * ijw 통합뷰는 카드마다 자기 요일축(`finalDays`)을 써서 토요일이 있는 반에만 토 열이 붙는다.
-   * → 같은 규약으로 되돌린다. 다른 반 카드에 빈 토 열이 생기지 않는다.
+   *
+   * 🔴 **빈 요일 열은 그리지 않는다**(원장 2026-08-11 *"수업없는 요일 열도 숨겨버리고"*) — 2026-07-27에
+   *    도입한 "항상 월~금 5칸"(`buildAxisDays`/`axisDays`) 규약을 **뒤집은 것**이다. 그 규약의 목적은
+   *    "한 칸 너비가 카드마다 같아야 시트처럼 읽힌다"였는데, 실측(영어 활성 42반)에서 **2일 12반·3일 29반·
+   *    5일 1반** — 즉 거의 모든 카드의 격자 **40~60%가 빈 칸**이었다. 카드 폭은 그대로 두고 열만 없애므로
+   *    남은 칸이 넓어질 뿐 카드 간 세로 정렬(시트로 읽히는 성질)은 그대로다.
    * ⚠️ 셀은 (그룹 교시행 × 카드 요일)로 조회하므로, 주말 슬롯의 교시 order도 그룹 축에 있어야 보인다
    *    (아래 presentOrders에서 혼합 카드의 주말 order를 함께 넣는 이유).
    */
   days: DayOfWeek[];
-  /**
-   * **표시용** 요일축 — 항상 5칸(월~금 기준, `buildAxisDays` 참조). 렌더는 이걸 쓴다.
-   * `days`(실제 수업 요일)와 분리한 이유: 실제 요일은 집계·테스트가 쓰는 사실이고, 축은 열 너비를
-   * 고정하기 위한 표시 규약이라 서로 다른 관심사다. `null`은 라벨 없는 빈 칸(주말 섹션 패딩).
-   */
-  axisDays: (DayOfWeek | null)[];
   /**
    * 커스텀 그룹 안에서의 열 순서(그룹 정의에 적힌 반 순서). 미설정(자동 그룹)이면 undefined → 가나다.
    * 원장 시트의 좌우 순서를 그대로 재현하기 위한 값이라 **정의 순서가 곧 화면 순서**다.
@@ -183,7 +178,6 @@ export const OTHERS_GROUP_ID = "__others__";
 
 const DAY_ORDER: DayOfWeek[] = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
 const WEEKEND = new Set<string>(["sat", "sun"]);
-const WEEKDAYS: DayOfWeek[] = ["mon", "tue", "wed", "thu", "fri"];
 /** 명단 섹션 최대 표시 행수(원장 2026-07-27 "최대 12명"). 넘치면 카드 안에서 스크롤(스크롤바 숨김+페이드). */
 export const ROSTER_ROW_CAP = 12;
 
@@ -212,84 +206,32 @@ function periodIndexByOrder(rows: readonly { order: number; label: string; time:
 function shiftedWeekendRow(
   row: { order: number; label: string; time: string; key?: string },
   weekendIdx: { byOrder: Map<number, number> },
-  weekdayRows: readonly { order: number; label: string; time: string }[],
+  targetRows: readonly { order: number; label: string; time: string }[],
   shift: number,
 ): { order: number; label: string; time: string } {
-  if (shift <= 0) return row;
+  if (shift === 0) return row;
   const k = weekendIdx.byOrder.get(row.order);
   if (k === undefined) return row;
-  return weekdayRows[k + shift] ?? row;
+  return targetRows[k + shift] ?? row;
 }
 const clampRows = (n: number, min: number) => Math.min(ROSTER_ROW_CAP, Math.max(min, Number.isFinite(n) ? n : min));
 
 /**
- * 아무 카드도 쓰지 않는 **중간** 교시 구간을 접어 축 생략(물결) 한 줄로 바꾼다.
+ * 아무 카드도 쓰지 않는 교시 행을 **통째로 뺀다**(원장 2026-08-11 *"수업없는 교시행도 숨겨버려"*).
  *
- * 🔴 왜(원장 2026-07-27 "그냥 7·8 없애도 되지 않나? 1·2·3 / 9·10·11만 있어도 될 듯 · 중간에 물결처리"):
- * 혼합 반 섹션은 위쪽(토요일이 얹힌 1~3교시)과 아래쪽(평일 9~11교시)만 쓰는데, 그 사이 윈도우 패딩(7·8교시)이
- * 통째로 비어 세로만 먹었다. 막대그래프에서 최대·최소 차가 크면 축을 끊고 물결을 넣는 것과 같은 처리다.
+ * 🔴 뒤집힌 규약 두 가지 — 되돌리기 전에 여기를 읽을 것:
+ *  · 2026-07-06 "5칸 윈도우의 위·아래 패딩은 컨텍스트라 유지" → **폐기**(끝단 빈 행도 뺀다).
+ *  · 2026-07-27 "중간 빈 구간은 물결(〜〜〜) 한 줄로 접는다" → **폐기**(접는 게 아니라 없앤다).
+ *    행 라벨에 "1교시·8교시"처럼 교시 번호가 그대로 남아서, 사이가 비었다는 사실은 라벨로 읽힌다.
  *
- * ⚠️ **중간만** 접는다 — 위/아래 끝의 빈 패딩 행은 그대로 둔다(5칸 윈도우의 컨텍스트 보존,
- * 2026-07-06 사용자 결정). 접을 게 없으면 입력을 그대로 돌려준다(참조 동일).
+ * ⚠️ **전부 비면 원본을 돌려준다** — 격자가 0행인 카드는 "반이 깨진 것"으로 보인다. 셀이 하나도 없는
+ *    카드는 정상 상태가 아니지만(슬롯이 있어야 카드가 생긴다), 방어적으로 윈도우를 남긴다.
+ * ⚠️ '1시간 단위' 토글은 **여전히 의미가 있다** — 그 토글의 본체는 행 숨김이 아니라 **교시 체계가 다른
+ *    반을 부그룹으로 쪼개는 것**이다(안 쪼개면 두 체계의 union이 전 행을 덮어 아무것도 안 없어진다).
  */
-export function collapseEmptyRuns(rows: GridPeriodRow[], usedOrders: Set<number>): GridPeriodRow[] {
-  const firstUsed = rows.findIndex((r) => usedOrders.has(r.order));
-  const lastUsed = rows.findLastIndex((r) => usedOrders.has(r.order));
-  if (firstUsed < 0 || lastUsed <= firstUsed) return rows;
-  const out: GridPeriodRow[] = [];
-  for (let i = 0; i < rows.length; i++) {
-    const r = rows[i];
-    // 끝단 패딩이거나 실제로 쓰는 행이면 그대로.
-    if (i < firstUsed || i > lastUsed || usedOrders.has(r.order)) {
-      out.push(r);
-      continue;
-    }
-    // 중간의 빈 구간 — 연속 구간을 통째로 한 줄로.
-    let j = i;
-    while (j <= lastUsed && !usedOrders.has(rows[j].order)) j++;
-    const run = rows.slice(i, j);
-    out.push({
-      order: run[0].order,
-      label: run.map((x) => x.label).join("·"),
-      time: "",
-      gapRows: run.length,
-    });
-    i = j - 1;
-  }
-  return out;
-}
-/** 통합뷰 카드 요일축의 **고정 열 수**(월~금 5일 기준). 요일이 늘고 줄어도 열 너비가 변하지 않게 하는 상수. */
-export const AXIS_COLS = 5;
-
-/**
- * 통합뷰 카드의 **표시 요일축** — 항상 `AXIS_COLS`(5)칸. ijw `useEnglishClasses`의 `finalDays` 이식.
- *
- * 🔴 왜 5칸 고정인가(원장 지시 2026-07-27): 예전엔 카드가 **실제 수업 요일만** 열로 그려서, 2요일 반은
- * 열 2개(폭 88px)·5요일 반은 열 5개(폭 35px)로 **한 칸 너비가 카드마다 달랐다**. 시트처럼 읽히려면
- * 열 너비가 카드 간 같아야 한다 → 축을 월~금 5칸으로 못박고, 남는 요일은 빈 칸으로 둔다.
- *
- * 🔴 그러면서도 토요일은 안 잃는다(2026-07-23 회귀 방지, [[class-grid-saturday.test.ts]]): 평일 섹션의
- * 축을 월~금 **고정**으로 되돌리면 평일+토 혼합 반의 토요일이 통째로 사라졌었다. ijw 영어 규약은
- * **주말 요일이 "그 반이 안 쓰는 평일" 칸을 대체**하는 것 — 열 수는 5로 유지되면서 토 열이 생긴다.
- * (대체할 빈 평일이 없으면 금요일 칸을 내준다 = ijw 폴백 동일.)
- *
- * 주말 **전용** 반은 별도 주말 섹션이라 평일 라벨이 노이즈다 → 실제 주말 요일만 앞에 두고 나머지는
- * `null`(빈 칸)로 채운다. 열 수는 5 그대로라 너비 불변 규칙은 지켜진다.
- */
-export function buildAxisDays(activeDays: DayOfWeek[], weekendOnly: boolean): (DayOfWeek | null)[] {
-  const active = new Set<DayOfWeek>(activeDays);
-  if (weekendOnly) {
-    const used = DAY_ORDER.filter((d) => WEEKEND.has(d) && active.has(d));
-    return [...used, ...Array<null>(Math.max(0, AXIS_COLS - used.length)).fill(null)].slice(0, AXIS_COLS);
-  }
-  const axis: DayOfWeek[] = [...WEEKDAYS];
-  for (const wknd of DAY_ORDER.filter((d) => WEEKEND.has(d) && active.has(d))) {
-    if (axis.includes(wknd)) continue;
-    // 이 반이 **안 쓰는** 평일 칸을 내준다(빈 칸이면 정보 손실 0). 전부 쓰면 ijw와 동일하게 금요일 칸.
-    const free = axis.findIndex((d) => !active.has(d));
-    axis[free === -1 ? AXIS_COLS - 1 : free] = wknd;
-  }
-  return axis.sort((a, b) => DAY_ORDER.indexOf(a) - DAY_ORDER.indexOf(b));
+function keepUsedRows(rows: GridPeriodRow[], usedOrders: Set<number>): GridPeriodRow[] {
+  const kept = rows.filter((r) => usedOrders.has(r.order));
+  return kept.length > 0 ? kept : rows;
 }
 /** 주말 섹션의 groupOrder(=sectionKey). 교시 체계가 없어 '1시간 단위' 압축 대상이 아니다. */
 export const WEEKEND_ORDER = 100000;
@@ -302,15 +244,24 @@ const CUSTOM_BASE = 200000;
 const CUSTOM_OTHERS = 299000;
 const GRID_MIN = 5; // 미니그리드 기본 크기 — 평일 섹션은 항상 5요일(월~금) × 5교시(섹션 시작부터).
 
+/** "15:00:00" → "15:00". DB time 문자열을 사람이 읽는 시각으로(초는 항상 00이라 버린다). */
+const hhmm = (t: string): string => t.slice(0, 5);
+
 /** "본원304" → "304"(공통 건물 접두사 제거로 라벨 압축). "LAB실"·타건물은 그대로 — 건물 구분 유지. */
 function shortRoom(room: string): string {
   return room.replace(/^본원/, "") || room;
 }
 
 /**
- * 요일별 강의실 → "월수 304 / 목 LAB실·304". 한 요일에 교시마다 강의실이 다르면(LAB 교시 등)
- * 그 요일의 강의실을 "·"로 모아 보여주고(ijw "목 LAB실-본원304" 패턴), 같은 강의실 집합인 요일끼리 묶는다.
+ * 요일별 강의실 → "월수 304 / 목 605". 한 요일에 교시마다 강의실이 다르면 그 요일의 강의실을 "·"로
+ * 모아 보여주고, 같은 강의실 집합인 요일끼리 묶는다.
  * 전부 같으면 단일, 비면 "-". 방 이름은 shortRoom으로 공통 "본원" 접두사를 떼 압축.
+ *
+ * 🔴 **자리(LAB·JJ) 교시의 방은 안 싣는다**(원장 2026-08-11 *"LAB 및 JJ는 강의실이 안보여도됨"*).
+ *    자리는 사람이 아니라 방이라 셀에 이미 `LAB`·`JJ`로(색까지 갈라) 찍힌다 — 강의실 줄에 603·305를
+ *    또 적으면 같은 사실이 두 번 나오면서 줄이 "603·605·본원602·본원605"처럼 불어난다.
+ *    실측(영어 활성 42반): 41반의 라벨이 짧아지고, **방이 통째로 사라지는 반은 0개**(자리 교시만 있는
+ *    반이 없다). 제외는 `perDayRooms`에 넣기 전에 — 여기 함수는 들어온 것만 조립한다.
  */
 function classroomLabel(perDayRooms: Map<DayOfWeek, Set<string>>): string {
   if (perDayRooms.size === 0) return "-";
@@ -467,17 +418,51 @@ export function buildRichClassCards(slots: GridSlot[], config: PeriodsConfig): R
     // 주말 교시를 평일 교시 행으로 끌어올리는 폭(교시 **개수** 단위). ijw `useEnglishClasses`의 weekendShift 이식.
     const weekendShift =
       wdStartIdx !== Infinity && wkStartIdx !== Infinity && wdStartIdx > wkStartIdx ? wdStartIdx - wkStartIdx : 0;
+    /**
+     * 🔴 **주말 전용 반은 무조건 1교시부터 시작하게 당긴다**(원장 2026-08-11 *"주말 수업은 6행이나 차지하게
+     * 두지말고, 그냥 3행으로 처리해 보기 편하게 강제로 … 평일수업에 맞춰서"*).
+     *
+     * 왜: 주말 섹션은 반들이 제각각 다른 시각에 시작한다(실측 수학 주말전용 3반 = 09~11시 / 14~16시 /
+     * 15~16시). 섹션 교시축은 카드들의 **합집합**이라 그대로 두면 **6행**인데, 정작 어느 반도 3교시를
+     * 넘지 않는다 — 카드마다 3분의 2가 빈 칸이었다. 각 카드를 자기 1교시부터 시작하게 당기면 **3행**.
+     *
+     * ⚠️ 그 대가로 **행 라벨의 시각이 그 반의 시각이 아니게 된다**(09시 반과 14시 반이 같은 "1교시" 행).
+     *    그래서 ① 주말 섹션은 행 라벨에서 시각을 뗀다(`groupRichCards`) ② 실제 시각은 셀(`GridCell.time`)이
+     *    들고 간다. 행은 "몇 번째 교시"라는 뜻이고, 그건 이 뷰가 원래 쓰던 규약이다(weekendShift 주석).
+     */
+    const weekendSelfShift = !hasWeekday && wkStartIdx !== Infinity ? -wkStartIdx : 0;
+    const weekendRows = [...weekendIdx.rows];
 
     for (const { s, day, row, weekend: isW, shiftable } of scanned) {
-      // 혼합 반의 주말 슬롯은 **평일 교시 행에 얹는다** — 새 행을 만들지 않는다(shiftedWeekendRow 주석).
-      const eff = isW && shiftable ? shiftedWeekendRow(row, weekendIdx, weekdayRows, weekendShift) : row;
-      if (!periodMap.has(eff.order)) periodMap.set(eff.order, { order: eff.order, label: eff.label, time: eff.time });
+      // 혼합 반의 주말 슬롯은 **평일 교시 행에 얹고**(shiftedWeekendRow 주석), 주말 전용 반은 자기 1교시로 당긴다.
+      const eff = !isW
+        ? row
+        : shiftable
+          ? shiftedWeekendRow(row, weekendIdx, weekdayRows, weekendShift)
+          : row;
+      const effWeekend =
+        isW && weekendSelfShift !== 0
+          ? shiftedWeekendRow(eff, weekendIdx, weekendRows, weekendSelfShift)
+          : eff;
+      if (!periodMap.has(effWeekend.order))
+        periodMap.set(effWeekend.order, {
+          order: effWeekend.order,
+          label: effWeekend.label,
+          time: effWeekend.time,
+        });
       const teacher = s.slotTeacherLabel ?? s.teacherName ?? "";
-      cells[`${eff.order}:${day}`] = { label: teacher, isLab: isSpecialSlotLabel(s.slotTeacherLabel) };
+      const isSeat = isSpecialSlotLabel(s.slotTeacherLabel);
+      cells[`${effWeekend.order}:${day}`] = {
+        label: teacher,
+        isLab: isSeat,
+        // 주말 셀만 실제 시각을 들고 간다 — 행 라벨이 그 반의 시각이 아닐 수 있다(GridCell.time 주석).
+        ...(isW ? { time: `${hhmm(s.startTime)}~${hhmm(s.endTime)}` } : null),
+      };
       // 담임 폴백 집계에서 특수 자리는 제외 — LAB·JJ는 방(자리)이라 담임이 될 수 없다.
-      if (s.slotTeacherLabel && !isSpecialSlotLabel(s.slotTeacherLabel))
+      if (s.slotTeacherLabel && !isSeat)
         slotTeacherCount.set(s.slotTeacherLabel, (slotTeacherCount.get(s.slotTeacherLabel) ?? 0) + 1);
-      const room = s.slotRoomLabel ?? s.classroomName;
+      // 자리(LAB·JJ) 교시의 방은 강의실 줄에 안 싣는다 — 셀이 이미 자리 이름을 보여준다(classroomLabel 주석).
+      const room = isSeat ? null : (s.slotRoomLabel ?? s.classroomName);
       if (room) (perDayRooms.get(day) ?? perDayRooms.set(day, new Set()).get(day)!).add(room);
       if (!isW && row.order < weekdayStart) weekdayStart = row.order;
     }
@@ -490,7 +475,6 @@ export function buildRichClassCards(slots: GridSlot[], config: PeriodsConfig): R
     const cardDays = DAY_ORDER.filter((d) => group.some((s) => (s.dayOfWeek as DayOfWeek) === d));
     cards.push({
       days: cardDays,
-      axisDays: buildAxisDays(cardDays, weekend),
       classId: first.classId,
       className: first.className,
       subject: first.subject,
@@ -647,23 +631,34 @@ export function groupRichCards(
           }
         }
       }
+      // 🔴 **표준 교시표에 없는 시각의 수업도 행을 준다**(적대 리뷰 2026-08-11에 적발한 기존 버그).
+      //    위 `presentStd`는 표준표에 있는 order만 추리므로, 교시표에 없는 시각(실측 injaewon 12종 —
+      //    `[특강]중3-2 개념 완성반` 월화목금 11:00, `중등E_초5 의치대` 화·금 16:00 등)은 셀은 만들어졌는데
+      //    **앉을 행이 없어 화면에서 통째로 사라졌다**. 특히 슬롯이 전부 비표준인 특강 반은 격자가 빈 칸만
+      //    남았다. `slotPeriodRow`가 이미 폴백 행(시각 그대로 라벨)을 만들어 두므로 그걸 축에 얹는다.
+      //    ⚠️ 빈 행은 안 생긴다 — 아래 keepUsedRows가 실제 셀이 있는 행만 남긴다.
+      for (const c of cluster) {
+        for (const r of c.periodRows) {
+          if (winRows.has(r.order) || !presentOrders.has(r.order)) continue;
+          winRows.set(r.order, { order: r.order, label: r.label, time: r.time });
+        }
+      }
       // 요일축 = 평일 섹션은 항상 월~금(5열), 주말 섹션은 실제 주말요일.
       // 그룹 축은 **폴백·집계용**(렌더는 카드별 `card.days`). 평일 섹션은 월~금을 항상 보장하되
       // 이 섹션에 실제 등장하는 주말 요일을 뒤에 덧붙인다(혼합 반이 있으면 토/일).
       const days = weekend
         ? DAY_ORDER.filter((d) => WEEKEND.has(d) && daySet.has(d))
         : DAY_ORDER.filter((d) => !WEEKEND.has(d) || daySet.has(d));
-      // compact = 이 그룹이 실제 쓰는 교시 범위 [lo,hi] "사이"의 빈 행만 제거.
-      // 범위 밖(그룹 위아래 패딩 행)은 유지 — 5칸 윈도우의 컨텍스트 보존(사용자 결정 2026-07-06).
+      // 위 winRows는 이제 **후보 행 풀**이다(라벨·시각의 출처) — 실제로 그릴 행은 바로 아래에서 고른다.
+      // 아무 카드도 안 쓰는 교시 행은 통째로 뺀다(끝단 패딩 포함 — keepUsedRows 주석의 뒤집힌 규약 2건).
+      // ⚠️ 그래서 sectionCompact가 여기서 행을 더 지울 일은 없다 — 그 토글의 몫은 **클러스터 분리**뿐이다
+      //    (교시 체계가 다른 반을 안 쪼개면 두 체계의 union이 전 행을 덮어 아무것도 안 없어진다).
       const winList = [...winRows.values()].sort((a, b) => a.order - b.order);
-      let periodRows = winList;
-      if (sectionCompact && presentStd.length > 0) {
-        const lo = Math.min(...presentStd);
-        const hi = Math.max(...presentStd);
-        periodRows = winList.filter((r) => r.order <= lo || r.order >= hi || presentOrders.has(r.order));
-      }
-      // 아무 카드도 안 쓰는 **중간** 교시 구간은 접고 축 생략(물결) 한 줄로 대체한다.
-      periodRows = collapseEmptyRuns(periodRows, new Set([...presentOrders, ...mixedWeekendOrders]));
+      let periodRows = keepUsedRows(winList, new Set([...presentOrders, ...mixedWeekendOrders]));
+      // 🔴 주말 섹션은 행 라벨에서 **시각을 뗀다** — 카드마다 자기 1교시로 당겨져 있어(weekendSelfShift)
+      //    09시 반과 14시 반이 같은 "1교시" 행에 앉는다. 그 행에 "09:00~10:00"을 적으면 14시 반에 대해
+      //    **거짓말**이 된다. 행의 뜻은 "몇 번째 교시"이고, 진짜 시각은 셀(`GridCell.time`)이 들고 간다.
+      if (weekend) periodRows = periodRows.map((r) => ({ ...r, time: "" }));
       // 분리된 부그룹은 라벨에 ②③… 접미(같은 "N교시 시작"이 두 박스로 나뉠 때 구분).
       const label = ci === 0 ? cluster[0].groupLabel : `${cluster[0].groupLabel} ${"②③④⑤"[ci - 1] ?? `(${ci + 1})`}`;
       out.push({
