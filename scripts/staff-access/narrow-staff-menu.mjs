@@ -57,7 +57,9 @@ const H = {
 const GRANTEES = [
   { name: "설현", role: "admin" },
   { name: "이승엽", role: "admin" },
-  { name: "김예원", role: "manager" }, // 2026-08-05 원장 추가 지시
+  // ⚠️ role은 **매칭 조건**이다 — 이 사람의 역할이 바뀌면 여기도 같이 고쳐야 재실행이 안 죽는다
+  //    (김예원: 2026-08-11 manager → admin 승급).
+  { name: "김예원", role: "admin" }, // 2026-08-05 원장 추가 지시
   { name: "오은진", role: "admin" }, // 2026-08-06 원장 추가 지시
   { name: "엄소윤", role: "admin" }, // 2026-08-11 원장 추가 지시("데스크 직원이여서 필요함")
 ];
