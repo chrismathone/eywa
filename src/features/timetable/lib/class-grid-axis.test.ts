@@ -173,7 +173,11 @@ describe("주말 전용 반은 1교시부터 시작하게 당긴다 — 섹션 �
     buildRichCardGroups(weekendOnly, DEFAULT_PERIODS_CONFIG).find((g) => g.label === "주말")!;
 
   it("🔴 합집합이면 6행이던 것이 3행", () => {
-    expect(section().periodRows.map((r) => r.label)).toEqual(["1교시", "2교시", "3교시"]);
+    expect(section().periodRows).toHaveLength(3);
+  });
+
+  it("🔴 주말 행은 교시 번호가 아니라 시각으로 적는다 — 원장 \"9, 10, 11로. 123 하지말고\"", () => {
+    expect(section().periodRows.map((r) => r.label)).toEqual(["9시", "10시", "11시"]);
   });
 
   it("늦게 시작하는 반도 1교시 행부터 채운다(2교시짜리는 두 칸)", () => {
@@ -187,7 +191,7 @@ describe("주말 전용 반은 1교시부터 시작하게 당긴다 — 섹션 �
     expect(cells("short")).toEqual([540, 600]);
   });
 
-  it("행 라벨엔 시각을 안 적는다 — 같은 행에 09시 반과 14시 반이 함께 앉는다", () => {
+  it("시각 범위 부제는 안 붙인다 — 같은 행에 09시 반과 14시 반이 함께 앉으므로 범위까지 적으면 거짓이 된다", () => {
     expect(section().periodRows.every((r) => r.time === "")).toBe(true);
   });
 
