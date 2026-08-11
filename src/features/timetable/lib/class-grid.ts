@@ -205,13 +205,15 @@ function periodIndexByOrder(rows: readonly { order: number; label: string; time:
  */
 function shiftedWeekendRow(
   row: { order: number; label: string; time: string; key?: string },
-  weekendIdx: { byOrder: Map<number, number> },
+  /** 이 행이 **원래 앉아 있던 표**의 order→인덱스 맵(주말 표일 수도, 평일 표일 수도 있다). */
+  fromIdx: { byOrder: Map<number, number> },
   targetRows: readonly { order: number; label: string; time: string }[],
   shift: number,
 ): { order: number; label: string; time: string } {
   if (shift === 0) return row;
-  const k = weekendIdx.byOrder.get(row.order);
+  const k = fromIdx.byOrder.get(row.order);
   if (k === undefined) return row;
+  // 음수 시프트도 허용(위로 당김) — 범위를 벗어나면 원래 행을 유지해 정보를 잃지 않는다.
   return targetRows[k + shift] ?? row;
 }
 const clampRows = (n: number, min: number) => Math.min(ROSTER_ROW_CAP, Math.max(min, Number.isFinite(n) ? n : min));
@@ -246,17 +248,6 @@ const GRID_MIN = 5; // 미니그리드 기본 크기 — 평일 섹션은 항상
 
 /** "15:00:00" → "15:00". DB time 문자열을 사람이 읽는 시각으로(초는 항상 00이라 버린다). */
 const hhmm = (t: string): string => t.slice(0, 5);
-
-/**
- * 주말 행 라벨 — "09:00~10:00" → "9시". 주말은 정시 단위 운영이라 교시 번호보다 시계가 읽힌다
- * (원장 2026-08-11 "9, 10, 11로 맞추란 뜻이야. 123 하지말고").
- * 정시가 아니거나(9:30) 시각을 못 읽으면 **null** — 부르는 쪽이 원래 라벨을 유지한다(지어내지 않는다).
- */
-function hourLabel(timeRange: string): string | null {
-  const m = /^(\d{1,2}):(\d{2})/.exec(timeRange.trim());
-  if (!m) return null;
-  return m[2] === "00" ? `${Number(m[1])}시` : `${Number(m[1])}:${m[2]}`;
-}
 
 /** "본원304" → "304"(공통 건물 접두사 제거로 라벨 압축). "LAB실"·타건물은 그대로 — 건물 구분 유지. */
 function shortRoom(room: string): string {
@@ -412,23 +403,41 @@ export function buildRichClassCards(slots: GridSlot[], config: PeriodsConfig): R
         shiftable: isW && !onWeekday,
       };
     });
-    let wdStartIdx = Infinity;
-    let wkStartIdx = Infinity;
+    // 기준점 셋을 **따로** 잰다. 🔴 예전엔 "평일 행에 앉은 주말 슬롯"을 평일 기준점(wdStartIdx)에
+    // 섞었는데, 그러면 토 14:20(=영어 평일 1교시) 하나가 앵커를 1교시로 끌어내려 **시프트가 0이 됐다**
+    // — 그래서 저녁 반(평일 9·10·11교시)의 토요일이 1·2·3교시에 따로 앉아 한 반이 6행을 먹었다.
+    let wdStartIdx = Infinity; // 진짜 평일 슬롯의 시작(평일 표 인덱스)
+    let wkOnWeekdayIdx = Infinity; // 평일 표 시각을 그대로 쓰는 주말 슬롯의 시작(평일 표 인덱스)
+    let wkOnWeekendIdx = Infinity; // 주말 표에 앉은 주말 슬롯의 시작(주말 표 인덱스)
     for (const { row, weekend: isW, shiftable } of scanned) {
-      if (isW && !shiftable) {
-        // 평일 행에 앉은 주말 슬롯은 평일 기준점에 포함(시프트 폭 계산의 앵커가 흔들리지 않게).
+      if (!isW) {
         const i = weekdayIdx.byOrder.get(row.order);
         if (i !== undefined) wdStartIdx = Math.min(wdStartIdx, i);
-        continue;
+      } else if (!shiftable) {
+        const i = weekdayIdx.byOrder.get(row.order);
+        if (i !== undefined) wkOnWeekdayIdx = Math.min(wkOnWeekdayIdx, i);
+      } else {
+        const i = weekendIdx.byOrder.get(row.order);
+        if (i !== undefined) wkOnWeekendIdx = Math.min(wkOnWeekendIdx, i);
       }
-      const i = (isW ? weekendIdx : weekdayIdx).byOrder.get(row.order);
-      if (i === undefined) continue;
-      if (isW) wkStartIdx = Math.min(wkStartIdx, i);
-      else wdStartIdx = Math.min(wdStartIdx, i);
     }
-    // 주말 교시를 평일 교시 행으로 끌어올리는 폭(교시 **개수** 단위). ijw `useEnglishClasses`의 weekendShift 이식.
-    const weekendShift =
-      wdStartIdx !== Infinity && wkStartIdx !== Infinity && wdStartIdx > wkStartIdx ? wdStartIdx - wkStartIdx : 0;
+    /**
+     * 🔴 **혼합 반(평일+주말)의 주말 수업은 그 반의 평일 교시 행에 겹쳐 놓는다** — 한 반은 자기 교시 수만큼만
+     * 행을 쓴다(원장 2026-08-11 *"행을 6개가 아닌 3개만 하고 싶다니까?"* · *"주말수업 9, 10, 11로 맞추란
+     * 뜻이야. 123 하지말고"*).
+     *
+     * 실측(영어 고등 3반): 평일 수업이 9·10·11교시(19:20~22:00)인데 토요일 수업이 14:20·15:00·15:40이라
+     * **평일 1·2·3교시 시각과 정확히 같았다.** 그래서 `weekdayPeriodRowOrNull`이 그 슬롯을 평일 1교시 행에
+     * 앉히고 시프트 대상에서 뺐고(`shiftable=false`), 결과가 한 반에 6행이었다. 이제 그 블록도 통째로 옮긴다.
+     *
+     * 이동 폭 = (평일 시작) − (주말 블록의 시작). ⚠️ **위로도 아래로도** 옮긴다 — 예전 `weekendShift`는
+     * `wdStartIdx > wkStartIdx`일 때만 내렸는데, 그 조건은 "주말이 평일보다 이르다"는 가정이라
+     * 오전 평일·오후 주말 조합에선 다시 두 덩어리로 갈라진다.
+     */
+    const weekendShiftOnWeekday =
+      wdStartIdx !== Infinity && wkOnWeekdayIdx !== Infinity ? wdStartIdx - wkOnWeekdayIdx : 0;
+    const weekendShiftOnWeekend =
+      wdStartIdx !== Infinity && wkOnWeekendIdx !== Infinity ? wdStartIdx - wkOnWeekendIdx : 0;
     /**
      * 🔴 **주말 전용 반은 무조건 1교시부터 시작하게 당긴다**(원장 2026-08-11 *"주말 수업은 6행이나 차지하게
      * 두지말고, 그냥 3행으로 처리해 보기 편하게 강제로 … 평일수업에 맞춰서"*).
@@ -441,16 +450,16 @@ export function buildRichClassCards(slots: GridSlot[], config: PeriodsConfig): R
      *    그래서 ① 주말 섹션은 행 라벨에서 시각을 뗀다(`groupRichCards`) ② 실제 시각은 셀(`GridCell.time`)이
      *    들고 간다. 행은 "몇 번째 교시"라는 뜻이고, 그건 이 뷰가 원래 쓰던 규약이다(weekendShift 주석).
      */
-    const weekendSelfShift = !hasWeekday && wkStartIdx !== Infinity ? -wkStartIdx : 0;
+    const weekendSelfShift = !hasWeekday && wkOnWeekendIdx !== Infinity ? -wkOnWeekendIdx : 0;
     const weekendRows = [...weekendIdx.rows];
 
     for (const { s, day, row, weekend: isW, shiftable } of scanned) {
-      // 혼합 반의 주말 슬롯은 **평일 교시 행에 얹고**(shiftedWeekendRow 주석), 주말 전용 반은 자기 1교시로 당긴다.
+      // 혼합 반의 주말 슬롯은 **평일 교시 행으로** 옮기고(어느 표에서 왔든), 주말 전용 반은 자기 1교시로 당긴다.
       const eff = !isW
         ? row
         : shiftable
-          ? shiftedWeekendRow(row, weekendIdx, weekdayRows, weekendShift)
-          : row;
+          ? shiftedWeekendRow(row, weekendIdx, weekdayRows, weekendShiftOnWeekend)
+          : shiftedWeekendRow(row, weekdayIdx, weekdayRows, weekendShiftOnWeekday);
       const effWeekend =
         isW && weekendSelfShift !== 0
           ? shiftedWeekendRow(eff, weekendIdx, weekendRows, weekendSelfShift)
@@ -673,7 +682,10 @@ export function groupRichCards(
       //    원장이 "강제로" 3행을 지시한 결과라 행 라벨은 **그 반의 몇 번째 시간**을 가리키는 자리표이고,
       //    그 반의 진짜 시각은 셀(`GridCell.time`, 화면에선 툴팁)이 든다. 시각 범위 부제는 안 적는다 —
       //    "09:00~10:00"까지 적으면 14시 반에 대해 대놓고 틀린 문장이 된다.
-      if (weekend) periodRows = periodRows.map((r) => ({ ...r, label: hourLabel(r.time) ?? r.label, time: "" }));
+      // ⚠️ 한때 라벨을 "9시·10시·11시"(시계)로 바꿨다가 되돌렸다 — 원장이 말한 "123 하지말고 9/10/11"은
+      //    주말 섹션이 아니라 **혼합 반이 1·2·3교시와 9·10·11교시로 갈라지던 것**을 뜻했다(위 시프트).
+      //    시계 라벨은 여기서도 같은 이유로 거짓이 된다(14시 반이 "9시" 행에 앉는다).
+      if (weekend) periodRows = periodRows.map((r) => ({ ...r, time: "" }));
       // 분리된 부그룹은 라벨에 ②③… 접미(같은 "N교시 시작"이 두 박스로 나뉠 때 구분).
       const label = ci === 0 ? cluster[0].groupLabel : `${cluster[0].groupLabel} ${"②③④⑤"[ci - 1] ?? `(${ci + 1})`}`;
       out.push({
