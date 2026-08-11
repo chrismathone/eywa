@@ -242,3 +242,49 @@ export function planMerge(
     keyLossCount,
   };
 }
+
+/**
+ * 계획 + 사람의 선택 → **DB에 넣을 patch**. 순수 함수라 실행 전에 무엇이 저장될지 그대로 검사할 수 있다.
+ *
+ * 🔴 서버 액션 안에 두면 "실제로 저장되는 값"을 테스트할 방법이 없어진다 — 병합은 되돌릴 수 없으므로
+ *    저장 직전의 모양이 가장 중요한 검사 대상이다. `choices`는 값이 아니라 **행 id만** 받는다(임의 값 주입 차단).
+ */
+export function buildMergePatch(
+  plan: MergePlan,
+  rows: ConsultRow[],
+  winnerId: string,
+  choices: Record<string, string> = {},
+):
+  | { error: string; patch?: undefined; discarded?: undefined }
+  | { error?: undefined; patch: Record<string, unknown>; discarded: { key: string; values: unknown[] }[] } {
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  if (!byId.has(winnerId)) return { error: "남길 상담을 찾을 수 없습니다" };
+
+  const patch: Record<string, unknown> = {};
+  const discarded: { key: string; values: unknown[] }[] = [];
+
+  for (const d of plan.decisions) {
+    const pickId = choices[d.key];
+    if (d.needsHuman && !pickId) return { error: `MISSING_CHOICE:${d.key}` };
+    if (d.discarded.length > 0) discarded.push({ key: d.key, values: d.discarded });
+
+    if (d.kind === "atomic" || d.kind === "key") {
+      // 세트는 **통째로** 한 행에서 가져온다 — 섞으면 "A의 오디오에 B의 전사"가 된다.
+      const srcId = pickId ?? String(d.proposed);
+      const src = byId.get(srcId);
+      if (!src) return { error: "선택한 상담을 찾을 수 없습니다" };
+      if (srcId === winnerId) continue; // 승자 것 그대로 — patch에 넣을 필요 없다
+      for (const col of ATOMIC_SETS[d.key as AtomicSetName]) patch[col] = src[col] ?? null;
+      continue;
+    }
+    if (d.needsHuman) {
+      const src = byId.get(pickId!);
+      if (!src) return { error: "선택한 상담을 찾을 수 없습니다" };
+      patch[d.key] = src[d.key] ?? null;
+      continue;
+    }
+    // 규칙이 정한 값(채움/자동해결/이어붙임). 승자 값과 같으면(same) 굳이 쓰지 않는다.
+    if (d.status !== "same") patch[d.key] = d.proposed ?? null;
+  }
+  return { patch, discarded };
+}

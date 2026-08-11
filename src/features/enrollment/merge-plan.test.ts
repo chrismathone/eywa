@@ -1,6 +1,6 @@
 // 병합 계획 순수함수 테스트 — 케이스는 전부 **운영 DB 드라이런(2026-08-11)에서 실제로 나온 모양**이다.
 import { describe, expect, it } from "vitest";
-import { looksLikePhone, memoDates, planMerge, pickWinner, type ConsultRow } from "./merge-plan";
+import { buildMergePatch, looksLikePhone, memoDates, planMerge, pickWinner, type ConsultRow } from "./merge-plan";
 
 const row = (o: Partial<ConsultRow> & { id: string }): ConsultRow => ({
   outcome: "consulted",
@@ -293,5 +293,68 @@ describe("적대 검증 — 이어붙인 순서는 엔진에 따라 흔들리면
     for (let i = 0; i < 20; i += 1) {
       expect(planMerge(rows).decisions.find((d) => d.key === "parent_request")!.proposed).toBe(first);
     }
+  });
+});
+
+// ── buildMergePatch — **실제로 DB에 저장될 값**. 병합은 되돌릴 수 없어 여기가 가장 중요한 검사 대상이다.
+describe("buildMergePatch — 저장 직전의 모양", () => {
+  const two = () => [
+    row({ id: "a", prospect_name: "김", parent_name: "어머니", parent_request: "가" }),
+    row({ id: "b", prospect_name: "김", parent_name: "아버지", parent_request: "나" }),
+  ];
+
+  it("사람이 안 고른 충돌이 있으면 patch를 만들지 않는다", () => {
+    const rows = two();
+    const plan = planMerge(rows, {}, "composite");
+    const r = buildMergePatch(plan, rows, plan.winnerId, {});
+    expect(r.error).toMatch(/^MISSING_CHOICE:/);
+    expect(r.patch).toBeUndefined();
+  });
+
+  it("고른 행의 값을 그대로 담는다(패자 쪽을 골라도)", () => {
+    const rows = two();
+    const plan = planMerge(rows, {}, "composite");
+    const loser = plan.loserIds[0]!;
+    const r = buildMergePatch(plan, rows, plan.winnerId, { parent_name: loser });
+    expect(r.error).toBeUndefined();
+    expect(r.patch!.parent_name).toBe(rows.find((x) => x.id === loser)!.parent_name);
+  });
+
+  it("승자 값과 같은 항목은 patch에 넣지 않는다(불필요한 쓰기 금지)", () => {
+    const rows = [row({ id: "a", prospect_name: "김", subject: "math" }), row({ id: "b", prospect_name: "김" })];
+    const plan = planMerge(rows, {}, "composite");
+    const r = buildMergePatch(plan, rows, plan.winnerId, {});
+    expect(Object.keys(r.patch!)).not.toContain("prospect_name");
+  });
+
+  it("세트를 패자에서 가져오면 세트의 모든 컬럼을 함께 담는다(찢으면 거짓이 된다)", () => {
+    const rows = [
+      row({ id: "a", prospect_name: "김", outcome: "enrolled" }),
+      row({ id: "b", prospect_name: "김", audio_path: "x.m4a", transcription: "전사", audio_duration_sec: 12 }),
+    ];
+    const plan = planMerge(rows, {}, "composite");
+    const r = buildMergePatch(plan, rows, plan.winnerId, {});
+    expect(r.patch!.audio_path).toBe("x.m4a");
+    expect(r.patch!.transcription).toBe("전사");
+    expect(r.patch!.audio_duration_sec).toBe(12);
+    // 세트 안에서 그 행이 안 가진 칸은 **null로 덮는다** — 승자 값이 남으면 섞인 행이 된다.
+    expect(r.patch!).toHaveProperty("speaker_labels", null);
+  });
+
+  it("보호 컬럼은 절대 patch에 담기지 않는다", () => {
+    const rows = two();
+    const plan = planMerge(rows, {}, "composite");
+    const r = buildMergePatch(plan, rows, plan.winnerId, { parent_name: plan.winnerId });
+    for (const k of ["id", "tenant_id", "created_at", "updated_at"]) {
+      expect(Object.keys(r.patch!)).not.toContain(k);
+    }
+  });
+
+  it("이어붙인 메모가 그대로 저장값이 된다", () => {
+    const rows = two();
+    const plan = planMerge(rows, {}, "composite");
+    const r = buildMergePatch(plan, rows, plan.winnerId, { parent_name: plan.winnerId });
+    expect(String(r.patch!.parent_request)).toContain("가");
+    expect(String(r.patch!.parent_request)).toContain("나");
   });
 });

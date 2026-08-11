@@ -10,8 +10,8 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
 import { logAction } from "@/features/audit/server/log";
-import { ATOMIC_SETS, COLUMN_LABEL, type AtomicSetName } from "@/features/enrollment/merge-policy";
-import { planMerge, type ConsultRow, type MergePlan } from "@/features/enrollment/merge-plan";
+import { COLUMN_LABEL } from "@/features/enrollment/merge-policy";
+import { buildMergePatch, planMerge, type ConsultRow, type MergePlan } from "@/features/enrollment/merge-plan";
 
 const DEFAULT_GAP_DAYS = 7;
 /** 한 번에 합칠 수 있는 최대 건수 — `.in()`이 URL 길이로 죽는 것(B3)과, 사람이 검수 못 할 규모를 동시에 막는다. */
@@ -135,35 +135,19 @@ export async function mergeConsultations(
   if (plan.blockers.length > 0) return { error: plan.blockers[0] };
   const targetLoserIds = plan.loserIds;
 
-  const patch: Record<string, unknown> = {};
-  const discarded: { field: string; values: unknown[] }[] = [];
-
-  for (const d of plan.decisions) {
-    const pickId = choices[d.key];
-    if (d.needsHuman && !pickId) {
-      return { error: `'${COLUMN_LABEL[d.key] ?? d.key}'을(를) 어느 쪽으로 남길지 정해주세요` };
-    }
-    if (d.discarded.length > 0) discarded.push({ field: COLUMN_LABEL[d.key] ?? d.key, values: d.discarded });
-
-    if (d.kind === "atomic" || d.kind === "key") {
-      // 세트는 **통째로** 한 행에서 가져온다 — 섞으면 "A의 오디오에 B의 전사"가 된다.
-      const srcId = pickId ?? String(d.proposed);
-      const src = byId.get(srcId);
-      if (!src) return { error: "선택한 상담을 찾을 수 없습니다" };
-      if (srcId === winnerId) continue; // 승자 것 그대로 — patch에 넣을 필요 없음
-      for (const col of ATOMIC_SETS[d.key as AtomicSetName]) patch[col] = src[col] ?? null;
-      continue;
-    }
-
-    if (d.needsHuman) {
-      const src = byId.get(pickId!);
-      if (!src) return { error: "선택한 상담을 찾을 수 없습니다" };
-      patch[d.key] = src[d.key] ?? null;
-      continue;
-    }
-    // 규칙이 정한 값(같음/채움/자동해결/이어붙임). 승자 값과 같으면 굳이 안 쓴다.
-    if (d.status !== "same") patch[d.key] = d.proposed ?? null;
+  // patch 조립은 순수 함수(buildMergePatch)에 둔다 — 병합은 되돌릴 수 없어서
+  // "실제로 저장될 값"이 가장 중요한 검사 대상인데, 서버 액션 안에 있으면 테스트할 방법이 없다.
+  const built = buildMergePatch(plan, rows, winnerId, choices);
+  if (built.error !== undefined) {
+    const miss = built.error.startsWith("MISSING_CHOICE:")
+      ? built.error.slice("MISSING_CHOICE:".length)
+      : null;
+    return {
+      error: miss ? `'${COLUMN_LABEL[miss] ?? miss}'을(를) 어느 쪽으로 남길지 정해주세요` : built.error,
+    };
   }
+  const patch = built.patch;
+  const discarded = built.discarded.map((d) => ({ field: COLUMN_LABEL[d.key] ?? d.key, values: d.values }));
 
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("merge_enrollment_consultations", {
