@@ -247,6 +247,17 @@ const GRID_MIN = 5; // 미니그리드 기본 크기 — 평일 섹션은 항상
 /** "15:00:00" → "15:00". DB time 문자열을 사람이 읽는 시각으로(초는 항상 00이라 버린다). */
 const hhmm = (t: string): string => t.slice(0, 5);
 
+/**
+ * 주말 행 라벨 — "09:00~10:00" → "9시". 주말은 정시 단위 운영이라 교시 번호보다 시계가 읽힌다
+ * (원장 2026-08-11 "9, 10, 11로 맞추란 뜻이야. 123 하지말고").
+ * 정시가 아니거나(9:30) 시각을 못 읽으면 **null** — 부르는 쪽이 원래 라벨을 유지한다(지어내지 않는다).
+ */
+function hourLabel(timeRange: string): string | null {
+  const m = /^(\d{1,2}):(\d{2})/.exec(timeRange.trim());
+  if (!m) return null;
+  return m[2] === "00" ? `${Number(m[1])}시` : `${Number(m[1])}:${m[2]}`;
+}
+
 /** "본원304" → "304"(공통 건물 접두사 제거로 라벨 압축). "LAB실"·타건물은 그대로 — 건물 구분 유지. */
 function shortRoom(room: string): string {
   return room.replace(/^본원/, "") || room;
@@ -655,10 +666,14 @@ export function groupRichCards(
       //    (교시 체계가 다른 반을 안 쪼개면 두 체계의 union이 전 행을 덮어 아무것도 안 없어진다).
       const winList = [...winRows.values()].sort((a, b) => a.order - b.order);
       let periodRows = keepUsedRows(winList, new Set([...presentOrders, ...mixedWeekendOrders]));
-      // 🔴 주말 섹션은 행 라벨에서 **시각을 뗀다** — 카드마다 자기 1교시로 당겨져 있어(weekendSelfShift)
-      //    09시 반과 14시 반이 같은 "1교시" 행에 앉는다. 그 행에 "09:00~10:00"을 적으면 14시 반에 대해
-      //    **거짓말**이 된다. 행의 뜻은 "몇 번째 교시"이고, 진짜 시각은 셀(`GridCell.time`)이 들고 간다.
-      if (weekend) periodRows = periodRows.map((r) => ({ ...r, time: "" }));
+      // 🔴 주말 섹션 행은 **교시 번호가 아니라 시각(9시·10시·11시)으로** 적는다
+      //    (원장 2026-08-11 *"주말수업 9, 10, 11로 맞추란 뜻이야. 123 하지말고"*).
+      //    주말은 정시 단위 운영이라 "1교시"라는 번호가 뜻하는 게 없다 — 시계가 곧 축이다.
+      // ⚠️ 카드는 자기 첫 교시로 당겨져 있으므로(weekendSelfShift) 14시 시작 반도 "9시" 행에 앉는다.
+      //    원장이 "강제로" 3행을 지시한 결과라 행 라벨은 **그 반의 몇 번째 시간**을 가리키는 자리표이고,
+      //    그 반의 진짜 시각은 셀(`GridCell.time`, 화면에선 툴팁)이 든다. 시각 범위 부제는 안 적는다 —
+      //    "09:00~10:00"까지 적으면 14시 반에 대해 대놓고 틀린 문장이 된다.
+      if (weekend) periodRows = periodRows.map((r) => ({ ...r, label: hourLabel(r.time) ?? r.label, time: "" }));
       // 분리된 부그룹은 라벨에 ②③… 접미(같은 "N교시 시작"이 두 박스로 나뉠 때 구분).
       const label = ci === 0 ? cluster[0].groupLabel : `${cluster[0].groupLabel} ${"②③④⑤"[ci - 1] ?? `(${ci + 1})`}`;
       out.push({

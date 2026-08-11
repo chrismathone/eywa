@@ -23,6 +23,12 @@ import { timetableStudentTone, useTimetableColorMode, withdrawnTone } from "./ti
  * ⚠️ 한 곳에서만 정한다(셀마다 `border-line`을 흩뿌리면 다음에 또 전수 치환해야 한다).
  */
 const GRID = "border-line-strong";
+/**
+ * **수업(카드) 사이** 세로 구분선 — 격자선보다 한참 진하다(원장 2026-08-11 "한참 진하게").
+ * 격자(요일·교시)와 카드 경계는 뜻이 다르다: 앞은 한 반 **안**의 칸 나눔이고, 뒤는 **반과 반의 경계**다.
+ * 같은 농도로 두면 옆 반 열이 자기 반 요일 열처럼 읽혀 카드 경계가 사라진다(원장이 짚은 "이 사이선").
+ */
+const CARD_EDGE = "border-r-2 border-ink/45";
 
 // 라벨열·카드가 공유하는 고정 섹션 높이(px) — 같은 y에서 행이 맞물려 "행=라벨, 열=수업" 스프레드시트 정렬.
 /** 수업명만 있는 헤더(배치 편집 모드). 정상 모드는 강의실 줄이 붙어 `NAME_ROOM_H`. */
@@ -39,7 +45,18 @@ const PERIOD_H = 26;
 // ⚠️ 서식을 기본뷰와 동일하게 두는 한 이 값도 함께 따라가야 한다(안 그러면 행이 잘린다).
 const STU_H = 24;
 const LABEL_W = 58;
+/** 5요일 반(DP6)의 카드 폭 — 아래 `DAY_COL_W`의 기준값이다. */
 const CARD_W = 176;
+/**
+ * 요일 한 칸의 폭 — **주5일 기준 고정**(원장 2026-08-11 "열너비는 dp처럼 주5일 기준에 맞춰").
+ *
+ * 빈 요일 열을 없앤 뒤(같은 날) 카드 폭을 CARD_W로 붙들어 두니 2요일 반의 한 칸이 88px로 벌어져
+ * 5요일 반(DP6, 35px)과 두 배 넘게 차이 났다. 칸 너비를 고정하고 **카드 폭이 요일 수를 따라가게** 뒤집는다
+ * — 그래야 어느 카드든 한 칸이 같은 크기로 읽히고(2026-07-27 원장이 5칸 고정을 요구했던 그 이유), 덤으로
+ * 2·3요일 반이 좁아져 한 화면에 더 들어온다.
+ * ⚠️ 대가: 2요일 반의 카드가 70px이라 긴 반 이름이 한 줄에 안 들어간다 → 헤더에서 이름을 두 줄까지 접는다.
+ */
+const DAY_COL_W = CARD_W / 5;
 const SECTION_PAD = 8; // p-1(4px) 상하
 // 명단 섹션 높이는 **그룹 내 최대 인원**(`group.rosterRows`, 상한 12)에서 온다 — 고정 행수 상수는 폐지.
 // 배경·상한 근거는 class-grid.ts `rosterRows` 주석 참조(2026-07-27 "세로 여백이 너무 많다").
@@ -195,6 +212,9 @@ export function ClassColumn({
   // "항상 월~금 5칸" 규약을 뒤집은 배경은 class-grid.ts `days` 주석 참조(실측 42반 중 41반이 2~3일).
   const days: DayOfWeek[] = card.days?.length ? card.days : group.days;
   const gridCols = { gridTemplateColumns: `repeat(${Math.max(1, days.length)}, 1fr)` };
+  // 카드 폭 = 요일 수 × 고정 칸 폭(DAY_COL_W). 배치 편집(namesOnly)은 격자를 안 그리므로 5칸 기준 폭 유지 —
+  // 수업명만 남은 칩이 요일 수에 따라 들쭉날쭉하면 끌어 놓을 자리를 가늠하기 어렵다.
+  const cardW = namesOnly ? CARD_W : Math.max(1, days.length) * DAY_COL_W;
   // 반 헤더색 — ijw bgColor 우선(인라인), 없으면 과목색 클래스.
   const headerStyle = card.bgColor
     ? { background: card.bgColor, color: card.textColor ?? "#1d1d1f" }
@@ -205,10 +225,10 @@ export function ClassColumn({
   return (
     <div
       ref={edit?.setNodeRef}
-      className={`${GRID} flex shrink-0 flex-col border-r ${edit ? "relative" : ""} ${
+      className={`${CARD_EDGE} flex shrink-0 flex-col ${edit ? "relative" : ""} ${
         edit?.dragging ? "opacity-35" : ""
       }`}
-      style={{ width: CARD_W, ...edit?.style }}
+      style={{ width: cardW, ...edit?.style }}
     >
       {/* 끼워질 자리 — 끌고 있는 열이 **이 열 앞**에 들어간다는 표시(놓기 전에 결과를 보여준다). */}
       {edit?.insertBefore ? (
@@ -248,14 +268,16 @@ export function ClassColumn({
               ariaLabel={`${card.className} 반 정보`}
               className="flex h-full w-full flex-col items-center justify-center gap-0.5 px-1 text-center transition hover:brightness-95"
             >
-              <span className="w-full overflow-hidden text-[13px] leading-tight font-bold whitespace-nowrap text-clip">
+              {/* 이름은 **두 줄까지** 접는다 — 칸 너비를 고정하면서(DAY_COL_W) 2요일 반 카드가 70px까지
+                  좁아져 한 줄로는 `고등E_고1 특별 S` 같은 이름이 통째로 잘린다. 전체 이름은 title에도 있다. */}
+              <span className="line-clamp-2 w-full text-[13px] leading-tight font-bold break-keep">
                 {card.className}
               </span>
               {/* 강의실 — 전용 행 대신 수업명 바로 아래(원장 2026-08-11 "LS6 / 화 602 / 금 603 이렇게").
                   헤더색 위에 얹히므로 색을 따로 주지 않고 투명도만 낮춘다(반색이 어두우면 흰 글자가 유지된다).
                   ⚠️ namesOnly(배치 편집)에선 헤더가 NAME_H(40px)로 좁아 두 줄이 안 들어간다 → 안 그린다. */}
               {namesOnly ? null : (
-                <span className="line-clamp-2 w-full text-[9px] leading-tight font-normal opacity-70" title={card.classroomLabel}>
+                <span className="line-clamp-1 w-full text-[9px] leading-tight font-normal opacity-70" title={card.classroomLabel}>
                   {card.classroomLabel}
                 </span>
               )}
@@ -291,7 +313,7 @@ export function ClassColumn({
       {group.periodRows.map((p) => (
         <div key={p.order} className={`${GRID} grid border-b`} style={{ ...gridCols, height: PERIOD_H }}>
           {days.map((d) => (
-            <Cell key={d} card={card} order={p.order} day={d} teacherColors={teacherColors} wide={days.length <= 3} />
+            <Cell key={d} card={card} order={p.order} day={d} teacherColors={teacherColors} />
           ))}
         </div>
       ))}
@@ -383,14 +405,11 @@ function Cell({
   order,
   day,
   teacherColors,
-  wide,
 }: {
   card: RichClassCard;
   order: number;
   day: DayOfWeek;
   teacherColors: TeacherColorMap;
-  /** 열이 적어 칸이 넉넉한 카드(3열 이하) — 글자를 줄일 이유가 없다(cellFont 주석). */
-  wide: boolean;
 }) {
   const base = `${GRID} flex items-center justify-center overflow-hidden border-r font-bold last:border-r-0`;
   const c = card.cells[`${order}:${day}`];
@@ -401,7 +420,7 @@ function Cell({
   if (c.isLab) {
     const tone = c.label === LAB_ROOM_LABEL ? "bg-blue-soft text-blue" : "bg-purple-soft text-purple";
     return (
-      <div className={`${base} ${tone} ${cellFont(c.label, wide)}`} title={tip}>
+      <div className={`${base} ${tone} ${cellFont(c.label)}`} title={tip}>
         {c.label}
       </div>
     );
@@ -410,7 +429,7 @@ function Cell({
   // 저장된 강사색(ijw) 우선 — 라벨(한글명·영문닉네임)이 users 맵에 있으면 그 hex. 없으면 라벨 해시색.
   const tc = teacherColors[c.label];
   const text = abbrev(c.label);
-  const cls = `${base} ${cellFont(text, wide)}`;
+  const cls = `${base} ${cellFont(text)}`;
   if (tc)
     return (
       <div className={cls} style={{ background: tc.bg, color: tc.text }} title={tip}>
@@ -430,11 +449,10 @@ function Cell({
  * "크리스틴"·"플로렌스"(4자)가 들어오면서 35px 칸에서 **두 줄로 쪼개져** 행 높이가 들쭉날쭉해졌다.
  * 자르지 않고(사람 이름을 클립하면 누군지 모른다) 줄여서 한 줄에 넣는다 — 전체 이름은 title 툴팁에도 있다.
  *
- * `wide`(3열 이하 = 칸 ≥58px)면 줄일 이유가 없다 — 빈 요일 열을 없앤 뒤(2026-08-11) 영어 반 42개 중
- * 41개가 이 경우라, 4자 이름이 8px로 쪼그라들던 게 사라진다.
+ * ⚠️ 칸 너비는 **어느 카드든 DAY_COL_W(35px) 고정**이라(원장 2026-08-11 "dp처럼 주5일 기준") 요일 수로
+ * 글자를 키우면 안 된다 — 잠깐 그렇게 뒀다가 폭 고정으로 되돌리며 함께 되돌렸다.
  */
-function cellFont(text: string, wide: boolean): string {
-  if (wide) return "text-[10px] whitespace-nowrap";
+function cellFont(text: string): string {
   if (text.length >= 4) return "text-[8px] tracking-tight whitespace-nowrap";
   if (text.length === 3) return "text-[9px] tracking-tight whitespace-nowrap";
   return "text-[10px] whitespace-nowrap";
