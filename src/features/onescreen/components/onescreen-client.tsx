@@ -11,7 +11,7 @@ import { CLASS_TAGS, TODAY } from "../data";
 import { ATTITUDE } from "../attitude";
 import type { OneScreenView } from "../view";
 import { buildSubjectReport, studentStatus } from "../report";
-import { applyTestScoreMode, buildReportCommentInput } from "../report-comment";
+import { buildReportCommentInput } from "../report-comment";
 // 저장·미리보기 공용 필드 조립(단일 소스) — 미리보기가 발송본과 갈라지지 않게.
 import { buildExamInfo as buildExamInfoOf, buildReportFields } from "../report-fields";
 import {
@@ -379,9 +379,6 @@ export function OneScreenClient({
       dailyMax: s.tests.daily.max,
       checkScore: showCheckTest ? s.tests.check.score : null,
       checkMax: s.tests.check.max,
-      // 0148a — 표기 모드를 세션에 실어야 승계 소스가 채워진다(안 하면 write-only-orphan → 새로고침 시 모드 리셋).
-      dailyScoreMode: s.tests.daily.mode ?? null,
-      checkScoreMode: s.tests.check.mode ?? null,
       attitude: s.attitude,
       homework: s.homework || null,
       note: s.note || null,
@@ -945,14 +942,6 @@ export function OneScreenClient({
       return { ...s, tests: { ...s.tests, [which]: { ...cur, max, score } } };
     });
   }
-  // 표기 모드(개수/점수) 전환(0148a) — 로직은 순수함수 applyTestScoreMode 단일 소스(Vitest). 점수↔개수 왕복
-  // 문항수 보존(countMax) + 척도 변경 시 prevScore 폐기 + 재클램프를 그 함수가 담당(적대검수 2건 방어).
-  function setModeFor(studentId: string, which: "daily" | "check", mode: "score" | "count") {
-    patch(studentId, (s) => ({
-      ...s,
-      tests: { ...s.tests, [which]: applyTestScoreMode(s.tests[which], mode) },
-    }));
-  }
   // ── 출결 인라인 입력(2-2) — 출석부와 같은 기록(setAttendanceCell 재사용). 행(반) 단위 raw 보존 ──
   const markOf = (s: string): AttendanceMark =>
     s === "late" ? "지각" : s === "absent" || s === "early_leave" ? "결석" : "출석";
@@ -1097,10 +1086,6 @@ export function OneScreenClient({
   function setMax(which: "daily" | "check", v: number) {
     if (!selected) return;
     setMaxFor(selected.id, which, v);
-  }
-  function setMode(which: "daily" | "check", m: "score" | "count") {
-    if (!selected) return;
-    setModeFor(selected.id, which, m);
   }
   function setAttitude(a: string) {
     if (!selected) return;
@@ -2576,7 +2561,6 @@ export function OneScreenClient({
                       onScore={setScore}
                       allowMax={allowTeacherTestMax}
                       onMax={setMax}
-                      onMode={setMode}
                       dailyEnabled={showDailyTest}
                       checkEnabled={showCheckTest}
                     />

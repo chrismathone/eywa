@@ -82,10 +82,9 @@ function flatten(s: string): string {
 function testClause(label: string, t: TestScore): string | null {
   if (t.score == null) return null;
   const d = delta(t.score, t.prevScore);
-  const unit = t.mode === "score" ? "점" : "개";
   const tail =
-    d == null ? "" : d === 0 ? " (지난 회차와 동일)" : ` (지난 회차 대비 ${d > 0 ? "▲" : "▼"}${Math.abs(d)}${unit})`;
-  return `${label}는 ${formatTestScore(t.score, t.max, t.mode)}${tail}`;
+    d == null ? "" : d === 0 ? " (지난 회차와 동일)" : ` (지난 회차 대비 ${d > 0 ? "▲" : "▼"}${Math.abs(d)}개)`;
+  return `${label}에서 ${formatTestScore(t.score, t.max)}${tail}`;
 }
 
 /**

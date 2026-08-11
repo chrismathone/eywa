@@ -5,6 +5,7 @@ import { EyIcon } from "@/components/icons/eywa-icons";
 import { Pill } from "@/components/atoms/pill";
 import { RecallButton } from "@/features/report-admin/components/recall-button";
 import { isRecallInFlight, isRecallable } from "@/features/report-admin/report-recall";
+import { normalizeHomeworkPages } from "../homework-pages";
 import {
   effectiveClassnoteStatus,
   isAlreadySent,
@@ -428,6 +429,11 @@ export function ReportCard({
             rows={Math.min(4, ((subject.homeworkToday ?? "").match(/\n/g)?.length ?? 0) + 1)}
             value={subject.homeworkToday ?? ""}
             onChange={(e) => onHomeworkToday(subjectName, e.target.value)}
+            // 쪽수 후보정 — 그리드 셀과 같은 처방(입력이 끝났을 때만, homework-pages.ts).
+            onBlur={(e) => {
+              const fixed = normalizeHomeworkPages(e.target.value);
+              if (fixed !== e.target.value) onHomeworkToday(subjectName, fixed);
+            }}
             placeholder="오늘 과제 (예: 개념편 p10~16, 유형편 p6~11)"
             aria-label={`${subjectName} 오늘 과제`}
             className="border-line bg-card focus:border-primary scrollbar-thin mt-1.5 w-full min-w-0 resize-none rounded-lg border px-2 py-1.5 text-[12px] leading-relaxed outline-none transition-colors"
