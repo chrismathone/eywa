@@ -25,6 +25,7 @@ import { buildSubjectMaps } from "@/features/owner/subjects";
 import { getClassesList } from "@/features/classes/server/queries";
 import { TranscriptSection } from "@/components/transcript-section";
 import { RecordingsSection } from "./recordings-section";
+import { MergeButton } from "./merge-button";
 import { RunAiButton } from "./run-ai-button";
 import { ConsultationReportEditor } from "./consultation-report-editor";
 import { ConsultationContentActions } from "./consultation-content-actions";
@@ -223,18 +224,18 @@ export default async function EnrollmentDetailPage({
             </h2>
           </div>
           <p className="text-text-dim mt-1 text-xs">
-            같은 이름·학교로 접수된 다른 상담입니다. 중복이면 정리하고, 다른 상담(과목·시기)이면 각각 진행하세요.
+            같은 이름·학교로 접수된 다른 상담입니다. 중복이면 병합하고, 다른 상담(과목·시기)이면 각각 진행하세요.
           </p>
           <ul className="mt-3 space-y-1.5">
             {siblings.map((sib) => {
               const sBadge = OUTCOME_BADGE[sib.outcome] ?? OUTCOME_BADGE.pending!;
               const sSubject = sib.subject ? subjectMaps.labelOf(sib.subject) : null;
               return (
-                <li key={sib.id}>
+                <li key={sib.id} className="flex items-center gap-2">
                   <WindowLink
                     href={`/enrollment/${sib.id}`}
                     title={sib.prospectName}
-                    className="bg-card hover:bg-bg-soft border-border flex items-center justify-between gap-2 rounded-lg border px-3 py-2 transition"
+                    className="bg-card hover:bg-bg-soft border-border flex flex-1 items-center justify-between gap-2 rounded-lg border px-3 py-2 transition"
                   >
                     <span className="text-foreground flex items-center gap-2 text-[13px]">
                       <span className="num text-text-dim">
@@ -249,6 +250,8 @@ export default async function EnrollmentDetailPage({
                       <ExternalLink className="text-text-faint size-3.5" />
                     </span>
                   </WindowLink>
+                  {/* 쓰기 권한이 있을 때만 — 읽기 전용 계정에 눌리지 않는 버튼을 보여주지 않는다. */}
+                  {canWrite ? <MergeButton ids={[id, sib.id]} currentId={id} /> : null}
                 </li>
               );
             })}

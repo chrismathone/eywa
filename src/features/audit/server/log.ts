@@ -7,6 +7,7 @@ import { collectAuditNameIds } from "../describe";
 // 운영 감사로그 액션 키 + 라벨 — logAction 호출부와 뷰어 필터가 공유.
 // ⚠️ 새 logAction 액션 키는 반드시 여기 등록(안 하면 뷰어에 영문 키 원문 노출) + describe.ts에 상세 한글화 추가.
 export const AUDIT_ACTIONS = {
+  consultation_merge: "등록상담 병합",
   staff_role_change: "역할 변경",
   staff_delete: "직원 삭제",
   staff_password_reset: "직원 비밀번호 재설정",
