@@ -125,21 +125,18 @@ export type Subject = {
   attachments?: { path: string; name: string }[]; // 학생 사진 첨부(P2b) — /r·ClassNote 스샷에 렌더
 };
 
-/** 테스트 점수 표기 모드(0148a). count="20문제 중 18개" / score="95점"(만점 100 고정, v1). */
-export type TestScoreMode = "count" | "score";
-
-/** 한 테스트(일일/확인)의 점수 + 만점 + 직전 회차 점수 */
+/**
+ * 한 테스트(일일/확인)의 점수 + 문항수 + 직전 회차 점수.
+ *
+ * 🔴 표기는 **맞은 개수 하나뿐**이다(원장 2026-08-11: "점은 제거하고 갯수로만"). 0148a가 넣었던
+ *    '점수(100점 만점)' 표기 모드는 제거됐다 — 실사용 0(전 테넌트 설정 count, 세션 1,144행 전부 count,
+ *    저장된 '점' 표기 0건)이라 이관할 데이터가 없었다. `daily_score_mode`·`check_score_mode` 컬럼은
+ *    남아 있지만 **아무도 읽지 않는다**. 척도가 하나뿐이라 prevScore 척도 경계 문제도 사라졌다.
+ */
 export type TestScore = {
-  score: number | null; // 미입력이면 null
-  max: number; // count 모드=문항수 / score 모드=만점(100 고정, v1)
+  score: number | null; // 미입력이면 null (= 맞은 개수)
+  max: number; // 문항수
   prevScore: number | null;
-  /** 표기 모드(0148a). 미지정=count(기존 동작 보존) — 옵셔널이라 다른 TestScore 생성부가 안 깨진다. */
-  mode?: TestScoreMode;
-  /**
-   * 점수 모드로 전환하면 max가 100으로 바뀌므로 **직전 개수 문항수를 기억**해 둔다 → 개수로 돌아올 때 복원
-   * (2026-07-24 적대검수: 점수↔개수 왕복 시 문항수가 100으로 굳어 "100문제 중 N개"가 되던 것). 클라 상태 전용.
-   */
-  countMax?: number;
 };
 
 export type Tests = {

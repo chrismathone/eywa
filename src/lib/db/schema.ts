@@ -817,7 +817,8 @@ export const onescreenDailySessions = pgTable(
     dailyMax: integer("daily_max"),
     checkScore: integer("check_score"),
     checkMax: integer("check_max"),
-    // 테스트 점수 표기 모드 오버라이드(0148a) — score|count, NULL=학원설정 기본(report.*TestScoreMode).
+    // 🔴 표기 모드(0148a) — **더 이상 쓰지 않는다**(원장 2026-08-11: 표기는 맞은 개수 하나뿐).
+    //    앱은 읽지도 쓰지도 않으며 컬럼만 남겨 뒀다(옛 행 보존 · 마이그레이션 0). 다시 배선하지 말 것.
     dailyScoreMode: text("daily_score_mode"),
     checkScoreMode: text("check_score_mode"),
     attitude: text("attitude"),

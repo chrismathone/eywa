@@ -202,8 +202,6 @@ export const DEFAULT_SETTINGS: TenantSettings = {
     showTrendGraph: true, // 성적 추이 그래프(시험·과제) 기본 표시 — 데이터 2점 미만이면 자동 숨김
     showAttachments: true,
     allowTeacherTestMax: false, // 기본: 강사는 과목 설정값(문항수) 고정 사용. 켜면 원스크린에서 /N 직접 변경 가능.
-    dailyTestScoreMode: "count", // 기본 개수 표기("20문제 중 18개") — 무회귀. 인재원은 학원설정에서 score로 전환(일일=100점 만점).
-    checkTestScoreMode: "count", // 확인테스트(개념백지 등)는 개수 표기가 자연스러워 기본 count 유지.
     writingExemptTeachers: [], // 작성률 예외 강사(빈=전원 집계) — 강사별 작성률 표에서 제외할 표시 이름.
     noticeMode: "A", // 기본: 단일 문단 멘트. B=수업내용+태도·특이사항 2문단 분리(0093a).
     classnoteSendEnabled: false, // 기본 OFF(dry-run) — 원장 승인 전까지 실제 발송 안 함(오발송 안전장치).

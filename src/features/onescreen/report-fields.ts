@@ -10,6 +10,7 @@
  * 날짜처럼 저장에만 필요한 값은 호출부(`buildSaveInputFor`)가 붙인다.
  */
 import { formatTestScore } from "./report-comment";
+import { normalizeHomeworkPages } from "./homework-pages";
 import type { Subject, Tests } from "./types";
 
 export type ReportFieldSource = {
@@ -57,19 +58,17 @@ export function buildExamInfo(tests: Tests, dailyOn: boolean, checkOn: boolean):
 /** (학생, 과목) → 학부모 보고서 표시 필드. 저장·미리보기 공용. */
 export function buildReportFields(src: ReportFieldSource): ReportFields {
   const { subject: su, tests, showDailyTest, showCheckTest } = src;
-  // 표기는 공유 순수함수(0148a) — AI 멘트(testLine)와 같은 포맷이라 "카드는 개수·멘트는 점수" 불일치가 없다.
+  // 표기는 공유 순수함수 — AI 멘트(testLine)와 같은 포맷이라 카드와 멘트가 다른 말을 하지 않는다.
   const dailyTest =
-    showDailyTest && tests.daily.score != null
-      ? formatTestScore(tests.daily.score, tests.daily.max, tests.daily.mode)
-      : "";
+    showDailyTest && tests.daily.score != null ? formatTestScore(tests.daily.score, tests.daily.max) : "";
   const checkTest =
-    showCheckTest && tests.check.score != null
-      ? formatTestScore(tests.check.score, tests.check.max, tests.check.mode)
-      : "";
+    showCheckTest && tests.check.score != null ? formatTestScore(tests.check.score, tests.check.max) : "";
   return {
     textbook: su?.textbook || "",
     makeup: su?.makeup ?? false,
-    homeworkToday: su?.homeworkToday || "",
+    // 쪽수 후보정 — **저장 직전 마지막 관문**(homework-pages.ts). 화면 blur가 이미 고쳤어도 일괄적용·
+    // 첫행복사·시트 가져오기처럼 blur를 안 거치는 경로가 있어, 학부모에게 나가는 값은 여기서 확정한다.
+    homeworkToday: normalizeHomeworkPages(su?.homeworkToday || ""),
     // ⚠️ 진도 접두는 **순수 과목 라벨**(subjectLabel) — 행 이름(name)엔 반 이름이 붙을 수 있고
     //    이 값은 학부모 카드에 그대로 나간다(원장 확정: 보고서에 반은 노출하지 않는다).
     progress: su ? `${su.subjectLabel || su.name} ${su.today}`.trim() : "",

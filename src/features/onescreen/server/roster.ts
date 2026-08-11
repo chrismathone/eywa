@@ -134,8 +134,6 @@ type OnescreenSessionRow = {
   daily_max: number | null;
   check_score: number | null;
   check_max: number | null;
-  daily_score_mode: string | null; // 0148a — 점수 표기 모드 오버라이드(score|count)
-  check_score_mode: string | null;
   attitude: string | null;
   homework: string | null;
   special_note: string | null;
@@ -264,9 +262,6 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
   const subjectTestMax = new Map(settings.operations.subjects.map((su) => [su.key, su.testMax ?? 5]));
   const allowTeacherTestMax = settings.report.allowTeacherTestMax;
   const { showDailyTest, showCheckTest } = settings.report;
-  // 테스트 점수 표기 모드(0148a) 학원 기본 — 세션에 오버라이드가 없으면 이 값이 출발점(문항수 시드와 같은 층).
-  const dailyModeDefault: "score" | "count" = settings.report.dailyTestScoreMode ?? "count";
-  const checkModeDefault: "score" | "count" = settings.report.checkTestScoreMode ?? "count";
   const academyNoticeMode: "A" | "B" = settings.report.noticeMode ?? "A";
 
   // 1) 그 날짜에 내가 가르치는 활성 반(담당 반 ∪ **위임받은 반**, 0173a) + 본인 멘트 모드
@@ -465,9 +460,9 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
         attendance: "출석",
         subjects: [],
         tests: {
-          // 모드(0148a) 학원 기본으로 시드 — 아래 승계·세션복원이 있으면 덮어씀. 점수 모드의 만점은 100 고정(v1).
-          daily: { score: null, max: dailyModeDefault === "score" ? 100 : tmax, prevScore: null, mode: dailyModeDefault },
-          check: { score: null, max: checkModeDefault === "score" ? 100 : tmax, prevScore: null, mode: checkModeDefault },
+          // 문항수는 과목 설정값으로 시드 — 아래 승계(권한 on)·세션복원이 있으면 덮어쓴다.
+          daily: { score: null, max: tmax, prevScore: null },
+          check: { score: null, max: tmax, prevScore: null },
         },
         attitude: null,
         homework: "",
@@ -514,8 +509,8 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
           attendance: "출석",
           subjects: [],
           tests: {
-            daily: { score: null, max: dailyModeDefault === "score" ? 100 : tmax, prevScore: null, mode: dailyModeDefault },
-            check: { score: null, max: checkModeDefault === "score" ? 100 : tmax, prevScore: null, mode: checkModeDefault },
+            daily: { score: null, max: tmax, prevScore: null },
+            check: { score: null, max: tmax, prevScore: null },
           },
           attitude: null,
           homework: "",
@@ -640,7 +635,7 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
       supabase
         .from("onescreen_daily_sessions")
         .select(
-          "student_id, study_grade, subject_progress, daily_score, daily_max, check_score, check_max, daily_score_mode, check_score_mode, attitude, homework, special_note, progress_confirmed",
+          "student_id, study_grade, subject_progress, daily_score, daily_max, check_score, check_max, attitude, homework, special_note, progress_confirmed",
         )
         .eq("session_date", todayIso)
         .eq("updated_by", user.id)
@@ -750,41 +745,46 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
     //     그러지 않으면 매일 학원 설정값(기본 5)으로 되돌아가, 20문항 시험을 보는 반은 날마다 /N을 다시 고쳐야 한다
     //     (실측: 07-21 12·13문항, 07-23 10·100문항이 다음 날 전부 5로 리셋). 원장 지시 2026-07-23.
     //  ⚠️ 강사축(0118a) 유지 — 같은 학생을 다른 강사가 가르쳐도 서로의 문항수를 물려받지 않는다.
-    //  ⚠️ 조회는 **항상** 돈다 — 표기 모드(0148a)는 문항수 권한과 무관하게 항상 승계해야 하기 때문(원장 요구:
-    //     "한번 정한 점수/개수 토글은 다음 보고서로 이어짐"). 단 **문항수(max) 시드만** allowTeacherTestMax로
-    //     게이트한다(off의 계약="과목 설정값 고정"). 모드 시드는 게이트 없음.
-    fetchAllPagedInChunks<{
-      student_id: string;
-      session_date: string;
-      daily_max: number | null;
-      check_max: number | null;
-      daily_score_mode: string | null;
-      check_score_mode: string | null;
-    }>(
-      studentIds,
-      (chunk, from, to) =>
-        supabase
-          .from("onescreen_daily_sessions")
-          .select("student_id, session_date, daily_max, check_max, daily_score_mode, check_score_mode")
-          .eq("updated_by", user.id)
-          .lt("session_date", todayIso)
-          .gte("session_date", testMaxFrom)
-          .in("student_id", chunk)
-          // 최신 우선 + unique tie-break(student_id) — 페이지가 흔들리지 않게(fetchAllPagedInChunks 계약).
-          .order("session_date", { ascending: false })
-          .order("student_id", { ascending: true })
-          .range(from, to),
-    ).catch((e) => {
-      console.error("[roster] 문항수·모드 승계 조회 실패 — 학원 설정값 사용:", e instanceof Error ? e.message : e);
-      return [] as {
-        student_id: string;
-        session_date: string;
-        daily_max: number | null;
-        check_max: number | null;
-        daily_score_mode: string | null;
-        check_score_mode: string | null;
-      }[];
-    }),
+    //  ⚠️ 예전엔 표기 모드(0148a)까지 여기서 승계해서 **권한과 무관하게 항상** 돌았다. 모드가 사라진 지금
+    //     이 결과는 문항수 시드에만 쓰이므로, 권한이 off면 **아예 조회하지 않는다**(원스크린은 전원이 매일
+    //     여는 경로 — 쓰지도 않을 페이지 조회를 남겨 두지 않는다).
+    allowTeacherTestMax
+      ? fetchAllPagedInChunks<{
+          student_id: string;
+          session_date: string;
+          daily_max: number | null;
+          check_max: number | null;
+        }>(
+          studentIds,
+          (chunk, from, to) =>
+            supabase
+              .from("onescreen_daily_sessions")
+              .select("student_id, session_date, daily_max, check_max")
+              .eq("updated_by", user.id)
+              .lt("session_date", todayIso)
+              .gte("session_date", testMaxFrom)
+              .in("student_id", chunk)
+              // 최신 우선 + unique tie-break(student_id) — 페이지가 흔들리지 않게(fetchAllPagedInChunks 계약).
+              .order("session_date", { ascending: false })
+              .order("student_id", { ascending: true })
+              .range(from, to),
+        ).catch((e) => {
+          console.error("[roster] 문항수 승계 조회 실패 — 학원 설정값 사용:", e instanceof Error ? e.message : e);
+          return [] as {
+            student_id: string;
+            session_date: string;
+            daily_max: number | null;
+            check_max: number | null;
+          }[];
+        })
+      : Promise.resolve(
+          [] as {
+            student_id: string;
+            session_date: string;
+            daily_max: number | null;
+            check_max: number | null;
+          }[],
+        ),
   ]);
 
   // ── ECS 시트 → 보고서 초안(2026-08-07) ────────────────────────────────────────────────────────
@@ -830,18 +830,12 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
 
   const seededDailyMax = new Set<string>();
   const seededCheckMax = new Set<string>();
-  // ⚠️ 모드용 가드 Set은 max와 **분리**한다 — max는 있는데 mode가 null인 과거 행에서 max Set을 재사용하면
-  //    그 학생을 조기 seeded 처리해 더 오래된 행의 mode를 못 물려받는 미묘한 버그가 난다.
-  const seededDailyMode = new Set<string>();
-  const seededCheckMode = new Set<string>();
-  const asMode = (v: string | null): "score" | "count" | null =>
-    v === "score" || v === "count" ? v : null;
   // 학생별 **가장 최근** 값(정렬 최신순 → 처음 만난 값이 직전 값) → 오늘의 기본값으로 승계.
   // 오늘 세션이 있으면 아래 Phase3 복원이 다시 덮으므로, 여기서 넣는 건 "오늘 아직 안 건드린 행"의 출발값이다.
   for (const r of priorMaxRows) {
     const os = byStudent.get(r.student_id);
     if (!os) continue;
-    // 문항수 승계 — allowTeacherTestMax on일 때만(off=과목 설정값 고정). 점수 모드 만점(100)은 아래 normalize가 고정.
+    // 문항수 승계 — allowTeacherTestMax on일 때만(off=과목 설정값 고정).
     if (allowTeacherTestMax && r.daily_max != null && !seededDailyMax.has(r.student_id)) {
       os.tests.daily.max = r.daily_max;
       seededDailyMax.add(r.student_id);
@@ -849,17 +843,6 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
     if (allowTeacherTestMax && r.check_max != null && !seededCheckMax.has(r.student_id)) {
       os.tests.check.max = r.check_max;
       seededCheckMax.add(r.student_id);
-    }
-    // 표기 모드 승계 — **항상**(원장 요구). 유효값(score|count)만.
-    const dm = asMode(r.daily_score_mode);
-    if (dm && !seededDailyMode.has(r.student_id)) {
-      os.tests.daily.mode = dm;
-      seededDailyMode.add(r.student_id);
-    }
-    const cm = asMode(r.check_score_mode);
-    if (cm && !seededCheckMode.has(r.student_id)) {
-      os.tests.check.mode = cm;
-      seededCheckMode.add(r.student_id);
     }
   }
   type PriorRow = {
@@ -1138,11 +1121,6 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
       if (sess.daily_max != null) os.tests.daily.max = sess.daily_max;
       if (sess.check_score != null) os.tests.check.score = sess.check_score;
       if (sess.check_max != null) os.tests.check.max = sess.check_max;
-      // 표기 모드 복원(0148a) — 저장 세션이 시드·승계를 최종으로 덮는다(문항수와 대칭). 만점 100 고정은 아래 normalize.
-      const sdm = asMode(sess.daily_score_mode);
-      if (sdm) os.tests.daily.mode = sdm;
-      const scm = asMode(sess.check_score_mode);
-      if (scm) os.tests.check.mode = scm;
       if (sess.attitude != null) os.attitude = sess.attitude;
       if (sess.homework != null) os.homework = sess.homework;
       if (sess.special_note != null) os.note = sess.special_note;
@@ -1174,13 +1152,9 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
         if (entry?.trendDraft?.trim()) su.trendDraft = entry.trendDraft;
       }
     }
-    // 점수 모드의 만점 = v1에서 **100 고정** — 시드·승계·세션복원 어느 경로로 mode가 정해졌든 max를 일관되게 맞춘다.
-    // (개수 모드는 문항수 그대로.) 이걸 안 하면 개수 세션에서 승계된 max로 "95/5점" 같은 어긋남이 난다.
-    if (os.tests.daily.mode === "score") os.tests.daily.max = 100;
-    if (os.tests.check.mode === "score") os.tests.check.max = 100;
-    // ⚠️ 척도 경계에서 prevScore 폐기(2026-07-24 적대검수): 직전 회차의 척도(exam_info 분모)가 오늘의 max와
-    //    다르면(개수 20문항 ↔ 점수 100점) prevScore를 그대로 빼면 "▲77" 같은 허위 증감이 학부모에게 나간다.
-    //    척도가 같을 때만 유지(같은 척도의 직전 회차가 쌓이면 다음 회차부터 정상 복원). 원장 롤아웃 당일 전 학생 커버.
+    // ⚠️ 척도 경계에서 prevScore 폐기: 직전 회차의 문항수(exam_info 분모)가 오늘의 문항수와 다르면
+    //    (5문항 ↔ 20문항) prevScore를 그대로 빼면 "▲15" 같은 허위 증감이 학부모에게 나간다.
+    //    같을 때만 유지(같은 문항수의 직전 회차가 쌓이면 다음 회차부터 정상 복원).
     const prMax = parseExamMaxes(pr?.examInfo);
     if (prMax.daily != null && prMax.daily !== os.tests.daily.max) os.tests.daily.prevScore = null;
     if (prMax.check != null && prMax.check !== os.tests.check.max) os.tests.check.prevScore = null;
