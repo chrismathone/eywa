@@ -28,7 +28,7 @@ import {
 // 태도 선택지는 수학 수업보고서와 **같은 단일 소스**(원장 2026-08-06 "수학 수업보고서처럼").
 import { ATTITUDE } from "@/features/onescreen/attitude";
 import { FieldSelect } from "@/features/onescreen/components/field-select";
-import type { BasicAttendance } from "./attendance-select";
+import type { BasicAttendance } from "../lib/mark-cycle";
 
 const TERM_LABEL: Record<"regular" | "exam", string> = { regular: "평시", exam: "내신" };
 /** 출결 일괄 선택지 — 셀 드롭다운과 **같은 어휘**(라벨→enum 변환도 한 곳에서). */

@@ -396,6 +396,17 @@ export async function upsertGoal(input: {
   return { ok: true };
 }
 
+/**
+ * 컬럼이 아직 없어서 난 오류인가 — 0202a(`score`)가 손으로 적용되기 **전에** 앱이 배포돼도
+ * 태도·특이사항 저장이 함께 죽지 않게 하려는 판정이다(#95: 배포는 옛 스키마·새 스키마 둘 다에서 돌아야 한다).
+ * PostgREST는 스키마 캐시에 없는 컬럼을 `PGRST204`로, Postgres는 `42703`으로 알린다.
+ */
+function isMissingColumn(err: { code?: string; message?: string } | null, column: string): boolean {
+  if (!err) return false;
+  if (err.code === "PGRST204" || err.code === "42703") return true;
+  return (err.message ?? "").includes(column) && /column|컬럼/i.test(err.message ?? "");
+}
+
 export async function upsertStudentMark(input: {
   classId: string;
   studentId: string;
@@ -403,6 +414,8 @@ export async function upsertStudentMark(input: {
   slotStart: string;
   status: string | null;
   progressNote: string | null;
+  /** 점수 — 자유 입력(원장 2026-08-11 "점수 입력칸 신설"). `18/20`·`95`처럼 형식이 제각각이라 숫자로 안 굳힌다. */
+  score?: string | null;
 }): Promise<{ ok: true } | ActionError> {
   const gate = await requireEcsClassAccess(input.classId, { write: true });
   if (!gate.ok) return { ok: false, error: gate.error };
@@ -411,13 +424,15 @@ export async function upsertStudentMark(input: {
   }
   const status = normalizePlanText(input.status);
   const progressNote = normalizePlanText(input.progressNote);
+  const score = normalizePlanText(input.score ?? null);
   if ((status?.length ?? 0) > 50) return { ok: false, error: "상태는 50자 이내로 입력하세요" };
+  if ((score?.length ?? 0) > 30) return { ok: false, error: "점수는 30자 이내로 입력하세요" };
   if ((progressNote?.length ?? 0) > 500) return { ok: false, error: "입력이 너무 깁니다(500자 이내)" };
 
   const admin = createAdminClient();
   const { tenantId, user } = gate.access;
 
-  if (status === null && progressNote === null) {
+  if (status === null && progressNote === null && score === null) {
     const { error } = await admin
       .from("class_sheet_student_marks")
       .delete()
@@ -434,20 +449,29 @@ export async function upsertStudentMark(input: {
   const elig = await checkStudentEligibleOn(admin, tenantId, input.classId, input.studentId, input.markDate);
   if (!elig.ok) return elig;
 
-  const { error } = await admin.from("class_sheet_student_marks").upsert(
-    {
-      tenant_id: tenantId,
-      class_id: input.classId,
-      student_id: input.studentId,
-      mark_date: input.markDate,
-      slot_start: input.slotStart,
-      status,
-      progress_note: progressNote,
-      updated_by: user.id,
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: "tenant_id,class_id,student_id,mark_date,slot_start" },
-  );
+  const base = {
+    tenant_id: tenantId,
+    class_id: input.classId,
+    student_id: input.studentId,
+    mark_date: input.markDate,
+    slot_start: input.slotStart,
+    status,
+    progress_note: progressNote,
+    updated_by: user.id,
+    updated_at: new Date().toISOString(),
+  };
+  const onConflict = "tenant_id,class_id,student_id,mark_date,slot_start";
+  let { error } = await admin
+    .from("class_sheet_student_marks")
+    .upsert({ ...base, score }, { onConflict });
+  if (isMissingColumn(error, "score")) {
+    // 🔴 0202a 미적용 프로덕션 — 점수만 못 담을 뿐 태도·특이사항은 예전처럼 저장돼야 한다(#95).
+    //    대신 **점수를 실제로 입력한 경우엔 조용히 버리지 않고** 아직 준비 전임을 그대로 말한다.
+    ({ error } = await admin.from("class_sheet_student_marks").upsert(base, { onConflict }));
+    if (!error && score !== null) {
+      return { ok: false, error: "점수 칸은 아직 준비 중입니다(관리자에게 문의하세요)" };
+    }
+  }
   if (error) return { ok: false, error: `저장에 실패했습니다: ${error.message}` };
   return { ok: true };
 }

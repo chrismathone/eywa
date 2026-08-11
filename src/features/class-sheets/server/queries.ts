@@ -115,7 +115,7 @@ export type ClassSheetWeekData = {
    */
   unitsByDate: Record<string, number>;
   /** `${studentId}|${date}|${HH:MM}` → 마크. */
-  marks: Record<string, { status: string | null; progressNote: string | null }>;
+  marks: Record<string, { status: string | null; progressNote: string | null; score: string | null }>;
   goals: SheetGoalDTO[];
   monthStart: string;
   memos: Record<string, string>;
@@ -234,7 +234,10 @@ export async function getClassSheetWeek(
       .eq("period_start", monthStart),
     admin
       .from("class_sheet_student_marks")
-      .select("student_id, mark_date, slot_start, status, progress_note")
+      // 🔴 `*`인 이유 = **마이그레이션(0202a `score`)보다 앱이 먼저 배포돼도 시트가 안 죽게**(#95).
+      //    열을 이름으로 적으면 아직 없는 컬럼 하나에 PostgREST가 400을 내고 반 시트 전체가 통째로
+      //    안 열린다(2026-08-03 실사고와 같은 모양). 이 표는 한 반 × 한 주라 행이 적어 `*`가 싸다.
+      .select("*")
       .eq("tenant_id", tenantId)
       .eq("class_id", classId)
       .gte("mark_date", weekMonday)
@@ -305,6 +308,8 @@ export async function getClassSheetWeek(
     slotStart: m.slot_start as string,
     status: (m.status as string | null) ?? null,
     progressNote: (m.progress_note as string | null) ?? null,
+    // 0202a 적용 전(컬럼 없음)엔 undefined로 와서 null이 된다 — 화면은 '빈 점수'로 정상 동작한다.
+    score: ((m as { score?: string | null }).score as string | null) ?? null,
   }));
 
   const effAttendance = effectiveAttendanceRecords(
@@ -489,11 +494,15 @@ export async function getClassSheetWeek(
     };
   }
 
-  const marksMap: Record<string, { status: string | null; progressNote: string | null }> = {};
+  const marksMap: Record<
+    string,
+    { status: string | null; progressNote: string | null; score: string | null }
+  > = {};
   for (const m of marks) {
     marksMap[`${m.studentId}|${m.markDate}|${normalizeSlotTime(m.slotStart)}`] = {
       status: m.status,
       progressNote: m.progressNote,
+      score: m.score,
     };
   }
 

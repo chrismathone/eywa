@@ -17,7 +17,8 @@ import { toast } from "sonner";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { setAttendanceCell } from "@/features/attendance/server/actions";
 import { clearPresentAttendance } from "../server/actions";
-import { AttendanceSelect, type BasicAttendance } from "./attendance-select";
+import { AttendanceCheck } from "./attendance-check";
+import type { BasicAttendance } from "../lib/mark-cycle";
 import { TodayMarkPopover, type MarkMap, type StudentMark } from "./today-mark-popover";
 import type { SkillAreaSetting } from "@/features/owner/settings-types";
 import { TodayPlanEditor } from "./today-plan-editor";
@@ -103,7 +104,7 @@ function StudentRow({
         {student.grade ? <span className="text-text-dim ml-1 text-[12.5px]">{student.grade}</span> : null}
       </span>
       <span>
-        <AttendanceSelect
+        <AttendanceCheck
           status={att.status}
           note={att.note}
           studentName={student.name}

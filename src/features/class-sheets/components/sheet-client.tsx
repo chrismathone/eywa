@@ -94,6 +94,8 @@ export type SheetHandlers = {
     slotStart: string,
     status: string | null,
     note: string | null,
+    /** 점수(0202a) — 안 넘기면 **지금 값 유지**(태도만 바꿀 때 점수를 null로 덮지 않게). */
+    score?: string | null,
   ) => void;
 };
 
@@ -501,14 +503,17 @@ export function SheetClient({
           }
         });
       },
-      saveMark: (studentId, date, slotStart, status, note) => {
+      saveMark: (studentId, date, slotStart, status, note, score) => {
         const key = `${studentId}|${date}|${slotStart}`;
         // 실패 시 되돌릴 직전 값 — 낙관 반영만 하고 롤백이 없으면 화면엔 남고 서버엔 없는 상태가 되어
         // 툴바가 "저장됨"이라 말하는 동안 강사는 입력을 잃는다(적대검증 2026-07-29). 출석과 같은 처방.
         const before = marksRef.current[key] ?? null;
+        // 🔴 점수를 **안 넘긴 호출**(태도·특이사항 변경)은 지금 값을 그대로 들고 간다. 세 칸이 한 행을
+        //    공유하는 upsert라, 안 건드린 칸을 undefined로 흘리면 다음 저장이 그 칸을 null로 덮는다.
+        const nextScore = score === undefined ? (before?.score ?? null) : score;
         setMarks((prev) => ({
           ...prev,
-          [key]: { status, progressNote: note },
+          [key]: { status, progressNote: note, score: nextScore },
         }));
         store.scheduleLww(`mark:${key}`, async () => {
           const r = await upsertStudentMark({
@@ -518,6 +523,7 @@ export function SheetClient({
             slotStart,
             status,
             progressNote: note,
+            score: nextScore,
           });
           if (!r.ok) {
             setMarks((prev) => {

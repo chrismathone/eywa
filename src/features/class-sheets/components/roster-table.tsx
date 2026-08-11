@@ -1,6 +1,6 @@
 "use client";
 
-// 학생 로스터 표 — [이름 | 출결(일 단위 공유) | 학교학년 | 유닛 | 태도 | 특이사항].
+// 학생 로스터 표 — [이름 | 출결 | 유닛 | 태도 | 점수 | 특이사항].
 // 출결은 **교시별**(0196a, 원장 2026-08-10) — 같은 날 4교시·6교시가 서로 다른 기록이다.
 //   ⚠️ 그전엔 (학생,날짜) 하루 1건이라 모든 교시 카드가 같은 행을 비췄고, 한 칸을 고치면 다른 칸도
 //      함께 바뀌었다. 옛 기록(slot_start null)은 서버가 그 날 **첫 교시 칸에만** 붙여 준다.
@@ -32,11 +32,10 @@ import { handleGridNavKey } from "@/features/onescreen/components/grid-nav";
 import type { ClassSheetWeekData } from "../server/queries";
 import type { RosterEntry } from "../lib/grid";
 import { groupRosterRows, type RosterGroupKey } from "../lib/roster-order";
-import { AttendanceSelect } from "./attendance-select";
+import { AttendanceCheck } from "./attendance-check";
+import { AttitudeCheck } from "./attitude-check";
 import { SessionUnitsField } from "@/features/onescreen/components/attendance-pills";
-import { FieldSelect } from "@/features/onescreen/components/field-select";
-import { ATTITUDE } from "@/features/onescreen/attitude";
-import { SHEET_BOX_READONLY, SHEET_BOX_UNITS, SHEET_INPUT } from "../ui-box";
+import { SHEET_BOX_UNITS, SHEET_INPUT } from "../ui-box";
 import type { SheetHandlers } from "./sheet-client";
 
 /** 섹션 라벨 행의 설명(툴팁) — 왜 이 학생이 아직 보이는지 화면이 스스로 답한다. */
@@ -109,7 +108,7 @@ export const RosterTable = memo(function RosterTable({
   slotStart: string;
   roster: RosterEntry[];
   data: ClassSheetWeekData;
-  marks: Record<string, { status: string | null; progressNote: string | null }>;
+  marks: Record<string, { status: string | null; progressNote: string | null; score: string | null }>;
   attendance: Record<
     string,
     { status: string; note: string | null; units: number | null; slot: string | null }
@@ -149,17 +148,18 @@ export const RosterTable = memo(function RosterTable({
             학교·학년은 학생 이름 툴팁과 학생목록에 있고, 교시 카드에서 매일 보는 값이 아니다. */}
         {/* 폭은 **꼭 필요한 만큼만** 고정하고 남는 건 전부 '특이사항'이 가져간다(원장 2026-08-06
             "특이사항 열너비를 남은 열너비로"). `table-fixed`라 width 없는 마지막 <col>이 잔여를 받는다. */}
+        {/* 폭은 **꼭 필요한 만큼만** — 2026-08-11 원장 *"학생 뒤에 여백 많으니까 여백 최소화"*.
+            이름 열이 84px일 때 세 글자 이름(≈39px)이 끝나고도 40px이 비어 있었다. 그 폭은 화살표가
+            사라진 출결·태도(드롭다운 → 체크 순환)에서도 함께 회수해 **신설 '점수' 열과 특이사항**이 가져간다.
+            ⚠️ 13px 글자 기준: 이름 4자 ≈ 52 + 여백 8 = 60 · '매우 안좋음' ≈ 69 + 8 = 77 · '✓ 출석' ≈ 47. */}
         <colgroup>
-          <col style={{ width: 84 }} />
-          {/* 출결·태도는 드롭다운 — 태도는 가장 긴 선택지('매우 안좋음')가 잘리지 않는 폭이어야 한다.
-              유닛은 숫자 한두 자리라 좁게(수학은 '타임', 영어는 '유닛' — 원장 어휘 그대로).
-              ⚠️ 폭은 13px 글자 + 좌우 px-1(8) + 간격(4) + 화살표(10) 기준 — 더 좁히면 값이 잘린다
-                 ('선택 안 함' ≈ 56 + 22 = 78, '매우 안좋음' ≈ 69 + 22 = 91). */}
-          <col style={{ width: 88 }} />
-          {/* ⚠️ 유닛 칸은 이제 열 폭을 그대로 채운다(w-full) — 예전 46px 고정 입력이 열보다 넓어
-              양옆 드롭다운 위로 겹쳐 그려지던 문제(원장 2026-08-06 "너무 겹치네")가 구조적으로 사라졌다. */}
+          <col style={{ width: 64 }} />
+          <col style={{ width: 60 }} />
+          {/* ⚠️ 유닛 칸은 열 폭을 그대로 채운다(w-full) — 예전 46px 고정 입력이 열보다 넓어
+              양옆 칸 위로 겹쳐 그려지던 문제(원장 2026-08-06 "너무 겹치네")가 구조적으로 사라졌다. */}
           <col style={{ width: 46 }} />
-          <col style={{ width: 96 }} />
+          <col style={{ width: 80 }} />
+          <col style={{ width: 54 }} />
           <col />
         </colgroup>
         <thead>
@@ -186,6 +186,10 @@ export const RosterTable = memo(function RosterTable({
               유닛
             </th>
             <th className="py-0.5 text-center font-bold">태도</th>
+            {/* 점수(0202a) — 그전엔 특이사항에 섞여 있었다("… PL 7, 15문"). 형식이 제각각이라 자유 입력이다. */}
+            <th className="py-0.5 text-center font-bold" title="이 교시의 점수 — 자유 입력(18/20 · 95 · A 등)">
+              점수
+            </th>
             <th className="rounded-r-md py-0.5 pr-1 font-bold">특이사항</th>
           </tr>
         </thead>
@@ -195,7 +199,7 @@ export const RosterTable = memo(function RosterTable({
               return (
                 <tr key={`label:${row.key}`} className="bg-bg-soft">
                   <td
-                    colSpan={5}
+                    colSpan={6}
                     className="text-foreground px-1 py-0.5 text-[11px] font-bold"
                     title={GROUP_HINT[row.key]}
                   >
@@ -252,9 +256,9 @@ export const RosterTable = memo(function RosterTable({
                   ) : null}
                 </td>
                 <td className="py-px">
-                  {/* 태도와 **같은 컨트롤**(드롭다운, 원장 2026-08-06) — 알약 3개는 한 줄에서 폭을 먹고
-                      두 칸이 서로 다른 모양으로 읽혔다. 시수·사유 편집은 출석부·원스크린 쪽에 남는다. */}
-                  <AttendanceSelect
+                  {/* 누를 때마다 출석 → 결석 → 지각 → 선택 안 함(원장 2026-08-11). 드롭다운 시절엔
+                      15명을 찍는 데 매번 열고-고르고-닫는 3동작이 들었다. 사유는 우클릭(순환을 막지 않게). */}
+                  <AttendanceCheck
                     status={att?.status ?? null}
                     note={att?.note ?? null}
                     studentName={meta?.name ?? ""}
@@ -303,20 +307,39 @@ export const RosterTable = memo(function RosterTable({
                   )}
                 </td>
                 <td className="py-px pr-1">
-                  {rowEditable ? (
-                    <FieldSelect
-                      options={ATTITUDE}
-                      value={mark?.status ?? null}
-                      ariaLabel={`${meta?.name ?? ""} 태도`}
-                      box={SHEET_INPUT}
-                      onSelect={(v) =>
-                        handlers.saveMark(entry.studentId, date, slotStart, v, mark?.progressNote ?? null)
-                      }
-                    />
-                  ) : (
-                    // 읽기 전용 행도 **값은 보여준다**(옛 '완'·'결석' 같은 이전 표기 포함) — 숨기면 기록이 증발한다.
-                    <span className={SHEET_BOX_READONLY}>{mark?.status ?? "—"}</span>
-                  )}
+                  {/* 출결과 같은 체크 순환(원장 2026-08-11 "태도도 마찬가지"). */}
+                  <AttitudeCheck
+                    value={mark?.status ?? null}
+                    studentName={meta?.name ?? ""}
+                    canEdit={rowEditable}
+                    onSet={(v) =>
+                      handlers.saveMark(entry.studentId, date, slotStart, v, mark?.progressNote ?? null)
+                    }
+                  />
+                </td>
+                <td className="py-px pr-1">
+                  {/* 점수(0202a) — 태도·특이사항과 **같은 행 하나**를 공유하므로 저장은 같은 액션으로 간다.
+                      ⚠️ 0202a 미적용이면 서버가 "아직 준비 중"이라 답한다(태도·특이사항 저장은 그대로 산다). */}
+                  <input
+                    className={`${SHEET_INPUT} text-center`}
+                    defaultValue={mark?.score ?? ""}
+                    disabled={!rowEditable}
+                    aria-label={`${meta?.name ?? ""} 점수`}
+                    placeholder="—"
+                    data-nav-col="ecs-score"
+                    data-nav-row={navRow}
+                    onKeyDown={handleGridNavKey}
+                    onChange={(e) =>
+                      handlers.saveMark(
+                        entry.studentId,
+                        date,
+                        slotStart,
+                        mark?.status ?? null,
+                        mark?.progressNote ?? null,
+                        e.target.value,
+                      )
+                    }
+                  />
                 </td>
                 <td className="py-px">
                   <input

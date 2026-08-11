@@ -30,7 +30,7 @@ export const PeriodBlock = memo(function PeriodBlock({
   slot: GridSlot;
   data: ClassSheetWeekData;
   lines: PlanLineDTO[];
-  marks: Record<string, { status: string | null; progressNote: string | null }>;
+  marks: Record<string, { status: string | null; progressNote: string | null; score: string | null }>;
   attendance: Record<
     string,
     { status: string; note: string | null; units: number | null; slot: string | null }
