@@ -3,8 +3,7 @@ import { displayLessons } from "../curriculum";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { DeltaChip } from "./delta-chip";
 import { TestMaxInput } from "./test-max-input";
-import { TestModeToggle } from "./test-mode-toggle";
-import type { OneScreenStudent, TestScore, TestScoreMode } from "../types";
+import type { OneScreenStudent, TestScore } from "../types";
 
 function clamp(n: number, max: number) {
   return Math.max(0, Math.min(max, n));
@@ -17,7 +16,6 @@ function ScoreBlock({
   onChange,
   allowMax,
   onMax,
-  onMode,
 }: {
   kicker: string;
   range: string;
@@ -25,16 +23,13 @@ function ScoreBlock({
   onChange: (v: number | null) => void;
   allowMax?: boolean; // 학원설정: 강사 문항수 변경 허용
   onMax?: (v: number) => void;
-  onMode?: (m: TestScoreMode) => void; // 개수/점수 표기 전환(0148a). 미지정이면 토글 숨김.
 }) {
   const empty = test.score == null;
-  const mode: TestScoreMode = test.mode ?? "count";
-  const scoreMode = mode === "score";
   const setVal = (raw: string | number) => {
     if (raw === "") return onChange(null);
     const n = typeof raw === "number" ? raw : parseInt(raw, 10);
     if (Number.isNaN(n)) return;
-    onChange(clamp(n, test.max)); // 점수 모드 만점=100(roster·setModeFor가 보장) → 0~100 클램프
+    onChange(clamp(n, test.max)); // 맞은 개수는 문항수를 넘을 수 없다
   };
   return (
     <div className="border-line rounded-md border px-3 py-2.5">
@@ -44,7 +39,6 @@ function ScoreBlock({
         <span className="text-foreground shrink-0 text-[13px] font-bold whitespace-nowrap">{kicker}</span>
         <div className="flex min-w-0 items-center gap-2">
           <span className="text-text-faint truncate text-[11px]">{range}</span>
-          {onMode ? <TestModeToggle mode={mode} onMode={onMode} /> : null}
         </div>
       </div>
       <div className="mt-2 flex items-center gap-2">
@@ -55,10 +49,7 @@ function ScoreBlock({
           onChange={(e) => setVal(e.target.value.replace(/[^0-9]/g, ""))}
           className="border-line focus:border-primary tabular w-14 rounded-sm border bg-background px-2 py-1 text-center text-[15px] font-bold outline-none"
         />
-        {scoreMode ? (
-          // 점수 모드 = "X점"(만점 100 고정). 문항수 입력·% 표시 없음.
-          <span className="text-text-faint text-[13px] font-bold">점</span>
-        ) : allowMax && onMax ? (
+        {allowMax && onMax ? (
           <span className="text-text-faint tabular flex items-center gap-0.5 text-[12px]">
             /
             {/* 빈칸 편집 허용(분모를 지우면 옛 값으로 스냅백하던 버그, 2026-07-24 원장 제보). */}
@@ -91,8 +82,7 @@ function ScoreBlock({
           </button>
         </div>
         {!empty ? <DeltaChip score={test.score} prev={test.prevScore} /> : null}
-        {/* % 는 개수 모드에서만 — 점수 모드는 숫자 자체가 점수라 중복이다. */}
-        {!empty && !scoreMode ? (
+        {!empty ? (
           <span className="text-text-dim tabular ml-auto text-[12px] font-bold">
             {pct(test.score ?? 0, test.max)}%
           </span>
@@ -108,7 +98,6 @@ export function TestCard({
   onScore,
   allowMax,
   onMax,
-  onMode,
   dailyEnabled = true,
   checkEnabled = true,
   embedded,
@@ -117,7 +106,6 @@ export function TestCard({
   onScore: (which: "daily" | "check", v: number | null) => void;
   allowMax?: boolean; // 강사 문항수 변경 허용(학원 설정)
   onMax?: (which: "daily" | "check", v: number) => void;
-  onMode?: (which: "daily" | "check", m: TestScoreMode) => void; // 개수/점수 표기 전환(0148a)
   dailyEnabled?: boolean; // 일일테스트 사용(off면 입력창 숨김)
   checkEnabled?: boolean; // 확인테스트 사용(off면 입력창 숨김)
   /** 보고서 카드 안에 들어간 상태 — 카드 속 카드로 겹쳐 보이지 않게 그림자·배경을 뺀 얇은 테두리로(2026-08-05 통합). */
@@ -128,7 +116,7 @@ export function TestCard({
   const todayRange = student.subjects.map((s) => displayLessons(s.today) || s.today).filter(Boolean).join(" / ");
   return (
     <div className={embedded ? "border-line rounded-lg border" : "bg-card border-line shadow-card rounded-2xl border"}>
-      {/* embedded = 보고서 카드 안 → 제목 한 줄 + 안내문구 생략(토글이 바로 옆에 있어 자명하다). */}
+      {/* embedded = 보고서 카드 안 → 제목 한 줄 + 안내문구 생략(칸이 좁고 옆 입력이 이미 자명하다). */}
       <header
         className={`border-line flex items-center justify-between gap-2 border-b ${
           embedded ? "px-3 py-2" : "px-4 py-3"
@@ -144,7 +132,7 @@ export function TestCard({
             </>
           )}
         </div>
-        {embedded ? null : <span className="text-text-faint text-[11px]">개/점 토글로 표기 전환</span>}
+        {embedded ? null : <span className="text-text-faint text-[11px]">맞은 개수 / 문항수</span>}
       </header>
       <div className={`flex flex-col gap-2 ${embedded ? "px-3 py-2" : "px-4 py-3"}`}>
         {dailyEnabled ? (
@@ -155,7 +143,6 @@ export function TestCard({
             onChange={(v) => onScore("daily", v)}
             allowMax={allowMax}
             onMax={onMax ? (v) => onMax("daily", v) : undefined}
-            onMode={onMode ? (m) => onMode("daily", m) : undefined}
           />
         ) : null}
         {checkEnabled ? (
@@ -166,7 +153,6 @@ export function TestCard({
             onChange={(v) => onScore("check", v)}
             allowMax={allowMax}
             onMax={onMax ? (v) => onMax("check", v) : undefined}
-            onMode={onMode ? (m) => onMode("check", m) : undefined}
           />
         ) : null}
         {!dailyEnabled && !checkEnabled ? (

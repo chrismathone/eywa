@@ -130,7 +130,7 @@ describe("buildReport", () => {
     );
     expect(r).not.toContain("이전 진도");
     expect(r).not.toContain("오늘 진도)"); // "확인테스트(오늘 진도)" 라벨
-    expect(r).toContain("일일테스트는 25문제 중 17개"); // 표기는 formatTestScore 단일 소스
+    expect(r).toContain("일일테스트에서 25문제 중 17개 맞음"); // 표기는 formatTestScore 단일 소스
     expect(r).not.toContain("17/25");
   });
 
@@ -375,7 +375,7 @@ describe("월말평가 보고서 문장", () => {
       attitude: "아주 좋음",
     });
     const r = buildSubjectReport(st, 0);
-    expect(r).toContain("일일테스트는 20문제 중 18개");
+    expect(r).toContain("일일테스트에서 20문제 중 18개 맞음");
     expect(r).toContain("수업 태도는 아주 좋음");
   });
 });

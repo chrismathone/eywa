@@ -2,6 +2,7 @@
 
 // 반 단위 대량 발송 — 반을 골라 그 반 재원생 각자에게 **같은 내용**의 리포트 카드를 일괄 발송(반 공지의 리포트-카드 버전).
 // 발송 안전가드(dry-run·과목·동명이인·이미작성 제외)는 서버 액션(sendBulkAdminReports)이 학생별로 최종 강제 — 여기선 안내·확인만.
+import { normalizeHomeworkPages } from "@/features/onescreen/homework-pages";
 import { useState } from "react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
@@ -69,7 +70,7 @@ export function BulkComposeFace({
       checkTest: "",
       attitude: "",
       homework: "",
-      homeworkToday: homeworkToday.trim(),
+      homeworkToday: normalizeHomeworkPages(homeworkToday.trim()),
       textbook: textbook.trim(),
       specialNote: "",
     });
@@ -106,7 +107,7 @@ export function BulkComposeFace({
       teacherName: teacherName.trim() || undefined,
       textbook: textbook.trim() || undefined,
       makeup,
-      homeworkToday: homeworkToday.trim() || undefined,
+      homeworkToday: normalizeHomeworkPages(homeworkToday.trim()) || undefined,
       progress: progress.trim() || undefined,
       notes: body.trim(),
       trendNote: trend.trim() || undefined,

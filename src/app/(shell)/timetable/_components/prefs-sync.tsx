@@ -11,6 +11,7 @@ import {
   writeCompact1hFor,
 } from "@/features/timetable/lib/pref-cookies";
 import { saveTimetableViewPrefs } from "@/features/timetable/server/view-prefs-actions";
+import type { EnglishTrackFilter } from "@/features/classes/english-track";
 
 const ONE_YEAR = 60 * 60 * 24 * 365;
 
@@ -44,19 +45,28 @@ export function TimetableViewPrefsSync({
   collapseEmptyPeriods,
   subject,
   sections,
+  englishTrack,
   savedHideEmptyDays,
   savedCollapseEmptyPeriods,
   savedSections,
+  savedEnglishTrack,
 }: {
   hideEmptyDays: boolean;
   collapseEmptyPeriods: boolean;
   subject: string;
   sections: number[];
+  /**
+   * 영어 프로그램 필터(전체/EiE/인재원 영어). **영어 과목일 때만** 넘긴다(undefined = 저장 대상 아님).
+   * ⚠️ 다른 과목을 보는 중에 'all'을 넘기면 영어에서 좁혀 둔 값이 조용히 풀린다 — 그래서 값이 아니라
+   *    **undefined**로 "지금은 이 축이 없다"를 표현한다.
+   */
+  englishTrack?: EnglishTrackFilter;
   /** 계정에 저장돼 있던 값(null = 미설정). 이것과 다를 때만 저장한다. */
   savedHideEmptyDays: boolean | null;
   savedCollapseEmptyPeriods: boolean | null;
   /** 계정에 저장돼 있던 **이 과목의** 압축 섹션(null = 그 과목 미설정). */
   savedSections: number[] | null;
+  savedEnglishTrack: EnglishTrackFilter | null;
 }) {
   // 배열은 렌더마다 새 참조라 effect 의존성으로 못 쓴다 → 원시 문자열로 고정.
   const key = sections.join(".");
@@ -89,9 +99,14 @@ export function TimetableViewPrefsSync({
     if (subject && savedKey !== key) {
       patch.compact1h = { [subject]: key ? key.split(".").map(Number) : [] };
     }
+    // 프로그램 필터 — 이 축이 있는 과목(영어)일 때만. `savedEnglishTrack`이 null(미설정)이면 'all'과 같은
+    // 뜻이라 그때 'all'을 또 저장하지 않는다(첫 방문에 빈 쓰기가 나가지 않게).
+    if (englishTrack !== undefined && englishTrack !== (savedEnglishTrack ?? "all")) {
+      patch.englishTrack = englishTrack;
+    }
     if (Object.keys(patch).length === 0) return;
 
-    const stamp = `${hideEmptyDays}|${collapseEmptyPeriods}|${subject}|${key}`;
+    const stamp = `${hideEmptyDays}|${collapseEmptyPeriods}|${subject}|${key}|${englishTrack ?? "-"}`;
     if (sentRef.current === stamp) return;
     sentRef.current = stamp;
     // 표시 취향이라 실패해도 화면을 막지 않는다(쿠키 폴백이 남아 이번 기기에선 유지된다).
@@ -101,9 +116,11 @@ export function TimetableViewPrefsSync({
     collapseEmptyPeriods,
     subject,
     key,
+    englishTrack,
     savedHideEmptyDays,
     savedCollapseEmptyPeriods,
     savedKey,
+    savedEnglishTrack,
   ]);
 
   return null;

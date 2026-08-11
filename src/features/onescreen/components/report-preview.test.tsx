@@ -38,8 +38,8 @@ const student = {
   attendance: "출석",
   subjects: [subject],
   tests: {
-    daily: { score: 18, max: 20, prevScore: null, mode: "count" },
-    check: { score: null, max: 20, prevScore: null, mode: "count" },
+    daily: { score: 18, max: 20, prevScore: null },
+    check: { score: null, max: 20, prevScore: null },
   },
   attitude: "매우 좋음",
   homework: "90%",
@@ -68,7 +68,7 @@ describe("ReportPreview", () => {
     expect(screen.getByText("박소선")).toBeTruthy(); // 담임
     expect(screen.getByText("수학 1-1-1 백 알아보기")).toBeTruthy();
     expect(screen.getByText("개념원리 초2-1")).toBeTruthy();
-    expect(screen.getByText("20문제 중 18개")).toBeTruthy();
+    expect(screen.getByText("20문제 중 18개 맞음")).toBeTruthy();
     expect(screen.getByText("90%")).toBeTruthy();
     expect(screen.getByText("원과 현을 무리 없이 따라왔습니다.")).toBeTruthy();
     // 미입력 항목(확인테스트)은 학부모 카드에 줄 자체가 없다.

@@ -31,6 +31,13 @@ import {
   parseTimetableKind,
   type TimetableKind,
 } from "@/features/timetable/lib/class-kind";
+import {
+  ENGLISH_TRACK_FILTERS,
+  ENGLISH_TRACK_FILTER_LABEL,
+  keepEnglishTrack,
+  normalizeEnglishTrackFilter,
+  type EnglishTrackFilter,
+} from "@/features/classes/english-track";
 import { canAccessTenant, canManageTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { resolveSkillAreas } from "@/features/owner/skill-areas";
 import { EcsShortcut } from "./_components/ecs-shortcut";
@@ -88,10 +95,10 @@ type ViewMode = "basic" | "integrated" | "teacher" | "rooms";
 export default async function TimetablePage({
   searchParams,
 }: {
-  searchParams: Promise<{ view?: ViewMode; subject?: string; kind?: string; week?: string; compact1h?: string; emptydays?: string; emptyperiods?: string; gedit?: string }>;
+  searchParams: Promise<{ view?: ViewMode; subject?: string; kind?: string; week?: string; compact1h?: string; emptydays?: string; emptyperiods?: string; gedit?: string; etrack?: string }>;
 }) {
   const user = await requireAccess("timetable");
-  const { view: viewParam, subject: subjectParam, kind: kindRaw, week: weekRaw, compact1h: compact1hRaw, emptydays: emptydaysRaw, emptyperiods: emptyperiodsRaw, gedit: geditRaw } = await searchParams;
+  const { view: viewParam, subject: subjectParam, kind: kindRaw, week: weekRaw, compact1h: compact1hRaw, emptydays: emptydaysRaw, emptyperiods: emptyperiodsRaw, gedit: geditRaw, etrack: etrackRaw } = await searchParams;
   // 정규/특강/전체 — 기본 = 정규(특강 제외). 특강은 방학 단기강좌라 정규 주간표에 섞이면 시야가 흐려진다.
   const kind = parseTimetableKind(kindRaw);
   const cookieStore = await cookies();
@@ -197,6 +204,18 @@ export default async function TimetablePage({
   const defaultSubject = available[0] ?? "";
   const subject =
     subjectParam && available.includes(subjectParam) ? subjectParam : defaultSubject;
+  // 영어 프로그램 보기 필터(전체/EiE/인재원 영어, 0176a `classes.english_track`).
+  // 🔴 **영어에만 있는 축이다** — 다른 과목 반은 english_track이 항상 null이라 'eie'를 걸면 화면이 통째로
+  //    빈다. 그래서 칩도 안 띄우고 값도 'all'로 못박는다(과목 칩으로 옮겨가도 필터가 따라붙지 않는다).
+  // 우선순위 = URL 파라미터(공유 링크 존중) → 계정(0146a) → 전체. 저장은 TimetableViewPrefsSync.
+  const trackApplies = subject === "english";
+  const englishTrack: EnglishTrackFilter = !trackApplies
+    ? "all"
+    : etrackRaw !== undefined
+      ? normalizeEnglishTrackFilter(etrackRaw)
+      : (viewPrefs.englishTrack ?? "all");
+  /** 같은 과목 안에서 움직이는 링크(주 이동·뷰 전환·구분·뷰 설정)가 실어 나르는 값. 비영어면 안 싣는다. */
+  const carriedTrack = trackApplies ? englishTrack : undefined;
   /** 그 과목을 열 때 처음 보이는 뷰(학원설정, 미설정·모르는 값=기본뷰). 과목 칩은 상대 과목 것도 묻는다. */
   const defaultViewOf = (key: string): ViewMode =>
     subjectDefaultView(settings.operations.subjects, key);
@@ -242,8 +261,13 @@ export default async function TimetablePage({
   // 기본·강사·통합 3뷰와 상단 명단 요약이 전부 같은 명단을 본다(뷰마다 따로 거르면 숫자가 갈린다).
   // ⚠️ 과목 칩(available)에는 **일부러 적용하지 않는다** — 필터가 과목을 지우면 고를 과목이 0개가 돼
   // 빈 화면에 갇힌다. 칩은 "학원이 무엇을 운영하나", 필터는 "내가 누구를 보나"로 층을 나눈다.
+  // 프로그램 필터는 **반 단위**(학년 필터와 축이 다르다 — 저쪽은 학생 단위라 혼합 반이 살아남아야 한다).
+  // 비대칭 계약 주의: '인재원 영어' = "EiE가 아닌 전부"(미분류 포함) — keepEnglishTrack 주석 참조.
   const slots = applyGradeFilter(
-    kindSlots.filter((s) => s.subject === subject),
+    keepEnglishTrack(
+      kindSlots.filter((s) => s.subject === subject),
+      englishTrack,
+    ),
     viewPrefs.grades,
   );
   const subjectRow = settings.operations.subjects.find((s) => s.key === subject);
@@ -388,6 +412,7 @@ export default async function TimetablePage({
       compact1hExplicit: true,
       hideEmptyDays,
       collapseEmptyPeriods,
+      englishTrack: carriedTrack,
     });
   // 상단 명단 요약(ijw식 재원/신입/전입/퇴원) — 그 주 시점(타임머신) 기준. 학생이 여러 반에 걸쳐 있어
   // studentId로 유일 집계(중복 제거). 상태 우선순위 재원>대기>퇴원(한 반 재원·다른 반 퇴원이면 재원).
@@ -426,9 +451,11 @@ export default async function TimetablePage({
         collapseEmptyPeriods={collapseEmptyPeriods}
         subject={subject}
         sections={compactList}
+        englishTrack={carriedTrack}
         savedHideEmptyDays={viewPrefs.hideEmptyDays}
         savedCollapseEmptyPeriods={viewPrefs.collapseEmptyPeriods}
         savedSections={viewPrefs.compact1h?.[subject] ?? null}
+        savedEnglishTrack={viewPrefs.englishTrack}
       />
       {/* 계정에 저장된 셀 색 강도를 스토어에 주입(서버→클라 단방향). 계정값이 없으면 기기 설정 유지. */}
       <TimetableColorPrefSync mode={viewPrefs.colorMode} />
@@ -465,7 +492,7 @@ export default async function TimetablePage({
         <WeekNav
           currentWeek={week}
           today={today}
-          hrefForWeek={(monday) => buildHref({ view: effView, subject, defaultSubject, kind, week: monday, thisWk, compact1h: compactList, hideEmptyDays, collapseEmptyPeriods, defaultView: thisSubjectDefaultView })}
+          hrefForWeek={(monday) => buildHref({ view: effView, subject, defaultSubject, kind, week: monday, thisWk, compact1h: compactList, hideEmptyDays, collapseEmptyPeriods, englishTrack: carriedTrack, defaultView: thisSubjectDefaultView })}
         />
         <span className="bg-line h-4 w-px" aria-hidden />
 
@@ -503,6 +530,9 @@ export default async function TimetablePage({
                 // 네비(주 이동·뷰 전환·강사 토글)는 전부 보존하는데 과목 칩만 떨궈 설정이 초기화됐다(적대 감사 LOW).
                 hideEmptyDays,
                 collapseEmptyPeriods,
+                // 프로그램 필터는 **영어에만 있는 축**이라 다른 과목으로 갈 땐 안 싣는다(싣고 가면 그 과목
+                // 반이 전부 english_track=null이라 'eie'에서 화면이 통째로 빈다). 영어로 돌아올 땐 계정값 복원.
+                englishTrack: k === "english" ? englishTrack : undefined,
               })}
               className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs transition ${
                 subject === k
@@ -534,6 +564,7 @@ export default async function TimetablePage({
                 compact1h: compactList,
                 hideEmptyDays,
                 collapseEmptyPeriods,
+                englishTrack: carriedTrack,
               })}
               className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs transition ${
                 kind === k
@@ -546,6 +577,43 @@ export default async function TimetablePage({
           ))}
         </div>
         <span className="bg-line h-4 w-px" aria-hidden />
+
+        {/* 프로그램(전체/EiE/인재원 영어) — 영어 과목에서만. ECS 랜딩의 같은 칩과 **같은 어휘**다
+            (원장 2026-08-04 "상단 헤더에 토글버튼", 2026-08-11 통합뷰에도 요청).
+            ⚠️ 라벨·비대칭 계약은 english-track.ts 단일 소스에서 온다 — 여기서 문자열을 새로 적지 말 것. */}
+        {trackApplies ? (
+          <>
+            <div className="flex flex-wrap items-center gap-1">
+              <span className="micro mr-1 compact-chrome:hidden">프로그램</span>
+              {ENGLISH_TRACK_FILTERS.map((t) => (
+                <ParamLink
+                  key={t}
+                  href={buildHref({
+                    view: effView,
+                    defaultView: thisSubjectDefaultView,
+                    subject,
+                    defaultSubject,
+                    kind,
+                    week,
+                    thisWk,
+                    compact1h: compactList,
+                    hideEmptyDays,
+                    collapseEmptyPeriods,
+                    englishTrack: t,
+                  })}
+                  className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs transition ${
+                    englishTrack === t
+                      ? "border-primary bg-primary text-primary-foreground font-medium"
+                      : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
+                  }`}
+                >
+                  {ENGLISH_TRACK_FILTER_LABEL[t]}
+                </ParamLink>
+              ))}
+            </div>
+            <span className="bg-line h-4 w-px" aria-hidden />
+          </>
+        ) : null}
         </>
         )}
 
@@ -567,7 +635,7 @@ export default async function TimetablePage({
             return (
               <ParamLink
                 key={v.key}
-                href={buildHref({ view: v.key, subject, defaultSubject, kind, week, thisWk, compact1h: compactList, hideEmptyDays, collapseEmptyPeriods, defaultView: thisSubjectDefaultView })}
+                href={buildHref({ view: v.key, subject, defaultSubject, kind, week, thisWk, compact1h: compactList, hideEmptyDays, collapseEmptyPeriods, englishTrack: carriedTrack, defaultView: thisSubjectDefaultView })}
                 className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs transition ${
                   effView === v.key
                     ? "border-primary bg-primary text-primary-foreground font-medium"
@@ -596,7 +664,7 @@ export default async function TimetablePage({
                 *"통합뷰에서 편집모드를 누르고, 통합뷰의 그 자체를 드래그하고 싶은거야"*).
                 누르면 같은 서식 그대로 **수업명 행만** 남고 그 위에서 반을 끌어 줄을 바꾼다. */}
             <ParamLink
-              href={buildHref({ view: effView, subject, defaultSubject, kind, week, thisWk, compact1h: compactList, hideEmptyDays, collapseEmptyPeriods, gedit: !groupEditing, defaultView: thisSubjectDefaultView })}
+              href={buildHref({ view: effView, subject, defaultSubject, kind, week, thisWk, compact1h: compactList, hideEmptyDays, collapseEmptyPeriods, gedit: !groupEditing, englishTrack: carriedTrack, defaultView: thisSubjectDefaultView })}
               title="통합뷰를 수업명만 남긴 상태로 바꿔 반을 끌어 옮깁니다"
               className={`inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-2 py-0.5 text-xs transition ${
                 groupEditing
@@ -648,6 +716,7 @@ export default async function TimetablePage({
                   compact1h: compactList,
                   hideEmptyDays,
                   collapseEmptyPeriods: !collapseEmptyPeriods,
+                  englishTrack: carriedTrack,
                 })
               : undefined
           }
@@ -665,6 +734,7 @@ export default async function TimetablePage({
                   compact1h: compactList,
                   hideEmptyDays: !hideEmptyDays,
                   collapseEmptyPeriods,
+                  englishTrack: carriedTrack,
                 })
               : undefined
           }
@@ -676,6 +746,18 @@ export default async function TimetablePage({
         {viewPrefs.grades && slots.length === 0 && kindSlots.some((s) => s.subject === subject) ? (
           <span className="bg-accent text-accent-foreground rounded-full px-2.5 py-0.5 text-[11px]">
             학년 필터에 걸려 표시할 수업이 없습니다 — 뷰 설정에서 학년을 넓혀 보세요.
+          </span>
+        ) : null}
+
+        {/* 프로그램 필터로 화면이 비면 원인을 밝힌다 — 안 그러면 아래 빈 상태가 "해당 과목의 시간표가
+            없습니다"라고 말해 **거짓 원인**을 준다(학년 필터에 같은 안내를 둔 이유와 동일).
+            ⚠️ 학년 필터 안내와 조건이 겹칠 수 있어 프로그램 쪽을 먼저 잡는다(학년은 계정 설정이라 안 보이지만
+            프로그램은 바로 위 칩에서 눈에 보이는 원인이다). */}
+        {englishTrack !== "all" && slots.length === 0 && kindSlots.some((s) => s.subject === subject) ? (
+          <span className="bg-accent text-accent-foreground rounded-full px-2.5 py-0.5 text-[11px]">
+            프로그램 필터(
+            {ENGLISH_TRACK_FILTER_LABEL[englishTrack]})에 걸려 표시할 수업이 없습니다 — &lsquo;전체&rsquo;로
+            바꿔 보세요.
           </span>
         ) : null}
 
@@ -780,7 +862,7 @@ export default async function TimetablePage({
           initialShowOthers={subjectRow?.integrationShowOthers !== false}
           initialOthersTitle={subjectRow?.integrationOthersTitle ?? ""}
           initialPresets={groupPresets}
-          doneHref={buildHref({ view: effView, subject, defaultSubject, kind, week, thisWk, compact1h: compactList, hideEmptyDays, collapseEmptyPeriods, defaultView: thisSubjectDefaultView })}
+          doneHref={buildHref({ view: effView, subject, defaultSubject, kind, week, thisWk, compact1h: compactList, hideEmptyDays, collapseEmptyPeriods, englishTrack: carriedTrack, defaultView: thisSubjectDefaultView })}
         />
       ) : isIntegrated ? (
         <TimetableZoomArea>
@@ -871,6 +953,12 @@ function buildHref(opts: {
    */
   gedit?: boolean;
   /**
+   * 영어 프로그램 필터(전체/EiE/인재원 영어). **값이 오면 양방향 명시 직렬화**(all도 적는다) —
+   * hideEmptyDays와 같은 규약이다. 'all'을 생략하면 계정에 저장된 'eie'가 되살아나 **'전체' 칩이 죽는다**.
+   * 영어가 아닌 과목으로 가는 링크는 undefined(그 과목엔 없는 축이라 실어 나르면 안 된다).
+   */
+  englishTrack?: EnglishTrackFilter;
+  /**
    * 이 링크가 가리키는 **과목의 기본 뷰**(학원설정 `subjects[].defaultView`). 같으면 `view`를 생략해
    * URL을 깨끗이 둔다. 미지정=basic(설정이 없던 시절과 같은 URL).
    */
@@ -891,6 +979,7 @@ function buildHref(opts: {
   if (opts.collapseEmptyPeriods !== undefined)
     params.set("emptyperiods", opts.collapseEmptyPeriods ? "collapse" : "expand");
   if (opts.gedit) params.set("gedit", "1");
+  if (opts.englishTrack !== undefined) params.set("etrack", opts.englishTrack);
   const q = params.toString();
   return q ? `/timetable?${q}` : "/timetable";
 }

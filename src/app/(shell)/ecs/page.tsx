@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { requireAccess } from "@/lib/auth/require-access";
 import { PageHeader } from "@/components/page-header";
 import { WeekNav } from "@/app/(shell)/timetable/_components/week-nav";
@@ -10,6 +9,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { effectiveTeacherScope } from "@/lib/auth/view-mode";
 import { canManageSheetSync } from "@/features/integrations/server/sheet-access";
 import { EcsSheetImportDialog } from "./_components/sheet-import-dialog";
+import { EcsLandingList } from "./_components/landing-list";
 import { EcsTrackFilter } from "./_components/track-filter";
 import { EcsFaceTabs, EcsDayNav } from "./_components/today-nav";
 import { ENGLISH_TRACK_FILTER_LABEL } from "@/features/classes/english-track";
@@ -92,46 +92,8 @@ export default async function EcsLandingPage({
                 : "이 주에 운영 중인 영어 반이 없습니다."}
         </p>
       ) : (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {res.cards.map((card) => {
-            const pct = card.totalSlots > 0 ? Math.round((card.filledSlots / card.totalSlots) * 100) : 0;
-            return (
-              // 카드 높이 균형: grid stretch + flex-col + 통계줄 mt-auto — 짧은 카드도 같은 높이·하단 정렬
-              <Link
-                key={card.classId}
-                href={`/ecs/${card.classId}?week=${res.weekMonday}`}
-                className="bg-card shadow-card hover:shadow-md flex h-full flex-col rounded-2xl px-4 py-3 transition"
-              >
-                <p className="text-foreground flex items-center gap-1.5 truncate text-[15px] font-bold">
-                  <span className="truncate">{card.className}</span>
-                  {/* 임시 위임(0173a) — 원스크린 반 칩과 같은 앰버 규약. 남의 반 시트를 내 반인 줄 알고
-                      고치는 일이 없게, 목록에서부터 갈라 보인다(원장 지시 2026-08-03). */}
-                  {card.delegated ? (
-                    <span className="border-amber bg-amber-soft text-amber shrink-0 rounded-pill border px-1.5 py-0.5 text-[10px] font-bold">
-                      위임
-                    </span>
-                  ) : null}
-                </p>
-                <p className="text-text-dim mt-0.5 text-[13px]">
-                  {card.teacherName ?? "담임 미지정"}
-                  {card.delegated ? " 선생님 반" : ""}
-                </p>
-                {card.orphanSlots > 0 ? (
-                  <p className="text-text-dim mt-1 text-[12px]">시간 변경된 기록 {card.orphanSlots}건</p>
-                ) : null}
-                <div className="mt-auto flex items-center gap-2 pt-2">
-                  <span className="num text-foreground text-[14px] font-bold">
-                    {card.filledSlots}/{card.totalSlots}
-                  </span>
-                  <span className="text-text-dim text-[12px]">교시 작성</span>
-                  <span className="bg-bg-soft ml-auto h-1.5 w-16 overflow-hidden rounded-full">
-                    <span className="bg-primary block h-full rounded-full" style={{ width: `${pct}%` }} />
-                  </span>
-                </div>
-              </Link>
-            );
-          })}
-        </div>
+        // 카드 벽 → **한 장의 시트**(2026-08-11 원장 "이름에 걸맞게 컴팩트하게"). 상세는 landing-list.tsx.
+        <EcsLandingList cards={res.cards} weekMonday={res.weekMonday} />
       )}
     </div>
   );

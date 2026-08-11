@@ -138,6 +138,12 @@ export type ScheduleSlot = {
   // 화면은 이 boolean만 쓴다(이름 매칭 재구현 금지 — 급여와 판정이 갈리면 시간표엔 특강인데 급여엔 아닌 반이 생긴다).
   isSpecialLecture: boolean;
   /**
+   * 영어 프로그램 구분(0176a `classes.english_track`) — 통합뷰 '프로그램' 보기 필터의 근거. 비영어 반은 null.
+   * 🔴 **컬럼이 유일한 진실**(반 이름으로 추측 금지 — 이름을 고치면 분류가 조용히 뒤집힌다).
+   * ⚠️ 보기 필터일 뿐이라 명단·집계·돈에 안 닿는다([`english-track.ts`](../../classes/english-track.ts)).
+   */
+  englishTrack: string | null;
+  /**
    * 비수업 블록(감독·준비·회의·연차·쉬는 시간, 0138a)이면 그 종류. 수업 슬롯은 항상 undefined.
    * ⚠️ **강사뷰 렌더 전용** — 반이 아니라서 classId가 없고, 학생·수강·청구·급여 어디에도 안 걸린다.
    * 다른 뷰·집계는 이 값이 있는 항목을 세지 말 것(수업 수가 부풀어 보인다).
@@ -154,6 +160,7 @@ type SlotClassRef = {
   is_active?: boolean | null;
   closed_at?: string | null;
   is_special?: boolean | null;
+  english_track?: string | null;
   pending_teacher_id?: string | null;
   pending_teacher_date?: string | null;
   classroom_id?: string | null;
@@ -207,7 +214,7 @@ async function fetchSlots(
           `id, day_of_week, start_time, end_time, class_id, slot_teacher_label, slot_room_label, classroom_id,
        valid_from, valid_to,
        class:class_id!inner (
-         id, class_name, subject, bg_color, text_color, is_active, closed_at, is_special,
+         id, class_name, subject, bg_color, text_color, is_active, closed_at, is_special, english_track,
          pending_teacher_id, pending_teacher_date, classroom_id,
          teacher:teacher_id ( display_name ),
          pendingTeacher:pending_teacher_id ( display_name ),
@@ -275,6 +282,7 @@ async function fetchSlots(
           bg_color?: string | null;
           text_color?: string | null;
           is_special?: boolean | null;
+          english_track?: string | null;
           pending_teacher_id?: string | null;
           pending_teacher_date?: string | null;
           classroom_id?: string | null;
@@ -337,6 +345,7 @@ async function fetchSlots(
         isSpecial: (klass?.is_special as boolean | null) ?? null,
         className: (klass?.class_name as string | null) ?? null,
       }),
+      englishTrack: (klass?.english_track as string | null) ?? null,
     };
   });
 }
@@ -822,6 +831,8 @@ export async function getTodaySchedule(): Promise<TodaySlot[]> {
         pendingHandover: null,
         // 대시보드 '오늘 일정'은 정규/특강을 가르지 않지만 타입 계약상 채운다(이름 폴백만으로 충분).
         isSpecialLecture: isSpecialLecture({ isSpecial: null, className: klass?.class_name ?? null }),
+        // 프로그램 구분은 시간표 화면의 보기 필터 전용 — 여긴 안 읽으므로 조회도 안 한다(컬럼 추가 X).
+        englishTrack: null,
       };
     })
     .sort((a, b) => toMins(a.startTime) - toMins(b.startTime))
@@ -916,6 +927,8 @@ export async function getTeacherScheduleBlocks(
     classTextColor: null,
     pendingHandover: null,
     isSpecialLecture: false,
+    // 비수업 블록은 반이 아니라 프로그램 구분도 없다 — 필터가 이 항목을 지우지 않게 null(=인재원 쪽 통과).
+    englishTrack: null,
     blockKind: r.kind as NonNullable<ScheduleSlot["blockKind"]>,
     students: [],
   }));

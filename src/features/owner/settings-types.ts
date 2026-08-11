@@ -349,10 +349,9 @@ export const reportSchema = z.object({
   showTrendGraph: z.boolean().default(true), // 성적 추이 그래프(시험·과제 순수 SVG) — edutrix ReportPaper 그래프 이식
   showAttachments: z.boolean(), // 학생 사진 첨부(P2b) — /r·ClassNote 게시 이미지에 표시
   allowTeacherTestMax: z.boolean(), // 강사가 원스크린에서 테스트 문항수(/N)를 직접 변경 가능한지. off=과목 설정값 고정.
-  // 테스트 점수 표기 모드(0148a) — count="20문제 중 18개"(현행) / score="95점"(만점 100). 강사가 입력칸에서
-  // 오버라이드 가능(세션 승계). **기본 count**(무회귀 — 현행 표시 보존). 인재원은 일일=score로 전환(일일=100점 만점).
-  dailyTestScoreMode: z.enum(["score", "count"]).default("count"),
-  checkTestScoreMode: z.enum(["score", "count"]).default("count"),
+  // 🔴 테스트 점수 표기 모드(0148a `dailyTestScoreMode`/`checkTestScoreMode`)는 **제거됐다**(원장 2026-08-11
+  //    "점은 제거하고 갯수로만"). 표기는 "20문제 중 18개 맞음" 하나뿐이다(report-comment.ts formatTestScore).
+  //    저장된 jsonb에 옛 키가 남아 있어도 읽는 곳이 없다 — 다시 만들지 말 것.
   // 작성률 예외 강사(표시 이름 배열) — '강사별 작성률' 표에서 제외(보고서 작성 대상이 아닌 보조·데스크 강사 등).
   writingExemptTeachers: z.array(z.string()).default([]),
   // AI 멘트 공지 모드 — 0093a(4c). A=단일 문단(사실+특이사항 종합), B=수업내용(P1)+태도·특이사항(P2) 2문단 분리.
