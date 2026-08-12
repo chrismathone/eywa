@@ -41,7 +41,14 @@ export default async function EcsSheetPage({
     );
   }
 
-  const classOptions = landing.ok ? landing.cards.map((c) => ({ id: c.classId, name: c.className })) : [];
+  // 🔴 랜딩 목록은 **보기 필터**(프로그램·담임)가 걸린 목록이다. 링크·북마크로 필터 밖의 반에 바로
+  //    들어오면 지금 보고 있는 반이 옵션에 없고, 그러면 상단 드롭다운이 반 이름 대신 '반 선택'이라는
+  //    빈 표시로 바뀐다 — 화면이 "지금 무엇을 보고 있는지"를 잃는다. 없으면 현재 반을 맨 앞에 끼운다.
+  //    (담임 필터가 생기면서 4/42로 좁아지는 일이 흔해져 실제로 밟히는 길이 됐다, 2026-08-11.)
+  const listed = landing.ok ? landing.cards.map((c) => ({ id: c.classId, name: c.className })) : [];
+  const classOptions = listed.some((o) => o.id === classId)
+    ? listed
+    : [{ id: classId, name: res.data.className }, ...listed];
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">

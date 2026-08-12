@@ -12,6 +12,7 @@ import { effectiveTeacherScope } from "@/lib/auth/view-mode";
 import { canManageSheetSync } from "@/features/integrations/server/sheet-access";
 import { EcsSheetImportDialog } from "./_components/sheet-import-dialog";
 import { EcsLandingList } from "./_components/landing-list";
+import { EcsTeacherFilter } from "./_components/teacher-filter";
 import { EcsTrackFilter } from "./_components/track-filter";
 import { EcsFaceTabs, EcsDayNav, EcsTodayModeTabs, type EcsTodayMode } from "./_components/today-nav";
 import { ENGLISH_TRACK_FILTER_LABEL } from "@/features/classes/english-track";
@@ -95,6 +96,13 @@ export default async function EcsLandingPage({
         <WeekNav currentWeek={res.weekMonday} today={res.today} hrefForWeek={(monday) => `/ecs?view=week&week=${monday}`} />
         {/* 프로그램 필터(EiE / 인재원 영어) — 계정 귀속. 시트 가져오기 왼쪽에 붙여 주 네비와 한 줄. */}
         <EcsTrackFilter value={res.trackFilter} counts={res.trackCounts} />
+        {/* 담임 필터 — 프로그램 **다음**에 걸린다(둘은 곱해진다). 옵션이 프로그램 적용 후 집합이라
+            순서가 화면과 같고, 담임이 한 명뿐인 화면(강사 본인)에선 컴포넌트가 스스로 사라진다. */}
+        <EcsTeacherFilter
+          value={res.teacherFilter}
+          options={res.teacherOptions}
+          totalCount={res.trackCounts[res.trackFilter]}
+        />
         {canSync ? (
           <div className="ml-auto">
             <EcsSheetImportDialog />

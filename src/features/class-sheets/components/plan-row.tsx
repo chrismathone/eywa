@@ -96,7 +96,7 @@ export const PlanRow = memo(function PlanRow({
   const areaTone = skillAreaColorOf(skillAreas, areaValue ?? "");
   // 셀렉트도 알약처럼 — 닫힌 상태(평소 보이는 모습)에 색·굵기가 그대로 실린다.
   // 치수는 시트 공통 박스(SHEET_BOX_FRAME = h-5·rounded-sm)를 그대로 쓴다 — 여기만 h-6으로 두면
-  // 같은 줄의 교재·페이지 칸과 높이가 어긋난다(높이를 덧붙여 덮지 말 것: 이기는 쪽은 CSS 순서가 정한다).
+  // 같은 줄의 교재·시간 칸과 높이가 어긋난다(높이를 덧붙여 덮지 말 것: 이기는 쪽은 CSS 순서가 정한다).
   const areaCls = `${SHEET_BOX_FRAME} w-full cursor-pointer px-1 text-[13px] font-bold outline-none focus:border-primary ${SUBJECT_SOFT[areaTone]}`;
 
   return (
@@ -130,7 +130,7 @@ export const PlanRow = memo(function PlanRow({
         <CasInput lineId={line.id} field="textbook" fallback={line.textbook} store={store} handlers={handlers} canEdit={canEdit} ariaLabel="교재" />
       </td>
       <td className="py-0.5 pr-1">
-        <CasInput lineId={line.id} field="page_range" fallback={line.pageRange} store={store} handlers={handlers} canEdit={canEdit} ariaLabel="페이지" />
+        <CasInput lineId={line.id} field="page_range" fallback={line.pageRange} store={store} handlers={handlers} canEdit={canEdit} ariaLabel="시간" />
       </td>
       <td className="py-0.5 pr-1">
         <CasInput lineId={line.id} field="progress" fallback={line.progress} store={store} handlers={handlers} canEdit={canEdit} ariaLabel="진도" />

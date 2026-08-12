@@ -5,22 +5,21 @@
  * **같은 셀 구현**을 쓴다(원장 2026-08-11 "쓸데없이 중복되는 컴포넌트가 다수" — 중복의 처방은 추출).
  *
  *  · `RosterNameCell` — 이름(학생 정보 링크) + 영어이름 + 퇴원일.
- *  · `RosterSlotCells` — 한 교시분 4칸: 출결(클릭 알약) · 유닛 · 태도 · 특이사항.
- *    entry가 null이면(통합 표에서 그 교시 수강 대상이 아닌 학생) 4칸 전부 '—'로 조용히 비운다.
+ *  · `RosterSlotCells` — 한 교시분 5칸: 출결(체크 순환) · 유닛 · 태도(체크 순환) · 점수 · 특이사항.
+ *    entry가 null이면(통합 표에서 그 교시 수강 대상이 아닌 학생) 5칸 전부 '—'로 조용히 비운다.
  *
- * 🔴 출결은 **클릭 알약**(원장 2026-08-11 "출결도 클릭형으로 변경. 드랍다운 제거") — 옛 드롭다운
- *    (attendance-select)은 삭제됐다. 저장 경로는 불변: handlers.setAttendance/clearAttendance
- *    (= setAttendanceCell·0169a — 권한·담당 반·7일 창 게이트 공용, #77).
+ * 🔴 컨트롤·저장 경로는 주간 표의 것을 **한 글자도 바꾸지 않고** 옮겼다: 출결=AttendanceCheck(누를 때마다
+ *    출석→결석→지각→선택 안 함, 우클릭=사유 — 원장 2026-08-11 "클릭형으로 변경. 드랍다운 제거"),
+ *    태도=AttitudeCheck, 점수(0202a)·특이사항=한 마크 행 공유(saveMark), 유닛=SessionUnitsField.
  */
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { WindowLink } from "@/components/workspace/window-link";
 import { handleGridNavKey } from "@/features/onescreen/components/grid-nav";
 import { SessionUnitsField } from "@/features/onescreen/components/attendance-pills";
-import { FieldSelect } from "@/features/onescreen/components/field-select";
-import { ATTITUDE } from "@/features/onescreen/attitude";
 import type { RosterEntry } from "../lib/grid";
-import { SHEET_BOX_READONLY, SHEET_BOX_UNITS, SHEET_INPUT } from "../ui-box";
-import { TodayAttendancePills } from "./today-attendance-pills";
+import { SHEET_BOX_UNITS, SHEET_INPUT } from "../ui-box";
+import { AttendanceCheck } from "./attendance-check";
+import { AttitudeCheck } from "./attitude-check";
 import type { SheetHandlers } from "./sheet-client";
 
 export type StudentMeta = {
@@ -57,7 +56,7 @@ export function RosterNameCell({ entry, meta }: { entry: RosterEntry; meta: Stud
   );
 }
 
-/** 한 교시분 4칸(출결·유닛·태도·특이사항). 폭은 표의 colgroup이 정한다(88·46·96·잔여). */
+/** 한 교시분 5칸(출결·유닛·태도·점수·특이사항). 폭은 표의 colgroup이 정한다(60·46·80·54·잔여). */
 export function RosterSlotCells({
   entry,
   meta,
@@ -69,39 +68,37 @@ export function RosterSlotCells({
   canEdit,
   handlers,
   navRow,
-  navCol,
+  navColSuffix = "",
   withDivider = false,
 }: {
-  /** null = 이 학생이 이 교시 수강 대상이 아님(통합 표) — 4칸 전부 '—'. */
+  /** null = 이 학생이 이 교시 수강 대상이 아님(통합 표) — 5칸 전부 '—'. */
   entry: RosterEntry | null;
   meta: StudentMeta | undefined;
   date: string;
   slotStart: string;
-  mark: { status: string | null; progressNote: string | null } | null;
+  mark: { status: string | null; progressNote: string | null; score: string | null } | null;
   att: { status: string; note: string | null; units: number | null; slot: string | null } | null;
   canMarkDate: boolean;
   canEdit: boolean;
   handlers: SheetHandlers;
   /** 키보드 세로 이동(Enter/↑↓) 행 번호 — 보이는 행 기준으로 표가 매긴다. */
   navRow: number;
-  /** 특이사항 칸의 이동 열 식별자 — 통합 표는 교시마다 다른 열이라 slotStart를 섞어 넘긴다. */
-  navCol: string;
+  /** 이동 열 식별자 꼬리 — 통합 표는 교시마다 다른 열이라 `:${slotStart}`를 붙여 세로 이동을 교시 안에 가둔다. */
+  navColSuffix?: string;
   /** 교시 그룹 경계선(통합 표) — 첫 칸 왼쪽에 옅은 세로선(표 규약: 세로선은 가로선보다 한 단계 옅게). */
   withDivider?: boolean;
 }) {
   const dividerCls = withDivider ? "border-line border-l" : "";
   if (entry === null) {
+    const dash = <span className="text-text-faint text-[13px] font-semibold">—</span>;
     return (
       <>
         <td className={`py-px text-center ${dividerCls}`} title="이 교시 수강 대상이 아닙니다">
-          <span className="text-text-faint text-[13px] font-semibold">—</span>
+          {dash}
         </td>
-        <td className="py-px text-center">
-          <span className="text-text-faint text-[13px] font-semibold">—</span>
-        </td>
-        <td className="py-px text-center">
-          <span className="text-text-faint text-[13px] font-semibold">—</span>
-        </td>
+        <td className="py-px text-center">{dash}</td>
+        <td className="py-px text-center">{dash}</td>
+        <td className="py-px text-center">{dash}</td>
         <td className="py-px pr-1" />
       </>
     );
@@ -110,19 +107,18 @@ export function RosterSlotCells({
   return (
     <>
       <td className={`py-px ${dividerCls}`}>
-        {/* 클릭 알약(압축 라벨 출/지/결 — 88px 열) — 활성 '출석' 재클릭=0169a 취소, 지각·결석=사유 창. */}
-        <TodayAttendancePills
+        {/* 누를 때마다 출석 → 결석 → 지각 → 선택 안 함(원장 2026-08-11). 사유는 우클릭(순환을 막지 않게). */}
+        <AttendanceCheck
           status={att?.status ?? null}
           note={att?.note ?? null}
           studentName={meta?.name ?? ""}
           canMark={canMarkDate && rowEditable}
-          compact
           onSet={(status, n) => handlers.setAttendance(entry.studentId, date, slotStart, status, n)}
           onClear={() => handlers.clearAttendance(entry.studentId, date, slotStart)}
         />
       </td>
       <td className="px-1 py-px text-center">
-        {/* 유닛 = session_units. 결석은 시수를 안 쓰고, 기록이 없으면 값 자체가 없다('—', 원장 지시). */}
+        {/* 유닛 = session_units. 결석은 시수를 안 쓰고, 기록이 없으면 값 자체가 없다('—', 원장 "없는 경우 -"). */}
         {att?.status === "absent" ? (
           <span
             className="text-text-faint text-[13px] font-semibold"
@@ -146,18 +142,37 @@ export function RosterSlotCells({
         )}
       </td>
       <td className="py-px pr-1">
-        {rowEditable ? (
-          <FieldSelect
-            options={ATTITUDE}
-            value={mark?.status ?? null}
-            ariaLabel={`${meta?.name ?? ""} 태도`}
-            box={SHEET_INPUT}
-            onSelect={(v) => handlers.saveMark(entry.studentId, date, slotStart, v, mark?.progressNote ?? null)}
-          />
-        ) : (
-          // 읽기 전용 행도 **값은 보여준다**(옛 '완'·'결석' 같은 이전 표기 포함) — 숨기면 기록이 증발한다.
-          <span className={SHEET_BOX_READONLY}>{mark?.status ?? "—"}</span>
-        )}
+        {/* 출결과 같은 체크 순환(원장 2026-08-11 "태도도 마찬가지"). */}
+        <AttitudeCheck
+          value={mark?.status ?? null}
+          studentName={meta?.name ?? ""}
+          canEdit={rowEditable}
+          onSet={(v) => handlers.saveMark(entry.studentId, date, slotStart, v, mark?.progressNote ?? null)}
+        />
+      </td>
+      <td className="py-px pr-1">
+        {/* 점수(0202a) — 태도·특이사항과 **같은 행 하나**를 공유하므로 저장은 같은 액션으로 간다.
+            ⚠️ 0202a 미적용이면 서버가 "아직 준비 중"이라 답한다(태도·특이사항 저장은 그대로 산다). */}
+        <input
+          className={`${SHEET_INPUT} text-center`}
+          defaultValue={mark?.score ?? ""}
+          disabled={!rowEditable}
+          aria-label={`${meta?.name ?? ""} 점수`}
+          placeholder="—"
+          data-nav-col={`ecs-score${navColSuffix}`}
+          data-nav-row={navRow}
+          onKeyDown={handleGridNavKey}
+          onChange={(e) =>
+            handlers.saveMark(
+              entry.studentId,
+              date,
+              slotStart,
+              mark?.status ?? null,
+              mark?.progressNote ?? null,
+              e.target.value,
+            )
+          }
+        />
       </td>
       <td className="py-px pr-1">
         <input
@@ -165,7 +180,7 @@ export function RosterSlotCells({
           defaultValue={mark?.progressNote ?? ""}
           disabled={!rowEditable}
           aria-label={`${meta?.name ?? ""} 특이사항`}
-          data-nav-col={navCol}
+          data-nav-col={`ecs-note${navColSuffix}`}
           data-nav-row={navRow}
           onKeyDown={handleGridNavKey}
           onChange={(e) =>

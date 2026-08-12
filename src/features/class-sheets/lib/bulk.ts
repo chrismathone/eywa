@@ -94,7 +94,7 @@ export function countStatusOverwrites(
 /** 일괄로 채울 수 있는 계획 칸 — 구분(skill_area)은 줄의 정체라 제외(바꾸면 다른 영역 줄이 된다). */
 export const PLAN_BULK_FIELDS = [
   { key: "textbook", label: "교재" },
-  { key: "page_range", label: "페이지" },
+  { key: "page_range", label: "시간" }, // 라벨만 — 저장 컬럼은 page_range 그대로(2026-08-11)
   { key: "progress", label: "진도" },
   { key: "homework", label: "과제" },
 ] as const;

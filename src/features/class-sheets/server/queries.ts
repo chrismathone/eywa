@@ -24,7 +24,15 @@ import {
   readEcsCollapsedRosterGroups,
   readEcsEnglishTrack,
   readEcsShowSelfStudy,
+  readEcsTeacher,
 } from "../view-prefs";
+import {
+  buildTeacherOptions,
+  ECS_TEACHER_ALL,
+  keepTeacher,
+  resolveTeacherFilter,
+  type LandingTeacherOption,
+} from "../landing-teacher";
 import type { RosterGroupKey } from "../lib/roster-order";
 import { keepEnglishTrack, type EnglishTrackFilter } from "@/features/classes/english-track";
 import {
@@ -107,7 +115,7 @@ export type ClassSheetWeekData = {
    */
   unitsByDate: Record<string, number>;
   /** `${studentId}|${date}|${HH:MM}` → 마크. */
-  marks: Record<string, { status: string | null; progressNote: string | null }>;
+  marks: Record<string, { status: string | null; progressNote: string | null; score: string | null }>;
   goals: SheetGoalDTO[];
   monthStart: string;
   memos: Record<string, string>;
@@ -226,7 +234,10 @@ export async function getClassSheetWeek(
       .eq("period_start", monthStart),
     admin
       .from("class_sheet_student_marks")
-      .select("student_id, mark_date, slot_start, status, progress_note")
+      // 🔴 `*`인 이유 = **마이그레이션(0202a `score`)보다 앱이 먼저 배포돼도 시트가 안 죽게**(#95).
+      //    열을 이름으로 적으면 아직 없는 컬럼 하나에 PostgREST가 400을 내고 반 시트 전체가 통째로
+      //    안 열린다(2026-08-03 실사고와 같은 모양). 이 표는 한 반 × 한 주라 행이 적어 `*`가 싸다.
+      .select("*")
       .eq("tenant_id", tenantId)
       .eq("class_id", classId)
       .gte("mark_date", weekMonday)
@@ -297,6 +308,8 @@ export async function getClassSheetWeek(
     slotStart: m.slot_start as string,
     status: (m.status as string | null) ?? null,
     progressNote: (m.progress_note as string | null) ?? null,
+    // 0202a 적용 전(컬럼 없음)엔 undefined로 와서 null이 된다 — 화면은 '빈 점수'로 정상 동작한다.
+    score: ((m as { score?: string | null }).score as string | null) ?? null,
   }));
 
   const effAttendance = effectiveAttendanceRecords(
@@ -481,11 +494,15 @@ export async function getClassSheetWeek(
     };
   }
 
-  const marksMap: Record<string, { status: string | null; progressNote: string | null }> = {};
+  const marksMap: Record<
+    string,
+    { status: string | null; progressNote: string | null; score: string | null }
+  > = {};
   for (const m of marks) {
     marksMap[`${m.studentId}|${m.markDate}|${normalizeSlotTime(m.slotStart)}`] = {
       status: m.status,
       progressNote: m.progressNote,
+      score: m.score,
     };
   }
 
@@ -542,6 +559,11 @@ export async function getClassSheetWeek(
 export type SheetLandingCard = {
   classId: string;
   className: string;
+  /**
+   * 담임 **id** — 목록을 담임별로 묶을 때 쓴다(2026-08-11 "열마다 담임 구분해서 놓자").
+   * ⚠️ 이름으로 묶지 말 것: 동명이인이면 두 사람의 반이 한 덩어리가 된다(이름은 표시용 라벨일 뿐).
+   */
+  teacherId: string | null;
   teacherName: string | null;
   totalSlots: number;
   filledSlots: number;
@@ -580,6 +602,13 @@ export async function getSheetLanding(
       trackFilter: EnglishTrackFilter;
       /** 토글에 붙는 개수 — **필터 전** 내 스코프 기준(필터를 걸어도 숫자가 안 변해야 고를 수 있다). */
       trackCounts: Record<EnglishTrackFilter, number>;
+      /**
+       * 담임 보기 필터(내 계정, 2026-08-11)의 **실제 적용값**. 저장값이 이 주 옵션에 없으면 `all`로
+       * 떨어진 결과가 온다(저장값 자체는 안 지운다 — landing-teacher.ts 주석).
+       */
+      teacherFilter: string;
+      /** 드롭다운 옵션 — **프로그램 필터 적용 후** 목록에 실제로 있는 담임뿐(개수는 전부 1 이상). */
+      teacherOptions: LandingTeacherOption[];
     }
   | { ok: false; error: string }
 > {
@@ -605,6 +634,8 @@ export async function getSheetLanding(
       emptyReason: "not-configured",
       trackFilter: DEFAULT_ECS_ENGLISH_TRACK,
       trackCounts: { all: 0, eie: 0, injaewon: 0 },
+      teacherFilter: ECS_TEACHER_ALL,
+      teacherOptions: [],
     };
   }
 
@@ -624,13 +655,27 @@ export async function getSheetLanding(
   ]);
   if (classError) return { ok: false, error: `반 목록을 불러오지 못했습니다: ${classError.message}` };
   const trackFilter = readEcsEnglishTrack(prefsRes.data?.ui_prefs);
+  const storedTeacher = readEcsTeacher(prefsRes.data?.ui_prefs);
   // 강사 스코프는 JS 교집합(스코프 id를 .in에 넣지 않는다 — 대량 .in 상한/silent cap 회피, B3).
   // 담당 반 ∪ 부담임 반 ∪ **임시 위임 반**(ecsVisibleClassFilter — 게이트 requireEcsClassAccess와 같은
   // 세 갈래. 갈라지면 "목록엔 뜨는데 열면 거절" → ecs-scope-sources.test.ts가 두 곳을 함께 잠근다).
-  const { classIds: visibleIds } = await ecsVisibleClassFilter();
+  //
+  // 담임 이름을 **여기서** 함께 가져온다(2026-08-11 담임 필터). 이름이 있어야 드롭다운 옵션을 만들고,
+  // 옵션이 있어야 저장된 담임 필터가 지금 고를 수 있는 값인지 판정할 수 있다 — 그런데 이 셋은 서로
+  // 독립이라 **직렬로 세우면 왕복이 합산된다**(B4). 대상 id를 스코프 이후가 아니라 `allClasses`에서
+  // 뽑으면(어차피 영어 담임 십수 명) 스코프 조회와 **동시에** 던질 수 있다.
+  const [{ classIds: visibleIds }, delegatedIds, teachers] = await Promise.all([
+    ecsVisibleClassFilter(),
+    ecsDelegatedClassIds(),
+    fetchInChunks<{ id: string; display_name: string | null }>(
+      [...new Set((allClasses ?? []).map((c) => c.teacher_id as string | null).filter((v): v is string => !!v))],
+      (chunk) => supabase.from("users").select("id, display_name").in("id", chunk),
+    ),
+  ]);
   const scopeSet = visibleIds ? new Set(visibleIds) : null;
   // 카드에 '위임' 배지를 달기 위한 집합 — 게이트와 **같은 소스**(ecsDelegatedClassIds)라 배지와 접근이 안 갈린다.
-  const delegatedIdSet = new Set(await ecsDelegatedClassIds());
+  const delegatedIdSet = new Set(delegatedIds);
+  const teacherName = new Map(teachers.map((t) => [t.id, t.display_name]));
   const inScope = (allClasses ?? []).filter((c) => !scopeSet || scopeSet.has(c.id as string));
   // 프로그램 보기 필터(전체/EiE/인재원 영어) — 개수는 **필터 전** 집합에서 세야 토글에 진짜 숫자가 뜬다.
   const trackCounts = {
@@ -638,7 +683,15 @@ export async function getSheetLanding(
     eie: keepEnglishTrack(inScope, "eie").length,
     injaewon: keepEnglishTrack(inScope, "injaewon").length,
   };
-  const classes = keepEnglishTrack(inScope, trackFilter);
+  // 담임 필터는 프로그램 필터 **다음**에 걸린다(둘은 곱해진다). 옵션도 프로그램 적용 후 집합에서 만들어
+  // "골랐는데 0개"가 구조적으로 안 나오게 한다 — 상세 규약은 landing-teacher.ts 주석.
+  const tracked = keepEnglishTrack(inScope, trackFilter).map((c) => ({
+    row: c,
+    teacherId: (c.teacher_id as string | null) ?? null,
+  }));
+  const teacherOptions = buildTeacherOptions(tracked, teacherName);
+  const teacherFilter = resolveTeacherFilter(storedTeacher, teacherOptions);
+  const classes = keepTeacher(tracked, teacherFilter).map((t) => t.row);
   const classIds = classes.map((c) => c.id as string);
   if (classIds.length === 0) {
     return {
@@ -649,8 +702,12 @@ export async function getSheetLanding(
       cards: [],
       trackFilter,
       trackCounts,
+      teacherFilter,
+      teacherOptions,
       // 원인별로 갈라야 안내가 거짓말이 안 된다 — 필터 때문에 빈 것을 "담당 반이 없다"로 말하면
       // 고칠 수 있는 일(필터 되돌리기)을 숨기고 못 고칠 일(반 배정)을 시키는 셈이다.
+      // ⚠️ 여기서 말하는 '필터'는 **프로그램뿐**이다 — 담임 필터는 지금 목록에 있는 담임만 옵션이라
+      //    고른 값이 목록을 비울 수 없다(그래서 안내가 담임을 지목하지 않는다).
       emptyReason:
         inScope.length > 0
           ? "filtered"
@@ -660,7 +717,7 @@ export async function getSheetLanding(
     };
   }
 
-  const [schedules, lines, teachers] = await Promise.all([
+  const [schedules, lines] = await Promise.all([
     fetchInChunks<{
       class_id: string;
       day_of_week: DowKey;
@@ -699,16 +756,11 @@ export async function getSheetLanding(
         .order("id")
         .range(from, to),
     ),
-    fetchInChunks<{ id: string; display_name: string | null }>(
-      [...new Set((classes ?? []).map((c) => c.teacher_id as string | null).filter((v): v is string => !!v))],
-      (chunk) => supabase.from("users").select("id, display_name").in("id", chunk),
-    ),
   ]);
 
   // JJ 표시 설정 — 시트 화면과 **같은 값**으로 세야 두 화면의 작성률이 갈리지 않는다(LAB은 양쪽 다 제외).
   // (프로그램 필터와 함께 위에서 한 번만 읽는다 — 같은 행을 두 번 조회하지 않게.)
   const showSelfStudy = readEcsShowSelfStudy(prefsRes.data?.ui_prefs);
-  const teacherName = new Map(teachers.map((t) => [t.id, t.display_name]));
   const schedulesByClass = new Map<string, typeof schedules>();
   for (const s of schedules) {
     const arr = schedulesByClass.get(s.class_id) ?? [];
@@ -764,6 +816,7 @@ export async function getSheetLanding(
     return {
       classId: c.id as string,
       className: c.class_name as string,
+      teacherId: (c.teacher_id as string | null) ?? null,
       teacherName: c.teacher_id ? (teacherName.get(c.teacher_id as string) ?? null) : null,
       totalSlots: scheduled.size,
       filledSlots: filled,
@@ -782,5 +835,7 @@ export async function getSheetLanding(
     emptyReason: null,
     trackFilter,
     trackCounts,
+    teacherFilter,
+    teacherOptions,
   };
 }

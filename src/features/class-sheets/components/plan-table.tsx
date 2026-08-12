@@ -88,11 +88,17 @@ export function PlanTable({
                   <col style={{ width: 26 }} />
                 </colgroup>
                 <thead>
-                  {/* 헤더 밴드 — 원본 시트의 노란 머리글(시기·구분·교재·페이지·진도·과제)과 같은 역할. */}
+                  {/* 헤더 밴드 — 원본 시트의 노란 머리글(시기·구분·교재·시간·진도·과제)과 같은 역할. */}
                   <tr className="bg-bg-soft text-foreground text-left text-[11px]">
                     <th className="rounded-l-md py-0.5 pl-1 font-bold">구분</th>
                     <th className="py-0.5 font-bold">교재 / 내신교과서</th>
-                    <th className="py-0.5 font-bold">페이지</th>
+                    {/* '페이지' → **'시간'**(원장 2026-08-11 "이번 수업에서 할당된 시간을 입력하는 란").
+                        ⚠️ **라벨만 바꾼다** — 저장은 그대로 `page_range`다. 실측(2026-08-11, 프로덕션 768행)
+                        기준 채워진 326건의 1·2위가 `25분`(56)·`15분`(53)으로, 강사들은 이미 이 칸에 시간을
+                        적고 있었다. 새 컬럼을 파면 그 기록이 화면에서 사라진다. */}
+                    <th className="py-0.5 font-bold" title="이 수업에 할당된 시간(예: 25분)">
+                      시간
+                    </th>
                     <th className="py-0.5 font-bold">진도</th>
                     <th className="py-0.5 font-bold">과제</th>
                     <th className="rounded-r-md" aria-hidden />

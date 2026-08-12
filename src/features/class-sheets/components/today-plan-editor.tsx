@@ -218,7 +218,7 @@ export function TodayPlanEditor({
                   <CasInput store={store} lineId={l.id} field="textbook" fallback={l.textbook} canEdit={canEdit} ariaLabel={`${className} 교재`} placeholder="교재" />
                 </span>
                 <span className="min-w-[5rem] flex-1">
-                  <CasInput store={store} lineId={l.id} field="page_range" fallback={l.pageRange} canEdit={canEdit} ariaLabel={`${className} 페이지`} placeholder="페이지" />
+                  <CasInput store={store} lineId={l.id} field="page_range" fallback={l.pageRange} canEdit={canEdit} ariaLabel={`${className} 시간`} placeholder="시간" />
                 </span>
                 <span className="min-w-[7rem] flex-1">
                   <CasInput store={store} lineId={l.id} field="progress" fallback={l.progress} canEdit={canEdit} ariaLabel={`${className} 진도`} placeholder="진도" />

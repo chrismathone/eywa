@@ -16,6 +16,7 @@
  *    (헤더의 `계획 N/M교시`·랜딩 카드가 서버 계산이라 클라에서만 감추면 숫자가 갈린다).
  */
 import { normalizeEnglishTrackFilter, type EnglishTrackFilter } from "@/features/classes/english-track";
+import { normalizeEcsTeacher } from "./landing-teacher";
 import type { RosterGroupKey } from "./lib/roster-order";
 
 /** 미설정 기본값 = 표시(원장 2026-08-03). 저장은 기본값이 아닐 때만 키를 남긴다. */
@@ -44,6 +45,19 @@ export function readEcsEnglishTrack(uiPrefs: unknown): EnglishTrackFilter {
   if (!scope) return DEFAULT_ECS_ENGLISH_TRACK;
   // 모르는 값이면 '전체' — 저장값이 깨졌다고 반 목록이 통째로 비면 "반이 사라졌다"가 된다.
   return normalizeEnglishTrackFilter(scope.englishTrack);
+}
+
+/**
+ * `ui_prefs.ecs.teacher` → 랜딩의 **담임 보기 필터**(전체 / 담임별 / 담임 미지정, 2026-08-11).
+ *
+ * ⚠️ 프로그램 필터와 **곱해져** 걸린다(EiE만 보면서 그중 육소희 반만). 하나로 합치지 말 것.
+ * ⚠️ 프로그램 필터와 마찬가지로 **작성률 분모를 바꾸지 않는다** — 목록을 눈으로 좁혀 보는 용도다.
+ * ⚠️ 계정 귀속(원장 2026-08-04 *"모든 뷰 세팅은 계정에 귀속"*).
+ * 🔴 저장값이 **지금 고를 수 있는 값인지**는 여기서 못 정한다(그 주의 반 목록을 알아야 한다) →
+ *    [`resolveTeacherFilter`](./landing-teacher.ts)가 서버 쿼리에서 판정한다. 여기선 모양만 본다.
+ */
+export function readEcsTeacher(uiPrefs: unknown): string {
+  return normalizeEcsTeacher(ecsScope(uiPrefs)?.teacher);
 }
 
 /** `users.ui_prefs` → JJ 표시 여부(`ecs` 네임스페이스만 읽는다 — 다른 화면 값 훔치기 금지). */

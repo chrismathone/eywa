@@ -4,6 +4,7 @@ import {
   readEcsCollapsedRosterGroups,
   readEcsEnglishTrack,
   readEcsShowSelfStudy,
+  readEcsTeacher,
 } from "./view-prefs";
 
 describe("readEcsShowSelfStudy — JJ 표시(LAB은 대상 아님)", () => {
@@ -91,9 +92,41 @@ describe("readEcsCollapsedRosterGroups — 로스터 섹션 접힘(계정 귀속
   });
 
   it("형제 설정과 서로 간섭하지 않는다", () => {
-    const prefs = { ecs: { collapsedRosterGroups: ["withdrawn"], showSpecialRooms: false, englishTrack: "eie" } };
+    const prefs = {
+      ecs: {
+        collapsedRosterGroups: ["withdrawn"],
+        showSpecialRooms: false,
+        englishTrack: "eie",
+        teacher: TEACHER_ID,
+      },
+    };
     expect(readEcsCollapsedRosterGroups(prefs)).toEqual(["withdrawn"]);
     expect(readEcsShowSelfStudy(prefs)).toBe(false);
     expect(readEcsEnglishTrack(prefs)).toBe("eie");
+    expect(readEcsTeacher(prefs)).toBe(TEACHER_ID);
+  });
+});
+
+const TEACHER_ID = "11111111-1111-4111-8111-111111111111";
+
+describe("readEcsTeacher — 담임 보기 필터(계정 귀속)", () => {
+  it("미설정은 '전체'", () => {
+    expect(readEcsTeacher(null)).toBe("all");
+    expect(readEcsTeacher({})).toBe("all");
+    expect(readEcsTeacher({ ecs: {} })).toBe("all");
+  });
+
+  it("저장값을 그대로 읽는다", () => {
+    expect(readEcsTeacher({ ecs: { teacher: TEACHER_ID } })).toBe(TEACHER_ID);
+    expect(readEcsTeacher({ ecs: { teacher: "none" } })).toBe("none");
+  });
+
+  it("깨진 값은 '전체' — 반 목록이 통째로 비어 '반이 사라졌다'가 되지 않게", () => {
+    expect(readEcsTeacher({ ecs: { teacher: "육소희" } })).toBe("all");
+    expect(readEcsTeacher({ ecs: { teacher: 7 } })).toBe("all");
+  });
+
+  it("다른 화면 네임스페이스 값은 훔쳐 읽지 않는다", () => {
+    expect(readEcsTeacher({ onescreen: { teacher: TEACHER_ID } })).toBe("all");
   });
 });

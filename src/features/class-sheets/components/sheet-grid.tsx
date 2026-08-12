@@ -38,7 +38,7 @@ export const SheetGrid = memo(function SheetGrid({
   days: GridDay[];
   data: ClassSheetWeekData;
   linesBySlot: Record<string, PlanLineDTO[]>;
-  marks: Record<string, { status: string | null; progressNote: string | null }>;
+  marks: Record<string, { status: string | null; progressNote: string | null; score: string | null }>;
   attendance: Record<
     string,
     { status: string; note: string | null; units: number | null; slot: string | null }

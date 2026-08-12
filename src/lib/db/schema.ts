@@ -2139,6 +2139,7 @@ export const classSheetStudentMarks = pgTable(
     slotStart: time("slot_start").notNull(), // 교시 포함 — 같은 학생 하루 2교시 독립 기록
     status: text("status"), // '완'/'결석'/'안침' 등 자유 라벨(운영 어휘 진화 허용) — 출결 아님
     progressNote: text("progress_note"), // "PL 7, 20개 / PV 4" 등 개인 진도/과제 자유기입
+    score: text("score"), // 점수 — 자유 입력('18/20'·'95'·'A'). 0202a, 형식이 제각각이라 숫자로 안 굳힌다
     updatedBy: uuid("updated_by").references(() => users.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),

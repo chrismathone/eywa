@@ -1,14 +1,21 @@
 "use client";
 
-// 학생 로스터 표 — [이름 | 출결(일 단위 공유) | 학교학년 | 유닛 | 태도 | 특이사항].
+// 학생 로스터 표 — [이름 | 출결 | 유닛 | 태도 | 점수 | 특이사항].
 // 출결은 **교시별**(0196a, 원장 2026-08-10) — 같은 날 4교시·6교시가 서로 다른 기록이다.
 //   ⚠️ 그전엔 (학생,날짜) 하루 1건이라 모든 교시 카드가 같은 행을 비췄고, 한 칸을 고치면 다른 칸도
 //      함께 바뀌었다. 옛 기록(slot_start null)은 서버가 그 날 **첫 교시 칸에만** 붙여 준다.
 // 태도·과제는 교시별(class_sheet_student_marks — 키에 slot_start 포함). 아바타 금지(이름 텍스트만).
 //
-// **컨트롤 이력**: 2026-08-06 "수학 보고서와 같은 어휘·컨트롤"(출결 3분화·태도 5단·특이사항) →
-// 출결 컨트롤은 2026-08-11 원장 *"클릭형으로 변경. 드랍다운 제거"*로 **클릭 알약**(roster-slot-cells.tsx,
-// 압축 라벨 출/지/결)이 됐다. 셀 구현은 오늘 면 통합 표(today-roster-table)와 **공용**이다(중복 금지).
+// **2026-08-06 원장 지시 — 수학 수업보고서와 같은 어휘·같은 컨트롤로 통일**:
+//  · '출석' 열 → **'출결'** + 체크박스 → **출석/지각/결석 3분화**([AttendancePills] 재사용).
+//    🔴 이제 ECS에서 **결석도 찍힌다 = 시수·급여에 닿는다**(그전엔 present만 만들 수 있었다). 서버는
+//       원스크린과 **같은 게이트**(`setAttendanceCell` — 권한·담당 반·강사 7일 창)를 그대로 통과한다(#77).
+//    ⚠️ 대신 **'출석 취소'는 여기서 사라졌다**(0169a) — pill은 지우지 않는다(활성 재클릭 = no-op). 지우기는
+//       출석부에서만: status=null 삭제가 사유 메모·시수까지 함께 지우기 때문(수학 쪽과 동일한 이유).
+//  · '상태' 열 → **'태도'** + 자유입력 칩 → **5단 눈금**([ATTITUDE] 재사용, 매우 좋음~매우 안좋음).
+//    ⚠️ 옛 값('완' 736·'결석' 49·'지각' 12·'안침' 7 — 출결 대용으로 쓰이던 것)은 **안 지운다**.
+//       FieldSelect가 선택지 밖 저장값을 '이전 표기'로 그대로 보여 준다(쓴 게 안 보이면 안 된다).
+//  · '개인 진도 · 과제' → **'특이사항'**(라벨만 — 저장 필드는 그대로 `progressNote`).
 //
 // 명단은 시간표 셀처럼 **섹션으로 나뉜다**: 재원(기본) → 퇴원(유예 30일) → 기록(그 외 보존 행).
 // 퇴원·기록 섹션은 전부 읽기 전용이고 일괄 입력 대상도 아니다(bulk.ts editableRows).
@@ -20,8 +27,10 @@
 import { memo, useMemo } from "react";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import type { ClassSheetWeekData } from "../server/queries";
-import { groupRosterRows, type RosterGroupKey } from "../lib/roster-order";
 import type { RosterEntry } from "../lib/grid";
+import { groupRosterRows, type RosterGroupKey } from "../lib/roster-order";
+// 셀 구현은 **공용 모듈**(roster-slot-cells) — 오늘 면 통합 표(today-roster-table)와 같은 셀을 쓴다
+// (원장 2026-08-11 "쓸데없이 중복되는 컴포넌트가 다수" — 여기 인라인이던 것을 추출, 동작 불변).
 import { RosterNameCell, RosterSlotCells } from "./roster-slot-cells";
 import type { SheetHandlers } from "./sheet-client";
 
@@ -39,7 +48,7 @@ const GROUP_TOGGLE_LABEL: Record<RosterGroupKey, string> = {
   record: "기록 목록",
 };
 
-/** 섹션 접기/펼치기 셰브런 — 표 머리(active)와 라벨 행(withdrawn·record)이 같은 어포던스. 통합 표와 공용. */
+/** 섹션 접기/펼치기 셰브런 — 표 머리(active)와 라벨 행(withdrawn·record)이 같은 어포던스를 쓴다. */
 export function GroupToggle({
   group,
   collapsed,
@@ -95,7 +104,7 @@ export const RosterTable = memo(function RosterTable({
   slotStart: string;
   roster: RosterEntry[];
   data: ClassSheetWeekData;
-  marks: Record<string, { status: string | null; progressNote: string | null }>;
+  marks: Record<string, { status: string | null; progressNote: string | null; score: string | null }>;
   attendance: Record<
     string,
     { status: string; note: string | null; units: number | null; slot: string | null }
@@ -135,16 +144,18 @@ export const RosterTable = memo(function RosterTable({
             학교·학년은 학생 이름 툴팁과 학생목록에 있고, 교시 카드에서 매일 보는 값이 아니다. */}
         {/* 폭은 **꼭 필요한 만큼만** 고정하고 남는 건 전부 '특이사항'이 가져간다(원장 2026-08-06
             "특이사항 열너비를 남은 열너비로"). `table-fixed`라 width 없는 마지막 <col>이 잔여를 받는다. */}
+        {/* 폭은 **꼭 필요한 만큼만** — 2026-08-11 원장 *"학생 뒤에 여백 많으니까 여백 최소화"*.
+            이름 열이 84px일 때 세 글자 이름(≈39px)이 끝나고도 40px이 비어 있었다. 그 폭은 화살표가
+            사라진 출결·태도(드롭다운 → 체크 순환)에서도 함께 회수해 **신설 '점수' 열과 특이사항**이 가져간다.
+            ⚠️ 13px 글자 기준: 이름 4자 ≈ 52 + 여백 8 = 60 · '매우 안좋음' ≈ 69 + 8 = 77 · '✓ 출석' ≈ 47. */}
         <colgroup>
-          <col style={{ width: 84 }} />
-          {/* 출결 = 클릭 알약 3개(출/지/결, 2026-08-11 "드랍다운 제거") — 압축 라벨이라 88px에 앉는다.
-              태도는 드롭다운 유지 — 가장 긴 선택지('매우 안좋음' ≈ 91px)가 잘리지 않는 폭.
-              유닛은 숫자 한두 자리라 좁게(수학은 '타임', 영어는 '유닛' — 원장 어휘 그대로). */}
-          <col style={{ width: 88 }} />
-          {/* ⚠️ 유닛 칸은 이제 열 폭을 그대로 채운다(w-full) — 예전 46px 고정 입력이 열보다 넓어
+          <col style={{ width: 64 }} />
+          <col style={{ width: 60 }} />
+          {/* ⚠️ 유닛 칸은 열 폭을 그대로 채운다(w-full) — 예전 46px 고정 입력이 열보다 넓어
               양옆 칸 위로 겹쳐 그려지던 문제(원장 2026-08-06 "너무 겹치네")가 구조적으로 사라졌다. */}
           <col style={{ width: 46 }} />
-          <col style={{ width: 96 }} />
+          <col style={{ width: 80 }} />
+          <col style={{ width: 54 }} />
           <col />
         </colgroup>
         <thead>
@@ -171,6 +182,10 @@ export const RosterTable = memo(function RosterTable({
               유닛
             </th>
             <th className="py-0.5 text-center font-bold">태도</th>
+            {/* 점수(0202a) — 그전엔 특이사항에 섞여 있었다("… PL 7, 15문"). 형식이 제각각이라 자유 입력이다. */}
+            <th className="py-0.5 text-center font-bold" title="이 교시의 점수 — 자유 입력(18/20 · 95 · A 등)">
+              점수
+            </th>
             <th className="rounded-r-md py-0.5 pr-1 font-bold">특이사항</th>
           </tr>
         </thead>
@@ -180,7 +195,7 @@ export const RosterTable = memo(function RosterTable({
               return (
                 <tr key={`label:${row.key}`} className="bg-bg-soft">
                   <td
-                    colSpan={5}
+                    colSpan={6}
                     className="text-foreground px-1 py-0.5 text-[11px] font-bold"
                     title={GROUP_HINT[row.key]}
                   >
@@ -214,7 +229,6 @@ export const RosterTable = memo(function RosterTable({
                   canEdit={canEdit}
                   handlers={handlers}
                   navRow={navRow}
-                  navCol="ecs-note"
                 />
               </tr>
             );
