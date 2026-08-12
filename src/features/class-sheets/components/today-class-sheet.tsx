@@ -17,9 +17,8 @@ import type { SheetHandlers } from "./sheet-client";
 import type { SheetSaveStore } from "./use-sheet-saves";
 import { PeriodBlock } from "./period-block";
 import { TodayRosterTable } from "./today-roster-table";
-
-/** 계획 카드 폭 — 주간 시트 열 폭(sheet-grid COL_W)과 같은 540px(계획 표 colgroup이 이 폭 기준). */
-const PLAN_W = 540;
+// 가로 치수는 아래 통합 로스터와 **공유**한다 — 한쪽만 고치면 줄이 조용히 어긋난다(today-columns).
+import { TODAY_GUTTER, TODAY_NAME_W, TODAY_SLOT_W } from "../lib/today-columns";
 
 export function TodayClassSheet({
   day,
@@ -48,47 +47,60 @@ export function TodayClassSheet({
   onToggleGroup: (key: RosterGroupKey) => void;
 }) {
   return (
-    <div className="space-y-2">
-      {/* 교시 카드(계획) — 가로 레일. 로스터는 아래 통합 표가 맡으므로 hideRoster. 일괄 입력(SlotBulk —
-          '기록 없는 N명 출석' 포함)은 카드 머리에 그대로 산다.
-          ⚠️ 카드 폭은 540 고정(주간 시트 열과 동일 — PlanTable 고정열이 이 폭 기준이라 줄이면 진도·과제
-          칸이 슬리버로 무너진다). 좁은 화면은 접는 대신 가로 드래그 스크롤이 받는다(시트와 같은 어포던스). */}
-      <DragScrollArea barX className="min-w-0">
-        <div className="flex w-max items-start gap-3">
-          {day.slots.map((slot) => (
-            <div key={slot.slotStart} className="shrink-0" style={{ width: PLAN_W }}>
-              <PeriodBlock
-                date={day.date}
-                slot={slot}
-                data={data}
-                lines={linesBySlot[`${day.date}|${slot.slotStart}`] ?? []}
-                marks={marks}
-                attendance={attendance}
-                store={store}
-                handlers={handlers}
-                canEdit={canEdit}
-                collapsedGroups={collapsedGroups}
-                onToggleGroup={onToggleGroup}
-                hideRoster
-              />
-            </div>
-          ))}
+    // 🔴 **가로 스크롤은 하나**다(원장 2026-08-11 "줄맞춤"). 위 레일과 아래 표가 각자 스크롤을 가지면
+    //    옆으로 미는 순간 교시가 서로 다른 위치로 밀려 줄이 어긋난다 — 같은 격자를 쓰는 두 층은 같은
+    //    스크롤을 타야 한다. 안쪽은 `w-max`라 내용 폭 그대로 늘어난다(배경이 초기 폭에 멈추지 않게).
+    <DragScrollArea barX className="min-w-0">
+      <div className="w-max space-y-2">
+        {/* 교시 카드(계획) — 가로 레일. 로스터는 아래 통합 표가 맡으므로 hideRoster. 일괄 입력(SlotBulk —
+            '기록 없는 N명 출석' 포함)은 카드 머리에 그대로 산다.
+            ⚠️ 바깥 상자는 아래 로스터 카드와 **같은 모형**(테두리 1 + 패딩 10)이라야 첫 교시의 시작점이
+            맞는다 — 여기만 상자가 없으면 카드가 표보다 11px 왼쪽에서 시작한다(테두리는 투명). */}
+        <div className="border border-transparent p-2.5">
+          <div className="flex items-start">
+            {/* 학생 이름 열 자리 — 아래 표의 첫 열과 같은 폭만큼 비워 교시 열을 맞춘다. */}
+            <div aria-hidden className="shrink-0" style={{ width: TODAY_NAME_W }} />
+            {day.slots.map((slot) => (
+              // 교시 한 칸 = 카드 + 오른쪽 숨. 숨을 `gap`으로 주면 카드 왼쪽 모서리가 표의 열 경계보다
+              // 점점 밀려 교시가 늘수록 어긋남이 누적된다(안쪽 패딩이라야 폭이 정확히 교시 폭이다).
+              <div
+                key={slot.slotStart}
+                className="shrink-0"
+                style={{ width: TODAY_SLOT_W, paddingRight: TODAY_GUTTER }}
+              >
+                <PeriodBlock
+                  date={day.date}
+                  slot={slot}
+                  data={data}
+                  lines={linesBySlot[`${day.date}|${slot.slotStart}`] ?? []}
+                  marks={marks}
+                  attendance={attendance}
+                  store={store}
+                  handlers={handlers}
+                  canEdit={canEdit}
+                  collapsedGroups={collapsedGroups}
+                  onToggleGroup={onToggleGroup}
+                  hideRoster
+                />
+              </div>
+            ))}
+          </div>
         </div>
-      </DragScrollArea>
 
-      {/* 통합 로스터 — 가로 스크롤은 표 컴포넌트가 카드 **안**에서 처리한다(카드 밖 스크롤 금지). */}
-      {day.slots.some((s) => s.roster.length > 0) ? (
-        <TodayRosterTable
-          day={day}
-          data={data}
-          marks={marks}
-          attendance={attendance}
-          handlers={handlers}
-          canEdit={canEdit}
-          collapsedGroups={collapsedGroups}
-          onToggleGroup={onToggleGroup}
-        />
-      ) : null}
-    </div>
+        {/* 통합 로스터 — 위 레일과 같은 격자(today-columns)라 교시 경계가 위아래로 이어진다. */}
+        {day.slots.some((s) => s.roster.length > 0) ? (
+          <TodayRosterTable
+            day={day}
+            data={data}
+            marks={marks}
+            attendance={attendance}
+            handlers={handlers}
+            canEdit={canEdit}
+            collapsedGroups={collapsedGroups}
+            onToggleGroup={onToggleGroup}
+          />
+        ) : null}
+      </div>
+    </DragScrollArea>
   );
 }

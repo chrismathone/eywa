@@ -15,7 +15,6 @@
  *    입력이어야 Enter/↑↓ 세로 이동이 구멍을 건너뛴다).
  */
 import { Fragment, memo, useMemo } from "react";
-import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import type { ClassSheetWeekData } from "../server/queries";
 import type { GridDay, GridSlot } from "../lib/grid";
 import type { RosterEntry } from "../lib/grid";
@@ -24,11 +23,13 @@ import { GroupToggle, GROUP_HINT } from "./roster-table";
 import { RosterNameCell, RosterSlotCells } from "./roster-slot-cells";
 import type { SheetHandlers } from "./sheet-client";
 
-/** 교시 그룹 안 열 폭 — 주간 표(roster-table colgroup)와 같은 수치(출결 60·유닛 46·태도 80·점수 54). */
-const SLOT_COLS = [60, 46, 80, 54] as const;
-/** 특이사항 최소폭 — 표 전체 minWidth 계산용(이보다 좁아지면 가로 드래그 스크롤이 받는다). */
-const NOTE_MIN = 120;
-const NAME_W = 64;
+// 가로 치수는 **위 카드 레일과 공유**한다(today-columns) — 한쪽만 고치면 줄이 조용히 어긋난다.
+import {
+  TODAY_NAME_W,
+  TODAY_NOTE_W,
+  TODAY_SLOT_COLS,
+  todayContentWidth,
+} from "../lib/today-columns";
 
 export const TodayRosterTable = memo(function TodayRosterTable({
   day,
@@ -91,25 +92,26 @@ export const TodayRosterTable = memo(function TodayRosterTable({
 
   const colSpanAll = 1 + slots.length * 5;
   const slotLabel = (slot: GridSlot) => data.periodLabelBySlot[`${date}|${slot.slotStart}`] ?? null;
-  const slotColsW = SLOT_COLS.reduce((a, b) => a + b, 0) + NOTE_MIN;
 
   return (
-    // 🔴 스크롤은 **카드 안**에서 — 카드 밖에서 스크롤하면 표가 카드 폭(뷰포트)을 넘는 순간 배경·테두리가
-    //    초기 폭에 멈춰 셀이 맨바탕 위에 그려진다(sheet-grid의 w-max 교훈과 같은 계열, 적대 리뷰 2026-08-11).
-    <div className="bg-card border-foreground shadow-card cursor-default rounded-2xl border p-2.5">
-      <DragScrollArea barX className="min-w-0">
+    // 🔴 스크롤은 이 카드가 아니라 **부모(today-class-sheet)의 스크롤 한 개**가 맡는다 — 위 카드 레일과
+    //    아래 표가 서로 다른 스크롤을 가지면 옆으로 밀자마자 줄이 어긋난다(원장 2026-08-11 "줄맞춤").
+    //    대신 카드는 `w-max`라 내용(고정 폭 표)만큼 넓어져, 배경·테두리가 초기 폭에 멈춰 셀이 맨바탕 위에
+    //    그려지던 문제(적대 리뷰 2026-08-11)는 그대로 막힌다.
+    <div className="bg-card border-foreground shadow-card w-max cursor-default rounded-2xl border p-2.5">
         <table
-          className="w-full border-collapse text-[13px]"
-          style={{ tableLayout: "fixed", minWidth: NAME_W + slots.length * slotColsW }}
+          className="border-collapse text-[13px]"
+          style={{ tableLayout: "fixed", width: todayContentWidth(slots.length) }}
         >
         <colgroup>
-          <col style={{ width: NAME_W }} />
+          <col style={{ width: TODAY_NAME_W }} />
           {slots.map((slot) => (
             <Fragment key={slot.slotStart}>
-              {SLOT_COLS.map((w, i) => (
+              {TODAY_SLOT_COLS.map((w, i) => (
                 <col key={i} style={{ width: w }} />
               ))}
-              <col />
+              {/* 특이사항도 **고정 폭** — 가변으로 두면 표가 남는 폭을 여기 몰아줘 교시 폭이 카드와 달라진다. */}
+              <col style={{ width: TODAY_NOTE_W }} />
             </Fragment>
           ))}
         </colgroup>
@@ -196,7 +198,6 @@ export const TodayRosterTable = memo(function TodayRosterTable({
           })}
         </tbody>
         </table>
-      </DragScrollArea>
     </div>
   );
 });
