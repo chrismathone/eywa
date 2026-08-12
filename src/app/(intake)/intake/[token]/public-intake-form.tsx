@@ -54,7 +54,10 @@ function ConsentBlock({
   note?: string;
   required?: boolean;
 }) {
-  if (!show) return null;
+  // 🔴 **필수 동의는 문구가 비어도 체크박스를 없애지 않는다.** 없애면 `required` 입력 자체가 사라져
+  // 서버가 "개인정보 수집·이용에 동의해주세요"로 계속 거부하는데 화면엔 누를 것이 없어, 학부모가
+  // 접수를 **영원히 제출할 수 없다**(적대 리뷰 2026-08-12). 선택 동의만 문구가 없을 때 숨긴다.
+  if (!show && !required) return null;
   return (
     <div className="space-y-3 pt-2">
       <h4 className="text-foreground text-sm font-bold">
@@ -65,9 +68,11 @@ function ConsentBlock({
           <span className="text-text-dim text-[12px] font-normal">(선택)</span>
         )}
       </h4>
-      <div className="bg-bg-soft max-h-56 overflow-y-auto rounded-xl p-4 text-[13px] leading-relaxed">
-        <p className="text-text-dim whitespace-pre-line">{text}</p>
-      </div>
+      {show ? (
+        <div className="bg-bg-soft max-h-56 overflow-y-auto rounded-xl p-4 text-[13px] leading-relaxed">
+          <p className="text-text-dim whitespace-pre-line">{text}</p>
+        </div>
+      ) : null}
       {note ? <p className="text-text-dim text-[12px] leading-relaxed">{note}</p> : null}
       <label className="flex cursor-pointer items-start gap-2.5">
         <input

@@ -97,12 +97,17 @@ export async function updateSession(request: NextRequest) {
   // 서버액션이 admin client로 직접 검증한다. ⚠️ "/staff-intake"·"/staff-intake/…"만 — "/staff"(직원관리,
   // 사무실 전용)는 여기 걸리면 안 되므로 정확/슬래시 매칭이다.
   const isStaffIntakePublic = pathname === "/staff-intake" || pathname.startsWith("/staff-intake/");
+  // /privacy (개인정보 처리방침)도 비로그인 통과 — 🔴 **공개가 법적 의무**다(제30조). 로그인해야 볼 수
+  // 있으면 "공개"가 아니고, 접수 폼의 처리방침 링크를 누른 학부모가 로그인 화면으로 튕긴다.
+  // 정확 매칭 — 테넌트별 내용이 없는 단일 공개 페이지라 하위 경로가 없다.
+  const isPrivacyPublic = pathname === "/privacy";
   if (
     PUBLIC_PATHS.has(pathname) ||
     isKioskPublic ||
     isIntakePublic ||
     isReportPublic ||
-    isStaffIntakePublic
+    isStaffIntakePublic ||
+    isPrivacyPublic
   ) {
     return response;
   }

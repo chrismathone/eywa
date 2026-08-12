@@ -14,6 +14,13 @@
 --   key = privacy(제15조) · overseas(제28조의8) · sensitive(제23조) · service(약관)
 --   🔴 법은 이 셋을 **각각 별도로** 동의받도록 요구한다 — 하나로 묶으면 포괄 동의라 셋 다 무효 소지.
 --
+-- 🔴🔴 **컬럼을 둘로 나눈 이유**(적대 리뷰 2026-08-12에서 잡힌 치명 결함): 처음엔 상담사의 녹음 확인도
+-- 같은 `consent_snapshot`에 썼는데, QR로 접수한 학부모가 **국외이전을 거부**한 건에 상담사가 나중에
+-- 녹음을 붙이면 그 update가 컬럼을 통째 교체해 **거부 기록이 사라지고 '동의함'으로 뒤바뀌었다**
+-- (민감정보 동의도 함께 false로 뒤집히고 원래 동의 시각·문구까지 소실). 동의를 증명하려고 만든 칸이
+-- 오히려 **허위 증거**를 만드는 상태였다. 학부모의 동의와 상담사의 확인은 **서로 다른 사실**이므로
+-- 칸을 나눈다. ⚠️ `consent_snapshot`은 접수 시 1회만 쓰고 이후 어떤 경로에서도 덮지 말 것.
+--
 -- ⚠️ 앱은 이 컬럼이 **없어도 돌아간다**(#95, expand/contract): 조회는 `select("*")` 계열이라 없으면
 --    undefined(=동의 없음으로 판정, fail-closed), 저장은 컬럼 부재를 감지해 스냅샷을 뺀 채 다시 저장한다
 --    (접수 자체는 절대 막지 않는다 — 학부모가 폼을 다 채우고 실패하는 것이 가장 나쁘다).
@@ -23,10 +30,14 @@
 set local statement_timeout = '60s';
 
 alter table enrollment_consultations
-  add column if not exists consent_snapshot jsonb;
+  add column if not exists consent_snapshot jsonb,
+  add column if not exists staff_recording_consent jsonb;
 
 comment on column enrollment_consultations.consent_snapshot is
-  '동의 스냅샷 — 동의 시각·항목별 동의 여부·그 시점 문구 전문/지문. 학원설정 문구가 바뀌어도 과거 동의를 재현하기 위한 증빙. 0204a, 2026-08-12 개인정보 검토.';
+  '학부모 동의 스냅샷 — 동의 시각·항목별 동의 여부·그 시점 문구 전문/지문. 학원설정 문구가 바뀌어도 과거 동의를 재현하기 위한 증빙. 🔴 한 번 쓰이면 덮어쓰지 말 것. 0204a, 2026-08-12.';
+
+comment on column enrollment_consultations.staff_recording_consent is
+  '상담사의 녹음 안내·동의 확인 이력(배열) — 학부모가 직접 누른 동의와 **다른 사실**이라 컬럼을 나눴다. 0204a, 2026-08-12.';
 
 -- 동의 이력 조회(감사·분쟁 대응)용 — 스냅샷이 있는 행만 훑는다.
 create index if not exists enrollment_consultations_consent_idx

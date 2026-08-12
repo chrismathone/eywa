@@ -11,7 +11,11 @@ import { kstToday } from "@/lib/date-kst";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { isMissingColumn } from "@/lib/supabase/missing-column";
-import { buildConsentSnapshot } from "@/lib/consent/snapshot";
+import {
+  buildStaffRecordingConsent,
+  recordingBlockReason,
+  type ConsentSnapshot,
+} from "@/lib/consent/snapshot";
 import { getTenantSettingsByTenantId } from "@/features/owner/server/queries";
 import { reportWarning } from "@/lib/observability/report-error";
 import { resolveUniqueStudentNameFor } from "@/features/students/server/unique-name";
@@ -166,7 +170,8 @@ export async function createEnrollmentConsultation(
   // 웹훅(handleConsultation)의 buildFormPatch가 **빈 필드만** 보강하므로 수기 입력값은 보존된다.
   const audioPath = String(formData.get("audioPath") ?? "").trim();
   if (audioPath) {
-    const consentErr = recordingConsentError(formData);
+    // 신규 생성이라 읽을 학부모 스냅샷이 없다(consultationId=null) → 문구 존재 + 상담사 확인이 근거.
+    const consentErr = await recordingConsentError(formData, user.tenantId, null);
     if (consentErr) return { error: consentErr };
     return createConsultationWithAudio(
       user,
@@ -241,7 +246,7 @@ async function createConsultationWithAudio(
   if (insertErr || !consult) return { error: `상담 생성 실패: ${insertErr?.message ?? "unknown"}` };
 
   // 동의 확인을 **행에 남긴다** — 전사 제출보다 먼저(전사는 이미 국외로 나가는 행위라, 그 전에 근거가 있어야).
-  await recordStaffRecordingConsent(admin, consult.id as string, user.tenantId);
+  await recordStaffRecordingConsent(admin, consult.id as string, user.tenantId, user.id);
 
   const err = await insertRecordingAndTranscribe(admin, {
     tenantId: user.tenantId,
@@ -258,48 +263,90 @@ async function createConsultationWithAudio(
 }
 
 /**
- * 녹음 첨부 게이트(서버) — 상담사가 "학부모에게 안내하고 동의를 받았다"고 확인했는가.
- * 🔴 화면 체크박스만으로는 게이트가 아니다(#77) — 폼을 우회해 액션을 직접 부르면 그대로 뚫린다.
- * 녹음은 반드시 국외(전사 엔진)로 나가므로, 확인 없는 녹음은 그 자체가 동의 없는 국외이전이다.
+ * 🔴 **녹음 첨부 게이트(서버)** — 화면 체크박스만으로는 게이트가 아니다(#77).
+ * 세 가지를 **전부** 확인한다:
+ *   ① 상담사가 "학부모에게 안내하고 동의를 받았다"고 확인했는가(폼 플래그)
+ *   ② 학원이 국외이전·수집이용 동의 문구를 갖고 있는가(없으면 학부모가 동의할 방법 자체가 없다)
+ *   ③ 이 상담에 **학부모가 직접 낸 동의**가 이미 있다면, 국외이전을 거부하지 않았는가
+ *
+ * ③이 이 게이트의 핵심이다 — QR로 접수한 학부모가 국외이전 체크를 비웠는데(폼이 "동의하지 않으셔도
+ * 제한 없다"고 안내하므로 정상 경로다) 상담사가 나중에 녹음을 붙이면 **명시적 거부를 무시**하는 것이다.
+ * 스냅샷이 아예 없는 건(전화·방문 신규)은 ①의 상담사 확인이 근거가 된다.
+ *
+ * ⚠️ 문구가 비면 여기서 막는다 — 학원설정 힌트가 "비우면 녹음 첨부도 막힙니다"라고 약속한 동작이고,
+ *    약속만 하고 막지 않으면 그 힌트가 곧 오정보다(적대 리뷰 2026-08-12).
  */
-function recordingConsentError(formData: FormData): string | null {
-  if (String(formData.get("recordingConsent") ?? "") === "true") return null;
-  return "녹음을 저장하려면 학부모 안내·동의 확인이 필요합니다 — 녹음을 지우면 상담 기록만 저장됩니다";
+async function recordingConsentError(
+  formData: FormData,
+  tenantId: string,
+  consultationId: string | null,
+): Promise<string | null> {
+  if (String(formData.get("recordingConsent") ?? "") !== "true") {
+    return "녹음을 저장하려면 학부모 안내·동의 확인이 필요합니다 — 녹음을 지우면 상담 기록만 저장됩니다";
+  }
+  const settings = await getTenantSettingsByTenantId(tenantId);
+  const terms = {
+    privacy: settings.notifications.privacyTerms,
+    overseas: settings.notifications.overseasTransferTerms,
+  };
+  // 기존 상담(수정 경로)이면 학부모가 낸 동의를 실제로 읽어 거부 여부를 본다. 컬럼이 없으면(0204a 미적용) null.
+  let parentSnapshot: ConsentSnapshot | null = null;
+  if (consultationId) {
+    const { data } = await createAdminClient()
+      .from("enrollment_consultations")
+      .select("consent_snapshot")
+      .eq("id", consultationId)
+      .eq("tenant_id", tenantId)
+      .maybeSingle();
+    const raw = (data as { consent_snapshot?: unknown } | null)?.consent_snapshot;
+    if (raw && typeof raw === "object") parentSnapshot = raw as ConsentSnapshot;
+  }
+  return recordingBlockReason({ terms, parentSnapshot });
 }
 
 /**
- * 상담사 확인(전화·방문 상담)을 동의 스냅샷으로 기록. 학부모가 직접 누른 QR 접수와 구분하려고
- * `source: "staff_form"`으로 남긴다 — 이건 **상담사의 확인**이지 학부모의 클릭이 아니다.
- * 문구는 그 시점 학원설정에서 읽어 전문까지 얼린다(나중에 문구를 고쳐도 과거 근거가 남는다).
+ * 상담사의 녹음 안내·확인을 **별도 칸**(`staff_recording_consent`)에 이력으로 남긴다.
  *
- * ⚠️ best-effort — 이미 저장된 상담을 되돌리지 않는다. 0204a 미적용 구간(#95)에선 컬럼이 없어 조용히 넘어간다.
+ * 🔴 **학부모 동의 칸(`consent_snapshot`)을 절대 건드리지 않는다.** 처음엔 같은 칸에 썼는데, 그러면
+ * QR로 접수하며 국외이전을 **거부한** 학부모의 기록을 상담사 확인이 통째로 덮어써 "동의함"으로
+ * 뒤바뀌었다(민감정보 동의도 함께 false로 뒤집히고 원래 동의 시각·문구까지 소실). 동의를 증명하려고
+ * 만든 칸이 오히려 **허위 증거**를 만드는 상태였다 — 적대 리뷰 2026-08-12에서 잡힌 치명 결함.
+ * 학부모의 동의와 상담사의 확인은 서로 다른 사실이므로 칸을 나눴다.
+ *
+ * ⚠️ best-effort — 이미 저장된 상담을 되돌리지 않는다. 0204a 미적용 구간(#95)에선 조용히 넘어간다.
  */
 async function recordStaffRecordingConsent(
   admin: ReturnType<typeof createAdminClient>,
   consultationId: string,
   tenantId: string,
+  userId: string,
 ): Promise<void> {
   try {
     const settings = await getTenantSettingsByTenantId(tenantId);
-    const snapshot = buildConsentSnapshot({
+    const entry = buildStaffRecordingConsent({
       terms: {
         privacy: settings.notifications.privacyTerms,
         overseas: settings.notifications.overseasTransferTerms,
-        sensitive: settings.notifications.sensitiveInfoTerms,
-        service: settings.notifications.serviceTerms,
       },
-      // 상담사가 확인한 범위 = 녹음에 필요한 두 가지(수집·이용 + 국외이전). 민감정보·학칙은 이 화면의 확인 대상이 아니다.
-      agreed: { privacy: true, overseas: true },
-      source: "staff_form",
+      confirmedBy: userId,
       at: new Date(),
     });
+    // 이력이라 누적한다(여러 상담사가 각자 녹음을 붙일 수 있다 — 녹음 행이 누적되는 것과 같은 이유).
+    const { data } = await admin
+      .from("enrollment_consultations")
+      .select("staff_recording_consent")
+      .eq("id", consultationId)
+      .eq("tenant_id", tenantId)
+      .maybeSingle();
+    const prev = (data as { staff_recording_consent?: unknown } | null)?.staff_recording_consent;
+    const history = Array.isArray(prev) ? [...prev, entry] : [entry];
     const { error } = await admin
       .from("enrollment_consultations")
-      .update({ consent_snapshot: snapshot })
+      .update({ staff_recording_consent: history })
       .eq("id", consultationId)
       .eq("tenant_id", tenantId);
-    if (error && !isMissingColumn(error, "consent_snapshot")) {
-      reportWarning("동의 스냅샷 기록 실패", { scope: "enrollment.consent", consultationId });
+    if (error && !isMissingColumn(error, "staff_recording_consent")) {
+      reportWarning("녹음 동의 확인 기록 실패", { scope: "enrollment.consent", consultationId });
     }
   } catch {
     /* 동의 기록 실패가 상담 저장을 되돌리게 두지 않는다 — 상담은 이미 저장돼 있다 */
@@ -490,14 +537,15 @@ export async function updateEnrollmentConsultation(
   // 수정 중 새 녹음 첨부(QR 접수건을 상담사가 수정하며 상담 녹음) — 전사·13섹션 분석 재실행.
   const audioPath = String(formData.get("audioPath") ?? "").trim();
   if (audioPath) {
-    // 생성과 같은 게이트 — 수정에서 녹음을 붙이는 경로도 동의 확인 없이는 통과시키지 않는다(#77).
-    const consentErr = recordingConsentError(formData);
+    // 생성과 같은 게이트 — 여기서는 **학부모가 낸 동의까지 읽는다**(QR 접수건에 녹음을 붙이는 경로).
+    // 학부모가 국외이전을 거부했으면 상담사 확인이 있어도 막는다(명시적 거부를 덮지 않는다).
+    const consentErr = await recordingConsentError(formData, user.tenantId, id);
     if (consentErr) {
       revalidatePath("/enrollment");
       revalidatePath(`/enrollment/${id}`);
       return { error: `입력 내용은 저장되었습니다. ${consentErr}`, saved: true };
     }
-    await recordStaffRecordingConsent(createAdminClient(), id, user.tenantId);
+    await recordStaffRecordingConsent(createAdminClient(), id, user.tenantId, user.id);
     const audioErr = await attachAudioAndTranscribe(
       user,
       id,

@@ -109,16 +109,69 @@ export function hasConsent(snapshot: ConsentSnapshot | null | undefined, key: Co
 }
 
 /**
- * 녹음을 붙여도 되는가 — 개인정보 수집·이용 **그리고** 국외이전 동의가 둘 다 있어야 한다.
- * 🔴 녹음은 반드시 국외(전사 엔진)로 나가므로, 국외이전 동의 없는 녹음은 그 자체가 위반이다.
+ * 상담사의 녹음 안내·확인 기록 — **학부모 동의와 다른 사실**이라 타입도 저장 칸도 분리한다.
+ * 🔴 이걸 학부모 스냅샷과 같은 칸에 쓰면, 학부모가 거부한 기록을 상담사 확인이 덮어써
+ *    "학부모가 동의했다"는 **허위 증거**가 만들어진다(적대 리뷰 2026-08-12에서 실제로 잡힌 결함).
  */
-export function canAttachRecording(snapshot: ConsentSnapshot | null | undefined): boolean {
-  return RECORDING_CONSENTS.every((k) => hasConsent(snapshot, k));
+export type StaffRecordingConsent = {
+  version: 1;
+  confirmedAt: string;
+  /** 확인한 상담사 — 나중에 "누가 안내했는가"를 되짚기 위한 것. */
+  confirmedBy: string | null;
+  /** 확인 시점에 화면이 안내한 문구(수집·이용/국외이전)의 지문 — 어떤 안내를 근거로 확인했는지. */
+  termsHash: { privacy: string; overseas: string };
+};
+
+export function buildStaffRecordingConsent(args: {
+  terms: Pick<ConsentTerms, "privacy" | "overseas">;
+  confirmedBy: string | null;
+  at: Date;
+}): StaffRecordingConsent {
+  return {
+    version: 1,
+    confirmedAt: args.at.toISOString(),
+    confirmedBy: args.confirmedBy,
+    termsHash: {
+      privacy: termsFingerprint((args.terms.privacy ?? "").trim()),
+      overseas: termsFingerprint((args.terms.overseas ?? "").trim()),
+    },
+  };
 }
 
-/** 녹음을 막은 이유 — 화면이 그대로 보여줄 한글 문장(없으면 null = 첨부 가능). */
-export function recordingBlockReason(snapshot: ConsentSnapshot | null | undefined): string | null {
-  const missing = RECORDING_CONSENTS.filter((k) => !hasConsent(snapshot, k));
-  if (missing.length === 0) return null;
-  return `${missing.map((k) => CONSENT_LABELS[k]).join(" · ")} 동의가 없어 녹음을 첨부할 수 없습니다`;
+/**
+ * 🔴 **녹음을 붙여도 되는가** — 이 커밋의 실질 게이트. 두 조건을 **모두** 본다:
+ *
+ *  ① 학원이 국외이전 동의 문구를 갖고 있는가(`terms.overseas`가 비면 학부모는 동의할 방법조차 없다).
+ *  ② 학부모가 직접 낸 동의가 이미 있다면(QR 접수), 그 기록이 **국외이전을 거부하지 않았는가**.
+ *
+ * ②가 핵심이다 — 학부모가 "녹음은 원하지 않는다"고 체크를 비웠는데 상담사가 나중에 녹음을 붙이면
+ * 그건 명시적 거부를 무시하는 것이다. 스냅샷이 아예 없는 건(전화·방문 신규)은 상담사 확인으로 간다.
+ */
+export function recordingBlockReason(args: {
+  terms: Pick<ConsentTerms, "privacy" | "overseas">;
+  /** 학부모가 접수 화면에서 직접 낸 동의(있을 때만). 없으면 상담사 확인 경로. */
+  parentSnapshot: ConsentSnapshot | null | undefined;
+}): string | null {
+  if (!(args.terms.overseas ?? "").trim()) {
+    return "국외 이전 동의 문구가 설정되지 않아 녹음을 첨부할 수 없습니다 — 학원설정 › 알림·약관에서 문구를 먼저 등록하세요";
+  }
+  if (!(args.terms.privacy ?? "").trim()) {
+    return "개인정보 수집·이용 동의 문구가 설정되지 않아 녹음을 첨부할 수 없습니다 — 학원설정 › 알림·약관에서 문구를 먼저 등록하세요";
+  }
+  const snap = args.parentSnapshot;
+  if (snap) {
+    const refused = RECORDING_CONSENTS.filter((k) => !hasConsent(snap, k));
+    if (refused.length > 0) {
+      return `학부모가 ${refused.map((k) => CONSENT_LABELS[k]).join(" · ")}에 동의하지 않아 녹음을 첨부할 수 없습니다 — 다시 동의를 받은 뒤 진행하세요`;
+    }
+  }
+  return null;
+}
+
+/** 위 판정의 불리언 형태. */
+export function canAttachRecording(args: {
+  terms: Pick<ConsentTerms, "privacy" | "overseas">;
+  parentSnapshot: ConsentSnapshot | null | undefined;
+}): boolean {
+  return recordingBlockReason(args) === null;
 }
