@@ -24,7 +24,7 @@ import { EyIcon } from "@/components/icons/eywa-icons";
 import { setAttendanceBulk, setAttendanceCell } from "@/features/attendance/server/actions";
 import { clearPresentAttendance, setMyEcsFontSize } from "../server/actions";
 import { ECS_FONT_SIZE_ZOOM, type EcsFontSize } from "../font-size";
-import type { BasicAttendance } from "./attendance-select";
+import type { BasicAttendance } from "@/features/onescreen/components/attendance-pills";
 import { StudentRow } from "./today-student-row";
 import { TodaySummary, type TodayStats } from "./today-summary";
 import type { StudentMark } from "./today-mark-popover";

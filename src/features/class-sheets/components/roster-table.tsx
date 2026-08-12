@@ -6,16 +6,9 @@
 //      함께 바뀌었다. 옛 기록(slot_start null)은 서버가 그 날 **첫 교시 칸에만** 붙여 준다.
 // 태도·과제는 교시별(class_sheet_student_marks — 키에 slot_start 포함). 아바타 금지(이름 텍스트만).
 //
-// **2026-08-06 원장 지시 — 수학 수업보고서와 같은 어휘·같은 컨트롤로 통일**:
-//  · '출석' 열 → **'출결'** + 체크박스 → **출석/지각/결석 3분화**([AttendancePills] 재사용).
-//    🔴 이제 ECS에서 **결석도 찍힌다 = 시수·급여에 닿는다**(그전엔 present만 만들 수 있었다). 서버는
-//       원스크린과 **같은 게이트**(`setAttendanceCell` — 권한·담당 반·강사 7일 창)를 그대로 통과한다(#77).
-//    ⚠️ 대신 **'출석 취소'는 여기서 사라졌다**(0169a) — pill은 지우지 않는다(활성 재클릭 = no-op). 지우기는
-//       출석부에서만: status=null 삭제가 사유 메모·시수까지 함께 지우기 때문(수학 쪽과 동일한 이유).
-//  · '상태' 열 → **'태도'** + 자유입력 칩 → **5단 눈금**([ATTITUDE] 재사용, 매우 좋음~매우 안좋음).
-//    ⚠️ 옛 값('완' 736·'결석' 49·'지각' 12·'안침' 7 — 출결 대용으로 쓰이던 것)은 **안 지운다**.
-//       FieldSelect가 선택지 밖 저장값을 '이전 표기'로 그대로 보여 준다(쓴 게 안 보이면 안 된다).
-//  · '개인 진도 · 과제' → **'특이사항'**(라벨만 — 저장 필드는 그대로 `progressNote`).
+// **컨트롤 이력**: 2026-08-06 "수학 보고서와 같은 어휘·컨트롤"(출결 3분화·태도 5단·특이사항) →
+// 출결 컨트롤은 2026-08-11 원장 *"클릭형으로 변경. 드랍다운 제거"*로 **클릭 알약**(roster-slot-cells.tsx,
+// 압축 라벨 출/지/결)이 됐다. 셀 구현은 오늘 면 통합 표(today-roster-table)와 **공용**이다(중복 금지).
 //
 // 명단은 시간표 셀처럼 **섹션으로 나뉜다**: 재원(기본) → 퇴원(유예 30일) → 기록(그 외 보존 행).
 // 퇴원·기록 섹션은 전부 읽기 전용이고 일괄 입력 대상도 아니다(bulk.ts editableRows).
@@ -25,22 +18,15 @@
 //    같은 일을 교시 수만큼 반복해야 하고, 나란한 카드의 로스터 높이가 어긋나 subgrid 줄맞춤이 깨진다.
 // ⚠️ 접어도 **건수는 머리에 남긴다** — 숨기면서 숫자까지 지우면 "몇 명인지 모를 뿐 아니라 있는지도 모름"이 된다.
 import { memo, useMemo } from "react";
-import { schoolGradeLabel } from "@/lib/format/school-grade";
-import { WindowLink } from "@/components/workspace/window-link";
 import { EyIcon } from "@/components/icons/eywa-icons";
-import { handleGridNavKey } from "@/features/onescreen/components/grid-nav";
 import type { ClassSheetWeekData } from "../server/queries";
-import type { RosterEntry } from "../lib/grid";
 import { groupRosterRows, type RosterGroupKey } from "../lib/roster-order";
-import { AttendanceSelect } from "./attendance-select";
-import { SessionUnitsField } from "@/features/onescreen/components/attendance-pills";
-import { FieldSelect } from "@/features/onescreen/components/field-select";
-import { ATTITUDE } from "@/features/onescreen/attitude";
-import { SHEET_BOX_READONLY, SHEET_BOX_UNITS, SHEET_INPUT } from "../ui-box";
+import type { RosterEntry } from "../lib/grid";
+import { RosterNameCell, RosterSlotCells } from "./roster-slot-cells";
 import type { SheetHandlers } from "./sheet-client";
 
-/** 섹션 라벨 행의 설명(툴팁) — 왜 이 학생이 아직 보이는지 화면이 스스로 답한다. */
-const GROUP_HINT: Record<RosterGroupKey, string> = {
+/** 섹션 라벨 행의 설명(툴팁) — 왜 이 학생이 아직 보이는지 화면이 스스로 답한다. 통합 표와 공용. */
+export const GROUP_HINT: Record<RosterGroupKey, string> = {
   active: "",
   withdrawn: "수강이 끝난 학생 — 종료일부터 한 달간 표시되고 그 뒤 주부터는 명단에서 빠집니다(읽기 전용)",
   record: "현재 수강 대상이 아니지만 이 교시에 기록이 있어 표시(읽기 전용)",
@@ -53,8 +39,8 @@ const GROUP_TOGGLE_LABEL: Record<RosterGroupKey, string> = {
   record: "기록 목록",
 };
 
-/** 섹션 접기/펼치기 셰브런 — 표 머리(active)와 라벨 행(withdrawn·record)이 같은 어포던스를 쓴다. */
-function GroupToggle({
+/** 섹션 접기/펼치기 셰브런 — 표 머리(active)와 라벨 행(withdrawn·record)이 같은 어포던스. 통합 표와 공용. */
+export function GroupToggle({
   group,
   collapsed,
   count,
@@ -151,13 +137,12 @@ export const RosterTable = memo(function RosterTable({
             "특이사항 열너비를 남은 열너비로"). `table-fixed`라 width 없는 마지막 <col>이 잔여를 받는다. */}
         <colgroup>
           <col style={{ width: 84 }} />
-          {/* 출결·태도는 드롭다운 — 태도는 가장 긴 선택지('매우 안좋음')가 잘리지 않는 폭이어야 한다.
-              유닛은 숫자 한두 자리라 좁게(수학은 '타임', 영어는 '유닛' — 원장 어휘 그대로).
-              ⚠️ 폭은 13px 글자 + 좌우 px-1(8) + 간격(4) + 화살표(10) 기준 — 더 좁히면 값이 잘린다
-                 ('선택 안 함' ≈ 56 + 22 = 78, '매우 안좋음' ≈ 69 + 22 = 91). */}
+          {/* 출결 = 클릭 알약 3개(출/지/결, 2026-08-11 "드랍다운 제거") — 압축 라벨이라 88px에 앉는다.
+              태도는 드롭다운 유지 — 가장 긴 선택지('매우 안좋음' ≈ 91px)가 잘리지 않는 폭.
+              유닛은 숫자 한두 자리라 좁게(수학은 '타임', 영어는 '유닛' — 원장 어휘 그대로). */}
           <col style={{ width: 88 }} />
           {/* ⚠️ 유닛 칸은 이제 열 폭을 그대로 채운다(w-full) — 예전 46px 고정 입력이 열보다 넓어
-              양옆 드롭다운 위로 겹쳐 그려지던 문제(원장 2026-08-06 "너무 겹치네")가 구조적으로 사라졌다. */}
+              양옆 칸 위로 겹쳐 그려지던 문제(원장 2026-08-06 "너무 겹치네")가 구조적으로 사라졌다. */}
           <col style={{ width: 46 }} />
           <col style={{ width: 96 }} />
           <col />
@@ -211,133 +196,26 @@ export const RosterTable = memo(function RosterTable({
             }
             const { entry, navRow } = row;
             const meta = data.students[entry.studentId];
-            const mark = marks[`${entry.studentId}|${date}|${slotStart}`] ?? null;
-            // 출결은 이제 **교시별**(0196a) — 같은 날 4교시·6교시가 서로 다른 칸이다.
-            // (옛 "그날 전체" 기록은 서버가 그 날 첫 교시 칸에만 붙여 준다 — 모든 칸에 붙이면
-            //  예전처럼 한 칸을 고쳤을 때 다른 칸도 바뀐 것처럼 보인다.)
-            const att = attendance[`${entry.studentId}|${date}|${slotStart}`] ?? null;
-            const rowEditable = canEdit && entry.eligible;
+            // 출결은 **교시별**(0196a) — 같은 날 4교시·6교시가 서로 다른 칸이다.
+            // (옛 "그날 전체" 기록은 서버가 그 날 첫 교시 칸에만 붙여 준다.)
             return (
               // ⚠️ 읽기 전용 행을 opacity로 흐리지 않는다 — 흐린 회색은 "가독성이 떨어진다"의 본체였다.
               //    회색조(text-dim)와 은은한 배경으로 구분하고 **글자 대비는 유지**한다.
               <tr key={entry.studentId} className={entry.historical ? "bg-bg-soft/40" : ""}>
-                <td className="py-px pr-1">
-                  {/* 이름 클릭 = 학생 정보(원장 2026-08-06). WindowLink라 창(embed) 안에서는 그 창에서
-                      드릴인하고, 최상위 프레임에서는 새 플로팅 창으로 뜬다([[#86]] — 배경이 창에 가려
-                      "아무 일도 안 일어난 것처럼" 보이는 사고를 이 컴포넌트가 이미 막아 준다). */}
-                  <WindowLink
-                    href={`/students/${entry.studentId}`}
-                    title={meta?.name}
-                    className={`truncate text-[13px] font-bold underline-offset-2 hover:underline ${
-                      entry.historical ? "text-text-dim" : "text-foreground"
-                    } ${entry.endedOn ? "line-through" : ""}`}
-                    // 학교 열을 뺐으므로 학교·학년은 **이름 툴팁으로 옮긴다** — 열이 사라졌다고 정보까지
-                    // 사라지면 "누구인지" 확인할 길이 화면에서 없어진다.
-                    ariaLabel={meta ? `${meta.name} 학생 정보` : "학생 정보"}
-                  >
-                    <span title={meta ? `${meta.name} · ${schoolGradeLabel(meta.school, meta.grade)} — 클릭하면 학생 정보` : undefined}>
-                      {meta?.name ?? "?"}
-                    </span>
-                  </WindowLink>
-                  {/* 행 안의 글자는 **전부 같은 크기**(원장 2026-08-10 "이 행은 모든 글자 크기 통일") —
-                      영어이름·퇴원일만 11px면 같은 줄이 두 위계로 읽힌다. 구분은 색(dim)이 진다. */}
-                  {meta?.englishName ? (
-                    <span className="text-text-dim ml-1 text-[13px]">({meta.englishName})</span>
-                  ) : null}
-                  {/* 퇴원일 — 섹션 라벨이 '퇴원'이라 날짜만(월-일). 전체 날짜는 툴팁. */}
-                  {entry.endedOn ? (
-                    <span className="text-text-dim num ml-1 text-[13px]" title={`${entry.endedOn} 수강 종료`}>
-                      {entry.endedOn.slice(5)}
-                    </span>
-                  ) : null}
-                </td>
-                <td className="py-px">
-                  {/* 태도와 **같은 컨트롤**(드롭다운, 원장 2026-08-06) — 알약 3개는 한 줄에서 폭을 먹고
-                      두 칸이 서로 다른 모양으로 읽혔다. 시수·사유 편집은 출석부·원스크린 쪽에 남는다. */}
-                  <AttendanceSelect
-                    status={att?.status ?? null}
-                    note={att?.note ?? null}
-                    studentName={meta?.name ?? ""}
-                    canMark={canMarkDate && rowEditable}
-                    onSet={(status, n) =>
-                      handlers.setAttendance(entry.studentId, date, slotStart, status, n)
-                    }
-                    onClear={() => handlers.clearAttendance(entry.studentId, date, slotStart)}
-                  />
-                </td>
-                <td className="px-1 py-px text-center">
-                  {/* 유닛 = 수학의 '타임'과 같은 값(session_units). 결석이면 컴포넌트가 '—'로 잠근다
-                      (결석은 시수를 안 쓴다). **출결 기록이 없으면 '—'** — 아직 유닛이라는 값 자체가
-                      없는 상태라 0이나 1을 보여주면 "이미 잡혀 있다"는 거짓 표시가 된다(원장 "없는 경우 -"). */}
-                  {att?.status === "absent" ? (
-                    // 결석은 시수를 안 쓴다. size="md"의 SessionUnitsField는 이 경우 **null을 반환**해
-                    // 칸이 통째로 비므로(빈 칸 = "입력이 안 되나?") 여기서 직접 '—'를 그린다.
-                    <span
-                      className="text-text-faint text-[13px] font-semibold"
-                      title="결석은 유닛(시수)을 쓰지 않습니다 — 출석·지각으로 바꾸면 입력할 수 있습니다"
-                    >
-                      —
-                    </span>
-                  ) : canMarkDate && rowEditable && att ? (
-                    <SessionUnitsField
-                      units={att.units}
-                      status={(att.status as "present" | "late" | "absent" | null) ?? null}
-                      pending={false}
-                      studentName={meta?.name ?? ""}
-                      // 이웃 칸(출결·태도 드롭다운)과 **같은 잉크 테두리·같은 높이**로 — 이 칸만 얇은
-                      // 헤어라인이면 한 줄에서 칸 하나가 비어 보인다(원장 2026-08-10 "모든 박스에 테두리").
-                      box={SHEET_BOX_UNITS}
-                      onSet={(status, extra) =>
-                        handlers.setAttendance(
-                          entry.studentId,
-                          date,
-                          slotStart,
-                          status,
-                          undefined,
-                          extra?.units,
-                        )
-                      }
-                    />
-                  ) : (
-                    <span className="text-text-faint text-[13px] font-semibold">—</span>
-                  )}
-                </td>
-                <td className="py-px pr-1">
-                  {rowEditable ? (
-                    <FieldSelect
-                      options={ATTITUDE}
-                      value={mark?.status ?? null}
-                      ariaLabel={`${meta?.name ?? ""} 태도`}
-                      box={SHEET_INPUT}
-                      onSelect={(v) =>
-                        handlers.saveMark(entry.studentId, date, slotStart, v, mark?.progressNote ?? null)
-                      }
-                    />
-                  ) : (
-                    // 읽기 전용 행도 **값은 보여준다**(옛 '완'·'결석' 같은 이전 표기 포함) — 숨기면 기록이 증발한다.
-                    <span className={SHEET_BOX_READONLY}>{mark?.status ?? "—"}</span>
-                  )}
-                </td>
-                <td className="py-px">
-                  <input
-                    className={SHEET_INPUT}
-                    defaultValue={mark?.progressNote ?? ""}
-                    disabled={!rowEditable}
-                    aria-label={`${meta?.name ?? ""} 특이사항`}
-                    data-nav-col="ecs-note"
-                    data-nav-row={navRow}
-                    onKeyDown={handleGridNavKey}
-                    onChange={(e) =>
-                      handlers.saveMark(
-                        entry.studentId,
-                        date,
-                        slotStart,
-                        mark?.status ?? null,
-                        e.target.value,
-                      )
-                    }
-                  />
-                </td>
+                <RosterNameCell entry={entry} meta={meta} />
+                <RosterSlotCells
+                  entry={entry}
+                  meta={meta}
+                  date={date}
+                  slotStart={slotStart}
+                  mark={marks[`${entry.studentId}|${date}|${slotStart}`] ?? null}
+                  att={attendance[`${entry.studentId}|${date}|${slotStart}`] ?? null}
+                  canMarkDate={canMarkDate}
+                  canEdit={canEdit}
+                  handlers={handlers}
+                  navRow={navRow}
+                  navCol="ecs-note"
+                />
               </tr>
             );
           })}

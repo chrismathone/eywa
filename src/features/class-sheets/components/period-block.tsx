@@ -25,6 +25,7 @@ export const PeriodBlock = memo(function PeriodBlock({
   canEdit,
   collapsedGroups,
   onToggleGroup,
+  hideRoster = false,
 }: {
   date: string;
   slot: GridSlot;
@@ -41,6 +42,11 @@ export const PeriodBlock = memo(function PeriodBlock({
   /** 접어 둔 로스터 섹션 — **시트 전체 공유**(카드마다 따로면 나란한 카드의 줄맞춤이 어긋난다). */
   collapsedGroups: readonly RosterGroupKey[];
   onToggleGroup: (key: RosterGroupKey) => void;
+  /**
+   * 로스터 생략 — 오늘 면(today-class-sheet)이 명단을 **통합 표 한 번**으로 그리므로 교시 카드는
+   * 머리(교시·시각·일괄 입력)+계획만 낸다(원장 2026-08-11 "목록은 왜 여러 번?"). 주간 시트는 기본값.
+   */
+  hideRoster?: boolean;
 }) {
   // 키에 날짜 포함 — 같은 시각이라도 평일/주말 교시 번호가 다르다(주말은 별도 교시표).
   const periodLabel = data.periodLabelBySlot[`${date}|${slot.slotStart}`] ?? null;
@@ -147,7 +153,7 @@ export const PeriodBlock = memo(function PeriodBlock({
         showExamTerm={!data.isEie}
       />
 
-      {slot.roster.length > 0 ? (
+      {!hideRoster && slot.roster.length > 0 ? (
         <RosterTable
           date={date}
           slotStart={slot.slotStart}

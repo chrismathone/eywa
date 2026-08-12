@@ -6,7 +6,7 @@
  * setAttendanceCell/clearPresentAttendance 두 경로만, 보고서는 원스크린 링크만).
  */
 import Link from "next/link";
-import type { BasicAttendance } from "./attendance-select";
+import type { BasicAttendance } from "@/features/onescreen/components/attendance-pills";
 import { TodayAttendancePills } from "./today-attendance-pills";
 import { TodayMarkPopover, type MarkMap, type StudentMark } from "./today-mark-popover";
 import type { TodayClassCard, TodayStudent } from "../server/today";

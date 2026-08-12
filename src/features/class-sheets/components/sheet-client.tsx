@@ -40,6 +40,7 @@ import { SheetGrid } from "./sheet-grid";
 import { CopyPrevWeek } from "./copy-prev-week";
 import { ClassSheetImportButton } from "./class-import-button";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
+import { TodayClassSheet } from "./today-class-sheet";
 
 export type SheetHandlers = {
   editCell: (
@@ -104,19 +105,26 @@ export function SheetClient({
   tenantId,
   initialDay = null,
   initialPanelOpen = true,
+  variant = "full",
 }: {
   data: ClassSheetWeekData;
   classOptions: { id: string; name: string }[];
   userId: string;
   tenantId: string;
   /**
-   * 요일 필터 초기값 — ECS '오늘' 면이 시트를 **그 날짜 열만** 필터해 쌓을 때 쓴다(2026-08-11).
+   * 요일 필터 초기값 — ECS '오늘' 면이 시트를 **그 날짜만** 보여줄 때 쓴다(2026-08-11).
    * URL `?day=`가 있으면 그쪽이 이긴다(단일 시트 화면의 기존 계약 불변). SSR·클라 초기값이 같아야
    * 하이드레이션이 안 어긋나므로 서버가 이 prop으로 확정해 내려준다.
    */
   initialDay?: string | null;
   /** 목표·메모 패널 초기 접힘 — 오늘 면은 시트가 N개 쌓여 패널까지 다 열면 화면이 무너진다. */
   initialPanelOpen?: boolean;
+  /**
+   * "today" = ECS 오늘 면 임베드(원장 2026-08-11 "중복 컴포넌트 다수" — 반마다 반복되던 툴바·주 복사
+   * 배너·목표 패널을 걷어내고, 그 날짜의 교시 카드(가로)+**통합 로스터**만 그린다). 저널·CAS·presence
+   * ·저장 경로는 full과 완전히 같다 — 이 스위치는 **껍데기(무엇을 그리나)**만 바꾼다.
+   */
+  variant?: "full" | "today";
 }) {
   const router = useRouter();
   const { classId, weekMonday } = data;
@@ -627,6 +635,8 @@ export function SheetClient({
   const visibleDays = dayFilter
     ? data.grid.days.filter((d) => d.date === dayFilter)
     : data.grid.days;
+  // today 변형이 그릴 하루 — initialDay가 확정돼 내려오므로 사실상 항상 있다(없으면 "수업 없음").
+  const todayDay = variant === "today" ? (visibleDays[0] ?? null) : null;
   // "이 주는 아직 비어 있어요"는 **현재 화면 상태**로 판정한다. 서버 스냅샷(data.fill)만 보면 계획 셀
   // 저장이 RSC를 갱신하지 않으므로(서버 액션에 revalidate 없음·같은 주에선 재마운트 없음) 강사가 그 주를
   // 다 채워도 채워진 표 바로 위에 "비어 있어요"가 계속 뜬다(적대검증 2026-07-29, 첫 사용 시 100% 발생).
@@ -640,31 +650,34 @@ export function SheetClient({
   );
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-3">
-      <SheetToolbar
-        data={data}
-        classOptions={classOptions}
-        store={store}
-        dayFilter={dayFilter}
-        onDayFilter={changeDayFilter}
-        panelOpen={panelOpen}
-        onTogglePanel={() => setPanelOpen((v) => !v)}
-        onNavigate={navigate}
-        fontSize={fontSize}
-        onFontSize={changeFontSize}
-        showSelfStudy={data.showSelfStudy}
-        onShowSelfStudy={(show) => void changeShowSelfStudy(show)}
-        selfStudyPending={selfStudyPending}
-        trailing={
-          data.showSheetImport ? (
-            <ClassSheetImportButton
-              classId={classId}
-              className={data.className}
-              beforeApply={flushBeforeImport}
-            />
-          ) : null
-        }
-      />
+    // today 임베드는 h-full을 안 쓴다 — 자연 높이로 쌓여 페이지가 스크롤한다(부모에 높이가 없다).
+    <div className={variant === "today" ? "flex flex-col gap-3" : "flex h-full min-h-0 flex-col gap-3"}>
+      {variant === "full" ? (
+        <SheetToolbar
+          data={data}
+          classOptions={classOptions}
+          store={store}
+          dayFilter={dayFilter}
+          onDayFilter={changeDayFilter}
+          panelOpen={panelOpen}
+          onTogglePanel={() => setPanelOpen((v) => !v)}
+          onNavigate={navigate}
+          fontSize={fontSize}
+          onFontSize={changeFontSize}
+          showSelfStudy={data.showSelfStudy}
+          onShowSelfStudy={(show) => void changeShowSelfStudy(show)}
+          selfStudyPending={selfStudyPending}
+          trailing={
+            data.showSheetImport ? (
+              <ClassSheetImportButton
+                classId={classId}
+                className={data.className}
+                beforeApply={flushBeforeImport}
+              />
+            ) : null
+          }
+        />
+      ) : null}
 
       {doc.recoverable ? (
         <div className="border-line bg-bg-soft flex flex-wrap items-center gap-2 rounded-2xl border border-dashed px-4 py-2.5 text-[13px]">
@@ -689,7 +702,7 @@ export function SheetClient({
         </div>
       ) : null}
 
-      {canEdit && weekIsEmpty ? (
+      {variant === "full" && canEdit && weekIsEmpty ? (
         <CopyPrevWeek
           classId={classId}
           weekMonday={weekMonday}
@@ -701,36 +714,59 @@ export function SheetClient({
           커지면 어지럽다). ⚠️ font-size가 아니라 zoom인 이유는 font-size.ts 주석 참조(열 폭이 px 고정인 표).
           기본('작음')은 배율 1이라 **스타일 자체를 안 붙인다** — 손대지 않은 사용자의 렌더는 완전 무변경. */}
       <div
-        className="flex min-h-0 flex-1 items-stretch gap-3"
+        className={variant === "today" ? "min-w-0" : "flex min-h-0 flex-1 items-stretch gap-3"}
         style={fontZoom === 1 ? undefined : { zoom: fontZoom }}
       >
-        {panelOpen ? (
-          <PlanPanel
-            goals={goals}
-            skillAreas={data.skillAreas}
-            canEdit={canEdit}
-            monthStart={data.monthStart}
-            weekMonday={weekMonday}
-            memo={memos["panel"] ?? ""}
-            onGoalField={saveGoal}
-            onMemo={(body) => saveWeekMemo("panel", body)}
-          />
-        ) : null}
-        <DragScrollArea barX className="min-w-0 flex-1">
-          {/* 같은 교시 블록이 요일 간 같은 행에 정렬(행 높이 통일) — 카드 크기 맞춤 */}
-          <SheetGrid
-            days={visibleDays}
-            data={data}
-            linesBySlot={linesBySlot}
-            marks={marks}
-            attendance={attendance}
-            store={store}
-            handlers={handlers}
-            canEdit={canEdit}
-            collapsedGroups={collapsedGroups}
-            onToggleGroup={toggleRosterGroup}
-          />
-        </DragScrollArea>
+        {variant === "today" ? (
+          todayDay && todayDay.slots.length > 0 ? (
+            <TodayClassSheet
+              day={todayDay}
+              data={data}
+              linesBySlot={linesBySlot}
+              marks={marks}
+              attendance={attendance}
+              store={store}
+              handlers={handlers}
+              canEdit={canEdit}
+              collapsedGroups={collapsedGroups}
+              onToggleGroup={toggleRosterGroup}
+            />
+          ) : (
+            <p className="bg-card shadow-card text-text-dim rounded-2xl px-4 py-6 text-sm">
+              이 날은 수업이 없습니다.
+            </p>
+          )
+        ) : (
+          <>
+            {panelOpen ? (
+              <PlanPanel
+                goals={goals}
+                skillAreas={data.skillAreas}
+                canEdit={canEdit}
+                monthStart={data.monthStart}
+                weekMonday={weekMonday}
+                memo={memos["panel"] ?? ""}
+                onGoalField={saveGoal}
+                onMemo={(body) => saveWeekMemo("panel", body)}
+              />
+            ) : null}
+            <DragScrollArea barX className="min-w-0 flex-1">
+              {/* 같은 교시 블록이 요일 간 같은 행에 정렬(행 높이 통일) — 카드 크기 맞춤 */}
+              <SheetGrid
+                days={visibleDays}
+                data={data}
+                linesBySlot={linesBySlot}
+                marks={marks}
+                attendance={attendance}
+                store={store}
+                handlers={handlers}
+                canEdit={canEdit}
+                collapsedGroups={collapsedGroups}
+                onToggleGroup={toggleRosterGroup}
+              />
+            </DragScrollArea>
+          </>
+        )}
       </div>
 
       {data.grid.attendanceOnly.length > 0 ? (

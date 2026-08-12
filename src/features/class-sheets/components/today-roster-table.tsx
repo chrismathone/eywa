@@ -1,0 +1,190 @@
+"use client";
+
+/**
+ * 오늘 면 **통합 로스터** — 학생 명단은 **한 번만** 그리고, 그 날의 교시들이 열 그룹(출결·유닛·태도·
+ * 특이사항 × 교시)으로 옆에 붙는다(원장 2026-08-11 *"목록은 왜 여러 번? 쓸데없이 중복되는 컴포넌트가
+ * 다수"* — 교시 카드마다 로스터를 반복하던 것을 접는다). 가로 공간도 이 표가 쓴다(같은 날 지적
+ * *"세로로 놓으면 가로 공간이 너무 의미없지 않아?"*의 처방).
+ *
+ * 셀 구현은 주간 시트와 **공용**(roster-slot-cells) — 저장 경로·게이트·키(`학생|날짜|교시`)가 전부 같다.
+ * 섹션(재원/퇴원/기록)·접기·건수 규약도 주간 표(roster-table)와 동일하다.
+ *
+ * ⚠️ 교시마다 수강 대상이 다를 수 있다(분리등원·기록 보존 행) — 명단은 교시들의 **합집합**이고,
+ *    그 교시 대상이 아닌 칸은 '—'로 조용히 비운다(RosterSlotCells entry=null).
+ */
+import { Fragment, memo, useMemo } from "react";
+import type { ClassSheetWeekData } from "../server/queries";
+import type { GridDay, GridSlot } from "../lib/grid";
+import type { RosterEntry } from "../lib/grid";
+import { groupRosterRows, type RosterGroupKey } from "../lib/roster-order";
+import { GroupToggle, GROUP_HINT } from "./roster-table";
+import { RosterNameCell, RosterSlotCells } from "./roster-slot-cells";
+import type { SheetHandlers } from "./sheet-client";
+
+/** 교시 그룹 안 열 폭 — 주간 표(roster-table colgroup)와 같은 수치. 특이사항만 잔여를 나눠 갖는다. */
+const SLOT_COLS = [88, 46, 96] as const;
+/** 특이사항 최소폭 — 표 전체 minWidth 계산용(이보다 좁아지면 가로 스크롤이 받는다). */
+const NOTE_MIN = 150;
+
+export const TodayRosterTable = memo(function TodayRosterTable({
+  day,
+  data,
+  marks,
+  attendance,
+  handlers,
+  canEdit,
+  collapsedGroups,
+  onToggleGroup,
+}: {
+  day: GridDay;
+  data: ClassSheetWeekData;
+  marks: Record<string, { status: string | null; progressNote: string | null }>;
+  attendance: Record<
+    string,
+    { status: string; note: string | null; units: number | null; slot: string | null }
+  >;
+  handlers: SheetHandlers;
+  canEdit: boolean;
+  collapsedGroups: readonly RosterGroupKey[];
+  onToggleGroup: (key: RosterGroupKey) => void;
+}) {
+  const date = day.date;
+  const slots = day.slots;
+  const canMarkDate = data.canMarkAttendanceByDate[date] ?? false;
+
+  // 명단 = 교시 로스터의 합집합(학생당 1행). 교시별 entry는 따로 들고 다닌다 — eligible·historical이
+  // 교시마다 다를 수 있어 "합쳐진 하나"로 뭉개면 읽기전용 판정이 틀어진다.
+  const { rows, counts } = useMemo(() => {
+    const perSlot = new Map<string, Record<string, RosterEntry>>();
+    const base = new Map<string, RosterEntry>();
+    for (const slot of slots) {
+      for (const e of slot.roster) {
+        if (!base.has(e.studentId)) base.set(e.studentId, e);
+        // 재원(eligible) 교시가 하나라도 있으면 그 entry를 대표로 — 섹션 분류가 '기록'으로 쏠리지 않게.
+        else if (e.eligible && !base.get(e.studentId)!.eligible) base.set(e.studentId, e);
+        const cur = perSlot.get(e.studentId) ?? {};
+        cur[slot.slotStart] = e;
+        perSlot.set(e.studentId, cur);
+      }
+    }
+    const out: (
+      | { kind: "label"; key: RosterGroupKey; count: number }
+      | { kind: "row"; entry: RosterEntry; perSlot: Record<string, RosterEntry>; navRow: number }
+    )[] = [];
+    const sizes = {} as Record<RosterGroupKey, number>;
+    let navRow = 0;
+    for (const group of groupRosterRows([...base.values()], (id) => data.students[id]?.name ?? "")) {
+      sizes[group.key] = group.rows.length;
+      const collapsed = collapsedGroups.includes(group.key);
+      if (group.label) out.push({ kind: "label", key: group.key, count: group.rows.length });
+      if (collapsed) continue; // 접힌 섹션 행은 아예 안 만든다(키보드 이동이 숨은 칸으로 새지 않게)
+      for (const entry of group.rows) {
+        out.push({ kind: "row", entry, perSlot: perSlot.get(entry.studentId) ?? {}, navRow: navRow++ });
+      }
+    }
+    return { rows: out, counts: sizes };
+  }, [slots, data.students, collapsedGroups]);
+
+  const colSpanAll = 1 + slots.length * 4;
+  const slotLabel = (slot: GridSlot) => data.periodLabelBySlot[`${date}|${slot.slotStart}`] ?? null;
+
+  return (
+    <div className="bg-card border-foreground shadow-card cursor-default rounded-2xl border p-2.5">
+      <table
+        className="w-full border-collapse text-[13px]"
+        style={{ tableLayout: "fixed", minWidth: 84 + slots.length * (88 + 46 + 96 + NOTE_MIN) }}
+      >
+        <colgroup>
+          <col style={{ width: 84 }} />
+          {slots.map((slot) => (
+            <Fragment key={slot.slotStart}>
+              {SLOT_COLS.map((w, i) => (
+                <col key={i} style={{ width: w }} />
+              ))}
+              <col />
+            </Fragment>
+          ))}
+        </colgroup>
+        <thead>
+          {/* 1행 = 교시 머리(교시·시각·강의실), 2행 = 칸 라벨. 교시 경계는 옅은 세로선(표 규약). */}
+          <tr className="bg-bg-soft text-foreground text-left text-[11px]">
+            <th rowSpan={2} className="rounded-l-md py-0.5 pl-1 align-bottom font-bold">
+              <GroupToggle
+                group="active"
+                collapsed={collapsedGroups.includes("active")}
+                count={counts.active ?? 0}
+                onToggle={() => onToggleGroup("active")}
+              />
+            </th>
+            {slots.map((slot) => (
+              <th key={slot.slotStart} colSpan={4} className="border-line border-l py-0.5 text-center font-bold">
+                {slotLabel(slot) ? `${slotLabel(slot)} · ` : ""}
+                <span className="num">
+                  {slot.slotStart}
+                  {slot.slotEnd ? `~${slot.slotEnd}` : ""}
+                </span>
+                {slot.roomLabel ? ` · ${slot.roomLabel}` : ""}
+              </th>
+            ))}
+          </tr>
+          <tr className="bg-bg-soft text-foreground text-[11px]">
+            {slots.map((slot) => (
+              <Fragment key={slot.slotStart}>
+                <th className="border-line border-l py-0.5 text-center font-bold">출결</th>
+                <th
+                  className="py-0.5 text-center font-bold"
+                  title="수업 1회 = 1유닛(기본). 다르면 여기서 고칠 수 있습니다. 급여 시수에 반영됩니다."
+                >
+                  유닛
+                </th>
+                <th className="py-0.5 text-center font-bold">태도</th>
+                <th className="py-0.5 pr-1 text-left font-bold">특이사항</th>
+              </Fragment>
+            ))}
+          </tr>
+        </thead>
+        <tbody className="divide-line divide-y">
+          {rows.map((row) => {
+            if (row.kind === "label") {
+              return (
+                <tr key={`label:${row.key}`} className="bg-bg-soft">
+                  <td colSpan={colSpanAll} className="text-foreground px-1 py-0.5 text-[11px] font-bold" title={GROUP_HINT[row.key]}>
+                    <GroupToggle
+                      group={row.key}
+                      collapsed={collapsedGroups.includes(row.key)}
+                      count={row.count}
+                      onToggle={() => onToggleGroup(row.key)}
+                    />
+                  </td>
+                </tr>
+              );
+            }
+            const meta = data.students[row.entry.studentId];
+            return (
+              <tr key={row.entry.studentId} className={row.entry.historical ? "bg-bg-soft/40" : ""}>
+                <RosterNameCell entry={row.entry} meta={meta} />
+                {slots.map((slot) => (
+                  <RosterSlotCells
+                    key={slot.slotStart}
+                    entry={row.perSlot[slot.slotStart] ?? null}
+                    meta={meta}
+                    date={date}
+                    slotStart={slot.slotStart}
+                    mark={marks[`${row.entry.studentId}|${date}|${slot.slotStart}`] ?? null}
+                    att={attendance[`${row.entry.studentId}|${date}|${slot.slotStart}`] ?? null}
+                    canMarkDate={canMarkDate}
+                    canEdit={canEdit}
+                    handlers={handlers}
+                    navRow={row.navRow}
+                    navCol={`ecs-note:${slot.slotStart}`}
+                    withDivider
+                  />
+                ))}
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+});

@@ -205,7 +205,7 @@ function EcsTodayFace({
                   userId={res.userId}
                   tenantId={res.tenantId}
                   initialDay={res.date}
-                  initialPanelOpen={false}
+                  variant="today"
                 />
               </section>
             ) : (
