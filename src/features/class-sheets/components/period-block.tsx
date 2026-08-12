@@ -26,6 +26,7 @@ export const PeriodBlock = memo(function PeriodBlock({
   collapsedGroups,
   onToggleGroup,
   hideRoster = false,
+  flat = false,
 }: {
   date: string;
   slot: GridSlot;
@@ -47,6 +48,12 @@ export const PeriodBlock = memo(function PeriodBlock({
    * 머리(교시·시각·일괄 입력)+계획만 낸다(원장 2026-08-11 "목록은 왜 여러 번?"). 주간 시트는 기본값.
    */
   hideRoster?: boolean;
+  /**
+   * 카드 껍데기(잉크 테두리·라운드·그림자·패딩)를 벗는다 — 오늘 면은 교시들이 **한 카드 안에서
+   * 세로선으로** 갈리므로(원장 2026-08-11 "줄로 교시 구분") 교시마다 상자를 또 두르면 선이 두 겹이 되고
+   * 카드 안에 카드가 생긴다. 주간 시트는 기본값(카드 한 장 = 수업 하나, 원장 2026-08-10).
+   */
+  flat?: boolean;
 }) {
   // 키에 날짜 포함 — 같은 시각이라도 평일/주말 교시 번호가 다르다(주말은 별도 교시표).
   const periodLabel = data.periodLabelBySlot[`${date}|${slot.slotStart}`] ?? null;
@@ -75,7 +82,11 @@ export const PeriodBlock = memo(function PeriodBlock({
     //    사진 하나가 수업카드 1개"*). shadow만으로는 흰 배경 위에서 카드가 어디서 끝나는지 안 보였고,
     //    가로로 여러 요일이 늘어선 시트에선 그게 곧 "어느 교시 얘기인지"가 안 보인다는 뜻이었다.
     // ⚠️ 이 테두리는 **카드에만**. 안쪽 입력칸까지 잉크로 두르면 격자가 검게 뒤덮여 카드 경계가 묻힌다.
-    <article className="bg-card border-foreground shadow-card row-span-3 grid cursor-default grid-rows-subgrid rounded-2xl border p-2.5">
+    <article
+      className={`row-span-3 grid cursor-default grid-rows-subgrid ${
+        flat ? "" : "bg-card border-foreground shadow-card rounded-2xl border p-2.5"
+      }`}
+    >
       {/* 카드 머리 — 원본 시트의 회색 교시 칸(1교시 / 03:00~03:40)과 같은 위계. 교시=칩, 시각=옆 숫자.
           ⚠️ 글자는 **전부 굵게 + foreground**(원장 2026-08-06 "전체 텍스트를 굵게할것 (잘보이게)").
              시각·강의실이 dim 보통굵기라 한 발짝만 떨어져도 안 읽혔다 — 여기서 위계를 다시 낮추지 말 것. */}

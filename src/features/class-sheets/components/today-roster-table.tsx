@@ -15,20 +15,21 @@
  *    입력이어야 Enter/↑↓ 세로 이동이 구멍을 건너뛴다).
  */
 import { Fragment, memo, useMemo } from "react";
-import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import type { ClassSheetWeekData } from "../server/queries";
-import type { GridDay, GridSlot } from "../lib/grid";
+import type { GridDay } from "../lib/grid";
 import type { RosterEntry } from "../lib/grid";
 import { groupRosterRows, type RosterGroupKey } from "../lib/roster-order";
 import { GroupToggle, GROUP_HINT } from "./roster-table";
 import { RosterNameCell, RosterSlotCells } from "./roster-slot-cells";
 import type { SheetHandlers } from "./sheet-client";
 
-/** 교시 그룹 안 열 폭 — 주간 표(roster-table colgroup)와 같은 수치(출결 60·유닛 46·태도 80·점수 54). */
-const SLOT_COLS = [60, 46, 80, 54] as const;
-/** 특이사항 최소폭 — 표 전체 minWidth 계산용(이보다 좁아지면 가로 드래그 스크롤이 받는다). */
-const NOTE_MIN = 120;
-const NAME_W = 64;
+// 가로 치수는 **위 카드 레일과 공유**한다(today-columns) — 한쪽만 고치면 줄이 조용히 어긋난다.
+import {
+  TODAY_NAME_W,
+  TODAY_NOTE_W,
+  TODAY_SLOT_COLS,
+  todayContentWidth,
+} from "../lib/today-columns";
 
 export const TodayRosterTable = memo(function TodayRosterTable({
   day,
@@ -90,33 +91,35 @@ export const TodayRosterTable = memo(function TodayRosterTable({
   }, [slots, data.students, collapsedGroups]);
 
   const colSpanAll = 1 + slots.length * 5;
-  const slotLabel = (slot: GridSlot) => data.periodLabelBySlot[`${date}|${slot.slotStart}`] ?? null;
-  const slotColsW = SLOT_COLS.reduce((a, b) => a + b, 0) + NOTE_MIN;
 
   return (
-    // 🔴 스크롤은 **카드 안**에서 — 카드 밖에서 스크롤하면 표가 카드 폭(뷰포트)을 넘는 순간 배경·테두리가
-    //    초기 폭에 멈춰 셀이 맨바탕 위에 그려진다(sheet-grid의 w-max 교훈과 같은 계열, 적대 리뷰 2026-08-11).
-    <div className="bg-card border-foreground shadow-card cursor-default rounded-2xl border p-2.5">
-      <DragScrollArea barX className="min-w-0">
+    // 🔴 카드 껍데기도, 스크롤도 여기 없다 — 위 계획 층과 **한 카드·한 스크롤**을 쓴다
+    //    (원장 2026-08-11 *"학생은 붙어있잖아? 이것도 그냥 붙여버려. 마치 엑셀처럼"*). 두 층이 각자
+    //    상자를 두르면 사이에 여백과 테두리가 겹쳐 격자가 끊긴다.
+    <>
         <table
-          className="w-full border-collapse text-[13px]"
-          style={{ tableLayout: "fixed", minWidth: NAME_W + slots.length * slotColsW }}
+          className="border-collapse text-[13px]"
+          style={{ tableLayout: "fixed", width: todayContentWidth(slots.length) }}
         >
         <colgroup>
-          <col style={{ width: NAME_W }} />
+          <col style={{ width: TODAY_NAME_W }} />
           {slots.map((slot) => (
             <Fragment key={slot.slotStart}>
-              {SLOT_COLS.map((w, i) => (
+              {TODAY_SLOT_COLS.map((w, i) => (
                 <col key={i} style={{ width: w }} />
               ))}
-              <col />
+              {/* 특이사항도 **고정 폭** — 가변으로 두면 표가 남는 폭을 여기 몰아줘 교시 폭이 카드와 달라진다. */}
+              <col style={{ width: TODAY_NOTE_W }} />
             </Fragment>
           ))}
         </colgroup>
         <thead>
-          {/* 1행 = 교시 머리(교시·시각·강의실), 2행 = 칸 라벨. 교시 경계는 옅은 세로선(표 규약). */}
+          {/* 🔴 **교시 머리 행은 없다.** 바로 위 계획 층이 같은 열에서 이미 "2교시 15:00~15:40 이현이
+              본원302"를 말하고 있어, 표가 한 번 더 적으면 같은 사실이 두 줄을 먹는다(원장 2026-08-11
+              "여백도 최소화"). 두 층은 한 카드·한 격자라 위층 머리가 곧 이 열의 머리다.
+              ⚠️ 계획 층 없이 이 표만 따로 쓸 일이 생기면 교시 머리를 여기 되살릴 것. */}
           <tr className="bg-bg-soft text-foreground text-left text-[11px]">
-            <th rowSpan={2} className="rounded-l-md py-0.5 pl-1 align-bottom font-bold">
+            <th className="rounded-l-md py-0.5 pl-1 align-bottom font-bold">
               <GroupToggle
                 group="active"
                 collapsed={collapsedGroups.includes("active")}
@@ -125,20 +128,8 @@ export const TodayRosterTable = memo(function TodayRosterTable({
               />
             </th>
             {slots.map((slot) => (
-              <th key={slot.slotStart} colSpan={5} className="border-l-line-faint border-l py-0.5 text-center font-bold">
-                {slotLabel(slot) ? `${slotLabel(slot)} · ` : ""}
-                <span className="num">
-                  {slot.slotStart}
-                  {slot.slotEnd ? `~${slot.slotEnd}` : ""}
-                </span>
-                {slot.roomLabel ? ` · ${slot.roomLabel}` : ""}
-              </th>
-            ))}
-          </tr>
-          <tr className="bg-bg-soft text-foreground text-[11px]">
-            {slots.map((slot) => (
               <Fragment key={slot.slotStart}>
-                <th className="border-l-line-faint border-l py-0.5 text-center font-bold">출결</th>
+                <th className="border-line-strong border-l py-0.5 text-center font-bold">출결</th>
                 <th
                   className="py-0.5 text-center font-bold"
                   title="수업 1회 = 1유닛(기본). 다르면 여기서 고칠 수 있습니다. 급여 시수에 반영됩니다."
@@ -196,7 +187,6 @@ export const TodayRosterTable = memo(function TodayRosterTable({
           })}
         </tbody>
         </table>
-      </DragScrollArea>
-    </div>
+    </>
   );
 });
