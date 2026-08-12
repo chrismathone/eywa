@@ -33,7 +33,8 @@ import type { RosterGroupKey } from "../lib/roster-order";
 import { buildSaveKey, type PlanFieldPatch } from "../lib/save-keys";
 import { PLAN_PATCH_FIELDS, isMeaningfulPlanLine } from "../lib/plan-codec";
 import { useSheetDoc } from "./use-sheet-doc";
-import { useFlushOnUnmount, useSheetSaveStore } from "./use-sheet-saves";
+import { useFlushOnUnmount, useSaveIndicator, useSheetSaveStore } from "./use-sheet-saves";
+import { EditingBadge } from "@/features/presence/editing-badge";
 import { SheetToolbar } from "./sheet-toolbar";
 import { PlanPanel } from "./plan-panel";
 import { SheetGrid } from "./sheet-grid";
@@ -84,9 +85,10 @@ export type SheetHandlers = {
     units?: string,
   ) => void;
   /**
-   * 출결 '선택 안 함' — 드롭다운에만 있는 지우기. **plain present만** 지워진다(0169a `ecs_clear_present`).
-   * 사유·시수가 붙은 기록이나 결석·지각은 서버가 거절하고 사유를 띄운다 — 화면에서 지워진 것처럼
-   * 보였다가 새로고침하면 돌아오는 거짓 성공을 만들지 않는다.
+   * 출결 '선택 안 함'(체크 순환의 마지막 단계) — **사유·시수가 안 붙은 기본 3종만** 지워진다
+   * (`ecs_clear_present`: 0169a는 present만이었고 **0203a가 지각·결석까지 넓혔다** — #103 탈출문).
+   * 사람 손을 탄 기록(사유·시수)은 서버가 거절하고 사유를 띄운다 — 화면에서 지워진 것처럼 보였다가
+   * 새로고침하면 돌아오는 거짓 성공을 만들지 않는다. ⚠️ 0203a 미적용 창에선 present만 지워진다(#95).
    */
   clearAttendance: (studentId: string, date: string, slotStart: string) => void;
   saveMark: (
@@ -643,6 +645,10 @@ export function SheetClient({
     : data.grid.days;
   // today 변형이 그릴 하루 — initialDay가 확정돼 내려오므로 사실상 항상 있다(없으면 "수업 없음").
   const todayDay = variant === "today" ? (visibleDays[0] ?? null) : null;
+  // 저장 표시기 — full은 SheetToolbar가 자체 구독으로 그린다. today는 툴바가 없어 **여기서** 충돌·저장 중을
+  // 그려야 한다(적대 리뷰 2026-08-11: 복구 배너로 살아난 패치가 다른 날짜 셀에서 충돌하면 today엔 그 충돌을
+  // 보여줄 표면이 없었다 — 충돌은 조용히 사라지면 입력 유실이다).
+  const saveIndicator = useSaveIndicator(store);
   // "이 주는 아직 비어 있어요"는 **현재 화면 상태**로 판정한다. 서버 스냅샷(data.fill)만 보면 계획 셀
   // 저장이 RSC를 갱신하지 않으므로(서버 액션에 revalidate 없음·같은 주에선 재마운트 없음) 강사가 그 주를
   // 다 채워도 채워진 표 바로 위에 "비어 있어요"가 계속 뜬다(적대검증 2026-07-29, 첫 사용 시 100% 발생).
@@ -725,18 +731,38 @@ export function SheetClient({
       >
         {variant === "today" ? (
           todayDay && todayDay.slots.length > 0 ? (
-            <TodayClassSheet
-              day={todayDay}
-              data={data}
-              linesBySlot={linesBySlot}
-              marks={marks}
-              attendance={attendance}
-              store={store}
-              handlers={handlers}
-              canEdit={canEdit}
-              collapsedGroups={collapsedGroups}
-              onToggleGroup={toggleRosterGroup}
-            />
+            <div className="min-w-0 space-y-2">
+              {/* 툴바가 없는 변형의 상태 표면 — 동시편집 배지(주간 시트와 같은 scope) + 충돌·저장 중.
+                  조용할 땐 아무것도 안 그린다(반마다 '저장됨'이 줄지어 서면 소음이다). 충돌한 셀이
+                  다른 날짜(복구 패치)면 이 화면엔 안 보이므로 주간 시트로 안내한다. */}
+              {(saveIndicator.conflicts > 0 || saveIndicator.pending > 0) ? (
+                <div className="flex flex-wrap items-center gap-2 px-1">
+                  <EditingBadge scope={`ecs:${classId}:${weekMonday}`} />
+                  {saveIndicator.conflicts > 0 ? (
+                    <span className="text-danger text-[12px] font-bold whitespace-nowrap">
+                      저장 충돌 {saveIndicator.conflicts}건 — 충돌한 셀에서 서버값/내 값을 고르세요(이 화면에 안
+                      보이면 주간 시트에서)
+                    </span>
+                  ) : (
+                    <span className="text-text-dim text-[12px] font-semibold whitespace-nowrap">저장 중…</span>
+                  )}
+                </div>
+              ) : (
+                <EditingBadge scope={`ecs:${classId}:${weekMonday}`} />
+              )}
+              <TodayClassSheet
+                day={todayDay}
+                data={data}
+                linesBySlot={linesBySlot}
+                marks={marks}
+                attendance={attendance}
+                store={store}
+                handlers={handlers}
+                canEdit={canEdit}
+                collapsedGroups={collapsedGroups}
+                onToggleGroup={toggleRosterGroup}
+              />
+            </div>
           ) : (
             <p className="bg-card shadow-card text-text-dim rounded-2xl px-4 py-6 text-sm">
               이 날은 수업이 없습니다.
@@ -775,7 +801,10 @@ export function SheetClient({
         )}
       </div>
 
-      {data.grid.attendanceOnly.length > 0 ? (
+      {/* 주 전체 집계 각주(시간표 밖 출석 기록) — **full 전용**. 하루짜리 오늘 변형 밑에 주 전체
+          숫자를 깔면 그 날 화면과 숫자가 안 맞는 거짓 표시가 된다(적대 리뷰 2026-08-11). 오늘 면에는
+          반마다 '주간 시트 열기' 링크가 있어 그쪽에서 그대로 보인다. */}
+      {variant === "full" && data.grid.attendanceOnly.length > 0 ? (
         <div className="bg-card shadow-card rounded-2xl px-4 py-3 text-[13px]">
           <p className="text-text-dim">
             수업 시간표가 없는 날짜의 출석 기록:{" "}
@@ -791,13 +820,17 @@ export function SheetClient({
 
       {/* 안 그린 자리에 쓴 기록이 남아 있으면 건수를 알린다 — 조용히 사라지면 "쓴 게 증발했다"가 된다.
           ⚠️ 자리마다 **문장이 다르다**: JJ는 상단 토글로 되돌릴 수 있지만 LAB은 화면에서 되돌릴 길이 없다
-             (항상 제외). 한 문장으로 뭉치면 둘 중 하나는 반드시 거짓말이 된다. */}
+             (항상 제외). 한 문장으로 뭉치면 둘 중 하나는 반드시 거짓말이 된다.
+          ⚠️ 오늘 변형엔 그 토글(SheetToolbar)이 없다 — 없는 컨트롤을 가리키면 거짓 안내이므로 문구를
+             '주간 시트의 토글'로 바꾼다(건수는 주 전체 기준임을 함께 밝힌다). */}
       {data.grid.hiddenSpecial.map((h) => (
         <p key={h.seat} className="text-text-dim px-1 text-[12px]">
-          {h.seat} 교시 {h.slots}개는 이 시트에 표시하지 않습니다 — 그 시간에
+          {h.seat} 교시 {h.slots}개는 이 시트에 표시하지 않습니다(이번 주 기준) — 그 시간에
           남아 있는 기록 {h.records}건은 지워지지 않았습니다
           {h.seat === "JJ"
-            ? "(상단 ‘JJ 표시’로 다시 볼 수 있습니다)."
+            ? variant === "today"
+              ? "(주간 시트의 ‘JJ 표시’로 다시 볼 수 있습니다)."
+              : "(상단 ‘JJ 표시’로 다시 볼 수 있습니다)."
             : "(LAB 전용 출석부가 열리면 그쪽에서 볼 수 있습니다)."}
         </p>
       ))}

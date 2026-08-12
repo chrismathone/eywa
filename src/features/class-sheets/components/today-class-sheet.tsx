@@ -49,43 +49,45 @@ export function TodayClassSheet({
 }) {
   return (
     <div className="space-y-2">
-      {/* 교시 카드(계획) — 가로 나열. 로스터는 아래 통합 표가 맡으므로 hideRoster. 일괄 입력(SlotBulk —
-          '기록 없는 N명 출석' 포함)은 카드 머리에 그대로 산다. */}
-      <div className="flex flex-wrap items-start gap-3">
-        {day.slots.map((slot) => (
-          <div key={slot.slotStart} className="max-w-full" style={{ width: PLAN_W }}>
-            <PeriodBlock
-              date={day.date}
-              slot={slot}
-              data={data}
-              lines={linesBySlot[`${day.date}|${slot.slotStart}`] ?? []}
-              marks={marks}
-              attendance={attendance}
-              store={store}
-              handlers={handlers}
-              canEdit={canEdit}
-              collapsedGroups={collapsedGroups}
-              onToggleGroup={onToggleGroup}
-              hideRoster
-            />
-          </div>
-        ))}
-      </div>
+      {/* 교시 카드(계획) — 가로 레일. 로스터는 아래 통합 표가 맡으므로 hideRoster. 일괄 입력(SlotBulk —
+          '기록 없는 N명 출석' 포함)은 카드 머리에 그대로 산다.
+          ⚠️ 카드 폭은 540 고정(주간 시트 열과 동일 — PlanTable 고정열이 이 폭 기준이라 줄이면 진도·과제
+          칸이 슬리버로 무너진다). 좁은 화면은 접는 대신 가로 드래그 스크롤이 받는다(시트와 같은 어포던스). */}
+      <DragScrollArea barX className="min-w-0">
+        <div className="flex w-max items-start gap-3">
+          {day.slots.map((slot) => (
+            <div key={slot.slotStart} className="shrink-0" style={{ width: PLAN_W }}>
+              <PeriodBlock
+                date={day.date}
+                slot={slot}
+                data={data}
+                lines={linesBySlot[`${day.date}|${slot.slotStart}`] ?? []}
+                marks={marks}
+                attendance={attendance}
+                store={store}
+                handlers={handlers}
+                canEdit={canEdit}
+                collapsedGroups={collapsedGroups}
+                onToggleGroup={onToggleGroup}
+                hideRoster
+              />
+            </div>
+          ))}
+        </div>
+      </DragScrollArea>
 
-      {/* 통합 로스터 — 좁은 화면에선 가로 드래그 스크롤(주간 시트와 같은 어포던스). */}
+      {/* 통합 로스터 — 가로 스크롤은 표 컴포넌트가 카드 **안**에서 처리한다(카드 밖 스크롤 금지). */}
       {day.slots.some((s) => s.roster.length > 0) ? (
-        <DragScrollArea barX className="min-w-0">
-          <TodayRosterTable
-            day={day}
-            data={data}
-            marks={marks}
-            attendance={attendance}
-            handlers={handlers}
-            canEdit={canEdit}
-            collapsedGroups={collapsedGroups}
-            onToggleGroup={onToggleGroup}
-          />
-        </DragScrollArea>
+        <TodayRosterTable
+          day={day}
+          data={data}
+          marks={marks}
+          attendance={attendance}
+          handlers={handlers}
+          canEdit={canEdit}
+          collapsedGroups={collapsedGroups}
+          onToggleGroup={onToggleGroup}
+        />
       ) : null}
     </div>
   );

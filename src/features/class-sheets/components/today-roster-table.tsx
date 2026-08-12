@@ -10,10 +10,12 @@
  * 저장 경로·게이트·키(`학생|날짜|교시`)가 전부 같다. 섹션(재원/퇴원/기록)·접기·건수 규약도
  * 주간 표(roster-table)와 동일하다.
  *
- * ⚠️ 교시마다 수강 대상이 다를 수 있다(분리등원·기록 보존 행) — 명단은 교시들의 **합집합**이고,
- *    그 교시 대상이 아닌 칸은 '—'로 조용히 비운다(RosterSlotCells entry=null).
+ * ⚠️ 교시마다 명단 포함 여부가 다를 수 있다(분리등원·기록 보존 행) — 명단은 교시들의 **합집합**이고,
+ *    그 교시 칸이 없는 학생은 값 칸 '—' + 잠긴 입력으로 비운다(RosterSlotCells entry=null — 잠긴
+ *    입력이어야 Enter/↑↓ 세로 이동이 구멍을 건너뛴다).
  */
 import { Fragment, memo, useMemo } from "react";
+import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import type { ClassSheetWeekData } from "../server/queries";
 import type { GridDay, GridSlot } from "../lib/grid";
 import type { RosterEntry } from "../lib/grid";
@@ -54,16 +56,16 @@ export const TodayRosterTable = memo(function TodayRosterTable({
   const slots = day.slots;
   const canMarkDate = data.canMarkAttendanceByDate[date] ?? false;
 
-  // 명단 = 교시 로스터의 합집합(학생당 1행). 교시별 entry는 따로 들고 다닌다 — eligible·historical이
-  // 교시마다 다를 수 있어 "합쳐진 하나"로 뭉개면 읽기전용 판정이 틀어진다.
+  // 명단 = 교시 로스터의 합집합(학생당 1행). 교시마다 다른 것은 **명단 포함 여부**뿐이다(markOwners가
+  // (날짜,교시) 단위) — entry의 값(eligible·historical·endedOn)은 rosterStateOn이 **날짜 단위**로 찍어
+  // 같은 날 교시 간 항상 동일하다(grid.ts). 그래서 대표는 처음 만난 entry면 충분하고, perSlot은
+  // "이 교시에 이 학생 칸이 있나"(구멍이면 잠긴 '—' 칸)를 판정하는 데만 쓴다.
   const { rows, counts } = useMemo(() => {
     const perSlot = new Map<string, Record<string, RosterEntry>>();
     const base = new Map<string, RosterEntry>();
     for (const slot of slots) {
       for (const e of slot.roster) {
         if (!base.has(e.studentId)) base.set(e.studentId, e);
-        // 재원(eligible) 교시가 하나라도 있으면 그 entry를 대표로 — 섹션 분류가 '기록'으로 쏠리지 않게.
-        else if (e.eligible && !base.get(e.studentId)!.eligible) base.set(e.studentId, e);
         const cur = perSlot.get(e.studentId) ?? {};
         cur[slot.slotStart] = e;
         perSlot.set(e.studentId, cur);
@@ -92,11 +94,14 @@ export const TodayRosterTable = memo(function TodayRosterTable({
   const slotColsW = SLOT_COLS.reduce((a, b) => a + b, 0) + NOTE_MIN;
 
   return (
+    // 🔴 스크롤은 **카드 안**에서 — 카드 밖에서 스크롤하면 표가 카드 폭(뷰포트)을 넘는 순간 배경·테두리가
+    //    초기 폭에 멈춰 셀이 맨바탕 위에 그려진다(sheet-grid의 w-max 교훈과 같은 계열, 적대 리뷰 2026-08-11).
     <div className="bg-card border-foreground shadow-card cursor-default rounded-2xl border p-2.5">
-      <table
-        className="w-full border-collapse text-[13px]"
-        style={{ tableLayout: "fixed", minWidth: NAME_W + slots.length * slotColsW }}
-      >
+      <DragScrollArea barX className="min-w-0">
+        <table
+          className="w-full border-collapse text-[13px]"
+          style={{ tableLayout: "fixed", minWidth: NAME_W + slots.length * slotColsW }}
+        >
         <colgroup>
           <col style={{ width: NAME_W }} />
           {slots.map((slot) => (
@@ -120,7 +125,7 @@ export const TodayRosterTable = memo(function TodayRosterTable({
               />
             </th>
             {slots.map((slot) => (
-              <th key={slot.slotStart} colSpan={5} className="border-line border-l py-0.5 text-center font-bold">
+              <th key={slot.slotStart} colSpan={5} className="border-l-line-faint border-l py-0.5 text-center font-bold">
                 {slotLabel(slot) ? `${slotLabel(slot)} · ` : ""}
                 <span className="num">
                   {slot.slotStart}
@@ -133,7 +138,7 @@ export const TodayRosterTable = memo(function TodayRosterTable({
           <tr className="bg-bg-soft text-foreground text-[11px]">
             {slots.map((slot) => (
               <Fragment key={slot.slotStart}>
-                <th className="border-line border-l py-0.5 text-center font-bold">출결</th>
+                <th className="border-l-line-faint border-l py-0.5 text-center font-bold">출결</th>
                 <th
                   className="py-0.5 text-center font-bold"
                   title="수업 1회 = 1유닛(기본). 다르면 여기서 고칠 수 있습니다. 급여 시수에 반영됩니다."
@@ -190,7 +195,8 @@ export const TodayRosterTable = memo(function TodayRosterTable({
             );
           })}
         </tbody>
-      </table>
+        </table>
+      </DragScrollArea>
     </div>
   );
 });

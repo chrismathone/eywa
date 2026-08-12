@@ -1,5 +1,29 @@
 # eywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-08-11 — ECS 오늘 면 시트 모드: **명단 1회 통합 로스터 + 교시 가로**
+
+원장 연속 지적 3건: *"세로로 놓으면 가로 공간이 너무 의미없지 않아?"* · *"목록은 왜 여러 번?
+쓸데없이 중복되는 컴포넌트가 다수"* · *"출결도 이전에 했던것처럼 클릭형으로 변경. 드랍다운 제거."*
+— 오늘 면(시트 모드)이 반마다 SheetClient 전체(툴바 포함)를 쌓고 교시 카드마다 로스터를 반복하던
+1차 조립을 걷어냈다.
+
+- **반 1개 = 교시 카드(계획, 가로 나열) + 통합 로스터 1장**: 학생 명단은 반마다 **한 번만** 그리고
+  교시가 열 그룹(출결·유닛·태도·점수·특이사항 × 교시)으로 옆에 붙는다
+  ([today-class-sheet](../src/features/class-sheets/components/today-class-sheet.tsx) ·
+  [today-roster-table](../src/features/class-sheets/components/today-roster-table.tsx)). 가로 공간을
+  로스터가 쓰고, 반별로 반복되던 SheetToolbar·목표 패널·주 복사 배너는 오늘 면에서 제거
+  (`SheetClient variant="today"` — 껍데기만 다르고 저널·CAS·presence·저장 경로는 full과 한 벌).
+- **셀 공용화**: 주간 표(roster-table)의 셀(출결 체크 순환·유닛·태도 체크·점수·특이사항)을
+  [roster-slot-cells](../src/features/class-sheets/components/roster-slot-cells.tsx)로 추출 — 주간 표와
+  통합 표가 **같은 구현**을 쓴다(중복 지적의 처방). 교시 그룹 경계는 옅은 세로선(표 규약).
+  교시 카드는 PeriodBlock `hideRoster`(SlotBulk '기록 없는 N명 출석' 일괄은 카드 머리에 그대로).
+- **병렬 세션 통합**: 같은 날 다른 세션이 출결·태도를 **체크 순환**(attendance-check·attitude-check,
+  0202a 점수·0203a 지각·결석 취소)으로 바꿨다 — 내 알약(1클릭 3버튼) 대신 **그쪽 체크 순환을 채택**
+  (같은 지시의 더 최신 구현, 좌클릭 순환·우클릭 사유·#103 탈출로 포함). 옛 드롭다운
+  attendance-select.tsx는 양쪽 모두 삭제. 요약 카드(보조 모드)의 알약은 유지.
+- 통합 표 명단 = 교시 로스터의 **합집합**(분리등원으로 교시마다 대상이 달라도 한 행 — 대상 아닌 교시
+  칸은 '—'), 키보드 세로 이동은 교시 안에 가둔다(`ecs-score:{slot}`/`ecs-note:{slot}`).
+
 ## 2026-08-11 — ECS 랜딩 배치: **열마다 담임**
 
 원장: *"영어 강사 시트 관리자뷰에서 열마다 담임 구분해서 놓자."* 같은 날 오전엔 반 이름순 한 줄

@@ -6,7 +6,9 @@
  *
  *  · `RosterNameCell` — 이름(학생 정보 링크) + 영어이름 + 퇴원일.
  *  · `RosterSlotCells` — 한 교시분 5칸: 출결(체크 순환) · 유닛 · 태도(체크 순환) · 점수 · 특이사항.
- *    entry가 null이면(통합 표에서 그 교시 수강 대상이 아닌 학생) 5칸 전부 '—'로 조용히 비운다.
+ *    entry가 null이면(통합 표에서 그 교시 수강 대상이 아닌 학생) 값 칸 셋은 '—', 입력 칸 둘(점수·
+ *    특이사항)은 **잠긴 입력**으로 비운다 — 잠긴 입력이어야 Enter/↑↓ 세로 이동이 이 행을 건너뛴다
+ *    (grid-nav는 '없는 입력'을 열의 끝으로 오판한다 — 적대 리뷰 2026-08-11, #103 계열).
  *
  * 🔴 컨트롤·저장 경로는 주간 표의 것을 **한 글자도 바꾸지 않고** 옮겼다: 출결=AttendanceCheck(누를 때마다
  *    출석→결석→지각→선택 안 함, 우클릭=사유 — 원장 2026-08-11 "클릭형으로 변경. 드랍다운 제거"),
@@ -88,18 +90,29 @@ export function RosterSlotCells({
   /** 교시 그룹 경계선(통합 표) — 첫 칸 왼쪽에 옅은 세로선(표 규약: 세로선은 가로선보다 한 단계 옅게). */
   withDivider?: boolean;
 }) {
-  const dividerCls = withDivider ? "border-line border-l" : "";
+  const dividerCls = withDivider ? "border-l-line-faint border-l" : "";
   if (entry === null) {
+    const offTitle = "이 교시 수강 대상이 아닙니다";
     const dash = <span className="text-text-faint text-[13px] font-semibold">—</span>;
     return (
       <>
-        <td className={`py-px text-center ${dividerCls}`} title="이 교시 수강 대상이 아닙니다">
+        <td className={`py-px text-center ${dividerCls}`} title={offTitle}>
           {dash}
         </td>
-        <td className="py-px text-center">{dash}</td>
-        <td className="py-px text-center">{dash}</td>
-        <td className="py-px text-center">{dash}</td>
-        <td className="py-px pr-1" />
+        <td className="py-px text-center" title={offTitle}>
+          {dash}
+        </td>
+        <td className="py-px text-center" title={offTitle}>
+          {dash}
+        </td>
+        {/* 점수·특이사항은 **잠긴 입력**(값 없음·placeholder —) — 세로 이동(grid-nav)이 이 행을
+            '열의 끝'이 아니라 '건너뛸 칸'으로 보게 하는 유일한 방법이다(disabled는 continue, 부재는 종료). */}
+        <td className="py-px pr-1" title={offTitle}>
+          <input className={`${SHEET_INPUT} text-center`} disabled placeholder="—" aria-label={offTitle} data-nav-col={`ecs-score${navColSuffix}`} data-nav-row={navRow} readOnly value="" />
+        </td>
+        <td className="py-px" title={offTitle}>
+          <input className={SHEET_INPUT} disabled placeholder="—" aria-label={offTitle} data-nav-col={`ecs-note${navColSuffix}`} data-nav-row={navRow} readOnly value="" />
+        </td>
       </>
     );
   }
@@ -174,7 +187,8 @@ export function RosterSlotCells({
           }
         />
       </td>
-      <td className="py-px pr-1">
+      {/* pr-1 없음 — 주간 표 원본과 동일(옮기며 폭을 바꾸지 않는다). */}
+      <td className="py-px">
         <input
           className={SHEET_INPUT}
           defaultValue={mark?.progressNote ?? ""}

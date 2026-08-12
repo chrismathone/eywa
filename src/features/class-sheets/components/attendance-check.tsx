@@ -63,7 +63,7 @@ export function AttendanceCheck({
   studentName: string;
   canMark: boolean;
   onSet: (status: BasicAttendance, note?: string | null) => void;
-  /** '선택 안 함' — plain present만 지워진다(그 외는 서버가 거절하고 사유를 띄운다). */
+  /** '선택 안 함' — 사유·시수 안 붙은 기본 3종만 지워진다(0203a. 손댄 기록은 서버가 거절하고 사유를 띄운다). */
   onClear: () => void;
 }) {
   const [noteOpen, setNoteOpen] = useState(false);
