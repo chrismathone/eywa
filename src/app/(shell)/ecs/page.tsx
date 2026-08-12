@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { requireAccess } from "@/lib/auth/require-access";
 import { PageHeader } from "@/components/page-header";
 import { WeekNav } from "@/app/(shell)/timetable/_components/week-nav";
-import { getSheetLanding } from "@/features/class-sheets/server/queries";
+import { getClassSheetWeek, getSheetLanding } from "@/features/class-sheets/server/queries";
 import { getEcsToday, type EcsTodayResult } from "@/features/class-sheets/server/today";
 import { TodayBoard } from "@/features/class-sheets/components/today-board";
+import { SheetClient } from "@/features/class-sheets/components/sheet-client";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { effectiveTeacherScope } from "@/lib/auth/view-mode";
 import { canManageSheetSync } from "@/features/integrations/server/sheet-access";
@@ -12,8 +14,15 @@ import { EcsSheetImportDialog } from "./_components/sheet-import-dialog";
 import { EcsLandingList } from "./_components/landing-list";
 import { EcsTeacherFilter } from "./_components/teacher-filter";
 import { EcsTrackFilter } from "./_components/track-filter";
-import { EcsFaceTabs, EcsDayNav } from "./_components/today-nav";
+import { EcsFaceTabs, EcsDayNav, EcsTodayModeTabs, type EcsTodayMode } from "./_components/today-nav";
 import { ENGLISH_TRACK_FILTER_LABEL } from "@/features/classes/english-track";
+
+/** 오늘 면 시트 모드의 반 1개분 — 시트 조회가 실패해도 나머지 반은 그려야 하므로 결과를 통째로 나른다. */
+type TodaySheet = {
+  classId: string;
+  className: string;
+  res: Awaited<ReturnType<typeof getClassSheetWeek>>;
+};
 
 export const metadata: Metadata = { title: "영어 강사 시트 — eywa" };
 
@@ -29,10 +38,10 @@ export const metadata: Metadata = { title: "영어 강사 시트 — eywa" };
 export default async function EcsLandingPage({
   searchParams,
 }: {
-  searchParams: Promise<{ week?: string; view?: string; date?: string }>;
+  searchParams: Promise<{ week?: string; view?: string; date?: string; mode?: string }>;
 }) {
   await requireAccess("ecs");
-  const { week, view, date } = await searchParams;
+  const { week, view, date, mode: modeParam } = await searchParams;
   // 🔴 '오늘' 면은 **강사 스코프 전용**이다. 스코프가 없는 사람(사무실)에게 이 면은 그 날 운영 중인
   // 영어 반 **전부**(실측 24반)를 편집기·저널·presence 채널과 함께 펼친다 — 쓸 일도 없는 화면에
   // IndexedDB 문서 24개와 realtime 채널 24개를 여는 셈이다(2026-08-07 적대적 리뷰).
@@ -41,8 +50,23 @@ export default async function EcsLandingPage({
   const face: "today" | "week" = scoped ? (view === "week" ? "week" : "today") : "week";
 
   if (face === "today") {
+    // 기본 = **시트 모드**(원장 2026-08-11 "원스크린 느낌으로 한곳에서 모두 수정") — 카드는 보조 요약.
+    const mode: EcsTodayMode = modeParam === "cards" ? "cards" : "sheet";
     const todayRes = await getEcsToday(date ?? null);
-    return <EcsTodayFace res={todayRes} scoped={scoped} />;
+    let sheets: TodaySheet[] | null = null;
+    if (mode === "sheet" && todayRes.ok && todayRes.cards.length > 0) {
+      // 반별 주간 시트를 병렬로(B4) — 강사 스코프라 그 날 수업 반 몇 개뿐이다(사무실은 오늘 면 차단).
+      // 첫 페인트는 route loading.tsx가 스켈레톤으로 받는다(B7).
+      const results = await Promise.all(
+        todayRes.cards.map((c) => getClassSheetWeek(c.classId, todayRes.weekMonday)),
+      );
+      sheets = results.map((res, i) => ({
+        classId: todayRes.cards[i]!.classId,
+        className: todayRes.cards[i]!.className,
+        res,
+      }));
+    }
+    return <EcsTodayFace res={todayRes} scoped={scoped} mode={mode} sheets={sheets} />;
   }
   // 시트 가져오기 버튼은 시트 경로 자격(sheet_sync=full)에만 — 서버 액션도 같은 게이트로 이중 방어.
   const [res, user] = await Promise.all([getSheetLanding(week ?? null), getCurrentUser()]);
@@ -110,10 +134,25 @@ export default async function EcsLandingPage({
 /**
  * '오늘' 면 — 영어 강사의 원스크린. 그 날 수업이 있는 내 반만 교시 순서로 쌓는다.
  *
+ * 모드 2개(원장 2026-08-11 *"왔다갔다하면서 다 수정해야해서 큰 의미가 떨어져 — 한곳에서 모두 수정"*):
+ *  · **시트(기본)** — 반마다 주간 시트를 **그 날짜 열만** 필터해 쌓는다. 주간 시트와 같은 기계(SheetClient:
+ *    계획 줄 추가·출결·태도·특이사항·시수·일괄 입력·CAS·저널·presence)라 여기서 전부 편집이 끝난다.
+ *  · **요약 카드** — 기존 보드(일괄 출석·알림장/보고서 배지·하루 합산). 훑어보기용 보조.
+ *
  * ⚠️ 빈 화면 문구를 **원인별로** 가른다(랜딩과 같은 규약): 담당 반이 아예 없는 것과, 반은 있는데
  *    그 날 수업이 없는 것은 사람이 할 일이 완전히 다르다. 하나로 뭉치면 둘 중 하나는 거짓말이 된다.
  */
-function EcsTodayFace({ res, scoped }: { res: EcsTodayResult; scoped: boolean }) {
+function EcsTodayFace({
+  res,
+  scoped,
+  mode,
+  sheets,
+}: {
+  res: EcsTodayResult;
+  scoped: boolean;
+  mode: EcsTodayMode;
+  sheets: TodaySheet[] | null;
+}) {
   if (!res.ok) {
     return (
       <div className="space-y-4">
@@ -123,6 +162,8 @@ function EcsTodayFace({ res, scoped }: { res: EcsTodayResult; scoped: boolean })
     );
   }
   const isToday = res.date === res.today;
+  const okSheets = (sheets ?? []).filter((s) => s.res.ok);
+  const classOptions = okSheets.map((s) => ({ id: s.classId, name: s.className }));
   return (
     <div className="space-y-4">
       <PageHeader
@@ -135,7 +176,8 @@ function EcsTodayFace({ res, scoped }: { res: EcsTodayResult; scoped: boolean })
       {/* 좁은 화면(모바일·좁은 창)은 칩 툴바를 가로 레일로 — 시간표 툴바와 같은 .toolbar-rail 규약. */}
       <div className="bg-card shadow-card toolbar-rail flex flex-wrap items-center gap-3 rounded-2xl px-4 py-3">
         <EcsFaceTabs face="today" />
-        <EcsDayNav date={res.date} today={res.today} />
+        <EcsTodayModeTabs mode={mode} date={res.date} />
+        <EcsDayNav date={res.date} today={res.today} mode={mode} />
       </div>
 
       {res.cards.length === 0 ? (
@@ -146,6 +188,41 @@ function EcsTodayFace({ res, scoped }: { res: EcsTodayResult; scoped: boolean })
               : "운영 중인 영어 반이 없습니다."
             : `${isToday ? "오늘은" : "이 날은"} 수업이 없습니다. 다른 날짜를 보시거나 '주간 시트'에서 이번 주 전체를 확인하세요.`}
         </p>
+      ) : mode === "sheet" ? (
+        // 시트 모드 — 반마다 SheetClient를 그 날짜 열만 필터해 쌓는다. 조회 실패한 반은 그 반만 사유를
+        // 보이고 나머지는 그린다(한 반 때문에 하루 전체가 죽으면 안 된다).
+        <div className="space-y-6">
+          {(sheets ?? []).map((s) =>
+            s.res.ok ? (
+              <section key={s.classId} className="space-y-2">
+                <div className="flex flex-wrap items-baseline gap-x-2 px-1">
+                  <h2 className="text-foreground text-[15px] font-bold">{s.className}</h2>
+                  <Link
+                    href={`/ecs/${s.classId}?week=${res.weekMonday}`}
+                    className="text-primary text-[12.5px] font-bold underline-offset-2 hover:underline"
+                  >
+                    주간 시트 열기 →
+                  </Link>
+                </div>
+                <SheetClient
+                  // 반 상세와 같은 재마운트 키 + **날짜** — 날짜 이동은 searchParam 네비라 키에 없으면
+                  // 요일 필터 state가 옛 날짜에 남는다(카드 모드 key={date}와 같은 이유).
+                  key={`${s.classId}:${s.res.data.weekMonday}:${s.res.data.showSelfStudy ? "jj" : "nojj"}:${res.date}`}
+                  data={s.res.data}
+                  classOptions={classOptions}
+                  userId={res.userId}
+                  tenantId={res.tenantId}
+                  initialDay={res.date}
+                  initialPanelOpen={false}
+                />
+              </section>
+            ) : (
+              <p key={s.classId} className="bg-card shadow-card text-text-dim rounded-2xl px-4 py-4 text-sm">
+                {s.className}: {s.res.error}
+              </p>
+            ),
+          )}
+        </div>
       ) : (
         // 🔴 `key={date}` — 날짜 이동은 searchParam 네비라 React가 이 클라 컴포넌트를 **재사용**한다.
         // 출결 낙관 상태는 `useState` 초기값으로만 만들어져, 같은 반이 두 요일에 걸치면 **어제 찍은 값이
