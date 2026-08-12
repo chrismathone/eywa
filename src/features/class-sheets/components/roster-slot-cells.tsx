@@ -87,10 +87,15 @@ export function RosterSlotCells({
   navRow: number;
   /** 이동 열 식별자 꼬리 — 통합 표는 교시마다 다른 열이라 `:${slotStart}`를 붙여 세로 이동을 교시 안에 가둔다. */
   navColSuffix?: string;
-  /** 교시 그룹 경계선(통합 표) — 첫 칸 왼쪽에 옅은 세로선(표 규약: 세로선은 가로선보다 한 단계 옅게). */
+  /**
+   * 교시 그룹 경계선(통합 표) — 첫 칸 왼쪽 세로선.
+   * ⚠️ 표 규약의 옅은 열 구분선(`--line-faint`)이 **아니라** 진한 선이다: 여기는 열 하나의 경계가 아니라
+   *    **교시(수업)의 경계**이고, 위층 계획 카드와 아래층 명단이 이 선 하나로 이어져 한 격자로 읽혀야
+   *    한다(원장 2026-08-11 *"마치 엑셀처럼 … 대신 구분 경계만 명확하게"*).
+   */
   withDivider?: boolean;
 }) {
-  const dividerCls = withDivider ? "border-l-line-faint border-l" : "";
+  const dividerCls = withDivider ? "border-line-strong border-l" : "";
   if (entry === null) {
     const offTitle = "이 교시 수강 대상이 아닙니다";
     const dash = <span className="text-text-faint text-[13px] font-semibold">—</span>;

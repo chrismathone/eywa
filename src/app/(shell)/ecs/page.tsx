@@ -195,11 +195,17 @@ function EcsTodayFace({
           {(sheets ?? []).map((s) =>
             s.res.ok ? (
               <section key={s.classId} className="space-y-2">
+                {/* 수업명은 **이 격자가 어느 반인지**를 말하는 유일한 자리라 또렷해야 한다(원장 2026-08-11
+                    "수업명을 더 선명하게") — 반이 여러 개 세로로 쌓이는 화면이라 15px 굵게로는 카드
+                    안 글자들(13px 굵게)과 위계가 안 벌어졌다. 크기·굵기·자간을 함께 올리고, 옆 링크는
+                    한 단계 낮춰(보통 굵기) 이름이 먼저 읽히게 한다. */}
                 <div className="flex flex-wrap items-baseline gap-x-2 px-1">
-                  <h2 className="text-foreground text-[15px] font-bold">{s.className}</h2>
+                  <h2 className="text-foreground text-[19px] leading-tight font-extrabold tracking-tight">
+                    {s.className}
+                  </h2>
                   <Link
                     href={`/ecs/${s.classId}?week=${res.weekMonday}`}
-                    className="text-primary text-[12.5px] font-bold underline-offset-2 hover:underline"
+                    className="text-primary text-[12.5px] font-medium underline-offset-2 hover:underline"
                   >
                     주간 시트 열기 →
                   </Link>
