@@ -285,7 +285,12 @@ export const notificationsSchema = z.object({
   kakaoChannelId: z.string().max(80),
   googleSheetId: z.string().max(120),
   printHeader: z.string().max(200),
+  // 🔴 동의 문구는 **법이 요구하는 단위대로 3개로 분리**한다(2026-08-12 개인정보 검토 C-1~C-3).
+  // 하나로 묶으면 "포괄 동의"라 셋 다 무효가 될 수 있다 — 수집·이용(제15조)·국외이전(제28조의8)·
+  // 민감정보(제23조)는 각각 별도로 동의받아야 한다. 화면(공개접수·등록상담)도 체크박스를 나눠 받는다.
   privacyTerms: z.string().max(8000),
+  overseasTransferTerms: z.string().max(8000),
+  sensitiveInfoTerms: z.string().max(8000),
   serviceTerms: z.string().max(8000),
 });
 export type NotificationsSettings = z.infer<typeof notificationsSchema>;

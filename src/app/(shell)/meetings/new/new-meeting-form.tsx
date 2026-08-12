@@ -18,7 +18,6 @@ import { issueAudioUploadTicket } from "@/features/media/server/upload-actions";
 import { uploadToTicket } from "@/lib/storage/upload-to-ticket";
 import {
   ACCEPTED_AUDIO_TYPES,
-  downloadFile,
   formatBytes,
   formatSeconds,
   kstTimestamp,
@@ -136,8 +135,7 @@ export function NewMeetingForm({ onSuccess }: { onSuccess?: () => void } = {}) {
         const blob = new Blob(recordingChunksRef.current, { type: "audio/webm" });
         const recorded = new File([blob], `회의녹음_${kstTimestamp()}.webm`, { type: "audio/webm" });
         setFile(recorded);
-        // 불상사 대비 디스크 백스톱 — 정지 즉시 다운로드 폴더로 저장(IDB 복구와 별개).
-        downloadFile(recorded);
+        // 🔴 디스크 백스톱 제거 — 회의 녹음도 같은 이유(2026-08-12 M-3). IDB 청크 복구가 대신한다.
         stream.getTracks().forEach((t) => t.stop());
       };
       recorder.start(1000);

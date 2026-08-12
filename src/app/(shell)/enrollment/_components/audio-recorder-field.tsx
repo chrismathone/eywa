@@ -13,7 +13,6 @@ import {
 import { useRecordingLock } from "@/components/workspace/use-recording-lock";
 import {
   ACCEPTED_AUDIO_TYPES,
-  downloadFile,
   formatBytes,
   formatSeconds,
   kstTimestamp,
@@ -124,8 +123,9 @@ export function AudioRecorderField({
         const blob = new Blob(recordingChunksRef.current, { type: "audio/webm" });
         const recorded = new File([blob], `등록상담녹음_${kstTimestamp()}.webm`, { type: "audio/webm" });
         onChange(recorded);
-        // 불상사 대비 디스크 백스톱 — 정지 즉시 다운로드 폴더로 저장(IDB 복구와 별개).
-        downloadFile(recorded);
+        // 🔴 디스크 백스톱(다운로드 폴더 자동 저장)은 제거했다(2026-08-12 개인정보 검토 M-3):
+        // 상담 녹음 원본이 매 상담마다 직원 PC에 남아 학원이 통제할 수 없는 사본이 쌓였다
+        // (안전성 확보조치 위반 소지). 유실 방어는 IndexedDB 청크 복구가 그대로 담당한다.
         stream.getTracks().forEach((t) => t.stop());
       };
       recorder.start(1000);

@@ -38,21 +38,35 @@ export function NotificationsSection({ initial }: { initial: NotificationsSettin
 
       {/* 공개 접수(학부모 QR) 폼의 동의서 문구 — 비우면 해당 동의 블록이 폼에서 숨겨집니다. */}
       <SettingsCard
-        title="공개 접수 약관"
-        description="학부모 QR 접수 폼에 표시되는 동의 문구. 개인정보 동의는 필수 체크, 환불·학칙 안내는 선택 체크로 노출됩니다."
+        title="동의서 문구"
+        description="QR 접수 폼과 등록상담 화면에 표시되는 동의 문구. 개인정보·국외이전·민감정보는 법이 각각 별도 동의를 요구해 세 블록으로 나뉘어 있습니다 — 하나로 합치지 마세요."
         span2
       >
         <div className="space-y-4">
           <TextAreaField
-            label="개인정보 수집·이용 동의 문구"
-            hint="비우면 개인정보 동의 블록 숨김"
-            rows={6}
+            label="① 개인정보 수집·이용 동의 문구"
+            hint="필수 체크. 수집 항목·이용 목적·보유 기간·거부권 4가지는 법정 고지사항이라 빼면 안 됩니다"
+            rows={8}
             value={n.privacyTerms}
             onChange={(v) => set({ privacyTerms: v })}
           />
           <TextAreaField
-            label="환불·학칙 안내 문구"
-            hint="비우면 환불·학칙 동의 블록 숨김"
+            label="② 개인정보 국외 이전 동의 문구"
+            hint="녹음을 쓰려면 필수. 받는 자·국가·시점·방법·항목·목적·기간·거부권 8가지를 모두 적어야 합니다. 비우면 국외이전 동의 블록이 숨겨지고, 녹음 첨부도 막힙니다"
+            rows={10}
+            value={n.overseasTransferTerms}
+            onChange={(v) => set({ overseasTransferTerms: v })}
+          />
+          <TextAreaField
+            label="③ 민감정보 수집·이용 동의 문구"
+            hint="선택 체크. 학습 태도·정서 상태 등이 상담에 등장하면 필요합니다. 비우면 해당 블록 숨김"
+            rows={8}
+            value={n.sensitiveInfoTerms}
+            onChange={(v) => set({ sensitiveInfoTerms: v })}
+          />
+          <TextAreaField
+            label="④ 환불·학칙 안내 문구"
+            hint="선택 체크. 비우면 환불·학칙 동의 블록 숨김"
             rows={8}
             value={n.serviceTerms}
             onChange={(v) => set({ serviceTerms: v })}

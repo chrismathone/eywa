@@ -10,6 +10,10 @@ import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { kstToday } from "@/lib/date-kst";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { isMissingColumn } from "@/lib/supabase/missing-column";
+import { buildConsentSnapshot } from "@/lib/consent/snapshot";
+import { getTenantSettingsByTenantId } from "@/features/owner/server/queries";
+import { reportWarning } from "@/lib/observability/report-error";
 import { resolveUniqueStudentNameFor } from "@/features/students/server/unique-name";
 import { generateJSON } from "@/lib/ai/generate";
 import { after } from "next/server";
@@ -162,6 +166,8 @@ export async function createEnrollmentConsultation(
   // 웹훅(handleConsultation)의 buildFormPatch가 **빈 필드만** 보강하므로 수기 입력값은 보존된다.
   const audioPath = String(formData.get("audioPath") ?? "").trim();
   if (audioPath) {
+    const consentErr = recordingConsentError(formData);
+    if (consentErr) return { error: consentErr };
     return createConsultationWithAudio(
       user,
       parsed.data,
@@ -234,6 +240,9 @@ async function createConsultationWithAudio(
     .single();
   if (insertErr || !consult) return { error: `상담 생성 실패: ${insertErr?.message ?? "unknown"}` };
 
+  // 동의 확인을 **행에 남긴다** — 전사 제출보다 먼저(전사는 이미 국외로 나가는 행위라, 그 전에 근거가 있어야).
+  await recordStaffRecordingConsent(admin, consult.id as string, user.tenantId);
+
   const err = await insertRecordingAndTranscribe(admin, {
     tenantId: user.tenantId,
     consultationId: consult.id,
@@ -246,6 +255,55 @@ async function createConsultationWithAudio(
 
   revalidatePath("/enrollment");
   redirect(`/enrollment/${consult.id}`);
+}
+
+/**
+ * 녹음 첨부 게이트(서버) — 상담사가 "학부모에게 안내하고 동의를 받았다"고 확인했는가.
+ * 🔴 화면 체크박스만으로는 게이트가 아니다(#77) — 폼을 우회해 액션을 직접 부르면 그대로 뚫린다.
+ * 녹음은 반드시 국외(전사 엔진)로 나가므로, 확인 없는 녹음은 그 자체가 동의 없는 국외이전이다.
+ */
+function recordingConsentError(formData: FormData): string | null {
+  if (String(formData.get("recordingConsent") ?? "") === "true") return null;
+  return "녹음을 저장하려면 학부모 안내·동의 확인이 필요합니다 — 녹음을 지우면 상담 기록만 저장됩니다";
+}
+
+/**
+ * 상담사 확인(전화·방문 상담)을 동의 스냅샷으로 기록. 학부모가 직접 누른 QR 접수와 구분하려고
+ * `source: "staff_form"`으로 남긴다 — 이건 **상담사의 확인**이지 학부모의 클릭이 아니다.
+ * 문구는 그 시점 학원설정에서 읽어 전문까지 얼린다(나중에 문구를 고쳐도 과거 근거가 남는다).
+ *
+ * ⚠️ best-effort — 이미 저장된 상담을 되돌리지 않는다. 0204a 미적용 구간(#95)에선 컬럼이 없어 조용히 넘어간다.
+ */
+async function recordStaffRecordingConsent(
+  admin: ReturnType<typeof createAdminClient>,
+  consultationId: string,
+  tenantId: string,
+): Promise<void> {
+  try {
+    const settings = await getTenantSettingsByTenantId(tenantId);
+    const snapshot = buildConsentSnapshot({
+      terms: {
+        privacy: settings.notifications.privacyTerms,
+        overseas: settings.notifications.overseasTransferTerms,
+        sensitive: settings.notifications.sensitiveInfoTerms,
+        service: settings.notifications.serviceTerms,
+      },
+      // 상담사가 확인한 범위 = 녹음에 필요한 두 가지(수집·이용 + 국외이전). 민감정보·학칙은 이 화면의 확인 대상이 아니다.
+      agreed: { privacy: true, overseas: true },
+      source: "staff_form",
+      at: new Date(),
+    });
+    const { error } = await admin
+      .from("enrollment_consultations")
+      .update({ consent_snapshot: snapshot })
+      .eq("id", consultationId)
+      .eq("tenant_id", tenantId);
+    if (error && !isMissingColumn(error, "consent_snapshot")) {
+      reportWarning("동의 스냅샷 기록 실패", { scope: "enrollment.consent", consultationId });
+    }
+  } catch {
+    /* 동의 기록 실패가 상담 저장을 되돌리게 두지 않는다 — 상담은 이미 저장돼 있다 */
+  }
 }
 
 /**
@@ -432,6 +490,14 @@ export async function updateEnrollmentConsultation(
   // 수정 중 새 녹음 첨부(QR 접수건을 상담사가 수정하며 상담 녹음) — 전사·13섹션 분석 재실행.
   const audioPath = String(formData.get("audioPath") ?? "").trim();
   if (audioPath) {
+    // 생성과 같은 게이트 — 수정에서 녹음을 붙이는 경로도 동의 확인 없이는 통과시키지 않는다(#77).
+    const consentErr = recordingConsentError(formData);
+    if (consentErr) {
+      revalidatePath("/enrollment");
+      revalidatePath(`/enrollment/${id}`);
+      return { error: `입력 내용은 저장되었습니다. ${consentErr}`, saved: true };
+    }
+    await recordStaffRecordingConsent(createAdminClient(), id, user.tenantId);
     const audioErr = await attachAudioAndTranscribe(
       user,
       id,

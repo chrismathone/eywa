@@ -5,7 +5,7 @@ import { History, Loader2, Mic, Square, Upload } from "@/components/icons/eywa-i
 import { Button } from "@/components/ui/button";
 import { FilePickerButton } from "@/components/ui/file-picker-button";
 import { SearchableSelect } from "@/components/ui/searchable-select";
-import { downloadFile, kstTimestamp } from "@/lib/audio-upload";
+import { kstTimestamp } from "@/lib/audio-upload";
 import { issueAudioUploadTicket } from "@/features/media/server/upload-actions";
 import { uploadToTicket } from "@/lib/storage/upload-to-ticket";
 import {
@@ -91,8 +91,7 @@ export function AudioConsultationForm({ students }: { students: StudentOption[] 
         const blob = new Blob(chunksRef.current, { type: mime });
         const recorded = new File([blob], `상담녹음_${kstTimestamp()}.webm`, { type: mime });
         setFile(recorded);
-        // 불상사 대비 디스크 백스톱 — 정지 즉시 다운로드 폴더로 저장(IDB 복구와 별개).
-        downloadFile(recorded);
+        // 🔴 디스크 백스톱 제거 — 학생상담 녹음도 같은 이유(2026-08-12 M-3). IDB 청크 복구가 대신한다.
         setRecording(false);
       };
       recRef.current = rec;

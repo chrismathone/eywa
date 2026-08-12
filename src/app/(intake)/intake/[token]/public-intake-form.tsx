@@ -31,6 +31,58 @@ const SCHOOL_TYPES = [
   { type: "고등학교", prefix: "고" },
 ] as const;
 
+/**
+ * 동의 한 블록(문구 + 체크). 법이 요구하는 **항목별 분리 동의**를 한 구현으로 반복한다 —
+ * 블록마다 손으로 복제하면 필수 표시·문구 노출 규칙이 서로 어긋난다.
+ * ⚠️ `show=false`(문구 미설정)면 체크박스 자체를 렌더하지 않는다 — 보이지 않은 문구에 동의한 것으로
+ *    기록되면 그게 곧 허위 증거다(서버 `buildConsentSnapshot`도 같은 규칙으로 이중 방어).
+ */
+function ConsentBlock({
+  name,
+  title,
+  text,
+  show,
+  confirm,
+  note,
+  required = false,
+}: {
+  name: string;
+  title: string;
+  text: string;
+  show: boolean;
+  confirm: string;
+  note?: string;
+  required?: boolean;
+}) {
+  if (!show) return null;
+  return (
+    <div className="space-y-3 pt-2">
+      <h4 className="text-foreground text-sm font-bold">
+        {title}{" "}
+        {required ? (
+          <span className="text-danger">*</span>
+        ) : (
+          <span className="text-text-dim text-[12px] font-normal">(선택)</span>
+        )}
+      </h4>
+      <div className="bg-bg-soft max-h-56 overflow-y-auto rounded-xl p-4 text-[13px] leading-relaxed">
+        <p className="text-text-dim whitespace-pre-line">{text}</p>
+      </div>
+      {note ? <p className="text-text-dim text-[12px] leading-relaxed">{note}</p> : null}
+      <label className="flex cursor-pointer items-start gap-2.5">
+        <input
+          type="checkbox"
+          name={name}
+          value="true"
+          required={required}
+          className="accent-danger mt-0.5 size-5 shrink-0"
+        />
+        <span className="text-foreground text-sm">{confirm}</span>
+      </label>
+    </div>
+  );
+}
+
 function SubmitBtn({ disabled }: { disabled?: boolean }) {
   const { pending } = useFormStatus();
   return (
@@ -60,6 +112,8 @@ export function PublicIntakeForm({
   gradeLevels,
   shuttle,
   privacyTerms,
+  overseasTerms,
+  sensitiveTerms,
   serviceTerms,
   serverNow,
   turnstileSiteKey,
@@ -70,6 +124,8 @@ export function PublicIntakeForm({
   gradeLevels: string[];
   shuttle: ShuttleSetting;
   privacyTerms: string;
+  overseasTerms: string;
+  sensitiveTerms: string;
   serviceTerms: string;
   serverNow: number;
   turnstileSiteKey: string | null;
@@ -88,6 +144,8 @@ export function PublicIntakeForm({
   const [schoolType, setSchoolType] = useState("");
   const [grade, setGrade] = useState("");
   const showPrivacy = privacyTerms.trim().length > 0;
+  const showOverseas = overseasTerms.trim().length > 0;
+  const showSensitive = sensitiveTerms.trim().length > 0;
   const showService = serviceTerms.trim().length > 0;
 
   const gradeOptions = useMemo(() => {
@@ -420,35 +478,50 @@ export function PublicIntakeForm({
         </Section>
       ) : null}
 
-      {/* 동의서 (ink) — 문구는 학원설정 notifications.privacyTerms / serviceTerms. */}
+      {/* 동의서 (ink) — 🔴 **항목별로 나눠서** 받는다(2026-08-12 개인정보 검토). 수집·이용(제15조)·
+          국외이전(제28조의8)·민감정보(제23조)는 법이 각각 별도 동의를 요구하므로, 하나로 묶으면
+          포괄 동의가 되어 셋 다 무효가 될 수 있다. 필수는 수집·이용뿐이고 나머지는 거부해도 접수된다
+          (거부를 이유로 서비스를 막으면 그 자체가 문제가 된다). 문구는 학원설정 notifications.*. */}
       <Section title="동의서 & 학칙 안내" tone="ink">
-        <div className="space-y-3">
-          <h4 className="text-foreground text-sm font-bold">
-            개인정보 활용 동의서 <span className="text-danger">*</span>
-          </h4>
-          {showPrivacy ? (
-            <div className="bg-bg-soft rounded-xl p-4 text-[13px] leading-relaxed">
-              <p className="text-text-dim whitespace-pre-line">{privacyTerms}</p>
-            </div>
-          ) : null}
-          <label className="flex cursor-pointer items-center gap-2.5">
-            <input type="checkbox" name="privacyAgreement" value="true" required className="accent-danger size-5 shrink-0" />
-            <span className="text-foreground text-sm">개인정보 수집·이용에 동의합니다.</span>
-          </label>
-        </div>
-
-        {showService ? (
-          <div className="space-y-3 pt-2">
-            <h4 className="text-foreground text-sm font-bold">환불·학칙 안내 동의서</h4>
-            <div className="bg-bg-soft rounded-xl p-4 text-[13px] leading-relaxed">
-              <p className="text-text-dim whitespace-pre-line">{serviceTerms}</p>
-            </div>
-            <label className="flex cursor-pointer items-center gap-2.5">
-              <input type="checkbox" name="installmentAgreement" value="true" className="accent-danger size-5 shrink-0" />
-              <span className="text-foreground text-sm">위 내용을 확인하였으며, 이에 동의합니다.</span>
-            </label>
-          </div>
-        ) : null}
+        <ConsentBlock
+          name="privacyAgreement"
+          title="개인정보 수집·이용 동의"
+          text={privacyTerms}
+          show={showPrivacy}
+          required
+          confirm="개인정보 수집·이용에 동의합니다."
+        />
+        <ConsentBlock
+          name="overseasAgreement"
+          title="개인정보 국외 이전 동의"
+          text={overseasTerms}
+          show={showOverseas}
+          confirm="개인정보가 국외로 이전되는 것에 동의합니다."
+          note="상담 녹음을 이용하실 때만 필요합니다. 동의하지 않으셔도 상담과 등록에는 아무런 제한이 없습니다."
+        />
+        <ConsentBlock
+          name="sensitiveAgreement"
+          title="민감정보 수집·이용 동의"
+          text={sensitiveTerms}
+          show={showSensitive}
+          confirm="민감정보 수집·이용에 동의합니다."
+          note="동의하지 않으셔도 수업 등록과 상담에는 아무런 제한이 없습니다."
+        />
+        <ConsentBlock
+          name="installmentAgreement"
+          title="환불·학칙 안내 동의"
+          text={serviceTerms}
+          show={showService}
+          confirm="위 내용을 확인하였으며, 이에 동의합니다."
+        />
+        {/* 처리방침은 "공개"가 의무라 닿을 수 있어야 한다(제30조) — 동의 블록 바로 아래가 그 자리다. */}
+        <p className="text-text-dim pt-3 text-[12px]">
+          개인정보 처리 전반은{" "}
+          <a href="/privacy" target="_blank" rel="noopener" className="text-foreground font-bold underline underline-offset-2">
+            개인정보 처리방침
+          </a>
+          에서 확인하실 수 있습니다.
+        </p>
       </Section>
       </div>
 

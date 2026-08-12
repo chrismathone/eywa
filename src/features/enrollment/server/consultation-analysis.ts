@@ -38,13 +38,19 @@ export type ConsultationReport13 = {
   };
 };
 
-/** 프롬프트에 들어가는 상담 행 필드(현재 입력값 — 추출 대조·grounding용). */
+/**
+ * 프롬프트에 들어가는 상담 행 필드(현재 입력값 — 추출 대조·grounding용).
+ *
+ * 🔴 **학부모 휴대전화번호는 여기에 없다**(2026-08-12 개인정보 검토 C-1). 전에는 프롬프트 본문에
+ * 그대로 실려 국외 AI로 나갔는데, 분석 품질에 기여하지 않는다 — 모델은 전사에서 번호를 뽑아
+ * `extracted.parentPhone`로 돌려줄 뿐이고, 우리가 미리 알려줄 이유가 없다. 국외로 나가는
+ * **직접 식별자를 하나 줄이는 가장 싼 조치**라 뺐다. ⚠️ 편의를 이유로 다시 넣지 말 것.
+ */
 export type ConsultationPromptInput = {
   prospect_name: string;
   prospect_grade: string | null;
   prospect_school: string | null;
   parent_name: string | null;
-  parent_phone: string | null;
 };
 
 /** ijw 이식 프롬프트 문자열 빌드(단일/합본 공용). multi=true면 회차 종합 안내 추가. */
@@ -76,7 +82,8 @@ export function buildConsultationAnalysisPrompt(
     `학생 이름(현재 입력값): ${consult.prospect_name}`,
     `학년: ${consult.prospect_grade ?? "미상"}`,
     `학교: ${consult.prospect_school ?? "미상"}`,
-    `학부모(현재 입력값): ${consult.parent_name ?? "미상"} / ${consult.parent_phone ?? "미상"}`,
+    // ⚠️ 전화번호는 싣지 않는다(위 타입 주석 참조) — 국외로 나가는 직접 식별자를 줄인다.
+    `학부모(현재 입력값): ${consult.parent_name ?? "미상"}`,
     "",
     "섹션별 작성 지침:",
     "1. consultationType: 상담 성격 한 줄 (예: '등록 상담 - 진단 결과 설명 및 등록 유도', '초기 탐색', '환불/이탈 우려'). 등록/영업 상담이면 상담사가 등록을 유도하는 구조임을 명시.",

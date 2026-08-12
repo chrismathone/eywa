@@ -68,6 +68,8 @@ export default async function PublicIntakePage({
       gradeLevels={settings.operations.gradeLevels}
       shuttle={settings.operations.shuttle}
       privacyTerms={settings.notifications.privacyTerms}
+      overseasTerms={settings.notifications.overseasTransferTerms}
+      sensitiveTerms={settings.notifications.sensitiveInfoTerms}
       serviceTerms={settings.notifications.serviceTerms}
       serverNow={serverNow}
       turnstileSiteKey={turnstileSiteKey}

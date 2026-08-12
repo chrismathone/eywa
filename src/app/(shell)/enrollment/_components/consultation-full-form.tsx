@@ -124,6 +124,8 @@ export function ConsultationFullForm({
   const router = useRouter();
   const isCreate = mode === "create";
   const [audioFile, setAudioFile] = useState<File | null>(null);
+  // 녹음 첨부 시 상담사가 "학부모에게 안내하고 동의를 받았다"고 확인한 상태. 녹음이 없으면 무의미.
+  const [recordingConsent, setRecordingConsent] = useState(false);
   const [recordingActive, setRecordingActive] = useState(false);
   const [phase, setPhase] = useState<"idle" | "uploading" | "submitting">("idle");
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -213,6 +215,13 @@ export function ConsultationFullForm({
       setSubmitError("녹음을 먼저 중지한 후 저장해주세요.");
       return;
     }
+    // 🔴 녹음이 붙어 있으면 **동의 확인 없이는 저장하지 않는다**(2026-08-12 개인정보 검토 C-1/C-2).
+    // QR 접수 폼에만 동의가 있어 전화·방문 상담은 동의 절차 자체가 없던 구멍을 막는 지점이다.
+    // 서버(saveConsultation)도 같은 조건을 재검증한다 — 화면 조건만으로는 게이트가 아니다(#77).
+    if (audioFile && !recordingConsent) {
+      setSubmitError("녹음을 저장하려면 학부모에게 안내하고 동의를 받았는지 확인해주세요.");
+      return;
+    }
     const fd = new FormData(e.currentTarget);
     fd.set("subjectDetails", JSON.stringify(details));
     // QR 접수 대기·예약 건 — 저장 전에 상담 완료 전환 여부를 묻고, 선택에 따라 이어서 제출.
@@ -250,6 +259,8 @@ export function ConsultationFullForm({
         }
         fd.set("audioPath", tk.ticket.path);
         fd.set("audioSizeBytes", String(audioFile.size));
+        // 상담사가 "안내하고 동의를 받았다"고 확인한 사실 — 서버가 그 시점 문구와 함께 스냅샷으로 남긴다.
+        fd.set("recordingConsent", "true");
       }
       setPhase("submitting");
       if (isCreate) {
@@ -335,6 +346,41 @@ export function ConsultationFullForm({
             )}
           </p>
         </div>
+
+        {/* 🔴 녹음 고지 — 상담사가 학부모에게 무엇을 안내해야 하는지 **화면이 알려준다**(2026-08-12 검토).
+            종전엔 앱 어디에도 "녹음됩니다"라는 문구가 한 건도 없어, 상담사가 무엇을 말해야 하는지조차
+            알 수 없었다. 문장은 학부모에게 그대로 읽어줄 수 있는 형태로 쓴다. */}
+        <div className="border-border bg-card/70 rounded-md border px-2.5 py-2">
+          <p className="text-text-dim text-[11px] leading-relaxed">
+            <span className="text-foreground font-bold">상담 전 이렇게 안내하세요</span> — “상담 내용을 정확히
+            기록하기 위해 녹음하고, 자동으로 글로 옮겨 요약합니다. 이 과정에서 국외 사업자를 이용합니다.
+            녹음 원본은 90일 뒤 자동 삭제되며, 원하지 않으시면 녹음 없이 진행합니다.”
+          </p>
+        </div>
+
+        {/* 동의 확인 — 녹음이 붙었을 때만. 체크 없이는 저장이 막힌다(서버도 재검증). */}
+        {audioFile ? (
+          <label
+            className={`flex cursor-pointer items-start gap-2.5 rounded-md border px-2.5 py-2 transition-colors ${
+              recordingConsent ? "border-border bg-card/70" : "border-danger/40 bg-danger/5"
+            }`}
+          >
+            <input
+              type="checkbox"
+              checked={recordingConsent}
+              onChange={(e) => setRecordingConsent(e.target.checked)}
+              disabled={busy}
+              className="accent-danger mt-0.5 size-4 shrink-0"
+            />
+            <span className="text-foreground text-xs leading-relaxed">
+              위 내용을 <span className="font-bold">학부모에게 안내하고 동의를 받았습니다.</span>
+              <span className="text-text-dim">
+                {" "}
+                동의를 받지 못했다면 녹음을 지우고 저장하세요 — 상담 기록은 그대로 저장됩니다.
+              </span>
+            </span>
+          </label>
+        ) : null}
       </div>
 
       {/* 상단 탭바 — overflow-y-hidden: overflow-x-auto가 버튼 -mb-px로 세로 1px 넘쳐 세로 스크롤바가

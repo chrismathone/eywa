@@ -45,27 +45,11 @@ export function kstTimestamp(d: Date = new Date()): string {
   return `${g("year")}-${g("month")}-${g("day")}_${g("hour")}-${g("minute")}-${g("second")}_KST`;
 }
 
-/**
- * 녹음 파일을 사용자의 다운로드 폴더로 저장(불상사=파일증발 대비 디스크 백스톱).
- * 녹음 정지 직후 호출 — IndexedDB 복구(브라우저 내부)와 별개로 OS 파일을 남긴다(옛 팝업 동작 복원).
- * best-effort: 차단/실패해도 throw하지 않음(업로드 흐름을 막지 않게).
- */
-export function downloadFile(file: File): void {
-  try {
-    const url = URL.createObjectURL(file);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = file.name;
-    document.body.appendChild(a);
-    a.click();
-    setTimeout(() => {
-      URL.revokeObjectURL(url);
-      a.remove();
-    }, 1000);
-  } catch {
-    /* 다운로드 실패해도 무시 — 파일은 폼 state + IDB에 보존 */
-  }
-}
+// 🔴 `downloadFile`(녹음 정지 시 다운로드 폴더 자동 저장)은 2026-08-12 개인정보 검토로 **제거**했다.
+// 유실 대비 디스크 백스톱이 의도였으나, 결과적으로 상담·회의 녹음 원본이 매 건마다 직원 개인 PC에
+// 남아 학원이 통제·파기할 수 없는 사본이 쌓였다(개인정보보호법 제29조 안전성 확보조치 위반 소지 —
+// 서버 원본은 90일 자동 파기되는데 PC 사본은 영원히 남는다). 유실 방어는 IndexedDB 청크 복구
+// (`recording-recovery.ts`)가 그대로 담당한다. ⚠️ 편의를 이유로 되살리지 말 것.
 
 /** 업로드 오디오 검증 — 통과하면 null, 아니면 폼이 그대로 표시할 에러 메시지. */
 export function validateAudioFile(f: { type: string; name: string; size: number }): string | null {

@@ -6,6 +6,8 @@ import {
   RECORDING_RETENTION_DAYS,
   retentionCutoffISO,
   RETENTION_TABLES,
+  TRANSCRIPT_RETENTION_DAYS,
+  TRANSCRIPT_TABLES,
 } from "@/lib/storage/retention";
 
 /**
@@ -85,5 +87,74 @@ export async function GET(req: Request) {
       ...result,
     });
   }
-  return NextResponse.json({ cutoff, retentionDays: RECORDING_RETENTION_DAYS, ...result });
+
+  const transcripts = await purgeExpiredTranscripts(admin);
+
+  return NextResponse.json({
+    cutoff,
+    retentionDays: RECORDING_RETENTION_DAYS,
+    ...result,
+    transcriptRetentionDays: TRANSCRIPT_RETENTION_DAYS,
+    transcripts,
+  });
+}
+
+/**
+ * 🔴 등록상담 **전사 원문 파기**(원장 결정 2026-08-12: 14일).
+ *
+ * 지우는 것 = `transcription`(통짜 전사) + `speaker_labels`(화자별 발화) — **오간 말 그대로**.
+ * 남기는 것 = AI 분석 결과(요약·13섹션)와 상담 기록. 위험이 가장 큰 축어 전문만 짧게 끊고 쓸모는 남긴다.
+ *
+ * ⚠️ 등록 여부와 무관하게 **전건** 적용. 전사는 기록의 근거일 뿐 기록 자체가 아니다.
+ * ⚠️ 전사는 **두 표**에 산다(단일 미러 `enrollment_consultations` + 녹음 행 `consultation_recordings`) —
+ *    한쪽만 지우면 다른 쪽에 그대로 남는다. `TRANSCRIPT_TABLES`가 그 목록이고 새 표가 생기면 여기도 추가.
+ * 🔴 되돌릴 수 없다 — 지운 뒤엔 "AI 분석 다시 생성"이 불가능하다(오디오도 90일에 사라져 재전사 불가).
+ */
+async function purgeExpiredTranscripts(
+  admin: ReturnType<typeof createAdminClient>,
+): Promise<Record<string, number>> {
+  const cutoff = retentionCutoffISO(new Date(), TRANSCRIPT_RETENTION_DAYS);
+  const out: Record<string, number> = {};
+
+  for (const { table, dateColumn } of TRANSCRIPT_TABLES) {
+    const { data: rows, error } = await admin
+      .from(table)
+      .select("id")
+      .lt(dateColumn, cutoff)
+      .not("transcription", "is", null)
+      .order(dateColumn, { ascending: true })
+      .limit(BATCH_PER_TABLE);
+    if (error) {
+      // 전사 파기가 실패해도 오디오 파기(본 작업)를 되돌리지 않는다 — 다음 실행이 재시도한다.
+      reportError(error, { scope: "cron.transcript-retention", table });
+      out[table] = -1;
+      continue;
+    }
+    if (!rows?.length) {
+      out[table] = 0;
+      continue;
+    }
+    const ids = rows.map((r) => r.id);
+    const { error: upErr } = await admin
+      .from(table)
+      .update({ transcription: null, speaker_labels: null })
+      .in("id", ids);
+    if (upErr) {
+      reportError(upErr, { scope: "cron.transcript-retention", table });
+      out[table] = -1;
+      continue;
+    }
+    out[table] = ids.length;
+  }
+
+  const total = Object.values(out)
+    .filter((n) => n > 0)
+    .reduce((s, n) => s + n, 0);
+  if (total > 0) {
+    reportWarning(`전사 보유기간(${TRANSCRIPT_RETENTION_DAYS}일) 원문 파기 ${total}건`, {
+      scope: "cron.transcript-retention",
+      ...out,
+    });
+  }
+  return out;
 }

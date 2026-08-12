@@ -11,6 +11,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { generatePrepBriefOnIntake } from "@/features/enrollment/server/prep-generate";
 import { logAction } from "@/features/audit/server/log";
 import { getTenantSettingsByTenantId } from "@/features/owner/server/queries";
+import { buildConsentSnapshot } from "@/lib/consent/snapshot";
+import { isMissingColumn } from "@/lib/supabase/missing-column";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { parseIntakeChecklist } from "@/features/enrollment/intake-checklist-parse";
 import { parseForwardedFor } from "@/features/attendance/kiosk/device-info";
@@ -143,10 +145,18 @@ export async function submitPublicIntake(
   }
 
   const prospectName = clip(formData.get("prospectName"), 60);
-  const privacy = String(formData.get("privacyAgreement") ?? "") === "true";
+  // 동의는 **항목별로** 받는다(2026-08-12 개인정보 검토) — 포괄 동의 금지. 필수는 수집·이용뿐이고,
+  // 나머지는 거부해도 접수가 막히지 않는다(거부를 이유로 서비스를 막으면 그 자체가 문제가 된다).
+  const checked = (name: string) => String(formData.get(name) ?? "") === "true";
+  const agreed = {
+    privacy: checked("privacyAgreement"),
+    overseas: checked("overseasAgreement"),
+    sensitive: checked("sensitiveAgreement"),
+    service: checked("installmentAgreement"),
+  };
   if (!token) return { error: "잘못된 접근입니다" };
   if (!prospectName) return { error: "학생 이름을 입력해주세요" };
-  if (!privacy) return { error: "개인정보 수집·이용에 동의해주세요" };
+  if (!agreed.privacy) return { error: "개인정보 수집·이용에 동의해주세요" };
 
   const admin = createAdminClient();
   const { data: tok } = await admin
@@ -241,7 +251,21 @@ export async function submitPublicIntake(
   // 학부모는 자기 아이 이름을 그대로 적으면 되고, 동명이인 판단은 **직원이 상담을 학생으로 전환할 때**
   // convertConsultationToStudent가 접미사를 붙이며 그 자리에서 알린다. 이름을 학부모 화면에서 고쳐
   // 보여주면 "내 아이 이름이 왜 바뀌지?"가 되고, 접수 자체를 막으면 상담 유입이 끊긴다.
-  const { data: inserted, error: insErr } = await admin.from("enrollment_consultations").insert({
+  // 동의 스냅샷 — **지금 이 화면에 실제로 표시된 문구 전문**을 동의 결과와 함께 얼려 행에 남긴다.
+  // ⚠️ 문구는 클라가 보낸 값이 아니라 서버가 방금 읽은 학원설정에서 가져온다(보낸 값을 믿으면 위조 가능).
+  const consentSnapshot = buildConsentSnapshot({
+    terms: {
+      privacy: settings.notifications.privacyTerms,
+      overseas: settings.notifications.overseasTransferTerms,
+      sensitive: settings.notifications.sensitiveInfoTerms,
+      service: settings.notifications.serviceTerms,
+    },
+    agreed,
+    source: "public_intake",
+    at: new Date(),
+  });
+
+  const consultationRow = {
     tenant_id: tok.tenant_id,
     prospect_name: prospectName,
     prospect_grade: prospectGrade,
@@ -260,13 +284,30 @@ export async function submitPublicIntake(
     intake_checklist: checklist,
     parent_request: clip(formData.get("parentRequest"), 2000) || null,
     shuttle_bus_request: String(formData.get("shuttleBusRequest") ?? "") === "true",
-    privacy_agreement: true,
-    installment_agreement: String(formData.get("installmentAgreement") ?? "") === "true",
+    privacy_agreement: agreed.privacy,
+    installment_agreement: agreed.service,
+    consent_snapshot: consentSnapshot,
     outcome: "pending",
     from_public_intake: true,
     intake_token_id: tok.id,
     consultant_id: null,
-  }).select("id").single();
+  };
+
+  let { data: inserted, error: insErr } = await admin
+    .from("enrollment_consultations")
+    .insert(consultationRow)
+    .select("id")
+    .single();
+  // 0204a 미적용 구간(#95) — 스냅샷 컬럼만 빼고 재시도한다. 학부모가 폼을 다 채우고 실패하는 것이
+  // 가장 나쁘므로 접수 자체는 절대 막지 않는다. ⚠️ 이 구간에선 동의를 증명할 수 없으니 SQL을 빨리 적용할 것.
+  if (isMissingColumn(insErr, "consent_snapshot")) {
+    const { consent_snapshot: _pending, ...withoutSnapshot } = consultationRow;
+    ({ data: inserted, error: insErr } = await admin
+      .from("enrollment_consultations")
+      .insert(withoutSnapshot)
+      .select("id")
+      .single());
+  }
   if (insErr) return { error: "제출에 실패했습니다. 잠시 후 다시 시도해주세요" };
 
   // 상담 준비 브리프 **자동 생성**(원장 지시 2026-07-29) — 학부모가 제출한 순간 상담지가 만들어져

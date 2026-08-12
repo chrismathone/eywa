@@ -7,6 +7,7 @@
 // 0169a — plain present만) 두 경로뿐. 결석·지각·시수 편집은 여전히 /attendance 전용(§E 완화판).
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchInChunks } from "@/lib/supabase/batch";
+import { isMissingColumn } from "@/lib/supabase/missing-column";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { kstToday } from "@/lib/date-kst";
 import { mondayOf, shiftDays } from "@/features/timetable/lib/week";
@@ -396,16 +397,8 @@ export async function upsertGoal(input: {
   return { ok: true };
 }
 
-/**
- * 컬럼이 아직 없어서 난 오류인가 — 0202a(`score`)가 손으로 적용되기 **전에** 앱이 배포돼도
- * 태도·특이사항 저장이 함께 죽지 않게 하려는 판정이다(#95: 배포는 옛 스키마·새 스키마 둘 다에서 돌아야 한다).
- * PostgREST는 스키마 캐시에 없는 컬럼을 `PGRST204`로, Postgres는 `42703`으로 알린다.
- */
-function isMissingColumn(err: { code?: string; message?: string } | null, column: string): boolean {
-  if (!err) return false;
-  if (err.code === "PGRST204" || err.code === "42703") return true;
-  return (err.message ?? "").includes(column) && /column|컬럼/i.test(err.message ?? "");
-}
+// 컬럼 부재 판정(0202a `score`가 손으로 적용되기 전에도 태도·특이사항 저장이 살아남게 하는 장치)은
+// 같은 필요가 0204a(`consent_snapshot`)에서 또 생겨 공용으로 옮겼다 → `@/lib/supabase/missing-column`.
 
 export async function upsertStudentMark(input: {
   classId: string;
