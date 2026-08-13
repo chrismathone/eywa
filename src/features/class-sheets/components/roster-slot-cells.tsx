@@ -207,7 +207,8 @@ export function RosterSlotCells({
             disabled={!rowEditable}
             aria-label={`${meta?.name ?? ""} ${col.label}`}
             title={col.title}
-            placeholder="—"
+            // placeholder 없음 — 텍스트 입력은 **그냥 비워 둔다**(원장 2026-08-13). 빈 상자 자체가
+            // "여기 적어라"이고, `—`를 넣으면 값이 적힌 것처럼 보인다([click-hint.ts](../click-hint.ts)).
             data-nav-col={`${col.nav}${navColSuffix}`}
             data-nav-row={navRow}
             onKeyDown={handleGridNavKey}
