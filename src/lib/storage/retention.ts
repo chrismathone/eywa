@@ -1,3 +1,5 @@
+// 2026-08-13: 개인정보 변경분(동의 3분리·전사 파기 등)을 프로덕션에서 내리고 30b09ba2 내용으로
+// 되돌린 상태다. 그 작업은 워크트리 브랜치에 보존돼 있으며, 재개 시 docs/privacy-compliance.md 참조.
 // 녹음 원본 보존기간 — 순수 함수(Vitest 대상). IO는 cron 라우트(recordings-retention)가 담당.
 // 원장 결정(2026-07-28): 90일. 원본 오디오만 삭제하며 전사·AI 분석 결과는 영구 보존.
 // ⚠️ 기준일은 created_at이 아니라 **도메인 날짜**(held_at·consulted_at) — ijw 이전분은 created_at이
