@@ -1,6 +1,7 @@
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import type { ScheduleSlotWithStudents } from "@/features/timetable/server/queries";
 import {
+  periodListLabel,
   subjectWeekdayPeriods,
   subjectWeekendPeriods,
   DEFAULT_PERIODS_CONFIG,
@@ -9,6 +10,7 @@ import {
   type PeriodsConfig,
   type TimetableSubject,
 } from "@/features/timetable/lib/periods";
+import { buildPeriodMatcher } from "@/features/timetable/lib/period-match";
 import {
   cellClassKey,
   computeBlocks,
@@ -245,11 +247,11 @@ function GroupTable({
   const isMathFamily = !weekend && subject !== "english";
   const hm5 = (t: string) => t.slice(0, 5);
   const periodList = weekend ? subjectWeekendPeriods(config) : subjectWeekdayPeriods(subject, config);
-  const startToId = new Map<string, string>();
-  for (const p of periodList) if (!startToId.has(hm5(p.startTime))) startToId.set(hm5(p.startTime), p.id);
+  const matchPeriod = buildPeriodMatcher(periodList);
   const rowKeyOf = (s: ScheduleSlotWithStudents) => {
     const st = hm5(s.startTime);
-    return startToId.has(st) ? `p-${startToId.get(st)!}` : `x-${st}`;
+    const periodId = matchPeriod({ startTime: s.startTime, endTime: s.endTime });
+    return periodId ? `p-${periodId}` : `x-${st}`;
   };
 
   // 표준 교시 행 전체(수업 없어도 표시 — 빈 교시도 균일 높이) + 데이터에만 있는 비표준 시각(폴백) 합집합.
@@ -257,14 +259,14 @@ function GroupTable({
   for (const p of periodList) {
     rowMap.set(`p-${p.id}`, {
       key: `p-${p.id}`,
-      label: `${p.id}교시`,
+      label: periodListLabel(p),
       time: `${hm5(p.startTime)}~${hm5(p.endTime)}`,
       order: timeToMin(p.startTime),
     });
   }
   for (const s of slots) {
     const st = hm5(s.startTime);
-    if (!startToId.has(st) && !rowMap.has(`x-${st}`)) {
+    if (!matchPeriod({ startTime: s.startTime, endTime: s.endTime }) && !rowMap.has(`x-${st}`)) {
       rowMap.set(`x-${st}`, { key: `x-${st}`, label: st, time: st, order: timeToMin(st) });
     }
   }

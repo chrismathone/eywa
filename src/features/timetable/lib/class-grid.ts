@@ -393,11 +393,12 @@ export function buildRichClassCards(slots: GridSlot[], config: PeriodsConfig): R
       // 혼합 반의 주말 슬롯이 **평일 교시 시각 그대로**면(토 14:20 = 영어 평일 1교시) 그 평일 행에 바로 놓는다.
       // ⚠️ 주말표보다 먼저 본다 — 15:00처럼 양쪽 표에 다 있는 시각이 있어서, 주말표를 먼저 보면 같은 반의
       //    연속 3교시(14:20·15:00·15:40)가 1교시·주말7교시·3교시로 찢어진다(실측).
-      const onWeekday = isW && hasWeekday ? weekdayPeriodRowOrNull(subject, s.startTime, config) : null;
+      const onWeekday =
+        isW && hasWeekday ? weekdayPeriodRowOrNull(subject, s.startTime, config, s.endTime) : null;
       return {
         s,
         day,
-        row: onWeekday ?? slotPeriodRow(subject, s.startTime, day, config),
+        row: onWeekday ?? slotPeriodRow(subject, s.startTime, day, config, s.endTime),
         weekend: isW,
         // 이미 평일 행에 앉은 주말 슬롯은 시프트 대상이 아니다(더 옮기면 엉뚱한 교시로 간다).
         shiftable: isW && !onWeekday,
@@ -508,7 +509,8 @@ export function buildRichClassCards(slots: GridSlot[], config: PeriodsConfig): R
       hold: split("hold"),
       withdrawn: split("withdrawn"),
       activeCount: students.filter((x) => x.status === "active").length,
-      groupOrder: weekend ? WEEKEND_ORDER : weekdayStart,
+      // 같은 시작시각의 서로 다른 교시는 행 식별용 소수부만 다르다. 섹션 정렬키는 실제 시작 분으로 유지한다.
+      groupOrder: weekend ? WEEKEND_ORDER : Math.floor(weekdayStart),
       groupLabel: weekend ? "주말" : `${periodMap.get(weekdayStart)?.label ?? ""} 시작`,
       weekendOnly: weekend,
     });

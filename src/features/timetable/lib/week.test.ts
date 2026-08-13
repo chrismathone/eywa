@@ -6,7 +6,9 @@ import {
   shiftDays,
   getWeekReferenceDate,
   weekEndOf,
+  weekBoundsOf,
   weekSundayOf,
+  slotLiveOnDate,
   weekLabel,
   weekRelation,
 } from "./week";
@@ -54,6 +56,21 @@ describe("getWeekReferenceDate — ijw 3분기", () => {
     // 스케줄 전환(temporal cutover) 시나리오: valid_from=07-03이 직전 과거 주(ref 06-28)에 새면 안 됨
     expect(weekSundayOf("2026-06-28") < "2026-07-03").toBe(true);
     expect(weekEndOf("2026-06-28") >= "2026-07-03").toBe(true); // 옛 롤링 창은 샜음(버그 근거)
+  });
+  it("weekBoundsOf = 기준일이 속한 월요일~일요일", () => {
+    expect(weekBoundsOf("2026-08-13")).toEqual({ start: "2026-08-10", end: "2026-08-16" });
+  });
+  it("주중 스케줄 전환 시 요일 날짜마다 옛 행/새 행을 정확히 고른다", () => {
+    // LS6 실측: 목요일(8/13)에 새 시간표를 저장했어도 화요일(8/11)은 8/12까지 유효한 옛 LAB 행이다.
+    expect(
+      slotLiveOnDate({ dayOfWeek: "tue", validFrom: "2026-08-03", validTo: "2026-08-12" }, "2026-08-13"),
+    ).toBe(true);
+    expect(
+      slotLiveOnDate({ dayOfWeek: "tue", validFrom: "2026-08-13", validTo: null }, "2026-08-13"),
+    ).toBe(false);
+    expect(
+      slotLiveOnDate({ dayOfWeek: "thu", validFrom: "2026-08-13", validTo: null }, "2026-08-13"),
+    ).toBe(true);
   });
 });
 

@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { buildRichCardGroups, teacherColor, type GridSlot } from "./class-grid";
-import { DEFAULT_PERIODS_CONFIG } from "./periods";
+import { DEFAULT_PERIODS_CONFIG, settingsToPeriodsConfig } from "./periods";
 
 const C = DEFAULT_PERIODS_CONFIG;
 
@@ -51,6 +51,41 @@ describe("buildRichCardGroups", () => {
     expect(card.classroomLabel).toBe("604");
     expect(card.classroomLabel).not.toContain("LAB");
     expect(card.classroomLabel).not.toContain("본원");
+  });
+
+  it("같은 16:20 시작인 EiE 4교시와 IJW 1교시를 서로 다른 설정 행에 배치", () => {
+    const config = settingsToPeriodsConfig({
+      weekdayPeriods: [],
+      weekendPeriods: [],
+      subjects: [
+        {
+          key: "english",
+          weekdayPeriods: [
+            { label: "EiE 1교시", startTime: "14:20", endTime: "15:00" },
+            { label: "EiE 2교시", startTime: "15:00", endTime: "15:40" },
+            { label: "EiE 3교시", startTime: "15:40", endTime: "16:20" },
+            { label: "EiE 4교시", startTime: "16:20", endTime: "17:00" },
+            { label: "EiE 5교시", startTime: "17:00", endTime: "17:40" },
+            { label: "EiE 6교시", startTime: "17:40", endTime: "18:20" },
+            { label: "IJW 1교시", startTime: "16:20", endTime: "17:20" },
+          ],
+        },
+      ],
+    });
+    const groups = buildRichCardGroups(
+      [
+        slot({ classId: "eie", className: "EiE", startTime: "16:20", endTime: "17:00" }),
+        slot({ classId: "ijw", className: "IJW", startTime: "16:20", endTime: "17:20" }),
+      ],
+      config,
+    );
+
+    expect(groups.map((g) => g.label)).toEqual(["EiE 4교시 시작", "IJW 1교시 시작"]);
+    expect(groups.flatMap((g) => g.periodRows.map((r) => r.label))).toEqual(["EiE 4교시", "IJW 1교시"]);
+    expect(groups.flatMap((g) => g.cards.flatMap((c) => Object.keys(c.cells)))).toEqual([
+      "980:mon",
+      "980.001:mon",
+    ]);
   });
 
   it("🔴 교시표에 없는 시각의 수업도 행을 받는다 — 셀만 만들고 앉을 자리가 없던 버그", () => {
