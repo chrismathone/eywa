@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { ChevronDown, ChevronUp } from "@/components/icons/eywa-icon-compat";
+import { buildPeriodMatcher } from "@/features/classes/grid-slots";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   SPECIAL_SLOT_LABELS,
@@ -11,15 +12,23 @@ import {
 } from "@/features/timetable/lib/teacher-label";
 import { readableTextColor } from "@/lib/color-utils";
 
-type Period = { id: string; startTime: string; endTime: string };
+type Period = { id: string; startTime: string; endTime: string; label?: string };
 type InitialSlot = {
   dayOfWeek: string;
   startTime: string;
+  /** 종료시각 — 시작시각이 같은 교시가 둘 이상일 때(EiE 4교시 vs IJW 1교시 = 둘 다 16:20) 어느 교시인지 가른다. */
+  endTime?: string | null;
   teacherId?: string | null;
   classroomId?: string | null;
   /** 저장된 표시 라벨 — 자리(LAB·JJ)면 드롭다운이 그 자리로 열린다. */
   slotTeacherLabel?: string | null;
 };
+
+const hm = (t: string | null | undefined) => String(t ?? "").slice(0, 5);
+/** 읽어주기·목록에 쓰는 교시 이름 — 학원설정에서 지은 이름이 있으면 그것, 없으면 "N교시". */
+const periodName = (p: Period) => p.label?.trim() || `${p.id}교시`;
+/** 교시 열 안에 쓰는 짧은 표기 — 이름이 없으면 번호만(열 제목이 이미 '교시'라 중복을 피한다). */
+const periodCellName = (p: Period) => p.label?.trim() || p.id;
 type Opt = { id: string; name: string };
 
 const DAYS = [
@@ -78,16 +87,16 @@ export function ScheduleGrid({
   const periodFor = (day: string, id: string): Period | undefined =>
     (isWeekendDay(day) ? weekendById : weekdayById).get(id);
 
-  // 초기: 기존 스케줄의 (요일,시작시각)을 교시로 역매핑(요일 종류별 표로) + 오버라이드 복원(마운트 1회).
+  // 초기: 기존 스케줄의 (요일,시각)을 교시로 역매핑(요일 종류별 표로) + 오버라이드 복원(마운트 1회).
+  // 매핑 규칙(시작시각만으로는 EiE 4교시/IJW 1교시를 못 가른다)은 buildPeriodMatcher에 있다 — 순수·Vitest.
   const initState = useMemo(() => {
-    const wdStartToId = new Map(weekdayPeriods.map((p) => [p.startTime, p.id]));
-    const weStartToId = new Map(weekendPeriods.map((p) => [p.startTime, p.id]));
+    const matchWeekday = buildPeriodMatcher(weekdayPeriods);
+    const matchWeekend = buildPeriodMatcher(weekendPeriods);
     const sel = new Set<string>();
     const st: Record<string, string> = {};
     const sc: Record<string, string> = {};
     for (const s of initial) {
-      const map = isWeekendDay(s.dayOfWeek) ? weStartToId : wdStartToId;
-      const id = map.get(s.startTime.slice(0, 5));
+      const id = (isWeekendDay(s.dayOfWeek) ? matchWeekend : matchWeekday)(s);
       if (!id) continue;
       const k = cellKey(s.dayOfWeek, id);
       sel.add(k);
@@ -135,7 +144,9 @@ export function ScheduleGrid({
   const rows = activeKeys.map((k) => {
     const [day, id] = k.split("__");
     const p = periodFor(day, id)!;
-    return { key: k, day, periodId: id, start: p.startTime, end: p.endTime };
+    // name = 학원설정 이름(예 "EiE 4교시") — 없으면 "4교시". 아래 목록·읽어주기 라벨이 이 이름을 쓴다.
+    const name = p.label?.trim() || `${id}교시`;
+    return { key: k, day, periodId: id, name, start: p.startTime, end: p.endTime };
   });
 
   const toggle = (day: string, periodId: string) => {
@@ -203,7 +214,9 @@ export function ScheduleGrid({
           <table className="w-full table-fixed border-collapse text-center text-xs">
             <thead>
               <tr className="bg-muted/40">
-                <th className="border-border text-muted-foreground w-10 border-b border-r py-1.5 font-medium">
+                {/* 교시 열은 시작~종료 시각(예 14:20~15:00)을 한 줄로 담아야 해 폭을 넉넉히 준다.
+                    table-fixed라 이 폭이 그대로 확정되고 나머지를 요일이 나눠 갖는다. */}
+                <th className="border-border text-muted-foreground w-[4.5rem] border-b border-r py-1.5 font-medium">
                   교시
                 </th>
                 {days.map((d) => (
@@ -219,9 +232,15 @@ export function ScheduleGrid({
             <tbody>
               {periodList.map((p) => (
                 <tr key={p.id}>
-                  <th className="border-border bg-muted/20 text-muted-foreground border-b border-r py-1 font-normal leading-tight last:border-b-0">
-                    <div className="text-foreground text-[11px] font-bold">{p.id}</div>
-                    <div className="num text-[9px]">{p.startTime}</div>
+                  <th className="border-border bg-muted/20 text-muted-foreground border-b border-r px-0.5 py-1 font-normal leading-tight last:border-b-0">
+                    {/* 교시 이름은 학원설정(과목 운영 → 평일 교시)이 단일 소스 — 코드가 "N교시"를 지어내지 않는다. */}
+                    <div className="text-foreground break-keep text-[10px] font-bold">
+                      {periodCellName(p)}
+                    </div>
+                    {/* 시작만 보이면 몇 분짜리 수업인지 알 수 없다 — 종료 시각까지 한 줄로. */}
+                    <div className="num whitespace-nowrap text-[9px]">
+                      {p.startTime}~{p.endTime}
+                    </div>
                   </th>
                   {days.map((d) => {
                     const k = cellKey(d.key, p.id);
@@ -234,7 +253,7 @@ export function ScheduleGrid({
                         <button
                           type="button"
                           aria-pressed={on}
-                          aria-label={`${d.label} ${p.id}교시`}
+                          aria-label={`${d.label} ${periodName(p)}`}
                           onClick={() => toggle(d.key, p.id)}
                           style={preview ? { background: bgColor, color: readableTextColor(bgColor) } : undefined}
                           className={`block h-9 w-full px-0.5 transition ${
@@ -305,22 +324,23 @@ export function ScheduleGrid({
           </p>
           {rows.map((r) => (
             <div key={r.key} className="flex flex-wrap items-center gap-2">
-              <span className="text-foreground w-16 shrink-0 text-xs font-medium">
-                {DAY_LABEL[r.day]} {r.periodId}교시
+              {/* 교시 이름이 길어질 수 있어(예 "EiE 4교시") 고정폭 대신 최소폭 + 줄바꿈 없음. */}
+              <span className="text-foreground min-w-16 shrink-0 whitespace-nowrap text-xs font-medium">
+                {DAY_LABEL[r.day]} {r.name}
               </span>
               <SearchableSelect
                 className="w-40"
                 value={slotTeacher[r.key] ?? ""}
                 onValueChange={(v) => setTeacher(r.key, v)}
                 options={teacherSelectOptions}
-                ariaLabel={`${DAY_LABEL[r.day]} ${r.periodId}교시 강사`}
+                ariaLabel={`${DAY_LABEL[r.day]} ${r.name} 강사`}
               />
               <SearchableSelect
                 className="w-40"
                 value={slotClassroom[r.key] ?? ""}
                 onValueChange={(v) => setClassroom(r.key, v)}
                 options={classroomSelectOptions}
-                ariaLabel={`${DAY_LABEL[r.day]} ${r.periodId}교시 강의실`}
+                ariaLabel={`${DAY_LABEL[r.day]} ${r.name} 강의실`}
               />
               {slotClassroom[r.key] ? (
                 <span className="text-text-faint text-[10px]">{classroomNameOf(slotClassroom[r.key])}</span>

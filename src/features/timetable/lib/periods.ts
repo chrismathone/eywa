@@ -13,6 +13,11 @@ export type DayOfWeek = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
 export interface PeriodTime {
   startTime: string; // "HH:MM"
   endTime: string; // "HH:MM"
+  /**
+   * 학원설정에서 학원장이 지은 교시 이름(예 "EiE 1교시"·"IJW 3교시"). **내장 기본표엔 없다**
+   * → 소비처는 없으면 교시 번호로 폴백한다. 이름은 표시 전용이고 식별자는 여전히 periodId(index+1).
+   */
+  label?: string;
 }
 
 const KO_DAYS = ["월", "화", "수", "목", "금", "토", "일"] as const;
@@ -124,19 +129,28 @@ export const DEFAULT_PERIODS_CONFIG: PeriodsConfig = {
   weekend: WEEKEND_PERIODS,
 };
 
+/** 설정 화면(owner)의 교시 한 줄 — label은 학원설정 스키마에선 필수지만 옛 저장분·내장표를 위해 optional. */
+type PeriodRowSetting = { startTime: string; endTime: string; label?: string };
+
 /**
  * 설정(operations)의 교시 배열 → PeriodsConfig. 배열 index+1 = periodId 규약. 빈 배열이면 기본 상수.
  * subjects[].weekdayPeriods(길이>0)는 weekdayBySubject로 — 빈 배열=미설정 관례 동일.
  */
 export function settingsToPeriodsConfig(operations: {
-  weekdayPeriods: { startTime: string; endTime: string }[];
-  weekendPeriods: { startTime: string; endTime: string }[];
-  subjects?: { key: string; weekdayPeriods?: { startTime: string; endTime: string }[] }[];
+  weekdayPeriods: PeriodRowSetting[];
+  weekendPeriods: PeriodRowSetting[];
+  subjects?: { key: string; weekdayPeriods?: PeriodRowSetting[] }[];
 }): PeriodsConfig {
-  const toTable = (rows: { startTime: string; endTime: string }[]): Record<string, PeriodTime> => {
+  const toTable = (rows: PeriodRowSetting[]): Record<string, PeriodTime> => {
     const t: Record<string, PeriodTime> = {};
     rows.forEach((r, i) => {
-      t[String(i + 1)] = { startTime: hm(r.startTime), endTime: hm(r.endTime) };
+      // 라벨은 학원장이 지은 이름 — 빈 문자열은 "미지정"으로 보고 키를 아예 안 만든다(소비처가 번호로 폴백).
+      const label = r.label?.trim();
+      t[String(i + 1)] = {
+        startTime: hm(r.startTime),
+        endTime: hm(r.endTime),
+        ...(label ? { label } : {}),
+      };
     });
     return t;
   };
@@ -160,6 +174,16 @@ export function weekdayTableFor(subject: string, config: PeriodsConfig): Record<
   return subject === "english" ? ENGLISH_PERIODS : config.weekday;
 }
 
+/** 교시 목록 한 줄 — id는 식별자(index+1), label은 학원설정에서 지은 이름(없으면 소비처가 번호로 폴백). */
+export type PeriodListItem = { id: string; startTime: string; endTime: string; label?: string };
+
+const toListItem = (id: string, t: PeriodTime): PeriodListItem => ({
+  id,
+  startTime: hm(t.startTime),
+  endTime: hm(t.endTime),
+  ...(t.label ? { label: t.label } : {}),
+});
+
 /**
  * 과목의 평일 개별 교시 목록(그룹 X) — 반 편집 클릭그리드용. english=10교시, 그 외=config.weekday(보통 8).
  * subject 문자열은 느슨히 받아 "english"만 특수처리(arts·etc·highmath 등은 수학계열 평일표).
@@ -167,10 +191,10 @@ export function weekdayTableFor(subject: string, config: PeriodsConfig): Record<
 export function subjectWeekdayPeriods(
   subject: string,
   config: PeriodsConfig = DEFAULT_PERIODS_CONFIG,
-): { id: string; startTime: string; endTime: string }[] {
+): PeriodListItem[] {
   const table = weekdayTableFor(subject, config);
   return Object.entries(table)
-    .map(([id, t]) => ({ id, startTime: hm(t.startTime), endTime: hm(t.endTime) }))
+    .map(([id, t]) => toListItem(id, t))
     .sort((a, b) => Number(a.id) - Number(b.id));
 }
 
@@ -178,11 +202,9 @@ export function subjectWeekdayPeriods(
  * 주말(토·일) 개별 교시 목록 — 반 편집 클릭그리드 주말 열용. 주말은 과목 무관 config.weekend(보통 8교시·시간단위).
  * 평일 교시(subjectWeekdayPeriods)와 시각이 달라(주말 09:00~ / 평일 14:30~) 별도 표로 렌더해야 한다.
  */
-export function subjectWeekendPeriods(
-  config: PeriodsConfig = DEFAULT_PERIODS_CONFIG,
-): { id: string; startTime: string; endTime: string }[] {
+export function subjectWeekendPeriods(config: PeriodsConfig = DEFAULT_PERIODS_CONFIG): PeriodListItem[] {
   return Object.entries(config.weekend)
-    .map(([id, t]) => ({ id, startTime: hm(t.startTime), endTime: hm(t.endTime) }))
+    .map(([id, t]) => toListItem(id, t))
     .sort((a, b) => Number(a.id) - Number(b.id));
 }
 

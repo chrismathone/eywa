@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { splitGridSlots } from "./grid-slots";
+import { buildPeriodMatcher, splitGridSlots, type PeriodMatchRow } from "./grid-slots";
 
 // 실측 교시표(injaewon): 평일 영어 11교시(14:20~), 주말 8교시(09:00~17:00 정시).
 const WEEKDAY = [{ startTime: "14:20" }, { startTime: "16:20" }, { startTime: "17:40" }];
@@ -62,5 +62,35 @@ describe("splitGridSlots — 클릭그리드가 표현할 수 있는 슬롯 가�
       weekendPeriods: WEEKEND,
     });
     expect(grid).toHaveLength(1);
+  });
+});
+
+// 실측 학원설정(injaewon 영어): EiE와 IJW 두 계열이 한 표에 섞여 **시작시각이 겹친다**.
+const EIE_IJW: PeriodMatchRow[] = [
+  { id: "1", startTime: "14:20", endTime: "15:00" },
+  { id: "4", startTime: "16:20", endTime: "17:00" }, // EiE 4교시
+  { id: "7", startTime: "16:20", endTime: "17:20" }, // IJW 1교시 — 시작이 같다
+  { id: "8", startTime: "17:20", endTime: "18:10" },
+];
+
+describe("buildPeriodMatcher — 저장된 슬롯을 어느 교시 칸으로 되돌릴지", () => {
+  it("시작이 같은 교시가 둘이면 종료시각으로 가른다(4교시에 찍은 수업이 7교시로 옮겨가지 않는다)", () => {
+    const match = buildPeriodMatcher(EIE_IJW);
+    expect(match({ startTime: "16:20", endTime: "17:00" })).toBe("4");
+    expect(match({ startTime: "16:20", endTime: "17:20" })).toBe("7");
+  });
+
+  it("DB의 HH:MM:SS도 맞는다", () => {
+    expect(buildPeriodMatcher(EIE_IJW)({ startTime: "16:20:00", endTime: "17:20:00" })).toBe("7");
+  });
+
+  it("종료시각이 표와 다르면 시작시각으로 폴백 — 그리드에서 사라져 삭제되는 일이 없게", () => {
+    const match = buildPeriodMatcher(EIE_IJW);
+    expect(match({ startTime: "16:20", endTime: "16:50" })).toBe("4"); // 먼저 나온 교시
+    expect(match({ startTime: "14:20", endTime: null })).toBe("1");
+  });
+
+  it("시작시각조차 표에 없으면 null(=자유 시각 행이 맡는다)", () => {
+    expect(buildPeriodMatcher(EIE_IJW)({ startTime: "09:00", endTime: "10:00" })).toBeNull();
   });
 });
