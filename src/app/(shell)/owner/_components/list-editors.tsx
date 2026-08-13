@@ -1,8 +1,24 @@
 "use client";
 
 // 배열형 설정(과목·직급·학년·교시·학기·공휴일) 편집기 — 행 추가/삭제 + 인라인 입력.
-import { useRef } from "react";
-import { Plus, X } from "@/components/icons/eywa-icon-compat";
+import { useId, useRef } from "react";
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { GripVertical, Plus, X } from "@/components/icons/eywa-icon-compat";
 import { SUBJECT_COLORS, SUBJECT_DEFAULT_VIEW_OPTIONS, type ConsultationTemplate, type HolidaySetting, type PeriodTimeRow, type ShuttleSetting, type SubjectSetting, type TermSetting } from "@/features/owner/settings-types";
 import { SUBJECT_SOLID, KNOWN_SUBJECT_KEYS } from "@/features/owner/subjects";
 import { WEEKDAY_GROUPING_OPTIONS } from "@/features/timetable/lib/weekday-groups";
@@ -231,6 +247,74 @@ export function SubjectListEditor({
   );
 }
 
+/**
+ * 교시 한 줄 — 왼쪽 손잡이만 드래그 대상이라 시각 입력은 평소대로 클릭·편집된다.
+ * (행 전체를 잡게 하면 input을 누르는 순간 드래그가 시작돼 시각을 못 고친다.)
+ */
+function PeriodRow({
+  id,
+  row,
+  onPatch,
+  onRemove,
+}: {
+  id: string;
+  row: PeriodTimeRow;
+  onPatch: (patch: Partial<PeriodTimeRow>) => void;
+  onRemove: () => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+  return (
+    <div
+      ref={setNodeRef}
+      // 세로 목록이라 y만 반영(가로 흔들림 제거). @dnd-kit/utilities는 미설치라 transform은 직접 만든다.
+      style={{
+        transform: transform ? `translate3d(0, ${Math.round(transform.y)}px, 0)` : undefined,
+        transition,
+      }}
+      className={`flex flex-wrap items-center gap-2 ${
+        isDragging ? "bg-bg-soft relative z-10 rounded-md opacity-90 shadow-sm" : ""
+      }`}
+    >
+      <button
+        type="button"
+        aria-label={`${row.label || "교시"} 순서 이동`}
+        title="끌어서 순서 변경"
+        // touch-none이 없으면 터치에서 스크롤이 드래그를 삼킨다(dnd-kit 요구).
+        className="text-text-faint hover:text-foreground shrink-0 cursor-grab touch-none rounded p-1 active:cursor-grabbing"
+        {...attributes}
+        {...listeners}
+      >
+        <GripVertical className="size-4" />
+      </button>
+      <input
+        className={`${cellCls} w-[90px]`}
+        value={row.label}
+        placeholder="1교시"
+        onChange={(e) => onPatch({ label: e.target.value })}
+      />
+      <input
+        type="time"
+        className={`${cellCls} w-[120px]`}
+        value={row.startTime}
+        onChange={(e) => onPatch({ startTime: e.target.value })}
+      />
+      <span className="text-text-faint text-[12px]">~</span>
+      <input
+        type="time"
+        className={`${cellCls} w-[120px]`}
+        value={row.endTime}
+        onChange={(e) => onPatch({ endTime: e.target.value })}
+      />
+      <RemoveButton onClick={onRemove} />
+    </div>
+  );
+}
+
+/**
+ * 교시 목록 편집기 — 행의 **순서가 곧 교시 번호**(1행=1교시)라 중간에 교시를 끼우려면 순서를 바꿀 수
+ * 있어야 한다. '교시 추가'는 항상 맨 아래에 붙으므로, 손잡이로 끌어 제자리에 놓는다.
+ * ⚠️ 저장된 수업(class_schedules)은 교시 번호가 아니라 **시각**으로 연결되므로 순서를 바꿔도 배치는 안 옮겨간다.
+ */
 export function PeriodListEditor({
   value,
   onChange,
@@ -240,36 +324,49 @@ export function PeriodListEditor({
 }) {
   const set = (i: number, patch: Partial<PeriodTimeRow>) =>
     onChange(value.map((x, j) => (j === i ? { ...x, ...patch } : x)));
+  // 한 화면에 편집기가 여러 개(전역 평일·주말·과목별)라 id를 인스턴스마다 분리.
+  // SSR/CSR 동일 id가 필요해 useId 사용(하드코딩 id는 hydration 불일치).
+  const uid = useId();
+  const ids = value.map((_, i) => `${uid}-p${i}`);
+  const sensors = useSensors(
+    // 4px 이동 전엔 클릭으로 취급 — 손잡이를 살짝 눌러도 순서가 안 흔들린다.
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+  const handleDragEnd = (e: DragEndEvent) => {
+    const { active, over } = e;
+    if (!over || active.id === over.id) return;
+    const from = ids.indexOf(String(active.id));
+    const to = ids.indexOf(String(over.id));
+    if (from < 0 || to < 0) return;
+    onChange(arrayMove(value, from, to));
+  };
   return (
     <div className="space-y-2">
-      {value.map((p, i) => (
-        <div key={i} className="flex flex-wrap items-center gap-2">
-          <input
-            className={`${cellCls} w-[90px]`}
-            value={p.label}
-            placeholder="1교시"
-            onChange={(e) => set(i, { label: e.target.value })}
-          />
-          <input
-            type="time"
-            className={`${cellCls} w-[120px]`}
-            value={p.startTime}
-            onChange={(e) => set(i, { startTime: e.target.value })}
-          />
-          <span className="text-text-faint text-[12px]">~</span>
-          <input
-            type="time"
-            className={`${cellCls} w-[120px]`}
-            value={p.endTime}
-            onChange={(e) => set(i, { endTime: e.target.value })}
-          />
-          <RemoveButton onClick={() => onChange(value.filter((_, j) => j !== i))} />
-        </div>
-      ))}
-      <AddButton
-        onClick={() => onChange([...value, { label: `${value.length + 1}교시`, startTime: "", endTime: "" }])}
-        label="교시 추가"
-      />
+      <DndContext id={uid} sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+        <SortableContext items={ids} strategy={verticalListSortingStrategy}>
+          <div className="space-y-2">
+            {value.map((p, i) => (
+              <PeriodRow
+                key={ids[i]}
+                id={ids[i]}
+                row={p}
+                onPatch={(patch) => set(i, patch)}
+                onRemove={() => onChange(value.filter((_, j) => j !== i))}
+              />
+            ))}
+          </div>
+        </SortableContext>
+      </DndContext>
+      <div className="flex flex-wrap items-center gap-2">
+        <AddButton
+          onClick={() => onChange([...value, { label: `${value.length + 1}교시`, startTime: "", endTime: "" }])}
+          label="교시 추가"
+        />
+        {value.length > 1 ? (
+          <span className="text-text-faint text-[11px]">왼쪽 손잡이를 끌어 순서를 바꿉니다.</span>
+        ) : null}
+      </div>
     </div>
   );
 }
