@@ -198,6 +198,47 @@ describe("과목별 평일 교시표(weekdayBySubject) — subjects[].weekdayPer
     expect(slotPeriodRow("english", "18:20", "mon", cfg).key).toBe("x-18:20");
   });
 
+  it("영어 교시 이름과 같은 시작시각의 EiE/IJW 교시를 종료시각으로 구분", () => {
+    const cfg = settingsToPeriodsConfig({
+      ...base,
+      subjects: [
+        {
+          key: "english",
+          weekdayPeriods: [
+            { label: "EiE 1교시", ...p("14:20", "15:00") },
+            { label: "EiE 2교시", ...p("15:00", "15:40") },
+            { label: "EiE 3교시", ...p("15:40", "16:20") },
+            { label: "EiE 4교시", ...p("16:20", "17:00") },
+            { label: "EiE 5교시", ...p("17:00", "17:40") },
+            { label: "EiE 6교시", ...p("17:40", "18:20") },
+            { label: "IJW 1교시", ...p("16:20", "17:20") },
+          ],
+        },
+      ],
+    });
+
+    expect(subjectWeekdayPeriods("english", cfg).map((r) => r.label)).toEqual([
+      "EiE 1교시",
+      "EiE 2교시",
+      "EiE 3교시",
+      "EiE 4교시",
+      "EiE 5교시",
+      "EiE 6교시",
+      "IJW 1교시",
+    ]);
+    expect(slotPeriodRow("english", "16:20", "tue", cfg, "17:00")).toMatchObject({
+      key: "e-4",
+      label: "EiE 4교시",
+    });
+    expect(slotPeriodRow("english", "16:20", "tue", cfg, "17:20")).toMatchObject({
+      key: "e-7",
+      label: "IJW 1교시",
+    });
+    const duplicateStartRows = subjectPeriodRows("english", false, cfg).filter((r) => r.time.startsWith("16:20~"));
+    expect(duplicateStartRows.map((r) => r.label)).toEqual(["EiE 4교시", "IJW 1교시"]);
+    expect(new Set(duplicateStartRows.map((r) => r.order)).size).toBe(2);
+  });
+
   it("subjects에 english override 없음(빈 배열 포함) → 기존 ENGLISH_PERIODS 동일(무회귀)", () => {
     const noSub = settingsToPeriodsConfig(base);
     const emptyOverride = settingsToPeriodsConfig({

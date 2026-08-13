@@ -62,6 +62,11 @@ export function weekSundayOf(referenceDate: string): string {
   return dow === 0 ? referenceDate : shiftDays(referenceDate, 7 - dow);
 }
 
+/** 기준일이 속한 달력 주의 월요일~일요일. 스케줄 유효기간 겹침 조회의 단일 경계. */
+export function weekBoundsOf(referenceDate: string): { start: string; end: string } {
+  return { start: mondayOf(referenceDate), end: weekSundayOf(referenceDate) };
+}
+
 /**
  * "2026년 6월 4주차 (22일~28일)" — 달 경계면 "29일~7/5일". (ijw TimetableManager.tsx:2320-2335)
  * @param monday 그 주 월요일(YYYY-MM-DD)
