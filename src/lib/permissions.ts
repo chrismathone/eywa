@@ -127,8 +127,13 @@ export const MENU_ACCESS: AccessMatrix = {
   meetings: { master: "full", admin: "full", manager: "full", teacher: "none", counselor: "full", accountant: "full", viewer: "readonly", student: "none" },
   // 데이터베이스(서식 저장소) — 사무실(master/admin/manager)이 업로드·작성, 나머지는 조회만. 학생은 미노출.
   documents: { master: "full", admin: "full", manager: "full", teacher: "readonly", counselor: "readonly", accountant: "readonly", viewer: "readonly", student: "none" },
-  // 수업 평가 체크리스트(참관 30문항, 원장 지시 2026-08-04) — **테스트 단계라 기본 전원 차단**,
-  // 이승엽 개인 예외(userOverrides)로만 개방. 확대는 owner 역할·권한 매트릭스에서 셀을 켜면 된다.
+  // 수업 평가 체크리스트(참관 30문항, 원장 지시 2026-08-04) — **테스트 단계라 기본 전원 차단**.
+  // 개방은 코드가 아니라 tenant_settings 데이터로만 한다(배포 없이 명단 조정):
+  //   · 원장직급(master) = 역할 override — ⚠️ **여기 기본값이 none이라 원장도 이 행이 없으면 못 들어간다**
+  //     (2026-08-13 실측: 원장이 "원장은 풀려 있을 텐데"라고 여긴 3주간 실제로는 막혀 있었다).
+  //   · 개별 인원 = 개인 예외(userOverrides) — 같은 역할 전원이 따라 열리는 것을 막으려고 개인으로만.
+  // 명단·개방은 scripts/staff-access/grant-class-review.mjs(드라이런→--apply, --revoke로 원복) 단일 소스.
+  // ⚠️ 개인 예외는 CRUD뿐 아니라 **실명 열람·문항 세트 편집**까지 연다(getReviewPrivileges) — 명단은 최소로.
   class_review: { master: "none", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", student: "none" },
   // makeedu 연동 조작 — '지금 동기화'(정방향 릴레이 트리거)·'makeedu로 보내기'(역동기화 큐잉) 실행 권한.
   // 사이드바 메뉴가 아니라 **액션 권한 키**(hidden) — 버튼 노출(목록 ↻ 배지 옆·등록상담 전송 카드)과 서버 액션
