@@ -4,8 +4,11 @@ import {
   canWrite,
   canAccess,
   MENU_ACCESS,
+  MENU_KEYS,
   menuKeyForPath,
+  mergeMostPermissive,
   resolveMatrix,
+  SYSTEM_ROLES,
   type UserPermissionOverride,
 } from "./permissions";
 
@@ -139,5 +142,52 @@ describe("applyUserOverrides — 개인 예외(직원관리 4인 좁히기의 �
       { userId: "u-view", menu: "timetable", access: "none" },
     ]);
     expect(narrowed.timetable.viewer).toBe("none"); // 기본 readonly → 개인 none
+  });
+});
+
+// 2026-08-13 회귀: super_admin이 되자 수업 평가·학원 설정이 사이드바에서 사라졌다.
+// 원인은 super_admin 우회가 override를 통째로 버린 것 — "잠금 무시"와 "부여 폐기"를 구분하지 않았다.
+describe("mergeMostPermissive — super_admin은 잠금만 무시하고 부여는 보존", () => {
+  it("원장이 연 셀이 보존된다 (예전 구현이 버렸던 쪽)", () => {
+    // 실제 사고 재현: class_review는 코드 기본값이 전 역할 none이고 개방은 override로만 한다.
+    expect(MENU_ACCESS.class_review.master).toBe("none");
+    const granted = resolveMatrix([{ menu: "class_review", role: "master", access: "full" }]);
+    expect(mergeMostPermissive(MENU_ACCESS, granted).class_review.master).toBe("full");
+    // 학원 설정도 같은 모양(admin 기본 none + override full)이라 함께 사라졌다.
+    const ownerGrant = resolveMatrix([{ menu: "owner", role: "admin", access: "full" }]);
+    expect(mergeMostPermissive(MENU_ACCESS, ownerGrant).owner.admin).toBe("full");
+  });
+
+  it("원장이 닫은 셀은 무시된다 (락아웃 방지 — 기존 성질 유지)", () => {
+    const locked = resolveMatrix([
+      { menu: "staff", role: "admin", access: "none" },
+      { menu: "retention", role: "admin", access: "none" },
+    ]);
+    expect(locked.staff.admin).toBe("none"); // 일반 admin은 잠긴다
+    const merged = mergeMostPermissive(MENU_ACCESS, locked);
+    expect(merged.staff.admin).toBe(MENU_ACCESS.staff.admin); // super_admin은 기본값 유지
+    expect(merged.retention.admin).toBe(MENU_ACCESS.retention.admin);
+  });
+
+  it("개인 예외의 부여도 보존된다 (수업 평가 실종의 나머지 절반)", () => {
+    const plain = resolveMatrix([]);
+    const applied = applyUserOverrides(plain, "u-lsy", "admin", [
+      { userId: "u-lsy", menu: "class_review", access: "full" },
+    ]);
+    expect(mergeMostPermissive(plain, applied).class_review.admin).toBe("full");
+  });
+
+  it("병합은 항상 올라가는 방향 — 어떤 셀도 낮아지지 않는다", () => {
+    const arbitrary = resolveMatrix([
+      { menu: "timetable", role: "viewer", access: "none" },
+      { menu: "students", role: "counselor", access: "readonly" },
+    ]);
+    const merged = mergeMostPermissive(MENU_ACCESS, arbitrary);
+    const rank = { none: 0, readonly: 1, scoped: 2, full: 3 } as const;
+    for (const menu of MENU_KEYS) {
+      for (const role of SYSTEM_ROLES) {
+        expect(rank[merged[menu][role]]).toBeGreaterThanOrEqual(rank[MENU_ACCESS[menu][role]]);
+      }
+    }
   });
 });

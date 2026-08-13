@@ -164,6 +164,41 @@ export function canAccess(role: SystemRole, menu: MenuKey, matrix: AccessMatrix 
   return matrix[menu][role] !== "none";
 }
 
+/**
+ * 접근 수준의 강도 순서 — **`mergeMostPermissive` 전용**. 일반 게이트 판정에 쓰지 말 것
+ * (canAccess·canWrite·accessLevel이 단일 소스다).
+ * ⚠️ readonly↔scoped는 "전체 읽기"와 "담당 쓰기"라 서로를 포함하지 않는다. 그래도 안전한 이유는
+ * 병합이 **항상 올라가는 방향**이기 때문 — 어떤 셀도 이 순서 때문에 잠기지 않는다.
+ */
+const ACCESS_RANK: Record<Access, number> = { none: 0, readonly: 1, scoped: 2, full: 3 };
+
+/**
+ * 두 매트릭스를 셀 단위로 **더 허용적인 쪽**으로 합친다(순수 함수).
+ *
+ * 용도는 하나 — **super_admin**(SaaS 총괄)이다. super_admin은 원장이 편집하는 권한 매트릭스 **위에**
+ * 있어야 하므로 owner override가 super_admin을 잠그면 안 된다(결정 2026-07-02). 그런데 예전 구현은
+ * 그걸 "override를 **통째로 버리고** 코드 기본값만 쓴다"로 처리했다 — 잠금은 무시됐지만 **원장이 준
+ * 권한도 함께 사라졌다.**
+ *
+ * 🔴 2026-08-13 실측(원장 제보 "수업평가가 사라졌는데"): 이승엽이 super_admin이 된 순간, 개인 예외로
+ *    열어 둔 **수업 평가**(userOverrides full)와 역할 override로 열어 둔 **학원 설정**(owner admin=full)이
+ *    동시에 사이드바에서 사라졌다. 반대로 원장이 닫아 둔 이탈 방어·성적관리·직원관리는 그대로 보였다.
+ *    즉 기본값이 `none`인 메뉴에선 super_admin이 **일반 직원보다 덜 보는 역전**이 생긴다.
+ * ⚠️ 그래서 "override 무시"를 **"기본값과 override 중 높은 쪽"** 으로 바꿨다 — 잠금은 여전히 무시하고
+ *    (기본값이 살아남는다), 부여는 보존한다. super_admin 판정을 다시 `resolveMatrix([])`로 되돌리지 말 것.
+ */
+export function mergeMostPermissive(a: AccessMatrix, b: AccessMatrix): AccessMatrix {
+  const out = {} as AccessMatrix;
+  for (const menu of MENU_KEYS) {
+    const cells = {} as Record<SystemRole, Access>;
+    for (const role of SYSTEM_ROLES) {
+      cells[role] = ACCESS_RANK[b[menu][role]] > ACCESS_RANK[a[menu][role]] ? b[menu][role] : a[menu][role];
+    }
+    out[menu] = cells;
+  }
+  return out;
+}
+
 export function accessLevel(role: SystemRole, menu: MenuKey, matrix: AccessMatrix = MENU_ACCESS): Access {
   return matrix[menu][role];
 }

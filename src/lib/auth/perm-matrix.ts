@@ -5,6 +5,7 @@ import {
   applyUserOverrides,
   canAccess,
   canWrite,
+  mergeMostPermissive,
   resolveMatrix,
   type Access,
   type AccessMatrix,
@@ -23,8 +24,12 @@ import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
  *
  * ⚠️ super_admin 우회: super_admin(SaaS 총괄, super_admins 테이블)은 owner가 편집하는 역할·권한
  * 매트릭스 **위에** 있다 — owner(master) override가 super_admin까지 잠그면 안 됨(사용자 결정 2026-07-02).
- * super_admin이면 override를 무시하고 **코드 기본 MENU_ACCESS**로 취급(blanket full이 아니라 기본값 —
- * 역할 전용 화면(원스크린/내 학습) 접근이 새로 생기지 않고, 기본 master=전 메뉴 full이라 실질 전체 접근).
+ * super_admin이면 **코드 기본 MENU_ACCESS와 override 중 더 허용적인 쪽**을 취한다(mergeMostPermissive):
+ * 잠금(낮추는 override)은 무시되고, 부여(올리는 override)는 보존된다. blanket full이 아니라 기본값이
+ * 바닥이라 역할 전용 화면(원스크린/내 학습) 접근이 새로 생기지도 않는다.
+ * 🔴 예전엔 override를 **통째로 버렸고**(`resolveMatrix([])`), 그래서 기본값이 `none`인 메뉴는
+ *    super_admin에게 **일반 직원보다 덜** 보였다 — 2026-08-13 수업 평가·학원 설정 동시 실종의 원인.
+ *    되돌리지 말 것(상세 = permissions.ts mergeMostPermissive 주석).
  * 비용: override가 0개면 검사 자체를 스킵(쿼리 0), 있으면 요청당 1회 캐시된 PK 조회(GoTrue 왕복 없음).
  */
 export const getPermMatrix = cache(async (): Promise<AccessMatrix> => {
@@ -32,7 +37,8 @@ export const getPermMatrix = cache(async (): Promise<AccessMatrix> => {
     const settings = await getTenantSettings();
     const overrides = settings.permissions.overrides;
     if (overrides.length > 0 && (await isCurrentUserSuperAdmin())) {
-      return resolveMatrix([]);
+      // 잠금은 무시(기본값이 살아남고), 부여는 보존(원장이 연 셀은 그대로) — mergeMostPermissive 주석 참조.
+      return mergeMostPermissive(resolveMatrix([]), resolveMatrix(overrides));
     }
     return resolveMatrix(overrides);
   } catch (e) {
@@ -60,8 +66,11 @@ export const getUserPermMatrix = cache(async (): Promise<AccessMatrix> => {
     const settings = await getTenantSettings(); // getPermMatrix와 같은 요청 캐시 — 추가 라운드트립 0
     const userOverrides = settings.permissions.userOverrides;
     if (userOverrides.length === 0) return base;
-    if (await isCurrentUserSuperAdmin()) return base;
-    return applyUserOverrides(base, user.id, user.systemRole, userOverrides);
+    const applied = applyUserOverrides(base, user.id, user.systemRole, userOverrides);
+    // super_admin도 **부여는 받는다**(예전엔 base로 되돌려 개인 예외가 통째로 날아갔다 — 2026-08-13
+    // 수업 평가 실종의 절반). 개인 예외로 잠그는(낮추는) 것만 무시하려고 높은 쪽을 취한다.
+    if (await isCurrentUserSuperAdmin()) return mergeMostPermissive(base, applied);
+    return applied;
   } catch (e) {
     console.error("[perm-matrix] 개인 예외 적용 실패 — 테넌트 매트릭스로 폴백", e);
     return base;
