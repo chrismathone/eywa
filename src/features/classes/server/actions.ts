@@ -26,7 +26,17 @@ import {
 import { deleteCurrentSlots, loadCurrentSlots } from "./schedule-sync";
 import type { ClassroomAssignData } from "../lib/classroom-assign";
 import type { OverlapItem } from "../overlap";
-import { planSlotArchives, preserveScheduleFields } from "../schedule-preserve";
+import {
+  periodPairKey,
+  planSlotArchives,
+  preserveScheduleFields,
+  type PeriodPairs,
+} from "../schedule-preserve";
+import {
+  settingsToPeriodsConfig,
+  subjectWeekdayPeriods,
+  subjectWeekendPeriods,
+} from "@/features/timetable/lib/periods";
 import { normalizeEnglishTrack } from "../english-track";
 
 export type ClassFormState =
@@ -264,6 +274,28 @@ export async function createClass(
   return { ok: true, redirectTo: `/classes/${data.id}`, nonce: Date.now(), overlaps };
 }
 
+/**
+ * 학원설정 → 교시표의 (시작,종료) 짝 집합. 과목별 평일 교시(`subjects[].weekdayPeriods`)를 쓰므로
+ * **과목 목록을 받아 합집합**으로 만든다(저장 중 과목이 바뀔 수 있다). 주말은 과목 무관 단일 표.
+ * 쓰임새는 `formEndTimeWins` 하나뿐 — "이 시각 조합이 진짜 교시인가"만 답한다.
+ */
+function buildPeriodPairs(
+  settings: Awaited<ReturnType<typeof getTenantSettings>>,
+  subjects: (string | null | undefined)[],
+): PeriodPairs {
+  const config = settingsToPeriodsConfig(settings.operations);
+  const weekday = new Set<string>();
+  for (const subject of new Set(subjects.filter((v): v is string => !!v))) {
+    for (const p of subjectWeekdayPeriods(subject, config)) {
+      weekday.add(periodPairKey(p.startTime, p.endTime));
+    }
+  }
+  const weekend = new Set(
+    subjectWeekendPeriods(config).map((p) => periodPairKey(p.startTime, p.endTime)),
+  );
+  return { weekday, weekend };
+}
+
 export async function updateClass(
   _prev: ClassFormState,
   formData: FormData,
@@ -284,11 +316,14 @@ export async function updateClass(
 
   // 🔴 겹침은 저장을 막지 않는다(경고만). 자기 자신(id)은 제외.
   // 독립 조회 2건은 병렬(B4) — 겹침 진단과 "delete 전에 기존 스케줄 읽어두기"는 서로 안 쓴다.
-  const [overlaps, priorRes, beforeRes] = await Promise.all([
+  const [overlaps, priorRes, beforeRes, settingsForPeriods] = await Promise.all([
     collectOverlaps(supabase, input, id),
     loadCurrentSlots(supabase, id, today),
     // 감사로그용 **변경 전 스냅샷** — 무엇이 바뀌었는지는 바꾸기 전에만 알 수 있다(독립 조회라 병렬, B4).
     supabase.from("classes").select("class_name, subject, teacher_id, classroom_id").eq("id", id).maybeSingle(),
+    // 교시표 — "폼이 보낸 종료시각을 믿어도 되나" 판정에 쓴다(schedule-preserve `formEndTimeWins`).
+    // 캐시된 조회지만 저장 경로에 직렬 왕복을 얹지 않으려고 여기서 함께 받는다(B4).
+    getTenantSettings(),
   ]);
   const before = beforeRes.data as
     | { class_name: string; subject: string; teacher_id: string | null; classroom_id: string | null }
@@ -332,7 +367,10 @@ export async function updateClass(
   //    "주차변경시에 실제로 일어났던 모든것이 반영되도록"). 지금까지는 같은 행을 덮어써서 지난 주를
   //    봐도 현재 담당·강의실이 보였다(무기한 슬롯 587행이 전부 여기 해당). 마감 행은 아래 재삽입에
   //    함께 실어 왕복을 늘리지 않는다 — delete가 이미 끝났으므로 이 insert가 유일한 복원 지점이다.
-  const archiveRows = planSlotArchives({ incoming: input.schedules, prior, today }).map((a) => ({
+  // 교시표의 (시작,종료) 짝 — **과목이 바뀌는 저장**도 있으므로 이전 과목·새 과목 표를 합집합으로 본다
+  // (그리드는 마운트 시점 과목 표로 기존 슬롯을 복원하고, 제출은 화면의 현재 과목 표로 만든다).
+  const periodPairs = buildPeriodPairs(settingsForPeriods, [before?.subject, input.subject]);
+  const archiveRows = planSlotArchives({ incoming: input.schedules, prior, today, periodPairs }).map((a) => ({
     tenant_id: user.tenantId,
     class_id: id,
     day_of_week: a.dayOfWeek,
@@ -348,6 +386,8 @@ export async function updateClass(
     merge_group: a.mergeGroup,
   }));
 
+  // 새로 열린 구간 수 — 감사로그가 "수업 배치" 변경을 잡는 두 번째 근거다(아래 changes).
+  let openedRows = 0;
   if (input.schedules.length > 0 || archiveRows.length > 0) {
     // ⚠️ 재삽입 값은 **반드시** preserveScheduleFields를 거친다 — 폼이 안 보내는
     // valid_to·slot_teacher_label·slot_room_label·period_label·merge_group을 기존 행에서 되살리고
@@ -362,6 +402,7 @@ export async function updateClass(
         ...(input.periodKeepValidTo ? { keepValidTo: true } : {}),
       },
       today,
+      periodPairs,
     }).map((s) => ({
       tenant_id: user.tenantId,
       class_id: id,
@@ -377,8 +418,36 @@ export async function updateClass(
       period_label: s.periodLabel,
       merge_group: s.mergeGroup,
     }));
+    openedRows = rows.filter((r) => r.validFrom === today).length;
     const { error: schedErr } = await supabase.from("class_schedules").insert([...archiveRows, ...rows]);
-    if (schedErr) return { error: "스케줄 저장에 실패했습니다. 잠시 후 다시 시도해주세요." };
+    if (schedErr) {
+      // 🔴 delete는 이미 끝났다 — 여기서 그냥 돌아가면 **그 반의 현재 교시가 통째로 사라진다**(저장 실패
+      //    메시지만 뜨고 시간표·출석부에서 반이 빈다). PostgREST insert는 한 문장이라 전부 실패했으므로,
+      //    지우기 전에 읽어 둔 `prior`를 **그대로 되돌려** 원상복구를 시도한다(best-effort).
+      //    ⚠️ 트랜잭션이 아니다 — 복구까지 실패하면 사용자에게 그 사실을 **말해야** 한다(조용한 소실 금지).
+      const restore = await supabase.from("class_schedules").insert(
+        prior.map((pr) => ({
+          tenant_id: user.tenantId,
+          class_id: id,
+          day_of_week: pr.dayOfWeek,
+          start_time: pr.startTime,
+          end_time: pr.endTime,
+          valid_from: pr.validFrom,
+          valid_to: pr.validTo,
+          teacher_id: pr.teacherId ?? null,
+          classroom_id: pr.classroomId ?? null,
+          slot_teacher_label: pr.slotTeacherLabel,
+          slot_room_label: pr.slotRoomLabel,
+          period_label: pr.periodLabel,
+          merge_group: pr.mergeGroup,
+        })),
+      );
+      return {
+        error: restore.error
+          ? "스케줄 저장에 실패했고 되돌리기도 실패했습니다. 이 반의 교시를 확인해주세요."
+          : "스케줄 저장에 실패했습니다. 잠시 후 다시 시도해주세요.",
+      };
+    }
   }
 
   // 🔴 반 수정에는 그동안 **감사로그가 아예 없었다**(2026-08-04 발견) — 담당·강의실이 언제 누구로
@@ -412,7 +481,9 @@ export async function updateClass(
 
   const changes: Array<{ field: string; from?: string | null; to?: string | null }> = [];
   // 배치는 짝이 되는 한 쌍이 아니다(교시 여러 개가 한꺼번에 바뀐다) — 상세는 배치 구간 이력이 갖는다.
-  if (archiveRows.length > 0) changes.push({ field: "수업 배치" });
+  // ⚠️ 마감 행(archiveRows)만 보면 **순수 추가**(없던 교시를 새로 켬)가 이력에서 통째로 빠진다 —
+  //    마감할 옛 배치가 없기 때문이다. 오늘 새로 열린 구간(openedRows)도 같은 근거로 센다.
+  if (archiveRows.length > 0 || openedRows > 0) changes.push({ field: "수업 배치" });
   if (teacherChanged)
     changes.push({
       field: "담임",

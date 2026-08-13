@@ -370,3 +370,110 @@ describe("자리 라벨", () => {
     expect(run(incoming("JJ"), prior("JJ")).slotTeacherLabel).toBe("JJ");
   });
 });
+
+/**
+ * 🔴 실사고 재현(원장 2026-08-13 *"중등E_초등 브릿지 C2는 스케줄 수정 자체가 안 되네. 수업목록에서
+ * 수업수정 눌러서 스케줄 수정 후 저장했는데 자꾸 원복이 되네"*).
+ *
+ * 영어 평일 교시표엔 **시작시각이 같은 교시가 둘**이다 — EiE 4교시(16:20~17:00) · IJW 1교시(16:20~17:20).
+ * C2 실데이터: 월·목은 IJW 1교시인데 화요일만 EiE 4교시였다. 화요일을 IJW 1교시로 옮기면
+ * `요일|시작`이 같아 짝이 지어지고, 옛 규칙("종료시각은 기존 행이 이긴다")이 17:00으로 되돌려
+ * **저장이 아무 일도 안 했다**(실측: 그날 C2에 마감 행 0·신규 구간 0·감사로그 0).
+ */
+describe("🔴 같은 시작시각의 다른 교시로 이동(EiE 4교시 ↔ IJW 1교시)", () => {
+  const PAIRS = {
+    weekday: new Set([
+      "16:20|17:00", // EiE 4교시
+      "16:20|17:20", // IJW 1교시
+      "17:20|18:10", // IJW 2교시
+    ]),
+    weekend: new Set<string>(),
+  };
+  const prior = {
+    dayOfWeek: "tue",
+    startTime: "16:20",
+    endTime: "17:00", // EiE 4교시
+    validFrom: "2026-07-03",
+    validTo: null,
+    teacherId: "t1",
+    classroomId: "r1",
+    slotTeacherLabel: "Sam",
+    slotRoomLabel: "본원604",
+    periodLabel: null,
+    mergeGroup: null,
+  };
+  // 그리드가 IJW 1교시 칸으로 옮겨 제출한 값(클릭그리드라 explicitTime=false).
+  const incoming = [
+    { dayOfWeek: "tue", startTime: "16:20", endTime: "17:20", teacherId: "t1", classroomId: "r1" },
+  ];
+
+  it("교시표를 아는 경우 폼이 고른 교시로 저장된다(원복 안 됨)", () => {
+    const rows = preserveScheduleFields({
+      incoming,
+      prior: [prior],
+      period: { validFrom: null, validTo: null, provided: false },
+      today: "2026-08-13",
+      periodPairs: PAIRS,
+    });
+    expect(rows[0]!.endTime).toBe("17:20");
+    // 배치가 바뀌었으니 새 구간은 오늘부터(이력 규약).
+    expect(rows[0]!.validFrom).toBe("2026-08-13");
+    // 라벨·강의실 라벨은 그대로 승계된다(폼이 안 보내는 값).
+    expect(rows[0]!.slotTeacherLabel).toBe("Sam");
+    expect(rows[0]!.slotRoomLabel).toBe("본원604");
+  });
+
+  it("옛 배치는 어제까지로 마감된다 — 값만 바뀌고 이력이 비는 일이 없게", () => {
+    const archives = planSlotArchives({
+      incoming,
+      prior: [prior],
+      today: "2026-08-13",
+      periodPairs: PAIRS,
+    });
+    expect(archives).toHaveLength(1);
+    expect(archives[0]).toMatchObject({ endTime: "17:00", validTo: "2026-08-12" });
+  });
+
+  it("반대 방향(IJW 1교시 → EiE 4교시)도 같다", () => {
+    const rows = preserveScheduleFields({
+      incoming: [{ dayOfWeek: "tue", startTime: "16:20", endTime: "17:00", teacherId: "t1", classroomId: "r1" }],
+      prior: [{ ...prior, endTime: "17:20" }],
+      period: { validFrom: null, validTo: null, provided: false },
+      today: "2026-08-13",
+      periodPairs: PAIRS,
+    });
+    expect(rows[0]!.endTime).toBe("17:00");
+  });
+
+  it("🔴 교시표 밖 시각(레거시 16:20~17:10)은 여전히 기존 행이 이긴다 — 급여 시수가 조용히 줄면 안 된다", () => {
+    const rows = preserveScheduleFields({
+      incoming, // 그리드가 시작시각 폴백으로만 그린 칸 = 종료시각은 추측
+      prior: [{ ...prior, endTime: "17:10" }],
+      period: { validFrom: null, validTo: null, provided: false },
+      today: "2026-08-13",
+      periodPairs: PAIRS,
+    });
+    expect(rows[0]!.endTime).toBe("17:10");
+  });
+
+  it("교시표를 안 넘기면 예전 동작(기존 행 우선) — 모르는 호출부가 시수를 자르지 않게", () => {
+    const rows = preserveScheduleFields({
+      incoming,
+      prior: [prior],
+      period: { validFrom: null, validTo: null, provided: false },
+      today: "2026-08-13",
+    });
+    expect(rows[0]!.endTime).toBe("17:00");
+  });
+
+  it("자유 시각 행(explicitTime)은 교시표와 무관하게 폼 값이 이긴다", () => {
+    const rows = preserveScheduleFields({
+      incoming: [{ ...incoming[0], endTime: "17:35", explicitTime: true }],
+      prior: [prior],
+      period: { validFrom: null, validTo: null, provided: false },
+      today: "2026-08-13",
+      periodPairs: PAIRS,
+    });
+    expect(rows[0]!.endTime).toBe("17:35");
+  });
+});
