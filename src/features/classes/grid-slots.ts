@@ -23,37 +23,19 @@ export type GridSlotInput = {
 const hm = (t: string) => String(t).slice(0, 5);
 const isWeekendDay = (d: string) => d === "sat" || d === "sun";
 
+// 기존 소비처 호환 re-export. 매처의 진실원본은 시간표 전체가 함께 쓰는 period-match.ts다.
+export {
+  buildPeriodMatcher,
+  type PeriodMatchRow,
+} from "@/features/timetable/lib/period-match";
+
 /**
  * 슬롯 목록 → { grid, custom }.
  *  · `grid`   = 그 요일 종류(평일/주말) 교시표에 **시작시각이 있는** 슬롯 → 클릭그리드가 셀로 복원한다.
  *  · `custom` = 나머지 → 자유 시각 행으로 실어 보낸다(안 실으면 저장 시 삭제된다).
- * ⚠️ 판정 기준은 그리드(`schedule-grid.tsx`)의 역매핑과 **같아야** 한다 — 시작시각만 본다.
+ * ⚠️ 판정 기준은 그리드(`schedule-grid.tsx`)의 역매핑과 **같아야** 한다 — 시작·종료 짝 우선,
+ *    레거시 종료시각만 시작시각으로 폴백한다.
  */
-export type PeriodMatchRow = { id: string; startTime: string; endTime: string };
-
-/**
- * 저장된 슬롯 → 교시 id 역매핑기(요일 종류별로 하나씩 만들어 쓴다).
- *
- * 🔴 시작시각만으로는 못 가른다: 학원설정에 **시작이 같은 교시가 둘** 있을 수 있다(실측 injaewon 영어:
- *    EiE 4교시 16:20~17:00 과 IJW 1교시 16:20~17:20). 시작시각만 보고 매핑하면 4교시에 찍어 저장한 수업이
- *    반정보를 다시 열 때 IJW 1교시 칸에 나타나고, 그대로 저장하면 종료시각이 17:20으로 **바뀐다**.
- *    → (시작,종료) 짝을 먼저 맞춘다.
- * ⚠️ 시작시각 폴백은 반드시 남긴다: splitGridSlots가 "시작시각이 표에 있으면 그리드"로 분류하므로,
- *    폴백이 없으면 종료시각이 표와 어긋난 슬롯이 그리드에서 사라지고 저장 시 삭제된다(이 파일 상단 경고).
- * 같은 짝·같은 시작이 여러 개면 **먼저 나온 교시**(작은 번호)를 쓴다 — 시간표 축(weekday-group-tables)과 동일 규약.
- */
-export function buildPeriodMatcher(periods: PeriodMatchRow[]) {
-  const exact = new Map<string, string>();
-  const byStart = new Map<string, string>();
-  for (const p of periods) {
-    const pair = `${hm(p.startTime)}|${hm(p.endTime)}`;
-    if (!exact.has(pair)) exact.set(pair, p.id);
-    if (!byStart.has(hm(p.startTime))) byStart.set(hm(p.startTime), p.id);
-  }
-  return (slot: { startTime: string; endTime?: string | null }): string | null =>
-    exact.get(`${hm(slot.startTime)}|${hm(slot.endTime ?? "")}`) ?? byStart.get(hm(slot.startTime)) ?? null;
-}
-
 export function splitGridSlots<T extends GridSlotInput>(input: {
   slots: T[];
   weekdayPeriods: PeriodRow[];

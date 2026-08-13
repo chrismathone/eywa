@@ -4,7 +4,14 @@ import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged, fetchAllPagedInChunks } from "@/lib/supabase/batch";
 import { kstToday, kstMinutesOfDay } from "@/lib/date-kst";
 import { getTeacherScope } from "@/lib/auth/teacher-scope";
-import { dateOfDowInWeek, slotLiveOnDate, weekEndOf, weekSundayOf, shiftDays } from "../lib/week";
+import {
+  dateOfDowInWeek,
+  slotLiveOnDate,
+  weekBoundsOf,
+  weekEndOf,
+  weekSundayOf,
+  shiftDays,
+} from "../lib/week";
 import { getTeacherAsOfIndex } from "@/features/classes/server/teacher-as-of-queries";
 import { resolveTeacherAsOf } from "@/features/classes/teacher-as-of";
 // 보고서 과목 판정 규칙은 RPC(0150a) SQL에 내장 — 규칙 문서·테스트는 lib/report-subject.ts가 담당(동기 유지).
@@ -195,9 +202,10 @@ async function fetchSlots(
 ): Promise<ScheduleSlot[]> {
   const supabase = db?.supabase ?? (await createClient());
   const weekEnd = weekEndOf(referenceDate);
-  // 그 주 시점에 유효한 스케줄만: valid_from ≤ 그 주 일요일(미래 시작 스케줄 제외) + valid_to ≥ 기준일(만료 제외).
-  // ⚠️ valid_from 상한은 weekEnd(ref+6 롤링 창)가 아니라 weekSundayOf(그 주 실제 끝) — 롤링 창이면
-  // 과거 주(ref=일요일) 조회에 다음 주 시작 스케줄이 새어 스케줄 전환(temporal cutover) 시 중복 표시된다.
+  const scheduleWeek = weekBoundsOf(referenceDate);
+  // 그 주와 하루라도 겹치는 스케줄만: valid_from ≤ 일요일 + valid_to ≥ 월요일.
+  // 🔴 valid_to를 기준일과 비교하면 목요일 조회에서 수요일에 끝난 행을 먼저 버린다. 그러면 화요일 칸은
+  // 옛 행도 새 행도 남지 않는다. 주 전체 겹침을 가져온 뒤 아래 slotLiveOnDate가 각 요일 날짜로 하나만 고른다.
   // 폐지(is_active=false)된 반은 `!inner` 조인 + class.is_active 필터로 전체 주에서 제외.
   // 종강(class.closed_at)된 반은 종강일 이후 주에서만 제외(이전 주엔 수강이력으로 표시) — JS에서 거른다.
   // ⚠️ 무페이징 select 금지(B2) — 이 쿼리는 시간표 화면의 **뿌리**라, 1000행에서 조용히 잘리면 반이
@@ -222,8 +230,8 @@ async function fetchSlots(
        )`,
         )
         .eq("class.is_active", true)
-        .lte("valid_from", weekSundayOf(referenceDate))
-        .or(`valid_to.is.null,valid_to.gte.${referenceDate}`);
+        .lte("valid_from", scheduleWeek.end)
+        .or(`valid_to.is.null,valid_to.gte.${scheduleWeek.start}`);
       if (db) q = q.eq("tenant_id", db.tenantId); // admin(cron) 경로 — RLS 우회라 명시 격리
       return q.order("start_time").order("id").range(from, to);
     }),

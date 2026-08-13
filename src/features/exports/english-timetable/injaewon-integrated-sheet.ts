@@ -283,7 +283,13 @@ export function appendInjaewonIntegratedSheet(
   const roomByCell = new Map<string, string>();
   for (const s of slots) {
     if (!WEEKDAYS.includes(s.dayOfWeek as Weekday)) continue;
-    const order = slotPeriodRow("english", s.startTime, s.dayOfWeek as DayOfWeek, opts.config).order;
+    const order = slotPeriodRow(
+      "english",
+      s.startTime,
+      s.dayOfWeek as DayOfWeek,
+      opts.config,
+      s.endTime,
+    ).order;
     const room = s.slotRoomLabel ?? "";
     if (room) roomByCell.set(`${s.classId}:${order}:${s.dayOfWeek}`, shortRoom(room));
   }

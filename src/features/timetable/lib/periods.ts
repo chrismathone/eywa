@@ -3,8 +3,10 @@
 // eywa는 DB에 절대시각(start_time/end_time)만 저장하므로, 이 변환은 엑셀 import 어댑터(Phase 3)가
 // periodId→시각으로 1회 적용하는 데 쓰인다. periodLabel은 표시 전용.
 //
-// 평일: 과목별 교시표. math/highmath/science/korean = 8교시 55분(동일), english = 10교시.
+// 평일: 과목별 교시표. math/highmath/science/korean = 8교시 55분(동일), english = 11교시.
 // 주말(토·일): 09:00부터 1시간 단위 8교시(과목 무관).
+
+import { buildPeriodMatcher } from "./period-match";
 
 export type TimetableSubject = "math" | "highmath" | "english" | "science" | "korean";
 // day_of_week enum(mon..sun)을 미러. DB 결합을 피하려 로컬 정의.
@@ -177,6 +179,11 @@ export function weekdayTableFor(subject: string, config: PeriodsConfig): Record<
 /** 교시 목록 한 줄 — id는 식별자(index+1), label은 학원설정에서 지은 이름(없으면 소비처가 번호로 폴백). */
 export type PeriodListItem = { id: string; startTime: string; endTime: string; label?: string };
 
+/** 설정 이름이 있으면 그대로, 없으면 기존 `N교시` 폴백. 모든 시간표 표면이 이 규칙을 쓴다. */
+export function periodListLabel(p: Pick<PeriodListItem, "id" | "label">): string {
+  return p.label?.trim() || `${p.id}교시`;
+}
+
 const toListItem = (id: string, t: PeriodTime): PeriodListItem => ({
   id,
   startTime: hm(t.startTime),
@@ -281,11 +288,33 @@ function toMin(t: string): number {
   return (h ?? 0) * 60 + (m ?? 0);
 }
 
-// 시작시각("HH:MM") → periodId 역인덱스.
-function reverseStart(table: Record<string, PeriodTime>): Map<string, string> {
-  const m = new Map<string, string>();
-  for (const [id, t] of Object.entries(table)) if (!m.has(hm(t.startTime))) m.set(hm(t.startTime), id);
-  return m;
+/** 테이블의 교시를 (시작,종료) 우선 매처가 읽는 목록으로. */
+function periodItems(table: Record<string, PeriodTime>): PeriodListItem[] {
+  return Object.entries(table).map(([id, t]) => toListItem(id, t));
+}
+
+/** 동일 시작시각 교시를 종료시각으로 가르고, 종료가 어긋난 레거시 행만 첫 시작시각으로 폴백. */
+function matchPeriodId(
+  table: Record<string, PeriodTime>,
+  startTime: string,
+  endTime?: string | null,
+): string | null {
+  return buildPeriodMatcher(periodItems(table))({ startTime, endTime });
+}
+
+/**
+ * 교시축 정렬키. 보통은 자정 기준 분 그대로다.
+ * 시작이 같은 교시만 두 번째부터 0.001씩 더해 두 행을 같은 Map 키로 뭉개지 않게 한다.
+ * sectionKey는 class-grid에서 정수 분으로 별도 유지하므로 이 소수부는 행 식별에만 쓰인다.
+ */
+function periodAxisOrder(table: Record<string, PeriodTime>, id: string): number {
+  const ids = Object.keys(table).sort((a, b) => Number(a) - Number(b));
+  const target = table[id];
+  if (!target) return 0;
+  const sameStartBefore = ids
+    .slice(0, ids.indexOf(id))
+    .filter((otherId) => hm(table[otherId]!.startTime) === hm(target.startTime)).length;
+  return toMin(target.startTime) + sameStartBefore / 1000;
 }
 
 /**
@@ -323,25 +352,36 @@ export function slotPeriodRow(
   startTime: string,
   day: DayOfWeek,
   config: PeriodsConfig = DEFAULT_PERIODS_CONFIG,
+  endTime?: string | null,
 ): PeriodRow {
   const start = hm(startTime);
   if (isWeekendDay(day)) {
-    const p = reverseStart(config.weekend).get(start);
+    const p = matchPeriodId(config.weekend, start, endTime);
     if (p) {
       const t = config.weekend[p]!;
-      return { key: `w-${p}`, label: `${p}교시`, time: `${hm(t.startTime)}~${hm(t.endTime)}`, order: toMin(t.startTime) };
+      return {
+        key: `w-${p}`,
+        label: periodListLabel({ id: p, label: t.label }),
+        time: `${hm(t.startTime)}~${hm(t.endTime)}`,
+        order: periodAxisOrder(config.weekend, p),
+      };
     }
   } else if (subject === "english") {
-    // 역조회는 해석 테이블에서 per-call(주말·수학 분기와 동일 관례, O(≤20)) — 커스텀 테이블 지원.
+    // 역조회는 (시작,종료) 우선 — EiE 4교시와 IJW 1교시처럼 시작이 같은 설정도 정확히 가른다.
     const table = weekdayTableFor(subject, config);
-    const p = reverseStart(table).get(start);
+    const p = matchPeriodId(table, start, endTime);
     if (p) {
       const t = table[p]!;
-      return { key: `e-${p}`, label: `${p}교시`, time: `${hm(t.startTime)}~${hm(t.endTime)}`, order: toMin(t.startTime) };
+      return {
+        key: `e-${p}`,
+        label: periodListLabel({ id: p, label: t.label }),
+        time: `${hm(t.startTime)}~${hm(t.endTime)}`,
+        order: periodAxisOrder(table, p),
+      };
     }
   } else {
     const table = weekdayTableFor(subject, config);
-    const p = reverseStart(table).get(start);
+    const p = matchPeriodId(table, start, endTime);
     if (p) {
       const { groupOf, display } = mathGroups(table);
       const g = groupOf.get(p)!;
@@ -365,14 +405,20 @@ export function weekdayPeriodRowOrNull(
   subject: string,
   startTime: string,
   config: PeriodsConfig = DEFAULT_PERIODS_CONFIG,
+  endTime?: string | null,
 ): PeriodRow | null {
   const start = hm(startTime);
   const table = weekdayTableFor(subject, config);
-  const p = reverseStart(table).get(start);
+  const p = matchPeriodId(table, start, endTime);
   if (!p) return null;
   const t = table[p]!;
   if (subject === "english")
-    return { key: `e-${p}`, label: `${p}교시`, time: `${hm(t.startTime)}~${hm(t.endTime)}`, order: toMin(t.startTime) };
+    return {
+      key: `e-${p}`,
+      label: periodListLabel({ id: p, label: t.label }),
+      time: `${hm(t.startTime)}~${hm(t.endTime)}`,
+      order: periodAxisOrder(table, p),
+    };
   const { groupOf, display } = mathGroups(table);
   const g = groupOf.get(p)!;
   const d = display.get(g)!;
@@ -392,16 +438,17 @@ export function subjectPeriodRows(
   if (weekend) {
     out = Object.entries(config.weekend).map(([p, t]) => ({
       key: `w-${p}`,
-      label: `${p}교시`,
+      label: periodListLabel({ id: p, label: t.label }),
       time: `${hm(t.startTime)}~${hm(t.endTime)}`,
-      order: toMin(t.startTime),
+      order: periodAxisOrder(config.weekend, p),
     }));
   } else if (subject === "english") {
-    out = Object.entries(weekdayTableFor(subject, config)).map(([p, t]) => ({
+    const table = weekdayTableFor(subject, config);
+    out = Object.entries(table).map(([p, t]) => ({
       key: `e-${p}`,
-      label: `${p}교시`,
+      label: periodListLabel({ id: p, label: t.label }),
       time: `${hm(t.startTime)}~${hm(t.endTime)}`,
-      order: toMin(t.startTime),
+      order: periodAxisOrder(table, p),
     }));
   } else {
     out = Array.from(mathGroups(weekdayTableFor(subject, config)).display.entries()).map(([g, d]) => ({
