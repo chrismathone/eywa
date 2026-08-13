@@ -11,6 +11,7 @@ import { memo, useMemo } from "react";
 import type { ClassSheetWeekData } from "../server/queries";
 import type { GridDay } from "../lib/grid";
 import type { RosterGroupKey } from "../lib/roster-order";
+import type { SheetMark } from "../lib/roster-form";
 import { buildGridRows } from "../lib/grid-rows";
 import type { PlanLineDTO } from "../server/actions";
 import type { SheetHandlers } from "./sheet-client";
@@ -38,7 +39,7 @@ export const SheetGrid = memo(function SheetGrid({
   days: GridDay[];
   data: ClassSheetWeekData;
   linesBySlot: Record<string, PlanLineDTO[]>;
-  marks: Record<string, { status: string | null; progressNote: string | null; score: string | null }>;
+  marks: Record<string, SheetMark>;
   attendance: Record<
     string,
     { status: string; note: string | null; units: number | null; slot: string | null }

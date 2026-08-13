@@ -14,13 +14,16 @@
  *    **세로선**이 가른다(아래 표가 이미 `border-l-line-faint`로 하던 것과 같은 방식).
  *    ⚠️ 숨을 되살릴 땐 `gap`이 아니라 **카드 안쪽 패딩**으로 — gap은 카드 왼쪽 모서리를 열 경계보다
  *    밀어내 교시가 늘수록 어긋남이 누적된다.
+ * ⚠️ 열 **구성**은 교시마다 다를 수 있다(JJ 전용 폼) — 구성은 [roster-form](./roster-form.ts)이 정하고
+ *    여기는 그 폭들을 교시 폭에 맞춰 배분만 한다.
  */
+import { rosterTextCols, type RosterForm } from "./roster-form";
 
 /** 학생 이름 열 — 주간 로스터(roster-table colgroup)와 같은 수치. */
 export const TODAY_NAME_W = 64;
 
-/** 교시 그룹 안 고정 열 [출결, 유닛, 태도, 점수] — 주간 로스터와 같은 수치. */
-export const TODAY_SLOT_COLS = [60, 46, 80, 54] as const;
+/** 교시 그룹 안 **폼 무관** 고정 열 [출결, 유닛, 태도] — 주간 로스터와 같은 수치. */
+export const TODAY_BASE_COLS = [60, 46, 80] as const;
 
 /** 교시 사이 숨 — **0**. 경계는 여백이 아니라 세로선이 긋는다(위 주석 참조). */
 export const TODAY_GUTTER = 0;
@@ -31,13 +34,25 @@ export const TODAY_PLAN_W = 540;
 /** 한 교시가 차지하는 전체 폭 = 카드 + 숨. 위아래가 **같은 값**을 쓴다. */
 export const TODAY_SLOT_W = TODAY_PLAN_W + TODAY_GUTTER;
 
-const FIXED_SUM = TODAY_SLOT_COLS.reduce((a, b) => a + b, 0);
-
 /**
- * 특이사항 열 폭 — 교시 폭에서 고정 열을 뺀 나머지. **가변(`<col>` 무지정)으로 두지 말 것**:
- * 가변이면 표가 남는 폭을 특이사항에 몰아줘 교시 폭이 카드와 달라진다(이 버그의 본체).
+ * 한 교시 그룹의 열 폭 — [출결, 유닛, 태도, …폼별 자유 입력, **특이사항(잔여)**].
+ *
+ * 🔴 합은 **항상 교시 폭(TODAY_SLOT_W)** 이다. 교시마다 폼이 달라도(JJ 교시는 시험 점수 대신 듣기
+ *    레벨·누적 암기 단어수) 그룹 총폭이 같아야 위층 카드 레일과 세로선이 어긋나지 않는다.
+ * ⚠️ 특이사항을 **가변(`<col>` 무지정)으로 두지 말 것**: 가변이면 표가 남는 폭을 거기 몰아줘 교시 폭이
+ *    카드와 달라진다(2026-08-11에 실제로 밟은 버그).
  */
-export const TODAY_NOTE_W = TODAY_SLOT_W - FIXED_SUM;
+export function todaySlotCols(form: RosterForm): number[] {
+  const fixed = [...TODAY_BASE_COLS, ...rosterTextCols(form).map((c) => c.width)];
+  const sum = fixed.reduce((a, b) => a + b, 0);
+  return [...fixed, TODAY_SLOT_W - sum];
+}
+
+/** 특이사항 열 폭(잔여) — 폼이 자유 입력 칸을 더 쓰면 그만큼 줄어든다(원장 2026-08-13 "특이사항은 좀 줄여도 돼"). */
+export function todayNoteWidth(form: RosterForm): number {
+  const cols = todaySlotCols(form);
+  return cols[cols.length - 1];
+}
 
 /** 로스터 카드의 안쪽 여백(p-2.5) — 레일도 **같은 상자 모형**을 써야 첫 열의 시작점이 맞는다. */
 export const TODAY_CARD_PAD = 10;

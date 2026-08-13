@@ -30,6 +30,7 @@ import {
 } from "../server/actions";
 import { ECS_FONT_SIZE_ZOOM, type EcsFontSize } from "../font-size";
 import type { RosterGroupKey } from "../lib/roster-order";
+import type { MarkTextField } from "../lib/roster-form";
 import { buildSaveKey, type PlanFieldPatch } from "../lib/save-keys";
 import { PLAN_PATCH_FIELDS, isMeaningfulPlanLine } from "../lib/plan-codec";
 import { useSheetDoc } from "./use-sheet-doc";
@@ -97,8 +98,12 @@ export type SheetHandlers = {
     slotStart: string,
     status: string | null,
     note: string | null,
-    /** 점수(0202a) — 안 넘기면 **지금 값 유지**(태도만 바꿀 때 점수를 null로 덮지 않게). */
-    score?: string | null,
+    /**
+     * 자유 입력 칸 패치(시험 점수 0202a · 듣기 레벨/누적 암기 단어수 0206a) — **바뀐 칸만** 담는다.
+     * 🔴 안 담은 칸은 서버가 **지금 값 그대로** 둔다(upsert의 SET 목록에서 빠진다). 그래서 JJ 교시에서
+     *    듣기 레벨을 고쳐도 그 행의 시험 점수가 지워지지 않고, 반대도 마찬가지다.
+     */
+    patch?: Partial<Record<MarkTextField, string | null>>,
   ) => void;
 };
 
@@ -523,17 +528,22 @@ export function SheetClient({
           }
         });
       },
-      saveMark: (studentId, date, slotStart, status, note, score) => {
+      saveMark: (studentId, date, slotStart, status, note, patch) => {
         const key = `${studentId}|${date}|${slotStart}`;
         // 실패 시 되돌릴 직전 값 — 낙관 반영만 하고 롤백이 없으면 화면엔 남고 서버엔 없는 상태가 되어
         // 툴바가 "저장됨"이라 말하는 동안 강사는 입력을 잃는다(적대검증 2026-07-29). 출석과 같은 처방.
         const before = marksRef.current[key] ?? null;
-        // 🔴 점수를 **안 넘긴 호출**(태도·특이사항 변경)은 지금 값을 그대로 들고 간다. 세 칸이 한 행을
-        //    공유하는 upsert라, 안 건드린 칸을 undefined로 흘리면 다음 저장이 그 칸을 null로 덮는다.
-        const nextScore = score === undefined ? (before?.score ?? null) : score;
+        // 화면 상태는 **머지**(안 건드린 칸은 지금 값 유지) — 서버도 같은 규약이라 둘이 어긋나지 않는다.
         setMarks((prev) => ({
           ...prev,
-          [key]: { status, progressNote: note, score: nextScore },
+          [key]: {
+            status,
+            progressNote: note,
+            score: before?.score ?? null,
+            listeningLevel: before?.listeningLevel ?? null,
+            memorizedWords: before?.memorizedWords ?? null,
+            ...patch,
+          },
         }));
         store.scheduleLww(`mark:${key}`, async () => {
           const r = await upsertStudentMark({
@@ -543,7 +553,8 @@ export function SheetClient({
             slotStart,
             status,
             progressNote: note,
-            score: nextScore,
+            // 🔴 **바뀐 칸만** 보낸다 — 안 보낸 칸은 서버가 건드리지 않는다(다른 폼의 값을 지우지 않게).
+            ...patch,
           });
           if (!r.ok) {
             setMarks((prev) => {

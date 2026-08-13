@@ -5,20 +5,25 @@
  * **같은 셀 구현**을 쓴다(원장 2026-08-11 "쓸데없이 중복되는 컴포넌트가 다수" — 중복의 처방은 추출).
  *
  *  · `RosterNameCell` — 이름(학생 정보 링크) + 영어이름 + 퇴원일.
- *  · `RosterSlotCells` — 한 교시분 5칸: 출결(체크 순환) · 유닛 · 태도(체크 순환) · 점수 · 특이사항.
- *    entry가 null이면(통합 표에서 그 교시 수강 대상이 아닌 학생) 값 칸 셋은 '—', 입력 칸 둘(점수·
+ *  · `RosterSlotCells` — 한 교시분: 출결(체크 순환) · 유닛 · 태도(체크 순환) · **폼별 자유 입력** · 특이사항.
+ *    자유 입력 칸은 교시마다 다르다 — 기본은 '시험 점수' 하나, **JJ 교시는 '듣기 레벨'+'누적 암기 단어수'**
+ *    (원장 2026-08-13). 구성은 [roster-form](../lib/roster-form.ts) 단일 소스.
+ *    entry가 null이면(통합 표에서 그 교시 수강 대상이 아닌 학생) 값 칸 셋은 '—', 입력 칸들(자유 입력·
  *    특이사항)은 **잠긴 입력**으로 비운다 — 잠긴 입력이어야 Enter/↑↓ 세로 이동이 이 행을 건너뛴다
  *    (grid-nav는 '없는 입력'을 열의 끝으로 오판한다 — 적대 리뷰 2026-08-11, #103 계열).
  *
  * 🔴 컨트롤·저장 경로는 주간 표의 것을 **한 글자도 바꾸지 않고** 옮겼다: 출결=AttendanceCheck(누를 때마다
  *    출석→결석→지각→선택 안 함, 우클릭=사유 — 원장 2026-08-11 "클릭형으로 변경. 드랍다운 제거"),
- *    태도=AttitudeCheck, 점수(0202a)·특이사항=한 마크 행 공유(saveMark), 유닛=SessionUnitsField.
+ *    태도=AttitudeCheck, 자유 입력·특이사항=한 마크 행 공유(saveMark), 유닛=SessionUnitsField.
+ * ⚠️ 화면에 없는 칸(예: JJ 교시의 시험 점수)은 **서버로 안 보낸다** = 지금 값 유지. 폼이 바뀌었다고
+ *    저장된 값을 지우지 않는다(roster-form.ts 규약).
  */
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { WindowLink } from "@/components/workspace/window-link";
 import { handleGridNavKey } from "@/features/onescreen/components/grid-nav";
 import { SessionUnitsField } from "@/features/onescreen/components/attendance-pills";
 import type { RosterEntry } from "../lib/grid";
+import { rosterTextCols, type RosterForm, type SheetMark } from "../lib/roster-form";
 import { SHEET_BOX_UNITS, SHEET_INPUT } from "../ui-box";
 import { AttendanceCheck } from "./attendance-check";
 import { AttitudeCheck } from "./attitude-check";
@@ -58,7 +63,10 @@ export function RosterNameCell({ entry, meta }: { entry: RosterEntry; meta: Stud
   );
 }
 
-/** 한 교시분 5칸(출결·유닛·태도·점수·특이사항). 폭은 표의 colgroup이 정한다(60·46·80·54·잔여). */
+/**
+ * 한 교시분 칸들(출결·유닛·태도·자유 입력 N·특이사항). 폭은 표의 colgroup이 정한다
+ * (60·46·80·[폼별]·잔여) — 여기서 폭을 정하지 않는다.
+ */
 export function RosterSlotCells({
   entry,
   meta,
@@ -70,21 +78,27 @@ export function RosterSlotCells({
   canEdit,
   handlers,
   navRow,
+  form,
   navColSuffix = "",
   withDivider = false,
 }: {
-  /** null = 이 학생이 이 교시 수강 대상이 아님(통합 표) — 5칸 전부 '—'. */
+  /** null = 이 학생이 이 교시 수강 대상이 아님(통합 표) — 값 칸은 '—', 입력 칸은 잠긴 입력. */
   entry: RosterEntry | null;
   meta: StudentMeta | undefined;
   date: string;
   slotStart: string;
-  mark: { status: string | null; progressNote: string | null; score: string | null } | null;
+  mark: SheetMark | null;
   att: { status: string; note: string | null; units: number | null; slot: string | null } | null;
   canMarkDate: boolean;
   canEdit: boolean;
   handlers: SheetHandlers;
   /** 키보드 세로 이동(Enter/↑↓) 행 번호 — 보이는 행 기준으로 표가 매긴다. */
   navRow: number;
+  /**
+   * 이 교시의 입력 폼 — 표(colgroup·머리)와 **같은 값**을 써야 열과 칸이 맞는다.
+   * 판정은 `rosterFormOf(slot.teacherLabel)` 한 곳에서(소비처가 각자 추측하지 않는다).
+   */
+  form: RosterForm;
   /** 이동 열 식별자 꼬리 — 통합 표는 교시마다 다른 열이라 `:${slotStart}`를 붙여 세로 이동을 교시 안에 가둔다. */
   navColSuffix?: string;
   /**
@@ -96,6 +110,7 @@ export function RosterSlotCells({
   withDivider?: boolean;
 }) {
   const dividerCls = withDivider ? "border-line-strong border-l" : "";
+  const textCols = rosterTextCols(form);
   if (entry === null) {
     const offTitle = "이 교시 수강 대상이 아닙니다";
     const dash = <span className="text-text-faint text-[13px] font-semibold">—</span>;
@@ -110,11 +125,22 @@ export function RosterSlotCells({
         <td className="py-px text-center" title={offTitle}>
           {dash}
         </td>
-        {/* 점수·특이사항은 **잠긴 입력**(값 없음·placeholder —) — 세로 이동(grid-nav)이 이 행을
+        {/* 자유 입력·특이사항은 **잠긴 입력**(값 없음·placeholder —) — 세로 이동(grid-nav)이 이 행을
             '열의 끝'이 아니라 '건너뛸 칸'으로 보게 하는 유일한 방법이다(disabled는 continue, 부재는 종료). */}
-        <td className="py-px pr-1" title={offTitle}>
-          <input className={`${SHEET_INPUT} text-center`} disabled placeholder="—" aria-label={offTitle} data-nav-col={`ecs-score${navColSuffix}`} data-nav-row={navRow} readOnly value="" />
-        </td>
+        {textCols.map((col) => (
+          <td key={col.field} className="py-px pr-1" title={offTitle}>
+            <input
+              className={`${SHEET_INPUT} text-center`}
+              disabled
+              placeholder="—"
+              aria-label={offTitle}
+              data-nav-col={`${col.nav}${navColSuffix}`}
+              data-nav-row={navRow}
+              readOnly
+              value=""
+            />
+          </td>
+        ))}
         <td className="py-px" title={offTitle}>
           <input className={SHEET_INPUT} disabled placeholder="—" aria-label={offTitle} data-nav-col={`ecs-note${navColSuffix}`} data-nav-row={navRow} readOnly value="" />
         </td>
@@ -168,30 +194,37 @@ export function RosterSlotCells({
           onSet={(v) => handlers.saveMark(entry.studentId, date, slotStart, v, mark?.progressNote ?? null)}
         />
       </td>
-      <td className="py-px pr-1">
-        {/* 점수(0202a) — 태도·특이사항과 **같은 행 하나**를 공유하므로 저장은 같은 액션으로 간다.
-            ⚠️ 0202a 미적용이면 서버가 "아직 준비 중"이라 답한다(태도·특이사항 저장은 그대로 산다). */}
-        <input
-          className={`${SHEET_INPUT} text-center`}
-          defaultValue={mark?.score ?? ""}
-          disabled={!rowEditable}
-          aria-label={`${meta?.name ?? ""} 점수`}
-          placeholder="—"
-          data-nav-col={`ecs-score${navColSuffix}`}
-          data-nav-row={navRow}
-          onKeyDown={handleGridNavKey}
-          onChange={(e) =>
-            handlers.saveMark(
-              entry.studentId,
-              date,
-              slotStart,
-              mark?.status ?? null,
-              mark?.progressNote ?? null,
-              e.target.value,
-            )
-          }
-        />
-      </td>
+      {/* 자유 입력 칸(폼별) — 기본은 시험 점수(0202a), JJ는 듣기 레벨·누적 암기 단어수(0206a).
+          태도·특이사항과 **같은 마크 행 하나**를 공유하므로 저장은 같은 액션으로 간다.
+          ⚠️ 마이그레이션 미적용이면 서버가 "아직 준비 중"이라 답한다(태도·특이사항 저장은 그대로 산다, #95).
+          ⚠️ `key`에 폼이 섞이지 않게 field를 쓴다 — 같은 자리에 다른 칸이 오면 React가 defaultValue를
+             재사용해 옛 값이 남는다. */}
+      {textCols.map((col) => (
+        <td key={col.field} className="py-px pr-1">
+          <input
+            className={`${SHEET_INPUT} text-center`}
+            defaultValue={mark?.[col.field] ?? ""}
+            disabled={!rowEditable}
+            aria-label={`${meta?.name ?? ""} ${col.label}`}
+            title={col.title}
+            placeholder="—"
+            data-nav-col={`${col.nav}${navColSuffix}`}
+            data-nav-row={navRow}
+            onKeyDown={handleGridNavKey}
+            onChange={(e) =>
+              handlers.saveMark(
+                entry.studentId,
+                date,
+                slotStart,
+                mark?.status ?? null,
+                mark?.progressNote ?? null,
+                // 이 칸 **하나만** 실어 보낸다 — 안 보낸 칸은 서버가 지금 값 그대로 둔다.
+                { [col.field]: e.target.value },
+              )
+            }
+          />
+        </td>
+      ))}
       {/* pr-1 없음 — 주간 표 원본과 동일(옮기며 폭을 바꾸지 않는다). */}
       <td className="py-px">
         <input

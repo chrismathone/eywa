@@ -12,6 +12,7 @@ import { PlanTable } from "./plan-table";
 import { RosterTable } from "./roster-table";
 import { SlotBulk } from "./slot-bulk";
 import type { RosterGroupKey } from "../lib/roster-order";
+import { rosterFormOf, type SheetMark } from "../lib/roster-form";
 
 export const PeriodBlock = memo(function PeriodBlock({
   date,
@@ -32,7 +33,7 @@ export const PeriodBlock = memo(function PeriodBlock({
   slot: GridSlot;
   data: ClassSheetWeekData;
   lines: PlanLineDTO[];
-  marks: Record<string, { status: string | null; progressNote: string | null; score: string | null }>;
+  marks: Record<string, SheetMark>;
   attendance: Record<
     string,
     { status: string; note: string | null; units: number | null; slot: string | null }
@@ -176,6 +177,9 @@ export const PeriodBlock = memo(function PeriodBlock({
           canEdit={canEdit}
           collapsedGroups={collapsedGroups}
           onToggleGroup={onToggleGroup}
+          // JJ(집중자율수업실) 교시는 전용 폼 — 판정은 슬롯 라벨 하나(원장 2026-08-13).
+          // ⚠️ `teacher`(위 폴백)로 판정하지 말 것: 라벨이 없으면 반 담임 이름으로 떨어져 자리가 아니게 된다.
+          form={rosterFormOf(slot.teacherLabel)}
         />
       ) : null}
     </article>

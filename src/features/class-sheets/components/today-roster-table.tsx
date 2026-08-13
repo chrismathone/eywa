@@ -2,17 +2,20 @@
 
 /**
  * 오늘 면 **통합 로스터** — 학생 명단은 **한 번만** 그리고, 그 날의 교시들이 열 그룹(출결·유닛·태도·
- * 점수·특이사항 × 교시)으로 옆에 붙는다(원장 2026-08-11 *"목록은 왜 여러 번? 쓸데없이 중복되는
+ * 자유 입력·특이사항 × 교시)으로 옆에 붙는다(원장 2026-08-11 *"목록은 왜 여러 번? 쓸데없이 중복되는
  * 컴포넌트가 다수"* — 교시 카드마다 로스터를 반복하던 것을 접는다). 가로 공간도 이 표가 쓴다
  * (같은 날 지적 *"세로로 놓으면 가로 공간이 너무 의미없지 않아?"*의 처방).
  *
- * 셀 구현은 주간 시트와 **공용**(roster-slot-cells — 출결·태도 체크 순환, 점수 0202a 포함) —
+ * 셀 구현은 주간 시트와 **공용**(roster-slot-cells — 출결·태도 체크 순환, 자유 입력 포함) —
  * 저장 경로·게이트·키(`학생|날짜|교시`)가 전부 같다. 섹션(재원/퇴원/기록)·접기·건수 규약도
  * 주간 표(roster-table)와 동일하다.
  *
  * ⚠️ 교시마다 명단 포함 여부가 다를 수 있다(분리등원·기록 보존 행) — 명단은 교시들의 **합집합**이고,
  *    그 교시 칸이 없는 학생은 값 칸 '—' + 잠긴 입력으로 비운다(RosterSlotCells entry=null — 잠긴
  *    입력이어야 Enter/↑↓ 세로 이동이 구멍을 건너뛴다).
+ * ⚠️ **교시마다 폼이 다를 수 있다**(JJ 교시는 시험 점수 대신 듣기 레벨·누적 암기 단어수 — 원장
+ *    2026-08-13). 그래서 열 폭·머리·칸을 교시별로 뽑는다. 그룹 총폭은 `todaySlotCols`가 항상
+ *    교시 폭과 같게 유지하므로 위층 카드 레일과의 줄맞춤은 폼이 섞여도 안 깨진다.
  */
 import { Fragment, memo, useMemo } from "react";
 import type { ClassSheetWeekData } from "../server/queries";
@@ -24,12 +27,8 @@ import { RosterNameCell, RosterSlotCells } from "./roster-slot-cells";
 import type { SheetHandlers } from "./sheet-client";
 
 // 가로 치수는 **위 카드 레일과 공유**한다(today-columns) — 한쪽만 고치면 줄이 조용히 어긋난다.
-import {
-  TODAY_NAME_W,
-  TODAY_NOTE_W,
-  TODAY_SLOT_COLS,
-  todayContentWidth,
-} from "../lib/today-columns";
+import { TODAY_NAME_W, todayContentWidth, todaySlotCols } from "../lib/today-columns";
+import { rosterFormOf, rosterTextCols, type SheetMark } from "../lib/roster-form";
 
 export const TodayRosterTable = memo(function TodayRosterTable({
   day,
@@ -43,7 +42,7 @@ export const TodayRosterTable = memo(function TodayRosterTable({
 }: {
   day: GridDay;
   data: ClassSheetWeekData;
-  marks: Record<string, { status: string | null; progressNote: string | null; score: string | null }>;
+  marks: Record<string, SheetMark>;
   attendance: Record<
     string,
     { status: string; note: string | null; units: number | null; slot: string | null }
@@ -56,6 +55,8 @@ export const TodayRosterTable = memo(function TodayRosterTable({
   const date = day.date;
   const slots = day.slots;
   const canMarkDate = data.canMarkAttendanceByDate[date] ?? false;
+  // 교시별 폼 — 판정은 슬롯 라벨 하나(rosterFormOf). colgroup·머리·칸이 **같은 값**을 봐야 열이 안 어긋난다.
+  const formOf = (slot: (typeof slots)[number]) => rosterFormOf(slot.teacherLabel);
 
   // 명단 = 교시 로스터의 합집합(학생당 1행). 교시마다 다른 것은 **명단 포함 여부**뿐이다(markOwners가
   // (날짜,교시) 단위) — entry의 값(eligible·historical·endedOn)은 rosterStateOn이 **날짜 단위**로 찍어
@@ -90,7 +91,8 @@ export const TodayRosterTable = memo(function TodayRosterTable({
     return { rows: out, counts: sizes };
   }, [slots, data.students, collapsedGroups]);
 
-  const colSpanAll = 1 + slots.length * 5;
+  // 이름 열 + 교시마다 (출결·유닛·태도 + 자유 입력 N + 특이사항) — 폼이 섞이면 교시마다 칸 수가 다르다.
+  const colSpanAll = 1 + slots.reduce((n, s) => n + 4 + rosterTextCols(formOf(s)).length, 0);
 
   return (
     // 🔴 카드 껍데기도, 스크롤도 여기 없다 — 위 계획 층과 **한 카드·한 스크롤**을 쓴다
@@ -105,11 +107,11 @@ export const TodayRosterTable = memo(function TodayRosterTable({
           <col style={{ width: TODAY_NAME_W }} />
           {slots.map((slot) => (
             <Fragment key={slot.slotStart}>
-              {TODAY_SLOT_COLS.map((w, i) => (
+              {/* 마지막이 특이사항(잔여)이고 **합은 항상 교시 폭** — 특이사항까지 고정 폭이어야 표가
+                  남는 폭을 거기 몰아주지 않는다(그러면 교시 폭이 카드와 달라진다). */}
+              {todaySlotCols(formOf(slot)).map((w, i) => (
                 <col key={i} style={{ width: w }} />
               ))}
-              {/* 특이사항도 **고정 폭** — 가변으로 두면 표가 남는 폭을 여기 몰아줘 교시 폭이 카드와 달라진다. */}
-              <col style={{ width: TODAY_NOTE_W }} />
             </Fragment>
           ))}
         </colgroup>
@@ -137,9 +139,15 @@ export const TodayRosterTable = memo(function TodayRosterTable({
                   유닛
                 </th>
                 <th className="py-0.5 text-center font-bold">태도</th>
-                <th className="py-0.5 text-center font-bold" title="이 교시의 점수 — 자유 입력(18/20 · 95 · A 등)">
-                  점수
-                </th>
+                {rosterTextCols(formOf(slot)).map((col) => (
+                  <th
+                    key={col.field}
+                    className="py-0.5 text-center leading-tight font-bold"
+                    title={col.title}
+                  >
+                    {col.label}
+                  </th>
+                ))}
                 <th className="py-0.5 pr-1 text-left font-bold">특이사항</th>
               </Fragment>
             ))}
@@ -178,6 +186,7 @@ export const TodayRosterTable = memo(function TodayRosterTable({
                     canEdit={canEdit}
                     handlers={handlers}
                     navRow={row.navRow}
+                    form={formOf(slot)}
                     navColSuffix={`:${slot.slotStart}`}
                     withDivider
                   />

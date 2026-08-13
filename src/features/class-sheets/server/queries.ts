@@ -34,6 +34,7 @@ import {
   type LandingTeacherOption,
 } from "../landing-teacher";
 import type { RosterGroupKey } from "../lib/roster-order";
+import type { SheetMark } from "../lib/roster-form";
 import { keepEnglishTrack, type EnglishTrackFilter } from "@/features/classes/english-track";
 import {
   buildWeekGrid,
@@ -114,8 +115,8 @@ export type ClassSheetWeekData = {
    *    이 값을 쓰기 경로에서 되살리지 말 것.
    */
   unitsByDate: Record<string, number>;
-  /** `${studentId}|${date}|${HH:MM}` → 마크. */
-  marks: Record<string, { status: string | null; progressNote: string | null; score: string | null }>;
+  /** `${studentId}|${date}|${HH:MM}` → 마크(태도·특이사항 + 폼별 자유 입력 칸). */
+  marks: Record<string, SheetMark>;
   goals: SheetGoalDTO[];
   monthStart: string;
   memos: Record<string, string>;
@@ -308,8 +309,11 @@ export async function getClassSheetWeek(
     slotStart: m.slot_start as string,
     status: (m.status as string | null) ?? null,
     progressNote: (m.progress_note as string | null) ?? null,
-    // 0202a 적용 전(컬럼 없음)엔 undefined로 와서 null이 된다 — 화면은 '빈 점수'로 정상 동작한다.
+    // 마이그레이션(0202a score · 0206a 듣기/단어수) 적용 전엔 컬럼이 없어 undefined → null이 된다
+    // — 화면은 '빈 칸'으로 정상 동작한다(#95 expand/contract). 위 select가 `*`인 이유도 이것.
     score: ((m as { score?: string | null }).score as string | null) ?? null,
+    listeningLevel: ((m as { listening_level?: string | null }).listening_level as string | null) ?? null,
+    memorizedWords: ((m as { memorized_words?: string | null }).memorized_words as string | null) ?? null,
   }));
 
   const effAttendance = effectiveAttendanceRecords(
@@ -494,15 +498,14 @@ export async function getClassSheetWeek(
     };
   }
 
-  const marksMap: Record<
-    string,
-    { status: string | null; progressNote: string | null; score: string | null }
-  > = {};
+  const marksMap: Record<string, SheetMark> = {};
   for (const m of marks) {
     marksMap[`${m.studentId}|${m.markDate}|${normalizeSlotTime(m.slotStart)}`] = {
       status: m.status,
       progressNote: m.progressNote,
       score: m.score,
+      listeningLevel: m.listeningLevel,
+      memorizedWords: m.memorizedWords,
     };
   }
 

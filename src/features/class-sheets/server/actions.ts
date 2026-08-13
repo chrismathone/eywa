@@ -407,6 +407,52 @@ function isMissingColumn(err: { code?: string; message?: string } | null, column
   return (err.message ?? "").includes(column) && /column|컬럼/i.test(err.message ?? "");
 }
 
+/**
+ * 마크 한 행의 **자유 입력 칸** — 입력 키 → DB 컬럼. 폼(기본 / JJ)마다 화면에 뜨는 칸이 다르다
+ * ([roster-form.ts](../lib/roster-form.ts)).
+ *
+ * 🔴 **안 넘긴 칸은 건드리지 않는다.** 아래 upsert의 SET 목록에서 빠지므로 지금 값이 그대로 남는다.
+ *    그래서 ① JJ 교시에서 듣기 레벨을 고쳐도 그 행의 시험 점수가 안 지워지고 ② 오늘 보드 팝오버
+ *    (태도·특이사항만 보낸다)가 다른 칸을 null로 덮지 않는다 — 종전엔 `input.score ?? null`이라
+ *    팝오버 저장 한 번에 시험 점수가 조용히 날아갔다(2026-08-13 발견, 실제 피해 0건: score 입력 0행).
+ * ⚠️ 칸을 늘리면 여기와 `MARK_TEXT_LABEL`·DB 컬럼·roster-form을 **함께** 늘릴 것.
+ */
+const MARK_TEXT_COLUMNS = {
+  score: "score",
+  listeningLevel: "listening_level",
+  memorizedWords: "memorized_words",
+} as const;
+type MarkTextKey = keyof typeof MARK_TEXT_COLUMNS;
+/** 에러 문구에 쓰는 이름 — 화면 라벨과 같은 말(raw 컬럼명 노출 금지). */
+const MARK_TEXT_LABEL: Record<MarkTextKey, string> = {
+  score: "시험 점수",
+  listeningLevel: "듣기 레벨",
+  memorizedWords: "누적 암기 단어수",
+};
+const MARK_TEXT_MAXLEN = 30;
+const ALL_MARK_TEXT_COLUMNS = Object.values(MARK_TEXT_COLUMNS);
+
+/**
+ * 선택 컬럼이 **아직 없어도** 죽지 않게 — 컬럼 부재면 그 컬럼을 빼고 다시 시도한다(#95 expand/contract).
+ * ⚠️ PostgREST는 어느 컬럼이 없는지 이름으로 알려주지 않는다(PGRST204) — 그래서 앞에서부터 하나씩 빼며
+ *    재시도한다. 한 마이그레이션의 컬럼들은 함께 없거나 함께 있어서 실사용에선 곧바로 수렴한다.
+ */
+async function runDroppingMissingColumns(
+  columns: readonly string[],
+  run: (cols: readonly string[]) => PromiseLike<{ error: { code?: string; message?: string } | null }>,
+): Promise<{ error: { code?: string; message?: string } | null; dropped: string[] }> {
+  let cols = [...columns];
+  const dropped: string[] = [];
+  for (;;) {
+    const { error } = await run(cols);
+    if (!error) return { error: null, dropped };
+    const missing = cols.find((c) => isMissingColumn(error, c));
+    if (!missing) return { error, dropped };
+    cols = cols.filter((c) => c !== missing);
+    dropped.push(missing);
+  }
+}
+
 export async function upsertStudentMark(input: {
   classId: string;
   studentId: string;
@@ -414,8 +460,12 @@ export async function upsertStudentMark(input: {
   slotStart: string;
   status: string | null;
   progressNote: string | null;
-  /** 점수 — 자유 입력(원장 2026-08-11 "점수 입력칸 신설"). `18/20`·`95`처럼 형식이 제각각이라 숫자로 안 굳힌다. */
+  /** 시험 점수(0202a) — 자유 입력. `18/20`·`95`처럼 형식이 제각각이라 숫자로 안 굳힌다. */
   score?: string | null;
+  /** 듣기 레벨(0206a) — JJ 교시 전용 폼(원장 2026-08-13). 자유 입력. */
+  listeningLevel?: string | null;
+  /** 누적 암기 단어수(0206a) — JJ 교시 전용 폼. 자유 입력(숫자로 안 굳힌다). */
+  memorizedWords?: string | null;
 }): Promise<{ ok: true } | ActionError> {
   const gate = await requireEcsClassAccess(input.classId, { write: true });
   if (!gate.ok) return { ok: false, error: gate.error };
@@ -424,30 +474,33 @@ export async function upsertStudentMark(input: {
   }
   const status = normalizePlanText(input.status);
   const progressNote = normalizePlanText(input.progressNote);
-  const score = normalizePlanText(input.score ?? null);
   if ((status?.length ?? 0) > 50) return { ok: false, error: "상태는 50자 이내로 입력하세요" };
-  if ((score?.length ?? 0) > 30) return { ok: false, error: "점수는 30자 이내로 입력하세요" };
   if ((progressNote?.length ?? 0) > 500) return { ok: false, error: "입력이 너무 깁니다(500자 이내)" };
+
+  // 넘어온 칸만 담는다(undefined = 이 호출은 그 칸을 안 건드린다).
+  const text: Record<string, string | null> = {};
+  for (const key of Object.keys(MARK_TEXT_COLUMNS) as MarkTextKey[]) {
+    const raw = input[key];
+    if (raw === undefined) continue;
+    const value = normalizePlanText(raw);
+    if ((value?.length ?? 0) > MARK_TEXT_MAXLEN) {
+      return { ok: false, error: `${MARK_TEXT_LABEL[key]}은(는) ${MARK_TEXT_MAXLEN}자 이내로 입력하세요` };
+    }
+    text[MARK_TEXT_COLUMNS[key]] = value;
+  }
+  // 이 호출이 아는 값이 전부 비었나 — 그렇다고 곧장 지우진 않는다(안 넘긴 칸에 값이 남아 있을 수 있다).
+  const looksEmpty =
+    status === null && progressNote === null && Object.values(text).every((v) => v === null);
 
   const admin = createAdminClient();
   const { tenantId, user } = gate.access;
 
-  if (status === null && progressNote === null && score === null) {
-    const { error } = await admin
-      .from("class_sheet_student_marks")
-      .delete()
-      .eq("tenant_id", tenantId)
-      .eq("class_id", input.classId)
-      .eq("student_id", input.studentId)
-      .eq("mark_date", input.markDate)
-      .eq("slot_start", input.slotStart);
-    if (error) return { ok: false, error: `저장에 실패했습니다: ${error.message}` };
-    return { ok: true };
+  // mark_date 기준 실수강·등원요일 검증 — 비eligible(historical) 학생 행은 읽기 전용(§F).
+  // ⚠️ **비우는 방향은 예외**(기존 규약) — 잘못 찍힌 기록은 수강이 끝난 뒤에도 지울 수 있어야 한다.
+  if (!looksEmpty) {
+    const elig = await checkStudentEligibleOn(admin, tenantId, input.classId, input.studentId, input.markDate);
+    if (!elig.ok) return elig;
   }
-
-  // mark_date 기준 실수강·등원요일 검증 — 비eligible(historical) 학생 행은 읽기 전용(§F)
-  const elig = await checkStudentEligibleOn(admin, tenantId, input.classId, input.studentId, input.markDate);
-  if (!elig.ok) return elig;
 
   const base = {
     tenant_id: tenantId,
@@ -461,18 +514,41 @@ export async function upsertStudentMark(input: {
     updated_at: new Date().toISOString(),
   };
   const onConflict = "tenant_id,class_id,student_id,mark_date,slot_start";
-  let { error } = await admin
-    .from("class_sheet_student_marks")
-    .upsert({ ...base, score }, { onConflict });
-  if (isMissingColumn(error, "score")) {
-    // 🔴 0202a 미적용 프로덕션 — 점수만 못 담을 뿐 태도·특이사항은 예전처럼 저장돼야 한다(#95).
-    //    대신 **점수를 실제로 입력한 경우엔 조용히 버리지 않고** 아직 준비 전임을 그대로 말한다.
-    ({ error } = await admin.from("class_sheet_student_marks").upsert(base, { onConflict }));
-    if (!error && score !== null) {
-      return { ok: false, error: "점수 칸은 아직 준비 중입니다(관리자에게 문의하세요)" };
-    }
-  }
+  const { error, dropped } = await runDroppingMissingColumns(Object.keys(text), (cols) =>
+    admin
+      .from("class_sheet_student_marks")
+      .upsert({ ...base, ...Object.fromEntries(cols.map((c) => [c, text[c]])) }, { onConflict }),
+  );
   if (error) return { ok: false, error: `저장에 실패했습니다: ${error.message}` };
+  // 🔴 마이그레이션 미적용 — 그 칸만 못 담을 뿐 태도·특이사항은 예전처럼 저장된다(#95). 대신 값을 실제로
+  //    **입력한 경우엔 조용히 버리지 않고** 아직 준비 전임을 그대로 말한다(화면은 롤백된다).
+  const lostKey = (Object.keys(MARK_TEXT_COLUMNS) as MarkTextKey[]).find(
+    (k) => dropped.includes(MARK_TEXT_COLUMNS[k]) && text[MARK_TEXT_COLUMNS[k]] != null,
+  );
+  if (lostKey) {
+    return { ok: false, error: `'${MARK_TEXT_LABEL[lostKey]}' 칸은 아직 준비 중입니다(관리자에게 문의하세요)` };
+  }
+
+  if (looksEmpty) {
+    // 빈 행은 남기지 않는다 — 마크가 남으면 그 학생이 명단(로스터 합집합)과 자리 각주 건수에 계속 잡힌다.
+    // 🔴 단 **정말로 다 비었을 때만** 지운다: 이 호출이 안 넘긴 칸(다른 폼의 값)이 남아 있으면 조건이
+    //    안 맞아 0행이 지워지고 행은 값과 함께 그대로 산다.
+    // 청소가 실패해도 사용자에게 알리지 않는다 — 값은 위에서 이미 비워졌고 남는 건 빈 행뿐이다.
+    await runDroppingMissingColumns(ALL_MARK_TEXT_COLUMNS, (cols) => {
+      let q = admin
+        .from("class_sheet_student_marks")
+        .delete()
+        .eq("tenant_id", tenantId)
+        .eq("class_id", input.classId)
+        .eq("student_id", input.studentId)
+        .eq("mark_date", input.markDate)
+        .eq("slot_start", input.slotStart)
+        .is("status", null)
+        .is("progress_note", null);
+      for (const c of cols) q = q.is(c, null);
+      return q;
+    });
+  }
   return { ok: true };
 }
 

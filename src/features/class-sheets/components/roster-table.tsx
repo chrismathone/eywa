@@ -1,6 +1,8 @@
 "use client";
 
-// 학생 로스터 표 — [이름 | 출결 | 유닛 | 태도 | 점수 | 특이사항].
+// 학생 로스터 표 — [이름 | 출결 | 유닛 | 태도 | (폼별 자유 입력) | 특이사항].
+// 자유 입력 칸은 **교시마다 다르다**: 기본은 '시험 점수' 하나, JJ(집중자율수업실) 교시는 '듣기 레벨' +
+// '누적 암기 단어수'(원장 2026-08-13). 구성은 lib/roster-form.ts 단일 소스 — 여기서 열을 새로 짜지 말 것.
 // 출결은 **교시별**(0196a, 원장 2026-08-10) — 같은 날 4교시·6교시가 서로 다른 기록이다.
 //   ⚠️ 그전엔 (학생,날짜) 하루 1건이라 모든 교시 카드가 같은 행을 비췄고, 한 칸을 고치면 다른 칸도
 //      함께 바뀌었다. 옛 기록(slot_start null)은 서버가 그 날 **첫 교시 칸에만** 붙여 준다.
@@ -29,6 +31,8 @@ import { EyIcon } from "@/components/icons/eywa-icons";
 import type { ClassSheetWeekData } from "../server/queries";
 import type { RosterEntry } from "../lib/grid";
 import { groupRosterRows, type RosterGroupKey } from "../lib/roster-order";
+import { rosterColSpan, rosterTextCols, type RosterForm, type SheetMark } from "../lib/roster-form";
+import { TODAY_BASE_COLS } from "../lib/today-columns";
 // 셀 구현은 **공용 모듈**(roster-slot-cells) — 오늘 면 통합 표(today-roster-table)와 같은 셀을 쓴다
 // (원장 2026-08-11 "쓸데없이 중복되는 컴포넌트가 다수" — 여기 인라인이던 것을 추출, 동작 불변).
 import { RosterNameCell, RosterSlotCells } from "./roster-slot-cells";
@@ -99,12 +103,13 @@ export const RosterTable = memo(function RosterTable({
   canEdit,
   collapsedGroups,
   onToggleGroup,
+  form,
 }: {
   date: string;
   slotStart: string;
   roster: RosterEntry[];
   data: ClassSheetWeekData;
-  marks: Record<string, { status: string | null; progressNote: string | null; score: string | null }>;
+  marks: Record<string, SheetMark>;
   attendance: Record<
     string,
     { status: string; note: string | null; units: number | null; slot: string | null }
@@ -113,8 +118,11 @@ export const RosterTable = memo(function RosterTable({
   canEdit: boolean;
   collapsedGroups: readonly RosterGroupKey[];
   onToggleGroup: (key: RosterGroupKey) => void;
+  /** 이 교시의 입력 폼(기본 / JJ 전용) — 카드가 슬롯 라벨로 판정해 넘긴다. */
+  form: RosterForm;
 }) {
   const canMarkDate = data.canMarkAttendanceByDate[date] ?? false;
+  const textCols = rosterTextCols(form);
   // 섹션(재원/퇴원/기록)으로 나눠 이름·종료일 순으로 정렬한 뒤 라벨 행과 함께 한 줄로 편다.
   // 표를 나누지 않고 한 <table> 안에서 라벨 행으로 가르는 이유: 열 폭(이름/출결/학교/태도/과제)이
   // 섹션마다 어긋나면 같은 명단으로 안 읽힌다. 키보드 이동(data-nav-row)은 렌더 순서로 다시 매긴다.
@@ -148,14 +156,18 @@ export const RosterTable = memo(function RosterTable({
             이름 열이 84px일 때 세 글자 이름(≈39px)이 끝나고도 40px이 비어 있었다. 그 폭은 화살표가
             사라진 출결·태도(드롭다운 → 체크 순환)에서도 함께 회수해 **신설 '점수' 열과 특이사항**이 가져간다.
             ⚠️ 13px 글자 기준: 이름 4자 ≈ 52 + 여백 8 = 60 · '매우 안좋음' ≈ 69 + 8 = 77 · '✓ 출석' ≈ 47. */}
+        {/* ⚠️ 출결·유닛·태도 폭은 오늘 면과 **같은 상수**(TODAY_BASE_COLS) — 한쪽만 고치면 두 화면이 갈린다.
+            ⚠️ 유닛 칸은 열 폭을 그대로 채운다(w-full) — 예전 46px 고정 입력이 열보다 넓어
+               양옆 칸 위로 겹쳐 그려지던 문제(원장 2026-08-06 "너무 겹치네")가 구조적으로 사라졌다. */}
         <colgroup>
           <col style={{ width: 64 }} />
-          <col style={{ width: 60 }} />
-          {/* ⚠️ 유닛 칸은 열 폭을 그대로 채운다(w-full) — 예전 46px 고정 입력이 열보다 넓어
-              양옆 칸 위로 겹쳐 그려지던 문제(원장 2026-08-06 "너무 겹치네")가 구조적으로 사라졌다. */}
-          <col style={{ width: 46 }} />
-          <col style={{ width: 80 }} />
-          <col style={{ width: 54 }} />
+          {TODAY_BASE_COLS.map((w, i) => (
+            <col key={i} style={{ width: w }} />
+          ))}
+          {textCols.map((c) => (
+            <col key={c.field} style={{ width: c.width }} />
+          ))}
+          {/* 특이사항 = 잔여(원장 2026-08-13 "특이사항은 좀 줄여도 돼" — JJ 폼은 칸이 하나 더 많아 그만큼 좁다). */}
           <col />
         </colgroup>
         <thead>
@@ -182,10 +194,13 @@ export const RosterTable = memo(function RosterTable({
               유닛
             </th>
             <th className="py-0.5 text-center font-bold">태도</th>
-            {/* 점수(0202a) — 그전엔 특이사항에 섞여 있었다("… PL 7, 15문"). 형식이 제각각이라 자유 입력이다. */}
-            <th className="py-0.5 text-center font-bold" title="이 교시의 점수 — 자유 입력(18/20 · 95 · A 등)">
-              점수
-            </th>
+            {/* 자유 입력 칸 — 그전엔 특이사항에 섞여 있었다("… PL 7, 15문"). 형식이 제각각이라 자유 입력이다.
+                라벨은 roster-form이 정한다(기본 '시험 점수' / JJ '듣기 레벨'·'누적 암기 단어수'). */}
+            {textCols.map((col) => (
+              <th key={col.field} className="py-0.5 text-center leading-tight font-bold" title={col.title}>
+                {col.label}
+              </th>
+            ))}
             <th className="rounded-r-md py-0.5 pr-1 font-bold">특이사항</th>
           </tr>
         </thead>
@@ -195,7 +210,7 @@ export const RosterTable = memo(function RosterTable({
               return (
                 <tr key={`label:${row.key}`} className="bg-bg-soft">
                   <td
-                    colSpan={6}
+                    colSpan={rosterColSpan(form)}
                     className="text-foreground px-1 py-0.5 text-[11px] font-bold"
                     title={GROUP_HINT[row.key]}
                   >
@@ -229,6 +244,7 @@ export const RosterTable = memo(function RosterTable({
                   canEdit={canEdit}
                   handlers={handlers}
                   navRow={navRow}
+                  form={form}
                 />
               </tr>
             );
