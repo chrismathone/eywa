@@ -10,6 +10,7 @@ import {
   getClassroomsLite,
   getTeacherColorMap,
   getTeacherLabelMap,
+  getTeacherNicknameMap,
   getTeacherScheduleBlocks,
   getWeeklyScheduleWithStudents,
 } from "@/features/timetable/server/queries";
@@ -226,9 +227,13 @@ export default async function TimetablePage({
   // ⚠️ 과목별이라 **그 과목 키가 계정에 있을 때만** 계정을 쓴다 — 계정 맵이 있어도 아직 그 과목을
   // 토글한 적이 없으면 쿠키(구 설정)를 살려야 한다(계정 첫 저장이 다른 과목 설정을 덮어버리지 않게).
   // '해제'는 계정에 **빈 배열로 명시 저장**되므로 `?? 쿠키`가 옛 값을 되살리지 않는다(none 센티널과 같은 이유).
+  // ⚠️ 2026-08-13부터 **계정이 파라미터보다 앞선다** — 토글이 통합뷰에서 빠지고 '그룹 설정'으로 옮겨
+  //    가면서, 유일한 쓰기 경로가 계정(users.ui_prefs)이 됐기 때문이다. 파라미터를 앞에 두면 그룹
+  //    설정에서 방금 저장한 값을 **돌아올 때 URL에 실려 있던 옛 값**이 덮어써 "체크가 안 먹는다"가 된다.
+  //    파라미터·쿠키는 계정에 값이 없을 때의 이관 폴백으로만 남는다.
   const compactList =
-    compactFromParam ??
     viewPrefs.compact1h?.[subject] ??
+    compactFromParam ??
     readCompact1hFor(cookieStore.get(COMPACT1H_COOKIE)?.value, subject);
   const compactSections = new Set(compactList);
 
@@ -328,6 +333,13 @@ export default async function TimetablePage({
   // 강사 컬럼 순서도 **라벨 문자열로** 열과 맞물린다 — 제외 강사와 같은 해석기를 통과시켜야
   // 예전에 닉네임으로 저장된 값도 계속 맞는다(마이그레이션 불필요).
   const teacherViewOrder = resolveTeacherLabels(subjectRow?.teacherViewOrder ?? [], teacherLabelMap);
+  /**
+   * 담임·강사 헤더에 `한글이름(영어이름)`을 적을 때 쓰는 맵 — **영어 과목에서만**(원장 2026-08-13).
+   * 🔴 과목을 가리는 이유: 닉네임은 영어과 문화다. 실측(활성 12명 중) **김은정(Celine)이 비영어 반 8개**
+   *    담임이라, 과목을 안 가리면 수학 시간표에도 "김은정(Celine)"이 붙는다(요청 밖 화면이 바뀐다).
+   * 왕복은 0회 — `getTeacherLabelMap`과 **같은 조회**(getTeacherNameRows, React cache)를 나눠 쓴다.
+   */
+  const teacherNicknames = subject === "english" ? await getTeacherNicknameMap() : undefined;
   // '강사 순서' 창이 편집할 목록 = **지금 강사뷰에 실제 있는 강사**를 현재 표시 순서 그대로.
   // (설정에 없던 강사도 포함해야 저장 한 번에 순서가 통째로 굳는다.)
   const teacherViewNames =
@@ -394,26 +406,8 @@ export default async function TimetablePage({
   ]!;
   // "지금" 표시(교실뷰) — 서버 렌더 시점 KST 고정(클라 타이머 없음, 새로고침·주 이동 시 갱신).
   const nowMin = kstMinutesOfDay();
-  // 섹션별 '1시간 단위' 토글 href — 그 sectionKey를 압축 집합에 넣고/빼기(다른 필터·주·과목은 유지).
-  const hrefForSectionToggle = (sectionKey: number) =>
-    buildHref({
-      view: effView,
-      defaultView: thisSubjectDefaultView,
-      subject,
-      defaultSubject,
-      kind,
-      week,
-      thisWk,
-      compact1h: compactSections.has(sectionKey)
-        ? compactList.filter((k) => k !== sectionKey)
-        : [...compactList, sectionKey],
-      // 사용자가 방금 정한 값 = 빈 집합도 명시(compact1h=none). 안 그러면 마지막 하나를 해제할 때
-      // 파라미터가 사라져 쿠키의 옛 값이 되살아난다(안 꺼지는 토글).
-      compact1hExplicit: true,
-      hideEmptyDays,
-      collapseEmptyPeriods,
-      englishTrack: carriedTrack,
-    });
+  // ('1시간 단위' 섹션 토글 href는 없앴다 — 토글이 통합뷰에서 '그룹 설정' 화면으로 옮겨갔고,
+  //  거기선 URL이 아니라 계정 설정에 직접 저장한다. 2026-08-13)
   // 상단 명단 요약(ijw식 재원/신입/전입/퇴원) — 그 주 시점(타임머신) 기준. 학생이 여러 반에 걸쳐 있어
   // studentId로 유일 집계(중복 제거). 상태 우선순위 재원>대기>퇴원(한 반 재원·다른 반 퇴원이면 재원).
   const statusOf = new Map<string, "active" | "hold" | "withdrawn">();
@@ -653,8 +647,8 @@ export default async function TimetablePage({
             (2026-07-24 원장 "시간표도 깔끔하게"). 셋 다 "무엇이 어떻게 보이나"라 학년 필터와 같은 성격이고,
             특히 색 3칩이 툴바를 상시 2줄로 밀어내던 주범이었다. href는 아래 TimetableViewSettings에 넘긴다. */}
 
-        {/* 통합뷰 '1시간 단위' 토글은 전역이 아니라 **각 섹션 헤더(RichGridView)** 에 있다
-            (사용자 결정 2026-07-06 — 각 교시 시작별로 세팅). 툴바 전역 토글 없음. */}
+        {/* 통합뷰 '1시간 단위'는 툴바에도, 통합뷰 섹션 헤더에도 없다 — **'그룹 설정' 화면의 줄 머리글**이
+            유일한 설정 지점이다(원장 2026-08-13). 값은 계속 계정(과목별)에 저장된다. */}
 
         {/* 통합뷰 '그룹 설정' — 섹션을 'N교시 시작' 자동 묶음 대신 원장이 정한 묶음으로(ijw 이식). */}
         {canEditGroups ? (
@@ -862,6 +856,7 @@ export default async function TimetablePage({
           initialShowOthers={subjectRow?.integrationShowOthers !== false}
           initialOthersTitle={subjectRow?.integrationOthersTitle ?? ""}
           initialPresets={groupPresets}
+          initialCompactSections={compactList}
           doneHref={buildHref({ view: effView, subject, defaultSubject, kind, week, thisWk, compact1h: compactList, hideEmptyDays, collapseEmptyPeriods, englishTrack: carriedTrack, defaultView: thisSubjectDefaultView })}
         />
       ) : isIntegrated ? (
@@ -871,8 +866,8 @@ export default async function TimetablePage({
             subjectMaps={subjectMaps}
             config={periodsConfig}
             teacherColors={teacherColors}
+            teacherNicknames={teacherNicknames}
             compactSections={compactSections}
-            hrefForSectionToggle={hrefForSectionToggle}
             customGroups={customGroups}
           />
         </TimetableZoomArea>
@@ -885,6 +880,7 @@ export default async function TimetablePage({
               slots={[...slots, ...scheduleBlocks]}
               weekMonday={week}
               teacherColors={teacherColors}
+              teacherNicknames={teacherNicknames}
               sectionLineMins={sectionLineMins}
               stepMin={teacherViewStep}
               pxPerMin={teacherViewPxPerMin}

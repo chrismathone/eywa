@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_PERIODS_CONFIG } from "./periods";
-import { ROSTER_ROW_CAP, buildRichCardGroups, type GridSlot } from "./class-grid";
+import { ROSTER_ROW_CAP, buildRichCardGroups, padCardDays, type GridSlot } from "./class-grid";
 
 /**
  * 통합뷰 카드 요일축 = **그 반이 실제 수업하는 요일만**(원장 지시 2026-08-11 "수업없는 요일 열도 숨겨버리고").
@@ -259,5 +259,47 @@ describe("주말 전용 반은 1교시부터 시작하게 당긴다 — 섹션 �
     const c = cardOf([slot("x1", "wed", "14:20"), slot("x1", "sat", "20:00")], "x1");
     const satKeys = Object.keys(c.cells).filter((k) => k.endsWith(":sat"));
     expect(satKeys).toHaveLength(1);
+  });
+});
+
+/**
+ * 최소 3열(더미 요일) — **렌더 전용** 규칙(원장 2026-08-13 *"요일이 2개라 열이 2개밖에 없는 수업은
+ * 강제로 수요일을 추가해서 열을 3개로 … 수업이 없지만 3개열로 만들기 위해 더미열을 넣는 것"*).
+ *
+ * ⚠️ 위 describe의 "실제 요일만"과 모순이 아니다 — 카드 데이터(`card.days`)는 그대로 실제 요일이고,
+ *    통합뷰 카드 컴포넌트만 이 함수를 거쳐 **빈 칸**을 늘린다(엑셀·시트 내보내기는 안 거친다).
+ */
+describe("padCardDays — 통합뷰 카드 최소 3열", () => {
+  it("2요일 반엔 수요일을 넣어 3열로", () => {
+    expect(padCardDays(["mon", "thu"])).toEqual(["mon", "wed", "thu"]);
+    expect(padCardDays(["tue", "fri"])).toEqual(["tue", "wed", "fri"]);
+  });
+
+  it("이미 수요일이 있으면 다른 요일로 채운다(금→월→화→목)", () => {
+    expect(padCardDays(["mon", "wed"])).toEqual(["mon", "wed", "fri"]);
+    expect(padCardDays(["wed", "fri"])).toEqual(["mon", "wed", "fri"]);
+    expect(padCardDays(["wed", "thu"])).toEqual(["wed", "thu", "fri"]);
+  });
+
+  it("3열 이상은 손대지 않는다", () => {
+    expect(padCardDays(["mon", "wed", "fri"])).toEqual(["mon", "wed", "fri"]);
+    expect(padCardDays(["mon", "tue", "wed", "thu", "fri"])).toHaveLength(5);
+  });
+
+  it("한 요일 반도 3열까지 채운다", () => {
+    expect(padCardDays(["mon"])).toEqual(["mon", "wed", "fri"]);
+  });
+
+  it("🔴 주말 전용 반은 그대로 — 평일 더미를 붙이면 토·일반이 평일 반처럼 읽힌다", () => {
+    expect(padCardDays(["sat", "sun"])).toEqual(["sat", "sun"]);
+    expect(padCardDays(["sat"])).toEqual(["sat"]);
+  });
+
+  it("평일+주말 혼합 반은 평일 쪽으로 채운다(요일 순서는 월~일 유지)", () => {
+    expect(padCardDays(["wed", "sat"])).toEqual(["wed", "fri", "sat"]);
+  });
+
+  it("빈 배열은 빈 배열(카드가 깨진 상태를 더미로 감추지 않는다)", () => {
+    expect(padCardDays([])).toEqual([]);
   });
 });

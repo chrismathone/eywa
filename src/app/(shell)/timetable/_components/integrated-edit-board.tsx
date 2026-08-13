@@ -32,6 +32,7 @@ import { POOL_ID, dedupeGroups, moveClass, reorderGroups, type GroupDraft } from
 import { normalizePresets, type GroupPreset } from "@/features/timetable/lib/group-presets";
 import { DEFAULT_OTHERS_TITLE } from "@/features/timetable/lib/integration-groups";
 import type { PeriodsConfig } from "@/features/timetable/lib/periods";
+import { saveTimetableViewPrefs } from "@/features/timetable/server/view-prefs-actions";
 import { TimetableZoomArea } from "./font-size-toggle";
 import { GroupPresetBar } from "./group-preset-bar";
 import { RichCardGroupBoard, ClassColumn, NAME_H, type ColumnCommon } from "./rich-card-group";
@@ -68,6 +69,7 @@ export function IntegratedEditBoard({
   initialShowOthers,
   initialOthersTitle,
   initialPresets,
+  initialCompactSections,
   doneHref,
 }: {
   subject: string;
@@ -82,6 +84,13 @@ export function IntegratedEditBoard({
   initialShowOthers: boolean;
   initialOthersTitle: string;
   initialPresets: GroupPreset[];
+  /**
+   * 지금 '1시간 단위'로 접혀 있는 줄(sectionKey 목록) — 통합뷰에서 토글을 없애고 **여기로 옮겼다**
+   * (원장 2026-08-13 *"1시간 단위는 그룹설정에서만 세팅 가능하도록"*).
+   * ⚠️ 저장 위치는 지금까지와 같은 **내 계정**(users.ui_prefs.timetable.compact1h[과목])이다 — 줄 배치는
+   *    학원 공통 설정이지만 이 토글은 보는 사람 취향이라 통합뷰가 원래 쓰던 그릇을 그대로 쓴다.
+   */
+  initialCompactSections: number[];
   /** 편집을 끝내고 돌아갈 통합뷰 주소(같은 과목·주·필터). */
   doneHref: string;
 }) {
@@ -120,6 +129,12 @@ export function IntegratedEditBoard({
   const [saving, startSave] = useTransition();
   const [presetSaving, startPresetSave] = useTransition();
   const [presetError, setPresetError] = useState<string | null>(null);
+  // '1시간 단위'(줄별) — 보관함과 같은 **즉시 저장**이다. 하단 '실제 반영'에 묶으면 줄 배치를 안 바꾸고
+  // 이것만 켜러 온 사람이 "반영"까지 눌러야 하고, 안 누르면 조용히 사라진다.
+  const [compactKeys, setCompactKeys] = useState<number[]>(() =>
+    [...new Set(initialCompactSections)].sort((a, b) => a - b),
+  );
+  const [, startCompactSave] = useTransition();
 
   /**
    * 보관함(저장된 배치) 추가·삭제 — **그 자리에서 서버에 쓴다**.
@@ -149,6 +164,22 @@ export function IntegratedEditBoard({
       // 🔴 서버가 찍은 '누가·언제'를 받아 목록에 반영한다 — 안 하면 방금 저장한 항목이
       //    "저장자 미상 · 시각 없음"으로 남는다(새로고침해야 보이는 값 = 없는 값).
       if (res.presets) setPresets(normalizePresets(res.presets, othersTitle));
+    });
+  }
+
+  /**
+   * 줄 하나의 '1시간 단위' 켜기/끄기 — 화면은 즉시, 저장은 계정(과목별)으로 곧장.
+   * ⚠️ 키는 **줄의 순번에서 나온 sectionKey**라, 켜 둔 뒤 줄 순서를 바꾸면 다른 줄로 따라간다
+   *    (통합뷰가 원래 쓰던 키라 그대로 둔다 — 순서를 바꿨으면 다시 확인할 것).
+   */
+  function toggleCompact(sectionKey: number) {
+    const next = compactKeys.includes(sectionKey)
+      ? compactKeys.filter((k) => k !== sectionKey)
+      : [...compactKeys, sectionKey].sort((a, b) => a - b);
+    setCompactKeys(next);
+    // 표시 취향이라 실패해도 편집을 막지 않는다(다음 저장 때 다시 시도된다).
+    startCompactSave(async () => {
+      await saveTimetableViewPrefs({ compact1h: { [subject]: next } });
     });
   }
 
@@ -341,6 +372,16 @@ export function IntegratedEditBoard({
                   subjectSoftClass={subjectSoftClass}
                   teacherColors={teacherColors}
                   over={over}
+                  // 한 줄이 평일/주말 두 섹션으로 갈리면 토글은 **평일 섹션에만**(주말은 교시 체계가 없어
+                  // 압축 대상이 아니다 — section.compactable이 그걸 판정한다).
+                  compact={
+                    section.compactable && (first || isOthers)
+                      ? {
+                          on: compactKeys.includes(section.sectionKey),
+                          onToggle: () => toggleCompact(section.sectionKey),
+                        }
+                      : null
+                  }
                   header={
                     isOthers ? (
                       <>
@@ -534,6 +575,7 @@ function EditSection({
   over,
   header,
   action,
+  compact,
 }: {
   section: RichCardGroup;
   containerId: string;
@@ -542,6 +584,8 @@ function EditSection({
   over: { containerId: string; classId: string | null } | null;
   header: React.ReactNode;
   action: React.ReactNode;
+  /** 이 줄의 '1시간 단위' — null이면 대상이 아닌 섹션(주말·같은 줄의 둘째 섹션). */
+  compact: { on: boolean; onToggle: () => void } | null;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: `box:${section.key}`, data: { type: "box", containerId } });
   // 카드 위가 아니라 **줄의 빈 곳**에 있을 때만 줄 전체를 밝힌다(카드 앞 삽입 표시와 겹치면 시끄럽다).
@@ -562,6 +606,17 @@ function EditSection({
         </span>
         {header}
         <span className="text-text-dim shrink-0 text-[12px] whitespace-nowrap">{section.cards.length}개 수업</span>
+        {/* '1시간 단위' — 통합뷰 섹션 헤더에 있던 토글의 새 자리(원장 2026-08-13). 이 줄에 교시 체계가
+            다른 반이 섞여 있으면 체계별로 표를 나눠 그린다(빈 교시 행이 서로를 가리지 않게). */}
+        {compact ? (
+          <label
+            title="이 줄에 교시 체계가 다른 반이 섞여 있으면 체계별로 나눠 그립니다 (내 화면에만 적용)"
+            className="text-text-dim hover:text-foreground flex shrink-0 cursor-pointer items-center gap-1 text-[11px] whitespace-nowrap"
+          >
+            <input type="checkbox" checked={compact.on} onChange={compact.onToggle} />
+            1시간 단위
+          </label>
+        ) : null}
         {action}
       </div>
       {/* trailing = '맨 뒤' 자리. 카드 사이(=그 앞에 끼우기)만 있으면 맨 뒤로 보내는 길이 없다. */}

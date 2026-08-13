@@ -83,6 +83,54 @@ export type PreservedSlot = Omit<IncomingSlot, "explicitTime"> & {
 };
 
 const hm = (t: string) => String(t).slice(0, 5);
+const isWeekendDay = (d: string) => d === "sat" || d === "sun";
+
+/**
+ * 교시표에 **실재하는 (시작,종료) 짝** 집합(평일/주말). 키는 `periodPairKey`.
+ *
+ * 🔴 왜 필요한가(원장 2026-08-13 *"중등E_초등 브릿지 C2는 스케줄 수정 자체가 안 되네 … 저장했는데
+ * 자꾸 원복이 되네"*): 영어 평일 교시표엔 **시작시각이 같은 교시가 둘**이다 — EiE 4교시(16:20~17:00)와
+ * IJW 1교시(16:20~17:20). 아래 종료시각 규칙이 "폼 값 무시, 기존 행 유지"라, 그 둘 사이 이동은
+ * `요일|시작`이 같아 짝이 지어지고 **종료시각이 옛 값으로 되돌려져** 저장이 아무 일도 안 한 게 된다
+ * (실측: C2가 오늘 여러 번 저장됐는데 마감 행 0·신규 구간 0·감사로그 0 = 전부 무시됨).
+ */
+export type PeriodPairs = { weekday: ReadonlySet<string>; weekend: ReadonlySet<string> };
+export const periodPairKey = (startTime: string, endTime: string): string =>
+  `${hm(startTime)}|${hm(endTime)}`;
+
+/** 이 슬롯의 (시작,종료)가 그 요일 종류의 교시표에 **정확히** 있는가. */
+function inPeriodTable(
+  slot: { dayOfWeek: string; startTime: string; endTime: string },
+  pairs: PeriodPairs | undefined,
+): boolean {
+  if (!pairs) return false;
+  const table = isWeekendDay(slot.dayOfWeek) ? pairs.weekend : pairs.weekday;
+  return table.has(periodPairKey(slot.startTime, slot.endTime));
+}
+
+/**
+ * 폼이 보낸 **종료시각을 믿어도 되는가**.
+ *
+ * 기본 규칙은 여전히 "클릭그리드의 종료시각은 교시표 파생이라 기존 행이 이긴다"다 — 저장된 실제 수업
+ * 길이(16:20~17:20 = 60분)가 그리드의 교시 값(40분)으로 조용히 줄면 **급여 시수가 준다**.
+ * 다만 그 보호는 **그리드가 그 슬롯을 정확히 복원하지 못했을 때만** 의미가 있다:
+ *  · 기존 행이 교시표의 정확한 짝이면 → 그리드가 (시작,종료) 짝 매칭으로 **그 교시를 그대로 복원**했다
+ *    (`buildPeriodMatcher`, 2026-08-13 [[#106]] 수정). 그러니 폼이 다른 종료시각을 보냈다는 건
+ *    **사용자가 다른 교시를 골랐다**는 뜻이다 → 폼 값을 쓴다.
+ *  · 기존 행이 교시표 밖(레거시 16:20~17:10 같은 값)이면 → 그리드는 **시작시각 폴백**으로 밖에 못
+ *    그렸으니 종료시각은 추측이다 → 기존 행을 지킨다(지금까지의 보호 그대로).
+ * ⚠️ `pairs`를 안 넘기면 **예전 동작**(항상 기존 행 우선)으로 떨어진다 — 교시표를 모르는 호출부가
+ *    시수를 잘라먹지 않게 하는 안전한 기본값이다.
+ */
+export function formEndTimeWins(
+  incoming: IncomingSlot,
+  prior: PriorSlot | undefined,
+  pairs?: PeriodPairs,
+): boolean {
+  if (incoming.explicitTime) return true; // 자유 시각 행 = 사용자가 직접 적은 값
+  if (!prior) return true; // 새 슬롯은 폼 값이 유일한 근거
+  return inPeriodTable(prior, pairs) && inPeriodTable(incoming, pairs);
+}
 
 /** 짝짓기 키 — 요일|시작(HH:MM)|종료(HH:MM). DB는 HH:MM:SS로 돌려주므로 잘라서 맞춘다. */
 export function slotKey(s: { dayOfWeek: string; startTime: string; endTime: string }): string {
@@ -144,12 +192,13 @@ function matchIncomingToPrior(incoming: IncomingSlot[], prior: PriorSlot[]): (Pr
   return matched;
 }
 
-/** 이 슬롯의 **이력 있는 값**이 바뀌었나 — 담당·강의실·(직접 입력한) 종료시각. */
-function slotChanged(incoming: IncomingSlot, prior: PriorSlot): boolean {
+/** 이 슬롯의 **이력 있는 값**이 바뀌었나 — 담당·강의실·(폼 값이 이기는) 종료시각. */
+function slotChanged(incoming: IncomingSlot, prior: PriorSlot, pairs?: PeriodPairs): boolean {
   if ((incoming.teacherId ?? null) !== (prior.teacherId ?? null)) return true;
   if ((incoming.classroomId ?? null) !== (prior.classroomId ?? null)) return true;
-  // 종료시각은 explicitTime일 때만 폼 값이 이긴다(그때만 실제로 바뀐다).
-  if (incoming.explicitTime && hm(incoming.endTime) !== hm(prior.endTime)) return true;
+  // 종료시각은 **폼 값이 이길 때만** 실제로 바뀐다(formEndTimeWins) — 판정을 preserveScheduleFields와
+  // 반드시 같은 함수로 할 것. 어긋나면 값은 바뀌는데 마감 행이 안 남거나(이력 구멍) 그 반대가 된다.
+  if (formEndTimeWins(incoming, prior, pairs) && hm(incoming.endTime) !== hm(prior.endTime)) return true;
   return false;
 }
 
@@ -179,6 +228,8 @@ export function planSlotArchives(input: {
   prior: PriorSlot[];
   /** KST 오늘 — 마감일은 이 날의 전날. */
   today: string;
+  /** 교시표의 (시작,종료) 짝 — 종료시각 변경 판정용(`formEndTimeWins`). 없으면 예전 동작. */
+  periodPairs?: PeriodPairs;
 }): (PriorSlot & { validTo: string })[] {
   const matched = matchIncomingToPrior(input.incoming, input.prior);
   const keptPairs = new Map<PriorSlot, IncomingSlot>();
@@ -193,7 +244,7 @@ export function planSlotArchives(input: {
     if (p.validFrom && String(p.validFrom).slice(0, 10) >= input.today) continue;
     const pair = keptPairs.get(p);
     // 짝이 없으면 '사라진 슬롯'(그 배치는 어제까지 있었다), 짝이 있어도 값이 바뀌었으면 옛 값을 남긴다.
-    if (pair && !slotChanged(pair, p)) continue;
+    if (pair && !slotChanged(pair, p, input.periodPairs)) continue;
     out.push({ ...p, validTo: cutoff });
   }
   return out;
@@ -206,6 +257,8 @@ export function preserveScheduleFields(input: {
   period: PeriodOverride;
   /** KST 오늘 — 승계할 기존값도 폼 지정도 없는 신규 슬롯의 valid_from. */
   today: string;
+  /** 교시표의 (시작,종료) 짝 — `planSlotArchives`에 넘긴 것과 **같은 값**이어야 한다. */
+  periodPairs?: PeriodPairs;
 }): PreservedSlot[] {
   // 같은 키가 여러 행일 수 있어(중복 슬롯) 큐로 두고 하나씩 소비 = 1:1 승계.
   // 1차 = 정확 키(요일|시작|종료). 2차 = (요일|시작) — 폼이 보내는 종료시각은 교시표에서 파생되므로
@@ -218,7 +271,9 @@ export function preserveScheduleFields(input: {
     //    기존값을 그대로 승계하면 같은 행을 덮어쓰는 셈이라 지난 주에도 새 담당이 보인다.
     //    단 오늘 시작한 행은 쪼갤 과거가 없어 그대로 승계한다(하루 두 번 수정 시 구간 폭발 방지).
     const splitToday =
-      !!prior && slotChanged(s, prior) && !(prior.validFrom && String(prior.validFrom).slice(0, 10) >= input.today);
+      !!prior &&
+      slotChanged(s, prior, input.periodPairs) &&
+      !(prior.validFrom && String(prior.validFrom).slice(0, 10) >= input.today);
     const inheritedFrom = splitToday ? input.today : (prior?.validFrom ?? input.today);
     const validFrom = input.period.provided
       ? (input.period.validFrom ?? inheritedFrom)
@@ -228,10 +283,12 @@ export function preserveScheduleFields(input: {
     const keepTo = input.period.keepValidTo === true && input.period.validTo === null;
     const validTo =
       input.period.provided && !keepTo ? input.period.validTo : (prior?.validTo ?? null);
-    // 종료시각: 교시 클릭그리드가 보낸 값은 **교시표 파생**이라 저장된 실제 수업 길이를 덮어쓴다
+    // 종료시각: 규칙은 `formEndTimeWins` 한 곳에 있다 — 기존 행이 교시표의 정확한 짝이면 폼 값(=사용자가
+    // 고른 교시)이 이기고, 교시표 밖(그리드가 시작시각 폴백으로만 그린 행)이면 기존 행을 지킨다
     // (16:20~17:20 수업이 교시표 17:00으로 40분이 되면 급여 시수가 조용히 줄어든다).
-    // → 기존 행이 있으면 그 종료시각을 유지하고, 사용자가 직접 입력한 행(explicitTime)만 그 값을 쓴다.
-    const endTime = s.explicitTime ? hm(s.endTime) : hm(prior?.endTime ?? s.endTime);
+    const endTime = formEndTimeWins(s, prior, input.periodPairs)
+      ? hm(s.endTime)
+      : hm(prior?.endTime ?? s.endTime);
     return {
       dayOfWeek: s.dayOfWeek,
       startTime: hm(s.startTime),

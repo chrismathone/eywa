@@ -1,5 +1,3 @@
-import { ParamLink } from "./param-link";
-import { EyIcon } from "@/components/icons/eywa-icons";
 import { SUBJECT_SOFT, type SubjectMaps } from "@/features/owner/subjects";
 import {
   buildRichCardGroups,
@@ -8,34 +6,44 @@ import {
   type TeacherColorMap,
 } from "@/features/timetable/lib/class-grid";
 import type { PeriodsConfig } from "@/features/timetable/lib/periods";
+import type { TeacherNicknameMap } from "@/features/timetable/lib/teacher-label";
 import { RichCardGroupBoard } from "./rich-card-group";
 
 /**
  * 통합뷰 = ijw EnglishClassTab "반=열 리치 그리드" 이식. 시작 교시별 섹션마다:
  * 좌측 고정 라벨열(수업명/담임/강의실/교시/재원/대기/퇴원) + 반=열 카드(요일×교시 미니그리드 — 셀마다 강사/LAB).
  * 교시 정렬은 평일 기준, 주말 전용 반은 "주말" 섹션. 읽기전용(편집은 기본뷰). 과목칩=과목 전환.
- * '1시간 단위'는 **섹션 헤더별 토글**(사용자 결정 2026-07-06 — 전역 아님): 그 섹션만 사이 빈 교시 행을 숨김.
  * 빌드는 서버(순수), 보드 렌더는 클라(DragScrollArea). 과목색은 SubjectMaps→plain 클래스로만 클라에 전달([[#61]]).
+ *
+ * 🔴 **섹션 머리글(그룹 이름·수업 수·'1시간 단위' 토글)은 안 그린다**(원장 2026-08-13 — *"그룹이름은
+ *    전체 숨겨주고. 1시간 단위도 숨겨줘. 이건 그룹설정에서만 세팅가능하도록"*). 줄 이름은 원장이 배치를
+ *    짜면서 쓰는 작업용 이름이지 보는 사람에게 필요한 정보가 아니었고, 머리글 한 줄(43px)이 섹션마다
+ *    붙어 세로를 먹었다. '1시간 단위'는 **그룹 설정(배치 편집) 화면의 줄 머리글**로 옮겼다.
+ * 🔴 섹션들은 **붙여서** 한 판으로 그린다(원장 2026-08-13 *"스프레드시트에서 다음 시트로 이어지는 것처럼"*)
+ *    — 카드 사이엔 구분선만 둔다(아래 SECTION_DIVIDER).
  */
 export function RichGridView({
   slots,
   subjectMaps,
   config,
   teacherColors,
+  teacherNicknames,
   compactSections,
-  hrefForSectionToggle,
   customGroups,
 }: {
   slots: GridSlot[];
   subjectMaps: SubjectMaps;
   config: PeriodsConfig;
   teacherColors: TeacherColorMap;
+  /** 담임 줄 `한글이름(영어이름)` 표기(영어 시간표만) — page가 과목을 보고 넘긴다. */
+  teacherNicknames?: TeacherNicknameMap;
   /** 커스텀 그룹(학원설정 과목별). 미지정이면 "N교시 시작" 자동 그룹. */
   customGroups?: IntegrationGroupsConfig | null;
-  /** 압축할 섹션(N교시 시작)의 sectionKey 집합 — 이 섹션만 '1시간 단위'로 사이 빈 교시 행 숨김. */
+  /**
+   * 압축할 섹션(N교시 시작)의 sectionKey 집합 — 이 섹션만 '1시간 단위'로 교시 체계가 다른 반을 부그룹으로
+   * 나눈다. **여기선 설정만 소비**하고 토글은 안 그린다(설정 지점 = 그룹 설정 화면).
+   */
   compactSections: Set<number>;
-  /** 섹션 토글 href — 그 sectionKey를 압축 집합에 넣고/빼는 URL(읽기전용이라 상태는 URL 파라미터). */
-  hrefForSectionToggle: (sectionKey: number) => string;
 }) {
   const groups = buildRichCardGroups(slots, config, compactSections, customGroups);
   const total = groups.reduce((n, g) => n + g.cards.length, 0);
@@ -45,44 +53,34 @@ export function RichGridView({
     // ⚠️ 자체 overflow-y-auto 금지 — 셸 스크롤과 중첩돼 우측 이단 스크롤바가 생긴다(2026-07-06).
     // 세로 스크롤은 바깥(셸) 하나만: 명단 섹션이 고정 행수(재원12·대기3·퇴원5)로 캡되어 그룹 높이가
     // 유계라, 그룹들이 자연 문서 흐름으로 쌓이고 넘침은 셸이 스크롤한다.
-    <div className="space-y-4">
-      <div className="text-text-faint text-right text-[12px]">
+    // ⚠️ 아래 여백(pb-8) — 마지막 줄이 창 바닥에 딱 붙어 끝나 **끝까지 내려온 건지 알 수 없었다**
+    //    (원장 2026-08-13 *"스크롤이 우측에 너무 안 보여서 끝까지 내려갔는지 헷갈림"*). 위(헤더 아래)와
+    //    같은 정도의 숨 쉴 틈을 아래에도 둔다 — 여백 자체가 "여기가 끝"이라는 신호다.
+    <div className="pb-8">
+      <div className="text-text-faint mb-2 text-right text-[12px]">
         읽기 전용 · {total}개 수업 · 편집은 기본뷰
       </div>
-      {groups.map((g) => (
-        <section key={g.key} className="bg-card shadow-card w-max max-w-full overflow-hidden rounded-2xl">
-          {/* 섹션 헤더 — 구 bg-ink 검정 바(터미널 톤) → 라이트 소프트 헤더(Editorial 문법 ③) */}
-          <div className="border-line/70 flex items-center gap-2.5 border-b px-4 py-2.5">
-            <span className="bg-primary-soft text-primary flex size-6 shrink-0 items-center justify-center rounded-lg" aria-hidden="true">
-              <EyIcon name="clock" size={13} />
-            </span>
-            <span className="text-foreground text-[13px] font-bold whitespace-nowrap">{g.label}</span>
-            <span className="text-text-dim text-[12px] whitespace-nowrap">{g.cards.length}개 수업</span>
-            {/* 섹션별 '1시간 단위' 토글 — 이 시작 교시 섹션만 사이 빈 교시 행을 숨긴다(전역 아님).
-                주말 섹션은 교시 체계가 없어 압축 대상 아님 → 토글 숨김(커스텀 그룹의 주말 하위 섹션 포함). */}
-            {g.compactable ? (
-              <ParamLink
-                href={hrefForSectionToggle(g.sectionKey)}
-                className={`ml-auto inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] whitespace-nowrap transition ${
-                  g.compacted
-                    ? "border-primary bg-primary text-primary-foreground"
-                    : "border-line text-text-dim hover:bg-bg-soft hover:text-foreground"
-                }`}
-              >
-                <span
-                  className={`flex size-3 items-center justify-center rounded-[3px] border ${
-                    g.compacted ? "border-primary-foreground bg-primary-foreground text-primary" : "border-line-strong"
-                  }`}
-                >
-                  {g.compacted ? <EyIcon name="check" size={9} /> : null}
-                </span>
-                1시간 단위
-              </ParamLink>
-            ) : null}
-          </div>
-          <RichCardGroupBoard group={g} subjectSoftClass={subjectSoftClass} teacherColors={teacherColors} />
-        </section>
-      ))}
+      {/* 섹션 = 한 판(스프레드시트의 다음 시트처럼 이어 붙임). 카드 사이는 구분선만. */}
+      <div className="bg-card shadow-card w-max max-w-full overflow-hidden rounded-2xl">
+        {groups.map((g, i) => (
+          // 라벨은 화면에서 뺐지만 aria-label로는 남긴다 — 보조기술엔 "몇 번째 줄"이 여전히 필요하다.
+          <section key={g.key} aria-label={g.label}>
+            {i > 0 ? <div aria-hidden className={SECTION_DIVIDER} /> : null}
+            <RichCardGroupBoard
+              group={g}
+              subjectSoftClass={subjectSoftClass}
+              teacherColors={teacherColors}
+              teacherNicknames={teacherNicknames}
+            />
+          </section>
+        ))}
+      </div>
     </div>
   );
 }
+
+/**
+ * 줄과 줄 사이 구분선 — 머리글이 사라진 자리를 대신해 **여기서 다른 줄이 시작한다**만 말한다.
+ * 격자선(1px)·카드 경계(2px)보다 굵어야 줄 경계로 읽히므로 3px(원장 2026-08-13 "적당한 굵기의 구분선만").
+ */
+const SECTION_DIVIDER = "bg-ink/45 h-[3px]";

@@ -15,6 +15,20 @@
 export type TeacherLabelMap = Record<string, string>;
 
 /**
+ * 표시 이름(한글) → **영어 닉네임**(`users.english_name`). 위 `TeacherLabelMap`의 반대 방향이다.
+ *
+ * 🔴 왜 따로 두나(원장 2026-08-13 *"영어시간표에서 원어민강사 제외 한국인강사는 한글이름(영어이름)"*):
+ * 영어과는 서로를 **닉네임으로 부른다**(Jane·Hannah…). 2026-07-27에 시간표를 한글 이름으로 통일하고
+ * 나니, 이번엔 "화면의 이현이가 평소 부르는 Hannah"라는 연결이 끊겼다. 그래서 **넓은 자리 두 곳에만**
+ * 둘 다 적는다(통합뷰 카드 담임 줄 · 강사뷰 강사 헤더).
+ *
+ * ⚠️ **라벨(열 식별자)은 절대 안 바꾼다** — `resolveTeacherLabel`의 결과가 강사뷰 열·'가로줄 제외 강사'
+ *    설정·정렬 순서와 문자열로 맞물려 있다(이 파일 상단 ⚠️). 이 맵은 **렌더 직전 표기**에만 쓴다.
+ * ⚠️ 미니그리드(통합뷰 셀)는 제외 — 칸이 35px라 `이현이(Hannah)`가 4자로 잘려 오히려 못 읽는다.
+ */
+export type TeacherNicknameMap = Record<string, string>;
+
+/**
  * **특수 자리 = 사람이 아니라 방(수업 형태)**. 원장 2026-07-29: *"직원 이름을 마치 영어이름 LAB인 것처럼
  * 해두니 아르바이트 선생님인데 출석부 등 여러 곳에 필요 없는 게 배선돼 노출된다."*
  * - `LAB`(603호) — 원 라벨 `LAB`·`이주희`. 이주희 선생님이 맡던 자리라 한때 그 이름이 라벨로 들어왔지만
@@ -141,6 +155,57 @@ export function resolveTeacherLabels(
  * 잘못 붙이는 것보다 닉네임 그대로 두는 편이 낫다.
  * 특수 자리는 `resolveTeacherLabel`이 먼저 처리하므로 여기서 굳이 거르지 않는다.
  */
+/** 한글 음절이 하나라도 있으면 **한국인 이름**으로 본다 — 원어민은 이름 자체가 로마자다. */
+const HANGUL = /[가-힣]/;
+
+/**
+ * 표시 이름 → 영어 닉네임 맵. **한국인 강사만**(원장 2026-08-13 *"원어민강사 제외"*).
+ *
+ * 원어민을 어떻게 아나: 직급(`job_title`)에 "원어민"이라고 적혀 있긴 하지만 그건 학원설정 운영 enum이라
+ * 라벨이 바뀌면 판정이 조용히 뒤집힌다. 대신 **이름에 한글이 있나**로 가른다 — 실측(injaewon 활성
+ * 12명)에서 닉네임 보유자 중 `KRISTINE DRIVER`·`Florence Park` 둘만 로마자 이름이고, 그 둘이 원어민이다.
+ * 덤으로 "이름이 곧 영어인 사람에게 (영어이름)을 또 붙이는" 중복이 구조적으로 안 생긴다.
+ *
+ * ⚠️ 모호하면 안 붙인다 — 같은 한글 이름을 쓰는 사람이 둘 이상이면(동명이인) 재직자를 우선하고,
+ *    그래도 하나로 안 좁혀지면 그 이름은 맵에서 뺀다(`buildTeacherLabelMap`과 같은 규약).
+ */
+export function buildTeacherNicknameMap(
+  users: readonly { displayName: string | null; englishName: string | null; active: boolean }[],
+): TeacherNicknameMap {
+  const byName = new Map<string, { nick: string; active: boolean }[]>();
+  for (const u of users) {
+    const name = u.displayName?.trim();
+    const nick = u.englishName?.trim();
+    if (!name || !nick || nick === name) continue;
+    if (!HANGUL.test(name)) continue; // 원어민(로마자 이름) 제외
+    (byName.get(name) ?? byName.set(name, []).get(name)!).push({ nick, active: u.active });
+  }
+  const map: TeacherNicknameMap = {};
+  for (const [name, cands] of byName) {
+    const pool = cands.some((c) => c.active) ? cands.filter((c) => c.active) : cands;
+    const nicks = [...new Set(pool.map((c) => c.nick))];
+    if (nicks.length !== 1) continue; // 모호 → 안 붙인다
+    map[name] = nicks[0];
+  }
+  return map;
+}
+
+/**
+ * 표기 하나를 `한글이름(영어이름)`으로. 붙일 수 없으면 **원본 그대로**(빈 괄호·물음표 금지).
+ * 안 붙이는 경우: 특수 자리(LAB·JJ = 사람 아님) · 원어민(맵에 없음) · 닉네임 미등록 · 이미 괄호가 붙음(멱등).
+ */
+export function withTeacherNickname(
+  name: string | null | undefined,
+  map: TeacherNicknameMap | undefined,
+): string | null {
+  if (name == null) return null;
+  const raw = name.trim();
+  if (!raw || raw.includes("(")) return name;
+  if (isSpecialSlotLabel(raw)) return name;
+  const nick = map?.[raw];
+  return nick ? `${raw}(${nick})` : name;
+}
+
 export function buildTeacherLabelMap(
   users: readonly { displayName: string | null; englishName: string | null; active: boolean }[],
 ): TeacherLabelMap {

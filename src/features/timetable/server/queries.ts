@@ -17,7 +17,13 @@ import { resolveTeacherAsOf } from "@/features/classes/teacher-as-of";
 // 보고서 과목 판정 규칙은 RPC(0150a) SQL에 내장 — 규칙 문서·테스트는 lib/report-subject.ts가 담당(동기 유지).
 import { compareStudentLines } from "../lib/student-sort";
 import type { TeacherColorMap } from "../lib/class-grid";
-import { buildTeacherLabelMap, resolveTeacherLabel, type TeacherLabelMap } from "../lib/teacher-label";
+import {
+  buildTeacherLabelMap,
+  buildTeacherNicknameMap,
+  resolveTeacherLabel,
+  type TeacherLabelMap,
+  type TeacherNicknameMap,
+} from "../lib/teacher-label";
 import { isSpecialLecture } from "@/features/classes/special-lecture";
 import {
   enrollmentAttendsOnDay,
@@ -44,17 +50,31 @@ export type TimetableDb = { supabase: Awaited<ReturnType<typeof createClient>>; 
  * React `cache` — 한 요청에서 여러 쿼리가 같이 쓴다.
  */
 export const getTeacherLabelMap = cache(async (db?: TimetableDb): Promise<TeacherLabelMap> => {
-  const supabase = db?.supabase ?? (await createClient());
-  let q = supabase.from("users").select("display_name, english_name, status").not("english_name", "is", null);
-  if (db) q = q.eq("tenant_id", db.tenantId);
-  const { data } = await q;
-  return buildTeacherLabelMap(
-    (data ?? []).map((u) => ({
+  return buildTeacherLabelMap(await getTeacherNameRows(db));
+});
+
+/** 닉네임 보유자 행 — 라벨 맵과 닉네임 맵이 **같은 조회**를 나눠 쓴다(요청당 왕복 1회, B4). */
+const getTeacherNameRows = cache(
+  async (db?: TimetableDb): Promise<{ displayName: string | null; englishName: string | null; active: boolean }[]> => {
+    const supabase = db?.supabase ?? (await createClient());
+    let q = supabase.from("users").select("display_name, english_name, status").not("english_name", "is", null);
+    if (db) q = q.eq("tenant_id", db.tenantId);
+    const { data } = await q;
+    return (data ?? []).map((u) => ({
       displayName: (u.display_name as string | null) ?? null,
       englishName: (u.english_name as string | null) ?? null,
       active: (u.status as string | null) === "active",
-    })),
-  );
+    }));
+  },
+);
+
+/**
+ * 표시 이름 → 영어 닉네임 맵(**한국인 강사만**) — 통합뷰 담임 줄·강사뷰 강사 헤더가 `한글이름(영어이름)`으로
+ * 적을 때 쓴다. 규칙·원어민 판정은 [`teacher-label.ts`](../lib/teacher-label.ts) `buildTeacherNicknameMap`.
+ * ⚠️ 이 맵은 **표기 전용**이다 — 슬롯 라벨(열 식별자)엔 절대 적용하지 말 것(강사뷰 열이 쪼개진다).
+ */
+export const getTeacherNicknameMap = cache(async (db?: TimetableDb): Promise<TeacherNicknameMap> => {
+  return buildTeacherNicknameMap(await getTeacherNameRows(db));
 });
 
 /**

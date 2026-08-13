@@ -5,9 +5,10 @@ import { GripVertical } from "@/components/icons/eywa-icon-compat";
 import { WindowLink } from "@/components/workspace/window-link";
 import { SUBJECT_SOLID } from "@/features/owner/subjects";
 import { enumDayToKo, type DayOfWeek } from "@/features/timetable/lib/periods";
-import { LAB_ROOM_LABEL } from "@/features/timetable/lib/teacher-label";
+import { LAB_ROOM_LABEL, type TeacherNicknameMap } from "@/features/timetable/lib/teacher-label";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 import {
+  padCardDays,
   teacherColor,
   type GridStudent,
   type RichCardGroup,
@@ -74,6 +75,11 @@ export type ColumnCommon = {
   group: RichCardGroup;
   subjectSoftClass: string;
   teacherColors: TeacherColorMap;
+  /**
+   * 표시 이름 → 영어 닉네임(한국인 강사만). 있으면 **담임 줄만** `한글이름(영어이름)`으로 적는다.
+   * 🔴 미니그리드 셀엔 절대 안 쓴다(원장 2026-08-13 *"미니그리드는 제외"*) — 칸이 35px라 4자로 잘린다.
+   */
+  teacherNicknames?: TeacherNicknameMap;
   activeH: number;
   holdH: number;
   wdH: number;
@@ -104,6 +110,7 @@ export function RichCardGroupBoard({
   group,
   subjectSoftClass,
   teacherColors,
+  teacherNicknames,
   renderCard,
   trailing,
   namesOnly,
@@ -111,6 +118,8 @@ export function RichCardGroupBoard({
   group: RichCardGroup;
   subjectSoftClass: string;
   teacherColors: TeacherColorMap;
+  /** 담임 줄 `한글이름(영어이름)` 표기용(영어 시간표). 미지정=이름만. */
+  teacherNicknames?: TeacherNicknameMap;
   /** 편집 모드 — 열을 dnd 훅 컴포넌트로 감싸 그린다(key도 호출부가 준다). 미지정=평소 렌더. */
   renderCard?: (card: RichClassCard, common: ColumnCommon) => ReactNode;
   /** 마지막 열 뒤에 붙는 칸(편집 모드의 '맨 뒤에 놓기' 자리). 미지정=없음. */
@@ -122,7 +131,7 @@ export function RichCardGroupBoard({
   const activeH = sectionH(group.rosterRows.active);
   const holdH = sectionH(group.rosterRows.hold);
   const wdH = sectionH(group.rosterRows.withdrawn);
-  const common: ColumnCommon = { group, subjectSoftClass, teacherColors, activeH, holdH, wdH, namesOnly };
+  const common: ColumnCommon = { group, subjectSoftClass, teacherColors, teacherNicknames, activeH, holdH, wdH, namesOnly };
 
   return (
     <DragScrollArea barX className={`${GRID} border-t`}>
@@ -198,6 +207,7 @@ export function ClassColumn({
   group,
   subjectSoftClass,
   teacherColors,
+  teacherNicknames,
   activeH,
   holdH,
   wdH,
@@ -211,7 +221,9 @@ export function ClassColumn({
   // 요일축 = **이 반이 실제 수업하는 요일만**(원장 2026-08-11 "수업없는 요일 열도 숨겨버리고").
   // 카드 폭(CARD_W)은 그대로라 남은 칸이 넓어질 뿐, 카드 간 세로 정렬은 유지된다. 2026-07-27의
   // "항상 월~금 5칸" 규약을 뒤집은 배경은 class-grid.ts `days` 주석 참조(실측 42반 중 41반이 2~3일).
-  const days: DayOfWeek[] = card.days?.length ? card.days : group.days;
+  // ⚠️ 단 **최소 3열**은 보장한다(원장 2026-08-13) — 2요일 반만 카드가 70px로 쪼그라들어 격자가
+  //    들쭉날쭉했다. 모자란 만큼 수요일부터 **빈 더미 열**을 채운다(padCardDays, 주말 전용은 예외).
+  const days: DayOfWeek[] = padCardDays(card.days?.length ? card.days : group.days);
   const gridCols = { gridTemplateColumns: `repeat(${Math.max(1, days.length)}, 1fr)` };
   // 카드 폭 = 요일 수 × 고정 칸 폭(DAY_COL_W). 배치 편집(namesOnly)은 격자를 안 그리므로 5칸 기준 폭 유지 —
   // 수업명만 남은 칩이 요일 수에 따라 들쭉날쭉하면 끌어 놓을 자리를 가늠하기 어렵다.
@@ -289,19 +301,26 @@ export function ClassColumn({
       {/* 배치 편집(수업명만) — 여기서 끝. 아래 담임·격자·명단을 안 그려야 42반을 끌 때 안 버벅인다. */}
       {namesOnly ? null : (
       <>
-      {/* 담임 — 저장된 강사색이 있으면 색칩, 없으면 plain */}
-      <div className={`${GRID} flex items-center justify-center border-b`} style={{ height: TEACHER_H }}>
+      {/* 담임 — 저장된 강사색이 있으면 색칩, 없으면 plain.
+          한국인 강사는 `한글이름(영어이름)`(원장 2026-08-13) — 영어과는 서로를 닉네임으로 부른다.
+          닉네임은 9px로 한 단계 작게: 2요일 카드는 폭이 70px라 같은 크기로 적으면 이름부터 잘린다.
+          ⚠️ 넘치면 카드 안에서 **잘린다**(overflow-hidden) — 옆 반 칸 위로 삐져나오지 않게. */}
+      <div className={`${GRID} flex min-w-0 items-center justify-center overflow-hidden border-b`} style={{ height: TEACHER_H }}>
         {!card.teacherName ? (
           <span className="text-text-faint text-[11px]">-</span>
         ) : damimColor ? (
           <span
-            className="rounded px-1.5 py-0.5 text-[11px] font-bold"
+            className="overflow-hidden rounded px-1.5 py-0.5 text-[11px] font-bold whitespace-nowrap text-clip"
             style={{ background: damimColor.bg, color: damimColor.text }}
           >
             {card.teacherName}
+            <TeacherNick name={card.teacherName} map={teacherNicknames} />
           </span>
         ) : (
-          <span className="text-foreground text-[11px] font-bold">{card.teacherName}</span>
+          <span className="text-foreground overflow-hidden text-[11px] font-bold whitespace-nowrap text-clip">
+            {card.teacherName}
+            <TeacherNick name={card.teacherName} map={teacherNicknames} />
+          </span>
         )}
       </div>
       {/* 요일 헤더 — 이 반이 실제 수업하는 요일만(빈 열 없음). */}
@@ -386,6 +405,12 @@ function RosterSection({
       {children}
     </div>
   );
+}
+
+/** 담임 이름 뒤 `(영어이름)` — 한국인 강사이고 닉네임이 등록돼 있을 때만. 원어민·미등록은 안 그린다. */
+function TeacherNick({ name, map }: { name: string; map?: TeacherNicknameMap }) {
+  const nick = map?.[name];
+  return nick ? <span className="text-[9px] font-bold opacity-85">({nick})</span> : null;
 }
 
 function DayHead({ day }: { day: DayOfWeek }) {
