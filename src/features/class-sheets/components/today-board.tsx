@@ -113,6 +113,8 @@ function ClassCard({
   const slotLabels = card.slots.map((s) => ({
     slotStart: s.slotStart,
     label: s.periodLabel ?? s.slotStart,
+    // 폼(기본 / JJ 전용)은 서버가 자리 라벨로 확정해 내려준다 — 화면이 반 이름으로 추측하지 않는다.
+    form: s.form,
   }));
   const marked = card.students.filter((s) => att[`${card.classId}|${s.studentId}`]?.status).length;
   const written = card.students.filter((s) => s.reportWritten).length;

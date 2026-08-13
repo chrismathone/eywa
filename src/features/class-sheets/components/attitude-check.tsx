@@ -11,6 +11,7 @@
  */
 import { ATTITUDE } from "@/features/onescreen/attitude";
 import { nextCycleValue } from "../lib/mark-cycle";
+import { EMPTY_CLICK_LABEL } from "../click-hint";
 import { SHEET_BOX, SHEET_BOX_READONLY } from "../ui-box";
 
 export function AttitudeCheck({
@@ -42,7 +43,9 @@ export function AttitudeCheck({
         value === null ? "text-text-faint" : known ? "text-foreground" : "text-text-dim"
       }`}
     >
-      <span className="truncate">{value ?? "—"}</span>
+      {/* 빈 칸도 **누를 수 있다는 걸 모양으로** 말한다(원장 2026-08-13). 읽기 전용 칸은 위에서 이미
+          값/`—`로 갈라져 있어 여기 라벨이 새지 않는다. */}
+      <span className="truncate">{value ?? EMPTY_CLICK_LABEL}</span>
     </button>
   );
 }

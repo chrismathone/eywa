@@ -8,7 +8,7 @@
 import Link from "next/link";
 import type { BasicAttendance } from "../lib/mark-cycle";
 import { TodayAttendancePills } from "./today-attendance-pills";
-import { TodayMarkPopover, type MarkMap, type StudentMark } from "./today-mark-popover";
+import { TodayMarkPopover, type MarkMap, type MarkSlot, type StudentMark } from "./today-mark-popover";
 import type { TodayClassCard, TodayStudent } from "../server/today";
 
 export function StudentRow({
@@ -26,8 +26,8 @@ export function StudentRow({
   card: TodayClassCard;
   student: TodayStudent;
   date: string;
-  /** 그 반의 그날 교시(시각·라벨) — 학생 기록은 교시별로 저장된다. */
-  slotLabels: { slotStart: string; label: string }[];
+  /** 그 반의 그날 교시(시각·라벨·폼) — 학생 기록은 교시별로 저장되고, JJ 교시엔 전용 칸이 붙는다. */
+  slotLabels: MarkSlot[];
   marks: MarkMap;
   onMark: (slotStart: string, next: StudentMark | null) => void;
   /** 학생 기록 편집 가능 — 계획 편집과 **같은 게이트**(ecs full|scoped). */

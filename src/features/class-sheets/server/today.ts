@@ -17,6 +17,7 @@ import { mondayOf } from "@/features/timetable/lib/week";
 import { resolvePeriodLabel, tableToEntries } from "../lib/period-label";
 import { isWeekendDow } from "../lib/grid-rows";
 import { hiddenSeatOf } from "../lib/grid";
+import { rosterFormOf, type RosterForm, type SheetMark } from "../lib/roster-form";
 import { isMeaningfulPlanLine } from "../lib/plan-codec";
 import { dowKeyOf, normalizeSlotTime, YMD_RE } from "../lib/week";
 import { readEcsShowSelfStudy } from "../view-prefs";
@@ -67,6 +68,13 @@ export type TodaySlot = {
   periodLabel: string | null;
   roomLabel: string | null;
   lines: TodayPlanLine[];
+  /**
+   * 이 교시의 **입력 폼**(기본 / JJ 전용) — 주간 시트와 **같은 판정**([roster-form.ts](../lib/roster-form.ts)).
+   * JJ 교시는 태도·특이사항에 더해 듣기 레벨·누적 암기 단어수를 받는다(원장 2026-08-13 "JJ 수업에만 넣을
+   * 것이므로 만약 JJ가 있다면 넣기"). ⚠️ 반이 아니라 **교시**가 정한다 — 같은 반이 4교시는 강사 수업,
+   * 5교시는 JJ인 경우가 실제로 있다.
+   */
+  form: RosterForm;
 };
 
 export type TodayStudent = {
@@ -93,7 +101,7 @@ export type TodayStudent = {
    * 🔴 반 카드는 학생 한 줄인데 기록은 **교시마다** 있다(그날 2~3교시가 흔하다) — 한 칸으로 뭉개면
    *    어느 교시 기록인지 잃는다. 그래서 교시별로 들고 다니고, 입력도 교시별로 받는다(주간 시트와 같은 축).
    */
-  marks: Record<string, { status: string | null; progressNote: string | null }>;
+  marks: Record<string, SheetMark>;
 };
 
 export type TodayClassCard = {
@@ -273,10 +281,16 @@ export async function getEcsToday(dateParam?: string | null): Promise<EcsTodayRe
       slot_start: string;
       status: string | null;
       progress_note: string | null;
+      score?: string | null;
+      listening_level?: string | null;
+      memorized_words?: string | null;
     }>(todayIds, (chunk, from, to) =>
       admin
         .from("class_sheet_student_marks")
-        .select("class_id, student_id, slot_start, status, progress_note")
+        // 🔴 `*`인 이유 = **여기가 강사 전원의 홈**이라 스키마 스큐에 죽으면 안 된다(#95). 열을 이름으로
+        //    적으면 아직 없는 컬럼 하나에 PostgREST가 400을 내고 오늘 면이 통째로 안 열린다(2026-08-03
+        //    실사고와 같은 모양). 이 조회는 그 날 하루치라 행이 적어 `*`가 싸다(주간 시트와 같은 판단).
+        .select("*")
         .eq("tenant_id", user.tenantId)
         .in("class_id", chunk)
         .eq("mark_date", date)
@@ -496,12 +510,19 @@ export async function getEcsToday(dateParam?: string | null): Promise<EcsTodayRe
       : null;
 
   // 학생 기록 — (반|학생)당 교시별. 시각은 배치와 **같은 정규화**를 거쳐야 키가 맞는다("15:00:00" ↔ "15:00").
-  const marksByStudent = new Map<string, Record<string, { status: string | null; progressNote: string | null }>>();
+  const marksByStudent = new Map<string, Record<string, SheetMark>>();
   for (const m of marks) {
     const key = `${m.class_id}|${m.student_id}`;
     const slot = normalizeSlotTime(m.slot_start);
     const cur = marksByStudent.get(key) ?? {};
-    cur[slot] = { status: m.status, progressNote: m.progress_note };
+    cur[slot] = {
+      status: m.status,
+      progressNote: m.progress_note,
+      // 마이그레이션(0202a·0206a) 적용 전엔 컬럼이 없어 undefined → null(빈 칸). 위 select가 `*`인 이유.
+      score: m.score ?? null,
+      listeningLevel: m.listening_level ?? null,
+      memorizedWords: m.memorized_words ?? null,
+    };
     marksByStudent.set(key, cur);
   }
 
@@ -550,6 +571,8 @@ export async function getEcsToday(dateParam?: string | null): Promise<EcsTodayRe
           periodLabel: resolvePeriodLabel(start, end, periodTables, weekend),
           roomLabel: s.classroom_id ? (roomName.get(s.classroom_id) ?? null) : null,
           lines,
+          // 폼은 자리 라벨이 정한다 — 주간 시트와 같은 함수(반 이름·강의실로 추측 금지).
+          form: rosterFormOf(s.slot_teacher_label),
         };
       });
 

@@ -23,6 +23,7 @@ import { Popover } from "@base-ui/react/popover";
 import { NoteForm } from "@/features/onescreen/components/attendance-pills";
 import { EyIcon, type EywaIconName } from "@/components/icons/eywa-icons";
 import { nextAttendance, type BasicAttendance } from "../lib/mark-cycle";
+import { EMPTY_CLICK_LABEL } from "../click-hint";
 import { SHEET_BOX, SHEET_BOX_READONLY } from "../ui-box";
 
 const TO_LABEL: Record<string, string> = {
@@ -142,7 +143,10 @@ export function AttendanceCheck({
               <span className="truncate">{label}</span>
             </>
           ) : (
-            <span aria-hidden>—</span>
+            // 빈 칸이라도 **누를 수 있다는 걸 모양으로** 말한다(원장 2026-08-13 "클릭할 수 있는 곳은
+            // 클릭할 수 있음을 암시하는 라벨"). '—'는 "값 없음"이지 "눌러라"가 아니었다.
+            // ⚠️ 읽기 전용 칸(권한 없음·조퇴 등)은 그대로 '—'/값이다 — 못 누르는 칸이 눌러 보이면 안 된다.
+            <span aria-hidden>{EMPTY_CLICK_LABEL}</span>
           )}
         </button>
         {/* 사유가 있으면 점 하나 — 열어보지 않아도 "사유가 적혀 있다"가 보인다(원스크린 알약과 같은 신호). */}
