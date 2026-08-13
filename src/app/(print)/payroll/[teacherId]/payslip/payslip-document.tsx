@@ -370,6 +370,12 @@ function ClassMetrics({ data }: { data: PayslipData }) {
   );
 }
 
+/**
+ * 서명란 — 담당자 / **대표** / 수령인.
+ * ⚠️ 가운데 칸 라벨은 원장 지시로 `원장` → **`대표`**(2026-08-13). 이건 **이 문서의 서명 칸 이름**이라
+ *    시스템 역할 표시 라벨("원장", CLAUDE.md 결정 로그)과 **별개**다 — 역할 라벨은 건드리지 않는다.
+ * 🔑 수령인 = 이 명세서를 받는 그 강사다(빈칸으로 두면 누가 받는 문서인지 종이에 안 남는다).
+ */
 function Signatures({ data }: { data: PayslipData }) {
   const signDate = payDateLabel(data.period) ?? "";
   const signers = (data.company.signerLabels ?? "").trim();
@@ -385,13 +391,23 @@ function Signatures({ data }: { data: PayslipData }) {
         </colgroup>
         <tbody>
           <tr>
-            <td className="border border-black/70 bg-black/[0.04] px-2 py-1.5" />
-            <td className="border border-black/70 bg-black/[0.04] px-2 py-1.5 font-medium">담당자</td>
-            <td className="border border-black/70 bg-black/[0.04] px-2 py-1.5 font-medium">원장</td>
-            <td className="border border-black/70 bg-black/[0.04] px-2 py-1.5 font-medium">수령인</td>
+            <td className="border border-black/70 px-2 py-1.5" style={{ background: SHEET.label }} />
+            <td className="border border-black/70 px-2 py-1.5 font-medium" style={{ background: SHEET.label }}>
+              담당자
+            </td>
+            <td className="border border-black/70 px-2 py-1.5 font-medium" style={{ background: SHEET.label }}>
+              대표
+            </td>
+            <td className="border border-black/70 px-2 py-1.5 font-medium" style={{ background: SHEET.label }}>
+              수령인
+            </td>
           </tr>
           <tr>
-            <th scope="row" className="border border-black/70 bg-black/[0.04] px-2 py-1.5 font-medium">
+            <th
+              scope="row"
+              className="border border-black/70 px-2 py-1.5 font-medium"
+              style={{ background: SHEET.label }}
+            >
               날 짜
             </th>
             <td className="num border border-black/70 px-2 py-1.5">{signDate}</td>
@@ -399,7 +415,11 @@ function Signatures({ data }: { data: PayslipData }) {
             <td className="num border border-black/70 px-2 py-1.5">{signDate}</td>
           </tr>
           <tr>
-            <th scope="row" className="border border-black/70 bg-black/[0.04] px-2 py-1.5 font-medium">
+            <th
+              scope="row"
+              className="border border-black/70 px-2 py-1.5 font-medium"
+              style={{ background: SHEET.label }}
+            >
               서 명
             </th>
             <td className="h-14 whitespace-pre-line border border-black/70 px-2 py-1.5 align-middle">
@@ -408,7 +428,8 @@ function Signatures({ data }: { data: PayslipData }) {
             <td className="border border-black/70 px-2 py-1.5 align-middle">
               {data.company.representativeName ?? ""}
             </td>
-            <td className="border border-black/70 px-2 py-1.5" />
+            {/* 수령인 = 명세서를 받는 강사 본인 — 이름은 자동, 서명은 사람이 한다. */}
+            <td className="border border-black/70 px-2 py-1.5 align-middle">{data.teacher.name}</td>
           </tr>
         </tbody>
       </table>

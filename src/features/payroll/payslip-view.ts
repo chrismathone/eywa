@@ -6,8 +6,6 @@ import type { GroupRates } from "./salary-group";
 import type { TierSettlementLine } from "./tier-settlement";
 import type { WithdrawalStats } from "./payslip-metrics";
 
-export const PAYSLIP_MASTER_ONLY_MSG = "급여명세서는 원장 계정만 열람할 수 있습니다";
-
 /** 월별 수동 조정(0205a payslips 행). 표가 없거나 행이 없으면 전부 0/미입력. */
 export type PayslipAdjustments = {
   incentive: number;

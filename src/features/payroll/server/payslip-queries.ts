@@ -16,7 +16,9 @@ import {
 } from "@/features/payroll/payslip-metrics";
 import { currentContract } from "@/features/staff/contract";
 import type { PayslipData, PayslipAdjustments } from "@/features/payroll/payslip-view";
-import { PAYSLIP_MASTER_ONLY_MSG, emptyAdjustments } from "@/features/payroll/payslip-view";
+import { emptyAdjustments } from "@/features/payroll/payslip-view";
+import { canViewPayslip, PAYSLIP_DENIED_MSG } from "@/features/payroll/payslip-access";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 /**
  * 급여명세서 데이터 조립 — **원장(master) 전용**.
@@ -29,10 +31,18 @@ import { PAYSLIP_MASTER_ONLY_MSG, emptyAdjustments } from "@/features/payroll/pa
  */
 export async function getPayslipData(teacherId: string, period: string): Promise<PayslipData> {
   const user = await getCurrentUser();
-  if (!user || user.systemRole !== "master") throw new Error(PAYSLIP_MASTER_ONLY_MSG);
+  if (!user || !canViewPayslip(user)) throw new Error(PAYSLIP_DENIED_MSG);
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(period)) throw new Error("기간 형식이 올바르지 않습니다(YYYY-MM)");
 
   const supabase = await createClient();
+  /**
+   * 🔴 단가표(`salary_tiers`)·명세서(`payslips`)·계약(`staff_contracts`)은 **master 전용 RLS**다.
+   *    명단의 설현·김예원은 admin이라 세션 클라이언트로는 **에러 없이 0행**을 받고(정책 미매치),
+   *    화면엔 조용히 "산정 불가"만 뜬다([[#104]] — 정책에 안 걸리면 0행이지 에러가 아니다).
+   *    그래서 **앱 게이트를 통과한 뒤에만** admin 클라이언트로 읽는다(contract-queries.ts 선례).
+   * ⚠️ admin은 RLS를 우회하므로 **tenant_id를 명시 필터**해야 한다 — 아래 모든 admin 조회에 걸려 있다.
+   */
+  const admin = createAdminClient();
   const year = Number(period.slice(0, 4));
 
   // 서로 독립이라 병렬(B4).
@@ -54,7 +64,7 @@ export async function getPayslipData(teacherId: string, period: string): Promise
       .order("class_name"),
     getTenantSettings(),
     // 0205a 미적용이어도 명세서는 떠야 한다(#95) — 조회 실패 = '조정 없음'.
-    supabase
+    admin
       .from("payslips")
       .select("incentive, other_deduction, blog_written_on, rate_penalty_points, rate_penalty_reason, memo, status, issued_at, print_payload")
       .eq("tenant_id", user.tenantId)
@@ -62,7 +72,7 @@ export async function getPayslipData(teacherId: string, period: string): Promise
       .eq("period", period)
       .maybeSingle()
       .then((r) => r, () => ({ data: null, error: null })),
-    supabase
+    admin
       .from("staff_contracts")
       .select("id, seq, kind, start_date, end_date, terms, memo, line_no")
       .eq("tenant_id", user.tenantId)
@@ -121,7 +131,7 @@ export async function getPayslipData(teacherId: string, period: string): Promise
   // 셋은 서로 독립이라 병렬(B4) — 직렬로 두면 명세서 첫 페인트가 세 왕복을 합산한다.
   // ⚠️ 신상(academy_documents)은 명세서 성패를 좌우하지 않으므로 실패해도 접는다(지어내진 않는다).
   const [collected, metrics, resume] = await Promise.all([
-    classIds.length > 0 ? collectTierRows(supabase, period, classIds) : Promise.resolve(null),
+    classIds.length > 0 ? collectTierRows(admin, period, classIds, user.tenantId) : Promise.resolve(null),
     loadMetrics(supabase, classIds, period, year),
     supabase
       .from("academy_documents")

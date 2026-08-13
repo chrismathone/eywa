@@ -53,12 +53,20 @@ export async function collectTierRows(
   supabase: Awaited<ReturnType<typeof createClient>>,
   month: string,
   classIds: string[],
+  /**
+   * 🔴 **admin 클라이언트로 부를 때는 필수**다. admin은 RLS를 우회하므로 단가표를 테넌트로 안 걸면
+   *    다른 학원의 단가까지 읽어 라벨이 겹치는 순간 남의 금액으로 급여를 계산한다.
+   *    세션 클라이언트(출석부 경로)는 RLS가 이미 테넌트를 가르므로 생략해도 안전하다.
+   */
+  tenantId?: string,
 ): Promise<TierRowsResult | null> {
   if (classIds.length === 0) return null;
   const { from, to } = monthBounds(month);
 
+  const tierQuery = supabase.from("salary_tiers").select("label, unit_price");
+
   const [tiers, tierEnrollments, records, dowSettings] = await Promise.all([
-    supabase.from("salary_tiers").select("label, unit_price"),
+    tenantId ? tierQuery.eq("tenant_id", tenantId) : tierQuery,
     fetchInChunks<{ student_id: string; class_id: string; salary_tier: string | null }>(classIds, (chunk) =>
       supabase.from("enrollments").select("student_id, class_id, salary_tier").in("class_id", chunk),
     ),

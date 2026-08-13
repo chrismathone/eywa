@@ -7,7 +7,7 @@ import type { PayslipData } from "@/features/payroll/payslip-view";
 function makeData(over: Partial<PayslipData> = {}): PayslipData {
   return {
     period: "2026-07",
-    company: { name: "(주) 곰돌이", representativeName: "원장", bizRegNo: null, sealUrl: null, signerLabels: "박소선" },
+    company: { name: "(주) 곰돌이", representativeName: "김대표", bizRegNo: null, sealUrl: null, signerLabels: "박소선" },
     teacher: {
       id: "t1",
       name: "김은정",
@@ -138,3 +138,25 @@ describe("급여명세서 문서", () => {
 function render1() {
   return <PayslipDocument data={makeData({ warnings: ["단가 미지정 3명 — 40시수가 산정에서 빠졌습니다."] })} />;
 }
+
+describe("서명란", () => {
+  it("가운데 칸은 '대표'다 (원장 지시 2026-08-13 — 시스템 역할 라벨과는 별개)", () => {
+    render(<PayslipDocument data={makeData()} />);
+    expect(screen.getByText("대표")).toBeTruthy();
+    // 서명란 헤더에 '원장'이 남아 있으면 안 된다(역할 라벨은 이 문서 밖의 이야기)
+    expect(screen.queryByText("원장")).toBeNull();
+  });
+
+  it("수령인 칸에 그 강사 이름이 자동으로 들어간다", () => {
+    render(<PayslipDocument data={makeData()} />);
+    // 표 머리(이름 칸)와 서명란 두 곳에 나온다
+    expect(screen.getAllByText("김은정").length).toBe(2);
+  });
+
+  it("대표자명이 비어 있어도 칸을 만들되 지어내지 않는다", () => {
+    const d = makeData();
+    render(<PayslipDocument data={{ ...d, company: { ...d.company, representativeName: null } }} />);
+    expect(screen.getByText("대표")).toBeTruthy();
+    expect(screen.getAllByText("김은정").length).toBe(2); // 수령인은 그대로
+  });
+});

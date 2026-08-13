@@ -6,8 +6,9 @@
 
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
-import { createClient } from "@/lib/supabase/server";
 import { resolvePenaltyPoints } from "../payslip";
+import { canViewPayslip, PAYSLIP_DENIED_MSG } from "../payslip-access";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { getPayslipData } from "./payslip-queries";
 
 export type SavePayslipState =
@@ -46,7 +47,7 @@ export async function savePayslipAdjustments(
   if (!user) return { error: "로그인이 필요합니다" };
   // 급여 = 원장 전용(RLS로도 막히지만 여기서 먼저 분명한 메시지를 준다).
   // ⚠️ canWriteTenant("billing")은 admin·accountant를 통과시켜 여기 쓸 수 없다.
-  if (user.systemRole !== "master") return { error: "급여명세서는 원장만 수정할 수 있습니다" };
+  if (!canViewPayslip(user)) return { error: PAYSLIP_DENIED_MSG };
 
   const teacherId = String(formData.get("teacherId") ?? "").trim();
   const period = String(formData.get("period") ?? "").trim();
@@ -77,7 +78,9 @@ export async function savePayslipAdjustments(
 
   const memo = String(formData.get("memo") ?? "").trim() || null;
 
-  const supabase = await createClient();
+  // 🔴 payslips는 master 전용 RLS — 명단의 admin(설현·김예원)은 세션 클라이언트로 0행을 받는다([[#104]]).
+  //    앱 게이트를 통과한 뒤 admin으로 쓰되 tenant_id를 명시한다(RLS 우회이므로).
+  const supabase = createAdminClient();
   // 발행(issued)된 명세서는 동결이다 — 조정을 다시 쓰면 서명된 문서와 값이 갈린다.
   const { data: existing } = await supabase
     .from("payslips")
@@ -125,7 +128,7 @@ export async function issuePayslip(
 ): Promise<SavePayslipState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  if (user.systemRole !== "master") return { error: "급여명세서는 원장만 발행할 수 있습니다" };
+  if (!canViewPayslip(user)) return { error: PAYSLIP_DENIED_MSG };
 
   const teacherId = String(formData.get("teacherId") ?? "").trim();
   const period = String(formData.get("period") ?? "").trim();
@@ -140,7 +143,7 @@ export async function issuePayslip(
   if (!data.settlement) return { error: "수업료를 산정할 수 없어 발행할 수 없습니다. 위 경고를 먼저 해결하세요." };
   if (data.amounts.netPay < 0) return { error: "실수령액이 음수입니다. 기타공제를 확인하세요." };
 
-  const supabase = await createClient();
+  const supabase = createAdminClient();
   const now = new Date().toISOString();
   // 제약(payslips_issued_has_payload)이 status·issued_at·print_payload를 **함께** 요구한다 — 한 문장으로 쓴다.
   const { error } = await supabase.from("payslips").upsert(
@@ -175,13 +178,13 @@ export async function unissuePayslip(
 ): Promise<SavePayslipState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  if (user.systemRole !== "master") return { error: "급여명세서는 원장만 되돌릴 수 있습니다" };
+  if (!canViewPayslip(user)) return { error: PAYSLIP_DENIED_MSG };
 
   const teacherId = String(formData.get("teacherId") ?? "").trim();
   const period = String(formData.get("period") ?? "").trim();
   if (!teacherId || !/^\d{4}-(0[1-9]|1[0-2])$/.test(period)) return { error: "대상이 올바르지 않습니다" };
 
-  const supabase = await createClient();
+  const supabase = createAdminClient();
   const { error } = await supabase
     .from("payslips")
     .update({ status: "draft", issued_at: null, issued_by: null, print_payload: null })
