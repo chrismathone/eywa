@@ -107,6 +107,7 @@ import { useEditPresence, useEditingOthers } from "@/features/presence/edit-pres
 import { dedupeEditors } from "@/features/presence/presence-state";
 import { MakeupMergeDialog, type MakeupMergeChoice } from "./makeup-merge-dialog";
 import { mergeStatusOf, mergedUnits, planMakeupMerge, type MergeCandidate } from "../makeup-merge-plan";
+import { hasRowOverrides, resolveRowFields, seedRowFields } from "../row-fields";
 import { shortDate } from "../makeup-absence-link";
 
 type ReportsState = Record<string, Record<string, SubjectReport>>; // studentId → 과목명 → {draft, sent}
@@ -352,15 +353,20 @@ export function OneScreenClient({
       studyGrade: s.studyGrade ?? null,
       subjectProgress: Object.fromEntries(
         s.subjects
-          // 병합된 보강 행(classId 없음·makeup)은 세션에 저장하지 않는다(2026-07-24 적대검수): 로스터가
-          // 보강 행을 재구성하지 않으므로 그 세션 항목은 아무도 안 읽는 write-only-orphan이다. 게다가
-          // 과목키(예 'math')로 저장되면 정규 행이 미편집(sp[classId] 없음)일 때 legacyKey 폴백이 그 항목을
-          // 집어 보강 진도가 정규 행에 새어들 수 있다(교차오염). 보강 초안은 세션 무관 임시(카드 makeup과 동일).
-          .filter((su) => !(su.makeup && !su.classId))
+          // 🔴 보강 행도 **이제는 저장한다**(2026-08-13). 예전엔 통째로 걸러냈는데(2026-07-24), 그래서
+          //    보강 행에 쓴 진도·교재·오늘 과제가 **새로고침 한 번에 사라졌다**(원장 제보 2026-08-13
+          //    "입력해놓은 내용이 일부 새로고침시에 삭제"). 저장된 보고서에서도 복원되지 않는 값들이라
+          //    되찾을 길이 없었다.
+          //    걸러냈던 진짜 이유는 키 충돌이었다 — 과목키('math')로 저장하면 정규 행이 미편집일 때
+          //    로스터의 legacyKey 폴백이 그 항목을 집어 **보강 진도가 정규 행에 새어들었다**(교차오염).
+          //    → 보강 행은 `makeup::{과목키}` **전용 키**를 쓴다. legacyKey 폴백은 맨 키('math')만 보므로
+          //      구조적으로 겹치지 않는다(로스터가 같은 규약으로 읽는다).
           .map((su) => [
             // 반 키 우선(0134a) — 과목키면 같은 과목 두 행(정규+특강)이 한 항목을 공유해 서로를 덮는다.
-            // 로스터 복원(roster.ts)이 같은 순서로 읽는다(반 키 → 과목키 폴백).
-            su.classId || su.subjectKey || su.name,
+            // 로스터 복원(roster.ts)이 같은 순서로 읽는다(보강 전용 키 → 반 키 → 과목키 폴백).
+            su.makeup && !su.classId
+              ? `makeup::${su.subjectKey || su.name}`
+              : su.classId || su.subjectKey || su.name,
             {
               today: su.today,
               // 오늘 수업 성격(복습·문제풀이) — 빈 문자열로 보내 **해제도 저장**한다(undefined면 로스터가
@@ -371,6 +377,19 @@ export function OneScreenClient({
               textbook: su.textbook ?? "",
               makeup: su.makeup ?? false,
               homeworkToday: su.homeworkToday ?? "",
+              // 행 단위 평가값(태도·점수·과제 수행률·특이사항) — 지정된 행만 싣는다(row-fields.ts).
+              // 미지정 행은 옛 세션과 같은 모양으로 남아 로스터가 학생 값으로 폴백한다(하위호환).
+              ...(hasRowOverrides(su)
+                ? {
+                    attitude: su.attitude,
+                    homework: su.homework,
+                    note: su.note,
+                    dailyScore: su.dailyScore,
+                    dailyMax: su.dailyMax,
+                    checkScore: su.checkScore,
+                    checkMax: su.checkMax,
+                  }
+                : {}),
             },
           ]),
       ),
@@ -930,16 +949,18 @@ export function OneScreenClient({
       Object.keys(bySubject).length ? "이전 진도를 불러왔습니다" : "이전 보고서가 없습니다",
     );
   }
-  function setScoreFor(studentId: string, which: "daily" | "check", v: number | null) {
-    patch(studentId, (s) => ({ ...s, tests: { ...s.tests, [which]: { ...s.tests[which], score: v } } }));
+  function setScoreFor(studentId: string, subjectName: string, which: "daily" | "check", v: number | null) {
+    patchRowEval(studentId, subjectName, (su) => ({ ...su, [which === "daily" ? "dailyScore" : "checkScore"]: v }));
   }
   // 테스트 만점(/N) 변경 — 학원설정 allowTeacherTestMax on일 때만 UI 노출. 점수가 새 만점 초과면 함께 클램프.
-  function setMaxFor(studentId: string, which: "daily" | "check", v: number) {
+  function setMaxFor(studentId: string, subjectName: string, which: "daily" | "check", v: number) {
     const max = Math.max(1, Math.min(100, Math.round(v) || 1));
-    patch(studentId, (s) => {
-      const cur = s.tests[which];
-      const score = cur.score != null ? Math.min(cur.score, max) : cur.score;
-      return { ...s, tests: { ...s.tests, [which]: { ...cur, max, score } } };
+    patchRowEval(studentId, subjectName, (su) => {
+      const cur = which === "daily" ? su.dailyScore : su.checkScore;
+      const score = cur != null ? Math.min(cur, max) : cur;
+      return which === "daily"
+        ? { ...su, dailyMax: max, dailyScore: score }
+        : { ...su, checkMax: max, checkScore: score };
     });
   }
   // ── 출결 인라인 입력(2-2) — 출석부와 같은 기록(setAttendanceCell 재사용). 행(반) 단위 raw 보존 ──
@@ -1052,20 +1073,47 @@ export function OneScreenClient({
       });
     }
   }
+  /**
+   * 행(수업) 단위 평가값 갱신 — 태도·점수·과제 수행률·특이사항.
+   *
+   * 🔴 **그 행에만** 쓴다(원장 2026-08-13: *"보강은 정규와 완전히 다른 보고서"*). 학생 값(`student.attitude` 등)은
+   *    건드리지 않는다 — 건드리면 아직 값이 없는 다른 행이 폴백으로 그 값을 따라가 버려서 버그가 그대로 재현된다.
+   * 편집하는 행에는 먼저 `seedRowFields`로 **지금 화면에 보이던 값**을 굳힌다(안 그러면 태도만 바꿨는데
+   * 점수가 미지정으로 남아 나중에 학생 값이 흔들릴 때 같이 흔들린다).
+   * ⚠️ 대상 행을 못 찾으면 아무것도 안 한다 — 예전처럼 학생 값으로 흘리지 말 것.
+   */
+  function patchRowEval(studentId: string, subjectName: string, up: (su: Subject) => Subject) {
+    patch(studentId, (s) => ({
+      ...s,
+      subjects: s.subjects.map((su) => (su.name === subjectName ? up(seedRowFields(s, su)) : su)),
+    }));
+  }
   // 표=SET(선택값), 카드=TOGGLE(같은 값 재클릭 시 해제) — 카드 wrapper가 토글을 계산해 SET 호출.
-  function setAttitudeValue(studentId: string, a: string | null) {
-    patch(studentId, (s) => ({ ...s, attitude: a }));
+  function setAttitudeValue(studentId: string, subjectName: string, a: string | null) {
+    patchRowEval(studentId, subjectName, (su) => ({ ...su, attitude: a }));
   }
-  function setHomeworkValue(studentId: string, h: string) {
-    patch(studentId, (s) => ({ ...s, homework: h }));
+  function setHomeworkValue(studentId: string, subjectName: string, h: string) {
+    patchRowEval(studentId, subjectName, (su) => ({ ...su, homework: h }));
   }
-  // 특이사항(강사 메모) — AI 멘트 입력(공지 모드 A/B). 학생별. 자동저장(patch→queueSave)에 실림.
-  function setNoteFor(studentId: string, text: string) {
-    patch(studentId, (s) => ({ ...s, note: text }));
+  // 특이사항(강사 메모) — AI 멘트 입력(공지 모드 A/B). **행별**(보강은 다른 수업이라 메모도 다르다).
+  function setNoteFor(studentId: string, subjectName: string, text: string) {
+    patchRowEval(studentId, subjectName, (su) => ({ ...su, note: text }));
   }
+  /**
+   * 일괄 적용 전용 — 그 학생의 **모든 행**에 같은 값을 넣는다(보강 행 포함).
+   * 🔴 원장 2026-08-13: *"일괄 적용은 말 그대로 일괄 적용이기 때문에 보강에도 적용시켜. 다만 선생님이
+   *    수정할 수 있겠지. 일괄 적용됐는데 보강만 적용 안 된다는건 일괄 적용이 아님."*
+   *    적용 후 행별로 다르게 하고 싶으면 강사가 그 행에서 고친다.
+   */
+  function applyToAllRows(studentId: string, up: (su: Subject) => Subject) {
+    patch(studentId, (s) => ({ ...s, subjects: s.subjects.map((su) => up(seedRowFields(s, su))) }));
+  }
+  /** 카드 뷰가 지금 보고 있는 행 — 카드엔 과목 선택 탭이 있어 대상이 명확하다(표와 같은 행 단위 규약). */
+  const cardRowName = () => previewSubject?.name ?? null;
   function setNote(text: string) {
-    if (!selected) return;
-    setNoteFor(selected.id, text);
+    const n = cardRowName();
+    if (!selected || !n) return;
+    setNoteFor(selected.id, n, text);
   }
   function setProgress(subjectIndex: number, today: string) {
     if (!selected) return;
@@ -1080,20 +1128,27 @@ export function OneScreenClient({
     setStudyGradeFor(selected.id, grade);
   }
   function setScore(which: "daily" | "check", v: number | null) {
-    if (!selected) return;
-    setScoreFor(selected.id, which, v);
+    const n = cardRowName();
+    if (!selected || !n) return;
+    setScoreFor(selected.id, n, which, v);
   }
   function setMax(which: "daily" | "check", v: number) {
-    if (!selected) return;
-    setMaxFor(selected.id, which, v);
+    const n = cardRowName();
+    if (!selected || !n) return;
+    setMaxFor(selected.id, n, which, v);
   }
   function setAttitude(a: string) {
-    if (!selected) return;
-    setAttitudeValue(selected.id, selected.attitude === a ? null : a);
+    const n = cardRowName();
+    if (!selected || !n) return;
+    // 카드=TOGGLE(같은 값 재클릭 시 해제) — 판정 기준은 **그 행의 현재 값**(표=SET과 같은 규약).
+    const cur = resolveRowFields(selected, previewSubject).attitude;
+    setAttitudeValue(selected.id, n, cur === a ? null : a);
   }
   function setHomework(h: string) {
-    if (!selected) return;
-    setHomeworkValue(selected.id, selected.homework === h ? "" : h);
+    const n = cardRowName();
+    if (!selected || !n) return;
+    const cur = resolveRowFields(selected, previewSubject).homework;
+    setHomeworkValue(selected.id, n, cur === h ? "" : h);
   }
   function setDraftFor(studentId: string, subjectName: string, text: string) {
     patchReport(studentId, subjectName, (r) => ({ ...r, draft: text }));
@@ -1305,8 +1360,10 @@ export function OneScreenClient({
     );
     // 값 칸은 먼저 즉시 반영(출결 왕복을 기다리게 하지 않는다).
     for (const p of plan) {
-      if (p.set.attitude !== undefined) setAttitudeValue(p.studentId, p.set.attitude);
-      if (p.set.homework !== undefined) setHomeworkValue(p.studentId, p.set.homework);
+      // 🔴 일괄 적용은 **보강 행에도** 적용한다(원장 2026-08-13) — "일괄 적용됐는데 보강만 적용 안 된다는건
+      //    일괄 적용이 아님". 이후 강사가 행별로 고치는 건 강사 몫이다.
+      if (p.set.attitude !== undefined) applyToAllRows(p.studentId, (su) => ({ ...su, attitude: p.set.attitude! }));
+      if (p.set.homework !== undefined) applyToAllRows(p.studentId, (su) => ({ ...su, homework: p.set.homework! }));
       if (p.set.textbook !== undefined) setTextbookFor(p.studentId, p.subjectName, p.set.textbook);
       if (p.set.homeworkToday !== undefined) setHomeworkTodayFor(p.studentId, p.subjectName, p.set.homeworkToday);
       if (p.set.today !== undefined) setProgressFor(p.studentId, p.subjectIndex, p.set.today);
@@ -1465,8 +1522,8 @@ export function OneScreenClient({
       return;
     }
     if (fill.today !== undefined) setProgressFor(student.id, idx, fill.today);
-    if (fill.attitude !== undefined) setAttitudeValue(student.id, fill.attitude);
-    if (fill.homework !== undefined) setHomeworkValue(student.id, fill.homework);
+    if (fill.attitude !== undefined) applyToAllRows(student.id, (su) => ({ ...su, attitude: fill.attitude! }));
+    if (fill.homework !== undefined) applyToAllRows(student.id, (su) => ({ ...su, homework: fill.homework! }));
     if (fill.homeworkToday !== undefined) setHomeworkTodayFor(student.id, subjectName, fill.homeworkToday);
     toast.success(`이전 회차 값으로 빈 칸 ${count}개를 가져왔습니다`);
   }
@@ -1526,8 +1583,10 @@ export function OneScreenClient({
     let filledCells = 0;
     for (const p of plan) {
       if (p.set.today !== undefined) setProgressFor(p.studentId, p.subjectIndex, p.set.today);
-      if (p.set.attitude !== undefined) setAttitudeValue(p.studentId, p.set.attitude);
-      if (p.set.homework !== undefined) setHomeworkValue(p.studentId, p.set.homework);
+      // 🔴 일괄 적용은 **보강 행에도** 적용한다(원장 2026-08-13) — "일괄 적용됐는데 보강만 적용 안 된다는건
+      //    일괄 적용이 아님". 이후 강사가 행별로 고치는 건 강사 몫이다.
+      if (p.set.attitude !== undefined) applyToAllRows(p.studentId, (su) => ({ ...su, attitude: p.set.attitude! }));
+      if (p.set.homework !== undefined) applyToAllRows(p.studentId, (su) => ({ ...su, homework: p.set.homework! }));
       if (p.set.homeworkToday !== undefined) setHomeworkTodayFor(p.studentId, p.subjectName, p.set.homeworkToday);
       filledCells += Object.keys(p.set).length;
     }
@@ -1592,11 +1651,15 @@ export function OneScreenClient({
     const draft = existing?.draft ?? "";
     // 표시 필드(교재·진도·시험·태도·멘트…)는 **카드 미리보기와 같은 함수**로 만든다(report-fields.ts).
     // 여기서 따로 조립하면 "화면에 보이던 것"과 "학부모가 받은 것"이 조용히 갈라진다.
+    // 🔴 평가값(태도·점수·과제 수행률)은 **행 단위**로 해석한다(row-fields.ts) — 보강은 정규와 따로 나가는
+    //    다른 보고서라 값도 독립이어야 한다(원장 2026-08-13). 행에 값이 없으면 학생 값으로 폴백해
+    //    옛 세션·기존 행은 지금까지와 똑같이 동작한다.
+    const rowEval = resolveRowFields(student, su);
     const fields = buildReportFields({
       subject: su,
-      homework: student.homework,
-      attitude: student.attitude,
-      tests: student.tests,
+      homework: rowEval.homework,
+      attitude: rowEval.attitude,
+      tests: rowEval.tests,
       draft,
       trendDraft: existing?.trendDraft,
       showDailyTest,
@@ -2558,6 +2621,8 @@ export function OneScreenClient({
                     <TestCard
                       embedded
                       student={selected}
+                      // 선택된 행의 점수를 보여준다 — 쓰기(setScore)도 그 행에 간다(row-fields.ts).
+                      tests={resolveRowFields(selected, previewSubject).tests}
                       onScore={setScore}
                       allowMax={allowTeacherTestMax}
                       onMax={setMax}

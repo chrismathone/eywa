@@ -19,6 +19,7 @@ import { evaluateSendGate } from "../send-gate";
 import { checkMentConsistency, MENT_WARNING_HINT, MENT_WARNING_LABEL } from "../ment-consistency";
 import { parentUnreadBadge, progressAnomalyBadge } from "../roster-signals";
 import { makeupBadgeLabel } from "../makeup-label";
+import { resolveRowFields } from "../row-fields";
 import type { OneScreenStudent } from "../types";
 import { classnoteBadge, readAtLabel, type SubjectReport } from "./report-card";
 import { GridAttachButton, useRowFileDrop } from "./grid-attach";
@@ -58,16 +59,18 @@ export type GridFieldHandlers = {
   /** 오늘 수업 성격(복습·문제풀이) — 진도와 함께 사는 별개 축(progress-mode.ts). */
   onProgressMode: (studentId: string, subjectIndex: number, mode: string | null) => void;
   onStudyGrade: (studentId: string, grade: string) => void;
-  onScore: (studentId: string, which: "daily" | "check", v: number | null) => void;
-  onMax: (studentId: string, which: "daily" | "check", v: number) => void;
+  // 🔴 평가값 5종은 **행(수업) 단위**다(2026-08-13) — 보강은 정규와 따로 나가는 다른 보고서라 값도 독립이어야
+  //    한다(원장 제보). 그래서 학생 id만이 아니라 **행 이름**까지 받는다. 해석·폴백은 row-fields.ts 단일 소스.
+  onScore: (studentId: string, subjectName: string, which: "daily" | "check", v: number | null) => void;
+  onMax: (studentId: string, subjectName: string, which: "daily" | "check", v: number) => void;
   // ⚠️ 모드 전환(onMode)은 그리드에 없다 — 열이 88px 고정이라 셀이 넘친다(2026-07-24). 카드(TestCard)에서만 전환.
-  onAttitude: (studentId: string, a: string | null) => void;
-  onHomework: (studentId: string, h: string) => void;
+  onAttitude: (studentId: string, subjectName: string, a: string | null) => void;
+  onHomework: (studentId: string, subjectName: string, h: string) => void;
   onTextbook: (studentId: string, subjectName: string, text: string) => void;
   onHomeworkToday: (studentId: string, subjectName: string, text: string) => void; // 오늘 과제(0096a)
   onDraft: (studentId: string, subjectName: string, text: string) => void; // 학부모 문구(멘트) 편집
   onTrend: (studentId: string, subjectName: string, text: string) => void; // 학습 추세(종합분석) 편집(4a)
-  onNote: (studentId: string, text: string) => void; // 특이사항(강사 메모) — AI 멘트 입력(4c). 학생별.
+  onNote: (studentId: string, subjectName: string, text: string) => void; // 특이사항(강사 메모) — AI 멘트 입력(4c). **행별**.
   onMakeup: (studentId: string, subjectName: string) => void; // 보강 토글
 };
 
@@ -201,6 +204,8 @@ export function GridBodyRow({
   groupStart?: boolean; // 학생 묶음의 첫 렌더 행 — 위쪽에 굵은 구분선(참고행이 켜져 있으면 그쪽이 받는다)
 }) {
   const { student, subject, subjectIndex, key } = row;
+  // 이 행에 적용되는 평가값(태도·점수·과제 수행률) — 행 값이 없으면 학생 값 폴백(row-fields.ts).
+  const rowEval = resolveRowFields(student, subject);
   const td = groupStart ? TD_GROUP : TD; // 학생 구분선(묶음 첫 행만 굵게)
   const { tone } = subjectTone(subject.name);
   const badge = classnoteBadge(rep?.classnoteStatus);
@@ -236,8 +241,8 @@ export function GridBodyRow({
   const mentWarnings = checkMentConsistency({
     ment: rep?.draft ?? "",
     progress: subject.today ?? "",
-    dailyTest: student.tests.daily.score != null ? "y" : "",
-    checkTest: student.tests.check.score != null ? "y" : "",
+    dailyTest: rowEval.tests.daily.score != null ? "y" : "",
+    checkTest: rowEval.tests.check.score != null ? "y" : "",
   });
   // 발송 완료건은 자동작성도 막는다 — 멘트를 새로 만들어 봐야 저장이 서버에서 거부된다(입력 유실).
   const canAutoWrite = isRowActionable(subject, "autowrite", liveStatus);
@@ -419,12 +424,12 @@ export function GridBodyRow({
         <td className={`${td} text-center`}>
           <fieldset disabled={rowLocked} className={LOCK_FS}>
             <ScoreInput
-              value={student.tests.daily.score}
-              max={student.tests.daily.max}
-              onChange={(v) => fields.onScore(student.id, "daily", v)}
+              value={rowEval.tests.daily.score}
+              max={rowEval.tests.daily.max}
+              onChange={(v) => fields.onScore(student.id, subject.name, "daily", v)}
               label={`${student.name} 일일테스트`}
               allowMax={config.allowTestMax}
-              onMax={(v) => fields.onMax(student.id, "daily", v)}
+              onMax={(v) => fields.onMax(student.id, subject.name, "daily", v)}
               nav={nav.studentRow !== undefined ? { col: "daily", row: nav.studentRow } : undefined}
             />
           </fieldset>
@@ -434,12 +439,12 @@ export function GridBodyRow({
         <td className={`${td} text-center`}>
           <fieldset disabled={rowLocked} className={LOCK_FS}>
             <ScoreInput
-              value={student.tests.check.score}
-              max={student.tests.check.max}
-              onChange={(v) => fields.onScore(student.id, "check", v)}
+              value={rowEval.tests.check.score}
+              max={rowEval.tests.check.max}
+              onChange={(v) => fields.onScore(student.id, subject.name, "check", v)}
               label={`${student.name} 확인테스트`}
               allowMax={config.allowTestMax}
-              onMax={(v) => fields.onMax(student.id, "check", v)}
+              onMax={(v) => fields.onMax(student.id, subject.name, "check", v)}
               nav={nav.studentRow !== undefined ? { col: "check", row: nav.studentRow } : undefined}
             />
           </fieldset>
@@ -451,8 +456,8 @@ export function GridBodyRow({
           <FieldSelect
             radius="sm"
             options={config.attitudes}
-            value={student.attitude}
-            onSelect={(a) => fields.onAttitude(student.id, a)}
+            value={rowEval.attitude}
+            onSelect={(a) => fields.onAttitude(student.id, subject.name, a)}
             ariaLabel={`${student.name} 태도`}
           />
         </fieldset>
@@ -461,8 +466,8 @@ export function GridBodyRow({
         {/* 과제 수행률 — 숫자 칸 + % (드롭다운 폐지, 원장 2026-08-03). 옆 일일·확인 점수칸과 같은 모양. */}
         <fieldset disabled={rowLocked} className={LOCK_FS}>
           <HomeworkRateInput
-            value={student.homework}
-            onChange={(h) => fields.onHomework(student.id, h)}
+            value={rowEval.homework}
+            onChange={(h) => fields.onHomework(student.id, subject.name, h)}
             label={`${student.name} 과제 수행률`}
             nav={{ col: "homework", row: nav.row }}
           />
@@ -542,7 +547,7 @@ export function GridBodyRow({
               표만 열려 있어 같은 값이 한쪽에선 써지고 한쪽에선 안 써졌다. */}
           <textarea
             value={student.note ?? ""}
-            onChange={(e) => fields.onNote(student.id, e.target.value)}
+            onChange={(e) => fields.onNote(student.id, subject.name, e.target.value)}
             readOnly={rowLocked}
             placeholder={rowPlaceholder ?? "특이사항(메모) · 예: 조퇴함 / 개념 어려워함"}
             aria-label={`${student.name} 특이사항`}

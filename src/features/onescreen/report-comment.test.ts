@@ -48,6 +48,43 @@ function student(overrides: Partial<OneScreenStudent> = {}): OneScreenStudent {
   };
 }
 
+/**
+ * 🔴 적대적 리뷰에서 잡은 것(2026-08-13): 행 단위 평가값을 도입하고도 **AI 멘트 입력만** 학생 값을 읽고
+ * 있었다. 그대로 뒀으면 보강 행 멘트에 정규 수업의 태도·점수가 실려 학부모에게 나갔다 —
+ * 화면·저장은 고쳐졌는데 멘트만 옛 값을 쓰는, 눈에 안 보이는 종류의 어긋남이다.
+ */
+describe("🔴 멘트 입력도 행 값을 쓴다 — 보강은 정규와 다른 보고서", () => {
+  it("보강 행의 태도·점수·과제·특이사항이 멘트 입력에 들어간다", () => {
+    const st = student({
+      subjects: [
+        { name: "수학(상)", prev: "", today: "이차함수" },
+        {
+          name: "수학(상) (보강)",
+          prev: "",
+          today: "복습",
+          makeup: true,
+          classId: null,
+          attitude: "보통",
+          homework: "미제출",
+          note: "보강 중 개념 재확인",
+          dailyScore: 3,
+          dailyMax: 5,
+        },
+      ],
+    });
+    const mk = buildReportCommentInput(st, 1);
+    expect(mk.attitude).toBe("보통");
+    expect(mk.homework).toBe("미제출");
+    expect(mk.specialNote).toBe("보강 중 개념 재확인");
+    expect(mk.dailyTest).toContain("5문제 중 3개");
+    // 정규 행은 그대로 학생 값 — 보강 입력이 옮겨붙지 않는다.
+    const reg = buildReportCommentInput(st, 0);
+    expect(reg.attitude).toBe("좋음");
+    expect(reg.homework).toBe("완료");
+    expect(reg.dailyTest).toContain("20문제 중 16개");
+  });
+});
+
 describe("buildReportCommentInput", () => {
   it("진도·테스트(증감 포함)·태도·과제를 매핑한다", () => {
     const input = buildReportCommentInput(student(), 0);
