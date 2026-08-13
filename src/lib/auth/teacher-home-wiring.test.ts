@@ -52,6 +52,12 @@ const LANDING_SURFACES: { file: string[]; via: string; what: string }[] = [
     via: "landingPath",
     what: "'내 정보'에서 홈으로 되돌아가기",
   },
+  {
+    // 급여명세서는 원장 전용이라 강사가 URL로 들어오면 되돌린다 — 그 되돌림도 착지 지점이다.
+    file: ["src", "app", "(print)", "payroll", "[teacherId]", "payslip", "page.tsx"],
+    via: "landingPath",
+    what: "급여명세서 비-원장 되돌림",
+  },
 ];
 
 function read(parts: string[]): string {

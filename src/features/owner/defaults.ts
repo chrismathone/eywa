@@ -114,6 +114,8 @@ export const DEFAULT_SETTINGS: TenantSettings = {
     brandColor: "#153e75", // --primary 인재원 네이비 — color-utils DEFAULT_BRAND_COLOR와 동일
     logoUrl: "",
     sealUrl: "",
+    legalName: "",
+    payslipSigners: "",
   },
   operations: {
     // 과목 — 현재 SUBJECT_LABEL 중복 맵 이식(단일 소스). color=Pill 토큰.

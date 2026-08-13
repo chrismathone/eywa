@@ -24,6 +24,7 @@ import { GridProvider } from "./_components/grid-context";
 import { CollapseAllChip } from "./_components/class-group";
 import { LiveStats } from "./_components/live-totals";
 import { attHref, resolveViewMode, type ViewMode } from "./_components/att-href";
+import { PayslipWindowButton } from "./_components/payslip-window-button";
 
 export const metadata = { title: "출석부 — eywa" };
 
@@ -594,6 +595,11 @@ export default async function AttendancePage({
 
         {/* 우측 — 살아있는 합계 + 안내 토글. **새 줄을 만들지 않고** 툴바의 남는 가로 여백을 쓴다. */}
         <div className="ml-auto flex items-center gap-3">
+          {/* 급여명세서 — 이 화면의 '정산액'을 그대로 쓰는 문서라 **여기**가 진입점이다(수납관리 강사 정산
+              면은 invoice_teacher_splits가 비어 있어 표 자체가 안 그려진다). 원장 + 강사 전체 보기일 때만. */}
+          {mode === "teacher" && effectiveTeacher && user.systemRole === "master" ? (
+            <PayslipWindowButton teacherId={effectiveTeacher} period={month} subjectFiltered={!!effectiveSubject} />
+          ) : null}
           {groups.length > 0 ? <LiveStats totalStudents={totalStudents} fallback={statsCount} /> : null}
           {notices.length > 0 ? (
             // `<details>`라 클라 JS가 없다. 패널은 absolute라 열려도 격자를 밀어내지 않는다(높이 0 유지).

@@ -48,9 +48,39 @@ export type TierRow = {
   units: number;
 };
 
+/**
+ * 산정된 1행의 내역 — **급여명세서의 '수업 내역'**과 매출액 산출에 쓴다.
+ * 집계값(total)은 이 배열과 무관하게 기존 로직 그대로 나온다(여기 추가는 순수 부가정보).
+ */
+export type TierSettlementLine = {
+  studentId: string;
+  studentName: string;
+  classId: string;
+  tierLabel: string;
+  units: number;
+  /** 티어 단가(원). */
+  unitPrice: number;
+  /** 이 행에 적용된 과정(초등/중등/…) — 비율을 어디서 가져왔는지 밝힌다. */
+  group: SalaryGroup | null;
+  /** 적용 비율(%). */
+  rate: number;
+  /** 매출액 기여분 = 단가 × 시수 (수수료·비율 적용 전). */
+  gross: number;
+  /** 이 행의 급여 = floor1(단가 × 시수 × 0.911 × 비율%). */
+  amount: number;
+};
+
 export type TierSettlementResult = {
   /** 산정된 정산액(원, 정수 내림). 산정 가능한 행이 하나도 없으면 null. */
   total: number | null;
+  /**
+   * 매출액 = Σ(단가 × 시수), **수수료(0.911)·비율 적용 전**. 원장 시트 '프리랜서 소득세신고' 탭의
+   * `매출액(급여 정산합)` 열과 같은 값이다(김은정 26.07 = 7,307,250 → 급여/매출 = 0.4353).
+   * ⚠️ 산정된 행만 더한다 — 단가·비율이 없어 제외된 행은 여기에도 안 들어간다(제외는 excludedUnits로 본다).
+   */
+  grossTuition: number;
+  /** 산정된 행별 내역(명세서 '수업 내역'용). 제외된 행은 담기지 않는다. */
+  lines: TierSettlementLine[];
   /** 산정에 들어간 행 수 · 시수 합. */
   rowCount: number;
   unitsTotal: number;
@@ -79,6 +109,8 @@ export function computeTierSettlement(
   let rowCount = 0;
   let unitsTotal = 0;
   let excludedUnits = 0;
+  let grossTuition = 0;
+  const lines: TierSettlementLine[] = [];
   const missingTierStudents = new Set<string>();
   const missingTierStudentIds = new Set<string>();
   const missingPriceTiers = new Set<string>();
@@ -107,13 +139,29 @@ export function computeTierSettlement(
       excludedUnits += row.units;
       continue;
     }
-    raw += floor1(price * row.units * NET_MULTIPLIER * (rate / 100));
+    const amount = floor1(price * row.units * NET_MULTIPLIER * (rate / 100));
+    raw += amount;
     rowCount++;
     unitsTotal += row.units;
+    grossTuition += price * row.units;
+    lines.push({
+      studentId: row.studentId,
+      studentName: row.studentName,
+      classId: row.classId,
+      tierLabel: row.tierLabel,
+      units: row.units,
+      unitPrice: price,
+      group,
+      rate,
+      gross: price * row.units,
+      amount,
+    });
   }
 
   return {
     total: rowCount > 0 ? Math.floor(raw) : null,
+    grossTuition,
+    lines,
     rowCount,
     unitsTotal,
     missingTierStudents: [...missingTierStudents].sort((a, b) => a.localeCompare(b, "ko")),

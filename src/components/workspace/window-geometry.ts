@@ -82,6 +82,7 @@ export const ROUTE_WINDOW_SIZE: Record<string, { w: number; h: number }> = {
   "print/meetings": { w: 840, h: 1120 }, // 회의록
   "print/textbook": { w: 800, h: 1040 }, // 교재요청서 카드(짧음)
   "print/lesson_reports": { w: 840, h: 1120 }, // 수업 보고서(원스크린 PDF)
+  "print/payslip": { w: 860, h: 1120 }, // 급여명세서(프리랜서 강의용역수수료) — 6열 표라 인수인계서보다 조금 넓게
 };
 
 /**
