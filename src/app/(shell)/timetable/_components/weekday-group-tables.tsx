@@ -424,6 +424,9 @@ function GroupTable({
             mathN !== null
               ? `${row.time.split("~")[0]}~${(paired ? nextRow! : row).time.split("~")[1]}`
               : row.time;
+          // 학원장이 교시 이름을 비우면 이름 줄을 없애고 **시간대를 이름 자리로 올린다**(2026-08-13).
+          // 시각을 작은 회색 줄로만 남기면 축이 텅 빈 칸처럼 보인다.
+          const timeOnly = labelText === "";
           return (
             // ⚠️ 교시 행 높이를 rowHeight로 **명시 고정** → 그룹 라벨(rowSpan=2)이 두 교시(예 4-1/4-2)를
             // 정확히 2등분(각 rowHeight). tr에 안 박으면 border-collapse 표에서 브라우저가 rowSpan=2 라벨의
@@ -431,18 +434,24 @@ function GroupTable({
             <tr key={row.key} style={{ height: rowH }}>
               {isGroupSecond ? null : (
                 <td rowSpan={paired ? 2 : 1} className={labelCls} style={{ height: labelH }}>
-                  {labelText}
-                  {labelCollapsed ? (
-                    <>
-                      <span className="text-text-faint ml-1 num text-[9px] font-normal [.tt-editing_&]:hidden">
-                        {timeText}
-                      </span>
-                      <div className="text-text-faint mt-0.5 hidden num text-[10px] [.tt-editing_&]:block">
-                        {timeText}
-                      </div>
-                    </>
+                  {timeOnly ? (
+                    <span className="num">{timeText}</span>
                   ) : (
-                    <div className="text-text-faint mt-0.5 num text-[10px]">{timeText}</div>
+                    <>
+                      {labelText}
+                      {labelCollapsed ? (
+                        <>
+                          <span className="text-text-faint ml-1 num text-[9px] font-normal [.tt-editing_&]:hidden">
+                            {timeText}
+                          </span>
+                          <div className="text-text-faint mt-0.5 hidden num text-[10px] [.tt-editing_&]:block">
+                            {timeText}
+                          </div>
+                        </>
+                      ) : (
+                        <div className="text-text-faint mt-0.5 num text-[10px]">{timeText}</div>
+                      )}
+                    </>
                   )}
                 </td>
               )}

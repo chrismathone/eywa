@@ -35,7 +35,10 @@ export const SUBJECT_DEFAULT_VIEW_OPTIONS: { value: SubjectDefaultView; label: s
   SUBJECT_DEFAULT_VIEWS.map((v) => ({ value: v, label: SUBJECT_DEFAULT_VIEW_LABEL[v] }));
 
 export const periodTimeSchema = z.object({
-  label: z.string().min(1).max(20),
+  // 교시 이름 — **빈 값 허용**(원장 2026-08-13: *"빈값이면 그냥 표기하고 싶지 않은 것"*).
+  // 빈 문자열은 "미입력"이 아니라 **뜻이 있는 값**이다: 소비처가 이름 자리에 시간대만 그린다
+  // (내장 교시표처럼 label 키 자체가 없으면 지금처럼 `N교시` 폴백 — periods.ts periodListLabel).
+  label: z.string().max(20),
   startTime: z.string().regex(HHMM, "HH:MM 형식"),
   endTime: z.string().regex(HHMM, "HH:MM 형식"),
 });

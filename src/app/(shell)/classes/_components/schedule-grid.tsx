@@ -25,10 +25,17 @@ type InitialSlot = {
 };
 
 const hm = (t: string | null | undefined) => String(t ?? "").slice(0, 5);
-/** 읽어주기·목록에 쓰는 교시 이름 — 학원설정에서 지은 이름이 있으면 그것, 없으면 "N교시". */
-const periodName = (p: Period) => p.label?.trim() || `${p.id}교시`;
-/** 교시 열 안에 쓰는 짧은 표기 — 이름이 없으면 번호만(열 제목이 이미 '교시'라 중복을 피한다). */
-const periodCellName = (p: Period) => p.label?.trim() || p.id;
+/**
+ * 읽어주기·목록에 쓰는 교시 이름 — 학원설정 이름 → (내장표면) "N교시" → **이름을 비웠으면 시간대**.
+ * 규칙의 진실원본은 periods.ts periodListLabel/periodSoloLabel(여긴 로컬 Period 타입이라 같은 규칙을 따라 쓴다).
+ */
+const periodName = (p: Period) =>
+  p.label === undefined ? `${p.id}교시` : p.label.trim() || `${hm(p.startTime)}~${hm(p.endTime)}`;
+/**
+ * 교시 열 안에 쓰는 짧은 표기 — 이름이 없으면 번호만(열 제목이 이미 '교시'라 중복을 피한다).
+ * 학원장이 **이름을 비우면 빈칸**으로 둔다(바로 아래 줄에 시간대가 이미 있다, 2026-08-13).
+ */
+const periodCellName = (p: Period) => (p.label === undefined ? p.id : p.label.trim());
 type Opt = { id: string; name: string };
 
 const DAYS = [

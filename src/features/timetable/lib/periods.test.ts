@@ -5,6 +5,9 @@ import {
   koDayToEnum,
   normalizePeriodId,
   periodLabel,
+  periodListLabel,
+  periodRowText,
+  periodSoloLabel,
   periodToTimes,
   slotPeriodRow,
   subjectPeriodRows,
@@ -274,5 +277,69 @@ describe("과목별 평일 교시표(weekdayBySubject) — subjects[].weekdayPer
     expect(subjectWeekdayPeriods("subject_1", cfg)).toEqual([{ id: "1", startTime: "17:00", endTime: "18:00" }]);
     // 주말은 여전히 과목 무관 config.weekend
     expect(periodToTimes("1", "subject_1", { weekend: true }, cfg)).toEqual({ startTime: "09:00", endTime: "10:00" });
+  });
+});
+
+// 원장 2026-08-13: *"빈값으로 설정 가능하게 … 빈값이면 표기하고 싶지 않은 거니까 시간대만 표시"*.
+// 🔴 이 규칙의 전부는 **`undefined`(내장 교시표 = 이름이라는 개념이 없음)와 `""`(학원장이 비움)를
+//    구분**하는 것이다. 둘을 뭉개면 비운 이름이 다시 `N교시`로 되살아난다.
+describe("교시 이름 비우기 — `\"\"`(비움) ≠ undefined(내장표)", () => {
+  const p = (startTime: string, endTime: string) => ({ startTime, endTime });
+
+  it("settingsToPeriodsConfig가 빈 이름을 버리지 않는다(칸 없는 옛 저장분만 undefined)", () => {
+    const cfg = settingsToPeriodsConfig({
+      weekdayPeriods: [{ label: "", ...p("14:30", "15:25") }, { label: " ", ...p("15:25", "16:20") }],
+      weekendPeriods: [p("09:00", "10:00")],
+    });
+    expect(cfg.weekday["1"]!.label).toBe("");
+    expect(cfg.weekday["2"]!.label).toBe(""); // 공백만 적은 것도 "비움"
+    expect(cfg.weekend["1"]!.label).toBeUndefined(); // label 칸 자체가 없던 행
+  });
+
+  it("periodListLabel: 이름 그대로 / undefined는 `N교시` / 빈 값은 빈 문자열", () => {
+    expect(periodListLabel({ id: "4", label: "EiE 4교시" })).toBe("EiE 4교시");
+    expect(periodListLabel({ id: "4" })).toBe("4교시");
+    expect(periodListLabel({ id: "4", label: "" })).toBe("");
+  });
+
+  it("이름을 홀로 찍는 자리(periodSoloLabel·periodRowText)는 시간대로 대체", () => {
+    const row = { id: "4", label: "", startTime: "16:20", endTime: "17:00" };
+    expect(periodSoloLabel(row)).toBe("16:20~17:00");
+    expect(periodSoloLabel({ ...row, label: "EiE 4교시" })).toBe("EiE 4교시");
+    expect(periodSoloLabel({ ...row, label: undefined })).toBe("4교시");
+    expect(periodRowText({ label: "", time: "16:20~17:00" })).toBe("16:20~17:00");
+    expect(periodRowText({ label: "EiE 4교시", time: "16:20~17:00" })).toBe("EiE 4교시");
+  });
+
+  it("영어 축: 이름을 비운 교시는 label이 빈 문자열이고 시각은 그대로 살아 있다(행은 안 사라진다)", () => {
+    const cfg = settingsToPeriodsConfig({
+      weekdayPeriods: [p("14:30", "15:25"), p("15:25", "16:20")],
+      weekendPeriods: [p("09:00", "10:00")],
+      subjects: [
+        {
+          key: "english",
+          weekdayPeriods: [
+            { label: "", ...p("14:20", "15:00") },
+            { label: "EiE 2교시", ...p("15:00", "15:40") },
+          ],
+        },
+      ],
+    });
+    const rows = subjectPeriodRows("english", false, cfg);
+    expect(rows.map((r) => r.label)).toEqual(["", "EiE 2교시"]);
+    expect(rows.map((r) => r.time)).toEqual(["14:20~15:00", "15:00~15:40"]);
+    // 역매핑(슬롯 → 행)도 그대로 — 이름을 비웠다고 배치가 흔들리면 안 된다.
+    expect(slotPeriodRow("english", "14:20", "mon", cfg, "15:00")).toMatchObject({ key: "e-1", label: "" });
+    expect(subjectWeekdayPeriods("english", cfg)[0]).toEqual({
+      id: "1",
+      label: "",
+      startTime: "14:20",
+      endTime: "15:00",
+    });
+  });
+
+  it("내장 교시표(설정 없음)는 그대로 `N교시` — 무회귀", () => {
+    expect(subjectPeriodRows("english", false)[0]!.label).toBe("1교시");
+    expect(subjectPeriodRows("math", true)[0]!.label).toBe("1교시");
   });
 });

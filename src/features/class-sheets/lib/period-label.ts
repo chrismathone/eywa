@@ -9,11 +9,28 @@
 // 쓰는 반이 실재**한다(sat 3반·sun 1반). 그 요일의 표만 보면 그 반들이 라벨을 통째로 잃는다.
 // → **시작+종료가 정확히 일치**할 때만 다른 표를 교차 참조한다(강한 신호). 시작만 같은 추측 매칭은
 //   그 요일의 표에서만 허용 — 시각이 다른 교시에 남의 번호를 붙이는 게 이 버그의 원인이었다.
-export type PeriodEntry = { id: string; startTime: string; endTime: string };
+export type PeriodEntry = {
+  id: string;
+  startTime: string;
+  endTime: string;
+  /**
+   * 학원설정에서 지은 이름. `undefined`=내장 교시표(이름 없음) → `N교시`.
+   * `""`=학원장이 **비움**(2026-08-13) → 라벨 자체를 안 만든다(화면이 시각만 그린다).
+   */
+  label?: string;
+};
 export type PeriodTables = { weekday: PeriodEntry[]; weekend: PeriodEntry[] };
 
-export function tableToEntries(table: Record<string, { startTime: string; endTime: string }>): PeriodEntry[] {
-  return Object.entries(table).map(([id, t]) => ({ id, startTime: t.startTime, endTime: t.endTime }));
+export function tableToEntries(
+  table: Record<string, { startTime: string; endTime: string; label?: string }>,
+): PeriodEntry[] {
+  return Object.entries(table).map(([id, t]) => ({
+    id,
+    startTime: t.startTime,
+    endTime: t.endTime,
+    // 빈 문자열도 뜻이 있는 값이라 그대로 옮긴다(periods.ts periodListLabel과 같은 규약).
+    ...(t.label === undefined ? {} : { label: t.label }),
+  }));
 }
 
 export function resolvePeriodLabel(
@@ -30,5 +47,9 @@ export function resolvePeriodLabel(
   // ① 그 요일 표에 시작+종료 일치 → ② 다른 표에 시작+종료 일치(교차, 강한 신호만)
   // → ③ 그 요일 표에 시작만 일치(고아 슬롯 등 종료 미상). 넷 다 없으면 **라벨 없음**(지어내지 않는다).
   const hit = exact(primary) ?? exact(secondary) ?? byStart(primary);
-  return hit ? `${hit.id}교시` : null;
+  if (!hit) return null;
+  // 교시 **이름은 학원설정이 단일 소스**(하드코딩 금지 규칙) — 코드가 번호를 지어내는 건 이름이
+  // 아예 없는 내장 교시표뿐이다. 학원장이 이름을 비웠으면 라벨 없음(null)으로 돌려 화면이 시각만 그린다.
+  if (hit.label === undefined) return `${hit.id}교시`;
+  return hit.label.trim() || null;
 }

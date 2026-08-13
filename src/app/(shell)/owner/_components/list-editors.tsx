@@ -287,9 +287,12 @@ function PeriodRow({
         <GripVertical className="size-4" />
       </button>
       <input
-        className={`${cellCls} w-[90px]`}
+        className={`${cellCls} w-[110px]`}
         value={row.label}
-        placeholder="1교시"
+        // 비워도 저장된다(2026-08-13) — 그 교시는 화면에서 이름 없이 시간대만 나온다. placeholder에
+        // "1교시"를 두면 비운 칸이 "1교시로 저장될 것"처럼 보여 그 규칙이 안 보인다.
+        placeholder="이름 없음(시간만)"
+        title="비워 두면 시간표·시트에 이름 없이 시간대만 표시됩니다"
         onChange={(e) => onPatch({ label: e.target.value })}
       />
       <input

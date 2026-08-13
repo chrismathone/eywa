@@ -1,6 +1,7 @@
 import {
   subjectWeekdayPeriods,
   subjectWeekendPeriods,
+  periodListLabel,
   type DayOfWeek,
   type PeriodsConfig,
   DEFAULT_PERIODS_CONFIG,
@@ -72,7 +73,9 @@ export function buildSubjectPeriodGrid(
   for (const p of periodList) {
     rowMap.set(`p-${p.id}`, {
       key: `p-${p.id}`,
-      label: `${p.id}교시`,
+      // 교시 이름은 학원설정이 단일 소스 — 코드가 "N교시"를 지어내지 않는다(비운 이름은 빈 문자열로
+      // 내려가 렌더가 시간대만 그린다, 2026-08-13). 수학계열 '묶음' 라벨만 렌더 단계에서 따로 만든다.
+      label: periodListLabel(p),
       time: `${hm5(p.startTime)}~${hm5(p.endTime)}`,
       order: toMin(p.startTime),
     });

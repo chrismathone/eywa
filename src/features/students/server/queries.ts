@@ -8,6 +8,7 @@ import { attendanceRate } from "@/lib/calc/attendance";
 import { invoiceOutstanding } from "@/features/billing/calc";
 import {
   slotPeriodRow,
+  periodRowText,
   settingsToPeriodsConfig,
   enumDayToKo,
   type DayOfWeek,
@@ -645,7 +646,8 @@ function groupSchedule(
     const dayKo = enumDayToKo(s.day);
     if (attendanceDaysKo.length > 0 && !attendanceDaysKo.includes(dayKo)) continue;
     // 테넌트 설정 교시(과목별 override 포함)로 라벨 해석 — 무config 호출은 커스텀 교시 저장 시 라벨이 틀어진다(2026-07-06).
-    const label = slotPeriodRow(subj, s.startTime, s.day, config).label;
+    // 여긴 시각을 따로 안 그리는 자리라, 이름을 비운 교시는 시간대로 대체한다(periodRowText).
+    const label = periodRowText(slotPeriodRow(subj, s.startTime, s.day, config));
     const entry = byDay.get(dayKo) ?? { nums: [], other: [] };
     const m = label.match(/^(\d+)교시$/);
     if (m) entry.nums.push(Number(m[1]));
@@ -749,7 +751,7 @@ export async function getStudentClassesDetail(studentId: string): Promise<Studen
       .map((s) => ({
         day: s.day,
         startTime: s.startTime,
-        periodLabel: slotPeriodRow(subject, s.startTime, s.day, periodsConfig).label,
+        periodLabel: periodRowText(slotPeriodRow(subject, s.startTime, s.day, periodsConfig)),
         // 슬롯별 강의실 라벨 우선, 없으면 반 기본 강의실 상속(메인 시간표와 동일 규칙).
         room: s.roomLabel ?? defaultRoom,
       }));

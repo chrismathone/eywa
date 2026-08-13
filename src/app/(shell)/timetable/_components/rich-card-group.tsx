@@ -171,10 +171,11 @@ function LabelColumn({
           className={`${GRID} text-text-faint flex flex-col items-center justify-center border-b num leading-none`}
           style={{ height: PERIOD_H }}
         >
-          <span className="text-foreground text-[10px] font-bold">{p.label}</span>
+          {/* 학원장이 교시 이름을 비우면 시간대가 이름 자리로 올라온다(2026-08-13, periodListLabel). */}
+          <span className="text-foreground text-[10px] font-bold">{p.label || p.time}</span>
           {/* 주말 섹션은 시각이 비어 온다(카드마다 시각이 달라 행에 못 적는다 — class-grid `weekendSelfShift`).
               교시표에 없는 시각의 행은 라벨 자체가 시각이라 같은 값을 두 번 적지 않는다(`slotPeriodRow` 폴백). */}
-          {p.time && p.time !== p.label ? <span className="text-[7px]">{p.time}</span> : null}
+          {p.label && p.time && p.time !== p.label ? <span className="text-[7px]">{p.time}</span> : null}
         </div>
       ))}
       <div className={`text-primary ${GRID} flex items-center justify-center border-b text-[10px] font-bold`} style={{ height: activeH }}>

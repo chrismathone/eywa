@@ -62,10 +62,39 @@ describe("resolvePeriodLabel — 경계", () => {
   });
 });
 
+describe("resolvePeriodLabel — 학원설정 교시 이름(2026-08-13)", () => {
+  // 교시 이름은 학원설정이 단일 소스다(하드코딩 금지). 코드가 번호를 지어내는 건 이름이 없는 내장표뿐.
+  const named: PeriodTables = {
+    weekday: [
+      { id: "4", startTime: "16:20", endTime: "17:00", label: "EiE 4교시" },
+      { id: "7", startTime: "16:20", endTime: "17:20", label: "" }, // 학원장이 이름을 비움
+    ],
+    weekend: [],
+  };
+
+  it("이름이 있으면 번호가 아니라 그 이름", () => {
+    expect(resolvePeriodLabel("16:20", "17:00", named, false)).toBe("EiE 4교시");
+  });
+
+  it("이름을 비우면 라벨 없음(null) — 화면이 시각만 그린다", () => {
+    expect(resolvePeriodLabel("16:20", "17:20", named, false)).toBeNull();
+  });
+
+  it("이름 칸이 없는 내장표는 그대로 `N교시`(무회귀)", () => {
+    expect(resolvePeriodLabel("15:00", "16:00", tables, true)).toBe("7교시");
+  });
+});
+
 describe("tableToEntries", () => {
   it("Record<id, {start,end}> → 배열(id 보존)", () => {
     expect(tableToEntries({ "1": { startTime: "09:00", endTime: "10:00" } })).toEqual([
       { id: "1", startTime: "09:00", endTime: "10:00" },
+    ]);
+  });
+
+  it("빈 이름도 그대로 옮긴다 — 없는 것과 뜻이 다르다", () => {
+    expect(tableToEntries({ "1": { startTime: "09:00", endTime: "10:00", label: "" } })).toEqual([
+      { id: "1", startTime: "09:00", endTime: "10:00", label: "" },
     ]);
   });
 });

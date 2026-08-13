@@ -17,7 +17,9 @@ export interface PeriodTime {
   endTime: string; // "HH:MM"
   /**
    * 학원설정에서 학원장이 지은 교시 이름(예 "EiE 1교시"·"IJW 3교시"). **내장 기본표엔 없다**
-   * → 소비처는 없으면 교시 번호로 폴백한다. 이름은 표시 전용이고 식별자는 여전히 periodId(index+1).
+   * → 소비처는 없으면(undefined) 교시 번호로 폴백한다. 이름은 표시 전용이고 식별자는 여전히 periodId(index+1).
+   * ⚠️ **빈 문자열은 undefined와 다르다** — 학원장이 이름을 비운 것("시간대만 표시")이라 번호로 폴백하지
+   *    않는다(2026-08-13). 판정은 [periodListLabel] 한 곳에서만 한다.
    */
   label?: string;
 }
@@ -146,12 +148,15 @@ export function settingsToPeriodsConfig(operations: {
   const toTable = (rows: PeriodRowSetting[]): Record<string, PeriodTime> => {
     const t: Record<string, PeriodTime> = {};
     rows.forEach((r, i) => {
-      // 라벨은 학원장이 지은 이름 — 빈 문자열은 "미지정"으로 보고 키를 아예 안 만든다(소비처가 번호로 폴백).
-      const label = r.label?.trim();
+      // 라벨은 학원장이 지은 이름. 🔴 **빈 문자열을 버리지 말 것**(2026-08-13) — 학원장이 이름을 비운 건
+      // "이름 없이 시간대만 보여 달라"는 뜻이라 `N교시` 폴백과 **구분해야** 한다. 그래서
+      //   · 설정에 label 칸이 있으면(빈 값이어도) 그대로 싣고
+      //   · 칸 자체가 없는 옛 저장분만 undefined로 남긴다(→ 소비처가 `N교시`로 폴백).
+      const label = typeof r.label === "string" ? r.label.trim() : undefined;
       t[String(i + 1)] = {
         startTime: hm(r.startTime),
         endTime: hm(r.endTime),
-        ...(label ? { label } : {}),
+        ...(label === undefined ? {} : { label }),
       };
     });
     return t;
@@ -179,16 +184,37 @@ export function weekdayTableFor(subject: string, config: PeriodsConfig): Record<
 /** 교시 목록 한 줄 — id는 식별자(index+1), label은 학원설정에서 지은 이름(없으면 소비처가 번호로 폴백). */
 export type PeriodListItem = { id: string; startTime: string; endTime: string; label?: string };
 
-/** 설정 이름이 있으면 그대로, 없으면 기존 `N교시` 폴백. 모든 시간표 표면이 이 규칙을 쓴다. */
+/**
+ * 교시 **이름**. 모든 시간표 표면이 이 규칙 하나를 쓴다.
+ *  · 이름이 있으면 그대로("EiE 1교시").
+ *  · `undefined`(내장 교시표 — 이름이라는 개념이 없는 표) → 기존 `N교시` 폴백.
+ *  · `""`(학원장이 설정에서 **비운** 경우, 2026-08-13) → **빈 문자열**. "이름을 안 붙이겠다"는 뜻이라
+ *    번호를 지어내지 않는다. 이름 자리에 시각을 따로 안 그리는 화면은 [periodRowText]/[periodSoloLabel]로.
+ */
 export function periodListLabel(p: Pick<PeriodListItem, "id" | "label">): string {
-  return p.label?.trim() || `${p.id}교시`;
+  if (p.label === undefined) return `${p.id}교시`;
+  return p.label.trim();
+}
+
+/**
+ * 이름을 **홀로** 찍는 자리(시각을 따로 안 그리는 화면·읽어주기)용 표기 — 이름이 비면 시간대로 대체한다.
+ * 라벨과 시각을 따로 그리는 축(기본뷰·통합뷰)은 이걸 쓰지 말 것(같은 값이 두 번 찍힌다).
+ */
+export function periodSoloLabel(p: Pick<PeriodListItem, "id" | "label" | "startTime" | "endTime">): string {
+  return periodListLabel(p) || `${hm(p.startTime)}~${hm(p.endTime)}`;
+}
+
+/** [PeriodRow]를 한 덩어리 문자열로 — 이름이 비면 시간대(`14:20~15:00`). periodSoloLabel의 행(row) 판. */
+export function periodRowText(row: Pick<PeriodRow, "label" | "time">): string {
+  return row.label || row.time;
 }
 
 const toListItem = (id: string, t: PeriodTime): PeriodListItem => ({
   id,
   startTime: hm(t.startTime),
   endTime: hm(t.endTime),
-  ...(t.label ? { label: t.label } : {}),
+  // ⚠️ 빈 문자열도 그대로 넘긴다 — "이름 비움"과 "이름 없음(내장표)"은 다른 뜻이다(periodListLabel).
+  ...(t.label === undefined ? {} : { label: t.label }),
 });
 
 /**

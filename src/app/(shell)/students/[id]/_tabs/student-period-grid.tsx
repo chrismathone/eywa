@@ -121,8 +121,15 @@ function PeriodTable({
                 </td>
               ) : (
                 <td className={labelCls} style={{ height: rowHeight }}>
-                  {row.label}
-                  <div className="text-text-faint num mt-0.5 text-[9px] font-normal">{row.time}</div>
+                  {/* 교시 이름을 비운 학원은 시간대가 이름 자리로 올라온다(2026-08-13, periodListLabel). */}
+                  {row.label ? (
+                    <>
+                      {row.label}
+                      <div className="text-text-faint num mt-0.5 text-[9px] font-normal">{row.time}</div>
+                    </>
+                  ) : (
+                    <span className="num">{row.time}</span>
+                  )}
                 </td>
               )}
               {days.map((d, ci) => {

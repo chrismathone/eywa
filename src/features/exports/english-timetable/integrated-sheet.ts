@@ -183,8 +183,10 @@ export function appendIntegratedSheet(
     for (const p of group.periodRows) {
       const pr = cursor++;
       // 주말 섹션은 시각이 비어 온다(카드마다 시각이 달라 행에 못 적는다 — class-grid `weekendSelfShift`).
-      // 그대로 이으면 셀에 개행만 남으니 라벨만 쓴다.
-      setCell(pr, 1, p.time ? `${p.label}\n${p.time}` : p.label, { bg: "FFF7F9F8", bold: true, size: 8, wrap: true });
+      // 그대로 이으면 셀에 개행만 남으니 라벨만 쓴다. 반대로 학원장이 교시 **이름을 비운** 경우(2026-08-13)는
+      // 시각만 쓴다(안 그러면 셀이 개행으로 시작한다).
+      const head = p.label && p.time ? `${p.label}\n${p.time}` : p.label || p.time;
+      setCell(pr, 1, head, { bg: "FFF7F9F8", bold: true, size: 8, wrap: true });
       cards.forEach((c, i) => {
         const st = cardStart[i];
         days.forEach((d, di) => {
