@@ -1,5 +1,7 @@
 import "server-only";
+import { unstable_cache } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchInChunks, fetchAllPaged } from "@/lib/supabase/batch";
 import { inclusiveDateWindowStart, kstToday, kstMonthStart, kstMonth } from "@/lib/date-kst";
 import { attendanceRate } from "@/lib/calc/attendance";
@@ -650,6 +652,49 @@ export async function getTopOutstanding(limit = 8): Promise<OutstandingItem[]> {
   }));
 }
 
+/**
+ * 대시보드 위젯(미수 상위·결석 위험) 캐시 태그 — 테넌트별. 지금은 TTL(60초)만 쓰지만, 즉시 반영이
+ * 필요해지면 저장 액션에서 `updateTag(dashboardWidgetsTag(tenantId))`로 비우면 된다.
+ */
+export function dashboardWidgetsTag(tenantId: string): string {
+  return `dashboard-widgets:${tenantId}`;
+}
+
+/**
+ * 🔴 **호출 전에 권한을 반드시 확인할 것** — 아래 두 함수는 캐시 안에서 **admin 클라이언트**를 쓰므로
+ * RLS를 타지 않는다(캐시엔 쿠키가 없다, B6 규칙 — `loadTenantSettingsRaw`와 같은 패턴).
+ * 대시보드 페이지는 이미 `access.read.billing` / `access.read.students && access.read.attendance`로
+ * 갈라 부르므로 안전하다. **게이트 없는 새 호출부는 RLS를 타는 원래 함수**(`getTopOutstanding`·
+ * `getAbsenceRiskStudents`)를 쓸 것 — 대화형 비서 툴이 그 경우다.
+ *
+ * 왜 캐시인가(실측 2026-08-13): 이 두 RPC는 **RLS 경로에서 70~90배 비싸다** — 직접 실행 0.1~1.3ms인데
+ * authenticated 롤로는 86ms·103ms(콜드 454ms·241ms)다. 게이트 함수(`auth_billing_can_read` 등)가
+ * 표마다 붙는 값이라 쿼리를 더 조여도 안 줄어든다. 게다가 eywa는 **창(iframe)마다 셸+페이지가 다시
+ * 도는 구조**라 창 N개면 N배로 든다. 59일 실측 총합 **48분+26분**이 이 둘이었다.
+ * 60초 TTL이면 창을 몇 개를 띄우든 1분에 한 번만 돈다. 미수·결석 위험은 초 단위 신선도가 필요 없다.
+ */
+export const getTopOutstandingCached = (tenantId: string, limit = 8): Promise<OutstandingItem[]> =>
+  unstable_cache(
+    async () => {
+      const admin = createAdminClient();
+      const { data, error } = await admin.rpc("dashboard_top_outstanding_admin", {
+        p_limit: limit,
+        p_tenant: tenantId,
+      });
+      if (error) throw new Error(`getTopOutstandingCached: ${error.message}`);
+      return (
+        (data ?? []) as Array<{ student_id: string; student_name: string; amount: number | string; status: string }>
+      ).map((r) => ({
+        studentId: r.student_id,
+        studentName: r.student_name,
+        amount: Number(r.amount),
+        status: r.status,
+      }));
+    },
+    ["dashboard-top-outstanding", tenantId, String(limit)],
+    { tags: [dashboardWidgetsTag(tenantId)], revalidate: 60 },
+  )();
+
 export type AbsenceRisk = {
   studentId: string;
   studentName: string;
@@ -676,3 +721,18 @@ export async function getAbsenceRiskStudents(
     absences: Number(r.absences),
   }));
 }
+
+/** 결석 위험 학생 — 위 `getTopOutstandingCached`와 같은 계약(권한은 호출부가 확인, 60초 캐시). */
+export const getAbsenceRiskCached = (tenantId: string): Promise<AbsenceRisk[]> =>
+  unstable_cache(
+    async () => {
+      const admin = createAdminClient();
+      const { data, error } = await admin.rpc("dashboard_absence_risk_admin", { p_min: 3, p_tenant: tenantId });
+      if (error) throw new Error(`getAbsenceRiskCached: ${error.message}`);
+      return ((data ?? []) as Array<{ student_id: string; student_name: string; absences: number | string }>).map(
+        (r) => ({ studentId: r.student_id, studentName: r.student_name, absences: Number(r.absences) }),
+      );
+    },
+    ["dashboard-absence-risk", tenantId],
+    { tags: [dashboardWidgetsTag(tenantId)], revalidate: 60 },
+  )();

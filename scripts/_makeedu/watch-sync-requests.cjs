@@ -116,7 +116,9 @@ async function heartbeat() {
   // spawnSync가 이벤트 루프를 막으므로 setInterval도 그 사이엔 못 돈다 → 자식 실행 **직전에** 한 번 더 찍고,
   // 타이머는 유휴 구간을 메운다(둘 다 best-effort).
   const beat = () => heartbeat().catch((e) => log(`heartbeat 실패(무시): ${e.message}`));
-  const heartbeatTimer = setInterval(beat, 20_000);
+  // 하트비트 60초 — 온라인 판정 창이 150초(WORKER_ONLINE_MS)라 2회 연속 유실돼도 '온라인'이 유지된다.
+  // 20초였을 때 59일간 283,314회로 연결 수립(pgbouncer 인증)까지 같이 밀어올리고 있었다(2026-08-13 계측).
+  const heartbeatTimer = setInterval(beat, 60_000);
   heartbeatTimer.unref?.();
   for (;;) {
     try {

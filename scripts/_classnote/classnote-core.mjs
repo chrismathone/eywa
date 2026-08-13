@@ -355,6 +355,13 @@ export async function sendReportViaApi(adminPage, { report, studentName, boardId
  * @returns {Promise<{stale:number, claimed:number, success:number, failed:number, requeued:number, blocked:number}>}
  *   blocked = 프리플라이트 보드 안전 게이트가 오발송 위험으로 보류한 건수(classnote_status='blocked_shared').
  */
+/**
+ * stale 복구 주기(ms) — 데몬 폴(15초)보다 길게 둔다. 대상이 10분 초과 행이라 더 자주 볼 이유가 없다.
+ * one-shot 실행은 `lastStaleSweepAt=0`이라 **첫 호출에서 항상** 한 번 돈다(주기 건너뜀 없음).
+ */
+const STALE_SWEEP_MS = 60_000;
+let lastStaleSweepAt = 0;
+
 export async function processQueueOnce(sql, browser, opts) {
   const {
     tenant,
@@ -399,11 +406,19 @@ export async function processQueueOnce(sql, browser, opts) {
   }
 
   // 1) stale 복구: processing 10분 초과 → queued (tenant 격리)
-  const stale = await sql`update lesson_reports set classnote_status='queued'
-    where tenant_id = ${tenant} and classnote_status='processing'
-      and classnote_processing_at < now() - (${STALE_MIN} || ' minutes')::interval
-    returning id`;
-  if (stale.length) log(`[worker] stale 복구 ${stale.length}건`);
+  // ⚠️ **매 폴(15초)마다 돌리지 않는다**(2026-08-13 계측). 대상은 애초에 10분(STALE_MIN)을 넘긴 행이라
+  //    15초마다 물어봐야 답이 달라지지 않는데, 59일 실측에서 이 UPDATE 한 줄이 **148,186회·총 89분**으로
+  //    DB 전체 1위였다(그때는 인덱스도 없어 매번 19,043행 전수 스캔). 1분 주기면 복구 지연은 최대 +45초고
+  //    (이미 10분 기다린 건에 대해) 쿼리 수는 1/4로 준다. 인덱스(lesson_reports_status_idx)는 별도 적용됨.
+  let stale = [];
+  if (Date.now() - lastStaleSweepAt >= STALE_SWEEP_MS) {
+    lastStaleSweepAt = Date.now();
+    stale = await sql`update lesson_reports set classnote_status='queued'
+      where tenant_id = ${tenant} and classnote_status='processing'
+        and classnote_processing_at < now() - (${STALE_MIN} || ' minutes')::interval
+      returning id`;
+    if (stale.length) log(`[worker] stale 복구 ${stale.length}건`);
+  }
 
   // 2) 원자 클레임: queued → processing (FOR UPDATE SKIP LOCKED, tenant 격리)
   const claimed = await sql`
