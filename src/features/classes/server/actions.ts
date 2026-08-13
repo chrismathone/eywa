@@ -418,7 +418,9 @@ export async function updateClass(
       period_label: s.periodLabel,
       merge_group: s.mergeGroup,
     }));
-    openedRows = rows.filter((r) => r.validFrom === today).length;
+    // ⚠️ `rows`는 이미 **DB 컬럼명(snake_case)** 으로 변환된 뒤다 — 여기서 `r.validFrom`을 보면
+    //    항상 undefined라 openedRows가 늘 0이었다(감사로그의 "수업 배치" 근거 하나가 조용히 죽는다).
+    openedRows = rows.filter((r) => r.valid_from === today).length;
     const { error: schedErr } = await supabase.from("class_schedules").insert([...archiveRows, ...rows]);
     if (schedErr) {
       // 🔴 delete는 이미 끝났다 — 여기서 그냥 돌아가면 **그 반의 현재 교시가 통째로 사라진다**(저장 실패
