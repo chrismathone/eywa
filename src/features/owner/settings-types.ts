@@ -171,6 +171,11 @@ export const profileSchema = z.object({
   brandColor: z.string().max(24),
   logoUrl: z.string().max(400), // 로고 이미지 URL(호스팅 주소). 인쇄물 머리글. 파일 업로드 UI는 후속.
   sealUrl: z.string().max(400), // 직인/도장 이미지 URL. 인쇄물 하단.
+  // 법인명 — 급여명세서 머리글의 '회사명'. 학원명(name)과 다를 수 있다(실제: 학원 "인재원" / 법인
+  // "(주) 곰돌이 (강의하는아이들인재원)"). 비우면 name으로 폴백한다. 소비처 = 급여명세서 인쇄.
+  legalName: z.string().max(80),
+  // 급여명세서 서명란 '담당'에 인쇄할 이름(여러 명이면 줄바꿈). 비우면 그 칸은 빈 서명란으로 남는다.
+  payslipSigners: z.string().max(120),
 });
 export type ProfileSettings = z.infer<typeof profileSchema>;
 

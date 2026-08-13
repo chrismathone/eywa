@@ -151,3 +151,76 @@ describe("floor1", () => {
     expect(floor1(129_817.5)).toBe(129_817.5);
   });
 });
+
+/**
+ * 매출액·행 내역(급여명세서용 부가정보) — **집계값(total)에 영향이 없어야** 한다.
+ * 시트 '프리랜서 소득세신고' 탭의 `매출액(급여 정산합)` 열이 바로 이 grossTuition이다
+ * (김은정 26.07 = 7,307,250 → 급여 3,181,051 / 매출 = 0.4353 = 0.911 × 평균비율).
+ */
+describe("매출액·행 내역 (0205a 급여명세서 부가)", () => {
+  it("매출액 = Σ(단가 × 시수) — 수수료·비율 적용 전", () => {
+    const r = computeTierSettlement(
+      [row({ units: 7 }), row({ studentId: "s2", tierLabel: "중등 3T", units: 4 })],
+      prices,
+      { groupRates: { 초등: 45, 중등: 48 }, defaultRate: null },
+    );
+    expect(r.grossTuition).toBe(21_250 * 7 + 24_000 * 4); // 148,750 + 96,000
+  });
+
+  it("행 내역은 산정된 행만 담고 단가·비율·매출·급여를 함께 밝힌다", () => {
+    const r = computeTierSettlement([row({ units: 7 })], prices, {
+      groupRates: { 초등: 45 },
+      defaultRate: null,
+    });
+    expect(r.lines).toHaveLength(1);
+    expect(r.lines[0]).toMatchObject({
+      studentId: "s1",
+      tierLabel: "초등 3T",
+      units: 7,
+      unitPrice: 21_250,
+      group: "초등",
+      rate: 45,
+      gross: 148_750,
+      // 148,750 × 0.911 × 0.45 = 60,980.0625 → floor1 = 60,980 (위 골든 케이스와 같은 값)
+      amount: 60_980,
+    });
+    expect(Math.floor(r.lines.reduce((s, l) => s + l.amount, 0))).toBe(r.total);
+  });
+
+  it("제외된 행(단가 미지정·단가표 없음·비율 없음)은 매출액·내역에 안 들어간다", () => {
+    const r = computeTierSettlement(
+      [
+        row({ units: 2 }), // 정상
+        row({ studentId: "s2", tierLabel: null, units: 5 }), // 단가 미지정
+        row({ studentId: "s3", tierLabel: "없는티어", units: 3 }), // 단가표 없음
+        row({ studentId: "s4", tierLabel: "고등 3T", units: 4 }), // 비율 없음
+      ],
+      prices,
+      { groupRates: { 초등: 45 }, defaultRate: null },
+    );
+    expect(r.lines).toHaveLength(1);
+    expect(r.grossTuition).toBe(21_250 * 2);
+    expect(r.excludedUnits).toBe(12);
+    expect(r.rowCount).toBe(1);
+  });
+
+  it("산정 가능한 행이 없으면 매출액 0 · 내역 빈 배열 (total은 null 그대로)", () => {
+    const r = computeTierSettlement([row({ tierLabel: null, units: 3 })], prices, {
+      groupRates: {},
+      defaultRate: null,
+    });
+    expect(r.total).toBeNull();
+    expect(r.grossTuition).toBe(0);
+    expect(r.lines).toEqual([]);
+  });
+
+  it("김은정 26.07 비율 구조 재현 — 매출 대비 급여 비율이 시트 0.4353 근방", () => {
+    // 초등 47.5 / 중등 48 (시트 실측). 매출 대비 = 0.911 × 비율.
+    const r = computeTierSettlement(
+      [row({ units: 100 }), row({ studentId: "s2", tierLabel: "중등 3T", units: 100 })],
+      prices,
+      { groupRates: { 초등: 47.5, 중등: 48 }, defaultRate: null },
+    );
+    expect(r.total! / r.grossTuition).toBeCloseTo(0.4353, 3);
+  });
+});

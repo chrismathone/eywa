@@ -1,8 +1,8 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
-import { fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
-import { effectiveAttendanceRecords } from "@/features/attendance/effective-records";
-import { computeTierSettlement, type TierRow } from "@/features/payroll/tier-settlement";
+import { fetchInChunks } from "@/lib/supabase/batch";
+import { computeTierSettlement } from "@/features/payroll/tier-settlement";
+import { collectTierRows } from "@/features/payroll/server/tier-rows";
 import { parseGroupRates } from "@/features/payroll/salary-group";
 
 /**
@@ -177,113 +177,13 @@ async function computeTierSettlementInfo(
   classIds: string[],
   rates: { groupRates: ReturnType<typeof parseGroupRates>; defaultRate: number | null },
 ): Promise<TierSettlementInfo> {
-  if (classIds.length === 0) return { status: "unwired" };
-  const from = `${month}-01`;
-  const [y, m] = month.split("-").map(Number);
-  const to = new Date(Date.UTC(y!, m!, 0)).toISOString().slice(0, 10);
-
   try {
-    const [tiers, tierEnrollments, records, dowSettings] = await Promise.all([
-      // 단가표 — master 전용 RLS(0199a). 비-master는 RLS가 0행을 돌려주고(정책 없음이 아니라 미매치),
-      // 그 경우 아래 "단가표 비어 있음" 분기로 unwired가 된다(급여 정보 비노출과 화면 안전이 같이 성립).
-      supabase.from("salary_tiers").select("label, unit_price"),
-      fetchInChunks<{ student_id: string; class_id: string; salary_tier: string | null }>(classIds, (chunk) =>
-        supabase.from("enrollments").select("student_id, class_id, salary_tier").in("class_id", chunk),
-      ),
-      fetchAllPagedInChunks<{
-        id: string;
-        student_id: string;
-        class_id: string;
-        session_date: string;
-        slot_start: string | null;
-        status: string;
-        session_units: number | string | null;
-        salary_tier: string | null;
-        recorded_at: string;
-      }>(classIds, (chunk, f, t) =>
-        supabase
-          .from("attendance_records")
-          .select("id, student_id, class_id, session_date, slot_start, status, session_units, salary_tier, recorded_at")
-          .in("class_id", chunk)
-          .gte("session_date", from)
-          .lte("session_date", to)
-          .order("id", { ascending: true }) // OFFSET 페이지 안정용 unique 정렬(B2)
-          .range(f, t),
-      ),
-      // 급여 적용 요일(0132a class_salary_settings.applies_dows) — "주말 수업분만 비율제"(이성우: 평일
-      // 수업은 급여 밖, 토·일 시수만). 지정된 반은 그 요일 날짜의 출결만 정산에 넣는다.
-      // splits 경로(settlement-queries dowApportionRatio)와 **같은 설정을 같은 의미로** 소비한다.
-      fetchInChunks<{ class_id: string; applies_dows: string[] | null }>(classIds, (chunk) =>
-        supabase.from("class_salary_settings").select("class_id, applies_dows").in("class_id", chunk),
-      ),
-    ]);
-    if (tiers.error) return { status: "unwired" };
-    const priceByTier = new Map<string, number>(
-      (tiers.data ?? []).map((t) => [t.label as string, Number(t.unit_price)]),
-    );
-    if (priceByTier.size === 0) return { status: "unwired" };
+    // 행 조립은 공용 모듈이 단일 소스 — 급여명세서(payslip-queries)와 **같은 코드**로 같은 숫자를 낸다.
+    const collected = await collectTierRows(supabase, month, classIds);
+    if (!collected) return { status: "unwired" };
 
-    // 수강 티어: 같은 (학생, 반)에 재등록 행이 여럿이면 티어가 지정된 행 우선(백필은 전 행에 같은 값을 쓴다).
-    const enrollTier = new Map<string, string>();
-    // 학생별 티어 라벨(표시용) — 수강 티어 + 기록 예외를 전부 모은다(여럿이면 " · " join).
-    const tierSetByStudent = new Map<string, Set<string>>();
-    const addTier = (studentId: string, tier: string) => {
-      (tierSetByStudent.get(studentId) ?? tierSetByStudent.set(studentId, new Set()).get(studentId)!).add(tier);
-    };
-    for (const e of tierEnrollments) {
-      if (e.salary_tier) {
-        enrollTier.set(`${e.student_id}|${e.class_id}`, e.salary_tier);
-        addTier(e.student_id, e.salary_tier);
-      }
-    }
-
-    // 반별 급여 적용 요일 — 지정 없는 반은 전 요일. 키는 DOW_KEYS("sun"~"sat", getDay() 인덱스와 동일).
-    const appliesDowsByClass = new Map<string, Set<string>>();
-    for (const s of dowSettings) {
-      if (s.applies_dows && s.applies_dows.length > 0) appliesDowsByClass.set(s.class_id, new Set(s.applies_dows));
-    }
-    const DOW_KEYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
-
-    // 교시별 유효행 → 출석 시수를 (학생 × 반 × 티어)로 합산. 결석·excused는 시수를 소비하지 않는다.
-    const effective = effectiveAttendanceRecords(records);
-    const unitsByRow = new Map<string, { studentId: string; classId: string; tierLabel: string | null; units: number }>();
-    for (const r of effective) {
-      if (r.status === "absent" || r.status === "excused") continue;
-      // 급여 적용 요일 밖의 출결은 정산에 넣지 않는다(출결 자체는 진실로 남는다 — 급여만 거른다).
-      const applies = appliesDowsByClass.get(r.class_id);
-      if (applies && !applies.has(DOW_KEYS[new Date(`${r.session_date}T00:00:00Z`).getUTCDay()]!)) continue;
-      const u = r.session_units === null || r.session_units === undefined ? 1 : Number(r.session_units);
-      if (!Number.isFinite(u) || u <= 0) continue;
-      const tierLabel = r.salary_tier ?? enrollTier.get(`${r.student_id}|${r.class_id}`) ?? null;
-      if (r.salary_tier) addTier(r.student_id, r.salary_tier); // 기록 예외(교시 분리 0.5T)도 표시에 포함
-      const key = `${r.student_id}|${r.class_id}|${tierLabel ?? ""}`;
-      const cur = unitsByRow.get(key) ?? { studentId: r.student_id, classId: r.class_id, tierLabel, units: 0 };
-      cur.units += u;
-      unitsByRow.set(key, cur);
-    }
-    if (unitsByRow.size === 0) return { status: "unwired" };
-
-    // 이름은 "단가 미지정" 명단에만 필요 — 그 학생들만 조회(B3 청크).
-    const missingIds = [...new Set([...unitsByRow.values()].filter((r) => !r.tierLabel).map((r) => r.studentId))];
-    const nameById = new Map<string, string>();
-    if (missingIds.length > 0) {
-      const named = await fetchInChunks<{ id: string; name: string }>(missingIds, (chunk) =>
-        supabase.from("students").select("id, name").in("id", chunk),
-      );
-      for (const n of named) nameById.set(n.id, n.name);
-    }
-    const rows: TierRow[] = [...unitsByRow.values()].map((r) => ({
-      studentId: r.studentId,
-      studentName: nameById.get(r.studentId) ?? "",
-      classId: r.classId,
-      tierLabel: r.tierLabel,
-      units: r.units,
-    }));
-
-    const result = computeTierSettlement(rows, priceByTier, rates);
-    const tierByStudent = Object.fromEntries(
-      [...tierSetByStudent].map(([id, set]) => [id, [...set].join(" · ")]),
-    );
+    const result = computeTierSettlement(collected.rows, collected.priceByTier, rates);
+    const tierByStudent = collected.tierByStudent;
     if (result.total === null)
       return {
         status: "hold",
@@ -306,6 +206,7 @@ async function computeTierSettlementInfo(
     };
   } catch {
     // 0199a 미적용(칼럼·표 없음 = PostgREST 400 → 헬퍼 throw) — 정산액만 접고 화면은 산다.
+    // ⚠️ 명세서 쪽은 반대로 **던진다**(0원짜리 문서를 뽑으면 안 되므로) — tier-rows.ts 주석 참조.
     return { status: "unwired" };
   }
 }

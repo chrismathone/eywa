@@ -41,6 +41,20 @@ export function ProfileSection({ initial }: { initial: ProfileSettings }) {
             onChange={(v) => set({ bizRegNo: v })}
             placeholder="000-00-00000"
           />
+          <TextField
+            label="법인명"
+            hint="급여명세서 머리글 · 비우면 학원명"
+            value={p.legalName}
+            onChange={(v) => set({ legalName: v })}
+            placeholder="(주) 곰돌이 (강의하는아이들인재원)"
+          />
+          <TextField
+            label="급여명세서 담당자"
+            hint="명세서 서명란 '담당' 칸 · 여러 명이면 쉼표"
+            value={p.payslipSigners}
+            onChange={(v) => set({ payslipSigners: v })}
+            placeholder="박소선, 백은미"
+          />
         </div>
       </SettingsCard>
 
