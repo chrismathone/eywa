@@ -66,6 +66,15 @@ export type GridCell = { label: string; isLab: boolean; time?: string };
 export type GridPeriodRow = { order: number; label: string; time: string };
 
 /**
+ * 섹션 제목("… 시작")에 쓸 앵커 교시 표기 — 교시 이름이 있으면 그 이름, **비었으면 시작 시각**.
+ * 학원장이 이름을 비우면(2026-08-13) 이름이 빈 문자열로 내려오는데, 그대로 이으면 " 시작"이 된다.
+ */
+function startAnchorName(row: GridPeriodRow | undefined): string {
+  if (!row) return ""; // 행 자체가 없는 경우 = 데이터 어긋남. 종전 동작 유지.
+  return row.label || row.time.split("~")[0] || "";
+}
+
+/**
  * 강사 라벨(display_name·영문닉네임) → 저장된 색(#RRGGBB). 통합뷰 셀·담임색 배선용.
  * 서버가 users.bg_color/text_color + english_name으로 빌드해 클라 렌더에 plain 객체로 전달
  * (메서드 없는 순수 데이터라 [[#61]] server-only 무관). 미해결 라벨은 teacherColor 해시 폴백.
@@ -543,7 +552,10 @@ export function buildRichClassCards(slots: GridSlot[], config: PeriodsConfig): R
       activeCount: students.filter((x) => x.status === "active").length,
       // 같은 시작시각의 서로 다른 교시는 행 식별용 소수부만 다르다. 섹션 정렬키는 실제 시작 분으로 유지한다.
       groupOrder: weekend ? WEEKEND_ORDER : Math.floor(weekdayStart),
-      groupLabel: weekend ? "주말" : `${periodMap.get(weekdayStart)?.label ?? ""} 시작`,
+      // 🔴 학원장이 교시 **이름을 비우면**(2026-08-13) label이 빈 문자열이라 제목이 " 시작"이 된다
+      //    (화면 섹션 머리글 + 영어 통합 엑셀 섹션행이 같은 문자열을 쓴다) → 시작 시각으로 적는다.
+      //    ⚠️ 행 자체가 없을 때의 `""`는 종전 동작 그대로 둔다(그건 데이터가 어긋난 경우다).
+      groupLabel: weekend ? "주말" : `${startAnchorName(periodMap.get(weekdayStart))} 시작`,
       weekendOnly: weekend,
     });
   }

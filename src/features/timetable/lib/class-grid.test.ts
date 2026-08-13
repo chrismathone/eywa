@@ -296,4 +296,29 @@ describe("buildRichCardGroups", () => {
     expect(teacherColor("Kristine")).toBe(teacherColor("Kristine"));
     expect(teacherColor(null)).toBe("blue");
   });
+
+  // 🔴 적대 리뷰(2026-08-13): 교시 이름을 비우면 섹션 제목이 " 시작"이 됐다(엑셀 섹션행도 같은 문자열).
+  it("교시 이름을 비우면 섹션 제목은 시작 시각으로 — 절대 ' 시작'으로 두지 않는다", () => {
+    const cfg = settingsToPeriodsConfig({
+      weekdayPeriods: [{ label: "", startTime: "14:30", endTime: "15:25" }],
+      weekendPeriods: [{ label: "", startTime: "09:00", endTime: "10:00" }],
+      subjects: [
+        {
+          key: "english",
+          weekdayPeriods: [
+            { label: "", startTime: "14:20", endTime: "15:00" },
+            { label: "EiE 2교시", startTime: "15:00", endTime: "15:40" },
+          ],
+        },
+      ],
+    });
+    const groups = buildRichCardGroups(
+      [slot({ startTime: "14:20", endTime: "15:00" }), slot({ classId: "c2", startTime: "15:00", endTime: "15:40" })],
+      cfg,
+    );
+    const labels = groups.map((g) => g.label);
+    expect(labels).toContain("14:20 시작");
+    expect(labels).toContain("EiE 2교시 시작");
+    expect(labels.some((l) => l.startsWith(" ") || l === "시작")).toBe(false);
+  });
 });

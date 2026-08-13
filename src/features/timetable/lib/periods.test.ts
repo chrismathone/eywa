@@ -342,4 +342,16 @@ describe("교시 이름 비우기 — `\"\"`(비움) ≠ undefined(내장표)", 
     expect(subjectPeriodRows("english", false)[0]!.label).toBe("1교시");
     expect(subjectPeriodRows("math", true)[0]!.label).toBe("1교시");
   });
+
+  // 적대 리뷰: 설정 jsonb는 읽을 때 스키마를 안 거친다(deep-merge뿐) → 저장된 null이 그대로 온다.
+  it("깨진 값(null·숫자)은 죽지 않고 `N교시`로 — 설정 한 줄이 시간표를 못 깨뜨린다", () => {
+    expect(periodListLabel({ id: "3", label: null as unknown as string })).toBe("3교시");
+    expect(periodListLabel({ id: "3", label: 7 as unknown as string })).toBe("3교시");
+    const cfg = settingsToPeriodsConfig({
+      weekdayPeriods: [{ label: null as unknown as string, startTime: "14:30", endTime: "15:25" }],
+      weekendPeriods: [],
+    });
+    expect(cfg.weekday["1"]!.label).toBeUndefined();
+    expect(subjectPeriodRows("math", false, cfg)[0]!.label).toBe("1교시");
+  });
 });

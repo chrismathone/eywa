@@ -192,7 +192,9 @@ export type PeriodListItem = { id: string; startTime: string; endTime: string; l
  *    번호를 지어내지 않는다. 이름 자리에 시각을 따로 안 그리는 화면은 [periodRowText]/[periodSoloLabel]로.
  */
 export function periodListLabel(p: Pick<PeriodListItem, "id" | "label">): string {
-  if (p.label === undefined) return `${p.id}교시`;
+  // ⚠️ `typeof`로 본다 — 설정 jsonb는 읽을 때 스키마를 안 거치므로(resolveSettings는 deep-merge뿐)
+  //    저장된 `label: null`이 여기까지 올 수 있고, `=== undefined`만 보면 `null.trim()`으로 죽는다.
+  if (typeof p.label !== "string") return `${p.id}교시`;
   return p.label.trim();
 }
 

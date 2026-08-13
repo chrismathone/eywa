@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { ChevronDown, ChevronUp } from "@/components/icons/eywa-icon-compat";
 import { buildPeriodMatcher } from "@/features/classes/grid-slots";
+import { periodSoloLabel } from "@/features/timetable/lib/periods";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   SPECIAL_SLOT_LABELS,
@@ -24,18 +25,17 @@ type InitialSlot = {
   slotTeacherLabel?: string | null;
 };
 
-const hm = (t: string | null | undefined) => String(t ?? "").slice(0, 5);
 /**
  * 읽어주기·목록에 쓰는 교시 이름 — 학원설정 이름 → (내장표면) "N교시" → **이름을 비웠으면 시간대**.
- * 규칙의 진실원본은 periods.ts periodListLabel/periodSoloLabel(여긴 로컬 Period 타입이라 같은 규칙을 따라 쓴다).
+ * 규칙은 periods.ts가 단일 소스다(여기서 다시 적지 말 것 — 두 벌이 되면 화면마다 갈린다).
  */
-const periodName = (p: Period) =>
-  p.label === undefined ? `${p.id}교시` : p.label.trim() || `${hm(p.startTime)}~${hm(p.endTime)}`;
+const periodName = (p: Period) => periodSoloLabel(p);
 /**
  * 교시 열 안에 쓰는 짧은 표기 — 이름이 없으면 번호만(열 제목이 이미 '교시'라 중복을 피한다).
- * 학원장이 **이름을 비우면 빈칸**으로 둔다(바로 아래 줄에 시간대가 이미 있다, 2026-08-13).
+ * 위와 폴백이 다르므로(번호 vs "N교시") 여기만 따로 쓴다. 학원장이 **이름을 비우면 빈칸**으로 둔다
+ * (바로 아래 줄에 시간대가 이미 있다, 2026-08-13). `typeof` 판정 이유는 periodListLabel 주석 참조.
  */
-const periodCellName = (p: Period) => (p.label === undefined ? p.id : p.label.trim());
+const periodCellName = (p: Period) => (typeof p.label === "string" ? p.label.trim() : p.id);
 type Opt = { id: string; name: string };
 
 const DAYS = [

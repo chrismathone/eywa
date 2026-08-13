@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { DEFAULT_PERIODS_CONFIG } from "@/features/timetable/lib/periods";
+import { DEFAULT_PERIODS_CONFIG, settingsToPeriodsConfig } from "@/features/timetable/lib/periods";
 import { buildSubjectPeriodGrid, type WeekGridRow } from "./week-grid";
 
 const row = (
@@ -132,5 +132,39 @@ describe("buildSubjectPeriodGrid (교시축 · 과목 탭)", () => {
       cfg,
     );
     expect(g.rows.length).toBe(11); // ENGLISH_PERIODS 11교시
+  });
+
+  // 교시 이름은 **학원설정이 단일 소스**다(코드가 `N교시`를 지어내지 않는다, 2026-08-13).
+  // 비운 이름은 빈 문자열로 내려오고 그 자리엔 화면이 시간대를 그린다(student-period-grid).
+  it("교시 이름 = 설정값 · 비우면 빈 문자열(내장표만 `N교시`)", () => {
+    const named = settingsToPeriodsConfig({
+      weekdayPeriods: [{ label: "1교시", startTime: "14:30", endTime: "15:25" }],
+      weekendPeriods: [{ label: "1교시", startTime: "09:00", endTime: "10:00" }],
+      subjects: [
+        {
+          key: "english",
+          weekdayPeriods: [
+            { label: "EiE 1교시", startTime: "14:20", endTime: "15:00" },
+            { label: "", startTime: "15:00", endTime: "15:40" },
+          ],
+        },
+      ],
+    });
+    const g = buildSubjectPeriodGrid(
+      [row("c1", "english", "E반", "Anna", [{ day: "mon", startTime: "14:20", periodLabel: "EiE 1교시" }])],
+      "english",
+      false,
+      named,
+    );
+    expect(g.rows.map((r) => r.label)).toEqual(["EiE 1교시", ""]);
+    expect(g.rows.map((r) => r.time)).toEqual(["14:20~15:00", "15:00~15:40"]);
+    // 내장표(설정 없음)는 종전대로 번호.
+    const builtin = buildSubjectPeriodGrid(
+      [row("c1", "english", "E반", "Anna", [{ day: "mon", startTime: "14:20", periodLabel: "1교시" }])],
+      "english",
+      false,
+      cfg,
+    );
+    expect(builtin.rows[0]!.label).toBe("1교시");
   });
 });
