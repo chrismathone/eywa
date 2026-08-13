@@ -80,13 +80,17 @@ export function PayslipDocument({ data }: { data: PayslipData }) {
       </div>
 
       <table className="mt-4 w-full table-fixed border-collapse text-[13px] leading-snug">
+        {/* 🔑 칸마다 **필요한 폭이 다르다** — 6칸을 같은 폭으로 나누면 어딘가는 반드시 접힌다.
+            실측(210mm·13px 기준)으로 잡은 값이고, 라벨/값을 균등 분배로 되돌리지 말 것:
+              A 라벨 "수업료 총액"(6자) · C 라벨 "소득세 3.3%"(가장 김) · E 라벨 "계약형태"(가장 짧음)
+              D 값 "2025.03.02~2026.02.28"(21자 ≈163px, 여기가 폭을 지배한다) · F 값 계좌번호 */}
         <colgroup>
+          <col className="w-[14%]" />
+          <col className="w-[15%]" />
           <col className="w-[13%]" />
-          <col className="w-[20%]" />
-          <col className="w-[13%]" />
-          <col className="w-[21%]" />
-          <col className="w-[13%]" />
-          <col className="w-[20%]" />
+          <col className="w-[24%]" />
+          <col className="w-[12%]" />
+          <col className="w-[22%]" />
         </colgroup>
         <tbody>
           <tr>
@@ -105,7 +109,9 @@ export function PayslipDocument({ data }: { data: PayslipData }) {
             <Cell label="계약기간">
               {contract ? (
                 <>
-                  {dotDate(contract.start)}~{dotDate(contract.end)}
+                  <span className="whitespace-nowrap">
+                    {dotDate(contract.start)}~{dotDate(contract.end)}
+                  </span>
                   {/* 저장된 계약이 없어 입사일+1년으로 **계산한** 값이면 그렇다고 밝힌다(사실과 추정 구분). */}
                   {contract.stored ? null : <span className="ml-1 text-[11px]">(입사일 기준 추정)</span>}
                 </>
@@ -294,7 +300,7 @@ function Signatures({ data }: { data: PayslipData }) {
         <tbody>
           <tr>
             <td className="border border-black/70 bg-black/[0.04] px-2 py-1.5" />
-            <td className="border border-black/70 bg-black/[0.04] px-2 py-1.5 font-medium">담당</td>
+            <td className="border border-black/70 bg-black/[0.04] px-2 py-1.5 font-medium">담당자</td>
             <td className="border border-black/70 bg-black/[0.04] px-2 py-1.5 font-medium">원장</td>
             <td className="border border-black/70 bg-black/[0.04] px-2 py-1.5 font-medium">수령인</td>
           </tr>
