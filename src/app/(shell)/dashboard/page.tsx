@@ -3,7 +3,7 @@ import { getPermMatrix } from "@/lib/auth/perm-matrix";
 import { canManageStaff } from "@/lib/auth/role-hierarchy";
 import { canAccess, canWrite } from "@/lib/permissions";
 import {
-  getAbsenceRiskStudents,
+  getAbsenceRiskCached,
   getActiveEnrollmentConsultations,
   getAnnouncementsForManage,
   getEnrolledStudentCount,
@@ -12,7 +12,7 @@ import {
   getDashboardAttendanceState,
   getPaymentRateThisMonth,
   getRecentAnnouncements,
-  getTopOutstanding,
+  getTopOutstandingCached,
   getTrendDataLast7Days,
   getEnrollmentChangeLast7d,
 } from "@/features/dashboard/server/queries";
@@ -128,8 +128,12 @@ export default async function TodayPage() {
     access.read.enrollment
       ? dashboardQuery("enrollment consultations", getActiveEnrollmentConsultations(), EMPTY_ENROLLMENT_LIST)
       : Promise.resolve({ data: EMPTY_ENROLLMENT_LIST, unavailable: false }),
-    access.read.students && access.read.attendance ? getAbsenceRiskStudents() : Promise.resolve([]),
-    access.read.billing ? getTopOutstanding() : Promise.resolve([]),
+    // ⚠️ 캐시본(60초)은 admin 클라이언트라 RLS를 안 탄다 — **이 줄의 권한 분기가 곧 게이트다**(queries.ts 주석).
+    //    분기를 지우거나 캐시본을 게이트 없는 자리로 옮기지 말 것.
+    access.read.students && access.read.attendance
+      ? getAbsenceRiskCached(user.tenantId)
+      : Promise.resolve([]),
+    access.read.billing ? getTopOutstandingCached(user.tenantId) : Promise.resolve([]),
     // 관리 목록은 30건으로 잘리므로 카드용 역할 필터 쿼리를 별도로 유지해야 대상 공지가 누락되지 않는다.
     dashboardQuery("recent announcements", getRecentAnnouncements(user.systemRole, 4), []),
     canManageAnnouncements
