@@ -8,6 +8,7 @@ import { enumDayToKo, type DayOfWeek } from "@/features/timetable/lib/periods";
 import { LAB_ROOM_LABEL } from "@/features/timetable/lib/teacher-label";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 import {
+  padCardDays,
   teacherColor,
   type GridStudent,
   type RichCardGroup,
@@ -210,7 +211,9 @@ export function ClassColumn({
   // 요일축 = **이 반이 실제 수업하는 요일만**(원장 2026-08-11 "수업없는 요일 열도 숨겨버리고").
   // 카드 폭(CARD_W)은 그대로라 남은 칸이 넓어질 뿐, 카드 간 세로 정렬은 유지된다. 2026-07-27의
   // "항상 월~금 5칸" 규약을 뒤집은 배경은 class-grid.ts `days` 주석 참조(실측 42반 중 41반이 2~3일).
-  const days: DayOfWeek[] = card.days?.length ? card.days : group.days;
+  // ⚠️ 단 **최소 3열**은 보장한다(원장 2026-08-13) — 2요일 반만 카드가 70px로 쪼그라들어 격자가
+  //    들쭉날쭉했다. 모자란 만큼 수요일부터 **빈 더미 열**을 채운다(padCardDays, 주말 전용은 예외).
+  const days: DayOfWeek[] = padCardDays(card.days?.length ? card.days : group.days);
   const gridCols = { gridTemplateColumns: `repeat(${Math.max(1, days.length)}, 1fr)` };
   // 카드 폭 = 요일 수 × 고정 칸 폭(DAY_COL_W). 배치 편집(namesOnly)은 격자를 안 그리므로 5칸 기준 폭 유지 —
   // 수업명만 남은 칩이 요일 수에 따라 들쭉날쭉하면 끌어 놓을 자리를 가늠하기 어렵다.

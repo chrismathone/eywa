@@ -178,6 +178,38 @@ export const OTHERS_GROUP_ID = "__others__";
 
 const DAY_ORDER: DayOfWeek[] = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
 const WEEKEND = new Set<string>(["sat", "sun"]);
+
+/** 통합뷰 카드가 최소로 갖는 요일 열 수(원장 2026-08-13 *"강제로 열 3개로"*). */
+export const MIN_CARD_DAY_COLS = 3;
+/**
+ * 더미 열로 채울 요일 우선순위 — **수요일 먼저**(원장 지시), 이미 있으면 금·월·화·목 순.
+ * 순서 근거: 실제 배치가 월목·화금·월수금 계열이라 수 다음으로 금·월을 넣어야 `월수금`·`화수금`처럼
+ * 학원에서 실제 쓰는 조합으로 읽힌다(더미인 줄 몰라도 어색하지 않게).
+ */
+const FILLER_DAY_ORDER: DayOfWeek[] = ["wed", "fri", "mon", "tue", "thu"];
+
+/**
+ * 카드 요일 열이 `min`개보다 적으면 **수업 없는 더미 요일**을 채워 넣는다(원장 2026-08-13 —
+ * *"요일이 2개라 열이 2개밖에 없는 수업은 강제로 수요일을 추가해서 열을 3개로"*).
+ *
+ * 왜: 요일 칸 폭이 고정(DAY_COL_W)이라 2요일 반의 카드가 3요일 반보다 눈에 띄게 좁아, 나란히 놓으면
+ * 카드 크기가 들쭉날쭉해 시트로 안 읽힌다. 채운 열엔 셀이 없으므로(그 요일 키의 셀이 애초에 없다)
+ * **빈 칸**만 늘어난다 — 데이터가 아니라 격자만 늘리는 조작이다.
+ *
+ * ⚠️ **주말 전용 카드는 손대지 않는다** — 토·일반에 평일 더미를 붙이면 평일 반처럼 읽힌다.
+ * ⚠️ 렌더 전용이다(`RichClassCard.days`는 그대로 = 실제 수업 요일). 엑셀·시트 내보내기는 이 함수를
+ *    거치지 않으므로 없는 요일이 문서로 새지 않는다.
+ */
+export function padCardDays(days: readonly DayOfWeek[], min: number = MIN_CARD_DAY_COLS): DayOfWeek[] {
+  if (days.length === 0 || days.length >= min) return [...days];
+  if (days.every((d) => WEEKEND.has(d))) return [...days];
+  const have = new Set<DayOfWeek>(days);
+  for (const d of FILLER_DAY_ORDER) {
+    if (have.size >= min) break;
+    have.add(d);
+  }
+  return DAY_ORDER.filter((d) => have.has(d));
+}
 /** 명단 섹션 최대 표시 행수(원장 2026-07-27 "최대 12명"). 넘치면 카드 안에서 스크롤(스크롤바 숨김+페이드). */
 export const ROSTER_ROW_CAP = 12;
 
