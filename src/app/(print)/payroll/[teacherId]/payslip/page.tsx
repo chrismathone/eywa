@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { landingPath } from "@/lib/auth/teacher-home";
 import { getPayslipData } from "@/features/payroll/server/payslip-queries";
-import { canViewPayslip } from "@/features/payroll/payslip-access";
+import { canViewPayslipNow } from "@/features/payroll/server/payslip-gate";
 import { kstMonth } from "@/lib/date-kst";
 import { PrintActions } from "@/app/(print)/enrollment/[id]/print/print-actions";
 import { PayslipDocument } from "./payslip-document";
@@ -36,7 +36,7 @@ export default async function PayslipPrintPage({
   if (!user) redirect("/login");
   // ⚠️ 착지는 `landingPath` 단일 소스로 — roleHome은 과목 축이 없어 영어 전담 강사를 빈 원스크린에 떨어뜨린다
   //    (teacher-home-wiring.test.ts가 착지 지점 목록을 잠근다 — 새 지점은 거기에도 추가).
-  if (!canViewPayslip(user)) redirect(await landingPath(user.systemRole));
+  if (!(await canViewPayslipNow(user))) redirect(await landingPath(user.systemRole));
 
   const { teacherId } = await params;
   const sp = await searchParams;

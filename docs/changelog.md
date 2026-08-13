@@ -1,5 +1,24 @@
 # eywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-08-13 — super_admin은 앞으로 **어떤 제한 명단도 자동 통과**(명시 규칙)
+
+원장: *"넣어. superadmin은 앞으로 뭘 안해도 그냥 넣고봐. 명시"*.
+
+- 급여명세서 명단에 **이승엽** 추가(5명) + **super_admin 자동 통과**를 게이트에 배선.
+- 🔑 **규칙으로 명시**(CLAUDE.md 결정 로그): *새 제한 명단·게이트를 만들 때 super_admin을 빼먹지 말 것.*
+  권한 매트릭스(perm-matrix)가 이미 super_admin을 우회시키는 것과 같은 결이고, 빼먹으면 **총괄이 자기
+  시스템에서 잠긴다**. 판정은 `isCurrentUserSuperAdmin()`(요청 캐시라 게이트를 네 곳에서 불러도 왕복 1회).
+- 게이트를 [`canViewPayslipNow()`](../src/features/payroll/server/payslip-gate.ts) **한 함수**로 모았다
+  (명단 **또는** super_admin). 순수 판정(`canViewPayslip`)은 테스트용으로 남기되, 주석에 "실제 게이트는
+  저쪽"이라고 못박았다 — 새 호출부가 순수 함수를 집으면 super_admin이 조용히 막힌다.
+  ⚠️ 출석부 버튼은 게이트가 async가 되면서 **JSX 밖에서 한 번 계산**한다(강사 전체 보기일 때만 물어본다).
+- 계정 승급(별도, DB): 설현 admin→**master**(users + auth app_metadata 미러 동기화, [[#70]]) ·
+  이승엽 **super_admin 추가**. 🔑 박소선은 **이미 super_admin이었다** — `super_admins.display_name`이
+  옛 이름("석태선")이라 목록에서 안 보였을 뿐(id·이메일 동일)이라 이름을 교정했다.
+  롤백: `D:/tmp/promote-2026-08-13-rollback.json`.
+- 검증: typecheck0 · lint0 · **test4481**(355파일).
+
+
 ## 2026-08-13 — 명세서 서명란(대표·수령인 자동) + 열람을 **하드 픽스 명단**으로
 
 원장: *"원장 → 대표로 변경"* · *"수령인 → 해당 선생님 이름으로 자동화"* ·

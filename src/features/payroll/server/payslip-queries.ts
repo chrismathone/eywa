@@ -17,7 +17,8 @@ import {
 import { currentContract } from "@/features/staff/contract";
 import type { PayslipData, PayslipAdjustments } from "@/features/payroll/payslip-view";
 import { emptyAdjustments } from "@/features/payroll/payslip-view";
-import { canViewPayslip, PAYSLIP_DENIED_MSG } from "@/features/payroll/payslip-access";
+import { PAYSLIP_DENIED_MSG } from "@/features/payroll/payslip-access";
+import { canViewPayslipNow } from "@/features/payroll/server/payslip-gate";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 /**
@@ -31,7 +32,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
  */
 export async function getPayslipData(teacherId: string, period: string): Promise<PayslipData> {
   const user = await getCurrentUser();
-  if (!user || !canViewPayslip(user)) throw new Error(PAYSLIP_DENIED_MSG);
+  if (!user || !(await canViewPayslipNow(user))) throw new Error(PAYSLIP_DENIED_MSG);
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(period)) throw new Error("기간 형식이 올바르지 않습니다(YYYY-MM)");
 
   const supabase = await createClient();

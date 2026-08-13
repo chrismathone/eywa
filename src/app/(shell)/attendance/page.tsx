@@ -25,7 +25,7 @@ import { CollapseAllChip } from "./_components/class-group";
 import { LiveStats } from "./_components/live-totals";
 import { attHref, resolveViewMode, type ViewMode } from "./_components/att-href";
 import { PayslipWindowButton } from "./_components/payslip-window-button";
-import { canViewPayslip } from "@/features/payroll/payslip-access";
+import { canViewPayslipNow } from "@/features/payroll/server/payslip-gate";
 
 export const metadata = { title: "출석부 — eywa" };
 
@@ -363,6 +363,11 @@ export default async function AttendancePage({
     sortKey,
   );
 
+  // 급여명세서 버튼 노출 — 게이트가 async(super_admin 조회)라 JSX 밖에서 한 번 계산한다.
+  // ⚠️ 강사 전체 보기일 때만 물어본다 — 그 외에는 버튼 자체가 없어 왕복이 아깝다.
+  const canOpenPayslip =
+    mode === "teacher" && !!effectiveTeacher ? await canViewPayslipNow(user) : false;
+
   // 시트 격자의 좌표·초기값 — 표보다 위(상단 스탯)까지 감싸야 해서 여기서 만든다.
   const gridSource = buildGridSource(groups, visibleDays, orderedRows);
 
@@ -598,7 +603,7 @@ export default async function AttendancePage({
         <div className="ml-auto flex items-center gap-3">
           {/* 급여명세서 — 이 화면의 '정산액'을 그대로 쓰는 문서라 **여기**가 진입점이다(수납관리 강사 정산
               면은 invoice_teacher_splits가 비어 있어 표 자체가 안 그려진다). 원장 + 강사 전체 보기일 때만. */}
-          {mode === "teacher" && effectiveTeacher && canViewPayslip(user) ? (
+          {canOpenPayslip && effectiveTeacher ? (
             <PayslipWindowButton teacherId={effectiveTeacher} period={month} subjectFiltered={!!effectiveSubject} />
           ) : null}
           {groups.length > 0 ? <LiveStats totalStudents={totalStudents} fallback={statsCount} /> : null}

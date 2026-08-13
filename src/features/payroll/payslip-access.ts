@@ -17,16 +17,18 @@ export const PAYSLIP_VIEWER_IDS: readonly string[] = [
   "94007db7-12d3-4b5d-97f2-39071446536b", // 원일 (master)
   "44626c09-22d9-445f-a350-b792d6afdf75", // 설현 (admin)
   "8bb70f71-a8c3-450c-9236-561e9b43ca4f", // 김예원 (admin)
+  "477950d4-9cb0-4c02-9ac4-f00d42754d55", // 이승엽 (admin · super_admin)
 ];
 
 export const PAYSLIP_DENIED_MSG = "급여명세서는 지정된 계정만 열람할 수 있습니다";
 
 /**
- * 이 사람이 급여명세서를 볼 수 있는가.
+ * 명단에 이름이 올라 있는가 — **순수 판정**(테스트 가능).
  *
  * ⚠️ master라고 무조건 통과시키지 않는다 — 명단이 곧 전부다. 새 원장이 생겨도 명단에 넣기 전엔 안 열린다
- *    (원장 지시가 "이 4명"이었고, 조용히 넓히는 쪽이 더 위험하다). 대신 이름 4개가 전부 명단에 있어
- *    지금 두 원장은 그대로 통과한다.
+ *    (조용히 넓히는 쪽이 더 위험하다).
+ * ⚠️ 실제 게이트는 이 함수가 아니라 **`canViewPayslipNow()`**(server/payslip-gate.ts)다 —
+ *    super_admin 자동 통과가 거기 붙어 있다. 새 호출부는 그쪽을 쓸 것.
  */
 export function canViewPayslip(user: { id: string; systemRole: SystemRole }): boolean {
   return PAYSLIP_VIEWER_IDS.includes(user.id);

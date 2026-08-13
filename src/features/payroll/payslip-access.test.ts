@@ -8,13 +8,21 @@ import { canViewPayslip, PAYSLIP_VIEWER_IDS } from "./payslip-access";
 describe("급여명세서 열람 자격", () => {
   const at = (i: number) => ({ id: PAYSLIP_VIEWER_IDS[i]!, systemRole: "admin" as const });
 
-  it("명단에 있는 4명은 통과한다", () => {
-    expect(PAYSLIP_VIEWER_IDS).toHaveLength(4);
+  it("명단에 오른 사람은 전부 통과한다", () => {
+    expect(PAYSLIP_VIEWER_IDS).toHaveLength(5);
     for (let i = 0; i < PAYSLIP_VIEWER_IDS.length; i++) expect(canViewPayslip(at(i))).toBe(true);
   });
 
   it("🔴 명단에 없으면 master여도 못 본다 — 역할이 아니라 명단이 게이트다", () => {
     expect(canViewPayslip({ id: "someone-else", systemRole: "master" })).toBe(false);
+  });
+
+  /**
+   * ⚠️ super_admin 자동 통과는 **이 순수 함수가 아니라** `canViewPayslipNow()`(server/payslip-gate.ts)에
+   *    있다(DB 조회가 필요해 async). 여기서 false가 나오는 게 정상이며, 새 호출부는 반드시 그쪽을 쓸 것.
+   */
+  it("순수 판정은 super_admin을 모른다 — 게이트는 canViewPayslipNow가 한다", () => {
+    expect(canViewPayslip({ id: "some-super-admin", systemRole: "admin" })).toBe(false);
   });
 
   it("역할이 무엇이든 명단이 아니면 전부 거부", () => {

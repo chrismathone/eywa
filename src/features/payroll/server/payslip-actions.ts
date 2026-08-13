@@ -7,7 +7,8 @@
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { resolvePenaltyPoints } from "../payslip";
-import { canViewPayslip, PAYSLIP_DENIED_MSG } from "../payslip-access";
+import { PAYSLIP_DENIED_MSG } from "../payslip-access";
+import { canViewPayslipNow } from "./payslip-gate";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getPayslipData } from "./payslip-queries";
 
@@ -47,7 +48,7 @@ export async function savePayslipAdjustments(
   if (!user) return { error: "로그인이 필요합니다" };
   // 급여 = 원장 전용(RLS로도 막히지만 여기서 먼저 분명한 메시지를 준다).
   // ⚠️ canWriteTenant("billing")은 admin·accountant를 통과시켜 여기 쓸 수 없다.
-  if (!canViewPayslip(user)) return { error: PAYSLIP_DENIED_MSG };
+  if (!(await canViewPayslipNow(user))) return { error: PAYSLIP_DENIED_MSG };
 
   const teacherId = String(formData.get("teacherId") ?? "").trim();
   const period = String(formData.get("period") ?? "").trim();
@@ -128,7 +129,7 @@ export async function issuePayslip(
 ): Promise<SavePayslipState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  if (!canViewPayslip(user)) return { error: PAYSLIP_DENIED_MSG };
+  if (!(await canViewPayslipNow(user))) return { error: PAYSLIP_DENIED_MSG };
 
   const teacherId = String(formData.get("teacherId") ?? "").trim();
   const period = String(formData.get("period") ?? "").trim();
@@ -178,7 +179,7 @@ export async function unissuePayslip(
 ): Promise<SavePayslipState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  if (!canViewPayslip(user)) return { error: PAYSLIP_DENIED_MSG };
+  if (!(await canViewPayslipNow(user))) return { error: PAYSLIP_DENIED_MSG };
 
   const teacherId = String(formData.get("teacherId") ?? "").trim();
   const period = String(formData.get("period") ?? "").trim();
