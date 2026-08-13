@@ -13,6 +13,7 @@ import {
   isReportEligible,
   isRowActionable,
 } from "../grid";
+import { resolveRowFields } from "../row-fields";
 import { evaluateSendGate } from "../send-gate";
 import { checkMentConsistency, MENT_WARNING_HINT, MENT_WARNING_LABEL } from "../ment-consistency";
 import { parentUnreadBadge, progressAnomalyBadge } from "../roster-signals";
@@ -181,6 +182,9 @@ export function ReportCard({
   const subject = student.subjects[idx];
   if (!subject) return null;
   const subjectName = subject.name;
+  // 카드의 태도·과제·특이사항·점수 칸은 **선택된 행**의 값이다(row-fields.ts) — 보강 행을 고르면
+  // 보강 값이 뜨고, 정규 행을 고르면 정규 값이 뜬다. 예전엔 학생 한 벌을 공유해 서로 덮어썼다.
+  const cardEval = resolveRowFields(student, subject);
   const rep = reports[subjectName] ?? { draft: "", sent: false };
   // 학부모 공개 링크 — 저장 후(shareToken 존재) 노출. 강사가 복사해 카톡/문자로 전달.
   const origin = typeof window !== "undefined" ? window.location.origin : "";
@@ -214,8 +218,8 @@ export function ReportCard({
   const mentWarnings = checkMentConsistency({
     ment: rep.draft ?? "",
     progress: subject.today ?? "",
-    dailyTest: student.tests.daily.score != null ? "y" : "",
-    checkTest: student.tests.check.score != null ? "y" : "",
+    dailyTest: cardEval.tests.daily.score != null ? "y" : "",
+    checkTest: cardEval.tests.check.score != null ? "y" : "",
   });
   const atts = rep.attachments ?? []; // 학생 사진 첨부(P2b)
   const uploadingAtt = uploadingSubject === subjectName;
@@ -407,7 +411,7 @@ export function ReportCard({
           {/* 원장 2026-07-23: 알약 → 드롭다운(표 모드와 동일 규약). 해제는 "선택 안 함". */}
           <FieldSelect
             options={attitudes}
-            value={student.attitude}
+            value={cardEval.attitude}
             onSelect={(v) => onAttitude(v ?? "")}
             ariaLabel={`${student.name} 수업 태도`}
           />
@@ -416,7 +420,7 @@ export function ReportCard({
         <div>
           <p className="micro text-text-faint mb-1.5">과제 수행률</p>
           <HomeworkRateInput
-            value={student.homework}
+            value={cardEval.homework}
             onChange={onHomework}
             label={`${student.name} 과제 수행률`}
             size="lg"
@@ -444,7 +448,7 @@ export function ReportCard({
         <div className="flex flex-col gap-1.5">
           <p className="micro text-text-faint">특이사항 (메모)</p>
           <textarea
-            value={student.note ?? ""}
+            value={cardEval.note}
             onChange={(e) => onNote(e.target.value)}
             placeholder="예: 조퇴함 / 개념이 어려워 연습문제 한 번 더 · 자동작성 시 학부모 문장으로 풀어 씁니다"
             className="border-line focus:border-primary scrollbar-thin min-h-[52px] resize-none rounded-lg border bg-background px-3 py-2 text-[13px] leading-relaxed outline-none"

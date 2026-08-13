@@ -3,6 +3,7 @@ import { displayLessons } from "../curriculum";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { DeltaChip } from "./delta-chip";
 import { TestMaxInput } from "./test-max-input";
+import type { Tests } from "../types";
 import type { OneScreenStudent, TestScore } from "../types";
 
 function clamp(n: number, max: number) {
@@ -101,8 +102,14 @@ export function TestCard({
   dailyEnabled = true,
   checkEnabled = true,
   embedded,
+  tests,
 }: {
   student: OneScreenStudent;
+  /**
+   * 표시·편집할 점수 — **선택된 행**의 값(row-fields.ts `resolveRowFields`). 미지정이면 학생 값.
+   * 🔴 보강은 정규와 따로 나가는 다른 보고서라 점수가 겹치면 안 된다(원장 2026-08-13).
+   */
+  tests?: Tests;
   onScore: (which: "daily" | "check", v: number | null) => void;
   allowMax?: boolean; // 강사 문항수 변경 허용(학원 설정)
   onMax?: (which: "daily" | "check", v: number) => void;
@@ -111,6 +118,7 @@ export function TestCard({
   /** 보고서 카드 안에 들어간 상태 — 카드 속 카드로 겹쳐 보이지 않게 그림자·배경을 뺀 얇은 테두리로(2026-08-05 통합). */
   embedded?: boolean;
 }) {
+  const shown = tests ?? student.tests;
   // 다중 차시도 한 줄로 이어 표시(", "). '·'로 쪼개던 옛 로직은 다중차시(개행)에서 깨져 제거.
   const prevRange = student.subjects.map((s) => displayLessons(s.prev) || s.prev).filter(Boolean).join(" / ");
   const todayRange = student.subjects.map((s) => displayLessons(s.today) || s.today).filter(Boolean).join(" / ");
@@ -139,7 +147,7 @@ export function TestCard({
           <ScoreBlock
             kicker="일일테스트"
             range={`이전 진도 · ${prevRange}`}
-            test={student.tests.daily}
+            test={shown.daily}
             onChange={(v) => onScore("daily", v)}
             allowMax={allowMax}
             onMax={onMax ? (v) => onMax("daily", v) : undefined}
@@ -149,7 +157,7 @@ export function TestCard({
           <ScoreBlock
             kicker="확인테스트"
             range={`오늘 진도 · ${todayRange}`}
-            test={student.tests.check}
+            test={shown.check}
             onChange={(v) => onScore("check", v)}
             allowMax={allowMax}
             onMax={onMax ? (v) => onMax("check", v) : undefined}

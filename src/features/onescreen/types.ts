@@ -62,6 +62,25 @@ export type Subject = {
   // + AI 멘트 마무리 문장("오늘 과제는 ~입니다")의 재료. homework(수행 상태)와 별개.
   homeworkToday?: string;
 
+  // ── 행(수업) 단위 평가값 (2026-08-13) — 해석·폴백은 [row-fields.ts](./row-fields.ts) 단일 소스 ──
+  /**
+   * 🔴 이 일곱 값은 예전엔 **학생 단위**뿐이라 같은 학생의 정규·특강·보강 행이 한 벌을 공유했다.
+   *    보강 행에 태도를 넣으면 정규 행에도 들어갔다(원장 제보 2026-08-13, 실측 정규+보강 9쌍 중 8쌍 태도 동일).
+   *    보강은 **따로 발송되는 다른 보고서**라 값도 독립이어야 한다 → 행에 얹는다.
+   * ⚠️ `undefined` = 이 행에 지정 안 됨 → 학생 값으로 폴백(옛 세션·옛 행은 지금까지와 동일하게 동작).
+   *    `null`·`""`은 강사가 **비운 것**이라 폴백하지 않는다. 판정을 호출부에서 새로 짜지 말고
+   *    `resolveRowFields(student, subject)`를 쓸 것.
+   */
+  attitude?: string | null;
+  /** 지난 과제 수행률("90%"·"미제출"·"없음") — 행 단위. 미지정=학생 값. */
+  homework?: string;
+  /** 특이사항(강사 메모, AI 멘트 입력) — 행 단위. 미지정=학생 값. */
+  note?: string;
+  dailyScore?: number | null;
+  dailyMax?: number;
+  checkScore?: number | null;
+  checkMax?: number;
+
   /**
    * **ECS 시트에 적힌 그날 그 반 계획**(2026-08-07) — 교재·진도·오늘 과제의 출처.
    * roster가 이 값으로 위 `textbook`/`today`/`homeworkToday`의 **초안**을 채웠고, 화면은 같은 값을
