@@ -128,6 +128,17 @@ type OnescreenSessionRow = {
       textbook?: string;
       makeup?: boolean;
       homeworkToday?: string;
+      /**
+       * 행(수업) 단위 평가값 — 2026-08-13. 이 항목이 있는 행만 독립 값을 갖고, 없으면 아래 세션 컬럼
+       * (학생 단위)으로 폴백한다(row-fields.ts `resolveRowFields`). 옛 세션은 전부 후자라 동작 불변.
+       */
+      attitude?: string | null;
+      homework?: string;
+      note?: string;
+      dailyScore?: number | null;
+      dailyMax?: number;
+      checkScore?: number | null;
+      checkMax?: number;
     }
   > | null;
   daily_score: number | null;
@@ -595,12 +606,17 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
       attachments: { path: string; name: string }[] | null;
       notes: string | null;
       trend_note: string | null;
+      // 새로고침 복원용(2026-08-13) — 진도·교재·오늘 과제는 세션에서만 복원됐는데 보강 행은 세션에
+      // 저장되지 않아 통째로 사라졌다. 저장된 보고서에서 되채운다(전부 오래된 컬럼 = 스키마 위험 없음).
+      progress: string | null;
+      textbook: string | null;
+      homework_today: string | null;
     }>(
       studentIds,
       (chunk) =>
         supabase
           .from("lesson_reports")
-          .select("id, student_id, subject, class_id, makeup, share_token, classnote_status, classnote_read_at, revoked_at, attachments, notes, trend_note")
+          .select("id, student_id, subject, class_id, makeup, share_token, classnote_status, classnote_read_at, revoked_at, attachments, notes, trend_note, progress, textbook, homework_today")
           .eq("report_date", todayIso)
           .in("student_id", chunk)
           // 결정적 매칭 순서 — 같은 (학생,반) 폴백 후보가 여럿일 때 항상 같은 것을 집는다.
@@ -992,9 +1008,15 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
       })),
       (todayByStudent.get(os.id) ?? []).map((r) => ({ ...r, classId: r.class_id })),
     );
+    // 오늘 저장된 보고서를 행 이름으로 보관 — 아래 ⑤에서 진도·교재·오늘 과제를 되채운다.
+    // 🔴 왜 필요한가(원장 제보 2026-08-13 "입력해놓은 내용이 일부 새로고침시에 삭제"): 이 값들은
+    //    **세션에서만** 복원됐는데 보강 행은 세션에 저장되지 않았다 → 발송까지 끝낸 보강 보고서도
+    //    새로고침하면 진도·교재·오늘 과제가 빈칸으로 돌아왔다(DB엔 멀쩡히 있는데도).
+    const savedToday = new Map<string, { progress: string | null; textbook: string | null; homework_today: string | null }>();
     os.subjects.forEach((su, i) => {
       const t = todayMatched[i];
       if (!t) return;
+      savedToday.set(su.name, { progress: t.progress, textbook: t.textbook, homework_today: t.homework_today });
       su.reportSent = true;
       su.shareToken = t.share_token ?? undefined;
       su.classnoteStatus = t.classnote_status ?? undefined;
@@ -1109,6 +1131,17 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
           if (sheet.textbook && !(isMathRow && reqBook)) su.textbook = sheet.textbook;
         }
       }
+      // ⑤ **오늘 이미 저장된 보고서**가 있으면 그 값으로 되채운다 — 시트 계획(④)·직전 교재(③)보다 세고,
+      //    아래 세션(작업중 편집)보다는 약하다. 진도 접두("수학 …")는 저장 시 붙인 것이라 떼고 넣는다.
+      //    ⚠️ **빈 칸만** 채운다 — 위에서 이미 채워진 값을 덮지 않는다.
+      const saved = savedToday.get(su.name);
+      if (saved) {
+        const label = su.subjectLabel || su.name;
+        const prog = (saved.progress ?? "").trim();
+        if (prog && !su.today) su.today = label && prog.startsWith(label) ? prog.slice(label.length).trim() || prog : prog;
+        if (saved.textbook && !su.textbook) su.textbook = saved.textbook;
+        if (saved.homework_today && !su.homeworkToday) su.homeworkToday = saved.homework_today;
+      }
       // 학생별 시트 기록은 **참고 표시 전용**(자동 삽입 금지 — 개인 기록은 문맥이 제각각이다).
       const mark = su.classId ? sheetMarkByKey.get(`${su.classId}|${os.id}`) : undefined;
       if (mark) su.sheetStudentNote = mark;
@@ -1132,10 +1165,15 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
       for (const su of os.subjects) {
         // 세션 키 = **반**(0134a) — 과목키로 두면 같은 과목 두 행(정규+특강)이 한 항목을 공유해
         // 한쪽에 입력한 진도가 다른 쪽에도 뜬다(그리고 저장할 때 서로를 덮는다).
-        const byClass = su.classId ? sp[su.classId] : undefined;
+        // 보강 행(반 없음)은 **전용 키**를 쓴다(2026-08-13) — 맨 과목키로 저장하면 아래 legacyKey 폴백이
+        // 그 항목을 집어 **보강 진도가 정규 행에 새어들었다**(그래서 예전엔 보강을 아예 저장하지 않았고,
+        // 그 대가로 보강 입력이 새로고침에 사라졌다). 키를 분리하면 둘 다 해결된다.
+        const makeupKey = su.makeup && !su.classId ? `makeup::${su.subjectKey || su.name}` : null;
+        const byClass = makeupKey ? sp[makeupKey] : su.classId ? sp[su.classId] : undefined;
         const legacyKey = su.subjectKey || su.name;
         let entry = byClass;
-        if (!entry && !legacyTaken.has(legacyKey)) {
+        // ⚠️ 보강 행은 legacyKey 폴백을 **타지 않는다** — 그 폴백이 바로 교차오염의 통로였다.
+        if (!entry && !makeupKey && !legacyTaken.has(legacyKey)) {
           entry = sp[legacyKey];
           if (entry) legacyTaken.add(legacyKey);
         }
@@ -1150,6 +1188,15 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
         // (lesson_reports엔 updated_at이 없어 신구 비교 불가 → 빈 세션 초안은 발송본 복원을 지우지 않음.)
         if (entry?.draft?.trim()) su.draft = entry.draft;
         if (entry?.trendDraft?.trim()) su.trendDraft = entry.trendDraft;
+        // 행 단위 평가값(2026-08-13) — 지정된 행만 실려 있다. 없으면 su.*를 undefined로 두어
+        // resolveRowFields가 학생 값(아래 sess 컬럼)으로 폴백한다 = 옛 세션 하위호환.
+        if (entry?.attitude !== undefined) su.attitude = entry.attitude;
+        if (entry?.homework !== undefined) su.homework = entry.homework;
+        if (entry?.note !== undefined) su.note = entry.note;
+        if (entry?.dailyScore !== undefined) su.dailyScore = entry.dailyScore;
+        if (entry?.dailyMax !== undefined) su.dailyMax = entry.dailyMax;
+        if (entry?.checkScore !== undefined) su.checkScore = entry.checkScore;
+        if (entry?.checkMax !== undefined) su.checkMax = entry.checkMax;
       }
     }
     // ⚠️ 척도 경계에서 prevScore 폐기: 직전 회차의 문항수(exam_info 분모)가 오늘의 문항수와 다르면

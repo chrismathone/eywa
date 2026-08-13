@@ -3,6 +3,7 @@
  * 카드↔표 토글의 표 쪽 행 구성·발송대상 판정을 순수 함수로 분리(CLAUDE.md: 계산 함수 분리+Vitest).
  */
 import { toHomeworkRateChoice } from "./homework-rate";
+import { resolveRowFields } from "./row-fields";
 import type { OneScreenStudent, PrevReport, Subject } from "./types";
 
 /**
@@ -219,8 +220,10 @@ export function summarizeSendGaps(
   for (const r of rows) {
     if (seen.has(r.student.id)) continue;
     seen.add(r.student.id);
-    if (!r.student.attitude) missingAttitude++;
-    const t = r.student.tests;
+    // 요약 카운트도 **행 기준**(row-fields.ts) — 보강 행이 정규 값을 빌려 "입력됨"으로 세지 않게.
+    const rowEval = resolveRowFields(r.student, r.subject);
+    if (!rowEval.attitude) missingAttitude++;
+    const t = rowEval.tests;
     if ((opts.dailyEnabled && t.daily.score == null) || (opts.checkEnabled && t.check.score == null))
       missingTest++;
   }

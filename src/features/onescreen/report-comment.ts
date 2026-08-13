@@ -7,6 +7,7 @@
  */
 import type { OneScreenStudent } from "./types";
 import { normalizeHomeworkPages } from "./homework-pages";
+import { resolveRowFields } from "./row-fields";
 import { DEFAULT_PROMPTS, interpolate, assembleSingle } from "./prompt-defaults";
 import { isSkipStatus } from "./progress-status";
 import { asProgressMode, progressFactLabel } from "./progress-mode";
@@ -76,6 +77,10 @@ function testLine(score: number | null, max: number, prev: number | null): strin
 /** onescreen 학생 + 과목 인덱스 → 멘트 입력. 빈 값은 빈 문자열(프롬프트가 침묵하도록). */
 export function buildReportCommentInput(st: OneScreenStudent, subjectIndex: number): ReportCommentInput {
   const su = st.subjects[subjectIndex];
+  // 🔴 평가값은 **그 행의 값**이다(row-fields.ts) — 학생 값을 그대로 쓰면 보강 행 멘트에 정규 수업의
+  //    태도·점수가 실려 나간다(원장 2026-08-13: 보강은 따로 발송되는 다른 보고서다).
+  //    저장(report-fields.ts)·화면과 같은 해석을 쓴다 = 셋이 서로 다른 말을 하지 않는다.
+  const ev = resolveRowFields(st, su);
   return {
     studentName: st.name,
     // ⚠️ AI 프롬프트 → 학부모 멘트로 그대로 흘러가는 값이라 **순수 과목 라벨**만 넣는다.
@@ -83,15 +88,15 @@ export function buildReportCommentInput(st: OneScreenStudent, subjectIndex: numb
     subject: su?.subjectLabel || su?.name || "",
     progress: su?.today ?? "",
     progressMode: su?.progressMode ?? null,
-    dailyTest: testLine(st.tests.daily.score, st.tests.daily.max, st.tests.daily.prevScore),
-    checkTest: testLine(st.tests.check.score, st.tests.check.max, st.tests.check.prevScore),
-    attitude: st.attitude ?? "",
-    homework: st.homework && st.homework !== "—" ? st.homework : "",
+    dailyTest: testLine(ev.tests.daily.score, ev.tests.daily.max, ev.tests.daily.prevScore),
+    checkTest: testLine(ev.tests.check.score, ev.tests.check.max, ev.tests.check.prevScore),
+    attitude: ev.attitude ?? "",
+    homework: ev.homework && ev.homework !== "—" ? ev.homework : "",
     // 쪽수 후보정 — 저장(report-fields)과 **같은 값**이 AI에 가야 멘트가 "~131까지"로 나가고 카드는 "~131p"가
     // 되는 어긋남이 안 생긴다. 순수·멱등이라 이미 단위가 붙은 값은 그대로 지나간다(homework-pages.ts).
     homeworkToday: normalizeHomeworkPages(su?.homeworkToday ?? ""),
     textbook: su?.textbook ?? "",
-    specialNote: st.note ?? "",
+    specialNote: ev.note,
   };
 }
 

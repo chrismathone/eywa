@@ -465,6 +465,19 @@ export type SaveOnescreenSessionInput = {
       textbook?: string;
       makeup?: boolean;
       homeworkToday?: string;
+      /**
+       * 행(수업) 단위 평가값(2026-08-13) — 있는 행만 독립 값을 갖고, 없으면 아래 학생 단위 컬럼으로
+       * 폴백한다(row-fields.ts). 보강은 정규와 따로 나가는 다른 보고서라 값이 겹치면 안 된다.
+       * ⚠️ 이 객체는 검증 없이 `subject_progress` jsonb에 그대로 들어간다 — 새 키를 더할 땐
+       *    로스터 복원(roster.ts)의 타입도 함께 넓힐 것(한쪽만 넓히면 조용히 안 읽힌다).
+       */
+      attitude?: string | null;
+      homework?: string;
+      note?: string;
+      dailyScore?: number | null;
+      dailyMax?: number;
+      checkScore?: number | null;
+      checkMax?: number;
     }
   >;
   dailyScore?: number | null;
