@@ -82,7 +82,9 @@ export const ROUTE_WINDOW_SIZE: Record<string, { w: number; h: number }> = {
   "print/meetings": { w: 840, h: 1120 }, // 회의록
   "print/textbook": { w: 800, h: 1040 }, // 교재요청서 카드(짧음)
   "print/lesson_reports": { w: 840, h: 1120 }, // 수업 보고서(원스크린 PDF)
-  "print/payslip": { w: 860, h: 1120 }, // 급여명세서(프리랜서 강의용역수수료) — 6열 표라 인수인계서보다 조금 넓게
+  // 급여명세서 + **그 달 출석부 별지**(가로 A4). 별지 콘텐츠가 277mm(=1047px)라 창이 그보다 좁으면
+  // 볼 때마다 가로로 밀어야 한다 — 별지가 통째로 들어가는 폭으로 연다.
+  "print/payslip": { w: 1120, h: 1120 },
 };
 
 /**

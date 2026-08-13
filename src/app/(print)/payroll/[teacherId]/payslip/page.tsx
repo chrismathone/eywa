@@ -7,6 +7,8 @@ import { kstMonth } from "@/lib/date-kst";
 import { PrintActions } from "@/app/(print)/enrollment/[id]/print/print-actions";
 import { PayslipDocument } from "./payslip-document";
 import { AdjustmentsEditor } from "./adjustments-editor";
+import { AttendanceAppendix } from "./attendance-appendix";
+import { getMonthlyAttendanceMatrix } from "@/features/attendance/server/queries";
 
 export const metadata = { title: "급여명세서 — eywa" };
 
@@ -40,16 +42,35 @@ export default async function PayslipPrintPage({
 
   const data = await getPayslipData(teacherId, period);
 
+  /**
+   * 별지 = 그 달 출석부(원장 지시). 명세서의 반 목록이 정해진 뒤라야 무엇을 그릴지 알 수 있어 순차다.
+   * ⚠️ 반마다 한 번씩 부른다 — 출석부 화면(강사 전체 보기)과 **같은 쿼리·같은 규칙**이라야 두 표가
+   *    다른 말을 하지 않는다. 강사 1명분(실측 최대 10반)이라 허용되는 호출 수다(전체 반엔 쓰지 말 것).
+   * ⚠️ 날짜축은 달력월로 고정 — 반마다 세션 기간이 달라 첫 반 축으로 나머지를 그리면 칸이 어긋난다.
+   */
+  const appendix = await Promise.all(
+    data.teacher.classes.map(async (c) => ({
+      classId: c.id,
+      className: c.className,
+      matrix: await getMonthlyAttendanceMatrix(period, c.id, "month"),
+    })),
+  );
+
   return (
-    <div className="print-portrait payslip-doc mx-auto max-w-[210mm] bg-white px-12 py-10 text-black print:p-0">
-      <PrintActions embedded={embedded} />
-      <AdjustmentsEditor
-        teacherId={teacherId}
-        period={period}
-        adjustments={data.adjustments}
-        canIssue={data.settlement !== null && data.amounts.netPay >= 0}
-      />
-      <PayslipDocument data={data} />
-    </div>
+    <>
+      <div className="print-portrait payslip-doc mx-auto max-w-[210mm] bg-white px-12 py-10 text-black print:p-0">
+        <PrintActions embedded={embedded} />
+        <AdjustmentsEditor
+          teacherId={teacherId}
+          period={period}
+          adjustments={data.adjustments}
+          canIssue={data.settlement !== null && data.amounts.netPay >= 0}
+        />
+        <PayslipDocument data={data} />
+      </div>
+      {/* 🔴 별지는 세로 문서 **밖**에 둔다 — 안에 두면 `max-w-[210mm]`에 갇혀 가로 용지(297mm)의
+          3분의 1을 버린다(31일 격자가 그만큼 좁아진다). 자체 컨테이너로 가로 전폭을 쓴다. */}
+      <AttendanceAppendix groups={appendix} period={period} teacherName={data.teacher.name} />
+    </>
   );
 }

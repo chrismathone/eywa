@@ -581,6 +581,22 @@
   body:has(.print-portrait) {
     page: portrait-doc;
   }
+  /* ───────────────────────────────────────────────
+   * 세로 문서 **안에 끼워 넣는 가로 페이지**(급여명세서 뒤에 붙는 그 달 출석부).
+   * named page는 "이름이 다른 in-flow 박스 런" 경계마다 강제 페이지 브레이크를 만든다 —
+   * 여기선 그게 정확히 원하는 동작이다(명세서 = 세로 1장, 출석부 = 가로 별지).
+   * ⚠️ 출석부는 학생×31일이라 세로 A4에 절대 안 들어간다. 폭을 줄이는 대신 **용지를 돌린다**.
+   * ⚠️ `.print-landscape`를 세로 문서 **바깥**에 두지 말 것 — body가 portrait-doc이라
+   *    앞뒤로 빈 페이지가 생긴다(위 지출결의서 실측과 같은 함정).
+   * ─────────────────────────────────────────────── */
+  @page landscape-doc {
+    size: A4 landscape;
+    margin: 8mm 10mm;
+  }
+  .print-landscape {
+    page: landscape-doc;
+  }
+
   /* 토스트·쿼리 데브툴은 인쇄물이 아님 — 모든 인쇄 표면에서 숨김(0높이 in-flow 박스 생성도 차단). */
   section[aria-label^="Notifications"],
   [data-sonner-toaster],
