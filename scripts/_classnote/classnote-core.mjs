@@ -360,7 +360,12 @@ export async function sendReportViaApi(adminPage, { report, studentName, boardId
  * one-shot 실행은 `lastStaleSweepAt=0`이라 **첫 호출에서 항상** 한 번 돈다(주기 건너뜀 없음).
  */
 const STALE_SWEEP_MS = 60_000;
-let lastStaleSweepAt = 0;
+/**
+ * ⚠️ **tenant별**로 기록한다. 전역 한 개로 두면 여러 tenant를 도는 루프에서 **첫 tenant만 sweep하고
+ * 나머지는 60초 내내 건너뛴다**(지금 워커는 단일 tenant라 증상이 안 보이지만, 다중 tenant가 되는 순간
+ * 조용히 복구가 멈춘다 — 조용한 고장은 만들지 않는다).
+ */
+const lastStaleSweepAt = new Map();
 
 export async function processQueueOnce(sql, browser, opts) {
   const {
@@ -411,8 +416,8 @@ export async function processQueueOnce(sql, browser, opts) {
   //    DB 전체 1위였다(그때는 인덱스도 없어 매번 19,043행 전수 스캔). 1분 주기면 복구 지연은 최대 +45초고
   //    (이미 10분 기다린 건에 대해) 쿼리 수는 1/4로 준다. 인덱스(lesson_reports_status_idx)는 별도 적용됨.
   let stale = [];
-  if (Date.now() - lastStaleSweepAt >= STALE_SWEEP_MS) {
-    lastStaleSweepAt = Date.now();
+  if (Date.now() - (lastStaleSweepAt.get(tenant) ?? 0) >= STALE_SWEEP_MS) {
+    lastStaleSweepAt.set(tenant, Date.now());
     stale = await sql`update lesson_reports set classnote_status='queued'
       where tenant_id = ${tenant} and classnote_status='processing'
         and classnote_processing_at < now() - (${STALE_MIN} || ' minutes')::interval

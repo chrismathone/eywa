@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { buildTeacherNicknameMap } from "./teacher-label";
 import {
   buildTeacherLabelMap,
   isSpecialSlotLabel,
@@ -118,5 +119,47 @@ describe("resolveTeacherLabels", () => {
 
   it("순서는 처음 등장 순서를 지킨다(열 순서 보존)", () => {
     expect(resolveTeacherLabels(["Sam", "Jane", "Sam"], map)).toEqual(["김태건", "추민아"]);
+  });
+});
+
+/**
+ * 영어 시간표 `한글이름(영어이름)` 표기의 재료 — **한국인 강사만** 담는다(원장 2026-08-13 "원어민 제외").
+ * 판정은 직급 문자열이 아니라 **이름에 한글이 있나**다(직급은 학원설정 운영 enum이라 라벨이 바뀌면 뒤집힌다).
+ */
+describe("buildTeacherNicknameMap — 한국인 강사만 (원어민 제외)", () => {
+  const u = (displayName: string, englishName: string | null, active = true) => ({
+    displayName,
+    englishName,
+    active,
+  });
+
+  it("한글 이름 + 닉네임이면 담는다", () => {
+    expect(buildTeacherNicknameMap([u("이현이", "Hannah"), u("추민아", "Jane")])).toEqual({
+      이현이: "Hannah",
+      추민아: "Jane",
+    });
+  });
+
+  it("🔴 원어민(로마자 이름)은 담지 않는다 — 이름이 곧 영어라 괄호가 중복이다", () => {
+    const map = buildTeacherNicknameMap([u("KRISTINE DRIVER", "Kristine"), u("Florence Park", "Florence")]);
+    expect(map).toEqual({});
+  });
+
+  it("닉네임이 없거나 이름과 같으면 담지 않는다", () => {
+    expect(buildTeacherNicknameMap([u("김태건", null), u("이수진", "이수진")])).toEqual({});
+  });
+
+  it("동명이인이 서로 다른 닉네임이면 안 담는다 — 남의 닉네임을 붙이느니 이름만", () => {
+    const map = buildTeacherNicknameMap([u("김민수", "Kevin"), u("김민수", "Mike")]);
+    expect(map).toEqual({});
+  });
+
+  it("동명이인이라도 재직자가 하나뿐이면 그 사람으로 정한다", () => {
+    const map = buildTeacherNicknameMap([u("김민수", "Kevin", true), u("김민수", "Mike", false)]);
+    expect(map).toEqual({ 김민수: "Kevin" });
+  });
+
+  it("퇴사자만 있어도 닉네임이 하나면 담는다(옛 시간표도 이름으로 읽히게)", () => {
+    expect(buildTeacherNicknameMap([u("박나연", "Zoe", false)])).toEqual({ 박나연: "Zoe" });
   });
 });

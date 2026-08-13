@@ -1,6 +1,9 @@
 import "server-only";
 import { cache } from "react";
+import { unstable_cache } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { getCurrentUser } from "@/lib/auth/current-user";
 import { fetchAllPaged, fetchAllPagedInChunks } from "@/lib/supabase/batch";
 import { kstToday, kstMinutesOfDay } from "@/lib/date-kst";
 import { getTeacherScope } from "@/lib/auth/teacher-scope";
@@ -440,6 +443,41 @@ const refOf = (r: { student: StudentRef | StudentRef[] }): StudentRef | undefine
  * 재원(active)뿐 아니라 **대기(on_hold)·최근 퇴원(end_date)** 도 포함 — ijw 셀이 보여주던
  * 재원/대기/퇴원 섹션을 복원. 퇴원은 최근 1달(30일)·반이동 제외(셀에서 status로 분리 렌더).
  */
+/**
+ * 학생 id 목록 → 짧고 **안정적인** 캐시 키 조각. 300개 uuid를 그대로 키에 넣으면 키가 11KB가 되고,
+ * 순서만 달라도 다른 키가 되어 적중률이 떨어진다 → 정렬 후 djb2 해시.
+ * (해시 충돌은 캐시 오적중을 뜻하므로 길이도 함께 넣어 충돌 확률을 더 낮춘다.)
+ */
+function studentIdsKey(ids: readonly string[]): string {
+  let h = 5381;
+  for (const id of [...ids].sort()) {
+    for (let i = 0; i < id.length; i++) h = ((h * 33) ^ id.charCodeAt(i)) >>> 0;
+  }
+  return `${ids.length}-${h.toString(36)}`;
+}
+
+/**
+ * 시간표 hover용 '최근 보고서' 캐시본(테넌트별 60초). 호출부 주석 참조 —
+ * ⚠️ admin 클라이언트라 RLS를 안 탄다. **호출부가 이미 스코프를 정한 학생 id만** 넘기므로 조회 범위가
+ *    넓어지지는 않지만, tenant는 반드시 명시한다(교차 테넌트 차단).
+ */
+function latestReportsCached(tenantId: string, studentIds: string[]): Promise<unknown[]> {
+  return unstable_cache(
+    async () => {
+      const admin = createAdminClient();
+      const { data, error } = await admin.rpc("timetable_latest_reports", {
+        p_student_ids: studentIds,
+        p_tenant: tenantId,
+      });
+      // ?? [] 삼킴 금지(B3) — 실패는 화면을 조용히 비우지 말고 위로 던진다.
+      if (error) throw new Error(`timetable_latest_reports RPC 실패: ${error.message}`);
+      return (data ?? []) as unknown[];
+    },
+    ["timetable-latest-reports", tenantId, studentIdsKey(studentIds)],
+    { revalidate: 60 },
+  )();
+}
+
 export async function getWeeklyScheduleWithStudents(
   // db = 세션 없는 호출(cron) 주입 — teacherId 스코핑은 세션 전제(getTeacherScope)라 db와 병용 불가.
   opts?: { referenceDate?: string; teacherId?: string; subject?: string; db?: TimetableDb },
@@ -662,19 +700,29 @@ export async function getWeeklyScheduleWithStudents(
     const CHUNK = 300;
     const chunks: string[][] = [];
     for (let i = 0; i < studentIds.length; i += CHUNK) chunks.push(studentIds.slice(i, i + CHUNK));
+    // 🔴 **테넌트 단위 60초 캐시**(2026-08-13 계측) — 이 RPC는 59일 3,976회·평균 **379ms**로 시간표
+    //    응답의 지배 항목이었다. 정밀 측정상 비싼 건 쿼리 자체가 아니라 **콜드 연결의 첫 실행**이라
+    //    (같은 연결 두 번째 호출은 5ms) 조여서 줄일 수 없고, **호출 자체를 없애야** 준다. 시간표는 창으로
+    //    반복해서 열리고 창마다 셸+페이지가 다시 도는 구조라 캐시 적중률이 높다.
+    // ⚠️ 이 값은 hover에 뜨는 **최근 보고서 요약**이다 — 60초 늦어도 해가 없다(수업 배치는 캐시 대상 아님).
+    // ⚠️ 캐시 안엔 쿠키가 없어 admin 클라이언트를 쓰므로 **tenant를 명시**해 격리한다(키에도 넣는다).
+    //    세션 경로에서 tenantId를 못 구하면(비로그인 등) 캐시 없이 기존 RLS 경로로 간다.
+    // ⚠️ cron(db 주입)은 캐시를 **타지 않는다** — 하루 한 번 도는 배치가 60초 전 값을 보면 안 되고,
+    //    호출 횟수도 적어 캐시 이득이 없다. 캐시는 사람이 창을 여는 세션 경로만.
+    const cacheTenantId = db ? null : ((await getCurrentUser())?.tenantId ?? null);
     const results = await Promise.all(
       chunks.map((chunk) =>
-        supabase.rpc("timetable_latest_reports", {
-          p_student_ids: chunk,
-          // cron/admin 경로는 auth_tenant_id()가 null → 명시 tenant 필수(세션 경로는 null로 RLS+auth 격리)
-          p_tenant: db?.tenantId ?? null,
-        }),
+        cacheTenantId
+          ? latestReportsCached(cacheTenantId, chunk)
+          : supabase
+              .rpc("timetable_latest_reports", { p_student_ids: chunk, p_tenant: db?.tenantId ?? null })
+              .then(({ data, error }) => {
+                if (error) throw new Error(`timetable_latest_reports RPC 실패: ${error.message}`);
+                return (data ?? []) as RepRow[];
+              }),
       ),
     );
-    for (const { data, error } of results) {
-      if (error) throw new Error(`timetable_latest_reports RPC 실패: ${error.message}`); // ?? [] 삼킴 금지(B3)
-      repRows.push(...((data ?? []) as RepRow[]));
-    }
+    for (const rows of results) repRows.push(...(rows as RepRow[]));
     // 🔴 **그 수업의** 최신 보고서를 먼저 본다(0134a). 예전엔 학생 단위 최신 1건이라, 같은 학생이
     //    정규 수학 + 수학 특강을 들으면 두 슬롯의 hover가 **똑같은 진도·교재**를 보여줬다(둘 중 하나는 거짓).
     //    반 매칭이 없으면(이관분·관리자 작성분 = class_id NULL) 학생×과목 최신으로 폴백한다.

@@ -1,5 +1,8 @@
 import "server-only";
+import { unstable_cache } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { getCurrentUser } from "@/lib/auth/current-user";
 import { fetchAllPaged } from "@/lib/supabase/batch";
 import { summarizeInvoices, currentPeriod, type BillingSummary } from "../calc";
 
@@ -222,8 +225,38 @@ export async function getBillingSummary(period?: string): Promise<BillingSummary
  * group-by RPC(0163a `invoice_periods`)로 옮겼다 — 단일 요청, 페이로드 수백 바이트.
  */
 export async function getAvailablePeriods(): Promise<string[]> {
-  const supabase = await createClient();
-  const { data, error } = await supabase.rpc("invoice_periods");
+  const user = await getCurrentUser();
+  // 창(iframe)마다 도는 값이라 테넌트 단위로 60초 공유한다(B6). 결과는 "2026-08" 꼴 **월 문자열 목록**이라
+  // 개인정보도 금액도 없고, 이 화면 자체가 수납 권한 뒤에 있다. 새 월의 첫 청구서를 만들면 최대 60초 뒤
+  // 칩이 뜬다 — 그 이상 기다리게 하지 않으려고 TTL을 짧게 잡았다.
+  // ⚠️ 세션이 없으면(비로그인·cron) 캐시를 안 태우고 기존 경로로 간다(캐시 키가 테넌트라서).
+  if (user?.tenantId) return getAvailablePeriodsCached(user.tenantId);
+  return loadAvailablePeriods(await createClient());
+}
+
+/** 테넌트별 60초 캐시본 — 캐시 안엔 쿠키가 없어 admin 클라이언트를 쓴다(`loadTenantSettingsRaw`와 같은 규약). */
+const getAvailablePeriodsCached = (tenantId: string): Promise<string[]> =>
+  unstable_cache(
+    async () => loadAvailablePeriods(createAdminClient(), tenantId),
+    ["billing-available-periods", tenantId],
+    { revalidate: 60 },
+  )();
+
+/**
+ * 실제 조회 — 세션 경로는 RPC(`invoice_periods`), **admin 경로(캐시 안)는 RPC를 쓰지 않는다.**
+ *
+ * 🔴 그 RPC는 `where tenant_id = auth_tenant_id()`라 service_role로 부르면 **에러 없이 0행**이다
+ *    (0114a가 dashboard_*_admin 변형을 따로 만든 것과 같은 함정). 그러면 월 칩이 "이번 달 하나"로
+ *    조용히 줄어든다 — 그래서 admin 경로는 tenant를 명시한 페이지네이션 조회로 간다(느리지만 캐시라
+ *    60초에 한 번뿐이고, 결과는 RPC와 동일하다).
+ */
+async function loadAvailablePeriods(
+  supabase: Awaited<ReturnType<typeof createClient>> | ReturnType<typeof createAdminClient>,
+  tenantId?: string,
+): Promise<string[]> {
+  const { data, error } = tenantId
+    ? { data: null, error: null }
+    : await supabase.rpc("invoice_periods");
   // 마이그레이션 미적용 환경(로컬 등)에서 월 칩이 통째로 사라지지 않게 구 경로로 폴백한다.
   // 결과는 동일하고 느릴 뿐이라 '조용한 오작동'은 아니지만 **화면이 똑같아 폴백 중인지 알 수 없다** —
   // 실패는 반드시 로그로 남긴다(gotcha #89: 폴백 있는 기능은 실패를 따로 계측해야 보인다).
@@ -233,10 +266,12 @@ export async function getAvailablePeriods(): Promise<string[]> {
       `[billing] invoice_periods RPC 실패 — 전건 스캔으로 폴백(느림). 0163a 적용 여부 확인 필요: ${error.message}`,
     );
   }
-  const rows: { period: string }[] = error
-    ? await fetchAllPaged<{ period: string }>((from, to) =>
-        supabase.from("invoices").select("period").order("period", { ascending: false }).range(from, to),
-      )
+  const rows: { period: string }[] = error || tenantId
+    ? await fetchAllPaged<{ period: string }>((from, to) => {
+        // ⚠️ admin 경로는 RLS를 안 타므로 tenant 필터가 **필수**(교차 테넌트 유출 방지).
+        const q = supabase.from("invoices").select("period").order("period", { ascending: false });
+        return (tenantId ? q.eq("tenant_id", tenantId) : q).range(from, to);
+      })
     : ((data ?? []) as { period: string }[]);
   const set = new Set<string>();
   for (const r of rows) set.add(r.period);

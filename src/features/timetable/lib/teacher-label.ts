@@ -190,22 +190,6 @@ export function buildTeacherNicknameMap(
   return map;
 }
 
-/**
- * 표기 하나를 `한글이름(영어이름)`으로. 붙일 수 없으면 **원본 그대로**(빈 괄호·물음표 금지).
- * 안 붙이는 경우: 특수 자리(LAB·JJ = 사람 아님) · 원어민(맵에 없음) · 닉네임 미등록 · 이미 괄호가 붙음(멱등).
- */
-export function withTeacherNickname(
-  name: string | null | undefined,
-  map: TeacherNicknameMap | undefined,
-): string | null {
-  if (name == null) return null;
-  const raw = name.trim();
-  if (!raw || raw.includes("(")) return name;
-  if (isSpecialSlotLabel(raw)) return name;
-  const nick = map?.[raw];
-  return nick ? `${raw}(${nick})` : name;
-}
-
 export function buildTeacherLabelMap(
   users: readonly { displayName: string | null; englishName: string | null; active: boolean }[],
 ): TeacherLabelMap {
