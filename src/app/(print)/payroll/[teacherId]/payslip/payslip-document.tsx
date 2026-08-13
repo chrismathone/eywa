@@ -9,6 +9,23 @@ import { formatWithdrawalRate } from "@/features/payroll/payslip-metrics";
 import { SALARY_GROUPS } from "@/features/payroll/salary-group";
 import { EMPTY_MARK, won, wonOrDash, type PayslipData } from "@/features/payroll/payslip-view";
 
+/**
+ * 원장 시트의 **실제 색**(xlsx 셀 서식에서 그대로 추출). 장식이 아니라 의미가 실려 있어 그대로 옮긴다:
+ *  · BAND   머리글 2줄(회사명·제목) 밴드
+ *  · LABEL  모든 라벨 칸
+ *  · ALERT  빨강 굵게 = **지급총액**과 **퇴원 지표**(원장이 훑을 때 먼저 걸려야 하는 값)
+ *  · INPUT  노랑 = '내신분석'(사람이 채워야 하는 칸이라는 표식)
+ *  · RATE   비율표 5칸을 과정별로 갈라 칠한다(같은 숫자여도 어느 과정인지 색으로 구분)
+ * ⚠️ 인쇄에서도 나온다 — globals.css가 `print-color-adjust: exact`를 전역으로 강제한다.
+ */
+const SHEET = {
+  band: "#F4CCCC",
+  label: "#DCDADA",
+  alert: "#FF0000",
+  input: "#FFFF00",
+  rate: { 초등: "#FFF2CC", 중등: "#FCE5CD", 고등: "#F4CCCC", 수능: "#D0E0E3", 특강: "#CFE2F3" },
+} as const;
+
 /** 값이 없으면 '미입력'을 명시한다 — 빈 칸은 "0"이나 "없음"으로 오해된다. */
 function Val({ v }: { v: string | null | undefined }) {
   const s = (v ?? "").trim();
@@ -21,14 +38,38 @@ function dotDate(v: string | null | undefined): string | null {
   return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s.replace(/-/g, ".") : s || null;
 }
 
-/** 명세서 표의 한 칸(라벨 + 값). */
-function Cell({ label, children, mono }: { label: string; children: React.ReactNode; mono?: boolean }) {
+/**
+ * 명세서 표의 한 칸(라벨 + 값).
+ * `alert` = 시트에서 빨강 굵게인 칸 · `input` = 노랑(사람이 채우는 칸).
+ */
+function Cell({
+  label,
+  children,
+  mono,
+  alert,
+  input,
+}: {
+  label: string;
+  children: React.ReactNode;
+  mono?: boolean;
+  alert?: boolean;
+  input?: boolean;
+}) {
   return (
     <>
-      <th scope="row" className="border border-black/70 bg-black/[0.04] px-2 py-1.5 text-left font-medium">
+      <th
+        scope="row"
+        className="border border-black/70 px-2 py-1.5 text-left font-medium"
+        style={{ background: SHEET.label }}
+      >
         {label}
       </th>
-      <td className={`border border-black/70 px-2 py-1.5 ${mono ? "num" : ""}`}>{children}</td>
+      <td
+        className={`border border-black/70 px-2 py-1.5 ${mono ? "num" : ""} ${alert ? "font-bold" : ""}`}
+        style={{ background: input ? SHEET.input : undefined, color: alert ? SHEET.alert : undefined }}
+      >
+        {children}
+      </td>
     </>
   );
 }
@@ -72,9 +113,15 @@ export function PayslipDocument({ data }: { data: PayslipData }) {
         </p>
       ) : null}
 
-      <p className="text-sm">회사명 : {company.name}</p>
-      <div className="mt-1 flex items-baseline justify-between">
-        <p className="text-sm font-medium">{periodTitle(data.period)}</p>
+      {/* 머리글 2줄 = 시트의 분홍 밴드. 여기가 문서의 얼굴이라 색을 뺐더니 통째로 밋밋해졌다. */}
+      <p className="border border-black/70 px-2 py-1.5 text-sm font-bold" style={{ background: SHEET.band }}>
+        회사명 : {company.name}
+      </p>
+      <div
+        className="flex items-baseline justify-between border border-t-0 border-black/70 px-2 py-2"
+        style={{ background: SHEET.band }}
+      >
+        <p className="text-sm font-bold">{periodTitle(data.period)}</p>
         <h1 className="text-lg font-bold tracking-tight">프리랜서 강의용역수수료 명세서</h1>
         <p className="w-24" aria-hidden />
       </div>
@@ -125,7 +172,7 @@ export function PayslipDocument({ data }: { data: PayslipData }) {
           </tr>
           <tr>
             {/* 시트의 '내신분석' 칸 = 강사별 블로그 작성일. 라벨은 시트 표기를 그대로 쓴다. */}
-            <Cell label="내신분석">
+            <Cell label="내신분석" input>
               <Val v={adjustments.blogWrittenOn} />
             </Cell>
             <Cell label="입사일">
@@ -137,10 +184,18 @@ export function PayslipDocument({ data }: { data: PayslipData }) {
           </tr>
 
           <tr>
-            <th colSpan={2} className="border border-black/70 bg-black/[0.07] px-2 py-1.5 text-left font-semibold">
+            <th
+              colSpan={2}
+              className="border border-black/70 px-2 py-1.5 text-left font-semibold"
+              style={{ background: SHEET.label }}
+            >
               지급 내역
             </th>
-            <th colSpan={2} className="border border-black/70 bg-black/[0.07] px-2 py-1.5 text-left font-semibold">
+            <th
+              colSpan={2}
+              className="border border-black/70 px-2 py-1.5 text-left font-semibold"
+              style={{ background: SHEET.label }}
+            >
               공제 내역
             </th>
             <Cell label="입금은행">
@@ -174,13 +229,18 @@ export function PayslipDocument({ data }: { data: PayslipData }) {
             </Cell>
           </tr>
           <tr>
-            <Cell label="지급총액" mono>
-              {ok ? <strong>{won(amounts.grossPay)}</strong> : unknown}
+            {/* 시트에서 유일하게 빨강 14pt인 칸 — 이 문서의 결론 숫자다. */}
+            <Cell label="지급총액" mono alert={ok}>
+              {ok ? won(amounts.grossPay) : unknown}
             </Cell>
             <Cell label="공제총액" mono>
               {ok ? won(amounts.deductionTotal) : unknown}
             </Cell>
-            <th scope="row" className="border border-black/70 bg-black/[0.04] px-2 py-1.5 text-left font-medium">
+            <th
+              scope="row"
+              className="border border-black/70 px-2 py-1.5 text-left font-medium"
+              style={{ background: SHEET.label }}
+            >
               총 시수
             </th>
             <td className="num border border-black/70 px-2 py-1.5">
@@ -196,9 +256,11 @@ export function PayslipDocument({ data }: { data: PayslipData }) {
       <table className="mt-5 w-full border-collapse text-center text-[13px]">
         <thead>
           <tr>
-            <th className="border border-black/70 bg-black/[0.04] px-2 py-1 font-medium">배분율</th>
+            <th className="border border-black/70 px-2 py-1 font-medium" style={{ background: SHEET.label }}>
+              배분율
+            </th>
             {SALARY_GROUPS.map((g) => (
-              <th key={g} className="border border-black/70 bg-black/[0.04] px-2 py-1 font-medium">
+              <th key={g} className="border border-black/70 px-2 py-1 font-bold" style={{ background: SHEET.label }}>
                 {g}
               </th>
             ))}
@@ -218,8 +280,13 @@ export function PayslipDocument({ data }: { data: PayslipData }) {
           ) : null}
           <tr>
             <td className="border border-black/70 px-2 py-1 font-medium">적용</td>
+            {/* 과정별 파스텔 — 시트가 다섯 칸을 각각 다른 색으로 갈라 놨다(같은 숫자여도 어느 과정인지 보인다). */}
             {SALARY_GROUPS.map((g) => (
-              <td key={g} className="num border border-black/70 px-2 py-1 font-medium">
+              <td
+                key={g}
+                className="num border border-black/70 px-2 py-1 font-bold"
+                style={{ background: SHEET.rate[g] }}
+              >
                 {shownApplied(g) === undefined ? EMPTY_MARK : `${formatRate(shownApplied(g)!)}%`}
               </td>
             ))}
@@ -252,31 +319,50 @@ function ClassMetrics({ data }: { data: PayslipData }) {
       </colgroup>
       <thead>
         <tr>
-          <th colSpan={2} className="border border-black/70 bg-black/[0.07] px-2 py-1.5 text-left font-semibold">
+          <th
+            colSpan={2}
+            className="border border-black/70 px-2 py-1.5 text-left font-semibold"
+            style={{ background: SHEET.label }}
+          >
             {data.period.slice(5)}월 수업 내역
           </th>
-          <th colSpan={2} className="border border-black/70 bg-black/[0.07] px-2 py-1.5 text-left font-semibold">
+          <th
+            colSpan={2}
+            className="border border-black/70 px-2 py-1.5 text-left font-semibold"
+            style={{ background: SHEET.label }}
+          >
             {year}년 누적 수업 내역
           </th>
         </tr>
       </thead>
+      {/* 🔑 시트에서 **퇴원 계열 3줄이 전부 빨강 굵게**다 — 원장이 훑을 때 먼저 걸려야 하는 값이라
+          그렇게 칠해 둔 것이고, 색을 빼면 그 의도가 사라진다. 오른쪽 열의 '월 평균 수업인원'도
+          같은 줄에 있어 시트에선 빨강이다(원장 확인 전까진 시트를 그대로 따른다). */}
       <tbody>
         <tr>
           <Cell label="수업인원">{metrics.studentsThisMonth}명</Cell>
           <Cell label="누적수업인원">{metrics.cumulativeStudents}명</Cell>
         </tr>
         <tr>
-          <Cell label="퇴원생 수">{metrics.withdrawal.count}명</Cell>
-          <Cell label={`${year} 퇴원생 수`}>{metrics.yearlyWithdrawals}명</Cell>
+          <Cell label="퇴원생 수" alert>
+            {metrics.withdrawal.count}명
+          </Cell>
+          <Cell label={`${year} 퇴원생 수`} alert>
+            {metrics.yearlyWithdrawals}명
+          </Cell>
         </tr>
         <tr>
-          <Cell label="퇴원생 명단">
+          <Cell label="퇴원생 명단" alert>
             {metrics.withdrawal.names.length > 0 ? metrics.withdrawal.names.join(", ") : EMPTY_MARK}
           </Cell>
-          <Cell label="월 평균 수업인원">{metrics.averageStudents}명</Cell>
+          <Cell label="월 평균 수업인원" alert>
+            {metrics.averageStudents}명
+          </Cell>
         </tr>
         <tr>
-          <Cell label="퇴원생율">{formatWithdrawalRate(metrics.withdrawal.rate)}</Cell>
+          <Cell label="퇴원생율" alert>
+            {formatWithdrawalRate(metrics.withdrawal.rate)}
+          </Cell>
           <Cell label="담당 반">{data.teacher.classes.length}개</Cell>
         </tr>
       </tbody>

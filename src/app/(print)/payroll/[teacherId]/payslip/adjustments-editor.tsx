@@ -86,7 +86,8 @@ export function AdjustmentsEditor({
               className="num border-line w-full rounded-lg border px-2 py-1.5 text-right"
             />
           </Field>
-          <Field label="내신분석(블로그) 작성일" hint="비우면 미작성">
+          {/* ⚠️ 힌트를 붙이면 라벨이 두 줄로 접혀 옆 칸들과 높이가 어긋난다(원장 지적) — 안내는 placeholder로. */}
+          <Field label="내신분석(블로그) 작성일">
             <input
               name="blogWrittenOn"
               defaultValue={dv.blogWrittenOn}

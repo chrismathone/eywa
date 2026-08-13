@@ -60,6 +60,22 @@ export const DAY_TONE = {
 export const HEAD_ROW_H = "h-[38px]";
 export const CELL_SCROLL_MARGIN = "scroll-mt-[38px]";
 
+/**
+ * 이름 칸 표식(신입·퇴원·반이동) — **출석부 화면과 인쇄물이 같은 색·같은 크기**를 써야 한다.
+ * (원래 matrix-row.tsx 지역 상수였는데, 급여명세서 별지가 같은 표를 그리게 되면서 여기로 올렸다.
+ *  두 벌로 두면 화면과 종이의 '퇴원' 표시가 서로 달라진다.)
+ * ⚠️ 출결 팔레트(`--att-*`)를 쓰지 않는다 — 그 색은 칸의 출결 값 전용이라 이름 옆에 쓰면 뜻이 겹친다.
+ */
+export const BADGE_TONE: Record<"new" | "left" | "transferIn" | "transferOut", string> = {
+  new: "bg-emerald-100 text-emerald-800",
+  left: "bg-rose-100 text-rose-700",
+  transferIn: "bg-violet-100 text-violet-800",
+  transferOut: "bg-violet-100 text-violet-800",
+};
+
+/** 표식 공통 크기 — 신입·퇴원·반이동·「단가」 전부 이 하나(크기 제각각 금지, 원장 2026-08-10). */
+export const BADGE_BASE = "shrink-0 rounded-sm px-1 text-[9px] leading-[14px] font-bold";
+
 export const STATUS_TEXT: Record<AttendanceMark, string> = {
   present: "출석",
   absent: "결석",

@@ -9,6 +9,8 @@ import { PayslipDocument } from "./payslip-document";
 import { AdjustmentsEditor } from "./adjustments-editor";
 import { AttendanceAppendix } from "./attendance-appendix";
 import { getMonthlyAttendanceMatrix } from "@/features/attendance/server/queries";
+import { buildHolidayMap } from "@/features/attendance/calendar";
+import { getTenantSettings } from "@/features/owner/server/queries";
 
 export const metadata = { title: "급여명세서 — eywa" };
 
@@ -48,13 +50,18 @@ export default async function PayslipPrintPage({
    *    다른 말을 하지 않는다. 강사 1명분(실측 최대 10반)이라 허용되는 호출 수다(전체 반엔 쓰지 말 것).
    * ⚠️ 날짜축은 달력월로 고정 — 반마다 세션 기간이 달라 첫 반 축으로 나머지를 그리면 칸이 어긋난다.
    */
-  const appendix = await Promise.all(
-    data.teacher.classes.map(async (c) => ({
-      classId: c.id,
-      className: c.className,
-      matrix: await getMonthlyAttendanceMatrix(period, c.id, "month"),
-    })),
-  );
+  const [appendix, settings] = await Promise.all([
+    Promise.all(
+      data.teacher.classes.map(async (c) => ({
+        classId: c.id,
+        className: c.className,
+        matrix: await getMonthlyAttendanceMatrix(period, c.id, "month"),
+      })),
+    ),
+    getTenantSettings(),
+  ]);
+  // 공휴일 = 학원설정 단일 소스(출석부 화면과 같은 값이라야 음영이 어긋나지 않는다).
+  const holidays = buildHolidayMap(settings.operations.holidays);
 
   return (
     <>
@@ -70,7 +77,12 @@ export default async function PayslipPrintPage({
       </div>
       {/* 🔴 별지는 세로 문서 **밖**에 둔다 — 안에 두면 `max-w-[210mm]`에 갇혀 가로 용지(297mm)의
           3분의 1을 버린다(31일 격자가 그만큼 좁아진다). 자체 컨테이너로 가로 전폭을 쓴다. */}
-      <AttendanceAppendix groups={appendix} period={period} teacherName={data.teacher.name} />
+      <AttendanceAppendix
+        groups={appendix}
+        period={period}
+        teacherName={data.teacher.name}
+        holidays={holidays}
+      />
     </>
   );
 }

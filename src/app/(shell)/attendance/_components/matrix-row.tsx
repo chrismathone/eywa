@@ -2,30 +2,12 @@ import type { AttendanceMatrix, AttendanceStatus, MatrixStudent } from "@/featur
 import type { StudentMoney } from "@/features/attendance/server/teacher-money";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { formatDows } from "@/features/attendance/calendar";
-import {
-  BADGE_LABEL,
-  badgeTitle,
-  isEnrolledOn,
-  type LifecycleBadge,
-} from "@/features/attendance/enrollment-span";
+import { BADGE_LABEL, badgeTitle, isEnrolledOn } from "@/features/attendance/enrollment-span";
+import { BADGE_BASE, BADGE_TONE } from "@/features/attendance/cell-display";
 import { countMarks } from "@/features/attendance/grid/totals";
 import { rowKey } from "@/features/attendance/grid/model";
 import { AttendanceCell } from "./attendance-cell";
 import { RowTotalCells } from "./live-totals";
-
-/**
- * 표식 색 — 신입은 눈에 띄게(초록), 퇴원은 경고(빨강), 반이동은 중립적 이동(보라).
- * ⚠️ 출결 팔레트(`--att-*`)를 쓰지 않는다 — 그 색은 칸의 출결 값 전용이라 이름 옆에 쓰면 뜻이 겹친다.
- */
-const BADGE_TONE: Record<LifecycleBadge["kind"], string> = {
-  new: "bg-emerald-100 text-emerald-800",
-  left: "bg-rose-100 text-rose-700",
-  transferIn: "bg-violet-100 text-violet-800",
-  transferOut: "bg-violet-100 text-violet-800",
-};
-
-/** 이름 칸 라벨 공통 크기 — 신입·퇴원·반이동·「단가」 전부 이 하나를 쓴다(크기 제각각 금지, 원장 2026-08-10). */
-const BADGE_BASE = "shrink-0 rounded-sm px-1 text-[9px] leading-[14px] font-bold";
 
 /** 금액 표시 — 0원과 '자료 없음'을 구분한다(청구서가 없는 달은 "—"). */
 export function formatMoney(n: number | null | undefined): string {
