@@ -14,6 +14,7 @@ import {
   type ClassInterval,
 } from "@/features/timetable/lib/ten-minute-grid";
 import type { TeacherColorMap } from "@/features/timetable/lib/class-grid";
+import type { TeacherNicknameMap } from "@/features/timetable/lib/teacher-label";
 import { DAY_LABEL } from "@/features/timetable/lib/split-attendance";
 import {
   ENGLISH_SHEET_TEACHERS,
@@ -90,6 +91,7 @@ export function TeacherGridView({
   slots,
   weekMonday,
   teacherColors,
+  teacherNicknames,
   sectionLineMins,
   stepMin = 10,
   pxPerMin,
@@ -102,6 +104,11 @@ export function TeacherGridView({
   weekMonday?: string;
   /** 강사 헤더색(DB getTeacherColorMap) — 직원 등록된 강사 우선. 미등록은 시트 미러색 폴백. */
   teacherColors?: TeacherColorMap;
+  /**
+   * 표시 이름 → 영어 닉네임(한국인 강사만). 있으면 강사 헤더를 `한글이름(영어이름)`으로 적는다.
+   * ⚠️ **표기 전용** — 열 식별자(`t.name`)는 그대로다(바꾸면 '가로줄 제외 강사'·정렬 설정이 어긋난다).
+   */
+  teacherNicknames?: TeacherNicknameMap;
   /** 내부 가로줄 시각(자정 기준 분) — 과목 설정 teacherViewLines. page.tsx가 도출. */
   sectionLineMins?: number[];
   /** 격자 단위(분, 60의 약수) — 과목 설정 teacherViewStep. */
@@ -236,8 +243,13 @@ export function TeacherGridView({
                   ...(t.color ? { backgroundColor: t.color.bg, color: t.color.text } : {}),
                 }}
               >
+                {/* 한국인 강사는 `한글이름(영어이름)`(원장 2026-08-13) — 영어과는 서로를 닉네임으로 부른다.
+                    원어민은 이름이 곧 영어라 그대로. 닉네임은 한 단계 작게 — 이름이 먼저 읽혀야 한다. */}
                 <span className={`block overflow-hidden text-[16px] leading-tight font-bold whitespace-nowrap text-clip ${t.color ? "" : "text-foreground bg-bg-soft"}`}>
                   {t.name}
+                  {teacherNicknames?.[t.name] ? (
+                    <span className="text-[13px] font-bold opacity-85">({teacherNicknames[t.name]})</span>
+                  ) : null}
                 </span>
               </th>
             ))}

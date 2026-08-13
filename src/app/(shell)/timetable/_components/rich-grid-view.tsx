@@ -6,6 +6,7 @@ import {
   type TeacherColorMap,
 } from "@/features/timetable/lib/class-grid";
 import type { PeriodsConfig } from "@/features/timetable/lib/periods";
+import type { TeacherNicknameMap } from "@/features/timetable/lib/teacher-label";
 import { RichCardGroupBoard } from "./rich-card-group";
 
 /**
@@ -26,6 +27,7 @@ export function RichGridView({
   subjectMaps,
   config,
   teacherColors,
+  teacherNicknames,
   compactSections,
   customGroups,
 }: {
@@ -33,6 +35,8 @@ export function RichGridView({
   subjectMaps: SubjectMaps;
   config: PeriodsConfig;
   teacherColors: TeacherColorMap;
+  /** 담임 줄 `한글이름(영어이름)` 표기(영어 시간표만) — page가 과목을 보고 넘긴다. */
+  teacherNicknames?: TeacherNicknameMap;
   /** 커스텀 그룹(학원설정 과목별). 미지정이면 "N교시 시작" 자동 그룹. */
   customGroups?: IntegrationGroupsConfig | null;
   /**
@@ -62,7 +66,12 @@ export function RichGridView({
           // 라벨은 화면에서 뺐지만 aria-label로는 남긴다 — 보조기술엔 "몇 번째 줄"이 여전히 필요하다.
           <section key={g.key} aria-label={g.label}>
             {i > 0 ? <div aria-hidden className={SECTION_DIVIDER} /> : null}
-            <RichCardGroupBoard group={g} subjectSoftClass={subjectSoftClass} teacherColors={teacherColors} />
+            <RichCardGroupBoard
+              group={g}
+              subjectSoftClass={subjectSoftClass}
+              teacherColors={teacherColors}
+              teacherNicknames={teacherNicknames}
+            />
           </section>
         ))}
       </div>
