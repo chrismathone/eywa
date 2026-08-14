@@ -1,7 +1,14 @@
 "use client";
 
 import { ChevronRight } from "@/components/icons/eywa-icon-compat";
+import { useOptionalCollapse } from "./collapse-source";
 import { useGridCollapse } from "./grid-context";
+
+function useCollapse() {
+  const optional = useOptionalCollapse();
+  const grid = useGridCollapse();
+  return optional ?? grid;
+}
 
 /**
  * 강사 전체 보기의 **반 덩어리** — 머리행을 누르면 그 반이 접힌다(구 출석부 D:\attendance의 그룹 접기).
@@ -22,7 +29,7 @@ export function ClassGroupBody({
   summary: React.ReactNode;
   children: React.ReactNode;
 }) {
-  const ctx = useGridCollapse();
+  const ctx = useCollapse();
   const collapsed = ctx?.collapsed.has(classId) ?? false;
   return (
     <tbody>
@@ -69,7 +76,7 @@ export function nextCollapseAction(classIds: readonly string[], collapsed: Reado
  *    둘은 같은 판정(`nextCollapseAction`)을 쓴다 — 한쪽만 고치면 두 버튼이 다른 말을 한다.
  */
 export function CollapseAllButton({ classIds }: { classIds: string[] }) {
-  const ctx = useGridCollapse();
+  const ctx = useCollapse();
   if (!ctx) return null;
   const { expand, label } = nextCollapseAction(classIds, ctx.collapsed);
   return (
@@ -92,7 +99,7 @@ export function CollapseAllButton({ classIds }: { classIds: string[] }) {
  * (교실뷰 '경고 N'과 같은 규칙). 반 머리행이 없는 보기에선 아예 안 그린다.
  */
 export function CollapseAllChip({ classIds }: { classIds: string[] }) {
-  const ctx = useGridCollapse();
+  const ctx = useCollapse();
   if (!ctx || classIds.length === 0) return null;
   const { collapsedCount, expand, label } = nextCollapseAction(classIds, ctx.collapsed);
   return (

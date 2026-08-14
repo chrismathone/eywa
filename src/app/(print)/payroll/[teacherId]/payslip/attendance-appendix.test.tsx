@@ -117,5 +117,18 @@ describe("급여명세서 별지 — 그 달 출석부", () => {
   it("머리글에 연월과 강사 이름을 밝힌다(별지만 떨어져도 누구 것인지 알게)", () => {
     render1();
     expect(screen.getByText(/2026년 8월 출석부 — 김윤하/)).toBeTruthy();
+    expect(screen.getByText(/칸의 숫자 = 그날 인정된 수업 시수/)).toBeTruthy();
+  });
+
+  it("caption을 바꾸면 급여 문구는 안 나오고 새 문구가 선다(랩실 별지)", () => {
+    render1({ caption: "자리 표시가 있는 확정 기록만 시수 열에 넣습니다" });
+    expect(screen.queryByText(/급여 산정에 들어간 값/)).toBeNull();
+    expect(screen.getByText(/자리 표시가 있는 확정 기록만/)).toBeTruthy();
+  });
+
+  it("unitsByStudent가 있으면 시수 열만 덮는다(확정·확인을 섞지 않으려고)", () => {
+    render1({ unitsByStudent: { s1: 7, s2: 11 } });
+    expect(screen.getByText("7")).toBeTruthy();
+    expect(screen.getByText("11")).toBeTruthy();
   });
 });

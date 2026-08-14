@@ -4,6 +4,7 @@ import { schoolGradeLabel } from "@/lib/format/school-grade";
 import {
   isJjMarkField,
   JJ_MARK_MAXLEN,
+  jjClassColumns,
   jjSeatTextCols,
   type JjMarkField,
 } from "@/features/attendance/seat/jj-fields";
@@ -30,7 +31,10 @@ type JjTableProps = {
  */
 export function SeatJjTable(props: JjTableProps) {
   return (
-    <div className="grid items-start gap-3 [grid-template-columns:repeat(auto-fill,minmax(min(100%,340px),1fr))]">
+    <div
+      className="grid items-start gap-3 overflow-x-auto"
+      style={{ gridTemplateColumns: jjClassColumns(props.rosters.length) }}
+    >
       {props.rosters.map((r) => (
         <SeatJjClass
           key={r.classId}
