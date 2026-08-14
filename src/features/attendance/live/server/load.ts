@@ -22,6 +22,7 @@ import { classifySignal, hhmm, resolveSlotStatus } from "../signals";
 import { saveSlotFor } from "../slot-axis";
 import { resolveRoomName } from "../seating-floors";
 import { specialSlotLabel } from "@/features/timetable/lib/teacher-label";
+import { isReportOptout } from "@/features/classes/report-optout";
 import type { LiveSlot, LiveStudent } from "../types";
 
 export type { LiveSlot, LiveStudent };
@@ -113,10 +114,11 @@ export async function loadLiveSlots(date: string, classIds?: readonly string[]):
       closed_at: string | null;
       teacher_id: string | null;
       classroom_id: string | null;
+      report_optout: boolean | null;
     }>(slotClassIds, (chunk) =>
       supabase
         .from("classes")
-        .select("id, class_name, subject, is_active, closed_at, teacher_id, classroom_id")
+        .select("id, class_name, subject, is_active, closed_at, teacher_id, classroom_id, report_optout")
         .in("id", chunk)
         .eq("is_active", true),
     ),
@@ -254,6 +256,7 @@ export async function loadLiveSlots(date: string, classIds?: readonly string[]):
   for (const slot of slots) {
     const klass = activeClasses.get(slot.class_id);
     if (!klass) continue;
+    if (isReportOptout(klass)) continue;
     // 랩실·JJ실은 출결이 되므로 좌석표에 남긴다. 다만 담임으로 폴백하면 강사 스트립의
     // 「전원 출석」이 자리 수업에 행을 만든다 — teacher_id는 슬롯 담당만(없으면 담당 미지정).
     const special = specialSlotLabel(slot.slot_teacher_label);

@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { setAttendanceCell } from "@/features/attendance/server/actions";
-import { canDeskMark, seatHoverTitle, seatMarkOf, SEAT_MARK_BULB, SEAT_MARK_LABEL } from "../mark-state";
+import { canDeskMark, seatHoverTitle, seatMarkOf, SEAT_MARK_TONE } from "../mark-state";
 import type { SeatingClass, SeatingStudent } from "../seating";
 
 const MARKS = [
@@ -72,12 +72,11 @@ export function SeatingCell({
           mark,
           note: student.note,
         })}
-        className={`bg-surface border-line flex min-h-11 min-w-[5.5rem] items-center gap-1.5 rounded-lg border px-2 py-1.5 ${
+        className={`flex min-h-11 min-w-[5.5rem] items-center justify-center rounded-lg px-2 py-1.5 ${SEAT_MARK_TONE[mark]} ${
           canMark ? "hover:ring-primary/40 cursor-pointer hover:ring-2" : "cursor-default"
         } disabled:opacity-60`}
       >
-        <span className={`size-3 shrink-0 rounded-full ${SEAT_MARK_BULB[mark]}`} aria-hidden />
-        <span className="text-left text-[13px] leading-tight font-bold">{student.studentName}</span>
+        <span className="text-[13px] leading-tight font-bold">{student.studentName}</span>
       </button>
       {open && canMark && (
         <div className="border-line bg-surface absolute top-full left-0 z-20 mt-1 flex gap-0.5 rounded-lg border p-1 shadow-md">
