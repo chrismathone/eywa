@@ -19,6 +19,7 @@ import {
   EXTERNAL_NAV,
   navPresentation,
   subTabsForMenu,
+  activeSubTabHref,
   type NavItem,
   type ExternalNavItem,
   type SubTab as SubTabItem,
@@ -356,7 +357,15 @@ export function AppSidebar({
                               active={
                                 sub.menuKey
                                   ? hasFocus && focusedId === windowId("route", sub.menuKey)
-                                  : isSubActive(sub.href, pathname, currentTab, hasFocus && focusedId === windowId("route", item.menuKey) ? focusedHref : undefined)
+                                  : isSubActive(
+                                      sub.href,
+                                      subs,
+                                      pathname,
+                                      currentTab,
+                                      hasFocus && focusedId === windowId("route", item.menuKey)
+                                        ? focusedHref
+                                        : undefined,
+                                    )
                               }
                             />
                           </li>
@@ -488,6 +497,7 @@ export function AppSidebar({
                           ? hasFocus && focusedId === windowId("route", sub.menuKey)
                           : isSubActive(
                               sub.href,
+                              flyout.subs,
                               pathname,
                               currentTab,
                               hasFocus && focusedId === windowId("route", flyout.menuKey)
@@ -514,23 +524,13 @@ export function AppSidebar({
  */
 function isSubActive(
   href: string,
+  tabs: readonly { href: string }[],
   pathname: string,
   currentTab: string | null,
   focusedHref?: string,
 ): boolean {
-  const [path, query] = href.split("?");
-  const tab = query ? new URLSearchParams(query).get("tab") : null;
-  if (focusedHref) {
-    const [fPath, fQuery] = focusedHref.split("?");
-    const fTab = fQuery ? new URLSearchParams(fQuery).get("tab") : null;
-    // 면(?tab=)이 있는 하부탭은 정확히 그 면일 때만.
-    if (tab) return fPath === path && fTab === tab;
-    // 면이 없는 하부탭(= 메뉴 루트, 예 '직원 목록')은 **그 아래 상세까지** 포함한다 —
-    // 목록에서 직원 상세로 들어가도 "직원 목록 안"이라는 사실은 그대로다.
-    return (fPath === path || fPath.startsWith(`${path}/`)) && !fTab;
-  }
-  if (path !== pathname) return false;
-  return (tab ?? null) === (currentTab ?? null);
+  const current = focusedHref ?? (currentTab ? `${pathname}?tab=${currentTab}` : pathname);
+  return activeSubTabHref(tabs, current) === href;
 }
 
 /** 하부탭(면) 링크 — 클릭 시 `windowKey` 창에서 그 면으로 이동(open이 href 갱신 → iframe 네비).

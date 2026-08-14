@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { findNavGroup, findNavItem, navPresentation, subTabsForMenu, NAV_GROUPS } from "./navigation";
+import {
+  activeSubTabHref,
+  findNavGroup,
+  findNavItem,
+  navPresentation,
+  subTabsForMenu,
+  NAV_GROUPS,
+} from "./navigation";
 
 describe("navigation presentation", () => {
   it("운영실은 데스크톱 작업면으로 표시한다", () => {
@@ -62,5 +69,35 @@ describe("하위 카테고리(subOf)", () => {
     const subs = subTabsForMenu("billing");
     expect(subs.length).toBeGreaterThan(0);
     expect(subs.every((s) => s.menuKey === undefined)).toBe(true);
+  });
+});
+
+describe("하부탭 활성 — 접두가 겹치면 긴 쪽이 이긴다", () => {
+  const attendance = [
+    { href: "/attendance/live" },
+    { href: "/attendance" },
+  ];
+
+  it("오늘 출결에서는 월별이 같이 켜지지 않는다", () => {
+    expect(activeSubTabHref(attendance, "/attendance/live")).toBe("/attendance/live");
+    expect(activeSubTabHref(attendance, "/attendance/live?tab=seating")).toBe("/attendance/live");
+  });
+
+  it("월별 장부·날짜 칸만 월별이 켜진다", () => {
+    expect(activeSubTabHref(attendance, "/attendance")).toBe("/attendance");
+    expect(activeSubTabHref(attendance, "/attendance/2026-08-14")).toBe("/attendance");
+  });
+
+  it("출석부 부모 기본 착지는 월별이다 — 오늘 출결을 부모 href로 올리지 않는다", () => {
+    expect(findNavItem("/attendance")?.href).toBe("/attendance");
+    expect(NAV_GROUPS.flatMap((g) => g.items).find((i) => i.menuKey === "attendance")?.href).toBe(
+      "/attendance",
+    );
+  });
+
+  it("수납 ?tab= 면은 접두와 섞이지 않는다", () => {
+    const billing = subTabsForMenu("billing");
+    expect(activeSubTabHref(billing, "/billing")).toBe("/billing");
+    expect(activeSubTabHref(billing, "/billing?tab=textbooks")).toBe("/billing?tab=textbooks");
   });
 });
