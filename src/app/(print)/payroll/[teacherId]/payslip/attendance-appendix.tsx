@@ -25,8 +25,15 @@ import { schoolGradeLabel } from "@/lib/format/school-grade";
 export const PAYSLIP_APPENDIX_CAPTION =
   "칸의 숫자 = 그날 인정된 수업 시수(급여 산정에 들어간 값) · 이름 옆 표식으로 신입·퇴원·반이동 표시";
 
-export const SEAT_APPENDIX_CAPTION =
-  "칸의 숫자 = 그날 자리 출결 · 시수 열은 자리 표시가 있는 확정 기록만(아르바이트 급여 근거) · 자리 표시가 없는 기록은 아직 담임 정산에 남아 있습니다";
+/**
+ * 자리 별지 머리 문구. **자리 시수를 켠 자리(랩실)만** 급여 근거다 —
+ * JJ실처럼 화면만 연 자리는 시수가 여전히 담임 정산에 있어서, 같은 문구를 쓰면 종이가 거짓말을 한다.
+ */
+export function seatAppendixCaption(payrollSeat: boolean): string {
+  return payrollSeat
+    ? "칸의 숫자 = 그날 자리 출결 · 시수 열은 자리 표시가 있는 확정 기록만(아르바이트 급여 근거) · 자리 표시가 없는 기록은 아직 담임 정산에 남아 있습니다"
+    : "칸의 숫자 = 그날 자리 출결 · 이 자리의 시수는 담임 정산에 들어 있습니다(자리 시수로 따로 잡지 않습니다)";
+}
 
 export function AttendanceAppendix({
   groups,

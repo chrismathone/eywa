@@ -76,11 +76,24 @@ export function firstSlotStart(slots: readonly SeatSlotDef[], classId: string): 
   return starts.sort((a, b) => a.localeCompare(b))[0] ?? "99:99";
 }
 
-export function sortClassIdsByFirstSlot(classIds: readonly string[], slots: readonly SeatSlotDef[]): string[] {
+/**
+ * 하루 흐름대로(첫 자리 교시 시각) 반을 세운다.
+ *
+ * ⚠️ **같은 시각에 여러 반이 들어온다**(실측 2026-08 랩실: 14:20에 6반·16:20에 4반) — 동률을 id로 깨면
+ * 사람 눈에 순서가 무작위로 보인다. 이름이 있으면 이름으로 깬다(한글 정렬).
+ */
+export function sortClassIdsByFirstSlot(
+  classIds: readonly string[],
+  slots: readonly SeatSlotDef[],
+  nameOf?: (classId: string) => string,
+): string[] {
   return [...classIds].sort((a, b) => {
     const sa = firstSlotStart(slots, a);
     const sb = firstSlotStart(slots, b);
-    return sa.localeCompare(sb) || a.localeCompare(b);
+    if (sa !== sb) return sa.localeCompare(sb);
+    const na = nameOf?.(a) ?? "";
+    const nb = nameOf?.(b) ?? "";
+    return na.localeCompare(nb, "ko") || a.localeCompare(b);
   });
 }
 

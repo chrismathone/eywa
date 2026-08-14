@@ -60,6 +60,7 @@ export function buildSeatMonthly(input: {
   const classIds = sortClassIdsByFirstSlot(
     [...new Set(slots.map((s) => s.classId))].filter((id) => classById.has(id)),
     slots,
+    (id) => classById.get(id)?.className ?? "",
   );
 
   const recByKey = new Map<string, { rec: SeatAttRecord; track: SeatTrack }>();
