@@ -137,7 +137,7 @@ export function TodayPlanEditor({
   classId: string;
   className: string;
   weekMonday: string;
-  /** 보드가 보는 날짜 — 빈 교시 '직전 교시 복사'의 대상 날짜(주차가 아니라 그 날 계획 행이다). */
+  /** 보드가 보는 날짜 — '내용 복사'의 대상 날짜(주차가 아니라 그 날 계획 행이다). */
   date: string;
   slots: TodaySlot[];
   skillAreas: SkillAreaSetting[];
@@ -192,13 +192,21 @@ export function TodayPlanEditor({
 
       {slots.map((slot) => (
         <div key={slot.slotStart} className="border-line mb-2 border-b pb-2 last:mb-0 last:border-b-0 last:pb-0">
-          <p className="text-text-dim mb-1 text-[12px] font-bold">
-            {slot.periodLabel ?? slot.slotStart}
-            {slot.roomLabel ? <span className="font-medium"> · {slot.roomLabel}</span> : null}
+          <p className="text-text-dim mb-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] font-bold">
+            <span>
+              {slot.periodLabel ?? slot.slotStart}
+              {slot.roomLabel ? <span className="font-medium"> · {slot.roomLabel}</span> : null}
+            </span>
+            {/* 줄이 이미 있어도 '내용 복사'를 준다 — 0209a는 덮어쓰기 없이 **빈 칸만** 채우므로, 교재만
+                적혀 있고 진도·과제가 빈 흔한 상태에서 이 버튼이 가장 쓸모 있다(원장 2026-08-14).
+                줄이 없을 때는 아래 빈 상태 블록이 같은 버튼을 안내 문구와 함께 낸다(중복 방지). */}
+            {canEdit && slot.lines.length > 0 ? (
+              <TodayCopySlot classId={classId} date={date} slotStart={slot.slotStart} store={store} />
+            ) : null}
           </p>
           {slot.lines.length === 0 ? (
-            // 줄 자체가 없으면 여기서 새로 만들 수 없다(구조 변경은 주간 시트) — 대신 **직전 교시 복사**
-            // (0183a, 주간 시트와 같은 RPC)가 한 클릭 지름길이다. 그 외 구조 편집은 여전히 주간 시트로.
+            // 줄 자체가 없으면 여기서 새로 만들 수 없다(구조 변경은 주간 시트) — 대신 **내용 복사**
+            // (주간 시트와 같은 RPC)가 한 클릭 지름길이다. 그 외 구조 편집은 여전히 주간 시트로.
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
               {/* ⚠️ 읽기 전용 사용자에겐 지시문을 붙이지 않는다 — 권한상 할 수 없는 행동("주간 시트에서
                   추가하세요")을 시키는 거짓 안내가 된다(적대 리뷰 2026-08-11). */}
