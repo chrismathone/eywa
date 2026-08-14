@@ -14,6 +14,7 @@ import { accessLevelTenant } from "@/lib/auth/perm-matrix";
 import { getTeachingClasses } from "@/features/classes/server/delegation";
 import { effectiveTeacherId } from "@/lib/auth/view-mode";
 import { fetchInChunks } from "@/lib/supabase/batch";
+import { reportError } from "@/lib/observability/report-error";
 import { addDays, kstMinutesOfDay, kstToday } from "@/lib/date-kst";
 import { isWithinAttendanceEditWindow } from "@/features/attendance/edit-window";
 import { hhmmToMin, shouldQueue, slotPhase, type SlotPhase } from "../signals";
@@ -238,6 +239,9 @@ async function loadFollowups(date: string): Promise<Map<string, FollowupBrief>> 
     .eq("session_date", date);
   // 표가 아직 없거나(마이그레이션 미적용) 조회가 실패해도 **화면은 살아야 한다** — 큐는 파생이라
   // 조치 기록이 없으면 "아직 아무도 안 만졌다"로 보이는 게 맞다(#95: 옛 스키마에서도 도는 배포).
+  // ⚠️ 단 **소리 없이 삼키지는 않는다**(#89) — 이게 계속 실패하면 데스크의 '오늘 처리함'이 매일 비고
+  //    매듭지은 건이 다시 열려 보이는데, 화면만 보면 "아직 아무도 안 했다"와 구분되지 않는다.
+  if (error) reportError(error, { scope: "attendance.loadFollowups", date });
   if (error || !data) return new Map();
   const out = new Map<string, FollowupBrief>();
   for (const row of data) {
@@ -271,6 +275,9 @@ async function loadInputRequests(date: string): Promise<Set<string>> {
     .select("subject_key, bucket")
     .eq("event_type", "attendance_input_request")
     .like("bucket", `${date}|%`);
+  // ⚠️ 실패하면 '요청함' 표식이 전부 꺼져 데스크가 이미 보낸 반에 또 손댄다 — 조용히 넘기지 않는다(#89).
+  //    (서버 dedup이 중복 발송은 막으므로 화면 표식만 어긋난다.)
+  if (error) reportError(error, { scope: "attendance.loadInputRequests", date });
   if (error || !data) return new Set();
   return new Set(data.map((r) => `${r.subject_key}|${String(r.bucket).slice(date.length + 1)}`));
 }
