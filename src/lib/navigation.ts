@@ -93,6 +93,9 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: "/onescreen", label: "선생님 원스크린", icon: MENU_ICON.teacher_onescreen, menuKey: "teacher_onescreen" },
       { href: "/timetable", label: "시간표", icon: MENU_ICON.timetable, menuKey: "timetable" },
       { href: "/attendance", label: "출석부", icon: MENU_ICON.attendance, menuKey: "attendance" },
+      // 자리 출석부 — 랩실·JJ실처럼 여러 반이 동시에 들어오는 **방**을 축으로 출석만 찍는 면(0208a).
+      // subOf: 사이드바에선 출석부 하위로(같은 일의 다른 축이라 형제로 세우면 둘 중 뭘 여는지 헷갈린다).
+      { href: "/attendance/seat", label: "랩실·JJ실 출석부", icon: MENU_ICON.seat_attendance, menuKey: "seat_attendance", subOf: "attendance" },
       // English Class Sheet(ECS) — 영어 반별 주간 수업계획서/출석부(구글시트 이식). 라벨은 원장 확정 명칭.
       // subOf: 사이드바에선 시간표 하위 카테고리로 표시(원장 지시 2026-07-29). 팰릿·모바일내비엔 그대로 노출.
       { href: "/ecs", label: "영어 강사 시트", icon: MENU_ICON.ecs, menuKey: "ecs", subOf: "timetable" },

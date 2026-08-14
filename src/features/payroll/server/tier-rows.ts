@@ -79,11 +79,14 @@ export async function collectTierRows(
       status: string;
       session_units: number | string | null;
       salary_tier: string | null;
+      seat_label: string | null;
       recorded_at: string;
     }>(classIds, (chunk, f, t) =>
       supabase
         .from("attendance_records")
-        .select("id, student_id, class_id, session_date, slot_start, status, session_units, salary_tier, recorded_at")
+        .select(
+          "id, student_id, class_id, session_date, slot_start, status, session_units, salary_tier, seat_label, recorded_at",
+        )
         .in("class_id", chunk)
         .gte("session_date", from)
         .lte("session_date", to)
@@ -123,6 +126,10 @@ export async function collectTierRows(
   const unitsByRow = new Map<string, { studentId: string; classId: string; tierLabel: string | null; units: number }>();
   for (const r of effective) {
     if (r.status === "absent" || r.status === "excused") continue;
+    // 자리(랩실·JJ실) 수업은 **담임 시수가 아니다**(원장 2026-08-14 "담임 시수로 잡히는게 아니라 별도
+    // 시수로 잡힘", 0208a). 출결 자체는 그 반 기록으로 남아 반 출석부에 그대로 보이지만, 정산 분모에선
+    // 뺀다 — 자리 시수는 자리 축으로 따로 센다.
+    if (r.seat_label) continue;
     const applies = appliesDowsByClass.get(r.class_id);
     if (applies && !applies.has(DOW_KEYS[new Date(`${r.session_date}T00:00:00Z`).getUTCDay()]!)) continue;
     const u = r.session_units === null || r.session_units === undefined ? 1 : Number(r.session_units);

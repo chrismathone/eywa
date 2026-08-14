@@ -87,10 +87,11 @@ export async function getTeacherSettlementView(period: string): Promise<Settleme
       session_date: string;
       session_units: number | string | null;
       status: string;
+      seat_label: string | null;
     }>(dowClassIds, (chunk, f, t) =>
       supabase
         .from("attendance_records")
-        .select("class_id, session_date, session_units, status")
+        .select("class_id, session_date, session_units, status, seat_label")
         .in("class_id", chunk)
         .gte("session_date", from)
         .lte("session_date", to)
@@ -100,6 +101,8 @@ export async function getTeacherSettlementView(period: string): Promise<Settleme
     for (const r of recs) {
       // 결석은 시수를 소비하지 않는다(COUNTABLE_STATUSES와 같은 기준) — 안분 분모에서도 뺀다.
       if (r.status === "absent" || r.status === "excused") continue;
+      // 자리(랩실·JJ실) 수업은 담임 시수가 아니다(0208a) — 안분 분모에서도 뺀다. tier-rows.ts와 같은 규칙.
+      if (r.seat_label) continue;
       const units = r.session_units === null || r.session_units === undefined ? 1 : Number(r.session_units);
       const list = sessionsByClass.get(r.class_id) ?? [];
       list.push({ date: r.session_date, units: Number.isFinite(units) && units > 0 ? units : 1 });
