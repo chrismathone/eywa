@@ -46,11 +46,13 @@ async function loadTeacherNames(ids: readonly string[]) {
  * 강사별 당일 출결 보드.
  * @param date  기본 오늘(KST). 과거 날짜도 열 수 있다(놓친 날 메우기).
  *
+ * @param selfOnly 권한과 무관하게 **내 수업만**. 강사 홈 스트립 전용이다 — 아래 🔴.
+ *
  * ⚠️ React `cache` — 데스크 면은 이 보드와 큐를 **둘 다** 그리는데(탭 배지에 두 수치가 같이 필요하다),
  *    `getDeskQueue`가 내부에서 다시 이 함수를 부른다. 감싸지 않으면 한 요청에 슬롯·수강행·출결을
- *    **두 번** 읽는다(오늘만 슬롯 100여 개 × 학생 수백). 인자가 날짜 문자열 하나라 캐시가 그대로 맞는다.
+ *    **두 번** 읽는다(오늘만 슬롯 100여 개 × 학생 수백). 인자가 (날짜, selfOnly)라 캐시가 그대로 맞는다.
  */
-export const getLiveBoard = cache(async (date: string = kstToday()): Promise<LiveBoard> => {
+export const getLiveBoard = cache(async (date: string = kstToday(), selfOnly = false): Promise<LiveBoard> => {
   const user = await getCurrentUser();
   const empty: LiveBoard = {
     date,
@@ -68,7 +70,13 @@ export const getLiveBoard = cache(async (date: string = kstToday()): Promise<Liv
 
   // 강사(scoped)는 담당 반 ∪ 그날 위임받은 반으로 좁힌다 — 판정은 기존 단일 소스(getTeachingClasses).
   // 겸직 강사뷰도 같은 헬퍼를 쓰는 effectiveTeacherId로 스코프가 따라온다.
-  const scopedTeacherId = level === "scoped" ? ((await effectiveTeacherId()) ?? user.id) : null;
+  // 🔴 `selfOnly`는 권한이 아니라 **화면의 성격**이 정한다. 강사 홈 스트립은 "내가 지금 찍어야 할 것"을
+  //    미는 자리인데, 관리자 계열(full = 활성 12명 — admin 7·master 3·manager 2)이 원스크린을 열면
+  //    ① 자기 5.5개 슬롯 대신 **전체 104슬롯·43반·수강 600행**을 읽고(창마다 도는 hot path, B6)
+  //    ② 남의 반 카드에 **「전원 출석」 버튼**이 붙는다 — 한 번 잘못 누르면 안 온 아이가 출석이 된다.
+  //    전체 보드가 필요한 자리는 `/attendance/live`이지 강사 홈이 아니다.
+  const scopedTeacherId =
+    level === "scoped" || selfOnly ? ((await effectiveTeacherId()) ?? user.id) : null;
   let classIds: string[] | undefined;
   if (scopedTeacherId) {
     // 🔴 담임(`classes.teacher_id`)만 보면 **부담임이 자기 화면에서 아무것도 못 본다.** 영어는 슬롯마다

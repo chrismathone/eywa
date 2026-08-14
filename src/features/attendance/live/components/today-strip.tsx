@@ -19,7 +19,9 @@ import { getLiveBoard } from "../server/queries";
 import { StripSlot } from "./strip-slot";
 
 export async function TodayAttendanceStrip() {
-  const board = await getLiveBoard(kstToday()).catch(() => null);
+  // 🔴 **내 수업만**(selfOnly) — 관리자 계열도 여기선 자기 반만 본다. 안 그러면 원스크린을 여는 것만으로
+  //    전체 보드를 읽고(느려짐), 남의 반에 「전원 출석」이 붙는다. 전체는 /attendance/live에서 본다.
+  const board = await getLiveBoard(kstToday(), true).catch(() => null);
   if (!board?.canEdit) return null;
 
   // 시작한 교시(grace 포함 — 수업이 시작됐으면 찍을 수 있다) 중 아직 빈 칸이 남은 것만.

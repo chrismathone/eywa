@@ -10,7 +10,7 @@ import "server-only";
  * 페이지네이션 청크(B2 — 1000행 절단 방지), 서로 독립인 조회는 `Promise.all`(B4).
  */
 import { createClient } from "@/lib/supabase/server";
-import { fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
+import { fetchAllPaged, fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildHolidayMap } from "@/features/attendance/calendar";
 import { fixedHolidaysForYear } from "@/features/billing/tuition-calc";
@@ -87,9 +87,12 @@ export async function loadLiveSlots(date: string, classIds?: readonly string[]):
     // ⚠️ 담당 반이 수십 개면 단일 `.in()`이 414로 죽는다 → 청크(B3). 에러는 헬퍼가 throw(삼키지 않음).
     slots = await fetchInChunks<SlotRow>([...classIds], (chunk) => liveSlotQuery().in("class_id", chunk));
   } else {
-    const { data, error } = await liveSlotQuery();
-    if (error) throw new Error(`live slots: ${error.message}`);
-    slots = (data ?? []) as SlotRow[];
+    // ⚠️ 데스크(전 반) 경로는 페이지네이션으로 받는다 — 이 결과로 **총 교시·예정 인원을 센다**(B2).
+    //    무페이징이면 1000행에서 **에러 없이 잘려** 큐가 조용히 일부 반을 빼먹는다. 오늘은 104행이라
+    //    당장은 안 걸리지만, 조용한 절단은 걸리는 날 원인을 못 찾는 종류의 버그다.
+    //    ⚠️ OFFSET 페이징은 정렬이 흔들리면 행이 겹치거나 빠진다 → **유니크 tie-break(`id`)로 정렬**한다
+    //       (select에 없는 컬럼으로도 정렬된다 — 화면 정렬은 뒤에서 따로 한다).
+    slots = await fetchAllPaged<SlotRow>((from, to) => liveSlotQuery().order("id").range(from, to));
   }
   if (slots.length === 0) return [];
 
