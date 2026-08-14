@@ -129,7 +129,7 @@ export function PayslipDocument({ data }: { data: PayslipData }) {
       <table className="mt-4 w-full table-fixed border-collapse text-[13px] leading-snug">
         {/* 🔑 칸마다 **필요한 폭이 다르다** — 6칸을 같은 폭으로 나누면 어딘가는 반드시 접힌다.
             실측(210mm·13px 기준)으로 잡은 값이고, 라벨/값을 균등 분배로 되돌리지 말 것:
-              A 라벨 "수업료 총액"(6자) · C 라벨 "소득세 3.3%"(가장 김) · E 라벨 "계약형태"(가장 짧음)
+              A 라벨 "수업료 총액"(6자) · C 라벨 "지방세 0.3%"(가장 김) · E 라벨 "계약형태"(가장 짧음)
               D 값 "2025.03.02~2026.02.28"(21자 ≈163px, 여기가 폭을 지배한다) · F 값 계좌번호 */}
         <colgroup>
           <col className="w-[14%]" />
@@ -205,12 +205,18 @@ export function PayslipDocument({ data }: { data: PayslipData }) {
               <Val v={teacher.bankName} />
             </Cell>
           </tr>
+          {/* 🔑 공제는 시트와 같은 4줄이다: 소득세 3% → 지방세 0.3% → 기타공제 → 공제총액(원장 2026-08-14).
+              예전엔 '소득세 3.3%' 한 줄로 합쳐 놨는데, 그 안에 **지방세가 섞여 있어** 라벨이 사실과 달랐다.
+              ⚠️ 계산은 손대지 않는다 — `withholding`(3.3%)이 진실이고 `incomeTax`+`localTax`가 그 분해다
+              (payslip.ts: localTax = withholding − incomeTax라 **합이 절대 어긋나지 않는다**).
+              ⚠️ 지급 항목은 3개뿐이라(시트의 '기타 지급'은 eywa에 없다) 아래 한 줄의 좌·우가 비어 있다 —
+                 빈 칸을 채우려고 **없는 항목을 만들지 말 것**(값이 영영 'ㅡ'인 칸은 거짓 약속이다). */}
           <tr>
             <Cell label="수업료 총액" mono>
               {ok ? won(amounts.tuition) : unknown}
             </Cell>
-            <Cell label="기타공제" mono>
-              {wonOrDash(amounts.otherDeduction)}
+            <Cell label="소득세 3%" mono>
+              {ok ? won(amounts.incomeTax) : unknown}
             </Cell>
             <Cell label="계좌번호" mono>
               <Val v={teacher.accountNumber} />
@@ -220,24 +226,8 @@ export function PayslipDocument({ data }: { data: PayslipData }) {
             <Cell label="인센티브" mono>
               {wonOrDash(amounts.incentive)}
             </Cell>
-            <Cell label="소득세 3.3%" mono>
-              {ok ? won(amounts.withholding) : unknown}
-            </Cell>
-            <Cell label="실수령액" mono>
-              {ok ? (
-                <strong className={amounts.netPay < 0 ? "text-red-700" : undefined}>{won(amounts.netPay)}</strong>
-              ) : (
-                unknown
-              )}
-            </Cell>
-          </tr>
-          <tr>
-            {/* 시트에서 유일하게 빨강 14pt인 칸 — 이 문서의 결론 숫자다. */}
-            <Cell label="지급총액" mono alert={ok}>
-              {ok ? won(amounts.grossPay) : unknown}
-            </Cell>
-            <Cell label="공제총액" mono>
-              {ok ? won(amounts.deductionTotal) : unknown}
+            <Cell label="지방세 0.3%" mono>
+              {ok ? won(amounts.localTax) : unknown}
             </Cell>
             <th
               scope="row"
@@ -249,6 +239,29 @@ export function PayslipDocument({ data }: { data: PayslipData }) {
             <td className="num border border-black/70 px-2 py-1.5">
               {ok ? `${data.settlement!.unitsTotal}T` : unknown}
             </td>
+          </tr>
+          <tr>
+            <td colSpan={2} className="border border-black/70 px-2 py-1.5" />
+            <Cell label="기타공제" mono>
+              {wonOrDash(amounts.otherDeduction)}
+            </Cell>
+            <td colSpan={2} className="border border-black/70 px-2 py-1.5" />
+          </tr>
+          <tr>
+            {/* 시트에서 유일하게 빨강 14pt인 칸 — 이 문서의 결론 숫자다. */}
+            <Cell label="지급총액" mono alert={ok}>
+              {ok ? won(amounts.grossPay) : unknown}
+            </Cell>
+            <Cell label="공제총액" mono>
+              {ok ? won(amounts.deductionTotal) : unknown}
+            </Cell>
+            <Cell label="실수령액" mono>
+              {ok ? (
+                <strong className={amounts.netPay < 0 ? "text-red-700" : undefined}>{won(amounts.netPay)}</strong>
+              ) : (
+                unknown
+              )}
+            </Cell>
           </tr>
         </tbody>
       </table>
