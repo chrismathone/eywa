@@ -3,7 +3,7 @@ import {
   classifySignal,
   hhmm,
   hhmmToMin,
-  LIVE_GRACE_MIN,
+  ATTENDANCE_GRACE_MIN,
   resolveSlotStatus,
   shouldQueue,
   slotPhase,
@@ -19,11 +19,11 @@ describe("slotPhase", () => {
 
   it("시작 직후 유예 안은 grace", () => {
     expect(slotPhase(start, start, end)).toBe("grace");
-    expect(slotPhase(start + LIVE_GRACE_MIN - 1, start, end)).toBe("grace");
+    expect(slotPhase(start + ATTENDANCE_GRACE_MIN - 1, start, end)).toBe("grace");
   });
 
   it("유예를 넘기면 due", () => {
-    expect(slotPhase(start + LIVE_GRACE_MIN, start, end)).toBe("due");
+    expect(slotPhase(start + ATTENDANCE_GRACE_MIN, start, end)).toBe("due");
   });
 
   it("종료시각부터 ended", () => {

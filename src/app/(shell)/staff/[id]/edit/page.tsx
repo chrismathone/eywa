@@ -93,6 +93,7 @@ export default async function EditStaffPage({
           attendanceAlertOptin: staff.attendanceAlertOptin,
           seatLabDuty: staff.seatLabDuty,
           seatJjDuty: staff.seatJjDuty,
+          deskAttendanceOptin: staff.deskAttendanceOptin,
         }}
       />
     </div>

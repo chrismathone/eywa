@@ -166,12 +166,23 @@ export async function fillSeatSlot(input: {
       status: input.status,
       seat_label: isPayrollSeat(input.seat) ? SEAT_DB_LABEL[input.seat] : null,
       recorded_by: g.userId,
+      recorded_via: "seat",
     })),
   );
   if (rows.length === 0) return { ok: true, changed: 0 };
 
   const supabase = g.via === "pin" ? createAdminClient() : await createClient();
-  const { error } = await supabase.from("attendance_records").insert(rows);
+  const first = await supabase.from("attendance_records").insert(rows);
+  const error =
+    first.error && /recorded_via/i.test(first.error.message)
+      ? (await supabase.from("attendance_records").insert(
+          rows.map((r) => {
+            const rest = { ...r };
+            delete rest.recorded_via;
+            return rest;
+          }),
+        )).error
+      : first.error;
   if (error) return { error: error.message };
 
   revalidatePath("/attendance/seat");
@@ -227,19 +238,32 @@ async function writeOne(
   const { data: rows } = await base.order("recorded_at", { ascending: false }).limit(1);
   const existing = rows?.[0]?.id as string | undefined;
   if (existing) {
-    const { error } = await supabase
-      .from("attendance_records")
-      .update({
-        status: p.status,
-        ...(isPayrollSeat(p.seat) ? { seat_label: SEAT_DB_LABEL[p.seat] } : {}),
-        recorded_by: p.userId,
-        recorded_at: new Date().toISOString(),
-      })
-      .eq("id", existing);
+    const patch: Record<string, unknown> = {
+      status: p.status,
+      ...(isPayrollSeat(p.seat) ? { seat_label: SEAT_DB_LABEL[p.seat] } : {}),
+      recorded_by: p.userId,
+      recorded_at: new Date().toISOString(),
+      recorded_via: "seat",
+    };
+    const first = await supabase.from("attendance_records").update(patch).eq("id", existing);
+    const error =
+      first.error && /recorded_via/i.test(first.error.message)
+        ? (
+            await supabase
+              .from("attendance_records")
+              .update({
+                status: patch.status,
+                ...(isPayrollSeat(p.seat) ? { seat_label: SEAT_DB_LABEL[p.seat] } : {}),
+                recorded_by: patch.recorded_by,
+                recorded_at: patch.recorded_at,
+              })
+              .eq("id", existing)
+          ).error
+        : first.error;
     return error ? error.message : 1;
   }
 
-  const { error } = await supabase.from("attendance_records").insert({
+  const row = {
     tenant_id: p.tenantId,
     class_id: p.classId,
     student_id: p.studentId,
@@ -248,6 +272,21 @@ async function writeOne(
     status: p.status,
     seat_label: isPayrollSeat(p.seat) ? SEAT_DB_LABEL[p.seat] : null,
     recorded_by: p.userId,
-  });
+    recorded_via: "seat",
+  };
+  const first = await supabase.from("attendance_records").insert(row);
+  const error =
+    first.error && /recorded_via/i.test(first.error.message)
+      ? (await supabase.from("attendance_records").insert({
+          tenant_id: row.tenant_id,
+          class_id: row.class_id,
+          student_id: row.student_id,
+          session_date: row.session_date,
+          slot_start: row.slot_start,
+          status: row.status,
+          seat_label: row.seat_label,
+          recorded_by: row.recorded_by,
+        })).error
+      : first.error;
   return error ? error.message : 1;
 }
