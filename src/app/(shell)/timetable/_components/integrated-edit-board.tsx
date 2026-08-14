@@ -18,7 +18,7 @@ import {
   type DragOverEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
-import { AlertTriangle, ChevronDown, ChevronUp, Loader2, Plus, RotateCcw, Trash2 } from "@/components/icons/eywa-icon-compat";
+import { AlertTriangle, ChevronDown, ChevronUp, GripVertical, Loader2, Plus, RotateCcw, Trash2 } from "@/components/icons/eywa-icon-compat";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { saveIntegrationGroups } from "@/features/owner/server/subject-actions";
 import {
@@ -28,6 +28,7 @@ import {
   type RichClassCard,
   type TeacherColorMap,
 } from "@/features/timetable/lib/class-grid";
+import { withEmptyRowSections } from "@/features/timetable/lib/edit-rows";
 import { POOL_ID, dedupeGroups, moveClass, reorderGroups, type GroupDraft } from "@/features/timetable/lib/group-assign";
 import { normalizePresets, type GroupPreset } from "@/features/timetable/lib/group-presets";
 import { DEFAULT_OTHERS_TITLE } from "@/features/timetable/lib/integration-groups";
@@ -121,6 +122,8 @@ export function IntegratedEditBoard({
   const [presets, setPresets] = useState<GroupPreset[]>(initialPresets);
   // 고스트를 원본 헤더와 똑같이 그리려면 라벨만으론 부족하다(반 저장색). 카드를 통째로 들고 있는다.
   const [dragCard, setDragCard] = useState<RichClassCard | null>(null);
+  /** 지금 끌고 있는 **줄**(반이 아니라 줄 자체) — 같은 DndContext를 쓰고 `data.type`으로 갈린다. */
+  const [dragRow, setDragRow] = useState<{ id: string; title: string } | null>(null);
   const [over, setOver] = useState<{ containerId: string; classId: string | null } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [confirmLeave, setConfirmLeave] = useState(false);
@@ -208,20 +211,43 @@ export function IntegratedEditBoard({
       }),
     [cards, config, titled, othersTitle],
   );
+  // 반이 0개인 줄도 자리를 잡아 준다(드롭 칸이 없으면 새 줄에 반을 넣을 수가 없다) — 규칙은
+  // [edit-rows.ts](src/features/timetable/lib/edit-rows.ts) 한 곳, 편집 보드에서만.
+  const rowSections = useMemo(() => withEmptyRowSections(sections, titled), [sections, titled]);
 
   function onDragStart({ active }: DragStartEvent) {
-    setDragCard((active.data.current?.card as RichClassCard | undefined) ?? null);
+    const a = active.data.current;
+    if (a?.type === "row") {
+      setDragRow({ id: String(a.rowId), title: String(a.title ?? "") });
+      setDragCard(null);
+      return;
+    }
+    setDragCard((a?.card as RichClassCard | undefined) ?? null);
   }
-  function onDragOver({ over: o }: DragOverEvent) {
+  function onDragOver({ active, over: o }: DragOverEvent) {
     const d = o?.data.current;
+    // 줄을 끌 때는 "어느 반 앞"이 뜻이 없다 — 줄 전체만 밝힌다(카드 삽입 표시가 켜지면 시끄럽다).
+    if (active.data.current?.type === "row") {
+      setOver(d ? { containerId: String(d.containerId), classId: null } : null);
+      return;
+    }
     setOver(d ? { containerId: String(d.containerId), classId: d.type === "class" ? String(d.classId) : null } : null);
   }
   function onDragEnd({ active, over: o }: DragEndEvent) {
     setDragCard(null);
+    setDragRow(null);
     setOver(null);
     const a = active.data.current;
     const d = o?.data.current;
     if (!a || !d) return; // 칸 밖에서 놓음 = 무동작(엉뚱한 줄로 안 튄다)
+    // 줄 자체를 끌었으면 **줄 순서**를 바꾼다(원장 2026-08-14 *"그룹 위치를 드래그해서 이동하고싶은데"*).
+    // ⚠️ 미배정('기타')은 진짜 줄이 아니라 순서에 낄 수 없다 — 거기 놓으면 무동작(제자리).
+    if (a.type === "row") {
+      const target = String(d.containerId);
+      if (target === OTHERS_GROUP_ID || target === String(a.rowId)) return;
+      setGroups((gs) => reorderGroups(gs, String(a.rowId), target));
+      return;
+    }
     // '기타' 섹션은 진짜 줄이 아니라 **미배정**이다 — 거기 놓기 = 모든 줄에서 빼기.
     const target = d.containerId === OTHERS_GROUP_ID ? POOL_ID : String(d.containerId);
     const before = d.type === "class" ? String(d.classId) : null;
@@ -358,7 +384,7 @@ export function IntegratedEditBoard({
         {/* ⚠️ zoom은 DndContext 안쪽 — 바깥이면 fixed인 DragOverlay가 커서와 어긋난다. */}
         <TimetableZoomArea>
           <div className="space-y-4">
-            {sections.map((section) => {
+            {rowSections.map((section) => {
               const isOthers = section.customGroupId === OTHERS_GROUP_ID;
               const rowId = section.customGroupId;
               const first = !isOthers && !!rowId && !seenRows.has(rowId);
@@ -398,6 +424,7 @@ export function IntegratedEditBoard({
                       </>
                     ) : first ? (
                       <>
+                        <RowDragHandle rowId={rowId!} title={groups[ri]?.title || `줄 ${ri + 1}`} />
                         <span className="inline-flex shrink-0 flex-col">
                           <button
                             type="button"
@@ -560,6 +587,11 @@ export function IntegratedEditBoard({
           >
             <span className="overflow-hidden whitespace-nowrap text-clip">{dragCard.className}</span>
           </div>
+        ) : dragRow ? (
+          <span className="bg-card border-primary text-foreground shadow-card pointer-events-none inline-flex cursor-grabbing items-center gap-1.5 rounded-lg border-2 px-3 py-1.5 text-[13px] font-bold whitespace-nowrap">
+            <GripVertical className="size-3.5" aria-hidden="true" />
+            {dragRow.title}
+          </span>
         ) : null}
       </DragOverlay>
     </DndContext>
@@ -646,6 +678,32 @@ function EditSection({
         }
       />
     </section>
+  );
+}
+
+/**
+ * 줄 손잡이 — **줄 자체**를 끌어 순서를 바꾼다(반 칩과 같은 DndContext, `data.type`으로 갈린다).
+ * 위/아래 화살표는 그대로 둔다 — 멀리 옮길 땐 드래그가, 한 칸은 화살표가 빠르다.
+ */
+function RowDragHandle({ rowId, title }: { rowId: string; title: string }) {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: `row:${rowId}`,
+    data: { type: "row", rowId, title },
+  });
+  return (
+    <button
+      ref={setNodeRef}
+      type="button"
+      {...attributes}
+      {...listeners}
+      title="끌어서 줄 순서 바꾸기"
+      aria-label="줄 순서 바꾸기(끌기)"
+      className={`text-text-faint hover:text-foreground shrink-0 cursor-grab touch-none active:cursor-grabbing ${
+        isDragging ? "opacity-30" : ""
+      }`}
+    >
+      <GripVertical className="size-3.5" aria-hidden="true" />
+    </button>
   );
 }
 

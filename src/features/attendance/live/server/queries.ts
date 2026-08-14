@@ -18,8 +18,10 @@ import { reportError } from "@/lib/observability/report-error";
 import { addDays, kstMinutesOfDay, kstToday } from "@/lib/date-kst";
 import { isWithinAttendanceEditWindow } from "@/features/attendance/edit-window";
 import { hhmmToMin, shouldQueue, slotPhase, type SlotPhase } from "../signals";
+import { isSpecialSlotLabel } from "@/features/timetable/lib/teacher-label";
 import { buildQueue, type DeskQueue, type FollowupBrief, type QueueClass, type QueueStudent } from "../queue";
 import { loadLiveSlots } from "./load";
+import { userTaughtClassSet } from "./write-policy";
 import type { LiveBoard, LiveBoardSlot, LiveSlot } from "../types";
 
 export type { LiveBoard, LiveBoardSlot };
@@ -101,7 +103,10 @@ export const getLiveBoard = cache(async (date: string = kstToday(), selfOnly = f
     }
   }
 
-  const slots = await loadLiveSlots(date, classIds);
+  const [slots, taught] = await Promise.all([
+    loadLiveSlots(date, classIds),
+    userTaughtClassSet(supabase, user.id, date),
+  ]);
   const isToday = date === kstToday();
   const teacherIds = [...new Set(slots.map((s) => s.teacherId).filter((v): v is string => !!v))];
   const nameById = await loadTeacherNames(teacherIds);
@@ -113,6 +118,7 @@ export const getLiveBoard = cache(async (date: string = kstToday(), selfOnly = f
       ...slot,
       teacherName: slot.teacherId ? (nameById.get(slot.teacherId)?.name ?? null) : null,
       phase: phaseOf(slot, isToday),
+      ownedByMe: taught.has(slot.classId) || slot.teacherId === user.id,
     };
     (byTeacher.get(key) ?? byTeacher.set(key, []).get(key)!).push(withPhase);
   }
@@ -180,6 +186,8 @@ export async function getDeskQueue(date: string = kstToday()): Promise<DeskQueue
   for (const teacher of board.teachers) {
     for (const slot of teacher.slots) {
       if (slot.phase === "before") continue; // 시작 전 = 안 온 게 정상
+      // 랩실·JJ는 자리 출석부 몫. 여기 올리면 담임에게 '입력 요청'이 간다.
+      if (isSpecialSlotLabel(slot.slotTeacherLabel)) continue;
       // 레인 A는 "출석부가 안 열렸다"는 신호라 유예를 기다린다(grace 중엔 아직 열 시간이다).
       if (!slot.hasAnyRecord && (slot.phase === "due" || slot.phase === "ended")) {
         // 레인 A — 반 통째로 미체크. 학생을 개별로 쏟지 않는다(영어 91.6% 공백이 여기로 접힌다).
@@ -204,7 +212,7 @@ export async function getDeskQueue(date: string = kstToday()): Promise<DeskQueue
       for (const s of slot.students) {
         if (!s.signal || s.signal === "class_unmarked") continue;
         // 🔴 `absent`는 유예를 기다리지 않는다 — 강사가 결석을 찍은 순간이 가장 확실한 신호이고,
-        //    하원·셔틀 시간을 감안하면 15분을 더 흘려보낼 이유가 없다(signals.shouldQueue와 같은 규약).
+        //    하원·셔틀 시간을 감안하면 유예를 더 흘려보낼 이유가 없다(signals.shouldQueue와 같은 규약).
         if (!shouldQueue(s.signal, slot.phase)) continue;
         students.push({
           studentId: s.studentId,

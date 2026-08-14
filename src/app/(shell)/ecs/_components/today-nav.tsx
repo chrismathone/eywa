@@ -51,16 +51,28 @@ export function EcsTodayModeTabs({ mode, date }: { mode: EcsTodayMode; date: str
   );
 }
 
-export function EcsFaceTabs({ face }: { face: "today" | "week" }) {
+export type EcsFace = "today" | "week" | "room";
+
+export function EcsFaceTabs({ face, showToday = true }: { face: EcsFace; showToday?: boolean }) {
   return (
     <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
       <span className="micro mr-0.5">보기</span>
       <div className="flex items-center gap-0.5">
-        <Link href="/ecs?view=today" className={chip(face === "today")} aria-current={face === "today" ? "page" : undefined}>
-          오늘
-        </Link>
+        {showToday ? (
+          <Link href="/ecs?view=today" className={chip(face === "today")} aria-current={face === "today" ? "page" : undefined}>
+            오늘
+          </Link>
+        ) : null}
         <Link href="/ecs?view=week" className={chip(face === "week")} aria-current={face === "week" ? "page" : undefined}>
           주간 시트
+        </Link>
+        <Link
+          href="/ecs?view=room"
+          className={chip(face === "room")}
+          aria-current={face === "room" ? "page" : undefined}
+          title="305호 집중자율수업실 — 그 시각 여러 반을 한 표로"
+        >
+          305 · JJ실
         </Link>
       </div>
     </div>
@@ -68,24 +80,35 @@ export function EcsFaceTabs({ face }: { face: "today" | "week" }) {
 }
 
 /** 날짜 이동(하루씩) + '오늘' 복귀 — WeekNav와 같은 배열·같은 아이콘 버튼. mode는 이동해도 유지한다. */
-export function EcsDayNav({ date, today, mode }: { date: string; today: string; mode?: EcsTodayMode }) {
+export function EcsDayNav({
+  date,
+  today,
+  mode,
+  view = "today",
+}: {
+  date: string;
+  today: string;
+  mode?: EcsTodayMode;
+  view?: "today" | "room";
+}) {
+  const q = view === "room" ? "" : modeQ(mode);
+  const base = `/ecs?view=${view}`;
   const iconBtn =
     "border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex shrink-0 items-center rounded-full border p-1 transition";
   return (
     <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
       <span className="micro mr-0.5">날짜</span>
       <div className="flex items-center gap-0.5">
-        <Link href={`/ecs?view=today&date=${addDays(date, -1)}${modeQ(mode)}`} aria-label="이전 날" className={iconBtn}>
+        <Link href={`${base}&date=${addDays(date, -1)}${q}`} aria-label="이전 날" className={iconBtn}>
           <ChevronLeft size={13} strokeWidth={2.5} />
         </Link>
-        <Link href={`/ecs?view=today${modeQ(mode)}`} className={chip(date === today)}>
+        <Link href={`${base}${q}`} className={chip(date === today)}>
           오늘
         </Link>
-        <Link href={`/ecs?view=today&date=${addDays(date, 1)}${modeQ(mode)}`} aria-label="다음 날" className={iconBtn}>
+        <Link href={`${base}&date=${addDays(date, 1)}${q}`} aria-label="다음 날" className={iconBtn}>
           <ChevronRight size={13} strokeWidth={2.5} />
         </Link>
-        {/* 달력 점프 — 하루씩 이동의 보완(원스크린 top-bar와 같은 showPicker 패턴). */}
-        <EcsDatePicker date={date} mode={mode} />
+        <EcsDatePicker date={date} mode={mode} view={view} />
       </div>
       <span className="text-text-dim num text-[11px] whitespace-nowrap">{formatKoreanDate(date)}</span>
       {/* 오늘이 아니면 무슨 날을 보는지 명시 — WeekNav의 '과거/미래 조회' 배지와 같은 규약. */}

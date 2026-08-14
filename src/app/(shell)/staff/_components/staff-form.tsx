@@ -46,6 +46,8 @@ export type StaffFormValue = {
   seatLabDuty?: boolean;
   /** JJ실 출석부 담당. 1차에선 저장만(화면은 아직 안 열림). */
   seatJjDuty?: boolean;
+  /** 오늘 출결 데스크 알림 — 강사가 미출결을 출석으로 바꾸면 벨. */
+  deskAttendanceOptin?: boolean;
 };
 
 function SubmitButton({ mode }: { mode: Mode }) {
@@ -408,6 +410,25 @@ export function StaffForm({
             <span className="text-muted-foreground block text-xs">
               학부모가 클래스노트에 남긴 결석·지각·조퇴 연락을 <b>담당 반과 상관없이 전부</b> 이 계정 알림으로
               받습니다. 차량(셔틀)·사무실처럼 오늘 누가 안 오는지 모아 봐야 하는 자리에 켜세요.
+            </span>
+          </span>
+        </label>
+      </div>
+
+      <div className="border-border bg-surface-soft rounded-2xl border p-4">
+        <label htmlFor="deskAttendanceOptin" className="flex cursor-pointer items-start gap-3">
+          <input
+            id="deskAttendanceOptin"
+            name="deskAttendanceOptin"
+            type="checkbox"
+            defaultChecked={v.deskAttendanceOptin === true}
+            className="border-border text-primary focus-visible:ring-ring mt-0.5 size-4 shrink-0 rounded"
+          />
+          <span className="space-y-1">
+            <span className="text-foreground block text-sm font-medium">오늘 출결 데스크 알림 받기</span>
+            <span className="text-muted-foreground block text-xs">
+              강사가 미출결을 출석으로 바꾸면 이 계정 벨로 받습니다. 사무실 자리만 켜세요. 셔틀·학부모
+              연락 알림과는 다릅니다.
             </span>
           </span>
         </label>

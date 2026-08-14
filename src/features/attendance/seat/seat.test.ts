@@ -4,7 +4,9 @@ import {
   groupByStart,
   hhmm,
   OPEN_SEAT_KEYS,
+  USABLE_SEAT_KEYS,
   parseAnySeatKey,
+  parseUsableSeatKey,
   parseSeatFilterValue,
   parseSeatKey,
   seatFilterValue,
@@ -32,12 +34,13 @@ describe("자리 키", () => {
     expect(seatKeyOf(null)).toBeNull();
   });
 
-  it("아직 안 연 자리는 URL로도 못 들어온다(1차 = 랩실만)", () => {
+  it("공개 PIN·자리 시수는 랩실만, 로그인 화면은 JJ실도 연다", () => {
     expect(parseSeatKey("lab")).toBe("lab");
     expect(parseSeatKey("LAB")).toBe("lab");
     expect(OPEN_SEAT_KEYS).toEqual(["lab"]);
-    // JJ실은 기존 484행의 시수 귀속을 바꾸게 되므로 원장 확인 전까지 닫아 둔다.
     expect(parseSeatKey("jj")).toBeNull();
+    expect(parseUsableSeatKey("jj")).toBe("jj");
+    expect(USABLE_SEAT_KEYS).toEqual(["lab", "jj"]);
     expect(parseSeatKey(undefined)).toBeNull();
     expect(parseSeatKey("603")).toBeNull();
   });

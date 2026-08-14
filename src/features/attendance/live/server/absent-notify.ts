@@ -19,9 +19,11 @@ import "server-only";
  *    🔴 아무도 안 켰으면 **아무 데도 안 간다** — 데스크 계정에서 켜야 이 경로가 산다(운영 조건).
  */
 import { createAdminClient } from "@/lib/supabase/admin";
+import { fetchInChunks } from "@/lib/supabase/batch";
 import { reportError } from "@/lib/observability/report-error";
 import { notifyUsers } from "@/features/notifications/server/notify";
 import { addDays, kstToday } from "@/lib/date-kst";
+import { collectStudentNames, formatAttendanceNotifyNames } from "../notify-names";
 
 const YMD = /^\d{4}-\d{2}-\d{2}$/;
 const EVENT_TYPE = "attendance_absent_desk";
@@ -75,25 +77,27 @@ export async function notifyDeskOfAbsences(input: {
     const freshKeys = new Set(fresh.map((f) => `${f.subject_key}|${f.bucket}`));
     const freshCells = cells.filter((c) => freshKeys.has(`${c.studentId}|${date}|${c.slotStart ?? ""}`));
     if (freshCells.length === 0) return;
-    const freshIds = new Set(freshCells.map((c) => c.studentId));
+    const freshIds = [...new Set(freshCells.map((c) => c.studentId))];
 
     // 이름 — 벨 본문에 학생 이름이 없으면 데스크가 링크를 눌러야만 무슨 일인지 안다.
-    const { data: students, error: studentError } = await admin
-      .from("students")
-      .select("id, name")
-      .eq("tenant_id", tenantId)
-      .in("id", [...freshIds].slice(0, 100));
-    if (studentError) throw studentError;
-    const nameById = new Map((students ?? []).map((s) => [s.id as string, s.name as string]));
-
-    const names = [...new Set(freshCells.map((c) => nameById.get(c.studentId)).filter(Boolean))] as string[];
-    if (names.length === 0) return;
+    // 100에서 자르면 뒤 이름이 벨에서 사라진다(B3). 청크로 전건.
+    const students = await fetchInChunks<{ id: string; name: string }>(freshIds, (chunk) =>
+      admin.from("students").select("id, name").eq("tenant_id", tenantId).in("id", chunk),
+    );
+    const nameById = new Map(students.map((s) => [s.id, s.name]));
+    const { names, missing } = collectStudentNames(freshIds, nameById);
+    if (missing > 0) {
+      reportError(new Error(`absent-notify names incomplete: ${names.length}/${freshIds.length}`), {
+        scope: "attendance.absentNotify.names",
+        expected: freshIds.length,
+        resolved: names.length,
+        missing,
+      });
+    }
+    const { who, listedLabel } = formatAttendanceNotifyNames(names, freshIds.length);
     // ⚠️ 날짜를 안 쓰면 **어제 일로 오늘 전화**하게 된다 — 결석의 42.5%가 익일 이후 기록이다(실측).
     const whenLabel = date === today ? "" : ` (${date.slice(5).replace("-", "/")})`;
-    const title =
-      names.length === 1
-        ? `결석${whenLabel} — ${names[0]}`
-        : `결석${whenLabel} — ${names[0]} 외 ${names.length - 1}명`;
+    const title = `결석${whenLabel} — ${who}`;
 
     await notifyUsers(
       targets.map((recipientId) => ({
@@ -101,7 +105,7 @@ export async function notifyDeskOfAbsences(input: {
         recipientId,
         type: EVENT_TYPE,
         title,
-        body: `${date} 수업에서 ${names.join(", ")} 학생이 결석으로 입력됐습니다 — 학부모 확인이 필요합니다.`,
+        body: `${date} 수업에서 ${listedLabel} 학생이 결석으로 입력됐습니다 — 학부모 확인이 필요합니다.`,
         link: date === today ? "/attendance/live?tab=desk" : `/attendance/live?tab=desk&date=${date}`,
         actorId,
       })),

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ChevronLeft, ChevronRight, Users } from "@/components/icons/eywa-icon-compat";
 import {
-  OPEN_SEAT_KEYS,
+  USABLE_SEAT_KEYS,
   SEAT_KEYS,
   SEAT_NAME,
   SEAT_ROOM,
@@ -688,7 +688,7 @@ export default async function AttendancePage({
                   room: SEAT_ROOM[k],
                   href: `/attendance/seat/${k}`,
                   monthHref: `/attendance/seat/${k}/month?month=${month}`,
-                  open: (OPEN_SEAT_KEYS as readonly string[]).includes(k),
+                  open: (USABLE_SEAT_KEYS as readonly string[]).includes(k),
                 }))
               : []
           }

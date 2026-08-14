@@ -21,8 +21,13 @@
  *   ③은 반 단위 카드 하나로 접고, 연락이 아니라 **강사에게 확인 요청**이 정답이다(queue.ts).
  */
 
-/** 유예(분) — 교시 시작 후 이만큼 지나야 "안 왔다"를 의심한다. 지각·강사 입장 지연을 흡수. */
-export const LIVE_GRACE_MIN = 15;
+/**
+ * 유예(분) — 교시 시작 후 이만큼 지나야 빈 칸이 **미출결**이다(원장 2026-08-14: 10분).
+ * 그 전에는 '대기'. 🔴 입력 잠금이 아니라 표시·전달 기준 — 강사는 지나도 계속 찍는다.
+ */
+export const ATTENDANCE_GRACE_MIN = 10;
+/** @deprecated 이름만 `ATTENDANCE_GRACE_MIN`으로 통일. 값은 같다. */
+export const LIVE_GRACE_MIN = ATTENDANCE_GRACE_MIN;
 
 export type SlotPhase =
   /** 아직 시작 전 — 아무 신호도 만들지 않는다. */
@@ -42,7 +47,7 @@ export function slotPhase(
   nowMin: number,
   startMin: number,
   endMin: number | null,
-  graceMin: number = LIVE_GRACE_MIN,
+  graceMin: number = ATTENDANCE_GRACE_MIN,
 ): SlotPhase {
   if (nowMin < startMin) return "before";
   if (endMin != null && nowMin >= endMin) return "ended";
@@ -80,7 +85,7 @@ export function classifySignal(status: string | null, classHasAny: boolean): Liv
  * 데스크 큐에 올릴 신호인가 — 국면과 신호를 함께 본다.
  *
  * · `absent`는 **유예를 기다리지 않는다**. 강사가 결석을 찍은 순간이 가장 확실한 신호이고, 셔틀·하원
- *   시간을 감안하면 15분을 더 흘려보낼 이유가 없다(단 시작 전에 미리 찍어둔 건 제외 — 아래 before).
+ *   시간을 감안하면 유예를 더 흘려보낼 이유가 없다(단 시작 전에 미리 찍어둔 건 제외 — 아래 before).
  * · 나머지는 유예 경과(`due`) 이후부터. `grace`에서 올리면 매일 20분마다 "지각생 전원"이 큐에 뜬다.
  * · 시작 전(`before`)은 무조건 제외 — 아직 오지 않은 게 정상이다.
  */

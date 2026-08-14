@@ -36,19 +36,33 @@ export const SEAT_NAME: Record<SeatKey, string> = { lab: "랩실", jj: "JJ실" }
 export const SEAT_ROOM: Record<SeatKey, string> = { lab: "603호", jj: "305호" };
 
 /**
- * 1차 오픈 범위 — **랩실만**(원장 2026-08-14 *"랩실 먼저 오픈"*).
+ * 로그인 출석부에서 **화면을 여는** 자리. 허브 카드·`/attendance/seat/:key`가 이걸 본다.
+ * 랩실 + JJ실. 공개 PIN(`/seat/:key`)·시수 분리(`seat_label`)와는 다른 축이다.
+ */
+export const USABLE_SEAT_KEYS: readonly SeatKey[] = ["lab", "jj"];
+
+/**
+ * **자리 시수(seat_label) + 공개 PIN** 을 켜는 자리 — 지금은 랩실만.
  *
- * 🔴 JJ실을 같이 열면 안 되는 이유는 화면이 아니라 **돈**이다: JJ실 반엔 이미 출결 484행이 쌓여 있고
- *    (반 출석부·ECS에서 찍은 것) 그 시수는 지금 **담임 몫**으로 잡힌다. 자리 화면에서 찍기 시작하면
- *    그 순간부터 `seat_label`이 붙어 담임 시수에서 빠진다 — 아무도 요청하지 않은 급여 변화다.
- *    JJ실은 "그 시수를 담임에서 뺄지"를 원장에게 확인한 뒤 이 배열에 넣을 것.
+ * 🔴 JJ실 반엔 이미 출결이 담임 시수로 쌓여 있다. 여기 넣으면 그 순간부터 담임 정산에서 빠진다.
+ *    화면만 쓰려면 `USABLE_SEAT_KEYS`에만 두고, 쓰기는 `seat_label` 없이 한다.
  */
 export const OPEN_SEAT_KEYS: readonly SeatKey[] = ["lab"];
 
-/** URL 파라미터 → 자리 키. 알 수 없거나 아직 안 연 자리면 null. */
+export function isPayrollSeat(seat: SeatKey): boolean {
+  return (OPEN_SEAT_KEYS as readonly string[]).includes(seat);
+}
+
+/** 공개 PIN·자리 시수 경로. 알 수 없거나 PIN 미오픈이면 null. */
 export function parseSeatKey(raw: string | undefined | null): SeatKey | null {
   const v = (raw ?? "").trim().toLowerCase();
   return (OPEN_SEAT_KEYS as readonly string[]).includes(v) ? (v as SeatKey) : null;
+}
+
+/** 로그인 자리 출석부 URL. PIN 미오픈(JJ)도 통과한다. */
+export function parseUsableSeatKey(raw: string | undefined | null): SeatKey | null {
+  const v = (raw ?? "").trim().toLowerCase();
+  return (USABLE_SEAT_KEYS as readonly string[]).includes(v) ? (v as SeatKey) : null;
 }
 
 /**

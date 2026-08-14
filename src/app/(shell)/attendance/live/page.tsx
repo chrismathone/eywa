@@ -9,6 +9,7 @@ import { addDays, formatKoreanDate, kstToday } from "@/lib/date-kst";
 import { getCarryOverAbsences, getDeskQueue, getLiveBoard } from "@/features/attendance/live/server/queries";
 import { holidayNameOf } from "@/features/attendance/live/server/load";
 import type { LiveBoard } from "@/features/attendance/live/types";
+import { SeatingChart } from "@/features/attendance/live/components/seating-chart";
 import { BoardView } from "./_components/board-view";
 import { DeskView } from "./_components/desk-view";
 import { LiveRefresher } from "./_components/live-refresher";
@@ -39,7 +40,8 @@ export default async function AttendanceLivePage({
   const isDesk = level === "full";
   const today = kstToday();
   const date = /^\d{4}-\d{2}-\d{2}$/.test(sp.date ?? "") && sp.date! <= today ? sp.date! : today;
-  const tab = sp.tab === "desk" && isDesk ? "desk" : "board";
+  const tab =
+    isDesk && sp.tab === "desk" ? "desk" : isDesk && sp.tab === "seating" ? "seating" : "board";
 
   const holiday = await holidayNameOf(date);
   const [board, queue, carryOver] = await Promise.all([
@@ -81,12 +83,15 @@ export default async function AttendanceLivePage({
           {isDesk && (
             <nav className="border-line flex gap-1 border-b" aria-label="보기 전환">
               <TabLink active={tab === "board"} href={`/attendance/live?date=${date}`} label="출결 현황" count={`${recorded}/${expected}`} />
+              <TabLink active={tab === "seating"} href={`/attendance/live?tab=seating&date=${date}`} label="좌석표" />
               <TabLink active={tab === "desk"} href={`/attendance/live?tab=desk&date=${date}`} label="확인 필요" count={pending ? String(pending) : undefined} alert={pending > 0} />
             </nav>
           )}
 
           {tab === "desk" && queue ? (
             <DeskView queue={queue} date={date} canEdit={board?.canEdit ?? false} carryOver={carryOver} />
+          ) : tab === "seating" && board ? (
+            <SeatingChart board={stripContacts(board)} />
           ) : (
             // ⚠️ 보드는 전화번호를 하나도 그리지 않는다 — RSC 페이로드에 전교생 학부모 번호를 실어
             //    보낼 이유가 없어 여기서 떨어뜨린다(데스크 큐만 연락처가 필요하다).
@@ -104,7 +109,12 @@ export default async function AttendanceLivePage({
 }
 
 function DayLink({ date, tab, label }: { date: string; tab: string; label: string }) {
-  const href = tab === "desk" ? `/attendance/live?tab=desk&date=${date}` : `/attendance/live?date=${date}`;
+  const href =
+    tab === "desk"
+      ? `/attendance/live?tab=desk&date=${date}`
+      : tab === "seating"
+        ? `/attendance/live?tab=seating&date=${date}`
+        : `/attendance/live?date=${date}`;
   return (
     <Link
       href={href}

@@ -15,10 +15,13 @@ import { dutyAllowsSeat } from "@/features/attendance/seat/duty";
 import { getSeatDuties } from "@/features/attendance/seat/server/duty";
 import { getSeatMonthly } from "@/features/attendance/seat/server/monthly-queries";
 import type { SeatMonthGroup } from "@/features/attendance/seat/monthly-build";
-import { parseAnySeatKey, parseSeatKey, SEAT_NAME } from "@/features/attendance/seat/seat";
+import { parseAnySeatKey, parseUsableSeatKey, SEAT_NAME } from "@/features/attendance/seat/seat";
 import type { AttendanceMatrix, AttendanceStatus, MatrixStudent } from "@/features/attendance/server/queries";
 
-export const metadata = { title: "랩실 월간 출석부 인쇄 — eywa" };
+export async function generateMetadata({ params }: { params: Promise<{ seat: string }> }) {
+  const seat = parseAnySeatKey((await params).seat);
+  return { title: `${seat ? SEAT_NAME[seat] : "자리"} 월간 출석부 인쇄 — eywa` };
+}
 
 export default async function SeatMonthlyPrintPage({
   params,
@@ -30,7 +33,7 @@ export default async function SeatMonthlyPrintPage({
   const { seat: seatParam } = await params;
   const seat = parseAnySeatKey(seatParam);
   if (!seat) notFound();
-  if (!parseSeatKey(seatParam)) notFound();
+  if (!parseUsableSeatKey(seatParam)) notFound();
 
   const user = await getCurrentUser();
   if (!user) redirect("/login");

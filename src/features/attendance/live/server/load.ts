@@ -20,7 +20,8 @@ import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { weekdayIndexOf } from "@/lib/date-kst";
 import { classifySignal, hhmm, resolveSlotStatus } from "../signals";
 import { saveSlotFor } from "../slot-axis";
-import { isSpecialSlotLabel } from "@/features/timetable/lib/teacher-label";
+import { resolveRoomName } from "../seating-floors";
+import { specialSlotLabel } from "@/features/timetable/lib/teacher-label";
 import type { LiveSlot, LiveStudent } from "../types";
 
 export type { LiveSlot, LiveStudent };
@@ -54,6 +55,8 @@ type SlotRow = {
   teacher_id: string | null;
   period_label: string | null;
   slot_teacher_label: string | null;
+  classroom_id: string | null;
+  slot_room_label: string | null;
 };
 
 /**
@@ -76,7 +79,9 @@ export async function loadLiveSlots(date: string, classIds?: readonly string[]):
   const liveSlotQuery = () =>
     supabase
       .from("class_schedules")
-      .select("class_id, start_time, end_time, teacher_id, period_label, slot_teacher_label")
+      .select(
+        "class_id, start_time, end_time, teacher_id, period_label, slot_teacher_label, classroom_id, slot_room_label",
+      )
       .eq("day_of_week", dayEnum)
       .lte("valid_from", date)
       .or(`valid_to.is.null,valid_to.gte.${date}`);
@@ -107,10 +112,11 @@ export async function loadLiveSlots(date: string, classIds?: readonly string[]):
       is_active: boolean;
       closed_at: string | null;
       teacher_id: string | null;
+      classroom_id: string | null;
     }>(slotClassIds, (chunk) =>
       supabase
         .from("classes")
-        .select("id, class_name, subject, is_active, closed_at, teacher_id")
+        .select("id, class_name, subject, is_active, closed_at, teacher_id, classroom_id")
         .in("id", chunk)
         .eq("is_active", true),
     ),
@@ -192,49 +198,65 @@ export async function loadLiveSlots(date: string, classIds?: readonly string[]):
   const effective = effectiveAttendanceRecords(recordRows).filter((r) =>
     expectedInClass(r.class_id, r.student_id),
   );
-  const bySlot = new Map<string, { status: string; note: string | null }>(); // `${classId}|${slot}|${studentId}`
-  const byDay = new Map<string, { status: string; note: string | null }>(); // `${classId}|${studentId}`
+  const bySlot = new Map<string, { status: string; note: string | null; recordedAt: string; slot: string | null }>();
+  const byDay = new Map<string, { status: string; note: string | null; recordedAt: string; slot: string | null }>();
   const slotHasRecord = new Set<string>(); // `${classId}|${slot}`
   const dayHasRecord = new Set<string>(); // classId
   for (const r of effective) {
+    const hit = {
+      status: r.status,
+      note: r.note,
+      recordedAt: r.recorded_at,
+      slot: r.slot_start ? hhmm(r.slot_start) : null,
+    };
     if (r.slot_start) {
       const slot = hhmm(r.slot_start);
-      bySlot.set(`${r.class_id}|${slot}|${r.student_id}`, { status: r.status, note: r.note });
+      bySlot.set(`${r.class_id}|${slot}|${r.student_id}`, hit);
       slotHasRecord.add(`${r.class_id}|${slot}`);
     } else {
-      byDay.set(`${r.class_id}|${r.student_id}`, { status: r.status, note: r.note });
+      byDay.set(`${r.class_id}|${r.student_id}`, hit);
       dayHasRecord.add(r.class_id);
     }
   }
 
-  // 5) 학생 메타 — 명단에 오른 학생만(연락처 포함, 데스크가 바로 걸 수 있게).
+  // 5) 학생 메타 + 강의실 이름 — 서로 독립이라 병렬(B4).
   const studentIds = [...new Set([...expectedByClass.values()].flatMap((s) => [...s]))];
-  const students = await fetchInChunks<{
-    id: string;
-    name: string;
-    school: string | null;
-    grade: string | null;
-    parent_phone: string | null;
-    student_phone: string | null;
-  }>(studentIds, (chunk) =>
-    supabase
-      .from("students")
-      .select("id, name, school, grade, parent_phone, student_phone")
-      .in("id", chunk),
-  );
+  const roomIds = [
+    ...new Set(
+      [...slots.map((s) => s.classroom_id), ...classRows.map((c) => c.classroom_id)].filter(
+        (id): id is string => !!id,
+      ),
+    ),
+  ];
+  const [students, rooms] = await Promise.all([
+    fetchInChunks<{
+      id: string;
+      name: string;
+      school: string | null;
+      grade: string | null;
+      parent_phone: string | null;
+      student_phone: string | null;
+    }>(studentIds, (chunk) =>
+      supabase
+        .from("students")
+        .select("id, name, school, grade, parent_phone, student_phone")
+        .in("id", chunk),
+    ),
+    fetchInChunks<{ id: string; name: string }>(roomIds, (chunk) =>
+      supabase.from("classrooms").select("id, name").in("id", chunk),
+    ),
+  ]);
   const studentById = new Map(students.map((s) => [s.id, s]));
+  const roomNameById = new Map(rooms.map((r) => [r.id, r.name]));
 
   // 6) 슬롯 × 학생 조립.
   const out: LiveSlot[] = [];
   for (const slot of slots) {
     const klass = activeClasses.get(slot.class_id);
     if (!klass) continue;
-    // 🔴 **자리(LAB·JJ) 슬롯은 이 화면의 것이 아니다.** 자리는 사람이 아니라 방이라 담당 계정이 없고,
-    //    `teacher_id ?? classes.teacher_id` 폴백이 그 블록을 **반 담임의 수업으로 붙여** 담임 스트립에
-    //    "전원 출석" 버튼을 띄운다(누르면 그 반에 없던 출결 행이 생긴다). 같은 리포의 시수 계산도
-    //    자리는 언제나 제외하고, 자리 출결은 **자리 출석부**(0208a)가 따로 담당한다.
-    //    판정은 문자열 비교가 아니라 단일 소스 `specialSlotLabel`(별칭 '랩실'·사람 이름 표기까지 흡수).
-    if (isSpecialSlotLabel(slot.slot_teacher_label)) continue;
+    // 랩실·JJ실은 출결이 되므로 좌석표에 남긴다. 다만 담임으로 폴백하면 강사 스트립의
+    // 「전원 출석」이 자리 수업에 행을 만든다 — teacher_id는 슬롯 담당만(없으면 담당 미지정).
+    const special = specialSlotLabel(slot.slot_teacher_label);
     const start = hhmm(slot.start_time);
     const expected = expectedByClass.get(slot.class_id);
     if (!expected || expected.size === 0) continue; // 명단 0명 = 보여줄 것이 없다
@@ -257,6 +279,8 @@ export async function loadLiveSlots(date: string, classIds?: readonly string[]):
         studentPhone: meta.student_phone,
         status,
         note: hit?.note ?? null,
+        recordSlot: hit?.slot ?? null,
+        recordedAt: hit?.recordedAt ?? null,
         signal: classifySignal(status, hasAnyRecord),
       });
     }
@@ -273,9 +297,15 @@ export async function loadLiveSlots(date: string, classIds?: readonly string[]):
       slotEnd: slot.end_time ? hhmm(slot.end_time) : null,
       periodLabel: slot.period_label,
       // 슬롯 담당이 지정된 건 542개 중 207개(38%)뿐 — 나머지는 반 담임으로 폴백해야 "선생님별"이 성립한다.
-      teacherId: slot.teacher_id ?? klass.teacher_id,
+      teacherId: special ? slot.teacher_id : (slot.teacher_id ?? klass.teacher_id),
       slotTeacherLabel: slot.slot_teacher_label,
       teacherName: null, // 이름은 호출부가 채운다(사용자 조회를 화면당 1회로 모으기 위해)
+      roomName:
+        resolveRoomName({
+          slotClassroomName: slot.classroom_id ? (roomNameById.get(slot.classroom_id) ?? null) : null,
+          slotRoomLabel: slot.slot_room_label,
+          classClassroomName: klass.classroom_id ? (roomNameById.get(klass.classroom_id) ?? null) : null,
+        }) ?? (special === "LAB" ? "랩실" : special === "JJ" ? "JJ실" : null),
       students: rows,
       hasAnyRecord,
       recordedCount: rows.filter((r) => r.status != null).length,

@@ -13,14 +13,18 @@ import { dutyAllowsSeat } from "@/features/attendance/seat/duty";
 import { getSeatDuties } from "@/features/attendance/seat/server/duty";
 import { getSeatMonthly } from "@/features/attendance/seat/server/monthly-queries";
 import { loadSeatMonthlyPrefs } from "@/features/attendance/seat/server/monthly-prefs";
-import { parseAnySeatKey, parseSeatKey, SEAT_NAME, SEAT_ROOM } from "@/features/attendance/seat/seat";
+import { parseAnySeatKey, parseUsableSeatKey, SEAT_NAME, SEAT_ROOM } from "@/features/attendance/seat/seat";
 import { CollapseAllChip } from "@/app/(shell)/attendance/_components/class-group";
 import { SeatMonthlyCollapse } from "./_components/collapse-provider";
 import { MonthlyLegend, MonthlySummary } from "./_components/monthly-summary";
 import { MonthlyTable } from "./_components/monthly-table";
 import { MonthlyPrintButton } from "./_components/print-button";
 
-export const metadata: Metadata = { title: "랩실 월간 출석부 — eywa" };
+/** 탭 제목은 자리 이름을 따라간다 — 같은 화면이 랩실·JJ실 둘 다를 연다. */
+export async function generateMetadata({ params }: { params: Promise<{ seat: string }> }): Promise<Metadata> {
+  const seat = parseAnySeatKey((await params).seat);
+  return { title: `${seat ? SEAT_NAME[seat] : "자리"} 월간 출석부 — eywa` };
+}
 
 function shiftMonth(month: string, delta: number): string {
   const [y, m] = month.split("-").map(Number);
@@ -45,7 +49,8 @@ export default async function SeatMonthlyPage({
   const seat = parseAnySeatKey(seatParam);
   if (!seat) notFound();
 
-  if (!parseSeatKey(seatParam)) {
+  // 화면은 '쓸 수 있는 자리'(USABLE)까지 연다 — `seat_label`(자리 시수)은 OPEN만이라 JJ 기록은 '확인 필요'로 선다.
+  if (!parseUsableSeatKey(seatParam)) {
     return (
       <div className="flex h-full min-h-0 flex-col gap-3">
         <PageHeader
