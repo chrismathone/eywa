@@ -91,7 +91,8 @@ export async function fillSeatSlot(input: {
     first.error && /recorded_via/i.test(first.error.message)
       ? (await supabase.from("attendance_records").insert(
           rows.map((r) => {
-            const rest = { ...r };
+            // Record로 받아야 delete가 열린다(리터럴 타입은 필수 속성이라 TS2790).
+            const rest: Record<string, unknown> = { ...r };
             delete rest.recorded_via;
             return rest;
           }),
