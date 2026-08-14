@@ -105,6 +105,10 @@ create index if not exists leave_approvals_request_idx
   on public.leave_approvals (request_id);
 
 -- ── RLS ─────────────────────────────────────────────────────────────────────
+-- 🔴 **아래 정책 4개는 0211a가 대체한다 — 여기 정의는 무한 재귀(42P17)라 실제로 동작하지 않는다.**
+--    `leave_requests` 정책이 `leave_approvals`를 조회하고 그 표의 정책이 다시 `leave_requests`를
+--    조회해서, 0행이어도 쿼리 자체가 거부됐다(적용 직후 /leave 전체 500). 고침은 교차 조회를
+--    security definer 함수로 감싸는 것 — 0211a 참조. 이 블록은 역사 기록으로만 남긴다.
 -- 읽기만 정책으로 연다(쓰기는 위 주석대로 service_role 서버 액션 전용).
 -- ⚠️ 게이트 함수는 `(select …)`로 감싼다([[#91]] InitPlan — 행마다 호출 방지).
 alter table public.leave_requests enable row level security;
