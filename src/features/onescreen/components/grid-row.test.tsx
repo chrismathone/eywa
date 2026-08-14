@@ -48,7 +48,14 @@ const config: GridConfig = {
   noticeMode: "A",
 };
 
-function row(attendanceRaw: string | null, over: { subjectKey?: string; progressMode?: string | null } = {}): GridRow {
+type RowOver = {
+  subjectKey?: string;
+  progressMode?: string | null;
+  rowNote?: string; // 행(수업) 단위 특이사항 — 미전달=미지정(학생 값 폴백)
+  studentNote?: string; // 옛 학생 단위 특이사항
+};
+
+function row(attendanceRaw: string | null, over: RowOver = {}): GridRow {
   const subject = {
     name: over.subjectKey === "english" ? "영어" : "수학",
     subjectLabel: over.subjectKey === "english" ? "영어" : "수학",
@@ -59,6 +66,7 @@ function row(attendanceRaw: string | null, over: { subjectKey?: string; progress
     classId: "c1",
     className: "중3 A",
     attendanceRaw,
+    note: over.rowNote, // undefined면 resolveRowFields가 학생 값으로 폴백
   } as unknown as Subject;
   const student = {
     id: "s1",
@@ -73,6 +81,7 @@ function row(attendanceRaw: string | null, over: { subjectKey?: string; progress
     },
     attitude: null,
     homework: "",
+    note: over.studentNote,
     progressConfirmed: false,
     reportDraft: "",
     reportSent: false,
@@ -80,10 +89,7 @@ function row(attendanceRaw: string | null, over: { subjectKey?: string; progress
   return { student, subject, subjectIndex: 0, key: "s1::수학" };
 }
 
-function renderRow(
-  attendanceRaw: string | null,
-  over: { subjectKey?: string; progressMode?: string | null } = {},
-) {
+function renderRow(attendanceRaw: string | null, over: RowOver = {}) {
   return render(
     <table>
       <tbody>
@@ -161,5 +167,57 @@ describe("자유 입력 과목(영어) — 수업 성격 알약", () => {
   it("수학 행에는 인라인 알약을 그리지 않는다", () => {
     renderRow("present");
     expect(screen.queryByRole("button", { name: "복습" })).toBeNull();
+  });
+});
+
+/**
+ * 🔴 특이사항 — **읽는 층과 쓰는 층이 같아야 한다**(원장 긴급 제보 2026-08-14:
+ *    *"특이사항만 커서존재하는데 입력불가"* — 멘트·추세는 정상이라 잠금이 아니었다).
+ *
+ * 2026-08-13에 쓰기(`onNote`)가 행별로 바뀌었는데 표 모드의 `value`만 `student.note`(옛 학생 단위)로
+ * 남아, 타이핑한 글자가 `subject.note`로 들어가는 동안 화면은 옛 값을 계속 그렸다 = **입력이 아예 안 보임**.
+ * 카드 모드는 처음부터 `cardEval.note`로 읽어 멀쩡했다(같은 값이 한쪽에서만 써지던 비대칭).
+ */
+describe("특이사항 — 행 값을 읽는다(쓰기와 같은 층)", () => {
+  it("행 값이 있으면 학생 값이 아니라 행 값을 보여준다", () => {
+    renderRow("present", { rowNote: "보강 — 오답 다시", studentNote: "정규 — 개념 어려워함" });
+    expect(screen.getByLabelText("학생 특이사항")).toHaveValue("보강 — 오답 다시");
+  });
+
+  it("행 값이 없으면 학생 값으로 폴백한다(옛 세션 하위호환)", () => {
+    renderRow("present", { studentNote: "개념 어려워함" });
+    expect(screen.getByLabelText("학생 특이사항")).toHaveValue("개념 어려워함");
+  });
+
+  // 🔴 잠갔으면 **잠긴 것처럼 보여야** 한다 — 발송 완료 행이 평소와 똑같이 보여서
+  //    "커서는 잡히는데 안 써진다"가 됐다(결석만 톤을 입던 것).
+  it("발송 완료로 잠긴 행도 잠금 톤과 이유를 보여준다", () => {
+    render(
+      <table>
+        <tbody>
+          <GridBodyRow
+            row={row("present")}
+            checked={false}
+            onToggle={vi.fn()}
+            rep={{ classnoteStatus: "success" } as never}
+            fields={fields}
+            actions={actions}
+            config={config}
+            gen={{ rowBusy: false, attPending: new Set() }}
+            nav={{ row: 0, studentRow: 0 }}
+          />
+        </tbody>
+      </table>,
+    );
+    const note = screen.getByLabelText("학생 특이사항");
+    expect(note).toHaveAttribute("readonly");
+    expect(note).toHaveAttribute("placeholder", "발송 완료 — 수정할 수 없습니다");
+    expect(note.className).toContain("cursor-not-allowed");
+  });
+
+  it("타이핑은 그 행(과목)으로 올라간다 — 읽은 층과 같은 곳", () => {
+    renderRow("present", { rowNote: "" });
+    fireEvent.change(screen.getByLabelText("학생 특이사항"), { target: { value: "조퇴함" } });
+    expect(fields.onNote).toHaveBeenLastCalledWith("s1", "수학", "조퇴함");
   });
 });
