@@ -3,7 +3,12 @@
  * 쿼리는 한 번씩만 읽어 여기로 넘긴다(반 14개 N+1 금지).
  */
 import { DOW_KEYS, resolveAttendDows } from "@/features/attendance/calendar";
-import { isEnrolledOn, type EnrollSpan } from "@/features/attendance/enrollment-span";
+import {
+  isEnrolledOn,
+  lifecycleBadgesInRange,
+  type EnrollSpan,
+  type OtherSpan,
+} from "@/features/attendance/enrollment-span";
 import { countCells } from "@/features/attendance/grid/totals";
 import { COUNTABLE_STATUSES } from "@/features/attendance/session-units";
 import type { AttendanceMark } from "@/features/attendance/cell-display";
@@ -33,6 +38,7 @@ import type {
 
 export type {
   SeatEnrollRow,
+  SeatOtherSpan,
   SeatMonthCell,
   SeatMonthGroup,
   SeatMonthSlotCell,
@@ -54,8 +60,23 @@ export function buildSeatMonthly(input: {
   records: readonly SeatAttRecord[];
   wantLabel: SpecialSlotLabel;
   periodLabelOf?: (start: string, end: string) => string;
+  /** 학생별 **다른 반** 수강 구간 — 퇴원이 실은 반이동인지 가르는 데만 쓴다(없으면 신입·퇴원까지). */
+  otherSpans?: ReadonlyMap<string, readonly OtherSpan[]>;
 }): SeatMonthlyView {
-  const { month, window, days, holidays, slots, classes, enrollments, records, wantLabel, periodLabelOf } = input;
+  const {
+    month,
+    window,
+    days,
+    holidays,
+    slots,
+    classes,
+    enrollments,
+    records,
+    wantLabel,
+    periodLabelOf,
+    otherSpans,
+  } = input;
+  const badgeRange = { first: window.start, last: window.end };
   const classById = new Map(classes.map((c) => [c.id, c]));
   const classIds = sortClassIdsByFirstSlot(
     [...new Set(slots.map((s) => s.classId))].filter((id) => classById.has(id)),
@@ -139,6 +160,13 @@ export function buildSeatMonthly(input: {
         grade: row.grade,
         attendDows,
         spans,
+        // 회색(소속 아님) 띠만으로는 왜 비었는지 모른다 — 반별 출석부와 같은 표식을 이름 옆에 단다.
+        badges: lifecycleBadgesInRange(
+          badgeRange,
+          spans,
+          meta.subject,
+          (otherSpans?.get(row.studentId) ?? []).filter((o) => o.classId !== classId),
+        ),
         confirmedUnits: sumTrackUnits(confirmedRecs),
         reviewUnits: sumTrackUnits(reviewRecs),
         counted: countCells(countedCells),
