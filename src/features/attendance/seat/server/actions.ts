@@ -7,7 +7,14 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { kstToday } from "@/lib/date-kst";
 import { dutyAllowsSeat } from "../duty";
-import { OPEN_SEAT_KEYS, SEAT_DB_LABEL, ambiguousClassIds, hhmm, type SeatKey } from "../seat";
+import {
+  USABLE_SEAT_KEYS,
+  SEAT_DB_LABEL,
+  ambiguousClassIds,
+  hhmm,
+  isPayrollSeat,
+  type SeatKey,
+} from "../seat";
 import { getSeatDuties } from "./duty";
 import { readSeatPinSession } from "./pin-session";
 import { getPublicSeatDay, getSeatDay } from "./queries";
@@ -25,7 +32,7 @@ type GateOk = { ok: true; userId: string | null; tenantId: string; via: "menu" |
  *   ④ 그날 그 자리 명단(화이트리스트) — 아래 각 액션이 다시 확인한다(#77).
  */
 async function gate(seat: SeatKey, date: string): Promise<GateOk | { error: string }> {
-  if (!(OPEN_SEAT_KEYS as readonly string[]).includes(seat)) {
+  if (!(USABLE_SEAT_KEYS as readonly string[]).includes(seat)) {
     return { error: "이 자리 출석부는 아직 열리지 않았습니다" };
   }
 
@@ -50,6 +57,10 @@ async function gate(seat: SeatKey, date: string): Promise<GateOk | { error: stri
     }
   }
 
+  // 공개 PIN은 자리 시수를 켠 자리만(랩실). JJ실은 로그인 출석부만.
+  if (!isPayrollSeat(seat)) {
+    return { error: user ? "자리 출석부 입력 권한이 없습니다" : "비밀번호를 다시 입력해 주세요" };
+  }
   const pin = await readSeatPinSession();
   if (!pin || pin.seat !== seat) {
     return { error: user ? "자리 출석부 입력 권한이 없습니다" : "비밀번호를 다시 입력해 주세요" };
@@ -153,14 +164,25 @@ export async function fillSeatSlot(input: {
       session_date: input.date,
       slot_start: slot,
       status: input.status,
-      seat_label: SEAT_DB_LABEL[input.seat],
+      seat_label: isPayrollSeat(input.seat) ? SEAT_DB_LABEL[input.seat] : null,
       recorded_by: g.userId,
+      recorded_via: "seat",
     })),
   );
   if (rows.length === 0) return { ok: true, changed: 0 };
 
   const supabase = g.via === "pin" ? createAdminClient() : await createClient();
-  const { error } = await supabase.from("attendance_records").insert(rows);
+  const first = await supabase.from("attendance_records").insert(rows);
+  const error =
+    first.error && /recorded_via/i.test(first.error.message)
+      ? (await supabase.from("attendance_records").insert(
+          rows.map((r) => {
+            const rest = { ...r };
+            delete rest.recorded_via;
+            return rest;
+          }),
+        )).error
+      : first.error;
   if (error) return { error: error.message };
 
   revalidatePath("/attendance/seat");
@@ -216,27 +238,55 @@ async function writeOne(
   const { data: rows } = await base.order("recorded_at", { ascending: false }).limit(1);
   const existing = rows?.[0]?.id as string | undefined;
   if (existing) {
-    const { error } = await supabase
-      .from("attendance_records")
-      .update({
-        status: p.status,
-        seat_label: SEAT_DB_LABEL[p.seat],
-        recorded_by: p.userId,
-        recorded_at: new Date().toISOString(),
-      })
-      .eq("id", existing);
+    const patch: Record<string, unknown> = {
+      status: p.status,
+      ...(isPayrollSeat(p.seat) ? { seat_label: SEAT_DB_LABEL[p.seat] } : {}),
+      recorded_by: p.userId,
+      recorded_at: new Date().toISOString(),
+      recorded_via: "seat",
+    };
+    const first = await supabase.from("attendance_records").update(patch).eq("id", existing);
+    const error =
+      first.error && /recorded_via/i.test(first.error.message)
+        ? (
+            await supabase
+              .from("attendance_records")
+              .update({
+                status: patch.status,
+                ...(isPayrollSeat(p.seat) ? { seat_label: SEAT_DB_LABEL[p.seat] } : {}),
+                recorded_by: patch.recorded_by,
+                recorded_at: patch.recorded_at,
+              })
+              .eq("id", existing)
+          ).error
+        : first.error;
     return error ? error.message : 1;
   }
 
-  const { error } = await supabase.from("attendance_records").insert({
+  const row = {
     tenant_id: p.tenantId,
     class_id: p.classId,
     student_id: p.studentId,
     session_date: p.date,
     slot_start: p.slot,
     status: p.status,
-    seat_label: SEAT_DB_LABEL[p.seat],
+    seat_label: isPayrollSeat(p.seat) ? SEAT_DB_LABEL[p.seat] : null,
     recorded_by: p.userId,
-  });
+    recorded_via: "seat",
+  };
+  const first = await supabase.from("attendance_records").insert(row);
+  const error =
+    first.error && /recorded_via/i.test(first.error.message)
+      ? (await supabase.from("attendance_records").insert({
+          tenant_id: row.tenant_id,
+          class_id: row.class_id,
+          student_id: row.student_id,
+          session_date: row.session_date,
+          slot_start: row.slot_start,
+          status: row.status,
+          seat_label: row.seat_label,
+          recorded_by: row.recorded_by,
+        })).error
+      : first.error;
   return error ? error.message : 1;
 }

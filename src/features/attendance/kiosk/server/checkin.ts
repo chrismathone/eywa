@@ -120,6 +120,7 @@ async function reflectPresent(
     status: "present",
     access_method: "kiosk",
     recorded_by: null,
+    recorded_via: "kiosk",
   });
   if (error) return null; // best-effort — 실패해도 등하원/발송은 그대로
   // G4: 이 삽입이 (반,날짜) 완료 전이일 수 있음 — 키오스크 완결도 벨(적대 리뷰: 미훅 갭). actorId=null(시스템 이벤트).

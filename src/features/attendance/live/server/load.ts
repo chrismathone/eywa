@@ -20,6 +20,7 @@ import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { weekdayIndexOf } from "@/lib/date-kst";
 import { classifySignal, hhmm, resolveSlotStatus } from "../signals";
 import { saveSlotFor } from "../slot-axis";
+import { resolveRoomName } from "../seating-floors";
 import { isSpecialSlotLabel } from "@/features/timetable/lib/teacher-label";
 import type { LiveSlot, LiveStudent } from "../types";
 
@@ -54,6 +55,8 @@ type SlotRow = {
   teacher_id: string | null;
   period_label: string | null;
   slot_teacher_label: string | null;
+  classroom_id: string | null;
+  slot_room_label: string | null;
 };
 
 /**
@@ -76,7 +79,9 @@ export async function loadLiveSlots(date: string, classIds?: readonly string[]):
   const liveSlotQuery = () =>
     supabase
       .from("class_schedules")
-      .select("class_id, start_time, end_time, teacher_id, period_label, slot_teacher_label")
+      .select(
+        "class_id, start_time, end_time, teacher_id, period_label, slot_teacher_label, classroom_id, slot_room_label",
+      )
       .eq("day_of_week", dayEnum)
       .lte("valid_from", date)
       .or(`valid_to.is.null,valid_to.gte.${date}`);
@@ -107,10 +112,11 @@ export async function loadLiveSlots(date: string, classIds?: readonly string[]):
       is_active: boolean;
       closed_at: string | null;
       teacher_id: string | null;
+      classroom_id: string | null;
     }>(slotClassIds, (chunk) =>
       supabase
         .from("classes")
-        .select("id, class_name, subject, is_active, closed_at, teacher_id")
+        .select("id, class_name, subject, is_active, closed_at, teacher_id, classroom_id")
         .in("id", chunk)
         .eq("is_active", true),
     ),
@@ -192,37 +198,56 @@ export async function loadLiveSlots(date: string, classIds?: readonly string[]):
   const effective = effectiveAttendanceRecords(recordRows).filter((r) =>
     expectedInClass(r.class_id, r.student_id),
   );
-  const bySlot = new Map<string, { status: string; note: string | null }>(); // `${classId}|${slot}|${studentId}`
-  const byDay = new Map<string, { status: string; note: string | null }>(); // `${classId}|${studentId}`
+  const bySlot = new Map<string, { status: string; note: string | null; recordedAt: string; slot: string | null }>();
+  const byDay = new Map<string, { status: string; note: string | null; recordedAt: string; slot: string | null }>();
   const slotHasRecord = new Set<string>(); // `${classId}|${slot}`
   const dayHasRecord = new Set<string>(); // classId
   for (const r of effective) {
+    const hit = {
+      status: r.status,
+      note: r.note,
+      recordedAt: r.recorded_at,
+      slot: r.slot_start ? hhmm(r.slot_start) : null,
+    };
     if (r.slot_start) {
       const slot = hhmm(r.slot_start);
-      bySlot.set(`${r.class_id}|${slot}|${r.student_id}`, { status: r.status, note: r.note });
+      bySlot.set(`${r.class_id}|${slot}|${r.student_id}`, hit);
       slotHasRecord.add(`${r.class_id}|${slot}`);
     } else {
-      byDay.set(`${r.class_id}|${r.student_id}`, { status: r.status, note: r.note });
+      byDay.set(`${r.class_id}|${r.student_id}`, hit);
       dayHasRecord.add(r.class_id);
     }
   }
 
-  // 5) 학생 메타 — 명단에 오른 학생만(연락처 포함, 데스크가 바로 걸 수 있게).
+  // 5) 학생 메타 + 강의실 이름 — 서로 독립이라 병렬(B4).
   const studentIds = [...new Set([...expectedByClass.values()].flatMap((s) => [...s]))];
-  const students = await fetchInChunks<{
-    id: string;
-    name: string;
-    school: string | null;
-    grade: string | null;
-    parent_phone: string | null;
-    student_phone: string | null;
-  }>(studentIds, (chunk) =>
-    supabase
-      .from("students")
-      .select("id, name, school, grade, parent_phone, student_phone")
-      .in("id", chunk),
-  );
+  const roomIds = [
+    ...new Set(
+      [...slots.map((s) => s.classroom_id), ...classRows.map((c) => c.classroom_id)].filter(
+        (id): id is string => !!id,
+      ),
+    ),
+  ];
+  const [students, rooms] = await Promise.all([
+    fetchInChunks<{
+      id: string;
+      name: string;
+      school: string | null;
+      grade: string | null;
+      parent_phone: string | null;
+      student_phone: string | null;
+    }>(studentIds, (chunk) =>
+      supabase
+        .from("students")
+        .select("id, name, school, grade, parent_phone, student_phone")
+        .in("id", chunk),
+    ),
+    fetchInChunks<{ id: string; name: string }>(roomIds, (chunk) =>
+      supabase.from("classrooms").select("id, name").in("id", chunk),
+    ),
+  ]);
   const studentById = new Map(students.map((s) => [s.id, s]));
+  const roomNameById = new Map(rooms.map((r) => [r.id, r.name]));
 
   // 6) 슬롯 × 학생 조립.
   const out: LiveSlot[] = [];
@@ -257,6 +282,8 @@ export async function loadLiveSlots(date: string, classIds?: readonly string[]):
         studentPhone: meta.student_phone,
         status,
         note: hit?.note ?? null,
+        recordSlot: hit?.slot ?? null,
+        recordedAt: hit?.recordedAt ?? null,
         signal: classifySignal(status, hasAnyRecord),
       });
     }
@@ -276,6 +303,11 @@ export async function loadLiveSlots(date: string, classIds?: readonly string[]):
       teacherId: slot.teacher_id ?? klass.teacher_id,
       slotTeacherLabel: slot.slot_teacher_label,
       teacherName: null, // 이름은 호출부가 채운다(사용자 조회를 화면당 1회로 모으기 위해)
+      roomName: resolveRoomName({
+        slotClassroomName: slot.classroom_id ? (roomNameById.get(slot.classroom_id) ?? null) : null,
+        slotRoomLabel: slot.slot_room_label,
+        classClassroomName: klass.classroom_id ? (roomNameById.get(klass.classroom_id) ?? null) : null,
+      }),
       students: rows,
       hasAnyRecord,
       recordedCount: rows.filter((r) => r.status != null).length,

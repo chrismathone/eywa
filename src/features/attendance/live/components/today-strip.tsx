@@ -16,6 +16,7 @@ import "server-only";
 import Link from "next/link";
 import { kstToday } from "@/lib/date-kst";
 import { reportError } from "@/lib/observability/report-error";
+import { groupAdjacentSlots } from "../seating";
 import { getLiveBoard } from "../server/queries";
 import { StripSlot } from "./strip-slot";
 
@@ -31,9 +32,9 @@ export async function TodayAttendanceStrip() {
   if (!board?.canEdit) return null;
 
   // 시작한 교시(grace 포함 — 수업이 시작됐으면 찍을 수 있다) 중 아직 빈 칸이 남은 것만.
-  const slots = board.teachers
-    .flatMap((t) => t.slots)
-    .filter((s) => s.phase !== "before" && s.recordedCount < s.students.length);
+  const slots = groupAdjacentSlots(board.teachers.flatMap((t) => t.slots)).filter(
+    (s) => s.phase !== "before" && s.recordedCount < s.students.length,
+  );
   if (slots.length === 0) return null;
 
   const missing = slots.reduce((n, s) => n + (s.students.length - s.recordedCount), 0);

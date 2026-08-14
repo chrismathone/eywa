@@ -5,6 +5,16 @@ import { redirect } from "next/navigation";
 import { after } from "next/server";
 import { notifyIfClassAttendanceComplete } from "./complete-notify";
 import { notifyDeskOfAbsences } from "@/features/attendance/live/server/absent-notify";
+import { notifyUnmarkedToPresent } from "@/features/attendance/live/server/cross-notify";
+import { isUnmarkedToArrival } from "@/features/attendance/live/mark-state";
+import {
+  assertDeskMayWrite,
+  isMissingViaColumn,
+  lookupPeriodPhase,
+  resolveWriteVia,
+  withVia,
+} from "@/features/attendance/live/server/write-policy";
+import type { RecordedVia } from "@/features/attendance/live/recorded-via";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { accessLevelTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
@@ -26,6 +36,53 @@ import { schoolGradeLabel } from "@/lib/format/school-grade";
 
 const STATUSES = ["present", "absent", "late", "excused", "makeup", "early_leave"] as const;
 type Status = (typeof STATUSES)[number];
+
+type Sb = Awaited<ReturnType<typeof createClient>>;
+
+/** 0212a 컬럼이 없으면 빼고 재시도 — 출결 저장을 죽이지 않는다(#95). */
+async function updateWithVia(
+  supabase: Sb,
+  patch: Record<string, unknown>,
+  ids: string[],
+): Promise<{ error: string | null }> {
+  const { error } = await supabase.from("attendance_records").update(patch).in("id", ids);
+  if (!error) return { error: null };
+  if (!isMissingViaColumn(error.message)) return { error: error.message };
+  const rest = { ...patch };
+  delete rest.recorded_via;
+  const retry = await supabase.from("attendance_records").update(rest).in("id", ids);
+  return { error: retry.error?.message ?? null };
+}
+
+async function insertWithVia(
+  supabase: Sb,
+  row: Record<string, unknown>,
+): Promise<{ error: string | null }> {
+  const { error } = await supabase.from("attendance_records").insert(row);
+  if (!error) return { error: null };
+  if (!isMissingViaColumn(error.message)) return { error: error.message };
+  const rest = { ...row };
+  delete rest.recorded_via;
+  const retry = await supabase.from("attendance_records").insert(rest);
+  return { error: retry.error?.message ?? null };
+}
+
+async function insertManyWithVia(
+  supabase: Sb,
+  rows: Record<string, unknown>[],
+): Promise<{ error: string | null }> {
+  const { error } = await supabase.from("attendance_records").insert(rows);
+  if (!error) return { error: null };
+  if (!isMissingViaColumn(error.message)) return { error: error.message };
+  const retry = await supabase.from("attendance_records").insert(
+    rows.map((r) => {
+      const rest = { ...r };
+      delete rest.recorded_via;
+      return rest;
+    }),
+  );
+  return { error: retry.error?.message ?? null };
+}
 
 export type SaveAttendanceState = { error?: string; saved?: number } | undefined;
 
@@ -116,8 +173,10 @@ export async function saveAttendance(
   }
 
   const nowIso = new Date().toISOString();
+  const via = await resolveWriteVia(supabase, user.id, classId, date);
 
-  // Split into updates (existing row) and inserts (new)
+  // 반별 입력 폼은 월간 출석부 경로 — 데스크 게이트를 걸지 않는다(#103).
+  // recorded_via 스탬프만 남긴다. 당일 화면의 제한은 source:"live"인 셀·일괄만.
   const updates = rows.filter((r) => r.existingIds.length > 0);
   const inserts = rows.filter((r) => r.existingIds.length === 0);
 
@@ -126,41 +185,47 @@ export async function saveAttendance(
   for (const r of updates) {
     // 교시가 여럿인 학생은 그날 **전 교시**를 같은 상태로 고친다(이 화면은 학생당 한 줄 = "그날 전체").
     const multi = r.existingIds.length > 1;
-    const patch: Record<string, unknown> = {
-      status: r.status,
-      note: r.note,
-      homework_required: r.homeworkRequired,
-      homework_done: r.homeworkDone,
-      recorded_by: user.id,
-      recorded_at: nowIso,
-    };
-    // 🔴 교시가 여럿이면 시수는 **건드리지 않는다** — 화면이 보여 준 값은 그날 **합**이라 그대로 각
-    //    교시에 쓰면 교시 수만큼 부풀려진다(2교시 합 2 → 각 2 → 합 4). 교시별 시수는 영어 수업 시트에서.
-    if (!multi) patch.session_units = r.sessionUnits;
-    const { error } = await supabase
-      .from("attendance_records")
-      .update(patch)
-      .in("id", r.existingIds);
-    if (error) return { error: error.message };
-    saved++;
-  }
-
-  if (inserts.length > 0) {
-    const { error } = await supabase.from("attendance_records").insert(
-      inserts.map((r) => ({
-        tenant_id: user.tenantId,
-        class_id: classId,
-        student_id: r.studentId,
-        session_date: date,
+    const patch: Record<string, unknown> = withVia(
+      {
         status: r.status,
         note: r.note,
         homework_required: r.homeworkRequired,
         homework_done: r.homeworkDone,
-        session_units: r.sessionUnits,
         recorded_by: user.id,
-      })),
+        recorded_at: nowIso,
+      },
+      via,
     );
-    if (error) return { error: error.message };
+    // 🔴 교시가 여럿이면 시수는 **건드리지 않는다** — 화면이 보여 준 값은 그날 **합**이라 그대로 각
+    //    교시에 쓰면 교시 수만큼 부풀려진다(2교시 합 2 → 각 2 → 합 4). 교시별 시수는 영어 수업 시트에서.
+    if (!multi) patch.session_units = r.sessionUnits;
+    const wrote = await updateWithVia(supabase, patch, r.existingIds);
+    if (wrote.error) return { error: wrote.error };
+    saved++;
+  }
+
+  if (inserts.length > 0) {
+    const wrote = await insertManyWithVia(
+      supabase,
+      inserts.map((r) =>
+        withVia(
+          {
+            tenant_id: user.tenantId,
+            class_id: classId,
+            student_id: r.studentId,
+            session_date: date,
+            status: r.status,
+            note: r.note,
+            homework_required: r.homeworkRequired,
+            homework_done: r.homeworkDone,
+            session_units: r.sessionUnits,
+            recorded_by: user.id,
+          },
+          via,
+        ),
+      ),
+    );
+    if (wrote.error) return { error: wrote.error };
     saved += inserts.length;
   }
 
@@ -198,6 +263,11 @@ export async function setAttendanceCell(input: {
    */
   slotStart?: string | null;
   /**
+   * 화면 교시("HH:MM") — **저장 축과 다를 수 있다**(수학은 saveSlot=null).
+   * 데스크 10분 판정·교차 알림이 이 시각을 본다. 안 넘기면 그날 가장 이른 교시.
+   */
+  periodStart?: string | null;
+  /**
    * 메모만 고친다 — 상태·시수는 **읽지도 쓰지도 않는다**.
    * 🔴 이 경로만 7일 편집창을 면제한다(원장 2026-08-06: "메모는 언제든 추가할 수 있어야"). 근거는
    *    메모가 **돈에 안 닿는다**는 것 — 시수·출석률은 그대로라 마감한 급여·청구가 흔들리지 않는다.
@@ -207,6 +277,12 @@ export async function setAttendanceCell(input: {
   noteOnly?: boolean;
   /** 화면 갱신 생략 — 출석부 시트가 입력이 멎은 뒤 한 번만 새로고침한다(키 입력마다 재조회 방지). */
   quiet?: boolean;
+  /**
+   * `"live"` = 당일 출결 화면. 데스크 게이트(10분 후 미출결만·삭제 금지)를 켠다.
+   * 없으면 종전 권한 — 월간 격자·원스크린·시트가 정정·삭제를 그대로 한다.
+   * `recorded_via` 스탬프는 이 값과 무관하게 항상 남긴다.
+   */
+  source?: "live";
 }): Promise<CellResult> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
@@ -263,6 +339,8 @@ export async function setAttendanceCell(input: {
   // ⚠️ `recorded_by`/`recorded_at`도 안 건드린다 — 그건 "누가 출결을 찍었나"라 메모 수정으로 덮으면 사실이 바뀐다.
   // 교시 지정(0196a) — 넘어온 값만 그 교시로 좁힌다. `slot`은 아래 세 경로가 공유한다.
   const slot = input.slotStart ?? null;
+  const periodStart = input.periodStart ?? slot;
+  const via = await resolveWriteVia(supabase, user.id, classId, sessionDate);
 
   if (noteOnly) {
     let q = supabase
@@ -285,6 +363,18 @@ export async function setAttendanceCell(input: {
 
   // 지우기 — 해당 (반·학생·날짜) 기록 삭제. 교시를 넘겼으면 **그 교시만**(다른 교시 기록은 남는다).
   if (status === null) {
+    // 당일 출결 화면만 데스크 삭제를 막는다. 월간 격자의 오클릭 되돌리기는 여기로 온다(#103).
+    const deskGate = await assertDeskMayWrite({
+      supabase,
+      via,
+      classId,
+      date: sessionDate,
+      periodStart,
+      currentStatus: "present",
+      nextStatus: null,
+      source: input.source,
+    });
+    if ("error" in deskGate) return deskGate;
     let del = supabase
       .from("attendance_records")
       .delete()
@@ -306,7 +396,7 @@ export async function setAttendanceCell(input: {
   //    멀쩡해 보이지만 급여·시수는 두 행을 다 합산해서, 정정이 돈에 반영되지 않거나 이중 계상된다.
   const { data: rows } = await supabase
     .from("attendance_records")
-    .select("id, slot_start, recorded_at")
+    .select("id, slot_start, recorded_at, status")
     .eq("class_id", classId)
     .eq("student_id", studentId)
     .eq("session_date", sessionDate)
@@ -315,38 +405,56 @@ export async function setAttendanceCell(input: {
   // 대상 선정은 순수 규칙 **한 곳**(pickSaveTargets)이 정한다 — 일괄 저장도 같은 함수를 쓴다.
   // 이미 recorded_at 내림차순이라 "교시마다 처음 만난 행이 최신"이라는 그 함수의 전제를 만족한다.
   const { updateIds, promoteIds } = pickSaveTargets(rows ?? [], slot);
+  const targetIdSet = new Set([...updateIds, ...promoteIds]);
+  const prevStatus =
+    (rows ?? []).find((r) => targetIdSet.has(r.id as string))?.status ?? null;
+
+  const deskGate = await assertDeskMayWrite({
+    supabase,
+    via,
+    classId,
+    date: sessionDate,
+    periodStart,
+    currentStatus: prevStatus,
+    nextStatus: status,
+    source: input.source,
+  });
+  if ("error" in deskGate) return deskGate;
 
   const nowIso = new Date().toISOString();
-  const targetIds = [...updateIds, ...promoteIds];
-  if (targetIds.length > 0) {
-    const patch: Record<string, unknown> = { status, recorded_by: user.id, recorded_at: nowIso };
+  if (updateIds.length > 0 || promoteIds.length > 0) {
+    const patch: Record<string, unknown> = withVia(
+      { status, recorded_by: user.id, recorded_at: nowIso },
+      via,
+    );
     if (noteProvided) patch.note = noteVal;
     if (unitsProvided) patch.session_units = unitsVal;
     if (promoteIds.length > 0) {
       // 승격(옛 "그날 전체" 행 → 그 교시). 승격 대상만 있을 때만 발생하므로 한 문장으로 끝난다.
-      const { error } = await supabase
-        .from("attendance_records")
-        .update({ ...patch, slot_start: slot })
-        .in("id", promoteIds);
-      if (error) return { error: error.message };
+      const wrote = await updateWithVia(supabase, { ...patch, slot_start: slot }, promoteIds);
+      if (wrote.error) return { error: wrote.error };
     }
     if (updateIds.length > 0) {
-      const { error } = await supabase.from("attendance_records").update(patch).in("id", updateIds);
-      if (error) return { error: error.message };
+      const wrote = await updateWithVia(supabase, patch, updateIds);
+      if (wrote.error) return { error: wrote.error };
     }
   } else {
-    const { error } = await supabase.from("attendance_records").insert({
-      tenant_id: user.tenantId,
-      class_id: classId,
-      student_id: studentId,
-      session_date: sessionDate,
-      slot_start: slot,
-      status,
-      note: noteProvided ? noteVal : null,
-      session_units: unitsProvided ? unitsVal : null,
-      recorded_by: user.id,
-    });
-    if (error) return { error: error.message };
+    const row = withVia(
+      {
+        tenant_id: user.tenantId,
+        class_id: classId,
+        student_id: studentId,
+        session_date: sessionDate,
+        slot_start: slot,
+        status,
+        note: noteProvided ? noteVal : null,
+        session_units: unitsProvided ? unitsVal : null,
+        recorded_by: user.id,
+      },
+      via,
+    );
+    const wrote = await insertWithVia(supabase, row);
+    if (wrote.error) return { error: wrote.error };
   }
 
   // G4: 셀 저장(삽입/갱신)마다 완료 전이 검사 — 삭제 경로는 위에서 조기 반환이라 미발화(기록 제거는 완료가 아님).
@@ -363,6 +471,21 @@ export async function setAttendanceCell(input: {
         cells: [{ studentId, classId, slotStart: slot }],
       }),
     );
+  }
+  if (isUnmarkedToArrival(prevStatus, status)) {
+    // '미출결'은 유예 경과 뒤의 빈 칸. 유예 안 찍기는 정상 입력이라 교차 알림을 안 보낸다.
+    const phase = await lookupPeriodPhase(supabase, classId, sessionDate, periodStart);
+    if (phase === "due" || phase === "ended") {
+      after(() =>
+        notifyUnmarkedToPresent({
+          tenantId: user.tenantId,
+          actorId: user.id,
+          date: sessionDate,
+          via,
+          cells: [{ studentId, classId, slotStart: slot }],
+        }),
+      );
+    }
   }
   if (!input.quiet) revalidatePath("/attendance");
   return { ok: true };
@@ -564,6 +687,10 @@ export async function setAttendanceBulk(input: {
    *    1교시를 찍은 순간 2교시가 통째로 blocked가 되어 영원히 못 찍는다.
    */
   slotStart?: string | null;
+  /** 화면 교시 — 데스크 10분 판정용. 저장 축(`slotStart`)과 다를 수 있다. */
+  periodStart?: string | null;
+  /** `"live"` = 당일 출결 화면의 일괄. 없으면 데스크 게이트 없음(원스크린·시트). */
+  source?: "live";
 }): Promise<BulkCellResult> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
@@ -622,6 +749,7 @@ export async function setAttendanceBulk(input: {
   const classIds = [...new Set(allowed.map((c) => c.classId))];
   const studentIds = [...new Set(allowed.map((c) => c.studentId))];
   const slot = input.slotStart?.trim() || null;
+  const periodStart = input.periodStart?.trim() || slot;
   if (slot && !/^\d{2}:\d{2}(:\d{2})?$/.test(slot)) return { error: "잘못된 교시입니다" };
   // 기존 기록 — 셀 액션과 같은 "가장 최근 1건" 규약(그 날짜에 행이 여러 개일 수 있다).
   // 교시를 넘겼으면 **그 교시 행만** 본다(다른 교시 기록을 이 교시의 답으로 오인하지 않는다).
@@ -666,51 +794,89 @@ export async function setAttendanceBulk(input: {
   }
 
   const nowIso = new Date().toISOString();
-  // 갱신 대상을 둘로 가른다 — 그 교시 행은 그대로, 옛 "그날 전체" 행은 **그 교시로 승격**하며 갱신.
-  const updateIds: string[] = [];
-  const promoteIds: string[] = [];
+  // 반마다 주체(강사/데스크)를 한 번만 판정 — 같은 요청에 여러 반이 섞일 수 있다.
+  const viaByClass = new Map<string, RecordedVia>();
+  for (const classId of classIds) {
+    viaByClass.set(classId, await resolveWriteVia(supabase, user.id, classId, sessionDate));
+  }
+
+  // 데스크 게이트 — 당일 출결 화면만. 이미 찍힌 칸·유예 안 칸은 건너뛴다(blocked).
+  if (input.source === "live") {
+    const deskGateByClass = new Map<string, { error: string } | { ok: true }>();
+    const open: typeof allowed = [];
+    for (const c of allowed) {
+      const via = viaByClass.get(c.classId) ?? "desk";
+      const current = targetsByKey.has(`${c.studentId}::${c.classId}`) ? "present" : null;
+      const cacheKey = `${c.classId}|${current ?? ""}`;
+      let gate = deskGateByClass.get(cacheKey);
+      if (!gate) {
+        gate = await assertDeskMayWrite({
+          supabase,
+          via,
+          classId: c.classId,
+          date: sessionDate,
+          periodStart,
+          currentStatus: current,
+          nextStatus: status,
+          source: "live",
+        });
+        deskGateByClass.set(cacheKey, gate);
+      }
+      if ("error" in gate) continue;
+      open.push(c);
+    }
+    allowed = open;
+  }
+
+  const inserts = allowed.filter((c) => !targetsByKey.has(`${c.studentId}::${c.classId}`));
+
+  // 갱신 대상을 주체×(그대로/승격)로 나눈다. pickSaveTargets가 돈 규칙을 정한다.
+  const CHUNK = 100;
+  const byVia = new Map<RecordedVia, { updateIds: string[]; promoteIds: string[] }>();
   for (const c of allowed) {
     const targets = targetsByKey.get(`${c.studentId}::${c.classId}`);
     if (!targets) continue;
-    updateIds.push(...targets.updateIds);
-    promoteIds.push(...targets.promoteIds);
+    const via = viaByClass.get(c.classId) ?? "teacher";
+    const bucket = byVia.get(via) ?? byVia.set(via, { updateIds: [], promoteIds: [] }).get(via)!;
+    bucket.updateIds.push(...targets.updateIds);
+    bucket.promoteIds.push(...targets.promoteIds);
   }
-  const inserts = allowed.filter((c) => !targetsByKey.has(`${c.studentId}::${c.classId}`));
-
-  // 상태가 전부 같아서 갱신은 한 문장이면 된다(id 목록은 청크로 나눠 URL 길이 회피).
-  const applyUpdate = async (ids: string[], extra: Record<string, unknown>) => {
-    const CHUNK = 100;
-    for (let i = 0; i < ids.length; i += CHUNK) {
-      const { error } = await supabase
-        .from("attendance_records")
-        .update({ status, recorded_by: user.id, recorded_at: nowIso, ...extra })
-        .in("id", ids.slice(i, i + CHUNK));
-      if (error) return error.message;
+  for (const [via, bucket] of byVia) {
+    for (let i = 0; i < bucket.updateIds.length; i += CHUNK) {
+      const wrote = await updateWithVia(
+        supabase,
+        withVia({ status, recorded_by: user.id, recorded_at: nowIso }, via),
+        bucket.updateIds.slice(i, i + CHUNK),
+      );
+      if (wrote.error) return { error: wrote.error };
     }
-    return null;
-  };
-  if (updateIds.length > 0) {
-    const err = await applyUpdate(updateIds, {});
-    if (err) return { error: err };
-  }
-  if (promoteIds.length > 0) {
-    const err = await applyUpdate(promoteIds, { slot_start: slot });
-    if (err) return { error: err };
+    for (let i = 0; i < bucket.promoteIds.length; i += CHUNK) {
+      const wrote = await updateWithVia(
+        supabase,
+        withVia({ status, recorded_by: user.id, recorded_at: nowIso, slot_start: slot }, via),
+        bucket.promoteIds.slice(i, i + CHUNK),
+      );
+      if (wrote.error) return { error: wrote.error };
+    }
   }
   if (inserts.length > 0) {
-    const { error } = await supabase.from("attendance_records").insert(
-      inserts.map((c) => ({
-        tenant_id: user.tenantId,
-        class_id: c.classId,
-        student_id: c.studentId,
-        session_date: sessionDate,
-        status,
-        recorded_by: user.id,
-        // 교시 미지정이면 종전대로 null("그날 전체") — 기존 호출부의 저장 모양이 바뀌지 않는다.
-        ...(slot ? { slot_start: slot } : {}),
-      })),
+    const rows = inserts.map((c) =>
+      withVia(
+        {
+          tenant_id: user.tenantId,
+          class_id: c.classId,
+          student_id: c.studentId,
+          session_date: sessionDate,
+          status,
+          recorded_by: user.id,
+          // 교시 미지정이면 종전대로 null("그날 전체") — 기존 호출부의 저장 모양이 바뀌지 않는다.
+          ...(slot ? { slot_start: slot } : {}),
+        },
+        viaByClass.get(c.classId) ?? "teacher",
+      ),
     );
-    if (error) return { error: error.message };
+    const wrote = await insertManyWithVia(supabase, rows);
+    if (wrote.error) return { error: wrote.error };
   }
 
   // G4: 반마다 '전원 기록 완료' 전이 검사(셀 액션과 동일) — 백그라운드라 응답을 막지 않는다.
@@ -734,6 +900,34 @@ export async function setAttendanceBulk(input: {
         cells: allowed.map((c) => ({ ...c, slotStart: slot })),
       }),
     );
+  }
+  // 일괄 '전원 출석'이 미출결→출결이면 교차 알림. 주체별로 나눠 보낸다.
+  if (isUnmarkedToArrival(null, status) && inserts.length > 0) {
+    const phaseByClass = new Map<string, Awaited<ReturnType<typeof lookupPeriodPhase>>>();
+    const byVia = new Map<RecordedVia, typeof inserts>();
+    for (const c of inserts) {
+      let phase = phaseByClass.get(c.classId);
+      if (!phase) {
+        phase = await lookupPeriodPhase(supabase, c.classId, sessionDate, periodStart);
+        phaseByClass.set(c.classId, phase);
+      }
+      if (phase !== "due" && phase !== "ended") continue;
+      const via = viaByClass.get(c.classId) ?? "teacher";
+      (byVia.get(via) ?? byVia.set(via, []).get(via)!).push(c);
+    }
+    if (byVia.size > 0) {
+      after(async () => {
+        for (const [via, group] of byVia) {
+          await notifyUnmarkedToPresent({
+            tenantId: user.tenantId,
+            actorId: user.id,
+            date: sessionDate,
+            via,
+            cells: group.map((c) => ({ ...c, slotStart: slot })),
+          });
+        }
+      });
+    }
   }
   revalidatePath("/attendance");
   return { ok: true, applied: allowed, blocked: cells.length - allowed.length };
@@ -891,31 +1085,52 @@ export async function setAttendanceRange(input: {
     .filter((id): id is string => !!id);
   const inserts = allowed.filter((c) => !latestId.has(`${c.studentId}::${c.classId}::${c.sessionDate}`));
 
+  const rangeViaByClass = new Map<string, RecordedVia>();
+  for (const classId of classIds) {
+    rangeViaByClass.set(classId, await resolveWriteVia(supabase, user.id, classId, dates[0] ?? kstToday()));
+  }
+
   if (updateIds.length > 0) {
-    const patch: Record<string, unknown> = { status, recorded_by: user.id, recorded_at: nowIso };
-    if (unitsProvided) patch.session_units = unitsVal;
-    for (let i = 0; i < updateIds.length; i += CHUNK) {
-      const { error } = await supabase
-        .from("attendance_records")
-        .update(patch)
-        .in("id", updateIds.slice(i, i + CHUNK));
-      if (error) return { error: error.message };
+    const byVia = new Map<RecordedVia, string[]>();
+    for (const c of allowed) {
+      const id = latestId.get(`${c.studentId}::${c.classId}::${c.sessionDate}`);
+      if (!id) continue;
+      const via = rangeViaByClass.get(c.classId) ?? "teacher";
+      // 범위 채우기는 월간 격자 전용 — 데스크 게이트를 걸지 않는다(오클릭 결석을 여기서 되돌린다).
+      (byVia.get(via) ?? byVia.set(via, []).get(via)!).push(id);
+    }
+    for (const [via, ids] of byVia) {
+      const patch: Record<string, unknown> = withVia(
+        { status, recorded_by: user.id, recorded_at: nowIso },
+        via,
+      );
+      if (unitsProvided) patch.session_units = unitsVal;
+      for (let i = 0; i < ids.length; i += CHUNK) {
+        const wrote = await updateWithVia(supabase, patch, ids.slice(i, i + CHUNK));
+        if (wrote.error) return { error: wrote.error };
+      }
     }
   }
   if (inserts.length > 0) {
     for (let i = 0; i < inserts.length; i += CHUNK) {
-      const { error } = await supabase.from("attendance_records").insert(
-        inserts.slice(i, i + CHUNK).map((c) => ({
-          tenant_id: user.tenantId,
-          class_id: c.classId,
-          student_id: c.studentId,
-          session_date: c.sessionDate,
-          status,
-          session_units: unitsProvided ? unitsVal : null,
-          recorded_by: user.id,
-        })),
+      const wrote = await insertManyWithVia(
+        supabase,
+        inserts.slice(i, i + CHUNK).map((c) =>
+          withVia(
+            {
+              tenant_id: user.tenantId,
+              class_id: c.classId,
+              student_id: c.studentId,
+              session_date: c.sessionDate,
+              status,
+              session_units: unitsProvided ? unitsVal : null,
+              recorded_by: user.id,
+            },
+            rangeViaByClass.get(c.classId) ?? "teacher",
+          ),
+        ),
       );
-      if (error) return { error: error.message };
+      if (wrote.error) return { error: wrote.error };
     }
   }
 

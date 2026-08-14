@@ -11,16 +11,16 @@ describe("자리 담당 착지", () => {
     expect(landingPathFromDuties({ lab: true, jj: false })).toBe("/attendance/seat/lab");
   });
 
-  it("JJ실만 켜져 있어도 1차에선 착지하지 않는다(아직 안 연 자리)", () => {
-    expect(landingPathFromDuties({ lab: false, jj: true })).toBeNull();
-    expect(dutyAllowsSeat({ lab: false, jj: true }, "jj")).toBe(false);
+  it("JJ실만 켜져 있으면 JJ실 출석부로 착지한다", () => {
+    expect(landingPathFromDuties({ lab: false, jj: true })).toBe("/attendance/seat/jj");
+    expect(dutyAllowsSeat({ lab: false, jj: true }, "jj")).toBe(true);
   });
 
-  it("둘 다 켜면 열린 자리(랩실)가 이긴다", () => {
+  it("둘 다 켜면 목록 앞(랩실)이 이긴다", () => {
     expect(landingPathFromDuties({ lab: true, jj: true })).toBe("/attendance/seat/lab");
   });
 
-  it("랩실 담당만 그 자리 쓰기를 연다", () => {
+  it("켜 둔 자리만 쓰기를 연다", () => {
     expect(dutyAllowsSeat({ lab: true, jj: false }, "lab")).toBe(true);
     expect(dutyAllowsSeat({ lab: true, jj: false }, "jj")).toBe(false);
     expect(dutyAllowsSeat(EMPTY_SEAT_DUTIES, "lab")).toBe(false);
