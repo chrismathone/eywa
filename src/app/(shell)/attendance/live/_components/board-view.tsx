@@ -171,7 +171,10 @@ function SlotCard({ slot, date, canEdit }: { slot: LiveBoardSlot; date: string; 
             </span>
             <TodayAttendancePills
               status={statusOf(s.studentId, s.status)}
-              note={null}
+              // 🔴 기존 사유를 넘겨야 한다. null로 두면 ① 카드에 사유가 안 보이고 ② 사유 창을 다시 열 때
+              //    **빈 칸으로 시작**해, 그대로 저장하면 "감기로 결석"이 지워진다(데스크 카드는 그 메모를
+              //    전화 전에 읽으라고 띄우는데 강사 쪽에서 없애는 셈).
+              note={s.note}
               studentName={s.studentName}
               canMark={canEdit && !busy}
               onSet={(status, note) => save(s.studentId, status, note)}
