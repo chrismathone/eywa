@@ -12,7 +12,15 @@ import {
   commentStyleDirective,
   styleSeedIndex,
 } from "./prompt-defaults";
-import { buildTrendInput, compressRuns, examScales, trendBody, TREND_MIXED_SCALE_NOTE } from "./trend-comment";
+import {
+  buildTrendInput,
+  compressRuns,
+  examScales,
+  findImpossibleScaleSpans,
+  isTrendScaleSane,
+  trendBody,
+  TREND_MIXED_SCALE_NOTE,
+} from "./trend-comment";
 
 describe("멘트 프롬프트 — 원장 지시 4종이 문구로 박혀 있다", () => {
   const p = DEFAULT_PROMPTS.comment;
@@ -139,5 +147,41 @@ describe("추세 — 연속 같은 값 묶기(입력 축약)", () => {
         { date: "2026-07-13", value: "일일 8/10" },
       ]),
     ).toBe("[07-06] 일일 6/10 -> [07-13] 일일 8/10");
+  });
+});
+
+/**
+ * 🔴 2026-08-13 실측 사고: 척도 주의 문구가 이미 있었는데도 이 문장이 학부모에게 나갔다 —
+ *    "큰 변화 없이 **9~15문제 중 9~15개** 선을 유지하고 있으며". 모델이 '비교'는 안 했지만 범위로 뭉갠 것.
+ *    프롬프트만으로는 못 막는다는 증거라, 생성 뒤 **후검증**을 둔다.
+ */
+describe("추세 — 사실일 수 없는 척도 표기 후검증", () => {
+  it("🔴 분모(문항 수)에 범위가 붙으면 거짓 — 실제로 나간 문장", () => {
+    const bad = "큰 변화 없이 9~15문제 중 9~15개 선을 유지하고 있으며, 과제도 대부분 챙겨 오고 있습니다.";
+    expect(findImpossibleScaleSpans(bad)).toContain("9~15문제");
+    expect(isTrendScaleSane(bad)).toBe(false);
+  });
+
+  it("만점에 범위가 붙어도 거짓", () => {
+    expect(isTrendScaleSane("9~15점 만점에 8점을 받았습니다")).toBe(false);
+  });
+
+  it("하이픈·물결 어느 쪽이든 잡는다", () => {
+    expect(isTrendScaleSane("10-20문제 중 절반쯤")).toBe(false);
+    expect(isTrendScaleSane("10∼20문제 중 절반쯤")).toBe(false);
+  });
+
+  it("✅ 만점이 같고 점수만 범위인 건 **정상**이다 — 막으면 안 된다", () => {
+    expect(isTrendScaleSane("10문제 중 8~9개 선을 유지하고 있습니다")).toBe(true);
+    expect(isTrendScaleSane("100점 만점에 80~90점을 오가고 있습니다")).toBe(true);
+  });
+
+  it("✅ 숫자 없는 서술형 추세는 통과", () => {
+    expect(isTrendScaleSane("최근 몇 회차는 예전만큼 점수가 나오지는 않고 있습니다.")).toBe(true);
+  });
+
+  it("주의 문구가 범위 표기를 이름으로 막는다(프롬프트 쪽 방어)", () => {
+    expect(TREND_MIXED_SCALE_NOTE).toContain("만점(문항 수)에 범위를 쓰지 마세요");
+    expect(TREND_MIXED_SCALE_NOTE).toContain("9~15문제 중 9~15개");
   });
 });

@@ -8,6 +8,9 @@
 import type { OneScreenStudent } from "./types";
 import { normalizeHomeworkPages } from "./homework-pages";
 import { resolveRowFields } from "./row-fields";
+import { splitNoticeFromNote } from "./class-notice";
+
+const EMPTY_NOTICES: ReadonlyMap<string, string> = new Map();
 import { DEFAULT_PROMPTS, interpolate, assembleSingle } from "./prompt-defaults";
 import { isSkipStatus } from "./progress-status";
 import { asProgressMode, progressFactLabel } from "./progress-mode";
@@ -47,6 +50,12 @@ export type ReportCommentInput = {
   // 학생별 사실과 결합해 서로 다른 멘트로 분기되는 **생성 재료**(기록 아님 — 클라 sessionStorage).
   // 가드 문구가 fact 블록에 동봉되므로(모순 시 학생 사실 우선) DB 프롬프트 오버라이드와 무관하게 항상 동행.
   classContext?: string; // "" 또는 미지정 = 반 서술 없음(기존 동작과 동일)
+  /**
+   * **반 전체 안내** — 그 반 학생 모두에게 같은 내용으로 나가는 공지(class-notice.ts가 판별).
+   * 🔴 `specialNote`와 **동시에 채우지 않는다**. 같은 문장이 '안내'와 '이 아이의 특이사항'으로 두 번 들어가면
+   *    모델이 그걸 개인 사실로 한 번 더 쓴다 — 중복이 곧 AI 티다(2026-08-13 실측: 한 반 6명 멘트가 거의 동일).
+   */
+  classNotice?: string;
 };
 
 /** 값을 라벨 **한 줄 안에** 가두는 정규화 — 내부 개행을 ", "로 접는다.
@@ -75,12 +84,22 @@ function testLine(score: number | null, max: number, prev: number | null): strin
 }
 
 /** onescreen 학생 + 과목 인덱스 → 멘트 입력. 빈 값은 빈 문자열(프롬프트가 침묵하도록). */
-export function buildReportCommentInput(st: OneScreenStudent, subjectIndex: number): ReportCommentInput {
+export function buildReportCommentInput(
+  st: OneScreenStudent,
+  subjectIndex: number,
+  /**
+   * 반별 **반 전체 안내**(class-notice.ts `detectClassNotices`). 넘기지 않으면 종전대로 전부 특이사항 취급.
+   * 🔑 같은 반 학생들의 특이사항이 전부 똑같으면 그건 개인 관찰일 수 없다 — 공지를 특이사항으로 주면
+   *    모델이 6명분 관찰을 지어내 멘트가 서로 복사본처럼 된다(2026-08-13 실측).
+   */
+  classNotices?: ReadonlyMap<string, string>,
+): ReportCommentInput {
   const su = st.subjects[subjectIndex];
   // 🔴 평가값은 **그 행의 값**이다(row-fields.ts) — 학생 값을 그대로 쓰면 보강 행 멘트에 정규 수업의
   //    태도·점수가 실려 나간다(원장 2026-08-13: 보강은 따로 발송되는 다른 보고서다).
   //    저장(report-fields.ts)·화면과 같은 해석을 쓴다 = 셋이 서로 다른 말을 하지 않는다.
   const ev = resolveRowFields(st, su);
+  const { classNotice, specialNote } = splitNoticeFromNote(ev.note, su?.classId, classNotices ?? EMPTY_NOTICES);
   return {
     studentName: st.name,
     // ⚠️ AI 프롬프트 → 학부모 멘트로 그대로 흘러가는 값이라 **순수 과목 라벨**만 넣는다.
@@ -96,7 +115,8 @@ export function buildReportCommentInput(st: OneScreenStudent, subjectIndex: numb
     // 되는 어긋남이 안 생긴다. 순수·멱등이라 이미 단위가 붙은 값은 그대로 지나간다(homework-pages.ts).
     homeworkToday: normalizeHomeworkPages(su?.homeworkToday ?? ""),
     textbook: su?.textbook ?? "",
-    specialNote: ev.note,
+    specialNote,
+    classNotice,
   };
 }
 
@@ -133,6 +153,11 @@ export function buildFactBlock(input: ReportCommentInput): string {
   if (input.homework) facts.push(`과제: ${flatten(input.homework)}`);
   if (input.homeworkToday) facts.push(`오늘 과제: ${flatten(input.homeworkToday)}`); // 마무리 문장 재료(0096a)
   if (input.specialNote) facts.push(`특이사항: ${flatten(input.specialNote)}`);
+  // 반 전체 안내 — 라벨에 **취급법까지** 적는다(프롬프트 본문은 원장이 편집 가능해 사라질 수 있다).
+  if (input.classNotice)
+    facts.push(
+      `반 전체 안내(이 반 학생 모두에게 같은 내용으로 나가는 공지 — 그대로 한 번만 전하고, 이것으로 이 아이의 모습·태도·성취를 지어내지 마세요): ${flatten(input.classNotice)}`,
+    );
   // 반 공통 서술(G6) — 참고 맥락으로 동봉. 가드("모순 시 위 학생 정보 우선")를 데이터에 실어
   // 프롬프트 템플릿(DB 오버라이드 가능)과 무관하게 항상 적용. 결석·진도미입력 행은 호출 전 구조 제외됨.
   // ⚠️ **개별 사실이 1개+ 있을 때만**(facts 앵커) — 반 서술 단독으로 문단이 살아나면 학생 개인 멘트가
@@ -183,6 +208,11 @@ export function buildP2FactBlock(input: ReportCommentInput): string | null {
   const facts: string[] = [];
   if (input.attitude) facts.push(`태도: ${flatten(input.attitude)}`);
   if (input.specialNote) facts.push(`특이사항: ${flatten(input.specialNote)}`);
+  // 반 전체 안내 — 라벨에 **취급법까지** 적는다(프롬프트 본문은 원장이 편집 가능해 사라질 수 있다).
+  if (input.classNotice)
+    facts.push(
+      `반 전체 안내(이 반 학생 모두에게 같은 내용으로 나가는 공지 — 그대로 한 번만 전하고, 이것으로 이 아이의 모습·태도·성취를 지어내지 마세요): ${flatten(input.classNotice)}`,
+    );
   return facts.length ? facts.join("\n") : null;
 }
 

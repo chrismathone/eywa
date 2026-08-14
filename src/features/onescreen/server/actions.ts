@@ -7,7 +7,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { kstToday, resolveReportDate } from "@/lib/date-kst";
 import { generateJSON } from "@/lib/ai/generate";
 import { commentBody, commentP1Body, commentP2Body, type ReportCommentInput } from "../report-comment";
-import { buildTrendInput, trendBody } from "../trend-comment";
+import { buildTrendInput, findImpossibleScaleSpans, trendBody } from "../trend-comment";
 import {
   assembleCombined,
   commentStyleDirective,
@@ -658,7 +658,23 @@ ${style}` : body });
     const pick = (k: string) => (data[k] ?? "").trim();
     const comment = mode === "B" ? [pick("p1"), pick("p2")].filter(Boolean).join("\n\n") : pick("comment");
     if (!comment) return { ok: false, error: "빈 응답" };
-    const trend = hasTrend ? pick("trend") || undefined : undefined;
+    // 🔴 추세 문장 후검증(2026-08-13) — 척도가 섞인 학생에게서 *"9~15문제 중 9~15개 선을 유지"* 같은
+    //    **사실일 수 없는 표기**가 실제로 학부모에게 나갔다. 프롬프트 주의 문구가 이미 있었는데도 뚫렸으므로
+    //    생성 뒤에도 한 번 더 본다. 걸리면 **추세를 아예 안 실는다** — 없는 것보다 거짓이 나쁘다.
+    //    (추세는 선택 항목이라 빠져도 보고서는 성립한다. 멘트는 그대로 살린다.)
+    const rawTrend = hasTrend ? pick("trend") || undefined : undefined;
+    const badSpans = rawTrend ? findImpossibleScaleSpans(rawTrend) : [];
+    if (badSpans.length)
+      console.warn(
+        JSON.stringify({
+          level: "warn",
+          scope: "generateReportComment.trend",
+          reason: "impossible_scale_span",
+          spans: badSpans,
+          message: "추세 문장에 사실일 수 없는 척도 표기가 있어 저장하지 않음",
+        }),
+      );
+    const trend = badSpans.length ? undefined : rawTrend;
     return { ok: true, comment, trend };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "AI 생성 실패" };

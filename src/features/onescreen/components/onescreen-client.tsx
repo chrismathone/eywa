@@ -108,6 +108,7 @@ import { dedupeEditors } from "@/features/presence/presence-state";
 import { MakeupMergeDialog, type MakeupMergeChoice } from "./makeup-merge-dialog";
 import { mergeStatusOf, mergedUnits, planMakeupMerge, type MergeCandidate } from "../makeup-merge-plan";
 import { hasRowOverrides, resolveRowFields, seedRowFields } from "../row-fields";
+import { detectClassNotices } from "../class-notice";
 import { shortDate } from "../makeup-absence-link";
 
 type ReportsState = Record<string, Record<string, SubjectReport>>; // studentId → 과목명 → {draft, sent}
@@ -1223,9 +1224,18 @@ export function OneScreenClient({
     // ⚠️ 키 = classId(이름 아님) — 동명 반(수학·영어 같은 이름, 스키마 허용)에서 이름 키면 남의 반 수업
     // 맥락이 교차 주입된다(리뷰 확정 major, 순서 기능 동명 가드와 같은 원인). classId null(모호 행·보강)=서술 없음.
     const classContext = (su?.classId && classNarratives[su.classId]) || "";
+    // 🔴 특이사항 칸에 들어온 **반 공지**를 개인 관찰과 갈라 준다(class-notice.ts) — 같은 반 학생들의
+    //    특이사항이 전부 똑같으면 그건 개인 관찰일 수 없다. 안 가르면 모델이 6명분 관찰을 지어내
+    //    멘트가 서로 복사본처럼 된다(2026-08-13 실측: 한 반 6명 특이사항이 글자까지 동일).
+    //    ⚠️ 판정 대상은 **화면에 있는 지금 로스터 전체**다 — 강사가 보고 있는 반들이 곧 판정 모집단이다.
+    const classNotices = detectClassNotices(
+      studentsRef.current.flatMap((st) =>
+        st.subjects.map((row) => ({ classId: row.classId, note: resolveRowFields(st, row).note })),
+      ),
+    );
     try {
       // 통합 1회 호출 — 멘트 + 추세를 한 번에 생성(비용·지연↓).
-      const res = await generateReportComment({ ...buildReportCommentInput(student, idx), classContext }, {
+      const res = await generateReportComment({ ...buildReportCommentInput(student, idx, classNotices), classContext }, {
         studentId: student.id,
         subject: subjectKey,
         classId: su?.classId ?? null, // 정규/특강 추세 분리(2026-07-23) — 이 행의 반.
