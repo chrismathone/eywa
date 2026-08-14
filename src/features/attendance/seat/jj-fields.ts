@@ -39,3 +39,8 @@ export function isJjMarkField(field: MarkTextField): field is JjMarkField {
 export function seatOverlayKey(classId: string, studentId: string, slotStart: string): string {
   return `${classId}|${studentId}|${hhmm(slotStart)}`;
 }
+
+/** 반 N개 = 열 N개. auto-fill은 창이 넓으면 빈 칸을 만들고, 좁으면 반을 다음 줄로 내린다. */
+export function jjClassColumns(classCount: number): string {
+  return `repeat(${Math.max(1, classCount)}, minmax(240px, 1fr))`;
+}

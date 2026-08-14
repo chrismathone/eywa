@@ -26,7 +26,7 @@ export type HubTeacher = {
  *    하루치 경량 집계라 허브 진입 비용으로 감수한다.
  */
 /** 자리(랩실·JJ실) 한 칸 — 사람이 아니라 방이라 강사 카드와 같은 줄에 섞지 않고 아래 묶음으로 둔다. */
-export type HubSeat = { key: string; name: string; room: string; href: string; open: boolean };
+export type HubSeat = { key: string; name: string; room: string; href: string; monthHref: string; open: boolean };
 
 export function AttendanceHub({
   teachers,
@@ -129,26 +129,32 @@ export function AttendanceHub({
                 <ul className="mt-1.5 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
                   {seats.map((s) => (
                     <li key={s.key}>
-                      <Link
-                        href={s.href}
-                        className={`hover:bg-bg-soft border-line flex items-center gap-2.5 rounded-xl border px-3 py-2.5 transition ${s.open ? "" : "opacity-60"}`}
+                      <div
+                        className={`border-line flex items-center gap-2.5 rounded-xl border px-3 py-2.5 ${s.open ? "" : "opacity-60"}`}
                       >
-                        <span className="min-w-0">
+                        <Link href={s.href} className="hover:bg-bg-soft min-w-0 flex-1 rounded-lg">
                           <span className="text-foreground block truncate text-[13.5px] font-bold">
                             {s.name} <span className="text-text-faint font-medium">{s.room}</span>
                           </span>
                           <span className="text-text-dim block text-[11.5px]">
                             {s.open ? "여러 반이 함께 들어오는 자리" : "아직 열지 않음"}
                           </span>
-                        </span>
-                        <span
-                          className={`rounded-pill ml-auto shrink-0 px-2.5 py-1 text-[11px] font-bold ${
+                        </Link>
+                        <Link
+                          href={s.monthHref}
+                          className="bg-bg-soft text-text-dim hover:text-foreground rounded-pill shrink-0 px-2.5 py-1 text-[11px] font-bold"
+                        >
+                          월간
+                        </Link>
+                        <Link
+                          href={s.href}
+                          className={`rounded-pill shrink-0 px-2.5 py-1 text-[11px] font-bold ${
                             s.open ? "bg-primary-soft text-primary" : "bg-bg-soft text-text-faint"
                           }`}
                         >
-                          {s.open ? "출석부 열기" : "준비 중"}
-                        </span>
-                      </Link>
+                          {s.open ? "하루" : "준비 중"}
+                        </Link>
+                      </div>
                     </li>
                   ))}
                 </ul>
