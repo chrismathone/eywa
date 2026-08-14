@@ -36,15 +36,6 @@ export const SEAT_MARK_TONE: Record<SeatMark, string> = {
   waiting: "bg-att-classday text-text-dim",
 };
 
-/** 좌석 위 출석불 — 잉크색으로 출석/결석을 한눈에. */
-export const SEAT_MARK_BULB: Record<SeatMark, string> = {
-  present: "bg-att-present-ink",
-  absent: "bg-att-absent-ink",
-  late: "bg-att-late-ink",
-  unmarked: "bg-att-outside",
-  waiting: "bg-att-classday ring-1 ring-line",
-};
-
 /** 마우스오버 — 결석이면 사유 메모를 둘째 줄에. */
 export function seatHoverTitle(input: {
   studentName: string;

@@ -51,8 +51,9 @@ export const SUBTABS_BY_MENU: Partial<Record<MenuKey, SubTab[]>> = {
     { label: "시수 검증", href: "/billing?tab=verify" },
     { label: "환불 요청서", href: "/billing?tab=refunds" },
   ],
-  // 출석부 — '오늘 출결'(당일 강사별 출석부 + 데스크 확인 큐, 2026-08-14)을 먼저 둔다. 매일 여는 자리라
-  // 월별 장부보다 위다. 라우트가 `/attendance/*`라 menuKeyForPath(첫 세그먼트)가 그대로 attendance로 푼다.
+  // 출석부 — 오늘 출결을 하부탭 위에 두되, **부모 메뉴·기본 착지는 월별**(`/attendance`).
+  // 오늘 출결을 부모 href로 올리면 월별 장부를 열던 손이 끊긴다(원장 2026-08-14).
+  // 라우트가 `/attendance/*`라 menuKeyForPath(첫 세그먼트)가 그대로 attendance로 푼다.
   attendance: [
     { label: "오늘 출결", href: "/attendance/live" },
     { label: "월별 출석부", href: "/attendance" },
@@ -164,6 +165,46 @@ export const EXTERNAL_NAV: ExternalNavItem[] = [];
 
 function routePath(value: string): string {
   return value.split(/[?#]/, 1)[0] ?? value;
+}
+
+/**
+ * 하부탭 중 **지금 주소에 맞는 하나**. 접두가 겹치면(예 `/attendance` ⊂ `/attendance/live`)
+ * 더 긴 경로가 이긴다 — 짧은 쪽이 같이 켜지면 "오늘 출결을 눌렀는데 월별도 선택"이 된다.
+ */
+export function activeSubTabHref(
+  tabs: readonly { href: string }[],
+  currentHref: string,
+): string | null {
+  const currentPath = routePath(currentHref);
+  const currentTab = new URLSearchParams(currentHref.split("?")[1] ?? "").get("tab");
+  let best: string | null = null;
+  let bestScore = -1;
+  for (const t of tabs) {
+    const [rawPath, rawQuery] = t.href.split("?");
+    const path = routePath(rawPath ?? "");
+    if (!path) continue;
+    const tab = rawQuery ? new URLSearchParams(rawQuery).get("tab") : null;
+    if (tab === null) continue;
+    if (currentPath === path && currentTab === tab) {
+      const score = path.length + 1_000;
+      if (score > bestScore) {
+        best = t.href;
+        bestScore = score;
+      }
+    }
+  }
+  if (best) return best;
+  for (const t of tabs) {
+    const path = routePath(t.href);
+    if (!path || t.href.includes("?")) continue;
+    if (currentPath === path || currentPath.startsWith(`${path}/`)) {
+      if (path.length > bestScore) {
+        best = t.href;
+        bestScore = path.length;
+      }
+    }
+  }
+  return best;
 }
 
 export function findNavItem(pathname: string): NavItem | undefined {

@@ -59,4 +59,30 @@ describe("JJ실 출석부 표", () => {
     fireEvent.change(screen.getByLabelText("이다윤A 누적 암기 단어수"), { target: { value: "1200" } });
     expect(onSaveField).toHaveBeenCalledWith("c1", "s1", "memorizedWords", "1200");
   });
+
+  it("반은 가로 칸에 나란히 놓고 학생은 반 안에서 세로로 둔다", () => {
+    const other: SeatClassRoster = {
+      ...roster,
+      classId: "c2",
+      className: "중등E_초등 브릿지 A",
+      students: [{ ...roster.students[0]!, id: "s2", name: "김수민" }],
+    };
+    const { container } = render(
+      <SeatJjTable
+        rosters={[roster, other]}
+        statusOf={() => null}
+        onSave={vi.fn()}
+        onSaveField={vi.fn()}
+        onFillClass={vi.fn()}
+        readOnly={false}
+        pending={false}
+      />,
+    );
+    expect((container.firstElementChild as HTMLElement).style.gridTemplateColumns).toBe(
+      "repeat(2, minmax(240px, 1fr))",
+    );
+    expect(screen.getAllByRole("table")).toHaveLength(2);
+    expect(screen.getByText("중등E_초5 의치대")).toBeTruthy();
+    expect(screen.getByText("중등E_초등 브릿지 A")).toBeTruthy();
+  });
 });

@@ -21,17 +21,30 @@ import { schoolGradeLabel } from "@/lib/format/school-grade";
  * ⚠️ 화면 격자(MatrixTable/MatrixRow)를 그대로는 못 쓴다 — 입력·드래그·sticky를 지고 있어 인쇄에서 깨진다.
  *    그래서 **마크업만** 읽기 전용으로 다시 짜되 표시 규약은 하나도 새로 만들지 않았다.
  */
+/** 급여 별지 기본 문구. 랩실은 시수가 담임 정산에서 빠져 있어 호출부가 다른 caption을 넘긴다. */
+export const PAYSLIP_APPENDIX_CAPTION =
+  "칸의 숫자 = 그날 인정된 수업 시수(급여 산정에 들어간 값) · 이름 옆 표식으로 신입·퇴원·반이동 표시";
+
+export const SEAT_APPENDIX_CAPTION =
+  "칸의 숫자 = 그날 자리 출결 · 시수 열은 자리 표시가 있는 확정 기록만(아르바이트 급여 근거) · 자리 표시가 없는 기록은 아직 담임 정산에 남아 있습니다";
+
 export function AttendanceAppendix({
   groups,
   period,
   teacherName,
   holidays,
+  caption = PAYSLIP_APPENDIX_CAPTION,
+  unitsByStudent,
 }: {
   groups: { classId: string; className: string; matrix: AttendanceMatrix }[];
   period: string;
   teacherName: string;
   /** 'YYYY-MM-DD' → 공휴일 이름. 날짜 음영·글자색을 화면과 맞추는 데 쓴다. */
   holidays: Record<string, string>;
+  /** 머리 안내. 기본 = 급여 별지 문구. 랩실은 시수 귀속이 달라 다른 문장을 넘긴다. */
+  caption?: string;
+  /** 시수 열을 덮어쓴다(랩실: 확정만). 없으면 countMarks. */
+  unitsByStudent?: Record<string, number>;
 }) {
   const drawable = groups.filter((g) => g.matrix.students.length > 0);
   if (drawable.length === 0) return null;
@@ -45,13 +58,17 @@ export function AttendanceAppendix({
         <h2 className="text-base font-bold">
           {y}년 {Number(m)}월 출석부 — {teacherName}
         </h2>
-        <p className="text-[11px]">
-          칸의 숫자 = 그날 인정된 수업 시수(급여 산정에 들어간 값) · 이름 옆 표식으로 신입·퇴원·반이동 표시
-        </p>
+        <p className="text-[11px]">{caption}</p>
       </header>
 
       {drawable.map((g) => (
-        <ClassSheet key={g.classId} className={g.className} matrix={g.matrix} holidays={holidays} />
+        <ClassSheet
+          key={g.classId}
+          className={g.className}
+          matrix={g.matrix}
+          holidays={holidays}
+          unitsByStudent={unitsByStudent}
+        />
       ))}
     </section>
   );
@@ -61,10 +78,12 @@ function ClassSheet({
   className,
   matrix,
   holidays,
+  unitsByStudent,
 }: {
   className: string;
   matrix: AttendanceMatrix;
   holidays: Record<string, string>;
+  unitsByStudent?: Record<string, number>;
 }) {
   // 인쇄엔 31칸 패딩이 필요 없다(화면은 열 위치 고정 때문에 채운다) — 실제 날짜만.
   const days = matrix.days.filter((d) => !d.placeholder);
@@ -79,7 +98,15 @@ function ClassSheet({
     if (badges.some((b) => b.kind === "left")) leftNames.push(s.name);
     const marks = matrix.marks[s.id] ?? {};
     const units = matrix.units[s.id] ?? {};
-    return { student: s, badges, marks, units, counted: countMarks(marks, units) };
+    const counted = countMarks(marks, units);
+    return {
+      student: s,
+      badges,
+      marks,
+      units,
+      counted,
+      unitsShown: unitsByStudent?.[s.id] ?? counted.units,
+    };
   });
 
   return (
@@ -162,7 +189,7 @@ function ClassSheet({
                     </td>
                   );
                 })}
-                <td className="num border border-black/50 px-0 py-1 text-center font-semibold">{r.counted.units}</td>
+                <td className="num border border-black/50 px-0 py-1 text-center font-semibold">{r.unitsShown}</td>
                 <td className="num border border-black/50 px-0 py-1 text-center">{rate === null ? "—" : `${rate}%`}</td>
               </tr>
             );
