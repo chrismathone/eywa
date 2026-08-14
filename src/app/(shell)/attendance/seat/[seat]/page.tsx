@@ -1,12 +1,15 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { ChevronLeft, ChevronRight } from "@/components/icons/eywa-icon-compat";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
 import { requireAccess } from "@/lib/auth/require-access";
+import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { kstToday } from "@/lib/date-kst";
+import { dutyAllowsSeat } from "@/features/attendance/seat/duty";
+import { getSeatDuties } from "@/features/attendance/seat/server/duty";
 import { getSeatDay } from "@/features/attendance/seat/server/queries";
 import {
   OPEN_SEAT_KEYS,
@@ -56,12 +59,16 @@ export default async function SeatAttendancePage({
   params: Promise<{ seat: string }>;
   searchParams: Promise<{ date?: string; start?: string }>;
 }) {
-  const user = await requireAccess("seat_attendance");
   const { seat: seatParam } = await params;
   const { date: dateParam, start: startParam } = await searchParams;
 
   const seat = parseSeatKey(seatParam);
   if (!seat) notFound(); // 아직 안 연 자리(JJ실)는 URL로도 들어올 수 없다 — seat.ts OPEN_SEAT_KEYS 주석 참조
+
+  // 토글 담당은 메뉴 권한 없이 그 자리만 연다. 없으면 기존 seat_attendance 게이트.
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  if (!dutyAllowsSeat(await getSeatDuties(user.id), seat)) await requireAccess("seat_attendance");
 
   const today = kstToday();
   const date = /^\d{4}-\d{2}-\d{2}$/.test(dateParam ?? "") ? dateParam! : today;

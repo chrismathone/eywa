@@ -97,12 +97,16 @@ export async function updateSession(request: NextRequest) {
   // 서버액션이 admin client로 직접 검증한다. ⚠️ "/staff-intake"·"/staff-intake/…"만 — "/staff"(직원관리,
   // 사무실 전용)는 여기 걸리면 안 되므로 정확/슬래시 매칭이다.
   const isStaffIntakePublic = pathname === "/staff-intake" || pathname.startsWith("/staff-intake/");
+  // /seat/* (랩실 공개 출석부) — 비로그인 통과. 실제 보안은 PIN httpOnly 쿠키.
+  // ⚠️ "/seat"·"/seat/…"만. "/attendance/seat"(로그인 셸)은 여기 걸리면 안 된다.
+  const isSeatPublic = pathname === "/seat" || pathname.startsWith("/seat/");
   if (
     PUBLIC_PATHS.has(pathname) ||
     isKioskPublic ||
     isIntakePublic ||
     isReportPublic ||
-    isStaffIntakePublic
+    isStaffIntakePublic ||
+    isSeatPublic
   ) {
     return response;
   }

@@ -1,5 +1,6 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchInChunks } from "@/lib/supabase/batch";
 import { effectiveAttendanceRecords } from "@/features/attendance/effective-records";
 import { DOW_KEYS, dowIndexOf, resolveAttendDows } from "@/features/attendance/calendar";
@@ -45,18 +46,41 @@ export type SeatDay = {
  * ⚠️ 라벨 원문은 `이주희`·`랩실` 같은 별칭도 쓰인다 → 문자열 비교 대신 `specialSlotLabel`(단일 소스)로
  *    판정한다. 그래서 쿼리는 라벨이 있는 그 요일 슬롯을 받아 JS에서 거른다(한 요일치라 수십~백 행).
  */
+/** 로그인 자리 출석부 — 세션 클라이언트(RLS). */
 export async function getSeatDay(seat: SeatKey, date: string): Promise<SeatDay> {
-  const supabase = await createClient();
+  return loadSeatDay(await createClient(), seat, date, null);
+}
+
+/**
+ * 비로그인 PIN 화면 — admin + **명시 tenantId**(RLS 우회라 필터가 필수).
+ * 학생은 이름·학교·학년만 고른다(전화번호 없음).
+ */
+export async function getPublicSeatDay(
+  tenantId: string,
+  seat: SeatKey,
+  date: string,
+): Promise<SeatDay> {
+  return loadSeatDay(createAdminClient(), seat, date, tenantId);
+}
+
+async function loadSeatDay(
+  supabase: Awaited<ReturnType<typeof createClient>> | ReturnType<typeof createAdminClient>,
+  seat: SeatKey,
+  date: string,
+  tenantId: string | null,
+): Promise<SeatDay> {
   const dowKey = DOW_KEYS[new Date(`${date}T00:00:00Z`).getUTCDay()]!;
   const wantLabel = SEAT_DB_LABEL[seat];
 
-  const { data: rawSlots } = await supabase
+  let slotQ = supabase
     .from("class_schedules")
     .select("class_id, start_time, end_time, slot_teacher_label")
     .eq("day_of_week", dowKey)
     .not("slot_teacher_label", "is", null)
     .lte("valid_from", date)
     .or(`valid_to.is.null,valid_to.gte.${date}`);
+  if (tenantId) slotQ = slotQ.eq("tenant_id", tenantId);
+  const { data: rawSlots } = await slotQ;
 
   const seatRows = (rawSlots ?? []).filter((r) => specialSlotLabel(r.slot_teacher_label) === wantLabel);
   if (seatRows.length === 0) return { date, periods: [], rosterByPeriod: {} };
@@ -65,22 +89,28 @@ export async function getSeatDay(seat: SeatKey, date: string): Promise<SeatDay> 
 
   // 반 이름 · 수강생 · 그날 출결 — 서로 독립이라 병렬(B4). id 수십 개까지 갈 수 있어 청크 헬퍼(B3).
   const [classes, enrollments, records] = await Promise.all([
-    fetchInChunks<{ id: string; class_name: string }>(classIds, (chunk) =>
-      supabase.from("classes").select("id, class_name").in("id", chunk),
-    ),
+    fetchInChunks<{ id: string; class_name: string }>(classIds, (chunk) => {
+      let q = supabase.from("classes").select("id, class_name").in("id", chunk);
+      if (tenantId) q = q.eq("tenant_id", tenantId);
+      return q;
+    }),
     // ⚠️ PostgREST 임베드는 타입상 **배열**로 온다(실제로는 1건) — 아래에서 첫 원소로 접는다.
     fetchInChunks<{
       class_id: string;
       attendance_days: string[] | null;
       student: { id: string; name: string; school: string | null; grade: string | null }[];
     }>(classIds, (chunk) =>
-      supabase
-        .from("enrollments")
-        .select("class_id, attendance_days, student:student_id ( id, name, school, grade )")
-        .in("class_id", chunk)
-        .not("on_hold", "is", true)
-        .lte("start_date", date)
-        .or(`end_date.is.null,end_date.gte.${date}`),
+      (() => {
+        let q = supabase
+          .from("enrollments")
+          .select("class_id, attendance_days, student:student_id ( id, name, school, grade )")
+          .in("class_id", chunk)
+          .not("on_hold", "is", true)
+          .lte("start_date", date)
+          .or(`end_date.is.null,end_date.gte.${date}`);
+        if (tenantId) q = q.eq("tenant_id", tenantId);
+        return q;
+      })(),
     ),
     fetchInChunks<{
       id: string;
@@ -93,13 +123,17 @@ export async function getSeatDay(seat: SeatKey, date: string): Promise<SeatDay> 
       recorded_at: string;
       recorder: { display_name: string | null }[];
     }>(classIds, (chunk) =>
-      supabase
-        .from("attendance_records")
-        .select(
-          "id, class_id, student_id, session_date, slot_start, status, seat_label, recorded_at, recorder:recorded_by ( display_name )",
-        )
-        .in("class_id", chunk)
-        .eq("session_date", date),
+      (() => {
+        let q = supabase
+          .from("attendance_records")
+          .select(
+            "id, class_id, student_id, session_date, slot_start, status, seat_label, recorded_at, recorder:recorded_by ( display_name )",
+          )
+          .in("class_id", chunk)
+          .eq("session_date", date);
+        if (tenantId) q = q.eq("tenant_id", tenantId);
+        return q;
+      })(),
     ),
   ]);
 

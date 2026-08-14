@@ -166,6 +166,8 @@ export const DEFAULT_SETTINGS: TenantSettings = {
     terms: [],
     holidays: [],
     shuttle: DEFAULT_SHUTTLE,
+    // 랩실 공개 출석부 PIN — /seat/lab 비로그인 접속. 원장이 학원설정에서 바꾼다.
+    seatPins: { lab: "7099" },
   },
   billing: {
     dueDay: 10,
