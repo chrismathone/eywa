@@ -12,6 +12,7 @@ import { fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 // 담당 반 판정 단일 소스(담당 반 ∪ 그날 위임 반) — classes.teacher_id를 직접 비교하지 말 것(0173a).
 import { getTeachingClassIds } from "@/features/classes/server/delegation";
 import { parseSessionUnits } from "../session-units";
+import { hasSaveTarget, pickSaveTargets, type SaveTargets } from "../save-targets";
 import {
   absenceMemo,
   appendMemo,
@@ -311,30 +312,28 @@ export async function setAttendanceCell(input: {
     .eq("session_date", sessionDate)
     .order("recorded_at", { ascending: false });
 
-  // 이미 recorded_at 내림차순이라 **교시마다 처음 만난 행이 최신**이다.
-  const latestBySlot = new Map<string, string>(); // slot(또는 "" = 그날 전체) → id
-  for (const r of rows ?? []) {
-    const k = (r.slot_start as string | null) ?? "";
-    if (!latestBySlot.has(k)) latestBySlot.set(k, r.id as string);
-  }
-  // 교시를 넘긴 저장은 **그 교시 행 + 그날 전체 행**만 대상으로 좁힌다(다른 교시는 남의 칸이라 안 건드림).
-  // 그날 전체 행이 남아 있으면 새로 만들지 않고 **그 행을 갱신**한다 = 한 칸에 한 행이 유지된다.
-  if (slot !== null) {
-    for (const k of [...latestBySlot.keys()]) {
-      if (k !== slot && k !== "") latestBySlot.delete(k);
-    }
-  }
+  // 대상 선정은 순수 규칙 **한 곳**(pickSaveTargets)이 정한다 — 일괄 저장도 같은 함수를 쓴다.
+  // 이미 recorded_at 내림차순이라 "교시마다 처음 만난 행이 최신"이라는 그 함수의 전제를 만족한다.
+  const { updateIds, promoteIds } = pickSaveTargets(rows ?? [], slot);
 
   const nowIso = new Date().toISOString();
-  const targetIds = [...latestBySlot.values()];
+  const targetIds = [...updateIds, ...promoteIds];
   if (targetIds.length > 0) {
     const patch: Record<string, unknown> = { status, recorded_by: user.id, recorded_at: nowIso };
     if (noteProvided) patch.note = noteVal;
     if (unitsProvided) patch.session_units = unitsVal;
-    // ⚠️ 교시를 안 넘긴 저장(출석부)은 그날 **모든 교시**를 함께 고친다 — 위 slotStart 주석의 (a)(b) 참조.
-    //    교시를 넘긴 저장(ECS)은 애초에 그 교시 1건만 조회했으므로 여기서도 1건이다.
-    const { error } = await supabase.from("attendance_records").update(patch).in("id", targetIds);
-    if (error) return { error: error.message };
+    if (promoteIds.length > 0) {
+      // 승격(옛 "그날 전체" 행 → 그 교시). 승격 대상만 있을 때만 발생하므로 한 문장으로 끝난다.
+      const { error } = await supabase
+        .from("attendance_records")
+        .update({ ...patch, slot_start: slot })
+        .in("id", promoteIds);
+      if (error) return { error: error.message };
+    }
+    if (updateIds.length > 0) {
+      const { error } = await supabase.from("attendance_records").update(patch).in("id", updateIds);
+      if (error) return { error: error.message };
+    }
   } else {
     const { error } = await supabase.from("attendance_records").insert({
       tenant_id: user.tenantId,
@@ -642,39 +641,61 @@ export async function setAttendanceBulk(input: {
       //    옛 day-level 행을 못 보고 새 행을 만들어 한 칸에 두 행이 살아남는다(정정이 돈에 안 닿는다).
       .order("recorded_at", { ascending: false }),
   );
-  const latestId = new Map<string, string>();
+  // 칸(학생::반)마다 **셀 저장과 같은 규칙**으로 대상을 고른다(pickSaveTargets 단일 소스).
+  // 청크는 학생 단위라 한 칸의 행은 모두 같은 청크에 있고, 각 청크가 recorded_at 내림차순이라
+  // "교시마다 처음 만난 행이 최신"이라는 전제가 여기서도 성립한다.
+  const rowsByKey = new Map<string, { id: string; slot_start?: string | null }[]>();
   for (const r of existingRows) {
-    // 교시를 넘긴 저장은 **그 교시 행과 그날 전체 행**만 자기 칸이다(다른 교시는 남의 칸).
-    const rowSlot = (r as { slot_start?: string | null }).slot_start ?? null;
-    if (slot && rowSlot !== null && rowSlot.slice(0, 5) !== slot.slice(0, 5)) continue;
     const k = `${r.student_id}::${r.class_id}`;
-    if (!latestId.has(k)) latestId.set(k, r.id); // 청크별 desc 정렬 → 각 조합의 첫 행이 최신
+    const list = rowsByKey.get(k);
+    if (list) list.push(r);
+    else rowsByKey.set(k, [r]);
+  }
+  const targetsByKey = new Map<string, SaveTargets>();
+  for (const [k, list] of rowsByKey) {
+    const targets = pickSaveTargets(list, slot);
+    if (hasSaveTarget(targets)) targetsByKey.set(k, targets);
   }
 
   // '빈 칸만' 모드 — 기존 기록이 있는 셀은 **여기서**(서버) 걸러 절대 update 경로를 안 탄다.
   // 이 필터가 클라에 있으면 낡은 탭이 남의 결석을 덮는다(위 fillEmptyOnly 주석). blocked로 집계돼
   // 호출부가 "건너뛴 N명"을 사용자에게 밝힌다(조용한 스킵 금지).
   if (input.fillEmptyOnly) {
-    allowed = allowed.filter((c) => !latestId.has(`${c.studentId}::${c.classId}`));
+    allowed = allowed.filter((c) => !targetsByKey.has(`${c.studentId}::${c.classId}`));
     if (allowed.length === 0) return { ok: true, applied: [], blocked: cells.length };
   }
 
   const nowIso = new Date().toISOString();
-  const updateIds = allowed
-    .map((c) => latestId.get(`${c.studentId}::${c.classId}`))
-    .filter((id): id is string => !!id);
-  const inserts = allowed.filter((c) => !latestId.has(`${c.studentId}::${c.classId}`));
+  // 갱신 대상을 둘로 가른다 — 그 교시 행은 그대로, 옛 "그날 전체" 행은 **그 교시로 승격**하며 갱신.
+  const updateIds: string[] = [];
+  const promoteIds: string[] = [];
+  for (const c of allowed) {
+    const targets = targetsByKey.get(`${c.studentId}::${c.classId}`);
+    if (!targets) continue;
+    updateIds.push(...targets.updateIds);
+    promoteIds.push(...targets.promoteIds);
+  }
+  const inserts = allowed.filter((c) => !targetsByKey.has(`${c.studentId}::${c.classId}`));
 
   // 상태가 전부 같아서 갱신은 한 문장이면 된다(id 목록은 청크로 나눠 URL 길이 회피).
-  if (updateIds.length > 0) {
+  const applyUpdate = async (ids: string[], extra: Record<string, unknown>) => {
     const CHUNK = 100;
-    for (let i = 0; i < updateIds.length; i += CHUNK) {
+    for (let i = 0; i < ids.length; i += CHUNK) {
       const { error } = await supabase
         .from("attendance_records")
-        .update({ status, recorded_by: user.id, recorded_at: nowIso })
-        .in("id", updateIds.slice(i, i + CHUNK));
-      if (error) return { error: error.message };
+        .update({ status, recorded_by: user.id, recorded_at: nowIso, ...extra })
+        .in("id", ids.slice(i, i + CHUNK));
+      if (error) return error.message;
     }
+    return null;
+  };
+  if (updateIds.length > 0) {
+    const err = await applyUpdate(updateIds, {});
+    if (err) return { error: err };
+  }
+  if (promoteIds.length > 0) {
+    const err = await applyUpdate(promoteIds, { slot_start: slot });
+    if (err) return { error: err };
   }
   if (inserts.length > 0) {
     const { error } = await supabase.from("attendance_records").insert(
