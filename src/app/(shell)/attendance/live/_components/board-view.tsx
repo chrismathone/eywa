@@ -102,6 +102,7 @@ function SlotCard({ slot, date, canEdit }: { slot: LiveBoardSlot; date: string; 
         periodStart: slot.slotStart,
         ...(note !== undefined ? { note } : {}),
         quiet: true,
+        source: "live",
       })
         .then((res) => {
           if ("error" in res) {
@@ -140,6 +141,7 @@ function SlotCard({ slot, date, canEdit }: { slot: LiveBoardSlot; date: string; 
         fillEmptyOnly: true,
         slotStart: slot.saveSlot,
         periodStart: slot.slotStart,
+        source: "live",
       })
         .then((res) => {
           if ("error" in res) {

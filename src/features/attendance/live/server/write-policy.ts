@@ -4,11 +4,12 @@ import "server-only";
  *
  * 화면에서만 막으면 우회된다(#77). 강사는 제한 없고, 데스크(그 반 담당이 아닌 full)만
  * `canDeskMark`와 같은 판정을 서버가 다시 한다.
+ * 🔴 게이트는 `source:"live"`(당일 출결)에만. 월간 격자 정정을 막지 않는다(#103).
  */
 import { createClient } from "@/lib/supabase/server";
 import { getTeachingClassIds } from "@/features/classes/server/delegation";
 import { kstMinutesOfDay, kstToday, weekdayIndexOf } from "@/lib/date-kst";
-import { deskMarkDeniedReason } from "../mark-state";
+import { deskWriteDenied, shouldEnforceDeskGate } from "../mark-state";
 import { resolveStaffVia, type RecordedVia } from "../recorded-via";
 import { hhmm, hhmmToMin, slotPhase, type SlotPhase } from "../signals";
 
@@ -94,6 +95,9 @@ export async function lookupPeriodPhase(
 /**
  * 데스크 쓰기 허용 여부. 강사(via=teacher)는 무조건 통과.
  * 거절 메시지는 `deskMarkDeniedReason`과 같다 — 화면과 서버가 같은 말.
+ *
+ * 🔴 `source !== "live"`면 검사하지 않는다. 월간 출석부·원스크린·시트가 같은 액션을 쓰는데
+ *    via=desk로 정정·삭제를 막으면 원장부터 오클릭한 결석을 못 되돌린다(#103).
  */
 export async function assertDeskMayWrite(input: {
   supabase: Sb;
@@ -104,13 +108,21 @@ export async function assertDeskMayWrite(input: {
   currentStatus: string | null;
   /** 지우기(null)는 데스크 범위가 아니다. */
   nextStatus: string | null;
+  /** 당일 출결 화면만 `"live"`. 없으면 게이트 없음(recorded_via 스탬프는 그대로). */
+  source?: string | null;
 }): Promise<{ error: string } | { ok: true }> {
-  if (input.via !== "desk") return { ok: true };
-  if (input.nextStatus === null) {
-    return { error: "데스크는 미출결 칸만 입력할 수 있습니다 — 이미 있는 기록을 지울 수 없습니다" };
-  }
-  const phase = await lookupPeriodPhase(input.supabase, input.classId, input.date, input.periodStart);
-  const reason = deskMarkDeniedReason(input.currentStatus, phase);
+  // 국면 조회는 당일 데스크 쓰기에만. 월간 정정이 시간표 lookup에 묶이면 안 된다.
+  const phase =
+    shouldEnforceDeskGate(input.source) && input.via === "desk" && input.nextStatus !== null
+      ? await lookupPeriodPhase(input.supabase, input.classId, input.date, input.periodStart)
+      : "ended";
+  const reason = deskWriteDenied({
+    source: input.source,
+    via: input.via,
+    currentStatus: input.currentStatus,
+    nextStatus: input.nextStatus,
+    phase,
+  });
   return reason ? { error: reason } : { ok: true };
 }
 

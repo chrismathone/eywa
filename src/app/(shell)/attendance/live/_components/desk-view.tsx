@@ -289,6 +289,7 @@ function StudentCard({ row, date, canEdit }: { row: QueueStudent; date: string; 
               //    정정이 시수·급여에 반영되지 않는다(살아남은 옛 행이 계속 1시수를 청구한다).
               slotStart: row.saveSlot,
               periodStart: row.slotStart,
+              source: "live",
               // 🔴 **메모를 넘기지 않는다.** `note`는 "전달하면 갱신"이라 빈 칸을 null로 넘기면
               //    강사가 적어 둔 사유("감기로 결석")가 지워진다 — 바로 위에서 그 메모를 전화 전에
               //    읽으라고 띄워 놓고, 확인을 기록하는 순간 그 근거를 없애는 셈이다.

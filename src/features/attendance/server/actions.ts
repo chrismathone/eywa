@@ -175,13 +175,10 @@ export async function saveAttendance(
   const nowIso = new Date().toISOString();
   const via = await resolveWriteVia(supabase, user.id, classId, date);
 
-  // Split into updates (existing row) and inserts (new)
-  // 데스크는 미출결(새 칸)만 — 이미 찍힌 행을 이 폼으로 덮지 않는다.
-  const updates = via === "desk" ? [] : rows.filter((r) => r.existingIds.length > 0);
+  // 반별 입력 폼은 월간 출석부 경로 — 데스크 게이트를 걸지 않는다(#103).
+  // recorded_via 스탬프만 남긴다. 당일 화면의 제한은 source:"live"인 셀·일괄만.
+  const updates = rows.filter((r) => r.existingIds.length > 0);
   const inserts = rows.filter((r) => r.existingIds.length === 0);
-  if (via === "desk" && inserts.length === 0) {
-    return { error: "이미 입력된 출결은 데스크가 덮을 수 없습니다 — 미출결 칸만 처리할 수 있습니다" };
-  }
 
   let saved = 0;
 
@@ -280,6 +277,12 @@ export async function setAttendanceCell(input: {
   noteOnly?: boolean;
   /** 화면 갱신 생략 — 출석부 시트가 입력이 멎은 뒤 한 번만 새로고침한다(키 입력마다 재조회 방지). */
   quiet?: boolean;
+  /**
+   * `"live"` = 당일 출결 화면. 데스크 게이트(10분 후 미출결만·삭제 금지)를 켠다.
+   * 없으면 종전 권한 — 월간 격자·원스크린·시트가 정정·삭제를 그대로 한다.
+   * `recorded_via` 스탬프는 이 값과 무관하게 항상 남긴다.
+   */
+  source?: "live";
 }): Promise<CellResult> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
@@ -360,9 +363,18 @@ export async function setAttendanceCell(input: {
 
   // 지우기 — 해당 (반·학생·날짜) 기록 삭제. 교시를 넘겼으면 **그 교시만**(다른 교시 기록은 남는다).
   if (status === null) {
-    if (via === "desk") {
-      return { error: "데스크는 미출결 칸만 입력할 수 있습니다 — 이미 있는 기록을 지울 수 없습니다" };
-    }
+    // 당일 출결 화면만 데스크 삭제를 막는다. 월간 격자의 오클릭 되돌리기는 여기로 온다(#103).
+    const deskGate = await assertDeskMayWrite({
+      supabase,
+      via,
+      classId,
+      date: sessionDate,
+      periodStart,
+      currentStatus: "present",
+      nextStatus: null,
+      source: input.source,
+    });
+    if ("error" in deskGate) return deskGate;
     let del = supabase
       .from("attendance_records")
       .delete()
@@ -405,6 +417,7 @@ export async function setAttendanceCell(input: {
     periodStart,
     currentStatus: prevStatus,
     nextStatus: status,
+    source: input.source,
   });
   if ("error" in deskGate) return deskGate;
 
@@ -676,6 +689,8 @@ export async function setAttendanceBulk(input: {
   slotStart?: string | null;
   /** 화면 교시 — 데스크 10분 판정용. 저장 축(`slotStart`)과 다를 수 있다. */
   periodStart?: string | null;
+  /** `"live"` = 당일 출결 화면의 일괄. 없으면 데스크 게이트 없음(원스크린·시트). */
+  source?: "live";
 }): Promise<BulkCellResult> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
@@ -785,30 +800,33 @@ export async function setAttendanceBulk(input: {
     viaByClass.set(classId, await resolveWriteVia(supabase, user.id, classId, sessionDate));
   }
 
-  // 데스크 게이트 — 이미 찍힌 칸·유예 안 칸은 건너뛴다(blocked). 요청 전체를 실패시키지 않는다.
-  const deskGateByClass = new Map<string, { error: string } | { ok: true }>();
-  const open: typeof allowed = [];
-  for (const c of allowed) {
-    const via = viaByClass.get(c.classId) ?? "desk";
-    const current = targetsByKey.has(`${c.studentId}::${c.classId}`) ? "present" : null;
-    const cacheKey = `${c.classId}|${current ?? ""}`;
-    let gate = deskGateByClass.get(cacheKey);
-    if (!gate) {
-      gate = await assertDeskMayWrite({
-        supabase,
-        via,
-        classId: c.classId,
-        date: sessionDate,
-        periodStart,
-        currentStatus: current,
-        nextStatus: status,
-      });
-      deskGateByClass.set(cacheKey, gate);
+  // 데스크 게이트 — 당일 출결 화면만. 이미 찍힌 칸·유예 안 칸은 건너뛴다(blocked).
+  if (input.source === "live") {
+    const deskGateByClass = new Map<string, { error: string } | { ok: true }>();
+    const open: typeof allowed = [];
+    for (const c of allowed) {
+      const via = viaByClass.get(c.classId) ?? "desk";
+      const current = targetsByKey.has(`${c.studentId}::${c.classId}`) ? "present" : null;
+      const cacheKey = `${c.classId}|${current ?? ""}`;
+      let gate = deskGateByClass.get(cacheKey);
+      if (!gate) {
+        gate = await assertDeskMayWrite({
+          supabase,
+          via,
+          classId: c.classId,
+          date: sessionDate,
+          periodStart,
+          currentStatus: current,
+          nextStatus: status,
+          source: "live",
+        });
+        deskGateByClass.set(cacheKey, gate);
+      }
+      if ("error" in gate) continue;
+      open.push(c);
     }
-    if ("error" in gate) continue;
-    open.push(c);
+    allowed = open;
   }
-  allowed = open;
 
   const inserts = allowed.filter((c) => !targetsByKey.has(`${c.studentId}::${c.classId}`));
 
@@ -1078,7 +1096,7 @@ export async function setAttendanceRange(input: {
       const id = latestId.get(`${c.studentId}::${c.classId}::${c.sessionDate}`);
       if (!id) continue;
       const via = rangeViaByClass.get(c.classId) ?? "teacher";
-      if (via === "desk") continue; // 데스크는 이미 찍힌 칸을 덮지 않는다
+      // 범위 채우기는 월간 격자 전용 — 데스크 게이트를 걸지 않는다(오클릭 결석을 여기서 되돌린다).
       (byVia.get(via) ?? byVia.set(via, []).get(via)!).push(id);
     }
     for (const [via, ids] of byVia) {
