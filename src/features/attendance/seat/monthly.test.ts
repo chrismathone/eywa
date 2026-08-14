@@ -105,6 +105,26 @@ describe("반 정렬 = 첫 랩실 교시 시각", () => {
     expect(firstSlotStart(slots, "jp2")).toBe("14:20");
     expect(sortClassIdsByFirstSlot(["lt5", "jp2"], slots)).toEqual(["jp2", "lt5"]);
   });
+
+  /** 실측 2026-08 랩실: 14:20에 6반·16:20에 4반이 동시에 들어온다 — 동률을 id로 깨면 순서가 무작위로 보인다. */
+  it("같은 시각이면 반 이름으로 — id 순서(무작위)로 두지 않는다", () => {
+    const slots = [
+      slot({ classId: "z-uuid", start: "14:20" }),
+      slot({ classId: "a-uuid", start: "14:20" }),
+      slot({ classId: "m-uuid", start: "14:20" }),
+    ];
+    const name: Record<string, string> = { "z-uuid": "JP2", "a-uuid": "PJ6", "m-uuid": "LS3a" };
+    expect(sortClassIdsByFirstSlot(["z-uuid", "a-uuid", "m-uuid"], slots, (id) => name[id]!)).toEqual([
+      "z-uuid", // JP2
+      "m-uuid", // LS3a
+      "a-uuid", // PJ6
+    ]);
+  });
+
+  it("이름을 안 넘기면 종전대로 id로 깬다(호출부 미배선이어도 순서가 흔들리지 않게)", () => {
+    const slots = [slot({ classId: "b", start: "14:20" }), slot({ classId: "a", start: "14:20" })];
+    expect(sortClassIdsByFirstSlot(["b", "a"], slots)).toEqual(["a", "b"]);
+  });
 });
 
 describe("요일·교시 요약", () => {
