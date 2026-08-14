@@ -103,11 +103,12 @@ function buildTimeline(doc: NonNullable<Awaited<ReturnType<typeof getApprovalDoc
 }
 
 /**
- * 결재 문서 1건 — 종이 결재 문서의 배치를 그대로 옮겼다: **상단 좌측 표제·문서번호 / 우측 결재란**,
- * 아래 본문(양식 항목), 맨 아래 처리(내 차례면 승인·반려, 기안자면 회수).
+ * 결재 문서 1건 — **하이웍스 결재 문서 배치**(원장 스크린샷 2026-08-14 기준):
+ * 가운데 큰 표제("휴가신청서") → 정보 격자표(문서 종류·번호·기안자·일시·상태) → **원형 도장 결재란 표**
+ * (참조 행 포함) → 본문(양식 항목) → 결재 이력 → 처리(내 차례면 승인·반려, 기안자면 회수).
  *
- * 열람 자격은 RLS(기안자·결재자·원장)가 정한다 — 못 보는 문서는 조회가 비어 404로 떨어진다([[#77]]:
- * 화면 조건이 아니라 데이터 게이트가 판정한다).
+ * 열람 자격은 RLS(기안자·결재자·참조자·원장)가 정한다 — 못 보는 문서는 조회가 비어 404로 떨어진다
+ * ([[#77]]: 화면 조건이 아니라 데이터 게이트가 판정한다).
  */
 export default async function ApprovalDocPage({ params }: { params: Promise<{ id: string }> }) {
   const user = await requireAccess("approvals");
@@ -134,27 +135,46 @@ export default async function ApprovalDocPage({ params }: { params: Promise<{ id
         <ArrowLeft className="size-3.5" /> 결재함으로
       </Link>
 
-      {/* 문서 — A4 종이 한 장 느낌(흰 판 + 표제 + 결재란) */}
+      {/* 문서 — A4 종이 한 장 느낌(흰 판). 배치는 하이웍스 결재 문서 그대로. */}
       <article className="border-line bg-card shadow-card space-y-5 rounded-2xl border p-6">
-        <header className="flex flex-wrap items-start justify-between gap-4">
-          <div className="min-w-0">
-            <p className="micro">{APPROVAL_FORM_LABEL[doc.form] ?? doc.form}</p>
-            <h1 className="text-foreground mt-1 text-[19px] font-bold tracking-tight break-keep">
-              {doc.title}
-            </h1>
-            <p className="text-text-dim mt-1 text-xs">
-              문서번호 <span className="num">{doc.docNo}</span> · 기안{" "}
-              <b className="text-foreground">{doc.drafterName}</b>
-              {doc.drafterJobTitle ? <span className="text-text-faint"> {doc.drafterJobTitle}</span> : null}
-              {" · "}
-              <span className="num">{doc.submittedAt.slice(0, 10)}</span>
-              <span className="ml-2">
+        {/* ① 가운데 큰 표제 — 양식 이름이 곧 문서 제목이다(하이웍스 "휴가 신청서"). */}
+        <h1 className="text-foreground text-center text-[22px] font-bold tracking-tight">
+          {APPROVAL_FORM_LABEL[doc.form] ?? "결재 문서"}
+        </h1>
+
+        {/* ② 정보 격자표 — 문서 종류·번호·기안자·일시·상태(하이웍스 상단 그리드). */}
+        <table className="border-line w-full border-collapse border text-sm">
+          <tbody className="[&_th]:bg-bg-soft/60 [&_th]:text-text-dim [&_td]:text-foreground [&_th]:border-line [&_td]:border-line [&_th]:border [&_td]:border [&_th]:px-3 [&_th]:py-2 [&_td]:px-3 [&_td]:py-2 [&_th]:text-left [&_th]:text-xs [&_th]:font-semibold [&_td]:text-[13px]">
+            <tr>
+              <th className="w-[96px]">문서 종류</th>
+              <td>공통 · {APPROVAL_FORM_LABEL[doc.form] ?? doc.form}</td>
+              <th className="w-[96px]">문서 번호</th>
+              <td className="num">{doc.docNo}</td>
+            </tr>
+            <tr>
+              <th>기안자</th>
+              <td>
+                {doc.drafterName}
+                {doc.drafterJobTitle ? (
+                  <span className="text-text-faint"> {doc.drafterJobTitle}</span>
+                ) : null}
+              </td>
+              <th>기안 일시</th>
+              <td className="num">{fmtTime(doc.submittedAt)}</td>
+            </tr>
+            <tr>
+              <th>상태</th>
+              <td>
                 <Pill color={status.color}>{status.label}</Pill>
-              </span>
-            </p>
-          </div>
-          <ApprovalStamps doc={doc} />
-        </header>
+              </td>
+              <th>완료 일시</th>
+              <td className="num">{fmtTime(doc.completedAt) ?? "—"}</td>
+            </tr>
+          </tbody>
+        </table>
+
+        {/* ③ 결재란 — 원형 도장 표(참조 행 포함). */}
+        <ApprovalStamps doc={doc} />
 
         {leave ? (
           <table className="border-line w-full border-collapse border text-sm">
@@ -195,15 +215,7 @@ export default async function ApprovalDocPage({ params }: { params: Promise<{ id
           <p className="text-text-faint text-sm">양식 내용을 불러오지 못했습니다.</p>
         )}
 
-        {/* 참조 — 결재 없이 열람만 하는 사람(하이웍스 참조). 이름 텍스트만, 아바타 금지. */}
-        {doc.refs.length > 0 ? (
-          <div className="flex flex-wrap items-baseline gap-2">
-            <span className="micro">참조</span>
-            <span className="text-text-dim text-[13px]">
-              {doc.refs.map((r) => r.name).join(" · ")}
-            </span>
-          </div>
-        ) : null}
+        {/* 참조는 결재란 표의 [참조] 행이 담당한다(중복 표시 금지). */}
 
         {/* 결재 이력 — 기안부터 종결까지 시간순. 결재 의견은 각 줄에 실린다(따로 그리지 않는다). */}
         <section className="border-line space-y-2 border-t pt-4">
