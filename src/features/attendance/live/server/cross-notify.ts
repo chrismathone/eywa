@@ -10,10 +10,12 @@ import "server-only";
  * ⚠️ 인앱 벨만. 휴대폰 푸시 확대는 원장 결정 사항.
  */
 import { createAdminClient } from "@/lib/supabase/admin";
+import { fetchInChunks } from "@/lib/supabase/batch";
 import { reportError } from "@/lib/observability/report-error";
 import { notifyUsers } from "@/features/notifications/server/notify";
 import { addDays, kstToday } from "@/lib/date-kst";
 import { crossNotifyDirection } from "../mark-state";
+import { collectStudentNames, formatAttendanceNotifyNames } from "../notify-names";
 import type { RecordedVia } from "../recorded-via";
 
 const YMD = /^\d{4}-\d{2}-\d{2}$/;
@@ -62,24 +64,27 @@ export async function notifyUnmarkedToPresent(input: {
     const freshCells = cells.filter((c) => freshKeys.has(`${c.studentId}|${date}|${c.slotStart ?? ""}`));
     if (freshCells.length === 0) return;
     const freshIds = [...new Set(freshCells.map((c) => c.studentId))];
-
-    const { data: students, error: studentError } = await admin
-      .from("students")
-      .select("id, name")
-      .eq("tenant_id", tenantId)
-      .in("id", freshIds.slice(0, 100));
-    if (studentError) throw studentError;
-    const nameById = new Map((students ?? []).map((s) => [s.id as string, s.name as string]));
-    const names = [...new Set(freshCells.map((c) => nameById.get(c.studentId)).filter(Boolean))] as string[];
-    if (names.length === 0) return;
-
-    const who = names.length === 1 ? names[0] : `${names[0]} 외 ${names.length - 1}명`;
+    // 100에서 자르면 뒤 이름이 벨에서 사라진다(B3). 청크로 전건.
+    const students = await fetchInChunks<{ id: string; name: string }>(freshIds, (chunk) =>
+      admin.from("students").select("id, name").eq("tenant_id", tenantId).in("id", chunk),
+    );
+    const nameById = new Map(students.map((s) => [s.id, s.name]));
+    const { names, missing } = collectStudentNames(freshIds, nameById);
+    if (missing > 0) {
+      reportError(new Error(`cross-notify names incomplete: ${names.length}/${freshIds.length}`), {
+        scope: "attendance.crossNotify.names",
+        expected: freshIds.length,
+        resolved: names.length,
+        missing,
+      });
+    }
+    const { who, listedLabel } = formatAttendanceNotifyNames(names, freshIds.length);
     const title =
       direction === "to_teacher" ? `사무실이 출석 처리 — ${who}` : `강사가 뒤늦게 출석 처리 — ${who}`;
     const body =
       direction === "to_teacher"
-        ? `${date} 미출결이던 ${names.join(", ")} 학생을 사무실에서 출석으로 입력했습니다.`
-        : `${date} 미출결이던 ${names.join(", ")} 학생을 강사가 출석으로 입력했습니다.`;
+        ? `${date} 미출결이던 ${listedLabel} 학생을 사무실에서 출석으로 입력했습니다.`
+        : `${date} 미출결이던 ${listedLabel} 학생을 강사가 출석으로 입력했습니다.`;
 
     await notifyUsers(
       targets.map((recipientId) => ({
