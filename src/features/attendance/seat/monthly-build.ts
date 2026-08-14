@@ -7,6 +7,7 @@ import { isEnrolledOn, type EnrollSpan } from "@/features/attendance/enrollment-
 import { countCells } from "@/features/attendance/grid/totals";
 import { COUNTABLE_STATUSES } from "@/features/attendance/session-units";
 import type { AttendanceMark } from "@/features/attendance/cell-display";
+import type { PeriodWindow } from "@/features/periods/resolve";
 import type { SpecialSlotLabel } from "@/features/timetable/lib/teacher-label";
 import { hhmm } from "./seat";
 import {
@@ -17,10 +18,18 @@ import {
   sortClassIdsByFirstSlot,
   sumTrackUnits,
   type SeatAttRecord,
+  type SeatMonthDay,
   type SeatSlotDef,
   type SeatTrack,
 } from "./monthly";
-import type { SeatEnrollRow, SeatMonthCell, SeatMonthGroup, SeatMonthSlotCell, SeatMonthlyView } from "./monthly-view";
+import type {
+  SeatEnrollRow,
+  SeatMonthCell,
+  SeatMonthGroup,
+  SeatMonthSlotCell,
+  SeatMonthStudent,
+  SeatMonthlyView,
+} from "./monthly-view";
 
 export type {
   SeatEnrollRow,
