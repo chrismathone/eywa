@@ -4,6 +4,7 @@ import {
   groupAdjacentSlots,
   isAdjacentSlot,
   pickClassDayHit,
+  SEATING_PERIOD_COLS,
   seatingHeaderClass,
   seatingSummary,
   spanAdjacentEnd,
@@ -200,6 +201,12 @@ describe("foldSeating", () => {
     ]);
     expect(klass?.students.find((s) => s.studentId === "김대기")?.mark).toBe("waiting");
     expect(klass?.students.find((s) => s.studentId === "이출석")?.mark).toBe("present");
+  });
+});
+
+describe("SEATING_PERIOD_COLS", () => {
+  it("한 강의실 가로는 교시 4칸", () => {
+    expect(SEATING_PERIOD_COLS).toBe(4);
   });
 });
 

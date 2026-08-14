@@ -8,6 +8,7 @@
  *    (알림 규칙이 "강사가 미출결→출결로 바꾸면"을 전제하므로). 데스크만 이 선 밖의 빈 칸만 손댄다.
  * 판정은 읽는 시점 계산 — 상태를 DB에 적어 두면 10분마다 배치가 필요해진다.
  */
+import { DAY_TONE, STATUS_TONE } from "@/features/attendance/cell-display";
 import type { RecordedVia } from "./recorded-via";
 import { ATTENDANCE_GRACE_MIN, type SlotPhase } from "./signals";
 
@@ -25,14 +26,15 @@ export const SEAT_MARK_LABEL: Record<SeatMark, string> = {
 };
 
 /**
- * 출석부 `--att-*` 토큰만 쓴다(새 팔레트 금지).
+ * 출석·결석·지각은 출석부 `STATUS_TONE`과 같은 배경(민트/빨강/주황).
  * 시작 전(대기)은 민트를 쓰지 않는다 — classday는 출석과 같은 계열이라 전원 출석으로 읽힌다.
+ * ⚠️ 칸 버튼에 `bg-card`를 덧씌우지 말 것 — 동형 유틸은 CSS 순서라 출석 배경이 진다.
  */
 export const SEAT_MARK_TONE: Record<SeatMark, string> = {
-  present: "bg-att-present text-att-present-ink",
-  absent: "bg-att-absent text-att-absent-ink",
-  late: "bg-att-late text-att-late-ink",
-  unmarked: "bg-att-outside text-att-absent-ink",
+  present: STATUS_TONE.present,
+  absent: STATUS_TONE.absent,
+  late: STATUS_TONE.late,
+  unmarked: `${DAY_TONE.outside} text-att-absent-ink`,
   waiting: "border-line bg-card text-text-dim border",
 };
 

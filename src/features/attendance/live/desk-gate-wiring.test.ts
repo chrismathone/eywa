@@ -34,6 +34,21 @@ describe("desk gate wiring", () => {
     expect(policy).not.toMatch(/deskMarkDeniedReason\(/);
   });
 
+  it("자리 버튼에 bg-card를 덧씌우지 않는다 — 출석 배경이 진다", () => {
+    const cell = read("src/features/attendance/live/components/seating-cell.tsx");
+    expect(cell).not.toMatch(/className=\{`bg-card /);
+    expect(cell).toMatch(/SEAT_MARK_TONE\[mark\]/);
+  });
+
+  it("강의실은 4열 고정 — 수업 2~3개여도 폭이 늘어나지 않는다", () => {
+    const chart = read("src/features/attendance/live/components/seating-chart.tsx");
+    expect(chart).toMatch(/grid-cols-4/);
+    expect(chart).not.toMatch(/xl:grid-cols-3/);
+    expect(read("src/features/attendance/live/components/seating-room.tsx")).toMatch(
+      /grid-cols-3/,
+    );
+  });
+
   it("반별 폼·범위 채우기는 via=desk여도 기존 칸을 건너뛰지 않는다", () => {
     const actions = read("src/features/attendance/server/actions.ts");
     expect(actions).not.toMatch(/via === "desk" \? \[\]/);

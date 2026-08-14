@@ -61,7 +61,7 @@ export function SeatingCell({
   }
 
   return (
-    <div className="relative">
+    <div className="relative min-w-0">
       <button
         type="button"
         disabled={busy || !canMark}
@@ -72,11 +72,11 @@ export function SeatingCell({
           mark,
           note: student.note,
         })}
-        className={`bg-card flex min-h-9 min-w-[4.25rem] items-center justify-center rounded-lg px-1.5 py-1 ${SEAT_MARK_TONE[mark]} ${
+        className={`flex min-h-9 w-full items-center justify-center rounded-lg px-1 py-1 ${SEAT_MARK_TONE[mark]} ${
           canMark ? "hover:ring-primary/40 cursor-pointer hover:ring-2" : "cursor-default"
         } disabled:opacity-60`}
       >
-        <span className="text-[13px] leading-tight font-bold">{student.studentName}</span>
+        <span className="truncate text-[13px] leading-tight font-bold">{student.studentName}</span>
       </button>
       {open && canMark && (
         <div className="bg-card shadow-card absolute top-full left-0 z-30 mt-1 flex gap-0.5 rounded-lg p-1">

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { STATUS_TONE } from "@/features/attendance/cell-display";
 import { ATTENDANCE_GRACE_MIN } from "./signals";
 import {
   canDeskMark,
@@ -10,6 +11,7 @@ import {
   isArrivalStatus,
   isUnmarkedToArrival,
   seatMarkOf,
+  SEAT_MARK_TONE,
   shortSeatName,
 } from "./mark-state";
 
@@ -201,6 +203,16 @@ describe("shortSeatName", () => {
     expect(shortSeatName("김철수")).toBe("김철수");
     expect(shortSeatName("남궁민수")).toBe("남궁민");
     expect(shortSeatName("  Jo  ")).toBe("Jo");
+  });
+});
+
+describe("SEAT_MARK_TONE", () => {
+  it("출석·결석·지각은 출석부와 같은 배경 토큰", () => {
+    expect(SEAT_MARK_TONE.present).toBe(STATUS_TONE.present);
+    expect(SEAT_MARK_TONE.absent).toBe(STATUS_TONE.absent);
+    expect(SEAT_MARK_TONE.late).toBe(STATUS_TONE.late);
+    expect(SEAT_MARK_TONE.present).toContain("bg-att-present");
+    expect(SEAT_MARK_TONE.absent).toContain("bg-att-absent");
   });
 });
 

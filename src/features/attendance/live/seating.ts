@@ -233,6 +233,12 @@ export function groupAdjacentSlots(slots: readonly LiveBoardSlot[]): LiveBoardSl
 }
 
 /**
+ * 한 강의실 가로 칸 수. 수학 4교시와 같다.
+ * 수업이 2~3개여도 이 폭을 유지하고, 학생은 칸 안에서 다음 줄로 간다.
+ */
+export const SEATING_PERIOD_COLS = 4;
+
+/**
  * 수업명 줄 배경.
  * 대기(시작 전·유예 10분) = 회색, 출결이 열린 뒤(진행·종료) = 네이비.
  * 둘 다 네이비면 20:10 반과 이미 끝난 반이 같아 보인다.

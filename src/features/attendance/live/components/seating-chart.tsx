@@ -71,7 +71,7 @@ export function SeatingChart({ board }: { board: LiveBoard }) {
             {floor.rooms.map((room) => (
               <div key={room.key} className="space-y-2">
                 <h3 className="text-base font-bold">{room.roomName}</h3>
-                <div className="grid items-start gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                <div className="grid grid-cols-4 items-start gap-3">
                   {room.classes.map((klass) => (
                     <SeatingRoom key={klass.classId} date={board.date} klass={klass} />
                   ))}
