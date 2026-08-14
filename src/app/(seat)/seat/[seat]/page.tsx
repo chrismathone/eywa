@@ -14,7 +14,14 @@ import { kstToday } from "@/lib/date-kst";
 import { SeatBoard } from "@/app/(shell)/attendance/seat/[seat]/_components/seat-board";
 import { SeatPinForm } from "./pin-form";
 
-export const metadata: Metadata = { title: "자리 출석부" };
+/**
+ * 🔴 `noindex` — 이 주소는 로그인 없이 열리고 통과하면 **학생 명단**이 나온다. 검색엔진에 실리면
+ * 주소가 새는 순간 비밀번호만 남는다(4자리). 크롤러가 못 담게 막는다.
+ */
+export const metadata: Metadata = {
+  title: "자리 출석부",
+  robots: { index: false, follow: false, nocache: true },
+};
 
 function kstNowHm(): string {
   return new Intl.DateTimeFormat("en-GB", {

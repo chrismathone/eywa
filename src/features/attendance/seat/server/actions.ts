@@ -34,16 +34,29 @@ async function gate(seat: SeatKey, date: string): Promise<GateOk | { error: stri
     const duties = await getSeatDuties(user.id);
     const assigned = dutyAllowsSeat(duties, seat);
     const menuWrite = await canWriteTenant(user.systemRole, "seat_attendance");
-    if (!assigned && !menuWrite) return { error: "자리 출석부 입력 권한이 없습니다" };
-    if (date !== kstToday() && !(await canWriteTenant(user.systemRole, "attendance"))) {
-      return { error: "지난 날짜는 수정할 수 없습니다 — 관리자에게 요청하세요" };
+    // ⚠️ 권한이 없다고 **여기서 끝내지 않는다** — 자리 태블릿에 누군가의 계정이 로그인된 채로
+    //    남아 있을 수 있고, 그 사람이 PIN을 넣었다면 그 자리 출결은 찍을 수 있어야 한다
+    //    (로그인했다는 이유로 오히려 막히면 "왜 나만 안 되지"가 된다). 아래 PIN 검사로 떨어진다.
+    if (assigned || menuWrite) {
+      if (date !== kstToday() && !(await canWriteTenant(user.systemRole, "attendance"))) {
+        return { error: "지난 날짜는 수정할 수 없습니다 — 관리자에게 요청하세요" };
+      }
+      return {
+        ok: true,
+        userId: user.id,
+        tenantId: user.tenantId,
+        via: assigned && !menuWrite ? "duty" : "menu",
+      };
     }
-    return { ok: true, userId: user.id, tenantId: user.tenantId, via: assigned && !menuWrite ? "duty" : "menu" };
   }
 
   const pin = await readSeatPinSession();
-  if (!pin || pin.seat !== seat) return { error: "로그인이 필요합니다" };
-  if (date !== kstToday()) return { error: "오늘은 오늘 출석만 입력할 수 있습니다" };
+  if (!pin || pin.seat !== seat) {
+    return { error: user ? "자리 출석부 입력 권한이 없습니다" : "비밀번호를 다시 입력해 주세요" };
+  }
+  if (date !== kstToday()) return { error: "오늘 날짜만 입력할 수 있습니다" };
+  // 🔴 PIN 경로는 **기록자를 남기지 않는다**(로그인한 사람이 있어도 그 사람이 찍었다는 보장이 없다 —
+  //    태블릿에 남의 계정이 켜져 있을 수 있다). 키오스크 셀프 체크인과 같은 정직함.
   return { ok: true, userId: null, tenantId: pin.tenantId, via: "pin" };
 }
 

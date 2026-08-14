@@ -11,6 +11,13 @@ export const SEAT_PIN_COOKIE = "eywa_seat_pin";
 export const SEAT_PIN_TTL_MS = 12 * 60 * 60 * 1000;
 export const SEAT_PIN_RL_MAX = 10;
 export const SEAT_PIN_RL_WINDOW_MS = 10 * 60 * 1000;
+/**
+ * 🔴 **키와 무관한 전체 상한** — IP별 상한만 두면 헤더·회선을 바꿔가며 사실상 무제한이 된다
+ * (4자리 = 1만 가지라 그 차이가 곧 뚫림/막힘이다). 이 인스턴스에서 창당 총 실패가 이 수를 넘으면
+ * 키가 무엇이든 더 안 받는다. ⚠️ 그래도 **인스턴스 메모리**라 서버리스에선 best-effort다 —
+ * 진짜 방어는 주소를 추측 불가능하게 만들거나(경로 토큰) 자릿수를 늘리는 것.
+ */
+export const SEAT_PIN_RL_GLOBAL_MAX = 40;
 export const SEAT_PIN_FAIL_DELAY_MS = 400;
 
 export type SeatPinPayload = { tenantId: string; seat: SeatKey; exp: number };
@@ -69,12 +76,14 @@ export type PinAttemptWindow = { count: number; resetAt: number };
 export function nextPinAttempt(
   prev: PinAttemptWindow | null | undefined,
   nowMs: number,
+  /** 상한 — 기본은 키(IP)별, 전체 창은 `SEAT_PIN_RL_GLOBAL_MAX`를 넘겨 쓴다. */
+  max: number = SEAT_PIN_RL_MAX,
 ): { ok: true; next: PinAttemptWindow } | { ok: false; next: PinAttemptWindow } {
   const fresh = !prev || nowMs >= prev.resetAt;
   const window: PinAttemptWindow = fresh
     ? { count: 0, resetAt: nowMs + SEAT_PIN_RL_WINDOW_MS }
     : { count: prev.count, resetAt: prev.resetAt };
-  if (window.count >= SEAT_PIN_RL_MAX) return { ok: false, next: window };
+  if (window.count >= max) return { ok: false, next: window };
   return { ok: true, next: window };
 }
 

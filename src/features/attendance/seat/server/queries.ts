@@ -121,19 +121,27 @@ async function loadSeatDay(
       status: "present" | "absent" | "late";
       seat_label: string | null;
       recorded_at: string;
-      recorder: { display_name: string | null }[];
+      /** 로그인 화면에서만 채워진다 — 공개(PIN) 경로는 아예 조회하지 않는다(아래 주석). */
+      recorder?: { display_name: string | null }[];
     }>(classIds, (chunk) =>
-      (() => {
-        let q = supabase
-          .from("attendance_records")
-          .select(
-            "id, class_id, student_id, session_date, slot_start, status, seat_label, recorded_at, recorder:recorded_by ( display_name )",
-          )
-          .in("class_id", chunk)
-          .eq("session_date", date);
-        if (tenantId) q = q.eq("tenant_id", tenantId);
-        return q;
-      })(),
+      // 🔴 공개(PIN) 경로에선 **직원 이름을 아예 안 가져온다** — 지금 화면이 안 그린다고 해도,
+      //    로그인 없이 열리는 페이지로 직원 신상이 건너가는 것 자체를 막는다(나중에 누가 그리면 끝).
+      //    tenantId가 넘어온 경로 = admin 클라이언트 = 공개 경로다.
+      //    ⚠️ select 문자열을 삼항으로 만들면 PostgREST 타입 파서가 못 읽는다 → 분기를 통째로 나눈다.
+      tenantId
+        ? supabase
+            .from("attendance_records")
+            .select("id, class_id, student_id, session_date, slot_start, status, seat_label, recorded_at")
+            .in("class_id", chunk)
+            .eq("session_date", date)
+            .eq("tenant_id", tenantId)
+        : supabase
+            .from("attendance_records")
+            .select(
+              "id, class_id, student_id, session_date, slot_start, status, seat_label, recorded_at, recorder:recorded_by ( display_name )",
+            )
+            .in("class_id", chunk)
+            .eq("session_date", date),
     ),
   ]);
 
