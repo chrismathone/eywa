@@ -10,9 +10,21 @@ import { useRef } from "react";
 import { useRouter } from "next/navigation";
 import { EyIcon } from "@/components/icons/eywa-icons";
 
-export function EcsDatePicker({ date, mode }: { date: string; mode?: "sheet" | "cards" }) {
+export function EcsDatePicker({
+  date,
+  mode,
+  view = "today",
+}: {
+  date: string;
+  mode?: "sheet" | "cards";
+  view?: "today" | "room";
+}) {
   const ref = useRef<HTMLInputElement>(null);
   const router = useRouter();
+  const href = (ymd: string) =>
+    view === "room"
+      ? `/ecs?view=room&date=${ymd}`
+      : `/ecs?view=today&date=${ymd}${mode === "cards" ? "&mode=cards" : ""}`;
   return (
     <label
       className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft relative inline-flex shrink-0 cursor-pointer items-center rounded-full border p-1 transition"
@@ -32,8 +44,7 @@ export function EcsDatePicker({ date, mode }: { date: string; mode?: "sheet" | "
         type="date"
         value={date}
         onChange={(e) => {
-          if (e.target.value)
-            router.push(`/ecs?view=today&date=${e.target.value}${mode === "cards" ? "&mode=cards" : ""}`);
+          if (e.target.value) router.push(href(e.target.value));
         }}
         aria-label="날짜 선택"
         className="absolute inset-0 h-full w-full cursor-pointer opacity-0 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:inset-0 [&::-webkit-calendar-picker-indicator]:h-full [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:cursor-pointer"

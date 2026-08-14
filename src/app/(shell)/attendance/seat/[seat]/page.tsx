@@ -88,6 +88,15 @@ export default async function SeatAttendancePage({
           title={`${SEAT_NAME[seat]} 출석부는 아직 열지 않았습니다`}
           description="이 자리 수업은 지금 담임 시수로 잡혀 있습니다. 자리 시수로 옮길지 정한 뒤 열면, 그때부터 찍은 기록이 담임 정산에서 빠집니다."
         />
+        {seat === "jj" ? (
+          <p className="text-text-dim px-1 text-center text-[13px]">
+            305호 출결·듣기 레벨·암기 단어는{" "}
+            <Link href="/ecs?view=room" className="text-primary font-bold underline-offset-2 hover:underline">
+              영어 시트 → 305 · JJ실
+            </Link>
+            에서 찍습니다. 시수 귀속은 그대로입니다.
+          </p>
+        ) : null}
       </div>
     );
   }
