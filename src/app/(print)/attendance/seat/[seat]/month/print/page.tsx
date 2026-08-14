@@ -3,7 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { PrintActions } from "@/app/(print)/enrollment/[id]/print/print-actions";
 import {
   AttendanceAppendix,
-  SEAT_APPENDIX_CAPTION,
+  seatAppendixCaption,
 } from "@/app/(print)/payroll/[teacherId]/payslip/attendance-appendix";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { requireAccess } from "@/lib/auth/require-access";
@@ -15,7 +15,7 @@ import { dutyAllowsSeat } from "@/features/attendance/seat/duty";
 import { getSeatDuties } from "@/features/attendance/seat/server/duty";
 import { getSeatMonthly } from "@/features/attendance/seat/server/monthly-queries";
 import type { SeatMonthGroup } from "@/features/attendance/seat/monthly-build";
-import { parseAnySeatKey, parseUsableSeatKey, SEAT_NAME } from "@/features/attendance/seat/seat";
+import { isPayrollSeat, parseAnySeatKey, parseUsableSeatKey, SEAT_NAME } from "@/features/attendance/seat/seat";
 import type { AttendanceMatrix, AttendanceStatus, MatrixStudent } from "@/features/attendance/server/queries";
 
 export async function generateMetadata({ params }: { params: Promise<{ seat: string }> }) {
@@ -63,7 +63,7 @@ export default async function SeatMonthlyPrintPage({
         period={month}
         teacherName={SEAT_NAME[seat]}
         holidays={buildHolidayMap(settings.operations.holidays)}
-        caption={SEAT_APPENDIX_CAPTION}
+        caption={seatAppendixCaption(isPayrollSeat(seat))}
         unitsByStudent={unitsByStudent}
       />
     </>

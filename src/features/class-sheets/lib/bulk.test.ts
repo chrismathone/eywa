@@ -5,6 +5,13 @@ import {
   planBulkAttendance,
   planBulkPlanCells,
   planBulkStatus,
+  countDayPlanCellOverwrites,
+  countDayStatusOverwrites,
+  countDayTargets,
+  countDayTermLines,
+  planDayBulkAttendance,
+  planDayBulkPlanCells,
+  planDayBulkStatus,
   type BulkPlanRow,
   type BulkRosterRow,
 } from "./bulk";
@@ -126,5 +133,87 @@ describe("planBulkPlanCells / countPlanCellOverwrites", () => {
     expect(countPlanCellOverwrites(lines, "regular", "textbook", true)).toBe(1); // r1만 값이 있다
     expect(countPlanCellOverwrites(lines, "regular", "progress", true)).toBe(0);
     expect(countPlanCellOverwrites(lines, "exam", "textbook", true)).toBe(1);
+  });
+});
+
+// ── 하루 단위(요일 머리 버튼) ─────────────────────────────────────────────────
+describe("하루 단위 일괄", () => {
+  const slots = [
+    { slotStart: "16:20", roster, lines: [] as BulkPlanRow[], scheduled: true },
+    { slotStart: "17:20", roster, lines: [] as BulkPlanRow[], scheduled: true },
+    // 시간표에서 사라진 칸 — 개별 셀도 잠겨 있으므로 일괄 대상이 아니다.
+    { slotStart: "18:20", roster, lines: [] as BulkPlanRow[], scheduled: false },
+  ];
+
+  it("교시별로 빈 칸을 따로 센다 — 4교시엔 찍혔고 5교시엔 안 찍힌 학생이 흔하다", () => {
+    const attendance = { [`a|${DATE}|16:20`]: "absent" };
+    const targets = planDayBulkAttendance(slots, attendance, DATE, {
+      canEdit: true,
+      canMarkDate: true,
+    });
+    expect(targets).toEqual([
+      { slotStart: "16:20", studentIds: ["b"] },
+      { slotStart: "17:20", studentIds: ["a", "b"] },
+    ]);
+    // 같은 학생이 두 교시면 2칸 — 찍히는 칸이 곧 일감이라 사람이 기대하는 수.
+    expect(countDayTargets(targets)).toBe(3);
+  });
+
+  it("시간표에 없는 칸(scheduled=false)은 대상에서 빠진다", () => {
+    const targets = planDayBulkAttendance(slots, {}, DATE, { canEdit: true, canMarkDate: true });
+    expect(targets.map((t) => t.slotStart)).toEqual(["16:20", "17:20"]);
+  });
+
+  it("대상이 0인 교시는 묶음에서 빠진다(빈 저장을 보내지 않는다)", () => {
+    const attendance = {
+      [`a|${DATE}|16:20`]: "present",
+      [`b|${DATE}|16:20`]: "present",
+    };
+    const targets = planDayBulkAttendance(slots, attendance, DATE, {
+      canEdit: true,
+      canMarkDate: true,
+    });
+    expect(targets.map((t) => t.slotStart)).toEqual(["17:20"]);
+  });
+
+  it("기간·권한이 없으면 하루치도 0건", () => {
+    expect(planDayBulkAttendance(slots, {}, DATE, { canEdit: true, canMarkDate: false })).toEqual([]);
+    expect(planDayBulkAttendance(slots, {}, DATE, { canEdit: false, canMarkDate: true })).toEqual([]);
+  });
+
+  it("태도 덮어쓰기 개수는 그 날 교시를 통틀어 센다(확인 문구의 숫자)", () => {
+    const marks = {
+      [`a|${DATE}|16:20`]: { status: "좋음", progressNote: null },
+      [`b|${DATE}|17:20`]: { status: "보통", progressNote: null },
+    };
+    expect(countDayStatusOverwrites(slots, marks, DATE, true)).toBe(2);
+    // 빈 칸만 채우기면 이미 값이 있는 칸은 대상에서 빠진다.
+    const onlyEmpty = planDayBulkStatus(slots, marks, DATE, { canEdit: true, onlyEmpty: true });
+    expect(countDayTargets(onlyEmpty)).toBe(2); // 16:20의 b, 17:20의 a
+  });
+
+  it("계획 줄은 교시를 넘어 합친다(줄 id는 유일)", () => {
+    const withLines = [
+      {
+        slotStart: "16:20",
+        roster,
+        lines: [{ id: "L1", termMode: "regular", textbook: null, pageRange: null, progress: null, homework: null }],
+        scheduled: true,
+      },
+      {
+        slotStart: "17:20",
+        roster,
+        lines: [{ id: "L2", termMode: "regular", textbook: "있음", pageRange: null, progress: null, homework: null }],
+        scheduled: true,
+      },
+    ] as unknown as Parameters<typeof planDayBulkPlanCells>[0];
+    expect(countDayTermLines(withLines, "regular", true)).toBe(2);
+    expect(planDayBulkPlanCells(withLines, "regular", "textbook", { canEdit: true, onlyEmpty: false })).toEqual([
+      "L1",
+      "L2",
+    ]);
+    // 빈 칸만이면 이미 쓴 줄(L2)은 빠진다.
+    expect(planDayBulkPlanCells(withLines, "regular", "textbook", { canEdit: true, onlyEmpty: true })).toEqual(["L1"]);
+    expect(countDayPlanCellOverwrites(withLines, "regular", "textbook", true)).toBe(1);
   });
 });

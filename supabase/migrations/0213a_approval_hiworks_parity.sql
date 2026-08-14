@@ -22,8 +22,12 @@
 set local statement_timeout = '60s';
 
 -- ── 옛 휴가 전용 표 정리(프로덕션 실측 0행, 2026-08-14) ─────────────────────
-drop table if exists public.leave_approvals;
-drop table if exists public.leave_requests;
+-- ⚠️ **cascade가 필요하다** — 두 표의 RLS 정책이 서로 상대 표를 조회해서(바로 그 42P17 상호재귀 쌍,
+--    [[#109]]) 맨몸 drop이 2BP01("other objects depend on it")로 막힌다(원장 실행에서 실측).
+--    cascade가 지우는 의존 객체는 **그 정책들뿐**이다: 두 표는 0210a에서 태어나 소비처가 생기기 전에
+--    폐기됐고(0행), 다른 표의 FK·뷰·함수 어느 것도 이 표를 가리키지 않는다.
+drop table if exists public.leave_approvals cascade;
+drop table if exists public.leave_requests cascade;
 drop function if exists public.auth_is_leave_approver(uuid);
 drop function if exists public.auth_is_leave_requester(uuid);
 
