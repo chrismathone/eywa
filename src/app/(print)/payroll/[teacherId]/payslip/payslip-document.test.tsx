@@ -160,3 +160,46 @@ describe("서명란", () => {
     expect(screen.getAllByText("김은정").length).toBe(2); // 수령인은 그대로
   });
 });
+
+/**
+ * 🔴 원장 2026-08-14: *"인쇄시에 퇴원 관련 내용은 인쇄 안되도록 (내부 자료)"*.
+ * 명세서는 강사에게 주는 문서인데 퇴원생 수·명단·퇴원생률은 학원 내부 지표다.
+ * ⚠️ 이 때문에 표의 **행 구성**을 바꿨다 — 예전엔 퇴원 칸이 '월 평균 수업인원'·'담당 반'과 같은 줄이라
+ *    줄째로 숨기면 그 둘까지 종이에서 사라졌다. 그래서 아래 두 가지를 함께 잠근다.
+ */
+describe("퇴원 항목은 내부 자료 — 인쇄 제외", () => {
+  const rowOf = (label: string) => screen.getByText(label).closest("tr");
+
+  it("퇴원 계열 4칸이 전부 print:hidden 줄에 있다", () => {
+    render(<PayslipDocument data={makeData()} />);
+    for (const label of ["퇴원생 수", "퇴원생 명단", "퇴원생률", "2026 퇴원생 수"]) {
+      expect(rowOf(label)?.className, `${label}이 인쇄에 남는다`).toContain("print:hidden");
+    }
+  });
+
+  it("🔴 퇴원이 아닌 지표는 인쇄에 **남는다**(같이 숨기면 안 된다)", () => {
+    render(<PayslipDocument data={makeData()} />);
+    for (const label of ["수업인원", "누적수업인원", "월 평균 수업인원", "담당 반"]) {
+      expect(rowOf(label)?.className ?? "", `${label}이 인쇄에서 사라진다`).not.toContain("print:hidden");
+    }
+  });
+
+  it("라벨은 원장 시트 표기를 따른다(용역제공기간·담당과목·퇴원생률)", () => {
+    render(<PayslipDocument data={makeData()} />);
+    expect(screen.getByText("용역제공기간")).toBeTruthy();
+    expect(screen.getByText("담당과목")).toBeTruthy();
+    expect(screen.getByText("퇴원생률")).toBeTruthy();
+    expect(screen.queryByText("근무기간")).toBeNull();
+    expect(screen.queryByText("퇴원생율")).toBeNull();
+  });
+
+  /**
+   * 🔴 시트 사진에는 "담당 / 원장 / 수령인"으로 적혀 있지만, 원장이 2026-08-13에 이 문서의 가운데 서명 칸을
+   *    `원장` → `대표`로 지시했다. **시트가 아니라 원장 지시가 이긴다** — 사진을 근거로 되돌리지 말 것.
+   */
+  it("서명란은 원장 지시(담당자/대표/수령인)를 유지한다 — 시트 사진으로 되돌리지 말 것", () => {
+    render(<PayslipDocument data={makeData()} />);
+    expect(screen.getByText("담당자")).toBeTruthy();
+    expect(screen.getByText("대표")).toBeTruthy();
+  });
+});
