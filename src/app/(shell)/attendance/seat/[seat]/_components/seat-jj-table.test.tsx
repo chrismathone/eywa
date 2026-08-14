@@ -78,7 +78,9 @@ describe("JJ실 출석부 표", () => {
         pending={false}
       />,
     );
-    expect(container.firstElementChild?.className).toMatch(/auto-fill/);
+    expect((container.firstElementChild as HTMLElement).style.gridTemplateColumns).toBe(
+      "repeat(2, minmax(240px, 1fr))",
+    );
     expect(screen.getAllByRole("table")).toHaveLength(2);
     expect(screen.getByText("중등E_초5 의치대")).toBeTruthy();
     expect(screen.getByText("중등E_초등 브릿지 A")).toBeTruthy();
