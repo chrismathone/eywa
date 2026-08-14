@@ -8,6 +8,15 @@
 //  · 개별 사실(학생별 개인 진도·과제)은 일괄 대상이 아니다 — 학생마다 다른 기록이라 복제하면 거짓이 된다.
 //    반대로 **수업계획(평시/내신)은 반 전체의 사실**이라 6영역에 같은 교재를 넣는 게 정상 작업이다.
 //
+// 🔴 **버튼 셋으로 갈랐다**(원장 2026-08-14 *"일괄 입력창을 제거하고 거기에 '일괄 출석' '일괄 태도'로
+//    라벨 대신"*). 종전엔 한 창에 계획·출결·태도가 다 들어 있어서, 제일 잦은 "전원 출석"조차
+//    **창 열기 → 드롭다운 고르기 → 버튼 누르기** 세 동작이 들었다.
+//     · `일괄 출석` = 창 없이 **한 번에**(값이 '출석' 하나뿐이라 고를 게 없다).
+//     · `일괄 태도` = 5단 눈금에서 골라야 해 작은 창이 남는다.
+//     · `계획`      = 평시/내신 × 교재·시간·진도·과제라 역시 창.
+//    ⚠️ 지각·결석 **일괄은 없앴다** — 값 선택 단계를 되살리면 위 세 동작으로 돌아간다. 그 둘은 애초에
+//       한 반 전체가 같은 값일 일이 없어(개별 셀 순환이 정석) 일괄의 실익이 없었다.
+//
 // ⚠️ 자리는 교시 카드 **머리(우측)**다(원장 2026-08-06). 로스터 표 위에 있을 땐 계획 표를 지나 한참
 //    내려가야 보였고, 계획 일괄까지 담게 된 지금은 계획 표보다 아래 있는 게 순서상 어긋난다.
 import { useState } from "react";
@@ -31,9 +40,6 @@ import { FieldSelect } from "@/features/onescreen/components/field-select";
 import type { BasicAttendance } from "../lib/mark-cycle";
 
 const TERM_LABEL: Record<"regular" | "exam", string> = { regular: "평시", exam: "내신" };
-/** 출결 일괄 선택지 — 셀 드롭다운과 **같은 어휘**(라벨→enum 변환도 한 곳에서). */
-const ATT_OPTIONS = ["출석", "지각", "결석"] as const;
-const ATT_TO_STATUS: Record<string, BasicAttendance> = { 출석: "present", 지각: "late", 결석: "absent" };
 
 const miniBtn = (on: boolean) =>
   `cursor-pointer rounded-full border px-2 py-0.5 text-[12px] transition ${
@@ -41,6 +47,12 @@ const miniBtn = (on: boolean) =>
       ? "border-foreground bg-foreground text-background font-bold"
       : "border-line-strong text-text-dim hover:text-foreground hover:bg-bg-soft"
   }`;
+
+/** 교시 머리의 알약 버튼 셋 — 세 트리거가 같은 모양이라야 한 줄로 읽힌다. */
+const PILL =
+  "border-line-strong text-foreground hover:text-primary hover:border-primary shrink-0 cursor-pointer rounded-full border px-2 py-0.5 text-[12px] font-bold disabled:cursor-default disabled:opacity-40 disabled:hover:text-foreground disabled:hover:border-line-strong";
+const POPUP =
+  "bg-card border-line-strong shadow-card flex max-h-[70vh] w-[268px] flex-col gap-2 overflow-y-auto rounded-lg border p-3 text-[12px] outline-none";
 
 export function SlotBulk({
   date,
@@ -74,14 +86,14 @@ export function SlotBulk({
   onBulkStatus: (studentIds: string[], status: string | null) => void;
   onBulkPlanCells: (lineIds: string[], field: PlanBulkField, value: string) => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const [attitudeOpen, setAttitudeOpen] = useState(false);
+  const [planOpen, setPlanOpen] = useState(false);
   const [picked, setPicked] = useState<string | null>(null);
   const [onlyEmpty, setOnlyEmpty] = useState(false);
   const [term, setTerm] = useState<"regular" | "exam">("regular");
   const [planField, setPlanField] = useState<PlanBulkField>("textbook");
   const [planValue, setPlanValue] = useState("");
   const [planOnlyEmpty, setPlanOnlyEmpty] = useState(false);
-  const [att, setAtt] = useState<string | null>(null);
 
   // 권한 없으면 컨트롤을 아예 렌더하지 않는다(누를 수 있는 것처럼 보였다가 서버가 거절하는 게 최악).
   if (!canEdit) return null;
@@ -104,6 +116,15 @@ export function SlotBulk({
   const planOverwrites = countPlanCellOverwrites(lines, effectiveTerm, planField, canEdit);
   const planFieldLabel = PLAN_BULK_FIELDS.find((f) => f.key === planField)?.label ?? "";
 
+  /**
+   * 일괄 출석 — **창도 확인도 없다**. 대상이 언제나 "아직 기록이 없는 학생"뿐이라(planBulkAttendance)
+   * 되돌릴 게 없는 비파괴 동작이고, 그래서 한 번에 끝낸다. 이미 찍힌 출결·사유·시수는 손대지 않는다.
+   */
+  const applyPresent = () => {
+    if (attendanceTargets.length === 0) return;
+    onBulkAttendance(attendanceTargets, "present");
+  };
+
   const applyStatus = () => {
     // 값이 없으면 적용 자체가 안 된다(버튼 disabled) — "아무것도 안 골랐는데 전원 태도 삭제"가
     // 기본 액션이 되면 안 된다. 일괄 지우기는 의도적으로 미제공(지우기는 개별 셀에서).
@@ -116,7 +137,7 @@ export function SlotBulk({
       if (!ok) return;
     }
     onBulkStatus(statusTargets, value);
-    setOpen(false);
+    setAttitudeOpen(false);
     setPicked(null);
   };
 
@@ -131,42 +152,105 @@ export function SlotBulk({
       if (!ok) return;
     }
     onBulkPlanCells(planTargets, planField, v);
-    setOpen(false);
+    setPlanOpen(false);
     setPlanValue("");
   };
 
   return (
-    <Popover.Root
-      open={open}
-      onOpenChange={(o) => {
-        setOpen(o);
-        if (!o) {
-          setPicked(null);
-          setPlanValue("");
-          // 출결은 특히 — 남아 있다가 다음에 열었을 때 딸려 나가면 출석부에 그대로 박힌다(원스크린 선례).
-          setAtt(null);
+    // 좁은 교시 칸에서도 버튼이 잘리지 않게 줄바꿈을 허용한다(칸 폭은 교시 열이 정한다).
+    <span className="flex shrink-0 flex-wrap items-center justify-end gap-1">
+      <button
+        type="button"
+        className={PILL}
+        disabled={attendanceTargets.length === 0}
+        onClick={applyPresent}
+        title={
+          attendanceTargets.length > 0
+            ? `기록 없는 ${attendanceTargets.length}명을 출석으로 — 이미 기록된 학생은 그대로 둡니다`
+            : canMarkDate
+              ? "이 교시는 이미 전원 기록됐습니다"
+              : // canMarkAttendanceByDate = 권한 AND 기간 — 원인을 단정하면 오표시(개별 툴팁과 동일 문구)
+                "출결 입력 권한이 없거나 수정 기간이 지났습니다"
         }
-      }}
-    >
-      <Popover.Trigger
-        className="border-line-strong text-foreground hover:text-primary hover:border-primary shrink-0 cursor-pointer rounded-full border px-2 py-0.5 text-[12px] font-bold"
-        title="이 교시의 출결·태도와 수업계획(평시/내신)을 한 번에 입력"
       >
-        일괄 입력
-      </Popover.Trigger>
-      <Popover.Portal>
-        <Popover.Positioner side="bottom" align="end" sideOffset={4} className="z-50">
-          <Popover.Popup className="bg-card border-line-strong shadow-card flex max-h-[70vh] w-[268px] flex-col gap-2 overflow-y-auto rounded-lg border p-3 text-[12px] outline-none">
-            <p className="text-text-dim text-[12px]">
-              이 교시 <b className="text-foreground num">{roster.length}</b>명 · 계획{" "}
-              <b className="text-foreground num">{lines.length}</b>줄
-            </p>
+        일괄 출석{attendanceTargets.length > 0 ? ` ${attendanceTargets.length}` : ""}
+      </button>
 
-            {/* ── 수업계획(평시/내신) ─ 계획 표가 카드에서 로스터보다 위라 여기서도 먼저 놓는다. */}
-            <div className="border-line-strong border-t pt-2">
-              <p className="text-text-dim mb-1 text-[11px] font-bold">수업계획</p>
+      {/* 태도 — 셀과 같은 5단 눈금에서 골라야 해서 창이 남는다. */}
+      <Popover.Root
+        open={attitudeOpen}
+        onOpenChange={(o) => {
+          setAttitudeOpen(o);
+          if (!o) setPicked(null);
+        }}
+      >
+        <Popover.Trigger className={PILL} title="이 교시 태도를 한 번에">
+          일괄 태도
+        </Popover.Trigger>
+        <Popover.Portal>
+          <Popover.Positioner side="bottom" align="end" sideOffset={4} className="z-50">
+            <Popover.Popup className={POPUP}>
+              <p className="text-text-dim text-[12px]">
+                이 교시 <b className="text-foreground num">{roster.length}</b>명
+              </p>
+              {/* ⚠️ 자유입력은 **없앴다**(원장 2026-08-06 "태도 직접 입력은 없애버려. ecs").
+                  ECS 태도는 5단 눈금으로 고정 — 자유입력이 있으면 눈금 밖 값이 계속 새로 생겨
+                  집계도 학부모 문장도 갈린다. 셀(FieldSelect)도 원래 자유입력이 없어 두 곳이 같아졌다.
+                  옛 저장값('완'·'안침' 등)은 셀에서 '이전 표기'로 계속 보인다(쓴 게 사라지지 않는다). */}
+              <FieldSelect
+                options={ATTITUDE}
+                value={picked}
+                ariaLabel="일괄 태도"
+                placeholder="태도 선택"
+                onSelect={setPicked}
+              />
+              <label className="text-text-dim flex cursor-pointer items-center gap-1.5 text-[12px]">
+                <input
+                  type="checkbox"
+                  className="cursor-pointer"
+                  checked={onlyEmpty}
+                  onChange={(e) => setOnlyEmpty(e.target.checked)}
+                />
+                빈 칸만 채우기
+              </label>
+              <Button
+                type="button"
+                size="sm"
+                className="w-full"
+                disabled={statusTargets.length === 0 || value === null}
+                onClick={applyStatus}
+              >
+                {value === null ? "태도를 선택하세요" : `"${value}" 적용 ${statusTargets.length}명`}
+              </Button>
+              {/* 각주 — 위 입력칸과 **붙어 보이지 않게** 구분한다. 안 그러면 바로 위 태도 설명으로 읽힌다. */}
+              <p className="bg-bg-soft text-text-dim rounded-md px-2 py-1.5 text-[11px]">
+                ※ ‘특이사항’은 <b className="text-foreground">여기서 입력하지 않습니다</b> — 학생마다
+                다른 기록이라 일괄 대상이 아니며, 학생 행의 맨 오른쪽 칸에 직접 적습니다.
+              </p>
+            </Popover.Popup>
+          </Popover.Positioner>
+        </Popover.Portal>
+      </Popover.Root>
+
+      {/* 수업계획(평시/내신) — 반 전체의 사실이라 일괄이 정상 작업이다. */}
+      <Popover.Root
+        open={planOpen}
+        onOpenChange={(o) => {
+          setPlanOpen(o);
+          if (!o) setPlanValue("");
+        }}
+      >
+        <Popover.Trigger className={PILL} title="수업계획(평시/내신)을 한 번에 채우기">
+          계획
+        </Popover.Trigger>
+        <Popover.Portal>
+          <Popover.Positioner side="bottom" align="end" sideOffset={4} className="z-50">
+            <Popover.Popup className={POPUP}>
+              <p className="text-text-dim text-[12px]">
+                이 교시 계획 <b className="text-foreground num">{lines.length}</b>줄
+              </p>
               {showExamTerm ? (
-                <div className="mb-1.5 flex gap-1">
+                <div className="flex gap-1">
                   {(["regular", "exam"] as const).map((t) => (
                     <button
                       key={t}
@@ -179,7 +263,7 @@ export function SlotBulk({
                   ))}
                 </div>
               ) : null}
-              <div className="mb-1.5 flex flex-wrap gap-1">
+              <div className="flex flex-wrap gap-1">
                 {PLAN_BULK_FIELDS.map((f) => (
                   <button
                     key={f.key}
@@ -198,7 +282,7 @@ export function SlotBulk({
                 aria-label={`${TERM_LABEL[effectiveTerm]} ${planFieldLabel} 일괄 입력`}
                 onChange={(e) => setPlanValue(e.target.value)}
               />
-              <label className="text-text-dim mt-1.5 flex cursor-pointer items-center gap-1.5 text-[12px]">
+              <label className="text-text-dim flex cursor-pointer items-center gap-1.5 text-[12px]">
                 <input
                   type="checkbox"
                   className="cursor-pointer"
@@ -210,7 +294,7 @@ export function SlotBulk({
               <Button
                 type="button"
                 size="sm"
-                className="mt-1.5 w-full"
+                className="w-full"
                 disabled={planTargets.length === 0 || planValue.trim() === ""}
                 onClick={applyPlan}
               >
@@ -220,90 +304,14 @@ export function SlotBulk({
               </Button>
               {termLines.length === 0 ? (
                 // 대상이 없는 이유를 밝힌다 — 일괄이 줄을 몰래 만들지 않는다는 계약(bulk.ts 주석)의 이면.
-                <p className="text-text-dim mt-1 text-[11px]">
+                <p className="text-text-dim text-[11px]">
                   계획 표의 ‘+ 줄 추가’로 줄을 먼저 만드세요(일괄은 있는 줄만 채웁니다).
                 </p>
               ) : null}
-            </div>
-
-            {/* 출결 — 셀과 **같은 컨트롤**(드롭다운). 대상은 언제나 **아직 기록이 없는 학생만**이라
-                (planBulkAttendance) 이미 찍힌 출결·사유·시수를 덮지 않는다. 그래서 지각·결석을 골라도
-                "전원 결석" 사고가 안 난다 — 이 비파괴 계약을 풀지 말 것. */}
-            <div className="border-line-strong border-t pt-2">
-              <p className="text-text-dim mb-1 text-[11px] font-bold">출결</p>
-              <FieldSelect
-                options={ATT_OPTIONS}
-                value={att}
-                ariaLabel="일괄 출결"
-                placeholder="출결 선택"
-                onSelect={setAtt}
-              />
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                className="mt-1.5 w-full"
-                disabled={attendanceTargets.length === 0 || att === null}
-                onClick={() => {
-                  if (att === null) return;
-                  onBulkAttendance(attendanceTargets, ATT_TO_STATUS[att]);
-                  setOpen(false);
-                  setAtt(null);
-                }}
-              >
-                {att === null ? "출결을 선택하세요" : `기록 없는 ${attendanceTargets.length}명에 "${att}"`}
-              </Button>
-              <p className="text-text-dim mt-1 text-[11px]">
-                {canMarkDate
-                  ? "이미 기록된 학생은 그대로 둡니다(출석부 기록 보존)."
-                  : // canMarkAttendanceByDate = 권한 AND 기간 — 원인을 단정하면 오표시(개별 툴팁과 동일 문구)
-                    "출결 입력 권한이 없거나 수정 기간이 지났습니다."}
-              </p>
-            </div>
-
-            {/* 태도 — 셀과 같은 드롭다운. 자유입력은 남긴다(옛 표기·학원 고유 어휘가 실제로 쓰인다). */}
-            <div className="border-line-strong border-t pt-2">
-              <p className="text-text-dim mb-1 text-[11px] font-bold">태도</p>
-              {/* ⚠️ 자유입력은 **없앴다**(원장 2026-08-06 "태도 직접 입력은 없애버려. ecs").
-                  ECS 태도는 5단 눈금으로 고정 — 자유입력이 있으면 눈금 밖 값이 계속 새로 생겨
-                  집계도 학부모 문장도 갈린다. 셀(FieldSelect)도 원래 자유입력이 없어 두 곳이 같아졌다.
-                  옛 저장값('완'·'안침' 등)은 셀에서 '이전 표기'로 계속 보인다(쓴 게 사라지지 않는다). */}
-              <FieldSelect
-                options={ATTITUDE}
-                value={picked}
-                ariaLabel="일괄 태도"
-                placeholder="태도 선택"
-                onSelect={setPicked}
-              />
-              <label className="text-text-dim mt-1.5 flex cursor-pointer items-center gap-1.5 text-[12px]">
-                <input
-                  type="checkbox"
-                  className="cursor-pointer"
-                  checked={onlyEmpty}
-                  onChange={(e) => setOnlyEmpty(e.target.checked)}
-                />
-                빈 칸만 채우기
-              </label>
-              <Button
-                type="button"
-                size="sm"
-                className="mt-1.5 w-full"
-                disabled={statusTargets.length === 0 || value === null}
-                onClick={applyStatus}
-              >
-                {value === null ? "태도를 선택하세요" : `"${value}" 적용 ${statusTargets.length}명`}
-              </Button>
-            </div>
-
-            {/* 각주 — 위 입력칸과 **붙어 보이지 않게** 구분한다. 안 그러면 바로 위 '태도 직접 입력'의
-                설명(=그 칸에 과제를 적는 것)으로 읽힌다. 배경 있는 블록 + '※'로 성격을 못박는다. */}
-            <p className="bg-bg-soft text-text-dim rounded-md px-2 py-1.5 text-[11px]">
-              ※ ‘특이사항’은 <b className="text-foreground">여기서 입력하지 않습니다</b> — 학생마다
-              다른 기록이라 일괄 대상이 아니며, 학생 행의 맨 오른쪽 칸에 직접 적습니다.
-            </p>
-          </Popover.Popup>
-        </Popover.Positioner>
-      </Popover.Portal>
-    </Popover.Root>
+            </Popover.Popup>
+          </Popover.Positioner>
+        </Popover.Portal>
+      </Popover.Root>
+    </span>
   );
 }
