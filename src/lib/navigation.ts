@@ -129,8 +129,8 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: "/meetings", label: "회의록", icon: MENU_ICON.meetings, menuKey: "meetings" },
       // 수업 평가 체크리스트(참관) — 테스트 단계: 기본 전원 none이라 개인 예외(이승엽)에게만 보인다.
       { href: "/class-review", label: "수업 평가", icon: MENU_ICON.class_review, menuKey: "class_review" },
-      // 휴가관리(연차 신청 + 전자결재) — 테스트 단계: 기본 전원 none이라 코드 명단(이승엽·김예원)에게만 보인다.
-      { href: "/leave", label: "휴가관리", icon: MENU_ICON.leave, menuKey: "leave" },
+      // 전자결재(기안·결재함, 첫 양식 = 휴가신청서) — 테스트 단계: 기본 전원 none이라 코드 명단(이승엽·김예원)에게만 보인다.
+      { href: "/approvals", label: "전자결재", icon: MENU_ICON.approvals, menuKey: "approvals" },
       // 데이터베이스 = 학원 각종 서식(빈 양식 파일·앱 작성 문서) 저장소 — 윈도우 탐색기형 뷰.
       { href: "/documents", label: "데이터베이스", icon: MENU_ICON.documents, menuKey: "documents" },
     ],
