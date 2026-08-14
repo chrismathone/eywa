@@ -5,6 +5,7 @@ import {
   jjSeatTextCols,
   parseJjMarkField,
   seatHasJjFields,
+  jjClassColumns,
   seatOverlayKey,
 } from "./jj-fields";
 
@@ -30,5 +31,14 @@ describe("JJ실 전용 칸", () => {
   it("오버레이 키에 교시가 들어간다 — 없으면 다른 교시 값이 묻는다", () => {
     expect(seatOverlayKey("c1", "s1", "16:20:00")).toBe("c1|s1|16:20");
     expect(seatOverlayKey("c1", "s1", "16:20")).not.toBe(seatOverlayKey("c1", "s1", "17:20"));
+  });
+});
+
+describe("JJ실 반 = 열", () => {
+  it("반 수만큼 열을 만들고 빈 칸을 만들지 않는다", () => {
+    expect(jjClassColumns(1)).toBe("repeat(1, minmax(240px, 1fr))");
+    expect(jjClassColumns(2)).toBe("repeat(2, minmax(240px, 1fr))");
+    expect(jjClassColumns(3)).toBe("repeat(3, minmax(240px, 1fr))");
+    expect(jjClassColumns(0)).toBe("repeat(1, minmax(240px, 1fr))");
   });
 });
