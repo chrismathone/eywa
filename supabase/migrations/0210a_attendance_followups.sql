@@ -87,7 +87,7 @@ create policy attendance_followups_tenant_isolation on attendance_followups
 -- ⚠️ 나중에 출결 계열에 역할 게이트를 붙일 땐 **이 표도 함께** 넣을 것 — 통화 메모·`outcome='sick'`은
 --    기존 출결 계열에 없던 종류의 개인정보다(0158a가 billing 계열만 잠갔던 것과 같은 누락을 막는다).
 comment on table attendance_followups is
-  '당일 미확인·결석 학생에 대한 데스크 확인 기록(0209a). 큐 자체는 파생 계산이고 이 표는 조치만 담는다. 출결(attendance_records)은 여기서 바꾸지 않는다 — 급여·청구 재료라 사람이 명시로 반영한다.';
+  '당일 미확인·결석 학생에 대한 데스크 확인 기록(0210a). 큐 자체는 파생 계산이고 이 표는 조치만 담는다. 출결(attendance_records)은 여기서 바꾸지 않는다 — 급여·청구 재료라 사람이 명시로 반영한다.';
 comment on column attendance_followups.signal is
   '행 생성 시점의 신호(absent=강사가 결석 입력 / unmarked=같은 교시 다른 학생은 입력됐는데 이 학생만 빈 칸). 파생값이라 이후 갱신하지 않는다.';
 comment on column attendance_followups.outcome is
