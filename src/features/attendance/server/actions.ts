@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { after } from "next/server";
 import { notifyIfClassAttendanceComplete } from "./complete-notify";
+import { notifyDeskOfAbsences } from "@/features/attendance/live/server/absent-notify";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { accessLevelTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
@@ -343,6 +344,17 @@ export async function setAttendanceCell(input: {
   after(() =>
     notifyIfClassAttendanceComplete({ tenantId: user.tenantId, classId, date: sessionDate, actorId: user.id }),
   );
+  // 결석이 찍힌 순간 → 데스크 확인 벨(2026-08-14). 결석일 때만, 그리고 dedup은 그쪽이 진다.
+  if (status === "absent") {
+    after(() =>
+      notifyDeskOfAbsences({
+        tenantId: user.tenantId,
+        actorId: user.id,
+        date: sessionDate,
+        cells: [{ studentId, classId, slotStart: slot }],
+      }),
+    );
+  }
   if (!input.quiet) revalidatePath("/attendance");
   return { ok: true };
 }
@@ -533,6 +545,16 @@ export async function setAttendanceBulk(input: {
    * 기존 행을 절대 update하지 않으므로 교시별(0196a) 행이 섞인 날에도 부분 갱신·시수 이중 계상이 없다.
    */
   fillEmptyOnly?: boolean;
+  /**
+   * 교시(0196a, "HH:MM") — **넘기면 그 교시 칸만** 읽고 쓴다. 안 넘기면 종전대로 "그날 전체"(slot null).
+   *
+   * 🔴 당일 출결 화면(2026-08-14)이 교시별로 그리기 때문에 필요하다. 이걸 안 넘기고 일괄 출석을 하면
+   *    같은 반이 하루 두 번 만나는 날(영어에 흔하다) **1교시에 누른 '전원 출석'이 2교시까지 출석으로
+   *    보인다** — 2교시에 안 온 학생이 데스크 큐에서 조용히 사라진다.
+   * ⚠️ `fillEmptyOnly`의 "이미 기록 있음" 판정도 함께 좁혀진다(그 교시에 기록이 있는지). 안 그러면
+   *    1교시를 찍은 순간 2교시가 통째로 blocked가 되어 영원히 못 찍는다.
+   */
+  slotStart?: string | null;
 }): Promise<BulkCellResult> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
@@ -590,21 +612,24 @@ export async function setAttendanceBulk(input: {
 
   const classIds = [...new Set(allowed.map((c) => c.classId))];
   const studentIds = [...new Set(allowed.map((c) => c.studentId))];
+  const slot = input.slotStart?.trim() || null;
+  if (slot && !/^\d{2}:\d{2}(:\d{2})?$/.test(slot)) return { error: "잘못된 교시입니다" };
   // 기존 기록 — 셀 액션과 같은 "가장 최근 1건" 규약(그 날짜에 행이 여러 개일 수 있다).
+  // 교시를 넘겼으면 **그 교시 행만** 본다(다른 교시 기록을 이 교시의 답으로 오인하지 않는다).
   const existingRows = await fetchInChunks<{
     id: string;
     class_id: string;
     student_id: string;
     recorded_at: string | null;
-  }>(studentIds, (chunk) =>
-    supabase
+  }>(studentIds, (chunk) => {
+    const q = supabase
       .from("attendance_records")
       .select("id, class_id, student_id, recorded_at")
       .eq("session_date", sessionDate)
       .in("class_id", classIds)
-      .in("student_id", chunk)
-      .order("recorded_at", { ascending: false }),
-  );
+      .in("student_id", chunk);
+    return (slot ? q.eq("slot_start", slot) : q).order("recorded_at", { ascending: false });
+  });
   const latestId = new Map<string, string>();
   for (const r of existingRows) {
     const k = `${r.student_id}::${r.class_id}`;
@@ -645,6 +670,8 @@ export async function setAttendanceBulk(input: {
         session_date: sessionDate,
         status,
         recorded_by: user.id,
+        // 교시 미지정이면 종전대로 null("그날 전체") — 기존 호출부의 저장 모양이 바뀌지 않는다.
+        ...(slot ? { slot_start: slot } : {}),
       })),
     );
     if (error) return { error: error.message };
@@ -661,6 +688,17 @@ export async function setAttendanceBulk(input: {
       });
     }
   });
+  // 일괄로 결석을 찍는 경우(예: 휴강 처리)도 데스크가 알아야 한다 — 같은 dedup을 타 중복 벨은 없다.
+  if (status === "absent" && allowed.length > 0) {
+    after(() =>
+      notifyDeskOfAbsences({
+        tenantId: user.tenantId,
+        actorId: user.id,
+        date: sessionDate,
+        cells: allowed.map((c) => ({ ...c, slotStart: slot })),
+      }),
+    );
+  }
   revalidatePath("/attendance");
   return { ok: true, applied: allowed, blocked: cells.length - allowed.length };
 }
