@@ -100,7 +100,7 @@ export function DeskView({
           </h2>
           <div className="grid gap-2 lg:grid-cols-2">
             {absentRows.map((s) => (
-              <StudentCard key={`${s.studentId}@${s.slotStart}`} row={s} date={date} canEdit={canEdit} />
+              <StudentCard key={`${s.studentId}@${s.classId}@${s.slotStart}`} row={s} date={date} canEdit={canEdit} />
             ))}
           </div>
         </section>
@@ -117,7 +117,7 @@ export function DeskView({
           </h2>
           <div className="grid gap-2 lg:grid-cols-2">
             {unmarkedRows.map((s) => (
-              <StudentCard key={`${s.studentId}@${s.slotStart}`} row={s} date={date} canEdit={canEdit} />
+              <StudentCard key={`${s.studentId}@${s.classId}@${s.slotStart}`} row={s} date={date} canEdit={canEdit} />
             ))}
           </div>
         </section>
@@ -130,7 +130,7 @@ export function DeskView({
           </h2>
           <ul className="border-line divide-line divide-y rounded-2xl border">
             {queue.done.map((s) => (
-              <li key={`${s.studentId}@${s.slotStart}`} className="flex flex-wrap items-center gap-x-2 gap-y-1 p-2.5 text-sm">
+              <li key={`${s.studentId}@${s.classId}@${s.slotStart}`} className="flex flex-wrap items-center gap-x-2 gap-y-1 p-2.5 text-sm">
                 <span className="font-semibold">{s.studentName}</span>
                 <span className="text-text-faint num text-xs">
                   {s.className} · {s.slotStart}
