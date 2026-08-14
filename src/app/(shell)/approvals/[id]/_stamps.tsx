@@ -60,9 +60,9 @@ function SignArea({ col }: { col: Col }) {
     );
   }
   return (
-    <span className="inline-flex flex-col items-center gap-0.5">
+    <span className="inline-flex flex-col items-center gap-1">
       <span
-        className={`flex size-10 items-center justify-center rounded-full border-2 text-[12px] font-bold ${STAMP_CLS[col.sign]}`}
+        className={`flex size-14 items-center justify-center rounded-full border-2 text-[15px] font-bold ${STAMP_CLS[col.sign]}`}
       >
         {STAMP_TEXT[col.sign]}
       </span>
@@ -129,12 +129,12 @@ export function ApprovalStamps({ doc }: { doc: ApprovalDocRow }) {
             {cols.map((c) => (
               <td
                 key={c.key}
-                className={`border-line min-w-[84px] border px-2 pt-1.5 pb-1.5 align-bottom ${
+                className={`border-line min-w-[96px] border px-2 pt-1.5 pb-1.5 align-bottom ${
                   c.active ? "bg-primary-soft/30" : ""
                 }`}
               >
-                {/* 사인 칸 — 고정 높이로 항상 확보(빈 칸도 종이처럼 자리가 있다). */}
-                <span className="flex h-[52px] items-center justify-center">
+                {/* 사인 칸 — 고정 높이로 항상 확보(빈 칸도 종이처럼 자리가 있다 · 원장 "사인란 더 크게"). */}
+                <span className="flex h-20 items-center justify-center">
                   <SignArea col={c} />
                 </span>
                 <p className="text-foreground mt-0.5 text-[12px] font-medium whitespace-nowrap">

@@ -4,6 +4,8 @@ import { fetchInChunks } from "@/lib/supabase/batch";
 import { kstToday } from "@/lib/date-kst";
 import { resolveLeavePeriod, type LeavePeriod } from "@/features/leave/accrual";
 import type { LeaveKind } from "@/features/leave/request-days";
+import { getTenantSettings } from "@/features/owner/server/queries";
+import { compareByJobRank } from "../job-rank";
 import type { ApprovalForm, DocStatus, StepDecision } from "../types";
 
 /**
@@ -333,22 +335,29 @@ export type ApprovalPerson = { id: string; name: string; jobTitle: string | null
  *
  * ⚠️ 파일럿 명단 밖 직원이 결재자가 되면 사이드바에 전자결재 메뉴는 없지만, **벨 알림의 문서 링크로**
  *    들어가 결재할 수 있다(문서 열람·결재 자격은 메뉴가 아니라 동결된 결재선이 근거 — 결정 로그).
- * 학생 계정은 제외. 이름순. 직원 수십 명 규모라 상한 500이면 절단 위험 없음(B2 명시 상한).
+ * 학생 계정은 제외. **직급 서열순**(원장 2026-08-14 "직급 기준으로 정렬" — 서열 소스는 학원설정
+ * `operations.jobTitles` 배열 순서, 매칭 규칙은 job-rank.ts). 직원 수십 명 규모라 상한 500이면
+ * 절단 위험 없음(B2 명시 상한).
  */
 export async function getApproverCandidates(): Promise<ApprovalPerson[]> {
   const supabase = await createClient();
-  const { data } = await supabase
-    .from("users")
-    .select("id, display_name, job_title")
-    .neq("status", "inactive")
-    .neq("system_role", "student")
-    .order("display_name", { ascending: true })
-    .limit(500);
-  return (data ?? []).map((u) => ({
-    id: String(u.id),
-    name: (u.display_name as string) ?? "(이름 없음)",
-    jobTitle: (u.job_title as string | null) ?? null,
-  }));
+  const [{ data }, settings] = await Promise.all([
+    supabase
+      .from("users")
+      .select("id, display_name, job_title")
+      .neq("status", "inactive")
+      .neq("system_role", "student")
+      .limit(500),
+    getTenantSettings(), // React cache — 레이아웃에서 이미 부른 요청이면 왕복 0
+  ]);
+  const order = settings.operations.jobTitles;
+  return (data ?? [])
+    .map((u) => ({
+      id: String(u.id),
+      name: (u.display_name as string) ?? "(이름 없음)",
+      jobTitle: (u.job_title as string | null) ?? null,
+    }))
+    .sort((a, b) => compareByJobRank(a, b, order));
 }
 
 export type ApprovalLineTemplate = {

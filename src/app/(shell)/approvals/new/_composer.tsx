@@ -298,9 +298,9 @@ function LineTable({
 }) {
   const roles = stepRoleLabels(approvers.length);
   const [picker, setPicker] = useState<null | "approver" | "ref">(null);
-  const canAddApprover = approvers.length < MAX_APPROVAL_STEPS;
-  const canAddRef = refs.length < MAX_REFS;
 
+  // 순서 이동 — **모달 안에서만** 쓴다(원장 2026-08-14: "위치 조정하는거랑 사람 찾는거 모달에서
+  // 정하고 넣는걸로"). 표는 종이처럼 표시 전용이라 컨트롤이 없다.
   function move(i: number, dir: -1 | 1) {
     setApprovers((list) => {
       const next = [...list];
@@ -327,8 +327,8 @@ function LineTable({
     );
   }
 
-  // 참조 행 colSpan = 기안 1 + 결재자 칸(없으면 안내 1) + [+] 열.
-  const bodyCols = 1 + Math.max(1, approvers.length) + (canAddApprover ? 1 : 0);
+  // 참조 행 colSpan = 기안 1 + 결재자 칸(없으면 안내 1) + [지정] 열(항상 있다 — 수정 진입점).
+  const bodyCols = 1 + Math.max(1, approvers.length) + 1;
 
   return (
     <div className="overflow-x-auto">
@@ -359,69 +359,40 @@ function LineTable({
                 </th>
               ))
             )}
-            {canAddApprover ? (
-              <td rowSpan={3} className="border-line w-[52px] border px-2 align-middle">
-                <button
-                  type="button"
-                  onClick={() => setPicker("approver")}
-                  className="border-line text-text-dim hover:border-primary/60 hover:text-primary mx-auto flex size-8 items-center justify-center rounded-lg border border-dashed transition"
-                  aria-label="결재자 지정"
-                  title="결재자 지정"
-                >
-                  <EyIcon name="plus" size={15} />
-                </button>
-              </td>
-            ) : null}
+            {/* [지정]은 항상 보인다 — 표에 편집 컨트롤이 없으므로 수정·제거도 이 모달이 유일한 문이다. */}
+            <td rowSpan={3} className="border-line w-[52px] border px-2 align-middle">
+              <button
+                type="button"
+                onClick={() => setPicker("approver")}
+                className="border-line text-text-dim hover:border-primary/60 hover:text-primary mx-auto flex size-9 items-center justify-center rounded-lg border border-dashed transition"
+                aria-label="결재선 지정·순서 변경"
+                title="결재선 지정·순서 변경"
+              >
+                <EyIcon name={approvers.length > 0 ? "edit" : "plus"} size={15} />
+              </button>
+            </td>
           </tr>
-          {/* 2줄 — 사인 칸(작성 화면이라 비움) */}
+          {/* 2줄 — 사인 칸(작성 화면이라 비움 · 원장 "사인란 더 크게") */}
           <tr>
-            <td className="border-line h-11 border" aria-label="기안자 사인 칸(비어 있음)" />
+            <td className="border-line h-20 border" aria-label="기안자 사인 칸(비어 있음)" />
             {approvers.map((id) => (
-              <td key={id} className="border-line h-11 border" aria-label="결재자 사인 칸(비어 있음)" />
+              <td key={id} className="border-line h-20 border" aria-label="결재자 사인 칸(비어 있음)" />
             ))}
           </tr>
-          {/* 3줄 — 이름 + 순서·제거 */}
+          {/* 3줄 — 이름(표시 전용 — 편집은 [지정] 모달에서) */}
           <tr>
             <td className="border-line border px-2 py-1.5">
               <p className="text-foreground text-[12px] font-medium whitespace-nowrap">{drafterName}</p>
               <p className="text-text-faint text-[10px]">기안</p>
             </td>
             {approvers.map((id, i) => (
-              <td key={id} className="border-line border px-2 py-1.5 align-top">
+              <td key={id} className="border-line border px-2 py-1.5">
                 <p className="text-foreground text-[12px] font-medium whitespace-nowrap">
                   {byId.get(id)?.name ?? "(알 수 없음)"}
                 </p>
                 <p className="text-text-faint text-[10px]">
                   {i + 1}차 {roles[i]}
                 </p>
-                <span className="mt-0.5 inline-flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => move(i, -1)}
-                    disabled={i === 0}
-                    className="text-text-faint hover:text-foreground disabled:opacity-30"
-                    aria-label={`${byId.get(id)?.name ?? ""} 순서 앞으로`}
-                  >
-                    <EyIcon name="chevronLeft" size={13} />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => move(i, 1)}
-                    disabled={i === approvers.length - 1}
-                    className="text-text-faint hover:text-foreground disabled:opacity-30"
-                    aria-label={`${byId.get(id)?.name ?? ""} 순서 뒤로`}
-                  >
-                    <EyIcon name="chevronRight" size={13} />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setApprovers((l) => l.filter((x) => x !== id))}
-                    className="text-text-faint hover:text-danger"
-                    aria-label={`${byId.get(id)?.name ?? ""} 결재선에서 제거`}
-                  >
-                    <EyIcon name="close" size={13} />
-                  </button>
-                </span>
               </td>
             ))}
           </tr>
@@ -433,29 +404,19 @@ function LineTable({
             <td colSpan={bodyCols} className="border-line border px-3 py-1.5 text-left">
               <span className="inline-flex flex-wrap items-center gap-x-2.5 gap-y-1 align-middle">
                 {refs.map((id) => (
-                  <span key={id} className="text-foreground inline-flex items-center gap-1 text-[12px]">
+                  <span key={id} className="text-foreground text-[12px]">
                     {byId.get(id)?.name ?? "(알 수 없음)"}
-                    <button
-                      type="button"
-                      onClick={() => setRefs((l) => l.filter((x) => x !== id))}
-                      className="text-text-faint hover:text-danger"
-                      aria-label={`${byId.get(id)?.name ?? ""} 참조에서 제거`}
-                    >
-                      <EyIcon name="close" size={11} />
-                    </button>
                   </span>
                 ))}
-                {canAddRef ? (
-                  <button
-                    type="button"
-                    onClick={() => setPicker("ref")}
-                    className="border-line text-text-dim hover:border-blue/60 hover:text-blue flex size-6 items-center justify-center rounded-lg border border-dashed transition"
-                    aria-label="참조자 지정"
-                    title="참조자 지정"
-                  >
-                    <EyIcon name="plus" size={13} />
-                  </button>
-                ) : null}
+                <button
+                  type="button"
+                  onClick={() => setPicker("ref")}
+                  className="border-line text-text-dim hover:border-blue/60 hover:text-blue flex size-6 items-center justify-center rounded-lg border border-dashed transition"
+                  aria-label="참조자 지정"
+                  title="참조자 지정"
+                >
+                  <EyIcon name={refs.length > 0 ? "edit" : "plus"} size={12} />
+                </button>
                 {refs.length === 0 ? (
                   <span className="text-text-faint text-[11px]">결재 없이 열람만 — 없어도 됩니다</span>
                 ) : null}
@@ -469,9 +430,16 @@ function LineTable({
         <StaffPickerDialog
           mode={picker}
           candidates={candidates}
+          byId={byId}
           approvers={approvers}
           refs={refs}
           onToggle={picker === "approver" ? toggleApprover : toggleRef}
+          onMove={move}
+          onRemove={(id) =>
+            picker === "approver"
+              ? setApprovers((l) => l.filter((x) => x !== id))
+              : setRefs((l) => l.filter((x) => x !== id))
+          }
           onClose={() => setPicker(null)}
         />
       ) : null}
@@ -480,22 +448,32 @@ function LineTable({
 }
 
 /**
- * 직원 선택 다이얼로그 — 하이웍스 조직도 팝업 대응. **fixed 오버레이**(ConfirmDialog 선례)라 표의
- * 가로 스크롤 래퍼에 잘리지 않는다. 클릭 = 추가/해제 토글(체크 표시), 여러 명 연속 지정 후 닫기.
+ * 결재선 지정 다이얼로그 — 하이웍스 조직도 팝업 대응. **fixed 오버레이**(ConfirmDialog 선례)라 표의
+ * 가로 스크롤 래퍼에 잘리지 않는다.
+ *
+ * 결재자 모드 = **2열**: 왼쪽 직원 목록(검색·클릭=넣고 빼기) + 오른쪽 **결재 순서**(↑↓·제거) —
+ * 지정과 순서 조정을 **모달 안에서 끝낸다**(원장 2026-08-14: "위치 조정하는거랑 사람 찾는거 모달에서
+ * 정하고 넣는걸로"). 표에는 편집 컨트롤이 없다. 참조 모드 = 순서가 없어 1열.
  */
 function StaffPickerDialog({
   mode,
   candidates,
+  byId,
   approvers,
   refs,
   onToggle,
+  onMove,
+  onRemove,
   onClose,
 }: {
   mode: "approver" | "ref";
   candidates: ApprovalPerson[];
+  byId: Map<string, ApprovalPerson>;
   approvers: string[];
   refs: string[];
   onToggle: (id: string) => void;
+  onMove: (i: number, dir: -1 | 1) => void;
+  onRemove: (id: string) => void;
   onClose: () => void;
 }) {
   const [q, setQ] = useState("");
@@ -508,6 +486,8 @@ function StaffPickerDialog({
     );
   }, [q, candidates]);
   const max = mode === "approver" ? MAX_APPROVAL_STEPS : MAX_REFS;
+  const roles = stepRoleLabels(approvers.length);
+  const twoPane = mode === "approver";
 
   return (
     <div
@@ -516,75 +496,145 @@ function StaffPickerDialog({
       role="presentation"
     >
       <div
-        className="bg-background border-line flex max-h-[80vh] w-full max-w-sm flex-col rounded-xl border p-4 shadow-lg"
+        className={`bg-background border-line flex max-h-[84vh] w-full flex-col rounded-xl border p-4 shadow-lg ${
+          twoPane ? "max-w-2xl" : "max-w-sm"
+        }`}
         role="dialog"
         aria-modal="true"
-        aria-label={mode === "approver" ? "결재자 지정" : "참조자 지정"}
+        aria-label={twoPane ? "결재선 지정" : "참조자 지정"}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-baseline justify-between gap-2">
-          <h2 className="text-foreground text-sm font-bold">
-            {mode === "approver" ? "결재자 지정" : "참조자 지정"}
-          </h2>
+          <h2 className="text-foreground text-sm font-bold">{twoPane ? "결재선 지정" : "참조자 지정"}</h2>
           <p className="text-text-faint text-[11px]">
             {selected.length}/{max}명 · 클릭해서 넣고 빼세요
           </p>
         </div>
-        <input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="이름·직급 검색"
-          autoFocus
-          className={`${inputClass} mt-2.5 w-full`}
-          aria-label="직원 검색"
-        />
-        <ul className="border-line mt-2 max-h-[320px] flex-1 divide-y overflow-y-auto rounded-lg border">
-          {list.length === 0 ? (
-            <li className="text-text-faint px-3 py-6 text-center text-xs">검색 결과가 없습니다</li>
-          ) : (
-            list.map((c) => {
-              const isSelected = selected.includes(c.id);
-              // 참조 지정에서 이미 결재자인 사람은 막는다(결재자는 어차피 문서를 본다).
-              const lockedAsApprover = mode === "ref" && approvers.includes(c.id);
-              const full = !isSelected && selected.length >= max;
-              return (
-                <li key={c.id} className="divide-line">
-                  <button
-                    type="button"
-                    onClick={() => onToggle(c.id)}
-                    disabled={lockedAsApprover || full}
-                    title={
-                      lockedAsApprover
-                        ? "결재선에 있는 사람은 참조로 지정할 수 없습니다"
-                        : full
-                          ? `최대 ${max}명까지 지정할 수 있습니다`
-                          : undefined
-                    }
-                    className="hover:bg-bg-soft flex w-full items-center justify-between px-3 py-2 text-left transition disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    <span className="min-w-0">
-                      <span className="text-foreground text-[13px] font-medium">{c.name}</span>
-                      {c.jobTitle ? (
-                        <span className="text-text-faint ml-1.5 text-xs">{c.jobTitle}</span>
-                      ) : null}
-                      {lockedAsApprover ? (
-                        <span className="text-text-faint ml-1.5 text-[10px]">결재선에 있음</span>
-                      ) : null}
-                    </span>
-                    {isSelected ? (
-                      <span className="text-primary shrink-0">
-                        <EyIcon name="check" size={15} />
-                      </span>
-                    ) : null}
-                  </button>
-                </li>
-              );
-            })
-          )}
-        </ul>
+
+        <div className={`mt-2.5 grid min-h-0 flex-1 gap-3 ${twoPane ? "sm:grid-cols-[1fr_240px]" : ""}`}>
+          {/* 왼쪽 — 직원 찾기 */}
+          <div className="flex min-h-0 flex-col">
+            <input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="이름·직급 검색"
+              autoFocus
+              className={`${inputClass} w-full`}
+              aria-label="직원 검색"
+            />
+            <ul className="border-line mt-2 max-h-[320px] flex-1 divide-y overflow-y-auto rounded-lg border">
+              {list.length === 0 ? (
+                <li className="text-text-faint px-3 py-6 text-center text-xs">검색 결과가 없습니다</li>
+              ) : (
+                list.map((c) => {
+                  const isSelected = selected.includes(c.id);
+                  // 참조 지정에서 이미 결재자인 사람은 막는다(결재자는 어차피 문서를 본다).
+                  const lockedAsApprover = mode === "ref" && approvers.includes(c.id);
+                  const full = !isSelected && selected.length >= max;
+                  return (
+                    <li key={c.id} className="divide-line">
+                      <button
+                        type="button"
+                        onClick={() => onToggle(c.id)}
+                        disabled={lockedAsApprover || full}
+                        title={
+                          lockedAsApprover
+                            ? "결재선에 있는 사람은 참조로 지정할 수 없습니다"
+                            : full
+                              ? `최대 ${max}명까지 지정할 수 있습니다`
+                              : undefined
+                        }
+                        className="hover:bg-bg-soft flex w-full items-center justify-between px-3 py-2 text-left transition disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        <span className="min-w-0">
+                          <span className="text-foreground text-[13px] font-medium">{c.name}</span>
+                          {c.jobTitle ? (
+                            <span className="text-text-faint ml-1.5 text-xs">{c.jobTitle}</span>
+                          ) : null}
+                          {lockedAsApprover ? (
+                            <span className="text-text-faint ml-1.5 text-[10px]">결재선에 있음</span>
+                          ) : null}
+                        </span>
+                        {isSelected ? (
+                          <span className="text-primary shrink-0">
+                            <EyIcon name="check" size={15} />
+                          </span>
+                        ) : null}
+                      </button>
+                    </li>
+                  );
+                })
+              )}
+            </ul>
+          </div>
+
+          {/* 오른쪽 — 결재 순서(결재자 모드만): 여기서 ↑↓·제거로 결재선을 완성한다. */}
+          {twoPane ? (
+            <div className="flex min-h-0 flex-col">
+              <p className="micro pt-2.5">결재 순서</p>
+              <ol className="border-line mt-2 flex-1 divide-y overflow-y-auto rounded-lg border">
+                {approvers.length === 0 ? (
+                  <li className="text-text-faint px-3 py-6 text-center text-xs">
+                    왼쪽에서 결재자를 고르세요
+                  </li>
+                ) : (
+                  approvers.map((id, i) => {
+                    const person = byId.get(id);
+                    return (
+                      <li key={id} className="divide-line flex items-center gap-2 px-2.5 py-2">
+                        <span className="text-text-dim w-[52px] shrink-0 text-[11px]">
+                          {i + 1}차 {roles[i]}
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="text-foreground block truncate text-[13px] font-medium">
+                            {person?.name ?? "(알 수 없음)"}
+                          </span>
+                          {person?.jobTitle ? (
+                            <span className="text-text-faint block truncate text-[10px]">
+                              {person.jobTitle}
+                            </span>
+                          ) : null}
+                        </span>
+                        <span className="flex shrink-0 items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => onMove(i, -1)}
+                            disabled={i === 0}
+                            className="text-text-faint hover:text-foreground disabled:opacity-30"
+                            aria-label={`${person?.name ?? ""} 순서 위로`}
+                          >
+                            <EyIcon name="chevronUp" size={14} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => onMove(i, 1)}
+                            disabled={i === approvers.length - 1}
+                            className="text-text-faint hover:text-foreground disabled:opacity-30"
+                            aria-label={`${person?.name ?? ""} 순서 아래로`}
+                          >
+                            <EyIcon name="chevronDown" size={14} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => onRemove(id)}
+                            className="text-text-faint hover:text-danger"
+                            aria-label={`${person?.name ?? ""} 결재선에서 제거`}
+                          >
+                            <EyIcon name="close" size={13} />
+                          </button>
+                        </span>
+                      </li>
+                    );
+                  })
+                )}
+              </ol>
+            </div>
+          ) : null}
+        </div>
+
         <div className="mt-3 flex justify-end">
-          <Button type="button" variant="outline" size="sm" onClick={onClose}>
-            닫기
+          <Button type="button" size="sm" onClick={onClose}>
+            완료
           </Button>
         </div>
       </div>
