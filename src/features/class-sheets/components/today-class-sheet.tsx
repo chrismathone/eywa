@@ -22,6 +22,7 @@ import type { PlanLineDTO } from "../server/actions";
 import type { SheetHandlers } from "./sheet-client";
 import type { SheetSaveStore } from "./use-sheet-saves";
 import { PeriodBlock } from "./period-block";
+import { DayBulk } from "./day-bulk";
 import { TodayRosterTable } from "./today-roster-table";
 // 가로 치수는 아래 통합 로스터와 **공유**한다 — 한쪽만 고치면 줄이 조용히 어긋난다(today-columns).
 import { TODAY_GUTTER, TODAY_NAME_W, TODAY_SLOT_W } from "../lib/today-columns";
@@ -59,8 +60,49 @@ export function TodayClassSheet({
     //    (배경·테두리가 초기 폭에 멈춰 셀이 맨바탕 위에 그려지던 문제, 적대 리뷰 2026-08-11).
     <DragScrollArea barX className="min-w-0">
       <div className="bg-card border-foreground shadow-card w-max cursor-default rounded-2xl border p-2">
+        {/* 일괄 = **시트 머리 오른쪽**(원장 2026-08-14 "가장 위의 수업에만 있으면 됨"). 교시 카드마다
+            반복하던 버튼 셋을 하루 하나로 — 범위가 그 날 전부라 "나머지 교시도"를 따로 물을 게 없다.
+            권한이 없으면 컴포넌트가 스스로 아무것도 안 그려 이 줄은 빈 여백만 남는다. */}
+        <div className="flex justify-end pb-1.5">
+          <DayBulk
+            date={day.date}
+            slots={day.slots.map((s) => ({
+              slotStart: s.slotStart,
+              roster: s.roster,
+              lines: linesBySlot[`${day.date}|${s.slotStart}`] ?? [],
+              scheduled: s.scheduled,
+            }))}
+            marks={marks}
+            attendance={attendance}
+            canEdit={canEdit}
+            canMarkDate={data.canMarkAttendanceByDate[day.date] ?? false}
+            showExamTerm={!data.isEie}
+            // 저장은 **교시별로** 나눠 보낸다(0196a) — 뭉치면 다른 교시 기록을 덮는다.
+            onBulkAttendance={(targets, status) =>
+              targets.forEach((t) =>
+                t.studentIds.forEach((id) => handlers.setAttendance(id, day.date, t.slotStart, status)),
+              )
+            }
+            onBulkStatus={(targets, status) =>
+              targets.forEach((t) =>
+                t.studentIds.forEach((id) =>
+                  handlers.saveMark(
+                    id,
+                    day.date,
+                    t.slotStart,
+                    status,
+                    marks[`${id}|${day.date}|${t.slotStart}`]?.progressNote ?? null,
+                  ),
+                ),
+              )
+            }
+            onBulkPlanCells={(lineIds, field, value) =>
+              lineIds.forEach((id) => handlers.editCell(id, field, value))
+            }
+          />
+        </div>
         {/* 계획 층 — 교시가 가로로. 명단은 아래 층이 맡으므로 hideRoster, 껍데기는 이 상자가 있으니 flat.
-            일괄 입력(SlotBulk — '기록 없는 N명 출석' 포함)은 교시 머리에 그대로 산다. */}
+            일괄은 위 시트 머리(DayBulk)로 올라갔다 — 교시 머리엔 더 이상 없다. */}
         <div className="flex items-start">
           {/* 학생 이름 열 자리 — 아래 표의 첫 열과 같은 폭만큼 비워 교시 줄을 맞춘다. */}
           <div aria-hidden className="shrink-0" style={{ width: TODAY_NAME_W }} />
