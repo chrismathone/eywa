@@ -23,6 +23,7 @@ export type QueueStudent = {
   schoolGrade: string | null; // 이미 압축된 표기("경명여중1") — 조립은 호출부
   classId: string;
   className: string;
+  subject: string;
   slotStart: string; // "HH:MM" — 표시·앵커
   /** 출결 정정에 실을 교시 값(slot-axis) — 수학은 null("그날 전체"). */
   saveSlot: string | null;
@@ -198,6 +199,28 @@ export const OUTCOME_LABEL: Record<string, string> = Object.fromEntries(
  * ⚠️ `no_answer`·`coming`·`other`는 **아무 것도 제안하지 않는다** — 연락이 안 됐다는 사실은
  *    학생이 안 왔다는 뜻이 아니다.
  */
+/** 학원설정 과목 순. 설정에 없는 키는 뒤에, 처음 나온 순. */
+export function orderQueueSubjects(
+  keys: readonly string[],
+  settingsOrder: readonly string[],
+): string[] {
+  const seen = new Set(keys);
+  const out: string[] = [];
+  for (const k of settingsOrder) {
+    if (seen.has(k)) {
+      out.push(k);
+      seen.delete(k);
+    }
+  }
+  for (const k of keys) {
+    if (seen.has(k)) {
+      out.push(k);
+      seen.delete(k);
+    }
+  }
+  return out;
+}
+
 export function suggestedStatus(outcome: string): "present" | "absent" | null {
   if (outcome === "already_here") return "present";
   if (outcome === "absent_today" || outcome === "sick") return "absent";
