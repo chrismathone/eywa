@@ -220,6 +220,7 @@ export async function getDeskQueue(date: string = kstToday()): Promise<DeskQueue
           schoolGrade: s.schoolGrade,
           classId: slot.classId,
           className: slot.className,
+          subject: slot.subject,
           slotStart: slot.slotStart,
           saveSlot: slot.saveSlot,
           teacherName: teacher.teacherName,

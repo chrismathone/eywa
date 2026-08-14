@@ -3,6 +3,7 @@ import {
   buildQueue,
   compareStudents,
   isSettled,
+  orderQueueSubjects,
   suggestedStatus,
   type QueueClass,
   type QueueStudent,
@@ -14,6 +15,7 @@ const student = (over: Partial<QueueStudent> & { studentId: string }): QueueStud
   schoolGrade: null,
   classId: "c1",
   className: "CR1A",
+  subject: "english",
   slotStart: "16:20",
   saveSlot: null,
   teacherName: "김강사",
@@ -198,5 +200,18 @@ describe("suggestedStatus", () => {
     expect(suggestedStatus("coming")).toBeNull();
     expect(suggestedStatus("other")).toBeNull();
     expect(suggestedStatus("모르는값")).toBeNull();
+  });
+});
+
+describe("orderQueueSubjects", () => {
+  it("학원설정 순 — 가나다가 아니다", () => {
+    expect(orderQueueSubjects(["english", "math"], ["math", "english", "korean"])).toEqual([
+      "math",
+      "english",
+    ]);
+  });
+
+  it("설정에 없는 과목은 뒤에", () => {
+    expect(orderQueueSubjects(["art", "math"], ["math", "english"])).toEqual(["math", "art"]);
   });
 });
