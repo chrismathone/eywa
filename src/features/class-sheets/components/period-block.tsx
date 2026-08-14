@@ -10,7 +10,6 @@ import type { SheetHandlers } from "./sheet-client";
 import type { SheetSaveStore } from "./use-sheet-saves";
 import { PlanTable } from "./plan-table";
 import { RosterTable } from "./roster-table";
-import { SlotBulk } from "./slot-bulk";
 import type { RosterGroupKey } from "../lib/roster-order";
 import { rosterFormOf, type SheetMark } from "../lib/roster-form";
 
@@ -117,41 +116,6 @@ export const PeriodBlock = memo(function PeriodBlock({
             시간 변경됨
           </span>
         ) : null}
-        {/* 일괄 입력 = 카드 머리 오른쪽 끝(원장 2026-08-06). 계획·로스터 **둘 다**의 일괄이라 두 표보다
-            위에 있어야 순서가 맞는다. 권한 없으면 컴포넌트가 스스로 아무것도 안 그린다. */}
-        <span className="ml-auto">
-          <SlotBulk
-            date={date}
-            slotStart={slot.slotStart}
-            roster={slot.roster}
-            lines={lines}
-            marks={marks}
-            attendance={attendance}
-            canEdit={canEdit && slot.scheduled}
-            canMarkDate={data.canMarkAttendanceByDate[date] ?? false}
-            showExamTerm={!data.isEie}
-            // 일괄 출결은 **빈 칸만** 채운다(planBulkAttendance가 기록 있는 학생을 이미 뺀다) — 그래서
-            // 지각·결석을 골라도 이미 찍힌 기록·사유·시수를 덮지 않는다.
-            onBulkAttendance={(ids, status) =>
-              // 일괄도 **이 교시**에만 찍는다(0196a) — 같은 날 다른 교시는 그대로 둔다.
-              ids.forEach((id) => handlers.setAttendance(id, date, slot.slotStart, status))
-            }
-            onBulkStatus={(ids, status) =>
-              ids.forEach((id) =>
-                handlers.saveMark(
-                  id,
-                  date,
-                  slot.slotStart,
-                  status,
-                  marks[`${id}|${date}|${slot.slotStart}`]?.progressNote ?? null,
-                ),
-              )
-            }
-            onBulkPlanCells={(lineIds, field, value) =>
-              lineIds.forEach((id) => handlers.editCell(id, field, value))
-            }
-          />
-        </span>
       </header>
 
       <PlanTable

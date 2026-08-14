@@ -960,3 +960,121 @@ html[data-stage="on"] main {
     }
   }
 }
+
+/* ─────────────────────────────────────────────────────────────────────────
+   .rich-content — 결재 문서 본문(리치 텍스트) 서식.
+
+   🔑 **에디터와 뷰어가 같은 클래스를 쓴다.** 쓸 때와 읽을 때 서식이 다르면 "작성 화면에선 표였는데
+      결재자에게는 줄글"이 된다 — 그래서 컴포넌트 안 <style>이 아니라 여기 한 곳에 둔다.
+   ⚠️ 저장 HTML엔 style·class가 남지 않는다(sanitizeRichHtml이 전부 뗀다) — 서식은 전적으로 이 규칙이
+      정한다. 표 열 너비도 균등 분배다(colwidth를 저장하지 않는다).
+   ───────────────────────────────────────────────────────────────────────── */
+.rich-content {
+  color: var(--foreground);
+  font-size: 14px;
+  line-height: 1.7;
+  word-break: keep-all; /* 한글은 어절 단위로 끊는다(전역 규약) */
+  overflow-wrap: anywhere; /* 긴 URL은 칸을 넘지 않게 */
+}
+.rich-content > * + * {
+  margin-top: 0.6em;
+}
+.rich-content h1 {
+  font-size: 18px;
+  font-weight: 700;
+}
+.rich-content h2 {
+  font-size: 16px;
+  font-weight: 700;
+}
+.rich-content h3 {
+  font-size: 14px;
+  font-weight: 700;
+}
+.rich-content strong,
+.rich-content b {
+  font-weight: 700;
+}
+.rich-content u {
+  text-decoration: underline;
+}
+.rich-content s {
+  text-decoration: line-through;
+}
+.rich-content a {
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.rich-content ul,
+.rich-content ol {
+  padding-left: 1.35em;
+}
+.rich-content ul {
+  list-style: disc;
+}
+.rich-content ol {
+  list-style: decimal;
+}
+.rich-content li > p {
+  margin: 0; /* 에디터가 li 안에 p를 넣는다 — 줄 간격이 두 배로 벌어지지 않게 */
+}
+.rich-content blockquote {
+  border-left: 3px solid var(--line);
+  padding-left: 0.8em;
+  color: var(--text-dim);
+}
+.rich-content code {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.92em;
+  background: var(--bg-soft);
+  border-radius: 4px;
+  padding: 0.1em 0.3em;
+}
+.rich-content pre {
+  background: var(--bg-soft);
+  border-radius: 8px;
+  padding: 0.7em 0.9em;
+  overflow-x: auto;
+}
+.rich-content pre code {
+  background: transparent;
+  padding: 0;
+}
+/* 표 — 종이 문서처럼 테두리가 보여야 한다(칸이 안 보이면 표를 쓴 의미가 없다). */
+.rich-content table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed; /* 열 너비를 저장하지 않으므로 균등 분배 */
+  overflow: hidden;
+}
+.rich-content th,
+.rich-content td {
+  border: 1px solid var(--line);
+  padding: 6px 8px;
+  vertical-align: top;
+  text-align: left;
+}
+.rich-content th {
+  background: var(--bg-soft);
+  font-weight: 600;
+}
+/* 에디터 전용 — 표 안에서 지금 고른 칸을 옅게 칠한다(뷰어엔 이 클래스가 없다). */
+.rich-content .selectedCell::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: color-mix(in oklab, var(--primary) 12%, transparent);
+  pointer-events: none;
+}
+.rich-content .selectedCell {
+  position: relative;
+}
+/* 에디터 placeholder — 비었을 때 첫 문단에 회색 안내(TipTap Placeholder 규약). */
+.rich-content p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  color: var(--text-faint);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}

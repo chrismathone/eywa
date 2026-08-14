@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { Loader2 } from "@/components/icons/eywa-icon-compat";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { Button } from "@/components/ui/button";
-import { SearchableSelect } from "@/components/ui/searchable-select";
+import { RichEditor } from "@/components/editor/rich-editor";
 import {
   deleteLineTemplate,
   saveLineTemplate,
@@ -23,27 +23,34 @@ import {
   type LeaveKind,
 } from "@/features/leave/request-days";
 
-const inputClass =
-  "border-line bg-card text-foreground placeholder:text-text-faint focus:border-primary w-full rounded-lg border px-3 py-2 text-sm outline-none transition";
-
-const KIND_OPTIONS = [
-  { value: "annual", label: "연차", hint: "하루 단위" },
-  { value: "half", label: "반차", hint: "0.5일 · 하루만" },
-];
-
 /**
- * 결재 문서 작성 — **하이웍스 '결재 문서 작성' 화면 구조 그대로**(원장 스크린샷 대조, 2026-08-14):
- *   ① 기본 설정(문서 종류 선택·작성자) → ② **결재선 표**(결재 행 = 결재자 열 나열 + 참조 행)
- *   → ③ 상세 입력(양식 필드) → 하단 상신.
+ * 결재 문서 작성 — **하이웍스 작성 화면 그대로 한 장의 연속 문서**(원장 2026-08-14:
+ * *"굳이 저렇게 영역 따로 안 나누고 진짜 하이웍스랑 똑같이"*).
  *
- * 문서 종류가 화면 **안**에 있다 — 기안하기를 누르면 양식이 정해진 폼이 아니라 이 작성 화면으로
- * 온다(하이웍스 흐름). 지금 양식은 휴가신청서 하나라 선택지가 하나지만, 양식이 늘면 여기 드롭다운에
- * 붙고 ③만 갈린다.
+ * 구조: [기본 설정] [결재선] [상세 입력]이 각각 **왼쪽 섹션 라벨 + 오른쪽 표**로 한 판 위에 이어진다
+ * (카드 3장으로 쪼개지 않는다 — 하이웍스는 문서 한 장이다).
  *
+ * 🔴 **표 안에 팝오버 드롭다운을 넣지 않는다** — `SearchableSelect` 팝오버는 `absolute`라 표의
+ *    `overflow-x-auto` 래퍼에 **잘린다**(원장 제보 "드롭다운 등 사용하면 css 깨짐"). 결재자·참조자
+ *    선택은 후보를 **칩으로 항상 펼쳐** 클릭해 넣는다(하이웍스의 조직도 팝업 대응이자, 후보가 몇 명인
+ *    파일럿에선 클릭 수가 더 적다). 휴가 종류처럼 표 밖 폼 필드는 드롭다운 그대로 둔다.
  * ⚠️ 잔여·결재선 검증의 근거는 서버(line.ts·submitLeaveDraft)다 — 화면은 미리보기·조기경고([[#77]]).
- * ⚠️ 임시저장·인쇄미리보기·보존연한·보안등급은 범위 밖(하이웍스에 있지만 우리 데이터 개념이 없다 —
- *    흉내만 낸 죽은 컨트롤을 두지 않는다).
+ * ⚠️ 임시저장·인쇄미리보기·보존연한·보안등급은 흉내 내지 않는다(대응 데이터가 없다 — 죽은 컨트롤 금지).
  */
+
+const inputClass =
+  "border-line bg-card text-foreground placeholder:text-text-faint focus:border-primary rounded-lg border px-3 py-1.5 text-sm outline-none transition";
+
+/** 섹션 한 줄 — 좌측 라벨 칸 + 우측 내용(하이웍스 작성 화면의 행 문법). */
+function Row({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="border-line flex flex-col gap-2 border-b py-4 last:border-b-0 sm:flex-row sm:gap-4">
+      <p className="text-foreground w-[84px] shrink-0 pt-1 text-[13px] font-bold">{label}</p>
+      <div className="min-w-0 flex-1">{children}</div>
+    </div>
+  );
+}
+
 export function DraftComposer({
   drafterName,
   drafterJobTitle,
@@ -64,14 +71,10 @@ export function DraftComposer({
   today: string;
 }) {
   const byId = new Map(candidates.map((c) => [c.id, c]));
-
-  // ── 결재선 상태 ──────────────────────────────────────────────────────────
   const [approvers, setApprovers] = useState<string[]>(
     initialApproverIds.filter((id) => byId.has(id)),
   );
   const [refs, setRefs] = useState<string[]>([]);
-
-  // ── 양식(휴가신청서) 상태 ────────────────────────────────────────────────
   const [kind, setKind] = useState<LeaveKind>("annual");
   const [start, setStart] = useState(today);
   const [end, setEnd] = useState(today);
@@ -87,7 +90,6 @@ export function DraftComposer({
 
   const effectiveEnd = kind === "half" ? start : end;
   const days = countLeaveDays(start, effectiveEnd, kind);
-  // 시작일이 현재 연차 구간을 지나면 서버가 다음 구간으로 판정한다 — 현재 구간 잣대를 접는다.
   const inCurrentPeriod = !!start && start <= periodEnd;
   const invalid = validateLeaveRange({
     start,
@@ -104,50 +106,57 @@ export function DraftComposer({
   const blocked = !!invalid || !!over || approvers.length === 0;
 
   return (
-    <form action={action} className="space-y-4">
+    <form action={action}>
       <input type="hidden" name="approverIds" value={JSON.stringify(approvers)} />
       <input type="hidden" name="refIds" value={JSON.stringify(refs)} />
+      <input type="hidden" name="kind" value={kind} />
 
-      {/* ① 기본 설정 — 하이웍스 상단 격자 대응 */}
-      <section className="border-line bg-card shadow-card rounded-2xl border p-5">
-        <h2 className="text-foreground text-sm font-bold">기본 설정</h2>
-        <div className="border-line mt-3 overflow-x-auto rounded-lg border">
-          <table className="w-full min-w-[560px] border-collapse text-sm">
-            <tbody className="[&_th]:bg-bg-soft/60 [&_th]:text-text-dim [&_th]:border-line [&_td]:border-line [&_th]:border [&_td]:border [&_th]:px-3 [&_th]:py-2 [&_td]:px-3 [&_td]:py-1.5 [&_th]:text-left [&_th]:text-xs [&_th]:font-semibold [&_th]:whitespace-nowrap">
-              <tr>
-                <th className="w-[100px]">문서 종류</th>
-                <td className="w-[220px]">
-                  {/* 양식이 하나라 선택지도 하나 — 자리는 하이웍스 구조 그대로(양식이 늘면 여기만 커진다). */}
-                  <SearchableSelect
-                    options={[{ value: "leave", label: APPROVAL_FORM_LABEL.leave, hint: "공통" }]}
-                    value="leave"
-                    ariaLabel="문서 종류"
-                    triggerClassName="border-0 px-1 py-1 text-sm"
-                  />
-                </td>
-                <th className="w-[100px]">작성자</th>
-                <td>
-                  <span className="text-foreground text-[13px] font-medium">{drafterName}</span>
-                  {drafterJobTitle ? (
-                    <span className="text-text-faint ml-1 text-xs">{drafterJobTitle}</span>
-                  ) : null}
-                </td>
-              </tr>
-              <tr>
-                <th>문서 번호</th>
-                <td className="text-text-faint text-xs">상신하면 자동으로 부여됩니다</td>
-                <th>기안 일시</th>
-                <td className="num text-text-dim text-xs">{today}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </section>
+      {/* 문서 한 장 — 섹션이 카드로 갈라지지 않고 구분선으로만 이어진다. */}
+      <article className="border-line bg-card shadow-card rounded-2xl border px-5 py-1 sm:px-6">
+        <Row label="기본 설정">
+          <div className="overflow-hidden rounded-lg">
+            <table className="w-full table-fixed border-collapse text-sm">
+              <tbody className="[&_th]:bg-bg-soft/60 [&_th]:text-text-dim [&_th]:border-line [&_td]:border-line [&_th]:border [&_td]:border [&_th]:px-3 [&_th]:py-2 [&_td]:px-3 [&_td]:py-2 [&_th]:text-left [&_th]:text-xs [&_th]:font-semibold [&_th]:whitespace-nowrap">
+                <tr>
+                  <th className="w-[88px]">문서 종류</th>
+                  <td className="text-foreground text-[13px]">
+                    공통 · <b>{APPROVAL_FORM_LABEL.leave}</b>
+                    <span className="text-text-faint ml-1 text-[11px]">(현재 양식 1종)</span>
+                  </td>
+                  <th className="w-[76px]">작성자</th>
+                  <td className="text-[13px]">
+                    <span className="text-foreground font-medium">{drafterName}</span>
+                    {drafterJobTitle ? (
+                      <span className="text-text-faint ml-1 text-xs">{drafterJobTitle}</span>
+                    ) : null}
+                  </td>
+                </tr>
+                <tr>
+                  <th>문서 번호</th>
+                  <td className="text-text-faint text-xs">상신하면 자동으로 부여됩니다</td>
+                  <th>기안 일시</th>
+                  <td className="num text-text-dim text-xs">{today}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </Row>
 
-      {/* ② 결재선 — 하이웍스 결재선 표(결재 행 + 참조 행) */}
-      <section className="border-line bg-card shadow-card rounded-2xl border p-5">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-foreground text-sm font-bold">결재선</h2>
+        <Row label="결재선">
+          <LineTable
+            drafterName={drafterName}
+            byId={byId}
+            approvers={approvers}
+            setApprovers={setApprovers}
+            refs={refs}
+          />
+          <PeoplePicker
+            candidates={candidates}
+            approvers={approvers}
+            refs={refs}
+            setApprovers={setApprovers}
+            setRefs={setRefs}
+          />
           <TemplateControls
             templates={templates}
             approvers={approvers}
@@ -158,85 +167,75 @@ export function DraftComposer({
               toast.info(`결재선 '${t.name}'을(를) 불러왔습니다`);
             }}
           />
-        </div>
-        <LineTable
-          drafterName={drafterName}
-          byId={byId}
-          candidates={candidates}
-          approvers={approvers}
-          setApprovers={setApprovers}
-          refs={refs}
-          setRefs={setRefs}
-        />
-      </section>
+        </Row>
 
-      {/* ③ 상세 입력 — 휴가신청서 */}
-      <section className="border-line bg-card shadow-card space-y-4 rounded-2xl border p-5">
-        <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <h2 className="text-foreground text-sm font-bold">상세 입력 — {APPROVAL_FORM_LABEL.leave}</h2>
-          <p className="text-text-faint text-[11px]">
-            연차 사용 기간 <span className="num">~{periodEnd}</span> · 일요일은 차감하지 않습니다
-          </p>
-        </div>
-
-        <div className="grid gap-3 sm:grid-cols-3">
-          <label className="block">
-            <span className="micro mb-1 block">휴가 종류</span>
-            <SearchableSelect
-              options={KIND_OPTIONS}
-              value={kind}
-              onValueChange={(v) => setKind(v === "half" ? "half" : "annual")}
-              name="kind"
-              ariaLabel="휴가 종류"
-            />
-          </label>
-          <label className="block">
-            <span className="micro mb-1 block">시작일</span>
-            <input
-              type="date"
-              name="startDate"
-              value={start}
-              onChange={(e) => {
-                setStart(e.target.value);
-                if (e.target.value > end) setEnd(e.target.value);
-              }}
-              className={inputClass}
-              required
-            />
-          </label>
-          {kind === "half" ? (
-            <input type="hidden" name="endDate" value={start} />
-          ) : (
+        <Row label="상세 입력">
+          <div className="flex flex-wrap items-end gap-3">
             <label className="block">
-              <span className="micro mb-1 block">종료일</span>
+              <span className="micro mb-1 block">휴가 종류</span>
+              {/* 표 밖이라 팝오버가 잘리지 않는다 — 여긴 칩 대신 토글 두 개로(선택지가 둘뿐). */}
+              <span className="border-line inline-flex overflow-hidden rounded-lg border">
+                {(["annual", "half"] as const).map((k) => (
+                  <button
+                    key={k}
+                    type="button"
+                    onClick={() => setKind(k)}
+                    className={`px-3 py-1.5 text-[13px] transition ${
+                      kind === k
+                        ? "bg-primary text-primary-foreground font-medium"
+                        : "bg-card text-text-dim hover:bg-bg-soft"
+                    }`}
+                  >
+                    {k === "annual" ? "연차" : "반차"}
+                  </button>
+                ))}
+              </span>
+            </label>
+            <label className="block">
+              <span className="micro mb-1 block">시작일</span>
               <input
                 type="date"
-                name="endDate"
-                value={end}
-                min={start}
-                onChange={(e) => setEnd(e.target.value)}
+                name="startDate"
+                value={start}
+                onChange={(e) => {
+                  setStart(e.target.value);
+                  if (e.target.value > end) setEnd(e.target.value);
+                }}
                 className={inputClass}
                 required
               />
             </label>
-          )}
-        </div>
+            {kind === "half" ? (
+              <input type="hidden" name="endDate" value={start} />
+            ) : (
+              <label className="block">
+                <span className="micro mb-1 block">종료일</span>
+                <input
+                  type="date"
+                  name="endDate"
+                  value={end}
+                  min={start}
+                  onChange={(e) => setEnd(e.target.value)}
+                  className={inputClass}
+                  required
+                />
+              </label>
+            )}
+            <p className="text-text-faint pb-2 text-[11px]">
+              연차 사용 기간 <span className="num">~{periodEnd}</span> · 일요일은 차감하지 않습니다
+            </p>
+          </div>
 
-        <label className="block">
-          <span className="micro mb-1 block">사유 (선택)</span>
-          {/* 비제어 — React 19가 action 성공 후 폼을 자동 리셋해 저절로 비워진다([[#25]] 참조). */}
-          <textarea
-            name="reason"
-            rows={3}
-            maxLength={500}
-            placeholder="예: 가족 행사"
-            className={`${inputClass} resize-y`}
-          />
-        </label>
-      </section>
+          <div className="mt-3">
+            <span className="micro mb-1 block">사유</span>
+            {/* 표·서식이 필요해 리치 에디터(원장 요구). 무거운 라이브러리라 지연로드된다(B5). */}
+            <RichEditor name="reason" placeholder="사유를 적어 주세요 — 표·목록·서식을 쓸 수 있습니다" ariaLabel="사유" />
+          </div>
+        </Row>
+      </article>
 
-      {/* 하단 — 차감 요약 + 상신 */}
-      <div className="border-line bg-card shadow-card flex flex-wrap items-center justify-between gap-3 rounded-2xl border px-5 py-3.5">
+      {/* 하단 — 차감 요약 + 상신(문서 판 바깥, 하이웍스의 하단 액션 바 대응) */}
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-3 px-1">
         <p className="text-[13px]">
           {invalid ? (
             <span className="text-danger">{invalid}</span>
@@ -276,31 +275,23 @@ function SubmitButton({ blocked }: { blocked: boolean }) {
 }
 
 /**
- * 결재선 표 — 하이웍스처럼 **결재자가 열(column)로 나란히** 선다.
- * 헤더 행 = 직함 라벨(1차 검토 → … → 승인, 자동), 본문 행 = 이름 + 순서 이동·제거,
- * 마지막 열 = [+] 추가. 그 아래 참조 행.
+ * 결재선 표 — 하이웍스처럼 **사람이 열로** 선다(왼쪽 세로 [결재] 라벨 + 기안 칸 + 결재자 칸들).
+ * 이 표 안에는 **팝오버가 없다**(잘림 방지) — 추가는 아래 PeoplePicker가 맡는다.
  */
 function LineTable({
   drafterName,
   byId,
-  candidates,
   approvers,
   setApprovers,
   refs,
-  setRefs,
 }: {
   drafterName: string;
   byId: Map<string, ApprovalPerson>;
-  candidates: ApprovalPerson[];
   approvers: string[];
   setApprovers: React.Dispatch<React.SetStateAction<string[]>>;
   refs: string[];
-  setRefs: React.Dispatch<React.SetStateAction<string[]>>;
 }) {
   const roles = stepRoleLabels(approvers.length);
-  const addable = candidates.filter((c) => !approvers.includes(c.id));
-  const refAddable = candidates.filter((c) => !refs.includes(c.id) && !approvers.includes(c.id));
-  const canAdd = addable.length > 0 && approvers.length < MAX_APPROVAL_STEPS;
 
   function move(i: number, dir: -1 | 1) {
     setApprovers((list) => {
@@ -313,123 +304,91 @@ function LineTable({
   }
 
   return (
-    <div className="border-line mt-3 overflow-x-auto rounded-lg border">
-      <table className="w-full border-collapse text-sm">
-        <tbody className="[&_th]:bg-bg-soft/60 [&_th]:text-text-dim [&_th]:border-line [&_td]:border-line [&_th]:border [&_td]:border [&_th]:px-3 [&_th]:py-2 [&_td]:px-2 [&_td]:py-2 [&_th]:text-xs [&_th]:font-semibold [&_th]:whitespace-nowrap">
+    <div className="overflow-x-auto">
+      <table className="border-line border-collapse border text-center text-sm">
+        <tbody>
           <tr>
-            <th className="w-[64px] text-center">결재</th>
-            {/* 기안 칸 — 항상 첫 자리(도장표와 같은 어순). */}
-            <td className="w-[130px] text-center align-top">
+            <th className="border-line bg-bg-soft/60 text-text-dim w-9 border px-2.5 text-xs font-semibold">
+              결재
+            </th>
+            <td className="border-line min-w-[110px] border px-3 py-2 align-top">
               <p className="micro">기안</p>
-              <p className="text-foreground mt-1 text-[13px] font-medium">{drafterName}</p>
+              <p className="text-foreground mt-1 text-[13px] font-medium whitespace-nowrap">
+                {drafterName}
+              </p>
             </td>
-            {approvers.map((id, i) => {
-              const person = byId.get(id);
-              return (
-                <td key={id} className="w-[150px] text-center align-top">
-                  <p className="micro">
-                    {i + 1}차 {roles[i]}
-                  </p>
-                  <p className="text-foreground mt-1 text-[13px] font-medium">
-                    {person?.name ?? "(알 수 없음)"}
-                    {person?.jobTitle ? (
-                      <span className="text-text-faint ml-1 text-[11px] font-normal">
-                        {person.jobTitle}
-                      </span>
-                    ) : null}
-                  </p>
-                  <span className="mt-1 inline-flex items-center gap-1">
-                    <button
-                      type="button"
-                      onClick={() => move(i, -1)}
-                      disabled={i === 0}
-                      className="text-text-faint hover:text-foreground disabled:opacity-30"
-                      aria-label={`${person?.name ?? ""} 순서 앞으로`}
-                    >
-                      <EyIcon name="chevronLeft" size={13} />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => move(i, 1)}
-                      disabled={i === approvers.length - 1}
-                      className="text-text-faint hover:text-foreground disabled:opacity-30"
-                      aria-label={`${person?.name ?? ""} 순서 뒤로`}
-                    >
-                      <EyIcon name="chevronRight" size={13} />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setApprovers((l) => l.filter((x) => x !== id))}
-                      className="text-text-faint hover:text-danger"
-                      aria-label={`${person?.name ?? ""} 결재선에서 제거`}
-                    >
-                      <EyIcon name="close" size={13} />
-                    </button>
-                  </span>
-                </td>
-              );
-            })}
-            {canAdd ? (
-              <td className="w-[150px] text-center align-middle">
-                <SearchableSelect
-                  options={addable.map((c) => ({
-                    value: c.id,
-                    label: c.name,
-                    hint: c.jobTitle ?? undefined,
-                  }))}
-                  value=""
-                  onValueChange={(id) => id && setApprovers((l) => [...l, id])}
-                  placeholder="+ 결재자"
-                  ariaLabel="결재자 추가"
-                  triggerClassName="border-line rounded-lg border border-dashed px-2 py-1 text-[12px]"
-                />
+            {approvers.length === 0 ? (
+              <td className="border-line text-text-faint min-w-[180px] border px-3 py-4 text-xs">
+                아래에서 결재자를 골라 주세요
               </td>
-            ) : null}
-            {/* 남는 폭 흡수용 빈 칸(하이웍스 결재란처럼 표가 오른쪽으로 비어 있다). */}
-            <td aria-hidden className="border-0" />
-          </tr>
-          <tr>
-            <th className="text-center">참조</th>
-            <td colSpan={approvers.length + (canAdd ? 3 : 2)} className="border-0 px-3">
-              <span className="inline-flex flex-wrap items-center gap-1.5 align-middle">
-                {refs.map((id) => {
-                  const person = byId.get(id);
-                  return (
-                    <span
-                      key={id}
-                      className="border-line bg-bg-soft/50 inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs"
-                    >
-                      <span className="text-foreground">{person?.name ?? "(알 수 없음)"}</span>
+            ) : (
+              approvers.map((id, i) => {
+                const person = byId.get(id);
+                return (
+                  <td key={id} className="border-line min-w-[128px] border px-3 py-2 align-top">
+                    <p className="micro">
+                      {i + 1}차 {roles[i]}
+                    </p>
+                    <p className="text-foreground mt-1 text-[13px] font-medium whitespace-nowrap">
+                      {person?.name ?? "(알 수 없음)"}
+                      {person?.jobTitle ? (
+                        <span className="text-text-faint ml-1 text-[11px] font-normal">
+                          {person.jobTitle}
+                        </span>
+                      ) : null}
+                    </p>
+                    <span className="mt-1 inline-flex items-center gap-1.5">
                       <button
                         type="button"
-                        onClick={() => setRefs((l) => l.filter((x) => x !== id))}
-                        className="text-text-faint hover:text-danger"
-                        aria-label={`${person?.name ?? ""} 참조에서 제거`}
+                        onClick={() => move(i, -1)}
+                        disabled={i === 0}
+                        className="text-text-faint hover:text-foreground disabled:opacity-30"
+                        aria-label={`${person?.name ?? ""} 순서 앞으로`}
                       >
-                        <EyIcon name="close" size={11} />
+                        <EyIcon name="chevronLeft" size={13} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => move(i, 1)}
+                        disabled={i === approvers.length - 1}
+                        className="text-text-faint hover:text-foreground disabled:opacity-30"
+                        aria-label={`${person?.name ?? ""} 순서 뒤로`}
+                      >
+                        <EyIcon name="chevronRight" size={13} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setApprovers((l) => l.filter((x) => x !== id))}
+                        className="text-text-faint hover:text-danger"
+                        aria-label={`${person?.name ?? ""} 결재선에서 제거`}
+                      >
+                        <EyIcon name="close" size={13} />
                       </button>
                     </span>
-                  );
-                })}
-                {refAddable.length > 0 && refs.length < MAX_REFS ? (
-                  <SearchableSelect
-                    options={refAddable.map((c) => ({
-                      value: c.id,
-                      label: c.name,
-                      hint: c.jobTitle ?? undefined,
-                    }))}
-                    value=""
-                    onValueChange={(id) => id && setRefs((l) => [...l, id])}
-                    placeholder="+ 참조"
-                    ariaLabel="참조자 추가"
-                    triggerClassName="border-line rounded-full border border-dashed px-2.5 py-0.5 text-[12px]"
-                  />
-                ) : refs.length === 0 ? (
-                  <span className="text-text-faint text-[11px]">
-                    결재 없이 열람만 하는 사람 — 없어도 됩니다
-                  </span>
-                ) : null}
-              </span>
+                  </td>
+                );
+              })
+            )}
+          </tr>
+          <tr>
+            <th className="border-line bg-bg-soft/60 text-text-dim border px-2.5 py-1.5 text-xs font-semibold">
+              참조
+            </th>
+            <td
+              colSpan={Math.max(1, approvers.length) + 1}
+              className="border-line border px-3 py-1.5 text-left"
+            >
+              {refs.length === 0 ? (
+                <span className="text-text-faint text-[11px]">
+                  결재 없이 열람만 하는 사람 — 없어도 됩니다
+                </span>
+              ) : (
+                <span className="text-foreground inline-flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px]">
+                  {refs.map((id) => (
+                    <span key={id}>{byId.get(id)?.name ?? "(알 수 없음)"}</span>
+                  ))}
+                </span>
+              )}
             </td>
           </tr>
         </tbody>
@@ -438,7 +397,87 @@ function LineTable({
   );
 }
 
-/** 자주 쓰는 결재선 — 불러오기 드롭다운 + 현재 결재선 저장(이름 입력) + 삭제. */
+/**
+ * 사람 고르기 — 후보를 **칩으로 펼쳐** 클릭해 결재선·참조에 넣는다(팝오버 없음 = 잘릴 일 없음).
+ * 이미 들어간 사람은 눌린 상태로 표시하고 다시 누르면 빠진다.
+ */
+function PeoplePicker({
+  candidates,
+  approvers,
+  refs,
+  setApprovers,
+  setRefs,
+}: {
+  candidates: ApprovalPerson[];
+  approvers: string[];
+  refs: string[];
+  setApprovers: React.Dispatch<React.SetStateAction<string[]>>;
+  setRefs: React.Dispatch<React.SetStateAction<string[]>>;
+}) {
+  function toggleApprover(id: string) {
+    setApprovers((l) => {
+      if (l.includes(id)) return l.filter((x) => x !== id);
+      if (l.length >= MAX_APPROVAL_STEPS) return l;
+      setRefs((r) => r.filter((x) => x !== id)); // 결재자는 참조에서 뺀다(어차피 문서를 본다)
+      return [...l, id];
+    });
+  }
+  function toggleRef(id: string) {
+    if (approvers.includes(id)) return;
+    setRefs((l) => (l.includes(id) ? l.filter((x) => x !== id) : l.length >= MAX_REFS ? l : [...l, id]));
+  }
+
+  return (
+    <div className="mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-2">
+      <span className="flex flex-wrap items-center gap-1.5">
+        <span className="micro">결재자 선택</span>
+        {candidates.map((c) => {
+          const on = approvers.includes(c.id);
+          return (
+            <button
+              key={c.id}
+              type="button"
+              onClick={() => toggleApprover(c.id)}
+              className={`rounded-full border px-2.5 py-0.5 text-xs transition ${
+                on
+                  ? "border-primary bg-primary text-primary-foreground font-medium"
+                  : "border-line bg-card text-text-dim hover:border-primary/50 hover:text-foreground"
+              }`}
+            >
+              {c.name}
+              {c.jobTitle ? <span className="ml-1 opacity-70">{c.jobTitle}</span> : null}
+            </button>
+          );
+        })}
+      </span>
+      <span className="flex flex-wrap items-center gap-1.5">
+        <span className="micro">참조 선택</span>
+        {candidates.map((c) => {
+          const disabled = approvers.includes(c.id);
+          const on = refs.includes(c.id);
+          return (
+            <button
+              key={c.id}
+              type="button"
+              onClick={() => toggleRef(c.id)}
+              disabled={disabled}
+              title={disabled ? "결재자는 이미 문서를 봅니다" : undefined}
+              className={`rounded-full border px-2.5 py-0.5 text-xs transition disabled:opacity-30 ${
+                on
+                  ? "border-blue bg-blue-soft text-blue font-medium"
+                  : "border-line bg-card text-text-dim hover:border-blue/50 hover:text-foreground"
+              }`}
+            >
+              {c.name}
+            </button>
+          );
+        })}
+      </span>
+    </div>
+  );
+}
+
+/** 자주 쓰는 결재선 — 저장(이름) · 불러오기 · 삭제. 불러오기도 팝오버 없이 **버튼 나열**. */
 function TemplateControls({
   templates,
   approvers,
@@ -482,61 +521,59 @@ function TemplateControls({
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-1.5">
-      {templates.length > 0 ? (
-        <>
-          <SearchableSelect
-            options={templates.map((t) => ({
-              value: t.id,
-              label: t.name,
-              hint: `결재 ${t.approverIds.length}단계${t.refIds.length ? ` · 참조 ${t.refIds.length}` : ""}`,
-            }))}
-            value=""
-            onValueChange={(id) => {
-              const t = templates.find((x) => x.id === id);
-              if (t) onApply(t);
-            }}
-            placeholder="자주 쓰는 결재선"
-            ariaLabel="자주 쓰는 결재선 불러오기"
-            triggerClassName="border-line bg-card rounded-lg border px-2.5 py-1 text-[12px]"
-          />
-          {templates.map((t) => (
+    <div className="border-line mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-2 border-t pt-2.5">
+      <span className="micro">자주 쓰는 결재선</span>
+      {templates.length === 0 ? (
+        <span className="text-text-faint text-[11px]">저장된 결재선이 없습니다</span>
+      ) : (
+        templates.map((t) => (
+          <span
+            key={t.id}
+            className="border-line bg-card inline-flex items-center gap-1 rounded-full border py-0.5 pr-1.5 pl-2.5 text-xs"
+          >
             <button
-              key={t.id}
+              type="button"
+              onClick={() => onApply(t)}
+              className="text-foreground hover:text-primary"
+              title={`결재 ${t.approverIds.length}단계${t.refIds.length ? ` · 참조 ${t.refIds.length}명` : ""}`}
+            >
+              {t.name}
+            </button>
+            <button
               type="button"
               onClick={() => remove(t.id, t.name)}
               disabled={busyDelete === t.id}
               className="text-text-faint hover:text-danger"
-              title={`'${t.name}' 삭제`}
               aria-label={`저장된 결재선 ${t.name} 삭제`}
             >
               {busyDelete === t.id ? (
                 <Loader2 className="size-3 animate-spin" />
               ) : (
-                <EyIcon name="trash" size={12} />
+                <EyIcon name="close" size={11} />
               )}
             </button>
-          ))}
-          <span className="bg-line mx-1 h-4 w-px" aria-hidden />
-        </>
-      ) : null}
-      <input
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        maxLength={40}
-        placeholder="결재선 이름"
-        className="border-line bg-card text-foreground placeholder:text-text-faint focus:border-primary w-[130px] rounded-lg border px-2.5 py-1 text-[12px] outline-none transition"
-        aria-label="저장할 결재선 이름"
-      />
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        disabled={pending || !name.trim() || approvers.length === 0}
-        onClick={save}
-      >
-        저장
-      </Button>
+          </span>
+        ))
+      )}
+      <span className="ml-auto inline-flex items-center gap-1.5">
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          maxLength={40}
+          placeholder="이름 붙여 저장"
+          className="border-line bg-card text-foreground placeholder:text-text-faint focus:border-primary w-[130px] rounded-lg border px-2.5 py-1 text-[12px] outline-none transition"
+          aria-label="저장할 결재선 이름"
+        />
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={pending || !name.trim() || approvers.length === 0}
+          onClick={save}
+        >
+          저장
+        </Button>
+      </span>
     </div>
   );
 }
