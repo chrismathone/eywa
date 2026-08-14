@@ -187,8 +187,15 @@ export function ReportCard({
   const cardEval = resolveRowFields(student, subject);
   const rep = reports[subjectName] ?? { draft: "", sent: false };
   // 학부모 공개 링크 — 저장 후(shareToken 존재) 노출. 강사가 복사해 카톡/문자로 전달.
-  const origin = typeof window !== "undefined" ? window.location.origin : "";
-  const shareUrl = rep.shareToken ? `${origin}/r/${rep.shareToken}` : "";
+  // 🔴 **표시 텍스트에 `window.location.origin`을 쓰지 말 것**(React #418). 이 카드는 서버에서도
+  //    렌더되는데 거기선 origin이 `""`라 같은 자리에 서버는 `/r/…`, 클라는 `https://…/r/…`를 그려
+  //    텍스트 노드가 갈렸다 → 하이드레이션 실패로 **카드 subtree가 클라에서 통째로 재생성**된다
+  //    (콘솔 `Minified React error #418`, args `["text",""]`. 같은 오류로 예전에 페이지 클릭이 전부
+  //    먹통이 된 전례가 있다 — gotchas #75).
+  //    · 표시 = 빌드 시 인라인되는 `NEXT_PUBLIC_APP_URL`(서버·클라 값이 동일해 갈릴 수 없다)
+  //    · 복사 = 클릭 시점의 실제 `window.location.origin`(커스텀 도메인·프리뷰에서도 유효한 주소)
+  const sharePath = rep.shareToken ? `/r/${rep.shareToken}` : "";
+  const shareUrl = sharePath ? `${(process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/+$/, "")}${sharePath}` : "";
   const generating = generatingSubject === subjectName; // 이 과목 AI 멘트 생성 중
   const cnBadge = classnoteBadge(rep.classnoteStatus); // ClassNote 발송 상태 배지
   // 재발송 차단(2026-07-22) — 화면 state가 로스터 스냅샷을 이긴다.
@@ -744,7 +751,7 @@ export function ReportCard({
 
         {/* 저장 후 발급된 학부모 공개 링크 — 강사가 복사해 카톡/문자로 직접 전달(발송 시스템 P0). */}
         {/* P2a: 열람 수 배지 + 취소(열람 차단)/재발급(새 토큰). 취소된 링크는 재발급만 노출. */}
-        {rep.sent && shareUrl ? (
+        {rep.sent && sharePath ? (
           <div className="border-line bg-bg-soft rounded-md border px-3 py-2">
             <div className="mb-1 flex items-center justify-between gap-2">
               <p className="text-text-faint text-[11px] font-bold">학부모 공유 링크</p>
@@ -779,7 +786,8 @@ export function ReportCard({
                     variant="outline"
                     size="sm"
                     onClick={() => {
-                      void navigator.clipboard?.writeText(shareUrl);
+                      // 복사는 **지금 열려 있는 호스트** 기준으로 — env가 비었거나 도메인이 달라도 유효한 주소가 나간다.
+                      void navigator.clipboard?.writeText(`${window.location.origin}${sharePath}`);
                       toast.success("학부모 공유 링크를 복사했습니다");
                     }}
                   >
