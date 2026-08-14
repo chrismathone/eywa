@@ -45,7 +45,15 @@ const PERIOD_H = 26;
 // 학생 1행 높이 — 기본뷰 StudentRow 실측(13px × leading-tight + py-[3px] = 23.1px)에 맞춘 값.
 // ⚠️ 서식을 기본뷰와 동일하게 두는 한 이 값도 함께 따라가야 한다(안 그러면 행이 잘린다).
 const STU_H = 24;
-const LABEL_W = 58;
+/**
+ * 교시축(좌측 라벨열) 폭 — **시간대 한 줄이 안 깨지는 최소치**.
+ *
+ * 58px이던 것을 넓혔다(2026-08-14): 학원장이 교시 이름을 비우면 시간대가 **이름 자리로 올라오는데**
+ * (`p.label || p.time`, 10px tabular), `14:20~15:00` 11자가 58px에 안 들어가 두 줄로 깨졌다
+ * (원장 *"시간 표시하는 열너비 조금만 넓혀서 두줄 안되도록"*). 이름이 있던 시절엔 시각이 7px 보조줄이라
+ * 좁아도 됐다. ⚠️ 이름을 다시 붙여도 이 폭은 유지할 것 — 이름이 짧아질 뿐 깨질 이유가 없다.
+ */
+const LABEL_W = 72;
 /** 5요일 반(DP6)의 카드 폭 — 아래 `DAY_COL_W`의 기준값이다. */
 const CARD_W = 176;
 /**
@@ -180,8 +188,10 @@ function LabelColumn({
           className={`${GRID} text-text-faint flex flex-col items-center justify-center border-b num leading-none`}
           style={{ height: PERIOD_H }}
         >
-          {/* 학원장이 교시 이름을 비우면 시간대가 이름 자리로 올라온다(2026-08-13, periodListLabel). */}
-          <span className="text-foreground text-[10px] font-bold">{p.label || p.time}</span>
+          {/* 학원장이 교시 이름을 비우면 시간대가 이름 자리로 올라온다(2026-08-13, periodListLabel).
+              ⚠️ `nowrap` — 시간대(`14:20~15:00`)가 줄바꿈되면 교시 한 칸이 두 줄로 부풀어 축이 어긋난다.
+                 폭은 LABEL_W가 책임진다(둘을 같이 볼 것). */}
+          <span className="text-foreground text-[10px] font-bold whitespace-nowrap">{p.label || p.time}</span>
           {/* 주말 섹션은 시각이 비어 온다(카드마다 시각이 달라 행에 못 적는다 — class-grid `weekendSelfShift`).
               교시표에 없는 시각의 행은 라벨 자체가 시각이라 같은 값을 두 번 적지 않는다(`slotPeriodRow` 폴백). */}
           {p.label && p.time && p.time !== p.label ? <span className="text-[7px]">{p.time}</span> : null}
