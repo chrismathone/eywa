@@ -1,37 +1,40 @@
 "use client";
 
-// 교시 카드의 일괄 입력 — 원스크린 '일괄 입력' 팝오버의 계약을 그대로 따른다.
-//  · 대상 = **이 카드에 보이는 것**(로스터 = 표시 집합, 계획 = 그 카드에 이미 있는 줄).
-//  · 라벨에 **실제 동작 대상 수**를 밝힌다("전원"이라 써놓고 5명 중 2명만 되는 거짓말 금지).
-//  · 출결 일괄은 언제나 빈 칸만(비파괴) → 확인 불필요. 태도·계획 일괄은 덮어쓰기가 기본이라
-//    덮일 값이 있으면 확인을 받고, 몇 건이 덮이는지 숫자로 밝힌다(침묵 금지).
-//  · 개별 사실(학생별 개인 진도·과제)은 일괄 대상이 아니다 — 학생마다 다른 기록이라 복제하면 거짓이 된다.
-//    반대로 **수업계획(평시/내신)은 반 전체의 사실**이라 6영역에 같은 교재를 넣는 게 정상 작업이다.
+// 하루치 일괄 입력 — 요일 머리(주간 시트)·반 머리(오늘 면)에 붙는 버튼 셋.
 //
-// 🔴 **버튼 셋으로 갈랐다**(원장 2026-08-14 *"일괄 입력창을 제거하고 거기에 '일괄 출석' '일괄 태도'로
-//    라벨 대신"*). 종전엔 한 창에 계획·출결·태도가 다 들어 있어서, 제일 잦은 "전원 출석"조차
-//    **창 열기 → 드롭다운 고르기 → 버튼 누르기** 세 동작이 들었다.
+// 🔴 **교시 카드에서 요일 머리로 올라왔다**(원장 2026-08-14: *"가장 위의 수업에만 있으면 됨.
+//    아래까지 필요없음"* → *"생각해보니까 요일 옆에 넣어도 될듯. 어차피 일괄이니까"*).
+//    교시마다 같은 버튼 셋이 반복돼 시끄러웠고, 사람이 하려던 일은 애초에 "그 날 전부"였다.
+//    덤으로 처음 요청("맨 위에서 누르면 나머지 교시도")이 확인창 없이 그냥 해결된다 — 범위가 곧 하루다.
+//
+// 🔴 **버튼 셋으로 갈랐다**(같은 날 지시). 종전엔 한 창에 계획·출결·태도가 다 들어 있어서, 제일 잦은
+//    "전원 출석"조차 **창 열기 → 드롭다운 고르기 → 버튼 누르기** 세 동작이 들었다.
 //     · `일괄 출석` = 창 없이 **한 번에**(값이 '출석' 하나뿐이라 고를 게 없다).
 //     · `일괄 태도` = 5단 눈금에서 골라야 해 작은 창이 남는다.
 //     · `계획`      = 평시/내신 × 교재·시간·진도·과제라 역시 창.
-//    ⚠️ 지각·결석 **일괄은 없앴다** — 값 선택 단계를 되살리면 위 세 동작으로 돌아간다. 그 둘은 애초에
-//       한 반 전체가 같은 값일 일이 없어(개별 셀 순환이 정석) 일괄의 실익이 없었다.
+//    ⚠️ 지각·결석 **일괄은 없앴다** — 값 선택 단계를 되살리면 위 세 동작으로 돌아간다. 한 반 전체가
+//       같은 지각·결석일 일이 없어(개별 셀 순환이 정석) 일괄의 실익이 없던 자리다.
 //
-// ⚠️ 자리는 교시 카드 **머리(우측)**다(원장 2026-08-06). 로스터 표 위에 있을 땐 계획 표를 지나 한참
-//    내려가야 보였고, 계획 일괄까지 담게 된 지금은 계획 표보다 아래 있는 게 순서상 어긋난다.
+// 계약은 종전 그대로다(교시 단위 → 하루 단위로 범위만 넓혔다):
+//  · 대상 = **화면에 보이는 것**(로스터 = 표시 집합, 계획 = 이미 있는 줄). 라벨에 실제 대상 수를 밝힌다.
+//  · 출결 일괄은 언제나 빈 칸만(비파괴) → 확인 불필요. 태도·계획은 덮어쓰기가 기본이라 덮일 값이 있으면
+//    몇 건인지 숫자로 밝히고 확인을 받는다(침묵 금지).
+//  · 개별 사실(학생별 진도·과제·특이사항)은 일괄 대상이 아니다 — 복제하면 거짓이 된다.
+//  · 저장은 **교시별로** 나간다(0196a) — 뭉쳐 보내면 다른 교시 기록을 덮는다.
 import { useState } from "react";
 import { Popover } from "@base-ui/react/popover";
 import { Button } from "@/components/ui/button";
 import {
-  countPlanCellOverwrites,
-  countStatusOverwrites,
-  planBulkAttendance,
-  planBulkPlanCells,
-  planBulkStatus,
-  planLinesOfTerm,
+  countDayPlanCellOverwrites,
+  countDayStatusOverwrites,
+  countDayTargets,
+  countDayTermLines,
+  planDayBulkAttendance,
+  planDayBulkPlanCells,
+  planDayBulkStatus,
   PLAN_BULK_FIELDS,
-  type BulkPlanRow,
-  type BulkRosterRow,
+  type DayBulkSlot,
+  type DayBulkTarget,
   type PlanBulkField,
 } from "../lib/bulk";
 // 태도 선택지는 수학 수업보고서와 **같은 단일 소스**(원장 2026-08-06 "수학 수업보고서처럼").
@@ -48,17 +51,15 @@ const miniBtn = (on: boolean) =>
       : "border-line-strong text-text-dim hover:text-foreground hover:bg-bg-soft"
   }`;
 
-/** 교시 머리의 알약 버튼 셋 — 세 트리거가 같은 모양이라야 한 줄로 읽힌다. */
+/** 머리의 알약 버튼 셋 — 셋이 같은 모양이라야 한 줄로 읽힌다. */
 const PILL =
   "border-line-strong text-foreground hover:text-primary hover:border-primary shrink-0 cursor-pointer rounded-full border px-2 py-0.5 text-[12px] font-bold disabled:cursor-default disabled:opacity-40 disabled:hover:text-foreground disabled:hover:border-line-strong";
 const POPUP =
   "bg-card border-line-strong shadow-card flex max-h-[70vh] w-[268px] flex-col gap-2 overflow-y-auto rounded-lg border p-3 text-[12px] outline-none";
 
-export function SlotBulk({
+export function DayBulk({
   date,
-  slotStart,
-  roster,
-  lines,
+  slots,
   marks,
   attendance,
   canEdit,
@@ -69,10 +70,8 @@ export function SlotBulk({
   onBulkPlanCells,
 }: {
   date: string;
-  slotStart: string;
-  roster: BulkRosterRow[];
-  /** 이 교시의 계획 줄 — 계획 일괄의 대상. 줄이 없으면 그 시기 버튼은 0건으로 잠긴다. */
-  lines: BulkPlanRow[];
+  /** 이 날의 교시 전부(계획 줄 포함). `scheduled=false`인 칸은 대상에서 빠진다. */
+  slots: DayBulkSlot[];
   marks: Record<string, { status: string | null; progressNote: string | null }>;
   attendance: Record<
     string,
@@ -82,8 +81,9 @@ export function SlotBulk({
   canMarkDate: boolean;
   /** '내신' 시기를 제안할지 — EiE(초등) 반은 내신이 없다(plan-table과 **같은 값**). */
   showExamTerm: boolean;
-  onBulkAttendance: (studentIds: string[], status: BasicAttendance) => void;
-  onBulkStatus: (studentIds: string[], status: string | null) => void;
+  /** 교시별로 나눠 저장한다(0196a) — 평평한 목록으로 뭉치지 말 것. */
+  onBulkAttendance: (targets: DayBulkTarget[], status: BasicAttendance) => void;
+  onBulkStatus: (targets: DayBulkTarget[], status: string | null) => void;
   onBulkPlanCells: (lineIds: string[], field: PlanBulkField, value: string) => void;
 }) {
   const [attitudeOpen, setAttitudeOpen] = useState(false);
@@ -98,37 +98,36 @@ export function SlotBulk({
   // 권한 없으면 컨트롤을 아예 렌더하지 않는다(누를 수 있는 것처럼 보였다가 서버가 거절하는 게 최악).
   if (!canEdit) return null;
 
-  const attendanceTargets = planBulkAttendance(roster, attendance, date, slotStart, {
-    canEdit,
-    canMarkDate,
-  });
-  const statusTargets = planBulkStatus(roster, marks, date, slotStart, { canEdit, onlyEmpty });
-  const overwrites = countStatusOverwrites(roster, marks, date, slotStart, canEdit);
+  const attendanceTargets = planDayBulkAttendance(slots, attendance, date, { canEdit, canMarkDate });
+  const attendanceCount = countDayTargets(attendanceTargets);
+  const statusTargets = planDayBulkStatus(slots, marks, date, { canEdit, onlyEmpty });
+  const statusCount = countDayTargets(statusTargets);
+  const overwrites = countDayStatusOverwrites(slots, marks, date, canEdit);
   const value = picked;
 
   // 내신을 안 그리는 반에서 term이 'exam'으로 굳으면 대상 0건인 채로 잠긴다 → 항상 평시로 되돌린다.
   const effectiveTerm = showExamTerm ? term : "regular";
-  const termLines = planLinesOfTerm(lines, effectiveTerm, canEdit);
-  const planTargets = planBulkPlanCells(lines, effectiveTerm, planField, {
+  const termLineCount = countDayTermLines(slots, effectiveTerm, canEdit);
+  const planTargets = planDayBulkPlanCells(slots, effectiveTerm, planField, {
     canEdit,
     onlyEmpty: planOnlyEmpty,
   });
-  const planOverwrites = countPlanCellOverwrites(lines, effectiveTerm, planField, canEdit);
+  const planOverwrites = countDayPlanCellOverwrites(slots, effectiveTerm, planField, canEdit);
   const planFieldLabel = PLAN_BULK_FIELDS.find((f) => f.key === planField)?.label ?? "";
 
   /**
-   * 일괄 출석 — **창도 확인도 없다**. 대상이 언제나 "아직 기록이 없는 학생"뿐이라(planBulkAttendance)
+   * 일괄 출석 — **창도 확인도 없다**. 대상이 언제나 "아직 기록이 없는 칸"뿐이라(planBulkAttendance)
    * 되돌릴 게 없는 비파괴 동작이고, 그래서 한 번에 끝낸다. 이미 찍힌 출결·사유·시수는 손대지 않는다.
    */
   const applyPresent = () => {
-    if (attendanceTargets.length === 0) return;
+    if (attendanceCount === 0) return;
     onBulkAttendance(attendanceTargets, "present");
   };
 
   const applyStatus = () => {
     // 값이 없으면 적용 자체가 안 된다(버튼 disabled) — "아무것도 안 골랐는데 전원 태도 삭제"가
     // 기본 액션이 되면 안 된다. 일괄 지우기는 의도적으로 미제공(지우기는 개별 셀에서).
-    if (statusTargets.length === 0 || value === null) return;
+    if (statusCount === 0 || value === null) return;
     // 덮어쓰기 + 실제로 덮일 값이 있을 때만 확인(마찰 최소화 — 빈 칸만 채우기는 확인 없음).
     if (!onlyEmpty && overwrites > 0) {
       const ok = window.confirm(
@@ -157,23 +156,23 @@ export function SlotBulk({
   };
 
   return (
-    // 좁은 교시 칸에서도 버튼이 잘리지 않게 줄바꿈을 허용한다(칸 폭은 교시 열이 정한다).
+    // 좁은 머리에서도 버튼이 잘리지 않게 줄바꿈을 허용한다.
     <span className="flex shrink-0 flex-wrap items-center justify-end gap-1">
       <button
         type="button"
         className={PILL}
-        disabled={attendanceTargets.length === 0}
+        disabled={attendanceCount === 0}
         onClick={applyPresent}
         title={
-          attendanceTargets.length > 0
-            ? `기록 없는 ${attendanceTargets.length}명을 출석으로 — 이미 기록된 학생은 그대로 둡니다`
+          attendanceCount > 0
+            ? `이 날 기록 없는 ${attendanceCount}칸을 출석으로 — 이미 기록된 학생은 그대로 둡니다`
             : canMarkDate
-              ? "이 교시는 이미 전원 기록됐습니다"
+              ? "이 날은 이미 전원 기록됐습니다"
               : // canMarkAttendanceByDate = 권한 AND 기간 — 원인을 단정하면 오표시(개별 툴팁과 동일 문구)
                 "출결 입력 권한이 없거나 수정 기간이 지났습니다"
         }
       >
-        일괄 출석{attendanceTargets.length > 0 ? ` ${attendanceTargets.length}` : ""}
+        일괄 출석{attendanceCount > 0 ? ` ${attendanceCount}` : ""}
       </button>
 
       {/* 태도 — 셀과 같은 5단 눈금에서 골라야 해서 창이 남는다. */}
@@ -184,14 +183,14 @@ export function SlotBulk({
           if (!o) setPicked(null);
         }}
       >
-        <Popover.Trigger className={PILL} title="이 교시 태도를 한 번에">
+        <Popover.Trigger className={PILL} title="이 날 태도를 한 번에">
           일괄 태도
         </Popover.Trigger>
         <Popover.Portal>
           <Popover.Positioner side="bottom" align="end" sideOffset={4} className="z-50">
             <Popover.Popup className={POPUP}>
               <p className="text-text-dim text-[12px]">
-                이 교시 <b className="text-foreground num">{roster.length}</b>명
+                이 날 교시 <b className="text-foreground num">{slots.filter((s) => s.scheduled).length}</b>개
               </p>
               {/* ⚠️ 자유입력은 **없앴다**(원장 2026-08-06 "태도 직접 입력은 없애버려. ecs").
                   ECS 태도는 5단 눈금으로 고정 — 자유입력이 있으면 눈금 밖 값이 계속 새로 생겨
@@ -217,10 +216,10 @@ export function SlotBulk({
                 type="button"
                 size="sm"
                 className="w-full"
-                disabled={statusTargets.length === 0 || value === null}
+                disabled={statusCount === 0 || value === null}
                 onClick={applyStatus}
               >
-                {value === null ? "태도를 선택하세요" : `"${value}" 적용 ${statusTargets.length}명`}
+                {value === null ? "태도를 선택하세요" : `"${value}" 적용 ${statusCount}칸`}
               </Button>
               {/* 각주 — 위 입력칸과 **붙어 보이지 않게** 구분한다. 안 그러면 바로 위 태도 설명으로 읽힌다. */}
               <p className="bg-bg-soft text-text-dim rounded-md px-2 py-1.5 text-[11px]">
@@ -240,14 +239,15 @@ export function SlotBulk({
           if (!o) setPlanValue("");
         }}
       >
-        <Popover.Trigger className={PILL} title="수업계획(평시/내신)을 한 번에 채우기">
+        <Popover.Trigger className={PILL} title="이 날 수업계획(평시/내신)을 한 번에 채우기">
           계획
         </Popover.Trigger>
         <Popover.Portal>
           <Popover.Positioner side="bottom" align="end" sideOffset={4} className="z-50">
             <Popover.Popup className={POPUP}>
               <p className="text-text-dim text-[12px]">
-                이 교시 계획 <b className="text-foreground num">{lines.length}</b>줄
+                이 날 {TERM_LABEL[effectiveTerm]} 계획{" "}
+                <b className="text-foreground num">{termLineCount}</b>줄
               </p>
               {showExamTerm ? (
                 <div className="flex gap-1">
@@ -298,11 +298,11 @@ export function SlotBulk({
                 disabled={planTargets.length === 0 || planValue.trim() === ""}
                 onClick={applyPlan}
               >
-                {termLines.length === 0
+                {termLineCount === 0
                   ? `${TERM_LABEL[effectiveTerm]} 줄이 없습니다`
                   : `${planFieldLabel} 채우기 ${planTargets.length}줄`}
               </Button>
-              {termLines.length === 0 ? (
+              {termLineCount === 0 ? (
                 // 대상이 없는 이유를 밝힌다 — 일괄이 줄을 몰래 만들지 않는다는 계약(bulk.ts 주석)의 이면.
                 <p className="text-text-dim text-[11px]">
                   계획 표의 ‘+ 줄 추가’로 줄을 먼저 만드세요(일괄은 있는 줄만 채웁니다).

@@ -17,6 +17,7 @@ import type { PlanLineDTO } from "../server/actions";
 import type { SheetHandlers } from "./sheet-client";
 import type { SheetSaveStore } from "./use-sheet-saves";
 import { PeriodBlock } from "./period-block";
+import { DayBulk } from "./day-bulk";
 
 const DOW_KO: Record<string, string> = { mon: "월", tue: "화", wed: "수", thu: "목", fri: "금", sat: "토", sun: "일" };
 const COL_W = 540;
@@ -95,6 +96,49 @@ export const SheetGrid = memo(function SheetGrid({
                   오늘
                 </span>
               ) : null}
+              {/* 일괄 = **요일 머리**(원장 2026-08-14 "요일 옆에 넣어도 될듯. 어차피 일괄이니까").
+                  교시 카드마다 반복하던 것을 하루 하나로 — 범위가 곧 그 날 전부라 "나머지 교시도"를
+                  따로 물을 필요가 없다. 권한 없으면 컴포넌트가 스스로 아무것도 안 그린다. */}
+              <span className="ml-auto">
+                <DayBulk
+                  date={day.date}
+                  slots={day.slots.map((s) => ({
+                    slotStart: s.slotStart,
+                    roster: s.roster,
+                    lines: linesBySlot[`${day.date}|${s.slotStart}`] ?? [],
+                    scheduled: s.scheduled,
+                  }))}
+                  marks={marks}
+                  attendance={attendance}
+                  canEdit={canEdit}
+                  canMarkDate={data.canMarkAttendanceByDate[day.date] ?? false}
+                  showExamTerm={!data.isEie}
+                  // 저장은 **교시별로** 나눠 보낸다(0196a) — 뭉치면 다른 교시 기록을 덮는다.
+                  onBulkAttendance={(targets, status) =>
+                    targets.forEach((t) =>
+                      t.studentIds.forEach((id) =>
+                        handlers.setAttendance(id, day.date, t.slotStart, status),
+                      ),
+                    )
+                  }
+                  onBulkStatus={(targets, status) =>
+                    targets.forEach((t) =>
+                      t.studentIds.forEach((id) =>
+                        handlers.saveMark(
+                          id,
+                          day.date,
+                          t.slotStart,
+                          status,
+                          marks[`${id}|${day.date}|${t.slotStart}`]?.progressNote ?? null,
+                        ),
+                      ),
+                    )
+                  }
+                  onBulkPlanCells={(lineIds, field, value) =>
+                    lineIds.forEach((id) => handlers.editCell(id, field, value))
+                  }
+                />
+              </span>
             </header>
           );
         })}

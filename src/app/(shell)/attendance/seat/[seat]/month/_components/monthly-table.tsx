@@ -94,7 +94,7 @@ export function MonthlyTable({
             }
           >
             {g.students.map((s) => (
-              <MonthlyRow key={s.id} seat={seat} student={s} days={days} cells={g.cells[s.id] ?? {}} holidays={holidays} />
+              <MonthlyRow key={s.id} seat={seat} className={g.className} student={s} days={days} cells={g.cells[s.id] ?? {}} holidays={holidays} />
             ))}
           </ClassGroupBody>
         ))}

@@ -2,6 +2,7 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged, fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 import { addDays, kstToday } from "@/lib/date-kst";
+import { TRANSFER_GAP_DAYS } from "@/features/attendance/enrollment-span";
 import { effectiveAttendanceRecords } from "@/features/attendance/effective-records";
 import { buildHolidayMap } from "@/features/attendance/calendar";
 import { getPeriodWindow } from "@/features/periods/server/queries";
@@ -16,7 +17,12 @@ import {
 import { specialSlotLabel } from "@/features/timetable/lib/teacher-label";
 import { hhmm, SEAT_DB_LABEL, type SeatKey } from "../seat";
 import { buildMonthDays, isSlotLiveOnDate, padDaysTo31, type SeatAttRecord, type SeatSlotDef } from "../monthly";
-import { buildSeatMonthly, type SeatEnrollRow, type SeatMonthlyView } from "../monthly-build";
+import {
+  buildSeatMonthly,
+  type SeatEnrollRow,
+  type SeatMonthlyView,
+  type SeatOtherSpan,
+} from "../monthly-build";
 
 /**
  * 자리 월간 — 슬롯·반·수강·기록을 **각 1회** 읽고 반별로 조립(N+1 금지).
@@ -87,8 +93,18 @@ export async function getSeatMonthly(seat: SeatKey, month: string): Promise<Seat
     fetchRecords(supabase, liveClassIds, periodWindow.start, periodWindow.end),
   ]);
 
+  // 표식(퇴원/반이동) 판정용 — 그 학생들의 **다른 반** 수강. 반이동은 떠난 뒤 14일 안에 시작한 반을
+  // 보므로 창을 그만큼 넓혀 읽는다(안 넓히면 월말 반이동이 '퇴원'으로 보인다).
+  const otherSpans = await fetchOtherSpans(
+    supabase,
+    [...new Set(enrollments.map((e) => e.studentId))],
+    addDays(periodWindow.start, -TRANSFER_GAP_DAYS),
+    addDays(periodWindow.end, TRANSFER_GAP_DAYS),
+  );
+
   const periodLabelOf = periodLabelFn(subjects, settings.operations);
   return buildSeatMonthly({
+    otherSpans,
     month,
     window: periodWindow,
     days,
@@ -154,6 +170,46 @@ async function fetchEnrollments(
       onHold: e.on_hold,
       attendanceDays: e.attendance_days,
     });
+  }
+  return out;
+}
+
+/** 학생별 전(全) 반 수강 구간 — 표식 판정에만 쓴다(자리 반 자신은 조립부에서 뺀다). */
+async function fetchOtherSpans(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  studentIds: string[],
+  start: string,
+  end: string,
+): Promise<Map<string, SeatOtherSpan[]>> {
+  const out = new Map<string, SeatOtherSpan[]>();
+  if (studentIds.length === 0) return out;
+  const rows = await fetchAllPagedInChunks<{
+    student_id: string;
+    class_id: string;
+    start_date: string;
+    end_date: string | null;
+    class: { class_name: string; subject: string | null }[] | { class_name: string; subject: string | null } | null;
+  }>(studentIds, (chunk, from, to) =>
+    supabase
+      .from("enrollments")
+      .select("student_id, class_id, start_date, end_date, class:class_id ( class_name, subject )")
+      .in("student_id", chunk)
+      .lte("start_date", end)
+      .or(`end_date.is.null,end_date.gte.${start}`)
+      .order("id")
+      .range(from, to),
+  );
+  for (const r of rows) {
+    const c = (Array.isArray(r.class) ? r.class[0] : r.class) ?? null;
+    const list = out.get(r.student_id) ?? [];
+    list.push({
+      classId: r.class_id,
+      className: c?.class_name ?? "다른 반",
+      subject: c?.subject ?? null,
+      start: r.start_date,
+      end: r.end_date,
+    });
+    out.set(r.student_id, list);
   }
   return out;
 }

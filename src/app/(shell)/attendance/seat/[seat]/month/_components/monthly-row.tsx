@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { formatSessionUnits } from "@/features/attendance/session-units";
-import { cellDisplay, rollupDay, type SlotMark } from "@/features/attendance/cell-display";
+import { BADGE_BASE, BADGE_TONE, cellDisplay, rollupDay, type SlotMark } from "@/features/attendance/cell-display";
+import { BADGE_LABEL, badgeTitle } from "@/features/attendance/enrollment-span";
 import { ratePercent } from "@/features/attendance/grid/totals";
-import type { SeatKey } from "@/features/attendance/seat/seat";
+import { SEAT_NAME, type SeatKey } from "@/features/attendance/seat/seat";
 import type { SeatMonthCell, SeatMonthStudent } from "@/features/attendance/seat/monthly-build";
 import type { SeatMonthDay } from "@/features/attendance/seat/monthly";
 
@@ -14,12 +15,15 @@ function rateColor(rate: number | null): string {
 
 export function MonthlyRow({
   seat,
+  className,
   student,
   days,
   cells,
   holidays,
 }: {
   seat: SeatKey;
+  /** 이 반 이름 — 반이동 표식 툴팁("A반 → B반")에 쓴다. */
+  className: string;
   student: SeatMonthStudent;
   days: SeatMonthDay[];
   cells: Record<string, SeatMonthCell>;
@@ -29,8 +33,21 @@ export function MonthlyRow({
   return (
     <tr className="hover:bg-bg-soft/40">
       <td className="border-line text-foreground sticky left-0 z-10 border-b border-r bg-card px-2 py-1">
-        <span className="truncate text-[12px] leading-tight font-bold" title={student.name}>
-          {student.name}
+        {/* 반별 출석부와 같은 표식·같은 규약 — 회색 띠(소속 아님)만으로는 신입인지 퇴원인지 모른다.
+            라벨은 우측 정렬(ml-auto), 자리가 부족하면 이름이 줄임표로 양보한다. */}
+        <span className="flex items-center gap-1">
+          <span className="min-w-0 truncate text-[12px] leading-tight font-bold" title={student.name}>
+            {student.name}
+          </span>
+          {student.badges.map((b) => (
+            <span
+              key={`${b.kind}-${b.date}`}
+              title={badgeTitle(b, className)}
+              className={`${BADGE_BASE} ${BADGE_TONE[b.kind]} ml-auto`}
+            >
+              {BADGE_LABEL[b.kind]}
+            </span>
+          ))}
         </span>
       </td>
       <td className="border-line text-text-dim truncate border-b border-r px-1.5 py-1 text-[11px]">
@@ -106,7 +123,7 @@ function MonthCell({
   return (
     <td
       className="border-line border-b border-r p-0 text-center"
-      title={review ? "자리 표시가 없어 아직 담임 정산에 남아 있는 기록입니다" : holiday}
+      title={review ? `${SEAT_NAME[seat]} 출석부로 찍힌 기록이 아닙니다` : holiday}
     >
       {clickable ? (
         <Link href={href} className="block">

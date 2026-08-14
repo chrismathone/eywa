@@ -158,3 +158,104 @@ export function countPlanCellOverwrites(
 function isBlank(v: string | null): boolean {
   return v === null || v.trim() === "";
 }
+
+// ── 하루 단위 일괄 ────────────────────────────────────────────────────────────
+// 🔴 버튼이 **요일 머리**로 올라갔다(원장 2026-08-14: *"가장 위의 수업에만 있으면 됨. 아래까지 필요없음"*
+//    → *"생각해보니까 요일 옆에 넣어도 될듯. 어차피 일괄이니까"*). 교시 카드마다 같은 버튼 셋이 반복돼
+//    시끄러웠고, 정작 사람이 하려는 일은 "그 날 전부"라 요일이 맞는 단위다.
+// ⚠️ 대상은 그래도 **교시별로** 계산한다 — 로스터·기록이 교시마다 다르다(같은 날 4교시엔 찍혔고
+//    6교시엔 안 찍힌 학생이 흔하다). 그래서 반환도 교시별 묶음이고 저장도 교시별로 나간다
+//    (0196a: 출결·태도의 저장 축이 교시다 — 여기서 뭉치면 다른 교시 기록을 덮는다).
+
+export type DayBulkSlot = {
+  slotStart: string;
+  roster: BulkRosterRow[];
+  lines: BulkPlanRow[];
+  /** 그 날 실제로 열린 교시인가 — 시간표에 없는 칸은 아예 대상이 아니다(개별 셀도 잠겨 있다). */
+  scheduled: boolean;
+};
+
+/** 교시별 대상 묶음 — 저장이 교시 단위라 평평한 id 목록으로 뭉개지 않는다. */
+export type DayBulkTarget = { slotStart: string; studentIds: string[] };
+
+/** 대상 칸 수 — 같은 학생이 두 교시면 2로 센다(찍히는 칸이 곧 일감이라 사람이 기대하는 수). */
+export function countDayTargets(targets: readonly DayBulkTarget[]): number {
+  return targets.reduce((n, t) => n + t.studentIds.length, 0);
+}
+
+const openSlots = (slots: readonly DayBulkSlot[]) => slots.filter((s) => s.scheduled);
+
+/** 하루치 일괄 출석 대상 — 교시별 빈 칸의 합. 대상이 0인 교시는 빠진다. */
+export function planDayBulkAttendance(
+  slots: readonly DayBulkSlot[],
+  attendance: Record<string, unknown>,
+  date: string,
+  opts: { canEdit: boolean; canMarkDate: boolean },
+): DayBulkTarget[] {
+  return openSlots(slots)
+    .map((s) => ({
+      slotStart: s.slotStart,
+      studentIds: planBulkAttendance(s.roster, attendance, date, s.slotStart, opts),
+    }))
+    .filter((t) => t.studentIds.length > 0);
+}
+
+/** 하루치 일괄 태도 대상 — 교시별 합(`onlyEmpty`면 빈 칸만). */
+export function planDayBulkStatus(
+  slots: readonly DayBulkSlot[],
+  marks: Record<string, { status: string | null; progressNote: string | null }>,
+  date: string,
+  opts: { canEdit: boolean; onlyEmpty: boolean },
+): DayBulkTarget[] {
+  return openSlots(slots)
+    .map((s) => ({
+      slotStart: s.slotStart,
+      studentIds: planBulkStatus(s.roster, marks, date, s.slotStart, opts),
+    }))
+    .filter((t) => t.studentIds.length > 0);
+}
+
+/** 하루치 태도 덮어쓰기 개수 — 확인 문구의 숫자. */
+export function countDayStatusOverwrites(
+  slots: readonly DayBulkSlot[],
+  marks: Record<string, { status: string | null; progressNote: string | null }>,
+  date: string,
+  canEdit: boolean,
+): number {
+  return openSlots(slots).reduce(
+    (n, s) => n + countStatusOverwrites(s.roster, marks, date, s.slotStart, canEdit),
+    0,
+  );
+}
+
+/** 하루치 계획 줄 id — 줄 id는 교시와 무관하게 유일하므로 평평하게 합쳐도 된다. */
+export function planDayBulkPlanCells(
+  slots: readonly DayBulkSlot[],
+  termMode: "regular" | "exam",
+  field: PlanBulkField,
+  opts: { canEdit: boolean; onlyEmpty: boolean },
+): string[] {
+  return openSlots(slots).flatMap((s) => planBulkPlanCells(s.lines, termMode, field, opts));
+}
+
+/** 하루치 계획 줄 수(그 시기) — 0이면 "줄이 없습니다"로 정직하게 막는다. */
+export function countDayTermLines(
+  slots: readonly DayBulkSlot[],
+  termMode: "regular" | "exam",
+  canEdit: boolean,
+): number {
+  return openSlots(slots).reduce((n, s) => n + planLinesOfTerm(s.lines, termMode, canEdit).length, 0);
+}
+
+/** 하루치 계획 덮어쓰기 개수. */
+export function countDayPlanCellOverwrites(
+  slots: readonly DayBulkSlot[],
+  termMode: "regular" | "exam",
+  field: PlanBulkField,
+  canEdit: boolean,
+): number {
+  return openSlots(slots).reduce(
+    (n, s) => n + countPlanCellOverwrites(s.lines, termMode, field, canEdit),
+    0,
+  );
+}

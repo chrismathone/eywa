@@ -4,6 +4,8 @@ import {
   groupAdjacentSlots,
   isAdjacentSlot,
   pickClassDayHit,
+  SEATING_PERIOD_COLS,
+  seatingHeaderClass,
   seatingSummary,
   spanAdjacentEnd,
 } from "./seating";
@@ -199,6 +201,39 @@ describe("foldSeating", () => {
     ]);
     expect(klass?.students.find((s) => s.studentId === "김대기")?.mark).toBe("waiting");
     expect(klass?.students.find((s) => s.studentId === "이출석")?.mark).toBe("present");
+  });
+});
+
+describe("SEATING_PERIOD_COLS", () => {
+  it("한 강의실 가로는 교시 4칸", () => {
+    expect(SEATING_PERIOD_COLS).toBe(4);
+  });
+});
+
+describe("seatingHeaderClass", () => {
+  it("대기(시작 전·유예)는 회색, 출결이 열린 뒤는 네이비", () => {
+    expect(seatingHeaderClass("before")).toContain("bg-att-weekend");
+    expect(seatingHeaderClass("before")).not.toContain("bg-primary");
+    expect(seatingHeaderClass("grace")).toContain("bg-att-weekend");
+    expect(seatingHeaderClass("due")).toContain("bg-primary");
+    expect(seatingHeaderClass("ended")).toContain("bg-primary");
+  });
+});
+
+describe("foldSeating phase", () => {
+  it("카드 국면은 첫 교시 — 시작 전 저녁 반이 오전 종료로 네이비가 되지 않는다", () => {
+    const [klass] = foldSeating([
+      slot({
+        key: "eve",
+        classId: "bs4f",
+        className: "고등M 개별 BS4F",
+        slotStart: "20:10",
+        slotEnd: "22:00",
+        phase: "before",
+      }),
+    ]);
+    expect(klass?.phase).toBe("before");
+    expect(seatingHeaderClass(klass!.phase)).toContain("bg-att-weekend");
   });
 });
 

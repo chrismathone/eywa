@@ -10,10 +10,7 @@ const root = process.cwd();
 const read = (p: string) => readFileSync(join(root, p), "utf8");
 
 describe("desk gate wiring", () => {
-  it("보드·좌석표는 source: \"live\", 확인 기록 정정은 아니다(이미 찍힌 결석을 되돌린다)", () => {
-    expect(read("src/app/(shell)/attendance/live/_components/board-view.tsx")).toMatch(
-      /source:\s*"live"/,
-    );
+  it("좌석표는 source: \"live\", 확인 기록 정정은 아니다(이미 찍힌 결석을 되돌린다)", () => {
     expect(read("src/features/attendance/live/components/seating-cell.tsx")).toMatch(
       /source:\s*"live"/,
     );
@@ -35,6 +32,21 @@ describe("desk gate wiring", () => {
     const policy = read("src/features/attendance/live/server/write-policy.ts");
     expect(policy).toMatch(/deskWriteDenied\(/);
     expect(policy).not.toMatch(/deskMarkDeniedReason\(/);
+  });
+
+  it("자리 버튼에 bg-card를 덧씌우지 않는다 — 출석 배경이 진다", () => {
+    const cell = read("src/features/attendance/live/components/seating-cell.tsx");
+    expect(cell).not.toMatch(/className=\{`bg-card /);
+    expect(cell).toMatch(/SEAT_MARK_TONE\[mark\]/);
+  });
+
+  it("강의실은 4열 고정 — 수업 2~3개여도 폭이 늘어나지 않는다", () => {
+    const chart = read("src/features/attendance/live/components/seating-chart.tsx");
+    expect(chart).toMatch(/grid-cols-4/);
+    expect(chart).not.toMatch(/xl:grid-cols-3/);
+    expect(read("src/features/attendance/live/components/seating-room.tsx")).toMatch(
+      /grid-cols-3/,
+    );
   });
 
   it("반별 폼·범위 채우기는 via=desk여도 기존 칸을 건너뛰지 않는다", () => {

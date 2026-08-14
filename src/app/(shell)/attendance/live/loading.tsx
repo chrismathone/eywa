@@ -9,7 +9,7 @@ export default function Loading() {
         <div className="bg-bg-soft h-3 w-12 animate-pulse rounded" />
         <div className="bg-bg-soft h-6 w-40 animate-pulse rounded" />
       </div>
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+      <div className="grid grid-cols-4 gap-3">
         {Array.from({ length: 6 }).map((_, i) => (
           <div key={i} className="border-line h-40 animate-pulse rounded-2xl border" />
         ))}

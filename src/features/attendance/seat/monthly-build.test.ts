@@ -119,3 +119,35 @@ describe("월간 표 조립", () => {
     expect(v.summary.classCount).toBe(2);
   });
 });
+
+describe("이름 옆 표식", () => {
+  it("그 기간에 끝난 수강 = 퇴원", () => {
+    const v = build({ enrollments: [enroll({ endDate: "2026-08-12" })] });
+    expect(v.groups[0]!.students[0]!.badges).toEqual([{ kind: "left", date: "2026-08-12" }]);
+  });
+
+  it("그 기간에 시작한 수강 = 신입", () => {
+    const v = build({ enrollments: [enroll({ startDate: "2026-08-05" })] });
+    expect(v.groups[0]!.students[0]!.badges).toEqual([{ kind: "new", date: "2026-08-05" }]);
+  });
+
+  /** 같은 과목의 다른 반이 14일 안에 이어지면 퇴원이 아니라 반이동 — 안 그러면 옮긴 아이가 나간 걸로 보인다. */
+  it("이어받은 반이 있으면 반이동으로 승격한다", () => {
+    const v = build({
+      enrollments: [enroll({ endDate: "2026-08-12" })],
+      otherSpans: new Map([
+        [
+          "s1",
+          [{ classId: "ls6", className: "LS6", subject: "english", start: "2026-08-13", end: null }],
+        ],
+      ]),
+    });
+    expect(v.groups[0]!.students[0]!.badges).toEqual([
+      { kind: "transferOut", date: "2026-08-12", otherClassName: "LS6" },
+    ]);
+  });
+
+  it("경계가 없으면 표식도 없다(대부분의 학생)", () => {
+    expect(build({}).groups[0]!.students[0]!.badges).toEqual([]);
+  });
+});
