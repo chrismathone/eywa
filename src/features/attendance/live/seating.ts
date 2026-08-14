@@ -133,6 +133,9 @@ export function isAdjacentSlot(a: LiveBoardSlot, b: LiveBoardSlot): boolean {
   return (
     a.classId === b.classId &&
     a.teacherId === b.teacherId &&
+    // 저장 축이 같아야 한 칸이다. 수학 연강(둘 다 null)만 묶고,
+    // 영어 연속 교시(14:30 / 15:25 = 다른 행·다른 교재)는 묶지 않는다.
+    a.saveSlot === b.saveSlot &&
     a.slotEnd != null &&
     a.slotEnd === b.slotStart
   );
@@ -178,19 +181,31 @@ function mergeAdjacentPair(a: LiveBoardSlot, b: LiveBoardSlot): LiveBoardSlot {
 }
 
 export function groupAdjacentSlots(slots: readonly LiveBoardSlot[]): LiveBoardSlot[] {
-  const ordered = [...slots].sort((a, b) =>
+  // 반+강사별로 먼저 모은 뒤 잇는다. 시각 순으로만 훑으면 사이에 다른 반이
+  // 끼는 순간(14:30 A, 14:40 B, 15:25 A) 연강 A가 안 붙는다.
+  const byKey = new Map<string, LiveBoardSlot[]>();
+  for (const slot of slots) {
+    const key = `${slot.teacherId ?? ""}|${slot.classId}`;
+    (byKey.get(key) ?? byKey.set(key, []).get(key)!).push(slot);
+  }
+  const out: LiveBoardSlot[] = [];
+  for (const group of byKey.values()) {
+    const ordered = [...group].sort((a, b) => (a.slotStart < b.slotStart ? -1 : 1));
+    const merged: LiveBoardSlot[] = [];
+    for (const slot of ordered) {
+      const prev = merged[merged.length - 1];
+      if (prev && isAdjacentSlot(prev, slot)) merged[merged.length - 1] = mergeAdjacentPair(prev, slot);
+      else merged.push(slot);
+    }
+    out.push(...merged);
+  }
+  out.sort((a, b) =>
     a.slotStart === b.slotStart
       ? a.className.localeCompare(b.className, "ko")
       : a.slotStart < b.slotStart
         ? -1
         : 1,
   );
-  const out: LiveBoardSlot[] = [];
-  for (const slot of ordered) {
-    const prev = out[out.length - 1];
-    if (prev && isAdjacentSlot(prev, slot)) out[out.length - 1] = mergeAdjacentPair(prev, slot);
-    else out.push(slot);
-  }
   return out;
 }
 

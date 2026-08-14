@@ -260,12 +260,103 @@ describe("groupAdjacentSlots", () => {
 
   it("세 교시 연강도 한 장", () => {
     const grouped = groupAdjacentSlots([
-      slot({ key: "1", classId: "c", teacherId: "t", slotStart: "14:00", slotEnd: "14:50", students: kids }),
-      slot({ key: "2", classId: "c", teacherId: "t", slotStart: "14:50", slotEnd: "15:40", students: kids }),
-      slot({ key: "3", classId: "c", teacherId: "t", slotStart: "15:40", slotEnd: "16:30", students: kids }),
+      slot({
+        key: "1",
+        classId: "c",
+        teacherId: "t",
+        subject: "math",
+        saveSlot: null,
+        slotStart: "14:00",
+        slotEnd: "14:50",
+        students: kids,
+      }),
+      slot({
+        key: "2",
+        classId: "c",
+        teacherId: "t",
+        subject: "math",
+        saveSlot: null,
+        slotStart: "14:50",
+        slotEnd: "15:40",
+        students: kids,
+      }),
+      slot({
+        key: "3",
+        classId: "c",
+        teacherId: "t",
+        subject: "math",
+        saveSlot: null,
+        slotStart: "15:40",
+        slotEnd: "16:30",
+        students: kids,
+      }),
     ]);
     expect(grouped).toHaveLength(1);
     expect(grouped[0]?.slotStart).toBe("14:00");
     expect(grouped[0]?.slotEnd).toBe("16:30");
+  });
+
+  it("영어 연속 교시는 묶지 않는다 — 교시마다 다른 행·다른 교재", () => {
+    const grouped = groupAdjacentSlots([
+      slot({
+        key: "e1",
+        classId: "e",
+        teacherId: "t",
+        subject: "english",
+        saveSlot: "14:30",
+        slotStart: "14:30",
+        slotEnd: "15:25",
+      }),
+      slot({
+        key: "e2",
+        classId: "e",
+        teacherId: "t",
+        subject: "english",
+        saveSlot: "15:25",
+        slotStart: "15:25",
+        slotEnd: "16:20",
+      }),
+    ]);
+    expect(grouped).toHaveLength(2);
+  });
+
+  it("사이에 다른 반이 끼어도 수학 연강은 붙는다", () => {
+    const grouped = groupAdjacentSlots([
+      slot({
+        key: "a1",
+        classId: "a",
+        className: "A",
+        teacherId: "t",
+        subject: "math",
+        saveSlot: null,
+        slotStart: "14:30",
+        slotEnd: "15:25",
+        students: kids,
+      }),
+      slot({
+        key: "b",
+        classId: "b",
+        className: "B",
+        teacherId: "t",
+        subject: "math",
+        saveSlot: null,
+        slotStart: "14:40",
+        slotEnd: "15:20",
+      }),
+      slot({
+        key: "a2",
+        classId: "a",
+        className: "A",
+        teacherId: "t",
+        subject: "math",
+        saveSlot: null,
+        slotStart: "15:25",
+        slotEnd: "16:20",
+        students: kids,
+      }),
+    ]);
+    expect(grouped.filter((s) => s.classId === "a")).toHaveLength(1);
+    expect(grouped.find((s) => s.classId === "a")?.slotEnd).toBe("16:20");
+    expect(grouped.filter((s) => s.classId === "b")).toHaveLength(1);
   });
 });
