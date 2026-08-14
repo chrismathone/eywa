@@ -13,8 +13,8 @@ import { DocList } from "./_components/doc-list";
 export const metadata = { title: "전자결재 — eywa" };
 
 /**
- * 전자결재 결재함 — 원장 지시 2026-08-14: *"전자결재 페이지를 만들자. 그중에 휴가를 먼저 사용하는
- * 느낌으로."* 그룹웨어 표준 구성을 그대로 따른다: **기안 → 순차 결재선 → 결재대기/상신함/완료함**.
+ * 전자결재 결재함 — 원장 지시 2026-08-14: *"하이웍스 기준으로 디자인 및 기능 따서 우리 디자인에 맞게."*
+ * 하이웍스 문서함 구성을 그대로 옮겼다: **결재 대기(내 차례) / 결재 예정 / 진행 / 완료 / 반려·회수 / 참조**.
  *
  * 양식은 늘어날 자리다(지금은 휴가신청서 하나) — 문서 껍데기(`approval_documents`)와 양식 상세
  * (`leave_forms`)가 분리돼 있어 새 양식은 상세 표 + 폼만 더하면 된다.
@@ -22,6 +22,44 @@ export const metadata = { title: "전자결재 — eywa" };
  * 접근은 `approvals` 메뉴 게이트 — 기본값이 전 역할 `none`이고 코드 명단(이승엽·김예원)이 개인
  * 예외로 얹힌다(파일럿). 상세는 [`access.ts`](../../../features/approvals/access.ts).
  */
+
+/** 탭(하이웍스 문서함) 정의 — 어느 함이 어떤 문서를 담는지 설명 문구까지 여기 한 곳. */
+const BOX_TABS = [
+  { key: "waiting", label: "결재 대기", empty: "결재할 문서가 없습니다.", note: null },
+  {
+    key: "upcoming",
+    label: "결재 예정",
+    empty: "차례를 기다리는 문서가 없습니다.",
+    note: "내가 결재선에 있지만 아직 내 차례가 오지 않은 문서입니다.",
+  },
+  {
+    key: "progress",
+    label: "진행",
+    empty: "진행 중인 문서가 없습니다 — 위 ‘기안하기’로 시작하세요.",
+    note: "내가 기안했거나 결재한, 아직 진행 중인 문서입니다.",
+  },
+  {
+    key: "done",
+    label: "완료",
+    empty: "완료된 문서가 없습니다.",
+    note: "승인으로 끝난, 내가 관여한 문서입니다.",
+  },
+  {
+    key: "rejected",
+    label: "반려·회수",
+    empty: "반려되거나 회수된 문서가 없습니다.",
+    note: "반려 또는 기안자 회수로 끝난, 내가 관여한 문서입니다.",
+  },
+  {
+    key: "refs",
+    label: "참조",
+    empty: "참조로 지정된 문서가 없습니다.",
+    note: "결재 없이 열람만 하도록 참조로 지정된 문서입니다.",
+  },
+] as const;
+
+type BoxTabKey = (typeof BOX_TABS)[number]["key"];
+
 export default async function ApprovalsPage({
   searchParams,
 }: {
@@ -36,16 +74,29 @@ export default async function ApprovalsPage({
     getMyLeaveBalance(user.id),
   ]);
 
-  const face = sp.tab === "drafted" ? "drafted" : sp.tab === "done" ? "done" : "waiting";
-  const faces: Face[] = [
-    {
-      key: "waiting",
-      label: boxes.waiting.length > 0 ? `결재 대기 ${boxes.waiting.length}` : "결재 대기",
-      href: "/approvals",
-    },
-    { key: "drafted", label: "상신함", href: "/approvals?tab=drafted" },
-    { key: "done", label: "완료함", href: "/approvals?tab=done" },
-  ];
+  const face: BoxTabKey = BOX_TABS.some((t) => t.key === sp.tab)
+    ? (sp.tab as BoxTabKey)
+    : "waiting";
+  const faces: Face[] = BOX_TABS.map((t) => ({
+    key: t.key,
+    label:
+      t.key === "waiting" && boxes.waiting.length > 0
+        ? `결재 대기 ${boxes.waiting.length}`
+        : t.label,
+    href: t.key === "waiting" ? "/approvals" : `/approvals?tab=${t.key}`,
+  }));
+
+  // 탭 키 → 그 함의 문서 목록. 기안자 열은 "전부 내 문서"일 수 있는 진행 탭에서도 유지한다 —
+  // 진행엔 내가 결재한 남의 문서도 섞여 있어 기안자가 정보다.
+  const docsByTab: Record<BoxTabKey, typeof boxes.waiting> = {
+    waiting: boxes.waiting,
+    upcoming: boxes.upcoming,
+    progress: boxes.inProgress,
+    done: boxes.completed,
+    rejected: boxes.rejected,
+    refs: boxes.refDocs,
+  };
+  const activeTab = BOX_TABS.find((t) => t.key === face)!;
 
   const period = balance.period;
 
@@ -76,7 +127,7 @@ export default async function ApprovalsPage({
       {!boxes.ready ? (
         <div className="border-line bg-card text-text-dim rounded-2xl border border-dashed p-8 text-center text-sm">
           전자결재 표가 아직 준비되지 않았습니다 — 마이그레이션{" "}
-          <span className="num">0212a</span>를 적용하면 바로 쓸 수 있습니다.
+          <span className="num">0213a</span>를 적용하면 바로 쓸 수 있습니다.
         </div>
       ) : (
         <>
@@ -107,17 +158,11 @@ export default async function ApprovalsPage({
 
           <FaceTabs faces={faces} active={face} ariaLabel="결재함 전환" />
 
-          {face === "waiting" ? (
-            <DocList docs={boxes.waiting} emptyText="결재할 문서가 없습니다." />
-          ) : face === "drafted" ? (
-            <DocList
-              docs={boxes.drafted}
-              showDrafter={false}
-              emptyText="올린 문서가 없습니다 — 위 ‘기안하기’로 시작하세요."
-            />
-          ) : (
-            <DocList docs={boxes.done} emptyText="결재를 마친 문서가 없습니다." />
-          )}
+          {activeTab.note ? (
+            <p className="text-text-faint px-1 text-[11px]">{activeTab.note}</p>
+          ) : null}
+
+          <DocList docs={docsByTab[face]} emptyText={activeTab.empty} />
         </>
       )}
     </div>

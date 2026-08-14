@@ -6,7 +6,12 @@ import { kstToday } from "@/lib/date-kst";
 import { leavePeriodLabel } from "@/features/leave/accrual";
 import { formatLeaveDays } from "@/features/leave/request-days";
 import { APPROVAL_FORM_LABEL } from "@/features/approvals/types";
-import { getApprovalLinePreview, getMyLeaveBalance } from "@/features/approvals/server/queries";
+import { approvalLineFor } from "@/features/approvals/access";
+import {
+  getApproverCandidates,
+  getMyLeaveBalance,
+  getMyLineTemplates,
+} from "@/features/approvals/server/queries";
 import { LeaveDraftForm } from "./_leave-form";
 
 export const metadata = { title: "기안하기 — eywa" };
@@ -15,14 +20,16 @@ export const metadata = { title: "기안하기 — eywa" };
  * 기안 — 양식을 고르고 문서를 써서 올린다. 지금 양식은 **휴가신청서 하나**라 바로 그 폼을 편다
  * (양식이 둘 이상이 되면 이 자리에 양식 선택 카드가 붙는다 — 문서 껍데기는 이미 양식 중립이다).
  *
- * 그룹웨어 관행대로 **결재선을 올리기 전에 보여준다** — 누가 어떤 순서로 받는지 모르고 올리면
- * 나중에 "왜 저 사람한테 갔지"가 된다.
+ * 결재선은 폼 안 **결재선 편집기**(하이웍스 대응)에서 기안자가 직접 지정한다 — 후보·저장된 결재선을
+ * 서버에서 내려주고, 초기값은 기본 결재선(approvalLineFor)이다.
  */
 export default async function NewApprovalPage() {
   const user = await requireAccess("approvals");
-  const [balance, line] = await Promise.all([
+  // 세 조회는 서로 독립 — 함께 받는다(B4 직렬 워터폴 금지).
+  const [balance, candidates, templates] = await Promise.all([
     getMyLeaveBalance(user.id),
-    getApprovalLinePreview(user.id),
+    getApproverCandidates(),
+    getMyLineTemplates(),
   ]);
   const period = balance.period;
 
@@ -69,36 +76,14 @@ export default async function NewApprovalPage() {
             </p>
           </div>
 
-          {/* 결재선 미리보기 — 올리기 전에 순서를 보여준다. */}
-          <div className="border-line bg-bg-soft/40 rounded-xl border px-4 py-3">
-            <p className="micro mb-2">결재선</p>
-            {line.length === 0 ? (
-              <p className="text-danger text-xs">
-                결재선이 비어 있어 상신할 수 없습니다 — 관리자에게 문의하세요.
-              </p>
-            ) : (
-              <ol className="flex flex-wrap items-center gap-2">
-                <li className="border-line bg-card text-text-dim rounded-lg border px-2.5 py-1 text-xs">
-                  기안 <b className="text-foreground">{user.displayName}</b>
-                </li>
-                {line.map((m, i) => (
-                  <li key={m.id} className="flex items-center gap-2">
-                    <span className="text-text-faint text-xs">→</span>
-                    <span className="border-line bg-card text-text-dim rounded-lg border px-2.5 py-1 text-xs">
-                      {i + 1}차 {m.roleLabel} <b className="text-foreground">{m.name}</b>
-                      {m.jobTitle ? <span className="text-text-faint"> {m.jobTitle}</span> : null}
-                    </span>
-                  </li>
-                ))}
-              </ol>
-            )}
-          </div>
-
           <LeaveDraftForm
             periodEnd={period.end}
             remaining={balance.remaining}
             today={kstToday()}
-            hasLine={line.length > 0}
+            drafterName={user.displayName}
+            candidates={candidates}
+            templates={templates}
+            initialApproverIds={approvalLineFor(user.id)}
           />
         </section>
       )}

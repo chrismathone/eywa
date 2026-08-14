@@ -7,12 +7,14 @@ import { Loader2 } from "@/components/icons/eywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { submitLeaveDraft, type ApprovalActionState } from "@/features/approvals/server/actions";
+import type { ApprovalLineTemplate, ApprovalPerson } from "@/features/approvals/server/queries";
 import {
   countLeaveDays,
   formatLeaveDays,
   validateLeaveRange,
   type LeaveKind,
 } from "@/features/leave/request-days";
+import { LineEditor } from "./_line-editor";
 
 const inputClass =
   "border-line bg-card text-foreground placeholder:text-text-faint focus:border-primary w-full rounded-lg border px-3 py-2 text-sm outline-none transition";
@@ -34,7 +36,8 @@ function SubmitButton({ blocked }: { blocked: boolean }) {
 
 /**
  * 휴가신청서 기안 폼. 차감 일수는 화면에서도 **같은 순수 함수**(countLeaveDays)로 미리 보여준다 —
- * 서버가 다시 계산하므로 규칙이 갈라질 여지가 없다.
+ * 서버가 다시 계산하므로 규칙이 갈라질 여지가 없다. 결재선은 폼 안 **결재선 편집기**(LineEditor)가
+ * hidden input(JSON)으로 싣는다 — 결재자 0명 검증은 편집기 안내 + 서버(line.ts)가 한다.
  *
  * ⚠️ 잔여를 넘으면 **버튼을 잠근다**(원장 2026-08-14: *"잔여없으면 신청 자체를 못하자나"*).
  *    다만 이건 알려주기용이고 **판정의 근거는 서버 액션**이다 — 화면은 게이트가 아니다([[#77]]).
@@ -43,12 +46,18 @@ export function LeaveDraftForm({
   periodEnd,
   remaining,
   today,
-  hasLine,
+  drafterName,
+  candidates,
+  templates,
+  initialApproverIds,
 }: {
   periodEnd: string;
   remaining: number;
   today: string;
-  hasLine: boolean;
+  drafterName: string;
+  candidates: ApprovalPerson[];
+  templates: ApprovalLineTemplate[];
+  initialApproverIds: string[];
 }) {
   const [state, action] = useActionState<ApprovalActionState, FormData>(submitLeaveDraft, undefined);
   const [kind, setKind] = useState<LeaveKind>("annual");
@@ -73,7 +82,7 @@ export function LeaveDraftForm({
         ? "남은 연차가 없어 상신할 수 없습니다"
         : `잔여 연차 ${formatLeaveDays(remaining)}보다 많이 신청할 수 없습니다`
       : null;
-  const blocked = !!invalid || !!over || !hasLine;
+  const blocked = !!invalid || !!over;
 
   useEffect(() => {
     if (!state || state === seen.current) return;
@@ -140,6 +149,14 @@ export function LeaveDraftForm({
           className={`${inputClass} resize-y`}
         />
       </label>
+
+      {/* 결재선 편집기 — hidden input(approverIds/refIds JSON)을 이 폼에 싣는다. */}
+      <LineEditor
+        drafterName={drafterName}
+        candidates={candidates}
+        templates={templates}
+        initialApproverIds={initialApproverIds}
+      />
 
       <div className="border-line flex flex-wrap items-center justify-between gap-3 border-t pt-3">
         <p className="text-[13px]">

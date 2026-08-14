@@ -5,8 +5,9 @@ import { APPROVAL_FORM_LABEL, docStatusLabel } from "@/features/approvals/types"
 import type { ApprovalDocRow } from "@/features/approvals/server/queries";
 
 /**
- * 결재 문서 목록 — 세 함(결재 대기·상신함·완료함)이 공유하는 표.
+ * 결재 문서 목록 — 결재함 여섯 함(대기·예정·진행·완료·반려·회수·참조)이 공유하는 표.
  * 그룹웨어 관행대로 **문서번호 → 제목 → 기안자 → 기안일 → 진행 → 상태** 순서.
+ * "어디까지 결재됐나"는 진행 열(progressLabel)이 담당한다 — "2/3 김예원 차례".
  */
 
 /** 지금 누구 차례인가 / 어디까지 왔나 — "2/3 김예원" 식 한 줄. */
