@@ -687,6 +687,7 @@ export default async function AttendancePage({
                   name: SEAT_NAME[k],
                   room: SEAT_ROOM[k],
                   href: `/attendance/seat/${k}`,
+                  monthHref: `/attendance/seat/${k}/month?month=${month}`,
                   open: (OPEN_SEAT_KEYS as readonly string[]).includes(k),
                 }))
               : []

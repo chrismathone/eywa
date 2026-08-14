@@ -132,6 +132,12 @@ export default async function SeatAttendancePage({
             >
               출석부로
             </Link>
+            <Link
+              href={`/attendance/seat/${seat}/month?month=${date.slice(0, 7)}`}
+              className="border-line hover:bg-bg-soft mr-1 rounded-full border px-2.5 py-0.5 text-xs"
+            >
+              월간
+            </Link>
             {OPEN_SEAT_KEYS.length > 1 ? (
               <div className="bg-bg-soft mr-1 inline-flex rounded-full p-0.5">
                 {OPEN_SEAT_KEYS.map((k) => (
