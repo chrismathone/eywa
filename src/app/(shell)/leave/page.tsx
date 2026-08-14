@@ -40,7 +40,9 @@ export default async function LeavePage({
   // 두 면의 데이터는 서로 독립 — 한 번에 받는다(B4 직렬 워터폴 금지).
   const [overview, inbox] = await Promise.all([
     getMyLeaveOverview(user.id),
-    canApprove ? getLeaveApprovalInbox(user.id) : Promise.resolve({ ready: true, rows: [] }),
+    canApprove
+      ? getLeaveApprovalInbox(user.id)
+      : Promise.resolve({ ready: true, loadError: null, rows: [] as never[] }),
   ]);
 
   const waiting = inbox.rows.filter((r) => r.status === "pending").length;
@@ -59,6 +61,9 @@ export default async function LeavePage({
 
   const period = overview.period;
   const ready = overview.ready && inbox.ready;
+  // 🔴 조회가 깨져도 페이지는 뜬다(2026-08-14 RLS 재귀로 창이 통째로 검게 죽은 뒤 규약) —
+  //    무슨 일인지 한글로 보여주고, 원문은 툴팁에만 둔다.
+  const loadError = overview.loadError ?? inbox.loadError;
 
   return (
     <div className="mx-auto w-full max-w-[980px] space-y-5 p-4 md:p-6">
@@ -70,6 +75,15 @@ export default async function LeavePage({
       />
 
       {faces.length > 1 ? <FaceTabs faces={faces} active={face} ariaLabel="휴가관리 면 전환" /> : null}
+
+      {loadError ? (
+        <p
+          className="border-danger/30 bg-danger-soft text-danger rounded-xl border px-4 py-2.5 text-[13px]"
+          title={loadError.raw}
+        >
+          {loadError.summary}
+        </p>
+      ) : null}
 
       {!ready ? (
         <div className="border-line bg-card text-text-dim rounded-2xl border border-dashed p-8 text-center text-sm">
