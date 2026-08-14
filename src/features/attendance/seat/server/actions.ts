@@ -176,9 +176,10 @@ export async function fillSeatSlot(input: {
   const error =
     first.error && /recorded_via/i.test(first.error.message)
       ? (await supabase.from("attendance_records").insert(
+          // recorded_via가 필수 키인 객체 리터럴이라 delete가 TS2790 — 구조분해로 그 키만 뺀다(동작 동일).
           rows.map((r) => {
-            const rest = { ...r };
-            delete rest.recorded_via;
+            const { recorded_via, ...rest } = r;
+            void recorded_via;
             return rest;
           }),
         )).error
