@@ -49,6 +49,12 @@ describe("desk gate wiring", () => {
     );
   });
 
+  it("랩실·JJ는 교시 가로줄 — 하루를 4열에 펼치지 않는다", () => {
+    const chart = read("src/features/attendance/live/components/seating-chart.tsx");
+    expect(chart).toMatch(/groupSeatPeriods/);
+    expect(chart).toMatch(/auto-fill/);
+  });
+
   it("반별 폼·범위 채우기는 via=desk여도 기존 칸을 건너뛰지 않는다", () => {
     const actions = read("src/features/attendance/server/actions.ts");
     expect(actions).not.toMatch(/via === "desk" \? \[\]/);

@@ -5,6 +5,7 @@
  * 방을 모르는 반은 맨 끝 「강의실 미지정」.
  */
 import { roomGroupKey, roomGroupOf, type RoomGroup } from "@/features/timetable/lib/room-groups";
+import { SEAT_ROOM_META } from "./seating-bands";
 import type { SeatingClass } from "./seating";
 
 export type SeatingRoom = {
@@ -62,11 +63,12 @@ export function seatingFloorOf(roomName: string | null | undefined): RoomGroup {
 export function groupSeatingFloors(classes: readonly SeatingClass[]): SeatingFloor[] {
   const buildingOrder = new Map<string, number>();
   const tagged = classes.map((klass) => {
-    const group = seatingFloorOf(klass.roomName);
+    const seat = klass.seatLabel ? SEAT_ROOM_META[klass.seatLabel] : null;
+    const group = seatingFloorOf(seat?.floorRoom ?? klass.roomName);
     if (group.building !== UNASSIGNED.building && !buildingOrder.has(group.building)) {
       buildingOrder.set(group.building, buildingOrder.size);
     }
-    const roomLabel = pickName(klass.roomName) ?? UNASSIGNED.label;
+    const roomLabel = seat?.roomName ?? pickName(klass.roomName) ?? UNASSIGNED.label;
     return { klass, group, roomKey: roomLabel, roomLabel };
   });
   tagged.sort((a, b) => {

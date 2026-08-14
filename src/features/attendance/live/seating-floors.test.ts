@@ -118,4 +118,35 @@ describe("groupSeatingFloors", () => {
     expect(floors.find((f) => f.label === "본원 6층")?.unmarked).toBe(1);
     expect(floors.find((f) => f.label === "본원 2층")?.unmarked).toBe(0);
   });
+
+  it("LAB는 본원603에 있어도 랩실(603호)로 따로 선다 — 일반 반과 4열을 나누지 않는다", () => {
+    const floors = groupSeatingFloors(
+      foldSeating([
+        slot({
+          key: "lab",
+          className: "LT3",
+          slotStart: "15:00",
+          roomName: "본원603",
+          slotTeacherLabel: "LAB",
+        }),
+        slot({ key: "reg", className: "고등E", slotStart: "15:00", roomName: "본원603" }),
+      ]),
+    );
+    const floor = floors.find((f) => f.label === "본원 6층");
+    expect(floor?.rooms.map((r) => r.roomName)).toEqual(["랩실(603호)", "본원603"]);
+    expect(floor?.rooms.find((r) => r.roomName === "랩실(603호)")?.classes.map((c) => c.className)).toEqual([
+      "LT3",
+    ]);
+  });
+
+  it("방 이름이 랩실·JJ실만 있어도 호수 층으로 선다", () => {
+    const floors = groupSeatingFloors(
+      foldSeating([
+        slot({ key: "lab", className: "LT3", slotStart: "15:00", roomName: "랩실", slotTeacherLabel: "LAB" }),
+        slot({ key: "jj", className: "LS2", slotStart: "15:00", roomName: "JJ실", slotTeacherLabel: "JJ" }),
+      ]),
+    );
+    expect(floors.find((f) => f.label === "본원 6층")?.rooms.map((r) => r.roomName)).toEqual(["랩실(603호)"]);
+    expect(floors.find((f) => f.label === "본원 3층")?.rooms.map((r) => r.roomName)).toEqual(["JJ실(305호)"]);
+  });
 });
