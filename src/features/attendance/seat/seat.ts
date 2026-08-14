@@ -51,6 +51,24 @@ export function parseSeatKey(raw: string | undefined | null): SeatKey | null {
   return (OPEN_SEAT_KEYS as readonly string[]).includes(v) ? (v as SeatKey) : null;
 }
 
+/**
+ * 아직 안 연 자리까지 포함한 해석 — **목록에 이름은 보이되 기록은 못 하게** 하려고 나눠 둔다.
+ * 화면은 이걸로 자리를 알아보고, 쓰기 가능 여부는 `parseSeatKey`(= OPEN_SEAT_KEYS)가 정한다.
+ */
+export function parseAnySeatKey(raw: string | undefined | null): SeatKey | null {
+  const v = (raw ?? "").trim().toLowerCase();
+  return (SEAT_KEYS as readonly string[]).includes(v) ? (v as SeatKey) : null;
+}
+
+/** 강사 드롭다운에 자리를 태울 때 쓰는 값 — uuid와 안 겹치는 접두사(시간표 폼의 `seat:`와 같은 규약). */
+export const SEAT_FILTER_PREFIX = "seat:";
+export const seatFilterValue = (seat: SeatKey): string => `${SEAT_FILTER_PREFIX}${seat}`;
+/** 강사 필터 값이 자리면 그 자리 키, 아니면 null(= uuid이거나 빈 값). */
+export function parseSeatFilterValue(value: string | null | undefined): SeatKey | null {
+  if (!value?.startsWith(SEAT_FILTER_PREFIX)) return null;
+  return parseAnySeatKey(value.slice(SEAT_FILTER_PREFIX.length));
+}
+
 /** "16:20:00" → "16:20". 이미 짧으면 그대로. 빈 값은 빈 문자열. */
 export function hhmm(time: string | null | undefined): string {
   return (time ?? "").slice(0, 5);

@@ -10,6 +10,7 @@ import { kstToday } from "@/lib/date-kst";
 import { getSeatDay } from "@/features/attendance/seat/server/queries";
 import {
   OPEN_SEAT_KEYS,
+  parseAnySeatKey,
   parseSeatKey,
   pickPeriodIndex,
   SEAT_NAME,
@@ -60,8 +61,34 @@ export default async function SeatAttendancePage({
   const { seat: seatParam } = await params;
   const { date: dateParam, start: startParam } = await searchParams;
 
-  const seat = parseSeatKey(seatParam);
-  if (!seat) notFound(); // 아직 안 연 자리(JJ실)는 URL로도 들어올 수 없다 — seat.ts OPEN_SEAT_KEYS 주석 참조
+  const seat = parseAnySeatKey(seatParam);
+  if (!seat) notFound();
+  /**
+   * 아직 안 연 자리(JJ실)는 **이름은 보이되 기록은 못 한다** — 강사 드롭다운엔 랩실·JJ실이 나란히
+   * 있어야 하지만(원장 2026-08-14), JJ실을 실제로 열면 기존 484행의 시수 귀속이 바뀐다
+   * (seat.ts `OPEN_SEAT_KEYS` 주석). 그래서 화면은 열되 이유를 적고 명단은 그리지 않는다.
+   */
+  if (!parseSeatKey(seatParam)) {
+    return (
+      <div className="flex h-full min-h-0 flex-col gap-3">
+        <PageHeader
+          eyebrow="출석부"
+          title={`${SEAT_NAME[seat]} ${SEAT_ROOM[seat]}`}
+          description="아직 열지 않은 자리입니다"
+          actions={
+            <Link href="/attendance" className="border-line hover:bg-bg-soft rounded-full border px-2.5 py-0.5 text-xs">
+              출석부로
+            </Link>
+          }
+        />
+        <EmptyState
+          image="students"
+          title={`${SEAT_NAME[seat]} 출석부는 아직 열지 않았습니다`}
+          description="이 자리 수업은 지금 담임 시수로 잡혀 있습니다. 자리 시수로 옮길지 정한 뒤 열면, 그때부터 찍은 기록이 담임 정산에서 빠집니다."
+        />
+      </div>
+    );
+  }
 
   const today = kstToday();
   const date = /^\d{4}-\d{2}-\d{2}$/.test(dateParam ?? "") ? dateParam! : today;
@@ -91,6 +118,13 @@ export default async function SeatAttendancePage({
         description={dateLabel(date)}
         actions={
           <div className="flex items-center gap-1.5">
+            {/* 자리는 강사 축의 한 갈래라 되돌아갈 길을 헤더에 둔다(사이드바 항목이 없다). */}
+            <Link
+              href="/attendance"
+              className="border-line hover:bg-bg-soft mr-1 rounded-full border px-2.5 py-0.5 text-xs"
+            >
+              출석부로
+            </Link>
             {OPEN_SEAT_KEYS.length > 1 ? (
               <div className="bg-bg-soft mr-1 inline-flex rounded-full p-0.5">
                 {OPEN_SEAT_KEYS.map((k) => (
