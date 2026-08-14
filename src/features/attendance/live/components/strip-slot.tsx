@@ -46,6 +46,7 @@ export function StripSlot({
         cells: pendingIds.map((id) => ({ studentId: id, classId })),
         fillEmptyOnly: true, // 서버 강제 — 낡은 화면이 남이 찍은 결석을 뒤집지 못한다
         slotStart: saveSlot,
+        periodStart: slotStart,
       })
         .then((res) => {
           if ("error" in res) {

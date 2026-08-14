@@ -18,6 +18,8 @@ import { TodayAttendancePills } from "@/features/class-sheets/components/today-a
 import { setAttendanceBulk, setAttendanceCell } from "@/features/attendance/server/actions";
 import { EmptyState } from "@/components/empty-state";
 import { CalendarDays } from "@/components/icons/eywa-icon-compat";
+import { canDeskMark } from "@/features/attendance/live/mark-state";
+import { groupAdjacentSlots } from "@/features/attendance/live/seating";
 import type { LiveBoard, LiveBoardSlot } from "@/features/attendance/live/types";
 import type { BasicAttendance } from "@/features/class-sheets/lib/mark-cycle";
 
@@ -33,28 +35,34 @@ export function BoardView({ board }: { board: LiveBoard }) {
   }
   return (
     <div className="space-y-6">
-      {board.teachers.map((t) => (
+      {board.teachers.map((t) => {
+        // 이어지는 같은 반(연강)은 한 카드 — 같은 7명이 14:30·15:25 두 장으로 보이던 것.
+        const slots = groupAdjacentSlots(t.slots);
+        const expected = slots.reduce((n, s) => n + s.students.length, 0);
+        const recorded = slots.reduce((n, s) => n + s.recordedCount, 0);
+        return (
         <section key={t.teacherId ?? "none"} className="space-y-2.5">
           <header className="flex flex-wrap items-baseline gap-2">
             <h2 className="text-base font-bold">{t.teacherName}</h2>
             <span
               className={`num rounded-full px-2 py-0.5 text-xs font-bold ${
-                t.recorded >= t.expected ? "bg-primary/10 text-primary" : "bg-amber/15 text-amber-strong"
+                recorded >= expected ? "bg-primary/10 text-primary" : "bg-amber/15 text-amber-strong"
               }`}
             >
-              {t.recorded}/{t.expected}
+              {recorded}/{expected}
             </span>
-            {t.recorded < t.expected && (
-              <span className="text-text-faint text-xs">미입력 {t.expected - t.recorded}명</span>
+            {recorded < expected && (
+              <span className="text-text-faint text-xs">미입력 {expected - recorded}명</span>
             )}
           </header>
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {t.slots.map((slot) => (
+            {slots.map((slot) => (
               <SlotCard key={slot.key} slot={slot} date={board.date} canEdit={board.canEdit} />
             ))}
           </div>
         </section>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -91,8 +99,10 @@ function SlotCard({ slot, date, canEdit }: { slot: LiveBoardSlot; date: string; 
         status,
         // 🔴 화면 축이 아니라 **저장 축**(slot-axis) — 수학에 교시를 실으면 연강 반 시수가 2~3배가 된다.
         slotStart: slot.saveSlot,
+        periodStart: slot.slotStart,
         ...(note !== undefined ? { note } : {}),
         quiet: true,
+        source: "live",
       })
         .then((res) => {
           if ("error" in res) {
@@ -130,6 +140,8 @@ function SlotCard({ slot, date, canEdit }: { slot: LiveBoardSlot; date: string; 
         // 🔴 서버 강제 '빈 칸만' — 낡은 탭이 딴 곳에서 방금 찍힌 결석을 출석으로 뒤집는 것을 막는다.
         fillEmptyOnly: true,
         slotStart: slot.saveSlot,
+        periodStart: slot.slotStart,
+        source: "live",
       })
         .then((res) => {
           if ("error" in res) {
@@ -176,7 +188,11 @@ function SlotCard({ slot, date, canEdit }: { slot: LiveBoardSlot; date: string; 
               //    전화 전에 읽으라고 띄우는데 강사 쪽에서 없애는 셈).
               note={s.note}
               studentName={s.studentName}
-              canMark={canEdit && !busy}
+              canMark={
+                canEdit &&
+                !busy &&
+                (slot.ownedByMe || canDeskMark(statusOf(s.studentId, s.status), slot.phase))
+              }
               onSet={(status, note) => save(s.studentId, status, note)}
               onClear={() => save(s.studentId, null)}
             />
@@ -184,7 +200,7 @@ function SlotCard({ slot, date, canEdit }: { slot: LiveBoardSlot; date: string; 
         ))}
       </ul>
 
-      {canEdit && pending.length > 0 && (
+      {canEdit && slot.ownedByMe && pending.length > 0 && (
         <button
           type="button"
           onClick={fillRest}
