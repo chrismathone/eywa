@@ -7,7 +7,14 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { kstToday } from "@/lib/date-kst";
 import { dutyAllowsSeat } from "../duty";
-import { OPEN_SEAT_KEYS, SEAT_DB_LABEL, ambiguousClassIds, hhmm, type SeatKey } from "../seat";
+import {
+  USABLE_SEAT_KEYS,
+  SEAT_DB_LABEL,
+  ambiguousClassIds,
+  hhmm,
+  isPayrollSeat,
+  type SeatKey,
+} from "../seat";
 import { getSeatDuties } from "./duty";
 import { readSeatPinSession } from "./pin-session";
 import { getPublicSeatDay, getSeatDay } from "./queries";
@@ -25,7 +32,7 @@ type GateOk = { ok: true; userId: string | null; tenantId: string; via: "menu" |
  *   ④ 그날 그 자리 명단(화이트리스트) — 아래 각 액션이 다시 확인한다(#77).
  */
 async function gate(seat: SeatKey, date: string): Promise<GateOk | { error: string }> {
-  if (!(OPEN_SEAT_KEYS as readonly string[]).includes(seat)) {
+  if (!(USABLE_SEAT_KEYS as readonly string[]).includes(seat)) {
     return { error: "이 자리 출석부는 아직 열리지 않았습니다" };
   }
 
@@ -50,6 +57,10 @@ async function gate(seat: SeatKey, date: string): Promise<GateOk | { error: stri
     }
   }
 
+  // 공개 PIN은 자리 시수를 켠 자리만(랩실). JJ실은 로그인 출석부만.
+  if (!isPayrollSeat(seat)) {
+    return { error: user ? "자리 출석부 입력 권한이 없습니다" : "비밀번호를 다시 입력해 주세요" };
+  }
   const pin = await readSeatPinSession();
   if (!pin || pin.seat !== seat) {
     return { error: user ? "자리 출석부 입력 권한이 없습니다" : "비밀번호를 다시 입력해 주세요" };
@@ -153,7 +164,7 @@ export async function fillSeatSlot(input: {
       session_date: input.date,
       slot_start: slot,
       status: input.status,
-      seat_label: SEAT_DB_LABEL[input.seat],
+      seat_label: isPayrollSeat(input.seat) ? SEAT_DB_LABEL[input.seat] : null,
       recorded_by: g.userId,
     })),
   );
@@ -220,7 +231,7 @@ async function writeOne(
       .from("attendance_records")
       .update({
         status: p.status,
-        seat_label: SEAT_DB_LABEL[p.seat],
+        ...(isPayrollSeat(p.seat) ? { seat_label: SEAT_DB_LABEL[p.seat] } : {}),
         recorded_by: p.userId,
         recorded_at: new Date().toISOString(),
       })
@@ -235,7 +246,7 @@ async function writeOne(
     session_date: p.date,
     slot_start: p.slot,
     status: p.status,
-    seat_label: SEAT_DB_LABEL[p.seat],
+    seat_label: isPayrollSeat(p.seat) ? SEAT_DB_LABEL[p.seat] : null,
     recorded_by: p.userId,
   });
   return error ? error.message : 1;

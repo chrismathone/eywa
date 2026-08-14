@@ -12,9 +12,8 @@ import { dutyAllowsSeat } from "@/features/attendance/seat/duty";
 import { getSeatDuties } from "@/features/attendance/seat/server/duty";
 import { getSeatDay } from "@/features/attendance/seat/server/queries";
 import {
-  OPEN_SEAT_KEYS,
-  parseAnySeatKey,
-  parseSeatKey,
+  USABLE_SEAT_KEYS,
+  parseUsableSeatKey,
   pickPeriodIndex,
   SEAT_NAME,
   SEAT_ROOM,
@@ -63,43 +62,8 @@ export default async function SeatAttendancePage({
   const { seat: seatParam } = await params;
   const { date: dateParam, start: startParam } = await searchParams;
 
-  const seat = parseAnySeatKey(seatParam);
+  const seat = parseUsableSeatKey(seatParam);
   if (!seat) notFound();
-  /**
-   * 아직 안 연 자리(JJ실)는 **이름은 보이되 기록은 못 한다** — 강사 드롭다운엔 랩실·JJ실이 나란히
-   * 있어야 하지만(원장 2026-08-14), JJ실을 실제로 열면 기존 484행의 시수 귀속이 바뀐다
-   * (seat.ts `OPEN_SEAT_KEYS` 주석). 그래서 화면은 열되 이유를 적고 명단은 그리지 않는다.
-   */
-  if (!parseSeatKey(seatParam)) {
-    return (
-      <div className="flex h-full min-h-0 flex-col gap-3">
-        <PageHeader
-          eyebrow="출석부"
-          title={`${SEAT_NAME[seat]} ${SEAT_ROOM[seat]}`}
-          description="아직 열지 않은 자리입니다"
-          actions={
-            <Link href="/attendance" className="border-line hover:bg-bg-soft rounded-full border px-2.5 py-0.5 text-xs">
-              출석부로
-            </Link>
-          }
-        />
-        <EmptyState
-          image="students"
-          title={`${SEAT_NAME[seat]} 출석부는 아직 열지 않았습니다`}
-          description="이 자리 수업은 지금 담임 시수로 잡혀 있습니다. 자리 시수로 옮길지 정한 뒤 열면, 그때부터 찍은 기록이 담임 정산에서 빠집니다."
-        />
-        {seat === "jj" ? (
-          <p className="text-text-dim px-1 text-center text-[13px]">
-            305호 출결·듣기 레벨·암기 단어는{" "}
-            <Link href="/ecs?view=room" className="text-primary font-bold underline-offset-2 hover:underline">
-              영어 시트 → 305 · JJ실
-            </Link>
-            에서 찍습니다. 시수 귀속은 그대로입니다.
-          </p>
-        ) : null}
-      </div>
-    );
-  }
 
   // 토글 담당은 메뉴 권한 없이 그 자리만 연다. 없으면 기존 seat_attendance 게이트.
   const user = await getCurrentUser();
@@ -141,9 +105,9 @@ export default async function SeatAttendancePage({
             >
               출석부로
             </Link>
-            {OPEN_SEAT_KEYS.length > 1 ? (
+            {USABLE_SEAT_KEYS.length > 1 ? (
               <div className="bg-bg-soft mr-1 inline-flex rounded-full p-0.5">
-                {OPEN_SEAT_KEYS.map((k) => (
+                {USABLE_SEAT_KEYS.map((k) => (
                   <Link
                     key={k}
                     href={`/attendance/seat/${k}?date=${date}`}
