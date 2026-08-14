@@ -18,6 +18,8 @@ import {
   SEAT_NAME,
   SEAT_ROOM,
 } from "@/features/attendance/seat/seat";
+import { seatHasJjFields } from "@/features/attendance/seat/jj-fields";
+import { attachJjMarks } from "@/features/attendance/seat/server/jj-marks";
 import { SeatBoard } from "./_components/seat-board";
 
 export const metadata: Metadata = { title: "랩실·JJ실 출석부 — eywa" };
@@ -162,7 +164,11 @@ export default async function SeatAttendancePage({
             classIds: p.slots.map((s) => s.classId),
           }))}
           activeStart={period.start}
-          rosters={day.rosterByPeriod[period.start] ?? []}
+          rosters={
+            seatHasJjFields(seat)
+              ? await attachJjMarks(day.rosterByPeriod[period.start] ?? [], user.tenantId, date, period.start)
+              : (day.rosterByPeriod[period.start] ?? [])
+          }
           readOnly={readOnly}
           hrefFor={`/attendance/seat/${seat}?date=${date}&start=`}
         />

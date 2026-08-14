@@ -1,0 +1,62 @@
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import type { SeatClassRoster } from "@/features/attendance/seat/server/queries";
+import { SeatJjTable } from "./seat-jj-table";
+
+afterEach(cleanup);
+
+const roster: SeatClassRoster = {
+  classId: "c1",
+  className: "중등E_초5 의치대",
+  end: "17:00",
+  students: [
+    {
+      id: "s1",
+      name: "이다윤A",
+      school: "칠성초",
+      grade: "4",
+      status: null,
+      recordedBy: null,
+      fromSeat: false,
+      listeningLevel: "L3",
+      memorizedWords: null,
+    },
+  ],
+};
+
+describe("JJ실 출석부 표", () => {
+  it("듣기 레벨·누적 암기 단어수 칸이 있고 시험 점수는 없다", () => {
+    render(
+      <SeatJjTable
+        rosters={[roster]}
+        statusOf={() => null}
+        onSave={vi.fn()}
+        onSaveField={vi.fn()}
+        onFillClass={vi.fn()}
+        readOnly={false}
+        pending={false}
+      />,
+    );
+    expect(screen.getByText("듣기 레벨")).toBeTruthy();
+    expect(screen.getByText("누적 암기 단어수")).toBeTruthy();
+    expect(screen.queryByText("시험 점수")).toBeNull();
+    expect(screen.getByLabelText("이다윤A 듣기 레벨")).toHaveValue("L3");
+  });
+
+  it("칸을 고치면 그 필드만 넘긴다", () => {
+    const onSaveField = vi.fn();
+    render(
+      <SeatJjTable
+        rosters={[roster]}
+        statusOf={() => null}
+        onSave={vi.fn()}
+        onSaveField={onSaveField}
+        onFillClass={vi.fn()}
+        readOnly={false}
+        pending={false}
+      />,
+    );
+    fireEvent.change(screen.getByLabelText("이다윤A 누적 암기 단어수"), { target: { value: "1200" } });
+    expect(onSaveField).toHaveBeenCalledWith("c1", "s1", "memorizedWords", "1200");
+  });
+});
