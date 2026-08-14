@@ -449,16 +449,12 @@ export function buildRichClassCards(slots: GridSlot[], config: PeriodsConfig): R
     // 섞었는데, 그러면 토 14:20(=영어 평일 1교시) 하나가 앵커를 1교시로 끌어내려 **시프트가 0이 됐다**
     // — 그래서 저녁 반(평일 9·10·11교시)의 토요일이 1·2·3교시에 따로 앉아 한 반이 6행을 먹었다.
     let wdStartIdx = Infinity; // 진짜 평일 슬롯의 시작(평일 표 인덱스)
-    let wkOnWeekdayIdx = Infinity; // 평일 표 시각을 그대로 쓰는 주말 슬롯의 시작(평일 표 인덱스)
     let wkOnWeekendIdx = Infinity; // 주말 표에 앉은 주말 슬롯의 시작(주말 표 인덱스)
     for (const { row, weekend: isW, shiftable } of scanned) {
       if (!isW) {
         const i = weekdayIdx.byOrder.get(row.order);
         if (i !== undefined) wdStartIdx = Math.min(wdStartIdx, i);
-      } else if (!shiftable) {
-        const i = weekdayIdx.byOrder.get(row.order);
-        if (i !== undefined) wkOnWeekdayIdx = Math.min(wkOnWeekdayIdx, i);
-      } else {
+      } else if (shiftable) {
         const i = weekendIdx.byOrder.get(row.order);
         if (i !== undefined) wkOnWeekendIdx = Math.min(wkOnWeekendIdx, i);
       }
@@ -472,14 +468,10 @@ export function buildRichClassCards(slots: GridSlot[], config: PeriodsConfig): R
      * **평일 1·2·3교시 시각과 정확히 같았다.** 그래서 `weekdayPeriodRowOrNull`이 그 슬롯을 평일 1교시 행에
      * 앉히고 시프트 대상에서 뺐고(`shiftable=false`), 결과가 한 반에 6행이었다. 이제 그 블록도 통째로 옮긴다.
      *
-     * 이동 폭 = (평일 시작) − (주말 블록의 시작). ⚠️ **위로도 아래로도** 옮긴다 — 예전 `weekendShift`는
-     * `wdStartIdx > wkStartIdx`일 때만 내렸는데, 그 조건은 "주말이 평일보다 이르다"는 가정이라
-     * 오전 평일·오후 주말 조합에선 다시 두 덩어리로 갈라진다.
+     * 놓는 자리 = 평일 시작 행부터 **주말 교시 순번대로**(아래 `liftToWeekday`). ⚠️ **위로도 아래로도**
+     * 옮긴다 — 예전 `weekendShift`는 주말이 평일보다 이를 때만 내렸는데, 그 가정은 오전 평일·오후 주말
+     * 조합에서 다시 두 덩어리로 갈라진다.
      */
-    const weekendShiftOnWeekday =
-      wdStartIdx !== Infinity && wkOnWeekdayIdx !== Infinity ? wdStartIdx - wkOnWeekdayIdx : 0;
-    const weekendShiftOnWeekend =
-      wdStartIdx !== Infinity && wkOnWeekendIdx !== Infinity ? wdStartIdx - wkOnWeekendIdx : 0;
     /**
      * 🔴 **주말 전용 반은 무조건 1교시부터 시작하게 당긴다**(원장 2026-08-11 *"주말 수업은 6행이나 차지하게
      * 두지말고, 그냥 3행으로 처리해 보기 편하게 강제로 … 평일수업에 맞춰서"*).
@@ -494,14 +486,37 @@ export function buildRichClassCards(slots: GridSlot[], config: PeriodsConfig): R
      */
     const weekendSelfShift = !hasWeekday && wkOnWeekendIdx !== Infinity ? -wkOnWeekendIdx : 0;
     const weekendRows = [...weekendIdx.rows];
+    /**
+     * 혼합 반의 주말 블록을 평일 행으로 옮길 때 쓰는 **순번**(그 반의 주말 교시 중 몇 번째인가).
+     *
+     * 🔴 왜 인덱스 간격이 아니라 순번인가(2026-08-14): 예전엔 `평일시작 − 주말시작`만큼 **인덱스를 밀었다**.
+     * 그러면 주말 블록이 평일 표에서 **연속 인덱스일 때만** 맞는다 — 표 중간에 교시가 하나라도 끼면
+     * 간격이 그대로 벌어져 마지막 슬롯이 표 끝을 넘고, `targetRows[k+shift] ?? row`가 **원래 행을 남겨**
+     * 그 칸만 딴 줄에 앉는다(실측: 영어 교시표에 60분 교시 2개를 더하자 고등 주말 3반이 3행→4행).
+     * 순번으로 옮기면 블록이 항상 평일 시작부터 **붙어서** 놓여 밀도 변화에 흔들리지 않는다.
+     * (연속 블록에서는 종전과 결과가 같다 — 기존 토요일 배치는 그대로다.)
+     */
+    const rankByOrder = (orders: number[]) => {
+      const uniq = [...new Set(orders)].sort((a, b) => a - b);
+      return new Map(uniq.map((o, i) => [o, i]));
+    };
+    const weekendRank = rankByOrder(
+      scanned.filter((x) => x.weekend && !x.shiftable).map((x) => x.row.order),
+    );
+    const weekendOnWeekendRank = rankByOrder(
+      scanned.filter((x) => x.weekend && x.shiftable).map((x) => x.row.order),
+    );
+    /** 주말 행 → 평일 표의 (평일 시작 + 순번)번째 행. 못 옮기면 원래 행(정보 유실 금지). */
+    const liftToWeekday = (row: GridPeriodRow, rank: number | undefined) =>
+      wdStartIdx !== Infinity && rank !== undefined ? (weekdayRows[wdStartIdx + rank] ?? row) : row;
 
     for (const { s, day, row, weekend: isW, shiftable } of scanned) {
       // 혼합 반의 주말 슬롯은 **평일 교시 행으로** 옮기고(어느 표에서 왔든), 주말 전용 반은 자기 1교시로 당긴다.
       const eff = !isW
         ? row
         : shiftable
-          ? shiftedWeekendRow(row, weekendIdx, weekdayRows, weekendShiftOnWeekend)
-          : shiftedWeekendRow(row, weekdayIdx, weekdayRows, weekendShiftOnWeekday);
+          ? liftToWeekday(row, weekendOnWeekendRank.get(row.order))
+          : liftToWeekday(row, weekendRank.get(row.order));
       const effWeekend =
         isW && weekendSelfShift !== 0
           ? shiftedWeekendRow(eff, weekendIdx, weekendRows, weekendSelfShift)
