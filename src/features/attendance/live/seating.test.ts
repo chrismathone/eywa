@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { foldSeating, groupAdjacentSlots, isAdjacentSlot, pickClassDayHit, seatingSummary } from "./seating";
+import {
+  foldSeating,
+  groupAdjacentSlots,
+  isAdjacentSlot,
+  pickClassDayHit,
+  seatingSummary,
+  spanAdjacentEnd,
+} from "./seating";
 import type { LiveBoardSlot } from "./types";
 
 const slot = (over: Partial<LiveBoardSlot> & { key: string; slotStart: string }): LiveBoardSlot => ({
@@ -70,7 +77,33 @@ describe("foldSeating", () => {
     ]);
     expect(classes).toHaveLength(1);
     expect(classes[0]?.firstStart).toBe("16:20");
+    expect(classes[0]?.firstEnd).toBe("17:20");
     expect(classes[0]?.students.map((s) => s.studentId)).toEqual(["김철수", "이영희"]);
+  });
+
+  it("이어지는 연강은 끝까지 — BS4F 20:10~21:05 + 21:05~22:00 → 20:10~22:00", () => {
+    const [klass] = foldSeating([
+      slot({
+        key: "p1",
+        classId: "bs4f",
+        className: "고등M 개별 BS4F",
+        subject: "math",
+        slotStart: "20:10",
+        slotEnd: "21:05",
+        saveSlot: null,
+      }),
+      slot({
+        key: "p2",
+        classId: "bs4f",
+        className: "고등M 개별 BS4F",
+        subject: "math",
+        slotStart: "21:05",
+        slotEnd: "22:00",
+        saveSlot: null,
+      }),
+    ]);
+    expect(klass?.firstStart).toBe("20:10");
+    expect(klass?.firstEnd).toBe("22:00");
   });
 
   it("수학 day-level 출석이 있으면 둘째 교시도 출석 — 거짓 미출결이 아니다", () => {
@@ -166,6 +199,17 @@ describe("foldSeating", () => {
     ]);
     expect(klass?.students.find((s) => s.studentId === "김대기")?.mark).toBe("waiting");
     expect(klass?.students.find((s) => s.studentId === "이출석")?.mark).toBe("present");
+  });
+});
+
+describe("spanAdjacentEnd", () => {
+  it("끝이 다음에 닿지 않으면 앞 블록만", () => {
+    expect(
+      spanAdjacentEnd([
+        { slotStart: "10:00", slotEnd: "10:50" },
+        { slotStart: "16:20", slotEnd: "17:10" },
+      ]),
+    ).toBe("10:50");
   });
 });
 

@@ -107,10 +107,10 @@ export function foldSeating(slots: readonly LiveBoardSlot[]): SeatingClass[] {
       classId: first.classId,
       className: first.className,
       subject: first.subject,
-      teacherName: first.teacherName,
+      teacherName: first.teacherName ?? first.slotTeacherLabel,
       roomName: ordered.find((s) => s.roomName)?.roomName ?? first.roomName,
       firstStart: first.slotStart,
-      firstEnd: first.slotEnd,
+      firstEnd: spanAdjacentEnd(ordered),
       periodLabel: first.periodLabel,
       phase: first.phase,
       ownedByMe: first.ownedByMe,
@@ -125,6 +125,25 @@ export function foldSeating(slots: readonly LiveBoardSlot[]): SeatingClass[] {
         : 1,
   );
   return out;
+}
+
+/**
+ * 첫 교시부터 끝이 다음에 닿는 동안의 종료시각.
+ * BS4F 20:10~21:05 + 21:05~22:00 → 22:00. 점심으로 끊기면 앞 블록만.
+ */
+export function spanAdjacentEnd(
+  ordered: readonly { slotStart: string; slotEnd: string | null }[],
+): string | null {
+  const first = ordered[0];
+  if (!first) return null;
+  let end = first.slotEnd;
+  for (let i = 1; i < ordered.length; i++) {
+    const prev = ordered[i - 1]!;
+    const next = ordered[i]!;
+    if (prev.slotEnd == null || prev.slotEnd !== next.slotStart) break;
+    end = next.slotEnd;
+  }
+  return end;
 }
 
 /**

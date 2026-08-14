@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { setAttendanceCell } from "@/features/attendance/server/actions";
-import { canDeskMark, seatMarkOf, SEAT_MARK_BULB, SEAT_MARK_LABEL, shortSeatName } from "../mark-state";
+import { canDeskMark, seatHoverTitle, seatMarkOf, SEAT_MARK_BULB, SEAT_MARK_LABEL } from "../mark-state";
 import type { SeatingClass, SeatingStudent } from "../seating";
 
 const MARKS = [
@@ -66,21 +66,21 @@ export function SeatingCell({
         type="button"
         disabled={busy || !canMark}
         onClick={() => canMark && setOpen((v) => !v)}
-        title={`${student.studentName}${student.schoolGrade ? ` · ${student.schoolGrade}` : ""} · ${SEAT_MARK_LABEL[mark]}`}
-        className={`bg-surface flex min-h-[52px] min-w-[44px] flex-col items-center rounded-t-2xl rounded-b-md px-1 pt-1.5 pb-1 ${
+        title={seatHoverTitle({
+          studentName: student.studentName,
+          schoolGrade: student.schoolGrade,
+          mark,
+          note: student.note,
+        })}
+        className={`bg-surface border-line flex min-h-11 min-w-[5.5rem] items-center gap-1.5 rounded-lg border px-2 py-1.5 ${
           canMark ? "hover:ring-primary/40 cursor-pointer hover:ring-2" : "cursor-default"
         } disabled:opacity-60`}
       >
-        <span
-          className={`mb-1 size-2.5 rounded-full ring-2 ${SEAT_MARK_BULB[mark]}`}
-          aria-hidden
-        />
-        <span className="text-[11px] leading-tight font-bold whitespace-nowrap">
-          {shortSeatName(student.studentName)}
-        </span>
+        <span className={`size-3 shrink-0 rounded-full ${SEAT_MARK_BULB[mark]}`} aria-hidden />
+        <span className="text-left text-[13px] leading-tight font-bold">{student.studentName}</span>
       </button>
       {open && canMark && (
-        <div className="border-line bg-surface absolute top-full left-1/2 z-20 mt-1 flex -translate-x-1/2 gap-0.5 rounded-lg border p-1 shadow-md">
+        <div className="border-line bg-surface absolute top-full left-0 z-20 mt-1 flex gap-0.5 rounded-lg border p-1 shadow-md">
           {MARKS.map((m) => (
             <button
               key={m.status}
