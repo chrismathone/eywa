@@ -36,14 +36,30 @@ export const SEAT_MARK_TONE: Record<SeatMark, string> = {
   waiting: "bg-att-classday text-text-dim",
 };
 
-/** 좌석 위 출석불 — 토큰만. 출석=민트, 결석=빨강, 지각=주황. */
+/** 좌석 위 출석불 — 잉크색으로 출석/결석을 한눈에. */
 export const SEAT_MARK_BULB: Record<SeatMark, string> = {
-  present: "bg-att-present ring-att-present-ink/50",
-  absent: "bg-att-absent ring-att-absent-ink/50",
-  late: "bg-att-late ring-att-late-ink/50",
-  unmarked: "bg-att-outside ring-att-absent-ink/30",
-  waiting: "bg-att-classday ring-line",
+  present: "bg-att-present-ink",
+  absent: "bg-att-absent-ink",
+  late: "bg-att-late-ink",
+  unmarked: "bg-att-outside",
+  waiting: "bg-att-classday ring-1 ring-line",
 };
+
+/** 마우스오버 — 결석이면 사유 메모를 둘째 줄에. */
+export function seatHoverTitle(input: {
+  studentName: string;
+  schoolGrade?: string | null;
+  mark: SeatMark;
+  note?: string | null;
+}): string {
+  const bits = [input.studentName];
+  if (input.schoolGrade) bits.push(input.schoolGrade);
+  bits.push(SEAT_MARK_LABEL[input.mark]);
+  const head = bits.join(" · ");
+  const note = input.note?.trim();
+  if (input.mark === "absent" && note) return `${head}\n${note}`;
+  return head;
+}
 
 /** 그 칸의 표시 상태 — 기록이 있으면 그 값, 없으면 국면으로 대기/미출결. */
 export function seatMarkOf(status: string | null, phase: SlotPhase): SeatMark {

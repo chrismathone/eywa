@@ -4,13 +4,18 @@ import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { fillSeatSlot, setSeatCell, type SeatStatus } from "@/features/attendance/seat/server/actions";
 import { setSeatJjField } from "@/features/attendance/seat/server/mark-actions";
-import type { JjMarkField } from "@/features/attendance/seat/jj-fields";
+import { seatOverlayKey, type JjMarkField } from "@/features/attendance/seat/jj-fields";
 import type { SeatClassRoster } from "@/features/attendance/seat/server/queries";
 import type { SeatKey } from "@/features/attendance/seat/seat";
 
 const DEBOUNCE_MS = 800;
 
 type FieldPatch = Partial<Record<JjMarkField, string | null>>;
+
+function failMessage(res: { error: string } | { ok: true } | null | undefined): string | null {
+  if (!res) return "저장에 실패했습니다";
+  return "error" in res ? res.error : null;
+}
 
 export function useSeatBoardSaves(seat: SeatKey, date: string, activeStart: string) {
   const router = useRouter();
@@ -20,25 +25,31 @@ export function useSeatBoardSaves(seat: SeatKey, date: string, activeStart: stri
   const [error, setError] = useState<string | null>(null);
   const timers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const runs = useRef(new Map<string, () => Promise<void>>());
+  const beforeField = useRef(new Map<string, string | null | undefined>());
 
-  useEffect(() => {
-    const t = timers.current;
-    const r = runs.current;
-    return () => {
-      for (const id of t.values()) clearTimeout(id);
-      t.clear();
-      const pendingRuns = [...r.values()];
-      r.clear();
-      for (const fn of pendingRuns) void fn();
-    };
+  const flushFields = useCallback(() => {
+    for (const id of timers.current.values()) clearTimeout(id);
+    timers.current.clear();
+    const pendingRuns = [...runs.current.values()];
+    runs.current.clear();
+    return Promise.all(pendingRuns.map((fn) => fn()));
   }, []);
 
-  const keyOf = (classId: string, studentId: string) => `${classId}|${studentId}`;
+  useEffect(() => {
+    return () => {
+      void flushFields();
+    };
+  }, [flushFields, seat, date, activeStart]);
+
+  const keyOf = useCallback(
+    (classId: string, studentId: string) => seatOverlayKey(classId, studentId, activeStart),
+    [activeStart],
+  );
 
   const statusOf = useCallback(
     (classId: string, s: SeatClassRoster["students"][number]) =>
       keyOf(classId, s.id) in over ? over[keyOf(classId, s.id)]! : s.status,
-    [over],
+    [keyOf, over],
   );
 
   const mergeFields = useCallback(
@@ -50,7 +61,7 @@ export function useSeatBoardSaves(seat: SeatKey, date: string, activeStart: stri
           return patch ? { ...s, ...patch } : s;
         }),
       })),
-    [fields],
+    [fields, keyOf],
   );
 
   const save = useCallback(
@@ -59,37 +70,44 @@ export function useSeatBoardSaves(seat: SeatKey, date: string, activeStart: stri
       setError(null);
       startTransition(async () => {
         const res = await setSeatCell({ seat, date, slotStart: activeStart, classId, studentId, status: next });
-        if ("error" in res) {
+        const fail = failMessage(res);
+        if (fail) {
           setOver((m) => ({ ...m, [keyOf(classId, studentId)]: prev }));
-          setError(res.error);
+          setError(fail);
         }
       });
     },
-    [activeStart, date, seat],
+    [activeStart, date, keyOf, seat],
   );
 
   const fill = useCallback(
     (status: "present" | "absent", classId?: string) => {
       setError(null);
       startTransition(async () => {
+        await flushFields();
         const res = await fillSeatSlot({ seat, date, slotStart: activeStart, status, classId });
-        if ("error" in res) {
-          setError(res.error);
+        const fail = failMessage(res);
+        if (fail) {
+          setError(fail);
           return;
         }
         setOver({});
         router.refresh();
       });
     },
-    [activeStart, date, router, seat],
+    [activeStart, date, flushFields, router, seat],
   );
 
   const saveField = useCallback(
     (classId: string, studentId: string, field: JjMarkField, value: string) => {
       const key = keyOf(classId, studentId);
-      setFields((m) => ({ ...m, [key]: { ...m[key], [field]: value } }));
+      const snapKey = `${key}|${field}`;
+      setFields((m) => {
+        if (!beforeField.current.has(snapKey)) beforeField.current.set(snapKey, m[key]?.[field]);
+        return { ...m, [key]: { ...m[key], [field]: value } };
+      });
       setError(null);
-      const prev = timers.current.get(`${key}|${field}`);
+      const prev = timers.current.get(snapKey);
       if (prev) clearTimeout(prev);
       const run = async () => {
         const res = await setSeatJjField({
@@ -101,19 +119,31 @@ export function useSeatBoardSaves(seat: SeatKey, date: string, activeStart: stri
           field,
           value,
         });
-        if ("error" in res) setError(res.error);
+        const fail = failMessage(res);
+        if (fail) {
+          const snap = beforeField.current.get(snapKey);
+          setFields((m) => {
+            const next = { ...m[key] };
+            if (snap === undefined) delete next[field];
+            else next[field] = snap;
+            return { ...m, [key]: next };
+          });
+          setError(fail);
+          return;
+        }
+        beforeField.current.delete(snapKey);
       };
-      runs.current.set(`${key}|${field}`, run);
+      runs.current.set(snapKey, run);
       timers.current.set(
-        `${key}|${field}`,
+        snapKey,
         setTimeout(() => {
-          timers.current.delete(`${key}|${field}`);
-          runs.current.delete(`${key}|${field}`);
+          timers.current.delete(snapKey);
+          runs.current.delete(snapKey);
           void run();
         }, DEBOUNCE_MS),
       );
     },
-    [activeStart, date, seat],
+    [activeStart, date, keyOf, seat],
   );
 
   return { pending, error, statusOf, mergeFields, save, fill, saveField };

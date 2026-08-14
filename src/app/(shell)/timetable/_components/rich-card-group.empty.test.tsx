@@ -37,6 +37,17 @@ describe("RichCardGroupBoard — 반이 0개인 줄", () => {
     expect(screen.getByText("맨 뒤")).toBeTruthy(); // 여기가 반을 놓는 자리다
   });
 
+  it("이름을 비운 교시는 시간대를 **한 줄로** 그린다(두 줄로 부풀면 축이 어긋난다)", () => {
+    // 원장 2026-08-14 *"시간 표시하는 열너비 조금만 넓혀서 두줄 안되도록"* — 폭(LABEL_W)과 nowrap이 짝이다.
+    const g: RichCardGroup = {
+      ...emptyGroup,
+      periodRows: [{ order: 860, label: "", time: "14:20~15:00" }],
+    };
+    render(<RichCardGroupBoard group={g} subjectSoftClass="bg-rose-soft" teacherColors={{}} />);
+    const label = screen.getByText("14:20~15:00");
+    expect(label.className).toContain("whitespace-nowrap");
+  });
+
   it("읽기 모드에서도 크래시 없이 그려진다(명단 섹션은 0행이라 안 그린다)", () => {
     const { container } = render(
       <RichCardGroupBoard group={emptyGroup} subjectSoftClass="bg-rose-soft" teacherColors={{}} />,

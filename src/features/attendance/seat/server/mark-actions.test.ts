@@ -19,4 +19,10 @@ describe("JJ 전용 칸 쓰기 가드", () => {
     expect(src).toMatch(/via === "pin"/);
     expect(src).toMatch(/seatHasJjFields/);
   });
+
+  it("동시 입력은 upsert로 받는다(select+insert는 unique 충돌)", () => {
+    expect(src).toMatch(/\.upsert\(/);
+    expect(src).toMatch(/onConflict/);
+    expect(src).not.toMatch(/실패했습니다: \$\{/);
+  });
 });

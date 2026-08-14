@@ -1,6 +1,7 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchInChunks } from "@/lib/supabase/batch";
+import { reportError } from "@/lib/observability/report-error";
 import { hhmm } from "../seat";
 import type { SeatClassRoster } from "./queries";
 
@@ -27,20 +28,27 @@ export async function attachJjMarks(
   if (classIds.length === 0) return rosters;
   const slot = hhmm(slotStart);
   const admin = createAdminClient();
-  const rows = await fetchInChunks<{
+  let rows: {
     class_id: string;
     student_id: string;
     slot_start: string;
     listening_level?: string | null;
     memorized_words?: string | null;
-  }>(classIds, (chunk) =>
-    admin
-      .from("class_sheet_student_marks")
-      .select("class_id, student_id, slot_start, listening_level, memorized_words")
-      .eq("tenant_id", tenantId)
-      .eq("mark_date", date)
-      .in("class_id", chunk),
-  );
+  }[];
+  try {
+    rows = await fetchInChunks(classIds, (chunk) =>
+      admin
+        .from("class_sheet_student_marks")
+        .select("class_id, student_id, slot_start, listening_level, memorized_words")
+        .eq("tenant_id", tenantId)
+        .eq("mark_date", date)
+        .in("class_id", chunk),
+    );
+  } catch (e) {
+    // #95 — 칸 컬럼이 아직 없어도 출결 화면은 살아야 한다.
+    reportError(e, { scope: "attendance.seat.jj-marks", tenantId, date, slot });
+    return rosters;
+  }
   const byKey = new Map<string, SeatJjMark>();
   for (const r of rows) {
     if (hhmm(r.slot_start) !== slot) continue;

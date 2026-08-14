@@ -49,8 +49,8 @@ export function SeatingChart({ board }: { board: LiveBoard }) {
         </p>
         <ul className="ml-auto flex flex-wrap items-center gap-2">
           {LEGEND.map((k) => (
-            <li key={k} className="text-text-dim flex items-center gap-1 text-[11px] font-bold">
-              <span className={`size-2 rounded-full ring-2 ${SEAT_MARK_BULB[k]}`} aria-hidden />
+            <li key={k} className="text-text-dim flex items-center gap-1.5 text-[12px] font-bold">
+              <span className={`size-3 rounded-full ${SEAT_MARK_BULB[k]}`} aria-hidden />
               {SEAT_MARK_LABEL[k]}
             </li>
           ))}
@@ -60,15 +60,15 @@ export function SeatingChart({ board }: { board: LiveBoard }) {
       {floors.map((floor) => (
         <section key={floor.key} className="space-y-4">
           <h2 className="flex flex-wrap items-baseline gap-x-2">
-            <span className="text-sm font-bold">{floor.label}</span>
+            <span className="text-xl font-bold">{floor.label}</span>
             {floor.unmarked > 0 && (
-              <span className="text-att-absent-ink text-xs font-bold">미출결 {floor.unmarked}</span>
+              <span className="text-att-absent-ink text-sm font-bold">미출결 {floor.unmarked}</span>
             )}
           </h2>
           <div className="space-y-4">
             {floor.rooms.map((room) => (
               <div key={room.key} className="space-y-2">
-                <h3 className="text-text-dim text-xs font-bold">{room.roomName}</h3>
+                <h3 className="text-base font-bold">{room.roomName}</h3>
                 <div className="grid items-start gap-3 sm:grid-cols-2 xl:grid-cols-3">
                   {room.classes.map((klass) => (
                     <SeatingRoom key={klass.classId} date={board.date} klass={klass} />

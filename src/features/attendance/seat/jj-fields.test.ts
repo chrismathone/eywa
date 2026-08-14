@@ -5,6 +5,7 @@ import {
   jjSeatTextCols,
   parseJjMarkField,
   seatHasJjFields,
+  seatOverlayKey,
 } from "./jj-fields";
 
 describe("JJ실 전용 칸", () => {
@@ -24,5 +25,10 @@ describe("JJ실 전용 칸", () => {
   it("열 라벨은 ECS JJ 폼과 같다", () => {
     expect(jjSeatTextCols()).toBe(rosterTextCols("selfStudy"));
     expect(jjSeatTextCols().map((c) => c.label)).toEqual(["듣기 레벨", "누적 암기 단어수"]);
+  });
+
+  it("오버레이 키에 교시가 들어간다 — 없으면 다른 교시 값이 묻는다", () => {
+    expect(seatOverlayKey("c1", "s1", "16:20:00")).toBe("c1|s1|16:20");
+    expect(seatOverlayKey("c1", "s1", "16:20")).not.toBe(seatOverlayKey("c1", "s1", "17:20"));
   });
 });

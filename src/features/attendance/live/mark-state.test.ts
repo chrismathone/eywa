@@ -6,6 +6,7 @@ import {
   deskMarkDeniedReason,
   shouldEnforceDeskGate,
   deskWriteDenied,
+  seatHoverTitle,
   isArrivalStatus,
   isUnmarkedToArrival,
   seatMarkOf,
@@ -200,5 +201,25 @@ describe("shortSeatName", () => {
     expect(shortSeatName("김철수")).toBe("김철수");
     expect(shortSeatName("남궁민수")).toBe("남궁민");
     expect(shortSeatName("  Jo  ")).toBe("Jo");
+  });
+});
+
+describe("seatHoverTitle", () => {
+  it("결석이면 사유를 둘째 줄에 붙인다", () => {
+    expect(
+      seatHoverTitle({
+        studentName: "김철수",
+        schoolGrade: "경명여중1",
+        mark: "absent",
+        note: "감기로 결석",
+      }),
+    ).toBe("김철수 · 경명여중1 · 결석\n감기로 결석");
+  });
+
+  it("출석·사유 없는 결석은 한 줄", () => {
+    expect(seatHoverTitle({ studentName: "이영희", mark: "present", note: "감기로 결석" })).toBe(
+      "이영희 · 출석",
+    );
+    expect(seatHoverTitle({ studentName: "박민수", mark: "absent", note: "  " })).toBe("박민수 · 결석");
   });
 });

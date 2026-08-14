@@ -84,6 +84,7 @@ export default async function PublicSeatPage({
         <EmptyState image="students" title={`오늘은 ${SEAT_NAME[seat]} 수업이 없습니다`} />
       ) : (
         <SeatBoard
+          key={`${seat}|${date}|${period.start}`}
           seat={seat}
           date={date}
           periods={day.periods.map((p) => ({
