@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getTenantSettingsByTenantId } from "@/features/owner/server/queries";
 import { resolveKakaoChannel, sendAttendanceNotification } from "@/lib/messaging/provider";
 import { notifyIfClassAttendanceComplete } from "../../server/complete-notify";
+import { isMissingViaColumn } from "../../live/server/write-policy";
 import {
   classesInWindow,
   decideCheckinAction,
@@ -112,7 +113,9 @@ async function reflectPresent(
     .maybeSingle();
   if (existing) return null;
 
-  const { error } = await admin.from("attendance_records").insert({
+  // 🔴 0212a(recorded_via)가 아직 안 걸린 DB에서도 출결은 남아야 한다(#95) —
+  //    여기 실패는 `return null`로 삼켜지므로, 폴백이 없으면 **조용히** 출결이 안 찍힌다.
+  const row: Record<string, unknown> = {
     tenant_id: tenantId,
     class_id: classId,
     student_id: studentId,
@@ -121,7 +124,14 @@ async function reflectPresent(
     access_method: "kiosk",
     recorded_by: null,
     recorded_via: "kiosk",
-  });
+  };
+  const first = await admin.from("attendance_records").insert(row);
+  let error = first.error;
+  if (error && isMissingViaColumn(error.message)) {
+    const rest = { ...row };
+    delete rest.recorded_via;
+    error = (await admin.from("attendance_records").insert(rest)).error;
+  }
   if (error) return null; // best-effort — 실패해도 등하원/발송은 그대로
   // G4: 이 삽입이 (반,날짜) 완료 전이일 수 있음 — 키오스크 완결도 벨(적대 리뷰: 미훅 갭). actorId=null(시스템 이벤트).
   after(() => notifyIfClassAttendanceComplete({ tenantId, classId, date, actorId: null }));
