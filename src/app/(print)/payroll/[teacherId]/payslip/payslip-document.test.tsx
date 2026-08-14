@@ -60,8 +60,12 @@ describe("급여명세서 문서", () => {
     // 수업료 총액 · 지급총액 두 칸에 같은 값이 찍힌다(인센티브 0)
     expect(screen.getAllByText("₩3,181,049")).toHaveLength(2);
     expect(screen.getByText("₩3,076,074")).toBeTruthy(); // 실수령액
-    // 소득세 3.3% · 공제총액 두 칸(기타공제 0이라 같은 값)
-    expect(screen.getAllByText("₩104,975")).toHaveLength(2);
+    // 🔑 공제는 시트처럼 **소득세 3% / 지방세 0.3%로 나눠** 찍는다(원장 2026-08-14).
+    //    기타공제가 0이라 공제총액(₩104,975)은 원천징수 합계와 같고, 그 아래 두 칸이 그 분해다.
+    const a = computePayslipAmounts({ tuition: 3_181_049 });
+    expect(screen.getByText(`₩${a.incomeTax.toLocaleString()}`)).toBeTruthy(); // 소득세 3%
+    expect(screen.getByText(`₩${a.localTax.toLocaleString()}`)).toBeTruthy(); // 지방세 0.3%
+    expect(screen.getAllByText("₩104,975")).toHaveLength(1); // 공제총액(기타공제 0)
     expect(screen.getByText("132T")).toBeTruthy();
   });
 
@@ -80,8 +84,9 @@ describe("급여명세서 문서", () => {
         })}
       />,
     );
-    // 수업료·소득세·지급총액·공제총액·실수령액·총 시수 = 6칸
-    expect(screen.getAllByText("산정 불가")).toHaveLength(6);
+    // 수업료·소득세 3%·지방세 0.3%·지급총액·공제총액·실수령액·총 시수 = 7칸
+    // (2026-08-14 소득세를 3%/0.3% 두 줄로 나누면서 6 → 7. 하나라도 빠지면 ₩0이 찍혀 거짓 명세서가 된다.)
+    expect(screen.getAllByText("산정 불가")).toHaveLength(7);
     expect(screen.queryByText("₩0")).toBeNull();
     expect(screen.queryByText("0T")).toBeNull();
   });
@@ -201,5 +206,26 @@ describe("퇴원 항목은 내부 자료 — 인쇄 제외", () => {
     render(<PayslipDocument data={makeData()} />);
     expect(screen.getByText("담당자")).toBeTruthy();
     expect(screen.getByText("대표")).toBeTruthy();
+  });
+});
+
+/**
+ * 🔴 원장 시트대로 소득세를 `3%` / `지방세 0.3%` 두 줄로 나눴다(2026-08-14). 표기만 나눈 것이고
+ *    **계산은 그대로**다 — `withholding`(3.3%)이 진실이고 `localTax = withholding − incomeTax`라
+ *    합이 구조적으로 어긋나지 않는다. 3%와 0.3%를 각각 반올림하면 1원이 새는 구간이 생기는데,
+ *    그 함정을 다시 밟지 않도록 여기서 잠근다.
+ */
+describe("소득세 3% + 지방세 0.3% = 원천징수(3.3%)", () => {
+  it.each([3_181_049, 3_160_062, 937_418, 4_649_941, 1, 0])("%i원에서 합이 어긋나지 않는다", (tuition) => {
+    const a = computePayslipAmounts({ tuition });
+    expect(a.incomeTax + a.localTax).toBe(a.withholding);
+    expect(a.localTax).toBeGreaterThanOrEqual(0);
+  });
+
+  it("두 칸이 화면에 각각 찍힌다(합쳐서 한 줄로 되돌리지 말 것)", () => {
+    render(<PayslipDocument data={makeData()} />);
+    expect(screen.getByText("소득세 3%")).toBeTruthy();
+    expect(screen.getByText("지방세 0.3%")).toBeTruthy();
+    expect(screen.queryByText("소득세 3.3%")).toBeNull();
   });
 });

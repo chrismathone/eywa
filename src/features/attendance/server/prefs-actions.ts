@@ -85,6 +85,16 @@ export async function saveAttendancePeriodMode(
 }
 
 /**
+ * 퇴직자 숨김만 저장 — 접힌 반·정렬·날짜축은 건드리지 않는다.
+ * ⚠️ 이건 **강사 선택지의 표시 렌즈**다. 반·출결·집계는 이 값을 읽지 않는다(감춘다고 기록이 빠지지 않는다).
+ */
+export async function saveAttendanceHideRetired(
+  hideRetired: boolean,
+): Promise<{ ok: boolean; error?: string }> {
+  return mergeAttendancePrefs((prev) => ({ ...prev, hideRetired: hideRetired !== false }));
+}
+
+/**
  * `ui_prefs.attendance`를 **필드 단위로** 갱신 — 읽고 → 고칠 필드만 바꿔 → 되쓴다.
  * ⚠️ 형제 키(ecs·timetable·onescreen…)는 물론 **같은 attendance 안의 다른 필드도** 보존한다.
  *    화면마다 통째로 덮으면 마지막에 저장한 쪽이 나머지를 되돌린다.

@@ -99,6 +99,10 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: "/onescreen", label: "선생님 원스크린", icon: MENU_ICON.teacher_onescreen, menuKey: "teacher_onescreen" },
       { href: "/timetable", label: "시간표", icon: MENU_ICON.timetable, menuKey: "timetable" },
       { href: "/attendance", label: "출석부", icon: MENU_ICON.attendance, menuKey: "attendance" },
+      // 🔴 자리 출석부(랩실·JJ실)는 **사이드바 항목이 아니다**(원장 2026-08-14: "따로 빼지말고").
+      //    출석부 안 강사 드롭다운에서 [선생님] / [LAB·JJ] / [퇴직] 그룹으로 고른다 — 자리는 메뉴가
+      //    아니라 **강사 축의 한 갈래**다. 라우트(/attendance/seat/*)와 권한 키는 그대로 있고
+      //    진입만 그 드롭다운으로 좁힌다.
       // English Class Sheet(ECS) — 영어 반별 주간 수업계획서/출석부(구글시트 이식). 라벨은 원장 확정 명칭.
       // subOf: 사이드바에선 시간표 하위 카테고리로 표시(원장 지시 2026-07-29). 팰릿·모바일내비엔 그대로 노출.
       { href: "/ecs", label: "영어 강사 시트", icon: MENU_ICON.ecs, menuKey: "ecs", subOf: "timetable" },

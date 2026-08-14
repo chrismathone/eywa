@@ -43,3 +43,23 @@ describe("periodMode — 날짜축 보기 설정", () => {
     expect(p.collapsed).toEqual(["c1"]);
   });
 });
+
+describe("hideRetired — 퇴직 담임 숨김(원장 2026-08-14)", () => {
+  it("저장된 적 없으면 켜짐(기본 숨김)", () => {
+    expect(parseAttendanceViewPrefs({}).hideRetired).toBe(true);
+    expect(parseAttendanceViewPrefs(undefined).hideRetired).toBe(true);
+    expect(DEFAULT_ATTENDANCE_PREFS.hideRetired).toBe(true);
+  });
+
+  it("명시적 false를 저장한 계정만 퇴직자를 본다", () => {
+    expect(parseAttendanceViewPrefs({ hideRetired: false }).hideRetired).toBe(false);
+    expect(parseAttendanceViewPrefs({ hideRetired: true }).hideRetired).toBe(true);
+  });
+
+  it("쓰레기 값은 기본(숨김)으로 흡수하고 형제 설정은 보존한다", () => {
+    const p = parseAttendanceViewPrefs({ hideRetired: "아니오", sort: "name", collapsed: ["c1"] });
+    expect(p.hideRetired).toBe(true);
+    expect(p.sort).toBe("name");
+    expect(p.collapsed).toEqual(["c1"]);
+  });
+});

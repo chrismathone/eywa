@@ -24,6 +24,15 @@ export type AttendanceViewPrefs = {
    * ⚠️ 이건 **표시 렌즈일 뿐**이다. 청구·시수검증·급여는 이 설정을 읽지 않는다(저장되는 진실은 하나).
    */
   periodMode: PeriodMode;
+  /**
+   * 퇴직 담임을 **강사 선택지·요약 허브에서 감춘다**(원장 2026-08-14 "퇴직자 출석부 숨기기").
+   * 기본 켜짐 — 매일 여는 화면에서 안 쓰는 이름이 목록 절반을 먹고 있었다.
+   *
+   * ⚠️ 감추는 건 **강사 축**뿐이다. 그 반 자체는 반 드롭다운에 그대로 남는다 — 담임이 퇴직해도
+   *    재원생은 계속 다니므로 반을 감추면 출석을 찍을 길이 사라진다(page.tsx의 기존 주석과 같은 이유).
+   * ⚠️ 감춘 인원은 **숫자로 알린다**(칩에 "퇴직 N"). 조용히 사라지면 "강사가 없어졌다"가 된다.
+   */
+  hideRetired: boolean;
 };
 
 export type PeriodMode = "session" | "month";
@@ -32,6 +41,7 @@ export const DEFAULT_ATTENDANCE_PREFS: AttendanceViewPrefs = {
   collapsed: [],
   sort: "class",
   periodMode: "session",
+  hideRetired: true,
 };
 
 export function parsePeriodMode(raw: unknown): PeriodMode {
@@ -52,5 +62,7 @@ export function parseAttendanceViewPrefs(raw: unknown): AttendanceViewPrefs {
     collapsed: [...new Set(ids)].slice(0, MAX_COLLAPSED),
     sort: parseAttendanceSortKey(o.sort),
     periodMode: parsePeriodMode(o.periodMode),
+    // 저장된 적 없으면(undefined) 기본 켜짐. 명시적으로 false를 저장한 계정만 퇴직자를 본다.
+    hideRetired: o.hideRetired === false ? false : true,
   };
 }
