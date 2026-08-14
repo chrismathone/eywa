@@ -89,7 +89,8 @@ function SlotCard({ slot, date, canEdit }: { slot: LiveBoardSlot; date: string; 
         classId: slot.classId,
         sessionDate: date,
         status,
-        slotStart: slot.slotStart,
+        // 🔴 화면 축이 아니라 **저장 축**(slot-axis) — 수학에 교시를 실으면 연강 반 시수가 2~3배가 된다.
+        slotStart: slot.saveSlot,
         ...(note !== undefined ? { note } : {}),
         quiet: true,
       })
@@ -128,7 +129,7 @@ function SlotCard({ slot, date, canEdit }: { slot: LiveBoardSlot; date: string; 
         cells: ids.map((id) => ({ studentId: id, classId: slot.classId })),
         // 🔴 서버 강제 '빈 칸만' — 낡은 탭이 딴 곳에서 방금 찍힌 결석을 출석으로 뒤집는 것을 막는다.
         fillEmptyOnly: true,
-        slotStart: slot.slotStart,
+        slotStart: slot.saveSlot,
       })
         .then((res) => {
           if ("error" in res) {

@@ -14,7 +14,8 @@ import { accessLevelTenant } from "@/lib/auth/perm-matrix";
 import { getTeachingClasses } from "@/features/classes/server/delegation";
 import { effectiveTeacherId } from "@/lib/auth/view-mode";
 import { fetchInChunks } from "@/lib/supabase/batch";
-import { kstMinutesOfDay, kstToday } from "@/lib/date-kst";
+import { addDays, kstMinutesOfDay, kstToday } from "@/lib/date-kst";
+import { isWithinAttendanceEditWindow } from "@/features/attendance/edit-window";
 import { hhmmToMin, shouldQueue, slotPhase, type SlotPhase } from "../signals";
 import { buildQueue, type DeskQueue, type FollowupBrief, type QueueClass, type QueueStudent } from "../queue";
 import { loadLiveSlots } from "./load";
@@ -70,8 +71,22 @@ export const getLiveBoard = cache(async (date: string = kstToday()): Promise<Liv
   const scopedTeacherId = level === "scoped" ? ((await effectiveTeacherId()) ?? user.id) : null;
   let classIds: string[] | undefined;
   if (scopedTeacherId) {
-    const teaching = await getTeachingClasses(supabase, scopedTeacherId, date);
-    classIds = teaching.map((c) => c.id);
+    // 🔴 담임(`classes.teacher_id`)만 보면 **부담임이 자기 화면에서 아무것도 못 본다.** 영어는 슬롯마다
+    //    담당이 따로 붙는 편성이 흔해서(실측 2026-08-14: 오늘 담당 교시 4개인데 담임 반은 0개인 강사가
+    //    실재), 그 강사에겐 보드도 스트립도 영영 비어 있는데 **데스크 레인 A는 그에게 전화하라고 한다.**
+    //    ECS 접근 규약이 이미 `class_schedules.teacher_id`를 포함하므로(원장 2026-07-29 승인) 같은 축으로 맞춘다.
+    const [teaching, slotRes] = await Promise.all([
+      getTeachingClasses(supabase, scopedTeacherId, date),
+      supabase
+        .from("class_schedules")
+        .select("class_id")
+        .eq("teacher_id", scopedTeacherId)
+        .lte("valid_from", date)
+        .or(`valid_to.is.null,valid_to.gte.${date}`),
+    ]);
+    classIds = [
+      ...new Set([...teaching.map((c) => c.id), ...(slotRes.data ?? []).map((r) => r.class_id as string)]),
+    ];
     if (classIds.length === 0) {
       return { ...empty, scopedToSelf: true, canEdit: level === "scoped" || level === "full" };
     }
@@ -120,7 +135,10 @@ export const getLiveBoard = cache(async (date: string = kstToday()): Promise<Liv
     isToday,
     teachers,
     scopedToSelf: !!scopedTeacherId,
-    canEdit: level === "full" || level === "scoped",
+    // ⚠️ 강사(scoped)는 7일 지난 출결을 못 고친다(원장 2026-07-21) — 화면이 그 사실을 **먼저** 반영해야
+    //    한다. 안 그러면 '이전날'로 8일 전에 간 강사에게 알약이 눌리는 것처럼 보이고 서버만 거절한다(#103 계열).
+    canEdit:
+      level === "full" || (level === "scoped" && isWithinAttendanceEditWindow(date, kstToday())),
     totals: {
       expected: teachers.reduce((n, t) => n + t.expected, 0),
       recorded: teachers.reduce((n, t) => n + t.recorded, 0),
@@ -141,8 +159,12 @@ export async function getDeskQueue(date: string = kstToday()): Promise<DeskQueue
   if (!user) return blank;
   if ((await accessLevelTenant(user.systemRole, "attendance")) === "none") return blank;
 
-  const board = await getLiveBoard(date);
-  const followups = await loadFollowups(date);
+  // 조치 기록과 '입력 요청 보냄' 이력은 서로 독립이라 병렬(B4).
+  const [board, followups, requested] = await Promise.all([
+    getLiveBoard(date),
+    loadFollowups(date),
+    loadInputRequests(date),
+  ]);
 
   const students: QueueStudent[] = [];
   const classes: QueueClass[] = [];
@@ -163,6 +185,8 @@ export async function getDeskQueue(date: string = kstToday()): Promise<DeskQueue
           slotTeacherLabel: slot.slotTeacherLabel,
           expected: slot.students.length,
           phase: slot.phase,
+          // 이미 요청을 보냈나 — 없으면 데스크 3명이 같은 강사에게 두세 번 전화한다(적대 리뷰 S4).
+          requested: requested.has(`${slot.classId}|${slot.saveSlot ?? ""}`),
         });
       }
       for (const s of slot.students) {
@@ -177,6 +201,7 @@ export async function getDeskQueue(date: string = kstToday()): Promise<DeskQueue
           classId: slot.classId,
           className: slot.className,
           slotStart: slot.slotStart,
+          saveSlot: slot.saveSlot,
           teacherName: teacher.teacherName,
           signal: s.signal,
           phase: slot.phase,
@@ -184,7 +209,8 @@ export async function getDeskQueue(date: string = kstToday()): Promise<DeskQueue
           parentPhone: s.parentPhone,
           studentPhone: s.studentPhone,
           // 교시별 기록이 먼저, 없으면 "그날 전체"로 남긴 조치(교시 없이 저장된 세대).
-          followup: followups.get(`${s.studentId}|${slot.slotStart}`) ?? followups.get(`${s.studentId}|`) ?? null,
+          followup:
+            followups.get(`${s.studentId}|${slot.saveSlot ?? ""}`) ?? followups.get(`${s.studentId}|`) ?? null,
         });
       }
     }
@@ -197,7 +223,7 @@ async function loadFollowups(date: string): Promise<Map<string, FollowupBrief>> 
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("attendance_followups")
-    .select("id, student_id, slot_start, state, outcome, note, handled_at, handler:handled_by ( display_name )")
+    .select("id, student_id, slot_start, state, signal, outcome, note, handled_at, handler:handled_by ( display_name )")
     .eq("session_date", date);
   // 표가 아직 없거나(마이그레이션 미적용) 조회가 실패해도 **화면은 살아야 한다** — 큐는 파생이라
   // 조치 기록이 없으면 "아직 아무도 안 만졌다"로 보이는 게 맞다(#95: 옛 스키마에서도 도는 배포).
@@ -210,6 +236,7 @@ async function loadFollowups(date: string): Promise<Map<string, FollowupBrief>> 
     const brief: FollowupBrief = {
       id: row.id as string,
       state: row.state as string,
+      signal: (row.signal as string) ?? null,
       outcome: (row.outcome as string) ?? null,
       note: (row.note as string) ?? null,
       handledByName: handler?.display_name ?? null,
@@ -220,4 +247,50 @@ async function loadFollowups(date: string): Promise<Map<string, FollowupBrief>> 
     if (!slot) out.set(`${row.student_id}|`, brief);
   }
   return out;
+}
+
+/**
+ * 그날 이미 보낸 '출결 입력 요청' — 키는 `${classId}|${slot}`.
+ * `notification_events`가 dedup 원장이라 그걸 그대로 읽는다(요청 이력을 위한 별도 표를 만들지 않는다).
+ */
+async function loadInputRequests(date: string): Promise<Set<string>> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("notification_events")
+    .select("subject_key, bucket")
+    .eq("event_type", "attendance_input_request")
+    .like("bucket", `${date}|%`);
+  if (error || !data) return new Set();
+  return new Set(data.map((r) => `${r.subject_key}|${String(r.bucket).slice(date.length + 1)}`));
+}
+
+/**
+ * 어제 남은 **미처리 결석** 건수 — 데스크 화면 상단 배너용(#105: 조치 목록이 하루 경계에서 증발 방지).
+ *
+ * 🔑 어제 보드를 통째로 다시 적재하지 않는다(비싸다). 가장 확실한 신호인 **결석**만, 그것도
+ *    "조치 기록이 없는 학생 수"로 센다 — 미확인까지 세면 숫자가 커져 배너가 무시된다.
+ */
+export async function getCarryOverAbsences(
+  date: string,
+): Promise<{ date: string; count: number } | null> {
+  const user = await getCurrentUser();
+  if (!user) return null;
+  if ((await accessLevelTenant(user.systemRole, "attendance")) !== "full") return null;
+  const prev = addDays(date, -1);
+  const supabase = await createClient();
+  const [absRes, fuRes] = await Promise.all([
+    supabase.from("attendance_records").select("student_id").eq("session_date", prev).eq("status", "absent"),
+    supabase.from("attendance_followups").select("student_id, state").eq("session_date", prev),
+  ]);
+  if (absRes.error) return null;
+  // 조치 표가 아직 없으면(마이그레이션 미적용) 조치는 0건으로 본다 — 화면은 살아야 한다(#95).
+  const settled = new Set(
+    (fuRes.data ?? [])
+      .filter((r) => r.state === "resolved" || r.state === "dismissed")
+      .map((r) => r.student_id as string),
+  );
+  const pending = new Set(
+    (absRes.data ?? []).map((r) => r.student_id as string).filter((id) => !settled.has(id)),
+  );
+  return pending.size > 0 ? { date: prev, count: pending.size } : null;
 }

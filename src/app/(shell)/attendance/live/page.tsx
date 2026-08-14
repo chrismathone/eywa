@@ -6,8 +6,9 @@ import { requireAccess } from "@/lib/auth/require-access";
 import { accessLevelTenant } from "@/lib/auth/perm-matrix";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { addDays, formatKoreanDate, kstToday } from "@/lib/date-kst";
-import { getDeskQueue, getLiveBoard } from "@/features/attendance/live/server/queries";
+import { getCarryOverAbsences, getDeskQueue, getLiveBoard } from "@/features/attendance/live/server/queries";
 import { holidayNameOf } from "@/features/attendance/live/server/load";
+import type { LiveBoard } from "@/features/attendance/live/types";
 import { BoardView } from "./_components/board-view";
 import { DeskView } from "./_components/desk-view";
 import { LiveRefresher } from "./_components/live-refresher";
@@ -32,15 +33,19 @@ export default async function AttendanceLivePage({
   const sp = await searchParams;
   const user = await getCurrentUser();
   const level = await accessLevelTenant(user?.systemRole ?? "viewer", "attendance");
-  const isDesk = level === "full" || level === "readonly"; // 사무실·회계·뷰어 = 전체 시야
+  // 🔴 데스크 큐는 **full만**(사무실). readonly(뷰어·회계)는 조치를 남길 수 없는데(canWriteTenant 거절)
+  //    큐를 열면 전 학생 학부모 연락처만 새로 보이게 된다 — 볼 수 있는 것과 할 수 있는 것을 맞춘다.
+  //    ⚠️ 유일한 출결 알림 수신자가 뷰어라 벨은 받는데 큐는 못 여는 상태가 될 수 있다(운영 조건 참조).
+  const isDesk = level === "full";
   const today = kstToday();
   const date = /^\d{4}-\d{2}-\d{2}$/.test(sp.date ?? "") && sp.date! <= today ? sp.date! : today;
   const tab = sp.tab === "desk" && isDesk ? "desk" : "board";
 
   const holiday = await holidayNameOf(date);
-  const [board, queue] = await Promise.all([
+  const [board, queue, carryOver] = await Promise.all([
     holiday ? null : getLiveBoard(date),
     holiday || !isDesk ? null : getDeskQueue(date),
+    holiday || !isDesk || tab !== "desk" ? null : getCarryOverAbsences(date),
   ]);
 
   const pending = queue ? queue.counts.students + queue.counts.classes : 0;
@@ -81,9 +86,11 @@ export default async function AttendanceLivePage({
           )}
 
           {tab === "desk" && queue ? (
-            <DeskView queue={queue} date={date} />
+            <DeskView queue={queue} date={date} canEdit={board?.canEdit ?? false} carryOver={carryOver} />
           ) : (
-            <BoardView board={board!} />
+            // ⚠️ 보드는 전화번호를 하나도 그리지 않는다 — RSC 페이로드에 전교생 학부모 번호를 실어
+            //    보낼 이유가 없어 여기서 떨어뜨린다(데스크 큐만 연락처가 필요하다).
+            <BoardView board={stripContacts(board!)} />
           )}
 
           {/* 화면이 열려 있는 동안만, 20초마다 서버 카운트를 확인해 바뀌었을 때만 다시 그린다(폴링 규약).
@@ -141,4 +148,19 @@ function TabLink({
       )}
     </Link>
   );
+}
+
+/** 보드로 내려보낼 때 연락처를 지운다 — 화면이 안 쓰는 개인정보를 클라 페이로드에 남기지 않는다. */
+function stripContacts(board: LiveBoard): LiveBoard {
+  return {
+    ...board,
+    teachers: board.teachers.map((t) => ({
+      ...t,
+      teacherPhone: null,
+      slots: t.slots.map((s) => ({
+        ...s,
+        students: s.students.map((st) => ({ ...st, parentPhone: null, studentPhone: null })),
+      })),
+    })),
+  };
 }

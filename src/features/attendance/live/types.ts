@@ -32,7 +32,13 @@ export type LiveSlot = {
   classId: string;
   className: string;
   subject: string;
-  slotStart: string; // "HH:MM"
+  slotStart: string; // "HH:MM" — 화면 표시·큐 앵커
+  /**
+   * **저장에 실을 교시 값**(`slot-axis.ts`) — per-slot 과목(영어)만 값이 있고 나머지는 `null`.
+   * 🔴 화면 축(`slotStart`)과 저장 축을 반드시 구분할 것. 수학은 하루 한 행이 규약이라 교시를 실으면
+   *    연강 반의 시수·회차가 2~3배가 된다(실측: 오늘 수학 19반 중 17반이 2~3교시).
+   */
+  saveSlot: string | null;
   slotEnd: string | null;
   periodLabel: string | null;
   teacherId: string | null;

@@ -17,17 +17,52 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle2 } from "@/components/icons/eywa-icon-compat";
 import { EmptyState } from "@/components/empty-state";
-import { recordFollowup } from "@/features/attendance/live/server/actions";
+import { recordFollowup, requestAttendanceInput } from "@/features/attendance/live/server/actions";
 import { setAttendanceCell } from "@/features/attendance/server/actions";
-import { FOLLOWUP_OUTCOMES, OUTCOME_LABEL, suggestedStatus, type DeskQueue, type QueueStudent } from "@/features/attendance/live/queue";
+import {
+  FOLLOWUP_OUTCOMES,
+  OUTCOME_LABEL,
+  suggestedStatus,
+  type DeskQueue,
+  type QueueClass,
+  type QueueStudent,
+} from "@/features/attendance/live/queue";
 import { SIGNAL_HINT, SIGNAL_LABEL } from "@/features/attendance/live/signals";
 
-export function DeskView({ queue, date }: { queue: DeskQueue; date: string }) {
+export function DeskView({
+  queue,
+  date,
+  canEdit,
+  carryOver,
+}: {
+  queue: DeskQueue;
+  date: string;
+  /**
+   * 조치를 남길 수 있는가(출결 쓰기 권한). 🔴 `readonly` 역할(뷰어·회계)에게 '확인 기록' 버튼을
+   * 보여주면 눌러도 서버가 거절만 한다 — 할 수 없는 일을 할 수 있는 것처럼 보이지 않는다(원스크린
+   * 알약이 같은 이유로 권한 없으면 버튼을 아예 안 내보낸다). 전화번호·큐는 그대로 보인다(열람은 정상).
+   */
+  canEdit: boolean;
+  /**
+   * 어제 남은 **미처리 결석** 건수(0이면 표시 안 함).
+   * 🔴 이 화면 기본이 '오늘'이라, 21~22시 수업분은 데스크 퇴근 뒤에 생기고 다음 날 아침엔 통째로
+   *    안 보인다 — 조치가 필요한 목록에 짧은 시간창을 걸면 고치기도 전에 사라진다(#105).
+   */
+  carryOver: { date: string; count: number } | null;
+}) {
   const empty = queue.counts.classes === 0 && queue.counts.students === 0;
   const absentRows = queue.lanes.students.filter((s) => s.signal === "absent");
   const unmarkedRows = queue.lanes.students.filter((s) => s.signal !== "absent");
   return (
     <div className="space-y-6">
+      {carryOver && carryOver.count > 0 && (
+        <a
+          href={`/attendance/live?tab=desk&date=${carryOver.date}`}
+          className="border-amber/40 bg-amber/5 text-amber-strong block rounded-2xl border px-3 py-2 text-sm font-semibold"
+        >
+          어제 확인하지 못한 결석 <span className="num">{carryOver.count}</span>건이 남아 있습니다 — 보기
+        </a>
+      )}
       {empty && queue.counts.done === 0 ? (
         <EmptyState
           icon={CheckCircle2}
@@ -46,19 +81,7 @@ export function DeskView({ queue, date }: { queue: DeskQueue; date: string }) {
           </h2>
           <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
             {queue.lanes.classes.map((c) => (
-              <div
-                key={`${c.classId}@${c.slotStart}`}
-                className="border-line bg-surface flex items-center justify-between gap-2 rounded-2xl border p-3"
-              >
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-bold">{c.className}</p>
-                  <p className="text-text-dim num text-xs">
-                    {c.slotStart} · {c.slotTeacherLabel ?? c.teacherName ?? "담당 미지정"} · 예정{" "}
-                    {c.expected}명
-                  </p>
-                </div>
-                <CallButton phone={c.teacherPhone} label="강사" />
-              </div>
+              <ClassCard key={`${c.classId}@${c.slotStart}`} row={c} date={date} canEdit={canEdit} />
             ))}
           </div>
         </section>
@@ -77,7 +100,7 @@ export function DeskView({ queue, date }: { queue: DeskQueue; date: string }) {
           </h2>
           <div className="grid gap-2 lg:grid-cols-2">
             {absentRows.map((s) => (
-              <StudentCard key={`${s.studentId}@${s.slotStart}`} row={s} date={date} />
+              <StudentCard key={`${s.studentId}@${s.slotStart}`} row={s} date={date} canEdit={canEdit} />
             ))}
           </div>
         </section>
@@ -94,7 +117,7 @@ export function DeskView({ queue, date }: { queue: DeskQueue; date: string }) {
           </h2>
           <div className="grid gap-2 lg:grid-cols-2">
             {unmarkedRows.map((s) => (
-              <StudentCard key={`${s.studentId}@${s.slotStart}`} row={s} date={date} />
+              <StudentCard key={`${s.studentId}@${s.slotStart}`} row={s} date={date} canEdit={canEdit} />
             ))}
           </div>
         </section>
@@ -112,8 +135,20 @@ export function DeskView({ queue, date }: { queue: DeskQueue; date: string }) {
                 <span className="text-text-faint num text-xs">
                   {s.className} · {s.slotStart}
                 </span>
-                <span className="bg-bg-soft text-text-dim ml-auto rounded-full px-2 py-0.5 text-xs">
-                  {s.followup?.outcome ? (OUTCOME_LABEL[s.followup.outcome] ?? s.followup.outcome) : "확인 완료"}
+                {/* ⚠️ '확인 불필요'(dismissed)를 '확인 완료'로 뭉치면 남용 비용이 안 보인다 —
+                    한 주면 "일단 내리고 보자"가 정착하고 그때부터 결석을 놓치기 시작한다. */}
+                <span
+                  className={`ml-auto rounded-full px-2 py-0.5 text-xs ${
+                    s.followup?.state === "dismissed"
+                      ? "bg-amber/15 text-amber-strong"
+                      : "bg-bg-soft text-text-dim"
+                  }`}
+                >
+                  {s.followup?.state === "dismissed"
+                    ? "확인 불필요"
+                    : s.followup?.outcome
+                      ? (OUTCOME_LABEL[s.followup.outcome] ?? s.followup.outcome)
+                      : "확인 완료"}
                 </span>
                 {s.followup?.handledByName && (
                   <span className="text-text-faint text-xs">{s.followup.handledByName}</span>
@@ -123,6 +158,73 @@ export function DeskView({ queue, date }: { queue: DeskQueue; date: string }) {
           </ul>
         </section>
       )}
+    </div>
+  );
+}
+
+/**
+ * 레인 A 카드 — **강사에게 요청**이 주 동작이고 전화는 보조다.
+ *
+ * 🔴 '요청함' 표식이 없으면 데스크 3명이 하루 60~70장을 서로 모른 채 중복 전화한다(적대 리뷰 S4).
+ *    그리고 화면이 "강사 확인이 먼저"라고 적어 두고 정작 요청할 수단이 없으면, 남는 선택지는
+ *    헛전화 아니면 방치뿐이다.
+ * ⚠️ 담당 표기는 **사람 이름이 먼저**다 — `slotTeacherLabel`(LAB·JJ)은 사람이 없을 때의 폴백이다
+ *    (시트 원문 닉네임이 실명 앞에 나오면 raw 표기가 화면에 새는 셈).
+ */
+function ClassCard({ row, date, canEdit }: { row: QueueClass; date: string; canEdit: boolean }) {
+  const router = useRouter();
+  const [busy, startTransition] = useTransition();
+  const [sent, setSent] = useState(row.requested);
+  const [error, setError] = useState<string | null>(null);
+
+  function ask() {
+    setError(null);
+    setSent(true);
+    startTransition(() => {
+      requestAttendanceInput({ classId: row.classId, sessionDate: date, slotStart: row.slotStart })
+        .then((res) => {
+          if ("error" in res) {
+            setSent(row.requested);
+            setError(res.error);
+            return;
+          }
+          router.refresh();
+        })
+        .catch(() => {
+          setSent(row.requested);
+          setError("요청을 보내지 못했습니다 — 다시 눌러 주세요");
+        });
+    });
+  }
+
+  return (
+    <div className="border-line bg-surface space-y-2 rounded-2xl border p-3">
+      <div className="min-w-0">
+        <p className="truncate text-sm font-bold">{row.className}</p>
+        <p className="text-text-dim num text-xs">
+          {row.slotStart} · {row.teacherName ?? row.slotTeacherLabel ?? "담당 미지정"} · 예정 {row.expected}명
+        </p>
+      </div>
+      <div className="flex flex-wrap items-center gap-1.5">
+        {canEdit &&
+          (sent ? (
+            <span className="bg-bg-soft text-text-dim rounded-lg px-2.5 py-1.5 text-xs font-bold">
+              입력 요청함
+            </span>
+          ) : (
+            <button
+              type="button"
+              onClick={ask}
+              disabled={busy}
+              className="bg-primary text-primary-foreground rounded-lg px-2.5 py-1.5 text-xs font-bold disabled:opacity-60"
+              title="담당 강사에게 '출결 입력' 알림을 보냅니다 — 전화보다 먼저 이걸 눌러 주세요"
+            >
+              강사에게 요청
+            </button>
+          ))}
+        <CallButton phone={row.teacherPhone} label="강사" />
+      </div>
+      {error && <p className="text-danger text-xs">{error}</p>}
     </div>
   );
 }
@@ -140,10 +242,11 @@ function CallButton({ phone, label }: { phone: string | null; label: string }) {
   );
 }
 
-function StudentCard({ row, date }: { row: QueueStudent; date: string }) {
+function StudentCard({ row, date, canEdit }: { row: QueueStudent; date: string; canEdit: boolean }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [outcome, setOutcome] = useState<string>("");
+  const [via, setVia] = useState<string>("phone");
   const [note, setNote] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, startTransition] = useTransition();
@@ -159,12 +262,15 @@ function StudentCard({ row, date }: { row: QueueStudent; date: string }) {
         studentId: row.studentId,
         classId: row.classId,
         sessionDate: date,
-        slotStart: row.slotStart,
+        // 조치 앵커도 저장 축을 따른다 — 수학 연강(하루 2~3교시)에서 교시별로 앵커를 잡으면
+        // 같은 아이 같은 날 조치가 2~3행이 되어 데스크가 같은 집에 두세 번 전화한다.
+        slotStart: row.saveSlot,
         signal: row.signal === "absent" ? "absent" : "unmarked",
         state,
         outcome: outcome || null,
         note: note || null,
-        contactedVia: outcome === "no_answer" || outcome ? "phone" : null,
+        // ⚠️ 모르면 null이 정직하다(#93) — 데스크가 고른 방법만 저장한다(카톡·대면을 전화로 적지 않는다).
+        contactedVia: via || null,
       })
         .then(async (res) => {
           if ("error" in res) return setError(res.error);
@@ -174,7 +280,9 @@ function StudentCard({ row, date }: { row: QueueStudent; date: string }) {
               classId: row.classId,
               sessionDate: date,
               status: suggestion,
-              slotStart: row.slotStart,
+              // 🔴 저장 축(slot-axis) — 수학에 교시를 실으면 day-level 행 위에 두 번째 행이 생겨
+              //    정정이 시수·급여에 반영되지 않는다(살아남은 옛 행이 계속 1시수를 청구한다).
+              slotStart: row.saveSlot,
               note: note || null,
               quiet: true,
             }).catch(() => ({ error: "출결 정정에 실패했습니다" }) as const);
@@ -224,16 +332,18 @@ function StudentCard({ row, date }: { row: QueueStudent; date: string }) {
         {row.followup?.state === "open" && (
           <span className="bg-bg-soft text-text-dim rounded-full px-2 py-0.5 text-xs">확인 중</span>
         )}
-        <button
-          type="button"
-          onClick={() => setOpen((v) => !v)}
-          className="border-line hover:bg-bg-soft ml-auto rounded-lg border px-2.5 py-1.5 text-xs font-bold"
-        >
-          {open ? "닫기" : "확인 기록"}
-        </button>
+        {canEdit && (
+          <button
+            type="button"
+            onClick={() => setOpen((v) => !v)}
+            className="border-line hover:bg-bg-soft ml-auto rounded-lg border px-2.5 py-1.5 text-xs font-bold"
+          >
+            {open ? "닫기" : "확인 기록"}
+          </button>
+        )}
       </div>
 
-      {open && (
+      {open && canEdit && (
         <div className="border-line space-y-2 rounded-xl border p-2.5">
           <div className="flex flex-wrap gap-1">
             {FOLLOWUP_OUTCOMES.map((o) => (
@@ -247,6 +357,26 @@ function StudentCard({ row, date }: { row: QueueStudent; date: string }) {
                 }`}
               >
                 {o.label}
+              </button>
+            ))}
+          </div>
+          <div className="flex flex-wrap items-center gap-1">
+            <span className="text-text-faint text-xs">연락 방법</span>
+            {[
+              { v: "phone", l: "전화" },
+              { v: "kakao", l: "카톡" },
+              { v: "in_person", l: "대면" },
+            ].map((o) => (
+              <button
+                key={o.v}
+                type="button"
+                onClick={() => setVia(o.v)}
+                aria-pressed={via === o.v}
+                className={`rounded-full px-2 py-0.5 text-xs ${
+                  via === o.v ? "bg-bg-soft text-text font-semibold" : "text-text-faint"
+                }`}
+              >
+                {o.l}
               </button>
             ))}
           </div>

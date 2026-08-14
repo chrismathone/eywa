@@ -9,18 +9,31 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { accessLevelTenant } from "@/lib/auth/perm-matrix";
 
-/** 그날 출결 기록 수(테넌트 전체). 권한 없거나 실패면 null — 호출부는 조용히 넘어간다. */
-export async function getLiveRecordedCount(date: string): Promise<number | null> {
+/**
+ * 그날 출결의 **변화 지문** — 건수만으로는 부족하다.
+ *
+ * 🔴 `present → absent` 정정은 행이 안 늘어 **건수가 그대로**다. 건수만 비교하면 데스크 화면은 갱신되지
+ *    않고 방금 결석으로 바뀐 학생을 계속 '출석'으로 보여준다(벨은 가는데 화면만 거짓말). 그래서
+ *    건수와 **가장 최근 기록 시각**을 합친 문자열을 지문으로 쓴다.
+ */
+export async function getLiveRecordedCount(date: string): Promise<string | null> {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return null;
   const user = await getCurrentUser();
   if (!user) return null;
   if ((await accessLevelTenant(user.systemRole, "attendance")) === "none") return null;
 
   const supabase = await createClient();
-  const { count, error } = await supabase
-    .from("attendance_records")
-    .select("*", { count: "exact", head: true })
-    .eq("session_date", date);
+  // 건수는 행을 안 받고(head), 최신 시각은 1행만 — 창마다 도는 폴링이라 왕복 비용을 최소로(B2·B6).
+  const [{ count, error }, latest] = await Promise.all([
+    supabase.from("attendance_records").select("*", { count: "exact", head: true }).eq("session_date", date),
+    supabase
+      .from("attendance_records")
+      .select("recorded_at")
+      .eq("session_date", date)
+      .order("recorded_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ]);
   if (error) return null;
-  return count ?? 0;
+  return `${count ?? 0}|${latest.data?.recorded_at ?? ""}`;
 }

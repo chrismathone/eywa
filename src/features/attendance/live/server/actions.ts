@@ -13,6 +13,8 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { accessLevelTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { getTeachingClassIds } from "@/features/classes/server/delegation";
 import { kstToday } from "@/lib/date-kst";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { notifyUsers } from "@/features/notifications/server/notify";
 
 const STATES = ["open", "resolved", "dismissed"] as const;
 const OUTCOMES = ["coming", "absent_today", "sick", "already_here", "no_answer", "other"] as const;
@@ -92,7 +94,105 @@ export async function recordFollowup(input: {
     .select("id")
     .maybeSingle();
 
-  if (error) return { error: error.message };
+  if (error) {
+    // ⚠️ raw 원문을 화면에 그대로 내보내지 않는다(전역 규칙). 표가 아직 없을 때(마이그레이션 미적용)가
+    //    가장 흔한 실패라 그 경우를 먼저 알아보게 한다 — #95 대비.
+    const missingTable = /relation .* does not exist|schema cache/i.test(error.message);
+    return {
+      error: missingTable
+        ? "확인 기록 저장소가 아직 준비되지 않았습니다 — 관리자에게 문의해 주세요(0209a 미적용)"
+        : "확인 기록을 저장하지 못했습니다 — 잠시 후 다시 시도해 주세요",
+    };
+  }
   revalidatePath("/attendance/live");
   return { ok: true, id: (data?.id as string) ?? "" };
+}
+
+/**
+ * 레인 A — **강사에게 "출결 입력" 요청**을 보낸다(2026-08-14 적대 리뷰 S4).
+ *
+ * 🔴 왜 필요한가: 레인 A 카드는 하루 60~70장인데 상태가 없었다. 데스크가 전화해도 카드는 강사가 실제로
+ *    찍기 전까지 그대로라, 3명이 같은 강사에게 두세 번 걸고 "이미 했다"를 공유할 자리가 없었다.
+ *    그리고 화면은 "강사 확인이 먼저"라고 적어 두고 **정작 요청할 버튼이 없었다** — 선택지가 헛전화 아니면
+ *    방치뿐이었다.
+ *
+ * 규약은 기존 이벤트 알림과 같다: dedup bucket = 상태 전이 표현(`날짜|교시`), 신규분만 발송,
+ * 수신자 확인이 dedup보다 먼저, admin 조회엔 tenant 필터. best-effort가 아니라 **결과를 돌려준다**
+ * (데스크가 "보냈는지"를 알아야 카드에 표시된다).
+ */
+export type RequestResult = { ok: true; sent: boolean } | { error: string };
+
+export async function requestAttendanceInput(input: {
+  classId: string;
+  sessionDate: string;
+  slotStart?: string | null;
+}): Promise<RequestResult> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "로그인이 필요합니다" };
+  // 전 학원 강사에게 보내는 요청이라 담당(scoped)이 아니라 **관리 권한**(full)만 통과시킨다.
+  if ((await accessLevelTenant(user.systemRole, "attendance")) !== "full") {
+    return { error: "출결 요청 권한이 없습니다" };
+  }
+  const { classId, sessionDate } = input;
+  if (!classId || !/^\d{4}-\d{2}-\d{2}$/.test(sessionDate)) return { error: "필수 값이 누락되었습니다" };
+  if (sessionDate > kstToday()) return { error: "아직 지나지 않은 날짜입니다" };
+  const slot = input.slotStart?.trim() || null;
+
+  const admin = createAdminClient();
+  // 받을 사람 = 그 슬롯 담당(부담임 포함) ∪ 반 담임. admin 경로라 tenant 필터 필수.
+  const [{ data: klass }, { data: slotRows }] = await Promise.all([
+    admin
+      .from("classes")
+      .select("id, class_name, teacher_id")
+      .eq("tenant_id", user.tenantId)
+      .eq("id", classId)
+      .maybeSingle(),
+    admin
+      .from("class_schedules")
+      .select("teacher_id")
+      .eq("tenant_id", user.tenantId)
+      .eq("class_id", classId)
+      .not("teacher_id", "is", null),
+  ]);
+  const recipients = [
+    ...new Set(
+      [klass?.teacher_id as string | null, ...(slotRows ?? []).map((r) => r.teacher_id as string)].filter(
+        (id): id is string => !!id && id !== user.id,
+      ),
+    ),
+  ];
+  if (recipients.length === 0) return { error: "이 반에 연결된 강사가 없습니다 — 직접 확인해 주세요" };
+
+  const { data: fresh, error: dedupError } = await admin
+    .from("notification_events")
+    .upsert(
+      [
+        {
+          tenant_id: user.tenantId,
+          event_type: "attendance_input_request",
+          subject_key: classId,
+          bucket: `${sessionDate}|${slot ?? ""}`,
+          seeded: false,
+        },
+      ],
+      { onConflict: "tenant_id,event_type,subject_key,bucket", ignoreDuplicates: true },
+    )
+    .select("bucket");
+  if (dedupError) return { error: "요청을 기록하지 못했습니다" };
+  // 이미 보낸 건이면 다시 보내지 않는다(강사에게 같은 알림이 쌓이지 않게) — 화면엔 '요청함'으로 남는다.
+  if (!fresh?.length) return { ok: true, sent: false };
+
+  await notifyUsers(
+    recipients.map((recipientId) => ({
+      tenantId: user.tenantId,
+      recipientId,
+      type: "attendance_input_request",
+      title: `출결 입력 요청 — ${klass?.class_name ?? "수업"}${slot ? ` ${slot}` : ""}`,
+      body: "사무실에서 오늘 출결 입력을 요청했습니다. 화면 위 '오늘 출석 미입력'에서 바로 찍을 수 있습니다.",
+      link: sessionDate === kstToday() ? "/attendance/live" : `/attendance/live?date=${sessionDate}`,
+      actorId: user.id,
+    })),
+  );
+  revalidatePath("/attendance/live");
+  return { ok: true, sent: true };
 }

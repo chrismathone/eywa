@@ -26,7 +26,10 @@ export type NotificationType =
   // 강사가 결석을 입력한 순간 → 출결 알림 토글(users.attendance_alert_optin)을 켠 계정(2026-08-14).
   // ⚠️ 학부모 연락 분류(student_attendance_notice)와 **다른 축**이다: 저건 학부모가 먼저 알려온 것이고,
   //    이건 학원이 먼저 알아챈 것이라 확인 전화가 필요하다. 링크는 데스크 확인 큐.
-  | "attendance_absent_desk";
+  | "attendance_absent_desk"
+  // 사무실이 "이 교시 출결 입력해 주세요"를 담당 강사(슬롯 담당 포함)에게 요청 — 데스크 레인 A 버튼.
+  // ⚠️ 이게 없으면 데스크는 헛전화 아니면 방치뿐이었다(적대 리뷰 S4). dedup은 (반, 날짜|교시) 1회.
+  | "attendance_input_request";
 
 export type NotificationItem = {
   id: string;
@@ -58,4 +61,5 @@ export const NOTIFICATION_ICON: Record<string, EywaIconName> = {
   makeedu_login_failed: "alert",
   student_attendance_notice: "userMinus",
   attendance_absent_desk: "userMinus",
+  attendance_input_request: "clipboardCheck",
 };

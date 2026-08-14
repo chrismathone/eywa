@@ -25,7 +25,7 @@ export function LiveRefresher({ date }: { date: string }) {
    * ⚠️ 서버가 그린 숫자는 강사면 "내 수업만"이고 이 카운트는 테넌트 전체라, 그 둘을 비교하면 강사
    *    화면에서 20초마다 무한 새로고침이 돈다. 같은 자로 잰 값끼리만 비교한다.
    */
-  const baselineRef = useRef<number | null>(null);
+  const baselineRef = useRef<string | null>(null);
 
   useEffect(() => {
     baselineRef.current = null; // 날짜가 바뀌면 기준선도 새로
@@ -35,14 +35,14 @@ export function LiveRefresher({ date }: { date: string }) {
     let stopped = false;
     const tick = async () => {
       if (stopped || document.visibilityState !== "visible") return;
-      const count = await getLiveRecordedCount(date).catch(() => null);
-      if (stopped || count == null) return;
+      const fingerprint = await getLiveRecordedCount(date).catch(() => null);
+      if (stopped || fingerprint == null) return;
       if (baselineRef.current == null) {
-        baselineRef.current = count;
+        baselineRef.current = fingerprint;
         return;
       }
-      if (count !== baselineRef.current) {
-        baselineRef.current = count;
+      if (fingerprint !== baselineRef.current) {
+        baselineRef.current = fingerprint;
         setChanged(true);
         router.refresh();
       }

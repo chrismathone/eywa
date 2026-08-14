@@ -23,7 +23,9 @@ export type QueueStudent = {
   schoolGrade: string | null; // 이미 압축된 표기("경명여중1") — 조립은 호출부
   classId: string;
   className: string;
-  slotStart: string; // "HH:MM"
+  slotStart: string; // "HH:MM" — 표시·앵커
+  /** 출결 정정에 실을 교시 값(slot-axis) — 수학은 null("그날 전체"). */
+  saveSlot: string | null;
   teacherName: string | null;
   signal: LiveSignal;
   phase: SlotPhase;
@@ -38,6 +40,8 @@ export type QueueStudent = {
 export type FollowupBrief = {
   id: string;
   state: string; // open | resolved | dismissed
+  /** 그 조치를 남길 때의 신호 — 나중에 결석으로 올라섰는지 판정하는 근거(isSettled). */
+  signal: string | null;
   outcome: string | null;
   note: string | null;
   handledByName: string | null;
@@ -57,6 +61,8 @@ export type QueueClass = {
   slotTeacherLabel: string | null;
   expected: number; // 그날 예정 학생 수 — "12명이 통째로 비어 있음"을 보여준다
   phase: SlotPhase;
+  /** 이미 '출결 입력 요청'을 보낸 카드인가 — 중복 전화를 막는 유일한 표식. */
+  requested: boolean;
 };
 
 export type DeskQueue = {
@@ -66,9 +72,19 @@ export type DeskQueue = {
   counts: { classes: number; students: number; done: number };
 };
 
-/** 후속조치가 매듭지어졌는가 — open(진행 중)은 아직 큐에 남는다. */
-export function isSettled(f: FollowupBrief | null): boolean {
-  return f != null && (f.state === "resolved" || f.state === "dismissed");
+/**
+ * 후속조치가 매듭지어졌는가 — open(진행 중)은 아직 큐에 남는다.
+ *
+ * 🔴 **신호가 그 뒤에 `absent`로 올라섰으면 다시 연다.** 실측(2026-08-14): 결석 266건 중 **113건(42.5%)이
+ *    수업 다음날 이후에 기록**된다. 즉 "오전에 미확인으로 한 번 내렸다가 저녁에 강사가 결석을 찍는" 순서가
+ *    예외가 아니라 **기본 흐름**이다. 상태만 보고 닫아두면 그 결석은 데스크에 영영 안 뜬다.
+ * ⚠️ 이미 `absent`를 보고 매듭지은 건(조치의 signal도 absent)은 다시 열지 않는다 — 그건 같은 사실이다.
+ */
+export function isSettled(f: FollowupBrief | null, currentSignal?: LiveSignal): boolean {
+  if (f == null) return false;
+  if (f.state !== "resolved" && f.state !== "dismissed") return false;
+  if (currentSignal === "absent" && f.signal !== "absent") return false; // 결석으로 승격 → 재개봉
+  return true;
 }
 
 /**
@@ -78,7 +94,7 @@ export function isSettled(f: FollowupBrief | null): boolean {
  * 건이다. 하원 시간이 다가오는 아이부터 확인해야 셔틀·귀가가 어긋나지 않는다.
  */
 export function compareStudents(a: QueueStudent, b: QueueStudent): number {
-  const settled = Number(isSettled(a.followup)) - Number(isSettled(b.followup));
+  const settled = Number(isSettled(a.followup, a.signal)) - Number(isSettled(b.followup, b.signal));
   if (settled !== 0) return settled;
   const rank = SIGNAL_RANK[b.signal] - SIGNAL_RANK[a.signal];
   if (rank !== 0) return rank;
@@ -102,9 +118,18 @@ export function compareClasses(a: QueueClass, b: QueueClass): number {
 export function buildQueue(students: readonly QueueStudent[], classes: readonly QueueClass[]): DeskQueue {
   const open: QueueStudent[] = [];
   const done: QueueStudent[] = [];
+  // 🔴 같은 (학생, 저장축)은 **한 장**이다. 수학은 하루 한 행이 규약인데(slot-axis) 화면은 교시별로
+  //    도니, 연강 3교시 반이면 같은 아이가 카드 3장으로 나와 데스크가 같은 집에 세 번 전화한다
+  //    (실측: 오늘 수학 19반 중 17반이 2~3교시). 신호가 센 쪽(결석)을 남긴다.
+  const seen = new Map<string, QueueStudent>();
   for (const s of students) {
     if (s.signal === "class_unmarked") continue; // 반 단위로 접힌다
-    (isSettled(s.followup) ? done : open).push(s);
+    const key = `${s.studentId}|${s.classId}|${s.saveSlot ?? ""}`;
+    const prev = seen.get(key);
+    if (!prev || SIGNAL_RANK[s.signal] > SIGNAL_RANK[prev.signal]) seen.set(key, s);
+  }
+  for (const s of seen.values()) {
+    (isSettled(s.followup, s.signal) ? done : open).push(s);
   }
   open.sort(compareStudents);
   done.sort(compareStudents);

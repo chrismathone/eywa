@@ -24,9 +24,11 @@
 --      ① 원본인 `attendance_records`가 지금 tenant_isolation 하나뿐이다. 파생 기록만 더 잠그면
 --         비대칭이고 실익이 없다(같은 사실을 원본에서 읽을 수 있다).
 --      ② `auth_menu_access(p_menu)`의 DEFAULTS jsonb에는 billing·expense_requests·staff·
---         textbook_requests **4개뿐**이라 'attendance'를 부르면 master 빼고 전원 'none'이 된다.
---         행을 추가해도 그 함수는 **개인 예외(userOverrides)를 안 본다**(현 정의 실측) — 개인 예외로
---         출결을 연 직원이 DB에서만 조용히 막히는 fail-closed 락아웃이 된다(#60·#92).
+--         textbook_requests **4개뿐**이라(0170a) 'attendance'를 부르면 master 빼고 전원 'none'이 되어
+--         fail-closed 락아웃이 된다(#60·#92). 여기에 attendance 행을 더하는 것은 **출결 계열 전체를
+--         DB로 잠그는 별도 작업**이고, 그때는 `attendance_records`와 이 표를 함께 넣어야 한다.
+--         (0170a의 `auth_menu_access`는 개인 예외(userOverrides)를 master>개인>역할>기본값 순으로
+--          정상 반영한다 — 개인 예외가 SQL에서 안 통한다는 뜻이 아니다.)
 --    → 역할 게이트는 앱 레이어 단일 소스(`canWriteTenant("attendance")` / `accessLevelTenant`)가 진다.
 --       그쪽은 역할 override와 개인 예외를 모두 본다.
 --
@@ -82,6 +84,8 @@ drop policy if exists attendance_followups_tenant_isolation on attendance_follow
 create policy attendance_followups_tenant_isolation on attendance_followups
   for all using (tenant_id = auth_tenant_id()) with check (tenant_id = auth_tenant_id());
 
+-- ⚠️ 나중에 출결 계열에 역할 게이트를 붙일 땐 **이 표도 함께** 넣을 것 — 통화 메모·`outcome='sick'`은
+--    기존 출결 계열에 없던 종류의 개인정보다(0158a가 billing 계열만 잠갔던 것과 같은 누락을 막는다).
 comment on table attendance_followups is
   '당일 미확인·결석 학생에 대한 데스크 확인 기록(0209a). 큐 자체는 파생 계산이고 이 표는 조치만 담는다. 출결(attendance_records)은 여기서 바꾸지 않는다 — 급여·청구 재료라 사람이 명시로 반영한다.';
 comment on column attendance_followups.signal is

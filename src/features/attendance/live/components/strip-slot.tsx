@@ -16,6 +16,7 @@ export function StripSlot({
   classId,
   className,
   slotStart,
+  saveSlot,
   periodLabel,
   pendingIds,
   pendingNames,
@@ -24,6 +25,8 @@ export function StripSlot({
   classId: string;
   className: string;
   slotStart: string;
+  /** 저장에 실을 교시 값(slot-axis) — 수학은 null이라 "그날 전체"로 저장된다. */
+  saveSlot: string | null;
   periodLabel: string | null;
   pendingIds: string[];
   pendingNames: string[];
@@ -42,7 +45,7 @@ export function StripSlot({
         status: "present",
         cells: pendingIds.map((id) => ({ studentId: id, classId })),
         fillEmptyOnly: true, // 서버 강제 — 낡은 화면이 남이 찍은 결석을 뒤집지 못한다
-        slotStart,
+        slotStart: saveSlot,
       })
         .then((res) => {
           if ("error" in res) {

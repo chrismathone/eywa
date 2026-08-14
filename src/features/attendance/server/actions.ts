@@ -299,20 +299,30 @@ export async function setAttendanceCell(input: {
 
   // 그날(또는 그 교시)의 기록을 훑는다 — append-only라 정정 이력이 함께 나오므로 **교시별 최신 1건**만
   // 유효행으로 고른다(effectiveAttendanceRecords와 같은 규칙: recorded_at 최신, 동률이면 id 큰 쪽).
-  let find = supabase
+  // 🔴 교시를 넘겼어도 **"그날 전체"(slot_start null) 행까지 함께** 본다. 두 세대가 공존하기 때문이다
+  //    (실측 2026-08-14: 영어도 day-level 20행이 남아 있다). 그 교시만 조회하면 옛 day-level 행을
+  //    못 보고 새 행을 INSERT해 **같은 (학생·반·날짜)에 두 행이 살아남는다** — 화면은 교시 우선이라
+  //    멀쩡해 보이지만 급여·시수는 두 행을 다 합산해서, 정정이 돈에 반영되지 않거나 이중 계상된다.
+  const { data: rows } = await supabase
     .from("attendance_records")
     .select("id, slot_start, recorded_at")
     .eq("class_id", classId)
     .eq("student_id", studentId)
-    .eq("session_date", sessionDate);
-  if (slot !== null) find = find.eq("slot_start", slot);
-  const { data: rows } = await find.order("recorded_at", { ascending: false });
+    .eq("session_date", sessionDate)
+    .order("recorded_at", { ascending: false });
 
   // 이미 recorded_at 내림차순이라 **교시마다 처음 만난 행이 최신**이다.
   const latestBySlot = new Map<string, string>(); // slot(또는 "" = 그날 전체) → id
   for (const r of rows ?? []) {
     const k = (r.slot_start as string | null) ?? "";
     if (!latestBySlot.has(k)) latestBySlot.set(k, r.id as string);
+  }
+  // 교시를 넘긴 저장은 **그 교시 행 + 그날 전체 행**만 대상으로 좁힌다(다른 교시는 남의 칸이라 안 건드림).
+  // 그날 전체 행이 남아 있으면 새로 만들지 않고 **그 행을 갱신**한다 = 한 칸에 한 행이 유지된다.
+  if (slot !== null) {
+    for (const k of [...latestBySlot.keys()]) {
+      if (k !== slot && k !== "") latestBySlot.delete(k);
+    }
   }
 
   const nowIso = new Date().toISOString();
@@ -621,17 +631,22 @@ export async function setAttendanceBulk(input: {
     class_id: string;
     student_id: string;
     recorded_at: string | null;
-  }>(studentIds, (chunk) => {
-    const q = supabase
+  }>(studentIds, (chunk) =>
+    supabase
       .from("attendance_records")
-      .select("id, class_id, student_id, recorded_at")
+      .select("id, class_id, student_id, recorded_at, slot_start")
       .eq("session_date", sessionDate)
       .in("class_id", classIds)
-      .in("student_id", chunk);
-    return (slot ? q.eq("slot_start", slot) : q).order("recorded_at", { ascending: false });
-  });
+      .in("student_id", chunk)
+      // 🔴 교시를 넘겨도 **그날 전체(slot null) 행까지** 본다 — 아래에서 좁힌다. 조회에서 이미 잘라내면
+      //    옛 day-level 행을 못 보고 새 행을 만들어 한 칸에 두 행이 살아남는다(정정이 돈에 안 닿는다).
+      .order("recorded_at", { ascending: false }),
+  );
   const latestId = new Map<string, string>();
   for (const r of existingRows) {
+    // 교시를 넘긴 저장은 **그 교시 행과 그날 전체 행**만 자기 칸이다(다른 교시는 남의 칸).
+    const rowSlot = (r as { slot_start?: string | null }).slot_start ?? null;
+    if (slot && rowSlot !== null && rowSlot.slice(0, 5) !== slot.slice(0, 5)) continue;
     const k = `${r.student_id}::${r.class_id}`;
     if (!latestId.has(k)) latestId.set(k, r.id); // 청크별 desc 정렬 → 각 조합의 첫 행이 최신
   }

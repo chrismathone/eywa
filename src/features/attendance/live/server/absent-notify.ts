@@ -70,9 +70,12 @@ export async function notifyDeskOfAbsences(input: {
     if (dedupError) throw dedupError;
     if (!fresh?.length) return;
 
-    const freshIds = new Set(fresh.map((f) => f.subject_key as string));
-    const freshCells = cells.filter((c) => freshIds.has(c.studentId));
+    // ⚠️ studentId만으로 거르면 같은 학생이 두 교시에 걸리고 **한쪽만 신규**일 때 이름이 두 번 들어가
+    //    "외 1명"이 거짓이 된다(#89 계열) — bucket까지 맞춰 신규분만 남긴다.
+    const freshKeys = new Set(fresh.map((f) => `${f.subject_key}|${f.bucket}`));
+    const freshCells = cells.filter((c) => freshKeys.has(`${c.studentId}|${date}|${c.slotStart ?? ""}`));
     if (freshCells.length === 0) return;
+    const freshIds = new Set(freshCells.map((c) => c.studentId));
 
     // 이름 — 벨 본문에 학생 이름이 없으면 데스크가 링크를 눌러야만 무슨 일인지 안다.
     const { data: students, error: studentError } = await admin
@@ -83,10 +86,14 @@ export async function notifyDeskOfAbsences(input: {
     if (studentError) throw studentError;
     const nameById = new Map((students ?? []).map((s) => [s.id as string, s.name as string]));
 
-    const names = freshCells.map((c) => nameById.get(c.studentId)).filter(Boolean) as string[];
+    const names = [...new Set(freshCells.map((c) => nameById.get(c.studentId)).filter(Boolean))] as string[];
     if (names.length === 0) return;
+    // ⚠️ 날짜를 안 쓰면 **어제 일로 오늘 전화**하게 된다 — 결석의 42.5%가 익일 이후 기록이다(실측).
+    const whenLabel = date === today ? "" : ` (${date.slice(5).replace("-", "/")})`;
     const title =
-      names.length === 1 ? `결석 — ${names[0]}` : `결석 — ${names[0]} 외 ${names.length - 1}명`;
+      names.length === 1
+        ? `결석${whenLabel} — ${names[0]}`
+        : `결석${whenLabel} — ${names[0]} 외 ${names.length - 1}명`;
 
     await notifyUsers(
       targets.map((recipientId) => ({
@@ -94,8 +101,8 @@ export async function notifyDeskOfAbsences(input: {
         recipientId,
         type: EVENT_TYPE,
         title,
-        body: `${names.join(", ")} 학생이 결석으로 입력됐습니다 — 학부모 확인이 필요합니다.`,
-        link: date === kstToday() ? "/attendance/live?tab=desk" : `/attendance/live?tab=desk&date=${date}`,
+        body: `${date} 수업에서 ${names.join(", ")} 학생이 결석으로 입력됐습니다 — 학부모 확인이 필요합니다.`,
+        link: date === today ? "/attendance/live?tab=desk" : `/attendance/live?tab=desk&date=${date}`,
         actorId,
       })),
     );

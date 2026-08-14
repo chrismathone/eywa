@@ -15,6 +15,7 @@ const student = (over: Partial<QueueStudent> & { studentId: string }): QueueStud
   classId: "c1",
   className: "CR1A",
   slotStart: "16:20",
+  saveSlot: null,
   teacherName: "김강사",
   signal: "unmarked" as LiveSignal,
   phase: "due",
@@ -37,7 +38,7 @@ describe("buildQueue", () => {
   it("매듭지은 건은 큐에서 내리되 사라지지 않는다(done으로)", () => {
     const settled = student({
       studentId: "done1",
-      followup: { id: "f1", state: "resolved", outcome: "sick", note: null, handledByName: "김데스크", handledAt: null },
+      followup: { id: "f1", state: "resolved", signal: "unmarked", outcome: "sick", note: null, handledByName: "김데스크", handledAt: null },
     });
     const q = buildQueue([settled, student({ studentId: "open1" })], []);
     expect(q.lanes.students.map((s) => s.studentId)).toEqual(["open1"]);
@@ -48,7 +49,7 @@ describe("buildQueue", () => {
   it("진행 중(open) 조치는 아직 큐에 남는다 — 전화 걸다 만 것은 끝난 게 아니다", () => {
     const calling = student({
       studentId: "x",
-      followup: { id: "f", state: "open", outcome: null, note: null, handledByName: null, handledAt: null },
+      followup: { id: "f", state: "open", signal: "unmarked", outcome: null, note: null, handledByName: null, handledAt: null },
     });
     expect(buildQueue([calling], []).lanes.students).toHaveLength(1);
   });
@@ -65,6 +66,7 @@ describe("buildQueue", () => {
       slotTeacherLabel: null,
       expected: 5,
       phase: "due",
+      requested: false,
       ...over,
     });
     const q = buildQueue(
@@ -88,12 +90,26 @@ describe("compareStudents", () => {
 });
 
 describe("isSettled", () => {
-  const f = (state: string) => ({ id: "f", state, outcome: null, note: null, handledByName: null, handledAt: null });
+  const f = (state: string, signal: string | null = "unmarked") =>
+    ({ id: "f", state, signal, outcome: null, note: null, handledByName: null, handledAt: null });
   it("resolved·dismissed만 매듭", () => {
     expect(isSettled(f("resolved"))).toBe(true);
     expect(isSettled(f("dismissed"))).toBe(true);
     expect(isSettled(f("open"))).toBe(false);
     expect(isSettled(null)).toBe(false);
+  });
+
+  it("🔴 내렸던 건이 나중에 결석으로 올라서면 다시 연다 — 결석의 42.5%가 익일 기록이다", () => {
+    expect(isSettled(f("dismissed", "unmarked"), "absent")).toBe(false);
+    expect(isSettled(f("resolved", "unmarked"), "absent")).toBe(false);
+  });
+
+  it("이미 결석을 보고 매듭지은 건은 다시 열지 않는다 — 같은 사실이다", () => {
+    expect(isSettled(f("resolved", "absent"), "absent")).toBe(true);
+  });
+
+  it("미확인인 채로는 매듭이 유지된다", () => {
+    expect(isSettled(f("dismissed", "unmarked"), "unmarked")).toBe(true);
   });
 });
 

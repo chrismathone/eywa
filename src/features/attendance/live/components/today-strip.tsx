@@ -52,6 +52,7 @@ export async function TodayAttendanceStrip() {
             classId={slot.classId}
             className={slot.className}
             slotStart={slot.slotStart}
+            saveSlot={slot.saveSlot}
             periodLabel={slot.periodLabel}
             pendingIds={slot.students.filter((s) => s.status == null).map((s) => s.studentId)}
             pendingNames={slot.students.filter((s) => s.status == null).map((s) => s.studentName)}
