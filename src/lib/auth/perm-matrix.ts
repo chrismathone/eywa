@@ -15,7 +15,7 @@ import {
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
-import { leaveMenuOverridesFor } from "@/features/leave/leave-access";
+import { approvalMenuOverridesFor } from "@/features/approvals/access";
 
 /**
  * 현재 테넌트의 유효 권한 매트릭스 = 하드코딩 MENU_ACCESS(기본값) + owner 설정 permissions override.
@@ -73,7 +73,7 @@ export const getUserPermMatrix = cache(async (): Promise<AccessMatrix> => {
     // 요청 캐시된 PK 조회 1회이고, override가 있는 테넌트는 getPermMatrix에서 이미 부른 그 캐시다.
     const isSuperAdmin = await isCurrentUserSuperAdmin();
     const userOverrides = [
-      ...leaveMenuOverridesFor(user.id, isSuperAdmin),
+      ...approvalMenuOverridesFor(user.id, isSuperAdmin),
       ...settings.permissions.userOverrides,
     ];
     if (userOverrides.length === 0) return base;

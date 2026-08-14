@@ -6,9 +6,11 @@ import { PageHeader } from "@/components/page-header";
 import { WeekNav } from "@/app/(shell)/timetable/_components/week-nav";
 import { getClassSheetWeek, getSheetLanding } from "@/features/class-sheets/server/queries";
 import { getEcsToday, type EcsTodayResult } from "@/features/class-sheets/server/today";
+import { getEcsSeatDay } from "@/features/class-sheets/server/seat-day";
 import { TodayBoard } from "@/features/class-sheets/components/today-board";
 import { TodayAttendanceStrip } from "@/features/attendance/live/components/today-strip";
 import { SheetClient } from "@/features/class-sheets/components/sheet-client";
+import { EcsSeatDayFace } from "@/features/class-sheets/components/seat-day-face";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { effectiveTeacherScope } from "@/lib/auth/view-mode";
 import { canManageSheetSync } from "@/features/integrations/server/sheet-access";
@@ -29,10 +31,11 @@ type TodaySheet = {
 export const metadata: Metadata = { title: "영어 강사 시트 — eywa" };
 
 /**
- * ECS 랜딩 — 면 두 개.
+ * ECS 랜딩 — 면 세 개.
  *  · **오늘**(강사 기본값) = 영어 강사의 원스크린. 그 날 수업이 있는 내 반만 교시 순서로 쌓아
  *    계획·출결·보고서 상태를 한 화면에서 본다(원장 지시 2026-08-07 "ECS를 기반으로 한 원스크린").
  *  · **주간** = 기존 반 카드 + 주간 작성률(사무실 기본값 — 전 반을 훑는 자리라 날짜로 좁히면 못 쓴다).
+ *  · **305 · JJ실** = 집중자율수업실 하루. 같은 시각 여러 반을 한 표로(출결·듣기·단어). 사무실도 연다.
  *
  * ⚠️ 기본 면을 **역할이 아니라 스코프**로 가른다: 강사 스코프가 있으면(내 반이 정해져 있으면) '오늘'.
  *    관리자는 스코프가 없어 '오늘'로 열면 학원 전체의 그날 수업이 쏟아진다 — 그건 시간표의 일이다.
@@ -49,6 +52,11 @@ export default async function EcsLandingPage({
   // IndexedDB 문서 24개와 realtime 채널 24개를 여는 셈이다(2026-08-07 적대적 리뷰).
   // 학원 전체의 하루를 보는 건 시간표의 일이다. `?view=today`를 손으로 넣어도 주간으로 떨어뜨린다.
   const scoped = (await effectiveTeacherScope()) !== null;
+  // 305 면은 사무실도 연다(오늘 면의 24반 폭탄과 달리 타임 단위). view=room 은 스코프와 무관.
+  if (view === "room") {
+    const roomRes = await getEcsSeatDay("JJ", date ?? null);
+    return <EcsSeatDayFace res={roomRes} showToday={scoped} />;
+  }
   const face: "today" | "week" = scoped ? (view === "week" ? "week" : "today") : "week";
 
   if (face === "today") {
@@ -93,8 +101,9 @@ export default async function EcsLandingPage({
       />
 
       <div className="bg-card shadow-card flex flex-wrap items-center gap-3 rounded-2xl px-4 py-3">
-        {/* 면 전환은 **'오늘'을 쓸 수 있는 사람에게만** 보인다 — 눌러도 주간으로 돌아오는 탭은 거짓 어포던스다. */}
-        {scoped ? <EcsFaceTabs face="week" /> : null}
+        {/* '오늘'은 강사 스코프만 — 사무실이 눌러도 주간으로 떨어지는 탭은 거짓 어포던스.
+            305는 사무실 본업(그 시각 여러 반)이라 스코프 없어도 단다. */}
+        <EcsFaceTabs face="week" showToday={scoped} />
         <WeekNav currentWeek={res.weekMonday} today={res.today} hrefForWeek={(monday) => `/ecs?view=week&week=${monday}`} />
         {/* 프로그램 필터(EiE / 인재원 영어) — 계정 귀속. 시트 가져오기 왼쪽에 붙여 주 네비와 한 줄. */}
         <EcsTrackFilter value={res.trackFilter} counts={res.trackCounts} />
@@ -177,7 +186,7 @@ function EcsTodayFace({
 
       {/* 좁은 화면(모바일·좁은 창)은 칩 툴바를 가로 레일로 — 시간표 툴바와 같은 .toolbar-rail 규약. */}
       <div className="bg-card shadow-card toolbar-rail flex flex-wrap items-center gap-3 rounded-2xl px-4 py-3">
-        <EcsFaceTabs face="today" />
+        <EcsFaceTabs face="today" showToday />
         <EcsTodayModeTabs mode={mode} date={res.date} />
         <EcsDayNav date={res.date} today={res.today} mode={mode} />
       </div>
