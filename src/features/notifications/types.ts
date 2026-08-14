@@ -22,7 +22,10 @@ export type NotificationType =
   | "class_delegation" // 결근 대체로 반을 임시 위임받음 → 대체 강사(0173a, createClassDelegation)
   // 학부모의 결석·지각·조퇴 연락(클래스노트) → **직원 설정에서 토글을 켠 계정 전원**(0184a).
   // ⚠️ 담당 반과 무관하다 — 차량(셔틀)·사무실이 "오늘 누가 안 오는지"를 담임에게 묻지 않게 하는 게 목적.
-  | "student_attendance_notice";
+  | "student_attendance_notice"
+  // 휴가(연차) 전자결재 — 신청이 올라가면 결재선 전원에게, 결재가 끝나면 신청자에게(0210a).
+  | "leave_request_submitted"
+  | "leave_request_decided";
 
 export type NotificationItem = {
   id: string;
@@ -53,4 +56,6 @@ export const NOTIFICATION_ICON: Record<string, EywaIconName> = {
   notice_send_failed: "alert",
   makeedu_login_failed: "alert",
   student_attendance_notice: "userMinus",
+  leave_request_submitted: "calendarOff",
+  leave_request_decided: "calendarCheck",
 };

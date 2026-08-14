@@ -55,6 +55,7 @@ export const MENU_KEYS = [
   "meetings",
   "documents",
   "class_review",
+  "leave",
   "integrations",
   "sheet_sync",
   "help",
@@ -135,6 +136,12 @@ export const MENU_ACCESS: AccessMatrix = {
   // 명단·개방은 scripts/staff-access/grant-class-review.mjs(드라이런→--apply, --revoke로 원복) 단일 소스.
   // ⚠️ 개인 예외는 CRUD뿐 아니라 **실명 열람·문항 세트 편집**까지 연다(getReviewPrivileges) — 명단은 최소로.
   class_review: { master: "none", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", student: "none" },
+  // 휴가관리(연차 신청 + 전자결재, 원장 지시 2026-08-14) — **테스트 단계라 기본 전원 차단**.
+  // 개방은 코드 명단([`leave-access.ts`](../features/leave/leave-access.ts) = 이승엽·김예원)이 개인
+  // 예외로 얹는다(class_review와 같은 결이되, 그쪽은 tenant_settings 데이터·이쪽은 코드 상수 —
+  // 이 PC에서 DB에 넣을 경로가 없어서다). ⚠️ 파일럿을 끝내고 전 직원에게 열 땐 명단을 늘리는 게
+  // 아니라 **이 행의 기본값을 올려라**(연차 신청은 결국 모든 직원의 기능이다. student는 계속 none).
+  leave: { master: "none", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", student: "none" },
   // makeedu 연동 조작 — '지금 동기화'(정방향 릴레이 트리거)·'makeedu로 보내기'(역동기화 큐잉) 실행 권한.
   // 사이드바 메뉴가 아니라 **액션 권한 키**(hidden) — 버튼 노출(목록 ↻ 배지 옆·등록상담 전송 카드)과 서버 액션
   // 게이트(canWriteTenant)가 함께 읽는다. 역할·권한 면에 행이 떠 원장이 조정 가능(예: 상담사에게 열기).
@@ -246,6 +253,7 @@ const PATH_SEGMENT_TO_MENU: Record<string, MenuKey> = {
   meetings: "meetings",
   documents: "documents",
   "class-review": "class_review",
+  leave: "leave",
   help: "help",
   admin: "admin",
   owner: "owner",

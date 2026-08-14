@@ -1140,6 +1140,7 @@ export const MENU_ICON = {
   meetings: "note",
   documents: "folder",
   class_review: "clipboardCheck", // 수업 평가 체크리스트 — 점검 정체성(출석부와 공유, ecs 선례)
+  leave: "calendarOff", // 휴가관리 — "사용할 수 없는 날짜"(자리 비움) 정체성
   integrations: "sync",
   sheet_sync: "spreadsheet",
   help: "help",
