@@ -1,8 +1,8 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { ArrowLeft } from "@/components/icons/eywa-icon-compat";
 import { Pill } from "@/components/atoms/pill";
-import { requireAccess } from "@/lib/auth/require-access";
+import { getCurrentUser } from "@/lib/auth/current-user";
 import { sanitizeRichHtml } from "@/lib/html/sanitize";
 import { APPROVAL_FORM_LABEL, docStatusLabel } from "@/features/approvals/types";
 import { formatLeaveDays } from "@/features/leave/request-days";
@@ -112,7 +112,11 @@ function buildTimeline(doc: NonNullable<Awaited<ReturnType<typeof getApprovalDoc
  * ([[#77]]: 화면 조건이 아니라 데이터 게이트가 판정한다).
  */
 export default async function ApprovalDocPage({ params }: { params: Promise<{ id: string }> }) {
-  const user = await requireAccess("approvals");
+  // ⚠️ 메뉴 게이트(requireAccess)를 **일부러 안 건다** — 결재자 후보가 전 직원이 되면서(원장 2026-08-14)
+  //    파일럿 명단 밖 직원도 벨 알림 링크로 이 문서에 들어와 결재해야 한다. 열람 자격은 메뉴가 아니라
+  //    RLS(기안자·결재선·참조·원장)가 정하고, 못 보는 사람은 조회가 비어 notFound로 떨어진다.
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
   const { id } = await params;
 
   const doc = await getApprovalDoc(id).catch(() => null);

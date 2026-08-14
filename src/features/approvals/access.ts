@@ -21,29 +21,16 @@ export const APPROVAL_PILOT_USER_IDS: readonly string[] = [
 ];
 
 /**
- * 결재자·참조자 **후보 풀** — 기안 화면의 결재선 편집기가 이 명단에서 고른다(하이웍스의 조직도 선택
- * 대응). 파일럿 동안은 파일럿 명단과 같다 — 명단 밖 사람을 결재자로 지정하면 그 사람은 메뉴가 없어
- * 문서를 처리할 수 없기 때문(결재선이 거기서 영원히 멈춘다).
- *
- * 🔴 전사 개방 시 이 함수를 **활성 직원 전체 조회**로 바꾼다(메뉴 기본값을 올리는 것과 같은 커밋에서).
- *    최종 목표인 "해당과 부원장 → 경리팀 → 원장&대표" 기본 결재선은 그 자리가 조직도로 생기면
- *    기본 템플릿(자주 쓰는 결재선)으로 내려준다.
+ * ⚠️ 결재자·참조자 **후보 풀은 여기 없다** — **활성 직원 전원**이다(원장 2026-08-14: *"테스트를 둘이
+ * 하는 거지, 결재자랑 이런 건 직원들 다 있어야지"*). 조회는 `getApproverCandidates()`(queries.ts),
+ * 서버 검증은 액션이 users 표에서 직접 대조한다. 이 파일의 명단은 **메뉴 노출(파일럿)만** 정한다.
+ * 명단 밖 직원이 결재자로 지정되면 사이드바 메뉴는 없지만 **벨 알림의 문서 링크로** 들어가 결재한다
+ * (문서 열람·결재 자격은 메뉴가 아니라 동결된 결재선 — 결정 로그).
  */
-export function approverCandidateIds(): readonly string[] {
-  return APPROVAL_PILOT_USER_IDS;
-}
 
 /** 파일럿 명단에 있는가 — 순수 판정(super_admin 통과는 권한 매트릭스가 얹는다). */
 export function isApprovalPilotUser(userId: string): boolean {
   return APPROVAL_PILOT_USER_IDS.includes(userId);
-}
-
-/**
- * 기본 결재선(폼 초기값) — 후보 풀에서 기안자만 뺀 순서. 파일럿처럼 두 명이면 서로가 서로의
- * 결재자다. 기안자가 편집기에서 바꿀 수 있고, **저장은 서버가 다시 검증한다**(line.ts).
- */
-export function approvalLineFor(drafterId: string): string[] {
-  return approverCandidateIds().filter((id) => id !== drafterId);
 }
 
 /** 파일럿으로 여는 메뉴 — `MENU_ACCESS` 기본값이 전 역할 `none`이라 명단 없이는 아무도 못 본다. */
