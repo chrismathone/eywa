@@ -15,6 +15,7 @@ import {
   validateLeaveRange,
   type LeaveKind,
 } from "@/features/leave/request-days";
+import { sanitizeRichHtml } from "@/lib/html/sanitize";
 import { approverCandidateIds } from "../access";
 import { nextDocNo } from "../doc-no";
 import { normalizeLine, normalizeRefs, validateApprovalLine } from "../line";
@@ -33,8 +34,32 @@ import { APPROVAL_FORM_LABEL, stepRoleLabels } from "../types";
 export type ApprovalActionState = { ok?: true; error?: string; notice?: string } | undefined;
 
 const MAX_TEXT = 500;
+/**
+ * 사유 본문 상한 — 리치 텍스트(HTML)라 평문 500자와 자릿수가 다르다(표 하나만 넣어도 태그가 수백 자다).
+ *
+ * 🔴 상한을 넘으면 **자르지 않고 거절한다.** `slice`로 잘라내면 태그 한가운데가 끊겨
+ *    깨진 HTML이 DB에 남고, 그걸 sanitize가 다시 손보면 사용자가 쓴 내용과 다른 문서가 저장된다.
+ *    "너무 길다"는 사람이 줄이면 되는 문제라 조용히 훼손하는 쪽이 훨씬 나쁘다.
+ */
+const MAX_REASON_HTML = 20_000;
 const DOC_NO_RETRY = 3;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * 위생처리된 HTML이 **사실상 빈 값**인가 — 순수 함수.
+ *
+ * 리치 에디터는 사용자가 아무것도 안 써도 빈 문단(`<p></p>`·`<p><br></p>`)을 내보낸다.
+ * 그걸 그대로 저장하면 문서에 "사유: (빈 칸)"이 남아 `—`(미입력)와 구분되지 않으므로 null로 접는다.
+ * ⚠️ 태그를 걷어낸 **텍스트**로 판정한다 — `<p>&nbsp;</p>`처럼 눈에 안 보이는 공백만 있는 경우도 빈 값이다.
+ */
+function isBlankHtml(html: string): boolean {
+  return (
+    html
+      .replace(/<[^>]*>/g, "")
+      .replace(/&nbsp;| /g, " ")
+      .trim().length === 0
+  );
+}
 
 /** 폼의 JSON id 배열(`["uuid", …]`)을 안전하게 파싱 — 형식이 깨졌으면 빈 배열(검증이 걸러낸다). */
 function parseIds(raw: FormDataEntryValue | null): string[] {
@@ -93,7 +118,16 @@ export async function submitLeaveDraft(
   const kind: LeaveKind = isLeaveKind(kindRaw) ? kindRaw : "annual";
   const start = String(formData.get("startDate") ?? "").trim();
   const end = kind === "half" ? start : String(formData.get("endDate") ?? "").trim() || start;
-  const reason = String(formData.get("reason") ?? "").trim().slice(0, MAX_TEXT) || null;
+
+  // 사유 = 리치 텍스트(HTML). 길이는 **자르지 않고 거절**(위 MAX_REASON_HTML 주석) → 위생처리 →
+  // 빈 껍데기면 null. 🔴 위생처리는 여기서 끝이 아니다 — 문서 화면이 렌더 직전에 한 번 더 통과시킨다
+  // (옛 행·직접 INSERT 방어. 저장 시점의 선의를 믿고 innerHTML을 그리면 그게 곧 XSS 경로다).
+  const reasonRaw = String(formData.get("reason") ?? "").trim();
+  if (reasonRaw.length > MAX_REASON_HTML) {
+    return { error: "사유가 너무 깁니다 — 줄여 주세요" };
+  }
+  const reasonHtml = reasonRaw ? sanitizeRichHtml(reasonRaw) : "";
+  const reason = reasonHtml && !isBlankHtml(reasonHtml) ? reasonHtml : null;
 
   const admin = createAdminClient();
   const { data: me } = await admin
