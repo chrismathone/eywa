@@ -106,7 +106,7 @@ import type { BasicAttendance } from "./attendance-pills";
 import { useEditPresence, useEditingOthers } from "@/features/presence/edit-presence";
 import { dedupeEditors } from "@/features/presence/presence-state";
 import { MakeupMergeDialog, type MakeupMergeChoice } from "./makeup-merge-dialog";
-import { mergeStatusOf, mergedUnits, planMakeupMerge, type MergeCandidate } from "../makeup-merge-plan";
+import { mergeStatusOf, planMakeupMerge, type MergeCandidate } from "../makeup-merge-plan";
 import { hasRowOverrides, resolveRowFields, seedRowFields } from "../row-fields";
 import { detectClassNotices } from "../class-notice";
 import { shortDate } from "../makeup-absence-link";
@@ -153,11 +153,8 @@ function reportCell(map: Record<string, SubjectReport> | undefined, subjectCount
   return "todo";
 }
 
-/** 오늘 시험·테스트 합본("일일 18/20, 확인 19/20") — exam_info 규격(추세 조립·prev-score 파싱 공용).
- * 규격 자체는 report-fields.ts(저장·미리보기 공용 단일 소스)에 있고, 여기선 학생 shape에 맞춰 넘겨준다. */
-function buildExamInfo(st: OneScreenStudent, dailyOn: boolean, checkOn: boolean): string {
-  return buildExamInfoOf(st.tests, dailyOn, checkOn);
-}
+// ⚠️ 학생 shape로 감싸던 래퍼(`buildExamInfo(student, …)`)는 없앴다 — 점수는 2026-08-13부터 **행 단위**라
+//    학생 값을 넘기면 보강·특강 행 추세에 정규 행 점수가 실렸다. 호출부가 rowEval.tests를 직접 넘긴다.
 
 /**
  * 선생님 원스크린 메인 — 상태는 전부 클라이언트 state(새로고침 시 초기화).
@@ -1224,6 +1221,8 @@ export function OneScreenClient({
     // ⚠️ 키 = classId(이름 아님) — 동명 반(수학·영어 같은 이름, 스키마 허용)에서 이름 키면 남의 반 수업
     // 맥락이 교차 주입된다(리뷰 확정 major, 순서 기능 동명 가드와 같은 원인). classId null(모호 행·보강)=서술 없음.
     const classContext = (su?.classId && classNarratives[su.classId]) || "";
+    // 이 행의 평가값 — 멘트(buildReportCommentInput)와 **같은 층**을 추세 재료로도 쓴다.
+    const rowEval = resolveRowFields(student, su);
     // 🔴 특이사항 칸에 들어온 **반 공지**를 개인 관찰과 갈라 준다(class-notice.ts) — 같은 반 학생들의
     //    특이사항이 전부 똑같으면 그건 개인 관찰일 수 없다. 안 가르면 모델이 6명분 관찰을 지어내
     //    멘트가 서로 복사본처럼 된다(2026-08-13 실측: 한 반 6명 특이사항이 글자까지 동일).
@@ -1240,8 +1239,11 @@ export function OneScreenClient({
         subject: subjectKey,
         classId: su?.classId ?? null, // 정규/특강 추세 분리(2026-07-23) — 이 행의 반.
 
-        todayExamInfo: buildExamInfo(student, showDailyTest, showCheckTest),
-        todayHomework: student.homework,
+        // 🔴 추세가 **숫자를 말하는** 자리다 — 재료는 멘트와 같은 행 값(row-fields.ts)이어야 한다.
+        //    2026-08-13에 점수·과제 수행률이 행 단위로 갈렸는데 이 두 줄만 학생 값으로 남아, 강사가 그 행에서
+        //    점수를 고쳐도 추세엔 **다른 행(정규)의 점수**가 실렸다(보강·특강 행일수록 어긋난다).
+        todayExamInfo: buildExamInfoOf(rowEval.tests, showDailyTest, showCheckTest),
+        todayHomework: rowEval.homework,
         date: date || undefined, // 보는 날짜 — 과거 날짜면 추세를 그 날짜 기준으로(이후 채점 이력 있으면 추세 생략)
       });
       const text = res.ok && res.comment ? res.comment : buildSubjectReport(student, idx);
