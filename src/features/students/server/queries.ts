@@ -20,6 +20,7 @@ import { buildSubjectMaps } from "@/features/owner/subjects";
 import { isShareExpired } from "@/features/onescreen/share-expiry";
 import { reportSubject } from "@/features/timetable/lib/report-subject";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { effectiveAttendanceRecords } from "@/features/attendance/effective-records";
 import { canSeeStudentEnrollment } from "./enrollment-gate";
 import { OUTCOME_LABEL, type OutcomeKey } from "@/features/enrollment/server/queries";
 import { reasonDisplay } from "@/features/withdrawals/types";
@@ -1257,33 +1258,53 @@ export type StudentAttendanceFull = {
   className: string;
   classId: string;
   note: string | null;
+  /** classes.subject 내부 키. 라벨은 소비처가 buildSubjectMaps/useSubjectMaps로. */
+  subject: string;
+  /** 0196a 교시. null = 그날 전체(옛 기록). */
+  slotStart: string | null;
+  /** 0208a 자리(LAB/JJ). 학생 출결로는 정상 기록 — 감추지 않는다. */
+  seatLabel: string | null;
 };
 
-/** 학생 전 출결 기록(월 네비·달력/리스트 뷰·반 필터를 클라에서 처리하도록 전건 반환). */
+/** 학생 전 출결 기록(월 네비·달력/리스트 뷰·과목/반 필터를 클라에서 처리하도록 전건 반환). */
 export async function getStudentAttendanceFull(studentId: string): Promise<StudentAttendanceFull[]> {
   const supabase = await createClient();
   const data = await fetchAllPaged<{
+    id: string;
+    student_id: string;
     session_date: string;
     status: string;
     note: string | null;
     class_id: string;
-    class: { class_name?: string } | { class_name?: string }[] | null;
+    slot_start: string | null;
+    seat_label: string | null;
+    recorded_at: string;
+    class: { class_name?: string; subject?: string } | { class_name?: string; subject?: string }[] | null;
   }>((from, to) =>
     supabase
       .from("attendance_records")
-      .select(`session_date, status, note, class_id, class:class_id ( class_name )`)
+      .select(
+        `id, student_id, session_date, status, note, class_id, slot_start, seat_label, recorded_at, class:class_id ( class_name, subject )`,
+      )
       .eq("student_id", studentId)
       .order("session_date", { ascending: false })
+      .order("id", { ascending: true })
       .range(from, to),
   );
-  return data.map((r) => {
-    const c = (Array.isArray(r.class) ? r.class[0] : r.class) as { class_name?: string } | undefined;
+  // append-only 정정 행을 전부 그리면 같은 교시가 두 번 나온다 — 최신만.
+  return effectiveAttendanceRecords(data).map((r) => {
+    const c = (Array.isArray(r.class) ? r.class[0] : r.class) as
+      | { class_name?: string; subject?: string }
+      | undefined;
     return {
       date: r.session_date,
       status: r.status,
       className: c?.class_name ?? "?",
       classId: r.class_id,
       note: r.note,
+      subject: c?.subject ?? "",
+      slotStart: r.slot_start,
+      seatLabel: r.seat_label,
     } satisfies StudentAttendanceFull;
   });
 }

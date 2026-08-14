@@ -82,6 +82,10 @@ describe("강사 홈 착지 지점 배선", () => {
     ).toEqual([]);
   });
 
+  it("착지 단일 소스가 자리 담당 착지(landingPathFromDuties)를 거친다", () => {
+    expect(read(["src", "lib", "auth", "teacher-home.ts"])).toContain("landingPathFromDuties");
+  });
+
   it("폴백 종점(원스크린)은 ROLE_LOCKED라 무한 리다이렉트가 없다", () => {
     // teacher_onescreen이 잠금 해제되면 "홈으로 폴백 → 홈이 거부 → 다시 폴백"이 무한히 돈다.
     // ECS는 잠기지 않은 메뉴라, teacher-home이 접근 확인 후에만 ECS를 준다(ecsHomeIfAllowed).

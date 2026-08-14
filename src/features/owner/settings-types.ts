@@ -211,6 +211,13 @@ export const operationsSchema = z
     terms: z.array(termSchema).max(20),
     holidays: z.array(holidaySchema).max(200),
     shuttle: shuttleSchema,
+    /**
+     * 자리 출석부 공개 PIN — 비로그인 태블릿(`/seat/lab`)에서 입력.
+     * lab만 1차 소비. 비우면 그 자리 공개 접속이 꺼진다(기본값 7099는 defaults).
+     */
+    seatPins: z.object({
+      lab: z.string().max(12),
+    }),
   })
   .superRefine((v, ctx) => {
     // 과목 중복 방지(저장 거부) — 내부 키·과목명(라벨) 모두 유일해야 한다. 클라 편집기 경고와 이중 방어.

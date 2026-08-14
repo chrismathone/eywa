@@ -1,6 +1,6 @@
 "use server";
 /**
- * 데스크 확인 기록(후속조치) 저장 — 0209a.
+ * 데스크 확인 기록(후속조치) 저장 — 0210a.
  *
  * 🔴 **여기서 출결(attendance_records)을 바꾸지 않는다.** 그 표는 시수·단가를 통해 급여·청구로
  *    흘러간다(골든마스터 대상) — 데스크의 전화 한 통이 강사 급여를 조용히 바꾸면 안 된다.
@@ -87,7 +87,7 @@ export async function recordFollowup(input: {
         created_by: user.id,
         updated_at: new Date().toISOString(),
       },
-      // 0209a의 `nulls not distinct` 유니크와 짝 — 같은 칸에 두 번 저장하면 갱신된다
+      // 0210a의 `nulls not distinct` 유니크와 짝 — 같은 칸에 두 번 저장하면 갱신된다
       // (데스크가 전화한 뒤 결과를 고쳐 적는 게 정상 흐름이라 갱신이 맞다).
       { onConflict: "tenant_id,student_id,session_date,slot_start" },
     )
@@ -100,7 +100,7 @@ export async function recordFollowup(input: {
     const missingTable = /relation .* does not exist|schema cache/i.test(error.message);
     return {
       error: missingTable
-        ? "확인 기록 저장소가 아직 준비되지 않았습니다 — 관리자에게 문의해 주세요(0209a 미적용)"
+        ? "확인 기록 저장소가 아직 준비되지 않았습니다 — 관리자에게 문의해 주세요(0210a 미적용)"
         : "확인 기록을 저장하지 못했습니다 — 잠시 후 다시 시도해 주세요",
     };
   }
