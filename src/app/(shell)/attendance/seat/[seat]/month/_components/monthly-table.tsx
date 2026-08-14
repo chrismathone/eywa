@@ -115,16 +115,16 @@ export function MonthlyTable({
             <td className="border-line sticky right-0 z-10 border-t bg-bg-soft" />
           </tr>
           <tr className="bg-bg-soft">
-            <td className="border-line text-amber-800 sticky left-0 z-10 border-t px-2 py-1 text-[11px] font-bold" colSpan={2}>
+            <td className="border-line text-amber sticky left-0 z-10 border-t px-2 py-1 text-[11px] font-bold" colSpan={2}>
               확인
             </td>
             {days.map((d) => (
-              <td key={`r-${d.date}`} className="border-line text-amber-800 num border-t px-0.5 py-1 text-center text-[10px]">
+              <td key={`r-${d.date}`} className="border-line text-amber num border-t px-0.5 py-1 text-center text-[10px]">
                 {d.placeholder ? "" : view.dateTotals[d.date]?.review ? formatSessionUnits(view.dateTotals[d.date]!.review) : "·"}
               </td>
             ))}
             <td className="border-line sticky right-[104px] z-10 border-t bg-bg-soft" />
-            <td className="border-line text-amber-800 num sticky right-[64px] z-10 border-t bg-bg-soft px-1 py-1 text-right text-[11px] font-bold">
+            <td className="border-line text-amber num sticky right-[64px] z-10 border-t bg-bg-soft px-1 py-1 text-right text-[11px] font-bold">
               {formatSessionUnits(view.summary.reviewUnits)}
             </td>
             <td className="border-line sticky right-0 z-10 border-t bg-bg-soft" />

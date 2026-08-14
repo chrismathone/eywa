@@ -20,7 +20,7 @@ export function MonthlySummary({
       확정 <span className="num font-bold">{formatSessionUnits(summary.confirmedUnits)}</span>시수
       {confirmedMin}
       <span className="text-text-faint mx-1.5">│</span>
-      확인 필요 <span className="text-amber-800 num font-bold">{formatSessionUnits(summary.reviewUnits)}</span>시수
+      확인 필요 <span className="text-amber num font-bold">{formatSessionUnits(summary.reviewUnits)}</span>시수
       <span className="text-text-faint mx-1.5">│</span>
       출석 <span className="num font-bold">{summary.present}</span> · 결석{" "}
       <span className="num font-bold">{summary.absent}</span> · 미입력{" "}
@@ -45,7 +45,7 @@ export function MonthlyLegend() {
         지각
       </span>
       <span>
-        <i className="mr-1 inline-block size-2.5 rounded-sm align-middle ring-1 ring-inset ring-amber-500" />
+        <i className="mr-1 inline-block size-2.5 rounded-sm align-middle ring-1 ring-inset ring-amber" />
         확인 필요
       </span>
     </p>

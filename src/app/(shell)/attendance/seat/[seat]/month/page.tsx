@@ -113,7 +113,7 @@ export default async function SeatMonthlyPage({
           <MonthlySummary summary={view.summary} minutesPerSlot={view.minutesPerSlot} />
           <MonthlyLegend />
           {view.summary.reviewUnits > 0 ? (
-            <p className="text-amber-800 text-xs break-keep">
+            <p className="text-amber text-xs break-keep">
               호박색 칸은 자리 표시가 없어 <strong>아직 담임 정산에 남아 있는</strong> 기록입니다.
             </p>
           ) : null}

@@ -55,7 +55,7 @@ export function MonthlyRow({
       <td className="border-line text-foreground num sticky right-[104px] z-10 w-[44px] min-w-[44px] border-b border-l bg-card px-1 py-2 text-right text-[12px]">
         {student.confirmedUnits > 0 ? formatSessionUnits(student.confirmedUnits) : "—"}
       </td>
-      <td className="border-line text-amber-800 num sticky right-[64px] z-10 w-[40px] min-w-[40px] border-b bg-card px-1 py-2 text-right text-[12px]">
+      <td className="border-line text-amber num sticky right-[64px] z-10 w-[40px] min-w-[40px] border-b bg-card px-1 py-2 text-right text-[12px]">
         {student.reviewUnits > 0 ? formatSessionUnits(student.reviewUnits) : "—"}
       </td>
       <td className={`border-line num sticky right-0 z-10 w-[64px] min-w-[64px] border-b bg-card px-2 py-2 text-right text-[12px] font-bold ${rateColor(rate)}`}>
@@ -97,7 +97,7 @@ function MonthCell({
   const clickable = Boolean(cell?.expected || recorded.length);
   const inner = (
     <span
-      className={`flex h-7 items-center justify-center text-[11px] ${disp.className} ${review ? "ring-1 ring-inset ring-amber-500" : ""}`}
+      className={`flex h-7 items-center justify-center text-[11px] ${disp.className} ${review ? "ring-1 ring-inset ring-amber" : ""}`}
       style={disp.style}
     >
       {disp.text}
