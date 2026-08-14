@@ -4,12 +4,12 @@ import { fetchInChunks } from "@/lib/supabase/batch";
 import { kstToday } from "@/lib/date-kst";
 import { resolveLeavePeriod, type LeavePeriod } from "@/features/leave/accrual";
 import type { LeaveKind } from "@/features/leave/request-days";
-import { approvalLineFor } from "../access";
-import { stepRoleLabels, type ApprovalForm, type DocStatus, type StepDecision } from "../types";
+import { approverCandidateIds } from "../access";
+import type { ApprovalForm, DocStatus, StepDecision } from "../types";
 
 /**
  * 전자결재 조회. 읽기는 **세션 클라이언트 + RLS**(기안자·결재자·원장)로만 한다 —
- * 쓰기는 서버 액션(service_role)이 담당한다(0212a 주석).
+ * 쓰기는 서버 액션(service_role)이 담당한다(0213a 주석).
  *
  * ⚠️ 조회 실패를 삼키지 않고 `loadError`로 올린다 — 2026-08-14에 RLS 재귀로 페이지가 통째로 500이
  *    되면서 화면에 단서가 한 글자도 안 남았다([[#109]]). 빈 목록으로 위장하지도 않는다.
@@ -43,6 +43,8 @@ export type LeaveFormDetail = {
   grantedDays: number;
 };
 
+export type ApprovalRefCell = { userId: string; name: string };
+
 export type ApprovalDocRow = {
   id: string;
   docNo: string;
@@ -57,6 +59,7 @@ export type ApprovalDocRow = {
   completedAt: string | null;
   outcomeNote: string | null;
   steps: ApprovalStepCell[];
+  refs: ApprovalRefCell[];
   leave: LeaveFormDetail | null;
 };
 
@@ -86,12 +89,12 @@ function num(v: unknown): number {
   return Number.isFinite(n) ? n : 0;
 }
 
-/** 문서 id 목록 → 문서 + 결재선 + 휴가 상세를 붙여 돌려준다(세 조회는 서로 독립 → 병렬, B4). */
+/** 문서 id 목록 → 문서 + 결재선 + 참조 + 휴가 상세를 붙여 돌려준다(네 조회는 서로 독립 → 병렬, B4). */
 async function loadDocs(ids: string[]): Promise<ApprovalDocRow[]> {
   if (ids.length === 0) return [];
   const supabase = await createClient();
 
-  const [docs, steps, leaves] = await Promise.all([
+  const [docs, steps, refs, leaves] = await Promise.all([
     fetchInChunks<Raw>(ids, (chunk) =>
       supabase
         .from("approval_documents")
@@ -108,6 +111,12 @@ async function loadDocs(ids: string[]): Promise<ApprovalDocRow[]> {
         )
         .in("document_id", chunk)
         .order("step_no", { ascending: true }),
+    ),
+    fetchInChunks<Raw>(ids, (chunk) =>
+      supabase
+        .from("approval_refs")
+        .select("document_id, user_id, viewer:users!approval_refs_user_id_fkey(display_name)")
+        .in("document_id", chunk),
     ),
     fetchInChunks<Raw>(ids, (chunk) =>
       supabase
@@ -134,6 +143,15 @@ async function loadDocs(ids: string[]): Promise<ApprovalDocRow[]> {
       comment: (s.comment as string | null) ?? null,
     });
     stepsBy.set(key, list);
+  }
+
+  const refsBy = new Map<string, ApprovalRefCell[]>();
+  for (const r of refs) {
+    const key = String(r.document_id);
+    const viewer = r.viewer as { display_name?: string } | null;
+    const list = refsBy.get(key) ?? [];
+    list.push({ userId: String(r.user_id), name: viewer?.display_name ?? "(이름 없음)" });
+    refsBy.set(key, list);
   }
 
   const leaveBy = new Map<string, LeaveFormDetail>();
@@ -168,6 +186,7 @@ async function loadDocs(ids: string[]): Promise<ApprovalDocRow[]> {
       completedAt: (d.completed_at as string | null) ?? null,
       outcomeNote: (d.outcome_note as string | null) ?? null,
       steps: (stepsBy.get(id) ?? []).sort((a, b) => a.stepNo - b.stepNo),
+      refs: refsBy.get(id) ?? [],
       leave: leaveBy.get(id) ?? null,
     };
   });
@@ -180,23 +199,45 @@ export function isMyTurn(doc: ApprovalDocRow, userId: string): boolean {
   return !!step && step.approverId === userId && step.decision === "pending";
 }
 
+/**
+ * 결재함 — **하이웍스 문서함 구성**을 따른다(원장 지시 2026-08-14 "하이웍스 기준으로"):
+ *   결재할 문서(내 차례) / 결재 예정(내 차례가 올 문서) / 진행(내가 관여한 진행중) /
+ *   완료 / 반려·회수 / 참조(열람만).
+ * ⚠️ 임시저장·합의·수신·회람은 이번 범위 밖(0213a 주석 — 필요해지면 kind로 확장).
+ */
 export type ApprovalBoxes = {
   ready: boolean;
   loadError: LeaveLoadError | null;
-  /** 결재 대기 — 내 차례인 문서(오래된 기안 먼저). */
+  /** 결재할 문서 — 내 차례(오래된 기안 먼저: 먼저 올라온 것부터 처리). */
   waiting: ApprovalDocRow[];
-  /** 상신함 — 내가 올린 문서(최근 기안 먼저). */
-  drafted: ApprovalDocRow[];
-  /** 완료함 — 내가 결재선에 있었고 이미 끝난 문서. */
-  done: ApprovalDocRow[];
+  /** 결재 예정 — 내가 결재선에 있지만 아직 내 차례가 아닌 진행 문서. */
+  upcoming: ApprovalDocRow[];
+  /** 진행 문서 — 내가 기안했거나 이미 결재한, 아직 진행중인 문서. */
+  inProgress: ApprovalDocRow[];
+  /** 완료 문서 — 승인으로 끝난, 내가 관여한 문서. */
+  completed: ApprovalDocRow[];
+  /** 반려·회수 문서 — 반려 또는 기안자 회수로 끝난, 내가 관여한 문서. */
+  rejected: ApprovalDocRow[];
+  /** 참조 문서 — 내가 참조로 지정된 문서(결재하지 않고 열람). */
+  refDocs: ApprovalDocRow[];
 };
 
-/** 결재함 3종을 한 번에 — 문서 id를 모아 한 벌만 적재한다(같은 문서를 세 번 읽지 않게). */
+const EMPTY_BOXES: ApprovalBoxes = {
+  ready: true,
+  loadError: null,
+  waiting: [],
+  upcoming: [],
+  inProgress: [],
+  completed: [],
+  rejected: [],
+  refDocs: [],
+};
+
+/** 결재함 전부를 한 번에 — 문서 id를 모아 **한 벌만** 적재한다(같은 문서를 함마다 다시 읽지 않게). */
 export async function getApprovalBoxes(userId: string): Promise<ApprovalBoxes> {
-  const empty: ApprovalBoxes = { ready: true, loadError: null, waiting: [], drafted: [], done: [] };
   const supabase = await createClient();
 
-  const [mine, asApprover] = await Promise.all([
+  const [mine, asApprover, asRef] = await Promise.all([
     supabase
       .from("approval_documents")
       .select("id")
@@ -209,40 +250,69 @@ export async function getApprovalBoxes(userId: string): Promise<ApprovalBoxes> {
       .eq("approver_id", userId)
       .order("created_at", { ascending: false })
       .limit(300),
+    supabase
+      .from("approval_refs")
+      .select("document_id")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(300),
   ]);
 
-  const err = mine.error ?? asApprover.error;
+  const err = mine.error ?? asApprover.error ?? asRef.error;
   if (err) {
-    if (isMissingRelation(err)) return { ...empty, ready: false };
-    return { ...empty, loadError: describeLoadError(new Error(err.message)) };
+    if (isMissingRelation(err)) return { ...EMPTY_BOXES, ready: false };
+    return { ...EMPTY_BOXES, loadError: describeLoadError(new Error(err.message)) };
   }
 
+  const refIds = new Set((asRef.data ?? []).map((r) => String(r.document_id)));
   const ids = [
     ...new Set([
       ...(mine.data ?? []).map((r) => String(r.id)),
       ...(asApprover.data ?? []).map((r) => String(r.document_id)),
+      ...refIds,
     ]),
   ];
-  if (ids.length === 0) return empty;
+  if (ids.length === 0) return EMPTY_BOXES;
 
   let docs: ApprovalDocRow[];
   try {
     docs = await loadDocs(ids);
   } catch (e) {
-    return { ...empty, loadError: describeLoadError(e) };
+    return { ...EMPTY_BOXES, loadError: describeLoadError(e) };
   }
 
   const byNewest = (a: ApprovalDocRow, b: ApprovalDocRow) =>
     b.submittedAt.localeCompare(a.submittedAt);
+  const myStep = (d: ApprovalDocRow) => d.steps.find((s) => s.approverId === userId);
+  /** 내가 관여했는가 = 기안자이거나 결재선에 있다(참조는 별도 함). */
+  const involved = (d: ApprovalDocRow) => d.drafterId === userId || !!myStep(d);
+
   return {
     ready: true,
     loadError: null,
-    // 먼저 올라온 기안을 먼저 처리하는 게 결재 순서의 상식이라 대기함만 오래된 순.
-    waiting: docs.filter((d) => isMyTurn(d, userId)).sort((a, b) => a.submittedAt.localeCompare(b.submittedAt)),
-    drafted: docs.filter((d) => d.drafterId === userId).sort(byNewest),
-    done: docs
-      .filter((d) => d.status !== "pending" && d.steps.some((s) => s.approverId === userId))
+    waiting: docs
+      .filter((d) => isMyTurn(d, userId))
+      .sort((a, b) => a.submittedAt.localeCompare(b.submittedAt)),
+    upcoming: docs
+      .filter((d) => {
+        if (d.status !== "pending") return false;
+        const s = myStep(d);
+        return !!s && s.stepNo > d.currentStep;
+      })
+      .sort((a, b) => a.submittedAt.localeCompare(b.submittedAt)),
+    inProgress: docs
+      .filter((d) => {
+        if (d.status !== "pending") return false;
+        if (d.drafterId === userId) return true;
+        const s = myStep(d);
+        return !!s && s.decision !== "pending"; // 내가 이미 결재했고 다음 사람 차례
+      })
       .sort(byNewest),
+    completed: docs.filter((d) => d.status === "approved" && involved(d)).sort(byNewest),
+    rejected: docs
+      .filter((d) => (d.status === "rejected" || d.status === "canceled") && involved(d))
+      .sort(byNewest),
+    refDocs: docs.filter((d) => refIds.has(d.id)).sort(byNewest),
   };
 }
 
@@ -252,28 +322,51 @@ export async function getApprovalDoc(id: string): Promise<ApprovalDocRow | null>
   return docs[0] ?? null;
 }
 
-export type ApprovalLineMember = { id: string; name: string; jobTitle: string | null; roleLabel: string };
+export type ApprovalPerson = { id: string; name: string; jobTitle: string | null };
 
 /**
- * 기안 화면에 보여줄 **결재선 미리보기** — 누가 어떤 순서로 받는지 올리기 전에 보여준다(그룹웨어 관행).
- * 순서는 `approvalLineFor`가 정하고, 여기서는 이름만 붙인다(이름이 없는 id도 자리는 지킨다).
+ * 결재자·참조자 **후보 명단**(이름 포함) — 기안 화면 결재선 편집기의 선택지(하이웍스 조직도 선택 대응).
+ * 풀은 `approverCandidateIds()`(파일럿 동안 파일럿 명단)이고 여기서는 이름만 붙인다.
  */
-export async function getApprovalLinePreview(drafterId: string): Promise<ApprovalLineMember[]> {
-  const ids = approvalLineFor(drafterId);
+export async function getApproverCandidates(): Promise<ApprovalPerson[]> {
+  const ids = [...approverCandidateIds()];
   if (ids.length === 0) return [];
   const supabase = await createClient();
   const { data } = await supabase.from("users").select("id, display_name, job_title").in("id", ids);
   const byId = new Map((data ?? []).map((u) => [String(u.id), u]));
-  const roles = stepRoleLabels(ids.length);
-  return ids.map((id, i) => {
+  return ids.map((id) => {
     const u = byId.get(id);
     return {
       id,
       name: (u?.display_name as string) ?? "(이름 없음)",
       jobTitle: (u?.job_title as string | null) ?? null,
-      roleLabel: roles[i] ?? "승인",
     };
   });
+}
+
+export type ApprovalLineTemplate = {
+  id: string;
+  name: string;
+  approverIds: string[];
+  refIds: string[];
+};
+
+/** 자주 쓰는 결재선(본인 것, RLS self) — 이름순. 표가 없으면 빈 목록(파일럿 안전망). */
+export async function getMyLineTemplates(): Promise<ApprovalLineTemplate[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("approval_line_templates")
+    .select("id, name, approver_ids, ref_ids")
+    .order("name", { ascending: true })
+    .limit(50);
+  if (error || !data) return [];
+  const toIds = (v: unknown) => (Array.isArray(v) ? v.map(String) : []);
+  return data.map((t) => ({
+    id: String(t.id),
+    name: String(t.name),
+    approverIds: toIds(t.approver_ids),
+    refIds: toIds(t.ref_ids),
+  }));
 }
 
 export type LeaveBalance = {

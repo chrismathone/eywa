@@ -5,7 +5,7 @@
  */
 import { EmptyState } from "@/components/empty-state";
 import { CalendarDays } from "@/components/icons/eywa-icon-compat";
-import { SEAT_MARK_BULB, SEAT_MARK_LABEL } from "../mark-state";
+import { SEAT_MARK_LABEL, SEAT_MARK_TONE } from "../mark-state";
 import { foldSeating, seatingSummary } from "../seating";
 import { groupSeatingFloors } from "../seating-floors";
 import type { LiveBoard } from "../types";
@@ -49,8 +49,10 @@ export function SeatingChart({ board }: { board: LiveBoard }) {
         </p>
         <ul className="ml-auto flex flex-wrap items-center gap-2">
           {LEGEND.map((k) => (
-            <li key={k} className="text-text-dim flex items-center gap-1.5 text-[12px] font-bold">
-              <span className={`size-3 rounded-full ${SEAT_MARK_BULB[k]}`} aria-hidden />
+            <li
+              key={k}
+              className={`rounded-lg px-2 py-0.5 text-[12px] font-bold ${SEAT_MARK_TONE[k]}`}
+            >
               {SEAT_MARK_LABEL[k]}
             </li>
           ))}

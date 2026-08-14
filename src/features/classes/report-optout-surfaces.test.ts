@@ -25,6 +25,7 @@ const SURFACES: { path: string; why: string }[] = [
   { path: "src/features/report-admin/server/board-roster-queries.ts", why: "'반 구성' 보드 대조" },
   { path: "src/features/notifications/server/events.ts", why: "'미발송 보고서' 재촉 알림" },
   { path: "src/features/attendance/server/queries.ts", why: "🔴 출결 파생 — 빼면 지난 등원일이 전부 결석으로 뒤집힌다" },
+  { path: "src/features/attendance/live/server/load.ts", why: "당일 출결 보드·좌석표 — 미발송 반이 미출결로 쏟아진다" },
   { path: "src/features/classes/server/delegation.ts", why: "로스터에 값 실어 나르기" },
   { path: "src/features/classes/server/actions.ts", why: "반 생성/수정 저장" },
   { path: "src/app/(shell)/lesson-reports/_components/bulk-compose-face.tsx", why: "직접 발송 반 체크박스 목록" },

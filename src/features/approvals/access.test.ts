@@ -1,10 +1,10 @@
 import { describe, it, expect } from "vitest";
 import { MENU_ACCESS, SYSTEM_ROLES, applyUserOverrides, resolveMatrix } from "@/lib/permissions";
 import {
-  APPROVAL_LINE_USER_IDS,
   APPROVAL_PILOT_USER_IDS,
   approvalLineFor,
   approvalMenuOverridesFor,
+  approverCandidateIds,
   isApprovalPilotUser,
 } from "./access";
 import { docYear, formatDocNo, nextDocNo } from "./doc-no";
@@ -27,14 +27,18 @@ describe("파일럿 명단", () => {
   });
 });
 
-describe("결재선", () => {
-  it("기안자 본인은 자기 결재선에서 빠진다(셀프 결재 금지)", () => {
+describe("기본 결재선(폼 초기값)", () => {
+  it("결재자 후보 풀 = 파일럿 동안은 파일럿 명단", () => {
+    expect(approverCandidateIds()).toEqual(APPROVAL_PILOT_USER_IDS);
+  });
+
+  it("기안자 본인은 기본 결재선에서 빠진다(셀프 결재 금지)", () => {
     expect(approvalLineFor(SEUNGYEOP!)).toEqual([YEWON]);
     expect(approvalLineFor(YEWON!)).toEqual([SEUNGYEOP]);
   });
 
-  it("명단 밖 사람이 올리면 전원이 결재선(순서 보존)", () => {
-    expect(approvalLineFor(OUTSIDER)).toEqual([...APPROVAL_LINE_USER_IDS]);
+  it("후보 풀 밖 사람이 올리면 후보 전원이 기본 결재선(순서 보존)", () => {
+    expect(approvalLineFor(OUTSIDER)).toEqual([...approverCandidateIds()]);
   });
 
   it("직함 라벨 — 한 명이면 '승인', 여럿이면 마지막만 '승인'", () => {
