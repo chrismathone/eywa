@@ -1,7 +1,12 @@
 "use client";
 
 import { schoolGradeLabel } from "@/lib/format/school-grade";
-import { isJjMarkField, jjSeatTextCols, type JjMarkField } from "@/features/attendance/seat/jj-fields";
+import {
+  isJjMarkField,
+  JJ_MARK_MAXLEN,
+  jjSeatTextCols,
+  type JjMarkField,
+} from "@/features/attendance/seat/jj-fields";
 import type { SeatClassRoster } from "@/features/attendance/seat/server/queries";
 import type { SeatStatus } from "@/features/attendance/seat/server/actions";
 import { SEAT_LABEL, SEAT_TONE } from "./seat-status";
@@ -115,6 +120,7 @@ export function SeatJjTable({
                                 className={INPUT}
                                 value={s[field] ?? ""}
                                 disabled={readOnly}
+                                maxLength={JJ_MARK_MAXLEN}
                                 aria-label={`${s.name} ${c.label}`}
                                 title={c.title}
                                 onChange={(e) => onSaveField(r.classId, s.id, field, e.target.value)}

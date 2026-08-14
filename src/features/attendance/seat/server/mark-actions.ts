@@ -11,15 +11,23 @@ const COL: Record<"listeningLevel" | "memorizedWords", "listening_level" | "memo
   listeningLevel: "listening_level",
   memorizedWords: "memorized_words",
 };
+const ON_CONFLICT = "tenant_id,class_id,student_id,mark_date,slot_start";
 
 function fieldLabel(field: "listeningLevel" | "memorizedWords"): string {
   return jjSeatTextCols().find((c) => c.field === field)?.label ?? "입력";
+}
+
+function isMissingColumn(err: { code?: string; message?: string } | null, column: string): boolean {
+  if (!err) return false;
+  if (err.code === "PGRST204" || err.code === "42703") return true;
+  return (err.message ?? "").includes(column) && /column|컬럼/i.test(err.message ?? "");
 }
 
 /**
  * JJ실 전용 칸 한 개 저장. 출결 행은 건드리지 않고, 자리 시수도 안 박는다.
  *
  * 기록은 영어 시트 JJ 칸과 같은 `class_sheet_student_marks`. PIN·랩실에서는 거부.
+ * 🔴 듣기·단어를 동시에 적으면 둘 다 "새 행"으로 보이므로 **upsert**(select+insert는 unique 충돌).
  */
 export async function setSeatJjField(input: {
   seat: SeatKey;
@@ -65,32 +73,12 @@ export async function setSeatJjField(input: {
     .eq("mark_date", input.date)
     .eq("slot_start", slot)
     .maybeSingle();
-  if (readErr) return { error: `저장에 실패했습니다: ${readErr.message}` };
+  if (readErr) return { error: "저장에 실패했습니다" };
+  if (!existing && value === null) return { ok: true };
 
   const now = new Date().toISOString();
-  if (existing?.id) {
-    const { error } = await admin
-      .from("class_sheet_student_marks")
-      .update({ [col]: value, updated_by: g.userId, updated_at: now })
-      .eq("id", existing.id)
-      .eq("tenant_id", g.tenantId);
-    if (error) return { error: `저장에 실패했습니다: ${error.message}` };
-    const next = {
-      status: existing.status,
-      progress_note: existing.progress_note,
-      score: existing.score,
-      listening_level: field === "listeningLevel" ? value : existing.listening_level,
-      memorized_words: field === "memorizedWords" ? value : existing.memorized_words,
-    };
-    if (Object.values(next).every((v) => v == null)) {
-      await admin
-        .from("class_sheet_student_marks")
-        .delete()
-        .eq("id", existing.id)
-        .eq("tenant_id", g.tenantId);
-    }
-  } else if (value !== null) {
-    const { error } = await admin.from("class_sheet_student_marks").insert({
+  const { error } = await admin.from("class_sheet_student_marks").upsert(
+    {
       tenant_id: g.tenantId,
       class_id: input.classId,
       student_id: input.studentId,
@@ -99,8 +87,29 @@ export async function setSeatJjField(input: {
       [col]: value,
       updated_by: g.userId,
       updated_at: now,
-    });
-    if (error) return { error: `저장에 실패했습니다: ${error.message}` };
+    },
+    { onConflict: ON_CONFLICT },
+  );
+  if (error) {
+    if (isMissingColumn(error, col)) {
+      return { error: `'${fieldLabel(field)}' 칸은 아직 준비 중입니다` };
+    }
+    return { error: "저장에 실패했습니다" };
+  }
+
+  const next = {
+    status: existing?.status ?? null,
+    progress_note: existing?.progress_note ?? null,
+    score: existing?.score ?? null,
+    listening_level: field === "listeningLevel" ? value : (existing?.listening_level ?? null),
+    memorized_words: field === "memorizedWords" ? value : (existing?.memorized_words ?? null),
+  };
+  if (Object.values(next).every((v) => v == null) && existing?.id) {
+    await admin
+      .from("class_sheet_student_marks")
+      .delete()
+      .eq("id", existing.id)
+      .eq("tenant_id", g.tenantId);
   }
 
   revalidatePath("/attendance/seat");

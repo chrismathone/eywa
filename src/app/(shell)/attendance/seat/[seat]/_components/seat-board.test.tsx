@@ -1,7 +1,11 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { SeatClassRoster } from "@/features/attendance/seat/server/queries";
 import { SeatBoard } from "./seat-board";
+
+const { setSeatJjField } = vi.hoisted(() => ({
+  setSeatJjField: vi.fn().mockResolvedValue({ ok: true }),
+}));
 
 vi.mock("next/link", () => ({
   default: ({ href, children, ...rest }: { href: string; children: React.ReactNode }) => (
@@ -16,10 +20,14 @@ vi.mock("@/features/attendance/seat/server/actions", () => ({
   fillSeatSlot: vi.fn(),
 }));
 vi.mock("@/features/attendance/seat/server/mark-actions", () => ({
-  setSeatJjField: vi.fn(),
+  setSeatJjField,
 }));
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  setSeatJjField.mockReset();
+  setSeatJjField.mockResolvedValue({ ok: true });
+});
 
 const rosters: SeatClassRoster[] = [
   {
@@ -74,5 +82,24 @@ describe("자리 출석부 본문", () => {
     );
     expect(screen.queryByText("듣기 레벨")).toBeNull();
     expect(screen.queryByText("누적 암기 단어수")).toBeNull();
+  });
+
+  it("교시를 바꾸면 방금 적던 듣기 값이 다음 교시에 묻지 않는다", () => {
+    const props = {
+      seat: "jj" as const,
+      date: "2026-08-14",
+      periods: [
+        { start: "16:20", ends: ["17:00"], classIds: ["c1"] },
+        { start: "17:20", ends: ["18:00"], classIds: ["c1"] },
+      ],
+      rosters,
+      readOnly: false,
+      hrefFor: "/attendance/seat/jj?date=2026-08-14&start=",
+    };
+    const { rerender } = render(<SeatBoard {...props} activeStart="16:20" />);
+    fireEvent.change(screen.getByLabelText("이다윤A 듣기 레벨"), { target: { value: "L3" } });
+    expect(screen.getByLabelText("이다윤A 듣기 레벨")).toHaveValue("L3");
+    rerender(<SeatBoard {...props} activeStart="17:20" />);
+    expect(screen.getByLabelText("이다윤A 듣기 레벨")).toHaveValue("");
   });
 });

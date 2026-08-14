@@ -9,7 +9,7 @@
  * 🔴 자리 시수(`seat_label`)와는 무관 — 이 칸을 적는다고 담임 정산에서 빠지지 않는다.
  */
 import { rosterTextCols, type MarkTextField, type RosterTextCol } from "@/features/class-sheets/lib/roster-form";
-import type { SeatKey } from "./seat";
+import { hhmm, type SeatKey } from "./seat";
 
 export const JJ_MARK_FIELDS = ["listeningLevel", "memorizedWords"] as const;
 export type JjMarkField = (typeof JJ_MARK_FIELDS)[number];
@@ -33,4 +33,9 @@ export function jjSeatTextCols(): readonly RosterTextCol[] {
 
 export function isJjMarkField(field: MarkTextField): field is JjMarkField {
   return (JJ_MARK_FIELDS as readonly string[]).includes(field);
+}
+
+/** 낙관적 오버레이 키 — 교시가 빠지면 16:20에 적은 값이 17:20에 묻는다. */
+export function seatOverlayKey(classId: string, studentId: string, slotStart: string): string {
+  return `${classId}|${studentId}|${hhmm(slotStart)}`;
 }

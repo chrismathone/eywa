@@ -156,6 +156,7 @@ export default async function SeatAttendancePage({
         />
       ) : (
         <SeatBoard
+          key={`${seat}|${date}|${period.start}`}
           seat={seat}
           date={date}
           periods={day.periods.map((p) => ({
