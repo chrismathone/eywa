@@ -73,9 +73,9 @@ export const AUDIT_ACTIONS = {
   classnote_report_recall: "수업보고서 회수",
   ecs_attendance_clear: "출석 취소(ECS)",
   operating_periods_save: "세션 기간 저장",
-  leave_request_submit: "휴가 신청",
-  leave_request_decide: "휴가 결재",
-  leave_request_cancel: "휴가 신청 취소",
+  approval_submit: "전자결재 기안",
+  approval_decide: "전자결재 처리",
+  approval_withdraw: "전자결재 회수",
 } as const;
 export type AuditActionKey = keyof typeof AUDIT_ACTIONS;
 
