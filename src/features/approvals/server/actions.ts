@@ -15,14 +15,15 @@ import {
   validateLeaveRange,
   type LeaveKind,
 } from "@/features/leave/request-days";
-import { approvalLineFor } from "../access";
+import { approverCandidateIds } from "../access";
 import { nextDocNo } from "../doc-no";
+import { normalizeLine, normalizeRefs, validateApprovalLine } from "../line";
 import { APPROVAL_FORM_LABEL, stepRoleLabels } from "../types";
 
 /**
  * 전자결재 쓰기 — 기안·결재·회수.
  *
- * 🔴 **쓰기는 모두 여기서만** — 0212a는 authenticated 쓰기 정책을 두지 않았다(RLS는 읽기 격리 전용).
+ * 🔴 **쓰기는 모두 여기서만** — 0213a는 authenticated 쓰기 정책을 두지 않았다(RLS는 읽기 격리 전용).
  *    ① 잔여 연차 검증과 ② 순차 단계 진행이 서버 판단이라, 클라가 행을 직접 만들 수 있으면 규칙이 뚫린다.
  * ⚠️ admin(service_role)은 RLS를 우회하므로 **모든 쿼리에 `tenant_id` 명시 필터**([[#104]]).
  * ⚠️ 게이트는 화면과 **같은 함수**(`canWriteTenant(role, "approvals")`) — 파일럿 명단이 권한 매트릭스에
@@ -33,6 +34,17 @@ export type ApprovalActionState = { ok?: true; error?: string; notice?: string }
 
 const MAX_TEXT = 500;
 const DOC_NO_RETRY = 3;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** 폼의 JSON id 배열(`["uuid", …]`)을 안전하게 파싱 — 형식이 깨졌으면 빈 배열(검증이 걸러낸다). */
+function parseIds(raw: FormDataEntryValue | null): string[] {
+  try {
+    const v = JSON.parse(String(raw ?? "[]"));
+    return Array.isArray(v) ? v.map(String).filter((id) => UUID_RE.test(id)) : [];
+  } catch {
+    return [];
+  }
+}
 
 async function requireApprovalWriter() {
   const user = await getCurrentUser();
@@ -104,10 +116,17 @@ export async function submitLeaveDraft(
   if (invalid) return { error: invalid };
   const days = countLeaveDays(start, end, kind);
 
-  const line = approvalLineFor(user.id);
-  if (line.length === 0) {
-    return { error: "결재선이 비어 있어 상신할 수 없습니다 — 관리자에게 문의하세요" };
-  }
+  // 결재선·참조 — 기안자가 편집기에서 지정한 값(하이웍스 대응). 폼 조작 방어는 순수 검증(line.ts)이
+  // 후보 풀과 대조해서 한다 — 명단 밖 결재자는 메뉴가 없어 문서가 그 칸에서 영원히 멈춘다.
+  const line = normalizeLine(user.id, parseIds(formData.get("approverIds")));
+  const refs = normalizeRefs(user.id, line, parseIds(formData.get("refIds")));
+  const lineInvalid = validateApprovalLine({
+    drafterId: user.id,
+    approverIds: line,
+    refIds: refs,
+    candidateIds: approverCandidateIds(),
+  });
+  if (lineInvalid) return { error: lineInvalid };
 
   let reserved: number;
   try {
@@ -162,14 +181,14 @@ export async function submitLeaveDraft(
     const missing = /does not exist|Could not find the table|PGRST205/i.test(lastError);
     return {
       error: missing
-        ? "전자결재 표가 아직 준비되지 않았습니다(마이그레이션 0212a 적용 필요)"
+        ? "전자결재 표가 아직 준비되지 않았습니다(마이그레이션 0213a 적용 필요)"
         : `상신 실패 — ${lastError || "알 수 없는 오류"}`,
     };
   }
 
-  // 결재선과 양식 상세를 붙인다. 하나라도 실패하면 문서를 지운다(결재선 없는 유령 문서 방지).
+  // 결재선·참조·양식 상세를 붙인다. 하나라도 실패하면 문서를 지운다(결재선 없는 유령 문서 방지).
   const roles = stepRoleLabels(line.length);
-  const [{ error: stepErr }, { error: formErr }] = await Promise.all([
+  const inserts = await Promise.all([
     admin.from("approval_steps").insert(
       line.map((approverId, i) => ({
         tenant_id: user.tenantId,
@@ -192,10 +211,16 @@ export async function submitLeaveDraft(
       period_end: period.end,
       granted_days: period.granted,
     }),
+    refs.length > 0
+      ? admin.from("approval_refs").insert(
+          refs.map((userId) => ({ tenant_id: user.tenantId, document_id: docId, user_id: userId })),
+        )
+      : Promise.resolve({ error: null }),
   ]);
-  if (stepErr || formErr) {
+  const insertErr = inserts.find((r) => r.error)?.error;
+  if (insertErr) {
     await admin.from("approval_documents").delete().eq("id", docId).eq("tenant_id", user.tenantId);
-    return { error: `상신 실패 — ${(stepErr ?? formErr)?.message ?? "알 수 없는 오류"}` };
+    return { error: `상신 실패 — ${insertErr.message}` };
   }
 
   // 순차 결재라 **1단계 결재자에게만** 알린다(뒤 차례는 자기 차례가 되면 알림을 받는다).
@@ -220,7 +245,10 @@ export async function submitLeaveDraft(
     metadata: { days, remaining, granted: period.granted, period: leavePeriodLabel(period) },
   });
   revalidatePath("/approvals");
-  return { ok: true, notice: `상신했습니다 — 결재선 ${line.length}명` };
+  return {
+    ok: true,
+    notice: `상신했습니다 — 결재 ${line.length}단계${refs.length > 0 ? ` · 참조 ${refs.length}명` : ""}`,
+  };
 }
 
 /**
@@ -303,16 +331,32 @@ export async function decideDocument(
       ]);
     }
   } else {
+    // 문서가 끝났다 — 기안자 + **참조자**에게 알린다(참조는 하이웍스처럼 결말을 받아본다).
+    const { data: refRows } = await admin
+      .from("approval_refs")
+      .select("user_id")
+      .eq("document_id", docId)
+      .eq("tenant_id", user.tenantId);
+    const outcome = approved ? "승인" : "반려";
     await notifyUsers([
       {
         tenantId: user.tenantId,
         recipientId: doc.drafter_id as string,
         type: "approval_decided",
-        title: approved ? "결재 승인" : "결재 반려",
-        body: `${doc.title} — ${approved ? "승인" : "반려"}되었습니다`,
+        title: `결재 ${outcome}`,
+        body: `${doc.title} — ${outcome}되었습니다`,
         link: `/approvals/${docId}`,
         actorId: user.id,
       },
+      ...((refRows ?? []).map((r) => ({
+        tenantId: user.tenantId,
+        recipientId: r.user_id as string,
+        type: "approval_decided" as const,
+        title: `참조 문서 ${outcome}`,
+        body: `${doc.title} — ${outcome}으로 종결되었습니다 (참조)`,
+        link: `/approvals/${docId}`,
+        actorId: user.id,
+      }))),
     ]);
   }
 
@@ -379,4 +423,80 @@ export async function withdrawDocument(
   revalidatePath("/approvals");
   revalidatePath(`/approvals/${docId}`);
   return { ok: true, notice: "기안을 회수했습니다" };
+}
+
+// ── 자주 쓰는 결재선(개인 템플릿, 하이웍스 대응) ─────────────────────────────
+
+/**
+ * 현재 결재선을 이름 붙여 저장(같은 이름은 덮어쓴다 — upsert). 저장 시점에도 검증해서
+ * 애초에 못 쓸 결재선(풀 밖·상한 초과)이 템플릿으로 남지 않게 한다.
+ */
+export async function saveLineTemplate(
+  _prev: ApprovalActionState,
+  formData: FormData,
+): Promise<ApprovalActionState> {
+  const gate = await requireApprovalWriter();
+  if ("error" in gate) return { error: gate.error };
+  const { user } = gate;
+
+  const name = String(formData.get("name") ?? "").trim().slice(0, 40);
+  if (!name) return { error: "결재선 이름을 입력하세요" };
+  const approvers = normalizeLine(user.id, parseIds(formData.get("approverIds")));
+  const refs = normalizeRefs(user.id, approvers, parseIds(formData.get("refIds")));
+  const invalid = validateApprovalLine({
+    drafterId: user.id,
+    approverIds: approvers,
+    refIds: refs,
+    candidateIds: approverCandidateIds(),
+  });
+  if (invalid) return { error: invalid };
+
+  const admin = createAdminClient();
+  const { error } = await admin.from("approval_line_templates").upsert(
+    {
+      tenant_id: user.tenantId,
+      owner_id: user.id,
+      name,
+      approver_ids: approvers,
+      ref_ids: refs,
+    },
+    { onConflict: "tenant_id,owner_id,name" },
+  );
+  if (error) {
+    const missing = /does not exist|Could not find the table|PGRST205/i.test(error.message);
+    return {
+      error: missing
+        ? "전자결재 표가 아직 준비되지 않았습니다(마이그레이션 0213a 적용 필요)"
+        : `결재선 저장 실패 — ${error.message}`,
+    };
+  }
+  revalidatePath("/approvals/new");
+  return { ok: true, notice: `결재선 '${name}'을(를) 저장했습니다` };
+}
+
+/** 내 템플릿 삭제 — 본인 것만(owner_id 필터). */
+export async function deleteLineTemplate(
+  _prev: ApprovalActionState,
+  formData: FormData,
+): Promise<ApprovalActionState> {
+  const gate = await requireApprovalWriter();
+  if ("error" in gate) return { error: gate.error };
+  const { user } = gate;
+
+  const id = String(formData.get("templateId") ?? "").trim();
+  if (!id) return { error: "삭제할 결재선을 찾을 수 없습니다" };
+
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("approval_line_templates")
+    .delete()
+    .eq("id", id)
+    .eq("tenant_id", user.tenantId)
+    .eq("owner_id", user.id) // 남의 템플릿은 못 지운다
+    .select("id")
+    .maybeSingle();
+  if (error) return { error: `삭제 실패 — ${error.message}` };
+  if (!data) return { error: "본인이 저장한 결재선만 삭제할 수 있습니다" };
+  revalidatePath("/approvals/new");
+  return { ok: true, notice: "저장된 결재선을 삭제했습니다" };
 }
