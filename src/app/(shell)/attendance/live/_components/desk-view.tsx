@@ -67,7 +67,7 @@ export function DeskView({
         <EmptyState
           icon={CheckCircle2}
           title="확인할 건이 없습니다"
-          description="수업 시작 15분이 지나도 출결이 비어 있으면 여기에 뜹니다."
+          description="수업 시작 10분이 지나도 출결이 비어 있으면 여기에 뜹니다."
         />
       ) : null}
 
@@ -283,6 +283,7 @@ function StudentCard({ row, date, canEdit }: { row: QueueStudent; date: string; 
               // 🔴 저장 축(slot-axis) — 수학에 교시를 실으면 day-level 행 위에 두 번째 행이 생겨
               //    정정이 시수·급여에 반영되지 않는다(살아남은 옛 행이 계속 1시수를 청구한다).
               slotStart: row.saveSlot,
+              periodStart: row.slotStart,
               note: note || null,
               quiet: true,
             }).catch(() => ({ error: "출결 정정에 실패했습니다" }) as const);

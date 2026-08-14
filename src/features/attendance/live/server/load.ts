@@ -189,17 +189,23 @@ export async function loadLiveSlots(date: string, classIds?: readonly string[]):
   const effective = effectiveAttendanceRecords(recordRows).filter((r) =>
     expectedInClass(r.class_id, r.student_id),
   );
-  const bySlot = new Map<string, { status: string; note: string | null }>(); // `${classId}|${slot}|${studentId}`
-  const byDay = new Map<string, { status: string; note: string | null }>(); // `${classId}|${studentId}`
+  const bySlot = new Map<string, { status: string; note: string | null; recordedAt: string; slot: string | null }>();
+  const byDay = new Map<string, { status: string; note: string | null; recordedAt: string; slot: string | null }>();
   const slotHasRecord = new Set<string>(); // `${classId}|${slot}`
   const dayHasRecord = new Set<string>(); // classId
   for (const r of effective) {
+    const hit = {
+      status: r.status,
+      note: r.note,
+      recordedAt: r.recorded_at,
+      slot: r.slot_start ? hhmm(r.slot_start) : null,
+    };
     if (r.slot_start) {
       const slot = hhmm(r.slot_start);
-      bySlot.set(`${r.class_id}|${slot}|${r.student_id}`, { status: r.status, note: r.note });
+      bySlot.set(`${r.class_id}|${slot}|${r.student_id}`, hit);
       slotHasRecord.add(`${r.class_id}|${slot}`);
     } else {
-      byDay.set(`${r.class_id}|${r.student_id}`, { status: r.status, note: r.note });
+      byDay.set(`${r.class_id}|${r.student_id}`, hit);
       dayHasRecord.add(r.class_id);
     }
   }
@@ -254,6 +260,8 @@ export async function loadLiveSlots(date: string, classIds?: readonly string[]):
         studentPhone: meta.student_phone,
         status,
         note: hit?.note ?? null,
+        recordSlot: hit?.slot ?? null,
+        recordedAt: hit?.recordedAt ?? null,
         signal: classifySignal(status, hasAnyRecord),
       });
     }

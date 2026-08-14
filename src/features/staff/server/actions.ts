@@ -54,6 +54,7 @@ function readBaseForm(formData: FormData) {
     attendanceAlertOptin: get("attendanceAlertOptin") === "on",
     seatLabDuty: get("seatLabDuty") === "on",
     seatJjDuty: get("seatJjDuty") === "on",
+    deskAttendanceOptin: get("deskAttendanceOptin") === "on",
   };
 }
 
@@ -146,10 +147,15 @@ export async function createStaff(
   };
   const { error: dbErr } = await admin
     .from("users")
-    .update({ ...staffPatch, seat_lab_duty: input.seatLabDuty, seat_jj_duty: input.seatJjDuty })
+    .update({
+      ...staffPatch,
+      seat_lab_duty: input.seatLabDuty,
+      seat_jj_duty: input.seatJjDuty,
+      desk_attendance_optin: input.deskAttendanceOptin,
+    })
     .eq("id", authData.user.id);
 
-  if (dbErr && /seat_lab_duty|seat_jj_duty/i.test(dbErr.message)) {
+  if (dbErr && /seat_lab_duty|seat_jj_duty|desk_attendance_optin/i.test(dbErr.message)) {
     // 0209a 미적용 — 자리 토글만 빼고 나머지를 저장한다(#95, 직원 등록을 죽이지 않음).
     const { error: retryErr } = await admin.from("users").update(staffPatch).eq("id", authData.user.id);
     if (retryErr) {
@@ -265,16 +271,21 @@ export async function updateStaff(
   };
   const { error } = await supabase
     .from("users")
-    .update({ ...staffPatch, seat_lab_duty: input.seatLabDuty, seat_jj_duty: input.seatJjDuty })
+    .update({
+      ...staffPatch,
+      seat_lab_duty: input.seatLabDuty,
+      seat_jj_duty: input.seatJjDuty,
+      desk_attendance_optin: input.deskAttendanceOptin,
+    })
     .eq("id", id);
 
   if (error) {
-    // 0209a 미적용이면 자리 토글만 빼고 나머지를 저장한다(#95 — 직원 수정 화면을 죽이지 않음).
-    if (/seat_lab_duty|seat_jj_duty/i.test(error.message)) {
+    // 0209a/0211a 미적용이면 선택 토글만 빼고 나머지를 저장한다(#95 — 직원 수정 화면을 죽이지 않음).
+    if (/seat_lab_duty|seat_jj_duty|desk_attendance_optin/i.test(error.message)) {
       const { error: retry } = await supabase.from("users").update(staffPatch).eq("id", id);
       if (retry) return { error: retry.message };
-      if (input.seatLabDuty || input.seatJjDuty) {
-        return { error: "자리 출석부 담당은 아직 저장할 수 없습니다. 관리자에게 문의하세요." };
+      if (input.seatLabDuty || input.seatJjDuty || input.deskAttendanceOptin) {
+        return { error: "일부 알림·담당 토글은 아직 저장할 수 없습니다. 관리자에게 문의하세요." };
       }
     } else {
       return { error: error.message };

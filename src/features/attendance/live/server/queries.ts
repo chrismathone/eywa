@@ -19,6 +19,7 @@ import { isWithinAttendanceEditWindow } from "@/features/attendance/edit-window"
 import { hhmmToMin, shouldQueue, slotPhase, type SlotPhase } from "../signals";
 import { buildQueue, type DeskQueue, type FollowupBrief, type QueueClass, type QueueStudent } from "../queue";
 import { loadLiveSlots } from "./load";
+import { userTaughtClassSet } from "./write-policy";
 import type { LiveBoard, LiveBoardSlot, LiveSlot } from "../types";
 
 export type { LiveBoard, LiveBoardSlot };
@@ -92,7 +93,10 @@ export const getLiveBoard = cache(async (date: string = kstToday()): Promise<Liv
     }
   }
 
-  const slots = await loadLiveSlots(date, classIds);
+  const [slots, taught] = await Promise.all([
+    loadLiveSlots(date, classIds),
+    userTaughtClassSet(supabase, user.id, date),
+  ]);
   const isToday = date === kstToday();
   const teacherIds = [...new Set(slots.map((s) => s.teacherId).filter((v): v is string => !!v))];
   const nameById = await loadTeacherNames(teacherIds);
@@ -104,6 +108,7 @@ export const getLiveBoard = cache(async (date: string = kstToday()): Promise<Liv
       ...slot,
       teacherName: slot.teacherId ? (nameById.get(slot.teacherId)?.name ?? null) : null,
       phase: phaseOf(slot, isToday),
+      ownedByMe: taught.has(slot.classId) || slot.teacherId === user.id,
     };
     (byTeacher.get(key) ?? byTeacher.set(key, []).get(key)!).push(withPhase);
   }
@@ -192,7 +197,7 @@ export async function getDeskQueue(date: string = kstToday()): Promise<DeskQueue
       for (const s of slot.students) {
         if (!s.signal || s.signal === "class_unmarked") continue;
         // 🔴 `absent`는 유예를 기다리지 않는다 — 강사가 결석을 찍은 순간이 가장 확실한 신호이고,
-        //    하원·셔틀 시간을 감안하면 15분을 더 흘려보낼 이유가 없다(signals.shouldQueue와 같은 규약).
+        //    하원·셔틀 시간을 감안하면 유예를 더 흘려보낼 이유가 없다(signals.shouldQueue와 같은 규약).
         if (!shouldQueue(s.signal, slot.phase)) continue;
         students.push({
           studentId: s.studentId,

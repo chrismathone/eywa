@@ -18,6 +18,7 @@ import { TodayAttendancePills } from "@/features/class-sheets/components/today-a
 import { setAttendanceBulk, setAttendanceCell } from "@/features/attendance/server/actions";
 import { EmptyState } from "@/components/empty-state";
 import { CalendarDays } from "@/components/icons/eywa-icon-compat";
+import { canDeskMark } from "@/features/attendance/live/mark-state";
 import type { LiveBoard, LiveBoardSlot } from "@/features/attendance/live/types";
 import type { BasicAttendance } from "@/features/class-sheets/lib/mark-cycle";
 
@@ -91,6 +92,7 @@ function SlotCard({ slot, date, canEdit }: { slot: LiveBoardSlot; date: string; 
         status,
         // 🔴 화면 축이 아니라 **저장 축**(slot-axis) — 수학에 교시를 실으면 연강 반 시수가 2~3배가 된다.
         slotStart: slot.saveSlot,
+        periodStart: slot.slotStart,
         ...(note !== undefined ? { note } : {}),
         quiet: true,
       })
@@ -130,6 +132,7 @@ function SlotCard({ slot, date, canEdit }: { slot: LiveBoardSlot; date: string; 
         // 🔴 서버 강제 '빈 칸만' — 낡은 탭이 딴 곳에서 방금 찍힌 결석을 출석으로 뒤집는 것을 막는다.
         fillEmptyOnly: true,
         slotStart: slot.saveSlot,
+        periodStart: slot.slotStart,
       })
         .then((res) => {
           if ("error" in res) {
@@ -173,7 +176,11 @@ function SlotCard({ slot, date, canEdit }: { slot: LiveBoardSlot; date: string; 
               status={statusOf(s.studentId, s.status)}
               note={null}
               studentName={s.studentName}
-              canMark={canEdit && !busy}
+              canMark={
+                canEdit &&
+                !busy &&
+                (slot.ownedByMe || canDeskMark(statusOf(s.studentId, s.status), slot.phase))
+              }
               onSet={(status, note) => save(s.studentId, status, note)}
               onClear={() => save(s.studentId, null)}
             />
@@ -181,7 +188,7 @@ function SlotCard({ slot, date, canEdit }: { slot: LiveBoardSlot; date: string; 
         ))}
       </ul>
 
-      {canEdit && pending.length > 0 && (
+      {canEdit && slot.ownedByMe && pending.length > 0 && (
         <button
           type="button"
           onClick={fillRest}
