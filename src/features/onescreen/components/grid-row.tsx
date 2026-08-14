@@ -261,12 +261,26 @@ export function GridBodyRow({
   /** 잠긴 칸 묶음(td 안에서만 쓴다 — tr의 자식은 td여야 하므로 행 전체를 fieldset으로 감쌀 수 없다). */
   const LOCK_FS =
     "contents [&_input:disabled]:opacity-50 [&_textarea:disabled]:opacity-50 [&_button:disabled]:opacity-50 [&:disabled_*]:cursor-not-allowed";
-  const mentPlaceholder = isAbsent ? "결석 — 학부모 문구는 발송되지 않습니다" : null;
+  const mentPlaceholder = isAbsent
+    ? "결석 — 학부모 문구는 발송되지 않습니다"
+    : alreadySent
+      ? "발송 완료 — 수정할 수 없습니다"
+      : null;
   /** 특이사항 자리 — 막기만 하지 말고 **갈 곳**을 알려준다(결석 사유는 출결 알약 안에 적는 칸이 있다). */
-  const rowPlaceholder = isAbsent ? "결석 — 사유는 왼쪽 출결에서 적어 주세요" : null;
+  const rowPlaceholder = isAbsent
+    ? "결석 — 사유는 왼쪽 출결에서 적어 주세요"
+    : alreadySent
+      ? "발송 완료 — 수정할 수 없습니다"
+      : null;
   const mentBase =
     "border-line focus:border-primary scrollbar-thin w-full rounded-sm border px-2 py-1 text-[11px] leading-snug outline-none";
-  const lockedTone = isAbsent ? "bg-bg-soft text-text-faint cursor-not-allowed" : "";
+  /**
+   * 잠긴 칸의 톤 — 🔴 **결석만이 아니라 잠긴 모든 이유**에 붙인다(2026-08-14).
+   * 예전엔 `isAbsent`만 봐서, **발송 완료로 잠긴 행이 평소와 똑같이 보였다**. 칸은 readOnly라 커서는
+   * 잡히고 글자만 안 들어가니 "왜 안 써지지"가 된다(원장 제보: *"발송한건 오히려 안잠궜는데"* — 실제로는
+   * 잠겨 있었고 표시가 없었을 뿐). 잠갔으면 잠긴 것처럼 보여야 한다.
+   */
+  const lockedTone = rowLocked ? "bg-bg-soft text-text-faint cursor-not-allowed" : "";
   // 파일을 행 위에 놓으면 그 행에 바로 첨부(가장 빠른 경로). 진도 미입력 등 게이트는 부모 핸들러가 안내한다.
   // 발송 완료건은 파일을 행에 떨어뜨려도 첨부되지 않는다(위 버튼 잠금과 같은 이유).
   const drop = useRowFileDrop((files) => {
@@ -545,8 +559,12 @@ export function GridBodyRow({
         <div className="flex flex-col gap-1">
           {/* 특이사항도 이 행의 기록이라 함께 잠근다 — 카드 모드는 처음부터 잠겨 있었고(왼쪽 fieldset)
               표만 열려 있어 같은 값이 한쪽에선 써지고 한쪽에선 안 써졌다. */}
+          {/* 🔴 읽기도 **행 값**(rowEval) — 쓰기(onNote)가 행별로 바뀐 2026-08-13에 여기만 학생 값으로 남아,
+              타이핑이 `subject.note`에 들어가는데 화면은 `student.note`를 계속 그려 **글자가 아예 안 보였다**
+              (원장 제보: *"커서만 깜빡이고 입력이 전혀 안됨"*). 잠금이 아니라 읽기/쓰기 층 불일치였다.
+              ⚠️ 이 칸의 value는 onNote가 쓰는 층과 항상 같아야 한다 — 카드 모드는 처음부터 cardEval.note로 읽었다. */}
           <textarea
-            value={student.note ?? ""}
+            value={rowEval.note}
             onChange={(e) => fields.onNote(student.id, subject.name, e.target.value)}
             readOnly={rowLocked}
             placeholder={rowPlaceholder ?? "특이사항(메모) · 예: 조퇴함 / 개념 어려워함"}

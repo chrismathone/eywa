@@ -5,9 +5,11 @@ import { PageHeader } from "@/components/page-header";
 import { BigStat } from "@/components/atoms/big-stat";
 import { Pill } from "@/components/atoms/pill";
 import { requireAccess } from "@/lib/auth/require-access";
+import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { Button } from "@/components/ui/button";
+import { DeleteReviewButton } from "../_components/delete-review-button";
 import {
   getClassReview,
   getReviewPrivileges,
@@ -27,10 +29,12 @@ export const metadata = { title: "수업 평가 상세 — eywa" };
 export default async function ClassReviewDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const viewer = await requireAccess("class_review");
   const { id } = await params;
-  const [found, settings, priv] = await Promise.all([
+  const [found, settings, priv, canDelete] = await Promise.all([
     getClassReview(id),
     getTenantSettings(),
     getReviewPrivileges(viewer),
+    // 삭제 버튼 노출 조건 = 서버 액션(deleteClassReview)의 게이트와 **같은 함수** — 화면 조건은 게이트가 아니다(#77).
+    canWriteTenant(viewer.systemRole, "class_review"),
   ]);
   if (!found) notFound();
   const { doc, areas } = found;
@@ -66,6 +70,9 @@ export default async function ClassReviewDetailPage({ params }: { params: Promis
   // 내 채점 자격(공용 헬퍼) — 있으면 헤더에 평가하기/수정하기 버튼(채점은 별도 페이지, 원장 지시 2026-08-04).
   const mine = myScoreSlot(doc, viewer.id);
 
+  // 채점이 실제로 들어온 열 수 — 상단 '제출' 스탯과 삭제 확인 문구가 같은 수를 쓴다("몇 명 것이 사라지나").
+  const submittedCount = cols.filter((c) => c.totals.answered > 0).length;
+
   const headerBits = [
     doc.header.subject ? subjects.labelOf(doc.header.subject) : null,
     openMode ? "선착순 3명" : "평가자 지정",
@@ -88,10 +95,22 @@ export default async function ClassReviewDetailPage({ params }: { params: Promis
           description={headerBits.join(" · ")}
           embedLabel={`수업 평가 — ${doc.header.teacherName}`}
           actions={
-            mine ? (
-              <Button render={<Link href={`/class-review/${doc.id}/score`} />}>
-                {mine.submitted ? "내 평가 수정하기" : "평가하기"}
-              </Button>
+            mine || canDelete ? (
+              <span className="flex flex-wrap items-center gap-2">
+                {mine ? (
+                  <Button render={<Link href={`/class-review/${doc.id}/score`} />}>
+                    {mine.submitted ? "내 평가 수정하기" : "평가하기"}
+                  </Button>
+                ) : null}
+                {canDelete ? (
+                  <DeleteReviewButton
+                    docId={doc.id}
+                    teacherName={doc.header.teacherName}
+                    date={doc.header.date}
+                    submittedCount={submittedCount}
+                  />
+                ) : null}
+              </span>
             ) : undefined
           }
         />
@@ -99,12 +118,7 @@ export default async function ClassReviewDetailPage({ params }: { params: Promis
 
       {/* 종합 — 평균 기준 빅 스탯(공용 아톰, 화면 로컬 Stat 금지 규칙) */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <BigStat
-          label="제출"
-          value={cols.filter((c) => c.totals.answered > 0).length}
-          unit={`/ ${cols.length}`}
-          sub="평가자 + 본인"
-        />
+        <BigStat label="제출" value={submittedCount} unit={`/ ${cols.length}`} sub="평가자 + 본인" />
         <BigStat
           label="총점(평균)"
           value={avg ? avg.total : "—"}

@@ -5,6 +5,7 @@ import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canAccessTenant } from "@/lib/auth/perm-matrix";
 import type { SystemRole } from "@/lib/permissions";
+import { getSeatDuties } from "@/features/attendance/seat/server/duty";
 import {
   WORK_DAYS,
   WORK_TIME_RANGE,
@@ -174,6 +175,10 @@ export type StaffDetail = {
    * 이 계정 벨에 온다(0184a). 차량(셔틀)·사무실이 담임에게 일일이 묻지 않게 하는 스위치.
    */
   attendanceAlertOptin: boolean;
+  /** 랩실 출석부 담당 — 켜면 로그인 착지가 랩실 출석부이고 그 자리만 쓸 수 있다(0209a). */
+  seatLabDuty: boolean;
+  /** JJ실 출석부 담당. 1차에선 착지·쓰기가 아직 안 열린다(OPEN_SEAT_KEYS). */
+  seatJjDuty: boolean;
   hourlyRate: number;
   monthlyBase: number;
   department: string | null; // 0147a — 이력서 프리필·상세 표시용
@@ -192,11 +197,16 @@ export async function getStaffById(id: string): Promise<StaffDetail | null> {
 
   if (!data) return null;
 
+  // 자리 담당 컬럼은 0209a 이후. 없으면 빈 값으로 — 직원 상세를 죽이지 않는다(#95).
+  const duties = await getSeatDuties(id);
+
   return {
     id: data.id,
     displayName: data.display_name,
     // 학생 출결 알림(클래스노트) 받기 — 켜면 담당 반과 무관하게 전 학생의 학부모 출결 연락을 받는다(0184a).
     attendanceAlertOptin: data.attendance_alert_optin === true,
+    seatLabDuty: duties.lab,
+    seatJjDuty: duties.jj,
     email: data.email,
     phone: data.phone ?? null,
     systemRole: data.system_role as SystemRole,

@@ -39,6 +39,7 @@ export const MENU_KEYS = [
   "dashboard",
   "timetable",
   "attendance",
+  "seat_attendance",
   "classes",
   "students",
   "exams",
@@ -95,6 +96,13 @@ export const MENU_ACCESS: AccessMatrix = {
   dashboard: { master: "full", admin: "full", manager: "full", teacher: "none", counselor: "scoped", accountant: "scoped", viewer: "readonly", student: "none" },
   timetable: { master: "full", admin: "full", manager: "full", teacher: "scoped", counselor: "readonly", accountant: "readonly", viewer: "readonly", student: "none" },
   attendance: { master: "full", admin: "full", manager: "full", teacher: "scoped", counselor: "none", accountant: "readonly", viewer: "readonly", student: "none" },
+  // 자리(랩실·JJ실) 출석부 — 여러 반이 동시에 들어오는 **방**을 축으로 출석만 찍는 면(0208a).
+  // 🔴 attendance와 **별개 키**인 이유: 자리 당번은 아르바이트(현재 viewer)라 출석 쓰기를 통째로 주면
+  //    학원 전체 출석부가 함께 열린다(#77). "이 기능만 다른 권한"은 menuKey 승격이 정석
+  //    (textbook_requests·integrations 선례) → 개인은 permissions.userOverrides로 이 키만 연다.
+  // ⚠️ 기본값은 사무실만. 자리 당번 계정은 역할 승격이 아니라 **개인 예외**로 열 것
+  //    (역할을 올리면 급여·직원명부·알림 수신자가 따라 붙는다 — LAB 가짜 강사 사고와 같은 종류).
+  seat_attendance: { master: "full", admin: "full", manager: "full", teacher: "none", counselor: "none", accountant: "none", viewer: "none", student: "none" },
   classes: { master: "full", admin: "full", manager: "full", teacher: "scoped", counselor: "none", accountant: "none", viewer: "readonly", student: "none" },
   students: { master: "full", admin: "full", manager: "full", teacher: "scoped", counselor: "full", accountant: "readonly", viewer: "readonly", student: "none" },
   // 성적관리 — 시험 등록 + 반 일괄 성적입력. 강사는 담당 반 채점(scoped), 회계는 무관, 학생 미표시.

@@ -22,6 +22,7 @@ const MENU_LABEL: Record<MenuKey, string> = {
   dashboard: "운영실",
   timetable: "시간표",
   attendance: "출석부",
+  seat_attendance: "랩실·JJ실 출석부",
   classes: "수업목록",
   students: "학생목록",
   exams: "성적관리",

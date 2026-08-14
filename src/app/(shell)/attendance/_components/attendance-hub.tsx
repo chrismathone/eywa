@@ -25,8 +25,12 @@ export type HubTeacher = {
  * ⚠️ 무거운 출석 데이터(매트릭스)는 여전히 안 불러온다 — 오늘 처리 현황(getDailyProcessingStatus)은
  *    하루치 경량 집계라 허브 진입 비용으로 감수한다.
  */
+/** 자리(랩실·JJ실) 한 칸 — 사람이 아니라 방이라 강사 카드와 같은 줄에 섞지 않고 아래 묶음으로 둔다. */
+export type HubSeat = { key: string; name: string; room: string; href: string; open: boolean };
+
 export function AttendanceHub({
   teachers,
+  seats,
   month,
   subjectId,
   colorOf,
@@ -34,6 +38,8 @@ export function AttendanceHub({
   todayLabel,
 }: {
   teachers: HubTeacher[];
+  /** 강사 목록과 퇴직 사이에 놓이는 자리 묶음(원장 2026-08-14: 선생님 / LAB·JJ / 퇴직 순). */
+  seats: HubSeat[];
   month: string;
   subjectId: string | null;
   /** 과목 색·라벨 = 학원설정 단일 소스(buildSubjectMaps). 로컬 과목 맵 신설 금지. */
@@ -116,6 +122,38 @@ export function AttendanceHub({
         ) : (
           <>
             <ul className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">{active.map(row)}</ul>
+            {seats.length > 0 ? (
+              <>
+                {/* 자리 = 여러 반이 동시에 들어오는 방. 담임이 없어 강사 줄에 섞으면 사람으로 오해한다. */}
+                <p className="micro mt-4">랩실 · JJ실</p>
+                <ul className="mt-1.5 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                  {seats.map((s) => (
+                    <li key={s.key}>
+                      <Link
+                        href={s.href}
+                        className={`hover:bg-bg-soft border-line flex items-center gap-2.5 rounded-xl border px-3 py-2.5 transition ${s.open ? "" : "opacity-60"}`}
+                      >
+                        <span className="min-w-0">
+                          <span className="text-foreground block truncate text-[13.5px] font-bold">
+                            {s.name} <span className="text-text-faint font-medium">{s.room}</span>
+                          </span>
+                          <span className="text-text-dim block text-[11.5px]">
+                            {s.open ? "여러 반이 함께 들어오는 자리" : "아직 열지 않음"}
+                          </span>
+                        </span>
+                        <span
+                          className={`rounded-pill ml-auto shrink-0 px-2.5 py-1 text-[11px] font-bold ${
+                            s.open ? "bg-primary-soft text-primary" : "bg-bg-soft text-text-faint"
+                          }`}
+                        >
+                          {s.open ? "출석부 열기" : "준비 중"}
+                        </span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            ) : null}
             {retired.length > 0 ? (
               <>
                 {/* 퇴직 강사도 지난달 급여·기록 조회가 실제 용무라 숨기지 않는다 — 뒤로 밀고 흐리게만. */}

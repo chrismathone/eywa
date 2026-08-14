@@ -5,6 +5,7 @@ import type { OperationsSettings } from "@/features/owner/settings-types";
 import { RESUME_DEPARTMENTS } from "@/features/staff/resume";
 import type { ClassroomRow } from "@/features/owner/server/classroom-queries";
 import { SectionForm, SettingsCard } from "./section-form";
+import { TextField } from "./fields";
 import { ClassroomManager } from "./classroom-manager";
 import {
   HolidayListEditor,
@@ -103,6 +104,20 @@ export function OperationsSection({
 
       <SettingsCard title="셔틀버스" description="공개 접수(학부모 QR) 폼에 표시되는 셔틀 신청·요금·노선. 표시를 끄면 폼에서 숨겨집니다." span2>
         <ShuttleEditor value={o.shuttle} onChange={(v) => set({ shuttle: v })} />
+      </SettingsCard>
+
+      <SettingsCard
+        title="랩실 출석부 비밀번호"
+        description="로그인 없이 /seat/lab 로 들어와 출결을 찍을 때 쓰는 비밀번호입니다. 비우면 공개 접속이 꺼집니다."
+        span2
+      >
+        <TextField
+          label="비밀번호"
+          hint="태블릿에서 입력. 숫자만이 아니어도 됩니다."
+          value={o.seatPins?.lab ?? ""}
+          onChange={(lab) => set({ seatPins: { ...o.seatPins, lab } })}
+          placeholder="7099"
+        />
       </SettingsCard>
       </div>
     </SectionForm>

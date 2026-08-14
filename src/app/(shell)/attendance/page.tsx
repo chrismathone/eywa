@@ -1,5 +1,14 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { ChevronLeft, ChevronRight, Users } from "@/components/icons/eywa-icon-compat";
+import {
+  OPEN_SEAT_KEYS,
+  SEAT_KEYS,
+  SEAT_NAME,
+  SEAT_ROOM,
+  parseSeatFilterValue,
+  seatFilterValue,
+} from "@/features/attendance/seat/seat";
 import { EmptyState } from "@/components/empty-state";
 import { FilterSelect } from "@/components/filter-select";
 import { kstMonth, kstToday } from "@/lib/date-kst";
@@ -18,6 +27,7 @@ import { countMarks, sumCounts } from "@/features/attendance/grid/totals";
 import { isGroupedSort, sortAttendanceRows } from "@/features/attendance/sort-rows";
 import { getSubjectSessionsByStudent, roleFor } from "@/features/attendance/server/subject-sessions";
 import { AttendanceSortSelect } from "./_components/sort-select";
+import { HideRetiredToggle } from "./_components/hide-retired-toggle";
 import { AttendanceHub, type HubTeacher } from "./_components/attendance-hub";
 import { MatrixTable, buildGridSource, type MatrixGroup } from "./_components/matrix-table";
 import { GridProvider } from "./_components/grid-context";
@@ -130,6 +140,11 @@ export default async function AttendancePage({
     subject: subjectParam,
     mode: modeParam,
   } = await searchParams;
+  // 강사 드롭다운에서 자리(랩실·JJ실)를 고르면 자리 화면으로 보낸다 — 같은 강사 축의 다른 갈래라
+  // 메뉴를 새로 열지 않고 화면만 바꾼다(원장 2026-08-14 "따로 빼지말고").
+  const seatPick = parseSeatFilterValue(teacherParam);
+  if (seatPick) redirect(`/attendance/seat/${seatPick}`);
+
   const month = monthParam ?? currentMonthKey();
   // 강사(또는 강사뷰 겸직)인지 — 기본 진입 화면을 가른다. 캐시된 헬퍼라 쿼리가 늘지 않는다.
   const myTeacherId = await effectiveTeacherId();
@@ -161,7 +176,7 @@ export default async function AttendancePage({
   const classesForSubject = effectiveSubject
     ? allClasses.filter((c) => c.subject === effectiveSubject)
     : allClasses;
-  const teacherOptions = Array.from(
+  const allTeacherOptions = Array.from(
     new Map(
       classesForSubject
         .filter((c) => c.teacherId && c.teacherName)
@@ -172,8 +187,39 @@ export default async function AttendancePage({
     ),
   )
     .map(([value, t]) => ({ value, label: t.retired ? `${t.name} (퇴직)` : t.name, retired: t.retired }))
-    .sort((a, b) => Number(a.retired) - Number(b.retired) || a.label.localeCompare(b.label, "ko"))
-    .map(({ value, label }) => ({ value, label }));
+    .sort((a, b) => Number(a.retired) - Number(b.retired) || a.label.localeCompare(b.label, "ko"));
+  /**
+   * 퇴직 담임 숨김(원장 2026-08-14) — **강사 축에서만** 감춘다. 그 반은 반 드롭다운에 그대로 남는다
+   * (담임이 퇴직해도 재원생은 계속 다니므로 반까지 감추면 출석을 찍을 길이 사라진다).
+   * ⚠️ **이미 고른 강사는 감추지 않는다** — URL에 남은 선택이 목록에서 사라지면 화면이 요약 허브로
+   *    튕겨 "방금 보던 출석부가 없어졌다"가 된다.
+   */
+  const retiredCount = allTeacherOptions.filter((t) => t.retired).length;
+  /**
+   * 강사 드롭다운 = **선생님 → 자리(랩실·JJ실) → 퇴직 선생님** 세 갈래(원장 2026-08-14:
+   * *"따로 빼지말고 퇴직처럼 구분해서 그 아래 LAB실 JJ실"*).
+   * 자리는 메뉴가 아니라 **강사 축의 한 갈래**다 — 사이드바 항목은 그래서 없앴다(navigation.ts 주석).
+   * 값은 uuid와 안 겹치는 `seat:` 접두사를 태우고, 고르면 아래에서 자리 화면으로 보낸다.
+   * ⚠️ 과목 필터가 영어가 아닐 땐 자리를 숨긴다 — 자리는 영어관 운영이라 수학 화면에 뜨면 노이즈다.
+   */
+  const showSeats = !effectiveSubject || effectiveSubject === "english";
+  const seatOptions = showSeats
+    ? SEAT_KEYS.map((k) => ({
+        value: seatFilterValue(k),
+        label: `${SEAT_NAME[k]} ${SEAT_ROOM[k]}`,
+        hint: "자리 · 여러 반 동시 입실",
+      }))
+    : [];
+  const teacherOptions = [
+    ...allTeacherOptions
+      .filter((t) => !t.retired)
+      .map(({ value, label }) => ({ value, label })),
+    ...seatOptions,
+    ...allTeacherOptions
+      // ⚠️ 이미 고른 강사는 숨김이어도 남긴다 — 목록에서 사라지면 보던 출석부가 허브로 튕긴다.
+      .filter((t) => t.retired && (!viewPrefs.hideRetired || t.value === teacherParam))
+      .map(({ value, label }) => ({ value, label, hint: "퇴직" })),
+  ];
   // 강사는 자기 자신이 기본 선택 — 자기 이름을 드롭다운에서 다시 고르게 하지 않는다.
   // (강사 계정의 반 목록은 이미 본인 반으로 좁혀져 있어 선택지도 자기 하나뿐이다.)
   const effectiveTeacher =
@@ -484,6 +530,10 @@ export default async function AttendancePage({
                 ariaLabel="강사 필터"
                 allLabel="전체 강사"
               />
+              {/* 퇴직 담임 숨김 — 감춘 인원을 칩에 적어 "강사가 없어졌다"로 읽히지 않게 한다. */}
+              {retiredCount > 0 || !viewPrefs.hideRetired ? (
+                <HideRetiredToggle hidden={viewPrefs.hideRetired} count={retiredCount} />
+              ) : null}
             </div>
             <span className="bg-line h-4 w-px" aria-hidden />
           </>
@@ -625,7 +675,22 @@ export default async function AttendancePage({
         // 강사 미선택 허브 = **출석부 요약**(원장 2026-08-10). 무거운 매트릭스는 여전히 안 불러온다.
         // 강사를 고르면 바로 그 강사 전체 출석부(기본 보기 = 강사 전체, resolveViewMode).
         <AttendanceHub
-          teachers={await buildHubTeachers(classesForFilters, subjectOptions)}
+          // 허브 카드도 같은 렌즈를 쓴다 — 드롭다운에선 감췄는데 카드로는 보이면 설정이 거짓말이 된다.
+          teachers={(await buildHubTeachers(classesForFilters, subjectOptions)).filter(
+            (t) => !viewPrefs.hideRetired || !t.retired,
+          )}
+          // 자리 묶음 = 드롭다운과 같은 순서·같은 조건(과목이 영어일 때만). 목록이 두 곳에서 달라 보이면 안 된다.
+          seats={
+            showSeats
+              ? SEAT_KEYS.map((k) => ({
+                  key: k,
+                  name: SEAT_NAME[k],
+                  room: SEAT_ROOM[k],
+                  href: `/attendance/seat/${k}`,
+                  open: (OPEN_SEAT_KEYS as readonly string[]).includes(k),
+                }))
+              : []
+          }
           month={month}
           subjectId={effectiveSubject}
           colorOf={subjectMaps.colorOf}

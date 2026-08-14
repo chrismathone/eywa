@@ -42,6 +42,10 @@ export type StaffFormValue = {
    * 차량팀·사무실처럼 "누가 오늘 안 오는지"를 통째로 알아야 하는 자리를 위한 스위치(0184a). 미지정=꺼짐.
    */
   attendanceAlertOptin?: boolean;
+  /** 랩실 출석부 담당 — 로그인 착지 + 그 자리 쓰기. */
+  seatLabDuty?: boolean;
+  /** JJ실 출석부 담당. 1차에선 저장만(화면은 아직 안 열림). */
+  seatJjDuty?: boolean;
 };
 
 function SubmitButton({ mode }: { mode: Mode }) {
@@ -406,6 +410,34 @@ export function StaffForm({
               받습니다. 차량(셔틀)·사무실처럼 오늘 누가 안 오는지 모아 봐야 하는 자리에 켜세요.
             </span>
           </span>
+        </label>
+      </div>
+
+      <div className="border-border bg-surface-soft space-y-3 rounded-2xl border p-4">
+        <p className="text-foreground text-sm font-medium">자리 출석부 담당</p>
+        <p className="text-muted-foreground text-xs">
+          켜면 로그인 후 그 자리 출석부로 바로 들어가고, 그 자리 출결만 찍을 수 있습니다. 다른 메뉴는
+          열리지 않습니다.
+        </p>
+        <label htmlFor="seatLabDuty" className="flex cursor-pointer items-start gap-3">
+          <input
+            id="seatLabDuty"
+            name="seatLabDuty"
+            type="checkbox"
+            defaultChecked={v.seatLabDuty === true}
+            className="border-border text-primary focus-visible:ring-ring mt-0.5 size-4 shrink-0 rounded"
+          />
+          <span className="text-foreground text-sm">랩실 출석부 담당</span>
+        </label>
+        <label htmlFor="seatJjDuty" className="flex cursor-pointer items-start gap-3">
+          <input
+            id="seatJjDuty"
+            name="seatJjDuty"
+            type="checkbox"
+            defaultChecked={v.seatJjDuty === true}
+            className="border-border text-primary focus-visible:ring-ring mt-0.5 size-4 shrink-0 rounded"
+          />
+          <span className="text-foreground text-sm">JJ실 출석부 담당</span>
         </label>
       </div>
 

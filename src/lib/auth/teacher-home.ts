@@ -11,6 +11,9 @@ import {
   teacherHomeFromAssistantClasses,
   teacherHomeFromClassSubjects,
 } from "./teacher-home-rule";
+import { getCurrentUser } from "./current-user";
+import { landingPathFromDuties } from "@/features/attendance/seat/duty";
+import { getSeatDuties } from "@/features/attendance/seat/server/duty";
 
 /**
  * 🔴 무한 리다이렉트 가드 — ECS 홈은 **접근이 열려 있을 때만** 준다.
@@ -69,6 +72,12 @@ export async function teacherHomeForSubjects(subjects: string[]): Promise<string
  * 같고 왕복만 하나 준다.
  */
 export async function landingPath(role: SystemRole, matrix?: AccessMatrix): Promise<string> {
+  // 자리 출석부 담당 토글 — 강사 홈보다 앞선다(원장: 로그인하면 그 출석부로).
+  const user = await getCurrentUser();
+  if (user) {
+    const seatHome = landingPathFromDuties(await getSeatDuties(user.id));
+    if (seatHome) return seatHome;
+  }
   if (await effectiveTeacherId()) return teacherViewHome();
   return roleHome(role, matrix);
 }

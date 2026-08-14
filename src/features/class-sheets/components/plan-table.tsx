@@ -3,7 +3,6 @@
 // 수업계획 표 — 시기(평시/내신) 그룹 헤더 + 가변 행. 행 추가/삭제/시기 이동은 RPC(구조 변경),
 // 셀 텍스트는 CAS 자동저장(plan-row). ⚠️ <col/>과 같은 줄에 주석 금지(하이드레이션, onescreen 선례).
 import type { SkillAreaSetting } from "@/features/owner/settings-types";
-import { isMeaningfulPlanLine } from "../lib/plan-codec";
 import type { PlanLineDTO } from "../server/actions";
 import type { SheetHandlers } from "./sheet-client";
 import type { SheetSaveStore } from "./use-sheet-saves";
@@ -51,7 +50,9 @@ export function PlanTable({
         if (rows.length === 0 && term.key === "exam" && !canEdit) return null;
         return (
           <div key={term.key}>
-            <div className="flex items-center gap-1.5 py-0.5">
+            {/* flex-wrap — 칩이 셋(시기·줄 추가·내용 복사)이라 글씨 크기를 키우면 한 줄을 넘길 수 있다.
+                안 감싸면 넘친 칩이 옆 카드 배경에 덮여 "라벨이 잘린" 것처럼 보인다(디자인 규칙). */}
+            <div className="flex flex-wrap items-center gap-1.5 py-0.5">
               <span className={`rounded-full border px-2 py-0.5 text-[11px] font-bold ${term.tone}`}>
                 {term.label}
               </span>
@@ -64,16 +65,19 @@ export function PlanTable({
                   + 줄 추가
                 </button>
               ) : null}
-              {/* 직전 교시 복사 — **비어 있을 때만** 뜬다(주 복사가 '빈 주에만' 배너를 띄우는 것과 같은 규칙).
-                  이미 쓴 교시에 띄우면 서버가 덮어쓰기를 거부하므로 눌러도 아무 일이 안 나는 버튼이 된다. */}
-              {canEdit && !rows.some((l) => isMeaningfulPlanLine(l)) ? (
+              {/* 내용 복사 — **항상** 뜬다(평시 포함). 옛 '직전 교시 복사'는 비어 있을 때만 떴는데, 평시는
+                  교재를 미리 적어 두는 자리라 사실상 한 번도 안 보였다(원장 2026-08-14 "평시에도 추가").
+                  이제 서버가 덮어쓰기 대신 **빈 칸만** 채우므로(0209a) 이미 쓴 구획에서 눌러도 잃을 게 없다.
+                  ⚠️ 라벨에 '(지난 수업)'을 박는다 — "오늘 직전 차시인지 전날인지" 헷갈린다는 지적이 이
+                     버튼의 유일한 실제 불만이었다. 원본은 언제나 **같은 교시의 지난 수업일**이다. */}
+              {canEdit ? (
                 <button
                   type="button"
                   className="border-line-strong text-foreground hover:text-primary hover:border-primary cursor-pointer rounded-full border px-2 py-0.5 text-[12px] font-bold"
-                  title={`같은 ${term.label} 계획 중 이 교시보다 앞선 가장 최근 교시에서 복사합니다(학생 기록은 복사하지 않습니다)`}
+                  title={`같은 교시의 지난 수업일에서 ${term.label} 계획을 가져옵니다 — 이미 쓴 칸은 그대로 두고 빈 칸만 채웁니다(학생 기록은 복사하지 않습니다)`}
                   onClick={() => handlers.copySlot(date, slotStart, term.key)}
                 >
-                  직전 교시 복사
+                  내용 복사 (지난 수업)
                 </button>
               ) : null}
             </div>
