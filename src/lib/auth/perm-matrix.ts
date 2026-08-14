@@ -15,6 +15,7 @@ import {
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
+import { leaveMenuOverridesFor } from "@/features/leave/leave-access";
 
 /**
  * 현재 테넌트의 유효 권한 매트릭스 = 하드코딩 MENU_ACCESS(기본값) + owner 설정 permissions override.
@@ -57,6 +58,10 @@ export const getPermMatrix = cache(async (): Promise<AccessMatrix> => {
  * "사용자 유효 매트릭스" — requireAccess·사이드바 등 현재 행위자 판정의 단일 소스(2026-08-01).
  * 자기 역할 행만 패치되므로 다른 역할 행을 읽는 소비처(레이아웃 강사뷰 가드 등)는 영향받지 않는다.
  * 비로그인·super_admin(테넌트 설정 위에 있음)·조회 실패는 테넌트 매트릭스 그대로(fail-open, 위와 동일 철학).
+ *
+ * ⚠️ **코드 기반 개인 예외**(파일럿 기능)도 같은 자리에서 얹는다 — 지금은 휴가관리(2026-08-14,
+ *    이승엽·김예원)뿐이다. 저장된 설정보다 **먼저** 넣어 원장이 owner 콘솔에서 덮어쓸 수 있게 한다.
+ *    이렇게 두면 사이드바·requireAccess·서버 액션이 전부 한 게이트를 공유한다(#77).
  */
 export const getUserPermMatrix = cache(async (): Promise<AccessMatrix> => {
   const base = await getPermMatrix();
@@ -64,12 +69,18 @@ export const getUserPermMatrix = cache(async (): Promise<AccessMatrix> => {
     const user = await getCurrentUser();
     if (!user) return base;
     const settings = await getTenantSettings(); // getPermMatrix와 같은 요청 캐시 — 추가 라운드트립 0
-    const userOverrides = settings.permissions.userOverrides;
+    // 파일럿 명단 판정에 super_admin 여부가 필요하다(명단에 없어도 통과 — 원장 지시 2026-08-13).
+    // 요청 캐시된 PK 조회 1회이고, override가 있는 테넌트는 getPermMatrix에서 이미 부른 그 캐시다.
+    const isSuperAdmin = await isCurrentUserSuperAdmin();
+    const userOverrides = [
+      ...leaveMenuOverridesFor(user.id, isSuperAdmin),
+      ...settings.permissions.userOverrides,
+    ];
     if (userOverrides.length === 0) return base;
     const applied = applyUserOverrides(base, user.id, user.systemRole, userOverrides);
     // super_admin도 **부여는 받는다**(예전엔 base로 되돌려 개인 예외가 통째로 날아갔다 — 2026-08-13
     // 수업 평가 실종의 절반). 개인 예외로 잠그는(낮추는) 것만 무시하려고 높은 쪽을 취한다.
-    if (await isCurrentUserSuperAdmin()) return mergeMostPermissive(base, applied);
+    if (isSuperAdmin) return mergeMostPermissive(base, applied);
     return applied;
   } catch (e) {
     console.error("[perm-matrix] 개인 예외 적용 실패 — 테넌트 매트릭스로 폴백", e);

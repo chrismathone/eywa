@@ -100,7 +100,7 @@ export function DeskView({
           </h2>
           <div className="grid gap-2 lg:grid-cols-2">
             {absentRows.map((s) => (
-              <StudentCard key={`${s.studentId}@${s.slotStart}`} row={s} date={date} canEdit={canEdit} />
+              <StudentCard key={`${s.studentId}@${s.classId}@${s.slotStart}`} row={s} date={date} canEdit={canEdit} />
             ))}
           </div>
         </section>
@@ -117,7 +117,7 @@ export function DeskView({
           </h2>
           <div className="grid gap-2 lg:grid-cols-2">
             {unmarkedRows.map((s) => (
-              <StudentCard key={`${s.studentId}@${s.slotStart}`} row={s} date={date} canEdit={canEdit} />
+              <StudentCard key={`${s.studentId}@${s.classId}@${s.slotStart}`} row={s} date={date} canEdit={canEdit} />
             ))}
           </div>
         </section>
@@ -130,7 +130,7 @@ export function DeskView({
           </h2>
           <ul className="border-line divide-line divide-y rounded-2xl border">
             {queue.done.map((s) => (
-              <li key={`${s.studentId}@${s.slotStart}`} className="flex flex-wrap items-center gap-x-2 gap-y-1 p-2.5 text-sm">
+              <li key={`${s.studentId}@${s.classId}@${s.slotStart}`} className="flex flex-wrap items-center gap-x-2 gap-y-1 p-2.5 text-sm">
                 <span className="font-semibold">{s.studentName}</span>
                 <span className="text-text-faint num text-xs">
                   {s.className} · {s.slotStart}
@@ -181,7 +181,10 @@ function ClassCard({ row, date, canEdit }: { row: QueueClass; date: string; canE
     setError(null);
     setSent(true);
     startTransition(() => {
-      requestAttendanceInput({ classId: row.classId, sessionDate: date, slotStart: row.slotStart })
+      // 🔴 **저장축**(saveSlot)으로 보낸다 — 표시축(slotStart)으로 보내면 수학 연강 3교시가 서로 다른
+      //    dedup 버킷이 되어 같은 강사에게 벨이 3번 가고, '요청함' 표식은 저장축으로 조회하므로
+      //    영원히 안 켜진다(눌러도 아무 표시가 안 나 데스크가 계속 다시 누른다).
+      requestAttendanceInput({ classId: row.classId, sessionDate: date, slotStart: row.saveSlot })
         .then((res) => {
           if ("error" in res) {
             setSent(row.requested);
@@ -202,7 +205,9 @@ function ClassCard({ row, date, canEdit }: { row: QueueClass; date: string; canE
       <div className="min-w-0">
         <p className="truncate text-sm font-bold">{row.className}</p>
         <p className="text-text-dim num text-xs">
-          {row.slotStart} · {row.teacherName ?? row.slotTeacherLabel ?? "담당 미지정"} · 예정 {row.expected}명
+          {/* 접힌 카드는 구간으로 밝힌다 — "16:20"만 보이면 뒤 교시는 확인 안 해도 되는 줄 안다. */}
+          {row.slotCount > 1 ? `${row.slotStart}~${row.slotEnd}` : row.slotStart} ·{" "}
+          {row.teacherName ?? row.slotTeacherLabel ?? "담당 미지정"} · 예정 {row.expected}명
         </p>
       </div>
       <div className="flex flex-wrap items-center gap-1.5">
@@ -284,7 +289,10 @@ function StudentCard({ row, date, canEdit }: { row: QueueStudent; date: string; 
               //    정정이 시수·급여에 반영되지 않는다(살아남은 옛 행이 계속 1시수를 청구한다).
               slotStart: row.saveSlot,
               periodStart: row.slotStart,
-              note: note || null,
+              // 🔴 **메모를 넘기지 않는다.** `note`는 "전달하면 갱신"이라 빈 칸을 null로 넘기면
+              //    강사가 적어 둔 사유("감기로 결석")가 지워진다 — 바로 위에서 그 메모를 전화 전에
+              //    읽으라고 띄워 놓고, 확인을 기록하는 순간 그 근거를 없애는 셈이다.
+              //    데스크가 쓴 메모는 attendance_followups.note에 이미 남는다(연락 기록의 제자리).
               quiet: true,
             }).catch(() => ({ error: "출결 정정에 실패했습니다" }) as const);
             if ("error" in applied) {

@@ -15,17 +15,26 @@ import "server-only";
  */
 import Link from "next/link";
 import { kstToday } from "@/lib/date-kst";
+import { reportError } from "@/lib/observability/report-error";
+import { groupAdjacentSlots } from "../seating";
 import { getLiveBoard } from "../server/queries";
 import { StripSlot } from "./strip-slot";
 
 export async function TodayAttendanceStrip() {
-  const board = await getLiveBoard(kstToday()).catch(() => null);
+  // 🔴 **내 수업만**(selfOnly) — 관리자 계열도 여기선 자기 반만 본다. 안 그러면 원스크린을 여는 것만으로
+  //    전체 보드를 읽고(느려짐), 남의 반에 「전원 출석」이 붙는다. 전체는 /attendance/live에서 본다.
+  // ⚠️ 실패는 삼키되 **소리 없이 삼키지 않는다**(#89) — 이 스트립은 실패하면 그냥 안 보이므로, 조회가
+  //    매번 깨져도 화면은 평소와 똑같아 아무도 눈치채지 못한다(기능이 죽은 채로 몇 주가 간다).
+  const board = await getLiveBoard(kstToday(), true).catch((e: unknown) => {
+    reportError(e, { scope: "attendance.todayStrip" });
+    return null;
+  });
   if (!board?.canEdit) return null;
 
   // 시작한 교시(grace 포함 — 수업이 시작됐으면 찍을 수 있다) 중 아직 빈 칸이 남은 것만.
-  const slots = board.teachers
-    .flatMap((t) => t.slots)
-    .filter((s) => s.phase !== "before" && s.recordedCount < s.students.length);
+  const slots = groupAdjacentSlots(board.teachers.flatMap((t) => t.slots)).filter(
+    (s) => s.phase !== "before" && s.recordedCount < s.students.length,
+  );
   if (slots.length === 0) return null;
 
   const missing = slots.reduce((n, s) => n + (s.students.length - s.recordedCount), 0);

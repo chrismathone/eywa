@@ -22,6 +22,7 @@ import { fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 // 담당 반 판정 단일 소스(담당 반 ∪ 그날 위임 반) — classes.teacher_id를 직접 비교하지 말 것(0173a).
 import { getTeachingClassIds } from "@/features/classes/server/delegation";
 import { parseSessionUnits } from "../session-units";
+import { hasSaveTarget, pickSaveTargets, type SaveTargets } from "../save-targets";
 import {
   absenceMemo,
   appendMemo,
@@ -38,7 +39,7 @@ type Status = (typeof STATUSES)[number];
 
 type Sb = Awaited<ReturnType<typeof createClient>>;
 
-/** 0211a 컬럼이 없으면 빼고 재시도 — 출결 저장을 죽이지 않는다(#95). */
+/** 0212a 컬럼이 없으면 빼고 재시도 — 출결 저장을 죽이지 않는다(#95). */
 async function updateWithVia(
   supabase: Sb,
   patch: Record<string, unknown>,
@@ -389,23 +390,13 @@ export async function setAttendanceCell(input: {
     .eq("session_date", sessionDate)
     .order("recorded_at", { ascending: false });
 
-  // 이미 recorded_at 내림차순이라 **교시마다 처음 만난 행이 최신**이다.
-  const latestBySlot = new Map<string, { id: string; status: string }>(); // slot(또는 "" = 그날 전체)
-  for (const r of rows ?? []) {
-    const k = (r.slot_start as string | null) ?? "";
-    if (!latestBySlot.has(k)) latestBySlot.set(k, { id: r.id as string, status: r.status as string });
-  }
-  // 교시를 넘긴 저장은 **그 교시 행 + 그날 전체 행**만 대상으로 좁힌다(다른 교시는 남의 칸이라 안 건드림).
-  // 그날 전체 행이 남아 있으면 새로 만들지 않고 **그 행을 갱신**한다 = 한 칸에 한 행이 유지된다.
-  if (slot !== null) {
-    for (const k of [...latestBySlot.keys()]) {
-      if (k !== slot && k !== "") latestBySlot.delete(k);
-    }
-  }
+  // 대상 선정은 순수 규칙 **한 곳**(pickSaveTargets)이 정한다 — 일괄 저장도 같은 함수를 쓴다.
+  // 이미 recorded_at 내림차순이라 "교시마다 처음 만난 행이 최신"이라는 그 함수의 전제를 만족한다.
+  const { updateIds, promoteIds } = pickSaveTargets(rows ?? [], slot);
+  const targetIdSet = new Set([...updateIds, ...promoteIds]);
+  const prevStatus =
+    (rows ?? []).find((r) => targetIdSet.has(r.id as string))?.status ?? null;
 
-  const nowIso = new Date().toISOString();
-  const targets = [...latestBySlot.values()];
-  const prevStatus = targets[0]?.status ?? null;
   const deskGate = await assertDeskMayWrite({
     supabase,
     via,
@@ -417,18 +408,23 @@ export async function setAttendanceCell(input: {
   });
   if ("error" in deskGate) return deskGate;
 
-  const targetIds = targets.map((t) => t.id);
-  if (targetIds.length > 0) {
+  const nowIso = new Date().toISOString();
+  if (updateIds.length > 0 || promoteIds.length > 0) {
     const patch: Record<string, unknown> = withVia(
       { status, recorded_by: user.id, recorded_at: nowIso },
       via,
     );
     if (noteProvided) patch.note = noteVal;
     if (unitsProvided) patch.session_units = unitsVal;
-    // ⚠️ 교시를 안 넘긴 저장(출석부)은 그날 **모든 교시**를 함께 고친다 — 위 slotStart 주석의 (a)(b) 참조.
-    //    교시를 넘긴 저장(ECS)은 애초에 그 교시 1건만 조회했으므로 여기서도 1건이다.
-    const wrote = await updateWithVia(supabase, patch, targetIds);
-    if (wrote.error) return { error: wrote.error };
+    if (promoteIds.length > 0) {
+      // 승격(옛 "그날 전체" 행 → 그 교시). 승격 대상만 있을 때만 발생하므로 한 문장으로 끝난다.
+      const wrote = await updateWithVia(supabase, { ...patch, slot_start: slot }, promoteIds);
+      if (wrote.error) return { error: wrote.error };
+    }
+    if (updateIds.length > 0) {
+      const wrote = await updateWithVia(supabase, patch, updateIds);
+      if (wrote.error) return { error: wrote.error };
+    }
   } else {
     const row = withVia(
       {
@@ -758,20 +754,27 @@ export async function setAttendanceBulk(input: {
       //    옛 day-level 행을 못 보고 새 행을 만들어 한 칸에 두 행이 살아남는다(정정이 돈에 안 닿는다).
       .order("recorded_at", { ascending: false }),
   );
-  const latestId = new Map<string, string>();
+  // 칸(학생::반)마다 **셀 저장과 같은 규칙**으로 대상을 고른다(pickSaveTargets 단일 소스).
+  // 청크는 학생 단위라 한 칸의 행은 모두 같은 청크에 있고, 각 청크가 recorded_at 내림차순이라
+  // "교시마다 처음 만난 행이 최신"이라는 전제가 여기서도 성립한다.
+  const rowsByKey = new Map<string, { id: string; slot_start?: string | null }[]>();
   for (const r of existingRows) {
-    // 교시를 넘긴 저장은 **그 교시 행과 그날 전체 행**만 자기 칸이다(다른 교시는 남의 칸).
-    const rowSlot = (r as { slot_start?: string | null }).slot_start ?? null;
-    if (slot && rowSlot !== null && rowSlot.slice(0, 5) !== slot.slice(0, 5)) continue;
     const k = `${r.student_id}::${r.class_id}`;
-    if (!latestId.has(k)) latestId.set(k, r.id); // 청크별 desc 정렬 → 각 조합의 첫 행이 최신
+    const list = rowsByKey.get(k);
+    if (list) list.push(r);
+    else rowsByKey.set(k, [r]);
+  }
+  const targetsByKey = new Map<string, SaveTargets>();
+  for (const [k, list] of rowsByKey) {
+    const targets = pickSaveTargets(list, slot);
+    if (hasSaveTarget(targets)) targetsByKey.set(k, targets);
   }
 
   // '빈 칸만' 모드 — 기존 기록이 있는 셀은 **여기서**(서버) 걸러 절대 update 경로를 안 탄다.
   // 이 필터가 클라에 있으면 낡은 탭이 남의 결석을 덮는다(위 fillEmptyOnly 주석). blocked로 집계돼
   // 호출부가 "건너뛴 N명"을 사용자에게 밝힌다(조용한 스킵 금지).
   if (input.fillEmptyOnly) {
-    allowed = allowed.filter((c) => !latestId.has(`${c.studentId}::${c.classId}`));
+    allowed = allowed.filter((c) => !targetsByKey.has(`${c.studentId}::${c.classId}`));
     if (allowed.length === 0) return { ok: true, applied: [], blocked: cells.length };
   }
 
@@ -783,12 +786,11 @@ export async function setAttendanceBulk(input: {
   }
 
   // 데스크 게이트 — 이미 찍힌 칸·유예 안 칸은 건너뛴다(blocked). 요청 전체를 실패시키지 않는다.
-  // 국면 조회는 반당 1회(같은 교시 12명을 12번 치지 않는다).
   const deskGateByClass = new Map<string, { error: string } | { ok: true }>();
   const open: typeof allowed = [];
   for (const c of allowed) {
     const via = viaByClass.get(c.classId) ?? "desk";
-    const current = latestId.has(`${c.studentId}::${c.classId}`) ? "present" : null;
+    const current = targetsByKey.has(`${c.studentId}::${c.classId}`) ? "present" : null;
     const cacheKey = `${c.classId}|${current ?? ""}`;
     let gate = deskGateByClass.get(cacheKey);
     if (!gate) {
@@ -808,31 +810,35 @@ export async function setAttendanceBulk(input: {
   }
   allowed = open;
 
-  const updateIds = allowed
-    .map((c) => latestId.get(`${c.studentId}::${c.classId}`))
-    .filter((id): id is string => !!id);
-  const inserts = allowed.filter((c) => !latestId.has(`${c.studentId}::${c.classId}`));
+  const inserts = allowed.filter((c) => !targetsByKey.has(`${c.studentId}::${c.classId}`));
 
-  // 상태가 전부 같아서 갱신은 한 문장이면 된다(id 목록은 청크로 나눠 URL 길이 회피).
-  // recorded_via는 반마다 다를 수 있어(한 요청에 내 반+남의 반) 주체별로 나눈다.
-  if (updateIds.length > 0) {
-    const CHUNK = 100;
-    const byVia = new Map<RecordedVia, string[]>();
-    for (const c of allowed) {
-      const id = latestId.get(`${c.studentId}::${c.classId}`);
-      if (!id) continue;
-      const via = viaByClass.get(c.classId) ?? "teacher";
-      (byVia.get(via) ?? byVia.set(via, []).get(via)!).push(id);
+  // 갱신 대상을 주체×(그대로/승격)로 나눈다. pickSaveTargets가 돈 규칙을 정한다.
+  const CHUNK = 100;
+  const byVia = new Map<RecordedVia, { updateIds: string[]; promoteIds: string[] }>();
+  for (const c of allowed) {
+    const targets = targetsByKey.get(`${c.studentId}::${c.classId}`);
+    if (!targets) continue;
+    const via = viaByClass.get(c.classId) ?? "teacher";
+    const bucket = byVia.get(via) ?? byVia.set(via, { updateIds: [], promoteIds: [] }).get(via)!;
+    bucket.updateIds.push(...targets.updateIds);
+    bucket.promoteIds.push(...targets.promoteIds);
+  }
+  for (const [via, bucket] of byVia) {
+    for (let i = 0; i < bucket.updateIds.length; i += CHUNK) {
+      const wrote = await updateWithVia(
+        supabase,
+        withVia({ status, recorded_by: user.id, recorded_at: nowIso }, via),
+        bucket.updateIds.slice(i, i + CHUNK),
+      );
+      if (wrote.error) return { error: wrote.error };
     }
-    for (const [via, ids] of byVia) {
-      for (let i = 0; i < ids.length; i += CHUNK) {
-        const wrote = await updateWithVia(
-          supabase,
-          withVia({ status, recorded_by: user.id, recorded_at: nowIso }, via),
-          ids.slice(i, i + CHUNK),
-        );
-        if (wrote.error) return { error: wrote.error };
-      }
+    for (let i = 0; i < bucket.promoteIds.length; i += CHUNK) {
+      const wrote = await updateWithVia(
+        supabase,
+        withVia({ status, recorded_by: user.id, recorded_at: nowIso, slot_start: slot }, via),
+        bucket.promoteIds.slice(i, i + CHUNK),
+      );
+      if (wrote.error) return { error: wrote.error };
     }
   }
   if (inserts.length > 0) {

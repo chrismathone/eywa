@@ -61,8 +61,17 @@ export type QueueClass = {
   slotTeacherLabel: string | null;
   expected: number; // 그날 예정 학생 수 — "12명이 통째로 비어 있음"을 보여준다
   phase: SlotPhase;
+  /** 이 (반·저장축)에 실을 교시 값 — 수학은 null("그날 전체"). 카드 접기와 요청 dedup의 키. */
+  saveSlot: string | null;
   /** 이미 '출결 입력 요청'을 보낸 카드인가 — 중복 전화를 막는 유일한 표식. */
   requested: boolean;
+  /**
+   * 이 카드에 접힌 교시 수(기본 1). 수학처럼 **하루 한 행**이 규약인 과목은 연강 2~3교시가 한 칸이라
+   * 카드도 한 장이다 — 접힌 교시가 있으면 화면이 "1~3교시"로 밝힌다.
+   */
+  slotCount: number;
+  /** 접힌 마지막 교시("HH:MM") — 한 장이면 slotStart와 같다. */
+  slotEnd: string;
 };
 
 export type DeskQueue = {
@@ -133,7 +142,27 @@ export function buildQueue(students: readonly QueueStudent[], classes: readonly 
   }
   open.sort(compareStudents);
   done.sort(compareStudents);
-  const laneClasses = [...classes].sort(compareClasses);
+  // 🔴 레인 A도 **저장축으로 접는다**. 수학은 하루 한 행이라 연강 3교시가 한 칸인데 카드를 3장 내면
+  //    ① '확인 필요' 배지가 3배로 부풀고(반 3개인 줄 안다) ② 데스크가 같은 강사에게 세 번 손댄다.
+  //    영어(교시별 저장)는 교시마다 진짜 빈 칸이므로 접지 않는다 — 접는 키에 saveSlot이 들어간 이유다.
+  const foldedClasses = new Map<string, QueueClass>();
+  for (const c of classes) {
+    const key = `${c.classId}|${c.saveSlot ?? ""}`;
+    const prev = foldedClasses.get(key);
+    if (!prev) {
+      foldedClasses.set(key, { ...c, slotCount: 1, slotEnd: c.slotStart });
+      continue;
+    }
+    // 이른 교시를 대표로 남긴다 — 가장 오래 방치된 칸이 먼저 눈에 와야 한다(compareStudents와 같은 이유).
+    const first = c.slotStart < prev.slotStart ? c : prev;
+    foldedClasses.set(key, {
+      ...first,
+      expected: Math.max(prev.expected, c.expected),
+      slotCount: prev.slotCount + 1,
+      slotEnd: c.slotStart > prev.slotEnd ? c.slotStart : prev.slotEnd,
+    });
+  }
+  const laneClasses = [...foldedClasses.values()].sort(compareClasses);
   return {
     lanes: { classes: laneClasses, students: open },
     done,

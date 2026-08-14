@@ -180,7 +180,7 @@ export type StaffDetail = {
   seatLabDuty: boolean;
   /** JJ실 출석부 담당. 1차에선 착지·쓰기가 아직 안 열린다(OPEN_SEAT_KEYS). */
   seatJjDuty: boolean;
-  /** 오늘 출결 데스크 알림 — 강사가 미출결→출결로 바꾸면 벨(0211a). */
+  /** 오늘 출결 데스크 알림 — 강사가 미출결→출결로 바꾸면 벨(0212a). */
   deskAttendanceOptin: boolean;
   hourlyRate: number;
   monthlyBase: number;
@@ -200,7 +200,7 @@ export async function getStaffById(id: string): Promise<StaffDetail | null> {
 
   if (!data) return null;
 
-  // 자리 담당·데스크 알림 컬럼은 0209a/0211a 이후. 없으면 빈 값으로 — 직원 상세를 죽이지 않는다(#95).
+  // 자리 담당·데스크 알림 컬럼은 0209a/0212a 이후. 없으면 빈 값으로 — 직원 상세를 죽이지 않는다(#95).
   const [duties, deskOptin] = await Promise.all([getSeatDuties(id), getDeskAttendanceOptin(id)]);
 
   return {

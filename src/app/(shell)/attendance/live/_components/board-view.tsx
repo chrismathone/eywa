@@ -19,6 +19,7 @@ import { setAttendanceBulk, setAttendanceCell } from "@/features/attendance/serv
 import { EmptyState } from "@/components/empty-state";
 import { CalendarDays } from "@/components/icons/eywa-icon-compat";
 import { canDeskMark } from "@/features/attendance/live/mark-state";
+import { groupAdjacentSlots } from "@/features/attendance/live/seating";
 import type { LiveBoard, LiveBoardSlot } from "@/features/attendance/live/types";
 import type { BasicAttendance } from "@/features/class-sheets/lib/mark-cycle";
 
@@ -34,28 +35,34 @@ export function BoardView({ board }: { board: LiveBoard }) {
   }
   return (
     <div className="space-y-6">
-      {board.teachers.map((t) => (
+      {board.teachers.map((t) => {
+        // 이어지는 같은 반(연강)은 한 카드 — 같은 7명이 14:30·15:25 두 장으로 보이던 것.
+        const slots = groupAdjacentSlots(t.slots);
+        const expected = slots.reduce((n, s) => n + s.students.length, 0);
+        const recorded = slots.reduce((n, s) => n + s.recordedCount, 0);
+        return (
         <section key={t.teacherId ?? "none"} className="space-y-2.5">
           <header className="flex flex-wrap items-baseline gap-2">
             <h2 className="text-base font-bold">{t.teacherName}</h2>
             <span
               className={`num rounded-full px-2 py-0.5 text-xs font-bold ${
-                t.recorded >= t.expected ? "bg-primary/10 text-primary" : "bg-amber/15 text-amber-strong"
+                recorded >= expected ? "bg-primary/10 text-primary" : "bg-amber/15 text-amber-strong"
               }`}
             >
-              {t.recorded}/{t.expected}
+              {recorded}/{expected}
             </span>
-            {t.recorded < t.expected && (
-              <span className="text-text-faint text-xs">미입력 {t.expected - t.recorded}명</span>
+            {recorded < expected && (
+              <span className="text-text-faint text-xs">미입력 {expected - recorded}명</span>
             )}
           </header>
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {t.slots.map((slot) => (
+            {slots.map((slot) => (
               <SlotCard key={slot.key} slot={slot} date={board.date} canEdit={board.canEdit} />
             ))}
           </div>
         </section>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -174,7 +181,10 @@ function SlotCard({ slot, date, canEdit }: { slot: LiveBoardSlot; date: string; 
             </span>
             <TodayAttendancePills
               status={statusOf(s.studentId, s.status)}
-              note={null}
+              // 🔴 기존 사유를 넘겨야 한다. null로 두면 ① 카드에 사유가 안 보이고 ② 사유 창을 다시 열 때
+              //    **빈 칸으로 시작**해, 그대로 저장하면 "감기로 결석"이 지워진다(데스크 카드는 그 메모를
+              //    전화 전에 읽으라고 띄우는데 강사 쪽에서 없애는 셈).
+              note={s.note}
               studentName={s.studentName}
               canMark={
                 canEdit &&

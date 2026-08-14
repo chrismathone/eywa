@@ -281,14 +281,16 @@ export async function copyWeekFromPrevious(input: {
 }
 
 /**
- * 직전 교시 복사(0183a `ecs_copy_slot`) — 원장 2026-08-06 *"이전 교시의 ecs를 복사하는 기능 추가."*
+ * 내용 복사(`ecs_copy_slot`) — 원본은 **같은 교시(slot_start)의 지난 수업일**, 동작은 **빈 칸만 채우기**.
  *
- * 주 복사(`copyWeekFromPrevious`)와 **같은 계약**: 대상 교시에 의미 있는 행이 있으면 아무것도 안 하고,
- * 학생 기록은 안 옮기며, 원본도 의미 있는 행이 있는 교시만 본다. 원본 = 같은 시기(term)에서 이 교시보다
- * 앞선 것 중 가장 최근(56일 내) — 같은 날 앞 교시도 지난 수업일도 자연히 잡힌다.
+ * 0183a는 "이 교시보다 앞선 것 중 가장 최근"이라 하루에 여러 교시를 하는 반에서 **같은 날 앞 교시**가
+ * 원본으로 잡혔는데, 교시마다 교재가 달라(3교시 Vocab·4교시 Reading…) 엉뚱한 내용이 들어왔다. 0209a가
+ * 원본을 같은 교시로 고정하고, 덮어쓰기 대신 **비어 있는 칸만** 채우게 바꿨다(원장 2026-08-14).
+ * 학생 기록은 여전히 안 옮긴다.
  *
  * ⚠️ 마이그레이션이 아직 안 돌았으면 PostgREST가 "함수를 못 찾겠다"로 떨어진다([[#95]]). 그때도 **화면은
  *    안 죽고** 이 액션만 실패해야 하므로(호출부는 토스트) 사유를 한글로 바꿔서 돌려준다.
+ *    0209a는 **시그니처를 안 바꿨다** — 적용 전이면 옛 동작(직전 교시·덮어쓰기 없음)으로 그냥 돌아간다.
  */
 export async function copySlotFromPrevious(input: {
   classId: string;
@@ -296,7 +298,16 @@ export async function copySlotFromPrevious(input: {
   slotStart: string;
   termMode: "regular" | "exam";
 }): Promise<
-  | { ok: true; copied: number; sourceLabel: string | null; reason: string | null; lines: PlanLineDTO[] }
+  | {
+      ok: true;
+      copied: number;
+      /** 원본 날짜 "MM-DD"(같은 교시라 시각은 대상과 동일 — 라벨에 안 싣는다) */
+      sourceLabel: string | null;
+      /** 20줄 상한에 걸려 못 넣은 원본 줄 수(0209a 이전 함수는 안 돌려줘 0) */
+      truncated: number;
+      reason: string | null;
+      lines: PlanLineDTO[];
+    }
   | ActionError
 > {
   const gate = await requireEcsClassAccess(input.classId, { write: true });
@@ -321,10 +332,11 @@ export async function copySlotFromPrevious(input: {
     if (/could not find|does not exist|schema cache/i.test(error.message)) {
       return { ok: false, error: "이 기능은 아직 준비 중입니다(DB 반영 대기)" };
     }
-    return { ok: false, error: `직전 교시 복사에 실패했습니다: ${error.message}` };
+    return { ok: false, error: `내용 복사에 실패했습니다: ${error.message}` };
   }
   const r = (data ?? {}) as {
     copied?: number;
+    truncated?: number;
     reason?: string;
     sourceDate?: string;
     sourceSlot?: string;
@@ -333,7 +345,10 @@ export async function copySlotFromPrevious(input: {
   return {
     ok: true,
     copied: r.copied ?? 0,
-    sourceLabel: r.sourceDate ? `${r.sourceDate.slice(5)} ${r.sourceSlot ?? ""}`.trim() : null,
+    // 같은 교시에서만 가져오므로 시각은 대상과 늘 같다 — 라벨엔 **날짜만**(붙이면 "08-11 19:20 교시"가
+    // 되어 마치 다른 시각에서 온 것처럼 읽힌다). ⚠️ 0209a 적용 전 함수는 다른 시각을 돌려줄 수 있다.
+    sourceLabel: r.sourceDate ? r.sourceDate.slice(5) : null,
+    truncated: r.truncated ?? 0,
     reason: r.reason ?? null,
     lines: (r.lines ?? []).map(toLineDTO),
   };

@@ -14,6 +14,7 @@ import { accessLevelTenant } from "@/lib/auth/perm-matrix";
 import { getTeachingClasses } from "@/features/classes/server/delegation";
 import { effectiveTeacherId } from "@/lib/auth/view-mode";
 import { fetchInChunks } from "@/lib/supabase/batch";
+import { reportError } from "@/lib/observability/report-error";
 import { addDays, kstMinutesOfDay, kstToday } from "@/lib/date-kst";
 import { isWithinAttendanceEditWindow } from "@/features/attendance/edit-window";
 import { hhmmToMin, shouldQueue, slotPhase, type SlotPhase } from "../signals";
@@ -47,11 +48,13 @@ async function loadTeacherNames(ids: readonly string[]) {
  * 강사별 당일 출결 보드.
  * @param date  기본 오늘(KST). 과거 날짜도 열 수 있다(놓친 날 메우기).
  *
+ * @param selfOnly 권한과 무관하게 **내 수업만**. 강사 홈 스트립 전용이다 — 아래 🔴.
+ *
  * ⚠️ React `cache` — 데스크 면은 이 보드와 큐를 **둘 다** 그리는데(탭 배지에 두 수치가 같이 필요하다),
  *    `getDeskQueue`가 내부에서 다시 이 함수를 부른다. 감싸지 않으면 한 요청에 슬롯·수강행·출결을
- *    **두 번** 읽는다(오늘만 슬롯 100여 개 × 학생 수백). 인자가 날짜 문자열 하나라 캐시가 그대로 맞는다.
+ *    **두 번** 읽는다(오늘만 슬롯 100여 개 × 학생 수백). 인자가 (날짜, selfOnly)라 캐시가 그대로 맞는다.
  */
-export const getLiveBoard = cache(async (date: string = kstToday()): Promise<LiveBoard> => {
+export const getLiveBoard = cache(async (date: string = kstToday(), selfOnly = false): Promise<LiveBoard> => {
   const user = await getCurrentUser();
   const empty: LiveBoard = {
     date,
@@ -69,7 +72,13 @@ export const getLiveBoard = cache(async (date: string = kstToday()): Promise<Liv
 
   // 강사(scoped)는 담당 반 ∪ 그날 위임받은 반으로 좁힌다 — 판정은 기존 단일 소스(getTeachingClasses).
   // 겸직 강사뷰도 같은 헬퍼를 쓰는 effectiveTeacherId로 스코프가 따라온다.
-  const scopedTeacherId = level === "scoped" ? ((await effectiveTeacherId()) ?? user.id) : null;
+  // 🔴 `selfOnly`는 권한이 아니라 **화면의 성격**이 정한다. 강사 홈 스트립은 "내가 지금 찍어야 할 것"을
+  //    미는 자리인데, 관리자 계열(full = 활성 12명 — admin 7·master 3·manager 2)이 원스크린을 열면
+  //    ① 자기 5.5개 슬롯 대신 **전체 104슬롯·43반·수강 600행**을 읽고(창마다 도는 hot path, B6)
+  //    ② 남의 반 카드에 **「전원 출석」 버튼**이 붙는다 — 한 번 잘못 누르면 안 온 아이가 출석이 된다.
+  //    전체 보드가 필요한 자리는 `/attendance/live`이지 강사 홈이 아니다.
+  const scopedTeacherId =
+    level === "scoped" || selfOnly ? ((await effectiveTeacherId()) ?? user.id) : null;
   let classIds: string[] | undefined;
   if (scopedTeacherId) {
     // 🔴 담임(`classes.teacher_id`)만 보면 **부담임이 자기 화면에서 아무것도 못 본다.** 영어는 슬롯마다
@@ -190,8 +199,11 @@ export async function getDeskQueue(date: string = kstToday()): Promise<DeskQueue
           slotTeacherLabel: slot.slotTeacherLabel,
           expected: slot.students.length,
           phase: slot.phase,
+          saveSlot: slot.saveSlot,
           // 이미 요청을 보냈나 — 없으면 데스크 3명이 같은 강사에게 두세 번 전화한다(적대 리뷰 S4).
           requested: requested.has(`${slot.classId}|${slot.saveSlot ?? ""}`),
+          slotCount: 1, // 접기는 buildQueue가 한다(저장축 기준) — 여기선 교시마다 한 장씩 올린다.
+          slotEnd: slot.slotStart,
         });
       }
       for (const s of slot.students) {
@@ -232,6 +244,9 @@ async function loadFollowups(date: string): Promise<Map<string, FollowupBrief>> 
     .eq("session_date", date);
   // 표가 아직 없거나(마이그레이션 미적용) 조회가 실패해도 **화면은 살아야 한다** — 큐는 파생이라
   // 조치 기록이 없으면 "아직 아무도 안 만졌다"로 보이는 게 맞다(#95: 옛 스키마에서도 도는 배포).
+  // ⚠️ 단 **소리 없이 삼키지는 않는다**(#89) — 이게 계속 실패하면 데스크의 '오늘 처리함'이 매일 비고
+  //    매듭지은 건이 다시 열려 보이는데, 화면만 보면 "아직 아무도 안 했다"와 구분되지 않는다.
+  if (error) reportError(error, { scope: "attendance.loadFollowups", date });
   if (error || !data) return new Map();
   const out = new Map<string, FollowupBrief>();
   for (const row of data) {
@@ -265,6 +280,9 @@ async function loadInputRequests(date: string): Promise<Set<string>> {
     .select("subject_key, bucket")
     .eq("event_type", "attendance_input_request")
     .like("bucket", `${date}|%`);
+  // ⚠️ 실패하면 '요청함' 표식이 전부 꺼져 데스크가 이미 보낸 반에 또 손댄다 — 조용히 넘기지 않는다(#89).
+  //    (서버 dedup이 중복 발송은 막으므로 화면 표식만 어긋난다.)
+  if (error) reportError(error, { scope: "attendance.loadInputRequests", date });
   if (error || !data) return new Set();
   return new Set(data.map((r) => `${r.subject_key}|${String(r.bucket).slice(date.length + 1)}`));
 }

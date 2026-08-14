@@ -1,4 +1,5 @@
--- 0211a — 출결 입력 주체(recorded_via) + 데스크 교차알림 수신 토글.
+-- 0212a — 출결 입력 주체(recorded_via) + 데스크 교차알림 수신 토글.
+-- (0211a는 휴가 RLS 수리 `0211a_leave_rls_recursion_fix`가 씀.)
 --
 -- 배경(원장 2026-08-14 추가): *"10분 이후 미출결건에 대하여 수정할때만. 이때는 구분해줄것.
 -- 내부 데이터로. 미출결 -> 출결로 바뀌면 알림이 가도록, 단 데스크가 미출결 -> 출결하면 강사는
@@ -38,10 +39,10 @@ begin
 end $$;
 
 comment on column attendance_records.recorded_via is
-  '입력 주체(teacher=강사 / desk=데스크 / seat=자리 / kiosk=키오스크). 쓰는 순간에 굳힘. null=미상(0211a 이전 또는 미배선 경로).';
+  '입력 주체(teacher=강사 / desk=데스크 / seat=자리 / kiosk=키오스크). 쓰는 순간에 굳힘. null=미상(0212a 이전 또는 미배선 경로).';
 
 alter table users
   add column if not exists desk_attendance_optin boolean not null default false;
 
 comment on column users.desk_attendance_optin is
-  '오늘 출결 데스크 알림. true면 강사가 미출결을 출석으로 바꾼 벨을 이 계정이 받는다(0211a). attendance_alert_optin(셔틀·학부모 연락)과 별개.';
+  '오늘 출결 데스크 알림. true면 강사가 미출결을 출석으로 바꾼 벨을 이 계정이 받는다(0212a). attendance_alert_optin(셔틀·학부모 연락)과 별개.';

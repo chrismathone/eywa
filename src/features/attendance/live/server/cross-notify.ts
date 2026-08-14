@@ -141,7 +141,7 @@ async function loadDeskOptin(
     .eq("status", "active")
     .eq("desk_attendance_optin", true);
   if (error) {
-    // 0211a 미적용 — 받을 사람이 없는 것과 같다. 출결 저장은 살린다(#95).
+    // 0212a 미적용 — 받을 사람이 없는 것과 같다. 출결 저장은 살린다(#95).
     if (/desk_attendance_optin/i.test(error.message)) return [];
     throw error;
   }

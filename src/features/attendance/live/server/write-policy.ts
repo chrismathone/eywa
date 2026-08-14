@@ -114,7 +114,7 @@ export async function assertDeskMayWrite(input: {
   return reason ? { error: reason } : { ok: true };
 }
 
-/** 컬럼 부재(#95) — 0211a 미적용이어도 출결 저장은 살아야 한다. */
+/** 컬럼 부재(#95) — 0212a 미적용이어도 출결 저장은 살아야 한다. */
 export function isMissingViaColumn(message: string): boolean {
   return /recorded_via/i.test(message);
 }

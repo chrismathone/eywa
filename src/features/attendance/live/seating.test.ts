@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { foldSeating, pickClassDayHit, seatingSummary } from "./seating";
+import { foldSeating, groupAdjacentSlots, isAdjacentSlot, pickClassDayHit, seatingSummary } from "./seating";
 import type { LiveBoardSlot } from "./types";
 
 const slot = (over: Partial<LiveBoardSlot> & { key: string; slotStart: string }): LiveBoardSlot => ({
@@ -202,5 +202,70 @@ describe("seatingSummary", () => {
       }),
     ]);
     expect(seatingSummary(classes)).toEqual({ unmarked: 1, absent: 1, recorded: 2, expected: 3 });
+  });
+});
+
+describe("groupAdjacentSlots", () => {
+  const kids = [student("곽민주"), student("김소은")];
+
+  it("끝이 다음에 닿는 같은 반·같은 강사는 한 장 — 14:30~15:25 + 15:25~16:20", () => {
+    const a = slot({
+      key: "p1",
+      classId: "bs1j",
+      className: "초등M 초4 BS1J",
+      teacherId: "kim",
+      slotStart: "14:30",
+      slotEnd: "15:25",
+      saveSlot: null,
+      subject: "math",
+      phase: "ended",
+      students: kids,
+    });
+    const b = slot({
+      key: "p2",
+      classId: "bs1j",
+      className: "초등M 초4 BS1J",
+      teacherId: "kim",
+      slotStart: "15:25",
+      slotEnd: "16:20",
+      saveSlot: null,
+      subject: "math",
+      phase: "ended",
+      students: kids,
+    });
+    expect(isAdjacentSlot(a, b)).toBe(true);
+    const grouped = groupAdjacentSlots([b, a]);
+    expect(grouped).toHaveLength(1);
+    expect(grouped[0]?.slotStart).toBe("14:30");
+    expect(grouped[0]?.slotEnd).toBe("16:20");
+    expect(grouped[0]?.students).toHaveLength(2);
+    expect(grouped[0]?.saveSlot).toBeNull(); // 수학 하루 한 행
+  });
+
+  it("같은 반이어도 시간이 안 이어지면 묶지 않는다", () => {
+    const grouped = groupAdjacentSlots([
+      slot({ key: "am", classId: "c", teacherId: "t", slotStart: "10:00", slotEnd: "10:50", students: kids }),
+      slot({ key: "pm", classId: "c", teacherId: "t", slotStart: "16:20", slotEnd: "17:10", students: kids }),
+    ]);
+    expect(grouped).toHaveLength(2);
+  });
+
+  it("강사가 다르면 묶지 않는다", () => {
+    const grouped = groupAdjacentSlots([
+      slot({ key: "a", classId: "c", teacherId: "t1", slotStart: "14:30", slotEnd: "15:25" }),
+      slot({ key: "b", classId: "c", teacherId: "t2", slotStart: "15:25", slotEnd: "16:20" }),
+    ]);
+    expect(grouped).toHaveLength(2);
+  });
+
+  it("세 교시 연강도 한 장", () => {
+    const grouped = groupAdjacentSlots([
+      slot({ key: "1", classId: "c", teacherId: "t", slotStart: "14:00", slotEnd: "14:50", students: kids }),
+      slot({ key: "2", classId: "c", teacherId: "t", slotStart: "14:50", slotEnd: "15:40", students: kids }),
+      slot({ key: "3", classId: "c", teacherId: "t", slotStart: "15:40", slotEnd: "16:30", students: kids }),
+    ]);
+    expect(grouped).toHaveLength(1);
+    expect(grouped[0]?.slotStart).toBe("14:00");
+    expect(grouped[0]?.slotEnd).toBe("16:30");
   });
 });

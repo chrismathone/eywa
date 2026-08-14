@@ -124,6 +124,76 @@ export function foldSeating(slots: readonly LiveBoardSlot[]): SeatingClass[] {
   return out;
 }
 
+/**
+ * 이어지는 같은 반·같은 강사 교시를 한 카드로 접는다.
+ * 예: 초등M 초4 BS1J 14:30~15:25 와 15:25~16:20 → 14:30~16:20 한 장.
+ * 끝이 다음에 닿지 않으면(점심 전·후) 묶지 않는다.
+ */
+export function isAdjacentSlot(a: LiveBoardSlot, b: LiveBoardSlot): boolean {
+  return (
+    a.classId === b.classId &&
+    a.teacherId === b.teacherId &&
+    a.slotEnd != null &&
+    a.slotEnd === b.slotStart
+  );
+}
+
+function mergeAdjacentPair(a: LiveBoardSlot, b: LiveBoardSlot): LiveBoardSlot {
+  const roster = new Map<string, LiveStudent>();
+  for (const s of [...a.students, ...b.students]) roster.set(s.studentId, s);
+  const students = [...roster.values()]
+    .map((base) => {
+      const hit = pickClassDayHit(
+        [a, b].map((slot) => {
+          const s = slot.students.find((x) => x.studentId === base.studentId);
+          return {
+            status: s?.status ?? null,
+            note: s?.note ?? null,
+            recordedAt: s?.recordedAt ?? null,
+            recordSlot: s?.recordSlot ?? null,
+          };
+        }),
+      );
+      const status = hit?.status ?? null;
+      return {
+        ...base,
+        status,
+        note: hit?.note ?? base.note,
+        recordSlot: hit?.recordSlot ?? null,
+        recordedAt: hit?.recordedAt ?? null,
+        signal: base.signal,
+      };
+    })
+    .sort((x, y) => x.studentName.localeCompare(y.studentName, "ko"));
+  return {
+    ...a,
+    slotEnd: b.slotEnd ?? a.slotEnd,
+    // 뒤 교시가 시작됐으면 그 국면(앞이 종료여도 '진행 중'으로).
+    phase: b.phase !== "before" ? b.phase : a.phase,
+    students,
+    recordedCount: students.filter((s) => s.status != null).length,
+    hasAnyRecord: a.hasAnyRecord || b.hasAnyRecord,
+    ownedByMe: a.ownedByMe || b.ownedByMe,
+  };
+}
+
+export function groupAdjacentSlots(slots: readonly LiveBoardSlot[]): LiveBoardSlot[] {
+  const ordered = [...slots].sort((a, b) =>
+    a.slotStart === b.slotStart
+      ? a.className.localeCompare(b.className, "ko")
+      : a.slotStart < b.slotStart
+        ? -1
+        : 1,
+  );
+  const out: LiveBoardSlot[] = [];
+  for (const slot of ordered) {
+    const prev = out[out.length - 1];
+    if (prev && isAdjacentSlot(prev, slot)) out[out.length - 1] = mergeAdjacentPair(prev, slot);
+    else out.push(slot);
+  }
+  return out;
+}
+
 export function seatingSummary(classes: readonly SeatingClass[]): SeatingSummary {
   let unmarked = 0;
   let absent = 0;

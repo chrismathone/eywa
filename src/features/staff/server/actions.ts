@@ -280,7 +280,7 @@ export async function updateStaff(
     .eq("id", id);
 
   if (error) {
-    // 0209a/0211a 미적용이면 선택 토글만 빼고 나머지를 저장한다(#95 — 직원 수정 화면을 죽이지 않음).
+    // 0209a/0212a 미적용이면 선택 토글만 빼고 나머지를 저장한다(#95 — 직원 수정 화면을 죽이지 않음).
     if (/seat_lab_duty|seat_jj_duty|desk_attendance_optin/i.test(error.message)) {
       const { error: retry } = await supabase.from("users").update(staffPatch).eq("id", id);
       if (retry) return { error: retry.message };

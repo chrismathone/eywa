@@ -372,16 +372,17 @@ export function SheetClient({
           }
         });
       },
-      // 직전 교시 복사 — 서버가 canonical 행을 돌려주므로 addLine과 **같은 방식**으로 state를 갈아끼우고
-      // CAS 시드도 다시 심는다(안 심으면 복사된 칸을 처음 고칠 때 expectedValue가 어긋나 충돌로 뜬다).
+      // 내용 복사(같은 교시의 지난 수업 → 빈 칸만) — 서버가 canonical 행을 돌려주므로 addLine과 **같은
+      // 방식**으로 state를 갈아끼우고 CAS 시드도 다시 심는다. 🔴 시드는 새 줄뿐 아니라 **채워진 기존 줄**
+      // 에도 필요하다(0209a는 행을 지우고 새로 넣는 게 아니라 같은 id의 빈 칸을 UPDATE한다 — 안 심으면
+      // 그 칸을 처음 고칠 때 expectedValue가 어긋나 충돌로 뜬다).
       copySlot: (planDate, slotStart, termMode) => {
-        // ⚠️ **반영 전 flush 필수** — 복사는 대상 교시의 placeholder 행을 지우고 새로 넣는다(0183a). 아직
-        //    확정 안 된 셀 입력(디바운스 800ms)이 큐에 남아 있으면 그 행이 먼저 삭제돼 patch가 `gone`으로
-        //    떨어지고 방금 친 글자가 사라진다. '시트 가져오기'가 같은 이유로 `flushBeforeImport`를 둔다.
+        // ⚠️ **반영 전 flush 필수** — 복사가 대상 행을 갱신하므로, 아직 확정 안 된 셀 입력(디바운스 800ms)이
+        //    큐에 남아 있으면 서버 값과 순서가 뒤집혀 방금 친 글자가 되돌아간다('시트 가져오기'와 같은 계약).
         void store.flush().then((flushed) => {
           if (!flushed.ok) {
             const go = window.confirm(
-              "아직 저장이 확정되지 않은 입력(또는 충돌)이 있습니다. 그래도 직전 교시를 복사할까요? (입력을 잃을 수 있습니다)",
+              "아직 저장이 확정되지 않은 입력(또는 충돌)이 있습니다. 그래도 지난 수업 내용을 복사할까요? (입력을 잃을 수 있습니다)",
             );
             if (!go) return;
           }
@@ -394,10 +395,13 @@ export function SheetClient({
             if (!r.ok) return toast.error(r.error);
             if (r.copied === 0) {
               // 서버가 "왜 아무것도 안 했는지"를 돌려준다 — 조용히 성공한 척하면 사람이 버튼을 계속 누른다.
+              // ⚠️ target_not_empty는 0209a 적용 전(옛 함수)에만 온다 — 그때도 raw 코드는 안 보여준다.
               toast.info(
-                r.reason === "target_not_empty"
-                  ? "이미 계획이 있는 교시라 복사하지 않았습니다(덮어쓰기 없음)"
-                  : "복사할 직전 교시가 없습니다(최근 8주 안에 작성된 같은 시기 계획이 없습니다)",
+                r.reason === "target_already_filled"
+                  ? "빈 칸이 없어 채울 게 없습니다(이미 쓴 칸은 덮어쓰지 않습니다)"
+                  : r.reason === "target_not_empty"
+                    ? "이미 계획이 있는 교시라 복사하지 않았습니다(덮어쓰기 없음)"
+                    : "복사할 지난 수업이 없습니다(최근 8주 안에 같은 교시·같은 시기 계획이 없습니다)",
               );
               return;
             }
@@ -413,9 +417,8 @@ export function SheetClient({
               store.seed(l.id, "skill_area", l.skillArea);
             }
             toast.success(
-              r.sourceLabel
-                ? `${r.sourceLabel} 교시에서 ${r.copied}줄 복사`
-                : `${r.copied}줄 복사`,
+              (r.sourceLabel ? `${r.sourceLabel} 수업에서 ${r.copied}줄 채움` : `${r.copied}줄 채움`) +
+                (r.truncated > 0 ? ` — ${r.truncated}줄은 20줄 상한이라 못 넣었습니다` : ""),
             );
           });
         });
