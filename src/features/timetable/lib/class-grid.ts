@@ -748,8 +748,17 @@ export function groupRichCards(
       if (weekend) periodRows = periodRows.map((r) => ({ ...r, time: "" }));
       // 분리된 부그룹은 라벨에 ②③… 접미(같은 "N교시 시작"이 두 박스로 나뉠 때 구분).
       const label = ci === 0 ? cluster[0].groupLabel : `${cluster[0].groupLabel} ${"②③④⑤"[ci - 1] ?? `(${ci + 1})`}`;
+      // 🔴 key에 **제목을 넣지 말 것**(2026-08-14). 커스텀 줄의 제목은 배치 편집에서 **입력칸**이라,
+      //    한 글자 칠 때마다 key가 바뀌어 섹션이 통째로 리마운트되고 **입력칸이 포커스를 잃는다**
+      //    (원장 *"그룹 명 수정시에 뒤로가기가 되어버림"* — 포커스가 body로 빠진 뒤의 백스페이스를
+      //    브라우저가 뒤로가기로 해석한다). 커스텀 줄은 **불변 id**로 잡고, 자동 그룹만 라벨로 잡는다
+      //    (자동 라벨은 "N교시 시작"이라 사람이 못 바꾼다).
+      // ⚠️ 같은 줄의 평일·주말은 groupCustomId가 **같다** → 주말 쪽에 접미를 붙여 key 충돌을 막는다.
+      const keyBase = cluster[0].groupCustomId
+        ? `${cluster[0].groupCustomId}${weekend ? "::w" : ""}`
+        : cluster[0].groupLabel;
       out.push({
-        key: `${cluster[0].groupOrder}::${cluster[0].groupLabel}::${ci}`,
+        key: `${cluster[0].groupOrder}::${keyBase}::${ci}`,
         label,
         order: cluster[0].groupOrder + ci * 0.001, // 같은 앵커의 부그룹은 바로 뒤에 정렬
         sectionKey: cluster[0].groupOrder,
