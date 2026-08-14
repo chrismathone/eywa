@@ -8,6 +8,7 @@
  *    (알림 규칙이 "강사가 미출결→출결로 바꾸면"을 전제하므로). 데스크만 이 선 밖의 빈 칸만 손댄다.
  * 판정은 읽는 시점 계산 — 상태를 DB에 적어 두면 10분마다 배치가 필요해진다.
  */
+import type { RecordedVia } from "./recorded-via";
 import { ATTENDANCE_GRACE_MIN, type SlotPhase } from "./signals";
 
 export { ATTENDANCE_GRACE_MIN };
@@ -35,6 +36,15 @@ export const SEAT_MARK_TONE: Record<SeatMark, string> = {
   waiting: "bg-att-classday text-text-dim",
 };
 
+/** 좌석 위 출석불 — 토큰만. 출석=민트, 결석=빨강, 지각=주황. */
+export const SEAT_MARK_BULB: Record<SeatMark, string> = {
+  present: "bg-att-present ring-att-present-ink/50",
+  absent: "bg-att-absent ring-att-absent-ink/50",
+  late: "bg-att-late ring-att-late-ink/50",
+  unmarked: "bg-att-outside ring-att-absent-ink/30",
+  waiting: "bg-att-classday ring-line",
+};
+
 /** 그 칸의 표시 상태 — 기록이 있으면 그 값, 없으면 국면으로 대기/미출결. */
 export function seatMarkOf(status: string | null, phase: SlotPhase): SeatMark {
   if (status === "present" || status === "makeup") return "present";
@@ -43,6 +53,15 @@ export function seatMarkOf(status: string | null, phase: SlotPhase): SeatMark {
   if (status != null) return "present"; // 알 수 없는 값은 '왔다' 쪽으로 — 빈 칸으로 오인하지 않는다
   if (phase === "before" || phase === "grace") return "waiting";
   return "unmarked";
+}
+
+/**
+ * 데스크 10분 게이트를 켤 화면인가.
+ * `"live"` = 당일 출결(보드·확인 큐·좌석표). 없으면 종전 권한(월간 격자·원스크린·시트).
+ * 권한을 **좁히기만** 하므로 클라가 위조해도 넣으면 더 막힐 뿐(#77 예외 — 원장 범위가 당일 화면).
+ */
+export function shouldEnforceDeskGate(source?: string | null): boolean {
+  return source === "live";
 }
 
 /**
@@ -56,12 +75,32 @@ export function canDeskMark(status: string | null, phase: SlotPhase): boolean {
   return phase === "due" || phase === "ended";
 }
 
+const DESK_ALREADY_MARKED = "이미 입력된 출결은 데스크가 덮을 수 없습니다 — 미출결 칸만 처리할 수 있습니다";
+const DESK_CLEAR_DENIED = "데스크는 미출결 칸만 입력할 수 있습니다 — 이미 있는 기록을 지울 수 없습니다";
+
 /** 데스크 거절 사유 — 서버 액션이 같은 함수로 메시지를 만든다(#77). */
 export function deskMarkDeniedReason(status: string | null, phase: SlotPhase): string | null {
   if (canDeskMark(status, phase)) return null;
-  if (status != null) return "이미 입력된 출결은 데스크가 덮을 수 없습니다 — 미출결 칸만 처리할 수 있습니다";
+  if (status != null) return DESK_ALREADY_MARKED;
   if (phase === "before") return "아직 수업 시작 전입니다 — 시작 후 10분이 지나야 데스크가 입력할 수 있습니다";
   return `수업 시작 후 ${ATTENDANCE_GRACE_MIN}분이 지나야 데스크가 입력할 수 있습니다`;
+}
+
+/**
+ * 이 쓰기를 데스크 게이트가 막는가. `assertDeskMayWrite`의 순수 판정.
+ * 플래그 없음 = 종전 권한 — 담당이 아닌 master(via=desk)도 기존 기록을 고친다.
+ */
+export function deskWriteDenied(input: {
+  source?: string | null;
+  via: RecordedVia;
+  currentStatus: string | null;
+  nextStatus: string | null;
+  phase: SlotPhase;
+}): string | null {
+  if (!shouldEnforceDeskGate(input.source)) return null;
+  if (input.via !== "desk") return null;
+  if (input.nextStatus === null) return DESK_CLEAR_DENIED;
+  return deskMarkDeniedReason(input.currentStatus, input.phase);
 }
 
 /** 출석으로 본 상태 — 미출결→출결 알림의 '출결' 쪽. 지각·조퇴·보강도 '왔다'. */

@@ -56,6 +56,11 @@ export type LiveSlot = {
    * 뭉쳐 누구에게 전화할지 알 수 없다.
    */
   slotTeacherLabel: string | null;
+  /**
+   * 그 교시의 강의실 이름(슬롯 FK → 슬롯 라벨 → 반 기본).
+   * 좌석표가 층·호로 묶는 근거. 없으면 null(「강의실 미지정」).
+   */
+  roomName: string | null;
   students: LiveStudent[];
   /** 그 (반,교시)에 출결 기록이 하나라도 있는가 — 레인 A/B를 가르는 근거. */
   hasAnyRecord: boolean;

@@ -12,6 +12,7 @@ const slot = (over: Partial<LiveBoardSlot> & { key: string; slotStart: string })
   teacherId: null,
   teacherName: "김강사",
   slotTeacherLabel: null,
+  roomName: over.roomName ?? null,
   students: [],
   hasAnyRecord: false,
   recordedCount: 0,
@@ -144,6 +145,14 @@ describe("foldSeating", () => {
     ]);
     expect(klass?.students[0]?.mark).toBe("present");
     expect(klass?.students[0]?.writeSlot).toBe("18:20");
+  });
+
+  it("강의실 이름은 오늘 슬롯 중 처음 있는 값을 쓴다", () => {
+    const [klass] = foldSeating([
+      slot({ key: "p1", classId: "m", slotStart: "16:20", roomName: null }),
+      slot({ key: "p2", classId: "m", slotStart: "17:20", roomName: "본원305" }),
+    ]);
+    expect(klass?.roomName).toBe("본원305");
   });
 
   it("첫 교시 유예 안의 빈 칸은 대기", () => {

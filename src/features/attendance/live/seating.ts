@@ -23,6 +23,8 @@ export type SeatingClass = {
   className: string;
   subject: string;
   teacherName: string | null;
+  /** 오늘 첫 교시가 열리는 강의실 — 층 묶음 근거. */
+  roomName: string | null;
   /** 오늘 첫 살아있는 교시 — 표시·10분 판정·영어 신규 저장. */
   firstStart: string;
   firstEnd: string | null;
@@ -106,6 +108,7 @@ export function foldSeating(slots: readonly LiveBoardSlot[]): SeatingClass[] {
       className: first.className,
       subject: first.subject,
       teacherName: first.teacherName,
+      roomName: ordered.find((s) => s.roomName)?.roomName ?? first.roomName,
       firstStart: first.slotStart,
       firstEnd: first.slotEnd,
       periodLabel: first.periodLabel,

@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { setAttendanceCell } from "@/features/attendance/server/actions";
-import { canDeskMark, seatMarkOf, SEAT_MARK_LABEL, SEAT_MARK_TONE, shortSeatName } from "../mark-state";
+import { canDeskMark, seatMarkOf, SEAT_MARK_BULB, SEAT_MARK_LABEL, shortSeatName } from "../mark-state";
 import type { SeatingClass, SeatingStudent } from "../seating";
 
 const MARKS = [
@@ -28,9 +28,7 @@ export function SeatingCell({
   const [optimistic, setOptimistic] = useState<string | null | undefined>(undefined);
   const status = optimistic === undefined ? student.status : optimistic;
   const mark = seatMarkOf(status, klass.phase);
-  // 자기 반(owned)은 강사 규칙 — 10분 전에도 찍는다. 남의 반은 데스크 규칙.
   const canMark = klass.ownedByMe || canDeskMark(status, klass.phase);
-  const tone = SEAT_MARK_TONE[mark];
 
   function save(next: "present" | "late" | "absent") {
     setError(null);
@@ -42,10 +40,10 @@ export function SeatingCell({
         classId: klass.classId,
         sessionDate: date,
         status: next,
-        // 기존 행이면 그 교시, 없으면 과목 축(수학=null · 영어=첫 교시). 한 클릭이 2행을 만들지 않는다.
         slotStart: student.writeSlot,
         periodStart: klass.firstStart,
         quiet: true,
+        source: "live",
       })
         .then((res) => {
           if ("error" in res) {
@@ -69,14 +67,20 @@ export function SeatingCell({
         disabled={busy || !canMark}
         onClick={() => canMark && setOpen((v) => !v)}
         title={`${student.studentName}${student.schoolGrade ? ` · ${student.schoolGrade}` : ""} · ${SEAT_MARK_LABEL[mark]}`}
-        className={`flex h-11 min-w-[44px] items-center justify-center rounded-lg px-1.5 text-[11px] font-bold whitespace-nowrap ${tone} ${
-          canMark ? "hover:ring-primary/40 cursor-pointer hover:ring-2" : "cursor-default opacity-95"
+        className={`bg-surface flex min-h-[52px] min-w-[44px] flex-col items-center rounded-t-2xl rounded-b-md px-1 pt-1.5 pb-1 ${
+          canMark ? "hover:ring-primary/40 cursor-pointer hover:ring-2" : "cursor-default"
         } disabled:opacity-60`}
       >
-        {shortSeatName(student.studentName)}
+        <span
+          className={`mb-1 size-2.5 rounded-full ring-2 ${SEAT_MARK_BULB[mark]}`}
+          aria-hidden
+        />
+        <span className="text-[11px] leading-tight font-bold whitespace-nowrap">
+          {shortSeatName(student.studentName)}
+        </span>
       </button>
       {open && canMark && (
-        <div className="border-line bg-surface absolute top-full left-0 z-20 mt-1 flex gap-0.5 rounded-lg border p-1 shadow-md">
+        <div className="border-line bg-surface absolute top-full left-1/2 z-20 mt-1 flex -translate-x-1/2 gap-0.5 rounded-lg border p-1 shadow-md">
           {MARKS.map((m) => (
             <button
               key={m.status}

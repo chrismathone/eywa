@@ -1,15 +1,15 @@
 "use client";
 
 /**
- * 데스크 좌석표 — 섹션 = 반(첫 교시 시작시각 순), 칸 = 그 반의 오늘 학생 하나.
- * 색은 출석부 `--att-*`만. 칸 최소 44px.
+ * 데스크 좌석표 — 층 띠 → 강의실(칠판+좌석). 칸 = 그 반의 오늘 학생 하나.
  */
 import { EmptyState } from "@/components/empty-state";
 import { CalendarDays } from "@/components/icons/eywa-icon-compat";
-import { SEAT_MARK_LABEL, SEAT_MARK_TONE } from "../mark-state";
+import { SEAT_MARK_BULB, SEAT_MARK_LABEL } from "../mark-state";
 import { foldSeating, seatingSummary } from "../seating";
+import { groupSeatingFloors } from "../seating-floors";
 import type { LiveBoard } from "../types";
-import { SeatingCell } from "./seating-cell";
+import { SeatingRoom } from "./seating-room";
 
 const LEGEND: Array<keyof typeof SEAT_MARK_LABEL> = [
   "present",
@@ -32,9 +32,10 @@ export function SeatingChart({ board }: { board: LiveBoard }) {
     );
   }
   const sum = seatingSummary(classes);
+  const floors = groupSeatingFloors(classes);
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       <header className="flex flex-wrap items-center gap-x-3 gap-y-1">
         <p className="text-sm font-bold">
           미출결 <span className="num text-att-absent-ink">{sum.unmarked}</span>
@@ -46,30 +47,34 @@ export function SeatingChart({ board }: { board: LiveBoard }) {
             {sum.recorded}/{sum.expected}
           </span>
         </p>
-        <ul className="ml-auto flex flex-wrap gap-1.5">
+        <ul className="ml-auto flex flex-wrap items-center gap-2">
           {LEGEND.map((k) => (
-            <li
-              key={k}
-              className={`rounded-md px-1.5 py-0.5 text-[10px] font-bold ${SEAT_MARK_TONE[k]}`}
-            >
+            <li key={k} className="text-text-dim flex items-center gap-1 text-[11px] font-bold">
+              <span className={`size-2 rounded-full ring-2 ${SEAT_MARK_BULB[k]}`} aria-hidden />
               {SEAT_MARK_LABEL[k]}
             </li>
           ))}
         </ul>
       </header>
 
-      {classes.map((klass) => (
-        <section key={klass.classId} className="space-y-1.5">
-          <h2 className="flex flex-wrap items-baseline gap-x-2 text-sm font-bold">
-            <span className="num">{klass.firstStart}</span>
-            <span>{klass.className}</span>
-            {klass.teacherName && (
-              <span className="text-text-faint text-xs font-normal">{klass.teacherName}</span>
+      {floors.map((floor) => (
+        <section key={floor.key} className="space-y-4">
+          <h2 className="flex flex-wrap items-baseline gap-x-2">
+            <span className="text-sm font-bold">{floor.label}</span>
+            {floor.unmarked > 0 && (
+              <span className="text-att-absent-ink text-xs font-bold">미출결 {floor.unmarked}</span>
             )}
           </h2>
-          <div className="flex flex-wrap gap-1">
-            {klass.students.map((s) => (
-              <SeatingCell key={s.studentId} date={board.date} klass={klass} student={s} />
+          <div className="space-y-4">
+            {floor.rooms.map((room) => (
+              <div key={room.key} className="space-y-2">
+                <h3 className="text-text-dim text-xs font-bold">{room.roomName}</h3>
+                <div className="grid items-start gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                  {room.classes.map((klass) => (
+                    <SeatingRoom key={klass.classId} date={board.date} klass={klass} />
+                  ))}
+                </div>
+              </div>
             ))}
           </div>
         </section>
