@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { after } from "next/server";
 import { notifyIfClassAttendanceComplete } from "./complete-notify";
+import { notifyDeskOfAbsences } from "@/features/attendance/live/server/absent-notify";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { accessLevelTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
@@ -11,6 +12,7 @@ import { fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 // 담당 반 판정 단일 소스(담당 반 ∪ 그날 위임 반) — classes.teacher_id를 직접 비교하지 말 것(0173a).
 import { getTeachingClassIds } from "@/features/classes/server/delegation";
 import { parseSessionUnits } from "../session-units";
+import { hasSaveTarget, pickSaveTargets, type SaveTargets } from "../save-targets";
 import {
   absenceMemo,
   appendMemo,
@@ -298,32 +300,40 @@ export async function setAttendanceCell(input: {
 
   // 그날(또는 그 교시)의 기록을 훑는다 — append-only라 정정 이력이 함께 나오므로 **교시별 최신 1건**만
   // 유효행으로 고른다(effectiveAttendanceRecords와 같은 규칙: recorded_at 최신, 동률이면 id 큰 쪽).
-  let find = supabase
+  // 🔴 교시를 넘겼어도 **"그날 전체"(slot_start null) 행까지 함께** 본다. 두 세대가 공존하기 때문이다
+  //    (실측 2026-08-14: 영어도 day-level 20행이 남아 있다). 그 교시만 조회하면 옛 day-level 행을
+  //    못 보고 새 행을 INSERT해 **같은 (학생·반·날짜)에 두 행이 살아남는다** — 화면은 교시 우선이라
+  //    멀쩡해 보이지만 급여·시수는 두 행을 다 합산해서, 정정이 돈에 반영되지 않거나 이중 계상된다.
+  const { data: rows } = await supabase
     .from("attendance_records")
     .select("id, slot_start, recorded_at")
     .eq("class_id", classId)
     .eq("student_id", studentId)
-    .eq("session_date", sessionDate);
-  if (slot !== null) find = find.eq("slot_start", slot);
-  const { data: rows } = await find.order("recorded_at", { ascending: false });
+    .eq("session_date", sessionDate)
+    .order("recorded_at", { ascending: false });
 
-  // 이미 recorded_at 내림차순이라 **교시마다 처음 만난 행이 최신**이다.
-  const latestBySlot = new Map<string, string>(); // slot(또는 "" = 그날 전체) → id
-  for (const r of rows ?? []) {
-    const k = (r.slot_start as string | null) ?? "";
-    if (!latestBySlot.has(k)) latestBySlot.set(k, r.id as string);
-  }
+  // 대상 선정은 순수 규칙 **한 곳**(pickSaveTargets)이 정한다 — 일괄 저장도 같은 함수를 쓴다.
+  // 이미 recorded_at 내림차순이라 "교시마다 처음 만난 행이 최신"이라는 그 함수의 전제를 만족한다.
+  const { updateIds, promoteIds } = pickSaveTargets(rows ?? [], slot);
 
   const nowIso = new Date().toISOString();
-  const targetIds = [...latestBySlot.values()];
+  const targetIds = [...updateIds, ...promoteIds];
   if (targetIds.length > 0) {
     const patch: Record<string, unknown> = { status, recorded_by: user.id, recorded_at: nowIso };
     if (noteProvided) patch.note = noteVal;
     if (unitsProvided) patch.session_units = unitsVal;
-    // ⚠️ 교시를 안 넘긴 저장(출석부)은 그날 **모든 교시**를 함께 고친다 — 위 slotStart 주석의 (a)(b) 참조.
-    //    교시를 넘긴 저장(ECS)은 애초에 그 교시 1건만 조회했으므로 여기서도 1건이다.
-    const { error } = await supabase.from("attendance_records").update(patch).in("id", targetIds);
-    if (error) return { error: error.message };
+    if (promoteIds.length > 0) {
+      // 승격(옛 "그날 전체" 행 → 그 교시). 승격 대상만 있을 때만 발생하므로 한 문장으로 끝난다.
+      const { error } = await supabase
+        .from("attendance_records")
+        .update({ ...patch, slot_start: slot })
+        .in("id", promoteIds);
+      if (error) return { error: error.message };
+    }
+    if (updateIds.length > 0) {
+      const { error } = await supabase.from("attendance_records").update(patch).in("id", updateIds);
+      if (error) return { error: error.message };
+    }
   } else {
     const { error } = await supabase.from("attendance_records").insert({
       tenant_id: user.tenantId,
@@ -343,6 +353,17 @@ export async function setAttendanceCell(input: {
   after(() =>
     notifyIfClassAttendanceComplete({ tenantId: user.tenantId, classId, date: sessionDate, actorId: user.id }),
   );
+  // 결석이 찍힌 순간 → 데스크 확인 벨(2026-08-14). 결석일 때만, 그리고 dedup은 그쪽이 진다.
+  if (status === "absent") {
+    after(() =>
+      notifyDeskOfAbsences({
+        tenantId: user.tenantId,
+        actorId: user.id,
+        date: sessionDate,
+        cells: [{ studentId, classId, slotStart: slot }],
+      }),
+    );
+  }
   if (!input.quiet) revalidatePath("/attendance");
   return { ok: true };
 }
@@ -533,6 +554,16 @@ export async function setAttendanceBulk(input: {
    * 기존 행을 절대 update하지 않으므로 교시별(0196a) 행이 섞인 날에도 부분 갱신·시수 이중 계상이 없다.
    */
   fillEmptyOnly?: boolean;
+  /**
+   * 교시(0196a, "HH:MM") — **넘기면 그 교시 칸만** 읽고 쓴다. 안 넘기면 종전대로 "그날 전체"(slot null).
+   *
+   * 🔴 당일 출결 화면(2026-08-14)이 교시별로 그리기 때문에 필요하다. 이걸 안 넘기고 일괄 출석을 하면
+   *    같은 반이 하루 두 번 만나는 날(영어에 흔하다) **1교시에 누른 '전원 출석'이 2교시까지 출석으로
+   *    보인다** — 2교시에 안 온 학생이 데스크 큐에서 조용히 사라진다.
+   * ⚠️ `fillEmptyOnly`의 "이미 기록 있음" 판정도 함께 좁혀진다(그 교시에 기록이 있는지). 안 그러면
+   *    1교시를 찍은 순간 2교시가 통째로 blocked가 되어 영원히 못 찍는다.
+   */
+  slotStart?: string | null;
 }): Promise<BulkCellResult> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
@@ -590,7 +621,10 @@ export async function setAttendanceBulk(input: {
 
   const classIds = [...new Set(allowed.map((c) => c.classId))];
   const studentIds = [...new Set(allowed.map((c) => c.studentId))];
+  const slot = input.slotStart?.trim() || null;
+  if (slot && !/^\d{2}:\d{2}(:\d{2})?$/.test(slot)) return { error: "잘못된 교시입니다" };
   // 기존 기록 — 셀 액션과 같은 "가장 최근 1건" 규약(그 날짜에 행이 여러 개일 수 있다).
+  // 교시를 넘겼으면 **그 교시 행만** 본다(다른 교시 기록을 이 교시의 답으로 오인하지 않는다).
   const existingRows = await fetchInChunks<{
     id: string;
     class_id: string;
@@ -599,42 +633,69 @@ export async function setAttendanceBulk(input: {
   }>(studentIds, (chunk) =>
     supabase
       .from("attendance_records")
-      .select("id, class_id, student_id, recorded_at")
+      .select("id, class_id, student_id, recorded_at, slot_start")
       .eq("session_date", sessionDate)
       .in("class_id", classIds)
       .in("student_id", chunk)
+      // 🔴 교시를 넘겨도 **그날 전체(slot null) 행까지** 본다 — 아래에서 좁힌다. 조회에서 이미 잘라내면
+      //    옛 day-level 행을 못 보고 새 행을 만들어 한 칸에 두 행이 살아남는다(정정이 돈에 안 닿는다).
       .order("recorded_at", { ascending: false }),
   );
-  const latestId = new Map<string, string>();
+  // 칸(학생::반)마다 **셀 저장과 같은 규칙**으로 대상을 고른다(pickSaveTargets 단일 소스).
+  // 청크는 학생 단위라 한 칸의 행은 모두 같은 청크에 있고, 각 청크가 recorded_at 내림차순이라
+  // "교시마다 처음 만난 행이 최신"이라는 전제가 여기서도 성립한다.
+  const rowsByKey = new Map<string, { id: string; slot_start?: string | null }[]>();
   for (const r of existingRows) {
     const k = `${r.student_id}::${r.class_id}`;
-    if (!latestId.has(k)) latestId.set(k, r.id); // 청크별 desc 정렬 → 각 조합의 첫 행이 최신
+    const list = rowsByKey.get(k);
+    if (list) list.push(r);
+    else rowsByKey.set(k, [r]);
+  }
+  const targetsByKey = new Map<string, SaveTargets>();
+  for (const [k, list] of rowsByKey) {
+    const targets = pickSaveTargets(list, slot);
+    if (hasSaveTarget(targets)) targetsByKey.set(k, targets);
   }
 
   // '빈 칸만' 모드 — 기존 기록이 있는 셀은 **여기서**(서버) 걸러 절대 update 경로를 안 탄다.
   // 이 필터가 클라에 있으면 낡은 탭이 남의 결석을 덮는다(위 fillEmptyOnly 주석). blocked로 집계돼
   // 호출부가 "건너뛴 N명"을 사용자에게 밝힌다(조용한 스킵 금지).
   if (input.fillEmptyOnly) {
-    allowed = allowed.filter((c) => !latestId.has(`${c.studentId}::${c.classId}`));
+    allowed = allowed.filter((c) => !targetsByKey.has(`${c.studentId}::${c.classId}`));
     if (allowed.length === 0) return { ok: true, applied: [], blocked: cells.length };
   }
 
   const nowIso = new Date().toISOString();
-  const updateIds = allowed
-    .map((c) => latestId.get(`${c.studentId}::${c.classId}`))
-    .filter((id): id is string => !!id);
-  const inserts = allowed.filter((c) => !latestId.has(`${c.studentId}::${c.classId}`));
+  // 갱신 대상을 둘로 가른다 — 그 교시 행은 그대로, 옛 "그날 전체" 행은 **그 교시로 승격**하며 갱신.
+  const updateIds: string[] = [];
+  const promoteIds: string[] = [];
+  for (const c of allowed) {
+    const targets = targetsByKey.get(`${c.studentId}::${c.classId}`);
+    if (!targets) continue;
+    updateIds.push(...targets.updateIds);
+    promoteIds.push(...targets.promoteIds);
+  }
+  const inserts = allowed.filter((c) => !targetsByKey.has(`${c.studentId}::${c.classId}`));
 
   // 상태가 전부 같아서 갱신은 한 문장이면 된다(id 목록은 청크로 나눠 URL 길이 회피).
-  if (updateIds.length > 0) {
+  const applyUpdate = async (ids: string[], extra: Record<string, unknown>) => {
     const CHUNK = 100;
-    for (let i = 0; i < updateIds.length; i += CHUNK) {
+    for (let i = 0; i < ids.length; i += CHUNK) {
       const { error } = await supabase
         .from("attendance_records")
-        .update({ status, recorded_by: user.id, recorded_at: nowIso })
-        .in("id", updateIds.slice(i, i + CHUNK));
-      if (error) return { error: error.message };
+        .update({ status, recorded_by: user.id, recorded_at: nowIso, ...extra })
+        .in("id", ids.slice(i, i + CHUNK));
+      if (error) return error.message;
     }
+    return null;
+  };
+  if (updateIds.length > 0) {
+    const err = await applyUpdate(updateIds, {});
+    if (err) return { error: err };
+  }
+  if (promoteIds.length > 0) {
+    const err = await applyUpdate(promoteIds, { slot_start: slot });
+    if (err) return { error: err };
   }
   if (inserts.length > 0) {
     const { error } = await supabase.from("attendance_records").insert(
@@ -645,6 +706,8 @@ export async function setAttendanceBulk(input: {
         session_date: sessionDate,
         status,
         recorded_by: user.id,
+        // 교시 미지정이면 종전대로 null("그날 전체") — 기존 호출부의 저장 모양이 바뀌지 않는다.
+        ...(slot ? { slot_start: slot } : {}),
       })),
     );
     if (error) return { error: error.message };
@@ -661,6 +724,17 @@ export async function setAttendanceBulk(input: {
       });
     }
   });
+  // 일괄로 결석을 찍는 경우(예: 휴강 처리)도 데스크가 알아야 한다 — 같은 dedup을 타 중복 벨은 없다.
+  if (status === "absent" && allowed.length > 0) {
+    after(() =>
+      notifyDeskOfAbsences({
+        tenantId: user.tenantId,
+        actorId: user.id,
+        date: sessionDate,
+        cells: allowed.map((c) => ({ ...c, slotStart: slot })),
+      }),
+    );
+  }
   revalidatePath("/attendance");
   return { ok: true, applied: allowed, blocked: cells.length - allowed.length };
 }

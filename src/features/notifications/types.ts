@@ -23,6 +23,13 @@ export type NotificationType =
   // 학부모의 결석·지각·조퇴 연락(클래스노트) → **직원 설정에서 토글을 켠 계정 전원**(0184a).
   // ⚠️ 담당 반과 무관하다 — 차량(셔틀)·사무실이 "오늘 누가 안 오는지"를 담임에게 묻지 않게 하는 게 목적.
   | "student_attendance_notice"
+  // 강사가 결석을 입력한 순간 → 출결 알림 토글(users.attendance_alert_optin)을 켠 계정(2026-08-14).
+  // ⚠️ 학부모 연락 분류(student_attendance_notice)와 **다른 축**이다: 저건 학부모가 먼저 알려온 것이고,
+  //    이건 학원이 먼저 알아챈 것이라 확인 전화가 필요하다. 링크는 데스크 확인 큐.
+  | "attendance_absent_desk"
+  // 사무실이 "이 교시 출결 입력해 주세요"를 담당 강사(슬롯 담당 포함)에게 요청 — 데스크 레인 A 버튼.
+  // ⚠️ 이게 없으면 데스크는 헛전화 아니면 방치뿐이었다(적대 리뷰 S4). dedup은 (반, 날짜|교시) 1회.
+  | "attendance_input_request"
   // 전자결재(0212a) — **내 결재 차례가 됐을 때** 그 결재자에게(순차라 한 명씩), 문서가 끝나면 기안자에게.
   | "approval_requested"
   | "approval_decided";
@@ -56,6 +63,8 @@ export const NOTIFICATION_ICON: Record<string, EywaIconName> = {
   notice_send_failed: "alert",
   makeedu_login_failed: "alert",
   student_attendance_notice: "userMinus",
+  attendance_absent_desk: "userMinus",
+  attendance_input_request: "clipboardCheck",
   approval_requested: "scrollText",
   approval_decided: "clipboardCheck",
 };
