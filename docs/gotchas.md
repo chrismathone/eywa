@@ -1358,7 +1358,30 @@ IJW 1교시(16:20) 칸에 가 있었다. 함께 제보된 두 번째 증상 — 
   메뉴가 보이면 그건 권한 부족이 아니라 **override가 적용되지 않는 것**이고, 원인은 게이트가 아니라 그 위의
   우회 분기다. (역할 하나만 보고 "기본값이면 충분히 열려 있다"고 가정하지 말 것 — 역할별로 기본값이 다르다.)
 
-## #108 — RLS 정책 **둘이 서로의 표를 조회**하면 무한 재귀(42P17)로 그 표가 통째로 안 읽힌다 (2026-08-14)
+## #108 `window.location.origin`으로 만든 문자열을 **화면에 텍스트로 그리면** 하이드레이션이 깨진다 (React #418, 2026-08-14)
+
+원장 콘솔 제보: `Uncaught Error: Minified React error #418; …args[]=text&args[]=`.
+#418은 **"서버가 그린 텍스트가 클라와 다르다"**이고, 인자가 `["text", ""]` — **한쪽이 빈 문자열**이라는 뜻이다.
+
+- **원인**: 원스크린 카드([report-card.tsx](src/features/onescreen/components/report-card.tsx))가 학부모 공유
+  링크를 이렇게 만들었다 —
+  `const origin = typeof window !== "undefined" ? window.location.origin : ""` → `` `${origin}/r/${token}` ``
+  → 그 값을 `<code>{shareUrl}</code>`로 **텍스트 렌더**. 이 카드는 클라 컴포넌트지만 **SSR도 된다**:
+  서버에선 origin이 `""`라 `/r/…`, 클라에선 `https://…/r/…` → 같은 자리의 텍스트가 갈린다.
+- **증상**: React가 그 subtree의 서버 HTML을 버리고 **클라에서 통째로 재생성**한다. 대개 화면은 결국 맞게
+  그려져서 "콘솔만 빨간" 것처럼 보이지만, ① 첫 페인트 후 재렌더 비용(반응속도 1순위인 화면이다)
+  ② 같은 오류로 **페이지 클릭이 전부 먹통**이 된 전례가 있다([[#75]] — localStorage를 lazy 초기값으로 읽었을 때).
+- **고침**: **표시와 복사를 분리**한다.
+  · 표시 = `process.env.NEXT_PUBLIC_APP_URL`(빌드 시 인라인 = 서버·클라 값이 같아 갈릴 수 없다)
+  · 복사 = 클릭 핸들러에서 `window.location.origin`(그 순간 열려 있는 호스트라 커스텀 도메인·프리뷰에서도 유효)
+- 🔑 **판별**: `window.*`에서 온 값이 **렌더 스코프**에 있으면 위험, **핸들러·useEffect 안**이면 안전하다.
+  같은 파일 계열에서 [report-list.tsx](<src/app/(shell)/lesson-reports/_components/report-list.tsx>)도 같은
+  `origin` 관용구를 쓰지만 **`openReport()` 핸들러 안에서만** 소비해서 문제가 없다 — 관용구가 아니라
+  **소비 위치**가 기준이다.
+- ⚠️ `suppressHydrationWarning`으로 덮지 말 것 — 경고만 지우고 subtree 재생성(비용)은 그대로다.
+- ⚠️ 진단 시 배포 id(`?dpl=…`)만으로는 화면을 특정할 수 없다. 코드 쪽에서 **"클라 전용 값이 텍스트로 나가는 곳"**
+  을 찾는 게 빠르다: `git grep -n "location\.origin" -- src`로 훑고 **렌더 스코프에 있는 것만** 남긴다.
+## #109 — RLS 정책 **둘이 서로의 표를 조회**하면 무한 재귀(42P17)로 그 표가 통째로 안 읽힌다 (2026-08-14)
 
 휴가관리(0210a)를 배포하자 `/leave` 창이 검은 화면 **"This page couldn't load"**. 표도 컬럼도 앱 코드도
 멀쩡했다 — 죽은 건 **RLS**였다.
