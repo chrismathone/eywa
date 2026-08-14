@@ -72,20 +72,20 @@ export function SeatingCell({
           mark,
           note: student.note,
         })}
-        className={`flex min-h-11 min-w-[5.5rem] items-center justify-center rounded-lg px-2 py-1.5 ${SEAT_MARK_TONE[mark]} ${
+        className={`bg-card flex min-h-9 min-w-[4.25rem] items-center justify-center rounded-lg px-1.5 py-1 ${SEAT_MARK_TONE[mark]} ${
           canMark ? "hover:ring-primary/40 cursor-pointer hover:ring-2" : "cursor-default"
         } disabled:opacity-60`}
       >
         <span className="text-[13px] leading-tight font-bold">{student.studentName}</span>
       </button>
       {open && canMark && (
-        <div className="border-line bg-surface absolute top-full left-0 z-20 mt-1 flex gap-0.5 rounded-lg border p-1 shadow-md">
+        <div className="bg-card shadow-card absolute top-full left-0 z-30 mt-1 flex gap-0.5 rounded-lg p-1">
           {MARKS.map((m) => (
             <button
               key={m.status}
               type="button"
               onClick={() => save(m.status)}
-              className="hover:bg-bg-soft rounded-md px-2 py-1 text-[11px] font-bold whitespace-nowrap"
+              className={`rounded-md px-2 py-1 text-[11px] font-bold whitespace-nowrap ${SEAT_MARK_TONE[m.status]}`}
             >
               {m.label}
             </button>

@@ -112,6 +112,7 @@ export function foldSeating(slots: readonly LiveBoardSlot[]): SeatingClass[] {
       firstStart: first.slotStart,
       firstEnd: spanAdjacentEnd(ordered),
       periodLabel: first.periodLabel,
+      // 헤더 색·대기/미출결은 카드에 적힌 첫 시각 기준. 뒤 교시는 더 늦다.
       phase: first.phase,
       ownedByMe: first.ownedByMe,
       students,
@@ -229,6 +230,17 @@ export function groupAdjacentSlots(slots: readonly LiveBoardSlot[]): LiveBoardSl
         : 1,
   );
   return out;
+}
+
+/**
+ * 수업명 줄 배경.
+ * 대기(시작 전·유예 10분) = 회색, 출결이 열린 뒤(진행·종료) = 네이비.
+ * 둘 다 네이비면 20:10 반과 이미 끝난 반이 같아 보인다.
+ */
+export function seatingHeaderClass(phase: SeatingClass["phase"]): string {
+  return phase === "before" || phase === "grace"
+    ? "bg-att-weekend text-text"
+    : "bg-primary text-white";
 }
 
 export function seatingSummary(classes: readonly SeatingClass[]): SeatingSummary {

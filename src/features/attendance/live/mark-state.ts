@@ -26,14 +26,14 @@ export const SEAT_MARK_LABEL: Record<SeatMark, string> = {
 
 /**
  * 출석부 `--att-*` 토큰만 쓴다(새 팔레트 금지).
- * 미출결은 기록 전 민트(`classday`)와 구별되게 진한 회색(`outside`).
+ * 시작 전(대기)은 민트를 쓰지 않는다 — classday는 출석과 같은 계열이라 전원 출석으로 읽힌다.
  */
 export const SEAT_MARK_TONE: Record<SeatMark, string> = {
   present: "bg-att-present text-att-present-ink",
   absent: "bg-att-absent text-att-absent-ink",
   late: "bg-att-late text-att-late-ink",
   unmarked: "bg-att-outside text-att-absent-ink",
-  waiting: "bg-att-classday text-text-dim",
+  waiting: "border-line bg-card text-text-dim border",
 };
 
 /** 마우스오버 — 결석이면 사유 메모를 둘째 줄에. */

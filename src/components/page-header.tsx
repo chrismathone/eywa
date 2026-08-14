@@ -28,13 +28,13 @@ export function PageHeader({
   /** 상단 소라벨(문법 ①) — 예: "학생 관리". 한글 전제, uppercase 없음. */
   eyebrow?: string;
   title: string;
-  description?: string;
+  description?: ReactNode;
   /**
    * 임베드 컴팩트 행의 라벨 명시 지정(기본 description ?? title). title이 메뉴명이 아니라
    * **콘텐츠**(수납의 "2026년 7월" 등)라 컴팩트 행에서 사라지면 안 되거나, description이
    * 길어 창 안에서 여러 줄로 감길 때 짧은 대체 문구로 쓴다.
    */
-  embedLabel?: string;
+  embedLabel?: ReactNode;
   actions?: ReactNode;
   /** 헤더 아래 붙는 BigStat 행 슬롯(문법 ②). */
   stats?: ReactNode;
@@ -57,16 +57,16 @@ export function PageHeader({
             {title}
           </h2>
           {description ? (
-            <p
+            <div
               className={`text-text-dim mt-1 text-[13px] ${
                 embedLabel ? "compact-chrome:hidden" : "compact-chrome:mt-0"
               }`}
             >
               {description}
-            </p>
+            </div>
           ) : null}
           {embedLabel ? (
-            <p className="text-text-dim hidden text-[13px] compact-chrome:block">{embedLabel}</p>
+            <div className="text-text-dim hidden text-[13px] compact-chrome:block">{embedLabel}</div>
           ) : null}
         </div>
         {actions ? (
