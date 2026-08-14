@@ -10,10 +10,7 @@ const root = process.cwd();
 const read = (p: string) => readFileSync(join(root, p), "utf8");
 
 describe("desk gate wiring", () => {
-  it("보드·좌석표는 source: \"live\", 확인 기록 정정은 아니다(이미 찍힌 결석을 되돌린다)", () => {
-    expect(read("src/app/(shell)/attendance/live/_components/board-view.tsx")).toMatch(
-      /source:\s*"live"/,
-    );
+  it("좌석표는 source: \"live\", 확인 기록 정정은 아니다(이미 찍힌 결석을 되돌린다)", () => {
     expect(read("src/features/attendance/live/components/seating-cell.tsx")).toMatch(
       /source:\s*"live"/,
     );

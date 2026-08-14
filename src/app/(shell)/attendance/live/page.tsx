@@ -5,19 +5,19 @@ import { CalendarDays } from "@/components/icons/eywa-icon-compat";
 import { requireAccess } from "@/lib/auth/require-access";
 import { accessLevelTenant } from "@/lib/auth/perm-matrix";
 import { getCurrentUser } from "@/lib/auth/current-user";
-import { addDays, formatKoreanDate, kstToday } from "@/lib/date-kst";
+import { kstToday } from "@/lib/date-kst";
 import { getCarryOverAbsences, getDeskQueue, getLiveBoard } from "@/features/attendance/live/server/queries";
 import { holidayNameOf } from "@/features/attendance/live/server/load";
 import type { LiveBoard } from "@/features/attendance/live/types";
 import { SeatingChart } from "@/features/attendance/live/components/seating-chart";
-import { BoardView } from "./_components/board-view";
 import { DeskView } from "./_components/desk-view";
+import { LiveDatePicker } from "./_components/live-date-picker";
 import { LiveRefresher } from "./_components/live-refresher";
 
 export const metadata = { title: "오늘 출결 — eywa" };
 
 /**
- * 오늘 출결 — 당일 강사별 출석부 + 데스크 확인 큐 (원장 지시 2026-08-14).
+ * 오늘 출결 — 좌석표(기본) + 데스크 확인 큐. 강사별 현황 보드는 폐기(좌석표가 시야가 낫다).
  *
  * 한 화면에 두 면을 둔 이유는 **흐름이 끊기면 안 되기 때문**이다: 강사가 안 찍은 것 → 데스크가 확인 →
  * 결과가 다시 출결로. 화면을 나누면 데스크는 자기 큐만 보고, 강사가 늦게 찍은 걸 아무도 모른다.
@@ -40,8 +40,7 @@ export default async function AttendanceLivePage({
   const isDesk = level === "full";
   const today = kstToday();
   const date = /^\d{4}-\d{2}-\d{2}$/.test(sp.date ?? "") && sp.date! <= today ? sp.date! : today;
-  const tab =
-    isDesk && sp.tab === "desk" ? "desk" : isDesk && sp.tab === "seating" ? "seating" : "board";
+  const tab = isDesk && sp.tab === "desk" ? "desk" : "seating";
 
   const holiday = await holidayNameOf(date);
   const [board, queue, carryOver] = await Promise.all([
@@ -51,23 +50,21 @@ export default async function AttendanceLivePage({
   ]);
 
   const pending = queue ? queue.counts.students + queue.counts.classes : 0;
-  const recorded = board?.totals.recorded ?? 0;
-  const expected = board?.totals.expected ?? 0;
 
   return (
     <div className="space-y-5">
       <PageHeader
         eyebrow="출결"
         title="오늘 출결"
-        description={`${formatKoreanDate(date)} · ${board?.scopedToSelf ? "내 수업" : "전체"}`}
-        embedLabel={formatKoreanDate(date)}
-        actions={
-          <div className="flex flex-wrap items-center gap-1.5">
-            <DayLink date={addDays(date, -1)} tab={tab} label="이전날" />
-            {date !== today && <DayLink date={today} tab={tab} label="오늘" />}
-            {date < today && <DayLink date={addDays(date, 1)} tab={tab} label="다음날" />}
-          </div>
+        description={
+          <LiveDatePicker
+            date={date}
+            today={today}
+            tab={tab}
+            hint={board?.scopedToSelf ? "내 수업" : "전체"}
+          />
         }
+        embedLabel={<LiveDatePicker date={date} today={today} tab={tab} />}
       />
 
       {holiday ? (
@@ -82,21 +79,16 @@ export default async function AttendanceLivePage({
         <>
           {isDesk && (
             <nav className="border-line flex gap-1 border-b" aria-label="보기 전환">
-              <TabLink active={tab === "board"} href={`/attendance/live?date=${date}`} label="출결 현황" count={`${recorded}/${expected}`} />
-              <TabLink active={tab === "seating"} href={`/attendance/live?tab=seating&date=${date}`} label="좌석표" />
+              <TabLink active={tab === "seating"} href={`/attendance/live?date=${date}`} label="좌석표" />
               <TabLink active={tab === "desk"} href={`/attendance/live?tab=desk&date=${date}`} label="확인 필요" count={pending ? String(pending) : undefined} alert={pending > 0} />
             </nav>
           )}
 
           {tab === "desk" && queue ? (
             <DeskView queue={queue} date={date} canEdit={board?.canEdit ?? false} carryOver={carryOver} />
-          ) : tab === "seating" && board ? (
+          ) : board ? (
             <SeatingChart board={stripContacts(board)} />
-          ) : (
-            // ⚠️ 보드는 전화번호를 하나도 그리지 않는다 — RSC 페이로드에 전교생 학부모 번호를 실어
-            //    보낼 이유가 없어 여기서 떨어뜨린다(데스크 큐만 연락처가 필요하다).
-            <BoardView board={stripContacts(board!)} />
-          )}
+          ) : null}
 
           {/* 화면이 열려 있는 동안만, 20초마다 서버 카운트를 확인해 바뀌었을 때만 다시 그린다(폴링 규약).
               ⚠️ Realtime(postgres_changes)은 이 프로젝트에서 RLS 인가에 막혀 **조용히 무전송**이다
@@ -105,23 +97,6 @@ export default async function AttendanceLivePage({
         </>
       )}
     </div>
-  );
-}
-
-function DayLink({ date, tab, label }: { date: string; tab: string; label: string }) {
-  const href =
-    tab === "desk"
-      ? `/attendance/live?tab=desk&date=${date}`
-      : tab === "seating"
-        ? `/attendance/live?tab=seating&date=${date}`
-        : `/attendance/live?date=${date}`;
-  return (
-    <Link
-      href={href}
-      className="border-line text-text-dim hover:bg-bg-soft rounded-lg border px-2.5 py-1 text-xs whitespace-nowrap"
-    >
-      {label}
-    </Link>
   );
 }
 
