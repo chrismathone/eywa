@@ -27,8 +27,16 @@ const MENU = "class_review";
 const GRANTEES = [
   { id: "477950d4-9cb0-4c02-9ac4-f00d42754d55", name: "이승엽", note: "개발팀 대리(2026-08-04 최초 개방)" },
   { id: "d3e9bcd1-f30e-4f5b-9e78-2ad509f1d06b", name: "정유진", note: "영어과 부원장(2026-08-13 테스트)" },
-  { id: "04a91fe9-f353-49f2-b5bb-4190d7b034d9", name: "송지혜", note: "강사(2026-08-13 테스트)" },
   { id: "64aafc9c-aed3-4be3-8d24-899a20498eb9", name: "김동후", note: "영어과 교수부장(2026-08-13 테스트)" },
+  // ⚠️ 동명이인 주의 — '오은진'(admin)이 아니라 **허은진**(수학과 부원장·경영팀)이다(원장 지시 2026-08-14).
+  { id: "deff8b0b-29cf-461e-8eea-a6196dc2a126", name: "허은진", note: "수학과 부원장·경영팀(2026-08-14 테스트)" },
+];
+/**
+ * 명단에서 **빠진** 사람 — 아래에 두면 이 스크립트가 매번 회수 대상으로 잡아 되살아나지 않는다.
+ * (GRANTEES에서 지우기만 하면 이미 저장된 예외가 그대로 남아 조용히 계속 열려 있다.)
+ */
+const REVOKED = [
+  { id: "04a91fe9-f353-49f2-b5bb-4190d7b034d9", name: "송지혜", note: "강사 — 2026-08-14 원장 지시로 제외" },
 ];
 /** 역할 개방 — 원장직급(master). 코드 기본값이 none이라 이 행이 없으면 원장도 메뉴에 못 들어간다. */
 const ROLE_GRANTS = [{ role: "master", access: "full" }];
@@ -50,8 +58,10 @@ const [ts] = await (await fetch(`${SB}/rest/v1/tenant_settings?select=tenant_id,
 const perms = ts.data.permissions ?? {};
 
 // class_review 행만 걷어내고 다시 쌓는다 — 다른 메뉴 override는 절대 건드리지 않는다.
+// 걷어내는 대상은 GRANTEES + REVOKED 둘 다이고, 다시 쌓는 건 GRANTEES뿐이라 REVOKED는 지워진다.
+const MANAGED = [...GRANTEES, ...REVOKED];
 const keepUser = (perms.userOverrides ?? []).filter(
-  (o) => !(o.menu === MENU && GRANTEES.some((g) => g.id === o.userId)),
+  (o) => !(o.menu === MENU && MANAGED.some((g) => g.id === o.userId)),
 );
 const keepRole = (perms.overrides ?? []).filter(
   (o) => !(o.menu === MENU && ROLE_GRANTS.some((r) => r.role === o.role)),
@@ -70,6 +80,9 @@ for (const r of ROLE_GRANTS) {
 console.log("\n[개인 예외]");
 for (const g of GRANTEES) {
   console.log(`  ${g.name}  ${hadUser.has(g.id) ? "이미 열림" : "→ 신규 개방"}${REVOKE ? " (회수)" : ""}  ${g.note}`);
+}
+for (const g of REVOKED) {
+  console.log(`  ${g.name}  ${hadUser.has(g.id) ? "→ 제외(회수)" : "이미 없음"}  ${g.note}`);
 }
 console.log(`\n적용 후 ${MENU} — 역할 ${nextRole.filter((o) => o.menu === MENU).length}건 / 개인 ${nextUser.filter((o) => o.menu === MENU).length}건`);
 console.log(

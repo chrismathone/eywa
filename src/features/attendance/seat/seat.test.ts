@@ -4,7 +4,10 @@ import {
   groupByStart,
   hhmm,
   OPEN_SEAT_KEYS,
+  parseAnySeatKey,
+  parseSeatFilterValue,
   parseSeatKey,
+  seatFilterValue,
   periodTimeLabel,
   pickPeriodIndex,
   SEAT_DB_LABEL,
@@ -125,5 +128,24 @@ describe("시간 표기", () => {
     expect(hhmm("16:20:00")).toBe("16:20");
     expect(hhmm("16:20")).toBe("16:20");
     expect(hhmm(null)).toBe("");
+  });
+});
+
+describe("강사 드롭다운에 태우는 자리 값", () => {
+  it("uuid와 안 겹치는 접두사로 왕복한다", () => {
+    expect(seatFilterValue("lab")).toBe("seat:lab");
+    expect(parseSeatFilterValue("seat:lab")).toBe("lab");
+    expect(parseSeatFilterValue("seat:jj")).toBe("jj"); // 목록엔 보인다(열림 여부는 별개)
+    expect(parseSeatFilterValue("771473c9-7b6d-49f8-9080-172d0e10bc47")).toBeNull();
+    expect(parseSeatFilterValue(null)).toBeNull();
+    expect(parseSeatFilterValue("seat:603")).toBeNull();
+  });
+
+  it("이름 보이기(parseAnySeatKey)와 기록 가능(parseSeatKey)은 다른 문이다", () => {
+    // JJ실은 목록엔 있지만 아직 안 열었다 — 기존 484행의 시수 귀속이 바뀌기 때문.
+    expect(parseAnySeatKey("jj")).toBe("jj");
+    expect(parseSeatKey("jj")).toBeNull();
+    expect(parseAnySeatKey("lab")).toBe("lab");
+    expect(parseSeatKey("lab")).toBe("lab");
   });
 });
