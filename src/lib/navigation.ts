@@ -51,6 +51,12 @@ export const SUBTABS_BY_MENU: Partial<Record<MenuKey, SubTab[]>> = {
     { label: "시수 검증", href: "/billing?tab=verify" },
     { label: "환불 요청서", href: "/billing?tab=refunds" },
   ],
+  // 출석부 — '오늘 출결'(당일 강사별 출석부 + 데스크 확인 큐, 2026-08-14)을 먼저 둔다. 매일 여는 자리라
+  // 월별 장부보다 위다. 라우트가 `/attendance/*`라 menuKeyForPath(첫 세그먼트)가 그대로 attendance로 푼다.
+  attendance: [
+    { label: "오늘 출결", href: "/attendance/live" },
+    { label: "월별 출석부", href: "/attendance" },
+  ],
   // 직원 이력서 면은 2026-07-28 직원 목록에 통합(이름 클릭=이력서, 등록=이력서 작성) — 하위 메뉴 제거.
   // ⚠️ 면이 이거 하나뿐이라 **사이드바엔 안 나온다**(subTabsForMenu의 "면 하나 = 하부탭 아님" 규칙).
   //    면을 하나 더 만들면 그때 자동으로 다시 보인다.

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import Link from "next/link";
 import { requireAccess } from "@/lib/auth/require-access";
 import { PageHeader } from "@/components/page-header";
@@ -6,6 +7,7 @@ import { WeekNav } from "@/app/(shell)/timetable/_components/week-nav";
 import { getClassSheetWeek, getSheetLanding } from "@/features/class-sheets/server/queries";
 import { getEcsToday, type EcsTodayResult } from "@/features/class-sheets/server/today";
 import { TodayBoard } from "@/features/class-sheets/components/today-board";
+import { TodayAttendanceStrip } from "@/features/attendance/live/components/today-strip";
 import { SheetClient } from "@/features/class-sheets/components/sheet-client";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { effectiveTeacherScope } from "@/lib/auth/view-mode";
@@ -179,6 +181,16 @@ function EcsTodayFace({
         <EcsTodayModeTabs mode={mode} date={res.date} />
         <EcsDayNav date={res.date} today={res.today} mode={mode} />
       </div>
+
+      {/* 오늘 출석 미입력 스트립(2026-08-14) — 영어가 이 기능의 최대 수요처다: 최근 28일 영어 반은
+          수업이 열린 464 반×날짜 중 **425건(91.6%)이 출결 0행**이었다. 원스크린과 같은 컴포넌트라
+          강사가 화면마다 다른 제스처를 외우지 않는다. ⚠️ Suspense로 첫 페인트를 막지 않는다(B7).
+          ⚠️ 오늘이 아닌 날짜를 보고 있으면 스트립은 스스로 오늘 기준이라 뜨지 않는다(과거 재촉 금지). */}
+      {isToday && (
+        <Suspense fallback={null}>
+          <TodayAttendanceStrip />
+        </Suspense>
+      )}
 
       {res.cards.length === 0 ? (
         <p className="bg-card shadow-card text-text-dim rounded-2xl px-4 py-6 text-sm">

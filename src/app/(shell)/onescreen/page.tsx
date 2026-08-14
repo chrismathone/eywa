@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { getShellView } from "@/lib/auth/view-mode";
@@ -6,6 +7,7 @@ import { roleHome } from "@/lib/permissions";
 import { getTeacherRoster } from "@/features/onescreen/server/roster";
 import { parseView } from "@/features/onescreen/view";
 import { OneScreenClient } from "@/features/onescreen/components/onescreen-client";
+import { TodayAttendanceStrip } from "@/features/attendance/live/components/today-strip";
 
 export const metadata = { title: "선생님 원스크린 — eywa" };
 
@@ -41,8 +43,15 @@ export default async function OneScreenPage({
   const initialStudentId =
     studentId && roster.students.some((s) => s.id === studentId) ? studentId : null;
   return (
-    // key=대상 날짜 — 날짜 이동(searchParam) 시 클라 상태를 새 날짜 로스터로 재초기화(useState는 최초 1회만).
-    <OneScreenClient
+    <>
+      {/* 오늘 출석 미입력 스트립(2026-08-14) — 출결을 '보고서 마감의 부산물'에서 '수업 직후의 행동'으로
+          옮기는 자리. ⚠️ Suspense로 감싼다: 전원이 매일 여는 hot path라 이 조회가 첫 페인트를 막으면 안
+          된다(B7). 다 찍은 날엔 컴포넌트가 스스로 null을 돌려 아무 것도 그리지 않는다. */}
+      <Suspense fallback={null}>
+        <TodayAttendanceStrip />
+      </Suspense>
+      {/* key=대상 날짜 — 날짜 이동(searchParam) 시 클라 상태를 새 날짜 로스터로 재초기화(useState는 최초 1회만). */}
+      <OneScreenClient
       key={roster.date}
       initial={roster.students}
       today={roster.today}
@@ -73,6 +82,7 @@ export default async function OneScreenPage({
       initialView={parseView(view)}
       initialClassName={initialClassName}
       initialStudentId={initialStudentId}
-    />
+      />
+    </>
   );
 }
