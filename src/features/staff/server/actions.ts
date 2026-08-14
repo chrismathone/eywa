@@ -52,6 +52,8 @@ function readBaseForm(formData: FormData) {
     textColor,
     // 학생 출결 알림(클래스노트) 받기 — 체크박스라 미체크면 formData에 키 자체가 없다(빈 문자열 = false).
     attendanceAlertOptin: get("attendanceAlertOptin") === "on",
+    seatLabDuty: get("seatLabDuty") === "on",
+    seatJjDuty: get("seatJjDuty") === "on",
   };
 }
 
@@ -125,26 +127,37 @@ export async function createStaff(
 
   // 2) 미러 트리거가 만든 최소 행을 **UPDATE로 보강**한다. (insert면 트리거가 이미 같은 id로 넣은 행과
   //    users_pkey 충돌 → "직원 row 생성 실패"가 신규 직원에서도 항상 발생.)
+  // 🔴 저장할 값은 **한 번만** 만든다 — 아래 0209a 폴백이 같은 payload를 복사해 두면, 나중에 칸이
+  //    하나 늘 때 한쪽만 고쳐져 "가끔 그 칸만 저장이 안 되는" 침묵 버그가 된다(자리 토글만 빼서 재시도).
+  const staffPatch = {
+    display_name: input.displayName,
+    phone: input.phone,
+    system_role: newRole,
+    status: "active" as const,
+    hire_date: input.hireDate,
+    job_title: input.jobTitle,
+    english_name: input.englishName,
+    subjects: input.subjects,
+    default_classroom: input.defaultClassroom,
+    memo: input.memo,
+    bg_color: input.bgColor,
+    text_color: input.textColor,
+    attendance_alert_optin: input.attendanceAlertOptin,
+  };
   const { error: dbErr } = await admin
     .from("users")
-    .update({
-      display_name: input.displayName,
-      phone: input.phone,
-      system_role: newRole,
-      status: "active",
-      hire_date: input.hireDate,
-      job_title: input.jobTitle,
-      english_name: input.englishName,
-      subjects: input.subjects,
-      default_classroom: input.defaultClassroom,
-      memo: input.memo,
-      bg_color: input.bgColor,
-      text_color: input.textColor,
-      attendance_alert_optin: input.attendanceAlertOptin,
-    })
+    .update({ ...staffPatch, seat_lab_duty: input.seatLabDuty, seat_jj_duty: input.seatJjDuty })
     .eq("id", authData.user.id);
 
-  if (dbErr) {
+  if (dbErr && /seat_lab_duty|seat_jj_duty/i.test(dbErr.message)) {
+    // 0209a 미적용 — 자리 토글만 빼고 나머지를 저장한다(#95, 직원 등록을 죽이지 않음).
+    const { error: retryErr } = await admin.from("users").update(staffPatch).eq("id", authData.user.id);
+    if (retryErr) {
+      await admin.auth.admin.deleteUser(authData.user.id);
+      await admin.from("users").delete().eq("id", authData.user.id);
+      return { error: `직원 정보 저장 실패: ${retryErr.message}` };
+    }
+  } else if (dbErr) {
     // 롤백 — auth user + 트리거가 만든 public.users 행 둘 다 정리(deleteUser는 public.users를 안 지움 = 고아 방지).
     await admin.auth.admin.deleteUser(authData.user.id);
     await admin.from("users").delete().eq("id", authData.user.id);
@@ -234,25 +247,39 @@ export async function updateStaff(
   }
 
   const supabase = await createClient();
+  // 🔴 저장할 값은 **한 번만** 만든다 — 폴백이 같은 payload를 복사해 두면 나중에 칸이 늘 때 한쪽만
+  //    고쳐져 "가끔 그 칸만 저장이 안 되는" 침묵 버그가 된다. 폴백은 자리 토글만 빼고 이걸 재사용한다.
+  const staffPatch = {
+    display_name: input.displayName,
+    ...(emailChanged ? { email: input.email } : {}),
+    phone: input.phone,
+    hire_date: input.hireDate,
+    job_title: input.jobTitle,
+    english_name: input.englishName,
+    subjects: input.subjects,
+    default_classroom: input.defaultClassroom,
+    memo: input.memo,
+    bg_color: input.bgColor,
+    text_color: input.textColor,
+    attendance_alert_optin: input.attendanceAlertOptin,
+  };
   const { error } = await supabase
     .from("users")
-    .update({
-      display_name: input.displayName,
-      ...(emailChanged ? { email: input.email } : {}),
-      phone: input.phone,
-      hire_date: input.hireDate,
-      job_title: input.jobTitle,
-      english_name: input.englishName,
-      subjects: input.subjects,
-      default_classroom: input.defaultClassroom,
-      memo: input.memo,
-      bg_color: input.bgColor,
-      text_color: input.textColor,
-      attendance_alert_optin: input.attendanceAlertOptin,
-    })
+    .update({ ...staffPatch, seat_lab_duty: input.seatLabDuty, seat_jj_duty: input.seatJjDuty })
     .eq("id", id);
 
-  if (error) return { error: error.message };
+  if (error) {
+    // 0209a 미적용이면 자리 토글만 빼고 나머지를 저장한다(#95 — 직원 수정 화면을 죽이지 않음).
+    if (/seat_lab_duty|seat_jj_duty/i.test(error.message)) {
+      const { error: retry } = await supabase.from("users").update(staffPatch).eq("id", id);
+      if (retry) return { error: retry.message };
+      if (input.seatLabDuty || input.seatJjDuty) {
+        return { error: "자리 출석부 담당은 아직 저장할 수 없습니다. 관리자에게 문의하세요." };
+      }
+    } else {
+      return { error: error.message };
+    }
+  }
 
   revalidatePath("/staff");
   // redirect 대신 결과 반환 — 클라가 성공 확정 후 동시편집 신호(publish) → 이동(B-2).

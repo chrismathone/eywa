@@ -31,6 +31,14 @@ describe("operationsSchema — 교시 이름은 비워도 저장된다", () => {
     expect(parsed.success).toBe(true);
   });
 
+  it("랩실 공개 PIN은 비워도 저장된다(비움 = 공개 접속 끔)", () => {
+    const parsed = operationsSchema.safeParse({
+      ...ops,
+      seatPins: { lab: "" },
+    });
+    expect(parsed.success).toBe(true);
+  });
+
   it("시각은 여전히 HH:MM 형식이어야 한다(빈 이름 허용이 검증을 통째로 푼 게 아니다)", () => {
     // ⚠️ 스키마는 **형식만** 본다(`/^\d{2}:\d{2}$/`) — "25:00"은 통과한다. 범위 검증은 여기 몫이 아니다.
     const parsed = operationsSchema.safeParse({

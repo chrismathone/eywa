@@ -2,38 +2,62 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { kstToday } from "@/lib/date-kst";
-import { SEAT_DB_LABEL, ambiguousClassIds, hhmm, type SeatKey } from "../seat";
-import { getSeatDay } from "./queries";
+import { dutyAllowsSeat } from "../duty";
+import { OPEN_SEAT_KEYS, SEAT_DB_LABEL, ambiguousClassIds, hhmm, type SeatKey } from "../seat";
+import { getSeatDuties } from "./duty";
+import { readSeatPinSession } from "./pin-session";
+import { getPublicSeatDay, getSeatDay } from "./queries";
 
 export type SeatStatus = "present" | "absent" | "late";
 export type SeatResult = { ok: true; changed: number } | { error: string };
 
+type GateOk = { ok: true; userId: string | null; tenantId: string; via: "menu" | "duty" | "pin" };
+
 /**
- * 자리 출석부의 쓰기 게이트 — **두 겹**이다.
- *   ① 메뉴 권한(`seat_attendance`) — 자리 당번(아르바이트)에게는 개인 예외로 이 키만 열린다.
- *   ② 그날 그 자리 명단(화이트리스트) — 아래 각 액션이 `getSeatDay`로 다시 확인한다.
- *
- * 🔴 화면에서만 좁히면 안 된다(#77): 액션 인자는 클라가 보낸 값이라 다른 반 학생 id를 실어 보낼 수 있다.
- * 🔴 "자기 담당 반인가" 검사는 **여기서 쓸 수 없다** — 자리 슬롯은 `teacher_id`가 전부 비어 있어
- *    그 검사를 걸면 아무도(담당자 포함) 못 쓴다.
- * ⚠️ 지난 날짜는 사무실만. 자리 전용 권한만 가진 계정은 **오늘만** 쓴다(오입력 정정은 사무실 몫).
+ * 자리 출석부 쓰기 게이트.
+ *   ① 메뉴 권한(`seat_attendance`) — 사무실.
+ *   ② 직원 토글 — **그 자리만**(다른 자리·다른 메뉴는 안 연다).
+ *   ③ 공개 PIN 쿠키 — 그 자리·오늘만. recorded_by는 null(키오스크와 같은 정직함).
+ *   ④ 그날 그 자리 명단(화이트리스트) — 아래 각 액션이 다시 확인한다(#77).
  */
-async function gate(date: string): Promise<
-  | { ok: true; userId: string; tenantId: string }
-  | { error: string }
-> {
+async function gate(seat: SeatKey, date: string): Promise<GateOk | { error: string }> {
+  if (!(OPEN_SEAT_KEYS as readonly string[]).includes(seat)) {
+    return { error: "이 자리 출석부는 아직 열리지 않았습니다" };
+  }
+
   const user = await getCurrentUser();
-  if (!user) return { error: "로그인이 필요합니다" };
-  if (!(await canWriteTenant(user.systemRole, "seat_attendance"))) {
-    return { error: "자리 출석부 입력 권한이 없습니다" };
+  if (user) {
+    const duties = await getSeatDuties(user.id);
+    const assigned = dutyAllowsSeat(duties, seat);
+    const menuWrite = await canWriteTenant(user.systemRole, "seat_attendance");
+    // ⚠️ 권한이 없다고 **여기서 끝내지 않는다** — 자리 태블릿에 누군가의 계정이 로그인된 채로
+    //    남아 있을 수 있고, 그 사람이 PIN을 넣었다면 그 자리 출결은 찍을 수 있어야 한다
+    //    (로그인했다는 이유로 오히려 막히면 "왜 나만 안 되지"가 된다). 아래 PIN 검사로 떨어진다.
+    if (assigned || menuWrite) {
+      if (date !== kstToday() && !(await canWriteTenant(user.systemRole, "attendance"))) {
+        return { error: "지난 날짜는 수정할 수 없습니다 — 관리자에게 요청하세요" };
+      }
+      return {
+        ok: true,
+        userId: user.id,
+        tenantId: user.tenantId,
+        via: assigned && !menuWrite ? "duty" : "menu",
+      };
+    }
   }
-  if (date !== kstToday() && !(await canWriteTenant(user.systemRole, "attendance"))) {
-    return { error: "지난 날짜는 수정할 수 없습니다 — 관리자에게 요청하세요" };
+
+  const pin = await readSeatPinSession();
+  if (!pin || pin.seat !== seat) {
+    return { error: user ? "자리 출석부 입력 권한이 없습니다" : "비밀번호를 다시 입력해 주세요" };
   }
-  return { ok: true, userId: user.id, tenantId: user.tenantId };
+  if (date !== kstToday()) return { error: "오늘 날짜만 입력할 수 있습니다" };
+  // 🔴 PIN 경로는 **기록자를 남기지 않는다**(로그인한 사람이 있어도 그 사람이 찍었다는 보장이 없다 —
+  //    태블릿에 남의 계정이 켜져 있을 수 있다). 키오스크 셀프 체크인과 같은 정직함.
+  return { ok: true, userId: null, tenantId: pin.tenantId, via: "pin" };
 }
 
 /** 그 교시 명단에 실제로 있는 (반, 학생) 조합만 통과시킨다. 모호한 반(같은 반·같은 시작·다른 종료)은 제외. */
@@ -41,8 +65,9 @@ async function rosterKeys(
   seat: SeatKey,
   date: string,
   slotStart: string,
+  tenantId: string | null,
 ): Promise<{ keys: Set<string>; classes: Map<string, string[]> } | null> {
-  const day = await getSeatDay(seat, date);
+  const day = tenantId ? await getPublicSeatDay(tenantId, seat, date) : await getSeatDay(seat, date);
   const period = day.periods.find((p) => p.start === hhmm(slotStart));
   if (!period) return null;
   const blocked = new Set(ambiguousClassIds(period));
@@ -68,17 +93,17 @@ export async function setSeatCell(input: {
   studentId: string;
   status: SeatStatus | null;
 }): Promise<SeatResult> {
-  const g = await gate(input.date);
+  const g = await gate(input.seat, input.date);
   if ("error" in g) return g;
 
   const slot = hhmm(input.slotStart);
-  const roster = await rosterKeys(input.seat, input.date, slot);
+  const roster = await rosterKeys(input.seat, input.date, slot, g.via === "pin" ? g.tenantId : null);
   if (!roster) return { error: "그 시각에는 이 자리 수업이 없습니다" };
   if (!roster.keys.has(`${input.classId}|${input.studentId}`)) {
     return { error: "이 교시 명단에 없는 학생입니다" };
   }
 
-  const supabase = await createClient();
+  const supabase = g.via === "pin" ? createAdminClient() : await createClient();
   const changed = await writeOne(supabase, {
     tenantId: g.tenantId,
     userId: g.userId,
@@ -93,6 +118,7 @@ export async function setSeatCell(input: {
 
   revalidatePath("/attendance/seat");
   revalidatePath("/attendance");
+  revalidatePath("/seat");
   return { ok: true, changed };
 }
 
@@ -107,11 +133,11 @@ export async function fillSeatSlot(input: {
   status: Extract<SeatStatus, "present" | "absent">;
   classId?: string;
 }): Promise<SeatResult> {
-  const g = await gate(input.date);
+  const g = await gate(input.seat, input.date);
   if ("error" in g) return g;
 
   const slot = hhmm(input.slotStart);
-  const roster = await rosterKeys(input.seat, input.date, slot);
+  const roster = await rosterKeys(input.seat, input.date, slot, g.via === "pin" ? g.tenantId : null);
   if (!roster) return { error: "그 시각에는 이 자리 수업이 없습니다" };
 
   const targets = input.classId
@@ -133,12 +159,13 @@ export async function fillSeatSlot(input: {
   );
   if (rows.length === 0) return { ok: true, changed: 0 };
 
-  const supabase = await createClient();
+  const supabase = g.via === "pin" ? createAdminClient() : await createClient();
   const { error } = await supabase.from("attendance_records").insert(rows);
   if (error) return { error: error.message };
 
   revalidatePath("/attendance/seat");
   revalidatePath("/attendance");
+  revalidatePath("/seat");
   return { ok: true, changed: rows.length };
 }
 
@@ -153,10 +180,10 @@ export async function fillSeatSlot(input: {
  *    일부일 뿐이라 "이 반 오늘 출결 끝"이 아니다.
  */
 async function writeOne(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  supabase: Awaited<ReturnType<typeof createClient>> | ReturnType<typeof createAdminClient>,
   p: {
     tenantId: string;
-    userId: string;
+    userId: string | null;
     seat: SeatKey;
     date: string;
     slot: string;
@@ -168,6 +195,7 @@ async function writeOne(
   const base = supabase
     .from("attendance_records")
     .select("id, recorded_at")
+    .eq("tenant_id", p.tenantId)
     .eq("class_id", p.classId)
     .eq("student_id", p.studentId)
     .eq("session_date", p.date)
@@ -177,6 +205,7 @@ async function writeOne(
     const { error } = await supabase
       .from("attendance_records")
       .delete()
+      .eq("tenant_id", p.tenantId)
       .eq("class_id", p.classId)
       .eq("student_id", p.studentId)
       .eq("session_date", p.date)

@@ -26,6 +26,13 @@ describe("resolveSettings", () => {
     expect(r.operations.weekdayPeriods).toEqual(DEFAULT_SETTINGS.operations.weekdayPeriods);
   });
 
+  it("자리 출석부 PIN은 저장 없으면 기본 7099", () => {
+    const r = resolveSettings(null, { name: "X" });
+    expect(r.operations.seatPins.lab).toBe("7099");
+    const r2 = resolveSettings({ operations: { seatPins: { lab: "1234" } } }, { name: "X" });
+    expect(r2.operations.seatPins.lab).toBe("1234");
+  });
+
   it("중첩 객체는 일부 키만 덮어쓰고 나머지는 기본값", () => {
     const r = resolveSettings({ billing: { dueDay: 25 } }, { name: "X" });
     expect(r.billing.dueDay).toBe(25);
