@@ -18,6 +18,9 @@ export type SeatStudent = {
   recordedBy: string | null;
   /** 자리에서 찍힌 기록인가 — 반 출석부에서 찍힌 기록과 구분해 보여준다(시수 귀속이 다르다). */
   fromSeat: boolean;
+  /** JJ 전용(0206a). 랩실·공개 PIN은 항상 null. */
+  listeningLevel: string | null;
+  memorizedWords: string | null;
 };
 
 export type SeatClassRoster = {
@@ -35,6 +38,30 @@ export type SeatDay = {
   /** 교시 start("HH:MM") → 반별 명단. */
   rosterByPeriod: Record<string, SeatClassRoster[]>;
 };
+
+function toSeatStudent(
+  s: { id: string; name: string; school: string | null; grade: string | null },
+  rec:
+    | {
+        status: "present" | "absent" | "late";
+        seat_label: string | null;
+        recorder?: { display_name: string | null }[] | { display_name: string | null };
+      }
+    | undefined,
+): SeatStudent {
+  const recorder = Array.isArray(rec?.recorder) ? rec.recorder[0] : rec?.recorder;
+  return {
+    id: s.id,
+    name: s.name,
+    school: s.school,
+    grade: s.grade,
+    status: rec?.status ?? null,
+    recordedBy: recorder?.display_name ?? null,
+    fromSeat: !!rec?.seat_label,
+    listeningLevel: null,
+    memorizedWords: null,
+  };
+}
 
 /**
  * 자리(랩실·JJ실) 하루치 명단 — **그 날짜에 유효한** 슬롯만 읽는다.
@@ -188,19 +215,7 @@ async function loadSeatDay(
       className: slot.className,
       end: hhmm(slot.end),
       students: (studentsByClass.get(slot.classId) ?? [])
-        .map((s) => {
-          const rec = recByKey.get(`${slot.classId}|${s.id}|${p.start}`);
-          const recorder = Array.isArray(rec?.recorder) ? rec?.recorder[0] : rec?.recorder;
-          return {
-            id: s.id,
-            name: s.name,
-            school: s.school,
-            grade: s.grade,
-            status: rec?.status ?? null,
-            recordedBy: recorder?.display_name ?? null,
-            fromSeat: !!rec?.seat_label,
-          };
-        })
+        .map((s) => toSeatStudent(s, recByKey.get(`${slot.classId}|${s.id}|${p.start}`)))
         .sort((a, b) => (a.grade ?? "").localeCompare(b.grade ?? "", "ko") || a.name.localeCompare(b.name, "ko")),
     }));
   }
