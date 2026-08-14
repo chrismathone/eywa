@@ -5,7 +5,6 @@ import { requireAccess } from "@/lib/auth/require-access";
 import { kstToday } from "@/lib/date-kst";
 import { leavePeriodLabel } from "@/features/leave/accrual";
 import { formatLeaveDays } from "@/features/leave/request-days";
-import { approvalLineFor } from "@/features/approvals/access";
 import {
   getApproverCandidates,
   getMyLeaveBalance,
@@ -64,7 +63,8 @@ export default async function NewApprovalPage() {
           drafterJobTitle={user.jobTitle}
           candidates={candidates}
           templates={templates}
-          initialApproverIds={approvalLineFor(user.id)}
+          // 기본 결재선은 없다 — 하이웍스처럼 기안자가 [+]로 매번 지정하거나 자주 쓰는 결재선을 불러온다.
+          initialApproverIds={[]}
           periodEnd={period.end}
           remaining={balance.remaining}
           today={kstToday()}

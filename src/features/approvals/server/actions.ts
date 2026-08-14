@@ -16,7 +16,6 @@ import {
   type LeaveKind,
 } from "@/features/leave/request-days";
 import { sanitizeRichHtml } from "@/lib/html/sanitize";
-import { approverCandidateIds } from "../access";
 import { nextDocNo } from "../doc-no";
 import { normalizeLine, normalizeRefs, validateApprovalLine } from "../line";
 import { APPROVAL_FORM_LABEL, stepRoleLabels } from "../types";
@@ -71,6 +70,7 @@ function parseIds(raw: FormDataEntryValue | null): string[] {
   }
 }
 
+/** 기안·템플릿용 게이트 — 파일럿 동안 **기안은** 메뉴가 열린 사람(이승엽·김예원)만 한다. */
 async function requireApprovalWriter() {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" as const };
@@ -78,6 +78,32 @@ async function requireApprovalWriter() {
     return { error: "전자결재 권한이 없습니다" as const };
   }
   return { user };
+}
+
+/**
+ * 결재·회수용 게이트 — **메뉴를 보지 않는다.** 결재 자격의 근거는 명단이 아니라 동결된 결재선 +
+ * current_step(결정 로그)이고, 후보 풀이 전 직원이라(원장 2026-08-14) 파일럿 명단 밖 직원도 자기
+ * 차례의 문서는 벨 알림 링크로 들어와 결재해야 한다. 실제 자격 판정(내 차례인가/내 기안인가)은
+ * 각 액션 본문이 문서·결재선 행으로 한다 — 여기는 로그인 확인만.
+ */
+async function requireSignedIn() {
+  const user = await getCurrentUser();
+  if (!user) return { error: "로그인이 필요합니다" as const };
+  return { user };
+}
+
+/** 결재선·참조 후보 = **활성 직원 전원**(학생 제외) — 서버 검증용 id 집합(폼 조작 방어). */
+async function activeStaffIds(tenantId: string): Promise<string[]> {
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("users")
+    .select("id")
+    .eq("tenant_id", tenantId) // admin은 RLS 우회 — tenant 명시 필수([[#104]])
+    .neq("status", "inactive")
+    .neq("system_role", "student")
+    .limit(500); // 직원 수십 명 규모 — 절단 방지용 명시 상한(B2)
+  if (error) throw new Error(`결재자 후보 확인 실패 — ${error.message}`);
+  return (data ?? []).map((u) => String(u.id));
 }
 
 /** 이 구간에서 이미 잡아 둔 연차(승인 + 진행중). 진행중도 빼야 같은 연차를 두 번 올리지 못한다. */
@@ -151,14 +177,20 @@ export async function submitLeaveDraft(
   const days = countLeaveDays(start, end, kind);
 
   // 결재선·참조 — 기안자가 편집기에서 지정한 값(하이웍스 대응). 폼 조작 방어는 순수 검증(line.ts)이
-  // 후보 풀과 대조해서 한다 — 명단 밖 결재자는 메뉴가 없어 문서가 그 칸에서 영원히 멈춘다.
+  // **활성 직원 명단**과 대조해서 한다(퇴직·학생 계정을 결재선에 못 끼운다).
   const line = normalizeLine(user.id, parseIds(formData.get("approverIds")));
   const refs = normalizeRefs(user.id, line, parseIds(formData.get("refIds")));
+  let candidateIds: string[];
+  try {
+    candidateIds = await activeStaffIds(user.tenantId);
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "결재자 후보 확인 실패" };
+  }
   const lineInvalid = validateApprovalLine({
     drafterId: user.id,
     approverIds: line,
     refIds: refs,
-    candidateIds: approverCandidateIds(),
+    candidateIds,
   });
   if (lineInvalid) return { error: lineInvalid };
 
@@ -294,7 +326,8 @@ export async function decideDocument(
   _prev: ApprovalActionState,
   formData: FormData,
 ): Promise<ApprovalActionState> {
-  const gate = await requireApprovalWriter();
+  // 메뉴 게이트가 아니라 결재선이 자격이다(requireSignedIn 주석) — 아래 "내 차례" 검사가 실 판정.
+  const gate = await requireSignedIn();
   if ("error" in gate) return { error: gate.error };
   const { user } = gate;
 
@@ -417,7 +450,8 @@ export async function withdrawDocument(
   _prev: ApprovalActionState,
   formData: FormData,
 ): Promise<ApprovalActionState> {
-  const gate = await requireApprovalWriter();
+  // 자격 = 아래 drafter_id 필터(본인 기안만) — 메뉴 게이트가 아니다(requireSignedIn 주석).
+  const gate = await requireSignedIn();
   if ("error" in gate) return { error: gate.error };
   const { user } = gate;
 
@@ -477,11 +511,17 @@ export async function saveLineTemplate(
   if (!name) return { error: "결재선 이름을 입력하세요" };
   const approvers = normalizeLine(user.id, parseIds(formData.get("approverIds")));
   const refs = normalizeRefs(user.id, approvers, parseIds(formData.get("refIds")));
+  let candidateIds: string[];
+  try {
+    candidateIds = await activeStaffIds(user.tenantId);
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "결재자 후보 확인 실패" };
+  }
   const invalid = validateApprovalLine({
     drafterId: user.id,
     approverIds: approvers,
     refIds: refs,
-    candidateIds: approverCandidateIds(),
+    candidateIds,
   });
   if (invalid) return { error: invalid };
 

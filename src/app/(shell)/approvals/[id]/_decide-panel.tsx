@@ -48,7 +48,8 @@ export function DecidePanel({ documentId }: { documentId: string }) {
   return (
     <form
       action={action}
-      className="border-primary/30 bg-primary-soft/30 flex flex-wrap items-center justify-between gap-3 rounded-2xl border p-4"
+      id="decide" // 결재란 사인 칸의 `결재` 칩(#decide 앵커)이 여기로 스크롤한다
+      className="border-primary/30 bg-primary-soft/30 flex scroll-mt-4 flex-wrap items-center justify-between gap-3 rounded-2xl border p-4"
     >
       <input type="hidden" name="documentId" value={documentId} />
       <input

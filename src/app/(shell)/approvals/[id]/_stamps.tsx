@@ -2,41 +2,43 @@ import { EyIcon } from "@/components/icons/eywa-icons";
 import type { ApprovalDocRow } from "@/features/approvals/server/queries";
 
 /**
- * 결재란 — **하이웍스 결재 문서의 도장 표** 문법(원장 스크린샷 2026-08-14).
- * 세로 라벨 [결재] + 결재자당 열 하나(맨 앞은 기안자). 윗행 = 역할("1차 검토"), 아랫행 = **원형 도장** +
- * 이름 + 처리일. 참조자가 있으면 맨 아래 [참조] 행(이름 + 체크).
+ * 결재란 — 종이 결재 양식 문법(원장 스크린샷 2026-08-14): 칸 = **위 직급 / 가운데 사인 칸 / 아래 이름**.
+ * 세로 라벨 [결재] + 사람당 열 하나(맨 앞은 기안자). 참조자가 있으면 맨 아래 [참조] 행(이름 + 체크).
  *
- * 도장 문법: 승인 = 네이비 원(하이웍스 파란 도장의 우리 브랜드 대응) · 반려 = 빨간 원 ·
- * 지금 차례 = 점선 '대기' 원 + 열 배경 살짝 · 아직 차례 아님 = 빈 점선 원.
+ * 사인 칸 규칙(종이처럼 **빈 칸도 자리를 차지한다** — 고정 높이):
+ *   승인 = 네이비 원형 도장 + 처리일 · 반려 = 빨간 원형 도장 + 처리일 ·
+ *   지금 차례 = 파란 외곽 `결재` 칩(#decide 앵커 — 아래 처리 패널로) + 열 배경 ·
+ *   아직 차례 아님 = **완전히 빈 칸**(점선 원도 없음 — "사인 란도 작성칸이지만 비워놓고") ·
+ *   기안 = 중립 '상신' 도장 + 기안일.
+ *
+ * ⚠️ 위/가운데/아래를 tr 세 개로 가르면 칸 안에 가로 표선이 생겨 종이 결재 룩이 깨진다 —
+ *    헤더(직급)만 tr로 두고 **사인+이름은 한 td 안에** 쌓는다.
  * ⚠️ 사람 표시는 **이름 텍스트만** — 이름 앞 아바타/이니셜 배지는 이 프로젝트에서 영구 금지다.
  */
 
-type StampKind = "drafted" | "approved" | "rejected" | "turn" | "waiting";
+type SignKind = "drafted" | "approved" | "rejected" | "turn" | "blank";
 
 type Col = {
   key: string;
-  role: string;
+  /** 칸 머리 — 직급(없으면 역할 라벨 폴백). */
+  title: string;
   name: string;
   date: string | null;
-  stamp: StampKind;
+  sign: SignKind;
   /** 지금 결재할 차례인 열 — 배경을 칠해 어디서 멈췄는지 보이게. */
   active: boolean;
 };
 
-const STAMP_CLS: Record<StampKind, string> = {
+const STAMP_CLS: Record<Exclude<SignKind, "turn" | "blank">, string> = {
   drafted: "border-line text-text-dim",
   approved: "border-primary text-primary",
   rejected: "border-danger text-danger",
-  turn: "border-dashed border-primary/60 text-primary/70",
-  waiting: "border-dashed border-line",
 };
 
-const STAMP_TEXT: Record<StampKind, string> = {
+const STAMP_TEXT: Record<Exclude<SignKind, "turn" | "blank">, string> = {
   drafted: "상신",
   approved: "승인",
   rejected: "반려",
-  turn: "대기",
-  waiting: "",
 };
 
 /** ISO → "08/14". 도장 아래 처리일 — 연도까지는 정보 격자표·이력이 담당한다. */
@@ -44,14 +46,39 @@ function mmdd(iso: string | null): string | null {
   return iso ? iso.slice(5, 10).replace("-", "/") : null;
 }
 
+/** 사인 칸 내용 — 종이처럼 칸 높이는 항상 같고, 상태에 따라 내용만 달라진다. */
+function SignArea({ col }: { col: Col }) {
+  if (col.sign === "blank") return null; // 빈 사인 칸 — 자리만 지킨다
+  if (col.sign === "turn") {
+    return (
+      <a
+        href="#decide"
+        className="border-primary text-primary hover:bg-primary-soft/50 inline-flex items-center rounded-md border px-2.5 py-1 text-[12px] font-bold transition"
+      >
+        결재
+      </a>
+    );
+  }
+  return (
+    <span className="inline-flex flex-col items-center gap-0.5">
+      <span
+        className={`flex size-10 items-center justify-center rounded-full border-2 text-[12px] font-bold ${STAMP_CLS[col.sign]}`}
+      >
+        {STAMP_TEXT[col.sign]}
+      </span>
+      <span className="num text-text-faint text-[10px] leading-none">{col.date ?? ""}</span>
+    </span>
+  );
+}
+
 export function ApprovalStamps({ doc }: { doc: ApprovalDocRow }) {
   const cols: Col[] = [
     {
       key: "draft",
-      role: "기안",
+      title: doc.drafterJobTitle ?? "기안",
       name: doc.drafterName,
       date: mmdd(doc.submittedAt),
-      stamp: "drafted",
+      sign: "drafted",
       active: false,
     },
     ...doc.steps.map((s): Col => {
@@ -59,17 +86,17 @@ export function ApprovalStamps({ doc }: { doc: ApprovalDocRow }) {
         doc.status === "pending" && doc.currentStep === s.stepNo && s.decision === "pending";
       return {
         key: `step-${s.stepNo}`,
-        role: `${s.stepNo}차 ${s.roleLabel}`,
+        title: s.approverJobTitle ?? s.roleLabel,
         name: s.approverName,
         date: mmdd(s.decidedAt),
-        stamp:
+        sign:
           s.decision === "approved"
             ? "approved"
             : s.decision === "rejected"
               ? "rejected"
               : turn
                 ? "turn"
-                : "waiting",
+                : "blank",
         active: turn,
       };
     }),
@@ -90,11 +117,11 @@ export function ApprovalStamps({ doc }: { doc: ApprovalDocRow }) {
             {cols.map((c) => (
               <th
                 key={c.key}
-                className={`border-line border px-2 py-1 text-[10px] font-semibold text-text-dim ${
+                className={`border-line text-text-dim border px-2 py-1 text-[10px] font-semibold ${
                   c.active ? "bg-primary-soft/30" : "bg-bg-soft/60"
                 }`}
               >
-                {c.role}
+                {c.title}
               </th>
             ))}
           </tr>
@@ -102,19 +129,17 @@ export function ApprovalStamps({ doc }: { doc: ApprovalDocRow }) {
             {cols.map((c) => (
               <td
                 key={c.key}
-                className={`border-line min-w-[84px] border px-2 pt-2 pb-1.5 align-top ${
+                className={`border-line min-w-[84px] border px-2 pt-1.5 pb-1.5 align-bottom ${
                   c.active ? "bg-primary-soft/30" : ""
                 }`}
               >
-                <span
-                  className={`mx-auto flex size-11 items-center justify-center rounded-full border-2 text-[12px] font-bold ${STAMP_CLS[c.stamp]}`}
-                >
-                  {STAMP_TEXT[c.stamp]}
+                {/* 사인 칸 — 고정 높이로 항상 확보(빈 칸도 종이처럼 자리가 있다). */}
+                <span className="flex h-[52px] items-center justify-center">
+                  <SignArea col={c} />
                 </span>
-                <p className="text-foreground mt-1 text-[12px] font-medium whitespace-nowrap">
+                <p className="text-foreground mt-0.5 text-[12px] font-medium whitespace-nowrap">
                   {c.name}
                 </p>
-                <p className="num text-text-faint text-[10px]">{c.date ?? " "}</p>
               </td>
             ))}
           </tr>

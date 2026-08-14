@@ -4,7 +4,6 @@ import { fetchInChunks } from "@/lib/supabase/batch";
 import { kstToday } from "@/lib/date-kst";
 import { resolveLeavePeriod, type LeavePeriod } from "@/features/leave/accrual";
 import type { LeaveKind } from "@/features/leave/request-days";
-import { approverCandidateIds } from "../access";
 import type { ApprovalForm, DocStatus, StepDecision } from "../types";
 
 /**
@@ -25,6 +24,8 @@ export type ApprovalStepCell = {
   stepNo: number;
   approverId: string;
   approverName: string;
+  /** 결재란 칸 위에 찍히는 직급(종이 결재 문법 — 위 직급/가운데 사인/아래 이름). 없으면 roleLabel 폴백. */
+  approverJobTitle: string | null;
   roleLabel: string;
   decision: StepDecision;
   decidedAt: string | null;
@@ -107,7 +108,7 @@ async function loadDocs(ids: string[]): Promise<ApprovalDocRow[]> {
       supabase
         .from("approval_steps")
         .select(
-          "document_id, step_no, approver_id, role_label, decision, decided_at, comment, approver:users!approval_steps_approver_id_fkey(display_name)",
+          "document_id, step_no, approver_id, role_label, decision, decided_at, comment, approver:users!approval_steps_approver_id_fkey(display_name, job_title)",
         )
         .in("document_id", chunk)
         .order("step_no", { ascending: true }),
@@ -131,12 +132,13 @@ async function loadDocs(ids: string[]): Promise<ApprovalDocRow[]> {
   const stepsBy = new Map<string, ApprovalStepCell[]>();
   for (const s of steps) {
     const key = String(s.document_id);
-    const approver = s.approver as { display_name?: string } | null;
+    const approver = s.approver as { display_name?: string; job_title?: string | null } | null;
     const list = stepsBy.get(key) ?? [];
     list.push({
       stepNo: num(s.step_no),
       approverId: String(s.approver_id),
       approverName: approver?.display_name ?? "(이름 없음)",
+      approverJobTitle: approver?.job_title ?? null,
       roleLabel: (s.role_label as string) ?? "승인",
       decision: s.decision as StepDecision,
       decidedAt: (s.decided_at as string | null) ?? null,
@@ -325,23 +327,28 @@ export async function getApprovalDoc(id: string): Promise<ApprovalDocRow | null>
 export type ApprovalPerson = { id: string; name: string; jobTitle: string | null };
 
 /**
- * 결재자·참조자 **후보 명단**(이름 포함) — 기안 화면 결재선 편집기의 선택지(하이웍스 조직도 선택 대응).
- * 풀은 `approverCandidateIds()`(파일럿 동안 파일럿 명단)이고 여기서는 이름만 붙인다.
+ * 결재자·참조자 **후보 명단** = **활성 직원 전원**(원장 2026-08-14: *"테스트를 둘이 하는 거지,
+ * 결재자랑 이런 건 직원들 다 있어야지"*). 하이웍스의 조직도 선택 대응 — 메뉴 노출(파일럿 2명)과
+ * 별개로, 결재선에는 누구든 지정할 수 있다.
+ *
+ * ⚠️ 파일럿 명단 밖 직원이 결재자가 되면 사이드바에 전자결재 메뉴는 없지만, **벨 알림의 문서 링크로**
+ *    들어가 결재할 수 있다(문서 열람·결재 자격은 메뉴가 아니라 동결된 결재선이 근거 — 결정 로그).
+ * 학생 계정은 제외. 이름순. 직원 수십 명 규모라 상한 500이면 절단 위험 없음(B2 명시 상한).
  */
 export async function getApproverCandidates(): Promise<ApprovalPerson[]> {
-  const ids = [...approverCandidateIds()];
-  if (ids.length === 0) return [];
   const supabase = await createClient();
-  const { data } = await supabase.from("users").select("id, display_name, job_title").in("id", ids);
-  const byId = new Map((data ?? []).map((u) => [String(u.id), u]));
-  return ids.map((id) => {
-    const u = byId.get(id);
-    return {
-      id,
-      name: (u?.display_name as string) ?? "(이름 없음)",
-      jobTitle: (u?.job_title as string | null) ?? null,
-    };
-  });
+  const { data } = await supabase
+    .from("users")
+    .select("id, display_name, job_title")
+    .neq("status", "inactive")
+    .neq("system_role", "student")
+    .order("display_name", { ascending: true })
+    .limit(500);
+  return (data ?? []).map((u) => ({
+    id: String(u.id),
+    name: (u.display_name as string) ?? "(이름 없음)",
+    jobTitle: (u.job_title as string | null) ?? null,
+  }));
 }
 
 export type ApprovalLineTemplate = {
