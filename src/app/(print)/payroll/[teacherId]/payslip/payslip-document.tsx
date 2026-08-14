@@ -150,7 +150,8 @@ export function PayslipDocument({ data }: { data: PayslipData }) {
             </Cell>
           </tr>
           <tr>
-            <Cell label="근무기간">
+            {/* 라벨은 원장 시트 표기를 그대로 따른다(2026-08-14) — 값은 그대로고 문구만 맞춘 것이다. */}
+            <Cell label="용역제공기간">
               <Val v={workPeriodLabel(data.period)} />
             </Cell>
             <Cell label="계약기간">
@@ -166,7 +167,9 @@ export function PayslipDocument({ data }: { data: PayslipData }) {
                 <Val v={null} />
               )}
             </Cell>
-            <Cell label="부서">
+            {/* 시트도 이 칸을 '담당과목'이라 부르고 값은 리스트 탭의 **부서**를 끌어온다(수학과·영어과) —
+                라벨만 시트에 맞추고 데이터 소스는 그대로 둔다(값을 갈아끼우지 않는다). */}
+            <Cell label="담당과목">
               <Val v={teacher.department} />
             </Cell>
           </tr>
@@ -310,7 +313,8 @@ function ClassMetrics({ data }: { data: PayslipData }) {
   const { metrics } = data;
   const year = data.period.slice(0, 4);
   return (
-    <table className="mt-5 w-full table-fixed border-collapse text-[13px]">
+    <>
+      <table className="mt-5 w-full table-fixed border-collapse text-[13px]">
       <colgroup>
         <col className="w-[15%]" />
         <col className="w-[35%]" />
@@ -335,15 +339,23 @@ function ClassMetrics({ data }: { data: PayslipData }) {
           </th>
         </tr>
       </thead>
-      {/* 🔑 시트에서 **퇴원 계열 3줄이 전부 빨강 굵게**다 — 원장이 훑을 때 먼저 걸려야 하는 값이라
-          그렇게 칠해 둔 것이고, 색을 빼면 그 의도가 사라진다. 오른쪽 열의 '월 평균 수업인원'도
-          같은 줄에 있어 시트에선 빨강이다(원장 확인 전까진 시트를 그대로 따른다). */}
+      {/* 🔑 시트에서 **퇴원 계열이 전부 빨강 굵게**다 — 원장이 훑을 때 먼저 걸려야 하는 값이라 그렇게
+          칠해 둔 것이고, 색을 빼면 그 의도가 사라진다.
+          🔴 **퇴원 항목은 인쇄에서 뺀다**(원장 2026-08-14: "인쇄시에 퇴원 관련 내용은 인쇄 안되도록 (내부 자료)").
+             명세서는 강사에게 주는 문서인데 퇴원생 수·명단·퇴원생률은 학원 내부 지표다.
+          ⚠️ 그래서 **행 구성을 바꿨다** — 예전엔 퇴원 칸이 '월 평균 수업인원'·'담당 반'과 같은 줄이라
+             줄째로 숨기면 그 둘까지 사라졌다. 퇴원 계열만 아래 두 줄로 모아 그 줄만 숨긴다.
+             ⚠️ 새 지표를 이 표에 넣을 땐 **퇴원 줄에 끼우지 말 것**(인쇄에서 함께 사라진다). */}
       <tbody>
         <tr>
           <Cell label="수업인원">{metrics.studentsThisMonth}명</Cell>
           <Cell label="누적수업인원">{metrics.cumulativeStudents}명</Cell>
         </tr>
         <tr>
+          <Cell label="담당 반">{data.teacher.classes.length}개</Cell>
+          <Cell label="월 평균 수업인원">{metrics.averageStudents}명</Cell>
+        </tr>
+        <tr className="print:hidden">
           <Cell label="퇴원생 수" alert>
             {metrics.withdrawal.count}명
           </Cell>
@@ -351,27 +363,28 @@ function ClassMetrics({ data }: { data: PayslipData }) {
             {metrics.yearlyWithdrawals}명
           </Cell>
         </tr>
-        <tr>
+        <tr className="print:hidden">
           <Cell label="퇴원생 명단" alert>
             {metrics.withdrawal.names.length > 0 ? metrics.withdrawal.names.join(", ") : EMPTY_MARK}
           </Cell>
-          <Cell label="월 평균 수업인원" alert>
-            {metrics.averageStudents}명
-          </Cell>
-        </tr>
-        <tr>
-          <Cell label="퇴원생율" alert>
+          <Cell label="퇴원생률" alert>
             {formatWithdrawalRate(metrics.withdrawal.rate)}
           </Cell>
-          <Cell label="담당 반">{data.teacher.classes.length}개</Cell>
         </tr>
       </tbody>
-    </table>
+      </table>
+      {/* 화면에만 — 종이에서 왜 두 줄이 사라지는지 보는 사람이 알아야 한다(모르면 "빠졌다"는 제보가 온다). */}
+      <p className="print:hidden mt-1 text-[11px] text-[var(--muted-fg,#767676)]">
+        퇴원 항목(퇴원생 수·명단·퇴원생률)은 <b>내부 자료</b>라 인쇄물에는 나오지 않습니다.
+      </p>
+    </>
   );
 }
 
 /**
  * 서명란 — 담당자 / **대표** / 수령인.
+ * 🔴 2026-08-14: 원장 시트 사진("담당 / 원장 / 수령인")에 맞추려다 아래 결정을 되돌릴 뻔했다.
+ *    **시트가 아니라 원장 지시가 이긴다** — 시트를 근거로 이 두 칸을 바꾸지 말 것.
  * ⚠️ 가운데 칸 라벨은 원장 지시로 `원장` → **`대표`**(2026-08-13). 이건 **이 문서의 서명 칸 이름**이라
  *    시스템 역할 표시 라벨("원장", CLAUDE.md 결정 로그)과 **별개**다 — 역할 라벨은 건드리지 않는다.
  * 🔑 수령인 = 이 명세서를 받는 그 강사다(빈칸으로 두면 누가 받는 문서인지 종이에 안 남는다).
