@@ -181,7 +181,10 @@ function ClassCard({ row, date, canEdit }: { row: QueueClass; date: string; canE
     setError(null);
     setSent(true);
     startTransition(() => {
-      requestAttendanceInput({ classId: row.classId, sessionDate: date, slotStart: row.slotStart })
+      // 🔴 **저장축**(saveSlot)으로 보낸다 — 표시축(slotStart)으로 보내면 수학 연강 3교시가 서로 다른
+      //    dedup 버킷이 되어 같은 강사에게 벨이 3번 가고, '요청함' 표식은 저장축으로 조회하므로
+      //    영원히 안 켜진다(눌러도 아무 표시가 안 나 데스크가 계속 다시 누른다).
+      requestAttendanceInput({ classId: row.classId, sessionDate: date, slotStart: row.saveSlot })
         .then((res) => {
           if ("error" in res) {
             setSent(row.requested);
@@ -202,7 +205,9 @@ function ClassCard({ row, date, canEdit }: { row: QueueClass; date: string; canE
       <div className="min-w-0">
         <p className="truncate text-sm font-bold">{row.className}</p>
         <p className="text-text-dim num text-xs">
-          {row.slotStart} · {row.teacherName ?? row.slotTeacherLabel ?? "담당 미지정"} · 예정 {row.expected}명
+          {/* 접힌 카드는 구간으로 밝힌다 — "16:20"만 보이면 뒤 교시는 확인 안 해도 되는 줄 안다. */}
+          {row.slotCount > 1 ? `${row.slotStart}~${row.slotEnd}` : row.slotStart} ·{" "}
+          {row.teacherName ?? row.slotTeacherLabel ?? "담당 미지정"} · 예정 {row.expected}명
         </p>
       </div>
       <div className="flex flex-wrap items-center gap-1.5">

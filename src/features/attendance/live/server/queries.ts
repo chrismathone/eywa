@@ -185,8 +185,11 @@ export async function getDeskQueue(date: string = kstToday()): Promise<DeskQueue
           slotTeacherLabel: slot.slotTeacherLabel,
           expected: slot.students.length,
           phase: slot.phase,
+          saveSlot: slot.saveSlot,
           // 이미 요청을 보냈나 — 없으면 데스크 3명이 같은 강사에게 두세 번 전화한다(적대 리뷰 S4).
           requested: requested.has(`${slot.classId}|${slot.saveSlot ?? ""}`),
+          slotCount: 1, // 접기는 buildQueue가 한다(저장축 기준) — 여기선 교시마다 한 장씩 올린다.
+          slotEnd: slot.slotStart,
         });
       }
       for (const s of slot.students) {

@@ -26,6 +26,66 @@ const student = (over: Partial<QueueStudent> & { studentId: string }): QueueStud
   ...over,
 });
 
+const klass = (over: Partial<QueueClass> & { classId: string; slotStart: string }): QueueClass => ({
+  className: over.classId,
+  subject: "math",
+  teacherId: "t1",
+  teacherName: "김강사",
+  teacherPhone: null,
+  slotTeacherLabel: null,
+  expected: 10,
+  phase: "due",
+  saveSlot: null,
+  requested: false,
+  slotCount: 1,
+  slotEnd: over.slotStart,
+  ...over,
+});
+
+describe("buildQueue — 레인 A 접기", () => {
+  it("🔴 수학 연강 3교시는 한 장이다(저장축이 하루 한 행) — 배지가 3배로 부풀지 않게", () => {
+    const q = buildQueue(
+      [],
+      [
+        klass({ classId: "m1", slotStart: "17:20" }),
+        klass({ classId: "m1", slotStart: "16:20" }),
+        klass({ classId: "m1", slotStart: "18:20" }),
+      ],
+    );
+    expect(q.lanes.classes).toHaveLength(1);
+    expect(q.counts.classes).toBe(1);
+    const card = q.lanes.classes[0];
+    expect(card.slotStart).toBe("16:20"); // 가장 이른 교시가 대표
+    expect(card.slotEnd).toBe("18:20");
+    expect(card.slotCount).toBe(3);
+  });
+
+  it("영어는 교시마다 진짜 빈 칸이라 접지 않는다(saveSlot이 다르다)", () => {
+    const q = buildQueue(
+      [],
+      [
+        klass({ classId: "e1", slotStart: "16:20", saveSlot: "16:20", subject: "english" }),
+        klass({ classId: "e1", slotStart: "17:20", saveSlot: "17:20", subject: "english" }),
+      ],
+    );
+    expect(q.lanes.classes).toHaveLength(2);
+    expect(q.counts.classes).toBe(2);
+  });
+
+  it("다른 반은 접히지 않는다", () => {
+    const q = buildQueue([], [klass({ classId: "a", slotStart: "16:20" }), klass({ classId: "b", slotStart: "16:20" })]);
+    expect(q.lanes.classes).toHaveLength(2);
+  });
+
+  it("접힌 카드의 '예정 인원'은 가장 많은 교시를 따른다(적게 보여 넘기지 않게)", () => {
+    const q = buildQueue(
+      [],
+      [klass({ classId: "m", slotStart: "16:20", expected: 4 }), klass({ classId: "m", slotStart: "17:20", expected: 11 })],
+    );
+    expect(q.lanes.classes[0].expected).toBe(11);
+  });
+});
+
 describe("buildQueue", () => {
   it("class_unmarked 학생은 레인 B에 절대 넣지 않는다 — 반 카드로 접힌다", () => {
     const q = buildQueue(
@@ -55,8 +115,8 @@ describe("buildQueue", () => {
   });
 
   it("반 레인은 교시 이른 순, 같으면 인원 많은 순", () => {
-    const c = (over: Partial<QueueClass>): QueueClass => ({
-      classId: "c",
+    // ⚠️ classId를 서로 다르게 둔다 — 같은 반이면 저장축으로 **접히는 게 맞다**(위 '레인 A 접기').
+    const c = (over: Partial<QueueClass> & { classId: string }): QueueClass => ({
       className: "A",
       subject: "math",
       slotStart: "16:20",
@@ -66,12 +126,19 @@ describe("buildQueue", () => {
       slotTeacherLabel: null,
       expected: 5,
       phase: "due",
+      saveSlot: null,
       requested: false,
+      slotCount: 1,
+      slotEnd: over.slotStart ?? "16:20",
       ...over,
     });
     const q = buildQueue(
       [],
-      [c({ className: "늦은", slotStart: "18:20" }), c({ className: "작은", expected: 3 }), c({ className: "큰", expected: 12 })],
+      [
+        c({ classId: "c3", className: "늦은", slotStart: "18:20" }),
+        c({ classId: "c2", className: "작은", expected: 3 }),
+        c({ classId: "c1", className: "큰", expected: 12 }),
+      ],
     );
     expect(q.lanes.classes.map((x) => x.className)).toEqual(["큰", "작은", "늦은"]);
   });
