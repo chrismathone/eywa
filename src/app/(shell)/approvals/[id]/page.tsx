@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { ArrowLeft } from "@/components/icons/eywa-icon-compat";
 import { Pill } from "@/components/atoms/pill";
 import { requireAccess } from "@/lib/auth/require-access";
+import { sanitizeRichHtml } from "@/lib/html/sanitize";
 import { APPROVAL_FORM_LABEL, docStatusLabel } from "@/features/approvals/types";
 import { formatLeaveDays } from "@/features/leave/request-days";
 import { getApprovalDoc, isMyTurn } from "@/features/approvals/server/queries";
@@ -125,6 +126,9 @@ export default async function ApprovalDocPage({ params }: { params: Promise<{ id
     doc.steps.every((s) => s.decision === "pending");
   const leave = doc.leave;
   const timeline = buildTimeline(doc);
+  // 사유는 리치 텍스트(HTML)다 — **렌더 직전에 다시 위생처리**한다(저장 때 한 번 걸렀어도 마찬가지).
+  // 저장 시점의 선의를 믿고 innerHTML을 그리면 옛 행·직접 INSERT·위생 규칙 변경분이 그대로 새어 나온다.
+  const reasonHtml = leave?.reason ? sanitizeRichHtml(leave.reason) : "";
 
   return (
     <div className="mx-auto w-full max-w-[820px] space-y-4 p-4 md:p-6">
@@ -195,7 +199,19 @@ export default async function ApprovalDocPage({ params }: { params: Promise<{ id
               <tr>
                 <th>사유</th>
                 <td className="break-keep" colSpan={3}>
-                  {leave.reason ?? "—"}
+                  {reasonHtml ? (
+                    // 표·목록이 들어오면 셀보다 넓어질 수 있어 셀 안에서만 가로 스크롤한다.
+                    <div className="overflow-x-auto">
+                      <div
+                        className="rich-content"
+                        // 🔴 저장 시점 위생처리를 **믿지 않고** 서버에서 한 번 더 통과시킨 값이다(위 reasonHtml).
+                        //    옛 행·직접 INSERT·위생 규칙 변경분까지 렌더 직전에 다시 걸러야 XSS 경로가 닫힌다.
+                        dangerouslySetInnerHTML={{ __html: reasonHtml }}
+                      />
+                    </div>
+                  ) : (
+                    "—"
+                  )}
                 </td>
               </tr>
               <tr>
