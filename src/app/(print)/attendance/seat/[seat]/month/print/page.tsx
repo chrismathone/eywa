@@ -104,7 +104,7 @@ function groupToMatrix(
     enrolledAt: s.spans[0]?.start ?? null,
     attendDows: s.attendDows,
     spans: s.spans,
-    badges: [],
+    badges: s.badges,
   }));
   return {
     classes: [],

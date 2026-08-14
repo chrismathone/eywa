@@ -47,6 +47,7 @@ function view(over: Partial<SeatMonthlyView> = {}): SeatMonthlyView {
             grade: "중2",
             attendDows: [1],
             spans: [{ start: "2026-01-01", end: null }],
+            badges: [],
             confirmedUnits: 1,
             reviewUnits: 0,
             counted: { present: 1, absent: 0, late: 0, makeup: 0, excused: 0, units: 1 },
@@ -57,7 +58,8 @@ function view(over: Partial<SeatMonthlyView> = {}): SeatMonthlyView {
             school: "침산중",
             grade: "중1",
             attendDows: [1],
-            spans: [{ start: "2026-01-01", end: null }],
+            spans: [{ start: "2026-01-01", end: "2026-08-20" }],
+            badges: [{ kind: "left" as const, date: "2026-08-20" }],
             confirmedUnits: 0,
             reviewUnits: 1,
             counted: { present: 1, absent: 0, late: 0, makeup: 0, excused: 0, units: 1 },
@@ -111,6 +113,12 @@ describe("자리 월간 격자", () => {
     expect(screen.getAllByText("확인").length).toBeGreaterThanOrEqual(2);
     // 학생별: 확정만 있는 학생과 확인만 있는 학생이 서로 다른 칸에 선다(둘 다 "—"가 하나씩 있다).
     expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("퇴원·신입은 이름 옆 라벨로 — 회색 띠만으로는 왜 비었는지 모른다", () => {
+    render(<MonthlyTable seat="lab" view={view()} holidays={{}} />);
+    expect(screen.getByText("퇴원")).toBeTruthy();
+    expect(screen.getByTitle("2026-08-20 퇴원")).toBeTruthy();
   });
 
   it("기록이 없어도 표는 선다 — 자리 출석부를 아직 아무도 안 쓴 상태가 기본", () => {
