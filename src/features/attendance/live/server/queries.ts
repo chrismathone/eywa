@@ -18,6 +18,7 @@ import { reportError } from "@/lib/observability/report-error";
 import { addDays, kstMinutesOfDay, kstToday } from "@/lib/date-kst";
 import { isWithinAttendanceEditWindow } from "@/features/attendance/edit-window";
 import { hhmmToMin, shouldQueue, slotPhase, type SlotPhase } from "../signals";
+import { isSpecialSlotLabel } from "@/features/timetable/lib/teacher-label";
 import { buildQueue, type DeskQueue, type FollowupBrief, type QueueClass, type QueueStudent } from "../queue";
 import { loadLiveSlots } from "./load";
 import { userTaughtClassSet } from "./write-policy";
@@ -185,6 +186,8 @@ export async function getDeskQueue(date: string = kstToday()): Promise<DeskQueue
   for (const teacher of board.teachers) {
     for (const slot of teacher.slots) {
       if (slot.phase === "before") continue; // 시작 전 = 안 온 게 정상
+      // 랩실·JJ는 자리 출석부 몫. 여기 올리면 담임에게 '입력 요청'이 간다.
+      if (isSpecialSlotLabel(slot.slotTeacherLabel)) continue;
       // 레인 A는 "출석부가 안 열렸다"는 신호라 유예를 기다린다(grace 중엔 아직 열 시간이다).
       if (!slot.hasAnyRecord && (slot.phase === "due" || slot.phase === "ended")) {
         // 레인 A — 반 통째로 미체크. 학생을 개별로 쏟지 않는다(영어 91.6% 공백이 여기로 접힌다).

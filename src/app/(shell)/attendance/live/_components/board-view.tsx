@@ -20,6 +20,7 @@ import { EmptyState } from "@/components/empty-state";
 import { CalendarDays } from "@/components/icons/eywa-icon-compat";
 import { canDeskMark } from "@/features/attendance/live/mark-state";
 import { groupAdjacentSlots } from "@/features/attendance/live/seating";
+import { isSpecialSlotLabel } from "@/features/timetable/lib/teacher-label";
 import type { LiveBoard, LiveBoardSlot } from "@/features/attendance/live/types";
 import type { BasicAttendance } from "@/features/class-sheets/lib/mark-cycle";
 
@@ -37,7 +38,8 @@ export function BoardView({ board }: { board: LiveBoard }) {
     <div className="space-y-6">
       {board.teachers.map((t) => {
         // 이어지는 같은 반(연강)은 한 카드 — 같은 7명이 14:30·15:25 두 장으로 보이던 것.
-        const slots = groupAdjacentSlots(t.slots);
+        const slots = groupAdjacentSlots(t.slots).filter((s) => !isSpecialSlotLabel(s.slotTeacherLabel));
+        if (slots.length === 0) return null;
         const expected = slots.reduce((n, s) => n + s.students.length, 0);
         const recorded = slots.reduce((n, s) => n + s.recordedCount, 0);
         return (

@@ -174,12 +174,12 @@ export function buildQueue(students: readonly QueueStudent[], classes: readonly 
  * 후속조치 결과 — 데스크가 전화 후 고르는 값. **출결 상태와 1:1로 매핑하지 않는다**(아래 🔴).
  */
 export const FOLLOWUP_OUTCOMES = [
-  { value: "coming", label: "곧 옴 (늦게 출발)" },
-  { value: "absent_today", label: "오늘 안 옴 (확인됨)" },
-  { value: "sick", label: "아파서 결석" },
-  { value: "already_here", label: "이미 와 있음 (강사 미입력)" },
+  { value: "coming", label: "곧 옴" },
+  { value: "absent_today", label: "오늘 안 옴" },
+  { value: "sick", label: "아파서" },
+  { value: "already_here", label: "이미 옴" },
   { value: "no_answer", label: "연락 안 됨" },
-  { value: "other", label: "기타 (메모)" },
+  { value: "other", label: "기타" },
 ] as const;
 
 export type FollowupOutcome = (typeof FOLLOWUP_OUTCOMES)[number]["value"];
