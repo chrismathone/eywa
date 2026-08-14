@@ -8,6 +8,7 @@
  * 읽기: 교시 무시, (반·학생·오늘)에 기록이 있으면 그 상태. 여러 행이면 recorded_at 최신.
  * 쓰기 슬롯은 호출부가 slot-axis를 따른다(수학=null, 영어=첫 교시). 기존 행이 있으면 그 행의 교시를 쓴다.
  */
+import { specialSlotLabel, type SpecialSlotLabel } from "@/features/timetable/lib/teacher-label";
 import { seatMarkOf, type SeatMark } from "./mark-state";
 import { saveSlotFor } from "./slot-axis";
 import type { LiveBoardSlot, LiveStudent } from "./types";
@@ -29,6 +30,8 @@ export type SeatingClass = {
   firstStart: string;
   firstEnd: string | null;
   periodLabel: string | null;
+  /** LAB·JJ — 같은 시각에 여러 반이 한 방을 쓴다. 일반 4열과 다른 묶음의 근거. */
+  seatLabel: SpecialSlotLabel | null;
   phase: LiveBoardSlot["phase"];
   ownedByMe: boolean;
   students: SeatingStudent[];
@@ -112,6 +115,7 @@ export function foldSeating(slots: readonly LiveBoardSlot[]): SeatingClass[] {
       firstStart: first.slotStart,
       firstEnd: spanAdjacentEnd(ordered),
       periodLabel: first.periodLabel,
+      seatLabel: specialSlotLabel(first.slotTeacherLabel),
       // 헤더 색·대기/미출결은 카드에 적힌 첫 시각 기준. 뒤 교시는 더 늦다.
       phase: first.phase,
       ownedByMe: first.ownedByMe,

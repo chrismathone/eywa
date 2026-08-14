@@ -16,10 +16,12 @@ export function SeatingRoom({ date, klass }: { date: string; klass: SeatingClass
     <article className="bg-card shadow-card flex min-w-0 flex-col overflow-hidden rounded-2xl">
       <header className={`px-2 py-2 text-center text-sm font-bold ${seatingHeaderClass(klass.phase)}`}>
         <h4>{klass.className}</h4>
-        <p className="mt-0.5">
-          {time}
-          {klass.teacherName ? ` · ${klass.teacherName}` : ""}
-        </p>
+        {klass.seatLabel ? null : (
+          <p className="mt-0.5">
+            {time}
+            {klass.teacherName ? ` · ${klass.teacherName}` : ""}
+          </p>
+        )}
       </header>
       <div className="bg-bg-soft px-2 py-2">
         <div className="grid grid-cols-3 gap-1">

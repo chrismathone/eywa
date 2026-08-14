@@ -6,8 +6,9 @@
 import { EmptyState } from "@/components/empty-state";
 import { CalendarDays } from "@/components/icons/eywa-icon-compat";
 import { SEAT_MARK_LABEL, SEAT_MARK_TONE } from "../mark-state";
+import { groupSeatPeriods, isSeatRoom } from "../seating-bands";
 import { foldSeating, seatingSummary } from "../seating";
-import { groupSeatingFloors } from "../seating-floors";
+import { groupSeatingFloors, type SeatingRoom as SeatingRoomGroup } from "../seating-floors";
 import type { LiveBoard } from "../types";
 import { SeatingRoom } from "./seating-room";
 
@@ -69,18 +70,45 @@ export function SeatingChart({ board }: { board: LiveBoard }) {
           </h2>
           <div className="space-y-4">
             {floor.rooms.map((room) => (
-              <div key={room.key} className="space-y-2">
-                <h3 className="text-base font-bold">{room.roomName}</h3>
-                <div className="grid grid-cols-4 items-start gap-3">
-                  {room.classes.map((klass) => (
-                    <SeatingRoom key={klass.classId} date={board.date} klass={klass} />
-                  ))}
-                </div>
-              </div>
+              <SeatingRoomBlock key={room.key} date={board.date} room={room} />
             ))}
           </div>
         </section>
       ))}
+    </div>
+  );
+}
+
+/**
+ * 일반 방 = 4열(교시 폭). 랩실(603호)·JJ실(305호)만 시트처럼 시각 한 줄.
+ */
+function SeatingRoomBlock({ date, room }: { date: string; room: SeatingRoomGroup }) {
+  const bands = isSeatRoom(room) ? groupSeatPeriods(room.classes) : null;
+  return (
+    <div className="space-y-2">
+      <h3 className="text-base font-bold">{room.roomName}</h3>
+      {bands ? (
+        <div className="space-y-3">
+          {bands.map((band) => (
+            <div key={band.start} className="space-y-1.5">
+              <p className="text-text-dim text-xs font-bold">
+                {band.end && band.end !== band.start ? `${band.start}~${band.end}` : band.start}
+              </p>
+              <div className="grid grid-cols-[repeat(auto-fill,minmax(11rem,1fr))] items-start gap-3">
+                {band.classes.map((klass) => (
+                  <SeatingRoom key={klass.classId} date={date} klass={klass} />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="grid grid-cols-4 items-start gap-3">
+          {room.classes.map((klass) => (
+            <SeatingRoom key={klass.classId} date={date} klass={klass} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
