@@ -18,6 +18,7 @@ import { countMarks, sumCounts } from "@/features/attendance/grid/totals";
 import { isGroupedSort, sortAttendanceRows } from "@/features/attendance/sort-rows";
 import { getSubjectSessionsByStudent, roleFor } from "@/features/attendance/server/subject-sessions";
 import { AttendanceSortSelect } from "./_components/sort-select";
+import { HideRetiredToggle } from "./_components/hide-retired-toggle";
 import { AttendanceHub, type HubTeacher } from "./_components/attendance-hub";
 import { MatrixTable, buildGridSource, type MatrixGroup } from "./_components/matrix-table";
 import { GridProvider } from "./_components/grid-context";
@@ -161,7 +162,7 @@ export default async function AttendancePage({
   const classesForSubject = effectiveSubject
     ? allClasses.filter((c) => c.subject === effectiveSubject)
     : allClasses;
-  const teacherOptions = Array.from(
+  const allTeacherOptions = Array.from(
     new Map(
       classesForSubject
         .filter((c) => c.teacherId && c.teacherName)
@@ -172,7 +173,16 @@ export default async function AttendancePage({
     ),
   )
     .map(([value, t]) => ({ value, label: t.retired ? `${t.name} (퇴직)` : t.name, retired: t.retired }))
-    .sort((a, b) => Number(a.retired) - Number(b.retired) || a.label.localeCompare(b.label, "ko"))
+    .sort((a, b) => Number(a.retired) - Number(b.retired) || a.label.localeCompare(b.label, "ko"));
+  /**
+   * 퇴직 담임 숨김(원장 2026-08-14) — **강사 축에서만** 감춘다. 그 반은 반 드롭다운에 그대로 남는다
+   * (담임이 퇴직해도 재원생은 계속 다니므로 반까지 감추면 출석을 찍을 길이 사라진다).
+   * ⚠️ **이미 고른 강사는 감추지 않는다** — URL에 남은 선택이 목록에서 사라지면 화면이 요약 허브로
+   *    튕겨 "방금 보던 출석부가 없어졌다"가 된다.
+   */
+  const retiredCount = allTeacherOptions.filter((t) => t.retired).length;
+  const teacherOptions = allTeacherOptions
+    .filter((t) => !viewPrefs.hideRetired || !t.retired || t.value === teacherParam)
     .map(({ value, label }) => ({ value, label }));
   // 강사는 자기 자신이 기본 선택 — 자기 이름을 드롭다운에서 다시 고르게 하지 않는다.
   // (강사 계정의 반 목록은 이미 본인 반으로 좁혀져 있어 선택지도 자기 하나뿐이다.)
@@ -484,6 +494,10 @@ export default async function AttendancePage({
                 ariaLabel="강사 필터"
                 allLabel="전체 강사"
               />
+              {/* 퇴직 담임 숨김 — 감춘 인원을 칩에 적어 "강사가 없어졌다"로 읽히지 않게 한다. */}
+              {retiredCount > 0 || !viewPrefs.hideRetired ? (
+                <HideRetiredToggle hidden={viewPrefs.hideRetired} count={retiredCount} />
+              ) : null}
             </div>
             <span className="bg-line h-4 w-px" aria-hidden />
           </>
@@ -625,7 +639,10 @@ export default async function AttendancePage({
         // 강사 미선택 허브 = **출석부 요약**(원장 2026-08-10). 무거운 매트릭스는 여전히 안 불러온다.
         // 강사를 고르면 바로 그 강사 전체 출석부(기본 보기 = 강사 전체, resolveViewMode).
         <AttendanceHub
-          teachers={await buildHubTeachers(classesForFilters, subjectOptions)}
+          // 허브 카드도 같은 렌즈를 쓴다 — 드롭다운에선 감췄는데 카드로는 보이면 설정이 거짓말이 된다.
+          teachers={(await buildHubTeachers(classesForFilters, subjectOptions)).filter(
+            (t) => !viewPrefs.hideRetired || !t.retired,
+          )}
           month={month}
           subjectId={effectiveSubject}
           colorOf={subjectMaps.colorOf}
