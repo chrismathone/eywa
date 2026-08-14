@@ -52,7 +52,9 @@ export default async function ShellLayout({ children }: { children: ReactNode })
               layout(<main>)은 재렌더되지 않아 창 안 내비가 embed 파라미터를 흘려도 컴팩트가 유지된다(요청 단위
               x-embed로 판정하면 내비마다 풀 헤더로 플립 — 적대 리뷰 major). */}
           {/* pt-3(창 전용) — 타이틀바가 바로 위에 있어 상단 여백을 조인다(2026-07-20 세로 회수). */}
-          <main style={brandStyle} className="embed-main bg-background text-foreground h-screen overflow-auto px-3 pt-3 lg:px-6 [scrollbar-gutter:stable]">
+          {/* pb — 스크롤 끝에서 마지막 줄이 창 바닥에 딱 붙어 "빠듯"했다(원장 2026-08-14, 강사 ECS 시트).
+              세 셸(창·미니셸·풀셸)에 같은 여백을 준다 — 한 곳만 주면 화면마다 끝이 다르게 느껴진다. */}
+          <main style={brandStyle} className="embed-main bg-background text-foreground h-screen overflow-auto px-3 pt-3 pb-8 lg:px-6 lg:pb-10 [scrollbar-gutter:stable]">
             <EmbedFocusSignal />
             {/* 창 안에서도 Shift+F/Ctrl·Cmd+K로 검색 팰릿 — keydown은 프레임을 못 넘어 postMessage 포워딩. */}
             <PaletteHotkeyForward />
@@ -174,7 +176,8 @@ export default async function ShellLayout({ children }: { children: ReactNode })
         {view === "teacher" ? <NotifyPermissionBanner /> : null}
         {/* .compact-main = 페이지 헤더 접기 마커(globals.css `compact-chrome` ③). 위 헤더가 이미 메뉴명을
             찍으므로 본문 PageHeader의 eyebrow·21px 제목은 중복이다 — 강사 화면은 세로 1px이 곧 데이터다. */}
-        <main className="compact-main flex-1 overflow-auto px-3 pt-4 lg:px-6 lg:pt-5 [scrollbar-gutter:stable]">
+        {/* 강사 미니셸 — 원장이 "빠듯하다"고 짚은 화면(영어 강사 ECS 시트)이 여기다. */}
+        <main className="compact-main flex-1 overflow-auto px-3 pt-4 pb-8 lg:px-6 lg:pt-5 lg:pb-10 [scrollbar-gutter:stable]">
           <EditPresenceProvider user={{ id: user.id, displayName: user.displayName, tenantId: user.tenantId }}><OperationsProvider subjects={settings.operations.subjects} gradeLevels={settings.operations.gradeLevels} jobTitles={settings.operations.jobTitles} jobTitlesByDepartment={settings.operations.jobTitlesByDepartment}>
             {children}
           </OperationsProvider></EditPresenceProvider>
@@ -227,7 +230,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
             (원장 2026-07-30 "모바일뷰에서 시간표가 상단 헤더 때문에 거의 보이지 않음"). 제목·벨은
             MobileTopNav 한 줄로 흡수. 데스크톱은 원래 이 헤더가 숨겨져 있어 영향 없음. */}
         {/* pt-2(모바일) — 상단 바 바로 아래라 여백을 조인다. 데스크톱은 종전 pt-5. */}
-        <main className="flex-1 overflow-auto px-3 pt-2 lg:px-6 lg:pt-5 [scrollbar-gutter:stable]">
+        <main className="flex-1 overflow-auto px-3 pt-2 pb-8 lg:px-6 lg:pt-5 lg:pb-10 [scrollbar-gutter:stable]">
           {/* 드릴인 등으로 embed 파라미터가 떨어진 하드 내비가 창(iframe) 안에서 풀 셸을 렌더하면
               물리 프레임 판정으로 .embed-main 마커를 재부착 — PageHeader 컴팩트의 HideInFrame판. */}
           <EmbedMainMarker />
