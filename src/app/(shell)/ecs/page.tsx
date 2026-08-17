@@ -11,10 +11,7 @@ import { TodayBoard } from "@/features/class-sheets/components/today-board";
 import { TodayAttendanceStrip } from "@/features/attendance/live/components/today-strip";
 import { SheetClient } from "@/features/class-sheets/components/sheet-client";
 import { EcsSeatDayFace } from "@/features/class-sheets/components/seat-day-face";
-import { getCurrentUser } from "@/lib/auth/current-user";
 import { effectiveTeacherScope } from "@/lib/auth/view-mode";
-import { canManageSheetSync } from "@/features/integrations/server/sheet-access";
-import { EcsSheetImportDialog } from "./_components/sheet-import-dialog";
 import { EcsLandingList } from "./_components/landing-list";
 import { EcsTeacherFilter } from "./_components/teacher-filter";
 import { EcsTrackFilter } from "./_components/track-filter";
@@ -78,9 +75,7 @@ export default async function EcsLandingPage({
     }
     return <EcsTodayFace res={todayRes} scoped={scoped} mode={mode} sheets={sheets} />;
   }
-  // 시트 가져오기 버튼은 시트 경로 자격(sheet_sync=full)에만 — 서버 액션도 같은 게이트로 이중 방어.
-  const [res, user] = await Promise.all([getSheetLanding(week ?? null), getCurrentUser()]);
-  const canSync = user ? await canManageSheetSync(user.systemRole) : false;
+  const res = await getSheetLanding(week ?? null);
 
   if (!res.ok) {
     return (
@@ -114,11 +109,6 @@ export default async function EcsLandingPage({
           options={res.teacherOptions}
           totalCount={res.trackCounts[res.trackFilter]}
         />
-        {canSync ? (
-          <div className="ml-auto">
-            <EcsSheetImportDialog />
-          </div>
-        ) : null}
       </div>
 
       {res.cards.length === 0 ? (
