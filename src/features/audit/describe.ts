@@ -22,6 +22,12 @@ export const AUDIT_TYPE_LABEL: Record<string, string> = {
   notice_popup: "팝업 공지",
   classnote_notice: "학부모 공지",
   operating_periods: "세션 기간",
+  // 2026-08-17 원장 제보("대상이 attendance 등 날것으로 나옴") — 누락 유형 전수 추가(가드 테스트도 갱신).
+  attendance: "출결",
+  lesson_report: "수업보고서",
+  approval_document: "결재 문서",
+  enrollment_consultations: "등록상담",
+  document: "문서",
 };
 
 // 시험유형은 운영 enum이 아니라 코드 고정(CLAUDE.md) — exams 화면과 동일 라벨.
