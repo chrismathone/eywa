@@ -14,7 +14,6 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { canManageSheetSync, SHEET_ACCESS_DENIED_MSG } from "@/features/integrations/server/sheet-access";
 import {
   claimSheetSyncLease,
-  isSheetSyncBusy,
   releaseSheetSyncLease,
   SHEET_SYNC_BUSY_MSG,
   touchSheetSyncLease,
@@ -42,14 +41,6 @@ type Fail = { ok: false; error: string };
  *     (`api/cron/sheets-sync`). 원장 마스터 시트를 가리키는 행을 만들면 자동 반영이 **마스터를 덮어쓸 수 있다**.
  */
 const ECS_LEASE_PROVIDER = sheetsProvider("english");
-
-/** 지금 다른 사람이 시트 작업 중인가 — 버튼 선제 비활성용(서버 액션 거부는 2차 방어로 그대로). */
-export async function isEcsImportBusy(): Promise<boolean> {
-  const user = await getCurrentUser();
-  if (!user) return false;
-  const supabase = await createClient();
-  return isSheetSyncBusy(supabase, ECS_LEASE_PROVIDER);
-}
 
 /**
  * 순회 시작 — 리스를 선점한다. 미리보기·반영 **각 회차마다** 잡고 끝나면 놓는다
@@ -134,14 +125,6 @@ async function resolveMasterTargets(tenantId: string): Promise<ListTargetsResult
     targets: targets.filter((t) => t.classId && (seenClass.get(t.classId) ?? 0) === 1),
     unmatched,
   };
-}
-
-/** 1단계(전 반) — 마스터 시트의 반 시트 링크를 모아 eywa 반과 맞춘다(시트 읽기 2~수 콜, DB 쓰기 0). */
-export async function listEcsImportTargets(): Promise<ListTargetsResult> {
-  const user = await getCurrentUser();
-  if (!user) return { ok: false, error: "로그인이 필요합니다" };
-  if (!(await canManageSheetSync(user.systemRole))) return { ok: false, error: SHEET_ACCESS_DENIED_MSG };
-  return resolveMasterTargets(user.tenantId);
 }
 
 export type ClassTargetResult = { ok: true; year: number; target: EcsSheetTarget } | Fail;
