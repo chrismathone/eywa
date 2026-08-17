@@ -10,6 +10,7 @@ import { subjectTone, toneSoftClass, toneSolidClass } from "../data";
 import {
   effectiveClassnoteStatus,
   isAlreadySent,
+  isAttendanceUnchecked,
   isReportEligible,
   isRowInputEditable,
   isRowActionable,
@@ -234,6 +235,7 @@ export function GridBodyRow({
     isAbsent: subject.attendanceRaw === "absent",
     hasProgress: isReportEligible(subject),
     hasDraft: !!rep?.draft?.trim(),
+    attendanceUnchecked: isAttendanceUnchecked(subject),
   });
   const canSend = sendGate.canSend;
   // 멘트와 기록 칸이 서로 다른 말을 하는지(시험날 진도·멘트에만 있는 점수) — **막지 않고 알린다**.

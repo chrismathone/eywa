@@ -5,6 +5,7 @@ import {
   isReportEligible,
   effectiveClassnoteStatus,
   isAlreadySent,
+  isAttendanceUnchecked,
   isClassMember,
   isRowInputEditable,
   isRowActionable,
@@ -216,10 +217,30 @@ describe("isRowActionable", () => {
     expect(isRowActionable(absent, "autowrite")).toBe(false);
   });
 
-  it("조퇴(early_leave)·지각·기록없음은 발송 유지", () => {
-    expect(isRowActionable(sub({ attendanceRaw: "early_leave" }), "send")).toBe(true);
-    expect(isRowActionable(sub({ attendanceRaw: "late" }), "send")).toBe(true);
+  it("조퇴(early_leave)·지각은 발송 유지 — 수업을 들었다", () => {
+    expect(isRowActionable(sub({ classId: "c1", attendanceRaw: "early_leave" }), "send")).toBe(true);
+    expect(isRowActionable(sub({ classId: "c1", attendanceRaw: "late" }), "send")).toBe(true);
+    // 반 없는 행(이관·반 모호)의 기록없음은 예전대로 발송 유지 — 아래 미체크 게이트 예외 참조.
     expect(isRowActionable(sub({}), "send")).toBe(true);
+  });
+
+  // 출결 미체크 발송 게이트(2026-08-17 원장 지시) — 출결 체크도 진도·멘트 같은 발송 필요 입력이다.
+  it("출결 미체크(정규 반 행) — send만 제외, save·autowrite는 유지", () => {
+    const unchecked = sub({ classId: "c1", attendanceRaw: null });
+    expect(isRowActionable(unchecked, "send")).toBe(false);
+    expect(isRowActionable(unchecked, "save")).toBe(true);
+    expect(isRowActionable(unchecked, "autowrite")).toBe(true);
+    // 출결을 찍는 순간 발송이 열린다.
+    expect(isRowActionable(sub({ classId: "c1", attendanceRaw: "present" }), "send")).toBe(true);
+  });
+
+  it("출결 미체크 게이트 예외 — 보강·반 없는 행은 판정 대상이 아니다(출결을 기록할 수단이 없다)", () => {
+    expect(isRowActionable(sub({ makeup: true, classId: "c1", attendanceRaw: null }), "send")).toBe(true);
+    expect(isAttendanceUnchecked({ attendanceRaw: null, classId: "c1", makeup: true })).toBe(false);
+    expect(isAttendanceUnchecked({ attendanceRaw: null, classId: null })).toBe(false);
+    expect(isAttendanceUnchecked({ attendanceRaw: null, classId: "c1" })).toBe(true);
+    expect(isAttendanceUnchecked({ attendanceRaw: undefined, classId: "c1" })).toBe(true);
+    expect(isAttendanceUnchecked({ attendanceRaw: "absent", classId: "c1" })).toBe(false);
   });
 
   // 2026-07-22 원장 지시로 강화: 발송 완료 = **수정도 금지**(예전엔 save만 열려 있었다).
