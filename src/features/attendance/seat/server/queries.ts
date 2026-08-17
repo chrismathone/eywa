@@ -5,7 +5,7 @@ import { fetchInChunks } from "@/lib/supabase/batch";
 import { effectiveAttendanceRecords } from "@/features/attendance/effective-records";
 import { DOW_KEYS, dowIndexOf, resolveAttendDows } from "@/features/attendance/calendar";
 import { specialSlotLabel } from "@/features/timetable/lib/teacher-label";
-import { groupByStart, hhmm, SEAT_DB_LABEL, type SeatKey, type SeatPeriod, type SeatSlot } from "../seat";
+import { groupByStart, hhmm, isPayrollSeat, SEAT_DB_LABEL, type SeatKey, type SeatPeriod, type SeatSlot } from "../seat";
 
 export type SeatStudent = {
   id: string;
@@ -207,6 +207,25 @@ async function loadSeatDay(
   const effective = effectiveAttendanceRecords(records);
   const recByKey = new Map<string, (typeof records)[number]>();
   for (const r of effective) recByKey.set(`${r.class_id}|${r.student_id}|${hhmm(r.slot_start)}`, r);
+  // 🔴 비급여 자리(JJ실)는 자리 기록이 **담임 출석과 같은 사실**이다(seat_label 없이 저장 = 담임 시수).
+  //    그래서 담임이 원스크린에서 먼저 찍은 "그날 전체"(slot null) 행도 이 교시의 기록으로 보여야 한다 —
+  //    안 그러면 당번 눈에 '미체크'로 보여 다시 찍고, 그 두 번째 행이 시수·회차를 이중 계상한다
+  //    (2026-08-17 적대 감사 P1-4). 급여 자리(랩실)는 자리 시수가 **별도 축**(seat_label 행)이라 폴백 금지 —
+  //    담임 출석을 자리 기록처럼 보여주면 자리 시수가 안 찍힌 걸 찍힌 걸로 오인한다.
+  // 이 자리판에 그 반이 오늘 몇 교시 걸려 있나 — day-level 폴백은 **한 교시뿐인 반**에만 허용한다.
+  // 두 교시 이상이면 담임의 "그날 전체" 한 행이 모든 교시에 '체크됨'으로 복제돼 보이고, 한 교시에서
+  // 승격되는 순간 나머지 교시가 미체크로 뒤집혀 새 insert를 부른다(적대 리뷰 확정 — 폴백이 만든 유령).
+  const periodCountByClass = new Map<string, number>();
+  for (const p of periods)
+    for (const s of p.slots) periodCountByClass.set(s.classId, (periodCountByClass.get(s.classId) ?? 0) + 1);
+  const dayLevelFallback = (classId: string, studentId: string) => {
+    if (isPayrollSeat(seat)) return undefined;
+    if ((periodCountByClass.get(classId) ?? 0) !== 1) return undefined;
+    const rec = recByKey.get(`${classId}|${studentId}|`);
+    // 자리판이 표현 못 하는 상태(조퇴·공결·보강)는 폴백하지 않는다 — 미체크로 보이더라도 쓰기 경로
+    // (writeOne·fillSeatSlot)가 그 행을 보호한다(덮지도, 중복 행을 만들지도 않는다).
+    return rec && ["present", "absent", "late"].includes(rec.status) ? rec : undefined;
+  };
 
   const rosterByPeriod: Record<string, SeatClassRoster[]> = {};
   for (const p of periods) {
@@ -215,7 +234,9 @@ async function loadSeatDay(
       className: slot.className,
       end: hhmm(slot.end),
       students: (studentsByClass.get(slot.classId) ?? [])
-        .map((s) => toSeatStudent(s, recByKey.get(`${slot.classId}|${s.id}|${p.start}`)))
+        .map((s) =>
+          toSeatStudent(s, recByKey.get(`${slot.classId}|${s.id}|${p.start}`) ?? dayLevelFallback(slot.classId, s.id)),
+        )
         .sort((a, b) => (a.grade ?? "").localeCompare(b.grade ?? "", "ko") || a.name.localeCompare(b.name, "ko")),
     }));
   }

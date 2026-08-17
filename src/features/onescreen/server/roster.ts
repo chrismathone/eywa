@@ -643,7 +643,10 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
           .select("student_id, class_id, status, recorded_at, note, session_units")
           .eq("session_date", todayIso)
           .in("student_id", chunk)
-          .order("recorded_at", { ascending: false }),
+          .order("recorded_at", { ascending: false })
+          // id 내림차순 = recorded_at 동률 tie-break(2026-08-17 감사) — 발송 게이트(absence-gate)·
+          // effective-records와 같은 규약. 없으면 동시각 중복 행에서 pill과 게이트가 다른 행을 고를 수 있다.
+          .order("id", { ascending: false }),
     ),
     // Phase3: 오늘 "작업중" 세션(점수/진도/태도/과제/확정) 복원 — 새로고침에도 유지.
     // ⚠️ 강사축(0118a): 같은 학생을 다른 강사가 가르쳐도 서로 안 덮게 updated_by=본인 세션만 복원.

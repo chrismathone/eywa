@@ -72,6 +72,8 @@ export function BulkApplyPopover({
     onlyEmpty: boolean,
     progressSubjectKey: string,
     attendance: BulkAttendanceStatus | null,
+    /** 출결 수업타임(시수) — 빈 문자열=미지정(종전과 동일, 새 행 시수 null=1). 새로 만드는 행에만 적용. */
+    attendanceUnits: string,
   ) => void;
   onCopyFirstRow: (overwrite: boolean) => void;
   disabled?: boolean;
@@ -86,6 +88,9 @@ export function BulkApplyPopover({
   const [subjectKey, setSubjectKey] = useState<string | null>(null);
   const [grade, setGrade] = useState(studyGrade);
   const [att, setAtt] = useState<BulkAttendanceStatus | null>(null);
+  // 출결 수업타임(시수) — 새로 기록되는 칸에만 적용(기존 기록의 시수는 보존). 빈칸=기본(1).
+  // 시수는 급여 재료라(감사 P0-2) 3시간 반(1.5) 같은 배수 반을 일괄로 찍을 때 강사가 직접 지정한다.
+  const [attUnits, setAttUnits] = useState("");
   // 모드마다 기본이 다르다(위 주석) — 직접 입력=덮어쓰기, 복사=빈 칸만.
   const [onlyEmpty, setOnlyEmpty] = useState(false);
   const canCopy = !!copySource && copySource.belowCount > 0;
@@ -110,6 +115,7 @@ export function BulkApplyPopover({
     setHomeworkToday("");
     setProgress("");
     setAtt(null); // 출결은 특히 — 남아 있다가 다음 적용에 딸려 나가면 출석부에 그대로 박힌다
+    setAttUnits(""); // 시수도 같은 이유 — 급여 재료라 잔존값이 다음 반에 딸려 나가면 안 된다
     // ⚠️ 과목·진도 학년·모드는 유지 — 같은 반을 연달아 채우는 흐름에서 매번 다시 고르게 하면 손이 는다.
   };
   const apply = () => {
@@ -142,6 +148,7 @@ export function BulkApplyPopover({
       onlyEmpty,
       activeSubject?.key ?? "",
       att,
+      att && att !== "absent" ? attUnits.trim() : "", // 결석엔 시수가 무의미(소비 0) — 안 보낸다
     );
     setOpen(false);
     reset();
@@ -294,6 +301,25 @@ export function BulkApplyPopover({
                     </button>
                   ))}
                 </div>
+                {/* 수업타임(시수) — 출석·지각일 때만(결석은 시수 소비 0). 새로 만드는 기록에만 적용되고
+                    기존 기록의 시수는 보존된다(급여 재료 — 3시간 반은 1.5, 감사 P0-2). */}
+                {att && att !== "absent" ? (
+                  <div className="mt-1.5 flex items-center gap-1.5">
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={attUnits}
+                      onChange={(e) => setAttUnits(e.target.value)}
+                      placeholder="수업타임"
+                      aria-label="일괄 출결 수업타임"
+                      title="이번에 새로 기록되는 칸의 수업타임(시수) — 빈칸=기본 1. 이미 기록된 칸의 시수는 바꾸지 않습니다"
+                      className="border-line bg-card focus:border-primary h-7 w-20 rounded-lg border px-2 text-[12px] outline-none"
+                    />
+                    <span className="text-text-faint text-[11px]">
+                      예: 3시간 반 = 1.5 · 빈칸 = 기본(1) · 기존 기록의 시수는 유지
+                    </span>
+                  </div>
+                ) : null}
                 {/* 고른 즉시 실제 대상·덮어쓸 건수를 보여준다 — 눌러 보고 나서 알게 되면 늦다. */}
                 {attPlan ? (
                   <p className={`mt-1 text-[11px] ${attPlan.cells.length ? "text-text-dim" : "text-amber"}`}>

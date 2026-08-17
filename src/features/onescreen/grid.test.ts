@@ -234,6 +234,18 @@ describe("isRowActionable", () => {
     expect(isRowActionable(sub({ classId: "c1", attendanceRaw: "present" }), "send")).toBe(true);
   });
 
+  it("출결 쓰기 권한이 없으면 미체크 게이트 해당 없음(감사 P0-3) — 충족할 수 없는 입력은 요구하지 않는다", () => {
+    const unchecked = sub({ classId: "c1", attendanceRaw: null });
+    expect(isRowActionable(unchecked, "send")).toBe(false);
+    expect(isRowActionable(unchecked, "send", undefined, { attendanceReadOnly: true })).toBe(true);
+    // 결석은 권한과 무관하게 발송 제외 — 이미 기록된 사실에 대한 판정이라 권한 예외가 안 붙는다.
+    expect(
+      isRowActionable(sub({ classId: "c1", attendanceRaw: "absent" }), "send", undefined, {
+        attendanceReadOnly: true,
+      }),
+    ).toBe(false);
+  });
+
   it("출결 미체크 게이트 예외 — 보강·반 없는 행은 판정 대상이 아니다(출결을 기록할 수단이 없다)", () => {
     expect(isRowActionable(sub({ makeup: true, classId: "c1", attendanceRaw: null }), "send")).toBe(true);
     expect(isAttendanceUnchecked({ attendanceRaw: null, classId: "c1", makeup: true })).toBe(false);

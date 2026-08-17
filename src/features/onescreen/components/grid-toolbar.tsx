@@ -21,6 +21,8 @@ export type GridBulkActions = {
     onlyEmpty: boolean,
     progressSubjectKey: string,
     attendance: BulkAttendanceStatus | null,
+    /** 출결 수업타임(시수) — 빈 문자열=미지정. 새로 만드는 출결 행에만 적용(기존 시수 보존). */
+    attendanceUnits?: string,
   ) => void;
   // 맨 위 행의 수업 내용(진도·교재·오늘 과제)을 아래 행에 복사 — 같은 진도를 학생마다 다시 고르지 않게.
   onCopyFirstRow?: (keys: string[], overwrite: boolean) => void;

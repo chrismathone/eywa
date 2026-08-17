@@ -235,7 +235,8 @@ export function GridBodyRow({
     isAbsent: subject.attendanceRaw === "absent",
     hasProgress: isReportEligible(subject),
     hasDraft: !!rep?.draft?.trim(),
-    attendanceUnchecked: isAttendanceUnchecked(subject),
+    // 출결 쓰기 권한 없음 = 게이트 해당 없음(P0-3) — 알약도 없는데 "출결을 기록하라"는 거짓 안내 방지.
+    attendanceUnchecked: !gen.attReadOnly && isAttendanceUnchecked(subject),
   });
   const canSend = sendGate.canSend;
   // 멘트와 기록 칸이 서로 다른 말을 하는지(시험날 진도·멘트에만 있는 점수) — **막지 않고 알린다**.

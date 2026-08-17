@@ -4,6 +4,7 @@ import { normalizeNoneMarker } from "../none-marker";
 import { randomUUID } from "node:crypto";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { kstToday, resolveReportDate } from "@/lib/date-kst";
 import { generateJSON } from "@/lib/ai/generate";
 import { commentBody, commentP1Body, commentP2Body, type ReportCommentInput } from "../report-comment";
@@ -329,12 +330,19 @@ export async function saveAndQueueClassnote(
         // ⚠️ 결석 게이트의 fail-open(기록 없음=통과)은 그대로다 — 이 체크는 강사 경로 전용 별도 게이트
         //    (관리자 콘솔·재발송·미발송 재촉 이벤트는 안 걸린다, hasAnyAttendance 주석·#105 참조).
         // ⚠️ 반(classId) 있는 정규 행만 — 반 없는 행(이관·반 모호)은 어느 반 출결을 요구할지 정할 수 없다.
+        // ⚠️ 출결 쓰기 권한이 없는 계정(attendance 메뉴 none)은 게이트 해당 없음(감사 P0-3) —
+        //    충족할 수 없는 입력을 요구하면 그 계정의 발송이 영구 차단된다. 클라(isRowActionable
+        //    attendanceReadOnly)와 같은 예외이고, 판정 헬퍼도 roster canEditAttendance와 동일하다.
         input.classId
-          ? hasAnyAttendance(supabase, user.tenantId, {
-              studentId: input.studentId,
-              classId: input.classId,
-              date: reportDate,
-            })
+          ? canWriteTenant(user.systemRole, "attendance").then((can) =>
+              can
+                ? hasAnyAttendance(supabase, user.tenantId, {
+                    studentId: input.studentId,
+                    classId: input.classId!,
+                    date: reportDate,
+                  })
+                : true,
+            )
           : Promise.resolve(true),
       ]);
       if (absentBlocked || !attendanceChecked) {
