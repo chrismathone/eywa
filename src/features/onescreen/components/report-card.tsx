@@ -223,7 +223,8 @@ export function ReportCard({
     isAbsent,
     hasProgress: isReportEligible(subject),
     hasDraft: !!rep.draft?.trim(),
-    attendanceUnchecked: isAttendanceUnchecked(subject),
+    // 출결 쓰기 권한 없음 = 게이트 해당 없음(P0-3) — 표뷰(grid-row)와 동일 예외.
+    attendanceUnchecked: !attendance?.readOnly && isAttendanceUnchecked(subject),
   });
   const canQueue = sendGate.canSend;
   // 멘트 ↔ 기록 불일치(시험날 진도·멘트에만 있는 점수) — 표뷰와 같은 판정. 막지 않고 알린다.

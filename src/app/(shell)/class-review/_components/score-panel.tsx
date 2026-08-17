@@ -170,8 +170,9 @@ export function ScorePanel({
         className="border-line bg-card text-foreground placeholder:text-text-faint focus:border-primary w-full rounded-lg border px-3 py-2 text-sm outline-none transition"
       />
 
-      {/* 저장 바 — 하단 고정(창 데이터입력 폼 규약). 미입력이 있으면 개수 + 점프를 함께 보여준다. */}
-      <div className="border-line/60 bg-card sticky bottom-0 z-10 -mx-5 -mb-5 mt-4 flex flex-wrap items-center justify-between gap-2 rounded-b-2xl border-t px-5 py-3">
+      {/* 저장 바 — 하단 고정(창 데이터입력 폼 규약). 미입력이 있으면 개수 + 점프를 함께 보여준다.
+          sticky-save-bar 마커 = main 하단 패딩 제거(바 밀착, globals.css [[#110]]). */}
+      <div className="sticky-save-bar border-line/60 bg-card sticky bottom-0 z-10 -mx-5 -mb-5 mt-4 flex flex-wrap items-center justify-between gap-2 rounded-b-2xl border-t px-5 py-3">
         {missing > 0 ? (
           <button
             type="button"

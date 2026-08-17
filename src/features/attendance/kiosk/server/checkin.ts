@@ -102,16 +102,21 @@ async function reflectPresent(
   if (matching.length !== 1) return null; // 모호 → 스킵
   const classId = matching[0];
 
-  // 기존 기록 있으면 보존(덮지 않음)
-  const { data: existing } = await admin
+  // 기존 기록 있으면 보존(덮지 않음).
+  // 🔴 `.maybeSingle()` 금지(2026-08-17 감사) — 2행 이상이면 maybeSingle이 **에러 + data null**을 주는데
+  //    error를 안 보면 "기록 없음"으로 오판해 세 번째 행을 INSERT한다(교시별 기록이 있는 날 재태그).
+  //    그 중복 행은 시수·회차를 부풀리고, 최신 행이 되어 강사가 찍은 결석을 화면에서 덮는다.
+  //    올바른 프로브는 "정확히 1행"이 아니라 **"한 행이라도 있나"**다. 확인 실패도 안 쓴다(중복 위험 > 누락 —
+  //    best-effort 경로라 다음 태그·강사 입력이 채운다).
+  const { data: existingRows, error: existErr } = await admin
     .from("attendance_records")
     .select("id")
     .eq("tenant_id", tenantId)
     .eq("class_id", classId)
     .eq("student_id", studentId)
     .eq("session_date", date)
-    .maybeSingle();
-  if (existing) return null;
+    .limit(1);
+  if (existErr || (existingRows?.length ?? 0) > 0) return null;
 
   // 🔴 0212a(recorded_via)가 아직 안 걸린 DB에서도 출결은 남아야 한다(#95) —
   //    여기 실패는 `return null`로 삼켜지므로, 폴백이 없으면 **조용히** 출결이 안 찍힌다.
