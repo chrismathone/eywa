@@ -128,9 +128,12 @@ export async function deleteStaffContractFile(
 
 /**
  * 계약서 다운로드용 signed URL — 읽기 게이트(직원관리 접근, 개인 예외 반영).
- * attachment disposition이라 탭이 안 열리고 원본 파일명으로 저장된다(documents downloadDocument 규약).
+ * attachment disposition이라 탭이 안 열린다. 저장 파일명은 헤더가 아니라 **함께 돌려주는 `fileName`**이
+ * 정한다(`saveFileAs` — documents downloadDocument와 같은 규약, 2026-08-17 percent-encoded 파일명 버그).
  */
-export async function signStaffContractFileUrl(docId: string): Promise<{ url?: string; error?: string }> {
+export async function signStaffContractFileUrl(
+  docId: string,
+): Promise<{ url?: string; fileName?: string; error?: string }> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canAccessTenant(user.systemRole, "staff"))) return { error: "접근 권한이 없습니다" };
@@ -145,8 +148,11 @@ export async function signStaffContractFileUrl(docId: string): Promise<{ url?: s
     .maybeSingle();
   if (!row?.file_path) return { error: "파일을 찾을 수 없습니다" };
   try {
-    const downloadName = row.file_name ?? row.file_path.split("/").pop() ?? "contract.pdf";
-    return { url: await resolveTenantReadUrl(row.file_path, "document", user.tenantId, undefined, downloadName) };
+    const fileName = row.file_name ?? row.file_path.split("/").pop() ?? "contract.pdf";
+    return {
+      url: await resolveTenantReadUrl(row.file_path, "document", user.tenantId, undefined, fileName),
+      fileName,
+    };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "다운로드 URL 생성 실패" };
   }

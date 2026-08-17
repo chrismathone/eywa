@@ -1,5 +1,27 @@
 # eywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-08-17 (5) — 계약서·서식 다운로드 파일명이 `%EA%B9%80…`로 저장되던 버그 (파일명 결정권을 헤더에서 회수)
+
+원장 제보(스크린샷): 직원 상세에서 `김동후26.06(시용)근로계약서.pdf`를 내려받으면 파일 이름이
+`%EA%B9%80%EB%8F%99…`로 저장된다. 원인은 우리 인코딩이 아니라 **Supabase Storage `?download=`의 헤더 생성**
+— 실측 헤더가 `attachment; filename=%EA%B9%80…; filename*=UTF-8''%EA%B9%80…`이라 ① 폴백 `filename`이
+percent-encoded 원문 그대로고(따옴표도 없음) ② `filename*`도 `encodeURIComponent`뿐이라 RFC 5987이 금지하는
+`*'()`가 날것으로 남는다(계약서·서식 63건 중 **18건이 괄호·공백 포함**). 크로미움은 둘 다 되돌려 한글로
+저장하지만, `filename*`을 규격대로 거르는 브라우저는 ①을 리터럴로 받아 제보된 이름이 된다.
+
+- 고침 = **이름 결정을 헤더 파서에서 뺏어온다**: 신규 [`saveFileAs`](../src/lib/http/download-file.ts)가
+  서명 URL을 fetch → 같은 출처 blob + `a.download`로 저장(브라우저 파서와 무관하게 우리가 준 문자열 그대로).
+  실패(네트워크·CORS)하면 서명 URL로 직접 이동하는 폴백은 유지 — 이름은 못 지켜도 파일은 받게.
+- 배선: `signStaffContractFileUrl`·`signDocumentUrl`이 `fileName`을 함께 반환하고, 계약서 카드와
+  `downloadDocument`(문서 목록·상세·미리보기 공용)가 그 이름으로 저장. 스토리지 파일 다운로드 표면은
+  이 둘뿐이고(전수 grep), 영수증·미리보기는 inline 열람이라 대상 아님. 엑셀 내보내기 3라우트는 **우리가**
+  헤더를 만드는 자리라 기존 `attachmentFilename()`(B1) 그대로.
+- ⚠️ `media-storage.ts` 주석이 "한글 파일명은 attachmentFilename이 안전 인코딩"이라고 적혀 있었으나 그 경로엔
+  attachmentFilename이 **한 번도 안 걸려 있었다**(헤더는 Supabase가 만든다) → 실측 내용으로 정정.
+- 검증: 운영 스토리지 실 서명 URL로 크로미움 다운로드 재현(before/after 모두 `김동후26.06(시용)근로계약서.pdf`
+  — 크로미움은 원래 관대해 증상이 안 뜬다) + Vitest 3케이스(원본명 그대로·`%` 없음·폴백) / typecheck0·lint0·
+  test4872·build✓.
+
 ## 2026-08-17 (4) — ECS 주간 그리드 시각 정렬 폐기 → 서수 배치 단일화 (평일끼리도 공백 제거)
 
 원장 제보(실화면): 중등E_초등 브릿지 B의 화·금 두 교시 사이에 큰 공백 — *"왜 붙어있지 않고 공간이 있지?

@@ -133,8 +133,12 @@ export async function verifyUploadedObject(
 }
 
 // ── 읽기(signed GET URL) ─────────────────────────────────────
-// downloadName을 주면 attachment disposition으로 서명 → 브라우저가 미리보기 대신 그 파일명으로 저장.
-// (한글 파일명은 attachmentFilename이 RFC 5987로 안전 인코딩 — B1 헤더 규칙.)
+// downloadName을 주면 attachment disposition으로 서명 → 브라우저가 미리보기 대신 파일로 저장한다.
+// 🔴 **파일명을 이 인자에 의존하지 말 것**(2026-08-17 실측): Content-Disposition은 Supabase storage-api가
+// 만들고, 그 구현은 `filename=<encodeURIComponent(이름)>; filename*=UTF-8''<같은 값>`이라 ① 폴백이
+// percent-encoded 원문이고 ② RFC 5987 비-attr-char(`*'()`)가 인코딩되지 않는다 → `filename*`을 못 읽는
+// 브라우저가 `%EA%B9%80…pdf`를 그대로 저장한다(원장 제보). 저장 이름이 중요한 표면은 클라에서
+// [`saveFileAs`](src/lib/http/download-file.ts)로 blob+`a.download` 저장 — 여기서는 "미리보기 대신 저장"만 담당.
 async function supabaseSignedRead(
   bucket: string,
   path: string,

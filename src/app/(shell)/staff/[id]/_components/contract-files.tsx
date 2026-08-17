@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { Download, Loader2, Paperclip, Trash2, Upload } from "@/components/icons/eywa-icon-compat";
+import { saveFileAs } from "@/lib/http/download-file";
 import { uploadToTicket } from "@/lib/storage/upload-to-ticket";
 import { issueContractPdfTicket } from "@/features/staff/server/contract-extract-actions";
 import {
@@ -81,12 +82,8 @@ export function ContractFiles({
         toast.error(res.error ?? "다운로드 URL 생성 실패");
         return;
       }
-      // attachment disposition 서명 URL을 anchor로 클릭 — 탭 안 열리고 원본 파일명으로 저장(documents 규약).
-      const a = document.createElement("a");
-      a.href = res.url;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
+      // 파일명은 서명 URL 헤더가 아니라 우리가 정한다 — 한글·괄호 이름이 `%EA%B9%80…`로 저장되던 버그(documents 규약).
+      await saveFileAs(res.url, res.fileName ?? "계약서.pdf");
     } finally {
       setRowBusy(null);
     }
