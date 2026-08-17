@@ -33,8 +33,10 @@ describe("오늘 면 가로 치수 — 위 카드 레일과 아래 표가 같은
     expect(cols[cols.length - 1]).toBe(todayNoteWidth(form));
   });
 
+  // 임계 200→120(2026-08-17 열 다이어트 — 원장 "특이사항 열너비를 줄이면서 같이 전체적 열너비를 줄이면
+  // 될듯"). JJ 폼이 436px 교시에서 142라 200은 성립 불가 — 120은 "한 어절은 보이는" 하한 가드로 남긴다.
   it.each(FORMS)("[%s] 특이사항이 슬리버가 되지 않는다 — 고정 열을 늘리면 여기서 걸린다", (form) => {
-    expect(todayNoteWidth(form)).toBeGreaterThanOrEqual(200);
+    expect(todayNoteWidth(form)).toBeGreaterThanOrEqual(120);
   });
 
   it("JJ 폼은 칸이 하나 더 많고 그만큼 특이사항이 줄어든다(원장 2026-08-13)", () => {

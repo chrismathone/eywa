@@ -49,30 +49,32 @@ export type RosterTextCol = {
  * 오늘 면은 `todaySlotCols`가 항등식(합 = 교시 폭)을 지키고 테스트가 그걸 잠근다.
  */
 export const ROSTER_TEXT_COLS: Record<RosterForm, readonly RosterTextCol[]> = {
+  // ⚠️ 폭은 **머리 라벨이 한 줄에 들어가는 최소치 + 여유**다(11px bold 실측 2026-08-13: '듣기 레벨'
+  //    41px · '누적 암기 단어수' 72px, '시험 점수'는 같은 셈법으로 ≈48px). 더 줄이면 머리가 두 줄이 되고,
+  //    나란한 카드들 사이에서 그 카드만 학생 줄이 아래로 밀려 `grid-rows-subgrid` 줄맞춤이 깨진다(2026-08-04
+  //    규약). 2026-08-17 열 다이어트(원장 "줄일 수 있는 곳은 다 줄여보자")로 이 하한 근처까지 내렸다
+  //    — dev 실측으로 세 머리 모두 한 줄 유지 확인.
   default: [
     {
       field: "score",
       label: "시험 점수",
-      width: 62,
+      width: 52,
       title: "이 교시의 시험 점수 — 자유 입력(18/20 · 95 · A 등)",
       nav: "ecs-score",
     },
   ],
-  // ⚠️ 폭은 **머리 라벨이 한 줄에 들어가는 최소치 + 여유**다(11px bold 실측 2026-08-13: '듣기 레벨'
-  //    41px · '누적 암기 단어수' 72px). 더 줄이면 머리가 두 줄이 되고, 나란한 카드들 사이에서 그 카드만
-  //    학생 줄이 아래로 밀려 `grid-rows-subgrid` 줄맞춤이 깨진다(2026-08-04 규약).
   selfStudy: [
     {
       field: "listeningLevel",
       label: "듣기 레벨",
-      width: 56,
+      width: 48,
       title: "JJ(집중자율수업실) 듣기 레벨 — 자유 입력",
       nav: "ecs-listening",
     },
     {
       field: "memorizedWords",
       label: "누적 암기 단어수",
-      width: 84,
+      width: 78,
       title: "지금까지 외운 누적 단어 수 — 자유 입력",
       nav: "ecs-words",
     },

@@ -82,14 +82,18 @@ export function PlanTable({
               ) : null}
             </div>
             {rows.length > 0 ? (
+              // 고정 열은 요일 열 다이어트(2026-08-17, today-columns TODAY_PLAN_W 540→436)와 함께 줄였다
+              // — 안 줄이면 가변인 진도·과제가 남는 폭을 뒤집어쓰고 슬리버로 무너진다(today-columns ⚠️).
+              // 하한: 구분 = 영역 라벨 2~3자+네이티브 셀렉트 화살표 ≈ 70 → 76 · 시간 = 머리
+              // '페이지/시간' 11px bold ≈ 61 → 64 · × = 아이콘14+패딩4 → 22. (표 안 주석 금지 — 파일 상단 ⚠️)
               <table className="w-full border-collapse text-[13px]" style={{ tableLayout: "fixed" }}>
                 <colgroup>
-                  <col style={{ width: 86 }} />
-                  <col style={{ width: 130 }} />
-                  <col style={{ width: 74 }} />
+                  <col style={{ width: 76 }} />
+                  <col style={{ width: 106 }} />
+                  <col style={{ width: 64 }} />
                   <col />
                   <col />
-                  <col style={{ width: 26 }} />
+                  <col style={{ width: 22 }} />
                 </colgroup>
                 <thead>
                   {/* 헤더 밴드 — 원본 시트의 노란 머리글(시기·구분·교재·시간·진도·과제)과 같은 역할. */}

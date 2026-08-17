@@ -13,6 +13,7 @@ import type { GridDay } from "../lib/grid";
 import type { RosterGroupKey } from "../lib/roster-order";
 import type { SheetMark } from "../lib/roster-form";
 import { buildGridRows } from "../lib/grid-rows";
+import { TODAY_PLAN_W } from "../lib/today-columns";
 import type { PlanLineDTO } from "../server/actions";
 import type { SheetHandlers } from "./sheet-client";
 import type { SheetSaveStore } from "./use-sheet-saves";
@@ -20,7 +21,8 @@ import { PeriodBlock } from "./period-block";
 import { DayBulk } from "./day-bulk";
 
 const DOW_KO: Record<string, string> = { mon: "월", tue: "화", wed: "수", thu: "목", fri: "금", sat: "토", sun: "일" };
-const COL_W = 540;
+// 요일 열 폭 = 오늘 면 교시 카드 폭과 **같은 상수**(today-columns 단일 소스) — 따로 적으면 두 화면이 갈린다.
+const COL_W = TODAY_PLAN_W;
 const GAP_X = 12; // gap-x-3 — 밴드가 열 사이 틈까지 덮어야 본문이 안 비친다
 // 교시 행 사이 간격(옛 gap-y-2). row-gap이 아니라 **행마다 붙는 전용 트랙**이다 — 아래 주석 참조.
 const GAP_Y = 8;

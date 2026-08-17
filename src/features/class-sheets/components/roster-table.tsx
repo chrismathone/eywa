@@ -32,7 +32,7 @@ import type { ClassSheetWeekData } from "../server/queries";
 import type { RosterEntry } from "../lib/grid";
 import { groupRosterRows, type RosterGroupKey } from "../lib/roster-order";
 import { rosterColSpan, rosterTextCols, type RosterForm, type SheetMark } from "../lib/roster-form";
-import { TODAY_BASE_COLS } from "../lib/today-columns";
+import { TODAY_BASE_COLS, TODAY_NAME_W } from "../lib/today-columns";
 // 셀 구현은 **공용 모듈**(roster-slot-cells) — 오늘 면 통합 표(today-roster-table)와 같은 셀을 쓴다
 // (원장 2026-08-11 "쓸데없이 중복되는 컴포넌트가 다수" — 여기 인라인이던 것을 추출, 동작 불변).
 import { RosterNameCell, RosterSlotCells } from "./roster-slot-cells";
@@ -156,11 +156,14 @@ export const RosterTable = memo(function RosterTable({
             이름 열이 84px일 때 세 글자 이름(≈39px)이 끝나고도 40px이 비어 있었다. 그 폭은 화살표가
             사라진 출결·태도(드롭다운 → 체크 순환)에서도 함께 회수해 **신설 '점수' 열과 특이사항**이 가져간다.
             ⚠️ 13px 글자 기준: 이름 4자 ≈ 52 + 여백 8 = 60 · '매우 안좋음' ≈ 69 + 8 = 77 · '✓ 출석' ≈ 47. */}
+        {/* 2026-08-17 열 다이어트(원장 "줄일 수 있는 곳은 다 줄여보자") — 이름 열은 영어이름이 둘째 줄로
+            내려가(RosterNameCell 두 줄 표기) 한 줄 몫(60)만 남기고, 폭 수치는 전부 today-columns·roster-form
+            상수로 모았다. 하한 근거는 그 파일들 주석 참조. */}
         {/* ⚠️ 출결·유닛·태도 폭은 오늘 면과 **같은 상수**(TODAY_BASE_COLS) — 한쪽만 고치면 두 화면이 갈린다.
             ⚠️ 유닛 칸은 열 폭을 그대로 채운다(w-full) — 예전 46px 고정 입력이 열보다 넓어
                양옆 칸 위로 겹쳐 그려지던 문제(원장 2026-08-06 "너무 겹치네")가 구조적으로 사라졌다. */}
         <colgroup>
-          <col style={{ width: 64 }} />
+          <col style={{ width: TODAY_NAME_W }} />
           {TODAY_BASE_COLS.map((w, i) => (
             <col key={i} style={{ width: w }} />
           ))}

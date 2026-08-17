@@ -4,7 +4,7 @@
  * 로스터 **셀 묶음** — 주간 시트(교시별 표, roster-table)와 오늘 면(통합 표, today-roster-table)이
  * **같은 셀 구현**을 쓴다(원장 2026-08-11 "쓸데없이 중복되는 컴포넌트가 다수" — 중복의 처방은 추출).
  *
- *  · `RosterNameCell` — 이름(학생 정보 링크) + 영어이름 + 퇴원일.
+ *  · `RosterNameCell` — 이름(학생 정보 링크) + 퇴원일, 영어이름은 **둘째 줄**(2026-08-17).
  *  · `RosterSlotCells` — 한 교시분: 출결(체크 순환) · 유닛 · 태도(체크 순환) · **폼별 자유 입력** · 특이사항.
  *    자유 입력 칸은 교시마다 다르다 — 기본은 '시험 점수' 하나, **JJ 교시는 '듣기 레벨'+'누적 암기 단어수'**
  *    (원장 2026-08-13). 구성은 [roster-form](../lib/roster-form.ts) 단일 소스.
@@ -36,28 +36,43 @@ export type StudentMeta = {
   englishName: string | null;
 };
 
-/** 이름 칸 — 클릭=학생 정보(WindowLink, #86). 행 안 글자는 전부 13px(원장 2026-08-10 "크기 통일"). */
+/**
+ * 이름 칸 — 클릭=학생 정보(WindowLink, #86). 한글 이름 13px 굵게(원장 2026-08-10 "크기 통일").
+ *
+ * 영어이름은 **아래 줄 작은 회색 한 줄**이다(원장 2026-08-17 "학생들 영어이름 어떻게 하면 깔끔하게
+ * 보이게 할 수 있을려나"). 그전의 괄호 병기("김나윤A (Chloe)")는 좁은 칸에서 "김나윤A (" 다음 줄
+ * "Chloe)"로 꺾여 지저분했다 — 이제 truncate(nowrap)라 꺾이지 않고, 잘리면 title 툴팁이 전체를 보인다.
+ * ⚠️ 아바타/이니셜 배지 금지(결정 로그) — 이름은 텍스트만.
+ */
 export function RosterNameCell({ entry, meta }: { entry: RosterEntry; meta: StudentMeta | undefined }) {
   return (
     <td className="py-px pr-1">
-      <WindowLink
-        href={`/students/${entry.studentId}`}
-        title={meta?.name}
-        className={`truncate text-[13px] font-bold underline-offset-2 hover:underline ${
-          entry.historical ? "text-text-dim" : "text-foreground"
-        } ${entry.endedOn ? "line-through" : ""}`}
-        ariaLabel={meta ? `${meta.name} 학생 정보` : "학생 정보"}
-      >
-        {/* 학교·학년은 이름 툴팁(학교 열은 2026-08-06에 뺐다 — 정보는 남긴다). */}
-        <span title={meta ? `${meta.name} · ${schoolGradeLabel(meta.school, meta.grade)} — 클릭하면 학생 정보` : undefined}>
-          {meta?.name ?? "?"}
-        </span>
-      </WindowLink>
-      {meta?.englishName ? <span className="text-text-dim ml-1 text-[13px]">({meta.englishName})</span> : null}
-      {entry.endedOn ? (
-        <span className="text-text-dim num ml-1 text-[13px]" title={`${entry.endedOn} 수강 종료`}>
-          {entry.endedOn.slice(5)}
-        </span>
+      {/* 첫 줄: 한글 이름(+퇴원일). flex+min-w-0라 긴 이름이 truncate로 잘리고 날짜는 안 밀린다. */}
+      <div className="flex min-w-0 items-center gap-1">
+        <WindowLink
+          href={`/students/${entry.studentId}`}
+          title={meta?.name}
+          className={`min-w-0 truncate text-[13px] font-bold underline-offset-2 hover:underline ${
+            entry.historical ? "text-text-dim" : "text-foreground"
+          } ${entry.endedOn ? "line-through" : ""}`}
+          ariaLabel={meta ? `${meta.name} 학생 정보` : "학생 정보"}
+        >
+          {/* 학교·학년은 이름 툴팁(학교 열은 2026-08-06에 뺐다 — 정보는 남긴다). */}
+          <span title={meta ? `${meta.name} · ${schoolGradeLabel(meta.school, meta.grade)} — 클릭하면 학생 정보` : undefined}>
+            {meta?.name ?? "?"}
+          </span>
+        </WindowLink>
+        {entry.endedOn ? (
+          <span className="text-text-dim num shrink-0 text-[13px]" title={`${entry.endedOn} 수강 종료`}>
+            {entry.endedOn.slice(5)}
+          </span>
+        ) : null}
+      </div>
+      {/* 둘째 줄: 영어이름 — 행 글자 13px 통일 규약의 유일한 예외(보조 표기라 11px dim, ui-box.ts 각주). */}
+      {meta?.englishName ? (
+        <div className="text-text-dim truncate text-[11px] leading-tight font-semibold" title={meta.englishName}>
+          {meta.englishName}
+        </div>
       ) : null}
     </td>
   );
