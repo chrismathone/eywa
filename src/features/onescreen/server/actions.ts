@@ -29,7 +29,7 @@ import { hasClassnoteNameCollision, teacherOwnsStudent } from "./scope";
 import { isRecallInFlight } from "@/features/report-admin/report-recall";
 // 담당 반 판정 단일 소스(담당 반 ∪ 그날 위임 반) — classes.teacher_id를 직접 비교하지 말 것(0173a).
 import { getTeachingClassIds, getTeachingClasses } from "@/features/classes/server/delegation";
-import { isStudentAbsentForSend } from "./absence-gate";
+import { hasAnyAttendance, isStudentAbsentForSend } from "./absence-gate";
 import { ingestReport } from "@/features/progress/server/ingest";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getTextbookOrdersForStudents } from "@/features/billing/server/textbook-queries";
@@ -315,15 +315,29 @@ export async function saveAndQueueClassnote(
   // 조회 실패 = fail-closed(모르면 안 보냄, 저장은 이미 완료) — 명확 안내 후 재시도 유도.
   if (!input.makeup && !input.outOfClass) {
     try {
-      if (
-        await isStudentAbsentForSend(supabase, user.tenantId, {
+      // 결석 판정과 출결 존재 판정은 서로 독립 쿼리 — 직렬 워터폴 금지(B4).
+      const [absentBlocked, attendanceChecked] = await Promise.all([
+        isStudentAbsentForSend(supabase, user.tenantId, {
           studentId: input.studentId,
           reportDate,
           subject: input.subject ?? null,
           // 반이 있으면 **그 반** 출결만 본다(0134a) — 특강 결석인데 정규 출석이라 통과하던 구멍을 막는다.
           classId: input.classId ?? null,
-        })
-      ) {
+        }),
+        // 출결 미체크 게이트(2026-08-17 원장 지시) — 출결 체크도 진도·멘트 같은 발송 필요 입력.
+        // 클라 게이트(grid.ts isAttendanceUnchecked)와 동일 규약의 서버 이중 방어(버튼 우회·stale 화면 차단).
+        // ⚠️ 결석 게이트의 fail-open(기록 없음=통과)은 그대로다 — 이 체크는 강사 경로 전용 별도 게이트
+        //    (관리자 콘솔·재발송·미발송 재촉 이벤트는 안 걸린다, hasAnyAttendance 주석·#105 참조).
+        // ⚠️ 반(classId) 있는 정규 행만 — 반 없는 행(이관·반 모호)은 어느 반 출결을 요구할지 정할 수 없다.
+        input.classId
+          ? hasAnyAttendance(supabase, user.tenantId, {
+              studentId: input.studentId,
+              classId: input.classId,
+              date: reportDate,
+            })
+          : Promise.resolve(true),
+      ]);
+      if (absentBlocked || !attendanceChecked) {
         // 대기 중(queued) 재고 회수 — 안 지우면 "발송하지 않았습니다" 안내 직후 워커가 방금 갱신된
         // 내용을 그대로 게시한다(적대 리뷰 확정). .eq queued 조건 = 그새 클레임된 processing은 불변.
         if (prior?.classnote_status === "queued") {
@@ -333,9 +347,29 @@ export async function saveAndQueueClassnote(
             .eq("id", saved.id)
             .eq("classnote_status", "queued");
         }
-        return { ok: true, id: saved.id, shareToken: saved.shareToken, status: "absent" };
+        // 결석이 미체크보다 우선 — 기록이 있는데 결석인 행에 "출결 체크하라"는 안내는 거짓이다.
+        return {
+          ok: true,
+          id: saved.id,
+          shareToken: saved.shareToken,
+          status: absentBlocked ? "absent" : "no_attendance",
+        };
       }
     } catch {
+      // fail-closed 마무리 — 판정을 모르면 **대기 중(queued) 재고도 회수**한다. 안 지우면 "발송하지
+      // 않았습니다" 안내 직후 워커가 방금 저장된 내용을 그대로 게시한다(적대 리뷰 확정 — 차단 분기만
+      // 회수하던 기존 구멍). 회수 자체의 실패는 무시 — 어차피 에러 반환이라 강사 재시도가 뒤따른다.
+      if (prior?.classnote_status === "queued") {
+        try {
+          await supabase
+            .from("lesson_reports")
+            .update({ classnote_status: null, classnote_queued_at: null })
+            .eq("id", saved.id)
+            .eq("classnote_status", "queued");
+        } catch {
+          // best-effort — 위 주석 참조
+        }
+      }
       return { ok: false, error: "출결 확인에 실패해 발송하지 않았습니다 — 저장은 완료됐어요. 다시 시도해 주세요" };
     }
   }

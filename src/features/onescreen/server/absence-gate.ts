@@ -110,3 +110,33 @@ export async function isStudentAbsentForSend(
   const blocked = await getAbsenceBlockedKeys(supabase, tenantId, [key]);
   return blocked.has(absenceKeyOf(key));
 }
+
+/**
+ * 그날 그 반에 이 학생의 출결 기록이 **하나라도** 있는가 — 출결 미체크 발송 게이트(2026-08-17 원장 지시)의
+ * 서버 판정. 출결 체크도 진도·멘트 같은 "발송에 필요한 입력"이 됐다.
+ *
+ * ⚠️ 위 결석 게이트(fail-open: 기록 없음=통과)를 뒤집지 않고 **별도 체크**로 둔 이유 — 그 fail-open은
+ *    발송 콘솔·재발송·관리자 대량·미발송 재촉 이벤트가 공유하는 규약이라, 뒤집으면 출결 기록이 아예 없는
+ *    이관(edutrix)·과거 건의 관리자 구제 발송이 영영 막힌다(#105 — 구제 경로를 막으면 학부모에게 영영 못 감).
+ *    이 체크는 **강사 발송 경로(saveAndQueueClassnote)만** 소비한다. 미발송 재촉 이벤트(detectUnsentReports)는
+ *    발송 콘솔(관리자 경로) 게이트를 미러하므로 여기 안 걸려도 거짓 재촉이 아니다(#77 불변식 유지).
+ * ⚠️ attendance_records RLS = tenant_isolation(0001a, authenticated 전원) — 강사 세션 클라이언트로도
+ *    0행 침묵(#104) 없이 읽힌다(결석 게이트와 같은 클라이언트·같은 표).
+ * count head:true = 행을 받지 않는 존재 확인(B2). 조회 실패는 throw — 호출부가 catch해 발송을 멈춘다
+ * (fail-closed, "모르면 안 보냄" — 결석 게이트와 동일 계약).
+ */
+export async function hasAnyAttendance(
+  supabase: SupabaseClient,
+  tenantId: string,
+  key: { studentId: string; classId: string; date: string },
+): Promise<boolean> {
+  const { count, error } = await supabase
+    .from("attendance_records")
+    .select("id", { count: "exact", head: true })
+    .eq("tenant_id", tenantId)
+    .eq("student_id", key.studentId)
+    .eq("class_id", key.classId)
+    .eq("session_date", key.date);
+  if (error) throw new Error(error.message);
+  return (count ?? 0) > 0;
+}

@@ -1,5 +1,22 @@
 # eywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-08-17 — 출결 미체크 = 수업보고서 발송 조건 추가 (진도·멘트와 동급)
+
+원장: 결석 시 비활성화에 더해 *"현재 발송조건에서 멘트나 진도 이런거잇지? 거기에 출결여부 추가"*.
+기존 결석 게이트는 "기록 없음 = 통과"(fail-open)라 출결을 안 찍은 보고서가 그대로 나갔다.
+
+- **클라**: [`isAttendanceUnchecked`](../src/features/onescreen/grid.ts)(정규 반 행 = classId 있음·보강 아님에서
+  `attendanceRaw == null`) → `isRowActionable`은 **send만** 제외(save·autowrite 불변). 발송 버튼 사유 알약
+  (`send-gate.ts`)에 "출결 입력 필요" 추가(표·카드 공용). 일괄 발송 confirm에 "출결 미체크 N건 제외 — 이름들"
+  명시(진도·멘트와 같은 규약 — 소리 없는 제외 금지).
+- **서버 이중 방어**: `saveAndQueueClassnote`(강사 경로)가 [`hasAnyAttendance`](../src/features/onescreen/server/absence-gate.ts)
+  (count head:true, B2)로 그날 그 반 출결 0건이면 저장만 하고 큐잉 안 함(`status:"no_attendance"`, queued 재고 회수 포함).
+  결석 판정과 `Promise.all` 병렬(B4). 조회 실패 = fail-closed(결석 게이트와 동일 계약).
+- 🔴 **기존 결석 게이트(`isAbsentForSend`)의 fail-open은 그대로** — 발송 콘솔·재발송·관리자 대량·미발송 재촉
+  이벤트가 공유하는 규약이라, 뒤집으면 출결 기록이 없는 이관 건의 관리자 구제 발송이 영영 막힌다(#105).
+  미체크 게이트는 **강사 발송 경로 전용**(관리자 경로는 종전대로). 보강·수업외·반 없는 행 예외도 결석
+  게이트와 동일(출결을 기록할 수단이 없다).
+
 ## 2026-08-14 — 랩실(603호)·JJ실(305호)는 교시 가로줄
 
 일반 방은 4열 유지. 자리 두 방만 시트처럼 시각마다 한 줄 — 목 랩실 5반 병렬이 그 줄에서 선다.

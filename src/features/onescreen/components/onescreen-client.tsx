@@ -57,6 +57,7 @@ import {
   rowKey,
   effectiveClassnoteStatus,
   isAlreadySent,
+  isAttendanceUnchecked,
   isClassMember,
   isCopyTargetRow,
   isRowInputEditable,
@@ -1820,6 +1821,12 @@ export function OneScreenClient({
       toast.message(`${subjectName} — 수업일 출결이 결석으로 기록돼 있어 발송하지 않았습니다(기록 저장은 유지)`);
       return;
     }
+    // 출결 미체크 게이트(서버판, 2026-08-17) — 여기서 안 잡으면 아래 폴스루가 "대기 중" 성공 토스트를
+    // 띄운다(서버가 방금 거절한 발송을 성공으로 오인 — 적대 리뷰 확정). 표 sendRow와 동일 안내.
+    if (res.status === "no_attendance") {
+      toast.message(`${subjectName} — 출결이 아직 체크되지 않아 발송하지 않았습니다(출결 기록 후 다시 발송 · 저장은 유지)`);
+      return;
+    }
     // 이미 게시된 건(중복 게시 차단) — 저장도 안 했으므로 "내용을 고쳤다면 저장부터"를 함께 안내한다.
     if (res.status === "already_sent") {
       toast.message(
@@ -1877,6 +1884,9 @@ export function OneScreenClient({
     } else if (res.status === "absent") {
       // 결석 게이트(#77 서버판) — 반 모호(attendanceRaw 미채움) 행 등 클라 게이트 사각을 서버가 막은 경우.
       toast.message(`${student.name} — 수업일 출결이 결석으로 기록돼 있어 발송하지 않았습니다(기록 저장은 유지)`);
+    } else if (res.status === "no_attendance") {
+      // 출결 미체크 게이트(서버판, 2026-08-17) — stale 화면 등 클라 게이트 사각을 서버가 막은 경우.
+      toast.message(`${student.name} — 출결이 아직 체크되지 않아 발송하지 않았습니다(출결 기록 후 다시 발송 · 저장은 유지)`);
     } else if (res.status === "already_sent") {
       // 중복 게시 차단(서버판) — 화면 게이트를 지난 경로(stale 화면·다른 창에서 먼저 발송)도 서버가 막는다.
       toast.message(`${student.name} ${subjectName} — 이미 학부모에게 발송된 보고서라 다시 보내지 않았습니다`);
@@ -1944,7 +1954,7 @@ export function OneScreenClient({
       toast.message(
         alreadySentRows
           ? `발송할 새 행이 없습니다 — ${alreadySentRows}건은 이미 학부모에게 발송됐습니다`
-          : "발송할 행이 없습니다 — 오늘 진도를 입력하세요 (결석 학생은 발송 제외)",
+          : "발송할 행이 없습니다 — 오늘 진도를 입력하세요 (결석·출결 미체크 행은 발송 제외)",
       );
       return;
     }
@@ -1968,6 +1978,22 @@ export function OneScreenClient({
       ? `\n진도 미입력 ${noProgressRows.length}건은 발송에서 제외됩니다 — ${noProgressNames.slice(0, 5).join(", ")}${
           noProgressNames.length > 5 ? ` 외 ${noProgressNames.length - 5}명` : ""
         } (진도 입력 후 다시 발송하세요)`
+      : "";
+    // 출결 미체크 제외(2026-08-17 원장 지시) — 진도·멘트와 같은 규약: 소리 없는 제외 금지, 누구인지 명시.
+    // "미체크만 아니면 발송됐을 행" = autowrite 판정(진도 있음·미발송·결석 아님)과 정확히 같은 집합이라
+    // 게이트 함수를 재사용한다(조건 체인을 손으로 복제하면 게이트가 바뀔 때 이 카운트만 조용히 어긋난다, #89류).
+    // 진도 미입력 행은 위 progressLine이 이미 셌으므로 여기 안 겹친다(한 행 중복 계수 방지).
+    const uncheckedRows = allRows.filter(
+      (r) =>
+        (!keySet || keySet.has(r.key)) &&
+        isRowActionable(r.subject, "autowrite", effectiveClassnoteStatus(liveClassnoteStatus(r.student.id, r.subject.name), r.subject.classnoteStatus)) &&
+        isAttendanceUnchecked(r.subject),
+    );
+    const uncheckedNames = [...new Set(uncheckedRows.map((r) => r.student.name))];
+    const uncheckedLine = uncheckedRows.length
+      ? `\n출결 미체크 ${uncheckedRows.length}건은 발송에서 제외됩니다 — ${uncheckedNames.slice(0, 5).join(", ")}${
+          uncheckedNames.length > 5 ? ` 외 ${uncheckedNames.length - 5}명` : ""
+        } (출결 체크 후 다시 발송하세요)`
       : "";
     const gaps = summarizeSendGaps(rows, { dailyEnabled: showDailyTest, checkEnabled: showCheckTest });
     const gapLine =
@@ -1994,7 +2020,7 @@ export function OneScreenClient({
       : "";
     if (
       !window.confirm(
-        `${rows.length}건을 ClassNote로 일괄 발송할까요? (동명이인·취소·오래된 건은 자동 제외)${emptyMentLine}${progressLine}${gapLine}${absentLine}${sentLine}`,
+        `${rows.length}건을 ClassNote로 일괄 발송할까요? (동명이인·취소·오래된 건은 자동 제외)${emptyMentLine}${progressLine}${uncheckedLine}${gapLine}${absentLine}${sentLine}`,
       )
     )
       return;
@@ -2004,6 +2030,7 @@ export function OneScreenClient({
     let skipped = 0;
     let subjectOff = 0; // 발송 대상 과목 아님(저장만) — '발송 대기'로 뭉뚱그리지 않고 명시(#2 확정)
     let absentSkip = 0; // 서버 결석 게이트에 걸린 행(클라 사전 필터의 사각 — 반 모호 행 등)
+    let uncheckedSkip = 0; // 서버 출결 미체크 게이트에 걸린 행(stale 화면 등 클라 게이트 사각)
     let sentSkip = 0; // 서버 중복 게시 가드에 걸린 행(다른 창에서 먼저 보낸 경우 등)
     let dry = 0;
     let fail = 0;
@@ -2020,6 +2047,7 @@ export function OneScreenClient({
         else if (res.status === "subject_off") subjectOff++;
         else if (res.status === "name_conflict" || res.status === "revoked" || res.status === "recall_pending") blocked++;
         else if (res.status === "absent") absentSkip++; // 서버 결석 게이트(클라 사전 필터를 지난 반 모호 행 등)
+        else if (res.status === "no_attendance") uncheckedSkip++; // 서버 출결 미체크 게이트(stale 화면 등)
         else if (res.status === "already_sent") sentSkip++; // 서버 중복 게시 가드(클라 게이트를 지난 stale 행)
         else skipped++; // processing/too_old
       }
@@ -2031,10 +2059,11 @@ export function OneScreenClient({
         (windowHint ? `발송 예약 ${queued}건(${windowHint}에 자동 발송)` : `발송 대기 ${queued}건`) +
         (subjectOff ? ` · 과목 제외 ${subjectOff}건(발송 대상 과목 아님)` : "") +
         (absentSkip ? ` · 결석 제외 ${absentSkip}건` : "") +
+        (uncheckedSkip ? ` · 출결 미체크 제외 ${uncheckedSkip}건` : "") +
         (alreadySentRows || sentSkip ? ` · 발송완료 제외 ${alreadySentRows + sentSkip}건` : "") +
         (blocked ? ` · 차단 ${blocked}건(동명이인/취소)` : "") +
         (skipped ? ` · 제외 ${skipped}건` : "") +
-        (preSkipped ? ` · 대상 제외 ${preSkipped}건(진도 미입력·결석·발송완료)` : "") +
+        (preSkipped ? ` · 대상 제외 ${preSkipped}건(진도 미입력·출결 미체크·결석·발송완료)` : "") +
         (fail ? ` · 실패 ${fail}건` : ""),
     );
   }

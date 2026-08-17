@@ -64,7 +64,7 @@ export function OneScreenGrid({
   const sendableRows = rows.filter((r) => isRowActionable(r.subject, "send"));
   // 🔴 실제로 **발송되는** 행 = 위 조건 + **멘트 있음**. 빈 멘트는 절대 가드가 거절하므로(2026-07-28 사고)
   //    `sendableRows`를 그대로 "발송가능"이라 쓰면 상단 숫자와 행 라벨("멘트 입력 필요")이 서로 다른 말을 한다.
-  //    ⚠️ `sendableRows`는 자동작성 대상 계산(멘트 없는 행 = autoWritable)에 그대로 필요하니 갈라 둔다.
+  //    (자동작성 대상은 아래 `autoRows` — 출결 미체크 게이트로 send≠autowrite가 되면서 갈라졌다, 2026-08-17.)
   const hasDraft = (r: (typeof rows)[number]) => !!reports[r.student.id]?.[r.subject.name]?.draft?.trim();
   const sendReadyRows = sendableRows.filter(hasDraft);
   const saveableRows = rows.filter((r) => isRowActionable(r.subject, "save"));
@@ -91,12 +91,15 @@ export function OneScreenGrid({
   const selectedKeys = rows.filter((r) => checked.has(r.key)).map((r) => r.key);
   const selectedSendReady = sendReadyRows.filter((r) => checked.has(r.key)).length; // 선택 중 실제 발송될 수
   const selectedSaveable = saveableRows.filter((r) => checked.has(r.key)).length; // 선택 중 실제 저장될 수
-  // 자동작성 실대상 = 발송가능 − **이미 멘트가 있는 행**(client autoWriteAllVisible이 손댄 문구를 보존하려 건너뜀).
+  // 자동작성 실대상 = 자동작성 가능 − **이미 멘트가 있는 행**(client autoWriteAllVisible이 손댄 문구를 보존하려 건너뜀).
   // 이 수를 버튼에 그대로 노출한다 — 이전값 가져오기로 멘트를 깔면 대상이 즉시 줄어드는 게 눈에 보여야
   // "채웠는데 자동작성이 덮어쓰나?" 하는 불안이 없다(원장 지시 07-21).
+  // ⚠️ sendableRows를 쓰면 안 된다(2026-08-17부터 send≠autowrite) — 출결 미체크 행은 발송만 막히고
+  //    자동작성은 되므로, send 기준으로 세면 카운트가 실제 대상보다 적은 거짓 숫자가 된다(#89류).
+  const autoRows = rows.filter((r) => isRowActionable(r.subject, "autowrite"));
   const noDraft = (r: (typeof rows)[number]) => !hasDraft(r);
-  const autoWritable = sendableRows.filter(noDraft).length;
-  const selectedAutoWritable = sendableRows.filter((r) => checked.has(r.key) && noDraft(r)).length;
+  const autoWritable = autoRows.filter(noDraft).length;
+  const selectedAutoWritable = autoRows.filter((r) => checked.has(r.key) && noDraft(r)).length;
   const hasPrev = rows.some((r) => r.subject.prevReport); // 참고행 데이터가 있을 때만 토글 노출
   // '맨 위 행 복사' 표시용 — 선택이 있으면 선택 행, 없으면 표시 전체(핸들러와 같은 규약).
   const copyRows = selectedKeys.length ? rows.filter((r) => selectedKeys.includes(r.key)) : rows;

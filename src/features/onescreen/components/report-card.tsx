@@ -9,6 +9,7 @@ import { normalizeHomeworkPages } from "../homework-pages";
 import {
   effectiveClassnoteStatus,
   isAlreadySent,
+  isAttendanceUnchecked,
   isRowInputEditable,
   isReportEligible,
   isRowActionable,
@@ -80,6 +81,9 @@ export function classnoteBadge(status?: string | null): { label: string; cls: st
     case "absent":
       // 서버 결석 게이트(#77) 반환 상태(세션 내 표시 전용 — DB엔 안 남음). 저장만 되고 발송 제외.
       return { label: "결석 — 발송 제외", cls: "text-text-dim" };
+    case "no_attendance":
+      // 서버 출결 미체크 게이트(2026-08-17) 반환 상태(세션 내 표시 전용). 저장만 되고 발송 제외.
+      return { label: "출결 미체크 — 발송 제외", cls: "text-text-dim" };
     default:
       return null;
   }
@@ -219,6 +223,7 @@ export function ReportCard({
     isAbsent,
     hasProgress: isReportEligible(subject),
     hasDraft: !!rep.draft?.trim(),
+    attendanceUnchecked: isAttendanceUnchecked(subject),
   });
   const canQueue = sendGate.canSend;
   // 멘트 ↔ 기록 불일치(시험날 진도·멘트에만 있는 점수) — 표뷰와 같은 판정. 막지 않고 알린다.

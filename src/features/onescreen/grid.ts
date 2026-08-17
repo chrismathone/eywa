@@ -146,6 +146,23 @@ export function effectiveClassnoteStatus(
   return live !== undefined ? live : snapshot;
 }
 
+/**
+ * 출결 미체크 발송 게이트(2026-08-17 원장 지시) — 진도·멘트처럼 **출결 체크도 발송의 필요 입력**이다.
+ * 기존 결석 게이트는 "기록 없음 = 통과"(fail-open)였는데, 그 틈으로 출결을 안 찍은 보고서가 나갔다.
+ *
+ * ⚠️ **정규 반 행(classId 있음·보강 아님)만** 판정한다 — 결석 게이트의 예외와 같은 이유:
+ *    보강·수업외 행은 강사에게 출결을 기록할 수단이 없고, 반 없는 행(이관·반 모호)은 attendanceRaw가
+ *    안 채워져 판정 근거 자체가 없다(로스터가 classId 있는 행만 채운다, roster.ts). 그 행들까지 막으면
+ *    체크할 방법이 없는 행이 영영 발송 불가가 된다.
+ * ⚠️ **send에만** 건다 — save(기록 보존)·autowrite(멘트 초안)는 출결과 무관한 작업이다.
+ */
+export function isAttendanceUnchecked(
+  subject: Pick<Subject, "attendanceRaw" | "classId" | "makeup">,
+): boolean {
+  if (subject.makeup || !subject.classId) return false;
+  return subject.attendanceRaw == null;
+}
+
 export function isRowActionable(
   subject: Subject,
   action: RowAction,
@@ -158,6 +175,8 @@ export function isRowActionable(
   // 푸는 유일한 문 = 공유링크 재발급(그 건을 무효화 선언). 서버 saveLessonReport가 같은 규칙을 강제한다.
   if (isAlreadySent(statusOverride ?? subject.classnoteStatus)) return false;
   if (action === "save") return true;
+  // 출결 미체크 = 발송만 제외(위 게이트) — 서버 saveAndQueueClassnote가 같은 규칙을 이중 방어한다.
+  if (action === "send" && isAttendanceUnchecked(subject)) return false;
   return subject.attendanceRaw !== "absent";
 }
 

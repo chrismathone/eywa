@@ -10,16 +10,18 @@
  * ⚠️ 판정 근거는 실제 발송 경로의 게이트와 **1:1로 맞춘다**:
  *    · 발송 완료  = `isAlreadySent` (grid.ts — ClassNote는 게시글 수정이 없어 재발송 금지)
  *    · 결석       = `attendanceRaw === "absent"` (isRowActionable "send")
+ *    · 출결 미체크 = `isAttendanceUnchecked` (2026-08-17 — 출결 체크도 발송 필요 입력, 정규 반 행만)
  *    · 진도 미입력 = `isReportEligible` (빈 보고서 방지)
  *    · 멘트 미작성 = 🔴 **빈 멘트 절대 가드**(2026-07-28 사고) — `sendRow`가 즉시 거절하고 워커도
  *      최종 관문에서 차단한다. 예전엔 버튼이 멀쩡히 눌려서 빨간 토스트로만 알 수 있었다.
  */
 
-/** 발송을 막는 사유. sent·absent는 **상태**(고칠 게 아니라 그런 행), progress·ment는 **필요한 입력**. */
-export type SendBlockReason = "sent" | "absent" | "progress" | "ment" | "recall_pending";
+/** 발송을 막는 사유. sent·absent는 **상태**(고칠 게 아니라 그런 행), attendance·progress·ment는 **필요한 입력**. */
+export type SendBlockReason = "sent" | "absent" | "attendance" | "progress" | "ment" | "recall_pending";
 
-/** 입력이 필요한 사유의 짧은 이름 — 라벨에서 "진도 · 멘트 입력 필요"로 이어 붙인다. */
-const NEED_LABEL: Record<"progress" | "ment", string> = {
+/** 입력이 필요한 사유의 짧은 이름 — 라벨에서 "출결 · 진도 · 멘트 입력 필요"로 이어 붙인다. */
+const NEED_LABEL: Record<"attendance" | "progress" | "ment", string> = {
+  attendance: "출결",
   progress: "진도",
   ment: "멘트",
 };
@@ -46,6 +48,12 @@ export function evaluateSendGate(args: {
   isAbsent: boolean;
   hasProgress: boolean;
   hasDraft: boolean;
+  /**
+   * 출결 미체크(정규 반 행에서 그날 출결 기록 없음) — `isAttendanceUnchecked`(grid.ts)를 그대로 넣는다.
+   * 🔴 옵셔널이 아니다 — 옵셔널로 두면 새 소비처가 빼먹었을 때 버튼은 살아 있는데 서버가 거절하는
+   *    "눌렀는데 무반응"이 된다(이 모듈이 막으려는 2026-07-30 문제의 재발). 컴파일러가 강제하게 한다.
+   */
+  attendanceUnchecked: boolean;
   /**
    * 회수 요청됐지만 워커가 아직 옛 글을 안 지웠다 — 지금 보내면 **옛 글 옆에 새 글이 하나 더** 붙고,
    * 새 토큰을 내면 워커가 지울 글을 못 찾아 **고아 게시글**이 된다. 삭제가 끝난 뒤에만 보낸다.
@@ -76,7 +84,9 @@ export function evaluateSendGate(args: {
       hint: "결석 학생 — 발송 제외 (기록 저장은 가능)",
     };
   }
-  const needs: ("progress" | "ment")[] = [];
+  const needs: ("attendance" | "progress" | "ment")[] = [];
+  // 출결이 행에서 제일 앞 칸이라 사유도 맨 앞 — 체크하는 순서대로 읽힌다.
+  if (args.attendanceUnchecked) needs.push("attendance");
   if (!args.hasProgress) needs.push("progress");
   if (!args.hasDraft) needs.push("ment");
   if (needs.length === 0) return { canSend: true, reasons: [], label: null, hint: null };
@@ -85,6 +95,9 @@ export function evaluateSendGate(args: {
     reasons: needs,
     label: `${needs.map((n) => NEED_LABEL[n]).join(" · ")} 입력 필요`,
     hint: [
+      needs.includes("attendance")
+        ? "출결이 아직 체크되지 않았습니다 — 출결 알약에서 출석/지각 등을 먼저 기록하세요(미체크 행은 발송되지 않습니다)"
+        : "",
       needs.includes("progress") ? "오늘 진도를 입력해야 발송할 수 있습니다(보고서 본문의 뼈대)" : "",
       needs.includes("ment")
         ? "학부모 전달 멘트가 비어 있습니다 — '자동작성'을 누르거나 직접 입력하세요(빈 보고서는 발송되지 않습니다)"
