@@ -103,6 +103,7 @@ import { saveStudentOrder } from "../server/order-actions";
 import { useClassnoteStatusSync } from "./use-classnote-status-sync";
 import { mergeClassnoteStatuses, pendingSendStudentIds, type ClassnoteStatusRow } from "../classnote-status";
 import { linkMakeupToAbsence, setAttendanceBulk, setAttendanceCell } from "@/features/attendance/server/actions";
+import { STATUS_TEXT } from "@/features/attendance/cell-display";
 import type { BasicAttendance } from "./attendance-pills";
 import { useEditPresence, useEditingOthers } from "@/features/presence/edit-presence";
 import { dedupeEditors } from "@/features/presence/presence-state";
@@ -828,9 +829,13 @@ export function OneScreenClient({
    */
   function addMakeupUnitsOnly(existing: OneScreenStudent, target: MergeCandidate, addUnits: number) {
     const units = (target.attendanceUnits ?? 1) + addUnits;
-    void setAttendanceFor(existing.id, target.classId, mergeStatusOf(target.attendanceRaw), {
-      units: String(units),
-    });
+    void setAttendanceFor(
+      existing.id,
+      target.classId,
+      mergeStatusOf(target.attendanceRaw),
+      { units: String(units) },
+      { overwrite: true }, // 보강 시수 합산은 성공 안내를 이미 띄웠다 — conflict no-op이면 안내가 거짓이 된다
+    );
     setSelId(existing.id);
     toast.success(
       `${existing.name} 보강 추가 — ${target.name} 보고서 2건(정규·보강 따로) · 수업타임 ${units}. 결석분 연결은 없습니다(추가 보강).`,
@@ -851,9 +856,13 @@ export function OneScreenClient({
     // 수업타임 = 지금 값(미입력=1) + 강사가 고른 보강 시수. 출결이 비어 있으면 '출석'으로 함께 찍힌다.
     // 🔴 보강 시수를 1로 박지 않는다 — 수학은 0.5당 1시간이라 3시간 반의 1회는 1.5다(원장 2026-08-06).
     const units = (merge.attendanceUnits ?? 1) + addUnits;
-    void setAttendanceFor(existing.id, merge.classId, mergeStatusOf(merge.attendanceRaw), {
-      units: String(units),
-    });
+    void setAttendanceFor(
+      existing.id,
+      merge.classId,
+      mergeStatusOf(merge.attendanceRaw),
+      { units: String(units) },
+      { overwrite: true }, // 합침 시수 합산도 위와 동일 — 비파괴 보호는 알약 첫 체크 전용
+    );
     setSelId(existing.id);
     if (sent) {
       // 발송본 잠금이라 보강 내용은 못 싣는다 — 다이얼로그에서 이미 알렸지만 결과도 그대로 밝힌다.
@@ -1019,6 +1028,14 @@ export function OneScreenClient({
     classId: string,
     status: BasicAttendance,
     extra?: { note?: string | null; units?: string },
+    opts?: {
+      /**
+       * true = 화면상 기록이 없어도 **덮어쓰기 허용**(onlyIfEmpty 비파괴를 끈다) — 보강 합침/추가 흐름 전용.
+       * 그 흐름은 화면 값 기준으로 시수 합을 이미 계산해 성공 안내까지 띄우므로, 여기서 conflict no-op이
+       * 되면 "수업타임 N" 안내와 실제 기록이 갈린다(적대 리뷰 확정). 종전(비파괴 도입 전) 의미 그대로.
+       */
+      overwrite?: boolean;
+    },
   ) {
     const key = `${studentId}::${classId}`;
     if (attPending.has(key)) return;
@@ -1056,10 +1073,26 @@ export function OneScreenClient({
         status,
         ...(extra && "note" in extra ? { note: extra.note ?? null } : {}),
         ...(extra && "units" in extra ? { units: extra.units } : {}),
+        // 🔴 화면이 "기록 없음"이라 믿는 첫 체크만 비파괴로 — 서버에 이미 기록이 있으면(스테일 화면:
+        //    데스크가 그 사이 결석을 찍음) 덮지 않고 conflict로 현재 상태를 받는다(2026-08-17 감사 P0-1).
+        //    화면에 상태가 보이는 행의 변경(정정)은 종전대로 덮는다 — 그건 보고 하는 편집이다.
+        //    보강 흐름은 opts.overwrite로 이 보호를 끈다(위 opts 주석 — 성공 안내와 기록이 갈리는 것 방지).
+        onlyIfEmpty: prev.raw === null && !opts?.overwrite,
       });
       if ("error" in res) {
         rollbackAttendance(studentId, classId, prev, myMark, prevMark);
         toast.error(res.error);
+      } else if (res.conflict) {
+        // 서버 진실로 화면을 맞춘다(낙관값 폐기) — 다시 누르면 그때는 보이는 상태를 바꾸는 정상 편집.
+        const cu =
+          res.conflict.units == null ? null : Number(String(res.conflict.units).replace(",", "."));
+        applyAttendanceLocal(studentId, classId, res.conflict.status, {
+          note: res.conflict.note,
+          units: cu != null && Number.isFinite(cu) && cu !== 1 ? cu : null,
+        });
+        toast.message(
+          `이미 출결이 기록되어 있어 덮지 않았습니다 (현재: ${STATUS_TEXT[res.conflict.status as keyof typeof STATUS_TEXT] ?? "기록됨"}) — 바꾸려면 다시 눌러 주세요`,
+        );
       }
     } catch {
       rollbackAttendance(studentId, classId, prev, myMark, prevMark);
@@ -1291,7 +1324,14 @@ export function OneScreenClient({
   function selectRows(action: RowAction, keys?: string[]) {
     const all = buildGridRows(visible)
       .filter((r) => rowInClass(r.subject, activeClassFilter)) // 특정 반이면 그 반 행만(타 반 혼입 차단)
-      .filter((r) => isRowActionable(r.subject, action, effectiveClassnoteStatus(liveClassnoteStatus(r.student.id, r.subject.name), r.subject.classnoteStatus)));
+      .filter((r) =>
+        isRowActionable(
+          r.subject,
+          action,
+          effectiveClassnoteStatus(liveClassnoteStatus(r.student.id, r.subject.name), r.subject.classnoteStatus),
+          { attendanceReadOnly: !canEditAttendance }, // 출결 쓰기 권한 없음 = 미체크 게이트 해당 없음(P0-3)
+        ),
+      );
     if (!keys || keys.length === 0) return all;
     const set = new Set(keys);
     return all.filter((r) => set.has(r.key));
@@ -1344,6 +1384,7 @@ export function OneScreenClient({
     onlyEmpty: boolean,
     progressSubjectKey: string,
     attendance: BulkAttendanceStatus | null = null,
+    attendanceUnits = "", // 수업타임(시수) — 새로 만드는 출결 행에만(서버 setAttendanceBulk 규약)
   ) {
     const all = buildGridRows(visible).filter((r) => rowInClass(r.subject, activeClassFilter));
     const keySet = new Set(keys);
@@ -1411,12 +1452,28 @@ export function OneScreenClient({
             sessionDate: activeDate,
             status: attendance,
             cells: attPlan.cells,
+            // 수업타임(시수) — 결석엔 무의미(팝오버가 이미 안 보냄), 새로 만드는 행에만 적용된다.
+            ...(attendanceUnits ? { units: attendanceUnits } : {}),
           });
           if ("error" in res) {
             toast.error(res.error);
           } else {
             // 서버가 실제로 기록한 셀만 화면에 반영 — 게이트에 걸려 빠진 셀을 '됐다'고 칠하지 않는다.
-            for (const c of res.applied) applyAttendanceLocal(c.studentId, c.classId, attendance);
+            // 시수는 **새로 만들어진(created) 행에만** 되그린다 — 갱신된 행은 기존 시수가 보존됐으므로
+            // 입력값을 칠하면 화면과 DB가 갈린다(setAttendanceFor optimisticUnits와 같은 정규화: 1=null).
+            const echoUnits = attendanceUnits
+              ? (() => {
+                  const n = Number(attendanceUnits.replace(",", "."));
+                  return !Number.isFinite(n) || n === 1 ? null : n;
+                })()
+              : undefined;
+            for (const c of res.applied)
+              applyAttendanceLocal(
+                c.studentId,
+                c.classId,
+                attendance,
+                c.created && echoUnits !== undefined ? { units: echoUnits } : undefined,
+              );
             done.push(
               `출결 ${res.applied.length}건 기록` +
                 (res.blocked ? ` (담당 반·수강생이 아니어서 ${res.blocked}건 제외)` : "") +
@@ -1979,6 +2036,7 @@ export function OneScreenClient({
     // 진도 미입력 행은 위 progressLine이 이미 셌으므로 여기 안 겹친다(한 행 중복 계수 방지).
     const uncheckedRows = allRows.filter(
       (r) =>
+        canEditAttendance && // 출결 쓰기 권한 없음 = 게이트 해당 없음(P0-3) — 제외 안내도 하지 않는다
         (!keySet || keySet.has(r.key)) &&
         isRowActionable(r.subject, "autowrite", effectiveClassnoteStatus(liveClassnoteStatus(r.student.id, r.subject.name), r.subject.classnoteStatus)) &&
         isAttendanceUnchecked(r.subject),

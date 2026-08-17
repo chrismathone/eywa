@@ -167,6 +167,14 @@ export function isRowActionable(
   subject: Subject,
   action: RowAction,
   statusOverride?: string | null,
+  opts?: {
+    /**
+     * 출결 쓰기 권한이 없는 계정(roster canEditAttendance=false) — 미체크 게이트 **해당 없음**.
+     * 충족할 수 없는 입력을 요구하면 발송이 영구 차단되고, 알약도 없는데 "출결을 기록하라"는
+     * 거짓 안내가 된다(2026-08-17 적대 감사 P0-3). 서버 게이트도 같은 예외를 탄다.
+     */
+    attendanceReadOnly?: boolean;
+  },
 ): boolean {
   if (!isReportEligible(subject)) return false;
   // 발송 완료 = **수정도 금지**(2026-07-22 원장 지시). ClassNote는 게시글 수정·삭제가 없어 학부모는
@@ -176,7 +184,7 @@ export function isRowActionable(
   if (isAlreadySent(statusOverride ?? subject.classnoteStatus)) return false;
   if (action === "save") return true;
   // 출결 미체크 = 발송만 제외(위 게이트) — 서버 saveAndQueueClassnote가 같은 규칙을 이중 방어한다.
-  if (action === "send" && isAttendanceUnchecked(subject)) return false;
+  if (action === "send" && !opts?.attendanceReadOnly && isAttendanceUnchecked(subject)) return false;
   return subject.attendanceRaw !== "absent";
 }
 

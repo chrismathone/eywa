@@ -183,10 +183,13 @@ describe("AUDIT_TYPE_LABEL", () => {
   it("logAction 호출부의 모든 target_type이 한글 라벨을 가진다", () => {
     // logAction 전수(2026-07-11 grep) + 실 DB target_type 전수(2026-08-03) — 후자에서 user·users·
     // academy_documents가 라벨 없이 영문으로 노출되고 있었다. 새 targetType은 여기와 AUDIT_TYPE_LABEL에 함께 추가.
+    // 2026-08-17 재전수(grep `targetType:`) — attendance·lesson_report·approval_document·
+    // enrollment_consultations·document 5종이 라벨 없이 영문 노출되고 있었다(원장 제보: "attendance 공민규").
     const usedTypes = [
       "staff", "student", "invoice", "exam", "payroll", "class", "classroom",
       "tenant_settings", "staff_resume", "intake_token", "notice_popup",
-      "user", "users", "academy_documents", "classnote_notice",
+      "user", "users", "academy_documents", "classnote_notice", "operating_periods",
+      "attendance", "lesson_report", "approval_document", "enrollment_consultations", "document",
     ];
     for (const t of usedTypes) expect(AUDIT_TYPE_LABEL[t], t).toBeTruthy();
   });

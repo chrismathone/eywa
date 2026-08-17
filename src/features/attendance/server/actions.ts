@@ -39,18 +39,33 @@ type Status = (typeof STATUSES)[number];
 
 type Sb = Awaited<ReturnType<typeof createClient>>;
 
-/** 0212a 컬럼이 없으면 빼고 재시도 — 출결 저장을 죽이지 않는다(#95). */
+/** 0212a 컬럼이 없으면 빼고 재시도 — 출결 저장을 죽이지 않는다(#95).
+ *  `scope`(선택) — id 목록에 **소유 술어를 덧건다**(반·학생·날짜). 🔴 클라이언트가 보낸 행 id를 그대로
+ *  믿는 경로(saveAttendance 폼)는 반드시 걸 것: id만으로 update하면 폼의 담당 반·7일창 게이트가 판정한
+ *  (반·날짜)와 **무관한 행**을 쓸 수 있다(2026-08-17 감사 — 남의 반·석 달 전 행에 상태·시수 기입 가능).
+ *  술어가 있으면 낯선 id는 0행에 걸릴 뿐 아무것도 못 쓴다. RLS는 tenant 격리뿐이라 여기가 방어선이다. */
 async function updateWithVia(
   supabase: Sb,
   patch: Record<string, unknown>,
   ids: string[],
+  scope?: { classId: string; studentId: string; sessionDate: string },
 ): Promise<{ error: string | null }> {
-  const { error } = await supabase.from("attendance_records").update(patch).in("id", ids);
+  const run = async (p: Record<string, unknown>) => {
+    let q = supabase.from("attendance_records").update(p).in("id", ids);
+    if (scope) {
+      q = q
+        .eq("class_id", scope.classId)
+        .eq("student_id", scope.studentId)
+        .eq("session_date", scope.sessionDate);
+    }
+    return q;
+  };
+  const { error } = await run(patch);
   if (!error) return { error: null };
   if (!isMissingViaColumn(error.message)) return { error: error.message };
   const rest = { ...patch };
   delete rest.recorded_via;
-  const retry = await supabase.from("attendance_records").update(rest).in("id", ids);
+  const retry = await run(rest);
   return { error: retry.error?.message ?? null };
 }
 
@@ -199,7 +214,13 @@ export async function saveAttendance(
     // 🔴 교시가 여럿이면 시수는 **건드리지 않는다** — 화면이 보여 준 값은 그날 **합**이라 그대로 각
     //    교시에 쓰면 교시 수만큼 부풀려진다(2교시 합 2 → 각 2 → 합 4). 교시별 시수는 영어 수업 시트에서.
     if (!multi) patch.session_units = r.sessionUnits;
-    const wrote = await updateWithVia(supabase, patch, r.existingIds);
+    // 🔴 scope 필수 — existingIds는 **폼(클라이언트)이 보낸 값**이라 그대로 믿으면 이 폼의 반·날짜와
+    //    무관한 행을 쓸 수 있다(updateWithVia 주석 참조). 술어를 걸면 낯선 id는 0행 no-op이 된다.
+    const wrote = await updateWithVia(supabase, patch, r.existingIds, {
+      classId,
+      studentId: r.studentId,
+      sessionDate: date,
+    });
     if (wrote.error) return { error: wrote.error };
     saved++;
   }
@@ -238,7 +259,16 @@ export async function saveAttendance(
   redirect(`/attendance/${date}?saved=${saved}`);
 }
 
-export type CellResult = { ok: true } | { error: string };
+export type CellResult =
+  | {
+      ok: true;
+      /**
+       * `onlyIfEmpty` 요청인데 서버에 이미 기록이 있어 **아무것도 쓰지 않았다** — 현재 진실을 돌려준다.
+       * 호출부는 이걸로 화면을 서버 상태에 맞추고 사용자에게 알린다(덮어쓰기 사고 방지, 2026-08-17 감사 P0-1).
+       */
+      conflict?: { status: string; note: string | null; units: number | string | null };
+    }
+  | { error: string };
 
 /**
  * 매트릭스 인라인 셀 1건 출결 토글 — 페이지 이동 없이 빠르게 찍는다(반응속도 1순위).
@@ -277,6 +307,16 @@ export async function setAttendanceCell(input: {
   noteOnly?: boolean;
   /** 화면 갱신 생략 — 출석부 시트가 입력이 멎은 뒤 한 번만 새로고침한다(키 입력마다 재조회 방지). */
   quiet?: boolean;
+  /**
+   * 비파괴 쓰기 — **클라 화면이 "기록 없음"이라 믿고** 만드는 첫 체크에서 켠다(원스크린 알약).
+   * 서버에 이미 그날(그 교시) 기록이 있으면 덮지 않고 `conflict`로 현재 상태를 돌려준다.
+   * 🔴 이유(2026-08-17 적대 감사 P0-1): 원스크린은 출결을 재폴링하지 않아, 강사가 페이지를 열어 둔 사이
+   *    데스크가 찍은 결석이 화면엔 안 보인다. 그 상태에서 발송 게이트가 "출결 입력 필요"를 띄우면
+   *    강사의 출석 클릭이 **데스크의 결석을 통보 없이 뒤집는다** — 일괄의 fillEmptyOnly와 같은 의미론의
+   *    단건판으로 그 덮어쓰기를 서버에서 끊는다. 화면이 기록을 **보여주고 있는** 상태에서의 변경(정정)은
+   *    이 플래그 없이 와서 종전대로 덮는다(그건 의도된 편집이다).
+   */
+  onlyIfEmpty?: boolean;
   /**
    * `"live"` = 당일 출결 화면. 데스크 게이트(10분 후 미출결만·삭제 금지)를 켠다.
    * 없으면 종전 권한 — 월간 격자·원스크린·시트가 정정·삭제를 그대로 한다.
@@ -396,18 +436,33 @@ export async function setAttendanceCell(input: {
   //    멀쩡해 보이지만 급여·시수는 두 행을 다 합산해서, 정정이 돈에 반영되지 않거나 이중 계상된다.
   const { data: rows } = await supabase
     .from("attendance_records")
-    .select("id, slot_start, recorded_at, status")
+    .select("id, slot_start, recorded_at, status, note, session_units")
     .eq("class_id", classId)
     .eq("student_id", studentId)
     .eq("session_date", sessionDate)
-    .order("recorded_at", { ascending: false });
+    .order("recorded_at", { ascending: false })
+    // id desc = recorded_at 동률 tie-break — 로스터·발송 게이트·effective-records와 같은 규약.
+    // 없으면 동시각 중복 행에서 pickSaveTargets의 "처음 만난 행이 최신" 전제가 다른 행을 고른다.
+    .order("id", { ascending: false });
 
   // 대상 선정은 순수 규칙 **한 곳**(pickSaveTargets)이 정한다 — 일괄 저장도 같은 함수를 쓴다.
   // 이미 recorded_at 내림차순이라 "교시마다 처음 만난 행이 최신"이라는 그 함수의 전제를 만족한다.
   const { updateIds, promoteIds } = pickSaveTargets(rows ?? [], slot);
   const targetIdSet = new Set([...updateIds, ...promoteIds]);
-  const prevStatus =
-    (rows ?? []).find((r) => targetIdSet.has(r.id as string))?.status ?? null;
+  const prevRow = (rows ?? []).find((r) => targetIdSet.has(r.id as string));
+  const prevStatus = prevRow?.status ?? null;
+
+  // 비파괴 요청인데 기록이 이미 있다 — 아무것도 쓰지 않고 현재 진실을 돌려준다(위 onlyIfEmpty 주석).
+  if (input.onlyIfEmpty && prevRow) {
+    return {
+      ok: true,
+      conflict: {
+        status: prevRow.status as string,
+        note: (prevRow.note as string | null) ?? null,
+        units: (prevRow.session_units as number | string | null) ?? null,
+      },
+    };
+  }
 
   const deskGate = await assertDeskMayWrite({
     supabase,
@@ -648,7 +703,13 @@ const BULK_STATUSES = ["present", "late", "absent"] as const;
 const BULK_CELL_LIMIT = 300;
 
 export type BulkCellResult =
-  | { ok: true; applied: { studentId: string; classId: string }[]; blocked: number }
+  | {
+      ok: true;
+      /** `created` = 이번에 **새로 만들어진** 행(시수 등 insert 전용 값이 실린 칸) — 클라 낙관 반영이
+       *  화면과 DB가 갈리지 않게 구분한다(갱신된 칸은 기존 시수가 보존되므로 시수를 되그리면 안 된다). */
+      applied: { studentId: string; classId: string; created?: boolean }[];
+      blocked: number;
+    }
   | { error: string };
 
 /**
@@ -691,6 +752,13 @@ export async function setAttendanceBulk(input: {
   periodStart?: string | null;
   /** `"live"` = 당일 출결 화면의 일괄. 없으면 데스크 게이트 없음(원스크린·시트). */
   source?: "live";
+  /**
+   * 수업타임(시수) — **이번 일괄로 새로 만들어지는 행에만** 쓴다(2026-08-17 감사 P0-2 부분 대응).
+   * 🔴 기존 행은 절대 안 건드린다 — 일괄의 "기존 note·시수 보존" 계약 유지(위 fillEmptyOnly 주석).
+   *    시수는 급여 재료라(tier-rows: null=1), 3시간 반(규약 1.5)을 일괄 출석으로 찍으면 새 행이
+   *    조용히 1.0으로 계상되던 것을 강사가 값을 **직접 골라** 막을 수 있게 한다. 미입력=종전(null).
+   */
+  units?: string;
 }): Promise<BulkCellResult> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
@@ -699,6 +767,16 @@ export async function setAttendanceBulk(input: {
   const { sessionDate, status } = input;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(sessionDate)) return { error: "잘못된 날짜입니다" };
   if (!BULK_STATUSES.includes(status)) return { error: "잘못된 상태입니다" };
+
+  // 시수(선택) — 셀 저장과 같은 파서(쉼표 소수점 허용·1은 null 정규화). 결석엔 시수가 무의미하지만
+  // 값이 와도 해가 없다(소비처가 결석 행 시수를 안 읽는다) — 클라가 이미 출석·지각에서만 보낸다.
+  const bulkUnitsProvided = input.units !== undefined && String(input.units).trim() !== "";
+  let bulkUnitsVal: number | null = null;
+  if (bulkUnitsProvided) {
+    const parsed = parseSessionUnits(input.units);
+    if (!parsed.ok) return { error: parsed.error };
+    bulkUnitsVal = parsed.value;
+  }
 
   // 같은 (학생·반)이 두 번 오면 한 번만 — 출결 원장은 그 조합에 한 칸이다.
   const seen = new Set<string>();
@@ -767,7 +845,9 @@ export async function setAttendanceBulk(input: {
       .in("student_id", chunk)
       // 🔴 교시를 넘겨도 **그날 전체(slot null) 행까지** 본다 — 아래에서 좁힌다. 조회에서 이미 잘라내면
       //    옛 day-level 행을 못 보고 새 행을 만들어 한 칸에 두 행이 살아남는다(정정이 돈에 안 닿는다).
-      .order("recorded_at", { ascending: false }),
+      .order("recorded_at", { ascending: false })
+      // id desc = 동률 tie-break(셀 액션·로스터와 같은 규약 — pickSaveTargets 전제 보호).
+      .order("id", { ascending: false }),
   );
   // 칸(학생::반)마다 **셀 저장과 같은 규칙**으로 대상을 고른다(pickSaveTargets 단일 소스).
   // 청크는 학생 단위라 한 칸의 행은 모두 같은 청크에 있고, 각 청크가 recorded_at 내림차순이라
@@ -871,6 +951,8 @@ export async function setAttendanceBulk(input: {
           recorded_by: user.id,
           // 교시 미지정이면 종전대로 null("그날 전체") — 기존 호출부의 저장 모양이 바뀌지 않는다.
           ...(slot ? { slot_start: slot } : {}),
+          // 수업타임(시수) — **새 행에만**(update 패치엔 절대 안 넣는다 — 기존 시수 보존 계약).
+          ...(bulkUnitsProvided ? { session_units: bulkUnitsVal } : {}),
         },
         viaByClass.get(c.classId) ?? "teacher",
       ),
@@ -930,7 +1012,12 @@ export async function setAttendanceBulk(input: {
     }
   }
   revalidatePath("/attendance");
-  return { ok: true, applied: allowed, blocked: cells.length - allowed.length };
+  const createdKeys = new Set(inserts.map((c) => `${c.studentId}::${c.classId}`));
+  return {
+    ok: true,
+    applied: allowed.map((c) => ({ ...c, created: createdKeys.has(`${c.studentId}::${c.classId}`) })),
+    blocked: cells.length - allowed.length,
+  };
 }
 
 export type RangeCell = { studentId: string; classId: string; sessionDate: string };

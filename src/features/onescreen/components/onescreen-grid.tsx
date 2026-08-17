@@ -61,7 +61,9 @@ export function OneScreenGrid({
 }) {
   const rows = buildGridRows(students).filter((r) => rowInClass(r.subject, classFilter));
   // 작업별 대상(2-3): 발송·자동작성=진도+결석 제외, 저장=진도만(결석 포함 — 기록 보존).
-  const sendableRows = rows.filter((r) => isRowActionable(r.subject, "send"));
+  const sendableRows = rows.filter((r) =>
+    isRowActionable(r.subject, "send", undefined, { attendanceReadOnly: attReadOnly }),
+  );
   // 🔴 실제로 **발송되는** 행 = 위 조건 + **멘트 있음**. 빈 멘트는 절대 가드가 거절하므로(2026-07-28 사고)
   //    `sendableRows`를 그대로 "발송가능"이라 쓰면 상단 숫자와 행 라벨("멘트 입력 필요")이 서로 다른 말을 한다.
   //    (자동작성 대상은 아래 `autoRows` — 출결 미체크 게이트로 send≠autowrite가 되면서 갈라졌다, 2026-08-17.)
@@ -242,8 +244,8 @@ export function OneScreenGrid({
                         ),
                     }
               }
-              onApply={(patch, onlyEmpty, progressSubjectKey, attendance) =>
-                bulkActions.onBulkApply(selectedKeys, patch, onlyEmpty, progressSubjectKey, attendance)
+              onApply={(patch, onlyEmpty, progressSubjectKey, attendance, attendanceUnits) =>
+                bulkActions.onBulkApply(selectedKeys, patch, onlyEmpty, progressSubjectKey, attendance, attendanceUnits)
               }
               onCopyFirstRow={(overwrite) => bulkActions.onCopyFirstRow?.(selectedKeys, overwrite)}
               disabled={bulkGen}
