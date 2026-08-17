@@ -486,8 +486,9 @@ export function IntegratedEditBoard({
           </div>
         </TimetableZoomArea>
 
-        {/* 저장 바 — 창 데이터입력 폼 규약과 같은 하단 고정. 되돌릴 수 없는 건 저장뿐이라 여기 모은다. */}
-        <div className="border-line bg-card/95 sticky bottom-0 z-30 flex flex-wrap items-center gap-2 rounded-t-xl border-t px-3 py-2 backdrop-blur">
+        {/* 저장 바 — 창 데이터입력 폼 규약과 같은 하단 고정. 되돌릴 수 없는 건 저장뿐이라 여기 모은다.
+            sticky-save-bar 마커 = main 하단 패딩 제거(바 밀착, globals.css [[#110]]). */}
+        <div className="sticky-save-bar border-line bg-card/95 sticky bottom-0 z-30 flex flex-wrap items-center gap-2 rounded-t-xl border-t px-3 py-2 backdrop-blur">
           {error ? <span className="text-danger text-[12px]">{error}</span> : null}
           {confirmLeave ? (
             <span className="text-warning text-[12px]">아직 반영하지 않은 변경이 있습니다 — 한 번 더 누르면 버립니다.</span>
