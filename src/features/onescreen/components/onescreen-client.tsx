@@ -1793,10 +1793,6 @@ export function OneScreenClient({
       toast.error(`${subjectName} — 회수 처리 중입니다. 게시글 삭제가 끝난 뒤에 보내세요`);
       return;
     }
-    if (res.status === "recall_pending") {
-      toast.error(`${subjectName} — 회수 처리 중입니다. 게시글 삭제가 끝난 뒤에 보내세요`);
-      return;
-    }
     if (res.status === "revoked") {
       toast.error(`${subjectName} — 취소된 링크입니다. 재발급 후 발송하세요`);
       return;
@@ -1868,8 +1864,6 @@ export function OneScreenClient({
     }
     if (res.status === "name_conflict") {
       toast.error(`${student.name} — 동명이인이 있어 발송을 막았습니다(학생 관리에서 ClassNote 이름 지정)`);
-    } else if (res.status === "recall_pending") {
-      toast.error(`${student.name} — 회수 처리 중입니다(삭제 후 발송)`);
     } else if (res.status === "recall_pending") {
       toast.error(`${student.name} — 회수 처리 중입니다(삭제 후 발송)`);
     } else if (res.status === "revoked") {
