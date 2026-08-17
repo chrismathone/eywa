@@ -40,7 +40,6 @@ import { SheetToolbar } from "./sheet-toolbar";
 import { PlanPanel } from "./plan-panel";
 import { SheetGrid } from "./sheet-grid";
 import { CopyPrevWeek } from "./copy-prev-week";
-import { ClassSheetImportButton } from "./class-import-button";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import { TodayClassSheet } from "./today-class-sheet";
 
@@ -319,18 +318,6 @@ export function SheetClient({
     },
     [router, store],
   );
-
-  // ── 시트 가져오기(이 반만) — 반영 직전 flush ───────────────────────────────
-  // 가져오기는 시트가 채운 교시를 **교체**하므로, 아직 확정 안 된 내 입력이 큐에 남아 있으면
-  // 그 입력이 가져오기 뒤에 덮어써 "시트를 가져왔는데 옛 값이 되살아나는" 순서 뒤집힘이 난다.
-  // 이동(navigate)과 같은 계약: flush 실패·미확정이면 사람이 고른다.
-  const flushBeforeImport = useCallback(async () => {
-    const r = await store.flush();
-    if (r.ok) return true;
-    return window.confirm(
-      "아직 저장이 확정되지 않은 입력(또는 충돌)이 있습니다. 그래도 시트 내용을 가져올까요? (입력은 이 기기에 보관됩니다)",
-    );
-  }, [store]);
 
   // ── 저널 복구 배너 적용 ────────────────────────────────────────────────────
   const applyRecovered = useCallback(async () => {
@@ -693,15 +680,6 @@ export function SheetClient({
           showSelfStudy={data.showSelfStudy}
           onShowSelfStudy={(show) => void changeShowSelfStudy(show)}
           selfStudyPending={selfStudyPending}
-          trailing={
-            data.showSheetImport ? (
-              <ClassSheetImportButton
-                classId={classId}
-                className={data.className}
-                beforeApply={flushBeforeImport}
-              />
-            ) : null
-          }
         />
       ) : null}
 

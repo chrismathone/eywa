@@ -1,15 +1,19 @@
 # eywa — 진행 상황 (변경 로그, Tier 1)
 
-## 2026-08-17 — ECS 랜딩 '시트에서 가져오기' 제거 (전 반 순회 UI 접기 — 부분)
+## 2026-08-17 — ECS '시트에서 가져오기' 완전 접기 (2026-07-30 임시 경로 계획 이행)
 
 원장: 영어 강사 시트(주간 면) 상단의 '시트에서 가져오기' 제거 지시.
 
 - 랜딩 전용 다이얼로그 `ecs/_components/sheet-import-dialog.tsx` 삭제 + 페이지의 `canSync` 게이트 계산 제거.
   이 다이얼로그만 쓰던 서버 액션 `listEcsImportTargets`·`isEcsImportBusy`도 함께 삭제
   — "use server" 모듈의 고아 export는 살아있는 엔드포인트로 남는다.
-- ⚠️ **부분 접기다** — 반 상세·오늘 면의 '이 반만 시트에서 가져오기'(`ClassSheetImportButton`)와
-  `import-actions.ts`·`import/`는 유지. 임시 버튼 계획(2026-07-30 "랜딩과 함께 삭제")과 달리 이번 지시는
-  랜딩만이다. **전 반 일괄 가져오기 경로는 사라짐** — 남은 경로는 반 단위뿐. 완전 접기(반 버튼·`import/` 동반 삭제)는 원장 결정 대기.
+- 이어서 원장 확인으로 **완전 접기**: 반 상세·오늘 면의 '이 반만 시트에서 가져오기'
+  (`ClassSheetImportButton`)·`server/import-actions.ts`·`server/sheet-source.ts`·`import/` 폴더(파서·행 빌더
+  ·이슈 타입·테스트)까지 삭제. 배선 흔적도 걷음 — `queries.ts`의 `showSheetImport` 필드·`canManageSheetSync`
+  조회, `sheet-toolbar`의 `trailing` 슬롯, `sheet-client`의 `flushBeforeImport`.
+  **구글 반 시트 → eywa 가져오기 경로는 이제 없다**(시트 병행 운영의 임시 경로 종료). 필요해지면 git에서 되살린다.
+- 유지(별개 데이터 경로): onescreen의 시트 초안(`hasSheetDraft`·`SheetSourceCard`)은 ECS **DB** 기록 →
+  보고서 초안이라 무관. ECS 리스가 쓰던 `google_sheets:english` 행 공유도 시간표 쪽 사용은 그대로.
 - 시간표의 '시트에서 가져오기'(english-import-dialog)는 별개 기능으로 그대로 — cron `sheets-sync`·과목 운영 카드의 재개 안내문이 가리키는 것은 그쪽이다(막다른 안내 아님 확인).
 
 ## 2026-08-17 — 출결 미체크 = 수업보고서 발송 조건 추가 (진도·멘트와 동급)
