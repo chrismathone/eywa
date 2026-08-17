@@ -20,7 +20,8 @@ export type NavItem = {
    * **사이드바에서만** 이 메뉴를 부모 메뉴의 하부탭으로 내려 표시한다(독립 라우트·독립 창 유지).
    * `hidden`과 다른 점: 팰릿·모바일내비엔 그대로 남아 검색·이동이 된다(발견성 보존).
    * 창 id·권한키는 자기 menuKey를 그대로 쓰므로 창 크기(routeWindowSize)도 자기 것이다.
-   * 예: English Class Sheet = 시간표의 하위 카테고리(원장 지시 2026-07-29).
+   * 현재 사용처 0 — English Class Sheet가 썼으나(2026-07-29) 독립 사이드바 탭으로 승격되며
+   * 떼었다(원장 지시 2026-08-17). 메커니즘은 다음 하위 카테고리 메뉴를 위해 보존.
    */
   subOf?: MenuKey;
 };
@@ -99,14 +100,15 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: "/onescreen", label: "선생님 원스크린", icon: MENU_ICON.teacher_onescreen, menuKey: "teacher_onescreen" },
       { href: "/timetable", label: "시간표", icon: MENU_ICON.timetable, menuKey: "timetable" },
+      // English Class Sheet(ECS) — 영어 반별 주간 수업계획서/출석부(구글시트 이식). 라벨은 원장 확정 명칭.
+      // 시간표 하위 카테고리(subOf, 2026-07-29)였다가 **독립 사이드바 탭으로 승격**(원장 지시 2026-08-17)
+      // — 시간표와 같은 급. 권한은 기존 menuKey "ecs" 그대로(사이드바 canAccess + 페이지 requireEcsClassAccess).
+      { href: "/ecs", label: "영어 강사 시트", icon: MENU_ICON.ecs, menuKey: "ecs" },
       { href: "/attendance", label: "출석부", icon: MENU_ICON.attendance, menuKey: "attendance" },
       // 🔴 자리 출석부(랩실·JJ실)는 **사이드바 항목이 아니다**(원장 2026-08-14: "따로 빼지말고").
       //    출석부 안 강사 드롭다운에서 [선생님] / [LAB·JJ] / [퇴직] 그룹으로 고른다 — 자리는 메뉴가
       //    아니라 **강사 축의 한 갈래**다. 라우트(/attendance/seat/*)와 권한 키는 그대로 있고
       //    진입만 그 드롭다운으로 좁힌다.
-      // English Class Sheet(ECS) — 영어 반별 주간 수업계획서/출석부(구글시트 이식). 라벨은 원장 확정 명칭.
-      // subOf: 사이드바에선 시간표 하위 카테고리로 표시(원장 지시 2026-07-29). 팰릿·모바일내비엔 그대로 노출.
-      { href: "/ecs", label: "영어 강사 시트", icon: MENU_ICON.ecs, menuKey: "ecs", subOf: "timetable" },
       { href: "/classes", label: "수업목록", icon: MENU_ICON.classes, menuKey: "classes" },
       // 수업보고서 = 학원 전체 보고서 발송 총괄(구 학원설정 ?tab=report_mgmt에서 승격, 옛 Edutrix 외부링크 대체).
       { href: "/lesson-reports", label: "수업보고서", icon: MENU_ICON.lesson_reports, menuKey: "lesson_reports" },
@@ -240,7 +242,7 @@ export function findNavGroup(pathname: string): NavGroup | undefined {
  *    노이즈가 됐다). 그 한 줄은 부모 메뉴를 눌렀을 때 이미 열리는 바로 그 화면이라, 그려 봐야 갈 수 있는
  *    곳이 늘지 않는다. 면이 줄어든 메뉴가 또 생겨도 자동으로 사라지도록 데이터가 아니라 **여기서** 판정한다.
  * ⚠️ 단 **독립 메뉴(`menuKey` 有)는 하나여도 남긴다** — subOf 자식은 최상위 목록에서 빠져 있어서,
- *    여기서 지우면 사이드바에서 그 메뉴로 갈 길이 통째로 사라진다(ECS 같은 경우).
+ *    여기서 지우면 사이드바에서 그 메뉴로 갈 길이 통째로 사라진다(ECS가 그랬다 — 2026-08-17 독립 승격 전).
  */
 export function subTabsForMenu(menuKey: MenuKey): SubTab[] {
   const faces = SUBTABS_BY_MENU[menuKey] ?? [];

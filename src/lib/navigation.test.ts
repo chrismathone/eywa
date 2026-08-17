@@ -36,33 +36,33 @@ describe("navigation presentation", () => {
   });
 });
 
-describe("하위 카테고리(subOf)", () => {
-  it("영어 강사 시트는 시간표의 하부탭으로 나오고 자기 menuKey를 갖는다(자기 창으로 열림)", () => {
-    const subs = subTabsForMenu("timetable");
-    expect(subs).toContainEqual({ label: "영어 강사 시트", href: "/ecs", menuKey: "ecs" });
+describe("영어 강사 시트(ECS) — 독립 사이드바 탭 (원장 2026-08-17 승격)", () => {
+  // 2026-07-29~08-16엔 시간표의 subOf 하위 카테고리였다. 승격은 사이드바 위치만 바꾼다 —
+  // 라우트(/ecs)·menuKey(권한)·창 크기·강사 미니셸 진입은 전부 그대로다.
+  it("시간표와 같은 급의 최상위 항목이다 — subOf 없음, 수업 그룹 소속", () => {
+    const ecs = NAV_GROUPS.flatMap((g) => g.items).find((i) => i.href === "/ecs");
+    expect(ecs).toMatchObject({ label: "영어 강사 시트", menuKey: "ecs" });
+    expect(ecs!.subOf).toBeUndefined();
+    expect(ecs!.hidden).not.toBe(true);
+    expect(findNavGroup("/ecs")?.label).toBe("수업");
   });
 
-  it("subOf 항목은 창 해석(findNavItem)에 그대로 남는다 — 지우면 WindowLink가 창을 못 연다", () => {
-    expect(findNavItem("/ecs")).toMatchObject({ menuKey: "ecs", subOf: "timetable" });
+  it("창 해석(findNavItem)은 불변 — 지우면 WindowLink가 창을 못 연다", () => {
+    expect(findNavItem("/ecs")?.menuKey).toBe("ecs");
     expect(findNavItem("/ecs/abc-123")?.menuKey).toBe("ecs");
   });
 
-  it("subOf는 hidden이 아니다 — 검색 팰릿·모바일 내비에서 계속 찾을 수 있어야 한다", () => {
-    expect(findNavItem("/ecs")?.hidden).not.toBe(true);
-    const inNav = NAV_GROUPS.flatMap((g) => g.items).some((i) => i.href === "/ecs");
-    expect(inNav).toBe(true);
+  it("시간표엔 이제 하부탭이 없다 — ECS가 떠나며 subOf 사용처 0(메커니즘은 보존)", () => {
+    expect(subTabsForMenu("timetable")).toEqual([]);
   });
+});
 
+describe("하위 카테고리·하부탭(subTabsForMenu)", () => {
   // 🔴 원장 2026-08-03: 직원관리가 '직원 목록' 하나만 남자 사이드바의 그 한 줄이 노이즈가 됐다.
-  //    "면 하나 = 하부탭 아님". 단 독립 메뉴는 하나여도 남는다(지우면 갈 길이 사라진다).
+  //    "면 하나 = 하부탭 아님". 단 독립 메뉴(subOf 자식)는 하나여도 남는다(지우면 갈 길이 사라진다) —
+  //    현재 subOf 사용처는 0이라 이 분기는 다음 하위 카테고리 메뉴가 생길 때 다시 산다.
   it("면이 하나뿐인 메뉴는 하부탭을 내지 않는다(직원관리)", () => {
     expect(subTabsForMenu("staff")).toEqual([]);
-  });
-
-  it("독립 메뉴(menuKey)는 하나여도 남는다 — 최상위에서 빠져 있어 유일한 진입로다", () => {
-    const subs = subTabsForMenu("timetable");
-    expect(subs.length).toBeGreaterThan(0);
-    expect(subs.some((s) => s.menuKey === "ecs")).toBe(true);
   });
 
   it("면(?tab=)만 있는 메뉴는 menuKey 없이 그대로 — 부모 창에서 면 전환", () => {
