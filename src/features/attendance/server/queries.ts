@@ -1,7 +1,7 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged, fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
-import { addDays, kstToday } from "@/lib/date-kst";
+import { addDays, kstMonth, kstToday, monthRange } from "@/lib/date-kst";
 import { effectiveTeacherId } from "@/lib/auth/view-mode";
 import { attendanceRate } from "@/lib/calc/attendance";
 import {
@@ -21,6 +21,8 @@ import {
 } from "@/features/attendance/enrollment-span";
 import { getPeriodWindow } from "@/features/periods/server/queries";
 import type { PeriodWindow } from "@/features/periods/resolve";
+// 출결의 강사 귀속 축 단일 소스(2026-08-18) — 담임만 보면 교시 담당 강사가 자기 수업을 못 본다.
+import { loadClassAxisRows } from "./teacher-axis-queries";
 import type { PeriodMode } from "@/features/attendance/view-prefs";
 import {
   deriveMarksFromReports,
@@ -454,6 +456,13 @@ export type AttendanceMatrix = {
     teacherName: string | null;
     // 담임 재직 여부 — 퇴직(inactive) 담임 반은 살아있는 한 노출하되, 강사 필터에 "(퇴직)" 표시.
     teacherActive: boolean;
+    /**
+     * **그 달에 이 반의 교시를 맡은 사람들**(`class_schedules.teacher_id`, 담임 포함될 수 있음).
+     * 영어는 교시마다 담당이 따로 붙어서, 담임만 보면 실제로 가르친 강사가 자기 출석부에서
+     * 그 반을 아예 못 본다(실측 2026-08-18: Florence Park = 담임 0반·교시 담당 5반).
+     * ⚠️ 자리(LAB·JJ)는 사람이 아니라 여기 안 들어온다(teacher_id가 null이라 구조적으로 제외).
+     */
+    slotTeachers: { id: string; name: string; active: boolean }[];
   }[];
   selectedClassId: string | null;
   month: string; // "2026-05" — **라벨월**이다. 세션은 이 달을 넘길 수 있다(window.end 참조).
@@ -614,32 +623,26 @@ export async function getMonthlyAttendanceMatrix(
   // 강사 스코프: teacher(또는 겸직-강사뷰)면 selector·데이터를 본인 담당 반만(URL로 남의 classId 넘겨도 무시).
   const tId = await effectiveTeacherId();
 
-  // 활성 반만 (selector용) — 폐강 반 제외(getDailyProcessingStatus와 동일 기준). 강사면 본인 담당 반만.
-  // ⚠️ 담임이 퇴직(status=inactive)이어도 반이 살아있으면 노출 유지 — 재원생이 다니는 반을 숨기면 안 됨.
-  //    대신 teacherActive로 내려 강사 필터에 "(퇴직)"을 표시한다(담임 재배정 전까지의 정직한 표시).
-  let classesQuery = supabase
-    .from("classes")
-    .select("id, class_name, subject, report_optout, teacher:teacher_id ( id, display_name, status )")
-    .eq("is_active", true)
-    .order("class_name");
-  if (tId) classesQuery = classesQuery.eq("teacher_id", tId);
-  const { data: classesData } = await classesQuery;
+  // 활성 반 목록 + 그 달 강사 축(담임 ∪ 교시 담당) — 조회는 축 헬퍼가 맡고 요청당 1회 캐시된다.
+  // 🔴 강사 스코프를 SQL의 `.eq("teacher_id", tId)`로 걸지 **않는다**(2026-08-18). 그러면 축이 담임뿐이라
+  //    교시 담당 강사의 출석부가 통째로 빈다 — 좁히는 판정은 축 단일 소스(taughtBy)가 한다.
+  // ⚠️ `month`는 URL에서 온다 — 형식이 어긋나면 이번 달로 떨어뜨린다(축 조회가 날짜를 필터에 보간한다).
+  const axisRange = monthRange(/^\d{4}-\d{2}$/.test(month) ? month : kstMonth());
+  const allClassRows = await loadClassAxisRows(axisRange.from, axisRange.to);
 
-  const classes = (classesData ?? []).map((c) => {
-    const teacher = (Array.isArray(c.teacher) ? c.teacher[0] : c.teacher) as
-      | { id?: string; display_name?: string; status?: string }
-      | undefined;
-    return {
+  // 강사(또는 겸직 강사뷰)면 **자기가 가르치는 반**으로 좁힌다 — 담임 반 ∪ 그 달 교시 담당 반.
+  const classes = allClassRows
+    .filter((c) => !tId || c.taughtBy.includes(tId))
+    .map((c) => ({
       id: c.id,
-      className: c.class_name,
+      className: c.className,
       subject: c.subject,
-      // 수업보고서 미발송(0174a) — 아래 출결 파생이 "보고서 없음 = 결석" 규칙을 끄는 데 쓴다.
-      reportOptout: (c as { report_optout?: boolean | null }).report_optout === true,
-      teacherId: teacher?.id ?? null,
-      teacherName: teacher?.display_name ?? null,
-      teacherActive: teacher ? teacher.status !== "inactive" : true,
-    };
-  });
+      reportOptout: c.reportOptout,
+      teacherId: c.teacherId,
+      teacherName: c.teacherName,
+      teacherActive: c.teacherActive,
+      slotTeachers: c.slotTeachers,
+    }));
 
   // 강사가 본인 반이 아닌 classId를 URL로 넘기면 선택 무시(스코프 위반 차단).
   const classId = tId && requestedClassId && !classes.some((c) => c.id === requestedClassId)
