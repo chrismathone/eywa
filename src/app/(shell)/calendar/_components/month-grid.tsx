@@ -1,9 +1,12 @@
 import { weekdayIndexOf } from "@/lib/date-kst";
+import { holidayFor, holidayShortName } from "@/features/calendar/holidays";
 import type { CalendarEvent, EventColor } from "@/features/calendar/types";
 
 /**
  * 월 그리드 — 일~토 7열(한국 달력 관행: 일=빨강·토=파랑), 앞뒤 달 날짜는 흐리게, 오늘은 primary 원 배지.
  * 여러 날 일정은 걸치는 칸마다 칩을 반복한다(v1 — 가로 바 연결은 다음).
+ * **법정공휴일**(holidays.ts 내장 테이블)은 날짜 숫자 빨강 + 칸 상단 공휴일명 라벨 — 일정이 아니라
+ * 달력의 속성이므로 칩·클릭이 없다(DB 무관, 내장 범위 밖 연도는 표시 없음).
  *
  * ⚠️ Tailwind 동적 클래스 조립 금지 — 색→클래스는 아래 Record 한 곳(purge에 잡히게 전부 정적 문자열).
  * ⚠️ 페이지 가로 스크롤 금지 — 그리드는 w-full, 칸은 min-w-0 + 칩 truncate.
@@ -100,6 +103,7 @@ export function MonthGrid({
             const dow = weekdayIndexOf(cell.date);
             const dayNum = Number(cell.date.slice(8, 10));
             const isToday = cell.date === today;
+            const holiday = holidayFor(cell.date);
             const dayEvents = eventsOn(events, cell.date);
             const shown = dayEvents.slice(0, MAX_CHIPS);
             const more = dayEvents.length - shown.length;
@@ -108,14 +112,27 @@ export function MonthGrid({
                 key={cell.date}
                 className={`min-h-[96px] min-w-0 p-1 ${dow === 0 || dow === 6 ? "bg-bg-soft/30" : ""}`}
               >
-                <p className="mb-0.5 flex justify-end">
+                <p className="mb-0.5 flex items-center justify-between gap-1">
+                  {/* 공휴일명 — 일정 칩 위(좌측), 정식 명칭은 title 툴팁. 앞뒤 달은 흐림 규칙을 따른다. */}
+                  {holiday ? (
+                    <span
+                      className={`min-w-0 truncate text-[10px] leading-none ${
+                        cell.inMonth ? "text-danger" : "text-text-faint"
+                      }`}
+                      title={holiday}
+                    >
+                      {holidayShortName(cell.date)}
+                    </span>
+                  ) : (
+                    <span />
+                  )}
                   <span
-                    className={`flex size-5 items-center justify-center rounded-full text-[11px] ${
+                    className={`flex size-5 shrink-0 items-center justify-center rounded-full text-[11px] ${
                       isToday
                         ? "bg-primary text-primary-foreground font-bold"
                         : !cell.inMonth
                           ? "text-text-faint"
-                          : dow === 0
+                          : dow === 0 || holiday
                             ? "text-danger"
                             : dow === 6
                               ? "text-blue"

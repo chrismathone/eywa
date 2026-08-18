@@ -38,7 +38,7 @@ export function CalendarClient({
   }
 
   return (
-    <div className="space-y-3">
+    <div className="flex min-h-0 flex-1 flex-col gap-3">
       {/* 상단 내비 — 월 이동은 URL(?m=)이라 새로고침·딥링크·창 타이틀이 공짜. */}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-1.5">
@@ -73,7 +73,10 @@ export function CalendarClient({
         ) : null}
       </div>
 
-      <MonthGrid month={month} today={today} events={events} onEventClick={openEvent} />
+      {/* 그리드가 남는 세로를 전부 차지 — 셀 min-h는 grid 몫, 여기는 자리만 내준다. */}
+      <div className="min-h-0 flex-1">
+        <MonthGrid month={month} today={today} events={events} onEventClick={openEvent} />
+      </div>
 
       {dialog ? <EventDialog state={dialog} onClose={() => setDialog(null)} /> : null}
     </div>

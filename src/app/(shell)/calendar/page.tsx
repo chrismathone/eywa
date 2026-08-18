@@ -45,7 +45,9 @@ export default async function CalendarPage({
   const monthLabel = `${y}년 ${Number(mo)}월`;
 
   return (
-    <div className="mx-auto w-full max-w-[1240px] space-y-4 p-4 md:p-6">
+    // 풀폭·풀높이 — 캘린더는 여백보다 면적이 정보다(원장 2026-08-18 "캘린더가 너무 작음").
+    // min-h-full: 셸 <main>(overflow-auto)의 가시 높이만큼은 항상 채워 그리드가 아래로 붙게.
+    <div className="flex min-h-full w-full flex-col gap-4 p-4 md:px-6 md:py-5">
       <PageHeader
         eyebrow="홈"
         title="캘린더"
