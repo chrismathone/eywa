@@ -24,6 +24,13 @@ export function useStateDraft<T>({
 }) {
   const [draftSavedAt, setDraftSavedAt] = useState<number | null>(null);
   const loadedRef = useRef<T | null>(null);
+  // 대기 중 디바운스 저장 타이머 — clear/discard가 취소할 수 있게 ref로 보관.
+  // (저장 성공 직후 700ms 안에 남은 타이머가 발화하면 방금 지운 초안이 되살아나 stale 배너가 뜬다.)
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // clear() 직후 재기준선 대기 — 저장 성공이 유발한 상태 변화(선택 해제 등)로 json이 바뀌면
+  // 그 첫 스냅샷을 **저장하지 않고 새 기준선으로** 삼는다. 안 그러면 "발송 후 선택만 초기화하고
+  // 본문은 남기는" 화면에서 방금 지운 초안이 즉시 다시 저장돼 배너가 되살아난다(대량 발송 실측).
+  const rebaseRef = useRef(false);
 
   // 마운트 시 기존 초안 로드 → 있으면 배너 노출. (저장은 hasContent일 때만 일어나므로 로드된 초안은 항상 의미 있음.)
   useEffect(() => {
@@ -52,8 +59,15 @@ export function useStateDraft<T>({
   useEffect(() => {
     if (!enabled || !has) return;
     if (json === initialJsonRef.current) return;
-    const t = setTimeout(() => void saveDraft(scope, { __json: json }), 700);
-    return () => clearTimeout(t);
+    if (rebaseRef.current) {
+      rebaseRef.current = false;
+      initialJsonRef.current = json;
+      return;
+    }
+    timerRef.current = setTimeout(() => void saveDraft(scope, { __json: json }), 700);
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
   }, [scope, enabled, json, has]);
 
   const restore = useCallback(() => {
@@ -62,13 +76,16 @@ export function useStateDraft<T>({
   }, []);
 
   const discard = useCallback(() => {
+    if (timerRef.current) clearTimeout(timerRef.current);
     void clearDraft(scope);
     loadedRef.current = null;
     setDraftSavedAt(null);
   }, [scope]);
 
-  // 서버 저장 성공 시 호출 — 초안 비움.
+  // 서버 저장 성공 시 호출 — 초안 비움. 대기 중 저장 타이머 취소 + 다음 스냅샷은 재기준선(재저장 억제).
   const clear = useCallback(() => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    rebaseRef.current = true;
     void clearDraft(scope);
     loadedRef.current = null;
     setDraftSavedAt(null);

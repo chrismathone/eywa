@@ -5,6 +5,8 @@ import { useFormStatus } from "react-dom";
 import { Loader2, Plus } from "@/components/icons/eywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { createStudentMemo, type CreateMemoState } from "@/features/students/server/actions";
+import { useFormDraft } from "@/components/forms/use-form-draft";
+import { DraftBanner } from "@/components/forms/draft-banner";
 
 const CATEGORIES = [
   { value: "general", label: "일반" },
@@ -31,11 +33,24 @@ export function MemoForm({ studentId }: { studentId: string }) {
     undefined,
   );
   const formRef = useRef<HTMLFormElement>(null);
-  const success = state && !state.error;
 
+  // 로컬 초안 자동저장 — 작성 중 메모를 새로고침/창닫기에서 지킨다. 저장 성공 시 초안 삭제(reset과 함께).
+  const draft = useFormDraft({
+    scope: `student-memo:${studentId}`,
+    formRef,
+    exclude: ["studentId"],
+    ignoreForBanner: ["category"],
+  });
+  const clearDraft = draft.clear;
+
+  // ⚠️ 성공 판정은 state?.ok(액션이 성공 시 {ok:true} 반환) + 의존성은 state 객체 —
+  //    boolean 파생값에 걸면 연속 저장부터 effect가 안 돌아 reset·초안 삭제가 죽는다(리뷰 지적).
   useEffect(() => {
-    if (success) formRef.current?.reset();
-  }, [success]);
+    if (state?.ok) {
+      formRef.current?.reset();
+      clearDraft();
+    }
+  }, [state, clearDraft]);
 
   return (
     <form
@@ -43,6 +58,7 @@ export function MemoForm({ studentId }: { studentId: string }) {
       action={formAction}
       className="bg-bg-soft/30 border-border space-y-2 rounded-2xl border p-3"
     >
+      <DraftBanner savedAt={draft.draftSavedAt} onRestore={draft.restore} onDiscard={draft.discard} />
       <input type="hidden" name="studentId" value={studentId} />
       <div className="flex items-center gap-2">
         <select

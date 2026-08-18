@@ -64,7 +64,8 @@ export function ReportNameCard({
             value={name}
             onChange={(e) => setName(e.target.value)}
             maxLength={REPORT_NAME_MAX}
-            placeholder={`예: 영어 이름, ${realName} 선생님`}
+            // 예시에 실명("OO 선생님")을 섞지 않는다 — 원장 지시 2026-08-18 "하드 코딩된 이름 삭제".
+            placeholder="예: 영어 이름"
             autoComplete="off"
             className={`${inputClass} max-w-72 flex-1`}
           />

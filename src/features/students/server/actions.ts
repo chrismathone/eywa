@@ -598,7 +598,7 @@ export async function endSingleEnrollment(
 
 // ────────────────────── 메모 + 성적 ──────────────────────
 
-export type CreateMemoState = { error?: string } | undefined;
+export type CreateMemoState = { error?: string; ok?: boolean } | undefined;
 
 export async function createStudentMemo(
   _prev: CreateMemoState,
@@ -627,7 +627,8 @@ export async function createStudentMemo(
   if (error) return { error: error.message };
 
   revalidatePath(`/students/${studentId}`);
-  return undefined;
+  // 성공을 undefined로 돌리면 useActionState 소비처가 성공을 감지할 수 없다(성공 시 reset·초안 삭제가 죽는다).
+  return { ok: true };
 }
 
 export type DeleteMemoState = { error?: string } | undefined;
