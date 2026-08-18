@@ -35,7 +35,8 @@
  * 아니라 기능색이므로 유지하되 한 단계 또렷하게(--muted), 사이드바 활성은 네이비 틴트로 전환.
  * Light-only. Dark mode 제거됨. (v1 forest → v2 pine → v3 navy+gray → v4 navy+white)
  * chart-2는 그린 유지(출석·완납 "긍정" 시맨틱은 브랜드색과 분리).
- * ⚠️ --primary 계열을 바꾸면 src/lib/color-utils.ts(DEFAULT_BRAND_COLOR·soft alpha 0.1/0.05)와 동기 필수.
+ * ⚠️ --primary 계열을 바꾸면 src/lib/color-utils.ts(DEFAULT_BRAND_COLOR·soft alpha **0.11/0.05** +
+ *    --sidebar-accent 0.07)와 동기 필수 — 숫자는 color-utils.test.ts가 잠근다.
  */
 
 /* 초대형 화면(≥1680px) — 원스크린 카드 뷰가 4열(학생·진도·보고서·학부모 미리보기)로 펼쳐지는 지점.
@@ -84,7 +85,7 @@
   --color-input: var(--input);
   --color-ring: var(--ring);
 
-  /* charts: 시안 의미 (1=blue/정보, 2=primary green/출석, 3=amber/지각, 4=danger/결석·미납, 5=rose/상담) */
+  /* charts: 의미색 캐논과 같은 뜻 (1=blue/정보, 2=green/정상·출석, 3=amber 계열/주의, 4=danger/위험, 5=rose 계열/상담) */
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);
   --color-chart-3: var(--chart-3);
@@ -115,7 +116,7 @@
   --color-line-strong: var(--line-strong);
   --color-line-faint: var(--line-faint);
 
-  /* 출석부 전용 팔레트(att-*) — 아래 :root 정의 참조. 앱 표준 -soft 토큰(8~11%)보다 훨씬 쨍하다. */
+  /* 출석부 전용 팔레트(att-*) — 아래 :root 정의 참조. 앱 표준 -soft 토큰(12~13%)보다 훨씬 쨍하다. */
   --color-att-present: var(--att-present);
   --color-att-present-ink: var(--att-present-ink);
   --color-att-late: var(--att-late);
@@ -176,7 +177,7 @@
   --bg-soft: #e9edf4;
   --surface-hi: #ffffff;
 
-  /* text — 3단 시스템, v4 대비 승압(화이트 표면 전제): 기본 #1d1d1f(16.8:1) · 중간 #3f3f45(10.7:1) ·
+  /* text — 3단 시스템, v4 대비 승압(화이트 표면 전제): 기본 #1d1d1f(16.8:1) · 중간 #3f3f45(10.5:1) ·
      마지노선 #66666c(5.6:1 — 구 #767676 4.54:1에서 강화, muted 칠 위에서도 4.5:1 유지). */
   --foreground: #1d1d1f;
   --ink: #1d1d1f;
@@ -597,6 +598,17 @@
   * {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
+  }
+
+  /* 카드 그림자 — 종이에선 **헤어라인만** 남기고 블러 레이어를 뗀다.
+     위 `print-color-adjust: exact`가 그림자까지 찍게 만들기 때문에, v4에서 `--shadow-card`에 넣은
+     링(0 0 0 1px)과 함께 4%짜리 블러 두 겹이 인쇄물에 회색 번짐으로 나온다(화면에선 부양감이지만
+     종이엔 부양이라는 개념이 없다 — 잉크만 먹는다). 구조를 그리는 건 링이므로 링만 남긴다.
+     ⚠️ `box-shadow: none`으로 통째로 지우지 않는다 — 테두리가 따로 없는 카드(262곳)는 링이 유일한
+     경계라, 지우면 종이에서 카드 구분이 사라진다. */
+  .shadow-card,
+  .shadow-card-hover {
+    box-shadow: 0 0 0 1px rgba(29, 29, 31, 0.22) !important;
   }
 }
 

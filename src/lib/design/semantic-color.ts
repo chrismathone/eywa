@@ -35,8 +35,14 @@ import type { PillColor } from "@/components/atoms/pill";
  *
  * ⚠️ `caution`과 `info`의 경계는 **"내가 지금 손을 대야 하나"** 다. 결재가 돌고 있는 것(진행중)은
  *    info지만 **내 차례**로 온 것은 caution — 같은 문서라도 보는 사람에 따라 뜻이 달라진다.
+ *    📌 결재함 '대기' 탭은 아직 색이 아니라 **건수**로 이 구분을 표현한다(공용 FaceTabs라 탭별 색 없음).
  * - `special`  예외·대체       — 보강 · 대결/전결 · 반 이동(전출)
  * - `inert`    종료·비활성     — 퇴원 · 취소 · 해당 없음 (색을 빼서 "지나간 것"으로)
+ *
+ * ⚠️ `inert`는 **목록에서 지나간 행을 죽일 때** 쓰는 톤이지, **주의를 끌려고 붙인 배지**에 쓸 톤이
+ *    아니다. 출석부 이름 칸의 '퇴원' 표식을 inert로 칠했다가 되돌렸다 — 같은 표의 주말 회색과
+ *    대비가 1.13이라 표식이 있다는 사실 자체가 안 보였고, 신입·반이동과 한 세트인데 혼자 무채색이
+ *    되면 세트에서 빠진다(2026-08-18 실측).
  *
  * `brand`는 뜻이 아니라 **자리 표시**(현재 위치·기본 액션·브랜드)라 따로 둔다 —
  * 상태에 brand를 쓰면 테넌트가 브랜드색을 바꿀 때 상태 색이 같이 바뀐다.
@@ -108,3 +114,18 @@ export const TONE_ACCENT_BAR: Record<SemanticTone, string> = {
 export function toneColor(tone: SemanticTone): PillColor {
   return TONE_COLOR[tone];
 }
+
+/**
+ * **상태 전용으로 예약된 색** — 과목 등 다른 축이 이 색을 쓰면 뜻이 겹친다.
+ *
+ * 캐논이 코드로 막지 못하는 유일한 구멍이 여기다: 과목 색은 학원설정이라 원장이 `SUBJECT_COLORS`에서
+ * **초록도 고를 수 있다**(2026-08-18 확인. injaewon 현재 설정은 blue·rose·purple·gold라 충돌 없음).
+ * 🔑 선택지에서 빼지 않는 이유 = 이미 그 색으로 저장한 학원이 있으면 Zod가 거절해 **학원설정 저장이
+ * 통째로 막힌다**(fail-closed). 그래서 편집기가 경고만 띄운다
+ * ([list-editors.tsx](<src/app/(shell)/owner/_components/list-editors.tsx>) SubjectListEditor).
+ */
+export const STATE_RESERVED_COLORS: ReadonlySet<PillColor> = new Set<PillColor>([
+  TONE_COLOR.positive,
+  TONE_COLOR.critical,
+  TONE_COLOR.caution,
+]);
