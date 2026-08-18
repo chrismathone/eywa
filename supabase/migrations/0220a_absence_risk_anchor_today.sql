@@ -1,4 +1,4 @@
--- 0219a — 결석 위험 14일 창의 **기준일에 "오늘" 상한**을 건다 (미리 찍은 미래 결석이 창을 밀던 것)
+-- 0220a — 결석 위험 14일 창의 **기준일에 "오늘" 상한**을 건다 (미리 찍은 미래 결석이 창을 밀던 것)
 --
 -- 원장 2026-08-18: *"출석부에서 미래 출석에 미리 결석(여행, 개인사정 등)을 처리해놓으면 ecs 및 여러
 -- 뷰에서 미리 결석 체크 연동되는지 확인"* → 확인 결과 표시는 전부 정상인데 **이 함수 하나가 오염된다.**
@@ -43,7 +43,7 @@ as $$
     select max(session_date) as d
     from attendance_records
     where tenant_id = auth_tenant_id()
-      -- 🔴 오늘(KST) 상한 — 미리 찍은 미래 결석이 창을 앞으로 밀지 않게(0219a).
+      -- 🔴 오늘(KST) 상한 — 미리 찍은 미래 결석이 창을 앞으로 밀지 않게(0220a).
       and session_date <= (now() at time zone 'Asia/Seoul')::date
   ),
   effective as (
@@ -85,7 +85,7 @@ as $$
     select max(session_date) as d
     from attendance_records
     where tenant_id = p_tenant
-      -- 🔴 오늘(KST) 상한 — 위 ①과 같은 이유(0219a).
+      -- 🔴 오늘(KST) 상한 — 위 ①과 같은 이유(0220a).
       and session_date <= (now() at time zone 'Asia/Seoul')::date
   ),
   effective as (
@@ -116,8 +116,8 @@ as $$
 $$;
 
 comment on function public.dashboard_absence_risk(int) is
-  '최근 유효 출결일(오늘 이하) 기준 14일 결석 위험: 학생·반·수업일·교시별 최신 행만 집계(0198a 교시 단위, 0219a 오늘 상한).';
+  '최근 유효 출결일(오늘 이하) 기준 14일 결석 위험: 학생·반·수업일·교시별 최신 행만 집계(0198a 교시 단위, 0220a 오늘 상한).';
 comment on function public.dashboard_absence_risk_admin(int, uuid) is
-  'dashboard_absence_risk의 cron(service_role) 변형 — auth_tenant_id() 대신 p_tenant. execute는 service_role만(0219a: 오늘 상한).';
+  'dashboard_absence_risk의 cron(service_role) 변형 — auth_tenant_id() 대신 p_tenant. execute는 service_role만(0220a: 오늘 상한).';
 
 notify pgrst, 'reload schema';
