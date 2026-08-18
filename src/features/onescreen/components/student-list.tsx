@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { ChevronDown } from "@/components/icons/eywa-icon-compat";
+import { BulkPresentButton, type BulkPresentProps } from "./bulk-present-button";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { studentStatus, type TestConfig } from "../report";
 import { subjectTone, toneSolidClass } from "../data";
@@ -131,6 +132,7 @@ export function StudentList({
   sendMarkById,
   classOrder,
   testConfig,
+  bulkPresent,
   emptyLabel = "해당 반 학생이 없습니다",
 }: {
   students: OneScreenStudent[];
@@ -145,6 +147,13 @@ export function StudentList({
   classOrder?: readonly string[];
   /** 테스트 사용 여부 — '테' 셀이 비활성 테스트를 요구하지 않게(#25). */
   testConfig?: TestConfig;
+  /**
+   * 머리의 '일괄 출석'(빠른 출결) — 재료·핸들러. **없으면 버튼 자체를 안 그린다**(출결 쓰기 권한이
+   * 없을 때. 누를 수 있는 것처럼 보였다가 서버가 거절하는 게 최악 — attendance-pills와 같은 규약).
+   * 대상 계산은 호출부가 [planQuickPresent](../quick-attendance.ts)로 한다 — 반 필터를 아는 쪽이고,
+   * 표 모드와 **같은 한 번의 계산**을 나눠 써야 두 화면이 다른 수를 말하지 않는다.
+   */
+  bulkPresent?: BulkPresentProps;
 }) {
   // 반별 그룹 — className 없으면 "기타"로.
   const groups = new Map<string, OneScreenStudent[]>();
@@ -181,6 +190,7 @@ export function StudentList({
       <header className="border-line flex items-center justify-between gap-2 border-b px-3 py-2.5">
         <p className="micro text-text-faint">학생 · 반별</p>
         <div className="flex items-center gap-2">
+          {bulkPresent ? <BulkPresentButton {...bulkPresent} /> : null}
           {orderedKeys.length > 1 ? (
             <button
               type="button"

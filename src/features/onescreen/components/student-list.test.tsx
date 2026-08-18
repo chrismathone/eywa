@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { StudentList } from "./student-list";
 import type { OneScreenStudent } from "../types";
@@ -105,5 +105,50 @@ describe("StudentList 빈 목록 문구", () => {
     );
     expect(screen.getByText("미작성 학생이 없습니다")).toBeTruthy();
     expect(screen.queryByText("해당 반 학생이 없습니다")).toBeNull();
+  });
+});
+
+describe("StudentList 머리의 '일괄 출석'(빠른 출결)", () => {
+  const students = [student({ id: "a", name: "최주원" }), student({ id: "b", name: "안서준" })];
+  const quick = (over: Partial<Parameters<typeof StudentList>[0]["bulkPresent"] & object> = {}) => ({
+    count: 2,
+    alreadyMarked: 0,
+    busy: false,
+    onApply: vi.fn(),
+    ...over,
+  });
+
+  it("'학생 · 반별' 줄에 대상 수를 붙여 나온다", () => {
+    render(<StudentList students={students} selId="a" onSelect={vi.fn()} bulkPresent={quick()} />);
+    const btn = screen.getByRole("button", { name: "일괄 출석 2" });
+    expect(btn.hasAttribute("disabled")).toBe(false);
+    // 머리(헤더)에 있어야 한다 — 학생 행 안이 아니다(행마다 반복되면 시끄럽다).
+    expect(btn.closest("header")).not.toBeNull();
+  });
+
+  it("대상 0명이면 비활성", () => {
+    render(
+      <StudentList
+        students={students}
+        selId="a"
+        onSelect={vi.fn()}
+        bulkPresent={quick({ count: 0, alreadyMarked: 2 })}
+      />,
+    );
+    expect(screen.getByRole("button", { name: "일괄 출석" }).hasAttribute("disabled")).toBe(true);
+  });
+
+  it("🔴 출결 쓰기 권한이 없으면(재료 없음) 버튼 자체가 없다 — 할 수 없는 일을 보여주지 않는다", () => {
+    render(<StudentList students={students} selId="a" onSelect={vi.fn()} />);
+    expect(screen.queryByRole("button", { name: /일괄 출석/ })).toBeNull();
+  });
+
+  it("누르면 호출부 핸들러가 돈다(확인창 없음)", () => {
+    const onApply = vi.fn();
+    render(
+      <StudentList students={students} selId="a" onSelect={vi.fn()} bulkPresent={quick({ onApply })} />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "일괄 출석 2" }));
+    expect(onApply).toHaveBeenCalledTimes(1);
   });
 });
