@@ -8,6 +8,7 @@ import { parseForwardedFor } from "@/features/attendance/kiosk/device-info";
 import { isShareExpired } from "@/features/onescreen/share-expiry";
 import { visibleAttachments } from "@/features/onescreen/attachment-utils";
 import { fetchReportTrendRows, fetchSpecialClassIds } from "@/features/onescreen/server/score-history";
+import { resolveReportAuthorName } from "@/features/onescreen/server/report-author-name";
 import { buildTrendPoints } from "@/features/onescreen/report-trend";
 import { ParentReportCard } from "@/features/onescreen/components/parent-report-card";
 import { ClosedReportScreen } from "./_closed";
@@ -66,7 +67,7 @@ export default async function PublicLessonReportPage({
   const specialClassIds = await fetchSpecialClassIds(admin, report.tenant_id as string).catch(
     () => [] as string[],
   );
-  const [{ data: student }, settings, trendRows] = await Promise.all([
+  const [{ data: student }, settings, trendRows, sendName] = await Promise.all([
     admin.from("students").select("name, school, grade").eq("id", report.student_id).maybeSingle(),
     getTenantSettingsByTenantId(report.tenant_id as string),
     // 성적 추이 이력 — admin(service_role)이라 tenantId 필터로 테넌트 격리 필수(#B6 규약). 실패해도 페이지 안 깨짐.
@@ -75,6 +76,9 @@ export default async function PublicLessonReportPage({
       classId: report.class_id as string | null,
       specialClassIds,
     }).catch(() => []),
+    // 발송용 이름(0217a) — 강사가 정했으면 '담임' 칸에 실명 대신 표시. fail-soft(실패=실명 그대로).
+    // ClassNote 게시 이미지는 이 페이지의 워커 스크린샷이라 여기 한 곳으로 이미지 표기가 함께 바뀐다.
+    resolveReportAuthorName(report.tenant_id as string, report.teacher_name as string | null),
   ]);
   const trend = buildTrendPoints(trendRows, report.id as string);
 
@@ -109,7 +113,7 @@ export default async function PublicLessonReportPage({
       <ParentReportCard
         report={{
           reportDate: report.report_date,
-          teacherName: report.teacher_name,
+          teacherName: sendName ?? report.teacher_name,
           textbook: report.textbook,
           progress: report.progress,
           dailyTest: report.daily_test,

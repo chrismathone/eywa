@@ -188,6 +188,13 @@ export async function reactivateStudent(
   const holdErr = await clearOnHoldForActiveEnrollments(supabase, studentId);
   if (holdErr) return { error: holdErr };
 
+  // 학생 상세의 재원 전환(student_restore)과 같은 액션 키 — 어느 화면에서 복구했든 한 필터로 역검수.
+  await logAction({
+    action: "student_restore",
+    targetType: "student",
+    metadata: { studentId },
+  });
+
   revalidatePath("/withdrawals");
   revalidatePath(`/students/${studentId}`);
   revalidatePath("/timetable");

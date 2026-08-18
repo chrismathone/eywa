@@ -5,6 +5,7 @@ import { getShellView } from "@/lib/auth/view-mode";
 import { getPermMatrix } from "@/lib/auth/perm-matrix";
 import { roleHome } from "@/lib/permissions";
 import { getTeacherRoster } from "@/features/onescreen/server/roster";
+import { resolveReportAuthorName } from "@/features/onescreen/server/report-author-name";
 import { parseView } from "@/features/onescreen/view";
 import { OneScreenClient } from "@/features/onescreen/components/onescreen-client";
 import { TodayAttendanceStrip } from "@/features/attendance/live/components/today-strip";
@@ -34,7 +35,14 @@ export default async function OneScreenPage({
   }
   const { date, view, all, class: classId, student: studentId } = await searchParams;
   // all=1 = 강사가 '담당 반 전체 보기'를 명시로 고른 상태. 기본은 그 요일 수업만(폴백 금지).
-  const roster = await getTeacherRoster(date, all === "1");
+  // 발송용 이름(0217a)은 병렬 fail-soft 조회(B4) — **이 화면에서 지금 저장하는 보고서**(teacher_name=
+  // 본인 실명 기록)의 발송 표기와 미리보기를 맞춘다. ⚠️ 옛 별칭 보강 행(pre-0172a, teacher_name이 실명이
+  // 아닌 행)은 /r가 행별 저장값으로 해석하므로 미리보기와 다를 수 있다(재저장하면 실명으로 갱신돼 일치).
+  // ⚠️ 로스터(전원 핫패스)에 새 컬럼을 넣지 않는다(#95) — 실패해도 sendName=null이라 실명으로 그대로 산다.
+  const [roster, sendName] = await Promise.all([
+    getTeacherRoster(date, all === "1"),
+    resolveReportAuthorName(user.tenantId, user.displayName),
+  ]);
   // 진입 지정(2026-08-07) — '오늘 ECS' 카드에서 `?class=&student=`로 넘어온다.
   // 🔴 **로스터 안에 실제로 있을 때만** 넘긴다. 남의 반 id를 URL에 적어도 여기서 걸러지고(로스터는 이미
   //    담당 반으로 좁혀져 있다), 없는 값이면 조용히 '전체'로 떨어진다(빈 화면·에러 대신 기존 동작).
@@ -72,7 +80,8 @@ export default async function OneScreenPage({
       noClassesToday={roster.noClassesToday}
       showingAll={roster.showingAll}
       // 카드 뷰 우측 '학부모 미리보기'(2026-08-05) — /r·인쇄와 같은 컴포넌트에 넘길 재료. 표시 전용.
-      teacherName={roster.teacherName}
+      // 발송용 이름이 있으면 그 이름으로(지금 저장·발송될 보고서 기준) — 저장되는 teacher_name(귀속 축)은 불변.
+      teacherName={sendName ?? roster.teacherName}
       reportSettings={roster.reportSettings}
       academyName={roster.academyName}
       logoSrc={roster.logoSrc}

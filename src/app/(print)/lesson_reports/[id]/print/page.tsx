@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 import { resolveBrandingSrc, resolveTenantReadUrls } from "@/lib/storage/media-storage";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { fetchReportTrendRows, fetchSpecialClassIds } from "@/features/onescreen/server/score-history";
+import { resolveReportAuthorName } from "@/features/onescreen/server/report-author-name";
 import { buildTrendPoints } from "@/features/onescreen/report-trend";
 import { ParentReportCard } from "@/features/onescreen/components/parent-report-card";
 import { PrintActions } from "@/app/(print)/enrollment/[id]/print/print-actions";
@@ -51,7 +52,7 @@ export default async function LessonReportPrintPage({
     if (!report.student_id || !studentIds.includes(report.student_id)) notFound();
   }
 
-  const [{ data: student }, settings, trendRows] = await Promise.all([
+  const [{ data: student }, settings, trendRows, sendName] = await Promise.all([
     supabase.from("students").select("name, school, grade").eq("id", report.student_id).single(),
     getTenantSettings(),
     // 성적 추이 이력 — RLS 클라이언트라 테넌트 격리 자동(tenantId 불요). 실패해도 문서 안 깨짐.
@@ -67,6 +68,8 @@ export default async function LessonReportPrintPage({
         ),
       )
       .catch(() => []),
+    // 발송용 이름(0217a) — /r·ClassNote 이미지와 같은 표기(강사 미리보기 = 실제 발송물). fail-soft.
+    resolveReportAuthorName(user.tenantId, report.teacher_name as string | null),
   ]);
   const trend = buildTrendPoints(trendRows, report.id as string);
 
@@ -100,7 +103,7 @@ export default async function LessonReportPrintPage({
         <ParentReportCard
           report={{
             reportDate: report.report_date,
-            teacherName: report.teacher_name,
+            teacherName: sendName ?? report.teacher_name,
             textbook: report.textbook,
             progress: report.progress,
             dailyTest: report.daily_test,

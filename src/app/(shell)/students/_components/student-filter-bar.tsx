@@ -180,18 +180,22 @@ export function StudentFilterBar({
               ariaLabel="정렬 기준"
             />
           </FilterGroup>
-          <button
-            type="button"
-            onClick={() => go({ noenr: !current.noenr })}
-            aria-pressed={current.noenr}
-            className={`shrink-0 rounded-full border px-2.5 py-2 text-xs transition ${
-              current.noenr
-                ? "border-primary bg-primary text-primary-foreground font-medium"
-                : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
-            }`}
-          >
-            미수강 제외
-          </button>
+          {/* 상태=퇴원에선 숨김 — 퇴원생은 활성 수강이 없어 이 토글이 켜져 있으면 전원이 걸러져
+              "검색해도 항상 0명"이 된다(2026-08-18 실사고). 서버(getStudentsPage)도 같은 조건에서 무시. */}
+          {current.status !== "withdrawn" ? (
+            <button
+              type="button"
+              onClick={() => go({ noenr: !current.noenr })}
+              aria-pressed={current.noenr}
+              className={`shrink-0 rounded-full border px-2.5 py-2 text-xs transition ${
+                current.noenr
+                  ? "border-primary bg-primary text-primary-foreground font-medium"
+                  : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
+              }`}
+            >
+              미수강 제외
+            </button>
+          ) : null}
           <form
             onSubmit={(e) => {
               e.preventDefault();

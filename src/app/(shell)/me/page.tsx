@@ -9,8 +9,13 @@ import { emptyResume } from "@/features/staff/resume";
 import { isImportArtifactEmail } from "@/features/staff/email";
 import { getStaffById } from "@/features/staff/server/queries";
 import { getResumeByStaffUser } from "@/features/staff/server/resume-queries";
+import {
+  fetchMyReportDisplayName,
+  resolveReportAuthorName,
+} from "@/features/onescreen/server/report-author-name";
 import { ResumeSheet } from "../staff/resumes/_components/resume-sheet";
 import { AccountCard } from "./_components/account-card";
+import { ReportNameCard } from "./_components/report-name-card";
 
 export const metadata = { title: "내 정보 — eywa" };
 
@@ -25,7 +30,15 @@ export default async function MyPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 
-  const [resume, me] = await Promise.all([getResumeByStaffUser(user.id), getStaffById(user.id)]);
+  const [resume, me, reportName, resolvedSendName] = await Promise.all([
+    getResumeByStaffUser(user.id),
+    getStaffById(user.id),
+    // 수업보고서 발송용 이름(0217a) — fail-soft: 컬럼 미적용이면 null(빈 칸)이고 페이지는 그대로 산다.
+    fetchMyReportDisplayName(user.id),
+    // 실제 발송이 쓰는 해석기로 "지금 매핑이 걸리는가"까지 확인 — 저장 후 생긴 동명 직원 때문에
+    // 조용히 실명 발송으로 돌아간 상태를 카드가 밝힌다([[#89]] 폴백 기능의 침묵 실패 가시화).
+    resolveReportAuthorName(user.tenantId, user.displayName),
+  ]);
   const placeholder = isImportArtifactEmail(user.email);
 
   // 이력서가 아직 없으면 계정에 있는 정보로 초안을 채워 바로 쓰게 한다(빈 종이보다 시작이 쉽다).
@@ -71,8 +84,14 @@ export default async function MyPage() {
         />
       </div>
 
-      <div className="print:hidden">
+      <div className="print:hidden space-y-5">
         <AccountCard email={user.email} isPlaceholder={placeholder} />
+        {/* 수업보고서 발송용 이름(0217a) — 발송·공유·인쇄에 실명 대신 표시할 이름을 본인이 정한다. */}
+        <ReportNameCard
+          realName={user.displayName}
+          initialName={reportName}
+          mappingBlocked={!!reportName && resolvedSendName !== reportName}
+        />
       </div>
 
       <ResumeSheet

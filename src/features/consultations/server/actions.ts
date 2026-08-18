@@ -25,11 +25,13 @@ export async function runStudentCareAnalysis(
   _prev: StudentCareState,
   formData: FormData,
 ): Promise<StudentCareState> {
-  // 역할 게이트 — 유료 AI 호출은 학생 접근권이 있는 역할만(비용통제, #S5 형제).
+  // 역할 게이트 — 유료 AI 호출은 학생 **full** 역할만(비용통제, #S5 형제).
+  // 🔴 강사(scoped) 차단(원장 지시 2026-08-18 "AI 케어 분석도 막고 — 읽기만") — 학생 상세의
+  // 퇴원·수정 차단(students/server/actions.ts canManageStudentRecords)과 같은 결.
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  if (!(await canWriteTenant(user.systemRole, "students"))) {
-    return { error: "학생 권한이 없습니다" };
+  if ((await accessLevelTenant(user.systemRole, "students")) !== "full") {
+    return { error: "AI 케어 분석 권한이 없습니다 — 강사 계정은 열람 전용입니다" };
   }
 
   const studentId = String(formData.get("studentId") ?? "");

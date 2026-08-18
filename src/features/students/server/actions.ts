@@ -8,6 +8,7 @@ import {
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { createClient } from "@/lib/supabase/server";
 import { accessLevelTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
+import { logAction } from "@/features/audit/server/log";
 import { kstToday } from "@/lib/date-kst";
 import { fetchAllPaged } from "@/lib/supabase/batch";
 import {
@@ -106,13 +107,26 @@ function translateDbError(message: string): string {
   return message;
 }
 
+/**
+ * 학생 기록 변경(등록·수정·상태 전환) 게이트 = students **full**만 (master·admin·manager·counselor).
+ * 🔴 `canWriteTenant`는 scoped(강사)도 통과한다 — 2026-08-18 원장 지시("강사들은 퇴원처리 막아,
+ * 수정도 안되게, AI 케어도 — 읽기만 해") 이후 강사는 학생 상세 **열람 전용**이다. 배경: 실제 등원 중인
+ * 학생 7명이 7월 날짜로 소급 퇴원 처리되는 사고 + 감사로그 부재로 행위자 역추적 불가.
+ * UI(학생 상세 헤더 버튼·edit 라우트)와 이 서버 게이트가 한 쌍이다(#77 — 화면 숨김은 게이트가 아니다).
+ */
+async function canManageStudentRecords(role: Parameters<typeof accessLevelTenant>[0]): Promise<boolean> {
+  return (await accessLevelTenant(role, "students")) === "full";
+}
+
+const STUDENT_MANAGE_DENIED = "학생 정보 변경 권한이 없습니다 — 강사 계정은 열람 전용입니다";
+
 export async function createStudent(
   _prev: StudentFormState,
   formData: FormData,
 ): Promise<StudentFormState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  if (!(await canWriteTenant(user.systemRole, "students"))) return { error: "학생 관리 권한이 없습니다" };
+  if (!(await canManageStudentRecords(user.systemRole))) return { error: STUDENT_MANAGE_DENIED };
 
   const input = readForm(formData);
   const fieldErrors = validate(input);
@@ -163,6 +177,13 @@ export async function createStudent(
     return { error: translateDbError(error?.message ?? "학생 등록 실패") };
   }
 
+  await logAction({
+    action: "student_create",
+    targetType: "student",
+    targetLabel: resolvedName.name,
+    metadata: { studentId: data.id },
+  });
+
   revalidatePath("/students");
   // redirect 대신 결과 반환 — 클라가 성공 확정(nonce) 후 초안 삭제·동시편집 신호·이동(B-2).
   // (redirect()면 NEXT_REDIRECT throw로 폼의 nonce 효과가 안 돌아 'student:new' 초안이 안 비워진다.)
@@ -192,6 +213,8 @@ export async function deleteStudent(_prev: DeleteStudentState, formData: FormDat
   if (!id) return { error: "학생 ID가 누락되었습니다" };
 
   const supabase = await createClient();
+  // 감사 기록용 이름 선조회 — 삭제 뒤엔 uuid로 이름을 되찾을 수 없다(describe.ts student_delete 참조).
+  const { data: target } = await supabase.from("students").select("name").eq("id", id).maybeSingle();
   // 청구(invoices) 기록 있으면 FK restrict라 삭제 실패 → 미리 막고 퇴원 처리 안내(count head:true = 행 안 받음, B2).
   const { count } = await supabase
     .from("invoices")
@@ -205,6 +228,13 @@ export async function deleteStudent(_prev: DeleteStudentState, formData: FormDat
   if (error) return { error: translateDbError(error.message) };
   if (!deleted) return { error: "학생을 찾을 수 없거나 권한이 없습니다" };
 
+  await logAction({
+    action: "student_delete",
+    targetType: "student",
+    targetLabel: target?.name ?? null,
+    metadata: { studentId: id, studentName: target?.name ?? null },
+  });
+
   revalidatePath("/students");
   revalidatePath("/withdrawals");
   return { ok: true };
@@ -216,7 +246,7 @@ export async function updateStudent(
 ): Promise<StudentFormState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  if (!(await canWriteTenant(user.systemRole, "students"))) return { error: "학생 관리 권한이 없습니다" };
+  if (!(await canManageStudentRecords(user.systemRole))) return { error: STUDENT_MANAGE_DENIED };
 
   const id = String(formData.get("id") ?? "").trim();
   if (!id) return { error: "학생 ID가 누락되었습니다" };
@@ -315,6 +345,13 @@ export async function updateStudent(
     if (enrErr) return { error: enrErr.message };
   }
 
+  await logAction({
+    action: "student_update",
+    targetType: "student",
+    targetLabel: finalName,
+    metadata: { studentId: id, statusFrom: prevStatus ?? null, statusTo: input.status },
+  });
+
   revalidatePath(`/students/${id}`);
   revalidatePath("/students");
   // redirect 대신 결과 반환 — 클라가 성공 확정 후 동시편집 신호(publish) → 이동(B-2). nonce로 연속 저장 구분.
@@ -399,7 +436,8 @@ export async function changeStudentStatus(
 ): Promise<ChangeStatusState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  if (!(await canWriteTenant(user.systemRole, "students"))) return { error: "학생 관리 권한이 없습니다" };
+  // 🔴 퇴원·휴원·복구 = full만(강사 차단, 원장 지시 2026-08-18) — canManageStudentRecords 주석 참조.
+  if (!(await canManageStudentRecords(user.systemRole))) return { error: STUDENT_MANAGE_DENIED };
 
   const id = String(formData.get("id") ?? "").trim();
   const target = String(formData.get("target") ?? "").trim();
@@ -489,6 +527,17 @@ export async function changeStudentStatus(
     if (enrErr) return { error: enrErr.message };
   }
 
+  // 퇴원/휴원/복구는 전부 감사로그에 actor를 남긴다 — "누가 퇴원시켰는지 역검수 불가" 사고(2026-08-18) 재발 방지.
+  await logAction({
+    action:
+      target === "withdrawn" ? "student_withdraw" : target === "on_hold" ? "student_hold" : "student_restore",
+    targetType: "student",
+    metadata:
+      target === "withdrawn"
+        ? { studentId: id, date, reason: reasonStr, memo }
+        : { studentId: id },
+  });
+
   revalidatePath(`/students/${id}`);
   revalidatePath("/students");
   revalidatePath("/withdrawals");
@@ -519,7 +568,7 @@ export async function endSingleEnrollment(
   // end_date=max(start_date, date)로 클램프(미래 시작 건은 start_date로 종료=zero-length).
   const { data: enr, error: selErr } = await supabase
     .from("enrollments")
-    .select("start_date")
+    .select("start_date, class_id, student_id")
     .eq("id", enrollmentId)
     .maybeSingle();
   if (selErr) return { error: selErr.message };
@@ -530,6 +579,17 @@ export async function endSingleEnrollment(
     .eq("id", enrollmentId);
 
   if (error) return { error: error.message };
+
+  await logAction({
+    action: "enrollment_end",
+    targetType: "student",
+    metadata: {
+      studentId: studentId || enr?.student_id || null,
+      classId: enr?.class_id ?? null,
+      date: endDate,
+      reason,
+    },
+  });
 
   if (studentId) revalidatePath(`/students/${studentId}`);
   revalidatePath("/students");

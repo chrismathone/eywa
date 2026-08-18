@@ -30,6 +30,7 @@ export const AUDIT_ACTIONS = {
   // 본인이 자기 계정을 바꾼 경우(/me) — 위의 staff_*(관리자가 남의 계정을 바꿈)와 구분해 읽힌다.
   self_password_change: "내 비밀번호 변경",
   self_email_change: "내 이메일 변경",
+  self_report_name_change: "수업보고서 발송용 이름 변경",
   invoice_create: "청구서 생성",
   exam_create: "시험 등록",
   exam_delete: "시험 삭제",
@@ -76,6 +77,17 @@ export const AUDIT_ACTIONS = {
   approval_submit: "전자결재 기안",
   approval_decide: "전자결재 처리",
   approval_withdraw: "전자결재 회수",
+  // 학생 기록 변경 전수 감사(2026-08-18) — "퇴원을 누가 했는지 역검수가 안 된다"(원장). 상태 전환·정보
+  // 수정·삭제·수강 종료·관리 도구 일괄 처리까지 **학생 레코드를 바꾸는 모든 경로**가 actor를 남긴다.
+  student_create: "학생 등록",
+  student_update: "학생 정보 수정",
+  student_delete: "학생 영구 삭제",
+  student_withdraw: "학생 퇴원 처리",
+  student_hold: "학생 휴원 처리",
+  student_restore: "학생 재원 복구",
+  enrollment_end: "수강 종료",
+  student_bulk_withdraw: "학생 일괄 퇴원(데이터 정리)",
+  student_bulk_delete: "학생 일괄 삭제(데이터 정리)",
 } as const;
 export type AuditActionKey = keyof typeof AUDIT_ACTIONS;
 

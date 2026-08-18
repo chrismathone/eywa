@@ -22,6 +22,45 @@
 - ⚠️ 잔여 한계(수용): 고정 scope는 같은 면을 두 창으로 열면 한 슬롯 공유(기존 소비처와 동일 전제) ·
   intake 공용 태블릿 연속 사용 2h 창 안에서는 이전 학부모 초안이 배너로 보일 수 있음(복구는 명시 탭).
 - 검증: 내 파일 typecheck 0 · Vitest 전체 통과 · ESLint는 공유 트리 자체가 깨져 있어 미실행(@babel/core 미설치).
+## 2026-08-18 (4) — 내 정보 "수업보고서 이름": 발송·공유·인쇄 표시 이름을 본인이 지정 (0217a)
+
+원장: *"내정보에서 '수업보고서용 이름' 입력가능하게. 입력된 이름으로 수업보고서 발송되게 해줘."*
+
+- **저장** = `users.report_display_name`(0217a) — /me 새 카드에서 본인만 입력(`updateMyReportName`,
+  admin client + 감사로그 `self_report_name_change`). 비우면 실명으로 복귀.
+- **표시 시점 매핑만** — `lesson_reports.teacher_name`(저장·귀속 축: 지난 보고서 이력 `eq(teacher_name)`·
+  보강 소유·작성률 통계가 이름 일치로 묶는다)은 **불변**. 학부모 표면 4곳이 매핑을 소비:
+  ① /r 공유 카드 '담임' 칸(워커 스크린샷=ClassNote 게시 이미지가 자동 동행) ② 인쇄본
+  ③ 원스크린 학부모 미리보기(발송물과 한 소스 규약 유지) ④ **발송 워커 게시 작성자명**
+  (classnote-core.mjs 2-b — ⚠️ **발송 PC에 워커 zip 재배포 필요**).
+- 규칙(순수함수 `pickReportAuthorName` + Vitest, 적대 리뷰 8건 반영): **raw 정확 일치**(trim 퍼지 금지 —
+  teacher_name은 display_name을 그대로 기록하므로 byte 동일=같은 계정. trim을 섞으면 앱 .eq와 워커 JS가
+  갈린다) · 같은 표시 이름의 직원 2명+면 매핑 제외(오표시 방지) · **학생 계정 제외**(`neq system_role
+  student`, staff 풀 규약 — 동명 학생이 강사 매핑을 끄면 안 된다) · 저장 직후·/me 열람 시 **실제 해석기로
+  매핑 활성 여부를 확인해 표시**(동명으로 조용히 실명 복귀한 상태 가시화, #89). /me 폼은 제어 입력 +
+  onSubmit 디스패치(#83 — 에러 응답에도 입력 보존). 전 조회 fail-soft — 0217a 미적용이어도 아무 화면도
+  안 죽는다(#95 expand/contract, 적용 순서 제약 없음).
+
+## 2026-08-18 (3) — 🔴 퇴원 사고 대응: 강사=학생 열람 전용 + 학생 변경 전수 감사로그 + 퇴원 필터 0명 수정
+
+배경(원장·허은진 제보 *"퇴원 아닌데 막 퇴원 들어가고"*): 실제 등원 중(8월 중순까지 출석)인 학생 **7명**이
+08-13~08-18 사이 7월 날짜로 **소급 퇴원 처리**됐다(엄채율·이채아·손지우·박병헌·유아림·김승언·강시윤 —
+이채아는 퇴원일 이후 출석 19건). 전부 앱의 '퇴원 처리' 다이얼로그 모양(개별 입력)이고, **감사로그가 없어
+누가 했는지 소급 추적 불가**였다. 자동 퇴원 경로는 없음 확인(makeedu 동기화는 additive 전용 — 기존 학생
+status 불변, 08-17 20:12 31명 일괄은 관리 도구 '수강 없는 재원생 정리' 버튼 = 전원 출석 0·수강 0이라 정상).
+
+- **강사(teacher, scoped) = 학생 기록 열람 전용** (원장 지시: *"강사들은 퇴원처리 막아 · 수정도 안되게 ·
+  AI 케어 분석도 막고 · 읽기만 해"*): 퇴원/휴원/복구(`changeStudentStatus`)·학생 수정(`updateStudent`)·
+  등록(`createStudent`)·수강 종료(`endSingleEnrollment` — 서버는 이미 full)·엑셀 가져오기(import-actions)·
+  AI 케어 분석(`runStudentCareAnalysis`) 전부 students **full**만(master·admin·manager·counselor).
+  게이트 단일 소스 = students/server/actions.ts `canManageStudentRecords`. UI(학생 상세 헤더 3버튼·
+  학생목록 새 학생/가져오기·edit·new 라우트 강제 URL)도 같은 판정으로 숨김/리다이렉트(#77).
+- **학생 레코드를 바꾸는 전 경로가 audit_logs에 actor를 남긴다**: `student_create/update/delete/
+  withdraw/hold/restore`·`enrollment_end`·`student_bulk_withdraw/delete` 9키(log.ts 등록 + describe.ts
+  한글 상세 — 삭제는 이름을 metadata에 보존, 일괄은 studentIds 전체 보존). 퇴원관리 '재원 복구'도 동일 키.
+- **퇴원 필터 0명 수정**: '미수강 제외'(계정 귀속 토글)가 켜진 채 상태=퇴원이면 inner join이 퇴원생 전원을
+  걸러 **검색이 항상 0명**이었다(엄채율 실종의 화면 쪽 원인) → 상태=퇴원에선 서버가 무시 + 칩 숨김.
+- 검증: typecheck 0 / lint 0(기존 경고 2) / **test 415파일·5,062 전체 통과**.
 
 ## 2026-08-18 (2) — 전자결재 v3: 양식 재편(수입결의서) + 전결·후결·대결 + 테스터 계정 (0216a, 병렬 fork 3 + 메인)
 
