@@ -117,12 +117,14 @@ describe("auditDetail — 액션별 한글 상세", () => {
 });
 
 describe("collectAuditNameIds / auditTargetName", () => {
-  it("studentId는 students로, userId·newTeacherId는 users로, classId는 classes로 — 중복 제거", () => {
+  it("studentId는 students로, userId·newTeacherId·delegateUserId는 users로, classId는 classes로 — 중복 제거", () => {
     const CID = "99999999-8888-7777-6666-555555555555";
     const rows = [
       { metadata: { studentId: SID } },
       { metadata: { studentId: SID, userId: UID } },
       { metadata: { newTeacherId: UID } },
+      // 담임 위임 로그 — 이 키가 빠지면 위임 상세의 강사 이름이 영영 해석 안 된다(적대 리뷰 2026-08-18).
+      { metadata: { delegateUserId: UID } },
       { metadata: { classId: CID } },
       { metadata: { studentId: "not-a-uuid" } },
       { metadata: null },

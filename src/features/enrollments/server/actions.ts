@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { createClient } from "@/lib/supabase/server";
-import { accessLevelTenant, canManageTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
+import { accessLevelTenant, canManageTenant } from "@/lib/auth/perm-matrix";
 import { kstToday } from "@/lib/date-kst";
 import { notifyClassAssignment } from "@/features/notifications/server/notify";
 import { logAction } from "@/features/audit/server/log";
@@ -120,13 +120,15 @@ export async function createEnrollment(
 ): Promise<CreateEnrollmentState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  // "반 배정"은 반 상세(classes) + 학생 상세(students) 양쪽에서 호출 — 둘 중 하나라도 쓰기면 허용
+  // "반 배정"은 반 상세(classes) + 학생 상세(students) 양쪽에서 호출 — 둘 중 하나라도 **full**이면 허용
   // (counselor는 classes=none이나 students=full로 학생 상세에서 배정. 회계/뷰어=양쪽 readonly/none → 차단).
+  // 🔴 canWriteTenant는 scoped(강사)도 통과한다 — 강사=학생 기록 열람 전용(원장 2026-08-18) 체제에서
+  //    수강 종료는 full 전용인데 수강 시작이 강사 가능이던 비대칭을 닫는다(적대 리뷰 F2).
   if (
-    !(await canWriteTenant(user.systemRole, "classes")) &&
-    !(await canWriteTenant(user.systemRole, "students"))
+    !(await canManageTenant(user.systemRole, "classes")) &&
+    !(await canManageTenant(user.systemRole, "students"))
   ) {
-    return { error: "반 배정 권한이 없습니다" };
+    return { error: "반 배정 권한이 없습니다 — 강사 계정은 열람 전용입니다" };
   }
 
   const studentId = String(formData.get("studentId") ?? "").trim();
@@ -195,76 +197,9 @@ export async function createEnrollment(
   return { enrollmentId: data.id };
 }
 
-export type MoveEnrollmentState = { error?: string } | undefined;
-
-/**
- * 학생을 한 반에서 다른 반으로 이동.
- * 기존 enrollment 종료 + 새 enrollment 생성 (transactional 흐름).
- */
-export async function moveEnrollment(
-  _prev: MoveEnrollmentState,
-  formData: FormData,
-): Promise<MoveEnrollmentState> {
-  const user = await getCurrentUser();
-  if (!user) return { error: "로그인이 필요합니다" };
-  // 반 이동 = **남의 반 명단까지 바뀐다** → 관리자만(canWriteTenant는 scoped 강사도 통과 — perm-matrix
-  // `canManageTenant` 주석). 학생 상세의 '반 이동' 버튼은 이미 full 전용(canEndEnrollment)이라 죽는 화면 없음.
-  if (!(await canManageTenant(user.systemRole, "classes"))) {
-    return { error: "반 이동은 관리자만 할 수 있습니다" };
-  }
-
-  const enrollmentId = String(formData.get("enrollmentId") ?? "").trim();
-  const newClassId = String(formData.get("newClassId") ?? "").trim();
-  const startDate =
-    String(formData.get("startDate") ?? "").trim() || kstToday();
-
-  if (!enrollmentId) return { error: "수강 ID가 누락되었습니다" };
-  if (!newClassId) return { error: "이동할 반을 선택해주세요" };
-
-  const supabase = await createClient();
-  const { data: current } = await supabase
-    .from("enrollments")
-    .select("student_id, end_date")
-    .eq("id", enrollmentId)
-    .single();
-  if (!current) return { error: "기존 수강 정보를 찾을 수 없습니다" };
-
-  // 1) 기존 enrollment 종료 — is_transferred=true 필수(일괄 RPC 0027h와 동일 규약). 이 플래그가 없으면
-  //    옛 반 ECS '퇴원' 줄·퇴원 집계에 전출자가 퇴원생으로 선다(원장 2026-08-18 "반이동이 제대로").
-  const today = kstToday();
-  const { error: endErr } = await supabase
-    .from("enrollments")
-    .update({ end_date: today, withdrawal_reason: "반 이동", is_transferred: true })
-    .eq("id", enrollmentId);
-  if (endErr) return { error: toKoreanDbError(endErr, "기존 수강을 종료하지 못했습니다") };
-
-  // 2) 새 enrollment INSERT — is_transferred_in=true(전입 표시, 통합뷰 초록 전입색과 같은 축).
-  const { error: newErr } = await supabase.from("enrollments").insert({
-    tenant_id: user.tenantId,
-    student_id: current.student_id,
-    class_id: newClassId,
-    start_date: startDate,
-    is_transferred_in: true,
-  });
-
-  if (newErr) {
-    // 새 enrollment 실패 - 기존 복구 시도
-    await supabase
-      .from("enrollments")
-      .update({ end_date: current.end_date, withdrawal_reason: null, is_transferred: false })
-      .eq("id", enrollmentId);
-    return { error: toKoreanDbError(newErr, "반 이동에 실패했습니다") };
-  }
-
-  await logAction({
-    action: "enrollment_move",
-    targetType: "student",
-    metadata: { studentId: current.student_id, classId: newClassId, enrollmentId },
-  });
-
-  revalidatePath("/timetable");
-  return undefined;
-}
+// (제거 2026-08-18, 적대 리뷰 M2) 단건 moveEnrollment는 UI 호출처 0곳인 죽은 코드였고, RPC 0027h 규약
+// (옛 수강 end = 새 수강 start)과 달리 end=오늘 고정이라 미래 시작일로 부르면 이동 전 기간 무적(無籍)이
+// 된다. 실이동은 전부 moveEnrollmentsBatch(RPC)를 쓴다 — 단건이 필요해지면 batch에 1건을 넘길 것.
 
 export type BatchMoveInput = {
   enrollmentId: string;
@@ -345,16 +280,20 @@ export async function moveEnrollmentsBatch(
       assignments,
       type: "enrollment_transferred_in",
     });
-  }
 
-  if (okMoves.length > 0) {
     await logAction({
       action: "enrollment_move_batch",
       targetType: "student",
       metadata: {
         count: okMoves.length,
         effectiveDate: eff,
-        moves: okMoves.map((m) => ({ enrollmentId: m.enrollmentId, newClassId: m.newClassId })),
+        // studentIds — 감사로그 이름 검색의 선해석(metadata->studentIds cs 매치)이 이 행을 찾으려면 필수(적대 리뷰 L3).
+        studentIds: [...new Set(okMoves.map((m) => studentByEnrollment.get(m.enrollmentId)).filter(Boolean))],
+        moves: okMoves.map((m) => ({
+          enrollmentId: m.enrollmentId,
+          newClassId: m.newClassId,
+          studentId: studentByEnrollment.get(m.enrollmentId) ?? null,
+        })),
       },
     });
   }
@@ -376,34 +315,47 @@ export async function updateEnrollmentsAttendanceBatch(
 ): Promise<{ error?: string; count?: number }> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  if (!(await canWriteTenant(user.systemRole, "classes"))) return { error: "반 배정 권한이 없습니다" };
+  // 시간표 '편집'의 요일 존 드래그가 쓰는 자리 — 임의 enrollment의 등원 요일을 바꾸므로 관리자만
+  // (canWriteTenant는 scoped 강사도 통과, 강사=학생 기록 열람 전용 — 적대 리뷰 F2와 같은 축).
+  if (!(await canManageTenant(user.systemRole, "classes"))) return { error: "등원 요일 편집은 관리자만 할 수 있습니다" };
   if (!Array.isArray(edits) || edits.length === 0) return { count: 0 };
 
   const supabase = await createClient();
-  let count = 0;
+  // 적용된 편집을 모아 두고 — 중간 실패로 빠져나가도 **이미 반영된 것까지는** 감사로그에 남긴다(적대 리뷰 M3).
+  // 기록값은 클라 원본이 아니라 실제 저장된 정규화 요일(L2) + 학생 id(이름 검색 선해석용, L3).
+  const applied: Array<{ enrollmentId: string; days: string[]; studentId: string | null }> = [];
+  const writeDaysLog = () =>
+    applied.length === 0
+      ? Promise.resolve()
+      : logAction({
+          action: "enrollment_days_update",
+          targetType: "student",
+          metadata: {
+            count: applied.length,
+            studentIds: [...new Set(applied.map((a) => a.studentId).filter(Boolean))],
+            edits: applied.map((a) => ({ enrollmentId: a.enrollmentId, days: a.days })),
+          },
+        });
   for (const e of edits) {
     const enrollmentId = String(e?.enrollmentId ?? "").trim();
     if (!enrollmentId) continue;
     const days = DAY_ORDER.filter((d) => (e.days ?? []).includes(d)); // 유효 요일코드만·요일순
-    const { error } = await supabase
+    const { data: row, error } = await supabase
       .from("enrollments")
       .update({ attendance_days: days })
-      .eq("id", enrollmentId);
-    if (error) return { error: toKoreanDbError(error, "등원 요일을 저장하지 못했습니다"), count };
-    count++;
+      .eq("id", enrollmentId)
+      .select("student_id")
+      .maybeSingle();
+    if (error) {
+      await writeDaysLog();
+      return { error: toKoreanDbError(error, "등원 요일을 저장하지 못했습니다"), count: applied.length };
+    }
+    // row=null이면 매치 0행(남의 테넌트·삭제된 수강) = 아무것도 안 바뀜 — 기록·카운트에서 제외.
+    if (row) applied.push({ enrollmentId, days, studentId: (row.student_id as string | null) ?? null });
   }
-  if (count > 0) {
-    await logAction({
-      action: "enrollment_days_update",
-      targetType: "student",
-      metadata: {
-        count,
-        edits: edits.map((e) => ({ enrollmentId: e.enrollmentId, days: e.days })),
-      },
-    });
-  }
+  await writeDaysLog();
   revalidatePath("/timetable");
-  return { count };
+  return { count: applied.length };
 }
 
 export type UpdateEnrollmentDatesState = { ok?: boolean; error?: string } | undefined;

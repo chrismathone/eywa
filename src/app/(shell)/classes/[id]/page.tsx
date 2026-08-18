@@ -98,6 +98,10 @@ export default async function ClassDetailPage({
   const classLevel = await accessLevelTenant(user.systemRole, "classes");
   const canDelegate =
     classLevel === "full" || (classLevel === "scoped" && klass.teacherId === user.id);
+  // 반 배정 = 학생 기록 변경 — 서버 createEnrollment 게이트(classes full ∥ students full)와 같은 모양(#77).
+  // 강사(양쪽 scoped)는 열람 전용(원장 2026-08-18)이라 버튼 자체를 숨긴다.
+  const canAssign =
+    classLevel === "full" || (await accessLevelTenant(user.systemRole, "students")) === "full";
 
   // 이 반에 이미 활성 등록된 학생 제외
   const enrolledIds = new Set(students.map((s) => s.studentId));
@@ -151,21 +155,23 @@ export default async function ClassDetailPage({
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <ClassAssignAction
-            klass={{
-              id: klass.id,
-              className: klass.className,
-              subject: klass.subject,
-              teacherName: klass.teacherName,
-              studentCount: klass.studentCount,
-              days: classDays,
-            }}
-            studentOptions={candidateStudents.map((s) => ({
-              id: s.id,
-              name: s.name,
-              grade: s.grade,
-            }))}
-          />
+          {canAssign ? (
+            <ClassAssignAction
+              klass={{
+                id: klass.id,
+                className: klass.className,
+                subject: klass.subject,
+                teacherName: klass.teacherName,
+                studentCount: klass.studentCount,
+                days: classDays,
+              }}
+              studentOptions={candidateStudents.map((s) => ({
+                id: s.id,
+                name: s.name,
+                grade: s.grade,
+              }))}
+            />
+          ) : null}
           <Button variant="outline" render={<WindowLink href={`/classes/${klass.id}/edit`} title="반 수정" />}>
             <Pencil className="size-4" />
             반 수정
@@ -199,15 +205,18 @@ export default async function ClassDetailPage({
               teacherOptions={handoverPool}
             />
           ) : null}
-          {klass.isActive ? (
+          {/* 종강·폐지 = 반 전원 수강 일괄 종료(학생 기록 대량 변경) — 관리자(full)만. 서버 게이트와 한 쌍(#77). */}
+          {classLevel === "full" && klass.isActive ? (
             <ClassTermButton classId={klass.id} className={klass.className} closedAt={klass.closedAt} />
           ) : null}
-          <ArchiveClassButton
-            classId={klass.id}
-            isActive={klass.isActive}
-            className={klass.className}
-            enrolledCount={students.length}
-          />
+          {classLevel === "full" ? (
+            <ArchiveClassButton
+              classId={klass.id}
+              isActive={klass.isActive}
+              className={klass.className}
+              enrolledCount={students.length}
+            />
+          ) : null}
         </div>
       </header>
 

@@ -161,6 +161,40 @@ describe("buildWeekGrid — 날짜별 로스터(입퇴반·분리등원·퇴원)
   });
 });
 
+// 플래그 없는 전출 억제(2026-08-18) — 같은 과목 다른 반에 열린 수강이 있으면 퇴원 줄에 안 선다.
+describe("buildWeekGrid — activeElsewhereSameSubject(플래그 없는 반 이동) 억제", () => {
+  const rosterOf = (grid: ReturnType<typeof buildWeekGrid>, date: string) =>
+    grid.days.find((d) => d.date === date)!.slots[0].roster;
+
+  it("종료(플래그 없음)됐어도 목록에 있으면 퇴원 줄에 서지 않는다", () => {
+    const grid = buildWeekGrid({
+      weekMonday: MON,
+      schedules: [sched("fri", "15:00")],
+      enrollments: [enr("s1", { endDate: "2026-07-22" })],
+      planLines: [],
+      marks: [],
+      attendance: [],
+      slotMemoKeys: [],
+      activeElsewhereSameSubject: ["s1"],
+    });
+    expect(rosterOf(grid, "2026-07-24")).toHaveLength(0);
+  });
+
+  it("학원 퇴원(withdrawnAt)은 목록에 있어도 예외 없이 표시 — 진짜 퇴원을 숨기지 않는다", () => {
+    const grid = buildWeekGrid({
+      weekMonday: MON,
+      schedules: [sched("fri", "15:00")],
+      enrollments: [enr("s1", { endDate: "2026-07-22", withdrawnAt: "2026-07-22" })],
+      planLines: [],
+      marks: [],
+      attendance: [],
+      slotMemoKeys: [],
+      activeElsewhereSameSubject: ["s1"],
+    });
+    expect(rosterOf(grid, "2026-07-24")[0]).toMatchObject({ studentId: "s1", endedOn: "2026-07-22" });
+  });
+});
+
 // 퇴원 유예 = 그 주 월요일 −30일. MON=2026-07-20 → 하한 2026-06-20.
 describe("buildWeekGrid — 퇴원 유예(하단 '퇴원' 섹션, 시간표와 같은 30일 창)", () => {
   const rosterOf = (grid: ReturnType<typeof buildWeekGrid>, date: string) =>

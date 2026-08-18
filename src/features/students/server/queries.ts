@@ -119,11 +119,26 @@ function applySearch<T extends { or: (f: string) => T }>(qb: T, q: string | unde
  * 반에 적을 뿐이므로). 과목 필터는 기존대로 `on_hold=false`까지 본다. 둘이 함께 걸리면 과목 조건이
  * 더 좁아 결과가 같다(과목 활성 수강자는 반드시 end_date null 수강이 있다).
  */
-function enrollmentEmbed(options?: StudentListFilters): { select: string; subjectFilter: boolean } {
+function enrollmentEmbed(options?: StudentListFilters): {
+  select: string;
+  subjectFilter: boolean;
+  teacherFilter: boolean;
+} {
   const bySubject = !!options?.subject && options.subject !== "all";
+  // 🔴 상태=퇴원 + 담당 강사 필터 — 퇴원생은 활성 수강이 없어 getTeacherScope(활성 기반) id 화이트리스트가
+  //    전원을 걸러 항상 0명이었다(적대 리뷰 F4). 퇴원에선 같은 embed 조인에 teacher_id 조건을 실어
+  //    **이력 포함**으로 매치한다(id 목록 URL 폭발도 없음 — 위 🔴 2026-07-29 수리와 같은 이유).
+  const byTeacher =
+    options?.status === "withdrawn" && !!options?.teacherId && options.teacherId !== "all";
+  const classCols = [bySubject ? "subject" : null, byTeacher ? "teacher_id" : null]
+    .filter(Boolean)
+    .join(", ");
   return {
-    select: bySubject ? "enrollments!inner(id, class:class_id!inner(subject))" : "enrollments!inner(id)",
+    select: classCols
+      ? `enrollments!inner(id, class:class_id!inner(${classCols}))`
+      : "enrollments!inner(id)",
     subjectFilter: bySubject,
+    teacherFilter: byTeacher,
   };
 }
 
@@ -171,6 +186,9 @@ export async function getStudentsList(
   if (data.length === 0) return [];
 
   // 학생별 수강 과목 unique + 과목별 담당 강사(반의 teacher_id). id를 청크로 .in()(414 + error삼킴 방지).
+  // 🔴 상태=퇴원이면 이력 포함(활성 조건 없이) — 안 그러면 과목·담당 강사 필터가 퇴원생을 전원 걸러
+  //    항상 0명(적대 리뷰 F4, getStudentsPage와 같은 규칙).
+  const isWithdrawn = options?.status === "withdrawn";
   const studentIds = data.map((r) => r.id);
   const subjectsByStudent = new Map<string, Set<string>>();
   const teachersByStudent = new Map<string, Map<string, string>>(); // student → teacher_id → 이름
@@ -181,19 +199,19 @@ export async function getStudentsList(
       on_hold: boolean;
       end_date: string | null;
       class: EnrollClass | EnrollClass[] | null;
-    }>(studentIds, (chunk) =>
-      supabase
+    }>(studentIds, (chunk) => {
+      const q = supabase
         .from("enrollments")
         .select(
           "student_id, on_hold, end_date, class:class_id ( subject, teacher_id, teacher:teacher_id ( display_name ) )",
         )
-        .in("student_id", chunk)
-        .is("end_date", null),
-    );
+        .in("student_id", chunk);
+      return isWithdrawn ? q : q.is("end_date", null);
+    });
 
     for (const e of ens) {
       enrolledSet.add(e.student_id); // 휴원 포함 — 반에 적힌 학생
-      if (e.on_hold) continue;
+      if (!isWithdrawn && e.on_hold) continue;
       const klass = (Array.isArray(e.class) ? e.class[0] : e.class) as EnrollClass | undefined;
       if (klass?.subject) {
         const set = subjectsByStudent.get(e.student_id) ?? new Set<string>();
@@ -323,9 +341,11 @@ export async function getStudentsPage(
   const teacherStudentIds = (await effectiveTeacherScope())?.studentIds ?? null;
   if (teacherStudentIds && teacherStudentIds.length === 0) return { rows: [], total: 0 };
 
+  const isWithdrawn = options?.status === "withdrawn";
   // 담당 강사 필터 → 그 강사 반에 수강 중인 학생 id(getTeacherScope 재사용, primary_teacher_id 대체).
+  // 퇴원 상태는 id 화이트리스트 대신 embed 조인(teacherFilter)으로 — enrollmentEmbed 주석의 F4 참조.
   let teacherFilterIds: string[] | null = null;
-  if (options?.teacherId && options.teacherId !== "all") {
+  if (options?.teacherId && options.teacherId !== "all" && !isWithdrawn) {
     teacherFilterIds = (await getTeacherScope(options.teacherId)).studentIds;
     if (teacherFilterIds.length === 0) return { rows: [], total: 0 };
   }
@@ -334,10 +354,9 @@ export async function getStudentsPage(
   // 🔴 상태=퇴원에선 '미수강 제외'를 무시한다 — 퇴원생은 정의상 활성 수강이 없어 inner join이 전원을
   //    걸러 "검색해도 항상 0명"이 된다(2026-08-18 실사고: 퇴원 처리된 엄채율이 목록 어디서도 안 보임.
   //    토글이 계정 귀속(ui_prefs)이라 켜둔 채 퇴원 필터로 넘어오면 반드시 재현).
-  const excludeNoEnrollment = !!options?.excludeNoEnrollment && options?.status !== "withdrawn";
-  const needEnrollmentJoin =
-    excludeNoEnrollment || (!!options?.subject && options.subject !== "all");
+  const excludeNoEnrollment = !!options?.excludeNoEnrollment && !isWithdrawn;
   const embed = enrollmentEmbed(options);
+  const needEnrollmentJoin = excludeNoEnrollment || embed.subjectFilter || embed.teacherFilter;
 
   let qb = supabase
     .from("students")
@@ -351,10 +370,14 @@ export async function getStudentsPage(
   qb = applySearch(qb, options?.q, options?.searchField);
   if (needEnrollmentJoin) {
     // 공통: 종료되지 않은 수강. (휴원은 '수강 중'으로 본다 — 과목 필터일 때만 아래에서 더 좁힌다.)
-    qb = qb.is("enrollments.end_date", null);
+    // 🔴 상태=퇴원에선 활성 조건을 떼고 **이력 포함** 매치 — 퇴원생은 활성 수강이 없어 그대로 걸면
+    //    과목/강사 필터가 항상 0명이 된다(적대 리뷰 F4 — noenr만 고치고 남았던 반쪽).
+    if (!isWithdrawn) qb = qb.is("enrollments.end_date", null);
     if (embed.subjectFilter) {
-      qb = qb.eq("enrollments.on_hold", false).eq("enrollments.class.subject", options!.subject!);
+      if (!isWithdrawn) qb = qb.eq("enrollments.on_hold", false);
+      qb = qb.eq("enrollments.class.subject", options!.subject!);
     }
+    if (embed.teacherFilter) qb = qb.eq("enrollments.class.teacher_id", options!.teacherId!);
   }
   // 강사 스코프 ∩ 담당 강사 필터 → id 화이트리스트. 강사 1인의 담당 학생 수라 URL은 짧다.
   let idWhitelist: string[] | null = null;
@@ -384,15 +407,17 @@ export async function getStudentsPage(
   const subjectsByStudent = new Map<string, Set<string>>();
   const teachersByStudent = new Map<string, Set<string>>(); // student → 담당 강사명 distinct
   if (ids.length > 0) {
-    const { data: ens } = await supabase
+    // 퇴원 목록의 과목·담당 열은 **이력 기준**(활성 수강이 없으니 활성 조건이면 전부 빈칸) — F4와 같은 축.
+    let ensQ = supabase
       .from("enrollments")
       .select(
         "student_id, on_hold, end_date, class:class_id ( subject, teacher_id, teacher:teacher_id ( display_name ) )",
       )
-      .in("student_id", ids)
-      .is("end_date", null);
+      .in("student_id", ids);
+    if (!isWithdrawn) ensQ = ensQ.is("end_date", null);
+    const { data: ens } = await ensQ;
     for (const e of (ens ?? []) as { student_id: string; on_hold: boolean; class: EnrollClass | EnrollClass[] | null }[]) {
-      if (e.on_hold) continue;
+      if (!isWithdrawn && e.on_hold) continue;
       const klass = (Array.isArray(e.class) ? e.class[0] : e.class) as EnrollClass | undefined;
       if (klass?.subject) {
         const set = subjectsByStudent.get(e.student_id) ?? new Set<string>();

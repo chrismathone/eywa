@@ -24,6 +24,7 @@ import {
 import { localizeTranscriptionError } from "@/lib/ai/transcription-error";
 import { syncMirrorAfterRecordingFailure } from "@/features/enrollment/server/recording-mirror";
 import { notifyClassAssignment } from "@/features/notifications/server/notify";
+import { logAction } from "@/features/audit/server/log";
 
 const opt = z.string().optional().nullable();
 const createSchema = z.object({
@@ -814,6 +815,14 @@ export async function convertConsultationToStudent(
   let reusedExisting = false;
   if (stu && !stuErr) {
     studentId = stu.id;
+    // 상담 전환도 학생 등록 경로 — "학생 레코드를 바꾸는 모든 경로는 감사로그"(원장 2026-08-18, 적대 리뷰 F5).
+    // INSERT 성공 직후 기록 — 뒤의 반 배정이 실패해도 학생은 이미 생겼다(F6과 같은 원칙).
+    await logAction({
+      action: "student_create",
+      targetType: "student",
+      targetLabel: uniqueName.name,
+      metadata: { studentId, source: "enrollment_consultation", consultationId },
+    });
   } else {
     const isDuplicate =
       stuErr?.code === "23505" || /duplicate key|natural_key/i.test(stuErr?.message ?? "");
@@ -878,6 +887,14 @@ export async function convertConsultationToStudent(
       assignments: assignClassIds.map((classId) => ({ classId, studentId })),
       type: "enrollment_assigned",
     });
+    // 수강을 바꾸는 모든 경로는 감사로그(원장 2026-08-18) — createEnrollment와 같은 키·모양(반마다 1행).
+    for (const classId of assignClassIds) {
+      await logAction({
+        action: "enrollment_assign",
+        targetType: "student",
+        metadata: { studentId, classId, startDate: today, source: "enrollment_consultation" },
+      });
+    }
   }
 
   // 상담에 학생 ID + outcome=enrolled 연결(재사용/신규 모두 — orphan 상담 해소).

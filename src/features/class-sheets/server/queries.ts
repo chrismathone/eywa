@@ -361,7 +361,10 @@ export async function getClassSheetWeek(
             .eq("tenant_id", tenantId)
             .neq("class_id", classId)
             .in("student_id", chunk)
-            .is("end_date", null),
+            .is("end_date", null)
+            // 🔴 새 반 수강이 **이 주에 이미 시작**한 것만 전출로 친다 — 미래 시작(다음 주 예약 배정)까지
+            //    세면 이번 주엔 새 반 로스터에도 없어서 학생이 ECS 어디에도 안 보인다(적대 리뷰 M1).
+            .lte("start_date", weekSunday),
       );
       const otherClassIds = [...new Set(open.map((o) => o.class_id))];
       if (otherClassIds.length > 0) {

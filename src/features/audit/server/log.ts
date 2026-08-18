@@ -141,11 +141,35 @@ export type AuditLogRow = {
   createdAt: string;
 };
 
+export type AuditLogsPageResult = {
+  rows: AuditLogRow[];
+  total: number;
+  /** 조회 실패 원문(있으면 화면이 한글 배너+툴팁으로 표면화). 🔴 실패를 "0건"으로 위장하지 말 것 — 감사로그는 "없다"가 곧 답인 화면이라(예: "이 사람이 퇴원 처리한 기록 없음") 특히 해롭다(#89·B3). */
+  error?: string;
+  /** 이름 선해석이 limit에 걸려 잘렸으면 true — "김" 같은 흔한 글자 검색은 결과가 불완전할 수 있다. */
+  nameLookupTruncated?: boolean;
+};
+
+/** 검색어·라벨 공통 정규화 — `,`·`(`·`)`는 or() 문법 구분자라 공백 치환(제거하면 "김,민"→"김민" 오검색) + 대소문자 무시. 라벨 쪽도 같은 규칙이어야 화면 라벨 "출석 취소(ECS)" 복붙이 찾힌다. */
+function normalizeSearch(s: string): string {
+  return s.replace(/[,()]/g, " ").replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+// 이름 선해석 상한 — "이" 검색 실측(학생 100+직원 14)에서 or 파라미터 4.2KB로 정상 동작 확인(414 여유).
+// 직원(users)은 총원이 이 값 미만이라 이론상 최악(100+100)은 현실에서 안 나온다.
+const NAME_LOOKUP_LIMIT = 100;
+
+const YMD = /^\d{4}-\d{2}-\d{2}$/;
+/** 형식 + 실존(2026-13-45 같은 값 거부 — timestamptz 파싱 에러가 400→"0건" 위장이 되는 것 방지). */
+function isValidYmd(s: string | undefined): s is string {
+  return typeof s === "string" && YMD.test(s) && !Number.isNaN(Date.parse(s));
+}
+
 export async function getAuditLogsPage(
   filter: { action?: string; q?: string; dateFrom?: string; dateTo?: string },
   page = 1,
   pageSize = 50,
-): Promise<{ rows: AuditLogRow[]; total: number }> {
+): Promise<AuditLogsPageResult> {
   const supabase = await createClient();
   const from = (page - 1) * pageSize;
   let q = supabase
@@ -155,36 +179,61 @@ export async function getAuditLogsPage(
     });
   if (filter.action && filter.action !== "all") q = q.eq("action", filter.action);
   // 기간 필터(달력) — 입력은 KST 날짜라 created_at(timestamptz) 경계에 +09:00을 명시(서버 UTC 오프셋 무관).
-  const YMD = /^\d{4}-\d{2}-\d{2}$/;
-  if (filter.dateFrom && YMD.test(filter.dateFrom)) q = q.gte("created_at", `${filter.dateFrom}T00:00:00+09:00`);
-  if (filter.dateTo && YMD.test(filter.dateTo)) q = q.lte("created_at", `${filter.dateTo}T23:59:59.999+09:00`);
+  let dateFrom = isValidYmd(filter.dateFrom) ? filter.dateFrom : undefined;
+  let dateTo = isValidYmd(filter.dateTo) ? filter.dateTo : undefined;
+  // 시작>종료 역전은 스왑 — 안내 없는 빈 결과("조건에 맞는 기록 없음")로 두지 않는다.
+  if (dateFrom && dateTo && dateFrom > dateTo) [dateFrom, dateTo] = [dateTo, dateFrom];
+  if (dateFrom) q = q.gte("created_at", `${dateFrom}T00:00:00+09:00`);
+  if (dateTo) q = q.lte("created_at", `${dateTo}T23:59:59.999+09:00`);
 
   // 텍스트 검색(원장 2026-08-18) — 실행자·대상 라벨 + 한글 액션 라벨 + **이름→id 선해석**.
   // 선해석이 필요한 이유: 학생 관련 로그(student_withdraw 등)는 이름이 화면에서만 보이고 DB엔
   // metadata의 uuid뿐이라, 라벨 ilike만으론 "엄채율" 검색이 그 행들을 못 찾는다. 학생·직원 이름을
   // 먼저 id로 풀어 metadata->>studentId/userId 매치에 넣는다(마이그레이션 0 — PostgREST 필터만).
-  // ⚠️ `,`·`(`·`)`는 or() 문법 구분자라 검색어에서 공백으로 치환(제거하면 "김,민"이 "김민"으로 오검색).
-  const term = (filter.q ?? "").trim().replace(/[,()]/g, " ").replace(/\s+/g, " ").trim();
+  const rawQ = (filter.q ?? "").trim();
+  const term = rawQ.replace(/[,()]/g, " ").replace(/\s+/g, " ").trim();
+  // 구분자만 친 검색(","·"()" 등)은 정규화 후 빈 문자열 — 무필터 전체 목록으로 새지 않게 빈 결과로.
+  if (rawQ && !term) return { rows: [], total: 0 };
+  let nameLookupTruncated = false;
+  let lookupError: string | undefined;
   if (term) {
     const [stuRes, usrRes] = await Promise.all([
-      supabase.from("students").select("id").ilike("name", `%${term}%`).limit(100),
-      supabase.from("users").select("id").ilike("display_name", `%${term}%`).limit(100),
+      supabase.from("students").select("id").ilike("name", `%${term}%`).limit(NAME_LOOKUP_LIMIT),
+      supabase.from("users").select("id").ilike("display_name", `%${term}%`).limit(NAME_LOOKUP_LIMIT),
     ]);
+    // 선해석 실패 = 이름 매치 차원이 조용히 빠진 불완전 검색 — 삼키지 않고 표면화(B3 "?? []로 error 삼키기 금지").
+    if (stuRes.error || usrRes.error) lookupError = (stuRes.error ?? usrRes.error)?.message;
     const ors = [`actor_name.ilike.*${term}*`, `target_label.ilike.*${term}*`];
+    const lcTerm = term.toLowerCase();
     const actionKeys = Object.entries(AUDIT_ACTIONS)
-      .filter(([, label]) => label.includes(term))
+      .filter(([, label]) => normalizeSearch(label).includes(lcTerm))
       .map(([key]) => key);
     if (actionKeys.length > 0) ors.push(`action.in.(${actionKeys.join(",")})`);
     const studentIds = (stuRes.data ?? []).map((r) => r.id as string);
-    if (studentIds.length > 0) ors.push(`metadata->>studentId.in.(${studentIds.join(",")})`);
+    if (studentIds.length > 0) {
+      ors.push(`metadata->>studentId.in.(${studentIds.join(",")})`);
+      ors.push(`metadata->>mergedStudentId.in.(${studentIds.join(",")})`);
+      // 일괄 로그(metadata.studentIds 배열)도 학생 이름으로 찾히게 — cs(contains)는 id마다 조건 1개라
+      // 소수 매치(=정확한 이름 검색)일 때만 편성. 흔한 글자 광역 검색은 개별 매치가 어차피 무의미하다.
+      if (studentIds.length <= 10)
+        for (const id of studentIds) ors.push(`metadata->studentIds.cs.["${id}"]`);
+    }
+    if (studentIds.length >= NAME_LOOKUP_LIMIT) nameLookupTruncated = true;
     const userIds = (usrRes.data ?? []).map((r) => r.id as string);
-    if (userIds.length > 0) ors.push(`metadata->>userId.in.(${userIds.join(",")})`);
+    if (userIds.length > 0) {
+      ors.push(`metadata->>userId.in.(${userIds.join(",")})`);
+      // 인수인계(newTeacherId)·담임 위임(delegateUserId)도 강사 이름 검색으로 찾히게(표시 측 collectAuditNameIds와 대칭).
+      ors.push(`metadata->>newTeacherId.in.(${userIds.join(",")})`);
+      ors.push(`metadata->>delegateUserId.in.(${userIds.join(",")})`);
+    }
+    if (userIds.length >= NAME_LOOKUP_LIMIT) nameLookupTruncated = true;
     q = q.or(ors.join(","));
   }
 
-  const { data, count } = await q
+  const { data, count, error } = await q
     .order("created_at", { ascending: false })
     .range(from, from + pageSize - 1);
+  if (error) return { rows: [], total: 0, error: error.message, nameLookupTruncated };
   return {
     rows: (data ?? []).map((r) => ({
       id: r.id,
@@ -196,6 +245,8 @@ export async function getAuditLogsPage(
       createdAt: r.created_at,
     })),
     total: count ?? 0,
+    error: lookupError,
+    nameLookupTruncated,
   };
 }
 
