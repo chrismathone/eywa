@@ -1,8 +1,11 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { Loader2, Pencil, Pin, PinOff } from "@/components/icons/eywa-icon-compat";
+import { useFormDraft } from "@/components/forms/use-form-draft";
+import { DraftBanner } from "@/components/forms/draft-banner";
+import { submitAction } from "@/components/forms/submit-action";
 import {
   toggleStudentMemoPin,
   updateStudentMemo,
@@ -53,26 +56,25 @@ function PinButton({ memo, studentId }: { memo: StudentMemoRow; studentId: strin
   );
 }
 
-function SaveBtn() {
-  const { pending } = useFormStatus();
-  return (
-    <button
-      type="submit"
-      disabled={pending}
-      className="text-chart-1 inline-flex items-center gap-1 text-[11px] font-medium"
-    >
-      {pending ? <Loader2 className="size-3 animate-spin" /> : null}
-      저장
-    </button>
-  );
-}
-
 export function MemoItem({ memo, studentId }: { memo: StudentMemoRow; studentId: string }) {
   const [editing, setEditing] = useState(false);
-  const [state, action] = useActionState<UpdateMemoState, FormData>(
+  const formRef = useRef<HTMLFormElement | null>(null);
+  // 수정 폼 로컬 초안 — 신규작성(memo-form)엔 있는데 수정엔 없어 긴 메모를 고치다 리로드되면 유실됐다.
+  const localDraft = useFormDraft({
+    scope: `student-memo-edit:${memo.id}`,
+    formRef,
+    enabled: editing,
+    exclude: ["id", "studentId"], // 서버 prop — IDB에 남길 이유가 없다
+  });
+  // pending은 useActionState의 세 번째 값 — submitAction(수동 디스패치)에선 useFormStatus가 안 잡힌다
+  // (class-form 선례: 스피너 없음 + 더블클릭 중복 제출).
+  const [state, action, pending] = useActionState<UpdateMemoState, FormData>(
     async (prev, formData) => {
       const res = await updateStudentMemo(prev, formData);
-      if (res?.ok) setEditing(false);
+      if (res?.ok) {
+        localDraft.clear();
+        setEditing(false);
+      }
       return res;
     },
     undefined,
@@ -124,7 +126,13 @@ export function MemoItem({ memo, studentId }: { memo: StudentMemoRow; studentId:
       </header>
 
       {editing ? (
-        <form action={action} className="space-y-2 pt-1">
+        // submitAction: React 19 액션 폼 자동 리셋(#83) 회피 — 저장 실패 시 입력이 옛 값으로 돌아가지 않게.
+        <form ref={formRef} onSubmit={(e) => submitAction(e, action)} className="space-y-2 pt-1">
+          <DraftBanner
+            savedAt={localDraft.draftSavedAt}
+            onRestore={localDraft.restore}
+            onDiscard={localDraft.discard}
+          />
           <input type="hidden" name="id" value={memo.id} />
           <input type="hidden" name="studentId" value={studentId} />
           <select
@@ -149,12 +157,25 @@ export function MemoItem({ memo, studentId }: { memo: StudentMemoRow; studentId:
           <div className="flex items-center justify-end gap-3">
             <button
               type="button"
-              onClick={() => setEditing(false)}
+              // 취소 = 사용자가 명시적으로 버린 것 — 초안도 함께 지운다. 안 지우면 이 메모를 다시 열
+              // 때마다 "작성하던 내용이 있습니다"가 뜨고, 복구하면 그 사이 바뀐 내용을 덮어쓴다
+              // (스코프가 메모마다 하나라 그런 키가 계속 쌓이기도 한다 — 적대 리뷰 2026-08-18).
+              onClick={() => {
+                localDraft.discard();
+                setEditing(false);
+              }}
               className="text-muted-foreground text-[11px]"
             >
               취소
             </button>
-            <SaveBtn />
+            <button
+              type="submit"
+              disabled={pending}
+              className="text-chart-1 inline-flex items-center gap-1 text-[11px] font-medium"
+            >
+              {pending ? <Loader2 className="size-3 animate-spin" /> : null}
+              저장
+            </button>
           </div>
         </form>
       ) : (

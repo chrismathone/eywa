@@ -62,7 +62,10 @@ export async function TodayAttendanceStrip() {
           오늘 출결 자세히
         </Link>
       </header>
-      <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+      {/* 열 수는 고정이 아니라 **한 줄 카드가 들어가는 폭(34rem)** 기준 auto-fill — 카드가 이름·시각·
+          명단·버튼 3개를 한 줄에 눕히므로(원장 "1개열"), 고정 3열이면 보통 노트북에서 카드가 ~400px로
+          좁아져 결국 버튼이 둘째 줄로 떨어진다(적대 리뷰 2026-08-18). min(…,100%)은 모바일 오버플로 가드. */}
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(min(34rem,100%),1fr))] gap-2">
         {slots.map((slot) => (
           <StripSlot
             key={slot.key}

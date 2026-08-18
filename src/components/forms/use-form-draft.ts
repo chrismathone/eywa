@@ -4,10 +4,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   applyFormValues,
   clearDraft,
+  DRAFT_DEBOUNCE_MS,
+  DRAFT_MAX_PENDING_MS,
   hasMeaningfulValues,
   loadDraft,
   readFormValues,
   saveDraft,
+  saveDraftOnHide,
 } from "@/lib/form-draft";
 
 /**
@@ -44,6 +47,8 @@ export function useFormDraft({
   // 대기 중 디바운스 저장 타이머 — clear/discard가 취소할 수 있게 ref로 보관.
   // (저장 성공 직후 700ms 안에 남은 타이머가 발화하면 방금 지운 초안이 되살아나 stale 배너가 뜬다.)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // 첫 미저장 입력 시각 — 연속 타이핑 중 강제 저장(MAX_PENDING) 판정 + 언로드 플러시 필요 여부.
+  const pendingSinceRef = useRef<number | null>(null);
   // 옵션 배열은 렌더마다 새 참조라 effect 재실행을 막기 위해 키로 안정화.
   const excludeKey = (exclude ?? []).join(",");
   const ignoreKey = (ignoreForBanner ?? []).join(",");
@@ -78,25 +83,53 @@ export function useFormDraft({
   }, [scope, enabled, ignoreKey, excludeKey, maxAgeMs]);
 
   // 디바운스 자동저장 — 폼 input/change에서 값 캡처 → IDB(의미 있는 값일 때만).
+  // ⚠️ 디바운스만으로는 부족하다: 연속 타이핑 중엔 타이머가 계속 뒤로 밀려 **한 번도 저장이 안 될 수 있고**,
+  // 배포 스큐 강제 리로드(회의록 녹음 사고 2026-08-18)가 그 사이에 오면 전부 유실된다. 그래서
+  // ① 미저장 입력이 DRAFT_MAX_PENDING_MS를 넘으면 타이핑 중에도 강제 저장, ② pagehide/탭 숨김 순간
+  // 동기 백스톱(saveDraftOnHide)으로 마지막 타이핑까지 플러시.
   useEffect(() => {
     if (!enabled) return;
     const form = formRef.current;
     if (!form) return;
+    // 이전 세션(enabled 토글 전)의 잔존 pending 무효화 — 남겨두면 무변경 재오픈 세션의 탭 숨김에서
+    // 서버값 그대로가 초안으로 저장돼 가짜 "작성하던 내용" 배너가 뜬다(적대 리뷰 경-1).
+    pendingSinceRef.current = null;
     const excl = excludeKey ? excludeKey.split(",") : [];
     const ignore = ignoreKey ? ignoreKey.split(",") : [];
+    const write = () => {
+      pendingSinceRef.current = null;
+      const values = readFormValues(form, excl);
+      if (hasMeaningfulValues(values, ignore)) void saveDraft(scope, values);
+    };
     const schedule = () => {
       if (timerRef.current) clearTimeout(timerRef.current);
-      timerRef.current = setTimeout(() => {
-        const values = readFormValues(form, excl);
-        if (hasMeaningfulValues(values, ignore)) void saveDraft(scope, values);
-      }, 700);
+      if (pendingSinceRef.current === null) pendingSinceRef.current = Date.now();
+      if (Date.now() - pendingSinceRef.current >= DRAFT_MAX_PENDING_MS) {
+        write();
+        return;
+      }
+      timerRef.current = setTimeout(write, DRAFT_DEBOUNCE_MS);
+    };
+    const flushOnHide = () => {
+      if (pendingSinceRef.current === null) return; // 미저장 입력 없음 — clear() 직후 초안 부활 방지
+      pendingSinceRef.current = null;
+      if (timerRef.current) clearTimeout(timerRef.current);
+      const values = readFormValues(form, excl);
+      if (hasMeaningfulValues(values, ignore)) saveDraftOnHide(scope, values);
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") flushOnHide();
     };
     form.addEventListener("input", schedule);
     form.addEventListener("change", schedule);
+    window.addEventListener("pagehide", flushOnHide);
+    document.addEventListener("visibilitychange", onVisibility);
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
       form.removeEventListener("input", schedule);
       form.removeEventListener("change", schedule);
+      window.removeEventListener("pagehide", flushOnHide);
+      document.removeEventListener("visibilitychange", onVisibility);
     };
   }, [scope, enabled, formRef, excludeKey, ignoreKey]);
 
@@ -112,6 +145,7 @@ export function useFormDraft({
 
   const discard = useCallback(() => {
     if (timerRef.current) clearTimeout(timerRef.current);
+    pendingSinceRef.current = null;
     void clearDraft(scope);
     draftRef.current = null;
     setDraftSavedAt(null);
@@ -120,6 +154,7 @@ export function useFormDraft({
   // 서버 저장 성공 시 호출 — 초안 비움(다음 열기 때 stale 복구 방지). 대기 중 저장 타이머도 취소.
   const clear = useCallback(() => {
     if (timerRef.current) clearTimeout(timerRef.current);
+    pendingSinceRef.current = null;
     void clearDraft(scope);
     draftRef.current = null;
     setDraftSavedAt(null);

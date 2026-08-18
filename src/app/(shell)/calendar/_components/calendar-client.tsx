@@ -34,7 +34,8 @@ export function CalendarClient({
   const [dialog, setDialog] = useState<DialogState>(null);
 
   function openEvent(e: CalendarEvent) {
-    setDialog(canWrite ? { mode: "edit", event: e } : { mode: "view", event: e });
+    // 휴가 오버레이는 진실이 결재 문서라 캘린더에서 못 고친다 — 누구에게나 읽기 전용.
+    setDialog(canWrite && e.source === "manual" ? { mode: "edit", event: e } : { mode: "view", event: e });
   }
 
   return (
@@ -75,10 +76,16 @@ export function CalendarClient({
 
       {/* 그리드가 남는 세로를 전부 차지 — 셀 min-h는 grid 몫, 여기는 자리만 내준다. */}
       <div className="min-h-0 flex-1">
-        <MonthGrid month={month} today={today} events={events} onEventClick={openEvent} />
+        <MonthGrid
+          month={month}
+          today={today}
+          events={events}
+          onEventClick={openEvent}
+          onDayClick={canWrite ? (d) => setDialog({ mode: "create", date: d }) : undefined}
+        />
       </div>
 
-      {dialog ? <EventDialog state={dialog} onClose={() => setDialog(null)} /> : null}
+      {dialog ? <EventDialog state={dialog} today={today} onClose={() => setDialog(null)} /> : null}
     </div>
   );
 }

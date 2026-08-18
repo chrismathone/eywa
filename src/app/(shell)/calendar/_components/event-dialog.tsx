@@ -3,6 +3,7 @@
 import { useActionState, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useFormStatus } from "react-dom";
 import { toast } from "sonner";
+import { weekdayIndexOf } from "@/lib/date-kst";
 import { Loader2 } from "@/components/icons/eywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -87,7 +88,16 @@ function SaveButton() {
   );
 }
 
-export function EventDialog({ state, onClose }: { state: DialogState; onClose: () => void }) {
+export function EventDialog({
+  state,
+  today,
+  onClose,
+}: {
+  state: DialogState;
+  /** KST 오늘 — 읽기 전용 뷰의 D-day 계산(서버가 내려준 값·클라 시계 안 씀). */
+  today: string;
+  onClose: () => void;
+}) {
   if (!state) return null;
   const isView = state.mode === "view";
   return (
@@ -100,14 +110,17 @@ export function EventDialog({ state, onClose }: { state: DialogState; onClose: (
       <div
         className={`bg-background border-line w-full rounded-xl border p-5 shadow-lg ${
           isView ? "max-w-md" : "max-w-2xl"
-        } max-h-[92vh] overflow-y-auto sm:max-h-none sm:overflow-visible`}
+        } max-h-[92vh] overflow-y-auto ${
+          // overflow 해제는 편집 모드 전용(시간 팝오버 잘림 방지) — 읽기 모드는 긴 메모(≤2000자) 스크롤 유지.
+          isView ? "" : "sm:max-h-none sm:overflow-visible"
+        }`}
         role="dialog"
         aria-modal="true"
         aria-label={state.mode === "create" ? "일정 등록" : state.mode === "edit" ? "일정 수정" : "일정"}
         onClick={(e) => e.stopPropagation()}
       >
         {state.mode === "view" ? (
-          <ViewBody event={state.event} onClose={onClose} />
+          <ViewBody event={state.event} today={today} onClose={onClose} />
         ) : (
           <EditBody state={state} onClose={onClose} />
         )}
@@ -116,26 +129,91 @@ export function EventDialog({ state, onClose }: { state: DialogState; onClose: (
   );
 }
 
-/** 읽기 전용 — 강사·상담 등 readonly 열람자. 필드 대신 내용을 그대로 보여준다. */
-function ViewBody({ event, onClose }: { event: CalendarEvent; onClose: () => void }) {
+/** 읽기 전용 — readonly 열람자 + 휴가 오버레이. 필드 대신 내용을 그대로, 다만 조촐하지 않게. */
+
+const DOW_KO = ["일", "월", "화", "수", "목", "금", "토"] as const;
+
+/** "2026-08-20 (목)" — 읽는 사람이 요일을 되짚지 않게. */
+function dateWithDow(ymd: string): string {
+  return `${ymd} (${DOW_KO[weekdayIndexOf(ymd)]})`;
+}
+
+/** 시작·종료 포함 일수. */
+function spanDaysOf(start: string, end: string): number {
+  return Math.floor((Date.parse(`${end}T00:00:00Z`) - Date.parse(`${start}T00:00:00Z`)) / 86_400_000) + 1;
+}
+
+/** "HH:MM"×2 → "1시간 30분" — 같은 날 시간 일정만(위 durationLabel(min) 재사용). */
+function timeSpanLabel(start: string, end: string): string | null {
+  const [sh, sm] = start.split(":").map(Number);
+  const [eh, em] = end.split(":").map(Number);
+  const min = (eh! - sh!) * 60 + (em! - sm!);
+  return min > 0 ? durationLabel(min) : null;
+}
+
+/** 오늘 기준 상태 배지 — D-N / 오늘 / 진행 중 / 지난 일정. */
+function ddayBadge(event: CalendarEvent, today: string): { label: string; cls: string } {
+  if (today < event.startDate) {
+    const d = spanDaysOf(today, event.startDate) - 1;
+    return { label: `D-${d}`, cls: "bg-primary-soft text-primary" };
+  }
+  if (today > event.endDate) return { label: "지난 일정", cls: "bg-bg-soft text-text-faint" };
+  return {
+    label: event.startDate === event.endDate ? "오늘" : "진행 중",
+    cls: "bg-green-soft text-green",
+  };
+}
+
+function ViewBody({
+  event,
+  today,
+  onClose,
+}: {
+  event: CalendarEvent;
+  today: string;
+  onClose: () => void;
+}) {
   const time = eventTimeLabel(event);
+  const days = spanDaysOf(event.startDate, event.endDate);
+  const dday = ddayBadge(event, today);
+  const duration =
+    event.startTime && event.endTime && event.startDate === event.endDate
+      ? timeSpanLabel(event.startTime, event.endTime)
+      : null;
   return (
     <div className="space-y-3">
-      <h2 className="text-foreground text-sm font-bold break-keep">{event.title}</h2>
+      <div className="flex items-start justify-between gap-3">
+        <h2 className="text-foreground flex min-w-0 items-center gap-2 text-[16px] font-bold break-keep">
+          <span className={`size-3 shrink-0 rounded-full ${DOT_SOLID[event.color]}`} aria-hidden />
+          {event.title}
+        </h2>
+        <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${dday.cls}`}>
+          {dday.label}
+        </span>
+      </div>
+
+      {event.source === "leave" ? (
+        <p className="bg-amber-soft text-amber rounded-lg px-3 py-2 text-[12px]">
+          전자결재로 승인된 휴가입니다 — 캘린더에서 수정할 수 없고, 변경은 결재 문서에서 합니다.
+        </p>
+      ) : null}
+
       <dl className="space-y-1.5 text-[13px]">
         <div className="flex gap-2">
           <dt className="text-text-dim w-[52px] shrink-0">기간</dt>
           <dd className="num text-foreground">
-            {event.startDate}
-            {event.endDate !== event.startDate ? ` ~ ${event.endDate}` : ""}
+            {dateWithDow(event.startDate)}
+            {event.endDate !== event.startDate ? ` ~ ${dateWithDow(event.endDate)}` : ""}
+            <span className="text-text-faint ml-1.5">· {days}일</span>
           </dd>
         </div>
-        {time ? (
-          <div className="flex gap-2">
-            <dt className="text-text-dim w-[52px] shrink-0">시간</dt>
-            <dd className="num text-foreground">{time}</dd>
-          </div>
-        ) : null}
+        <div className="flex gap-2">
+          <dt className="text-text-dim w-[52px] shrink-0">시간</dt>
+          <dd className="num text-foreground">
+            {time ?? <span className="text-text-dim">종일</span>}
+            {duration ? <span className="text-text-faint ml-1.5">({duration})</span> : null}
+          </dd>
+        </div>
         {event.memo ? (
           <div className="flex gap-2">
             <dt className="text-text-dim w-[52px] shrink-0">메모</dt>
