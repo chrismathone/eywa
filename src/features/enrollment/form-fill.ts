@@ -132,8 +132,9 @@ export function buildFormPatch(
     const d = v.replace(/\D/g, "");
     return d.length >= 9 && d.length <= 11 ? v : undefined;
   };
-  // 학년은 초1~고3 형식만(예: "중학교" 같은 비형식·오학년 거부).
-  const gradeOk = (v: string | undefined) => (v && /^(초[1-6]|중[1-3]|고[1-3])$/.test(v.trim()) ? v : undefined);
+  // 학년은 미취학(4~7세)·초1~고3 형식만(예: "중학교" 같은 비형식·오학년 거부).
+  const gradeOk = (v: string | undefined) =>
+    v && /^([4-7]세|미취학|초[1-6]|중[1-3]|고[1-3])$/.test(v.trim()) ? v : undefined;
   // 모델이 불확실/빈값을 값처럼 적은 경우 거부.
   const notUncertain = (v: string | undefined) => {
     if (!v) return undefined;

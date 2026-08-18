@@ -48,6 +48,8 @@ export type StudentFormValue = {
 };
 
 const GRADES = [
+  "6세",
+  "7세",
   "초1",
   "초2",
   "초3",

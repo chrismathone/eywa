@@ -14,6 +14,7 @@
 // ⚠️ 학년을 모르는 학생(grade null)은 **항상 보인다**(fail-open). 필터에 안 걸린다고 숨기면
 // 학년 미입력 학생이 시간표에서 통째로 증발한다 — 조용한 소실보다 한 명 더 보이는 쪽이 안전하다.
 
+import { isPreschoolGrade, PRESCHOOL_LABEL } from "@/lib/format/school-grade";
 import { DEFAULT_UI_FONT_SIZE, UI_FONT_SIZES, type UiFontSize } from "@/lib/ui-prefs/font-size";
 import {
   normalizeEnglishTrackFilter,
@@ -102,6 +103,8 @@ export const EMPTY_VIEW_PREFS: TimetableViewPrefs = {
 export function gradeBucket(grade: string | null | undefined): string | null {
   const g = grade?.trim();
   if (!g) return null;
+  // 미취학(6세·7세)은 첫 글자가 숫자라 그대로 두면 "6"·"7" 두 버킷으로 갈린다 — 한 덩어리로 묶는다.
+  if (isPreschoolGrade(g)) return PRESCHOOL_LABEL;
   return g[0]!;
 }
 

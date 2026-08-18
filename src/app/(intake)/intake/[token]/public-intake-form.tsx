@@ -4,6 +4,7 @@ import Image from "next/image";
 import { useActionState, useMemo, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { ArrowLeft, ArrowRight, Check, CheckCircle2, Loader2 } from "@/components/icons/eywa-icon-compat";
+import { isPreschoolGrade } from "@/lib/format/school-grade";
 import {
   submitPublicIntake,
   type PublicIntakeState,
@@ -25,10 +26,19 @@ import { AutoTextarea, Field, Section, inputCls as input } from "./intake-ui";
 // ⚠️ 스텝 전환은 **언마운트가 아니라 hidden** — 1단계 입력이 DOM에서 빠지면 제출 FormData에서 통째로 사라진다.
 // 필수 검증은 1단계에서 `reportValidity()`로 먼저 통과시키므로, 숨겨진 required가 제출을 막지 않는다.
 
+// 학교 구분 → 학년 후보. **학년 목록 자체는 학원설정(operations.gradeLevels)이 단일 소스**라
+// 여기엔 학년을 적지 않고 표기 모양으로만 가른다. 미취학(6세·7세)은 급이 없어 접두사로 못 걸러
+// 판별 함수를 쓴다(원장 2026-08-18: 7세반 문의가 들어온다).
 const SCHOOL_TYPES = [
-  { type: "초등학교", prefix: "초" },
-  { type: "중학교", prefix: "중" },
-  { type: "고등학교", prefix: "고" },
+  {
+    type: "미취학",
+    match: (g: string) => isPreschoolGrade(g),
+    schoolLabel: "유치원 이름 (다니지 않으면 '미취학')",
+    schoolPlaceholder: "유치원 이름 입력",
+  },
+  { type: "초등학교", match: (g: string) => g.startsWith("초"), schoolLabel: null, schoolPlaceholder: null },
+  { type: "중학교", match: (g: string) => g.startsWith("중"), schoolLabel: null, schoolPlaceholder: null },
+  { type: "고등학교", match: (g: string) => g.startsWith("고"), schoolLabel: null, schoolPlaceholder: null },
 ] as const;
 
 function SubmitBtn({ disabled }: { disabled?: boolean }) {
@@ -90,10 +100,17 @@ export function PublicIntakeForm({
   const showPrivacy = privacyTerms.trim().length > 0;
   const showService = serviceTerms.trim().length > 0;
 
+  // 학년이 하나도 없는 구분은 아예 안 보여준다 — 학원이 미취학을 안 받으면 학원설정에서 6세·7세를
+  // 빼는 것만으로 이 선택지가 사라진다(코드 수정 불요).
+  const schoolTypes = useMemo(
+    () => SCHOOL_TYPES.filter((s) => gradeLevels.some((g) => s.match(g))),
+    [gradeLevels],
+  );
+  const selectedSchoolType = SCHOOL_TYPES.find((s) => s.type === schoolType) ?? null;
   const gradeOptions = useMemo(() => {
     const st = SCHOOL_TYPES.find((s) => s.type === schoolType);
     if (!st) return [];
-    return gradeLevels.filter((g) => g.startsWith(st.prefix));
+    return gradeLevels.filter((g) => st.match(g));
   }, [schoolType, gradeLevels]);
 
   const toggleSubject = (v: string) =>
@@ -263,7 +280,7 @@ export function PublicIntakeForm({
               className={input}
             >
               <option value="">선택</option>
-              {SCHOOL_TYPES.map((s) => (
+              {schoolTypes.map((s) => (
                 <option key={s.type} value={s.type}>
                   {s.type}
                 </option>
@@ -288,8 +305,13 @@ export function PublicIntakeForm({
             </select>
           </Field>
         </div>
-        <Field label="학교 이름 (예: 경명여고, 칠성고)" required>
-          <input name="prospectSchool" required placeholder="학교 이름 입력" className={input} />
+        <Field label={selectedSchoolType?.schoolLabel ?? "학교 이름 (예: 경명여고, 칠성고)"} required>
+          <input
+            name="prospectSchool"
+            required
+            placeholder={selectedSchoolType?.schoolPlaceholder ?? "학교 이름 입력"}
+            className={input}
+          />
         </Field>
         {/* 과목은 사전 체크리스트의 과목별 문항(수학·영어) 노출을 가르므로 필수 — 서버도 재검증. */}
         <Field label="상담 희망 과목" required>

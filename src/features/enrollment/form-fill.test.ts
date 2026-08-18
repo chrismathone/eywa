@@ -156,6 +156,9 @@ describe("buildFormPatch — 후보정 하네스(약한 모델 오류 차단)", 
   it("학년은 초1~고3 형식만(예: '중학교'·오학년 거부)", () => {
     expect(buildFormPatch({ grade: "중학교" }, {}).prospect_grade).toBeUndefined();
     expect(buildFormPatch({ grade: "초6" }, {}).prospect_grade).toBe("초6");
+    // 미취학 학년(2026-08-18) — 나이 표기는 통과, 성인 나이는 학년이 아니다.
+    expect(buildFormPatch({ grade: "7세" }, {}).prospect_grade).toBe("7세");
+    expect(buildFormPatch({ grade: "30세" }, {}).prospect_grade).toBeUndefined();
   });
 
   it("모델 불확실 마커(미확인·확인 필요·XXXX·?)가 든 값 거부", () => {
