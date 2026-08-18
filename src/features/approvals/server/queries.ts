@@ -32,6 +32,8 @@ export type ApprovalStepCell = {
   decision: StepDecision;
   decidedAt: string | null;
   comment: string | null;
+  /** 대결 실제 처리자 이름(부재자 대신 결재). null = 본인 결재. */
+  actedByName: string | null;
 };
 
 export type LeaveFormDetail = {
@@ -51,6 +53,13 @@ export type BasicFormDetail = { bodyHtml: string };
 export type ExpenseFormDetail = {
   amount: number;
   spendDate: string;
+  category: string;
+  bodyHtml: string;
+};
+
+export type IncomeFormDetail = {
+  amount: number;
+  incomeDate: string;
   category: string;
   bodyHtml: string;
 };
@@ -77,6 +86,8 @@ export type ApprovalDocRow = {
   basic: BasicFormDetail | null;
   /** 지출결의서 상세. 해당 양식이 아니면 null. */
   expense: ExpenseFormDetail | null;
+  /** 수입결의서 상세. 해당 양식이 아니면 null. */
+  income: IncomeFormDetail | null;
 };
 
 type Raw = Record<string, unknown>;
@@ -110,7 +121,7 @@ async function loadDocs(ids: string[]): Promise<ApprovalDocRow[]> {
   if (ids.length === 0) return [];
   const supabase = await createClient();
 
-  const [docs, steps, refs, leaves, basics, expenses] = await Promise.all([
+  const [docs, steps, refs, leaves, basics, expenses, incomes] = await Promise.all([
     fetchInChunks<Raw>(ids, (chunk) =>
       supabase
         .from("approval_documents")
@@ -123,7 +134,7 @@ async function loadDocs(ids: string[]): Promise<ApprovalDocRow[]> {
       supabase
         .from("approval_steps")
         .select(
-          "document_id, step_no, approver_id, role_label, decision, decided_at, comment, approver:users!approval_steps_approver_id_fkey(display_name, job_title)",
+          "document_id, step_no, approver_id, role_label, decision, decided_at, comment, acted_by, approver:users!approval_steps_approver_id_fkey(display_name, job_title), actor:users!approval_steps_acted_by_fkey(display_name)",
         )
         .in("document_id", chunk)
         .order("step_no", { ascending: true }),
@@ -158,12 +169,22 @@ async function loadDocs(ids: string[]): Promise<ApprovalDocRow[]> {
       if (isMissingRelationText(String(e))) return [] as Raw[];
       throw e;
     }),
+    fetchInChunks<Raw>(ids, (chunk) =>
+      supabase
+        .from("approval_income_forms")
+        .select("document_id, amount, income_date, category, body_html")
+        .in("document_id", chunk),
+    ).catch((e) => {
+      if (isMissingRelationText(String(e))) return [] as Raw[];
+      throw e;
+    }),
   ]);
 
   const stepsBy = new Map<string, ApprovalStepCell[]>();
   for (const s of steps) {
     const key = String(s.document_id);
     const approver = s.approver as { display_name?: string; job_title?: string | null } | null;
+    const actor = s.actor as { display_name?: string } | null;
     const list = stepsBy.get(key) ?? [];
     list.push({
       stepNo: num(s.step_no),
@@ -174,6 +195,7 @@ async function loadDocs(ids: string[]): Promise<ApprovalDocRow[]> {
       decision: s.decision as StepDecision,
       decidedAt: (s.decided_at as string | null) ?? null,
       comment: (s.comment as string | null) ?? null,
+      actedByName: s.acted_by ? (actor?.display_name ?? "(이름 없음)") : null,
     });
     stepsBy.set(key, list);
   }
@@ -206,6 +228,15 @@ async function loadDocs(ids: string[]): Promise<ApprovalDocRow[]> {
   for (const b of basics) {
     basicBy.set(String(b.document_id), { bodyHtml: (b.body_html as string) ?? "" });
   }
+  const incomeBy = new Map<string, IncomeFormDetail>();
+  for (const i of incomes) {
+    incomeBy.set(String(i.document_id), {
+      amount: num(i.amount),
+      incomeDate: String(i.income_date),
+      category: (i.category as string) ?? "기타",
+      bodyHtml: (i.body_html as string) ?? "",
+    });
+  }
   const expenseBy = new Map<string, ExpenseFormDetail>();
   for (const e of expenses) {
     expenseBy.set(String(e.document_id), {
@@ -237,6 +268,7 @@ async function loadDocs(ids: string[]): Promise<ApprovalDocRow[]> {
       leave: leaveBy.get(id) ?? null,
       basic: basicBy.get(id) ?? null,
       expense: expenseBy.get(id) ?? null,
+      income: incomeBy.get(id) ?? null,
     };
   });
 }
@@ -246,6 +278,11 @@ export function isMyTurn(doc: ApprovalDocRow, userId: string): boolean {
   if (doc.status !== "pending") return false;
   const step = doc.steps.find((s) => s.stepNo === doc.currentStep);
   return !!step && step.approverId === userId && step.decision === "pending";
+}
+
+/** 내가 **후결 확인**을 해야 하는 문서인가 — 부재로 건너뛰어진 내 칸(deferred). 문서 종결 후에도 남는다. */
+export function needsMyDeferredConfirm(doc: ApprovalDocRow, userId: string): boolean {
+  return doc.steps.some((s) => s.approverId === userId && s.decision === "deferred");
 }
 
 /**
@@ -339,8 +376,9 @@ export async function getApprovalBoxes(userId: string): Promise<ApprovalBoxes> {
   return {
     ready: true,
     loadError: null,
+    // 후결 확인 대기도 결재 대기함에 함께 담는다 — 부재자가 돌아와 확인할 유일한 자리다.
     waiting: docs
-      .filter((d) => isMyTurn(d, userId))
+      .filter((d) => isMyTurn(d, userId) || needsMyDeferredConfirm(d, userId))
       .sort((a, b) => a.submittedAt.localeCompare(b.submittedAt)),
     upcoming: docs
       .filter((d) => {

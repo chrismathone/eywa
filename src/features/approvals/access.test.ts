@@ -8,8 +8,8 @@ const [SEUNGYEOP, YEWON] = APPROVAL_PILOT_USER_IDS;
 const OUTSIDER = "00000000-0000-4000-8000-000000000000";
 
 describe("파일럿 명단", () => {
-  it("이승엽·김예원 두 계정뿐", () => {
-    expect(APPROVAL_PILOT_USER_IDS).toHaveLength(2);
+  it("이승엽·김예원·테스터 세 계정뿐", () => {
+    expect(APPROVAL_PILOT_USER_IDS).toHaveLength(3);
     expect(isApprovalPilotUser(SEUNGYEOP!)).toBe(true);
     expect(isApprovalPilotUser(OUTSIDER)).toBe(false);
   });
@@ -38,7 +38,7 @@ describe("문서번호", () => {
     expect(formatDocNo("leave", "2026", 42)).toBe("휴가-2026-0042");
     expect(formatDocNo("proposal", 2026, 1)).toBe("품의-2026-0001");
     expect(formatDocNo("expense", 2026, 7)).toBe("지출-2026-0007");
-    expect(formatDocNo("memo", 2026, 3)).toBe("업무-2026-0003");
+    expect(formatDocNo("income", 2026, 3)).toBe("수입-2026-0003");
   });
 
   it("연도는 기안일(KST)에서 뽑는다", () => {

@@ -7,15 +7,15 @@
 
 import type { PillColor } from "@/components/atoms/pill";
 
-/** 결재 양식 — 하이웍스 기본 구성(휴가·품의·지출·업무연락). 추가는 여기 + DB check + 상세 표. */
-export const APPROVAL_FORMS = ["leave", "proposal", "expense", "memo"] as const;
+/** 결재 양식(원장 확정 2026-08-18: 휴가·품의·지출·수입 — 업무연락 폐기). 추가는 여기 + DB check + 상세 표. */
+export const APPROVAL_FORMS = ["leave", "proposal", "expense", "income"] as const;
 export type ApprovalForm = (typeof APPROVAL_FORMS)[number];
 
 export const APPROVAL_FORM_LABEL: Record<ApprovalForm, string> = {
   leave: "휴가신청서",
   proposal: "품의서",
   expense: "지출결의서",
-  memo: "업무연락",
+  income: "수입결의서",
 };
 
 /** 양식 고르기 화면의 한 줄 설명 — 무엇에 쓰는 문서인지(작성 화면과 목록이 공유). */
@@ -23,7 +23,7 @@ export const APPROVAL_FORM_DESC: Record<ApprovalForm, string> = {
   leave: "연차·반차를 신청합니다. 잔여 연차는 입사일 기준 법정 일수에서 자동 계산됩니다.",
   proposal: "구매·계약·행사 등 결정이 필요한 안건을 올려 승인 받습니다.",
   expense: "지출 내역(금액·지출일·분류)을 올려 승인 받습니다.",
-  memo: "부서·담당자 간 업무 내용을 공식 문서로 전달합니다.",
+  income: "수강료 외 수입(교재 판매·특강 등)의 내역을 올려 승인 받습니다.",
 };
 
 /** 문서번호 앞머리 — '휴가-2026-0001'. 사람이 부르는 이름이라 판정엔 쓰지 않는다. */
@@ -31,11 +31,14 @@ export const APPROVAL_FORM_PREFIX: Record<ApprovalForm, string> = {
   leave: "휴가",
   proposal: "품의",
   expense: "지출",
-  memo: "업무",
+  income: "수입",
 };
 
 /** 지출결의서 분류 — 기존 /billing 지출과 같은 어휘(실운영 통합 대비). 어휘의 주인은 billing. */
 export const EXPENSE_CATEGORIES = ["인건비", "운영비", "매입", "마케팅", "기타"] as const;
+
+/** 수입결의서 분류 — 수강료는 수납관리 소관이라 없다(수강료 외 수입). 어휘는 파일럿 중 원장 확정 대상. */
+export const INCOME_CATEGORIES = ["교재 판매", "특강·행사", "기타"] as const;
 
 export function isApprovalForm(v: string): v is ApprovalForm {
   return (APPROVAL_FORMS as readonly string[]).includes(v);
@@ -52,21 +55,47 @@ export function docStatusLabel(status: DocStatus): { label: string; color: PillC
   return { label: "진행중", color: "blue" };
 }
 
-/** 결재란 한 칸의 판단. */
-export const STEP_DECISIONS = ["pending", "approved", "rejected"] as const;
+/**
+ * 결재란 한 칸의 판단(0216a 특수 결재 포함):
+ *   final = **전결**(그 칸에서 문서 즉시 승인 종결) · skipped = 전결로 생략된 칸 ·
+ *   deferred = **후결 대기**(부재로 건너뜀 — 다음 사람이 먼저 결재) · post_approved = 후결 확인 완료.
+ * 대결은 decision이 아니라 **acted_by**(실제 처리자)로 표현한다 — 승인/반려 판단 자체는 같다.
+ */
+export const STEP_DECISIONS = [
+  "pending",
+  "approved",
+  "rejected",
+  "final",
+  "deferred",
+  "post_approved",
+  "skipped",
+] as const;
 export type StepDecision = (typeof STEP_DECISIONS)[number];
 
 export const STEP_DECISION_LABEL: Record<StepDecision, string> = {
   pending: "대기",
   approved: "승인",
   rejected: "반려",
+  final: "전결",
+  deferred: "후결 대기",
+  post_approved: "후결",
+  skipped: "생략",
 };
 
 export const STEP_DECISION_COLOR: Record<StepDecision, PillColor> = {
   pending: "neutral",
   approved: "green",
   rejected: "danger",
+  final: "primary",
+  deferred: "amber",
+  post_approved: "blue",
+  skipped: "neutral",
 };
+
+/** 이 칸이 "승인 계열"인가(문서 진행 판정용) — 전결·후결 확인도 승인으로 센다. */
+export function isApprovedDecision(d: StepDecision): boolean {
+  return d === "approved" || d === "final" || d === "post_approved";
+}
 
 /**
  * 결재선 칸의 직함 라벨 — **조직 직급이 아니라 이 문서에서의 역할**이다.

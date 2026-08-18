@@ -84,6 +84,7 @@ export const TEACHER_MENU_KEYS = [
   "consultations",
   "textbook_requests",
   "expense_requests", // 지출결의서 — 강사가 본인 지출을 작성·제출(사무실은 /billing 지출 면에서 결재)
+  "approvals", // 전자결재 — 기본 none(파일럿 개인 예외 계정에만 보인다). 문서 스코프는 결재선·RLS.
   "documents", // 서식 저장소 — 강사는 readonly(빈 양식 다운로드 용도)
 ] as const satisfies readonly MenuKey[];
 

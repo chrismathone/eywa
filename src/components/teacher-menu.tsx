@@ -36,6 +36,9 @@ const LINKS: { href: string; label: string; icon: EywaIconName; menu: MenuKey }[
   { href: "/textbook-requests", label: "교재 요청", icon: MENU_ICON.textbook_requests, menu: "textbook_requests" },
   // 지출결의서 — 강사가 본인 지출을 작성·제출 + 결재 진행상태 조회. 사무실은 /billing 지출 면에서 결재.
   { href: "/expense-requests", label: "지출결의서", icon: MENU_ICON.expense_requests, menu: "expense_requests" },
+  // 전자결재 — 기본 teacher=none이라 파일럿 개인 예외 계정(테스터)에만 보인다. 문서 스코프는
+  // 결재선·RLS가 정하므로(본인 관련 문서만) 미스코프 누수 없음.
+  { href: "/approvals", label: "전자결재", icon: MENU_ICON.approvals, menu: "approvals" },
   // 데이터베이스(서식 저장소) — 강사 readonly(빈 양식 다운로드). 테넌트 공용 자료라 스코핑 무관.
   { href: "/documents", label: "데이터베이스", icon: MENU_ICON.documents, menu: "documents" },
 ];

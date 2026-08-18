@@ -18,6 +18,9 @@ import type { MenuKey, UserPermissionOverride } from "@/lib/permissions";
 export const APPROVAL_PILOT_USER_IDS: readonly string[] = [
   "477950d4-9cb0-4c02-9ac4-f00d42754d55", // 이승엽 (admin · super_admin)
   "8bb70f71-a8c3-450c-9236-561e9b43ca4f", // 김예원 (admin)
+  // 테스터(tst@gmail.com, teacher) — 원장이 두 아이디로 직접 테스트(2026-08-18 지시). 강사 역할이라
+  // 진입은 미니셸 '내 메뉴' 드롭다운(teacher-menu LINKS에 전자결재 항목 등록됨).
+  "09705ab8-05cf-48ab-8f06-d54a3d990b5c", // 테스터 (teacher)
 ];
 
 /**

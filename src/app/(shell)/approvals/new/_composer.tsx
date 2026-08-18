@@ -12,6 +12,7 @@ import {
   saveLineTemplate,
   submitBasicDraft,
   submitExpenseDraft,
+  submitIncomeDraft,
   submitLeaveDraft,
   type ApprovalActionState,
 } from "@/features/approvals/server/actions";
@@ -21,6 +22,7 @@ import {
   APPROVAL_FORM_DESC,
   APPROVAL_FORM_LABEL,
   EXPENSE_CATEGORIES,
+  INCOME_CATEGORIES,
   stepRoleLabels,
   type ApprovalForm,
 } from "@/features/approvals/types";
@@ -99,12 +101,12 @@ export function DraftComposer({
   const [kind, setKind] = useState<LeaveKind>("annual");
   const [start, setStart] = useState(today);
   const [end, setEnd] = useState(today);
-  // 제목 — 품의·지출·업무연락 공용(양식을 오가도 입력이 유지되게 하나로 둔다).
+  // 제목 — 품의·지출·수입 공용(양식을 오가도 입력이 유지되게 하나로 둔다).
   const [title, setTitle] = useState("");
-  // 지출결의서
-  const [category, setCategory] = useState<(typeof EXPENSE_CATEGORIES)[number]>("기타");
+  // 지출·수입결의서 공용 — 분류 어휘만 양식 따라 다르다(EXPENSE_/INCOME_CATEGORIES).
+  const [category, setCategory] = useState<string>("기타");
   const [amountDigits, setAmountDigits] = useState(""); // 숫자만 보관, 표시할 때 콤마
-  const [spendDate, setSpendDate] = useState(today);
+  const [moneyDate, setMoneyDate] = useState(today); // 지출일(expense)·수입일(income) 공용
 
   // 양식별 제출 액션 — 폼 element는 하나고 action만 갈아 끼운다.
   const [leaveState, leaveAction] = useActionState<ApprovalActionState, FormData>(
@@ -119,10 +121,22 @@ export function DraftComposer({
     submitExpenseDraft,
     undefined,
   );
+  const [incomeState, incomeAction] = useActionState<ApprovalActionState, FormData>(
+    submitIncomeDraft,
+    undefined,
+  );
   useSubmitToast(leaveState);
   useSubmitToast(basicState);
   useSubmitToast(expenseState);
-  const action = form === "leave" ? leaveAction : form === "expense" ? expenseAction : basicAction;
+  useSubmitToast(incomeState);
+  const action =
+    form === "leave"
+      ? leaveAction
+      : form === "expense"
+        ? expenseAction
+        : form === "income"
+          ? incomeAction
+          : basicAction;
 
   // ── 휴가신청서 검증(기존 규칙 그대로 — 입사일 없으면 계산 불가) ─────────────
   const leaveReady = periodEnd !== null;
@@ -151,11 +165,13 @@ export function DraftComposer({
         : (invalid ?? over)
       : !title.trim()
         ? "제목을 입력하세요"
-        : form === "expense"
+        : form === "expense" || form === "income"
           ? amountValue <= 0
             ? "금액을 입력하세요"
-            : !spendDate
-              ? "지출일을 선택하세요"
+            : !moneyDate
+              ? form === "expense"
+                ? "지출일을 선택하세요"
+                : "수입일을 선택하세요"
               : null
           : null;
   const blocked = !!detailProblem || approvers.length === 0;
@@ -165,10 +181,10 @@ export function DraftComposer({
       <input type="hidden" name="approverIds" value={JSON.stringify(approvers)} />
       <input type="hidden" name="refIds" value={JSON.stringify(refs)} />
       {form === "leave" ? <input type="hidden" name="kind" value={kind} /> : null}
-      {form === "proposal" || form === "memo" ? (
-        <input type="hidden" name="formType" value={form} />
+      {form === "proposal" ? <input type="hidden" name="formType" value="proposal" /> : null}
+      {form === "expense" || form === "income" ? (
+        <input type="hidden" name="category" value={category} />
       ) : null}
-      {form === "expense" ? <input type="hidden" name="category" value={category} /> : null}
 
       {/* 문서 한 장 — 섹션이 카드로 갈라지지 않고 구분선으로만 이어진다. */}
       <article className="border-line bg-card shadow-card rounded-2xl border px-5 py-1 sm:px-6">
@@ -185,7 +201,11 @@ export function DraftComposer({
                         <button
                           key={f}
                           type="button"
-                          onClick={() => setForm(f)}
+                          onClick={() => {
+                            setForm(f);
+                            // 지출↔수입은 분류 어휘가 달라 남은 값이 다른 양식의 어휘일 수 있다 — 안전하게 리셋.
+                            setCategory("기타");
+                          }}
                           className={`rounded-full border px-2.5 py-0.5 text-[12px] transition ${
                             form === f
                               ? "border-primary bg-primary text-primary-foreground font-medium"
@@ -331,21 +351,21 @@ export function DraftComposer({
                   placeholder={
                     form === "expense"
                       ? "예: 8월 교재 구입비 지출"
-                      : form === "proposal"
-                        ? "예: 겨울 특강 교재 구매 품의"
-                        : "예: 9월 시간표 변경 안내"
+                      : form === "income"
+                        ? "예: 여름 특강 교재 판매 수입"
+                        : "예: 겨울 특강 교재 구매 품의"
                   }
                   className={`${inputClass} w-full max-w-[520px]`}
                   required
                 />
               </label>
 
-              {form === "expense" ? (
+              {form === "expense" || form === "income" ? (
                 <div className="mt-3 flex flex-wrap items-end gap-3">
                   <label className="block">
                     <span className="micro mb-1 block">분류</span>
                     <span className="flex flex-wrap items-center gap-1">
-                      {EXPENSE_CATEGORIES.map((c) => (
+                      {(form === "expense" ? EXPENSE_CATEGORIES : INCOME_CATEGORIES).map((c) => (
                         <button
                           key={c}
                           type="button"
@@ -380,12 +400,12 @@ export function DraftComposer({
                     </span>
                   </label>
                   <label className="block">
-                    <span className="micro mb-1 block">지출일</span>
+                    <span className="micro mb-1 block">{form === "expense" ? "지출일" : "수입일"}</span>
                     <input
                       type="date"
-                      name="spendDate"
-                      value={spendDate}
-                      onChange={(e) => setSpendDate(e.target.value)}
+                      name={form === "expense" ? "spendDate" : "incomeDate"}
+                      value={moneyDate}
+                      onChange={(e) => setMoneyDate(e.target.value)}
                       className={inputClass}
                       required
                     />
@@ -402,7 +422,9 @@ export function DraftComposer({
                   placeholder={
                     form === "expense"
                       ? "지출 내역을 적어 주세요 — 품목·수량 표를 넣을 수 있습니다"
-                      : "내용을 적어 주세요 — 표·목록·서식을 쓸 수 있습니다"
+                      : form === "income"
+                        ? "수입 내역을 적어 주세요 — 항목·수량 표를 넣을 수 있습니다"
+                        : "내용을 적어 주세요 — 표·목록·서식을 쓸 수 있습니다"
                   }
                   ariaLabel="본문"
                 />

@@ -4,11 +4,11 @@ import { ArrowLeft } from "@/components/icons/eywa-icon-compat";
 import { Pill } from "@/components/atoms/pill";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { sanitizeRichHtml } from "@/lib/html/sanitize";
-import { APPROVAL_FORM_LABEL, docStatusLabel } from "@/features/approvals/types";
+import { APPROVAL_FORM_LABEL, STEP_DECISION_LABEL, docStatusLabel } from "@/features/approvals/types";
 import { formatLeaveDays } from "@/features/leave/request-days";
-import { getApprovalDoc, isMyTurn } from "@/features/approvals/server/queries";
+import { getApprovalDoc, isMyTurn, needsMyDeferredConfirm } from "@/features/approvals/server/queries";
 import { ApprovalStamps } from "./_stamps";
-import { DecidePanel, WithdrawPanel } from "./_decide-panel";
+import { DecidePanel, DeferredConfirmPanel, WithdrawPanel } from "./_decide-panel";
 
 export const metadata = { title: "결재 문서 — eywa" };
 
@@ -65,15 +65,24 @@ function buildTimeline(doc: NonNullable<Awaited<ReturnType<typeof getApprovalDoc
   ];
 
   for (const s of doc.steps) {
-    if (s.decision === "pending") continue; // 처리된 칸만 — 미처리 칸은 결재란 도장이 이미 보여준다
+    // 처리된 칸만 — 대기(pending)·후결 대기(deferred)·전결 생략(skipped)은 결재란 도장이 이미 보여준다.
+    if (s.decision === "pending" || s.decision === "deferred" || s.decision === "skipped") continue;
     events.push({
       key: `step-${s.stepNo}`,
       label: `${s.stepNo}차 ${s.roleLabel}`,
       person: s.approverName,
-      result: s.decision === "approved" ? "승인" : "반려",
-      tone: s.decision === "approved" ? "green" : "danger",
+      result: STEP_DECISION_LABEL[s.decision], // 승인·반려·전결·후결 — 라벨 매핑 한 곳(types.ts)
+      tone:
+        s.decision === "rejected"
+          ? "danger"
+          : s.decision === "final" || s.decision === "post_approved"
+            ? "primary"
+            : "green",
       time: fmtTime(s.decidedAt),
-      note: s.comment,
+      // 대결이면 실제 처리자를 함께 남긴다 — 결재란 도장 아래 표기와 같은 사실.
+      note: [s.actedByName ? `대결 — ${s.actedByName}` : null, s.comment]
+        .filter(Boolean)
+        .join(" · ") || null,
     });
   }
 
@@ -124,6 +133,41 @@ export default async function ApprovalDocPage({ params }: { params: Promise<{ id
 
   const status = docStatusLabel(doc.status);
   const myTurn = isMyTurn(doc, user.id);
+
+  // ── 처리 패널 판정(0216a 특수 결재) — 서버 컴포넌트에서 한 번만 계산한다 ──────
+  // 우선순위: 내 차례(turn) → 내가 뒤 차례인데 앞이 전부 미결(후결 넘김) → 원장 대결(proxy).
+  // 전결 버튼은 "내 칸 뒤에 살아있는(pending) 단계가 있을 때만" — 마지막 단계면 전결=승인이라 숨긴다.
+  const myStep = doc.steps.find((s) => s.approverId === user.id);
+  const hasPendingAfter = (stepNo: number) =>
+    doc.steps.some((s) => s.stepNo > stepNo && s.decision === "pending");
+  let decidePanel: { mode: "turn" | "proxy"; canFinal: boolean; deferTargets: string[] } | null =
+    null;
+  if (doc.status === "pending") {
+    if (myTurn && myStep) {
+      decidePanel = { mode: "turn", canFinal: hasPendingAfter(myStep.stepNo), deferTargets: [] };
+    } else if (myStep && myStep.decision === "pending" && myStep.stepNo > doc.currentStep) {
+      // 내 앞 칸이 전부 미결일 때만 후결 넘김이 성립한다(누가 이미 반려/승인했다면 순차가 정상 진행 중).
+      const between = doc.steps.filter(
+        (s) => s.stepNo >= doc.currentStep && s.stepNo < myStep.stepNo,
+      );
+      if (between.length > 0 && between.every((s) => s.decision === "pending")) {
+        decidePanel = {
+          mode: "turn",
+          canFinal: hasPendingAfter(myStep.stepNo),
+          deferTargets: between.map((s) => s.approverName),
+        };
+      }
+    } else if (user.systemRole === "master") {
+      // 대결 v1 = 원장(master)이 부재자의 현재 차례를 대신 처리(0216a acted_by).
+      const current = doc.steps.find((s) => s.stepNo === doc.currentStep);
+      if (current && current.decision === "pending" && current.approverId !== user.id) {
+        decidePanel = { mode: "proxy", canFinal: hasPendingAfter(current.stepNo), deferTargets: [] };
+      }
+    }
+  }
+  // 후결 확인 — 부재로 건너뛰어진 내 칸. 문서가 종결된 뒤에도 남는 사후 확인이다.
+  const deferredConfirm = needsMyDeferredConfirm(doc, user.id);
+
   const canWithdraw =
     doc.drafterId === user.id &&
     doc.status === "pending" &&
@@ -133,9 +177,10 @@ export default async function ApprovalDocPage({ params }: { params: Promise<{ id
   // 사유는 리치 텍스트(HTML)다 — **렌더 직전에 다시 위생처리**한다(저장 때 한 번 걸렀어도 마찬가지).
   // 저장 시점의 선의를 믿고 innerHTML을 그리면 옛 행·직접 INSERT·위생 규칙 변경분이 그대로 새어 나온다.
   const reasonHtml = leave?.reason ? sanitizeRichHtml(leave.reason) : "";
-  // 품의서·업무연락·지출결의서 본문도 같은 규약 — 렌더 직전 재위생처리(저장 시점을 믿지 않는다).
+  // 품의서·지출결의서·수입결의서 본문도 같은 규약 — 렌더 직전 재위생처리(저장 시점을 믿지 않는다).
   const basicBodyHtml = doc.basic?.bodyHtml ? sanitizeRichHtml(doc.basic.bodyHtml) : "";
   const expenseBodyHtml = doc.expense?.bodyHtml ? sanitizeRichHtml(doc.expense.bodyHtml) : "";
+  const incomeBodyHtml = doc.income?.bodyHtml ? sanitizeRichHtml(doc.income.bodyHtml) : "";
 
   return (
     <div className="mx-auto w-full max-w-[820px] space-y-4 p-4 md:p-6">
@@ -148,7 +193,7 @@ export default async function ApprovalDocPage({ params }: { params: Promise<{ id
 
       {/* 문서 — A4 종이 한 장 느낌(흰 판). 배치는 하이웍스 결재 문서 그대로. */}
       <article className="border-line bg-card shadow-card space-y-5 rounded-2xl border p-6">
-        {/* ① 가운데 큰 표제(양식명) + 문서 제목 — 품의서·업무연락·지출결의서는 제목이 곧 안건명이다. */}
+        {/* ① 가운데 큰 표제(양식명) + 문서 제목 — 품의·지출·수입결의서는 제목이 곧 안건명이다. */}
         <header className="space-y-1.5">
           <h1 className="text-foreground text-center text-[22px] font-bold tracking-tight">
             {APPROVAL_FORM_LABEL[doc.form] ?? "결재 문서"}
@@ -267,6 +312,36 @@ export default async function ApprovalDocPage({ params }: { params: Promise<{ id
               </div>
             ) : null}
           </>
+        ) : doc.income ? (
+          <>
+            <table className="border-line w-full border-collapse border text-sm">
+              <tbody className="[&_th]:bg-bg-soft/60 [&_th]:text-text-dim [&_td]:text-foreground [&_th]:border-line [&_td]:border-line [&_th]:border [&_td]:border [&_th]:px-3 [&_th]:py-2 [&_td]:px-3 [&_td]:py-2 [&_th]:text-left [&_th]:text-xs [&_th]:font-semibold [&_td]:text-[13px]">
+                <tr>
+                  <th className="w-[110px]">분류</th>
+                  <td>{doc.income.category}</td>
+                  <th className="w-[110px]">금액</th>
+                  <td>
+                    <span className="num">{doc.income.amount.toLocaleString("ko-KR")}</span>원
+                  </td>
+                </tr>
+                <tr>
+                  <th>수입일</th>
+                  <td className="num" colSpan={3}>
+                    {doc.income.incomeDate}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            {incomeBodyHtml ? (
+              <div className="overflow-x-auto">
+                <div
+                  className="rich-content"
+                  // 🔴 렌더 직전 재위생처리를 통과한 값만(위 incomeBodyHtml — 사유 렌더와 같은 규약).
+                  dangerouslySetInnerHTML={{ __html: incomeBodyHtml }}
+                />
+              </div>
+            ) : null}
+          </>
         ) : doc.basic ? (
           basicBodyHtml ? (
             <div className="overflow-x-auto">
@@ -313,7 +388,15 @@ export default async function ApprovalDocPage({ params }: { params: Promise<{ id
         </section>
       </article>
 
-      {myTurn ? <DecidePanel documentId={doc.id} /> : null}
+      {deferredConfirm ? <DeferredConfirmPanel documentId={doc.id} /> : null}
+      {decidePanel ? (
+        <DecidePanel
+          documentId={doc.id}
+          mode={decidePanel.mode}
+          canFinal={decidePanel.canFinal}
+          deferTargets={decidePanel.deferTargets}
+        />
+      ) : null}
       {canWithdraw ? <WithdrawPanel documentId={doc.id} /> : null}
     </div>
   );

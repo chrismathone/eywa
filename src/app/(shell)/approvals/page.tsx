@@ -25,7 +25,12 @@ export const metadata = { title: "전자결재 — eywa" };
 
 /** 탭(하이웍스 문서함) 정의 — 어느 함이 어떤 문서를 담는지 설명 문구까지 여기 한 곳. */
 const BOX_TABS = [
-  { key: "waiting", label: "결재 대기", empty: "결재할 문서가 없습니다.", note: null },
+  {
+    key: "waiting",
+    label: "결재 대기",
+    empty: "결재할 문서가 없습니다.",
+    note: "내 차례인 문서와, 부재중에 후결로 넘어가 확인이 필요한 문서입니다.",
+  },
   {
     key: "upcoming",
     label: "결재 예정",
@@ -105,7 +110,7 @@ export default async function ApprovalsPage({
       <PageHeader
         eyebrow="운영"
         title="전자결재"
-        description="문서를 기안하면 결재선에 순서대로 올라갑니다. 양식: 휴가신청서·품의서·지출결의서·업무연락."
+        description="문서를 기안하면 결재선에 순서대로 올라갑니다. 양식: 휴가신청서·품의서·지출결의서·수입결의서."
         embedLabel="전자결재 · 기안과 결재함"
         actions={
           <Button render={<Link href="/approvals/new" />}>

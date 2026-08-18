@@ -21,6 +21,7 @@ import { normalizeLine, normalizeRefs, validateApprovalLine } from "../line";
 import {
   APPROVAL_FORM_LABEL,
   EXPENSE_CATEGORIES,
+  INCOME_CATEGORIES,
   stepRoleLabels,
   type ApprovalForm,
 } from "../types";
@@ -48,8 +49,8 @@ const MAX_TEXT = 500;
 const MAX_REASON_HTML = 20_000;
 /** 문서 제목 상한 — 목록·알림 한 줄에 들어가는 길이. 초과는 자르지 않고 거절(제목이 잘리면 딴 문서다). */
 const MAX_TITLE = 80;
-/** 지출결의서 금액 상한 — 학원 단건 지출로 10억을 넘으면 입력 실수다(0 하나 더 붙은 오타 차단). */
-const MAX_EXPENSE_AMOUNT = 1_000_000_000;
+/** 지출·수입결의서 금액 상한(공용) — 학원 단건 금액으로 10억을 넘으면 입력 실수다(0 하나 더 붙은 오타 차단). */
+const MAX_MONEY_AMOUNT = 1_000_000_000;
 const DOC_NO_RETRY = 3;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -393,8 +394,9 @@ export async function submitLeaveDraft(
 }
 
 /**
- * 품의서·업무연락 기안(상신) — 제목 + 리치 본문뿐인 **기본형 양식**(상세 표 approval_basic_forms 공유,
- * 양식 구분은 form_type). 새 기본형 양식이 생기면 여기 formType 허용 목록에만 더한다.
+ * 품의서 기안(상신) — 제목 + 리치 본문뿐인 **기본형 양식**(상세 표 approval_basic_forms).
+ * 새 기본형 양식이 생기면 여기 formType 허용 목록에만 더한다(업무연락은 2026-08-18 원장 지시로 폐기 —
+ * 문서 0건 실측이라 흔적 없이 뺐다).
  */
 export async function submitBasicDraft(
   _prev: ApprovalActionState,
@@ -405,7 +407,7 @@ export async function submitBasicDraft(
   const { user } = gate;
 
   const formRaw = String(formData.get("formType") ?? "");
-  if (formRaw !== "proposal" && formRaw !== "memo") return { error: "지원하지 않는 양식입니다" };
+  if (formRaw !== "proposal") return { error: "지원하지 않는 양식입니다" };
   const form: ApprovalForm = formRaw;
 
   const parsedTitle = parseTitle(formData.get("title"));
@@ -454,7 +456,7 @@ export async function submitExpenseDraft(
   if (!amountRaw) return { error: "금액을 입력하세요" };
   if (!/^\d+$/.test(amountRaw)) return { error: "금액은 숫자로 입력하세요" };
   const amount = Number(amountRaw);
-  if (amount < 1 || amount > MAX_EXPENSE_AMOUNT) {
+  if (amount < 1 || amount > MAX_MONEY_AMOUNT) {
     return { error: "금액은 1원 이상 10억 원 이하로 입력하세요" };
   }
 
@@ -495,24 +497,97 @@ export async function submitExpenseDraft(
 }
 
 /**
- * 결재 처리(승인·반려). **내 차례일 때만** 가능하다 — 자격의 근거는 명단이 아니라
- * 문서의 `current_step`과 동결된 결재선이다.
- * 승인 = 다음 단계로(마지막이면 문서 승인) · 반려 = 즉시 문서 반려(뒤 단계는 건너뛴다).
+ * 수입결의서 기안(상신) — 지출결의서의 거울(금액·수입일·분류 컬럼 + 리치 본문).
+ * ⚠️ 수강료는 수납관리 장부 소관이라 여기 안 온다(수강료 외 수입 승인용 — 0216a 주석).
+ *    이 금액도 재무 집계에 닿지 않는다.
+ */
+export async function submitIncomeDraft(
+  _prev: ApprovalActionState,
+  formData: FormData,
+): Promise<ApprovalActionState> {
+  const gate = await requireApprovalWriter();
+  if ("error" in gate) return { error: gate.error };
+  const { user } = gate;
+
+  const parsedTitle = parseTitle(formData.get("title"));
+  if ("error" in parsedTitle) return parsedTitle;
+
+  const amountRaw = String(formData.get("amount") ?? "").replace(/[,\s]/g, "");
+  if (!amountRaw) return { error: "금액을 입력하세요" };
+  if (!/^\d+$/.test(amountRaw)) return { error: "금액은 숫자로 입력하세요" };
+  const amount = Number(amountRaw);
+  if (amount < 1 || amount > MAX_MONEY_AMOUNT) {
+    return { error: "금액은 1원 이상 10억 원 이하로 입력하세요" };
+  }
+
+  const incomeDate = String(formData.get("incomeDate") ?? "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(incomeDate)) return { error: "수입일을 선택하세요" };
+
+  // 분류 — 어휘는 파일럿 중 원장 확정 대상(types.ts INCOME_CATEGORIES). 목록 밖 값은 "기타"로 접는다.
+  const categoryRaw = String(formData.get("category") ?? "");
+  const category = (INCOME_CATEGORIES as readonly string[]).includes(categoryRaw)
+    ? categoryRaw
+    : "기타";
+
+  const body = parseRichBody(formData.get("body"));
+  if ("error" in body) return body;
+
+  const line = normalizeLine(user.id, parseIds(formData.get("approverIds")));
+  const refs = normalizeRefs(user.id, line, parseIds(formData.get("refIds")));
+  const admin = createAdminClient();
+
+  return createApprovalDocument({
+    user,
+    form: "income",
+    title: parsedTitle.title,
+    line,
+    refs,
+    displayLabel: `${APPROVAL_FORM_LABEL.income} — ${parsedTitle.title}`,
+    insertDetail: async (docId) =>
+      admin.from("approval_income_forms").insert({
+        document_id: docId,
+        tenant_id: user.tenantId,
+        amount,
+        income_date: incomeDate,
+        category,
+        body_html: body.html,
+      }),
+    auditMetadata: { amount, incomeDate, category },
+  });
+}
+
+/**
+ * 결재 처리(승인·반려·**전결**) + **후결 넘김** + **대결** (0216a).
+ *
+ * 자격의 근거는 명단이 아니라 **동결된 결재선 + current_step**이다. 세 경로:
+ *   ① 내 차례(현재 칸 주인) — 승인/반려/전결.
+ *   ② 후결 넘김(fd `deferPrevious`="1") — 앞 칸 결재자가 부재중일 때 뒤 차례인 내가 앞의 pending
+ *      칸들을 전부 'deferred'(후결 대기)로 표시하고 먼저 결재한다. 부재자들은 알림을 받고 나중에
+ *      confirmDeferredStep으로 사후 확인한다(하이웍스 후열 '확인').
+ *   ③ 대결 — 현재 칸 주인이 아닌 **원장(master)**이 부재자 대신 현재 칸을 처리(acted_by 기록).
+ *      v1 대결 권한 = 원장(0216a 주석 — 부재 설정·대결자 사전 지정은 필요해지면 확장).
+ *
+ * 진행 규칙: 승인 → 다음 **pending** 칸으로(deferred·skipped는 건너뜀), 없으면 승인 종결.
+ * **전결** → 남은 pending 칸을 'skipped'로 바꾸고 그 칸에서 즉시 승인 종결. 반려 → 즉시 반려 종결
+ * (후결 대기 칸은 문서가 종결돼도 남는다 — 부재자의 사후 확인 대상).
  */
 export async function decideDocument(
   _prev: ApprovalActionState,
   formData: FormData,
 ): Promise<ApprovalActionState> {
-  // 메뉴 게이트가 아니라 결재선이 자격이다(requireSignedIn 주석) — 아래 "내 차례" 검사가 실 판정.
+  // 메뉴 게이트가 아니라 결재선이 자격이다(requireSignedIn 주석) — 아래 경로 판정이 실 판정.
   const gate = await requireSignedIn();
   if ("error" in gate) return { error: gate.error };
   const { user } = gate;
 
   const docId = String(formData.get("documentId") ?? "").trim();
   const decision = String(formData.get("decision") ?? "");
+  const deferPrevious = String(formData.get("deferPrevious") ?? "") === "1";
   const comment = String(formData.get("comment") ?? "").trim().slice(0, MAX_TEXT) || null;
   if (!docId) return { error: "결재할 문서를 찾을 수 없습니다" };
-  if (decision !== "approved" && decision !== "rejected") return { error: "승인 또는 반려를 선택하세요" };
+  if (decision !== "approved" && decision !== "rejected" && decision !== "final") {
+    return { error: "승인·반려·전결 중에서 선택하세요" };
+  }
 
   const admin = createAdminClient();
   const { data: doc } = await admin
@@ -531,25 +606,105 @@ export async function decideDocument(
     .eq("document_id", docId)
     .order("step_no", { ascending: true });
   const line = steps ?? [];
-  const myStep = line.find((s) => s.step_no === doc.current_step);
-  if (!myStep || myStep.approver_id !== user.id) return { error: "지금은 내 결재 차례가 아닙니다" };
-  if (myStep.decision !== "pending") return { error: "이미 결재한 문서입니다" };
+  const currentCell = line.find((s) => s.step_no === doc.current_step);
+  const myCell = line.find((s) => s.approver_id === user.id);
+
+  // ── 경로 판정: 내 차례 / 후결 넘김 / 대결 ─────────────────────────────────
+  let target: (typeof line)[number];
+  let proxy = false;
+  let deferredCells: typeof line = [];
+
+  if (currentCell && currentCell.approver_id === user.id) {
+    if (currentCell.decision !== "pending") return { error: "이미 결재한 문서입니다" };
+    target = currentCell;
+  } else if (deferPrevious) {
+    if (!myCell) return { error: "이 문서의 결재선에 포함되지 않았습니다" };
+    if (myCell.step_no <= doc.current_step) return { error: "후결로 넘길 앞 단계가 없습니다" };
+    if (myCell.decision !== "pending") return { error: "이미 결재한 문서입니다" };
+    deferredCells = line.filter(
+      (s) => s.step_no >= doc.current_step && s.step_no < myCell.step_no,
+    );
+    if (deferredCells.some((s) => s.decision !== "pending")) {
+      return { error: "앞 단계가 이미 처리되고 있어 후결로 넘길 수 없습니다" };
+    }
+    target = myCell;
+  } else if (user.systemRole === "master" && currentCell && currentCell.decision === "pending") {
+    // 대결 — 원장이 부재자의 현재 칸을 대신 처리한다(도장은 부재자 칸에, acted_by에 실제 처리자).
+    proxy = true;
+    target = currentCell;
+  } else {
+    return { error: "지금은 내 결재 차례가 아닙니다" };
+  }
 
   const now = new Date().toISOString();
-  const { error: stepErr } = await admin
-    .from("approval_steps")
-    .update({ decision, decided_at: now, comment })
-    .eq("id", myStep.id)
-    .eq("decision", "pending"); // 동시 클릭 방어 — 이미 처리된 칸은 안 덮는다
-  if (stepErr) return { error: `결재 저장 실패 — ${stepErr.message}` };
 
-  const isLast = doc.current_step >= line.length;
-  const approved = decision === "approved";
-  const patch = approved
-    ? isLast
-      ? { status: "approved", completed_at: now, outcome_note: `최종 승인 — ${user.displayName}` }
-      : { current_step: doc.current_step + 1 }
-    : { status: "rejected", completed_at: now, outcome_note: `반려 — ${user.displayName}${comment ? ` (${comment})` : ""}` };
+  // ── 후결 넘김: 앞 칸들을 deferred로(부재 표시). 내 결재 확정보다 먼저 — 실패하면 여기서 멈춘다. ──
+  if (deferredCells.length > 0) {
+    const ids = deferredCells.map((s) => s.id);
+    const { data: marked, error: deferErr } = await admin
+      .from("approval_steps")
+      .update({ decision: "deferred" })
+      .in("id", ids)
+      .eq("decision", "pending") // 동시 결재 방어
+      .select("id");
+    if (deferErr) return { error: `후결 처리 실패 — ${deferErr.message}` };
+    if ((marked ?? []).length !== ids.length) {
+      // 일부가 그 사이 처리됐다 — 방금 표시한 것만 되돌리고 사용자에게 다시 보게 한다.
+      await admin
+        .from("approval_steps")
+        .update({ decision: "pending" })
+        .in("id", ids)
+        .eq("decision", "deferred");
+      return { error: "앞 단계 상태가 방금 바뀌었습니다 — 새로고침 후 다시 확인해 주세요" };
+    }
+  }
+
+  // ── 내(또는 대결) 칸 확정 ──────────────────────────────────────────────────
+  const { data: written, error: stepErr } = await admin
+    .from("approval_steps")
+    .update({ decision, decided_at: now, comment, ...(proxy ? { acted_by: user.id } : {}) })
+    .eq("id", target.id)
+    .eq("decision", "pending") // 동시 클릭 방어 — 이미 처리된 칸은 안 덮는다
+    .select("id");
+  if (stepErr) return { error: `결재 저장 실패 — ${stepErr.message}` };
+  if ((written ?? []).length === 0) {
+    return { error: "이미 결재된 칸입니다 — 새로고침 후 확인해 주세요" };
+  }
+
+  // ── 전결: 남은 pending 칸 생략 처리(deferred 칸은 사후 확인 대상으로 남긴다) ──
+  const isFinal = decision === "final";
+  if (isFinal) {
+    const { error: skipErr } = await admin
+      .from("approval_steps")
+      .update({ decision: "skipped" })
+      .eq("document_id", docId)
+      .gt("step_no", target.step_no)
+      .eq("decision", "pending");
+    if (skipErr) return { error: `전결 처리 실패 — ${skipErr.message}` };
+  }
+
+  // ── 문서 진행/종결 ─────────────────────────────────────────────────────────
+  const deferredIds = new Set(deferredCells.map((s) => s.id));
+  const nextPending = isFinal
+    ? undefined
+    : line.find(
+        (s) => s.step_no > target.step_no && s.decision === "pending" && !deferredIds.has(s.id),
+      );
+  const approvedLike = decision === "approved" || isFinal;
+  const closes = !approvedLike || isFinal || !nextPending;
+  const who = `${user.displayName}${proxy ? " (대결)" : ""}`;
+
+  const patch = !approvedLike
+    ? {
+        status: "rejected",
+        completed_at: now,
+        outcome_note: `반려 — ${who}${comment ? ` (${comment})` : ""}`,
+      }
+    : isFinal
+      ? { status: "approved", completed_at: now, outcome_note: `전결 승인 — ${who}` }
+      : nextPending
+        ? { current_step: nextPending.step_no }
+        : { status: "approved", completed_at: now, outcome_note: `최종 승인 — ${who}` };
 
   const { error: docErr } = await admin
     .from("approval_documents")
@@ -558,37 +713,49 @@ export async function decideDocument(
     .eq("tenant_id", user.tenantId);
   if (docErr) return { error: `문서 상태 갱신 실패 — ${docErr.message}` };
 
-  if (approved && !isLast) {
-    // 다음 차례 결재자에게만 알린다.
-    const next = line.find((s) => s.step_no === doc.current_step + 1);
-    if (next) {
-      await notifyUsers([
-        {
-          tenantId: user.tenantId,
-          recipientId: next.approver_id as string,
-          type: "approval_requested",
-          title: "결재 요청",
-          body: `${doc.title}`,
-          link: `/approvals/${docId}`,
-          actorId: user.id,
-        },
-      ]);
-    }
-  } else {
+  // ── 알림 ───────────────────────────────────────────────────────────────────
+  // 후결로 건너뛰어진 부재자들 — 나중에 '후결 확인'이 필요함을 알린다.
+  if (deferredCells.length > 0) {
+    await notifyUsers(
+      deferredCells.map((s) => ({
+        tenantId: user.tenantId,
+        recipientId: s.approver_id as string,
+        type: "approval_requested" as const,
+        title: "후결 처리 안내",
+        body: `${doc.title} — 부재로 후결 처리됐습니다. 나중에 후결 확인이 필요합니다.`,
+        link: `/approvals/${docId}`,
+        actorId: user.id,
+      })),
+    );
+  }
+  if (!closes && nextPending) {
+    // 다음 차례 결재자에게만 알린다(순차).
+    await notifyUsers([
+      {
+        tenantId: user.tenantId,
+        recipientId: nextPending.approver_id as string,
+        type: "approval_requested",
+        title: "결재 요청",
+        body: `${doc.title}`,
+        link: `/approvals/${docId}`,
+        actorId: user.id,
+      },
+    ]);
+  } else if (closes) {
     // 문서가 끝났다 — 기안자 + **참조자**에게 알린다(참조는 하이웍스처럼 결말을 받아본다).
     const { data: refRows } = await admin
       .from("approval_refs")
       .select("user_id")
       .eq("document_id", docId)
       .eq("tenant_id", user.tenantId);
-    const outcome = approved ? "승인" : "반려";
+    const outcome = !approvedLike ? "반려" : isFinal ? "전결 승인" : "승인";
     await notifyUsers([
       {
         tenantId: user.tenantId,
         recipientId: doc.drafter_id as string,
         type: "approval_decided",
         title: `결재 ${outcome}`,
-        body: `${doc.title} — ${outcome}되었습니다`,
+        body: `${doc.title} — ${outcome}되었습니다${proxy ? ` (대결 — ${user.displayName})` : ""}`,
         link: `/approvals/${docId}`,
         actorId: user.id,
       },
@@ -607,19 +774,74 @@ export async function decideDocument(
   await logAction({
     action: "approval_decide",
     targetType: "approval_document",
-    targetLabel: `${doc.title} · ${approved ? "승인" : "반려"}`,
-    metadata: { docId, decision, step: doc.current_step },
+    targetLabel: `${doc.title} · ${!approvedLike ? "반려" : isFinal ? "전결" : "승인"}${proxy ? " (대결)" : ""}`,
+    metadata: {
+      docId,
+      decision,
+      step: target.step_no,
+      proxy,
+      deferred: deferredCells.length,
+    },
   });
   revalidatePath("/approvals");
   revalidatePath(`/approvals/${docId}`);
+  const deferNote = deferredCells.length > 0 ? "앞 단계를 후결로 넘기고 " : "";
   return {
     ok: true,
-    notice: approved
-      ? isLast
-        ? "최종 승인했습니다"
-        : "승인했습니다 — 다음 결재자에게 넘어갔습니다"
-      : "반려했습니다",
+    notice: !approvedLike
+      ? `${deferNote}반려했습니다${proxy ? " (대결)" : ""}`
+      : isFinal
+        ? `${deferNote}전결로 승인 종결했습니다${proxy ? " (대결)" : ""}`
+        : nextPending
+          ? `${deferNote}승인했습니다 — 다음 결재자에게 넘어갔습니다${proxy ? " (대결)" : ""}`
+          : `${deferNote}최종 승인했습니다${proxy ? " (대결)" : ""}`,
   };
+}
+
+/**
+ * 후결 확인 — 부재로 건너뛰어진(deferred) 내 칸을 사후 승인(post_approved)으로 바꾼다.
+ * 문서 상태·current_step은 **불변**(문서는 이미 진행·종결됐다 — 하이웍스 후열 '확인'과 같은 사후 기록).
+ */
+export async function confirmDeferredStep(
+  _prev: ApprovalActionState,
+  formData: FormData,
+): Promise<ApprovalActionState> {
+  const gate = await requireSignedIn();
+  if ("error" in gate) return { error: gate.error };
+  const { user } = gate;
+
+  const docId = String(formData.get("documentId") ?? "").trim();
+  if (!docId) return { error: "확인할 문서를 찾을 수 없습니다" };
+
+  const admin = createAdminClient();
+  const { data: doc } = await admin
+    .from("approval_documents")
+    .select("id, title")
+    .eq("id", docId)
+    .eq("tenant_id", user.tenantId)
+    .maybeSingle();
+  if (!doc) return { error: "문서를 찾을 수 없습니다" };
+
+  const { data: updated, error } = await admin
+    .from("approval_steps")
+    .update({ decision: "post_approved", decided_at: new Date().toISOString() })
+    .eq("document_id", docId)
+    .eq("approver_id", user.id) // 내 칸만
+    .eq("decision", "deferred")
+    .select("id")
+    .maybeSingle();
+  if (error) return { error: `후결 확인 실패 — ${error.message}` };
+  if (!updated) return { error: "후결 확인할 칸이 없습니다" };
+
+  await logAction({
+    action: "approval_decide",
+    targetType: "approval_document",
+    targetLabel: `${doc.title} · 후결 확인`,
+    metadata: { docId, postApproval: true },
+  });
+  revalidatePath("/approvals");
+  revalidatePath(`/approvals/${docId}`);
+  return { ok: true, notice: "후결 확인했습니다" };
 }
 
 /** 기안 회수 — 진행중이고 **아직 아무도 승인하지 않았을 때만**(한 번 결재된 문서는 기록으로 남긴다). */

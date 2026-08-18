@@ -1,22 +1,34 @@
 import { EyIcon } from "@/components/icons/eywa-icons";
-import type { ApprovalDocRow } from "@/features/approvals/server/queries";
+import type { ApprovalDocRow, ApprovalStepCell } from "@/features/approvals/server/queries";
 
 /**
  * 결재란 — 종이 결재 양식 문법(원장 스크린샷 2026-08-14): 칸 = **위 직급 / 가운데 사인 칸 / 아래 이름**.
  * 세로 라벨 [결재] + 사람당 열 하나(맨 앞은 기안자). 참조자가 있으면 맨 아래 [참조] 행(이름 + 체크).
  *
  * 사인 칸 규칙(종이처럼 **빈 칸도 자리를 차지한다** — 고정 높이):
- *   승인 = 네이비 원형 도장 + 처리일 · 반려 = 빨간 원형 도장 + 처리일 ·
- *   지금 차례 = 파란 외곽 `결재` 칩(#decide 앵커 — 아래 처리 패널로) + 열 배경 ·
- *   아직 차례 아님 = **완전히 빈 칸**(점선 원도 없음 — "사인 란도 작성칸이지만 비워놓고") ·
- *   기안 = 중립 '상신' 도장 + 기안일.
+ *   승인 = 네이비 원형 도장 · 반려 = 빨간 원형 도장 · **전결** = 네이비 '전결' 도장(그 칸에서 즉시 종결) ·
+ *   **후결** = 파란 '후결' 도장(부재 후 사후 확인 완료) · **후결 대기** = 점선 amber 칩(건너뛰어진 칸) ·
+ *   생략 = 회색 "—"(전결로 안 거친 칸) · 지금 차례 = 파란 외곽 `결재` 칩(#decide 앵커) + 열 배경 ·
+ *   아직 차례 아님 = **완전히 빈 칸** · 기안 = 중립 '상신' 도장. 처리일은 도장 아래(mm/dd).
+ *
+ * **대결**(0216a): 부재자 대신 결재한 실제 처리자(acted_by)가 있으면 도장 아래 "대결 · 이름"을 찍는다 —
+ * 칸의 주인(이름 행)은 그대로 부재자다(결재란의 자리는 결재선이 정한 사람 것).
  *
  * ⚠️ 위/가운데/아래를 tr 세 개로 가르면 칸 안에 가로 표선이 생겨 종이 결재 룩이 깨진다 —
  *    헤더(직급)만 tr로 두고 **사인+이름은 한 td 안에** 쌓는다.
  * ⚠️ 사람 표시는 **이름 텍스트만** — 이름 앞 아바타/이니셜 배지는 이 프로젝트에서 영구 금지다.
  */
 
-type SignKind = "drafted" | "approved" | "rejected" | "turn" | "blank";
+type SignKind =
+  | "drafted"
+  | "approved"
+  | "rejected"
+  | "final"
+  | "post_approved"
+  | "deferred"
+  | "skipped"
+  | "turn"
+  | "blank";
 
 type Col = {
   key: string;
@@ -25,25 +37,55 @@ type Col = {
   name: string;
   date: string | null;
   sign: SignKind;
+  /** 대결 실제 처리자(부재자 대신 결재). null = 본인 결재. */
+  actedByName: string | null;
   /** 지금 결재할 차례인 열 — 배경을 칠해 어디서 멈췄는지 보이게. */
   active: boolean;
 };
 
-const STAMP_CLS: Record<Exclude<SignKind, "turn" | "blank">, string> = {
+type StampKind = Exclude<SignKind, "turn" | "blank" | "deferred" | "skipped">;
+
+const STAMP_CLS: Record<StampKind, string> = {
   drafted: "border-line text-text-dim",
   approved: "border-primary text-primary",
   rejected: "border-danger text-danger",
+  final: "border-primary text-primary",
+  post_approved: "border-blue text-blue",
 };
 
-const STAMP_TEXT: Record<Exclude<SignKind, "turn" | "blank">, string> = {
+const STAMP_TEXT: Record<StampKind, string> = {
   drafted: "상신",
   approved: "승인",
   rejected: "반려",
+  final: "전결",
+  post_approved: "후결",
 };
 
 /** ISO → "08/14". 도장 아래 처리일 — 연도까지는 정보 격자표·이력이 담당한다. */
 function mmdd(iso: string | null): string | null {
   return iso ? iso.slice(5, 10).replace("-", "/") : null;
+}
+
+/** 결재란 칸의 사인 종류 — 판단(decision)과 문서 상태에서 도출. 한 곳에서만 정한다. */
+function signOf(step: ApprovalStepCell, doc: ApprovalDocRow): SignKind {
+  switch (step.decision) {
+    case "approved":
+      return "approved";
+    case "rejected":
+      return "rejected";
+    case "final":
+      return "final";
+    case "post_approved":
+      return "post_approved";
+    case "deferred":
+      return "deferred";
+    case "skipped":
+      return "skipped";
+    default: {
+      const turn = doc.status === "pending" && doc.currentStep === step.stepNo;
+      return turn ? "turn" : "blank";
+    }
+  }
 }
 
 /** 사인 칸 내용 — 종이처럼 칸 높이는 항상 같고, 상태에 따라 내용만 달라진다. */
@@ -57,6 +99,22 @@ function SignArea({ col }: { col: Col }) {
       >
         결재
       </a>
+    );
+  }
+  if (col.sign === "deferred") {
+    // 부재로 건너뛰어진 칸 — 사후 '후결 확인'을 기다린다(하이웍스 후열 '확인' 대응).
+    return (
+      <span className="border-amber/70 text-amber inline-flex items-center rounded-md border border-dashed px-2 py-1 text-[11px] font-semibold">
+        후결 대기
+      </span>
+    );
+  }
+  if (col.sign === "skipped") {
+    // 전결로 문서가 그 앞에서 종결돼 거치지 않은 칸.
+    return (
+      <span className="text-text-faint text-[13px]" title="전결로 생략된 결재 단계입니다">
+        —
+      </span>
     );
   }
   return (
@@ -79,25 +137,19 @@ export function ApprovalStamps({ doc }: { doc: ApprovalDocRow }) {
       name: doc.drafterName,
       date: mmdd(doc.submittedAt),
       sign: "drafted",
+      actedByName: null,
       active: false,
     },
     ...doc.steps.map((s): Col => {
-      const turn =
-        doc.status === "pending" && doc.currentStep === s.stepNo && s.decision === "pending";
+      const sign = signOf(s, doc);
       return {
         key: `step-${s.stepNo}`,
         title: s.approverJobTitle ?? s.roleLabel,
         name: s.approverName,
         date: mmdd(s.decidedAt),
-        sign:
-          s.decision === "approved"
-            ? "approved"
-            : s.decision === "rejected"
-              ? "rejected"
-              : turn
-                ? "turn"
-                : "blank",
-        active: turn,
+        sign,
+        actedByName: s.actedByName,
+        active: sign === "turn",
       };
     }),
   ];
@@ -137,6 +189,11 @@ export function ApprovalStamps({ doc }: { doc: ApprovalDocRow }) {
                 <span className="flex h-20 items-center justify-center">
                   <SignArea col={c} />
                 </span>
+                {c.actedByName ? (
+                  <p className="text-text-faint text-[10px] leading-tight whitespace-nowrap">
+                    대결 · {c.actedByName}
+                  </p>
+                ) : null}
                 <p className="text-foreground mt-0.5 text-[12px] font-medium whitespace-nowrap">
                   {c.name}
                 </p>
