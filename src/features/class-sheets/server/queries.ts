@@ -338,6 +338,49 @@ export async function getClassSheetWeek(
   // JJ 표시 여부 — **그리드 조립 전에** 정해야 한다(작성률 분모까지 이 값이 정한다). LAB은 항상 제외.
   const showSelfStudy = readEcsShowSelfStudy(myPrefsRes.data?.ui_prefs);
 
+  // 플래그 없는 반 이동 전출자 — 학원 퇴원이 아닌데 이 반 수강이 끝난 학생이 **같은 과목 다른 반**에
+  // 열린 수강을 가지면 전출(반 이동)이지 퇴원이 아니다(원장 2026-08-18 "이런 건 퇴원처리 안 되어 있게").
+  // is_transferred 플래그는 이동 도구를 안 거친 이동(시트 동기·종료+배정 수작업)엔 없어서 백업 판정이 필요.
+  // best-effort: 이 감지가 실패해도 시트는 열려야 한다(실패 시 옛 동작 = 퇴원 줄에 표시).
+  let activeElsewhereSameSubject: string[] = [];
+  try {
+    const endedNotWithdrawn = [
+      ...new Set(
+        enrollments
+          .filter((e) => e.end_date && !e.students?.withdrawn_at)
+          .map((e) => e.student_id),
+      ),
+    ];
+    if (endedNotWithdrawn.length > 0) {
+      const open = await fetchInChunks<{ student_id: string; class_id: string }>(
+        endedNotWithdrawn,
+        (chunk) =>
+          admin
+            .from("enrollments")
+            .select("student_id, class_id")
+            .eq("tenant_id", tenantId)
+            .neq("class_id", classId)
+            .in("student_id", chunk)
+            .is("end_date", null),
+      );
+      const otherClassIds = [...new Set(open.map((o) => o.class_id))];
+      if (otherClassIds.length > 0) {
+        const otherClasses = await fetchInChunks<{ id: string; subject: string }>(
+          otherClassIds,
+          (chunk) => admin.from("classes").select("id, subject").eq("tenant_id", tenantId).in("id", chunk),
+        );
+        const sameSubject = new Set(
+          otherClasses.filter((c) => c.subject === access.subject).map((c) => c.id),
+        );
+        activeElsewhereSameSubject = [
+          ...new Set(open.filter((o) => sameSubject.has(o.class_id)).map((o) => o.student_id)),
+        ];
+      }
+    }
+  } catch (e) {
+    console.error("[class-sheets] 전출자 감지 실패 — 퇴원 줄 표시로 폴백", e);
+  }
+
   // 스케줄 행은 **한 번만** 만들어 그리드와 유닛 계산이 같은 입력을 본다(두 벌이면 라벨 해석이 갈린다).
   const scheduleRows = (schedulesRes.data ?? []).map((s) => ({
     dayOfWeek: s.day_of_week as DowKey,
@@ -373,6 +416,7 @@ export async function getClassSheetWeek(
     })),
     slotMemoKeys: memoRows.map((m) => m.memoKey).filter((k) => k.startsWith("slot:")),
     includeSelfStudy: showSelfStudy,
+    activeElsewhereSameSubject,
   });
 
   // 학생 메타 — enrollment 조인분 + (마크·출석만 있는 historical) 부족분 보충 조회

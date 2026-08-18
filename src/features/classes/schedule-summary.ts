@@ -256,3 +256,26 @@ export function formatMinutes(total: number): string {
 export function formatRow(row: ScheduleRow): string {
   return `${formatDays(row.days)} ${row.startTime}~${row.endTime}`;
 }
+
+/**
+ * (시작,종료) 시각 구간들을 시작시각순 정렬 후 **딱 붙은 것만** 잇는다 — mergeAdjacent와 같은 규칙의
+ * 구간 버전(학생 상세 '수업' 탭 스케줄 셀용, 2026-08-18 원장 *"영어 수업을 스마트하게 보여주면 좋겠는데"*).
+ * 영어는 40분 교시가 연달아 붙어 `16:20~17:20`+`17:20~18:10` 나열이 길었다 → `16:20~18:10` 한 구간.
+ * ⚠️ 10분이라도 비면 별개 구간 유지(없는 수업 시간을 만들지 않는다 — mergeAdjacent docblock과 동일).
+ * 겹치는 구간(17:00~17:40 vs 17:20~18:10)도 잇지 않는다 — 겹침은 데이터 이상이라 그대로 보여야 눈에 띈다.
+ */
+export function mergeTimeRanges(
+  ranges: Array<{ start: string; end: string }>,
+): Array<{ start: string; end: string }> {
+  const sorted = [...ranges]
+    .map((r) => ({ start: hm(r.start), end: hm(r.end) }))
+    .sort((a, b) => a.start.localeCompare(b.start) || a.end.localeCompare(b.end));
+  const out: Array<{ start: string; end: string }> = [];
+  for (const r of sorted) {
+    const open = out[out.length - 1];
+    if (open && open.end === r.start) open.end = r.end;
+    else if (open && open.start === r.start && open.end === r.end) continue; // 완전 중복(이력 중첩)은 한 번만
+    else out.push({ ...r });
+  }
+  return out;
+}

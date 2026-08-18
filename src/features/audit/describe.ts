@@ -239,6 +239,38 @@ export function auditDetail(
       const n = num(m.count);
       return n === null ? null : `${n}명 (관리 도구 · 수강 없는 학생 정리)`;
     }
+    case "enrollment_assign": {
+      return join(
+        ctx.nameOf(m.studentId),
+        ctx.nameOf(m.classId),
+        str(m.startDate) ? `시작 ${str(m.startDate)}` : null,
+      );
+    }
+    case "enrollment_move": {
+      const dest = ctx.nameOf(m.classId);
+      return join(ctx.nameOf(m.studentId), dest ? `→ ${dest}` : null);
+    }
+    case "enrollment_move_batch": {
+      const n = num(m.count);
+      const eff = str(m.effectiveDate);
+      return join(n === null ? null : `${n}건 이동`, eff ? `적용일 ${eff}` : null);
+    }
+    case "enrollment_days_update": {
+      const n = num(m.count);
+      return n === null ? null : `${n}건`;
+    }
+    case "enrollment_dates_update": {
+      const f = str(m.field);
+      return join(
+        ctx.nameOf(m.studentId),
+        ctx.nameOf(m.classId),
+        f ? `${f === "start" ? "시작" : "종료"}일 ${str(m.from) ?? "—"} → ${str(m.to) ?? "—"}` : null,
+      );
+    }
+    case "student_merge": {
+      const merged = str(m.mergedName);
+      return join(ctx.nameOf(m.studentId), merged ? `← ${merged} 병합` : null);
+    }
     case "class_end_term": {
       const d = str(m.closedAt);
       return d ? `종강일 ${d}` : null;

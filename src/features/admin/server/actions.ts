@@ -37,6 +37,13 @@ export async function mergeStudents(
   const supabase = await createClient();
   let mergedRows = 0;
 
+  // 감사 기록용 이름 선조회 — mergee는 곧 퇴원 마킹되므로 병합 시점 이름을 보존한다.
+  const { data: pairNames } = await supabase
+    .from("students")
+    .select("id, name")
+    .in("id", [keeperId, mergeeId]);
+  const mergeeName = (pairNames ?? []).find((s) => s.id === mergeeId)?.name ?? null;
+
   const tables = [
     "enrollments",
     "attendance_records",
@@ -70,6 +77,12 @@ export async function mergeStudents(
       notes: `중복 병합: ${keeperId}와 통합됨 (${today})`,
     })
     .eq("id", mergeeId);
+
+  await logAction({
+    action: "student_merge",
+    targetType: "student",
+    metadata: { studentId: keeperId, mergedStudentId: mergeeId, mergedName: mergeeName, mergedRows },
+  });
 
   // 중복 병합 UI는 /owner?tab=data(데이터 정리 면)에 있다 — 그 경로를 revalidate해야 병합 후 목록이
   // 자동 갱신된다(구 /admin/duplicates는 redirect stub이라 무의미했음). /students도 함께(mergee 퇴원).

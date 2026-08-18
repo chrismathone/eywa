@@ -3,6 +3,7 @@ import {
   formatDays,
   formatMinutes,
   formatRow,
+  mergeTimeRanges,
   slotMinutes,
   slotPhase,
   summarizeSchedule,
@@ -308,5 +309,66 @@ describe("formatMinutes", () => {
     expect(formatMinutes(0)).toBe("");
     expect(formatMinutes(-10)).toBe("");
     expect(formatMinutes(Number.NaN)).toBe("");
+  });
+});
+
+describe("mergeTimeRanges — 학생 수업탭 스케줄 셀의 연속 구간 병합", () => {
+  it("실측 중고E_중1 의치대: 붙은 두 교시만 잇고 틈 있는 교시는 별개", () => {
+    // 16:20~17:20 + 17:20~18:10 은 딱 붙음 → 병합. 18:10~18:20 틈이 있는 18:20~19:20 은 별개.
+    expect(
+      mergeTimeRanges([
+        { start: "17:20", end: "18:10" },
+        { start: "16:20", end: "17:20" },
+        { start: "18:20", end: "19:20" },
+      ]),
+    ).toEqual([
+      { start: "16:20", end: "18:10" },
+      { start: "18:20", end: "19:20" },
+    ]);
+  });
+
+  it("정렬 안 된 입력도 시작시각순으로 이어 하나가 된다", () => {
+    expect(
+      mergeTimeRanges([
+        { start: "17:00", end: "17:40" },
+        { start: "16:20", end: "17:00" },
+        { start: "18:20", end: "19:20" },
+        { start: "17:40", end: "18:20" },
+      ]),
+    ).toEqual([{ start: "16:20", end: "19:20" }]);
+  });
+
+  it("틈이 있으면(고등E_고2 심화 10분 쉼) 잇지 않는다", () => {
+    expect(
+      mergeTimeRanges([
+        { start: "19:20", end: "20:10" },
+        { start: "20:20", end: "21:10" },
+      ]),
+    ).toEqual([
+      { start: "19:20", end: "20:10" },
+      { start: "20:20", end: "21:10" },
+    ]);
+  });
+
+  it("겹치는 구간은 잇지 않고, 완전 중복은 한 번만", () => {
+    expect(
+      mergeTimeRanges([
+        { start: "17:00", end: "17:40" },
+        { start: "17:20", end: "18:10" },
+        { start: "17:20", end: "18:10" },
+      ]),
+    ).toEqual([
+      { start: "17:00", end: "17:40" },
+      { start: "17:20", end: "18:10" },
+    ]);
+  });
+
+  it("초 붙은 DB time도 HH:MM으로 깎아 비교한다", () => {
+    expect(
+      mergeTimeRanges([
+        { start: "16:20:00", end: "17:20:00" },
+        { start: "17:20:00", end: "18:10:00" },
+      ]),
+    ).toEqual([{ start: "16:20", end: "18:10" }]);
   });
 });

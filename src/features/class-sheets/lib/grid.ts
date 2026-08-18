@@ -324,6 +324,14 @@ export function buildWeekGrid(input: {
    * ⚠️ LAB은 이 값과 무관하게 **항상 제외**된다(`hiddenSeatOf` 참조) — 켠다고 다시 나오지 않는다.
    */
   includeSelfStudy?: boolean;
+  /**
+   * **플래그 없는 반 이동 전출자**(원장 2026-08-18 *"이런 건 퇴원처리 안 되어 있게 · 반이동이 제대로"*) —
+   * 학원 퇴원이 아닌데 이 반 수강이 끝났고 **같은 과목 다른 반에 열린 수강**이 있는 학생 id 집합.
+   * 옛 반 종료+새 반 배정을 따로 하면(시트 동기·수강 종료+배정 수작업) `is_transferred`가 안 남아
+   * '퇴원' 줄에 잘못 선다 — 이 집합에 있으면 전출로 보고 퇴원 줄에서 뺀다(새 반 로스터에 보인다).
+   * 집합 산출은 서버(queries.ts) — 같은 과목 한정(다른 과목만 남은 학생은 이 과목에선 진짜 그만둔 것).
+   */
+  activeElsewhereSameSubject?: readonly string[];
 }): WeekGrid {
   const includeSelfStudy = input.includeSelfStudy ?? true;
   const dates = weekDatesOf(input.weekMonday);
@@ -386,6 +394,7 @@ export function buildWeekGrid(input: {
   }
 
   const withdrawnFloor = withdrawnFloorOf(input.weekMonday);
+  const movedElsewhere = new Set(input.activeElsewhereSameSubject ?? []);
 
   /**
    * 날짜별 로스터 상태 — eligible(그 날 수강 대상) + endedOn(퇴원 유예 내 종료일).
@@ -422,6 +431,9 @@ export function buildWeekGrid(input: {
       if (!(withdrawn || isEnrollmentEndedOn(e.endDate, date, e.isTransferred))) continue;
       // 반이동 전출은 새 반 로스터에서 보인다 — 옛 반에 퇴원으로 남기면 같은 학생이 두 번 보인다.
       if (e.isTransferred) continue;
+      // 플래그 없는 전출(같은 과목 다른 반에 열린 수강) — 위와 같은 결. 단 학원 퇴원(withdrawn_at)은
+      // 데이터가 어긋나도 예외 없이 표시한다(진짜 그만둔 학생을 숨기면 그게 더 큰 거짓이다).
+      if (!withdrawn && movedElsewhere.has(e.studentId)) continue;
       // 실효 종료일 = 반 이탈(end_date)과 학생 퇴원(withdrawn_at) 중 **이른** 것(시간표와 같은 산식).
       const effectiveEnd = [e.endDate, e.withdrawnAt].filter((x): x is string => !!x).sort()[0];
       if (!effectiveEnd) continue;
