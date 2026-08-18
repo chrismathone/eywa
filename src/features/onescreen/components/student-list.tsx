@@ -70,7 +70,7 @@ function StudentRow({
           {sendMark && sendMark.total > 0 && sendMark.sent > 0 ? (
             <span
               title={`${sendMark.label} ${sendMark.sent}/${sendMark.total}`}
-              className={`flex shrink-0 items-center gap-0.5 rounded-full px-1 py-px text-[10px] font-bold ${
+              className={`flex shrink-0 items-center gap-0.5 rounded-full px-1 py-px text-[10px] font-bold whitespace-nowrap ${
                 sendMark.sent >= sendMark.total
                   ? "bg-primary-soft text-primary"
                   : "border-line text-text-faint border"
@@ -84,19 +84,17 @@ function StudentRow({
               ) : null}
             </span>
           ) : null}
-          {st.attendance !== "출석" ? (
-            <span
-              className={`rounded-full px-1 py-px text-[10px] font-bold ${
-                st.attendance === "지각" ? "bg-amber-soft text-amber" : "bg-danger-soft text-danger"
-              }`}
-            >
-              {st.attendance}
-            </span>
-          ) : null}
         </div>
+        {/* 둘째 줄 = 학년 · 과목 점 · **출결 배지**.
+            🔴 배지가 여기로 내려온 이유(원장 2026-08-18 *"이거 왜 짤리지?"*): 목록 열은 **240px 고정**이고
+               오른쪽 진도·테스트·보고서 칩이 `shrink-0`로 ~124px을 먼저 가져간다. 남는 ~84px을 이름과
+               배지가 나눠 쓰다 보니 배지가 한 글자 폭까지 찌그러져 **"결/석"으로 쪼개졌다**(글자가 깨지면
+               축약보다 못하다 — 아래 칩 주석과 같은 원칙). 둘째 줄은 학년+점뿐이라 자리가 남는다.
+            ⚠️ `whitespace-nowrap`을 빼지 말 것 — 이 배지가 쪼개진 게 이 수정의 발단이다.
+            ⚠️ 학년은 `min-w-0 truncate` — 긴 학교명이 와도 배지를 밀어내 다시 찌그러뜨리지 않게. */}
         <div className="text-text-faint mt-0.5 flex items-center gap-1.5 text-[11px]">
-          <span>{st.grade}</span>
-          <span className="flex items-center gap-0.5">
+          <span className="min-w-0 truncate">{st.grade}</span>
+          <span className="flex shrink-0 items-center gap-0.5">
             {st.subjects.map((su, i) => (
               <span
                 key={i}
@@ -105,6 +103,15 @@ function StudentRow({
               />
             ))}
           </span>
+          {st.attendance !== "출석" ? (
+            <span
+              className={`shrink-0 rounded-full px-1 py-px text-[10px] font-bold whitespace-nowrap ${
+                st.attendance === "지각" ? "bg-amber-soft text-amber" : "bg-danger-soft text-danger"
+              }`}
+            >
+              {st.attendance}
+            </span>
+          ) : null}
         </div>
       </div>
       <div className="flex items-center gap-1">

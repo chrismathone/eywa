@@ -152,3 +152,48 @@ describe("StudentList 머리의 '일괄 출석'(빠른 출결)", () => {
     expect(onApply).toHaveBeenCalledTimes(1);
   });
 });
+
+/**
+ * 원장 2026-08-18: *"이거 왜 짤리지?"* — 결석 배지가 **"결/석"으로 세로로 쪼개져** 보였다.
+ *
+ * 원인: 목록 열은 240px 고정이고 오른쪽 진도·테스트·보고서 칩이 `shrink-0`로 ~124px을 먼저 가져간다.
+ * 남는 ~84px을 이름과 배지가 나눠 쓰는데, 배지에만 `whitespace-nowrap`이 없어 한 글자 폭까지 눌렸다.
+ * (같은 파일의 칩에는 *"찌그러지면 축약보다 못하다"*는 이유로 이미 둘 다 붙어 있었다 — 배지만 빠졌다.)
+ */
+describe("출결 배지가 쪼개지지 않는다", () => {
+  const badge = (name: string) =>
+    screen.getByText(name).closest("button")!.querySelector<HTMLElement>("span.rounded-full.whitespace-nowrap");
+
+  it("🔴 결석 배지는 줄바꿈·찌그러짐을 막는 클래스를 갖는다", () => {
+    render(
+      <StudentList
+        students={[student({ id: "x", name: "이수빈A", attendance: "결석" })]}
+        selId="x"
+        onSelect={vi.fn()}
+      />,
+    );
+    const el = screen.getByText("결석");
+    expect(el.className, "whitespace-nowrap이 없으면 '결/석'으로 쪼개진다").toContain("whitespace-nowrap");
+    expect(el.className, "shrink-0이 없으면 이름에 밀려 찌그러진다").toContain("shrink-0");
+  });
+
+  it("배지는 이름 줄이 아니라 **둘째 줄**(학년 옆)에 있다 — 첫 줄을 이름에 온전히 준다", () => {
+    render(
+      <StudentList
+        students={[student({ id: "x", name: "이수빈A", attendance: "결석" })]}
+        selId="x"
+        onSelect={vi.fn()}
+      />,
+    );
+    const nameRow = screen.getByText("이수빈A").parentElement!;
+    expect(nameRow.textContent, "이름 줄에 출결이 섞이면 이름 자리가 다시 좁아진다").not.toContain("결석");
+    // 학년과 같은 줄에 있어야 한다(둘째 줄).
+    expect(screen.getByText("중3").parentElement!.textContent).toContain("결석");
+  });
+
+  it("출석이면 배지 자체가 없다(기본 상태를 굳이 표시하지 않는다)", () => {
+    render(<StudentList students={[student({ id: "x", name: "김학생" })]} selId="x" onSelect={vi.fn()} />);
+    expect(screen.queryByText("출석")).toBeNull();
+    expect(badge("김학생")).toBeNull();
+  });
+});
