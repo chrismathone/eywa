@@ -88,6 +88,13 @@ export const AUDIT_ACTIONS = {
   enrollment_end: "수강 종료",
   student_bulk_withdraw: "학생 일괄 퇴원(데이터 정리)",
   student_bulk_delete: "학생 일괄 삭제(데이터 정리)",
+  // 2차 확장(2026-08-18 원장 "모든 행동에 기록이 남도록 범인 찾기 가능하게") — 수강을 바꾸는 나머지 경로.
+  enrollment_assign: "반 배정",
+  enrollment_move: "반 이동",
+  enrollment_move_batch: "반 이동(시간표 일괄)",
+  enrollment_days_update: "등원 요일 수정",
+  enrollment_dates_update: "수강 기간 수정",
+  student_merge: "학생 병합",
 } as const;
 export type AuditActionKey = keyof typeof AUDIT_ACTIONS;
 
@@ -135,7 +142,7 @@ export type AuditLogRow = {
 };
 
 export async function getAuditLogsPage(
-  filter: { action?: string },
+  filter: { action?: string; q?: string; dateFrom?: string; dateTo?: string },
   page = 1,
   pageSize = 50,
 ): Promise<{ rows: AuditLogRow[]; total: number }> {
@@ -145,12 +152,39 @@ export async function getAuditLogsPage(
     .from("audit_logs")
     .select("id, actor_name, action, target_type, target_label, metadata, created_at", {
       count: "exact",
-    })
+    });
+  if (filter.action && filter.action !== "all") q = q.eq("action", filter.action);
+  // 기간 필터(달력) — 입력은 KST 날짜라 created_at(timestamptz) 경계에 +09:00을 명시(서버 UTC 오프셋 무관).
+  const YMD = /^\d{4}-\d{2}-\d{2}$/;
+  if (filter.dateFrom && YMD.test(filter.dateFrom)) q = q.gte("created_at", `${filter.dateFrom}T00:00:00+09:00`);
+  if (filter.dateTo && YMD.test(filter.dateTo)) q = q.lte("created_at", `${filter.dateTo}T23:59:59.999+09:00`);
+
+  // 텍스트 검색(원장 2026-08-18) — 실행자·대상 라벨 + 한글 액션 라벨 + **이름→id 선해석**.
+  // 선해석이 필요한 이유: 학생 관련 로그(student_withdraw 등)는 이름이 화면에서만 보이고 DB엔
+  // metadata의 uuid뿐이라, 라벨 ilike만으론 "엄채율" 검색이 그 행들을 못 찾는다. 학생·직원 이름을
+  // 먼저 id로 풀어 metadata->>studentId/userId 매치에 넣는다(마이그레이션 0 — PostgREST 필터만).
+  // ⚠️ `,`·`(`·`)`는 or() 문법 구분자라 검색어에서 공백으로 치환(제거하면 "김,민"이 "김민"으로 오검색).
+  const term = (filter.q ?? "").trim().replace(/[,()]/g, " ").replace(/\s+/g, " ").trim();
+  if (term) {
+    const [stuRes, usrRes] = await Promise.all([
+      supabase.from("students").select("id").ilike("name", `%${term}%`).limit(100),
+      supabase.from("users").select("id").ilike("display_name", `%${term}%`).limit(100),
+    ]);
+    const ors = [`actor_name.ilike.*${term}*`, `target_label.ilike.*${term}*`];
+    const actionKeys = Object.entries(AUDIT_ACTIONS)
+      .filter(([, label]) => label.includes(term))
+      .map(([key]) => key);
+    if (actionKeys.length > 0) ors.push(`action.in.(${actionKeys.join(",")})`);
+    const studentIds = (stuRes.data ?? []).map((r) => r.id as string);
+    if (studentIds.length > 0) ors.push(`metadata->>studentId.in.(${studentIds.join(",")})`);
+    const userIds = (usrRes.data ?? []).map((r) => r.id as string);
+    if (userIds.length > 0) ors.push(`metadata->>userId.in.(${userIds.join(",")})`);
+    q = q.or(ors.join(","));
+  }
+
+  const { data, count } = await q
     .order("created_at", { ascending: false })
     .range(from, from + pageSize - 1);
-  if (filter.action && filter.action !== "all") q = q.eq("action", filter.action);
-
-  const { data, count } = await q;
   return {
     rows: (data ?? []).map((r) => ({
       id: r.id,

@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { accessLevelTenant, canManageTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { kstToday } from "@/lib/date-kst";
 import { notifyClassAssignment } from "@/features/notifications/server/notify";
+import { logAction } from "@/features/audit/server/log";
 
 export type CreateEnrollmentState =
   | { error?: string; enrollmentId?: string }
@@ -181,6 +182,13 @@ export async function createEnrollment(
     type: "enrollment_assigned",
   });
 
+  // 수강을 바꾸는 모든 경로는 감사로그 필수(원장 2026-08-18 "모든 행동에 기록" — CLAUDE.md 결정).
+  await logAction({
+    action: "enrollment_assign",
+    targetType: "student",
+    metadata: { studentId, classId, startDate, days: attendanceDays },
+  });
+
   revalidatePath("/timetable");
   revalidatePath(`/students/${studentId}`);
   revalidatePath(`/classes/${classId}`);
@@ -221,30 +229,38 @@ export async function moveEnrollment(
     .single();
   if (!current) return { error: "기존 수강 정보를 찾을 수 없습니다" };
 
-  // 1) 기존 enrollment 종료
+  // 1) 기존 enrollment 종료 — is_transferred=true 필수(일괄 RPC 0027h와 동일 규약). 이 플래그가 없으면
+  //    옛 반 ECS '퇴원' 줄·퇴원 집계에 전출자가 퇴원생으로 선다(원장 2026-08-18 "반이동이 제대로").
   const today = kstToday();
   const { error: endErr } = await supabase
     .from("enrollments")
-    .update({ end_date: today, withdrawal_reason: "반 이동" })
+    .update({ end_date: today, withdrawal_reason: "반 이동", is_transferred: true })
     .eq("id", enrollmentId);
   if (endErr) return { error: toKoreanDbError(endErr, "기존 수강을 종료하지 못했습니다") };
 
-  // 2) 새 enrollment INSERT
+  // 2) 새 enrollment INSERT — is_transferred_in=true(전입 표시, 통합뷰 초록 전입색과 같은 축).
   const { error: newErr } = await supabase.from("enrollments").insert({
     tenant_id: user.tenantId,
     student_id: current.student_id,
     class_id: newClassId,
     start_date: startDate,
+    is_transferred_in: true,
   });
 
   if (newErr) {
     // 새 enrollment 실패 - 기존 복구 시도
     await supabase
       .from("enrollments")
-      .update({ end_date: current.end_date, withdrawal_reason: null })
+      .update({ end_date: current.end_date, withdrawal_reason: null, is_transferred: false })
       .eq("id", enrollmentId);
     return { error: toKoreanDbError(newErr, "반 이동에 실패했습니다") };
   }
+
+  await logAction({
+    action: "enrollment_move",
+    targetType: "student",
+    metadata: { studentId: current.student_id, classId: newClassId, enrollmentId },
+  });
 
   revalidatePath("/timetable");
   return undefined;
@@ -331,6 +347,18 @@ export async function moveEnrollmentsBatch(
     });
   }
 
+  if (okMoves.length > 0) {
+    await logAction({
+      action: "enrollment_move_batch",
+      targetType: "student",
+      metadata: {
+        count: okMoves.length,
+        effectiveDate: eff,
+        moves: okMoves.map((m) => ({ enrollmentId: m.enrollmentId, newClassId: m.newClassId })),
+      },
+    });
+  }
+
   revalidatePath("/timetable");
   return { results };
 }
@@ -363,6 +391,16 @@ export async function updateEnrollmentsAttendanceBatch(
       .eq("id", enrollmentId);
     if (error) return { error: toKoreanDbError(error, "등원 요일을 저장하지 못했습니다"), count };
     count++;
+  }
+  if (count > 0) {
+    await logAction({
+      action: "enrollment_days_update",
+      targetType: "student",
+      metadata: {
+        count,
+        edits: edits.map((e) => ({ enrollmentId: e.enrollmentId, days: e.days })),
+      },
+    });
   }
   revalidatePath("/timetable");
   return { count };
@@ -438,6 +476,18 @@ export async function updateEnrollmentDates(
     }
     return { error: toKoreanDbError(error, "날짜를 저장하지 못했습니다") };
   }
+
+  await logAction({
+    action: "enrollment_dates_update",
+    targetType: "student",
+    metadata: {
+      studentId: current.student_id,
+      classId: current.class_id,
+      field,
+      from: field === "start" ? current.start_date : current.end_date,
+      to: value,
+    },
+  });
 
   revalidatePath("/timetable");
   revalidatePath(`/students/${current.student_id}`);

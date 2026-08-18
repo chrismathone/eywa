@@ -24,6 +24,7 @@ import { effectiveAttendanceRecords } from "@/features/attendance/effective-reco
 import { canSeeStudentEnrollment } from "./enrollment-gate";
 import { OUTCOME_LABEL, type OutcomeKey } from "@/features/enrollment/server/queries";
 import { reasonDisplay } from "@/features/withdrawals/types";
+import { mergeTimeRanges } from "@/features/classes/schedule-summary";
 
 /** 임포트된 상담/메모 텍스트("[제목]\n본문\n[등록자: 이름]")를 제목·본문·등록자로 분리. */
 function parseImportedNote(raw: string | null | undefined): {
@@ -639,31 +640,39 @@ function mergePeriodRanges(nums: number[]): string {
 }
 
 // 요일별로 교시 묶기(같은 요일 연속 교시는 N-M으로 병합) → 같은 라벨 요일끼리 합침("월목 1-3교시 / 화금 1-4교시").
-// attendanceDays 있으면 그 요일만(분리등원). 교시 매칭 실패 시각은 원라벨 그대로(병합 대상 아님).
+// attendanceDays 있으면 그 요일만(분리등원).
+// 교시 이름이 없어 시간대로 나오는 슬롯(영어 등)은 **붙은 구간을 이어** 한 구간으로(2026-08-18 원장
+// "영어 수업을 스마트하게" — 40분 교시 나열 `16:20~17:20, 17:20~18:10` → `16:20~18:10`). 이름 있는
+// 커스텀 교시 라벨은 시간이 아니라 이름이 정보라 병합 대상이 아니다(그대로 나열).
 function groupSchedule(
-  slots: { day: DayOfWeek; startTime: string }[],
+  slots: { day: DayOfWeek; startTime: string; endTime: string }[],
   subj: string,
   attendanceDaysKo: string[],
   config: PeriodsConfig,
 ): ScheduleGroup[] {
-  // 1) 요일 → 교시번호[] + 매칭 안 된 원라벨[]
-  const byDay = new Map<string, { nums: number[]; other: string[] }>();
+  const TIME_RANGE = /^\d{1,2}:\d{2}~\d{1,2}:\d{2}$/;
+  // 1) 요일 → 교시번호[] + 시간대 구간[] + 그 외 원라벨[]
+  const byDay = new Map<string, { nums: number[]; ranges: { start: string; end: string }[]; other: string[] }>();
   for (const s of slots) {
     const dayKo = enumDayToKo(s.day);
     if (attendanceDaysKo.length > 0 && !attendanceDaysKo.includes(dayKo)) continue;
     // 테넌트 설정 교시(과목별 override 포함)로 라벨 해석 — 무config 호출은 커스텀 교시 저장 시 라벨이 틀어진다(2026-07-06).
     // 여긴 시각을 따로 안 그리는 자리라, 이름을 비운 교시는 시간대로 대체한다(periodRowText).
-    const label = periodRowText(slotPeriodRow(subj, s.startTime, s.day, config));
-    const entry = byDay.get(dayKo) ?? { nums: [], other: [] };
+    // endTime까지 넘겨 (시작,종료) 짝 우선 매칭 — 시작시각이 같은 두 교시 오매핑 방지(#106).
+    const label = periodRowText(slotPeriodRow(subj, s.startTime, s.day, config, s.endTime));
+    const entry = byDay.get(dayKo) ?? { nums: [], ranges: [], other: [] };
     const m = label.match(/^(\d+)교시$/);
     if (m) entry.nums.push(Number(m[1]));
+    // 시간대 라벨이면 병합 후보 — 라벨의 교시표 시각이 아니라 **슬롯 실제 시각**으로 잇는다(사실 우선).
+    else if (TIME_RANGE.test(label)) entry.ranges.push({ start: s.startTime, end: s.endTime });
     else entry.other.push(label);
     byDay.set(dayKo, entry);
   }
-  // 2) 요일별 교시 라벨(연속 병합)
+  // 2) 요일별 라벨(교시 연속 병합 + 붙은 시간 구간 병합)
   const dayLabel = new Map<string, string>();
-  for (const [day, { nums, other }] of byDay) {
-    const parts = [mergePeriodRanges(nums), ...[...new Set(other)]].filter(Boolean);
+  for (const [day, { nums, ranges, other }] of byDay) {
+    const mergedRanges = mergeTimeRanges(ranges).map((r) => `${r.start}~${r.end}`);
+    const parts = [mergePeriodRanges(nums), ...mergedRanges, ...[...new Set(other)]].filter(Boolean);
     dayLabel.set(day, parts.join(", "));
   }
   // 3) 같은 라벨 요일끼리 묶기
@@ -695,17 +704,30 @@ export async function getStudentClassesDetail(studentId: string): Promise<Studen
 
   const classIds = [...new Set(ens.map((e) => e.class_id))];
 
-  // 반별 스케줄(요일·시작시각)
+  // 반별 스케줄(요일·시각) — valid_from/valid_to 포함. ⚠️ class_schedules는 운영 이력을 함께 담아(#88)
+  // 전 행을 그리면 끝난 교시가 현재 스케줄로 보인다(실측 중고E_중1 의치대: 현재 3교시인데 만료 6행이 섞여
+  // 요일당 9줄) — 아래 enrollment별 기준일(refDate)로 유효 슬롯만 남긴다.
   const { data: scheds } = await supabase
     .from("class_schedules")
-    .select("class_id, day_of_week, start_time, slot_room_label")
+    .select("class_id, day_of_week, start_time, end_time, valid_from, valid_to, slot_room_label")
     .in("class_id", classIds);
-  const schedByClass = new Map<string, { day: DayOfWeek; startTime: string; roomLabel: string | null }[]>();
+  type SchedSlot = {
+    day: DayOfWeek;
+    startTime: string;
+    endTime: string;
+    validFrom: string | null;
+    validTo: string | null;
+    roomLabel: string | null;
+  };
+  const schedByClass = new Map<string, SchedSlot[]>();
   for (const s of scheds ?? []) {
     const arr = schedByClass.get(s.class_id) ?? [];
     arr.push({
       day: s.day_of_week as DayOfWeek,
       startTime: String(s.start_time).slice(0, 5),
+      endTime: String(s.end_time).slice(0, 5),
+      validFrom: s.valid_from ? String(s.valid_from).slice(0, 10) : null,
+      validTo: s.valid_to ? String(s.valid_to).slice(0, 10) : null,
       roomLabel: (s.slot_room_label as string | null) ?? null,
     });
     schedByClass.set(s.class_id, arr);
@@ -726,6 +748,7 @@ export async function getStudentClassesDetail(studentId: string): Promise<Studen
 
   // 교시 라벨은 테넌트 설정(과목별 override 포함) 기준 — getTenantSettings는 React cache라 추가 쿼리 0.
   const periodsConfig = settingsToPeriodsConfig((await getTenantSettings()).operations);
+  const today = kstToday();
 
   return ens.map((e) => {
     const klass = (Array.isArray(e.class) ? e.class[0] : e.class) as
@@ -748,8 +771,18 @@ export async function getStudentClassesDetail(studentId: string): Promise<Studen
     const subject = klass?.subject ?? "other";
     const attDays = (Array.isArray(e.attendance_days) ? e.attendance_days : []) as string[];
     const attKo = attDays.map((d) => enumDayToKo(d as DayOfWeek));
-    const rawSlots = schedByClass.get(e.class_id) ?? [];
-    // 반 운영 요일(분리등원 선택지) = 이 반 스케줄의 distinct 요일(요일순).
+    const allSlots = schedByClass.get(e.class_id) ?? [];
+    // 유효 슬롯만(#88 — 만료 배치가 현재 스케줄로 보이는 것 방지). 기준일 = 수강 중이면 오늘,
+    // 지난 수강이면 **그 수강의 마지막 날**(당시 스케줄이 사실 — 오늘 기준이면 종강 반은 전멸한다).
+    // valid_to는 포함(inclusive) 경계 — slotPhase·시간표 쿼리(valid_to.gte)와 동일.
+    const endYmd = e.end_date ? String(e.end_date).slice(0, 10) : null;
+    const refDate = endYmd && endYmd < today ? endYmd : today;
+    const liveSlots = allSlots.filter(
+      (s) => (!s.validTo || s.validTo >= refDate) && (!s.validFrom || s.validFrom <= refDate),
+    );
+    // 전 슬롯이 이력뿐인 특이 데이터는 옛 동작(전 행)으로 폴백 — "시간 미정"으로 거짓 축소하지 않는다.
+    const rawSlots = liveSlots.length > 0 ? liveSlots : allSlots;
+    // 반 운영 요일(분리등원 선택지) = 이 반 **유효** 스케줄의 distinct 요일(요일순 — 만료 요일 금지).
     const classDays = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"].filter((d) => rawSlots.some((s) => s.day === d));
     // 등원요일 필터(분리등원) = groupSchedule과 동일 규칙. 각 슬롯에 과목별 교시 라벨 부착(그리드 셀 힌트).
     const slots: ClassSlot[] = rawSlots
@@ -757,7 +790,7 @@ export async function getStudentClassesDetail(studentId: string): Promise<Studen
       .map((s) => ({
         day: s.day,
         startTime: s.startTime,
-        periodLabel: periodRowText(slotPeriodRow(subject, s.startTime, s.day, periodsConfig)),
+        periodLabel: periodRowText(slotPeriodRow(subject, s.startTime, s.day, periodsConfig, s.endTime)),
         // 슬롯별 강의실 라벨 우선, 없으면 반 기본 강의실 상속(메인 시간표와 동일 규칙).
         room: s.roomLabel ?? defaultRoom,
       }));
@@ -771,12 +804,7 @@ export async function getStudentClassesDetail(studentId: string): Promise<Studen
       endDate: e.end_date,
       onHold: e.on_hold,
       studentCount: countByClass.get(e.class_id) ?? 0,
-      schedule: groupSchedule(
-        schedByClass.get(e.class_id) ?? [],
-        subject,
-        attKo,
-        periodsConfig,
-      ),
+      schedule: groupSchedule(rawSlots, subject, attKo, periodsConfig),
       slots,
       attendanceDays: attDays,
       classDays,
