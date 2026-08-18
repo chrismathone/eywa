@@ -10,7 +10,7 @@ import {
   ATT_VIVID,
 } from "@/features/attendance/status-color";
 import { BILLING_BADGE, BILLING_CARD } from "@/features/billing/status-color";
-import { classnoteBadge } from "@/features/onescreen/components/report-card";
+import { classnoteBadge } from "@/features/onescreen/classnote-badge";
 import { LEVEL_COLOR } from "@/features/retention/components/risk-badge";
 
 /**

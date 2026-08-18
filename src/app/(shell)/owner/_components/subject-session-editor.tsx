@@ -154,7 +154,7 @@ export function SubjectSessionEditor({
             href={`/owner?tab=subjects&year=${y}`}
             scroll={false}
             className={`rounded-full px-2.5 py-0.5 text-[11px] font-bold ${
-              y === year ? "bg-primary text-primary-foreground" : "bg-surface text-text-dim border-line border"
+              y === year ? "bg-primary text-primary-foreground" : "bg-card text-text-dim border-line border"
             }`}
           >
             {y}년
@@ -188,7 +188,7 @@ export function SubjectSessionEditor({
                   key={r.labelMonth}
                   title={v.warning ?? v.note ?? "월~금 각 4회"}
                   className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] ${
-                    v.ok ? "border-line bg-surface text-text-dim" : "border-amber/40 bg-amber-soft text-amber"
+                    v.ok ? "border-line bg-card text-text-dim" : "border-amber/40 bg-amber-soft text-amber"
                   }`}
                 >
                   <b className="text-foreground">{r.labelMonth}월</b>
@@ -204,7 +204,7 @@ export function SubjectSessionEditor({
       </div>
 
       <div className="flex flex-wrap items-center gap-1.5">
-        <button type="button" onClick={fillForward} className="border-line bg-surface rounded-lg border px-2.5 py-1 text-xs font-bold">
+        <button type="button" onClick={fillForward} className="border-line bg-card rounded-lg border px-2.5 py-1 text-xs font-bold">
           빈 달 이어서 채우기
         </button>
         <button
@@ -213,7 +213,7 @@ export function SubjectSessionEditor({
             setPasteText(formatPeriodLines(sorted.map((r) => ({ labelMonth: r.labelMonth, startDate: r.start, endDate: r.end })), year));
             setPasteOpen((v) => !v);
           }}
-          className="border-line bg-surface text-text-dim rounded-lg border px-2.5 py-1 text-xs"
+          className="border-line bg-card text-text-dim rounded-lg border px-2.5 py-1 text-xs"
         >
           {pasteOpen ? "붙여넣기 닫기" : "글자로 입력·복사"}
         </button>
@@ -236,7 +236,7 @@ export function SubjectSessionEditor({
       </div>
 
       {pasteOpen ? (
-        <div className="border-line bg-surface space-y-2 rounded-lg border p-2.5">
+        <div className="border-line bg-card space-y-2 rounded-lg border p-2.5">
           <p className="text-text-dim text-[12px]">
             한 줄에 한 달씩 — <b>3월 3/6~4/2</b>. 전해에 시작하는 1월 세션은 <b>1월 {year - 1}-12-28~1/24</b>처럼 연도까지.
           </p>

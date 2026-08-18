@@ -388,7 +388,8 @@ key(DB 식별자)는 **자동 확정**: 과목명 입력 후 blur 시 1회 — �
   - **바꾼 것**: 재원·재직·승인·수납완료·발송완료·출석·전사완료 등 **"완료/정상" 23군데**가 primary(네이비)였다 → 전부 초록(네이비는 과목 '수학' blue와 색상각 4.8°라 학생목록에서 상태와 과목이 구분되지 않았다). 🔑 **절반만 옮기면 안 된다** — 학생 축만 초록으로 가면 오히려 더 갈리므로 같은 푸시에서 전수 처리했다. 활성 필터 칩 44곳 검정→네이비.
   - **단일 소스로 합친 축(전부 "각자 맵을 복사"해서 갈렸다)**: 학생 상태 4벌(`studentStatusMeta`) · 직원 상태·역할 3벌(`staffStatusMeta`·`roleMeta`) · **출결 6벌**([`attendance/status-color.ts`](src/features/attendance/status-color.ts) — `ATT_VIVID` 격자 원색 / `ATT_SOFT` 칩 / `ATT_SOLID` 누른 알약, **색상은 하나·채도만 자리마다**) · **수납**(정본이 아예 없었다 → [`billing/status-color.ts`](src/features/billing/status-color.ts)) · **상담 outcome 5벌**([`outcomeBadge`](src/features/enrollment/outcome-meta.ts)) · 후속조치 긴급도 2벌.
   - 🔴 **색이 아니라 정보가 사라진 사례**: 학생 상세 진도 탭이 정본과 같은 이름의 로컬 `classnoteBadge`를 들고 있었는데 회수 3종·링크 취소·과목 제외를 switch에서 빠뜨려 **전부 "—"로 삼켰다**(회수했는데 "안 보낸 것"으로 보였다). 사본은 새 상태를 따라오지 않는다.
-  - 가드 = [`semantic-color.test.ts`](src/lib/design/semantic-color.test.ts)(재원·재직·승인 전부 green / 뜻마다 다른 색 / 역할 색엔 green 금지). ⚠️ **역할 색은 신원이지 상태가 아니라** 캐논 밖이다.
+  - 가드 3종(`src/lib/design/`): **semantic-color**(재원·재직·승인 전부 green / 뜻마다 다른 색 / 역할 색엔 green 금지 / ClassNote 정본이 상태를 안 삼킴) · **palette-contrast**(globals.css를 파싱해 WCAG 대비를 실제 계산 — 하드코딩 비교가 아니라 값을 되돌려 통과시키는 우회가 없다) · **dead-color-class**(정의 안 된 색 토큰 금지). ⚠️ **역할 색은 신원이지 상태가 아니라** 캐논 밖이다.
+  - 🔴 **오타가 에러를 안 낸다**: `text-warning`·`bg-primary-hover`·`text-danger-foreground`처럼 토큰 없는 유틸은 빌드·타입체크를 통과하고 **아무 색도 안 붙는다**(알림 벨 배지 숫자가 빨강 위 어두운 글자로 안 보이고 있었다, 13곳). 화이트 캔버스에선 배경이 안 칠해져도 흰색으로 "정상처럼" 보여 더 안 잡힌다 — 새 색은 **토큰을 먼저** 만들 것.
   - ⚠️ **미해결(원장 결정 대기)**: 시간표 vivid 모드는 신입=**빨강**(원장 *"시트 export 색 그대로"* 요청한 원본 시트 복제)인데 출석부는 신입=**초록**이라 둘이 어긋난다. 어느 쪽에 맞출지 미정 — 임의로 바꾸지 말 것.
 - **이름 앞 아바타/이니셜 배지 = 금지 (영구).** 사람 표시는 이름 텍스트만.
 - **master 시스템역할 표시 라벨 = "원장"** (2026-07-07 "owner→원장" 전역 환원, 최신). ⚠️ 07-02엔 "owner"로 통일했다가 뒤집힘 — **다시 owner로 되돌리지 말 것**.

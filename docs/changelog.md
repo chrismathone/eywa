@@ -77,6 +77,11 @@ ClassNote 발송완료(정본 `classnoteBadge`) · 수납 완료·납부액·완
 들고 있었는데, 회수 3종·링크 취소·과목 제외·결석/출결 미체크를 switch에서 빠뜨려 **전부 "—"로 삼켰다** —
 학부모 게시글을 회수했는데 학생 상세에선 "안 보낸 것"으로 보였다는 뜻이다. 정본에 `short`(좁은 칸용
 짧은 라벨)를 더해 사본을 제거했다(같은 switch에서 나오므로 상태를 빠뜨릴 수가 없다).
+⚠️ 그런데 정본이 `components/report-card.tsx`(**클라 컴포넌트**, `useState`) 안에 있어서, 서버 컴포넌트인
+진도 탭이 import하는 순간 **빌드가 깨졌다**("useState에 의존하는 모듈을 서버 컴포넌트로 가져왔다" —
+학생 상세가 통째로 안 열림. 타입체크·테스트는 다 통과했고 **실화면에서만** 잡혔다). 라벨·색은 순수
+데이터라 [`classnote-badge.ts`](src/features/onescreen/classnote-badge.ts)로 옮기고 기존 경로엔
+re-export만 남겼다(소비처 8곳 무변경).
 
 **4. 대비 실측에서 잡은 것 — v3부터 배지 글자가 미달이었다**
 `-soft` 배지는 *같은 색 글자*를 그 틴트 위에 얹는 구조라, 틴트를 진하게 하면 대비가 **떨어진다**.
@@ -88,6 +93,16 @@ ClassNote 발송완료(정본 `classnoteBadge`) · 수납 완료·납부액·완
 `--destructive`·`--accent-foreground`·`--chart-1/2/4`도 같은 값으로 맞췄다(갈리면 삭제 버튼만 다른
 빨강, 차트만 다른 초록이 된다).
 
+**4-b. 죽은 색 클래스 13곳 — 오타가 에러를 안 낸다**
+토큰이 없는 유틸(`text-warning`·`bg-primary-hover`·`text-danger-foreground`·`bg-surface`)은 빌드도
+타입체크도 통과하는데 **아무 색도 안 붙는다**. 🔴 `text-danger-foreground`는 `bg-danger`(진한 빨강) 위라
+글자가 상속색(어두운 잉크)으로 떨어졌다 — **알림 벨 배지의 숫자와 출석부 토스트 글자가 안 보이는 상태**였다.
+`hover:bg-primary-hover` 8곳은 hover가 그냥 안 먹었다. 화이트 캔버스에선 더 안 잡힌다(배경이 안 칠해져도
+흰색으로 "정상처럼" 보인다). 전부 실토큰으로 교체하고 **[가드](src/lib/design/dead-color-class.test.ts)**로
+막았다 — globals.css의 `--color-*` 선언 + Tailwind 내장 팔레트만 통과시킨다(새 색을 쓰려면 토큰을 먼저
+만들라는 뜻이고, 그게 "색은 의미에만"과 같은 방향이다). 임의값 `text-[color:var(--x)]`·CSS 변수·import
+경로·주석은 오탐이라 스캔 전에 걷어낸다.
+
 **5. 가드**
 - [`semantic-color.test.ts`](src/lib/design/semantic-color.test.ts) — "재원·재직·승인이 전부 green" /
   "서로 다른 뜻은 서로 다른 색" / "역할 색에 green 금지" / "출결 세 벌의 색상 계열이 하나" / "출석이
@@ -95,6 +110,7 @@ ClassNote 발송완료(정본 `classnoteBadge`) · 수납 완료·납부액·완
 - [`palette-contrast.test.ts`](src/lib/design/palette-contrast.test.ts) — **globals.css를 파싱해** WCAG
   대비를 실제로 계산한다. 하드코딩 hex 비교가 아니라서 "테스트를 고치려고 값을 되돌리는" 우회가 안 생긴다.
   텍스트 3단 · 회색 채움 위 캡션 · 배지 · 솔리드 채움 · 차트↔배지 동기 · 카드 링까지.
+- [`dead-color-class.test.ts`](src/lib/design/dead-color-class.test.ts) — 정의되지 않은 색 토큰 사용 금지.
 🔑 둘 다 **화면 하나만 보면 멀쩡하고 스크린샷을 나란히 놓아야 보이는** 회귀를 잡는다 — 사람 눈에 맡기면
 반드시 다시 갈라진다(그래서 v3에서 실제로 갈라졌다). `color-utils.test.ts`의 알파 핀도 v4 값으로 갱신.
 

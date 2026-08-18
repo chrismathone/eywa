@@ -241,7 +241,7 @@ export function NotificationBell() {
               className="bg-danger absolute inline-flex h-full w-full animate-ping rounded-full opacity-50"
               aria-hidden
             />
-            <span className="bg-danger text-danger-foreground ring-card relative inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1 text-[10px] font-bold tabular-nums shadow-sm ring-2 [animation:badge-pop_0.35s_ease-out]">
+            <span className="bg-danger text-white ring-card relative inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1 text-[10px] font-bold tabular-nums shadow-sm ring-2 [animation:badge-pop_0.35s_ease-out]">
               {badge}
             </span>
           </span>

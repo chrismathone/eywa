@@ -27,7 +27,7 @@ const STATUS_META: Record<VerificationStatus, { label: string; cell: string; chi
   matched: { label: "일치", cell: "text-green", chip: "bg-green-soft text-green border-green/30" },
   short: { label: "부족", cell: "text-amber", chip: "bg-amber-soft text-amber border-amber/30" },
   over: { label: "초과", cell: "text-danger", chip: "bg-danger-soft text-danger border-danger/30" },
-  unconfirmed: { label: "미확정", cell: "text-text-dim", chip: "bg-surface text-text-dim border-line" },
+  unconfirmed: { label: "미확정", cell: "text-text-dim", chip: "bg-card text-text-dim border-line" },
 };
 
 // 검증 우선 정렬 — 불일치(초과·부족)를 맨 위로, 그다음 미확정, 마지막 일치.
