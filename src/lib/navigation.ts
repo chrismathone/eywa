@@ -93,6 +93,8 @@ export const NAV_GROUPS: NavGroup[] = [
         menuKey: "dashboard",
         presentation: "desktop",
       },
+      // 캘린더 — 학원 공용 일정(원장 2026-08-18 도입). 매일 여는 자리라 홈 그룹.
+      { href: "/calendar", label: "캘린더", icon: MENU_ICON.calendar, menuKey: "calendar" },
     ],
   },
   {

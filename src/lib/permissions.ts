@@ -57,6 +57,7 @@ export const MENU_KEYS = [
   "documents",
   "class_review",
   "approvals",
+  "calendar",
   "integrations",
   "sheet_sync",
   "help",
@@ -85,6 +86,7 @@ export const TEACHER_MENU_KEYS = [
   "textbook_requests",
   "expense_requests", // 지출결의서 — 강사가 본인 지출을 작성·제출(사무실은 /billing 지출 면에서 결재)
   "approvals", // 전자결재 — 기본 none(파일럿 개인 예외 계정에만 보인다). 문서 스코프는 결재선·RLS.
+  "calendar", // 캘린더 — 학원 공용 일정(강사 readonly 열람)
   "documents", // 서식 저장소 — 강사는 readonly(빈 양식 다운로드 용도)
 ] as const satisfies readonly MenuKey[];
 
@@ -145,6 +147,9 @@ export const MENU_ACCESS: AccessMatrix = {
   // 명단·개방은 scripts/staff-access/grant-class-review.mjs(드라이런→--apply, --revoke로 원복) 단일 소스.
   // ⚠️ 개인 예외는 CRUD뿐 아니라 **실명 열람·문항 세트 편집**까지 연다(getReviewPrivileges) — 명단은 최소로.
   class_review: { master: "none", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", student: "none" },
+  // 캘린더(학원 공용 일정, 원장 2026-08-18 "일단 캘린더 탭으로 일정부터 관리") — 일정 등록·수정은
+  // 사무실(full), 강사·상담·회계·뷰어는 열람(readonly). 학원 일정은 전 직원이 봐야 의미가 있다.
+  calendar: { master: "full", admin: "full", manager: "full", teacher: "readonly", counselor: "readonly", accountant: "readonly", viewer: "readonly", student: "none" },
   // 전자결재(기안·결재함, 원장 지시 2026-08-14 — 첫 양식 = 휴가신청서) — **테스트 단계라 기본 전원 차단**.
   // 개방은 코드 명단([`access.ts`](../features/approvals/access.ts) = 이승엽·김예원)이 개인 예외로
   // 얹는다(class_review와 같은 결이되, 그쪽은 tenant_settings 데이터·이쪽은 코드 상수 — 이 PC에서
@@ -263,6 +268,7 @@ const PATH_SEGMENT_TO_MENU: Record<string, MenuKey> = {
   documents: "documents",
   "class-review": "class_review",
   approvals: "approvals",
+  calendar: "calendar",
   help: "help",
   admin: "admin",
   owner: "owner",

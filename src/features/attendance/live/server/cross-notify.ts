@@ -134,7 +134,8 @@ async function loadClassTeachers(
   ];
 }
 
-async function loadDeskOptin(
+/** '출결 데스크 알림' 켠 계정(0212a) — 교차 알림과 '데스크 확인 요청'이 같은 수신자 축을 쓴다. */
+export async function loadDeskOptin(
   admin: ReturnType<typeof createAdminClient>,
   tenantId: string,
   actorId: string | null,

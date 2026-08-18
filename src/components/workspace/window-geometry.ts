@@ -63,6 +63,8 @@ export const ROUTE_WINDOW_SIZE: Record<string, { w: number; h: number }> = {
   class_review: { w: 1180, h: 860 }, // 30문항 매트릭스 + 평가자 열 — 폭·높이 넉넉히
   // 휴가관리 — 연차 현황(3칸 스탯) + 신청 폼 + 내역 표 / 전자결재함. 기본 480은 폼 2열이 접힌다.
   approvals: { w: 1000, h: 800 },
+  calendar: { w: 1120, h: 800 }, // 월 그리드(7열×5~6주) — 칸당 일정 칩이 설 폭
+
 
   "billing/refunds": { w: 840, h: 720 }, // 환불 요청서(작성 폼·A4형 시트 뷰) — 상세 id도 prefix로 상속
   owner: { w: 960, h: 720 }, // 학원 설정 콘솔 — 탭 + 목록 편집(과목·교시·직급) 폼

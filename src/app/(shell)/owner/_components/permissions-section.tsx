@@ -40,6 +40,7 @@ const MENU_LABEL: Record<MenuKey, string> = {
   documents: "데이터베이스",
   class_review: "수업 평가",
   approvals: "전자결재",
+  calendar: "캘린더",
   integrations: "makeedu 연동",
   sheet_sync: "구글 시트 연동",
   help: "도움말",
