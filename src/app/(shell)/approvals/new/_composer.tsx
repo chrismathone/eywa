@@ -472,7 +472,12 @@ function useSubmitToast(state: ApprovalActionState) {
     if (!state || state === seen.current) return;
     seen.current = state;
     if (state.error) toast.error(state.error);
-    else if (state.ok) toast.success(state.notice ?? "상신했습니다");
+    else if (state.ok) {
+      toast.success(state.notice ?? "상신했습니다");
+      // 상신 성공 = 방금 만든 문서로 이동(원장 2026-08-18: "alert만 뜨니까 인지가 안 됨").
+      // ⚠️ 서버 액션 직후의 router.push는 액션 응답 RSC 적용에 삼켜진다([[#102]]) — window.location.assign.
+      if (state.docId) window.location.assign(`/approvals/${state.docId}`);
+    }
   }, [state]);
 }
 

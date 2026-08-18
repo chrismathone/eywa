@@ -37,7 +37,8 @@ import {
  *    개인 예외로 얹혀 있어 사이드바·페이지·액션이 한 판정을 공유한다([[#77]]).
  */
 
-export type ApprovalActionState = { ok?: true; error?: string; notice?: string } | undefined;
+/** `docId` = 상신 성공 시 만들어진 문서 — 클라가 그 문서로 이동한다(#102: router.push 금지, window.location.assign). */
+export type ApprovalActionState = { ok?: true; error?: string; notice?: string; docId?: string } | undefined;
 
 const MAX_TEXT = 500;
 /**
@@ -301,6 +302,7 @@ async function createApprovalDocument(args: {
   revalidatePath("/approvals");
   return {
     ok: true,
+    docId,
     notice: `상신했습니다 — 결재 ${line.length}단계${refs.length > 0 ? ` · 참조 ${refs.length}명` : ""}`,
   };
 }

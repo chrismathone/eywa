@@ -233,7 +233,9 @@ export default async function ApprovalDocPage({ params }: { params: Promise<{ id
         </table>
 
         {/* ③ 결재란 — 원형 도장 표(참조 행 포함). */}
-        <ApprovalStamps doc={doc} />
+        {/* '결재' 칩은 실제로 처리할 수 있는 사람(결재 패널이 뜬 사람)에게만 버튼이다 —
+            기안자·참관자에게 버튼처럼 보이면 "왜 눌러도 안 되지"가 된다(원장 2026-08-18 제보). */}
+        <ApprovalStamps doc={doc} actionable={decidePanel !== null} />
 
         {leave ? (
           <table className="border-line w-full border-collapse border text-sm">

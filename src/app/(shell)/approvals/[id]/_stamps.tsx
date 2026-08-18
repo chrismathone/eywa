@@ -89,9 +89,18 @@ function signOf(step: ApprovalStepCell, doc: ApprovalDocRow): SignKind {
 }
 
 /** 사인 칸 내용 — 종이처럼 칸 높이는 항상 같고, 상태에 따라 내용만 달라진다. */
-function SignArea({ col }: { col: Col }) {
+function SignArea({ col, actionable }: { col: Col; actionable: boolean }) {
   if (col.sign === "blank") return null; // 빈 사인 칸 — 자리만 지킨다
   if (col.sign === "turn") {
+    // 처리할 수 있는 사람(아래 결재 패널이 뜬 사람)에게만 **버튼** — 그 외엔 상태 표시만.
+    // 기안자 화면에서 버튼처럼 보이면 "눌러도 안 되는 결재 버튼"이 된다(원장 2026-08-18 제보).
+    if (!actionable) {
+      return (
+        <span className="border-primary/50 text-primary/70 inline-flex items-center rounded-md border border-dashed px-2 py-1 text-[11px] font-semibold">
+          결재 차례
+        </span>
+      );
+    }
     return (
       <a
         href="#decide"
@@ -129,7 +138,14 @@ function SignArea({ col }: { col: Col }) {
   );
 }
 
-export function ApprovalStamps({ doc }: { doc: ApprovalDocRow }) {
+export function ApprovalStamps({
+  doc,
+  actionable = false,
+}: {
+  doc: ApprovalDocRow;
+  /** 열람자가 지금 이 문서를 처리할 수 있는가(결재 패널 노출과 동일 판정) — true일 때만 '결재' 칩이 버튼. */
+  actionable?: boolean;
+}) {
   const cols: Col[] = [
     {
       key: "draft",
@@ -187,7 +203,7 @@ export function ApprovalStamps({ doc }: { doc: ApprovalDocRow }) {
               >
                 {/* 사인 칸 — 고정 높이로 항상 확보(빈 칸도 종이처럼 자리가 있다 · 원장 "사인란 더 크게"). */}
                 <span className="flex h-20 items-center justify-center">
-                  <SignArea col={c} />
+                  <SignArea col={c} actionable={actionable} />
                 </span>
                 {c.actedByName ? (
                   <p className="text-text-faint text-[10px] leading-tight whitespace-nowrap">

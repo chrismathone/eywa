@@ -26,6 +26,12 @@ export const metadata = { title: "전자결재 — eywa" };
 /** 탭(하이웍스 문서함) 정의 — 어느 함이 어떤 문서를 담는지 설명 문구까지 여기 한 곳. */
 const BOX_TABS = [
   {
+    key: "all",
+    label: "전체",
+    empty: "관련 문서가 없습니다 — 위 ‘기안하기’로 시작하세요.",
+    note: "내가 기안·결재·참조로 관련된 모든 문서입니다.",
+  },
+  {
     key: "waiting",
     label: "결재 대기",
     empty: "결재할 문서가 없습니다.",
@@ -94,6 +100,7 @@ export default async function ApprovalsPage({
   // 탭 키 → 그 함의 문서 목록. 기안자 열은 "전부 내 문서"일 수 있는 진행 탭에서도 유지한다 —
   // 진행엔 내가 결재한 남의 문서도 섞여 있어 기안자가 정보다.
   const docsByTab: Record<BoxTabKey, typeof boxes.waiting> = {
+    all: boxes.all,
     waiting: boxes.waiting,
     upcoming: boxes.upcoming,
     progress: boxes.inProgress,

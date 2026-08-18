@@ -307,6 +307,8 @@ export type ApprovalBoxes = {
   rejected: ApprovalDocRow[];
   /** 참조 문서 — 내가 참조로 지정된 문서(결재하지 않고 열람). */
   refDocs: ApprovalDocRow[];
+  /** 전체 — 내가 관련된 모든 문서(기안·결재선·참조), 최근 기안 먼저(하이웍스 문서함 '전체'). */
+  all: ApprovalDocRow[];
 };
 
 const EMPTY_BOXES: ApprovalBoxes = {
@@ -318,6 +320,7 @@ const EMPTY_BOXES: ApprovalBoxes = {
   completed: [],
   rejected: [],
   refDocs: [],
+  all: [],
 };
 
 /** 결재함 전부를 한 번에 — 문서 id를 모아 **한 벌만** 적재한다(같은 문서를 함마다 다시 읽지 않게). */
@@ -401,6 +404,8 @@ export async function getApprovalBoxes(userId: string): Promise<ApprovalBoxes> {
       .filter((d) => (d.status === "rejected" || d.status === "canceled") && involved(d))
       .sort(byNewest),
     refDocs: docs.filter((d) => refIds.has(d.id)).sort(byNewest),
+    // ids 자체가 "내가 관련된 문서"의 합집합이라 docs 전부가 곧 전체함이다.
+    all: [...docs].sort(byNewest),
   };
 }
 
