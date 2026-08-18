@@ -364,6 +364,75 @@ export function unsentReportDigestBody(events: readonly UnsentReportEvent[]): st
   return `${names} 학생의 수업 보고서 ${events.length}건이 저장만 되고 아직 발송되지 않았습니다(${events[0].reportDate}~).`;
 }
 
+// ─────────── 발송 실패 "마감" 이벤트 ───────────
+// 실패한 보고서는 **오늘 포함 7일** 안에만 다시 보낼 수 있다(classnoteRetryDeadline). 실패했다는 사실
+// 자체는 이미 두 경로가 알린다 — 0143a DB 트리거 + 하루 1회 유실 보정 스윕(failed-notify-sweep.ts).
+// 그래서 여기서는 실패를 **다시 알리지 않는다**. 알리는 건 오직 "오늘이 마지막 날"이라는 사실 하나다.
+//
+// 🔴 왜 필요한가: 2026-08-11 실측 — 실패 16건 중 **11건이 아무도 손대지 않은 채 기한을 넘겨 학부모에게
+//    영영 못 나갔다**(#105). 첫 알림은 갔지만 "언제까지"가 벨 어디에도 없어 미뤄지다 조용히 만료됐다.
+// ⚠️ **이미 만료된 건은 후보가 아니다** — 되돌릴 수 없는 일을 알리는 건 잔소리다(총량은 발송 콘솔의
+//    '기한 넘겨 못 나감' 경고가 맡는다).
+// ⚠️ 마지막 날 **하루만** 울린다(D-2·D-1을 더하면 같은 보고서가 벨을 세 번 채운다). 남은 날 표시는
+//    화면(발송 콘솔 배지)이 매일 하고 있고, 벨은 마지막 그물이다.
+// 🔴 본문을 `{학생} · {MM-DD} — ` 형식으로 쓰지 말 것 — 스윕의 중복키 파서(parseNotifiedKey)가 그 형식을
+//    읽어 "이 건은 이미 알렸다"로 오인해 **정작 실패 알림이 안 나간다**.
+
+export type SendDeadlineInput = {
+  reportId: string;
+  studentId: string;
+  studentName: string;
+  subjectLabel: string; // 한글 라벨(raw 과목 키 노출 금지)
+  reportDate: string; // YYYY-MM-DD
+  /** 오늘 포함 남은 날. 0 = 오늘이 마지막 날. classnoteRetryDeadline이 계산해 넘긴다. */
+  daysLeft: number;
+};
+
+export type SendDeadlineEvent = {
+  /** dedup 주체 = 보고서 id(학생이 아님 — groupEventsByTeacher에 studentIdOf 필수). */
+  subjectKey: string;
+  /**
+   * 상태 전이 표현 — 보고서당 딱 한 번. 앵커일(오늘)을 넣으면 매일 재알림이 되고,
+   * 실패 여부를 넣으면 상태가 오가며 다시 울린다.
+   */
+  bucket: "lastday";
+  studentId: string;
+  studentName: string;
+  subjectLabel: string;
+  reportDate: string;
+};
+
+/**
+ * 재발송 마지막 날인 실패 보고서만 이벤트로. 날짜 오름차순.
+ * ⚠️ `daysLeft !== 0`은 전부 버린다 — 아직 여유가 있으면 화면 배지가 맡고, 음수면 이미 만료다.
+ */
+export function buildSendDeadlineEvents(rows: readonly SendDeadlineInput[]): SendDeadlineEvent[] {
+  return [...rows]
+    .filter((row) => row.daysLeft === 0)
+    .sort((a, b) => a.reportDate.localeCompare(b.reportDate) || a.reportId.localeCompare(b.reportId))
+    .map((row) => ({
+      subjectKey: row.reportId,
+      bucket: "lastday" as const,
+      studentId: row.studentId,
+      studentName: row.studentName,
+      subjectLabel: row.subjectLabel,
+      reportDate: row.reportDate,
+    }));
+}
+
+/** 담당 강사용 본문 — 건별 1개(무엇을 고쳐야 하는지 학생·날짜가 정확해야 손이 간다). */
+export function sendDeadlineBody(event: SendDeadlineEvent): string {
+  return `${event.studentName} 학생 ${event.reportDate} ${event.subjectLabel} 수업 보고서가 학부모에게 발송되지 못했습니다 — 오늘까지만 다시 보낼 수 있습니다.`;
+}
+
+/** 원장(master)용 집계 본문 — 없으면 null. */
+export function sendDeadlineDigestBody(events: readonly SendDeadlineEvent[]): string | null {
+  if (events.length === 0) return null;
+  if (events.length === 1) return sendDeadlineBody(events[0]);
+  const names = summarizeNames([...new Set(events.map((event) => event.studentName))]);
+  return `${names} 학생의 수업 보고서 ${events.length}건이 발송되지 못한 채 오늘 재발송 기한이 끝납니다.`;
+}
+
 // ─────────── 진도 이상(수학) 이벤트 ───────────
 // G2 선알림 — ingest(progress/server/ingest.ts, math 전용)가 남긴 jump_error/overlap_error를 벨로.
 // ⚠️ regression은 의도적 제외 — 실측(2026-07-19) 최근 14일 80건/학생 50명(복습 재기록 소음),
