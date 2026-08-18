@@ -743,6 +743,10 @@ export const lessonReports = pgTable(
     homeworkToday: text("homework_today"),
     // 학습 추세(종합분석) — 0091a(edutrix graph_eval 이식). 멘트(notes)와 별개. 자동작성 시 함께 생성, /r '학습 추세' 섹션.
     trendNote: text("trend_note"),
+    // 멘트(notes) 작성 방식 — 0214a. auto(자동작성 그대로)/auto_edited(자동작성 후 수정)/manual(직접 작성)/
+    // NULL(도입 전·미상). 강사별 말투 코퍼스의 키(created_by와 결합). 판정·라벨 = onescreen/ment-source.ts 단일 소스.
+    // plain text(체크제약 없음 — classnote_status 선례). 쓰기는 probe(mentSourceColumnReady) 뒤에만(#95).
+    mentSource: text("ment_source"),
     // 학부모 공개 보고서 링크(/r/[token]) 토큰 — 0081a. 공개 페이지가 service_role로 이 토큰 단건 조회.
     shareToken: uuid("share_token").notNull().defaultRandom(),
     // ClassNote 발송 큐 + 과목별 dedup — 0083a. 인덱스(부분 유니크·queued 부분)는 0083a alpha에 정의.

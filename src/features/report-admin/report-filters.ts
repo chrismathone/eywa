@@ -2,6 +2,7 @@
  * 보고서 목록 필터 — 타입 + 상수(순수, 클라·서버 공용). "use server"(actions.ts)에서 비-async 값을
  * export할 수 없어(런타임 상수 IMPORT_FILTER) 여기로 분리. 5단계-2 Part C.
  */
+import type { MentSource } from "@/features/onescreen/ment-source";
 
 export type ReportListRow = {
   id: string;
@@ -37,6 +38,11 @@ export type ReportListRow = {
    * 그래서 UI는 **양성 배지("읽음")만** 표시하고 "미읽음"은 표시하지 않는다(거짓 미확인 방지, 4단계에서 재론).
    */
   readAt: string | null;
+  /**
+   * 멘트 작성 방식(0214a) — auto/auto_edited/manual, null=도입 전·미상. 0214a 미적용이면 select에서
+   * 빠져 undefined(목록은 그대로 동작 — 열 자체를 mentSourceReady로 숨긴다). 라벨은 ment-source.ts 단일 소스.
+   */
+  mentSource?: string | null;
 };
 
 export type ReportListFilters = {
@@ -70,6 +76,11 @@ export type ReportListFilters = {
    * + 읽음 기록 없음. 매칭 키 없는 옛 이관분은 동기화 자체가 안 되므로 "안읽음"에 안 섞는다(거짓 미확인 방지).
    */
   read?: "read" | "unread";
+  /**
+   * 멘트 작성 방식 필터(0214a) — 강사 필터와 조합하면 "그 선생님이 직접 쓴 멘트만"이 된다(말투 코퍼스 검수).
+   * 도입 후 저장분에만 라벨이 있다 — 옛 보고서는 어떤 값으로도 안 걸린다(뷰 설정이 문구로 안내).
+   */
+  mentSource?: MentSource;
   page?: number;
   /** 헤더 클릭 정렬. 없으면 기본 정렬(수업일 최신 → 발송시각 → 등록시각). */
   sort?: ReportSortKey;
@@ -183,6 +194,7 @@ export function activeReportFilterCount(f: ReportListFilters): number {
   if (f.status) n++;
   if (f.read) n++;
   if (f.classId) n++;
+  if (f.mentSource) n++;
   return n;
 }
 

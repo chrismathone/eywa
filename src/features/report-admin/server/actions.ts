@@ -12,6 +12,8 @@ import { isClassnoteAllowed, isClassnoteSubjectEnabled } from "@/features/onescr
 import { hasClassnoteNameCollision } from "@/features/onescreen/server/scope";
 import { absenceKeyOf, getAbsenceBlockedKeys } from "@/features/onescreen/server/absence-gate";
 import { getTenantSettings } from "@/features/owner/server/queries";
+import { parseMentSource } from "@/features/onescreen/ment-source";
+import { mentSourceColumnReady } from "@/features/onescreen/server/ment-source-db";
 import { STUCK_MINUTES } from "../classnote-queue";
 import { IMPORT_FILTER, reportOrderSpecs, type ReportListFilters, type ReportListRow } from "../report-filters";
 import { getClassnoteQueue, type ClassnoteQueueView } from "./queries";
@@ -294,6 +296,8 @@ export async function listReports(
   }
   const supabase = await createClient();
   const page = Math.max(0, filters.page ?? 0);
+  // ment_source(0214a) 적용 여부 — 미적용이면 select·필터에서 빼서 목록이 죽지 않게(#95, probe 캐시 왕복 0).
+  const mentReady = await mentSourceColumnReady(supabase);
 
   let q = supabase
     .from("lesson_reports")
@@ -305,7 +309,12 @@ export async function listReports(
     //    새 FK를 lesson_reports에 더할 땐 이 임베드가 여전히 유일하게 해석되는지 확인할 것.
     // ⚠️ 반대로 **정렬 문자열엔 `!FK`를 넣으면 안 된다** — order 파서가 '!'를 못 읽어 PGRST100(400)이다.
     //    select만 힌트로 확정하면 `order=classes(class_name)`은 그 임베드를 가리켜 정상 동작(둘 다 실측).
-    .select("id, student_id, subject, report_date, covers_date, covers_by, covers_at, covers_note, created_at, classnote_sent_at, classnote_status, classnote_read_at, teacher_name, share_token, source, class_id, classes!lesson_reports_class_id_fkey(class_name)", { count: "exact" });
+    .select(
+      "id, student_id, subject, report_date, covers_date, covers_by, covers_at, covers_note, created_at, classnote_sent_at, classnote_status, classnote_read_at, teacher_name, share_token, source, class_id" +
+        (mentReady ? ", ment_source" : "") +
+        ", classes!lesson_reports_class_id_fkey(class_name)",
+      { count: "exact" },
+    );
   // 정렬은 **서버에서** — 30건씩 끊어 주는 목록이라 화면에서 정렬하면 그 페이지 안에서만 정렬된다.
   // 기본값·헤더 클릭 모두 순수 함수(reportOrderSpecs)가 결정(동률 tiebreak 포함 — 페이징 중복/누락 방지).
   for (const o of reportOrderSpecs(filters.sort, filters.dir)) {
@@ -350,6 +359,14 @@ export async function listReports(
     }
     q = q.eq("class_id", filters.classId);
   }
+  // 멘트 작성 방식 필터(0214a) — 강사 필터와 조합해 "그 선생님이 직접 쓴 멘트만". 값은 신뢰 경계에서 정규화.
+  if (filters.mentSource) {
+    const ms = parseMentSource(filters.mentSource);
+    if (!ms) return { ok: false, error: "멘트 작성 방식 필터 값이 올바르지 않습니다 — 뷰 설정에서 다시 골라 주세요" };
+    // 미적용 상태에서 걸면 존재하지 않는 컬럼으로 400이 난다 — 조용히 무시(=거짓 '전체')하지 않고 사유를 말한다([[#89]]).
+    if (!mentReady) return { ok: false, error: "멘트 작성 방식 필터는 데이터베이스 업데이트(0214a) 적용 후 쓸 수 있습니다" };
+    q = q.eq("ment_source", ms);
+  }
   // 읽음 필터 — "안읽음"은 판정 가능한 행만(발송 성공 + 매칭 키 + 읽음 없음). 매칭 키 없는 옛 이관분은
   // 동기화 불가 = "안읽음" 아님(report-filters.ts ReportListFilters.read 주석 참조).
   if (filters.read === "read") q = q.not("classnote_read_at", "is", null);
@@ -364,7 +381,29 @@ export async function listReports(
 
   const { data, count, error } = await q;
   if (error) return { ok: false, error: humanizeDbError(error.message, "조회") };
-  const list = data ?? [];
+  // select 문자열이 동적(ment_source 조건부, 0214a)이라 supabase-js 타입 파서가 못 읽는다(GenericStringError)
+  // → 행 타입을 명시 캐스트. 아래 매핑이 실제 소비하는 컬럼만 적는다(select와 함께 고칠 것).
+  type DbRow = {
+    id: string;
+    student_id: string;
+    subject: string | null;
+    report_date: string;
+    covers_date: string | null;
+    covers_by: string | null;
+    covers_at: string | null;
+    covers_note: string | null;
+    created_at: string | null;
+    classnote_sent_at: string | null;
+    classnote_status: string | null;
+    classnote_read_at: string | null;
+    teacher_name: string | null;
+    share_token: string | null;
+    source: string | null;
+    class_id: string | null;
+    ment_source?: string | null;
+    classes?: unknown;
+  };
+  const list = (data ?? []) as unknown as DbRow[];
   const ids = [...new Set(list.map((r) => r.student_id as string))];
   const nameRows = await fetchInChunks<{ id: string; name: string }>(ids, (chunk) =>
     supabase.from("students").select("id, name").in("id", chunk),
@@ -400,6 +439,8 @@ export async function listReports(
     shareToken: r.share_token as string | null,
     source: r.source as string | null,
     readAt: r.classnote_read_at as string | null,
+    // 0214a 미적용이면 select에 없어 undefined — 열 표시는 mentSourceReady(옵션)가 따로 게이트한다.
+    mentSource: (r as { ment_source?: string | null }).ment_source ?? null,
   }));
   return { ok: true, rows, total: count ?? rows.length, page, pageSize: REPORT_PAGE_SIZE };
 }

@@ -1,5 +1,35 @@
 # eywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-08-18 — 수업보고서 멘트 작성 방식(ment_source) 기록 + 목록 필터·열 (0214a)
+
+원장 목적: *"선생님이 각자 작성한 멘트별로 선생님별 학습기를 만들어서 선생님별 자동생성멘트에 선생님 말투를
+반영해보려고"* — 강사별 **직접 쓴 멘트 코퍼스**의 기반. 소급 없음(도입 후 저장분부터, 옛 행은 NULL=미상).
+
+- **데이터(0214a, 🔴 원장 수동 적용 필요)**: `lesson_reports.ment_source` text — `auto`(자동작성 그대로,
+  AI 성공분+템플릿 폴백) / `auto_edited`(자동작성 후 수정 — 전부 지우고 새로 써도 여기, 코퍼스 순도 우선 보수
+  규칙) / `manual`(처음부터 직접) / NULL(미상). 코퍼스 추출 키 = `created_by`(0172a) + `ment_source`.
+- **판정 = [`ment-source.ts`](../src/features/onescreen/ment-source.ts) 순수 2단(Vitest 14)**: 클라
+  `computeClientMentSource`(자동작성이 마지막으로 넣은 텍스트 `autoDraft` 스냅샷 vs 최종 멘트) → 서버
+  `resolveMentSource`(**sticky**: 텍스트 불변이면 기존 라벨 유지·어제 AI 멘트를 오늘 새 세션에서 고치면
+  클라가 manual이라 해도 auto_edited로 강등 — AI 문장을 '직접'으로 오표기하는 쪽이 더 나쁘다).
+- **스냅샷 영속**: `autoDraft`를 SubjectReport(클라 state) → `onescreen_daily_sessions.subject_progress`
+  jsonb(자동저장, **마이그 0**) → roster 복원까지 초안(draft)과 같은 규약으로 왕복 — 재접속 후 저장이
+  전부 manual로 오표기되는 구멍을 막는다.
+- **기록 지점 4곳 전부**: 원스크린 `saveLessonReport`(게이트 pre-read에 notes·ment_source 합승, 왕복 0 추가)
+  · 관리자 직접작성 `upsertAdminReport` · 대량 발송 `sendBulkAdminReports`(신규 행만이라 sticky 불요) ·
+  발송 경로는 전부 위를 경유. AI 멘트 생성(`generateReportComment`)은 DB 미변경이라 그대로.
+- **적대 리뷰(high) 후 수정 2건**: ① '이전 회차 멘트 가져오기'(applyPrevComments)도 복사 텍스트에 스냅샷을
+  남긴다 — 안 남기면 그대로 저장 시 manual 오표기(코퍼스 오염, 리뷰 확정). ⚠️ **앞으로 멘트 칸에
+  프로그래매틱으로 텍스트를 넣는 새 경로는 반드시 autoDraft도 같이 세팅**할 것(setDraftFor는 수기 타이핑
+  전용). ② probe 일시 오류를 warn 로그로 계측([[#89]]) — 트레이드오프(일시 오류 시 라벨 한 건 stale 가능,
+  저장 생존 우선)는 ment-source-db.ts에 명문화.
+- **#95 expand/contract = probe**: [`mentSourceColumnReady`](../src/features/onescreen/server/ment-source-db.ts)
+  (select 1행, 양성 캐시)가 컬럼 유무를 확인 — **SQL 적용 전에도 저장·목록이 절대 안 죽고**(마커·필터만 생략),
+  적용하면 그 시점부터 자동 활성화(배포 순서 제약 0, 반 필터 0147a fail-soft와 같은 결).
+- **소비처**: 수업보고서 목록 뷰 설정에 '멘트' 필터(전체/직접 작성/자동작성 후 수정/자동작성 그대로 —
+  강사 필터와 조합 = "그 선생님이 직접 쓴 멘트만") + 목록 '멘트' 열(직접=네이비 강조/자동+수정/자동, 도입 전
+  행 "—"). 둘 다 `mentSourceReady`로 게이트(마이그 전 비노출). 필터 값은 서버 재검증(parseMentSource).
+
 ## 2026-08-17 (5) — 계약서·서식 다운로드 파일명이 `%EA%B9%80…`로 저장되던 버그 (파일명 결정권을 헤더에서 회수)
 
 원장 제보(스크린샷): 직원 상세에서 `김동후26.06(시용)근로계약서.pdf`를 내려받으면 파일 이름이

@@ -17,6 +17,7 @@ import {
   defaultReportFilters,
   type ReportSortKey,
 } from "@/features/report-admin/report-filters";
+import { MENT_SOURCE_LABEL, MENT_SOURCE_SHORT, parseMentSource } from "@/features/onescreen/ment-source";
 import { monthLabel, monthOf, monthRange, shiftMonth } from "@/lib/date-kst";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { SortableTh } from "@/components/table/sortable-th";
@@ -73,6 +74,19 @@ function StatusCell({ status, source, readAt }: { status: string | null; source:
       </>
     );
   return <span className="text-amber text-[11px]">미발송</span>;
+}
+
+/** 멘트 작성 방식(0214a) 셀 — 직접(강조)/자동+수정/자동. 도입 전 행(null)은 "—"(라벨을 지어내지 않는다). */
+function MentSourceCell({ value }: { value: string | null | undefined }) {
+  const ms = parseMentSource(value);
+  if (!ms) return <span className="text-text-faint">—</span>;
+  const cls =
+    ms === "manual" ? "text-primary font-bold" : ms === "auto_edited" ? "text-text-dim" : "text-text-faint";
+  return (
+    <span className={`text-[11px] ${cls}`} title={MENT_SOURCE_LABEL[ms]}>
+      {MENT_SOURCE_SHORT[ms]}
+    </span>
+  );
 }
 
 type Result = { rows: ReportListRow[]; total: number; page: number; pageSize: number };
@@ -152,6 +166,8 @@ export function ReportList({
   const maxPage = Math.max(0, Math.ceil(total / pageSize) - 1);
   const sendable = rows.filter(isAdminSendable);
   const allChecked = sendable.length > 0 && sendable.every((r) => checked.has(r.id));
+  // 멘트 작성 방식 열(0214a) — 마이그레이션 전엔 전 행 "—"뿐이라 열 자체를 숨긴다(뷰 설정 필터와 같은 게이트).
+  const showMent = options.mentSourceReady ?? false;
 
   const toggle = (id: string) =>
     setChecked((prev) => {
@@ -253,8 +269,9 @@ export function ReportList({
       </div>
 
       <div className="border-line overflow-x-auto rounded-md border">
-        {/* 반 열이 늘어 최소폭 상향(600→680) — 좁은 창에서 열이 서로 뭉개지지 않게. 넘치면 가로 스크롤. */}
-        <table className="w-full min-w-[680px] text-left text-[12px]">
+        {/* 반 열이 늘어 최소폭 상향(600→680) — 좁은 창에서 열이 서로 뭉개지지 않게. 넘치면 가로 스크롤.
+            멘트 열(0214a)이 켜지면 한 뼘 더(680→720). */}
+        <table className={`w-full ${showMent ? "min-w-[720px]" : "min-w-[680px]"} text-left text-[12px]`}>
           <thead>
             <tr className="border-line text-text-faint group border-b">
               {canSend ? (
@@ -276,6 +293,8 @@ export function ReportList({
               <th className="px-3 py-2 font-bold">학생 · 과목</th>
               <SortableTh sortKey="class" state={sortState} onSort={onSort}>반</SortableTh>
               <SortableTh sortKey="teacher" state={sortState} onSort={onSort}>강사</SortableTh>
+              {/* 멘트 작성 방식(0214a) — 정렬 없음(값 3종 + 도입 전 "—"라 필터가 더 정확하다, 뷰 설정에서). */}
+              {showMent ? <th className="px-3 py-2 font-bold" title="멘트를 누가 썼는가 — 직접 작성/자동작성(뷰 설정에서 필터)">멘트</th> : null}
               <SortableTh sortKey="status" state={sortState} onSort={onSort}>발송 상태</SortableTh>
               <SortableTh sortKey="read" state={sortState} onSort={onSort} align="right">열람</SortableTh>
             </tr>
@@ -283,7 +302,7 @@ export function ReportList({
           <tbody>
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={canSend ? 7 : 6} className="text-text-faint px-3 py-6 text-center">
+                <td colSpan={(canSend ? 7 : 6) + (showMent ? 1 : 0)} className="text-text-faint px-3 py-6 text-center">
                   조건에 맞는 보고서가 없습니다.
                 </td>
               </tr>
@@ -331,6 +350,11 @@ export function ReportList({
                       불가해 대부분 "—"다. 반 정렬 시 이 빈 값들이 뒤로 가고 반 있는 건이 위로 모인다. */}
                   <td className="text-text-dim px-3 py-2 whitespace-nowrap">{r.className ?? "—"}</td>
                   <td className="text-text-dim px-3 py-2">{r.teacherName ?? "—"}</td>
+                  {showMent ? (
+                    <td className="px-3 py-2 whitespace-nowrap">
+                      <MentSourceCell value={r.mentSource} />
+                    </td>
+                  ) : null}
                   <td className="px-3 py-2">
                     <StatusCell status={r.classnoteStatus} source={r.source} readAt={r.readAt} />
                   </td>

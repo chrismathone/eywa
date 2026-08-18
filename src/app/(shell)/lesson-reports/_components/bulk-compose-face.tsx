@@ -10,6 +10,7 @@ import { kstToday } from "@/lib/date-kst";
 import { Button } from "@/components/ui/button";
 import { useSubjectMaps } from "@/features/owner/operations-context";
 import { generateReportComment } from "@/features/onescreen/server/actions";
+import { computeClientMentSource } from "@/features/onescreen/ment-source";
 import type { NoticeClassOption } from "@/features/report-admin/server/notice-actions";
 import { sendBulkAdminReports } from "@/features/report-admin/server/compose-actions";
 import { REPORT_OPTOUT_LABEL } from "@/features/classes/report-optout";
@@ -38,6 +39,8 @@ export function BulkComposeFace({
   const [homeworkToday, setHomeworkToday] = useState("");
   const [makeup, setMakeup] = useState(false);
   const [body, setBody] = useState("");
+  // 자동작성이 본문 칸에 마지막으로 넣은 텍스트(0214a 스냅샷) — 발송 시 body와 비교해 작성 방식 판정.
+  const [autoBody, setAutoBody] = useState("");
   const [trend, setTrend] = useState("");
   const [aiBusy, setAiBusy] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -77,6 +80,7 @@ export function BulkComposeFace({
     setAiBusy(false);
     if (res.ok && res.comment) {
       setBody(res.comment);
+      setAutoBody(res.comment); // 작성 방식 스냅샷(0214a)
       toast.success("AI가 공용 본문을 작성했습니다 — 검토 후 발송하세요");
     } else {
       toast.message(res.error ?? "AI 생성에 실패했습니다 — 직접 작성하세요");
@@ -112,6 +116,8 @@ export function BulkComposeFace({
       notes: body.trim(),
       trendNote: trend.trim() || undefined,
       test,
+      // 멘트 작성 방식(0214a) — 공용 본문의 판정(관리자 자필/AI). 대량은 신규 행만 만들어 서버 sticky 불요.
+      mentSource: computeClientMentSource(body, autoBody),
     });
     setBusy(false);
     setConfirmSend(false);

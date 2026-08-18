@@ -112,6 +112,7 @@ import { mergeStatusOf, planMakeupMerge, type MergeCandidate } from "../makeup-m
 import { hasRowOverrides, resolveRowFields, seedRowFields } from "../row-fields";
 import { detectClassNotices } from "../class-notice";
 import { shortDate } from "../makeup-absence-link";
+import { computeClientMentSource } from "../ment-source";
 
 type ReportsState = Record<string, Record<string, SubjectReport>>; // studentId → 과목명 → {draft, sent}
 
@@ -126,6 +127,7 @@ function initReports(students: OneScreenStudent[]): ReportsState {
       out[s.id]![su.name] = {
         draft: su.draft ?? "",
         trendDraft: su.trendDraft,
+        autoDraft: su.autoDraft, // 자동작성 스냅샷(0214a) — 세션 복원값. 저장 시 draft와 비교해 작성 방식 판정.
         sent: su.reportSent ?? false,
         shareToken: su.shareToken,
         classnoteStatus: su.classnoteStatus,
@@ -374,6 +376,8 @@ export function OneScreenClient({
               mode: su.progressMode ?? "",
               draft: r?.[su.name]?.draft ?? "",
               trendDraft: r?.[su.name]?.trendDraft ?? "",
+              // 자동작성 스냅샷(0214a) — 초안과 함께 영속해야 재접속 후 저장이 manual로 오표기되지 않는다.
+              autoDraft: r?.[su.name]?.autoDraft ?? "",
               textbook: su.textbook ?? "",
               makeup: su.makeup ?? false,
               homeworkToday: su.homeworkToday ?? "",
@@ -1285,11 +1289,14 @@ export function OneScreenClient({
       patchReport(student.id, subjectName, (r) => ({
         ...r,
         draft: text,
+        // 작성 방식 스냅샷(0214a) — AI 성공분·템플릿 폴백 모두 "자동이 넣은 텍스트". 저장 시 draft와 비교.
+        autoDraft: text,
         // 추세는 생성 성공 시에만 갱신(표본 부족·실패면 기존 초안·수동 입력 보존).
         ...(res.ok && res.trend ? { trendDraft: res.trend } : {}),
       }));
     } catch {
-      patchReport(student.id, subjectName, (r) => ({ ...r, draft: buildSubjectReport(student, idx) }));
+      const fallback = buildSubjectReport(student, idx);
+      patchReport(student.id, subjectName, (r) => ({ ...r, draft: fallback, autoDraft: fallback }));
       toast.message("AI 자동작성이 어려워 기본 문구로 작성했습니다");
     }
   }
@@ -1670,7 +1677,11 @@ export function OneScreenClient({
     const plan = prevCommentPlan ?? [];
     setPrevCommentPlan(null);
     if (!plan.length) return;
-    for (const p of plan) setDraftFor(p.studentId, p.subjectName, p.comment);
+    // 🔴 복사 삽입도 autoDraft 스냅샷을 함께 남긴다(0214a, 적대 리뷰 확정) — 직전 회차 문구는 AI 유래일 수
+    //    있고 아니어도 "지금 직접 쓴" 문장이 아니다. setDraftFor(초안만)로 넣으면 그대로 저장 시 manual로
+    //    오표기돼 말투 코퍼스가 오염된다(중복 유입 포함). 스냅샷을 남기면 그대로=auto, 고치면=auto_edited.
+    for (const p of plan)
+      patchReport(p.studentId, p.subjectName, (r) => ({ ...r, draft: p.comment, autoDraft: p.comment }));
     toast.success(`${plan.length}행의 멘트를 직전 회차 문구로 가져왔습니다 — 발송 전에 오늘 내용과 맞는지 확인하세요`);
   }
   // 학생 순서 저장(3-2) — (강사×반) 영구 저장 + 성공 시 클라 state에도 즉시 반영(다음 로드는 roster가 적용).
@@ -1751,6 +1762,8 @@ export function OneScreenClient({
         outOfClass: (student.isMakeup ?? false) || (!!su?.makeup && !su?.classId),
         // 보강 행의 소속(어느 수업 시간에 한 보강인가) — 반 필터 앵커(0171a). 정규 행이면 서버가 무시한다.
         makeupClassId: su?.makeupClassId ?? null,
+        // 멘트 작성 방식(0214a) — 이번 세션 자동작성 스냅샷과 비교(최종은 서버 resolveMentSource가 sticky 판정).
+        mentSource: computeClientMentSource(draft, existing?.autoDraft),
       },
     };
   }

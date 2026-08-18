@@ -9,6 +9,7 @@ import { fetchReportOptoutClassIds } from "@/features/classes/server/report-opto
 import { enrollmentAttendsOnDay, isEnrollmentActiveOn } from "@/features/enrollments/eligibility";
 import { needsAttention, summarizeQueue, type QueueSummary, HUMAN_RESOLVED_STATUSES } from "../classnote-queue";
 import { classnoteMinDate } from "@/features/onescreen/classnote-guard";
+import { mentSourceColumnReady } from "@/features/onescreen/server/ment-source-db";
 // 임시 위임(0173a) — 위임된 (반, 날짜)의 대상(분모)을 대체 강사로 옮기는 순수 규칙.
 import { buildDelegateAttribution, type DelegateAttribution } from "../writing-rate-delegation";
 import {
@@ -776,6 +777,8 @@ export type ReportFilterOptions = {
   subjects: string[];
   /** 최근 창에 **실제로 보고서가 붙은** 반만(0147a RPC). 반 149개 전체가 아니라 = 0건 옵션 방지. */
   classes: { id: string; name: string }[];
+  /** ment_source(0214a) 적용 여부 — false면 멘트 작성 방식 필터·열을 통째로 숨긴다(반 필터 fail-soft와 같은 결). */
+  mentSourceReady: boolean;
 };
 
 /**
@@ -794,14 +797,15 @@ export type ReportFilterOptions = {
  */
 export async function getReportFilterOptions(): Promise<ReportFilterOptions> {
   const user = await getCurrentUser();
-  const empty: ReportFilterOptions = { teachers: [], subjects: [], classes: [] };
+  const empty: ReportFilterOptions = { teachers: [], subjects: [], classes: [], mentSourceReady: false };
   if (!user) return empty;
   const supabase = await createClient();
   const since = daysBefore(kstToday(), 60);
-  // 서로 독립인 두 RPC → 직렬 워터폴 금지(B4).
-  const [main, cls] = await Promise.all([
+  // 서로 독립인 두 RPC + ment_source probe(0214a) → 직렬 워터폴 금지(B4).
+  const [main, cls, mentSourceReady] = await Promise.all([
     supabase.rpc("lesson_report_filter_options", { p_since: since }),
     supabase.rpc("lesson_report_class_options", { p_since: since }),
+    mentSourceColumnReady(supabase),
   ]);
   // 반 옵션 실패는 본 옵션을 죽이지 않는다(마이그레이션 미적용 = 함수 없음이 정상 시나리오).
   const classes: { id: string; name: string }[] = [];
@@ -820,7 +824,7 @@ export async function getReportFilterOptions(): Promise<ReportFilterOptions> {
     // 옵션이 비면 필터를 못 쓸 뿐 목록 자체는 보이므로 화면을 죽이지 않는다. 단 조용히 넘기면
     // "필터에 강사가 안 뜬다"가 또 원인 불명이 되므로 로그는 남긴다.
     console.error("[report-admin] 필터 옵션 조회 실패", main.error);
-    return { ...empty, classes };
+    return { ...empty, classes, mentSourceReady };
   }
   const teachers = new Set<string>();
   const subjects = new Set<string>();
@@ -828,5 +832,5 @@ export async function getReportFilterOptions(): Promise<ReportFilterOptions> {
     if (r.teacher_name) teachers.add(r.teacher_name);
     if (r.subject) subjects.add(r.subject);
   }
-  return { teachers: [...teachers].sort(), subjects: [...subjects].sort(), classes };
+  return { teachers: [...teachers].sort(), subjects: [...subjects].sort(), classes, mentSourceReady };
 }

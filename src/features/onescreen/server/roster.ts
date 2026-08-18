@@ -125,6 +125,8 @@ type OnescreenSessionRow = {
       mode?: string;
       draft?: string;
       trendDraft?: string;
+      /** 자동작성이 멘트 칸에 마지막으로 넣은 텍스트(0214a 스냅샷) — 복원해야 재접속 후 저장이 manual로 오표기되지 않는다. */
+      autoDraft?: string;
       textbook?: string;
       makeup?: boolean;
       homeworkToday?: string;
@@ -1191,6 +1193,9 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
         // (lesson_reports엔 updated_at이 없어 신구 비교 불가 → 빈 세션 초안은 발송본 복원을 지우지 않음.)
         if (entry?.draft?.trim()) su.draft = entry.draft;
         if (entry?.trendDraft?.trim()) su.trendDraft = entry.trendDraft;
+        // 자동작성 스냅샷(0214a) — 초안과 같은 규약으로 복원. 없으면 미복원(발송본 notes 복원 행은 스냅샷을
+        // 모른다 — 그 경우 저장 시 서버 sticky(resolveMentSource)가 기존 라벨로 보수 판정한다.
+        if (entry?.autoDraft?.trim()) su.autoDraft = entry.autoDraft;
         // 행 단위 평가값(2026-08-13) — 지정된 행만 실려 있다. 없으면 su.*를 undefined로 두어
         // resolveRowFields가 학생 값(아래 sess 컬럼)으로 폴백한다 = 옛 세션 하위호환.
         if (entry?.attitude !== undefined) su.attitude = entry.attitude;

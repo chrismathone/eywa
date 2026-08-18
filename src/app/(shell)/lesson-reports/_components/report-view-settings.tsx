@@ -11,6 +11,7 @@ import {
   defaultReportFilters,
   type ReportListFilters,
 } from "@/features/report-admin/report-filters";
+import { MENT_SOURCES, MENT_SOURCE_LABEL } from "@/features/onescreen/ment-source";
 import { monthOf, monthRange } from "@/lib/date-kst";
 import type { ReportFilterOptions } from "@/features/report-admin/server/queries";
 
@@ -243,6 +244,32 @@ export function ReportViewSettings({
                 <option value="read">읽음</option>
                 <option value="unread">안읽음</option>
               </select>
+
+              {/* 멘트 작성 방식(0214a) — 강사 필터와 조합 = "그 선생님이 직접 쓴 멘트만"(말투 코퍼스 검수용).
+                  마이그레이션 전이면 항목 자체를 숨긴다(반 필터와 같은 규약 — 걸면 400이 나는 필터를 노출하지 않는다).
+                  `?? false`는 배포 중 버전 스큐(구 서버 페이로드에 이 키 없음) 런타임 방어(위 classes와 동일). */}
+              {(options.mentSourceReady ?? false) ? (
+                <>
+                  <label className="text-text-faint text-[11px] font-bold" htmlFor="rvs-ment">멘트</label>
+                  <select
+                    id="rvs-ment"
+                    value={draft.mentSource ?? ""}
+                    onChange={(e) => patch({ mentSource: (e.target.value || undefined) as ReportListFilters["mentSource"] })}
+                    className={sel}
+                    title="멘트를 누가 썼는가 — 직접 작성 / 자동작성 후 수정 / 자동작성 그대로"
+                  >
+                    <option value="">전체</option>
+                    {MENT_SOURCES.map((s) => (
+                      <option key={s} value={s}>{MENT_SOURCE_LABEL[s]}</option>
+                    ))}
+                  </select>
+                  {/* 소급 없음 — 도입 이후 저장분만 구분된다. 안 적으면 "왜 옛 보고서가 안 걸리지"가 된다. */}
+                  <span />
+                  <span className="text-text-faint text-[10px] leading-snug">
+                    도입(2026-08-18) 이후 저장된 보고서만 구분됩니다 — 이전 보고서는 &lsquo;전체&rsquo;에서만 보입니다
+                  </span>
+                </>
+              ) : null}
             </div>
 
             <div className="flex items-center justify-end gap-1.5">

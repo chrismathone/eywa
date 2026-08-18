@@ -42,6 +42,8 @@ import {
   type OnescreenFontSize,
 } from "../font-size";
 import { LEGACY_REPORT_SUBJECT, reportSubject } from "@/features/timetable/lib/report-subject";
+import { resolveMentSource, type MentSource } from "../ment-source";
+import { mentSourceColumnReady } from "./ment-source-db";
 import type { OneScreenStudent, PrevReport } from "../types";
 
 export type SaveLessonReportInput = {
@@ -73,6 +75,12 @@ export type SaveLessonReportInput = {
   // 보강·수업외 학생(수동 추가) — true면 '내 담당 반 활성 수강생' 검사 대신 같은 학원(tenant) 학생이면 허용.
   // 원장 승인 정책(보강 저장=학원 전체). RLS가 테넌트 격리(cross-tenant는 select null) → 학원 밖 학생은 여전히 거부.
   outOfClass?: boolean;
+  /**
+   * 멘트 작성 방식(0214a) — 클라 판정(computeClientMentSource: 이번 세션 자동작성 스냅샷과 비교).
+   * 서버가 resolveMentSource로 저장돼 있던 라벨과 합쳐 최종 확정한다(어제 AI 멘트를 오늘 고치는 경우 강등).
+   * 미지정(구 클라·직접 호출)이어도 저장은 그대로 — 라벨만 보수적으로(null 또는 auto_edited) 남는다.
+   */
+  mentSource?: MentSource;
 };
 
 /**
@@ -128,9 +136,12 @@ export async function saveLessonReport(
   //    나중에 어느 쪽이 사실인지 아무도 모른다(문의가 오면 대조할 근거가 사라진다).
   //    이 함수가 저장의 **단일 관문**이라 원스크린·카드·일괄·첨부 자동저장이 전부 여기서 막힌다.
   //    푸는 방법은 공유링크 재발급(reissueShareLink — 상태 리셋 = "이 건은 무효" 선언)뿐이다.
+  // ment_source(0214a) 기록 가능 여부 — 컬럼이 아직 없으면(마이그 미적용) 마커만 생략(#95, probe 캐시로 평시 왕복 0).
+  const mentReady = await mentSourceColumnReady(supabase);
   const gateBase = supabase
     .from("lesson_reports")
-    .select("id, classnote_status")
+    // 멘트 작성 방식 판정 재료(notes, ment_source)를 게이트 pre-read에 **합승**시킨다 — 별도 왕복 없음(B4).
+    .select(mentReady ? "id, classnote_status, notes, ment_source" : "id, classnote_status")
     .eq("student_id", input.studentId)
     .eq("report_date", reportDate);
   const gateScoped = input.classId
@@ -139,10 +150,13 @@ export async function saveLessonReport(
       ? gateBase.is("class_id", null).eq("subject", input.subject)
       : gateBase.is("class_id", null).is("subject", null);
   const { data: gateRows } = await gateScoped.limit(1);
-  if (gateRows?.[0]?.classnote_status === "success") {
+  const priorRow = gateRows?.[0] as
+    | { id: string; classnote_status: string | null; notes?: string | null; ment_source?: string | null }
+    | undefined;
+  if (priorRow?.classnote_status === "success") {
     return {
       ok: false,
-      id: gateRows[0].id,
+      id: priorRow.id,
       error: "이미 학부모에게 발송된 보고서라 수정할 수 없습니다 — 고쳐야 하면 공유링크를 재발급하세요",
     };
   }
@@ -180,6 +194,17 @@ export async function saveLessonReport(
         notes: input.notes || null,
         trend_note: input.trendNote || null,
         source: "onescreen",
+        // 멘트 작성 방식(0214a) — 클라 판정 + 기존 라벨 sticky 합산(ment-source.ts). 컬럼 없으면 통째 생략(#95).
+        ...(mentReady
+          ? {
+              ment_source: resolveMentSource({
+                client: input.mentSource,
+                prevSource: priorRow?.ment_source,
+                prevNotes: priorRow?.notes,
+                nextNotes: input.notes,
+              }),
+            }
+          : {}),
       },
       { onConflict: "tenant_id,student_id,report_date,unit_key" },
     )
@@ -504,6 +529,11 @@ export type SaveOnescreenSessionInput = {
       mode?: string;
       draft?: string;
       trendDraft?: string;
+      /**
+       * 자동작성이 멘트 칸에 마지막으로 넣은 텍스트(0214a 판정 스냅샷) — 세션에 실어야 새로고침·재접속
+       * 뒤에도 "이 멘트는 AI에서 출발했다"를 안다(안 실으면 복원 후 저장이 전부 manual로 오표기 = 코퍼스 오염).
+       */
+      autoDraft?: string;
       textbook?: string;
       makeup?: boolean;
       homeworkToday?: string;

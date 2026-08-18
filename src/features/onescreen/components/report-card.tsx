@@ -36,6 +36,8 @@ import type { OneScreenStudent } from "../types";
 export type SubjectReport = {
   draft: string;
   trendDraft?: string; // 학습 추세(종합분석) 초안 — 4a. 멘트(draft)와 별개, 자동작성 시 함께 채움.
+  // 자동작성이 멘트 칸에 마지막으로 넣은 텍스트(0214a) — 저장 시 draft와 비교해 작성 방식(ment_source) 판정.
+  autoDraft?: string;
   sent: boolean;
   shareToken?: string;
   /** null = 이번 세션에서 명시적으로 해제됨(재발급·첨부변경). undefined = 아직 모름 — 둘은 다르다. */

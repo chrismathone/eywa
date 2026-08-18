@@ -16,6 +16,7 @@ import { EyIcon } from "@/components/icons/eywa-icons";
 import { SearchableSelect, type ComboOption } from "@/components/ui/searchable-select";
 import { generateReportComment } from "@/features/onescreen/server/actions";
 import { ReportAttachments } from "@/features/onescreen/components/report-attachments";
+import { computeClientMentSource } from "@/features/onescreen/ment-source";
 import type { ReportCommentInput } from "@/features/onescreen/report-comment";
 import {
   getAdminComposeContext,
@@ -82,6 +83,8 @@ export function ComposeFace({
   const [homeworkToday, setHomeworkToday] = useState("");
   const [note, setNote] = useState("");
   const [body, setBody] = useState("");
+  // 자동작성이 본문 칸에 마지막으로 넣은 텍스트(0214a 스냅샷) — 저장 시 body와 비교해 작성 방식 판정.
+  const [autoBody, setAutoBody] = useState("");
   const [trend, setTrend] = useState("");
   const [aiBusy, setAiBusy] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -162,6 +165,8 @@ export function ComposeFace({
       checkTest,
       attitude: attitude || undefined,
       trendNote: trend.trim() || undefined,
+      // 멘트 작성 방식(0214a) — 자동작성 스냅샷과 비교(서버가 기존 라벨과 합쳐 최종 확정).
+      mentSource: computeClientMentSource(body, autoBody),
     };
   }
 
@@ -190,16 +195,19 @@ export function ComposeFace({
     setAiBusy(false);
     if (res.ok && res.comment) {
       setBody(res.comment);
+      setAutoBody(res.comment); // 작성 방식 스냅샷(0214a)
       if (res.trend) setTrend(res.trend);
       toast.success("AI가 본문을 작성했습니다 — 검토 후 발송하세요");
     } else {
-      // 폴백: 사실 기반 간단 문장(빈 본문 방지).
+      // 폴백: 사실 기반 간단 문장(빈 본문 방지). 템플릿도 "자동이 넣은 텍스트"다(0214a 스냅샷 동일 취급).
       const parts = [
         progress.trim() ? `오늘 ${curSubject.label} ${progress.trim()} 진행했습니다.` : "",
         attitude ? `수업 태도는 ${attitudeClause(attitude)}.` : "",
         homework ? `지난 과제는 ${homeworkRateClause(homework)}.` : "",
       ].filter(Boolean);
-      setBody(parts.join(" ") || `오늘 ${curSubject.label} 수업을 진행했습니다.`);
+      const fallback = parts.join(" ") || `오늘 ${curSubject.label} 수업을 진행했습니다.`;
+      setBody(fallback);
+      setAutoBody(fallback);
       toast.message("AI 생성에 실패해 기본 문구를 넣었습니다 — 직접 수정하세요");
     }
   }

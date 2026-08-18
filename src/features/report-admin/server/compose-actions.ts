@@ -18,6 +18,8 @@ import { isClassnoteAllowed, isClassnoteSubjectEnabled } from "@/features/onescr
 import { hasClassnoteNameCollision } from "@/features/onescreen/server/scope";
 import { absenceKeyOf, getAbsenceBlockedKeys, isStudentAbsentForSend } from "@/features/onescreen/server/absence-gate";
 import { ingestReport } from "@/features/progress/server/ingest";
+import { parseMentSource, resolveMentSource, type MentSource } from "@/features/onescreen/ment-source";
+import { mentSourceColumnReady } from "@/features/onescreen/server/ment-source-db";
 import { BOARD_PREFIX } from "../notice-targets";
 import { resolveReportClassId } from "./resolve-class";
 
@@ -42,6 +44,8 @@ export type AdminSaveReportInput = {
   checkTest?: string;
   attitude?: string;
   trendNote?: string;
+  /** 멘트 작성 방식(0214a) — 클라 판정(자동작성 스냅샷 비교). 서버가 기존 라벨과 합쳐 최종 확정. */
+  mentSource?: MentSource;
 };
 
 /**
@@ -54,11 +58,41 @@ async function upsertAdminReport(
   user: CurrentUser,
   input: AdminSaveReportInput,
 ): Promise<{ ok: boolean; id?: string; shareToken?: string; error?: string }> {
-  // 학생 존재(테넌트 스코프=RLS) 확인 — 크로스테넌트/삭제 학생 방어.
-  const { data: stu } = await supabase.from("students").select("id").eq("id", input.studentId).maybeSingle();
+  // 학생 존재(테넌트 스코프=RLS) 확인 — 크로스테넌트/삭제 학생 방어. probe와 독립이라 병렬(B4).
+  const [{ data: stu }, mentReady] = await Promise.all([
+    supabase.from("students").select("id").eq("id", input.studentId).maybeSingle(),
+    mentSourceColumnReady(supabase),
+  ]);
   if (!stu) return { ok: false, error: "학생을 찾을 수 없습니다" };
 
   const reportDate = resolveReportDate(input.reportDate); // 빈값·미래→오늘, 과거는 그대로(too_old 가드가 발송 범위 강제)
+
+  // 멘트 작성 방식(0214a) — 기존 행의 라벨·텍스트를 읽어 sticky 판정(강사 경로 saveLessonReport와 같은 규칙).
+  // 컬럼 없으면(마이그 미적용) 통째 생략(#95) — 본 저장은 그대로 간다.
+  let mentPatch: { ment_source: MentSource | null } | Record<string, never> = {};
+  if (mentReady) {
+    const priorBase = supabase
+      .from("lesson_reports")
+      .select("notes, ment_source")
+      .eq("student_id", input.studentId)
+      .eq("report_date", reportDate);
+    const { data: priorRows } = await (
+      input.classId
+        ? priorBase.eq("class_id", input.classId)
+        : input.subject
+          ? priorBase.is("class_id", null).eq("subject", input.subject)
+          : priorBase.is("class_id", null).is("subject", null)
+    ).limit(1);
+    const prior = priorRows?.[0];
+    mentPatch = {
+      ment_source: resolveMentSource({
+        client: input.mentSource,
+        prevSource: prior?.ment_source,
+        prevNotes: prior?.notes,
+        nextNotes: input.notes,
+      }),
+    };
+  }
   const { data, error } = await supabase
     .from("lesson_reports")
     .upsert(
@@ -83,6 +117,7 @@ async function upsertAdminReport(
         notes: input.notes || null,
         trend_note: input.trendNote || null,
         source: "admin",
+        ...mentPatch,
       },
       // 생성열 unit_key = coalesce(class_id::text, subject) — 0134a. 강사 경로와 같은 타깃.
       { onConflict: "tenant_id,student_id,report_date,unit_key" },
@@ -257,6 +292,8 @@ export type BulkAdminReportInput = {
   notes: string; // 학부모 보고서 본문(공유) — 필수
   trendNote?: string;
   test?: boolean; // 학원이 1명에게만(파이프라인 검증)
+  /** 멘트 작성 방식(0214a) — 공용 본문의 판정(관리자가 직접 썼나/AI 자동작성인가). 대량은 신규 행만 만들어 sticky 불요. */
+  mentSource?: MentSource;
 };
 
 // classId: 0134a — 대량발송은 **반을 골라서** 보내므로 반이 항상 정확하다(테스트 학생 경로만 null).
@@ -291,7 +328,8 @@ export async function sendBulkAdminReports(input: BulkAdminReportInput): Promise
   if (body.length > BULK_BODY_MAX) return { ok: false, error: `본문이 너무 깁니다(최대 ${BULK_BODY_MAX}자)` };
 
   const supabase = await createClient();
-  const settings = await getTenantSettings();
+  // ment_source probe(0214a)는 설정 조회와 독립 — 병렬(B4). 결과는 5단계(카드 작성)에서만 소비.
+  const [settings, mentReady] = await Promise.all([getTenantSettings(), mentSourceColumnReady(supabase)]);
   const reportDate = resolveReportDate(input.reportDate); // 빈값·미래→오늘, 과거 그대로(아래 too_old 가드가 실발송 범위 강제)
   const allowedSubjects = settings.report.classnoteSubjects;
 
@@ -443,6 +481,8 @@ export async function sendBulkAdminReports(input: BulkAdminReportInput): Promise
   }
 
   // ── 5. 리포트 카드 일괄 작성(공유 내용 + 학생 과목 + 반 담당강사). 청크 upsert. ──
+  // 멘트 작성 방식(0214a, mentReady는 함수 초입 병렬 probe) — 컬럼 없으면 생략(#95).
+  // 대량은 기존 행을 전부 걸러낸(fresh) 신규 insert라 sticky 불요.
   const nowIso = new Date().toISOString();
   const rowsToAuthor = sendable.map((t) => ({
     tenant_id: user.tenantId,
@@ -463,6 +503,7 @@ export async function sendBulkAdminReports(input: BulkAdminReportInput): Promise
     notes: body,
     trend_note: input.trendNote?.trim() || null,
     source: "admin",
+    ...(mentReady ? { ment_source: parseMentSource(input.mentSource) ?? null } : {}),
   }));
   const authored: { id: string; student_id: string; subject: string | null }[] = [];
   for (let i = 0; i < rowsToAuthor.length; i += 100) {
