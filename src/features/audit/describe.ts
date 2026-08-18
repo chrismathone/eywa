@@ -133,6 +133,10 @@ export function auditDetail(
       const to = str(m.to);
       return from && to ? `${from} → ${to}` : (to ?? null);
     }
+    case "self_report_name_change": {
+      const name = str(m.reportName);
+      return name ? `발송용 이름 "${name}"` : "발송용 이름 해제(실명으로 발송)";
+    }
     case "staff_contract_extend": {
       const seq = num(m.seq);
       const start = str(m.startDate);

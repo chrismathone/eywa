@@ -30,6 +30,7 @@ export const AUDIT_ACTIONS = {
   // 본인이 자기 계정을 바꾼 경우(/me) — 위의 staff_*(관리자가 남의 계정을 바꿈)와 구분해 읽힌다.
   self_password_change: "내 비밀번호 변경",
   self_email_change: "내 이메일 변경",
+  self_report_name_change: "수업보고서 발송용 이름 변경",
   invoice_create: "청구서 생성",
   exam_create: "시험 등록",
   exam_delete: "시험 삭제",

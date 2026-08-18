@@ -441,6 +441,32 @@ export async function processQueueOnce(sql, browser, opts) {
   if (!claimed.length) return summary;
   log(`[worker] 클레임 ${claimed.length}건`);
 
+  // 2-b) 발송용 이름(0217a users.report_display_name) — 강사가 /me에서 정한 이름이 있으면 게시 작성자명을
+  // 실명 대신 그 이름으로. 규칙은 앱(src/features/onescreen/report-author-name.ts)과 동일 복제:
+  // **raw 정확 일치**(teacher_name은 저장 시 display_name을 그대로 기록 — 트림 매칭은 앱 .eq와 답이 갈린다)
+  // + **같은 표시 이름(display_name)의 직원이 2명 이상이면 매핑하지 않는다**(남의 보고서에 다른 사람 발송용
+  // 이름이 붙는 오표시 방지 — 이때는 지금처럼 실명이 나간다). ⚠️ fail-soft: 0217a 미적용(컬럼 부재)·조회
+  // 실패면 빈 맵 = 전건 실명 그대로(#95 expand/contract — 발송 자체는 절대 안 막는다).
+  const reportNameByTeacher = new Map();
+  try {
+    // 학생 계정 제외 = 앱 resolveReportAuthorName과 동일 필터(동명 학생이 매핑을 끄면 안 된다). 퇴사자는 포함.
+    const nameRows = await sql`select display_name, report_display_name from users
+      where tenant_id = ${tenant} and system_role <> 'student'`;
+    const seenNames = new Set();
+    for (const u of nameRows) {
+      const dn = u.display_name ?? ""; // raw 키(트림 금지 — 위 주석)
+      if (!dn.trim()) continue;
+      if (seenNames.has(dn)) { reportNameByTeacher.delete(dn); continue; } // 동명 = 모호 → 매핑 제외
+      seenNames.add(dn);
+      const rn = (u.report_display_name ?? "").trim();
+      if (rn) reportNameByTeacher.set(dn, rn);
+    }
+  } catch (e) {
+    log(`[worker] 발송용 이름 조회 실패(0217a 미적용이면 정상) — 실명으로 발송: ${e instanceof Error ? e.message : e}`);
+  }
+  /** 이 보고서의 게시 작성자명 — 발송용 이름이 있으면 그 이름, 없으면 저장된 teacher_name 그대로. */
+  const authorNameFor = (row) => reportNameByTeacher.get(row.teacher_name ?? "") ?? row.teacher_name;
+
   // 3) 프리플라이트 준비(실게시 모드만) — ClassNote 로그인 1회 + 보드 전건 1회 캐시 + 발송 예외 목록.
   // 오발송 방지 게이트(공유 보드 차단)의 근거 데이터. **fail-closed**: 준비에 실패해 보드를 검증할 수 없으면
   // 보내지 않는다 — 클레임분을 즉시 queued로 되돌리고 이 주기를 건너뛴다(다음 폴 재시도). 검증 못 하면 안 보냄이
@@ -634,7 +660,9 @@ export async function processQueueOnce(sql, browser, opts) {
       // 🔴 타임아웃 시 **재큐하지 않고 failed로 고정**한다: POST가 이미 서버에 닿았을 수 있어(게시됐는지 불명)
       //    자동 재시도는 학부모 중복 게시로 직결된다. 사람이 ClassNote에서 확인 후 재발송하는 게 유일하게 안전하다.
       const result = await withPostTimeout(sendReportViaApi(adminPage, {
-        report: r, studentName, boardId, centerId, screenshot: buf, shareUrl: `${shareBase}/r/${r.share_token}`,
+        // 발송용 이름(0217a) — 게시 작성자명만 바꾼다. DB의 teacher_name(귀속 축)은 불변(2-b 주석).
+        report: { ...r, teacher_name: authorNameFor(r) },
+        studentName, boardId, centerId, screenshot: buf, shareUrl: `${shareBase}/r/${r.share_token}`,
         base, fileAtts: sendFiles, children: childrenCache, log,
         // 첫 발송만 3중 방어(멱등·사후확인) — classnote_sent_at 있는 행 = 의도적 재발송이라 content 판정이
         // 옛 게시물에 오염된다(sendReportViaApi 4) 주석). 재발송은 status 코드를 신뢰한다.
