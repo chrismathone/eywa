@@ -76,11 +76,14 @@ export function MonthGrid({
   today,
   events,
   onEventClick,
+  onDayClick,
 }: {
   month: string;
   today: string;
   events: CalendarEvent[];
   onEventClick: (e: CalendarEvent) => void;
+  /** 빈 날짜 칸 클릭 = 그 날짜로 일정 등록(구글식). 쓰기 권한이 없으면 안 넘어와 칸이 반응하지 않는다. */
+  onDayClick?: (ymd: string) => void;
 }) {
   const cells = buildCells(month);
   const weeks: Cell[][] = [];
@@ -110,7 +113,10 @@ export function MonthGrid({
             return (
               <div
                 key={cell.date}
-                className={`min-h-[128px] min-w-0 p-1.5 ${dow === 0 || dow === 6 ? "bg-bg-soft/30" : ""}`}
+                onClick={onDayClick ? () => onDayClick(cell.date) : undefined}
+                className={`min-h-[128px] min-w-0 p-1.5 ${dow === 0 || dow === 6 ? "bg-bg-soft/30" : ""} ${
+                  onDayClick ? "hover:bg-primary-soft/20 cursor-pointer transition-colors" : ""
+                }`}
               >
                 <p className="mb-0.5 flex items-center justify-between gap-1">
                   {/* 공휴일명 — 일정 칩 위(좌측), 정식 명칭은 title 툴팁. 앞뒤 달은 흐림 규칙을 따른다. */}
@@ -147,7 +153,10 @@ export function MonthGrid({
                     <button
                       key={e.id}
                       type="button"
-                      onClick={() => onEventClick(e)}
+                      onClick={(ev) => {
+                        ev.stopPropagation(); // 칩 클릭이 칸(일정 등록) 클릭으로 번지지 않게
+                        onEventClick(e);
+                      }}
                       className={`block w-full truncate rounded px-1 py-0.5 text-left text-[12px] leading-tight font-medium transition hover:opacity-80 ${CHIP_CLASS[e.color]} ${
                         cell.inMonth ? "" : "opacity-50"
                       }`}
@@ -158,7 +167,10 @@ export function MonthGrid({
                     </button>
                   ))}
                   {more > 0 ? (
-                    <p className="text-text-dim px-1 text-[11px]">+{more}개 더</p>
+                    // 안내 문구일 뿐 — 칸 클릭(일정 등록)으로 번지지 않게 막는다("더 보기" 기대 클릭 오발 방지).
+                    <p className="text-text-dim px-1 text-[11px]" onClick={(ev) => ev.stopPropagation()}>
+                      +{more}개 더
+                    </p>
                   ) : null}
                 </div>
               </div>
