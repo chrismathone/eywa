@@ -10,11 +10,20 @@ import { RichEditor } from "@/components/editor/rich-editor";
 import {
   deleteLineTemplate,
   saveLineTemplate,
+  submitBasicDraft,
+  submitExpenseDraft,
   submitLeaveDraft,
   type ApprovalActionState,
 } from "@/features/approvals/server/actions";
 import { MAX_APPROVAL_STEPS, MAX_REFS } from "@/features/approvals/line";
-import { APPROVAL_FORM_LABEL, stepRoleLabels } from "@/features/approvals/types";
+import {
+  APPROVAL_FORMS,
+  APPROVAL_FORM_DESC,
+  APPROVAL_FORM_LABEL,
+  EXPENSE_CATEGORIES,
+  stepRoleLabels,
+  type ApprovalForm,
+} from "@/features/approvals/types";
 import type { ApprovalLineTemplate, ApprovalPerson } from "@/features/approvals/server/queries";
 import {
   countLeaveDays,
@@ -37,7 +46,10 @@ import {
  * 🔴 **표 안에 팝오버 드롭다운을 넣지 않는다** — `absolute` 팝오버는 표의 `overflow-x-auto` 래퍼에
  *    **잘린다**(원장 제보 "드롭다운 등 사용하면 css 깨짐"). 직원 선택은 **fixed 오버레이 다이얼로그**
  *    (ConfirmDialog 선례)라 잘릴 일이 없다.
- * ⚠️ 잔여·결재선 검증의 근거는 서버(line.ts·submitLeaveDraft)다 — 화면은 미리보기·조기경고([[#77]]).
+ * 양식 4종(휴가신청서·품의서·지출결의서·업무연락, 2026-08-18) — 문서 종류 토글이 상세 입력과 제출
+ * 액션을 가른다. 결재선·기본 설정은 공용.
+ *
+ * ⚠️ 잔여·결재선 검증의 근거는 서버(line.ts·각 submit 액션)다 — 화면은 미리보기·조기경고([[#77]]).
  * ⚠️ 임시저장·인쇄미리보기·보존연한·보안등급은 흉내 내지 않는다(대응 데이터가 없다 — 죽은 컨트롤 금지).
  */
 
@@ -69,7 +81,8 @@ export function DraftComposer({
   candidates: ApprovalPerson[];
   templates: ApprovalLineTemplate[];
   initialApproverIds: string[];
-  periodEnd: string;
+  /** 연차 구간 끝 — 입사일 미등록이면 null. **휴가신청서만** 막고 다른 양식은 기안할 수 있어야 한다. */
+  periodEnd: string | null;
   remaining: number;
   today: string;
 }) {
@@ -78,22 +91,44 @@ export function DraftComposer({
     initialApproverIds.filter((id) => byId.has(id)),
   );
   const [refs, setRefs] = useState<string[]>([]);
+
+  // 문서 종류 — 상세 입력과 제출 액션이 여기서 갈린다.
+  const [form, setForm] = useState<ApprovalForm>("leave");
+
+  // 휴가신청서
   const [kind, setKind] = useState<LeaveKind>("annual");
   const [start, setStart] = useState(today);
   const [end, setEnd] = useState(today);
+  // 제목 — 품의·지출·업무연락 공용(양식을 오가도 입력이 유지되게 하나로 둔다).
+  const [title, setTitle] = useState("");
+  // 지출결의서
+  const [category, setCategory] = useState<(typeof EXPENSE_CATEGORIES)[number]>("기타");
+  const [amountDigits, setAmountDigits] = useState(""); // 숫자만 보관, 표시할 때 콤마
+  const [spendDate, setSpendDate] = useState(today);
 
-  const [state, action] = useActionState<ApprovalActionState, FormData>(submitLeaveDraft, undefined);
-  const seen = useRef<ApprovalActionState>(undefined);
-  useEffect(() => {
-    if (!state || state === seen.current) return;
-    seen.current = state;
-    if (state.error) toast.error(state.error);
-    else if (state.ok) toast.success(state.notice ?? "상신했습니다");
-  }, [state]);
+  // 양식별 제출 액션 — 폼 element는 하나고 action만 갈아 끼운다.
+  const [leaveState, leaveAction] = useActionState<ApprovalActionState, FormData>(
+    submitLeaveDraft,
+    undefined,
+  );
+  const [basicState, basicAction] = useActionState<ApprovalActionState, FormData>(
+    submitBasicDraft,
+    undefined,
+  );
+  const [expenseState, expenseAction] = useActionState<ApprovalActionState, FormData>(
+    submitExpenseDraft,
+    undefined,
+  );
+  useSubmitToast(leaveState);
+  useSubmitToast(basicState);
+  useSubmitToast(expenseState);
+  const action = form === "leave" ? leaveAction : form === "expense" ? expenseAction : basicAction;
 
+  // ── 휴가신청서 검증(기존 규칙 그대로 — 입사일 없으면 계산 불가) ─────────────
+  const leaveReady = periodEnd !== null;
   const effectiveEnd = kind === "half" ? start : end;
   const days = countLeaveDays(start, effectiveEnd, kind);
-  const inCurrentPeriod = !!start && start <= periodEnd;
+  const inCurrentPeriod = leaveReady && !!start && start <= periodEnd;
   const invalid = validateLeaveRange({
     start,
     end: effectiveEnd,
@@ -106,13 +141,34 @@ export function DraftComposer({
         ? "남은 연차가 없어 상신할 수 없습니다"
         : `잔여 연차 ${formatLeaveDays(remaining)}보다 많이 신청할 수 없습니다`
       : null;
-  const blocked = !!invalid || !!over || approvers.length === 0;
+
+  // ── 양식별 조기경고(서버가 최종 판정, [[#77]]) ──────────────────────────────
+  const amountValue = Number(amountDigits || "0");
+  const detailProblem =
+    form === "leave"
+      ? !leaveReady
+        ? "입사일이 등록되지 않아 연차를 계산할 수 없습니다"
+        : (invalid ?? over)
+      : !title.trim()
+        ? "제목을 입력하세요"
+        : form === "expense"
+          ? amountValue <= 0
+            ? "금액을 입력하세요"
+            : !spendDate
+              ? "지출일을 선택하세요"
+              : null
+          : null;
+  const blocked = !!detailProblem || approvers.length === 0;
 
   return (
     <form action={action}>
       <input type="hidden" name="approverIds" value={JSON.stringify(approvers)} />
       <input type="hidden" name="refIds" value={JSON.stringify(refs)} />
-      <input type="hidden" name="kind" value={kind} />
+      {form === "leave" ? <input type="hidden" name="kind" value={kind} /> : null}
+      {form === "proposal" || form === "memo" ? (
+        <input type="hidden" name="formType" value={form} />
+      ) : null}
+      {form === "expense" ? <input type="hidden" name="category" value={category} /> : null}
 
       {/* 문서 한 장 — 섹션이 카드로 갈라지지 않고 구분선으로만 이어진다. */}
       <article className="border-line bg-card shadow-card rounded-2xl border px-5 py-1 sm:px-6">
@@ -122,9 +178,24 @@ export function DraftComposer({
               <tbody className="[&_th]:bg-bg-soft/60 [&_th]:text-text-dim [&_th]:border-line [&_td]:border-line [&_th]:border [&_td]:border [&_th]:px-3 [&_th]:py-2 [&_td]:px-3 [&_td]:py-2 [&_th]:text-left [&_th]:text-xs [&_th]:font-semibold [&_th]:whitespace-nowrap">
                 <tr>
                   <th className="w-[88px]">문서 종류</th>
-                  <td className="text-foreground text-[13px]">
-                    공통 · <b>{APPROVAL_FORM_LABEL.leave}</b>
-                    <span className="text-text-faint ml-1 text-[11px]">(현재 양식 1종)</span>
+                  <td>
+                    {/* 토글 칩 — 표 래퍼가 overflow-hidden이라 팝오버 금지(잘린다). */}
+                    <span className="flex flex-wrap items-center gap-1">
+                      {APPROVAL_FORMS.map((f) => (
+                        <button
+                          key={f}
+                          type="button"
+                          onClick={() => setForm(f)}
+                          className={`rounded-full border px-2.5 py-0.5 text-[12px] transition ${
+                            form === f
+                              ? "border-primary bg-primary text-primary-foreground font-medium"
+                              : "border-line bg-card text-text-dim hover:border-primary/50 hover:text-foreground"
+                          }`}
+                        >
+                          {APPROVAL_FORM_LABEL[f]}
+                        </button>
+                      ))}
+                    </span>
                   </td>
                   <th className="w-[76px]">작성자</th>
                   <td className="text-[13px]">
@@ -143,6 +214,7 @@ export function DraftComposer({
               </tbody>
             </table>
           </div>
+          <p className="text-text-dim mt-1.5 text-[11px]">{APPROVAL_FORM_DESC[form]}</p>
         </Row>
 
         <Row label="결재선">
@@ -169,76 +241,181 @@ export function DraftComposer({
         </Row>
 
         <Row label="상세 입력">
-          <div className="flex flex-wrap items-end gap-3">
-            <label className="block">
-              <span className="micro mb-1 block">휴가 종류</span>
-              {/* 선택지가 둘뿐이라 드롭다운 대신 토글 — 표 밖이지만 팝오버 자체를 늘리지 않는다. */}
-              <span className="border-line inline-flex overflow-hidden rounded-lg border">
-                {(["annual", "half"] as const).map((k) => (
-                  <button
-                    key={k}
-                    type="button"
-                    onClick={() => setKind(k)}
-                    className={`px-3 py-1.5 text-[13px] transition ${
-                      kind === k
-                        ? "bg-primary text-primary-foreground font-medium"
-                        : "bg-card text-text-dim hover:bg-bg-soft"
-                    }`}
-                  >
-                    {k === "annual" ? "연차" : "반차"}
-                  </button>
-                ))}
-              </span>
-            </label>
-            <label className="block">
-              <span className="micro mb-1 block">시작일</span>
-              <input
-                type="date"
-                name="startDate"
-                value={start}
-                onChange={(e) => {
-                  setStart(e.target.value);
-                  if (e.target.value > end) setEnd(e.target.value);
-                }}
-                className={inputClass}
-                required
-              />
-            </label>
-            {kind === "half" ? (
-              <input type="hidden" name="endDate" value={start} />
+          {form === "leave" ? (
+            !leaveReady ? (
+              <div className="border-line bg-bg-soft/50 text-text-dim rounded-lg border border-dashed px-4 py-6 text-center text-xs">
+                입사일이 등록되지 않아 연차를 계산할 수 없습니다 — 사무실(직원관리)에 입사일 등록을
+                요청하세요.
+                <br />
+                품의서·지출결의서·업무연락은 지금도 기안할 수 있습니다.
+              </div>
             ) : (
+              <>
+                <div className="flex flex-wrap items-end gap-3">
+                  <label className="block">
+                    <span className="micro mb-1 block">휴가 종류</span>
+                    {/* 선택지가 둘뿐이라 드롭다운 대신 토글 — 표 밖이지만 팝오버 자체를 늘리지 않는다. */}
+                    <span className="border-line inline-flex overflow-hidden rounded-lg border">
+                      {(["annual", "half"] as const).map((k) => (
+                        <button
+                          key={k}
+                          type="button"
+                          onClick={() => setKind(k)}
+                          className={`px-3 py-1.5 text-[13px] transition ${
+                            kind === k
+                              ? "bg-primary text-primary-foreground font-medium"
+                              : "bg-card text-text-dim hover:bg-bg-soft"
+                          }`}
+                        >
+                          {k === "annual" ? "연차" : "반차"}
+                        </button>
+                      ))}
+                    </span>
+                  </label>
+                  <label className="block">
+                    <span className="micro mb-1 block">시작일</span>
+                    <input
+                      type="date"
+                      name="startDate"
+                      value={start}
+                      onChange={(e) => {
+                        setStart(e.target.value);
+                        if (e.target.value > end) setEnd(e.target.value);
+                      }}
+                      className={inputClass}
+                      required
+                    />
+                  </label>
+                  {kind === "half" ? (
+                    <input type="hidden" name="endDate" value={start} />
+                  ) : (
+                    <label className="block">
+                      <span className="micro mb-1 block">종료일</span>
+                      <input
+                        type="date"
+                        name="endDate"
+                        value={end}
+                        min={start}
+                        onChange={(e) => setEnd(e.target.value)}
+                        className={inputClass}
+                        required
+                      />
+                    </label>
+                  )}
+                  <p className="text-text-faint pb-2 text-[11px]">
+                    연차 사용 기간 <span className="num">~{periodEnd}</span> · 일요일은 차감하지
+                    않습니다
+                  </p>
+                </div>
+
+                <div className="mt-3">
+                  <span className="micro mb-1 block">사유</span>
+                  {/* 표·서식이 필요해 리치 에디터(원장 요구). 무거운 라이브러리라 지연로드된다(B5). */}
+                  <RichEditor
+                    name="reason"
+                    placeholder="사유를 적어 주세요 — 표·목록·서식을 쓸 수 있습니다"
+                    ariaLabel="사유"
+                  />
+                </div>
+              </>
+            )
+          ) : (
+            <>
               <label className="block">
-                <span className="micro mb-1 block">종료일</span>
+                <span className="micro mb-1 block">제목</span>
                 <input
-                  type="date"
-                  name="endDate"
-                  value={end}
-                  min={start}
-                  onChange={(e) => setEnd(e.target.value)}
-                  className={inputClass}
+                  name="title"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  maxLength={80}
+                  placeholder={
+                    form === "expense"
+                      ? "예: 8월 교재 구입비 지출"
+                      : form === "proposal"
+                        ? "예: 겨울 특강 교재 구매 품의"
+                        : "예: 9월 시간표 변경 안내"
+                  }
+                  className={`${inputClass} w-full max-w-[520px]`}
                   required
                 />
               </label>
-            )}
-            <p className="text-text-faint pb-2 text-[11px]">
-              연차 사용 기간 <span className="num">~{periodEnd}</span> · 일요일은 차감하지 않습니다
-            </p>
-          </div>
 
-          <div className="mt-3">
-            <span className="micro mb-1 block">사유</span>
-            {/* 표·서식이 필요해 리치 에디터(원장 요구). 무거운 라이브러리라 지연로드된다(B5). */}
-            <RichEditor name="reason" placeholder="사유를 적어 주세요 — 표·목록·서식을 쓸 수 있습니다" ariaLabel="사유" />
-          </div>
+              {form === "expense" ? (
+                <div className="mt-3 flex flex-wrap items-end gap-3">
+                  <label className="block">
+                    <span className="micro mb-1 block">분류</span>
+                    <span className="flex flex-wrap items-center gap-1">
+                      {EXPENSE_CATEGORIES.map((c) => (
+                        <button
+                          key={c}
+                          type="button"
+                          onClick={() => setCategory(c)}
+                          className={`rounded-full border px-2.5 py-0.5 text-[12px] transition ${
+                            category === c
+                              ? "border-primary bg-primary text-primary-foreground font-medium"
+                              : "border-line bg-card text-text-dim hover:border-primary/50 hover:text-foreground"
+                          }`}
+                        >
+                          {c}
+                        </button>
+                      ))}
+                    </span>
+                  </label>
+                  <label className="block">
+                    <span className="micro mb-1 block">금액</span>
+                    <span className="inline-flex items-center gap-1.5">
+                      <input
+                        name="amount"
+                        inputMode="numeric"
+                        value={amountDigits ? Number(amountDigits).toLocaleString("ko-KR") : ""}
+                        onChange={(e) =>
+                          setAmountDigits(e.target.value.replace(/[^0-9]/g, "").slice(0, 10))
+                        }
+                        placeholder="0"
+                        className={`${inputClass} w-[140px] text-right`}
+                        aria-label="금액(원)"
+                        required
+                      />
+                      <span className="text-text-dim text-[13px]">원</span>
+                    </span>
+                  </label>
+                  <label className="block">
+                    <span className="micro mb-1 block">지출일</span>
+                    <input
+                      type="date"
+                      name="spendDate"
+                      value={spendDate}
+                      onChange={(e) => setSpendDate(e.target.value)}
+                      className={inputClass}
+                      required
+                    />
+                  </label>
+                </div>
+              ) : null}
+
+              <div className="mt-3">
+                <span className="micro mb-1 block">본문</span>
+                {/* ⚠️ 문서 종류를 바꾸면 에디터가 재마운트돼 본문이 비워진다 — 양식이 다르면 문서도
+                    다른 것이라 의도된 동작(하이웍스도 양식 전환 시 본문을 잇지 않는다). */}
+                <RichEditor
+                  name="body"
+                  placeholder={
+                    form === "expense"
+                      ? "지출 내역을 적어 주세요 — 품목·수량 표를 넣을 수 있습니다"
+                      : "내용을 적어 주세요 — 표·목록·서식을 쓸 수 있습니다"
+                  }
+                  ariaLabel="본문"
+                />
+              </div>
+            </>
+          )}
         </Row>
       </article>
 
-      {/* 하단 — 차감 요약 + 상신(문서 판 바깥, 하이웍스의 하단 액션 바 대응) */}
+      {/* 하단 — 요약 + 상신(문서 판 바깥, 하이웍스의 하단 액션 바 대응) */}
       <div className="mt-3 flex flex-wrap items-center justify-between gap-3 px-1">
         <p className="text-[13px]">
-          {invalid ? (
-            <span className="text-danger">{invalid}</span>
-          ) : (
+          {form === "leave" && leaveReady && !detailProblem ? (
             <>
               <span className="text-text-dim">차감 </span>
               <b className="num text-foreground">{formatLeaveDays(days)}</b>
@@ -250,17 +427,31 @@ export function DraftComposer({
               ) : (
                 <span className="text-text-faint"> · 다음 연차 구간이라 잔여는 그 구간 기준입니다</span>
               )}
-              {over ? <span className="text-danger ml-2 font-medium">{over}</span> : null}
-              {approvers.length === 0 ? (
-                <span className="text-danger ml-2 font-medium">결재자를 1명 이상 지정하세요</span>
-              ) : null}
             </>
+          ) : detailProblem ? (
+            <span className="text-danger">{detailProblem}</span>
+          ) : (
+            <span className="text-text-faint">작성한 내용은 결재선 전원이 봅니다</span>
           )}
+          {approvers.length === 0 ? (
+            <span className="text-danger ml-2 font-medium">결재자를 1명 이상 지정하세요</span>
+          ) : null}
         </p>
         <SubmitButton blocked={blocked} />
       </div>
     </form>
   );
+}
+
+/** 제출 결과 토스트 — 양식별 useActionState 3개가 같은 규약을 공유한다. */
+function useSubmitToast(state: ApprovalActionState) {
+  const seen = useRef<ApprovalActionState>(undefined);
+  useEffect(() => {
+    if (!state || state === seen.current) return;
+    seen.current = state;
+    if (state.error) toast.error(state.error);
+    else if (state.ok) toast.success(state.notice ?? "상신했습니다");
+  }, [state]);
 }
 
 function SubmitButton({ blocked }: { blocked: boolean }) {

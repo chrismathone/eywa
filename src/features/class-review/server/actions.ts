@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { normalizeObserverLimit } from "../observer-count";
 import { humanizeDbError } from "@/lib/supabase/db-error";
 import { logAction } from "@/features/audit/server/log";
 import { kstToday } from "@/lib/date-kst";
@@ -20,7 +21,7 @@ import {
   getChecklistAreas,
   getChecklistTemplates,
   getReviewPrivileges,
-  OPEN_MODE_OBSERVER_LIMIT,
+  observerLimitOf,
   observerColumns,
   type ReviewDoc,
   type ReviewEvaluator,
@@ -56,6 +57,8 @@ export async function createClassReview(_prev: ReviewActionState, formData: Form
   const subject = String(formData.get("subject") ?? "").trim();
   const templateId = String(formData.get("templateId") ?? "").trim();
   const observerMode = String(formData.get("observerMode") ?? "") === "open" ? "open" : "assigned";
+  // 평가자 정원(원장 지시 2026-08-18) — 범위 밖·빈 값은 normalize가 기본 3으로 접는다.
+  const observerLimit = normalizeObserverLimit(formData.get("observerCount"));
   if (!teacherId) return { error: "평가 대상 강사를 선택하세요" };
 
   const admin = createAdminClient();
@@ -69,7 +72,9 @@ export async function createClassReview(_prev: ReviewActionState, formData: Form
   // 지정 모드: 참관자(선택 최대 3명). 선착순 모드: 지정 없이 본인 슬롯만 — 권한자 먼저 채점 3명이 참관자.
   const evaluators: ReviewEvaluator[] = [];
   if (observerMode === "assigned") {
-    for (const key of ["observer1", "observer2", "observer3"]) {
+    // ⚠️ 폼이 정원만큼만 칸을 그리므로 루프도 정원까지 — 고정 3칸으로 되돌리면 4번째부터 조용히 버려진다.
+    for (let n = 1; n <= observerLimit; n++) {
+      const key = `observer${n}`;
       const id = String(formData.get(key) ?? "").trim();
       if (!id) continue;
       if (evaluators.some((e) => e.id === id) || id === teacherId) continue; // 중복·본인 겸직 방지
@@ -96,6 +101,7 @@ export async function createClassReview(_prev: ReviewActionState, formData: Form
       classTime: "",
       studentCount: "",
       observerMode,
+      observerLimit,
     },
     evaluators,
     submissions: {},
@@ -123,7 +129,7 @@ export async function createClassReview(_prev: ReviewActionState, formData: Form
     action: "class_review_create",
     targetType: "user",
     targetLabel: teacher.display_name,
-    metadata: { date, observerMode, assigned: evaluators.length - 1, template: doc.templateName },
+    metadata: { date, observerMode, observerLimit, assigned: evaluators.length - 1, template: doc.templateName },
   });
   revalidatePath("/class-review");
   redirect(`/class-review/${row.id}`);
@@ -176,8 +182,9 @@ export async function submitClassReviewScores(
     // 선착순 — 이미 내 장이 있으면 갱신, 없으면 남은 슬롯이 있어야 새로 차지.
     const observers = observerColumns({ ...doc, id: docId, createdAt: "" });
     const mineAlready = observers.some((o) => o.slot === gate.user.id) || !!doc.submissions?.[gate.user.id];
-    if (!mineAlready && observers.length >= OPEN_MODE_OBSERVER_LIMIT) {
-      return { error: `평가자 ${OPEN_MODE_OBSERVER_LIMIT}명이 이미 채점을 마쳤습니다 (선착순 마감)` };
+    const limit = observerLimitOf(doc);
+    if (!mineAlready && observers.length >= limit) {
+      return { error: `평가자 ${limit}명이 이미 채점을 마쳤습니다 (선착순 마감)` };
     }
     slot = gate.user.id;
   } else {

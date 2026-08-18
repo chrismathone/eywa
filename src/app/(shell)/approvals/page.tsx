@@ -105,7 +105,7 @@ export default async function ApprovalsPage({
       <PageHeader
         eyebrow="운영"
         title="전자결재"
-        description="문서를 기안하면 결재선에 순서대로 올라갑니다. 지금은 휴가신청서를 쓸 수 있습니다."
+        description="문서를 기안하면 결재선에 순서대로 올라갑니다. 양식: 휴가신청서·품의서·지출결의서·업무연락."
         embedLabel="전자결재 · 기안과 결재함"
         actions={
           <Button render={<Link href="/approvals/new" />}>
