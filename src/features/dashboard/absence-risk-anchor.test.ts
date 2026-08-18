@@ -81,5 +81,23 @@ describe("결석 위험 anchor", () => {
         /session_date\s*<=\s*current_date/,
       );
     });
+
+    /**
+     * 세는 단위 = **반·하루**(0221a, 원장 선택 'B'). 0196a 이후 영어는 교시마다 행이 남아서 그냥 세면
+     * 같은 하루가 2~3회가 된다(실측 배수 2.19 — 수학은 1.00). 그 탓에 **하루 결석 1회인 학생 9명이
+     * "반복 결석 위험"으로 원장 대시보드·강사 알림에 올라와 있었다.**
+     *
+     * ⚠️ `effective`의 `distinct on (…, slot_start)`는 세는 단위가 아니라 "교시별 최신 정정 1건"을
+     *    고르는 장치다 — 그건 그대로 두고 **집계만** 반·하루로 센다.
+     */
+    it(`${name} — 결석 횟수를 교시가 아니라 반·하루로 센다`, () => {
+      const { file, sql } = newestDefining(sig);
+      const perClassDay = /count\(distinct \(a\.class_id, a\.session_date\)\)/;
+      expect(sql, `${file}: 집계가 반·하루 단위가 아니다 — 영어만 2.19배로 부푼다`).toMatch(perClassDay);
+      // having까지 같은 셈법이어야 한다(select만 바꾸면 문턱은 여전히 교시 수로 걸린다).
+      expect(sql, `${file}: having이 count(*) 그대로다 — 문턱이 교시 수로 걸린다`).not.toMatch(
+        /having\s+count\(\*\)/,
+      );
+    });
   }
 });
