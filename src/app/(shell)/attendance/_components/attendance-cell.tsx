@@ -6,6 +6,7 @@ import {
   CELL_SCROLL_MARGIN,
   STATUS_TEXT,
   cellDisplay,
+  ghostBreakdown,
   rollupDay,
   slotBreakdown,
   type SlotMark,
@@ -39,6 +40,7 @@ export function AttendanceCell({
   derived,
   locked,
   daySlots,
+  otherSlots,
 }: {
   studentId: string;
   classId: string;
@@ -64,6 +66,16 @@ export function AttendanceCell({
    * 대부분의 칸은 undefined라 종전과 완전히 같이 그려진다.
    */
   daySlots?: SlotMark[];
+  /**
+   * **이 표가 세지 않는 교시**(강사 전체 보기의 남의 교시·자리 JJ·LAB) — 값이 아니라 표시 근거다.
+   * 값이 비어 있을 때만 빗금으로 드러난다: 빈칸으로 두면 사람이 그 위에 다시 찍어 남의 기록을
+   * 덮는다(#103). 반별 보기에선 항상 undefined라 종전과 완전히 같이 그려진다.
+   *
+   * 🔴 **잠그지 않는다** — 강사 전체 보기는 권한 경계가 아니라 **렌즈**다. 같은 칸이 반별 보기에선
+   *    평범한 입력 칸이라, 여기서만 막으면 이유를 알 수 없는 '수정 불가'가 되고 게이트 구실도 못 한다.
+   *    입력·삭제는 종전 그대로 **그날 모든 교시**에 간다(save-targets ①) — 이 커밋이 바꾼 건 표시뿐이다.
+   */
+  otherSlots?: SlotMark[];
 }) {
   const row = rowKey(classId, studentId);
   const key = cellKey(row, sessionDate);
@@ -99,13 +111,22 @@ export function AttendanceCell({
   const dayRollup = daySlots && daySlots.length > 1 ? rollupDay(daySlots) : null;
   const pristine = status === initialStatus && (units ?? null) === (initialUnits ?? null);
   const day = pristine ? dayRollup : null;
-  const display = cellDisplay(status, units, { attendDay, muted, outside, day });
+  // 세지 않는 교시는 **값이 비어 있을 때만** 빗금으로 드러낸다 — 값이 있으면 그 값이 칸의 주인이고,
+  // 세지 않는 교시는 아래 툴팁에서 계속 밝힌다.
+  const ghost = !status && !!otherSlots?.length;
+  const display = cellDisplay(status, units, { attendDay, muted, outside, day, ghost });
   const fromReport = derived && status === initialStatus;
   // 잠긴 칸이라도 **메모는 보여 준다** — 잠금 사유만 남기고 메모를 감추면 왜 잠겼는지만 알고 뭐라 적혔는지는 못 본다.
   const title = [
     locked || (status ? STATUS_TEXT[status] : null),
     // 교시가 여럿인 날 — 칸엔 합계 하나뿐이라, 무엇을 접었는지 여기서 펼쳐 준다.
     day ? `${day.count}교시 · ${slotBreakdown(day.slots)}` : null,
+    // 이 표가 안 세는 교시(자리·남의 교시) — 숫자엔 없지만 기록은 있다는 사실을 여기서 밝힌다.
+    // ⚠️ 값이 **있는** 칸(내 교시 + 남의 교시가 같은 날)은 고치면 남의 교시까지 함께 바뀐다
+    //    (저장은 그날 모든 교시에 간다, save-targets ①). 숫자가 1이라 사정거리가 안 보이므로 여기서 말한다.
+    otherSlots?.length
+      ? `${ghostBreakdown(otherSlots)}${status ? " · 이 칸을 고치면 이 교시들도 함께 바뀝니다" : ""}`
+      : null,
     // 회색 칸의 뜻을 말해 준다 — 색만 다르면 "왜 여기만 회색이지"로 끝난다.
     outside ? (status ? "재원 기간 밖 기록(보강 등)" : "이 반 재원 기간이 아닙니다") : null,
     fromReport ? "수업보고서 자동 판정" : null,
@@ -137,7 +158,9 @@ export function AttendanceCell({
         data-cell-key={key}
         role="gridcell"
         tabIndex={state.active || isFirst ? 0 : -1}
-        aria-label={`${sessionDate} ${status ? STATUS_TEXT[status] : "미기록"}${day ? ` 외 ${day.count - 1}교시` : ""}`}
+        aria-label={`${sessionDate} ${status ? STATUS_TEXT[status] : "미기록"}${day ? ` 외 ${day.count - 1}교시` : ""}${
+          otherSlots?.length ? ` · 세지 않는 교시 ${otherSlots.length}건` : ""
+        }`}
         title={title || undefined}
         // 색이 갈린 교시가 섞인 날만 — 인라인 배경이 클래스 배경을 이긴다(글자색은 클래스 그대로).
         style={display.style}

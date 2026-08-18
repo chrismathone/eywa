@@ -118,6 +118,7 @@ function groupToMatrix(
     notes: {},
     units,
     slots,
+    ghosts: {},
     derived: {},
     derivedActive: false,
     stats: {

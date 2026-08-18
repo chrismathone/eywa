@@ -3,7 +3,7 @@ import type { StudentMoney } from "@/features/attendance/server/teacher-money";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { formatDows } from "@/features/attendance/calendar";
 import { BADGE_LABEL, badgeTitle, isEnrolledOn } from "@/features/attendance/enrollment-span";
-import { BADGE_BASE, BADGE_TONE } from "@/features/attendance/cell-display";
+import { BADGE_BASE, BADGE_TONE, NOT_MINE_MESSAGE } from "@/features/attendance/cell-display";
 import { countMarks } from "@/features/attendance/grid/totals";
 import { rowKey } from "@/features/attendance/grid/model";
 import { AttendanceCell } from "./attendance-cell";
@@ -137,6 +137,10 @@ export function MatrixRow({
         // 그 날 이 반 소속이 아니었나 — 8월 5일에 그만둔 학생의 나머지 26칸을 "수업하는 날"로
         // 그리면 표가 거짓말을 한다. ⚠️ **표시만** 바꾼다(입력은 그대로) — 퇴원 뒤 보강 출석이 실제로 있다.
         const outside = !isEnrolledOn(d.date, student.spans);
+        // 이 표의 몫이 아닌 칸(값 없음 + 남의 교시만) — 잠금과 **같은 통로**로 사유를 알린다.
+        // 그래야 팝오버·커서·툴팁이 격자(writeOne/writeMany)와 같은 말을 한다(#77: 표면마다 딴말 금지).
+        const otherSlots = matrix.ghosts[student.id]?.[d.date];
+        const notMine = !marks[d.date] && !!otherSlots?.length;
         // 등원요일 = 그 학생이 실제로 오는 날(분리등원 반영) — 공휴일은 휴원이라 제외.
         const attend = attendDows.has(d.dow) && !holiday && !outside;
         // 배경(음영·틴트)은 셀을 꽉 채우는 AttendanceCell 버튼이 그린다 — td는 relative 무대만
@@ -153,9 +157,16 @@ export function MatrixRow({
               attendDay={attend}
               muted={!!holiday || (!attend && d.isWeekend)}
               outside={outside}
-              locked={lockBefore && d.date < lockBefore ? lockedMessage(d.date, lockBefore) : null}
+              locked={
+                lockBefore && d.date < lockBefore
+                  ? lockedMessage(d.date, lockBefore)
+                  : notMine
+                    ? NOT_MINE_MESSAGE
+                    : null
+              }
               derived={!!matrix.derived[student.id]?.[d.date]}
               daySlots={matrix.slots[student.id]?.[d.date]}
+              otherSlots={otherSlots}
             />
           </td>
         );

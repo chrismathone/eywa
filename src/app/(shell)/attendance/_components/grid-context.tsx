@@ -16,6 +16,7 @@ import { saveAttendanceCollapsed } from "@/features/attendance/server/prefs-acti
 import { cellKey, classIdOfRow, parseCellKey } from "@/features/attendance/grid/model";
 import { GridStore, type CellState, type GridValue } from "@/features/attendance/grid/store";
 import { countCells, type Counted } from "@/features/attendance/grid/totals";
+import { NOT_MINE_MESSAGE } from "@/features/attendance/cell-display";
 import { COUNTABLE_STATUSES } from "@/features/attendance/session-units";
 import { appendChar, backspace, commitBuffer, copyValueOf, type TypedValue } from "@/features/attendance/grid/typing";
 
@@ -96,6 +97,7 @@ export function GridProvider({
   cols,
   initial,
   slotCounts,
+  notMine,
   lockBefore,
   initialCollapsed,
   children,
@@ -113,6 +115,11 @@ export function GridProvider({
    *    급여와 다른 숫자를 말한다(totals.ts의 서버·클라 동일 숫자 규약 위반). 그래서 **여기서 미리 곱한다**.
    */
   slotCounts?: Record<string, number>;
+  /**
+   * 이 표에 값이 없고 **남의 교시만** 있는 칸(강사 전체 보기의 빗금 칸) — 입력을 받지 않는다.
+   * 이유·근거는 matrix-table `notMine` 주석. 잠금(7일)과 달리 **날짜가 아니라 칸 단위**다.
+   */
+  notMine?: Record<string, true>;
   lockBefore: string | null;
   /** 지난번에 접어 둔 반(계정 설정). 없으면 전부 펼침. */
   initialCollapsed?: string[];
@@ -167,6 +174,8 @@ export function GridProvider({
   );
 
   const isLocked = useCallback((date: string) => !!lockBefore && date < lockBefore, [lockBefore]);
+  /** 이 칸이 이 표의 몫이 아닌가(빗금 칸) — 잠금과 사유가 달라 메시지도 따로 낸다. */
+  const isNotMine = useCallback((key: string) => !!notMine?.[key], [notMine]);
 
   /**
    * 입력이 멎은 뒤 **한 번만** 서버 데이터를 다시 읽는다.
@@ -222,28 +231,42 @@ export function GridProvider({
     (key: string, val: TypedValue | null) => {
       const p = parseCellKey(key);
       if (!p || isLocked(p.date)) return;
+      // 남의 교시만 있는 칸 — 조용히 무시하면 "쳤는데 반응이 없다"가 되므로 사유를 띄운다.
+      if (isNotMine(key)) {
+        setError(NOT_MINE_MESSAGE);
+        return;
+      }
       const prev = store.valueOf(key);
       undoRef.current.push([{ key, prev }]);
       if (undoRef.current.length > 50) undoRef.current.shift();
       pushCell(key, val, prev);
     },
-    [store, isLocked, pushCell],
+    [store, isLocked, isNotMine, pushCell],
   );
 
   /** 여러 칸에 같은 값 — 드래그 채우기·Ctrl+Enter·범위 Delete·범위 붙여넣기. */
   const writeMany = useCallback(
     (keys: Set<string>, val: TypedValue | null) => {
       const all = [...keys].map(parseCellKey).filter((p): p is NonNullable<typeof p> => !!p);
-      const targets = all.filter((p) => !isLocked(p.date));
-      // 잠긴 칸을 조용히 빼지 않는다 — 몇 칸이 안 들어갔는지 말해 주지 않으면 채워진 줄 안다.
-      const lockedCount = all.length - targets.length;
+      const unlocked = all.filter((p) => !isLocked(p.date));
+      // 🔴 남의 교시만 있는 칸은 범위 채우기·붙여넣기·**Delete에서도** 뺀다 — 안 빼면 화면에 값이
+      //    없는 채로 남의 기록·자리(JJ)가 통째로 지워지고(그날 모든 교시 DELETE) 화면은 그대로라
+      //    무엇을 지웠는지 아무도 모른다(적대적 리뷰 2026-08-18).
+      const targets = unlocked.filter((p) => !isNotMine(cellKey(p.row, p.date)));
+      // 건너뛴 칸을 조용히 빼지 않는다 — 몇 칸이 안 들어갔는지 말해 주지 않으면 채워진 줄 안다.
+      const lockedCount = all.length - unlocked.length;
+      const notMineCount = unlocked.length - targets.length;
+      const skipNote = [
+        lockedCount > 0 ? `${lockedCount}칸은 수정 기간(7일)이 지나` : null,
+        notMineCount > 0 ? `${notMineCount}칸은 선생님 교시가 없어` : null,
+      ].filter(Boolean);
       if (targets.length === 0) {
-        if (lockedCount > 0) setError(`${lockedCount}칸은 수정 기간(7일)이 지나 고칠 수 없습니다`);
+        if (skipNote.length > 0) setError(`${skipNote.join(" · ")} 건너뛰었습니다`);
         return;
       }
       if (targets.length === 1) {
         writeOne(cellKey(targets[0]!.row, targets[0]!.date), val);
-        if (lockedCount > 0) setError(`${lockedCount}칸은 수정 기간(7일)이 지나 건너뛰었습니다`);
+        if (skipNote.length > 0) setError(`${skipNote.join(" · ")} 건너뛰었습니다`);
         return;
       }
       const prevs = targets.map(
@@ -265,11 +288,12 @@ export function GridProvider({
           return;
         }
         scheduleRefresh();
-        const skipped = res.blocked + lockedCount;
-        if (skipped > 0) setError(`${skipped}칸은 수정 기간이 지났거나 담당 반이 아니어서 건너뛰었습니다`);
+        const skipped = res.blocked + lockedCount + notMineCount;
+        if (skipped > 0)
+          setError(`${skipped}칸은 수정 기간이 지났거나 담당 반·선생님 교시가 아니어서 건너뛰었습니다`);
       });
     },
-    [store, isLocked, writeOne, scheduleRefresh, toValue],
+    [store, isLocked, isNotMine, writeOne, scheduleRefresh, toValue],
   );
 
   /** 버퍼 확정 — 범위가 잡혀 있으면 전체에. 확정할 수 없는 입력이면 아무 일도 없다. */

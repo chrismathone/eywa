@@ -23,6 +23,8 @@ import { getPeriodWindow } from "@/features/periods/server/queries";
 import type { PeriodWindow } from "@/features/periods/resolve";
 // 출결의 강사 귀속 축 단일 소스(2026-08-18) — 담임만 보면 교시 담당 강사가 자기 수업을 못 본다.
 import { loadClassAxisRows } from "./teacher-axis-queries";
+// 교시 귀속(누구 몫인가)은 같은 축 모듈이 단일 소스다 — 여기서 규칙을 다시 적지 말 것.
+import { ownsAttendanceSlot } from "@/features/attendance/teacher-axis";
 import type { PeriodMode } from "@/features/attendance/view-prefs";
 import {
   deriveMarksFromReports,
@@ -486,6 +488,18 @@ export type AttendanceMatrix = {
    *    칸의 줄무늬·툴팁·저장(한 칸 입력이 그날 몇 건을 고치는지)이 전부 이 수를 근거로 한다.
    */
   slots: Record<string, Record<string, SlotMark[]>>;
+  /**
+   * studentId → date → **이 표가 세지 않는 교시**(강사 전체 보기에서 남의 교시·자리 JJ·LAB).
+   * `scopeTeacherId`를 안 넘긴 반별 보기에선 항상 비어 있다.
+   *
+   * 🔴 왜 따로 싣나: 칸 값(marks/units)은 **주인의 교시만** 담아야 합계·출석률·격자가 한 숫자를 말한다.
+   *    그렇다고 남의 교시를 통째로 숨기면 그 칸이 빈칸이 되고, 월간 출석부는 입력 격자라 사람이 거기
+   *    다시 찍어 숨은 기록을 덮는다(#103). 그래서 **값에서는 빼고, 표시(빗금·툴팁)로만 남긴다**.
+   * ⚠️ 여기 담기는 사유는 셋이다 — 자리(JJ·랩) · 다른 선생님 교시 · **교시를 안 남긴 옛 기록**(그날
+   *    담당이 둘 이상이면 담당을 가를 수 없어 `resolveTaughtBy`가 모호로 비운다). 툴팁이 사유를
+   *    단정하지 않는 이유다(cell-display `ghostBreakdown`).
+   */
+  ghosts: Record<string, Record<string, SlotMark[]>>;
   // studentId → date → true. **수기 기록이 아니라 수업보고서에서 파생한 칸**(derive-from-reports.ts).
   // 화면이 사실과 다른 말을 하지 않도록 셀 툴팁에 출처를 밝히는 용도 — 수기로 덮으면 이 표시는 사라진다.
   derived: Record<string, Record<string, true>>;
@@ -617,6 +631,20 @@ export async function getMonthlyAttendanceMatrix(
    * ⚠️ 세션이 정의돼 있지 않으면 조용히 달력월로 떨어진다(정상 경로).
    */
   periodMode: PeriodMode = "month",
+  /**
+   * **강사 전체 보기의 주인** — 넘기면 그 강사가 맡은 교시의 출결만 칸 값으로 싣는다(안 넘기면 반 전체).
+   *
+   * 🔴 왜: 영어는 한 반을 교시마다 다른 강사가 나눠 맡는데, 칸 숫자가 그날 **모든 교시의 합**이라
+   *    한 교시만 가르친 강사의 출석부에도 남의 교시가 함께 잡혔다(원장 제보 2026-08-18: 8/10 김근호가
+   *    이다교 선생님 출석부에 **3**으로 보임 — 실제로는 16:20 정유진·17:20 이다교·18:20 JJ라 이다교 몫은 1).
+   * ⚠️ 판정은 귀속 단일 소스 `resolveTaughtBy`가 한다 — 자리(LAB·JJ)는 teacherId가 null이라 **자동으로**
+   *    누구에게도 안 잡히고("JJ 및 랩은 누구의 것도 아님", 원장 2026-08-18), 담당 미지정 교시는 담임에게
+   *    간다(수학은 전 슬롯이 미지정이라 종전과 완전히 같다).
+   * 🔴 **반별 보기(이 값이 null)는 손대지 않는다** — 반의 책은 그 반 전체를 세는 게 맞고, 자리 출결을
+   *    고칠 수 있는 유일한 입력 표면이기도 하다(자리 전용 출석부는 읽기 전용). 원장 지시도 "JJ·랩 전용
+   *    출석부는 지금처럼 남겨놔"였다. 급여 별지(print)도 같은 이유로 안 넘긴다 — 돈 축은 담임 그대로다.
+   */
+  scopeTeacherId: string | null = null,
 ): Promise<AttendanceMatrix> {
   const supabase = await createClient();
 
@@ -671,6 +699,7 @@ export async function getMonthlyAttendanceMatrix(
       notes: {},
       units: {},
       slots: {},
+      ghosts: {},
       derived: {},
       derivedActive: false,
       stats: {
@@ -699,15 +728,37 @@ export async function getMonthlyAttendanceMatrix(
       .eq("class_id", classId)
       .lte("start_date", endIso),
     // 그 달과 유효기간이 겹치는 스케줄만(월 중 요일이 바뀐 반은 합집합 — 표시용 하이라이트라 넉넉히).
+    // ⚠️ 자리(LAB·JJ) 판정에도 이 결과를 쓴다 — 그래서 시각·담당·유효구간까지 함께 받는다(추가 왕복 0, B4).
     supabase
       .from("class_schedules")
-      .select("day_of_week")
+      .select("day_of_week, start_time, teacher_id, slot_teacher_label, valid_from, valid_to")
       .eq("class_id", classId)
       .lte("valid_from", endIso)
       .or(`valid_to.is.null,valid_to.gte.${startIso}`),
   ]);
 
   const classDows = dowsFromKeys((schedules ?? []).map((s) => s.day_of_week as string));
+
+  /**
+   * 교시 귀속 판정에 넘길 모양 — 규칙(자리 제외·담임 폴백·유효구간)은 전부 `resolveTaughtBy` 안에 있다.
+   * ⚠️ 라벨 문자열('JJ'·'랩실'·'이주희'…)을 이 파일에서 비교하지 말 것(별칭이 갈린다).
+   */
+  const axisSlots = (schedules ?? []).map((s) => ({
+    dayOfWeek: s.day_of_week as string,
+    startTime: (s.start_time as string | null) ?? null,
+    teacherId: (s.teacher_id as string | null) ?? null,
+    slotTeacherLabel: (s.slot_teacher_label as string | null) ?? null,
+    validFrom: s.valid_from as string,
+    validTo: (s.valid_to as string | null) ?? null,
+  }));
+  const homeroomTeacherId = classId ? (classes.find((c) => c.id === classId)?.teacherId ?? null) : null;
+
+  /**
+   * 이 교시가 **이 표의 주인 몫인가** — 규칙·근거는 축 단일 소스 `ownsAttendanceSlot` 주석.
+   * (반별 보기는 scope가 없어 항상 true = 종전과 완전히 동일한 숫자.)
+   */
+  const ownsSlot = (date: string, slotStart: string | null): boolean =>
+    ownsAttendanceSlot({ scopeTeacherId, homeroomTeacherId, slots: axisSlots, date, slotStart });
 
   const studentMap = new Map<string, MatrixStudent>();
   // 파생 판정용 수강 구간 — 한 학생이 같은 반에 재등록해 여러 행일 수 있어 **전 구간**을 모은다
@@ -764,6 +815,7 @@ export async function getMonthlyAttendanceMatrix(
   const notes: Record<string, Record<string, string>> = {};
   const units: Record<string, Record<string, number>> = {};
   const slots: Record<string, Record<string, SlotMark[]>> = {};
+  const ghosts: Record<string, Record<string, SlotMark[]>> = {};
   const derived: Record<string, Record<string, true>> = {};
 
   if (studentIds.length > 0) {
@@ -798,7 +850,15 @@ export async function getMonthlyAttendanceMatrix(
     const seen = new Set<string>();
     const byCell = new Map<
       string,
-      { studentId: string; date: string; note: string | null; slots: SlotMark[] }
+      {
+        studentId: string;
+        date: string;
+        note: string | null;
+        /** 남의 교시에 달린 메모 — 내 교시 메모가 하나도 없을 때만 쓴다(아래 주석). */
+        otherNote: string | null;
+        slots: SlotMark[];
+        others: SlotMark[];
+      }
     >();
     for (const r of records) {
       const slot = (r.slot_start as string | null) ?? null;
@@ -808,29 +868,53 @@ export async function getMonthlyAttendanceMatrix(
       const cellKey = `${r.student_id}::${r.session_date}`;
       const cell =
         byCell.get(cellKey) ??
-        { studentId: r.student_id, date: r.session_date, note: null, slots: [] as SlotMark[] };
+        {
+          studentId: r.student_id,
+          date: r.session_date,
+          note: null,
+          otherNote: null,
+          slots: [] as SlotMark[],
+          others: [] as SlotMark[],
+        };
       // 시수(배수) — null=기본 1. numeric은 문자열로 올 수 있어 Number 변환.
       const raw = r.session_units === null || r.session_units === undefined ? null : Number(r.session_units);
-      cell.slots.push({
+      // 주인 몫이면 칸 값(marks/units/slots)으로, 아니면 표시 전용(ghosts)으로 — 값과 표시를 갈라야
+      // 합계·출석률·격자가 한 숫자를 말한다(AttendanceMatrix.ghosts 주석).
+      const mine = ownsSlot(r.session_date, slot);
+      (mine ? cell.slots : cell.others).push({
         slot,
         status: r.status as AttendanceStatus,
         units: raw !== null && Number.isFinite(raw) ? raw : null,
       });
       // 메모는 **가장 최근에 찍힌 것** 하나(순회가 recorded_at 내림차순이라 처음 만난 것).
       // ⚠️ 교시마다 메모가 다를 수 있지만 칸이 하나라 다 못 적는다 — 교시별 메모는 영어 수업 시트에서 본다.
-      if (cell.note === null && r.note) cell.note = r.note as string;
+      // ⚠️ **내 교시 메모가 우선**이다(강사 전체 보기) — 칸의 값은 내 교시인데 메모만 남의 교시 것이면
+      //    그 칸이 서로 다른 두 사실을 한 번에 말한다. 내 교시에 메모가 없을 때만 남의 것을 보여 준다.
+      if (r.note) {
+        if (mine) { if (cell.note === null) cell.note = r.note as string; }
+        else if (cell.otherNote === null) cell.otherNote = r.note as string;
+      }
       byCell.set(cellKey, cell);
     }
 
     // 하루치를 한 칸으로 접는다 — 숫자는 시수 **합**, 색은 대표 상태(cell-display.rollupDay 단일 소스).
     for (const cell of byCell.values()) {
+      // 주인 몫이 아닌 교시는 값이 아니라 **표시**로만 남는다(빗금+툴팁) — 빈칸으로 두면 사람이 그 위에
+      // 다시 찍어 남의 기록을 덮는다(#103). 반별 보기에선 others가 항상 비어 있다.
+      if (cell.others.length > 0) {
+        ghosts[cell.studentId] ??= {};
+        ghosts[cell.studentId]![cell.date] = cell.others;
+      }
       const day = rollupDay(cell.slots);
+      // 🔴 주인 몫이 하나도 없는 칸은 **값을 만들지 않는다** — 여기서 0을 실으면 격자·합계·복사
+      //    어느 쪽도 0을 제대로 못 읽는다(units 레코드는 0을 안 담는 규약이라 합계가 1로 되살아난다).
       if (!day) continue;
       marks[cell.studentId] ??= {};
       marks[cell.studentId]![cell.date] = day.status as AttendanceStatus;
-      if (cell.note) {
+      const note = cell.note ?? cell.otherNote;
+      if (note) {
         notes[cell.studentId] ??= {};
-        notes[cell.studentId]![cell.date] = cell.note;
+        notes[cell.studentId]![cell.date] = note;
       }
       // 기본(1)이면 키 없음 — 종전 규약 그대로. 교시가 여럿이면 합이 들어간다(2교시 출석 = 2).
       // ⚠️ 0(전부 결석)도 키를 만들지 않는다 — 결석 칸의 시수는 원래 없는 값이고, 0을 실으면
@@ -982,6 +1066,7 @@ export async function getMonthlyAttendanceMatrix(
     notes,
     units,
     slots,
+    ghosts,
     derived,
     derivedActive,
     stats: {

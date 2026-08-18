@@ -34,6 +34,7 @@ function matrix(students: AttendanceMatrix["students"]): AttendanceMatrix {
     notes: {},
     units: {},
     slots: {},
+    ghosts: {},
     derived: {},
     derivedActive: false,
     stats: {
@@ -221,5 +222,77 @@ describe("교시 롤업 칸", () => {
     expect(cell.textContent).toContain("1");
     expect(cell.style.background).toBe("");
     expect(cell.getAttribute("title") ?? "").not.toContain("교시");
+  });
+});
+
+/**
+ * 강사 전체 보기 = **그 강사 교시만** 센다(queries `scopeTeacherId`).
+ * 🔴 원장 제보 2026-08-10: 8/10 김근호가 이다교 선생님 출석부에 **3**(16:20 정유진·17:20 이다교·18:20 JJ).
+ *    이다교 몫은 1이다. 여기서 잠그는 건 "칸 숫자 = 행 시수 = 세지 않는 교시 제외"가 **한 숫자**라는 것.
+ */
+describe("세지 않는 교시(자리·남의 교시)", () => {
+  const D1 = "2026-07-01";
+  function renderScoped(owned: SlotMark[], others: SlotMark[]) {
+    const m = matrix([
+      { id: S1, name: "김근호", grade: "중1", school: "경명여중", enrolledAt: null, attendDows: [3], spans: [], badges: [] },
+    ]);
+    const day = owned.length > 0 ? rollupDay(owned) : null;
+    if (day) {
+      m.marks = { [S1]: { [D1]: day.status as never } };
+      if (day.units !== 1 && day.units > 0) m.units = { [S1]: { [D1]: day.units } };
+      if (day.count > 1) m.slots = { [S1]: { [D1]: day.slots } };
+    }
+    m.ghosts = { [S1]: { [D1]: others } };
+    return render(
+      <MatrixTable
+        groups={[{ ...GROUP, matrix: m }]}
+        days={DAYS}
+        holidays={{}}
+        showGroups
+        ordered={[{ classId: C, studentId: S1 }]}
+      />,
+    );
+  }
+  const cellOf = (c: HTMLElement) => c.querySelector<HTMLElement>(`[data-cell-key$="${D1}"]`)!;
+  const unitsOf = (c: HTMLElement) => [...c.querySelectorAll("tbody tr td")].slice(-2)[0]!.textContent;
+
+  it("🔴 내 교시 1 + 남의 교시 2 = 칸도 행 시수도 **1**(3이 아니다)", () => {
+    const { container } = renderScoped(
+      [{ slot: "17:20:00", status: "present", units: null }],
+      [
+        { slot: "16:20:00", status: "present", units: null },
+        { slot: "18:20:00", status: "present", units: null },
+      ],
+    );
+    expect(cellOf(container).textContent).toContain("1");
+    expect(unitsOf(container)).toContain("1");
+    expect(cellOf(container).getAttribute("title")).toContain("이 선생님 몫으로 세지 않는 교시");
+  });
+
+  it("🔴 자리(JJ)만 있는 날은 시수에 안 든다 — 예전엔 '값 없음'이 합계에서 1로 되살아났다", () => {
+    const { container } = renderScoped([], [{ slot: "18:20:00", status: "present", units: null }]);
+    expect(unitsOf(container)).toBe("—"); // 기록이 아예 없는 행과 같은 표기(0이 아니라 '없음')
+  });
+
+  it("🔴 그래도 빈칸이 아니다 — 빗금 + 툴팁으로 '기록은 있다'를 남긴다(#103)", () => {
+    const { container } = renderScoped([], [{ slot: "18:20:00", status: "present", units: null }]);
+    const cell = cellOf(container);
+    expect(cell.style.backgroundImage).toContain("repeating-linear-gradient");
+    expect(cell.getAttribute("title")).toContain("18:20 출석 1");
+    // 출석색으로 칠하지 않는다 — 내 출석이 아니다(범례의 0=결석과도 헷갈리지 않게 숫자를 안 쓴다).
+    expect(cell.className).not.toContain("bg-att-present");
+    expect(cell.textContent).not.toContain("0");
+  });
+
+  it("🔴 빗금 칸은 **입력을 안 받는다** — 저장은 그날 모든 교시에 가는데 화면엔 흔적이 안 남는다", () => {
+    const { container } = renderScoped([], [{ slot: "18:20:00", status: "present", units: null }]);
+    const cell = cellOf(container);
+    expect(cell.className).toContain("cursor-not-allowed");
+    expect(cell.getAttribute("title")).toContain("반별 보기에서 고치세요");
+  });
+
+  it("세지 않는 교시가 없으면 종전 그대로(빗금 없음)", () => {
+    const { container } = renderScoped([{ slot: "17:20:00", status: "present", units: null }], []);
+    expect(cellOf(container).style.backgroundImage).toBe("");
   });
 });

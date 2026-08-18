@@ -41,6 +41,7 @@ function matrix(over: Partial<AttendanceMatrix> = {}): AttendanceMatrix {
     notes: {},
     units: { s1: { "2026-08-08": 1.5 } },
     slots: {},
+    ghosts: {},
     derived: {},
     derivedActive: false,
     stats: { totalStudents: 2, presentRate: 0, presentCount: 0, absentCount: 0, lateCount: 0, makeupCount: 0, totalRecords: 0 },

@@ -77,6 +77,16 @@ export function buildGridSource(
   const initial: Record<string, { s: string; u: number | null }> = {};
   // 하루에 교시가 둘 이상인 칸만(0196a) — 한 칸에 친 숫자가 그날 **몇 건**을 고치는지.
   const slotCounts: Record<string, number> = {};
+  /**
+   * **이 표에 값이 없고 남의 교시만 있는 칸**(강사 전체 보기의 빗금 칸) — 여기선 입력을 받지 않는다.
+   *
+   * 🔴 받으면 두 가지가 동시에 터진다: ① 저장은 그날 **모든 교시**에 가서 남의 기록·자리(JJ)를 조용히
+   *    덮거나 지우는데(save-targets ①) 화면은 그대로라 **무증상**이고, ② 낙관값은 서버 값과 같아질 때만
+   *    벗겨지는데(grid/store.ts) 서버는 이 칸을 영원히 비워 두므로 **친 숫자가 새로고침 전까지 시수·
+   *    출석률에 남는다**(적대적 리뷰 2026-08-18). 잠그는 대신 사유를 말하고 반별 보기로 보낸다 —
+   *    같은 칸이 반별 보기에선 그대로 입력 가능하다(#103: 되돌릴 문을 아예 막지는 않는다).
+   */
+  const notMine: Record<string, true> = {};
   for (const g of groups) {
     for (const s of g.matrix.students) {
       const marks = g.matrix.marks[s.id] ?? {};
@@ -88,9 +98,12 @@ export function buildGridSource(
         const n = slots[date]?.length ?? 1;
         if (n > 1) slotCounts[key] = n;
       }
+      for (const [date, others] of Object.entries(g.matrix.ghosts[s.id] ?? {})) {
+        if (!marks[date] && others.length > 0) notMine[cellKey(rowKey(g.classId, s.id), date)] = true;
+      }
     }
   }
-  return { rows, cols, initial, slotCounts };
+  return { rows, cols, initial, slotCounts, notMine };
 }
 
 /**
