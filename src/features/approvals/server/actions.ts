@@ -8,6 +8,7 @@ import { kstToday } from "@/lib/date-kst";
 import { logAction } from "@/features/audit/server/log";
 import { notifyUsers } from "@/features/notifications/server/notify";
 import { leavePeriodLabel, resolveLeavePeriod } from "@/features/leave/accrual";
+import { applyLeaveGrantOverride } from "@/features/leave/test-grants";
 import {
   countLeaveDays,
   formatLeaveDays,
@@ -338,7 +339,8 @@ export async function submitLeaveDraft(
   const hireDate = (me?.hire_date as string | null) ?? null;
 
   const today = kstToday();
-  const period = resolveLeavePeriod(hireDate, start || today, today);
+  // 화면(getMyLeaveBalance)과 같은 오버라이드를 지나야 잔여 판정·동결값(granted_days)이 일치한다.
+  const period = applyLeaveGrantOverride(user.id, resolveLeavePeriod(hireDate, start || today, today));
   if (!period) {
     return {
       error: "입사일이 등록되지 않아 연차를 계산할 수 없습니다 — 사무실(직원관리)에 등록을 요청하세요",

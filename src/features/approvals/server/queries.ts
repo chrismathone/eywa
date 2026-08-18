@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { fetchInChunks } from "@/lib/supabase/batch";
 import { kstToday } from "@/lib/date-kst";
 import { resolveLeavePeriod, type LeavePeriod } from "@/features/leave/accrual";
+import { applyLeaveGrantOverride } from "@/features/leave/test-grants";
 import type { LeaveKind } from "@/features/leave/request-days";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { compareByJobRank } from "../job-rank";
@@ -485,7 +486,8 @@ export async function getMyLeaveBalance(userId: string): Promise<LeaveBalance> {
   const today = kstToday();
   const { data: me } = await supabase.from("users").select("hire_date").eq("id", userId).maybeSingle();
   const hireDate = (me?.hire_date as string | null) ?? null;
-  const period = resolveLeavePeriod(hireDate, today);
+  // 테스트 계정 부여 오버라이드(파일럿 전용 — test-grants.ts) 적용 후의 부여가 이 화면의 진실이다.
+  const period = applyLeaveGrantOverride(userId, resolveLeavePeriod(hireDate, today));
   const zero = { hireDate, period, used: 0, pending: 0, remaining: period?.granted ?? 0 };
   if (!period) return zero;
 
