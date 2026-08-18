@@ -98,6 +98,9 @@ export const AUDIT_ACTIONS = {
   enrollment_days_update: "등원 요일 수정",
   enrollment_dates_update: "수강 기간 수정",
   student_merge: "학생 병합",
+  // 보강 빼기(2026-08-18) — 출결 보강 칸 + 저장된 보강 보고서를 지우는 경로. 기록을 없애는 동작이라
+  // 누가 지웠는지가 특히 중요하다(원장 "다 삭제" 지시로 보고서 삭제까지 열렸다).
+  makeup_remove: "보강 빼기(출결·보고서 삭제)",
 } as const;
 export type AuditActionKey = keyof typeof AUDIT_ACTIONS;
 

@@ -85,6 +85,8 @@ export type GridRowActions = {
   onAttach: (student: OneScreenStudent, subjectName: string, files: File[]) => void;
   onRemoveAttachment: (student: OneScreenStudent, subjectName: string, path: string) => void;
   onOpenAttachments: (student: OneScreenStudent, subjectName: string) => void; // 팝오버 열 때 썸네일 서명
+  /** 보강 빼기 — 없으면 배지가 그냥 표시로 남는다(권한 없는 화면·읽기 전용). */
+  onRemoveMakeup?: (student: OneScreenStudent, subjectName: string) => void;
 };
 
 /** 표 표시 설정(학원 설정 유래). */
@@ -325,10 +327,24 @@ export function GridBodyRow({
         <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
           <span className={`size-1.5 shrink-0 rounded-full ${toneSolidClass(tone)}`} aria-hidden />
           <span className="text-foreground shrink-0 font-bold whitespace-nowrap">{student.name}</span>
+          {/* 보강 배지 = **빼는 문**(원장 2026-08-18 *"다 삭제"*). 추가만 있고 빼는 길이 없어 잘못 추가한
+              보강이 화면에 눌러앉았다(영어 ECS는 같은 칸을 이미 버튼으로 열어 뒀다). 확인 후에만 지운다. */}
           {student.isMakeup ? (
-            <span className="bg-amber-soft text-amber shrink-0 rounded-pill px-1 py-px text-[9px] font-bold">
-              보강
-            </span>
+            actions.onRemoveMakeup ? (
+              <button
+                type="button"
+                onClick={() => actions.onRemoveMakeup?.(student, subject.name)}
+                title="클릭하면 이 보강을 뺍니다(출결 기록과 저장된 보강 보고서가 삭제됩니다)"
+                aria-label={`${student.name} 보강 빼기`}
+                className="bg-amber-soft text-amber hover:bg-amber hover:text-white shrink-0 cursor-pointer rounded-pill px-1 py-px text-[9px] font-bold transition"
+              >
+                보강 ✕
+              </button>
+            ) : (
+              <span className="bg-amber-soft text-amber shrink-0 rounded-pill px-1 py-px text-[9px] font-bold">
+                보강
+              </span>
+            )
           ) : null}
           {/* G3: 학부모 미확인 — 최근 추적 가능 보고서 3건+ 전부 나흘 넘게 미읽음(판정=roster-signals 순수함수).
               카피는 "미확인"(읽음 신호 커버리지 75%라 "안 읽음" 단정 금지). 모든 행에 표시(반 필터에 숨지 않게). */}

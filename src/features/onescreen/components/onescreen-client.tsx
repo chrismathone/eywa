@@ -27,6 +27,7 @@ import {
   setMyNoticeMode,
   setMyOnescreenFontSize,
 } from "../server/actions";
+import { removeMakeupEntry } from "../server/makeup-remove-actions";
 import { MakeupAdder } from "./makeup-adder";
 import { SendWindowNotice } from "./send-window-notice";
 import {
@@ -783,6 +784,53 @@ export function OneScreenClient({
       anchorId,
       existing.subjects.some((su) => su.classId === anchorId && !su.makeup),
     );
+  }
+  /**
+   * 보강 빼기 — '+ 보강 학생 추가'의 반대(원장 2026-08-18 *"다 삭제"*). 출결 보강 칸과 저장된 보강
+   * 보고서를 함께 지운다(서버 [`removeMakeupEntry`]). 되살아나는 원천이 둘이라 한쪽만 지우면
+   * 새로고침에 그대로 돌아온다.
+   * ⚠️ 학부모에게 나간 보고서는 **회수 요청만** 걸린다(게시글을 지울 열쇠가 그 행에 있다) — 그때는
+   *    화면에서도 행을 지우지 않는다(`keepRow`). 안 그러면 "지웠는데 새로고침하면 있다"가 된다.
+   */
+  async function removeMakeupRow(student: OneScreenStudent, subjectName: string) {
+    const su = student.subjects.find((x) => x.name === subjectName);
+    if (!su) return;
+    // 경고는 **무엇이 사라지는지 그대로** 적는다(원장 2026-08-18 *"경고하고 확인하면 삭제"*).
+    // 이미 학부모에게 나갔으면 게시글까지 지워지므로 그 사실을 먼저 말한다 — 되돌릴 수 없는 동작이다.
+    const rep = reports[student.id]?.[subjectName];
+    const alreadySent = rep?.classnoteStatus === "success" || rep?.classnoteStatus === "recall_failed";
+    const lines = [
+      `${student.name} 보강을 뺄까요?`,
+      "",
+      alreadySent
+        ? "⚠️ 이 보강은 이미 학부모에게 발송됐습니다. 빼면 학부모 게시글도 삭제(회수)됩니다."
+        : "출결 기록과 저장된 보강 수업보고서가 삭제됩니다.",
+      "보강을 추가하기 전 상태로 돌아가며, 되돌릴 수 없습니다.",
+    ];
+    if (!window.confirm(lines.join("\n"))) return;
+    const res = await removeMakeupEntry({
+      studentId: student.id,
+      date: activeDate,
+      classId: su.makeupClassId ?? null,
+      subject: su.subjectKey ?? null,
+    });
+    if (!res.ok) {
+      toast.error(res.error);
+      return;
+    }
+    // 확인했으면 **화면에서도 없앤다**(원장 *"아무것도 추가 안한것처럼 이전으로"*). 회수 대기 행은 DB에
+    // 남지만 로스터가 회수 계열을 되살리지 않으므로 새로고침해도 돌아오지 않는다.
+    // 그 행만 뺀다. 남은 행이 없으면 카드째 목록에서 제거(보강만 있던 학생).
+    setStudents((prev) =>
+      prev
+        .map((s) =>
+          s.id === student.id
+            ? { ...s, subjects: s.subjects.filter((x) => x.name !== subjectName) }
+            : s,
+        )
+        .filter((s) => !(s.id === student.id && s.subjects.length === 0)),
+    );
+    toast.success(res.message);
   }
   /**
    * 다이얼로그 응답 처리 — 고른 대로만 한다. 취소는 아무것도 하지 않는다(보강 행도 안 생긴다).
@@ -2668,6 +2716,7 @@ export function OneScreenClient({
             onRemoveAttachment: (student, subjectName, path) =>
               void removeAttachmentFor(student, subjectName, path),
             onOpenAttachments: (student, subjectName) => void ensureAttachmentUrls(student, subjectName),
+            onRemoveMakeup: (student, subjectName) => void removeMakeupRow(student, subjectName),
           }}
           bulkActions={{
             onSaveAll: saveAllVisible,
@@ -2776,6 +2825,7 @@ export function OneScreenClient({
                 onTextbook={setTextbook}
                 onHomeworkToday={setHomeworkToday}
                 onMakeup={toggleMakeup}
+                onRemoveMakeup={(subjectName) => void removeMakeupRow(selected, subjectName)}
                 onSubjectDraft={setSubjectDraft}
                 onSubjectTrend={setSubjectTrend}
                 onNote={setNote}

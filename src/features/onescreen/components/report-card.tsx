@@ -117,6 +117,7 @@ export function ReportCard({
   onTextbook,
   onHomeworkToday,
   onMakeup,
+  onRemoveMakeup,
   onSubjectDraft,
   onSubjectTrend,
   onNote,
@@ -145,6 +146,8 @@ export function ReportCard({
   onTextbook: (subjectName: string, text: string) => void; // 교재명(과목별) — 0089a
   onHomeworkToday: (subjectName: string, text: string) => void; // 오늘 과제(숙제 내용, 과목별) — 0096a
   onMakeup: (subjectName: string) => void; // 보강 토글(과목별) — 0089a
+  /** 보강 빼기(2026-08-18) — 출결·저장된 보강 보고서를 지운다. 없으면 배지가 표시로만 남는다. */
+  onRemoveMakeup?: (subjectName: string) => void;
   onSubjectDraft: (subjectName: string, text: string) => void;
   onSubjectTrend: (subjectName: string, text: string) => void; // 학습 추세 초안 편집(4a)
   onNote: (text: string) => void; // 특이사항(강사 메모) 편집 — AI 멘트 입력(4c). 학생별.
@@ -260,6 +263,22 @@ export function ReportCard({
             </p>
             <div className="flex flex-wrap items-center gap-1.5">
               <p className="text-foreground text-[15px] font-bold">{student.name} · 학부모 보고</p>
+              {/* 보강 빼기 — 표 모드와 같은 문(원장 2026-08-18 *"다 삭제"*). 확인 후 출결·보고서를 지운다. */}
+              {student.isMakeup && onRemoveMakeup ? (
+                <button
+                  type="button"
+                  onClick={() => onRemoveMakeup(subject.name)}
+                  title="클릭하면 이 보강을 뺍니다(출결 기록과 저장된 보강 보고서가 삭제됩니다)"
+                  aria-label={`${student.name} 보강 빼기`}
+                  className="bg-amber-soft text-amber hover:bg-amber cursor-pointer rounded-pill px-1.5 py-px text-[10px] font-bold transition hover:text-white"
+                >
+                  보강 ✕
+                </button>
+              ) : student.isMakeup ? (
+                <span className="bg-amber-soft text-amber rounded-pill px-1.5 py-px text-[10px] font-bold">
+                  보강
+                </span>
+              ) : null}
               {/* 로스터 신호(G2·G3) — 표뷰와 동일 판정(roster-signals.ts). 카드는 학생 단위라 진도 배지는
                   수학 과목 보유 시(진도 파이프라인=math 전용). 카피 "미확인"(단정 금지). */}
               {unreadBadge ? (

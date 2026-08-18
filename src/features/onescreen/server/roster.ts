@@ -25,6 +25,7 @@ import { applyStudentOrder } from "../student-order";
 import { rosterIncludesEnrollment } from "../roster-filter";
 import { matchReportsToRows } from "../report-unit";
 import { ownsMakeupReport } from "../makeup-owner";
+import { isRecallCleared } from "../makeup-remove-plan";
 import { makeupStudentIds } from "@/features/attendance/input-roster";
 import { LEGACY_REPORT_SUBJECT, reportSubject } from "@/features/timetable/lib/report-subject";
 import { carryProgress } from "../progress-status";
@@ -187,6 +188,8 @@ type MakeupReportRow = {
   student_id: string;
   subject: string | null;
   makeup_class_id: string | null;
+  /** 발송 상태 — 회수(요청·완료)된 보강은 화면에 되살리지 않는다(2026-08-18 '보강 빼기'). */
+  classnote_status: string | null;
   created_by: string | null; // 작성 계정(0172a) — 소유 판정의 1차 키
   teacher_name: string | null; // 0172a 이전 행의 폴백 키(표시 이름 문자열)
 };
@@ -213,7 +216,7 @@ async function fetchMyMakeupReports(
 ): Promise<MakeupReportRow[]> {
   const { data, error } = await supabase
     .from("lesson_reports")
-    .select("student_id, subject, makeup_class_id, created_by, teacher_name")
+    .select("student_id, subject, makeup_class_id, created_by, teacher_name, classnote_status")
     .eq("report_date", date)
     .eq("makeup", true)
     .is("class_id", null); // 순수 보강만 — 합쳐진 정규 보고서(반 있음)를 집으면 유령 보강 행이 생긴다(위 🔴)
@@ -221,9 +224,17 @@ async function fetchMyMakeupReports(
   // 소유 판정은 순수 함수 [`ownsMakeupReport`](../makeup-owner.ts) 하나로 — 계정 id 우선, 옛 행만 이름 폴백.
   // 하루치 보강은 학원 전체로도 수십 건(실측 9개월 171건)이라 서버에서 걸러도 비용이 없다 —
   // PostgREST `.or()`에 이름 문자열을 끼워 넣는 것보다 이 편이 안전하다(따옴표·특수문자 이스케이프 위험 0).
-  return ((data ?? []) as MakeupReportRow[]).filter((r) =>
-    ownsMakeupReport({ createdBy: r.created_by, teacherName: r.teacher_name }, userId, teacherName),
-  );
+  // 🔴 회수 계열은 **빼고 되살린다**(2026-08-18 '보강 빼기'). 학부모 게시글이 나간 보강을 빼면 행 자체는
+  //    못 지운다 — 게시글을 찾을 열쇠(share_token)가 그 행에 있어 워커가 지울 때까지 남아야 한다. 그대로
+  //    두면 여기서 다시 살아나 "뺐는데 새로고침하면 있다"가 된다. 다시 필요하면 '+ 보강 학생 추가'로
+  //    같은 행을 갱신하면 되고 발송도 정상 경로로 다시 열린다.
+  // ⚠️ **SQL `not.in`으로 거르지 말 것** — `classnote_status`가 NULL인 행(저장만 하고 미발송, 실측 29건)이
+  //    NOT IN의 UNKNOWN 판정에 걸려 통째로 사라진다. 판정은 JS에서(값이 있을 때만 비교).
+  return ((data ?? []) as MakeupReportRow[])
+    .filter((r) => !isRecallCleared(r.classnote_status))
+    .filter((r) =>
+      ownsMakeupReport({ createdBy: r.created_by, teacherName: r.teacher_name }, userId, teacherName),
+    );
 }
 
 function emptyRoster(today: string, date: string, teacherName: string, config: RosterConfig = {}): TeacherRoster {
