@@ -18,7 +18,9 @@ export function useSeatDaySaves(
   setAttendance: Dispatch<SetStateAction<Record<string, SeatAtt | null>>>,
   marks: Record<string, SheetMark>,
   setMarks: Dispatch<SetStateAction<Record<string, SheetMark>>>,
-): (classId: string) => Pick<SheetHandlers, "setAttendance" | "clearAttendance" | "saveMark"> {
+): (
+  classId: string,
+) => Pick<SheetHandlers, "setAttendance" | "clearAttendance" | "setAttendanceNote" | "saveMark"> {
   const attRef = useRef(attendance);
   const marksRef = useRef(marks);
   useEffect(() => {
@@ -106,6 +108,29 @@ export function useSeatDaySaves(
           slot: before.slot,
         }).then((r) => {
           if (!r.ok) {
+            setAttendance((prev) => ({ ...prev, [key]: before }));
+            toast.error(r.error);
+          }
+        });
+      },
+      // 사유만(noteOnly) — 상태·시수를 안 건드리므로 7일 창을 서버가 면제한다(sheet-client와 같은 계약).
+      setAttendanceNote: (studentId, date, slotStart, note) => {
+        const key = seatAttKey(classId, studentId, slotStart);
+        const before = attRef.current[key];
+        if (!before) return; // 기록이 없으면 붙일 자리가 없다(서버도 거절한다)
+        setAttendance((prev) => ({ ...prev, [key]: { ...before, note } }));
+        void setAttendanceCell({
+          classId,
+          studentId,
+          sessionDate: date,
+          slotStart: before.slot,
+          // 🔴 null이지만 **지우지 않는다** — `noteOnly` 분기가 삭제 분기보다 먼저 오고, 그 안에서는
+          //    status를 읽지도 쓰지도 않는다. "상태는 손대지 않는다"를 그대로 적은 값이다.
+          status: null,
+          note,
+          noteOnly: true,
+        }).then((r) => {
+          if ("error" in r) {
             setAttendance((prev) => ({ ...prev, [key]: before }));
             toast.error(r.error);
           }

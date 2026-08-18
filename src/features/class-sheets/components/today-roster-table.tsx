@@ -23,7 +23,12 @@ import type { GridDay } from "../lib/grid";
 import type { RosterEntry } from "../lib/grid";
 import { groupRosterRows, type RosterGroupKey } from "../lib/roster-order";
 import { GroupToggle, GROUP_HINT } from "./roster-table";
-import { RosterNameCell, RosterSlotCells } from "./roster-slot-cells";
+import {
+  RosterNameCell,
+  RosterSlotCells,
+  WithdrawnSummaryRow,
+  withdrawnSlotRecord,
+} from "./roster-slot-cells";
 import type { SheetHandlers } from "./sheet-client";
 
 // 가로 치수는 **위 카드 레일과 공유**한다(today-columns) — 한쪽만 고치면 줄이 조용히 어긋난다.
@@ -75,7 +80,14 @@ export const TodayRosterTable = memo(function TodayRosterTable({
     }
     const out: (
       | { kind: "label"; key: RosterGroupKey; count: number }
-      | { kind: "row"; entry: RosterEntry; perSlot: Record<string, RosterEntry>; navRow: number }
+      | {
+          kind: "row";
+          entry: RosterEntry;
+          perSlot: Record<string, RosterEntry>;
+          navRow: number;
+          /** 섹션 — 퇴원 행은 입력칸 대신 한 줄 요약이다(원장 2026-08-18). */
+          group: RosterGroupKey;
+        }
     )[] = [];
     const sizes = {} as Record<RosterGroupKey, number>;
     let navRow = 0;
@@ -85,7 +97,13 @@ export const TodayRosterTable = memo(function TodayRosterTable({
       if (group.label) out.push({ kind: "label", key: group.key, count: group.rows.length });
       if (collapsed) continue; // 접힌 섹션 행은 아예 안 만든다(키보드 이동이 숨은 칸으로 새지 않게)
       for (const entry of group.rows) {
-        out.push({ kind: "row", entry, perSlot: perSlot.get(entry.studentId) ?? {}, navRow: navRow++ });
+        out.push({
+          kind: "row",
+          entry,
+          perSlot: perSlot.get(entry.studentId) ?? {},
+          navRow: navRow++,
+          group: group.key,
+        });
       }
     }
     return { rows: out, counts: sizes };
@@ -170,6 +188,27 @@ export const TodayRosterTable = memo(function TodayRosterTable({
               );
             }
             const meta = data.students[row.entry.studentId];
+            // 퇴원 섹션 = **한 줄 요약**(주간 시트와 같은 문장 — 두 화면이 갈리지 않게 같은 컴포넌트).
+            // 교시가 여럿이라 남은 기록도 교시별로 모아 넘긴다(값이 있는 교시만 문장에 남는다).
+            if (row.group === "withdrawn") {
+              return (
+                <tr key={row.entry.studentId} className="bg-bg-soft/40">
+                  <WithdrawnSummaryRow
+                    entry={row.entry}
+                    meta={meta}
+                    colSpan={colSpanAll}
+                    records={slots.map((slot) =>
+                      withdrawnSlotRecord({
+                        slotStart: slot.slotStart,
+                        form: formOf(slot),
+                        mark: marks[`${row.entry.studentId}|${date}|${slot.slotStart}`] ?? null,
+                        att: attendance[`${row.entry.studentId}|${date}|${slot.slotStart}`] ?? null,
+                      }),
+                    )}
+                  />
+                </tr>
+              );
+            }
             return (
               <tr key={row.entry.studentId} className={row.entry.historical ? "bg-bg-soft/40" : ""}>
                 <RosterNameCell entry={row.entry} meta={meta} />
@@ -183,6 +222,7 @@ export const TodayRosterTable = memo(function TodayRosterTable({
                     mark={marks[`${row.entry.studentId}|${date}|${slot.slotStart}`] ?? null}
                     att={attendance[`${row.entry.studentId}|${date}|${slot.slotStart}`] ?? null}
                     canMarkDate={canMarkDate}
+                    canNoteDate={data.canNoteAttendance}
                     canEdit={canEdit}
                     handlers={handlers}
                     navRow={row.navRow}

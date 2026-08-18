@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
 import {
+  bulkScopeLabel,
+  countDayBulkStudents,
+  countDayOpenSlots,
   countPlanCellOverwrites,
   countStatusOverwrites,
   planBulkAttendance,
@@ -215,5 +218,52 @@ describe("하루 단위 일괄", () => {
     // 빈 칸만이면 이미 쓴 줄(L2)은 빠진다.
     expect(planDayBulkPlanCells(withLines, "regular", "textbook", { canEdit: true, onlyEmpty: true })).toEqual(["L1"]);
     expect(countDayPlanCellOverwrites(withLines, "regular", "textbook", true)).toBe(1);
+  });
+});
+
+// ── 라벨 '범위' 표기(원장 2026-08-18) ─────────────────────────────────────────
+// *"학생수는 6인데 일괄출석은 12"* → *"수업 개수가 곱해져서 12구나. … 학생수x수업수 로 표기, 합산하지 말고"*.
+// 🔴 저장 대상 산출(위 planDayBulk*·countDayTargets)은 **그대로**다 — 바뀐 건 라벨뿐이라는 걸 여기서 잠근다.
+describe("일괄 라벨 범위 — 학생수 × 교시수", () => {
+  const twoSlots = [
+    { slotStart: "16:20", roster, lines: [], scheduled: true },
+    { slotStart: "17:20", roster, lines: [], scheduled: true },
+    { slotStart: "18:20", roster, lines: [], scheduled: false }, // 시간표에 없는 칸 = 대상 아님
+  ] as unknown as Parameters<typeof countDayBulkStudents>[0];
+
+  it("학생은 교시 간 **중복 없이** 센다(같은 학생이 두 교시여도 1명)", () => {
+    // roster 4명 중 편집 가능한 건 a·b뿐(c=기록 전용, d=수강 대상 아님).
+    expect(countDayBulkStudents(twoSlots, { canEdit: true })).toBe(2);
+  });
+
+  it("교시는 **예정된(scheduled) 것만** 센다", () => {
+    expect(countDayOpenSlots(twoSlots)).toBe(2);
+  });
+
+  it("편집 권한이 없으면 학생 0명(버튼도 안 그려진다)", () => {
+    expect(countDayBulkStudents(twoSlots, { canEdit: false })).toBe(0);
+  });
+
+  it("🔴 라벨은 '6×3'이지 '18'이 아니다 — 곱한 값을 적지 않는다", () => {
+    expect(bulkScopeLabel(6, 3)).toBe("6×3");
+    expect(bulkScopeLabel(6, 1)).toBe("6×1"); // 교시가 하나여도 셈법을 섞지 않는다
+  });
+
+  it("범위가 비면 빈 문자열 — '0×3'은 읽을 값이 아니다", () => {
+    expect(bulkScopeLabel(0, 3)).toBe("");
+    expect(bulkScopeLabel(6, 0)).toBe("");
+  });
+
+  it("범위(학생×교시)와 실제 기록될 칸 수는 다를 수 있다 — 그래서 라벨과 토스트가 갈린다", () => {
+    // a는 16:20에 이미 찍혔다 → 빈 칸은 3개(16:20 b · 17:20 a·b)인데 범위는 여전히 2×2.
+    const attendance = { [`a|${DATE}|16:20`]: { status: "present" } };
+    const targets = planDayBulkAttendance(twoSlots, attendance, DATE, {
+      canEdit: true,
+      canMarkDate: true,
+    });
+    expect(countDayTargets(targets)).toBe(3);
+    expect(bulkScopeLabel(countDayBulkStudents(twoSlots, { canEdit: true }), countDayOpenSlots(twoSlots))).toBe(
+      "2×2",
+    );
   });
 });

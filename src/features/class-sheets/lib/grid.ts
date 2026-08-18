@@ -61,6 +61,11 @@ export type GridEnrollmentRow = {
   attendanceDays: readonly string[] | null;
   /** students.withdrawn_at — 퇴원 확정일 이후 날짜는 eligible에서 제외. */
   withdrawnAt?: string | null;
+  /**
+   * enrollments.withdrawal_reason — **반 단위** 종료 사유(원본 그대로. 표시는 소비처가
+   * `reasonDisplay`로 한글화한다 — 표준 코드(other·schedule…)를 화면에 흘리지 않기 위해).
+   */
+  withdrawalReason?: string | null;
 };
 
 export type GridPlanLine = {
@@ -102,6 +107,11 @@ export type RosterEntry = {
    * 없는 비eligible 행은 '기록' 행(마크·출석만 남은 학생 — 유예가 지났거나 이 반 수강 기록 자체가 없음).
    */
   endedOn?: string | null;
+  /**
+   * 그 종료를 만든 enrollment의 사유(원본) — '퇴원' 섹션 한 줄 요약의 괄호에 들어간다.
+   * null이면 괄호에서 사유를 통째로 뺀다(빈 괄호 금지 — 원장 2026-08-18).
+   */
+  endedReason?: string | null;
 };
 
 export type GridSlot = {
@@ -382,10 +392,16 @@ export function buildWeekGrid(input: {
    * 중복 enrollment(재등록·분리등원 분할)은 학생 1행으로 접는다: **열린 수강이 하나라도 있으면 재원**,
    * 전부 끝났으면 가장 **최근** 종료일을 퇴원일로 쓴다(시간표 셀의 재원>퇴원 우선순위와 같은 규약).
    */
-  function rosterStateOn(date: string): { eligible: Set<string>; endedOn: Map<string, string> } {
+  function rosterStateOn(date: string): {
+    eligible: Set<string>;
+    endedOn: Map<string, string>;
+    endedReason: Map<string, string | null>;
+  } {
     const dow = dowKeyOf(date);
     const eligible = new Set<string>();
     const endedOn = new Map<string, string>();
+    // 사유는 **그 종료일을 만든 enrollment의 것**이다(반마다 사유가 달라 endedOn과 반드시 같은 행에서 온다).
+    const endedReason = new Map<string, string | null>();
     for (const e of input.enrollments) {
       const attendsToday = enrollmentAttendsOnDay(e.attendanceDays, dow);
       const withdrawn = !!e.withdrawnAt && e.withdrawnAt < date;
@@ -411,10 +427,16 @@ export function buildWeekGrid(input: {
       if (!effectiveEnd) continue;
       if (effectiveEnd < withdrawnFloor) continue; // 유예(30일)가 지난 종료는 표시하지 않는다
       const prev = endedOn.get(e.studentId);
-      if (!prev || prev < effectiveEnd) endedOn.set(e.studentId, effectiveEnd);
+      if (!prev || prev < effectiveEnd) {
+        endedOn.set(e.studentId, effectiveEnd);
+        endedReason.set(e.studentId, e.withdrawalReason ?? null);
+      }
     }
-    for (const id of eligible) endedOn.delete(id); // 재등록: 열린 수강이 있으면 퇴원이 아니다
-    return { eligible, endedOn };
+    for (const id of eligible) {
+      endedOn.delete(id); // 재등록: 열린 수강이 있으면 퇴원이 아니다
+      endedReason.delete(id);
+    }
+    return { eligible, endedOn, endedReason };
   }
 
   const days: GridDay[] = [];
@@ -434,7 +456,7 @@ export function buildWeekGrid(input: {
       continue;
     }
 
-    const { eligible, endedOn } = rosterStateOn(date);
+    const { eligible, endedOn, endedReason } = rosterStateOn(date);
     const attToday = attendanceByDate.get(date) ?? new Set<string>();
 
     // 안 그릴 자리(LAB 항상 · JJ는 설정) — 판정은 hiddenSeatOf 단일 소스.
@@ -483,6 +505,7 @@ export function buildWeekGrid(input: {
         eligible: eligible.has(studentId),
         historical: !eligible.has(studentId),
         endedOn: endedOn.get(studentId) ?? null,
+        endedReason: endedReason.get(studentId) ?? null,
       }));
       return {
         slotStart: slot,

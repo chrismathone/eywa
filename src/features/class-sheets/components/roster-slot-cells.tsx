@@ -19,11 +19,19 @@
  *    저장된 값을 지우지 않는다(roster-form.ts 규약).
  */
 import { schoolGradeLabel } from "@/lib/format/school-grade";
+// 사유는 표준 코드(other·schedule…)일 수 있다 — 한글화를 거치지 않으면 raw enum이 화면에 샌다(반복 지적).
+import { reasonDisplay } from "@/features/withdrawals/types";
 import { WindowLink } from "@/components/workspace/window-link";
 import { handleGridNavKey } from "@/features/onescreen/components/grid-nav";
 import { SessionUnitsField } from "@/features/onescreen/components/attendance-pills";
 import type { RosterEntry } from "../lib/grid";
 import { rosterTextCols, type RosterForm, type SheetMark } from "../lib/roster-form";
+import { attendanceLabelOf } from "../lib/attendance-label";
+import {
+  withdrawnRecordText,
+  withdrawnSummaryText,
+  type WithdrawnSlotRecord,
+} from "../lib/withdrawn-row";
 import { SHEET_BOX_UNITS, SHEET_INPUT } from "../ui-box";
 import { AttendanceCheck } from "./attendance-check";
 import { AttitudeCheck } from "./attitude-check";
@@ -90,6 +98,7 @@ export function RosterSlotCells({
   mark,
   att,
   canMarkDate,
+  canNoteDate,
   canEdit,
   handlers,
   navRow,
@@ -105,6 +114,11 @@ export function RosterSlotCells({
   mark: SheetMark | null;
   att: { status: string; note: string | null; units: number | null; slot: string | null } | null;
   canMarkDate: boolean;
+  /**
+   * 사유(메모)만 고칠 수 있는가 — 7일 창을 안 보는 값(`canNoteAttendance`). 안 넘기면 `canMarkDate`를
+   * 따른다(면제를 배선하지 않은 화면 = 자리 출석부는 종전 동작 그대로).
+   */
+  canNoteDate?: boolean;
   canEdit: boolean;
   handlers: SheetHandlers;
   /** 키보드 세로 이동(Enter/↑↓) 행 번호 — 보이는 행 기준으로 표가 매긴다. */
@@ -172,8 +186,10 @@ export function RosterSlotCells({
           note={att?.note ?? null}
           studentName={meta?.name ?? ""}
           canMark={canMarkDate && rowEditable}
+          canNote={(canNoteDate ?? canMarkDate) && rowEditable}
           onSet={(status, n) => handlers.setAttendance(entry.studentId, date, slotStart, status, n)}
           onClear={() => handlers.clearAttendance(entry.studentId, date, slotStart)}
+          onNote={(n) => handlers.setAttendanceNote(entry.studentId, date, slotStart, n)}
         />
       </td>
       <td className="px-1 py-px text-center">
@@ -257,5 +273,95 @@ export function RosterSlotCells({
         />
       </td>
     </>
+  );
+}
+
+/**
+ * 퇴원 행 한 칸 분의 **남은 기록**을 요약 문장 재료로 — 화면에서 입력칸을 걷어내도 값은 안 사라지게.
+ * (`WithdrawnSummaryRow`가 교시마다 이걸 만들어 [withdrawn-row](../lib/withdrawn-row.ts)에 넘긴다.)
+ */
+export function withdrawnSlotRecord({
+  slotStart,
+  form,
+  mark,
+  att,
+}: {
+  slotStart: string;
+  form: RosterForm;
+  mark: SheetMark | null;
+  att: { status: string; note: string | null } | null;
+}): WithdrawnSlotRecord {
+  return {
+    slotStart,
+    attendance: attendanceLabelOf(att?.status ?? null),
+    attendanceNote: att?.note ?? null,
+    attitude: mark?.status ?? null,
+    progressNote: mark?.progressNote ?? null,
+    extras: rosterTextCols(form).map((c) => ({ label: c.label, value: mark?.[c.field] ?? null })),
+  };
+}
+
+/**
+ * **퇴원 섹션의 한 줄** — `이름 · 학교학년 · (퇴원일, 퇴원사유)` (원장 2026-08-18:
+ * *"퇴원생은 이름 학교학년만 표시, 뒤에는 필요 없음"* → *"날짜도 있어야겠네"*).
+ *
+ * 그전엔 이 행에도 출결·유닛·태도·시험 점수·특이사항 칸이 **그려지기만 하고 전부 잠겨** 있었다
+ * (`주. 08-18 — — —`). 퇴원 행은 원래 읽기 전용이고 일괄 대상도 아니라(bulk.ts `editableRows`)
+ * 그 칸들은 처음부터 **쓸 수 없는 자리**였다 — 그래서 `colSpan`으로 접는다(빈 칸도 남기지 않는다).
+ *
+ * 🔴 **접는 건 빈 칸이지 기록이 아니다**: 그만두기 직전 주에 찍힌 출결·태도가 남아 있으면 요약 뒤에
+ *    읽기 전용 텍스트로 이어 붙인다(값이 화면에서 증발하지 않게 — grid.ts `hiddenSpecial`과 같은 원칙).
+ * ⚠️ 여기엔 입력이 하나도 없다 → 세로 이동(grid-nav)이 이 행에서 멈춘다. 퇴원·기록 섹션은 **항상 재원
+ *    아래**이고 그 아래 행은 전부 잠긴 칸이라 잃는 이동이 없다(순서는 roster-order.ts가 보장).
+ * ⚠️ '기록' 섹션(마크·출석만 남은 행)은 **이 규칙 대상이 아니다** — 거기엔 퇴원일이 없어 요약할 문장이
+ *    없고, 원장 지시도 '퇴원'에 대한 것이었다.
+ */
+export function WithdrawnSummaryRow({
+  entry,
+  meta,
+  colSpan,
+  records,
+}: {
+  entry: RosterEntry;
+  meta: StudentMeta | undefined;
+  /** 표 한 행의 칸 수 — 주간 표는 `rosterColSpan(form)`, 오늘 통합 표는 교시 합계. */
+  colSpan: number;
+  /** 이 학생에게 남아 있는 교시별 기록(빈 것은 문장에서 알아서 빠진다). */
+  records: readonly WithdrawnSlotRecord[];
+}) {
+  const summary = withdrawnSummaryText({
+    // 압축 표기 "침산중2" — 공백 join 금지(전역 규칙).
+    schoolGrade: schoolGradeLabel(meta?.school, meta?.grade),
+    endedOn: entry.endedOn,
+    reason: reasonDisplay(entry.endedReason),
+  });
+  const kept = withdrawnRecordText(records);
+  const fullReason = reasonDisplay(entry.endedReason);
+  return (
+    <td colSpan={colSpan} className="py-px pr-1">
+      <div className="flex min-w-0 items-center gap-1.5">
+        <WindowLink
+          href={`/students/${entry.studentId}`}
+          title={meta?.name}
+          className="text-text-dim shrink-0 text-[13px] font-bold line-through underline-offset-2 hover:underline"
+          ariaLabel={meta ? `${meta.name} 학생 정보` : "학생 정보"}
+        >
+          <span
+            title={`${meta?.name ?? ""} · ${entry.endedOn ?? ""} 수강 종료${
+              fullReason ? ` · ${fullReason}` : ""
+            } — 클릭하면 학생 정보`}
+          >
+            {meta?.name ?? "?"}
+          </span>
+        </WindowLink>
+        {summary ? <span className="text-text-dim shrink-0 text-[13px]">{summary}</span> : null}
+        {/* 남은 기록 — 길면 잘리고 전체는 툴팁에(한 줄 요약이 두 줄로 부풀지 않게). */}
+        {kept ? (
+          <span className="text-text-dim min-w-0 truncate text-[13px]" title={kept}>
+            · {kept}
+          </span>
+        ) : null}
+      </div>
+    </td>
   );
 }

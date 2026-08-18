@@ -35,7 +35,12 @@ import { rosterColSpan, rosterTextCols, type RosterForm, type SheetMark } from "
 import { TODAY_BASE_COLS, TODAY_NAME_W } from "../lib/today-columns";
 // 셀 구현은 **공용 모듈**(roster-slot-cells) — 오늘 면 통합 표(today-roster-table)와 같은 셀을 쓴다
 // (원장 2026-08-11 "쓸데없이 중복되는 컴포넌트가 다수" — 여기 인라인이던 것을 추출, 동작 불변).
-import { RosterNameCell, RosterSlotCells } from "./roster-slot-cells";
+import {
+  RosterNameCell,
+  RosterSlotCells,
+  WithdrawnSummaryRow,
+  withdrawnSlotRecord,
+} from "./roster-slot-cells";
 import type { SheetHandlers } from "./sheet-client";
 
 /** 섹션 라벨 행의 설명(툴팁) — 왜 이 학생이 아직 보이는지 화면이 스스로 답한다. 통합 표와 공용. */
@@ -132,7 +137,7 @@ export const RosterTable = memo(function RosterTable({
   const { rows, counts } = useMemo(() => {
     const out: (
       | { kind: "label"; key: RosterGroupKey; count: number }
-      | { kind: "row"; entry: RosterEntry; navRow: number }
+      | { kind: "row"; entry: RosterEntry; navRow: number; group: RosterGroupKey }
     )[] = [];
     const sizes = {} as Record<RosterGroupKey, number>;
     let navRow = 0;
@@ -141,7 +146,8 @@ export const RosterTable = memo(function RosterTable({
       const collapsed = collapsedGroups.includes(group.key);
       if (group.label) out.push({ kind: "label", key: group.key, count: group.rows.length });
       if (collapsed) continue;
-      for (const entry of group.rows) out.push({ kind: "row", entry, navRow: navRow++ });
+      // 섹션 키를 행에 실어 둔다 — 퇴원 행은 입력칸 대신 한 줄 요약이라(원장 2026-08-18) 그리는 게 다르다.
+      for (const entry of group.rows) out.push({ kind: "row", entry, navRow: navRow++, group: group.key });
     }
     return { rows: out, counts: sizes };
   }, [roster, data.students, collapsedGroups]);
@@ -229,6 +235,28 @@ export const RosterTable = memo(function RosterTable({
             }
             const { entry, navRow } = row;
             const meta = data.students[entry.studentId];
+            const markKey = `${entry.studentId}|${date}|${slotStart}`;
+            // 퇴원 섹션 = **한 줄 요약**(이름 · 학교학년 · (퇴원일, 사유)). 남은 기록은 요약 뒤에 읽기
+            // 전용 텍스트로 붙어 사라지지 않는다 — 접는 건 빈 입력칸이지 값이 아니다.
+            if (row.group === "withdrawn") {
+              return (
+                <tr key={entry.studentId} className="bg-bg-soft/40">
+                  <WithdrawnSummaryRow
+                    entry={entry}
+                    meta={meta}
+                    colSpan={rosterColSpan(form)}
+                    records={[
+                      withdrawnSlotRecord({
+                        slotStart,
+                        form,
+                        mark: marks[markKey] ?? null,
+                        att: attendance[markKey] ?? null,
+                      }),
+                    ]}
+                  />
+                </tr>
+              );
+            }
             // 출결은 **교시별**(0196a) — 같은 날 4교시·6교시가 서로 다른 칸이다.
             // (옛 "그날 전체" 기록은 서버가 그 날 첫 교시 칸에만 붙여 준다.)
             return (
@@ -241,9 +269,10 @@ export const RosterTable = memo(function RosterTable({
                   meta={meta}
                   date={date}
                   slotStart={slotStart}
-                  mark={marks[`${entry.studentId}|${date}|${slotStart}`] ?? null}
-                  att={attendance[`${entry.studentId}|${date}|${slotStart}`] ?? null}
+                  mark={marks[markKey] ?? null}
+                  att={attendance[markKey] ?? null}
                   canMarkDate={canMarkDate}
+                  canNoteDate={data.canNoteAttendance}
                   canEdit={canEdit}
                   handlers={handlers}
                   navRow={navRow}

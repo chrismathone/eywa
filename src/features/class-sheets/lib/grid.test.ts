@@ -185,6 +185,61 @@ describe("buildWeekGrid — 퇴원 유예(하단 '퇴원' 섹션, 시간표와 �
     });
   });
 
+  it("퇴원 사유(enrollments.withdrawal_reason)를 endedReason으로 함께 싣는다 — 한 줄 요약의 괄호", () => {
+    const grid = buildWeekGrid({
+      weekMonday: MON,
+      schedules: [sched("fri", "15:00")],
+      enrollments: [enr("s1", { endDate: "2026-07-22", withdrawalReason: "이사" })],
+      planLines: [],
+      marks: [],
+      attendance: [],
+      slotMemoKeys: [],
+    });
+    expect(rosterOf(grid, "2026-07-24")[0]).toMatchObject({
+      endedOn: "2026-07-22",
+      endedReason: "이사",
+    });
+  });
+
+  it("사유는 **그 종료일을 만든 행**의 것이다(재등록으로 수강이 둘이면 늦은 종료 쪽)", () => {
+    const grid = buildWeekGrid({
+      weekMonday: MON,
+      schedules: [sched("fri", "15:00")],
+      enrollments: [
+        enr("s1", { endDate: "2026-07-05", withdrawalReason: "반 이동" }),
+        enr("s1", { endDate: "2026-07-22", withdrawalReason: "졸업" }),
+      ],
+      planLines: [],
+      marks: [],
+      attendance: [],
+      slotMemoKeys: [],
+    });
+    expect(rosterOf(grid, "2026-07-24")[0]).toMatchObject({
+      endedOn: "2026-07-22",
+      endedReason: "졸업",
+    });
+  });
+
+  it("열린 수강이 있으면(재등록) 퇴원이 아니므로 사유도 함께 지워진다", () => {
+    const grid = buildWeekGrid({
+      weekMonday: MON,
+      schedules: [sched("fri", "15:00")],
+      enrollments: [
+        enr("s1", { endDate: "2026-07-22", withdrawalReason: "이사" }),
+        enr("s1", { startDate: "2026-07-23" }),
+      ],
+      planLines: [],
+      marks: [],
+      attendance: [],
+      slotMemoKeys: [],
+    });
+    expect(rosterOf(grid, "2026-07-24")[0]).toMatchObject({
+      eligible: true,
+      endedOn: null,
+      endedReason: null,
+    });
+  });
+
   it("유예(30일)가 지난 종료는 기록이 없으면 로스터에서 빠진다", () => {
     const grid = buildWeekGrid({
       weekMonday: MON,
