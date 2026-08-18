@@ -32,6 +32,11 @@ export type CalendarEvent = {
   endTime: string | null;
   color: EventColor;
   createdByName: string | null;
+  /**
+   * 일정의 출처 — "manual" = 수기 등록(편집 가능) · "leave" = 전자결재 승인 휴가 오버레이
+   * (읽기 전용 — 진실은 결재 문서라 캘린더에서 못 고친다. 휴가를 바꾸려면 문서를 회수·재기안).
+   */
+  source: "manual" | "leave";
 };
 
 /** 시간 표기 — "15:00" / "15:00~16:30" / 종일이면 null. 목록·칩이 공유. */

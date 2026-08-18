@@ -62,7 +62,25 @@ export default async function StudentDetailPage({
   const tab = requestedTab === "billing" && !canSeeBilling ? "overview" : requestedTab;
 
   const student = await getStudentById(id);
-  if (!student) notFound();
+  if (!student) {
+    // 강사(scoped)는 담당 학생만 상세 열람(적대 리뷰 F9) — 차단이면 404 대신 이유를 말한다.
+    // (없는 학생과 비담당 학생을 구분해 주진 않는다 — 존재 여부 자체도 담당 밖 정보다.)
+    if ((await accessLevelTenant(user.systemRole, "students")) === "scoped") {
+      return (
+        <div className="space-y-6">
+          <BackLink href="/students" label="학생목록으로" />
+          <div className="bg-card border-line rounded-2xl border p-6">
+            <p className="text-foreground text-sm font-bold">담당 학생만 열람할 수 있어요</p>
+            <p className="text-text-dim mt-1 text-sm">
+              이 학생은 내 반(담임·교시 담당·임시 위임) 수강생이 아니거나, 수강이 끝난 지 오래됐어요.
+              열람이 필요하면 데스크(관리자)에 요청해 주세요.
+            </p>
+          </div>
+        </div>
+      );
+    }
+    notFound();
+  }
 
   const hasCareAi = student.aiCareSummary !== null;
   // 학생 기록 변경(상태 전환·수정·AI 케어·수강 종료) = 학생 full 권한만(master·admin·manager·counselor).

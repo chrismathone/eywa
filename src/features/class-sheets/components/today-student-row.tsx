@@ -50,9 +50,6 @@ export function StudentRow({
       <span className="min-w-0 truncate text-[13px]">
         {/* 구조화 행 목록(Editorial 문법 ⑤) — 이름 bold 13.5px + 설명 dim 12.5px. */}
         <span className="text-foreground text-[13.5px] font-bold">{student.name}</span>
-        {student.isMakeup ? (
-          <span className="bg-purple/15 text-purple ml-1 rounded-full px-1.5 py-0.5 text-[10px] font-bold">보강</span>
-        ) : null}
         {student.grade ? <span className="text-text-dim ml-1 text-[12.5px]">{student.grade}</span> : null}
       </span>
       <span>

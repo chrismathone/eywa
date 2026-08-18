@@ -1,4 +1,3 @@
-import { PageHeader } from "@/components/page-header";
 import { requireAccess } from "@/lib/auth/require-access";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { kstToday } from "@/lib/date-kst";
@@ -47,14 +46,9 @@ export default async function CalendarPage({
   return (
     // 풀폭·풀높이 — 캘린더는 여백보다 면적이 정보다(원장 2026-08-18 "캘린더가 너무 작음").
     // min-h-full: 셸 <main>(overflow-auto)의 가시 높이만큼은 항상 채워 그리드가 아래로 붙게.
-    <div className="flex min-h-full w-full flex-col gap-4 p-4 md:px-6 md:py-5">
-      <PageHeader
-        eyebrow="홈"
-        title="캘린더"
-        description="학원 공용 일정 — 시험·행사·휴원일을 한 달력에서 관리합니다."
-        embedLabel={`캘린더 · ${monthLabel}`}
-      />
-
+    // 헤더 없음(원장 2026-08-18 "밑에 똑같이 있으니까 없애고 위로 당겨줘") — 창 타이틀바가 "캘린더",
+    // 월 표기는 바로 아래 내비가 담당이라 PageHeader는 순수 중복이었다.
+    <div className="flex min-h-full w-full flex-col gap-3 p-3 md:px-5 md:py-4">
       {!ready ? (
         <div className="border-line bg-card text-text-dim rounded-2xl border border-dashed p-8 text-center text-sm">
           캘린더 표가 아직 준비되지 않았습니다 — 마이그레이션 <span className="num">0218a</span>를

@@ -34,7 +34,8 @@ export function CalendarClient({
   const [dialog, setDialog] = useState<DialogState>(null);
 
   function openEvent(e: CalendarEvent) {
-    setDialog(canWrite ? { mode: "edit", event: e } : { mode: "view", event: e });
+    // 휴가 오버레이는 진실이 결재 문서라 캘린더에서 못 고친다 — 누구에게나 읽기 전용.
+    setDialog(canWrite && e.source === "manual" ? { mode: "edit", event: e } : { mode: "view", event: e });
   }
 
   return (

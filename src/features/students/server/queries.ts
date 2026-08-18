@@ -22,6 +22,7 @@ import { reportSubject } from "@/features/timetable/lib/report-subject";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { effectiveAttendanceRecords } from "@/features/attendance/effective-records";
 import { canSeeStudentEnrollment } from "./enrollment-gate";
+import { canViewStudentDetail } from "./read-scope";
 import { OUTCOME_LABEL, type OutcomeKey } from "@/features/enrollment/server/queries";
 import { reasonDisplay } from "@/features/withdrawals/types";
 import { mergeTimeRanges } from "@/features/classes/schedule-summary";
@@ -520,6 +521,9 @@ export async function getTeacherOptions(): Promise<TeacherOption[]> {
 }
 
 export async function getStudentById(id: string): Promise<StudentDetail | null> {
+  // 🔴 강사(scoped)는 **담당 학생만** — 목록만 스코프였고 상세는 뚫려 있어 URL 직접 입력으로 학원 전체
+  //    학생의 전화·주소·케어까지 열렸다(적대 리뷰 F9). 여기가 상세 페이지·요약 API의 초크포인트(#77).
+  if (!(await canViewStudentDetail(id))) return null;
   const supabase = await createClient();
   const { data } = await supabase
     .from("students")

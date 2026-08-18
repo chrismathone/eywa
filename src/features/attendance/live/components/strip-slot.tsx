@@ -95,25 +95,32 @@ export function StripSlot({
   if (done && !error) return null;
 
   return (
-    <div className="border-line bg-surface flex items-center justify-between gap-2 rounded-xl border p-2.5">
-      <div className="min-w-0">
-        <p className="truncate text-sm font-bold">{className}</p>
-        <p className="text-text-dim num text-xs">
-          {periodLabel ? `${periodLabel} · ` : ""}
-          {slotStart} · 미입력 {pendingIds.length}명
-        </p>
-        <p className="text-text-faint truncate text-xs" title={pendingNames.join(", ")}>
-          {pendingNames.slice(0, 4).join(", ")}
-          {pendingNames.length > 4 ? ` 외 ${pendingNames.length - 4}명` : ""}
-        </p>
-        {error && <p className="text-danger text-xs">{error}</p>}
-      </div>
-      <div className="flex flex-col gap-1">
+    // 한 줄 카드(원장 2026-08-18 "3개행으로 하지말고 1개열로") — 버튼을 세로로 쌓으면 카드 높이가
+    // 버튼 3개만큼 커져 스트립이 화면을 먹는다. 이름·시각·명단·버튼을 한 줄에 눕힌다. 한 줄이 실제로
+    // 성립하는 폭은 부모 그리드가 보장한다(today-strip auto-fill minmax 34rem). 그래도 넘치면(아주 긴
+    // 반 이름 등) flex-wrap이 뒤쪽 조각부터 다음 줄로 내린다(이름·명단은 truncate + 전체는 title).
+    <div className="border-line bg-surface flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border px-2.5 py-1.5">
+      <p className="min-w-0 truncate text-sm font-bold" title={className}>
+        {className}
+      </p>
+      <p className="text-text-dim num shrink-0 text-xs">
+        {periodLabel ? `${periodLabel} · ` : ""}
+        {slotStart} · 미입력 {pendingIds.length}명
+      </p>
+      {/* 명단은 남는 공간만 쓴다(basis 0) — 좁으면 먼저 줄어들되 최소 폭은 지켜 버튼을 다음 줄로 민다. */}
+      <p
+        className="text-text-faint min-w-[3rem] flex-1 truncate text-xs"
+        title={pendingNames.join(", ")}
+      >
+        {pendingNames.slice(0, 4).join(", ")}
+        {pendingNames.length > 4 ? ` 외 ${pendingNames.length - 4}명` : ""}
+      </p>
+      <div className="ml-auto flex shrink-0 items-center gap-1">
         <button
           type="button"
           onClick={fillAll}
           disabled={busy}
-          className="bg-primary text-primary-foreground rounded-lg px-2.5 py-1.5 text-xs font-bold whitespace-nowrap disabled:opacity-60"
+          className="bg-primary text-primary-foreground rounded-lg px-2.5 py-1 text-xs font-bold whitespace-nowrap disabled:opacity-60"
         >
           전원 출석
         </button>
@@ -139,6 +146,7 @@ export function StripSlot({
           </button>
         )}
       </div>
+      {error && <p className="text-danger w-full text-xs">{error}</p>}
     </div>
   );
 }

@@ -24,11 +24,11 @@ const CHIP_CLASS: Record<EventColor, string> = {
 
 const WEEKDAYS = [
   { label: "일", cls: "text-danger" },
-  { label: "월", cls: "text-text-dim" },
-  { label: "화", cls: "text-text-dim" },
-  { label: "수", cls: "text-text-dim" },
-  { label: "목", cls: "text-text-dim" },
-  { label: "금", cls: "text-text-dim" },
+  { label: "월", cls: "text-foreground" },
+  { label: "화", cls: "text-foreground" },
+  { label: "수", cls: "text-foreground" },
+  { label: "목", cls: "text-foreground" },
+  { label: "금", cls: "text-foreground" },
   { label: "토", cls: "text-blue" },
 ] as const;
 
@@ -87,18 +87,18 @@ export function MonthGrid({
   for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
 
   return (
-    <div className="border-line bg-card shadow-card w-full overflow-hidden rounded-2xl border">
+    <div className="border-line-strong bg-card shadow-card w-full overflow-hidden rounded-2xl border">
       {/* 요일 머리 */}
-      <div className="border-line bg-bg-soft/50 grid grid-cols-7 border-b">
+      <div className="border-line-strong bg-bg-soft/50 grid grid-cols-7 border-b">
         {WEEKDAYS.map((w) => (
-          <p key={w.label} className={`py-1.5 text-center text-[11px] font-semibold ${w.cls}`}>
+          <p key={w.label} className={`py-2 text-center text-[12px] font-bold ${w.cls}`}>
             {w.label}
           </p>
         ))}
       </div>
 
       {weeks.map((week, wi) => (
-        <div key={wi} className="divide-line border-line grid grid-cols-7 divide-x border-b last:border-b-0">
+        <div key={wi} className="divide-line-strong border-line-strong grid grid-cols-7 divide-x border-b last:border-b-0">
           {week.map((cell) => {
             const dow = weekdayIndexOf(cell.date);
             const dayNum = Number(cell.date.slice(8, 10));
@@ -110,13 +110,13 @@ export function MonthGrid({
             return (
               <div
                 key={cell.date}
-                className={`min-h-[96px] min-w-0 p-1 ${dow === 0 || dow === 6 ? "bg-bg-soft/30" : ""}`}
+                className={`min-h-[128px] min-w-0 p-1.5 ${dow === 0 || dow === 6 ? "bg-bg-soft/30" : ""}`}
               >
                 <p className="mb-0.5 flex items-center justify-between gap-1">
                   {/* 공휴일명 — 일정 칩 위(좌측), 정식 명칭은 title 툴팁. 앞뒤 달은 흐림 규칙을 따른다. */}
                   {holiday ? (
                     <span
-                      className={`min-w-0 truncate text-[10px] leading-none ${
+                      className={`min-w-0 truncate text-[11px] leading-none font-semibold ${
                         cell.inMonth ? "text-danger" : "text-text-faint"
                       }`}
                       title={holiday}
@@ -127,7 +127,7 @@ export function MonthGrid({
                     <span />
                   )}
                   <span
-                    className={`flex size-5 shrink-0 items-center justify-center rounded-full text-[11px] ${
+                    className={`flex size-6 shrink-0 items-center justify-center rounded-full text-[13px] ${
                       isToday
                         ? "bg-primary text-primary-foreground font-bold"
                         : !cell.inMonth
@@ -136,8 +136,8 @@ export function MonthGrid({
                             ? "text-danger"
                             : dow === 6
                               ? "text-blue"
-                              : "text-text-dim"
-                    } ${!isToday ? "font-medium" : ""}`}
+                              : "text-foreground"
+                    } ${!isToday ? "font-semibold" : ""}`}
                   >
                     {dayNum}
                   </span>
@@ -148,7 +148,7 @@ export function MonthGrid({
                       key={e.id}
                       type="button"
                       onClick={() => onEventClick(e)}
-                      className={`block w-full truncate rounded px-1 py-0.5 text-left text-[11px] leading-tight transition hover:opacity-80 ${CHIP_CLASS[e.color]} ${
+                      className={`block w-full truncate rounded px-1 py-0.5 text-left text-[12px] leading-tight font-medium transition hover:opacity-80 ${CHIP_CLASS[e.color]} ${
                         cell.inMonth ? "" : "opacity-50"
                       }`}
                       title={e.title}
@@ -158,7 +158,7 @@ export function MonthGrid({
                     </button>
                   ))}
                   {more > 0 ? (
-                    <p className="text-text-faint px-1 text-[10px]">+{more}개 더</p>
+                    <p className="text-text-dim px-1 text-[11px]">+{more}개 더</p>
                   ) : null}
                 </div>
               </div>
