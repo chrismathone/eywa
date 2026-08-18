@@ -17,8 +17,16 @@
  *    둘을 합치면 유예(`grace`) 중인 반이 큐에 올라가거나, 끝난 반이 화면에서 사라진다.
  */
 
-/** 한 수업(또는 교시)이 지금 시각에 대해 놓인 자리. 화면이 이 순서로 묶는다. */
-export type NowBand = "now" | "upcoming" | "past";
+/**
+ * 한 수업(또는 교시)이 지금 시각에 대해 놓인 자리. 화면이 이 순서로 묶는다.
+ *
+ * 🔴 `later`(한참 뒤 시작)를 따로 둔 이유(원장 2026-08-18): *"지금 수업 및 다음 수업 정도만 보여주면
+ *    좋겠다. 2시간 이내에 시작하는 수업 모두 보여줘."* + *"그냥 예정 수업은 없애자."*
+ *    좌석표는 **지금 손댈 수 있는 것**만 펼치는 자리다 — 5시간 뒤 수업은 출결을 찍을 수도 없는데
+ *    자리만 차지하고, 그 탓에 정작 지금 반이 스크롤 아래로 밀렸다.
+ *    ⚠️ 그래도 **개수는 머리줄에 적는다** — 화면에서 통째로 지우면 "오늘 수업이 이게 다인가"로 읽힌다.
+ */
+export type NowBand = "now" | "upcoming" | "later" | "past";
 
 /**
  * 시작 이만큼 **전**부터 '지금'으로 올린다 — 아이들은 미리 오고, 강사도 시작 전에 찍는다
@@ -30,16 +38,22 @@ export const NOW_LEAD_MIN = 10;
  * 그 뒤엔 '지난'으로 내려갈 뿐 **사라지지 않는다**([[#105]]).
  */
 export const NOW_TAIL_MIN = 10;
+/**
+ * '예정'으로 **펼쳐 보여줄** 앞창(분) — 원장 2026-08-18: *"2시간 이내에 시작하는 수업 모두."*
+ * 이보다 뒤에 시작하는 수업은 `later`로 빠져 화면에서 접힌다(개수만 머리줄에 남는다).
+ */
+export const SOON_WINDOW_MIN = 120;
 
 /** 화면 라벨 — raw 코드(now/past)를 UI에 내보내지 않는다(전역 규칙). */
 export const NOW_BAND_LABEL: Record<NowBand, string> = {
   now: "지금 수업 중",
-  upcoming: "예정",
+  upcoming: "곧 시작",
+  later: "이후 수업",
   past: "지난 수업",
 };
 
 /** 묶음 배열 순서 — 지금이 맨 앞. 정렬·렌더 순서를 두 곳에서 따로 적지 않는다. */
-export const NOW_BAND_ORDER: readonly NowBand[] = ["now", "upcoming", "past"];
+export const NOW_BAND_ORDER: readonly NowBand[] = ["now", "upcoming", "later", "past"];
 
 /**
  * 한 교시의 묶음. 분 단위(KST 자정 기준)로만 계산한다 — 날짜 판정은 호출부 몫이다.
@@ -53,8 +67,12 @@ export function nowBandOf(
   endMin: number | null,
   leadMin: number = NOW_LEAD_MIN,
   tailMin: number = NOW_TAIL_MIN,
+  soonMin: number = SOON_WINDOW_MIN,
 ): NowBand {
-  if (nowMin < startMin - leadMin) return "upcoming";
+  if (nowMin < startMin - leadMin) {
+    // 아직 시작 전 — 앞창 안이면 '곧 시작', 그보다 멀면 '이후'(화면에서 접힌다).
+    return startMin - nowMin > soonMin ? "later" : "upcoming";
+  }
   if (endMin != null && nowMin >= endMin + tailMin) return "past";
   return "now";
 }
@@ -69,6 +87,9 @@ export function nowBandOf(
 export function foldNowBands(bands: readonly NowBand[]): NowBand {
   if (bands.includes("now")) return "now";
   if (bands.includes("upcoming")) return "upcoming";
+  // 🔴 '이후'가 '지난'을 이긴다 — 오전에 끝난 교시와 저녁 교시를 함께 가진 반을 '지난'으로 내리면
+  //    저녁이 되어도 접힌 채로 남는다(연강 반이 통째로 사라지는 길).
+  if (bands.includes("later")) return "later";
   return "past";
 }
 

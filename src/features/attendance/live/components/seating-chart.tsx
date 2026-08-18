@@ -34,7 +34,8 @@ const LEGEND: Array<keyof typeof SEAT_MARK_LABEL> = [
 /** 띠 한 줄에 붙는 설명 — "왜 접혀 있나"를 사람 말로 적는다(raw 코드 노출 금지). */
 const BAND_HINT: Record<NowBand, string> = {
   now: "이 시각에 실제로 열려 있는 수업입니다.",
-  upcoming: "아직 시작하지 않았습니다.",
+  upcoming: "2시간 안에 시작합니다.",
+  later: "", // 섹션으로 그리지 않는다(머리줄 개수로만)
   past: "이미 끝났습니다 — 미입력이 남은 반은 앰버로 표시하고 접지 않습니다.",
 };
 
@@ -53,8 +54,17 @@ export function SeatingChart({ board }: { board: LiveBoard }) {
   // 🔴 요약은 **하루 전체**가 분모다. 화면을 시간으로 나눈다고 "입력 12/240"이 "1/8"로 줄면
   //    그날 얼마나 남았는지를 아무도 못 본다(집계 분모 불변 규칙).
   const sum = seatingSummary(classes);
-  const groups = splitByNowBand(classes);
+  const allGroups = splitByNowBand(classes);
+  /**
+   * 🔴 화면에 띠로 그리는 건 **지금 · 곧 시작(2시간 내) · 지난** 셋뿐이다(원장 2026-08-18:
+   *    *"지금 수업 및 다음 수업 정도만"*, *"그냥 예정 수업은 없애자"*). 그보다 뒤에 시작하는 반은
+   *    지금 손댈 수 있는 일이 아니라서 자리만 차지하고, 그 탓에 정작 지금 반이 밀려 내려갔다.
+   * ⚠️ 대신 **개수는 머리줄에 적는다** — 통째로 지우면 "오늘 수업이 이게 다인가"로 읽힌다.
+   *    (하루 전체 분모인 미출결·입력 합계는 위에서 이미 그대로 보여 준다.)
+   */
+  const groups = allGroups.filter((g) => g.band !== "later");
   const nowCount = groups.find((g) => g.band === "now")?.items.length ?? 0;
+  const laterCount = allGroups.find((g) => g.band === "later")?.items.length ?? 0;
   // 처음 열릴 띠 = 지금 → (없으면) 예정 → (없으면) 지난. 밤늦게 열어도 빈 화면이 되지 않는다.
   const firstBand = groups[0]?.band;
   /**
@@ -80,6 +90,12 @@ export function SeatingChart({ board }: { board: LiveBoard }) {
             <>
               <span className="text-text-faint mx-1.5">·</span>
               지금 수업 중 <span className="num text-primary">{nowCount}</span>개 반
+              {laterCount > 0 && (
+                <span className="text-text-faint">
+                  <span className="mx-1.5">·</span>
+                  2시간 뒤 <span className="num">{laterCount}</span>개 반
+                </span>
+              )}
             </>
           )}
         </p>

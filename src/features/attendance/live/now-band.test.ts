@@ -23,7 +23,8 @@ describe("nowBandOf", () => {
       ["20:10", "21:05"],
     ];
     const bands = spans.map(([s, e]) => nowBandOf(now, min(s), min(e)));
-    expect(bands).toEqual(["now", "upcoming", "upcoming", "upcoming", "upcoming"]);
+    // 13:23 기준 앞창(2시간) 안은 14:30뿐 — 16:20 이후는 'later'로 빠져 화면에서 접힌다.
+    expect(bands).toEqual(["now", "upcoming", "later", "later", "later"]);
     expect(bands.filter((b) => b === "now")).toHaveLength(1);
   });
 
@@ -42,7 +43,18 @@ describe("nowBandOf", () => {
 
   it("종료시각을 모르면 끝난 척하지 않는다(slotPhase와 같은 규약)", () => {
     expect(nowBandOf(min("23:00"), min("16:20"), null)).toBe("now");
-    expect(nowBandOf(min("10:00"), min("16:20"), null)).toBe("upcoming");
+    expect(nowBandOf(min("10:00"), min("16:20"), null)).toBe("later"); // 6시간 뒤 = 앞창 밖
+  });
+
+  it("앞창(2시간) 안이면 '곧 시작', 넘으면 '이후' — 경계는 포함", () => {
+    // 원장 2026-08-18: "2시간 이내에 시작하는 수업 모두 보여줘."
+    expect(nowBandOf(min("13:00"), min("15:00"), min("16:00"))).toBe("upcoming"); // 정확히 2시간 = 포함
+    expect(nowBandOf(min("13:00"), min("15:01"), min("16:00"))).toBe("later"); // 1분 넘음
+    expect(nowBandOf(min("13:00"), min("14:00"), min("15:00"))).toBe("upcoming");
+  });
+
+  it("앞창도 인자로 덮을 수 있다", () => {
+    expect(nowBandOf(min("13:00"), min("18:00"), min("19:00"), undefined, undefined, 600)).toBe("upcoming");
   });
 
   it("유예·꼬리 폭은 인자로 덮을 수 있다(상수는 기본값일 뿐)", () => {
@@ -62,6 +74,12 @@ describe("foldNowBands", () => {
     expect(foldNowBands(["now", "upcoming"])).toBe("now");
   });
 
+  it("오전에 끝난 교시 + 저녁 교시 = '이후' — '지난'으로 내리면 저녁이 와도 접힌 채 남는다", () => {
+    expect(foldNowBands(["past", "later"])).toBe("later");
+    // 앞창 안의 교시가 하나라도 있으면 그게 이긴다(더 급한 쪽).
+    expect(foldNowBands(["later", "upcoming"])).toBe("upcoming");
+  });
+
   it("남은 교시가 있으면 '예정', 전부 끝났으면 '지난'", () => {
     expect(foldNowBands(["past", "upcoming"])).toBe("upcoming");
     expect(foldNowBands(["past", "past"])).toBe("past");
@@ -75,7 +93,7 @@ describe("표기·순서", () => {
   });
 
   it("지금이 맨 앞", () => {
-    expect(NOW_BAND_ORDER).toEqual(["now", "upcoming", "past"]);
+    expect(NOW_BAND_ORDER).toEqual(["now", "upcoming", "later", "past"]);
   });
 });
 
