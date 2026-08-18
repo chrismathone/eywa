@@ -1,5 +1,24 @@
 # eywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-08-18 (11) — 초안 자동저장 "타이핑 유실 0" 강화 — 강제 저장·언로드 플러시·무방비 2면 배선
+
+배포 스큐 강제 리로드로 회의록 녹음 화면이 통째로 새로고침된 사고(같은 날) 후속. 원장: *"실시간
+타이핑이 모두 남아있어야하고 이런 오류가 없어야해"* — 등록상담·회의록·학생상담 전수 감사 + 훅 계약 강화.
+
+- **훅 2종(useFormDraft·useStateDraft) 계약 강화**: ① 연속 타이핑 중엔 700ms 디바운스가 계속 뒤로 밀려
+  **한 번도 저장이 안 될 수 있던 것**을 `DRAFT_MAX_PENDING_MS`(2초)마다 강제 저장으로 봉합. ② `pagehide`/
+  탭 숨김 순간 `saveDraftOnHide`로 즉시 플러시 — **localStorage 동기 백스톱**(IDB는 언로드 찰나에 못 미칠
+  수 있다) + IDB 이중 기록, `loadDraft`가 둘 중 최신을 고른다(`pickNewerDraft`). `clearDraft`가 백스톱까지
+  지워 서버 저장 후 부활 방지. IDB 연결은 모듈 캐시(open/close 왕복 제거).
+- **실버그 수리**: `hasMeaningfulValues`가 `subjectDetails`(hidden JSON)를 통째 제외해 **과목 탭만 입력한
+  신규 등록상담이 초안 저장 자체가 안 됐다** → JSON 딥스캔으로 내용 있을 때만 의미 판정.
+- **무방비 표면 배선**: 학생 메모 **수정** 폼(memo-item — 신규엔 있는데 수정엔 없던 비대칭, +#83 submitAction
+  전환으로 실패 시 auto-reset 유실도 봉합) · 회의 화자 편집기(speaker-editor, useStateDraft + 열 때 서버값
+  스냅샷 대비 변경분만 저장). 회의 제목 한 줄 편집기는 의도적 제외(단일 필드·손실 미미).
+- 회귀 그물: `form-draft.test.ts`(딥스캔·백스톱·pickNewer 8) + `draft-flush.test.tsx`(강제 저장·플러시 6).
+- 조사 결론: 세 메뉴엔 서버 자동저장 표면이 0개(전부 명시 저장)라 로컬 초안이 유일한 안전망. 나머지 표면
+  (consultation-form·consultation-full-form·회의 3면·QR 접수·학생 메모 신규)은 기존 배선 확인 완료.
+
 ## 2026-08-18 (10) — ECS 보강 칸을 누르면 명단에서 빠진다
 
 보강 추가 뒤 회색 '보강' 칸이 읽기 전용이라 이 화면에서 뺄 문이 없었다(출석부 저장 전 X만 있음).

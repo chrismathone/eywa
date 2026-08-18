@@ -1,7 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { clearDraft, loadDraft, saveDraft } from "@/lib/form-draft";
+import {
+  clearDraft,
+  DRAFT_DEBOUNCE_MS,
+  DRAFT_MAX_PENDING_MS,
+  loadDraft,
+  saveDraft,
+  saveDraftOnHide,
+} from "@/lib/form-draft";
 
 /**
  * 상태 기반 로컬 초안 자동저장 — 입력이 `<form>` DOM이 아니라 React state(객체·동적 배열)인 폼용.
@@ -56,6 +63,13 @@ export function useStateDraft<T>({
   // 마운트 시점 스냅샷 — 사용자가 아직 안 건드렸으면(현재=초기) 저장 보류. 편집 모드에서 마운트 직후
   // 저장이 같은 scope의 '복구 대기 초안'을 서버 초기값으로 덮어쓰던 클로버 방지(사용자가 restore 누르기 전).
   const initialJsonRef = useRef(json);
+  // 첫 미저장 변경 시각 — 연속 타이핑 중 강제 저장(MAX_PENDING) 판정 + 언로드 플러시 필요 여부.
+  const pendingSinceRef = useRef<number | null>(null);
+  // 언로드 플러시가 읽을 최신 스냅샷(pagehide는 렌더 사이클 밖에서 온다).
+  const latestRef = useRef({ json, has });
+  useEffect(() => {
+    latestRef.current = { json, has };
+  });
   useEffect(() => {
     if (!enabled || !has) return;
     if (json === initialJsonRef.current) return;
@@ -64,11 +78,43 @@ export function useStateDraft<T>({
       initialJsonRef.current = json;
       return;
     }
-    timerRef.current = setTimeout(() => void saveDraft(scope, { __json: json }), 700);
+    const write = () => {
+      pendingSinceRef.current = null;
+      void saveDraft(scope, { __json: json });
+    };
+    if (pendingSinceRef.current === null) pendingSinceRef.current = Date.now();
+    // 연속 타이핑 중엔 디바운스가 계속 뒤로 밀린다 — 미저장이 MAX_PENDING을 넘으면 즉시 저장
+    // (배포 스큐 강제 리로드·크래시가 와도 최대 그 간격만 잃는다).
+    if (Date.now() - pendingSinceRef.current >= DRAFT_MAX_PENDING_MS) {
+      write();
+      return;
+    }
+    timerRef.current = setTimeout(write, DRAFT_DEBOUNCE_MS);
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
     };
   }, [scope, enabled, json, has]);
+
+  // 언로드/탭 숨김 순간 마지막 타이핑까지 플러시 — 미저장 변경이 있을 때만(동기 백스톱 포함).
+  useEffect(() => {
+    if (!enabled) return;
+    const flushOnHide = () => {
+      if (pendingSinceRef.current === null) return; // 미저장 없음 — clear() 직후 초안 부활 방지
+      pendingSinceRef.current = null;
+      if (timerRef.current) clearTimeout(timerRef.current);
+      const { json: j, has: h } = latestRef.current;
+      if (h && j !== initialJsonRef.current) saveDraftOnHide(scope, { __json: j });
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") flushOnHide();
+    };
+    window.addEventListener("pagehide", flushOnHide);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.removeEventListener("pagehide", flushOnHide);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [scope, enabled]);
 
   const restore = useCallback(() => {
     setDraftSavedAt(null);
@@ -77,6 +123,7 @@ export function useStateDraft<T>({
 
   const discard = useCallback(() => {
     if (timerRef.current) clearTimeout(timerRef.current);
+    pendingSinceRef.current = null;
     void clearDraft(scope);
     loadedRef.current = null;
     setDraftSavedAt(null);
@@ -85,6 +132,7 @@ export function useStateDraft<T>({
   // 서버 저장 성공 시 호출 — 초안 비움. 대기 중 저장 타이머 취소 + 다음 스냅샷은 재기준선(재저장 억제).
   const clear = useCallback(() => {
     if (timerRef.current) clearTimeout(timerRef.current);
+    pendingSinceRef.current = null;
     rebaseRef.current = true;
     void clearDraft(scope);
     loadedRef.current = null;

@@ -1,8 +1,11 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { Loader2, Pencil, Pin, PinOff } from "@/components/icons/eywa-icon-compat";
+import { useFormDraft } from "@/components/forms/use-form-draft";
+import { DraftBanner } from "@/components/forms/draft-banner";
+import { submitAction } from "@/components/forms/submit-action";
 import {
   toggleStudentMemoPin,
   updateStudentMemo,
@@ -69,10 +72,21 @@ function SaveBtn() {
 
 export function MemoItem({ memo, studentId }: { memo: StudentMemoRow; studentId: string }) {
   const [editing, setEditing] = useState(false);
+  const formRef = useRef<HTMLFormElement | null>(null);
+  // 수정 폼 로컬 초안 — 신규작성(memo-form)엔 있는데 수정엔 없어 긴 메모를 고치다 리로드되면 유실됐다.
+  const localDraft = useFormDraft({
+    scope: `student-memo-edit:${memo.id}`,
+    formRef,
+    enabled: editing,
+    exclude: ["id", "studentId"], // 서버 prop — IDB에 남길 이유가 없다
+  });
   const [state, action] = useActionState<UpdateMemoState, FormData>(
     async (prev, formData) => {
       const res = await updateStudentMemo(prev, formData);
-      if (res?.ok) setEditing(false);
+      if (res?.ok) {
+        localDraft.clear();
+        setEditing(false);
+      }
       return res;
     },
     undefined,
@@ -124,7 +138,13 @@ export function MemoItem({ memo, studentId }: { memo: StudentMemoRow; studentId:
       </header>
 
       {editing ? (
-        <form action={action} className="space-y-2 pt-1">
+        // submitAction: React 19 액션 폼 자동 리셋(#83) 회피 — 저장 실패 시 입력이 옛 값으로 돌아가지 않게.
+        <form ref={formRef} onSubmit={(e) => submitAction(e, action)} className="space-y-2 pt-1">
+          <DraftBanner
+            savedAt={localDraft.draftSavedAt}
+            onRestore={localDraft.restore}
+            onDiscard={localDraft.discard}
+          />
           <input type="hidden" name="id" value={memo.id} />
           <input type="hidden" name="studentId" value={studentId} />
           <select

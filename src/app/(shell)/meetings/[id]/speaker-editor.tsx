@@ -13,6 +13,8 @@ import type { StaffOption } from "@/features/meetings/server/queries";
 import type { TranscriptUtterance } from "@/components/transcript-section";
 import { useEditPresence } from "@/features/presence/edit-presence";
 import { submitAction } from "@/components/forms/submit-action";
+import { useStateDraft } from "@/components/forms/use-state-draft";
+import { DraftBanner } from "@/components/forms/draft-banner";
 
 const FREE = "__free__"; // 자유입력 옵션 sentinel
 
@@ -65,23 +67,36 @@ export function SpeakerEditor({
   // "수정중" presence — 화자 지정 편집기가 열려 있는 동안 track(닫히면 자동 해제).
   useEditPresence(`meeting:${meetingId}`, editing);
 
+  // 열 때 초기값(서버값) 스냅샷 — 초안은 여기서 벗어난 편집만 의미 있다(서버값 그대로를 저장하면
+  // 다음에 "복구" 배너가 서버값을 다시 권하는 노이즈가 된다).
+  const openInitRef = useRef("");
+  const localDraft = useStateDraft({
+    scope: `meeting-speakers:${meetingId}`,
+    snapshot: rows,
+    enabled: editing,
+    hasContent: (s) => JSON.stringify(s) !== openInitRef.current,
+  });
+
   function openEditor() {
     const init: Record<string, { staffId: string; label: string }> = {};
     for (const sp of speakers) {
       const staffId = speakerStaff?.[sp] ?? "";
       init[sp] = { staffId, label: staffId ? "" : (speakerRoles?.[sp] ?? "") };
     }
+    openInitRef.current = JSON.stringify(init);
     setRows(init);
     handled.current = false;
     setEditing(true);
   }
 
+  const clearLocalDraft = localDraft.clear; // useCallback으로 안정 — 객체 통째 의존 시 매 렌더 재실행
   useEffect(() => {
     if (state?.ok && !handled.current) {
       handled.current = true;
+      clearLocalDraft();
       setEditing(false);
     }
-  }, [state]);
+  }, [state, clearLocalDraft]);
 
   if (speakers.length === 0) return null;
 
@@ -130,6 +145,14 @@ export function SpeakerEditor({
       <p className="text-text-faint text-[11px]">
         각 화자를 직원으로 지정하면 회의 업무 연계의 기반이 됩니다. 직원이 아니면 “직접 입력”으로 이름을 적으세요.
       </p>
+      <DraftBanner
+        savedAt={localDraft.draftSavedAt}
+        onRestore={() => {
+          const d = localDraft.restore();
+          if (d) setRows(d);
+        }}
+        onDiscard={localDraft.discard}
+      />
 
       <div className="space-y-2">
         {speakers.map((sp) => {
