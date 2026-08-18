@@ -103,6 +103,7 @@
   --color-rose-soft: var(--rose-soft);
   --color-amber: var(--amber);
   --color-amber-soft: var(--amber-soft);
+  --color-marker: var(--marker);
   --color-danger: var(--danger);
   --color-danger-soft: var(--danger-soft);
   --color-primary-soft: var(--primary-soft);
@@ -231,6 +232,12 @@
   --rose-soft: rgba(194, 58, 110, 0.09);
   --amber: #a35d0a;
   --amber-soft: rgba(163, 93, 10, 0.11);
+  /* 형광펜 노랑 — **한 화면에서 절대 놓치면 안 되는 식별자 하나**를 칠하는 자리(원장 2026-08-18:
+     영어 강사 시트 반 전환 드롭다운 = *"배경을 쌩노란색으로 … 수업명을 확실하게 보기 위함"*).
+     ⚠️ 앱 톤은 -soft(8~11% 틴트)가 기준이라 이건 의도적 예외다 — 출석부 형광 팔레트와 같은 성격이고,
+     같은 이유로 **여기저기 쓰지 말 것**(둘째 노란 덩어리가 생기는 순간 첫째가 안 보인다).
+     글자는 --foreground(#1d1d1f) 고정 = 대비 17:1. 색을 조이거나 풀려면 이 한 줄만 고친다. */
+  --marker: #fff200;
   --danger: #d33f3f;
   --danger-soft: rgba(211, 63, 63, 0.09);
 
