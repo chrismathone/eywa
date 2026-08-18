@@ -116,9 +116,18 @@ function AreaChip({
   const tone = skillAreaColorOf(skillAreas, key);
   return (
     <span
-      className={`inline-block shrink-0 rounded-full border px-2 py-0.5 text-[12px] font-bold ${SUBJECT_BORDER[tone]} ${SUBJECT_SOFT[tone]}`}
+      className={`inline-grid shrink-0 rounded-full border px-2 py-0.5 text-center text-[12px] font-bold ${SUBJECT_BORDER[tone]} ${SUBJECT_SOFT[tone]}`}
     >
-      {label}
+      {/* 폭 맞춤판 — 설정된 모든 영역 라벨을 같은 격자 칸에 **투명하게 겹쳐** 두면 칩 폭이 가장 긴
+          라벨로 확정된다. 모든 칩이 같은 판을 깔므로 줄마다 칩 폭이 같아지고, 뒤따르는 교재·페이지·
+          진도·과제 칸의 왼쪽 끝이 줄 사이에서 맞는다(원장 2026-08-18 "라벨 크기 일정하게").
+          라벨은 학원설정이라 고정 px로 못 박으면 긴 라벨이 잘린다 — 판이 설정을 따라 늘어난다. */}
+      {skillAreas.map((a) => (
+        <span key={a.key} aria-hidden className="invisible col-start-1 row-start-1 whitespace-nowrap">
+          {a.label}
+        </span>
+      ))}
+      <span className="col-start-1 row-start-1 whitespace-nowrap">{label}</span>
     </span>
   );
 }
