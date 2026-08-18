@@ -76,10 +76,16 @@ export function CalendarClient({
 
       {/* 그리드가 남는 세로를 전부 차지 — 셀 min-h는 grid 몫, 여기는 자리만 내준다. */}
       <div className="min-h-0 flex-1">
-        <MonthGrid month={month} today={today} events={events} onEventClick={openEvent} />
+        <MonthGrid
+          month={month}
+          today={today}
+          events={events}
+          onEventClick={openEvent}
+          onDayClick={canWrite ? (d) => setDialog({ mode: "create", date: d }) : undefined}
+        />
       </div>
 
-      {dialog ? <EventDialog state={dialog} onClose={() => setDialog(null)} /> : null}
+      {dialog ? <EventDialog state={dialog} today={today} onClose={() => setDialog(null)} /> : null}
     </div>
   );
 }
