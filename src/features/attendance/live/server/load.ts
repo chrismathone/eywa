@@ -22,6 +22,8 @@ import { classifySignal, hhmm, resolveSlotStatus } from "../signals";
 import { saveSlotFor } from "../slot-axis";
 import { resolveRoomName } from "../seating-floors";
 import { specialSlotLabel } from "@/features/timetable/lib/teacher-label";
+// 출결 강사 귀속 축 단일 소스(자리는 담임 폴백 금지 · 담당 없으면 담임) — 월간 출석부와 같은 규칙.
+import { taughtByForSlot } from "@/features/attendance/teacher-axis";
 import { isReportOptout } from "@/features/classes/report-optout";
 import type { LiveSlot, LiveStudent } from "../types";
 
@@ -300,7 +302,11 @@ export async function loadLiveSlots(date: string, classIds?: readonly string[]):
       slotEnd: slot.end_time ? hhmm(slot.end_time) : null,
       periodLabel: slot.period_label,
       // 슬롯 담당이 지정된 건 542개 중 207개(38%)뿐 — 나머지는 반 담임으로 폴백해야 "선생님별"이 성립한다.
-      teacherId: special ? slot.teacher_id : (slot.teacher_id ?? klass.teacher_id),
+      // 🔴 판정은 `teacher-axis`가 단일 소스다(2026-08-18) — 여기에 규칙을 다시 적지 말 것.
+      teacherId: taughtByForSlot({
+        homeroomTeacherId: klass.teacher_id,
+        slot: { teacherId: slot.teacher_id, slotTeacherLabel: slot.slot_teacher_label },
+      }).teacherId,
       slotTeacherLabel: slot.slot_teacher_label,
       teacherName: null, // 이름은 호출부가 채운다(사용자 조회를 화면당 1회로 모으기 위해)
       roomName:
