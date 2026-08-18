@@ -70,14 +70,6 @@ export function RosterNameCell({ entry, meta }: { entry: RosterEntry; meta: Stud
             {meta?.name ?? "?"}
           </span>
         </WindowLink>
-        {entry.isMakeup ? (
-          <span
-            className="bg-purple/15 text-purple shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-bold"
-            title="이 반 수강생은 아니지만 그날 보강으로 온 학생"
-          >
-            보강
-          </span>
-        ) : null}
         {entry.endedOn ? (
           <span className="text-text-dim num shrink-0 text-[13px]" title={`${entry.endedOn} 수강 종료`}>
             {entry.endedOn.slice(5)}
@@ -198,6 +190,9 @@ export function RosterSlotCells({
           onSet={(status, n) => handlers.setAttendance(entry.studentId, date, slotStart, status, n)}
           onClear={() => handlers.clearAttendance(entry.studentId, date, slotStart)}
           onNote={(n) => handlers.setAttendanceNote(entry.studentId, date, slotStart, n)}
+          onRemoveMakeup={
+            entry.isMakeup ? () => handlers.removeMakeup(entry.studentId, date) : undefined
+          }
         />
       </td>
       <td className="px-1 py-px text-center">

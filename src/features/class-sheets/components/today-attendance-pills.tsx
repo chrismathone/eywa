@@ -43,6 +43,7 @@ export function TodayAttendancePills({
   canMark,
   onSet,
   onClear,
+  onRemoveMakeup,
 }: {
   status: string | null;
   /** 사유 메모 — 지각·결석 창의 초기값(점 표시로도 쓴다). */
@@ -52,6 +53,8 @@ export function TodayAttendancePills({
   onSet: (status: BasicAttendance, note?: string | null) => void;
   /** 활성 '출석' 재클릭 — plain present만 지워진다(그 외는 서버가 거절하고 사유를 띄운다). */
   onClear: () => void;
+  /** 보강 명단에서 빼기 — 수강생이 아닌 행만. */
+  onRemoveMakeup?: () => void;
 }) {
   // 권한·기간이 없으면 누를 수 있는 것처럼 그리지 않는다(드롭다운·원스크린과 같은 처방).
   if (!canMark) {
@@ -69,6 +72,22 @@ export function TodayAttendancePills({
     );
   }
   if (status && !BASIC.includes(status as BasicAttendance)) {
+    if (status === "makeup" && onRemoveMakeup) {
+      return (
+        <button
+          type="button"
+          className={`${READONLY_CLS} hover:bg-purple/15 text-purple cursor-pointer`}
+          title="클릭하면 보강 명단에서 뺍니다(출석 기록이 삭제됩니다)"
+          aria-label={`${studentName} 보강 취소`}
+          onClick={() => {
+            if (!window.confirm(`${studentName} 보강을 명단에서 뺄까요? 출석 기록이 삭제됩니다.`)) return;
+            onRemoveMakeup();
+          }}
+        >
+          {LABEL[status] ?? status}
+        </button>
+      );
+    }
     return (
       <span className={READONLY_CLS} title="조퇴·공결·보강은 출석부에서 변경하세요(여기서 바꾸면 그 상태가 사라집니다)">
         {LABEL[status] ?? status}

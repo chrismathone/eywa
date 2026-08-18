@@ -30,6 +30,17 @@ describe("ECS 출결 → 출석부 배선", () => {
     expect(sheetClient).toMatch(/await drainAttendanceSaves\(\);\s*router\.push\(href\)/);
   });
 
+  it("보강 빼기는 수강생을 거절하고 출결 행을 지운다", () => {
+    const actions = read("src", "features", "class-sheets", "server", "actions.ts");
+    const start = actions.indexOf("export async function removeMakeupAttendee");
+    expect(start).toBeGreaterThan(-1);
+    const body = actions.slice(start, start + 2500);
+    expect(body).toContain("이 반 수강생입니다");
+    expect(body).toContain('.from("attendance_records")');
+    expect(body).toContain(".delete()");
+    expect(sheetClient).toContain("removeMakeupAttendee");
+  });
+
   it("영어 시트가 출석부와 같은 setAttendanceCell 액션에 반·학생·날짜·교시를 보낸다", () => {
     expect(sheetClient).toContain(
       'import { setAttendanceCell } from "@/features/attendance/server/actions";',
