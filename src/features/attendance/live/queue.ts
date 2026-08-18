@@ -36,6 +36,12 @@ export type QueueStudent = {
   studentPhone: string | null;
   /** 이 (학생·날짜·교시)에 이미 남긴 후속조치 — 없으면 null. */
   followup: FollowupBrief | null;
+  /**
+   * 강사가 이 (반·저장축)에 "데스크 확인 요청"을 보냈는가(역방향 버튼, 2026-08-18).
+   * 강사가 교실을 직접 보고 지목한 것이라 같은 신호 안에서 먼저 처리한다(compareStudents).
+   * optional — 요청이 없는 화면(과거 날짜 등)은 안 싣는다.
+   */
+  teacherRequested?: boolean;
 };
 
 export type FollowupBrief = {
@@ -66,6 +72,8 @@ export type QueueClass = {
   saveSlot: string | null;
   /** 이미 '출결 입력 요청'을 보낸 카드인가 — 중복 전화를 막는 유일한 표식. */
   requested: boolean;
+  /** 강사가 이 (반·저장축)에 "데스크 확인 요청"을 보냈는가 — 카드에 힌트로 밝힌다(강사는 이미 안다). */
+  teacherRequested?: boolean;
   /**
    * 이 카드에 접힌 교시 수(기본 1). 수학처럼 **하루 한 행**이 규약인 과목은 연강 2~3교시가 한 칸이라
    * 카드도 한 장이다 — 접힌 교시가 있으면 화면이 "1~3교시"로 밝힌다.
@@ -108,12 +116,23 @@ export function compareStudents(a: QueueStudent, b: QueueStudent): number {
   if (settled !== 0) return settled;
   const rank = SIGNAL_RANK[b.signal] - SIGNAL_RANK[a.signal];
   if (rank !== 0) return rank;
+  // 같은 신호 안에선 강사가 지목한 건 먼저 — 요청 벨을 받고 큐를 연 데스크가 그 건을 바로 찾아야 한다.
+  const req = Number(b.teacherRequested ?? false) - Number(a.teacherRequested ?? false);
+  if (req !== 0) return req;
   if (a.slotStart !== b.slotStart) return a.slotStart < b.slotStart ? -1 : 1;
   return a.studentName.localeCompare(b.studentName, "ko");
 }
 
-/** 반 줄 정렬 — 교시 이른 순, 같으면 인원 많은 순(한 통으로 더 많이 걷히는 쪽 먼저). */
+/**
+ * 반 줄 정렬 — **강사가 지목한 카드 먼저**, 그다음 교시 이른 순, 같으면 인원 많은 순.
+ *
+ * 요청 승격이 학생 레인에만 있으면 안 된다 — 강사가 버튼을 누르는 가장 흔한 상태는 아직 아무도 안 찍은
+ * 반(class_unmarked)이고, 그 경우 큐엔 학생 행이 아니라 **이 반 카드**만 뜬다(레인 A 하루 60~70장 실측).
+ * 벨을 받고 큐를 연 데스크가 그 카드를 스크롤로 찾게 하면 grace-skip이 무의미해진다.
+ */
 export function compareClasses(a: QueueClass, b: QueueClass): number {
+  const req = Number(b.teacherRequested ?? false) - Number(a.teacherRequested ?? false);
+  if (req !== 0) return req;
   if (a.slotStart !== b.slotStart) return a.slotStart < b.slotStart ? -1 : 1;
   if (a.expected !== b.expected) return b.expected - a.expected;
   return a.className.localeCompare(b.className, "ko");
@@ -136,7 +155,10 @@ export function buildQueue(students: readonly QueueStudent[], classes: readonly 
     if (s.signal === "class_unmarked") continue; // 반 단위로 접힌다
     const key = `${s.studentId}|${s.classId}|${s.saveSlot ?? ""}`;
     const prev = seen.get(key);
-    if (!prev || SIGNAL_RANK[s.signal] > SIGNAL_RANK[prev.signal]) seen.set(key, s);
+    const winner = !prev || SIGNAL_RANK[s.signal] > SIGNAL_RANK[prev.signal] ? s : prev;
+    // 접힌 교시 중 하나라도 요청이 있으면 표식은 남는다 — 지는 쪽 행이 갖고 있었다고 사라지면 안 된다.
+    const teacherRequested = (prev?.teacherRequested ?? false) || (s.teacherRequested ?? false);
+    seen.set(key, teacherRequested === (winner.teacherRequested ?? false) ? winner : { ...winner, teacherRequested });
   }
   for (const s of seen.values()) {
     (isSettled(s.followup, s.signal) ? done : open).push(s);
@@ -161,6 +183,9 @@ export function buildQueue(students: readonly QueueStudent[], classes: readonly 
       expected: Math.max(prev.expected, c.expected),
       slotCount: prev.slotCount + 1,
       slotEnd: c.slotStart > prev.slotEnd ? c.slotStart : prev.slotEnd,
+      // 요청 표식들은 접힌 교시 중 하나만 있어도 참 — 저장축이 같으니 같은 요청이다.
+      requested: prev.requested || c.requested,
+      teacherRequested: (prev.teacherRequested ?? false) || (c.teacherRequested ?? false),
     });
   }
   const laneClasses = [...foldedClasses.values()].sort(compareClasses);

@@ -1,5 +1,22 @@
 # eywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-08-18 (7) — 강사→데스크 "데스크 확인 요청" (당일 출결 역방향 버튼)
+
+원장: *"선생님쪽에서 데스크에 출결확인 요청 가능하도록 반대로 버튼 추가하고싶네. 현재는 데스크→선생님만 있음."*
+강사 홈 스트립(오늘 출석 미입력) 카드에 **「데스크 확인」** 버튼 — `requestAttendanceInput`(데스크→강사)의 거울상.
+
+- **`requestDeskConfirm`**(live/server/actions.ts): 클라는 (반·날짜·저장축 교시)만 보낸다 — **미입력 명단은
+  서버가 `loadLiveSlots`로 재계산**(낡은 화면·임의 studentId 차단, 0명이면 거절). 수신 =
+  `desk_attendance_optin` 계정(교차 알림과 같은 축, `loadDeskOptin` 공유). dedup = `notification_events`
+  `attendance_desk_confirm_request` (반, `날짜|저장축`) 1회 — 수신자 확인이 dedup보다 먼저(빈 요청에 bucket 안 태움).
+  scoped 게이트는 보드와 같은 합집합(담임∪위임∪슬롯 담당 — 담임 축만 보면 부담임이 버튼만 보고 거절당함, #103 계열).
+- **데스크 쪽 표식**: 큐 학생 행 「강사 확인 요청」 배지 + 레인 A 카드 힌트, 같은 신호 안에선 요청 건 먼저 정렬.
+  요청된 (반·저장축)은 **유예(grace)를 건너뛴다**(`shouldQueueWithRequest` 순수+Vitest) — 벨 받고 큐를 열었는데
+  비어 있으면 "요청했다는데 없다"가 된다(강사가 교실을 보고 지목한 건 오탐이 아니다). `before`는 요청이 있어도 제외.
+- 강사 쪽 '데스크 요청함' 표식은 dedup 원장(notification_events)을 그대로 읽는다(`loadRequestMarks`로 양방향 통일).
+  마이그레이션 0(기존 표·컬럼만) — #95 해당 없음.
+- 검증: typecheck 0(내 파일) / lint 0 / attendance 스위트 50파일·550 통과(신규: signals 3·queue 4).
+
 ## 2026-08-18 (6) — 감사로그 뷰어: 텍스트 검색 + 기간(달력) 필터
 
 원장: *"감사로그에 텍스트 검색 가능하게"* · *"달력 추가해서 기간별 검색도"*. owner ?tab=audit 필터 바에

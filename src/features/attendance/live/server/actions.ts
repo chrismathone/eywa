@@ -12,9 +12,14 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { accessLevelTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { getTeachingClassIds } from "@/features/classes/server/delegation";
-import { kstToday } from "@/lib/date-kst";
+import { kstMinutesOfDay, kstToday } from "@/lib/date-kst";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { notifyUsers } from "@/features/notifications/server/notify";
+import { loadLiveSlots } from "./load";
+import { loadDeskOptin } from "./cross-notify";
+import { collectStudentNames, formatAttendanceNotifyNames } from "../notify-names";
+import { hhmmToMin, slotPhase } from "../signals";
+import { isSpecialSlotLabel } from "@/features/timetable/lib/teacher-label";
 
 const STATES = ["open", "resolved", "dismissed"] as const;
 const OUTCOMES = ["coming", "absent_today", "sick", "already_here", "no_answer", "other"] as const;
@@ -190,6 +195,134 @@ export async function requestAttendanceInput(input: {
       title: `출결 입력 요청 — ${klass?.class_name ?? "수업"}${slot ? ` ${slot}` : ""}`,
       body: "데스크에서 오늘 출결 입력을 요청했습니다. 화면 위 '오늘 출석 미입력'에서 바로 찍을 수 있습니다.",
       link: sessionDate === kstToday() ? "/attendance/live" : `/attendance/live?date=${sessionDate}`,
+      actorId: user.id,
+    })),
+  );
+  revalidatePath("/attendance/live");
+  return { ok: true, sent: true };
+}
+
+/**
+ * 역방향 — **강사가 데스크에 "미입력 학생 확인"을 요청**한다(원장 2026-08-18: *"선생님쪽에서 데스크에
+ * 출결확인 요청 가능하도록 반대로 버튼 추가"*). `requestAttendanceInput`(데스크→강사)의 거울상.
+ *
+ * · 명단은 클라를 믿지 않고 **서버가 다시 계산**한다(`loadLiveSlots` — 강사 화면이 낡았으면 그 사이
+ *   찍힌 학생은 빠지고, 전부 찍혔으면 요청 자체를 거절한다. 임의 studentId를 실어 보낼 길도 없다).
+ * · 수신 = `users.desk_attendance_optin` 켠 계정(교차 알림과 같은 수신자 축 — cross-notify.ts).
+ * · dedup bucket = (반, `날짜|저장축 교시`) — 큐의 모든 키는 저장축이다(수학 연강이 요청 3건이 되지 않게).
+ * · 결석(absent)은 이 요청 대상이 아니다 — 강사가 결석을 찍는 순간 `attendance_absent_desk` 벨이 이미 간다.
+ */
+export async function requestDeskConfirm(input: {
+  classId: string;
+  sessionDate: string;
+  /** 저장 축 교시(slot-axis saveSlot) — 수학은 null("그날 전체"). */
+  slotStart?: string | null;
+}): Promise<RequestResult> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "로그인이 필요합니다" };
+  const level = await accessLevelTenant(user.systemRole, "attendance");
+  // 🔴 readonly(회계·뷰어)는 거절 — none만 거르면 그 사이 등급이 통과해 "강사가 요청했다"는 벨을
+  //    강사 아닌 계정이 만들 수 있다(#77 — 스트립이 버튼을 안 보여주는 건 게이트가 아니다).
+  if (level !== "full" && level !== "scoped") return { error: "출결 요청 권한이 없습니다" };
+  const { classId, sessionDate } = input;
+  if (!classId || !/^\d{4}-\d{2}-\d{2}$/.test(sessionDate)) return { error: "필수 값이 누락되었습니다" };
+  if (sessionDate > kstToday()) return { error: "아직 지나지 않은 날짜입니다" };
+  const slot = input.slotStart?.trim() || null;
+  if (slot && !/^\d{2}:\d{2}$/.test(slot)) return { error: "잘못된 교시입니다" };
+
+  const supabase = await createClient();
+  // 강사(scoped)는 자기 수업만 — 스코프는 보드와 같은 합집합(담임 ∪ 위임 ∪ 슬롯 담당). 담임 축만 보면
+  // 부담임(교시 담당) 강사가 스트립에선 버튼을 보는데 서버가 거절하는 짝이 생긴다(#103 계열).
+  if (level === "scoped") {
+    const [teaching, slotRes] = await Promise.all([
+      getTeachingClassIds(supabase, user.id, sessionDate),
+      supabase
+        .from("class_schedules")
+        .select("class_id")
+        .eq("class_id", classId)
+        .eq("teacher_id", user.id)
+        .lte("valid_from", sessionDate)
+        .or(`valid_to.is.null,valid_to.gte.${sessionDate}`)
+        .limit(1),
+    ]);
+    // ⚠️ 에러를 `?? []`로 삼키면 부담임(슬롯 담당)의 일시 장애가 "담당 반이 아닙니다"로 위장한다(B3 계열)
+    //    — 권한 거절 문구를 받은 강사는 재시도 대신 포기한다.
+    if (slotRes.error) return { error: "담당 확인에 실패했습니다 — 잠시 후 다시 시도해 주세요" };
+    if (!teaching.all.includes(classId) && (slotRes.data ?? []).length === 0) {
+      return { error: "담당 반이 아닙니다" };
+    }
+  }
+
+  // 그 (반·저장축)의 미입력 학생을 서버가 직접 센다 — 0명이면 벨을 만들지 않는다(빈 요청 = 소음).
+  // 자리 반(LAB·JJ)은 제외 — 스트립·큐 둘 다 거르는 슬롯이라 요청해도 큐에 안 뜬다(빈 요청과 같다).
+  const matched = (await loadLiveSlots(sessionDate, [classId])).filter(
+    (s) => (s.saveSlot ?? null) === slot && !isSpecialSlotLabel(s.slotTeacherLabel),
+  );
+  if (matched.length === 0) return { error: "요청할 교시를 찾지 못했습니다 — 화면을 새로고침해 주세요" };
+  // 시작 전 교시는 거절 — 스트립은 안 보여주지만 서버 기준으론 올 수 있는 조합이다(#77). 시작 전에
+  // bucket을 태우면 큐는 before로 비어 있고("요청했다는데 없다") 정작 수업 때 누르면 벨이 안 나간다.
+  const nowMin = kstMinutesOfDay();
+  const slots = matched.filter((s) => {
+    if (sessionDate !== kstToday()) return true; // 지난 날짜는 전부 지난 교시다
+    const startMin = hhmmToMin(s.slotStart);
+    return startMin == null || slotPhase(nowMin, startMin, hhmmToMin(s.slotEnd)) !== "before";
+  });
+  if (slots.length === 0) return { error: "아직 시작하지 않은 교시입니다" };
+  // 🔴 명단은 학생 **id**로 접는다 — 이름 Set으로 접으면 동명이인이 1명으로 붕는다(#89, 이 학원은
+  //    동명이인 실재 — ClassNote 발송 게이트가 그래서 생겼다). 표시 이름 중복 제거는 collectStudentNames 몫.
+  const pendingIds: string[] = [];
+  const nameById = new Map<string, string>();
+  for (const s of slots) {
+    for (const st of s.students) {
+      if (st.status != null || nameById.has(st.studentId)) continue;
+      pendingIds.push(st.studentId);
+      nameById.set(st.studentId, st.studentName);
+    }
+  }
+  if (pendingIds.length === 0) return { error: "미입력 학생이 없습니다 — 이미 모두 입력됐어요" };
+  const className = slots[0]!.className;
+  const displayStart = slots.map((s) => s.slotStart).sort()[0]!;
+
+  const admin = createAdminClient();
+  // 수신자 확인이 dedup보다 먼저(기존 규약) — 받을 사람이 없는데 bucket만 태우면 "보냈다"가 거짓이 된다.
+  const recipients = await loadDeskOptin(admin, user.tenantId, user.id);
+  if (recipients.length === 0) {
+    return { error: "출결 알림을 켠 데스크 직원이 없습니다 — 데스크에 직접 알려 주세요" };
+  }
+
+  const { data: fresh, error: dedupError } = await admin
+    .from("notification_events")
+    .upsert(
+      [
+        {
+          tenant_id: user.tenantId,
+          event_type: "attendance_desk_confirm_request",
+          subject_key: classId,
+          bucket: `${sessionDate}|${slot ?? ""}`,
+          seeded: false,
+        },
+      ],
+      { onConflict: "tenant_id,event_type,subject_key,bucket", ignoreDuplicates: true },
+    )
+    .select("bucket");
+  if (dedupError) return { error: "요청을 기록하지 못했습니다" };
+  // 이미 보낸 건이면 다시 보내지 않는다 — 화면엔 '요청함'으로 남는다(requestAttendanceInput과 같은 규약).
+  if (!fresh?.length) return { ok: true, sent: false };
+
+  // 이름은 4명까지 — 벨 본문이 명단 전문이 될 필요는 없다(건수는 이름이 아니라 **id 수**로 "외 N명").
+  const { names } = collectStudentNames(pendingIds, nameById);
+  const { listedLabel } = formatAttendanceNotifyNames(names.slice(0, 4), pendingIds.length);
+  await notifyUsers(
+    recipients.map((recipientId) => ({
+      tenantId: user.tenantId,
+      recipientId,
+      type: "attendance_desk_confirm_request" as const,
+      title: `데스크 확인 요청 — ${className} ${displayStart}`,
+      body: `강사가 미입력 ${listedLabel} 학생의 등원 확인을 요청했습니다.`,
+      link:
+        sessionDate === kstToday()
+          ? "/attendance/live?tab=desk"
+          : `/attendance/live?tab=desk&date=${sessionDate}`,
       actorId: user.id,
     })),
   );

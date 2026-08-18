@@ -30,6 +30,9 @@ export type NotificationType =
   // 사무실이 "이 교시 출결 입력해 주세요"를 담당 강사(슬롯 담당 포함)에게 요청 — 데스크 레인 A 버튼.
   // ⚠️ 이게 없으면 데스크는 헛전화 아니면 방치뿐이었다(적대 리뷰 S4). dedup은 (반, 날짜|교시) 1회.
   | "attendance_input_request"
+  // 역방향(2026-08-18 원장): 강사가 "미입력 학생을 데스크에서 확인해 주세요"를 요청 — 강사 홈 스트립 버튼.
+  // 수신 = 출결 알림 토글(users.desk_attendance_optin) 켠 계정. dedup은 (반, 날짜|저장축 교시) 1회.
+  | "attendance_desk_confirm_request"
   // 미출결 → 출결. 데스크가 찍으면 강사에게, 강사가 찍으면 데스크(optin)에게.
   | "attendance_unmarked_to_present"
   // 전자결재(0212a) — **내 결재 차례가 됐을 때** 그 결재자에게(순차라 한 명씩), 문서가 끝나면 기안자에게.
@@ -67,6 +70,7 @@ export const NOTIFICATION_ICON: Record<string, EywaIconName> = {
   student_attendance_notice: "userMinus",
   attendance_absent_desk: "userMinus",
   attendance_input_request: "clipboardCheck",
+  attendance_desk_confirm_request: "clipboardCheck",
   attendance_unmarked_to_present: "userCheck",
   approval_requested: "scrollText",
   approval_decided: "clipboardCheck",

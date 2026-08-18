@@ -18,7 +18,7 @@ import { reportError } from "@/lib/observability/report-error";
 import { addDays, kstMinutesOfDay, kstToday } from "@/lib/date-kst";
 import { isWithinAttendanceEditWindow } from "@/features/attendance/edit-window";
 import { nowBandOf, type NowBand } from "../now-band";
-import { hhmmToMin, shouldQueue, slotPhase, type SlotPhase } from "../signals";
+import { hhmmToMin, shouldQueueWithRequest, slotPhase, type SlotPhase } from "../signals";
 import { isSpecialSlotLabel } from "@/features/timetable/lib/teacher-label";
 import { buildQueue, type DeskQueue, type FollowupBrief, type QueueClass, type QueueStudent } from "../queue";
 import { loadLiveSlots } from "./load";
@@ -188,11 +188,12 @@ export async function getDeskQueue(date: string = kstToday()): Promise<DeskQueue
   if (!user) return blank;
   if ((await accessLevelTenant(user.systemRole, "attendance")) === "none") return blank;
 
-  // 조치 기록과 '입력 요청 보냄' 이력은 서로 독립이라 병렬(B4).
-  const [board, followups, requested] = await Promise.all([
+  // 조치 기록과 '입력 요청 보냄'·'데스크 확인 요청' 이력은 서로 독립이라 병렬(B4).
+  const [board, followups, requested, deskRequested] = await Promise.all([
     getLiveBoard(date),
     loadFollowups(date),
-    loadInputRequests(date),
+    loadRequestMarks(date, "attendance_input_request"),
+    loadRequestMarks(date, "attendance_desk_confirm_request"),
   ]);
 
   const students: QueueStudent[] = [];
@@ -202,8 +203,11 @@ export async function getDeskQueue(date: string = kstToday()): Promise<DeskQueue
       if (slot.phase === "before") continue; // 시작 전 = 안 온 게 정상
       // 랩실·JJ는 자리 출석부 몫. 여기 올리면 담임에게 '입력 요청'이 간다.
       if (isSpecialSlotLabel(slot.slotTeacherLabel)) continue;
+      // 강사가 이 (반·저장축)에 "데스크 확인 요청"을 보냈나 — 보냈으면 유예를 건너뛴다(벨을 받고
+      // 큐를 열었는데 비어 있으면 "요청했다는데 없다"가 된다. shouldQueueWithRequest 주석 참조).
+      const teacherAsked = deskRequested.has(`${slot.classId}|${slot.saveSlot ?? ""}`);
       // 레인 A는 "출석부가 안 열렸다"는 신호라 유예를 기다린다(grace 중엔 아직 열 시간이다).
-      if (!slot.hasAnyRecord && (slot.phase === "due" || slot.phase === "ended")) {
+      if (!slot.hasAnyRecord && shouldQueueWithRequest("class_unmarked", slot.phase, teacherAsked)) {
         // 레인 A — 반 통째로 미체크. 학생을 개별로 쏟지 않는다(영어 91.6% 공백이 여기로 접힌다).
         classes.push({
           classId: slot.classId,
@@ -219,6 +223,7 @@ export async function getDeskQueue(date: string = kstToday()): Promise<DeskQueue
           saveSlot: slot.saveSlot,
           // 이미 요청을 보냈나 — 없으면 데스크 3명이 같은 강사에게 두세 번 전화한다(적대 리뷰 S4).
           requested: requested.has(`${slot.classId}|${slot.saveSlot ?? ""}`),
+          teacherRequested: teacherAsked,
           slotCount: 1, // 접기는 buildQueue가 한다(저장축 기준) — 여기선 교시마다 한 장씩 올린다.
           slotEnd: slot.slotStart,
         });
@@ -227,7 +232,8 @@ export async function getDeskQueue(date: string = kstToday()): Promise<DeskQueue
         if (!s.signal || s.signal === "class_unmarked") continue;
         // 🔴 `absent`는 유예를 기다리지 않는다 — 강사가 결석을 찍은 순간이 가장 확실한 신호이고,
         //    하원·셔틀 시간을 감안하면 유예를 더 흘려보낼 이유가 없다(signals.shouldQueue와 같은 규약).
-        if (!shouldQueue(s.signal, slot.phase)) continue;
+        //    강사가 데스크 확인을 요청한 교시도 유예를 건너뛴다(요청 = 강사가 교실을 보고 지목한 것).
+        if (!shouldQueueWithRequest(s.signal, slot.phase, teacherAsked)) continue;
         students.push({
           studentId: s.studentId,
           studentName: s.studentName,
@@ -243,6 +249,7 @@ export async function getDeskQueue(date: string = kstToday()): Promise<DeskQueue
           note: s.note,
           parentPhone: s.parentPhone,
           studentPhone: s.studentPhone,
+          teacherRequested: teacherAsked,
           // 교시별 기록이 먼저, 없으면 "그날 전체"로 남긴 조치(교시 없이 저장된 세대).
           followup:
             followups.get(`${s.studentId}|${slot.saveSlot ?? ""}`) ?? followups.get(`${s.studentId}|`) ?? null,
@@ -288,19 +295,23 @@ async function loadFollowups(date: string): Promise<Map<string, FollowupBrief>> 
 }
 
 /**
- * 그날 이미 보낸 '출결 입력 요청' — 키는 `${classId}|${slot}`.
+ * 그날 이미 보낸 요청 표식 — 키는 `${classId}|${저장축 slot}`. 양방향이 같은 모양을 쓴다:
+ * `attendance_input_request`(데스크→강사) / `attendance_desk_confirm_request`(강사→데스크).
  * `notification_events`가 dedup 원장이라 그걸 그대로 읽는다(요청 이력을 위한 별도 표를 만들지 않는다).
  */
-async function loadInputRequests(date: string): Promise<Set<string>> {
+export async function loadRequestMarks(
+  date: string,
+  eventType: "attendance_input_request" | "attendance_desk_confirm_request",
+): Promise<Set<string>> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("notification_events")
     .select("subject_key, bucket")
-    .eq("event_type", "attendance_input_request")
+    .eq("event_type", eventType)
     .like("bucket", `${date}|%`);
-  // ⚠️ 실패하면 '요청함' 표식이 전부 꺼져 데스크가 이미 보낸 반에 또 손댄다 — 조용히 넘기지 않는다(#89).
+  // ⚠️ 실패하면 '요청함' 표식이 전부 꺼져 이미 보낸 반에 또 손댄다 — 조용히 넘기지 않는다(#89).
   //    (서버 dedup이 중복 발송은 막으므로 화면 표식만 어긋난다.)
-  if (error) reportError(error, { scope: "attendance.loadInputRequests", date });
+  if (error) reportError(error, { scope: "attendance.loadRequestMarks", date, eventType });
   if (error || !data) return new Set();
   return new Set(data.map((r) => `${r.subject_key}|${String(r.bucket).slice(date.length + 1)}`));
 }

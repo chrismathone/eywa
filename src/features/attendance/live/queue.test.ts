@@ -215,3 +215,53 @@ describe("orderQueueSubjects", () => {
     expect(orderQueueSubjects(["art", "math"], ["math", "english"])).toEqual(["math", "art"]);
   });
 });
+
+describe("teacherRequested — 강사의 '데스크 확인 요청' 표식(역방향 버튼)", () => {
+  it("같은 신호 안에선 강사가 지목한 건 먼저 — 벨을 받고 큐를 연 데스크가 바로 찾는다", () => {
+    const a = student({ studentId: "a", slotStart: "16:20" });
+    const b = student({ studentId: "b", slotStart: "17:20", teacherRequested: true });
+    expect([a, b].sort(compareStudents).map((s) => s.studentId)).toEqual(["b", "a"]);
+  });
+
+  it("결석(사실)은 요청보다 먼저 — 요청이 신호 강도를 이기지는 않는다", () => {
+    const abs = student({ studentId: "abs", signal: "absent" as LiveSignal });
+    const req = student({ studentId: "req", teacherRequested: true });
+    expect([req, abs].sort(compareStudents).map((s) => s.studentId)).toEqual(["abs", "req"]);
+  });
+
+  it("수학 연강 접기에서 지는 쪽 행에만 있던 표식도 살아남는다(학생·반 둘 다)", () => {
+    const q = buildQueue(
+      [
+        // 같은 (학생·저장축) 두 교시 — 신호가 센 결석 행이 이기지만 표식은 미확인 행에 있었다.
+        student({ studentId: "s", slotStart: "16:20", signal: "absent" as LiveSignal }),
+        student({ studentId: "s", slotStart: "17:20", teacherRequested: true }),
+      ],
+      [
+        klass({ classId: "m1", slotStart: "16:20" }),
+        klass({ classId: "m1", slotStart: "17:20", teacherRequested: true }),
+      ],
+    );
+    expect(q.lanes.students[0].teacherRequested).toBe(true);
+    expect(q.lanes.students[0].signal).toBe("absent");
+    expect(q.lanes.classes[0].teacherRequested).toBe(true);
+  });
+
+  it("접힌 반 카드는 '입력 요청함' 표식도 한 교시만 있으면 참이다", () => {
+    const q = buildQueue(
+      [],
+      [klass({ classId: "m1", slotStart: "16:20" }), klass({ classId: "m1", slotStart: "17:20", requested: true })],
+    );
+    expect(q.lanes.classes[0].requested).toBe(true);
+  });
+
+  it("레인 A도 강사가 지목한 카드 먼저 — 반 통째 미체크가 이 버튼의 가장 흔한 상태다(하루 60~70장 사이)", () => {
+    const q = buildQueue(
+      [],
+      [
+        klass({ classId: "early", slotStart: "16:20" }),
+        klass({ classId: "asked", slotStart: "20:10", teacherRequested: true }),
+      ],
+    );
+    expect(q.lanes.classes.map((c) => c.classId)).toEqual(["asked", "early"]);
+  });
+});
