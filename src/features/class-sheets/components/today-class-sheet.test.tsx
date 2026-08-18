@@ -19,6 +19,10 @@ import type { SheetSaveStore } from "./use-sheet-saves";
  *  🔴 ③ 머리 줄의 폭 = 표의 내용 폭 — 카드가 `w-max`라 이걸 안 묶으면 긴 반 이름이 카드를 늘려
  *        아래 표와 어긋나고 가로 스크롤이 표 끝을 지나 더 밀린다.
  */
+// ⚠️ 카드 안에 나중에 들어온 `EcsMakeupAdder`가 `useRouter()`를 쓴다 — 앱 라우터가 없는 렌더 테스트에선
+//    "invariant expected app router to be mounted"로 죽는다. 리포 표준대로 navigation만 mock 하고
+//    컴포넌트는 **진짜로 그린다**(이 테스트가 보는 건 폭·줄맞춤이라 실물이 트리에 있어야 뜻이 있다).
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 vi.mock("@/components/ui/drag-scroll-area", () => ({
   DragScrollArea: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }));
