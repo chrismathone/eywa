@@ -1,7 +1,6 @@
 "use client";
 
 import { useActionState, useEffect, useMemo, useRef, useState } from "react";
-import { useFormStatus } from "react-dom";
 import { Loader2, Pencil, Users, X } from "@/components/icons/eywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { SearchableSelect } from "@/components/ui/searchable-select";
@@ -58,7 +57,10 @@ export function SpeakerEditor({
   const [editing, setEditing] = useState(false);
   // speaker → { staffId, label }. 초기값: speaker_staff(직원연결) 우선, 없으면 ai_speaker_roles 라벨.
   const [rows, setRows] = useState<Record<string, { staffId: string; label: string }>>({});
-  const [state, action] = useActionState<UpdateMeetingSpeakersState, FormData>(
+  // pending은 useActionState의 세 번째 값 — 이 폼은 submitAction(수동 디스패치)이라 useFormStatus가
+  // 영원히 false다(class-form에 적힌 함정). 그대로 두면 스피너가 없고 버튼이 안 잠겨 더블클릭이
+  // 저장을 두 번 보낸다(적대 리뷰 2026-08-18).
+  const [state, action, pending] = useActionState<UpdateMeetingSpeakersState, FormData>(
     updateMeetingSpeakers,
     undefined,
   );
@@ -192,19 +194,12 @@ export function SpeakerEditor({
       </div>
 
       <div className="flex items-center gap-2">
-        <SaveBtn />
+        <Button type="submit" size="sm" disabled={pending}>
+          {pending ? <Loader2 className="size-3.5 animate-spin" /> : null}
+          저장
+        </Button>
         {state?.error ? <span className="text-chart-4 text-xs">{state.error}</span> : null}
       </div>
     </form>
-  );
-}
-
-function SaveBtn() {
-  const { pending } = useFormStatus();
-  return (
-    <Button type="submit" size="sm" disabled={pending}>
-      {pending ? <Loader2 className="size-3.5 animate-spin" /> : null}
-      저장
-    </Button>
   );
 }

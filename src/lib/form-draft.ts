@@ -14,6 +14,12 @@ const DB_VERSION = 1;
 const STORE = "drafts";
 /** 언로드 순간(pagehide) 동기 백스톱의 localStorage 키 접두사 — IDB가 못 미치는 찰나를 메운다. */
 const BACKSTOP_PREFIX = "form-draft:hide:";
+/** 백스톱 1건 크기 상한 — 넘으면 IDB에만 남긴다(공용 localStorage 통을 한 초안이 먹지 않게). */
+const BACKSTOP_MAX_BYTES = 256 * 1024;
+/** 백스톱 보관 기간 — 저장 없이 떠난 초안이 영원히 눌러앉지 않게 읽기 경로에서 정리한다. */
+const BACKSTOP_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+/** 정리는 세션당 한 번(용량 초과 시에만 강제 재실행). */
+let swept = false;
 
 /** 입력 멈춤 후 저장까지 디바운스(ms). */
 export const DRAFT_DEBOUNCE_MS = 700;
@@ -168,11 +174,56 @@ export async function saveDraft(scope: string, values: Record<string, string>): 
 export function saveDraftOnHide(scope: string, values: Record<string, string>): void {
   const draft: FormDraft = { scope, savedAt: Date.now(), values };
   try {
-    localStorage.setItem(BACKSTOP_PREFIX + scope, JSON.stringify(draft));
+    const raw = JSON.stringify(draft);
+    // 🔴 큰 초안은 백스톱에 싣지 않는다 — localStorage는 **origin 공용 5MB 한 통**이고(gotcha #90)
+    //    거기엔 창 배치·사용자 설정(zustand persist)도 함께 산다. 그 통이 차면 조용히 degrade하는 건
+    //    초안이 아니라 **창 시스템**이다(persist는 setItem을 감싸지 않아 창을 열 때마다 throw).
+    //    한도를 넘는 초안은 IDB 사본만 남긴다 — 언로드 찰나를 놓칠 순 있어도 남의 저장을 깨진 않는다.
+    if (raw.length <= BACKSTOP_MAX_BYTES) {
+      try {
+        localStorage.setItem(BACKSTOP_PREFIX + scope, raw);
+      } catch {
+        // 용량 초과 — 오래된 백스톱을 걷어내고 한 번만 재시도(내 초안 하나 때문에 통을 못 쓰는 상황 방지).
+        sweepBackstops(true);
+        try {
+          localStorage.setItem(BACKSTOP_PREFIX + scope, raw);
+        } catch {
+          /* 그래도 안 되면 IDB만 — 조용히 포기 */
+        }
+      }
+    }
   } catch {
-    /* 사생활 모드·용량 초과 — IDB 쪽만 시도 */
+    /* 사생활 모드·직렬화 실패 — IDB 쪽만 시도 */
   }
   void saveDraft(scope, values);
+}
+
+/**
+ * 오래된 백스톱 키 정리 — 백스톱은 `clearDraft`(서버 저장·폐기)로만 사라지므로, 저장하지 않고 떠난
+ * 초안은 그대로 눌러앉는다. 스코프가 **레코드마다 하나**라(학생 메모·회의·상담) 시간이 지나면 수백 개가
+ * 된다. 읽기 경로에서 세션당 한 번만 훑는다(언로드 순간에 돌리면 그 프레임을 잡아먹는다).
+ */
+function sweepBackstops(force = false): void {
+  if (swept && !force) return;
+  swept = true;
+  try {
+    const now = Date.now();
+    const stale: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key?.startsWith(BACKSTOP_PREFIX)) continue;
+      let savedAt = 0;
+      try {
+        savedAt = (JSON.parse(localStorage.getItem(key) ?? "{}") as FormDraft).savedAt ?? 0;
+      } catch {
+        savedAt = 0; // 손상 항목도 정리 대상
+      }
+      if (!savedAt || now - savedAt > BACKSTOP_MAX_AGE_MS) stale.push(key);
+    }
+    for (const k of stale) localStorage.removeItem(k);
+  } catch {
+    /* 사생활 모드 등 — 정리는 best-effort */
+  }
 }
 
 function readBackstop(scope: string): FormDraft | null {
@@ -196,6 +247,7 @@ export function pickNewerDraft(fromDb: FormDraft | null, backstop: FormDraft | n
 }
 
 export async function loadDraft(scope: string): Promise<FormDraft | null> {
+  sweepBackstops(); // 세션 첫 조회에서만 — 오래된 백스톱이 공용 통에 쌓이지 않게
   const fromDb = await new Promise<FormDraft | null>((resolve) => {
     try {
       void openDB().then(

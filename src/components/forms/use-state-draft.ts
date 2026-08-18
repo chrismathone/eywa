@@ -11,6 +11,12 @@ import {
 } from "@/lib/form-draft";
 
 /**
+ * `clear()`(서버 저장 성공) 직후 재기준선을 받아 주는 창(ms). 프로그램적 상태 변화는 같은 커밋에서
+ * 오므로 이 정도면 충분하고, 사람의 편집을 삼키기엔 짧다.
+ */
+const REBASE_WINDOW_MS = 1000;
+
+/**
  * 상태 기반 로컬 초안 자동저장 — 입력이 `<form>` DOM이 아니라 React state(객체·동적 배열)인 폼용.
  * useFormDraft(DOM 이벤트 기반)와 짝. 직렬화 가능한 `snapshot`을 통째로 JSON으로 IDB에 디바운스 저장하고,
  * 복구는 `restore()`가 파싱된 스냅샷을 돌려주면 호출부가 setState로 rehydrate한다(동적 행·배열도 그대로 복원).
@@ -37,14 +43,19 @@ export function useStateDraft<T>({
   // clear() 직후 재기준선 대기 — 저장 성공이 유발한 상태 변화(선택 해제 등)로 json이 바뀌면
   // 그 첫 스냅샷을 **저장하지 않고 새 기준선으로** 삼는다. 안 그러면 "발송 후 선택만 초기화하고
   // 본문은 남기는" 화면에서 방금 지운 초안이 즉시 다시 저장돼 배너가 되살아난다(대량 발송 실측).
-  const rebaseRef = useRef(false);
+  //
+  // 🔴 **시간 상한이 안전장치다**(적대 리뷰 2026-08-18 HIGH). 불리언 플래그로 두면, 저장 뒤 그런
+  //    프로그램적 변화가 **끝내 오지 않는** 화면에서 플래그가 무장한 채 남는다 — 회의 메모장은
+  //    저장 성공 시 `hasContent`가 false가 되어(값=서버값) 아무 effect도 플래그를 소비하지 않는다.
+  //    그러면 한참 뒤 사용자가 처음 붙여넣은 편집이 "새 기준선"으로 삼켜지고, 그 순간 디바운스·
+  //    강제 저장·언로드 플러시가 **셋 다** pendingSince를 못 받아 붙여넣기가 통째로 사라진다
+  //    (사고가 났던 그 화면 그대로). 프로그램적 변화는 clear()와 같은 커밋에서 오므로 창은 짧아도 된다.
+  const rebaseUntilRef = useRef(0);
 
-  // enabled가 꺼지면(편집기 닫힘 등) rebase 대기를 해소한다 — 남겨두면 재오픈 세션의 **첫 편집**이
-  // "새 기준선"으로 삼켜져 저장 그물 전체(디바운스·강제 저장·플러시)에서 빠진다(적대 리뷰 중-2:
-  // 화자 하나만 고치러 재오픈한 편집이 영영 저장 안 되던 것). enabled 상시 true인 발송형 화면
-  // (compose-face)은 이 effect가 no-op이라 rebase가 설계대로 프로그램적 상태 변화에 소비된다.
+  // enabled가 꺼지면(편집기 닫힘 등) 남은 대기를 즉시 해소한다 — 창이 살아 있는 동안 재오픈하면
+  // 그 세션의 첫 편집이 삼켜질 수 있다(적대 리뷰 중-2: 화자 하나만 고치러 재오픈한 편집).
   useEffect(() => {
-    if (!enabled) rebaseRef.current = false;
+    if (!enabled) rebaseUntilRef.current = 0;
   }, [enabled]);
 
   // 마운트 시 기존 초안 로드 → 있으면 배너 노출. (저장은 hasContent일 때만 일어나므로 로드된 초안은 항상 의미 있음.)
@@ -79,13 +90,16 @@ export function useStateDraft<T>({
     latestRef.current = { json, has };
   });
   useEffect(() => {
-    if (!enabled || !has) return;
+    if (!enabled) return;
     if (json === initialJsonRef.current) return;
-    if (rebaseRef.current) {
-      rebaseRef.current = false;
+    // 저장 직후 창 안에서 스냅샷이 바뀌었으면 그게 프로그램적 변화다 — 새 기준선으로 삼고 저장하지 않는다.
+    // (창 밖의 변화는 사람이 친 것이므로 아래 저장 경로로 내려간다.)
+    if (Date.now() < rebaseUntilRef.current) {
+      rebaseUntilRef.current = 0;
       initialJsonRef.current = json;
       return;
     }
+    if (!has) return;
     const write = () => {
       pendingSinceRef.current = null;
       void saveDraft(scope, { __json: json });
@@ -137,11 +151,12 @@ export function useStateDraft<T>({
     setDraftSavedAt(null);
   }, [scope]);
 
-  // 서버 저장 성공 시 호출 — 초안 비움. 대기 중 저장 타이머 취소 + 다음 스냅샷은 재기준선(재저장 억제).
+  // 서버 저장 성공 시 호출 — 초안 비움. 대기 중 저장 타이머 취소 + 곧바로 이어지는 프로그램적
+  // 상태 변화만 재기준선으로 흡수(창은 REBASE_WINDOW_MS — 위 rebaseUntilRef 주석 참조).
   const clear = useCallback(() => {
     if (timerRef.current) clearTimeout(timerRef.current);
     pendingSinceRef.current = null;
-    rebaseRef.current = true;
+    rebaseUntilRef.current = Date.now() + REBASE_WINDOW_MS;
     void clearDraft(scope);
     loadedRef.current = null;
     setDraftSavedAt(null);

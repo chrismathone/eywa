@@ -157,7 +157,13 @@ export function MemoItem({ memo, studentId }: { memo: StudentMemoRow; studentId:
           <div className="flex items-center justify-end gap-3">
             <button
               type="button"
-              onClick={() => setEditing(false)}
+              // 취소 = 사용자가 명시적으로 버린 것 — 초안도 함께 지운다. 안 지우면 이 메모를 다시 열
+              // 때마다 "작성하던 내용이 있습니다"가 뜨고, 복구하면 그 사이 바뀐 내용을 덮어쓴다
+              // (스코프가 메모마다 하나라 그런 키가 계속 쌓이기도 한다 — 적대 리뷰 2026-08-18).
+              onClick={() => {
+                localDraft.discard();
+                setEditing(false);
+              }}
               className="text-muted-foreground text-[11px]"
             >
               취소

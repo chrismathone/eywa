@@ -191,6 +191,66 @@ describe("useStateDraft — 강제 저장 + pagehide 플러시", () => {
     expect(saveDraftSpy).toHaveBeenCalledTimes(2);
     expect(JSON.parse(saveDraftSpy.mock.calls.at(-1)![1].__json).text).toBe("A=박소선");
   });
+
+  it("🔴 저장 후 한참 뒤의 첫 편집도 삼켜지지 않는다 — 재기준선 대기는 시간 상한이 있다(적대 리뷰 HIGH)", async () => {
+    // 사고 화면(회의 메모장) 재현: 저장에 성공하면 편집기를 닫지 않고 그대로 둔다(enabled 계속 true).
+    // 그 상태에서 한참 뒤 한 번 붙여넣고 바로 리로드/탭 숨김이 오면, 재기준선 플래그가 남아 있는 한
+    // 디바운스·강제 저장·언로드 플러시가 셋 다 안 걸려 붙여넣기가 통째로 사라졌다.
+    const h = await renderStateHarness();
+    act(() => h.setText("초안 A"));
+    act(() => {
+      vi.advanceTimersByTime(800);
+    });
+    saveDraftSpy.mockClear();
+    act(() => h.clear()); // 서버 저장 성공
+    act(() => {
+      vi.advanceTimersByTime(5000); // 프로그램적 상태 변화 없이 시간만 흐른다(메모장은 값=서버값)
+    });
+    act(() => h.setText("회의 내용 통째 붙여넣기"));
+    act(() => {
+      window.dispatchEvent(new Event("pagehide")); // 배포 스큐 강제 리로드
+    });
+    expect(saveOnHideSpy).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(saveOnHideSpy.mock.calls[0]![1].__json).text).toBe("회의 내용 통째 붙여넣기");
+  });
+
+  it("저장 직후의 프로그램적 상태 변화는 여전히 재기준선으로 흡수한다(초안 부활 방지)", async () => {
+    const h = await renderStateHarness();
+    act(() => h.setText("발송 본문"));
+    act(() => {
+      vi.advanceTimersByTime(800);
+    });
+    saveDraftSpy.mockClear();
+    // 서버 저장 성공 → 같은 커밋에서 화면이 상태 일부를 초기화(발송 화면의 '선택만 해제' 패턴).
+    act(() => {
+      h.clear();
+      h.setText("발송 본문 (선택 해제됨)");
+    });
+    act(() => {
+      vi.advanceTimersByTime(1500);
+    });
+    expect(saveDraftSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe("탭 숨김(visibilitychange)도 플러시한다", () => {
+  // pagehide만 검증하면 **폰에서 앱을 전환한 경우**가 통째로 빠진다(학부모 QR 접수·강사 알트탭).
+  it("visibilityState=hidden이면 pagehide와 똑같이 백스톱 저장한다", async () => {
+    const { container } = render(<FormHarness />);
+    await act(async () => {});
+    const input = container.querySelector("input[name=content]") as HTMLInputElement;
+    act(() => {
+      typeInto(input, "폰에서 쓰던 중");
+      vi.advanceTimersByTime(300);
+    });
+    const spy = vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
+    act(() => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    spy.mockRestore();
+    expect(saveOnHideSpy).toHaveBeenCalledTimes(1);
+    expect(saveOnHideSpy.mock.calls[0]![1]).toMatchObject({ content: "폰에서 쓰던 중" });
+  });
 });
 
 describe("useFormDraft — enabled 토글 세션 경계", () => {
