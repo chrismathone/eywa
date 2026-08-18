@@ -80,10 +80,10 @@ export async function notifyUnmarkedToPresent(input: {
     }
     const { who, listedLabel } = formatAttendanceNotifyNames(names, freshIds.length);
     const title =
-      direction === "to_teacher" ? `사무실이 출석 처리 — ${who}` : `강사가 뒤늦게 출석 처리 — ${who}`;
+      direction === "to_teacher" ? `데스크가 출석 처리 — ${who}` : `강사가 뒤늦게 출석 처리 — ${who}`;
     const body =
       direction === "to_teacher"
-        ? `${date} 미출결이던 ${listedLabel} 학생을 사무실에서 출석으로 입력했습니다.`
+        ? `${date} 미출결이던 ${listedLabel} 학생을 데스크에서 출석으로 입력했습니다.`
         : `${date} 미출결이던 ${listedLabel} 학생을 강사가 출석으로 입력했습니다.`;
 
     await notifyUsers(
