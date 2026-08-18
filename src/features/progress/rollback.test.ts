@@ -2,20 +2,32 @@ import { describe, expect, it } from "vitest";
 import { rollbackContainer, type RemainingEntry } from "./rollback";
 
 /**
- * 진도 되감기 — 🔴 "빼기 산술"이 아니라 **남은 것으로 재계산**이어야 한다.
- * 엔트리는 날짜순으로 쌓이고 마지막이 최고 위치라는 보장이 없다(복습·역행 입력이 실제로 있다).
+ * 진도 되감기 — 🔴 "빼기 산술"이 아니라 **남은 것으로 재계산**이고, 축은 **인제스트 순서**다.
+ * ingest가 `container.lastPosition`(저장 순서) 기준으로 점프를 재므로 날짜축으로 재면 backfill에서 갈린다.
  */
-const e = (entryDate: string, globalPosition: number | null): RemainingEntry => ({ entryDate, globalPosition });
+const e = (createdAt: string, globalPosition: number | null): RemainingEntry => ({ createdAt, globalPosition });
 
 describe("rollbackContainer", () => {
-  it("남은 엔트리가 없으면 개시 위치로 되돌린다(막 열린 컨테이너와 같은 상태)", () => {
-    expect(rollbackContainer([], 100)).toEqual({ lastPosition: 100, chapterCount: 0, maxJump: 0 });
+  it("🔴 남은 엔트리가 0이면 컨테이너를 **지우라고** 알린다 — 개시 위치로 되돌리면 지운 수업이 '현재 진도'로 남는다", () => {
+    const out = rollbackContainer([], 100);
+    expect(out.dropContainer).toBe(true);
+    expect(out.chapterCount).toBe(0);
   });
 
-  it("마지막 위치는 **날짜순 마지막**이지 최댓값이 아니다(역행 입력 보존)", () => {
-    const out = rollbackContainer([e("2026-08-01", 110), e("2026-08-03", 105)], 100);
-    expect(out.lastPosition).toBe(105);
-    expect(out.chapterCount).toBe(2);
+  it("🔴 정렬축은 **인제스트 순서**다(날짜가 아니다) — 지난 날짜를 나중에 입력하는 backfill에서 갈린다", () => {
+    // ingest는 저장 순서로 점프를 잰다: 274 → 275 → 278 = 최대 3.
+    // 날짜순으로 재면 275(8/04) → 274(8/05) → 278 = 최대 4가 되어 저장값과 어긋난다(실측 2건).
+    const out = rollbackContainer(
+      [
+        { createdAt: "2026-08-05T09:00:00Z", globalPosition: 274 },
+        { createdAt: "2026-08-05T13:00:00Z", globalPosition: 275 },
+        { createdAt: "2026-08-12T09:00:00Z", globalPosition: 278 },
+      ],
+      274,
+    );
+    expect(out.maxJump).toBe(3);
+    expect(out.lastPosition).toBe(278);
+    expect(out.dropContainer).toBe(false);
   });
 
   it("max_jump는 개시 위치부터 다시 잰다(뒤로 간 구간은 0)", () => {
@@ -24,7 +36,7 @@ describe("rollbackContainer", () => {
     expect(out.maxJump).toBe(15);
   });
 
-  it("입력 순서가 뒤섞여 있어도 날짜로 정렬해 계산한다", () => {
+  it("입력 순서가 뒤섞여 있어도 인제스트 시각으로 정렬해 계산한다", () => {
     const out = rollbackContainer([e("2026-08-03", 130), e("2026-08-01", 110)], 100);
     expect(out.lastPosition).toBe(130);
     expect(out.maxJump).toBe(20);
@@ -51,6 +63,6 @@ describe("rollbackContainer", () => {
   it("입력 배열을 변형하지 않는다(정렬로 호출부 데이터를 흔들면 안 된다)", () => {
     const input = [e("2026-08-03", 130), e("2026-08-01", 110)];
     rollbackContainer(input, 100);
-    expect(input[0]!.entryDate).toBe("2026-08-03");
+    expect(input[0]!.createdAt).toBe("2026-08-03");
   });
 });

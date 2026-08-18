@@ -20,12 +20,17 @@ describe("보강 빼기 서버 액션 배선", () => {
     expect(guard).toBeLessThan(attendanceDelete); // 가드가 먼저
   });
 
-  it("🔴 진도는 **보고서를 지우기 전에** 되감는다(FK가 SET NULL이라 지운 뒤엔 못 찾는다)", () => {
-    const rollback = src.indexOf("rollbackProgressForReports");
-    const reportDelete = src.indexOf(".delete()");
-    expect(rollback).toBeGreaterThan(-1);
+  it("🔴 진도 되감기는 2단계 — capture(삭제 전) → 보고서 삭제 → apply(삭제 후)", () => {
+    // capture가 뒤로 가면 FK SET NULL로 대상을 못 찾고, apply가 앞으로 가면 삭제 실패 시
+    // 보고서는 남고 진도만 사라진다(둘 다 되돌릴 수 없는 유실 — 적대 리뷰).
+    const capture = src.indexOf("captureProgressForReports(");
+    const reportDelete = src.indexOf('.from("lesson_reports")', src.indexOf("plan.deleteIds.length"));
+    const apply = src.indexOf("applyProgressRollback(");
+    expect(capture).toBeGreaterThan(-1);
     expect(reportDelete).toBeGreaterThan(-1);
-    expect(rollback).toBeLessThan(reportDelete);
+    expect(apply).toBeGreaterThan(-1);
+    expect(capture).toBeLessThan(reportDelete);
+    expect(reportDelete).toBeLessThan(apply);
   });
 
   it("이 문에서 회수(발송 취소)를 걸지 않는다 — 발송분은 애초에 막는다", () => {

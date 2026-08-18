@@ -11,17 +11,18 @@
  * 지우면 워커가 방금 집어간 작업의 대상이 사라져 **게시만 되고 기록이 없는** 상태가 된다.
  */
 
-import {
-  isRecallInFlight,
-  RECALL_FAILED,
-  RECALL_REQUESTED,
-  RECALLED,
-} from "@/features/report-admin/report-recall";
+import { isRecallInFlight, RECALL_FAILED, RECALLED } from "@/features/report-admin/report-recall";
 
 export type MakeupReportRef = {
   id: string;
   classnoteStatus: string | null;
   shareToken: string | null;
+  /**
+   * 학부모가 게시글을 읽은 기록 — **재발급이 지우지 못하는 발송 흔적**(뒷문 방어, 적대 리뷰 M3).
+   * `reissueShareLink`는 `classnote_status`를 NULL로 되돌리지만 **게시글은 그대로 남는다**. 그 상태를
+   * "미발송"으로 보면 발송분이 삭제 경로로 새므로, 읽힌 적이 있으면 발송분으로 취급한다.
+   */
+  readAt?: string | null;
 };
 
 export type MakeupRemovePlan = {
@@ -50,8 +51,9 @@ export function planMakeupRemoval(rows: MakeupReportRef[]): MakeupRemovePlan {
       plan.busyIds.push(r.id);
       continue;
     }
-    // 게시된 상태 = success(토큰 유무 무관) 또는 회수 실패(게시글이 아직 살아 있다).
-    if (status === "success" || status === RECALL_FAILED) {
+    // 게시된 상태 = success(토큰 유무 무관) · 회수 실패(게시글이 아직 살아 있다) ·
+    // 재발급으로 상태가 지워졌지만 **학부모가 읽은 흔적이 남은** 행.
+    if (status === "success" || status === RECALL_FAILED || (!status && r.readAt)) {
       plan.sentIds.push(r.id);
       continue;
     }
@@ -90,12 +92,14 @@ export const MAKEUP_RECALLED = RECALLED;
  */
 export function canRemoveMakeupRow(status: string | null | undefined): boolean {
   if (!status) return true; // 미발송 — 지울 수 있다
+  // 진행 중 판정은 **공유 소스**(isRecallInFlight)를 쓴다 — `recalling`(워커가 집어간 상태)을 여기서
+  // 따로 나열하면 워커가 상태를 하나 더 쓸 때 이 목록만 낡는다(적대 리뷰 치명).
   return !(
     status === "success" ||
     status === RECALL_FAILED ||
     status === "queued" ||
     status === "processing" ||
-    status === RECALL_REQUESTED
+    isRecallInFlight(status ?? null)
   );
 }
 
@@ -104,6 +108,7 @@ export function makeupRemoveBlockReason(status: string | null | undefined): stri
   if (canRemoveMakeupRow(status)) return null;
   if (status === "queued" || status === "processing")
     return "발송 처리 중인 보강입니다 — 끝난 뒤에 다시 시도하세요";
-  if (status === RECALL_REQUESTED) return "회수 처리 중인 보강입니다 — 게시글 삭제가 끝난 뒤에 뺄 수 있습니다";
+  if (isRecallInFlight(status ?? null))
+    return "회수 처리 중인 보강입니다 — 게시글 삭제가 끝난 뒤에 뺄 수 있습니다";
   return "이미 학부모에게 발송된 보강이라 뺄 수 없습니다 — 먼저 보고서를 회수(게시글 삭제)하세요";
 }

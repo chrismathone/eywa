@@ -20,6 +20,7 @@ import { evaluateSendGate } from "../send-gate";
 import { checkMentConsistency, MENT_WARNING_HINT, MENT_WARNING_LABEL } from "../ment-consistency";
 import { parentUnreadBadge, progressAnomalyBadge } from "../roster-signals";
 import { makeupBadgeLabel } from "../makeup-label";
+import { makeupRemoveBlockReason } from "../makeup-remove-plan";
 import { resolveRowFields } from "../row-fields";
 import type { OneScreenStudent } from "../types";
 import { classnoteBadge, readAtLabel, type SubjectReport } from "./report-card";
@@ -336,7 +337,7 @@ export function GridBodyRow({
               <button
                 type="button"
                 onClick={() => actions.onRemoveMakeup?.(student, subject.name)}
-                title="클릭하면 이 보강을 뺍니다(출결 기록과 저장된 보강 보고서가 삭제됩니다)"
+                title="클릭하면 이 보강을 뺍니다(출결·보강 보고서·진도 기록이 삭제됩니다)"
                 aria-label={`${student.name} 보강 빼기`}
                 className="bg-amber-soft text-amber hover:bg-amber inline-flex shrink-0 cursor-pointer items-center gap-0.5 rounded-pill px-1 py-px text-[9px] font-bold transition hover:text-white"
               >
@@ -344,7 +345,11 @@ export function GridBodyRow({
                 <EyIcon name="close" size={8} />
               </button>
             ) : (
-              <span className="bg-amber-soft text-amber shrink-0 rounded-pill px-1 py-px text-[9px] font-bold">
+              // 발송분 등 뺄 수 없는 행 — 버튼을 없애기만 하면 "왜 안 되지"가 남는다(적대 리뷰).
+              <span
+                className="bg-amber-soft text-amber shrink-0 rounded-pill px-1 py-px text-[9px] font-bold"
+                title={makeupRemoveBlockReason(liveStatus) ?? undefined}
+              >
                 보강
               </span>
             )
@@ -395,7 +400,7 @@ export function GridBodyRow({
               <button
                 type="button"
                 onClick={() => actions.onRemoveMakeup?.(student, subject.name)}
-                title="클릭하면 이 보강을 뺍니다(출결 기록과 저장된 보강 보고서가 삭제됩니다)"
+                title="클릭하면 이 보강을 뺍니다(출결·보강 보고서·진도 기록이 삭제됩니다)"
                 aria-label={`${student.name} ${subject.name} 보강 빼기`}
                 className="bg-amber-soft text-amber hover:bg-amber inline-flex shrink-0 cursor-pointer items-center gap-0.5 rounded-pill px-1 py-px text-[9px] font-bold transition hover:text-white"
               >
@@ -403,7 +408,14 @@ export function GridBodyRow({
                 <EyIcon name="close" size={8} />
               </button>
             ) : (
-              <span className="bg-amber-soft text-amber shrink-0 rounded-pill px-1 py-px text-[9px] font-bold">
+              <span
+                className="bg-amber-soft text-amber shrink-0 rounded-pill px-1 py-px text-[9px] font-bold"
+                title={
+                  subject.classId
+                    ? undefined
+                    : (makeupRemoveBlockReason(liveStatus) ?? undefined)
+                }
+              >
                 {makeupBadgeLabel({ makeup: true, hasClass: !!subject.classId })}
               </span>
             )

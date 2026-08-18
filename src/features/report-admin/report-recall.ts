@@ -20,13 +20,19 @@
 
 /** 회수 요청됨 — 연동 PC 워커가 아직 안 지움. 완료되면 `recalled`(거둬들이고 끝). */
 export const RECALL_REQUESTED = "recall_requested";
+/**
+ * 워커가 **집어가서 지우는 중** — `classnote-recall-core.mjs`가 원자 클레임하며 세우는 상태.
+ * 🔴 이 상태를 "진행 중"에서 빼면 그 사이에 행을 지울 수 있고, 그러면 워커의 결과 기록이 0행이 되어
+ *    **학부모 게시판에 글만 남고 eywa엔 흔적이 사라진다**(적대 리뷰 치명, 2026-08-18).
+ */
+export const RECALLING = "recalling";
 /** 회수 완료 — ClassNote 게시글 삭제됨. */
 export const RECALLED = "recalled";
 /** 회수 실패 — 사유는 `classnote_error`(한글). 다시 시도할 수 있다. */
 export const RECALL_FAILED = "recall_failed";
 
 /** 회수 계열 상태 집합 — 발송 큐 집계·필터가 "발송 상태"와 섞지 않도록. */
-export const RECALL_STATUSES: readonly string[] = [RECALL_REQUESTED, RECALLED, RECALL_FAILED];
+export const RECALL_STATUSES: readonly string[] = [RECALL_REQUESTED, RECALLING, RECALLED, RECALL_FAILED];
 
 export type RecallableRow = {
   classnoteStatus: string | null;
@@ -49,7 +55,7 @@ export function isRecallable(row: RecallableRow): boolean {
 export function recallBlockReason(row: RecallableRow): string | null {
   const s = row.classnoteStatus;
   if (isRecallable(row)) return null;
-  if (s === RECALL_REQUESTED) return "이미 회수 요청됨 — 연동 PC가 순차 처리합니다";
+  if (s === RECALL_REQUESTED || s === RECALLING) return "이미 회수 요청됨 — 연동 PC가 순차 처리합니다";
   if (s === RECALLED) return "이미 회수된 보고서입니다";
   if (s === "queued" || s === "processing") return "발송 처리 중입니다 — 끝난 뒤에 회수할 수 있습니다";
   if (!s) return "아직 학부모에게 발송되지 않은 보고서입니다";
@@ -64,7 +70,8 @@ export function recallBlockReason(row: RecallableRow): string | null {
  * ⚠️ **재발급 차단도 이 판정을 쓴다** — 진행 중에 토큰이 바뀌면 워커가 게시글을 못 찾는다(고아 게시글).
  */
 export function isRecallInFlight(status: string | null): boolean {
-  return status === RECALL_REQUESTED;
+  // ⚠️ `recalling`(워커가 집어간 상태)을 빼면 삭제·재발급이 그 창으로 새어 들어간다.
+  return status === RECALL_REQUESTED || status === RECALLING;
 }
 
 /**

@@ -6,6 +6,7 @@ import { Pill } from "@/components/atoms/pill";
 import { RecallButton } from "@/features/report-admin/components/recall-button";
 import { isRecallInFlight, isRecallable } from "@/features/report-admin/report-recall";
 import { normalizeHomeworkPages } from "../homework-pages";
+import { makeupRemoveBlockReason } from "../makeup-remove-plan";
 import {
   effectiveClassnoteStatus,
   isAlreadySent,
@@ -245,7 +246,7 @@ export function ReportCard({
                 <button
                   type="button"
                   onClick={() => onRemoveMakeup(subject.name)}
-                  title="클릭하면 이 보강을 뺍니다(출결 기록과 저장된 보강 보고서가 삭제됩니다)"
+                  title="클릭하면 이 보강을 뺍니다(출결·보강 보고서·진도 기록이 삭제됩니다)"
                   aria-label={`${student.name} 보강 빼기`}
                   className="bg-amber-soft text-amber hover:bg-amber inline-flex cursor-pointer items-center gap-0.5 rounded-pill px-1.5 py-px text-[10px] font-bold transition hover:text-white"
                 >
@@ -253,7 +254,11 @@ export function ReportCard({
                   <EyIcon name="close" size={9} />
                 </button>
               ) : student.isMakeup || (subject.makeup && !subject.classId) ? (
-                <span className="bg-amber-soft text-amber rounded-pill px-1.5 py-px text-[10px] font-bold">
+                // 뺄 수 없는 행 — 왜인지 툴팁으로 남긴다(버튼만 없애면 "왜 안 되지"가 남는다).
+                <span
+                  className="bg-amber-soft text-amber rounded-pill px-1.5 py-px text-[10px] font-bold"
+                  title={makeupRemoveBlockReason(rep.classnoteStatus) ?? undefined}
+                >
                   보강
                 </span>
               ) : null}
