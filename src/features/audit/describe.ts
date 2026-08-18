@@ -2,6 +2,8 @@
 // UI 규칙: raw JSON·uuid·영문 enum을 셀에 그대로 노출하지 말 것 — 한글 요약을 보여주고 원문은 title 툴팁으로만.
 import { ROLE_LABEL } from "@/lib/auth/role-hierarchy";
 import { SECTION_LABELS } from "@/features/owner/settings-types";
+import { STUDENT_STATUS_LABEL } from "@/features/students/status-labels";
+import { reasonDisplay } from "@/features/withdrawals/types";
 
 /** 대상 유형(target_type) → 한글 — 감사로그 '대상' 열 접두. 미등록 유형은 원문 폴백. */
 export const AUDIT_TYPE_LABEL: Record<string, string> = {
@@ -188,6 +190,50 @@ export function auditDetail(
     case "withdrawal_update": {
       const reason = str(m.reason);
       return join(ctx.nameOf(m.studentId), reason ? `사유: ${reason}` : null);
+    }
+    // 학생 기록 변경 전수 감사(2026-08-18) — 누가·언제·어느 학생을 바꿨는지 역검수용.
+    case "student_withdraw": {
+      const reason = reasonDisplay(str(m.reason));
+      return join(
+        ctx.nameOf(m.studentId),
+        str(m.date) ? `퇴원일 ${str(m.date)}` : null,
+        reason ? `사유: ${reason}` : null,
+        str(m.memo),
+      );
+    }
+    case "student_hold":
+    case "student_restore": {
+      return ctx.nameOf(m.studentId);
+    }
+    case "student_update": {
+      const from = str(m.statusFrom);
+      const to = str(m.statusTo);
+      const statusChanged =
+        from && to && from !== to
+          ? `상태 ${STUDENT_STATUS_LABEL[from] ?? from} → ${STUDENT_STATUS_LABEL[to] ?? to}`
+          : null;
+      return join(ctx.nameOf(m.studentId), statusChanged);
+    }
+    case "student_create": {
+      return ctx.nameOf(m.studentId) ?? str(m.studentName);
+    }
+    case "student_delete": {
+      // 삭제된 학생은 uuid로 이름을 되찾을 수 없다 — 기록 시점의 이름을 metadata에 실어 보존.
+      return str(m.studentName) ?? ctx.nameOf(m.studentId);
+    }
+    case "enrollment_end": {
+      const reason = reasonDisplay(str(m.reason));
+      return join(
+        ctx.nameOf(m.studentId),
+        ctx.nameOf(m.classId),
+        str(m.date) ? `종료일 ${str(m.date)}` : null,
+        reason ? `사유: ${reason}` : null,
+      );
+    }
+    case "student_bulk_withdraw":
+    case "student_bulk_delete": {
+      const n = num(m.count);
+      return n === null ? null : `${n}명 (관리 도구 · 수강 없는 학생 정리)`;
     }
     case "class_end_term": {
       const d = str(m.closedAt);

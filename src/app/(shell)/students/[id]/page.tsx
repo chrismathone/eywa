@@ -65,8 +65,10 @@ export default async function StudentDetailPage({
   if (!student) notFound();
 
   const hasCareAi = student.aiCareSummary !== null;
-  // 수강 종료 노출 = 학생 쓰기(full) 권한 이상만(master·admin·manager·counselor).
-  const canEndEnrollment = (await accessLevelTenant(user.systemRole, "students")) === "full";
+  // 학생 기록 변경(상태 전환·수정·AI 케어·수강 종료) = 학생 full 권한만(master·admin·manager·counselor).
+  // 🔴 강사(scoped)는 열람 전용 — 원장 지시 2026-08-18("강사들은 퇴원처리 막아, 수정도, AI 케어도. 읽기만").
+  // 서버 게이트는 students/server/actions.ts canManageStudentRecords가 같은 판정(#77 — UI 숨김만으론 부족).
+  const canManageStudent = (await accessLevelTenant(user.systemRole, "students")) === "full";
   // 학생 영구 삭제 = 관리 도구(admin) 쓰기 권한(기본 master) — 파괴적이라 조임. 잘못 추가 정정용.
   const canDeleteStudent = await canWriteTenant(user.systemRole, "admin");
   // 시작/종료일 더블클릭 수정 = owner(원장) 콘솔 권한 이상만(관리자 정정).
@@ -101,7 +103,7 @@ export default async function StudentDetailPage({
             ) : null}
           </div>
           {student.dupSuspect ? (
-            <DupSuspectNotice studentId={student.id} canClear={canEndEnrollment} />
+            <DupSuspectNotice studentId={student.id} canClear={canManageStudent} />
           ) : null}
         </div>
         <div className="flex flex-col items-end gap-2">
@@ -115,18 +117,23 @@ export default async function StudentDetailPage({
           {/* ⚠️ 감기게 둔다 — 이 줄엔 상태 변경·수정·AI·삭제가 함께 서고, 라벨에 목적어를 붙이면
               (수정 → 학생 수정) 좁은 화면에서 가로로 넘친다. 넘치는 대신 다음 줄로 내려간다. */}
           <div className="flex flex-wrap items-center justify-end gap-2">
-            <StatusAction
-              studentId={student.id}
-              studentName={student.name}
-              currentStatus={student.status}
-            />
+            {/* 강사(scoped)는 열람 전용 — 상태 변경·학생 수정·AI 케어 전부 비노출(위 canManageStudent 주석). */}
+            {canManageStudent ? (
+              <StatusAction
+                studentId={student.id}
+                studentName={student.name}
+                currentStatus={student.status}
+              />
+            ) : null}
             {/* ⚠️ "수정" 단독 금지 — 상담 탭을 열면 상담 카드마다 '수정'(그 상담 기록)이 함께 보인다.
                 여기는 **학생 정보**를 연다. 반 상세('반 수정')와 같은 규칙. */}
-            <Button variant="outline" render={<WindowLink href={`/students/${student.id}/edit`} title="학생 수정" />}>
-              <Pencil className="size-3.5" />
-              학생 수정
-            </Button>
-            {student.status === "enrolled" ? (
+            {canManageStudent ? (
+              <Button variant="outline" render={<WindowLink href={`/students/${student.id}/edit`} title="학생 수정" />}>
+                <Pencil className="size-3.5" />
+                학생 수정
+              </Button>
+            ) : null}
+            {canManageStudent && student.status === "enrolled" ? (
               <RunCareAiButton studentId={student.id} hasExisting={hasCareAi} />
             ) : null}
             {canDeleteStudent ? (
@@ -142,7 +149,7 @@ export default async function StudentDetailPage({
         {tab === "overview" ? (
           <OverviewTab student={student} />
         ) : tab === "classes" ? (
-          <ClassesTab student={student} canEnd={canEndEnrollment} canEditDates={canEditDates} canEditSchedule={canEditSchedule} />
+          <ClassesTab student={student} canEnd={canManageStudent} canEditDates={canEditDates} canEditSchedule={canEditSchedule} />
         ) : tab === "grades" ? (
           <GradesTab studentId={student.id} />
         ) : tab === "progress" ? (

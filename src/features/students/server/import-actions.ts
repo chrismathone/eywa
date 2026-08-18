@@ -24,7 +24,8 @@ async function requireStudentWrite() {
   const user = await getCurrentUser();
   if (!user) return { user: null, error: "로그인이 필요합니다" };
   const lvl = await accessLevelTenant(user.systemRole, "students");
-  if (lvl !== "full" && lvl !== "scoped") return { user: null, error: "학생 관리 권한이 없습니다" };
+  // 🔴 full만 — 강사(scoped)는 학생 열람 전용(원장 지시 2026-08-18, 학생 상세 퇴원·수정 차단과 같은 결).
+  if (lvl !== "full") return { user: null, error: "학생 등록 권한이 없습니다 — 강사 계정은 열람 전용입니다" };
   return { user, error: undefined as string | undefined };
 }
 

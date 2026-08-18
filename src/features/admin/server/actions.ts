@@ -6,6 +6,7 @@ import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged } from "@/lib/supabase/batch";
 import { kstToday } from "@/lib/date-kst";
+import { logAction } from "@/features/audit/server/log";
 import type { WithdrawalMetadata } from "@/features/withdrawals/types";
 
 export type MergeStudentsState =
@@ -202,6 +203,14 @@ export async function bulkWithdrawStudents(
     if (enrErr) return { error: enrErr.message };
   }
 
+  // 일괄 퇴원도 감사로그에 남긴다 — 2026-08-17 배치(31명)가 "누가 했는지" 추적 불가였던 것 재발 방지.
+  // studentIds 전체를 metadata에 보존(역검수용 — 상세 화면 표시는 건수만, describe.ts).
+  await logAction({
+    action: "student_bulk_withdraw",
+    targetType: "student",
+    metadata: { count, studentIds: ids },
+  });
+
   revalidatePath("/owner");
   revalidatePath("/students");
   revalidatePath("/withdrawals");
@@ -251,6 +260,12 @@ export async function bulkDeleteStudents(
     if (error) return { error: error.message };
     count += c ?? 0;
   }
+
+  await logAction({
+    action: "student_bulk_delete",
+    targetType: "student",
+    metadata: { count, studentIds: deletable },
+  });
 
   revalidatePath("/owner");
   revalidatePath("/students");

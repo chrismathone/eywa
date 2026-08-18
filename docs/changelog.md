@@ -1,5 +1,26 @@
 # eywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-08-18 (3) — 🔴 퇴원 사고 대응: 강사=학생 열람 전용 + 학생 변경 전수 감사로그 + 퇴원 필터 0명 수정
+
+배경(원장·허은진 제보 *"퇴원 아닌데 막 퇴원 들어가고"*): 실제 등원 중(8월 중순까지 출석)인 학생 **7명**이
+08-13~08-18 사이 7월 날짜로 **소급 퇴원 처리**됐다(엄채율·이채아·손지우·박병헌·유아림·김승언·강시윤 —
+이채아는 퇴원일 이후 출석 19건). 전부 앱의 '퇴원 처리' 다이얼로그 모양(개별 입력)이고, **감사로그가 없어
+누가 했는지 소급 추적 불가**였다. 자동 퇴원 경로는 없음 확인(makeedu 동기화는 additive 전용 — 기존 학생
+status 불변, 08-17 20:12 31명 일괄은 관리 도구 '수강 없는 재원생 정리' 버튼 = 전원 출석 0·수강 0이라 정상).
+
+- **강사(teacher, scoped) = 학생 기록 열람 전용** (원장 지시: *"강사들은 퇴원처리 막아 · 수정도 안되게 ·
+  AI 케어 분석도 막고 · 읽기만 해"*): 퇴원/휴원/복구(`changeStudentStatus`)·학생 수정(`updateStudent`)·
+  등록(`createStudent`)·수강 종료(`endSingleEnrollment` — 서버는 이미 full)·엑셀 가져오기(import-actions)·
+  AI 케어 분석(`runStudentCareAnalysis`) 전부 students **full**만(master·admin·manager·counselor).
+  게이트 단일 소스 = students/server/actions.ts `canManageStudentRecords`. UI(학생 상세 헤더 3버튼·
+  학생목록 새 학생/가져오기·edit·new 라우트 강제 URL)도 같은 판정으로 숨김/리다이렉트(#77).
+- **학생 레코드를 바꾸는 전 경로가 audit_logs에 actor를 남긴다**: `student_create/update/delete/
+  withdraw/hold/restore`·`enrollment_end`·`student_bulk_withdraw/delete` 9키(log.ts 등록 + describe.ts
+  한글 상세 — 삭제는 이름을 metadata에 보존, 일괄은 studentIds 전체 보존). 퇴원관리 '재원 복구'도 동일 키.
+- **퇴원 필터 0명 수정**: '미수강 제외'(계정 귀속 토글)가 켜진 채 상태=퇴원이면 inner join이 퇴원생 전원을
+  걸러 **검색이 항상 0명**이었다(엄채율 실종의 화면 쪽 원인) → 상태=퇴원에선 서버가 무시 + 칩 숨김.
+- 검증: typecheck 0 / lint 0(기존 경고 2) / **test 415파일·5,062 전체 통과**.
+
 ## 2026-08-18 (2) — 전자결재 v3: 양식 재편(수입결의서) + 전결·후결·대결 + 테스터 계정 (0216a, 병렬 fork 3 + 메인)
 
 원장: *"업무연락은 필요없고 지출결의서·품의서·수입결의서 이정도면 될듯"* · *"전결, 후결, 대결, 반려

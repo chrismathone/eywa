@@ -1,6 +1,7 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { BackLink } from "@/components/back-link";
 import { requireAccess } from "@/lib/auth/require-access";
+import { accessLevelTenant } from "@/lib/auth/perm-matrix";
 import { getStudentById } from "@/features/students/server/queries";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { StudentForm } from "../../_components/student-form";
@@ -12,8 +13,11 @@ export default async function EditStudentPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await requireAccess("students");
+  const user = await requireAccess("students");
   const { id } = await params;
+  // 강사(scoped)는 학생 열람 전용(원장 지시 2026-08-18) — 강제 URL도 상세로 되돌린다(#77).
+  // 서버 액션(updateStudent)도 같은 full 판정으로 막혀 있어 이 리다이렉트는 UX용 이중 방어다.
+  if ((await accessLevelTenant(user.systemRole, "students")) !== "full") redirect(`/students/${id}`);
   const [student, { operations }] = await Promise.all([getStudentById(id), getTenantSettings()]);
   if (!student) notFound();
 
