@@ -44,7 +44,7 @@ async function requireWrite() {
 }
 
 /**
- * 새 평가 건 — 강사(필수) + 과목·문항 세트(선택) + 평가자 방식(지정/선착순 3명).
+ * 새 평가 건 — 강사(필수) + 과목·문항 세트(선택) + 평가자 방식(지정/선착순) + **평가자 인원**.
  * 날짜는 입력받지 않고 **생성 당일(KST)** 로 박는다(원장 지시 2026-08-05 "참관일 따로 받지 말고").
  * 문항은 선택한 세트를 **문서에 스냅샷** — 이후 세트를 고쳐도 이 평가지는 안 흔들린다.
  */
@@ -69,7 +69,7 @@ export async function createClassReview(_prev: ReviewActionState, formData: Form
     .maybeSingle();
   if (!teacher || teacher.tenant_id !== gate.user.tenantId) return { error: "강사를 찾을 수 없습니다" };
 
-  // 지정 모드: 참관자(선택 최대 3명). 선착순 모드: 지정 없이 본인 슬롯만 — 권한자 먼저 채점 3명이 참관자.
+  // 지정 모드: 참관자(정원만큼 선택). 선착순 모드: 지정 없이 본인 슬롯만 — 권한자 중 먼저 채점한 정원만큼이 참관자.
   const evaluators: ReviewEvaluator[] = [];
   if (observerMode === "assigned") {
     // ⚠️ 폼이 정원만큼만 칸을 그리므로 루프도 정원까지 — 고정 3칸으로 되돌리면 4번째부터 조용히 버려진다.
@@ -137,7 +137,7 @@ export async function createClassReview(_prev: ReviewActionState, formData: Form
 
 /**
  * 채점 제출 — 지정 모드: 지정된 평가자(관찰자=자기 userId 슬롯, 대상 강사='self')만.
- * 선착순 모드: 대상 강사='self', 그 외 권한자는 **먼저 제출한 3명까지** 자기 userId 슬롯.
+ * 선착순 모드: 대상 강사='self', 그 외 권한자는 **먼저 제출한 정원(observerLimitOf)까지** 자기 userId 슬롯.
  */
 export async function submitClassReviewScores(
   _prev: ReviewActionState,

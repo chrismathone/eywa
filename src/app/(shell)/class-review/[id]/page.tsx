@@ -49,7 +49,9 @@ export default async function ClassReviewDetailPage({ params }: { params: Promis
   }));
   // 선착순 모드: 아직 안 찬 슬롯을 빈 열로 보여준다(자리가 남았음이 보이게).
   // 정원은 문서마다 다르다(생성 시 선택) — 고정 상수로 되돌리면 5명짜리에 빈 칸이 3개만 그려진다.
-  const emptyOpenSlots = openMode ? Math.max(0, observerLimitOf(doc) - observerCols.length) : 0;
+  // ⚠️ 화면 문구에도 이 값을 쓸 것. 빈 칸 수만 고치고 라벨에 "3명"을 남기면 칸은 4개인데 글자는 3명이 된다.
+  const observerLimit = observerLimitOf(doc);
+  const emptyOpenSlots = openMode ? Math.max(0, observerLimit - observerCols.length) : 0;
   const cols = [
     ...observerCols,
     ...Array.from({ length: emptyOpenSlots }, (_, i) => ({
@@ -74,7 +76,7 @@ export default async function ClassReviewDetailPage({ params }: { params: Promis
 
   const headerBits = [
     doc.header.subject ? subjects.labelOf(doc.header.subject) : null,
-    openMode ? "선착순 3명" : "평가자 지정",
+    openMode ? `선착순 ${observerLimit}명` : "평가자 지정",
     doc.templateName ?? null,
   ].filter(Boolean);
 
@@ -275,7 +277,7 @@ export default async function ClassReviewDetailPage({ params }: { params: Promis
       ) : (
         <p className="text-text-dim text-xs">
           {openMode
-            ? "선착순 평가자 3명이 이미 채점을 마쳐 열람만 가능합니다."
+            ? `선착순 평가자 ${observerLimit}명이 이미 채점을 마쳐 열람만 가능합니다.`
             : "이 평가 건의 평가자로 지정되어 있지 않아 채점은 열람만 가능합니다."}
         </p>
       )}

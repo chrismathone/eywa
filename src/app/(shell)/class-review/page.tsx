@@ -9,6 +9,7 @@ import {
   getReviewPrivileges,
   listClassReviews,
   myScoreSlot,
+  observerLimitOf,
 } from "@/features/class-review/server/queries";
 import { GRADE_CUTS, GRADE_FALLBACK } from "@/features/class-review/checklist";
 import { ReviewTable } from "./_components/review-table";
@@ -74,7 +75,9 @@ export default async function ClassReviewPage() {
               subjectLabel: r.header.subject ? subjects.labelOf(r.header.subject) : null,
               subjectColor: r.header.subject ? subjects.colorOf(r.header.subject) : null,
               mode: r.header.observerMode === "open" ? ("open" as const) : ("assigned" as const),
-              modeLabel: r.header.observerMode === "open" ? "선착순 3명" : "평가자 지정",
+              // ⚠️ 인원을 글자로 박지 말 것 — 정원은 평가마다 다르다(생성 시 선택, 문서에 동결).
+              modeLabel:
+                r.header.observerMode === "open" ? `선착순 ${observerLimitOf(r)}명` : "평가자 지정",
               myTurn: !!mine && !mine.submitted,
               incomplete: r.submittedCount < r.observerSlots,
               submitted: `${r.submittedCount}/${r.observerSlots}`,
