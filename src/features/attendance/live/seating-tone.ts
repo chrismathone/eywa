@@ -24,7 +24,7 @@ export type SeatingTone = "now" | "upcoming" | "past_pending" | "past_done";
 
 export function seatingToneOf(band: NowBand, pending: number): SeatingTone {
   if (band === "now") return "now";
-  if (band === "upcoming") return "upcoming";
+  if (band === "upcoming" || band === "later") return "upcoming";
   return pending > 0 ? "past_pending" : "past_done";
 }
 
