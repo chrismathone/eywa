@@ -96,6 +96,24 @@ export function shouldQueue(signal: LiveSignal, phase: SlotPhase): boolean {
 }
 
 /**
+ * `shouldQueue` + **강사의 데스크 확인 요청**(2026-08-18, 역방향 버튼).
+ *
+ * 강사가 스트립에서 "데스크 확인 요청"을 누르면 벨이 가는데, 데스크가 벨 링크로 큐를 열었을 때
+ * 유예(grace) 때문에 아무것도 안 보이면 "요청했다는데 없다"가 된다 — 요청은 강사가 교실을 직접 보고
+ * 누른 것이라 유예를 기다릴 근거가 없다(유예의 목적 = "지각생 전원" 오탐 방지인데, 이건 오탐이 아니다).
+ * ⚠️ `before`는 요청이 있어도 제외 — 시작 전엔 스트립 자체가 그 교시를 안 보여주므로 올 수 없는 조합이고,
+ *    낡은 화면에서 온 요청이라면 "아직 안 온 게 정상"이 맞다.
+ */
+export function shouldQueueWithRequest(
+  signal: LiveSignal,
+  phase: SlotPhase,
+  teacherRequested: boolean,
+): boolean {
+  if (shouldQueue(signal, phase)) return true;
+  return teacherRequested && phase !== "before";
+}
+
+/**
  * 화면에 쓸 한글 라벨 — raw enum을 UI에 내보내지 않는다(전역 규칙).
  * ⚠️ `unmarked`를 "결석"이라 부르면 안 된다. 우리가 아는 건 "확인 안 됨"까지다.
  */

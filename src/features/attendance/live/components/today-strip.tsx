@@ -18,7 +18,7 @@ import { kstToday } from "@/lib/date-kst";
 import { reportError } from "@/lib/observability/report-error";
 import { groupAdjacentSlots } from "../seating";
 import { isSpecialSlotLabel } from "@/features/timetable/lib/teacher-label";
-import { getLiveBoard } from "../server/queries";
+import { getLiveBoard, loadRequestMarks } from "../server/queries";
 import { StripSlot } from "./strip-slot";
 
 export async function TodayAttendanceStrip() {
@@ -26,10 +26,15 @@ export async function TodayAttendanceStrip() {
   //    전체 보드를 읽고(느려짐), 남의 반에 「전원 출석」이 붙는다. 전체는 /attendance/live에서 본다.
   // ⚠️ 실패는 삼키되 **소리 없이 삼키지 않는다**(#89) — 이 스트립은 실패하면 그냥 안 보이므로, 조회가
   //    매번 깨져도 화면은 평소와 똑같아 아무도 눈치채지 못한다(기능이 죽은 채로 몇 주가 간다).
-  const board = await getLiveBoard(kstToday(), true).catch((e: unknown) => {
-    reportError(e, { scope: "attendance.todayStrip" });
-    return null;
-  });
+  const today = kstToday();
+  const [board, deskRequested] = await Promise.all([
+    getLiveBoard(today, true).catch((e: unknown) => {
+      reportError(e, { scope: "attendance.todayStrip" });
+      return null;
+    }),
+    // '데스크 요청함' 표식 — 실패해도 버튼이 다시 보일 뿐이다(서버 dedup이 중복 발송을 막는다).
+    loadRequestMarks(today, "attendance_desk_confirm_request").catch(() => new Set<string>()),
+  ]);
   if (!board?.canEdit) return null;
 
   // 시작한 교시(grace 포함 — 수업이 시작됐으면 찍을 수 있다) 중 아직 빈 칸이 남은 것만.
@@ -69,6 +74,7 @@ export async function TodayAttendanceStrip() {
             periodLabel={slot.periodLabel}
             pendingIds={slot.students.filter((s) => s.status == null).map((s) => s.studentId)}
             pendingNames={slot.students.filter((s) => s.status == null).map((s) => s.studentName)}
+            deskRequested={deskRequested.has(`${slot.classId}|${slot.saveSlot ?? ""}`)}
           />
         ))}
       </div>

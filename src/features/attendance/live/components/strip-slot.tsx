@@ -10,6 +10,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { setAttendanceBulk } from "@/features/attendance/server/actions";
+import { requestDeskConfirm } from "@/features/attendance/live/server/actions";
 
 export function StripSlot({
   date,
@@ -20,6 +21,7 @@ export function StripSlot({
   periodLabel,
   pendingIds,
   pendingNames,
+  deskRequested,
 }: {
   date: string;
   classId: string;
@@ -30,11 +32,14 @@ export function StripSlot({
   periodLabel: string | null;
   pendingIds: string[];
   pendingNames: string[];
+  /** 이 (반·저장축)에 이미 '데스크 확인 요청'을 보냈는가 — 표식은 서버(dedup 원장)가 진실. */
+  deskRequested: boolean;
 }) {
   const router = useRouter();
   const [busy, startTransition] = useTransition();
   const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [asked, setAsked] = useState(deskRequested);
 
   function fillAll() {
     setError(null);
@@ -59,6 +64,30 @@ export function StripSlot({
         .catch(() => {
           setDone(false);
           setError("저장하지 못했습니다 — 다시 눌러 주세요");
+        });
+    });
+  }
+
+  /**
+   * 역방향 요청(원장 2026-08-18) — 데스크→강사(입력 요청)만 있던 것의 거울상. 명단·수신자는 서버가
+   * 다시 계산하므로 여기선 (반·날짜·저장축)만 보낸다. 거절되면 낙관 표식을 되돌린다(전원 출석과 같은 규약).
+   */
+  function askDesk() {
+    setError(null);
+    setAsked(true);
+    startTransition(() => {
+      requestDeskConfirm({ classId, sessionDate: date, slotStart: saveSlot })
+        .then((res) => {
+          if ("error" in res) {
+            setAsked(deskRequested);
+            setError(res.error);
+            return;
+          }
+          router.refresh();
+        })
+        .catch(() => {
+          setAsked(deskRequested);
+          setError("요청을 보내지 못했습니다 — 다시 눌러 주세요");
         });
     });
   }
@@ -94,6 +123,21 @@ export function StripSlot({
         >
           자세히
         </Link>
+        {asked ? (
+          <span className="text-text-faint text-center text-xs font-bold whitespace-nowrap">
+            데스크 요청함
+          </span>
+        ) : (
+          <button
+            type="button"
+            onClick={askDesk}
+            disabled={busy}
+            title="미입력 학생의 등원 확인을 데스크에 요청합니다"
+            className="border-line text-text-dim hover:bg-bg-soft rounded-lg border px-2.5 py-1 text-xs whitespace-nowrap disabled:opacity-60"
+          >
+            데스크 확인
+          </button>
+        )}
       </div>
     </div>
   );

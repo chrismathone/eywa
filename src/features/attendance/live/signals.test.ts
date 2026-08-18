@@ -6,6 +6,7 @@ import {
   ATTENDANCE_GRACE_MIN,
   resolveSlotStatus,
   shouldQueue,
+  shouldQueueWithRequest,
   slotPhase,
 } from "./signals";
 
@@ -71,6 +72,24 @@ describe("shouldQueue", () => {
     expect(shouldQueue("unmarked", "grace")).toBe(false);
     expect(shouldQueue("unmarked", "due")).toBe(true);
     expect(shouldQueue("unmarked", "ended")).toBe(true);
+  });
+});
+
+describe("shouldQueueWithRequest — 강사의 데스크 확인 요청(역방향 버튼)", () => {
+  it("요청이 있으면 유예를 건너뛴다 — 강사가 교실을 보고 지목한 것은 오탐이 아니다", () => {
+    expect(shouldQueueWithRequest("unmarked", "grace", true)).toBe(true);
+    expect(shouldQueueWithRequest("class_unmarked", "grace", true)).toBe(true);
+  });
+
+  it("요청이 없으면 shouldQueue와 완전히 같다", () => {
+    expect(shouldQueueWithRequest("unmarked", "grace", false)).toBe(false);
+    expect(shouldQueueWithRequest("unmarked", "due", false)).toBe(true);
+    expect(shouldQueueWithRequest("absent", "grace", false)).toBe(true);
+  });
+
+  it("시작 전(before)은 요청이 있어도 제외 — 아직 안 온 게 정상이다", () => {
+    expect(shouldQueueWithRequest("unmarked", "before", true)).toBe(false);
+    expect(shouldQueueWithRequest("class_unmarked", "before", true)).toBe(false);
   });
 });
 
