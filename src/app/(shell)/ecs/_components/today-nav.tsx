@@ -17,7 +17,7 @@ import { EcsDatePicker } from "./today-date-picker";
 const chip = (active: boolean) =>
   `shrink-0 rounded-full border px-2 py-0.5 text-xs font-medium transition ${
     active
-      ? "border-foreground bg-foreground text-background"
+      ? "border-primary bg-primary text-primary-foreground"
       : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
   }`;
 

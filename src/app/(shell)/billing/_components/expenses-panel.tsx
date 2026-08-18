@@ -64,9 +64,9 @@ export async function ExpensesPanel({ sp }: { sp: Sp }) {
           <Link href={hrefFor({ period: nextPeriod })} className="border-line hover:bg-bg-soft inline-flex size-7 items-center justify-center rounded-full border" aria-label="다음 달"><EyIcon name="chevronRight" size={14} /></Link>
         </div>
         <div className="scrollbar-thin flex items-center gap-1 overflow-x-auto">
-          <Link href={hrefFor({ cat: "all" })} className={`shrink-0 rounded-full border px-2 py-0.5 text-xs transition ${cat === "all" ? "border-foreground bg-foreground text-background font-medium" : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"}`}>전체</Link>
+          <Link href={hrefFor({ cat: "all" })} className={`shrink-0 rounded-full border px-2 py-0.5 text-xs transition ${cat === "all" ? "border-primary bg-primary text-primary-foreground font-medium" : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"}`}>전체</Link>
           {CATS.map((c) => (
-            <Link key={c} href={hrefFor({ cat: c })} className={`shrink-0 rounded-full border px-2 py-0.5 text-xs transition ${cat === c ? "border-foreground bg-foreground text-background font-medium" : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"}`}>{c}</Link>
+            <Link key={c} href={hrefFor({ cat: c })} className={`shrink-0 rounded-full border px-2 py-0.5 text-xs transition ${cat === c ? "border-primary bg-primary text-primary-foreground font-medium" : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"}`}>{c}</Link>
           ))}
         </div>
         {months.length > 0 ? (

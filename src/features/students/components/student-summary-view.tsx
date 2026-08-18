@@ -2,22 +2,17 @@
 
 import { WindowLink } from "@/components/workspace/window-link";
 import { EyIcon } from "@/components/icons/eywa-icons";
-import { Pill, type PillColor } from "@/components/atoms/pill";
+import { Pill } from "@/components/atoms/pill";
 import { useSubjectMaps } from "@/features/owner/operations-context";
+import { studentStatusMeta } from "@/features/students/status-labels";
 import type { StudentSummary } from "@/features/students/server/queries";
 
 /**
  * 학생 경량 요약 뷰 — 모바일 QuickPanel(Sheet)과 데스크톱 워크스페이스 창이
  * 동일하게 쓰는 presentational 컴포넌트(한 소스). 데이터 페칭은 호출부가 담당.
  * 과목 라벨·색은 학원설정(operations.subjects) 단일 소스(useSubjectMaps) — 하드코딩 금지.
+ * 상태 라벨·색도 마찬가지로 studentStatusMeta 단일 소스 — 여기서 STATUS_META를 다시 만들지 말 것.
  */
-const STATUS_META: Record<string, { label: string; color: PillColor }> = {
-  prospect: { label: "예비", color: "amber" },
-  consulted: { label: "상담완료", color: "blue" },
-  enrolled: { label: "재원", color: "primary" },
-  on_hold: { label: "휴원", color: "amber" },
-  withdrawn: { label: "퇴원", color: "neutral" },
-};
 
 export type StudentHeaderInfo = {
   id: string;
@@ -47,7 +42,7 @@ export function StudentSummaryView({
   const school = summary?.school ?? info.school;
   const status = summary?.status ?? info.status;
   const teacherNames = summary?.teacherNames ?? info.teacherNames ?? [];
-  const statusMeta = status ? (STATUS_META[status] ?? null) : null;
+  const statusMeta = studentStatusMeta(status);
 
   return (
     <div className="flex h-full flex-col">

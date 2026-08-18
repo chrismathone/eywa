@@ -49,14 +49,20 @@ describe("brandColorVars", () => {
     expect(brandColorVars(undefined)).toBeNull();
     expect(brandColorVars("#zzz")).toBeNull();
   });
+  // 알파(0.11/0.05/0.07)는 globals.css의 --primary-soft/-softer/--sidebar-accent와 **같아야** 한다.
+  // 갈라지면 테넌트 브랜드색을 넣은 학원만 배지·사이드바 농도가 기본 팔레트와 달라진다(화면에선 거의
+  // 안 보이고 스크린샷 비교로만 잡힌다) → 여기서 숫자로 잠근다.
+  // ⚠️ v4(2026-08-18)에서 soft 0.1→0.11(화이트 캔버스 대비 승압) + --sidebar-accent 추가.
   it("maps primary + derived tokens for a custom color", () => {
     const vars = brandColorVars("#1f6ba8") as Record<string, string>;
     expect(vars["--primary"]).toBe("#1f6ba8");
-    expect(vars["--primary-soft"]).toBe("rgba(31, 107, 168, 0.1)");
+    expect(vars["--primary-soft"]).toBe("rgba(31, 107, 168, 0.11)");
     expect(vars["--primary-softer"]).toBe("rgba(31, 107, 168, 0.05)");
     expect(vars["--ring"]).toBe("#1f6ba8");
     expect(vars["--chart-2"]).toBe("#1f6ba8");
     expect(vars["--sidebar-primary"]).toBe("#1f6ba8");
+    // 사이드바 활성 배경도 브랜드색을 따라야 한다(v4에서 회색 → 브랜드 틴트).
+    expect(vars["--sidebar-accent"]).toBe("rgba(31, 107, 168, 0.07)");
   });
 });
 

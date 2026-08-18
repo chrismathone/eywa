@@ -66,7 +66,7 @@ function IssueBlock({
 }) {
   return (
     <section>
-      <p className="text-red-600">
+      <p className="text-danger">
         <span className="font-semibold">{title}</span>
         <span className="text-text-dim"> · {dayLabel}요일</span> <span className="num font-semibold">{total}</span>건
       </p>
@@ -232,8 +232,8 @@ export function RoomWeekPanel({
               } (내 계정에 저장)`}
               className={`shrink-0 rounded-full border px-2 py-0 text-[11px] leading-5 transition ${
                 issuesOpen
-                  ? "border-red-600 bg-red-600 font-medium text-white"
-                  : "border-red-300 text-red-600 hover:bg-red-50"
+                  ? "border-danger bg-danger font-medium text-white"
+                  : "border-danger/40 text-danger hover:bg-danger-soft"
               }`}
             >
               경고 <span className="num">{issueTotal}</span>
@@ -300,7 +300,7 @@ export function RoomWeekPanel({
         {issuesOpen && seatOver.length > 0 ? (
           <IssueBlock title="정원 초과" dayLabel={hourDayLabel} total={seatOver.length}>
             {seatOver.slice(0, LIST_MAX).map((r) => (
-              <li key={r.key} className="flex flex-wrap items-baseline gap-x-2 text-red-600">
+              <li key={r.key} className="flex flex-wrap items-baseline gap-x-2 text-danger">
                 <RowHead startMin={r.startMin} endMin={r.endMin} room={r.roomName} outside={r.startMin < axis.startMin} />
                 <span className="min-w-0">
                   {r.classes.map((c, i) => (
@@ -323,7 +323,7 @@ export function RoomWeekPanel({
         {issuesOpen && conflicts.length > 0 ? (
           <IssueBlock title="시간 겹침" dayLabel={hourDayLabel} total={conflicts.length}>
             {conflicts.slice(0, LIST_MAX).map((c) => (
-              <li key={c.key} className="flex flex-wrap items-baseline gap-x-2 text-red-600">
+              <li key={c.key} className="flex flex-wrap items-baseline gap-x-2 text-danger">
                 <RowHead startMin={c.startMin} endMin={c.endMin} room={c.roomName} outside={c.startMin < axis.startMin} />
                 <span className="min-w-0">
                   <ClassLink id={c.classes[0].classId} name={c.classes[0].className} />

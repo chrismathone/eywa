@@ -23,16 +23,13 @@ import { NoteForm } from "@/features/onescreen/components/attendance-pills";
 import type { BasicAttendance } from "../lib/mark-cycle";
 // 한글 라벨은 ECS 단일 소스 — 체크 순환·퇴원 요약과 **같은 낱말**을 쓴다(각자 맵을 복사하면 갈린다).
 import { ATTENDANCE_LABEL as LABEL } from "../lib/attendance-label";
+import { ATT_SOLID } from "@/features/attendance/status-color";
 
 const BASIC: readonly BasicAttendance[] = ["present", "late", "absent"];
 /** 사유를 받는 상태 — 알약·드롭다운 공통 계약(지각·결석). 출석은 즉시 저장. */
 const NEEDS_NOTE: ReadonlySet<string> = new Set(["late", "absent"]);
-/** 활성색 — 원스크린 알약과 동일(출석=primary·지각=amber·결석=danger). */
-const ON_CLS: Record<BasicAttendance, string> = {
-  present: "bg-primary text-primary-foreground",
-  late: "bg-amber text-white",
-  absent: "bg-danger text-white",
-};
+/** 활성색 — 원스크린 알약과 **같은 상수**(`ATT_SOLID`). 각자 적으면 한쪽만 고쳐져 갈린다. */
+const ON_CLS: Record<BasicAttendance, string> = ATT_SOLID;
 
 const READONLY_CLS = "bg-bg-soft text-text-dim rounded-full px-1.5 py-0.5 text-[10px] font-bold whitespace-nowrap";
 

@@ -138,7 +138,7 @@ export default async function SeatAttendancePage({
             <Link
               href={href({ date: today, start: undefined })}
               className={`rounded-full border px-2.5 py-0.5 text-xs ${
-                date === today ? "border-foreground bg-foreground text-background" : "border-line text-text-dim"
+                date === today ? "border-primary bg-primary text-primary-foreground" : "border-line text-text-dim"
               }`}
             >
               오늘

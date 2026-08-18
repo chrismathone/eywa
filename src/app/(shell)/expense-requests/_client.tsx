@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { Check, Loader2, Paperclip, Pencil, Plus, Receipt, Trash2 } from "@/components/icons/eywa-icon-compat";
 import { Pill, type PillColor } from "@/components/atoms/pill";
+import { toneColor } from "@/lib/design/semantic-color";
 import { Button } from "@/components/ui/button";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -25,10 +26,15 @@ const CAT_COLOR: Record<string, PillColor> = {
 function isLocked(r: ExpenseRow): boolean {
   return !!(r.approvalChecks.director?.checked || r.approvalChecks.ceo?.checked);
 }
+/**
+ * 색은 의미색 캐논(src/lib/design/semantic-color.ts) — 제출됨=inert → 결재중=info → 결재완료=positive.
+ * ⚠️ 결재완료는 v4에서 primary(네이비) → positive(그린): 전자결재 '승인'과 같은 뜻인데 색이 달랐다.
+ *    결재중도 amber(=내 차례)가 아니라 info다 — 강사에게 이건 **사무실이 처리 중**이라는 정보다.
+ */
 function statusLabel(r: ExpenseRow): { label: string; color: PillColor } {
-  if (r.approvalStatus === "approved") return { label: "결재완료", color: "primary" };
-  if (isLocked(r)) return { label: "결재중", color: "amber" };
-  return { label: "제출됨", color: "neutral" };
+  if (r.approvalStatus === "approved") return { label: "결재완료", color: toneColor("positive") };
+  if (isLocked(r)) return { label: "결재중", color: toneColor("info") };
+  return { label: "제출됨", color: toneColor("inert") };
 }
 
 export function ExpenseRequestsClient({

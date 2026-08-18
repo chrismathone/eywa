@@ -8,6 +8,11 @@ import {
   getDailyProcessingStatus,
   type AttendanceRow,
 } from "@/features/attendance/server/queries";
+import {
+  ATT_SOFT,
+  ATT_SOFT_BORDER,
+  type AttendanceStatusKey,
+} from "@/features/attendance/status-color";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 
@@ -21,13 +26,18 @@ const STATUS_LABEL: Record<string, string> = {
   makeup: "보강",
 };
 
-const STATUS_COLOR: Record<string, string> = {
-  present: "text-primary bg-primary/10 border-primary/20",
-  absent: "text-danger bg-danger/10 border-danger/20",
-  late: "text-amber bg-amber/10 border-amber/20",
-  early_leave: "text-rose bg-rose/10 border-rose/20",
-  makeup: "text-purple bg-purple/10 border-purple/20",
-};
+/**
+ * 출결 표시 색 = [`status-color.ts`](src/features/attendance/status-color.ts) 단일 소스.
+ * ⚠️ v4 이전엔 여기만 출석=primary(네이비)·조퇴=rose(장미)였다 — 월간 출석부(민트/파랑)를 보다
+ *    이 화면으로 오면 같은 출결의 색이 통째로 바뀌었다.
+ * 칩이 몇 개뿐이라 격자용 쨍한 원색(ATT_VIVID)이 아니라 -soft 틴트를 쓴다(색상은 같다).
+ */
+const STATUS_COLOR: Record<string, string> = Object.fromEntries(
+  (Object.keys(ATT_SOFT) as AttendanceStatusKey[]).map((k) => [
+    k,
+    `${ATT_SOFT[k]} ${ATT_SOFT_BORDER[k]}`,
+  ])
+);
 
 function formatKoreanDate(iso: string) {
   const [y, m, d] = iso.split("-");

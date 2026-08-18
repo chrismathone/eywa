@@ -413,7 +413,7 @@ export function PublicIntakeForm({
                   type="button"
                   onClick={() => setSiblings(opt)}
                   className={`h-11 flex-1 rounded-xl border text-sm font-medium transition-colors ${
-                    on ? "border-foreground bg-foreground text-background" : "border-border bg-card text-foreground"
+                    on ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card text-foreground"
                   }`}
                 >
                   {on ? <Check className="mr-1 inline size-3.5" /> : null}

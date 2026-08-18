@@ -1,7 +1,8 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { Pill, type PillColor } from "@/components/atoms/pill";
+import { Pill } from "@/components/atoms/pill";
+import { roleMeta, staffStatusMeta } from "@/features/staff/status-labels";
 import { Paperclip } from "@/components/icons/eywa-icon-compat";
 import { WindowLink } from "@/components/workspace/window-link";
 import { EditingBadge } from "@/features/presence/editing-badge";
@@ -11,20 +12,6 @@ import type { StaffRow } from "@/features/staff/server/queries";
 import { StaffRowLink } from "./staff-row-link";
 import { normalizeOrder, visibleColumns, type StaffColumnKey } from "./staff-columns";
 
-const ROLE_META: Record<string, { label: string; color: PillColor }> = {
-  master: { label: "원장", color: "danger" },
-  admin: { label: "관리자", color: "blue" },
-  manager: { label: "매니저", color: "blue" },
-  teacher: { label: "강사", color: "primary" },
-  counselor: { label: "상담", color: "rose" },
-  accountant: { label: "회계", color: "purple" },
-  viewer: { label: "참관", color: "neutral" },
-};
-const STATUS_META: Record<string, { label: string; color: PillColor }> = {
-  active: { label: "재직", color: "primary" },
-  inactive: { label: "퇴사", color: "neutral" },
-  pending: { label: "대기", color: "amber" },
-};
 
 const CELL = "px-3 py-2.5";
 
@@ -98,7 +85,7 @@ export function StaffTable({ rows }: { rows: StaffRow[] }) {
       </span>
     ),
     role: (s) => {
-      const m = ROLE_META[s.systemRole] ?? ROLE_META.viewer!;
+      const m = roleMeta(s.systemRole);
       return <Pill color={m.color}>{m.label}</Pill>;
     },
     classes: (s) => <span className="num font-medium">{s.classesCount > 0 ? s.classesCount : "—"}</span>,
@@ -106,7 +93,7 @@ export function StaffTable({ rows }: { rows: StaffRow[] }) {
       <span className="num font-medium">{s.primaryStudentsCount > 0 ? s.primaryStudentsCount : "—"}</span>
     ),
     status: (s) => {
-      const m = STATUS_META[s.status] ?? STATUS_META.active!;
+      const m = staffStatusMeta(s.status) ?? staffStatusMeta("active")!;
       return <Pill color={m.color}>{m.label}</Pill>;
     },
     updatedAt: (s) => <span className="num">{s.updatedAt ? s.updatedAt.slice(0, 10) : "—"}</span>,

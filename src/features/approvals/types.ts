@@ -6,6 +6,7 @@
  */
 
 import type { PillColor } from "@/components/atoms/pill";
+import { toneColor } from "@/lib/design/semantic-color";
 
 /** 결재 양식(원장 확정 2026-08-18: 휴가·품의·지출·수입 — 업무연락 폐기). 추가는 여기 + DB check + 상세 표. */
 export const APPROVAL_FORMS = ["leave", "proposal", "expense", "income"] as const;
@@ -48,11 +49,17 @@ export function isApprovalForm(v: string): v is ApprovalForm {
 export const DOC_STATUSES = ["pending", "approved", "rejected", "canceled"] as const;
 export type DocStatus = (typeof DOC_STATUSES)[number];
 
+/**
+ * 색은 의미색 캐논([`semantic-color`](src/lib/design/semantic-color.ts))이 정한다 — 승인=positive ·
+ * 반려=critical · 회수=inert · 진행중=info.
+ * ⚠️ 진행중이 caution(내 차례 노랑)이 아니라 info(파랑)인 이유: 문서가 결재선을 도는 것은 **남이
+ * 하는 중**이라는 정보다. **내 차례**로 온 것만 caution으로 칠한다(결재함 '대기' 탭).
+ */
 export function docStatusLabel(status: DocStatus): { label: string; color: PillColor } {
-  if (status === "approved") return { label: "승인", color: "green" };
-  if (status === "rejected") return { label: "반려", color: "danger" };
-  if (status === "canceled") return { label: "회수", color: "neutral" };
-  return { label: "진행중", color: "blue" };
+  if (status === "approved") return { label: "승인", color: toneColor("positive") };
+  if (status === "rejected") return { label: "반려", color: toneColor("critical") };
+  if (status === "canceled") return { label: "회수", color: toneColor("inert") };
+  return { label: "진행중", color: toneColor("info") };
 }
 
 /**

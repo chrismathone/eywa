@@ -6,6 +6,7 @@
 // ⚠️ O·X·L 같은 글자 표기로 되돌리지 말 것(원장 지시로 폐기).
 
 import { COUNTABLE_STATUSES, formatSessionUnits } from "./session-units";
+import { ATT_VIVID } from "./status-color";
 
 export type AttendanceMark = "present" | "absent" | "late" | "excused" | "makeup" | "early_leave";
 
@@ -21,14 +22,7 @@ export type SlotMark = { slot: string | null; status: AttendanceMark; units: num
  * 앱 표준 -soft 토큰(8~22% 틴트)으로는 31칸 격자에서 결석·지각이 안 튀었다.
  * ⚠️ 색을 다시 -soft 틴트로 낮추지 말 것. 이 팔레트는 출석부 전용이며 다른 화면에 쓰지도 말 것.
  */
-export const STATUS_TONE: Record<AttendanceMark, string> = {
-  present: "bg-att-present text-att-present-ink",
-  absent: "bg-att-absent text-att-absent-ink",
-  excused: "bg-att-absent text-att-absent-ink",
-  late: "bg-att-late text-att-late-ink",
-  early_leave: "bg-att-leave text-att-leave-ink",
-  makeup: "bg-att-makeup text-att-makeup-ink",
-};
+export const STATUS_TONE: Record<AttendanceMark, string> = ATT_VIVID;
 
 /**
  * 날짜 성격 배경 — 헤더·본문이 **같은 상수**를 써야 열이 위아래로 어긋나지 않는다.
@@ -66,11 +60,15 @@ export const CELL_SCROLL_MARGIN = "scroll-mt-[38px]";
  *  두 벌로 두면 화면과 종이의 '퇴원' 표시가 서로 달라진다.)
  * ⚠️ 출결 팔레트(`--att-*`)를 쓰지 않는다 — 그 색은 칸의 출결 값 전용이라 이름 옆에 쓰면 뜻이 겹친다.
  */
+/* v4: Tailwind 기본 팔레트(emerald/rose/violet-100)에서 앱 토큰으로 — 뜻은 그대로다.
+   신입=positive(green) · 퇴원=inert(중립, 지나간 것) · 반이동=special(purple, 예외·대체).
+   ⚠️ 퇴원을 rose로 칠하면 상담·학부모(rose)와 겹치고, 화면 전체에서 "이 색은 사람 얘기"라는
+   신호가 흐려진다. 퇴원은 끝난 상태라 색을 빼는 게 맞다. */
 export const BADGE_TONE: Record<"new" | "left" | "transferIn" | "transferOut", string> = {
-  new: "bg-emerald-100 text-emerald-800",
-  left: "bg-rose-100 text-rose-700",
-  transferIn: "bg-violet-100 text-violet-800",
-  transferOut: "bg-violet-100 text-violet-800",
+  new: "bg-green-soft text-green",
+  left: "bg-bg-soft text-text-dim",
+  transferIn: "bg-purple-soft text-purple",
+  transferOut: "bg-purple-soft text-purple",
 };
 
 /** 표식 공통 크기 — 신입·퇴원·반이동·「단가」 전부 이 하나(크기 제각각 금지, 원장 2026-08-10). */

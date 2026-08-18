@@ -4,6 +4,7 @@ import { WindowLink } from "@/components/workspace/window-link";
 import { EditingBadge } from "@/features/presence/editing-badge";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { Pill, type PillColor } from "@/components/atoms/pill";
+import { toneColor } from "@/lib/design/semantic-color";
 import { BigStat } from "@/components/atoms/big-stat";
 import { PageHeader } from "@/components/page-header";
 import { PhotoCard } from "@/components/atoms/photo-card";
@@ -22,16 +23,18 @@ export const metadata = { title: "회의록 — eywa" };
 
 const PAGE_SIZE = 50;
 
-const STATUS_META: Record<
-  MeetingProcessingStatus,
-  { label: string; color: PillColor } | null
-> = {
+/**
+ * 색은 의미색 캐논(src/lib/design/semantic-color.ts) — 대기=caution → 처리중=info → 완료=positive /
+ * 실패=critical. 한 줄에 하나만 뜨는 순차 상태라 '전사 중'과 '분석 중'은 같은 info로 둔다
+ * (v4 이전엔 분석 중만 primary 네이비였는데, 같은 "처리 중"이 단계마다 다른 색일 이유가 없다).
+ */
+const STATUS_META: Record<MeetingProcessingStatus, { label: string; color: PillColor } | null> = {
   idle: null,
-  uploaded: { label: "대기", color: "amber" },
-  transcribing: { label: "전사 중", color: "blue" },
-  analyzing: { label: "분석 중", color: "primary" },
-  completed: { label: "완료", color: "green" },
-  failed: { label: "실패", color: "danger" },
+  uploaded: { label: "대기", color: toneColor("caution") },
+  transcribing: { label: "전사 중", color: toneColor("info") },
+  analyzing: { label: "분석 중", color: toneColor("info") },
+  completed: { label: "완료", color: toneColor("positive") },
+  failed: { label: "실패", color: toneColor("critical") },
 };
 
 function formatHeldAt(iso: string): string {
@@ -239,7 +242,7 @@ export default async function MeetingsPage({
                 href={buildHref({ ...current, range: f.key })}
                 className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs transition ${
                   range === f.key
-                    ? "border-foreground bg-foreground text-background font-medium"
+                    ? "border-primary bg-primary text-primary-foreground font-medium"
                     : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
                 }`}
               >
