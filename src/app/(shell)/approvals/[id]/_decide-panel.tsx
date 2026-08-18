@@ -12,6 +12,28 @@ import {
   type ApprovalActionState,
 } from "@/features/approvals/server/actions";
 
+/**
+ * 도장칸의 '결재' 칩 — **처리자 전용 버튼**. 앵커(#decide)는 창(iframe)·스크롤 컨테이너 조합에서
+ * 이동이 안 보일 때가 있어(원장 제보 "클릭만 되고 아무 기능 안 함") 스크립트로 확실히:
+ * 결재 패널로 스크롤 + 의견 입력에 포커스(여기서 처리하라는 신호).
+ */
+export function TurnChip() {
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        const el = document.getElementById("decide");
+        el?.scrollIntoView({ behavior: "smooth", block: "center" });
+        el?.querySelector<HTMLInputElement>('input[name="comment"]')?.focus({ preventScroll: true });
+      }}
+      className="border-primary text-primary hover:bg-primary-soft/50 inline-flex items-center rounded-md border px-2.5 py-1 text-[12px] font-bold transition"
+      title="아래 결재 패널로 이동합니다"
+    >
+      결재
+    </button>
+  );
+}
+
 const inputClass =
   "border-line bg-card text-foreground placeholder:text-text-faint focus:border-primary w-full rounded-lg border px-3 py-1.5 text-[13px] outline-none transition";
 

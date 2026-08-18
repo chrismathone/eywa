@@ -1,4 +1,5 @@
 import { EyIcon } from "@/components/icons/eywa-icons";
+import { TurnChip } from "./_decide-panel";
 import type { ApprovalDocRow, ApprovalStepCell } from "@/features/approvals/server/queries";
 
 /**
@@ -101,14 +102,7 @@ function SignArea({ col, actionable }: { col: Col; actionable: boolean }) {
         </span>
       );
     }
-    return (
-      <a
-        href="#decide"
-        className="border-primary text-primary hover:bg-primary-soft/50 inline-flex items-center rounded-md border px-2.5 py-1 text-[12px] font-bold transition"
-      >
-        결재
-      </a>
-    );
+    return <TurnChip />;
   }
   if (col.sign === "deferred") {
     // 부재로 건너뛰어진 칸 — 사후 '후결 확인'을 기다린다(하이웍스 후열 '확인' 대응).
