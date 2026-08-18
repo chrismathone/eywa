@@ -20,6 +20,8 @@ export type ClassHistorySource =
   | "audit"
   /** class_delegations — 임시 위임 기간(사실). */
   | "delegation"
+  /** enrollments — 학생 배정·전입·전출·수강 종료(사실). */
+  | "enrollment"
   /** lesson_reports 작성 기록 — 그 달 누가 보고서를 썼나(정황). */
   | "report";
 
@@ -103,12 +105,69 @@ export function buildScheduleHistory(slots: HistorySlot[]): ClassHistoryEntry[] 
   return out;
 }
 
+/** 수강 한 줄(학생 배정 이력 판정에 필요한 것만). */
+export type EnrollmentHistoryRow = {
+  studentName: string;
+  startDate: string;
+  endDate: string | null;
+  /** 반 이동으로 나감(전출) — 퇴원/일반 종료와 구분. */
+  isTransferred: boolean;
+  /** 반 이동으로 들어옴(전입) — 신규 배정과 구분. */
+  isTransferredIn: boolean;
+};
+
+/**
+ * 학생 배정 이력(원장 2026-08-18: *"수업이력에 학생 배정에 관한 이력은 하나도 없네"*) —
+ * 수강 한 행을 **시점 사건 둘**로 편다: 시작일(배정/전입) + 종료일이 있으면 종료일(종료/전출).
+ * 같은 날 같은 종류는 한 줄로 묶는다(시트 임포트로 수십 명이 같은 날 배정되는 반이 있다).
+ * 미래 날짜(반 이동 적용일 기본=내일, 배정 예정)는 "(예정)"을 붙인다 — 안 붙이면 아직 안 일어난
+ * 이동이 이력 맨 위에 완료된 사실처럼 선다(적대 리뷰).
+ * 🔴 전입/전출의 상대 반은 기록에 없다 — "어느 반에서/으로"를 지어내지 않는다(형제 규칙 [[#93]]).
+ */
+export function buildEnrollmentHistory(rows: EnrollmentHistoryRow[], today: string): ClassHistoryEntry[] {
+  const KIND_LABEL = {
+    assign: "학생 배정",
+    transferIn: "전입(반 이동)",
+    end: "수강 종료",
+    transferOut: "전출(반 이동)",
+  } as const;
+  type Kind = keyof typeof KIND_LABEL;
+  const byKey = new Map<string, string[]>(); // `${date}|${kind}` → 학생 이름들
+  const add = (date: string | null, kind: Kind, name: string) => {
+    if (!date) return;
+    const key = `${String(date).slice(0, 10)}|${kind}`;
+    (byKey.get(key) ?? byKey.set(key, []).get(key)!).push(name);
+  };
+  for (const r of rows) {
+    const name = r.studentName.trim() || "(이름 없음)";
+    add(r.startDate, r.isTransferredIn ? "transferIn" : "assign", name);
+    if (r.endDate) add(r.endDate, r.isTransferred ? "transferOut" : "end", name);
+  }
+  return [...byKey.entries()].map(([key, names]) => {
+    const [date, kind] = key.split("|") as [string, Kind];
+    const sorted = [...names].sort((a, b) => a.localeCompare(b, "ko"));
+    const base = sorted.length > 1 ? `${KIND_LABEL[kind]} ${sorted.length}명` : KIND_LABEL[kind];
+    return {
+      date,
+      source: "enrollment" as const,
+      title: date > today ? `${base} (예정)` : base,
+      detail: sorted.join(" · "),
+    };
+  });
+}
+
 /**
  * 여러 출처를 **최신순 한 줄기로** 합친다. 같은 날짜면 사실(배치·감사로그)이 정황(보고서)보다 위.
  * ⚠️ 정렬만 한다 — 중복 제거·추론은 하지 않는다(합치는 순간 어느 기록이 근거인지 사라진다).
  */
 export function mergeClassHistory(groups: ClassHistoryEntry[][]): ClassHistoryEntry[] {
-  const RANK: Record<ClassHistorySource, number> = { audit: 0, schedule: 1, delegation: 2, report: 3 };
+  const RANK: Record<ClassHistorySource, number> = {
+    audit: 0,
+    schedule: 1,
+    enrollment: 2,
+    delegation: 3,
+    report: 4,
+  };
   return groups
     .flat()
     .filter((e) => !!e.date)

@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRightLeft, Loader2, X } from "@/components/icons/eywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { useSubjectMaps } from "@/features/owner/operations-context";
+import { isSpecialLecture } from "@/features/classes/special-lecture";
 import { moveEnrollmentsBatch } from "@/features/enrollments/server/actions";
 import type { AssignDialogClass, AssignDialogStudent } from "@/components/enrollment-assign-dialog";
 import { conflictToast } from "@/lib/ui/conflict-toast";
@@ -32,11 +33,17 @@ export function MoveEnrollmentButton({
   enrollmentId,
   student,
   currentClassName,
+  currentClassId,
+  currentSubject,
   classes,
 }: {
   enrollmentId: string;
   student: AssignDialogStudent;
   currentClassName: string;
+  /** 지금 반 자신은 이동 후보에서 뺀다(같은 반 이동 = GiST 거부만 만난다). */
+  currentClassId?: string;
+  /** 이동 후보를 **같은 과목 반만**으로 거른다(원장 2026-08-18: 다른 과목이 섞여 나옴). 없으면 전 과목. */
+  currentSubject?: string;
   classes: AssignDialogClass[];
 }) {
   const [open, setOpen] = useState(false);
@@ -56,6 +63,8 @@ export function MoveEnrollmentButton({
           enrollmentId={enrollmentId}
           student={student}
           currentClassName={currentClassName}
+          currentClassId={currentClassId}
+          currentSubject={currentSubject}
           classes={classes}
           onClose={() => setOpen(false)}
         />
@@ -68,18 +77,35 @@ function MoveDialog({
   enrollmentId,
   student,
   currentClassName,
+  currentClassId,
+  currentSubject,
   classes,
   onClose,
 }: {
   enrollmentId: string;
   student: AssignDialogStudent;
   currentClassName: string;
+  currentClassId?: string;
+  currentSubject?: string;
   classes: AssignDialogClass[];
   onClose: () => void;
 }) {
   const router = useRouter();
   const subjects = useSubjectMaps();
   const [targetId, setTargetId] = useState("");
+  // 특강은 기본 숨김(원장 2026-08-18: "특강은 안나오도록 특강 토글") — 방학 단기강좌라 정규 반 이동
+  // 후보에 섞이면 목록만 어지럽힌다. 판정은 단일소스 isSpecialLecture(컬럼 + 이름 폴백).
+  const [showSpecial, setShowSpecial] = useState(false);
+  const targets = useMemo(
+    () =>
+      classes.filter(
+        (c) =>
+          c.id !== currentClassId &&
+          (!currentSubject || c.subject === currentSubject) &&
+          (showSpecial || !isSpecialLecture({ isSpecial: c.isSpecial, className: c.className })),
+      ),
+    [classes, currentClassId, currentSubject, showSpecial],
+  );
   // 적용일 = 새 반 시작일(옛 반은 그 전날까지). 기본 = 내일(반이동은 보통 다음날 — 사용자 규약).
   const [eff, setEff] = useState(() => addDays(kstToday(), 1));
   const [attending, setAttending] = useState<string[]>([]);
@@ -95,6 +121,8 @@ function MoveDialog({
     setPrevTarget(targetId);
     setAttending([]);
   }
+  // 특강 토글을 끄는 순간 선택돼 있던 특강 반이 목록에서 사라지면 선택도 해제(같은 렌더 중 패턴).
+  if (targetId && !targets.some((t) => t.id === targetId)) setTargetId("");
   const toggleDay = (d: string) =>
     setAttending((prev) => {
       const next = prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d];
@@ -171,7 +199,18 @@ function MoveDialog({
 
         <div className="space-y-3">
           <div className="space-y-1.5">
-            <label className="text-foreground block text-sm font-medium">이동할 반</label>
+            <div className="flex items-center justify-between gap-2">
+              <label className="text-foreground block text-sm font-medium">이동할 반</label>
+              <label className="text-text-dim inline-flex cursor-pointer items-center gap-1.5 text-xs">
+                <input
+                  type="checkbox"
+                  checked={showSpecial}
+                  onChange={(e) => setShowSpecial(e.target.checked)}
+                  className="size-3.5"
+                />
+                특강 포함
+              </label>
+            </div>
             <SearchableSelect
               value={targetId}
               onValueChange={setTargetId}
@@ -179,12 +218,19 @@ function MoveDialog({
               searchPlaceholder="반 이름·과목·강사 검색..."
               // ⚠️ 기본 cap 50은 이름순 앞을 로마자 영어반이 독점해 수학반을 가린다(gotcha #84).
               cap={300}
-              options={classes.map((c) => ({
+              options={targets.map((c) => ({
                 value: c.id,
                 label: c.className,
                 hint: `${subjects.labelOf(c.subject)}${c.scheduleLabel ? ` · ${c.scheduleLabel}` : ""}${c.teacherName ? ` · ${c.teacherName}` : ""} · ${c.studentCount}명`,
               }))}
             />
+            {currentSubject ? (
+              <p className="text-muted-foreground text-[11px]">
+                같은 과목({subjects.labelOf(currentSubject)}) 반만 표시됩니다
+                {showSpecial ? "" : " · 특강 제외"}.
+                {targets.length === 0 ? " 이동할 수 있는 반이 없습니다." : ""}
+              </p>
+            ) : null}
           </div>
 
           <div className="space-y-1">

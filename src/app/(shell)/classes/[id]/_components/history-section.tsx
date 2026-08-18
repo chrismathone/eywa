@@ -25,6 +25,7 @@ const SOURCE_LABEL: Record<ClassHistorySource, string> = {
   schedule: "배치",
   audit: "기록",
   delegation: "위임",
+  enrollment: "학생",
   report: "보고서",
 };
 
@@ -32,6 +33,7 @@ const SOURCE_TONE: Record<ClassHistorySource, string> = {
   schedule: "border-line-strong text-text-dim",
   audit: "border-primary/40 text-primary bg-primary/5",
   delegation: "border-amber/50 text-amber bg-amber-soft",
+  enrollment: "border-blue/40 text-blue bg-blue/5",
   report: "border-line-strong text-text-faint",
 };
 
@@ -46,8 +48,11 @@ export function ClassHistorySection({ entries }: { entries: ClassHistoryEntry[] 
     () =>
       entries.filter((e) => {
         // 구간 항목은 **겹치면** 통과 — 시작일만 보면 "3월부터 지금까지"인 배치가 7월 검색에서 사라진다.
-        const end = e.endDate ?? null;
-        if (from && (end ?? "9999-12-31") < from) return false;
+        // 시점 사건(감사·배정·보고서)은 endDate가 없다고 열린 구간이 아니다 — 그 날 하루다.
+        // (안 가르면 3월의 학생 배정이 8월 검색에 계속 새어든다. '~현재' 의미는 배치·위임만.)
+        const openEnded = e.source === "schedule" || e.source === "delegation";
+        const end = e.endDate ?? (openEnded ? "9999-12-31" : e.date);
+        if (from && end < from) return false;
         if (to && e.date > to) return false;
         return true;
       }),
@@ -67,7 +72,8 @@ export function ClassHistorySection({ entries }: { entries: ClassHistoryEntry[] 
       <header className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <h2 className="text-foreground text-sm font-bold">이력</h2>
         <p className="text-text-dim min-w-0 flex-1 text-xs break-keep">
-          수업 배치·담당·강의실이 바뀐 기록입니다. 시간표에서 그 주를 열면 당시 배치가 그대로 보입니다.
+          수업 배치·담당·강의실·학생 배정이 바뀐 기록입니다. 시간표에서 그 주를 열면 당시 배치가 그대로
+          보입니다.
         </p>
         <span className="flex shrink-0 items-center gap-1">
           <input
