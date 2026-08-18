@@ -96,6 +96,7 @@ export async function ClassesTab({
       days: c.days.map((d) => d.day),
       scheduleLabel: formatClassSchedule(c.days),
       existingPeriods: periodsByClass.get(c.id),
+      isSpecial: c.isSpecial, // 반 이동 다이얼로그의 특강 기본 숨김(판정은 isSpecialLecture — 이름 폴백 포함)
     }));
 
   return (
@@ -244,6 +245,8 @@ function Section({
                               enrollmentId={r.enrollmentId}
                               student={moveStudent}
                               currentClassName={r.className}
+                              currentClassId={r.classId}
+                              currentSubject={r.subject}
                               classes={moveTargets}
                             />
                           ) : null}

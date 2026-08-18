@@ -105,6 +105,9 @@ export default async function ExamDetailPage({
             }))}
             ariaLabel="반 선택"
             searchable={classOptions.length > 12}
+            // 고른 반의 점수 행이 아래를 채운다 = ECS·출석부와 같은 "지금 어느 반" 자리(원장 2026-08-18).
+            // 여기엔 "전체"가 없고 늘 한 반이 잡혀 있어 표기가 항상 켜진다.
+            marker
           />
         )}
       </div>

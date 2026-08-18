@@ -31,6 +31,8 @@ export type ClassListRow = {
   isActive: boolean;
   /** 종강일(0059a) — 있으면 종강(운영 종료). is_active=false(폐지)와 구분. */
   closedAt: string | null;
+  /** 특강(0133a) 토글값 **그대로**. ⚠️ 판정은 이름 폴백까지 보는 `isSpecialLecture()`로. */
+  isSpecial: boolean;
   studentCount: number;
   days: ClassDaySlot[]; // 운영 요일(+시작시각), 요일순 정렬
   notes: string | null;
@@ -191,7 +193,7 @@ export async function getClassesList(options?: ClassListFilters): Promise<ClassL
   let qb = supabase
     .from("classes")
     .select(
-      `id, class_name, subject, is_active, closed_at, notes, teacher_id,
+      `id, class_name, subject, is_active, closed_at, is_special, notes, teacher_id,
        teacher:teacher_id ( display_name ),
        classroom:classroom_id ( name )`,
     )
@@ -256,6 +258,7 @@ export async function getClassesList(options?: ClassListFilters): Promise<ClassL
       classroomName: room?.name ?? null,
       isActive: c.is_active,
       closedAt: (c as { closed_at?: string | null }).closed_at ?? null,
+      isSpecial: (c as { is_special?: boolean | null }).is_special ?? false,
       studentCount: counts.get(c.id) ?? 0,
       days: sortedDaySlots(daysByClass.get(c.id)),
       notes: c.notes ?? null,
@@ -340,7 +343,7 @@ export async function getClassesPage(
   let qb = supabase
     .from("classes")
     .select(
-      `id, class_name, subject, is_active, closed_at, notes, teacher_id,
+      `id, class_name, subject, is_active, closed_at, is_special, notes, teacher_id,
        teacher:teacher_id ( display_name ),
        classroom:classroom_id ( name )`,
     )
@@ -402,6 +405,7 @@ export async function getClassesPage(
       classroomName: room?.name ?? null,
       isActive: c.is_active,
       closedAt: (c as { closed_at?: string | null }).closed_at ?? null,
+      isSpecial: (c as { is_special?: boolean | null }).is_special ?? false,
       studentCount: counts.get(c.id) ?? 0,
       days: sortedDaySlots(daysByClass.get(c.id)),
       notes: c.notes ?? null,

@@ -8,9 +8,11 @@ import { historyWindowStart } from "../teacher-as-of";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import {
+  buildEnrollmentHistory,
   buildScheduleHistory,
   mergeClassHistory,
   type ClassHistoryEntry,
+  type EnrollmentHistoryRow,
   type HistorySlot,
 } from "../history";
 
@@ -38,7 +40,7 @@ export async function getClassHistory(classId: string): Promise<ClassHistoryEntr
   const { data: klass } = await supabase.from("classes").select("class_name").eq("id", classId).maybeSingle();
   const className = (klass?.class_name as string | null) ?? "";
 
-  const [slotRows, auditRows, delegations, nameRows, reportRows] = await Promise.all([
+  const [slotRows, auditRows, delegations, nameRows, reportRows, enrollmentRows] = await Promise.all([
     // 한 반의 슬롯 = 요일×교시×구간이라 수십~수백 행 상한. 마감 행까지 **전부** 가져온다(그게 이력이다).
     supabase
       .from("class_schedules")
@@ -83,6 +85,24 @@ export async function getClassHistory(classId: string): Promise<ClassHistoryEntr
       .eq("class_id", classId)
       .gte("report_date", historyWindowStart(kstToday()))
       .order("report_date"),
+    // 학생 배정 이력(원장 2026-08-18) — 이 반의 수강 **전 행**(지난 것 포함). 이력이라 전건이 필요해
+    // fetchAllPaged(B2 — bare select는 1000행에서 조용히 잘린다). 실패해도 페이지는 안 죽인다(감사로그와 동일).
+    fetchAllPaged<{
+      start_date: string;
+      end_date: string | null;
+      is_transferred: boolean | null;
+      is_transferred_in: boolean | null;
+      students: { name?: string | null } | { name?: string | null }[] | null;
+    }>((from, to) =>
+      supabase
+        .from("enrollments")
+        .select("start_date, end_date, is_transferred, is_transferred_in, students!inner(name)")
+        .eq("class_id", classId)
+        // OFFSET 페이지가 흔들리지 않게 유니크 tie-break(batch.ts 규약) — id 2차 정렬.
+        .order("start_date", { ascending: false })
+        .order("id", { ascending: false })
+        .range(from, to),
+    ).catch(() => null),
   ]);
 
   const nameOf = new Map((nameRows.data ?? []).map((u) => [u.id as string, (u.display_name as string) ?? ""]));
@@ -135,19 +155,26 @@ export async function getClassHistory(classId: string): Promise<ClassHistoryEntr
   }));
 
   // ④ 보고서 작성 기록 — **추정 근거**라 라벨을 갈라 담당 변경으로 읽히지 않게 한다([[#93]]).
+  // endDate = 그 달의 실제 마지막 작성일 — 월 버킷 날짜(`ym-01`)만 있으면 기간 검색이 "1일 하루"로
+  // 오판해 8/10~ 검색에서 8월 버킷이 떨어진다(적대 리뷰). 구간으로 적어야 겹침 판정이 맞는다.
   const byMonth = new Map<string, Map<string, number>>();
+  const lastReportOfMonth = new Map<string, string>();
   for (const r of reportRows.data ?? []) {
     const name = String(r.teacher_name ?? "").trim();
     if (!name) continue;
-    const ym = String(r.report_date).slice(0, 7);
+    const day = String(r.report_date).slice(0, 10);
+    const ym = day.slice(0, 7);
     const m = byMonth.get(ym) ?? new Map<string, number>();
     m.set(name, (m.get(name) ?? 0) + 1);
     byMonth.set(ym, m);
+    const prev = lastReportOfMonth.get(ym);
+    if (!prev || day > prev) lastReportOfMonth.set(ym, day);
   }
   const reportEntries: ClassHistoryEntry[] = [...byMonth.entries()].map(([ym, names]) => {
     const sorted = [...names.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "ko"));
     return {
       date: `${ym}-01`,
+      endDate: lastReportOfMonth.get(ym) ?? null,
       source: "report" as const,
       title: "보고서 작성 기록",
       // "담임"이라 쓰지 않는다 — 작성자다. 화면이 추정임을 알 수 있게 문구로 못박는다.
@@ -155,9 +182,25 @@ export async function getClassHistory(classId: string): Promise<ClassHistoryEntr
     };
   });
 
-  // 감사로그를 못 읽었으면 **그 사실을 적는다** — 빈 목록으로 두면 "변경이 없었다"는 거짓말이 된다.
+  // ⑤ 학생 배정 — 수강 행의 시작/종료를 시점 사건으로(조립 규칙은 순수 함수, 같은 날·같은 종류 묶음).
+  const enrollmentEntries = buildEnrollmentHistory(
+    (enrollmentRows ?? []).map((r): EnrollmentHistoryRow => {
+      const s = r.students;
+      const name = (Array.isArray(s) ? s[0]?.name : s?.name) ?? "";
+      return {
+        studentName: String(name),
+        startDate: String(r.start_date ?? "").slice(0, 10),
+        endDate: r.end_date ? String(r.end_date).slice(0, 10) : null,
+        isTransferred: r.is_transferred === true,
+        isTransferredIn: r.is_transferred_in === true,
+      };
+    }),
+    kstToday(), // 미래 날짜(배정 예정·이동 적용일)는 "(예정)" 표기
+  );
+
+  // 감사로그·학생 배정을 못 읽었으면 **그 사실을 적는다** — 빈 목록으로 두면 "변경이 없었다"는 거짓말이 된다.
   const notice: ClassHistoryEntry[] =
-    auditRows === null
+    auditRows === null || enrollmentRows === null
       ? [
           {
             date: new Date().toISOString().slice(0, 10),
@@ -172,6 +215,7 @@ export async function getClassHistory(classId: string): Promise<ClassHistoryEntr
     buildScheduleHistory(slots),
     auditEntries,
     delegationEntries,
+    enrollmentEntries,
     reportEntries,
     notice,
   ]);
