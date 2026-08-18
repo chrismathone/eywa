@@ -26,6 +26,7 @@ export function useFormDraft({
   onRestore,
   exclude,
   ignoreForBanner,
+  maxAgeMs,
 }: {
   scope: string;
   formRef: React.RefObject<HTMLFormElement | null>;
@@ -35,9 +36,14 @@ export function useFormDraft({
   exclude?: string[];
   /** 캡처는 하되 "의미 있는 입력" 판정에선 무시할 필드(기본값이 항상 채워지는 select/시각 등 → 빈 폼 오탐 방지). */
   ignoreForBanner?: string[];
+  /** 초안 유효 시간(ms) — 지나면 복구 제안 없이 폐기. 공용 기기에서 남의 초안이 오래 남으면 안 되는 폼(QR 접수 등)에. */
+  maxAgeMs?: number;
 }) {
   const [draftSavedAt, setDraftSavedAt] = useState<number | null>(null);
   const draftRef = useRef<Record<string, string> | null>(null);
+  // 대기 중 디바운스 저장 타이머 — clear/discard가 취소할 수 있게 ref로 보관.
+  // (저장 성공 직후 700ms 안에 남은 타이머가 발화하면 방금 지운 초안이 되살아나 stale 배너가 뜬다.)
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // 옵션 배열은 렌더마다 새 참조라 effect 재실행을 막기 위해 키로 안정화.
   const excludeKey = (exclude ?? []).join(",");
   const ignoreKey = (ignoreForBanner ?? []).join(",");
@@ -50,6 +56,11 @@ export function useFormDraft({
     const excl = excludeKey ? excludeKey.split(",") : [];
     void loadDraft(scope).then((d) => {
       if (cancelled || !d) return;
+      // 유효 시간 초과 초안은 폐기(공용 기기에서 남의 초안이 며칠씩 남는 것 방지 — QR 접수 등).
+      if (maxAgeMs && Date.now() - d.savedAt > maxAgeMs) {
+        void clearDraft(scope);
+        return;
+      }
       // exclude가 생기기 전에 저장된 레거시 초안이 민감값을 품고 있으면 복구하지 않고 **즉시 폐기**한다.
       // (이력서 주민번호·계좌처럼 애초에 IDB에 남으면 안 되는 값 — 배포 후 첫 열기에 자동 정리)
       if (excl.some((k) => k in d.values)) {
@@ -64,7 +75,7 @@ export function useFormDraft({
     return () => {
       cancelled = true;
     };
-  }, [scope, enabled, ignoreKey, excludeKey]);
+  }, [scope, enabled, ignoreKey, excludeKey, maxAgeMs]);
 
   // 디바운스 자동저장 — 폼 input/change에서 값 캡처 → IDB(의미 있는 값일 때만).
   useEffect(() => {
@@ -73,10 +84,9 @@ export function useFormDraft({
     if (!form) return;
     const excl = excludeKey ? excludeKey.split(",") : [];
     const ignore = ignoreKey ? ignoreKey.split(",") : [];
-    let timer: ReturnType<typeof setTimeout> | null = null;
     const schedule = () => {
-      if (timer) clearTimeout(timer);
-      timer = setTimeout(() => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+      timerRef.current = setTimeout(() => {
         const values = readFormValues(form, excl);
         if (hasMeaningfulValues(values, ignore)) void saveDraft(scope, values);
       }, 700);
@@ -84,7 +94,7 @@ export function useFormDraft({
     form.addEventListener("input", schedule);
     form.addEventListener("change", schedule);
     return () => {
-      if (timer) clearTimeout(timer);
+      if (timerRef.current) clearTimeout(timerRef.current);
       form.removeEventListener("input", schedule);
       form.removeEventListener("change", schedule);
     };
@@ -101,13 +111,15 @@ export function useFormDraft({
   }, [formRef, onRestore, excludeKey]);
 
   const discard = useCallback(() => {
+    if (timerRef.current) clearTimeout(timerRef.current);
     void clearDraft(scope);
     draftRef.current = null;
     setDraftSavedAt(null);
   }, [scope]);
 
-  // 서버 저장 성공 시 호출 — 초안 비움(다음 열기 때 stale 복구 방지).
+  // 서버 저장 성공 시 호출 — 초안 비움(다음 열기 때 stale 복구 방지). 대기 중 저장 타이머도 취소.
   const clear = useCallback(() => {
+    if (timerRef.current) clearTimeout(timerRef.current);
     void clearDraft(scope);
     draftRef.current = null;
     setDraftSavedAt(null);

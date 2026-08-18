@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useStateDraft } from "@/components/forms/use-state-draft";
+import { DraftBanner } from "@/components/forms/draft-banner";
 import { CircleStop, History, Loader2, Mic, Upload, X } from "@/components/icons/eywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import {
@@ -54,6 +56,28 @@ export function NewMeetingForm({ onSuccess }: { onSuccess?: () => void } = {}) {
 
   // 녹음 중이면 이 폼이 든 플로팅 창의 닫기(X)·배경보내기와 탭 새로고침을 잠근다(우발적 유실 방지).
   useRecordingLock(isRecording);
+
+  // 텍스트 필드 로컬 초안 — 녹음은 recording-recovery(IDB 청크)가 지키지만 제목·참석자·메모는 React state뿐이라
+  // 새로고침/창닫기에 유실됐다. 스냅샷 저장 + 복구 배너(생성 성공 시 삭제). 파일/녹음 상태는 초안 대상 아님.
+  const draftSnapshot = useMemo(
+    () => ({ title, attendees, heldAt, notepad }),
+    [title, attendees, heldAt, notepad],
+  );
+  const localDraft = useStateDraft({
+    scope: "meeting:new",
+    snapshot: draftSnapshot,
+    // heldAt은 항상 기본값(지금)이 채워지므로 빈 폼 판정에서 제외.
+    hasContent: (s) => s.title.trim() !== "" || s.attendees.trim() !== "" || s.notepad.trim() !== "",
+  });
+
+  function restoreTextDraft() {
+    const d = localDraft.restore();
+    if (!d) return;
+    setTitle(d.title);
+    setAttendees(d.attendees);
+    if (d.heldAt) setHeldAt(d.heldAt);
+    setNotepad(d.notepad);
+  }
 
   // On mount: look for an unfinished recording in IndexedDB (browser crash recovery).
   useEffect(() => {
@@ -192,6 +216,7 @@ export function NewMeetingForm({ onSuccess }: { onSuccess?: () => void } = {}) {
         setPhase("idle");
         return;
       }
+      localDraft.clear();
       if (onSuccess) {
         onSuccess();
         router.refresh();
@@ -251,6 +276,7 @@ export function NewMeetingForm({ onSuccess }: { onSuccess?: () => void } = {}) {
       }
       // success — clear IDB recovery chunks (analysis is now safely queued server-side)
       await clearRecovery("meeting");
+      localDraft.clear();
       if (onSuccess) {
         onSuccess();
         router.refresh();
@@ -269,6 +295,12 @@ export function NewMeetingForm({ onSuccess }: { onSuccess?: () => void } = {}) {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
+      {/* 텍스트 초안 복구 배너(제목·참석자·메모) — 녹음 복구 배너와 별개 */}
+      <DraftBanner
+        savedAt={localDraft.draftSavedAt}
+        onRestore={restoreTextDraft}
+        onDiscard={localDraft.discard}
+      />
       {/* Recovery banner — IndexedDB crash recovery */}
       {recoveryMeta ? (
         <div className="border-chart-3/40 bg-chart-3/5 flex items-start gap-3 rounded-md border px-4 py-3">

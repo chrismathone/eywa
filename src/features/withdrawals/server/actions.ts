@@ -32,7 +32,7 @@ const CONSULTATION_KEYS: (keyof WithdrawalConsultation)[] = [
   "talkedWithStudent",
 ];
 
-export type WithdrawalReasonState = { error?: string } | undefined;
+export type WithdrawalReasonState = { error?: string; ok?: boolean } | undefined;
 
 /** 사유 카테고리 + 메모 저장 */
 export async function updateWithdrawalReason(
@@ -89,7 +89,8 @@ export async function updateWithdrawalReason(
   });
   revalidatePath(`/withdrawals/${studentId}`);
   revalidatePath("/withdrawals");
-  return undefined;
+  // 성공을 undefined로 돌리면 useActionState 소비처가 성공을 감지할 수 없다(성공 시 초안 삭제가 죽는다).
+  return { ok: true };
 }
 
 export type ConsultationToggleState = { error?: string } | undefined;

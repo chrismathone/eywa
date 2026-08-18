@@ -33,10 +33,14 @@ import { AutoTextarea, Field, QuestionSection, inputCls } from "./intake-ui";
 export function ChecklistStep({
   selectedSubjects,
   onGoalsCountChange,
+  textDefaults,
 }: {
   selectedSubjects: { key: string; label: string }[];
   onGoalsCountChange: (n: number) => void;
+  /** 로컬 초안 복구 시 자유입력 텍스트 초기값(name → 값) — 이 스텝은 늦게 마운트라 defaultValue로 주입. */
+  textDefaults?: Record<string, string>;
 }) {
+  const dv = (name: string) => textDefaults?.[name];
   const [goals, setGoals] = useState<string[]>([]);
   const [worries, setWorries] = useState<string[]>([]);
   const [levelBasis, setLevelBasis] = useState<string[]>([]);
@@ -89,27 +93,27 @@ export function ChecklistStep({
 
       <QuestionSection title={`${no()}학습 상담을 통해 가장 알고 싶은 문제`} tone="primary" hint={`최대 ${MAX_GOALS}개 · 필수`}>
         <Chips options={GOAL_OPTIONS} value={goals} max={MAX_GOALS} onToggle={toggler(setGoals, MAX_GOALS)} />
-        <EtcInput name="goalsEtc" />
+        <EtcInput name="goalsEtc" defaultValue={dv("goalsEtc")} />
       </QuestionSection>
 
       <QuestionSection title={`${no()}현재 가장 걱정되는 것`} tone="amber" hint={`최대 ${MAX_WORRIES}개`}>
         <Chips options={WORRY_OPTIONS} value={worries} max={MAX_WORRIES} onToggle={toggler(setWorries, MAX_WORRIES)} />
-        <EtcInput name="worriesEtc" />
+        <EtcInput name="worriesEtc" defaultValue={dv("worriesEtc")} />
         <Field label="지금 계획을 그대로 유지하면 가장 걱정되는 결과">
-          <AutoTextarea name="worryOutcome" minRows={3} placeholder="자유롭게 적어주세요 (선택)" />
+          <AutoTextarea name="worryOutcome" minRows={3} placeholder="자유롭게 적어주세요 (선택)" defaultValue={dv("worryOutcome")} />
         </Field>
       </QuestionSection>
 
       <QuestionSection title={`${no()}현재 학생의 학업 수준을 무엇으로 판단하시나요`} tone="gold" hint="복수 선택">
         <Chips options={LEVEL_BASIS_OPTIONS} value={levelBasis} max={LEVEL_BASIS_OPTIONS.length} onToggle={toggler(setLevelBasis, LEVEL_BASIS_OPTIONS.length)} />
-        <EtcInput name="levelBasisEtc" />
+        <EtcInput name="levelBasisEtc" defaultValue={dv("levelBasisEtc")} />
       </QuestionSection>
 
       {showMath || showBoth ? (
         <QuestionSection title={`${no()}수학 현재 상태`} tone="primary" hint={`최대 ${MAX_SUBJECT_STATES}개`}>
           <Chips options={MATH_STATE_OPTIONS} value={mathStates} max={MAX_SUBJECT_STATES} onToggle={toggler(setMathStates, MAX_SUBJECT_STATES)} />
           <Field label="현재 수학 학습 과정 또는 교재">
-            <input name="mathCourse" placeholder="예: 쎈 중2-1, 개념원리" className={inputCls} />
+            <input name="mathCourse" placeholder="예: 쎈 중2-1, 개념원리" defaultValue={dv("mathCourse")} className={inputCls} />
           </Field>
         </QuestionSection>
       ) : null}
@@ -118,7 +122,7 @@ export function ChecklistStep({
         <QuestionSection title={`${no()}영어 현재 상태`} tone="primary" hint={`최대 ${MAX_SUBJECT_STATES}개`}>
           <Chips options={ENGLISH_STATE_OPTIONS} value={englishStates} max={MAX_SUBJECT_STATES} onToggle={toggler(setEnglishStates, MAX_SUBJECT_STATES)} />
           <Field label="현재 영어 학습 과정 또는 교재">
-            <input name="englishCourse" placeholder="예: 리딩튜터, 그래머인유즈" className={inputCls} />
+            <input name="englishCourse" placeholder="예: 리딩튜터, 그래머인유즈" defaultValue={dv("englishCourse")} className={inputCls} />
           </Field>
         </QuestionSection>
       ) : null}
@@ -144,7 +148,7 @@ export function ChecklistStep({
         </Field>
         {priorStatus === "none" ? (
           <Field label="선행학습을 하지 않는 이유">
-            <AutoTextarea name="priorNoneReason" minRows={2} placeholder="예: 현재 과정을 다지는 게 먼저라고 생각해서 (선택)" />
+            <AutoTextarea name="priorNoneReason" minRows={2} placeholder="예: 현재 과정을 다지는 게 먼저라고 생각해서 (선택)" defaultValue={dv("priorNoneReason")} />
           </Field>
         ) : (
           <Field label="선행학습을 고려하거나 진행하는 가장 큰 이유">
@@ -159,7 +163,7 @@ export function ChecklistStep({
         </Field>
         {advancedStatus === "none" ? (
           <Field label="심화학습을 하지 않는 이유">
-            <AutoTextarea name="advancedNoneReason" minRows={2} placeholder="예: 아직 기본 개념부터 잡는 중이라 (선택)" />
+            <AutoTextarea name="advancedNoneReason" minRows={2} placeholder="예: 아직 기본 개념부터 잡는 중이라 (선택)" defaultValue={dv("advancedNoneReason")} />
           </Field>
         ) : (
           <Field label="심화학습을 고려하거나 진행하는 가장 큰 이유">
@@ -170,17 +174,17 @@ export function ChecklistStep({
 
       <QuestionSection title={`${no()}앞으로 6개월, 가장 원하는 변화`} tone="primary" hint={`최대 ${MAX_CHANGES}개`}>
         <Chips options={CHANGE_OPTIONS} value={changes} max={MAX_CHANGES} onToggle={toggler(setChanges, MAX_CHANGES)} />
-        <EtcInput name="changesEtc" />
+        <EtcInput name="changesEtc" defaultValue={dv("changesEtc")} />
       </QuestionSection>
 
       <QuestionSection title={`${no()}학원에서 확인·제공받고 싶은 것`} tone="ink" hint={`최대 ${MAX_WANTS}개`}>
         <Chips options={WANT_OPTIONS} value={wants} max={MAX_WANTS} onToggle={toggler(setWants, MAX_WANTS)} />
-        <EtcInput name="wantsEtc" />
+        <EtcInput name="wantsEtc" defaultValue={dv("wantsEtc")} />
         <Field label="상담자가 꼭 알아야 할 자녀의 강점이나 최근의 성공 경험">
-          <AutoTextarea name="strengths" minRows={3} placeholder="자유롭게 적어주세요 (선택)" />
+          <AutoTextarea name="strengths" minRows={3} placeholder="자유롭게 적어주세요 (선택)" defaultValue={dv("strengths")} />
         </Field>
         <Field label="추가로 전달하고 싶은 내용">
-          <AutoTextarea name="extra" minRows={3} placeholder="자유롭게 적어주세요 (선택)" />
+          <AutoTextarea name="extra" minRows={3} placeholder="자유롭게 적어주세요 (선택)" defaultValue={dv("extra")} />
         </Field>
       </QuestionSection>
     </>
@@ -323,6 +327,6 @@ function Scale({ label, value, onChange }: { label: string; value: number; onCha
   );
 }
 
-function EtcInput({ name }: { name: string }) {
-  return <input name={name} placeholder="기타 (직접 입력)" className={inputCls} />;
+function EtcInput({ name, defaultValue }: { name: string; defaultValue?: string }) {
+  return <input name={name} defaultValue={defaultValue} placeholder="기타 (직접 입력)" className={inputCls} />;
 }

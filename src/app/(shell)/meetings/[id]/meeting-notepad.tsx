@@ -1,10 +1,12 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { FileText, Loader2, Save } from "@/components/icons/eywa-icon-compat";
 import { updateMeetingNotepad, type UpdateNotepadState } from "@/features/meetings/server/actions";
 import { useEditPresence } from "@/features/presence/edit-presence";
+import { useStateDraft } from "@/components/forms/use-state-draft";
+import { DraftBanner } from "@/components/forms/draft-banner";
 
 function SaveBtn({ dirty }: { dirty: boolean }) {
   const { pending } = useFormStatus();
@@ -50,6 +52,18 @@ export function MeetingNotepad({
   // "수정중" presence — 저장 안 한 편집이 있는 동안 track.
   useEditPresence(`meeting:${meetingId}`, dirty);
 
+  // 로컬 초안 자동저장 — 수동 '메모 저장' 전 새로고침/창닫기로 미저장 메모가 날아가는 것 방지.
+  // 미저장 변경(dirty)일 때만 IDB에 보관, 서버 저장 성공 시 삭제(use-state-draft).
+  const localDraft = useStateDraft({
+    scope: `meeting-notepad:${meetingId}`,
+    snapshot: value,
+    hasContent: (s) => s.trim() !== "" && s !== savedValue,
+  });
+  const clearLocalDraft = localDraft.clear;
+  useEffect(() => {
+    if (state?.ok) clearLocalDraft();
+  }, [state, clearLocalDraft]);
+
   return (
     <section className="bg-card border-border space-y-3 rounded-2xl border p-5">
       <header className="flex items-center justify-between gap-3">
@@ -63,6 +77,14 @@ export function MeetingNotepad({
         회의 중 메모를 적어두면 {hasAudio ? "녹음 전사와 함께 " : ""}‘AI로 정리’ 때 함께 분석됩니다. 저장한 뒤 상단 ‘AI로
         정리’를 누르세요.
       </p>
+      <DraftBanner
+        savedAt={localDraft.draftSavedAt}
+        onRestore={() => {
+          const d = localDraft.restore();
+          if (d !== null) setValue(d);
+        }}
+        onDiscard={localDraft.discard}
+      />
       <form action={action} className="space-y-2">
         <input type="hidden" name="id" value={meetingId} />
         <textarea

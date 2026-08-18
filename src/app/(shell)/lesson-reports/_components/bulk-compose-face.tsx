@@ -3,9 +3,11 @@
 // 반 단위 대량 발송 — 반을 골라 그 반 재원생 각자에게 **같은 내용**의 리포트 카드를 일괄 발송(반 공지의 리포트-카드 버전).
 // 발송 안전가드(dry-run·과목·동명이인·이미작성 제외)는 서버 액션(sendBulkAdminReports)이 학생별로 최종 강제 — 여기선 안내·확인만.
 import { normalizeHomeworkPages } from "@/features/onescreen/homework-pages";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
+import { useStateDraft } from "@/components/forms/use-state-draft";
+import { DraftBanner } from "@/components/forms/draft-banner";
 import { kstToday } from "@/lib/date-kst";
 import { Button } from "@/components/ui/button";
 import { useSubjectMaps } from "@/features/owner/operations-context";
@@ -45,6 +47,34 @@ export function BulkComposeFace({
   const [aiBusy, setAiBusy] = useState(false);
   const [busy, setBusy] = useState(false);
   const [confirmSend, setConfirmSend] = useState(false);
+
+  // 로컬 초안 자동저장 — 공용 본문·진도 등 긴 입력을 새로고침/창닫기에서 지킨다(실발송 성공 시 삭제).
+  const draftSnapshot = useMemo(
+    () => ({ checkedIds: [...checked], reportDate, teacherName, textbook, progress, homeworkToday, makeup, body, autoBody, trend }),
+    [checked, reportDate, teacherName, textbook, progress, homeworkToday, makeup, body, autoBody, trend],
+  );
+  const localDraft = useStateDraft({
+    scope: "report-bulk-compose",
+    snapshot: draftSnapshot,
+    hasContent: (s) =>
+      s.body.trim() !== "" || s.progress.trim() !== "" || s.homeworkToday.trim() !== "" ||
+      s.textbook.trim() !== "" || s.trend.trim() !== "",
+  });
+
+  function restoreBulkDraft() {
+    const d = localDraft.restore();
+    if (!d) return;
+    setChecked(new Set(d.checkedIds.filter((id) => classes.some((c) => c.id === id))));
+    setReportDate(d.reportDate || kstToday());
+    setTeacherName(d.teacherName);
+    setTextbook(d.textbook);
+    setProgress(d.progress);
+    setHomeworkToday(d.homeworkToday);
+    setMakeup(d.makeup);
+    setBody(d.body);
+    setAutoBody(d.autoBody);
+    setTrend(d.trend);
+  }
 
   const selectedCount = classes.filter((c) => checked.has(c.id)).reduce((a, c) => a + c.studentCount, 0);
   // AI 자동작성 기준 과목 = 선택 반 중 첫 반의 과목(대량은 학생 무관 공용 초안).
@@ -143,12 +173,18 @@ export function BulkComposeFace({
     (res.queued ? toast.success : toast.message)(parts.join(" · "));
     if (!test) {
       setChecked(new Set()); // 같은 반 재클릭 오발송 방지 — 내용은 남겨 다른 반에 이어 보낼 수 있게 유지.
+      localDraft.clear(); // 발송된 본문이 내일 초안 배너로 되살아나 중복 발송을 유도하지 않게.
       router.refresh(); // 상단 발송 큐 카드 갱신
     }
   }
 
   return (
     <section className="bg-card border-line shadow-card space-y-4 rounded-2xl border px-5 py-4">
+      <DraftBanner
+        savedAt={localDraft.draftSavedAt}
+        onRestore={restoreBulkDraft}
+        onDiscard={localDraft.discard}
+      />
       <div>
         <h2 className="text-foreground text-[15px] font-bold">반 단위 대량 발송</h2>
         <p className="text-text-faint text-[12px]">
