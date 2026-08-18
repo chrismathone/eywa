@@ -38,6 +38,8 @@ export type AssignDialogClass = {
   subject: string;
   teacherName: string | null;
   studentCount: number;
+  /** 특강 토글값(0133a) — 반 이동 다이얼로그의 특강 기본 숨김용. 판정은 isSpecialLecture(이름 폴백 포함). */
+  isSpecial?: boolean;
   /** 반 운영 요일(분리등원 후보). 없으면 등원 요일 선택 미표시. */
   days?: string[];
   /** 스케줄 요약("월·목 14:20") — 반 옵션에서 무슨 요일·몇 시인지 표시. */

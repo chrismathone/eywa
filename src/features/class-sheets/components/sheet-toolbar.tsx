@@ -7,6 +7,7 @@ import { addWeeks, thisMonday } from "@/features/timetable/lib/week";
 import { EditingBadge } from "@/features/presence/editing-badge";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { WindowLink } from "@/components/workspace/window-link";
+import { MARKER_TRIGGER, MARKER_WIDTH } from "@/components/ui/marker-trigger";
 import type { ClassSheetWeekData } from "../server/queries";
 import { ECS_FONT_SIZES, ECS_FONT_SIZE_LABEL, type EcsFontSize } from "../font-size";
 import { attHref } from "@/app/(shell)/attendance/_components/att-href";
@@ -76,7 +77,7 @@ export function SheetToolbar({
       <button type="button" className={pill(false)} onClick={() => onNavigate("/ecs")}>
         목록
       </button>
-      <span className="w-[300px] shrink-0">
+      <span className={`${MARKER_WIDTH} shrink-0`}>
         <SearchableSelect
           options={classOptions.map((c) => ({ value: c.id, label: c.name }))}
           value={data.classId}
@@ -85,19 +86,10 @@ export function SheetToolbar({
           }}
           placeholder="반 선택"
           ariaLabel="반 전환"
-          // 🔴 **이 화면에서 가장 크고, 유일하게 노란 것** — 원장 2026-08-18: *"수업명에서 배경을
-          // 쌩노란색으로 해주고 글씨 크기를 이 페이지에서 보이는 글자중에 가장 큰 글자로"* +
-          // *"가장 큰 글자랑 동일 사이즈"* + *"즉, 수업명을 확실하게 보기 위함"*.
-          // · 21px = 이 페이지 최대 글자(PageHeader 제목 `text-[21px]`)와 **같은 크기**(더 크게가 아니다).
-          // · 노랑은 `--marker` 한 곳에서 온다(globals.css) — 색을 조이거나 풀려면 거기만 고친다.
-          // ⚠️ 2026-08-10에 h-7·13px로 낮췄던 것을(*"드랍박스가 너무 거대해서"*) **이 지시가 되돌린다.**
-          //    그때 문제는 "툴바에서 혼자 거대한 것"이었고 지금 목적은 "어느 반을 보고 있는지 즉시 읽히는 것"이다.
-          //    다시 낮추자는 말이 나오면 두 지시가 충돌한다는 걸 밝히고 물어볼 것(조용히 뒤집지 말 것).
-          // ⚠️ 이 화면에 **노란 덩어리를 하나 더 만들지 말 것** — 둘이 되는 순간 첫째가 안 보인다.
+          // 🔴 **이 화면에서 가장 크고, 유일하게 노란 것** — 표기 규약·근거는 한 곳에 모아 뒀다
+          //    ([marker-trigger.ts](@/components/ui/marker-trigger)). 출석부(반 모드)·시험 상세도 같은 상수를 쓴다.
           // ⚠️ `compact`를 안 쓴다 — 그건 쉐브론을 10px로 줄이는데(gap도 1) 21px 글자 옆에선 흔적만 남는다.
-          // ⚠️ 굵기는 **안쪽 라벨이 이긴다**: `highlightSelected`가 고른 값에 `font-bold`를 얹으므로
-          //    여기 `font-extrabold`를 적어도 실제로는 700이다 → 렌더되는 값 그대로 적는다(코드가 거짓말하지 않게).
-          triggerClassName="bg-marker border-amber/40 text-foreground focus:border-primary h-10 rounded-full border px-3.5 text-[21px] leading-tight font-bold outline-none"
+          triggerClassName={MARKER_TRIGGER}
           // 반이 수십 개라 목록에서 **지금 보고 있는 반**을 눈으로 못 찾겠다는 지적(원장 2026-08-06).
           // 체크 아이콘만으론 약해서 노란 배경 + 굵은 글씨로 또렷하게.
           highlightSelected

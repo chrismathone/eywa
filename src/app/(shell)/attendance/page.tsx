@@ -619,6 +619,11 @@ export default async function AttendancePage({
             ariaLabel="반 필터"
             allLabel={isTeacherView ? "전체 반(내 반 전부)" : "전체 반"}
             cap={300}
+            // 반을 고르면 그 반의 시트가 아래를 채운다 = "지금 어느 반을 보고 있나"의 자리라 형광 표기
+            // (원장 2026-08-18 "수업에 들어가서 세부 내용을 보는 곳에 전부 적용"). 옆 과목·강사 필터는
+            // 목록을 좁힐 뿐이라 **켜지 않는다** — 노란 게 둘이 되면 첫째가 안 보인다.
+            // ⚠️ "전체 반"일 땐 저절로 평범한 모양으로 돌아간다(FilterSelect가 고른 값에만 켠다).
+            marker
           />
         </div>
         <span className="bg-line h-4 w-px" aria-hidden />

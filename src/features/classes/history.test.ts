@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { buildScheduleHistory, mergeClassHistory, slotLabel, type ClassHistoryEntry } from "./history";
+import {
+  buildEnrollmentHistory,
+  buildScheduleHistory,
+  mergeClassHistory,
+  slotLabel,
+  type ClassHistoryEntry,
+  type EnrollmentHistoryRow,
+} from "./history";
 
 const slot = (o: Partial<Parameters<typeof buildScheduleHistory>[0][number]> = {}) => ({
   dayOfWeek: "mon",
@@ -48,6 +55,57 @@ describe("buildScheduleHistory — 배치 구간", () => {
   });
 });
 
+describe("buildEnrollmentHistory — 학생 배정 이력", () => {
+  const TODAY = "2026-08-18";
+  const en = (o: Partial<EnrollmentHistoryRow> = {}): EnrollmentHistoryRow => ({
+    studentName: "김지호",
+    startDate: "2026-08-01",
+    endDate: null,
+    isTransferred: false,
+    isTransferredIn: false,
+    ...o,
+  });
+
+  it("수강 한 행 = 배정 사건 하나(종료일 없으면 종료 사건 없음)", () => {
+    const out = buildEnrollmentHistory([en()], TODAY);
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({ date: "2026-08-01", source: "enrollment", title: "학생 배정", detail: "김지호" });
+  });
+
+  it("종료일이 있으면 종료 사건이 따로 생긴다 · 전입/전출 플래그는 라벨을 가른다", () => {
+    const out = buildEnrollmentHistory(
+      [en({ isTransferredIn: true, endDate: "2026-08-10", isTransferred: true })],
+      TODAY,
+    );
+    expect(out.find((e) => e.date === "2026-08-01")!.title).toBe("전입(반 이동)");
+    expect(out.find((e) => e.date === "2026-08-10")!.title).toBe("전출(반 이동)");
+  });
+
+  it("같은 날 같은 종류는 한 줄로 묶고 이름을 나열한다(시트 임포트 수십 명 대응)", () => {
+    const out = buildEnrollmentHistory([en(), en({ studentName: "이철수" })], TODAY);
+    expect(out).toHaveLength(1);
+    expect(out[0]!.title).toBe("학생 배정 2명");
+    expect(out[0]!.detail).toBe("김지호 · 이철수");
+  });
+
+  it("일반 종료는 '수강 종료'(전출 아님)", () => {
+    const out = buildEnrollmentHistory([en({ endDate: "2026-08-15" })], TODAY);
+    expect(out.find((e) => e.date === "2026-08-15")!.title).toBe("수강 종료");
+  });
+
+  it("미래 날짜 사건은 '(예정)' — 안 붙이면 아직 안 일어난 이동이 완료된 사실처럼 선다", () => {
+    const out = buildEnrollmentHistory(
+      [en({ startDate: "2026-08-25" }), en({ studentName: "이철수", startDate: "2026-08-25" })],
+      TODAY,
+    );
+    expect(out[0]!.title).toBe("학생 배정 2명 (예정)");
+  });
+
+  it("시작일 없는 행은 배정 사건을 만들지 않는다(지어내지 않는다)", () => {
+    expect(buildEnrollmentHistory([en({ startDate: "" })], TODAY)).toEqual([]);
+  });
+});
+
 describe("mergeClassHistory", () => {
   const e = (date: string, source: ClassHistoryEntry["source"], title = "x"): ClassHistoryEntry => ({
     date,
@@ -60,13 +118,14 @@ describe("mergeClassHistory", () => {
     expect(out.map((x) => x.date)).toEqual(["2026-08-04", "2026-01-01"]);
   });
 
-  it("같은 날짜면 사실(감사로그·배치)이 정황(보고서)보다 위", () => {
+  it("같은 날짜면 사실(감사로그·배치·학생)이 정황(보고서)보다 위", () => {
     const out = mergeClassHistory([
       [e("2026-08-04", "report")],
+      [e("2026-08-04", "enrollment")],
       [e("2026-08-04", "audit")],
       [e("2026-08-04", "schedule")],
     ]);
-    expect(out.map((x) => x.source)).toEqual(["audit", "schedule", "report"]);
+    expect(out.map((x) => x.source)).toEqual(["audit", "schedule", "enrollment", "report"]);
   });
 
   it("날짜 없는 항목은 뺀다(정렬이 무너지지 않게)", () => {
