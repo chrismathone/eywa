@@ -1,8 +1,10 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect, useRef } from "react";
 import { useFormStatus } from "react-dom";
 import { AlertCircle, Loader2, Save } from "@/components/icons/eywa-icon-compat";
+import { useFormDraft } from "@/components/forms/use-form-draft";
+import { DraftBanner } from "@/components/forms/draft-banner";
 import { Button } from "@/components/ui/button";
 import {
   updateWithdrawalReason,
@@ -39,8 +41,24 @@ export function WithdrawalReasonCard({
     undefined,
   );
 
+  // 로컬 초안 자동저장 — 메모(자유 기록)를 저장 전 새로고침/창닫기에서 지킨다. 저장 성공 시 초안 삭제.
+  const formRef = useRef<HTMLFormElement>(null);
+  const draft = useFormDraft({
+    scope: `withdrawal-reason:${studentId}`,
+    formRef,
+    exclude: ["studentId"],
+    // 사유 select는 항상 값이 채워짐 — 빈 폼 오탐 방지로 배너 판정서 제외.
+    ignoreForBanner: ["reason"],
+  });
+  const clearDraft = draft.clear;
+  // 성공 판정은 state?.ok — 액션이 성공 시 {ok:true}를 반환한다(undefined면 성공 감지 불가, 리뷰 지적).
+  useEffect(() => {
+    if (state?.ok) clearDraft();
+  }, [state, clearDraft]);
+
   return (
-    <form onSubmit={(e) => submitAction(e, formAction)} className="space-y-4">
+    <form ref={formRef} onSubmit={(e) => submitAction(e, formAction)} className="space-y-4">
+      <DraftBanner savedAt={draft.draftSavedAt} onRestore={draft.restore} onDiscard={draft.discard} />
       <input type="hidden" name="studentId" value={studentId} />
 
       <div className="space-y-1.5">

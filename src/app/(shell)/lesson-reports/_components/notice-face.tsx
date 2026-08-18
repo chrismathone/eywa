@@ -2,9 +2,11 @@
 
 // 반 공지 — eywa 반에서 학생을 골라 각 학생의 ClassNote 개별 보드로 같은 내용을 일괄 발송.
 // 반 구조는 eywa(여기)에 살고 ClassNote 1인 1반은 배달 레일(Edutrix NoticeWriteModal 패턴 계승).
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { useStateDraft } from "@/components/forms/use-state-draft";
+import { DraftBanner } from "@/components/forms/draft-banner";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { useSubjectMaps } from "@/features/owner/operations-context";
@@ -72,6 +74,27 @@ export function NoticeFace({
       return n;
     });
 
+  // 로컬 초안 자동저장 — 공통·개별 공지 내용을 새로고침/창닫기에서 지킨다(실발송 성공 시 삭제).
+  // 첨부(atts)는 업로드 참조라 초안 대상 아님(복구 시 참조 유효성 보장 불가 — 다시 첨부).
+  const draftSnapshot = useMemo(
+    () => ({ checkedIds: [...checked], body, individual, showIndividual }),
+    [checked, body, individual, showIndividual],
+  );
+  const localDraft = useStateDraft({
+    scope: "class-notice",
+    snapshot: draftSnapshot,
+    hasContent: (s) => s.body.trim() !== "" || Object.values(s.individual).some((t) => t.trim() !== ""),
+  });
+
+  function restoreNoticeDraft() {
+    const d = localDraft.restore();
+    if (!d) return;
+    setChecked(new Set(d.checkedIds.filter((id) => classes.some((c) => c.id === id))));
+    setBody(d.body);
+    setIndividual(d.individual);
+    setShowIndividual(d.showIndividual);
+  }
+
   // 전체 선택/해제 — 반 목록 전부(=발송 가능한 모든 재원생). 학원 전체 공지를 반마다 클릭하지 않게.
   const allChecked = classes.length > 0 && classes.every((c) => checked.has(c.id));
   const toggleAll = () => setChecked(allChecked ? new Set() : new Set(classes.map((c) => c.id)));
@@ -116,6 +139,7 @@ export function NoticeFace({
       setIndividual({});
       setShowIndividual(false);
       setAtts([]);
+      localDraft.clear();
     }
     refresh();
   }
@@ -123,6 +147,15 @@ export function NoticeFace({
   return (
     <div className="space-y-6">
       <section className="bg-card border-line shadow-card rounded-2xl border px-5 py-4">
+        {localDraft.draftSavedAt ? (
+          <div className="mb-3">
+            <DraftBanner
+              savedAt={localDraft.draftSavedAt}
+              onRestore={restoreNoticeDraft}
+              onDiscard={localDraft.discard}
+            />
+          </div>
+        ) : null}
         <div className="mb-3">
           <h2 className="text-foreground text-[15px] font-bold">반 공지 발송</h2>
           <p className="text-text-faint text-[12px]">

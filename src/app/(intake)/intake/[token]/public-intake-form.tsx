@@ -1,8 +1,11 @@
 "use client";
 
 import Image from "next/image";
-import { useActionState, useMemo, useRef, useState } from "react";
+import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
+import { useFormDraft } from "@/components/forms/use-form-draft";
+import { DraftBanner } from "@/components/forms/draft-banner";
+import { HABIT_ITEMS } from "@/features/enrollment/intake-checklist";
 import { ArrowLeft, ArrowRight, Check, CheckCircle2, Loader2 } from "@/components/icons/eywa-icon-compat";
 import { isPreschoolGrade } from "@/lib/format/school-grade";
 import {
@@ -90,6 +93,10 @@ export function PublicIntakeForm({
   const [step, setStep] = useState<1 | 2>(1);
   const [stepError, setStepError] = useState<string | null>(null);
   const [goalCount, setGoalCount] = useState(0);
+  // 2단계는 처음 진입할 때 마운트하고 이후엔 hidden으로만 감춘다(1단계와 동일) — 언마운트하면
+  // 뒤로 갔다 오는 순간 선택 칩·자유입력이 통째로 초기화되고, 초안 복구 defaultValue가
+  // 재마운트에서 사용자의 최신 수정을 옛 값으로 되돌린다(리뷰 지적). 최초 렌더 비용 절약은 유지.
+  const [checklistMounted, setChecklistMounted] = useState(false);
 
   // 버튼/다중선택은 상태로 보유 → hidden input으로 제출.
   const [subjects, setSubjects] = useState<string[]>([]);
@@ -131,6 +138,7 @@ export function PublicIntakeForm({
       return;
     }
     setStepError(null);
+    setChecklistMounted(true);
     setStep(2);
     window.scrollTo({ top: 0 });
   }
@@ -146,6 +154,61 @@ export function PublicIntakeForm({
       subjects.map((v) => ({ key: v, label: subjectOptions.find((o) => o.value === v)?.label ?? v })),
     [subjects, subjectOptions],
   );
+
+  // ── 로컬 초안 자동저장(긴 폼 기본값) — 학부모가 폰에서 길게 쓰다 새로고침/이탈해도 텍스트를 지킨다.
+  // **자유입력 텍스트만** 캡처: 서버 prop(token·renderedAt)·봇 트랩(company)·상태 기반 다중값 hidden
+  // (subjects·체크리스트 선택지·habit_*)은 exclude — Record<string,string> 캡처가 같은 name 다중 hidden을
+  // 마지막 값 하나로 뭉개 부분 복원(오해 유발)이 되기 때문. 과목·선택지는 복구 후 다시 탭한다(1단계 검증이 강제).
+  const [checklistTextDefaults, setChecklistTextDefaults] = useState<Record<string, string> | null>(null);
+  const draft = useFormDraft({
+    scope: `intake:${token}`,
+    formRef,
+    exclude: [
+      "token",
+      "renderedAt",
+      "company",
+      // Turnstile 위젯이 폼 안에 심는 단일사용 토큰 — 캡처하면 복구가 신선한 토큰을 낡은 것으로
+      // 덮어 정상 제출이 서버 검증에서 튕긴다(리뷰 지적). 보안 토큰을 IDB에 남기지도 않는다.
+      "cf-turnstile-response",
+      "subjects",
+      "checklistFilled",
+      "goals",
+      "worries",
+      "levelBasis",
+      "mathStates",
+      "englishStates",
+      "changes",
+      "wants",
+      "priorStatus",
+      "priorReason",
+      "advancedStatus",
+      "advancedReason",
+      ...HABIT_ITEMS.map((i) => `habit_${i.value}`),
+    ],
+    // 공용 기기 방어 — 토큰이 학원 공용(90일)이라 초안이 기기에 오래 남으면 다음 학부모에게 노출된다.
+    // 2시간이면 "폰에서 쓰다 새로고침/이탈" 복구는 지키고, 며칠 묵은 남의 초안은 폐기.
+    maxAgeMs: 2 * 60 * 60 * 1000,
+    onRestore: (values) => {
+      // 컨트롤드 필드 rehydrate — 학년은 급 판별로 학교 구분까지 역도출(학교구분 select는 name이 없다).
+      const g = values["prospectGrade"];
+      if (g) {
+        const st = SCHOOL_TYPES.find((s) => s.match(g));
+        if (st) setSchoolType(st.type);
+        setGrade(g);
+      }
+      if (values["siblings"] !== undefined) setSiblings(values["siblings"]!);
+      const sb = values["shuttleBusRequest"];
+      if (sb !== undefined) setApplyShuttle(sb === "" ? null : sb === "true");
+      // 2단계 자유입력은 아직 언마운트 상태 — 스텝 진입 시 defaultValue로 주입한다.
+      setChecklistTextDefaults(values);
+    },
+    // 상태 기반 hidden(항상 값이 채워지는 것 아님)이지만 셔틀 "미신청"만 눌러도 의미 있는 입력은 아님.
+    ignoreForBanner: ["shuttleBusRequest", "siblings"],
+  });
+  const clearDraft = draft.clear;
+  useEffect(() => {
+    if (state?.ok) clearDraft();
+  }, [state, clearDraft]);
 
   if (state?.ok) {
     // 제출 완료 — Editorial 문법 ④: 환영 사진 카드 + 또렷한 완료 위계 (학부모 첫인상의 마지막 장면)
@@ -198,6 +261,13 @@ export function PublicIntakeForm({
         name="shuttleBusRequest"
         value={applyShuttle === null ? "" : applyShuttle ? "true" : "false"}
       />
+
+      {/* 로컬 초안 복구 배너 — 작성 중 이탈했던 학부모에게 이어쓰기 제공(과목 등 버튼 선택은 다시 탭 필요). */}
+      {draft.draftSavedAt ? (
+        <div className="mx-3 mt-3">
+          <DraftBanner savedAt={draft.draftSavedAt} onRestore={draft.restore} onDiscard={draft.discard} />
+        </div>
+      ) : null}
 
       {/* 헤더 — Editorial 문법 ④: 학원 공간 사진 + 잉크 오버레이(구 단색 ink 블록의 대비는 유지).
           사진은 public/photos/intake-header.webp (placeholder → 실사 덮어쓰기, docs/photo-generation-prompts.md). */}
@@ -474,9 +544,16 @@ export function PublicIntakeForm({
       </Section>
       </div>
 
-      {/* 2단계 — 사전 체크리스트. 1단계에서 넘어온 뒤에만 마운트(문항이 많아 초기 렌더 비용을 아낀다). */}
-      {step === 2 ? (
-        <ChecklistStep selectedSubjects={selectedSubjectMeta} onGoalsCountChange={setGoalCount} />
+      {/* 2단계 — 사전 체크리스트. 첫 진입 때 마운트(초기 렌더 비용 절약)하고, 이후엔 1단계처럼
+          hidden으로만 감춘다(언마운트 금지 — 뒤로 갔다 오면 입력·칩이 초기화되고 FormData에서도 빠진다). */}
+      {checklistMounted ? (
+        <div className={step === 2 ? undefined : "hidden"}>
+          <ChecklistStep
+            selectedSubjects={selectedSubjectMeta}
+            onGoalsCountChange={setGoalCount}
+            textDefaults={checklistTextDefaults ?? undefined}
+          />
+        </div>
       ) : null}
 
       {turnstileSiteKey ? <TurnstileWidget siteKey={turnstileSiteKey} /> : null}

@@ -1,7 +1,9 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { Check, ChevronDown, Loader2, Pencil, X } from "@/components/icons/eywa-icon-compat";
+import { useStateDraft } from "@/components/forms/use-state-draft";
+import { DraftBanner } from "@/components/forms/draft-banner";
 import type { MeetingReportSection } from "@/features/meetings/server/queries";
 import { updateMeetingReportSection } from "@/features/meetings/server/actions";
 import { RichText } from "@/components/rich-text";
@@ -58,11 +60,38 @@ export function MeetingReportAccordion({
   );
   const [editing, setEditing] = useState<SectionKey | null>(null);
   const [draft, setDraft] = useState("");
+  // 편집 시작 시점의 원문 — 초안에 함께 저장해, 복구 시 원문이 그 사이 바뀌었으면(동료 수정·재분석) 폐기 판정.
+  const [editBase, setEditBase] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, startSave] = useTransition();
 
   // "수정중" presence — 어느 섹션이든 인라인 편집 중이면 track(닫히면 자동 해제).
   useEditPresence(`meeting:${meetingId}`, editing !== null);
+
+  // 섹션 인라인 수정 로컬 초안 — 저장 전 새로고침으로 교정 내용이 날아가는 것 방지.
+  // 수정 중 + 원문(base)에서 달라졌을 때만 IDB에 보관, 저장 성공·취소 시 삭제.
+  const draftSnapshot = useMemo(() => ({ editing, draft, base: editBase }), [editing, draft, editBase]);
+  const localDraft = useStateDraft({
+    scope: `meeting-report:${meetingId}`,
+    snapshot: draftSnapshot,
+    hasContent: (s) => s.editing !== null && s.draft.trim() !== s.base.trim(),
+  });
+
+  function restoreSectionDraft() {
+    const d = localDraft.restore();
+    if (!d?.editing) return;
+    // 그 사이 원문이 바뀌었으면(동료 수정·재분석) 옛 초안으로 덮지 않는다 — 폐기 + 안내.
+    if ((report[d.editing] ?? "").trim() !== (d.base ?? "").trim()) {
+      localDraft.discard();
+      setError("이어 쓰려던 섹션의 원문이 그 사이 바뀌어 초안을 폐기했습니다 — 현재 내용을 확인해 주세요.");
+      return;
+    }
+    setError(null);
+    setEditBase(d.base ?? "");
+    setDraft(d.draft);
+    setEditing(d.editing);
+    setOpen((prev) => new Set(prev).add(d.editing!));
+  }
 
   // 수정으로 비어졌다 다시 채워질 수 있으니 항상 7섹션 노출(빈 섹션도 수정 진입 가능하게).
   const visible = editing ? SECTIONS : available;
@@ -79,9 +108,17 @@ export function MeetingReportAccordion({
 
   function startEdit(key: SectionKey) {
     setError(null);
-    setDraft(report[key] ?? "");
+    const seed = report[key] ?? "";
+    setDraft(seed);
+    setEditBase(seed);
     setEditing(key);
     setOpen((prev) => new Set(prev).add(key));
+  }
+
+  // 취소 = 명시적 폐기 — 초안을 남기면 다음 열기에 버린 텍스트가 배너로 되살아난다(리뷰 지적).
+  function cancelEdit() {
+    localDraft.clear();
+    setEditing(null);
   }
 
   function save(key: SectionKey) {
@@ -98,14 +135,22 @@ export function MeetingReportAccordion({
       }
       setReport((prev) => ({ ...prev, [key]: draft.trim() }) as MeetingReportSection);
       if (res?.editedBy && res?.editedAt) setAttribution({ by: res.editedBy, at: res.editedAt });
+      localDraft.clear();
       setEditing(null);
     });
   }
 
-  if (available.length === 0 && !editing) return null;
+  if (available.length === 0 && !editing && !localDraft.draftSavedAt) return null;
 
   return (
     <div className="space-y-2">
+      <DraftBanner
+        savedAt={localDraft.draftSavedAt}
+        onRestore={restoreSectionDraft}
+        onDiscard={localDraft.discard}
+      />
+      {/* 복구 폐기 안내 — 편집 UI가 닫혀 있을 때도 보이게 배너 자리 아래에 표시. */}
+      {error && !editing ? <p className="text-danger text-xs">{error}</p> : null}
       <div className="flex items-center justify-between gap-2">
         {attribution ? (
           <span className="text-text-faint inline-flex items-center gap-1 text-[11px]">
@@ -173,7 +218,7 @@ export function MeetingReportAccordion({
                     <div className="flex items-center justify-end gap-1.5">
                       <button
                         type="button"
-                        onClick={() => setEditing(null)}
+                        onClick={cancelEdit}
                         disabled={saving}
                         className="border-line text-text-dim hover:bg-bg-soft inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs transition"
                       >

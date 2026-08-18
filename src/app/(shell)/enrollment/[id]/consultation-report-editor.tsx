@@ -22,6 +22,8 @@ import { ConversationFlowTree } from "./conversation-flow-tree";
 import { formatCreatedAt } from "@/lib/utils";
 import { modelDisplayLabel } from "@/lib/ai/model-label";
 import { EyIcon, type EywaIconName } from "@/components/icons/eywa-icons";
+import { useStateDraft } from "@/components/forms/use-state-draft";
+import { DraftBanner } from "@/components/forms/draft-banner";
 
 /**
  * 등록상담 AI 분석 — ijw ReportViewer식 아코디언(접기) + 섹션별 인라인 수정 + 재분석 + TXT 다운로드.
@@ -78,6 +80,8 @@ export function ConsultationReportEditor({
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [editing, setEditing] = useState<TextKey | null>(null);
   const [draft, setDraft] = useState("");
+  // 편집 시작 시점의 원문(후보정 후) — 초안에 함께 저장해, 복구 시 원문이 바뀌었으면(재분석·동료 수정) 폐기 판정.
+  const [editBase, setEditBase] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, startSave] = useTransition();
   const [reanalyzing, startReanalyze] = useTransition();
@@ -108,14 +112,52 @@ export function ConsultationReportEditor({
     setExpanded(allOpen ? new Set() : new Set(allKeys));
   }
 
+  // 편집 시작 시 textarea에 들어가는 초기값 — 리스트 섹션은 후보정된 텍스트를 편집(저장하면 정리된 형태로
+  // DB에 반영, 점진 정리). 로컬 초안의 "수정됐나" 판정도 같은 기준을 쓴다(열자마자 초안 오탐 방지).
+  function editSeed(key: TextKey): string {
+    const raw = (report[key] as string) ?? "";
+    return SECTIONS.find((s) => s.key === key)?.list ? normalizeAiListText(raw) : raw;
+  }
+
+  // 섹션 인라인 수정 로컬 초안 — 저장 전 새로고침으로 교정 내용이 날아가는 것 방지(저장 성공·취소 시 삭제).
+  // ⚠️ 재분석은 같은 분석 행을 **제자리 update**한다(actions.ts) — id가 안 바뀌므로 초안에 원문(base)을
+  // 함께 저장해 복구 시 비교하고, 바뀌었으면(재분석·동료 수정) 옛 초안으로 덮지 않고 폐기한다.
+  const draftSnapshot = useMemo(() => ({ editing, draft, base: editBase }), [editing, draft, editBase]);
+  const localDraft = useStateDraft({
+    scope: `enrollment-report:${analysisId}`,
+    snapshot: draftSnapshot,
+    hasContent: (s) => s.editing !== null && s.draft.trim() !== s.base.trim(),
+  });
+
+  function restoreSectionDraft() {
+    const d = localDraft.restore();
+    if (!d?.editing) return;
+    // 원문 불일치(재분석·동료 수정·섹션 비워짐) = 폐기 + 안내. 비워진 섹션은 편집 카드도 렌더되지 않는다.
+    if (editSeed(d.editing).trim() !== (d.base ?? "").trim()) {
+      localDraft.discard();
+      setError("이어 쓰려던 섹션의 원문이 그 사이 바뀌어 초안을 폐기했습니다 — 현재 내용을 확인해 주세요.");
+      return;
+    }
+    setError(null);
+    setEditBase(d.base ?? "");
+    setDraft(d.draft);
+    setEditing(d.editing);
+    setExpanded((prev) => new Set(prev).add(d.editing!));
+  }
+
   function startEdit(key: TextKey) {
     setError(null);
-    const raw = (report[key] as string) ?? "";
-    const isList = SECTIONS.find((s) => s.key === key)?.list;
-    // 리스트 섹션은 후보정된 텍스트를 편집(저장하면 정리된 형태로 DB에 반영 — 점진 정리).
-    setDraft(isList ? normalizeAiListText(raw) : raw);
+    const seed = editSeed(key);
+    setDraft(seed);
+    setEditBase(seed);
     setEditing(key);
     setExpanded((prev) => new Set(prev).add(key));
+  }
+
+  // 취소 = 명시적 폐기 — 초안을 남기면 다음 열기에 버린 텍스트가 배너로 되살아난다(리뷰 지적).
+  function cancelEdit() {
+    localDraft.clear();
+    setEditing(null);
   }
 
   function save(key: TextKey) {
@@ -133,6 +175,7 @@ export function ConsultationReportEditor({
       }
       setReport((prev) => ({ ...prev, [key]: draft.trim() }));
       if (res?.editedBy && res?.editedAt) setAttribution({ by: res.editedBy, at: res.editedAt });
+      localDraft.clear();
       setEditing(null);
     });
   }
@@ -177,6 +220,11 @@ export function ConsultationReportEditor({
 
   return (
     <section className="space-y-2">
+      <DraftBanner
+        savedAt={localDraft.draftSavedAt}
+        onRestore={restoreSectionDraft}
+        onDiscard={localDraft.discard}
+      />
       {/* 헤더: 수정/생성 시각 + 재분석·TXT·모두펼치기 */}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="text-text-faint inline-flex items-center gap-1 text-[11px]">
@@ -298,7 +346,7 @@ export function ConsultationReportEditor({
                     <div className="flex items-center justify-end gap-1.5">
                       <button
                         type="button"
-                        onClick={() => setEditing(null)}
+                        onClick={cancelEdit}
                         disabled={saving}
                         className="border-line text-text-dim hover:bg-bg-soft inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs transition"
                       >

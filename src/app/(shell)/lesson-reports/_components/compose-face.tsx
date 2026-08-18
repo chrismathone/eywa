@@ -7,9 +7,11 @@ import { homeworkRateClause } from "@/features/onescreen/homework-rate";
 import { formatTestScore } from "@/features/onescreen/report-comment";
 import { normalizeHomeworkPages } from "@/features/onescreen/homework-pages";
 import { ATTITUDE, attitudeClause } from "@/features/onescreen/attitude";
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
+import { useStateDraft } from "@/components/forms/use-state-draft";
+import { DraftBanner } from "@/components/forms/draft-banner";
 import { kstToday } from "@/lib/date-kst";
 import { Button } from "@/components/ui/button";
 import { EyIcon } from "@/components/icons/eywa-icons";
@@ -89,6 +91,53 @@ export function ComposeFace({
   const [aiBusy, setAiBusy] = useState(false);
   const [busy, setBusy] = useState(false);
   const [confirmSend, setConfirmSend] = useState(false);
+
+  // 로컬 초안 자동저장 — 길게 쓴 본문·진도·특이사항을 새로고침/창닫기에서 지킨다(저장·발송 성공 시 삭제).
+  // 학생 id·이름도 스냅샷에 담는다(리뷰 지적) — 본문은 그 학생 이야기라, 복구가 학생 선택까지 같이
+  // 되돌리지 않으면 다른 학생 앞으로 어제 본문이 발송될 수 있다. 과목·강사는 pickStudent가 다시 채운다.
+  const draftSnapshot = useMemo(
+    () => ({
+      studentId,
+      studentName: ctx?.student.name ?? "",
+      reportDate, progress, textbook, makeup, dScore, dMax, cScore, cMax, attitude, homework, homeworkToday, note, body, autoBody, trend,
+    }),
+    [studentId, ctx, reportDate, progress, textbook, makeup, dScore, dMax, cScore, cMax, attitude, homework, homeworkToday, note, body, autoBody, trend],
+  );
+  const localDraft = useStateDraft({
+    scope: "report-compose",
+    snapshot: draftSnapshot,
+    hasContent: (s) =>
+      s.progress.trim() !== "" || s.homeworkToday.trim() !== "" || s.note.trim() !== "" ||
+      s.body.trim() !== "" || s.trend.trim() !== "",
+  });
+
+  function restoreComposeDraft() {
+    const d = localDraft.restore();
+    if (!d) return;
+    // 학생까지 함께 복원 — 입력칸은 ctx가 있어야 보이므로 학생 재선택(서버 컨텍스트 재조회)이 먼저다.
+    // 학생이 그 사이 사라졌으면(퇴원 등) pickStudent가 토스트로 알리고 입력칸은 열리지 않는다.
+    if (d.studentId) pickStudent(d.studentId);
+    setReportDate(d.reportDate || kstToday());
+    setProgress(d.progress);
+    setTextbook(d.textbook);
+    setMakeup(d.makeup);
+    // 설정에서 끈 테스트 칸의 점수는 복원하지 않는다 — 숨은 칸의 값이 buildInput으로 새는 것 방지.
+    if (showDailyTest) {
+      setDScore(d.dScore);
+      setDMax(d.dMax);
+    }
+    if (showCheckTest) {
+      setCScore(d.cScore);
+      setCMax(d.cMax);
+    }
+    setAttitude(d.attitude);
+    setHomework(d.homework);
+    setHomeworkToday(d.homeworkToday);
+    setNote(d.note);
+    setBody(d.body);
+    setAutoBody(d.autoBody);
+    setTrend(d.trend);
+  }
 
   const studentOptions: ComboOption[] = students.map((s) => ({
     value: s.id,
@@ -239,8 +288,10 @@ export function ComposeFace({
     setBusy(true);
     const res = await saveAdminReport(buildInput());
     setBusy(false);
-    if (res.ok) toast.success("저장했습니다 (발송 안 함)");
-    else toast.error(res.error ?? "저장에 실패했습니다");
+    if (res.ok) {
+      localDraft.clear();
+      toast.success("저장했습니다 (발송 안 함)");
+    } else toast.error(res.error ?? "저장에 실패했습니다");
   }
 
   // 첨부 전 보고서 행 보장 — 현재 폼으로 저장(멱등 upsert). attachments 컬럼은 안 건드려 기존 첨부 보존.
@@ -254,6 +305,7 @@ export function ComposeFace({
       toast.error(res.error ?? "보고서 저장에 실패했습니다");
       return false;
     }
+    localDraft.clear();
     return true;
   }
 
@@ -270,6 +322,7 @@ export function ComposeFace({
       toast.error(res.error ?? "발송에 실패했습니다");
       return;
     }
+    localDraft.clear();
     const msg = res.status ? SEND_MESSAGE[res.status] : undefined;
     if (msg?.kind === "success") toast.success(msg.text);
     else if (msg?.kind === "warn") toast.warning(msg.text);
@@ -279,6 +332,11 @@ export function ComposeFace({
 
   return (
     <section className="bg-card border-line shadow-card space-y-4 rounded-2xl border px-5 py-4">
+      <DraftBanner
+        savedAt={localDraft.draftSavedAt}
+        onRestore={restoreComposeDraft}
+        onDiscard={localDraft.discard}
+      />
       <div>
         <h2 className="text-foreground text-[15px] font-bold">직접 작성·발송</h2>
         <p className="text-text-faint text-[12px]">
