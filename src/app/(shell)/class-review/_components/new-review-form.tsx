@@ -7,6 +7,11 @@ import { Loader2 } from "@/components/icons/eywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { createClassReview, type ReviewActionState } from "@/features/class-review/server/actions";
+import {
+  DEFAULT_OBSERVER_LIMIT,
+  OBSERVER_LIMIT_OPTIONS,
+  observerSlotLabel,
+} from "@/features/class-review/observer-count";
 
 function SubmitButton() {
   const { pending } = useFormStatus();
@@ -20,7 +25,9 @@ function SubmitButton() {
 
 /**
  * 새 평가 폼 — 강사(필수) + 과목·문항 세트(선택) + 평가자 방식 두 가지(원장 지시 2026-08-04):
- * ① 평가자 지정(최대 3명) ② 선착순 3명(지정 없이, 권한자 중 먼저 채점한 3명이 평가자).
+ * ① 평가자 지정 ② 선착순(지정 없이, 권한자 중 먼저 채점한 N명이 평가자).
+ * **평가자 인원(N)은 생성 시 고른다**(원장 지시 2026-08-18 — 종전 3명 고정). 두 방식 모두에 적용되고
+ * 그 값이 문서에 동결되므로, 나중에 기본값을 바꿔도 이미 만든 평가의 정원은 안 흔들린다.
  * 반명·회차·수업시간·학생수는 입력받지 않고, **날짜도 안 받는다**(2026-08-05 — 생성 당일 자동).
  * 호칭은 "평가자"(원장 지시 2026-08-05 — "참관자 아니고 평가자") — 데이터 키(observer*)는 불변.
  */
@@ -35,6 +42,7 @@ export function NewReviewForm({
   templates: { value: string; label: string }[];
 }) {
   const [mode, setMode] = useState<"assigned" | "open">("assigned");
+  const [count, setCount] = useState<number>(DEFAULT_OBSERVER_LIMIT);
   const [state, formAction] = useActionState<ReviewActionState, FormData>(createClassReview, undefined);
   const seenRef = useRef<ReviewActionState>(undefined);
   useEffect(() => {
@@ -46,6 +54,7 @@ export function NewReviewForm({
   return (
     <form action={formAction} className="bg-card max-w-2xl space-y-4 rounded-2xl p-5 shadow-card">
       <input type="hidden" name="observerMode" value={mode} />
+      <input type="hidden" name="observerCount" value={count} />
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div>
           <label className="micro mb-1 block">평가 대상 강사 *</label>
@@ -71,12 +80,35 @@ export function NewReviewForm({
       <p className="text-text-faint text-[11px]">날짜는 따로 입력하지 않습니다 — 생성한 날이 평가일로 기록됩니다.</p>
 
       <div className="border-line border-t pt-4">
-        <p className="micro mb-2">평가자 방식</p>
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <p className="micro">평가자 방식</p>
+          <div className="flex items-center gap-1.5">
+            <span className="text-text-dim text-[11px]">평가자 인원</span>
+            {/* 방식과 무관하게 같은 값을 쓴다 — 지정이면 칸 수, 선착순이면 마감 인원. */}
+            <div className="border-line flex overflow-hidden rounded-lg border" role="group" aria-label="평가자 인원">
+              {OBSERVER_LIMIT_OPTIONS.map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => setCount(n)}
+                  aria-pressed={count === n}
+                  className={`num border-line px-2.5 py-1 text-xs transition not-first:border-l ${
+                    count === n
+                      ? "bg-primary text-primary-foreground font-bold"
+                      : "text-text-dim hover:text-foreground"
+                  }`}
+                >
+                  {n}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
         <div className="flex flex-col gap-2 sm:flex-row">
           {(
             [
-              { v: "assigned", t: "평가자 지정", d: "아래에서 최대 3명을 지정합니다" },
-              { v: "open", t: "선착순 3명", d: "지정 없이 — 먼저 채점한 3명이 평가자가 됩니다" },
+              { v: "assigned", t: "평가자 지정", d: `아래에서 최대 ${count}명을 지정합니다` },
+              { v: "open", t: `선착순 ${count}명`, d: `지정 없이 — 먼저 채점한 ${count}명이 평가자가 됩니다` },
             ] as const
           ).map((o) => (
             <button
@@ -99,18 +131,29 @@ export function NewReviewForm({
         {mode === "assigned" ? (
           <div className="mt-3">
             <p className="micro mb-2">
-              평가자 (최대 3명 — 평가 대상 본인은 자동으로 &lsquo;본인 평가&rsquo; 자리에 들어갑니다)
+              평가자 (최대 <span className="num">{count}</span>명 — 평가 대상 본인은 자동으로
+              &lsquo;본인 평가&rsquo; 자리에 들어갑니다)
             </p>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-              <SearchableSelect name="observer1" options={staff} placeholder="평가자 A" ariaLabel="평가자 A" />
-              <SearchableSelect name="observer2" options={staff} placeholder="평가자 B" ariaLabel="평가자 B" />
-              <SearchableSelect name="observer3" options={staff} placeholder="평가자 C" ariaLabel="평가자 C" />
+            {/* 칸 수 = 정원. 서버 루프도 정원까지 읽으므로 둘이 어긋나면 뒤쪽 선택이 조용히 버려진다. */}
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {Array.from({ length: count }, (_, i) => {
+                const label = observerSlotLabel(i);
+                return (
+                  <SearchableSelect
+                    key={i}
+                    name={`observer${i + 1}`}
+                    options={staff}
+                    placeholder={label}
+                    ariaLabel={label}
+                  />
+                );
+              })}
             </div>
           </div>
         ) : (
           <p className="text-text-faint mt-3 text-[11px]">
-            이 화면에 접근 가능한 사람이라면 누구든 상세에서 바로 채점할 수 있고, 먼저 저장한 3명까지만
-            평가자로 집계됩니다. (평가 대상 본인은 인원 제한과 무관하게 &lsquo;본인 평가&rsquo;로 저장)
+            이 화면에 접근 가능한 사람이라면 누구든 상세에서 바로 채점할 수 있고, 먼저 저장한{" "}
+            <span className="num">{count}</span>명까지만 평가자로 집계됩니다. (평가 대상 본인은 인원 제한과 무관하게 &lsquo;본인 평가&rsquo;로 저장)
           </p>
         )}
       </div>
