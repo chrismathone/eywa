@@ -139,7 +139,9 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
           <DuplicatesFace page={page} isEmbed={isEmbed} />
         </div>
       ) : null}
-      {tab === "audit" ? <AuditFace action={sp.action} page={page} isEmbed={isEmbed} /> : null}
+      {tab === "audit" ? (
+        <AuditFace action={sp.action} q={sp.q} from={sp.from} to={sp.to} page={page} isEmbed={isEmbed} />
+      ) : null}
       {tab === "sheets" ? (
         <SheetsFace subjects={settings.operations.subjects} page={page} isEmbed={isEmbed} />
       ) : null}
