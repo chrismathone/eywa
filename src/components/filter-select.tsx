@@ -2,6 +2,7 @@
 
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { SearchableSelect } from "@/components/ui/searchable-select";
+import { MARKER_TRIGGER, MARKER_WIDTH } from "@/components/ui/marker-trigger";
 
 export type FilterSelectOption = {
   value: string;
@@ -26,6 +27,7 @@ export function FilterSelect({
   ariaLabel,
   className,
   cap,
+  marker = false,
 }: {
   paramName: string;
   value: string | null | undefined;
@@ -41,6 +43,15 @@ export function FilterSelect({
    * 50개 안에 수학반이 7개만 들어갔다. 그런 목록은 전량이 들어가도록 cap을 올릴 것.
    */
   cap?: number;
+  /**
+   * **"지금 어느 반을 보고 있나"** 드롭다운인가 — 켜면 값이 실제로 골라졌을 때 형광 노랑 +
+   * 페이지 최대 글자로 커진다([marker-trigger.ts](@/components/ui/marker-trigger), 원장 2026-08-18).
+   * 🔴 **목록을 좁히는 필터엔 켜지 말 것**(과목·강사·상태). 이 표기는 화면에 **하나**일 때만 뜻이 있다 —
+   *    노란 게 둘이 되는 순간 첫째가 안 보이고 "확실하게 보기 위함"이라는 목적이 통째로 사라진다.
+   * ⚠️ 켜도 **"전체"일 땐 평범한 모양**이다 — 아무 반도 안 골랐는데 노랗게 칠하면 "전체"가 선택된
+   *    반처럼 읽힌다(SearchableSelect `highlightSelected`가 같은 이유로 고른 값에만 강조를 준다).
+   */
+  marker?: boolean;
   /** @deprecated 호환용 — 이제 항상 검색형(SearchableSelect)으로 통일. */
   searchable?: boolean;
 }) {
@@ -57,14 +68,19 @@ export function FilterSelect({
     router.push(`${pathname}${s ? `?${s}` : ""}`);
   };
 
+  // 실제로 하나를 골랐을 때만 표기가 켜진다("전체"는 반을 고른 게 아니다 — 위 `marker` 주석).
+  const markerOn = marker && (value ?? allValue) !== allValue && (value ?? "") !== "";
+
   return (
     <SearchableSelect
-      className={className ?? "w-44"}
+      className={className ?? (markerOn ? MARKER_WIDTH : "w-44")}
       value={value ?? allValue}
       onValueChange={navigate}
       placeholder={allLabel}
       ariaLabel={ariaLabel ?? paramName}
       cap={cap}
+      // undefined면 SearchableSelect가 기본 박스를 그린다 — 반쪽만 덮어쓰지 않는다(톤은 한 벌).
+      triggerClassName={markerOn ? MARKER_TRIGGER : undefined}
       options={[{ value: allValue, label: allLabel }, ...options]}
     />
   );
