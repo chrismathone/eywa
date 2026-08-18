@@ -46,6 +46,15 @@ export type LeaveFormDetail = {
   grantedDays: number;
 };
 
+export type BasicFormDetail = { bodyHtml: string };
+
+export type ExpenseFormDetail = {
+  amount: number;
+  spendDate: string;
+  category: string;
+  bodyHtml: string;
+};
+
 export type ApprovalRefCell = { userId: string; name: string };
 
 export type ApprovalDocRow = {
@@ -64,6 +73,10 @@ export type ApprovalDocRow = {
   steps: ApprovalStepCell[];
   refs: ApprovalRefCell[];
   leave: LeaveFormDetail | null;
+  /** 품의서·업무연락 상세(양식 구분은 form). 해당 양식이 아니면 null. */
+  basic: BasicFormDetail | null;
+  /** 지출결의서 상세. 해당 양식이 아니면 null. */
+  expense: ExpenseFormDetail | null;
 };
 
 type Raw = Record<string, unknown>;
@@ -97,7 +110,7 @@ async function loadDocs(ids: string[]): Promise<ApprovalDocRow[]> {
   if (ids.length === 0) return [];
   const supabase = await createClient();
 
-  const [docs, steps, refs, leaves] = await Promise.all([
+  const [docs, steps, refs, leaves, basics, expenses] = await Promise.all([
     fetchInChunks<Raw>(ids, (chunk) =>
       supabase
         .from("approval_documents")
@@ -129,6 +142,22 @@ async function loadDocs(ids: string[]): Promise<ApprovalDocRow[]> {
         )
         .in("document_id", chunk),
     ),
+    // ⚠️ 0215a 미적용 DB에서도 죽지 않아야 한다([[#95]] expand/contract) — 표 부재는 빈 목록으로 접는다.
+    fetchInChunks<Raw>(ids, (chunk) =>
+      supabase.from("approval_basic_forms").select("document_id, body_html").in("document_id", chunk),
+    ).catch((e) => {
+      if (isMissingRelationText(String(e))) return [] as Raw[];
+      throw e;
+    }),
+    fetchInChunks<Raw>(ids, (chunk) =>
+      supabase
+        .from("approval_expense_forms")
+        .select("document_id, amount, spend_date, category, body_html")
+        .in("document_id", chunk),
+    ).catch((e) => {
+      if (isMissingRelationText(String(e))) return [] as Raw[];
+      throw e;
+    }),
   ]);
 
   const stepsBy = new Map<string, ApprovalStepCell[]>();
@@ -173,6 +202,20 @@ async function loadDocs(ids: string[]): Promise<ApprovalDocRow[]> {
     });
   }
 
+  const basicBy = new Map<string, BasicFormDetail>();
+  for (const b of basics) {
+    basicBy.set(String(b.document_id), { bodyHtml: (b.body_html as string) ?? "" });
+  }
+  const expenseBy = new Map<string, ExpenseFormDetail>();
+  for (const e of expenses) {
+    expenseBy.set(String(e.document_id), {
+      amount: num(e.amount),
+      spendDate: String(e.spend_date),
+      category: (e.category as string) ?? "기타",
+      bodyHtml: (e.body_html as string) ?? "",
+    });
+  }
+
   return docs.map((d) => {
     const drafter = d.drafter as { display_name?: string; job_title?: string | null } | null;
     const id = String(d.id);
@@ -192,6 +235,8 @@ async function loadDocs(ids: string[]): Promise<ApprovalDocRow[]> {
       steps: (stepsBy.get(id) ?? []).sort((a, b) => a.stepNo - b.stepNo),
       refs: refsBy.get(id) ?? [],
       leave: leaveBy.get(id) ?? null,
+      basic: basicBy.get(id) ?? null,
+      expense: expenseBy.get(id) ?? null,
     };
   });
 }

@@ -18,7 +18,12 @@ import {
 import { sanitizeRichHtml } from "@/lib/html/sanitize";
 import { nextDocNo } from "../doc-no";
 import { normalizeLine, normalizeRefs, validateApprovalLine } from "../line";
-import { APPROVAL_FORM_LABEL, stepRoleLabels } from "../types";
+import {
+  APPROVAL_FORM_LABEL,
+  EXPENSE_CATEGORIES,
+  stepRoleLabels,
+  type ApprovalForm,
+} from "../types";
 
 /**
  * 전자결재 쓰기 — 기안·결재·회수.
@@ -41,6 +46,10 @@ const MAX_TEXT = 500;
  *    "너무 길다"는 사람이 줄이면 되는 문제라 조용히 훼손하는 쪽이 훨씬 나쁘다.
  */
 const MAX_REASON_HTML = 20_000;
+/** 문서 제목 상한 — 목록·알림 한 줄에 들어가는 길이. 초과는 자르지 않고 거절(제목이 잘리면 딴 문서다). */
+const MAX_TITLE = 80;
+/** 지출결의서 금액 상한 — 학원 단건 지출로 10억을 넘으면 입력 실수다(0 하나 더 붙은 오타 차단). */
+const MAX_EXPENSE_AMOUNT = 1_000_000_000;
 const DOC_NO_RETRY = 3;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -68,6 +77,27 @@ function parseIds(raw: FormDataEntryValue | null): string[] {
   } catch {
     return [];
   }
+}
+
+/**
+ * 리치 본문 파싱 — 모든 양식의 본문이 같은 규칙을 탄다: 상한 초과는 **자르지 않고 거절**
+ * (MAX_REASON_HTML 주석 — slice는 태그를 끊어 쓴 것과 다른 문서를 남긴다) → 위생처리 →
+ * 빈 껍데기(`<p></p>` 등)는 빈 문자열로 정규화.
+ */
+function parseRichBody(raw: FormDataEntryValue | null): { html: string } | { error: string } {
+  const text = String(raw ?? "").trim();
+  if (text.length > MAX_REASON_HTML) return { error: "본문이 너무 깁니다 — 줄여 주세요" };
+  if (!text) return { html: "" };
+  const html = sanitizeRichHtml(text);
+  return { html: isBlankHtml(html) ? "" : html };
+}
+
+/** 문서 제목 파싱 — 필수·80자 상한(목록·알림 한 줄 길이). 초과는 거절. */
+function parseTitle(raw: FormDataEntryValue | null): { title: string } | { error: string } {
+  const title = String(raw ?? "").trim();
+  if (!title) return { error: "제목을 입력하세요" };
+  if (title.length > MAX_TITLE) return { error: `제목이 너무 깁니다 — ${MAX_TITLE}자 이내로 줄여 주세요` };
+  return { title };
 }
 
 /** 기안·템플릿용 게이트 — 파일럿 동안 **기안은** 메뉴가 열린 사람(이승엽·김예원)만 한다. */
@@ -128,58 +158,38 @@ async function reservedLeaveDays(args: {
   return Math.round(total * 10) / 10;
 }
 
+// ── 기안(상신) 공통 파이프라인 ───────────────────────────────────────────────
+
+type DraftUser = { id: string; tenantId: string; displayName: string };
+
 /**
- * 휴가신청서 기안(상신). 잔여를 넘으면 **접수 자체를 거절한다**(원장 2026-08-14:
- * *"자동반려 필요없고 잔여없으면 신청 자체를 못하자나 어차피"*).
+ * 양식별 기안 액션이 **상세 검증만** 하고 이 헬퍼로 문서를 만든다:
+ * [결재선 검증(활성 직원 대조) → 문서번호 채번(+충돌 재시도) → approval_documents insert →
+ *  결재선·참조·양식 상세 insert(하나라도 실패하면 문서 롤백 — FK cascade가 steps·refs·상세를 함께
+ *  지워 유령 문서가 안 남는다) → 1단계 결재자 알림 → 감사로그 → revalidate].
+ *
+ * ⚠️ 순차 결재라 알림은 **1단계 결재자에게만** — 뒤 차례는 자기 차례가 되면 받는다(decideDocument).
  */
-export async function submitLeaveDraft(
-  _prev: ApprovalActionState,
-  formData: FormData,
-): Promise<ApprovalActionState> {
-  const gate = await requireApprovalWriter();
-  if ("error" in gate) return { error: gate.error };
-  const { user } = gate;
+async function createApprovalDocument(args: {
+  user: DraftUser;
+  form: ApprovalForm;
+  /** approval_documents.title — 목록·알림에 그대로 뜬다. */
+  title: string;
+  /** normalizeLine 결과(순서 보존). 검증은 여기서 한다. */
+  line: string[];
+  /** normalizeRefs 결과. */
+  refs: string[];
+  /** 양식 상세 insert — 실패를 돌려주면 헬퍼가 문서를 롤백한다. */
+  insertDetail: (docId: string) => Promise<{ error: { message: string } | null }>;
+  /** 감사로그·알림 표시 라벨(기본 title). 사용자 제목 양식은 "양식명 — 제목"을 넘겨 무슨 문서인지 남긴다. */
+  displayLabel?: string;
+  auditMetadata?: Record<string, unknown>;
+}): Promise<ApprovalActionState> {
+  const { user, form, title, line, refs } = args;
+  const label = args.displayLabel ?? title;
 
-  const kindRaw = String(formData.get("kind") ?? "annual");
-  const kind: LeaveKind = isLeaveKind(kindRaw) ? kindRaw : "annual";
-  const start = String(formData.get("startDate") ?? "").trim();
-  const end = kind === "half" ? start : String(formData.get("endDate") ?? "").trim() || start;
-
-  // 사유 = 리치 텍스트(HTML). 길이는 **자르지 않고 거절**(위 MAX_REASON_HTML 주석) → 위생처리 →
-  // 빈 껍데기면 null. 🔴 위생처리는 여기서 끝이 아니다 — 문서 화면이 렌더 직전에 한 번 더 통과시킨다
-  // (옛 행·직접 INSERT 방어. 저장 시점의 선의를 믿고 innerHTML을 그리면 그게 곧 XSS 경로다).
-  const reasonRaw = String(formData.get("reason") ?? "").trim();
-  if (reasonRaw.length > MAX_REASON_HTML) {
-    return { error: "사유가 너무 깁니다 — 줄여 주세요" };
-  }
-  const reasonHtml = reasonRaw ? sanitizeRichHtml(reasonRaw) : "";
-  const reason = reasonHtml && !isBlankHtml(reasonHtml) ? reasonHtml : null;
-
-  const admin = createAdminClient();
-  const { data: me } = await admin
-    .from("users")
-    .select("hire_date")
-    .eq("id", user.id)
-    .eq("tenant_id", user.tenantId)
-    .maybeSingle();
-  const hireDate = (me?.hire_date as string | null) ?? null;
-
-  const today = kstToday();
-  const period = resolveLeavePeriod(hireDate, start || today, today);
-  if (!period) {
-    return {
-      error: "입사일이 등록되지 않아 연차를 계산할 수 없습니다 — 사무실(직원관리)에 등록을 요청하세요",
-    };
-  }
-
-  const invalid = validateLeaveRange({ start, end, kind, periodEnd: period.end });
-  if (invalid) return { error: invalid };
-  const days = countLeaveDays(start, end, kind);
-
-  // 결재선·참조 — 기안자가 편집기에서 지정한 값(하이웍스 대응). 폼 조작 방어는 순수 검증(line.ts)이
-  // **활성 직원 명단**과 대조해서 한다(퇴직·학생 계정을 결재선에 못 끼운다).
-  const line = normalizeLine(user.id, parseIds(formData.get("approverIds")));
-  const refs = normalizeRefs(user.id, line, parseIds(formData.get("refIds")));
+  // 결재선·참조 — 폼 조작 방어는 순수 검증(line.ts)이 **활성 직원 명단**과 대조해서 한다
+  // (퇴직·학생 계정을 결재선에 못 끼운다).
   let candidateIds: string[];
   try {
     candidateIds = await activeStaffIds(user.tenantId);
@@ -194,31 +204,15 @@ export async function submitLeaveDraft(
   });
   if (lineInvalid) return { error: lineInvalid };
 
-  let reserved: number;
-  try {
-    reserved = await reservedLeaveDays({ tenantId: user.tenantId, userId: user.id, periodStart: period.start });
-  } catch (e) {
-    return { error: e instanceof Error ? e.message : "잔여 연차 확인 실패" };
-  }
-  const remaining = Math.max(0, Math.round((period.granted - reserved) * 10) / 10);
-  if (days > remaining) {
-    return {
-      error:
-        remaining <= 0
-          ? `남은 연차가 없습니다 (${period.label} 부여 ${formatLeaveDays(period.granted)} 전부 사용·결재중)`
-          : `잔여 연차 ${formatLeaveDays(remaining)}보다 많이 신청할 수 없습니다 (신청 ${formatLeaveDays(days)})`,
-    };
-  }
-
-  const title = `${APPROVAL_FORM_LABEL.leave} — ${start}${end !== start ? ` ~ ${end}` : ""} ${formatLeaveDays(days)}`;
-
   // 문서번호 채번 — 그 해 그 양식의 개수에서 잇는다. 동시 기안이 같은 번호를 잡으면 unique가 막고 재시도.
+  const admin = createAdminClient();
+  const today = kstToday();
   const year = today.slice(0, 4);
   const { count } = await admin
     .from("approval_documents")
     .select("*", { count: "exact", head: true })
     .eq("tenant_id", user.tenantId)
-    .eq("form_type", "leave")
+    .eq("form_type", form)
     .like("doc_no", `%-${year}-%`);
 
   let docId: string | null = null;
@@ -228,14 +222,14 @@ export async function submitLeaveDraft(
       .from("approval_documents")
       .insert({
         tenant_id: user.tenantId,
-        doc_no: nextDocNo("leave", today, count ?? 0, attempt),
-        form_type: "leave",
+        doc_no: nextDocNo(form, today, count ?? 0, attempt),
+        form_type: form,
         title,
         drafter_id: user.id,
         status: "pending",
         current_step: 1,
       })
-      .select("id, doc_no")
+      .select("id")
       .single();
     if (data) docId = data.id as string;
     else {
@@ -264,19 +258,7 @@ export async function submitLeaveDraft(
         role_label: roles[i] ?? "승인",
       })),
     ),
-    admin.from("leave_forms").insert({
-      document_id: docId,
-      tenant_id: user.tenantId,
-      user_id: user.id,
-      leave_kind: kind,
-      start_date: start,
-      end_date: end,
-      days,
-      reason,
-      period_start: period.start,
-      period_end: period.end,
-      granted_days: period.granted,
-    }),
+    args.insertDetail(docId),
     refs.length > 0
       ? admin.from("approval_refs").insert(
           refs.map((userId) => ({ tenant_id: user.tenantId, document_id: docId, user_id: userId })),
@@ -286,10 +268,14 @@ export async function submitLeaveDraft(
   const insertErr = inserts.find((r) => r.error)?.error;
   if (insertErr) {
     await admin.from("approval_documents").delete().eq("id", docId).eq("tenant_id", user.tenantId);
-    return { error: `상신 실패 — ${insertErr.message}` };
+    const missing = /does not exist|Could not find the table|PGRST205/i.test(insertErr.message);
+    return {
+      error: missing
+        ? "이 양식의 표가 아직 준비되지 않았습니다(마이그레이션 0215a 적용 필요)"
+        : `상신 실패 — ${insertErr.message}`,
+    };
   }
 
-  // 순차 결재라 **1단계 결재자에게만** 알린다(뒤 차례는 자기 차례가 되면 알림을 받는다).
   const firstApprover = line[0];
   if (firstApprover) {
     await notifyUsers([
@@ -298,7 +284,7 @@ export async function submitLeaveDraft(
         recipientId: firstApprover,
         type: "approval_requested",
         title: "결재 요청",
-        body: `${user.displayName} · ${title}`,
+        body: `${user.displayName} · ${label}`,
         link: `/approvals/${docId}`,
         actorId: user.id,
       },
@@ -307,14 +293,205 @@ export async function submitLeaveDraft(
   await logAction({
     action: "approval_submit",
     targetType: "approval_document",
-    targetLabel: title,
-    metadata: { days, remaining, granted: period.granted, period: leavePeriodLabel(period) },
+    targetLabel: label,
+    metadata: args.auditMetadata,
   });
   revalidatePath("/approvals");
   return {
     ok: true,
     notice: `상신했습니다 — 결재 ${line.length}단계${refs.length > 0 ? ` · 참조 ${refs.length}명` : ""}`,
   };
+}
+
+/**
+ * 휴가신청서 기안(상신). 잔여를 넘으면 **접수 자체를 거절한다**(원장 2026-08-14:
+ * *"자동반려 필요없고 잔여없으면 신청 자체를 못하자나 어차피"*).
+ */
+export async function submitLeaveDraft(
+  _prev: ApprovalActionState,
+  formData: FormData,
+): Promise<ApprovalActionState> {
+  const gate = await requireApprovalWriter();
+  if ("error" in gate) return { error: gate.error };
+  const { user } = gate;
+
+  const kindRaw = String(formData.get("kind") ?? "annual");
+  const kind: LeaveKind = isLeaveKind(kindRaw) ? kindRaw : "annual";
+  const start = String(formData.get("startDate") ?? "").trim();
+  const end = kind === "half" ? start : String(formData.get("endDate") ?? "").trim() || start;
+
+  // 사유 = 리치 텍스트(HTML) — 공통 규칙(parseRichBody). 휴가는 빈 사유를 null로 저장한다(미입력 "—").
+  // 🔴 위생처리는 여기서 끝이 아니다 — 문서 화면이 렌더 직전에 한 번 더 통과시킨다
+  // (옛 행·직접 INSERT 방어. 저장 시점의 선의를 믿고 innerHTML을 그리면 그게 곧 XSS 경로다).
+  const body = parseRichBody(formData.get("reason"));
+  if ("error" in body) return { error: "사유가 너무 깁니다 — 줄여 주세요" };
+  const reason = body.html || null;
+
+  const admin = createAdminClient();
+  const { data: me } = await admin
+    .from("users")
+    .select("hire_date")
+    .eq("id", user.id)
+    .eq("tenant_id", user.tenantId)
+    .maybeSingle();
+  const hireDate = (me?.hire_date as string | null) ?? null;
+
+  const today = kstToday();
+  const period = resolveLeavePeriod(hireDate, start || today, today);
+  if (!period) {
+    return {
+      error: "입사일이 등록되지 않아 연차를 계산할 수 없습니다 — 사무실(직원관리)에 등록을 요청하세요",
+    };
+  }
+
+  const invalid = validateLeaveRange({ start, end, kind, periodEnd: period.end });
+  if (invalid) return { error: invalid };
+  const days = countLeaveDays(start, end, kind);
+
+  let reserved: number;
+  try {
+    reserved = await reservedLeaveDays({ tenantId: user.tenantId, userId: user.id, periodStart: period.start });
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "잔여 연차 확인 실패" };
+  }
+  const remaining = Math.max(0, Math.round((period.granted - reserved) * 10) / 10);
+  if (days > remaining) {
+    return {
+      error:
+        remaining <= 0
+          ? `남은 연차가 없습니다 (${period.label} 부여 ${formatLeaveDays(period.granted)} 전부 사용·결재중)`
+          : `잔여 연차 ${formatLeaveDays(remaining)}보다 많이 신청할 수 없습니다 (신청 ${formatLeaveDays(days)})`,
+    };
+  }
+
+  const title = `${APPROVAL_FORM_LABEL.leave} — ${start}${end !== start ? ` ~ ${end}` : ""} ${formatLeaveDays(days)}`;
+  const line = normalizeLine(user.id, parseIds(formData.get("approverIds")));
+  const refs = normalizeRefs(user.id, line, parseIds(formData.get("refIds")));
+
+  return createApprovalDocument({
+    user,
+    form: "leave",
+    title,
+    line,
+    refs,
+    insertDetail: async (docId) =>
+      admin.from("leave_forms").insert({
+        document_id: docId,
+        tenant_id: user.tenantId,
+        user_id: user.id,
+        leave_kind: kind,
+        start_date: start,
+        end_date: end,
+        days,
+        reason,
+        period_start: period.start,
+        period_end: period.end,
+        granted_days: period.granted,
+      }),
+    auditMetadata: { days, remaining, granted: period.granted, period: leavePeriodLabel(period) },
+  });
+}
+
+/**
+ * 품의서·업무연락 기안(상신) — 제목 + 리치 본문뿐인 **기본형 양식**(상세 표 approval_basic_forms 공유,
+ * 양식 구분은 form_type). 새 기본형 양식이 생기면 여기 formType 허용 목록에만 더한다.
+ */
+export async function submitBasicDraft(
+  _prev: ApprovalActionState,
+  formData: FormData,
+): Promise<ApprovalActionState> {
+  const gate = await requireApprovalWriter();
+  if ("error" in gate) return { error: gate.error };
+  const { user } = gate;
+
+  const formRaw = String(formData.get("formType") ?? "");
+  if (formRaw !== "proposal" && formRaw !== "memo") return { error: "지원하지 않는 양식입니다" };
+  const form: ApprovalForm = formRaw;
+
+  const parsedTitle = parseTitle(formData.get("title"));
+  if ("error" in parsedTitle) return parsedTitle;
+  const body = parseRichBody(formData.get("body"));
+  if ("error" in body) return body;
+
+  const line = normalizeLine(user.id, parseIds(formData.get("approverIds")));
+  const refs = normalizeRefs(user.id, line, parseIds(formData.get("refIds")));
+  const admin = createAdminClient();
+
+  return createApprovalDocument({
+    user,
+    form,
+    title: parsedTitle.title,
+    line,
+    refs,
+    // 감사로그·알림엔 양식명을 붙인다 — 사용자 제목만으로는 무슨 문서였는지 안 남는다.
+    displayLabel: `${APPROVAL_FORM_LABEL[form]} — ${parsedTitle.title}`,
+    insertDetail: async (docId) =>
+      admin.from("approval_basic_forms").insert({
+        document_id: docId,
+        tenant_id: user.tenantId,
+        body_html: body.html,
+      }),
+  });
+}
+
+/**
+ * 지출결의서 기안(상신) — 금액·지출일·분류는 컬럼(합산·기간 필터 대비, B2), 본문은 리치 텍스트.
+ * ⚠️ 기존 /billing 지출·expense_requests와 별개(0215a 주석) — 이 금액은 재무 집계에 닿지 않는다.
+ */
+export async function submitExpenseDraft(
+  _prev: ApprovalActionState,
+  formData: FormData,
+): Promise<ApprovalActionState> {
+  const gate = await requireApprovalWriter();
+  if ("error" in gate) return { error: gate.error };
+  const { user } = gate;
+
+  const parsedTitle = parseTitle(formData.get("title"));
+  if ("error" in parsedTitle) return parsedTitle;
+
+  // 금액 — 화면이 콤마를 찍어 보내도 받는다(1,000,000). 파싱 실패·범위 밖은 자르지 않고 거절.
+  const amountRaw = String(formData.get("amount") ?? "").replace(/[,\s]/g, "");
+  if (!amountRaw) return { error: "금액을 입력하세요" };
+  if (!/^\d+$/.test(amountRaw)) return { error: "금액은 숫자로 입력하세요" };
+  const amount = Number(amountRaw);
+  if (amount < 1 || amount > MAX_EXPENSE_AMOUNT) {
+    return { error: "금액은 1원 이상 10억 원 이하로 입력하세요" };
+  }
+
+  const spendDate = String(formData.get("spendDate") ?? "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(spendDate)) return { error: "지출일을 선택하세요" };
+
+  // 분류 — 어휘의 주인은 /billing 지출(types.ts EXPENSE_CATEGORIES). 목록 밖 값은 "기타"로 접는다.
+  const categoryRaw = String(formData.get("category") ?? "");
+  const category = (EXPENSE_CATEGORIES as readonly string[]).includes(categoryRaw)
+    ? categoryRaw
+    : "기타";
+
+  const body = parseRichBody(formData.get("body"));
+  if ("error" in body) return body;
+
+  const line = normalizeLine(user.id, parseIds(formData.get("approverIds")));
+  const refs = normalizeRefs(user.id, line, parseIds(formData.get("refIds")));
+  const admin = createAdminClient();
+
+  return createApprovalDocument({
+    user,
+    form: "expense",
+    title: parsedTitle.title,
+    line,
+    refs,
+    displayLabel: `${APPROVAL_FORM_LABEL.expense} — ${parsedTitle.title}`,
+    insertDetail: async (docId) =>
+      admin.from("approval_expense_forms").insert({
+        document_id: docId,
+        tenant_id: user.tenantId,
+        amount,
+        spend_date: spendDate,
+        category,
+        body_html: body.html,
+      }),
+    auditMetadata: { amount, spendDate, category },
+  });
 }
 
 /**

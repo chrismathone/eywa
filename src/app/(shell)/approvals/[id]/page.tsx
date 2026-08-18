@@ -133,6 +133,9 @@ export default async function ApprovalDocPage({ params }: { params: Promise<{ id
   // 사유는 리치 텍스트(HTML)다 — **렌더 직전에 다시 위생처리**한다(저장 때 한 번 걸렀어도 마찬가지).
   // 저장 시점의 선의를 믿고 innerHTML을 그리면 옛 행·직접 INSERT·위생 규칙 변경분이 그대로 새어 나온다.
   const reasonHtml = leave?.reason ? sanitizeRichHtml(leave.reason) : "";
+  // 품의서·업무연락·지출결의서 본문도 같은 규약 — 렌더 직전 재위생처리(저장 시점을 믿지 않는다).
+  const basicBodyHtml = doc.basic?.bodyHtml ? sanitizeRichHtml(doc.basic.bodyHtml) : "";
+  const expenseBodyHtml = doc.expense?.bodyHtml ? sanitizeRichHtml(doc.expense.bodyHtml) : "";
 
   return (
     <div className="mx-auto w-full max-w-[820px] space-y-4 p-4 md:p-6">
@@ -145,10 +148,13 @@ export default async function ApprovalDocPage({ params }: { params: Promise<{ id
 
       {/* 문서 — A4 종이 한 장 느낌(흰 판). 배치는 하이웍스 결재 문서 그대로. */}
       <article className="border-line bg-card shadow-card space-y-5 rounded-2xl border p-6">
-        {/* ① 가운데 큰 표제 — 양식 이름이 곧 문서 제목이다(하이웍스 "휴가 신청서"). */}
-        <h1 className="text-foreground text-center text-[22px] font-bold tracking-tight">
-          {APPROVAL_FORM_LABEL[doc.form] ?? "결재 문서"}
-        </h1>
+        {/* ① 가운데 큰 표제(양식명) + 문서 제목 — 품의서·업무연락·지출결의서는 제목이 곧 안건명이다. */}
+        <header className="space-y-1.5">
+          <h1 className="text-foreground text-center text-[22px] font-bold tracking-tight">
+            {APPROVAL_FORM_LABEL[doc.form] ?? "결재 문서"}
+          </h1>
+          <p className="text-foreground text-center text-[15px] font-medium break-keep">{doc.title}</p>
+        </header>
 
         {/* ② 정보 격자표 — 문서 종류·번호·기안자·일시·상태(하이웍스 상단 그리드). */}
         <table className="border-line w-full border-collapse border text-sm">
@@ -231,6 +237,48 @@ export default async function ApprovalDocPage({ params }: { params: Promise<{ id
               </tr>
             </tbody>
           </table>
+        ) : doc.expense ? (
+          <>
+            <table className="border-line w-full border-collapse border text-sm">
+              <tbody className="[&_th]:bg-bg-soft/60 [&_th]:text-text-dim [&_td]:text-foreground [&_th]:border-line [&_td]:border-line [&_th]:border [&_td]:border [&_th]:px-3 [&_th]:py-2 [&_td]:px-3 [&_td]:py-2 [&_th]:text-left [&_th]:text-xs [&_th]:font-semibold [&_td]:text-[13px]">
+                <tr>
+                  <th className="w-[110px]">분류</th>
+                  <td>{doc.expense.category}</td>
+                  <th className="w-[110px]">금액</th>
+                  <td>
+                    <span className="num">{doc.expense.amount.toLocaleString("ko-KR")}</span>원
+                  </td>
+                </tr>
+                <tr>
+                  <th>지출일</th>
+                  <td className="num" colSpan={3}>
+                    {doc.expense.spendDate}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            {expenseBodyHtml ? (
+              <div className="overflow-x-auto">
+                <div
+                  className="rich-content"
+                  // 🔴 렌더 직전 재위생처리를 통과한 값만(위 expenseBodyHtml — 사유 렌더와 같은 규약).
+                  dangerouslySetInnerHTML={{ __html: expenseBodyHtml }}
+                />
+              </div>
+            ) : null}
+          </>
+        ) : doc.basic ? (
+          basicBodyHtml ? (
+            <div className="overflow-x-auto">
+              <div
+                className="rich-content"
+                // 🔴 렌더 직전 재위생처리를 통과한 값만(위 basicBodyHtml).
+                dangerouslySetInnerHTML={{ __html: basicBodyHtml }}
+              />
+            </div>
+          ) : (
+            <p className="text-text-faint text-sm">—</p>
+          )
         ) : (
           <p className="text-text-faint text-sm">양식 내용을 불러오지 못했습니다.</p>
         )}

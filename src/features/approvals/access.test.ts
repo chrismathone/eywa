@@ -33,9 +33,12 @@ describe("직함 라벨", () => {
 });
 
 describe("문서번호", () => {
-  it("양식 접두 + 연도 + 4자리 일련번호", () => {
+  it("양식 접두 + 연도 + 4자리 일련번호 — 4종 전부", () => {
     expect(formatDocNo("leave", 2026, 1)).toBe("휴가-2026-0001");
     expect(formatDocNo("leave", "2026", 42)).toBe("휴가-2026-0042");
+    expect(formatDocNo("proposal", 2026, 1)).toBe("품의-2026-0001");
+    expect(formatDocNo("expense", 2026, 7)).toBe("지출-2026-0007");
+    expect(formatDocNo("memo", 2026, 3)).toBe("업무-2026-0003");
   });
 
   it("연도는 기안일(KST)에서 뽑는다", () => {
