@@ -56,20 +56,6 @@ function PinButton({ memo, studentId }: { memo: StudentMemoRow; studentId: strin
   );
 }
 
-function SaveBtn() {
-  const { pending } = useFormStatus();
-  return (
-    <button
-      type="submit"
-      disabled={pending}
-      className="text-chart-1 inline-flex items-center gap-1 text-[11px] font-medium"
-    >
-      {pending ? <Loader2 className="size-3 animate-spin" /> : null}
-      저장
-    </button>
-  );
-}
-
 export function MemoItem({ memo, studentId }: { memo: StudentMemoRow; studentId: string }) {
   const [editing, setEditing] = useState(false);
   const formRef = useRef<HTMLFormElement | null>(null);
@@ -80,7 +66,9 @@ export function MemoItem({ memo, studentId }: { memo: StudentMemoRow; studentId:
     enabled: editing,
     exclude: ["id", "studentId"], // 서버 prop — IDB에 남길 이유가 없다
   });
-  const [state, action] = useActionState<UpdateMemoState, FormData>(
+  // pending은 useActionState의 세 번째 값 — submitAction(수동 디스패치)에선 useFormStatus가 안 잡힌다
+  // (class-form 선례: 스피너 없음 + 더블클릭 중복 제출).
+  const [state, action, pending] = useActionState<UpdateMemoState, FormData>(
     async (prev, formData) => {
       const res = await updateStudentMemo(prev, formData);
       if (res?.ok) {
@@ -174,7 +162,14 @@ export function MemoItem({ memo, studentId }: { memo: StudentMemoRow; studentId:
             >
               취소
             </button>
-            <SaveBtn />
+            <button
+              type="submit"
+              disabled={pending}
+              className="text-chart-1 inline-flex items-center gap-1 text-[11px] font-medium"
+            >
+              {pending ? <Loader2 className="size-3 animate-spin" /> : null}
+              저장
+            </button>
           </div>
         </form>
       ) : (

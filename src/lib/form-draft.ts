@@ -35,7 +35,7 @@ let dbPromise: Promise<IDBDatabase> | null = null;
 
 function openDB(): Promise<IDBDatabase> {
   if (dbPromise) return dbPromise;
-  dbPromise = new Promise((resolve, reject) => {
+  const p = new Promise<IDBDatabase>((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, DB_VERSION);
     req.onupgradeneeded = () => {
       const db = req.result;
@@ -54,11 +54,16 @@ function openDB(): Promise<IDBDatabase> {
       resolve(db);
     };
     req.onerror = () => {
-      dbPromise = null;
       reject(req.error);
     };
   });
-  return dbPromise;
+  dbPromise = p;
+  // 실패한 연결을 영구 캐시하지 않는다 — executor 동기 throw(사생활 모드 등) 포함 모든 거부에서
+  // 캐시를 비워 다음 호출이 재시도할 수 있게(적대 리뷰 경-2).
+  p.catch(() => {
+    if (dbPromise === p) dbPromise = null;
+  });
+  return p;
 }
 
 /**

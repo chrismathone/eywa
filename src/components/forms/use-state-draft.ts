@@ -39,6 +39,14 @@ export function useStateDraft<T>({
   // 본문은 남기는" 화면에서 방금 지운 초안이 즉시 다시 저장돼 배너가 되살아난다(대량 발송 실측).
   const rebaseRef = useRef(false);
 
+  // enabled가 꺼지면(편집기 닫힘 등) rebase 대기를 해소한다 — 남겨두면 재오픈 세션의 **첫 편집**이
+  // "새 기준선"으로 삼켜져 저장 그물 전체(디바운스·강제 저장·플러시)에서 빠진다(적대 리뷰 중-2:
+  // 화자 하나만 고치러 재오픈한 편집이 영영 저장 안 되던 것). enabled 상시 true인 발송형 화면
+  // (compose-face)은 이 effect가 no-op이라 rebase가 설계대로 프로그램적 상태 변화에 소비된다.
+  useEffect(() => {
+    if (!enabled) rebaseRef.current = false;
+  }, [enabled]);
+
   // 마운트 시 기존 초안 로드 → 있으면 배너 노출. (저장은 hasContent일 때만 일어나므로 로드된 초안은 항상 의미 있음.)
   useEffect(() => {
     if (!enabled) return;

@@ -15,7 +15,12 @@
 - **무방비 표면 배선**: 학생 메모 **수정** 폼(memo-item — 신규엔 있는데 수정엔 없던 비대칭, +#83 submitAction
   전환으로 실패 시 auto-reset 유실도 봉합) · 회의 화자 편집기(speaker-editor, useStateDraft + 열 때 서버값
   스냅샷 대비 변경분만 저장). 회의 제목 한 줄 편집기는 의도적 제외(단일 필드·손실 미미).
-- 회귀 그물: `form-draft.test.ts`(딥스캔·백스톱·pickNewer 8) + `draft-flush.test.tsx`(강제 저장·플러시 6).
+- 회귀 그물: `form-draft.test.ts`(딥스캔·백스톱·pickNewer 8) + `draft-flush.test.tsx`(강제 저장·플러시·세션 경계 8).
+- 적대 리뷰 반영 4건: ① memo-item 저장 pending을 useActionState 3번째 값으로(submitAction 전환이 만든
+  useFormStatus 회귀 — class-form에 문서화된 함정 재발) ② **rebase 삼킴**: clear 후 enabled가 꺼졌다 재오픈한
+  세션의 첫 편집이 "새 기준선"으로 삼켜져 영영 저장 안 되던 것(화자 하나만 고치러 재오픈하는 흔한 흐름) →
+  enabled=false에서 rebase 해소 ③ useFormDraft 잔존 pending이 재오픈 무변경 세션의 탭 숨김에서 서버값을
+  유령 초안으로 저장하던 것 → 세션 경계에서 리셋 ④ 죽은 IDB 연결 promise 영구 캐시 → 자가 복구.
 - 조사 결론: 세 메뉴엔 서버 자동저장 표면이 0개(전부 명시 저장)라 로컬 초안이 유일한 안전망. 나머지 표면
   (consultation-form·consultation-full-form·회의 3면·QR 접수·학생 메모 신규)은 기존 배선 확인 완료.
 

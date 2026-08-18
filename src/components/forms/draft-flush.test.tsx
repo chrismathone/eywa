@@ -24,9 +24,9 @@ vi.mock("@/lib/form-draft", async (importOriginal) => {
   };
 });
 
-function FormHarness() {
+function FormHarness({ enabled = true }: { enabled?: boolean }) {
   const ref = useRef<HTMLFormElement | null>(null);
-  useFormDraft({ scope: "test-form", formRef: ref });
+  useFormDraft({ scope: "test-form", formRef: ref, enabled });
   return (
     <form ref={ref}>
       <input name="content" defaultValue="" />
@@ -34,31 +34,40 @@ function FormHarness() {
   );
 }
 
-function StateHarness({ onReady }: { onReady: (set: (t: string) => void) => void }) {
+type StateApi = { setText: (t: string) => void; clear: () => void };
+
+function StateHarness({
+  onReady,
+  enabled = true,
+}: {
+  onReady: (api: StateApi) => void;
+  enabled?: boolean;
+}) {
   const [text, setText] = useState("");
-  useEffect(() => {
-    onReady(setText);
-  }, [onReady]);
-  useStateDraft({
+  const draft = useStateDraft({
     scope: "test-state",
     snapshot: { text },
+    enabled,
     hasContent: (s) => s.text.trim() !== "",
   });
+  const clear = draft.clear;
+  useEffect(() => {
+    onReady({ setText, clear });
+  }, [onReady, clear]);
   return null;
 }
 
-/** StateHarness를 렌더하고 setText 핸들을 얻는다. */
+/** StateHarness를 렌더하고 setText/clear 핸들을 얻는다. */
 async function renderStateHarness() {
-  let setText: ((t: string) => void) | undefined;
-  render(
-    <StateHarness
-      onReady={(s) => {
-        setText = s;
-      }}
-    />,
-  );
+  const api = {} as StateApi;
+  const onReady = (a: StateApi) => Object.assign(api, a);
+  const view = render(<StateHarness onReady={onReady} />);
   await act(async () => {});
-  return { setText: setText! };
+  return {
+    setText: (t: string) => api.setText(t),
+    clear: () => api.clear(),
+    setEnabled: (enabled: boolean) => view.rerender(<StateHarness onReady={onReady} enabled={enabled} />),
+  };
 }
 
 beforeEach(() => {
@@ -157,6 +166,46 @@ describe("useStateDraft — 강제 저장 + pagehide 플러시", () => {
 
   it("변경이 없으면 pagehide에 저장하지 않는다", async () => {
     await renderStateHarness();
+    act(() => {
+      window.dispatchEvent(new Event("pagehide"));
+    });
+    expect(saveOnHideSpy).not.toHaveBeenCalled();
+  });
+
+  it("🔴 서버 저장(clear) → 닫기 → 재오픈 후의 첫 편집도 저장된다 — rebase가 삼키면 안 된다(적대 리뷰 중-2)", async () => {
+    const h = await renderStateHarness();
+    act(() => h.setText("A=김예원"));
+    act(() => {
+      vi.advanceTimersByTime(800);
+    });
+    expect(saveDraftSpy).toHaveBeenCalledTimes(1);
+    // 서버 저장 성공 → clear + 편집기 닫힘(enabled=false) → 재오픈(enabled=true)
+    act(() => h.clear());
+    act(() => h.setEnabled(false));
+    act(() => h.setEnabled(true));
+    // 재오픈 세션의 유일한 편집 — rebase 잔존 시 "새 기준선"으로 삼켜져 영영 저장 안 되던 회귀.
+    act(() => h.setText("A=박소선"));
+    act(() => {
+      vi.advanceTimersByTime(800);
+    });
+    expect(saveDraftSpy).toHaveBeenCalledTimes(2);
+    expect(JSON.parse(saveDraftSpy.mock.calls.at(-1)![1].__json).text).toBe("A=박소선");
+  });
+});
+
+describe("useFormDraft — enabled 토글 세션 경계", () => {
+  it("이전 세션의 미저장 꼬리가 재오픈 무변경 세션의 탭 숨김에서 유령 저장되지 않는다(적대 리뷰 경-1)", async () => {
+    const view = render(<FormHarness />);
+    await act(async () => {});
+    const input = view.container.querySelector("input[name=content]") as HTMLInputElement;
+    // 세션 1: 한 글자 치고 디바운스(700ms) 전에 닫는다 — pending이 잔존하던 조건.
+    act(() => {
+      typeInto(input, "ㄱ");
+      vi.advanceTimersByTime(300);
+    });
+    act(() => view.rerender(<FormHarness enabled={false} />));
+    // 세션 2: 재오픈만 하고 아무것도 안 친 채 탭 숨김.
+    act(() => view.rerender(<FormHarness enabled />));
     act(() => {
       window.dispatchEvent(new Event("pagehide"));
     });

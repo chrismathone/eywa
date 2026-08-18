@@ -91,6 +91,9 @@ export function useFormDraft({
     if (!enabled) return;
     const form = formRef.current;
     if (!form) return;
+    // 이전 세션(enabled 토글 전)의 잔존 pending 무효화 — 남겨두면 무변경 재오픈 세션의 탭 숨김에서
+    // 서버값 그대로가 초안으로 저장돼 가짜 "작성하던 내용" 배너가 뜬다(적대 리뷰 경-1).
+    pendingSinceRef.current = null;
     const excl = excludeKey ? excludeKey.split(",") : [];
     const ignore = ignoreKey ? ignoreKey.split(",") : [];
     const write = () => {
