@@ -34,9 +34,19 @@ const MAX_GRADE: Record<string, number> = { 초: 6, 중: 3, 고: 3 };
  */
 export function gradeLabel(rawGrade: string | null, school: string | null): string {
   const g = String(rawGrade ?? "").replace(/\s+/g, "");
-  // 미취학은 **애매한 게 아니라 확실한 칸**이다(2026-08-18 학년 목록에 6세·7세 추가). 학원에 오는 표기는
-  // 학년칸("7세")보다 학교칸("7세"·"Ing유치원")이 많아(실측 30건) 두 축 다 본다 — 안 보면 분류 불가에 쌓인다.
-  if (isPreschoolGrade(g) || schoolBucket(school) === GRADE_PRESCHOOL) return GRADE_PRESCHOOL;
+  // 미취학은 **애매한 게 아니라 확실한 칸**이다(2026-08-18 학년 목록에 6세·7세 추가).
+  if (isPreschoolGrade(g)) return GRADE_PRESCHOOL;
+  const byGrade = classifyByKind(g, school);
+  // 학년칸으로 분류가 안 될 때만 학교칸을 본다 — 학원에 오는 표기는 학년칸(실측 7건)보다
+  // 학교칸("7세"·"Ing유치원", 30건)이 많아 안 보면 분류 불가에 쌓인다.
+  // 🔴 순서가 생명이다: 학교칸을 먼저 보면 **"학교=○○유치원 + 학년=초1"(예비 초1 상담)이 미취학으로
+  //    뒤집힌다** — 명시된 유효 학년은 언제나 이긴다(적대적 리뷰 2026-08-18).
+  if (byGrade === GRADE_UNKNOWN && schoolBucket(school) === GRADE_PRESCHOOL) return GRADE_PRESCHOOL;
+  return byGrade;
+}
+
+/** 급(초·중·고) 기준 분류 — 위 gradeLabel의 본체. 미취학 판정은 호출부가 앞뒤로 감싼다. */
+function classifyByKind(g: string, school: string | null): string {
   if (!g || /^(미상|기타|미정|없음)$/.test(g)) return GRADE_UNKNOWN;
 
   // 이미 급이 붙어 있으면 그 조합이 유효할 때만 인정한다("예비중1"·"초7" 같은 건 분류하지 않는다).

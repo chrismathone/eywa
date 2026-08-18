@@ -156,8 +156,11 @@ describe("buildFormPatch — 후보정 하네스(약한 모델 오류 차단)", 
   it("학년은 초1~고3 형식만(예: '중학교'·오학년 거부)", () => {
     expect(buildFormPatch({ grade: "중학교" }, {}).prospect_grade).toBeUndefined();
     expect(buildFormPatch({ grade: "초6" }, {}).prospect_grade).toBe("초6");
-    // 미취학 학년(2026-08-18) — 나이 표기는 통과, 성인 나이는 학년이 아니다.
+    // 미취학 학년(2026-08-18) — 학원설정에 있는 6·7세만 통과. 설정에 없는 값을 써 넣으면 상담 수정
+    // 폼의 <select>에 옵션이 없어(다른 칸만 고쳐도) 학년이 지워지므로 일부러 좁게 잡는다.
     expect(buildFormPatch({ grade: "7세" }, {}).prospect_grade).toBe("7세");
+    expect(buildFormPatch({ grade: "6세" }, {}).prospect_grade).toBe("6세");
+    expect(buildFormPatch({ grade: "4세" }, {}).prospect_grade).toBeUndefined();
     expect(buildFormPatch({ grade: "30세" }, {}).prospect_grade).toBeUndefined();
   });
 

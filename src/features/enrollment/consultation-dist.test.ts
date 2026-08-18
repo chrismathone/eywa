@@ -50,6 +50,13 @@ describe("gradeLabel — 확실할 때만 분류한다", () => {
     // 나이가 아니라 학년 숫자인 것은 그대로 급 판정을 탄다("초7"을 만들지 않는다).
     expect(gradeLabel("7", "칠성초")).toBe(GRADE_UNKNOWN);
   });
+
+  it("🔴 명시된 유효 학년은 학교칸을 이긴다 — 예비 초1 상담이 미취학으로 뒤집히면 안 된다", () => {
+    expect(gradeLabel("초1", "Ing유치원")).toBe("초1"); // 7세가 내년 초1 반을 상담한 건
+    expect(gradeLabel("중2", "7세")).toBe("중2");
+    // 학년칸이 분류 불가일 때만 학교칸이 말을 한다.
+    expect(gradeLabel("7", "유치")).toBe(GRADE_PRESCHOOL);
+  });
 });
 
 describe("sortGradeBars", () => {

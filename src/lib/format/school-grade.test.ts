@@ -44,8 +44,10 @@ describe("미취학(7세·6세) — 급간이 없는 학년", () => {
 
 describe("isPreschoolGrade", () => {
   it("나이·미취학·유치 표기만 참", () => {
-    for (const g of ["7세", "6세", "미취학", "유치원", "유치"]) expect(isPreschoolGrade(g), g).toBe(true);
+    for (const g of ["7세", "6세", "3세", "미취학", "유치원", "유치"]) expect(isPreschoolGrade(g), g).toBe(true);
     for (const g of ["초1", "중3", "고2", "기타", "", null, undefined]) expect(isPreschoolGrade(g), String(g)).toBe(false);
+    // 🔴 성인 나이는 미취학이 아니다 — `\d+세`로 넓히면 성인반이 출석부에서 초1 앞으로 올라온다.
+    for (const g of ["8세", "13세", "20세", "30세"]) expect(isPreschoolGrade(g), g).toBe(false);
   });
 });
 
