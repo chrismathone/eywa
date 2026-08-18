@@ -5,7 +5,6 @@ import {
   isAdjacentSlot,
   pickClassDayHit,
   SEATING_PERIOD_COLS,
-  seatingHeaderClass,
   seatingSummary,
   spanAdjacentEnd,
 } from "./seating";
@@ -26,6 +25,7 @@ const slot = (over: Partial<LiveBoardSlot> & { key: string; slotStart: string })
   hasAnyRecord: false,
   recordedCount: 0,
   phase: "due",
+  band: "now",
   ownedByMe: false,
   ...over,
 });
@@ -210,16 +210,6 @@ describe("SEATING_PERIOD_COLS", () => {
   });
 });
 
-describe("seatingHeaderClass", () => {
-  it("대기(시작 전·유예)는 회색, 출결이 열린 뒤는 네이비", () => {
-    expect(seatingHeaderClass("before")).toContain("bg-att-weekend");
-    expect(seatingHeaderClass("before")).not.toContain("bg-primary");
-    expect(seatingHeaderClass("grace")).toContain("bg-att-weekend");
-    expect(seatingHeaderClass("due")).toContain("bg-primary");
-    expect(seatingHeaderClass("ended")).toContain("bg-primary");
-  });
-});
-
 describe("foldSeating phase", () => {
   it("카드 국면은 첫 교시 — 시작 전 저녁 반이 오전 종료로 네이비가 되지 않는다", () => {
     const [klass] = foldSeating([
@@ -230,10 +220,28 @@ describe("foldSeating phase", () => {
         slotStart: "20:10",
         slotEnd: "22:00",
         phase: "before",
+        band: "upcoming",
       }),
     ]);
     expect(klass?.phase).toBe("before");
-    expect(seatingHeaderClass(klass!.phase)).toContain("bg-att-weekend");
+    expect(klass?.band).toBe("upcoming");
+  });
+});
+
+describe("foldSeating band", () => {
+  it("교시 하나라도 열려 있으면 카드는 '지금' — 랩실로 옮긴 반이 '지난'으로 내려가지 않는다", () => {
+    const [klass] = foldSeating([
+      slot({ key: "p1", classId: "dp6", slotStart: "14:20", slotEnd: "15:00", band: "past" }),
+      slot({ key: "p2", classId: "dp6", slotStart: "15:00", slotEnd: "15:40", band: "now" }),
+    ]);
+    expect(klass?.band).toBe("now");
+  });
+
+  it("전부 끝났으면 '지난'", () => {
+    const [klass] = foldSeating([
+      slot({ key: "p1", classId: "c9", slotStart: "11:00", slotEnd: "14:00", band: "past" }),
+    ]);
+    expect(klass?.band).toBe("past");
   });
 });
 
@@ -245,6 +253,66 @@ describe("spanAdjacentEnd", () => {
         { slotStart: "16:20", slotEnd: "17:10" },
       ]),
     ).toBe("10:50");
+  });
+
+  it("방이 바뀌면 끊는다 — 실측 DP6(본원602 14:20~15:00 → 랩실 15:00~15:40)", () => {
+    expect(
+      spanAdjacentEnd([
+        { slotStart: "14:20", slotEnd: "15:00", roomName: "본원602", slotTeacherLabel: "Kristine" },
+        { slotStart: "15:00", slotEnd: "15:40", roomName: "본원603", slotTeacherLabel: "LAB" },
+      ]),
+    ).toBe("15:00");
+  });
+
+  it("같은 방 연강은 끝까지 잇는다 — 방을 보느라 BS4F가 끊기면 안 된다", () => {
+    expect(
+      spanAdjacentEnd([
+        { slotStart: "20:10", slotEnd: "21:05", roomName: "본원204" },
+        { slotStart: "21:05", slotEnd: "22:00", roomName: "본원204" },
+      ]),
+    ).toBe("22:00");
+  });
+
+  it("같은 호수라도 자리(LAB) 표기가 붙으면 별개 칸", () => {
+    expect(
+      spanAdjacentEnd([
+        { slotStart: "16:20", slotEnd: "17:00", roomName: "본원603", slotTeacherLabel: null },
+        { slotStart: "17:00", slotEnd: "17:40", roomName: "본원603", slotTeacherLabel: "LAB" },
+      ]),
+    ).toBe("17:00");
+  });
+});
+
+describe("좌석표가 만들던 가짜 겹침 — 실측 본원602(화요일)", () => {
+  const card = (name: string, id: string, spans: [string, string, string][]) =>
+    foldSeating(
+      spans.map(([st, en, room], i) =>
+        slot({
+          key: `${id}-${i}`,
+          classId: id,
+          className: name,
+          slotStart: st,
+          slotEnd: en,
+          roomName: room,
+          slotTeacherLabel: room === "본원603" ? "LAB" : "Kristine",
+        }),
+      ),
+    )[0]!;
+
+  it("카드 시각이 그 방을 벗어나지 않는다 — DP6 14:20~15:00과 LS6 15:00~16:20은 안 겹친다", () => {
+    const dp6 = card("DP6", "dp6", [
+      ["14:20", "15:00", "본원602"],
+      ["15:00", "15:40", "본원603"],
+    ]);
+    const ls6 = card("LS6", "ls6", [
+      ["15:00", "15:40", "본원602"],
+      ["15:40", "16:20", "본원602"],
+      ["16:20", "17:00", "본원603"],
+    ]);
+    expect(dp6.firstEnd).toBe("15:00");
+    expect(ls6.firstEnd).toBe("16:20");
+    // 종전엔 14:20~15:40 ↔ 15:00~17:00이라 한 강사가 한 방에서 동시에 두 반을 가르치는 그림이었다.
+    expect(dp6.firstEnd! <= ls6.firstStart).toBe(true);
   });
 });
 

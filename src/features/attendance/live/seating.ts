@@ -7,9 +7,14 @@
  *
  * 읽기: 교시 무시, (반·학생·오늘)에 기록이 있으면 그 상태. 여러 행이면 recorded_at 최신.
  * 쓰기 슬롯은 호출부가 slot-axis를 따른다(수학=null, 영어=첫 교시). 기존 행이 있으면 그 행의 교시를 쓴다.
+ *
+ * 🔴 **칸이 하루 하나라고 해서 하루치를 한 화면에 동시에 펼치는 건 다른 얘기다**(원장 2026-08-18:
+ *    *"1개의 수업에 대해서만 수업인데 마치 전부 수업하는 것처럼"*). 카드마다 [`NowBand`](./now-band.ts)를
+ *    들려 보내 화면이 지금/예정/지난으로 나눠 그린다 — **거르는 게 아니라 나누는 것**이다([[#105]]).
  */
 import { specialSlotLabel, type SpecialSlotLabel } from "@/features/timetable/lib/teacher-label";
 import { seatMarkOf, type SeatMark } from "./mark-state";
+import { foldNowBands, type NowBand } from "./now-band";
 import { saveSlotFor } from "./slot-axis";
 import type { LiveBoardSlot, LiveStudent } from "./types";
 
@@ -33,6 +38,11 @@ export type SeatingClass = {
   /** LAB·JJ — 같은 시각에 여러 반이 한 방을 쓴다. 일반 4열과 다른 묶음의 근거. */
   seatLabel: SpecialSlotLabel | null;
   phase: LiveBoardSlot["phase"];
+  /**
+   * 이 반이 **지금 열려 있나** — 교시 하나라도 열려 있으면 '지금'(`foldNowBands`).
+   * 🔑 `phase`(첫 교시의 유예 국면)와 다르다: phase는 "빈 칸을 큐에 올릴 때가 됐나", band는 "지금 하나".
+   */
+  band: NowBand;
   ownedByMe: boolean;
   students: SeatingStudent[];
 };
@@ -114,6 +124,7 @@ export function foldSeating(slots: readonly LiveBoardSlot[]): SeatingClass[] {
       roomName: ordered.find((s) => s.roomName)?.roomName ?? first.roomName,
       firstStart: first.slotStart,
       firstEnd: spanAdjacentEnd(ordered),
+      band: foldNowBands(ordered.map((s) => s.band)),
       periodLabel: first.periodLabel,
       seatLabel: specialSlotLabel(first.slotTeacherLabel),
       // 헤더 색·대기/미출결은 카드에 적힌 첫 시각 기준. 뒤 교시는 더 늦다.
@@ -133,19 +144,35 @@ export function foldSeating(slots: readonly LiveBoardSlot[]): SeatingClass[] {
 }
 
 /**
- * 첫 교시부터 끝이 다음에 닿는 동안의 종료시각.
+ * 첫 교시부터 끝이 다음에 닿는 동안의 종료시각 — **다만 같은 방에 있는 동안만**.
  * BS4F 20:10~21:05 + 21:05~22:00 → 22:00. 점심으로 끊기면 앞 블록만.
+ *
+ * 🔴 방이 바뀌면 끊는다. 카드는 **한 강의실 아래**에 놓이는데 종료시각만 계속 이어 붙이면 그 방에
+ *    있지도 않은 시간을 그 방의 수업인 양 적는다 — 실측(화요일 본원602): DP6는 14:20~15:00만 602이고
+ *    15:00~15:40은 랩실인데 카드가 `14:20~15:40`이라 적혀, 같은 방 LS6(15:00~17:00)와 **겹쳐 보였다**.
+ *    그래서 한 강사가 한 방에서 세 반을 동시에 가르치는 그림이 됐다(같은 요일 실측 4쌍, 목 3·금 3·수 1).
+ *    슬롯이 겹치는 일은 실제로 없다 — 겹침은 전부 이 이어붙이기가 만든 것이었다.
+ * ⚠️ 자리(LAB·JJ) 표기도 방과 같이 본다 — 같은 호수라도 자리 수업은 담당이 다른 별개의 칸이다.
  */
 export function spanAdjacentEnd(
-  ordered: readonly { slotStart: string; slotEnd: string | null }[],
+  ordered: readonly {
+    slotStart: string;
+    slotEnd: string | null;
+    roomName?: string | null;
+    slotTeacherLabel?: string | null;
+  }[],
 ): string | null {
   const first = ordered[0];
   if (!first) return null;
+  const sameRoom = (a: (typeof ordered)[number], b: (typeof ordered)[number]) =>
+    (a.roomName ?? null) === (b.roomName ?? null) &&
+    specialSlotLabel(a.slotTeacherLabel ?? null) === specialSlotLabel(b.slotTeacherLabel ?? null);
   let end = first.slotEnd;
   for (let i = 1; i < ordered.length; i++) {
     const prev = ordered[i - 1]!;
     const next = ordered[i]!;
     if (prev.slotEnd == null || prev.slotEnd !== next.slotStart) break;
+    if (!sameRoom(prev, next)) break;
     end = next.slotEnd;
   }
   return end;
@@ -200,6 +227,7 @@ function mergeAdjacentPair(a: LiveBoardSlot, b: LiveBoardSlot): LiveBoardSlot {
     slotEnd: b.slotEnd ?? a.slotEnd,
     // 뒤 교시가 시작됐으면 그 국면(앞이 종료여도 '진행 중'으로).
     phase: b.phase !== "before" ? b.phase : a.phase,
+    band: foldNowBands([a.band, b.band]),
     students,
     recordedCount: students.filter((s) => s.status != null).length,
     hasAnyRecord: a.hasAnyRecord || b.hasAnyRecord,
@@ -241,17 +269,6 @@ export function groupAdjacentSlots(slots: readonly LiveBoardSlot[]): LiveBoardSl
  * 수업이 2~3개여도 이 폭을 유지하고, 학생은 칸 안에서 다음 줄로 간다.
  */
 export const SEATING_PERIOD_COLS = 4;
-
-/**
- * 수업명 줄 배경.
- * 대기(시작 전·유예 10분) = 회색, 출결이 열린 뒤(진행·종료) = 네이비.
- * 둘 다 네이비면 20:10 반과 이미 끝난 반이 같아 보인다.
- */
-export function seatingHeaderClass(phase: SeatingClass["phase"]): string {
-  return phase === "before" || phase === "grace"
-    ? "bg-att-weekend text-text"
-    : "bg-primary text-white";
-}
 
 export function seatingSummary(classes: readonly SeatingClass[]): SeatingSummary {
   let unmarked = 0;
