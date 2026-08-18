@@ -316,6 +316,99 @@ describe("좌석표가 만들던 가짜 겹침 — 실측 본원602(화요일)",
   });
 });
 
+describe("foldSeating 대표 교시 — 하루에 방을 옮기는 반 (2026-08-18)", () => {
+  it("지금 교시의 방·시각·라벨로 카드가 옮겨간다 — 실측 LS3a 15:45 = 본원605", () => {
+    const [klass] = foldSeating([
+      // 14:20 랩실(지남) → 15:00 605(종료 뒤 꼬리) → 15:40 605(진행) → 16:20 랩실(예정)
+      slot({ key: "p1", classId: "ls3a", className: "LS3a", slotStart: "14:20", slotEnd: "15:00", roomName: "본원603", slotTeacherLabel: "LAB", band: "past", phase: "ended" }),
+      slot({ key: "p2", classId: "ls3a", className: "LS3a", slotStart: "15:00", slotEnd: "15:40", roomName: "본원605", band: "now", phase: "ended" }),
+      slot({ key: "p3", classId: "ls3a", className: "LS3a", slotStart: "15:40", slotEnd: "16:20", roomName: "본원605", band: "now", phase: "due" }),
+      slot({ key: "p4", classId: "ls3a", className: "LS3a", slotStart: "16:20", slotEnd: "17:00", roomName: "본원603", slotTeacherLabel: "LAB", band: "upcoming", phase: "before" }),
+    ]);
+    expect(klass?.roomName).toBe("본원605"); // 🔴 종전엔 첫 교시(랩실)에 못박혀 605가 화면에서 사라졌다
+    expect(klass?.firstStart).toBe("15:40");
+    expect(klass?.firstEnd).toBe("16:20"); // 같은 방인 동안만 — 16:20 랩실로는 이어붙지 않는다
+    expect(klass?.seatLabel).toBeNull(); // 대표가 일반 교시면 랩실 칸이 아니다
+    expect(klass?.band).toBe("now"); // band는 전 교시 fold 그대로
+  });
+
+  it("🔴 저장 축은 불변 — 대표 교시가 뒤로 가도 영어 신규 저장은 하루 첫 교시다", () => {
+    const [klass] = foldSeating([
+      slot({
+        key: "p1",
+        classId: "e",
+        subject: "english",
+        slotStart: "14:20",
+        slotEnd: "15:00",
+        roomName: "본원603",
+        slotTeacherLabel: "LAB",
+        band: "past",
+        phase: "ended",
+        students: [student("박민수")],
+      }),
+      slot({
+        key: "p2",
+        classId: "e",
+        subject: "english",
+        slotStart: "15:40",
+        slotEnd: "16:20",
+        roomName: "본원604",
+        band: "now",
+        phase: "due",
+        students: [student("박민수")],
+      }),
+    ]);
+    expect(klass?.firstStart).toBe("15:40"); // 표시는 지금 교시
+    // 폴백이 '지금 교시'가 되면 같은 (학생·반·날)에 교시 다른 행이 둘 생겨 시수→급여가 조용히 달라진다.
+    expect(klass?.students[0]?.writeSlot).toBe("14:20");
+  });
+
+  it("열린 교시가 없으면 다음 교시의 방 — 실측 KW2 15:45 = 랩실(다음에 거기 모인다)", () => {
+    const [klass] = foldSeating([
+      slot({ key: "p1", classId: "kw2", className: "KW2", slotStart: "16:20", slotEnd: "17:00", roomName: "본원603", slotTeacherLabel: "LAB", band: "upcoming", phase: "before" }),
+      slot({ key: "p2", classId: "kw2", className: "KW2", slotStart: "17:00", slotEnd: "17:40", roomName: "본원605", band: "upcoming", phase: "before" }),
+    ]);
+    expect(klass?.seatLabel).toBe("LAB");
+    expect(klass?.firstStart).toBe("16:20");
+  });
+
+  it("오전에 끝난 교시와 저녁 교시를 함께 가진 반은 저녁 방 — 오전 방에 남지 않는다", () => {
+    const [klass] = foldSeating([
+      slot({ key: "am", classId: "c", slotStart: "11:00", slotEnd: "12:00", roomName: "본원201", band: "past", phase: "ended" }),
+      slot({ key: "pm", classId: "c", slotStart: "19:00", slotEnd: "20:00", roomName: "본원305", band: "later", phase: "before" }),
+    ]);
+    expect(klass?.roomName).toBe("본원305");
+    expect(klass?.firstStart).toBe("19:00");
+  });
+
+  it("전부 끝났으면 마지막 방 — 지난 날짜 조회(전부 past)도 이 규칙", () => {
+    const [klass] = foldSeating([
+      slot({ key: "p1", classId: "dp6", className: "DP6", slotStart: "14:20", slotEnd: "15:00", roomName: "본원602", band: "past", phase: "ended" }),
+      slot({ key: "p2", classId: "dp6", className: "DP6", slotStart: "15:00", slotEnd: "15:40", roomName: "본원603", slotTeacherLabel: "LAB", band: "past", phase: "ended" }),
+    ]);
+    expect(klass?.seatLabel).toBe("LAB"); // 마지막으로 있었던 자리(랩실) 칸으로
+    expect(klass?.firstStart).toBe("15:00");
+  });
+
+  it("정렬도 대표 교시 시각 — 지금 하는 수업이 이미 끝난 첫 교시 시각에 끌려오지 않는다", () => {
+    const classes = foldSeating([
+      slot({ key: "a1", classId: "a", className: "A반", slotStart: "14:00", slotEnd: "15:00", band: "past", phase: "ended" }),
+      slot({ key: "a2", classId: "a", className: "A반", slotStart: "16:00", slotEnd: "17:00", band: "now", phase: "due" }),
+      slot({ key: "b1", classId: "b", className: "B반", slotStart: "15:00", slotEnd: "16:30", band: "now", phase: "due" }),
+    ]);
+    expect(classes.map((c) => c.className)).toEqual(["B반", "A반"]); // 15:00 < 16:00 (대표 교시 기준)
+  });
+
+  it("대표 교시가 유예 안이면 빈 칸은 '대기' — 국면도 대표 교시 것", () => {
+    const [klass] = foldSeating([
+      slot({ key: "p1", classId: "c", slotStart: "14:00", slotEnd: "15:00", band: "past", phase: "ended", students: [student("김대기")] }),
+      slot({ key: "p2", classId: "c", slotStart: "15:00", slotEnd: "16:00", band: "now", phase: "grace", students: [student("김대기")] }),
+    ]);
+    expect(klass?.phase).toBe("grace");
+    expect(klass?.students[0]?.mark).toBe("waiting");
+  });
+});
+
 describe("pickClassDayHit", () => {
   it("여러 행이면 recorded_at 최신", () => {
     const hit = pickClassDayHit([

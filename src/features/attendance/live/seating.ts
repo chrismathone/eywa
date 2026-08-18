@@ -5,6 +5,10 @@
  * 칸 = 반 × 학생 × 오늘 **하나**. 연강 2~3교시도 섹션 하나·칸 하나.
  * 섹션 순서 = 오늘 첫 교시 시작시각(시간을 훑는 건 유지).
  *
+ * 🔑 **카드가 대표하는 교시는 '지금 교시'다**(2026-08-18, [`seating-anchor.ts`](./seating-anchor.ts)) —
+ *    첫 교시에 못박으면 하루에 방을 옮기는 반(활성 43개 중 20개)의 **뒤 방이 화면에서 사라진다**.
+ *    바뀌는 건 **어디에 그릴지**(방·시각)뿐이고 **무엇을 쓸지**(저장 교시)는 불변이다.
+ *
  * 읽기: 교시 무시, (반·학생·오늘)에 기록이 있으면 그 상태. 여러 행이면 recorded_at 최신.
  * 쓰기 슬롯은 호출부가 slot-axis를 따른다(수학=null, 영어=첫 교시). 기존 행이 있으면 그 행의 교시를 쓴다.
  *
@@ -14,6 +18,7 @@
  */
 import { specialSlotLabel, type SpecialSlotLabel } from "@/features/timetable/lib/teacher-label";
 import { seatMarkOf, type SeatMark } from "./mark-state";
+import { anchorSlotIndex } from "./seating-anchor";
 import { foldNowBands, type NowBand } from "./now-band";
 import { saveSlotFor } from "./slot-axis";
 import type { LiveBoardSlot, LiveStudent } from "./types";
@@ -29,10 +34,19 @@ export type SeatingClass = {
   className: string;
   subject: string;
   teacherName: string | null;
-  /** 오늘 첫 교시가 열리는 강의실 — 층 묶음 근거. */
+  /**
+   * **대표 교시**가 열리는 강의실 — 층 묶음 근거([`seating-floors.ts`](./seating-floors.ts)).
+   * 대표 교시 = 지금 열린 교시(없으면 다음, 그것도 없으면 마지막) — [`anchorSlotIndex`](./seating-anchor.ts).
+   */
   roomName: string | null;
-  /** 오늘 첫 살아있는 교시 — 표시·10분 판정·영어 신규 저장. */
+  /**
+   * 🔑 이름은 `first`지만 뜻은 **"대표 교시의"**다(2026-08-18) — 하루에 방을 옮기는 반(활성 43개 중 20개)이
+   * 첫 방에 못박혀 604·605·606이 통째로 화면에서 빠졌다. 이름을 바꾸려면 소비처를 함께 고칠 것
+   * (`seating-floors`·`seating-bands`·`seating-room`·`seating-cell`·정렬).
+   * 🔴 **저장 축이 아니다** — 영어 신규 저장은 아래 `writeSlot`(하루 첫 교시)이 그대로 정한다.
+   */
   firstStart: string;
+  /** 대표 교시부터 **같은 방으로 이어지는 동안**의 종료시각(`spanAdjacentEnd`). */
   firstEnd: string | null;
   periodLabel: string | null;
   /** LAB·JJ — 같은 시각에 여러 반이 한 방을 쓴다. 일반 4열과 다른 묶음의 근거. */
@@ -87,6 +101,11 @@ export function foldSeating(slots: readonly LiveBoardSlot[]): SeatingClass[] {
     const ordered = [...list].sort((a, b) => (a.slotStart < b.slotStart ? -1 : 1));
     const first = ordered[0];
     if (!first) continue;
+    // 카드가 대표할 교시 — 지금 열린 것(없으면 다음, 그것도 없으면 마지막). 방·시각·라벨만 여기서 온다.
+    const anchorIdx = anchorSlotIndex(ordered);
+    const anchor = ordered[anchorIdx] ?? first;
+    /** 대표 교시부터 하루 끝까지 — 종료시각(`spanAdjacentEnd`)이 대표 교시에서 시작하게. */
+    const fromAnchor = ordered.slice(anchorIdx < 0 ? 0 : anchorIdx);
     const roster = new Map<string, LiveStudent>();
     for (const slot of ordered) {
       for (const s of slot.students) roster.set(s.studentId, s);
@@ -111,7 +130,10 @@ export function foldSeating(slots: readonly LiveBoardSlot[]): SeatingClass[] {
           note: hit?.note ?? base.note,
           recordSlot: hit?.recordSlot ?? null,
           recordedAt: hit?.recordedAt ?? null,
-          mark: seatMarkOf(status, first.phase),
+          mark: seatMarkOf(status, anchor.phase),
+          // 🔴 **저장 축은 하루 첫 교시 그대로**(`first`). 대표 교시로 바꾸면 같은 (학생·반·날)에
+          //    교시가 다른 행이 둘 생기고, 그 표는 시수(session_units) → 급여에 닿는다(slot-axis.ts).
+          //    화면 읽기는 어차피 "(반·학생·오늘) 최신 하나"라 표시는 그대로인데 **돈만 조용히 달라진다.**
           writeSlot: hit ? (hit.recordSlot ?? null) : saveSlotFor(first.subject, first.slotStart),
         };
       })
@@ -120,15 +142,20 @@ export function foldSeating(slots: readonly LiveBoardSlot[]): SeatingClass[] {
       classId: first.classId,
       className: first.className,
       subject: first.subject,
-      teacherName: first.teacherName ?? first.slotTeacherLabel,
-      roomName: ordered.find((s) => s.roomName)?.roomName ?? first.roomName,
-      firstStart: first.slotStart,
-      firstEnd: spanAdjacentEnd(ordered),
+      // 담당도 대표 교시 것 — 605호 카드에 랩실 자리 표기(LAB)가 강사 이름인 양 적히면 안 된다.
+      teacherName: anchor.teacherName ?? anchor.slotTeacherLabel,
+      // 대표 교시의 방이 우선. 그 교시에 방이 비어 있으면 뒤 교시 → 앞 교시 순으로 아는 이름을 쓴다.
+      roomName:
+        fromAnchor.find((s) => s.roomName)?.roomName ?? ordered.find((s) => s.roomName)?.roomName ?? null,
+      firstStart: anchor.slotStart,
+      firstEnd: spanAdjacentEnd(fromAnchor),
+      // 🔑 묶음(band)만은 **전 교시 fold** — 하나라도 열려 있으면 '지금'이다(랩실로 옮긴 반이 '지난'으로
+      //    내려가지 않게). 대표 교시는 "어디에 그릴지", band는 "어느 띠에 놓일지"라 질문이 다르다.
       band: foldNowBands(ordered.map((s) => s.band)),
-      periodLabel: first.periodLabel,
-      seatLabel: specialSlotLabel(first.slotTeacherLabel),
-      // 헤더 색·대기/미출결은 카드에 적힌 첫 시각 기준. 뒤 교시는 더 늦다.
-      phase: first.phase,
+      periodLabel: anchor.periodLabel,
+      seatLabel: specialSlotLabel(anchor.slotTeacherLabel),
+      // 헤더 색·대기/미출결은 카드에 적힌 시각(=대표 교시) 기준.
+      phase: anchor.phase,
       ownedByMe: first.ownedByMe,
       students,
     });
@@ -144,7 +171,7 @@ export function foldSeating(slots: readonly LiveBoardSlot[]): SeatingClass[] {
 }
 
 /**
- * 첫 교시부터 끝이 다음에 닿는 동안의 종료시각 — **다만 같은 방에 있는 동안만**.
+ * 넘겨받은 **첫 원소(= 카드의 대표 교시)** 부터 끝이 다음에 닿는 동안의 종료시각 — **다만 같은 방에 있는 동안만**.
  * BS4F 20:10~21:05 + 21:05~22:00 → 22:00. 점심으로 끊기면 앞 블록만.
  *
  * 🔴 방이 바뀌면 끊는다. 카드는 **한 강의실 아래**에 놓이는데 종료시각만 계속 이어 붙이면 그 방에
