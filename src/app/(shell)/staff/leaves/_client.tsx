@@ -50,12 +50,14 @@ export function LeavesAdminClient({
                 {l.reason ?? "—"}
               </td>
               <td className="px-4 py-2.5">
+                {/* 색은 전자결재와 같은 뜻·같은 색(승인=positive · 대기=caution) — 종전엔 chart 슬롯을
+                    직접 참조해 결재함 배지와 미묘하게 다른 초록·주황이었다. */}
                 {l.approvedAt ? (
-                  <span className="text-chart-2 bg-chart-2/10 border-chart-2/20 inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium">
+                  <span className="text-green bg-green-soft border-green/25 inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium">
                     승인{l.approvedByName ? ` · ${l.approvedByName}` : ""}
                   </span>
                 ) : (
-                  <span className="text-chart-3 bg-chart-3/10 border-chart-3/20 inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium">
+                  <span className="text-amber bg-amber-soft border-amber/25 inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium">
                     대기
                   </span>
                 )}

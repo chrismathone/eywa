@@ -83,7 +83,8 @@ export default async function StaffPayrollPage({
       <section className="grid grid-cols-2 gap-3.5 sm:grid-cols-4">
         <Stat label="총 실수령" value={won(overview.totalNet)} icon={Wallet} color="primary" />
         <Stat label="총 기본급" value={won(overview.totalBase)} icon={Wallet} color="blue" />
-        <Stat label="지급완료" value={`${overview.paidCount}명`} icon={CheckCircle2} color="primary" />
+        {/* 지급완료 = positive(green) — 같은 화면 아래 배지도 green이라 종전엔 KPI만 네이비로 어긋났다. */}
+        <Stat label="지급완료" value={`${overview.paidCount}명`} icon={CheckCircle2} color="green" />
         <Stat
           label="미지급/미작성"
           value={`${overview.savedCount + overview.draftCount}명`}

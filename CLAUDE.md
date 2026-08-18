@@ -385,7 +385,9 @@ key(DB 식별자)는 **자동 확정**: 과목명 입력 후 blur 시 1회 — �
   - **대비**: `--text-dim` 8.1:1→**10.7:1**, `--text-faint` 4.54:1(WCAG 하한)→**5.6:1**. `-soft` 틴트 9~11%→12~13%.
   - **의미색 캐논**(신설 [`semantic-color.ts`](src/lib/design/semantic-color.ts)): positive=green(정상·완료) · caution=amber(주의·**내 차례**) · critical=danger(실패·위험) · info=blue(진행중·**남이 하는 중**) · special=purple(예외·대체) · inert=neutral(종료) · brand=primary(현재 위치·기본 액션). 🔑 새로 지어낸 게 아니라 출석부 `--att-*`·ECS `status-tone.ts`가 **이미 쓰던 조합을 굳힌 것**이다.
   - 🔴 **축이 둘이고 섞지 않는다**: 의미(tone)=코드 고정 / 과목=학원설정(`buildSubjectMaps`). 화면 파일에 `STATUS_META`(라벨+색 맵)를 **새로 만들지 말 것** — 그 축의 단일 소스에 추가한다. 배지 색을 고를 땐 `PillColor`가 아니라 **tone**을 고른다.
-  - **바꾼 것**: 재원·재직·승인·수납완료·발송완료 = 전부 초록(종전 네이비 — 과목 '수학' blue와 색상각 4.8°라 학생목록에서 상태와 과목이 구분되지 않았다) · 활성 필터 칩 44곳 검정→네이비 · 학생 상태 3벌/직원 상태·역할 2벌 → 단일 소스(`studentStatusMeta`·`staffStatusMeta`·`roleMeta`).
+  - **바꾼 것**: 재원·재직·승인·수납완료·발송완료·출석·전사완료 등 **"완료/정상" 23군데**가 primary(네이비)였다 → 전부 초록(네이비는 과목 '수학' blue와 색상각 4.8°라 학생목록에서 상태와 과목이 구분되지 않았다). 🔑 **절반만 옮기면 안 된다** — 학생 축만 초록으로 가면 오히려 더 갈리므로 같은 푸시에서 전수 처리했다. 활성 필터 칩 44곳 검정→네이비.
+  - **단일 소스로 합친 축(전부 "각자 맵을 복사"해서 갈렸다)**: 학생 상태 4벌(`studentStatusMeta`) · 직원 상태·역할 3벌(`staffStatusMeta`·`roleMeta`) · **출결 6벌**([`attendance/status-color.ts`](src/features/attendance/status-color.ts) — `ATT_VIVID` 격자 원색 / `ATT_SOFT` 칩 / `ATT_SOLID` 누른 알약, **색상은 하나·채도만 자리마다**) · **수납**(정본이 아예 없었다 → [`billing/status-color.ts`](src/features/billing/status-color.ts)) · **상담 outcome 5벌**([`outcomeBadge`](src/features/enrollment/outcome-meta.ts)) · 후속조치 긴급도 2벌.
+  - 🔴 **색이 아니라 정보가 사라진 사례**: 학생 상세 진도 탭이 정본과 같은 이름의 로컬 `classnoteBadge`를 들고 있었는데 회수 3종·링크 취소·과목 제외를 switch에서 빠뜨려 **전부 "—"로 삼켰다**(회수했는데 "안 보낸 것"으로 보였다). 사본은 새 상태를 따라오지 않는다.
   - 가드 = [`semantic-color.test.ts`](src/lib/design/semantic-color.test.ts)(재원·재직·승인 전부 green / 뜻마다 다른 색 / 역할 색엔 green 금지). ⚠️ **역할 색은 신원이지 상태가 아니라** 캐논 밖이다.
   - ⚠️ **미해결(원장 결정 대기)**: 시간표 vivid 모드는 신입=**빨강**(원장 *"시트 export 색 그대로"* 요청한 원본 시트 복제)인데 출석부는 신입=**초록**이라 둘이 어긋난다. 어느 쪽에 맞출지 미정 — 임의로 바꾸지 말 것.
 - **이름 앞 아바타/이니셜 배지 = 금지 (영구).** 사람 표시는 이름 텍스트만.

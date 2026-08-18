@@ -1,11 +1,14 @@
+import { ATT_SOFT } from "@/features/attendance/status-color";
 import type { Session } from "../history";
 
 const DOW = ["일", "월", "화", "수", "목", "금", "토"];
 
+// 색은 출결 단일 소스([status-color.ts](src/features/attendance/status-color.ts)) — 학생이 보는 달력이라
+// 출석부·원스크린과 같은 색이어야 "같은 출결"로 읽힌다(구 출석=primary 네이비는 그 셋과 어긋났다).
 const CELL_CLASS: Record<string, string> = {
-  출석: "bg-primary-soft text-primary font-bold",
-  지각: "bg-amber-soft text-amber font-bold",
-  결석: "bg-danger-soft text-danger font-bold",
+  출석: `${ATT_SOFT.present} font-bold`,
+  지각: `${ATT_SOFT.late} font-bold`,
+  결석: `${ATT_SOFT.absent} font-bold`,
 };
 
 // 모듈 스코프 — 렌더 순수성 룰(react-hooks/purity)을 피하려 컴포넌트 밖에서 Date 계산.
@@ -35,7 +38,7 @@ export function AttendanceCalendar({ history }: { history: Session[] }) {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-foreground text-[15px] font-bold">출결 달력</h2>
         <div className="flex items-center gap-2.5 text-[11px]">
-          <Legend cls="bg-primary-soft" label="출석" />
+          <Legend cls="bg-green-soft" label="출석" />
           <Legend cls="bg-amber-soft" label="지각" />
           <Legend cls="bg-danger-soft" label="결석" />
         </div>

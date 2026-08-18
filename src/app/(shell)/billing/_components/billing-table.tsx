@@ -226,7 +226,7 @@ export function BillingTable({ rows, sort, desc, period, q, overdueOnly, missing
                     {(li.points ?? 0) > 0 ? <span className="text-text-dim">{won(li.points ?? 0)}</span> : <span className="text-text-faint">—</span>}
                   </td>
                   <td className="num px-3 py-2.5 text-right">
-                    <span className={(li.paid ?? 0) > 0 ? "text-primary" : "text-text-faint"}>{dash(li.paid ?? 0)}</span>
+                    <span className={(li.paid ?? 0) > 0 ? "text-green" : "text-text-faint"}>{dash(li.paid ?? 0)}</span>
                   </td>
                   <td className="num px-3 py-2.5 text-right">
                     {unpaid === undefined ? (
@@ -234,7 +234,7 @@ export function BillingTable({ rows, sort, desc, period, q, overdueOnly, missing
                     ) : unpaid > 0 ? (
                       <span className="text-danger font-medium">{won(unpaid)}</span>
                     ) : (
-                      <span className="text-chart-2">완납</span>
+                      <span className="text-green">완납</span>
                     )}
                   </td>
                   <td className="text-muted-foreground px-3 py-2.5 text-xs">
@@ -262,7 +262,7 @@ export function BillingTable({ rows, sort, desc, period, q, overdueOnly, missing
             <td className="num px-3 py-3 text-right text-xs">{pageDiscount > 0 ? <span className="text-amber">-{won(pageDiscount)}</span> : "—"}</td>
             <td className="num px-3 py-3 text-right text-xs">{pagePoints > 0 ? won(pagePoints) : "—"}</td>
             <td className="text-foreground num px-3 py-3 text-right">{won(pagePaid)}</td>
-            <td className="num px-3 py-3 text-right">{pageUnpaid > 0 ? <span className="text-danger">{won(pageUnpaid)}</span> : <span className="text-chart-2">완납</span>}</td>
+            <td className="num px-3 py-3 text-right">{pageUnpaid > 0 ? <span className="text-danger">{won(pageUnpaid)}</span> : <span className="text-green">완납</span>}</td>
             <td colSpan={3} />
           </tr>
         </tfoot>

@@ -154,7 +154,7 @@ export default async function AttendanceByDatePage({
                     미처리 {p.unprocessed}
                   </span>
                 ) : (
-                  <span className="text-primary shrink-0 text-[11px]">완료</span>
+                  <span className="text-green shrink-0 text-[11px]">완료</span>
                 )}
                 <Link
                   href={`/attendance/${date}/${p.classId}`}
@@ -180,7 +180,7 @@ export default async function AttendanceByDatePage({
         <>
           <div className="bg-card border-line grid grid-cols-2 gap-4 rounded-2xl border p-5 sm:grid-cols-4">
             <Summary label="전체" value={total} unit="건" />
-            <Summary label="출석" value={present} unit="건" highlight="text-primary" suffix={`${rate.toFixed(1)}%`} />
+            <Summary label="출석" value={present} unit="건" highlight="text-green" suffix={`${rate.toFixed(1)}%`} />
             <Summary label="결석" value={absent} unit="건" highlight="text-danger" />
             <Summary label="지각" value={late} unit="건" highlight="text-amber" />
           </div>
@@ -212,7 +212,7 @@ export default async function AttendanceByDatePage({
                         </span>
                       ) : null}
                       {gAbsent === 0 && gLate === 0 ? (
-                        <span className="text-primary text-[11px]">전원 출석</span>
+                        <span className="text-green text-[11px]">전원 출석</span>
                       ) : null}
                       <ChevronRight className="text-text-faint size-3 transition group-open:rotate-90" />
                     </div>

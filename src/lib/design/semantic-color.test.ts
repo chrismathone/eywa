@@ -9,6 +9,9 @@ import {
   ATT_SOLID,
   ATT_VIVID,
 } from "@/features/attendance/status-color";
+import { BILLING_BADGE, BILLING_CARD } from "@/features/billing/status-color";
+import { classnoteBadge } from "@/features/onescreen/components/report-card";
+import { LEVEL_COLOR } from "@/features/retention/components/risk-badge";
 
 /**
  * 의미색 캐논 가드 — *"일치하는 곳의 색은 항상 일치"*(원장 2026-08-18)를 코드로 잠근다.
@@ -93,6 +96,50 @@ describe("출결은 여섯 화면이 같은 색을 쓴다", () => {
   it("격자 팔레트는 --att-* 원색을 유지한다 — 31칸에서 틴트로는 결석을 못 찾는다", () => {
     expect(ATT_VIVID.present).toContain("att-present");
     expect(ATT_VIVID.absent).toContain("att-absent");
+  });
+});
+
+describe("'완료'가 화면마다 갈리지 않는다 — primary는 상태색이 아니다", () => {
+  // 🔴 2026-08-18 전수 감사: primary(네이비)를 "완료/정상"으로 쓰는 곳이 12군데였다.
+  //    학생 축만 초록으로 옮기면 오히려 더 갈리므로 같은 푸시에서 전부 옮겼다.
+  it("수납 완료·미납·부분납", () => {
+    expect(BILLING_BADGE.paid).toContain("green");
+    expect(BILLING_BADGE.unpaid).toContain("danger");
+    expect(BILLING_BADGE.partial).toContain("amber");
+    // 부분납과 미납이 같은 색이면 "일부라도 받았는가"가 색에서 사라진다.
+    expect(BILLING_BADGE.partial).not.toBe(BILLING_BADGE.unpaid);
+    for (const k of ["paid", "unpaid", "partial"] as const) {
+      expect(BILLING_BADGE[k], `BILLING_BADGE.${k}`).not.toContain("primary");
+      expect(BILLING_CARD[k], `BILLING_CARD.${k}`).not.toContain("primary");
+    }
+  });
+
+  it("ClassNote 발송 완료", () => {
+    expect(classnoteBadge("success")?.cls).toBe("text-green");
+    expect(classnoteBadge("failed")?.cls).toBe("text-danger");
+  });
+
+  it("ClassNote 정본이 회수·취소·제외 상태를 삼키지 않는다", () => {
+    // 로컬 사본이 이 상태들을 switch에서 빠뜨려 전부 "—"로 만들던 자리(상태 은폐 버그).
+    for (const s of [
+      "revoked",
+      "recall_requested",
+      "recalled",
+      "recall_failed",
+      "subject_off",
+      "absent",
+      "no_attendance",
+    ]) {
+      const b = classnoteBadge(s);
+      expect(b, `classnoteBadge("${s}")`).not.toBeNull();
+      expect(b!.short.length, `short label for ${s}`).toBeGreaterThan(0);
+    }
+    expect(classnoteBadge(null)).toBeNull();
+  });
+
+  it("이탈 위험 '안정'과 상담 후속조치 '완료'", () => {
+    expect(LEVEL_COLOR.ok).toBe("green");
+    expect(LEVEL_COLOR.risk).toBe("danger");
   });
 });
 

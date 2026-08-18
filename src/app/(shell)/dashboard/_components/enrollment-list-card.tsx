@@ -7,14 +7,19 @@
 import { Pill, type PillColor } from "@/components/atoms/pill";
 import { WindowLink } from "@/components/workspace/window-link";
 import { DashCard, DashEmpty } from "./dash-card";
+import { outcomePill } from "@/features/enrollment/outcome-meta";
 import type { DashEnrollmentList, DashEnrollmentRow } from "@/features/dashboard/server/queries";
 
-// 라벨은 등록상담 칸반(OUTCOME_LABEL)과 동일 표기, 색은 대시보드 Pill 팔레트로.
+/**
+ * 라벨·색 모두 등록상담 단일 소스([outcomePill](src/features/enrollment/outcome-meta.ts)).
+ * ⚠️ 종전엔 "색은 대시보드 팔레트로"라며 따로 골라서, 같은 'AI 완료'가 칸반=보라·상세=초록·
+ *    대시보드=골드로 **세 색**이었다(코드베이스에서 가장 심하게 갈린 축).
+ */
 const OUTCOME: Record<DashEnrollmentRow["outcome"], { label: string; color: PillColor }> = {
-  pending: { label: "대기", color: "amber" },
-  scheduled: { label: "예약", color: "blue" },
-  consulted: { label: "상담완료", color: "primary" },
-  ai_done: { label: "AI 완료", color: "gold" },
+  pending: outcomePill("pending"),
+  scheduled: outcomePill("scheduled"),
+  consulted: outcomePill("consulted"),
+  ai_done: outcomePill("ai_done"),
 };
 
 export function EnrollmentListCard({

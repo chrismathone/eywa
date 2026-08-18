@@ -5,19 +5,12 @@ import { SuperAdminHeader } from "@/components/super-admin/header";
 import { Pill, type PillColor } from "@/components/atoms/pill";
 import { getTenantSnapshot } from "@/features/super-admin/server/queries";
 import { logImpersonateView } from "@/features/super-admin/server/actions";
+import { studentStatusMeta } from "@/features/students/status-labels";
 
 export const metadata = { title: "Super Admin · 지점장 보기 — eywa" };
 
 const fmt = (n: number) => n.toLocaleString("ko-KR");
 const formatDate = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString("ko-KR", { timeZone: "Asia/Seoul" }) : "—");
-
-const STATUS_META: Record<string, { label: string; color: PillColor }> = {
-  prospect: { label: "예비", color: "amber" },
-  consulted: { label: "상담완료", color: "blue" },
-  enrolled: { label: "재원", color: "primary" },
-  on_hold: { label: "휴원", color: "amber" },
-  withdrawn: { label: "퇴원", color: "neutral" },
-};
 
 export default async function TenantViewPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -69,7 +62,8 @@ export default async function TenantViewPage({ params }: { params: Promise<{ id:
             ) : (
               <ul className="divide-line divide-y">
                 {snap.recentStudents.map((s) => {
-                  const meta = STATUS_META[s.status] ?? { label: s.status, color: "neutral" as PillColor };
+                  // 학생 상태 배지 = studentStatusMeta 단일 소스(목록·상세와 같은 색).
+                  const meta = studentStatusMeta(s.status) ?? { label: s.status, color: "neutral" as PillColor };
                   return (
                     <li key={s.id} className="flex items-center gap-3 px-5 py-2.5">
                       <span className="text-foreground text-[13px] font-medium">{s.name}</span>
