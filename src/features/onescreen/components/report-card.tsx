@@ -270,9 +270,10 @@ export function ReportCard({
                   onClick={() => onRemoveMakeup(subject.name)}
                   title="클릭하면 이 보강을 뺍니다(출결 기록과 저장된 보강 보고서가 삭제됩니다)"
                   aria-label={`${student.name} 보강 빼기`}
-                  className="bg-amber-soft text-amber hover:bg-amber cursor-pointer rounded-pill px-1.5 py-px text-[10px] font-bold transition hover:text-white"
+                  className="bg-amber-soft text-amber hover:bg-amber inline-flex cursor-pointer items-center gap-0.5 rounded-pill px-1.5 py-px text-[10px] font-bold transition hover:text-white"
                 >
-                  보강 ✕
+                  보강
+                  <EyIcon name="close" size={9} />
                 </button>
               ) : student.isMakeup ? (
                 <span className="bg-amber-soft text-amber rounded-pill px-1.5 py-px text-[10px] font-bold">

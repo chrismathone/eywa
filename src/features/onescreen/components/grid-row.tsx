@@ -336,9 +336,10 @@ export function GridBodyRow({
                 onClick={() => actions.onRemoveMakeup?.(student, subject.name)}
                 title="클릭하면 이 보강을 뺍니다(출결 기록과 저장된 보강 보고서가 삭제됩니다)"
                 aria-label={`${student.name} 보강 빼기`}
-                className="bg-amber-soft text-amber hover:bg-amber hover:text-white shrink-0 cursor-pointer rounded-pill px-1 py-px text-[9px] font-bold transition"
+                className="bg-amber-soft text-amber hover:bg-amber inline-flex shrink-0 cursor-pointer items-center gap-0.5 rounded-pill px-1 py-px text-[9px] font-bold transition hover:text-white"
               >
-                보강 ✕
+                보강
+                <EyIcon name="close" size={8} />
               </button>
             ) : (
               <span className="bg-amber-soft text-amber shrink-0 rounded-pill px-1 py-px text-[9px] font-bold">
