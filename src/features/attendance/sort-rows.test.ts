@@ -25,6 +25,11 @@ describe("gradeOrder — 초 → 중 → 고", () => {
     expect(gradeOrder("고1")).toBeLessThan(gradeOrder("고2"));
   });
 
+  it("미취학(7세·6세)은 초1 앞 — 학년 흐름의 시작이다", () => {
+    expect(gradeOrder("7세")).toBeLessThan(gradeOrder("초1"));
+    expect(gradeOrder("6세")).toBeLessThan(gradeOrder("7세"));
+  });
+
   it("모르는 표기·빈 값은 맨 뒤 — 숨기지 않는다(숨기면 그 학생이 출석부에서 사라진다)", () => {
     expect(gradeOrder(null)).toBeGreaterThan(gradeOrder("고3"));
     expect(gradeOrder("성인")).toBeGreaterThan(gradeOrder("고3"));

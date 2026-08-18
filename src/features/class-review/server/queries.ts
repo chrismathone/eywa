@@ -39,7 +39,7 @@ export type ReviewHeader = {
   session: string;
   classTime: string;
   studentCount: string;
-  /** 참관자 방식 — assigned: 생성 시 지정 / open: 선착순 3명(권한자 누구나 먼저 채점). 구버전 문서는 assigned 취급. */
+  /** 참관자 방식 — assigned: 생성 시 지정 / open: 선착순(정원은 observerLimit). 구버전 문서는 assigned 취급. */
   observerMode?: "assigned" | "open";
   /**
    * 평가자 정원(지정 슬롯 수 / 선착순 마감 수) — 생성 시 고른 값을 **문서에 동결**한다.

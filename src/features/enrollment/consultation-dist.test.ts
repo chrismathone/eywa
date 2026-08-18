@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
-  buildSchoolBars,
-  gradeLabel,
+  GRADE_PRESCHOOL,
   GRADE_UNKNOWN,
   SCHOOL_OTHER,
+  buildSchoolBars,
+  gradeLabel,
   schoolBucket,
   sortGradeBars,
 } from "./consultation-dist";
@@ -36,12 +37,37 @@ describe("gradeLabel — 확실할 때만 분류한다", () => {
   });
 
   it("애매한 표기는 전부 분류 불가 — 추측해서 끼워 넣지 않는다", () => {
-    for (const g of ["예비중1", "중등부", "7세", "기타", "미상", "", "  "])
+    for (const g of ["예비중1", "중등부", "기타", "미상", "", "  "])
       expect(gradeLabel(g, "칠성초"), g).toBe(GRADE_UNKNOWN);
+  });
+
+  // 2026-08-18 학원설정 학년 목록에 6세·7세가 들어왔다 — 미취학은 '애매한 값'이 아니라 확실한 칸이다.
+  it("미취학은 학년칸·학교칸 어느 쪽에 적혀 있어도 미취학", () => {
+    expect(gradeLabel("7세", null)).toBe(GRADE_PRESCHOOL);
+    expect(gradeLabel("6세", "Ing유치원")).toBe(GRADE_PRESCHOOL);
+    expect(gradeLabel(null, "7세")).toBe(GRADE_PRESCHOOL); // 실측 23건 — 학교칸에 나이를 적는다
+    expect(gradeLabel("", "Ing유치원")).toBe(GRADE_PRESCHOOL);
+    // 나이가 아니라 학년 숫자인 것은 그대로 급 판정을 탄다("초7"을 만들지 않는다).
+    expect(gradeLabel("7", "칠성초")).toBe(GRADE_UNKNOWN);
+  });
+
+  it("🔴 명시된 유효 학년은 학교칸을 이긴다 — 예비 초1 상담이 미취학으로 뒤집히면 안 된다", () => {
+    expect(gradeLabel("초1", "Ing유치원")).toBe("초1"); // 7세가 내년 초1 반을 상담한 건
+    expect(gradeLabel("중2", "7세")).toBe("중2");
+    // 학년칸이 분류 불가일 때만 학교칸이 말을 한다.
+    expect(gradeLabel("7", "유치")).toBe(GRADE_PRESCHOOL);
   });
 });
 
 describe("sortGradeBars", () => {
+  it("미취학이 초1보다 앞", () => {
+    const bars = [
+      { label: "초1", n: 3, enrolled: 1 },
+      { label: GRADE_PRESCHOOL, n: 2, enrolled: 0 },
+    ];
+    expect(sortGradeBars(bars).map((b) => b.label)).toEqual([GRADE_PRESCHOOL, "초1"]);
+  });
+
   it("초1→고3 흐름 순, '분류 불가'는 항상 끝", () => {
     const bars = [
       { label: "고1", n: 5, enrolled: 1 },

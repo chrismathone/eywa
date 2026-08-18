@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { formatSchoolGrade, getGradeLevel, getGradeNumber, schoolGradeLabel } from "./school-grade";
+import {
+  formatSchoolGrade,
+  getGradeLevel,
+  getGradeNumber,
+  isPreschoolGrade,
+  schoolGradeLabel,
+} from "./school-grade";
 
 describe("schoolGradeLabel (표시 표준: 학교+학년 압축)", () => {
   it("학교가 초/중/고로 끝나면 숫자만 붙인다", () => {
@@ -16,6 +22,32 @@ describe("schoolGradeLabel (표시 표준: 학교+학년 압축)", () => {
   it("둘 다 없으면 빈 문자열(호출부 폴백 유지)", () => {
     expect(schoolGradeLabel(null, null)).toBe("");
     expect(schoolGradeLabel(" ", "")).toBe("");
+  });
+});
+
+describe("미취학(7세·6세) — 급간이 없는 학년", () => {
+  it("숫자만 뽑아 붙이지 않는다 — 학교와 띄어 적는다", () => {
+    expect(schoolGradeLabel("Ing유치원", "7세")).toBe("Ing유치원 7세");
+    expect(schoolGradeLabel("미취학", "6세")).toBe("미취학 6세");
+  });
+  it("학교칸에도 같은 나이를 적었으면 학교만", () => {
+    expect(schoolGradeLabel("7세", "7세")).toBe("7세");
+  });
+  it("한쪽만 있으면 그것만", () => {
+    expect(schoolGradeLabel(null, "7세")).toBe("7세");
+    expect(schoolGradeLabel("Ing유치원", null)).toBe("Ing유치원");
+  });
+  it("초/중/고는 종전 그대로", () => {
+    expect(schoolGradeLabel("옥산초", "초3")).toBe("옥산초3");
+  });
+});
+
+describe("isPreschoolGrade", () => {
+  it("나이·미취학·유치 표기만 참", () => {
+    for (const g of ["7세", "6세", "3세", "미취학", "유치원", "유치"]) expect(isPreschoolGrade(g), g).toBe(true);
+    for (const g of ["초1", "중3", "고2", "기타", "", null, undefined]) expect(isPreschoolGrade(g), String(g)).toBe(false);
+    // 🔴 성인 나이는 미취학이 아니다 — `\d+세`로 넓히면 성인반이 출석부에서 초1 앞으로 올라온다.
+    for (const g of ["8세", "13세", "20세", "30세"]) expect(isPreschoolGrade(g), g).toBe(false);
   });
 });
 

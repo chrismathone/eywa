@@ -120,6 +120,12 @@ export function ConsultationFullForm({
   const subjects = useSubjectMaps();
   const gradeLevels = useGradeLevels();
   const v = initial ?? {};
+  // 학년 선택지 = 학원설정 + **현재 값**. 설정에 없는 옛 표기("1"·"예비 1"·"7세" 등 시트 임포트본이
+  // 1,500건 넘는다)를 안 남기면 <select>가 어느 옵션과도 안 맞아 "선택"으로 렌더되고, 다른 칸만
+  // 고쳐 저장해도 학년이 조용히 지워진다(학생 정보 폼이 쓰는 방식과 동일).
+  const currentGrade = (v.prospectGrade ?? "").trim();
+  const gradeOptions =
+    currentGrade && !gradeLevels.includes(currentGrade) ? [...gradeLevels, currentGrade] : gradeLevels;
 
   const router = useRouter();
   const isCreate = mode === "create";
@@ -412,7 +418,7 @@ export function ConsultationFullForm({
               <L label="학년" icon={GraduationCap}>
                 <select name="prospectGrade" defaultValue={v.prospectGrade ?? ""} className={input}>
                   <option value="">선택</option>
-                  {gradeLevels.map((g) => (
+                  {gradeOptions.map((g) => (
                     <option key={g} value={g}>{g}</option>
                   ))}
                 </select>

@@ -160,7 +160,8 @@ export const DEFAULT_SETTINGS: TenantSettings = {
       개발팀: ["연구소장", "부장", "과장", "대리", "사원"],
       아르바이트: ["아르바이트"],
     },
-    gradeLevels: ["초1", "초2", "초3", "초4", "초5", "초6", "중1", "중2", "중3", "고1", "고2", "고3"],
+    // 미취학(6세·7세)이 맨 앞 — 7세반 문의가 들어온다(원장 2026-08-18). 학년 흐름 순서가 곧 표시·정렬 순서다.
+    gradeLevels: ["6세", "7세", "초1", "초2", "초3", "초4", "초5", "초6", "중1", "중2", "중3", "고1", "고2", "고3"],
     weekdayPeriods: WEEKDAY_PERIODS,
     weekendPeriods: WEEKEND_PERIODS,
     terms: [],

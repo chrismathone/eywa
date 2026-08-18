@@ -6,6 +6,7 @@
  * 선택과도 무관해 화면이 거짓말을 했다(연도를 바꿔도 숫자가 그대로였다). 상담 기준이면 연도가 산다.
  */
 import { isSchoolLikeKey, kindFromKey, normalizeSchoolName } from "@/features/schools/school-name";
+import { isPreschoolGrade, PRESCHOOL_LABEL } from "@/lib/format/school-grade";
 
 export type DistBar = { label: string; n: number; enrolled: number };
 
@@ -15,6 +16,9 @@ export type DistBar = { label: string; n: number; enrolled: number };
  * 매핑하는것보다 무시하는것들이 더 정확성이 높을듯."*
  */
 export const GRADE_UNKNOWN = "분류 불가";
+
+/** 미취학(7세·6세) 칸 — 학교 축의 버킷 라벨과 같은 말을 쓴다(한 화면에 두 표기를 만들지 않는다). */
+export const GRADE_PRESCHOOL = PRESCHOOL_LABEL;
 
 /** 급별 유효 학년 — 이 밖의 조합은 만들지 않는다. */
 const MAX_GRADE: Record<string, number> = { 초: 6, 중: 3, 고: 3 };
@@ -30,6 +34,19 @@ const MAX_GRADE: Record<string, number> = { 초: 6, 중: 3, 고: 3 };
  */
 export function gradeLabel(rawGrade: string | null, school: string | null): string {
   const g = String(rawGrade ?? "").replace(/\s+/g, "");
+  // 미취학은 **애매한 게 아니라 확실한 칸**이다(2026-08-18 학년 목록에 6세·7세 추가).
+  if (isPreschoolGrade(g)) return GRADE_PRESCHOOL;
+  const byGrade = classifyByKind(g, school);
+  // 학년칸으로 분류가 안 될 때만 학교칸을 본다 — 학원에 오는 표기는 학년칸(실측 7건)보다
+  // 학교칸("7세"·"Ing유치원", 30건)이 많아 안 보면 분류 불가에 쌓인다.
+  // 🔴 순서가 생명이다: 학교칸을 먼저 보면 **"학교=○○유치원 + 학년=초1"(예비 초1 상담)이 미취학으로
+  //    뒤집힌다** — 명시된 유효 학년은 언제나 이긴다(적대적 리뷰 2026-08-18).
+  if (byGrade === GRADE_UNKNOWN && schoolBucket(school) === GRADE_PRESCHOOL) return GRADE_PRESCHOOL;
+  return byGrade;
+}
+
+/** 급(초·중·고) 기준 분류 — 위 gradeLabel의 본체. 미취학 판정은 호출부가 앞뒤로 감싼다. */
+function classifyByKind(g: string, school: string | null): string {
   if (!g || /^(미상|기타|미정|없음)$/.test(g)) return GRADE_UNKNOWN;
 
   // 이미 급이 붙어 있으면 그 조합이 유효할 때만 인정한다("예비중1"·"초7" 같은 건 분류하지 않는다).
@@ -49,8 +66,9 @@ export function gradeLabel(rawGrade: string | null, school: string | null): stri
   return n >= 1 && n <= MAX_GRADE[kind]! ? `${kind}${n}` : GRADE_UNKNOWN;
 }
 
-/** 학년 흐름 순(초1→고3). 문자 정렬은 "고1 < 중1 < 초1"이 되어 뒤집힌다. */
+/** 학년 흐름 순(미취학→초1→고3). 문자 정렬은 "고1 < 중1 < 초1"이 되어 뒤집힌다. */
 const GRADE_ORDER = [
+  GRADE_PRESCHOOL,
   ...[1, 2, 3, 4, 5, 6].map((n) => `초${n}`),
   ...[1, 2, 3].map((n) => `중${n}`),
   ...[1, 2, 3].map((n) => `고${n}`),
@@ -99,7 +117,7 @@ export function schoolBucket(raw: string | null): string | null {
     return k ? `예비 ${k}` : "예비 (급 미상)";
   }
   // 미취학 — 7세·6세·유치·유아·○○유치원
-  if (/^\d세/.test(s) || /^(유치|유아|미취학)/.test(s) || /유치원$/.test(s)) return "미취학";
+  if (/^\d세/.test(s) || /^(유치|유아|미취학)/.test(s) || /유치원$/.test(s)) return GRADE_PRESCHOOL;
   // 익명 자리표시 — "XX초"·"xx중"·"아무개". 급이 붙어 있어도 학교를 모르는 건 마찬가지다.
   if (/^(xx|ㅇㅇ|00|--)/i.test(s) || /^아무개/.test(s)) return SCHOOL_OTHER;
   // 🔴 급으로 끝나지 않거나(테스트06-04·영선·국제학교) 급만 있는 것(초·중·초등)은 학교가 아니다.
@@ -109,7 +127,7 @@ export function schoolBucket(raw: string | null): string | null {
 /** 묶음 버킷은 지표가 아니라 데이터 품질 표시 — 목록 맨 뒤로 보낸다. */
 export const SCHOOL_BUCKETS = new Set([
   SCHOOL_OTHER,
-  "미취학",
+  GRADE_PRESCHOOL,
   "예비 초",
   "예비 중",
   "예비 고",

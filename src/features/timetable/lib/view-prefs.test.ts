@@ -39,6 +39,11 @@ describe("gradeBucket / bucketsOf", () => {
     expect(bucketsOf(["유1", "초1", "초2"])).toEqual(["유", "초"]);
   });
 
+  it("미취학(6세·7세)은 첫 글자가 숫자라 한 버킷으로 묶는다 — '6'·'7'로 갈리면 안 된다", () => {
+    expect(gradeBucket("7세")).toBe("미취학");
+    expect(bucketsOf(["6세", "7세", "초1"])).toEqual(["미취학", "초"]);
+  });
+
   it("등장 순서를 보존해 유일화", () => {
     expect(bucketsOf(ALL)).toEqual(["초", "중", "고"]);
   });

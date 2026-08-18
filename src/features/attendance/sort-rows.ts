@@ -13,6 +13,8 @@
  *  · `role`   — 담임 먼저, 부담임 나중(담임 판정은 teacher-role.ts).
  */
 
+import { isPreschoolGrade } from "@/lib/format/school-grade";
+
 import type { TeacherRole } from "./teacher-role";
 
 export type AttendanceSortKey = "class" | "name" | "grade" | "role";
@@ -45,6 +47,8 @@ export function parseAttendanceSortKey(raw: unknown): AttendanceSortKey {
 export function gradeOrder(grade: string | null | undefined): number {
   if (!grade) return 9000;
   const s = grade.trim();
+  // 미취학(7세·6세)은 모르는 표기가 아니라 학년 흐름의 **시작**이다 — 초1 앞으로(2026-08-18).
+  if (isPreschoolGrade(s)) return 500 + (Number(s.replace(/[^0-9]/g, "")) || 0);
   const band = s.startsWith("초") ? 1000 : s.startsWith("중") ? 2000 : s.startsWith("고") ? 3000 : 0;
   const n = Number(s.replace(/[^0-9]/g, ""));
   if (band === 0) return 9000; // 초·중·고가 아닌 표기(성인반 등) — 뒤로, 이름순으로 안정 정렬된다.
