@@ -11,7 +11,8 @@
  */
 import { useState } from "react";
 import { toast } from "sonner";
-import { linkMakeupToAbsence, setAttendanceCell } from "../server/actions";
+import { setAttendanceCell } from "../server/actions";
+import { noteMakeupAgainstAbsence } from "../server/makeup-note-action";
 import { fetchMakeupAbsences } from "../server/makeup-actions";
 import type { MakeupAbsenceOption } from "../makeup-options";
 import { MakeupConfirmDialog, type MakeupConfirmChoice } from "./makeup-confirm-dialog";
@@ -75,13 +76,13 @@ export function MakeupAddFlow({
       onDone?.();
       return;
     }
-    const res = await linkMakeupToAbsence({
+    // 🔴 시수는 위에서 이미 그 칸에 적었다 — 여기선 **메모만** 잇는다(합산 액션을 쓰면 두 번 더해진다).
+    const res = await noteMakeupAgainstAbsence({
       studentId: s.id,
-      classId,
-      absentDate: choice.absentDate,
-      absentClassId: choice.absentClassId,
+      makeupClassId: classId,
       makeupDate: date,
-      addUnits: choice.addUnits,
+      absentClassId: choice.absentClassId ?? classId,
+      absentDate: choice.absentDate,
     });
     if ("error" in res) {
       // 칸은 이미 열렸다 — 연결만 실패했다는 사실을 그대로 알린다(둘 다 실패한 것처럼 말하지 않는다).
@@ -91,8 +92,8 @@ export function MakeupAddFlow({
     }
     toast.success(
       res.absenceNoted
-        ? `${s.name} 보강 추가 — 결석 칸에 메모, 수업타임 ${res.units}`
-        : `${s.name} 보강 추가 — 수업타임 ${res.units}. 그날 출결 기록이 없어 메모는 남기지 않았습니다.`,
+        ? `${s.name} 보강 추가 — 결석 칸에 메모, 수업타임 ${choice.addUnits}`
+        : `${s.name} 보강 추가 — 수업타임 ${choice.addUnits}. 그날 결석 기록이 없어 메모는 남기지 않았습니다.`,
     );
     onDone?.();
   }

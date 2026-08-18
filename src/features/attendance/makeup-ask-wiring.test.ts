@@ -52,24 +52,45 @@ describe("영어(ECS)도 같은 확인창을 쓴다", () => {
     expect(code(ecs)).not.toContain("setAttendanceCell");
   });
 
-  it("🔴 칸을 먼저 열고 결석분을 연결한다 — 순서가 뒤집히면 링크가 '출석' 칸을 새로 만든다", () => {
-    const cell = flow.indexOf("setAttendanceCell(");
-    const link = flow.indexOf("linkMakeupToAbsence(");
+  it("🔴 칸을 먼저 열고 결석분을 잇는다 — 순서 비교는 **주석을 지운 코드**에서(주석이 가드를 속인다)", () => {
+    const body = code(flow);
+    const cell = body.indexOf("setAttendanceCell(");
+    const note = body.indexOf("noteMakeupAgainstAbsence(");
     expect(cell).toBeGreaterThan(-1);
-    expect(link).toBeGreaterThan(-1);
-    expect(cell).toBeLessThan(link);
+    expect(note).toBeGreaterThan(-1);
+    expect(cell).toBeLessThan(note);
+  });
+
+  it("🔴 시수를 두 번 더하지 않는다 — 합산 액션(linkMakeupToAbsence)을 이 흐름에서 쓰지 않는다", () => {
+    // 칸을 열며 units를 적어 놓고 합산 액션을 부르면 그 액션이 자기 값을 current로 읽어 1.5→3.0이 된다.
+    expect(code(flow)).not.toContain("linkMakeupToAbsence");
+    expect(code(read("features/onescreen/components/onescreen-client.tsx"))).toContain(
+      "noteMakeupAgainstAbsence(",
+    );
   });
 });
 
 describe("이월 보강 — 메모와 시수가 서로 다른 반에 간다", () => {
   const action = read("features/attendance/server/actions.ts");
+  const note = read("features/attendance/server/makeup-note-action.ts");
 
-  it("결석 칸 조회는 absentClassId, 시수 칸은 classId", () => {
+  it("합산 액션도 결석 칸은 absentClassId, 시수 칸은 classId로 본다(정규 행 있는 경로)", () => {
     expect(action).toContain("latestCell(absentDate, absentClassId)");
     expect(action).toContain("latestCell(makeupDate, classId)");
+    expect(action).toContain("const absentClassId = input.absentClassId || classId");
   });
 
-  it("absentClassId 미지정이면 같은 반으로 떨어진다(기존 동작 보존)", () => {
-    expect(action).toContain("const absentClassId = input.absentClassId || classId");
+  it("🔴 메모 전용 액션은 **수강 여부를 묻지 않는다** — 보강생은 정의상 그 반 수강생이 아니다", () => {
+    const body = code(note);
+    expect(body).toContain("teaching.has(makeupClassId)");
+    expect(body).not.toContain("이 반 수강생이 아닙니다");
+  });
+
+  it("메모는 실제 결석/공결 칸에만 붙는다(아무 날짜에 한 줄 쓰는 표면을 열지 않는다)", () => {
+    expect(code(note)).toContain('absentStatus === "absent" || absentStatus === "excused"');
+  });
+
+  it("메모 전용 액션은 시수를 건드리지 않는다", () => {
+    expect(code(note)).not.toContain("session_units");
   });
 });

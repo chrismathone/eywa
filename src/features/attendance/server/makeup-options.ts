@@ -13,9 +13,11 @@ import { createClient } from "@/lib/supabase/server";
 import { addDays } from "@/lib/date-kst";
 import { buildAbsenceOptions, type AbsenceRow, type MakeupAbsenceOption } from "../makeup-options";
 
-const WINDOW_DAYS = 90;
-/** 한 학생 90일 결석은 실측 수십 행 — 상한을 둬도 잘릴 일이 없지만 방어로 둔다(B2). */
-const MAX_ROWS = 400;
+// 이월 보강은 지난 학기 결석까지 거슬러 간다 — 90일로 자르면 실측 이월 후보(지금 수강 아닌 반의 결석)
+// 249쌍 중 174쌍(70%)이 창 밖으로 떨어졌다. 1년으로 연다.
+const WINDOW_DAYS = 365;
+/** 한 학생 1년 결석은 실측 최다 수십 행 — 상한은 방어용이다(B2). */
+const MAX_ROWS = 1000;
 
 export async function getMakeupAbsenceOptions(
   studentId: string,
@@ -29,7 +31,10 @@ export async function getMakeupAbsenceOptions(
     supabase
       .from("attendance_records")
       // ⚠️ 임베드는 FK 이름을 명시한다(#94 — 컬럼이 늘면 맨몸 임베드는 300으로 죽는다).
-      .select("class_id, session_date, classes!attendance_records_class_id_fkey(class_name)")
+      // ⚠️ FK 힌트 이름은 **그 표의 실제 제약 이름**이다(#94). drizzle 명명이라 `_fkey`가 아니라
+      //    `attendance_records_class_id_classes_id_fk` — 옆 파일(lesson_reports)의 이름을 베끼면
+      //    PostgREST가 400(PGRST200)을 뱉고 목록이 **언제나 비어** "결석 기록이 없습니다"로 위장한다.
+      .select("class_id, session_date, note, classes!attendance_records_class_id_classes_id_fk(class_name)")
       .eq("student_id", studentId)
       .in("status", ["absent", "excused"])
       .gte("session_date", from)
@@ -52,6 +57,8 @@ export async function getMakeupAbsenceOptions(
       classId: r.class_id as string,
       className: (Array.isArray(c) ? c[0]?.class_name : c?.class_name) ?? null,
       date: String(r.session_date),
+      // 이미 보강으로 메운 결석은 그 칸 메모에 표시가 남는다 — 목록에서 '보강 완료'로 가른다.
+      note: (r.note as string | null) ?? null,
     };
   });
   return buildAbsenceOptions(raw, makeupDate, current);

@@ -14,6 +14,7 @@
  * ⚠️ 상태 초기화는 **부모의 조건부 렌더 + key**로 한다(effect에서 setState 금지 — React 19 룰, gotcha #25).
  */
 import { useState } from "react";
+import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
 import type { MergeCandidate } from "@/features/onescreen/makeup-merge-plan";
 import { absenceMemo, shortDate } from "@/features/onescreen/makeup-absence-link";
@@ -40,8 +41,12 @@ export type MakeupConfirmChoice = {
  * 0 이하·숫자 아님은 null(확인이 안 열린다) — 0시수 보강은 기록할 이유가 없고, 음수는 급여를 깎는다.
  */
 function parseAddUnits(raw: string): number | null {
-  const n = Number(raw.trim().replace(",", "."));
-  return Number.isFinite(n) && n > 0 ? n : null;
+  // ⚠️ 서버(`parseSessionUnits`)와 **같은 관용**이어야 한다 — 여기서만 느슨하면 "1.25"·"30"이 확인을
+  //    통과해 저장 단계에서 에러가 나고, 원스크린은 그 실패가 토스트로만 남아 반쪽 상태가 된다.
+  const t = raw.trim().replace(",", ".");
+  if (!/^\d{1,2}(\.\d)?$/.test(t)) return null;
+  const n = Number(t);
+  return Number.isFinite(n) && n > 0 && n <= 20 ? n : null;
 }
 
 /** 직접 입력 모드 sentinel — 셀렉트 값과 섞이지 않게 빈 문자열 대신 명시 토큰을 쓴다. */
@@ -99,9 +104,13 @@ export function MakeupConfirmDialog({
   const beforehand = !!absentDate && makeupDate < absentDate;
   // 합침을 골랐으면 결석분 연결은 의미가 없다(같은 날 한 칸에서 만난다) — 물어보지 않는다.
   const asksAbsence = mode === "separate";
-  const blocked = (canMerge && !chosen) || addUnits === null;
+  /** '직접 입력'을 골라 놓고 날짜를 비운 상태 — 조용히 '추가 보강'이 되지 않게 막는다. */
+  const customEmpty = asksAbsence && absencePick === PICK_CUSTOM && !customDate;
+  const blocked = (canMerge && !chosen) || addUnits === null || customEmpty;
 
-  return (
+  // 🔴 **portal로 body에 붙인다** — ECS 오늘 보드는 카드가 `zoom` 래퍼(글씨 크게) 안이라, 그 안에서
+  //    `position:fixed`를 쓰면 좌표가 배율만큼 곱해져 모달이 화면 밖으로 밀린다([[#98]] 사촌 함정).
+  return createPortal(
     <div
       className="fixed inset-0 z-[60] flex items-end justify-center bg-black/40 p-4 sm:items-center"
       onClick={onCancel}
@@ -256,6 +265,8 @@ export function MakeupConfirmDialog({
         >
           {canMerge && !chosen
             ? "어느 수업의 보강인지 골라 주세요."
+            : customEmpty
+              ? "결석 날짜를 고르거나, 결석분이 아니면 '결석분 아님'을 고르세요."
             : addUnits === null
               ? "보강 시수는 0보다 큰 숫자로 적어 주세요(0.5 = 1시간)."
               : mode === "merge" && chosen
@@ -293,6 +304,7 @@ export function MakeupConfirmDialog({
           </Button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

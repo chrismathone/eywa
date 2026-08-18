@@ -115,6 +115,7 @@ import {
   type MakeupConfirmChoice,
 } from "@/features/attendance/components/makeup-confirm-dialog";
 import { fetchMakeupAbsences } from "@/features/attendance/server/makeup-actions";
+import { noteMakeupAgainstAbsence } from "@/features/attendance/server/makeup-note-action";
 import type { MakeupAbsenceOption } from "@/features/attendance/makeup-options";
 import { mergeStatusOf, planMakeupMerge, type MergeCandidate } from "../makeup-merge-plan";
 import { hasRowOverrides, resolveRowFields, seedRowFields } from "../row-fields";
@@ -315,6 +316,8 @@ export function OneScreenClient({
     isNew: boolean;
     /** 그 학생의 결석 기록(이전 반 포함) — 이월 보강 선택지. */
     absences: MakeupAbsenceOption[];
+    /** 아직 불러오는 중 — 도착 전에 "결석 기록이 없습니다"라고 단언하지 않게. */
+    absencesLoading: boolean;
   } | null>(null);
   const [reports, setReports] = useState<ReportsState>(() => initReports(initial));
   const [genSubject, setGenSubject] = useState<string | null>(null); // AI 멘트 생성 중인 과목(카드 버튼 로딩)
@@ -761,6 +764,7 @@ export function OneScreenClient({
         sentSubjects: [],
         isNew: true,
         absences: [],
+        absencesLoading: true,
       });
       void loadAbsences(studentId);
       return;
@@ -806,6 +810,7 @@ export function OneScreenClient({
         sentSubjects,
         isNew: false,
         absences: [],
+        absencesLoading: true,
       });
       void loadAbsences(studentId);
       return;
@@ -820,13 +825,16 @@ export function OneScreenClient({
       sentSubjects: [],
       isNew: false,
       absences: [],
+      absencesLoading: true,
     });
     void loadAbsences(studentId);
   }
   /** 결석 후보(이전 반 포함)를 뒤늦게 채운다 — 창은 먼저 열고 목록만 도착하면 갈아 끼운다. */
   async function loadAbsences(studentId: string) {
     const list = await fetchMakeupAbsences(studentId, activeDate).catch(() => []);
-    setMakeupAsk((prev) => (prev && prev.studentId === studentId ? { ...prev, absences: list } : prev));
+    setMakeupAsk((prev) =>
+      prev && prev.studentId === studentId ? { ...prev, absences: list, absencesLoading: false } : prev,
+    );
   }
   /**
    * 보강 빼기 — '+ 보강 학생 추가'의 반대(원장 2026-08-18 *"다 삭제"*). 출결 보강 칸과 저장된 보강
@@ -896,7 +904,12 @@ export function OneScreenClient({
       if (choice.absentDate && anchorIdNew) {
         void linkMakeupToAbsenceCell(mk.id, anchorIdNew, choice, mk.name);
       } else {
-        toast.success(`${mk.name} (보강) 추가됨 — 수업타임 ${choice.addUnits}`);
+        // ⚠️ 앵커(보고 있는 반)가 없으면 출결에 남길 칸이 없다 — 시수를 약속하지 않는다(지킬 수 없다).
+        toast.success(
+          anchorIdNew
+            ? `${mk.name} (보강) 추가됨 — 수업타임 ${choice.addUnits}`
+            : `${mk.name} (보강) 추가됨 — 반 필터가 '전체'라 출결에는 남기지 않았습니다(반을 고르면 함께 기록됩니다).`,
+        );
       }
       return;
     }
@@ -917,7 +930,11 @@ export function OneScreenClient({
       if (choice.absentDate && anchorIdNew) {
         void linkMakeupToAbsenceCell(existing.id, anchorIdNew, choice, existing.name);
       } else {
-        toast.success(`${existing.name} (보강) 추가됨 — 수업타임 ${choice.addUnits}`);
+        toast.success(
+          anchorIdNew
+            ? `${existing.name} (보강) 추가됨 — 수업타임 ${choice.addUnits}`
+            : `${existing.name} (보강) 추가됨 — 반 필터가 '전체'라 출결에는 남기지 않았습니다(반을 고르면 함께 기록됩니다).`,
+        );
       }
       return;
     }
@@ -955,22 +972,22 @@ export function OneScreenClient({
     choice: MakeupConfirmChoice,
     name: string,
   ) {
-    const res = await linkMakeupToAbsence({
+    // 🔴 시수는 `persistAnchorMakeup`이 그 칸에 이미 적었다 — 여기선 **메모만**(합산 액션을 쓰면 두 번 더해진다).
+    const res = await noteMakeupAgainstAbsence({
       studentId,
-      classId: makeupClassId,
-      absentDate: choice.absentDate!,
-      absentClassId: choice.absentClassId,
+      makeupClassId,
       makeupDate: activeDate,
-      addUnits: choice.addUnits,
+      absentClassId: choice.absentClassId ?? makeupClassId,
+      absentDate: choice.absentDate!,
     });
     if ("error" in res) {
-      toast.error(`보강 시수를 기록하지 못했습니다 — ${res.error}`);
+      toast.error(`보강은 추가됐지만 결석분 연결에 실패했습니다 — ${res.error}`);
       return;
     }
     toast.success(
       res.absenceNoted
-        ? `${name} 보강 추가 — ${shortDate(choice.absentDate!)} 결석 칸에 메모, 수업타임 ${res.units}`
-        : `${name} 보강 추가 — 수업타임 ${res.units}. ${shortDate(choice.absentDate!)} 칸엔 출결 기록이 없어 메모는 남기지 않았습니다.`,
+        ? `${name} 보강 추가 — ${shortDate(choice.absentDate!)} 결석 칸에 메모, 수업타임 ${choice.addUnits}`
+        : `${name} 보강 추가 — 수업타임 ${choice.addUnits}. ${shortDate(choice.absentDate!)} 칸엔 결석 기록이 없어 메모는 남기지 않았습니다.`,
     );
   }
   /**
@@ -3056,6 +3073,7 @@ export function OneScreenClient({
           candidates={makeupAsk.candidates}
           sentSubjects={makeupAsk.sentSubjects}
           absenceOptions={makeupAsk.absences}
+          absenceLoading={makeupAsk.absencesLoading}
           makeupDate={activeDate}
           onConfirm={resolveMakeupAsk}
           onCancel={() => setMakeupAsk(null)}

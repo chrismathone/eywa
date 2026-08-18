@@ -18,6 +18,12 @@ export type MakeupAbsenceOption = {
   date: string;
   /** 지금은 그 반 수강이 아님(반 이동·수강 종료 뒤) — 화면에 "이전 반"으로 밝힌다. */
   pastClass?: boolean;
+  /**
+   * 이미 보강으로 메운 결석 — 그 칸 메모에 "N/N 보강 예정·완료"가 남아 있다.
+   * 🔴 목록에서 지우지 않고 **표시만** 한다: 같은 결석을 두 번 메우는 오조작은 막아야 하지만,
+   *    보이지 않으면 "왜 내 결석이 목록에 없지"가 된다(멱등은 같은 날짜쌍만 막는다).
+   */
+  alreadyMadeUp?: boolean;
 };
 
 /** 원본 출결 행(중복·정렬 전). */
@@ -25,6 +31,8 @@ export type AbsenceRow = {
   classId: string;
   className: string | null;
   date: string;
+  /** 그 결석 칸의 메모 — "N/N 보강 예정"이 있으면 이미 메운 결석이다. */
+  note?: string | null;
 };
 
 /**
@@ -32,6 +40,9 @@ export type AbsenceRow = {
  * @param makeupDate 보강을 실제로 한 날 — 이 날은 후보에서 뺀다(위 🔴).
  * @param currentClassIds 지금 수강 중인 반 id 집합 — 여기 없으면 '이전 반'으로 표시한다.
  */
+/** 결석 칸 메모의 보강 표시 — `absenceMemo()`가 남기는 "7/16 보강 예정 · 보강 완료" 형태. */
+const MADE_UP_RE = /\d{1,2}\/\d{1,2}\s*보강\s*(예정|완료)/;
+
 export function buildAbsenceOptions(
   rows: readonly AbsenceRow[],
   makeupDate: string,
@@ -51,6 +62,7 @@ export function buildAbsenceOptions(
       className: r.className?.trim() || "(반 이름 없음)",
       date,
       ...(currentClassIds.has(r.classId) ? {} : { pastClass: true }),
+      ...(MADE_UP_RE.test(r.note ?? "") ? { alreadyMadeUp: true } : {}),
     });
   }
   return out.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : a.className.localeCompare(b.className, "ko")));
@@ -59,5 +71,6 @@ export function buildAbsenceOptions(
 /** 화면 표기 — "8/12 (수학 초4 BS1J)" · 이전 반이면 꼬리표를 단다. */
 export function absenceOptionLabel(o: MakeupAbsenceOption): string {
   const [, m, d] = o.date.split("-");
-  return `${Number(m)}/${Number(d)} ${o.className}${o.pastClass ? " (이전 반)" : ""}`;
+  const tags = [o.pastClass ? "이전 반" : null, o.alreadyMadeUp ? "보강 완료" : null].filter(Boolean);
+  return `${Number(m)}/${Number(d)} ${o.className}${tags.length ? ` (${tags.join(" · ")})` : ""}`;
 }

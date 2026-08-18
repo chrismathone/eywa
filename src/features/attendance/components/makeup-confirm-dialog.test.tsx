@@ -174,7 +174,27 @@ describe("결석분 — 목록에서 고른다(이월 보강)", () => {
 
     expect(date).toHaveValue("");
     expect(screen.getByText(/보강한 날이라 결석분으로 고를 수 없습니다/)).toBeInTheDocument();
-    // 비어 있는 상태 = 추가 보강 → 막다른 길이 아니다.
+    // '직접 입력'인데 칸이 비면 확인은 잠긴다 — 조용히 '추가 보강'으로 넘어가면 고른 것과 다른 일이 된다.
+    expect(screen.getByRole("button", { name: "보강 추가" })).toBeDisabled();
+    // 🔴 막다른 길이면 안 된다 — 빠져나갈 길을 문장으로 알려 주고, 그대로 하면 열린다.
+    expect(screen.getByText(/결석분이 아니면 '결석분 아님'을 고르세요/)).toBeInTheDocument();
+    await userEvent.selectOptions(absenceSelect(), "__none__");
+    expect(screen.getByRole("button", { name: "보강 추가" })).toBeEnabled();
+  });
+
+  it("시수 관용은 서버와 같다 — 1.25·30은 확인이 안 열린다(저장 단계 실패 방지)", async () => {
+    setup({ candidates: [] });
+
+    const units = screen.getByLabelText("이번 보강 시수");
+    await userEvent.type(units, "1.25");
+    expect(screen.getByRole("button", { name: "보강 추가" })).toBeDisabled();
+
+    await userEvent.clear(units);
+    await userEvent.type(units, "30");
+    expect(screen.getByRole("button", { name: "보강 추가" })).toBeDisabled();
+
+    await userEvent.clear(units);
+    await userEvent.type(units, "1.5");
     expect(screen.getByRole("button", { name: "보강 추가" })).toBeEnabled();
   });
 
