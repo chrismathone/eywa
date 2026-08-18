@@ -237,8 +237,9 @@ export async function getStudentsList(
   if (options?.teacherId && options.teacherId !== "all") {
     rows = rows.filter((r) => teachersByStudent.get(r.id)?.has(options.teacherId!));
   }
-  // 미수강 제외 (in-memory — 전건을 이미 받았으므로)
-  if (options?.excludeNoEnrollment) {
+  // 미수강 제외 (in-memory — 전건을 이미 받았으므로). 상태=퇴원이면 무시(getStudentsPage와 같은 이유 —
+  // 퇴원생은 활성 수강이 없어 전원 걸러져 "항상 0명"이 된다).
+  if (options?.excludeNoEnrollment && options?.status !== "withdrawn") {
     rows = rows.filter((r) => enrolledSet.has(r.id));
   }
 
@@ -329,8 +330,12 @@ export async function getStudentsPage(
   }
 
   // 과목·'미수강 제외'는 **id 목록이 아니라 embed 조인**으로 건다(위 enrollmentEmbed 주석의 🔴 참조).
+  // 🔴 상태=퇴원에선 '미수강 제외'를 무시한다 — 퇴원생은 정의상 활성 수강이 없어 inner join이 전원을
+  //    걸러 "검색해도 항상 0명"이 된다(2026-08-18 실사고: 퇴원 처리된 엄채율이 목록 어디서도 안 보임.
+  //    토글이 계정 귀속(ui_prefs)이라 켜둔 채 퇴원 필터로 넘어오면 반드시 재현).
+  const excludeNoEnrollment = !!options?.excludeNoEnrollment && options?.status !== "withdrawn";
   const needEnrollmentJoin =
-    !!options?.excludeNoEnrollment || (!!options?.subject && options.subject !== "all");
+    excludeNoEnrollment || (!!options?.subject && options.subject !== "all");
   const embed = enrollmentEmbed(options);
 
   let qb = supabase

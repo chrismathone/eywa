@@ -9,6 +9,7 @@ import { DupSuspectTag } from "@/components/dup-suspect-tag";
 import { EditingBadge } from "@/features/presence/editing-badge";
 import { Button } from "@/components/ui/button";
 import { requireAccess } from "@/lib/auth/require-access";
+import { accessLevelTenant } from "@/lib/auth/perm-matrix";
 import {
   getStudentsPage,
   getEnrolledStatCounts,
@@ -51,7 +52,10 @@ export default async function StudentsPage({
     noenr?: string;
   }>;
 }) {
-  await requireAccess("students");
+  const user = await requireAccess("students");
+  // 학생 생성(새 학생·엑셀 가져오기) = full만 — 강사(scoped)는 열람 전용(원장 지시 2026-08-18).
+  // 서버 액션(createStudent·import-actions)도 같은 full 판정이라 UI 숨김은 이중 방어다(#77).
+  const canManageStudent = (await accessLevelTenant(user.systemRole, "students")) === "full";
   const sp = await searchParams;
   // 상태 필터 디폴트 = 재원(운영에서 당장 중요한 건 재원생). "전체"는 명시적 status=all로만.
   const status = sp.status ?? "enrolled";
@@ -145,8 +149,8 @@ export default async function StudentsPage({
               <EyIcon name="arrowDown" size={13} />
               엑셀 내보내기
             </Button>
-            <StudentImportDialog />
-            <NewStudentTrigger />
+            {canManageStudent ? <StudentImportDialog /> : null}
+            {canManageStudent ? <NewStudentTrigger /> : null}
           </>
         }
       />
