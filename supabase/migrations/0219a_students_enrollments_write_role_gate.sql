@@ -1,4 +1,4 @@
--- 0218a — 학생·수강 쓰기 역할 게이트 + 감사로그 append-only (2026-08-18 퇴원 사고 후속, 적대 리뷰 F1)
+-- 0219a — 학생·수강 쓰기 역할 게이트 + 감사로그 append-only (2026-08-18 퇴원 사고 후속, 적대 리뷰 F1)
 --
 -- 배경: 2026-08-18 소급 퇴원 사고 대응(d3cbe93d)이 서버 액션 게이트(canManageStudentRecords) +
 -- 전수 감사로그를 깔았지만, students·enrollments·audit_logs의 RLS는 여전히 **역할을 안 보는

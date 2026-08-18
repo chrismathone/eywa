@@ -584,7 +584,7 @@ export async function archiveClass(
   if (!user) return { error: "로그인이 필요합니다" };
   // 폐지/복구는 그 반 **전원의 수강을 일괄 종료/복원**한다(학생 기록 대량 변경) — 관리자(full)만.
   // 종전 scoped 허용은 담당 반 확인도 없어서 강사가 임의 반을 폐지할 수 있던 구멍(적대 리뷰 후속,
-  // 강사=학생 기록 열람 전용 결정과 0218a RLS(enrollments 쓰기 역할 게이트)에 정합).
+  // 강사=학생 기록 열람 전용 결정과 0219a RLS(enrollments 쓰기 역할 게이트)에 정합).
   if (!(await canManageTenant(user.systemRole, "classes"))) {
     return { error: "반 폐지/복구는 관리자만 할 수 있습니다" };
   }
