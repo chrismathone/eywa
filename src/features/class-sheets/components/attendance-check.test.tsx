@@ -116,4 +116,25 @@ describe("ECS 출결 체크 — 지각·결석 사유 창", () => {
     expect(screen.getByText("조퇴")).toBeTruthy();
     expect(screen.queryByRole("button")).toBeNull();
   });
+
+  it("보강 + onRemoveMakeup이면 칸이 버튼이고, 확인 후에만 뺀다", () => {
+    const onRemoveMakeup = vi.fn();
+    window.confirm = vi.fn(() => true);
+    render(
+      <AttendanceCheck {...base} status="makeup" note={null} onRemoveMakeup={onRemoveMakeup} />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "김학생 보강 취소" }));
+    expect(window.confirm).toHaveBeenCalled();
+    expect(onRemoveMakeup).toHaveBeenCalledTimes(1);
+  });
+
+  it("보강인데 확인을 취소하면 아무 일도 없다", () => {
+    const onRemoveMakeup = vi.fn();
+    window.confirm = vi.fn(() => false);
+    render(
+      <AttendanceCheck {...base} status="makeup" note={null} onRemoveMakeup={onRemoveMakeup} />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "김학생 보강 취소" }));
+    expect(onRemoveMakeup).not.toHaveBeenCalled();
+  });
 });

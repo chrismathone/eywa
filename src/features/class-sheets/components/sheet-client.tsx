@@ -27,6 +27,7 @@ import {
   setMyEcsShowSelfStudy,
   upsertGoal,
   upsertStudentMark,
+  removeMakeupAttendee,
   type PlanLineDTO,
 } from "../server/actions";
 import { ECS_FONT_SIZE_ZOOM, type EcsFontSize } from "../font-size";
@@ -92,6 +93,8 @@ export type SheetHandlers = {
    * 새로고침하면 돌아오는 거짓 성공을 만들지 않는다. ⚠️ 0203a 미적용 창에선 present만 지워진다(#95).
    */
   clearAttendance: (studentId: string, date: string, slotStart: string) => void;
+  /** 보강 명단에서 빼기 — 수강생이 아닌 행만. 출결+태도 기록을 지운다. */
+  removeMakeup: (studentId: string, date: string) => void;
   /**
    * **사유만** 고치는 저장(`setAttendanceCell({ noteOnly: true })`) — 상태·시수는 서버가 읽지도 쓰지도
    * 않는다. 🔴 이 경로만 **강사 7일 편집창을 면제**받는다(원장 2026-08-06 *"메모는 언제든 추가할 수
@@ -547,6 +550,33 @@ export function SheetClient({
         });
         trackAttendanceSave(save);
       },
+      removeMakeup: (studentId, date) => {
+        if (!data.canMarkAttendanceByDate[date]) return;
+        const prefix = `${studentId}|${date}|`;
+        const before = Object.fromEntries(
+          Object.entries(attendanceRef.current).filter(([k]) => k.startsWith(prefix)),
+        );
+        setAttendance((prev) => {
+          const next = { ...prev };
+          for (const k of Object.keys(before)) delete next[k];
+          return next;
+        });
+        setMarks((prev) => {
+          const next = { ...prev };
+          for (const k of Object.keys(prev)) if (k.startsWith(prefix)) delete next[k];
+          return next;
+        });
+        const save = removeMakeupAttendee({ classId, studentId, date }).then((r) => {
+          if (!r.ok) {
+            setAttendance((prev) => ({ ...prev, ...before }));
+            toast.error(r.error);
+            return;
+          }
+          toast.success("보강 명단에서 뺐습니다");
+          router.refresh();
+        });
+        trackAttendanceSave(save);
+      },
       // 사유만 — 상태·시수는 안 보낸다(noteOnly). 잠긴 날짜(7일 초과)의 유일한 쓰기 경로라
       // `canMarkAttendanceByDate`를 보지 않는다 — 대신 서버가 권한·담당 반을 그대로 검사한다(#77).
       setAttendanceNote: (studentId, date, slotStart, note) => {
@@ -614,7 +644,7 @@ export function SheetClient({
       },
     }),
     // unitsByDate가 빠지면 주를 넘긴 뒤에도 **옛 주의 유닛**이 박힌다(시수=급여라 조용한 오기록).
-    [classId, data.canMarkAttendanceByDate, data.unitsByDate, store, trackAttendanceSave],
+    [classId, data.canMarkAttendanceByDate, data.unitsByDate, router, store, trackAttendanceSave],
   );
 
   const saveGoal = useCallback(

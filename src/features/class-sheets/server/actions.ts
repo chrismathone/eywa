@@ -1,5 +1,6 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 // ECS 서버 액션 — 전부 requireEcsClassAccess(write) 공용 게이트(#77) 뒤. class_sheet_*는 deny-RLS라
 // admin client(service_role)로만 접근하되, **모든 select/update가 tenant_id + class_id + id 3중 조건**
 // (게이트한 반과 변경 행의 결속 — 계획 v2.2 §A). 구조 변경(create/move/delete/copy)은 0157a RPC 위임
@@ -667,6 +668,92 @@ async function checkStudentEligibleOn(
   if (attErr) return { ok: false, error: `수강 확인에 실패했습니다: ${attErr.message}` };
   if ((count ?? 0) > 0) return { ok: true };
   return { ok: false, error: "그 날짜에 이 반을 수강하지 않는 학생입니다(기록 행은 읽기 전용)" };
+}
+
+/**
+ * 보강(수업외) 명단에서 뺀다 — '+ 보강 학생 추가'의 반대.
+ * 수강생 출결을 지우면 안 되므로 **그날 실수강이면 거절**한다(출석 폴백 없는 수강 판정).
+ * 출결·시트 태도 기록을 함께 지워야 다음 조회에 행이 안 남는다(마크만 있으면 '기록' 섹션).
+ */
+export async function removeMakeupAttendee(input: {
+  classId: string;
+  studentId: string;
+  date: string;
+}): Promise<{ ok: true } | ActionError> {
+  const gate = await requireEcsClassAccess(input.classId, { write: true });
+  if (!gate.ok) return { ok: false, error: gate.error };
+  if (!YMD_RE.test(input.date) || !input.studentId) return { ok: false, error: "잘못된 요청입니다" };
+  const { user, tenantId } = gate.access;
+  if (!(await canWriteTenant(user.systemRole, "attendance"))) {
+    return { ok: false, error: "출석 입력 권한이 없습니다" };
+  }
+  if (user.systemRole === "teacher" && !isWithinAttendanceEditWindow(input.date, kstToday())) {
+    return { ok: false, error: attendanceLockMessage(input.date, kstToday()) };
+  }
+
+  const admin = createAdminClient();
+  const { data: enrs, error: enrErr } = await admin
+    .from("enrollments")
+    .select("start_date, end_date, on_hold, is_transferred, attendance_days, students!inner(withdrawn_at)")
+    .eq("tenant_id", tenantId)
+    .eq("class_id", input.classId)
+    .eq("student_id", input.studentId);
+  if (enrErr) return { ok: false, error: `수강 확인에 실패했습니다: ${enrErr.message}` };
+  const dow = dowKeyOf(input.date);
+  const enrolled = (enrs ?? []).some((e) => {
+    const withdrawnAt = (e.students as unknown as { withdrawn_at: string | null } | null)?.withdrawn_at ?? null;
+    if (withdrawnAt && withdrawnAt < input.date) return false;
+    if (
+      !isEnrollmentActiveOn(
+        {
+          startDate: e.start_date as string,
+          endDate: (e.end_date as string | null) ?? null,
+          onHold: e.on_hold as boolean,
+          isTransferred: (e.is_transferred as boolean | null) ?? undefined,
+        },
+        input.date,
+      )
+    ) {
+      return false;
+    }
+    return enrollmentAttendsOnDay(e.attendance_days as string[] | null, dow);
+  });
+  if (enrolled) {
+    return { ok: false, error: "이 반 수강생입니다 — 보강 명단에서 빼는 대상이 아닙니다" };
+  }
+
+  const { count, error: attErr } = await admin
+    .from("attendance_records")
+    .select("*", { count: "exact", head: true })
+    .eq("tenant_id", tenantId)
+    .eq("class_id", input.classId)
+    .eq("student_id", input.studentId)
+    .eq("session_date", input.date);
+  if (attErr) return { ok: false, error: `출결 확인에 실패했습니다: ${attErr.message}` };
+  if ((count ?? 0) === 0) return { ok: false, error: "보강 출결 기록이 없습니다" };
+
+  const { error: delAtt } = await admin
+    .from("attendance_records")
+    .delete()
+    .eq("tenant_id", tenantId)
+    .eq("class_id", input.classId)
+    .eq("student_id", input.studentId)
+    .eq("session_date", input.date);
+  if (delAtt) return { ok: false, error: `보강을 빼지 못했습니다: ${delAtt.message}` };
+
+  const { error: delMarks } = await admin
+    .from("class_sheet_student_marks")
+    .delete()
+    .eq("tenant_id", tenantId)
+    .eq("class_id", input.classId)
+    .eq("student_id", input.studentId)
+    .eq("mark_date", input.date);
+  if (delMarks) return { ok: false, error: `보강을 뺐지만 태도 기록이 남았습니다: ${delMarks.message}` };
+
+  revalidatePath("/ecs");
+  revalidatePath("/attendance");
+  revalidatePath("/onescreen");
+  return { ok: true };
 }
 
 // ── 출석(비파괴) ─────────────────────────────────────────────────────────────

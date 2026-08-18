@@ -198,6 +198,9 @@ export function RosterSlotCells({
           onSet={(status, n) => handlers.setAttendance(entry.studentId, date, slotStart, status, n)}
           onClear={() => handlers.clearAttendance(entry.studentId, date, slotStart)}
           onNote={(n) => handlers.setAttendanceNote(entry.studentId, date, slotStart, n)}
+          onRemoveMakeup={
+            entry.isMakeup ? () => handlers.removeMakeup(entry.studentId, date) : undefined
+          }
         />
       </td>
       <td className="px-1 py-px text-center">

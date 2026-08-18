@@ -6,7 +6,10 @@
  * setAttendanceCell/clearPresentAttendance 두 경로만, 보고서는 원스크린 링크만).
  */
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import type { BasicAttendance } from "../lib/mark-cycle";
+import { removeMakeupAttendee } from "../server/actions";
 import { TodayAttendancePills } from "./today-attendance-pills";
 import { TodayMarkPopover, type MarkMap, type MarkSlot, type StudentMark } from "./today-mark-popover";
 import type { TodayClassCard, TodayStudent } from "../server/today";
@@ -36,6 +39,7 @@ export function StudentRow({
   onSet: (status: BasicAttendance, note?: string | null) => void;
   onClear: () => void;
 }) {
+  const router = useRouter();
   return (
     // ⚠️ 이름 칸을 `1fr`로 두고 행을 화면 폭에 맡기면 넓은 창에서 이름은 왼쪽 끝, 컨트롤은 오른쪽 끝으로
     // **벌어져** 한 줄을 눈으로 잇기 어렵다(2026-08-07 실화면). 폭은 목록 컨테이너(`max-w`)가 잡고,
@@ -60,6 +64,24 @@ export function StudentRow({
           canMark={card.canMarkAttendance}
           onSet={onSet}
           onClear={onClear}
+          onRemoveMakeup={
+            student.isMakeup
+              ? () => {
+                  void removeMakeupAttendee({
+                    classId: card.classId,
+                    studentId: student.studentId,
+                    date,
+                  }).then((r) => {
+                    if (!r.ok) {
+                      toast.error(r.error);
+                      return;
+                    }
+                    toast.success("보강 명단에서 뺐습니다");
+                    router.refresh();
+                  });
+                }
+              : undefined
+          }
         />
       </span>
       {/* 태도·특이사항 — 주간 시트의 두 칸을 **교시별로** 담은 팝오버(행을 넓히지 않으면서 같은 표를 고친다). */}

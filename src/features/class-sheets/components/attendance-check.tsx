@@ -64,6 +64,7 @@ export function AttendanceCheck({
   onSet,
   onClear,
   onNote,
+  onRemoveMakeup,
 }: {
   status: string | null;
   /** 사유 메모 — 있으면 점(●)으로 표시하고, 지각·결석 창에 **채워서** 연다(빈칸으로 열면 조용히 지워진다). */
@@ -78,6 +79,11 @@ export function AttendanceCheck({
   onSet: (status: BasicAttendance, note?: string | null) => void;
   /** '선택 안 함' — 사유·시수 안 붙은 기본 3종만 지워진다(0203a. 손댄 기록은 서버가 거절하고 사유를 띄운다). */
   onClear: () => void;
+  /**
+   * 보강(수업외) 명단에서 빼기 — 수강생이 아닌 행만 넘긴다. 있으면 회색 칸이 버튼이 된다.
+   * 순환(출석/결석)으로 바꾸면 보강 상태가 사라지므로 빼는 길만 연다.
+   */
+  onRemoveMakeup?: () => void;
   /** 메모만 저장(`noteOnly`) — 상태·시수는 서버가 읽지도 쓰지도 않는다. 잠긴 칸의 유일한 쓰기 경로. */
   onNote?: (note: string | null) => void;
 }) {
@@ -157,6 +163,22 @@ export function AttendanceCheck({
   }
 
   if (!isEditableStatus(status)) {
+    if (status === "makeup" && onRemoveMakeup && canMark) {
+      return (
+        <button
+          type="button"
+          className={`${SHEET_BOX} text-purple hover:bg-purple/10 w-full cursor-pointer font-bold`}
+          title="클릭하면 보강 명단에서 뺍니다(출석 기록이 삭제됩니다)"
+          aria-label={`${studentName} 보강 취소`}
+          onClick={() => {
+            if (!window.confirm(`${studentName} 보강을 명단에서 뺄까요? 출석 기록이 삭제됩니다.`)) return;
+            onRemoveMakeup();
+          }}
+        >
+          {label}
+        </button>
+      );
+    }
     return (
       <span
         className={SHEET_BOX_READONLY}
