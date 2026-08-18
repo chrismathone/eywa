@@ -23,6 +23,7 @@ import { createClient } from "@/lib/supabase/server";
 import { humanizeDbError } from "@/lib/supabase/db-error";
 import { logAction } from "@/features/audit/server/log";
 import { teacherOwnsStudent } from "@/features/onescreen/server/scope";
+import { ownsMakeupReport } from "@/features/onescreen/makeup-owner";
 import { RECALL_FAILED, RECALL_REQUESTED, partitionRecallTargets } from "../report-recall";
 
 /** 한 번에 처리할 상한 — 실수로 전체 선택해 대량 삭제가 나가는 것을 구조적으로 막는다. */
@@ -70,7 +71,9 @@ export async function requestReportRecall(ids: string[]): Promise<RecallResult> 
   // ⚠️ 임베드는 FK 이름을 명시한다(#94 — lesson_reports→students FK가 늘면 맨몸 임베드는 전 쿼리가 죽는다).
   const { data: rows, error: readError } = await supabase
     .from("lesson_reports")
-    .select("id, student_id, report_date, classnote_status, share_token, students!lesson_reports_student_id_fkey(name)")
+    .select(
+      "id, student_id, report_date, classnote_status, share_token, makeup, class_id, created_by, teacher_name, students!lesson_reports_student_id_fkey(name)",
+    )
     .in("id", capped);
   if (readError) return { ok: false, error: humanizeDbError(readError.message, "보고서 조회") };
   if (!rows?.length) return { ok: false, error: "보고서를 찾을 수 없습니다" };
@@ -82,14 +85,35 @@ export async function requestReportRecall(ids: string[]): Promise<RecallResult> 
   let forbidden = 0;
   if (!isAdmin) {
     const owned = await Promise.all(
-      rows.map((r) =>
-        teacherOwnsStudent(supabase, user.id, r.student_id as string, r.report_date as string).catch(() => false),
-      ),
+      rows.map(async (r) => {
+        // 🔴 **보강(수업외) 보고서는 담당 판정으로 막으면 안 된다** — 보강 학생은 정의상 내 반 수강생이
+        //    아닌 경우가 흔해(`buildMakeupStudent`가 학원 전체를 허용) `teacherOwnsStudent`가 false가 된다.
+        //    실측(2026-08-18): 발송된 순수 보강 168건 중 **정확히 절반(84건)** 이 이 게이트에서 거부됐다 —
+        //    자기가 쓴 보고서를 자기가 회수하지 못하는 상태였다(보강 빼기·카드 회수 버튼 모두).
+        //    보강은 **작성 소유**가 담당 판정을 대신한다(원스크린 로스터가 이 축으로 행을 되살린다).
+        if (r.makeup === true && !r.class_id) {
+          return ownsMakeupReport(
+            { createdBy: r.created_by as string | null, teacherName: r.teacher_name as string | null },
+            user.id,
+            user.displayName ?? "",
+          );
+        }
+        return teacherOwnsStudent(
+          supabase,
+          user.id,
+          r.student_id as string,
+          r.report_date as string,
+        ).catch(() => false);
+      }),
     );
     allowed = rows.filter((_, i) => owned[i]);
     forbidden = rows.length - allowed.length;
     if (!allowed.length)
-      return { ok: false, forbidden, error: "담당 학생의 보고서만 회수할 수 있습니다" };
+      return {
+        ok: false,
+        forbidden,
+        error: "담당 학생의 보고서 또는 내가 쓴 보강 보고서만 회수할 수 있습니다",
+      };
   }
 
   const { targets, blocked } = partitionRecallTargets(

@@ -264,7 +264,9 @@ export function ReportCard({
             <div className="flex flex-wrap items-center gap-1.5">
               <p className="text-foreground text-[15px] font-bold">{student.name} · 학부모 보고</p>
               {/* 보강 빼기 — 표 모드와 같은 문(원장 2026-08-18 *"다 삭제"*). 확인 후 출결·보고서를 지운다. */}
-              {student.isMakeup && onRemoveMakeup ? (
+              {/* 순수 보강 행이면 정규 학생 카드에서도 뺄 수 있어야 한다(적대 리뷰 M2) — 학생 단위
+                  isMakeup만 보면 "정규 수업도 듣는 학생의 보강"에 문이 없다. 반이 붙은 '정규+보강'은 제외. */}
+              {(student.isMakeup || (subject.makeup && !subject.classId)) && onRemoveMakeup ? (
                 <button
                   type="button"
                   onClick={() => onRemoveMakeup(subject.name)}
@@ -275,7 +277,7 @@ export function ReportCard({
                   보강
                   <EyIcon name="close" size={9} />
                 </button>
-              ) : student.isMakeup ? (
+              ) : student.isMakeup || (subject.makeup && !subject.classId) ? (
                 <span className="bg-amber-soft text-amber rounded-pill px-1.5 py-px text-[10px] font-bold">
                   보강
                 </span>

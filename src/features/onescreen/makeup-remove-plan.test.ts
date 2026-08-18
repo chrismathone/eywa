@@ -15,7 +15,7 @@ const row = (o: Partial<{ id: string; classnoteStatus: string | null; shareToken
 describe("planMakeupRemoval", () => {
   it("미발송(상태 없음)은 바로 삭제", () => {
     const p = planMakeupRemoval([row()]);
-    expect(p).toEqual({ deleteIds: ["r1"], recallIds: [], busyIds: [] });
+    expect(p).toEqual({ deleteIds: ["r1"], recallIds: [], busyIds: [], manualIds: [] });
   });
 
   it("🔴 발송 완료는 삭제가 아니라 회수 — 먼저 지우면 학부모 게시글이 영원히 남는다", () => {
@@ -45,9 +45,10 @@ describe("planMakeupRemoval", () => {
     expect(p.recallIds).toEqual([]);
   });
 
-  it("게시는 됐다는데 공유 토큰이 없으면 회수 불가 → 기록만 삭제(게시글은 사람이 지운다)", () => {
+  it("🔴 게시는 됐는데 공유 토큰이 없으면 **지우지 않는다** — 지우면 게시글은 남고 흔적만 사라진다", () => {
     const p = planMakeupRemoval([row({ classnoteStatus: "success", shareToken: null })]);
-    expect(p.deleteIds).toEqual(["r1"]);
+    expect(p.manualIds).toEqual(["r1"]);
+    expect(p.deleteIds).toEqual([]);
     expect(p.recallIds).toEqual([]);
   });
 
@@ -77,6 +78,17 @@ describe("makeupRemoveMessage — 실제로 일어난 일만 적는다", () => {
     expect(makeupRemoveMessage({ attendanceRemoved: false, deleted: 0, recalled: 0, busy: 2 })).toContain(
       "끝난 뒤에 다시 시도",
     );
+  });
+
+  it("남의 보강이 섞였으면 남는다고 말한다(조용히 넘기면 '반만 빠졌다'가 된다)", () => {
+    const msg = makeupRemoveMessage({
+      attendanceRemoved: true,
+      deleted: 1,
+      recalled: 0,
+      busy: 0,
+      notMine: 2,
+    });
+    expect(msg).toContain("다른 선생님이 쓴 보강 2건은 그대로 남습니다");
   });
 
   it("아무것도 안 지웠으면 그렇게 말한다(거짓 성공 금지)", () => {

@@ -383,10 +383,26 @@ export function GridBodyRow({
                  섞여 들어온 보강 행"을 가르는 것이라, 학생 전체가 보강이면 이름 옆 배지 하나로 충분하다. */}
           {/* 반이 붙은 행의 보강 = 그날 정규까지 한 "정규+보강"(2026-08-05 합치기) — 라벨을 갈라 적어야
               강사가 "왜 보강인데 보고서가 하나지?"를 화면에서 바로 이해한다. 판정은 makeup-label.ts 단일 소스. */}
+          {/* 🔴 정규 학생 카드에 섞여 들어온 **순수 보강 행**(classId 없음)도 빼는 문이 있어야 한다
+              (적대 리뷰 M2 — 버튼을 학생 단위 `isMakeup`에만 달면 최근 60일 67건 중 12건이 못 뺀다).
+              반이 붙은 '정규+보강'은 대상 아님(그건 체크박스로 끈다 — 지우면 정규 보고서가 날아간다). */}
           {subject.makeup && !student.isMakeup ? (
-            <span className="bg-amber-soft text-amber shrink-0 rounded-pill px-1 py-px text-[9px] font-bold">
-              {makeupBadgeLabel({ makeup: true, hasClass: !!subject.classId })}
-            </span>
+            actions.onRemoveMakeup && !subject.classId ? (
+              <button
+                type="button"
+                onClick={() => actions.onRemoveMakeup?.(student, subject.name)}
+                title="클릭하면 이 보강을 뺍니다(출결 기록과 저장된 보강 보고서가 삭제됩니다)"
+                aria-label={`${student.name} ${subject.name} 보강 빼기`}
+                className="bg-amber-soft text-amber hover:bg-amber inline-flex shrink-0 cursor-pointer items-center gap-0.5 rounded-pill px-1 py-px text-[9px] font-bold transition hover:text-white"
+              >
+                {makeupBadgeLabel({ makeup: true, hasClass: false })}
+                <EyIcon name="close" size={8} />
+              </button>
+            ) : (
+              <span className="bg-amber-soft text-amber shrink-0 rounded-pill px-1 py-px text-[9px] font-bold">
+                {makeupBadgeLabel({ makeup: true, hasClass: !!subject.classId })}
+              </span>
+            )
           ) : null}
           {subject.subjectLabel && subject.name !== subject.subjectLabel && subject.className ? (
             <span className="text-text-faint text-[10px]">{subject.className}</span>

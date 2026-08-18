@@ -15,6 +15,7 @@
 import {
   isRecallable,
   isRecallInFlight,
+  RECALL_FAILED,
   RECALL_REQUESTED,
   RECALLED,
 } from "@/features/report-admin/report-recall";
@@ -32,6 +33,11 @@ export type MakeupRemovePlan = {
   recallIds: string[];
   /** 지금 건드리면 안 되는 행(발송·회수 처리 중). */
   busyIds: string[];
+  /**
+   * 게시는 됐는데 **공유 토큰이 없어 자동 회수가 불가능한** 행 — 사람이 ClassNote에서 직접 지워야 한다.
+   * 🔴 이걸 그냥 삭제하면 학부모 게시판에 글이 남는데 eywa엔 흔적이 0이 된다(찾을 방법이 사라진다).
+   */
+  manualIds: string[];
 };
 
 /**
@@ -41,7 +47,7 @@ export type MakeupRemovePlan = {
  * - `deleteIds` = 나머지(미발송·발송 실패·회수 완료) → 행 삭제.
  */
 export function planMakeupRemoval(rows: MakeupReportRef[]): MakeupRemovePlan {
-  const plan: MakeupRemovePlan = { deleteIds: [], recallIds: [], busyIds: [] };
+  const plan: MakeupRemovePlan = { deleteIds: [], recallIds: [], busyIds: [], manualIds: [] };
   for (const r of rows) {
     const status = r.classnoteStatus;
     if (isRecallInFlight(status) || status === "queued" || status === "processing") {
@@ -50,6 +56,11 @@ export function planMakeupRemoval(rows: MakeupReportRef[]): MakeupRemovePlan {
     }
     if (isRecallable({ classnoteStatus: status, shareToken: r.shareToken })) {
       plan.recallIds.push(r.id);
+      continue;
+    }
+    // 게시는 됐는데 토큰이 없다 = 자동 회수 불가. 지우면 학부모 게시판에 글만 남고 흔적이 사라진다.
+    if ((status === "success" || status === RECALL_FAILED) && !r.shareToken) {
+      plan.manualIds.push(r.id);
       continue;
     }
     // 회수가 끝난 행(recalled)은 게시글이 이미 없다 → 기록만 지우면 끝.
@@ -67,6 +78,8 @@ export function makeupRemoveMessage(r: {
   deleted: number;
   recalled: number;
   busy: number;
+  /** 남이 쓴 보강이라 못 건드린 수 — 조용히 넘기면 "반만 빠졌다"가 원인 불명으로 남는다. */
+  notMine?: number;
 }): string {
   const parts: string[] = [];
   if (r.attendanceRemoved) parts.push("출결 기록을 지웠습니다");
@@ -74,6 +87,7 @@ export function makeupRemoveMessage(r: {
   if (r.recalled > 0)
     parts.push(`학부모에게 나간 보고서 ${r.recalled}건은 게시글 삭제를 요청했습니다(연동 PC가 순차 처리)`);
   if (r.busy > 0) parts.push(`발송·회수 처리 중인 ${r.busy}건은 끝난 뒤에 다시 시도하세요`);
+  if ((r.notMine ?? 0) > 0) parts.push(`다른 선생님이 쓴 보강 ${r.notMine}건은 그대로 남습니다`);
   return parts.length ? parts.join(" · ") : "지울 기록이 없습니다";
 }
 

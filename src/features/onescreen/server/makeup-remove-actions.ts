@@ -29,6 +29,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { humanizeDbError } from "@/lib/supabase/db-error";
 import { kstToday } from "@/lib/date-kst";
+import { LEGACY_REPORT_SUBJECT } from "@/features/timetable/lib/report-subject";
 import { logAction } from "@/features/audit/server/log";
 import { attendanceLockMessage, isWithinAttendanceEditWindow } from "@/features/attendance/edit-window";
 import { requestReportRecall } from "@/features/report-admin/server/recall-actions";
@@ -87,18 +88,24 @@ export async function removeMakeupEntry(input: {
   const tenantId = user.tenantId;
 
   // ── 1) 저장된 보강 보고서(순수 보강만) ─────────────────────────────────────────
-  let reportQuery = supabase
+  const { data: reportRows, error: reportErr } = await supabase
     .from("lesson_reports")
     .select("id, subject, classnote_status, share_token, created_by, teacher_name")
     .eq("student_id", input.studentId)
     .eq("report_date", input.date)
     .eq("makeup", true)
     .is("class_id", null); // 정규 보고서(반 있음)는 대상 아님 — '정규+보강' 합친 건은 체크박스로 끈다
-  if (input.subject) reportQuery = reportQuery.eq("subject", input.subject);
-  const { data: reportRows, error: reportErr } = await reportQuery;
   if (reportErr) return { ok: false, error: humanizeDbError(reportErr.message, "보강 보고서 조회") };
 
-  const mine = (reportRows ?? []).filter(
+  // 🔴 과목 매칭은 **SQL이 아니라 JS**로 — 옛 보강은 `subject`가 NULL이고(실측 143건) 화면은 그걸
+  //    LEGACY_REPORT_SUBJECT("math")로 채워 보여준다. `.eq("subject","math")`로 거르면 그 143건이
+  //    한 건도 안 잡혀 "출결만 지우고 성공"이 되고, 새로고침하면 보고서가 행을 되살린다(적대 리뷰 M6).
+  const targetSubject = input.subject?.trim() || null;
+  const subjectMatched = (reportRows ?? []).filter(
+    (r) => !targetSubject || ((r.subject as string | null)?.trim() || LEGACY_REPORT_SUBJECT) === targetSubject,
+  );
+
+  const mine = subjectMatched.filter(
     (r) =>
       isAdmin ||
       ownsMakeupReport(
@@ -107,7 +114,9 @@ export async function removeMakeupEntry(input: {
         user.displayName ?? "",
       ),
   );
-  if (!isAdmin && (reportRows ?? []).length > mine.length && mine.length === 0) {
+  // 남의 보강이 섞여 있으면 **말해 준다** — 조용히 내 것만 지우면 "반만 빠졌다"가 원인 불명으로 남는다.
+  const notMine = subjectMatched.length - mine.length;
+  if (!isAdmin && notMine > 0 && mine.length === 0) {
     return { ok: false, error: "내가 작성한 보강만 뺄 수 있습니다" };
   }
 
@@ -118,6 +127,24 @@ export async function removeMakeupEntry(input: {
       shareToken: (r.share_token as string | null) ?? null,
     })),
   );
+
+  // 🔴 발송·회수가 **진행 중**이면 아무것도 하지 않고 거절한다(적대 리뷰 치명 1건).
+  //    예전엔 여기서 통과시켜 출결만 지우고 "성공"이라 답했는데, 워커가 큐에 남은 그 보고서를
+  //    **그대로 학부모에게 게시**했다 — 강사는 "되돌릴 수 없습니다"를 승인하고 초록 토스트까지 본 뒤였다.
+  //    지금 손대면 안 되는 상태이므로 화면·DB 어느 쪽도 건드리지 않고 이유를 돌려준다.
+  if (plan.busyIds.length > 0) {
+    return {
+      ok: false,
+      error: `발송·회수 처리 중인 보고서 ${plan.busyIds.length}건이 있어 지금은 뺄 수 없습니다 — 처리가 끝난 뒤 다시 시도하세요`,
+    };
+  }
+  if (plan.manualIds.length > 0) {
+    return {
+      ok: false,
+      error:
+        "학부모 게시글을 자동으로 지울 수 없는 보고서가 있습니다(공유 링크 없음) — ClassNote에서 게시글을 직접 지운 뒤 다시 시도하세요",
+    };
+  }
 
   // 게시글이 살아 있는 행은 **회수부터**(행은 남긴다 — 워커가 share_token으로 게시글을 찾아 지운다).
   let recalled = 0;
@@ -200,6 +227,7 @@ export async function removeMakeupEntry(input: {
       deleted,
       recalled,
       busy: plan.busyIds.length,
+      notMine,
     }),
     // 회수 대기·처리 중 행이 남아 있으면 화면에서 지우지 않는다(다음 새로고침에 되살아나 "안 지워졌다"가 된다).
     keepRow: recalled > 0 || plan.busyIds.length > 0,
