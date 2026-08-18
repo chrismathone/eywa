@@ -17,6 +17,7 @@ import { fetchInChunks } from "@/lib/supabase/batch";
 import { reportError } from "@/lib/observability/report-error";
 import { addDays, kstMinutesOfDay, kstToday } from "@/lib/date-kst";
 import { isWithinAttendanceEditWindow } from "@/features/attendance/edit-window";
+import { nowBandOf, type NowBand } from "../now-band";
 import { hhmmToMin, shouldQueue, slotPhase, type SlotPhase } from "../signals";
 import { isSpecialSlotLabel } from "@/features/timetable/lib/teacher-label";
 import { buildQueue, type DeskQueue, type FollowupBrief, type QueueClass, type QueueStudent } from "../queue";
@@ -27,12 +28,22 @@ import type { LiveBoard, LiveBoardSlot, LiveSlot } from "../types";
 export type { LiveBoard, LiveBoardSlot };
 
 /** 지금 KST 분(그 날짜가 오늘이 아니면 국면 판정을 하지 않는다 — 지난 날짜에 '진행 중'은 거짓말). */
-function phaseOf(slot: LiveSlot, isToday: boolean): SlotPhase {
+function phaseOf(slot: LiveSlot, isToday: boolean, nowMin: number): SlotPhase {
   if (!isToday) return "ended";
-  const nowMin = kstMinutesOfDay();
   const start = hhmmToMin(slot.slotStart);
   if (start == null) return "before";
   return slotPhase(nowMin, start, hhmmToMin(slot.slotEnd));
+}
+
+/**
+ * 그 교시가 지금 열려 있나 — 판정은 `nowBandOf` 단일 소스, 시각은 **서버에서만** 읽는다([[#108]]).
+ * 지난 날짜는 전부 '지난'이다(그 화면엔 지금이 없다 — 놓친 날을 메우러 여는 자리).
+ */
+function bandOf(slot: LiveSlot, isToday: boolean, nowMin: number): NowBand {
+  if (!isToday) return "past";
+  const start = hhmmToMin(slot.slotStart);
+  if (start == null) return "upcoming";
+  return nowBandOf(nowMin, start, hhmmToMin(slot.slotEnd));
 }
 
 async function loadTeacherNames(ids: readonly string[]) {
@@ -108,6 +119,8 @@ export const getLiveBoard = cache(async (date: string = kstToday(), selfOnly = f
     userTaughtClassSet(supabase, user.id, date),
   ]);
   const isToday = date === kstToday();
+  // 한 보드 안에서 시각이 흔들리면 같은 순간의 두 교시가 다른 기준으로 갈린다 — 한 번만 읽어 공유한다.
+  const nowMin = kstMinutesOfDay();
   const teacherIds = [...new Set(slots.map((s) => s.teacherId).filter((v): v is string => !!v))];
   const nameById = await loadTeacherNames(teacherIds);
 
@@ -117,7 +130,8 @@ export const getLiveBoard = cache(async (date: string = kstToday(), selfOnly = f
     const withPhase: LiveBoardSlot = {
       ...slot,
       teacherName: slot.teacherId ? (nameById.get(slot.teacherId)?.name ?? null) : null,
-      phase: phaseOf(slot, isToday),
+      phase: phaseOf(slot, isToday, nowMin),
+      band: bandOf(slot, isToday, nowMin),
       ownedByMe: taught.has(slot.classId) || slot.teacherId === user.id,
     };
     (byTeacher.get(key) ?? byTeacher.set(key, []).get(key)!).push(withPhase);
