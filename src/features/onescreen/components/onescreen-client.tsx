@@ -28,6 +28,7 @@ import {
   setMyOnescreenFontSize,
 } from "../server/actions";
 import { removeMakeupEntry } from "../server/makeup-remove-actions";
+import { canRemoveMakeupRow, makeupRemoveBlockReason } from "../makeup-remove-plan";
 import { MakeupAdder } from "./makeup-adder";
 import { SendWindowNotice } from "./send-window-notice";
 import {
@@ -795,16 +796,19 @@ export function OneScreenClient({
   async function removeMakeupRow(student: OneScreenStudent, subjectName: string) {
     const su = student.subjects.find((x) => x.name === subjectName);
     if (!su) return;
-    // 경고는 **무엇이 사라지는지 그대로** 적는다(원장 2026-08-18 *"경고하고 확인하면 삭제"*).
-    // 이미 학부모에게 나갔으면 게시글까지 지워지므로 그 사실을 먼저 말한다 — 되돌릴 수 없는 동작이다.
+    // 🔴 **발송된 보강은 애초에 못 뺀다**(원장 2026-08-18 *"발송된건은 보강취소를 못하게 강제해"*).
+    //    서버도 같은 판정으로 막지만 여기서 먼저 이유를 말한다 — 확인창을 띄웠다가 실패하면 더 나쁘다.
     const rep = reports[student.id]?.[subjectName];
-    const alreadySent = rep?.classnoteStatus === "success" || rep?.classnoteStatus === "recall_failed";
+    const blocked = makeupRemoveBlockReason(rep?.classnoteStatus ?? null);
+    if (blocked) {
+      toast.error(blocked);
+      return;
+    }
+    // 경고는 **무엇이 사라지는지 그대로** 적는다(원장 *"경고하고 확인하면 삭제"*).
     const lines = [
       `${student.name} 보강을 뺄까요?`,
       "",
-      alreadySent
-        ? "[경고] 이 보강은 이미 학부모에게 발송됐습니다. 빼면 학부모 게시글도 삭제(회수)됩니다."
-        : "출결 기록과 저장된 보강 수업보고서가 삭제됩니다.",
+      "출결 기록·저장된 보강 수업보고서·그 수업으로 올라간 진도 기록이 모두 삭제됩니다.",
       "보강을 추가하기 전 상태로 돌아가며, 되돌릴 수 없습니다.",
     ];
     if (!window.confirm(lines.join("\n"))) return;
@@ -818,9 +822,8 @@ export function OneScreenClient({
       toast.error(res.error);
       return;
     }
-    // 확인했으면 **화면에서도 없앤다**(원장 *"아무것도 추가 안한것처럼 이전으로"*). 회수 대기 행은 DB에
-    // 남지만 로스터가 회수 계열을 되살리지 않으므로 새로고침해도 돌아오지 않는다.
-    // 그 행만 뺀다. 남은 행이 없으면 카드째 목록에서 제거(보강만 있던 학생).
+    // 확인했으면 **화면에서도 없앤다**(원장 *"아무것도 추가 안한것처럼 이전으로"*) — 지울 수 있는 행만
+    // 여기까지 오므로 DB에도 남는 게 없다. 남은 행이 없으면 카드째 목록에서 제거(보강만 있던 학생).
     setStudents((prev) =>
       prev
         .map((s) =>
@@ -2716,7 +2719,10 @@ export function OneScreenClient({
             onRemoveAttachment: (student, subjectName, path) =>
               void removeAttachmentFor(student, subjectName, path),
             onOpenAttachments: (student, subjectName) => void ensureAttachmentUrls(student, subjectName),
+            // 발송분은 버튼을 아예 열지 않는다(서버도 막지만 화면에서 먼저 알린다).
             onRemoveMakeup: (student, subjectName) => void removeMakeupRow(student, subjectName),
+            canRemoveMakeup: (studentId, subjectName) =>
+              canRemoveMakeupRow(reports[studentId]?.[subjectName]?.classnoteStatus ?? null),
           }}
           bulkActions={{
             onSaveAll: saveAllVisible,
@@ -2826,6 +2832,9 @@ export function OneScreenClient({
                 onHomeworkToday={setHomeworkToday}
                 onMakeup={toggleMakeup}
                 onRemoveMakeup={(subjectName) => void removeMakeupRow(selected, subjectName)}
+                canRemoveMakeup={(subjectName) =>
+                  canRemoveMakeupRow(reports[selected.id]?.[subjectName]?.classnoteStatus ?? null)
+                }
                 onSubjectDraft={setSubjectDraft}
                 onSubjectTrend={setSubjectTrend}
                 onNote={setNote}

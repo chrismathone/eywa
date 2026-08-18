@@ -118,6 +118,7 @@ export function ReportCard({
   onHomeworkToday,
   onMakeup,
   onRemoveMakeup,
+  canRemoveMakeup,
   onSubjectDraft,
   onSubjectTrend,
   onNote,
@@ -148,6 +149,8 @@ export function ReportCard({
   onMakeup: (subjectName: string) => void; // 보강 토글(과목별) — 0089a
   /** 보강 빼기(2026-08-18) — 출결·저장된 보강 보고서를 지운다. 없으면 배지가 표시로만 남는다. */
   onRemoveMakeup?: (subjectName: string) => void;
+  /** 이 행을 뺄 수 있나 — 발송·처리 중이면 false(발송된 보강은 취소 불가, 원장 2026-08-18). */
+  canRemoveMakeup?: (subjectName: string) => boolean;
   onSubjectDraft: (subjectName: string, text: string) => void;
   onSubjectTrend: (subjectName: string, text: string) => void; // 학습 추세 초안 편집(4a)
   onNote: (text: string) => void; // 특이사항(강사 메모) 편집 — AI 멘트 입력(4c). 학생별.
@@ -266,7 +269,9 @@ export function ReportCard({
               {/* 보강 빼기 — 표 모드와 같은 문(원장 2026-08-18 *"다 삭제"*). 확인 후 출결·보고서를 지운다. */}
               {/* 순수 보강 행이면 정규 학생 카드에서도 뺄 수 있어야 한다(적대 리뷰 M2) — 학생 단위
                   isMakeup만 보면 "정규 수업도 듣는 학생의 보강"에 문이 없다. 반이 붙은 '정규+보강'은 제외. */}
-              {(student.isMakeup || (subject.makeup && !subject.classId)) && onRemoveMakeup ? (
+              {(student.isMakeup || (subject.makeup && !subject.classId)) &&
+              onRemoveMakeup &&
+              (canRemoveMakeup?.(subject.name) ?? true) ? (
                 <button
                   type="button"
                   onClick={() => onRemoveMakeup(subject.name)}

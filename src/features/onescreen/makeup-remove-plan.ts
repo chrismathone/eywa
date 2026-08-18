@@ -1,19 +1,17 @@
 /**
  * 보강 빼기 **판정**(순수 · Vitest) — 원스크린에서 잘못 추가한 보강을 지울 때, 저장된 보강 보고서를
- * ① 바로 지울 것 ② 학부모 게시글부터 회수할 것 ③ 지금은 손대면 안 되는 것으로 가른다.
+ * "지울 수 있는 것"과 "손대면 안 되는 것"으로 가른다.
  *
- * 원장 2026-08-18: *"다 삭제"* — 출결 기록과 저장된 보강 보고서를 함께 없앤다. 다만 **학부모에게 이미
- * 나간 게시글이 있으면 행을 먼저 지우면 안 된다**: 회수(ClassNote 게시글 삭제)는 연동 PC 워커가
- * `share_token`으로 게시글을 찾아 지우는데, 그 열쇠를 쥔 행을 없애면 **학부모 게시판에 영원히 남는
- * 유령 글**이 된다([[report-recall]]의 "특정 불가능하면 지우지 않는다"와 같은 이유).
- * 그래서 발송분은 **회수를 먼저 걸고 행은 남긴다** — 워커가 지운 뒤(`recalled`) 다시 누르면 그때 삭제된다.
+ * 🔴 **학부모에게 나갔거나 나가는 중인 보고서는 취소 자체를 막는다**(원장 2026-08-18:
+ *    *"이미 수업보고서가 발송된건은 보강취소를 못하게 강제해"*). 발송분을 이 버튼으로 회수까지 하던 초안이
+ *    있었지만 폐기했다 — 학부모가 이미 본 기록을 "보강 빼기"라는 정리 동작이 조용히 지우면 안 된다.
+ *    정말 지워야 하면 **먼저 보고서를 회수**(게시글 삭제)한 뒤 그때 뺀다(회수 완료분은 지울 수 있다).
  *
- * 🔴 발송/회수가 **진행 중**인 행은 어느 쪽도 아니다(`queued`·`processing`·`recall_requested`).
- *    지우면 워커가 방금 집어간 작업의 대상이 사라져 결과를 못 적고, 최악엔 게시만 되고 기록이 없다.
+ * 발송 진행 중(`queued`·`processing`)·회수 진행 중(`recall_requested`)도 같은 이유로 막는다 —
+ * 지우면 워커가 방금 집어간 작업의 대상이 사라져 **게시만 되고 기록이 없는** 상태가 된다.
  */
 
 import {
-  isRecallable,
   isRecallInFlight,
   RECALL_FAILED,
   RECALL_REQUESTED,
@@ -27,40 +25,34 @@ export type MakeupReportRef = {
 };
 
 export type MakeupRemovePlan = {
-  /** 바로 지울 행 — 학부모 게시판에 없는 것(미발송·실패·회수완료). */
+  /** 바로 지울 행 — 학부모 게시판에 없는 것(미발송·발송 실패·회수 완료). */
   deleteIds: string[];
-  /** 게시글부터 회수할 행 — 이번엔 안 지운다(워커가 지운 뒤 재시도). */
-  recallIds: string[];
-  /** 지금 건드리면 안 되는 행(발송·회수 처리 중). */
+  /** 이미 학부모에게 나간 행 — **취소 불가**. 회수를 먼저 해야 한다. */
+  sentIds: string[];
+  /** 발송·회수 처리 중인 행 — 끝난 뒤에 다시. */
   busyIds: string[];
-  /**
-   * 게시는 됐는데 **공유 토큰이 없어 자동 회수가 불가능한** 행 — 사람이 ClassNote에서 직접 지워야 한다.
-   * 🔴 이걸 그냥 삭제하면 학부모 게시판에 글이 남는데 eywa엔 흔적이 0이 된다(찾을 방법이 사라진다).
-   */
-  manualIds: string[];
 };
 
 /**
  * 보강 보고서들을 세 갈래로 나눈다.
- * - `recallIds` = 실제로 게시된 글이 있고 특정 가능(`isRecallable`) → 회수 먼저.
- * - `busyIds` = 발송 대기·처리 중이거나 회수 요청 중 → 이번엔 통과.
+ * - `sentIds` = 학부모 게시판에 **올라가 있다** → 취소 불가(회수가 먼저).
+ * - `busyIds` = 발송 대기·처리 중이거나 회수 요청 중 → 끝난 뒤에.
  * - `deleteIds` = 나머지(미발송·발송 실패·회수 완료) → 행 삭제.
+ *
+ * ⚠️ `success`인데 공유 토큰이 없는 행도 **발송분**이다(자동 회수만 불가) — 지우면 학부모 게시판에
+ *    글이 남고 eywa엔 흔적이 0이 된다.
  */
 export function planMakeupRemoval(rows: MakeupReportRef[]): MakeupRemovePlan {
-  const plan: MakeupRemovePlan = { deleteIds: [], recallIds: [], busyIds: [], manualIds: [] };
+  const plan: MakeupRemovePlan = { deleteIds: [], sentIds: [], busyIds: [] };
   for (const r of rows) {
     const status = r.classnoteStatus;
     if (isRecallInFlight(status) || status === "queued" || status === "processing") {
       plan.busyIds.push(r.id);
       continue;
     }
-    if (isRecallable({ classnoteStatus: status, shareToken: r.shareToken })) {
-      plan.recallIds.push(r.id);
-      continue;
-    }
-    // 게시는 됐는데 토큰이 없다 = 자동 회수 불가. 지우면 학부모 게시판에 글만 남고 흔적이 사라진다.
-    if ((status === "success" || status === RECALL_FAILED) && !r.shareToken) {
-      plan.manualIds.push(r.id);
+    // 게시된 상태 = success(토큰 유무 무관) 또는 회수 실패(게시글이 아직 살아 있다).
+    if (status === "success" || status === RECALL_FAILED) {
+      plan.sentIds.push(r.id);
       continue;
     }
     // 회수가 끝난 행(recalled)은 게시글이 이미 없다 → 기록만 지우면 끝.
@@ -76,32 +68,42 @@ export function planMakeupRemoval(rows: MakeupReportRef[]): MakeupRemovePlan {
 export function makeupRemoveMessage(r: {
   attendanceRemoved: boolean;
   deleted: number;
-  recalled: number;
-  busy: number;
+  /** 되감은 진도 엔트리 수(원장 "진도기록도 되돌려야지"). */
+  progressEntries?: number;
   /** 남이 쓴 보강이라 못 건드린 수 — 조용히 넘기면 "반만 빠졌다"가 원인 불명으로 남는다. */
   notMine?: number;
 }): string {
   const parts: string[] = [];
   if (r.attendanceRemoved) parts.push("출결 기록을 지웠습니다");
   if (r.deleted > 0) parts.push(`수업보고서 ${r.deleted}건을 지웠습니다`);
-  if (r.recalled > 0)
-    parts.push(`학부모에게 나간 보고서 ${r.recalled}건은 게시글 삭제를 요청했습니다(연동 PC가 순차 처리)`);
-  if (r.busy > 0) parts.push(`발송·회수 처리 중인 ${r.busy}건은 끝난 뒤에 다시 시도하세요`);
+  if ((r.progressEntries ?? 0) > 0) parts.push(`진도 기록 ${r.progressEntries}건을 되돌렸습니다`);
   if ((r.notMine ?? 0) > 0) parts.push(`다른 선생님이 쓴 보강 ${r.notMine}건은 그대로 남습니다`);
   return parts.length ? parts.join(" · ") : "지울 기록이 없습니다";
 }
 
-/** 회수 완료 상태 — 이 상태의 행은 다음 시도에서 바로 삭제된다(테스트·문서용 재수출). */
+/** 회수 완료 상태 — 이 상태의 행은 게시글이 없어 바로 삭제된다(테스트·문서용 재수출). */
 export const MAKEUP_RECALLED = RECALLED;
 
 /**
- * 이 보강 보고서는 **강사가 이미 없앤 것**인가 — 회수 요청·완료된 행.
- * 로스터가 화면에 되살리면 안 된다("뺐는데 새로고침하면 있다").
- *
- * 🔴 **NULL을 삼키지 말 것.** SQL `not in ('recall_requested','recalled')`으로 거르면 status가 NULL인
- *    행(저장만 하고 미발송 — 실측 29건)이 NOT IN의 UNKNOWN 판정에 걸려 **통째로 사라진다**.
- *    그래서 판정을 이 순수 함수로 못박고 값이 있을 때만 비교한다.
+ * 화면에서 이 보강은 **뺄 수 있는가** — 발송·처리 중이면 버튼을 열지 않는다(서버도 같은 판정으로 막는다).
+ * 🔴 **NULL을 "발송됨"으로 보지 말 것** — 저장만 하고 미발송인 행(실측 29건)이 NULL이다.
  */
-export function isRecallCleared(status: string | null | undefined): boolean {
-  return status === RECALL_REQUESTED || status === RECALLED;
+export function canRemoveMakeupRow(status: string | null | undefined): boolean {
+  if (!status) return true; // 미발송 — 지울 수 있다
+  return !(
+    status === "success" ||
+    status === RECALL_FAILED ||
+    status === "queued" ||
+    status === "processing" ||
+    status === RECALL_REQUESTED
+  );
+}
+
+/** 못 빼는 이유(한글) — 버튼 툴팁·확인창에 그대로 쓴다. 뺄 수 있으면 null. */
+export function makeupRemoveBlockReason(status: string | null | undefined): string | null {
+  if (canRemoveMakeupRow(status)) return null;
+  if (status === "queued" || status === "processing")
+    return "발송 처리 중인 보강입니다 — 끝난 뒤에 다시 시도하세요";
+  if (status === RECALL_REQUESTED) return "회수 처리 중인 보강입니다 — 게시글 삭제가 끝난 뒤에 뺄 수 있습니다";
+  return "이미 학부모에게 발송된 보강이라 뺄 수 없습니다 — 먼저 보고서를 회수(게시글 삭제)하세요";
 }

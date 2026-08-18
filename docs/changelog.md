@@ -1,5 +1,24 @@
 # eywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-08-18 (18) — 보강 빼기 2차: 발송분은 취소 **금지** + 진도 기록까지 되감기
+
+원장 지시: *"진도기록도 되돌려야지. 근데 이미 수업보고서가 발송된건은 보강취소를 못하게 강제해"*.
+직전 (17)의 "발송분은 회수 걸고 화면에서 제거" 설계를 **폐기**한다 — 학부모가 이미 본 기록을
+'보강 빼기'라는 정리 동작이 조용히 지우면 안 된다.
+
+- **발송·처리 중 = 취소 불가**([`planMakeupRemoval`](src/features/onescreen/makeup-remove-plan.ts) `sentIds`/`busyIds`):
+  `success`·`recall_failed`(게시글 살아 있음)·`queued`·`processing`·`recall_requested`는 **출결도 안 건드리고**
+  거절. 지우려면 **회수(게시글 삭제)가 먼저**고 회수 완료(`recalled`)분은 지울 수 있다. 버튼도 안 열린다
+  (`canRemoveMakeupRow` — 표·카드·서버가 같은 판정, #77).
+- **진도 되감기**([`rollbackContainer`](src/features/progress/rollback.ts) 순수 + [`rollbackProgressForReports`](src/features/progress/server/rollback-actions.ts)):
+  `progress_entries`·`progress_events` 삭제 + 컨테이너 `last_position`/`chapter_count`/`max_jump`를
+  **남은 엔트리로 재계산**. 🔴 `last_position -= 1` 같은 산술은 틀린다(엔트리는 날짜순이고 마지막이 최고
+  위치라는 보장이 없다 — 복습·역행 입력이 실제로 있다). 🔴 FK가 `SET NULL`이라 **보고서를 지우기 전에**
+  되감아야 한다(지운 뒤엔 어느 엔트리가 그 보고서 것인지 알 수 없다). 실패해도 본 삭제는 막지 않는다(파생 기록).
+- **(17)의 로스터 회수 제외를 원복** — 발송분을 아예 못 지우게 되어 회수 대기 행이 생기지 않는다. 제외를
+  유지하면 "회수 후 수정·재발송"(원장 2026-08-06) 흐름만 끊긴다. 상태로 거르지 않는 게 규약(구조 가드).
+- 검증: 순수·구조 34 + onescreen·progress 894 + typecheck/lint 0.
+
 ## 2026-08-18 (17) — 원스크린 '보강 빼기' — 경고 후 출결·보고서까지 지우고 추가 전으로
 
 원장 제보: *"수학은 어디서 수업보고서에 보강 추가한걸 삭제하지?"* → 조사 결과 **빼는 문이 아예 없었다**
