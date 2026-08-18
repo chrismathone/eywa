@@ -136,6 +136,7 @@ pnpm build       # next build (Turbopack)
 ```
 
 네 단계 모두 그린이어야 push. Vercel은 push 후 자동 빌드.
+마지막 커밋·푸시 전 적대적 리뷰는 이 게이트와 별도 필수 — `CLAUDE.md` 작업 선호.
 
 ## 데모 로그인 계정 (현재 상태)
 
