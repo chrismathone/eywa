@@ -3,6 +3,7 @@
 import { Fragment, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { buildGridRows, buildRowRenderMeta, isRowActionable, rowInClass } from "../grid";
+import { BulkPresentButton, type BulkPresentProps } from "./bulk-present-button";
 import { planBulkAttendance } from "../bulk-attendance";
 import { moveInOrder } from "../student-order";
 import { resolveStudyGrade } from "../curriculum";
@@ -40,6 +41,7 @@ export function OneScreenGrid({
   genKey,
   bulkGen,
   uploadingAttKey,
+  bulkPresent,
 }: {
   students: OneScreenStudent[]; // 현재 필터(반)로 보이는 학생만
   reports: Record<string, Record<string, SubjectReport>>; // studentId → 과목명 → 발송상태
@@ -58,6 +60,12 @@ export function OneScreenGrid({
   genKey?: string | null; // 자동작성 중인 행 키(studentId::과목)
   bulkGen?: boolean; // 전체 자동작성 진행중
   uploadingAttKey?: string | null; // 첨부 업로드 중인 행 키(studentId::과목) — 그 행 클립만 로딩 표시
+  /**
+   * 머리글 '학생 · 반' 칸의 '일괄 출석'(빠른 출결) — 재료·핸들러. **없으면 버튼 자체를 안 그린다**
+   * (출결 쓰기 권한 없음). 대상 계산은 호출부가 카드 모드와 **한 번만** 해서 나눠 준다
+   * ([planQuickPresent](../quick-attendance.ts)) — 두 화면이 다른 수를 말하면 안 된다.
+   */
+  bulkPresent?: BulkPresentProps;
 }) {
   const rows = buildGridRows(students).filter((r) => rowInClass(r.subject, classFilter));
   // 작업별 대상(2-3): 발송·자동작성=진도+결석 제외, 저장=진도만(결석 포함 — 기록 보존).
@@ -325,7 +333,14 @@ export function OneScreenGrid({
                   className="accent-primary size-3.5 align-middle"
                 />
               </th>
-              <th className={TH}>학생 · 반</th>
+              <th className={TH}>
+                {/* 고정 폭 열(128px)이라 버튼이 옆에 나란히 못 선다 — 넘치면 아랫줄로 접는다
+                    (docs/design-conventions.md "고정 폭 표 칸의 가로 나열은 flex-wrap"). nowrap은 TH가 이미
+                    걸고 있어 낱말이 쪼개지지는 않는다. */}
+                <span className="flex flex-wrap items-center justify-center gap-1">
+                  학생 · 반{bulkPresent ? <BulkPresentButton {...bulkPresent} /> : null}
+                </span>
+              </th>
               <th className={TH} title="수업타임(시수) — 기본 1. 출석부에 그대로 들어갑니다(학부모 보고서엔 미표시)">
                 타임
               </th>
