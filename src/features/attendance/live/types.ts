@@ -6,6 +6,7 @@
  *    클라 번들로 새어 빌드가 깨진다(gotcha #61). 그래서 모양은 여기, 조회는 저기로 갈라 둔다.
  */
 
+import type { NowBand } from "./now-band";
 import type { LiveSignal, SlotPhase } from "./signals";
 
 export type LiveStudent = {
@@ -69,6 +70,14 @@ export type LiveSlot = {
 
 export type LiveBoardSlot = LiveSlot & {
   phase: SlotPhase;
+  /**
+   * 그 교시가 **지금 열려 있나**(지금/예정/지난) — 판정은 [`nowBandOf`](./now-band.ts) 단일 소스.
+   *
+   * 🔴 서버가 계산해서 내려보낸다. 좌석표는 클라이언트 컴포넌트인데 SSR도 되므로, 거기서 현재 시각을
+   *    읽으면 서버 HTML과 클라 HTML이 갈려 하이드레이션이 깨진다([[#108]] — 같은 실수로 화면 클릭이
+   *    통째로 먹통이 된 전례가 있다). 시각을 아는 쪽은 서버 하나뿐이다.
+   */
+  band: NowBand;
   /**
    * 이 슬롯이 **내 수업**인가(담임·부담임·위임).
    * 데스크(전 학원 쓰기)라도 자기 반은 강사 규칙(10분 전에도 찍음)을 쓰고,

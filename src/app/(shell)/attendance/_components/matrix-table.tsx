@@ -47,6 +47,11 @@ export type MatrixGroup = {
   className: string;
   subjectLabel: string;
   matrix: AttendanceMatrix;
+  /**
+   * 이 반에서 지금 보고 있는 강사의 역할("교시 담당" 등) — 담임이 아닌 반이 목록에 있는 이유를 밝힌다.
+   * null이면 담임 반(종전과 같은 표기).
+   */
+  roleLabel?: string | null;
 };
 
 /** 그룹(반)의 집계 — 시수는 급여 계산의 기본 단위라 그룹 헤더에 그대로 노출한다. */
@@ -98,6 +103,7 @@ export function MatrixTable({
   holidays,
   showGroups,
   money,
+  moneyNote,
   lockBefore,
   ordered,
 }: {
@@ -111,6 +117,11 @@ export function MatrixTable({
   showGroups: boolean;
   /** 원장 전용 금액 열. null/undefined면 열 자체를 안 그린다(강사는 못 본다). */
   money?: TeacherMoney | null;
+  /**
+   * 금액 합계 옆 한 줄 주석 — 지금은 "표에 있는 반과 금액에 든 반이 다르다"를 밝히는 데 쓴다
+   * (표시 축은 담임 ∪ 교시 담당, 금액 축은 담임뿐). 없으면 아무것도 안 그린다.
+   */
+  moneyNote?: string | null;
   /** 이 날짜 이전 칸은 강사가 수정 못 함(7일 창). null = 관리자 이상이라 제한 없음. */
   lockBefore?: string | null;
 }) {
@@ -290,6 +301,14 @@ export function MatrixTable({
                 <>
                   <span className="text-foreground text-[12px] font-bold">{g.className}</span>
                   <span className="text-text-faint text-[11px]">{g.subjectLabel}</span>
+                  {g.roleLabel ? (
+                    <span
+                      className="border-line text-text-dim rounded-full border px-1.5 py-px text-[10px]"
+                      title="이 반의 담임은 다른 선생님이고, 교시(시간표 슬롯) 담당으로 배선돼 있어 이 목록에 있습니다."
+                    >
+                      {g.roleLabel}
+                    </span>
+                  ) : null}
                   <span className="text-text-dim text-[11px]">{g.matrix.students.length}명</span>
                   <span className="text-text-dim num text-[11px]">
                     시수{" "}
@@ -324,6 +343,14 @@ export function MatrixTable({
                         청구 {formatMoney(money.totals.billed)} · 납입 {formatMoney(money.totals.paid)}
                         <span className="text-text-faint ml-1">({money.totals.students}명 기준)</span>
                       </span>
+                      {moneyNote ? (
+                        <span
+                          className="text-amber text-[11px]"
+                          title="교시(시간표 슬롯) 담당으로 들어온 반입니다. 급여 배분은 아직 담임 축이라 이 반의 청구·정산액은 담임 선생님 쪽에 잡혀 있습니다."
+                        >
+                          {moneyNote}
+                        </span>
+                      ) : null}
                       {money.totals.sharedStudents > 0 ? (
                         <span
                           className="text-amber text-[11px]"

@@ -21,6 +21,8 @@ import { buildHolidayMap } from "@/features/attendance/calendar";
 import { ATTENDANCE_EDIT_WINDOW_DAYS } from "@/features/attendance/edit-window";
 import { accessLevelTenant } from "@/lib/auth/perm-matrix";
 import { effectiveTeacherId } from "@/lib/auth/view-mode";
+// 출결 강사 귀속 축 단일 소스 — 담임(classes.teacher_id)만 보면 교시 담당 강사가 자기 수업을 못 본다.
+import { classTeacherRole, type ClassTeacherRole } from "@/features/attendance/teacher-axis";
 import { loadAttendanceViewPrefs } from "@/features/attendance/server/prefs-actions";
 import { PeriodModeToggle } from "./_components/period-mode-toggle";
 import { countMarks, sumCounts } from "@/features/attendance/grid/totals";
@@ -66,47 +68,75 @@ function padTo31(days: AttendanceMatrix["days"]): AttendanceMatrix["days"] {
 }
 
 /**
- * 요약 허브(강사 미선택)의 강사 목록 — 담임별 반 수·과목·**오늘 입력 현황**.
+ * 이 반을 그 달에 가르치는 사람들 — **담임 ∪ 교시 담당**(축 단일 소스, 2026-08-18).
+ * 종전엔 담임뿐이라 교시 담당 강사의 출석부가 통째로 비어 있었다(Florence Park = 담임 0반·교시 5반).
+ */
+function classTeachers(c: AttendanceMatrix["classes"][number]): { id: string; name: string; active: boolean }[] {
+  const out = new Map<string, { id: string; name: string; active: boolean }>();
+  if (c.teacherId && c.teacherName) {
+    out.set(c.teacherId, { id: c.teacherId, name: c.teacherName, active: c.teacherActive });
+  }
+  for (const t of c.slotTeachers) if (!out.has(t.id)) out.set(t.id, t);
+  return [...out.values()];
+}
+
+/** 이 반이 그 강사의 출석부에 들어가는가(담임이든 교시 담당이든). */
+function classTaughtBy(c: AttendanceMatrix["classes"][number], teacherId: string): boolean {
+  return (
+    classTeacherRole({
+      homeroomTeacherId: c.teacherId,
+      slotTeacherIds: c.slotTeachers.map((t) => t.id),
+      teacherId,
+    }) !== null
+  );
+}
+
+/**
+ * 요약 허브(강사 미선택)의 강사 목록 — 강사별 반 수·과목·**오늘 입력 현황**.
  * 오늘 현황은 getDailyProcessingStatus(일별 처리 현황과 같은 소스) 한 번 — 허브가 뜰 때만 부른다.
  * ⚠️ 그 조회는 테넌트 전체(오늘 수업 반)라, 화면의 과목 필터로 좁힌 `classes`에 든 반만 집계에 넣는다.
+ * ⚠️ 오늘 현황은 **반 단위**라 교시 담당이 여럿인 반은 그 사람들에게 같은 반이 각각 한 번씩 세어진다
+ *    (반을 교시로 쪼개 세면 담임 화면의 종전 숫자가 흔들린다 — 여기선 "내가 오늘 볼 반"이 맞다).
  */
 async function buildHubTeachers(
   classes: AttendanceMatrix["classes"],
   subjectOrder: { value: string; label: string }[],
 ): Promise<HubTeacher[]> {
   const today = await getDailyProcessingStatus(kstToday());
-  const classTeacher = new Map(classes.map((c) => [c.id, c.teacherId]));
+  const teachersOfClass = new Map(classes.map((c) => [c.id, classTeachers(c)]));
   const order = subjectOrder.map((s) => s.value);
 
   type Acc = HubTeacher & { subjectSet: Set<string> };
   const byTeacher = new Map<string, Acc>();
   for (const c of classes) {
-    if (!c.teacherId || !c.teacherName) continue;
-    const cur =
-      byTeacher.get(c.teacherId) ??
-      ({
-        id: c.teacherId,
-        name: c.teacherName,
-        retired: !c.teacherActive,
-        classCount: 0,
-        subjects: [],
-        today: null,
-        subjectSet: new Set<string>(),
-      } as Acc);
-    cur.classCount++;
-    if (c.subject) cur.subjectSet.add(c.subject);
-    byTeacher.set(c.teacherId, cur);
+    for (const t of teachersOfClass.get(c.id) ?? []) {
+      const cur =
+        byTeacher.get(t.id) ??
+        ({
+          id: t.id,
+          name: t.name,
+          retired: !t.active,
+          classCount: 0,
+          subjects: [],
+          today: null,
+          subjectSet: new Set<string>(),
+        } as Acc);
+      cur.classCount++;
+      if (c.subject) cur.subjectSet.add(c.subject);
+      byTeacher.set(t.id, cur);
+    }
   }
   for (const r of today) {
-    const tId = classTeacher.get(r.classId);
-    const t = tId ? byTeacher.get(tId) : undefined;
-    if (!t) continue;
-    const cur = t.today ?? { classes: 0, doneClasses: 0, expected: 0, recorded: 0 };
-    cur.classes++;
-    cur.expected += r.expected;
-    cur.recorded += r.recorded;
-    if (r.expected > 0 && r.unprocessed === 0) cur.doneClasses++;
-    t.today = cur;
+    for (const t of teachersOfClass.get(r.classId) ?? []) {
+      const acc = byTeacher.get(t.id);
+      if (!acc) continue;
+      const cur = acc.today ?? { classes: 0, doneClasses: 0, expected: 0, recorded: 0 };
+      cur.classes++;
+      cur.expected += r.expected;
+      cur.recorded += r.recorded;
+      if (r.expected > 0 && r.unprocessed === 0) cur.doneClasses++;
+      acc.today = cur;
+    }
   }
   return [...byTeacher.values()]
     .map(({ subjectSet, ...t }) => ({
@@ -171,19 +201,17 @@ export default async function AttendancePage({
   ];
   const effectiveSubject = subjectParam && presentSubjects.has(subjectParam) ? subjectParam : null;
 
-  // 강사 선택지 = (선택 과목의) 반 담임 distinct. 퇴직 담임은 반이 살아있는 한 유지하되
-  // "(퇴직)"을 붙여 뒤로 정렬(재직자와 혼동 방지 — 담임 재배정이 끝나면 자연히 사라짐).
+  // 강사 선택지 = (선택 과목의) 반을 **실제로 가르치는 사람** distinct — 담임 ∪ 교시 담당(2026-08-18).
+  // 종전엔 담임뿐이라 교시 담당만 하는 강사는 드롭다운에 이름조차 없었다(그 사람 출석부로 갈 길이 없었다).
+  // 퇴직 강사는 반이 살아있는 한 유지하되 "(퇴직)"을 붙여 뒤로 정렬(재직자와 혼동 방지).
   const classesForSubject = effectiveSubject
     ? allClasses.filter((c) => c.subject === effectiveSubject)
     : allClasses;
   const allTeacherOptions = Array.from(
     new Map(
       classesForSubject
-        .filter((c) => c.teacherId && c.teacherName)
-        .map((c) => [
-          c.teacherId as string,
-          { name: c.teacherName as string, retired: !c.teacherActive },
-        ]),
+        .flatMap((c) => classTeachers(c))
+        .map((t) => [t.id, { name: t.name, retired: !t.active }]),
     ),
   )
     .map(([value, t]) => ({ value, label: t.retired ? `${t.name} (퇴직)` : t.name, retired: t.retired }))
@@ -231,7 +259,7 @@ export default async function AttendancePage({
 
   // 반 선택지 = 과목 + 강사로 좁힌 반. ⚠️ 첫 반 자동선택 안 함 — 반 미선택 = 안내문구(렉 방지 + '전체' 정상 동작).
   const classesForFilters = classesForSubject.filter(
-    (c) => !effectiveTeacher || c.teacherId === effectiveTeacher,
+    (c) => !effectiveTeacher || classTaughtBy(c, effectiveTeacher),
   );
   // ⚠️ hint를 반드시 넣는다(gotcha #84 후속): 옛 옵션은 `{value, label}`뿐이라 드롭다운 검색이 반 이름만
   // 매칭했는데, 수학반 이름엔 '수학'이 없어("고등M 고1 BS4A") **"수학"으로 검색해도 0건**이었다.
@@ -272,9 +300,25 @@ export default async function AttendancePage({
   //    반 수만큼 병렬 호출이라 '전체 반'(108개)이 아니라 **한 강사분**(실측 최대 10반)일 때만 허용한다.
   // ⚠️ `allClasses`가 아니라 **과목으로 좁힌 목록**에서 고른다 — 안 그러면 과목 칩을 눌러도 전체 보기엔
   //    다른 과목 반이 그대로 남아 필터가 거짓말을 한다(강사가 기본으로 이 화면에 들어오면서 더 잘 보인다).
+  // 🔴 **담임 반이 아니라 "그 강사가 가르치는 반"**(담임 ∪ 교시 담당, 2026-08-18 원장 제보 수정).
+  //    영어는 한 반의 교시를 여러 강사가 나눠 맡아서, 담임으로만 묶으면 실제로 출결을 찍은 강사의
+  //    출석부엔 그 반이 없고 담임 출석부에만 있다("담임 출결로 인정"으로 보이던 것의 정체).
   const teacherClasses = effectiveTeacher
-    ? classesForSubject.filter((c) => c.teacherId === effectiveTeacher)
+    ? classesForSubject.filter((c) => classTaughtBy(c, effectiveTeacher))
     : [];
+  // 반별 역할 표식(담임 / 교시 담당) — 반 머리행에 붙어 "왜 이 반이 여기 있나"를 밝힌다.
+  const teacherRoles = new Map<string, ClassTeacherRole | null>(
+    teacherClasses.map((c) => [
+      c.id,
+      effectiveTeacher
+        ? classTeacherRole({
+            homeroomTeacherId: c.teacherId,
+            slotTeacherIds: c.slotTeachers.map((t) => t.id),
+            teacherId: effectiveTeacher,
+          })
+        : null,
+    ]),
+  );
   const mode: ViewMode = requestedMode === "teacher" && teacherClasses.length > 0 ? "teacher" : "class";
   const teacherMatrices =
     mode === "teacher"
@@ -283,15 +327,34 @@ export default async function AttendancePage({
       //    (화면 라벨에 그 사실을 적는다 — 조용히 다르게 보이면 안 된다).
       ? await Promise.all(teacherClasses.map((c) => getMonthlyAttendanceMatrix(month, c.id, "month")))
       : [];
-  // 금액 열은 **원장 전용**(급여 PII 규율) — 강사가 자기 학생들의 청구·납입을 보게 하지 않는다.
+  /**
+   * 금액 열은 **원장 전용**(급여 PII 규율) — 강사가 자기 학생들의 청구·납입을 보게 하지 않는다.
+   *
+   * 🔴 **금액·정산액의 축은 담임 그대로다**(2026-08-18에 표시 축만 넓혔다). 위 `teacherClasses`가
+   *    교시 담당 반까지 품게 됐으므로 여기서 다시 담임 반만 걸러낸다 — 안 걸러내면 남의 반 학생 청구서가
+   *    이 강사 합계에 얹혀 급여 재료가 부풀고, 시트 대조로 맞춰 둔 프리랜서 4인 금액이 어긋난다
+   *    (`teaching-scope-single-source.test.ts`가 적어 둔 "돈은 담임을 따라간다"와 같은 규약).
+   *    교시 담당 몫을 실제로 나누려면 `invoice_teacher_splits`/티어를 교시 축으로 확장해야 하고,
+   *    그건 골든마스터를 건드리는 별건이다 — 화면은 그 사실을 아래 `moneyNote`로 밝힌다.
+   */
+  const homeroomClasses = effectiveTeacher
+    ? teacherClasses
+        .map((c, i) => ({ c, i }))
+        .filter(({ c }) => c.teacherId === effectiveTeacher)
+    : [];
   const money =
     mode === "teacher" && user.systemRole === "master" && effectiveTeacher
       ? await getTeacherMoney(
           month,
           effectiveTeacher,
-          [...new Set(teacherMatrices.flatMap((m) => m.students.map((s) => s.id)))],
-          teacherClasses.map((c) => c.id), // 티어 정산(0199a) — 시수·티어를 이 반들에서 읽는다
+          [...new Set(homeroomClasses.flatMap(({ i }) => teacherMatrices[i]!.students.map((s) => s.id)))],
+          homeroomClasses.map(({ c }) => c.id), // 티어 정산(0199a) — 시수·티어를 이 반들에서 읽는다
         )
+      : null;
+  const slotOnlyCount = teacherClasses.length - homeroomClasses.length;
+  const moneyNote =
+    money && slotOnlyCount > 0
+      ? `금액·정산액은 담임 반 ${homeroomClasses.length}개 기준 — 교시 담당 ${slotOnlyCount}개 반은 빠져 있습니다`
       : null;
   // 매트릭스(무거운 출석 데이터)는 반을 골랐을 때만 로드. 미선택이면 base(빈 매트릭스) 재사용.
   const matrix =
@@ -308,6 +371,10 @@ export default async function AttendancePage({
           className: c.className,
           subjectLabel: subjectMaps.labelOf(c.subject),
           matrix: teacherMatrices[i]!,
+          // 담임이 아닌 반이 왜 여기 있는지 밝힌다 — 라벨이 없으면 "남의 반이 왜 뜨지"가 된다.
+          // ⚠️ 담임인 반엔 안 붙인다(`both` 포함) — 영어는 담임이 자기 반 교시도 맡는 게 보통이라
+          //    거기까지 붙이면 거의 모든 반에 배지가 달려 정작 남의 반 표식이 안 보인다.
+          roleLabel: teacherRoles.get(c.id) === "slot" ? "교시 담당" : null,
         }))
       : effectiveClassId && selectedClass
         ? [
@@ -725,6 +792,7 @@ export default async function AttendancePage({
             // 반 머리행은 **반별 정렬 + 강사 전체 보기**일 때만. 가나다·학년·담임순은 반 구분을 없앤다.
             showGroups={showGroups}
             money={money}
+            moneyNote={moneyNote}
             lockBefore={lockBefore}
             // 공휴일은 학원설정(operations.holidays)이 단일 소스 — 헤더 빨간 날짜·셀 회색 처리에 동기화.
             holidays={buildHolidayMap(operations.holidays)}

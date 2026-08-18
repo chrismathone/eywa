@@ -13,6 +13,7 @@ import {
   lookupPeriodPhase,
   resolveWriteVia,
   withVia,
+  userTaughtClassSet,
 } from "@/features/attendance/live/server/write-policy";
 import type { RecordedVia } from "@/features/attendance/live/recorded-via";
 import { getCurrentUser } from "@/lib/auth/current-user";
@@ -20,7 +21,6 @@ import { accessLevelTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 // 담당 반 판정 단일 소스(담당 반 ∪ 그날 위임 반) — classes.teacher_id를 직접 비교하지 말 것(0173a).
-import { getTeachingClassIds } from "@/features/classes/server/delegation";
 import { parseSessionUnits } from "../session-units";
 import { hasSaveTarget, pickSaveTargets, type SaveTargets } from "../save-targets";
 import {
@@ -182,9 +182,14 @@ export async function saveAttendance(
     // RLS는 tenant 격리뿐이라, 강사가 폼을 직접 POST하면 학원 내 아무 반 출결이나 쓸 수 있었다
     // (2026-07-21 적대검증 미수리분 "출석부 scoped 검증 부재=보안·돈"). 아래 보강 추가로 **임의 학생**까지
     // 폼에 실을 수 있게 되므로, 그 문을 열기 전에 이 게이트를 먼저 닫는다(#77).
-    // 담당 반 ∪ 그날 위임받은 반(0173a) — 결근 대체로 그 반을 맡은 강사는 출결도 찍어야 한다.
-    const { all: myClassIds } = await getTeachingClassIds(supabase, user.id, date);
-    if (!myClassIds.includes(classId)) return { error: "담당 반이 아닙니다" };
+    // 담당 반 ∪ 그날 위임받은 반(0173a) ∪ **그 교시 담당**(2026-08-18) — 결근 대체로 그 반을 맡은
+    // 강사도, 시간표 슬롯으로 그 교시를 맡은 강사도 출결을 찍어야 한다.
+    // 🔴 슬롯을 넣은 이유: 같은 날 출석부의 **읽기** 축이 담임 ∪ 교시 담당으로 넓어졌다(teacher-axis.ts).
+    //    읽기만 넓히면 슬롯 담당 강사는 반이 보이는데 저장은 '담당 반이 아닙니다'로 막힌다 —
+    //    실제로 걸리는 사람이 있다(실측 2026-08-18: Florence Park = teacher·슬롯 9·담임 0).
+    //    읽기 ⊆ 쓰기가 되도록 같은 축을 쓴다(#77: 한 레코드의 모든 표면이 공용 게이트를 통과).
+    const myClassIds = await userTaughtClassSet(supabase, user.id, date);
+    if (!myClassIds.has(classId)) return { error: "담당 반이 아닙니다" };
   }
 
   const nowIso = new Date().toISOString();
@@ -361,7 +366,7 @@ export async function setAttendanceCell(input: {
     }
     const [teaching, { count: enrolled }] = await Promise.all([
       // 담당 반 ∪ 그날 위임받은 반(0173a).
-      getTeachingClassIds(supabase, user.id, sessionDate),
+      userTaughtClassSet(supabase, user.id, sessionDate),
       supabase
         .from("enrollments")
         .select("*", { count: "exact", head: true })
@@ -370,7 +375,7 @@ export async function setAttendanceCell(input: {
         .or(`start_date.is.null,start_date.lte.${sessionDate}`)
         .or(`end_date.is.null,end_date.gte.${sessionDate}`),
     ]);
-    if (!teaching.all.includes(classId)) return { error: "담당 반이 아닙니다" };
+    if (!teaching.has(classId)) return { error: "담당 반이 아닙니다" };
     if (!enrolled) return { error: "이 반 수강생이 아닙니다" };
   }
 
@@ -603,7 +608,7 @@ export async function linkMakeupToAbsence(input: {
       return { error: attendanceLockMessage(makeupDate, kstToday()) };
     }
     const [teaching, { count: enrolled }] = await Promise.all([
-      getTeachingClassIds(supabase, user.id, makeupDate),
+      userTaughtClassSet(supabase, user.id, makeupDate),
       supabase
         .from("enrollments")
         .select("*", { count: "exact", head: true })
@@ -612,7 +617,7 @@ export async function linkMakeupToAbsence(input: {
         .or(`start_date.is.null,start_date.lte.${makeupDate}`)
         .or(`end_date.is.null,end_date.gte.${makeupDate}`),
     ]);
-    if (!teaching.all.includes(classId)) return { error: "담당 반이 아닙니다" };
+    if (!teaching.has(classId)) return { error: "담당 반이 아닙니다" };
     if (!enrolled) return { error: "이 반 수강생이 아닙니다" };
   }
 
@@ -805,7 +810,7 @@ export async function setAttendanceBulk(input: {
     // ⚠️ 수강 판정은 **세션 날짜 기준**(셀 액션과 동일 의미) — 반이동·종강 학생의 그날 기록을 막지 않는다.
     const [teaching, enrolled] = await Promise.all([
       // 담당 반 ∪ 그날 위임받은 반(0173a) — 셀 액션과 **같은 소스**여야 일괄이 개별과 다른 말을 하지 않는다.
-      getTeachingClassIds(supabase, user.id, sessionDate),
+      userTaughtClassSet(supabase, user.id, sessionDate),
       fetchInChunks<{ class_id: string; student_id: string }>(studentIds, (chunk) =>
         supabase
           .from("enrollments")
@@ -816,7 +821,7 @@ export async function setAttendanceBulk(input: {
           .or(`end_date.is.null,end_date.gte.${sessionDate}`),
       ),
     ]);
-    const ownSet = new Set(teaching.all);
+    const ownSet = teaching;
     const enrolledSet = new Set(enrolled.map((e) => `${e.student_id}::${e.class_id}`));
     allowed = cells.filter(
       (c) => ownSet.has(c.classId) && enrolledSet.has(`${c.studentId}::${c.classId}`),
@@ -1089,7 +1094,7 @@ export async function setAttendanceRange(input: {
     // 수강 여부는 기간이라 한 번에 받아 칸마다 JS로 판정한다(날짜별 쿼리 반복 금지).
     const [teachingByDate, enrollments] = await Promise.all([
       Promise.all(
-        dates.map(async (d) => [d, new Set((await getTeachingClassIds(supabase, user.id, d)).all)] as const),
+        dates.map(async (d) => [d, await userTaughtClassSet(supabase, user.id, d)] as const),
       ),
       fetchInChunks<{ class_id: string; student_id: string; start_date: string | null; end_date: string | null }>(
         studentIds,
@@ -1258,8 +1263,8 @@ export async function searchMakeupStudents(
   if (!q || !classId) return [];
   const supabase = await createClient();
   if ((await accessLevelTenant(user.systemRole, "attendance")) === "scoped") {
-    const { all: myClassIds } = await getTeachingClassIds(supabase, user.id);
-    if (!myClassIds.includes(classId)) return [];
+    const myClassIds = await userTaughtClassSet(supabase, user.id, kstToday());
+    if (!myClassIds.has(classId)) return [];
   }
   const { data } = await supabase
     .from("students")

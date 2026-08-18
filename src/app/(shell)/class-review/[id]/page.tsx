@@ -15,7 +15,7 @@ import {
   getReviewPrivileges,
   myScoreSlot,
   observerColumns,
-  OPEN_MODE_OBSERVER_LIMIT,
+  observerLimitOf,
 } from "@/features/class-review/server/queries";
 import { averageTotals, computeTotals, itemCountOf, normalizeScore } from "@/features/class-review/checklist";
 
@@ -48,9 +48,8 @@ export default async function ClassReviewDetailPage({ params }: { params: Promis
     label: priv.seeNames ? c.name : anon(i),
   }));
   // 선착순 모드: 아직 안 찬 슬롯을 빈 열로 보여준다(자리가 남았음이 보이게).
-  const emptyOpenSlots = openMode
-    ? Math.max(0, OPEN_MODE_OBSERVER_LIMIT - observerCols.length)
-    : 0;
+  // 정원은 문서마다 다르다(생성 시 선택) — 고정 상수로 되돌리면 5명짜리에 빈 칸이 3개만 그려진다.
+  const emptyOpenSlots = openMode ? Math.max(0, observerLimitOf(doc) - observerCols.length) : 0;
   const cols = [
     ...observerCols,
     ...Array.from({ length: emptyOpenSlots }, (_, i) => ({

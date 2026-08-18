@@ -58,10 +58,32 @@ describe("담당 반 판정 단일 소스", () => {
       join(process.cwd(), "src", "features", "onescreen", "server", "roster.ts"),
       join(process.cwd(), "src", "features", "onescreen", "server", "actions.ts"),
       join(process.cwd(), "src", "features", "onescreen", "server", "scope.ts"),
-      join(process.cwd(), "src", "features", "attendance", "server", "actions.ts"),
     ];
     for (const f of files) {
       expect(readFileSync(f, "utf8"), f).toContain("@/features/classes/server/delegation");
     }
+  });
+
+  /**
+   * 출결 쓰기는 2026-08-18부터 축이 **한 겹 넓다**: 담임 ∪ 위임 ∪ **그 교시 담당**.
+   * 출석부의 읽기 축이 (담임 ∪ 교시 담당)으로 넓어졌는데 쓰기만 담임 ∪ 위임이면, 슬롯 담당 강사에게
+   * 반이 **보이는데 저장이 막힌다**(실측: Florence Park = teacher·슬롯 9·담임 0). 그래서 출결 액션은
+   * `userTaughtClassSet`(write-policy)을 쓴다 — 그 함수가 **내부에서** delegation을 부르므로
+   * "담당 반 판정을 재구현하지 않는다"는 이 파일의 취지는 그대로다. 사슬이 끊기지 않는지 함께 잠근다.
+   */
+  it("출결 액션은 교시 담당까지 포함한 축을 쓰고, 그 축은 여전히 delegation을 통과한다", () => {
+    const actions = readFileSync(
+      join(process.cwd(), "src", "features", "attendance", "server", "actions.ts"),
+      "utf8",
+    );
+    expect(actions).toContain("userTaughtClassSet");
+    expect(actions).not.toContain("getTeachingClassIds"); // 좁은 축으로 되돌아가지 않게
+
+    const policy = readFileSync(
+      join(process.cwd(), "src", "features", "attendance", "live", "server", "write-policy.ts"),
+      "utf8",
+    );
+    expect(policy).toContain("@/features/classes/server/delegation");
+    expect(policy).toContain("class_schedules"); // 교시 담당을 실제로 더한다
   });
 });

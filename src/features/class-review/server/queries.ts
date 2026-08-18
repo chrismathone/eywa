@@ -1,5 +1,6 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { normalizeObserverLimit } from "../observer-count";
 import { getCurrentUser, type CurrentUser } from "@/lib/auth/current-user";
 import { canAccessTenant } from "@/lib/auth/perm-matrix";
 import { getTenantSettings } from "@/features/owner/server/queries";
@@ -40,6 +41,11 @@ export type ReviewHeader = {
   studentCount: string;
   /** 참관자 방식 — assigned: 생성 시 지정 / open: 선착순 3명(권한자 누구나 먼저 채점). 구버전 문서는 assigned 취급. */
   observerMode?: "assigned" | "open";
+  /**
+   * 평가자 정원(지정 슬롯 수 / 선착순 마감 수) — 생성 시 고른 값을 **문서에 동결**한다.
+   * 없으면 3(구버전 문서가 실제로 돌던 값). 기본값이 바뀌어도 옛 평가의 정원은 안 흔들린다.
+   */
+  observerLimit?: number;
 };
 
 export type ReviewDoc = {
@@ -64,7 +70,15 @@ export type ReviewListRow = ReviewDoc & {
   averages: SheetTotals | null;
 };
 
-export const OPEN_MODE_OBSERVER_LIMIT = 3;
+/**
+ * 이 평가의 평가자 정원. 🔴 **고정 상수를 다시 쓰지 말 것** — 인원이 생성 시 선택값이 된 뒤로는
+ * (원장 지시 2026-08-18) 문서마다 다르다. 상수로 판정하면 정원 5명짜리가 3명에서 마감되고,
+ * 이미 채점한 4·5번째가 화면에서 사라진다.
+ */
+export function observerLimitOf(doc: { header?: ReviewHeader }): number {
+  // header가 없는 raw 문서(파싱 전 form_data)에서도 부른다 — 옵셔널 체이닝 유지.
+  return normalizeObserverLimit(doc.header?.observerLimit);
+}
 
 function parseDoc(r: { id: string; created_at: string; form_data: unknown }): ReviewDoc {
   const d = (r.form_data ?? {}) as Partial<ReviewDoc> & { header?: ReviewHeader };
@@ -81,6 +95,7 @@ function parseDoc(r: { id: string; created_at: string; form_data: unknown }): Re
       classTime: d.header?.classTime ?? "",
       studentCount: d.header?.studentCount ?? "",
       observerMode: d.header?.observerMode === "open" ? "open" : "assigned",
+      observerLimit: normalizeObserverLimit(d.header?.observerLimit),
     },
     evaluators: Array.isArray(d.evaluators) ? (d.evaluators as ReviewEvaluator[]) : [],
     submissions: (d.submissions ?? {}) as Record<string, ScoreSheet>,
@@ -95,7 +110,7 @@ export function observerColumns(doc: ReviewDoc): { slot: string; name: string }[
     return Object.entries(doc.submissions)
       .filter(([slot]) => slot !== "self")
       .sort((a, b) => String(a[1].submittedAt ?? "").localeCompare(String(b[1].submittedAt ?? "")))
-      .slice(0, OPEN_MODE_OBSERVER_LIMIT)
+      .slice(0, observerLimitOf(doc))
       .map(([slot, sheet]) => ({ slot, name: sheet.by?.name ?? "평가자" }));
   }
   return doc.evaluators
@@ -121,7 +136,7 @@ export function myScoreSlot(
   const mineSheet = doc.submissions[viewerId];
   if (openMode) {
     const seated = observers.some((o) => o.slot === viewerId) || !!mineSheet;
-    if (!seated && observers.length >= OPEN_MODE_OBSERVER_LIMIT) return null;
+    if (!seated && observers.length >= observerLimitOf(doc)) return null;
     return { slot: viewerId, submitted: !!mineSheet?.scores?.some((v) => v > 0) };
   }
   const assigned = doc.evaluators.some((e) => e.id === viewerId && e.kind === "observer");
@@ -229,7 +244,7 @@ export async function listClassReviews(): Promise<{ rows: ReviewListRow[]; areas
       ...doc,
       submittedCount: sheets.filter((s) => computeTotals(s, rowAreas).answered > 0).length,
       observerSlots:
-        (doc.header.observerMode === "open" ? OPEN_MODE_OBSERVER_LIMIT : observers.length) + 1, // +본인
+        (doc.header.observerMode === "open" ? observerLimitOf(doc) : observers.length) + 1, // +본인
       averages: averageTotals(sheets, rowAreas),
     };
   });

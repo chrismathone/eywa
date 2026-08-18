@@ -1,0 +1,267 @@
+/**
+ * 출결 강사 귀속 축 — 순수 규칙 잠금.
+ *
+ * 실데이터 근거(injaewon, 2026-08-18 SELECT 실측):
+ *  · 8월 교시별 기록 1,146행 중 **1,138행의 recorded_by가 김동후**(담임 반 0개) → 입력자는 귀속이 아니다.
+ *  · 같은 1,146행을 (반·요일·시각·유효기간)으로 되짚으면 **198행이 담임 ≠ 교시 담당**이다.
+ *  · 수학은 활성 슬롯 224개 전부 `teacher_id`가 null → 담임 폴백이 유일한 정답(축을 바꿔도 불변).
+ */
+import { describe, expect, it } from "vitest";
+import {
+  axisDowOf,
+  classTeacherIdsInRange,
+  classTeacherRole,
+  isSeatSlot,
+  normalizeAxisTime,
+  resolveTaughtBy,
+  slotLiveOn,
+  slotOverlapsRange,
+  taughtByForSlot,
+  type AxisSlot,
+} from "./teacher-axis";
+
+const HOMEROOM = "t-homeroom";
+const SLOT_A = "t-slot-a";
+const SLOT_B = "t-slot-b";
+
+function slot(over: Partial<AxisSlot> = {}): AxisSlot {
+  return {
+    dayOfWeek: "wed",
+    startTime: "16:20:00",
+    teacherId: SLOT_A,
+    slotTeacherLabel: null,
+    validFrom: "2026-07-03",
+    validTo: null,
+    ...over,
+  };
+}
+
+describe("시각·요일 정규화", () => {
+  it("HH:MM:SS를 HH:MM으로 자른다", () => {
+    expect(normalizeAxisTime("16:20:00")).toBe("16:20");
+    expect(normalizeAxisTime("16:20")).toBe("16:20");
+    expect(normalizeAxisTime(null)).toBeNull();
+  });
+
+  it("날짜에서 요일 enum을 뽑는다(2026-08-14 = 금요일)", () => {
+    expect(axisDowOf("2026-08-14")).toBe("fri");
+    expect(axisDowOf("2026-08-12")).toBe("wed");
+    expect(axisDowOf("망가진 값")).toBeNull();
+  });
+});
+
+describe("슬롯 유효기간", () => {
+  it("끝난 교시는 그날의 후보가 아니다(#88 — 전 행을 그리면 옛 담당이 되살아난다)", () => {
+    const ended = { validFrom: "2026-03-01", validTo: "2026-07-02" };
+    expect(slotLiveOn(ended, "2026-06-30")).toBe(true);
+    expect(slotLiveOn(ended, "2026-08-14")).toBe(false);
+  });
+
+  it("아직 시작 안 한 교시도 아니다", () => {
+    expect(slotLiveOn({ validFrom: "2026-09-01", validTo: null }, "2026-08-14")).toBe(false);
+  });
+
+  it("기간 겹침은 한쪽 끝만 걸쳐도 참(월간 스코프)", () => {
+    expect(slotOverlapsRange({ validFrom: "2026-08-20", validTo: null }, "2026-08-01", "2026-08-31")).toBe(true);
+    expect(slotOverlapsRange({ validFrom: "2026-03-01", validTo: "2026-07-02" }, "2026-08-01", "2026-08-31")).toBe(false);
+  });
+});
+
+describe("자리(LAB·JJ) 판정", () => {
+  it("담당이 비어 있고 자리 라벨이면 자리다", () => {
+    expect(isSeatSlot({ teacherId: null, slotTeacherLabel: "JJ" })).toBe(true);
+    expect(isSeatSlot({ teacherId: null, slotTeacherLabel: "이주희" })).toBe(true); // LAB 별칭
+  });
+
+  it("사람이 배선돼 있으면 자리가 아니다(닉네임 라벨은 표시 전용)", () => {
+    expect(isSeatSlot({ teacherId: SLOT_A, slotTeacherLabel: "Hannah" })).toBe(false);
+  });
+});
+
+describe("출결 한 건의 귀속(resolveTaughtBy)", () => {
+  it("교시 담당이 정해져 있으면 담임이 아니라 그 사람이다", () => {
+    // 실데이터: 중등E_초6 의치대 수요일 16:20 = 김태건(담임 정유진).
+    expect(
+      resolveTaughtBy({
+        homeroomTeacherId: HOMEROOM,
+        slots: [slot({ teacherId: SLOT_A })],
+        date: "2026-08-12", // 수
+        slotStart: "16:20",
+      }),
+    ).toEqual({ teacherId: SLOT_A, source: "slot" });
+  });
+
+  it("같은 반이라도 요일이 다르면 다른 사람이다(요일별 담당 편성)", () => {
+    const slots = [
+      slot({ dayOfWeek: "wed", teacherId: SLOT_A }),
+      slot({ dayOfWeek: "fri", teacherId: HOMEROOM }),
+    ];
+    expect(resolveTaughtBy({ homeroomTeacherId: HOMEROOM, slots, date: "2026-08-12", slotStart: "16:20" }).teacherId).toBe(SLOT_A);
+    expect(resolveTaughtBy({ homeroomTeacherId: HOMEROOM, slots, date: "2026-08-14", slotStart: "16:20" }).teacherId).toBe(HOMEROOM);
+  });
+
+  it("담당이 미지정이면 담임으로 떨어진다(수학 활성 슬롯 224/224가 이 경로)", () => {
+    expect(
+      resolveTaughtBy({
+        homeroomTeacherId: HOMEROOM,
+        slots: [slot({ teacherId: null })],
+        date: "2026-08-12",
+        slotStart: "16:20",
+      }),
+    ).toEqual({ teacherId: HOMEROOM, source: "homeroom" });
+  });
+
+  it("시간표에 없는 날(보강)은 담임으로 떨어진다 — 근거가 없을 때의 기본값", () => {
+    expect(
+      resolveTaughtBy({
+        homeroomTeacherId: HOMEROOM,
+        slots: [slot({ dayOfWeek: "wed" })],
+        date: "2026-08-16", // 일
+        slotStart: "16:20",
+      }),
+    ).toEqual({ teacherId: HOMEROOM, source: "homeroom" });
+  });
+
+  it("자리(LAB·JJ) 수업은 담임으로 폴백하지 않는다 — 담임 시수로 잡히면 안 된다(0208a)", () => {
+    expect(
+      resolveTaughtBy({
+        homeroomTeacherId: HOMEROOM,
+        slots: [slot({ teacherId: null, slotTeacherLabel: "JJ" })],
+        date: "2026-08-12",
+        slotStart: "16:20",
+      }),
+    ).toEqual({ teacherId: null, source: "seat" });
+  });
+
+  it("모호하면(담당이 서로 다른 유효 슬롯 둘) 지어내지 않는다", () => {
+    expect(
+      resolveTaughtBy({
+        homeroomTeacherId: HOMEROOM,
+        slots: [slot({ teacherId: SLOT_A }), slot({ teacherId: SLOT_B })],
+        date: "2026-08-12",
+        slotStart: "16:20",
+      }),
+    ).toEqual({ teacherId: null, source: "ambiguous" });
+  });
+
+  it("'그날 전체' 기록은 교시를 특정 못 해 교시별 담당이 갈리면 모호다", () => {
+    const slots = [
+      slot({ startTime: "16:20:00", teacherId: SLOT_A }),
+      slot({ startTime: "17:20:00", teacherId: SLOT_B }),
+    ];
+    expect(resolveTaughtBy({ homeroomTeacherId: HOMEROOM, slots, date: "2026-08-12", slotStart: null }).source).toBe(
+      "ambiguous",
+    );
+  });
+
+  it("'그날 전체'라도 담당이 한 사람뿐이면 그 사람이다(자리 슬롯은 세지 않는다)", () => {
+    const slots = [
+      slot({ startTime: "16:20:00", teacherId: SLOT_A }),
+      slot({ startTime: "17:20:00", teacherId: null, slotTeacherLabel: "JJ" }),
+    ];
+    expect(resolveTaughtBy({ homeroomTeacherId: HOMEROOM, slots, date: "2026-08-12", slotStart: null })).toEqual({
+      teacherId: SLOT_A,
+      source: "slot",
+    });
+  });
+
+  it("끝난 슬롯의 옛 담당은 되살아나지 않는다", () => {
+    const slots = [
+      slot({ teacherId: SLOT_B, validFrom: "2026-07-03", validTo: "2026-08-02" }),
+      slot({ teacherId: SLOT_A, validFrom: "2026-08-03", validTo: null }),
+    ];
+    expect(resolveTaughtBy({ homeroomTeacherId: HOMEROOM, slots, date: "2026-08-12", slotStart: "16:20" })).toEqual({
+      teacherId: SLOT_A,
+      source: "slot",
+    });
+  });
+
+  it("담임도 담당도 없으면 none — 빈 문자열이나 임의 선택으로 메우지 않는다", () => {
+    expect(resolveTaughtBy({ homeroomTeacherId: null, slots: [], date: "2026-08-12" })).toEqual({
+      teacherId: null,
+      source: "none",
+    });
+  });
+});
+
+describe("단건 슬롯 귀속(taughtByForSlot) — 당일 출결 보드가 쓰는 단건판", () => {
+  it("resolveTaughtBy와 같은 답을 낸다(자리·담당·폴백 3갈래)", () => {
+    const cases: { teacherId: string | null; slotTeacherLabel: string | null; expect: ReturnType<typeof resolveTaughtBy> }[] = [
+      { teacherId: SLOT_A, slotTeacherLabel: "Hannah", expect: { teacherId: SLOT_A, source: "slot" } },
+      { teacherId: null, slotTeacherLabel: null, expect: { teacherId: HOMEROOM, source: "homeroom" } },
+      { teacherId: null, slotTeacherLabel: "JJ", expect: { teacherId: null, source: "seat" } },
+    ];
+    for (const c of cases) {
+      const single = taughtByForSlot({
+        homeroomTeacherId: HOMEROOM,
+        slot: { teacherId: c.teacherId, slotTeacherLabel: c.slotTeacherLabel },
+      });
+      expect(single).toEqual(c.expect);
+      expect(
+        resolveTaughtBy({
+          homeroomTeacherId: HOMEROOM,
+          slots: [slot({ teacherId: c.teacherId, slotTeacherLabel: c.slotTeacherLabel })],
+          date: "2026-08-12",
+          slotStart: "16:20",
+        }),
+      ).toEqual(c.expect);
+    }
+  });
+});
+
+describe("가시성 스코프(classTeacherIdsInRange)", () => {
+  it("담임 ∪ 그 기간 교시 담당", () => {
+    const ids = classTeacherIdsInRange({
+      homeroomTeacherId: HOMEROOM,
+      slots: [slot({ teacherId: SLOT_A }), slot({ dayOfWeek: "fri", teacherId: SLOT_B })],
+      from: "2026-08-01",
+      to: "2026-08-31",
+    });
+    expect(new Set(ids)).toEqual(new Set([HOMEROOM, SLOT_A, SLOT_B]));
+  });
+
+  it("담임이 없어도 교시 담당만으로 보인다(Florence Park = 담임 0·교시 담당 5반)", () => {
+    expect(
+      classTeacherIdsInRange({
+        homeroomTeacherId: null,
+        slots: [slot({ teacherId: SLOT_A })],
+        from: "2026-08-01",
+        to: "2026-08-31",
+      }),
+    ).toEqual([SLOT_A]);
+  });
+
+  it("기간 밖 슬롯과 자리는 안 들어간다", () => {
+    expect(
+      classTeacherIdsInRange({
+        homeroomTeacherId: HOMEROOM,
+        slots: [
+          slot({ teacherId: SLOT_A, validFrom: "2026-03-01", validTo: "2026-07-02" }),
+          slot({ teacherId: null, slotTeacherLabel: "LAB" }),
+        ],
+        from: "2026-08-01",
+        to: "2026-08-31",
+      }),
+    ).toEqual([HOMEROOM]);
+  });
+
+  it("모호(담당 둘)해도 둘 다 보인다 — 귀속과 달리 가시성은 넓게", () => {
+    const ids = classTeacherIdsInRange({
+      homeroomTeacherId: null,
+      slots: [slot({ teacherId: SLOT_A }), slot({ teacherId: SLOT_B })],
+      from: "2026-08-01",
+      to: "2026-08-31",
+    });
+    expect(new Set(ids)).toEqual(new Set([SLOT_A, SLOT_B]));
+  });
+});
+
+describe("반 안에서의 역할 표식", () => {
+  it("담임/교시 담당/둘 다/아님", () => {
+    const base = { homeroomTeacherId: HOMEROOM, slotTeacherIds: [SLOT_A, HOMEROOM] };
+    expect(classTeacherRole({ ...base, teacherId: HOMEROOM })).toBe("both");
+    expect(classTeacherRole({ ...base, teacherId: SLOT_A })).toBe("slot");
+    expect(classTeacherRole({ homeroomTeacherId: HOMEROOM, slotTeacherIds: [], teacherId: HOMEROOM })).toBe("homeroom");
+    expect(classTeacherRole({ ...base, teacherId: SLOT_B })).toBeNull();
+  });
+});

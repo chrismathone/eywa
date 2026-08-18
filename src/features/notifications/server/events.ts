@@ -24,7 +24,12 @@ import { isEnrollmentActiveOn } from "@/features/enrollments/eligibility";
 import { notifyUsers, type NotifyInput } from "./notify";
 import { getTenantSettingsByTenantId } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
-import { isClassnoteAllowed, isClassnoteSubjectEnabled } from "@/features/onescreen/classnote-guard";
+import {
+  classnoteMinDate,
+  classnoteRetryDeadline,
+  isClassnoteAllowed,
+  isClassnoteSubjectEnabled,
+} from "@/features/onescreen/classnote-guard";
 import { absenceKeyOf, getAbsenceBlockedKeys } from "@/features/onescreen/server/absence-gate";
 import { fetchReportOptoutClassIds } from "@/features/classes/server/report-optout-ids";
 import {
@@ -34,6 +39,7 @@ import {
   buildGradeDropEvents,
   buildOutstandingEvents,
   buildProgressAnomalyEvents,
+  buildSendDeadlineEvents,
   buildUnsentReportEvents,
   followupBody,
   weekKey,
@@ -43,6 +49,8 @@ import {
   groupProgressAnomalyByStudent,
   progressAnomalyLink,
   progressAnomalyStudentBody,
+  sendDeadlineBody,
+  sendDeadlineDigestBody,
   unsentReportDigestBody,
   UNSENT_REPORT_WINDOW_DAYS,
   type AbsenceEvent,
@@ -51,10 +59,19 @@ import {
   type GradeRow,
   type OutstandingEvent,
   type ProgressAnomalyEvent,
+  type SendDeadlineEvent,
   type UnsentReportEvent,
 } from "../events-core";
 
-type EventType = "absence_alert" | "followup_due" | "grade_drop" | "outstanding_alert" | "unsent_report" | "progress_anomaly";
+type EventType =
+  | "absence_alert"
+  | "followup_due"
+  | "grade_drop"
+  | "outstanding_alert"
+  | "unsent_report"
+  | "progress_anomaly"
+  // 발송 실패 보고서의 **재발송 마지막 날**(실패 자체는 0143a 트리거+스윕이 이미 알린다).
+  | "send_deadline";
 type EventRow = { tenant_id: string; event_type: EventType; subject_key: string; bucket: string; seeded: boolean };
 /** admin client(RLS 우회)를 쿠키-클라 시그니처 db 주입에 넘길 때의 캐스트 별칭(briefing.ts 선례). */
 type ServerClient = Awaited<ReturnType<typeof createClient>>;
@@ -621,12 +638,130 @@ async function detectUnsentReports(admin: SupabaseClient, tenantId: string): Pro
 }
 
 /**
+ * 발송 실패 보고서의 **재발송 마지막 날** 감지 → 담당 강사 건별 + master 집계.
+ *
+ * 🔴 실패했다는 사실은 여기서 알리지 않는다 — 0143a DB 트리거와 유실 보정 스윕(failed-notify-sweep.ts)이
+ *    이미 담당한다. 같은 사실을 두 경로가 울리면 경보 피로만 는다. 여기가 메우는 건 **"언제까지"**다:
+ *    2026-08-11 실측으로 실패 16건 중 11건이 손 못 댄 채 기한을 넘겨 학부모에게 영영 못 나갔다(#105).
+ *
+ * **게이트는 재발송(retryClassnote)과 동일해야 한다** — 아니면 "보낼 수 없는 건"을 재촉하는 거짓 알림(#77):
+ * ① classnote_status='failed' ② revoked 제외 ③ edutrix_import 제외 ④ 빈 멘트 제외 ⑤ isClassnoteAllowed
+ * ⑥ 과목 opt-in ⑦ 발송 스위치 OFF면 감지 자체를 안 함 ⑧ 결석(그날 결석이면 재발송도 막힌다).
+ */
+async function detectSendDeadline(admin: SupabaseClient, tenantId: string): Promise<number> {
+  const today = kstToday();
+  const settings = await getTenantSettingsByTenantId(tenantId);
+  // ⑦ 발송이 꺼진 테넌트는 시드도 남기지 않는다(켜는 날 콜드스타트로 시작).
+  if (!settings.report.classnoteSendEnabled) return 0;
+
+  const { data, error } = await admin
+    .from("lesson_reports")
+    .select("id, student_id, report_date, subject, class_id, makeup, notes, student:student_id ( name )")
+    .eq("tenant_id", tenantId) // admin RLS 우회 — 테넌트 필터가 유일한 격리선
+    .eq("classnote_status", "failed")
+    .is("revoked_at", null)
+    .or("source.is.null,source.neq.edutrix_import")
+    .gte("report_date", classnoteMinDate(today)) // ⑤ 아직 손 쓸 수 있는 것만
+    .order("report_date", { ascending: true })
+    .limit(200);
+  if (error) throw new Error(`detectSendDeadline query: ${error.message}`);
+
+  const subjects = buildSubjectMaps(settings.operations.subjects);
+  const gated = (data ?? []).filter(
+    (row) =>
+      !!((row.notes as string | null) ?? "").trim() && // ④ 빈 멘트 절대 가드(retryClassnote와 동일)
+      isClassnoteAllowed(row.report_date as string, today) &&
+      isClassnoteSubjectEnabled(row.subject as string | null, settings.report.classnoteSubjects),
+  );
+  // ⑧ 결석 게이트 — 반 단위 판정(0134a)까지 재발송 경로와 같은 규약. 보강은 제외(발송 콘솔과 동일).
+  const gateKeyOf = (row: (typeof gated)[number]) => ({
+    studentId: row.student_id as string,
+    reportDate: (row.report_date as string).slice(0, 10),
+    subject: row.subject as string | null,
+    classId: (row.class_id as string | null) ?? null,
+  });
+  const absentBlocked = await getAbsenceBlockedKeys(
+    admin,
+    tenantId,
+    gated.filter((row) => !row.makeup).map(gateKeyOf),
+  );
+  const candidates = buildSendDeadlineEvents(
+    gated
+      .filter((row) => row.makeup || !absentBlocked.has(absenceKeyOf(gateKeyOf(row))))
+      .map((row) => {
+        const student = (Array.isArray(row.student) ? row.student[0] : row.student) as { name?: string } | undefined;
+        const subject = row.subject as string | null;
+        const reportDate = (row.report_date as string).slice(0, 10);
+        return {
+          reportId: row.id as string,
+          studentId: row.student_id as string,
+          studentName: student?.name ?? "(학생)",
+          subjectLabel: (subject ? subjects.labelOf(subject) : null) ?? subject ?? "수업",
+          reportDate,
+          daysLeft: classnoteRetryDeadline(reportDate, today).daysLeft,
+        };
+      }),
+  );
+  const cold = await isColdStart(admin, tenantId, "send_deadline");
+  const fresh = (await recordNew(admin, tenantId, "send_deadline", candidates, cold)) as SendDeadlineEvent[];
+  if (cold || fresh.length === 0) return 0;
+
+  const items: NotifyInput[] = [];
+  // 타입은 기존 report_send_failed를 그대로 쓴다 — 중요도(important.ts)·배지가 이미 배선돼 있고,
+  // 강사에겐 결국 같은 사건이다(새 타입을 만들면 두 줄기가 각자 배선을 요구한다).
+  const masterBody = sendDeadlineDigestBody(fresh);
+  if (masterBody) {
+    for (const recipientId of await activeMasterIds(admin, tenantId)) {
+      items.push({
+        tenantId,
+        recipientId,
+        type: "report_send_failed",
+        title: "오늘까지만 재발송 가능",
+        body: masterBody,
+        link: "/lesson-reports?tab=list", // 재발송 버튼이 있는 유일한 자리
+        actorId: null,
+      });
+    }
+  }
+  // 담당 강사 = 자기 학생 건만. ⚠️ subjectKey가 보고서 id라 studentIdOf 추출자 필수(안 넘기면 0건).
+  const studentTeachers = await getStudentActiveTeachers(
+    admin,
+    tenantId,
+    [...new Set(fresh.map((event) => event.studentId))],
+    today,
+  );
+  for (const [teacherId, teacherEvents] of groupEventsByTeacher(fresh, studentTeachers, (e) => e.studentId)) {
+    for (const event of teacherEvents) {
+      items.push({
+        tenantId,
+        recipientId: teacherId,
+        type: "report_send_failed",
+        title: "오늘까지만 재발송 가능",
+        body: sendDeadlineBody(event),
+        link: "/onescreen", // 강사는 lesson_reports 권한이 없다 — 원스크린에서 재발송
+        actorId: null,
+      });
+    }
+  }
+  await notifyUsers(items);
+  return fresh.length;
+}
+
+/**
  * 테넌트 1건의 이벤트 감지·발송. cron이 브리핑 생성과 **독립된 try/catch**로 호출한다
  * (브리핑 실패해도 감지는 돌아야 함). 반환은 관측용 신규 이벤트 수(결석/후속조치/성적/미수).
  */
 export async function detectAndNotifyEvents(
   tenantId: string,
-): Promise<{ absence: number; followup: number; gradeDrop: number; outstanding: number; unsentReport: number; progressAnomaly: number }> {
+): Promise<{
+  absence: number;
+  followup: number;
+  gradeDrop: number;
+  outstanding: number;
+  unsentReport: number;
+  progressAnomaly: number;
+  sendDeadline: number;
+}> {
   const admin = createAdminClient();
   let absence = 0;
   let followup = 0;
@@ -634,6 +769,7 @@ export async function detectAndNotifyEvents(
   let outstanding = 0;
   let unsentReport = 0;
   let progressAnomaly = 0;
+  let sendDeadline = 0;
   try {
     absence = await detectAbsence(admin, tenantId);
   } catch (e) {
@@ -664,5 +800,10 @@ export async function detectAndNotifyEvents(
   } catch (e) {
     reportError(e, { scope: "events.progressAnomaly", tenantId });
   }
-  return { absence, followup, gradeDrop, outstanding, unsentReport, progressAnomaly };
+  try {
+    sendDeadline = await detectSendDeadline(admin, tenantId);
+  } catch (e) {
+    reportError(e, { scope: "events.sendDeadline", tenantId });
+  }
+  return { absence, followup, gradeDrop, outstanding, unsentReport, progressAnomaly, sendDeadline };
 }

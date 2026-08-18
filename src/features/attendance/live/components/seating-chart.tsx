@@ -1,13 +1,24 @@
 "use client";
 
 /**
- * 데스크 좌석표 — 층 띠 → 강의실(칠판+좌석). 칸 = 그 반의 오늘 학생 하나.
+ * 데스크 좌석표 — **지금/예정/지난 띠 → 층 → 강의실(칠판+좌석)**. 칸 = 그 반의 오늘 학생 하나.
+ *
+ * 🔴 종전엔 시간축이 없어 **하루치가 한 화면에 통째로** 깔렸다(원장 2026-08-18: *"1개의 수업에 대해서만
+ *    수업인데, 마치 전부 수업하는 것처럼"*). 실측(화요일 13:23 KST): 그날 살아 있는 슬롯 102개 중
+ *    진행 중 **1개**, 나머지 101개는 시작 전. 게다가 헤더 색이 진행·종료를 같은 네이비로 칠해
+ *    끝난 반과 지금 하는 반이 구분되지 않았다.
+ * 🔴 **끝난 수업을 감추지는 않는다** — 지나간 교시도 찍어야 한다([[#105]]). 지난 띠는 미입력이 남으면
+ *    아예 펼친 채로 두고(원장 2026-08-18), 그 안에서 미입력 카드만 앰버로 세운다(`seating-tone.ts`).
+ *    다 찍은 지난 수업은 테두리만 남겨 조용히 물러난다 — 색이 말하는 건 시간이 아니라 "할 일이 남았나"다.
+ * ⚠️ 판정 시각은 **서버**가 읽어 `slot.band`로 내려준다([[#108]] — 여기서 현재 시각을 읽으면 SSR과
+ *    갈려 하이드레이션이 깨진다). 이 파일엔 `Date`가 없어야 한다.
  */
 import { EmptyState } from "@/components/empty-state";
 import { CalendarDays } from "@/components/icons/eywa-icon-compat";
 import { SEAT_MARK_LABEL, SEAT_MARK_TONE } from "../mark-state";
+import { NOW_BAND_LABEL, splitByNowBand, type NowBand } from "../now-band";
 import { groupSeatPeriods, isSeatRoom } from "../seating-bands";
-import { foldSeating, seatingSummary } from "../seating";
+import { foldSeating, seatingSummary, type SeatingClass } from "../seating";
 import { groupSeatingFloors, type SeatingRoom as SeatingRoomGroup } from "../seating-floors";
 import type { LiveBoard } from "../types";
 import { SeatingRoom } from "./seating-room";
@@ -19,6 +30,13 @@ const LEGEND: Array<keyof typeof SEAT_MARK_LABEL> = [
   "unmarked",
   "waiting",
 ];
+
+/** 띠 한 줄에 붙는 설명 — "왜 접혀 있나"를 사람 말로 적는다(raw 코드 노출 금지). */
+const BAND_HINT: Record<NowBand, string> = {
+  now: "이 시각에 실제로 열려 있는 수업입니다.",
+  upcoming: "아직 시작하지 않았습니다.",
+  past: "이미 끝났습니다 — 미입력이 남은 반은 앰버로 표시하고 접지 않습니다.",
+};
 
 export function SeatingChart({ board }: { board: LiveBoard }) {
   const slots = board.teachers.flatMap((t) => t.slots);
@@ -32,8 +50,19 @@ export function SeatingChart({ board }: { board: LiveBoard }) {
       />
     );
   }
+  // 🔴 요약은 **하루 전체**가 분모다. 화면을 시간으로 나눈다고 "입력 12/240"이 "1/8"로 줄면
+  //    그날 얼마나 남았는지를 아무도 못 본다(집계 분모 불변 규칙).
   const sum = seatingSummary(classes);
-  const floors = groupSeatingFloors(classes);
+  const groups = splitByNowBand(classes);
+  const nowCount = groups.find((g) => g.band === "now")?.items.length ?? 0;
+  // 처음 열릴 띠 = 지금 → (없으면) 예정 → (없으면) 지난. 밤늦게 열어도 빈 화면이 되지 않는다.
+  const firstBand = groups[0]?.band;
+  /**
+   * 🔴 **지난 띠는 미입력이 남아 있으면 접지 않는다**(원장 2026-08-18: 조치 대상은 눈에 걸려야 한다).
+   *    시간으로 접는 규칙이 조치 목록을 지우면 고치기도 전에 사라진다([[#105]]).
+   */
+  const openOf = (band: NowBand, list: SeatingClass[]) =>
+    band === "now" || band === firstBand || (band === "past" && seatingSummary(list).unmarked > 0);
 
   return (
     <div className="space-y-6">
@@ -44,9 +73,15 @@ export function SeatingChart({ board }: { board: LiveBoard }) {
           결석 <span className="num text-att-absent-ink">{sum.absent}</span>
           <span className="text-text-faint mx-1.5">·</span>
           입력{" "}
-          <span className={`num ${sum.recorded >= sum.expected ? "text-primary" : "text-amber-strong"}`}>
+          <span className={`num ${sum.recorded >= sum.expected ? "text-primary" : "text-amber"}`}>
             {sum.recorded}/{sum.expected}
           </span>
+          {board.isToday && (
+            <>
+              <span className="text-text-faint mx-1.5">·</span>
+              지금 수업 중 <span className="num text-primary">{nowCount}</span>개 반
+            </>
+          )}
         </p>
         <ul className="ml-auto flex flex-wrap items-center gap-2">
           {LEGEND.map((k) => (
@@ -60,7 +95,63 @@ export function SeatingChart({ board }: { board: LiveBoard }) {
         </ul>
       </header>
 
-      {floors.map((floor) => (
+      {/* 지난 날짜엔 '지금'이 없다 — 놓친 날을 메우러 여는 자리라 띠로 나누지 않고 그대로 편다. */}
+      {board.isToday ? (
+        groups.map((group) => (
+          <BandSection
+            key={group.band}
+            band={group.band}
+            classes={group.items}
+            date={board.date}
+            open={openOf(group.band, group.items)}
+          />
+        ))
+      ) : (
+        <FloorList classes={classes} date={board.date} />
+      )}
+    </div>
+  );
+}
+
+/** 시간 띠 하나 — 지금은 펼쳐서, 나머지는 접어서. 접혀도 남은 미출결 수는 띠에 적는다. */
+function BandSection({
+  band,
+  classes,
+  date,
+  open,
+}: {
+  band: NowBand;
+  classes: SeatingClass[];
+  date: string;
+  open: boolean;
+}) {
+  const unmarked = seatingSummary(classes).unmarked;
+  const alert = band === "past" && unmarked > 0;
+  return (
+    <details open={open} className={`rounded-2xl border ${alert ? "border-amber" : "border-line"}`}>
+      <summary className="flex cursor-pointer flex-wrap items-center gap-x-2 gap-y-1 px-3 py-2">
+        <span className={`text-base font-bold ${band === "now" ? "text-primary" : "text-text-dim"}`}>
+          {NOW_BAND_LABEL[band]}
+        </span>
+        <span className="num text-text-dim text-sm">{classes.length}개 반</span>
+        {unmarked > 0 && (
+          <span className={`num text-sm font-bold ${band === "past" ? "text-amber" : "text-att-absent-ink"}`}>
+            미출결 {unmarked}
+          </span>
+        )}
+        <span className="text-text-faint ml-auto text-xs">{BAND_HINT[band]}</span>
+      </summary>
+      <div className="px-3 pt-1 pb-3">
+        <FloorList classes={classes} date={date} />
+      </div>
+    </details>
+  );
+}
+
+function FloorList({ classes, date }: { classes: SeatingClass[]; date: string }) {
+  return (
+    <div className="space-y-6">
+      {groupSeatingFloors(classes).map((floor) => (
         <section key={floor.key} className="space-y-4">
           <h2 className="flex flex-wrap items-baseline gap-x-2">
             <span className="text-xl font-bold">{floor.label}</span>
@@ -70,7 +161,7 @@ export function SeatingChart({ board }: { board: LiveBoard }) {
           </h2>
           <div className="space-y-4">
             {floor.rooms.map((room) => (
-              <SeatingRoomBlock key={room.key} date={board.date} room={room} />
+              <SeatingRoomBlock key={room.key} date={date} room={room} />
             ))}
           </div>
         </section>

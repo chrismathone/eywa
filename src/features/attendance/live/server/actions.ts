@@ -188,7 +188,7 @@ export async function requestAttendanceInput(input: {
       recipientId,
       type: "attendance_input_request",
       title: `출결 입력 요청 — ${klass?.class_name ?? "수업"}${slot ? ` ${slot}` : ""}`,
-      body: "사무실에서 오늘 출결 입력을 요청했습니다. 화면 위 '오늘 출석 미입력'에서 바로 찍을 수 있습니다.",
+      body: "데스크에서 오늘 출결 입력을 요청했습니다. 화면 위 '오늘 출석 미입력'에서 바로 찍을 수 있습니다.",
       link: sessionDate === kstToday() ? "/attendance/live" : `/attendance/live?date=${sessionDate}`,
       actorId: user.id,
     })),

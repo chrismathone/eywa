@@ -2,13 +2,14 @@
 
 // ECS 툴바 — 주 네비(flush 후 이동)·반 전환·요일 알약·패널 토글·저장 인디케이터·동시편집 배지.
 // WeekNav(ParamLink)를 안 쓰는 이유: 이동 전 store.flush()를 await해야 해서(§F) 버튼+onNavigate로 처리.
-import { ChevronLeft, ChevronRight } from "@/components/icons/eywa-icon-compat";
+import { ChevronLeft, ChevronRight, ClipboardCheck } from "@/components/icons/eywa-icon-compat";
 import { addWeeks, thisMonday } from "@/features/timetable/lib/week";
 import { EditingBadge } from "@/features/presence/editing-badge";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { WindowLink } from "@/components/workspace/window-link";
 import type { ClassSheetWeekData } from "../server/queries";
 import { ECS_FONT_SIZES, ECS_FONT_SIZE_LABEL, type EcsFontSize } from "../font-size";
+import { attHref } from "@/app/(shell)/attendance/_components/att-href";
 import { useSaveIndicator, type SheetSaveStore } from "./use-sheet-saves";
 
 const DOW_KO: Record<string, string> = { mon: "월", tue: "화", wed: "수", thu: "목", fri: "금", sat: "토", sun: "일" };
@@ -63,6 +64,11 @@ export function SheetToolbar({
 }) {
   const { pending, conflicts } = useSaveIndicator(store);
   const hrefFor = (classId: string, monday: string) => `/ecs/${classId}?week=${monday}`;
+  // 출석부 바로가기 — 지금 보고 있는 날(요일 필터) 기준으로 그 반의 그 달 출석부를 연다.
+  // 🔴 링크는 출석부의 **단일 빌더**(attHref)로 만든다 — 여기서 파라미터를 따로 조립하면 규약이 갈라져
+  //    (mode 누락 등) 강사 기본값인 '강사 전체'로 되돌아간다(att-href.ts의 🔴 주석).
+  const attendanceDate = dayFilter ?? data.weekMonday;
+  const attendanceHref = attHref({ classId: data.classId, month: attendanceDate.slice(0, 7), mode: "class" });
   const rel = data.weekRelation;
 
   return (
@@ -163,6 +169,14 @@ export function SheetToolbar({
       </div>
 
       <span className="ml-auto flex items-center gap-2">
+        <button
+          type="button"
+          className={`${pill(false)} inline-flex items-center gap-1`}
+          onClick={() => onNavigate(attendanceHref)}
+          title={`${data.className} 반 ${attendanceDate.slice(0, 7)} 출석부 열기`}
+        >
+          <ClipboardCheck className="size-3" /> 출석부
+        </button>
         {/* JJ 표시(내 계정) — 원장 2026-08-03: 코드가 정하지 말고 여기서 고른다.
             ⚠️ 2026-08-06부터 **LAB은 여기서 빠졌다**(항상 제외 — 전용 출석부로 이관 예정). 라벨이 'LAB·JJ'
                면 켜도 LAB이 안 나오는 거짓 스위치가 된다.

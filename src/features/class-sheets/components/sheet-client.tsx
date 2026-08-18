@@ -217,6 +217,19 @@ export function SheetClient({
   useEffect(() => {
     attendanceRef.current = attendance;
   }, [attendance]);
+  // 출결은 계획 CAS 큐와 다른 공용 서버 액션을 쓰므로 별도 in-flight 집합으로 추적한다.
+  // 바로 출석부로 이동하면 새 화면 조회가 저장보다 먼저 끝날 수 있어, 네비게이션은 이 집합도 drain한다.
+  const attendanceSavesRef = useRef(new Set<Promise<void>>());
+  const trackAttendanceSave = useCallback((save: Promise<void>) => {
+    attendanceSavesRef.current.add(save);
+    void save.finally(() => attendanceSavesRef.current.delete(save));
+  }, []);
+  const drainAttendanceSaves = useCallback(async () => {
+    // 기다리는 중 새 저장이 추가될 수 있으므로 한 번의 snapshot이 아니라 빌 때까지 반복한다.
+    while (attendanceSavesRef.current.size > 0) {
+      await Promise.allSettled([...attendanceSavesRef.current]);
+    }
+  }, []);
 
   // ── 요일 필터(같은 주 전환 = flush·재조회 없이 History API) ────────────────
   const [dayFilter, setDayFilter] = useState<string | null>(() => {
@@ -314,9 +327,10 @@ export function SheetClient({
         );
         if (!go) return;
       }
+      await drainAttendanceSaves();
       router.push(href);
     },
-    [router, store],
+    [drainAttendanceSaves, router, store],
   );
 
   // ── 저널 복구 배너 적용 ────────────────────────────────────────────────────
@@ -466,7 +480,7 @@ export function SheetClient({
             slot: dbSlot,
           },
         }));
-        void setAttendanceCell({
+        const save = setAttendanceCell({
           classId,
           studentId,
           sessionDate: date,
@@ -486,6 +500,7 @@ export function SheetClient({
             toast.error(r.error);
           }
         });
+        trackAttendanceSave(save);
       },
       // 출결 '선택 안 함'(지우기) — **0169a `ecs_clear_present` 한 경로만** 쓴다.
       // 🔴 한때 "사유 없는 present는 `setAttendanceCell({status:null})`로 지우자"로 우회했다가 되돌렸다
@@ -503,7 +518,7 @@ export function SheetClient({
           delete next[key];
           return next;
         });
-        void clearPresentAttendance({
+        const save = clearPresentAttendance({
           classId,
           studentId,
           date,
@@ -517,6 +532,7 @@ export function SheetClient({
             toast.error(r.error);
           }
         });
+        trackAttendanceSave(save);
       },
       saveMark: (studentId, date, slotStart, status, note, patch) => {
         const key = `${studentId}|${date}|${slotStart}`;
@@ -559,7 +575,7 @@ export function SheetClient({
       },
     }),
     // unitsByDate가 빠지면 주를 넘긴 뒤에도 **옛 주의 유닛**이 박힌다(시수=급여라 조용한 오기록).
-    [classId, data.canMarkAttendanceByDate, data.unitsByDate, store],
+    [classId, data.canMarkAttendanceByDate, data.unitsByDate, store, trackAttendanceSave],
   );
 
   const saveGoal = useCallback(

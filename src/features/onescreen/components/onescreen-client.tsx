@@ -80,6 +80,7 @@ import {
   planBulkAttendance,
   type BulkAttendanceStatus,
 } from "../bulk-attendance";
+import { planQuickPresent } from "../quick-attendance";
 import {
   DEFAULT_ONESCREEN_FONT_SIZE,
   ONESCREEN_FONT_SIZE_ZOOM,
@@ -311,6 +312,7 @@ export function OneScreenClient({
   const [bulkBusy, setBulkBusy] = useState<"save" | "send" | null>(null); // 일괄 저장/발송 진행중 — 재진입·행발송 잠금(#9/#10)
   const [attUrls, setAttUrls] = useState<Record<string, string>>({}); // 첨부 path→signed 썸네일 URL(P2b)
   const [attPending, setAttPending] = useState<Set<string>>(new Set()); // 출결 저장 중 (학생::반) — pill 잠금(2-2)
+  const [quickAttBusy, setQuickAttBusy] = useState(false); // 학생 목록 머리 '일괄 출석' 왕복 중 — 연타 방지
   // 첨부 업로드 중인 (학생::과목) 키 — 표는 행마다 첨부할 수 있어 과목명만으론 어느 행인지 못 가린다.
   const [uploadingAttKey, setUploadingAttKey] = useState<string | null>(null);
   const openPrint = usePrintWindow(); // "PDF" = 저장된 보고서를 인쇄 문서 플로팅 창으로 연다
@@ -460,6 +462,20 @@ export function OneScreenClient({
   // 🔴 필터는 `visible` 자체를 좁힌다 — 표시 목록과 **일괄 저장·발송·자동작성 대상이 반드시 같은 집합**이어야
   //    한다(일괄 액션은 전부 visible에서 행을 만든다). 표시만 따로 좁히면 "화면엔 12명인데 일괄 발송은 28명"이 된다.
   const visible = applyWriteFilter(classVisible, writeFilter, writtenById, writePins);
+  /**
+   * 머리의 '일괄 출석'(빠른 출결) 재료 — **표 모드·카드 모드가 이 한 번의 계산을 나눠 쓴다**(두 화면이
+   * 다른 수를 말하면 안 된다). 대상은 표시 집합(`visible`) × 반 필터라 라벨의 숫자와 실제로 보내는
+   * 칸이 같다. 출결 쓰기 권한이 없으면 아예 안 내려보내 버튼 자체가 사라진다(누를 수 있는 척 금지).
+   */
+  const quickPresent = planQuickPresent(visible, activeClassFilter);
+  const bulkPresentProps = canEditAttendance
+    ? {
+        count: quickPresent.cells.length,
+        alreadyMarked: quickPresent.alreadyMarked,
+        busy: quickAttBusy,
+        onApply: applyQuickPresent,
+      }
+    : undefined;
   const writeCounts = {
     written: countByWriteFilter(classVisible, "written", writtenById),
     unwritten: countByWriteFilter(classVisible, "unwritten", writtenById),
@@ -1107,6 +1123,70 @@ export function OneScreenClient({
         n.delete(key);
         return n;
       });
+    }
+  }
+  /**
+   * '일괄 출석'(빠른 출결, 원장 2026-08-18) — 지금 보이는 목록에서 **출결 기록이 없는 칸만** 출석으로
+   * 찍는다. ⚠️ 두 모드의 **자리는 다르다**(표 모드=표 머리글 `학생 · 반` 칸 / 카드 모드=좌측 학생
+   * 목록 머리 `학생 · 반별` 줄 — 좌측 목록은 카드 모드에서만 렌더된다). 대신 재료(`bulkPresentProps`)와
+   * 이 핸들러를 **한 벌만** 두어 두 화면이 같은 수를 말하고 같은 칸을 보낸다.
+   *
+   * 🔴 **비파괴는 서버가 강제한다**(`fillEmptyOnly: true`) — 원스크린은 출결을 재폴링하지 않아, 열어 둔
+   *    사이 데스크가 찍은 결석을 낡은 화면이 '출석'으로 뒤집을 수 있다(2026-08-17 감사 P0-1). 클라 계산
+   *    (planQuickPresent)은 **라벨의 숫자와 요청 범위**만 정하고, 실제 "이미 기록 있음" 판정은 서버가 한다.
+   * ⚠️ 셀 액션(setAttendanceCell)을 N번 부르지 않는다 — 반 하나가 30~40칸이라 왕복이 그만큼 늘어
+   *    반응속도(1순위)를 깎는다. 게이트(권한·수정 기간·담당 반·수강생)는 배치 액션이 **집합 단위로**
+   *    똑같이 강제한다(#77 — 화면이 아니라 액션이 게이트). ECS 오늘 보드 일괄과 같은 경로다.
+   * ⚠️ 화면은 **서버가 실제로 기록한 칸(applied)만** 칠한다 — 게이트·기존 기록에 걸려 빠진 칸을
+   *    '됐다'고 칠하면 화면과 출석부가 갈린다(표뷰 일괄과 같은 계약, 낙관 롤백 레이스도 없다).
+   * ⚠️ 찍은 뒤 지각·결석으로 바꾸는 길은 알약에 그대로 열려 있다(원장: "추후에 지각 결석으로 변경 가능하게").
+   */
+  async function applyQuickPresent() {
+    if (quickAttBusy) return;
+    const { cells } = planQuickPresent(visible, activeClassFilter);
+    if (cells.length === 0) return; // 버튼이 이미 비활성 — 방어선
+    const keys = cells.map((c) => `${c.studentId}::${c.classId}`);
+    setQuickAttBusy(true);
+    setAttPending((p) => {
+      const n = new Set(p);
+      keys.forEach((k) => n.add(k));
+      return n;
+    });
+    try {
+      const res = await setAttendanceBulk({
+        sessionDate: activeDate,
+        status: "present",
+        cells,
+        fillEmptyOnly: true,
+      });
+      if ("error" in res) {
+        toast.error(res.error);
+        return;
+      }
+      for (const c of res.applied) applyAttendanceLocal(c.studentId, c.classId, "present");
+      const missed = cells.length - res.applied.length;
+      if (res.applied.length === 0) {
+        // 조용한 0건 금지 — 왜 아무 일도 안 났는지 밝힌다.
+        toast.message(
+          "기록된 칸이 없습니다 — 이미 다른 곳에서 출결이 찍혔거나 담당 반·수강 대상이 아닙니다",
+        );
+        return;
+      }
+      toast.success(
+        `일괄 출석 — ${res.applied.length}칸 기록` +
+          (missed > 0
+            ? ` · ${missed}칸은 그대로 뒀습니다(이미 기록됐거나 담당 반·수강 대상이 아님 — 새로고침하면 최신 기록이 보입니다)`
+            : ""),
+      );
+    } catch {
+      toast.error("일괄 출석 저장에 실패했습니다 — 네트워크를 확인해 주세요");
+    } finally {
+      setAttPending((p) => {
+        const n = new Set(p);
+        keys.forEach((k) => n.delete(k));
+        return n;
+      });
+      setQuickAttBusy(false);
     }
   }
   /**
@@ -2528,6 +2608,7 @@ export function OneScreenClient({
       {view === "grid" ? (
         <OneScreenGrid
           students={visible}
+          bulkPresent={bulkPresentProps}
           reports={reports}
           config={{
             attitudes: ATTITUDE,
@@ -2636,6 +2717,7 @@ export function OneScreenClient({
       <div className="grid grid-cols-1 gap-4 lg:min-h-0 lg:min-w-[1420px] lg:flex-1 lg:grid-cols-[240px_minmax(590px,1fr)_544px] lg:items-stretch">
         <StudentList
           students={visible}
+          bulkPresent={bulkPresentProps}
           selId={effectiveId}
           onSelect={setSelId}
           reportCellById={reportCellById}

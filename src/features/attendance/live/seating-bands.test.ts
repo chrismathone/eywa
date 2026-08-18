@@ -18,6 +18,7 @@ const slot = (over: Partial<LiveBoardSlot> & { key: string; slotStart: string })
   hasAnyRecord: false,
   recordedCount: 0,
   phase: "due",
+  band: "now",
   ownedByMe: false,
   ...over,
 });
