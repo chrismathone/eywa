@@ -259,3 +259,41 @@ export function countDayPlanCellOverwrites(
     0,
   );
 }
+
+// ── 일괄 라벨의 **범위** 표기 ──────────────────────────────────────────────────
+// 🔴 원장 2026-08-18: *"학생수는 6인데 일괄출석은 12"* → *"수업 개수가 곱해져서 12구나. 그럼 이렇게.
+//    **일괄 출석 학생수x수업수 로 표기, 합산하지 말고**."*
+//    그전 라벨은 `countDayTargets`(=빈 칸의 합)를 그대로 적어서, 학생 6명만 보고 있는 사람에게 12가
+//    어디서 왔는지 화면 어디에도 안 나왔다. 이제 라벨은 **범위**(6×3)를 말하고, 실제로 몇 칸이 기록됐는지는
+//    누른 뒤 토스트가 말한다(둘은 다를 수 있다 — 일괄 출석은 빈 칸만 채우기 때문).
+// ⚠️ **저장 대상 산출(`countDayTargets`·`planDayBulkAttendance`)은 손대지 않는다** — 그쪽이 맞다.
+//    여기 있는 건 오로지 라벨 표기다(2026-08-14 "라벨 숫자는 칸 수" 결정이 이 지시로 뒤집혔다).
+
+/**
+ * 일괄 대상 **학생 수** — 편집 가능한(재원) 학생을 교시 간 **중복 없이** 센다.
+ * 퇴원·기록 섹션은 `editableRows`가 이미 뺀다(일괄 대상이 아니라는 기존 규약 그대로).
+ */
+export function countDayBulkStudents(
+  slots: readonly DayBulkSlot[],
+  opts: { canEdit: boolean },
+): number {
+  const ids = new Set<string>();
+  for (const s of openSlots(slots)) {
+    for (const r of editableRows(s.roster, opts.canEdit)) ids.add(r.studentId);
+  }
+  return ids.size;
+}
+
+/** 그 날 **예정된(scheduled) 교시 수** — 시간표에 없는 칸은 애초에 일괄 대상이 아니다. */
+export function countDayOpenSlots(slots: readonly DayBulkSlot[]): number {
+  return openSlots(slots).length;
+}
+
+/**
+ * 라벨에 붙는 범위 표기 — `6×3`(학생수 × 교시수). **곱한 값을 적지 않는다**(그게 혼란의 원인이었다).
+ * 둘 중 하나라도 0이면 빈 문자열 — 그 경우 버튼은 어차피 비활성이고, `0×3`은 읽을 값이 아니다.
+ */
+export function bulkScopeLabel(studentCount: number, slotCount: number): string {
+  if (studentCount <= 0 || slotCount <= 0) return "";
+  return `${studentCount}×${slotCount}`;
+}

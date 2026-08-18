@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
-import Link from "next/link";
 import { requireAccess } from "@/lib/auth/require-access";
 import { PageHeader } from "@/components/page-header";
 import { WeekNav } from "@/app/(shell)/timetable/_components/week-nav";
@@ -206,21 +205,11 @@ function EcsTodayFace({
           {(sheets ?? []).map((s) =>
             s.res.ok ? (
               <section key={s.classId} className="space-y-2">
-                {/* 수업명은 **이 격자가 어느 반인지**를 말하는 유일한 자리라 또렷해야 한다(원장 2026-08-11
-                    "수업명을 더 선명하게") — 반이 여러 개 세로로 쌓이는 화면이라 15px 굵게로는 카드
-                    안 글자들(13px 굵게)과 위계가 안 벌어졌다. 크기·굵기·자간을 함께 올리고, 옆 링크는
-                    한 단계 낮춰(보통 굵기) 이름이 먼저 읽히게 한다. */}
-                <div className="flex flex-wrap items-baseline gap-x-2 px-1">
-                  <h2 className="text-foreground text-[19px] leading-tight font-extrabold tracking-tight">
-                    {s.className}
-                  </h2>
-                  <Link
-                    href={`/ecs/${s.classId}?week=${res.weekMonday}`}
-                    className="text-primary text-[12.5px] font-medium underline-offset-2 hover:underline"
-                  >
-                    주간 시트 열기 →
-                  </Link>
-                </div>
+                {/* 🔴 수업명 줄은 **카드 안**으로 내려갔다(원장 2026-08-18: *"수업명을 빈 공간으로
+                    이동시켜줘"* + *"그러면 행 절약할 수 있을듯"*). 여기 바깥 제목 줄과 카드 안 일괄
+                    버튼 줄이 나란히 있어 반마다 두 줄을 먹었는데, 정작 일괄 줄 왼쪽은 늘 비어 있었다.
+                    이름·'주간 시트 열기'·'수정중' 배지는 이제 SheetClient가 `header`로 넘긴다
+                    (today-class-sheet.tsx) — 위계(굵게·링크는 한 단계 낮게)는 그대로 옮겼다. */}
                 <SheetClient
                   // 반 상세와 같은 재마운트 키 + **날짜** — 날짜 이동은 searchParam 네비라 키에 없으면
                   // 요일 필터 state가 옛 날짜에 남는다(카드 모드 key={date}와 같은 이유).

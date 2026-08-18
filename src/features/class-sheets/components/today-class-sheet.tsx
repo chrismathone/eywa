@@ -13,6 +13,7 @@
  * 새 기계가 아니다 — 계획은 주간 시트의 PeriodBlock, 로스터는 공용 셀(roster-slot-cells)이라 저장
  * 경로(CAS·setAttendanceCell·마크 LWW)와 게이트가 주간 시트와 한 벌이다.
  */
+import type { ReactNode } from "react";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import type { ClassSheetWeekData } from "../server/queries";
 import type { GridDay } from "../lib/grid";
@@ -25,10 +26,11 @@ import { PeriodBlock } from "./period-block";
 import { DayBulk } from "./day-bulk";
 import { TodayRosterTable } from "./today-roster-table";
 // 가로 치수는 아래 통합 로스터와 **공유**한다 — 한쪽만 고치면 줄이 조용히 어긋난다(today-columns).
-import { TODAY_GUTTER, TODAY_NAME_W, TODAY_SLOT_W } from "../lib/today-columns";
+import { TODAY_GUTTER, TODAY_NAME_W, TODAY_SLOT_W, todayContentWidth } from "../lib/today-columns";
 
 export function TodayClassSheet({
   day,
+  header,
   data,
   linesBySlot,
   marks,
@@ -40,6 +42,13 @@ export function TodayClassSheet({
   onToggleGroup,
 }: {
   day: GridDay;
+  /**
+   * 카드 **안** 머리 왼쪽 — 반 이름 + '주간 시트 열기' + '수정중' 배지(원장 2026-08-18:
+   * *"수업명을 빈 공간으로 이동시켜줘"* + *"그러면 행 절약할 수 있을듯"*).
+   * 그전엔 카드 **바깥 위**에 제목 줄이 따로 있어 반마다 한 줄씩 더 먹었고, 정작 일괄 버튼 줄의
+   * 왼쪽 절반과 학생 이름 열 위는 비어 있었다 — 그 빈자리로 옮긴다.
+   */
+  header?: ReactNode;
   data: ClassSheetWeekData;
   linesBySlot: Record<string, PlanLineDTO[]>;
   marks: Record<string, SheetMark>;
@@ -63,7 +72,17 @@ export function TodayClassSheet({
         {/* 일괄 = **시트 머리 오른쪽**(원장 2026-08-14 "가장 위의 수업에만 있으면 됨"). 교시 카드마다
             반복하던 버튼 셋을 하루 하나로 — 범위가 그 날 전부라 "나머지 교시도"를 따로 물을 게 없다.
             권한이 없으면 컴포넌트가 스스로 아무것도 안 그려 이 줄은 빈 여백만 남는다. */}
-        <div className="flex justify-end pb-1.5">
+        {/* 🔴 이 줄의 폭을 **내용 폭으로 못 박는다**: 카드가 `w-max`라 그냥 두면 긴 반 이름이 카드를
+            늘려 아래 표보다 넓어지고, 가로 스크롤이 표 끝을 지나 더 밀린다. 폭을 표와 같게 두면
+            제목은 `truncate`로 접히고 격자는 그대로다(폭 단일 소스 = today-columns). */}
+        <div
+          className="flex items-center gap-2 pb-1.5"
+          style={{ width: todayContentWidth(day.slots.length) }}
+        >
+          {/* 반 이름 자리 — 아래 표 첫 열(TODAY_NAME_W) 위에서 시작해 일괄 버튼 앞까지 쓴다.
+              ⚠️ 폭을 고정하지 않는다(min-w-0 + flex-1) — 고정하면 이름이 늘 잘리고, 여기서 늘리면
+              아래 표와 어긋난다. 잘린 전체 이름은 header 쪽이 title로 남긴다. */}
+          <div className="min-w-0 flex-1">{header}</div>
           <DayBulk
             date={day.date}
             slots={day.slots.map((s) => ({

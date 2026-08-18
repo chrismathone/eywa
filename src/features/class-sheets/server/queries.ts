@@ -80,6 +80,12 @@ export type ClassSheetWeekData = {
   canWrite: boolean;
   /** 날짜별 출석 present 체크 가능 여부(attendance 계약 — 권한 + 강사 7일 창). */
   canMarkAttendanceByDate: Record<string, boolean>;
+  /**
+   * **사유(메모)만** 고칠 수 있는가 — 권한 + 담당 반까지는 같고 **7일 창은 보지 않는다**.
+   * 서버 `setAttendanceCell({ noteOnly: true })`가 정확히 그만큼을 면제하므로(메모는 시수·돈에 안 닿는다),
+   * 화면도 같은 폭으로 열어야 "서버는 되는데 화면이 막는" 문이 생기지 않는다(원장 2026-08-06).
+   */
+  canNoteAttendance: boolean;
   skillAreas: SkillAreaSetting[];
   grid: WeekGrid;
   /** teacherId → 표시 이름(users.display_name). 슬롯 라벨(slot_teacher_label)이 없을 때 폴백. */
@@ -191,7 +197,8 @@ export async function getClassSheetWeek(
     admin
       .from("enrollments")
       .select(
-        "student_id, start_date, end_date, on_hold, is_transferred, attendance_days, students!inner(id, name, school, grade, english_name, withdrawn_at)",
+        // withdrawal_reason = '퇴원' 섹션 한 줄 요약의 괄호(원장 2026-08-18) — 반 단위 사유라 여기서 온다.
+        "student_id, start_date, end_date, on_hold, is_transferred, attendance_days, withdrawal_reason, students!inner(id, name, school, grade, english_name, withdrawn_at)",
       )
       .eq("tenant_id", tenantId)
       .eq("class_id", classId)
@@ -267,6 +274,7 @@ export async function getClassSheetWeek(
     on_hold: boolean;
     is_transferred: boolean | null;
     attendance_days: string[] | null;
+    withdrawal_reason: string | null;
     students: {
       id: string;
       name: string;
@@ -354,6 +362,7 @@ export async function getClassSheetWeek(
       isTransferred: e.is_transferred ?? undefined,
       attendanceDays: e.attendance_days,
       withdrawnAt: e.students?.withdrawn_at ?? null,
+      withdrawalReason: e.withdrawal_reason ?? null,
     })),
     planLines,
     marks,
@@ -426,12 +435,12 @@ export async function getClassSheetWeek(
       ? (await getTeachingClassIds(await createClient(), access.user.id, today)).all
       : null;
   const attendanceClassOk = attendanceClassIds === null || attendanceClassIds.includes(classId);
+  // 사유(메모)만 = 권한 + 담당 반. 7일 창은 여기서 빼고 날짜별 canMark에만 곱한다(서버 noteOnly와 같은 폭).
+  const canNoteAttendance = attendanceWrite && attendanceClassOk;
   const canMarkAttendanceByDate: Record<string, boolean> = {};
   for (const date of weekDatesOf(weekMonday)) {
     canMarkAttendanceByDate[date] =
-      attendanceWrite &&
-      attendanceClassOk &&
-      (attendanceScope !== "scoped" || isWithinAttendanceEditWindow(date, today));
+      canNoteAttendance && (attendanceScope !== "scoped" || isWithinAttendanceEditWindow(date, today));
   }
 
   // 교시 라벨(표시 전용) — **요일별 표**로 슬롯마다 확정한다. 주말은 평일과 시각이 다른 별도 교시표를
@@ -519,6 +528,7 @@ export async function getClassSheetWeek(
       today,
       canWrite: access.canWrite,
       canMarkAttendanceByDate,
+      canNoteAttendance,
       skillAreas: access.skillAreas,
       grid,
       teacherNames,

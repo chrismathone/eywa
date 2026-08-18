@@ -16,15 +16,23 @@
 //       같은 지각·결석일 일이 없어(개별 셀 순환이 정석) 일괄의 실익이 없던 자리다.
 //
 // 계약은 종전 그대로다(교시 단위 → 하루 단위로 범위만 넓혔다):
-//  · 대상 = **화면에 보이는 것**(로스터 = 표시 집합, 계획 = 이미 있는 줄). 라벨에 실제 대상 수를 밝힌다.
+//  · 대상 = **화면에 보이는 것**(로스터 = 표시 집합, 계획 = 이미 있는 줄).
+//  · 🔴 **라벨은 '범위'(학생수×교시수)이고 '칸 수'가 아니다** — 원장 2026-08-18: *"학생수는 6인데
+//    일괄출석은 12"* → *"수업 개수가 곱해져서 12구나. … 일괄 출석 학생수x수업수 로 표기, 합산하지 말고"*.
+//    (2026-08-14의 "라벨 숫자 = 칸 수"를 뒤집은 결정이다. 실제로 기록되는 칸 수는 **누른 뒤 토스트**가
+//    말한다 — 일괄 출석은 빈 칸만 채우므로 둘은 다를 수 있고, 그 차이를 툴팁이 미리 밝힌다.)
 //  · 출결 일괄은 언제나 빈 칸만(비파괴) → 확인 불필요. 태도·계획은 덮어쓰기가 기본이라 덮일 값이 있으면
 //    몇 건인지 숫자로 밝히고 확인을 받는다(침묵 금지).
 //  · 개별 사실(학생별 진도·과제·특이사항)은 일괄 대상이 아니다 — 복제하면 거짓이 된다.
 //  · 저장은 **교시별로** 나간다(0196a) — 뭉쳐 보내면 다른 교시 기록을 덮는다.
 import { useState } from "react";
+import { toast } from "sonner";
 import { Popover } from "@base-ui/react/popover";
 import { Button } from "@/components/ui/button";
 import {
+  bulkScopeLabel,
+  countDayBulkStudents,
+  countDayOpenSlots,
   countDayPlanCellOverwrites,
   countDayStatusOverwrites,
   countDayTargets,
@@ -98,6 +106,11 @@ export function DayBulk({
   // 권한 없으면 컨트롤을 아예 렌더하지 않는다(누를 수 있는 것처럼 보였다가 서버가 거절하는 게 최악).
   if (!canEdit) return null;
 
+  // 라벨의 **범위** — 학생수(교시 간 중복 없이) × 예정 교시수. 곱한 값은 적지 않는다(원장 2026-08-18).
+  const studentCount = countDayBulkStudents(slots, { canEdit });
+  const slotCount = countDayOpenSlots(slots);
+  const scope = bulkScopeLabel(studentCount, slotCount);
+  const scopeWords = `학생 ${studentCount}명 × 교시 ${slotCount}개`;
   const attendanceTargets = planDayBulkAttendance(slots, attendance, date, { canEdit, canMarkDate });
   const attendanceCount = countDayTargets(attendanceTargets);
   const statusTargets = planDayBulkStatus(slots, marks, date, { canEdit, onlyEmpty });
@@ -122,6 +135,9 @@ export function DayBulk({
   const applyPresent = () => {
     if (attendanceCount === 0) return;
     onBulkAttendance(attendanceTargets, "present");
+    // 라벨은 범위(6×3), 토스트는 **실제로 기록된 칸 수** — 둘이 다른 게 정상이라 숫자를 여기서 밝힌다
+    // (빈 칸만 채우므로 이미 찍힌 칸은 세지 않는다).
+    toast.success(`출석 ${attendanceCount}칸 기록 — 이미 기록된 칸은 그대로 두었습니다`);
   };
 
   const applyStatus = () => {
@@ -165,14 +181,14 @@ export function DayBulk({
         onClick={applyPresent}
         title={
           attendanceCount > 0
-            ? `이 날 기록 없는 ${attendanceCount}칸을 출석으로 — 이미 기록된 학생은 그대로 둡니다`
+            ? `${scopeWords} 범위 — 이 중 기록 없는 ${attendanceCount}칸만 출석으로 기록합니다(이미 기록된 칸은 그대로 둡니다)`
             : canMarkDate
               ? "이 날은 이미 전원 기록됐습니다"
               : // canMarkAttendanceByDate = 권한 AND 기간 — 원인을 단정하면 오표시(개별 툴팁과 동일 문구)
                 "출결 입력 권한이 없거나 수정 기간이 지났습니다"
         }
       >
-        일괄 출석{attendanceCount > 0 ? ` ${attendanceCount}` : ""}
+        일괄 출석{scope ? ` ${scope}` : ""}
       </button>
 
       {/* 태도 — 셀과 같은 5단 눈금에서 골라야 해서 창이 남는다. */}
@@ -183,14 +199,19 @@ export function DayBulk({
           if (!o) setPicked(null);
         }}
       >
-        <Popover.Trigger className={PILL} title="이 날 태도를 한 번에">
-          일괄 태도
+        <Popover.Trigger
+          className={PILL}
+          title={`이 날 태도를 한 번에 — ${scopeWords} 범위(실제로 채우는 칸 수는 아래 버튼에)`}
+        >
+          일괄 태도{scope ? ` ${scope}` : ""}
         </Popover.Trigger>
         <Popover.Portal>
           <Popover.Positioner side="bottom" align="end" sideOffset={4} className="z-50">
             <Popover.Popup className={POPUP}>
+              {/* 범위는 출석 라벨과 **같은 셈법**으로 적는다(한 줄에 두 셈법이 섞이면 더 헷갈린다). */}
               <p className="text-text-dim text-[12px]">
-                이 날 교시 <b className="text-foreground num">{slots.filter((s) => s.scheduled).length}</b>개
+                학생 <b className="text-foreground num">{studentCount}</b>명 × 교시{" "}
+                <b className="text-foreground num">{slotCount}</b>개
               </p>
               {/* ⚠️ 자유입력은 **없앴다**(원장 2026-08-06 "태도 직접 입력은 없애버려. ecs").
                   ECS 태도는 5단 눈금으로 고정 — 자유입력이 있으면 눈금 밖 값이 계속 새로 생겨
@@ -245,9 +266,12 @@ export function DayBulk({
         <Popover.Portal>
           <Popover.Positioner side="bottom" align="end" sideOffset={4} className="z-50">
             <Popover.Popup className={POPUP}>
+              {/* ⚠️ 여기만 곱셈으로 못 적는다 — 계획 줄 수는 **교시마다 다를 수 있어** `N×M`이 거짓이 될
+                  수 있다. 대신 몇 개 교시를 합친 수인지 옆에 밝혀 숫자의 출처를 보이게 한다. */}
               <p className="text-text-dim text-[12px]">
                 이 날 {TERM_LABEL[effectiveTerm]} 계획{" "}
                 <b className="text-foreground num">{termLineCount}</b>줄
+                <span className="text-text-faint"> (교시 {slotCount}개 합계)</span>
               </p>
               {showExamTerm ? (
                 <div className="flex gap-1">

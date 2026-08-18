@@ -3,6 +3,7 @@
 // ECS 주간 시트 오케스트레이터 — state 소유·저장 큐·저널·presence·네비 flush.
 // 페이지가 key={classId:week}로 재마운트하므로 서버 데이터로 state가 재초기화된다.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { useEditPresence } from "@/features/presence/edit-presence";
@@ -91,6 +92,18 @@ export type SheetHandlers = {
    * 새로고침하면 돌아오는 거짓 성공을 만들지 않는다. ⚠️ 0203a 미적용 창에선 present만 지워진다(#95).
    */
   clearAttendance: (studentId: string, date: string, slotStart: string) => void;
+  /**
+   * **사유만** 고치는 저장(`setAttendanceCell({ noteOnly: true })`) — 상태·시수는 서버가 읽지도 쓰지도
+   * 않는다. 🔴 이 경로만 **강사 7일 편집창을 면제**받는다(원장 2026-08-06 *"메모는 언제든 추가할 수
+   * 있어야"* — 메모는 시수·급여에 안 닿는다). 담당 반·수강생 게이트는 그대로 서버가 본다.
+   * ⚠️ 그날 기록이 **없으면** 서버가 거절한다(메모를 붙이려고 없는 출결을 지어내지 않는다).
+   */
+  setAttendanceNote: (
+    studentId: string,
+    date: string,
+    slotStart: string,
+    note: string | null,
+  ) => void;
   saveMark: (
     studentId: string,
     date: string,
@@ -534,6 +547,32 @@ export function SheetClient({
         });
         trackAttendanceSave(save);
       },
+      // 사유만 — 상태·시수는 안 보낸다(noteOnly). 잠긴 날짜(7일 초과)의 유일한 쓰기 경로라
+      // `canMarkAttendanceByDate`를 보지 않는다 — 대신 서버가 권한·담당 반을 그대로 검사한다(#77).
+      setAttendanceNote: (studentId, date, slotStart, note) => {
+        const key = `${studentId}|${date}|${slotStart}`;
+        const before = attendanceRef.current[key];
+        if (before === undefined) return; // 기록이 없으면 붙일 자리가 없다(서버도 거절한다)
+        setAttendance((prev) => ({ ...prev, [key]: { ...before, note } }));
+        const save = setAttendanceCell({
+          classId,
+          studentId,
+          sessionDate: date,
+          // 그 행이 실제로 들고 있는 교시(옛 기록이면 null) — 제자리에서 고친다.
+          slotStart: before.slot,
+          // 🔴 null이지만 **지우지 않는다** — `noteOnly` 분기가 삭제 분기보다 먼저 오고, 그 안에서는
+          //    status를 읽지도 쓰지도 않는다. "상태는 손대지 않는다"를 그대로 적은 값이다.
+          status: null,
+          note,
+          noteOnly: true,
+        }).then((r) => {
+          if ("error" in r) {
+            setAttendance((prev) => ({ ...prev, [key]: before }));
+            toast.error(r.error);
+          }
+        });
+        trackAttendanceSave(save);
+      },
       saveMark: (studentId, date, slotStart, status, note, patch) => {
         const key = `${studentId}|${date}|${slotStart}`;
         // 실패 시 되돌릴 직전 값 — 낙관 반영만 하고 롤백이 없으면 화면엔 남고 서버엔 없는 상태가 되어
@@ -740,12 +779,13 @@ export function SheetClient({
         {variant === "today" ? (
           todayDay && todayDay.slots.length > 0 ? (
             <div className="min-w-0 space-y-2">
-              {/* 툴바가 없는 변형의 상태 표면 — 동시편집 배지(주간 시트와 같은 scope) + 충돌·저장 중.
-                  조용할 땐 아무것도 안 그린다(반마다 '저장됨'이 줄지어 서면 소음이다). 충돌한 셀이
-                  다른 날짜(복구 패치)면 이 화면엔 안 보이므로 주간 시트로 안내한다. */}
+              {/* 툴바가 없는 변형의 상태 표면 — 충돌·저장 중일 때만. 조용할 땐 아무것도 안 그린다
+                  (반마다 '저장됨'이 줄지어 서면 소음이다). 충돌한 셀이 다른 날짜(복구 패치)면 이
+                  화면엔 안 보이므로 주간 시트로 안내한다.
+                  ⚠️ '수정중' 배지는 **카드 안 머리**로 내려갔다(2026-08-18 제목 이동) — 여기 남기면
+                     제목 줄을 없앤 만큼을 이 줄이 도로 먹는다. */}
               {(saveIndicator.conflicts > 0 || saveIndicator.pending > 0) ? (
                 <div className="flex flex-wrap items-center gap-2 px-1">
-                  <EditingBadge scope={`ecs:${classId}:${weekMonday}`} />
                   {saveIndicator.conflicts > 0 ? (
                     <span className="text-danger text-[12px] font-bold whitespace-nowrap">
                       저장 충돌 {saveIndicator.conflicts}건 — 충돌한 셀에서 서버값/내 값을 고르세요(이 화면에 안
@@ -755,11 +795,31 @@ export function SheetClient({
                     <span className="text-text-dim text-[12px] font-semibold whitespace-nowrap">저장 중…</span>
                   )}
                 </div>
-              ) : (
-                <EditingBadge scope={`ecs:${classId}:${weekMonday}`} />
-              )}
+              ) : null}
               <TodayClassSheet
                 day={todayDay}
+                header={
+                  /* 반 이름 = 이 격자가 **어느 반인지** 말하는 유일한 자리라 또렷해야 한다(원장
+                     2026-08-11 "수업명을 더 선명하게"). 카드 바깥 제목 줄이 사라졌으므로 그 위계를
+                     여기로 그대로 옮긴다 — 이름 굵게, 링크는 한 단계 낮춰 이름이 먼저 읽히게.
+                     ⚠️ 이름이 길면 잘라 낸다(`min-w-0` + 말줄임) — 안 그러면 카드가 늘어나
+                     아래 표와 어긋난다. 전체 이름은 title 툴팁에 남는다. */
+                  <div className="flex min-w-0 items-baseline gap-x-2">
+                    <h2
+                      className="text-foreground min-w-0 truncate text-[17px] leading-tight font-extrabold tracking-tight"
+                      title={data.className}
+                    >
+                      {data.className}
+                    </h2>
+                    <Link
+                      href={`/ecs/${classId}?week=${weekMonday}`}
+                      className="text-primary shrink-0 text-[12.5px] font-medium underline-offset-2 hover:underline"
+                    >
+                      주간 시트 열기 →
+                    </Link>
+                    <EditingBadge scope={`ecs:${classId}:${weekMonday}`} />
+                  </div>
+                }
                 data={data}
                 linesBySlot={linesBySlot}
                 marks={marks}
