@@ -420,7 +420,7 @@ export function ClassnoteQueueCard({ view: served }: { view: ClassnoteQueueView 
       {/* 상태 집계 — 핵심 3계열(발송완료·대기/처리중·주의)은 큰 숫자로 위계화(문법 ②),
           세부 분해(대기·처리중·실패·오래됨·동명이인·공유 보드·멈춤)는 아래 알약 칩으로 유지. */}
       <div className="flex flex-wrap items-end gap-x-8 gap-y-3">
-        <BigStatInline label="발송완료" value={summary.success} valueClass="text-primary" />
+        <BigStatInline label="발송완료" value={summary.success} valueClass="text-green" />
         {/* stuck은 processing의 하위집합 — '주의'로 분리 계상하므로 여기선 제외(3분할 합=전체 유지) */}
         <BigStatInline label="대기·처리중" value={summary.queued + summary.processing - summary.stuck} />
         <BigStatInline label="주의" value={attention} valueClass={attention > 0 ? "text-danger" : undefined} />

@@ -8,6 +8,8 @@ import { canSeeStudentEnrollment } from "@/features/students/server/enrollment-g
 import { BackLink } from "@/components/back-link";
 import { DupSuspectTag } from "@/components/dup-suspect-tag";
 import { getStudentById } from "@/features/students/server/queries";
+import { studentStatusMeta } from "@/features/students/status-labels";
+import { Pill } from "@/components/atoms/pill";
 import { DupSuspectNotice } from "./_components/dup-suspect-notice";
 import { RunCareAiButton } from "./run-care-ai-button";
 import { StudentTabsNav, isStudentTabKey } from "./_components/tabs-nav";
@@ -25,21 +27,6 @@ import { TimelineTab } from "./_tabs/timeline-tab";
 
 export const metadata = { title: "학생 상세 — eywa" };
 
-const STATUS_LABEL: Record<string, string> = {
-  prospect: "예비",
-  consulted: "상담완료",
-  enrolled: "재원",
-  on_hold: "휴원",
-  withdrawn: "퇴원",
-};
-
-const STATUS_COLOR: Record<string, string> = {
-  enrolled: "text-chart-2 bg-chart-2/10 border-chart-2/20",
-  prospect: "text-chart-3 bg-chart-3/10 border-chart-3/20",
-  consulted: "text-chart-1 bg-chart-1/10 border-chart-1/20",
-  on_hold: "text-chart-3 bg-chart-3/10 border-chart-3/20",
-  withdrawn: "text-muted-foreground bg-muted border-border",
-};
 
 export default async function StudentDetailPage({
   params,
@@ -83,6 +70,7 @@ export default async function StudentDetailPage({
   }
 
   const hasCareAi = student.aiCareSummary !== null;
+  const statusMeta = studentStatusMeta(student.status);
   // 학생 기록 변경(상태 전환·수정·AI 케어·수강 종료) = 학생 full 권한만(master·admin·manager·counselor).
   // 🔴 강사(scoped)는 열람 전용 — 원장 지시 2026-08-18("강사들은 퇴원처리 막아, 수정도, AI 케어도. 읽기만").
   // 서버 게이트는 students/server/actions.ts canManageStudentRecords가 같은 판정(#77 — UI 숨김만으론 부족).
@@ -125,13 +113,11 @@ export default async function StudentDetailPage({
           ) : null}
         </div>
         <div className="flex flex-col items-end gap-2">
-          <span
-            className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium ${
-              STATUS_COLOR[student.status] ?? "bg-muted text-muted-foreground border-border"
-            }`}
-          >
-            {STATUS_LABEL[student.status] ?? student.status}
-          </span>
+          {/* 상태 배지 = 목록·요약과 같은 단일 소스(studentStatusMeta) — 화면마다 색이 달라지지 않게.
+              ⚠️ 크기는 Pill 기본을 그대로 쓴다. 처음엔 `className="px-2.5 py-1 text-xs"`를 얹었는데
+              Pill이 tailwind-merge를 안 거쳐서 기본값(text-[11px] py-[3px])과 **충돌한 채 둘 다 남고**
+              실제로는 기본값이 이겼다(계산값 11px/3px 실측) — 아무 효과 없는 거짓 클래스였다. */}
+          <Pill color={statusMeta?.color ?? "neutral"}>{statusMeta?.label ?? student.status}</Pill>
           {/* ⚠️ 감기게 둔다 — 이 줄엔 상태 변경·수정·AI·삭제가 함께 서고, 라벨에 목적어를 붙이면
               (수정 → 학생 수정) 좁은 화면에서 가로로 넘친다. 넘치는 대신 다음 줄로 내려간다. */}
           <div className="flex flex-wrap items-center justify-end gap-2">

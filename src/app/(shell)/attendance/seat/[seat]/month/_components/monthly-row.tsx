@@ -8,9 +8,10 @@ import { SEAT_NAME, type SeatKey } from "@/features/attendance/seat/seat";
 import type { SeatMonthCell, SeatMonthStudent } from "@/features/attendance/seat/monthly-build";
 import type { SeatMonthDay } from "@/features/attendance/seat/monthly";
 
+/** 출석률 신호등 — 월별 출석부(live-totals.tsx `rateColorOf`)와 **같은 문턱·같은 색**(90/80). */
 function rateColor(rate: number | null): string {
   if (rate === null) return "text-text-faint";
-  return rate >= 90 ? "text-primary" : rate >= 80 ? "text-amber" : "text-danger";
+  return rate >= 90 ? "text-green" : rate >= 80 ? "text-amber" : "text-danger";
 }
 
 export function MonthlyRow({

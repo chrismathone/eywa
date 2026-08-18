@@ -184,7 +184,7 @@ function Dialog({
                   onClick={() => setScopeType(v)}
                   className={`rounded-full border px-2.5 py-1 text-xs transition ${
                     scopeType === v
-                      ? "border-foreground bg-foreground text-background font-medium"
+                      ? "border-primary bg-primary text-primary-foreground font-medium"
                       : "border-line text-text-dim hover:bg-bg-soft"
                   }`}
                 >

@@ -78,7 +78,7 @@ export default async function EnrollmentDashboardPage({
             href={`/enrollment/dashboard?month=${m.key}`}
             className={`rounded-full border px-2 py-0.5 text-xs transition ${
               selectedMonth === m.key
-                ? "border-foreground bg-foreground text-background font-medium"
+                ? "border-primary bg-primary text-primary-foreground font-medium"
                 : "border-border text-muted-foreground hover:text-foreground hover:bg-accent/30"
             }`}
           >

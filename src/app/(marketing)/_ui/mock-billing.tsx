@@ -12,7 +12,7 @@ const ROWS: { name: string; item: string; amount: string; status: Status }[] = [
 ];
 
 const PILL: Record<Status, string> = {
-  완납: "bg-primary-soft text-primary",
+  완납: "bg-green-soft text-green",
   미납: "bg-danger-soft text-danger",
   부분: "bg-amber-soft text-amber",
 };

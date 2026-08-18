@@ -493,7 +493,7 @@ function DayEditPopover({
             type="button"
             onClick={() => onApply(toDays)}
             disabled={none}
-            className="bg-primary text-primary-foreground hover:bg-primary-hover rounded-lg px-3 py-1.5 text-xs font-medium transition disabled:opacity-50"
+            className="bg-primary text-primary-foreground hover:bg-primary/85 rounded-lg px-3 py-1.5 text-xs font-medium transition disabled:opacity-50"
           >
             적용
           </button>
@@ -624,7 +624,7 @@ function ClassPickPopover({
             type="button"
             onClick={() => picked && onApply(picked, toDays)}
             disabled={!picked || noDay}
-            className="bg-primary text-primary-foreground hover:bg-primary-hover rounded-lg px-3 py-1.5 text-xs font-medium transition disabled:opacity-50"
+            className="bg-primary text-primary-foreground hover:bg-primary/85 rounded-lg px-3 py-1.5 text-xs font-medium transition disabled:opacity-50"
           >
             이동
           </button>
@@ -754,7 +754,7 @@ export function TimetableEditControls() {
             type="button"
             onClick={save}
             disabled={saving}
-            className="bg-primary text-primary-foreground hover:bg-primary-hover inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 font-medium transition disabled:opacity-50"
+            className="bg-primary text-primary-foreground hover:bg-primary/85 inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 font-medium transition disabled:opacity-50"
           >
             {saving ? <Loader2 className="size-3 animate-spin" /> : <Check className="size-3" />}
             저장

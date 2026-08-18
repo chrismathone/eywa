@@ -448,7 +448,7 @@ export function GridProvider({
         <div
           role="alert"
           onClick={() => setError(null)}
-          className="bg-danger text-danger-foreground fixed bottom-4 left-1/2 z-50 -translate-x-1/2 cursor-pointer rounded-lg px-3 py-2 text-xs shadow-lg"
+          className="bg-danger text-white fixed bottom-4 left-1/2 z-50 -translate-x-1/2 cursor-pointer rounded-lg px-3 py-2 text-xs shadow-lg"
         >
           {error}
         </div>

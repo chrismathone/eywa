@@ -6,6 +6,7 @@
 // ⚠️ O·X·L 같은 글자 표기로 되돌리지 말 것(원장 지시로 폐기).
 
 import { COUNTABLE_STATUSES, formatSessionUnits } from "./session-units";
+import { ATT_VIVID } from "./status-color";
 
 export type AttendanceMark = "present" | "absent" | "late" | "excused" | "makeup" | "early_leave";
 
@@ -18,17 +19,10 @@ export type SlotMark = { slot: string | null; status: AttendanceMark; units: num
 /**
  * 상태별 배경(+글자색) = **쨍한 파스텔 원색**(`--att-*`, globals.css).
  * 2026-07-21 원장 교정: *"형광색은 날짜가 아니라 학생 출결 1의 배경 · 색도 더 쨍하게"* —
- * 앱 표준 -soft 토큰(8~22% 틴트)으로는 31칸 격자에서 결석·지각이 안 튀었다.
+ * 앱 표준 -soft 토큰(12~13% 틴트)으로는 31칸 격자에서 결석·지각이 안 튀었다.
  * ⚠️ 색을 다시 -soft 틴트로 낮추지 말 것. 이 팔레트는 출석부 전용이며 다른 화면에 쓰지도 말 것.
  */
-export const STATUS_TONE: Record<AttendanceMark, string> = {
-  present: "bg-att-present text-att-present-ink",
-  absent: "bg-att-absent text-att-absent-ink",
-  excused: "bg-att-absent text-att-absent-ink",
-  late: "bg-att-late text-att-late-ink",
-  early_leave: "bg-att-leave text-att-leave-ink",
-  makeup: "bg-att-makeup text-att-makeup-ink",
-};
+export const STATUS_TONE: Record<AttendanceMark, string> = ATT_VIVID;
 
 /**
  * 날짜 성격 배경 — 헤더·본문이 **같은 상수**를 써야 열이 위아래로 어긋나지 않는다.
@@ -66,11 +60,21 @@ export const CELL_SCROLL_MARGIN = "scroll-mt-[38px]";
  *  두 벌로 두면 화면과 종이의 '퇴원' 표시가 서로 달라진다.)
  * ⚠️ 출결 팔레트(`--att-*`)를 쓰지 않는다 — 그 색은 칸의 출결 값 전용이라 이름 옆에 쓰면 뜻이 겹친다.
  */
+/* v4: Tailwind 기본 팔레트(emerald/rose/violet-100)에서 앱 토큰으로 — **뜻과 색상 계열은 그대로다.**
+   신입=green · 퇴원=rose · 반이동=purple.
+
+   ⚠️ 퇴원을 한때 중립 회색으로 바꿨다가 **되돌렸다**(2026-08-18). 캐논의 `inert`(종료=색을 뺀다)를
+   그대로 적용한 건데, 두 가지가 틀렸다:
+     ① 이 셋은 **한 세트**(생애주기 사건)라 서로 구분돼야 하는데 하나만 무채색이면 세트에서 빠진다.
+     ② 같은 표에 주말 회색(`--att-weekend` #dfdfe6)이 깔려 있어 대비가 **1.13**이었다(실측) —
+        회색 배지가 회색 칸 옆에 서서 "표식이 있다"는 사실 자체가 안 보인다.
+   🔑 `inert`는 **목록에서 지나간 행을 죽일 때** 쓰는 톤이지, **주의를 끌려고 붙인 배지**에 쓸 톤이 아니다.
+   (rose가 캐논상 '상담·학부모'이긴 하나 이 칸엔 상담 배지가 없어 뜻이 겹치지 않는다.) */
 export const BADGE_TONE: Record<"new" | "left" | "transferIn" | "transferOut", string> = {
-  new: "bg-emerald-100 text-emerald-800",
-  left: "bg-rose-100 text-rose-700",
-  transferIn: "bg-violet-100 text-violet-800",
-  transferOut: "bg-violet-100 text-violet-800",
+  new: "bg-green-soft text-green",
+  left: "bg-rose-soft text-rose",
+  transferIn: "bg-purple-soft text-purple",
+  transferOut: "bg-purple-soft text-purple",
 };
 
 /** 표식 공통 크기 — 신입·퇴원·반이동·「단가」 전부 이 하나(크기 제각각 금지, 원장 2026-08-10). */

@@ -140,7 +140,7 @@ export default async function ConsultationsPage({
                 href={buildHref({ ...current, range: f.key })}
                 className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs transition ${
                   range === f.key
-                    ? "border-foreground bg-foreground text-background font-medium"
+                    ? "border-primary bg-primary text-primary-foreground font-medium"
                     : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
                 }`}
               >
@@ -175,7 +175,7 @@ export default async function ConsultationsPage({
                 href={buildHref({ ...current, urg: f.key })}
                 className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs transition ${
                   urg === f.key
-                    ? "border-foreground bg-foreground text-background font-medium"
+                    ? "border-primary bg-primary text-primary-foreground font-medium"
                     : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
                 }`}
               >

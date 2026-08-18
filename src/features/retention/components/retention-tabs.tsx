@@ -23,7 +23,7 @@ export function RetentionTabs() {
             href={t.href}
             className={`rounded-full border px-3 py-1 text-xs transition ${
               active
-                ? "border-foreground bg-foreground text-background font-medium"
+                ? "border-primary bg-primary text-primary-foreground font-medium"
                 : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
             }`}
           >

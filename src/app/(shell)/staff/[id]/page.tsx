@@ -2,16 +2,13 @@ import { WindowLink } from "@/components/workspace/window-link";
 import { notFound } from "next/navigation";
 import { CalendarDays, Pencil, Wallet } from "@/components/icons/eywa-icon-compat";
 import { Button } from "@/components/ui/button";
-import { Pill, type PillColor } from "@/components/atoms/pill";
+import { Pill } from "@/components/atoms/pill";
 import { requireAccess } from "@/lib/auth/require-access";
 import { BackLink } from "@/components/back-link";
 import { getCurrentUser } from "@/lib/auth/current-user";
-import {
-  assignableRoles,
-  canManageStaffMember,
-  ROLE_LABEL,
-} from "@/lib/auth/role-hierarchy";
+import { assignableRoles, canManageStaffMember } from "@/lib/auth/role-hierarchy";
 import { getStaffById } from "@/features/staff/server/queries";
+import { roleMeta, staffStatusMeta } from "@/features/staff/status-labels";
 import { getResumeByStaffUser } from "@/features/staff/server/resume-queries";
 import { canViewResume } from "@/features/staff/server/resume-access";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
@@ -26,22 +23,6 @@ import { PAYROLL_ENABLED } from "@/features/payroll/config";
 
 export const metadata = { title: "직원 상세 — eywa" };
 
-const ROLE_COLOR: Record<string, { pill: PillColor }> = {
-  master: { pill: "danger" },
-  admin: { pill: "blue" },
-  manager: { pill: "blue" },
-  teacher: { pill: "primary" },
-  counselor: { pill: "rose" },
-  accountant: { pill: "purple" },
-  viewer: { pill: "neutral" },
-  student: { pill: "neutral" },
-};
-
-const STATUS_META: Record<string, { label: string; color: PillColor }> = {
-  active: { label: "재직", color: "primary" },
-  inactive: { label: "퇴사", color: "neutral" },
-  pending: { label: "대기", color: "amber" },
-};
 
 export default async function StaffDetailPage({
   params,
@@ -90,8 +71,9 @@ export default async function StaffDetailPage({
           return resume.data.photos.map((p) => map[p] ?? null);
         })()
       : [];
-  const role = ROLE_COLOR[displayRole] ?? ROLE_COLOR.viewer!;
-  const status = STATUS_META[staff.status] ?? STATUS_META.active!;
+  // 역할·상태 배지 = 직원목록과 같은 단일 소스(features/staff/status-labels) — 화면마다 색이 갈리지 않게.
+  const role = roleMeta(displayRole);
+  const status = staffStatusMeta(staff.status) ?? staffStatusMeta("active")!;
   // 급여·휴가 버튼 노출은 표시 역할 기준(위장된 admin은 일반 관리자처럼 미노출) — 순수 표시.
   const isTeacherLike = displayRole === "teacher" || displayRole === "master";
 
@@ -112,7 +94,7 @@ export default async function StaffDetailPage({
         </div>
         <div className="flex flex-col items-end gap-2">
           <div className="flex items-center gap-2">
-            <Pill color={role.pill}>{ROLE_LABEL[displayRole] ?? displayRole}</Pill>
+            <Pill color={role.color}>{role.label}</Pill>
             <Pill color={status.color} soft>
               {status.label}
             </Pill>

@@ -36,16 +36,18 @@ import { nextAttendance, type BasicAttendance } from "../lib/mark-cycle";
 import { attendanceLabelOf } from "../lib/attendance-label";
 import { EMPTY_CLICK_LABEL } from "../click-hint";
 import { SHEET_BOX, SHEET_BOX_READONLY } from "../ui-box";
+import { ATT_SOFT } from "@/features/attendance/status-color";
 
 /**
- * 상태별 표시 — 알약(원스크린)과 **같은 색 계열**(출석=브랜드·지각=앰버·결석=단정색)의 옅은 판.
+ * 상태별 표시 — 알약(원스크린)과 **같은 색 계열**(출석=초록·지각=앰버·결석=단정색)의 옅은 판.
+ * 채움은 [`ATT_SOFT`](src/features/attendance/status-color.ts) 단일 소스, 테두리만 여기서 진하게.
  * ⚠️ 표식은 **아이콘 세트**로만 — `✓`·`✕` 글자를 아이콘 자리에 세우면 구조 가드
  *    (`eywa-icon-mapping.test.ts`)가 막는다(폰트마다 모양·너비가 달라 줄이 흔들린다).
  */
 const TONE: Record<BasicAttendance, { icon: EywaIconName; cls: string }> = {
-  present: { icon: "check", cls: "border-primary bg-primary-soft text-primary" },
-  late: { icon: "clock", cls: "border-amber bg-amber-soft text-amber" },
-  absent: { icon: "close", cls: "border-danger bg-danger-soft text-danger" },
+  present: { icon: "check", cls: `border-green ${ATT_SOFT.present}` },
+  late: { icon: "clock", cls: `border-amber ${ATT_SOFT.late}` },
+  absent: { icon: "close", cls: `border-danger ${ATT_SOFT.absent}` },
 };
 
 const BASIC: readonly string[] = ["present", "late", "absent"];

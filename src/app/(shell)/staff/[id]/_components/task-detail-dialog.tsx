@@ -238,7 +238,7 @@ export function TaskDetailDialog({
             <span className="text-text-dim num">마감 {task.due}</span>
           ) : null}
           {task.dept ? <span className="text-text-faint">· {task.dept}</span> : null}
-          {done ? <span className="text-primary">· 완료</span> : null}
+          {done ? <span className="text-green">· 완료</span> : null}
           {task.url ? (
             <a
               href={task.url}

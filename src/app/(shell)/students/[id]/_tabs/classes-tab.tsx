@@ -235,7 +235,8 @@ function Section({
                     ) : r.endDate ? (
                       <span className="text-amber num font-medium">~{r.endDate}</span>
                     ) : (
-                      <span className="text-primary font-medium">재원중</span>
+                      /* 재원중 = positive(green) — 학생 상태 배지와 같은 뜻·같은 색. */
+                      <span className="text-green font-medium">재원중</span>
                     )}
                     {r.onHold ? <span className="text-amber ml-1">(휴원)</span> : null}
                   </td>

@@ -73,7 +73,7 @@ export function RoomCapacityCell({
         if (e.key === "Escape") setEditing(false);
       }}
       className={`num w-12 rounded-md border px-1 py-0 text-right text-[11px] ${
-        err ? "border-red-500" : "border-line"
+        err ? "border-danger" : "border-line"
       }`}
     />
   );

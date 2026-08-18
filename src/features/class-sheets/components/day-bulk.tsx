@@ -55,7 +55,7 @@ const TERM_LABEL: Record<"regular" | "exam", string> = { regular: "평시", exam
 const miniBtn = (on: boolean) =>
   `cursor-pointer rounded-full border px-2 py-0.5 text-[12px] transition ${
     on
-      ? "border-foreground bg-foreground text-background font-bold"
+      ? "border-primary bg-primary text-primary-foreground font-bold"
       : "border-line-strong text-text-dim hover:text-foreground hover:bg-bg-soft"
   }`;
 

@@ -25,7 +25,7 @@ const iconBtn =
 const pill = (on: boolean) =>
   `shrink-0 cursor-pointer rounded-full border px-2.5 py-0.5 text-[12px] font-bold transition ${
     on
-      ? "border-foreground bg-foreground text-background"
+      ? "border-primary bg-primary text-primary-foreground"
       : "border-line-strong text-foreground hover:bg-bg-soft"
   }`;
 

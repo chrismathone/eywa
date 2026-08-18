@@ -187,7 +187,7 @@ export function TimetableViewSettings({
                     aria-pressed={on}
                     className={`rounded-lg border px-1 py-1 text-[11px] transition ${
                       on
-                        ? "border-foreground bg-foreground text-background font-medium"
+                        ? "border-primary bg-primary text-primary-foreground font-medium"
                         : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
                     }`}
                   >

@@ -9,7 +9,9 @@ export function PulseTiles({ stats }: { stats: RetentionStats }) {
     { label: "위험 학생", value: stats.risk, icon: "userMinus", tone: "danger" },
     { label: "관심 학생", value: stats.warn, icon: "alertCircle", tone: "amber" },
     { label: "상담 예약", value: stats.scheduled, icon: "messages", tone: "blue" },
-    { label: "재등록 위험", value: stats.renewalRisk, icon: "bell", tone: "rose" },
+    // '재등록 위험'도 위험이다 — 바로 위 '위험 학생'이 danger인데 여기만 rose면 같은 타일 줄에서
+    // "위험"이 두 색이 된다(campaign-board의 renewalTone==="risk"도 danger를 쓴다).
+    { label: "재등록 위험", value: stats.renewalRisk, icon: "bell", tone: "danger" },
     { label: "매출 위험", value: formatWonShort(stats.revenueRisk), icon: "wallet", tone: "primary" },
   ];
   return (

@@ -143,7 +143,7 @@ export async function TeacherSettlementFace({ period }: { period?: string }) {
                   <td className="num text-text-dim px-3 py-2 text-right">
                     {fmtWon(r.actualTotal)}
                     {r.diffTotal !== 0 ? (
-                      <span className={r.diffTotal > 0 ? "text-red-700" : "text-amber-700"}>
+                      <span className={r.diffTotal > 0 ? "text-danger" : "text-amber"}>
                         {" "}
                         ({r.diffTotal > 0 ? "+" : "−"}
                         {fmtWon(Math.abs(r.diffTotal)).replace("원", "")})

@@ -118,7 +118,7 @@ function TabLink({
       href={href}
       aria-current={active ? "page" : undefined}
       className={`-mb-px border-b-2 px-3 py-2 text-sm font-semibold whitespace-nowrap ${
-        active ? "border-primary text-primary" : "text-text-dim hover:text-text border-transparent"
+        active ? "border-primary text-primary" : "text-text-dim hover:text-foreground border-transparent"
       }`}
     >
       {label}

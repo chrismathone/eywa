@@ -19,7 +19,7 @@ import type { NoticeAttachment } from "@/features/onescreen/notice-attachments";
 const STATUS_LABEL: Record<string, { label: string; cls: string }> = {
   queued: { label: "발송 대기", cls: "text-text-dim" },
   processing: { label: "처리 중", cls: "text-text-dim" },
-  success: { label: "발송 완료", cls: "text-primary" },
+  success: { label: "발송 완료", cls: "text-green" },
   partial: { label: "일부 실패", cls: "text-amber" },
   failed: { label: "발송 실패", cls: "text-danger" },
 };

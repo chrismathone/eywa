@@ -220,7 +220,7 @@ export async function BillingContent({ sp }: { sp: Sp }) {
               href={buildHref({ period: p, q, sort, desc })}
               className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs transition ${
                 p === period
-                  ? "border-foreground bg-foreground text-background font-medium"
+                  ? "border-primary bg-primary text-primary-foreground font-medium"
                   : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
               }`}
             >
@@ -355,7 +355,7 @@ export async function BillingContent({ sp }: { sp: Sp }) {
               label="수납 완료"
               value={KRW.format(summary.totalCollected)}
               unit="원"
-              tone="primary"
+              tone="green"
               icon={<EyIcon name="check" size={16} />}
               sub={`${summary.paidCount}건`}
             />
@@ -384,8 +384,10 @@ export async function BillingContent({ sp }: { sp: Sp }) {
                 완납 {paidPct.toFixed(1)}% · 부분 {partialPct.toFixed(1)}% · 미수 {unpaidPct.toFixed(1)}%
               </span>
             </header>
+            {/* 의미색 캐논 — 완납=positive(green) · 부분=caution(amber) · 미수=critical(danger).
+                ⚠️ 완납은 v4에서 primary(네이비) → green: "정상 종결"은 앱 전역이 그린이다(출석·승인·재원). */}
             <div className="bg-bg-soft flex h-2.5 overflow-hidden rounded-pill">
-              <span className="bg-primary block h-full" style={{ width: `${paidPct}%` }} />
+              <span className="bg-green block h-full" style={{ width: `${paidPct}%` }} />
               <span className="bg-amber block h-full" style={{ width: `${partialPct}%` }} />
               <span className="bg-danger block h-full" style={{ width: `${unpaidPct}%` }} />
             </div>

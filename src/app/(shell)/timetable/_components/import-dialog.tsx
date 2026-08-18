@@ -365,7 +365,7 @@ export function TimetableImportDialog({
                   type="button"
                   onClick={apply}
                   disabled={total === 0 || applying}
-                  className="bg-primary text-primary-foreground hover:bg-primary-hover inline-flex w-full items-center justify-center gap-1.5 rounded-lg py-2 text-[12px] font-bold transition disabled:opacity-40"
+                  className="bg-primary text-primary-foreground hover:bg-primary/85 inline-flex w-full items-center justify-center gap-1.5 rounded-lg py-2 text-[12px] font-bold transition disabled:opacity-40"
                 >
                   {applying ? <Loader2 className="size-3 animate-spin" /> : null}
                   {total > 0 ? `${total}건 적용` : "변경 없음"}
