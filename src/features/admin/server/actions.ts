@@ -196,38 +196,46 @@ export async function bulkWithdrawStudents(
     consultation: { adminCalledParent: false, teacherCalledParent: false, talkedWithStudent: false },
   };
 
-  let count = 0;
+  // 일괄 퇴원도 감사로그에 남긴다 — 2026-08-17 배치(31명)가 "누가 했는지" 추적 불가였던 것 재발 방지.
+  // 🔴 청크 중간 실패 시에도 **이미 퇴원된 만큼은** 기록한다(무기록 창 방지, 적대 리뷰 F6) — 그래서
+  //    로그 id는 요청값이 아니라 update가 실제 갱신한 행(select 반환, F10 count·ids 불일치 해소).
+  const done: string[] = [];
+  const writeBulkLog = () =>
+    done.length === 0
+      ? Promise.resolve()
+      : logAction({
+          action: "student_bulk_withdraw",
+          targetType: "student",
+          metadata: { count: done.length, studentIds: done },
+        });
   for (const part of chunkIds(ids)) {
-    const { error, count: c } = await supabase
+    const { data: updated, error } = await supabase
       .from("students")
-      .update(
-        { status: "withdrawn", withdrawn_at: today, withdrawal_metadata: metadata },
-        { count: "exact" },
-      )
-      .in("id", part);
-    if (error) return { error: error.message };
-    count += c ?? 0;
+      .update({ status: "withdrawn", withdrawn_at: today, withdrawal_metadata: metadata })
+      .in("id", part)
+      .select("id");
+    if (error) {
+      await writeBulkLog();
+      return { error: error.message };
+    }
+    done.push(...(updated ?? []).map((r) => r.id as string));
     // 남아있는 활성 enrollment가 있으면 함께 종료(있는 경우만 — 보통 0건)
     const { error: enrErr } = await supabase
       .from("enrollments")
       .update({ end_date: today, withdrawal_reason: "other" })
       .in("student_id", part)
       .is("end_date", null);
-    if (enrErr) return { error: enrErr.message };
+    if (enrErr) {
+      await writeBulkLog();
+      return { error: enrErr.message };
+    }
   }
-
-  // 일괄 퇴원도 감사로그에 남긴다 — 2026-08-17 배치(31명)가 "누가 했는지" 추적 불가였던 것 재발 방지.
-  // studentIds 전체를 metadata에 보존(역검수용 — 상세 화면 표시는 건수만, describe.ts).
-  await logAction({
-    action: "student_bulk_withdraw",
-    targetType: "student",
-    metadata: { count, studentIds: ids },
-  });
+  await writeBulkLog();
 
   revalidatePath("/owner");
   revalidatePath("/students");
   revalidatePath("/withdrawals");
-  return { ok: true, message: `${count}명 퇴원 처리 완료` };
+  return { ok: true, message: `${done.length}명 퇴원 처리 완료` };
 }
 
 /**
@@ -264,21 +272,30 @@ export async function bulkDeleteStudents(
     };
   }
 
-  let count = 0;
+  // 청크 중간 실패 시에도 이미 지워진 만큼은 기록(F6) — id는 delete가 실제 지운 행(select 반환, F10).
+  const done: string[] = [];
+  const writeBulkLog = () =>
+    done.length === 0
+      ? Promise.resolve()
+      : logAction({
+          action: "student_bulk_delete",
+          targetType: "student",
+          metadata: { count: done.length, studentIds: done },
+        });
   for (const part of chunkIds(deletable)) {
-    const { error, count: c } = await supabase
+    const { data: deleted, error } = await supabase
       .from("students")
-      .delete({ count: "exact" })
-      .in("id", part);
-    if (error) return { error: error.message };
-    count += c ?? 0;
+      .delete()
+      .in("id", part)
+      .select("id");
+    if (error) {
+      await writeBulkLog();
+      return { error: error.message };
+    }
+    done.push(...(deleted ?? []).map((r) => r.id as string));
   }
-
-  await logAction({
-    action: "student_bulk_delete",
-    targetType: "student",
-    metadata: { count, studentIds: deletable },
-  });
+  const count = done.length;
+  await writeBulkLog();
 
   revalidatePath("/owner");
   revalidatePath("/students");

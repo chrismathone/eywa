@@ -371,4 +371,15 @@ describe("mergeTimeRanges — 학생 수업탭 스케줄 셀의 연속 구간 �
       ]),
     ).toEqual([{ start: "16:20", end: "18:10" }]);
   });
+
+  it("완전 중복이 병합 뒤에 와도 유령 겹침으로 새지 않는다(적대 리뷰 L1)", () => {
+    // [A, B, B]: A+B가 먼저 이어진 뒤 두 번째 B — 병합 후 비교면 새 구간으로 샌다 → 병합 전 dedup.
+    expect(
+      mergeTimeRanges([
+        { start: "16:20", end: "17:20" },
+        { start: "17:20", end: "18:10" },
+        { start: "17:20", end: "18:10" },
+      ]),
+    ).toEqual([{ start: "16:20", end: "18:10" }]);
+  });
 });

@@ -582,8 +582,12 @@ export async function archiveClass(
 ): Promise<ArchiveClassState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  const clsLvl = await accessLevelTenant(user.systemRole, "classes");
-  if (clsLvl !== "full" && clsLvl !== "scoped") return { error: "반 관리 권한이 없습니다" };
+  // 폐지/복구는 그 반 **전원의 수강을 일괄 종료/복원**한다(학생 기록 대량 변경) — 관리자(full)만.
+  // 종전 scoped 허용은 담당 반 확인도 없어서 강사가 임의 반을 폐지할 수 있던 구멍(적대 리뷰 후속,
+  // 강사=학생 기록 열람 전용 결정과 0219a RLS(enrollments 쓰기 역할 게이트)에 정합).
+  if (!(await canManageTenant(user.systemRole, "classes"))) {
+    return { error: "반 폐지/복구는 관리자만 할 수 있습니다" };
+  }
 
   const id = String(formData.get("id") ?? "").trim();
   const next = String(formData.get("isActive") ?? "false") === "true";
@@ -631,7 +635,8 @@ export type ClassTermState = { error?: string } | undefined;
 
 /** 종강 — closed_at에 종료일 기록(기본 오늘). */
 export async function endClassTerm(_prev: ClassTermState, formData: FormData): Promise<ClassTermState> {
-  const { user, error } = await requireClassWrite();
+  // 종강 = 그 반 활성 수강 전원 종료(학생 기록 대량 변경) — 관리자(full)만(archiveClass와 같은 근거).
+  const { user, error } = await requireClassManage();
   if (error || !user) return { error };
 
   const id = String(formData.get("id") ?? "").trim();
@@ -664,7 +669,8 @@ export async function endClassTerm(_prev: ClassTermState, formData: FormData): P
 
 /** 재개강 — closed_at 비움(다시 운영). */
 export async function reopenClassTerm(_prev: ClassTermState, formData: FormData): Promise<ClassTermState> {
-  const { user, error } = await requireClassWrite();
+  // 재개강도 수강 일괄 복원(학생 기록 대량 변경) — 관리자(full)만(endClassTerm과 한 쌍).
+  const { user, error } = await requireClassManage();
   if (error || !user) return { error };
 
   const id = String(formData.get("id") ?? "").trim();

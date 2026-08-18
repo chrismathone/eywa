@@ -115,10 +115,13 @@ export async function ClassesTab({
         moveTargets={candidateClasses}
         moveStudent={{ id: student.id, name: student.name, grade: student.grade }}
         action={
-          <StudentAssignAction
-            student={{ id: student.id, name: student.name, grade: student.grade }}
-            classes={candidateClasses}
-          />
+          // 반 배정도 학생 기록 변경 — 강사(열람 전용)에겐 숨긴다. 서버 createEnrollment 게이트(full)와 한 쌍(#77).
+          canEnd ? (
+            <StudentAssignAction
+              student={{ id: student.id, name: student.name, grade: student.grade }}
+              classes={candidateClasses}
+            />
+          ) : undefined
         }
         note="실제 학생이 등원하는 요일만 표기됩니다"
       />

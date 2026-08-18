@@ -1,5 +1,33 @@
 # eywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-08-18 (9) — 퇴원 사고 3푸시 적대 리뷰 → 확인분 일괄 수리 (+0219a RLS)
+
+원장: *"이 구현건에 대해 적대적 리뷰는 했나?"* → 리뷰어 3(강사 잠금 d3cbe93d · 반이동 90ade5f8 ·
+감사 검색 e837f2de) 병렬 공격 → 발견 전건 실코드/실서버 재검증 후 확인분만 수리.
+
+- **🔴 치명 F1 = DB 계층 우회**: students·enrollments·audit_logs RLS가 역할을 안 봐서(tenant_isolation
+  `for all` 하나) 강사 JWT+anon 키의 PostgREST 직결로 서버 게이트·감사로그를 다 우회해 퇴원 가능 +
+  **감사로그 본인 행 DELETE 가능**. → **0219a**(⏳ 원장 손 적용 대기): students·enrollments 쓰기 =
+  사무실 역할만(restrictive, SELECT 불변 — accountant는 퇴원관리 full이라 명단 포함 필수), audit_logs =
+  **append-only**(INSERT 본인 명의만·UPDATE/DELETE 전면 거부). ⚠️ auth_menu_access는 DEFAULTS에
+  students가 없고 0170a 프로덕션 미적용 확인 → 역할 명단으로(#92 락아웃 회피).
+- **앱 내 우회(F2·F3 + 후속)**: 반 배정 createEnrollment·등원 요일 일괄이 canWriteTenant(scoped 통과) →
+  **canManageTenant**로, clearDupSuspect도 full로. 학생 상세·반 상세 배정 버튼, 반 상세 종강·폐지 버튼
+  UI 게이트 동행(#77). **종강·폐지·재개강**(반 전원 수강 일괄 종료/복원)이 scoped 통과+담당 확인도
+  없던 것 → 관리자 전용. 죽은 단건 moveEnrollment(호출 0곳·RPC 규약 불일치) 삭제.
+- **감사로그 무기록 창(F5·F6·M3·F10)**: 상담→학생 전환에 student_create·enrollment_assign 로그 신설 ·
+  상태 전환/일괄 퇴원·삭제/등원 요일은 **mutation 성공 직후** 기록(뒤 단계 실패해도 남음) · 일괄 로그
+  id=실제 갱신 행(select 반환).
+- **감사 검색 결함(M1·M2 등 9건)**: error 삼킴 → 한글 배너+툴팁 표면화("0건" 위장 제거) · 선해석 절단
+  안내 · 라벨 매치 정규화("출석 취소(ECS)" 복붙·대소문자) · 배열 `?q=a&q=b` 500 방지 · 구분자만 검색 시
+  전체 노출 → 빈 결과 · 날짜 실존 검증·역전 스왑 · **일괄 로그(studentIds 배열)도 학생 이름으로
+  찾힘**(≤10명 cs 매치, 실서버 문법 검증) · 인수인계·위임 로그도 강사 이름으로 · 위임 로그 이름 해석
+  누락(collectAuditNameIds) 수정. 414는 실측 반증(학생 100cap+직원 14 = 4.2KB 정상).
+- **ECS 전출 판정(M1·L1)**: 다른 반 열린 수강에 `start_date <= 주 일요일` 조건(미래 시작 예약 배정이
+  이번 주 학생을 증발시키던 것) · mergeTimeRanges 중복을 병합 전 dedup(유령 겹침) · grid 억제 분기
+  단위테스트 2 추가. 잔여(수정 안 함): 시간표 셀 '퇴원' 섹션 백업 판정 미적용(기존 후속 후보 유지) ·
+  강사 학생 상세 URL 직접 열람(F9, 정책 질문으로 원장 보고).
+
 ## 2026-08-18 (3) — 캘린더 탭 신설: 학원 공용 일정 관리 (0218a, 병렬 fork 1 + 메인)
 
 원장: *"일단 캘린더 탭으로 우리 프로그램 내에 일정부터 관리 정리하자"* — 초기 "캘린더 비이식(영구
