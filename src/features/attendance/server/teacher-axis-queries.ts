@@ -14,6 +14,14 @@ import { classTeacherIdsInRange, slotOverlapsRange, type AxisSlot } from "../tea
 
 export type AxisTeacher = { id: string; name: string; active: boolean };
 
+type ClassSelectRow = {
+  id: string;
+  class_name: string;
+  subject: string;
+  report_optout: boolean | null;
+  teacher: { id?: string; display_name?: string; status?: string } | { id?: string; display_name?: string; status?: string }[] | null;
+};
+
 type SlotRow = {
   class_id: string;
   day_of_week: string;
@@ -116,13 +124,20 @@ export type ClassAxisRow = {
  */
 export const loadClassAxisRows = cache(async (from: string, to: string): Promise<ClassAxisRow[]> => {
   const supabase = await createClient();
-  // 반 목록과 교시 배선은 서로 독립이라 병렬(B4). 활성 반은 실측 110행이라 페이지 한 장에 들어온다.
-  const [classesRes, slotAxis] = await Promise.all([
-    supabase
-      .from("classes")
-      .select("id, class_name, subject, report_optout, teacher:teacher_id ( id, display_name, status )")
-      .eq("is_active", true)
-      .order("class_name"),
+  // 반 목록과 교시 배선은 서로 독립이라 병렬(B4).
+  // 🔴 이 목록은 **강사 스코프의 whitelist**로 쓰인다(taughtBy로 좁힌다) → bare select 금지, 페이지네이션(B2).
+  //    지금은 활성 반 110행이라 한 장에 들어오지만, 1000행을 넘기면 PostgREST가 **에러 없이 잘라** 그 강사의
+  //    반이 조용히 사라진다. 잘림이 곧 "내 반이 없다"가 되는 자리라 상한을 두지 않는다.
+  const [classRows, slotAxis] = await Promise.all([
+    fetchAllPaged<ClassSelectRow>((f, t) =>
+      supabase
+        .from("classes")
+        .select("id, class_name, subject, report_optout, teacher:teacher_id ( id, display_name, status )")
+        .eq("is_active", true)
+        .order("class_name")
+        .order("id", { ascending: true }) // OFFSET 페이지 안정용 unique 정렬(B2)
+        .range(f, t),
+    ),
     loadSlotAxisByClass(from, to),
   ]);
 
@@ -133,7 +148,7 @@ export const loadClassAxisRows = cache(async (from: string, to: string): Promise
     ),
   ]);
 
-  return (classesRes.data ?? []).map((c) => {
+  return classRows.map((c) => {
     const teacher = (Array.isArray(c.teacher) ? c.teacher[0] : c.teacher) as
       | { id?: string; display_name?: string; status?: string }
       | undefined;
