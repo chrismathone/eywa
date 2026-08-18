@@ -70,7 +70,7 @@ export function collectAuditNameIds(rows: Array<{ metadata: Meta | null }>): {
     if (!m) continue;
     const sid = str(m.studentId);
     if (sid && UUID_RE.test(sid)) students.add(sid);
-    for (const key of ["userId", "newTeacherId"]) {
+    for (const key of ["userId", "newTeacherId", "delegateUserId"]) {
       const uid = str(m[key]);
       if (uid && UUID_RE.test(uid)) users.add(uid);
     }

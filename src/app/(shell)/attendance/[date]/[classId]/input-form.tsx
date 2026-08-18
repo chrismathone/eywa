@@ -251,7 +251,7 @@ export function AttendanceInputForm({
             전체 초기화
           </button>
           <span className="text-text-dim/40 text-xs">·</span>
-          <AttendanceMakeupAdder classId={classId} disabled={locked} onAdd={addMakeup} />
+          <AttendanceMakeupAdder classId={classId} date={date} disabled={locked} onAdd={addMakeup} />
         </div>
       </div>
 

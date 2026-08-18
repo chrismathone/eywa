@@ -27,6 +27,7 @@ import { DEFAULT_ECS_FONT_SIZE, readEcsFontSize, type EcsFontSize } from "../fon
 // (0140a)이고, 반↔보드 매칭은 작성률 화면과 **같은 키**(classKey/boardKey)를 쓴다 — 따로 만들면 갈린다.
 import { boardKey, classKey } from "@/features/report-admin/english-writing";
 import { ecsDelegatedClassIds, ecsVisibleClassFilter } from "./access";
+import { appendMakeupStudents, makeupStudentIds } from "../lib/makeup-roster";
 
 /**
  * **오늘 ECS** — 영어 강사의 원스크린(원장 지시 2026-08-07 "영어 강사는 ECS를 기반으로 한 원스크린").
@@ -102,6 +103,8 @@ export type TodayStudent = {
    *    어느 교시 기록인지 잃는다. 그래서 교시별로 들고 다니고, 입력도 교시별로 받는다(주간 시트와 같은 축).
    */
   marks: Record<string, SheetMark>;
+  /** 이 반 수강생이 아닌데 그날 출결이 있는 보강(수업외) 학생. */
+  isMakeup?: boolean;
 };
 
 export type TodayClassCard = {
@@ -386,8 +389,16 @@ export async function getEcsToday(dateParam?: string | null): Promise<EcsTodayRe
     ).catch(() => [] as { board_name: string }[]),
   ]);
 
-  // 학생 이름은 수강 목록이 나온 뒤에야 알 수 있다(위 병렬의 결과에 의존) — 여기만 순차.
-  const studentIds = [...new Set(enrollments.map((e) => e.student_id))];
+  // 보강(수업외) = 그 반 수강행은 없는데 그날 출결이 있는 학생. 반마다 가른다(A반 수강생이 B반 보강일 수 있다).
+  const attMakeupIds = new Set<string>();
+  for (const classId of todayIds) {
+    const enrolled = enrollments.filter((e) => e.class_id === classId).map((e) => e.student_id);
+    const recorded = attendanceRaw.filter((r) => r.class_id === classId).map((r) => r.student_id);
+    for (const id of makeupStudentIds(recorded, enrolled)) attMakeupIds.add(id);
+  }
+
+  // 학생 이름은 수강 목록(+보강 출결)이 나온 뒤에야 알 수 있다 — 여기만 순차.
+  const studentIds = [...new Set([...enrollments.map((e) => e.student_id), ...attMakeupIds])];
   const studentRows = await fetchInChunks<{
     id: string;
     name: string;
@@ -400,7 +411,7 @@ export async function getEcsToday(dateParam?: string | null): Promise<EcsTodayRe
   //    저장한다(unit_key가 `coalesce(class_id, subject)`라 같은 반 정규 보고서와 충돌하기 때문).
   //    그래서 학생 기준으로 한 번 더 훑어 `class_id is null AND subject='english'`도 '작성'으로 센다
   //    (2026-08-07 적대적 리뷰 — 안 그러면 보강을 써 놓고도 배지가 '미작성'이라 다시 쓰게 만든다).
-  const [reports, subjectReports] = await Promise.all([
+  const [reports, subjectReports, anchoredMakeupReports] = await Promise.all([
     fetchAllPagedInChunks<{ student_id: string; class_id: string | null; classnote_status: string | null }>(
       todayIds,
       (chunk, from, to) =>
@@ -421,6 +432,19 @@ export async function getEcsToday(dateParam?: string | null): Promise<EcsTodayRe
           .in("student_id", chunk)
           .is("class_id", null)
           .eq("subject", "english")
+          .eq("report_date", date)
+          .order("id")
+          .range(from, to),
+    ),
+    // 원스크린이 어느 수업 시간에 한 보강인지 남겨 둔 행 — 출결보다 보고서가 먼저인 경우도 ECS에 보이게.
+    fetchAllPagedInChunks<{ student_id: string; makeup_class_id: string | null; classnote_status: string | null }>(
+      todayIds,
+      (chunk, from, to) =>
+        supabase
+          .from("lesson_reports")
+          .select("student_id, makeup_class_id, classnote_status")
+          .in("makeup_class_id", chunk)
+          .eq("makeup", true)
           .eq("report_date", date)
           .order("id")
           .range(from, to),
@@ -448,6 +472,16 @@ export async function getEcsToday(dateParam?: string | null): Promise<EcsTodayRe
     return postedBoardKeys.has(k) ? "posted" : "pending";
   };
   const studentMeta = new Map(studentRows.map((s) => [s.id, s]));
+  const missingMakeup = [...new Set(anchoredMakeupReports.map((r) => r.student_id))].filter((id) => !studentMeta.has(id));
+  if (missingMakeup.length > 0) {
+    const extra = await fetchInChunks<{
+      id: string;
+      name: string;
+      school: string | null;
+      grade: string | null;
+    }>(missingMakeup, (chunk) => supabase.from("students").select("id, name, school, grade").in("id", chunk));
+    for (const s of extra) studentMeta.set(s.id, s);
+  }
   // 교시 라벨 표 — 주간 시트(queries.ts)와 **같은 폴백 체인**(과목 전용 → english 내장 → 전역).
   const periodsConfig = settingsToPeriodsConfig(settings.operations);
   const periodTables = {
@@ -609,9 +643,40 @@ export async function getEcsToday(dateParam?: string | null): Promise<EcsTodayRe
             reportWritten: (rep?.written ?? false) || (subjRep?.written ?? false),
             reportSent: (rep?.sent ?? false) || (subjRep?.sent ?? false),
             marks: marksByStudent.get(`${classId}|${e.student_id}`) ?? {},
+            isMakeup: false,
           };
         })
         .sort((a, b) => a.name.localeCompare(b.name, "ko"));
+
+      const enrolledIds = roster.map((s) => s.studentId);
+      const recordedIds = attendanceRaw.filter((r) => r.class_id === classId).map((r) => r.student_id);
+      const reportMakeupIds = anchoredMakeupReports
+        .filter((r) => r.makeup_class_id === classId)
+        .map((r) => r.student_id);
+      const makeupIds = [
+        ...new Set([...makeupStudentIds(recordedIds, enrolledIds), ...makeupStudentIds(reportMakeupIds, enrolledIds)]),
+      ];
+      const makeupRows = makeupIds.map((id) => {
+        const meta = studentMeta.get(id);
+        const att = attByKey.get(`${classId}|${id}`);
+        const rep = reportByKey.get(`${classId}|${id}`);
+        const subjRep = subjectReportByStudent.get(id);
+        const anchored = anchoredMakeupReports.find((r) => r.student_id === id && r.makeup_class_id === classId);
+        return {
+          studentId: id,
+          name: meta?.name ?? "(이름 없음)",
+          school: meta?.school ?? null,
+          grade: meta?.grade ?? null,
+          attendance: att?.status ?? null,
+          attendanceNote: att?.note ?? null,
+          attendanceSlots: attSlotsByKey.get(`${classId}|${id}`) ?? [],
+          reportWritten: (rep?.written ?? false) || (subjRep?.written ?? false) || !!anchored,
+          reportSent:
+            (rep?.sent ?? false) || (subjRep?.sent ?? false) || anchored?.classnote_status === "success",
+          marks: marksByStudent.get(`${classId}|${id}`) ?? {},
+          isMakeup: true,
+        };
+      });
 
       return {
         classId,
@@ -620,7 +685,7 @@ export async function getEcsToday(dateParam?: string | null): Promise<EcsTodayRe
         startsAt: slots[0]?.slotStart ?? "00:00",
         endsAt: slots.at(-1)?.slotEnd ?? null,
         slots,
-        students: roster,
+        students: appendMakeupStudents(roster, makeupRows),
         fill: { total: slots.length, filled: slots.filter((s) => s.lines.some((l) => l.filled)).length },
         canMarkAttendance: attendanceWritable && (teachingSet === null || teachingSet.has(classId)),
         // 담임이 나면 위임이 아니다 — 주간 시트·랜딩 카드와 같은 판정.

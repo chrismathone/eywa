@@ -10,9 +10,13 @@ const NAMES: Record<string, string> = {
 };
 const nameOf = (id: string) => NAMES[id] ?? "";
 
-const row = (studentId: string, over?: Partial<{ eligible: boolean; endedOn: string | null }>) => ({
+const row = (
+  studentId: string,
+  over?: Partial<{ eligible: boolean; endedOn: string | null; isMakeup: boolean }>,
+) => ({
   studentId,
   eligible: over?.eligible ?? true,
+  isMakeup: over?.isMakeup,
   endedOn: over?.endedOn ?? null,
 });
 
@@ -22,12 +26,14 @@ describe("groupRosterRows — 재원 → 퇴원 → 기록", () => {
       [
         row("s3", { eligible: false }), // 기록
         row("s2", { eligible: false, endedOn: "2026-07-10" }), // 퇴원
+        row("s5", { eligible: false, isMakeup: true }), // 보강
         row("s1"), // 재원
       ],
       nameOf,
     );
     expect(groups.map((g) => [g.key, g.label])).toEqual([
       ["active", null],
+      ["makeup", "보강"],
       ["withdrawn", "퇴원"],
       ["record", "기록"],
     ]);

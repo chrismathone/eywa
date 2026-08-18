@@ -25,6 +25,7 @@ import { applyStudentOrder } from "../student-order";
 import { rosterIncludesEnrollment } from "../roster-filter";
 import { matchReportsToRows } from "../report-unit";
 import { ownsMakeupReport } from "../makeup-owner";
+import { makeupStudentIds } from "@/features/attendance/input-roster";
 import { LEGACY_REPORT_SUBJECT, reportSubject } from "@/features/timetable/lib/report-subject";
 import { carryProgress } from "../progress-status";
 import {
@@ -424,9 +425,28 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
       (startByClass.get(a.class_id) ?? "99:99").localeCompare(startByClass.get(b.class_id) ?? "99:99") ||
       a.class_id.localeCompare(b.class_id),
   );
+  // 출석부가 연 보강 칸 — 보고서보다 출결이 먼저인 경우(ECS·출석부에서 추가)도 원스크린에 되살린다.
+  const classAttRows = await fetchInChunks<{ student_id: string; class_id: string }>(activeIds, (chunk) =>
+    supabase
+      .from("attendance_records")
+      .select("student_id, class_id")
+      .eq("session_date", targetDate)
+      .in("class_id", chunk),
+  );
+  const attMakeup: { studentId: string; classId: string }[] = [];
+  for (const classId of activeIds) {
+    const enrolled = enrollments.filter((e) => e.class_id === classId).map((e) => e.student_id);
+    const recorded = classAttRows.filter((r) => r.class_id === classId).map((r) => r.student_id);
+    for (const id of makeupStudentIds(recorded, enrolled)) attMakeup.push({ studentId: id, classId });
+  }
+
   // 보강 학생은 수강생이 아니어도 화면에 있어야 한다 — 아래 학생정보·보고서 조회가 이 id 집합을 쓴다.
   const studentIds = [
-    ...new Set([...enrollments.map((e) => e.student_id), ...makeupReports.map((r) => r.student_id)]),
+    ...new Set([
+      ...enrollments.map((e) => e.student_id),
+      ...makeupReports.map((r) => r.student_id),
+      ...attMakeup.map((r) => r.studentId),
+    ]),
   ];
   if (studentIds.length === 0)
     return emptyRoster(today, targetDate, teacherName, {
@@ -543,6 +563,59 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
         classId: null,
         makeup: true,
         makeupClassId: mr.makeup_class_id,
+        makeupClassName: anchorName,
+        prev: "",
+        today: "",
+        textbook: "",
+        homeworkToday: "",
+      });
+    }
+  }
+
+  // 5-c) 출석부·ECS가 연 보강 칸 — 보고서가 아직 없어도 같은 보강 행으로 되살린다.
+  // 5-b가 이미 같은 과목 보강 행을 만들었으면 건너뛴다(보고서가 진실, 출결은 소속만 알려 준다).
+  if (attMakeup.length) {
+    const classNameById = new Map(allClasses.map((c) => [c.id, c.class_name]));
+    for (const row of attMakeup) {
+      const stu = studById.get(row.studentId);
+      const cls = classById.get(row.classId);
+      if (!stu || !cls) continue;
+      const key = cls.subject;
+      const label = subjects.labelOf(key);
+      const anchorName = classNameById.get(row.classId) ?? cls.class_name;
+      let os = byStudent.get(stu.id);
+      if (!os) {
+        const tmax = subjectTestMax.get(key) ?? 5;
+        os = {
+          id: stu.id,
+          name: stu.name,
+          grade: stu.grade ?? "",
+          tag: anchorName,
+          className: anchorName,
+          isMakeup: true,
+          attendance: "출석",
+          subjects: [],
+          tests: {
+            daily: { score: null, max: tmax, prevScore: null },
+            check: { score: null, max: tmax, prevScore: null },
+          },
+          attitude: null,
+          homework: "",
+          note: "",
+          progressConfirmed: false,
+          reportDraft: "",
+          reportSent: false,
+        };
+        byStudent.set(stu.id, os);
+      }
+      if (os.subjects.some((su) => su.makeup && !su.classId && (su.subjectKey ?? "") === key)) continue;
+      os.subjects.push({
+        name: `${label} (보강)`,
+        subjectLabel: label,
+        subjectKey: key,
+        classId: null,
+        makeup: true,
+        makeupClassId: row.classId,
         makeupClassName: anchorName,
         prev: "",
         today: "",

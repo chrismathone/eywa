@@ -7,7 +7,7 @@ import {
 } from "./enrollment-sync";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { createClient } from "@/lib/supabase/server";
-import { accessLevelTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
+import { accessLevelTenant, canManageTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { logAction } from "@/features/audit/server/log";
 import { kstToday } from "@/lib/date-kst";
 import { fetchAllPaged } from "@/lib/supabase/batch";
@@ -114,8 +114,9 @@ function translateDbError(message: string): string {
  * 학생 7명이 7월 날짜로 소급 퇴원 처리되는 사고 + 감사로그 부재로 행위자 역추적 불가.
  * UI(학생 상세 헤더 버튼·edit 라우트)와 이 서버 게이트가 한 쌍이다(#77 — 화면 숨김은 게이트가 아니다).
  */
-async function canManageStudentRecords(role: Parameters<typeof accessLevelTenant>[0]): Promise<boolean> {
-  return (await accessLevelTenant(role, "students")) === "full";
+async function canManageStudentRecords(role: Parameters<typeof canManageTenant>[0]): Promise<boolean> {
+  // canManageTenant(=full 판정) 위임 — 같은 의미를 두 벌 구현하면 다음 조정 때 한쪽만 고친다(적대 리뷰 F8).
+  return canManageTenant(role, "students");
 }
 
 const STUDENT_MANAGE_DENIED = "학생 정보 변경 권한이 없습니다 — 강사 계정은 열람 전용입니다";
@@ -452,6 +453,20 @@ export async function changeStudentStatus(
 
   const supabase = await createClient();
 
+  // 퇴원/휴원/복구는 전부 감사로그에 actor를 남긴다 — "누가 퇴원시켰는지 역검수 불가" 사고(2026-08-18) 재발 방지.
+  // 🔴 로그는 students.update **성공 직후**에 남긴다 — 뒤의 enrollment 정합 단계가 실패해도 상태는 이미
+  //    바뀌었으므로, 끝에서 몰아 남기면 "상태는 바뀌었는데 기록이 없는" 무기록 창이 생긴다(적대 리뷰 F6).
+  const writeStatusLog = () =>
+    logAction({
+      action:
+        target === "withdrawn" ? "student_withdraw" : target === "on_hold" ? "student_hold" : "student_restore",
+      targetType: "student",
+      metadata:
+        target === "withdrawn"
+          ? { studentId: id, date, reason: reasonStr, memo }
+          : { studentId: id },
+    });
+
   if (target === "withdrawn") {
     if (!WITHDRAWAL_REASONS.includes(reasonStr as WithdrawalReason)) {
       return { error: "퇴원 사유를 선택해주세요" };
@@ -477,6 +492,7 @@ export async function changeStudentStatus(
       })
       .eq("id", id);
     if (stuErr) return { error: stuErr.message };
+    await writeStatusLog();
 
     // 활성 enrollment 종료 (미래 시작 수강은 end_date=start_date로 클램프 — daterange 에러 방지).
     const enrErr = await closeActiveEnrollmentsClamped(supabase, id, date, { withdrawal_reason: reasonStr });
@@ -487,6 +503,7 @@ export async function changeStudentStatus(
       .update({ status: "on_hold" })
       .eq("id", id);
     if (stuErr) return { error: stuErr.message };
+    await writeStatusLog();
 
     const { error: enrErr } = await supabase
       .from("enrollments")
@@ -513,6 +530,7 @@ export async function changeStudentStatus(
       })
       .eq("id", id);
     if (stuErr) return { error: stuErr.message };
+    await writeStatusLog();
 
     // ⚠️ 퇴원이 닫은 enrollment(end_date=퇴원일)를 다시 연다 — 안 하면 재원인데 수강이 종료로 남아 시간표 '퇴원'에 뜬다.
     const reopenErr = await reopenEnrollmentsClosedByWithdrawal(supabase, id, withdrawnDate);
@@ -526,17 +544,6 @@ export async function changeStudentStatus(
       .is("end_date", null);
     if (enrErr) return { error: enrErr.message };
   }
-
-  // 퇴원/휴원/복구는 전부 감사로그에 actor를 남긴다 — "누가 퇴원시켰는지 역검수 불가" 사고(2026-08-18) 재발 방지.
-  await logAction({
-    action:
-      target === "withdrawn" ? "student_withdraw" : target === "on_hold" ? "student_hold" : "student_restore",
-    targetType: "student",
-    metadata:
-      target === "withdrawn"
-        ? { studentId: id, date, reason: reasonStr, memo }
-        : { studentId: id },
-  });
 
   revalidatePath(`/students/${id}`);
   revalidatePath("/students");
@@ -552,7 +559,7 @@ export async function endSingleEnrollment(
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
   // 수강 종료 = 학생 쓰기(full) 권한 이상만(master·admin·manager·counselor). UI 숨김 + 이 서버 게이트 이중 방어.
-  if ((await accessLevelTenant(user.systemRole, "students")) !== "full") {
+  if (!(await canManageStudentRecords(user.systemRole))) {
     return { error: "수강 종료 권한이 없습니다" };
   }
 
@@ -1010,7 +1017,8 @@ export async function clearDupSuspect(
 ): Promise<{ ok?: boolean; error?: string }> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  if (!(await canWriteTenant(user.systemRole, "students"))) return { error: "학생 관리 권한이 없습니다" };
+  // 학생 레코드 변경 = full만 — canWriteTenant는 scoped(강사)도 통과한다(적대 리뷰 F3, #77).
+  if (!(await canManageStudentRecords(user.systemRole))) return { error: STUDENT_MANAGE_DENIED };
   const id = String(studentId ?? "").trim();
   if (!id) return { error: "학생 ID가 누락되었습니다" };
 

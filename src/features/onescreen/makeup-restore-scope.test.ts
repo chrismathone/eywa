@@ -30,4 +30,10 @@ describe("보강 행 복원 범위", () => {
     const block = src.slice(src.indexOf("5-b) 보강(수업외) 행 복원"));
     expect(block.slice(0, 2000)).toContain("classId: null");
   });
+
+  it("출석부·ECS가 연 보강 칸도 같은 반 없는 행으로 되살린다", () => {
+    const block = src.slice(src.indexOf("5-c) 출석부·ECS가 연 보강 칸"));
+    expect(block.slice(0, 2500)).toContain("classId: null");
+    expect(block.slice(0, 2500)).toContain("makeupClassId: row.classId");
+  });
 });

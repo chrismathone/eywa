@@ -45,6 +45,16 @@ describe("planBulkAttendance", () => {
     expect(ids).not.toContain("d");
   });
 
+  it("🔴 보강 행은 출결 일괄에서 뺀다 — 빈 칸으로 보면 makeup을 출석으로 덮는다", () => {
+    const withMakeup: BulkRosterRow[] = [
+      ...roster,
+      { studentId: "m", eligible: false, historical: false, isMakeup: true },
+    ];
+    const ids = planBulkAttendance(withMakeup, {}, DATE, SLOT, { canEdit: true, canMarkDate: true });
+    expect(ids).not.toContain("m");
+    expect(planBulkStatus(withMakeup, {}, DATE, SLOT, { canEdit: true, onlyEmpty: true })).toContain("m");
+  });
+
   it("편집 권한 없거나 출결 수정 기간이 지나면 0건", () => {
     expect(planBulkAttendance(roster, {}, DATE, SLOT, { canEdit: false, canMarkDate: true })).toEqual([]);
     expect(planBulkAttendance(roster, {}, DATE, SLOT, { canEdit: true, canMarkDate: false })).toEqual([]);

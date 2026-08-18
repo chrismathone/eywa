@@ -15,10 +15,13 @@ export type MakeupPick = { id: string; name: string; label: string };
 
 export function AttendanceMakeupAdder({
   classId,
+  date,
   disabled,
   onAdd,
 }: {
   classId: string;
+  /** 보고 있는 수업일 — 그날 담당으로 검색을 연다. 없으면 오늘. */
+  date?: string;
   disabled?: boolean;
   onAdd: (student: MakeupPick) => void;
 }) {
@@ -42,7 +45,7 @@ export function AttendanceMakeupAdder({
     setLoading(true);
     const mine = ++seq.current;
     timer.current = setTimeout(() => {
-      void searchMakeupStudents(classId, t).then((r) => {
+      void searchMakeupStudents(classId, t, date).then((r) => {
         if (mine !== seq.current) return; // 최신 검색만 반영
         setResults(r);
         setLoading(false);

@@ -688,6 +688,19 @@ export function OneScreenClient({
     const res = await setMyOnescreenFontSize(size);
     if (!res.ok) toast.error("글씨 크기를 계정에 저장하지 못했습니다 — 이 화면에서는 적용됩니다");
   }
+  /** 보강을 그 수업 출석부에 남긴다 — ECS·출석부 명단이 같은 학생을 보게. 이미 그 반 수강이면 건너뛴다. */
+  function persistAnchorMakeup(studentId: string, classId: string | null, enrolledInAnchor: boolean) {
+    if (!classId || enrolledInAnchor) return;
+    void setAttendanceCell({
+      studentId,
+      classId,
+      sessionDate: activeDate,
+      status: "makeup",
+      allowMakeup: true,
+    }).then((r) => {
+      if ("error" in r) toast.error(`출석부 보강 기록을 남기지 못했습니다 — ${r.error}`);
+    });
+  }
   // 보강(수업외) 학생 추가 — 서버에서 OneScreenStudent 조립(담당 과목·교재 기본값).
   //
   // ⚠️ 정규/특강으로 **이미 목록에 있는 학생**도 보강 추가가 돼야 한다(2026-07-24 원장: 특강+정규외 보강).
@@ -723,6 +736,7 @@ export function OneScreenClient({
       setStudents((prev) => [...prev, mk]);
       setReports((prev) => ({ ...prev, [mk.id]: initReports([mk])[mk.id] ?? {} }));
       setSelId(mk.id);
+      persistAnchorMakeup(studentId, anchorId, false);
       toast.success(`${mk.name} (보강) 추가됨`);
       return;
     }
@@ -764,6 +778,11 @@ export function OneScreenClient({
     }
     // 합칠 정규 행이 없다(그날 결석·다른 강사 과목 등) → 묻지 않고 별도 보강 행. 그건 진짜 "보강만"이다.
     addSeparateMakeupRows(existing, mk);
+    persistAnchorMakeup(
+      studentId,
+      anchorId,
+      existing.subjects.some((su) => su.classId === anchorId && !su.makeup),
+    );
   }
   /**
    * 다이얼로그 응답 처리 — 고른 대로만 한다. 취소는 아무것도 하지 않는다(보강 행도 안 생긴다).
@@ -778,6 +797,9 @@ export function OneScreenClient({
       toast.error("학생 카드를 찾지 못했습니다 — 새로고침 후 다시 시도해 주세요");
       return;
     }
+    const anchorId = ask.mk.subjects.find((su) => su.makeupClassId)?.makeupClassId ?? null;
+    const enrolledInAnchor = existing.subjects.some((su) => su.classId === anchorId && !su.makeup);
+    persistAnchorMakeup(existing.id, anchorId, enrolledInAnchor);
     if (choice.mode === "separate") {
       // 🔴 **고른 과목의 보강 행만** 만든다. 안 좁히면 그 강사가 가르치는 학생의 다른 과목까지 "(보강)" 행이
       //    딸려 붙어(예: 영어가 오늘 결석이라 후보엔 없어도 행은 생겼다) 보고서가 2건이 아니라 3건 나간다 —

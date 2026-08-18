@@ -79,7 +79,7 @@ export function readEcsShowSelfStudy(uiPrefs: unknown): boolean {
  *    자리 토글과 결정적으로 다른 점이라 서버 재조회 없이 클라가 즉시 반영한다.
  */
 export const DEFAULT_ECS_COLLAPSED_ROSTER_GROUPS: RosterGroupKey[] = [];
-const ROSTER_GROUP_KEYS: RosterGroupKey[] = ["active", "withdrawn", "record"];
+const ROSTER_GROUP_KEYS: RosterGroupKey[] = ["active", "makeup", "withdrawn", "record"];
 
 export function readEcsCollapsedRosterGroups(uiPrefs: unknown): RosterGroupKey[] {
   const raw = ecsScope(uiPrefs)?.collapsedRosterGroups;

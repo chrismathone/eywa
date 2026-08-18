@@ -270,11 +270,16 @@ export function mergeTimeRanges(
   const sorted = [...ranges]
     .map((r) => ({ start: hm(r.start), end: hm(r.end) }))
     .sort((a, b) => a.start.localeCompare(b.start) || a.end.localeCompare(b.end));
+  // 완전 중복(이력 행 분할)은 **병합 전에** 걸러야 한다 — 병합 후 비교(out 끝 구간)는 이미 이어진
+  // 구간과 대조라 [A, B, B]에서 두 번째 B가 새 구간으로 새어 유령 겹침이 남는다(적대 리뷰 L1).
+  const seen = new Set<string>();
   const out: Array<{ start: string; end: string }> = [];
   for (const r of sorted) {
+    const key = `${r.start}~${r.end}`;
+    if (seen.has(key)) continue; // 완전 중복(이력 중첩)은 한 번만
+    seen.add(key);
     const open = out[out.length - 1];
     if (open && open.end === r.start) open.end = r.end;
-    else if (open && open.start === r.start && open.end === r.end) continue; // 완전 중복(이력 중첩)은 한 번만
     else out.push({ ...r });
   }
   return out;

@@ -59,11 +59,15 @@ export async function AuditFace({
   page: number;
   isEmbed: boolean;
 }) {
-  const query = (q ?? "").trim();
-  const dateFrom = from && YMD_RE.test(from) ? from : undefined;
-  const dateTo = to && YMD_RE.test(to) ? to : undefined;
+  // ⚠️ searchParams는 같은 키가 두 번 오면(?q=a&q=b) 런타임에 배열이다 — 타입(string|undefined)만 믿고
+  // .trim()을 부르면 조작 URL 한 번에 페이지가 500 난다 → typeof 가드(적대 리뷰 2026-08-18).
+  const query = (typeof q === "string" ? q : "").trim();
+  let dateFrom = typeof from === "string" && YMD_RE.test(from) ? from : undefined;
+  let dateTo = typeof to === "string" && YMD_RE.test(to) ? to : undefined;
+  // 시작>종료 역전은 스왑 — 입력 표시·pageHref·서버 필터가 같은 순서를 보게(안내 없는 빈 결과 방지).
+  if (dateFrom && dateTo && dateFrom > dateTo) [dateFrom, dateTo] = [dateTo, dateFrom];
   // 설정(과목 라벨)은 독립 조회라 병렬(B4) — 이름 맵만 rows에 의존.
-  const [{ rows: logs, total }, settings] = await Promise.all([
+  const [{ rows: logs, total, error: queryError, nameLookupTruncated }, settings] = await Promise.all([
     getAuditLogsPage({ action, q: query, dateFrom, dateTo }, page, PAGE_SIZE),
     getTenantSettings(),
   ]);
@@ -141,6 +145,20 @@ export async function AuditFace({
           {total}건{totalPages > 1 ? ` · ${page}/${totalPages}` : ""}
         </span>
       </div>
+
+      {/* 🔴 조회 실패는 "0건"으로 위장하지 않는다(#89) — 한글 배너 + 원문은 title 툴팁(raw 노출 금지 규칙). */}
+      {queryError ? (
+        <div
+          className="border-danger/30 bg-danger/5 text-danger rounded-2xl border px-4 py-3 text-sm"
+          title={queryError}
+        >
+          감사로그 조회 중 오류가 발생했어요 — 아래 결과가 비었거나 불완전할 수 있습니다. 잠시 후 다시 시도해 주세요.
+        </div>
+      ) : nameLookupTruncated ? (
+        <div className="border-line bg-bg-soft text-text-dim rounded-2xl border px-4 py-3 text-sm">
+          이름이 일치하는 학생·직원이 많아 일부만 검색에 반영됐어요 — 성과 이름을 더 구체적으로 입력해 보세요.
+        </div>
+      ) : null}
 
       {total === 0 ? (
         <EmptyState

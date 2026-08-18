@@ -70,6 +70,14 @@ export function RosterNameCell({ entry, meta }: { entry: RosterEntry; meta: Stud
             {meta?.name ?? "?"}
           </span>
         </WindowLink>
+        {entry.isMakeup ? (
+          <span
+            className="bg-purple/15 text-purple shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-bold"
+            title="이 반 수강생은 아니지만 그날 보강으로 온 학생"
+          >
+            보강
+          </span>
+        ) : null}
         {entry.endedOn ? (
           <span className="text-text-dim num shrink-0 text-[13px]" title={`${entry.endedOn} 수강 종료`}>
             {entry.endedOn.slice(5)}
@@ -176,7 +184,7 @@ export function RosterSlotCells({
       </>
     );
   }
-  const rowEditable = canEdit && entry.eligible;
+  const rowEditable = canEdit && (entry.eligible || !!entry.isMakeup);
   return (
     <>
       <td className={`py-px ${dividerCls}`}>

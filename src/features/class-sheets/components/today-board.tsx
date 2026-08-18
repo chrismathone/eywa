@@ -26,6 +26,7 @@ import { clearPresentAttendance, setMyEcsFontSize } from "../server/actions";
 import { ECS_FONT_SIZE_ZOOM, type EcsFontSize } from "../font-size";
 import type { BasicAttendance } from "../lib/mark-cycle";
 import { StudentRow } from "./today-student-row";
+import { EcsMakeupAdder } from "./ecs-makeup-adder";
 import { TodaySummary, type TodayStats } from "./today-summary";
 import type { StudentMark } from "./today-mark-popover";
 import type { SkillAreaSetting } from "@/features/owner/settings-types";
@@ -116,11 +117,14 @@ function ClassCard({
     // 폼(기본 / JJ 전용)은 서버가 자리 라벨로 확정해 내려준다 — 화면이 반 이름으로 추측하지 않는다.
     form: s.form,
   }));
-  const marked = card.students.filter((s) => att[`${card.classId}|${s.studentId}`]?.status).length;
+  const attOf = (s: TodayClassCard["students"][number]) =>
+    att[`${card.classId}|${s.studentId}`] ?? { status: s.attendance, note: s.attendanceNote };
+  const marked = card.students.filter((s) => attOf(s).status).length;
   const written = card.students.filter((s) => s.reportWritten).length;
   const planMissing = card.fill.total - card.fill.filled;
-  // 일괄 출석 대상 = 아직 출결이 없는 학생(빈 칸만 — planBulkAttendance와 같은 비파괴 계약).
-  const pending = card.students.filter((s) => !att[`${card.classId}|${s.studentId}`]?.status);
+  // 일괄 출석 대상 = 아직 출결이 없는 **정규** 학생. 보강은 추가 시 이미 makeup 칸이 있다 —
+  // refresh 뒤 로컬 att가 비어 보여도 여기 넣으면 일괄이 makeup을 출석으로 덮는다.
+  const pending = card.students.filter((s) => !s.isMakeup && !attOf(s).status);
   // 진행 중 = 지금 시각이 이 카드의 첫 교시 시작~마지막 교시 끝 사이(끝 시각이 없으면 표시하지 않는다).
   const live = nowHm !== null && card.endsAt !== null && nowHm >= card.startsAt && nowHm < card.endsAt;
 
@@ -346,6 +350,12 @@ function ClassCard({
           <div className="min-w-0 max-w-[26rem]">
             <div className="mb-1.5 flex items-center justify-between gap-2">
               <p className="editorial-eyebrow">학생 · 출결 · 보고서</p>
+              <EcsMakeupAdder
+                classId={card.classId}
+                date={date}
+                existingIds={new Set(card.students.map((s) => s.studentId))}
+                canAdd={card.canMarkAttendance}
+              />
               {/* 일괄 출석 — 빈 칸만이라 비파괴(확인 불필요). 라벨이 실제 대상 수를 밝힌다(bulk-label 규약).
                   ⚠️ 렌더 조건에 bulkBusy를 포함 — 낙관 갱신으로 pending이 즉시 0이 되므로 이게 없으면
                   버튼이 클릭 순간 언마운트돼 '기록 중…' 상태가 보일 수 없다(적대 리뷰 2026-08-11). */}
@@ -366,7 +376,10 @@ function ClassCard({
               ) : null}
             </div>
             {card.students.length === 0 ? (
-              <p className="text-text-faint text-[13px]">이 날 수강하는 학생이 없습니다</p>
+              <p className="text-text-faint text-[13px]">
+                이 날 수강하는 학생이 없습니다
+                {card.canMarkAttendance ? " — 보강으로 온 학생은 위에서 추가할 수 있습니다" : ""}
+              </p>
             ) : (
               card.students.map((s) => (
                 <StudentRow
@@ -383,7 +396,7 @@ function ClassCard({
                   )}
                   onMark={(slotStart, next) => saveMark(s.studentId, slotStart, next)}
                   canEdit={canWrite}
-                  att={att[`${card.classId}|${s.studentId}`] ?? { status: null, note: null }}
+                  att={attOf(s)}
                   onSet={(status, note) => save(s.studentId, status, note)}
                   onClear={() => clear(s.studentId)}
                 />
