@@ -100,6 +100,11 @@ export type RosterEntry = {
   studentId: string;
   /** 그 날짜 실제 수강 대상(계획 표시·마크 입력 허용). */
   eligible: boolean;
+  /**
+   * 보강(수업외) — 수강행은 없지만 그날 출결이 있다. 출석부 `makeupStudentIds`와 같은 집합.
+   * 읽기 전용이 아니다(태도·출결을 그 칸에서 고친다). historical과 동시에 true가 되지 않는다.
+   */
+  isMakeup?: boolean;
   /** 비eligible인데 화면에 남는 행(퇴원 유예 또는 기록 보존) — 읽기 전용. */
   historical: boolean;
   /**
@@ -512,13 +517,18 @@ export function buildWeekGrid(input: {
       // 로스터 합집합: eligible ∪ 퇴원 유예 ∪ 슬롯 마크 보유 ∪ 그 날짜 출석 보유
       const ids = new Set<string>([...eligible, ...endedOn.keys(), ...markOwners, ...attToday]);
       // 표시 순서는 소비처(roster-order.ts)가 이름·종료일로 정한다 — 여기선 id 순으로 안정 정렬만.
-      const roster: RosterEntry[] = [...ids].sort().map((studentId) => ({
-        studentId,
-        eligible: eligible.has(studentId),
-        historical: !eligible.has(studentId),
-        endedOn: endedOn.get(studentId) ?? null,
-        endedReason: endedReason.get(studentId) ?? null,
-      }));
+      const roster: RosterEntry[] = [...ids].sort().map((studentId) => {
+        const isEnrolled = eligible.has(studentId);
+        const isMakeup = !isEnrolled && attToday.has(studentId);
+        return {
+          studentId,
+          eligible: isEnrolled,
+          isMakeup,
+          historical: !isEnrolled && !isMakeup,
+          endedOn: endedOn.get(studentId) ?? null,
+          endedReason: endedReason.get(studentId) ?? null,
+        };
+      });
       return {
         slotStart: slot,
         slotEnd: sched ? normalizeSlotTime(sched.endTime) : null,

@@ -22,6 +22,7 @@ import type { ClassSheetWeekData } from "../server/queries";
 import type { GridDay } from "../lib/grid";
 import type { RosterEntry } from "../lib/grid";
 import { groupRosterRows, type RosterGroupKey } from "../lib/roster-order";
+import { attendanceOrMakeup } from "../lib/makeup-roster";
 import { GroupToggle, GROUP_HINT } from "./roster-table";
 import {
   RosterNameCell,
@@ -220,7 +221,10 @@ export const TodayRosterTable = memo(function TodayRosterTable({
                     date={date}
                     slotStart={slot.slotStart}
                     mark={marks[`${row.entry.studentId}|${date}|${slot.slotStart}`] ?? null}
-                    att={attendance[`${row.entry.studentId}|${date}|${slot.slotStart}`] ?? null}
+                    att={attendanceOrMakeup(
+                      attendance[`${row.entry.studentId}|${date}|${slot.slotStart}`],
+                      (row.perSlot[slot.slotStart] ?? row.entry).isMakeup,
+                    )}
                     canMarkDate={canMarkDate}
                     canNoteDate={data.canNoteAttendance}
                     canEdit={canEdit}

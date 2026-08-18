@@ -17,14 +17,22 @@ export type BulkRosterRow = {
   studentId: string;
   /** 이 교시의 수강 대상인가(아니면 입력 불가) */
   eligible: boolean;
+  /** 보강(수업외) — 수강행 없이 그날 출결. 태도 일괄은 연다(출결 일괄은 이미 칸이 있어 빠진다). */
+  isMakeup?: boolean;
   /** 현재 수강 대상은 아니지만 기록이 있어 표시되는 행(읽기 전용) */
   historical: boolean;
 };
 
-/** 편집 가능한 행만 — 일괄·개별 공통 전제. */
-function editableRows(roster: BulkRosterRow[], canEdit: boolean): BulkRosterRow[] {
+/** 태도·마크 일괄 — 보강도 연다(출결은 이미 있어서 출석 일괄에는 안 넣는다). */
+function editableMarkRows(roster: BulkRosterRow[], canEdit: boolean): BulkRosterRow[] {
   if (!canEdit) return [];
-  return roster.filter((r) => r.eligible && !r.historical);
+  return roster.filter((r) => (r.eligible || r.isMakeup) && !r.historical);
+}
+
+/** 출결 일괄 — 보강은 이미 칸이 있다. 빈 칸으로 보면 makeup을 present로 덮는다. */
+function editableAttendanceRows(roster: BulkRosterRow[], canEdit: boolean): BulkRosterRow[] {
+  if (!canEdit) return [];
+  return roster.filter((r) => r.eligible && !r.historical && !r.isMakeup);
 }
 
 /**
@@ -43,7 +51,7 @@ export function planBulkAttendance(
   opts: { canEdit: boolean; canMarkDate: boolean },
 ): string[] {
   if (!opts.canMarkDate) return [];
-  return editableRows(roster, opts.canEdit)
+  return editableAttendanceRows(roster, opts.canEdit)
     .filter((r) => !attendance[`${r.studentId}|${date}|${slotStart}`])
     .map((r) => r.studentId);
 }
@@ -60,7 +68,7 @@ export function planBulkStatus(
   slotStart: string,
   opts: { canEdit: boolean; onlyEmpty: boolean },
 ): string[] {
-  return editableRows(roster, opts.canEdit)
+  return editableMarkRows(roster, opts.canEdit)
     .filter((r) => {
       if (!opts.onlyEmpty) return true;
       const cur = marks[`${r.studentId}|${date}|${slotStart}`]?.status ?? null;
@@ -77,7 +85,7 @@ export function countStatusOverwrites(
   slotStart: string,
   canEdit: boolean,
 ): number {
-  return editableRows(roster, canEdit).filter((r) => {
+  return editableMarkRows(roster, canEdit).filter((r) => {
     const cur = marks[`${r.studentId}|${date}|${slotStart}`]?.status ?? null;
     return cur !== null && cur !== "";
   }).length;
@@ -271,7 +279,7 @@ export function countDayPlanCellOverwrites(
 
 /**
  * 일괄 대상 **학생 수** — 편집 가능한(재원) 학생을 교시 간 **중복 없이** 센다.
- * 퇴원·기록 섹션은 `editableRows`가 이미 뺀다(일괄 대상이 아니라는 기존 규약 그대로).
+ * 퇴원·기록·보강은 출석 일괄에서 뺀다(보강은 이미 칸이 있다).
  */
 export function countDayBulkStudents(
   slots: readonly DayBulkSlot[],
@@ -279,7 +287,7 @@ export function countDayBulkStudents(
 ): number {
   const ids = new Set<string>();
   for (const s of openSlots(slots)) {
-    for (const r of editableRows(s.roster, opts.canEdit)) ids.add(r.studentId);
+    for (const r of editableAttendanceRows(s.roster, opts.canEdit)) ids.add(r.studentId);
   }
   return ids.size;
 }

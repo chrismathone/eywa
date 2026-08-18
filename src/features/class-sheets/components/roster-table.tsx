@@ -31,6 +31,7 @@ import { EyIcon } from "@/components/icons/eywa-icons";
 import type { ClassSheetWeekData } from "../server/queries";
 import type { RosterEntry } from "../lib/grid";
 import { groupRosterRows, type RosterGroupKey } from "../lib/roster-order";
+import { attendanceOrMakeup } from "../lib/makeup-roster";
 import { rosterColSpan, rosterTextCols, type RosterForm, type SheetMark } from "../lib/roster-form";
 import { TODAY_BASE_COLS, TODAY_NAME_W } from "../lib/today-columns";
 // 셀 구현은 **공용 모듈**(roster-slot-cells) — 오늘 면 통합 표(today-roster-table)와 같은 셀을 쓴다
@@ -46,6 +47,7 @@ import type { SheetHandlers } from "./sheet-client";
 /** 섹션 라벨 행의 설명(툴팁) — 왜 이 학생이 아직 보이는지 화면이 스스로 답한다. 통합 표와 공용. */
 export const GROUP_HINT: Record<RosterGroupKey, string> = {
   active: "",
+  makeup: "이 반 수강생은 아니지만 그날 보강으로 온 학생 — 출석부·원스크린과 같은 명단입니다",
   withdrawn: "수강이 끝난 학생 — 종료일부터 한 달간 표시되고 그 뒤 주부터는 명단에서 빠집니다(읽기 전용)",
   record: "현재 수강 대상이 아니지만 이 교시에 기록이 있어 표시(읽기 전용)",
 };
@@ -53,6 +55,7 @@ export const GROUP_HINT: Record<RosterGroupKey, string> = {
 /** 접기 버튼의 접근성 이름 — `active`는 라벨 행이 없어 표 머리('학생')가 그 자리다. */
 const GROUP_TOGGLE_LABEL: Record<RosterGroupKey, string> = {
   active: "학생 목록",
+  makeup: "보강 학생 목록",
   withdrawn: "퇴원생 목록",
   record: "기록 목록",
 };
@@ -93,6 +96,7 @@ export function GroupToggle({
 
 const GROUP_LABEL_OF: Record<RosterGroupKey, string> = {
   active: "학생",
+  makeup: "보강",
   withdrawn: "퇴원",
   record: "기록",
 };
@@ -270,7 +274,7 @@ export const RosterTable = memo(function RosterTable({
                   date={date}
                   slotStart={slotStart}
                   mark={marks[markKey] ?? null}
-                  att={attendance[markKey] ?? null}
+                  att={attendanceOrMakeup(attendance[markKey], entry.isMakeup)}
                   canMarkDate={canMarkDate}
                   canNoteDate={data.canNoteAttendance}
                   canEdit={canEdit}

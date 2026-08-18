@@ -25,6 +25,7 @@ import type { SheetSaveStore } from "./use-sheet-saves";
 import { PeriodBlock } from "./period-block";
 import { DayBulk } from "./day-bulk";
 import { TodayRosterTable } from "./today-roster-table";
+import { EcsMakeupAdder } from "./ecs-makeup-adder";
 // 가로 치수는 아래 통합 로스터와 **공유**한다 — 한쪽만 고치면 줄이 조용히 어긋난다(today-columns).
 import { TODAY_GUTTER, TODAY_NAME_W, TODAY_SLOT_W, todayContentWidth } from "../lib/today-columns";
 
@@ -83,6 +84,12 @@ export function TodayClassSheet({
               ⚠️ 폭을 고정하지 않는다(min-w-0 + flex-1) — 고정하면 이름이 늘 잘리고, 여기서 늘리면
               아래 표와 어긋난다. 잘린 전체 이름은 header 쪽이 title로 남긴다. */}
           <div className="min-w-0 flex-1">{header}</div>
+          <EcsMakeupAdder
+            classId={data.classId}
+            date={day.date}
+            existingIds={new Set(day.slots.flatMap((s) => s.roster.map((r) => r.studentId)))}
+            canAdd={canEdit && (data.canMarkAttendanceByDate[day.date] ?? false)}
+          />
           <DayBulk
             date={day.date}
             slots={day.slots.map((s) => ({

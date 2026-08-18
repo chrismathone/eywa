@@ -12,6 +12,7 @@ import type { ClassSheetWeekData } from "../server/queries";
 import { ECS_FONT_SIZES, ECS_FONT_SIZE_LABEL, type EcsFontSize } from "../font-size";
 import { attHref } from "@/app/(shell)/attendance/_components/att-href";
 import { useSaveIndicator, type SheetSaveStore } from "./use-sheet-saves";
+import { EcsMakeupAdder } from "./ecs-makeup-adder";
 
 const DOW_KO: Record<string, string> = { mon: "월", tue: "화", wed: "수", thu: "목", fri: "금", sat: "토", sun: "일" };
 // ⚠️ cursor-pointer 명시 — Tailwind v4 preflight엔 v3의 `button{cursor:pointer}`가 없어서
@@ -169,6 +170,18 @@ export function SheetToolbar({
       </div>
 
       <span className="ml-auto flex items-center gap-2">
+        {dayFilter ? (
+          <EcsMakeupAdder
+            classId={data.classId}
+            date={dayFilter}
+            existingIds={new Set(
+              (data.grid.days.find((d) => d.date === dayFilter)?.slots ?? []).flatMap((s) =>
+                s.roster.map((r) => r.studentId),
+              ),
+            )}
+            canAdd={data.canMarkAttendanceByDate[dayFilter] ?? false}
+          />
+        ) : null}
         <button
           type="button"
           className={`${pill(false)} inline-flex items-center gap-1`}

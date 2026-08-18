@@ -339,7 +339,7 @@ describe("buildWeekGrid — 퇴원 유예(하단 '퇴원' 섹션, 시간표와 �
 });
 
 describe("buildWeekGrid — 과거 데이터 보존(합집합 로스터·고아·attendanceOnly)", () => {
-  it("비eligible이어도 마크·출석 보유 학생은 historical로 로스터에 남는다", () => {
+  it("비eligible이어도 마크·출석 보유 학생은 로스터에 남는다 — 출결만 있으면 보강", () => {
     const grid = buildWeekGrid({
       weekMonday: MON,
       schedules: [sched("mon", "15:00")],
@@ -350,10 +350,10 @@ describe("buildWeekGrid — 과거 데이터 보존(합집합 로스터·고아�
       slotMemoKeys: [],
     });
     const roster = grid.days[0].slots[0].roster;
-    expect(roster.map((r) => [r.studentId, r.eligible, r.historical])).toEqual([
-      ["s1", true, false],
-      ["s2", false, true],
-      ["s3", false, true],
+    expect(roster.map((r) => [r.studentId, r.eligible, r.historical, r.isMakeup])).toEqual([
+      ["s1", true, false, false],
+      ["s2", false, true, false],
+      ["s3", false, false, true],
     ]);
   });
 

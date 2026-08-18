@@ -31,11 +31,19 @@ import {
   unitsAfterMakeup,
 } from "@/features/onescreen/makeup-absence-link";
 import { attendanceLockMessage, isWithinAttendanceEditWindow } from "../edit-window";
+import { canWriteAttendanceStudent } from "../makeup-write";
 import { kstToday } from "@/lib/date-kst";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 
 const STATUSES = ["present", "absent", "late", "excused", "makeup", "early_leave"] as const;
 type Status = (typeof STATUSES)[number];
+
+/** 출결을 쓰는 화면은 셋(출석부·ECS·원스크린) — 한 곳에서 쓰면 나머지도 다시 그린다. */
+function revalidateAttendanceSurfaces() {
+  revalidatePath("/attendance");
+  revalidatePath("/ecs");
+  revalidatePath("/onescreen");
+}
 
 type Sb = Awaited<ReturnType<typeof createClient>>;
 
@@ -328,6 +336,12 @@ export async function setAttendanceCell(input: {
    * `recorded_via` 스탬프는 이 값과 무관하게 항상 남긴다.
    */
   source?: "live";
+  /**
+   * 보강(수업외)으로 **지금 넣는** 저장 — 수강행이 없어도 그 반·날짜 칸을 연다.
+   * ECS·원스크린·출석부 '+ 보강 학생 추가'가 켠다. 이미 있는 보강 칸을 고치는 건
+   * 이 플래그 없이 `hasRecord`로 통과한다(`canWriteAttendanceStudent`).
+   */
+  allowMakeup?: boolean;
 }): Promise<CellResult> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
@@ -364,7 +378,7 @@ export async function setAttendanceCell(input: {
     if (!noteOnly && !isWithinAttendanceEditWindow(sessionDate, kstToday())) {
       return { error: attendanceLockMessage(sessionDate, kstToday()) };
     }
-    const [teaching, { count: enrolled }] = await Promise.all([
+    const [teaching, { count: enrolled }, { count: existing }] = await Promise.all([
       // 담당 반 ∪ 그날 위임받은 반(0173a).
       userTaughtClassSet(supabase, user.id, sessionDate),
       supabase
@@ -374,9 +388,24 @@ export async function setAttendanceCell(input: {
         .eq("student_id", studentId)
         .or(`start_date.is.null,start_date.lte.${sessionDate}`)
         .or(`end_date.is.null,end_date.gte.${sessionDate}`),
+      // 보강으로 이미 열어 둔 칸 — 수강 게이트만 보면 ECS·원스크린에서 고칠 수 없다.
+      supabase
+        .from("attendance_records")
+        .select("*", { count: "exact", head: true })
+        .eq("class_id", classId)
+        .eq("student_id", studentId)
+        .eq("session_date", sessionDate),
     ]);
     if (!teaching.has(classId)) return { error: "담당 반이 아닙니다" };
-    if (!enrolled) return { error: "이 반 수강생이 아닙니다" };
+    if (
+      !canWriteAttendanceStudent({
+        enrolled: (enrolled ?? 0) > 0,
+        hasRecord: (existing ?? 0) > 0,
+        allowMakeup: input.allowMakeup === true,
+      })
+    ) {
+      return { error: "이 반 수강생이 아닙니다" };
+    }
   }
 
   // 메모만 — 있는 기록의 note만 갈아끼운다. 🔴 **지우기 분기보다 먼저** 온다(status가 null로 와도
@@ -402,7 +431,7 @@ export async function setAttendanceCell(input: {
     if (!row?.id) return { error: "그날 출결 기록이 없어 메모만 남길 수 없습니다 — 먼저 출결을 입력하세요" };
     const { error } = await supabase.from("attendance_records").update({ note: noteVal }).eq("id", row.id);
     if (error) return { error: error.message };
-    if (!input.quiet) revalidatePath("/attendance");
+    if (!input.quiet) revalidateAttendanceSurfaces();
     return { ok: true };
   }
 
@@ -429,7 +458,7 @@ export async function setAttendanceCell(input: {
     if (slot !== null) del = del.eq("slot_start", slot);
     const { error } = await del;
     if (error) return { error: error.message };
-    if (!input.quiet) revalidatePath("/attendance");
+    if (!input.quiet) revalidateAttendanceSurfaces();
     return { ok: true };
   }
 
@@ -547,7 +576,7 @@ export async function setAttendanceCell(input: {
       );
     }
   }
-  if (!input.quiet) revalidatePath("/attendance");
+  if (!input.quiet) revalidateAttendanceSurfaces();
   return { ok: true };
 }
 
@@ -698,7 +727,7 @@ export async function linkMakeupToAbsence(input: {
       notifyIfClassAttendanceComplete({ tenantId: user.tenantId, classId, date: makeupDate, actorId: user.id }),
     );
   }
-  revalidatePath("/attendance");
+  revalidateAttendanceSurfaces();
   return { ok: true, units, absenceNoted: !!absentCell?.id, alreadyLinked };
 }
 
@@ -1016,7 +1045,7 @@ export async function setAttendanceBulk(input: {
       });
     }
   }
-  revalidatePath("/attendance");
+  revalidateAttendanceSurfaces();
   const createdKeys = new Set(inserts.map((c) => `${c.studentId}::${c.classId}`));
   return {
     ok: true,
@@ -1162,7 +1191,7 @@ export async function setAttendanceRange(input: {
       const { error } = await supabase.from("attendance_records").delete().in("id", ids.slice(i, i + CHUNK));
       if (error) return { error: error.message };
     }
-    revalidatePath("/attendance");
+    revalidateAttendanceSurfaces();
     return { ok: true, applied: allowed.length, blocked: cells.length - allowed.length };
   }
 
@@ -1240,7 +1269,7 @@ export async function setAttendanceRange(input: {
       }
     });
   }
-  if (!input.quiet) revalidatePath("/attendance");
+  if (!input.quiet) revalidateAttendanceSurfaces();
   return { ok: true, applied: allowed.length, blocked: cells.length - allowed.length };
 }
 
@@ -1255,6 +1284,8 @@ export async function setAttendanceRange(input: {
 export async function searchMakeupStudents(
   classId: string,
   query: string,
+  /** 보고 있는 수업일 — 그날 담당·위임인지로 검색을 연다. 없으면 오늘. */
+  onDate?: string,
 ): Promise<{ id: string; name: string; label: string }[]> {
   const user = await getCurrentUser();
   if (!user) return [];
@@ -1262,8 +1293,9 @@ export async function searchMakeupStudents(
   const q = query.trim();
   if (!q || !classId) return [];
   const supabase = await createClient();
+  const when = onDate && /^\d{4}-\d{2}-\d{2}$/.test(onDate) ? onDate : kstToday();
   if ((await accessLevelTenant(user.systemRole, "attendance")) === "scoped") {
-    const myClassIds = await userTaughtClassSet(supabase, user.id, kstToday());
+    const myClassIds = await userTaughtClassSet(supabase, user.id, when);
     if (!myClassIds.has(classId)) return [];
   }
   const { data } = await supabase

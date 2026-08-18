@@ -655,10 +655,18 @@ async function checkStudentEligibleOn(
     }
     return enrollmentAttendsOnDay(e.attendance_days as string[] | null, dow);
   });
-  if (!eligible) {
-    return { ok: false, error: "그 날짜에 이 반을 수강하지 않는 학생입니다(기록 행은 읽기 전용)" };
-  }
-  return { ok: true };
+  if (eligible) return { ok: true };
+  // 보강(수업외) — 수강행은 없지만 그날 출결이 있으면 태도·특이사항도 같은 칸에 쓴다.
+  const { count, error: attErr } = await admin
+    .from("attendance_records")
+    .select("*", { count: "exact", head: true })
+    .eq("tenant_id", tenantId)
+    .eq("class_id", classId)
+    .eq("student_id", studentId)
+    .eq("session_date", date);
+  if (attErr) return { ok: false, error: `수강 확인에 실패했습니다: ${attErr.message}` };
+  if ((count ?? 0) > 0) return { ok: true };
+  return { ok: false, error: "그 날짜에 이 반을 수강하지 않는 학생입니다(기록 행은 읽기 전용)" };
 }
 
 // ── 출석(비파괴) ─────────────────────────────────────────────────────────────
