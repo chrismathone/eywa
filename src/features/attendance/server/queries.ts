@@ -24,7 +24,7 @@ import type { PeriodWindow } from "@/features/periods/resolve";
 // 출결의 강사 귀속 축 단일 소스(2026-08-18) — 담임만 보면 교시 담당 강사가 자기 수업을 못 본다.
 import { loadClassAxisRows } from "./teacher-axis-queries";
 // 교시 귀속(누구 몫인가)은 같은 축 모듈이 단일 소스다 — 여기서 규칙을 다시 적지 말 것.
-import { ownsAttendanceSlot } from "@/features/attendance/teacher-axis";
+import { classTeacherIdsInRange, ownsAttendanceSlot } from "@/features/attendance/teacher-axis";
 import type { PeriodMode } from "@/features/attendance/view-prefs";
 import {
   deriveMarksFromReports,
@@ -771,6 +771,19 @@ export async function getMonthlyAttendanceMatrix(
   const ownsSlot = (date: string, slotStart: string | null): boolean =>
     ownsAttendanceSlot({ scopeTeacherId, homeroomTeacherId, slots: axisSlots, date, slotStart });
 
+  /**
+   * 이 반을 그 기간에 맡은 강사가 **둘 이상인가** — 아래 `dayAxis` 안내를 붙일지 정한다.
+   *
+   * 🔴 한 사람뿐인 반에서 "다른 선생님 화면에도 같은 값"은 **거짓말**이다. 수학은 활성 68개 반 중
+   *    담임 아닌 교시 담당이 있는 반이 **0개**라, 안 가르면 day-level 칸 전부에 그 문장이 붙는다
+   *    (실측 2026-05~08: 수학 dayAxis 4,668칸 중 실제로 둘 이상에게 잡히는 칸은 136칸뿐 = 2.9%).
+   *    거짓 문구를 없애려던 화면에 또 다른 거짓을 붙이는 꼴이라 여기서 막는다(적대적 리뷰 2026-08-19).
+   * ⚠️ 판정은 가시성 축(`classTeacherIdsInRange`)과 **같은 함수**로 한다 — 화면에 뜨는 사람 수와
+   *    문구가 어긋나지 않게. 추가 쿼리 0(이미 받은 슬롯으로 계산).
+   */
+  const sharedByTeachers =
+    classTeacherIdsInRange({ homeroomTeacherId, slots: axisSlots, from: startIso, to: endIso }).length > 1;
+
   const studentMap = new Map<string, MatrixStudent>();
   // 파생 판정용 수강 구간 — 한 학생이 같은 반에 재등록해 여러 행일 수 있어 **전 구간**을 모은다
   // (studentMap은 첫 행만 담으므로 그것만 보면 재등록 이전 기간을 통째로 결석 처리한다).
@@ -931,8 +944,9 @@ export async function getMonthlyAttendanceMatrix(
       if (!day) continue;
       marks[cell.studentId] ??= {};
       marks[cell.studentId]![cell.date] = day.status as AttendanceStatus;
-      // 교시를 안 남긴 기록이 값에 섞였나 — 강사 전체 보기에서만 뜻이 있다(반별 보기는 원래 반 전체다).
-      if (scopeTeacherId && cell.slots.some((x) => x.slot === null)) {
+      // 교시를 안 남긴 기록이 값에 섞였나 — 강사 전체 보기 + **담당이 둘 이상인 반**에서만 뜻이 있다
+      // (반별 보기는 원래 반 전체이고, 혼자 맡는 반은 그 값이 남의 화면에 뜨지 않는다 = 위 sharedByTeachers).
+      if (scopeTeacherId && sharedByTeachers && cell.slots.some((x) => x.slot === null)) {
         dayAxis[cell.studentId] ??= {};
         dayAxis[cell.studentId]![cell.date] = true;
       }

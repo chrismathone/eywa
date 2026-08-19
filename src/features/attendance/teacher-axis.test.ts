@@ -246,6 +246,19 @@ describe("가시성 스코프(classTeacherIdsInRange)", () => {
     ).toEqual([HOMEROOM]);
   });
 
+  it("🔴 담임 혼자 맡는 반은 **1명** — 월간 격자의 '이 반 전체 몫' 안내가 이 수로 갈린다", () => {
+    // 수학이 여기 해당한다(활성 68개 반 중 담임 아닌 교시 담당이 있는 반 0개, 2026-08 실측).
+    // 혼자 맡는 반에 "다른 선생님 화면에도 같은 값"을 붙이면 그 문장 자체가 거짓이다(적대적 리뷰 2026-08-19).
+    expect(
+      classTeacherIdsInRange({
+        homeroomTeacherId: HOMEROOM,
+        slots: [slot({ teacherId: null }), slot({ dayOfWeek: "fri", teacherId: null })],
+        from: "2026-08-01",
+        to: "2026-08-31",
+      }),
+    ).toEqual([HOMEROOM]);
+  });
+
   it("모호(담당 둘)해도 둘 다 보인다 — 귀속과 달리 가시성은 넓게", () => {
     const ids = classTeacherIdsInRange({
       homeroomTeacherId: null,

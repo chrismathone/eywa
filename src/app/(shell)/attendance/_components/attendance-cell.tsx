@@ -123,7 +123,10 @@ export function AttendanceCell({
   const day = pristine ? dayRollup : null;
   // 세지 않는 교시는 **값이 비어 있을 때만** 빗금으로 드러낸다 — 값이 있으면 그 값이 칸의 주인이고,
   // 세지 않는 교시는 아래 툴팁에서 계속 밝힌다.
-  const ghost = !status && !!otherSlots?.length;
+  // 🔴 **서버가 값을 안 준 칸일 때만** 빗금이다(initialStatus === null). 값이 있던 칸을 범위 Delete로
+  //    지우면 서버는 그날 **모든 교시**를 지우므로 남의 교시도 이미 없다 — 그때 빗금·유령 메모를 켜면
+  //    새로고침(900ms) 전까지 없는 기록을 있다고 그린다(적대적 리뷰 2026-08-19).
+  const ghost = initialStatus === null && !status && !!otherSlots?.length;
   // 🔴 빗금 칸엔 값이 없어도 **메모는 있다** — 실측 78칸이 결석 사유였다("병결"·"가족여행").
   //    noteVal은 값이 없으면 비우는 규약(지워진 칸의 유령 메모 방지)이라, 이 칸만 따로 살린다.
   const ghostNote = ghost ? noteEdit ?? note ?? "" : "";

@@ -133,6 +133,17 @@ export function GridProvider({
 }) {
   const [store] = useState(() => new GridStore());
   const [error, setError] = useState<string | null>(null);
+  /**
+   * 정보 알림 — **저장은 됐는데 알아야 하는 것**(사정거리 등). 실패 채널(빨강·클릭해야 사라짐)과
+   * 섞으면 정상 입력마다 빨간 경고가 떠 경보 피로가 된다(적대적 리뷰 2026-08-19). 스스로 사라진다.
+   */
+  const [notice, setNotice] = useState<string | null>(null);
+  // 정보 알림은 스스로 사라진다 — 남겨 두면 다음 입력의 결과와 헷갈리고, 지우려고 손이 마우스로 간다.
+  useEffect(() => {
+    if (!notice) return;
+    const t = setTimeout(() => setNotice(null), 5000);
+    return () => clearTimeout(t);
+  }, [notice]);
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => new Set(initialCollapsed ?? []));
   // 되돌리기는 **작업 단위**(칸 하나가 아니라 한 번의 채우기 전체) — 30칸을 채우고 Ctrl+Z를 30번 누르게 하지 않는다.
   const undoRef = useRef<{ key: string; prev: GridValue }[][]>([]);
@@ -250,7 +261,7 @@ export function GridProvider({
       //    ⚠️ 문을 닫는 게 아니다 — 반별 보기에선 그 칸이 3으로 보이고 그대로 지울 수 있다(#103).
       if (val === null && shared > 0) {
         setError(
-          `이 칸엔 다른 선생님 교시 ${shared}건이 함께 있어 여기서 지우면 그것까지 지워집니다 — 반별 보기에서 지우세요`,
+          `이 칸엔 다른 교시 기록 ${shared}건(다른 선생님·자리 JJ·랩실)이 함께 있어 여기서 지우면 그것까지 지워집니다 — 반별 보기에서 지우세요`,
         );
         return;
       }
@@ -260,7 +271,8 @@ export function GridProvider({
       pushCell(key, val, prev);
       // 값을 **쓰는** 경우엔 막지 않는다(내 교시가 있으니 고칠 권리가 있다) — 대신 사정거리를 말한다.
       // 칸 숫자가 내 교시만 보여주므로 이 문장이 없으면 "내 것만 바뀐다"고 믿는다.
-      if (shared > 0) setError(`같은 날 다른 선생님 교시 ${shared}건도 함께 바뀝니다`);
+      // ⚠️ 이 문장은 **성공 알림**이다 — 실패 채널(빨강)에 실으면 잘 저장된 순간마다 경고가 뜬다.
+      if (shared > 0) setNotice(`같은 날 다른 교시 기록 ${shared}건(다른 선생님·자리)도 함께 바뀝니다`);
     },
     [store, isLocked, isNotMine, alsoWrites, pushCell],
   );
@@ -273,13 +285,20 @@ export function GridProvider({
       // 🔴 남의 교시만 있는 칸은 범위 채우기·붙여넣기·**Delete에서도** 뺀다 — 안 빼면 화면에 값이
       //    없는 채로 남의 기록·자리(JJ)가 통째로 지워지고(그날 모든 교시 DELETE) 화면은 그대로라
       //    무엇을 지웠는지 아무도 모른다(적대적 리뷰 2026-08-18).
-      const targets = unlocked.filter((p) => !isNotMine(cellKey(p.row, p.date)));
+      const mine = unlocked.filter((p) => !isNotMine(cellKey(p.row, p.date)));
+      // 🔴 **삭제만은 섞인 칸도 뺀다** — 단건 경로와 같은 이유다(지우기엔 교시 축이 없어 그날 행이
+      //    통째로 사라진다). 안 빼면 "1칸 선택하면 거절, 2칸 선택하면 실행"이라는 모순이 남고,
+      //    그 사이 남의 교시·자리(JJ) 기록이 흔적 없이 지워진다(적대적 리뷰 2026-08-19).
+      //    ⚠️ 값을 **쓰는** 범위 작업은 그대로 통과한다(고칠 권리가 있는 칸이다) — 아래에서 사정거리만 알린다.
+      const targets = val === null ? mine.filter((p) => !alsoWrites?.[cellKey(p.row, p.date)]) : mine;
       // 건너뛴 칸을 조용히 빼지 않는다 — 몇 칸이 안 들어갔는지 말해 주지 않으면 채워진 줄 안다.
       const lockedCount = all.length - unlocked.length;
-      const notMineCount = unlocked.length - targets.length;
+      const notMineCount = unlocked.length - mine.length;
+      const mixedCount = mine.length - targets.length;
       const skipNote = [
         lockedCount > 0 ? `${lockedCount}칸은 수정 기간(7일)이 지나` : null,
         notMineCount > 0 ? `${notMineCount}칸은 선생님 교시가 없어` : null,
+        mixedCount > 0 ? `${mixedCount}칸은 다른 교시 기록이 함께 있어(반별 보기에서 지우세요)` : null,
       ].filter(Boolean);
       if (targets.length === 0) {
         if (skipNote.length > 0) setError(`${skipNote.join(" · ")} 건너뛰었습니다`);
@@ -313,11 +332,13 @@ export function GridProvider({
         // 🔴 함께 바뀐 남의 교시를 **말해 준다** — 칸 숫자는 내 교시만 보여주므로 사용자는 "내 것만
         //    지웠다"고 믿는다. 저장은 그날 모든 교시에 간다(save-targets ①).
         const shared = targets.filter((t) => alsoWrites?.[cellKey(t.row, t.date)]).length;
-        const notes = [
-          skipped > 0 ? `${skipped}칸은 수정 기간이 지났거나 담당 반·선생님 교시가 아니어서 건너뛰었습니다` : null,
-          shared > 0 ? `${shared}칸은 같은 날 다른 선생님 교시도 함께 바뀌었습니다` : null,
-        ].filter(Boolean);
-        if (notes.length > 0) setError(notes.join(" · "));
+        if (skipped > 0) setError(`${skipped}칸은 수정 기간이 지났거나 담당 반·선생님 교시가 아니어서 건너뛰었습니다`);
+        // ⚠️ `shared`는 서버가 반려한 칸(res.blocked)까지 세므로, 반려가 섞였으면 단정하지 않는다.
+        if (shared > 0) {
+          setNotice(
+            `${shared}칸은 같은 날 다른 교시 기록(다른 선생님·자리)도 함께 바뀌${res.blocked > 0 ? "었을 수 있습니다" : "었습니다"}`,
+          );
+        }
       });
     },
     [store, isLocked, isNotMine, alsoWrites, writeOne, scheduleRefresh, toValue],
@@ -416,7 +437,10 @@ export function GridProvider({
       if ((e.key >= "0" && e.key <= "9") || e.key === "." || e.key === ",") {
         e.preventDefault();
         // 빗금 칸은 버퍼를 열지도 않는다 — 열면 숫자가 보였다가 확정 단계에서 거절돼 "쳤는데 사라졌다"가 된다.
-        if (isNotMine(key)) {
+        // 🔴 단, **범위가 잡혀 있으면 막지 않는다.** 앵커(활성 칸)만 보고 거절하면 함께 선택한 정상 칸까지
+        //    통째로 못 친다 — 한 행을 왼쪽부터 끄는 흔한 조작에서 앵커가 빗금이기 쉽다(영어 빗금 887칸).
+        //    범위는 `writeMany`가 빗금만 걸러내고 "N칸은 선생님 교시가 없어 건너뛰었습니다"로 알린다.
+        if (sel.size <= 1 && isNotMine(key)) {
           setError(NOT_MINE_MESSAGE);
           return;
         }
@@ -473,7 +497,7 @@ export function GridProvider({
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [store, commit, writeMany, writeOne, pushCell]);
+  }, [store, commit, writeMany, writeOne, pushCell, isNotMine]);
 
   const ctx = useMemo<Ctx>(
     () => ({
@@ -500,13 +524,28 @@ export function GridProvider({
   return (
     <GridCtx.Provider value={ctx}>
       {children}
-      {error ? (
-        <div
-          role="alert"
-          onClick={() => setError(null)}
-          className="bg-danger text-white fixed bottom-4 left-1/2 z-50 -translate-x-1/2 cursor-pointer rounded-lg px-3 py-2 text-xs shadow-lg"
-        >
-          {error}
+      {error || notice ? (
+        <div className="fixed bottom-4 left-1/2 z-50 flex -translate-x-1/2 flex-col items-center gap-1">
+          {/* 실패·거절 — 사람이 읽고 지워야 한다(자동으로 사라지면 왜 안 됐는지 못 본다). */}
+          {error ? (
+            <div
+              role="alert"
+              onClick={() => setError(null)}
+              className="bg-danger cursor-pointer rounded-lg px-3 py-2 text-xs text-white shadow-lg"
+            >
+              {error}
+            </div>
+          ) : null}
+          {/* 정보(성공 + 사정거리) — 의미색 캐논의 caution=amber. 스스로 사라진다. */}
+          {notice ? (
+            <div
+              role="status"
+              onClick={() => setNotice(null)}
+              className="bg-amber cursor-pointer rounded-lg px-3 py-2 text-xs text-white shadow-lg"
+            >
+              {notice}
+            </div>
+          ) : null}
         </div>
       ) : null}
     </GridCtx.Provider>

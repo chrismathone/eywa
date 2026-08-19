@@ -299,24 +299,27 @@ describe("세지 않는 교시(자리·남의 교시)", () => {
     const cell = cellOf(container);
     expect(cell.getAttribute("title")).toContain("병결");
     // 접힌 모서리(메모 표식)도 남아야 호버하기 전에 "메모가 있다"를 안다.
-    expect(cell.querySelector("span[aria-hidden]")).toBeTruthy();
+    // ⚠️ `span[aria-hidden]`만으로는 선택·활성 덮개도 통과한다 — 모서리 스팬을 그 위치로 집는다.
+    expect(cell.querySelector('span[aria-hidden][class*="top-0"][class*="right-0"]')).toBeTruthy();
   });
 
   /**
    * 🔴 격자(GridProvider) **안에서** 눌러야 진짜 검증이다 — 격자 없이 렌더하면 키보드 경로 자체가
    *    없어서 "액션이 안 불렸다"가 저절로 참이 된다(그렇게 짰다가 헛통과했다).
    */
-  function renderInGrid(owned: SlotMark[], others: SlotMark[]) {
+  /** @param bothDays 이틀 다 같은 모양으로 — 범위(2칸) 조작을 재현할 때 쓴다. */
+  function renderInGrid(owned: SlotMark[], others: SlotMark[], bothDays = false) {
     const m = matrix([
       { id: S1, name: "김근호", grade: "중1", school: "경명여중", enrolledAt: null, attendDows: [3], spans: [], badges: [] },
     ]);
+    const dates = bothDays ? [D1, "2026-07-02"] : [D1];
     const day = owned.length > 0 ? rollupDay(owned) : null;
     if (day) {
-      m.marks = { [S1]: { [D1]: day.status as never } };
-      if (day.units !== 1 && day.units > 0) m.units = { [S1]: { [D1]: day.units } };
-      if (day.count > 1) m.slots = { [S1]: { [D1]: day.slots } };
+      m.marks = { [S1]: Object.fromEntries(dates.map((d) => [d, day.status])) as never };
+      if (day.units !== 1 && day.units > 0) m.units = { [S1]: Object.fromEntries(dates.map((d) => [d, day.units])) };
+      if (day.count > 1) m.slots = { [S1]: Object.fromEntries(dates.map((d) => [d, day.slots])) };
     }
-    m.ghosts = { [S1]: { [D1]: others } };
+    m.ghosts = { [S1]: Object.fromEntries(dates.map((d) => [d, others])) };
     const groups = [{ ...GROUP, matrix: m }];
     const ordered = [{ classId: C, studentId: S1 }];
     const src = buildGridSource(groups, DAYS, ordered);
@@ -378,6 +381,40 @@ describe("세지 않는 교시(자리·남의 교시)", () => {
     fireEvent.keyDown(cell, { key: "Enter" });
     expect(setAttendanceCell).toHaveBeenCalledTimes(1);
     expect(container.textContent).toContain("함께 바뀝니다");
+  });
+
+  it("🔴 **범위 Delete도** 섞인 칸을 지우지 않는다 — 1칸은 거절, 2칸은 실행이면 모순이다", async () => {
+    const actions = await import("@/features/attendance/server/actions");
+    vi.mocked(actions.setAttendanceCell).mockClear();
+    vi.mocked(actions.setAttendanceRange).mockClear();
+    const { container } = renderInGrid(
+      [{ slot: "17:20:00", status: "present", units: null }],
+      [{ slot: "18:20:00", status: "present", units: null }],
+      true, // 이틀 다 섞인 칸
+    );
+    const cell = cellOf(container);
+    fireEvent.mouseDown(cell, { button: 0 });
+    fireEvent.keyDown(cell, { key: "ArrowRight", shiftKey: true });
+    fireEvent.keyDown(cell, { key: "Delete" });
+    expect(actions.setAttendanceRange).not.toHaveBeenCalled();
+    expect(actions.setAttendanceCell).not.toHaveBeenCalled();
+    expect(container.textContent).toContain("다른 교시 기록이 함께 있어");
+  });
+
+  it("🔴 앵커가 빗금이어도 **범위 입력은 죽지 않는다** — 함께 잡은 정상 칸엔 들어가야 한다", async () => {
+    const { setAttendanceCell } = await import("@/features/attendance/server/actions");
+    vi.mocked(setAttendanceCell).mockClear();
+    const { container } = renderInGrid([], [{ slot: "18:20:00", status: "present", units: null }]);
+    const cell = cellOf(container);
+    fireEvent.mouseDown(cell, { button: 0 });
+    // 한 행을 왼쪽부터 끄는 흔한 조작 — 앵커(7/1)는 빗금, 옆 칸(7/2)은 내 칸이다.
+    fireEvent.keyDown(cell, { key: "ArrowRight", shiftKey: true });
+    fireEvent.keyDown(cell, { key: "1" });
+    expect(container.querySelector("input")).not.toBeNull(); // 버퍼가 열린다(종전엔 통째로 막혔다)
+    fireEvent.keyDown(cell, { key: "Enter" });
+    // 빗금 칸만 빠지고 나머지 한 칸엔 실제로 저장된다 + 건너뛴 사실을 알린다.
+    expect(setAttendanceCell).toHaveBeenCalledTimes(1);
+    expect(container.textContent).toContain("건너뛰었습니다");
   });
 
   it("세지 않는 교시가 없으면 종전 그대로(빗금 없음)", () => {

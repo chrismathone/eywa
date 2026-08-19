@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { setAttendanceCell } from "@/features/attendance/server/actions";
 import type { AttendanceStatus } from "@/features/attendance/server/queries";
 import { parseSessionUnits } from "@/features/attendance/session-units";
-import { STATUS_TONE } from "@/features/attendance/cell-display";
+import { NOT_MINE_MESSAGE, STATUS_TONE } from "@/features/attendance/cell-display";
 
 const OPTIONS: { value: AttendanceStatus; name: string }[] = [
   { value: "present", name: "출석" },
@@ -142,11 +142,15 @@ export function CellPopover({
               // 붙일 행이 없다 — 없는 출결을 지어내지 않는다(#메모는 기록에 딸린 것).
               // ⚠️ 다만 **빗금 칸은 기록이 있다**(남의 교시). 그 경우엔 사유가 다르므로 문장도 다르다.
               <div className="flex flex-col gap-1">
-                <p className="text-text-dim text-[11px] leading-tight">
-                  {hasOtherRecords
-                    ? "이 날 기록은 다른 교시 것이라 여기서는 못 고칩니다 — 반별 보기에서 고치세요"
-                    : "기록이 없는 날이라 메모만 남길 수는 없습니다 — 관리자에게 요청하세요"}
-                </p>
+                {/* ⚠️ 잠금 사유가 이미 같은 말을 했으면 **반복하지 않는다**(빗금 칸의 기본 경로).
+                    7일 잠금과 겹칠 때만 두 문장이 서로 다른 정보를 담는다. */}
+                {hasOtherRecords && locked === NOT_MINE_MESSAGE ? null : (
+                  <p className="text-text-dim text-[11px] leading-tight">
+                    {hasOtherRecords
+                      ? "이 날 기록은 다른 교시 것이라 여기서는 못 고칩니다 — 반별 보기에서 고치세요"
+                      : "기록이 없는 날이라 메모만 남길 수는 없습니다 — 관리자에게 요청하세요"}
+                  </p>
+                )}
                 {/* 남의 교시에 달린 메모(결석 사유 등)는 **읽기로는 보여 준다** — 여기서 감추면
                     "병결"·"가족여행" 같은 사유가 화면에서 사라진다(실측 78칸). */}
                 {hasOtherRecords && note ? (
