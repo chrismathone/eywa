@@ -4,7 +4,7 @@
  *  AI 상태가 null인 경로를 특히 본다.)
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { OperationsProvider } from "@/features/owner/operations-context";
 import { buildDayRecap } from "@/features/attendance/recap/digest";
 import { buildRangeRecap } from "@/features/attendance/recap/range";
@@ -100,6 +100,50 @@ describe("RecapView", () => {
     expect(screen.getByRole("link", { name: "영어 B" }).getAttribute("href")).toBe("/attendance/2026-08-18/c2");
     // AI가 없을 때도 "아래 집계가 사실"이라고 말한다.
     expect(screen.getByRole("button", { name: "AI로 정리" })).toBeTruthy();
+  });
+
+  it("입력이 덜 된 강사를 펼치면 그 강사의 미입력 반이 그날 출석부 링크로 뜬다", () => {
+    renderRecap();
+    const toggle = screen.getByRole("button", { name: /최강사/ });
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    // 접힌 동안엔 링크가 날짜 블록 하나뿐이다(중복 링크로 화면이 두 번 말하지 않게).
+    expect(screen.getAllByRole("link", { name: "영어 B" })).toHaveLength(1);
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    // 펼치면 같은 반이 **같은 링크 규약**으로 한 줄 더(줄에 적힌 '미입력 1반'과 같은 수).
+    const links = screen.getAllByRole("link", { name: "영어 B" });
+    expect(links).toHaveLength(2);
+    expect(links[1].getAttribute("href")).toBe("/attendance/2026-08-18/c2");
+  });
+
+  it("빈 출석부가 없는(칸만 덜 찍은) 강사 줄은 펼칠 것이 없어 버튼이 아니다", () => {
+    const partial = buildRangeRecap([
+      {
+        ...buildDayRecap({
+          date: "2026-08-18",
+          slots: [
+            {
+              classId: "c3",
+              className: "중3 C",
+              subject: "math",
+              slotStart: "16:20",
+              saveSlot: null,
+              teacherName: "한강사",
+              slotTeacherLabel: null,
+              hasAnyRecord: true,
+              students: [
+                { studentId: "s8", studentName: "가학생", schoolGrade: null, status: "present", note: null },
+                { studentId: "s9", studentName: "나학생", schoolGrade: null, status: null, note: null },
+              ],
+            },
+          ],
+        }),
+        holiday: null,
+      },
+    ]);
+    renderRange(partial);
+    expect(screen.getByText("한강사")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /한강사/ })).toBeNull();
   });
 
   it("오늘을 요약하면 진행 중임을 먼저 말한다", () => {
