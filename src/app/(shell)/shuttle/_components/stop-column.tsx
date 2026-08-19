@@ -211,10 +211,22 @@ function StopCard({
             <EyIcon name="grip" className="mx-auto size-4" />
           </button>
         )}
-        <span className={`flex-1 truncate text-[13px] ${isCampus ? "text-text-dim font-medium" : "text-text font-bold"}`}>
+        <span className={`min-w-0 flex-1 truncate text-[13px] ${isCampus ? "text-text-dim font-medium" : "text-text font-bold"}`}>
           {isCampus ? RUN_STOP_KIND_LABEL[stop.kind] : stop.stopName}
           {stop.stopMemo && <span className="text-text-faint text-[11.5px]"> · {stop.stopMemo}</span>}
         </span>
+        {/* 배정이 0명이면 '+ 학생'을 **머리줄의 빈 자리**에 둔다 — 아래에 따로 줄을 만들면 카드마다
+            빈 줄이 하나씩 생겨 세로가 낭비된다(원장 2026-08-19 *"공간낭비 없도록"*). */}
+        {canWrite && !isCampus && stop.riders.length === 0 && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => setPicking((v) => !v)}
+            className="rounded-pill border-line text-text-dim hover:bg-muted min-h-8 shrink-0 border border-dashed px-2.5 text-[11.5px] font-bold"
+          >
+            + 학생
+          </button>
+        )}
         <input
           type="time"
           defaultValue={stop.atTime ?? ""}
@@ -227,7 +239,7 @@ function StopCard({
           //    실측 폭이 16px 글자에서 127px, 12px 글자에서 105px다(전엔 104/92라 "오후 03:4"로 잘렸다).
           className="border-line focus:border-primary num h-9 w-[132px] shrink-0 rounded-lg border px-1.5 text-base outline-none sm:h-8 sm:w-[110px] sm:text-[12px]"
         />
-        {canWrite && !isCampus && (
+        {canWrite && !isCampus ? (
           <button
             type="button"
             disabled={busy}
@@ -237,14 +249,18 @@ function StopCard({
           >
             <EyIcon name="trash" className="mx-auto size-3.5" />
           </button>
+        ) : (
+          // 학원 출발/도착 줄엔 삭제 버튼이 없다 — 자리를 비워 두면 그 줄만 시각이 오른쪽으로 튀어
+          // 시각 칸이 줄마다 어긋난다. 같은 크기의 빈 칸으로 열을 맞춘다(원장 2026-08-19 *"정렬 깔끔하게"*).
+          canWrite && <span aria-hidden className="size-9 shrink-0" />
         )}
       </div>
 
-      {!isCampus && (
+      {!isCampus && stop.riders.length > 0 && (
         // 🔑 균일 폭 격자 — 칩이 내용 길이대로 늘어나면 요일·× 라벨이 칩마다 다른 x에 서서 눈이
         //    매번 다시 찾는다(원장 2026-08-19: *"라벨이 어딜 가나 같은 위치였으면"*). 칸 폭을 고정하면
         //    이름은 왼쪽, 요일·×는 오른쪽 같은 자리에 줄맞춰 선다.
-        <div className="mt-2 grid grid-cols-[repeat(auto-fill,minmax(9rem,1fr))] items-start gap-1">
+        <div className="mt-1.5 grid grid-cols-[repeat(auto-fill,minmax(9rem,1fr))] items-start gap-1">
           {stop.riders.map((r) => (
             <RiderChip key={r.id} rider={r} canWrite={canWrite} onError={onError} />
           ))}
@@ -260,10 +276,10 @@ function StopCard({
               + 학생
             </button>
           )}
-          {stop.riders.length === 0 && !canWrite && (
-            <span className="text-text-faint text-[11.5px]">배정된 학생이 없습니다</span>
-          )}
         </div>
+      )}
+      {!isCampus && stop.riders.length === 0 && !canWrite && (
+        <p className="text-text-faint mt-1.5 text-[11.5px]">배정된 학생이 없습니다</p>
       )}
 
       {picking && canWrite && !isCampus && (
