@@ -48,6 +48,8 @@ export type StaffFormValue = {
   seatJjDuty?: boolean;
   /** 오늘 출결 데스크 알림 — 강사가 미출결을 출석으로 바꾸면 벨. */
   deskAttendanceOptin?: boolean;
+  /** '강사뷰 접근'(0224a) — 다른 강사의 강사뷰 열람(열람 전용) 허용. master(+super_admin) 편집 전용. */
+  teacherViewAccess?: boolean;
 };
 
 function SubmitButton({ mode }: { mode: Mode }) {
@@ -67,6 +69,7 @@ export function StaffForm({
   jobTitleOptions = [],
   scope,
   canEditEmail = false,
+  canGrantTeacherView = false,
 }: {
   mode: Mode;
   initialValue?: StaffFormValue;
@@ -76,6 +79,8 @@ export function StaffForm({
   scope?: string;
   /** 수정 모드에서 이메일 편집 허용 — 임포트 산물 이메일(형식불량·@imported.local)만(서버가 이중 검증). */
   canEditEmail?: boolean;
+  /** '강사뷰 접근' 토글 노출 — master(+super_admin)만. 서버 액션도 같은 자격일 때만 컬럼을 저장(이중 게이트). */
+  canGrantTeacherView?: boolean;
 }) {
   const action = mode === "create" ? createStaff : updateStaff;
   const [state, formAction] = useActionState<StaffFormState, FormData>(action, undefined);
@@ -461,6 +466,30 @@ export function StaffForm({
           <span className="text-foreground text-sm">JJ실 출석부 담당</span>
         </label>
       </div>
+
+      {/* '강사뷰 접근'(0224a) — 다른 강사의 강사뷰 열람(열람 전용). master(+super_admin)에게만 보이고
+          서버 액션도 그 자격일 때만 이 컬럼을 저장한다(#77 — 화면에서만 숨긴 게 아니다). */}
+      {canGrantTeacherView ? (
+        <div className="border-border bg-surface-soft rounded-2xl border p-4">
+          <label htmlFor="teacherViewAccess" className="flex cursor-pointer items-start gap-3">
+            <input
+              id="teacherViewAccess"
+              name="teacherViewAccess"
+              type="checkbox"
+              defaultChecked={v.teacherViewAccess === true}
+              className="border-border text-primary focus-visible:ring-ring mt-0.5 size-4 shrink-0 rounded"
+            />
+            <span className="space-y-1">
+              <span className="text-foreground block text-sm font-medium">강사뷰 접근 (다른 강사 뷰 열람)</span>
+              <span className="text-muted-foreground block text-xs">
+                사이드바에서 <b>다른 강사의 강사뷰를 열람 전용으로</b> 볼 수 있습니다. 저장·발송은 되지 않고,
+                열람 사실은 감사로그에 남습니다. 열람 대상 강사에게는 표시되지 않습니다. 관리자 계열
+                역할 전용이며(강사·학생 역할엔 줄 수 없음), 원장은 항상 가능합니다.
+              </span>
+            </span>
+          </label>
+        </div>
+      ) : null}
 
       <Field label="메모" htmlFor="memo">
         <textarea

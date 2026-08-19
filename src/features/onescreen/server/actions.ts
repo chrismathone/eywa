@@ -5,6 +5,7 @@ import { randomUUID } from "node:crypto";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
+import { readonlyTeacherViewError } from "@/lib/auth/view-mode";
 import { kstToday, resolveReportDate } from "@/lib/date-kst";
 import { generateJSON } from "@/lib/ai/generate";
 import { commentBody, commentP1Body, commentP2Body, type ReportCommentInput } from "../report-comment";
@@ -93,6 +94,10 @@ export async function saveLessonReport(
 ): Promise<{ ok: boolean; id?: string; shareToken?: string; error?: string }> {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
+  // '다른 강사 뷰'(열람 전용) 차단 — 아래 담당 판정은 user.id(본인) 축이라 대부분 자연 거절되지만,
+  // outOfClass(보강·수업외)는 학원 학생 전체가 허용이라 이 가드 없이는 열람 중 저장이 뚫린다.
+  const roError = await readonlyTeacherViewError();
+  if (roError) return { ok: false, error: roError };
   if (!input.studentId) return { ok: false, error: "학생 정보가 없습니다" };
 
   const supabase = await createClient();
@@ -257,6 +262,10 @@ export async function saveAndQueueClassnote(
 }> {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
+  // '다른 강사 뷰'(열람 전용) 차단 — 발송(외부 발신)은 특히 이중으로 막는다(saveLessonReport 내부 가드와 별개).
+  const roError = await readonlyTeacherViewError();
+  if (roError) return { ok: false, error: roError };
+
   if (!input.studentId) return { ok: false, error: "학생 정보가 없습니다" };
 
   const supabase = await createClient();
@@ -451,6 +460,9 @@ export async function saveAndQueueClassnote(
 export async function revokeShareLink(shareToken: string): Promise<{ ok: boolean; error?: string }> {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
+  // '다른 강사 뷰'(열람 전용) 차단 — 발송 흔적(공유 링크)을 열람 중에 만지지 못하게.
+  const roError = await readonlyTeacherViewError();
+  if (roError) return { ok: false, error: roError };
   if (!shareToken) return { ok: false, error: "링크 정보가 없습니다" };
   const supabase = await createClient();
   const { data: report } = await supabase
@@ -480,6 +492,9 @@ export async function reissueShareLink(
 ): Promise<{ ok: boolean; shareToken?: string; error?: string }> {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
+  // '다른 강사 뷰'(열람 전용) 차단 — revokeShareLink와 동일.
+  const roError = await readonlyTeacherViewError();
+  if (roError) return { ok: false, error: roError };
   if (!shareToken) return { ok: false, error: "링크 정보가 없습니다" };
   const supabase = await createClient();
   const { data: report } = await supabase
@@ -572,6 +587,9 @@ export async function saveOnescreenSession(
 ): Promise<{ ok: boolean; error?: string }> {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
+  // '다른 강사 뷰'(열람 전용) 차단 — 임시저장도 저장이다(대상 강사의 세션 행과 섞이면 안 된다).
+  const roError = await readonlyTeacherViewError();
+  if (roError) return { ok: false, error: roError };
   if (!input.studentId) return { ok: false, error: "학생 정보가 없습니다" };
 
   const supabase = await createClient();
@@ -633,6 +651,10 @@ export async function generateReportComment(
 ): Promise<{ ok: boolean; comment?: string; trend?: string; error?: string }> {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
+  // '다른 강사 뷰'(열람 전용) 차단 — DB 미변경이지만 AI 호출(비용)이라 열람에서 못 누르게 한다.
+  const roError = await readonlyTeacherViewError();
+  if (roError) return { ok: false, error: roError };
+
   // 방지로직 — 진도/태도/테스트/과제 등 최소 사실이 하나도 없으면 생성 거부(빈 껍데기 멘트 방지).
   // 개별 자동작성 버튼은 클라에서 진도 없으면 비활성이지만, 서버에서도 이중 방어(edutrix 관례).
   const hasFacts = !!(
@@ -763,6 +785,10 @@ export async function setMyNoticeMode(
 ): Promise<{ ok: boolean; error?: string }> {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
+  // '다른 강사 뷰'(열람 전용) 차단 — 화면은 대상 강사의 값을 보여주는데 저장은 본인 행이라, 허용하면
+  // "저장했는데 안 바뀜"으로 보인다. 열람에선 아예 막는 게 정직하다.
+  const roError = await readonlyTeacherViewError();
+  if (roError) return { ok: false, error: roError };
   if (mode !== null && mode !== "A" && mode !== "B") return { ok: false, error: "잘못된 모드입니다" };
   const admin = createAdminClient();
   const { error } = await admin
@@ -787,6 +813,9 @@ export async function setMyOnescreenFontSize(
 ): Promise<{ ok: boolean; error?: string }> {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
+  // '다른 강사 뷰'(열람 전용) 차단 — setMyNoticeMode와 같은 이유(화면=대상 값·저장=본인 행 불일치 방지).
+  const roError = await readonlyTeacherViewError();
+  if (roError) return { ok: false, error: roError };
   if (!(ONESCREEN_FONT_SIZES as readonly string[]).includes(size))
     return { ok: false, error: "잘못된 글씨 크기입니다" };
 

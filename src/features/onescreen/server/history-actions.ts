@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { viewAsTeacher } from "@/lib/auth/view-mode";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { fetchInChunks } from "@/lib/supabase/batch";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
@@ -46,7 +47,10 @@ export async function getMyPastReports(input?: {
 }): Promise<{ ok: boolean; rows?: PastReportRow[]; hasMore?: boolean; error?: string }> {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
-  const teacherName = user.displayName?.trim();
+  // '다른 강사 뷰'(열람 전용)면 그 강사의 이력을 보여준다 — 로스터와 같은 축(안 맞추면 열람자 본인의
+  // 빈 이력이 나와 "이 강사는 발송을 안 했다"로 오독된다). 이름이 비면 정직하게 거절(빈 이름 행 매칭 방지).
+  const viewAs = await viewAsTeacher();
+  const teacherName = (viewAs ? viewAs.displayName : user.displayName)?.trim();
   if (!teacherName) return { ok: false, error: "강사 이름이 없습니다" };
 
   // 과목 opt-in·발송 기한 = 월간 달력(calendar-actions)과 동일 소스 — sendable 판정 재료(#77 게이트 단일화).

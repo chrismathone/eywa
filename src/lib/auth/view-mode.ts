@@ -1,23 +1,24 @@
 import "server-only";
 import { cache } from "react";
 import { cookies } from "next/headers";
-import type { SystemRole } from "@/lib/permissions";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { getTeacherScope, type TeacherScope } from "@/lib/auth/teacher-scope";
 import { hasActiveDelegation } from "@/features/classes/server/delegation";
 import { createClient } from "@/lib/supabase/server";
+import { isFullShellRole, viewAsTeacher, VIEW_MODE_COOKIE } from "@/lib/auth/view-as";
 
-// 뷰 전환(겸직) 쿠키 — 관리자 계열 역할이 "강사뷰"를 켜면 세팅. 값 "teacher"만 의미 있음(그 외/부재=관리자뷰).
-// httpOnly(서버만 읽음) + path "/"(모든 셸 경로 공유, 창=iframe도 같은 도메인이라 전파).
-export const VIEW_MODE_COOKIE = "eywa-view";
-
-/**
- * 풀셸(관리자 계열) 역할 판별 — 강사/학생은 미니셸 전용 역할이라 뷰 전환 대상 아님.
- * 나머지(master/admin/manager/accountant/counselor/viewer)는 겸직으로 강사뷰를 켤 수 있다.
- */
-export function isFullShellRole(role: SystemRole): boolean {
-  return role !== "teacher" && role !== "student";
-}
+// 쿠키 상수·풀셸 판별·'다른 강사 뷰'(열람 전용) 검증은 [view-as.ts](./view-as.ts)로 분리 —
+// perm-matrix(쓰기 캡)가 이 파일을 import하면 순환이 생겨서다. 기존 소비처를 위해 재수출.
+export {
+  isFullShellRole,
+  viewAsTeacher,
+  canUseOtherTeacherView,
+  isReadonlyTeacherView,
+  readonlyTeacherViewError,
+  READONLY_TEACHER_VIEW_ERROR,
+  VIEW_MODE_COOKIE,
+  VIEW_AS_COOKIE,
+} from "@/lib/auth/view-as";
 
 /**
  * 강사 데이터 스코프를 적용할 강사 id(없으면 null) — 모든 스코프 소비처의 단일 소스.
@@ -34,6 +35,10 @@ export const effectiveTeacherId = cache(async (): Promise<string | null> => {
   if (!user) return null;
   if (user.systemRole === "teacher") return user.id; // 실 강사 — 불변(추가 쿼리 없음)
   if (!isFullShellRole(user.systemRole)) return null; // student 등
+  // '다른 강사 뷰'(열람 전용, 원장 2026-08-19) — 검증된 대상 강사의 id로 전 스코프 소비처가 따라온다.
+  // ⚠️ 쓰기 귀속은 안 따라온다: perm-matrix 쓰기 캡 + readonlyTeacherViewError 가드가 저장·발송을 차단.
+  const viewAs = await viewAsTeacher();
+  if (viewAs) return viewAs.id;
   // 겸직: 관리자 계열이 강사뷰 쿠키를 켰고, 실제 담당 반이 있을 때만.
   const jar = await cookies();
   if (jar.get(VIEW_MODE_COOKIE)?.value !== "teacher") return null;

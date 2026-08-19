@@ -13,7 +13,7 @@
 
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
-import { effectiveTeacherId } from "@/lib/auth/view-mode";
+import { effectiveTeacherId, readonlyTeacherViewError } from "@/lib/auth/view-mode";
 import type { UploadTicket } from "@/lib/storage/types";
 import type { NoticeAttachment } from "../notice-attachments";
 import { issueNoticeImageTicket, verifyNoticeImage } from "./notice-image-upload";
@@ -21,6 +21,9 @@ import { issueNoticeImageTicket, verifyNoticeImage } from "./notice-image-upload
 async function gate(): Promise<{ tenantId: string } | { error: string }> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
+  // '다른 강사 뷰'(열람 전용) 차단 — 발송(sendOnescreenNotice)과 같은 게이트 모양 유지(#77).
+  const roError = await readonlyTeacherViewError();
+  if (roError) return { error: roError };
   const teacherId = await effectiveTeacherId();
   if (!teacherId && !(await canWriteTenant(user.systemRole, "lesson_reports")))
     return { error: "공지 발송 권한이 없습니다" };

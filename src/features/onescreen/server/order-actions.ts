@@ -9,7 +9,7 @@
  */
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth/current-user";
-import { effectiveTeacherId } from "@/lib/auth/view-mode";
+import { effectiveTeacherId, readonlyTeacherViewError } from "@/lib/auth/view-mode";
 // 담당 반 판정 단일 소스(담당 반 ∪ 그날 위임 반) — classes.teacher_id를 직접 비교하지 말 것(0173a).
 import { getTeachingClassIds } from "@/features/classes/server/delegation";
 
@@ -23,6 +23,9 @@ export async function saveStudentOrder(input: {
 }): Promise<SaveOrderResult> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
+  // '다른 강사 뷰'(열람 전용) 차단 — 없으면 관리자가 **그 강사의 저장 순서 행**을 덮어쓴다(teacher_id=대상).
+  const roError = await readonlyTeacherViewError();
+  if (roError) return { error: roError };
   const teacherId = await effectiveTeacherId();
   if (!teacherId) return { error: "강사 화면에서만 학생 순서를 저장할 수 있습니다" };
 
