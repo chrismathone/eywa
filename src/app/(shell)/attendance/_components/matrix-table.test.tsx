@@ -425,7 +425,9 @@ describe("세지 않는 교시(자리·남의 교시)", () => {
     fireEvent.contextMenu(cellOf(container)); // 우클릭 = 상세 팝오버
     expect(screen.getByRole("dialog")).toBeTruthy();
     expect(screen.queryByText("지우기")).toBeNull();
-    expect(container.textContent).toContain("여기서는 못 지웁니다");
+    expect(container.textContent).toContain("반별 보기에서 지우세요");
+    // 저장은 열려 있으므로 **사정거리**도 격자와 같은 말로 알려야 한다(닫은 건 지우기 하나뿐).
+    expect(container.textContent).toContain("함께 바뀝니다");
   });
 
   it("🔴 범위 Delete가 섞인 칸을 뺐으면 **말해 준다** — 조용히 빠지면 다 지운 줄 안다", async () => {
