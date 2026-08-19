@@ -1,17 +1,26 @@
+import Link from "next/link";
 import { requireAccess } from "@/lib/auth/require-access";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { kstToday } from "@/lib/date-kst";
-import { getMonthEvents } from "@/features/calendar/server/queries";
+import { EyIcon } from "@/components/icons/eywa-icons";
+import { getCalendarTags, getMonthEvents, getYearEvents } from "@/features/calendar/server/queries";
 import { CalendarClient } from "./_components/calendar-client";
+import { YearView } from "./_components/year-view";
+import { ListView, DOT_SOLID } from "./_components/list-view";
+import { StatsView } from "./_components/stats-view";
 
 export const metadata = { title: "캘린더 — eywa" };
 
 /**
  * 캘린더(학원 공용 일정) — 원장 2026-08-18: *"일단 캘린더 탭으로 우리 프로그램 내에 일정부터 관리."*
- * eywa DB가 일정의 단일 진실(0218a — 구글 상시 동기화 없음). 월 뷰 + 일정 등록·수정·삭제.
+ * eywa DB가 일정의 단일 진실(0218a — 구글 상시 동기화 없음).
  *
- * 접근 = `calendar` 메뉴(사무실 full / 강사·상담·회계·뷰어 readonly) — 열람은 전 직원, 쓰기는
- * 사무실. 쓰기 판정은 화면·액션이 같은 함수(canWriteTenant)를 쓴다([[#77]]).
+ * 다중 뷰(0224a, 원장 2026-08-19 "여러가지 버전으로 볼 수 있게"): `?v=month(기본)|year|list|stats`
+ * + `y=YYYY`(연간·목록·분석) + `tag=<태그id|none>`(필터). 전환·연도·필터 전부 URL(Link) —
+ * 새로고침·딥링크·창 타이틀이 공짜고 서버 컴포넌트가 유지된다. `m=`은 월 보기 전용.
+ *
+ * 접근 = `calendar` 메뉴(사무실 full / 강사·상담·회계 readonly) — 열람은 전 직원(뷰 4종 모두),
+ * 쓰기는 사무실. 쓰기 판정은 화면·액션이 같은 함수(canWriteTenant)를 쓴다([[#77]]).
  */
 
 const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
@@ -23,10 +32,18 @@ function shiftMonth(month: string, delta: number): string {
   return `${Math.floor(total / 12)}-${String((total % 12) + 1).padStart(2, "0")}`;
 }
 
+const VIEWS = [
+  { key: "month", label: "월" },
+  { key: "year", label: "연간" },
+  { key: "list", label: "목록" },
+  { key: "stats", label: "분석" },
+] as const;
+type ViewKey = (typeof VIEWS)[number]["key"];
+
 export default async function CalendarPage({
   searchParams,
 }: {
-  searchParams: Promise<{ m?: string }>;
+  searchParams: Promise<{ m?: string; v?: string; y?: string; tag?: string }>;
 }) {
   const user = await requireAccess("calendar");
   const sp = await searchParams;
@@ -34,27 +51,131 @@ export default async function CalendarPage({
   const thisMonth = today.slice(0, 7);
   const month = sp.m && MONTH_RE.test(sp.m) ? sp.m : thisMonth;
 
-  // 두 판정은 서로 독립 — 함께 받는다(B4 직렬 워터폴 금지).
-  const [{ ready, events }, canWrite] = await Promise.all([
-    getMonthEvents(month),
+  const view: ViewKey = VIEWS.some((x) => x.key === sp.v) ? (sp.v as ViewKey) : "month";
+  const thisYear = Number(today.slice(0, 4));
+  const yRaw = Number(sp.y);
+  const year = Number.isInteger(yRaw) && yRaw >= 2000 && yRaw <= 2100 ? yRaw : thisYear;
+
+  // 태그 사전·일정·쓰기 판정은 서로 독립 — 함께 받는다(B4 직렬 워터폴 금지).
+  const [tags, data, canWrite] = await Promise.all([
+    getCalendarTags(),
+    view === "month" ? getMonthEvents(month) : getYearEvents(year),
     canWriteTenant(user.systemRole, "calendar"),
   ]);
 
+  // 태그 필터 — 사전에 없는 id는 조용히 "전체"로(주소창 장난·삭제된 태그의 딥링크).
+  const tagParam =
+    sp.tag === "none" || (sp.tag && tags.some((t) => t.id === sp.tag)) ? sp.tag : undefined;
+  const filtered =
+    tagParam === undefined
+      ? data.events
+      : data.events.filter((e) => (tagParam === "none" ? !e.tag : e.tag?.id === tagParam));
+
+  const tagQ = tagParam ? `&tag=${tagParam}` : "";
+  const viewHref = (k: ViewKey) => (k === "month" ? "/calendar" : `/calendar?v=${k}&y=${year}${tagQ}`);
+  const yearHref = (yy: number) => `/calendar?v=${view}&y=${yy}${tagQ}`;
+  const tagHref = (t?: string) => `/calendar?v=${view}&y=${year}${t ? `&tag=${t}` : ""}`;
+
   const [y, mo] = month.split("-");
   const monthLabel = `${y}년 ${Number(mo)}월`;
+  const navBtn =
+    "border-line text-text-dim hover:text-foreground hover:border-primary/50 flex size-8 items-center justify-center rounded-lg border transition";
 
   return (
     // 풀폭·풀높이 — 캘린더는 여백보다 면적이 정보다(원장 2026-08-18 "캘린더가 너무 작음").
-    // min-h-full: 셸 <main>(overflow-auto)의 가시 높이만큼은 항상 채워 그리드가 아래로 붙게.
-    // 헤더 없음(원장 2026-08-18 "밑에 똑같이 있으니까 없애고 위로 당겨줘") — 창 타이틀바가 "캘린더",
-    // 월 표기는 바로 아래 내비가 담당이라 PageHeader는 순수 중복이었다.
+    // 헤더 없음(원장 2026-08-18 "밑에 똑같이 있으니까 없애고 위로 당겨줘") — 창 타이틀바가 "캘린더".
     <div className="flex min-h-full w-full flex-col gap-3 p-3 md:px-5 md:py-4">
-      {!ready ? (
+      {/* 뷰 전환(알약) + 연간·목록·분석의 연도 이동 — 월 이동은 월 보기(CalendarClient)가 담당. */}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <nav className="bg-bg-soft flex items-center gap-0.5 rounded-full p-0.5" aria-label="캘린더 보기 방식">
+          {VIEWS.map((vd) => (
+            <Link
+              key={vd.key}
+              href={viewHref(vd.key)}
+              className={`rounded-full px-3 py-1 text-[12.5px] transition ${
+                view === vd.key
+                  ? "bg-card text-foreground font-semibold shadow-sm"
+                  : "text-text-dim hover:text-foreground"
+              }`}
+            >
+              {vd.label}
+            </Link>
+          ))}
+        </nav>
+        {view !== "month" ? (
+          <div className="flex items-center gap-1.5">
+            <Link href={yearHref(year - 1)} className={navBtn} aria-label="이전 연도">
+              <EyIcon name="chevronLeft" size={16} />
+            </Link>
+            <span className="num text-foreground min-w-[64px] text-center text-[16px] font-bold tracking-tight">
+              {year}
+            </span>
+            <Link href={yearHref(year + 1)} className={navBtn} aria-label="다음 연도">
+              <EyIcon name="chevronRight" size={16} />
+            </Link>
+            {year !== thisYear ? (
+              <Link
+                href={yearHref(thisYear)}
+                className="border-line text-text-dim hover:text-foreground hover:border-primary/50 rounded-lg border px-2.5 py-1.5 text-[12px] transition"
+              >
+                올해
+              </Link>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+
+      {/* 태그 필터(연간·목록·분석) — 월 보기는 그리드가 색으로 이미 말한다. */}
+      {view !== "month" ? (
+        <div className="flex flex-wrap items-center gap-1.5">
+          {tags.length > 0 ? (
+            <>
+              <Link
+                href={tagHref()}
+                className={`rounded-full border px-2.5 py-0.5 text-[12px] transition ${
+                  tagParam === undefined
+                    ? "border-primary bg-primary text-primary-foreground font-medium"
+                    : "border-line bg-card text-text-dim hover:border-primary/50 hover:text-foreground"
+                }`}
+              >
+                전체
+              </Link>
+              {tags.map((t) => (
+                <Link
+                  key={t.id}
+                  href={tagHref(t.id)}
+                  className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[12px] transition ${
+                    tagParam === t.id
+                      ? "border-primary bg-primary text-primary-foreground font-medium"
+                      : "border-line bg-card text-text-dim hover:border-primary/50 hover:text-foreground"
+                  }`}
+                >
+                  <span className={`size-2 shrink-0 rounded-full ${DOT_SOLID[t.color]}`} aria-hidden />
+                  {t.name}
+                </Link>
+              ))}
+              <Link
+                href={tagHref("none")}
+                className={`rounded-full border px-2.5 py-0.5 text-[12px] transition ${
+                  tagParam === "none"
+                    ? "border-primary bg-primary text-primary-foreground font-medium"
+                    : "border-line bg-card text-text-dim hover:border-primary/50 hover:text-foreground"
+                }`}
+              >
+                태그 없음
+              </Link>
+            </>
+          ) : null}
+          <span className="text-text-faint ml-auto text-[11px]">휴가는 월 보기에서만 표시됩니다</span>
+        </div>
+      ) : null}
+
+      {!data.ready ? (
         <div className="border-line bg-card text-text-dim rounded-2xl border border-dashed p-8 text-center text-sm">
           캘린더 표가 아직 준비되지 않았습니다 — 마이그레이션 <span className="num">0218a</span>를
           적용하면 바로 쓸 수 있습니다.
         </div>
-      ) : (
+      ) : view === "month" ? (
         <CalendarClient
           month={month}
           monthLabel={monthLabel}
@@ -62,9 +183,16 @@ export default async function CalendarPage({
           nextMonth={shiftMonth(month, 1)}
           isCurrentMonth={month === thisMonth}
           today={today}
-          events={events}
+          events={data.events}
           canWrite={canWrite}
+          tags={tags}
         />
+      ) : view === "year" ? (
+        <YearView year={year} events={filtered} />
+      ) : view === "list" ? (
+        <ListView events={filtered} />
+      ) : (
+        <StatsView year={year} events={data.events} tags={tags} tagFilter={tagParam} />
       )}
     </div>
   );

@@ -65,6 +65,11 @@ export type TodayPlanLine = {
 export type TodaySlot = {
   slotStart: string;
   slotEnd: string | null;
+  /**
+   * 그 교시의 담당 라벨 **원문**(`slot_teacher_label`) — 자리(LAB·JJ) 판정용.
+   * 🔴 표시·권한 근거로 쓰지 말 것(표시명은 해석을 거쳐야 하고, FK와 다른 사람을 가리킬 수 있다).
+   */
+  teacherLabel: string | null;
   /** "N교시"(요일별 교시표로 확정) — 못 찾으면 null(지어내지 않는다). */
   periodLabel: string | null;
   roomLabel: string | null;
@@ -602,6 +607,7 @@ export async function getEcsToday(dateParam?: string | null): Promise<EcsTodayRe
         return {
           slotStart: start,
           slotEnd: end,
+          teacherLabel: s.slot_teacher_label ?? null,
           periodLabel: resolvePeriodLabel(start, end, periodTables, weekend),
           roomLabel: s.classroom_id ? (roomName.get(s.classroom_id) ?? null) : null,
           lines,

@@ -2,7 +2,7 @@
 
 import { weekdayIndexOf } from "@/lib/date-kst";
 import { Button } from "@/components/ui/button";
-import { eventTimeLabel, type CalendarEvent } from "@/features/calendar/types";
+import { eventDisplayColor, eventTimeLabel, type CalendarEvent } from "@/features/calendar/types";
 import { CHIP_CLASS, eventsOn } from "./month-grid";
 
 /**
@@ -67,8 +67,8 @@ export function DayListDialog({
                   key={e.id}
                   type="button"
                   onClick={() => onSelect(e)}
-                  className={`block w-full truncate rounded-lg px-2.5 py-1.5 text-left text-[13px] leading-tight font-medium transition hover:opacity-80 ${CHIP_CLASS[e.color]}`}
-                  title={e.title}
+                  className={`block w-full truncate rounded-lg px-2.5 py-1.5 text-left text-[13px] leading-tight font-medium transition hover:opacity-80 ${CHIP_CLASS[eventDisplayColor(e)]}`}
+                  title={e.tag ? `[${e.tag.name}] ${e.title}` : e.title}
                 >
                   {time ? (
                     <span className="num mr-1.5">{time}</span>

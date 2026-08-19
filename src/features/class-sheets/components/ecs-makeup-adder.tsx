@@ -8,17 +8,25 @@
  */
 import { useRouter } from "next/navigation";
 import { MakeupAddFlow } from "@/features/attendance/components/makeup-add-flow";
+import { buildMakeupSlotOptions, type MakeupSlotSource } from "@/features/attendance/makeup-slot";
 
 export function EcsMakeupAdder({
   classId,
   date,
   existingIds,
   canAdd,
+  slots,
 }: {
   classId: string;
   date: string;
   existingIds: ReadonlySet<string>;
   canAdd: boolean;
+  /**
+   * 그 반 그날의 교시들 — 확인창이 "어느 교시에 왔나요"를 묻고 그 교시 칸에 저장한다.
+   * 🔴 **화면에 보이는 교시만** 넘긴다(숨긴 자리는 이미 빠져 있다) — 보이지 않는 교시를 고르게 하면
+   *    그 칸은 저장 뒤에도 어디에도 안 보인다("보이는 교시 = 세는 교시" 규약).
+   */
+  slots?: readonly MakeupSlotSource[];
 }) {
   const router = useRouter();
   if (!canAdd) return null;
@@ -27,6 +35,7 @@ export function EcsMakeupAdder({
       classId={classId}
       date={date}
       alreadyIn={existingIds}
+      slotOptions={slots ? buildMakeupSlotOptions(slots) : undefined}
       onDone={() => router.refresh()}
     />
   );
