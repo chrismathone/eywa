@@ -30,6 +30,8 @@ import { normalizePlanText } from "../lib/plan-codec";
 import { validatePatchBatch, type PatchResult } from "../lib/save-keys";
 import { dowKeyOf, HHMM_RE, normalizePeriodStart, YMD_RE } from "../lib/week";
 import { requireEcsClassAccess } from "./access";
+import { carrySelfStudyMarks } from "./carry-marks";
+import { carrySummary, type CarryPatch } from "../lib/carry-marks";
 
 type ActionError = { ok: false; error: string };
 
@@ -308,6 +310,18 @@ export async function copySlotFromPrevious(input: {
       truncated: number;
       reason: string | null;
       lines: PlanLineDTO[];
+      /**
+       * JJ 폼 이어받기(직원 요청 2026-08-19) — 학생별로 채운 듣기 레벨·누적 암기 단어수.
+       * 🔴 호출부는 이걸 **화면 상태에 머지**해야 한다: 마크는 클라 state(useState(data.marks))라
+       *    router.refresh()만으론 안 바뀐다.
+       */
+      carried: CarryPatch[];
+      /** 이어받기 요약 문구("듣기 레벨 4명 · 누적 암기 단어수 2명") — 빈 문자열이면 채운 게 없다. */
+      carrySummary: string;
+      /** 0206a 미적용이라 두 칸을 못 채웠다(계획 복사는 그대로 성공). */
+      carryPending: boolean;
+      /** 이어받기만 실패한 사유(한글) — 계획 복사는 성공이므로 에러로 만들지 않는다. */
+      carryError: string | null;
     }
   | ActionError
 > {
@@ -343,6 +357,18 @@ export async function copySlotFromPrevious(input: {
     sourceSlot?: string;
     lines?: Record<string, unknown>[];
   };
+  // JJ 폼 이어받기 — 같은 버튼이 학생별 듣기 레벨·누적 암기 단어수까지 채운다(직원 요청 2026-08-19).
+  // ⚠️ 계획 복사가 아무것도 못 했어도 **따로** 돈다 — 두 칸의 원본은 계획 줄이 아니라 학생 기록이라
+  //    "지난 계획이 없다"가 "지난 레벨이 없다"를 뜻하지 않는다. JJ 교시가 아니면 그 안에서 곧장 접힌다.
+  const carry = await carrySelfStudyMarks({
+    admin,
+    tenantId: gate.access.tenantId,
+    classId: input.classId,
+    actorId: gate.access.user.id,
+    planDate: input.planDate,
+    slotStart: input.slotStart,
+  });
+
   return {
     ok: true,
     copied: r.copied ?? 0,
@@ -352,6 +378,10 @@ export async function copySlotFromPrevious(input: {
     truncated: r.truncated ?? 0,
     reason: r.reason ?? null,
     lines: (r.lines ?? []).map(toLineDTO),
+    carried: carry.patches,
+    carrySummary: carrySummary(carry.patches),
+    carryPending: carry.pending,
+    carryError: carry.error,
   };
 }
 
