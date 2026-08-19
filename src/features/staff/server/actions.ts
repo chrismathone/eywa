@@ -56,6 +56,8 @@ function readBaseForm(formData: FormData) {
     attendanceAlertOptin: get("attendanceAlertOptin") === "on",
     seatLabDuty: get("seatLabDuty") === "on",
     seatJjDuty: get("seatJjDuty") === "on",
+    // 셔틀 담당(0227a) — 역할을 안 올리고 셔틀 등하원만 여는 개인 토글.
+    shuttleDuty: get("shuttleDuty") === "on",
     deskAttendanceOptin: get("deskAttendanceOptin") === "on",
     // '강사뷰 접근'(0224a) — 체크박스는 폼에 master(+super_admin)에게만 노출되고, 저장도 그 자격일 때만
     // 컬럼을 건드린다(아래 canGrantTeacherView 스프레드). 아니면 미체크=off로 남의 부여를 지우게 된다.
@@ -160,19 +162,27 @@ export async function createStaff(
     await admin.from("users").delete().eq("id", authData.user.id);
     return { error: "강사·학생 역할에는 '강사뷰 접근'을 줄 수 없습니다 (관리자 계열 전용)" };
   }
-  const { error: dbErr } = await admin
+  // 마이그레이션이 손으로 적용되기 전일 수 있는 선택 토글들(#95) — 가장 최근 것(0227a shuttle_duty)만
+  // 따로 떼어 낸다. 통째로 재시도하면 이미 적용된 자리 담당·데스크 알림·강사뷰 접근까지 그 창에 갇힌다.
+  const optionalToggles = {
+    seat_lab_duty: input.seatLabDuty,
+    seat_jj_duty: input.seatJjDuty,
+    desk_attendance_optin: input.deskAttendanceOptin,
+    ...(canGrantTeacherView ? { teacher_view_access: input.teacherViewAccess } : {}),
+  };
+  let { error: dbErr } = await admin
     .from("users")
-    .update({
-      ...staffPatch,
-      seat_lab_duty: input.seatLabDuty,
-      seat_jj_duty: input.seatJjDuty,
-      desk_attendance_optin: input.deskAttendanceOptin,
-      ...(canGrantTeacherView ? { teacher_view_access: input.teacherViewAccess } : {}),
-    })
+    .update({ ...staffPatch, ...optionalToggles, shuttle_duty: input.shuttleDuty })
     .eq("id", authData.user.id);
+  if (dbErr && /shuttle_duty/i.test(dbErr.message)) {
+    ({ error: dbErr } = await admin
+      .from("users")
+      .update({ ...staffPatch, ...optionalToggles })
+      .eq("id", authData.user.id));
+  }
 
-  if (dbErr && /seat_lab_duty|seat_jj_duty|desk_attendance_optin|teacher_view_access/i.test(dbErr.message)) {
-    // 0209a/0212a/0224a 미적용 — 선택 토글만 빼고 나머지를 저장한다(#95, 직원 등록을 죽이지 않음).
+  if (dbErr && /seat_lab_duty|seat_jj_duty|shuttle_duty|desk_attendance_optin|teacher_view_access/i.test(dbErr.message)) {
+    // 0209a/0212a/0224a/0227a 미적용 — 선택 토글만 빼고 나머지를 저장한다(#95, 직원 등록을 죽이지 않음).
     const { error: retryErr } = await admin.from("users").update(staffPatch).eq("id", authData.user.id);
     if (retryErr) {
       await admin.auth.admin.deleteUser(authData.user.id);
@@ -311,23 +321,37 @@ export async function updateStaff(
       .maybeSingle();
     prevTeacherView = prevErr || !prevRow ? null : prevRow.teacher_view_access === true;
   }
-  const { error } = await supabase
+  // 위 createStaff와 같은 이유 — 0227a(shuttle_duty)만 미적용일 때 나머지 토글까지 잃지 않는다(#95).
+  const optionalToggles = {
+    seat_lab_duty: input.seatLabDuty,
+    seat_jj_duty: input.seatJjDuty,
+    desk_attendance_optin: input.deskAttendanceOptin,
+    ...(canGrantTeacherView ? { teacher_view_access: input.teacherViewAccess } : {}),
+  };
+  let { error } = await supabase
     .from("users")
-    .update({
-      ...staffPatch,
-      seat_lab_duty: input.seatLabDuty,
-      seat_jj_duty: input.seatJjDuty,
-      desk_attendance_optin: input.deskAttendanceOptin,
-      ...(canGrantTeacherView ? { teacher_view_access: input.teacherViewAccess } : {}),
-    })
+    .update({ ...staffPatch, ...optionalToggles, shuttle_duty: input.shuttleDuty })
     .eq("id", id);
+  if (error && /shuttle_duty/i.test(error.message)) {
+    ({ error } = await supabase
+      .from("users")
+      .update({ ...staffPatch, ...optionalToggles })
+      .eq("id", id));
+    // 셔틀 토글만 못 저장했다 — 켜려던 참이면 조용히 넘기지 않는다(거짓 약속 방지).
+    if (!error && input.shuttleDuty) {
+      return {
+        error:
+          "나머지는 저장했습니다. '셔틀 담당' 토글만 아직 저장할 수 없습니다(0227a 미적용) — 관리자에게 문의하세요.",
+      };
+    }
+  }
 
   if (error) {
-    // 0209a/0212a/0224a 미적용이면 선택 토글만 빼고 나머지를 저장한다(#95 — 직원 수정 화면을 죽이지 않음).
-    if (/seat_lab_duty|seat_jj_duty|desk_attendance_optin|teacher_view_access/i.test(error.message)) {
+    // 0209a/0212a/0224a/0227a 미적용이면 선택 토글만 빼고 나머지를 저장한다(#95 — 직원 수정 화면을 죽이지 않음).
+    if (/seat_lab_duty|seat_jj_duty|shuttle_duty|desk_attendance_optin|teacher_view_access/i.test(error.message)) {
       const { error: retry } = await supabase.from("users").update(staffPatch).eq("id", id);
       if (retry) return { error: retry.message };
-      if (input.seatLabDuty || input.seatJjDuty || input.deskAttendanceOptin) {
+      if (input.seatLabDuty || input.seatJjDuty || input.shuttleDuty || input.deskAttendanceOptin) {
         return { error: "일부 알림·담당 토글은 아직 저장할 수 없습니다. 관리자에게 문의하세요." };
       }
     } else {

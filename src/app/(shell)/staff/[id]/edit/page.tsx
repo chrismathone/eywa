@@ -102,6 +102,7 @@ export default async function EditStaffPage({
           seatLabDuty: staff.seatLabDuty,
           seatJjDuty: staff.seatJjDuty,
           deskAttendanceOptin: staff.deskAttendanceOptin,
+          shuttleDuty: staff.shuttleDuty,
           teacherViewAccess: staff.teacherViewAccess,
         }}
       />

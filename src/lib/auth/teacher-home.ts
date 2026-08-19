@@ -14,6 +14,8 @@ import {
 import { getCurrentUser } from "./current-user";
 import { landingPathFromDuties } from "@/features/attendance/seat/duty";
 import { getSeatDuties } from "@/features/attendance/seat/server/duty";
+import { SHUTTLE_TODAY_PATH } from "@/features/shuttle/faces";
+import { getShuttleDuty } from "@/features/shuttle/server/duty";
 
 /**
  * 🔴 무한 리다이렉트 가드 — ECS 홈은 **접근이 열려 있을 때만** 준다.
@@ -83,6 +85,10 @@ export async function landingPath(role: SystemRole, matrix?: AccessMatrix): Prom
   if (user) {
     const seatHome = landingPathFromDuties(await getSeatDuties(user.id));
     if (seatHome) return seatHome;
+    // 셔틀 담당 토글(0227a) — 같은 결. 차에 타기 전 폰으로 여는 화면이 곧 홈이다.
+    // 🔴 여기로 보내는 이상 /shuttle/today는 **메뉴 권한이 없어도 열려야 한다**(그 페이지의 duty 우회) —
+    //    아니면 착지 → requireAccess 거부 → 다시 착지로 무한히 돈다(위 ecsHomeIfAllowed와 같은 함정).
+    if (await getShuttleDuty(user.id, user.tenantId)) return SHUTTLE_TODAY_PATH;
   }
   if (await effectiveTeacherId()) return teacherViewHome();
   return roleHome(role, matrix);

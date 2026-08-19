@@ -44,6 +44,7 @@ export type StaffFormValue = {
   attendanceAlertOptin?: boolean;
   /** 랩실 출석부 담당 — 로그인 착지 + 그 자리 쓰기. */
   seatLabDuty?: boolean;
+  shuttleDuty?: boolean;
   /** JJ실 출석부 담당. 1차에선 저장만(화면은 아직 안 열림). */
   seatJjDuty?: boolean;
   /** 오늘 출결 데스크 알림 — 강사가 미출결을 출석으로 바꾸면 벨. */
@@ -464,6 +465,29 @@ export function StaffForm({
             className="border-border text-primary focus-visible:ring-ring mt-0.5 size-4 shrink-0 rounded"
           />
           <span className="text-foreground text-sm">JJ실 출석부 담당</span>
+        </label>
+      </div>
+
+      {/* '셔틀 담당'(0227a) — 역할을 올리지 않고 셔틀만 여는 개인 토글(원장 2026-08-19:
+          "셔틀 선생님을 강사나 관리자 권한을 올리기엔 그렇고, 따로 토글시켜야겠어").
+          ⚠️ 편성(정류장·회차·배정) 수정은 열리지 않는다 — 사무실 권한 그대로다. */}
+      <div className="border-border bg-surface-soft rounded-2xl border p-4">
+        <label htmlFor="shuttleDuty" className="flex cursor-pointer items-start gap-3">
+          <input
+            id="shuttleDuty"
+            name="shuttleDuty"
+            type="checkbox"
+            defaultChecked={v.shuttleDuty === true}
+            className="border-border text-primary focus-visible:ring-ring mt-0.5 size-4 shrink-0 rounded"
+          />
+          <span className="space-y-1">
+            <span className="text-foreground block text-sm font-medium">셔틀 담당</span>
+            <span className="text-muted-foreground block text-xs">
+              켜면 로그인 후 <b>오늘 등하원</b> 화면으로 바로 들어가고, 학생 승·하차를 찍을 수 있습니다.
+              강사·관리자로 올리지 않아도 됩니다. 노선 편성(정류장·회차·배정) 수정과 다른 메뉴는 열리지
+              않습니다.
+            </span>
+          </span>
         </label>
       </div>
 
