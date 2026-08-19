@@ -62,7 +62,11 @@ export function StopColumn({
   const addable = stops.filter((s) => !used.has(s.id));
 
   return (
-    <div className="flex min-h-0 flex-col gap-2 overflow-y-auto">
+    // ⚠️ `px-1 py-0.5` — 카드 테두리는 실제 border가 아니라 `--shadow-card`의 1px 링(팔레트 v4)이라
+    //    **박스 밖 1px**에 그려진다. 그런데 `overflow-y-auto`는 CSS상 가로도 함께 잘라내므로(한 축만
+    //    visible일 수 없다) 링의 좌·우가 통째로 깎여 "테두리가 짤려 보인다"(원장 2026-08-19 제보).
+    //    안쪽 여백을 조금 주면 링이 잘릴 자리가 생긴다. 컨테이너 안 요소는 다 같이 밀리므로 줄맞춤은 그대로.
+    <div className="flex min-h-0 flex-col gap-2 overflow-y-auto px-1 py-0.5">
       <div className="flex items-center justify-between gap-2 px-1">
         <h2 className="text-text text-[14px] font-bold">{runTitle(run)}</h2>
         {canWrite && (
