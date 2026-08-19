@@ -5,7 +5,13 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { getTeacherScope } from "@/lib/auth/teacher-scope";
 import { roleHome } from "@/lib/permissions";
 import { isFullShellRole, VIEW_MODE_COOKIE } from "@/lib/auth/view-mode";
+import { canUseOtherTeacherView, loadViewAsTarget, VIEW_AS_COOKIE } from "@/lib/auth/view-as";
 import { teacherHomeForSubjects } from "@/lib/auth/teacher-home";
+import { ENGLISH_TEACHER_HOME, teacherHomeFromAssistantClasses } from "@/lib/auth/teacher-home-rule";
+import { createClient } from "@/lib/supabase/server";
+import { fetchAllPaged } from "@/lib/supabase/batch";
+import { englishAssistantClassIdsOf } from "@/features/class-sheets/server/access";
+import { logAction } from "@/features/audit/server/log";
 
 // 겸직(관리자 계열 + 담당 반 보유)의 셸 뷰 전환 — 쿠키만 바꾼다.
 // ⚠️ 권한 변경이 아니다: 실 system_role은 그대로라 RLS·requireAccess는 관리자 권한 유지(락아웃 불가).
@@ -33,7 +39,9 @@ export async function switchToTeacherView(): Promise<string | null> {
   if (!user || !isFullShellRole(user.systemRole)) return null; // 실 강사·학생은 애초에 토글 미노출
   const { classIds, subjects } = await getTeacherScope(user.id);
   if (classIds.length === 0) return null; // 담당 반 없으면 강사뷰가 무의미 — 무시
-  (await cookies()).set(VIEW_MODE_COOKIE, "teacher", COOKIE_OPTS);
+  const jar = await cookies();
+  jar.set(VIEW_MODE_COOKIE, "teacher", COOKIE_OPTS);
+  jar.delete(VIEW_AS_COOKIE); // '내 강사뷰'는 항상 본인 — 남아 있던 '다른 강사 뷰' 대상은 해제
   // 착지 = 그 사람의 강사 홈(영어 전담이면 ECS, 2026-08-07). ⚠️ 여기서 `teacherViewHome()`을 쓰지 않는 이유:
   // 그건 방금 **이 응답에서 세팅한** 쿠키를 다시 읽어야 하는데, 그 요청의 cookies()엔 아직 없다. 담당 반
   // 과목은 이미 손에 있으므로 그걸 받는 갈래를 쓴다(규칙·ECS 접근 가드는 teacher-home 한 곳뿐).
@@ -50,6 +58,92 @@ export async function switchToTeacherView(): Promise<string | null> {
 export async function switchToAdminView(): Promise<string> {
   const user = await getCurrentUser();
   if (!user) return "/";
-  (await cookies()).delete(VIEW_MODE_COOKIE);
+  const jar = await cookies();
+  jar.delete(VIEW_MODE_COOKIE);
+  jar.delete(VIEW_AS_COOKIE); // '다른 강사 뷰' 열람도 여기서 끝난다 — 대상 쿠키를 남기지 않는다
   return roleHome(user.systemRole);
+}
+
+/**
+ * '다른 강사 뷰'(열람 전용) 진입 — 대상 강사를 검증하고 두 쿠키(view=teacher + view-as=대상)를 세팅한 뒤
+ * **그 강사의 강사 홈 경로를 반환**한다(네비게이션은 호출부가 window.location — 위 두 액션과 동일 규약).
+ *
+ * 자격 = master·super_admin·직원관리 '강사뷰 접근' 토글(canUseOtherTeacherView, 원장 2026-08-19).
+ * 권한 불변·열람 전용(쓰기는 perm-matrix 캡 + readonlyTeacherViewError가 차단) — 상세는 view-as.ts.
+ * 열람 시작은 감사로그(teacher_view_impersonate)에 남긴다(누가 누구 뷰를 봤는지 역검수).
+ */
+export async function switchToOtherTeacherView(targetId: string): Promise<string | null> {
+  const user = await getCurrentUser();
+  if (!user || !isFullShellRole(user.systemRole)) return null;
+  if (!(await canUseOtherTeacherView())) return null;
+  if (targetId === user.id) return switchToTeacherView(); // 자기 자신 = 본인 강사뷰(쓰기 가능한 그 뷰)
+
+  // 대상 검증 — viewAsTeacher()(매 요청 재검증)와 **같은 단일 소스**(활성·테넌트·비학생, #77).
+  const target = await loadViewAsTarget(targetId);
+  if (!target) return null;
+
+  const jar = await cookies();
+  // 🔴 두 쿠키의 수명을 **함께** 12시간으로 — 대상 쿠키만 먼저 죽으면 겸직은 다음 요청부터 조용히
+  //    "본인(쓰기 가능) 강사뷰"로 갈아타 앉는다. 열람은 명시적으로 끝나야 한다(만료 = 둘 다 → 관리자뷰).
+  const opts = { ...COOKIE_OPTS, maxAge: 60 * 60 * 12 };
+  jar.set(VIEW_MODE_COOKIE, "teacher", opts);
+  jar.set(VIEW_AS_COOKIE, target.id, opts);
+
+  await logAction({
+    action: "teacher_view_impersonate",
+    targetType: "user",
+    targetLabel: target.displayName || target.id,
+    metadata: { targetUserId: target.id },
+  });
+
+  // 착지 = 그 강사의 강사 홈(영어 전담=ECS). 담당 반이 0개면 부담임(슬롯) 영어 반까지 보고 판정 —
+  // teacherViewHome()과 같은 규칙이지만, 방금 세팅한 쿠키를 그 함수는 아직 못 읽어 여기서 직접 잇는다.
+  // 부담임 판정은 ecsAssistantClassIds와 같은 파라미터판 단일 소스(englishAssistantClassIdsOf).
+  const { classIds, subjects } = await getTeacherScope(target.id);
+  if (classIds.length > 0) return teacherHomeForSubjects(subjects);
+  const assistantCount = (await englishAssistantClassIdsOf(target.id)).length;
+  return teacherHomeForSubjects(
+    teacherHomeFromAssistantClasses(assistantCount) === ENGLISH_TEACHER_HOME ? ["english"] : [],
+  );
+}
+
+export type TeacherViewTarget = { id: string; name: string };
+
+/**
+ * '다른 강사 뷰' 대상 후보 — 이 학원의 **활성 강사**(system_role=teacher) ∪ **담당 반이 있는 직원**(겸직).
+ * 사이드바 피커·열람 배지 드롭다운이 열릴 때만 호출(지연 로드 — 레이아웃 상시 비용 0).
+ * 자격 없는 호출은 빈 목록(게이트 재검증 — UI 조건은 게이트가 아니다 #77).
+ */
+export async function listTeacherViewTargets(): Promise<TeacherViewTarget[]> {
+  const user = await getCurrentUser();
+  if (!user || !(await canUseOtherTeacherView())) return [];
+  const supabase = await createClient();
+  // 전건 fetch지만 둘 다 whitelist 용도라 fetchAllPaged(B2 — 1000행 silent 절단 방지).
+  const [staff, classRows] = await Promise.all([
+    fetchAllPaged<{ id: string; display_name: string | null; system_role: string }>((from, to) =>
+      supabase
+        .from("users")
+        .select("id, display_name, system_role")
+        .eq("status", "active")
+        .neq("system_role", "student") // 학생이 압도적 다수 — SQL에서 걸러야 전건 페이징이 헛돌지 않는다(B2)
+        .order("display_name")
+        .order("id") // unique tie-break — 페이지 경계 안정(fetchAllPaged 계약)
+        .range(from, to),
+    ),
+    fetchAllPaged<{ teacher_id: string | null }>((from, to) =>
+      supabase
+        .from("classes")
+        .select("teacher_id")
+        .eq("is_active", true)
+        .not("teacher_id", "is", null)
+        .order("id")
+        .range(from, to),
+    ),
+  ]);
+  const teachingIds = new Set(classRows.map((r) => r.teacher_id).filter(Boolean) as string[]);
+  return staff
+    .filter((s) => s.id !== user.id && s.system_role !== "student")
+    .filter((s) => s.system_role === "teacher" || teachingIds.has(s.id))
+    .map((s) => ({ id: s.id, name: s.display_name ?? "(이름 없음)" }))
+    .sort((a, b) => a.name.localeCompare(b.name, "ko")); // Postgres 정렬은 로마자→한글(#84) — 한글 우선 정렬
 }

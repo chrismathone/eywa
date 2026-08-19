@@ -2,6 +2,7 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { viewAsTeacher } from "@/lib/auth/view-mode";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { DEFAULT_SETTINGS } from "@/features/owner/defaults";
@@ -267,7 +268,12 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
 
   const user = await getCurrentUser();
   if (!user) return emptyRoster(today, targetDate, "");
-  const teacherName = user.displayName ?? "";
+  // '다른 강사 뷰'(열람 전용, 2026-08-19) — 로스터의 강사 축을 열람 대상으로 통째 전환한다.
+  // viewAsTeacher()는 매 요청 자격·대상을 재검증(effectiveTeacherId와 같은 판정)하고, 아니면 본인.
+  // 쓰기는 이 축과 무관하게 전부 차단돼 있다(perm-matrix 캡 + 각 액션 readonlyTeacherViewError 가드).
+  const viewAs = await viewAsTeacher();
+  const teacherId = viewAs?.id ?? user.id;
+  const teacherName = viewAs?.displayName ?? user.displayName ?? "";
 
   const supabase = await createClient();
   // ECS 시트 표(`class_sheet_*`)는 RLS 정책이 없어 사용자 클라이언트로는 못 읽는다 — 그 조회에만 쓴다.
@@ -287,9 +293,9 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
   //    (저장·발송·출결 게이트가 같은 함수를 쓴다. 갈라지면 "화면엔 뜨는데 저장하면 거절"이 난다).
   const [teachingClasses, { data: meRow }, { data: orderRows }, canEditAttendance, logoSrc] =
     await Promise.all([
-      getTeachingClasses(supabase, user.id, targetDate),
-      supabase.from("users").select("report_notice_mode, ui_prefs").eq("id", user.id).single(),
-      supabase.from("onescreen_student_order").select("class_id, student_ids").eq("teacher_id", user.id),
+      getTeachingClasses(supabase, teacherId, targetDate),
+      supabase.from("users").select("report_notice_mode, ui_prefs").eq("id", teacherId).single(),
+      supabase.from("onescreen_student_order").select("class_id, student_ids").eq("teacher_id", teacherId),
       canWriteTenant(user.systemRole, "attendance"),
       // 학부모 보고서 미리보기의 로고 — /r·인쇄와 **같은 해석기**를 쓴다(미리보기가 발송본과 달라지지 않게).
       // 로고를 안 쓰는 설정이면 서명 왕복 자체를 건너뛴다(원스크린은 전원이 매일 여는 경로 — 왕복 하나가 비싸다).
@@ -366,7 +372,7 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
         .or(`valid_from.is.null,valid_from.lte.${targetDate}`)
         .or(`valid_to.is.null,valid_to.gte.${targetDate}`),
     ),
-    fetchMyMakeupReports(supabase, targetDate, user.id, teacherName),
+    fetchMyMakeupReports(supabase, targetDate, teacherId, teacherName),
   ]);
   if (allClasses.length === 0 && makeupReports.length === 0)
     return emptyRoster(today, targetDate, teacherName, config);
@@ -735,7 +741,7 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
           "student_id, study_grade, subject_progress, daily_score, daily_max, check_score, check_max, attitude, homework, special_note, progress_confirmed",
         )
         .eq("session_date", todayIso)
-        .eq("updated_by", user.id)
+        .eq("updated_by", teacherId)
         .in("student_id", chunk),
     ),
     // (i) **ECS 시트 계획**(2026-08-07) — 그날 그 반에 강사가 이미 적어 둔 교재·진도·과제.
@@ -857,7 +863,7 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
             supabase
               .from("onescreen_daily_sessions")
               .select("student_id, session_date, daily_max, check_max")
-              .eq("updated_by", user.id)
+              .eq("updated_by", teacherId)
               .lt("session_date", todayIso)
               .gte("session_date", testMaxFrom)
               .in("student_id", chunk)
