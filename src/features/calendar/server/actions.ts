@@ -19,11 +19,64 @@ const YMD = /^\d{4}-\d{2}-\d{2}$/;
 const HM = /^([01]\d|2[0-3]):[0-5]\d$/;
 const MAX_TITLE = 120;
 const MAX_MEMO = 2000;
-/** 한 일정 상한 — 1년을 넘는 구간은 오입력으로 본다(반복 일정은 별도 개념 — v1 범위 밖). */
+/** 한 일정 상한 — 1년을 넘는 구간은 오입력으로 본다(반복도 종료일이 1년 이내). */
 const MAX_SPAN_DAYS = 366;
 
 function spanDays(start: string, end: string): number {
   return Math.floor((Date.parse(`${end}T00:00:00Z`) - Date.parse(`${start}T00:00:00Z`)) / 86_400_000) + 1;
+}
+
+function addDaysYmd(ymd: string, n: number): string {
+  const [y, m, d] = ymd.split("-").map(Number);
+  const dt = new Date(Date.UTC(y!, m! - 1, d! + n));
+  return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, "0")}-${String(
+    dt.getUTCDate(),
+  ).padStart(2, "0")}`;
+}
+
+// ── 반복 전개(0222a) — 등록 시점 실체화: 규칙을 저장하지 않고 행 N개를 series_id로 묶는다 ──────
+const REPEAT_KINDS = ["none", "daily", "weekly", "biweekly", "monthly"] as const;
+type RepeatKind = (typeof REPEAT_KINDS)[number];
+/** 반복 상한 — 매일×2달이면 60회. 넘으면 오입력으로 보고 거절(행 폭탄 방지). */
+const MAX_OCCURRENCES = 60;
+
+/**
+ * 반복 시작일 목록(첫 회 포함, until 이하). 매월은 같은 날 — 그 날이 없는 달(29~31일)은
+ * 건너뛴다(끝날로 당기면 "매월 31일" 의도가 30일로 변질). 상한 초과 = 한글 에러.
+ */
+function expandRepeatStarts(
+  startDate: string,
+  repeat: RepeatKind,
+  until: string,
+): string[] | { error: string } {
+  const starts: string[] = [startDate];
+  if (repeat === "none") return starts;
+  const overflow = { error: "반복 횟수가 너무 많습니다(최대 60회) — 종료일을 당기세요" };
+
+  if (repeat === "monthly") {
+    const [y, m, d] = startDate.split("-").map(Number);
+    // until이 1년 이내로 이미 검증됨 — 13개월이면 전부 덮는다.
+    for (let k = 1; k <= 13; k += 1) {
+      const dt = new Date(Date.UTC(y!, m! - 1 + k, d!));
+      if (dt.getUTCDate() !== d) continue; // 그 날이 없는 달 — 건너뜀
+      const ymd = `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, "0")}-${String(
+        dt.getUTCDate(),
+      ).padStart(2, "0")}`;
+      if (ymd > until) break;
+      starts.push(ymd);
+      if (starts.length > MAX_OCCURRENCES) return overflow;
+    }
+    return starts;
+  }
+
+  const step = repeat === "daily" ? 1 : repeat === "weekly" ? 7 : 14;
+  for (let k = 1; ; k += 1) {
+    const ymd = addDaysYmd(startDate, step * k);
+    if (ymd > until) break;
+    starts.push(ymd);
+    if (starts.length > MAX_OCCURRENCES) return overflow;
+  }
+  return starts;
 }
 
 async function requireCalendarWriter() {
@@ -82,6 +135,25 @@ export async function saveCalendarEvent(
     color,
   };
 
+  // 반복(생성 전용 — 수정에선 무시: 회차 하나를 고치는 것뿐, 시리즈는 안 건드린다).
+  const repeatRaw = String(formData.get("repeat") ?? "none");
+  const repeat: RepeatKind = (REPEAT_KINDS as readonly string[]).includes(repeatRaw)
+    ? (repeatRaw as RepeatKind)
+    : "none";
+  let starts: string[] = [startDate];
+  if (!id && repeat !== "none") {
+    const until = String(formData.get("repeatUntil") ?? "").trim();
+    if (!YMD.test(until)) return { error: "반복 종료일을 선택하세요" };
+    if (until <= startDate) return { error: "반복 종료일은 시작일 이후여야 합니다" };
+    if (spanDays(startDate, until) > MAX_SPAN_DAYS) {
+      return { error: "반복은 최대 1년까지입니다 — 종료일을 당기세요" };
+    }
+    const expanded = expandRepeatStarts(startDate, repeat, until);
+    if (!Array.isArray(expanded)) return expanded;
+    starts = expanded;
+  }
+  const repeated = starts.length > 1;
+
   if (id) {
     const { data, error } = await admin
       .from("calendar_events")
@@ -92,7 +164,34 @@ export async function saveCalendarEvent(
       .maybeSingle();
     if (error) return { error: `일정 수정 실패 — ${error.message}` };
     if (!data) return { error: "수정할 일정을 찾을 수 없습니다" };
+  } else if (repeated) {
+    // 반복 = 실체화(0222a) — 회차 전부를 한 번에 insert, series_id 공통.
+    const seriesId = crypto.randomUUID();
+    const span = spanDays(startDate, endDate);
+    const { error } = await admin.from("calendar_events").insert(
+      starts.map((s) => ({
+        ...row,
+        start_date: s,
+        end_date: addDaysYmd(s, span - 1),
+        series_id: seriesId,
+        tenant_id: user.tenantId,
+        created_by: user.id,
+      })),
+    );
+    if (error) {
+      if (/series_id/i.test(error.message)) {
+        // #95 — 컬럼이 아직 없다(앱이 먼저 배포됨). 단발 등록은 그대로 되니 반복만 안내.
+        return { error: "반복 일정은 DB 마이그레이션(0222a) 적용 후 사용할 수 있습니다" };
+      }
+      const missing = /does not exist|Could not find the table|PGRST205/i.test(error.message);
+      return {
+        error: missing
+          ? "캘린더 표가 아직 준비되지 않았습니다(마이그레이션 0218a 적용 필요)"
+          : `일정 등록 실패 — ${error.message}`,
+      };
+    }
   } else {
+    // 단발 — series_id 키를 아예 안 보낸다(0222a 적용 전 배포에서도 등록이 살아야, #95).
     const { error } = await admin.from("calendar_events").insert({
       ...row,
       tenant_id: user.tenantId,
@@ -111,10 +210,19 @@ export async function saveCalendarEvent(
   await logAction({
     action: id ? "calendar_event_update" : "calendar_event_create",
     targetType: "calendar_event",
-    targetLabel: `${title} (${startDate}${endDate !== startDate ? `~${endDate}` : ""})`,
+    targetLabel: `${title} (${startDate}${endDate !== startDate ? `~${endDate}` : ""})${
+      repeated ? ` ×${starts.length}회` : ""
+    }`,
   });
   revalidatePath("/calendar");
-  return { ok: true, notice: id ? "일정을 수정했습니다" : "일정을 등록했습니다" };
+  return {
+    ok: true,
+    notice: id
+      ? "일정을 수정했습니다"
+      : repeated
+        ? `반복 일정 ${starts.length}건을 등록했습니다`
+        : "일정을 등록했습니다",
+  };
 }
 
 export async function deleteCalendarEvent(
@@ -129,6 +237,30 @@ export async function deleteCalendarEvent(
   if (!id) return { error: "삭제할 일정을 찾을 수 없습니다" };
 
   const admin = createAdminClient();
+
+  // 반복 전체 삭제 — 같은 시리즈(0222a) 회차 일괄. admin은 RLS 우회라 tenant 필터 필수([[#104]]).
+  const scope = String(formData.get("scope") ?? "one");
+  const seriesId = String(formData.get("seriesId") ?? "").trim();
+  if (scope === "series") {
+    if (!seriesId) return { error: "반복 일정 정보를 찾을 수 없습니다" };
+    const { data, error } = await admin
+      .from("calendar_events")
+      .delete()
+      .eq("tenant_id", user.tenantId)
+      .eq("series_id", seriesId)
+      .select("id, title");
+    if (error) return { error: `삭제 실패 — ${error.message}` };
+    if (!data || data.length === 0) return { error: "삭제할 반복 일정을 찾을 수 없습니다" };
+
+    await logAction({
+      action: "calendar_event_delete",
+      targetType: "calendar_event",
+      targetLabel: `${data[0]!.title} — 반복 전체 ${data.length}건`,
+    });
+    revalidatePath("/calendar");
+    return { ok: true, notice: `반복 일정 ${data.length}건을 삭제했습니다` };
+  }
+
   const { data, error } = await admin
     .from("calendar_events")
     .delete()

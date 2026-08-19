@@ -6,6 +6,7 @@ import { Pill } from "@/components/atoms/pill";
 import { RecallButton } from "@/features/report-admin/components/recall-button";
 import { isRecallInFlight, isRecallable } from "@/features/report-admin/report-recall";
 import { normalizeHomeworkPages } from "../homework-pages";
+import { makeupRemoveBlockReason } from "../makeup-remove-plan";
 import {
   effectiveClassnoteStatus,
   isAlreadySent,
@@ -88,6 +89,7 @@ export function ReportCard({
   onHomeworkToday,
   onMakeup,
   onRemoveMakeup,
+  canRemoveMakeup,
   onSubjectDraft,
   onSubjectTrend,
   onNote,
@@ -118,6 +120,8 @@ export function ReportCard({
   onMakeup: (subjectName: string) => void; // 보강 토글(과목별) — 0089a
   /** 보강 빼기(2026-08-18) — 출결·저장된 보강 보고서를 지운다. 없으면 배지가 표시로만 남는다. */
   onRemoveMakeup?: (subjectName: string) => void;
+  /** 이 행을 뺄 수 있나 — 발송·처리 중이면 false(발송된 보강은 취소 불가, 원장 2026-08-18). */
+  canRemoveMakeup?: (subjectName: string) => boolean;
   onSubjectDraft: (subjectName: string, text: string) => void;
   onSubjectTrend: (subjectName: string, text: string) => void; // 학습 추세 초안 편집(4a)
   onNote: (text: string) => void; // 특이사항(강사 메모) 편집 — AI 멘트 입력(4c). 학생별.
@@ -236,11 +240,13 @@ export function ReportCard({
               {/* 보강 빼기 — 표 모드와 같은 문(원장 2026-08-18 *"다 삭제"*). 확인 후 출결·보고서를 지운다. */}
               {/* 순수 보강 행이면 정규 학생 카드에서도 뺄 수 있어야 한다(적대 리뷰 M2) — 학생 단위
                   isMakeup만 보면 "정규 수업도 듣는 학생의 보강"에 문이 없다. 반이 붙은 '정규+보강'은 제외. */}
-              {(student.isMakeup || (subject.makeup && !subject.classId)) && onRemoveMakeup ? (
+              {(student.isMakeup || (subject.makeup && !subject.classId)) &&
+              onRemoveMakeup &&
+              (canRemoveMakeup?.(subject.name) ?? true) ? (
                 <button
                   type="button"
                   onClick={() => onRemoveMakeup(subject.name)}
-                  title="클릭하면 이 보강을 뺍니다(출결 기록과 저장된 보강 보고서가 삭제됩니다)"
+                  title="클릭하면 이 보강을 뺍니다(출결·보강 보고서·진도 기록이 삭제됩니다)"
                   aria-label={`${student.name} 보강 빼기`}
                   className="bg-amber-soft text-amber hover:bg-amber inline-flex cursor-pointer items-center gap-0.5 rounded-pill px-1.5 py-px text-[10px] font-bold transition hover:text-white"
                 >
@@ -248,7 +254,11 @@ export function ReportCard({
                   <EyIcon name="close" size={9} />
                 </button>
               ) : student.isMakeup || (subject.makeup && !subject.classId) ? (
-                <span className="bg-amber-soft text-amber rounded-pill px-1.5 py-px text-[10px] font-bold">
+                // 뺄 수 없는 행 — 왜인지 툴팁으로 남긴다(버튼만 없애면 "왜 안 되지"가 남는다).
+                <span
+                  className="bg-amber-soft text-amber rounded-pill px-1.5 py-px text-[10px] font-bold"
+                  title={makeupRemoveBlockReason(rep.classnoteStatus) ?? undefined}
+                >
                   보강
                 </span>
               ) : null}

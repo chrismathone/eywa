@@ -4,7 +4,7 @@ import { fetchInChunks } from "@/lib/supabase/batch";
 import { kstToday } from "@/lib/date-kst";
 import { resolveLeavePeriod, type LeavePeriod } from "@/features/leave/accrual";
 import { applyLeaveGrantOverride } from "@/features/leave/test-grants";
-import type { LeaveKind } from "@/features/leave/request-days";
+import { isLeaveKind, type LeaveKind } from "@/features/leave/request-days";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { compareByJobRank } from "../job-rank";
 import type { ApprovalForm, DocStatus, StepDecision } from "../types";
@@ -214,7 +214,7 @@ async function loadDocs(ids: string[]): Promise<ApprovalDocRow[]> {
   for (const l of leaves) {
     leaveBy.set(String(l.document_id), {
       userId: String(l.user_id),
-      kind: (l.leave_kind === "half" ? "half" : "annual") as LeaveKind,
+      kind: (isLeaveKind(String(l.leave_kind)) ? l.leave_kind : "annual") as LeaveKind,
       startDate: String(l.start_date),
       endDate: String(l.end_date),
       days: num(l.days),
@@ -512,12 +512,12 @@ export async function getMyLeaveBalance(userId: string): Promise<LeaveBalance> {
     if (doc?.status === "approved") used += num(row.days);
     else if (doc?.status === "pending") pending += num(row.days);
   }
-  const r1 = (v: number) => Math.round(v * 10) / 10;
+  const r2 = (v: number) => Math.round(v * 100) / 100; // 0.25(반반차) 해상도 보존
   return {
     hireDate,
     period,
-    used: r1(used),
-    pending: r1(pending),
-    remaining: Math.max(0, r1(period.granted - used - pending)),
+    used: r2(used),
+    pending: r2(pending),
+    remaining: Math.max(0, r2(period.granted - used - pending)),
   };
 }

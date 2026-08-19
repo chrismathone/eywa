@@ -606,6 +606,13 @@ export async function linkMakeupToAbsence(input: {
   classId: string;
   /** 결석했던 날(YYYY-MM-DD) — 메모만 붙는다. */
   absentDate: string;
+  /**
+   * 결석이 난 **반**(생략하면 `classId`와 같은 반) — 원장 2026-08-19: *"반이동으로 인해 반이 이동했는데
+   * 이전 수업을 이월해 보강할 수도 있을테니까."* 이월 보강은 **메모를 남길 반(옛 반)** 과
+   * **시수를 얹을 반(오늘 보강한 반)** 이 다르다. 하나로 묶으면 옛 반에 시수가 붙거나(급여 귀속이 틀림)
+   * 새 반 결석 칸에 남의 메모가 붙는다.
+   */
+  absentClassId?: string;
   /** 보강을 실제로 한 날(YYYY-MM-DD) — 시수가 여기에 얹힌다. 보통 오늘. */
   makeupDate: string;
   /**
@@ -619,6 +626,8 @@ export async function linkMakeupToAbsence(input: {
   if (!(await canWriteTenant(user.systemRole, "attendance"))) return { error: "출석 관리 권한이 없습니다" };
 
   const { studentId, classId, absentDate, makeupDate, addUnits } = input;
+  // 메모가 붙을 반 = 결석이 난 반(미지정이면 같은 반). 시수는 언제나 `classId`(오늘 보강한 반)에 얹는다.
+  const absentClassId = input.absentClassId || classId;
   if (!studentId || !classId || !absentDate || !makeupDate) return { error: "필수 값이 누락되었습니다" };
   const isDate = (d: string) => /^\d{4}-\d{2}-\d{2}$/.test(d);
   if (!isDate(absentDate) || !isDate(makeupDate)) return { error: "잘못된 날짜입니다" };
@@ -650,21 +659,21 @@ export async function linkMakeupToAbsence(input: {
     if (!enrolled) return { error: "이 반 수강생이 아닙니다" };
   }
 
-  const latestCell = (sessionDate: string) =>
+  const latestCell = (sessionDate: string, cellClassId: string) =>
     supabase
       .from("attendance_records")
       .select("id, status, note, session_units")
-      .eq("class_id", classId)
+      .eq("class_id", cellClassId)
       .eq("student_id", studentId)
       .eq("session_date", sessionDate)
       .order("recorded_at", { ascending: false })
       .limit(1)
       .maybeSingle();
 
-  // 두 칸은 서로 독립 조회 — 직렬 워터폴 금지(B4).
+  // 두 칸은 서로 독립 조회 — 직렬 워터폴 금지(B4). 이월 보강이면 **반이 서로 다르다**.
   const [{ data: absentCell }, { data: makeupCell }] = await Promise.all([
-    latestCell(absentDate),
-    latestCell(makeupDate),
+    latestCell(absentDate, absentClassId),
+    latestCell(makeupDate, classId),
   ]);
 
   const memoOnMakeup = makeupMemo(absentDate, makeupDate);

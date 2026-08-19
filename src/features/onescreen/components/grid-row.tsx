@@ -20,6 +20,7 @@ import { evaluateSendGate } from "../send-gate";
 import { checkMentConsistency, MENT_WARNING_HINT, MENT_WARNING_LABEL } from "../ment-consistency";
 import { parentUnreadBadge, progressAnomalyBadge } from "../roster-signals";
 import { makeupBadgeLabel } from "../makeup-label";
+import { makeupRemoveBlockReason } from "../makeup-remove-plan";
 import { resolveRowFields } from "../row-fields";
 import type { OneScreenStudent } from "../types";
 import { classnoteBadge, readAtLabel, type SubjectReport } from "./report-card";
@@ -87,6 +88,8 @@ export type GridRowActions = {
   onOpenAttachments: (student: OneScreenStudent, subjectName: string) => void; // 팝오버 열 때 썸네일 서명
   /** 보강 빼기 — 없으면 배지가 그냥 표시로 남는다(권한 없는 화면·읽기 전용). */
   onRemoveMakeup?: (student: OneScreenStudent, subjectName: string) => void;
+  /** 이 행을 뺄 수 있나 — 발송·처리 중이면 false라 버튼을 열지 않는다(서버도 같은 판정으로 막는다). */
+  canRemoveMakeup?: (studentId: string, subjectName: string) => boolean;
 };
 
 /** 표 표시 설정(학원 설정 유래). */
@@ -330,11 +333,11 @@ export function GridBodyRow({
           {/* 보강 배지 = **빼는 문**(원장 2026-08-18 *"다 삭제"*). 추가만 있고 빼는 길이 없어 잘못 추가한
               보강이 화면에 눌러앉았다(영어 ECS는 같은 칸을 이미 버튼으로 열어 뒀다). 확인 후에만 지운다. */}
           {student.isMakeup ? (
-            actions.onRemoveMakeup ? (
+            actions.onRemoveMakeup && (actions.canRemoveMakeup?.(student.id, subject.name) ?? true) ? (
               <button
                 type="button"
                 onClick={() => actions.onRemoveMakeup?.(student, subject.name)}
-                title="클릭하면 이 보강을 뺍니다(출결 기록과 저장된 보강 보고서가 삭제됩니다)"
+                title="클릭하면 이 보강을 뺍니다(출결·보강 보고서·진도 기록이 삭제됩니다)"
                 aria-label={`${student.name} 보강 빼기`}
                 className="bg-amber-soft text-amber hover:bg-amber inline-flex shrink-0 cursor-pointer items-center gap-0.5 rounded-pill px-1 py-px text-[9px] font-bold transition hover:text-white"
               >
@@ -342,7 +345,11 @@ export function GridBodyRow({
                 <EyIcon name="close" size={8} />
               </button>
             ) : (
-              <span className="bg-amber-soft text-amber shrink-0 rounded-pill px-1 py-px text-[9px] font-bold">
+              // 발송분 등 뺄 수 없는 행 — 버튼을 없애기만 하면 "왜 안 되지"가 남는다(적대 리뷰).
+              <span
+                className="bg-amber-soft text-amber shrink-0 rounded-pill px-1 py-px text-[9px] font-bold"
+                title={makeupRemoveBlockReason(liveStatus) ?? undefined}
+              >
                 보강
               </span>
             )
@@ -387,11 +394,13 @@ export function GridBodyRow({
               (적대 리뷰 M2 — 버튼을 학생 단위 `isMakeup`에만 달면 최근 60일 67건 중 12건이 못 뺀다).
               반이 붙은 '정규+보강'은 대상 아님(그건 체크박스로 끈다 — 지우면 정규 보고서가 날아간다). */}
           {subject.makeup && !student.isMakeup ? (
-            actions.onRemoveMakeup && !subject.classId ? (
+            actions.onRemoveMakeup &&
+            !subject.classId &&
+            (actions.canRemoveMakeup?.(student.id, subject.name) ?? true) ? (
               <button
                 type="button"
                 onClick={() => actions.onRemoveMakeup?.(student, subject.name)}
-                title="클릭하면 이 보강을 뺍니다(출결 기록과 저장된 보강 보고서가 삭제됩니다)"
+                title="클릭하면 이 보강을 뺍니다(출결·보강 보고서·진도 기록이 삭제됩니다)"
                 aria-label={`${student.name} ${subject.name} 보강 빼기`}
                 className="bg-amber-soft text-amber hover:bg-amber inline-flex shrink-0 cursor-pointer items-center gap-0.5 rounded-pill px-1 py-px text-[9px] font-bold transition hover:text-white"
               >
@@ -399,7 +408,14 @@ export function GridBodyRow({
                 <EyIcon name="close" size={8} />
               </button>
             ) : (
-              <span className="bg-amber-soft text-amber shrink-0 rounded-pill px-1 py-px text-[9px] font-bold">
+              <span
+                className="bg-amber-soft text-amber shrink-0 rounded-pill px-1 py-px text-[9px] font-bold"
+                title={
+                  subject.classId
+                    ? undefined
+                    : (makeupRemoveBlockReason(liveStatus) ?? undefined)
+                }
+              >
                 {makeupBadgeLabel({ makeup: true, hasClass: !!subject.classId })}
               </span>
             )

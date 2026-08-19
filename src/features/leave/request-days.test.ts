@@ -27,6 +27,11 @@ describe("차감 일수 — 일요일은 세지 않는다", () => {
     expect(countLeaveDays("2026-08-17", "2026-08-18", "half")).toBe(0);
   });
 
+  it("반반차는 하루만 0.25일 — 여러 날이면 0", () => {
+    expect(countLeaveDays("2026-08-17", "2026-08-17", "quarter")).toBe(0.25);
+    expect(countLeaveDays("2026-08-17", "2026-08-18", "quarter")).toBe(0);
+  });
+
   it("역순·형식 오류는 0", () => {
     expect(countLeaveDays("2026-08-20", "2026-08-17", "annual")).toBe(0);
     expect(countLeaveDays("", "2026-08-17", "annual")).toBe(0);
@@ -50,6 +55,13 @@ describe("신청 검증", () => {
     expect(validateLeaveRange({ start: "2026-08-17", end: "2026-08-18", kind: "half" })).toBe(
       "반차는 하루만 신청할 수 있습니다",
     );
+  });
+
+  it("반반차는 하루만", () => {
+    expect(validateLeaveRange({ start: "2026-08-17", end: "2026-08-18", kind: "quarter" })).toBe(
+      "반반차는 하루만 신청할 수 있습니다",
+    );
+    expect(validateLeaveRange({ start: "2026-08-17", end: "2026-08-17", kind: "quarter" })).toBeNull();
   });
 
   it("31일을 넘는 기간은 거른다", () => {
@@ -82,9 +94,17 @@ describe("표기·종류 판별", () => {
     expect(formatLeaveDays(2.5)).toBe("2.5일");
   });
 
+  it("0.25 단위는 그대로 보인다 — toFixed(1)이면 0.25가 0.3으로 왜곡됐다", () => {
+    expect(formatLeaveDays(0.25)).toBe("0.25일");
+    expect(formatLeaveDays(0.75)).toBe("0.75일");
+    expect(formatLeaveDays(14.5)).toBe("14.5일");
+    expect(formatLeaveDays(14.75)).toBe("14.75일");
+  });
+
   it("종류 판별", () => {
     expect(isLeaveKind("annual")).toBe(true);
     expect(isLeaveKind("half")).toBe(true);
+    expect(isLeaveKind("quarter")).toBe(true);
     expect(isLeaveKind("sick")).toBe(false);
   });
 });

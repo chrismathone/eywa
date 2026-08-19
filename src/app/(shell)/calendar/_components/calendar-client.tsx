@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import type { CalendarEvent } from "@/features/calendar/types";
 import { MonthGrid } from "./month-grid";
 import { EventDialog, type DialogState } from "./event-dialog";
+import { DayListDialog } from "./day-list-dialog";
 
 /**
  * 캘린더 클라 껍데기 — 월 내비(링크) + 그리드 + 일정 다이얼로그 상태.
@@ -32,6 +33,8 @@ export function CalendarClient({
   canWrite: boolean;
 }) {
   const [dialog, setDialog] = useState<DialogState>(null);
+  // "+N개 더"로 여는 하루 상세 — 그 날 일정 전건 목록(열람이라 권한 무관).
+  const [moreDate, setMoreDate] = useState<string | null>(null);
 
   function openEvent(e: CalendarEvent) {
     // 휴가 오버레이는 진실이 결재 문서라 캘린더에서 못 고친다 — 누구에게나 읽기 전용.
@@ -82,9 +85,26 @@ export function CalendarClient({
           events={events}
           onEventClick={openEvent}
           onDayClick={canWrite ? (d) => setDialog({ mode: "create", date: d }) : undefined}
+          onMoreClick={setMoreDate}
         />
       </div>
 
+      {moreDate ? (
+        <DayListDialog
+          date={moreDate}
+          events={events}
+          canWrite={canWrite}
+          onSelect={(e) => {
+            setMoreDate(null);
+            openEvent(e);
+          }}
+          onCreate={(d) => {
+            setMoreDate(null);
+            setDialog({ mode: "create", date: d });
+          }}
+          onClose={() => setMoreDate(null)}
+        />
+      ) : null}
       {dialog ? <EventDialog state={dialog} today={today} onClose={() => setDialog(null)} /> : null}
     </div>
   );

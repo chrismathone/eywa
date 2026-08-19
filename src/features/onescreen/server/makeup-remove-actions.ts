@@ -9,11 +9,13 @@
  * 게다가 그 액션은 출결만 지워서, **저장된 보강 보고서**가 남아 다음 새로고침에 행이 되살아난다
  * (원스크린 로스터는 출결(5-c)과 보고서(5-b) **양쪽**에서 보강 행을 복원한다).
  *
- * ## 무엇을 지우나 — 되살아나는 원천을 **둘 다** 끊는다
+ * ## 무엇을 지우나 — 되살아나는 원천을 **둘 다** 끊고 진도까지 되감는다
  * ① `attendance_records`의 그 날 **보강 칸**(status='makeup') ② 순수 보강 `lesson_reports`
- * (`makeup=true` ∧ `class_id IS NULL` ∧ 내 것). 단 **학부모에게 나간 보고서는 회수부터**
- * ([`planMakeupRemoval`](../makeup-remove-plan.ts) — 행을 먼저 지우면 게시글을 찾을 열쇠(share_token)가
- * 사라져 학부모 게시판에 유령 글이 남는다).
+ * (`makeup=true` ∧ `class_id IS NULL` ∧ 내 것) ③ 그 보고서가 밀어 올린 **진도**(entries·events·컨테이너
+ * 위치 재계산 — 원장 *"진도기록도 되돌려야지"*). 진도는 FK가 SET NULL이라 **보고서를 지우기 전에** 되감는다.
+ *
+ * 🔴 **이미 학부모에게 발송된 보강은 취소 자체를 막는다**(원장 *"발송된건은 보강취소를 못하게 강제해"*).
+ *    지우려면 먼저 보고서를 회수(게시글 삭제)해야 하고, 회수 완료분은 이 문으로 지울 수 있다.
  *
  * ## 게이트 (#77 — UI에서 숨기는 건 게이트가 아니다)
  * 로그인 + 출결 쓰기 권한. 관리자(lesson_reports 쓰기)는 테넌트 전체, 그 외는 **내가 만든 보강만**
@@ -32,9 +34,12 @@ import { kstToday } from "@/lib/date-kst";
 import { LEGACY_REPORT_SUBJECT } from "@/features/timetable/lib/report-subject";
 import { logAction } from "@/features/audit/server/log";
 import { attendanceLockMessage, isWithinAttendanceEditWindow } from "@/features/attendance/edit-window";
-import { requestReportRecall } from "@/features/report-admin/server/recall-actions";
+import {
+  applyProgressRollback,
+  captureProgressForReports,
+} from "@/features/progress/server/rollback-actions";
 import { ownsMakeupReport } from "../makeup-owner";
-import { makeupRemoveMessage, planMakeupRemoval } from "../makeup-remove-plan";
+import { makeupRemoveBlockReason, makeupRemoveMessage, planMakeupRemoval } from "../makeup-remove-plan";
 
 const YMD_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -45,14 +50,10 @@ export type RemoveMakeupResult =
       attendanceRemoved: boolean;
       /** 실제로 지운 보고서 수. */
       deleted: number;
-      /** 회수(게시글 삭제)를 요청한 보고서 수 — 이번엔 기록이 남는다. */
-      recalled: number;
-      /** 발송·회수 처리 중이라 건너뛴 수. */
-      busy: number;
+      /** 되감은 진도 엔트리 수. */
+      progressEntries: number;
       /** 화면에 그대로 띄우는 한글 요약. */
       message: string;
-      /** 회수 대기·처리 중이라 DB 행이 남았나(화면에서는 어차피 사라진다 — 로스터가 회수분을 안 되살린다). */
-      keepRow: boolean;
     }
   | { ok: false; error: string };
 
@@ -90,7 +91,7 @@ export async function removeMakeupEntry(input: {
   // ── 1) 저장된 보강 보고서(순수 보강만) ─────────────────────────────────────────
   const { data: reportRows, error: reportErr } = await supabase
     .from("lesson_reports")
-    .select("id, subject, classnote_status, share_token, created_by, teacher_name")
+    .select("id, subject, classnote_status, share_token, classnote_read_at, created_by, teacher_name")
     .eq("student_id", input.studentId)
     .eq("report_date", input.date)
     .eq("makeup", true)
@@ -125,37 +126,31 @@ export async function removeMakeupEntry(input: {
       id: r.id as string,
       classnoteStatus: (r.classnote_status as string | null) ?? null,
       shareToken: (r.share_token as string | null) ?? null,
+      // 재발급이 상태를 지워도 남는 발송 흔적 — 이게 있으면 "미발송"으로 보지 않는다(뒷문 방어).
+      readAt: (r.classnote_read_at as string | null) ?? null,
     })),
   );
 
-  // 🔴 발송·회수가 **진행 중**이면 아무것도 하지 않고 거절한다(적대 리뷰 치명 1건).
-  //    예전엔 여기서 통과시켜 출결만 지우고 "성공"이라 답했는데, 워커가 큐에 남은 그 보고서를
-  //    **그대로 학부모에게 게시**했다 — 강사는 "되돌릴 수 없습니다"를 승인하고 초록 토스트까지 본 뒤였다.
-  //    지금 손대면 안 되는 상태이므로 화면·DB 어느 쪽도 건드리지 않고 이유를 돌려준다.
-  if (plan.busyIds.length > 0) {
-    return {
-      ok: false,
-      error: `발송·회수 처리 중인 보고서 ${plan.busyIds.length}건이 있어 지금은 뺄 수 없습니다 — 처리가 끝난 뒤 다시 시도하세요`,
-    };
-  }
-  if (plan.manualIds.length > 0) {
-    return {
-      ok: false,
-      error:
-        "학부모 게시글을 자동으로 지울 수 없는 보고서가 있습니다(공유 링크 없음) — ClassNote에서 게시글을 직접 지운 뒤 다시 시도하세요",
-    };
-  }
-
-  // 게시글이 살아 있는 행은 **회수부터**(행은 남긴다 — 워커가 share_token으로 게시글을 찾아 지운다).
-  let recalled = 0;
-  if (plan.recallIds.length) {
-    const res = await requestReportRecall(plan.recallIds);
-    if (!res.ok) return { ok: false, error: res.error ?? "학부모 게시글 회수를 요청하지 못했습니다" };
-    recalled = res.recalled ?? plan.recallIds.length;
+  // 🔴 **발송분은 여기서 끝** — 학부모가 이미 본 기록을 '보강 빼기'가 조용히 지우지 않는다
+  //    (원장 2026-08-18). 출결도 건드리지 않고 그대로 돌려보낸다. 지우려면 회수가 먼저다.
+  // 🔴 처리 중(발송 대기·회수 요청)도 같다 — 예전엔 통과시켜 출결만 지우고 "성공"이라 답했는데,
+  //    워커가 큐에 남은 그 보고서를 **그대로 학부모에게 게시**했다(적대 리뷰 치명).
+  if (plan.sentIds.length > 0 || plan.busyIds.length > 0) {
+    // 사유는 **그 행의 실제 상태**로 만든다 — 예전엔 busy를 전부 "queued"로 뭉개 회수 처리 중인데도
+    // "발송 처리 중"이라 답했다(적대 리뷰). 문구는 순수 함수 한 곳이 소유한다.
+    const blockedId = plan.sentIds[0] ?? plan.busyIds[0];
+    const blockedStatus =
+      (mine.find((r) => r.id === blockedId)?.classnote_status as string | null) ?? "success";
+    return { ok: false, error: makeupRemoveBlockReason(blockedStatus) ?? "지금은 뺄 수 없습니다" };
   }
 
   let deleted = 0;
+  let progressEntries = 0;
   if (plan.deleteIds.length) {
+    // 진도 되감기는 **두 단계**(rollback-actions.ts 주석): 지우기 전에 대상을 기억하고(FK가 SET NULL이라
+    // 지운 뒤엔 못 찾는다), 실제 되감기는 **보고서 삭제가 성공한 뒤에** 한다(삭제가 실패했는데 진도만
+    // 사라지면 그 수업 진도가 영구 유실된다 — 적대 리뷰).
+    const captured = await captureProgressForReports(tenantId, plan.deleteIds);
     const { data: gone, error: delErr } = await admin
       .from("lesson_reports")
       .delete()
@@ -164,6 +159,12 @@ export async function removeMakeupEntry(input: {
       .select("id");
     if (delErr) return { ok: false, error: humanizeDbError(delErr.message, "보강 보고서 삭제") };
     deleted = (gone ?? []).length;
+    const rolled = await applyProgressRollback(tenantId, captured).catch(() => ({
+      entries: 0,
+      containers: 0,
+      droppedContainers: 0,
+    }));
+    progressEntries = rolled.entries;
   }
 
   // ── 2) 출결 보강 칸 ────────────────────────────────────────────────────────────
@@ -185,7 +186,7 @@ export async function removeMakeupEntry(input: {
     attendanceRemoved = (goneAtt ?? []).length > 0;
   }
 
-  if (!attendanceRemoved && deleted === 0 && recalled === 0 && plan.busyIds.length === 0) {
+  if (!attendanceRemoved && deleted === 0) {
     return { ok: false, error: "뺄 보강 기록을 찾지 못했습니다 — 다른 사람이 만든 보강일 수 있습니다" };
   }
 
@@ -206,8 +207,7 @@ export async function removeMakeupEntry(input: {
       subject: input.subject ?? null,
       attendanceRemoved,
       deletedReports: deleted,
-      recalledReports: recalled,
-      busyReports: plan.busyIds.length,
+      rolledBackProgress: progressEntries,
     },
   });
 
@@ -220,16 +220,7 @@ export async function removeMakeupEntry(input: {
     ok: true,
     attendanceRemoved,
     deleted,
-    recalled,
-    busy: plan.busyIds.length,
-    message: makeupRemoveMessage({
-      attendanceRemoved,
-      deleted,
-      recalled,
-      busy: plan.busyIds.length,
-      notMine,
-    }),
-    // 회수 대기·처리 중 행이 남아 있으면 화면에서 지우지 않는다(다음 새로고침에 되살아나 "안 지워졌다"가 된다).
-    keepRow: recalled > 0 || plan.busyIds.length > 0,
+    progressEntries,
+    message: makeupRemoveMessage({ attendanceRemoved, deleted, progressEntries, notMine }),
   };
 }
