@@ -10,7 +10,7 @@ import { TodayBoard } from "@/features/class-sheets/components/today-board";
 import { TodayAttendanceStrip } from "@/features/attendance/live/components/today-strip";
 import { SheetClient } from "@/features/class-sheets/components/sheet-client";
 import { EcsSeatDayFace } from "@/features/class-sheets/components/seat-day-face";
-import { effectiveTeacherScope } from "@/lib/auth/view-mode";
+import { effectiveTeacherId, effectiveTeacherScope } from "@/lib/auth/view-mode";
 import { EcsLandingList } from "./_components/landing-list";
 import { EcsTeacherFilter } from "./_components/teacher-filter";
 import { EcsTrackFilter } from "./_components/track-filter";
@@ -72,7 +72,18 @@ export default async function EcsLandingPage({
         res,
       }));
     }
-    return <EcsTodayFace res={todayRes} scoped={scoped} mode={mode} sheets={sheets} />;
+    // 오늘 시트는 **본인 교시만** 그린다(원장 2026-08-19) — 판정 주체는 `effectiveTeacherId`
+    // (겸직 강사뷰까지 커버하는 단일 소스. 요청당 캐시라 위 스코프 조회와 왕복을 공유한다).
+    const myTeacherId = await effectiveTeacherId();
+    return (
+      <EcsTodayFace
+        res={todayRes}
+        scoped={scoped}
+        mode={mode}
+        sheets={sheets}
+        myTeacherId={myTeacherId}
+      />
+    );
   }
   const res = await getSheetLanding(week ?? null);
 
@@ -137,6 +148,9 @@ export default async function EcsLandingPage({
  * 모드 2개(원장 2026-08-11 *"왔다갔다하면서 다 수정해야해서 큰 의미가 떨어져 — 한곳에서 모두 수정"*):
  *  · **시트(기본)** — 반마다 주간 시트를 **그 날짜 열만** 필터해 쌓는다. 주간 시트와 같은 기계(SheetClient:
  *    계획 줄 추가·출결·태도·특이사항·시수·일괄 입력·CAS·저널·presence)라 여기서 전부 편집이 끝난다.
+ *    🔴 단 **교시는 본인 담당만** 그린다(원장 2026-08-19 *"오늘 시트에서는 본인 수업만 보이고, 주간 시트는
+ *    여전히 지금처럼"*) — 자리(JJ·LAB)와 기록이 남은 교시는 남기고, 숨긴 건수는 각주로 밝힌다
+ *    ([today-own-slots](@/features/class-sheets/lib/today-own-slots)). 주간 시트·요약 카드는 불변.
  *  · **요약 카드** — 기존 보드(일괄 출석·알림장/보고서 배지·하루 합산). 훑어보기용 보조.
  *
  * ⚠️ 빈 화면 문구를 **원인별로** 가른다(랜딩과 같은 규약): 담당 반이 아예 없는 것과, 반은 있는데
@@ -147,11 +161,17 @@ function EcsTodayFace({
   scoped,
   mode,
   sheets,
+  myTeacherId,
 }: {
   res: EcsTodayResult;
   scoped: boolean;
   mode: EcsTodayMode;
   sheets: TodaySheet[] | null;
+  /**
+   * 시트 모드의 **내 교시만 보기** 기준 강사 id(`effectiveTeacherId`). 요약 카드 모드는 안 쓴다 —
+   * 카드는 하루 요약·작성률이라 반 전체가 목적이다(원장 지시 범위 = "오늘 시트").
+   */
+  myTeacherId: string | null;
 }) {
   if (!res.ok) {
     return (
@@ -220,6 +240,7 @@ function EcsTodayFace({
                   tenantId={res.tenantId}
                   initialDay={res.date}
                   variant="today"
+                  myTeacherId={myTeacherId}
                 />
               </section>
             ) : (

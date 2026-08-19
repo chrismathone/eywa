@@ -40,7 +40,13 @@ const day = {
   ],
 } as unknown as GridDay;
 
-const data = { canMarkAttendanceByDate: {}, isEie: false } as unknown as ClassSheetWeekData;
+// ⚠️ periodLabelBySlot은 실제로 **항상 오는 값**이다(서버가 채운다) — 픽스처에서 빼면 보강 어댑터에
+// 교시 이름을 넘기는 줄에서 죽는다. 빈 맵이라도 두어 "이름을 못 찾은 날"을 재현한다.
+const data = {
+  canMarkAttendanceByDate: {},
+  isEie: false,
+  periodLabelBySlot: {},
+} as unknown as ClassSheetWeekData;
 
 function renderSheet(header: React.ReactNode) {
   return render(

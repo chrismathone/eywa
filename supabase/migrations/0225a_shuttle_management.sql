@@ -198,7 +198,7 @@ comment on table public.shuttle_boardings is
 -- 🔴 **부분 인덱스(`where run_id is not null`)로 만들지 말 것** — 앱이 이 축으로 upsert하는데
 --    Postgres는 부분 유니크 인덱스를 `ON CONFLICT (컬럼들)`로 **추론하지 못한다**(42P10
 --    "there is no unique or exclusion constraint matching the ON CONFLICT specification").
---    PostgREST는 index_predicate를 붙여주지 않으므로 등하원 찍기가 **전부 실패**한다(2026-08-19 실증, [[#111]]).
+--    PostgREST는 index_predicate를 붙여주지 않으므로 등하원 찍기가 **전부 실패**한다(2026-08-19 실증, [[#113]]).
 --    술어를 빼도 의미는 같다: run_id가 null인 옛 기록(회차 삭제 후)은 NULL끼리 충돌하지 않아
 --    그대로 각자 남는다(같은 실증에서 확인).
 create unique index if not exists shuttle_boardings_day_student_run_uniq

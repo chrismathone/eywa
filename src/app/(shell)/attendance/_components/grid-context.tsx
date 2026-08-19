@@ -16,6 +16,7 @@ import { saveAttendanceCollapsed } from "@/features/attendance/server/prefs-acti
 import { cellKey, classIdOfRow, parseCellKey } from "@/features/attendance/grid/model";
 import { GridStore, type CellState, type GridValue } from "@/features/attendance/grid/store";
 import { countCells, type Counted } from "@/features/attendance/grid/totals";
+import { NOT_MINE_MESSAGE } from "@/features/attendance/cell-display";
 import { COUNTABLE_STATUSES } from "@/features/attendance/session-units";
 import { appendChar, backspace, commitBuffer, copyValueOf, type TypedValue } from "@/features/attendance/grid/typing";
 
@@ -96,6 +97,8 @@ export function GridProvider({
   cols,
   initial,
   slotCounts,
+  notMine,
+  alsoWrites,
   lockBefore,
   initialCollapsed,
   children,
@@ -113,6 +116,16 @@ export function GridProvider({
    *    급여와 다른 숫자를 말한다(totals.ts의 서버·클라 동일 숫자 규약 위반). 그래서 **여기서 미리 곱한다**.
    */
   slotCounts?: Record<string, number>;
+  /**
+   * 이 표에 값이 없고 **남의 교시만** 있는 칸(강사 전체 보기의 빗금 칸) — 입력을 받지 않는다.
+   * 이유·근거는 matrix-table `notMine` 주석. 잠금(7일)과 달리 **날짜가 아니라 칸 단위**다.
+   */
+  notMine?: Record<string, true>;
+  /**
+   * 값이 있으면서 그 날 **남의 교시도 함께 있는** 칸 → 함께 바뀌는 교시 수(matrix-table `alsoWrites`).
+   * 막지는 않는다 — 범위 작업 뒤 몇 칸이 그런지 알려 주기만 한다(칸 숫자가 사정거리를 안 보여주므로).
+   */
+  alsoWrites?: Record<string, number>;
   lockBefore: string | null;
   /** 지난번에 접어 둔 반(계정 설정). 없으면 전부 펼침. */
   initialCollapsed?: string[];
@@ -120,6 +133,24 @@ export function GridProvider({
 }) {
   const [store] = useState(() => new GridStore());
   const [error, setError] = useState<string | null>(null);
+  /**
+   * 정보 알림 — **저장은 됐는데 알아야 하는 것**(사정거리 등). 실패 채널(빨강·클릭해야 사라짐)과
+   * 섞으면 정상 입력마다 빨간 경고가 떠 경보 피로가 된다(적대적 리뷰 2026-08-19). 스스로 사라진다.
+   */
+  // ⚠️ 같은 문구가 연달아 나와도 타이머가 **다시** 돌게 id를 단다(문자열만 담으면 React가 bail-out
+  //    해서 effect가 안 돌고, 연속 입력 중 마지막 알림이 곧바로 사라진다).
+  const [notice, setNotice] = useState<{ text: string; id: number } | null>(null);
+  const noticeSeq = useRef(0);
+  const showNotice = useCallback((text: string) => {
+    noticeSeq.current += 1;
+    setNotice({ text, id: noticeSeq.current });
+  }, []);
+  // 정보 알림은 스스로 사라진다 — 남겨 두면 다음 입력의 결과와 헷갈리고, 지우려고 손이 마우스로 간다.
+  useEffect(() => {
+    if (!notice) return;
+    const t = setTimeout(() => setNotice(null), 5000);
+    return () => clearTimeout(t);
+  }, [notice]);
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => new Set(initialCollapsed ?? []));
   // 되돌리기는 **작업 단위**(칸 하나가 아니라 한 번의 채우기 전체) — 30칸을 채우고 Ctrl+Z를 30번 누르게 하지 않는다.
   const undoRef = useRef<{ key: string; prev: GridValue }[][]>([]);
@@ -167,6 +198,8 @@ export function GridProvider({
   );
 
   const isLocked = useCallback((date: string) => !!lockBefore && date < lockBefore, [lockBefore]);
+  /** 이 칸이 이 표의 몫이 아닌가(빗금 칸) — 잠금과 사유가 달라 메시지도 따로 낸다. */
+  const isNotMine = useCallback((key: string) => !!notMine?.[key], [notMine]);
 
   /**
    * 입력이 멎은 뒤 **한 번만** 서버 데이터를 다시 읽는다.
@@ -222,28 +255,69 @@ export function GridProvider({
     (key: string, val: TypedValue | null) => {
       const p = parseCellKey(key);
       if (!p || isLocked(p.date)) return;
+      // 새 작업이 시작되면 **지난 실패는 걷는다** — 실패 토스트는 클릭해야 사라져서, 30초 전 경고가
+      // 남아 있으면 이번 작업의 정보 알림(사정거리)이 렌더되지 않고 타이머만 돌고 끝난다.
+      setError(null);
+      // 남의 교시만 있는 칸 — 조용히 무시하면 "쳤는데 반응이 없다"가 되므로 사유를 띄운다.
+      if (isNotMine(key)) {
+        setError(NOT_MINE_MESSAGE);
+        return;
+      }
+      const shared = alsoWrites?.[key] ?? 0;
+      // 🔴 **섞인 칸의 단건 삭제는 막는다.** 삭제는 교시를 모른 채 그날 행을 **전부 지우므로**
+      //    (`slot === null`이면 (반·학생·날짜)로 DELETE) 정유진 화면에서 한 칸을 지우면 이다교 교시와
+      //    JJ 기록까지 함께 사라지는데, 이 화면의 숫자는 1이라 무엇을 지웠는지 흔적조차 없다.
+      //    범위 Delete는 빗금 칸만 걸러서 이 경로가 남아 있었다(인계 문서 2026-08-19).
+      //    ⚠️ 문을 닫는 게 아니다 — 반별 보기에선 그 칸이 3으로 보이고 그대로 지울 수 있다(#103).
+      if (val === null && shared > 0) {
+        setError(
+          `이 칸엔 다른 교시 기록 ${shared}건(다른 선생님·자리 JJ·랩실)이 함께 있어 여기서 지우면 그것까지 지워집니다 — 반별 보기에서 지우세요`,
+        );
+        return;
+      }
       const prev = store.valueOf(key);
       undoRef.current.push([{ key, prev }]);
       if (undoRef.current.length > 50) undoRef.current.shift();
       pushCell(key, val, prev);
+      // 값을 **쓰는** 경우엔 막지 않는다(내 교시가 있으니 고칠 권리가 있다) — 대신 사정거리를 말한다.
+      // 칸 숫자가 내 교시만 보여주므로 이 문장이 없으면 "내 것만 바뀐다"고 믿는다.
+      // ⚠️ 이 문장은 **성공 알림**이다 — 실패 채널(빨강)에 실으면 잘 저장된 순간마다 경고가 뜬다.
+      if (shared > 0) showNotice(`같은 날 다른 교시 기록 ${shared}건(다른 선생님·자리)도 함께 바뀝니다`);
     },
-    [store, isLocked, pushCell],
+    [store, isLocked, isNotMine, alsoWrites, pushCell, showNotice],
   );
 
   /** 여러 칸에 같은 값 — 드래그 채우기·Ctrl+Enter·범위 Delete·범위 붙여넣기. */
   const writeMany = useCallback(
     (keys: Set<string>, val: TypedValue | null) => {
+      setError(null); // 위 writeOne과 같은 이유 — 지난 실패가 이번 안내를 삼키지 않게.
       const all = [...keys].map(parseCellKey).filter((p): p is NonNullable<typeof p> => !!p);
-      const targets = all.filter((p) => !isLocked(p.date));
-      // 잠긴 칸을 조용히 빼지 않는다 — 몇 칸이 안 들어갔는지 말해 주지 않으면 채워진 줄 안다.
-      const lockedCount = all.length - targets.length;
+      const unlocked = all.filter((p) => !isLocked(p.date));
+      // 🔴 남의 교시만 있는 칸은 범위 채우기·붙여넣기·**Delete에서도** 뺀다 — 안 빼면 화면에 값이
+      //    없는 채로 남의 기록·자리(JJ)가 통째로 지워지고(그날 모든 교시 DELETE) 화면은 그대로라
+      //    무엇을 지웠는지 아무도 모른다(적대적 리뷰 2026-08-18).
+      const mine = unlocked.filter((p) => !isNotMine(cellKey(p.row, p.date)));
+      // 🔴 **삭제만은 섞인 칸도 뺀다** — 단건 경로와 같은 이유다(지우기엔 교시 축이 없어 그날 행이
+      //    통째로 사라진다). 안 빼면 "1칸 선택하면 거절, 2칸 선택하면 실행"이라는 모순이 남고,
+      //    그 사이 남의 교시·자리(JJ) 기록이 흔적 없이 지워진다(적대적 리뷰 2026-08-19).
+      //    ⚠️ 값을 **쓰는** 범위 작업은 그대로 통과한다(고칠 권리가 있는 칸이다) — 아래에서 사정거리만 알린다.
+      const targets = val === null ? mine.filter((p) => !alsoWrites?.[cellKey(p.row, p.date)]) : mine;
+      // 건너뛴 칸을 조용히 빼지 않는다 — 몇 칸이 안 들어갔는지 말해 주지 않으면 채워진 줄 안다.
+      const lockedCount = all.length - unlocked.length;
+      const notMineCount = unlocked.length - mine.length;
+      const mixedCount = mine.length - targets.length;
+      const skipNote = [
+        lockedCount > 0 ? `${lockedCount}칸은 수정 기간(7일)이 지나` : null,
+        notMineCount > 0 ? `${notMineCount}칸은 선생님 교시가 없어` : null,
+        mixedCount > 0 ? `${mixedCount}칸은 다른 교시 기록이 함께 있어(반별 보기에서 지우세요)` : null,
+      ].filter(Boolean);
       if (targets.length === 0) {
-        if (lockedCount > 0) setError(`${lockedCount}칸은 수정 기간(7일)이 지나 고칠 수 없습니다`);
+        if (skipNote.length > 0) setError(`${skipNote.join(" · ")} 건너뛰었습니다`);
         return;
       }
       if (targets.length === 1) {
         writeOne(cellKey(targets[0]!.row, targets[0]!.date), val);
-        if (lockedCount > 0) setError(`${lockedCount}칸은 수정 기간(7일)이 지나 건너뛰었습니다`);
+        if (skipNote.length > 0) setError(`${skipNote.join(" · ")} 건너뛰었습니다`);
         return;
       }
       const prevs = targets.map(
@@ -265,11 +339,26 @@ export function GridProvider({
           return;
         }
         scheduleRefresh();
-        const skipped = res.blocked + lockedCount;
-        if (skipped > 0) setError(`${skipped}칸은 수정 기간이 지났거나 담당 반이 아니어서 건너뛰었습니다`);
+        const skipped = res.blocked + lockedCount + notMineCount;
+        // 🔴 함께 바뀐 남의 교시를 **말해 준다** — 칸 숫자는 내 교시만 보여주므로 사용자는 "내 것만
+        //    지웠다"고 믿는다. 저장은 그날 모든 교시에 간다(save-targets ①).
+        const shared = targets.filter((t) => alsoWrites?.[cellKey(t.row, t.date)]).length;
+        // 🔴 `mixedCount`도 여기서 말한다 — skipNote는 targets가 0·1일 때만 뜨므로, 2칸 이상 남으면
+        //    섞인 칸이 **조용히** 빠졌다(5칸 잡아 지우면 3칸만 지워지는데 화면은 무음).
+        const failNotes = [
+          skipped > 0 ? `${skipped}칸은 수정 기간이 지났거나 담당 반·선생님 교시가 아니어서 건너뛰었습니다` : null,
+          mixedCount > 0 ? `${mixedCount}칸은 다른 교시 기록이 함께 있어 안 지웠습니다 — 반별 보기에서 지우세요` : null,
+        ].filter(Boolean);
+        if (failNotes.length > 0) setError(failNotes.join(" · "));
+        // ⚠️ `shared`는 서버가 반려한 칸(res.blocked)까지 세므로, 반려가 섞였으면 단정하지 않는다.
+        if (shared > 0) {
+          showNotice(
+            `${shared}칸은 같은 날 다른 교시 기록(다른 선생님·자리)도 함께 바뀌${res.blocked > 0 ? "었을 수 있습니다" : "었습니다"}`,
+          );
+        }
       });
     },
-    [store, isLocked, writeOne, scheduleRefresh, toValue],
+    [store, isLocked, isNotMine, alsoWrites, writeOne, scheduleRefresh, toValue, showNotice],
   );
 
   /** 버퍼 확정 — 범위가 잡혀 있으면 전체에. 확정할 수 없는 입력이면 아무 일도 없다. */
@@ -364,6 +453,14 @@ export function GridProvider({
       }
       if ((e.key >= "0" && e.key <= "9") || e.key === "." || e.key === ",") {
         e.preventDefault();
+        // 빗금 칸은 버퍼를 열지도 않는다 — 열면 숫자가 보였다가 확정 단계에서 거절돼 "쳤는데 사라졌다"가 된다.
+        // 🔴 단, **범위가 잡혀 있으면 막지 않는다.** 앵커(활성 칸)만 보고 거절하면 함께 선택한 정상 칸까지
+        //    통째로 못 친다 — 한 행을 왼쪽부터 끄는 흔한 조작에서 앵커가 빗금이기 쉽다(영어 빗금 887칸).
+        //    범위는 `writeMany`가 빗금만 걸러내고 "N칸은 선생님 교시가 없어 건너뛰었습니다"로 알린다.
+        if (sel.size <= 1 && isNotMine(key)) {
+          setError(NOT_MINE_MESSAGE);
+          return;
+        }
         store.setBuffer(appendChar(store.buffer, e.key));
         return;
       }
@@ -417,7 +514,7 @@ export function GridProvider({
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [store, commit, writeMany, writeOne, pushCell]);
+  }, [store, commit, writeMany, writeOne, pushCell, isNotMine]);
 
   const ctx = useMemo<Ctx>(
     () => ({
@@ -444,13 +541,30 @@ export function GridProvider({
   return (
     <GridCtx.Provider value={ctx}>
       {children}
-      {error ? (
-        <div
-          role="alert"
-          onClick={() => setError(null)}
-          className="bg-danger text-white fixed bottom-4 left-1/2 z-50 -translate-x-1/2 cursor-pointer rounded-lg px-3 py-2 text-xs shadow-lg"
-        >
-          {error}
+      {error || notice ? (
+        <div className="fixed bottom-4 left-1/2 z-50 flex -translate-x-1/2 flex-col items-center gap-1">
+          {/* 실패·거절 — 사람이 읽고 지워야 한다(자동으로 사라지면 왜 안 됐는지 못 본다). */}
+          {error ? (
+            <div
+              role="alert"
+              onClick={() => setError(null)}
+              className="bg-danger cursor-pointer rounded-lg px-3 py-2 text-xs text-white shadow-lg"
+            >
+              {error}
+            </div>
+          ) : null}
+          {/* 정보(성공 + 사정거리) — 의미색 캐논의 caution=amber. 스스로 사라진다. */}
+          {/* 🔴 실패가 떠 있으면 **성공 알림은 감춘다** — 서버가 거절했는데 "함께 바뀝니다"가 옆에 남으면
+              화면 두 곳이 반대로 말한다(채널을 가르며 생긴 부작용). 타이머는 그대로 돌아 스스로 사라진다. */}
+          {notice && !error ? (
+            <div
+              role="status"
+              onClick={() => setNotice(null)}
+              className="bg-amber cursor-pointer rounded-lg px-3 py-2 text-xs text-white shadow-lg"
+            >
+              {notice.text}
+            </div>
+          ) : null}
         </div>
       ) : null}
     </GridCtx.Provider>

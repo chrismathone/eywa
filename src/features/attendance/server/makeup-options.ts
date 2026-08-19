@@ -5,7 +5,7 @@ import "server-only";
  *
  * 🔴 **수강 여부로 거르지 않는다.** 반을 옮긴 학생의 옛 반 결석이 곧 이월 보강 대상이므로, 출결 기록
  *    자체를 후보로 삼는다. 지금 수강 중이 아닌 반은 화면에 '이전 반'으로 밝힌다(고르는 사람이 알아야 한다).
- * ⚠️ 창을 90일로 둔다 — 더 넓히면 고를 게 너무 많고, 좁히면 방학 낀 이월이 잘린다.
+ * ⚠️ 창은 **1년**이다(아래 WINDOW_DAYS) — 90일로 좁혔더니 실측 이월 후보 249쌍 중 174쌍이 창 밖이었다.
  * ⚠️ 결석만이 아니라 **공결(excused)** 도 넣는다 — 사유 있는 결석도 보강 대상이다.
  */
 
@@ -34,7 +34,7 @@ export async function getMakeupAbsenceOptions(
       // ⚠️ FK 힌트 이름은 **그 표의 실제 제약 이름**이다(#94). drizzle 명명이라 `_fkey`가 아니라
       //    `attendance_records_class_id_classes_id_fk` — 옆 파일(lesson_reports)의 이름을 베끼면
       //    PostgREST가 400(PGRST200)을 뱉고 목록이 **언제나 비어** "결석 기록이 없습니다"로 위장한다.
-      .select("class_id, session_date, note, classes!attendance_records_class_id_classes_id_fk(class_name)")
+      .select("class_id, session_date, note, slot_start, classes!attendance_records_class_id_classes_id_fk(class_name)")
       .eq("student_id", studentId)
       .in("status", ["absent", "excused"])
       .gte("session_date", from)
@@ -59,6 +59,8 @@ export async function getMakeupAbsenceOptions(
       date: String(r.session_date),
       // 이미 보강으로 메운 결석은 그 칸 메모에 표시가 남는다 — 목록에서 '보강 완료'로 가른다.
       note: (r.note as string | null) ?? null,
+      // 교시 — 하루 여러 교시를 도는 반에서 어느 수업의 결석인지 화면이 밝힌다(라벨은 순수부에서).
+      slotStart: (r.slot_start as string | null) ?? null,
     };
   });
   return buildAbsenceOptions(raw, makeupDate, current);

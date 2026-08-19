@@ -264,3 +264,40 @@ describe("보강 시수 — 강사가 고칠 수 있다", () => {
     expect(screen.getByText(/0보다 큰 숫자로 적어 주세요/)).toBeInTheDocument();
   });
 });
+
+/**
+ * 교시 — 🔴 영어(ECS)는 **하루 한 교시만 도는 반이 없다**(실측 2026-08-19: 활성 반-요일 115개 전부 2~4교시).
+ * 교시를 안 넘기면 그 칸이 "그날 전체"로 저장되고 주간 시트가 **첫 교시**에 붙인다.
+ */
+describe("어느 교시에 왔는가 (교시 축 화면만)", () => {
+  const slots = [
+    { start: "16:20", label: "1교시 16:20" },
+    { start: "17:20", label: "2교시 17:20" },
+  ];
+
+  it("교시 선택지를 안 넘기면 묻지 않는다 — 없는 질문을 만들지 않는다(원스크린·반별 출석부)", () => {
+    setup({ candidates: [] });
+    expect(screen.queryByText("어느 교시에 왔나요?")).toBeNull();
+  });
+
+  it("🔴 교시를 고르기 전에는 확인이 막힌다 — 첫 교시로 조용히 밀어 넣지 않는다", async () => {
+    const { onConfirm } = setup({ candidates: [], slotOptions: slots });
+
+    expect(screen.getByText("어느 교시에 왔나요?")).toBeTruthy();
+    const confirm = screen.getByRole("button", { name: "보강 추가" });
+    expect(confirm).toHaveProperty("disabled", true);
+
+    await userEvent.click(screen.getByRole("radio", { name: "2교시 17:20" }));
+    await userEvent.click(screen.getByRole("button", { name: "보강 추가" }));
+
+    expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({ slotStart: "17:20" }));
+  });
+
+  it("교시가 하나뿐이면 고를 것이 없으므로 자동 확정된다", async () => {
+    const { onConfirm } = setup({ candidates: [], slotOptions: [slots[0]!] });
+
+    await userEvent.click(screen.getByRole("button", { name: "보강 추가" }));
+
+    expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({ slotStart: "16:20" }));
+  });
+});
