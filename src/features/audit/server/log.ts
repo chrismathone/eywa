@@ -83,6 +83,8 @@ export const AUDIT_ACTIONS = {
   approval_submit: "전자결재 기안",
   approval_decide: "전자결재 처리",
   approval_withdraw: "전자결재 회수",
+  approval_comment: "전자결재 댓글",
+  approval_comment_delete: "전자결재 댓글 삭제",
   // 학생 기록 변경 전수 감사(2026-08-18) — "퇴원을 누가 했는지 역검수가 안 된다"(원장). 상태 전환·정보
   // 수정·삭제·수강 종료·관리 도구 일괄 처리까지 **학생 레코드를 바꾸는 모든 경로**가 actor를 남긴다.
   student_create: "학생 등록",

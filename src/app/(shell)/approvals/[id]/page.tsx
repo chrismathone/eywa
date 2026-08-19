@@ -6,8 +6,16 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { sanitizeRichHtml } from "@/lib/html/sanitize";
 import { APPROVAL_FORM_LABEL, STEP_DECISION_LABEL, docStatusLabel } from "@/features/approvals/types";
 import { formatLeaveDays, LEAVE_KIND_LABEL } from "@/features/leave/request-days";
-import { getApprovalDoc, isMyTurn, needsMyDeferredConfirm } from "@/features/approvals/server/queries";
+import {
+  describeLoadError,
+  getApprovalComments,
+  getApprovalDoc,
+  isMyTurn,
+  needsMyDeferredConfirm,
+  type ApprovalCommentsBox,
+} from "@/features/approvals/server/queries";
 import { ApprovalStamps } from "./_stamps";
+import { CommentDeleteForm, CommentForm } from "./_comments";
 import { DecidePanel, DeferredConfirmPanel, WithdrawPanel } from "./_decide-panel";
 
 export const metadata = { title: "결재 문서 — eywa" };
@@ -126,7 +134,13 @@ export default async function ApprovalDocPage({ params }: { params: Promise<{ id
   if (!user) redirect("/login");
   const { id } = await params;
 
-  const doc = await getApprovalDoc(id).catch(() => null);
+  // 문서와 댓글은 서로 독립 조회 — 병렬(B4). 댓글 실패는 문서를 못 죽인다(섹션 안 배너로만).
+  const [doc, commentsBox] = await Promise.all([
+    getApprovalDoc(id).catch(() => null),
+    getApprovalComments(id).catch(
+      (e): ApprovalCommentsBox => ({ ready: true, comments: [], loadError: describeLoadError(e) }),
+    ),
+  ]);
   if (!doc) notFound();
 
   const status = docStatusLabel(doc.status);
@@ -232,7 +246,9 @@ export default async function ApprovalDocPage({ params }: { params: Promise<{ id
 
         {/* ③ 결재란 — 원형 도장 표(참조 행 포함). */}
         {/* '결재' 칩은 실제로 처리할 수 있는 사람(결재 패널이 뜬 사람)에게만 버튼이다 —
-            기안자·참관자에게 버튼처럼 보이면 "왜 눌러도 안 되지"가 된다(원장 2026-08-18 제보). */}
+            기안자·참관자에게 버튼처럼 보이면 "왜 눌러도 안 되지"가 된다(원장 2026-08-18 제보).
+            ⚠️ actionable=true는 아래 DecidePanel이 **함께 마운트되는 페이지에서만** 넘길 것 —
+            칩은 window 이벤트로 그 패널의 결재 창을 연다(리스너가 없으면 조용히 아무 일도 없다). */}
         <ApprovalStamps doc={doc} actionable={decidePanel !== null} />
 
         {leave ? (
@@ -386,6 +402,59 @@ export default async function ApprovalDocPage({ params }: { params: Promise<{ id
             ))}
           </ol>
         </section>
+
+        {/* 댓글(0227a) — 하이웍스 개편 전자결재의 '댓글': 전결 사유·보충 설명을 참여자와 공유한다.
+            결재 의견(도장에 붙는 처리 의견)과 별개. ready=false(0227a 미적용)면 섹션 자체를 숨긴다. */}
+        {commentsBox.ready ? (
+          <section className="border-line space-y-2.5 border-t pt-4">
+            <p className="micro">
+              댓글
+              {commentsBox.comments.length > 0 ? (
+                // 200 = 조회 상한 — 상한에 닿은 수를 그대로 찍으면 얼어붙은 거짓 건수가 된다([[#89]]).
+                <span className="num ml-1">
+                  {commentsBox.comments.length >= 200 ? "200+" : commentsBox.comments.length}
+                </span>
+              ) : null}
+            </p>
+            {commentsBox.loadError ? (
+              // 실패를 빈 목록으로 위장하지 않는다 — 한글 요약 + 원문은 툴팁([[#109]] 규약).
+              <p className="text-danger text-xs" title={commentsBox.loadError.raw}>
+                {commentsBox.loadError.summary}
+              </p>
+            ) : (
+              <>
+                {commentsBox.comments.length > 0 ? (
+                  <ul className="space-y-2">
+                    {commentsBox.comments.map((c) => (
+                      <li key={c.id} className="border-line rounded-lg border px-3 py-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-[12px] leading-tight">
+                            <b className="text-foreground">{c.authorName}</b>
+                            {c.authorJobTitle ? (
+                              <span className="text-text-faint ml-1">{c.authorJobTitle}</span>
+                            ) : null}
+                            <span className="num text-text-faint ml-2 text-[11px]">
+                              {fmtTime(c.createdAt)}
+                            </span>
+                          </p>
+                          {c.authorId === user.id ? <CommentDeleteForm commentId={c.id} /> : null}
+                        </div>
+                        <p className="text-foreground mt-1 text-[13px] break-keep whitespace-pre-wrap">
+                          {c.body}
+                        </p>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-text-faint text-xs">
+                    아직 댓글이 없습니다 — 전결 사유·보충 설명을 참여자와 공유해 보세요.
+                  </p>
+                )}
+                <CommentForm documentId={doc.id} />
+              </>
+            )}
+          </section>
+        ) : null}
       </article>
 
       {deferredConfirm ? <DeferredConfirmPanel documentId={doc.id} /> : null}
