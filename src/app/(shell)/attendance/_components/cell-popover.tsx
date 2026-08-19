@@ -35,6 +35,7 @@ export function CellPopover({
   note,
   locked,
   otherCount = 0,
+  sharedDelete = false,
   anchor,
   onClose,
   onSaved,
@@ -52,6 +53,15 @@ export function CellPopover({
    * 0보다 크면 그 날 기록은 **있다**(남의 교시 것). 이걸 안 보면 아래 안내가 사실과 반대로 나간다.
    */
   otherCount?: number;
+  /**
+   * 이 칸을 **지우면 남의 교시·자리 기록까지 사라지나** — 격자의 `alsoWrites`와 같은 정의
+   * (서버가 준 값이 있고 + 이 표가 안 세는 교시도 있는 칸).
+   *
+   * 🔴 격자에만 가드를 걸면 이 팝오버가 그 가드를 통째로 우회한다 — 여긴 서버 액션을 **직접** 부른다.
+   *    한 레코드의 모든 표면이 같은 게이트를 통과해야 한다(#77). 잠금(7일)과 달리 이 규칙은
+   *    `locked`로 표현되지 않아(값이 있는 칸이라 편집은 열려 있다) 따로 받는다.
+   */
+  sharedDelete?: boolean;
   anchor: PopoverAnchor;
   onClose: () => void;
   onSaved: (next: { status: AttendanceStatus | null; units: number | null; note: string }) => void;
@@ -246,7 +256,7 @@ export function CellPopover({
                 저장
               </button>
             </div>
-            {status ? (
+            {status && !sharedDelete ? (
               <button
                 type="button"
                 onClick={() => apply(null, false)}
@@ -254,6 +264,13 @@ export function CellPopover({
               >
                 지우기
               </button>
+            ) : null}
+            {/* 지우기는 교시를 못 가린다(그날 행이 통째로 삭제된다) — 격자와 **같은 문장**으로 보낸다. */}
+            {status && sharedDelete ? (
+              <p className="text-text-dim border-t px-2 py-1 text-[10px] leading-tight break-keep">
+                이 칸엔 다른 교시 기록(다른 선생님·자리 JJ·랩실)이 함께 있어 여기서는 못 지웁니다 — 반별 보기에서
+                지우세요
+              </p>
             ) : null}
           </>
         )}

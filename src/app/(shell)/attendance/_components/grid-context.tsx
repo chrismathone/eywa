@@ -137,7 +137,14 @@ export function GridProvider({
    * 정보 알림 — **저장은 됐는데 알아야 하는 것**(사정거리 등). 실패 채널(빨강·클릭해야 사라짐)과
    * 섞으면 정상 입력마다 빨간 경고가 떠 경보 피로가 된다(적대적 리뷰 2026-08-19). 스스로 사라진다.
    */
-  const [notice, setNotice] = useState<string | null>(null);
+  // ⚠️ 같은 문구가 연달아 나와도 타이머가 **다시** 돌게 id를 단다(문자열만 담으면 React가 bail-out
+  //    해서 effect가 안 돌고, 연속 입력 중 마지막 알림이 곧바로 사라진다).
+  const [notice, setNotice] = useState<{ text: string; id: number } | null>(null);
+  const noticeSeq = useRef(0);
+  const showNotice = useCallback((text: string) => {
+    noticeSeq.current += 1;
+    setNotice({ text, id: noticeSeq.current });
+  }, []);
   // 정보 알림은 스스로 사라진다 — 남겨 두면 다음 입력의 결과와 헷갈리고, 지우려고 손이 마우스로 간다.
   useEffect(() => {
     if (!notice) return;
@@ -272,9 +279,9 @@ export function GridProvider({
       // 값을 **쓰는** 경우엔 막지 않는다(내 교시가 있으니 고칠 권리가 있다) — 대신 사정거리를 말한다.
       // 칸 숫자가 내 교시만 보여주므로 이 문장이 없으면 "내 것만 바뀐다"고 믿는다.
       // ⚠️ 이 문장은 **성공 알림**이다 — 실패 채널(빨강)에 실으면 잘 저장된 순간마다 경고가 뜬다.
-      if (shared > 0) setNotice(`같은 날 다른 교시 기록 ${shared}건(다른 선생님·자리)도 함께 바뀝니다`);
+      if (shared > 0) showNotice(`같은 날 다른 교시 기록 ${shared}건(다른 선생님·자리)도 함께 바뀝니다`);
     },
-    [store, isLocked, isNotMine, alsoWrites, pushCell],
+    [store, isLocked, isNotMine, alsoWrites, pushCell, showNotice],
   );
 
   /** 여러 칸에 같은 값 — 드래그 채우기·Ctrl+Enter·범위 Delete·범위 붙여넣기. */
@@ -332,16 +339,22 @@ export function GridProvider({
         // 🔴 함께 바뀐 남의 교시를 **말해 준다** — 칸 숫자는 내 교시만 보여주므로 사용자는 "내 것만
         //    지웠다"고 믿는다. 저장은 그날 모든 교시에 간다(save-targets ①).
         const shared = targets.filter((t) => alsoWrites?.[cellKey(t.row, t.date)]).length;
-        if (skipped > 0) setError(`${skipped}칸은 수정 기간이 지났거나 담당 반·선생님 교시가 아니어서 건너뛰었습니다`);
+        // 🔴 `mixedCount`도 여기서 말한다 — skipNote는 targets가 0·1일 때만 뜨므로, 2칸 이상 남으면
+        //    섞인 칸이 **조용히** 빠졌다(5칸 잡아 지우면 3칸만 지워지는데 화면은 무음).
+        const failNotes = [
+          skipped > 0 ? `${skipped}칸은 수정 기간이 지났거나 담당 반·선생님 교시가 아니어서 건너뛰었습니다` : null,
+          mixedCount > 0 ? `${mixedCount}칸은 다른 교시 기록이 함께 있어 안 지웠습니다 — 반별 보기에서 지우세요` : null,
+        ].filter(Boolean);
+        if (failNotes.length > 0) setError(failNotes.join(" · "));
         // ⚠️ `shared`는 서버가 반려한 칸(res.blocked)까지 세므로, 반려가 섞였으면 단정하지 않는다.
         if (shared > 0) {
-          setNotice(
+          showNotice(
             `${shared}칸은 같은 날 다른 교시 기록(다른 선생님·자리)도 함께 바뀌${res.blocked > 0 ? "었을 수 있습니다" : "었습니다"}`,
           );
         }
       });
     },
-    [store, isLocked, isNotMine, alsoWrites, writeOne, scheduleRefresh, toValue],
+    [store, isLocked, isNotMine, alsoWrites, writeOne, scheduleRefresh, toValue, showNotice],
   );
 
   /** 버퍼 확정 — 범위가 잡혀 있으면 전체에. 확정할 수 없는 입력이면 아무 일도 없다. */
@@ -537,13 +550,15 @@ export function GridProvider({
             </div>
           ) : null}
           {/* 정보(성공 + 사정거리) — 의미색 캐논의 caution=amber. 스스로 사라진다. */}
-          {notice ? (
+          {/* 🔴 실패가 떠 있으면 **성공 알림은 감춘다** — 서버가 거절했는데 "함께 바뀝니다"가 옆에 남으면
+              화면 두 곳이 반대로 말한다(채널을 가르며 생긴 부작용). 타이머는 그대로 돌아 스스로 사라진다. */}
+          {notice && !error ? (
             <div
               role="status"
               onClick={() => setNotice(null)}
               className="bg-amber cursor-pointer rounded-lg px-3 py-2 text-xs text-white shadow-lg"
             >
-              {notice}
+              {notice.text}
             </div>
           ) : null}
         </div>

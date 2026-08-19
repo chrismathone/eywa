@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { AttendanceMatrix } from "@/features/attendance/server/queries";
 import { rollupDay, type SlotMark } from "@/features/attendance/cell-display";
@@ -415,6 +415,60 @@ describe("세지 않는 교시(자리·남의 교시)", () => {
     // 빗금 칸만 빠지고 나머지 한 칸엔 실제로 저장된다 + 건너뛴 사실을 알린다.
     expect(setAttendanceCell).toHaveBeenCalledTimes(1);
     expect(container.textContent).toContain("건너뛰었습니다");
+  });
+
+  it("🔴 팝오버 '지우기'도 **같은 게이트**를 지난다 — 격자만 막으면 여기로 새어 나간다(#77)", () => {
+    const { container } = renderInGrid(
+      [{ slot: "17:20:00", status: "present", units: null }],
+      [{ slot: "18:20:00", status: "present", units: null }],
+    );
+    fireEvent.contextMenu(cellOf(container)); // 우클릭 = 상세 팝오버
+    expect(screen.getByRole("dialog")).toBeTruthy();
+    expect(screen.queryByText("지우기")).toBeNull();
+    expect(container.textContent).toContain("여기서는 못 지웁니다");
+  });
+
+  it("🔴 범위 Delete가 섞인 칸을 뺐으면 **말해 준다** — 조용히 빠지면 다 지운 줄 안다", async () => {
+    const actions = await import("@/features/attendance/server/actions");
+    vi.mocked(actions.setAttendanceRange).mockClear();
+    const D2 = "2026-07-02";
+    const m = matrix([
+      { id: S1, name: "김근호", grade: "중1", school: "경명여중", enrolledAt: null, attendDows: [3], spans: [], badges: [] },
+      { id: S2, name: "박서준", grade: "중2", school: "대구중", enrolledAt: null, attendDows: [3], spans: [], badges: [] },
+    ]);
+    // 네 칸 모두 값이 있고, S1의 7/1만 남의 교시가 함께 있다(= 지우면 그것까지 지워지는 칸).
+    m.marks = {
+      [S1]: { [D1]: "present", [D2]: "present" },
+      [S2]: { [D1]: "present", [D2]: "present" },
+    } as never;
+    m.ghosts = { [S1]: { [D1]: [{ slot: "18:20:00", status: "present", units: null }] } };
+    const groups = [{ ...GROUP, matrix: m }];
+    const ordered = [
+      { classId: C, studentId: S1 },
+      { classId: C, studentId: S2 },
+    ];
+    const src = buildGridSource(groups, DAYS, ordered);
+    const { container } = render(
+      <GridProvider
+        rows={src.rows}
+        cols={src.cols}
+        initial={src.initial}
+        slotCounts={src.slotCounts}
+        notMine={src.notMine}
+        alsoWrites={src.alsoWrites}
+        lockBefore={null}
+      >
+        <MatrixTable groups={groups} days={DAYS} holidays={{}} showGroups ordered={ordered} />
+      </GridProvider>,
+    );
+    const first = container.querySelectorAll<HTMLElement>(`[data-cell-key$="${D1}"]`)[0]!;
+    fireEvent.mouseDown(first, { button: 0 });
+    fireEvent.keyDown(first, { key: "ArrowRight", shiftKey: true });
+    fireEvent.keyDown(first, { key: "ArrowDown", shiftKey: true });
+    fireEvent.keyDown(first, { key: "Delete" });
+    // 섞인 칸 1개는 빠지고 나머지 3칸만 지운다 — 그리고 그 사실을 알린다.
+    expect(vi.mocked(actions.setAttendanceRange).mock.calls[0]![0]!.cells).toHaveLength(3);
+    await waitFor(() => expect(container.textContent).toContain("안 지웠습니다"));
   });
 
   it("세지 않는 교시가 없으면 종전 그대로(빗금 없음)", () => {

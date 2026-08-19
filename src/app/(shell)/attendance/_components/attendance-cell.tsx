@@ -292,6 +292,7 @@ export function AttendanceCell({
           note={noteVal || ghostNote}
           locked={locked ?? null}
           otherCount={otherSlots?.length ?? 0}
+          sharedDelete={initialStatus !== null && (otherSlots?.length ?? 0) > 0}
           anchor={popover}
           onClose={() => setPopover(null)}
           onSaved={(next) => {
