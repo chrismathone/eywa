@@ -425,14 +425,14 @@ export type ApprovalComment = {
 };
 
 export type ApprovalCommentsBox = {
-  /** false = 0226a 미적용(표 없음) — 섹션 자체를 그리지 않는다([[#95]] expand/contract). */
+  /** false = 0227a 미적용(표 없음) — 섹션 자체를 그리지 않는다([[#95]] expand/contract). */
   ready: boolean;
   comments: ApprovalComment[];
   loadError: LeaveLoadError | null;
 };
 
 /**
- * 문서 댓글(하이웍스 개편 전자결재 '댓글' 대응, 0226a) — 참여자가 전결 사유 등을 공유하는 대화형
+ * 문서 댓글(하이웍스 개편 전자결재 '댓글' 대응, 0227a) — 참여자가 전결 사유 등을 공유하는 대화형
  * 코멘트. 결재 의견(approval_steps.comment)과 별개. 열람 자격은 RLS(auth_can_read_approval_doc).
  */
 export async function getApprovalComments(documentId: string): Promise<ApprovalCommentsBox> {

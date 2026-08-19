@@ -902,7 +902,7 @@ export async function withdrawDocument(
   return { ok: true, notice: "기안을 회수했습니다" };
 }
 
-// ── 문서 댓글(하이웍스 개편 전자결재 '댓글', 0226a) ──────────────────────────
+// ── 문서 댓글(하이웍스 개편 전자결재 '댓글', 0227a) ──────────────────────────
 
 /**
  * 댓글 등록 — 참여자(기안자·결재선·참조·원장·super_admin)가 전결 사유 등 보충 내용을 공유한다
@@ -953,7 +953,7 @@ export async function addApprovalComment(
   if (error) {
     return {
       error: isMissingRelation(error)
-        ? "댓글 표가 아직 준비되지 않았습니다(마이그레이션 0226a 적용 필요)"
+        ? "댓글 표가 아직 준비되지 않았습니다(마이그레이션 0227a 적용 필요)"
         : `댓글 저장 실패 — ${error.message}`,
     };
   }

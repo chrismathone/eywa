@@ -403,8 +403,8 @@ export default async function ApprovalDocPage({ params }: { params: Promise<{ id
           </ol>
         </section>
 
-        {/* 댓글(0226a) — 하이웍스 개편 전자결재의 '댓글': 전결 사유·보충 설명을 참여자와 공유한다.
-            결재 의견(도장에 붙는 처리 의견)과 별개. ready=false(0226a 미적용)면 섹션 자체를 숨긴다. */}
+        {/* 댓글(0227a) — 하이웍스 개편 전자결재의 '댓글': 전결 사유·보충 설명을 참여자와 공유한다.
+            결재 의견(도장에 붙는 처리 의견)과 별개. ready=false(0227a 미적용)면 섹션 자체를 숨긴다. */}
         {commentsBox.ready ? (
           <section className="border-line space-y-2.5 border-t pt-4">
             <p className="micro">

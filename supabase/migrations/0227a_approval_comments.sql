@@ -1,4 +1,4 @@
--- 0226a — 전자결재 문서 댓글 (하이웍스 개편 전자결재 매뉴얼의 '댓글' 대응, 원장 2026-08-19)
+-- 0227a — 전자결재 문서 댓글 (하이웍스 개편 전자결재 매뉴얼의 '댓글' 대응, 원장 2026-08-19)
 --
 -- 원장: "결재 밑에 댓글처럼 있어서 전결 이유나 여러가지 공유하는거같음. 이것도 만들어줘."
 -- 문서 아래에 참여자(기안자·결재선·참조·원장)가 짧은 글을 남겨 전결 사유·보충 설명을 공유한다.
@@ -23,7 +23,7 @@ create table if not exists public.approval_comments (
 );
 
 comment on table public.approval_comments is
-  '전자결재 문서 댓글(하이웍스 개편 전자결재 댓글 대응) — 참여자가 전결 사유 등 보충 내용을 공유. 결재 의견(approval_steps.comment)과 별개. 0226a';
+  '전자결재 문서 댓글(하이웍스 개편 전자결재 댓글 대응) — 참여자가 전결 사유 등 보충 내용을 공유. 결재 의견(approval_steps.comment)과 별개. 0227a';
 
 create index if not exists approval_comments_document_idx
   on public.approval_comments (document_id, created_at);
