@@ -61,7 +61,7 @@ export function recallBlockReason(row: RecallableRow): string | null {
   if (!s) return "아직 학부모에게 발송되지 않은 보고서입니다";
   if (s === "success" && !row.shareToken)
     return "게시글을 특정할 공유 링크가 없어 자동 회수할 수 없습니다 — ClassNote에서 직접 삭제하세요";
-  // failed·too_old·name_conflict·blocked_shared·subject_off·absent = 애초에 게시가 안 된 상태.
+  // failed·too_old·name_conflict·blocked_shared·subject_off·absent·report_optout = 애초에 게시가 안 된 상태.
   return "학부모 게시판에 올라가지 않아 회수할 것이 없습니다";
 }
 

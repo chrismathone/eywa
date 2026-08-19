@@ -8,7 +8,7 @@ import { SortableTh } from "@/components/table/sortable-th";
 import { compareKo, sortRows, type SortState } from "@/lib/table/sort";
 import { buildGridRows } from "../grid";
 import { TONE_SOFT } from "@/lib/design/semantic-color";
-import { rowSendStatus, summarizeSend } from "../status";
+import { rowSendStatus, summarizeSend, type SendStatus } from "../status";
 import type { OneScreenStudent } from "../types";
 import { classnoteBadge, type SubjectReport } from "./report-card";
 
@@ -18,17 +18,20 @@ import { classnoteBadge, type SubjectReport } from "./report-card";
  * ⚠️ 발송완료는 v4에서 primary(네이비) → positive(그린): "끝났다"는 앱 전역이 그린이라(완납·승인·출석)
  *    여기만 네이비면 같은 뜻이 화면마다 다른 색이 된다.
  */
-const STATUS_META: Record<"sent" | "draft" | "todo", { label: string; cls: string }> = {
+const STATUS_META: Record<SendStatus, { label: string; cls: string }> = {
   sent: { label: "발송완료", cls: TONE_SOFT.positive },
   draft: { label: "작성중", cls: TONE_SOFT.caution },
   todo: { label: "미작성", cls: TONE_SOFT.critical },
+  // '수업보고서 미발송' 반(0174a) — 보낼 일이 없는 행이라 **위험(빨강)이 아니라 종료(중립)**다(2026-08-19).
+  excluded: { label: "미발송 반", cls: TONE_SOFT.inert },
 };
 
 // 정렬 우선순위 — '보고서' 열은 가나다가 아니라 **급한 순**(미작성 먼저)이 유용하다.
-const STATUS_ORDER: Record<"sent" | "draft" | "todo", number> = {
+const STATUS_ORDER: Record<SendStatus, number> = {
   todo: 0,
   draft: 1,
   sent: 2,
+  excluded: 3, // 할 일이 아니라 맨 뒤
 };
 
 type SortKey = "student" | "progress" | "report" | "classnote" | "views";
@@ -133,6 +136,8 @@ export function StatusBoard({
         />
         <span className="text-text-faint ml-auto text-[12px]">
           아직 안 보낸 {sum.unsent} / 전체 {sum.total}
+          {/* 분모에서 뺀 행을 밝힌다 — 안 밝히면 "학생은 8명인데 전체가 5?"가 된다. */}
+          {sum.excluded > 0 ? ` · 미발송 반 ${sum.excluded} 제외` : ""}
         </span>
       </div>
 
@@ -166,13 +171,11 @@ export function StatusBoard({
               한 표에 tbody 여러 개는 표준이며, 반 머리행을 그 안에 자연스럽게 넣을 수 있다. */}
           {orderedGroups.map(([className, groupRows]) => {
             const inGroup = sortRows(groupRows, sort, valueOf);
-            const todo = groupRows.filter(
-              (r) =>
-                rowSendStatus(
-                  reports[r.student.id]?.[r.subject.name],
-                  r.subject,
-                ) === "todo",
-            ).length;
+            const statuses = groupRows.map((r) =>
+              rowSendStatus(reports[r.student.id]?.[r.subject.name], r.subject),
+            );
+            const todo = statuses.filter((s) => s === "todo").length;
+            const allExcluded = statuses.length > 0 && statuses.every((s) => s === "excluded");
             return (
               <tbody key={className}>
                 {/* 반 머리행 — 반 이름 + 인원 + 그 반의 미작성 수(급한 반이 바로 보이게). */}
@@ -188,6 +191,11 @@ export function StatusBoard({
                     {todo > 0 ? (
                       <span className="text-danger ml-2 text-[11px] font-bold">
                         미작성 {todo}
+                      </span>
+                    ) : allExcluded ? (
+                      // 🔴 "전원 작성"이라고 하면 거짓말이다 — 아무도 안 썼고, 쓸 일도 없는 반이다.
+                      <span className="text-text-dim ml-2 text-[11px] font-bold">
+                        수업보고서 미발송 반 — 출결만 기록
                       </span>
                     ) : (
                       <span className="text-primary ml-2 text-[11px] font-bold">

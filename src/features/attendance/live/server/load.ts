@@ -24,7 +24,6 @@ import { resolveRoomName } from "../seating-floors";
 import { specialSlotLabel } from "@/features/timetable/lib/teacher-label";
 // 출결 강사 귀속 축 단일 소스(자리는 담임 폴백 금지 · 담당 없으면 담임) — 월간 출석부와 같은 규칙.
 import { taughtByForSlot } from "@/features/attendance/teacher-axis";
-import { isReportOptout } from "@/features/classes/report-optout";
 import type { LiveSlot, LiveStudent } from "../types";
 
 export type { LiveSlot, LiveStudent };
@@ -116,11 +115,12 @@ export async function loadLiveSlots(date: string, classIds?: readonly string[]):
       closed_at: string | null;
       teacher_id: string | null;
       classroom_id: string | null;
-      report_optout: boolean | null;
     }>(slotClassIds, (chunk) =>
       supabase
         .from("classes")
-        .select("id, class_name, subject, is_active, closed_at, teacher_id, classroom_id, report_optout")
+        // ⚠️ `report_optout`은 **일부러 안 읽는다** — 당일 출결 보드는 미발송 반도 그대로 그린다(아래 🔴).
+        //    읽어 두면 다음 사람이 "여기도 걸러야 하나"로 되돌리기 쉽다.
+        .select("id, class_name, subject, is_active, closed_at, teacher_id, classroom_id")
         .in("id", chunk)
         .eq("is_active", true),
     ),
@@ -258,7 +258,10 @@ export async function loadLiveSlots(date: string, classIds?: readonly string[]):
   for (const slot of slots) {
     const klass = activeClasses.get(slot.class_id);
     if (!klass) continue;
-    if (isReportOptout(klass)) continue;
+    // 🔴 '수업보고서 미발송' 반(0174a)을 **여기서 빼지 않는다**(2026-08-19 원장: *"보고서는 안보내지만
+    //    이제부터라도 출결은 찍을것"*). 예전엔 `isReportOptout(klass)`로 건너뛰어, 담임이 원스크린에서도
+    //    (반이 통째로 빠짐) 데스크가 이 보드에서도 그 반 출결을 찍을 수 없었다 — 실측 3반 전 기간 0행.
+    //    보고서 쪽 제외는 보고서 표면들이 계속 맡는다(작성률·재촉·직접 발송, report-optout-surfaces.test).
     // 랩실·JJ실은 출결이 되므로 좌석표에 남긴다. 다만 담임으로 폴백하면 강사 스트립의
     // 「전원 출석」이 자리 수업에 행을 만든다 — teacher_id는 슬롯 담당만(없으면 담당 미지정).
     const special = specialSlotLabel(slot.slot_teacher_label);

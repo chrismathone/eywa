@@ -129,6 +129,7 @@ describe("'완료'가 화면마다 갈리지 않는다 — primary는 상태색�
       "subject_off",
       "absent",
       "no_attendance",
+      "report_optout",
     ]) {
       const b = classnoteBadge(s);
       expect(b, `classnoteBadge("${s}")`).not.toBeNull();

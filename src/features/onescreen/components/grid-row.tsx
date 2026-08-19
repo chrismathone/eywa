@@ -12,11 +12,13 @@ import {
   isAlreadySent,
   isAttendanceUnchecked,
   isReportEligible,
+  isReportOptoutRow,
   isRowInputEditable,
   isRowActionable,
   type GridRow,
 } from "../grid";
 import { evaluateSendGate } from "../send-gate";
+import { REPORT_OPTOUT_NOTICE } from "@/features/classes/report-optout";
 import { checkMentConsistency, MENT_WARNING_HINT, MENT_WARNING_LABEL } from "../ment-consistency";
 import { parentUnreadBadge, progressAnomalyBadge } from "../roster-signals";
 import { makeupBadgeLabel } from "../makeup-label";
@@ -240,6 +242,7 @@ export function GridBodyRow({
   const sendGate = evaluateSendGate({
     readonlyView: gen.readonlyView, // 열람 전용 — 사유 라벨("열람 전용")까지 게이트가 만든다
     alreadySent,
+    reportOptout: isReportOptoutRow(subject), // 미발송 반(0174a) — 카드뷰와 같은 단일 소스
     isAbsent: subject.attendanceRaw === "absent",
     hasProgress: isReportEligible(subject),
     hasDraft: !!rep?.draft?.trim(),
@@ -273,17 +276,22 @@ export function GridBodyRow({
   /** 잠긴 칸 묶음(td 안에서만 쓴다 — tr의 자식은 td여야 하므로 행 전체를 fieldset으로 감쌀 수 없다). */
   const LOCK_FS =
     "contents [&_input:disabled]:opacity-50 [&_textarea:disabled]:opacity-50 [&_button:disabled]:opacity-50 [&:disabled_*]:cursor-not-allowed";
-  const mentPlaceholder = isAbsent
-    ? "결석 — 학부모 문구는 발송되지 않습니다"
-    : alreadySent
-      ? "발송 완료 — 수정할 수 없습니다"
-      : null;
+  const optoutRow = isReportOptoutRow(subject);
+  const mentPlaceholder = optoutRow
+    ? REPORT_OPTOUT_NOTICE
+    : isAbsent
+      ? "결석 — 학부모 문구는 발송되지 않습니다"
+      : alreadySent
+        ? "발송 완료 — 수정할 수 없습니다"
+        : null;
   /** 특이사항 자리 — 막기만 하지 말고 **갈 곳**을 알려준다(결석 사유는 출결 알약 안에 적는 칸이 있다). */
-  const rowPlaceholder = isAbsent
-    ? "결석 — 사유는 왼쪽 출결에서 적어 주세요"
-    : alreadySent
-      ? "발송 완료 — 수정할 수 없습니다"
-      : null;
+  const rowPlaceholder = optoutRow
+    ? REPORT_OPTOUT_NOTICE
+    : isAbsent
+      ? "결석 — 사유는 왼쪽 출결에서 적어 주세요"
+      : alreadySent
+        ? "발송 완료 — 수정할 수 없습니다"
+        : null;
   const mentBase =
     "border-line focus:border-primary scrollbar-thin w-full rounded-sm border px-2 py-1 text-[11px] leading-snug outline-none";
   /**
@@ -682,9 +690,11 @@ export function GridBodyRow({
                   ? "이미 발송된 보고서 — 수정할 수 없습니다"
                   : canAutoWrite
                   ? "AI 학부모 멘트 자동작성 (발송 문구)"
-                  : isAbsent
-                    ? "결석 학생 — 발송 제외 (기록 저장은 가능)"
-                    : "오늘 진도를 먼저 입력하세요"
+                  : optoutRow
+                    ? REPORT_OPTOUT_NOTICE
+                    : isAbsent
+                      ? "결석 학생 — 발송 제외 (기록 저장은 가능)"
+                      : "오늘 진도를 먼저 입력하세요" // 미발송 반은 위 optoutRow 분기가 먼저 잡는다
               }
               className={`border-line hover:bg-bg-soft flex-1 rounded-sm border px-1 py-1 text-[11px] font-bold disabled:opacity-50 ${
                 hasDraft ? "text-primary" : "text-text-dim"

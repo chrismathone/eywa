@@ -118,6 +118,15 @@ export type Subject = {
    *    100% 오배정이다(실제 증상: 특강 행의 '이전 회차'에 정규 수업 진도·교재가 떴다).
    */
   isSpecial?: boolean;
+  /**
+   * 이 행의 반이 **'수업보고서 미발송'**(`classes.report_optout`, 0174a)인가.
+   *
+   * 🔴 2026-08-19 원장: *"보고서는 안보내지만 이제부터라도 출결은 찍을것"*. 그래서 이 반은 로스터에
+   *    **남되**(예전엔 통째로 빠져 출결 알약 자체가 없었다) 보고서 쪽 입력·발송·자동작성만 잠근다.
+   *    판정은 `isRowInputEditable`/`isRowActionable`(grid.ts) 단일 소스가 이 값을 본다.
+   * ⚠️ 출결·수업타임·결석 사유는 **잠그지 않는다** — 이 반이 화면에 돌아온 이유가 그것이다.
+   */
+  reportOptout?: boolean;
   // 이 반의 대상 날짜 raw status(present/late/absent/early_leave/excused/makeup). null=기록 없음.
   // ⚠️ 표시 축약(toMark)과 별개로 raw를 보존 — 조퇴·공결·보강을 pill이 축약값으로 되쓰는 사고 방지.
   attendanceRaw?: string | null;

@@ -655,6 +655,18 @@ export async function getMonthlyAttendanceMatrix(
    *    출석부는 지금처럼 남겨놔"였다. 급여 별지(print)도 같은 이유로 안 넘긴다 — 돈 축은 담임 그대로다.
    */
   scopeTeacherId: string | null = null,
+  /**
+   * **이 강사가 이 반 담임이 된 날**(YYYY-MM-DD) — 이보다 이른 칸은 이 표의 값으로 세지 않는다.
+   *
+   * 🔴 원장 제보 2026-08-19: *"김주현 선생님이 출결한것도 아닌데 보이는것도 같이 수정해야겠네."*
+   *    담임은 반 단위 속성이라 시간 축이 없어서, 8/10·8/14 인계 **이전**인 8/3~8/10 기록(전임이 넣은
+   *    27행)이 새 담임 출석부에 그대로 떴다.
+   * ⚠️ **표시 축뿐이다** — 값에서 빼고 빗금(ghosts)으로 남긴다. 빈칸으로 두면 사람이 그 위에 다시 찍어
+   *    옛 기록을 덮는다([[#103]]). 반별 보기(scopeTeacherId=null)와 급여 별지는 이 값을 안 넘긴다.
+   * ⚠️ 판정(담임 폴백으로 잡힌 반인가 · 근거가 있는가)은 **호출부**가 한다 — 교시 담당으로 잡힌 반은
+   *    그 사람이 실제로 가르쳤으므로 대상이 아니고, 근거가 없으면 null이라 종전대로 전부 보인다.
+   */
+  scopeSince: string | null = null,
 ): Promise<AttendanceMatrix> {
   const supabase = await createClient();
 
@@ -769,7 +781,14 @@ export async function getMonthlyAttendanceMatrix(
    * (반별 보기는 scope가 없어 항상 true = 종전과 완전히 동일한 숫자.)
    */
   const ownsSlot = (date: string, slotStart: string | null): boolean =>
-    ownsAttendanceSlot({ scopeTeacherId, homeroomTeacherId, slots: axisSlots, date, slotStart });
+    ownsAttendanceSlot({
+      scopeTeacherId,
+      homeroomTeacherId,
+      slots: axisSlots,
+      date,
+      slotStart,
+      homeroomSince: scopeSince,
+    });
 
   /**
    * 이 반을 그 기간에 맡은 강사가 **둘 이상인가** — 아래 `dayAxis` 안내를 붙일지 정한다.
@@ -1041,7 +1060,12 @@ export async function getMonthlyAttendanceMatrix(
     }
     const holidays = buildHolidayMap(settings.operations.holidays);
     const todayIso = kstToday();
-    const realDays = days.filter((d) => !d.placeholder && !holidays[d.date]);
+    const realDays = days
+      .filter((d) => !d.placeholder && !holidays[d.date])
+      // 🔴 담임 이전 칸은 이 표의 값이 아니다 — **파생은 `ownsSlot`을 안 탄다**. 수기 기록만 빗금으로
+      //    빼고 여기를 안 막으면, 그 날짜가 보고서 파생 '출석'으로 **되살아난다**(JJ2A는 8/3~8/10에
+      //    전임이 쓴 보고서가 14건 있어 실제로 그렇게 된다).
+      .filter((d) => !scopeSince || d.date >= scopeSince);
 
     for (const s of students) {
       const dows = new Set(s.attendDows);

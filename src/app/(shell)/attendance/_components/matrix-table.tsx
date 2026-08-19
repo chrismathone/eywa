@@ -53,6 +53,12 @@ export type MatrixGroup = {
    * null이면 담임 반(종전과 같은 표기).
    */
   roleLabel?: string | null;
+  /**
+   * "8/10부터 담임" — 그 날짜 **이전 칸이 왜 값에서 빠졌는지** 밝힌다(2026-08-19).
+   * 담임은 반 단위 속성이라 시간 축이 없어 인계 전 기록까지 새 담임 표에 잡혔다. 이제 값에서 빼되
+   * 빗금으로 남기는데, 표식이 없으면 "왜 8월 초가 비었지"가 된다. null이면 종전과 같은 표기.
+   */
+  sinceLabel?: string | null;
 };
 
 /** 그룹(반)의 집계 — 시수는 급여 계산의 기본 단위라 그룹 헤더에 그대로 노출한다. */
@@ -337,6 +343,14 @@ export function MatrixTable({
                       title="이 반의 담임은 다른 선생님이고, 교시(시간표 슬롯) 담당으로 배선돼 있어 이 목록에 있습니다."
                     >
                       {g.roleLabel}
+                    </span>
+                  ) : null}
+                  {g.sinceLabel ? (
+                    <span
+                      className="border-line text-text-dim rounded-full border px-1.5 py-px text-[10px]"
+                      title="담임을 맡기 전(인수인계·담임 변경 기록 기준) 출결은 이전 담임 몫이라 이 표의 합계에서 뺐습니다 — 기록 자체는 남아 있고, 반별 보기에서 보입니다."
+                    >
+                      {g.sinceLabel}
                     </span>
                   ) : null}
                   <span className="text-text-dim text-[11px]">{g.matrix.students.length}명</span>

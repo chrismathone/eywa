@@ -163,6 +163,19 @@ export function isAttendanceUnchecked(
   return subject.attendanceRaw == null;
 }
 
+/**
+ * 이 행의 반이 **'수업보고서 미발송'**(0174a)인가 — 보고서 쪽만 잠그는 축.
+ *
+ * 🔴 2026-08-19 원장: *"보고서는 안보내지만 이제부터라도 출결은 찍을것"*. 그래서 반은 로스터에 **남고**
+ *    (예전엔 통째로 빠져 출결 알약이 없었다) 여기서 **발송·자동작성·보고서 입력**만 잠근다.
+ * ⚠️ `save`는 잠그지 않는다 — 결석 행과 같은 규약("기록은 언제든 보존")이고, 이 반의 **지난 보고서**
+ *    수정 경로까지 막으면 report-optout.ts가 못 박아 둔 "숨김이지 차단이 아니다"를 깨뜨린다.
+ * ⚠️ 출결·수업타임·결석 사유도 대상이 아니다(이 반이 화면에 돌아온 이유가 그것이다).
+ */
+export function isReportOptoutRow(subject: Pick<Subject, "reportOptout">): boolean {
+  return subject.reportOptout === true;
+}
+
 export function isRowActionable(
   subject: Subject,
   action: RowAction,
@@ -183,6 +196,8 @@ export function isRowActionable(
   // 푸는 유일한 문 = 공유링크 재발급(그 건을 무효화 선언). 서버 saveLessonReport가 같은 규칙을 강제한다.
   if (isAlreadySent(statusOverride ?? subject.classnoteStatus)) return false;
   if (action === "save") return true;
+  // 미발송 반 = 발송·자동작성 대상이 아니다(save는 위에서 이미 통과했다 — 기록은 보존).
+  if (isReportOptoutRow(subject)) return false;
   // 출결 미체크 = 발송만 제외(위 게이트) — 서버 saveAndQueueClassnote가 같은 규칙을 이중 방어한다.
   if (action === "send" && !opts?.attendanceReadOnly && isAttendanceUnchecked(subject)) return false;
   return subject.attendanceRaw !== "absent";
@@ -193,9 +208,11 @@ export function isRowActionable(
  * (원장 2026-08-07: *"카드뷰 모드에서도 비활성화 되니까 일관성이 있어야함"* → 같은 날
  *  *"결석을 눌렀는데 진도 같은거 전부다 적을 수 있던데? 완전히 차단되어있지 않은것 같은데"*).
  *
- * 잠그는 경우는 둘뿐이다:
+ * 잠그는 경우는 셋뿐이다:
  *  · **이미 발송** — 수정 금지(2026-07-22). ClassNote는 게시글 수정이 없어 여기서 고치면 기록과
  *    학부모가 본 것이 갈라진다.
+ *  · **'수업보고서 미발송' 반**(0174a, 2026-08-19) — 그 반의 보고서는 학부모에게 나가지 않는다.
+ *    반은 출결을 찍으라고 화면에 돌아왔을 뿐이라, 보고서 칸을 열어 두면 **아무도 안 볼 글**을 쓰게 된다.
  *  · **결석** — 그 학생은 그 수업에 없었다. 진도·테스트·태도·과제는 **일어나지 않은 일**이고,
  *    멘트·추세는 발송이 구조적으로 막히는 행이라(`isRowActionable` send·autowrite + 서버 게이트 +
  *    일괄 발송 사전 필터) 어디로도 나가지 않는다. 둘 다 적어봐야 헛수고이자 거짓 기록이다.
@@ -213,6 +230,9 @@ export function isRowInputEditable(subject: Subject, statusOverride?: string | n
   //    링크를 재발급해 잠금을 푼 행이 다시 잠긴다.
   const status = statusOverride !== undefined ? statusOverride : subject.classnoteStatus;
   if (isAlreadySent(status)) return false;
+  // 미발송 반(0174a) — 학부모에게 나갈 일이 없는 칸이라 적어 봐야 헛수고다(결석 행과 같은 이유).
+  // ⚠️ 출결 알약·수업타임·결석 사유는 이 판정의 대상이 아니다(위 🔴 주석).
+  if (isReportOptoutRow(subject)) return false;
   return subject.attendanceRaw !== "absent";
 }
 

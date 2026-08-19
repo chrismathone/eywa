@@ -32,6 +32,7 @@ import { isRecallInFlight } from "@/features/report-admin/report-recall";
 // 담당 반 판정 단일 소스(담당 반 ∪ 그날 위임 반) — classes.teacher_id를 직접 비교하지 말 것(0173a).
 import { getTeachingClassIds, getTeachingClasses } from "@/features/classes/server/delegation";
 import { hasAnyAttendance, isStudentAbsentForSend } from "./absence-gate";
+import { isReportOptout } from "@/features/classes/report-optout";
 import { ingestReport } from "@/features/progress/server/ingest";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getTextbookOrdersForStudents } from "@/features/billing/server/textbook-queries";
@@ -341,6 +342,38 @@ export async function saveAndQueueClassnote(
   // 과목별 발송 게이트 — 학원설정 발송 허용 과목(현 운영=수학만)에 없으면 저장만 하고 큐잉 안 함(오발송 방지).
   if (!isClassnoteSubjectEnabled(input.subject, settings.report.classnoteSubjects)) {
     return { ok: true, id: saved.id, shareToken: saved.shareToken, status: "subject_off" };
+  }
+
+  // 🔴 '수업보고서 미발송' 반(0174a) 게이트 — **저장은 하고 큐잉만 막는다**(2026-08-19).
+  //    2026-08-19부터 이 반이 원스크린 로스터에 **돌아왔다**(출결을 찍어야 해서). 화면은 발송 버튼을
+  //    잠그지만 그건 한 겹이라 stale 화면·직접 호출로 우회된다(#77) — 관리자 일괄 발송(compose-actions)이
+  //    이미 서버에서 다시 거르는 것과 **같은 축**의 강사 경로 방어다.
+  //    ⚠️ 저장을 막지 않는 이유는 report-optout.ts가 못 박아 둔 규약이다("숨김이지 차단이 아니다" —
+  //       막으면 그 반의 지난 보고서 수정 경로까지 잠긴다). 여기서 막는 것은 **학부모 발송**뿐이다.
+  //    ⚠️ 반이 없는 행(보강·수업외·이관분)은 판정 근거가 없어 대상이 아니다(결석 게이트와 같은 예외).
+  //    ⚠️ 왕복 1회(PK 단건 조회)이고 **발송 경로에서만** 돈다 — 페이지 렌더에는 안 얹힌다.
+  if (input.classId) {
+    const { data: klassRow, error: klassErr } = await supabase
+      .from("classes")
+      .select("report_optout")
+      .eq("id", input.classId)
+      .maybeSingle();
+    // 조회 실패는 fail-open — 이 게이트는 "안 보내도 되는 반"을 거르는 것이지 안전장치가 아니고,
+    // 여기서 막으면 조회가 흔들릴 때 **정상 반의 발송이 통째로 죽는다**(결석 게이트의 fail-closed와
+    // 성격이 다르다: 저쪽은 틀리면 학부모에게 거짓이 나가지만 여기는 화면이 이미 한 겹 막고 있다).
+    if (!klassErr && klassRow && isReportOptout(klassRow)) {
+      // 대기 중(queued) 재고 회수 — 결석 게이트와 **같은 이유**: 안 지우면 "발송하지 않았습니다" 안내
+      //    직후 워커가 방금 저장된 내용을 그대로 게시한다(반을 미발송으로 바꾸기 전에 큐에 올라간 건).
+      //    `.eq queued` 조건이라 그새 클레임된 processing은 건드리지 않는다.
+      if (prior?.classnote_status === "queued") {
+        await supabase
+          .from("lesson_reports")
+          .update({ classnote_status: null, classnote_queued_at: null })
+          .eq("id", saved.id)
+          .eq("classnote_status", "queued");
+      }
+      return { ok: true, id: saved.id, shareToken: saved.shareToken, status: "report_optout" };
+    }
   }
 
   // 결석 게이트(#77) — 그날 그 과목 출결이 결석이면 저장만 하고 큐잉 안 함(학부모 발송 무의미).
