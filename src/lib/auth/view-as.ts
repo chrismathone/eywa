@@ -5,6 +5,7 @@ import type { SystemRole } from "@/lib/permissions";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
 import { createClient } from "@/lib/supabase/server";
+import { READONLY_TEACHER_VIEW_ERROR } from "@/lib/auth/view-as-message";
 
 /**
  * '다른 강사 뷰'(열람 전용) — 관리자가 로그인 없이 특정 강사의 강사뷰를 그대로 본다 (원장 2026-08-19).
@@ -107,8 +108,8 @@ export async function isReadonlyTeacherView(): Promise<boolean> {
   return (await viewAsTeacher()) !== null;
 }
 
-export const READONLY_TEACHER_VIEW_ERROR =
-  "다른 강사 뷰는 열람 전용입니다 — 저장·발송은 관리자뷰 또는 본인 강사뷰에서 해 주세요";
+// 거절 문구는 클라 토스트와 공유하는 순수 모듈(view-as-message.ts)이 단일 소스 — 기존 소비처를 위해 재수출.
+export { READONLY_TEACHER_VIEW_ERROR } from "@/lib/auth/view-as-message";
 
 /**
  * 쓰기 서버 액션 공용 가드 — '다른 강사 뷰'면 거절 사유(한글)를, 아니면 null.

@@ -39,6 +39,10 @@ const GUARDED_ACTION_FILES: { file: string[]; what: string }[] = [
     file: ["src", "features", "onescreen", "server", "attachment-actions.ts"],
     what: "보고서 이미지 첨부(겸직 본인 축 우회)",
   },
+  {
+    file: ["src", "features", "report-admin", "server", "recall-actions.ts"],
+    what: "학부모 게시글 회수(겸직 본인 축 우회 — canWriteTenant 캡 후 소유 판정이 본인 id로 열린다)",
+  },
 ];
 
 describe("'다른 강사 뷰'(열람 전용) 배선 가드", () => {
@@ -82,6 +86,25 @@ describe("'다른 강사 뷰'(열람 전용) 배선 가드", () => {
     expect(actions).toContain("loadViewAsTarget");
     // 진입 액션 안에 대상 users select 복제본이 없어야 한다(활성·비학생 조건이 두 벌이면 반드시 갈라진다).
     expect(actions).not.toContain('select("id, tenant_id, display_name');
+  });
+
+  it("거절 문구는 서버·클라 단일 소스(view-as-message) — 사본이면 한쪽만 고쳐진다", () => {
+    expect(read("src", "lib", "auth", "view-as.ts")).toContain('from "@/lib/auth/view-as-message"');
+    expect(read("src", "features", "onescreen", "components", "onescreen-client.tsx")).toContain(
+      'from "@/lib/auth/view-as-message"',
+    );
+  });
+
+  it("원스크린 클라 — 열람 전용이면 카드·표의 입력·발송이 화면에서도 잠긴다(원장 2026-08-19 제보)", () => {
+    // 서버 거절만으론 부족하다 — 버튼이 활성으로 보이면 "발송될 것처럼" 읽힌다. locked 축과 핸들러 가드 둘 다.
+    expect(read("src", "features", "onescreen", "components", "onescreen-client.tsx")).toContain("readonlyBlocked");
+    expect(read("src", "features", "onescreen", "components", "report-card.tsx")).toContain(
+      "readonlyView || !isRowInputEditable",
+    );
+    expect(read("src", "features", "onescreen", "components", "grid-row.tsx")).toContain(
+      "gen.readonlyView || !isRowInputEditable",
+    );
+    expect(read("src", "app", "(shell)", "onescreen", "page.tsx")).toContain("readonlyView={!!viewAs}");
   });
 
   it("감사 레지스트리 — 열람·토글 액션 키가 한글 라벨로 등록돼 있다", () => {

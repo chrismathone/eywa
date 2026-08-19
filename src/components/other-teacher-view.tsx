@@ -103,10 +103,13 @@ export function OtherTeacherViewPicker({ expanded, motion }: { expanded: boolean
   return (
     <DropdownMenu modal={false} onOpenChange={(open) => open && load()}>
       <DropdownMenuTrigger render={btn} />
-      <DropdownMenuContent align="start" side="top" className="max-h-80 w-56 overflow-y-auto">
+      <DropdownMenuContent align="start" side="top" className="w-56">
         <DropdownMenuLabel className="text-text-faint">다른 강사 뷰 (열람 전용)</DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <TargetItems targets={targets} loading={loading} />
+        {/* 목록만 스크롤(라벨은 고정) — 강사가 많아도 머리글이 밀려 나가지 않는다. */}
+        <div className="max-h-64 overflow-y-auto">
+          <TargetItems targets={targets} loading={loading} />
+        </div>
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -135,14 +138,19 @@ export function ViewAsChip({ name }: { name: string }) {
         <span className="max-w-[9rem] truncate">{name || "이름 없음"} 강사뷰</span>
         <span className="hidden font-medium opacity-80 sm:inline">· 열람 전용</span>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="max-h-80 w-56 overflow-y-auto">
+      <DropdownMenuContent align="end" className="w-56">
         <DropdownMenuLabel className="text-text-faint">다른 강사로 전환 (열람 전용)</DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <TargetItems targets={targets} loading={loading} />
+        {/* 🔴 스크롤은 **목록만** — 강사가 스무 명이면 아래 종료행이 목록 끝까지 내려야 보였다
+            (원장 2026-08-19: "종료 버튼 따로, 강사 목록 아래에 고정행으로"). */}
+        <div className="max-h-64 overflow-y-auto">
+          <TargetItems targets={targets} loading={loading} />
+        </div>
         <DropdownMenuSeparator />
+        {/* 열람 종료 — 항상 보이는 고정행(스크롤 밖). */}
         <DropdownMenuItem
           closeOnClick={false}
-          className="cursor-pointer"
+          className="cursor-pointer font-medium"
           disabled={pending}
           onClick={() =>
             start(async () => {
@@ -151,7 +159,7 @@ export function ViewAsChip({ name }: { name: string }) {
             })
           }
         >
-          <EyIcon name="building" size={16} strokeWidth={1.8} /> 관리자뷰로 돌아가기
+          <EyIcon name="building" size={16} strokeWidth={1.8} /> 열람 종료 — 관리자뷰로 돌아가기
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

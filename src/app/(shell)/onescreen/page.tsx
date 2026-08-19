@@ -84,6 +84,8 @@ export default async function OneScreenPage({
       sendWindow={roster.sendWindow}
       showAttachments={roster.showAttachments}
       canEditAttendance={roster.canEditAttendance}
+      // '다른 강사 뷰'(열람 전용) — 카드·표의 입력·발송·저장 UI를 실제로 잠근다(서버 가드의 거울).
+      readonlyView={!!viewAs}
       // 글씨 크기(작음/보통/큼) — 계정 저장값. 서버가 확정해 내리므로 첫 렌더부터 정확하다(하이드레이션 안전).
       initialFontSize={roster.fontSize}
       noClassesToday={roster.noClassesToday}
