@@ -4,11 +4,17 @@
  * 데스크 확인 큐 — 과목별로 쪼갠 뒤 결석 → 미입력 반 → 미확인.
  * 처리한 건은 지우지 않고 아래로(#105).
  */
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { CheckCircle2 } from "@/components/icons/eywa-icon-compat";
 import { EmptyState } from "@/components/empty-state";
 import { useSubjectMaps } from "@/features/owner/operations-context";
-import { OUTCOME_LABEL, orderQueueSubjects, type DeskQueue } from "@/features/attendance/live/queue";
+import { OUTCOME_LABEL, orderQueueSubjects, type DeskQueue, type QueueStudent } from "@/features/attendance/live/queue";
+import { SearchScopeChip, StudentSearchBox } from "@/features/attendance/components/student-search-box";
+import {
+  emptySearchMessage,
+  isSearchActive,
+  matchesStudentSearch,
+} from "@/features/attendance/student-search";
 import { DeskClassRow } from "./desk-class-row";
 import { DeskStudentRow } from "./desk-student-row";
 
@@ -24,20 +30,70 @@ export function DeskView({
   carryOver: { date: string; count: number } | null;
 }) {
   const subjects = useSubjectMaps();
+  /**
+   * 학생 검색(원장 2026-08-19) — **클라 필터**(서버 왕복 0·저장 없음). 안 걸린 줄은 안 그린다.
+   * 🔴 '미입력 반' 레인은 **학생 이름이 없는 줄**(반이 통째로 비었다는 신호)이라 검색 대상이 아니다 —
+   *    조용히 지우면 "그 학생 반이 사라졌다"가 되므로, 감춘 건수를 한 줄로 밝힌다.
+   */
+  const [query, setQuery] = useState("");
+  const searching = isSearchActive(query);
+  const hit = (s: QueueStudent) => matchesStudentSearch(query, [s.studentName, s.schoolGrade]);
+  const students = searching ? queue.lanes.students.filter(hit) : queue.lanes.students;
+  const doneRows = searching ? queue.done.filter(hit) : queue.done;
+  const classRows = searching ? [] : queue.lanes.classes;
+  const hiddenClassRows = searching ? queue.lanes.classes.length : 0;
   const empty = queue.counts.classes === 0 && queue.counts.students === 0;
-  const absentRows = queue.lanes.students.filter((s) => s.signal === "absent");
-  const unmarkedRows = queue.lanes.students.filter((s) => s.signal !== "absent");
+  const absentRows = students.filter((s) => s.signal === "absent");
+  const unmarkedRows = students.filter((s) => s.signal !== "absent");
+  const shownRows = students.length + doneRows.length;
+  // 검색할 학생 줄 자체가 없으면 입력칸을 안 그린다 — 빈 큐 위에 뜬 검색칸은 노이즈다.
+  const searchableRows = queue.lanes.students.length + queue.done.length;
   const keys = orderQueueSubjects(
     [
-      ...queue.lanes.classes.map((c) => c.subject),
-      ...queue.lanes.students.map((s) => s.subject),
-      ...queue.done.map((s) => s.subject),
+      ...classRows.map((c) => c.subject),
+      ...students.map((s) => s.subject),
+      ...doneRows.map((s) => s.subject),
     ],
     subjects.options.map((o) => o.value),
   );
 
   return (
     <div className="space-y-6">
+      {/* 검색 줄 — 처리함까지 같은 규칙으로 좁힌다(그 학생을 되짚는 자리라). 칩이 많은 줄이 아니라
+          입력칸 하나뿐이지만, 좁은 화면에서 칩과 함께 감기지 않게 레일 규약을 그대로 쓴다. */}
+      {searchableRows > 0 ? (
+        <div className="toolbar-rail flex flex-wrap items-center gap-2">
+          <StudentSearchBox value={query} onChange={setQuery} inputWidth="w-[104px]" />
+          {searching ? (
+            <SearchScopeChip
+              shown={shownRows}
+              total={searchableRows}
+              unit="건"
+              totalsNote="탭의 확인 건수는 전체 기준"
+            />
+          ) : null}
+        </div>
+      ) : null}
+      {/* ⚠️ 이 안내는 레일 **밖**이다 — 문장이 길어 레일 안에 두면 폰에서 가로로 끌어야 읽힌다. */}
+      {searching && hiddenClassRows > 0 ? (
+        <p className="text-text-faint text-xs break-keep">
+          미입력 반 {hiddenClassRows}건은 학생 이름이 없어 검색에서 빠집니다 — 검색을 지우면 보입니다.
+        </p>
+      ) : null}
+      {searching && shownRows === 0 ? (
+        <div className="bg-card shadow-card flex flex-wrap items-center gap-3 rounded-2xl px-4 py-4">
+          <span className="text-foreground text-sm font-bold">
+            {emptySearchMessage(query, "이 날 확인 목록")}
+          </span>
+          <button
+            type="button"
+            onClick={() => setQuery("")}
+            className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft shrink-0 rounded-full border px-2.5 py-0.5 text-xs transition"
+          >
+            검색 지우기
+          </button>
+        </div>
+      ) : null}
       {carryOver && carryOver.count > 0 && (
         <a
           href={`/attendance/live?tab=desk&date=${carryOver.date}`}
@@ -46,7 +102,7 @@ export function DeskView({
           어제 남은 결석 {carryOver.count}건
         </a>
       )}
-      {empty && queue.counts.done === 0 && (
+      {!searching && empty && queue.counts.done === 0 && (
         <EmptyState
           icon={CheckCircle2}
           title="확인할 건이 없습니다"
@@ -55,10 +111,10 @@ export function DeskView({
       )}
 
       {keys.map((subject) => {
-        const classes = queue.lanes.classes.filter((c) => c.subject === subject);
+        const classes = classRows.filter((c) => c.subject === subject);
         const absent = absentRows.filter((s) => s.subject === subject);
         const unmarked = unmarkedRows.filter((s) => s.subject === subject);
-        const done = queue.done.filter((s) => s.subject === subject);
+        const done = doneRows.filter((s) => s.subject === subject);
         if (classes.length + absent.length + unmarked.length + done.length === 0) return null;
         return (
           <section key={subject || "none"} className="space-y-4">

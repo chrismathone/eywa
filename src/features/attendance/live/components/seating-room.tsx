@@ -14,7 +14,16 @@ import {
 } from "../seating-tone";
 import { SeatingCell } from "./seating-cell";
 
-export function SeatingRoom({ date, klass }: { date: string; klass: SeatingClass }) {
+export function SeatingRoom({
+  date,
+  klass,
+  /** 학생 검색에 걸린 id — 그 칸만 테두리로 짚는다(카드 명단은 줄이지 않는다, seating-chart 주석). */
+  highlight,
+}: {
+  date: string;
+  klass: SeatingClass;
+  highlight?: ReadonlySet<string>;
+}) {
   const time =
     klass.firstEnd && klass.firstEnd !== klass.firstStart
       ? `${klass.firstStart}~${klass.firstEnd}`
@@ -40,7 +49,13 @@ export function SeatingRoom({ date, klass }: { date: string; klass: SeatingClass
       <div className="bg-bg-soft px-2 py-2">
         <div className="grid grid-cols-3 gap-1">
           {klass.students.map((s) => (
-            <SeatingCell key={s.studentId} date={date} klass={klass} student={s} />
+            <SeatingCell
+              key={s.studentId}
+              date={date}
+              klass={klass}
+              student={s}
+              found={highlight?.has(s.studentId) ?? false}
+            />
           ))}
         </div>
       </div>

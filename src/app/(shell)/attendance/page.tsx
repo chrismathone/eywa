@@ -34,6 +34,9 @@ import { HideRetiredToggle } from "./_components/hide-retired-toggle";
 import { AttendanceHub, type HubTeacher } from "./_components/attendance-hub";
 import { MatrixTable, buildGridSource, type MatrixGroup } from "./_components/matrix-table";
 import { GridProvider } from "./_components/grid-context";
+import { AttendanceSearchBox, AttendanceSearchProvider } from "./_components/search-context";
+import { rowKey } from "@/features/attendance/grid/model";
+import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { CollapseAllChip } from "./_components/class-group";
 import { LiveStats } from "./_components/live-totals";
 import { attHref, resolveViewMode, type ViewMode } from "./_components/att-href";
@@ -494,6 +497,21 @@ export default async function AttendancePage({
   // 시트 격자의 좌표·초기값 — 표보다 위(상단 스탯)까지 감싸야 해서 여기서 만든다.
   const gridSource = buildGridSource(groups, visibleDays, orderedRows);
 
+  /**
+   * 학생 검색(원장 2026-08-19)이 볼 재료 — **화면에 이미 그려진 값만**(이름·학교·학년 + 붙여 쓴 압축 표기).
+   * 🔴 조회를 새로 붙이지 않는다: 강사는 담당 반만 보는데 검색이 학원 전체를 뒤지면 그 범위가 뚫린다([[#77]]).
+   */
+  const searchRows = groups.flatMap((g) =>
+    g.matrix.students.map((s) => ({
+      row: rowKey(g.classId, s.id),
+      studentId: s.id,
+      name: s.name,
+      school: s.school,
+      grade: s.grade,
+      schoolGrade: schoolGradeLabel(s.school, s.grade) || null,
+    })),
+  );
+
   // 수정 가능 기간 — 강사(scoped)는 KST 오늘 기준 7일 이내만. 관리자 이상(full)은 제한 없음(원장 2026-07-21).
   // ⚠️ 역할을 코드로 나열하지 않고 권한 매트릭스를 읽는다(#58) — 원장이 역할 권한을 조정하면 함께 따라간다.
   // ⚠️ 이건 화면 편의일 뿐 진짜 게이트는 서버 액션이다(#77).
@@ -580,6 +598,9 @@ export default async function AttendancePage({
     //
     // ⚠️ GridProvider가 **툴바까지** 감싼다 — 합계(LiveStats)가 툴바로 올라갔기 때문. 칸을 치면 출석률·결석·
     //    지각이 그 자리에서 따라 움직이려면 툴바가 격자 저장소를 구독해야 한다(DOM은 안 만드는 컨텍스트라 무비용).
+    // 🔴 검색 공급자가 **격자보다 바깥**이다 — 격자가 "안 걸린 행"을 좌표에서 빼야 키보드 이동·범위 선택이
+    // 안 보이는 칸으로 새지 않는다(search-context.tsx / grid-context.tsx `visibleRows`).
+    <AttendanceSearchProvider rows={searchRows}>
     <GridProvider
       rows={gridSource.rows}
       cols={gridSource.cols}
@@ -735,6 +756,11 @@ export default async function AttendancePage({
                   (아이콘만 있으면 있는 줄 모른다). 접힌 수까지 적어 "몇 개가 숨었는지"를 감추지 않는다. */}
               {showGroups ? <CollapseAllChip classIds={groups.map((g) => g.classId)} /> : null}
             </div>
+            <span className="bg-line h-4 w-px" aria-hidden />
+            {/* 학생 검색(원장 2026-08-19) — **클라 필터**라 서버 왕복 0, 친 즉시 표가 좁아진다.
+                안 걸린 행은 감추는 게 아니라 안 그린다(격자 좌표도 함께 좁아져 방향키가 새지 않는다).
+                검색어는 저장하지 않는다 — 다음 방문에 필터가 걸린 채 열리면 "출석부가 비었다"로 읽힌다. */}
+            <AttendanceSearchBox />
           </>
         ) : null}
 
@@ -845,5 +871,6 @@ export default async function AttendancePage({
       )}
       </div>
     </GridProvider>
+    </AttendanceSearchProvider>
   );
 }
