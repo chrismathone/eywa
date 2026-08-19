@@ -8,19 +8,27 @@
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { getMakeupAbsenceOptions } from "./makeup-options";
-import type { MakeupAbsenceOption } from "../makeup-options";
+import type { MakeupAbsenceList } from "../makeup-options";
+
+/** 권한이 없거나 못 불렀을 때 — 확인창은 이걸 받아 '직접 입력'으로 폴백한다. */
+const EMPTY: MakeupAbsenceList = { options: [], hiddenBySubject: 0 };
 
 /**
  * 그 학생의 결석 후보(이전 반 포함, 최근 1년 — `getMakeupAbsenceOptions`의 WINDOW_DAYS).
  * ⚠️ 실패·권한 없음은 **빈 목록**으로 돌려준다 — 확인창은 그때 '직접 입력'으로 폴백한다(창이 막히면 안 된다).
+ *
+ * @param anchorClassId 지금 보강을 넣는 반 — 그 반 **과목**의 결석만 남긴다(수학 보강에 영어 결석이
+ *   뜨던 것, 원장 제보 2026-08-19). 🔴 **과목 문자열이 아니라 반 id를 받는다** — 과목은 서버가
+ *   `classes.subject`에서 읽는다(클라가 준 과목을 믿으면 필터를 우회할 수 있다). 안 넘기면 안 거른다.
  */
 export async function fetchMakeupAbsences(
   studentId: string,
   makeupDate: string,
-): Promise<MakeupAbsenceOption[]> {
+  anchorClassId?: string | null,
+): Promise<MakeupAbsenceList> {
   const user = await getCurrentUser();
-  if (!user) return [];
+  if (!user) return EMPTY;
   // 보강 추가와 같은 권한(출결 쓰기) — 읽기 전용 계정이 남의 결석 이력을 훑는 경로를 열지 않는다.
-  if (!(await canWriteTenant(user.systemRole, "attendance"))) return [];
-  return getMakeupAbsenceOptions(studentId, makeupDate);
+  if (!(await canWriteTenant(user.systemRole, "attendance"))) return EMPTY;
+  return getMakeupAbsenceOptions(studentId, makeupDate, anchorClassId ?? null);
 }

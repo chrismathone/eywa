@@ -14,13 +14,16 @@ import { toast } from "sonner";
 import { setAttendanceCell } from "../server/actions";
 import { noteMakeupAgainstAbsence } from "../server/makeup-note-action";
 import { fetchMakeupAbsences } from "../server/makeup-actions";
-import type { MakeupAbsenceOption } from "../makeup-options";
+import type { MakeupAbsenceList } from "../makeup-options";
 import type { MakeupSlotOption } from "../makeup-slot";
 import { MakeupConfirmDialog, type MakeupConfirmChoice } from "./makeup-confirm-dialog";
 import {
   AttendanceMakeupAdder,
   type MakeupPick,
 } from "@/app/(shell)/attendance/[date]/[classId]/makeup-adder";
+
+/** 아직 안 불러왔을 때의 빈 한 벌. */
+const EMPTY_ABSENCES: MakeupAbsenceList = { options: [], hiddenBySubject: 0 };
 
 export function MakeupAddFlow({
   classId,
@@ -44,7 +47,7 @@ export function MakeupAddFlow({
   onDone?: () => void;
 }) {
   const [pending, setPending] = useState<MakeupPick | null>(null);
-  const [absences, setAbsences] = useState<MakeupAbsenceOption[]>([]);
+  const [absences, setAbsences] = useState<MakeupAbsenceList>(EMPTY_ABSENCES);
   const [loading, setLoading] = useState(false);
   /** 결석 조회 응답 순서 가드. */
   const seq = useRef(0);
@@ -55,19 +58,21 @@ export function MakeupAddFlow({
       return;
     }
     setPending(s);
-    setAbsences([]);
+    setAbsences(EMPTY_ABSENCES);
     setLoading(true);
     // 🔴 늦게 온 옛 조회가 최신 창을 덮지 않게 — 안 그러면 **남의 결석 이력**이 이 학생 것처럼 뜬다.
     const mine = ++seq.current;
     // 창은 먼저 열고 목록만 도착하면 갈아 끼운다 — 조회를 기다리며 멈춰 있으면 "눌러도 반응 없다"가 된다.
-    void fetchMakeupAbsences(s.id, date)
+    // 🔴 후보는 **이 반의 과목**으로 좁힌다(영어 반 보강에 수학 결석이 뜨지 않게) — 과목 판정은
+    //    서버가 이 반 id로 한다.
+    void fetchMakeupAbsences(s.id, date, classId)
       .then((list) => {
         if (mine !== seq.current) return;
         setAbsences(list);
       })
       .catch(() => {
         if (mine !== seq.current) return;
-        setAbsences([]);
+        setAbsences(EMPTY_ABSENCES);
       })
       .finally(() => {
         if (mine !== seq.current) return;
@@ -131,7 +136,7 @@ export function MakeupAddFlow({
           // ECS·출석부는 그 반 한 칸을 여는 것이라 '합침' 선택지가 없다(합칠 정규 보고서를 모른다).
           candidates={[]}
           makeupDate={date}
-          absenceOptions={absences}
+          absences={absences}
           absenceLoading={loading}
           slotOptions={slotOptions}
           onConfirm={(c) => void confirm(c)}

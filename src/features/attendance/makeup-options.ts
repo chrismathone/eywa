@@ -42,24 +42,71 @@ export type AbsenceRow = {
   note?: string | null;
   /** 그 칸의 교시("HH:MM[:SS]") — 하루 단위로 찍힌 결석은 없다(null). */
   slotStart?: string | null;
+  /**
+   * 그 결석이 난 **반의 과목 키**(`classes.subject`) — 앵커 반과 맞는 것만 남기는 기준.
+   * 🔴 화면에 그대로 쓰지 않는다(raw 키 노출 금지) — 판정에만 쓰고, 라벨은 학원설정이 단일 소스다.
+   */
+  subject?: string | null;
 };
 
 /**
- * 결석 행을 화면에 쓸 후보로 접는다 — (반,날짜) 중복 제거 + 최신순 + 보강일 제외.
- * @param makeupDate 보강을 실제로 한 날 — 이 날은 후보에서 뺀다(위 🔴).
- * @param currentClassIds 지금 수강 중인 반 id 집합 — 여기 없으면 '이전 반'으로 표시한다.
+ * 확인창이 받는 결석 후보 한 벌 — 목록 + **왜 이만큼인지**.
+ * 🔴 배열만 돌려주면 "0건"의 뜻이 갈린다(결석이 없다 ↔ 과목이 달라 뺐다). 화면이 이유를 말할 수 있게
+ *    숨긴 건수를 함께 준다.
  */
+export type MakeupAbsenceList = {
+  options: MakeupAbsenceOption[];
+  /** 앵커 반과 과목이 달라 목록에서 뺀 후보 수(0 = 아무것도 안 걸렀다). */
+  hiddenBySubject: number;
+  /**
+   * 기준 과목의 **화면 라벨**(학원설정 단일 소스) — 서버가 채운다. 설정에 없는 키면 비운다
+   * (raw 키를 화면에 흘리지 않는다).
+   */
+  subjectLabel?: string;
+};
+
 /** 결석 칸 메모의 보강 표시 — `absenceMemo()`가 남기는 "7/16 보강 예정 · 보강 완료" 형태. */
 const MADE_UP_RE = /\d{1,2}\/\d{1,2}\s*보강\s*(예정|완료)/;
 
+/**
+ * 앵커 반(지금 보강을 넣는 반)의 과목과 **맞는 결석인가** — 비대칭 규칙(`english-track.ts` 선례와 같은 결).
+ *
+ * 🔴 **거르는 쪽이 아니라 남기는 쪽이 기본**이다. 후보가 사라지면 보강을 못 넣는데, 그 실패는 화면에
+ *    "결석이 없다"로만 보여 원인을 알 수 없다. 그래서 모르면 통과시킨다:
+ *  · 앵커 과목을 모르면(null·빈 문자열) **아무것도 안 거른다**.
+ *  · 결석이 난 반의 과목이 비어 있으면(미분류) **항상 통과**시킨다.
+ *  · 둘 다 있을 때만 같은 과목인지 본다.
+ */
+export function subjectMatchesAnchor(
+  anchorSubject: string | null | undefined,
+  rowSubject: string | null | undefined,
+): boolean {
+  const anchor = (anchorSubject ?? "").trim();
+  if (!anchor) return true;
+  const row = (rowSubject ?? "").trim();
+  if (!row) return true;
+  return row === anchor;
+}
+
+/**
+ * 결석 행을 화면에 쓸 후보로 접는다 — (반,날짜) 중복 제거 + 최신순 + 보강일 제외 + 과목 필터.
+ * @param makeupDate 보강을 실제로 한 날 — 이 날은 후보에서 뺀다(위 🔴).
+ * @param currentClassIds 지금 수강 중인 반 id 집합 — 여기 없으면 '이전 반'으로 표시한다.
+ * @param anchorSubject 보강을 넣는 반의 과목 키 — 다른 과목 결석을 목록에서 뺀다(위 비대칭 규칙).
+ *   🔴 클라가 넘긴 문자열이 아니라 **서버가 앵커 classId로 조회한 값**이어야 한다.
+ */
 export function buildAbsenceOptions(
   rows: readonly AbsenceRow[],
   makeupDate: string,
   currentClassIds: ReadonlySet<string> = new Set(),
-): MakeupAbsenceOption[] {
+  anchorSubject?: string | null,
+): MakeupAbsenceList {
   // 같은 (반,날짜)의 교시별 행을 **접으면서** 교시를 모은다 — 첫 행만 보고 버리면 "어느 수업의
   // 결석인지"가 사라지고, 보강 메모가 뒤 행에만 있는 경우 '보강 완료' 표시도 놓친다.
-  const folded = new Map<string, { option: MakeupAbsenceOption; slots: Set<string>; madeUp: boolean }>();
+  const folded = new Map<
+    string,
+    { option: MakeupAbsenceOption; slots: Set<string>; madeUp: boolean; subject: string | null }
+  >();
   for (const r of rows) {
     const date = String(r.date).slice(0, 10);
     if (!r.classId || !date || date === makeupDate) continue;
@@ -82,14 +129,25 @@ export function buildAbsenceOptions(
       },
       slots: new Set(slot ? [slot] : []),
       madeUp,
+      // 같은 (반,날짜)의 행들은 같은 반이라 과목도 같다 — 첫 행의 값이 그 후보의 과목이다.
+      subject: r.subject ?? null,
     });
   }
-  const out: MakeupAbsenceOption[] = [...folded.values()].map(({ option, slots, madeUp }) => ({
+  // 과목이 다른 후보는 **뺀 건수를 세어** 함께 돌려준다 — 조용히 사라지면 화면이 "결석이 없다"고
+  // 거짓말하게 된다(수학 보강인데 영어 결석뿐인 학생이 실측 29명).
+  const all = [...folded.values()];
+  const kept = all.filter((f) => subjectMatchesAnchor(anchorSubject, f.subject));
+  const out: MakeupAbsenceOption[] = kept.map(({ option, slots, madeUp }) => ({
     ...option,
     ...(madeUp ? { alreadyMadeUp: true } : {}),
     ...(slots.size > 0 ? { slots: [...slots].sort() } : {}),
   }));
-  return out.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : a.className.localeCompare(b.className, "ko")));
+  return {
+    options: out.sort((a, b) =>
+      a.date < b.date ? 1 : a.date > b.date ? -1 : a.className.localeCompare(b.className, "ko"),
+    ),
+    hiddenBySubject: all.length - kept.length,
+  };
 }
 
 /** 저장된 교시 시각을 화면용 "HH:MM"으로 — 형식이 아니면 버린다(추측해서 만들지 않는다). */
