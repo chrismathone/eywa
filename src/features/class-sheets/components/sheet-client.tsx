@@ -10,8 +10,10 @@ import { useEditPresence } from "@/features/presence/edit-presence";
 import type { ClassSheetWeekData } from "../server/queries";
 // 출결 저장은 ECS 전용 액션을 만들지 않고 **출석부·원스크린과 같은 것**을 쓴다 — 권한·담당 반·7일 창
 // 게이트를 화면마다 다시 짜면 한쪽만 느슨해진다(#77).
-// ⚠️ 대신 그 액션의 담당 반 판정이 ECS 접근 범위보다 **좁다**(부담임 제외) → 서버가 거절할 사람에겐
-//    queries.ts가 `canMarkAttendanceByDate`를 false로 내려 컨트롤을 미리 잠근다(거짓 어포던스 금지).
+// ⚠️ queries.ts가 그 액션과 **같은 축**(`userTaughtClassSet` = 담임 ∪ 위임 ∪ 교시 담당)으로
+//    `canMarkAttendanceByDate`를 미리 내려 컨트롤을 잠근다 — 서버가 거절할 사람에게만(거짓 어포던스 금지).
+//    🔴 2026-08-19까지는 이 미리-잠금이 액션보다 **좁아서**(부담임 제외) 반대로 "서버는 허락하는데 화면이
+//    막는" 거짓 잠금이었다. 두 축을 다시 갈라 놓지 말 것(write-gate-axis.test.ts).
 import { setAttendanceCell } from "@/features/attendance/server/actions";
 import { parseSessionUnits } from "@/features/attendance/session-units";
 import {
@@ -425,6 +427,37 @@ export function SheetClient({
             termMode,
           }).then((r) => {
             if (!r.ok) return toast.error(r.error);
+            // JJ 이어받기(듣기 레벨·누적 암기 단어수) — 계획 복사와 **따로** 반영한다. 두 칸의 원본은
+            // 계획 줄이 아니라 학생 기록이라, 계획이 하나도 안 채워진 경우에도 이 칸은 채워질 수 있다.
+            // 🔴 서버가 돌려준 값으로 **화면 상태를 직접 머지**해야 한다 — 마크는 클라 state(useState)라
+            //    refresh로는 안 바뀐다(강사는 "복사했는데 칸이 그대로"로 본다).
+            if (r.carried.length > 0) {
+              setMarks((prev) => {
+                const next = { ...prev };
+                for (const p of r.carried) {
+                  const markKey = `${p.studentId}|${planDate}|${slotStart}`;
+                  const had = next[markKey];
+                  next[markKey] = {
+                    // 이어받기는 두 칸만 건드린다 — 태도·특이사항·시험 점수는 있던 값 그대로.
+                    status: had?.status ?? null,
+                    progressNote: had?.progressNote ?? null,
+                    score: had?.score ?? null,
+                    listeningLevel: p.listeningLevel,
+                    memorizedWords: p.memorizedWords,
+                  };
+                }
+                return next;
+              });
+            }
+            if (r.carryError) toast.error(r.carryError);
+            if (r.carryPending) {
+              toast.info("듣기 레벨·누적 암기 단어수 칸은 아직 준비 중입니다(관리자에게 문의하세요)");
+            }
+            // 계획은 채울 게 없었지만 두 칸은 채워진 경우 — "복사할 게 없다"고만 말하면 거짓말이 된다.
+            if (r.copied === 0 && r.carrySummary) {
+              toast.success(`${r.carrySummary} 채움 — 지난 기록 값이라 바뀐 학생은 고쳐 주세요`);
+              return;
+            }
             if (r.copied === 0) {
               // 서버가 "왜 아무것도 안 했는지"를 돌려준다 — 조용히 성공한 척하면 사람이 버튼을 계속 누른다.
               // ⚠️ target_not_empty는 0209a 적용 전(옛 함수)에만 온다 — 그때도 raw 코드는 안 보여준다.
@@ -450,6 +483,7 @@ export function SheetClient({
             }
             toast.success(
               (r.sourceLabel ? `${r.sourceLabel} 수업에서 ${r.copied}줄 채움` : `${r.copied}줄 채움`) +
+                (r.carrySummary ? ` · ${r.carrySummary} 채움` : "") +
                 (r.truncated > 0 ? ` — ${r.truncated}줄은 20줄 상한이라 못 넣었습니다` : ""),
             );
           });

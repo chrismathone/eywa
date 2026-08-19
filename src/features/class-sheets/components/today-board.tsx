@@ -323,6 +323,21 @@ function ClassCard({
               canEdit={canWrite}
               userId={userId}
               tenantId={tenantId}
+              // JJ 이어받기 — 복사가 채운 듣기 레벨·누적 암기 단어수를 **화면 상태에 옮긴다**.
+              // 🔴 refresh만으론 안 바뀐다(마크는 useState(initialMarks)) — 안 옮기면 강사는
+              //    "복사했는데 칸이 그대로"로 본다. 두 칸만 바꾸고 태도·특이사항은 있던 값 그대로.
+              onCarried={(slotStart, patches) => {
+                for (const p of patches) {
+                  const had = marks[`${card.classId}|${p.studentId}|${slotStart}`];
+                  saveMark(p.studentId, slotStart, {
+                    status: had?.status ?? null,
+                    progressNote: had?.progressNote ?? null,
+                    score: had?.score ?? null,
+                    listeningLevel: p.listeningLevel,
+                    memorizedWords: p.memorizedWords,
+                  });
+                }
+              }}
             />
             {/* 🔴 안 그린 기록은 **침묵하지 않는다** — "분명히 썼는데 안 보인다"를 막는 각주(주간 시트의
                 '시간 변경된 기록 N건'과 같은 규약). 계획뿐 아니라 학생 기록(태도·특이사항)도 같은 실종이
