@@ -6,7 +6,7 @@
  * 08-03엔 선택지만 고쳐 **"드롭다운엔 뜨는데 저장하면 거절"** 상태가 잠깐 생겼다.
  * → 값 잠금 + 복제 금지를 테스트로 못박는다. 새 소비처는 `ASSIGNABLE_TEACHER_ROLES`를 import할 것.
  */
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { ASSIGNABLE_TEACHER_ROLES, isAssignableTeacherRole, SYSTEM_ROLES } from "./permissions";
@@ -29,12 +29,17 @@ describe("ASSIGNABLE_TEACHER_ROLES", () => {
   });
 });
 
-/** src/ 전체에서 "역할 배열을 손으로 적은 곳"을 찾는다 — 이 파일과 permissions.ts만 허용. */
+/**
+ * src/ 전체에서 "역할 배열을 손으로 적은 곳"을 찾는다 — 이 파일과 permissions.ts만 허용.
+ *
+ * ⚠️ `withFileTypes`로 순회한다 — 엔트리마다 `statSync`를 부르면 src 전체 스캔이 vitest 기본
+ *    타임아웃(5s)에 걸린다(postgrest-embed-hints.test.ts가 같은 이유로 먼저 고친 자리). 디렉터리
+ *    판정은 dirent가 이미 갖고 있어 syscall이 절반으로 준다. 파일이 늘수록 차이가 커진다.
+ */
 function sourceFiles(dir: string, out: string[] = []): string[] {
-  for (const entry of readdirSync(dir)) {
-    const full = join(dir, entry);
-    if (statSync(full).isDirectory()) sourceFiles(full, out);
-    else if (/\.tsx?$/.test(entry)) out.push(full);
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (entry.isDirectory()) sourceFiles(join(dir, entry.name), out);
+    else if (/\.tsx?$/.test(entry.name)) out.push(join(dir, entry.name));
   }
   return out;
 }

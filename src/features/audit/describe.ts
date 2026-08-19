@@ -4,6 +4,15 @@ import { ROLE_LABEL } from "@/lib/auth/role-hierarchy";
 import { SECTION_LABELS } from "@/features/owner/settings-types";
 import { STUDENT_STATUS_LABEL } from "@/features/students/status-labels";
 import { reasonDisplay } from "@/features/withdrawals/types";
+import {
+  BOARDING_STATUS_LABEL,
+  DIRECTION_LABEL,
+  SEASON_LABEL,
+  isBoardingStatus,
+  isDirection,
+  isSeason,
+} from "@/features/shuttle/types";
+import { compactWeekdays } from "@/features/shuttle/roster";
 
 /** 대상 유형(target_type) → 한글 — 감사로그 '대상' 열 접두. 미등록 유형은 원문 폴백. */
 export const AUDIT_TYPE_LABEL: Record<string, string> = {
@@ -30,6 +39,8 @@ export const AUDIT_TYPE_LABEL: Record<string, string> = {
   approval_document: "결재 문서",
   enrollment_consultations: "등록상담",
   document: "문서",
+  // 셔틀(0225a) — 없으면 감사로그 '대상' 열에 영문 "shuttle"이 그대로 뜬다(2026-08-17 원장 제보와 같은 증상).
+  shuttle: "셔틀",
 };
 
 // 시험유형은 운영 enum이 아니라 코드 고정(CLAUDE.md) — exams 화면과 동일 라벨.
@@ -401,6 +412,43 @@ export function auditDetail(
         skipped ? `건너뜀 ${skipped}명` : null,
         failed ? `실패 ${failed}명` : null,
       );
+    }
+    // ── 셔틀(0225a) ────────────────────────────────────────────────────────────────
+    // ⚠️ 여기 없으면 기본 폴백이 `ioKind: in` · `status: missed` · `season: term`을 **영문 그대로**
+    //    화면에 내보낸다(raw enum 노출 금지 — CLAUDE.md 반복 지적). 새 셔틀 액션은 여기도 함께.
+    case "shuttle_stop_create":
+    case "shuttle_stop_update": {
+      const name = str(m.name);
+      return name ? `정류장 「${name}」` : null;
+    }
+    case "shuttle_run_create": {
+      const season = str(m.season);
+      const runNo = num(m.runNo);
+      const parts = [
+        isSeason(season) ? SEASON_LABEL[season] : null,
+        runNo === null ? null : `${runNo}회차`,
+      ].filter(Boolean);
+      return parts.length ? parts.join(" ") : null;
+    }
+    case "shuttle_run_update": {
+      const d = str(m.direction);
+      return isDirection(d) ? `${DIRECTION_LABEL[d]}으로 변경` : null;
+    }
+    case "shuttle_run_stop_remove": {
+      const riders = num(m.riders);
+      return riders ? `배정 ${riders}명 함께 해제` : "정류장 제거";
+    }
+    case "shuttle_rider_assign": {
+      const io = str(m.ioKind);
+      const days = Array.isArray(m.weekdays) ? compactWeekdays(m.weekdays.map(String)) : "";
+      const parts = [isDirection(io) ? (io === "in" ? "승차" : "하차") : null, days || null].filter(Boolean);
+      return parts.length ? parts.join(" · ") : null;
+    }
+    case "shuttle_boarding_record": {
+      const status = str(m.status);
+      const on = str(m.boardedOn);
+      const parts = [on, isBoardingStatus(status) ? BOARDING_STATUS_LABEL[status] : null].filter(Boolean);
+      return parts.length ? parts.join(" · ") : null;
     }
     default: {
       // 미등록 액션 폴백 — uuid는 이름으로 해석(실패 시 숨김), 나머지는 키: 값.
