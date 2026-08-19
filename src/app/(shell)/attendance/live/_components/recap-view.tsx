@@ -129,7 +129,7 @@ export function RecapView({
       {behind.length > 0 ? (
         <section className="space-y-2">
           <h2 className="flex items-baseline gap-2">
-            <span className="text-sm font-bold">입력이 덜 된 강사</span>
+            <span className="text-sm font-bold">입력이 덜 된 강사·자리</span>
             <span className="num text-text-dim text-sm">{behind.length}</span>
             {recap.days.length > 1 ? <span className="text-text-faint text-[11px]">기간 합계</span> : null}
             {behind.some((x) => x.unmarkedClasses > 0 || x.partialCells > 0) ? (

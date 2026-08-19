@@ -7,9 +7,9 @@
  *
  * 🔑 새로 세지 않는다. 날짜 블록이 이미 그리는 `day.unmarked`(반 단위)를 그 강사 것만 고를 뿐이라
  *    줄의 숫자와 펼친 목록이 **구조적으로 같은 값**이다(둘 다 `buildDayRecap`의 같은 순회에서 나온다).
- * 🔴 고르는 키는 `teacherNames`(표시)가 아니라 **`teacherLines`(집계 축)** 다 — 표시는 자리면 `LAB`·`JJ`,
- *    영어면 시트 닉네임 원문(`Jane`)이라 강사 줄 이름(`이현이`·`담당 미지정`)과 안 맞는다. 표시로 고르면
- *    "미입력 3반"인데 펼치면 0건이 된다(digest.ts `teacherLines` 주석 참조).
+ * 🔴 고르는 키는 `teacherNames`(표시)가 아니라 **`teacherLines`(집계 축)** 다 — 표시는 영어면 시트
+ *    닉네임 원문(`Jane`)이라 강사 줄 이름(`이현이`)과 안 맞는다. 표시로 고르면 "미입력 3반"인데 펼치면
+ *    0건이 된다(digest.ts `teacherLines` 주석 참조). 자리(LAB·JJ)만 2026-08-20부터 두 값이 같아졌다.
  * ⚠️ 반 단위라 **같은 반의 여러 교시는 한 줄**이다(영어는 하루에 2~4교시가 흔하다 — 교시는 행 안에
  *    `slots`로 함께 적힌다). 담당이 교시마다 갈리는 반은 **두 강사 줄에 모두** 뜬다(집계도 그렇게 센다).
  *
@@ -31,7 +31,8 @@ type DayLike = { date: string; unmarked: readonly RecapUnmarkedClass[] };
 /**
  * 그 강사의 미입력 출석부를 **날짜 오름차순**으로. 없는 날은 아예 넣지 않는다(빈 날짜 머리 금지).
  *
- * @param teacherName 강사 줄의 이름(`RecapTeacherLine.teacherName`) — `담당 미지정`도 그대로 넘긴다.
+ * @param teacherName 강사 줄의 이름(`RecapTeacherLine.teacherName`) — 자리(`LAB`·`JJ`)·`담당 미지정`도
+ *                    그대로 넘긴다(줄 이름은 보드가 이미 정해서 내려보낸다).
  */
 export function unmarkedByTeacher(
   days: readonly DayLike[],

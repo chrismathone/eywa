@@ -55,6 +55,7 @@ const BOARD: LiveBoard = {
   teachers: [
     {
       teacherId: "t1",
+      seatLabel: null, // 사람 줄(자리면 teacherId가 null이고 여기가 "LAB"·"JJ")
       teacherName: "김강사",
       teacherPhone: null,
       expected: 3,
