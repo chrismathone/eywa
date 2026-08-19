@@ -16,6 +16,8 @@ import { getTenantSettings } from "@/features/owner/server/queries";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
 import { approvalMenuOverridesFor } from "@/features/approvals/access";
+// ⚠️ view-mode.ts가 아니라 view-as.ts에서 — view-mode는 teacher-scope·delegation을 물고 있어 순환 위험.
+import { isReadonlyTeacherView } from "@/lib/auth/view-as";
 
 /**
  * 현재 테넌트의 유효 권한 매트릭스 = 하드코딩 MENU_ACCESS(기본값) + owner 설정 permissions override.
@@ -102,12 +104,21 @@ export async function canAccessTenant(role: SystemRole, menu: MenuKey): Promise<
  * ⚠️ 쓰기 액션은 canAccessTenant 대신 이걸 쓸 것(readonly 누수 방지). role 인자 주의는 위와 동일.
  */
 export async function canWriteTenant(role: SystemRole, menu: MenuKey): Promise<boolean> {
+  // 🔴 '다른 강사 뷰'(열람 전용, 원장 2026-08-19)면 **누구든**(master·super_admin 포함) 쓰기 불가 —
+  //    이 한 곳이 출석·보강·학생·상담·성적·케어 등 canWriteTenant를 지나는 모든 mutation의 중앙 캡이다.
+  //    본인 강사뷰(겸직)·관리자뷰는 viewAsTeacher()=null이라 영향 0. UI 쓰기 플래그(canEditAttendance 등)도
+  //    같은 함수를 읽어 화면이 자동으로 열람 전용이 된다.
+  if (await isReadonlyTeacherView()) return false;
   return canWrite(role, menu, await getUserPermMatrix());
 }
 
 /** 현재 사용자 유효 매트릭스로 접근 수준(readonly 다운그레이드가 쓰기 차단에 반영되도록). */
 export async function accessLevelTenant(role: SystemRole, menu: MenuKey): Promise<Access> {
-  return accessLevel(role, menu, await getUserPermMatrix());
+  const level = accessLevel(role, menu, await getUserPermMatrix());
+  // '다른 강사 뷰'는 열람 전용 — full/scoped를 readonly로 캡(ECS requireEcsClassAccess의 canWrite,
+  // canManageTenant=학생 레코드 게이트 등이 이 수준을 본다). none은 그대로(읽기를 넓히지 않는다).
+  if ((level === "full" || level === "scoped") && (await isReadonlyTeacherView())) return "readonly";
+  return level;
 }
 
 /**

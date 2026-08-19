@@ -89,8 +89,12 @@ export const getLiveBoard = cache(async (date: string = kstToday(), selfOnly = f
   //    ① 자기 5.5개 슬롯 대신 **전체 104슬롯·43반·수강 600행**을 읽고(창마다 도는 hot path, B6)
   //    ② 남의 반 카드에 **「전원 출석」 버튼**이 붙는다 — 한 번 잘못 누르면 안 온 아이가 출석이 된다.
   //    전체 보드가 필요한 자리는 `/attendance/live`이지 강사 홈이 아니다.
+  // '다른 강사 뷰'(열람 전용)·겸직 강사뷰 = effectiveTeacherId가 있으면 **항상 그 강사로 좁힌다** —
+  // 강사 크롬에서 /attendance/live를 열었는데 전체 보드가 나오면 "그 강사의 화면"이 아니다(2026-08-19).
+  // 관리자뷰(effectiveTeacherId=null)의 전체 보드는 그대로다.
+  const viewTeacherId = await effectiveTeacherId();
   const scopedTeacherId =
-    level === "scoped" || selfOnly ? ((await effectiveTeacherId()) ?? user.id) : null;
+    level === "scoped" || selfOnly ? (viewTeacherId ?? user.id) : viewTeacherId;
   let classIds: string[] | undefined;
   if (scopedTeacherId) {
     // 🔴 담임(`classes.teacher_id`)만 보면 **부담임이 자기 화면에서 아무것도 못 본다.** 영어는 슬롯마다
@@ -114,9 +118,12 @@ export const getLiveBoard = cache(async (date: string = kstToday(), selfOnly = f
     }
   }
 
+  // '내 수업' 강조 축도 뷰 강사를 따른다 — 열람(다른 강사 뷰)에서 전부 남의 수업으로 칠해지면
+  // "그 강사의 화면"이 아니다. 관리자뷰(viewTeacherId=null)는 본인 축 그대로. 편집 버튼은 canEdit이 별도 차단.
+  const ownerAxisId = viewTeacherId ?? user.id;
   const [slots, taught] = await Promise.all([
     loadLiveSlots(date, classIds),
-    userTaughtClassSet(supabase, user.id, date),
+    userTaughtClassSet(supabase, ownerAxisId, date),
   ]);
   const isToday = date === kstToday();
   // 한 보드 안에서 시각이 흔들리면 같은 순간의 두 교시가 다른 기준으로 갈린다 — 한 번만 읽어 공유한다.
@@ -132,7 +139,7 @@ export const getLiveBoard = cache(async (date: string = kstToday(), selfOnly = f
       teacherName: slot.teacherId ? (nameById.get(slot.teacherId)?.name ?? null) : null,
       phase: phaseOf(slot, isToday, nowMin),
       band: bandOf(slot, isToday, nowMin),
-      ownedByMe: taught.has(slot.classId) || slot.teacherId === user.id,
+      ownedByMe: taught.has(slot.classId) || slot.teacherId === ownerAxisId,
     };
     (byTeacher.get(key) ?? byTeacher.set(key, []).get(key)!).push(withPhase);
   }

@@ -104,6 +104,10 @@ export const AUDIT_ACTIONS = {
   // 보강 빼기(2026-08-18) — 출결 보강 칸 + 저장된 보강 보고서를 지우는 경로. 기록을 없애는 동작이라
   // 누가 지웠는지가 특히 중요하다(원장 "다 삭제" 지시로 보고서 삭제까지 열렸다).
   makeup_remove: "보강 빼기(출결·보고서 삭제)",
+  // '다른 강사 뷰'(열람 전용, 2026-08-19) — 누가 누구의 강사뷰를 열람했는지. 대상 강사에겐 안 보이는
+  // 기능이라(원장 지시) 이 로그가 유일한 역검수 근거다.
+  teacher_view_impersonate: "다른 강사 뷰 열람",
+  staff_teacher_view_access: "강사뷰 접근 토글 변경",
 } as const;
 export type AuditActionKey = keyof typeof AUDIT_ACTIONS;
 

@@ -17,7 +17,8 @@ import { NoticePopupLayer } from "@/features/notices/components/notice-popup-lay
 import { OperationsProvider } from "@/features/owner/operations-context";
 import { EditPresenceProvider } from "@/features/presence/edit-presence";
 import { getUserPermMatrix } from "@/lib/auth/perm-matrix";
-import { getShellView, canUseTeacherView, isFullShellRole, effectiveTeacherScope } from "@/lib/auth/view-mode";
+import { getShellView, canUseTeacherView, canUseOtherTeacherView, isFullShellRole, effectiveTeacherScope, viewAsTeacher } from "@/lib/auth/view-mode";
+import { ViewAsChip } from "@/components/other-teacher-view";
 import { teacherViewHome } from "@/lib/auth/teacher-home";
 import { ecsAssistantClassIds } from "@/features/class-sheets/server/access";
 import { canAccess, menuKeyForPath } from "@/lib/permissions";
@@ -35,6 +36,11 @@ export default async function ShellLayout({ children }: { children: ReactNode })
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 
+  // '다른 강사 뷰'(열람 전용, 2026-08-19) — 검증된 대상 강사(아니면 null). 쿠키 없으면 검증 쿼리 0.
+  // 소비처 셋: ① presence track 전면 차단(대상 강사가 열람을 모르게 — 원장 지시) ② 미니셸 헤더 배지
+  // ③ 데이터 스코프는 effectiveTeacherId가 같은 판정을 공유하므로 여기선 크롬만 다룬다.
+  const viewAs = await viewAsTeacher();
+
   // 학원 브랜드·색 — owner 설정(없으면 기본값). 셸 크롬(사이드바·헤더·미니셸)에 테넌트별 적용.
   // getTenantSettings는 React cache라 아래 분기들이 같은 라운드트립을 공유(임베드 포함).
   const settings = await getTenantSettings();
@@ -47,7 +53,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
   if (embed) {
     return (
       <EmbedProvider embed>
-        <EditPresenceProvider user={{ id: user.id, displayName: user.displayName, tenantId: user.tenantId }}><OperationsProvider subjects={settings.operations.subjects} gradeLevels={settings.operations.gradeLevels} jobTitles={settings.operations.jobTitles} jobTitlesByDepartment={settings.operations.jobTitlesByDepartment}>
+        <EditPresenceProvider trackDisabled={!!viewAs} user={{ id: user.id, displayName: user.displayName, tenantId: user.tenantId }}><OperationsProvider subjects={settings.operations.subjects} gradeLevels={settings.operations.gradeLevels} jobTitles={settings.operations.jobTitles} jobTitlesByDepartment={settings.operations.jobTitlesByDepartment}>
           {/* .embed-main = 창 컴팩트 마커 — PageHeader 등이 CSS 변형([.embed-main_&])으로 소비. soft nav에서
               layout(<main>)은 재렌더되지 않아 창 안 내비가 embed 파라미터를 흘려도 컴팩트가 유지된다(요청 단위
               x-embed로 판정하면 내비마다 풀 헤더로 플립 — 적대 리뷰 major). */}
@@ -107,10 +113,14 @@ export default async function ShellLayout({ children }: { children: ReactNode })
   // 권한(ecs=scoped)은 전 강사가 가지므로 그것만으론 못 거르고, 담당 과목은 서버에서만 안다.
   // 스코프 null은 fail-open(표시) — 모른다고 감추면 정작 영어 담당이 메뉴를 잃는다.
   // 부담임 확인(ecsAssistantClassIds)은 반담당 영어가 없을 때만 평가(|| 단락 — 영어 담당은 추가 쿼리 0).
+  // + 실 역할 축(2026-08-19): /ecs 페이지 requireAccess는 실 역할로 판정한다 — '다른 강사 뷰'를 켠
+  //   counselor처럼 실 역할이 ecs를 못 열면 메뉴를 보여줘도 눌러봤자 홈으로 튕긴다(거짓 항목). 실 강사
+  //   (teacher=scoped)·겸직 관리자(full)는 이 조건이 항상 참이라 기존 동작 불변.
   const ecsForTeacher =
     view === "teacher"
-      ? (((await effectiveTeacherScope())?.subjects.includes("english") ?? true) ||
-        (await ecsAssistantClassIds()).length > 0)
+      ? ((((await effectiveTeacherScope())?.subjects.includes("english") ?? true) ||
+          (await ecsAssistantClassIds()).length > 0) &&
+        canAccess(user.systemRole, "ecs", permMatrix))
       : false;
 
   // 강사 홈(= '내 메뉴'에서 맨 위로 올릴 항목) — 영어 전담이면 ECS, 그 외 원스크린(원장 지시 2026-08-07).
@@ -155,6 +165,8 @@ export default async function ShellLayout({ children }: { children: ReactNode })
           </div>
           <div className="flex items-center gap-1.5">
             {/* 겸직이면 '내 메뉴' 드롭다운 하단에 '관리자뷰로 전환'을 넣는다(헤더 별도 버튼 X). 실 강사는 미노출. */}
+            {/* '다른 강사 뷰' 배지 — 누구의 화면인지 상시 표시 + 강사 갈아타기/관리자뷰 복귀(열람 전용). */}
+            {viewAs ? <ViewAsChip name={viewAs.displayName} /> : null}
             {view === "teacher" ? (
               <TeacherMenu
                 permMatrix={permMatrix}
@@ -178,7 +190,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
             찍으므로 본문 PageHeader의 eyebrow·21px 제목은 중복이다 — 강사 화면은 세로 1px이 곧 데이터다. */}
         {/* 강사 미니셸 — 원장이 "빠듯하다"고 짚은 화면(영어 강사 ECS 시트)이 여기다. */}
         <main className="compact-main flex-1 overflow-auto px-3 pt-4 pb-8 lg:px-6 lg:pt-5 lg:pb-10 [scrollbar-gutter:stable]">
-          <EditPresenceProvider user={{ id: user.id, displayName: user.displayName, tenantId: user.tenantId }}><OperationsProvider subjects={settings.operations.subjects} gradeLevels={settings.operations.gradeLevels} jobTitles={settings.operations.jobTitles} jobTitlesByDepartment={settings.operations.jobTitlesByDepartment}>
+          <EditPresenceProvider trackDisabled={!!viewAs} user={{ id: user.id, displayName: user.displayName, tenantId: user.tenantId }}><OperationsProvider subjects={settings.operations.subjects} gradeLevels={settings.operations.gradeLevels} jobTitles={settings.operations.jobTitles} jobTitlesByDepartment={settings.operations.jobTitlesByDepartment}>
             {children}
           </OperationsProvider></EditPresenceProvider>
         </main>
@@ -190,6 +202,8 @@ export default async function ShellLayout({ children }: { children: ReactNode })
 
   // 겸직(관리자 계열 + 실제 담당 반) → 사이드바 하단에 '강사뷰로 전환' 노출. head:true 카운트라 저비용.
   const canTeacherView = await canUseTeacherView();
+  // '다른 강사 뷰'(열람 전용) 진입 자격 — master는 쿼리 0, 그 외 요청 캐시된 PK 조회 1회(0224a 토글).
+  const canOtherTeacherView = await canUseOtherTeacherView();
 
   return (
     // ⚠️ OperationsProvider는 **셸 전체**를 감싼다 — 예전엔 <main> 안 {children}만 감쌌더니
@@ -215,6 +229,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
           logoSrc={logoSrc}
           permMatrix={permMatrix}
           canTeacherView={canTeacherView}
+          canOtherTeacherView={canOtherTeacherView}
           className="hidden lg:pointer-fine:flex"
         />
       </HideInFrame>
@@ -234,7 +249,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
           {/* 드릴인 등으로 embed 파라미터가 떨어진 하드 내비가 창(iframe) 안에서 풀 셸을 렌더하면
               물리 프레임 판정으로 .embed-main 마커를 재부착 — PageHeader 컴팩트의 HideInFrame판. */}
           <EmbedMainMarker />
-          <EditPresenceProvider user={{ id: user.id, displayName: user.displayName, tenantId: user.tenantId }}>
+          <EditPresenceProvider trackDisabled={!!viewAs} user={{ id: user.id, displayName: user.displayName, tenantId: user.tenantId }}>
             {children}
           </EditPresenceProvider>
         </main>

@@ -9,6 +9,8 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { getStaffById, hasStaffEverSignedIn } from "@/features/staff/server/queries";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { canEditLoginEmail } from "@/features/staff/email";
+import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
+import { isFullShellRole } from "@/lib/auth/view-as";
 import { StaffForm } from "../../_components/staff-form";
 import { PAYROLL_ENABLED } from "@/features/payroll/config";
 
@@ -36,6 +38,11 @@ export default async function EditStaffPage({
   // 한 번이라도 로그인한 계정의 이메일은 잠금(그 사람의 실제 로그인 수단 = 조용한 탈취 통로 방지).
   // auth 계정 보유 시 서버 액션이 auth.users 이메일을 직접 변경(미러 트리거가 public 동기, 0075a).
   const canEditEmail = canEditLoginEmail(staff.email, everSignedIn);
+  // '강사뷰 접근' 토글(0224a) — master(+super_admin)에게만 노출(서버 액션이 같은 자격으로 이중 게이트).
+  // 강사·학생 역할에겐 소비처가 없어(풀셸 전용) 숨긴다 — 서버도 같은 조건으로 거절(이중 게이트).
+  const canGrantTeacherView =
+    (user.systemRole === "master" || (await isCurrentUserSuperAdmin())) &&
+    isFullShellRole(staff.systemRole);
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
@@ -77,6 +84,7 @@ export default async function EditStaffPage({
         assignableRoleOptions={[]}
         jobTitleOptions={operations.jobTitles}
         canEditEmail={canEditEmail}
+        canGrantTeacherView={canGrantTeacherView}
         initialValue={{
           id: staff.id,
           displayName: staff.displayName,
@@ -94,6 +102,7 @@ export default async function EditStaffPage({
           seatLabDuty: staff.seatLabDuty,
           seatJjDuty: staff.seatJjDuty,
           deskAttendanceOptin: staff.deskAttendanceOptin,
+          teacherViewAccess: staff.teacherViewAccess,
         }}
       />
     </div>

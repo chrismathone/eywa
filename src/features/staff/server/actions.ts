@@ -8,6 +8,8 @@ import {
   ROLE_HIERARCHY,
 } from "@/lib/auth/role-hierarchy";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
+import { isFullShellRole } from "@/lib/auth/view-as";
 import { accessLevelTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { isAssignableTeacherRole } from "@/lib/permissions";
 import { moveLiveSlotTeacher, reassignHomeroom } from "@/features/classes/server/handover";
@@ -55,6 +57,9 @@ function readBaseForm(formData: FormData) {
     seatLabDuty: get("seatLabDuty") === "on",
     seatJjDuty: get("seatJjDuty") === "on",
     deskAttendanceOptin: get("deskAttendanceOptin") === "on",
+    // '강사뷰 접근'(0224a) — 체크박스는 폼에 master(+super_admin)에게만 노출되고, 저장도 그 자격일 때만
+    // 컬럼을 건드린다(아래 canGrantTeacherView 스프레드). 아니면 미체크=off로 남의 부여를 지우게 된다.
+    teacherViewAccess: get("teacherViewAccess") === "on",
   };
 }
 
@@ -145,6 +150,16 @@ export async function createStaff(
     text_color: input.textColor,
     attendance_alert_optin: input.attendanceAlertOptin,
   };
+  // '강사뷰 접근'(0224a)은 master(+super_admin)만 저장 — 아니면 컬럼을 아예 안 건드린다(폼에도 미노출이라
+  // 미체크=off가 실려 오는데, 그걸 그대로 쓰면 남이 부여한 접근이 조용히 지워진다).
+  const canGrantTeacherView = actor.systemRole === "master" || (await isCurrentUserSuperAdmin());
+  // 강사·학생 역할엔 부여 불가(소비처 없음 — canUseOtherTeacherView가 풀셸 역할만 통과). 조용히 버리면
+  // "저장됐는데 안 됨"이 되므로 **명시 거절**한다(write-only-orphan 방지).
+  if (canGrantTeacherView && input.teacherViewAccess && !isFullShellRole(newRole)) {
+    await admin.auth.admin.deleteUser(authData.user.id);
+    await admin.from("users").delete().eq("id", authData.user.id);
+    return { error: "강사·학생 역할에는 '강사뷰 접근'을 줄 수 없습니다 (관리자 계열 전용)" };
+  }
   const { error: dbErr } = await admin
     .from("users")
     .update({
@@ -152,11 +167,12 @@ export async function createStaff(
       seat_lab_duty: input.seatLabDuty,
       seat_jj_duty: input.seatJjDuty,
       desk_attendance_optin: input.deskAttendanceOptin,
+      ...(canGrantTeacherView ? { teacher_view_access: input.teacherViewAccess } : {}),
     })
     .eq("id", authData.user.id);
 
-  if (dbErr && /seat_lab_duty|seat_jj_duty|desk_attendance_optin/i.test(dbErr.message)) {
-    // 0209a 미적용 — 자리 토글만 빼고 나머지를 저장한다(#95, 직원 등록을 죽이지 않음).
+  if (dbErr && /seat_lab_duty|seat_jj_duty|desk_attendance_optin|teacher_view_access/i.test(dbErr.message)) {
+    // 0209a/0212a/0224a 미적용 — 선택 토글만 빼고 나머지를 저장한다(#95, 직원 등록을 죽이지 않음).
     const { error: retryErr } = await admin.from("users").update(staffPatch).eq("id", authData.user.id);
     if (retryErr) {
       await admin.auth.admin.deleteUser(authData.user.id);
@@ -168,6 +184,16 @@ export async function createStaff(
     await admin.auth.admin.deleteUser(authData.user.id);
     await admin.from("users").delete().eq("id", authData.user.id);
     return { error: `직원 정보 저장 실패: ${dbErr.message}` };
+  }
+  if (!dbErr && canGrantTeacherView && input.teacherViewAccess) {
+    // '강사뷰 접근' 부여는 감사 대상(다른 강사 화면을 여는 권한) — 등록과 동시 부여도 남긴다.
+    // ⚠️ dbErr(0224a 미적용 폴백)면 토글이 **저장되지 않았다** — 그때 로그를 남기면 감사가 거짓이 된다.
+    await logAction({
+      action: "staff_teacher_view_access",
+      targetType: "user",
+      targetLabel: input.displayName,
+      metadata: { targetUserId: authData.user.id, enabled: true },
+    });
   }
 
   revalidatePath("/staff");
@@ -200,7 +226,7 @@ export async function updateStaff(
   const admin = createAdminClient();
   const { data: target, error: targetErr } = await admin
     .from("users")
-    .select("tenant_id, email")
+    .select("tenant_id, email, system_role")
     .eq("id", id)
     .single();
   if (targetErr || !target) return { error: "대상 직원을 찾을 수 없습니다" };
@@ -269,6 +295,22 @@ export async function updateStaff(
     text_color: input.textColor,
     attendance_alert_optin: input.attendanceAlertOptin,
   };
+  // '강사뷰 접근'(0224a)은 master(+super_admin)만 저장 — 아니면 컬럼을 아예 안 건드린다(폼에도 미노출이라
+  // 미체크=off가 실려 오는데, 그대로 쓰면 남이 부여한 접근이 조용히 지워진다). 부여·회수는 감사로그 대상.
+  const canGrantTeacherView = actor.systemRole === "master" || (await isCurrentUserSuperAdmin());
+  // 강사·학생 역할엔 부여 불가(소비처 없음) — 켜서 저장하려 하면 명시 거절(조용한 드롭 = 거짓 약속).
+  if (canGrantTeacherView && input.teacherViewAccess && !isFullShellRole(target.system_role as SystemRole)) {
+    return { error: "강사·학생 역할에는 '강사뷰 접근'을 줄 수 없습니다 (관리자 계열 전용)" };
+  }
+  let prevTeacherView: boolean | null = null; // 변경 감지용 — 0224a 미적용이면 에러 → null(저장·로그 스킵)
+  if (canGrantTeacherView) {
+    const { data: prevRow, error: prevErr } = await supabase
+      .from("users")
+      .select("teacher_view_access")
+      .eq("id", id)
+      .maybeSingle();
+    prevTeacherView = prevErr || !prevRow ? null : prevRow.teacher_view_access === true;
+  }
   const { error } = await supabase
     .from("users")
     .update({
@@ -276,12 +318,13 @@ export async function updateStaff(
       seat_lab_duty: input.seatLabDuty,
       seat_jj_duty: input.seatJjDuty,
       desk_attendance_optin: input.deskAttendanceOptin,
+      ...(canGrantTeacherView ? { teacher_view_access: input.teacherViewAccess } : {}),
     })
     .eq("id", id);
 
   if (error) {
-    // 0209a/0212a 미적용이면 선택 토글만 빼고 나머지를 저장한다(#95 — 직원 수정 화면을 죽이지 않음).
-    if (/seat_lab_duty|seat_jj_duty|desk_attendance_optin/i.test(error.message)) {
+    // 0209a/0212a/0224a 미적용이면 선택 토글만 빼고 나머지를 저장한다(#95 — 직원 수정 화면을 죽이지 않음).
+    if (/seat_lab_duty|seat_jj_duty|desk_attendance_optin|teacher_view_access/i.test(error.message)) {
       const { error: retry } = await supabase.from("users").update(staffPatch).eq("id", id);
       if (retry) return { error: retry.message };
       if (input.seatLabDuty || input.seatJjDuty || input.deskAttendanceOptin) {
@@ -290,6 +333,14 @@ export async function updateStaff(
     } else {
       return { error: error.message };
     }
+  } else if (canGrantTeacherView && prevTeacherView !== null && prevTeacherView !== input.teacherViewAccess) {
+    // '강사뷰 접근' 부여·회수 — 다른 강사 화면을 여는 권한이라 누가 언제 바꿨는지 남긴다.
+    await logAction({
+      action: "staff_teacher_view_access",
+      targetType: "user",
+      targetLabel: input.displayName,
+      metadata: { targetUserId: id, enabled: input.teacherViewAccess },
+    });
   }
 
   revalidatePath("/staff");
