@@ -100,11 +100,45 @@ export type RecapUnmarkedClass = {
   expected: number;
 };
 
+/** 부분 미입력 한 교시 — 그 교시에서 아직 안 찍힌 학생들. */
+export type RecapPartialSlot = {
+  /** "HH:MM" */
+  start: string;
+  students: { studentId: string; studentName: string }[];
+};
+
+/**
+ * **일부만 찍힌 출석부** — 강사가 출석부를 열었지만 학생 몇 명이 빈 칸으로 남은 반.
+ *
+ * 원장 제보 2026-08-20: *"유형숙과 추민아는 펼쳐보기가 안되서 누가 입력안되었는지 체크가 안돼."*
+ * 통째 미입력(`unmarked`)은 반 단위라 **한 명만 빠진 출석부를 표현하지 못한다** — 그 강사 줄은
+ * `미입력 0반`이라 펼칠 것이 없다고 판단했고, 그래서 누가 빠졌는지 볼 수단이 아예 없었다.
+ */
+export type RecapPartialClass = {
+  classId: string;
+  className: string;
+  subject: string;
+  /** 그 교시들의 표시 담당(자리 반은 `LAB`·`JJ`) — 누구에게 말할지의 표기. */
+  teacherNames: string[];
+  /**
+   * 🔴 **집계 축 하나**(복수형이 아니다). 이 항목은 (반 × 강사 줄)로 쪼개져 있다 — 같은 반의 교시마다
+   *    담당이 갈리는 편성이 실재해서(실측 2026-08-19 `중등E_초등 브릿지 A` = 14:20·16:20 / 15:00·15:40이
+   *    다른 강사), `classId`로만 묶으면 한쪽 강사 줄에 **남이 안 찍은 교시**가 섞여 보인다.
+   * 🔴 `teacherNames`(표시)와 같지 않다 — `RecapUnmarkedClass.teacherLines` 주석과 같은 함정이다.
+   */
+  teacherLine: string;
+  slots: RecapPartialSlot[];
+  /** 빈 칸 수(교시×학생) = `slots`의 `students` 길이 합. */
+  cells: number;
+};
+
 export type RecapTeacherLine = {
   teacherName: string;
   cells: number;
   recorded: number;
   unmarkedClasses: number;
+  /** 출석부는 열렸는데 남은 빈 칸 수(교시×학생) — 통째 미입력(`unmarkedClasses`)과 겹치지 않는다. */
+  partialCells: number;
 };
 
 export type DayRecap = {
@@ -135,6 +169,8 @@ export type DayRecap = {
   /** 지각·조퇴·보강. */
   others: RecapEvent[];
   unmarked: RecapUnmarkedClass[];
+  /** 출석부는 열렸는데 빈 칸이 남은 반(× 강사 줄) — 빈 칸이 많은 순. */
+  partial: RecapPartialClass[];
   /** 입력이 덜 된 강사 먼저. */
   teachers: RecapTeacherLine[];
 };
@@ -175,6 +211,8 @@ export function buildDayRecap(input: {
   // (학생·반·상태) → 한 건. 교시는 모아 둔다.
   const events = new Map<string, RecapEvent>();
   const unmarked = new Map<string, RecapUnmarkedClass & { studentIds: Set<string> }>();
+  // 🔴 키가 (반 × 강사 줄)이다 — 반으로만 묶으면 교시마다 담당이 갈리는 반에서 남의 빈 칸이 섞인다.
+  const partial = new Map<string, RecapPartialClass>();
   const teachers = new Map<string, RecapTeacherLine & { classes: Set<string> }>();
   const classIds = new Set<string>();
   const presentSeen = new Set<string>();
@@ -192,6 +230,7 @@ export function buildDayRecap(input: {
         cells: 0,
         recorded: 0,
         unmarkedClasses: 0,
+        partialCells: 0,
         classes: new Set<string>(),
       };
       teachers.set(slot.teacherName, line);
@@ -226,7 +265,36 @@ export function buildDayRecap(input: {
     }
 
     for (const s of slot.students) {
-      if (s.status == null) continue;
+      if (s.status == null) {
+        // 🔑 새로 순회하지 않고 **여기서** 함께 담는다(같은 자리에서 이미 빈 칸을 보고 있다).
+        // ⚠️ 통째로 비어 있는 슬롯은 위 `unmarked`가 반 단위로 담당한다 — 두 곳에 겹쳐 넣지 않는다.
+        if (slot.hasAnyRecord) {
+          const pkey = `${slot.classId}|${slot.teacherName}`;
+          let entry = partial.get(pkey);
+          if (!entry) {
+            entry = {
+              classId: slot.classId,
+              className: slot.className,
+              subject: slot.subject,
+              teacherNames: [],
+              teacherLine: slot.teacherName,
+              slots: [],
+              cells: 0,
+            };
+            partial.set(pkey, entry);
+          }
+          pushUnique(entry.teacherNames, handlerOf(slot));
+          let bucket = entry.slots.find((x) => x.start === slot.slotStart);
+          if (!bucket) {
+            bucket = { start: slot.slotStart, students: [] };
+            entry.slots.push(bucket);
+          }
+          bucket.students.push({ studentId: s.studentId, studentName: s.studentName });
+          entry.cells += 1;
+          line.partialCells += 1;
+        }
+        continue;
+      }
       recorded += 1;
       line.recorded += 1;
       if (s.status === "present") {
@@ -293,6 +361,18 @@ export function buildDayRecap(input: {
     .map(({ studentIds, ...rest }) => ({ ...rest, expected: studentIds.size }))
     .sort((a, b) => b.expected - a.expected || a.className.localeCompare(b.className, "ko"));
 
+  const partialList = [...partial.values()]
+    .map((c) => ({
+      ...c,
+      slots: [...c.slots]
+        .sort((a, b) => a.start.localeCompare(b.start))
+        .map((s) => ({
+          ...s,
+          students: [...s.students].sort((a, b) => a.studentName.localeCompare(b.studentName, "ko")),
+        })),
+    }))
+    .sort((a, b) => b.cells - a.cells || a.className.localeCompare(b.className, "ko"));
+
   const countBy = (s: RecapStatus) => all.filter((e) => e.status === s).length;
 
   return {
@@ -316,6 +396,7 @@ export function buildDayRecap(input: {
     absences,
     others,
     unmarked: unmarkedList,
+    partial: partialList,
     teachers: [...teachers.values()]
       // 집계용으로 들고 있던 반 Set은 화면·프롬프트로 내보내지 않는다(수는 이미 unmarkedClasses에 있다).
       .map((t) => ({
@@ -323,6 +404,7 @@ export function buildDayRecap(input: {
         cells: t.cells,
         recorded: t.recorded,
         unmarkedClasses: t.unmarkedClasses,
+        partialCells: t.partialCells,
       }))
       .sort((a, b) => {
         const ra = a.cells === 0 ? 1 : a.recorded / a.cells;

@@ -14,6 +14,7 @@ import {
   RECAP_STATUS_LABEL,
   slotsLabel,
   type RecapEvent,
+  type RecapPartialClass,
   type RecapUnmarkedClass,
 } from "@/features/attendance/recap/digest";
 import type { RecapDay } from "@/features/attendance/recap/range";
@@ -172,6 +173,46 @@ export function UnmarkedRow({ row, date }: { row: RecapUnmarkedClass; date: stri
       <span className="num text-text-dim text-xs">{slotsLabel(row.slots)}</span>
       <span className="text-text-faint text-xs">{handlersLabel(row.teacherNames)}</span>
       <span className="num text-text-dim ml-auto shrink-0 text-xs">학생 {row.expected}명</span>
+    </li>
+  );
+}
+
+/**
+ * **빈 칸이 남은 출석부** 한 줄 — 출석부는 열렸는데 학생 몇 명이 안 찍힌 반
+ * (원장 제보 2026-08-20: *"누가 입력안되었는지 체크가 안돼"*).
+ *
+ * 🔑 링크 규약은 `UnmarkedRow`와 **같다**(`/attendance/{날짜}/{반id}`) — 두 줄이 같은 곳으로 가야
+ *    "여기서 찍으면 된다"가 한 가지 뜻으로 읽힌다.
+ * ⚠️ 이름이 10명을 넘는 교시가 실재한다 — 접히게 두고(`flex-wrap`) 이름은 어절로 안 쪼갠다(`break-keep`).
+ */
+export function PartialRow({ row, date }: { row: RecapPartialClass; date: string }) {
+  const subjects = useSubjectMaps();
+  return (
+    <li className="space-y-1 px-3 py-2 text-sm">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        <a
+          href={`/attendance/${date}/${row.classId}`}
+          className="hover:text-primary font-bold underline-offset-2 hover:underline"
+        >
+          {row.className}
+        </a>
+        <span className="text-text-faint text-xs">{subjects.labelOf(row.subject) || "과목 없음"}</span>
+        <span className="text-text-faint text-xs">{handlersLabel(row.teacherNames)}</span>
+        <span className="num text-amber-strong ml-auto shrink-0 text-xs font-bold">
+          빈 칸 {row.cells}개
+        </span>
+      </div>
+      {/* 교시마다 누가 남았는지 — 이 줄이 이번 변경의 목적이다(반 이름만으론 확인이 안 됐다). */}
+      <ul className="space-y-0.5">
+        {row.slots.map((s) => (
+          <li key={s.start} className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+            <span className="num text-text-dim shrink-0 text-xs">{s.start} —</span>
+            <span className="text-text-dim text-xs break-keep">
+              {s.students.map((x) => x.studentName).join(", ")}
+            </span>
+          </li>
+        ))}
+      </ul>
     </li>
   );
 }

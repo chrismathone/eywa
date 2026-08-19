@@ -105,6 +105,8 @@ export function buildRangeRecap(days: readonly RecapDay[]): RangeRecap {
         hit.cells += line.cells;
         hit.recorded += line.recorded;
         hit.unmarkedClasses += line.unmarkedClasses;
+        // 빈 칸도 날짜를 가로질러 더한다 — `days`엔 `partial`이 그대로 실리므로 목록은 자동으로 흐른다.
+        hit.partialCells += line.partialCells;
       } else {
         byTeacher.set(line.teacherName, { ...line });
       }
