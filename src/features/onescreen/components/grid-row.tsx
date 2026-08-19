@@ -202,6 +202,8 @@ export function GridBodyRow({
     attPending: ReadonlySet<string>;
     attReadOnly?: boolean; // 출결 쓰기 권한 없음 — pill 비활성
     uploadingKey?: string | null; // 첨부 업로드 중인 행 키
+    /** '다른 강사 뷰'(열람 전용) — 행 입력·발송을 전면 잠근다(2026-08-19, 서버 가드의 거울). */
+    readonlyView?: boolean;
   };
   // 키보드 세로 이동(3-1) 인덱스 — **표시 순서 기준**(assembler가 buildRowRenderMeta로 부여).
   // row=과목 단위 열(교재·오늘과제), studentRow=학생 단위 열(점수 — 학생 묶음 첫 행만, 중복 칸 스킵).
@@ -236,6 +238,7 @@ export function GridBodyRow({
   // ⚠️ 멘트 미작성도 여기서 막는다: 빈 멘트 절대 가드(2026-07-28)가 어차피 sendRow에서 거절하므로,
   //    버튼만 살려 두면 눌러 보고서야 이유를 아는 거짓 어포던스다(원장 2026-07-30 제보의 핵심).
   const sendGate = evaluateSendGate({
+    readonlyView: gen.readonlyView, // 열람 전용 — 사유 라벨("열람 전용")까지 게이트가 만든다
     alreadySent,
     isAbsent: subject.attendanceRaw === "absent",
     hasProgress: isReportEligible(subject),
@@ -243,7 +246,7 @@ export function GridBodyRow({
     // 출결 쓰기 권한 없음 = 게이트 해당 없음(P0-3) — 알약도 없는데 "출결을 기록하라"는 거짓 안내 방지.
     attendanceUnchecked: !gen.attReadOnly && isAttendanceUnchecked(subject),
   });
-  const canSend = sendGate.canSend;
+  const canSend = sendGate.canSend; // 열람 전용 포함 — 판정·사유는 send-gate 단일 소스
   // 멘트와 기록 칸이 서로 다른 말을 하는지(시험날 진도·멘트에만 있는 점수) — **막지 않고 알린다**.
   // 학부모 카드엔 멘트와 기록이 나란히 보이므로 어긋나면 학부모가 두 사실을 동시에 받는다(2026-07-30 감사).
   const mentWarnings = checkMentConsistency({
@@ -265,7 +268,8 @@ export function GridBodyRow({
    *    결석한 날에도 사유·시수는 남겨야 할 기록이다(grid.ts 주석 참조).
    * ⚠️ 잠금은 행 전체를 흐리는 방식이 아니다(gotcha #20) — 잠긴 칸만 톤을 바꾸고 이유를 밝힌다.
    */
-  const rowLocked = !isRowInputEditable(subject, liveStatus);
+  // 열람 전용(다른 강사 뷰)이면 무조건 잠금 — 발송 완료·결석 잠금과 같은 축(스타일·이동 스킵까지 공유).
+  const rowLocked = gen.readonlyView || !isRowInputEditable(subject, liveStatus);
   /** 잠긴 칸 묶음(td 안에서만 쓴다 — tr의 자식은 td여야 하므로 행 전체를 fieldset으로 감쌀 수 없다). */
   const LOCK_FS =
     "contents [&_input:disabled]:opacity-50 [&_textarea:disabled]:opacity-50 [&_button:disabled]:opacity-50 [&:disabled_*]:cursor-not-allowed";
@@ -672,7 +676,7 @@ export function GridBodyRow({
             <button
               type="button"
               onClick={() => actions.onAutoWrite(student, subject.name)}
-              disabled={genRowBusy || bulkGen || !canAutoWrite || alreadySent}
+              disabled={genRowBusy || bulkGen || !canAutoWrite || alreadySent || gen.readonlyView}
               title={
                 alreadySent
                   ? "이미 발송된 보고서 — 수정할 수 없습니다"
@@ -699,8 +703,12 @@ export function GridBodyRow({
             <GridAttachButton
               // 발송 완료건은 첨부도 잠근다 — 첨부 변경은 classnote 상태를 리셋해 **재발송을 여는 뒷문**이었다
               // (수정 금지 규칙을 우회하는 경로가 되어버린다).
-              disabled={alreadySent}
-              disabledReason="이미 발송된 보고서 — 첨부를 바꿀 수 없습니다"
+              disabled={alreadySent || gen.readonlyView}
+              disabledReason={
+                gen.readonlyView
+                  ? "다른 강사 뷰(열람 전용) — 첨부를 바꿀 수 없습니다"
+                  : "이미 발송된 보고서 — 첨부를 바꿀 수 없습니다"
+              }
               attachments={rep?.attachments ?? []}
               urls={config.attachmentUrls}
               uploading={gen.uploadingKey === key}
@@ -739,7 +747,9 @@ export function GridBodyRow({
                   ? "text-danger"
                   : sendGate.reasons[0] === "sent"
                     ? "text-primary"
-                    : "text-amber"
+                    : sendGate.reasons[0] === "readonly"
+                      ? "text-purple"
+                      : "text-amber"
               }`}
               title={sendGate.hint ?? undefined}
             >

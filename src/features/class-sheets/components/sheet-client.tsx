@@ -427,6 +427,37 @@ export function SheetClient({
             termMode,
           }).then((r) => {
             if (!r.ok) return toast.error(r.error);
+            // JJ 이어받기(듣기 레벨·누적 암기 단어수) — 계획 복사와 **따로** 반영한다. 두 칸의 원본은
+            // 계획 줄이 아니라 학생 기록이라, 계획이 하나도 안 채워진 경우에도 이 칸은 채워질 수 있다.
+            // 🔴 서버가 돌려준 값으로 **화면 상태를 직접 머지**해야 한다 — 마크는 클라 state(useState)라
+            //    refresh로는 안 바뀐다(강사는 "복사했는데 칸이 그대로"로 본다).
+            if (r.carried.length > 0) {
+              setMarks((prev) => {
+                const next = { ...prev };
+                for (const p of r.carried) {
+                  const markKey = `${p.studentId}|${planDate}|${slotStart}`;
+                  const had = next[markKey];
+                  next[markKey] = {
+                    // 이어받기는 두 칸만 건드린다 — 태도·특이사항·시험 점수는 있던 값 그대로.
+                    status: had?.status ?? null,
+                    progressNote: had?.progressNote ?? null,
+                    score: had?.score ?? null,
+                    listeningLevel: p.listeningLevel,
+                    memorizedWords: p.memorizedWords,
+                  };
+                }
+                return next;
+              });
+            }
+            if (r.carryError) toast.error(r.carryError);
+            if (r.carryPending) {
+              toast.info("듣기 레벨·누적 암기 단어수 칸은 아직 준비 중입니다(관리자에게 문의하세요)");
+            }
+            // 계획은 채울 게 없었지만 두 칸은 채워진 경우 — "복사할 게 없다"고만 말하면 거짓말이 된다.
+            if (r.copied === 0 && r.carrySummary) {
+              toast.success(`${r.carrySummary} 채움 — 지난 기록 값이라 바뀐 학생은 고쳐 주세요`);
+              return;
+            }
             if (r.copied === 0) {
               // 서버가 "왜 아무것도 안 했는지"를 돌려준다 — 조용히 성공한 척하면 사람이 버튼을 계속 누른다.
               // ⚠️ target_not_empty는 0209a 적용 전(옛 함수)에만 온다 — 그때도 raw 코드는 안 보여준다.
@@ -452,6 +483,7 @@ export function SheetClient({
             }
             toast.success(
               (r.sourceLabel ? `${r.sourceLabel} 수업에서 ${r.copied}줄 채움` : `${r.copied}줄 채움`) +
+                (r.carrySummary ? ` · ${r.carrySummary} 채움` : "") +
                 (r.truncated > 0 ? ` — ${r.truncated}줄은 20줄 상한이라 못 넣었습니다` : ""),
             );
           });

@@ -79,4 +79,19 @@ describe("evaluateSendGate", () => {
       expect(g.hint).toBeTruthy();
     }
   });
+
+  it("'다른 강사 뷰'(열람 전용) — 다른 모든 사유보다 앞서고, 라벨·힌트가 반드시 있다", () => {
+    const g = evaluateSendGate({
+      alreadySent: false,
+      isAbsent: false,
+      hasProgress: true,
+      hasDraft: true,
+      attendanceUnchecked: false,
+      readonlyView: true,
+    });
+    expect(g.canSend).toBe(false);
+    expect(g.reasons).toEqual(["readonly"]);
+    expect(g.label).toBe("열람 전용"); // 비활성 버튼엔 항상 보이는 사유(2026-07-30 불변식)
+    expect(g.hint).toContain("열람 전용");
+  });
 });

@@ -34,6 +34,7 @@ import {
   type SheetSaveStore,
 } from "./use-sheet-saves";
 import type { TodaySlot } from "../server/today";
+import type { CarryPatch } from "../lib/carry-marks";
 
 // 입력칸 테두리 = line-strong(18%) — 헤어라인 9%는 흰 카드 위에서 칸 경계가 안 보인다(주간 시트와 동일).
 const cellCls =
@@ -142,6 +143,7 @@ export function TodayPlanEditor({
   canEdit,
   userId,
   tenantId,
+  onCarried,
 }: {
   classId: string;
   className: string;
@@ -153,6 +155,8 @@ export function TodayPlanEditor({
   canEdit: boolean;
   userId: string;
   tenantId: string;
+  /** JJ 이어받기로 채워진 학생 칸 — 보드가 마크 상태에 머지한다(TodayCopySlot 각주 참조). */
+  onCarried?: (slotStart: string, patches: CarryPatch[]) => void;
 }) {
   // ① 저널 — 창이 닫혀도 미전송 입력이 IndexedDB에 남는다. 주간 시트와 **같은 문서 키**(반+주차).
   const doc = useSheetDoc({ tenantId, userId, classId, week: weekMonday });
@@ -210,7 +214,13 @@ export function TodayPlanEditor({
                 적혀 있고 진도·과제가 빈 흔한 상태에서 이 버튼이 가장 쓸모 있다(원장 2026-08-14).
                 줄이 없을 때는 아래 빈 상태 블록이 같은 버튼을 안내 문구와 함께 낸다(중복 방지). */}
             {canEdit && slot.lines.length > 0 ? (
-              <TodayCopySlot classId={classId} date={date} slotStart={slot.slotStart} store={store} />
+              <TodayCopySlot
+                classId={classId}
+                date={date}
+                slotStart={slot.slotStart}
+                store={store}
+                onCarried={onCarried}
+              />
             ) : null}
           </p>
           {slot.lines.length === 0 ? (
@@ -221,7 +231,13 @@ export function TodayPlanEditor({
                   추가하세요")을 시키는 거짓 안내가 된다(적대 리뷰 2026-08-11). */}
               <p className="text-text-faint text-[13px]">계획 줄이 아직 없습니다{canEdit ? " —" : ""}</p>
               {canEdit ? (
-                <TodayCopySlot classId={classId} date={date} slotStart={slot.slotStart} store={store} />
+                <TodayCopySlot
+                classId={classId}
+                date={date}
+                slotStart={slot.slotStart}
+                store={store}
+                onCarried={onCarried}
+              />
               ) : null}
               {canEdit ? (
                 <span className="text-text-faint text-[12px]">또는 ‘주간 시트’에서 줄 추가</span>

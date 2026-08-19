@@ -47,6 +47,7 @@ import { ProgressCard } from "./progress-card";
 import { SheetSourceCard } from "./sheet-source-card";
 import { TestCard } from "./test-card";
 import { ReportCard, type SubjectReport } from "./report-card";
+import { READONLY_TEACHER_VIEW_ERROR } from "@/lib/auth/view-as-message";
 import { ReportPreview, type ReportPreviewContext } from "./report-preview";
 import type { TrendReportRow } from "../report-trend";
 import type { ReportSettings } from "@/features/owner/settings-types";
@@ -189,6 +190,7 @@ export function OneScreenClient({
   sendWindow = null,
   showAttachments = true,
   canEditAttendance = true,
+  readonlyView = false,
   presenceScope,
   initialView = "card",
   initialFontSize = DEFAULT_ONESCREEN_FONT_SIZE,
@@ -219,6 +221,8 @@ export function OneScreenClient({
   sendWindow?: { start: string; end: string } | null; // 발송 허용 시간창 원문(무제한=null) — 창 밖일 때만 안내 배너
   showAttachments?: boolean; // 사진/파일 첨부 표시(학원 설정) — off면 첨부해도 안 실린다는 경고를 카드에 표시
   canEditAttendance?: boolean; // 출결 쓰기 권한 — false면 pill을 표시 전용으로(서버 거절 전에 화면에서 알림)
+  /** '다른 강사 뷰'(열람 전용, 2026-08-19) — 전 입력·발송·저장 UI 잠금 + 핸들러 차단(서버 가드의 거울). */
+  readonlyView?: boolean;
   presenceScope?: string; // `onescreen:{teacherId}:{date}` — 다른 창/기기 동시 열림 경고(서버가 teacherId 파생)
   initialView?: OneScreenView; // URL(?view=)에서 온 초기 뷰 — 날짜 이동(재마운트) 후에도 보던 뷰 유지
   /** 글씨 크기(내 계정, users.ui_prefs.onescreen.fontSize) — 서버 확정값이라 첫 렌더부터 정확(#75 회피). */
@@ -296,7 +300,10 @@ export function OneScreenClient({
   };
   // 카드 ↔ 표 ↔ 발송 현황 ↔ 지난 보고서 ↔ 공지. 초기값은 URL(?view=) — 날짜 이동 후에도 보던 뷰 유지.
   // 토글 자체는 클라 state만 바꾼다(네비 없음) — 뷰 전환마다 서버 왕복하면 체감이 느려진다.
-  const [view, setView] = useState<OneScreenView>(initialView);
+  // 열람 전용은 공지 뷰로 착지하지 않는다(?view=notice 북마크·날짜 내비 URL 잔존 대비) — 공지는 순수 작성 화면.
+  const [view, setView] = useState<OneScreenView>(
+    readonlyView && initialView === "notice" ? "card" : initialView,
+  );
   // 공지 컴포저 진입 시 초기 선택 학생(카드=1명, 표=선택/표시). null=진입 안 함.
   const [noticeSeed, setNoticeSeed] = useState<string[] | null>(null);
   // '이전값 일괄 가져오기' 뒤 멘트 확인 대기 계획(null=다이얼로그 닫힘) — 확인해야만 학부모 문구를 채운다.
@@ -324,6 +331,16 @@ export function OneScreenClient({
   const [genKey, setGenKey] = useState<string | null>(null); // 표 행별 자동작성 로딩 키(studentId::과목)
   const [bulkGen, setBulkGen] = useState(false); // 표 일괄 자동작성 진행중
   const [bulkBusy, setBulkBusy] = useState<"save" | "send" | null>(null); // 일괄 저장/발송 진행중 — 재진입·행발송 잠금(#9/#10)
+
+  // '다른 강사 뷰'(열람 전용) — 클라 1차 차단. 버튼·입력도 잠그지만(locked·canSend·canQueue) 핸들러 입구를
+  // 한 번 더 끊어 드래그·단축키·일괄 같은 우회가 안 남게 한다. 진짜 게이트는 서버(#77 — perm-matrix 캡 +
+  // readonlyTeacherViewError)고 이건 그 거울이다. 원장 제보(2026-08-19): 토스트 경고만으론 무시된다.
+  // 문구는 서버 거절과 같은 단일 소스(view-as-message.ts) — 두 벌이면 한쪽만 고쳐진다.
+  function readonlyBlocked(): boolean {
+    if (!readonlyView) return false;
+    toast.error(READONLY_TEACHER_VIEW_ERROR);
+    return true;
+  }
   const [attUrls, setAttUrls] = useState<Record<string, string>>({}); // 첨부 path→signed 썸네일 URL(P2b)
   const [attPending, setAttPending] = useState<Set<string>>(new Set()); // 출결 저장 중 (학생::반) — pill 잠금(2-2)
   const [quickAttBusy, setQuickAttBusy] = useState(false); // 학생 목록 머리 '일괄 출석' 왕복 중 — 연타 방지
@@ -729,6 +746,7 @@ export function OneScreenClient({
   //    대신 **그 학생 카드에 '수학 (보강)' 행을 병합**한다(카드 id=실제 학생 id 불변 = 안전). 보강 행은
   //    classId=null·makeup=true라 DB에서 정규 보고서와 별개(unit_key 분리)로 저장되고, 학부모 보고서엔 "(보강)"이 붙는다.
   async function addMakeupStudent(studentId: string) {
+    if (readonlyBlocked()) return;
     const res = await buildMakeupStudent(studentId, date || undefined); // 조회 중인 날짜 전달(과거 백필 중복게시 방지)
     if (!res.ok || !res.student) {
       toast.error(res.error ?? "학생을 추가하지 못했습니다");
@@ -844,6 +862,7 @@ export function OneScreenClient({
    *    화면에서도 행을 지우지 않는다(`keepRow`). 안 그러면 "지웠는데 새로고침하면 있다"가 된다.
    */
   async function removeMakeupRow(student: OneScreenStudent, subjectName: string) {
+    if (readonlyBlocked()) return;
     const su = student.subjects.find((x) => x.name === subjectName);
     if (!su) return;
     // 🔴 **발송된 보강은 애초에 못 뺀다**(원장 2026-08-18 *"발송된건은 보강취소를 못하게 강제해"*).
@@ -1337,6 +1356,7 @@ export function OneScreenClient({
    * ⚠️ 찍은 뒤 지각·결석으로 바꾸는 길은 알약에 그대로 열려 있다(원장: "추후에 지각 결석으로 변경 가능하게").
    */
   async function applyQuickPresent() {
+    if (readonlyBlocked()) return;
     if (quickAttBusy) return;
     const { cells } = planQuickPresent(visible, activeClassFilter);
     if (cells.length === 0) return; // 버튼이 이미 비활성 — 방어선
@@ -1525,6 +1545,7 @@ export function OneScreenClient({
   // AI 학부모 멘트 + 학습 추세 생성 코어(카드·표 공용) — 멘트 실패 시 결정적 템플릿 폴백,
   // 추세는 표본 부족/실패면 조용히 생략(기존 값 유지). 둘을 학생별 병렬(Promise.all)로 생성해 지연 최소화.
   async function generateDraftFor(student: OneScreenStudent, subjectName: string) {
+    if (readonlyView) return; // 조용히 — 상위 진입(autoWrite*)이 이미 토스트를 띄운다(일괄이면 N개가 쌓인다)
     const idx = student.subjects.findIndex((su) => su.name === subjectName);
     if (idx < 0) return;
     const su = student.subjects[idx];
@@ -1576,6 +1597,7 @@ export function OneScreenClient({
     }
   }
   async function autoWriteSubject(subjectName: string) {
+    if (readonlyBlocked()) return;
     if (!selected) return;
     const student = selected; // 클로저 고정 — 생성 중 학생 전환돼도 원래 학생에 반영
     setGenSubject(subjectName);
@@ -1587,6 +1609,7 @@ export function OneScreenClient({
   }
   // 표: 행별 자동작성(genKey로 그 행만 로딩) + 일괄 자동작성(순차). 생성된 draft는 일괄 발송이 그대로 사용.
   async function autoWriteRow(student: OneScreenStudent, subjectName: string) {
+    if (readonlyBlocked()) return;
     const key = `${student.id}::${subjectName}`;
     setGenKey(key);
     try {
@@ -1619,6 +1642,7 @@ export function OneScreenClient({
     return all.filter((r) => set.has(r.key));
   }
   async function autoWriteAllVisible(keys?: string[]) {
+    if (readonlyBlocked()) return;
     if (bulkGen || bulkBusy) return; // 재진입·중첩 방지
     const eligible = selectRows("autowrite", keys);
     const skipped = keys?.length ? keys.length - eligible.length : 0; // 선택했지만 진도 없어 제외된 행(미선택=전체=0, 음수 방지 #11)
@@ -1685,10 +1709,12 @@ export function OneScreenClient({
         // 잠긴 행(발송 완료·결석)엔 값을 밀어 넣지 않는다 — 넣으면 강사가 **지울 수 없는 값**이 남는다.
         // ⚠️ 행 목록(rows)에서 빼지는 않는다: 아래 출결 일괄 적용이 같은 목록을 쓰는데 거기서 빠지면
         //    잘못 찍은 결석을 일괄로 되돌릴 수 없다(잠금의 유일한 탈출구를 막는 꼴).
-        locked: !isRowInputEditable(
-          r.subject,
-          effectiveClassnoteStatus(liveClassnoteStatus(r.student.id, r.subject.name), r.subject.classnoteStatus),
-        ),
+        locked:
+          readonlyView ||
+          !isRowInputEditable(
+            r.subject,
+            effectiveClassnoteStatus(liveClassnoteStatus(r.student.id, r.subject.name), r.subject.classnoteStatus),
+          ),
       })),
       patchFields,
       onlyEmpty,
@@ -1785,6 +1811,7 @@ export function OneScreenClient({
    * ⚠️ 점수·태도·과제 수행·학부모 문구는 **복사하지 않는다**(학생마다 다른 개별 사실 — grid.ts 주석 참조).
    */
   function copyFirstRowDown(keys: string[], overwrite: boolean) {
+    if (readonlyBlocked()) return; // #103 세 뒷문 중 하나 — 잠긴 화면에 값을 밀어 넣는 경로
     const all = buildGridRows(visible).filter((r) => rowInClass(r.subject, activeClassFilter));
     const keySet = new Set(keys);
     const rows = keys.length ? all.filter((r) => keySet.has(r.key)) : all;
@@ -1855,6 +1882,7 @@ export function OneScreenClient({
   // 이전 회차 가져오기(1-3) — 그 행의 **빈 칸만** 채움(진도·태도·과제·오늘 과제).
   // ⚠️ 특이사항은 채우지 않음 — prevReport.note는 학부모 발송 본문(notes)이라 특이사항이 아니다.
   function importPrevFor(student: OneScreenStudent, subjectName: string) {
+    if (readonlyBlocked()) return; // 참고행 '가져오기' — LOCK_FS 밖 버튼이라 여기서 끊는다
     const idx = student.subjects.findIndex((su) => su.name === subjectName);
     const su = student.subjects[idx];
     if (!su) return;
@@ -1886,6 +1914,7 @@ export function OneScreenClient({
   // ⚠️ 멘트(학부모 문구)만 예외로 **확인 다이얼로그**를 거친다 — 나머지 칸은 강사가 오늘 값을 고르는 입력이지만
   // 멘트는 직전에 이미 학부모에게 나간 문장이라, 오늘 진도·점수와 어긋난 채 그대로 발송될 위험이 있다(원장 지시 07-21).
   function bulkImportPrev(keys?: string[]) {
+    if (readonlyBlocked()) return; // 값 계획은 locked로 0건이지만 **멘트 계획**은 별도 경로라 입구에서 차단
     const all = buildGridRows(visible).filter((r) => rowInClass(r.subject, activeClassFilter));
     const keySet = new Set(keys ?? []);
     const rows = keySet.size ? all.filter((r) => keySet.has(r.key)) : all;
@@ -1909,10 +1938,12 @@ export function OneScreenClient({
               homeworkToday: su.homeworkToday ?? "",
             },
             // 잠긴 행(발송 완료·결석)은 채우지 않는다(위 일괄 적용과 같은 이유).
-            locked: !isRowInputEditable(
-              su,
-              effectiveClassnoteStatus(liveClassnoteStatus(r.student.id, r.subject.name), su.classnoteStatus),
-            ),
+            locked:
+              readonlyView ||
+              !isRowInputEditable(
+                su,
+                effectiveClassnoteStatus(liveClassnoteStatus(r.student.id, r.subject.name), su.classnoteStatus),
+              ),
           },
         ];
       }),
@@ -1961,6 +1992,7 @@ export function OneScreenClient({
   }
   // 학생 순서 저장(3-2) — (강사×반) 영구 저장 + 성공 시 클라 state에도 즉시 반영(다음 로드는 roster가 적용).
   async function saveOrderForClass(classId: string, studentIds: string[]): Promise<boolean> {
+    if (readonlyView) return false; // 조용히 — 드래그마다 토스트가 쌓이면 짜증(순서는 그 강사의 개인 설정이다)
     const res = await saveStudentOrder({ classId, studentIds });
     if ("error" in res) {
       toast.error(res.error);
@@ -1977,10 +2009,12 @@ export function OneScreenClient({
   }
   // 학부모 공지 진입 — 카드=선택 학생 1명, 표=선택 행(없으면 보이는 전체) 학생. 공지 뷰로 전환하며 대상 seed.
   function openNoticeForStudent(studentId: string) {
+    if (readonlyBlocked()) return; // 공지 뷰는 순수 작성 화면 — 열람 전용에선 열 이유가 없다(발송은 서버도 거절)
     setNoticeSeed([studentId]);
     setView("notice");
   }
   function openNoticeForRows(keys?: string[]) {
+    if (readonlyBlocked()) return; // openNoticeForStudent와 동일
     const ids =
       keys && keys.length
         ? [...new Set(keys.map((k) => k.split("::")[0]!))]
@@ -2050,6 +2084,8 @@ export function OneScreenClient({
   }
   // ── 저장·발송 코어(카드·표 공용) — (학생,과목) 저장/큐잉 + reports state 반영. ──
   async function saveRecord(student: OneScreenStudent, subjectName: string) {
+    // 이중 방어(진입부들이 이미 막지만 새 진입부 대비) — 호출부가 res를 바로 쓰므로 실패 객체로 반환.
+    if (readonlyView) return { ok: false, error: READONLY_TEACHER_VIEW_ERROR };
     const built = buildSaveInputFor(student, subjectName);
     const res = await saveLessonReport(built.input);
     if (res.ok) {
@@ -2067,6 +2103,8 @@ export function OneScreenClient({
     return res;
   }
   async function queueOne(student: OneScreenStudent, subjectName: string) {
+    // 이중 방어 — saveRecord와 같은 이유(호출부 계약 유지: 실패 객체 반환).
+    if (readonlyView) return { ok: false, error: READONLY_TEACHER_VIEW_ERROR };
     const built = buildSaveInputFor(student, subjectName);
     const res = await saveAndQueueClassnote(built.input);
     if (res.ok) {
@@ -2086,6 +2124,7 @@ export function OneScreenClient({
   }
 
   async function sendSubject(subjectName: string, channel: string) {
+    if (readonlyBlocked()) return;
     if (!selected) return;
     if (bulkGen || bulkBusy) {
       toast.message("일괄 작업이 진행 중입니다 — 완료 후 다시 시도하세요");
@@ -2118,6 +2157,7 @@ export function OneScreenClient({
 
   // ClassNote 발송(카드) — 저장 + 큐 적재. 실제 게시는 로컬 워커가 백그라운드로(강사는 대기 안 함).
   async function queueClassnote(subjectName: string) {
+    if (readonlyBlocked()) return;
     if (!selected) return;
     if (bulkGen || bulkBusy) {
       toast.message("일괄 작업이 진행 중입니다 — 완료 후 다시 시도하세요");
@@ -2192,6 +2232,7 @@ export function OneScreenClient({
 
   // ── 표(그리드) 행별/일괄 — 카드와 같은 코어(queueOne/saveRecord) 재사용. 오늘 진도 있는 행만. ──
   async function sendRow(student: OneScreenStudent, subjectName: string) {
+    if (readonlyBlocked()) return;
     if (bulkGen || bulkBusy) {
       toast.message("일괄 작업이 진행 중입니다 — 완료 후 다시 시도하세요");
       return;
@@ -2243,6 +2284,7 @@ export function OneScreenClient({
     return student;
   }
   async function saveAllVisible(keys?: string[]) {
+    if (readonlyBlocked()) return;
     if (bulkBusy || bulkGen) return; // 재진입·중첩 방지(#10)
     const rows = selectRows("save", keys);
     const skipped = keys?.length ? keys.length - rows.length : 0; // 미선택=전체=0(음수 방지 #11)
@@ -2273,6 +2315,7 @@ export function OneScreenClient({
     );
   }
   async function sendAllVisible(keys?: string[]) {
+    if (readonlyBlocked()) return;
     if (bulkBusy || bulkGen) return; // 재진입·중첩 방지(#10)
     let rows = selectRows("send", keys); // ⚠️ let — 아래 빈 멘트 절대 가드가 대상을 좁힌다
 
@@ -2410,6 +2453,7 @@ export function OneScreenClient({
 
   // 공유링크 취소(revoke) — 학부모 열람 즉시 차단. 대상은 그 과목의 현재 shareToken.
   async function revokeShare(subjectName: string) {
+    if (readonlyBlocked()) return;
     if (!selected) return;
     const token = reports[selected.id]?.[subjectName]?.shareToken;
     if (!token) return;
@@ -2425,6 +2469,7 @@ export function OneScreenClient({
 
   // 공유링크 재발급(reissue) — 새 토큰. 옛 링크(카톡/문자/ClassNote 게시)는 즉시 무효화되므로 확인 후 실행.
   async function reissueShare(subjectName: string) {
+    if (readonlyBlocked()) return;
     if (!selected) return;
     const token = reports[selected.id]?.[subjectName]?.shareToken;
     if (!token) return;
@@ -2499,6 +2544,10 @@ export function OneScreenClient({
     files: File[],
     opts?: { silent?: boolean }, // 일괄 첨부 — 행마다 토스트를 띄우면 10행이면 10개가 쌓인다(요약 1개로)
   ): Promise<number> {
+    if (readonlyView) {
+      if (!opts?.silent) toast.error(READONLY_TEACHER_VIEW_ERROR); // 일괄(bulkAttach)은 진입부가 이미 알렸다
+      return 0;
+    }
     // 미저장 첨부는 buildSaveInput으로 보고서 행을 먼저 만든다 — 진도 없으면 빈 보고서가 생기므로 게이트(#15).
     const su0 = student.subjects.find((s) => s.name === subjectName);
     if (su0 && !reports[student.id]?.[subjectName]?.sent && !isRowActionable(su0, "save")) {
@@ -2588,6 +2637,7 @@ export function OneScreenClient({
     selected ? addAttachmentsFor(selected, subjectName, files) : Promise.resolve();
 
   async function removeAttachmentFor(student: OneScreenStudent, subjectName: string, path: string) {
+    if (readonlyBlocked()) return;
     const studentId = student.id;
     const res = await removeReportAttachment({
       studentId,
@@ -2633,6 +2683,7 @@ export function OneScreenClient({
    * 행마다 **순차** 처리(register가 read-modify-write라 병렬이면 서로 덮어쓴다). 게이트·저장보장은 행 단위 동일.
    */
   async function bulkAttach(keys: string[], files: File[]) {
+    if (readonlyBlocked()) return;
     if (!files.length) return;
     if (bulkBusy || bulkGen) return; // 재진입·중첩 방지(#10과 같은 규약)
     const targets = keys
@@ -2674,6 +2725,7 @@ export function OneScreenClient({
     //    ⚠️ `min-h-0`이 없으면 flex 아이템의 최소 크기가 콘텐츠라 열이 창을 넘겨 밀어낸다.
     <div className="flex h-full min-h-0 flex-col gap-4">
       <OneScreenTopBar
+        readonlyView={readonlyView}
         today={today}
         date={activeDate}
         todayYmd={todayYmd}
@@ -2802,6 +2854,7 @@ export function OneScreenClient({
       <div style={fontZoom === 1 ? undefined : { zoom: fontZoom }}>
       {view === "grid" ? (
         <OneScreenGrid
+          readonlyView={readonlyView}
           students={visible}
           bulkPresent={bulkPresentProps}
           reports={reports}
@@ -2857,7 +2910,7 @@ export function OneScreenClient({
             onBulkAttach: (keys, files) => void bulkAttach(keys, files),
           }}
           uploadingAttKey={uploadingAttKey}
-          order={orderClass ? { classId: orderClass.id, onSave: saveOrderForClass } : undefined}
+          order={orderClass && !readonlyView ? { classId: orderClass.id, onSave: saveOrderForClass } : undefined}
           classFilter={activeClassFilter}
           // 반 서술(G6) — 순서 기능과 동일한 동명 반 가드(orderClass = 이름 매칭이 유일할 때만).
           // 키 = classId: 이름 키면 동명 두 반(수학·영어)에 서술이 교차 주입됨(리뷰 확정 major).
@@ -2865,6 +2918,9 @@ export function OneScreenClient({
             activeClass: orderClass ? orderClass.name : null,
             value: orderClass ? (classNarratives[orderClass.id] ?? "") : "",
             onSave: (text) => {
+              // 열람 전용 — 이 저장은 **열람자 브라우저**에만 남아 "반영됩니다" 토스트가 거짓 약속이 되고,
+              // 겸직이 나중에 본인 뷰에서 자동작성하면 열람 중 쓴 서술이 학부모 멘트로 샌다(교차 오염).
+              if (readonlyBlocked()) return;
               if (!orderClass) return;
               setClassNarrative(activeDate, orderClass.id, text);
               toast.success(
@@ -2945,6 +3001,7 @@ export function OneScreenClient({
               </header>
               <ReportCard
                 key={selected.id}
+                readonlyView={readonlyView}
                 student={selected}
                 reports={reports[selected.id] ?? {}}
                 attitudes={ATTITUDE}
