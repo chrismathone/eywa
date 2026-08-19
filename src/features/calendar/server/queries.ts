@@ -58,7 +58,7 @@ async function approvedLeaveOverlay(first: string, last: string): Promise<Calend
 
   return data.map((r) => {
     const person = r.person as { display_name?: string } | null;
-    const kind = r.leave_kind === "half" ? "반차" : "연차";
+    const kind = r.leave_kind === "half" ? "반차" : r.leave_kind === "quarter" ? "반반차" : "연차";
     return {
       id: `leave-${String(r.document_id)}`,
       title: `${person?.display_name ?? "(이름 없음)"} ${kind}`,
@@ -70,9 +70,24 @@ async function approvedLeaveOverlay(first: string, last: string): Promise<Calend
       color: "amber" as const, // 휴가 전용 톤 — 수기 일정과 구분
       createdByName: null,
       source: "leave" as const,
+      seriesId: null,
     };
   });
 }
+
+/** 수기 일정 행 — series_id는 0222a 전 배포에선 없을 수 있다(아래 재시도 분기). */
+type ManualEventRow = {
+  id: string;
+  title: string;
+  memo: string | null;
+  start_date: string;
+  end_date: string;
+  start_time: string | null;
+  end_time: string | null;
+  color: string;
+  series_id?: string | null;
+  creator: { display_name?: string } | null;
+};
 
 export async function getMonthEvents(month: string): Promise<CalendarMonth> {
   if (!MONTH_RE.test(month)) return { ready: true, events: [] };
@@ -80,19 +95,32 @@ export async function getMonthEvents(month: string): Promise<CalendarMonth> {
   const supabase = await createClient();
 
   // 겹침 조건: start <= 월말 AND end >= 월초. 학원 일정은 월 수십 건 규모 — 상한 500(절단 방지 명시, B2).
-  // 수기 일정과 휴가 오버레이는 서로 독립 — 병렬(B4).
-  const [{ data, error }, leaveEvents] = await Promise.all([
-    supabase
+  const fetchManual = async (cols: string) => {
+    const res = await supabase
       .from("calendar_events")
-      .select(
-        "id, title, memo, start_date, end_date, start_time, end_time, color, creator:users!calendar_events_created_by_fkey(display_name)",
-      )
+      .select(cols)
       .lte("start_date", last)
       .gte("end_date", first)
       .order("start_date", { ascending: true })
-      .limit(500),
+      .limit(500);
+    return { data: res.data as unknown as ManualEventRow[] | null, error: res.error };
+  };
+
+  const withSeries =
+    "id, title, memo, start_date, end_date, start_time, end_time, color, series_id, creator:users!calendar_events_created_by_fkey(display_name)";
+
+  // 수기 일정과 휴가 오버레이는 서로 독립 — 병렬(B4).
+  const [manual, leaveEvents] = await Promise.all([
+    fetchManual(withSeries),
     approvedLeaveOverlay(first, last),
   ]);
+
+  let { data, error } = manual;
+  if (error && /series_id/i.test(error.message)) {
+    // #95 expand/contract — 0222a(series_id) 적용 전 배포에서도 전 직원 캘린더는 떠야 한다:
+    // 컬럼 부재(42703, 메시지가 컬럼명을 짚는다)면 series_id 없는 기존 select로 1회 재시도.
+    ({ data, error } = await fetchManual(withSeries.replace("series_id, ", "")));
+  }
 
   if (error) {
     if (/PGRST205|42P01|does not exist|Could not find the table/i.test(`${error.code} ${error.message}`)) {
@@ -104,19 +132,19 @@ export async function getMonthEvents(month: string): Promise<CalendarMonth> {
   return {
     ready: true,
     events: [...leaveEvents, ...(data ?? []).map((r) => {
-      const creator = r.creator as { display_name?: string } | null;
       return {
         id: String(r.id),
         title: String(r.title),
-        memo: (r.memo as string | null) ?? null,
+        memo: r.memo ?? null,
         startDate: String(r.start_date),
         endDate: String(r.end_date),
         // DB time은 "HH:MM:SS" — 표시는 분까지.
         startTime: r.start_time ? String(r.start_time).slice(0, 5) : null,
         endTime: r.end_time ? String(r.end_time).slice(0, 5) : null,
         color: isEventColor(String(r.color)) ? (String(r.color) as CalendarEvent["color"]) : "primary",
-        createdByName: creator?.display_name ?? null,
+        createdByName: r.creator?.display_name ?? null,
         source: "manual" as const,
+        seriesId: r.series_id ? String(r.series_id) : null,
       };
     })].sort((a, b) => a.startDate.localeCompare(b.startDate)),
   };

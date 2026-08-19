@@ -12,7 +12,7 @@ import type { CalendarEvent, EventColor } from "@/features/calendar/types";
  * ⚠️ 페이지 가로 스크롤 금지 — 그리드는 w-full, 칸은 min-w-0 + 칩 truncate.
  */
 
-const CHIP_CLASS: Record<EventColor, string> = {
+export const CHIP_CLASS: Record<EventColor, string> = {
   primary: "bg-primary-soft text-primary",
   blue: "bg-blue-soft text-blue",
   green: "bg-green-soft text-green",
@@ -60,8 +60,8 @@ function buildCells(month: string): Cell[] {
   return lastWeek.every((c) => !c.inMonth) ? cells.slice(0, 35) : cells;
 }
 
-/** 그 날의 일정 — 종일 먼저, 그다음 시작 시간순(같으면 제목순). */
-function eventsOn(events: CalendarEvent[], date: string): CalendarEvent[] {
+/** 그 날의 일정 — 종일 먼저, 그다음 시작 시간순(같으면 제목순). 하루 상세(DayListDialog)도 공유. */
+export function eventsOn(events: CalendarEvent[], date: string): CalendarEvent[] {
   return events
     .filter((e) => e.startDate <= date && date <= e.endDate)
     .sort((a, b) => {
@@ -77,6 +77,7 @@ export function MonthGrid({
   events,
   onEventClick,
   onDayClick,
+  onMoreClick,
 }: {
   month: string;
   today: string;
@@ -84,6 +85,8 @@ export function MonthGrid({
   onEventClick: (e: CalendarEvent) => void;
   /** 빈 날짜 칸 클릭 = 그 날짜로 일정 등록(구글식). 쓰기 권한이 없으면 안 넘어와 칸이 반응하지 않는다. */
   onDayClick?: (ymd: string) => void;
+  /** "+N개 더" 클릭 = 그 날 일정 전건 보기(하루 상세) — 열람이라 권한 무관 전원. */
+  onMoreClick: (ymd: string) => void;
 }) {
   const cells = buildCells(month);
   const weeks: Cell[][] = [];
@@ -167,10 +170,17 @@ export function MonthGrid({
                     </button>
                   ))}
                   {more > 0 ? (
-                    // 안내 문구일 뿐 — 칸 클릭(일정 등록)으로 번지지 않게 막는다("더 보기" 기대 클릭 오발 방지).
-                    <p className="text-text-dim px-1 text-[11px]" onClick={(ev) => ev.stopPropagation()}>
+                    // 넘친 일정은 하루 상세에서 전건 — 칸 클릭(일정 등록)으로 번지지 않게 막는다.
+                    <button
+                      type="button"
+                      onClick={(ev) => {
+                        ev.stopPropagation();
+                        onMoreClick(cell.date);
+                      }}
+                      className="text-text-dim hover:text-primary cursor-pointer px-1 text-left text-[11px] hover:underline"
+                    >
                       +{more}개 더
-                    </p>
+                    </button>
                   ) : null}
                 </div>
               </div>

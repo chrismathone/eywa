@@ -158,7 +158,7 @@ async function reservedLeaveDays(args: {
     const status = (r as { doc?: { status?: string } | null }).doc?.status;
     return status === "approved" || status === "pending" ? acc + Number(r.days ?? 0) : acc;
   }, 0);
-  return Math.round(total * 10) / 10;
+  return Math.round(total * 100) / 100; // 0.25(반반차) 해상도 보존 — 소수 1자리 반올림 금지
 }
 
 // ── 기안(상신) 공통 파이프라인 ───────────────────────────────────────────────
@@ -272,6 +272,10 @@ async function createApprovalDocument(args: {
   if (insertErr) {
     await admin.from("approval_documents").delete().eq("id", docId).eq("tenant_id", user.tenantId);
     const missing = /does not exist|Could not find the table|PGRST205/i.test(insertErr.message);
+    // 반반차 check 위반(23514) = 0223a 미적용 배포([[#95]] expand/contract) — 제약 이름으로만 잡는다.
+    if (/leave_forms_kind_valid/i.test(insertErr.message)) {
+      return { error: "반반차는 DB 마이그레이션(0223a) 적용 후 신청할 수 있습니다" };
+    }
     return {
       error: missing
         ? "이 양식의 표가 아직 준비되지 않았습니다(마이그레이션 0215a 적용 필요)"
@@ -359,7 +363,7 @@ export async function submitLeaveDraft(
   } catch (e) {
     return { error: e instanceof Error ? e.message : "잔여 연차 확인 실패" };
   }
-  const remaining = Math.max(0, Math.round((period.granted - reserved) * 10) / 10);
+  const remaining = Math.max(0, Math.round((period.granted - reserved) * 100) / 100); // 0.25 단위 보존
   if (days > remaining) {
     return {
       error:
