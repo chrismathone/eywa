@@ -167,7 +167,8 @@ export const TodayRosterTable = memo(function TodayRosterTable({
                     {col.label}
                   </th>
                 ))}
-                <th className="py-0.5 pr-1 text-left font-bold">특이사항</th>
+                {/* 머리는 가운데 — 주간 시트와 **같은 규약**(둘이 갈리면 같은 표로 안 읽힌다). */}
+                <th className="py-0.5 text-center font-bold">특이사항</th>
               </Fragment>
             ))}
           </tr>

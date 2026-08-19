@@ -15,7 +15,8 @@ import { getTenantSettings } from "@/features/owner/server/queries";
 import { resolveSkillAreas } from "@/features/owner/skill-areas";
 import type { SkillAreaSetting } from "@/features/owner/settings-types";
 import { effectiveAttendanceRecords } from "@/features/attendance/effective-records";
-import { getTeachingClassIds } from "@/features/classes/server/delegation";
+// 출결 쓰기의 담당 반 축 — **출결 서버 액션과 같은 함수**(담임 ∪ 위임 ∪ 교시 담당, write-gate-axis).
+import { userTaughtClassSet } from "@/features/attendance/live/server/write-policy";
 import { isWithinAttendanceEditWindow } from "@/features/attendance/edit-window";
 import { readEcsFontSize, type EcsFontSize } from "../font-size";
 import {
@@ -470,18 +471,23 @@ export async function getClassSheetWeek(
     canWriteTenant(access.user.systemRole, "attendance"),
     accessLevelTenant(access.user.systemRole, "attendance"),
   ]);
-  // 🔴 출결 저장은 **출석부와 같은 액션**(`setAttendanceCell`)을 타는데, 그 액션의 담당 반 판정은
-  //    `getTeachingClassIds`(= `classes.teacher_id` ∪ 위임)라 **ECS 접근 범위보다 좁다**. ECS는 원장 승인
-  //    2026-07-29로 교시 담당(부담임, `ecsAssistantClassIds` — `class_schedules.teacher_id`)까지 열어 뒀다.
-  //    그래서 부담임은 시트를 열 수는 있지만 출결 저장은 서버가 거절한다 → **컨트롤을 미리 잠근다.**
-  //    안 잠그면 "눌리는데 매번 거절"이 되어 이 프로젝트가 반복해 밟은 거짓 어포던스가 된다(#77 반대편).
-  // ⚠️ 여기서 범위를 넓히지 말 것 — 출결은 시수·급여에 닿으므로 게이트는 출석부 쪽이 단일 소스다.
-  //    부담임에게도 열어야 한다면 그 액션의 담당 판정을 바꾸는 게 맞다(원장 결정 필요).
+  // 출결 저장은 **출석부와 같은 액션**(`setAttendanceCell`)을 타므로, 담당 반 판정도 그 액션과 **같은
+  // 함수**(`userTaughtClassSet` = 담임 ∪ 위임 ∪ 교시 담당)를 쓴다. 게이트는 여전히 출석부 쪽이 단일 소스고
+  // 여기는 그걸 미리 비추는 거울일 뿐이다(화면과 서버가 같은 말 — #77).
+  // 🔴 종전엔 여기서 `getTeachingClassIds`(담임 ∪ 위임)만 봐서 **교시 담당(부담임)의 출결이 화면에서만
+  //    잠겨** 있었다. 그때는 액션도 같은 축이라 맞는 잠금이었지만, 액션이 2026-08-18(write-gate-axis)에
+  //    교시 담당까지 넓히면서 **거짓 잠금**으로 남았다(원장 확인 2026-08-19: "본인 수업이니 당연히 출결이
+  //    가능해야 한다"). ⚠️ 두 축을 다시 갈라 놓지 말 것 — 넓히려면 액션 쪽을 고치고 여기가 따라온다.
+  // ⚠️ **알려진 한계(축은 같고 날짜가 다르다)**: 여기는 주 단위 화면이라 담당 반을 `today` 하나로 재는데
+  //    액션은 저장하려는 **그 날짜**(sessionDate)로 잰다. 담당이 이번 주 안에 바뀐 반(시간표 행 분할 #88)
+  //    에서만 한 칸 어긋난다 — 강사는 7일 창에 묶여 폭이 좁고, 날짜마다 다시 재면 이 핫패스 왕복이 7배가
+  //    된다(B4). 좁히려면 날짜 범위를 한 번에 받는 조회를 먼저 만들 것. (오늘 면 today.ts는 하루짜리
+  //    화면이라 처음부터 그 날짜로 잰다 — 거기선 어긋남이 없다.)
   const attendanceClassIds =
     attendanceWrite && attendanceScope === "scoped"
-      ? (await getTeachingClassIds(await createClient(), access.user.id, today)).all
+      ? await userTaughtClassSet(await createClient(), access.user.id, today)
       : null;
-  const attendanceClassOk = attendanceClassIds === null || attendanceClassIds.includes(classId);
+  const attendanceClassOk = attendanceClassIds === null || attendanceClassIds.has(classId);
   // 사유(메모)만 = 권한 + 담당 반. 7일 창은 여기서 빼고 날짜별 canMark에만 곱한다(서버 noteOnly와 같은 폭).
   const canNoteAttendance = attendanceWrite && attendanceClassOk;
   const canMarkAttendanceByDate: Record<string, boolean> = {};

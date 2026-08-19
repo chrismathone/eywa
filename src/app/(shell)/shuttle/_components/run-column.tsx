@@ -54,7 +54,9 @@ export function RunColumn({
   }
 
   return (
-    <div className="flex min-h-0 flex-col gap-3 overflow-y-auto">
+    // ⚠️ `px-1 py-0.5` — 카드 테두리가 `--shadow-card`의 1px 링(박스 밖)이라 `overflow-y-auto`가
+    //    좌·우를 깎아 "테두리 짤림"으로 보인다(stop-column과 같은 이유, 원장 2026-08-19).
+    <div className="flex min-h-0 flex-col gap-3 overflow-y-auto px-1 py-0.5">
       {vehicles.length === 0 && (
         <p className="text-text-faint px-1 text-[12.5px]">
           차량이 없습니다 — 아래에서 먼저 차량을 만드세요.

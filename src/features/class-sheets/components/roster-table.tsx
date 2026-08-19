@@ -214,7 +214,10 @@ export const RosterTable = memo(function RosterTable({
                 {col.label}
               </th>
             ))}
-            <th className="rounded-r-md py-0.5 pr-1 font-bold">특이사항</th>
+            {/* 특이사항 머리도 **가운데**(원장 2026-08-19 "라벨 줄맞춤") — 이 열은 잔여 폭을 다 받아
+                넓은데, 라벨만 왼쪽에 붙어 있어 앞 열(누적 암기 단어수)에 딸린 것처럼 보였다.
+                본문 값은 좌측 정렬 유지(표 규약 2026-08-05: 머리는 가운데, 값은 왼쪽). */}
+            <th className="rounded-r-md py-0.5 text-center font-bold">특이사항</th>
           </tr>
         </thead>
         <tbody className="divide-line divide-y">

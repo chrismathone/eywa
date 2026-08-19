@@ -47,3 +47,33 @@ describe("읽기 축(teacher-axis)도 교시 담당을 포함한다", () => {
     expect(axis).toContain("homeroom");
   });
 });
+
+/**
+ * 🔴 **화면의 미리-잠금도 같은 축이어야 한다** (2026-08-19).
+ *
+ * ECS(영어 강사 시트)는 출결 컨트롤을 서버 액션에 물어보기 전에 미리 잠근다 — "눌리는데 매번 거절"을
+ * 막으려는 거울이다. 그런데 2026-08-18에 액션 쪽만 교시 담당까지 넓히고 이 거울은 옛 축
+ * (`getTeachingClassIds` = 담임 ∪ 위임)에 남아, **서버는 허락하는데 화면이 막는 거짓 잠금**이 됐다
+ * (실측: 활성 영어 반 기준 교시 담당만 맡은 반 — 이현이 9 · KRISTINE DRIVER 8 · Florence Park 5/5).
+ * 원장 확인 2026-08-19: *"'오늘'에 나온 본인 수업은 전부 출결 가능해야 한다"*.
+ *
+ * ⚠️ 이 파일이 깨지면 테스트를 고치기 전에 "왜 거울이 액션과 달라졌는지"를 먼저 설명할 것.
+ */
+describe("ECS 화면의 출결 미리-잠금은 액션과 같은 축", () => {
+  const mirrors = [
+    ["오늘 면", join(process.cwd(), "src", "features", "class-sheets", "server", "today.ts")],
+    ["주간 시트", join(process.cwd(), "src", "features", "class-sheets", "server", "queries.ts")],
+  ] as const;
+
+  for (const [label, file] of mirrors) {
+    it(`${label}은 userTaughtClassSet(담임 ∪ 위임 ∪ 교시 담당)으로 잠근다`, () => {
+      const src = readFileSync(file, "utf8");
+      expect(src).toContain("userTaughtClassSet");
+      // 주석에도 옛 이름이 나오므로 **import 줄**만 본다(설명 문장이 위반으로 걸리지 않게).
+      const importsOldAxis = src
+        .split(/\r?\n/)
+        .some((line) => line.startsWith("import") && line.includes("getTeachingClassIds"));
+      expect(importsOldAxis, `${label}이 좁은 축으로 되돌아갔다`).toBe(false);
+    });
+  }
+});

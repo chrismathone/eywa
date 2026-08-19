@@ -267,8 +267,12 @@ export async function getDeskQueue(date: string = kstToday()): Promise<DeskQueue
   return { ...buildQueue(students, classes), date };
 }
 
-/** 그날 조치 기록 — 키는 `${studentId}|${slotStart}`(교시 null 기록은 모든 교시에 붙는다). */
-async function loadFollowups(date: string): Promise<Map<string, FollowupBrief>> {
+/**
+ * 그날 조치 기록 — 키는 `${studentId}|${slotStart}`(교시 null 기록은 모든 교시에 붙는다).
+ * ⚠️ 어제 출결 요약(recap)도 **이 로더를 그대로 쓴다** — 조치 판정이 두 벌이 되면 큐에선 '처리함'인데
+ *    요약에선 '미조치'로 뜬다. 키 규약을 바꿀 땐 두 소비처를 함께 볼 것.
+ */
+export async function loadFollowups(date: string): Promise<Map<string, FollowupBrief>> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("attendance_followups")

@@ -8,10 +8,13 @@ import type { AssignableStudent } from "@/features/shuttle/server/students";
  * 우열 — 배정 가능한 학생 풀(재원생). 여기서 정류장으로 끌어다 놓으면 배정되고,
  * 배정 칩을 여기로 끌어다 놓으면 해제된다(같은 곳이 원천이자 휴지통 — 방향만 반대다).
  *
- * 🔑 상한을 두지 않는다 — "상위 N 미리보기"의 배열 길이를 건수로 쓰다 34명이 영원히 "30"이던
- *    전례([[#89]])와, 정렬 편향으로 카테고리가 통째로 사라진 전례([[#84]])를 피해 **검색으로** 좁힌다.
+ * 🔑 **검색해야 나온다**(원장 2026-08-19: *"우측 학생이 전부 보일 필요 없음, 검색한 것만 보이게"*).
+ *    재원생 전원(실측 336명)을 늘 세워두면 셔틀 타는 71명을 찾는 데 방해만 되고, 항목 하나하나가
+ *    dnd-kit `useDraggable` 노드라 폰에서 드래그마다 그 수만큼 측정이 돈다(좁은 화면에서 이 열이
+ *    `hidden`이어도 **React는 계속 렌더**한다).
+ * ⚠️ 건수 표시는 **참값**을 유지한다 — 잘린 배열 길이를 건수로 쓰지 말 것([[#89]]).
  */
-/** 한 번에 그리는 최대 인원(검색으로 좁히면 그 안에서 다시 상한). 건수 표시는 상한과 무관하다. */
+/** 검색 결과가 넓을 때 한 번에 그리는 최대 인원. 건수 표시는 이 상한과 무관하다. */
 const POOL_RENDER_CAP = 80;
 
 export function StudentPool({
@@ -26,31 +29,37 @@ export function StudentPool({
   const [q, setQ] = useState("");
   const { setNodeRef, isOver } = useDroppable({ id: "pool", data: { type: "pool" } });
 
-  const filtered = useMemo(() => {
-    const key = q.replace(/\s+/g, "").toLowerCase();
-    if (!key) return students;
-    return students.filter((s) => s.searchKey.includes(key));
-  }, [students, q]);
+  const key = q.replace(/\s+/g, "").toLowerCase();
+  const searching = key.length > 0;
 
-  /**
-   * 실제로 그리는 건 상한까지만 — 항목 하나하나가 dnd-kit `useDraggable` 노드라 재원생 전원
-   * (실측 336명)을 항상 마운트하면 폰에서 드래그마다 그 수만큼 측정이 돈다. 좁은 화면에서는 이 열이
-   * `hidden`이어도 **React는 계속 렌더**하므로 상한이 없으면 안 보이는 곳에서 비용이 난다.
-   * ⚠️ 위 건수 표시는 `filtered.length`(참값) 그대로 둔다 — 잘린 배열 길이를 건수로 쓰지 말 것([[#89]]).
-   */
-  const shown = useMemo(() => filtered.slice(0, POOL_RENDER_CAP), [filtered]);
+  /** 검색 전에는 **아무도 그리지 않는다** — 목록은 검색으로만 열린다. */
+  const matches = useMemo(
+    () => (key ? students.filter((s) => s.searchKey.includes(key)) : []),
+    [students, key],
+  );
+  const shown = useMemo(() => matches.slice(0, POOL_RENDER_CAP), [matches]);
 
   return (
     <div
       ref={setNodeRef}
-      className={`bg-card flex min-h-0 flex-col gap-2 rounded-2xl p-2.5 shadow-[var(--shadow-card)] transition-colors ${
+      // flex-1: 검색 전에는 목록이 비므로 카드가 내용 높이로 쪼그라든다 — 그러면 "여기 놓으면 배정 해제"
+      // 드롭 영역이 손톱만 해진다. 열 높이를 그대로 채워 휴지통 면적을 유지한다.
+      className={`bg-card flex min-h-0 flex-1 flex-col gap-2 rounded-2xl p-2.5 shadow-[var(--shadow-card)] transition-colors ${
         isOver ? "ring-danger ring-2" : ""
       }`}
     >
       <div className="flex items-baseline justify-between gap-2">
         <h3 className="text-text text-[13.5px] font-bold">학생</h3>
         <span className="text-text-faint text-[11.5px]">
-          <span className="num">{filtered.length}</span>명
+          {searching ? (
+            <>
+              <span className="num">{matches.length}</span>명 찾음
+            </>
+          ) : (
+            <>
+              전체 <span className="num">{students.length}</span>명
+            </>
+          )}
         </span>
       </div>
 
@@ -69,15 +78,27 @@ export function StudentPool({
         {shown.map((s) => (
           <PoolItem key={s.id} student={s} assigned={assignedIds.has(s.id)} canWrite={canWrite} />
         ))}
-        {filtered.length === 0 && (
+        {!searching && (
+          // 목록이 비어 보이는 이유를 적어 둔다 — 빈 칸만 있으면 "학생이 안 나온다"로 읽힌다.
+          <li className="text-text-faint px-1 py-2 text-[12px] leading-relaxed">
+            이름이나 학교를 입력하면 여기에 나옵니다.
+            {canWrite && (
+              <>
+                <br />
+                배정된 칩을 이 칸으로 끌어다 놓으면 배정이 해제됩니다.
+              </>
+            )}
+          </li>
+        )}
+        {searching && matches.length === 0 && (
           <li className="text-text-faint px-1 py-2 text-[12px]">찾는 학생이 없습니다</li>
         )}
-        {filtered.length > shown.length && (
-          // ⚠️ 위의 건수(filtered.length)는 **참값**을 유지한다 — 잘린 배열 길이를 건수로 쓰면
+        {matches.length > shown.length && (
+          // ⚠️ 위의 건수(matches.length)는 **참값**을 유지한다 — 잘린 배열 길이를 건수로 쓰면
           //    학생이 늘어도 숫자가 상한에 붙어 안 변한다([[#89]]).
           <li className="text-text-faint px-1 py-2 text-[11px]">
-            <span className="num">{filtered.length}</span>명 중{" "}
-            <span className="num">{shown.length}</span>명만 표시 — 이름을 입력해 좁히세요
+            <span className="num">{matches.length}</span>명 중{" "}
+            <span className="num">{shown.length}</span>명만 표시 — 이름을 더 입력해 좁히세요
           </li>
         )}
       </ul>
@@ -110,11 +131,16 @@ function PoolItem({
       } ${assigned ? "opacity-55" : ""}`}
       title={assigned ? "이 시즌에 이미 배정된 학생 (다른 회차에 또 태울 수 있습니다)" : undefined}
     >
-      <span className="text-text font-medium">{student.name}</span>
-      {student.schoolGrade && (
-        <span className="text-text-faint text-[11px]">{student.schoolGrade}</span>
-      )}
-      {assigned && <span className="text-text-faint ml-auto text-[10.5px]">배정됨</span>}
+      {/* 🔑 라벨 자리 고정 — 이름 길이에 따라 학교·학년이 들쭉날쭉하면 눈이 매번 다시 찾는다
+          (원장 2026-08-19). 학교·학년은 오른쪽 정렬, '배정됨' 칸은 **비어 있어도 폭을 차지**해
+          같은 x에 선다. */}
+      <span className="text-text min-w-0 overflow-hidden font-medium text-ellipsis whitespace-nowrap">
+        {student.name}
+      </span>
+      <span className="text-text-faint ml-auto shrink-0 text-[11px]">{student.schoolGrade}</span>
+      <span className="text-text-faint w-[2.6rem] shrink-0 text-right text-[10.5px]">
+        {assigned ? "배정됨" : ""}
+      </span>
     </li>
   );
 }
