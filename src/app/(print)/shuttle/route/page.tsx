@@ -1,6 +1,6 @@
 import { headers } from "next/headers";
 import { PrintActions } from "@/app/(print)/enrollment/[id]/print/print-actions";
-import { requireAccess } from "@/lib/auth/require-access";
+import { requireShuttleView } from "@/features/shuttle/server/access";
 import { kstToday, formatKoreanDate } from "@/lib/date-kst";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { getShuttleBoard } from "@/features/shuttle/server/queries";
@@ -56,7 +56,8 @@ export default async function ShuttleRoutePrintPage({
 }: {
   searchParams: Promise<{ season?: string; d?: string; vehicle?: string }>;
 }) {
-  await requireAccess("shuttle");
+  // 열람 게이트는 화면과 같은 함수 — 노선표 인쇄는 셔틀 담당(0227a)도 필요하다(#77: 표면마다 다른 게이트 금지).
+  await requireShuttleView();
   const sp = await searchParams;
   const season: Season = isSeason(sp.season) ? sp.season : "term";
   const allDays = sp.d === "all";

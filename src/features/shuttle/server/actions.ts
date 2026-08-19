@@ -13,7 +13,7 @@ import { canRecordBoarding } from "./record-gate";
  *
  * 🔴 **게이트가 둘이고 축이 다르다** — 섞지 말 것:
  *   · `gate()`       = 편성(정류장·차량·회차·노선·배정) — `canWriteTenant("shuttle")` = 사무실 full.
- *   · `recordGate()` = 등하원 **기록** — [`canRecordBoarding`](./record-gate.ts)(사무실 ∪ 셔틀 체크 계정 ∪ super_admin).
+ *   · `recordGate()` = 등하원 **기록** — [`canRecordBoarding`](./record-gate.ts)(사무실 ∪ '셔틀 담당' 토글 ∪ super_admin).
  *   실측(2026-08-19) 셔틀 선생님은 역할이 `viewer`라, 기록까지 사무실 권한을 요구하면 정작 차에
  *   타는 사람이 아무것도 못 찍는다. 반대로 편성을 열면 viewer가 학생 동선을 바꿀 수 있다.
  *   새 액션을 더할 땐 **어느 축인지 먼저 정하고** 그 게이트를 쓸 것.

@@ -64,6 +64,10 @@ export const ROUTE_WINDOW_SIZE: Record<string, { w: number; h: number }> = {
   // 휴가관리 — 연차 현황(3칸 스탯) + 신청 폼 + 내역 표 / 전자결재함. 기본 480은 폼 2열이 접힌다.
   approvals: { w: 1000, h: 800 },
   calendar: { w: 1120, h: 800 }, // 월 그리드(7열×5~6주) — 칸당 일정 칩이 설 폭
+  // 셔틀 — 편성 보드가 **3열**(회차/노선/학생)이고 그 그리드는 `lg`(1024px)부터 펴진다. 등록이 없어
+  // 기본 480px로 열리면 데스크톱 창인데도 폰용 3탭 레이아웃이 떠서 드래그 편성을 할 수 없었다.
+  // (`shuttle/today`는 longest-prefix로 이 크기를 상속 — 회차 카드가 한 열로 시원하게 선다.)
+  shuttle: { w: 1180, h: 760 },
 
 
   "billing/refunds": { w: 840, h: 720 }, // 환불 요청서(작성 폼·A4형 시트 뷰) — 상세 id도 prefix로 상속

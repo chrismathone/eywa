@@ -7,6 +7,8 @@ export default function Loading() {
   return (
     <div className="flex min-h-full w-full flex-col gap-3 p-3 md:px-5 md:py-4">
       <div className="bg-muted h-9 w-40 animate-pulse rounded-lg" />
+      {/* 면 전환 탭바(노선 편성 · 오늘 등하원) — 로드 후 줄이 밀리지 않게 자리를 잡아 둔다. */}
+      <div className="bg-muted h-10 w-56 animate-pulse rounded-2xl" />
       <div className="flex gap-2">
         <div className="bg-muted rounded-pill h-10 w-20 animate-pulse" />
         <div className="bg-muted rounded-pill h-10 w-20 animate-pulse" />

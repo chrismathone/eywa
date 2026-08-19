@@ -86,6 +86,16 @@ describe("강사 홈 착지 지점 배선", () => {
     expect(read(["src", "lib", "auth", "teacher-home.ts"])).toContain("landingPathFromDuties");
   });
 
+  it("착지 단일 소스가 셔틀 담당 착지(getShuttleDuty)를 거치고, 그 화면이 메뉴 권한 없이 열린다", () => {
+    // 🔴 짝으로 봐야 한다 — 착지만 넣고 페이지 우회를 빠뜨리면 셔틀 담당 계정이 로그인하는 순간
+    //    착지 → requireAccess 거부 → 다시 착지로 무한히 돈다(ECS 홈에서 겪은 함정과 같은 모양).
+    expect(read(["src", "lib", "auth", "teacher-home.ts"])).toContain("getShuttleDuty");
+    expect(read(["src", "app", "(shell)", "shuttle", "today", "page.tsx"])).toContain(
+      "requireShuttleView",
+    );
+    expect(read(["src", "features", "shuttle", "server", "access.ts"])).toContain("getShuttleDuty");
+  });
+
   it("폴백 종점(원스크린)은 ROLE_LOCKED라 무한 리다이렉트가 없다", () => {
     // teacher_onescreen이 잠금 해제되면 "홈으로 폴백 → 홈이 거부 → 다시 폴백"이 무한히 돈다.
     // ECS는 잠기지 않은 메뉴라, teacher-home이 접근 확인 후에만 ECS를 준다(ecsHomeIfAllowed).

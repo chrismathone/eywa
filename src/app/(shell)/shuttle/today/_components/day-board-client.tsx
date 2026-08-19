@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { FaceTabs } from "@/components/face-tabs";
 import { Pill } from "@/components/atoms/pill";
 import { TONE_COLOR } from "@/lib/design/semantic-color";
 import { addDays, formatKoreanDate } from "@/lib/date-kst";
@@ -14,7 +15,8 @@ import {
   type ShuttleRun,
   type ShuttleVehicle,
 } from "@/features/shuttle/types";
-import { mergePlanAndLog, plannedRidesOn } from "@/features/shuttle/roster";
+import { SHUTTLE_TODAY_PATH, shuttleFaces } from "@/features/shuttle/faces";
+import { mergePlanAndLog, plannedRidesOn, type RideRow } from "@/features/shuttle/roster";
 import { saveShuttleTodayPrefs } from "@/features/shuttle/server/today-prefs";
 import {
   countProgress,
@@ -129,6 +131,10 @@ export function DayBoardClient({
 
   return (
     <div className="flex min-h-0 flex-col gap-3">
+      {/* 면 전환 — 📱 폰엔 사이드바(하부탭)가 없다. 이 화면엔 PageHeader가 없어(세로 아끼기)
+          여기가 "지금 어느 면인지"를 알려 주는 자리이기도 하다(faces.ts). */}
+      <FaceTabs faces={shuttleFaces(season)} active={SHUTTLE_TODAY_PATH} ariaLabel="셔틀 면 전환" />
+
       {/* 날짜·시즌 — 좁은 화면에선 가로 레일 한 줄(감기지 않는다). 탭 타겟은 44px 이상. */}
       <div className="toolbar-rail flex flex-wrap items-center gap-2">
         <Link
