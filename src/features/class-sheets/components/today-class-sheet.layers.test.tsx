@@ -74,6 +74,8 @@ function slot(slotStart: string, studentIds: string[]): GridSlot {
 const data = {
   classId: "c1",
   canMarkAttendanceByDate: { "2026-08-19": true },
+  // 보강 어댑터가 교시 이름을 여기서 뽑는다(서버가 항상 채우는 값) — 빼면 그 줄에서 죽는다.
+  periodLabelBySlot: {},
   isEie: false,
 } as unknown as ClassSheetWeekData;
 
