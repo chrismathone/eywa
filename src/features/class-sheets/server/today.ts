@@ -4,7 +4,9 @@ import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged, fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 import { accessLevelTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { getCurrentUser } from "@/lib/auth/current-user";
-import { getTeachingClassIds } from "@/features/classes/server/delegation";
+// 출결 쓰기의 담당 반 축 — **출결 서버 액션과 같은 함수**(담임 ∪ 위임 ∪ 교시 담당). 화면 잠금이
+// 액션보다 좁으면 "서버는 허락하는데 화면이 막는" 거짓 잠금이 된다(write-gate-axis.test.ts).
+import { userTaughtClassSet } from "@/features/attendance/live/server/write-policy";
 import { addDays, kstToday } from "@/lib/date-kst";
 import { settingsToPeriodsConfig, weekdayTableFor } from "@/features/timetable/lib/periods";
 import { getTenantSettings } from "@/features/owner/server/queries";
@@ -538,14 +540,17 @@ export async function getEcsToday(dateParam?: string | null): Promise<EcsTodayRe
   const attendanceWritable =
     (await canWriteTenant(user.systemRole, "attendance")) &&
     (user.systemRole !== "teacher" || isWithinAttendanceEditWindow(date, today));
-  // 담당 반 게이트를 **서버 액션과 같은 소스**(getTeachingClassIds = 담임∪그날 위임)로 미리 반영 —
-  // ECS 가시성(부담임·±7일 유예 위임 포함)이 출결 액션의 담당 판정보다 넓어서, 이걸 안 가르면
-  // 부담임 반에서 눌러도 서버가 전량 거절하는 거짓 어포던스가 된다(주간 시트 canMarkAttendanceByDate와
-  // 같은 처방 — 적대 리뷰 2026-08-11). full(관리자 계열)은 반 제한 없음.
+  // 담당 반 게이트를 **서버 액션과 같은 소스**(`userTaughtClassSet` = 담임 ∪ 위임 ∪ 교시 담당)로 미리
+  // 반영한다. full(관리자 계열)은 반 제한 없음.
+  // 🔴 2026-08-19 원장 확인 *"'오늘'에 나온 본인 수업은 전부 출결 가능해야 한다"* — 종전엔 여기서
+  //    `getTeachingClassIds`(담임 ∪ 위임)만 봐서, **교시 담당(부담임)으로 오늘 면에 뜬 반의 출결이
+  //    화면에서만 잠겨** 있었다. 정작 서버 액션은 2026-08-18(write-gate-axis)부터 교시 담당을 통과시키므로
+  //    이 잠금은 "서버는 허락하는데 화면이 막는" 거짓 잠금이었다(#77의 뒤집힌 꼴).
+  // ⚠️ 두 축을 다시 갈라 놓지 말 것 — 넓히려면 액션 쪽(`userTaughtClassSet`)을 고치고 여기가 따라온다.
   const attendanceScoped = (await accessLevelTenant(user.systemRole, "attendance")) === "scoped";
   const teachingSet =
     attendanceWritable && attendanceScoped
-      ? new Set((await getTeachingClassIds(supabase, user.id, date)).all)
+      ? await userTaughtClassSet(supabase, user.id, date)
       : null;
 
   // 학생 기록 — (반|학생)당 교시별. 시각은 배치와 **같은 정규화**를 거쳐야 키가 맞는다("15:00:00" ↔ "15:00").
