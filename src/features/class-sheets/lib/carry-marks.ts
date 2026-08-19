@@ -102,7 +102,9 @@ export function planCarryMarks(args: {
   }
 
   const out: CarryPatch[] = [];
-  for (const studentId of args.roster) {
+  // 🔴 학생당 한 패치 — 같은 id가 두 번 들어오면 한 upsert 문에 같은 충돌 키가 둘이 되어 Postgres가
+  //    문장 전체를 거부한다("cannot affect row a second time") = 그 반 이어받기가 통째로 실패한다.
+  for (const studentId of new Set(args.roster)) {
     const found = latest.get(studentId);
     if (!found) continue;
     const target = targetById.get(studentId);

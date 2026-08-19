@@ -115,6 +115,14 @@ describe("planCarryMarks(JJ 이어받기)", () => {
     });
     expect(second).toEqual([]);
   });
+  it("🔴 명단에 같은 학생이 두 번 있어도 패치는 한 번(한 upsert에 같은 키가 둘이면 문장 전체가 거부된다)", () => {
+    const out = planCarryMarks({
+      roster: ["s1", "s1"],
+      past: [past("s1", "2026-08-12", "L3", "1200")],
+      target: [],
+    });
+    expect(out).toHaveLength(1);
+  });
 });
 
 describe("carryRoster(이어받기 명단)", () => {
