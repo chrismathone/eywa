@@ -181,6 +181,54 @@ describe("collectAuditNameIds / auditTargetName", () => {
   });
 });
 
+describe("auditDetail — 셔틀(0225a)은 영문 enum을 그대로 내보내지 않는다", () => {
+  // 🔴 이 케이스들이 없으면 기본 폴백이 `ioKind: in` · `status: missed` · `season: term`을
+  //    영문 그대로 화면에 뱉는다(raw 코드 노출 금지 — 2026-08-17 원장 제보와 같은 증상).
+  const noEnglishEnum = (v: string | null) => {
+    expect(v).toBeTruthy();
+    expect(v, `영문 enum이 새어나옴: ${v}`).not.toMatch(/\b(in|out|term|vacation|missed|boarded|extra)\b/);
+  };
+
+  it("정류장 추가·수정은 이름을 보여준다", () => {
+    expect(auditDetail("shuttle_stop_create", { name: "빌리브루센트 앞" }, ctx())).toBe(
+      "정류장 「빌리브루센트 앞」",
+    );
+  });
+
+  it("회차 추가는 시즌·회차를 한글로", () => {
+    const v = auditDetail("shuttle_run_create", { season: "vacation", runNo: 3 }, ctx());
+    expect(v).toBe("방학중 3회차");
+    noEnglishEnum(v);
+  });
+
+  it("회차 수정은 등원/하원을 한글로", () => {
+    const v = auditDetail("shuttle_run_update", { direction: "out" }, ctx());
+    expect(v).toBe("하원으로 변경");
+    noEnglishEnum(v);
+  });
+
+  it("배정은 승/하차 + 요일 압축", () => {
+    const v = auditDetail(
+      "shuttle_rider_assign",
+      { ioKind: "in", weekdays: ["mon", "wed", "thu"] },
+      ctx(),
+    );
+    expect(v).toBe("승차 · 월수목");
+    noEnglishEnum(v);
+  });
+
+  it("등하원 기록은 날짜 + 상태를 한글로", () => {
+    const v = auditDetail("shuttle_boarding_record", { boardedOn: "2026-08-19", status: "missed" }, ctx());
+    expect(v).toBe("2026-08-19 · 미탑승");
+    noEnglishEnum(v);
+  });
+
+  it("정류장 제거는 함께 해제된 배정 수를 알린다(조용한 데이터 손실 방지)", () => {
+    expect(auditDetail("shuttle_run_stop_remove", { riders: 3 }, ctx())).toBe("배정 3명 함께 해제");
+    expect(auditDetail("shuttle_run_stop_remove", { riders: 0 }, ctx())).toBe("정류장 제거");
+  });
+});
+
 describe("AUDIT_TYPE_LABEL", () => {
   it("logAction 호출부의 모든 target_type이 한글 라벨을 가진다", () => {
     // logAction 전수(2026-07-11 grep) + 실 DB target_type 전수(2026-08-03) — 후자에서 user·users·
@@ -192,6 +240,8 @@ describe("AUDIT_TYPE_LABEL", () => {
       "tenant_settings", "staff_resume", "intake_token", "notice_popup",
       "user", "users", "academy_documents", "classnote_notice", "operating_periods",
       "attendance", "lesson_report", "approval_document", "enrollment_consultations", "document",
+      // 2026-08-19 셔틀(0225a) — targetType "shuttle".
+      "shuttle",
     ];
     for (const t of usedTypes) expect(AUDIT_TYPE_LABEL[t], t).toBeTruthy();
   });
