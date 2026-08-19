@@ -180,6 +180,10 @@ export function SheetToolbar({
               ),
             )}
             canAdd={data.canMarkAttendanceByDate[dayFilter] ?? false}
+            slots={(data.grid.days.find((d) => d.date === dayFilter)?.slots ?? []).map((s) => ({
+              ...s,
+              periodLabel: data.periodLabelBySlot[`${dayFilter}|${s.slotStart}`] ?? null,
+            }))}
           />
         ) : null}
         <button

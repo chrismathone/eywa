@@ -11,6 +11,8 @@
  *  ② **강사(scoped) 전원 실패** — 그 액션은 `enrolled`(그 반 수강생)를 요구하는데 보강은 정의상
  *     그 반 수강생이 아니다. 여기서는 **담당 반에서 보강했는지**만 본다(setAttendanceCell allowMakeup와 같은 결).
  *
+ * ⚠️ 결석 칸은 **상태로 찾는다**(최신 1건이 아니라) — 하루 여러 교시를 도는 반에서는 최신 행이
+ *    다른 교시의 출석이라 결석을 눈앞에 두고 못 찾았다(2026-08-19 수정, 실측 21건).
  * ⚠️ 메모를 붙이는 대상은 **실제 결석/공결 칸**뿐이다 — 아무 날짜·아무 반에 한 줄을 붙일 수 있으면
  *    쓰기 표면이 조용히 넓어진다(#77). 없는 칸은 만들지 않고 "없었다"고 돌려준다(선보강이 그 경우다).
  */
@@ -21,6 +23,7 @@ import { createClient } from "@/lib/supabase/server";
 import { kstToday } from "@/lib/date-kst";
 import { attendanceLockMessage, isWithinAttendanceEditWindow } from "../edit-window";
 import { userTaughtClassSet } from "@/features/attendance/live/server/write-policy";
+import { fetchAbsenceCells, pickAbsenceNoteTarget } from "./absence-cell";
 import {
   absenceMemo,
   appendMemo,
@@ -62,35 +65,40 @@ export async function noteMakeupAgainstAbsence(input: {
     if (!teaching.has(makeupClassId)) return { error: "담당 반이 아닙니다" };
   }
 
-  const cell = (classId: string, date: string) =>
-    supabase
-      .from("attendance_records")
-      .select("id, status, note")
-      .eq("class_id", classId)
-      .eq("student_id", studentId)
-      .eq("session_date", date)
-      .order("recorded_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+  /** 보강 칸 — 방금 연 그 칸(그날 그 반의 최신 1건). */
+  const makeupCellQuery = supabase
+    .from("attendance_records")
+    .select("id, status, note")
+    .eq("class_id", makeupClassId)
+    .eq("student_id", studentId)
+    .eq("session_date", makeupDate)
+    .order("recorded_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
 
-  const [{ data: absentCell }, { data: makeupCell }] = await Promise.all([
-    cell(absentClassId, absentDate),
-    cell(makeupClassId, makeupDate),
+  // 결석 칸 찾기는 두 경로가 공유하는 규약을 쓴다(absence-cell.ts — 정정 이력을 걷어낸 뒤 상태로 좁힌다).
+  const [makeupCell, absentRes] = await Promise.all([
+    makeupCellQuery.then((r) => r.data),
+    fetchAbsenceCells(supabase, { studentId, classId: absentClassId, date: absentDate }),
   ]);
+  // 🔴 조회 실패를 "결석 없음"으로 위장하지 않는다 — 그 위장이 이 기능이 고치려던 증상이다.
+  if (!absentRes.ok) return { error: absentRes.error };
+  const absentRows = absentRes.cells;
 
   const memoOnMakeup = makeupMemo(absentDate, makeupDate);
   const alreadyLinked = hasMemoLine(makeupCell?.note, memoOnMakeup);
 
+  const memoOnAbsence = absenceMemo(makeupDate, absentDate);
+  const absentTarget = pickAbsenceNoteTarget(absentRows, memoOnAbsence);
+
   const writes: PromiseLike<{ error: { message: string } | null }>[] = [];
-  // ① 결석 칸 — **결석/공결 칸에만** 메모를 붙인다. 없으면 만들지 않는다(선보강).
-  const absentStatus = (absentCell?.status as string | null) ?? null;
-  const canNote = !!absentCell?.id && (absentStatus === "absent" || absentStatus === "excused");
-  if (canNote) {
+  // ① 결석 칸 — 결석/공결 칸에만 붙는다(쿼리가 이미 좁혔다). 없으면 만들지 않는다(선보강).
+  if (absentTarget && !hasMemoLine(absentTarget.note, memoOnAbsence)) {
     writes.push(
       supabase
         .from("attendance_records")
-        .update({ note: appendMemo(absentCell!.note, absenceMemo(makeupDate, absentDate)) })
-        .eq("id", absentCell!.id),
+        .update({ note: appendMemo(absentTarget.note, memoOnAbsence) })
+        .eq("id", absentTarget.id),
     );
   }
   // ② 보강 칸 — 메모만(시수는 칸을 연 쪽이 이미 적었다). 칸이 없으면 만들지 않는다.
@@ -106,5 +114,7 @@ export async function noteMakeupAgainstAbsence(input: {
   const failed = results.find((r) => r.error);
   if (failed?.error) return { error: failed.error.message };
 
-  return { ok: true, absenceNoted: canNote, alreadyLinked };
+  // 🔑 "찾았다"와 "이번에 붙였다"를 구분하지 않는다 — 이미 붙어 있던 경우도 연결된 것이 사실이라,
+  //    호출부가 "결석 기록이 없다"고 말하면 그게 거짓이 된다.
+  return { ok: true, absenceNoted: !!absentTarget, alreadyLinked };
 }
