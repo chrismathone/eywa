@@ -13,6 +13,7 @@ import {
   classTeacherRole,
   isSeatSlot,
   normalizeAxisTime,
+  ownsAttendanceSlot,
   resolveTaughtBy,
   slotLiveOn,
   slotOverlapsRange,
@@ -245,6 +246,19 @@ describe("가시성 스코프(classTeacherIdsInRange)", () => {
     ).toEqual([HOMEROOM]);
   });
 
+  it("🔴 담임 혼자 맡는 반은 **1명** — 월간 격자의 '이 반 전체 몫' 안내가 이 수로 갈린다", () => {
+    // 수학이 여기 해당한다(활성 68개 반 중 담임 아닌 교시 담당이 있는 반 0개, 2026-08 실측).
+    // 혼자 맡는 반에 "다른 선생님 화면에도 같은 값"을 붙이면 그 문장 자체가 거짓이다(적대적 리뷰 2026-08-19).
+    expect(
+      classTeacherIdsInRange({
+        homeroomTeacherId: HOMEROOM,
+        slots: [slot({ teacherId: null }), slot({ dayOfWeek: "fri", teacherId: null })],
+        from: "2026-08-01",
+        to: "2026-08-31",
+      }),
+    ).toEqual([HOMEROOM]);
+  });
+
   it("모호(담당 둘)해도 둘 다 보인다 — 귀속과 달리 가시성은 넓게", () => {
     const ids = classTeacherIdsInRange({
       homeroomTeacherId: null,
@@ -253,6 +267,92 @@ describe("가시성 스코프(classTeacherIdsInRange)", () => {
       to: "2026-08-31",
     });
     expect(new Set(ids)).toEqual(new Set([SLOT_A, SLOT_B]));
+  });
+});
+
+describe("강사 전체 보기의 교시 귀속 — 원장 제보 2026-08-10 김근호 사례", () => {
+  /**
+   * 실데이터(중고E_중1 의치대, 월요일):
+   *   16:20 정유진 / 17:20 이다교 / 18:20 JJ(자리). 담임은 정유진.
+   * 출석부 칸이 그날 **모든 교시의 합**이라 이다교 선생님 화면에도 3으로 보였다 — 이다교 몫은 1이다.
+   */
+  const JEONG = "t-jeongyujin";
+  const DAGYO = "t-idagyo";
+  const monSlots: AxisSlot[] = [
+    { dayOfWeek: "mon", startTime: "16:20:00", teacherId: JEONG, slotTeacherLabel: null, validFrom: "2026-07-03", validTo: null },
+    { dayOfWeek: "mon", startTime: "17:20:00", teacherId: DAGYO, slotTeacherLabel: null, validFrom: "2026-08-03", validTo: null },
+    { dayOfWeek: "mon", startTime: "18:20:00", teacherId: null, slotTeacherLabel: "JJ", validFrom: "2026-07-09", validTo: null },
+  ];
+  const owner = (slotStart: string) =>
+    resolveTaughtBy({ homeroomTeacherId: JEONG, slots: monSlots, date: "2026-08-10", slotStart }).teacherId;
+
+  it("교시마다 주인이 다르다", () => {
+    expect(owner("16:20")).toBe(JEONG);
+    expect(owner("17:20")).toBe(DAGYO);
+  });
+
+  it("🔴 이다교 화면에는 17:20 한 칸만 잡힌다(3이 아니라 1)", () => {
+    const mine = ["16:20", "17:20", "18:20"].filter((s) => owner(s) === DAGYO);
+    expect(mine).toEqual(["17:20"]);
+  });
+
+  it("자리(JJ)는 담임에게도 안 붙는다 — 그래서 강사 전체 보기에서 자동으로 빠진다", () => {
+    expect(owner("18:20")).toBeNull();
+    expect(["16:20", "17:20", "18:20"].filter((s) => owner(s) === JEONG)).toEqual(["16:20"]);
+  });
+
+  it("🔴 교시를 안 남긴 기록(day-level)은 **좁히지 않는다** — 수학 8,322/8,358건이 이 모양이다", () => {
+    // 좁히면 담임 칸이 슬롯 담당에게 통째로 넘어가고(고등M 단체 BS4F: 이성우→유형숙 71건),
+    // 파생(수업보고서)이 "수기 기록 없음"으로 보고 덮어써 수기 출석이 결석으로 뒤집혔다.
+    for (const who of [JEONG, DAGYO]) {
+      expect(
+        ownsAttendanceSlot({
+          scopeTeacherId: who,
+          homeroomTeacherId: JEONG,
+          slots: monSlots,
+          date: "2026-08-10",
+          slotStart: null,
+        }),
+        `${who}의 day-level 칸`,
+      ).toBe(true);
+    }
+  });
+
+  it("교시가 찍힌 기록만 좁힌다 — 이다교는 17:20만, 자리(JJ)는 아무에게도", () => {
+    const owns = (who: string, slotStart: string) =>
+      ownsAttendanceSlot({
+        scopeTeacherId: who,
+        homeroomTeacherId: JEONG,
+        slots: monSlots,
+        date: "2026-08-10",
+        slotStart,
+      });
+    expect(["16:20", "17:20", "18:20"].filter((t) => owns(DAGYO, t))).toEqual(["17:20"]);
+    expect(["16:20", "17:20", "18:20"].filter((t) => owns(JEONG, t))).toEqual(["16:20"]);
+  });
+
+  it("반별 보기(scope 없음)는 전부 그 반 몫 — 종전과 같은 숫자", () => {
+    for (const slotStart of ["16:20", "18:20", null]) {
+      expect(
+        ownsAttendanceSlot({
+          scopeTeacherId: null,
+          homeroomTeacherId: JEONG,
+          slots: monSlots,
+          date: "2026-08-10",
+          slotStart,
+        }),
+      ).toBe(true);
+    }
+  });
+
+  it("담당이 미지정인 교시는 담임 몫이다 — 수학처럼 슬롯을 안 채운 반은 종전과 같다", () => {
+    const bare: AxisSlot[] = [
+      { dayOfWeek: "mon", startTime: "16:20:00", teacherId: null, slotTeacherLabel: null, validFrom: "2026-07-03", validTo: null },
+    ];
+    expect(
+      resolveTaughtBy({ homeroomTeacherId: JEONG, slots: bare, date: "2026-08-10", slotStart: "16:20" })
+        .teacherId,
+    ).toBe(JEONG);
   });
 });
 
