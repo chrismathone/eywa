@@ -2,7 +2,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { kstToday } from "@/lib/date-kst";
 import { dutyAllowsSeat } from "../duty";
-import { USABLE_SEAT_KEYS, ambiguousClassIds, hhmm, isPayrollSeat, type SeatKey } from "../seat";
+import { PIN_SEAT_KEYS, USABLE_SEAT_KEYS, ambiguousClassIds, hhmm, type SeatKey } from "../seat";
 import { getSeatDuties } from "./duty";
 import { readSeatPinSession } from "./pin-session";
 import { getPublicSeatDay, getSeatDay } from "./queries";
@@ -44,8 +44,9 @@ export async function gateSeatWrite(seat: SeatKey, date: string): Promise<SeatGa
     }
   }
 
-  // 공개 PIN은 자리 시수를 켠 자리만(랩실). JJ실은 로그인 출석부만.
-  if (!isPayrollSeat(seat)) {
+  // 🔴 공개 PIN 여부는 **문 목록**(PIN_SEAT_KEYS)이 정한다 — 급여 축(isPayrollSeat)으로 가르지 말 것.
+  //    자리를 하나 여는 일과 그 자리 출결을 담임 시수에서 빼는 일은 서로 다른 결정이다(seat.ts).
+  if (!(PIN_SEAT_KEYS as readonly string[]).includes(seat)) {
     return { error: user ? "자리 출석부 입력 권한이 없습니다" : "비밀번호를 다시 입력해 주세요" };
   }
   const pin = await readSeatPinSession();

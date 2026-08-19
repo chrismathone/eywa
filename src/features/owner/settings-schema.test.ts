@@ -31,12 +31,10 @@ describe("operationsSchema — 교시 이름은 비워도 저장된다", () => {
     expect(parsed.success).toBe(true);
   });
 
-  it("랩실 공개 PIN은 비워도 저장된다(비움 = 공개 접속 끔)", () => {
-    const parsed = operationsSchema.safeParse({
-      ...ops,
-      seatPins: { lab: "" },
-    });
-    expect(parsed.success).toBe(true);
+  it("자리 공개 PIN은 비워도 저장된다(비움 = 그 자리 공개 접속 끔)", () => {
+    expect(operationsSchema.safeParse({ ...ops, seatPins: { lab: "", jj: "" } }).success).toBe(true);
+    // JJ 칸이 없는 **옛 폼 번들**이 보내도 운영 섹션 전체가 거부되지 않는다(그때는 resolve가 기본값으로 채움).
+    expect(operationsSchema.safeParse({ ...ops, seatPins: { lab: "7099" } }).success).toBe(true);
   });
 
   it("시각은 여전히 HH:MM 형식이어야 한다(빈 이름 허용이 검증을 통째로 푼 게 아니다)", () => {
