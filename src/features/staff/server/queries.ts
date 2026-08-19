@@ -178,7 +178,7 @@ export type StaffDetail = {
   attendanceAlertOptin: boolean;
   /** 랩실 출석부 담당 — 켜면 로그인 착지가 랩실 출석부이고 그 자리만 쓸 수 있다(0209a). */
   seatLabDuty: boolean;
-  /** JJ실 출석부 담당. 1차에선 착지·쓰기가 아직 안 열린다(OPEN_SEAT_KEYS). */
+  /** JJ실 출석부 담당 — 켜면 로그인 착지가 JJ실 출석부이고 그 자리만 쓸 수 있다(0209a). */
   seatJjDuty: boolean;
   /** 오늘 출결 데스크 알림 — 강사가 미출결→출결로 바꾸면 벨(0212a). */
   deskAttendanceOptin: boolean;
