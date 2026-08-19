@@ -35,6 +35,10 @@ export type NotificationType =
   | "attendance_desk_confirm_request"
   // 미출결 → 출결. 데스크가 찍으면 강사에게, 강사가 찍으면 데스크(optin)에게.
   | "attendance_unmarked_to_present"
+  // 데스크가 학부모 결석 통보를 **접수**해 미리 결석으로 입력함 → 그 반 담임·부담임(2026-08-19).
+  // ⚠️ `attendance_absent_desk`와 방향이 반대다(저건 강사→데스크). 이건 **미래 날짜가 본체**라
+  //    "이미 처리됐으니 따로 하실 것 없다"를 알려 담임의 이중 처리를 막는 것이 목적이다.
+  | "attendance_absence_intake"
   // 전자결재(0212a) — **내 결재 차례가 됐을 때** 그 결재자에게(순차라 한 명씩), 문서가 끝나면 기안자에게.
   | "approval_requested"
   | "approval_decided";
@@ -72,6 +76,7 @@ export const NOTIFICATION_ICON: Record<string, EywaIconName> = {
   attendance_input_request: "clipboardCheck",
   attendance_desk_confirm_request: "clipboardCheck",
   attendance_unmarked_to_present: "userCheck",
+  attendance_absence_intake: "userMinus",
   approval_requested: "scrollText",
   approval_decided: "clipboardCheck",
 };

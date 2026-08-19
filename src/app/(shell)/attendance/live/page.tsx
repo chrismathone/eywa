@@ -14,6 +14,7 @@ import { SeatingChart } from "@/features/attendance/live/components/seating-char
 import { DeskView } from "./_components/desk-view";
 import { LiveDatePicker } from "./_components/live-date-picker";
 import { LiveRefresher } from "./_components/live-refresher";
+import { AbsenceIntakeButton } from "../_components/absence-intake-button";
 import { ShuttleMissedBanner } from "@/features/shuttle/components/shuttle-missed-banner";
 
 export const metadata = { title: "오늘 출결 — eywa" };
@@ -67,6 +68,9 @@ export default async function AttendanceLivePage({
           />
         }
         embedLabel={<LiveDatePicker date={date} today={today} tab={tab} />}
+        // 결석 통보 접수(2026-08-19) — 데스크 화면의 상단 고정 자리. 게이트는 큐와 같은 사무실(full)이고
+        // 서버 액션이 같은 판정을 다시 한다(#77). 휴원일 화면에서도 남는다(내일 결석 접수는 오늘 받는다).
+        actions={isDesk ? <AbsenceIntakeButton today={today} /> : null}
       />
 
       {holiday ? (

@@ -1,6 +1,7 @@
 "use client";
 
 import { schoolGradeLabel } from "@/lib/format/school-grade";
+import { fitSeatName, SEAT_CHIP_NAME_LADDER } from "@/features/attendance/seat/name-fit";
 import type { SeatClassRoster } from "@/features/attendance/seat/server/queries";
 import type { SeatStatus } from "@/features/attendance/seat/server/actions";
 import { SEAT_LABEL, SEAT_TONE } from "./seat-status";
@@ -45,6 +46,8 @@ export function SeatLabGrid({
             <ul className="grid gap-2 p-3 [grid-template-columns:repeat(auto-fill,minmax(148px,1fr))]">
               {r.students.map((s) => {
                 const cur = statusOf(r.classId, s);
+                // 긴 이름(동명이인 알파벳 접미사)은 잘라내지 않고 그 칩만 글씨를 줄인다.
+                const fit = fitSeatName(s.name, SEAT_CHIP_NAME_LADDER);
                 return (
                   <li key={s.id} className="relative">
                     <button
@@ -55,7 +58,15 @@ export function SeatLabGrid({
                         cur ? SEAT_TONE[cur] : "bg-card border-dashed"
                       }`}
                     >
-                      <span className="text-sm font-bold">{s.name}</span>
+                      {/* `pr-5` = 오른쪽 위 상태 배지·'결' 버튼 자리를 비워 둔다(안 비우면 긴 이름이
+                          배지 밑으로 들어간다). `leading-5`로 줄 높이를 고정해 단계가 내려가도 칩 높이는
+                          그대로. 하한(12px)에서도 넘칠 때만 말줄임 + 전체 이름 툴팁. */}
+                      <span
+                        className={`w-full truncate pr-5 leading-5 font-bold ${fit.className}`}
+                        title={fit.clipped ? s.name : undefined}
+                      >
+                        {s.name}
+                      </span>
                       <span className="text-[11.5px] opacity-80">
                         {schoolGradeLabel(s.school, s.grade) || " "}
                       </span>
