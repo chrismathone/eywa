@@ -19,7 +19,8 @@ import { getDailyProcessingStatus, getMonthlyAttendanceMatrix, type AttendanceMa
 import { getTeacherMoney } from "@/features/attendance/server/teacher-money";
 import { buildHolidayMap } from "@/features/attendance/calendar";
 import { ATTENDANCE_EDIT_WINDOW_DAYS } from "@/features/attendance/edit-window";
-import { accessLevelTenant } from "@/lib/auth/perm-matrix";
+import { accessLevelTenant, canManageTenant } from "@/lib/auth/perm-matrix";
+import { AbsenceIntakeButton } from "./_components/absence-intake-button";
 import { effectiveTeacherId } from "@/lib/auth/view-mode";
 // 출결 강사 귀속 축 단일 소스 — 담임(classes.teacher_id)만 보면 교시 담당 강사가 자기 수업을 못 본다.
 import { classTeacherRole, type ClassTeacherRole } from "@/features/attendance/teacher-axis";
@@ -481,6 +482,10 @@ export default async function AttendancePage({
   const canOpenPayslip =
     mode === "teacher" && !!effectiveTeacher ? await canViewPayslipNow(user) : false;
 
+  // 결석 통보 접수(2026-08-19) — 남의 반 칸까지 한 번에 만드는 조작이라 **사무실(full)만**.
+  // ⚠️ 화면 조건은 게이트가 아니다(#77) — 서버 액션이 같은 판정을 다시 한다.
+  const canIntakeAbsence = await canManageTenant(user.systemRole, "attendance");
+
   // 시트 격자의 좌표·초기값 — 표보다 위(상단 스탯)까지 감싸야 해서 여기서 만든다.
   const gridSource = buildGridSource(groups, visibleDays, orderedRows);
 
@@ -723,6 +728,8 @@ export default async function AttendancePage({
 
         {/* 우측 — 살아있는 합계 + 안내 토글. **새 줄을 만들지 않고** 툴바의 남는 가로 여백을 쓴다. */}
         <div className="ml-auto flex items-center gap-3">
+          {/* 결석 통보 접수 — 데스크가 학부모 전화를 받는 자리(원장 2026-08-19). 당일 출결 화면에도 같은 버튼. */}
+          {canIntakeAbsence ? <AbsenceIntakeButton today={kstToday()} /> : null}
           {/* 급여명세서 — 이 화면의 '정산액'을 그대로 쓰는 문서라 **여기**가 진입점이다(수납관리 강사 정산
               면은 invoice_teacher_splits가 비어 있어 표 자체가 안 그려진다). 원장 + 강사 전체 보기일 때만. */}
           {canOpenPayslip && effectiveTeacher ? (

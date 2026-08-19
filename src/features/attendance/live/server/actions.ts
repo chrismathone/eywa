@@ -39,6 +39,15 @@ export async function recordFollowup(input: {
   outcome?: string | null;
   note?: string | null;
   contactedVia?: string | null;
+  /**
+   * **결석 통보 접수 전용** — 미래 날짜를 허용한다(2026-08-19).
+   *
+   * 기본값(false)의 "미래엔 조치가 있을 수 없다"는 *우리가 먼저 알아채는* 흐름을 전제한 것이다.
+   * 접수는 반대로 **학부모가 먼저 알려온** 흐름이라 미래가 본체다("내일 결석할게요"). 조치를 못 남기면
+   * 그날 큐가 그 결석을 다시 '연락 대상'으로 올려 데스크가 같은 학부모에게 재확인 전화를 건다.
+   * ⚠️ 권한·담당 반 게이트는 그대로다 — 여는 것은 **날짜 제한 하나뿐**이다.
+   */
+  allowFuture?: boolean;
 }): Promise<FollowupResult> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
@@ -48,7 +57,8 @@ export async function recordFollowup(input: {
   if (!studentId || !classId) return { error: "필수 값이 누락되었습니다" };
   if (!/^\d{4}-\d{2}-\d{2}$/.test(sessionDate)) return { error: "잘못된 날짜입니다" };
   // 미래 날짜엔 조치가 있을 수 없다(아직 수업 전 — 실수로 만들면 큐가 영원히 그 행을 안고 간다).
-  if (sessionDate > kstToday()) return { error: "아직 지나지 않은 날짜입니다" };
+  // 예외 = 결석 통보 접수(allowFuture): 학부모가 미리 알려온 건이라 "내일 결석"이 정상 입력이다.
+  if (!input.allowFuture && sessionDate > kstToday()) return { error: "아직 지나지 않은 날짜입니다" };
   if (!SIGNALS.includes(input.signal)) return { error: "잘못된 신호입니다" };
   if (!STATES.includes(input.state)) return { error: "잘못된 상태입니다" };
 
