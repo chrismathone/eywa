@@ -71,6 +71,14 @@ export function StopColumn({
           </Button>
         )}
       </div>
+      {canWrite && (
+        // 요일 편집이 칩 안에 접혀 있어 처음 보면 못 찾는다(원장 2026-08-19 *"요일 어디서?"*) —
+        // 어디를 눌러야 하는지 한 줄로 적어 둔다.
+        <p className="text-text-faint px-1 text-[11.5px]">
+          학생을 끌어다 놓으면 <b className="font-bold">평일</b>로 들어갑니다 — 칩의 요일 글자를
+          누르면 요일을 바꿉니다.
+        </p>
+      )}
 
       {adding && canWrite && (
         <div className="bg-card flex max-h-56 flex-col gap-1 overflow-y-auto rounded-2xl p-2 shadow-[var(--shadow-card)]">
@@ -211,7 +219,9 @@ function StopCard({
             if ((e.currentTarget.value || "") !== (stop.atTime ?? "")) onTime(e.currentTarget.value);
           }}
           aria-label="도착 시각"
-          className="border-line focus:border-primary num h-9 w-[104px] shrink-0 rounded-lg border px-1.5 text-base outline-none sm:h-8 sm:w-[92px] sm:text-[12px]"
+          // ⚠️ 폭은 짐작하지 말 것 — 한국어 로캘의 `type="time"`은 "오후 03:45" + 시계 아이콘이라
+          //    실측 폭이 16px 글자에서 127px, 12px 글자에서 105px다(전엔 104/92라 "오후 03:4"로 잘렸다).
+          className="border-line focus:border-primary num h-9 w-[132px] shrink-0 rounded-lg border px-1.5 text-base outline-none sm:h-8 sm:w-[110px] sm:text-[12px]"
         />
         {canWrite && !isCampus && (
           <button
@@ -227,7 +237,10 @@ function StopCard({
       </div>
 
       {!isCampus && (
-        <div className="mt-2 flex flex-wrap items-center gap-1">
+        // 🔑 균일 폭 격자 — 칩이 내용 길이대로 늘어나면 요일·× 라벨이 칩마다 다른 x에 서서 눈이
+        //    매번 다시 찾는다(원장 2026-08-19: *"라벨이 어딜 가나 같은 위치였으면"*). 칸 폭을 고정하면
+        //    이름은 왼쪽, 요일·×는 오른쪽 같은 자리에 줄맞춰 선다.
+        <div className="mt-2 grid grid-cols-[repeat(auto-fill,minmax(9rem,1fr))] items-start gap-1">
           {stop.riders.map((r) => (
             <RiderChip key={r.id} rider={r} canWrite={canWrite} onError={onError} />
           ))}
@@ -236,7 +249,7 @@ function StopCard({
               type="button"
               disabled={busy}
               onClick={() => setPicking((v) => !v)}
-              className="rounded-pill border-line text-text-dim hover:bg-muted min-h-8 border border-dashed px-2.5 text-[11.5px] font-bold"
+              className="rounded-pill border-line text-text-dim hover:bg-muted min-h-8 w-full border border-dashed px-2.5 text-[11.5px] font-bold"
             >
               + 학생
             </button>

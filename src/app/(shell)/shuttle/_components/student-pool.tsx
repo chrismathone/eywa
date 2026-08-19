@@ -131,11 +131,16 @@ function PoolItem({
       } ${assigned ? "opacity-55" : ""}`}
       title={assigned ? "이 시즌에 이미 배정된 학생 (다른 회차에 또 태울 수 있습니다)" : undefined}
     >
-      <span className="text-text font-medium">{student.name}</span>
-      {student.schoolGrade && (
-        <span className="text-text-faint text-[11px]">{student.schoolGrade}</span>
-      )}
-      {assigned && <span className="text-text-faint ml-auto text-[10.5px]">배정됨</span>}
+      {/* 🔑 라벨 자리 고정 — 이름 길이에 따라 학교·학년이 들쭉날쭉하면 눈이 매번 다시 찾는다
+          (원장 2026-08-19). 학교·학년은 오른쪽 정렬, '배정됨' 칸은 **비어 있어도 폭을 차지**해
+          같은 x에 선다. */}
+      <span className="text-text min-w-0 overflow-hidden font-medium text-ellipsis whitespace-nowrap">
+        {student.name}
+      </span>
+      <span className="text-text-faint ml-auto shrink-0 text-[11px]">{student.schoolGrade}</span>
+      <span className="text-text-faint w-[2.6rem] shrink-0 text-right text-[10.5px]">
+        {assigned ? "배정됨" : ""}
+      </span>
     </li>
   );
 }
