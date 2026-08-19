@@ -35,6 +35,7 @@ function matrix(students: AttendanceMatrix["students"]): AttendanceMatrix {
     units: {},
     slots: {},
     ghosts: {},
+    dayAxis: {},
     derived: {},
     derivedActive: false,
     stats: {
@@ -232,7 +233,7 @@ describe("교시 롤업 칸", () => {
  */
 describe("세지 않는 교시(자리·남의 교시)", () => {
   const D1 = "2026-07-01";
-  function renderScoped(owned: SlotMark[], others: SlotMark[]) {
+  function renderScoped(owned: SlotMark[], others: SlotMark[], note?: string) {
     const m = matrix([
       { id: S1, name: "김근호", grade: "중1", school: "경명여중", enrolledAt: null, attendDows: [3], spans: [], badges: [] },
     ]);
@@ -243,6 +244,7 @@ describe("세지 않는 교시(자리·남의 교시)", () => {
       if (day.count > 1) m.slots = { [S1]: { [D1]: day.slots } };
     }
     m.ghosts = { [S1]: { [D1]: others } };
+    if (note) m.notes = { [S1]: { [D1]: note } };
     return render(
       <MatrixTable
         groups={[{ ...GROUP, matrix: m }]}
@@ -289,6 +291,14 @@ describe("세지 않는 교시(자리·남의 교시)", () => {
     const cell = cellOf(container);
     expect(cell.className).toContain("cursor-not-allowed");
     expect(cell.getAttribute("title")).toContain("반별 보기에서 고치세요");
+  });
+
+  it("🔴 빗금 칸의 **메모는 남는다** — 사라지는 게 결석 사유였다(실측 78칸)", () => {
+    const { container } = renderScoped([], [{ slot: "18:20:00", status: "present", units: null }], "병결");
+    const cell = cellOf(container);
+    expect(cell.getAttribute("title")).toContain("병결");
+    // 접힌 모서리(메모 표식)도 남아야 호버하기 전에 "메모가 있다"를 안다.
+    expect(cell.querySelector("span[aria-hidden]")).toBeTruthy();
   });
 
   it("세지 않는 교시가 없으면 종전 그대로(빗금 없음)", () => {

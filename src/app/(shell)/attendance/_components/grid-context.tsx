@@ -98,6 +98,7 @@ export function GridProvider({
   initial,
   slotCounts,
   notMine,
+  alsoWrites,
   lockBefore,
   initialCollapsed,
   children,
@@ -120,6 +121,11 @@ export function GridProvider({
    * 이유·근거는 matrix-table `notMine` 주석. 잠금(7일)과 달리 **날짜가 아니라 칸 단위**다.
    */
   notMine?: Record<string, true>;
+  /**
+   * 값이 있으면서 그 날 **남의 교시도 함께 있는** 칸 → 함께 바뀌는 교시 수(matrix-table `alsoWrites`).
+   * 막지는 않는다 — 범위 작업 뒤 몇 칸이 그런지 알려 주기만 한다(칸 숫자가 사정거리를 안 보여주므로).
+   */
+  alsoWrites?: Record<string, number>;
   lockBefore: string | null;
   /** 지난번에 접어 둔 반(계정 설정). 없으면 전부 펼침. */
   initialCollapsed?: string[];
@@ -289,11 +295,17 @@ export function GridProvider({
         }
         scheduleRefresh();
         const skipped = res.blocked + lockedCount + notMineCount;
-        if (skipped > 0)
-          setError(`${skipped}칸은 수정 기간이 지났거나 담당 반·선생님 교시가 아니어서 건너뛰었습니다`);
+        // 🔴 함께 바뀐 남의 교시를 **말해 준다** — 칸 숫자는 내 교시만 보여주므로 사용자는 "내 것만
+        //    지웠다"고 믿는다. 저장은 그날 모든 교시에 간다(save-targets ①).
+        const shared = targets.filter((t) => alsoWrites?.[cellKey(t.row, t.date)]).length;
+        const notes = [
+          skipped > 0 ? `${skipped}칸은 수정 기간이 지났거나 담당 반·선생님 교시가 아니어서 건너뛰었습니다` : null,
+          shared > 0 ? `${shared}칸은 같은 날 다른 선생님 교시도 함께 바뀌었습니다` : null,
+        ].filter(Boolean);
+        if (notes.length > 0) setError(notes.join(" · "));
       });
     },
-    [store, isLocked, isNotMine, writeOne, scheduleRefresh, toValue],
+    [store, isLocked, isNotMine, alsoWrites, writeOne, scheduleRefresh, toValue],
   );
 
   /** 버퍼 확정 — 범위가 잡혀 있으면 전체에. 확정할 수 없는 입력이면 아무 일도 없다. */
@@ -388,6 +400,11 @@ export function GridProvider({
       }
       if ((e.key >= "0" && e.key <= "9") || e.key === "." || e.key === ",") {
         e.preventDefault();
+        // 빗금 칸은 버퍼를 열지도 않는다 — 열면 숫자가 보였다가 확정 단계에서 거절돼 "쳤는데 사라졌다"가 된다.
+        if (isNotMine(key)) {
+          setError(NOT_MINE_MESSAGE);
+          return;
+        }
         store.setBuffer(appendChar(store.buffer, e.key));
         return;
       }

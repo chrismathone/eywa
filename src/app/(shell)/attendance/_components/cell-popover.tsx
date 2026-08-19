@@ -34,6 +34,7 @@ export function CellPopover({
   units,
   note,
   locked,
+  otherCount = 0,
   anchor,
   onClose,
   onSaved,
@@ -46,6 +47,11 @@ export function CellPopover({
   note: string;
   /** 수정 기간(7일)이 지나 상태·시수를 못 고치는 칸 — 이유를 담은 문장. null = 제한 없음. */
   locked?: string | null;
+  /**
+   * 이 표가 세지 않는 교시 수(강사 전체 보기의 빗금 칸) — **"기록이 없다"와 "내 기록이 없다"를 가른다.**
+   * 0보다 크면 그 날 기록은 **있다**(남의 교시 것). 이걸 안 보면 아래 안내가 사실과 반대로 나간다.
+   */
+  otherCount?: number;
   anchor: PopoverAnchor;
   onClose: () => void;
   onSaved: (next: { status: AttendanceStatus | null; units: number | null; note: string }) => void;
@@ -58,6 +64,9 @@ export function CellPopover({
   // 잠겼는데 기록도 없으면 손댈 게 없다 — 사유만 알리고 입력은 안 연다.
   const noteOnly = !!locked;
   const nothingToEdit = noteOnly && !status;
+  // 🔴 **값이 없다 ≠ 기록이 없다.** 빗금 칸엔 남의 교시 기록이 있고, 거기에 "기록이 없는 날"이라고
+  //    쓰면 화면이 스스로를 부정한다(잠금 사유는 "다른 교시 것"이라고 말하는데 그 아래에서 없다고 한다).
+  const hasOtherRecords = otherCount > 0;
 
   /**
    * 메모만 저장 — 상태·시수는 서버에서도 건드리지 않는다(`noteOnly`).
@@ -131,9 +140,19 @@ export function CellPopover({
             <p className="text-amber text-[10px] leading-tight">{locked}</p>
             {nothingToEdit ? (
               // 붙일 행이 없다 — 없는 출결을 지어내지 않는다(#메모는 기록에 딸린 것).
-              <p className="text-text-dim text-[11px] leading-tight">
-                기록이 없는 날이라 메모만 남길 수는 없습니다 — 관리자에게 요청하세요
-              </p>
+              // ⚠️ 다만 **빗금 칸은 기록이 있다**(남의 교시). 그 경우엔 사유가 다르므로 문장도 다르다.
+              <div className="flex flex-col gap-1">
+                <p className="text-text-dim text-[11px] leading-tight">
+                  {hasOtherRecords
+                    ? "이 날 기록은 다른 교시 것이라 여기서는 못 고칩니다 — 반별 보기에서 고치세요"
+                    : "기록이 없는 날이라 메모만 남길 수는 없습니다 — 관리자에게 요청하세요"}
+                </p>
+                {/* 남의 교시에 달린 메모(결석 사유 등)는 **읽기로는 보여 준다** — 여기서 감추면
+                    "병결"·"가족여행" 같은 사유가 화면에서 사라진다(실측 78칸). */}
+                {hasOtherRecords && note ? (
+                  <p className="text-foreground text-[11px] leading-tight break-keep">메모 · {note}</p>
+                ) : null}
+              </div>
             ) : (
               <>
                 <p className="text-text-dim text-[10px] leading-tight">메모는 기간과 무관하게 고칠 수 있습니다</p>

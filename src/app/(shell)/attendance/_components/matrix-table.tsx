@@ -87,6 +87,13 @@ export function buildGridSource(
    *    같은 칸이 반별 보기에선 그대로 입력 가능하다(#103: 되돌릴 문을 아예 막지는 않는다).
    */
   const notMine: Record<string, true> = {};
+  /**
+   * 값은 **있지만** 그 날 남의 교시도 함께 있는 칸 → 키 → 함께 바뀌는 교시 수.
+   * 잠그지는 않는다(내 교시가 있으니 고칠 권리가 있다). 대신 범위 작업에서 **사정거리를 말해 준다** —
+   * 종전엔 칸에 `3`이 떠서 "3건이 접혀 있다"가 보였는데, 지금은 `1`만 보이고 툴바 칩이
+   * "칸 = 이 선생님 교시"라고 단언해 **"내 것만 지워진다"는 오해를 화면이 심는다**(적대 리뷰 2026-08-18).
+   */
+  const alsoWrites: Record<string, number> = {};
   for (const g of groups) {
     for (const s of g.matrix.students) {
       const marks = g.matrix.marks[s.id] ?? {};
@@ -99,11 +106,14 @@ export function buildGridSource(
         if (n > 1) slotCounts[key] = n;
       }
       for (const [date, others] of Object.entries(g.matrix.ghosts[s.id] ?? {})) {
-        if (!marks[date] && others.length > 0) notMine[cellKey(rowKey(g.classId, s.id), date)] = true;
+        if (others.length === 0) continue;
+        const key = cellKey(rowKey(g.classId, s.id), date);
+        if (marks[date]) alsoWrites[key] = others.length;
+        else notMine[key] = true;
       }
     }
   }
-  return { rows, cols, initial, slotCounts, notMine };
+  return { rows, cols, initial, slotCounts, notMine, alsoWrites };
 }
 
 /**

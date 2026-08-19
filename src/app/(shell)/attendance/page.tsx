@@ -580,6 +580,7 @@ export default async function AttendancePage({
       cols={gridSource.cols}
       initial={gridSource.initial}
       notMine={gridSource.notMine}
+      alsoWrites={gridSource.alsoWrites}
       slotCounts={gridSource.slotCounts}
       lockBefore={lockBefore}
       initialCollapsed={viewPrefs.collapsed}
@@ -748,7 +749,8 @@ export default async function AttendancePage({
             <PayslipWindowButton teacherId={effectiveTeacher} period={month} subjectFiltered={!!effectiveSubject} />
           ) : null}
           {/* 🔴 이 한 줄은 **접히면 안 된다** — 강사 전체 보기는 칸 숫자를 그 선생님 교시로 좁혀 그리므로
-              (이현이 8월 525→118) 같은 반이 반별 보기와 다른 숫자를 낸다. 아래 '안내'는 `<details>`라
+              (한 달 시수가 서너 배 줄어드는 강사가 여럿이다) 같은 반이 반별 보기와 다른 숫자를 낸다.
+              ⚠️ 주석에 실측 숫자를 박지 말 것 — 라이브 데이터라 며칠 만에 늙는다. 아래 '안내'는 `<details>`라
               기본 화면에선 안 보인다(적대적 리뷰 2026-08-18). 사유 전문은 툴팁·안내가 잇는다. */}
           {mode === "teacher" && groups.length > 0 ? (
             <span

@@ -500,6 +500,16 @@ export type AttendanceMatrix = {
    *    단정하지 않는 이유다(cell-display `ghostBreakdown`).
    */
   ghosts: Record<string, Record<string, SlotMark[]>>;
+  /**
+   * studentId → date → true. **교시를 안 남긴 기록(day-level)이 값에 섞인 칸**(강사 전체 보기 전용).
+   *
+   * 🔴 그런 행은 "그날"만 말해 담당을 가릴 수 없으므로 좁히지 않는다(`ownsAttendanceSlot`) — 대신
+   *    **그 반을 맡은 강사 전원의 화면에 같은 값으로 잡힌다**(실측: 영어 day-level 31행 중 21행이
+   *    2~3명에게 동시 계상). 툴바 칩은 "칸 = 이 선생님 교시"라고 단언하므로, 이 칸들에 대해서만
+   *    화면이 스스로 예외를 밝혀야 거짓말이 안 된다.
+   * ⚠️ 월간 격자의 **새 입력도 day-level**이라 이 집합은 계속 늘어난다(교시를 아는 입력은 ECS가 한다).
+   */
+  dayAxis: Record<string, Record<string, true>>;
   // studentId → date → true. **수기 기록이 아니라 수업보고서에서 파생한 칸**(derive-from-reports.ts).
   // 화면이 사실과 다른 말을 하지 않도록 셀 툴팁에 출처를 밝히는 용도 — 수기로 덮으면 이 표시는 사라진다.
   derived: Record<string, Record<string, true>>;
@@ -700,6 +710,7 @@ export async function getMonthlyAttendanceMatrix(
       units: {},
       slots: {},
       ghosts: {},
+      dayAxis: {},
       derived: {},
       derivedActive: false,
       stats: {
@@ -816,6 +827,7 @@ export async function getMonthlyAttendanceMatrix(
   const units: Record<string, Record<string, number>> = {};
   const slots: Record<string, Record<string, SlotMark[]>> = {};
   const ghosts: Record<string, Record<string, SlotMark[]>> = {};
+  const dayAxis: Record<string, Record<string, true>> = {};
   const derived: Record<string, Record<string, true>> = {};
 
   if (studentIds.length > 0) {
@@ -905,16 +917,24 @@ export async function getMonthlyAttendanceMatrix(
         ghosts[cell.studentId] ??= {};
         ghosts[cell.studentId]![cell.date] = cell.others;
       }
+      // 🔴 메모는 **값보다 먼저** 싣는다 — 빗금 칸(내 몫 0)의 메모까지 버리면 화면에서 사라지는 것이
+      //    결석 사유다(실측 78칸: "8/3~5 가족여행" · "병결" · "수학학원 늘 늦게끝남"). 값은 빼더라도
+      //    표시는 남긴다는 이 화면의 규약과도 어긋난다 — 툴팁·접힌 모서리가 이 값을 그린다.
+      const note = cell.note ?? cell.otherNote;
+      if (note) {
+        notes[cell.studentId] ??= {};
+        notes[cell.studentId]![cell.date] = note;
+      }
       const day = rollupDay(cell.slots);
       // 🔴 주인 몫이 하나도 없는 칸은 **값을 만들지 않는다** — 여기서 0을 실으면 격자·합계·복사
       //    어느 쪽도 0을 제대로 못 읽는다(units 레코드는 0을 안 담는 규약이라 합계가 1로 되살아난다).
       if (!day) continue;
       marks[cell.studentId] ??= {};
       marks[cell.studentId]![cell.date] = day.status as AttendanceStatus;
-      const note = cell.note ?? cell.otherNote;
-      if (note) {
-        notes[cell.studentId] ??= {};
-        notes[cell.studentId]![cell.date] = note;
+      // 교시를 안 남긴 기록이 값에 섞였나 — 강사 전체 보기에서만 뜻이 있다(반별 보기는 원래 반 전체다).
+      if (scopeTeacherId && cell.slots.some((x) => x.slot === null)) {
+        dayAxis[cell.studentId] ??= {};
+        dayAxis[cell.studentId]![cell.date] = true;
       }
       // 기본(1)이면 키 없음 — 종전 규약 그대로. 교시가 여럿이면 합이 들어간다(2교시 출석 = 2).
       // ⚠️ 0(전부 결석)도 키를 만들지 않는다 — 결석 칸의 시수는 원래 없는 값이고, 0을 실으면
@@ -1067,6 +1087,7 @@ export async function getMonthlyAttendanceMatrix(
     units,
     slots,
     ghosts,
+    dayAxis,
     derived,
     derivedActive,
     stats: {

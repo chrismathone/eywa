@@ -167,6 +167,7 @@ export function MatrixRow({
               derived={!!matrix.derived[student.id]?.[d.date]}
               daySlots={matrix.slots[student.id]?.[d.date]}
               otherSlots={otherSlots}
+              sharedDay={!!matrix.dayAxis[student.id]?.[d.date]}
             />
           </td>
         );

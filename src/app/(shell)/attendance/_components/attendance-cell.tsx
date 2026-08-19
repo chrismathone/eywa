@@ -41,6 +41,7 @@ export function AttendanceCell({
   locked,
   daySlots,
   otherSlots,
+  sharedDay,
 }: {
   studentId: string;
   classId: string;
@@ -71,11 +72,20 @@ export function AttendanceCell({
    * 값이 비어 있을 때만 빗금으로 드러난다: 빈칸으로 두면 사람이 그 위에 다시 찍어 남의 기록을
    * 덮는다(#103). 반별 보기에선 항상 undefined라 종전과 완전히 같이 그려진다.
    *
-   * 🔴 **잠그지 않는다** — 강사 전체 보기는 권한 경계가 아니라 **렌즈**다. 같은 칸이 반별 보기에선
-   *    평범한 입력 칸이라, 여기서만 막으면 이유를 알 수 없는 '수정 불가'가 되고 게이트 구실도 못 한다.
-   *    입력·삭제는 종전 그대로 **그날 모든 교시**에 간다(save-targets ①) — 이 커밋이 바꾼 건 표시뿐이다.
+   * 🔴 **값이 하나도 없는 칸(빗금)은 이 화면에서 입력을 안 받는다**(`locked`로 사유를 알린다).
+   *    권한이 아니라 **안전장치**다: 월간 격자의 저장은 교시를 모른 채 그날 **모든 교시**에 가므로
+   *    (save-targets ①) 여기서 받으면 남의 기록·자리(JJ)를 화면에 흔적도 없이 덮거나 지운다. 게다가
+   *    낙관값은 서버 값과 같아질 때만 벗겨지는데 서버는 이 칸을 영원히 비워 두므로 친 숫자가
+   *    새로고침 전까지 시수·출석률에 남는다. 고칠 길은 막지 않는다 — **반별 보기에선 그대로 열려 있다**.
+   * ⚠️ 값이 **있는** 칸(내 교시 + 남의 교시)은 잠그지 않는다. 대신 툴팁이 "함께 바뀐다"를 말한다.
    */
   otherSlots?: SlotMark[];
+  /**
+   * 이 칸의 값에 **교시를 안 남긴 기록**이 섞였다(강사 전체 보기 전용, queries `dayAxis`).
+   * 그런 기록은 담당을 가릴 수 없어 좁히지 않으므로 **그 반 담당 전원 화면에 같은 값**으로 잡힌다 —
+   * 툴바 칩("칸 = 이 선생님 교시")의 유일한 예외라, 그 사실을 이 칸이 직접 말한다.
+   */
+  sharedDay?: boolean;
 }) {
   const row = rowKey(classId, studentId);
   const key = cellKey(row, sessionDate);
@@ -114,6 +124,9 @@ export function AttendanceCell({
   // 세지 않는 교시는 **값이 비어 있을 때만** 빗금으로 드러낸다 — 값이 있으면 그 값이 칸의 주인이고,
   // 세지 않는 교시는 아래 툴팁에서 계속 밝힌다.
   const ghost = !status && !!otherSlots?.length;
+  // 🔴 빗금 칸엔 값이 없어도 **메모는 있다** — 실측 78칸이 결석 사유였다("병결"·"가족여행").
+  //    noteVal은 값이 없으면 비우는 규약(지워진 칸의 유령 메모 방지)이라, 이 칸만 따로 살린다.
+  const ghostNote = ghost ? noteEdit ?? note ?? "" : "";
   const display = cellDisplay(status, units, { attendDay, muted, outside, day, ghost });
   const fromReport = derived && status === initialStatus;
   // 잠긴 칸이라도 **메모는 보여 준다** — 잠금 사유만 남기고 메모를 감추면 왜 잠겼는지만 알고 뭐라 적혔는지는 못 본다.
@@ -129,8 +142,10 @@ export function AttendanceCell({
       : null,
     // 회색 칸의 뜻을 말해 준다 — 색만 다르면 "왜 여기만 회색이지"로 끝난다.
     outside ? (status ? "재원 기간 밖 기록(보강 등)" : "이 반 재원 기간이 아닙니다") : null,
+    // 칩의 예외 — 교시가 안 찍힌 기록이라 이 반 담당 전원에게 같은 값이 잡힌다(위 sharedDay 주석).
+    sharedDay ? "교시가 안 찍힌 기록이라 이 반 전체 몫으로 셉니다(다른 선생님 화면에도 같은 값)" : null,
     fromReport ? "수업보고서 자동 판정" : null,
-    noteVal || null,
+    noteVal || ghostNote || null,
   ]
     .filter(Boolean)
     .join(" · ");
@@ -253,7 +268,7 @@ export function AttendanceCell({
           />
         ) : null}
         {/* 메모 — 포스트잇 모서리 접힘(구 출석부 표기) */}
-        {noteVal ? (
+        {noteVal || ghostNote ? (
           <span
             aria-hidden
             className="pointer-events-none absolute top-0 right-0 size-2"
@@ -271,8 +286,9 @@ export function AttendanceCell({
           sessionDate={sessionDate}
           status={status}
           units={units}
-          note={noteVal}
+          note={noteVal || ghostNote}
           locked={locked ?? null}
+          otherCount={otherSlots?.length ?? 0}
           anchor={popover}
           onClose={() => setPopover(null)}
           onSaved={(next) => {

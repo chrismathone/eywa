@@ -119,6 +119,7 @@ function groupToMatrix(
     units,
     slots,
     ghosts: {},
+    dayAxis: {},
     derived: {},
     derivedActive: false,
     stats: {
