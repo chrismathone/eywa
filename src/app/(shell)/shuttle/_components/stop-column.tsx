@@ -249,7 +249,9 @@ function StopCard({
               type="button"
               disabled={busy}
               onClick={() => setPicking((v) => !v)}
-              className="rounded-pill border-line text-text-dim hover:bg-muted min-h-8 w-full border border-dashed px-2.5 text-[11.5px] font-bold"
+              // ⚠️ 격자 칸을 꽉 채우지 않는다(`justify-self-start`) — 점선 테두리를 칩 폭만큼 늘리면
+              //    화면에 긴 파선이 여러 줄 생겨 "테두리가 깨져 보인다"(원장 2026-08-19 제보).
+              className="rounded-pill border-line text-text-dim hover:bg-muted min-h-8 justify-self-start border border-dashed px-2.5 text-[11.5px] font-bold"
             >
               + 학생
             </button>
