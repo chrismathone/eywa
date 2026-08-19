@@ -269,8 +269,8 @@ export function CellPopover({
                 지우기는 그날 행을 통째로 없앤다(그래서 저장은 열고 지우기만 닫는다). */}
             {status && sharedDelete ? (
               <p className="text-text-dim border-t px-2 py-1 text-[10px] leading-tight break-keep">
-                저장하면 같은 날 다른 교시 기록(다른 선생님·자리 JJ·랩실)도 함께 바뀝니다. 지우기는 여기서 못
-                합니다 — 반별 보기에서 지우세요
+                고치면 같은 날 다른 교시 기록 {otherCount}건(다른 선생님·자리 JJ·랩실)도 함께 바뀝니다. 지우기는
+                여기서 못 합니다 — 반별 보기에서 지우세요
               </p>
             ) : null}
           </>
