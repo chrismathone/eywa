@@ -109,6 +109,7 @@ export function ReportCard({
   subjectIndex,
   onSubjectIndex,
   todayInputs,
+  readonlyView = false,
 }: {
   student: OneScreenStudent;
   reports: Record<string, SubjectReport>;
@@ -157,6 +158,8 @@ export function ReportCard({
    * 배선은 원래 있던 자리(onescreen-client)에 그대로 두고, 이 카드는 **자리만** 내준다.
    */
   todayInputs?: ReactNode;
+  /** '다른 강사 뷰'(열람 전용) — 카드 입력·발송·저장·공유링크 조작 전부 잠금(2026-08-19). */
+  readonlyView?: boolean;
 }) {
   const [ownIdx, setOwnIdx] = useState(0);
   const selIdx = subjectIndex ?? ownIdx;
@@ -195,8 +198,10 @@ export function ReportCard({
   const isAbsent = subject.attendanceRaw === "absent";
   // 이 행의 입력을 잠그나 — 발송 완료 **또는 결석**(표 모드와 같은 단일 소스, grid.ts).
   // 2026-08-07 확대: 예전엔 왼쪽 기록 열이 `alreadySent`만 봐서, 결석을 눌러도 진도·태도가 그대로 열려 있었다.
-  const locked = !isRowInputEditable(subject, liveStatus);
+  // 열람 전용(다른 강사 뷰)이면 무조건 잠금 — 3개 fieldset(입력 열·멘트 열·첨부)이 이 값 하나를 본다.
+  const locked = readonlyView || !isRowInputEditable(subject, liveStatus);
   const sendGate = evaluateSendGate({
+    readonlyView, // 열람 전용 — 사유 라벨("열람 전용")까지 게이트가 만든다(표뷰와 동일)
     recallPending: isRecallInFlight(liveStatus ?? null),
     alreadySent,
     isAbsent,
@@ -205,7 +210,7 @@ export function ReportCard({
     // 출결 쓰기 권한 없음 = 게이트 해당 없음(P0-3) — 표뷰(grid-row)와 동일 예외.
     attendanceUnchecked: !attendance?.readOnly && isAttendanceUnchecked(subject),
   });
-  const canQueue = sendGate.canSend;
+  const canQueue = sendGate.canSend; // 열람 전용 포함 — 판정·사유는 send-gate 단일 소스
   // 멘트 ↔ 기록 불일치(시험날 진도·멘트에만 있는 점수) — 표뷰와 같은 판정. 막지 않고 알린다.
   const mentWarnings = checkMentConsistency({
     ment: rep.draft ?? "",
@@ -594,7 +599,9 @@ export function ReportCard({
                   ? "border-danger/40 bg-danger-soft text-danger"
                   : sendGate.reasons[0] === "sent"
                     ? "border-primary/40 bg-primary-soft text-primary"
-                    : "border-amber/40 bg-amber-soft text-amber"
+                    : sendGate.reasons[0] === "readonly"
+                      ? "border-purple/40 bg-purple-soft text-purple"
+                      : "border-amber/40 bg-amber-soft text-amber"
               }`}
               title={sendGate.hint ?? undefined}
             >
@@ -660,7 +667,7 @@ export function ReportCard({
           <Button
             variant="outline"
             size="sm"
-            disabled={!isRowActionable(subject, "save") || alreadySent}
+            disabled={readonlyView || !isRowActionable(subject, "save") || alreadySent}
             title={
               alreadySent
                 ? "이미 학부모에게 발송된 보고서 — 수정할 수 없습니다(고치려면 공유 링크 재발급)"
@@ -675,7 +682,7 @@ export function ReportCard({
           <Button
             variant="ghost"
             size="sm"
-            disabled={!isRowActionable(subject, "save")}
+            disabled={readonlyView || !isRowActionable(subject, "save")}
             title={isRowActionable(subject, "save") ? "학부모 보고서 미리보기·인쇄" : "오늘 진도를 먼저 입력하세요"}
             onClick={() => onSend(subjectName, "pdf")}
           >
@@ -777,13 +784,16 @@ export function ReportCard({
                 <p className="text-text-dim text-[11px]">이 링크는 열람이 차단됐습니다.</p>
                 <div className="flex items-center gap-1.5">
                   {/* ⚠️ 링크를 막아도 **ClassNote 게시글(스크린샷)은 남아 있다** — 지우려면 회수해야 한다. */}
-                  <RecallButton
-                    shareToken={rep.shareToken ?? null}
-                    classnoteStatus={liveStatus ?? null}
-                    studentName={student.name}
-                    readAt={subject.classnoteReadAt ?? null}
-                  />
-                  <Button variant="outline" size="sm" onClick={() => onReissue(subjectName)}>
+                  {/* 열람 전용에선 회수 숨김 — 아래 게시판 블록의 RecallButton과 같은 이유. */}
+                  {readonlyView ? null : (
+                    <RecallButton
+                      shareToken={rep.shareToken ?? null}
+                      classnoteStatus={liveStatus ?? null}
+                      studentName={student.name}
+                      readAt={subject.classnoteReadAt ?? null}
+                    />
+                  )}
+                  <Button variant="outline" size="sm" disabled={readonlyView} onClick={() => onReissue(subjectName)}>
                     재발급
                   </Button>
                 </div>
@@ -813,19 +823,23 @@ export function ReportCard({
                 <div className="mt-1.5 flex flex-wrap gap-1.5">
                   {postedToBoard ? (
                     <>
-                      <RecallButton
-                        shareToken={rep.shareToken ?? null}
-                        classnoteStatus={liveStatus ?? null}
-                        studentName={student.name}
-                        readAt={subject.classnoteReadAt ?? null}
-                      />
+                      {/* 열람 전용에선 회수도 숨김 — RecallButton은 disabled prop이 없고, 회수는
+                          학부모 게시글 삭제라 열람 화면에 열어 둘 이유가 없다(서버도 캡으로 거절). */}
+                      {readonlyView ? null : (
+                        <RecallButton
+                          shareToken={rep.shareToken ?? null}
+                          classnoteStatus={liveStatus ?? null}
+                          studentName={student.name}
+                          readAt={subject.classnoteReadAt ?? null}
+                        />
+                      )}
                     </>
                   ) : (
                     <>
-                      <Button variant="ghost" size="sm" onClick={() => onReissue(subjectName)}>
+                      <Button variant="ghost" size="sm" disabled={readonlyView} onClick={() => onReissue(subjectName)}>
                         재발급
                       </Button>
-                      <Button variant="ghost" size="sm" onClick={() => onRevoke(subjectName)}>
+                      <Button variant="ghost" size="sm" disabled={readonlyView} onClick={() => onRevoke(subjectName)}>
                         취소
                       </Button>
                     </>

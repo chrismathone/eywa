@@ -19,6 +19,7 @@
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
+import { readonlyTeacherViewError } from "@/lib/auth/view-mode";
 import { createClient } from "@/lib/supabase/server";
 import { humanizeDbError } from "@/lib/supabase/db-error";
 import { logAction } from "@/features/audit/server/log";
@@ -45,6 +46,12 @@ export type RecallResult = {
  * (revokeShareLink·reissueShareLink와 같은 키). **게이트는 아래 본체 하나뿐** — 진입점만 둘이다.
  */
 export async function requestReportRecallByShareToken(shareToken: string): Promise<RecallResult> {
+  // '다른 강사 뷰'(열람 전용) 차단 — canWriteTenant 캡만으론 부족하다: 겸직이 같은 학생을 직접 담당하면
+  // 아래 소유 판정(teacherOwnsStudent·ownsMakeupReport)이 본인 축으로 열려 열람 중 회수가 뚫린다(#77).
+  {
+    const roError = await readonlyTeacherViewError();
+    if (roError) return { ok: false, error: roError };
+  }
   if (!shareToken) return { ok: false, error: "링크 정보가 없습니다" };
   const supabase = await createClient();
   const { data } = await supabase
@@ -64,6 +71,9 @@ export async function requestReportRecallByShareToken(shareToken: string): Promi
 export async function requestReportRecall(ids: string[]): Promise<RecallResult> {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
+  // '다른 강사 뷰'(열람 전용) 차단 — 위 requestReportRecallByShareToken과 같은 이유(겸직 본인 축 우회).
+  const roError = await readonlyTeacherViewError();
+  if (roError) return { ok: false, error: roError };
   if (!ids?.length) return { ok: false, error: "대상이 없습니다" };
   const capped = ids.slice(0, MAX_PER_CALL);
   const supabase = await createClient();

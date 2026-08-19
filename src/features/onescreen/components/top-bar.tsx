@@ -37,6 +37,7 @@ export function OneScreenTopBar({
   fontSize,
   onFontSize,
   makeupAdder,
+  readonlyView = false,
 }: {
   today: string;
   date: string; // 대상 날짜(YYYY-MM-DD)
@@ -60,6 +61,8 @@ export function OneScreenTopBar({
   fontSize: OnescreenFontSize; // 글씨 크기(내 계정) — 아래 목록·표를 통째로 확대
   onFontSize: (size: OnescreenFontSize) => void;
   makeupAdder?: ReactNode; // 보강 학생 추가 컨트롤(슬롯)
+  /** '다른 강사 뷰'(열람 전용) — 공지 탭(순수 작성 화면)을 숨긴다(2026-08-19). */
+  readonlyView?: boolean;
 }) {
   // 작성 상태 필터 — 순서는 원장 표현대로 전체 → 작성 → 미작성. 숫자는 **지금 조건에 맞는 학생 수**라
   // 고정(pinned)으로 화면에 남아 있는 학생과 다를 수 있다(그래서 아래 안내줄이 그 차이를 밝힌다).
@@ -309,7 +312,11 @@ export function OneScreenTopBar({
         </div>
         {/* 카드 ↔ 표(스프레드시트) ↔ 오늘 발송 현황 ↔ 월간 발송(달력) ↔ 공지 뷰 전환 */}
         <div className="border-line flex items-center rounded-full border p-0.5">
-          {(["card", "grid", "status", "history", "notice"] as const).map((v) => (
+          {/* 열람 전용은 공지 탭 제외 — 공지는 순수 작성 화면이라 열람에서 열 이유가 없다(진입 가드와 짝). */}
+          {(readonlyView
+            ? (["card", "grid", "status", "history"] as const)
+            : (["card", "grid", "status", "history", "notice"] as const)
+          ).map((v) => (
             <button
               key={v}
               type="button"

@@ -17,7 +17,7 @@
  */
 
 /** 발송을 막는 사유. sent·absent는 **상태**(고칠 게 아니라 그런 행), attendance·progress·ment는 **필요한 입력**. */
-export type SendBlockReason = "sent" | "absent" | "attendance" | "progress" | "ment" | "recall_pending";
+export type SendBlockReason = "sent" | "absent" | "attendance" | "progress" | "ment" | "recall_pending" | "readonly";
 
 /** 입력이 필요한 사유의 짧은 이름 — 라벨에서 "출결 · 진도 · 멘트 입력 필요"로 이어 붙인다. */
 const NEED_LABEL: Record<"attendance" | "progress" | "ment", string> = {
@@ -59,7 +59,21 @@ export function evaluateSendGate(args: {
    * 새 토큰을 내면 워커가 지울 글을 못 찾아 **고아 게시글**이 된다. 삭제가 끝난 뒤에만 보낸다.
    */
   recallPending?: boolean;
+  /**
+   * '다른 강사 뷰'(열람 전용, 2026-08-19) — 화면 전체가 발송 불가. 게이트 **밖**에서 canSend를 AND로
+   * 꺾으면 "비활성인데 사유 라벨 없음"(이 모듈이 죽이려는 2026-07-30 문제)이 재발한다 — 사유도 여기서.
+   * 옵셔널인 이유: 원스크린 열람 화면 전용 상태라 다른 소비처는 몰라도 된다(빼먹어도 기존 판정 그대로).
+   */
+  readonlyView?: boolean;
 }): SendGate {
+  if (args.readonlyView) {
+    return {
+      canSend: false,
+      reasons: ["readonly"],
+      label: "열람 전용",
+      hint: "다른 강사 뷰(열람 전용)에서는 발송할 수 없습니다 — 관리자뷰 또는 본인 강사뷰에서 보내세요",
+    };
+  }
   if (args.recallPending) {
     return {
       canSend: false,
