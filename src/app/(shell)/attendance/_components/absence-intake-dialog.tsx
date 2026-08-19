@@ -16,6 +16,9 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { formatKoreanDate } from "@/lib/date-kst";
+// 색은 의미에만 — 배지/글자 색은 화면 파일이 아니라 의미색 캐논에서 고른다(팔레트 v4 규칙).
+import { TONE_TEXT } from "@/lib/design/semantic-color";
+import { attendanceStatusLabel } from "@/features/attendance/intake/absence-intake";
 import type { IntakePreviewCell } from "@/features/attendance/intake/server/queries";
 import {
   previewAbsenceIntake,
@@ -28,14 +31,10 @@ type Student = { id: string; name: string; label: string };
 /** 자주 오는 사유 — 타이핑을 줄이되 **문장은 그대로 메모가 되므로** 고칠 수 있게 둔다. */
 const QUICK_REASONS = ["가족여행", "병결(감기)", "개인 사정", "학교 행사", "병원 진료"];
 
-const STATUS_TEXT: Record<string, string> = {
-  present: "출석으로 입력됨",
-  late: "지각으로 입력됨",
-  early_leave: "조퇴로 입력됨",
-  makeup: "보강으로 입력됨",
-  absent: "이미 결석",
-  excused: "공결로 입력됨",
-};
+/** 칸의 현재 상태 문구 — 라벨은 접수 모듈 **한 벌**에서 오고 여기선 문장만 만든다(사본 금지). */
+function existingText(status: string): string {
+  return status === "absent" ? "이미 결석" : `현재 ${attendanceStatusLabel(status)}`;
+}
 
 export function AbsenceIntakeDialog({ today, onClose }: { today: string; onClose: () => void }) {
   const router = useRouter();
@@ -327,12 +326,13 @@ export function AbsenceIntakeDialog({ today, onClose }: { today: string; onClose
                       {c.existing ? (
                         <span
                           className={
+                            // 이미 결석 = 할 일 없음(옅게) / 출석·지각·보강 = **내가 판단해야 하는 칸**(caution).
                             c.existing.status === "absent"
                               ? "text-text-faint ml-auto"
-                              : "text-caution ml-auto font-bold"
+                              : `${TONE_TEXT.caution} ml-auto font-bold`
                           }
                         >
-                          {STATUS_TEXT[c.existing.status] ?? "기록 있음"}
+                          {existingText(c.existing.status)}
                         </span>
                       ) : null}
                     </label>

@@ -28,21 +28,12 @@ import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { appendMemo, hasMemoLine } from "@/features/onescreen/makeup-absence-link";
 import { setAttendanceCell } from "../../server/actions";
 import { recordFollowup } from "../../live/server/actions";
-import { INTAKE_MAX_REASON, intakeMemo } from "../absence-intake";
+import { INTAKE_MAX_REASON, attendanceStatusLabel, intakeMemo } from "../absence-intake";
 import { loadIntakePreview, type IntakePreview } from "./queries";
 import { notifyTeachersOfIntake } from "./notify";
 
 /** 접수가 손대지 않는 상태 — "이미 왔다/보강했다"는 기록은 전화 한 통으로 뒤집을 값이 아니다. */
 const KEEP_STATUSES = new Set(["present", "late", "early_leave", "makeup"]);
-
-const STATUS_LABEL: Record<string, string> = {
-  present: "출석",
-  late: "지각",
-  early_leave: "조퇴",
-  makeup: "보강",
-  absent: "결석",
-  excused: "공결",
-};
 
 export type IntakeSkip = { className: string; date: string; statusLabel: string };
 
@@ -164,7 +155,7 @@ export async function recordAbsenceIntake(input: {
     const existing = cell.existing;
     const where = { className: cell.className, date: cell.date };
     if (existing && KEEP_STATUSES.has(existing.status)) {
-      return { skip: { ...where, statusLabel: STATUS_LABEL[existing.status] ?? "기록 있음" } };
+      return { skip: { ...where, statusLabel: attendanceStatusLabel(existing.status) } };
     }
 
     if (existing?.status === "absent") {
@@ -203,7 +194,7 @@ export async function recordAbsenceIntake(input: {
     });
     if ("error" in res) return { fail: { ...where, message: res.error } };
     if (res.conflict) {
-      return { skip: { ...where, statusLabel: STATUS_LABEL[res.conflict.status] ?? "기록 있음" } };
+      return { skip: { ...where, statusLabel: attendanceStatusLabel(res.conflict.status) } };
     }
     return { saved: true, written: { ...where, classId: cell.classId } };
   }

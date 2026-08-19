@@ -3,6 +3,7 @@ import {
   INTAKE_MAX_RANGE_DAYS,
   INTAKE_MAX_REASON,
   INTAKE_MEMO_SUFFIX,
+  attendanceStatusLabel,
   intakeMemo,
   buildAbsenceCells,
   cellKey,
@@ -167,5 +168,16 @@ describe("intakeMemo — 출처가 메모 한 줄에 함께 간다(모든 화면
   it("길이 상한을 넘으면 사유를 자른다", () => {
     const long = "가".repeat(300);
     expect(intakeMemo(long).length).toBeLessThanOrEqual(INTAKE_MAX_REASON + INTAKE_MEMO_SUFFIX.length + 1);
+  });
+});
+
+describe("attendanceStatusLabel — 라벨 한 벌(화면·액션 공유)", () => {
+  it("raw enum을 그대로 내보내지 않는다", () => {
+    expect(attendanceStatusLabel("present")).toBe("출석");
+    expect(attendanceStatusLabel("early_leave")).toBe("조퇴");
+  });
+  it("모르는 값도 한글 폴백", () => {
+    expect(attendanceStatusLabel("weird")).toBe("기록 있음");
+    expect(attendanceStatusLabel(null)).toBe("기록 있음");
   });
 });

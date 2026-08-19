@@ -192,3 +192,23 @@ export function intakeMemo(reason: string): string {
   // 이미 접미어가 달린 문장을 다시 접수하면 두 번 붙이지 않는다(데스크가 메모를 복사해 넣는 경우).
   return body.endsWith(INTAKE_MEMO_SUFFIX) ? body : `${body} ${INTAKE_MEMO_SUFFIX}`;
 }
+
+/**
+ * 출결 상태 → 한글 라벨 — **접수 화면과 접수 액션이 같은 한 벌**을 쓴다.
+ *
+ * 🔑 맵을 두 벌로 만들지 말 것(팔레트 v4 작업의 교훈: 같은 뜻이 최대 6벌로 갈려 있었고, 사본은
+ *    새 상태를 따라오지 않아 화면이 조용히 "—"를 뱉었다). 화면은 여기에 문장만 덧붙인다.
+ * ⚠️ raw enum을 UI에 그대로 내보내지 않는다(전역 규칙) — 모르는 값도 한글 폴백으로 접는다.
+ */
+export const ATTENDANCE_STATUS_LABEL: Readonly<Record<string, string>> = {
+  present: "출석",
+  absent: "결석",
+  late: "지각",
+  early_leave: "조퇴",
+  makeup: "보강",
+  excused: "공결",
+};
+
+export function attendanceStatusLabel(status: string | null | undefined): string {
+  return ATTENDANCE_STATUS_LABEL[String(status ?? "")] ?? "기록 있음";
+}
