@@ -20,6 +20,7 @@ import { isWithinAttendanceEditWindow } from "@/features/attendance/edit-window"
 import { nowBandOf, type NowBand } from "../now-band";
 import { hhmmToMin, shouldQueueWithRequest, slotPhase, type SlotPhase } from "../signals";
 import { isSpecialSlotLabel } from "@/features/timetable/lib/teacher-label";
+import { groupHeaderOf, groupIdentityOf, identityKey, type TeacherGroupIdentity } from "../teacher-group";
 import { buildQueue, type DeskQueue, type FollowupBrief, type QueueClass, type QueueStudent } from "../queue";
 import { loadLiveSlots } from "./load";
 import { userTaughtClassSet } from "./write-policy";
@@ -131,9 +132,13 @@ export const getLiveBoard = cache(async (date: string = kstToday(), selfOnly = f
   const teacherIds = [...new Set(slots.map((s) => s.teacherId).filter((v): v is string => !!v))];
   const nameById = await loadTeacherNames(teacherIds);
 
-  const byTeacher = new Map<string, LiveBoardSlot[]>();
+  // 묶는 축은 `teacher-group.ts` 단일 소스 — 사람은 계정, 자리(LAB·JJ)는 **방마다 한 줄**이다
+  // (원장 2026-08-20: *"담당미지정으로 나오게하지말고, lAB이면 lAB, JJ면 JJ"*). 어제 출결 요약도
+  // 이 줄 이름을 그대로 받아 쓰므로 여기 한 곳만 갈라도 두 화면이 함께 따라온다.
+  const byTeacher = new Map<string, { identity: TeacherGroupIdentity; list: LiveBoardSlot[] }>();
   for (const slot of slots) {
-    const key = slot.teacherId ?? "";
+    const identity = groupIdentityOf(slot);
+    const key = identityKey(identity);
     const withPhase: LiveBoardSlot = {
       ...slot,
       teacherName: slot.teacherId ? (nameById.get(slot.teacherId)?.name ?? null) : null,
@@ -141,18 +146,18 @@ export const getLiveBoard = cache(async (date: string = kstToday(), selfOnly = f
       band: bandOf(slot, isToday, nowMin),
       ownedByMe: taught.has(slot.classId) || slot.teacherId === ownerAxisId,
     };
-    (byTeacher.get(key) ?? byTeacher.set(key, []).get(key)!).push(withPhase);
+    (byTeacher.get(key) ?? byTeacher.set(key, { identity, list: [] }).get(key)!).list.push(withPhase);
   }
 
-  const teachers = [...byTeacher.entries()]
-    .map(([teacherId, list]) => {
+  const teachers = [...byTeacher.values()]
+    .map(({ identity, list }) => {
       const expected = list.reduce((n, s) => n + s.students.length, 0);
       const recorded = list.reduce((n, s) => n + s.recordedCount, 0);
       return {
-        teacherId: teacherId || null,
+        // 🔴 줄 머리는 `groupHeaderOf`가 만든다 — 자리 이름이 `teacherId`로 새면 로그인도 못 하는
+        //    "가짜 강사"가 알림 수신자·급여로 따라 붙고, 방에 전화번호가 붙는다.
         // ⚠️ 담당 미지정 슬롯도 화면에서 사라지면 안 된다 — 그런 반이야말로 아무도 안 찍는다.
-        teacherName: teacherId ? (nameById.get(teacherId)?.name || "이름 없음") : "담당 미지정",
-        teacherPhone: teacherId ? (nameById.get(teacherId)?.phone ?? null) : null,
+        ...groupHeaderOf(identity, identity.teacherId ? nameById.get(identity.teacherId) : null),
         slots: list,
         expected,
         recorded,

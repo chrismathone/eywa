@@ -41,7 +41,11 @@ export type RecapSlotInput = {
   slotStart: string; // "HH:MM"
   /** 저장 축(slot-axis) — 조치 기록 조회 키. 수학은 null("그날 전체"). */
   saveSlot: string | null;
-  teacherName: string; // 이미 폴백된 표시 이름("담당 미지정")
+  /**
+   * 집계 축 = 보드의 강사 줄 이름(이미 폴백돼 있다). 사람이면 계정 이름, **자리면 `LAB`·`JJ`**,
+   * 자리도 담당·담임도 없으면 `담당 미지정`([teacher-group.ts](../live/teacher-group.ts)).
+   */
+  teacherName: string;
   /** 자리 반 표기(LAB·JJ) — 사람이 아니라 자리라 화면이 갈라 보여준다. */
   slotTeacherLabel: string | null;
   hasAnyRecord: boolean;
@@ -88,11 +92,13 @@ export type RecapUnmarkedClass = {
    * 같은 교시들의 **강사 줄 이름**(아래 `teachers[].teacherName`과 같은 축). 화면이 "입력이 덜 된 강사"
    * 줄에서 그 강사의 미입력 반을 파생할 때 쓰는 키다.
    *
-   * 🔴 **`teacherNames`(표시)와 같지 않다.** 표시는 슬롯 라벨이 이겨서 자리는 `LAB`·`JJ`, 영어는 시트
-   *    닉네임 원문(`Jane`·`Kristine`)으로 적히는데, 집계 줄은 담당 **계정의 표시 이름**(없으면
-   *    `담당 미지정`)으로 센다. 실측(2026-08-19 살아 있는 슬롯) 194개가 `teacher_id` + 닉네임 라벨을
-   *    함께 들고 있어, 표시 이름으로 강사 줄을 찾으면 **영어가 통째로 어긋난다**(줄엔 "미입력 3반"인데
-   *    펼치면 0건). 그래서 파생용 축을 따로 싣는다 — 두 배열의 뜻을 섞지 말 것.
+   * 🔴 **`teacherNames`(표시)와 같지 않다.** 표시는 슬롯 라벨이 이겨서 영어는 시트 닉네임 원문
+   *    (`Jane`·`Kristine`)으로 적히는데, 집계 줄은 담당 **계정의 표시 이름**으로 센다. 실측
+   *    (2026-08-19 살아 있는 슬롯) 194개가 `teacher_id` + 닉네임 라벨을 함께 들고 있어, 표시 이름으로
+   *    강사 줄을 찾으면 **영어가 통째로 어긋난다**(줄엔 "미입력 3반"인데 펼치면 0건). 그래서 파생용
+   *    축을 따로 싣는다 — 두 배열의 뜻을 섞지 말 것.
+   * ⚠️ 자리(LAB·JJ)만은 2026-08-20부터 **두 값이 같다**(보드가 방마다 줄을 나눠 세므로 축도 `LAB`·`JJ`).
+   *    그래도 축을 표시로 대체하지 말 것 — 같아지는 건 자리뿐이고 영어 닉네임에선 여전히 갈린다.
    */
   teacherLines: string[];
   slots: string[];
