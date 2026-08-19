@@ -22,6 +22,7 @@ import { GripVertical, Plus, X } from "@/components/icons/eywa-icon-compat";
 import { SUBJECT_COLORS, SUBJECT_DEFAULT_VIEW_OPTIONS, type ConsultationTemplate, type HolidaySetting, type PeriodTimeRow, type ShuttleSetting, type SubjectSetting, type TermSetting } from "@/features/owner/settings-types";
 import { SUBJECT_SOLID, KNOWN_SUBJECT_KEYS } from "@/features/owner/subjects";
 import { WEEKDAY_GROUPING_OPTIONS } from "@/features/timetable/lib/weekday-groups";
+import { STATE_RESERVED_COLORS } from "@/lib/design/semantic-color";
 
 const cellCls =
   "border-line text-foreground rounded-md border bg-transparent px-2.5 py-1.5 text-[13px] outline-none focus:border-primary";
@@ -158,7 +159,12 @@ export function SubjectListEditor({
                 onBlur={() => finalizeKey(i)}
                 aria-invalid={dup}
               />
-              {/* 색 — 미리보기 칩 + 선택 */}
+              {/* 색 — 미리보기 칩 + 선택.
+                  ⚠️ 초록·빨강·앰버는 앱 전체에서 **상태색**이다(정상·위험·주의 — 의미색 캐논,
+                  src/lib/design/semantic-color.ts). 과목에 그 색을 고르면 학생목록처럼 상태 배지와
+                  과목 배지가 한 행에 서는 화면에서 둘이 같은 색이 돼 구분이 사라진다.
+                  🔑 선택지에서 **빼지는 않는다** — 이미 그 색으로 저장한 학원이 있으면 Zod가 거절해
+                  학원설정 저장 자체가 막힌다(fail-closed). 대신 고른 순간 경고를 띄운다. */}
               <span className="flex items-center gap-1.5">
                 <span className={`size-4 shrink-0 rounded-sm ${SUBJECT_SOLID[s.color]}`} aria-hidden />
                 <select
@@ -166,10 +172,15 @@ export function SubjectListEditor({
                   value={s.color}
                   onChange={(e) => set(i, { color: e.target.value as SubjectSetting["color"] })}
                   aria-label="과목 색"
+                  title={
+                    STATE_RESERVED_COLORS.has(s.color)
+                      ? "초록·빨강·앰버는 상태색(정상·위험·주의)이라 과목에 쓰면 상태 배지와 헷갈립니다"
+                      : undefined
+                  }
                 >
                   {SUBJECT_COLORS.map((c) => (
                     <option key={c} value={c}>
-                      {c}
+                      {STATE_RESERVED_COLORS.has(c) ? `${c} (상태색)` : c}
                     </option>
                   ))}
                 </select>
@@ -230,6 +241,13 @@ export function SubjectListEditor({
             </div>
             {dup ? (
               <p className="text-danger pl-0.5 text-[11px]">이미 있는 과목명입니다 — 다른 이름을 쓰거나 한 행을 삭제하세요.</p>
+            ) : null}
+            {/* 저장은 막지 않는다(경고만) — 이미 그 색을 쓰던 학원의 설정이 잠기면 안 된다. */}
+            {STATE_RESERVED_COLORS.has(s.color) ? (
+              <p className="text-amber pl-0.5 text-[11px]">
+                초록·빨강·앰버는 앱 전체에서 <b>상태색</b>(정상·위험·주의)입니다 — 과목에 쓰면 학생목록
+                등에서 상태 배지와 같은 색이 되어 구분이 어려워집니다.
+              </p>
             ) : null}
           </div>
         );

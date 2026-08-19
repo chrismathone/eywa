@@ -39,7 +39,7 @@ function statusLabel(s: string): { label: string; cls: string } {
     case "processing":
       return { label: "게시 중", cls: "text-text-dim" };
     case "success":
-      return { label: "게시 완료", cls: "text-primary" };
+      return { label: "게시 완료", cls: "text-green" };
     case "partial":
       return { label: "일부 게시", cls: "text-amber" };
     case "failed":

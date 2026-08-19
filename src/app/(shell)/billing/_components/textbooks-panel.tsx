@@ -73,7 +73,7 @@ export async function TextbooksPanel({ sp }: { sp: Sp }) {
           href={chipHref("all")}
           className={`shrink-0 rounded-full border px-2 py-0.5 text-xs transition ${
             status === "all"
-              ? "border-foreground bg-foreground text-background font-medium"
+              ? "border-primary bg-primary text-primary-foreground font-medium"
               : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
           }`}
         >
@@ -86,7 +86,7 @@ export async function TextbooksPanel({ sp }: { sp: Sp }) {
             title={s.title}
             className={`shrink-0 rounded-full border px-2 py-0.5 text-xs transition ${
               status === s.key
-                ? "border-foreground bg-foreground text-background font-medium"
+                ? "border-primary bg-primary text-primary-foreground font-medium"
                 : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
             }`}
           >

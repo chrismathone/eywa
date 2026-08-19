@@ -20,6 +20,7 @@ import {
 } from "@/features/enrollment/server/queries";
 import { WindowLink } from "@/components/workspace/window-link";
 import { COMMON_FIELDS, ENGLISH_GROUPS, GENDER_OPTIONS, SUBJECT_TABS } from "@/features/enrollment/form-config";
+import { outcomeBadge } from "@/features/enrollment/outcome-meta";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { getClassesList } from "@/features/classes/server/queries";
@@ -44,15 +45,9 @@ export const metadata = { title: "신입생 상담 상세 — eywa" };
  */
 export const maxDuration = 300;
 
-const OUTCOME_BADGE: Record<string, { label: string; class: string }> = {
-  pending: { label: "대기", class: "text-chart-3 bg-chart-3/10 border-chart-3/20" },
-  scheduled: { label: "예약", class: "text-chart-3 bg-chart-3/10 border-chart-3/20" },
-  consulted: { label: "상담완료", class: "text-chart-1 bg-chart-1/10 border-chart-1/20" },
-  ai_done: { label: "AI 완료", class: "text-chart-2 bg-chart-2/10 border-chart-2/20" },
-  enrolled: { label: "재원생 등록", class: "text-chart-2 bg-chart-2/10 border-chart-2/20" },
-  declined: { label: "거절", class: "text-muted-foreground bg-muted border-border" },
-  no_show: { label: "노쇼", class: "text-chart-4 bg-chart-4/10 border-chart-4/20" },
-};
+// outcome 배지 = [outcomeBadge](src/features/enrollment/outcome-meta.ts) 단일 소스.
+// ⚠️ 여기 있던 로컬 맵은 chart 슬롯을 직접 참조해 목록과 색이 갈렸다(AI 완료가 목록=보라·상세=초록,
+//    대기와 예약이 상세에선 같은 색이라 두 단계가 붙어 보였다).
 
 const PROCESSING_BADGE: Record<
   ConsultationProcessingStatus,
@@ -108,7 +103,7 @@ export default async function EnrollmentDetailPage({
   const consultationDateLabel =
     f.consultationDate ?? new Date(consult.consultedAt).toLocaleDateString("ko-KR", { timeZone: "Asia/Seoul" });
 
-  const badge = OUTCOME_BADGE[consult.outcome] ?? OUTCOME_BADGE.pending!;
+  const badge = outcomeBadge(consult.outcome);
   const procBadge = PROCESSING_BADGE[consult.processingStatus];
   const isProcessing =
     consult.processingStatus === "uploaded" ||
@@ -228,7 +223,7 @@ export default async function EnrollmentDetailPage({
           </p>
           <ul className="mt-3 space-y-1.5">
             {siblings.map((sib) => {
-              const sBadge = OUTCOME_BADGE[sib.outcome] ?? OUTCOME_BADGE.pending!;
+              const sBadge = outcomeBadge(sib.outcome);
               const sSubject = sib.subject ? subjectMaps.labelOf(sib.subject) : null;
               return (
                 <li key={sib.id} className="flex items-center gap-2">

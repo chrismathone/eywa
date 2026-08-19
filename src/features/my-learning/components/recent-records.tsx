@@ -1,10 +1,12 @@
 import Link from "next/link";
+import { ATT_SOFT } from "@/features/attendance/status-color";
 import type { Session } from "../history";
 
+// 색은 출결 단일 소스 — 같은 달력을 그리는 attendance-calendar와 **같은 상수**를 쓴다.
 const ATT_CLASS: Record<string, string> = {
-  출석: "bg-primary-soft text-primary",
-  지각: "bg-amber-soft text-amber",
-  결석: "bg-danger-soft text-danger",
+  출석: ATT_SOFT.present,
+  지각: ATT_SOFT.late,
+  결석: ATT_SOFT.absent,
 };
 
 /** 최근 수업 기록 — 최신순. 클릭 시 그날 데일리 리포트로 이동. */

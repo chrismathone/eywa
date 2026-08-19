@@ -221,6 +221,9 @@ async function fetchMyMakeupReports(
   // 소유 판정은 순수 함수 [`ownsMakeupReport`](../makeup-owner.ts) 하나로 — 계정 id 우선, 옛 행만 이름 폴백.
   // 하루치 보강은 학원 전체로도 수십 건(실측 9개월 171건)이라 서버에서 걸러도 비용이 없다 —
   // PostgREST `.or()`에 이름 문자열을 끼워 넣는 것보다 이 편이 안전하다(따옴표·특수문자 이스케이프 위험 0).
+  // ⚠️ 회수된 보강도 **그대로 되살린다** — 회수는 "게시글만 지우고 다시 보낼 수 있다"는 흐름이라
+  //    (원장 2026-08-06) 행을 숨기면 수정 후 재발송 경로가 끊긴다. 보강 빼기는 발송분을 아예 막고
+  //    (취소 불가) 지울 수 있는 행만 **진짜 삭제**하므로, 여기서 상태로 거를 이유가 없다.
   return ((data ?? []) as MakeupReportRow[]).filter((r) =>
     ownsMakeupReport({ createdBy: r.created_by, teacherName: r.teacher_name }, userId, teacherName),
   );

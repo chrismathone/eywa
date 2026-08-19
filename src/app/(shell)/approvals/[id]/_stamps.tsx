@@ -46,11 +46,17 @@ type Col = {
 
 type StampKind = Exclude<SignKind, "turn" | "blank" | "deferred" | "skipped">;
 
+/**
+ * 도장 색 — 의미색 캐논. 승인·전결 = positive(종결) · 반려 = critical · 후결 = info · 상신 = inert.
+ * ⚠️ 승인·전결이 종전엔 primary(네이비)였다 — 결재함 배지(`docStatusLabel`)는 같은 '승인'을 초록으로
+ *    그려서, 목록에서 초록으로 본 문서를 열면 도장이 네이비였다.
+ * 📌 승인과 전결이 같은 색인 건 의도다(둘 다 "이 칸에서 통과") — 구분은 도장 **글자**가 한다.
+ */
 const STAMP_CLS: Record<StampKind, string> = {
   drafted: "border-line text-text-dim",
-  approved: "border-primary text-primary",
+  approved: "border-green text-green",
   rejected: "border-danger text-danger",
-  final: "border-primary text-primary",
+  final: "border-green text-green",
   post_approved: "border-blue text-blue",
 };
 

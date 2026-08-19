@@ -20,6 +20,7 @@ import {
 import { WindowLink } from "@/components/workspace/window-link";
 import { PageHeader } from "@/components/page-header";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
+import { studentStatusMeta } from "@/features/students/status-labels";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { NewStudentTrigger } from "./_components/new-student-trigger";
@@ -28,14 +29,6 @@ import { StudentFilterBar } from "./_components/student-filter-bar";
 import { EnrolledStatCard } from "./_components/enrolled-stat-card";
 
 export const metadata = { title: "학생목록 — eywa" };
-
-const STATUS_META: Record<string, { label: string; color: PillColor }> = {
-  prospect: { label: "예비", color: "amber" },
-  consulted: { label: "상담완료", color: "blue" },
-  enrolled: { label: "재원", color: "primary" },
-  on_hold: { label: "휴원", color: "amber" },
-  withdrawn: { label: "퇴원", color: "neutral" },
-};
 
 export default async function StudentsPage({
   searchParams,
@@ -206,7 +199,10 @@ export default async function StudentsPage({
             </thead>
             <tbody className="divide-line divide-y">
               {rows.map((s) => {
-                const meta = STATUS_META[s.status] ?? { label: s.status, color: "neutral" as PillColor };
+                const meta = studentStatusMeta(s.status) ?? {
+                  label: s.status,
+                  color: "neutral" as PillColor,
+                };
                 // 구조화 행(문법 ⑤) — 이름 bold + 학교·학년 압축 라벨("경명여중1") dim 서브라인
                 const sg = schoolGradeLabel(s.school, s.grade);
                 return (

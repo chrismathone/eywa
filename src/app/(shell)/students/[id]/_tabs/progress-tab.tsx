@@ -2,6 +2,7 @@ import { getStudentLessonReports, type LessonReportRow } from "@/features/studen
 import { ProgressContainerPanel } from "@/features/progress/components/progress-panel";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
+import { classnoteBadge } from "@/features/onescreen/classnote-badge";
 
 // ijw StudentDetail ProgressTab 이식 — 최근 수업보고서 표(날짜·선생님·진도·시험·숙제).
 // + P2a/P3 보강: ClassNote 발송 상태 · 학부모 링크(열람수/취소/만료) — "저장한 보고서 확인"을 여기서.
@@ -12,26 +13,20 @@ function homeworkMark(score: string | null): string {
   return score?.trim() || "—";
 }
 
-/** ClassNote 발송 상태 → 라벨 + 색. null=미발송("—"). */
-function classnoteBadge(status: string | null): { label: string; cls: string } {
-  switch (status) {
-    case "success":
-      return { label: "발송됨", cls: "text-primary" };
-    case "queued":
-      return { label: "대기", cls: "text-text-dim" };
-    case "processing":
-      return { label: "처리중", cls: "text-text-dim" };
-    case "failed":
-      return { label: "실패", cls: "text-danger" };
-    case "too_old":
-      return { label: "제외", cls: "text-text-faint" };
-    case "name_conflict":
-      return { label: "동명이인", cls: "text-danger" };
-    case "blocked_shared":
-      return { label: "공유 보드", cls: "text-danger" };
-    default:
-      return { label: "—", cls: "text-text-faint" };
-  }
+/**
+ * ClassNote 발송 상태 → 짧은 라벨 + 색. null·미지의 값 = 미발송("—").
+ *
+ * 🔴 여기 **로컬 사본**이 있었는데(2026-08-18 제거) 회수 3종·링크 취소·과목 제외·결석/출결 미체크를
+ * switch에서 빠뜨려 **전부 "—"로 삼켰다** — 학부모 게시글을 회수했는데 학생 상세에선 "안 보낸 것"처럼
+ * 보였다는 뜻이다. 색 문제가 아니라 상태 은폐 버그였다. 이제
+ * [`classnoteBadge`](src/features/onescreen/classnote-badge.ts) 정본 하나만 쓴다(좁은 칸이라
+ * `short` 라벨). 상태가 늘면 정본만 고치면 여기도 따라온다.
+ * ⚠️ import는 **순수 모듈**에서 — 이 파일은 서버 컴포넌트라 클라 컴포넌트(`components/report-card.tsx`,
+ *    `useState` 사용)를 거치면 빌드가 깨진다(그래서 정본을 컴포넌트 밖으로 옮겼다).
+ */
+function classnoteCell(status: string | null): { label: string; cls: string } {
+  const b = classnoteBadge(status);
+  return b ? { label: b.short, cls: b.cls } : { label: "—", cls: "text-text-faint" };
 }
 
 /** 학부모 링크 상태 → 라벨 + 색. 활성이면 열람 수(0=미열람). */
@@ -81,7 +76,7 @@ export async function ProgressTab({ studentId }: { studentId: string }) {
             </thead>
             <tbody className="divide-border divide-y">
               {reports.map((r) => {
-                const cn = classnoteBadge(r.classnoteStatus);
+                const cn = classnoteCell(r.classnoteStatus);
                 const link = linkBadge(r);
                 return (
                   <tr key={r.id} className="hover:bg-bg-soft/30 align-top">

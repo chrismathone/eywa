@@ -10,7 +10,7 @@ import { PlanRow } from "./plan-row";
 
 // 시기 칩 — 원본 시트에서 '평시/내신'은 계획 묶음을 가르는 큰 구분이라 알약도 또렷하게(솔리드/앰버).
 const TERMS: { key: "regular" | "exam"; label: string; tone: string }[] = [
-  { key: "regular", label: "평시", tone: "border-foreground bg-foreground text-background" },
+  { key: "regular", label: "평시", tone: "border-primary bg-primary text-primary-foreground" },
   { key: "exam", label: "내신", tone: "border-amber/60 text-amber bg-amber-soft" },
 ];
 

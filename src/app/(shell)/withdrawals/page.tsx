@@ -240,7 +240,7 @@ export default async function WithdrawalsPage({
           href="/withdrawals"
           className={`shrink-0 rounded-full border px-3 py-0.5 text-xs transition ${
             viewType === "withdrawn"
-              ? "border-foreground bg-foreground text-background font-medium"
+              ? "border-primary bg-primary text-primary-foreground font-medium"
               : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
           }`}
         >
@@ -288,7 +288,7 @@ export default async function WithdrawalsPage({
                 href={buildWdHref({ ...current, range: f.key })}
                 className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs transition ${
                   range === f.key
-                    ? "border-foreground bg-foreground text-background font-medium"
+                    ? "border-primary bg-primary text-primary-foreground font-medium"
                     : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
                 }`}
               >
@@ -316,7 +316,7 @@ export default async function WithdrawalsPage({
                 href={buildWdHref({ ...current, subject: f.value })}
                 className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs transition ${
                   subject === f.value
-                    ? "border-foreground bg-foreground text-background font-medium"
+                    ? "border-primary bg-primary text-primary-foreground font-medium"
                     : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
                 }`}
               >

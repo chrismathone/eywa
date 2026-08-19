@@ -7,17 +7,21 @@ import { useState } from "react";
 import { SortableTh } from "@/components/table/sortable-th";
 import { compareKo, sortRows, type SortState } from "@/lib/table/sort";
 import { buildGridRows } from "../grid";
+import { TONE_SOFT } from "@/lib/design/semantic-color";
 import { rowSendStatus, summarizeSend } from "../status";
 import type { OneScreenStudent } from "../types";
 import { classnoteBadge, type SubjectReport } from "./report-card";
 
-const STATUS_META: Record<
-  "sent" | "draft" | "todo",
-  { label: string; cls: string }
-> = {
-  sent: { label: "발송완료", cls: "bg-primary/10 text-primary" },
-  draft: { label: "작성중", cls: "bg-amber-soft text-amber" },
-  todo: { label: "미작성", cls: "bg-danger/10 text-danger" },
+/**
+ * 색은 의미색 캐논([`semantic-color.ts`](src/lib/design/semantic-color.ts)) — 발송완료=positive ·
+ * 작성중=caution(아직 내 일) · 미작성=critical(마감이 있는 큐라 '아무것도 안 한 상태'가 곧 위험).
+ * ⚠️ 발송완료는 v4에서 primary(네이비) → positive(그린): "끝났다"는 앱 전역이 그린이라(완납·승인·출석)
+ *    여기만 네이비면 같은 뜻이 화면마다 다른 색이 된다.
+ */
+const STATUS_META: Record<"sent" | "draft" | "todo", { label: string; cls: string }> = {
+  sent: { label: "발송완료", cls: TONE_SOFT.positive },
+  draft: { label: "작성중", cls: TONE_SOFT.caution },
+  todo: { label: "미작성", cls: TONE_SOFT.critical },
 };
 
 // 정렬 우선순위 — '보고서' 열은 가나다가 아니라 **급한 순**(미작성 먼저)이 유용하다.

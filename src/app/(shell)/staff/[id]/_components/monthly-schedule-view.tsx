@@ -99,7 +99,7 @@ function MonthListView({
                 {t.start && t.due && t.start !== t.due ? (
                   <span className="text-text-faint num text-[10px]">({t.start.slice(5)}~{t.due.slice(5)})</span>
                 ) : null}
-                {t.done ? <span className="text-primary text-[10px]">완료</span> : null}
+                {t.done ? <span className="text-green text-[10px]">완료</span> : null}
               </button>
             ))}
           </div>

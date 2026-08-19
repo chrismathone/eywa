@@ -128,7 +128,7 @@ export async function SessionTermsFace({
         <nav className="flex flex-wrap items-center gap-1.5" aria-label="과목별 보기">
           <Link
             href={`/billing?tab=sessions&period=${p}`}
-            className={`rounded-full border px-2.5 py-1 text-xs transition ${!activeSubject ? "border-foreground bg-foreground text-background font-bold" : "border-line text-text-dim hover:text-foreground"}`}
+            className={`rounded-full border px-2.5 py-1 text-xs transition ${!activeSubject ? "border-primary bg-primary text-primary-foreground font-bold" : "border-line text-text-dim hover:text-foreground"}`}
           >
             전체
           </Link>
@@ -136,7 +136,7 @@ export async function SessionTermsFace({
             <Link
               key={sk}
               href={`/billing?tab=sessions&period=${p}&subject=${sk}`}
-              className={`rounded-full border px-2.5 py-1 text-xs transition ${activeSubject === sk ? "border-foreground bg-foreground text-background font-bold" : "border-line text-text-dim hover:text-foreground"}`}
+              className={`rounded-full border px-2.5 py-1 text-xs transition ${activeSubject === sk ? "border-primary bg-primary text-primary-foreground font-bold" : "border-line text-text-dim hover:text-foreground"}`}
             >
               {subjects.labelOf(sk)}
             </Link>

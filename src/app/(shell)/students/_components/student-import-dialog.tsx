@@ -194,7 +194,7 @@ export function StudentImportDialog() {
                   type="button"
                   onClick={runImport}
                   disabled={newRows.length === 0 || importing}
-                  className="bg-primary text-primary-foreground hover:bg-primary-hover mt-3 inline-flex w-full items-center justify-center gap-1.5 rounded-lg py-2 text-[12px] font-bold transition disabled:opacity-40"
+                  className="bg-primary text-primary-foreground hover:bg-primary/85 mt-3 inline-flex w-full items-center justify-center gap-1.5 rounded-lg py-2 text-[12px] font-bold transition disabled:opacity-40"
                 >
                   {importing ? <Loader2 className="size-3 animate-spin" /> : null}
                   {newRows.length}명 가져오기

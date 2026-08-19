@@ -4,6 +4,12 @@ import { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, ChevronDown, CircleDollarSign, AlertTriangle } from "@/components/icons/eywa-icon-compat";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { invoiceOutstanding, paymentRateOf } from "@/features/billing/calc";
+import {
+  BILLING_BADGE,
+  BILLING_CARD,
+  BILLING_LABEL,
+  type BillingStatusKey,
+} from "@/features/billing/status-color";
 import type { StudentBillingRow } from "@/features/students/server/queries";
 
 const CATEGORY_LABEL: Record<string, string> = {
@@ -12,14 +18,15 @@ const CATEGORY_LABEL: Record<string, string> = {
   exam: "시험",
   other: "기타",
 };
-// eywa invoiceStatus → 배지(라벨·색). 미납=unpaid, 부분=partial.
-const STATUS_BADGE: Record<string, { label: string; cls: string }> = {
-  paid: { label: "납부완료", cls: "text-chart-2 bg-chart-2/10 border-chart-2/20" },
-  partial: { label: "부분납부", cls: "text-amber bg-amber/10 border-amber/20" },
-  unpaid: { label: "미납", cls: "text-danger bg-danger/10 border-danger/20" },
-  refunded: { label: "환불", cls: "text-text-dim bg-bg-soft border-line" },
-  void: { label: "무효", cls: "text-text-faint bg-bg-soft border-line" },
-};
+// eywa invoiceStatus → 배지(라벨·색) = [status-color.ts](src/features/billing/status-color.ts) 단일 소스.
+// ⚠️ 이 화면은 종전에 **자기 자신과 모순**이었다 — 표 배지는 '미납'을 빨강, 아래 요약 카드와 경고 배너는
+//    같은 '미납'을 앰버로 그렸다(스크롤 한 번에 두 색). 셋 다 같은 상수를 쓰게 고쳤다.
+const STATUS_BADGE: Record<string, { label: string; cls: string }> = Object.fromEntries(
+  (Object.keys(BILLING_LABEL) as BillingStatusKey[]).map((k) => [
+    k,
+    { label: BILLING_LABEL[k], cls: BILLING_BADGE[k] },
+  ])
+);
 const PAGE_SIZES = [10, 20, 50, 100];
 const won = (n: number) => n.toLocaleString();
 // 동기화가 남긴 시스템 메모(무효 처리 근거 등) — 수납명으로는 안 쓰고 툴팁으로만 노출.
@@ -142,16 +149,16 @@ export function BillingView({ invoices }: { invoices: StudentBillingRow[] }) {
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           <StatCard label="총 청구" value={`${won(yearStats.billed)}원`} cls="bg-blue/5 border-blue/20 text-blue" />
           <StatCard label="할인" value={`${won(yearStats.discount)}원`} cls="bg-gold/5 border-gold/20 text-gold" />
-          <StatCard label="납부 완료" value={`${won(yearStats.paid)}원`} cls="bg-chart-2/5 border-chart-2/20 text-chart-2" />
+          <StatCard label="납부 완료" value={`${won(yearStats.paid)}원`} cls={BILLING_CARD.paid} />
           <StatCard
             label="미납금"
             value={`${won(yearStats.unpaid)}원`}
             sub={yearStats.pending > 0 ? `${yearStats.pending}건` : undefined}
-            cls="bg-amber/5 border-amber/20 text-amber"
+            cls={BILLING_CARD.unpaid}
           />
         </div>
         {yearStats.pending > 0 ? (
-          <div className="border-amber/30 bg-amber/10 text-amber mt-2 flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs">
+          <div className="border-danger/30 bg-danger-soft text-danger mt-2 flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs">
             <AlertTriangle className="size-3.5" />
             미납 건이 {yearStats.pending}건 ({won(yearStats.unpaid)}원) 있습니다.
           </div>
@@ -199,7 +206,7 @@ export function BillingView({ invoices }: { invoices: StudentBillingRow[] }) {
                           )}
                         </td>
                         <td className="num px-3 py-2 text-right">{won(r.amountTotal)}</td>
-                        <td className="num text-chart-2 px-3 py-2 text-right">{r.amountPaid > 0 ? won(r.amountPaid) : "-"}</td>
+                        <td className="num text-green px-3 py-2 text-right">{r.amountPaid > 0 ? won(r.amountPaid) : "-"}</td>
                         <td className="px-3 py-2 text-center">
                           <span className={`inline-block rounded-full border px-1.5 py-0.5 text-[11px] font-medium ${badge.cls}`}>
                             {badge.label}
@@ -261,10 +268,11 @@ export function BillingView({ invoices }: { invoices: StudentBillingRow[] }) {
             <span>
               총 <b className="text-foreground num">{overall.total}</b>건
             </span>
-            <span className="text-chart-2">
+            <span className="text-green">
               납부 <b className="num">{overall.paidCount}</b>건
             </span>
-            <span className="text-amber">
+            {/* 미납은 위 표·카드·배너와 **같은 빨강**(종전엔 여기만 앰버라 같은 화면에서 두 색이었다). */}
+            <span className="text-danger">
               미납 <b className="num">{overall.pendingCount}</b>건
             </span>
             <span className="text-blue">

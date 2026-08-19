@@ -28,11 +28,15 @@
 }
 
 /*
- * eywa — Daylight palette v3 "Injaewon Navy" (2026-07-19, injaewon.blog 디자인 언어 동조)
- * Deep navy primary (#153e75) + 애플 뉴트럴(#1d1d1f 잉크 · #f5f5f7 캔버스 · 화이트 카드/사이드바).
- * Light-only. Dark mode 제거됨. (v1 forest+ivory → v2 pine+porcelain → v3 navy+neutral)
+ * eywa — Daylight palette v4 "White Contrast" (2026-08-18 원장 지시: 회색 캔버스 전면 제거)
+ * 화이트 캔버스 + 헤어라인 테두리 승압 + 잉크 대비 강화. Deep navy primary(#153e75) 불변.
+ * v3의 애매한 뉴트럴 표면(#f5f5f7 캔버스·#fafafc surface-hi)을 화이트로 통일하고, 표면 구분은
+ * 배경색 차이가 아니라 **테두리(--line 14%)**가 담당한다. 상호작용 상태(hover·선택)는 회색 잔존이
+ * 아니라 기능색이므로 유지하되 한 단계 또렷하게(--muted), 사이드바 활성은 네이비 틴트로 전환.
+ * Light-only. Dark mode 제거됨. (v1 forest → v2 pine → v3 navy+gray → v4 navy+white)
  * chart-2는 그린 유지(출석·완납 "긍정" 시맨틱은 브랜드색과 분리).
- * ⚠️ --primary 계열을 바꾸면 src/lib/color-utils.ts(DEFAULT_BRAND_COLOR·soft alpha 0.1/0.05)와 동기 필수.
+ * ⚠️ --primary 계열을 바꾸면 src/lib/color-utils.ts(DEFAULT_BRAND_COLOR·soft alpha **0.11/0.05** +
+ *    --sidebar-accent 0.07)와 동기 필수 — 숫자는 color-utils.test.ts가 잠근다.
  */
 
 /* 초대형 화면(≥1680px) — 원스크린 카드 뷰가 4열(학생·진도·보고서·학부모 미리보기)로 펼쳐지는 지점.
@@ -81,7 +85,7 @@
   --color-input: var(--input);
   --color-ring: var(--ring);
 
-  /* charts: 시안 의미 (1=blue/정보, 2=primary green/출석, 3=amber/지각, 4=danger/결석·미납, 5=rose/상담) */
+  /* charts: 의미색 캐논과 같은 뜻 (1=blue/정보, 2=green/정상·출석, 3=amber 계열/주의, 4=danger/위험, 5=rose 계열/상담) */
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);
   --color-chart-3: var(--chart-3);
@@ -112,7 +116,7 @@
   --color-line-strong: var(--line-strong);
   --color-line-faint: var(--line-faint);
 
-  /* 출석부 전용 팔레트(att-*) — 아래 :root 정의 참조. 앱 표준 -soft 토큰(8~11%)보다 훨씬 쨍하다. */
+  /* 출석부 전용 팔레트(att-*) — 아래 :root 정의 참조. 앱 표준 -soft 토큰(12~13%)보다 훨씬 쨍하다. */
   --color-att-present: var(--att-present);
   --color-att-present-ink: var(--att-present-ink);
   --color-att-late: var(--att-late);
@@ -147,37 +151,50 @@
   --radius-3xl: 22px;
   --radius-pill: 999px;
 
-  /* shadow — 소프트 엘리베이션, 뉴트럴 베이스 (2026-07-19 네이비 리스킨) */
-  --shadow-card: 0 1px 2px rgba(29, 29, 31, 0.04), 0 4px 16px rgba(29, 29, 31, 0.04);
-  --shadow-card-hover: 0 2px 4px rgba(29, 29, 31, 0.05), 0 10px 28px rgba(29, 29, 31, 0.08);
+  /* shadow — 소프트 엘리베이션, 뉴트럴 베이스 (2026-07-19 네이비 리스킨)
+     ⚠️ v4(2026-08-18): 첫 레이어가 **헤어라인 링**(`0 0 0 1px`)이다. 캔버스가 화이트가 되면서
+     카드(`--card` 화이트)와 배경의 명도차가 0이 됐고, 남은 그림자만으로는 카드 경계가 안 보였다
+     (원장 지시: *"이미 화이트톤인 곳은 **테두리로 구분선**"*). `shadow-card`는 카드 표면 432곳이
+     공유하는 단일 토큰이라, 링을 여기 넣으면 소비처를 한 곳도 안 고치고 전 카드에 테두리가 생긴다.
+     🔑 `border`가 아니라 그림자 링인 이유: border는 박스 크기를 1px 키워 기존 레이아웃(그리드 정렬·
+     sticky 오프셋·표 셀 높이)을 전부 밀어낸다. 링은 **박스 밖**에 그려져 레이아웃에 영향이 0이다
+     (실측: 링을 넣어도 `getBoundingClientRect`가 그대로다).
+     ⚠️ 이미 `border-line`을 함께 쓰는 카드(170곳)는 안쪽 1px 테두리(14%) + 바깥 1px 링(10%)이 붙는다.
+     실측 스크린샷으로 확인: **두 줄로 갈라져 보이지는 않고** 가장자리가 한 단계 진해지는 정도라
+     그대로 둔다(농도가 달라 하나의 부드러운 모서리로 읽힌다). 링만 있는 카드와 미세한 차이는 있다. */
+  --shadow-card: 0 0 0 1px rgba(29, 29, 31, 0.1), 0 1px 2px rgba(29, 29, 31, 0.04), 0 4px 16px rgba(29, 29, 31, 0.04);
+  --shadow-card-hover: 0 0 0 1px rgba(29, 29, 31, 0.14), 0 2px 4px rgba(29, 29, 31, 0.05), 0 10px 28px rgba(29, 29, 31, 0.08);
   --shadow-primary-glow: 0 6px 16px rgba(21, 62, 117, 0.25);
   --shadow-primary-deep: 0 14px 36px rgba(21, 62, 117, 0.28);
   --shadow-modal: 0 32px 80px rgba(29, 29, 31, 0.12);
 }
 
 :root {
-  /* page surface — 애플 뉴트럴 캔버스 (2026-07-19 injaewon.blog 동조: 그레이 캔버스 + 화이트 카드) */
-  --background: #f5f5f7;
-  --bg-soft: #e9e9ee;
-  --surface-hi: #fafafc;
+  /* page surface — v4 화이트 캔버스(2026-08-18 원장: "애매한 회색 전부 제거, 화이트톤").
+     구분은 배경색 차이가 아니라 테두리가 담당 — 캔버스·카드·surface-hi 전부 순백.
+     --bg-soft는 "면"이 아니라 **기능색**(코드 블록·표 머리띠·hover 강조)이라 잔존하되 살짝 조임. */
+  --background: #ffffff;
+  --bg-soft: #e9edf4;
+  --surface-hi: #ffffff;
 
-  /* text — 3단 시스템(2026-07-19 마디아/WCAG 정합): 기본 #1d1d1f(16.8:1) · 중간 #505050(8.1:1) ·
-     마지노선 #767676(4.54:1 — 화이트 표면 전용, 회색 캔버스 위 직상 텍스트는 dim 사용). */
+  /* text — 3단 시스템, v4 대비 승압(화이트 표면 전제): 기본 #1d1d1f(16.8:1) · 중간 #3f3f45(10.5:1) ·
+     마지노선 #66666c(5.6:1 — 구 #767676 4.54:1에서 강화, muted 칠 위에서도 4.5:1 유지). */
   --foreground: #1d1d1f;
   --ink: #1d1d1f;
-  --text-dim: #505050;
-  --text-faint: #767676;
+  --text-dim: #3f3f45;
+  --text-faint: #66666c;
 
-  /* lines — 뉴트럴 헤어라인 */
-  --border: rgba(29, 29, 31, 0.09);
-  --line: rgba(29, 29, 31, 0.09);
-  --line-strong: rgba(29, 29, 31, 0.18);
+  /* lines — v4 헤어라인 승압: 화이트 캔버스에선 테두리가 유일한 표면 구분자라 한 단계 진하게
+     (9%→14%). 상대 위계(faint < line < strong)는 유지. */
+  --border: rgba(29, 29, 31, 0.14);
+  --line: rgba(29, 29, 31, 0.14);
+  --line-strong: rgba(29, 29, 31, 0.26);
   /* 표 **열 구분**용 — 행 구분선(--line)보다 옅다(원장 2026-08-05: "아주 미세한 세로선, 거의 보일랑말랑").
      세로선은 행 높이만큼 길어 같은 농도면 가로선보다 훨씬 세게 읽힌다 → 한 단계 아래로 둔다.
-     ⚠️ 5%로 시작했다가 원장 요청(2026-08-10 "세로선 좀 더 진하게")으로 7%. --line(9%)은 넘기지 말 것 —
+     ⚠️ v4에서 --line 9%→14% 승압에 비례해 7%→10%. --line(14%)은 넘기지 말 것 —
      넘으면 열 구분이 행 구분보다 세져 표가 격자로 보인다. */
-  --line-faint: rgba(29, 29, 31, 0.07);
-  --input: rgba(29, 29, 31, 0.12);
+  --line-faint: rgba(29, 29, 31, 0.1);
+  --input: rgba(29, 29, 31, 0.2);
 
   /* shadcn semantic — map to eywa */
   --card: #ffffff;
@@ -187,59 +204,74 @@
 
   --primary: #153e75;
   --primary-foreground: #ffffff;
-  --primary-soft: rgba(21, 62, 117, 0.08);
-  --primary-softer: rgba(21, 62, 117, 0.04);
+  /* v4: -soft 틴트를 한 단계 올린다(8%→11%). 회색 캔버스(#f5f5f7)에선 카드와 캔버스의 명도차가
+     배지 경계를 대신 그려줬지만, 화이트 캔버스에선 틴트 자체가 유일한 형태라 그만큼 진해야 보인다.
+     ⚠️ color-utils.ts brandColorVars의 alpha(0.11/0.05)와 동기 필수. */
+  --primary-soft: rgba(21, 62, 117, 0.11);
+  --primary-softer: rgba(21, 62, 117, 0.05);
 
-  --secondary: #f5f5f7;
+  /* v4: secondary/muted는 캔버스와 같던 #f5f5f7(화이트 위 비가시)에서 또렷한 기능색으로.
+     secondary = 담긴 컨트롤 채움(네이비 캐스트 쿨 그레이 — "의도된 채움"으로 읽히게),
+     muted = ghost/outline hover·표 스트라이프(순수 뉴트럴, 화이트 위 확실히 보이는 농도). */
+  --secondary: #eef1f6;
   --secondary-foreground: #1d1d1f;
 
-  --muted: #f5f5f7;
-  --muted-foreground: #505050;
+  --muted: #f0f0f3;
+  --muted-foreground: #3f3f45;
 
-  --accent: rgba(138, 104, 28, 0.12); /* gold-soft */
-  --accent-foreground: #8a681c;
+  --accent: rgba(138, 104, 28, 0.13); /* gold-soft */
+  --accent-foreground: #82621a; /* --gold와 동일 값 유지 */
 
-  --destructive: #d33f3f;
+  --destructive: #bc3838; /* --danger와 동일 값 유지(둘이 갈리면 삭제 버튼만 다른 빨강이 된다) */
   --ring: #153e75;
 
-  /* chart roles (semantic) — chart-2는 primary가 네이비로 바뀐 뒤에도 "긍정=그린" 시맨틱 유지 */
-  --chart-1: #2d6be0;  /* blue · 정보·학생 안정 */
-  --chart-2: #0e7c46;  /* green · 출석·완납·긍정 */
-  --chart-3: #c8720d;  /* amber · 지각·경고 */
-  --chart-4: #d33f3f;  /* danger · 결석·미납 */
-  --chart-5: #d2447a;  /* rose · 상담·학부모 */
+  /* chart roles (semantic) — chart-2는 primary가 네이비로 바뀐 뒤에도 "긍정=그린" 시맨틱 유지.
+     ⚠️ 1·2·4는 아래 --blue/--green/--danger와 **같은 값이어야 한다** — 차트와 배지가 같은 뜻을
+     다른 빨강·다른 초록으로 그리면 "이어지는 느낌"이 거기서 끊긴다(v4에서 함께 조임).
+     3·5는 차트 전용 색이라 --amber/--rose와 원래 값이 다르다(막대가 서로 구분돼야 해 더 밝다). */
+  --chart-1: #2962ce;  /* blue · 정보·진행중 (= --blue) */
+  --chart-2: #0d7743;  /* green · 출석·완납·긍정 (= --green) */
+  --chart-3: #c8720d;  /* amber 계열 · 지각·경고 (차트 전용, --amber보다 밝다) */
+  --chart-4: #bc3838;  /* danger · 결석·미납 (= --danger) */
+  --chart-5: #d2447a;  /* rose 계열 · 상담·학부모 (차트 전용) */
 
-  /* eywa custom (직접 사용: bg-gold, text-blue, bg-danger-soft 등)
-     — 텍스트로 쓰이는 accent는 전부 4.5:1↑(2026-07-19 마디아 정합: gold 5.15 · amber 5.09 · rose 5.09) */
-  --gold: #8a681c;
-  --gold-soft: rgba(138, 104, 28, 0.11);
+  /* eywa custom (직접 사용: bg-gold, text-blue, bg-danger-soft 등) */
+  /* ⚠️ v4: 아래 -soft 틴트는 전부 한 단계 올렸다(9~11% → 12~13%) — 화이트 캔버스에선 옅은 틴트가
+     "색이 있나?" 수준으로 사라진다(원장 2026-08-18: "색감을 여기저기에 넣어 눈에 띄면 좋겠네").
+     🔑 **본색(잉크)도 함께 조였다** — `-soft` 배지는 *같은 색 글자*를 그 틴트 위에 얹으므로 배경이
+     진해지면 대비가 **떨어진다**. 실측으로 v3부터 이미 미달이었다(결석 4.08 · 파랑 4.35 · 앰버 4.39 ·
+     골드 4.45 — 전부 4.5:1 아래). v4는 잉크를 3~9% 어둡게 해 배지 대비 **4.7:1↑**·흰 배경 **5.6:1↑**·
+     솔리드 채움의 흰 글자 **5.6:1↑**를 동시에 만족시킨다(색상각은 그대로라 톤은 안 바뀐다).
+     ⚠️ 이 값을 밝게 되돌리면 배지 글자가 다시 미달로 떨어진다 — 대비 재계산 없이 손대지 말 것. */
+  --gold: #82621a;
+  --gold-soft: rgba(138, 104, 28, 0.13);
   /* green — "성공/완료/긍정" 상태 전용(--chart-2와 같은 값·같은 의미). primary가 v3에서 그린→네이비로
      바뀌면서 알약 팔레트가 파랑 계열 2개(primary·blue, 색상각 4.8° 차이로 구분 불가)만 갖게 돼
      '완료 vs 진행중' 같은 상태쌍을 색으로 못 나누던 것을 해소(2026-07-20 감사). 네이비와 색상각 64°.
      흰 배경 텍스트 5.26:1 · green-soft 위 4.65:1. ⚠️ 브랜드색 아님 — primary 자리에 쓰지 말 것. */
-  --green: #0e7c46;
-  --green-soft: rgba(14, 124, 70, 0.09);
+  --green: #0d7743;
+  --green-soft: rgba(14, 124, 70, 0.12);
   /* 다크 서피스(네이비 히어로 등) 전용 변형 — 라이트용 토큰이 어두워 안 보이는 자리에만 쓴다.
      --gold(#8a681c)는 primary 네이비 위에서 2.06:1이라 판독 불가 → gold-bright 5.53:1.
      --primary-deep은 var(--primary) 기반이라 테넌트 brandColor 주입도 자동 추종(치환은 사용 시점). */
   --gold-bright: #e2b45f;
   --primary-deep: color-mix(in srgb, var(--primary) 72%, #000);
-  --blue: #2d6be0;
-  --blue-soft: rgba(45, 107, 224, 0.09);
+  --blue: #2962ce;
+  --blue-soft: rgba(45, 107, 224, 0.12);
   --purple: #6c50c8;
-  --purple-soft: rgba(108, 80, 200, 0.09);
-  --rose: #c23a6e;
-  --rose-soft: rgba(194, 58, 110, 0.09);
-  --amber: #a35d0a;
-  --amber-soft: rgba(163, 93, 10, 0.11);
+  --purple-soft: rgba(108, 80, 200, 0.12);
+  --rose: #b63767;
+  --rose-soft: rgba(194, 58, 110, 0.12);
+  --amber: #995709;
+  --amber-soft: rgba(163, 93, 10, 0.13);
   /* 형광펜 노랑 — **한 화면에서 절대 놓치면 안 되는 식별자 하나**를 칠하는 자리(원장 2026-08-18:
      영어 강사 시트 반 전환 드롭다운 = *"배경을 쌩노란색으로 … 수업명을 확실하게 보기 위함"*).
      ⚠️ 앱 톤은 -soft(8~11% 틴트)가 기준이라 이건 의도적 예외다 — 출석부 형광 팔레트와 같은 성격이고,
      같은 이유로 **여기저기 쓰지 말 것**(둘째 노란 덩어리가 생기는 순간 첫째가 안 보인다).
      글자는 --foreground(#1d1d1f) 고정 = 대비 17:1. 색을 조이거나 풀려면 이 한 줄만 고친다. */
   --marker: #fff200;
-  --danger: #d33f3f;
-  --danger-soft: rgba(211, 63, 63, 0.09);
+  --danger: #bc3838;
+  --danger-soft: rgba(211, 63, 63, 0.12);
 
   /* ── 출석부 출결 팔레트(2026-07-21 원장: "형광색은 날짜가 아니라 학생 출결 1의 배경 · 더 쨍하게") ──
      ⚠️ 여기만 앱 표준 -soft 토큰(8~11% 틴트)을 **의도적으로 벗어난다**. 출석부는 한 화면에 31칸 × 수십 행이라
@@ -260,14 +292,15 @@
   /* 재원 기간 밖(입원 전·퇴원 후) — 구 출석부 빗금 자리. 주말 회색보다 **진해야** "쉬는 날"과 안 헷갈린다 */
   --att-outside: #c2c2cc;
 
-  /* sidebar — 화이트 레일(그레이 캔버스 위 부양, injaewon.blog 화이트 표면) */
+  /* sidebar — v4: 캔버스와 같은 화이트가 됐으므로 구분은 border-r(승압 헤어라인)가 담당.
+     활성/hover 항목은 회색(#f5f5f7, 화이트 위 비가시)이 아니라 네이비 틴트 — 브랜드 대비 강화. */
   --sidebar: #ffffff;
   --sidebar-foreground: #1d1d1f;
   --sidebar-primary: #153e75;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #f5f5f7;
+  --sidebar-accent: rgba(21, 62, 117, 0.07);
   --sidebar-accent-foreground: #153e75;
-  --sidebar-border: rgba(29, 29, 31, 0.09);
+  --sidebar-border: rgba(29, 29, 31, 0.14);
   --sidebar-ring: #153e75;
 
   --radius: 0.5rem;
@@ -565,6 +598,17 @@
   * {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
+  }
+
+  /* 카드 그림자 — 종이에선 **헤어라인만** 남기고 블러 레이어를 뗀다.
+     위 `print-color-adjust: exact`가 그림자까지 찍게 만들기 때문에, v4에서 `--shadow-card`에 넣은
+     링(0 0 0 1px)과 함께 4%짜리 블러 두 겹이 인쇄물에 회색 번짐으로 나온다(화면에선 부양감이지만
+     종이엔 부양이라는 개념이 없다 — 잉크만 먹는다). 구조를 그리는 건 링이므로 링만 남긴다.
+     ⚠️ `box-shadow: none`으로 통째로 지우지 않는다 — 테두리가 따로 없는 카드(262곳)는 링이 유일한
+     경계라, 지우면 종이에서 카드 구분이 사라진다. */
+  .shadow-card,
+  .shadow-card-hover {
+    box-shadow: 0 0 0 1px rgba(29, 29, 31, 0.22) !important;
   }
 }
 

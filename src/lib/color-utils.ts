@@ -64,12 +64,16 @@ export function brandColorVars(brandColor: string | undefined | null): CSSProper
   if (!isHexColor(hex) || lower === DEFAULT_BRAND_COLOR || LEGACY_DEFAULT_BRAND_COLORS.has(lower)) return null;
   return {
     "--primary": hex,
-    "--primary-soft": hexToRgba(hex, 0.1),
+    // alpha는 globals.css --primary-soft/-softer와 동기(v4: 0.11/0.05).
+    "--primary-soft": hexToRgba(hex, 0.11),
     "--primary-softer": hexToRgba(hex, 0.05),
     "--ring": hex,
     "--chart-2": hex,
     "--sidebar-primary": hex,
     "--sidebar-ring": hex,
     "--sidebar-accent-foreground": hex,
+    // v4에서 사이드바 활성 배경이 회색→브랜드 틴트가 됐다. 여기서 함께 덮지 않으면 테넌트 브랜드색
+    // 글자에 네이비 틴트 배경이 깔려 색이 어긋난다(글자만 따라오던 종전 버그).
+    "--sidebar-accent": hexToRgba(hex, 0.07),
   } as CSSProperties;
 }

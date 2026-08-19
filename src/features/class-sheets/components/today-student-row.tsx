@@ -10,6 +10,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import type { BasicAttendance } from "../lib/mark-cycle";
 import { removeMakeupAttendee } from "../server/actions";
+import { TONE_SOFT } from "@/lib/design/semantic-color";
 import { TodayAttendancePills } from "./today-attendance-pills";
 import { TodayMarkPopover, type MarkMap, type MarkSlot, type StudentMark } from "./today-mark-popover";
 import type { TodayClassCard, TodayStudent } from "../server/today";
@@ -99,10 +100,10 @@ export function StudentRow({
         href={`/onescreen?date=${date}&class=${card.classId}&student=${student.studentId}`}
         className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-bold whitespace-nowrap transition hover:opacity-80 ${
           student.reportSent
-            ? "bg-primary-soft text-primary"
+            ? TONE_SOFT.positive
             : student.reportWritten
-              ? "bg-amber-soft text-amber"
-              : "bg-bg-soft text-text-dim"
+              ? TONE_SOFT.caution
+              : TONE_SOFT.inert
         }`}
         title={
           student.reportSent

@@ -14,7 +14,7 @@ const REC_BADGE: Record<string, { label: string; class: string; spin?: boolean }
   uploaded: { label: "전사 대기", class: "text-chart-3 bg-chart-3/10 border-chart-3/20", spin: true },
   transcribing: { label: "전사 중", class: "text-chart-3 bg-chart-3/10 border-chart-3/20", spin: true },
   analyzing: { label: "분석 중", class: "text-chart-3 bg-chart-3/10 border-chart-3/20", spin: true },
-  completed: { label: "전사 완료", class: "text-primary bg-primary/10 border-primary/20" },
+  completed: { label: "전사 완료", class: "text-green bg-green-soft border-green/25" },
   failed: { label: "실패", class: "text-danger bg-danger/10 border-danger/20" },
   idle: { label: "대기", class: "text-text-dim bg-bg-soft border-line" },
 };

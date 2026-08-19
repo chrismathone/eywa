@@ -325,7 +325,7 @@ export function EnglishImportDialog({
                     </div>
                   </div>
                 ) : (
-                  <button type="button" onClick={() => setConfirming(true)} className="bg-primary text-primary-foreground hover:bg-primary-hover inline-flex w-full items-center justify-center gap-1.5 rounded-lg py-2 text-[12px] font-bold transition">
+                  <button type="button" onClick={() => setConfirming(true)} className="bg-primary text-primary-foreground hover:bg-primary/85 inline-flex w-full items-center justify-center gap-1.5 rounded-lg py-2 text-[12px] font-bold transition">
                     <Check className="size-3" /> {totalChanges}건 적용 (배치 {structChanges} · 반이동 {enrollChanges})
                   </button>
                 )}

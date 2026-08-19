@@ -42,7 +42,7 @@ const STATUS_BADGE: Record<
     class: "text-chart-3 bg-chart-3/10 border-chart-3/20",
     spin: true,
   },
-  completed: { label: "완료", class: "text-chart-2 bg-chart-2/10 border-chart-2/20" },
+  completed: { label: "완료", class: "text-green bg-green-soft border-green/25" },
   failed: { label: "실패", class: "text-chart-4 bg-chart-4/10 border-chart-4/20" },
 };
 

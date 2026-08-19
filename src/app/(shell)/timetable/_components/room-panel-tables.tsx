@@ -194,7 +194,7 @@ function TimelineTd({
           dim ? "opacity-30" : ""
         } ${seatFill(cell.seatPct)} ${
           cell.overlap === "conflict"
-            ? "ring-1 ring-red-500"
+            ? "ring-1 ring-danger"
             : cell.overlap === "joint"
               ? "ring-1 ring-amber-500"
               : ""
@@ -208,7 +208,7 @@ function TimelineTd({
         ) : (
           <>
             <span className="num truncate font-semibold">{cell.students}명</span>
-            <span className={`num truncate text-[10px] ${over ? "font-bold text-red-600" : "opacity-70"}`}>
+            <span className={`num truncate text-[10px] ${over ? "font-bold text-danger" : "opacity-70"}`}>
               {cell.seatPct == null ? "정원?" : `${cell.seatPct}%`}
             </span>
           </>
@@ -398,7 +398,7 @@ function TimelineTdVertical({
           dim ? "opacity-30" : ""
         } ${seatFill(cell.seatPct)} ${
           cell.overlap === "conflict"
-            ? "ring-1 ring-red-500"
+            ? "ring-1 ring-danger"
             : cell.overlap === "joint"
               ? "ring-1 ring-amber-500"
               : ""
@@ -410,7 +410,7 @@ function TimelineTdVertical({
                옆 칸이 `13명 130%`인 표에서 그 `5`는 사람 수인지 %인지 알 수 없었다(원장 지적 2026-08-06). */}
         <span className="num truncate font-semibold">{cell.students}명</span>
         {compact ? null : (
-          <span className={`num truncate text-[10px] ${over ? "font-bold text-red-600" : "opacity-70"}`}>
+          <span className={`num truncate text-[10px] ${over ? "font-bold text-danger" : "opacity-70"}`}>
             {cell.seatPct == null ? "정원?" : `${cell.seatPct}%`}
           </span>
         )}
@@ -422,7 +422,7 @@ function TimelineTdVertical({
 /** 인원률 농도 — **옅을수록 자리가 남는다**(충원 대상). 100% 초과만 색을 바꿔 별도 신호로 뺀다. */
 const seatFill = (pct: number | null): string => {
   if (pct == null) return "bg-bg-soft text-text-dim";
-  if (pct > 100) return "bg-red-500/20 text-red-700";
+  if (pct > 100) return "bg-danger-soft text-danger"; // 정원 초과 = critical(앱 공통 위험색)
   if (pct >= 80) return "bg-primary/70 text-primary-foreground";
   if (pct >= 60) return "bg-primary/50 text-primary-foreground";
   if (pct >= 40) return "bg-primary/30";

@@ -27,6 +27,8 @@ import {
   setMyNoticeMode,
   setMyOnescreenFontSize,
 } from "../server/actions";
+import { removeMakeupEntry } from "../server/makeup-remove-actions";
+import { canRemoveMakeupRow, makeupRemoveBlockReason } from "../makeup-remove-plan";
 import { MakeupAdder } from "./makeup-adder";
 import { SendWindowNotice } from "./send-window-notice";
 import {
@@ -108,7 +110,13 @@ import { STATUS_TEXT } from "@/features/attendance/cell-display";
 import type { BasicAttendance } from "./attendance-pills";
 import { useEditPresence, useEditingOthers } from "@/features/presence/edit-presence";
 import { dedupeEditors } from "@/features/presence/presence-state";
-import { MakeupMergeDialog, type MakeupMergeChoice } from "./makeup-merge-dialog";
+import {
+  MakeupConfirmDialog,
+  type MakeupConfirmChoice,
+} from "@/features/attendance/components/makeup-confirm-dialog";
+import { fetchMakeupAbsences } from "@/features/attendance/server/makeup-actions";
+import { noteMakeupAgainstAbsence } from "@/features/attendance/server/makeup-note-action";
+import type { MakeupAbsenceOption } from "@/features/attendance/makeup-options";
 import { mergeStatusOf, planMakeupMerge, type MergeCandidate } from "../makeup-merge-plan";
 import { hasRowOverrides, resolveRowFields, seedRowFields } from "../row-fields";
 import { detectClassNotices } from "../class-notice";
@@ -304,6 +312,12 @@ export function OneScreenClient({
     mk: OneScreenStudent;
     candidates: MergeCandidate[];
     sentSubjects: string[];
+    /** 목록에 없던 학생(그날 내 정규 수업 없음) — 확인 후에 카드를 만든다. */
+    isNew: boolean;
+    /** 그 학생의 결석 기록(이전 반 포함) — 이월 보강 선택지. */
+    absences: MakeupAbsenceOption[];
+    /** 아직 불러오는 중 — 도착 전에 "결석 기록이 없습니다"라고 단언하지 않게. */
+    absencesLoading: boolean;
   } | null>(null);
   const [reports, setReports] = useState<ReportsState>(() => initReports(initial));
   const [genSubject, setGenSubject] = useState<string | null>(null); // AI 멘트 생성 중인 과목(카드 버튼 로딩)
@@ -689,7 +703,12 @@ export function OneScreenClient({
     if (!res.ok) toast.error("글씨 크기를 계정에 저장하지 못했습니다 — 이 화면에서는 적용됩니다");
   }
   /** 보강을 그 수업 출석부에 남긴다 — ECS·출석부 명단이 같은 학생을 보게. 이미 그 반 수강이면 건너뛴다. */
-  function persistAnchorMakeup(studentId: string, classId: string | null, enrolledInAnchor: boolean) {
+  function persistAnchorMakeup(
+    studentId: string,
+    classId: string | null,
+    enrolledInAnchor: boolean,
+    units?: number,
+  ) {
     if (!classId || enrolledInAnchor) return;
     void setAttendanceCell({
       studentId,
@@ -697,6 +716,8 @@ export function OneScreenClient({
       sessionDate: activeDate,
       status: "makeup",
       allowMakeup: true,
+      // 확인창에서 고른 시수를 그 칸에 그대로 적는다(1이면 서버가 접는다) — 급여가 이 값을 읽는다.
+      ...(units && units !== 1 ? { units: String(units) } : {}),
     }).then((r) => {
       if ("error" in r) toast.error(`출석부 보강 기록을 남기지 못했습니다 — ${r.error}`);
     });
@@ -728,16 +749,24 @@ export function OneScreenClient({
     const mk = { ...res.student, subjects: res.student.subjects.map(withAnchor) };
     const existing = students.find((s) => s.id === studentId);
     if (!existing) {
-      // 목록에 없던 학생 → 보강 카드로 추가. 앵커가 있으면 그 수업 이름으로 묶어 보여 준다(로스터 복원과 같은 규약).
+      // 🔴 목록에 없던 학생도 **묻고 나서** 추가한다(원장 2026-08-19: *"이름 검색하고 누르면 그냥 추가되고
+      //    끝이야"*). 예전엔 여기서 바로 카드를 만들어, 보강의 대다수인 "다른 반 학생"에서 결석분·시수를
+      //    물을 자리가 아예 없었다. 카드는 확인 후 `resolveMakeupAsk`가 만든다(취소하면 아무 일도 없다).
       if (anchorName) {
         mk.tag = anchorName;
         mk.className = anchorName;
       }
-      setStudents((prev) => [...prev, mk]);
-      setReports((prev) => ({ ...prev, [mk.id]: initReports([mk])[mk.id] ?? {} }));
-      setSelId(mk.id);
-      persistAnchorMakeup(studentId, anchorId, false);
-      toast.success(`${mk.name} (보강) 추가됨`);
+      setMakeupAsk({
+        studentId,
+        studentName: mk.name,
+        mk,
+        candidates: [],
+        sentSubjects: [],
+        isNew: true,
+        absences: [],
+        absencesLoading: true,
+      });
+      void loadAbsences(studentId);
       return;
     }
     // 🔴 **자동으로 합치지 않는다 — 묻는다**(원장 2026-08-06: *"선생님들이 헷갈린대"*).
@@ -773,43 +802,156 @@ export function OneScreenClient({
         )
         .map((c) => c.name);
       setSelId(existing.id);
-      setMakeupAsk({ studentId, studentName: existing.name, mk, candidates: plan.candidates, sentSubjects });
+      setMakeupAsk({
+        studentId,
+        studentName: existing.name,
+        mk,
+        candidates: plan.candidates,
+        sentSubjects,
+        isNew: false,
+        absences: [],
+        absencesLoading: true,
+      });
+      void loadAbsences(studentId);
       return;
     }
-    // 합칠 정규 행이 없다(그날 결석·다른 강사 과목 등) → 묻지 않고 별도 보강 행. 그건 진짜 "보강만"이다.
-    addSeparateMakeupRows(existing, mk);
-    persistAnchorMakeup(
+    // 합칠 정규 행이 없다(그날 결석·다른 강사 과목 등) → **그래도 묻는다**. 결석 보강이 바로 이 경로라
+    // 예전엔 가장 흔한 보강에서 결석분·시수를 물을 자리가 없었다(원장 2026-08-19).
+    setMakeupAsk({
       studentId,
-      anchorId,
-      existing.subjects.some((su) => su.classId === anchorId && !su.makeup),
+      studentName: existing.name,
+      mk,
+      candidates: [],
+      sentSubjects: [],
+      isNew: false,
+      absences: [],
+      absencesLoading: true,
+    });
+    void loadAbsences(studentId);
+  }
+  /** 결석 후보(이전 반 포함)를 뒤늦게 채운다 — 창은 먼저 열고 목록만 도착하면 갈아 끼운다. */
+  async function loadAbsences(studentId: string) {
+    const list = await fetchMakeupAbsences(studentId, activeDate).catch(() => []);
+    setMakeupAsk((prev) =>
+      prev && prev.studentId === studentId ? { ...prev, absences: list, absencesLoading: false } : prev,
     );
+  }
+  /**
+   * 보강 빼기 — '+ 보강 학생 추가'의 반대(원장 2026-08-18 *"다 삭제"*). 출결 보강 칸과 저장된 보강
+   * 보고서를 함께 지운다(서버 [`removeMakeupEntry`]). 되살아나는 원천이 둘이라 한쪽만 지우면
+   * 새로고침에 그대로 돌아온다.
+   * ⚠️ 학부모에게 나간 보고서는 **회수 요청만** 걸린다(게시글을 지울 열쇠가 그 행에 있다) — 그때는
+   *    화면에서도 행을 지우지 않는다(`keepRow`). 안 그러면 "지웠는데 새로고침하면 있다"가 된다.
+   */
+  async function removeMakeupRow(student: OneScreenStudent, subjectName: string) {
+    const su = student.subjects.find((x) => x.name === subjectName);
+    if (!su) return;
+    // 🔴 **발송된 보강은 애초에 못 뺀다**(원장 2026-08-18 *"발송된건은 보강취소를 못하게 강제해"*).
+    //    서버도 같은 판정으로 막지만 여기서 먼저 이유를 말한다 — 확인창을 띄웠다가 실패하면 더 나쁘다.
+    const rep = reports[student.id]?.[subjectName];
+    const blocked = makeupRemoveBlockReason(rep?.classnoteStatus ?? null);
+    if (blocked) {
+      toast.error(blocked);
+      return;
+    }
+    // 경고는 **무엇이 사라지는지 그대로** 적는다(원장 *"경고하고 확인하면 삭제"*).
+    const lines = [
+      `${student.name} 보강을 뺄까요?`,
+      "",
+      "출결 기록·저장된 보강 수업보고서·그 수업으로 올라간 진도 기록이 모두 삭제됩니다.",
+      "보강을 추가하기 전 상태로 돌아가며, 되돌릴 수 없습니다.",
+    ];
+    if (!window.confirm(lines.join("\n"))) return;
+    const res = await removeMakeupEntry({
+      studentId: student.id,
+      date: activeDate,
+      classId: su.makeupClassId ?? null,
+      subject: su.subjectKey ?? null,
+    });
+    if (!res.ok) {
+      toast.error(res.error);
+      return;
+    }
+    // 확인했으면 **화면에서도 없앤다**(원장 *"아무것도 추가 안한것처럼 이전으로"*) — 지울 수 있는 행만
+    // 여기까지 오므로 DB에도 남는 게 없다. 남은 행이 없으면 카드째 목록에서 제거(보강만 있던 학생).
+    setStudents((prev) =>
+      prev
+        .map((s) =>
+          s.id === student.id
+            ? { ...s, subjects: s.subjects.filter((x) => x.name !== subjectName) }
+            : s,
+        )
+        .filter((s) => !(s.id === student.id && s.subjects.length === 0)),
+    );
+    toast.success(res.message);
   }
   /**
    * 다이얼로그 응답 처리 — 고른 대로만 한다. 취소는 아무것도 하지 않는다(보강 행도 안 생긴다).
    * ⚠️ 학생은 **id로 다시 찾는다** — 다이얼로그가 열려 있는 동안 실시간 갱신이 카드를 바꿨을 수 있다.
    */
-  function resolveMakeupAsk(choice: MakeupMergeChoice) {
+  function resolveMakeupAsk(choice: MakeupConfirmChoice) {
     const ask = makeupAsk;
     setMakeupAsk(null);
     if (!ask) return;
+    const anchorIdNew = ask.mk.subjects.find((su) => su.makeupClassId)?.makeupClassId ?? null;
+    if (ask.isNew) {
+      // 목록에 없던 학생 — 확인을 받았으니 이제 카드를 만든다(취소했으면 여기 안 온다).
+      const mk = ask.mk;
+      setStudents((prev) => (prev.some((s) => s.id === mk.id) ? prev : [...prev, mk]));
+      setReports((prev) => ({ ...prev, [mk.id]: initReports([mk])[mk.id] ?? {} }));
+      setSelId(mk.id);
+      persistAnchorMakeup(mk.id, anchorIdNew, false, choice.addUnits);
+      if (choice.absentDate && anchorIdNew) {
+        void linkMakeupToAbsenceCell(mk.id, anchorIdNew, choice, mk.name);
+      } else {
+        // ⚠️ 앵커(보고 있는 반)가 없으면 출결에 남길 칸이 없다 — 시수를 약속하지 않는다(지킬 수 없다).
+        toast.success(
+          anchorIdNew
+            ? `${mk.name} (보강) 추가됨 — 수업타임 ${choice.addUnits}`
+            : `${mk.name} (보강) 추가됨 — 반 필터가 '전체'라 출결에는 남기지 않았습니다(반을 고르면 함께 기록됩니다).`,
+        );
+      }
+      return;
+    }
     const existing = studentsRef.current.find((s) => s.id === ask.studentId);
     if (!existing) {
       toast.error("학생 카드를 찾지 못했습니다 — 새로고침 후 다시 시도해 주세요");
       return;
     }
-    const anchorId = ask.mk.subjects.find((su) => su.makeupClassId)?.makeupClassId ?? null;
+    if (!choice.candidate) {
+      // 합칠 정규 행이 없는 보강(그날 결석·다른 강사 과목) — 보강 행만 만들고 시수·결석분은 앵커 반에 적는다.
+      addSeparateMakeupRows(existing, ask.mk);
+      persistAnchorMakeup(
+        existing.id,
+        anchorIdNew,
+        existing.subjects.some((su) => su.classId === anchorIdNew && !su.makeup),
+        choice.addUnits,
+      );
+      if (choice.absentDate && anchorIdNew) {
+        void linkMakeupToAbsenceCell(existing.id, anchorIdNew, choice, existing.name);
+      } else {
+        toast.success(
+          anchorIdNew
+            ? `${existing.name} (보강) 추가됨 — 수업타임 ${choice.addUnits}`
+            : `${existing.name} (보강) 추가됨 — 반 필터가 '전체'라 출결에는 남기지 않았습니다(반을 고르면 함께 기록됩니다).`,
+        );
+      }
+      return;
+    }
+    const anchorId = anchorIdNew;
     const enrolledInAnchor = existing.subjects.some((su) => su.classId === anchorId && !su.makeup);
     persistAnchorMakeup(existing.id, anchorId, enrolledInAnchor);
     if (choice.mode === "separate") {
       // 🔴 **고른 과목의 보강 행만** 만든다. 안 좁히면 그 강사가 가르치는 학생의 다른 과목까지 "(보강)" 행이
       //    딸려 붙어(예: 영어가 오늘 결석이라 후보엔 없어도 행은 생겼다) 보고서가 2건이 아니라 3건 나간다 —
       //    다이얼로그가 "모두 2건" 이라고 약속한 것과 어긋난다. 강사가 어느 수업인지 이미 골랐으니 추측할 게 없다.
-      if (addSeparateMakeupRows(existing, ask.mk, true, choice.candidate.subjectKey)) {
+      if (addSeparateMakeupRows(existing, ask.mk, true, choice.candidate!.subjectKey)) {
         // 🔴 결석일은 **선택**이다(원장 2026-08-07 *"오늘 날짜에 추가 보강할 수도 있잖아"*). 없으면
         //    결석분 연결 없이 시수만 얹는다. 예전엔 이 분기가 없어 날짜가 비면 **조용히 '합침'으로**
         //    떨어졌다 — 강사는 '분리'를 골랐는데 보고서가 1건만 나가는, 화면과 다른 결과였다.
-        if (choice.absentDate) void linkMakeupAbsence(existing, choice.candidate, choice.absentDate, choice.addUnits);
-        else void addMakeupUnitsOnly(existing, choice.candidate, choice.addUnits);
+        if (choice.absentDate)
+          void linkMakeupAbsence(existing, choice.candidate!, choice.absentDate, choice.addUnits, choice.absentClassId);
+        else void addMakeupUnitsOnly(existing, choice.candidate!, choice.addUnits);
       }
       return;
     }
@@ -818,6 +960,34 @@ export function OneScreenClient({
       choice.candidate,
       choice.addUnits,
       ask.sentSubjects.includes(choice.candidate.name),
+    );
+  }
+  /**
+   * 정규 행이 없는 보강의 결석분 연결 — 시수는 **오늘 보강한 반**(앵커)에, 메모는 **결석이 난 반**에.
+   * 🔴 이월 보강(반 이동)은 두 반이 다르다 — 하나로 묶으면 옛 반에 시수가 붙어 급여 귀속이 틀린다.
+   */
+  async function linkMakeupToAbsenceCell(
+    studentId: string,
+    makeupClassId: string,
+    choice: MakeupConfirmChoice,
+    name: string,
+  ) {
+    // 🔴 시수는 `persistAnchorMakeup`이 그 칸에 이미 적었다 — 여기선 **메모만**(합산 액션을 쓰면 두 번 더해진다).
+    const res = await noteMakeupAgainstAbsence({
+      studentId,
+      makeupClassId,
+      makeupDate: activeDate,
+      absentClassId: choice.absentClassId ?? makeupClassId,
+      absentDate: choice.absentDate!,
+    });
+    if ("error" in res) {
+      toast.error(`보강은 추가됐지만 결석분 연결에 실패했습니다 — ${res.error}`);
+      return;
+    }
+    toast.success(
+      res.absenceNoted
+        ? `${name} 보강 추가 — ${shortDate(choice.absentDate!)} 결석 칸에 메모, 수업타임 ${choice.addUnits}`
+        : `${name} 보강 추가 — 수업타임 ${choice.addUnits}. ${shortDate(choice.absentDate!)} 칸엔 결석 기록이 없어 메모는 남기지 않았습니다.`,
     );
   }
   /**
@@ -830,11 +1000,14 @@ export function OneScreenClient({
     target: MergeCandidate,
     absentDate: string,
     addUnits: number,
+    absentClassId?: string,
   ) {
     const res = await linkMakeupToAbsence({
       studentId: existing.id,
       classId: target.classId,
       absentDate,
+      // 이월 보강 — 결석이 난 반이 다르면 메모는 그 반 칸에 붙는다(시수는 target 반).
+      absentClassId,
       makeupDate: activeDate,
       addUnits,
     });
@@ -2668,6 +2841,10 @@ export function OneScreenClient({
             onRemoveAttachment: (student, subjectName, path) =>
               void removeAttachmentFor(student, subjectName, path),
             onOpenAttachments: (student, subjectName) => void ensureAttachmentUrls(student, subjectName),
+            // 발송분은 버튼을 아예 열지 않는다(서버도 막지만 화면에서 먼저 알린다).
+            onRemoveMakeup: (student, subjectName) => void removeMakeupRow(student, subjectName),
+            canRemoveMakeup: (studentId, subjectName) =>
+              canRemoveMakeupRow(reports[studentId]?.[subjectName]?.classnoteStatus ?? null),
           }}
           bulkActions={{
             onSaveAll: saveAllVisible,
@@ -2776,6 +2953,10 @@ export function OneScreenClient({
                 onTextbook={setTextbook}
                 onHomeworkToday={setHomeworkToday}
                 onMakeup={toggleMakeup}
+                onRemoveMakeup={(subjectName) => void removeMakeupRow(selected, subjectName)}
+                canRemoveMakeup={(subjectName) =>
+                  canRemoveMakeupRow(reports[selected.id]?.[subjectName]?.classnoteStatus ?? null)
+                }
                 onSubjectDraft={setSubjectDraft}
                 onSubjectTrend={setSubjectTrend}
                 onNote={setNote}
@@ -2886,11 +3067,13 @@ export function OneScreenClient({
           ⚠️ 조건부 렌더 + key: 다이얼로그 안 선택 상태를 열 때마다 초기화하기 위한 것이다(effect에서
              setState 금지 — React 19 룰). key가 없으면 직전 학생의 선택이 다음 학생에 새어든다. */}
       {makeupAsk ? (
-        <MakeupMergeDialog
+        <MakeupConfirmDialog
           key={makeupAsk.studentId}
           studentName={makeupAsk.studentName}
           candidates={makeupAsk.candidates}
           sentSubjects={makeupAsk.sentSubjects}
+          absenceOptions={makeupAsk.absences}
+          absenceLoading={makeupAsk.absencesLoading}
           makeupDate={activeDate}
           onConfirm={resolveMakeupAsk}
           onCancel={() => setMakeupAsk(null)}

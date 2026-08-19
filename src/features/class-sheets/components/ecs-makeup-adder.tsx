@@ -1,17 +1,13 @@
 "use client";
 
 /**
- * ECS '+ 보강 학생 추가' — 출석부와 **같은 검색·같은 저장**.
- * 저장은 `setAttendanceCell({ status:"makeup", allowMakeup:true })`라 출석부·원스크린이
- * 같은 칸을 본다. 검색 게이트는 `searchMakeupStudents`(담당 반).
+ * ECS '+ 보강 학생 추가' — 원스크린과 **같은 질문, 같은 저장**(원장 2026-08-19: *"영어도 보강추가시 같은
+ * 동작으로 하게 해주고"*). 검색 → 확인창(며칠자 결석분·시수) → `setAttendanceCell(status:"makeup")`
+ * (+ 고른 결석분이 있으면 연결)까지 [`MakeupAddFlow`](@/features/attendance/components/makeup-add-flow)가 맡는다.
+ * 저장 축이 출석부와 같아 세 화면이 같은 칸을 본다.
  */
 import { useRouter } from "next/navigation";
-import { toast } from "sonner";
-import { setAttendanceCell } from "@/features/attendance/server/actions";
-import {
-  AttendanceMakeupAdder,
-  type MakeupPick,
-} from "@/app/(shell)/attendance/[date]/[classId]/makeup-adder";
+import { MakeupAddFlow } from "@/features/attendance/components/makeup-add-flow";
 
 export function EcsMakeupAdder({
   classId,
@@ -26,26 +22,12 @@ export function EcsMakeupAdder({
 }) {
   const router = useRouter();
   if (!canAdd) return null;
-
-  async function add(s: MakeupPick) {
-    if (existingIds.has(s.id)) {
-      toast.message(`${s.name}은(는) 이미 이 반 명단에 있습니다`);
-      return;
-    }
-    const res = await setAttendanceCell({
-      classId,
-      studentId: s.id,
-      sessionDate: date,
-      status: "makeup",
-      allowMakeup: true,
-    });
-    if ("error" in res) {
-      toast.error(res.error);
-      return;
-    }
-    toast.success(`${s.name} 보강 추가 — 출석부·원스크린에도 같은 학생으로 보입니다`);
-    router.refresh();
-  }
-
-  return <AttendanceMakeupAdder classId={classId} date={date} onAdd={add} />;
+  return (
+    <MakeupAddFlow
+      classId={classId}
+      date={date}
+      alreadyIn={existingIds}
+      onDone={() => router.refresh()}
+    />
+  );
 }

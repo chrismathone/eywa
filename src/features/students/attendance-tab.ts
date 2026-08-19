@@ -1,5 +1,10 @@
 // 학생 상세 출결 탭 — 라벨·필터·달력 배치(순수). 과목 라벨은 학원설정 labelOf.
 import { seatKeyOf, SEAT_NAME } from "@/features/attendance/seat/seat";
+import {
+  ATT_SOFT,
+  ATT_SOFT_BORDER,
+  type AttendanceStatusKey,
+} from "@/features/attendance/status-color";
 
 export type AttendanceClassOption = { value: string; label: string; subject: string };
 
@@ -33,14 +38,18 @@ export const ATTENDANCE_STATUS_LABEL: Record<(typeof ATTENDANCE_STATUS_ORDER)[nu
   makeup: "보강",
 };
 
-export const ATTENDANCE_STATUS_COLOR: Record<(typeof ATTENDANCE_STATUS_ORDER)[number], string> = {
-  present: "bg-chart-2/15 text-chart-2 border-chart-2/30",
-  absent: "bg-chart-4/15 text-chart-4 border-chart-4/30",
-  late: "bg-chart-3/15 text-chart-3 border-chart-3/30",
-  excused: "bg-blue/15 text-blue border-blue/30",
-  early_leave: "bg-chart-5/15 text-chart-5 border-chart-5/30",
-  makeup: "bg-chart-1/15 text-chart-1 border-chart-1/30",
-};
+/**
+ * 색은 [`status-color.ts`](src/features/attendance/status-color.ts) 단일 소스.
+ * ⚠️ v4 이전엔 여기가 chart 슬롯을 직접 참조해(공결=blue인데 조퇴=chart-5 장미, 보강=chart-1 파랑)
+ *    출석부·당일 출결과 조퇴·보강 색이 어긋나 있었다.
+ */
+export const ATTENDANCE_STATUS_COLOR: Record<(typeof ATTENDANCE_STATUS_ORDER)[number], string> =
+  Object.fromEntries(
+    (Object.keys(ATT_SOFT) as AttendanceStatusKey[]).map((k) => [
+      k,
+      `${ATT_SOFT[k]} ${ATT_SOFT_BORDER[k]}`,
+    ])
+  ) as Record<(typeof ATTENDANCE_STATUS_ORDER)[number], string>;
 
 const UNKNOWN_STATUS = "기타";
 

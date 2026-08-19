@@ -336,8 +336,9 @@ export default async function ClassDetailPage({
                           "~ 현재"
                         )}
                       </span>
+                      {/* 휴원 = caution(amber) — 학생목록·상세 배지와 같은 색(종전엔 chart-3 직접 참조). */}
                       {s.onHold ? (
-                        <span className="text-chart-3 bg-chart-3/10 border-chart-3/20 rounded-md border px-2 py-0.5 text-xs font-medium">
+                        <span className="text-amber bg-amber-soft border-amber/25 rounded-md border px-2 py-0.5 text-xs font-medium">
                           휴원
                         </span>
                       ) : null}

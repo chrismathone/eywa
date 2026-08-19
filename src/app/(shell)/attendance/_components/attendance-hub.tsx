@@ -82,7 +82,7 @@ export function AttendanceHub({
               <>
                 {" · 오늘 "}
                 {/* 기록/예정 — 오늘 수업이 있는 반의 학생 기준. 다 채워지면 초록. */}
-                <span className={`num font-bold ${t.today.recorded >= t.today.expected ? "text-emerald-700" : "text-amber-700"}`}>
+                <span className={`num font-bold ${t.today.recorded >= t.today.expected ? "text-green" : "text-amber"}`}>
                   {t.today.recorded}/{t.today.expected}명
                 </span>
                 {" 입력"}

@@ -144,7 +144,7 @@ export function RoomMapView({
             onClick={() => setFocusSubject(null)}
             className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs transition ${
               focusSubject === null
-                ? "border-foreground bg-foreground text-background font-medium"
+                ? "border-primary bg-primary text-primary-foreground font-medium"
                 : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
             }`}
           >
@@ -157,7 +157,7 @@ export function RoomMapView({
               onClick={() => setFocusSubject(focusSubject === k ? null : k)}
               className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs transition ${
                 focusSubject === k
-                  ? "border-foreground bg-foreground text-background font-medium"
+                  ? "border-primary bg-primary text-primary-foreground font-medium"
                   : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
               }`}
             >
@@ -205,7 +205,7 @@ export function RoomMapView({
           </span>
           {summary.conflictPairs > 0 ? (
             // ⚠️ 이 수치는 **선택 요일**이다(하단 목록도 같은 하루) — 요일을 안 적으면 다른 스코프처럼 읽힌다.
-            <span className="text-red-600">
+            <span className="text-danger">
               {DAY_LABEL[day] ?? day} 겹침 <span className="num font-semibold">{summary.conflictPairs}</span>건
             </span>
           ) : null}

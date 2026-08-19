@@ -153,12 +153,27 @@ export default async function ApprovalsPage({
                 icon={<EyIcon name="calendarCheck" size={16} />}
                 sub={period.label}
               />
-              <BigStat label="사용" value={formatLeaveDays(balance.used)} tone="neutral" />
-              <BigStat label="결재중" value={formatLeaveDays(balance.pending)} tone="amber" />
+              {/* ⚠️ BigStat의 tone은 **아이콘 칩에만** 칠해진다 — 아이콘이 없으면 톤을 줘도 화면엔
+                  아무 색도 안 나온다(v4 이전 이 세 칸이 그래서 통째로 무채색이었다).
+                  뜻은 의미색 캐논: 사용=info(지나간 정보) · 결재중=caution(내 차례로 돌고 있음) ·
+                  잔여=positive(여유 있음) / critical(0일=더 못 씀). */}
+              <BigStat
+                label="사용"
+                value={formatLeaveDays(balance.used)}
+                tone="blue"
+                icon={<EyIcon name="history" size={16} />}
+              />
+              <BigStat
+                label="결재중"
+                value={formatLeaveDays(balance.pending)}
+                tone="amber"
+                icon={<EyIcon name="clock" size={16} />}
+              />
               <BigStat
                 label="잔여"
                 value={formatLeaveDays(balance.remaining)}
-                tone={balance.remaining > 0 ? "blue" : "danger"}
+                tone={balance.remaining > 0 ? "green" : "danger"}
+                icon={<EyIcon name="wallet" size={16} />}
                 sub={leavePeriodLabel(period)}
               />
             </section>

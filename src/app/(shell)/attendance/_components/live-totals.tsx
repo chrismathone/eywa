@@ -14,9 +14,11 @@ import { useRowCount, useRowsCount } from "./grid-context";
  *    숫자가 갈릴 수 없다.
  */
 
+/** 출석률 신호등 — 의미색 캐논(좋음=positive · 주의=caution · 위험=critical). 구 primary(네이비)는
+ *  브랜드 자리라 "좋다"는 뜻으로 안 쓴다. 자리 월간 출석부(monthly-row.tsx)와 **같은 문턱·같은 색**. */
 function rateColorOf(rate: number | null): string {
   if (rate === null) return "text-text-faint";
-  return rate >= 90 ? "text-primary" : rate >= 80 ? "text-amber" : "text-danger";
+  return rate >= 90 ? "text-green" : rate >= 80 ? "text-amber" : "text-danger";
 }
 
 /** 학생 행 끝의 고정 두 칸(시수·출석률). `<tr>` 안에 그대로 놓인다. */

@@ -685,7 +685,7 @@ export default async function AttendancePage({
                     })}
                     className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs transition ${
                       mode === key
-                        ? "border-foreground bg-foreground text-background font-medium"
+                        ? "border-primary bg-primary text-primary-foreground font-medium"
                         : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
                     }`}
                   >

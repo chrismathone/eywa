@@ -2,7 +2,8 @@ import Link from "next/link";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { notFound } from "next/navigation";
 import { SuperAdminHeader } from "@/components/super-admin/header";
-import { Pill, type PillColor } from "@/components/atoms/pill";
+import { Pill } from "@/components/atoms/pill";
+import { roleMeta } from "@/features/staff/status-labels";
 import { getTenantDetail, getTenantLicenses } from "@/features/super-admin/server/queries";
 import { Pagination } from "@/components/pagination";
 import { UpdateTenantForm } from "./_update-form";
@@ -16,25 +17,10 @@ const USERS_PAGE_SIZE = 50;
 const fmt = (n: number) => n.toLocaleString("ko-KR");
 const formatDate = (iso: string) => new Date(iso).toLocaleDateString("ko-KR", { timeZone: "Asia/Seoul" });
 
-const ROLE_COLOR: Record<string, PillColor> = {
-  master: "primary",
-  admin: "blue",
-  manager: "purple",
-  teacher: "gold",
-  counselor: "rose",
-  accountant: "amber",
-  viewer: "neutral",
-};
-
-const ROLE_LABEL: Record<string, string> = {
-  master: "원장",
-  admin: "관리자",
-  manager: "매니저",
-  teacher: "강사",
-  counselor: "상담",
-  accountant: "회계",
-  viewer: "뷰어",
-};
+// 역할 라벨·색은 [`roleMeta`](src/features/staff/status-labels.ts) 단일 소스.
+// ⚠️ 여기 있던 3번째 사본은 직원관리와 **색이 통째로 달랐다**(원장=primary vs danger, 강사=gold vs
+// primary, 매니저=purple vs blue, 회계=amber vs purple) — 같은 사람을 두 화면에서 보면 역할 색이
+// 바뀌었다. 라벨도 viewer가 "뷰어"/"참관"으로 갈려 있었다.
 
 const STATUS_LABEL: Record<string, string> = {
   active: "활성",
@@ -118,8 +104,8 @@ export default async function TenantDetailPage({
           ) : (
             <div className="flex flex-wrap gap-2">
               {Object.entries(roleCount).map(([role, count]) => (
-                <Pill key={role} color={ROLE_COLOR[role] ?? "neutral"} soft>
-                  {role} · {count}
+                <Pill key={role} color={roleMeta(role).color} soft>
+                  {roleMeta(role).label} · {count}
                 </Pill>
               ))}
             </div>
@@ -148,8 +134,8 @@ export default async function TenantDetailPage({
                   <td className="text-foreground px-4 py-2.5 font-bold whitespace-nowrap">{u.displayName}</td>
                   <td className="text-text-dim px-4 py-2.5 font-mono text-[11px]">{u.email}</td>
                   <td className="px-4 py-2.5">
-                    <Pill color={ROLE_COLOR[u.systemRole] ?? "neutral"} soft>
-                      {ROLE_LABEL[u.systemRole] ?? u.systemRole}
+                    <Pill color={roleMeta(u.systemRole).color} soft>
+                      {roleMeta(u.systemRole).label}
                     </Pill>
                   </td>
                   <td className="text-text-dim px-4 py-2.5">{STATUS_LABEL[u.status] ?? u.status}</td>

@@ -6,6 +6,7 @@ import { Pill } from "@/components/atoms/pill";
 import { RecallButton } from "@/features/report-admin/components/recall-button";
 import { isRecallInFlight, isRecallable } from "@/features/report-admin/report-recall";
 import { normalizeHomeworkPages } from "../homework-pages";
+import { makeupRemoveBlockReason } from "../makeup-remove-plan";
 import {
   effectiveClassnoteStatus,
   isAlreadySent,
@@ -29,6 +30,7 @@ import { HomeworkRateInput } from "./homework-rate-input";
 import { isImageAttachment } from "../attachment-utils";
 import { splitComment, joinComment } from "../comment-paragraphs";
 import type { OneScreenStudent } from "../types";
+import { classnoteBadge, type ClassnoteBadge } from "../classnote-badge";
 
 // shareToken: 저장 시 발급되는 학부모 공개 링크(/r/[token]) 토큰. 세션 내 저장 후에만 존재.
 // classnoteStatus: ClassNote 발송 큐 상태(queued/processing/success/failed/too_old) — 발송 후에만.
@@ -49,47 +51,16 @@ export type SubjectReport = {
 
 const MAX_ATTACHMENTS = 6;
 
-/** classnote_status → 표시 라벨 + 색. 표 뷰(onescreen-grid)와 공용(중복 방지) → export. */
-export function classnoteBadge(status?: string | null): { label: string; cls: string } | null {
-  switch (status) {
-    case "queued":
-      return { label: "ClassNote 발송 대기", cls: "text-text-dim" };
-    case "processing":
-      return { label: "ClassNote 처리 중", cls: "text-text-dim" };
-    case "success":
-      return { label: "ClassNote 발송 완료", cls: "text-primary" };
-    case "failed":
-      return { label: "ClassNote 발송 실패", cls: "text-danger" };
-    case "too_old":
-      return { label: "ClassNote 발송 제외(오래됨)", cls: "text-text-dim" };
-    case "revoked":
-      return { label: "링크 취소됨 — 재발급 필요", cls: "text-danger" };
-    // 회수 3종(2026-08-05) — **링크 취소와 다르다**: 회수는 ClassNote 학부모 게시글 자체를 지운다.
-    // 실제 삭제는 연동 PC 워커가 하므로 요청 → 완료 사이에 대기 상태가 보인다(report-recall.ts).
-    case "recall_requested":
-      return { label: "회수 처리 중 — 게시글 삭제 대기", cls: "text-amber" };
-    case "recalled":
-      return { label: "회수됨 — 학부모 게시글 삭제", cls: "text-danger" };
-    case "recall_failed":
-      return { label: "회수 실패 — 다시 시도하세요", cls: "text-danger" };
-    case "name_conflict":
-      return { label: "동명이인 — 자동 발송 차단", cls: "text-danger" };
-    case "blocked_shared":
-      // 워커 프리플라이트 게이트가 오발송 위험(한 보드에 2가족+ 등)으로 보류 — 사유는 classnote_error에 한글로.
-      return { label: "공유 보드 — 자동 발송 차단", cls: "text-danger" };
-    case "subject_off":
-      // 원장 설정(classnoteSubjects) 밖 과목 — 저장만 되고 게시 안 됨. "발송 대기" 오인 방지(#2 확정).
-      return { label: "발송 대상 아님(과목 설정)", cls: "text-text-dim" };
-    case "absent":
-      // 서버 결석 게이트(#77) 반환 상태(세션 내 표시 전용 — DB엔 안 남음). 저장만 되고 발송 제외.
-      return { label: "결석 — 발송 제외", cls: "text-text-dim" };
-    case "no_attendance":
-      // 서버 출결 미체크 게이트(2026-08-17) 반환 상태(세션 내 표시 전용). 저장만 되고 발송 제외.
-      return { label: "출결 미체크 — 발송 제외", cls: "text-text-dim" };
-    default:
-      return null;
-  }
-}
+/**
+ * classnote_status → 표시 라벨 + 색 — **정본은 [classnote-badge.ts](../classnote-badge.ts)** 로 옮겼다.
+ *
+ * 🔴 이 파일은 `useState`를 쓰는 **클라 컴포넌트**라, 서버 컴포넌트(학생 상세 진도 탭)가 여기서
+ * import하면 Next가 빌드 에러를 낸다("useState에 의존하는 모듈을 서버 컴포넌트로 가져왔다") —
+ * 실제로 학생 상세가 통째로 안 열렸다(2026-08-18). 라벨·색은 순수 데이터라 컴포넌트에 묶을 이유가 없다.
+ * 기존 import 경로를 쓰는 곳(원스크린 표·발송 콘솔 등)을 위해 re-export만 남긴다.
+ */
+export { classnoteBadge };
+export type { ClassnoteBadge };
 
 /** 학부모 읽음 툴팁용 KST 일시("7월 18일 13:01") — 원장 목록(report-list readAtLabel)과 같은 표기. 표뷰 공용 → export. */
 export function readAtLabel(iso: string): string {
@@ -117,6 +88,8 @@ export function ReportCard({
   onTextbook,
   onHomeworkToday,
   onMakeup,
+  onRemoveMakeup,
+  canRemoveMakeup,
   onSubjectDraft,
   onSubjectTrend,
   onNote,
@@ -145,6 +118,10 @@ export function ReportCard({
   onTextbook: (subjectName: string, text: string) => void; // 교재명(과목별) — 0089a
   onHomeworkToday: (subjectName: string, text: string) => void; // 오늘 과제(숙제 내용, 과목별) — 0096a
   onMakeup: (subjectName: string) => void; // 보강 토글(과목별) — 0089a
+  /** 보강 빼기(2026-08-18) — 출결·저장된 보강 보고서를 지운다. 없으면 배지가 표시로만 남는다. */
+  onRemoveMakeup?: (subjectName: string) => void;
+  /** 이 행을 뺄 수 있나 — 발송·처리 중이면 false(발송된 보강은 취소 불가, 원장 2026-08-18). */
+  canRemoveMakeup?: (subjectName: string) => boolean;
   onSubjectDraft: (subjectName: string, text: string) => void;
   onSubjectTrend: (subjectName: string, text: string) => void; // 학습 추세 초안 편집(4a)
   onNote: (text: string) => void; // 특이사항(강사 메모) 편집 — AI 멘트 입력(4c). 학생별.
@@ -260,6 +237,31 @@ export function ReportCard({
             </p>
             <div className="flex flex-wrap items-center gap-1.5">
               <p className="text-foreground text-[15px] font-bold">{student.name} · 학부모 보고</p>
+              {/* 보강 빼기 — 표 모드와 같은 문(원장 2026-08-18 *"다 삭제"*). 확인 후 출결·보고서를 지운다. */}
+              {/* 순수 보강 행이면 정규 학생 카드에서도 뺄 수 있어야 한다(적대 리뷰 M2) — 학생 단위
+                  isMakeup만 보면 "정규 수업도 듣는 학생의 보강"에 문이 없다. 반이 붙은 '정규+보강'은 제외. */}
+              {(student.isMakeup || (subject.makeup && !subject.classId)) &&
+              onRemoveMakeup &&
+              (canRemoveMakeup?.(subject.name) ?? true) ? (
+                <button
+                  type="button"
+                  onClick={() => onRemoveMakeup(subject.name)}
+                  title="클릭하면 이 보강을 뺍니다(출결·보강 보고서·진도 기록이 삭제됩니다)"
+                  aria-label={`${student.name} 보강 빼기`}
+                  className="bg-amber-soft text-amber hover:bg-amber inline-flex cursor-pointer items-center gap-0.5 rounded-pill px-1.5 py-px text-[10px] font-bold transition hover:text-white"
+                >
+                  보강
+                  <EyIcon name="close" size={9} />
+                </button>
+              ) : student.isMakeup || (subject.makeup && !subject.classId) ? (
+                // 뺄 수 없는 행 — 왜인지 툴팁으로 남긴다(버튼만 없애면 "왜 안 되지"가 남는다).
+                <span
+                  className="bg-amber-soft text-amber rounded-pill px-1.5 py-px text-[10px] font-bold"
+                  title={makeupRemoveBlockReason(rep.classnoteStatus) ?? undefined}
+                >
+                  보강
+                </span>
+              ) : null}
               {/* 로스터 신호(G2·G3) — 표뷰와 동일 판정(roster-signals.ts). 카드는 학생 단위라 진도 배지는
                   수학 과목 보유 시(진도 파이프라인=math 전용). 카피 "미확인"(단정 금지). */}
               {unreadBadge ? (

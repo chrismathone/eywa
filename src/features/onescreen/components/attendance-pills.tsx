@@ -21,6 +21,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Popover } from "@base-ui/react/popover";
 import { effectiveUnits, formatSessionUnits } from "@/features/attendance/session-units";
+import { ATT_SOLID } from "@/features/attendance/status-color";
 
 export type BasicAttendance = "present" | "late" | "absent";
 /** 저장 부가값 — 넘기지 않은 필드는 서버가 기존 값을 유지한다(setAttendanceCell 규약). */
@@ -37,11 +38,11 @@ const LABEL: Record<string, string> = {
   excused: "공결",
   makeup: "보강",
 };
-const ON_CLS: Record<BasicAttendance, string> = {
-  present: "bg-primary text-primary-foreground",
-  late: "bg-amber text-white",
-  absent: "bg-danger text-white",
-};
+/**
+ * 활성색 = [`status-color.ts`](src/features/attendance/status-color.ts) 단일 소스(`ATT_SOLID`).
+ * ⚠️ v4 이전 출석=primary(네이비)는 출석부 격자의 민트와 어긋났다 — 같은 '출석'은 어디서나 초록 계열.
+ */
+const ON_CLS: Record<BasicAttendance, string> = ATT_SOLID;
 
 export function AttendancePills({
   value,

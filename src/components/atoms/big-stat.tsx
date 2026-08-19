@@ -6,9 +6,14 @@ import type { ReactNode } from "react";
  * 운영실 KpiCard의 공용 수렴 지점. 시맨틱 컬러는 값이 아니라 아이콘 칩 톤에 — 숫자는 잉크
  * (강조가 필요한 값만 valueClass, 예: 미수 text-danger).
  */
+/**
+ * ⚠️ v4에서 `green`을 추가했다 — 종전 톤엔 "정상·완료"를 나타낼 색이 아예 없어서, 수납 완료·출석률
+ * 같은 긍정 지표가 전부 primary(네이비)나 gold로 칠해졌다(의미색 캐논의 positive가 표현 불가였다).
+ */
 export type BigStatTone =
   | "neutral"
   | "primary"
+  | "green"
   | "gold"
   | "blue"
   | "purple"
@@ -19,6 +24,7 @@ export type BigStatTone =
 const ICON_TONE: Record<BigStatTone, string> = {
   neutral: "bg-bg-soft text-text-dim",
   primary: "bg-primary-soft text-primary",
+  green: "bg-green-soft text-green",
   gold: "bg-gold-soft text-gold",
   blue: "bg-blue-soft text-blue",
   purple: "bg-purple-soft text-purple",

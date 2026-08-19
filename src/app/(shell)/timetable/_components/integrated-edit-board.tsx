@@ -416,7 +416,7 @@ export function IntegratedEditBoard({
                           미배정
                         </span>
                         {!showOthers ? (
-                          <span className="text-warning inline-flex items-center gap-1 text-[11px]">
+                          <span className="text-amber inline-flex items-center gap-1 text-[11px]">
                             <AlertTriangle size={12} aria-hidden="true" />
                             저장하면 이 줄은 통합뷰에서 숨겨집니다
                           </span>
@@ -491,7 +491,7 @@ export function IntegratedEditBoard({
         <div className="sticky-save-bar border-line bg-card/95 sticky bottom-0 z-30 flex flex-wrap items-center gap-2 rounded-t-xl border-t px-3 py-2 backdrop-blur">
           {error ? <span className="text-danger text-[12px]">{error}</span> : null}
           {confirmLeave ? (
-            <span className="text-warning text-[12px]">아직 반영하지 않은 변경이 있습니다 — 한 번 더 누르면 버립니다.</span>
+            <span className="text-amber text-[12px]">아직 반영하지 않은 변경이 있습니다 — 한 번 더 누르면 버립니다.</span>
           ) : null}
           <span className="text-text-faint text-[11px]">
             줄 {groups.length}개 · 반 {cards.length}개
@@ -499,7 +499,7 @@ export function IntegratedEditBoard({
           {/* 초기화 — 화면만 되돌린다(저장 전이라 DB 무변). 되돌릴 게 없으면 아예 안 보인다. */}
           {dirty ? (
             confirmReset ? (
-              <span className="text-warning ml-auto inline-flex items-center gap-2 text-[12px]">
+              <span className="text-amber ml-auto inline-flex items-center gap-2 text-[12px]">
                 지금까지 옮긴 걸 버리고 처음 상태로?
                 <button type="button" onClick={resetToInitial} className="text-danger font-bold hover:underline">
                   초기화
@@ -535,7 +535,7 @@ export function IntegratedEditBoard({
               **'실제 반영'**. 이쪽만 통합뷰를 바꾸고, 위쪽은 보관함에만 넣는다. 되돌릴 수 없는
               유일한 동작이라 확인을 한 번 받는다. */}
           {confirmApply ? (
-            <span className="text-warning inline-flex items-center gap-2 text-[12px]">
+            <span className="text-amber inline-flex items-center gap-2 text-[12px]">
               이 배치를 통합뷰에 반영할까요?
               <button
                 type="button"
