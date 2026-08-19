@@ -17,10 +17,16 @@ export function SeatingCell({
   date,
   klass,
   student,
+  /**
+   * 학생 검색에 걸린 칸 — **색이 아니라 테두리**로 짚는다. 칸 색은 출결 상태(SEAT_MARK_TONE)가 쓰는
+   * 자리라 여기에 색을 얹으면 "이 학생은 무슨 상태인가"를 덮어 버린다.
+   */
+  found = false,
 }: {
   date: string;
   klass: SeatingClass;
   student: SeatingStudent;
+  found?: boolean;
 }) {
   const router = useRouter();
   const [busy, startTransition] = useTransition();
@@ -81,7 +87,7 @@ export function SeatingCell({
         })}
         className={`flex min-h-9 w-full items-center justify-center rounded-lg px-1 py-1 ${SEAT_MARK_TONE[mark]} ${
           canMark ? "hover:ring-primary/40 cursor-pointer hover:ring-2" : "cursor-default"
-        } disabled:opacity-60`}
+        } ${found ? "ring-primary ring-2" : ""} disabled:opacity-60`}
       >
         <span className={`truncate leading-tight font-bold ${fit.className}`}>
           {student.studentName}

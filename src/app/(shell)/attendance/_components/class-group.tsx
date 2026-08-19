@@ -3,6 +3,7 @@
 import { ChevronRight } from "@/components/icons/eywa-icon-compat";
 import { useOptionalCollapse } from "./collapse-source";
 import { useGridCollapse } from "./grid-context";
+import { useClassMatched, useSearchActive } from "./search-context";
 
 function useCollapse() {
   const optional = useOptionalCollapse();
@@ -21,16 +22,29 @@ export function ClassGroupBody({
   classId,
   colSpan,
   summary,
+  rowKeys,
   children,
 }: {
   classId: string;
   colSpan: number;
   /** 머리행에 띄울 내용(반 이름·과목·인원·시수) — 서버가 그린 그대로 받는다. */
   summary: React.ReactNode;
+  /**
+   * 이 반의 격자 행 키들 — **학생 검색**이 걸렸을 때 이 반을 통째로 지울지 판정한다(2026-08-19).
+   * 없으면 검색과 무관한 표(판정 자체를 안 한다).
+   */
+  rowKeys?: readonly string[];
   children: React.ReactNode;
 }) {
   const ctx = useCollapse();
-  const collapsed = ctx?.collapsed.has(classId) ?? false;
+  // 🔴 매칭 학생이 하나도 없는 반은 **머리행까지** 안 그린다 — 반 이름만 남으면 "여기 있나?" 하고
+  //    펼쳐 보게 되고, 접기 토글이 붙어 있어 조작 대상처럼 보인다.
+  const { active: searching, count: matchedCount } = useClassMatched(rowKeys);
+  // 🔴 검색 중엔 접힘을 무시한다(접기 상태는 그대로 두고 **표시만**) — 접힌 반 안에 걸린 학생이 있는데
+  //    안 보이면 "검색했는데 없다"가 된다. 격자 좌표(grid-context `visibleRows`)도 같은 판정이라
+  //    한쪽만 고치면 안 그린 행이 좌표에 남는다.
+  const collapsed = !searching && (ctx?.collapsed.has(classId) ?? false);
+  if (searching && matchedCount === 0) return null;
   return (
     <tbody>
       <tr className="bg-bg-soft">
@@ -77,7 +91,9 @@ export function nextCollapseAction(classIds: readonly string[], collapsed: Reado
  */
 export function CollapseAllButton({ classIds }: { classIds: string[] }) {
   const ctx = useCollapse();
-  if (!ctx) return null;
+  // 검색 중엔 접힘을 무시해 그리므로(위 ClassGroupBody 주석) 이 버튼은 눌러도 아무 일이 안 난다 — 감춘다.
+  const searching = useSearchActive();
+  if (!ctx || searching) return null;
   const { expand, label } = nextCollapseAction(classIds, ctx.collapsed);
   return (
     <button
@@ -100,7 +116,9 @@ export function CollapseAllButton({ classIds }: { classIds: string[] }) {
  */
 export function CollapseAllChip({ classIds }: { classIds: string[] }) {
   const ctx = useCollapse();
-  if (!ctx || classIds.length === 0) return null;
+  // 같은 이유로 검색 중엔 물러난다(짝인 CollapseAllButton과 판정을 맞춘다).
+  const searching = useSearchActive();
+  if (!ctx || classIds.length === 0 || searching) return null;
   const { collapsedCount, expand, label } = nextCollapseAction(classIds, ctx.collapsed);
   return (
     <button

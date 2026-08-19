@@ -19,6 +19,7 @@ import { countCells, type Counted } from "@/features/attendance/grid/totals";
 import { NOT_MINE_MESSAGE } from "@/features/attendance/cell-display";
 import { COUNTABLE_STATUSES } from "@/features/attendance/session-units";
 import { appendChar, backspace, commitBuffer, copyValueOf, type TypedValue } from "@/features/attendance/grid/typing";
+import { useAttendanceSearch } from "./search-context";
 
 type Ctx = {
   store: GridStore;
@@ -161,15 +162,32 @@ export function GridProvider({
 
   // 접힌 반의 행은 격자 좌표에서도 뺀다 — 안 그러면 방향키가 **안 보이는 칸**으로 들어간다.
   // ⚠️ 값(initial)은 그대로 전부 싣는다. 접기는 표시일 뿐이라 합계는 접어도 안 줄어야 한다.
-  const visibleRows = useMemo(
-    () => (collapsed.size === 0 ? rows : rows.filter((r) => !collapsed.has(classIdOfRow(r)))),
-    [rows, collapsed],
-  );
+  // 🔴 **학생 검색도 같은 규약**(2026-08-19) — 안 걸린 행은 표에서 안 그려지므로 좌표에서도 빼야
+  //    ↑↓·Tab·Shift 범위·드래그 채우기가 보이지 않는 칸을 건드리지 않는다.
+  const search = useAttendanceSearch();
+  const searchActive = search?.active ?? false;
+  const matchedRows = search?.matched;
+  const visibleRows = useMemo(() => {
+    // 🔴 검색 중엔 **접힘을 무시한다** — 접힌 반 안의 학생이 검색에 걸렸는데 화면에 없으면
+    //    "검색했는데 없다"(사라진 게 아니라 접힌 것)가 된다. 표(class-group.tsx)도 같은 판정을 하므로
+    //    이 둘이 어긋나면 그리지 않은 행이 좌표에 남는다 — **함께 고칠 것**.
+    if (searchActive && matchedRows) return rows.filter((r) => matchedRows.has(r));
+    return collapsed.size === 0 ? rows : rows.filter((r) => !collapsed.has(classIdOfRow(r)));
+  }, [rows, collapsed, searchActive, matchedRows]);
   // 렌더 중엔 값만 바꾸고(알림 없음), 렌더가 끝난 뒤 밀린 알림을 흘린다 — 렌더 도중 남의 setState 금지.
   store.setSource(visibleRows, cols, initial);
   useEffect(() => {
     store.flushSource();
   });
+  /**
+   * 🔴 검색으로 사라진 행에 활성 칸이 남아 있으면 놓는다 — 키 입력은 **document 리스너**가 받으므로
+   *    행이 안 그려져도 그 칸에 그대로 저장된다(반 접기가 `applyCollapsed`에서 같은 처리를 하는 이유).
+   *    ⚠️ 렌더가 끝난 뒤에 한다(렌더 도중 저장소 알림 금지).
+   */
+  useEffect(() => {
+    const a = store.active;
+    if (a && searchActive && matchedRows && !matchedRows.has(a.row)) store.clearUi();
+  }, [store, searchActive, matchedRows]);
 
   const applyCollapsed = useCallback(
     (next: Set<string>) => {
