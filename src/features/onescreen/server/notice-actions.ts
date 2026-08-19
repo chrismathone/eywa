@@ -15,7 +15,7 @@ import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 import { getTenantSettings } from "@/features/owner/server/queries";
-import { effectiveTeacherId } from "@/lib/auth/view-mode";
+import { effectiveTeacherId, readonlyTeacherViewError } from "@/lib/auth/view-mode";
 import { hasClassnoteNameCollision } from "./scope";
 // 담당 반 판정 단일 소스(담당 반 ∪ 그날 위임 반) — classes.teacher_id를 직접 비교하지 말 것(0173a).
 import { getTeachingClassIds } from "@/features/classes/server/delegation";
@@ -76,6 +76,10 @@ export type OnescreenNoticeResult = {
 export async function sendOnescreenNotice(input: OnescreenNoticeInput): Promise<OnescreenNoticeResult> {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
+  // 🔴 '다른 강사 뷰'(열람 전용) 차단 — 아래 게이트는 effectiveTeacherId(=열람 대상)가 있으면 통과라,
+  //    이 가드가 없으면 관리자가 **그 강사 명의·스코프로** 학부모 공지를 내보낼 수 있다(외부 발신).
+  const roError = await readonlyTeacherViewError();
+  if (roError) return { ok: false, error: roError };
   const body = (input.body ?? "").trim(); // 공통 내용
   if (!body) return { ok: false, error: "공통 내용을 입력하세요" };
   if (body.length > BODY_MAX) return { ok: false, error: `공지가 너무 깁니다(최대 ${BODY_MAX}자)` };

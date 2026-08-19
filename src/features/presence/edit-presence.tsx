@@ -48,7 +48,21 @@ function sameEditors(a: Editor[], b: Editor[]): boolean {
   return true;
 }
 
-export function EditPresenceProvider({ user, children }: { user: PresenceUser; children: ReactNode }) {
+export function EditPresenceProvider({
+  user,
+  trackDisabled = false,
+  children,
+}: {
+  user: PresenceUser;
+  /**
+   * true면 **내 track을 전면 차단**(다른 사람 presence 읽기는 유지 — 구독만으로는 presence state에 안 실린다).
+   * '다른 강사 뷰'(열람 전용)에서 켠다: 원스크린 "다른 창/기기 동시 열림" 경고가 `onescreen:{teacherId}:{date}`
+   * 축이라, 여기서 track하면 **열람 대상 강사의 화면에 열람자가 그대로 뜬다**(원장 2026-08-19: 강사가 모르게).
+   * 서버가 요청마다 계산해 내려주고 뷰 전환은 풀 문서 네비라 세션 중 안 바뀐다(useState 초기 캡처 안전).
+   */
+  trackDisabled?: boolean;
+  children: ReactNode;
+}) {
   // 비어있지 않은 scope만 보관, 변경 없으면 참조 유지 → useSyncExternalStore 안정.
   const snapshots = useRef(new Map<string, Editor[]>());
   const listeners = useRef(new Map<string, Set<() => void>>());
@@ -93,12 +107,14 @@ export function EditPresenceProvider({ user, children }: { user: PresenceUser; c
         };
       },
       startEditing: (scope) => {
+        if (trackDisabled) return; // 열람 전용 — myScopes가 항상 비어 track이 한 번도 안 나간다(위 prop 주석)
         myScopes.current.set(scope, (myScopes.current.get(scope) ?? 0) + 1);
         // retain이 채널을 열고, 열린 뒤 subscribe 콜백이 myScopes를 통째로 track한다(아래 효과).
         demand.retain();
         retrack();
       },
       stopEditing: (scope) => {
+        if (trackDisabled) return; // startEditing과 짝 — retain/release 짝수 유지
         const n = (myScopes.current.get(scope) ?? 0) - 1;
         if (n <= 0) myScopes.current.delete(scope);
         else myScopes.current.set(scope, n);

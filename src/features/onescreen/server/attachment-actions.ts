@@ -3,6 +3,7 @@
 import { randomUUID } from "node:crypto";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
+import { readonlyTeacherViewError } from "@/lib/auth/view-mode";
 import { kstToday } from "@/lib/date-kst";
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -93,6 +94,10 @@ async function findReportRow(
 async function gate(studentId: string, reportDate?: string) {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" as const };
+  // '다른 강사 뷰'(열람 전용) 차단 — canWriteTenant는 캡으로 거절되지만, 겸직이 같은 반을 직접
+  // 담당하는 경우 teacherOwnsStudent(본인 축)가 열려 열람 중 첨부가 뚫린다. 여기서 일괄 차단.
+  const roError = await readonlyTeacherViewError();
+  if (roError) return { error: roError };
   if (!studentId) return { error: "학생 정보가 없습니다" as const };
   const supabase = await createClient();
   // 🔴 담당 판정 기준일 = **그 보고서의 날짜**(오늘이 아니다). 임시 위임(0173a)은 기간이 있어서,

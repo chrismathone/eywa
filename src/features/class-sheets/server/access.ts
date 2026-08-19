@@ -119,6 +119,14 @@ export async function requireEcsClassAccess(
 export const ecsAssistantClassIds = cache(async (): Promise<string[]> => {
   const teacherId = await effectiveTeacherId();
   if (!teacherId) return [];
+  return englishAssistantClassIdsOf(teacherId);
+});
+
+/**
+ * 임의 강사의 영어 부담임(슬롯) 반 — 위 규칙의 파라미터판. '다른 강사 뷰' 진입 액션이 대상 강사의
+ * 착지(ECS 여부)를 정할 때도 **같은 판정**을 쓴다(두 벌이면 확장 조건이 갈라진다).
+ */
+export async function englishAssistantClassIdsOf(teacherId: string): Promise<string[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("class_schedules")
@@ -127,7 +135,7 @@ export const ecsAssistantClassIds = cache(async (): Promise<string[]> => {
     .eq("classes.subject", "english");
   if (error) return [];
   return [...new Set((data ?? []).map((r) => r.class_id as string))];
-});
+}
 
 /**
  * ECS 위임 스코프 — **임시 위임(0173a)으로 이 기간에 대신 맡은** english 반 id 목록.

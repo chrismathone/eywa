@@ -4,6 +4,7 @@ import { requireAccess } from "@/lib/auth/require-access";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { assignableRoles } from "@/lib/auth/role-hierarchy";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
+import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { StaffForm } from "../_components/staff-form";
 
@@ -35,6 +36,7 @@ export default async function NewStaffPage() {
         mode="create"
         assignableRoleOptions={roleOptions}
         jobTitleOptions={operations.jobTitles}
+        canGrantTeacherView={user.systemRole === "master" || (await isCurrentUserSuperAdmin())}
       />
     </div>
   );

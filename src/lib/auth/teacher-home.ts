@@ -27,9 +27,15 @@ import { getSeatDuties } from "@/features/attendance/seat/server/duty";
  */
 async function ecsHomeIfAllowed(home: string): Promise<string> {
   if (home !== ENGLISH_TEACHER_HOME) return home;
-  return canAccess("teacher", "ecs", await getUserPermMatrix())
-    ? ENGLISH_TEACHER_HOME
-    : DEFAULT_TEACHER_HOME;
+  const matrix = await getUserPermMatrix();
+  if (!canAccess("teacher", "ecs", matrix)) return DEFAULT_TEACHER_HOME;
+  // 🔴 '다른 강사 뷰'(열람 전용, 2026-08-19) 무한 리다이렉트 가드 — /ecs 페이지의 requireAccess는
+  //    **실 역할**로 판정한다. 강사 행은 통과해도 실 역할(예: counselor=none)이 ecs를 못 열면
+  //    홈→requireAccess 거부→landingPath→홈이 무한히 돈다. 두 축 모두 통과할 때만 ECS 홈.
+  //    (원스크린은 ROLE_LOCKED + 뷰 기준 게이트라 폴백 종점으로 항상 안전 — 위 주석과 같은 이유.)
+  const user = await getCurrentUser();
+  if (user && !canAccess(user.systemRole, "ecs", matrix)) return DEFAULT_TEACHER_HOME;
+  return ENGLISH_TEACHER_HOME;
 }
 
 /**

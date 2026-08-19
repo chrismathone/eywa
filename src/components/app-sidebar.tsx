@@ -27,6 +27,7 @@ import {
 import { canAccess, type AccessMatrix, type MenuKey, type SystemRole } from "@/lib/permissions";
 import { ROLE_LABEL } from "@/lib/auth/role-hierarchy";
 import { TeacherViewToggle } from "@/components/view-mode-toggle";
+import { OtherTeacherViewPicker } from "@/components/other-teacher-view";
 import { useIsDesktop } from "@/components/workspace/use-is-desktop";
 import { usePrefs } from "@/components/workspace/use-prefs";
 import { useSidebarResize } from "@/components/workspace/use-sidebar-resize";
@@ -90,6 +91,7 @@ export function AppSidebar({
   logoSrc,
   permMatrix,
   canTeacherView = false,
+  canOtherTeacherView = false,
 }: {
   systemRole: SystemRole;
   email: string;
@@ -101,6 +103,8 @@ export function AppSidebar({
   permMatrix?: AccessMatrix;
   /** 겸직(관리자 계열 + 담당 반 보유) → 하단에 '강사뷰로 전환' 노출. */
   canTeacherView?: boolean;
+  /** '다른 강사 뷰'(열람 전용) 자격(master·super_admin·강사뷰 접근 토글) → 하단에 강사 피커 노출. */
+  canOtherTeacherView?: boolean;
 }) {
   // 호칭(직책) — 직접 입력한 job_title 우선, 없으면 시스템 역할의 한글 라벨로 폴백.
   const title = jobTitle?.trim() || ROLE_LABEL[systemRole];
@@ -419,10 +423,11 @@ export function AppSidebar({
           />
         </div>
 
-        {/* 겸직(관리자+담당반) 강사뷰 전환 — user 줄 위, nav와 구분선으로 분리. 레일 톤. */}
-        {canTeacherView ? (
+        {/* 겸직(관리자+담당반) 강사뷰 전환 + '다른 강사 뷰'(열람 전용) — user 줄 위, nav와 구분선으로 분리. */}
+        {canTeacherView || canOtherTeacherView ? (
           <div className="border-line shrink-0 border-t px-1 py-1.5">
-            <TeacherViewToggle expanded={expanded} motion={motion} />
+            {canTeacherView ? <TeacherViewToggle expanded={expanded} motion={motion} /> : null}
+            {canOtherTeacherView ? <OtherTeacherViewPicker expanded={expanded} motion={motion} /> : null}
           </div>
         ) : null}
 
