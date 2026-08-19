@@ -3,7 +3,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MakeupConfirmDialog } from "./makeup-confirm-dialog";
 import type { MergeCandidate } from "@/features/onescreen/makeup-merge-plan";
-import type { MakeupAbsenceOption } from "../makeup-options";
+import type { MakeupAbsenceList, MakeupAbsenceOption } from "../makeup-options";
 
 /**
  * 여기서 잠그는 계약:
@@ -13,6 +13,8 @@ import type { MakeupAbsenceOption } from "../makeup-options";
  *     (원장 2026-08-19 *"이전 수업을 이월해 보강"*). 목록에 없으면 직접 입력(선보강).
  *  ④ **정규 수업이 없어도 창은 뜬다**(원장 2026-08-19 *"그냥 추가되고 끝이야"*) — 그때는 합침이 없다.
  *  ⑤ 고르면 무슨 일이 벌어지는지가 화면에 문장으로 있다(발송 건수·수업타임·출석부 칸).
+ *  ⑥ 목록이 비었으면 **왜** 비었는지 말한다 — 결석이 없는 것과 과목이 달라 뺀 것은 다른 사실이다
+ *     (원장 제보 2026-08-19: 수학 반 보강에 영어 결석이 뜨던 것을 과목으로 좁혔다).
  */
 const TODAY = "2026-07-31";
 const cand = (over: Partial<MergeCandidate> = {}): MergeCandidate => ({
@@ -30,6 +32,13 @@ const absence = (over: Partial<MakeupAbsenceOption> = {}): MakeupAbsenceOption =
   ...over,
 });
 
+/** 결석 후보 한 벌 — 대부분의 테스트는 뺀 건수가 0이다(과목 필터가 안 걸린 화면). */
+const list = (options: MakeupAbsenceOption[] = [], over: Partial<MakeupAbsenceList> = {}): MakeupAbsenceList => ({
+  options,
+  hiddenBySubject: 0,
+  ...over,
+});
+
 const setup = (props: Partial<Parameters<typeof MakeupConfirmDialog>[0]> = {}) => {
   const onConfirm = vi.fn();
   const onCancel = vi.fn();
@@ -39,7 +48,7 @@ const setup = (props: Partial<Parameters<typeof MakeupConfirmDialog>[0]> = {}) =
       candidates={[cand()]}
       sentSubjects={[]}
       makeupDate={TODAY}
-      absenceOptions={[absence()]}
+      absences={list([absence()])}
       onConfirm={onConfirm}
       onCancel={onCancel}
       {...props}
@@ -135,7 +144,7 @@ describe("결석분 — 목록에서 고른다(이월 보강)", () => {
   it("🔴 반 이동 전 옛 반 결석도 고를 수 있고, 그 반 id가 함께 넘어간다", async () => {
     const { onConfirm } = setup({
       candidates: [],
-      absenceOptions: [absence({ classId: "old", className: "초4 BS1J", date: "2026-07-16", pastClass: true })],
+      absences: list([absence({ classId: "old", className: "초4 BS1J", date: "2026-07-16", pastClass: true })]),
     });
 
     await userEvent.selectOptions(absenceSelect(), "old|2026-07-16");
@@ -148,13 +157,13 @@ describe("결석분 — 목록에서 고른다(이월 보강)", () => {
 
   it("이전 반은 목록에 '(이전 반)'으로 밝힌다 — 무엇을 고르는지 알아야 한다", () => {
     // 합침 모드에선 결석분을 안 묻는다 → 후보 없는(보강만) 상태로 연다.
-    setup({ candidates: [], absenceOptions: [absence({ className: "초4 BS1J", pastClass: true })] });
+    setup({ candidates: [], absences: list([absence({ className: "초4 BS1J", pastClass: true })]) });
 
     expect(screen.getByRole("option", { name: "7/16 초4 BS1J (이전 반)" })).toBeInTheDocument();
   });
 
   it("목록에 없으면 직접 입력 — 선보강(미래 결석 예정일)도 받는다", async () => {
-    const { onConfirm } = setup({ candidates: [], absenceOptions: [] });
+    const { onConfirm } = setup({ candidates: [], absences: list() });
 
     await userEvent.selectOptions(absenceSelect(), "__custom__");
     const date = screen.getByLabelText("결석 날짜 직접 입력");
@@ -166,7 +175,7 @@ describe("결석분 — 목록에서 고른다(이월 보강)", () => {
   });
 
   it("보강한 날은 직접 입력 칸에 들어가지 않고, 갈 길을 알려 준다", async () => {
-    setup({ candidates: [], absenceOptions: [] });
+    setup({ candidates: [], absences: list() });
 
     await userEvent.selectOptions(absenceSelect(), "__custom__");
     const date = screen.getByLabelText("결석 날짜 직접 입력");
@@ -299,5 +308,43 @@ describe("어느 교시에 왔는가 (교시 축 화면만)", () => {
     await userEvent.click(screen.getByRole("button", { name: "보강 추가" }));
 
     expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({ slotStart: "16:20" }));
+  });
+});
+
+/**
+ * 🔴 **빈 목록의 뜻이 갈린다** — "결석이 없다"와 "과목이 달라 뺐다"는 다른 사실이다. 뒤쪽을 앞쪽처럼
+ * 말하면 강사는 실제로 있는 영어 결석을 못 찾고 '직접 입력'으로 날짜를 손으로 적게 된다.
+ */
+describe("과목 필터 — 왜 비었는지 밝힌다", () => {
+  it("과목 때문에 0건이면 그 과목 이름으로 말하고, 뺀 건수를 밝힌다", () => {
+    setup({ candidates: [], absences: list([], { hiddenBySubject: 2, subjectLabel: "수학" }) });
+
+    expect(screen.getByText(/수학 과목에 메울 결석이 없습니다/)).toBeInTheDocument();
+    // ⚠️ 뺀 건수엔 **이미 보강한 결석**도 섞인다 — "메울 수 있는 2건"이라고 약속하면 있지도 않은 결석을
+    //    찾아다니게 된다. 사실만 적는다: 다른 과목이라 뺐다.
+    expect(screen.getByText(/다른 과목 결석 2건은 과목이 달라 뺐습니다/)).toBeInTheDocument();
+  });
+
+  it("과목 라벨을 못 받으면 raw 키 대신 '이 과목'이라고 한다(math·english 노출 금지)", () => {
+    setup({ candidates: [], absences: list([], { hiddenBySubject: 1 }) });
+
+    expect(screen.getByText(/이 과목에 메울 결석이 없습니다/)).toBeInTheDocument();
+  });
+
+  it("정말 결석이 없으면 종전 문구 그대로다(없는 과목 얘기를 지어내지 않는다)", () => {
+    setup({ candidates: [], absences: list() });
+
+    expect(screen.getByText(/최근 1년 결석 기록이 없습니다/)).toBeInTheDocument();
+  });
+
+  it("목록이 남아 있어도 뺀 게 있으면 그 사실을 알린다 — 목록이 전부인 줄 알면 안 된다", () => {
+    setup({
+      candidates: [],
+      absences: list([absence()], { hiddenBySubject: 3, subjectLabel: "수학" }),
+    });
+
+    // ⚠️ "수학 결석만 보입니다"라고는 하지 않는다 — 미분류 과목 결석은 일부러 통과시키므로 남은 목록이
+    //    한 과목이라고 단언할 수 없다. 뺀 사실만 말한다.
+    expect(screen.getByText(/과목이 다른 결석 3건은 뺐습니다\(수학 과목 보강\)/)).toBeInTheDocument();
   });
 });

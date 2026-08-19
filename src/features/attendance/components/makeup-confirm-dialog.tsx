@@ -18,7 +18,7 @@ import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
 import type { MergeCandidate } from "@/features/onescreen/makeup-merge-plan";
 import { absenceMemo, shortDate } from "@/features/onescreen/makeup-absence-link";
-import { absenceOptionLabel, type MakeupAbsenceOption } from "../makeup-options";
+import { absenceOptionLabel, type MakeupAbsenceList } from "../makeup-options";
 import type { MakeupSlotOption } from "../makeup-slot";
 
 /**
@@ -64,7 +64,7 @@ export function MakeupConfirmDialog({
   candidates,
   sentSubjects,
   makeupDate,
-  absenceOptions,
+  absences,
   absenceLoading,
   slotOptions,
   defaultUnits,
@@ -78,8 +78,12 @@ export function MakeupConfirmDialog({
   sentSubjects?: readonly string[];
   /** 보강을 실제로 한 날(=지금 보고 있는 날짜). 시수가 얹히는 날이자 결석일 선택의 상한. */
   makeupDate: string;
-  /** 그 학생의 결석 기록(이전 반 포함). 비어 있으면 직접 입력만 남는다. */
-  absenceOptions: readonly MakeupAbsenceOption[];
+  /**
+   * 그 학생의 결석 후보 한 벌(이전 반 포함). 비어 있으면 직접 입력만 남는다.
+   * ⚠️ 배열이 아니라 **한 벌**을 받는다 — "0건"의 뜻이 둘(결석이 없다 ↔ 과목이 달라 뺐다)이라
+   *    아래 안내가 이유를 밝힐 수 있어야 한다.
+   */
+  absences: MakeupAbsenceList;
   absenceLoading?: boolean;
   /**
    * 그 반 그날의 교시들 — **교시 축 화면(ECS)만** 넘긴다. 둘 이상이면 고르기 전엔 확인을 막는다
@@ -91,6 +95,9 @@ export function MakeupConfirmDialog({
   onConfirm: (choice: MakeupConfirmChoice) => void;
   onCancel: () => void;
 }) {
+  const { options: absenceOptions, hiddenBySubject, subjectLabel } = absences;
+  /** 과목 라벨이 없으면(설정에 없는 키) 이름 대신 "이 과목" — raw 키는 화면에 안 쓴다. */
+  const subjectWord = subjectLabel ? `${subjectLabel} 과목` : "이 과목";
   const canMerge = candidates.length > 0;
   const [mode, setMode] = useState<"merge" | "separate">(canMerge ? "merge" : "separate");
   // 후보가 하나면 그것으로 확정, 둘 이상이면 고르기 전엔 비워 둔다(추측 금지).
@@ -259,12 +266,21 @@ export function MakeupConfirmDialog({
               ))}
               <option value={PICK_CUSTOM}>직접 입력 (아직 결석 전 · 목록에 없음)</option>
             </select>
+            {/* 왜 이만큼인지 밝힌다 — 과목이 달라 뺀 후보가 있는데 그냥 "결석 기록이 없다"고 하면
+                거짓이 된다(실측: 수학 보강에서 목록이 통째로 비는 학생 29명이 영어 결석만 갖고 있다).
+                ⚠️ 문구는 **말한 만큼만** 참이어야 한다: ① 뺀 건수엔 이미 보강한 결석도 섞이므로 "메울 수 있는
+                N건"이라고 하지 않는다 ② 미분류 과목 결석은 일부러 통과시키므로 "이 과목 결석만 보인다"고도
+                하지 않는다(남은 목록이 한 과목이라고 단언할 수 없다). */}
             <p className="text-text-faint mt-1.5 text-[11px] leading-snug">
               {absenceLoading
                 ? "결석 기록을 불러오는 중…"
                 : absenceOptions.length === 0
-                  ? "최근 1년 결석 기록이 없습니다 — 추가 보강이면 그대로 두세요."
-                  : "반을 옮겼어도 이전 반 결석이 함께 보입니다(이월 보강)."}
+                  ? hiddenBySubject > 0
+                    ? `${subjectWord}에 메울 결석이 없습니다 — 다른 과목 결석 ${hiddenBySubject}건은 과목이 달라 뺐습니다.`
+                    : "최근 1년 결석 기록이 없습니다 — 추가 보강이면 그대로 두세요."
+                  : hiddenBySubject > 0
+                    ? `과목이 다른 결석 ${hiddenBySubject}건은 뺐습니다(${subjectWord} 보강). 반을 옮겼어도 이전 반 결석이 함께 보입니다.`
+                    : "반을 옮겼어도 이전 반 결석이 함께 보입니다(이월 보강)."}
             </p>
             {absencePick === PICK_CUSTOM ? (
               <div className="mt-2">

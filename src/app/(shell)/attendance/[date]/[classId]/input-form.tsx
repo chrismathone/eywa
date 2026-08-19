@@ -34,7 +34,7 @@ import {
   type MakeupConfirmChoice,
 } from "@/features/attendance/components/makeup-confirm-dialog";
 import { fetchMakeupAbsences } from "@/features/attendance/server/makeup-actions";
-import type { MakeupAbsenceOption } from "@/features/attendance/makeup-options";
+import type { MakeupAbsenceList } from "@/features/attendance/makeup-options";
 import { AttendanceMakeupAdder, type MakeupPick } from "./makeup-adder";
 
 const STATUS_DEFS: {
@@ -74,6 +74,9 @@ const STATUS_DEFS: {
     activeClass: "text-purple bg-purple/10 border-purple/30",
   },
 ];
+
+/** 아직 안 불러왔을 때의 빈 한 벌 — 확인창은 이걸 받아 '직접 입력'만 보여 준다. */
+const EMPTY_ABSENCES: MakeupAbsenceList = { options: [], hiddenBySubject: 0 };
 
 function SubmitButton() {
   const { pending } = useFormStatus();
@@ -140,7 +143,7 @@ export function AttendanceInputForm({
    *    직후 같은 자리에서 잇는다(연결 액션은 세 화면이 공유하는 `noteMakeupAgainstAbsence`).
    */
   const [makeupPick, setMakeupPick] = useState<MakeupPick | null>(null);
-  const [absences, setAbsences] = useState<MakeupAbsenceOption[]>([]);
+  const [absences, setAbsences] = useState<MakeupAbsenceList>(EMPTY_ABSENCES);
   const [absencesLoading, setAbsencesLoading] = useState(false);
   /** studentId → "결석반id|결석일" — 폼과 함께 보내는 결석분 연결(고른 사람만). */
   const [makeupLinks, setMakeupLinks] = useState<Record<string, string>>({});
@@ -150,20 +153,22 @@ export function AttendanceInputForm({
   function openMakeupConfirm(picked: MakeupPick) {
     if (allRows.some((r) => r.studentId === picked.id)) return;
     setMakeupPick(picked);
-    setAbsences([]);
+    setAbsences(EMPTY_ABSENCES);
     setAbsencesLoading(true);
     // 🔴 **어느 학생의 응답인지 확인하고 반영한다** — 취소하고 다른 학생을 열면 먼저 띄운 조회가 늦게
     //    도착해 **남의 결석 이력**이 이 학생 것처럼 뜬다(옆 파일 makeup-adder가 같은 이유로 seq를 쓴다).
     const mine = ++absenceSeq.current;
     // 창은 먼저 열고 목록만 갈아 끼운다 — 조회를 기다리며 멈춰 있으면 "눌러도 반응 없다"가 된다.
-    void fetchMakeupAbsences(picked.id, date)
+    // 🔴 **이 반의 과목**으로 후보를 좁힌다 — 수학 반 보강인데 영어 결석이 뜨면 잘못 골라 그 칸에
+    //    메모가 간다(원장 제보 2026-08-19). 과목은 서버가 이 반 id로 읽는다(클라가 정하지 않는다).
+    void fetchMakeupAbsences(picked.id, date, classId)
       .then((list) => {
         if (mine !== absenceSeq.current) return;
         setAbsences(list);
       })
       .catch(() => {
         if (mine !== absenceSeq.current) return;
-        setAbsences([]);
+        setAbsences(EMPTY_ABSENCES);
       })
       .finally(() => {
         if (mine !== absenceSeq.current) return;
@@ -571,7 +576,7 @@ export function AttendanceInputForm({
           // 이 화면은 그 반 한 칸을 여는 것이라 '합침' 선택지가 없다(합칠 정규 보고서를 모른다).
           candidates={[]}
           makeupDate={date}
-          absenceOptions={absences}
+          absences={absences}
           absenceLoading={absencesLoading}
           onConfirm={confirmMakeup}
           onCancel={() => setMakeupPick(null)}

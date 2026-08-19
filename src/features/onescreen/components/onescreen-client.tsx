@@ -117,12 +117,29 @@ import {
 } from "@/features/attendance/components/makeup-confirm-dialog";
 import { fetchMakeupAbsences } from "@/features/attendance/server/makeup-actions";
 import { noteMakeupAgainstAbsence } from "@/features/attendance/server/makeup-note-action";
-import type { MakeupAbsenceOption } from "@/features/attendance/makeup-options";
+import type { MakeupAbsenceList } from "@/features/attendance/makeup-options";
 import { mergeStatusOf, planMakeupMerge, type MergeCandidate } from "../makeup-merge-plan";
 import { hasRowOverrides, resolveRowFields, seedRowFields } from "../row-fields";
 import { detectClassNotices } from "../class-notice";
 import { shortDate } from "../makeup-absence-link";
 import { computeClientMentSource } from "../ment-source";
+
+/** 아직 안 불러왔을 때의 빈 결석 후보 한 벌 — 확인창은 이걸 받아 '직접 입력'만 보여 준다. */
+const EMPTY_ABSENCES: MakeupAbsenceList = { options: [], hiddenBySubject: 0 };
+
+/**
+ * 반 필터가 '전체'라 앵커가 없을 때의 **보조 앵커** — 합칠 정규 행(후보)의 반을 기준으로 삼는다.
+ *
+ * 🔴 이 경로가 비어 있으면 안 되는 이유: 후보를 고른 보강은 앵커가 없어도 결석분을 **실제로 쓴다**
+ *    (`linkMakeupAbsence`가 `choice.absentClassId`로 그 칸에 메모를 붙인다). 즉 '전체'로 두고 합침/분리를
+ *    고르면 수학 보강이 영어 결석 칸에 메모를 남길 수 있었다 — 고치려던 바로 그 사고다.
+ * ⚠️ **후보가 한 과목일 때만** 쓴다(겸직 강사는 후보가 두 과목일 수 있고, 그때 첫 후보로 좁히면 다른 과목
+ *    결석이 통째로 사라진다). 모르면 안 거른다 — 이 파일의 다른 폴백과 같은 비대칭.
+ */
+function candidateAnchorClassId(candidates: readonly MergeCandidate[]): string | null {
+  const keys = new Set(candidates.map((c) => c.subjectKey).filter(Boolean));
+  return keys.size === 1 ? (candidates[0]?.classId ?? null) : null;
+}
 
 type ReportsState = Record<string, Record<string, SubjectReport>>; // studentId → 과목명 → {draft, sent}
 
@@ -321,11 +338,18 @@ export function OneScreenClient({
     sentSubjects: string[];
     /** 목록에 없던 학생(그날 내 정규 수업 없음) — 확인 후에 카드를 만든다. */
     isNew: boolean;
-    /** 그 학생의 결석 기록(이전 반 포함) — 이월 보강 선택지. */
-    absences: MakeupAbsenceOption[];
+    /** 그 학생의 결석 후보 한 벌(이전 반 포함) — 이월 보강 선택지 + 과목이 달라 뺀 건수. */
+    absences: MakeupAbsenceList;
     /** 아직 불러오는 중 — 도착 전에 "결석 기록이 없습니다"라고 단언하지 않게. */
     absencesLoading: boolean;
   } | null>(null);
+  /**
+   * 결석 조회 응답 순서 가드(옆 두 화면 `input-form`·`makeup-add-flow`와 같은 규약).
+   * 🔴 **학생 id만으로는 부족하다** — 같은 학생을 반 필터를 바꿔 두 번 열면 조회 결과가 **앵커마다 다르므로**,
+   *    늦게 온 옛 조회가 새 창을 덮으면 **다른 과목 목록 + 그 과목 라벨**이 뜬다(과목 필터 이전엔 두 응답이
+   *    같아서 안 보이던 레이스다).
+   */
+  const absenceSeq = useRef(0);
   const [reports, setReports] = useState<ReportsState>(() => initReports(initial));
   const [genSubject, setGenSubject] = useState<string | null>(null); // AI 멘트 생성 중인 과목(카드 버튼 로딩)
   const [genKey, setGenKey] = useState<string | null>(null); // 표 행별 자동작성 로딩 키(studentId::과목)
@@ -781,10 +805,10 @@ export function OneScreenClient({
         candidates: [],
         sentSubjects: [],
         isNew: true,
-        absences: [],
+        absences: EMPTY_ABSENCES,
         absencesLoading: true,
       });
-      void loadAbsences(studentId);
+      void loadAbsences(studentId, anchorId);
       return;
     }
     // 🔴 **자동으로 합치지 않는다 — 묻는다**(원장 2026-08-06: *"선생님들이 헷갈린대"*).
@@ -827,10 +851,11 @@ export function OneScreenClient({
         candidates: plan.candidates,
         sentSubjects,
         isNew: false,
-        absences: [],
+        absences: EMPTY_ABSENCES,
         absencesLoading: true,
       });
-      void loadAbsences(studentId);
+      // 반 필터가 '전체'면 앵커가 없다 — 그때는 **합칠 후보의 반**으로 좁힌다(위 헬퍼의 🔴 참조).
+      void loadAbsences(studentId, anchorId ?? candidateAnchorClassId(plan.candidates));
       return;
     }
     // 합칠 정규 행이 없다(그날 결석·다른 강사 과목 등) → **그래도 묻는다**. 결석 보강이 바로 이 경로라
@@ -842,14 +867,23 @@ export function OneScreenClient({
       candidates: [],
       sentSubjects: [],
       isNew: false,
-      absences: [],
+      absences: EMPTY_ABSENCES,
       absencesLoading: true,
     });
-    void loadAbsences(studentId);
+    void loadAbsences(studentId, anchorId);
   }
-  /** 결석 후보(이전 반 포함)를 뒤늦게 채운다 — 창은 먼저 열고 목록만 도착하면 갈아 끼운다. */
-  async function loadAbsences(studentId: string) {
-    const list = await fetchMakeupAbsences(studentId, activeDate).catch(() => []);
+  /**
+   * 결석 후보(이전 반 포함)를 뒤늦게 채운다 — 창은 먼저 열고 목록만 도착하면 갈아 끼운다.
+   * 🔴 앵커 반을 함께 넘겨 **그 반 과목**의 결석만 받는다(수학 보강에 영어 결석이 뜨던 것,
+   *    원장 제보 2026-08-19). 반 필터가 '전체'라 앵커가 없으면 종전대로 안 거른다.
+   */
+  async function loadAbsences(studentId: string, anchorClassId: string | null) {
+    const mine = ++absenceSeq.current;
+    const list = await fetchMakeupAbsences(studentId, activeDate, anchorClassId).catch(
+      () => EMPTY_ABSENCES,
+    );
+    // 🔴 늦게 온 옛 조회는 버린다 — 학생이 같아도 **앵커(과목)가 다르면 다른 목록**이다.
+    if (mine !== absenceSeq.current) return;
     setMakeupAsk((prev) =>
       prev && prev.studentId === studentId ? { ...prev, absences: list, absencesLoading: false } : prev,
     );
@@ -3129,7 +3163,7 @@ export function OneScreenClient({
           studentName={makeupAsk.studentName}
           candidates={makeupAsk.candidates}
           sentSubjects={makeupAsk.sentSubjects}
-          absenceOptions={makeupAsk.absences}
+          absences={makeupAsk.absences}
           absenceLoading={makeupAsk.absencesLoading}
           makeupDate={activeDate}
           onConfirm={resolveMakeupAsk}
