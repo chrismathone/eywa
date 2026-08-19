@@ -169,9 +169,12 @@ function StopCard({
   const already = useMemo(() => new Set(stop.riders.map((r) => r.studentId)), [stop.riders]);
   const candidates = useMemo(() => {
     const key = q.replace(/\s+/g, "").toLowerCase();
+    // 🔑 **검색해야 나온다** — 재원생 전원(실측 336명)을 늘 세워두면 찾는 데 방해만 된다
+    //    (오른쪽 학생 풀과 같은 규약, 원장 2026-08-19).
+    if (!key) return [];
     return students
       .filter((s) => !already.has(s.id))
-      .filter((s) => !key || s.searchKey.includes(key))
+      .filter((s) => s.searchKey.includes(key))
       .slice(0, 40); // 목록은 검색으로 좁힌다 — 상한은 '더 있음'을 아래에 표기
   }, [students, already, q]);
 
@@ -270,7 +273,9 @@ function StopCard({
               </button>
             ))}
             {candidates.length === 0 && (
-              <span className="text-text-faint px-1 py-2 text-[12px]">찾는 학생이 없습니다</span>
+              <span className="text-text-faint px-1 py-2 text-[12px]">
+                {q.trim() ? "찾는 학생이 없습니다" : "이름이나 학교를 입력하세요"}
+              </span>
             )}
             {candidates.length === 40 && (
               <span className="text-text-faint px-1 py-1 text-[11px]">
