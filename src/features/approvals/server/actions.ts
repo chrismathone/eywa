@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
+import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { kstToday } from "@/lib/date-kst";
 import { logAction } from "@/features/audit/server/log";
@@ -19,6 +20,7 @@ import {
 import { sanitizeRichHtml } from "@/lib/html/sanitize";
 import { nextDocNo } from "../doc-no";
 import { normalizeLine, normalizeRefs, validateApprovalLine } from "../line";
+import { isMissingRelation } from "./queries";
 import {
   APPROVAL_FORM_LABEL,
   EXPENSE_CATEGORIES,
@@ -898,6 +900,131 @@ export async function withdrawDocument(
   revalidatePath("/approvals");
   revalidatePath(`/approvals/${docId}`);
   return { ok: true, notice: "기안을 회수했습니다" };
+}
+
+// ── 문서 댓글(하이웍스 개편 전자결재 '댓글', 0226a) ──────────────────────────
+
+/**
+ * 댓글 등록 — 참여자(기안자·결재선·참조·원장·super_admin)가 전결 사유 등 보충 내용을 공유한다
+ * (원장 2026-08-19: "결재 밑에 댓글처럼 있어서 전결 이유나 여러가지 공유하는거같음").
+ * 결재 판단(decideDocument의 comment — 도장에 붙는 처리 의견 1개)과 별개로 몇 번이든 단다.
+ * 쓰기는 admin이라 참여자 판정을 서버가 직접 한다([[#77]] — RLS 읽기 자격과 같은 범위).
+ */
+export async function addApprovalComment(
+  _prev: ApprovalActionState,
+  formData: FormData,
+): Promise<ApprovalActionState> {
+  const gate = await requireSignedIn();
+  if ("error" in gate) return { error: gate.error };
+  const { user } = gate;
+
+  const docId = String(formData.get("documentId") ?? "").trim();
+  const body = String(formData.get("body") ?? "").trim().slice(0, MAX_TEXT);
+  if (!docId) return { error: "댓글을 남길 문서를 찾을 수 없습니다" };
+  if (!body) return { error: "댓글 내용을 입력하세요" };
+
+  // 세 조회는 서로 독립(전부 docId 필터) — 병렬(B4). doc이 없으면 steps/refs는 그냥 버려진다.
+  const admin = createAdminClient();
+  const [{ data: doc }, { data: steps }, { data: refs }] = await Promise.all([
+    admin
+      .from("approval_documents")
+      .select("id, title, drafter_id")
+      .eq("id", docId)
+      .eq("tenant_id", user.tenantId) // admin은 RLS 우회 — tenant 명시 필수([[#104]])
+      .maybeSingle(),
+    admin.from("approval_steps").select("approver_id").eq("document_id", docId),
+    admin.from("approval_refs").select("user_id").eq("document_id", docId),
+  ]);
+  if (!doc) return { error: "문서를 찾을 수 없습니다" };
+  const participant =
+    doc.drafter_id === user.id ||
+    (steps ?? []).some((s) => s.approver_id === user.id) ||
+    (refs ?? []).some((r) => r.user_id === user.id) ||
+    user.systemRole === "master" ||
+    (await isCurrentUserSuperAdmin()); // super_admin은 모든 게이트 자동 통과(결정 로그 2026-08-13)
+  if (!participant) return { error: "이 문서의 기안자·결재자·참조자만 댓글을 남길 수 있습니다" };
+
+  const { error } = await admin.from("approval_comments").insert({
+    tenant_id: user.tenantId,
+    document_id: docId,
+    author_id: user.id,
+    body,
+  });
+  if (error) {
+    return {
+      error: isMissingRelation(error)
+        ? "댓글 표가 아직 준비되지 않았습니다(마이그레이션 0226a 적용 필요)"
+        : `댓글 저장 실패 — ${error.message}`,
+    };
+  }
+
+  // 공유 알림 — 기안자 + 결재선(작성자 본인은 notifyUsers가 스킵). 참조는 종결 알림만 받는 결이라 제외.
+  const recipients = [
+    ...new Set([String(doc.drafter_id), ...(steps ?? []).map((s) => String(s.approver_id))]),
+  ];
+  // 알림·감사로그는 서로 독립인 best-effort 부수효과 — 병렬(B4).
+  await Promise.all([
+    notifyUsers(
+      recipients.map((recipientId) => ({
+        tenantId: user.tenantId,
+        recipientId,
+        type: "approval_comment" as const,
+        title: "결재 문서 댓글",
+        body: `${doc.title} — ${user.displayName}: ${body.length > 60 ? `${body.slice(0, 60)}…` : body}`,
+        link: `/approvals/${docId}`,
+        actorId: user.id,
+      })),
+    ),
+    logAction({
+      action: "approval_comment",
+      targetType: "approval_document",
+      targetLabel: doc.title,
+      metadata: { docId },
+    }),
+  ]);
+  revalidatePath(`/approvals/${docId}`);
+  return { ok: true, notice: "댓글을 남겼습니다" };
+}
+
+/** 댓글 삭제 — 본인 것만(author_id 필터). 남긴 기록이라 수정은 두지 않는다(지우고 다시 단다). */
+export async function deleteApprovalComment(
+  _prev: ApprovalActionState,
+  formData: FormData,
+): Promise<ApprovalActionState> {
+  const gate = await requireSignedIn();
+  if ("error" in gate) return { error: gate.error };
+  const { user } = gate;
+
+  const commentId = String(formData.get("commentId") ?? "").trim();
+  if (!commentId) return { error: "삭제할 댓글을 찾을 수 없습니다" };
+
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("approval_comments")
+    .delete()
+    .eq("id", commentId)
+    .eq("tenant_id", user.tenantId)
+    .eq("author_id", user.id) // 남의 댓글은 못 지운다
+    .select("document_id")
+    .maybeSingle();
+  if (error) return { error: `댓글 삭제 실패 — ${error.message}` };
+  if (!data) return { error: "본인이 쓴 댓글만 삭제할 수 있습니다" };
+
+  // 감사로그 대상은 사람이 읽는 라벨(문서 제목) — raw UUID를 화면에 내보내지 않는다(작업 선호).
+  const { data: doc } = await admin
+    .from("approval_documents")
+    .select("title")
+    .eq("id", data.document_id)
+    .eq("tenant_id", user.tenantId)
+    .maybeSingle();
+  await logAction({
+    action: "approval_comment_delete",
+    targetType: "approval_document",
+    targetLabel: doc?.title ?? "결재 문서",
+    metadata: { commentId, docId: data.document_id },
+  });
+  revalidatePath(`/approvals/${data.document_id}`);
+  return { ok: true, notice: "댓글을 삭제했습니다" };
 }
 
 // ── 자주 쓰는 결재선(개인 템플릿, 하이웍스 대응) ─────────────────────────────

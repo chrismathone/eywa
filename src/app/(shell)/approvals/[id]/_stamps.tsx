@@ -9,7 +9,8 @@ import type { ApprovalDocRow, ApprovalStepCell } from "@/features/approvals/serv
  * 사인 칸 규칙(종이처럼 **빈 칸도 자리를 차지한다** — 고정 높이):
  *   승인 = 네이비 원형 도장 · 반려 = 빨간 원형 도장 · **전결** = 네이비 '전결' 도장(그 칸에서 즉시 종결) ·
  *   **후결** = 파란 '후결' 도장(부재 후 사후 확인 완료) · **후결 대기** = 점선 amber 칩(건너뛰어진 칸) ·
- *   생략 = 회색 "—"(전결로 안 거친 칸) · 지금 차례 = 파란 외곽 `결재` 칩(#decide 앵커) + 열 배경 ·
+ *   생략 = **사선 + '전결 생략'**(전결로 안 거친 칸 — 하이웍스 사선 표기, 원장 2026-08-19 "결재 안 해도
+ *   된다는 느낌") · 지금 차례 = 파란 외곽 `결재` 칩(누르면 결재 창) + 열 배경 ·
  *   아직 차례 아님 = **완전히 빈 칸** · 기안 = 중립 '상신' 도장. 처리일은 도장 아래(mm/dd).
  *
  * **대결**(0216a): 부재자 대신 결재한 실제 처리자(acted_by)가 있으면 도장 아래 "대결 · 이름"을 찍는다 —
@@ -119,10 +120,21 @@ function SignArea({ col, actionable }: { col: Col; actionable: boolean }) {
     );
   }
   if (col.sign === "skipped") {
-    // 전결로 문서가 그 앞에서 종결돼 거치지 않은 칸.
+    // 전결로 문서가 그 앞에서 종결돼 거치지 않은 칸 — 하이웍스처럼 사선을 그어
+    // "결재하지 않아도 되는 칸"임을 보이게 한다(원장 2026-08-19).
     return (
-      <span className="text-text-faint text-[13px]" title="전결로 생략된 결재 단계입니다">
-        —
+      <span
+        className="relative flex h-full w-full items-center justify-center"
+        title="앞 단계 전결로 승인 종결되어 결재가 필요 없는 칸입니다"
+      >
+        {/* 칸 대각선(좌하→우상) — 그라디언트 헤어라인(인라인 SVG는 아이콘 가드가 차트·장식 승인 목록으로 잠근다). */}
+        <span
+          aria-hidden
+          className="absolute inset-0 [background:linear-gradient(to_top_right,transparent_calc(50%-0.5px),var(--line-strong)_calc(50%-0.5px),var(--line-strong)_calc(50%+0.5px),transparent_calc(50%+0.5px))]"
+        />
+        <span className="bg-card text-text-faint relative px-1 text-[11px] font-medium">
+          전결 생략
+        </span>
       </span>
     );
   }

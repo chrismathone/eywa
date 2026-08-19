@@ -41,7 +41,9 @@ export type NotificationType =
   | "attendance_absence_intake"
   // 전자결재(0212a) — **내 결재 차례가 됐을 때** 그 결재자에게(순차라 한 명씩), 문서가 끝나면 기안자에게.
   | "approval_requested"
-  | "approval_decided";
+  | "approval_decided"
+  // 결재 문서에 댓글(0226a) — 기안자·결재선에게(작성자 제외). 전결 사유 등 공유가 목적이라 참조는 제외.
+  | "approval_comment";
 
 export type NotificationItem = {
   id: string;
@@ -79,4 +81,5 @@ export const NOTIFICATION_ICON: Record<string, EywaIconName> = {
   attendance_absence_intake: "userMinus",
   approval_requested: "scrollText",
   approval_decided: "clipboardCheck",
+  approval_comment: "message",
 };

@@ -415,6 +415,62 @@ export async function getApprovalDoc(id: string): Promise<ApprovalDocRow | null>
   return docs[0] ?? null;
 }
 
+export type ApprovalComment = {
+  id: string;
+  authorId: string;
+  authorName: string;
+  authorJobTitle: string | null;
+  body: string;
+  createdAt: string;
+};
+
+export type ApprovalCommentsBox = {
+  /** false = 0226a 미적용(표 없음) — 섹션 자체를 그리지 않는다([[#95]] expand/contract). */
+  ready: boolean;
+  comments: ApprovalComment[];
+  loadError: LeaveLoadError | null;
+};
+
+/**
+ * 문서 댓글(하이웍스 개편 전자결재 '댓글' 대응, 0226a) — 참여자가 전결 사유 등을 공유하는 대화형
+ * 코멘트. 결재 의견(approval_steps.comment)과 별개. 열람 자격은 RLS(auth_can_read_approval_doc).
+ */
+export async function getApprovalComments(documentId: string): Promise<ApprovalCommentsBox> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("approval_comments")
+    .select(
+      "id, author_id, body, created_at, author:users!approval_comments_author_id_fkey(display_name, job_title)",
+    )
+    .eq("document_id", documentId)
+    // 최신 200을 받아 표시 때 오래된 순으로 뒤집는다 — 오래된 순 + limit이면 상한을 넘는 순간
+    // **방금 단 댓글**이 잘려 "등록했는데 안 보인다"가 된다([[#89]] 냄새의 역truncation, 적대 리뷰).
+    .order("created_at", { ascending: false })
+    .limit(200); // 문서 하나의 댓글 스레드 — 절단 방지용 명시 상한(B2)
+  if (error) {
+    if (isMissingRelation(error)) return { ready: false, comments: [], loadError: null };
+    return { ready: true, comments: [], loadError: describeLoadError(new Error(error.message)) };
+  }
+  return {
+    ready: true,
+    loadError: null,
+    comments: [...(data ?? [])].reverse().map((c) => {
+      const author = c.author as unknown as {
+        display_name?: string;
+        job_title?: string | null;
+      } | null;
+      return {
+        id: String(c.id),
+        authorId: String(c.author_id),
+        authorName: author?.display_name ?? "(이름 없음)",
+        authorJobTitle: author?.job_title ?? null,
+        body: String(c.body),
+        createdAt: String(c.created_at),
+      };
+    }),
+  };
+}
+
 export type ApprovalPerson = { id: string; name: string; jobTitle: string | null };
 
 /**
