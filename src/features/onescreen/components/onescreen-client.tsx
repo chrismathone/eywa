@@ -48,6 +48,7 @@ import { SheetSourceCard } from "./sheet-source-card";
 import { TestCard } from "./test-card";
 import { ReportCard, type SubjectReport } from "./report-card";
 import { READONLY_TEACHER_VIEW_ERROR } from "@/lib/auth/view-as-message";
+import { REPORT_OPTOUT_NOTICE } from "@/features/classes/report-optout";
 import { ReportPreview, type ReportPreviewContext } from "./report-preview";
 import type { TrendReportRow } from "../report-trend";
 import type { ReportSettings } from "@/features/owner/settings-types";
@@ -63,6 +64,7 @@ import {
   isAttendanceUnchecked,
   isClassMember,
   isCopyTargetRow,
+  isReportOptoutRow,
   isRowInputEditable,
   isRowActionable,
   planBulkApply,
@@ -511,6 +513,7 @@ export function OneScreenClient({
           draft: reports[s.id]?.[su.name]?.draft,
           sent: reports[s.id]?.[su.name]?.sent,
           attendanceRaw: su.attendanceRaw,
+          reportOptout: su.reportOptout,
         })),
     );
   }
@@ -607,16 +610,24 @@ export function OneScreenClient({
   // 테스트 사용 여부(showDailyTest/showCheckTest)를 넘겨 비활성 테스트가 마감 카운트를 0에 고정하지 않게(#25).
   const testCfg = { dailyEnabled: showDailyTest, checkEnabled: showCheckTest };
   const reportCellById: Record<string, CellState> = {};
-  for (const s of students) reportCellById[s.id] = reportCell(reports[s.id], s.subjects.length);
+  // ⚠️ 분모에서 '수업보고서 미발송' 반 행은 뺀다(2026-08-19) — 안 빼면 정규 반 보고서를 다 써도
+  //    그 학생 '보고서' 칸이 영영 ok가 안 된다(그 반 행은 저장 자체가 잠겨 있다).
+  for (const s of students)
+    reportCellById[s.id] = reportCell(
+      reports[s.id],
+      s.subjects.filter((su) => !isReportOptoutRow(su)).length,
+    );
   // 이름 옆 발송 표시(원장 2026-07-27: "발송완료면 체크 같은 걸 이름 옆에" — 지금은 라벨 불 들어온 걸로만 구분).
   // 기준은 **학부모에게 실제로 나간 행**(ClassNote 발송 완료) — '저장됨'과 다르다(저장만으론 안 나간다).
   // ⚠️ ClassNote 발송이 꺼진 학원은 게시가 아예 없어 표시가 영원히 안 뜬다 → 그땐 '보고서 저장' 기준으로
   //    폴백하되, 툴팁 라벨로 어느 기준인지 밝힌다(같은 아이콘이 말없이 다른 뜻이 되지 않게).
   // ⚠️ 분모에서 결석 행은 뺀다 — 발송이 원천 차단된 행이라 남기면 "1/2"가 영영 안 채워진다(#77과 같은 이유).
+  //    '수업보고서 미발송' 반(0174a) 행도 같은 이유로 뺀다(2026-08-19) — 그 반은 발송이 **영구히** 없어서
+  //    남기면 그 학생 표시가 영원히 안 채워진다.
   const sendMarkLabel = classnoteSendEnabled ? "학부모 발송" : "보고서 저장";
   const sendMarkById: Record<string, SendMark> = {};
   for (const s of students) {
-    const rows = s.subjects.filter((su) => su.attendanceRaw !== "absent");
+    const rows = s.subjects.filter((su) => su.attendanceRaw !== "absent" && !isReportOptoutRow(su));
     const sent = rows.filter((su) => {
       const rep = reports[s.id]?.[su.name];
       return classnoteSendEnabled
@@ -625,7 +636,15 @@ export function OneScreenClient({
     }).length;
     sendMarkById[s.id] = { sent, total: rows.length, label: sendMarkLabel };
   }
-  const doneCount = students.filter((s) => {
+  /**
+   * 마감 분모 = **쓸 보고서가 있는 학생**. '수업보고서 미발송' 반만 듣는 학생은 진도·테스트·보고서 입력이
+   * 전부 잠겨 있어(grid.ts) 강사가 채울 수단이 없다 — 분모에 남기면 그 날의 마감이 **영영 0/N**이 된다
+   * (#77: 행동을 재촉하는 표시는 그 행동의 실제 게이트와 같은 조건이어야 한다). 2026-08-19.
+   * ⚠️ 그 학생이 화면에서 사라지는 게 아니다 — 출결을 찍으라고 로스터에 있는 것이고, 여기서 빼는 건
+   *    **숫자의 분모**뿐이다.
+   */
+  const reportableStudents = students.filter((s) => s.subjects.some((su) => !isReportOptoutRow(su)));
+  const doneCount = reportableStudents.filter((s) => {
     const st = studentStatus(s, testCfg);
     return st.prog === "ok" && st.test === "ok" && reportCellById[s.id] === "ok";
   }).length;
@@ -642,10 +661,10 @@ export function OneScreenClient({
   );
 
   const hubStats = {
-    students: students.length,
-    progressDone: students.filter((s) => s.progressConfirmed).length,
-    testDone: students.filter((s) => studentStatus(s, testCfg).test === "ok").length,
-    reportDone: students.filter((s) => reportCellById[s.id] === "ok").length,
+    students: reportableStudents.length,
+    progressDone: reportableStudents.filter((s) => s.progressConfirmed).length,
+    testDone: reportableStudents.filter((s) => studentStatus(s, testCfg).test === "ok").length,
+    reportDone: reportableStudents.filter((s) => reportCellById[s.id] === "ok").length,
   };
 
   function patch(id: string, fn: (s: OneScreenStudent) => OneScreenStudent) {
@@ -1886,8 +1905,10 @@ export function OneScreenClient({
     if (res.plan.length === 0) {
       // 왜 아무 일도 안 일어났는지 말해준다 — "눌렀는데 무반응"이 되지 않게.
       const why = [
-        // ⚠️ 이 카운터엔 결석 행도 들어온다(2026-08-07) — "발송 완료 N행"만 적으면 거짓말이 된다.
-        res.skippedSent ? `발송 완료·결석 ${res.skippedSent}행` : "",
+        // ⚠️ 이 카운터엔 결석 행(2026-08-07)과 '수업보고서 미발송' 반 행(2026-08-19)도 들어온다 —
+        //    사유를 하나로 단정하면 거짓말이 된다. 판정 자체가 `isRowInputEditable`(입력 잠김)이라
+        //    **잠김**이 셋 다 참인 유일한 이름이다.
+        res.skippedSent ? `입력 잠김 ${res.skippedSent}행` : "",
         res.skippedSubject ? `다른 과목 ${res.skippedSubject}행` : "",
         res.skippedFilled ? `이미 입력됨 ${res.skippedFilled}행` : "",
       ].filter(Boolean);
@@ -1904,7 +1925,7 @@ export function OneScreenClient({
       `${first.student.name} 행을 ${res.plan.length}행에 복사했습니다` +
         (skipped
           ? ` · 건너뜀 ${skipped}행(${[
-              res.skippedSent ? `발송완료·결석 ${res.skippedSent}` : "",
+              res.skippedSent ? `입력 잠김 ${res.skippedSent}` : "",
               res.skippedSubject ? `다른 과목 ${res.skippedSubject}` : "",
               res.skippedFilled ? `이미 입력 ${res.skippedFilled}` : "",
             ]
@@ -2231,6 +2252,12 @@ export function OneScreenClient({
       toast.message(`${subjectName} — 저장했지만 이 과목은 발송 대상이 아니라 전송하지 않았습니다(원장 설정의 발송 과목 확인)`);
       return;
     }
+    // '수업보고서 미발송' 반 게이트(서버판, 2026-08-19) — 여기서 안 잡으면 아래 폴스루가 "대기 중"
+    // 성공 토스트를 띄운다(서버가 방금 거절한 발송을 성공으로 오인).
+    if (res.status === "report_optout") {
+      toast.message(`${subjectName} — ${REPORT_OPTOUT_NOTICE}(기록 저장은 유지)`);
+      return;
+    }
     // 결석 게이트(#77 서버판) — 버튼 disabled를 우회한 경로(반 모호 행·stale 화면)도 서버가 막는다.
     if (res.status === "absent") {
       toast.message(`${subjectName} — 수업일 출결이 결석으로 기록돼 있어 발송하지 않았습니다(기록 저장은 유지)`);
@@ -2295,6 +2322,9 @@ export function OneScreenClient({
     } else if (res.status === "subject_off") {
       // 발송 대상 과목이 아님 — 저장만 됨. "발송 대기" 성공 오안내 방지(#2 확정).
       toast.message(`${student.name} ${subjectName} — 저장했지만 발송 대상 과목이 아니라 전송하지 않았습니다`);
+    } else if (res.status === "report_optout") {
+      // 미발송 반 게이트(서버판, 2026-08-19) — 화면 게이트를 지난 경로(stale 화면)도 서버가 막는다.
+      toast.message(`${student.name} ${subjectName} — ${REPORT_OPTOUT_NOTICE}(기록 저장은 유지)`);
     } else if (res.status === "absent") {
       // 결석 게이트(#77 서버판) — 반 모호(attendanceRaw 미채움) 행 등 클라 게이트 사각을 서버가 막은 경우.
       toast.message(`${student.name} — 수업일 출결이 결석으로 기록돼 있어 발송하지 않았습니다(기록 저장은 유지)`);
@@ -2448,6 +2478,7 @@ export function OneScreenClient({
     let subjectOff = 0; // 발송 대상 과목 아님(저장만) — '발송 대기'로 뭉뚱그리지 않고 명시(#2 확정)
     let absentSkip = 0; // 서버 결석 게이트에 걸린 행(클라 사전 필터의 사각 — 반 모호 행 등)
     let uncheckedSkip = 0; // 서버 출결 미체크 게이트에 걸린 행(stale 화면 등 클라 게이트 사각)
+    let optoutSkip = 0; // 서버 '수업보고서 미발송' 반 게이트에 걸린 행(2026-08-19)
     let sentSkip = 0; // 서버 중복 게시 가드에 걸린 행(다른 창에서 먼저 보낸 경우 등)
     let dry = 0;
     let fail = 0;
@@ -2465,6 +2496,7 @@ export function OneScreenClient({
         else if (res.status === "name_conflict" || res.status === "revoked" || res.status === "recall_pending") blocked++;
         else if (res.status === "absent") absentSkip++; // 서버 결석 게이트(클라 사전 필터를 지난 반 모호 행 등)
         else if (res.status === "no_attendance") uncheckedSkip++; // 서버 출결 미체크 게이트(stale 화면 등)
+        else if (res.status === "report_optout") optoutSkip++; // 서버 미발송 반 게이트(2026-08-19)
         else if (res.status === "already_sent") sentSkip++; // 서버 중복 게시 가드(클라 게이트를 지난 stale 행)
         else skipped++; // processing/too_old
       }
@@ -2477,6 +2509,7 @@ export function OneScreenClient({
         (subjectOff ? ` · 과목 제외 ${subjectOff}건(발송 대상 과목 아님)` : "") +
         (absentSkip ? ` · 결석 제외 ${absentSkip}건` : "") +
         (uncheckedSkip ? ` · 출결 미체크 제외 ${uncheckedSkip}건` : "") +
+        (optoutSkip ? ` · 미발송 반 제외 ${optoutSkip}건` : "") +
         (alreadySentRows || sentSkip ? ` · 발송완료 제외 ${alreadySentRows + sentSkip}건` : "") +
         (blocked ? ` · 차단 ${blocked}건(동명이인/취소)` : "") +
         (skipped ? ` · 제외 ${skipped}건` : "") +
@@ -2771,7 +2804,7 @@ export function OneScreenClient({
         writeCounts={writeCounts}
         onWriteFilter={changeWriteFilter}
         doneCount={doneCount}
-        total={students.length}
+        total={reportableStudents.length}
         view={view}
         onView={setView}
         stats={hubStats}

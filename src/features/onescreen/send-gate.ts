@@ -9,6 +9,7 @@
  *
  * ⚠️ 판정 근거는 실제 발송 경로의 게이트와 **1:1로 맞춘다**:
  *    · 발송 완료  = `isAlreadySent` (grid.ts — ClassNote는 게시글 수정이 없어 재발송 금지)
+ *    · 미발송 반   = `isReportOptoutRow` (grid.ts — 0174a 반은 발송 자체가 없다, 2026-08-19)
  *    · 결석       = `attendanceRaw === "absent"` (isRowActionable "send")
  *    · 출결 미체크 = `isAttendanceUnchecked` (2026-08-17 — 출결 체크도 발송 필요 입력, 정규 반 행만)
  *    · 진도 미입력 = `isReportEligible` (빈 보고서 방지)
@@ -16,8 +17,19 @@
  *      최종 관문에서 차단한다. 예전엔 버튼이 멀쩡히 눌려서 빨간 토스트로만 알 수 있었다.
  */
 
+import { REPORT_OPTOUT_NOTICE, REPORT_OPTOUT_SHORT } from "@/features/classes/report-optout";
+
 /** 발송을 막는 사유. sent·absent는 **상태**(고칠 게 아니라 그런 행), attendance·progress·ment는 **필요한 입력**. */
-export type SendBlockReason = "sent" | "absent" | "attendance" | "progress" | "ment" | "recall_pending" | "readonly";
+export type SendBlockReason =
+  | "sent"
+  | "absent"
+  | "attendance"
+  | "progress"
+  | "ment"
+  | "recall_pending"
+  | "readonly"
+  /** '수업보고서 미발송' 반(0174a) — 발송이 없는 반. 출결만 찍는다(2026-08-19). */
+  | "report_optout";
 
 /** 입력이 필요한 사유의 짧은 이름 — 라벨에서 "출결 · 진도 · 멘트 입력 필요"로 이어 붙인다. */
 const NEED_LABEL: Record<"attendance" | "progress" | "ment", string> = {
@@ -45,6 +57,11 @@ export type SendGate = {
  */
 export function evaluateSendGate(args: {
   alreadySent: boolean;
+  /**
+   * 이 행의 반이 '수업보고서 미발송'(0174a)인가 — `isReportOptoutRow`(grid.ts)를 그대로 넣는다.
+   * 옵셔널인 이유: 로스터 밖 호출부(데모·보강 행)는 반이 없어 애초에 해당이 없다.
+   */
+  reportOptout?: boolean;
   isAbsent: boolean;
   hasProgress: boolean;
   hasDraft: boolean;
@@ -82,12 +99,22 @@ export function evaluateSendGate(args: {
       hint: "학부모 게시글을 지우는 중입니다 — 끝나면 수정해서 다시 보낼 수 있습니다",
     };
   }
+  // 🔴 이미 발송된 건이 있으면 그 사실이 먼저다 — "미발송 반"이라고만 하면 이미 나간 글을 못 본다.
+  //    (미발송 반이 되기 전에 쓴 옛 보고서가 실제로 있을 수 있다.)
   if (args.alreadySent) {
     return {
       canSend: false,
       reasons: ["sent"],
       label: "발송됨 — 재발송 불가",
       hint: "이미 학부모에게 발송된 보고서입니다 — ClassNote는 게시글 수정이 안 됩니다",
+    };
+  }
+  if (args.reportOptout) {
+    return {
+      canSend: false,
+      reasons: ["report_optout"],
+      label: REPORT_OPTOUT_SHORT,
+      hint: REPORT_OPTOUT_NOTICE,
     };
   }
   if (args.isAbsent) {

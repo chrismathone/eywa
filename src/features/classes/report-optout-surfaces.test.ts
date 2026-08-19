@@ -1,9 +1,14 @@
 /**
  * '수업보고서 미발송'(0174a)이 **표면 하나에서 빠지는 것**을 막는 회귀 테스트.
  *
- * 이 기능의 유일한 실패 모드는 #77 — "화면에선 숨겼는데 다른 데선 보인다"이다. 실제 소비처가 7곳이고
+ * 이 기능의 유일한 실패 모드는 #77 — "화면에선 숨겼는데 다른 데선 보인다"이다. 실제 소비처가 여럿이고
  * (작성률 · 영어 작성률 · 오늘 미작성 신호 · 로스터 · 직접 발송 · 반 구성 대조 · 미발송 재촉 · 출결 파생)
  * 그중 하나라도 놓치면 원장 화면에서 숫자가 갈리거나 강사가 여전히 그 반을 본다.
+ *
+ * 🔴 **2026-08-19부터 방향이 둘이다.** 원장 지시 *"보고서는 안보내지만 이제부터라도 출결은 찍을것"*으로
+ *    **출결** 표면(당일 출결 보드·원스크린 로스터)은 이 반을 **빼면 안 된다**. 그래서 아래 두 묶음이 있다:
+ *      ① SURFACES  = 보고서 쪽에서 이 플래그를 **봐야** 하는 곳(빠뜨리면 미발송 반이 되살아난다)
+ *      ② 아래 반대 방향 가드 = 출결 쪽에서 이 플래그로 **거르면 안 되는** 곳(되돌리면 출결을 못 찍는다)
  *
  * 그래서 **파일 목록을 못 박고** 각 파일이 이 컬럼을 실제로 보는지 검사한다. 새 보고서 화면을 추가하는
  * 다음 사람은 여기서 걸려야 한다.
@@ -17,7 +22,12 @@ import { describe, expect, it } from "vitest";
 
 /** 이 컬럼을 **반드시 봐야 하는** 소비 표면. 새로 생기면 여기에 추가할 것. */
 const SURFACES: { path: string; why: string }[] = [
-  { path: "src/features/onescreen/server/roster.ts", why: "강사 보고서 작성 화면의 반 목록(요구 ①)" },
+  {
+    path: "src/features/onescreen/server/roster.ts",
+    why: "로스터 **행에 플래그를 실어** 보고서 칸만 잠근다(2026-08-19 — 목록에서 빼지는 않는다)",
+  },
+  { path: "src/features/onescreen/grid.ts", why: "원스크린 행 입력 잠금·발송/자동작성 게이트(isReportOptoutRow)" },
+  { path: "src/features/onescreen/server/actions.ts", why: "강사 발송 서버 재검증(#77) — 저장은 하고 큐잉만 막는다" },
   { path: "src/features/report-admin/server/queries.ts", why: "작성률 분모 + 영어 작성률(요구 ②)" },
   { path: "src/features/dashboard/server/action-signals.ts", why: "대시보드/브리핑 '오늘 미작성' — 작성률과 별도 경로" },
   { path: "src/features/report-admin/server/compose-actions.ts", why: "직접 발송 서버 재검증(#77)" },
@@ -25,7 +35,6 @@ const SURFACES: { path: string; why: string }[] = [
   { path: "src/features/report-admin/server/board-roster-queries.ts", why: "'반 구성' 보드 대조" },
   { path: "src/features/notifications/server/events.ts", why: "'미발송 보고서' 재촉 알림" },
   { path: "src/features/attendance/server/queries.ts", why: "🔴 출결 파생 — 빼면 지난 등원일이 전부 결석으로 뒤집힌다" },
-  { path: "src/features/attendance/live/server/load.ts", why: "당일 출결 보드·좌석표 — 미발송 반이 미출결로 쏟아진다" },
   { path: "src/features/classes/server/delegation.ts", why: "로스터에 값 실어 나르기" },
   { path: "src/features/classes/server/actions.ts", why: "반 생성/수정 저장" },
   { path: "src/app/(shell)/lesson-reports/_components/bulk-compose-face.tsx", why: "직접 발송 반 체크박스 목록" },
@@ -41,6 +50,61 @@ describe("수업보고서 미발송 — 소비 표면 전수(0174a)", () => {
         `보고서 표면은 classes.report_optout을 함께 볼 것 — 한 곳만 빠져도 ` +
         `"목록에선 사라졌는데 여기선 보인다"가 됩니다(#77). ` +
         `표면을 의도적으로 없앴다면 이 목록에서도 지우고 그 이유를 커밋 메시지에 남기세요.`,
+    ).toBe(true);
+  });
+
+  /**
+   * 🔴 **반대 방향 가드**(2026-08-19) — 출결 표면에서 이 플래그로 반을 거르면 안 된다.
+   *
+   * 원장 지시: *"보고서는 안보내지만 이제부터라도 출결은 찍을것"*. 그 전까지 미발송 3반은
+   * ① 원스크린 로스터(`.filter((c) => !c.reportOptout)`)와 ② 당일 출결 보드(`isReportOptout` continue)
+   * 두 곳 모두에서 빠져 **담임도 데스크도 출결을 찍을 수단이 아예 없었다**(실측 전 기간 출결 0행).
+   * 이 가드는 다음 사람이 "여기도 걸러야 하지 않나"로 무심코 되돌리는 것을 막는다.
+   */
+  it("🔴 출결 표면은 미발송 반을 목록에서 빼지 않는다 — 보고서는 안 보내도 출결은 찍는다(2026-08-19)", () => {
+    const live = readFileSync(join(process.cwd(), "src/features/attendance/live/server/load.ts"), "utf8");
+    expect(
+      /from "@\/features\/classes\/report-optout"/.test(live),
+      "당일 출결 보드(live/server/load.ts)가 다시 '수업보고서 미발송' 판정을 가져왔습니다. " +
+        "이 보드에서 그 반을 거르면 데스크가 대신 출결을 찍어 줄 수도 없습니다(원장 2026-08-19). " +
+        "보고서 쪽 제외는 SURFACES의 보고서 표면들이 맡습니다.",
+    ).toBe(false);
+
+    const roster = readFileSync(join(process.cwd(), "src/features/onescreen/server/roster.ts"), "utf8");
+    for (const [pattern, what] of [
+      [/filter\([^)]*!\s*c\.reportOptout/, "`.filter((c) => !c.reportOptout)`"],
+      [/keepReportedClasses/, "`keepReportedClasses`"],
+    ] as const) {
+      expect(
+        pattern.test(roster),
+        `원스크린 로스터가 ${what}로 미발송 반을 목록에서 다시 뺐습니다. ` +
+          "원스크린은 **출결 알약이 있는 유일한 강사 화면**이라, 목록에서 빼면 담임이 그 반 출결을 " +
+          "찍을 방법이 사라집니다. 반은 남기고 행 플래그(`reportOptout`)로 보고서 칸만 잠그세요.",
+      ).toBe(false);
+    }
+  });
+
+  it("🔴 로스터는 반을 남기되 보고서 칸은 잠근다 — 행에 플래그를 실어 보낸다", () => {
+    const roster = readFileSync(join(process.cwd(), "src/features/onescreen/server/roster.ts"), "utf8");
+    expect(
+      /reportOptout: true/.test(roster),
+      "로스터가 과목 행에 `reportOptout`을 싣지 않습니다 — 플래그가 없으면 grid.ts의 잠금·발송 게이트가 " +
+        "그 행을 평범한 반으로 보고 보고서 입력·발송을 열어 줍니다(#77의 뒤집힌 꼴).",
+    ).toBe(true);
+  });
+
+  it("🔴 발송 게이트는 화면 한 겹이 아니다 — 서버도 미발송 반을 큐잉하지 않는다(#77)", () => {
+    const actions = readFileSync(join(process.cwd(), "src/features/onescreen/server/actions.ts"), "utf8");
+    expect(
+      /status: "report_optout"/.test(actions),
+      "강사 발송 액션(saveAndQueueClassnote)에 '수업보고서 미발송' 반 게이트가 없습니다. " +
+        "화면 버튼만 잠그면 stale 화면·직접 호출로 우회돼 그 반 보고서가 학부모에게 나갑니다(#77). " +
+        "관리자 일괄 발송(compose-actions)이 이미 서버에서 다시 거르는 것과 같은 축입니다.",
+    ).toBe(true);
+    // 저장까지 막으면 그 반의 **지난 보고서 수정**이 잠긴다(report-optout.ts가 못 박은 "숨김이지 차단이 아니다").
+    expect(
+      /const saved = await saveLessonReport\(input\);[\s\S]*status: "report_optout"/.test(actions),
+      "미발송 반 게이트가 저장(saveLessonReport)보다 앞에 있습니다 — 발송만 막고 저장은 통과시켜야 합니다.",
     ).toBe(true);
   });
 

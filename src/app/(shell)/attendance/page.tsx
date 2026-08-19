@@ -24,6 +24,8 @@ import { AbsenceIntakeButton } from "./_components/absence-intake-button";
 import { effectiveTeacherId } from "@/lib/auth/view-mode";
 // 출결 강사 귀속 축 단일 소스 — 담임(classes.teacher_id)만 보면 교시 담당 강사가 자기 수업을 못 본다.
 import { classTeacherRole, type ClassTeacherRole } from "@/features/attendance/teacher-axis";
+import { getHomeroomSinceIndex } from "@/features/classes/server/teacher-as-of-queries";
+import { homeroomSinceOf } from "@/features/classes/teacher-as-of";
 import { loadAttendanceViewPrefs } from "@/features/attendance/server/prefs-actions";
 import { PeriodModeToggle } from "./_components/period-mode-toggle";
 import { countMarks, sumCounts } from "@/features/attendance/grid/totals";
@@ -55,6 +57,12 @@ function shiftMonth(month: string, delta: number): string {
 function formatMonth(month: string): string {
   const [y, m] = month.split("-");
   return `${y}년 ${Number(m)}월`;
+}
+
+/** "2026-08-10" → "8/10" — 반 머리행 칩처럼 좁은 자리용(연도는 그 표가 이미 말한다). */
+function dayLabel(ymd: string): string {
+  const [, m, d] = ymd.split("-");
+  return `${Number(m)}/${Number(d)}`;
 }
 
 // 월 보기를 항상 31칸으로 — 그 달 실제 일수 뒤에 placeholder 빈 칸을 채운다(예: 28일 달은 29~31 빈 칸).
@@ -321,6 +329,25 @@ export default async function AttendancePage({
     ]),
   );
   const mode: ViewMode = requestedMode === "teacher" && teacherClasses.length > 0 ? "teacher" : "class";
+  /**
+   * **담임이 되기 전 기록**을 그 강사 표에서 뺀다(원장 제보 2026-08-19: *"김주현 선생님이 출결한것도
+   * 아닌데 보이는것도 같이 수정해야겠네."*). `classes.teacher_id`는 현재 담임이라 시간 축이 없어서,
+   * 인계(8/10·8/14) 이전에 **전임이 넣은** 기록까지 새 담임 출석부에 잡혔다.
+   *
+   * 🔴 **담임 폴백으로 잡힌 반만** 대상이다 — 교시 담당(`slot`)·겸임(`both`)은 그 사람이 실제로 그날
+   *    그 교시를 가르쳤으므로 가리면 안 된다(그게 이 화면이 2026-08-18에 넓어진 이유다).
+   * 🔴 근거(인수인계·담임 변경 감사로그)가 없으면 `null` → **아무것도 숨기지 않는다**(폴백이 안전벨트).
+   * ⚠️ 반별 보기·급여 별지에는 넘기지 않는다 — 반 관점에선 그 기록이 맞고, 돈 축은 담임 그대로다.
+   */
+  const homeroomSinceIdx = mode === "teacher" && effectiveTeacher ? await getHomeroomSinceIndex() : null;
+  const sinceByClass = new Map<string, string | null>(
+    teacherClasses.map((c) => [
+      c.id,
+      homeroomSinceIdx && teacherRoles.get(c.id) === "homeroom"
+        ? homeroomSinceOf(homeroomSinceIdx, c.id, effectiveTeacher)
+        : null,
+    ]),
+  );
   const teacherMatrices =
     mode === "teacher"
       // ⚠️ 강사 전체 보기는 여러 반을 **한 표**에 그리는데 세션은 과목별이라 반마다 기간이 다를 수 있다.
@@ -330,7 +357,9 @@ export default async function AttendancePage({
       //    가르친 강사의 출석부에 남의 교시까지 잡힌다(원장 제보 2026-08-18: 8/10 김근호가 이다교 선생님
       //    출석부에 3 — 실제 이다교 몫은 1). 귀속 판정은 resolveTaughtBy 단일 소스가 한다.
       ? await Promise.all(
-          teacherClasses.map((c) => getMonthlyAttendanceMatrix(month, c.id, "month", effectiveTeacher)),
+          teacherClasses.map((c) =>
+            getMonthlyAttendanceMatrix(month, c.id, "month", effectiveTeacher, sinceByClass.get(c.id) ?? null),
+          ),
         )
       : [];
   /**
@@ -381,6 +410,8 @@ export default async function AttendancePage({
           // ⚠️ 담임인 반엔 안 붙인다(`both` 포함) — 영어는 담임이 자기 반 교시도 맡는 게 보통이라
           //    거기까지 붙이면 거의 모든 반에 배지가 달려 정작 남의 반 표식이 안 보인다.
           roleLabel: teacherRoles.get(c.id) === "slot" ? "교시 담당" : null,
+          // 담임 시작일 — 그 이전 칸이 왜 값에서 빠졌는지 반 머리행에서 밝힌다(빗금만 있으면 "왜 비었지").
+          sinceLabel: sinceByClass.get(c.id) ? `${dayLabel(sinceByClass.get(c.id)!)}부터 담임` : null,
         }))
       : effectiveClassId && selectedClass
         ? [

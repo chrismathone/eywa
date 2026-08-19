@@ -5,7 +5,7 @@
  * 판정 기준은 **학부모 문구(초안)** — 진도·점수가 아니라 실제로 학부모에게 나갈 문장이 있느냐다.
  * (발송 현황 보드의 3단계 미작성/작성중/발송완료와는 축이 다르다: 저긴 행 단위 진척, 여긴 학생 단위 "쓸 게 남았나".)
  *
- * ⚠️ **결석 행은 판정에서 뺀다.** 결석 행은 발송이 원천 차단돼(`isRowActionable(…,"send")`) 문구를 채워도
+ * ⚠️ **결석 행과 '수업보고서 미발송' 반 행은 판정에서 뺀다.** 결석 행은 발송이 원천 차단돼(`isRowActionable(…,"send")`) 문구를 채워도
  *    학부모에게 나가지 않는다 — 그걸 '미작성'에 남기면 **끝낼 수 없는 할 일**이 목록에 영원히 박힌다
  *    (CLAUDE.md #77: 행동을 재촉하는 표시는 그 행동의 실제 게이트와 같은 조건이어야 한다).
  */
@@ -20,11 +20,16 @@ export type WriteRow = {
   sent?: boolean;
   /** 이 행(반)의 대상 날짜 출결 raw. "absent"면 발송 불가라 판정 제외. */
   attendanceRaw?: string | null;
+  /**
+   * 이 행의 반이 '수업보고서 미발송'(0174a)인가 — **결석과 같은 이유로 판정에서 뺀다**(2026-08-19).
+   * 그 반은 보고서 입력 자체가 잠겨 있어(grid.ts `isRowInputEditable`) 강사가 채울 수단이 없다.
+   */
+  reportOptout?: boolean;
 };
 
-/** 이 행이 판정 대상인가 — 결석(발송 불가) 행은 제외. */
+/** 이 행이 판정 대상인가 — 결석·미발송 반(둘 다 발송 불가) 행은 제외. */
 export function isWriteTargetRow(row: WriteRow): boolean {
-  return row.attendanceRaw !== "absent";
+  return row.attendanceRaw !== "absent" && row.reportOptout !== true;
 }
 
 /** 행 1건이 '작성됨'인가 — 이미 저장/발송됐거나 문구 초안이 채워짐. */

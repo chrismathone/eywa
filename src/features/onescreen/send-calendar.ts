@@ -37,11 +37,12 @@ const BUCKET: Record<string, SendBucket> = {
   name_conflict: "problem",
   blocked_shared: "problem",
   too_old: "excluded",
-  // ⚠️ 아래 둘은 **DB에 저장되지 않는 반환 전용 상태**라 실데이터에선 도달하지 않는다. 남겨 둔 이유는
+  // ⚠️ 아래 셋은 **DB에 저장되지 않는 반환 전용 상태**라 실데이터에선 도달하지 않는다. 남겨 둔 이유는
   // 혹시 향후 컬럼에 기록되도록 바뀌면 즉시 올바르게 분류되게 하기 위함이며, 이 표에 의존해
   // "결석은 분모에서 빠진다"고 주장하면 안 된다(그 역할은 RPC의 sendable).
   subject_off: "excluded",
   absent: "excluded",
+  report_optout: "excluded",
 };
 
 /**

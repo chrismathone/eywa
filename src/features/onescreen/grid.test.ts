@@ -210,6 +210,29 @@ describe("isRowActionable", () => {
     expect(isRowInputEditable({ ...absent, attendanceRaw: "present" })).toBe(true);
   });
 
+  /**
+   * 🔴 '수업보고서 미발송' 반(0174a) — 2026-08-19부터 로스터에 **돌아왔다**(출결을 찍어야 해서).
+   *    반이 화면에 있는 것과 보고서 칸이 열려 있는 것은 다르다: 출결은 살리고 보고서만 잠근다.
+   */
+  it("미발송 반 행 — 보고서 입력이 잠기고 send·autowrite도 제외(save는 유지)", () => {
+    const optout = sub({ reportOptout: true });
+    expect(isRowInputEditable(optout)).toBe(false);
+    expect(isRowActionable(optout, "send")).toBe(false);
+    expect(isRowActionable(optout, "autowrite")).toBe(false);
+    // 🔴 save까지 막으면 그 반의 **지난 보고서 수정**이 잠긴다(report-optout.ts: "숨김이지 차단이 아니다").
+    expect(isRowActionable(optout, "save")).toBe(true);
+  });
+
+  it("미발송 반 잠금은 **출결과 무관**하다 — 출결을 바꿔도 계속 잠겨 있고, 정상 반은 안 잠긴다", () => {
+    for (const st of ["present", "late", "absent", undefined]) {
+      expect(isRowInputEditable(sub({ reportOptout: true, attendanceRaw: st }))).toBe(false);
+    }
+    // 플래그가 없는(=대부분의) 행은 종전과 완전히 같다.
+    expect(isRowInputEditable(sub())).toBe(true);
+    expect(isRowInputEditable(sub({ reportOptout: false }))).toBe(true);
+    expect(isRowActionable(sub({ reportOptout: false }), "send")).toBe(true);
+  });
+
   it("결석 행 — save는 포함(기록 보존), send/autowrite는 제외", () => {
     const absent = sub({ attendanceRaw: "absent" });
     expect(isRowActionable(absent, "save")).toBe(true);
