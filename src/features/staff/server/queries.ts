@@ -182,11 +182,24 @@ export type StaffDetail = {
   seatJjDuty: boolean;
   /** 오늘 출결 데스크 알림 — 강사가 미출결→출결로 바꾸면 벨(0212a). */
   deskAttendanceOptin: boolean;
+  /** '강사뷰 접근'(0224a) — 다른 강사의 강사뷰 열람(열람 전용) 허용. 편집은 master(+super_admin)만. */
+  teacherViewAccess: boolean;
   hourlyRate: number;
   monthlyBase: number;
   department: string | null; // 0147a — 이력서 프리필·상세 표시용
   employmentType: string | null;
 };
+
+/** '강사뷰 접근'(0224a) — 컬럼 미적용이면 에러 없이 false(#95: getStaffById 본 select에 싣지 말 것). */
+async function getTeacherViewAccessFlag(id: string): Promise<boolean> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("users")
+    .select("teacher_view_access")
+    .eq("id", id)
+    .maybeSingle();
+  return !error && data?.teacher_view_access === true;
+}
 
 export async function getStaffById(id: string): Promise<StaffDetail | null> {
   const supabase = await createClient();
@@ -200,8 +213,12 @@ export async function getStaffById(id: string): Promise<StaffDetail | null> {
 
   if (!data) return null;
 
-  // 자리 담당·데스크 알림 컬럼은 0209a/0212a 이후. 없으면 빈 값으로 — 직원 상세를 죽이지 않는다(#95).
-  const [duties, deskOptin] = await Promise.all([getSeatDuties(id), getDeskAttendanceOptin(id)]);
+  // 자리 담당·데스크 알림·강사뷰 접근 컬럼은 0209a/0212a/0224a 이후. 없으면 빈 값으로 — 직원 상세를 죽이지 않는다(#95).
+  const [duties, deskOptin, teacherViewAccess] = await Promise.all([
+    getSeatDuties(id),
+    getDeskAttendanceOptin(id),
+    getTeacherViewAccessFlag(id),
+  ]);
 
   return {
     id: data.id,
@@ -211,6 +228,7 @@ export async function getStaffById(id: string): Promise<StaffDetail | null> {
     seatLabDuty: duties.lab,
     seatJjDuty: duties.jj,
     deskAttendanceOptin: deskOptin,
+    teacherViewAccess,
     email: data.email,
     phone: data.phone ?? null,
     systemRole: data.system_role as SystemRole,

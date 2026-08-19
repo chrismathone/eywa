@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { viewAsTeacher } from "@/lib/auth/view-mode";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { classnoteMinDate } from "../classnote-guard";
 import { monthRange, type SendStatRow } from "../send-calendar";
@@ -19,7 +20,9 @@ export async function getMySendCalendar(input: {
 }): Promise<{ ok: boolean; rows?: SendStatRow[]; error?: string }> {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
-  const teacherName = user.displayName?.trim();
+  // '다른 강사 뷰'(열람 전용) = 그 강사의 달력 — "지난 보고서"(history-actions)와 같은 축(갈라지면 달력과 상세가 어긋난다).
+  const viewAs = await viewAsTeacher();
+  const teacherName = (viewAs ? viewAs.displayName : user.displayName)?.trim();
   if (!teacherName) return { ok: false, error: "강사 이름이 없습니다" };
   if (!/^\d{4}-\d{2}$/.test(input.month)) return { ok: false, error: "달 형식이 올바르지 않습니다" };
 

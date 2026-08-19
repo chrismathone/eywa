@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/current-user";
-import { getShellView } from "@/lib/auth/view-mode";
+import { getShellView, viewAsTeacher } from "@/lib/auth/view-mode";
 import { getPermMatrix } from "@/lib/auth/perm-matrix";
 import { roleHome } from "@/lib/permissions";
 import { getTeacherRoster } from "@/features/onescreen/server/roster";
@@ -39,9 +39,11 @@ export default async function OneScreenPage({
   // 본인 실명 기록)의 발송 표기와 미리보기를 맞춘다. ⚠️ 옛 별칭 보강 행(pre-0172a, teacher_name이 실명이
   // 아닌 행)은 /r가 행별 저장값으로 해석하므로 미리보기와 다를 수 있다(재저장하면 실명으로 갱신돼 일치).
   // ⚠️ 로스터(전원 핫패스)에 새 컬럼을 넣지 않는다(#95) — 실패해도 sendName=null이라 실명으로 그대로 산다.
+  // '다른 강사 뷰'(열람 전용)면 로스터·발송용 이름 모두 그 강사 기준(로스터는 내부에서 같은 판정 공유).
+  const viewAs = await viewAsTeacher();
   const [roster, sendName] = await Promise.all([
     getTeacherRoster(date, all === "1"),
-    resolveReportAuthorName(user.tenantId, user.displayName),
+    resolveReportAuthorName(user.tenantId, viewAs?.displayName ?? user.displayName),
   ]);
   // 진입 지정(2026-08-07) — '오늘 ECS' 카드에서 `?class=&student=`로 넘어온다.
   // 🔴 **로스터 안에 실제로 있을 때만** 넘긴다. 남의 반 id를 URL에 적어도 여기서 걸러지고(로스터는 이미
@@ -52,6 +54,13 @@ export default async function OneScreenPage({
     studentId && roster.students.some((s) => s.id === studentId) ? studentId : null;
   return (
     <>
+      {/* '다른 강사 뷰' 열람 배너 — 이 화면의 입력·발송은 서버가 전부 거절한다(perm-matrix 캡 +
+          readonlyTeacherViewError). 배너가 없으면 타이핑해 놓고 저장이 안 되는 이유를 알 수 없다. */}
+      {viewAs ? (
+        <div className="bg-purple-soft text-purple mb-3 rounded-lg px-3 py-2 text-[13px] font-medium">
+          {viewAs.displayName || "이름 없음"} 강사의 화면을 열람 중입니다 — 이 화면에서는 저장·발송이 되지 않습니다.
+        </div>
+      ) : null}
       {/* 오늘 출석 미입력 스트립(2026-08-14) — 출결을 '보고서 마감의 부산물'에서 '수업 직후의 행동'으로
           옮기는 자리. ⚠️ Suspense로 감싼다: 전원이 매일 여는 hot path라 이 조회가 첫 페인트를 막으면 안
           된다(B7). 다 찍은 날엔 컴포넌트가 스스로 null을 돌려 아무 것도 그리지 않는다. */}
@@ -86,7 +95,9 @@ export default async function OneScreenPage({
       academyName={roster.academyName}
       logoSrc={roster.logoSrc}
       // 다른 창/기기 동시 열림 경고(3-3) — teacherId는 서버 파생(user.id = 담당 반 소유자, 겸직 포함).
-      presenceScope={`onescreen:${user.id}:${roster.date}`}
+      // '다른 강사 뷰'는 대상 강사의 scope를 **읽기만** 한다(그 강사가 지금 작업 중이면 경고로 보임).
+      // 내 track은 EditPresenceProvider trackDisabled가 전면 차단 — 강사 화면엔 아무것도 안 뜬다.
+      presenceScope={`onescreen:${viewAs?.id ?? user.id}:${roster.date}`}
       // 날짜 이동은 위 key로 클라를 재마운트하므로 뷰(표·발송현황 등)는 URL로 넘겨받아야 유지된다.
       initialView={parseView(view)}
       initialClassName={initialClassName}

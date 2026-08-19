@@ -121,6 +121,10 @@ export function auditDetail(
       const r = roleKo(m.role);
       return r ? `삭제 당시 역할: ${r}` : null;
     }
+    case "staff_teacher_view_access": {
+      // '강사뷰 접근'(다른 강사 뷰 열람) 토글 — 대상은 targetLabel(직원 이름)이 이미 보여준다.
+      return m.enabled === true ? "허용으로 변경" : m.enabled === false ? "차단으로 변경" : null;
+    }
     case "staff_password_reset": {
       const mode = str(m.mode);
       if (mode === "temp") return "임시 비밀번호 발급";
