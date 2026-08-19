@@ -1,8 +1,9 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { AttendanceMatrix } from "@/features/attendance/server/queries";
 import { rollupDay, type SlotMark } from "@/features/attendance/cell-display";
-import { MatrixTable, type MatrixGroup } from "./matrix-table";
+import { MatrixTable, buildGridSource, type MatrixGroup } from "./matrix-table";
+import { GridProvider } from "./grid-context";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 vi.mock("@/features/attendance/server/actions", () => ({
@@ -299,6 +300,84 @@ describe("세지 않는 교시(자리·남의 교시)", () => {
     expect(cell.getAttribute("title")).toContain("병결");
     // 접힌 모서리(메모 표식)도 남아야 호버하기 전에 "메모가 있다"를 안다.
     expect(cell.querySelector("span[aria-hidden]")).toBeTruthy();
+  });
+
+  /**
+   * 🔴 격자(GridProvider) **안에서** 눌러야 진짜 검증이다 — 격자 없이 렌더하면 키보드 경로 자체가
+   *    없어서 "액션이 안 불렸다"가 저절로 참이 된다(그렇게 짰다가 헛통과했다).
+   */
+  function renderInGrid(owned: SlotMark[], others: SlotMark[]) {
+    const m = matrix([
+      { id: S1, name: "김근호", grade: "중1", school: "경명여중", enrolledAt: null, attendDows: [3], spans: [], badges: [] },
+    ]);
+    const day = owned.length > 0 ? rollupDay(owned) : null;
+    if (day) {
+      m.marks = { [S1]: { [D1]: day.status as never } };
+      if (day.units !== 1 && day.units > 0) m.units = { [S1]: { [D1]: day.units } };
+      if (day.count > 1) m.slots = { [S1]: { [D1]: day.slots } };
+    }
+    m.ghosts = { [S1]: { [D1]: others } };
+    const groups = [{ ...GROUP, matrix: m }];
+    const ordered = [{ classId: C, studentId: S1 }];
+    const src = buildGridSource(groups, DAYS, ordered);
+    return render(
+      <GridProvider
+        rows={src.rows}
+        cols={src.cols}
+        initial={src.initial}
+        slotCounts={src.slotCounts}
+        notMine={src.notMine}
+        alsoWrites={src.alsoWrites}
+        lockBefore={null}
+      >
+        <MatrixTable groups={groups} days={DAYS} holidays={{}} showGroups ordered={ordered} />
+      </GridProvider>,
+    );
+  }
+
+  it("🔴 섞인 칸의 **단건 Delete는 막는다** — 지우면 남의 교시·JJ 기록까지 함께 사라진다", async () => {
+    const { setAttendanceCell } = await import("@/features/attendance/server/actions");
+    vi.mocked(setAttendanceCell).mockClear();
+    const { container } = renderInGrid(
+      [{ slot: "17:20:00", status: "present", units: null }],
+      [
+        { slot: "16:20:00", status: "present", units: null },
+        { slot: "18:20:00", status: "present", units: null },
+      ],
+    );
+    const cell = cellOf(container);
+    fireEvent.mouseDown(cell, { button: 0 });
+    fireEvent.keyDown(cell, { key: "Delete" });
+    // 저장(삭제) 액션이 아예 안 나가야 한다 — 나가면 그날 행이 통째로 지워진다(저장에 교시 축이 없다).
+    expect(setAttendanceCell).not.toHaveBeenCalled();
+    expect(container.textContent).toContain("반별 보기에서 지우세요");
+  });
+
+  it("🔴 빗금 칸은 숫자를 쳐도 **버퍼가 안 열린다** — 열면 값이 보였다가 확정에서 거절돼 '쳤는데 사라졌다'가 된다", async () => {
+    const { setAttendanceCell } = await import("@/features/attendance/server/actions");
+    vi.mocked(setAttendanceCell).mockClear();
+    const { container } = renderInGrid([], [{ slot: "18:20:00", status: "present", units: null }]);
+    const cell = cellOf(container);
+    fireEvent.mouseDown(cell, { button: 0 });
+    fireEvent.keyDown(cell, { key: "1" });
+    expect(container.querySelector("input")).toBeNull();
+    expect(setAttendanceCell).not.toHaveBeenCalled();
+    expect(container.textContent).toContain("다른 교시 것이라");
+  });
+
+  it("섞인 칸에 값을 쓰는 건 막지 않는다 — 대신 사정거리를 알린다", async () => {
+    const { setAttendanceCell } = await import("@/features/attendance/server/actions");
+    vi.mocked(setAttendanceCell).mockClear();
+    const { container } = renderInGrid(
+      [{ slot: "17:20:00", status: "present", units: null }],
+      [{ slot: "18:20:00", status: "present", units: null }],
+    );
+    const cell = cellOf(container);
+    fireEvent.mouseDown(cell, { button: 0 });
+    fireEvent.keyDown(cell, { key: "0" }); // 결석
+    fireEvent.keyDown(cell, { key: "Enter" });
+    expect(setAttendanceCell).toHaveBeenCalledTimes(1);
+    expect(container.textContent).toContain("함께 바뀝니다");
   });
 
   it("세지 않는 교시가 없으면 종전 그대로(빗금 없음)", () => {

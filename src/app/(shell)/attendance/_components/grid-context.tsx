@@ -242,12 +242,27 @@ export function GridProvider({
         setError(NOT_MINE_MESSAGE);
         return;
       }
+      const shared = alsoWrites?.[key] ?? 0;
+      // 🔴 **섞인 칸의 단건 삭제는 막는다.** 삭제는 교시를 모른 채 그날 행을 **전부 지우므로**
+      //    (`slot === null`이면 (반·학생·날짜)로 DELETE) 정유진 화면에서 한 칸을 지우면 이다교 교시와
+      //    JJ 기록까지 함께 사라지는데, 이 화면의 숫자는 1이라 무엇을 지웠는지 흔적조차 없다.
+      //    범위 Delete는 빗금 칸만 걸러서 이 경로가 남아 있었다(인계 문서 2026-08-19).
+      //    ⚠️ 문을 닫는 게 아니다 — 반별 보기에선 그 칸이 3으로 보이고 그대로 지울 수 있다(#103).
+      if (val === null && shared > 0) {
+        setError(
+          `이 칸엔 다른 선생님 교시 ${shared}건이 함께 있어 여기서 지우면 그것까지 지워집니다 — 반별 보기에서 지우세요`,
+        );
+        return;
+      }
       const prev = store.valueOf(key);
       undoRef.current.push([{ key, prev }]);
       if (undoRef.current.length > 50) undoRef.current.shift();
       pushCell(key, val, prev);
+      // 값을 **쓰는** 경우엔 막지 않는다(내 교시가 있으니 고칠 권리가 있다) — 대신 사정거리를 말한다.
+      // 칸 숫자가 내 교시만 보여주므로 이 문장이 없으면 "내 것만 바뀐다"고 믿는다.
+      if (shared > 0) setError(`같은 날 다른 선생님 교시 ${shared}건도 함께 바뀝니다`);
     },
-    [store, isLocked, isNotMine, pushCell],
+    [store, isLocked, isNotMine, alsoWrites, pushCell],
   );
 
   /** 여러 칸에 같은 값 — 드래그 채우기·Ctrl+Enter·범위 Delete·범위 붙여넣기. */
