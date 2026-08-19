@@ -15,6 +15,7 @@ import {
   normalizeClassReviewFilter,
   type ClassReviewFilter,
 } from "../list-filter";
+import { isSelfOnlyReviewer } from "../self-only";
 import {
   CLASS_REVIEW_FORM_TYPE,
   CLASS_REVIEW_TEMPLATE_FORM_TYPE,
@@ -51,6 +52,11 @@ async function requireWrite() {
 export async function createClassReview(_prev: ReviewActionState, formData: FormData): Promise<ReviewActionState> {
   const gate = await requireWrite();
   if ("error" in gate) return { error: gate.error };
+  // 강사 직급 = 자기 평가 전용(원장 2026-08-19) — 평가 건 개설은 사무실 몫(남의 건을 열 수 있으면
+  // "누구를 평가하는지"부터가 인사 정보다). 화면도 같은 조건으로 '새 평가' 버튼을 감춘다(#77).
+  if (isSelfOnlyReviewer(gate.user.systemRole)) {
+    return { error: "평가 건 개설은 사무실에서 합니다 — 본인 평가만 작성할 수 있습니다" };
+  }
 
   const date = kstToday();
   const teacherId = String(formData.get("teacherId") ?? "").trim();
@@ -176,6 +182,12 @@ export async function submitClassReviewScores(
   const isSelf = doc.header?.teacherId === gate.user.id;
   const openMode = doc.header?.observerMode === "open";
 
+  // 강사 직급은 **본인 평가지의 본인 채점**만(원장 2026-08-19). 지정 관찰자로 박혀 있거나 선착순
+  // 자리가 남아 있어도 남의 평가지엔 못 쓴다 — 조회는 이미 가려지지만 POST는 화면을 안 거친다(#77).
+  if (isSelfOnlyReviewer(gate.user.systemRole) && !isSelf) {
+    return { error: "본인 평가만 작성할 수 있습니다" };
+  }
+
   let slot: string;
   if (isSelf) slot = "self";
   else if (openMode) {
@@ -269,6 +281,10 @@ export async function setMyClassReviewFilter(
 export async function deleteClassReview(_prev: ReviewActionState, formData: FormData): Promise<ReviewActionState> {
   const gate = await requireWrite();
   if ("error" in gate) return { error: gate.error };
+  // 강사 직급 불가 — 본인 평가지라도 인사 기록이라 지울 수 없다(원장 2026-08-19). 화면도 같은 조건.
+  if (isSelfOnlyReviewer(gate.user.systemRole)) {
+    return { error: "평가 건 삭제는 사무실에서 합니다" };
+  }
   const docId = String(formData.get("docId") ?? "").trim();
   if (!docId) return { error: "삭제할 건을 찾을 수 없습니다" };
 

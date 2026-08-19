@@ -13,8 +13,15 @@
  * ⚠️ 판정 시각은 **서버**가 읽어 `slot.band`로 내려준다([[#108]] — 여기서 현재 시각을 읽으면 SSR과
  *    갈려 하이드레이션이 깨진다). 이 파일엔 `Date`가 없어야 한다.
  */
+import { useState } from "react";
 import { EmptyState } from "@/components/empty-state";
 import { CalendarDays } from "@/components/icons/eywa-icon-compat";
+import { SearchScopeChip, StudentSearchBox } from "@/features/attendance/components/student-search-box";
+import {
+  emptySearchMessage,
+  isSearchActive,
+  matchesStudentSearch,
+} from "@/features/attendance/student-search";
 import { SEAT_MARK_LABEL, SEAT_MARK_TONE } from "../mark-state";
 import { NOW_BAND_LABEL, splitByNowBand, type NowBand } from "../now-band";
 import { groupSeatPeriods, isSeatRoom } from "../seating-bands";
@@ -40,6 +47,12 @@ const BAND_HINT: Record<NowBand, string> = {
 };
 
 export function SeatingChart({ board }: { board: LiveBoard }) {
+  /**
+   * 학생 검색(원장 2026-08-19) — **클라 필터**다(서버 왕복 0, URL·계정 저장 없음).
+   * 화면을 떠나면 사라진다: 다음에 열었을 때 필터가 걸려 있으면 "오늘 수업이 하나뿐"으로 읽힌다.
+   */
+  const [query, setQuery] = useState("");
+  const searching = isSearchActive(query);
   const slots = board.teachers.flatMap((t) => t.slots);
   const classes = foldSeating(slots);
   if (classes.length === 0) {
@@ -74,6 +87,23 @@ export function SeatingChart({ board }: { board: LiveBoard }) {
   const openOf = (band: NowBand, list: SeatingClass[]) =>
     band === "now" || band === firstBand || (band === "past" && seatingSummary(list).unmarked > 0);
 
+  /**
+   * 검색 결과 — **그 학생이 있는 반 카드만 남기고**(나머지는 안 그린다) 그 안에서 학생 칸을 강조한다.
+   *
+   * 🔴 **카드 안 명단은 안 줄인다.** 이 화면의 단위는 학생 줄이 아니라 **반 카드**이고, 카드 머리는
+   *    그 반의 상태를 말한다(`미입력 N`·앰버 띠 = `pendingCountOf`). 카드 안에서 안 걸린 학생을 빼면
+   *    미입력 4명짜리 반이 "입력 완료"로 조용히 칠해진다 — 숫자가 아니라 **색이 거짓말한다**.
+   *    그래서 좁히는 축은 카드, 찾은 학생은 테두리로 짚어 준다(둘 다 즉시 눈에 들어온다).
+   * 🔴 검색 중엔 시간 띠(지금·곧·지난)로 나누지 않고 **한 덩어리로 편다**: 띠는 `<details>`라 접혀 있을 수
+   *    있어서, 찾는 학생이 접힌 띠 안에 있으면 "검색했는데 없다"가 된다(사라진 게 아니라 접힌 것).
+   */
+  const hit = (s: { studentName: string; schoolGrade: string | null }) =>
+    matchesStudentSearch(query, [s.studentName, s.schoolGrade]);
+  const shownClasses = searching ? classes.filter((c) => c.students.some(hit)) : classes;
+  const matchIds = new Set(
+    searching ? classes.flatMap((c) => c.students.filter(hit).map((s) => s.studentId)) : [],
+  );
+
   return (
     <div className="space-y-6">
       <header className="flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -99,6 +129,17 @@ export function SeatingChart({ board }: { board: LiveBoard }) {
             </>
           )}
         </p>
+        {/* 학생 검색 — 이름을 치면 그 학생이 있는 반만 남는다. 위 합계(미출결·결석·입력)는 **하루 전체**
+            기준 그대로라(집계 분모 불변 규칙) 걸린 필터를 칩으로 크게 밝힌다. */}
+        <StudentSearchBox value={query} onChange={setQuery} inputWidth="w-[104px]" />
+        {searching ? (
+          <SearchScopeChip
+            shown={shownClasses.length}
+            total={classes.length}
+            unit="개 반"
+            totalsNote="위 합계는 하루 전체 기준"
+          />
+        ) : null}
         <ul className="ml-auto flex flex-wrap items-center gap-2">
           {LEGEND.map((k) => (
             <li
@@ -111,8 +152,26 @@ export function SeatingChart({ board }: { board: LiveBoard }) {
         </ul>
       </header>
 
-      {/* 지난 날짜엔 '지금'이 없다 — 놓친 날을 메우러 여는 자리라 띠로 나누지 않고 그대로 편다. */}
-      {board.isToday ? (
+      {/* 검색 중엔 띠를 접지 않고 한 덩어리로(위 shownClasses 주석). 0명이면 왜 비었는지 말한다. */}
+      {searching ? (
+        shownClasses.length === 0 ? (
+          <div className="bg-card shadow-card flex flex-wrap items-center gap-3 rounded-2xl px-4 py-4">
+            <span className="text-foreground text-sm font-bold">
+              {emptySearchMessage(query, "이 날 수업")}
+            </span>
+            <button
+              type="button"
+              onClick={() => setQuery("")}
+              className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft shrink-0 rounded-full border px-2.5 py-0.5 text-xs transition"
+            >
+              검색 지우기
+            </button>
+          </div>
+        ) : (
+          <FloorList classes={shownClasses} date={board.date} highlight={matchIds} />
+        )
+      ) : /* 지난 날짜엔 '지금'이 없다 — 놓친 날을 메우러 여는 자리라 띠로 나누지 않고 그대로 편다. */
+      board.isToday ? (
         groups.map((group) => (
           <BandSection
             key={group.band}
@@ -164,7 +223,16 @@ function BandSection({
   );
 }
 
-function FloorList({ classes, date }: { classes: SeatingClass[]; date: string }) {
+function FloorList({
+  classes,
+  date,
+  /** 검색에 걸린 학생 id — 그 칸만 테두리로 짚는다(없으면 아무 칸도 강조하지 않는다). */
+  highlight,
+}: {
+  classes: SeatingClass[];
+  date: string;
+  highlight?: ReadonlySet<string>;
+}) {
   return (
     <div className="space-y-6">
       {groupSeatingFloors(classes).map((floor) => (
@@ -177,7 +245,7 @@ function FloorList({ classes, date }: { classes: SeatingClass[]; date: string })
           </h2>
           <div className="space-y-4">
             {floor.rooms.map((room) => (
-              <SeatingRoomBlock key={room.key} date={date} room={room} />
+              <SeatingRoomBlock key={room.key} date={date} room={room} highlight={highlight} />
             ))}
           </div>
         </section>
@@ -189,7 +257,15 @@ function FloorList({ classes, date }: { classes: SeatingClass[]; date: string })
 /**
  * 일반 방 = 4열(교시 폭). 랩실(603호)·JJ실(305호)만 시트처럼 시각 한 줄.
  */
-function SeatingRoomBlock({ date, room }: { date: string; room: SeatingRoomGroup }) {
+function SeatingRoomBlock({
+  date,
+  room,
+  highlight,
+}: {
+  date: string;
+  room: SeatingRoomGroup;
+  highlight?: ReadonlySet<string>;
+}) {
   const bands = isSeatRoom(room) ? groupSeatPeriods(room.classes) : null;
   return (
     <div className="space-y-2">
@@ -203,7 +279,7 @@ function SeatingRoomBlock({ date, room }: { date: string; room: SeatingRoomGroup
               </p>
               <div className="grid grid-cols-[repeat(auto-fill,minmax(11rem,1fr))] items-start gap-3">
                 {band.classes.map((klass) => (
-                  <SeatingRoom key={klass.classId} date={date} klass={klass} />
+                  <SeatingRoom key={klass.classId} date={date} klass={klass} highlight={highlight} />
                 ))}
               </div>
             </div>
@@ -212,7 +288,7 @@ function SeatingRoomBlock({ date, room }: { date: string; room: SeatingRoomGroup
       ) : (
         <div className="grid grid-cols-4 items-start gap-3">
           {room.classes.map((klass) => (
-            <SeatingRoom key={klass.classId} date={date} klass={klass} />
+            <SeatingRoom key={klass.classId} date={date} klass={klass} highlight={highlight} />
           ))}
         </div>
       )}

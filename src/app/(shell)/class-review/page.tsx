@@ -12,6 +12,7 @@ import {
   observerLimitOf,
 } from "@/features/class-review/server/queries";
 import { GRADE_CUTS, GRADE_FALLBACK } from "@/features/class-review/checklist";
+import { isSelfOnlyReviewer } from "@/features/class-review/self-only";
 import { ReviewTable } from "./_components/review-table";
 
 export const metadata = { title: "수업 평가 — eywa" };
@@ -20,9 +21,14 @@ export const metadata = { title: "수업 평가 — eywa" };
  * 수업 평가 체크리스트(참관) 목록 — 시트 "수업 상향화 체크리스트" 이식 초안(2026-08-04).
  * 접근은 class_review 메뉴 게이트(기본 전원 차단, 개인 예외로만 개방 — 테스트 단계).
  * 보기 필터(전체/내 평가 대기/완료/미완료/선착순 — 평가지 기준)는 계정 귀속(원장 지시 2026-08-05).
+ *
+ * 강사 직급은 **자기 평가 전용**(원장 2026-08-19) — 목록에 본인 평가지만, 점수도 본인 채점만
+ * 내려온다(가림은 listClassReviews). 여기선 그 사실과 어긋나는 화면 요소만 걷어낸다:
+ * 서버가 거절하는 '새 평가' 버튼(죽은 버튼)과 "제출된 채점들의 평균"이라는 캡션(본인 것 하나뿐이다).
  */
 export default async function ClassReviewPage() {
   const viewer = await requireAccess("class_review");
+  const selfOnly = isSelfOnlyReviewer(viewer.systemRole);
   const [{ rows }, settings, priv, myFilter] = await Promise.all([
     listClassReviews(),
     getTenantSettings(),
@@ -38,7 +44,11 @@ export default async function ClassReviewPage() {
       <PageHeader
         eyebrow="운영"
         title="수업 평가 체크리스트"
-        description="평가 문항(4점 척도)을 평가자와 본인이 각자 채점하고 나란히 비교합니다."
+        description={
+          selfOnly
+            ? "내 수업 평가에 본인 평가를 작성합니다. 평가자 채점·종합 결과는 사무실에서 관리합니다."
+            : "평가 문항(4점 척도)을 평가자와 본인이 각자 채점하고 나란히 비교합니다."
+        }
         embedLabel="수업 평가 체크리스트"
         actions={
           <span className="flex items-center gap-2">
@@ -52,16 +62,23 @@ export default async function ClassReviewPage() {
                 문항 편집
               </Button>
             ) : null}
-            <Button size="sm" render={<Link href="/class-review/new" />}>
-              + 새 평가
-            </Button>
+            {/* 평가 건 개설은 사무실 몫 — 강사에겐 서버 액션이 거절하므로 버튼 자체를 안 그린다(#77). */}
+            {selfOnly ? null : (
+              <Button size="sm" render={<Link href="/class-review/new" />}>
+                + 새 평가
+              </Button>
+            )}
           </span>
         }
       />
 
       {rows.length === 0 ? (
         <div className="border-line rounded-2xl border border-dashed p-10 text-center">
-          <p className="text-text-dim text-sm">아직 평가 건이 없습니다 — &lsquo;새 평가&rsquo;로 시작하세요.</p>
+          <p className="text-text-dim text-sm">
+            {selfOnly
+              ? "아직 내 수업 평가 건이 없습니다 — 사무실에서 평가 건을 만들면 여기에 표시됩니다."
+              : "아직 평가 건이 없습니다 — ‘새 평가’로 시작하세요."}
+          </p>
         </div>
       ) : (
         <ReviewTable
@@ -88,7 +105,9 @@ export default async function ClassReviewPage() {
         />
       )}
       <p className="text-text-dim text-[11px]">
-        환산점수 = 제출된 채점들의 문항 평균으로 계산한 100점 기준 점수 · 등급 컷 {cutsLabel}
+        {selfOnly
+          ? `표시되는 점수는 본인 평가입니다 — 100점 기준 환산 · 등급 컷 ${cutsLabel}`
+          : `환산점수 = 제출된 채점들의 문항 평균으로 계산한 100점 기준 점수 · 등급 컷 ${cutsLabel}`}
       </p>
     </div>
   );

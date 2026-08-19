@@ -38,8 +38,20 @@ const GRANTEES = [
 const REVOKED = [
   { id: "04a91fe9-f353-49f2-b5bb-4190d7b034d9", name: "송지혜", note: "강사 — 2026-08-14 원장 지시로 제외" },
 ];
-/** 역할 개방 — 원장직급(master). 코드 기본값이 none이라 이 행이 없으면 원장도 메뉴에 못 들어간다. */
-const ROLE_GRANTS = [{ role: "master", access: "full" }];
+/**
+ * 역할 개방 — 원장직급(master). 코드 기본값이 none이라 이 행이 없으면 원장도 메뉴에 못 들어간다.
+ *
+ * **강사(teacher) = `scoped`**(원장 지시 2026-08-19: *"강사직급의 경우 … 자기자신 평가만 할 수 있도록"*).
+ * 강사에게 열어도 남의 평가지·평가자 점수는 **코드가 조회 초크포인트에서 잘라 낸다**
+ * ([`self-only.ts`](../../src/features/class-review/self-only.ts) — 목록·상세·채점·생성·삭제 전부):
+ * 보이는 것은 **본인 평가지의 본인 채점 한 장**뿐이고 실명 열람·문항 편집·종합 보기는 직급으로 막힌다.
+ * ⚠️ 그래서 강사만은 개인 예외가 아니라 **역할로** 연다(전 강사가 자기 것만 쓰는 게 목적).
+ * 되돌리기 = 이 줄을 지우고 `--apply`(그 역할 override만 걷힌다).
+ */
+const ROLE_GRANTS = [
+  { role: "master", access: "full" },
+  { role: "teacher", access: "scoped" },
+];
 
 const env = Object.fromEntries(
   readFileSync(join(HERE, "../../.env.local"), "utf-8")

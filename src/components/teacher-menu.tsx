@@ -41,6 +41,9 @@ const LINKS: { href: string; label: string; icon: EywaIconName; menu: MenuKey }[
   // 전자결재 — 기본 teacher=none이라 파일럿 개인 예외 계정(테스터)에만 보인다. 문서 스코프는
   // 결재선·RLS가 정하므로(본인 관련 문서만) 미스코프 누수 없음.
   { href: "/approvals", label: "전자결재", icon: MENU_ICON.approvals, menu: "approvals" },
+  // 수업 평가 — 강사는 **자기 평가 전용**(본인 평가지의 본인 채점만 보이고 쓸 수 있다, 원장 2026-08-19).
+  // 기본 teacher=none이라 학원설정에서 연 학원에서만 보인다.
+  { href: "/class-review", label: "수업 평가", icon: MENU_ICON.class_review, menu: "class_review" },
   // 데이터베이스(서식 저장소) — 강사 readonly(빈 양식 다운로드). 테넌트 공용 자료라 스코핑 무관.
   { href: "/documents", label: "데이터베이스", icon: MENU_ICON.documents, menu: "documents" },
 ];

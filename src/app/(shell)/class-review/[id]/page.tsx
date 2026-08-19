@@ -18,6 +18,7 @@ import {
   observerLimitOf,
 } from "@/features/class-review/server/queries";
 import { averageTotals, computeTotals, itemCountOf, normalizeScore } from "@/features/class-review/checklist";
+import { isSelfOnlyReviewer } from "@/features/class-review/self-only";
 
 export const metadata = { title: "수업 평가 상세 — eywa" };
 
@@ -25,17 +26,24 @@ export const metadata = { title: "수업 평가 상세 — eywa" };
  * 참관 상세 — 시트 모양의 문항×평가자 매트릭스 + 영역 소계 + 총점/환산/등급 + 내 채점.
  * 평가자 실명은 **원장·지정 인원만**(원장 지시 2026-08-04) — 그 외는 '평가자 A/B/C'로 익명화.
  * 디자인은 구조·위계 위주(원장 2026-08-05 "색칠 말고") — 스탯은 공용 BigStat, 표는 소프트 패널.
+ *
+ * 강사 직급은 **자기 평가 전용**(원장 2026-08-19): 남의 평가지는 애초에 조회가 안 되고(getClassReview),
+ * 본인 평가지도 본인 채점 한 장만 내려온다. 그래서 이 화면의 '평균'·'종합'은 강사에게 **본인 점수와
+ * 같은 수**다 — 그대로 두면 평가자 채점이 반영된 종합 결과로 오해하므로 라벨·열을 갈아 끼운다.
  */
 export default async function ClassReviewDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const viewer = await requireAccess("class_review");
   const { id } = await params;
-  const [found, settings, priv, canDelete] = await Promise.all([
+  const selfOnly = isSelfOnlyReviewer(viewer.systemRole);
+  const [found, settings, priv, canWrite] = await Promise.all([
     getClassReview(id),
     getTenantSettings(),
     getReviewPrivileges(viewer),
     // 삭제 버튼 노출 조건 = 서버 액션(deleteClassReview)의 게이트와 **같은 함수** — 화면 조건은 게이트가 아니다(#77).
     canWriteTenant(viewer.systemRole, "class_review"),
   ]);
+  // 강사는 본인 평가지라도 삭제 불가(인사 기록) — 서버 액션과 같은 조건으로 버튼을 감춘다.
+  const canDelete = canWrite && !selfOnly;
   if (!found) notFound();
   const { doc, areas } = found;
   const subjects = buildSubjectMaps(settings.operations.subjects);
@@ -73,10 +81,15 @@ export default async function ClassReviewDetailPage({ params }: { params: Promis
 
   // 채점이 실제로 들어온 열 수 — 상단 '제출' 스탯과 삭제 확인 문구가 같은 수를 쓴다("몇 명 것이 사라지나").
   const submittedCount = cols.filter((c) => c.totals.answered > 0).length;
+  // 강사(자기 평가 전용)에겐 '평균' 열이 본인 점수를 한 번 더 그릴 뿐이라 숨긴다.
+  // 🔴 조건을 `cols.length > 1`로 넓히지 말 것 — 관찰자 0명인 사무실 문서의 표 모양까지 바뀐다
+  //    (이번 지시 범위는 강사 화면뿐이다).
+  const showAvgCol = !selfOnly;
 
   const headerBits = [
     doc.header.subject ? subjects.labelOf(doc.header.subject) : null,
-    openMode ? `선착순 ${observerLimit}명` : "평가자 지정",
+    // 평가자 방식(지정/선착순)은 강사에게 숨긴다 — "몇 명이 나를 평가하는지"도 인사 정보다.
+    selfOnly ? null : openMode ? `선착순 ${observerLimit}명` : "평가자 지정",
     doc.templateName ?? null,
   ].filter(Boolean);
 
@@ -117,20 +130,46 @@ export default async function ClassReviewDetailPage({ params }: { params: Promis
         />
       </div>
 
+      {/* 강사(자기 평가 전용) — 화면에 본인 것만 있다는 사실을 먼저 말한다(점수를 종합으로 오해하지 않게). */}
+      {selfOnly ? (
+        <p className="bg-bg-soft/60 text-text-dim rounded-2xl px-4 py-3 text-[13px]">
+          본인 평가만 표시됩니다 — 평가자 채점과 종합 결과는 사무실에서 관리합니다.
+        </p>
+      ) : null}
+
       {/* 종합 — 평균 기준 빅 스탯(공용 아톰, 화면 로컬 Stat 금지 규칙) */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <BigStat label="제출" value={submittedCount} unit={`/ ${cols.length}`} sub="평가자 + 본인" />
+        {selfOnly ? (
+          <BigStat
+            label="본인 평가"
+            value={submittedCount > 0 ? "제출됨" : "미제출"}
+            sub={submittedCount > 0 ? "본인 채점" : "아직 작성 전"}
+          />
+        ) : (
+          <BigStat label="제출" value={submittedCount} unit={`/ ${cols.length}`} sub="평가자 + 본인" />
+        )}
         <BigStat
-          label="총점(평균)"
+          label={selfOnly ? "총점(본인)" : "총점(평균)"}
           value={avg ? avg.total : "—"}
           unit={`/ ${itemCountOf(areas) * 4}`}
-          sub="제출된 채점 평균"
+          sub={selfOnly ? "본인 채점 기준" : "제출된 채점 평균"}
         />
-        <BigStat label="환산점수" value={avg ? avg.percent.toFixed(1) : "—"} unit="/ 100" sub="100점 환산" />
         <BigStat
-          label="종합 등급"
+          label="환산점수"
+          value={avg ? avg.percent.toFixed(1) : "—"}
+          unit="/ 100"
+          sub={selfOnly ? "본인 평가 기준" : "100점 환산"}
+        />
+        <BigStat
+          label={selfOnly ? "본인 평가 등급" : "종합 등급"}
           value={avg ? avg.grade : "—"}
-          sub={avg?.grade === "재참관" ? "기준 미달 — 재참관 대상" : "등급 컷 기준"}
+          sub={
+            selfOnly
+              ? "최종 등급은 사무실에서 확정합니다"
+              : avg?.grade === "재참관"
+                ? "기준 미달 — 재참관 대상"
+                : "등급 컷 기준"
+          }
           valueClass={avg?.grade === "재참관" ? "text-danger" : undefined}
         />
       </div>
@@ -150,9 +189,11 @@ export default async function ClassReviewDetailPage({ params }: { params: Promis
                   ) : null}
                 </th>
               ))}
-              <th className="text-text-dim bg-bg-soft/40 w-16 px-2 py-2.5 text-center text-xs font-medium">
-                평균
-              </th>
+              {showAvgCol ? (
+                <th className="text-text-dim bg-bg-soft/40 w-16 px-2 py-2.5 text-center text-xs font-medium">
+                  평균
+                </th>
+              ) : null}
             </tr>
           </thead>
           <tbody>
@@ -160,11 +201,12 @@ export default async function ClassReviewDetailPage({ params }: { params: Promis
               const base = areas.slice(0, ai).reduce((n, a) => n + a.items.length, 0);
               return [
                 <tr key={area.key} className="border-line/60 bg-bg-soft/50 border-y">
-                  <td colSpan={cols.length + 3} className="px-3 py-2">
+                  {/* colSpan = No. + 평가항목 + 채점 열들 (+ 평균 열이 있으면 하나 더) */}
+                  <td colSpan={cols.length + (showAvgCol ? 3 : 2)} className="px-3 py-2">
                     <span className="text-foreground text-xs font-bold">{area.title}</span>
                     <span className="text-text-dim ml-2 text-xs">
                       소계 {cols.map((c) => c.totals.areaSubtotals[ai]).join(" · ")}
-                      {avg ? ` · 평균 ${avg.areaSubtotals[ai]}` : ""}
+                      {showAvgCol && avg ? ` · 평균 ${avg.areaSubtotals[ai]}` : ""}
                     </span>
                   </td>
                 </tr>,
@@ -189,7 +231,9 @@ export default async function ClassReviewDetailPage({ params }: { params: Promis
                           {v || "—"}
                         </td>
                       ))}
-                      <td className="num bg-bg-soft/40 px-2 py-2.5 text-center font-bold">{rowAvg ?? "—"}</td>
+                      {showAvgCol ? (
+                        <td className="num bg-bg-soft/40 px-2 py-2.5 text-center font-bold">{rowAvg ?? "—"}</td>
+                      ) : null}
                     </tr>
                   );
                 }),
@@ -206,7 +250,9 @@ export default async function ClassReviewDetailPage({ params }: { params: Promis
                   {c.totals.answered > 0 ? c.totals.total : "—"}
                 </td>
               ))}
-              <td className="num bg-bg-soft/40 px-2 py-2.5 text-center font-bold">{avg ? avg.total : "—"}</td>
+              {showAvgCol ? (
+                <td className="num bg-bg-soft/40 px-2 py-2.5 text-center font-bold">{avg ? avg.total : "—"}</td>
+              ) : null}
             </tr>
             <tr className="border-line bg-bg-soft/40 border-t">
               <td colSpan={2} className="px-3 py-2.5 text-right text-xs font-bold">
@@ -226,18 +272,20 @@ export default async function ClassReviewDetailPage({ params }: { params: Promis
                   )}
                 </td>
               ))}
-              <td className="num bg-bg-soft/40 px-2 py-2.5 text-center">
-                {avg ? (
-                  <>
-                    <span className="font-bold">{avg.percent.toFixed(1)}</span>{" "}
-                    <Pill color={avg.grade === "재참관" ? "danger" : "primary"} soft>
-                      {avg.grade}
-                    </Pill>
-                  </>
-                ) : (
-                  "—"
-                )}
-              </td>
+              {showAvgCol ? (
+                <td className="num bg-bg-soft/40 px-2 py-2.5 text-center">
+                  {avg ? (
+                    <>
+                      <span className="font-bold">{avg.percent.toFixed(1)}</span>{" "}
+                      <Pill color={avg.grade === "재참관" ? "danger" : "primary"} soft>
+                        {avg.grade}
+                      </Pill>
+                    </>
+                  ) : (
+                    "—"
+                  )}
+                </td>
+              ) : null}
             </tr>
           </tfoot>
         </table>
@@ -246,7 +294,7 @@ export default async function ClassReviewDetailPage({ params }: { params: Promis
       {/* 평가자 코멘트 — 이름 익명화 규칙 동일, 인용 스타일(구조로 구분) */}
       {cols.some((c) => c.sheet?.comment) ? (
         <div className="bg-card rounded-2xl p-5 shadow-card">
-          <p className="micro mb-3">평가자 코멘트</p>
+          <p className="micro mb-3">{selfOnly ? "내 코멘트" : "평가자 코멘트"}</p>
           <ul className="space-y-3">
             {cols
               .filter((c) => c.sheet?.comment)
@@ -274,7 +322,7 @@ export default async function ClassReviewDetailPage({ params }: { params: Promis
             {mine.submitted ? "내 평가 수정하기" : "평가하기"}
           </Button>
         </div>
-      ) : (
+      ) : selfOnly ? null : ( // 강사는 본인 평가지만 열리므로 '평가자로 지정되지 않았다'는 안내가 나올 일이 없다
         <p className="text-text-dim text-xs">
           {openMode
             ? `선착순 평가자 ${observerLimit}명이 이미 채점을 마쳐 열람만 가능합니다.`
