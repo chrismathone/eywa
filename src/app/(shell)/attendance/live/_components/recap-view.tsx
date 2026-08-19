@@ -11,14 +11,17 @@
  *
  * 🔑 월요일은 금·토·일 사흘을 덮는다(원장 정정) — 합계는 위에 한 번, 내용은 **날짜별로 나눠서**.
  */
+import { useId, useState } from "react";
 import { EmptyState } from "@/components/empty-state";
 import { BigStat } from "@/components/atoms/big-stat";
 import { CalendarDays } from "@/components/icons/eywa-icon-compat";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { formatKoreanDate } from "@/lib/date-kst";
 import type { RangeRecap } from "@/features/attendance/recap/range";
+import type { RecapTeacherLine } from "@/features/attendance/recap/digest";
+import { unmarkedByTeacher } from "@/features/attendance/recap/teacher-unmarked";
 import { RecapAiCard, type RecapAiState } from "./recap-ai-card";
-import { RecapDayBlock } from "./recap-day";
+import { RecapDayBlock, UnmarkedRow } from "./recap-day";
 
 export function RecapView({
   recap,
@@ -129,24 +132,106 @@ export function RecapView({
             <span className="text-sm font-bold">입력이 덜 된 강사</span>
             <span className="num text-text-dim text-sm">{behind.length}</span>
             {recap.days.length > 1 ? <span className="text-text-faint text-[11px]">기간 합계</span> : null}
+            {behind.some((x) => x.unmarkedClasses > 0) ? (
+              <span className="text-text-faint text-[11px]">이름을 누르면 미입력 출석부가 열립니다.</span>
+            ) : null}
           </h2>
-          <ul className="bg-card shadow-card divide-line divide-y rounded-2xl">
+          {/* 펼침 버튼이 행을 가득 채우므로 hover 배경이 모서리를 넘지 않게 목록이 자른다
+              (카드 테두리는 그림자 링이라 이 클립에 안 걸린다 [[#114]]). */}
+          <ul className="bg-card shadow-card divide-line divide-y overflow-hidden rounded-2xl">
             {behind.map((line) => (
-              <li key={line.teacherName} className="flex items-center gap-x-2 px-3 py-2 text-sm">
-                <span className="font-bold">{line.teacherName}</span>
-                <span className="num text-text-dim ml-auto text-xs">
-                  {line.cells}칸 중 {line.recorded}칸
-                </span>
-                {line.unmarkedClasses > 0 ? (
-                  <span className="num text-amber-strong shrink-0 text-xs font-bold">
-                    미입력 {line.unmarkedClasses}반
-                  </span>
-                ) : null}
-              </li>
+              <BehindTeacherRow key={line.teacherName} line={line} recap={recap} />
             ))}
           </ul>
         </section>
       ) : null}
     </div>
+  );
+}
+
+/**
+ * 입력이 덜 된 강사 한 줄 — 누르면 **그 강사의 미입력 출석부**가 날짜별로 펼쳐진다
+ * (원장 제보 2026-08-19: *"누르면 리스트라도 볼 수 있어야 하는데 바로가기 같은것도 없네."*).
+ *
+ * 🔑 목록은 새로 세지 않고 날짜 블록이 쓰는 `day.unmarked`를 그 강사 것만 고른 것이라, 줄에 적힌
+ *    `미입력 N반`과 펼친 반 수가 **같은 값**이다(`teacher-unmarked.ts` + Vitest가 잠근다).
+ * ⚠️ 펼침은 화면 로컬 상태로 둔다 — 정렬·필터처럼 오래 남는 뷰 세팅이 아니라 한 번 보고 마는 동작이다.
+ */
+function BehindTeacherRow({ line, recap }: { line: RecapTeacherLine; recap: RangeRecap }) {
+  const [open, setOpen] = useState(false);
+  const uid = useId();
+  const panelId = `${uid}-unmarked`;
+  const groups = unmarkedByTeacher(recap.days, line.teacherName);
+  const multiDay = recap.days.length > 1;
+  // 빈 출석부가 없는 강사(칸만 덜 찍힌 경우)는 펼칠 것이 없다 — 열어서 빈 칸을 보여주지 않는다.
+  const expandable = line.unmarkedClasses > 0;
+
+  const head = (
+    <>
+      {expandable ? (
+        <EyIcon
+          name={open ? "chevronUp" : "chevronDown"}
+          size={14}
+          className="text-text-faint shrink-0"
+        />
+      ) : (
+        // 펼칠 수 없는 줄도 이름 시작 위치가 같아야 한 열로 읽힌다.
+        <span aria-hidden className="inline-block size-[14px] shrink-0" />
+      )}
+      <span className="font-bold">{line.teacherName}</span>
+      <span className="num text-text-dim ml-auto text-xs">
+        {line.cells}칸 중 {line.recorded}칸
+      </span>
+      {line.unmarkedClasses > 0 ? (
+        <span className="num text-amber-strong shrink-0 text-xs font-bold">
+          미입력 {line.unmarkedClasses}반
+        </span>
+      ) : null}
+    </>
+  );
+
+  return (
+    <li className="text-sm">
+      {expandable ? (
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          aria-controls={panelId}
+          className="hover:bg-bg-soft/40 flex w-full items-center gap-x-2 px-3 py-2 text-left transition"
+        >
+          {head}
+        </button>
+      ) : (
+        <div className="flex items-center gap-x-2 px-3 py-2">{head}</div>
+      )}
+
+      {expandable && open ? (
+        <div id={panelId} className="border-line space-y-2 border-t px-3 pt-2 pb-3">
+          {groups.length === 0 ? (
+            // 여기까지 오면 파생이 집계와 어긋난 것이다 — 숫자를 감추지 말고 그 사실을 말한다.
+            <p className="text-text-faint text-xs break-keep">
+              이 요약 범위({formatKoreanDate(recap.from)}
+              {recap.from === recap.to ? "" : ` ~ ${formatKoreanDate(recap.to)}`})의 날짜별 목록에서는 빈
+              출석부를 찾지 못했습니다 — 범위 밖 날짜일 수 있습니다.
+            </p>
+          ) : (
+            groups.map((g) => (
+              <div key={g.date} className="space-y-1">
+                {/* 기간 합계 줄이라 날짜를 밝힌다 — "언제 안 찍었나"가 사라지면 물어볼 수가 없다. */}
+                {multiDay ? (
+                  <p className="text-text-faint text-[11px] font-medium">{formatKoreanDate(g.date)}</p>
+                ) : null}
+                <ul className="border-line divide-line divide-y rounded-xl border">
+                  {g.classes.map((c) => (
+                    <UnmarkedRow key={c.classId} row={c} date={g.date} />
+                  ))}
+                </ul>
+              </div>
+            ))
+          )}
+        </div>
+      ) : null}
+    </li>
   );
 }

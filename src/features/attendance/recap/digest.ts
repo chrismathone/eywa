@@ -84,6 +84,17 @@ export type RecapUnmarkedClass = {
   subject: string;
   /** 그 비어 있는 교시들의 담당(자리 반은 `LAB`·`JJ`). 여럿이면 전부 — 누구에게 말할지가 이 줄의 목적이다. */
   teacherNames: string[];
+  /**
+   * 같은 교시들의 **강사 줄 이름**(아래 `teachers[].teacherName`과 같은 축). 화면이 "입력이 덜 된 강사"
+   * 줄에서 그 강사의 미입력 반을 파생할 때 쓰는 키다.
+   *
+   * 🔴 **`teacherNames`(표시)와 같지 않다.** 표시는 슬롯 라벨이 이겨서 자리는 `LAB`·`JJ`, 영어는 시트
+   *    닉네임 원문(`Jane`·`Kristine`)으로 적히는데, 집계 줄은 담당 **계정의 표시 이름**(없으면
+   *    `담당 미지정`)으로 센다. 실측(2026-08-19 살아 있는 슬롯) 194개가 `teacher_id` + 닉네임 라벨을
+   *    함께 들고 있어, 표시 이름으로 강사 줄을 찾으면 **영어가 통째로 어긋난다**(줄엔 "미입력 3반"인데
+   *    펼치면 0건). 그래서 파생용 축을 따로 싣는다 — 두 배열의 뜻을 섞지 말 것.
+   */
+  teacherLines: string[];
   slots: string[];
   /** 그 반에서 통째로 비어 있는 학생 수(교시 중복 제거). */
   expected: number;
@@ -195,6 +206,7 @@ export function buildDayRecap(input: {
           className: slot.className,
           subject: slot.subject,
           teacherNames: [],
+          teacherLines: [],
           slots: [],
           expected: 0,
           studentIds: new Set<string>(),
@@ -203,6 +215,8 @@ export function buildDayRecap(input: {
       }
       pushUnique(entry.slots, slot.slotStart);
       pushUnique(entry.teacherNames, handlerOf(slot));
+      // 파생(강사 줄 → 미입력 반)이 아래 `line.unmarkedClasses`와 **같은 축**을 보게 한다.
+      pushUnique(entry.teacherLines, slot.teacherName);
       for (const s of slot.students) entry.studentIds.add(s.studentId);
       // 같은 반의 여러 교시가 다 비어도 강사에겐 "출석부 한 개"다(반 단위로 센다).
       if (!line.classes.has(slot.classId)) {
