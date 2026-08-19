@@ -5,14 +5,12 @@ import { Pill } from "@/components/atoms/pill";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { sanitizeRichHtml } from "@/lib/html/sanitize";
 import { APPROVAL_FORM_LABEL, STEP_DECISION_LABEL, docStatusLabel } from "@/features/approvals/types";
-import { formatLeaveDays } from "@/features/leave/request-days";
+import { formatLeaveDays, LEAVE_KIND_LABEL } from "@/features/leave/request-days";
 import { getApprovalDoc, isMyTurn, needsMyDeferredConfirm } from "@/features/approvals/server/queries";
 import { ApprovalStamps } from "./_stamps";
 import { DecidePanel, DeferredConfirmPanel, WithdrawPanel } from "./_decide-panel";
 
 export const metadata = { title: "결재 문서 — eywa" };
-
-const LEAVE_KIND_LABEL = { annual: "연차", half: "반차" } as const;
 
 // ── 결재 이력 타임라인(하이웍스 '문서 진행 이력' 대응) ─────────────────────────
 // 기안 → 처리된 단계(승인/반려 + 의견) → 종결(또는 "현재 N차 차례"). 결재 의견은 여기로 흡수한다

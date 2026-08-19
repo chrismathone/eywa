@@ -78,6 +78,25 @@ function withLegacy(slots: string[], current: string): string[] {
   return [...slots, current].sort();
 }
 
+// ── 반복(생성 전용, 0222a — 등록 시점 실체화) ─────────────────────────────────
+const REPEAT_OPTIONS: ComboOption[] = [
+  { value: "none", label: "반복 안 함" },
+  { value: "daily", label: "매일" },
+  { value: "weekly", label: "매주" },
+  { value: "biweekly", label: "격주" },
+  { value: "monthly", label: "매월 (같은 날)" },
+];
+
+/** 시작일+1개월(그 날이 없는 달은 말일) — 반복 종료일 기본값. */
+function plusOneMonth(ymd: string): string {
+  const [y, m, d] = ymd.split("-").map(Number);
+  let dt = new Date(Date.UTC(y!, m!, d!)); // m은 1-base라 그대로 넣으면 +1개월
+  if (dt.getUTCDate() !== d) dt = new Date(Date.UTC(y!, m! + 1, 0)); // 말일로
+  return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, "0")}-${String(
+    dt.getUTCDate(),
+  ).padStart(2, "0")}`;
+}
+
 function SaveButton() {
   const { pending } = useFormStatus();
   return (
@@ -220,6 +239,12 @@ function ViewBody({
             <dd className="text-foreground break-keep whitespace-pre-wrap">{event.memo}</dd>
           </div>
         ) : null}
+        {event.seriesId ? (
+          <div className="flex gap-2">
+            <dt className="text-text-dim w-[52px] shrink-0">반복</dt>
+            <dd className="text-foreground">반복 일정 — 회차별 등록</dd>
+          </div>
+        ) : null}
         {event.createdByName ? (
           <div className="flex gap-2">
             <dt className="text-text-dim w-[52px] shrink-0">작성</dt>
@@ -265,6 +290,14 @@ function EditBody({
   // 시간 — "" = 종일. 구글식 자동 보정의 근거라 제어 상태로 둔다.
   const [startTime, setStartTime] = useState(editing?.startTime ?? "");
   const [endTime, setEndTime] = useState(editing?.endTime ?? "");
+  // 반복(생성 전용) — 종료일 기본값은 시작일+1개월. 수정 모드는 회차 하나만 고친다(반복 UI 없음).
+  const [repeat, setRepeat] = useState("none");
+  const [repeatUntil, setRepeatUntil] = useState("");
+
+  function pickRepeat(v: string) {
+    setRepeat(v);
+    if (v !== "none" && (!repeatUntil || repeatUntil <= start)) setRepeatUntil(plusOneMonth(start));
+  }
 
   /** 시작 시간 선택 — 구글 동작: 종료가 비면 +1시간, 둘 다 있으면 기존 간격을 유지해 민다. */
   function pickStartTime(v: string) {
@@ -302,13 +335,15 @@ function EditBody({
     return [{ value: "", label: "미지정" }, ...list];
   }, [sameDay, startTime, endTime]);
 
-  // 삭제 — 확인 다이얼로그를 거친다(비가역).
-  const [confirmDelete, setConfirmDelete] = useState(false);
+  // 삭제 — 확인 다이얼로그를 거친다(비가역). 반복 회차면 "이 일정만/전체" 범위를 고른다.
+  const [confirmScope, setConfirmScope] = useState<"one" | "series" | null>(null);
   const [deleting, startDelete] = useTransition();
-  function doDelete() {
+  function doDelete(scope: "one" | "series") {
     if (!editing) return;
     const fd = new FormData();
     fd.append("id", editing.id);
+    fd.append("scope", scope);
+    if (scope === "series" && editing.seriesId) fd.append("seriesId", editing.seriesId);
     startDelete(async () => {
       const res = await deleteCalendarEvent(undefined, fd);
       if (res?.error) toast.error(res.error);
@@ -325,8 +360,15 @@ function EditBody({
       <input type="hidden" name="color" value={color} />
       <input type="hidden" name="startTime" value={startTime} />
       <input type="hidden" name="endTime" value={endTime} />
+      {!editing ? <input type="hidden" name="repeat" value={repeat} /> : null}
 
       <h2 className="text-foreground text-sm font-bold">{editing ? "일정 수정" : "일정 등록"}</h2>
+
+      {editing?.seriesId ? (
+        <p className="bg-bg-soft text-text-dim rounded-lg px-3 py-2 text-[12px]">
+          반복 일정의 한 회차입니다 — 수정은 이 회차에만 적용됩니다.
+        </p>
+      ) : null}
 
       {/* 제목 — 구글처럼 맨 위 한 줄 크게 */}
       <input
@@ -353,6 +395,10 @@ function EditBody({
                 onChange={(e) => {
                   setStart(e.target.value);
                   if (e.target.value > end) setEnd(e.target.value);
+                  // 반복 종료일이 시작일보다 앞서게 되면 기본값(+1개월)으로 되민다.
+                  if (repeat !== "none" && repeatUntil <= e.target.value) {
+                    setRepeatUntil(plusOneMonth(e.target.value));
+                  }
                 }}
                 className={inputClass}
                 required
@@ -404,10 +450,45 @@ function EditBody({
               </div>
             )}
           </div>
+          {!editing ? (
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <span className="micro mb-1 block">반복</span>
+                <SearchableSelect
+                  options={REPEAT_OPTIONS}
+                  value={repeat}
+                  onValueChange={pickRepeat}
+                  placeholder="반복 안 함"
+                  searchPlaceholder="반복"
+                  ariaLabel="반복"
+                />
+              </div>
+              {repeat !== "none" ? (
+                <label className="block">
+                  <span className="micro mb-1 block">반복 종료일</span>
+                  <input
+                    type="date"
+                    name="repeatUntil"
+                    value={repeatUntil}
+                    min={start}
+                    onChange={(e) => setRepeatUntil(e.target.value)}
+                    className={inputClass}
+                    required
+                  />
+                </label>
+              ) : null}
+            </div>
+          ) : null}
           <p className="text-text-faint text-[11px]">
             시작 시간을 고르면 종료는 자동으로 따라옵니다(기본 1시간). 종일 일정은 시작 시간을
             &lsquo;종일&rsquo;로.
           </p>
+          {repeat !== "none" && !editing ? (
+            <p className="text-text-faint text-[11px]">
+              같은 일정이 반복 종료일까지 반복 등록됩니다(최대 60회). 29~31일 시작은 그 날이 없는
+              달을 건너뜁니다.
+            </p>
+          ) : null}
         </div>
 
         {/* 오른쪽 — 어떻게 보일지 */}
@@ -443,18 +524,32 @@ function EditBody({
         </div>
       </div>
 
-      <div className="flex items-center justify-between gap-2 pt-1">
+      <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
         {editing ? (
-          <Button
-            type="button"
-            variant="destructive"
-            size="sm"
-            disabled={deleting}
-            onClick={() => setConfirmDelete(true)}
-          >
-            {deleting ? <Loader2 className="size-3.5 animate-spin" /> : null}
-            삭제
-          </Button>
+          <span className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="destructive"
+              size="sm"
+              disabled={deleting}
+              onClick={() => setConfirmScope("one")}
+            >
+              {deleting ? <Loader2 className="size-3.5 animate-spin" /> : null}
+              {editing.seriesId ? "이 일정만 삭제" : "삭제"}
+            </Button>
+            {editing.seriesId ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={deleting}
+                className="text-danger"
+                onClick={() => setConfirmScope("series")}
+              >
+                반복 전체 삭제
+              </Button>
+            ) : null}
+          </span>
         ) : (
           <span />
         )}
@@ -467,16 +562,23 @@ function EditBody({
       </div>
 
       <ConfirmDialog
-        open={confirmDelete}
-        title="일정 삭제"
-        message={editing ? `'${editing.title}' 일정을 삭제합니다. 되돌릴 수 없습니다.` : ""}
+        open={confirmScope !== null}
+        title={confirmScope === "series" ? "반복 일정 전체 삭제" : "일정 삭제"}
+        message={
+          editing
+            ? confirmScope === "series"
+              ? `'${editing.title}' 반복 일정을 전부 삭제합니다 — 반복된 모든 회차가 삭제됩니다. 되돌릴 수 없습니다.`
+              : `'${editing.title}' 일정을 삭제합니다. 되돌릴 수 없습니다.`
+            : ""
+        }
         confirmLabel="삭제"
         danger
         onConfirm={() => {
-          setConfirmDelete(false);
-          doDelete();
+          const scope = confirmScope ?? "one";
+          setConfirmScope(null);
+          doDelete(scope);
         }}
-        onCancel={() => setConfirmDelete(false)}
+        onCancel={() => setConfirmScope(null)}
       />
     </form>
   );

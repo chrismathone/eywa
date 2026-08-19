@@ -13,9 +13,19 @@ import { weekdayIndexOf } from "@/lib/date-kst";
 
 const YMD = /^\d{4}-\d{2}-\d{2}$/;
 
-/** 휴가 종류 — 연차(하루 단위) / 반차(0.5일, 하루만). */
-export const LEAVE_KINDS = ["annual", "half"] as const;
+/** 휴가 종류 — 연차(하루 단위) / 반차(0.5일) / 반반차(0.25일, 0223a). 반차·반반차는 하루만. */
+export const LEAVE_KINDS = ["annual", "half", "quarter"] as const;
 export type LeaveKind = (typeof LEAVE_KINDS)[number];
+
+/** 종류 한글 라벨 — 소비처(기안 폼·문서 화면·캘린더 오버레이)가 인라인 삼항 대신 이걸 쓴다(단일 소스). */
+export const LEAVE_KIND_LABEL: Record<LeaveKind, string> = {
+  annual: "연차",
+  half: "반차",
+  quarter: "반반차",
+};
+
+/** 하루 단위가 아닌 종류(반차 0.5·반반차 0.25) — 하루만 신청 가능. */
+const PARTIAL_DAY: Partial<Record<LeaveKind, number>> = { half: 0.5, quarter: 0.25 };
 
 export function isLeaveKind(v: string): v is LeaveKind {
   return (LEAVE_KINDS as readonly string[]).includes(v);
@@ -24,12 +34,13 @@ export function isLeaveKind(v: string): v is LeaveKind {
 const SUNDAY = 0;
 
 /**
- * 차감 일수. 반차는 0.5일(하루만), 연차는 시작~종료 중 **일요일을 뺀** 날 수.
- * 형식 오류·역순 범위·반차인데 여러 날 = 0(호출부가 검증 메시지로 거른다).
+ * 차감 일수. 반차 0.5일·반반차 0.25일(둘 다 하루만), 연차는 시작~종료 중 **일요일을 뺀** 날 수.
+ * 형식 오류·역순 범위·부분휴가인데 여러 날 = 0(호출부가 검증 메시지로 거른다).
  */
 export function countLeaveDays(start: string, end: string, kind: LeaveKind): number {
   if (!YMD.test(start) || !YMD.test(end) || end < start) return 0;
-  if (kind === "half") return start === end ? 0.5 : 0;
+  const partial = PARTIAL_DAY[kind];
+  if (partial !== undefined) return start === end ? partial : 0;
 
   let days = 0;
   let cursor = start;
@@ -67,7 +78,9 @@ export function validateLeaveRange(args: {
   const { start, end, kind, periodEnd } = args;
   if (!YMD.test(start) || !YMD.test(end)) return "휴가 날짜를 선택하세요";
   if (end < start) return "종료일이 시작일보다 앞섭니다";
-  if (kind === "half" && start !== end) return "반차는 하루만 신청할 수 있습니다";
+  if (PARTIAL_DAY[kind] !== undefined && start !== end) {
+    return `${LEAVE_KIND_LABEL[kind]}는 하루만 신청할 수 있습니다`;
+  }
 
   const span = countCalendarDays(start, end);
   if (span > MAX_SPAN_DAYS) return `한 번에 신청할 수 있는 기간은 최대 ${MAX_SPAN_DAYS}일입니다`;
@@ -89,7 +102,7 @@ function countCalendarDays(start: string, end: string): number {
   return Math.floor((b - a) / 86_400_000) + 1;
 }
 
-/** 일수 표기 — 0.5는 "0.5일", 정수는 "3일"(불필요한 소수점 제거). */
+/** 일수 표기 — 0.25는 "0.25일", 0.5는 "0.5일", 정수는 "3일". ⚠️ toFixed(1) 금지(0.25가 "0.3일"로 왜곡). */
 export function formatLeaveDays(days: number): string {
-  return `${Number.isInteger(days) ? days : days.toFixed(1)}일`;
+  return `${Math.round(days * 100) / 100}일`;
 }

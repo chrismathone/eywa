@@ -28,8 +28,17 @@ import {
 } from "@/features/approvals/types";
 import type { ApprovalLineTemplate, ApprovalPerson } from "@/features/approvals/server/queries";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   countLeaveDays,
   formatLeaveDays,
+  LEAVE_KINDS,
+  LEAVE_KIND_LABEL,
   validateLeaveRange,
   type LeaveKind,
 } from "@/features/leave/request-days";
@@ -48,12 +57,16 @@ import {
  * 🔴 **표 안에 팝오버 드롭다운을 넣지 않는다** — `absolute` 팝오버는 표의 `overflow-x-auto` 래퍼에
  *    **잘린다**(원장 제보 "드롭다운 등 사용하면 css 깨짐"). 직원 선택은 **fixed 오버레이 다이얼로그**
  *    (ConfirmDialog 선례)라 잘릴 일이 없다.
- * 양식 4종(휴가신청서·품의서·지출결의서·업무연락, 2026-08-18) — 문서 종류 토글이 상세 입력과 제출
+ * 양식 4종(휴가신청서·품의서·지출결의서·수입결의서) — 문서 종류 드롭다운이 상세 입력과 제출
  * 액션을 가른다. 결재선·기본 설정은 공용.
  *
  * ⚠️ 잔여·결재선 검증의 근거는 서버(line.ts·각 submit 액션)다 — 화면은 미리보기·조기경고([[#77]]).
  * ⚠️ 임시저장·인쇄미리보기·보존연한·보안등급은 흉내 내지 않는다(대응 데이터가 없다 — 죽은 컨트롤 금지).
  */
+
+/** Select.Root items — SelectValue가 값 대신 이 라벨을 그린다(base-ui). */
+const FORM_ITEMS = Object.fromEntries(APPROVAL_FORMS.map((f) => [f, APPROVAL_FORM_LABEL[f]]));
+const KIND_ITEMS = Object.fromEntries(LEAVE_KINDS.map((k) => [k, LEAVE_KIND_LABEL[k]]));
 
 const inputClass =
   "border-line bg-card text-foreground placeholder:text-text-faint focus:border-primary rounded-lg border px-3 py-1.5 text-sm outline-none transition";
@@ -140,7 +153,7 @@ export function DraftComposer({
 
   // ── 휴가신청서 검증(기존 규칙 그대로 — 입사일 없으면 계산 불가) ─────────────
   const leaveReady = periodEnd !== null;
-  const effectiveEnd = kind === "half" ? start : end;
+  const effectiveEnd = kind === "annual" ? end : start; // 반차·반반차는 하루
   const days = countLeaveDays(start, effectiveEnd, kind);
   const inCurrentPeriod = leaveReady && !!start && start <= periodEnd;
   const invalid = validateLeaveRange({
@@ -195,27 +208,29 @@ export function DraftComposer({
                 <tr>
                   <th className="w-[88px]">문서 종류</th>
                   <td>
-                    {/* 토글 칩 — 표 래퍼가 overflow-hidden이라 팝오버 금지(잘린다). */}
-                    <span className="flex flex-wrap items-center gap-1">
-                      {APPROVAL_FORMS.map((f) => (
-                        <button
-                          key={f}
-                          type="button"
-                          onClick={() => {
-                            setForm(f);
-                            // 지출↔수입은 분류 어휘가 달라 남은 값이 다른 양식의 어휘일 수 있다 — 안전하게 리셋.
-                            setCategory("기타");
-                          }}
-                          className={`rounded-full border px-2.5 py-0.5 text-[12px] transition ${
-                            form === f
-                              ? "border-primary bg-primary text-primary-foreground font-medium"
-                              : "border-line bg-card text-text-dim hover:border-primary/50 hover:text-foreground"
-                          }`}
-                        >
-                          {APPROVAL_FORM_LABEL[f]}
-                        </button>
-                      ))}
-                    </span>
+                    {/* 드롭다운(원장 2026-08-19) — ui/select는 Portal 렌더라 overflow-hidden 표 래퍼에
+                        안 잘린다(인플레이스 absolute 팝오버 금지 규칙은 그대로 유효). */}
+                    <Select
+                      value={form}
+                      onValueChange={(v) => {
+                        if (!v) return;
+                        setForm(v as ApprovalForm);
+                        // 지출↔수입은 분류 어휘가 달라 남은 값이 다른 양식의 어휘일 수 있다 — 안전하게 리셋.
+                        setCategory("기타");
+                      }}
+                      items={FORM_ITEMS}
+                    >
+                      <SelectTrigger className="bg-card w-[150px]" aria-label="문서 종류">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent align="start">
+                        {APPROVAL_FORMS.map((f) => (
+                          <SelectItem key={f} value={f}>
+                            {APPROVAL_FORM_LABEL[f]}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </td>
                   <th className="w-[76px]">작성자</th>
                   <td className="text-[13px]">
@@ -267,31 +282,33 @@ export function DraftComposer({
                 입사일이 등록되지 않아 연차를 계산할 수 없습니다 — 사무실(직원관리)에 입사일 등록을
                 요청하세요.
                 <br />
-                품의서·지출결의서·업무연락은 지금도 기안할 수 있습니다.
+                품의서·지출결의서·수입결의서는 지금도 기안할 수 있습니다.
               </div>
             ) : (
               <>
                 <div className="flex flex-wrap items-end gap-3">
-                  <label className="block">
+                  <div className="block">
                     <span className="micro mb-1 block">휴가 종류</span>
-                    {/* 선택지가 둘뿐이라 드롭다운 대신 토글 — 표 밖이지만 팝오버 자체를 늘리지 않는다. */}
-                    <span className="border-line inline-flex overflow-hidden rounded-lg border">
-                      {(["annual", "half"] as const).map((k) => (
-                        <button
-                          key={k}
-                          type="button"
-                          onClick={() => setKind(k)}
-                          className={`px-3 py-1.5 text-[13px] transition ${
-                            kind === k
-                              ? "bg-primary text-primary-foreground font-medium"
-                              : "bg-card text-text-dim hover:bg-bg-soft"
-                          }`}
-                        >
-                          {k === "annual" ? "연차" : "반차"}
-                        </button>
-                      ))}
-                    </span>
-                  </label>
+                    {/* 드롭다운(원장 2026-08-19: 반반차 추가로 셋) — Portal 렌더라 잘림 없음. */}
+                    <Select
+                      value={kind}
+                      onValueChange={(v) => {
+                        if (v) setKind(v as LeaveKind);
+                      }}
+                      items={KIND_ITEMS}
+                    >
+                      <SelectTrigger className="bg-card w-[120px]" aria-label="휴가 종류">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent align="start">
+                        {LEAVE_KINDS.map((k) => (
+                          <SelectItem key={k} value={k}>
+                            {LEAVE_KIND_LABEL[k]}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                   <label className="block">
                     <span className="micro mb-1 block">시작일</span>
                     <input
@@ -306,7 +323,7 @@ export function DraftComposer({
                       required
                     />
                   </label>
-                  {kind === "half" ? (
+                  {kind !== "annual" ? (
                     <input type="hidden" name="endDate" value={start} />
                   ) : (
                     <label className="block">
