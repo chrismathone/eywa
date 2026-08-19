@@ -106,18 +106,28 @@ export function OperationsSection({
         <ShuttleEditor value={o.shuttle} onChange={(v) => set({ shuttle: v })} />
       </SettingsCard>
 
+      {/* 자리별로 비밀번호가 따로다 — 한 자리를 닫아도 다른 자리는 열려 있어야 하고, 담당자가 서로 다르다. */}
       <SettingsCard
-        title="랩실 출석부 비밀번호"
-        description="로그인 없이 /seat/lab 로 들어와 출결을 찍을 때 쓰는 비밀번호입니다. 비우면 공개 접속이 꺼집니다."
+        title="자리 출석부 비밀번호"
+        description="로그인 없이 태블릿으로 들어와 그 자리 오늘 출결을 찍을 때 쓰는 비밀번호입니다. 비우면 그 자리 공개 접속이 꺼집니다."
         span2
       >
-        <TextField
-          label="비밀번호"
-          hint="태블릿에서 입력. 숫자만이 아니어도 됩니다."
-          value={o.seatPins?.lab ?? ""}
-          onChange={(lab) => set({ seatPins: { ...o.seatPins, lab } })}
-          placeholder="7099"
-        />
+        <div className="grid gap-3 sm:grid-cols-2">
+          <TextField
+            label="랩실(603호) 비밀번호"
+            hint="주소 /seat/lab · 숫자만이 아니어도 됩니다."
+            value={o.seatPins?.lab ?? ""}
+            onChange={(lab) => set({ seatPins: { ...o.seatPins, lab } })}
+            placeholder="7099"
+          />
+          <TextField
+            label="JJ실(305호) 비밀번호"
+            hint="주소 /seat/jj · 비우면 이 자리만 꺼집니다."
+            value={o.seatPins?.jj ?? ""}
+            onChange={(jj) => set({ seatPins: { ...o.seatPins, jj } })}
+            placeholder="7099"
+          />
+        </div>
       </SettingsCard>
       </div>
     </SectionForm>

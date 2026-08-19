@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  configuredLabPin,
+  configuredSeatPin,
   nextPinAttempt,
   normalizePin,
   pinsMatch,
@@ -28,11 +28,11 @@ describe("PIN 정규화·비교", () => {
     expect(pinsMatch("", "7099")).toBe(false);
   });
 
-  it("설정 PIN이 비면 공개 접속을 끈다", () => {
-    expect(configuredLabPin("7099")).toBe("7099");
-    expect(configuredLabPin("  ")).toBeNull();
-    expect(configuredLabPin("")).toBeNull();
-    expect(configuredLabPin(undefined)).toBeNull();
+  it("설정 PIN이 비면 그 자리 공개 접속을 끈다", () => {
+    expect(configuredSeatPin("7099")).toBe("7099");
+    expect(configuredSeatPin("  ")).toBeNull();
+    expect(configuredSeatPin("")).toBeNull();
+    expect(configuredSeatPin(undefined)).toBeNull();
   });
 });
 
@@ -57,8 +57,17 @@ describe("쿠키 서명", () => {
     expect(verifySeatPin(signSeatPin(expired, SECRET), SECRET, Date.now())).toBeNull();
   });
 
-  it("아직 안 연 자리(JJ)는 쿠키로도 통과하지 않는다", () => {
-    const token = signSeatPin({ tenantId: "t-1", seat: "jj", exp: Date.now() + 60_000 }, SECRET);
+  it("JJ실 쿠키도 통과한다(2026-08-19 공개 오픈) — 자리는 쿠키에 서명돼 있다", () => {
+    const payload = { tenantId: "t-1", seat: "jj" as const, exp: Date.now() + 60_000 };
+    expect(verifySeatPin(signSeatPin(payload, SECRET), SECRET, Date.now())).toEqual(payload);
+  });
+
+  it("자리가 아닌 값은 서명이 맞아도 거절한다", () => {
+    // 문 목록(PIN_SEAT_KEYS) 밖의 자리는 쿠키로 못 만든다 — 자리가 늘어난 척하는 토큰 차단.
+    const token = signSeatPin(
+      { tenantId: "t-1", seat: "603" as unknown as "lab", exp: Date.now() + 60_000 },
+      SECRET,
+    );
     expect(verifySeatPin(token, SECRET, Date.now())).toBeNull();
   });
 });

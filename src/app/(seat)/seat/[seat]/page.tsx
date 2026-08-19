@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 import { EmptyState } from "@/components/empty-state";
 import { brandLabels, getPublicBranding } from "@/features/owner/server/public-branding";
 import { getPublicSeatDay } from "@/features/attendance/seat/server/queries";
+import { attachJjMarks } from "@/features/attendance/seat/server/jj-marks";
+import { seatHasJjFields } from "@/features/attendance/seat/jj-fields";
 import { readSeatPinSession, resolvePinSigningSecret } from "@/features/attendance/seat/server/pin-session";
 import {
   parseSeatKey,
@@ -33,8 +35,11 @@ function kstNowHm(): string {
 }
 
 /**
- * 랩실 공개 출석부 — 로그인 없음. PIN 쿠키가 있어야 오늘·이 자리 명단만 보인다.
+ * 자리(랩실·JJ실) 공개 출석부 — 로그인 없음. PIN 쿠키가 있어야 오늘·**그 자리** 명단만 보인다.
  * 지난 날짜·다른 자리·학생 상세로 가는 길을 만들지 않는다.
+ *
+ * 🔴 쿠키에 적힌 자리와 주소의 자리가 **다르면 다시 묻는다**(`session.seat !== seat`) — 랩실 비밀번호로
+ *    JJ실을 열 수 없다. 자리마다 비밀번호가 따로이고 담당자도 다르다.
  */
 export default async function PublicSeatPage({
   params,
@@ -93,7 +98,12 @@ export default async function PublicSeatPage({
             classIds: p.slots.map((s) => s.classId),
           }))}
           activeStart={period.start}
-          rosters={day.rosterByPeriod[period.start] ?? []}
+          // JJ실은 듣기·단어 칸이 붙는다 — 이미 적힌 값을 안 보여주면 담당자가 빈 칸으로 보고 다시 적는다.
+          rosters={
+            seatHasJjFields(seat)
+              ? await attachJjMarks(day.rosterByPeriod[period.start] ?? [], session.tenantId, date, period.start)
+              : (day.rosterByPeriod[period.start] ?? [])
+          }
           readOnly={false}
           hrefFor={`/seat/${seat}?start=`}
         />

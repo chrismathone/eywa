@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { getPublicBranding } from "@/features/owner/server/public-branding";
-import { configuredLabPin, pinsMatch } from "../pin";
+import { configuredSeatPin, pinsMatch } from "../pin";
 import { parseSeatKey } from "../seat";
 import {
   delayAfterPinFail,
@@ -34,7 +34,9 @@ export async function submitSeatPin(
   const branding = await getPublicBranding();
   if (!branding) return { error: "지금은 이 화면을 쓸 수 없습니다. 관리자에게 문의하세요." };
 
-  const expected = configuredLabPin(branding.settings.operations.seatPins.lab);
+  // 🔴 그 **자리의** 비밀번호를 고른다 — 자리를 하드코딩하면 새 자리를 열 때 남의 비밀번호로 들어온다.
+  //    비어 있으면 그 자리만 닫힌다(다른 자리는 그대로 열려 있다).
+  const expected = configuredSeatPin(branding.settings.operations.seatPins[seat]);
   if (!expected) return { error: "지금은 이 화면을 쓸 수 없습니다. 관리자에게 문의하세요." };
 
   const key = await rateLimitKey();

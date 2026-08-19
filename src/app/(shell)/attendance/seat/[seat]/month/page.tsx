@@ -49,7 +49,7 @@ export default async function SeatMonthlyPage({
   const seat = parseAnySeatKey(seatParam);
   if (!seat) notFound();
 
-  // 화면은 '쓸 수 있는 자리'(USABLE)까지 연다 — `seat_label`(자리 시수)은 OPEN만이라 JJ 기록은 '확인 필요'로 선다.
+  // 화면은 '쓸 수 있는 자리'(USABLE)까지 연다 — `seat_label`(자리 시수)은 PAYROLL_SEAT_KEYS만이라 JJ 기록은 '확인 필요'로 선다.
   if (!parseUsableSeatKey(seatParam)) {
     return (
       <div className="flex h-full min-h-0 flex-col gap-3">

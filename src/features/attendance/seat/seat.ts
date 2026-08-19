@@ -37,29 +37,42 @@ export const SEAT_ROOM: Record<SeatKey, string> = { lab: "603호", jj: "305호" 
 
 /**
  * 로그인 출석부에서 **화면을 여는** 자리. 허브 카드·`/attendance/seat/:key`가 이걸 본다.
- * 랩실 + JJ실. 공개 PIN(`/seat/:key`)·시수 분리(`seat_label`)와는 다른 축이다.
+ * 랩실 + JJ실. 공개 PIN(`PIN_SEAT_KEYS`)·자리 시수(`PAYROLL_SEAT_KEYS`)와는 다른 축이다.
  */
 export const USABLE_SEAT_KEYS: readonly SeatKey[] = ["lab", "jj"];
 
 /**
- * **자리 시수(seat_label) + 공개 PIN** 을 켜는 자리 — 지금은 랩실만.
+ * **공개 PIN 문** — 로그인 없이 `/seat/:key`로 들어와 그 자리 오늘 명단을 찍을 수 있는 자리.
+ * 랩실 + JJ실(원장 2026-08-19: *"/seat/jj 도 같은 방법으로 만들자"*).
  *
- * 🔴 JJ실 반엔 이미 출결이 담임 시수로 쌓여 있다. 여기 넣으면 그 순간부터 담임 정산에서 빠진다.
- *    화면만 쓰려면 `USABLE_SEAT_KEYS`에만 두고, 쓰기는 `seat_label` 없이 한다.
+ * 🔵 이건 **문**이지 돈이 아니다 — 여기에 자리를 더해도 시수 귀속은 그대로다. 실제로 열리려면
+ *    학원설정 `operations.seatPins[자리]`에 비밀번호가 들어 있어야 한다(비면 그 자리는 닫힌다).
+ * 🔴 아래 급여 축과 **절대 한 배열로 합치지 말 것** — 합치는 순간 JJ 출결에 `seat_label`이 박혀
+ *    담임 정산에서 빠진다. 가드: `seat-axes.test.ts`.
  */
-export const OPEN_SEAT_KEYS: readonly SeatKey[] = ["lab"];
+export const PIN_SEAT_KEYS: readonly SeatKey[] = ["lab", "jj"];
+
+/**
+ * **자리 시수** — 출결을 쓸 때 `attendance_records.seat_label`을 박는 자리(0208a). 지금은 랩실만.
+ *
+ * 🔴 담임 시수 집계(tier-rows·settlement-queries)가 이 값이 있는 행을 **걸러 낸다**. JJ실 반엔 이미
+ *    출결이 담임 시수로 쌓여 있어(실측 2026-08-19: `seat_label` 붙은 행 0 / JJ 교시 시각 출결 334)
+ *    여기에 `"jj"`를 넣는 순간 그 출결이 담임 정산에서 통째로 빠진다.
+ * 🔴 공개 PIN을 여는 것과 **다른 축**이다 — 문은 `PIN_SEAT_KEYS`가, 돈은 여기가 정한다.
+ */
+export const PAYROLL_SEAT_KEYS: readonly SeatKey[] = ["lab"];
 
 export function isPayrollSeat(seat: SeatKey): boolean {
-  return (OPEN_SEAT_KEYS as readonly string[]).includes(seat);
+  return (PAYROLL_SEAT_KEYS as readonly string[]).includes(seat);
 }
 
-/** 공개 PIN·자리 시수 경로. 알 수 없거나 PIN 미오픈이면 null. */
+/** 공개 PIN 경로(`/seat/:key`)가 자리를 알아보는 문. 모르는 값·PIN 미오픈이면 null. */
 export function parseSeatKey(raw: string | undefined | null): SeatKey | null {
   const v = (raw ?? "").trim().toLowerCase();
-  return (OPEN_SEAT_KEYS as readonly string[]).includes(v) ? (v as SeatKey) : null;
+  return (PIN_SEAT_KEYS as readonly string[]).includes(v) ? (v as SeatKey) : null;
 }
 
-/** 로그인 자리 출석부 URL. PIN 미오픈(JJ)도 통과한다. */
+/** 로그인 자리 출석부 URL. 공개 PIN을 안 연 자리도 통과한다. */
 export function parseUsableSeatKey(raw: string | undefined | null): SeatKey | null {
   const v = (raw ?? "").trim().toLowerCase();
   return (USABLE_SEAT_KEYS as readonly string[]).includes(v) ? (v as SeatKey) : null;
@@ -67,7 +80,7 @@ export function parseUsableSeatKey(raw: string | undefined | null): SeatKey | nu
 
 /**
  * 아직 안 연 자리까지 포함한 해석 — **목록에 이름은 보이되 기록은 못 하게** 하려고 나눠 둔다.
- * 화면은 이걸로 자리를 알아보고, 쓰기 가능 여부는 `parseSeatKey`(= OPEN_SEAT_KEYS)가 정한다.
+ * 화면은 이걸로 자리를 알아보고, 공개(비로그인) 쓰기 가능 여부는 `parseSeatKey`(= PIN_SEAT_KEYS)가 정한다.
  */
 export function parseAnySeatKey(raw: string | undefined | null): SeatKey | null {
   const v = (raw ?? "").trim().toLowerCase();
