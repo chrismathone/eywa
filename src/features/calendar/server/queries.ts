@@ -3,12 +3,16 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { reportError } from "@/lib/observability/report-error";
-import { isEventColor, type CalendarEvent } from "../types";
+import { fetchAllPaged } from "@/lib/supabase/batch";
+import { isEventColor, type CalendarEvent, type CalendarTag } from "../types";
 
 /**
- * 캘린더 조회 — 월 단위(그 달과 **겹치는** 일정 전부: 여러 날짜에 걸친 일정 포함).
+ * 캘린더 조회 — 월 단위(그 달과 **겹치는** 일정 전부) + 연 단위(연간/목록/분석 뷰, 0224a).
  * 읽기는 세션 클라이언트 + RLS(테넌트 전원). 쓰기는 서버 액션(actions.ts).
- * ⚠️ 표 미적용(0218a 전) 배포에서도 죽지 않는다 — ready:false로 접는다([[#95]]).
+ *
+ * ⚠️ #95 expand/contract — SQL은 원장이 손으로 적용하므로 앱이 항상 먼저 배포된다. 전 직원이
+ *    보는 화면이라 스키마 세대별 select 폴백 체인으로 살아남는다:
+ *    FULL(태그 0224a + 시리즈 0222a) → NO_TAG(0224a 전) → LEGACY(0222a 전) → 표 부재 = ready:false.
  */
 
 export type CalendarMonth = {
@@ -71,11 +75,12 @@ async function approvedLeaveOverlay(first: string, last: string): Promise<Calend
       createdByName: null,
       source: "leave" as const,
       seriesId: null,
+      tag: null,
     };
   });
 }
 
-/** 수기 일정 행 — series_id는 0222a 전 배포에선 없을 수 있다(아래 재시도 분기). */
+/** 수기 일정 행 — series_id(0222a)·tag(0224a)는 마이그 전 배포에선 없을 수 있다(폴백 체인). */
 type ManualEventRow = {
   id: string;
   title: string;
@@ -86,66 +91,127 @@ type ManualEventRow = {
   end_time: string | null;
   color: string;
   series_id?: string | null;
+  tag?: { id: string; name: string; color: string } | null;
   creator: { display_name?: string } | null;
 };
+
+// select 폴백 체인(#95) — i번째가 실패하면 **그 세대가 새로 짚는 컬럼**의 에러일 때만 다음 세대로.
+const COLS_FULL =
+  "id, title, memo, start_date, end_date, start_time, end_time, color, series_id, tag:calendar_tags!calendar_events_tag_id_fkey(id, name, color), creator:users!calendar_events_created_by_fkey(display_name)";
+const COLS_NO_TAG =
+  "id, title, memo, start_date, end_date, start_time, end_time, color, series_id, creator:users!calendar_events_created_by_fkey(display_name)";
+const COLS_LEGACY =
+  "id, title, memo, start_date, end_date, start_time, end_time, color, creator:users!calendar_events_created_by_fkey(display_name)";
+const ATTEMPTS: { cols: string; droppedBy: RegExp }[] = [
+  { cols: COLS_FULL, droppedBy: /tag_id|calendar_tags/i },
+  { cols: COLS_NO_TAG, droppedBy: /series_id/i },
+  { cols: COLS_LEGACY, droppedBy: /$^/ },
+];
+
+function mapManual(r: ManualEventRow): CalendarEvent {
+  const tag: CalendarTag | null = r.tag
+    ? {
+        id: String(r.tag.id),
+        name: String(r.tag.name),
+        color: isEventColor(String(r.tag.color)) ? (String(r.tag.color) as CalendarTag["color"]) : "primary",
+      }
+    : null;
+  return {
+    id: String(r.id),
+    title: String(r.title),
+    memo: r.memo ?? null,
+    startDate: String(r.start_date),
+    endDate: String(r.end_date),
+    // DB time은 "HH:MM:SS" — 표시는 분까지.
+    startTime: r.start_time ? String(r.start_time).slice(0, 5) : null,
+    endTime: r.end_time ? String(r.end_time).slice(0, 5) : null,
+    color: isEventColor(String(r.color)) ? (String(r.color) as CalendarEvent["color"]) : "primary",
+    createdByName: r.creator?.display_name ?? null,
+    source: "manual" as const,
+    seriesId: r.series_id ? String(r.series_id) : null,
+    tag,
+  };
+}
+
+/**
+ * [first, last]와 겹치는 수기 일정 전건 — `.range` 페이지네이션(fetchAllPaged, B2: 1000행 절단 방지.
+ * 연간 뷰가 한 해 전체를 읽는다 — 반복 60회 시리즈가 여럿이면 1000을 넘을 수 있다).
+ * 표 부재 = ready:false(0218a 전 배포), 그 밖의 실패 = throw(호출부가 한글 배너로).
+ */
+async function fetchManualEvents(
+  first: string,
+  last: string,
+): Promise<{ ready: boolean; events: CalendarEvent[] }> {
+  const supabase = await createClient();
+  let lastError = "";
+  for (const attempt of ATTEMPTS) {
+    try {
+      const rows = await fetchAllPaged<ManualEventRow>(
+        (from, to) =>
+          supabase
+            .from("calendar_events")
+            .select(attempt.cols)
+            .lte("start_date", last)
+            .gte("end_date", first)
+            .order("start_date", { ascending: true })
+            .order("id", { ascending: true }) // OFFSET 페이지 흔들림 방지 tie-break
+            .range(from, to) as unknown as PromiseLike<{
+            data: ManualEventRow[] | null;
+            error: { message: string } | null;
+          }>,
+      );
+      return { ready: true, events: rows.map(mapManual) };
+    } catch (e) {
+      lastError = e instanceof Error ? e.message : String(e);
+      if (/PGRST205|42P01|Could not find the table/i.test(lastError)) {
+        return { ready: false, events: [] }; // 0218a 전 — 캘린더 표 자체가 없다
+      }
+      if (attempt.droppedBy.test(lastError)) continue; // 그 세대 컬럼 부재 — 다음 세대로
+      throw new Error(`일정 조회 실패 — ${lastError}`);
+    }
+  }
+  throw new Error(`일정 조회 실패 — ${lastError}`);
+}
 
 export async function getMonthEvents(month: string): Promise<CalendarMonth> {
   if (!MONTH_RE.test(month)) return { ready: true, events: [] };
   const { first, last } = monthRange(month);
-  const supabase = await createClient();
-
-  // 겹침 조건: start <= 월말 AND end >= 월초. 학원 일정은 월 수십 건 규모 — 상한 500(절단 방지 명시, B2).
-  const fetchManual = async (cols: string) => {
-    const res = await supabase
-      .from("calendar_events")
-      .select(cols)
-      .lte("start_date", last)
-      .gte("end_date", first)
-      .order("start_date", { ascending: true })
-      .limit(500);
-    return { data: res.data as unknown as ManualEventRow[] | null, error: res.error };
-  };
-
-  const withSeries =
-    "id, title, memo, start_date, end_date, start_time, end_time, color, series_id, creator:users!calendar_events_created_by_fkey(display_name)";
 
   // 수기 일정과 휴가 오버레이는 서로 독립 — 병렬(B4).
   const [manual, leaveEvents] = await Promise.all([
-    fetchManual(withSeries),
+    fetchManualEvents(first, last),
     approvedLeaveOverlay(first, last),
   ]);
-
-  let { data, error } = manual;
-  if (error && /series_id/i.test(error.message)) {
-    // #95 expand/contract — 0222a(series_id) 적용 전 배포에서도 전 직원 캘린더는 떠야 한다:
-    // 컬럼 부재(42703, 메시지가 컬럼명을 짚는다)면 series_id 없는 기존 select로 1회 재시도.
-    ({ data, error } = await fetchManual(withSeries.replace("series_id, ", "")));
-  }
-
-  if (error) {
-    if (/PGRST205|42P01|does not exist|Could not find the table/i.test(`${error.code} ${error.message}`)) {
-      return { ready: false, events: [] };
-    }
-    throw new Error(`일정 조회 실패 — ${error.message}`);
-  }
+  if (!manual.ready) return { ready: false, events: [] };
 
   return {
     ready: true,
-    events: [...leaveEvents, ...(data ?? []).map((r) => {
-      return {
-        id: String(r.id),
-        title: String(r.title),
-        memo: r.memo ?? null,
-        startDate: String(r.start_date),
-        endDate: String(r.end_date),
-        // DB time은 "HH:MM:SS" — 표시는 분까지.
-        startTime: r.start_time ? String(r.start_time).slice(0, 5) : null,
-        endTime: r.end_time ? String(r.end_time).slice(0, 5) : null,
-        color: isEventColor(String(r.color)) ? (String(r.color) as CalendarEvent["color"]) : "primary",
-        createdByName: r.creator?.display_name ?? null,
-        source: "manual" as const,
-        seriesId: r.series_id ? String(r.series_id) : null,
-      };
-    })].sort((a, b) => a.startDate.localeCompare(b.startDate)),
+    events: [...leaveEvents, ...manual.events].sort((a, b) => a.startDate.localeCompare(b.startDate)),
   };
+}
+
+/**
+ * 연 단위 조회(연간/목록/분석 뷰, 0224a) — **수기 일정만**. 휴가 오버레이는 일정 분석의 축이
+ * 아니라 의도적으로 뺀다(월 그리드에서만 겹쳐 보인다). 그 해와 겹치는 일정 전부, 날짜순.
+ */
+export async function getYearEvents(year: number): Promise<CalendarMonth> {
+  if (!Number.isInteger(year) || year < 2000 || year > 2100) return { ready: true, events: [] };
+  return fetchManualEvents(`${year}-01-01`, `${year}-12-31`);
+}
+
+/**
+ * 태그 사전(0224a) — 이름 가나다순(⚠️ Postgres 정렬은 로마자→한글 [[#84]] — JS에서 ko 정렬).
+ * 표 부재(0224a 전 배포)·실패 = 빈 배열(태그 UI가 조용히 접힌다, #95 — 일정 자체는 무관).
+ */
+export async function getCalendarTags(): Promise<CalendarTag[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("calendar_tags").select("id, name, color").limit(200);
+  if (error || !data) return [];
+  return data
+    .map((t) => ({
+      id: String(t.id),
+      name: String(t.name),
+      color: isEventColor(String(t.color)) ? (String(t.color) as CalendarTag["color"]) : ("primary" as const),
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name, "ko"));
 }
