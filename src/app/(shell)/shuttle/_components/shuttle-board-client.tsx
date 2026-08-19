@@ -298,7 +298,16 @@ export function ShuttleBoardClient({
       </DragOverlay>
 
       {stopDialogOpen && (
-        <StopMasterDialog stops={stops} onClose={() => setStopDialogOpen(false)} onError={setError} />
+        <StopMasterDialog
+          stops={stops}
+          // '노선 N곳'을 펼치려면 어느 노선이 그 정류장을 쓰는지가 필요한데, 보드가 이미 싣고 있다
+          // (추가 조회 0). 시즌 라벨을 함께 넘겨 "지금 보는 시즌 기준"임을 화면에 적는다.
+          runs={runs}
+          vehicles={vehicles}
+          seasonLabel={SEASON_LABEL[season]}
+          onClose={() => setStopDialogOpen(false)}
+          onError={setError}
+        />
       )}
 
       {activeRun && (

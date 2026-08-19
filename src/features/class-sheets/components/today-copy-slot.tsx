@@ -16,6 +16,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { copySlotFromPrevious } from "../server/actions";
+import type { CarryPatch } from "../lib/carry-marks";
 import type { SheetSaveStore } from "./use-sheet-saves";
 
 export function TodayCopySlot({
@@ -23,11 +24,18 @@ export function TodayCopySlot({
   date,
   slotStart,
   store,
+  onCarried,
 }: {
   classId: string;
   date: string;
   slotStart: string;
   store: SheetSaveStore;
+  /**
+   * JJ 이어받기로 채워진 학생 칸 — 보드가 **화면 상태에 머지**한다(직원 요청 2026-08-19).
+   * 🔴 `router.refresh()`로는 안 바뀐다: 보드의 마크는 클라 state(useState(initialMarks))라
+   *    서버 props가 새로 와도 그대로다. 넘기지 않으면 "복사했는데 칸이 그대로"로 보인다.
+   */
+  onCarried?: (slotStart: string, patches: CarryPatch[]) => void;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -35,7 +43,7 @@ export function TodayCopySlot({
     <button
       type="button"
       disabled={busy}
-      title="같은 교시의 지난 수업일에서 평시 계획을 가져옵니다 — 이미 쓴 칸은 그대로 두고 빈 칸만 채웁니다(학생 기록은 복사하지 않습니다)"
+      title="같은 교시의 지난 수업일에서 평시 계획을 가져옵니다 — 이미 쓴 칸은 그대로 두고 빈 칸만 채웁니다. JJ 교시는 학생별 듣기 레벨·누적 암기 단어수도 지난 기록에서 채웁니다(출결·태도는 복사하지 않습니다)"
       className="border-line-strong text-foreground hover:text-primary hover:border-primary cursor-pointer rounded-full border px-2 py-0.5 text-[12px] font-bold disabled:cursor-default disabled:opacity-60"
       onClick={() => {
         setBusy(true);
@@ -50,6 +58,16 @@ export function TodayCopySlot({
             }
             return copySlotFromPrevious({ classId, planDate: date, slotStart, termMode: "regular" }).then((r) => {
               if (!r.ok) return void toast.error(r.error);
+              // JJ 이어받기는 계획 복사와 **따로** 반영한다(원본이 계획 줄이 아니라 학생 기록이다).
+              if (r.carried.length > 0) onCarried?.(slotStart, r.carried);
+              if (r.carryError) toast.error(r.carryError);
+              if (r.carryPending) {
+                toast.info("듣기 레벨·누적 암기 단어수 칸은 아직 준비 중입니다(관리자에게 문의하세요)");
+              }
+              if (r.copied === 0 && r.carrySummary) {
+                toast.success(`${r.carrySummary} 채웠습니다 — 지난 기록 값이라 바뀐 학생은 고쳐 주세요`);
+                return;
+              }
               if (r.copied === 0) {
                 // 서버가 "조용히 성공한 척"을 안 한다 — 사유를 그대로 잇는다(raw 코드는 한글로).
                 // ⚠️ target_not_empty는 0209a 적용 전(옛 함수)에만 온다.
@@ -71,6 +89,7 @@ export function TodayCopySlot({
               }
               toast.success(
                 `${r.sourceLabel ? `${r.sourceLabel} 수업에서 ` : ""}${r.copied}줄 채웠습니다` +
+                  (r.carrySummary ? ` · ${r.carrySummary} 채움` : "") +
                   (r.truncated > 0 ? ` — ${r.truncated}줄은 20줄 상한이라 못 넣었습니다` : ""),
               );
               router.refresh();

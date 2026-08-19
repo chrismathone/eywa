@@ -24,7 +24,8 @@ export function LiveDatePicker({
 
   function go(ymd: string) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd) || ymd > today) return;
-    const q = tab === "desk" ? `tab=desk&date=${ymd}` : `date=${ymd}`;
+    // 날짜를 옮겨도 **보던 면은 그대로** 둔다(좌석표=기본이라 쿼리 없음, 나머지는 tab을 실어 보낸다).
+    const q = tab === "seating" ? `date=${ymd}` : `tab=${tab}&date=${ymd}`;
     router.push(`/attendance/live?${q}`);
   }
 

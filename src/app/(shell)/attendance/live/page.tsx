@@ -8,10 +8,13 @@ import { accessLevelTenant } from "@/lib/auth/perm-matrix";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { kstToday } from "@/lib/date-kst";
 import { getCarryOverAbsences, getDeskQueue, getLiveBoard } from "@/features/attendance/live/server/queries";
+import { getRangeRecap, getSavedRecapBrief } from "@/features/attendance/recap/server/queries";
+import { recapDatesFor, recapRangeDates } from "@/features/attendance/recap/range";
 import { holidayNameOf } from "@/features/attendance/live/server/load";
 import type { LiveBoard } from "@/features/attendance/live/types";
 import { SeatingChart } from "@/features/attendance/live/components/seating-chart";
 import { DeskView } from "./_components/desk-view";
+import { RecapView } from "./_components/recap-view";
 import { LiveDatePicker } from "./_components/live-date-picker";
 import { LiveRefresher } from "./_components/live-refresher";
 import { AbsenceIntakeButton } from "../_components/absence-intake-button";
@@ -31,7 +34,7 @@ export const metadata = { title: "오늘 출결 — eywa" };
 export default async function AttendanceLivePage({
   searchParams,
 }: {
-  searchParams: Promise<{ tab?: string; date?: string }>;
+  searchParams: Promise<{ tab?: string; date?: string; from?: string }>;
 }) {
   await requireAccess("attendance");
   const sp = await searchParams;
@@ -43,13 +46,26 @@ export default async function AttendanceLivePage({
   const isDesk = level === "full";
   const today = kstToday();
   const date = /^\d{4}-\d{2}-\d{2}$/.test(sp.date ?? "") && sp.date! <= today ? sp.date! : today;
-  const tab = isDesk && sp.tab === "desk" ? "desk" : "seating";
+  const tab = isDesk && (sp.tab === "desk" || sp.tab === "recap") ? sp.tab : "seating";
+  // '어제 출결' 탭이 데려갈 기간 — 평소엔 어제 하루, **월요일은 금·토·일**(원장 2026-08-19).
+  // 범위는 URL `from`~`date`로 실린다. 날짜 선택기로 직접 고르면 `from`이 없어 그날 하루가 된다.
+  const span = recapDatesFor(today);
+  const recapHref = `/attendance/live?tab=recap&from=${span[0]}&date=${span[span.length - 1]}`;
+  // 요약이 실제로 덮을 날짜들 — `from`이 없거나 이상하면 하루로 접힌다(range.ts가 상한도 건다).
+  const recapFrom = /^\d{4}-\d{2}-\d{2}$/.test(sp.from ?? "") && sp.from! <= date ? sp.from! : date;
+  const recapDates = tab === "recap" ? recapRangeDates(recapFrom, date) : [];
 
   const holiday = await holidayNameOf(date);
-  const [board, queue, carryOver] = await Promise.all([
+  const [board, queue, carryOver, recap, recapAi] = await Promise.all([
     holiday ? null : getLiveBoard(date),
     holiday || !isDesk ? null : getDeskQueue(date),
     holiday || !isDesk || tab !== "desk" ? null : getCarryOverAbsences(date),
+    // 요약은 좌석표와 **같은 적재**(getLiveBoard, React cache)를 공유한다 — 왕복이 늘지 않는다.
+    // 🔴 휴원일이어도 **요약은 막지 않는다** — 범위(금·토·일)에 수업이 있던 날이 섞여 있고, 그날 블록이
+    //    스스로 "휴원일"이라고 말한다. 좌석표·큐만 휴원일에 계산을 멈춘다.
+    tab !== "recap" ? null : getRangeRecap(recapDates),
+    // 저장된 AI 정리(있으면). ⚠️ 표(0226a) 적용 전이면 null로 떨어지고 카드만 접힌다(#95).
+    tab !== "recap" ? null : getSavedRecapBrief(recapDates[0] ?? date, date),
   ]);
 
   const pending = queue ? queue.counts.students + queue.counts.classes : 0;
@@ -73,7 +89,7 @@ export default async function AttendanceLivePage({
         actions={isDesk ? <AbsenceIntakeButton today={today} /> : null}
       />
 
-      {holiday ? (
+      {holiday && tab !== "recap" ? (
         // 🔴 휴원일엔 아무 것도 계산하지 않는다 — 시간표는 요일 반복이라 슬롯이 살아 있고, 그날 출결은
         //    당연히 비어 있다. 가드가 없으면 명절에 전교생이 '미확인'으로 뜬다.
         <EmptyState
@@ -90,7 +106,7 @@ export default async function AttendanceLivePage({
                  둔 것과 같은 이유: 볼 수 있는 것과 할 수 있는 것을 맞춘다). 강사에게 필요해지면
                  담당 반으로 좁힌 뒤에 열 것.
               ⚠️ Suspense로 감싸 **첫 페인트를 막지 않는다**(B7) — 부가 정보가 좌석표를 기다리게 하면 안 된다. */}
-          {isDesk && (
+          {isDesk && !holiday && tab !== "recap" && (
             <Suspense fallback={null}>
               <ShuttleMissedBanner date={date} />
             </Suspense>
@@ -100,10 +116,24 @@ export default async function AttendanceLivePage({
             <nav className="border-line flex gap-1 border-b" aria-label="보기 전환">
               <TabLink active={tab === "seating"} href={`/attendance/live?date=${date}`} label="좌석표" />
               <TabLink active={tab === "desk"} href={`/attendance/live?tab=desk&date=${date}`} label="확인 필요" count={pending ? String(pending) : undefined} alert={pending > 0} />
+              {/* 어제 출결 = **지난 수업일을 결산하는 면**이라 오늘이 아니라 어제(월요일이면 금·토·일)로 데려간다. */}
+              <TabLink active={tab === "recap"} href={recapHref} label="어제 출결" />
             </nav>
           )}
 
-          {tab === "desk" && queue ? (
+          {tab === "recap" ? (
+            recap ? (
+              <RecapView recap={recap} isToday={date === today} ai={recapAi} />
+            ) : (
+              // 게이트가 탭과 같아 여기 오기 어렵지만, **빈 화면으로 끝내지는 않는다** — 아무것도
+              // 안 그리면 "고장인지 없는 건지"를 구분할 수 없다.
+              <EmptyState
+                icon={CalendarDays}
+                title="요약을 불러오지 못했습니다"
+                description="잠시 후 다시 열어 주세요. 계속되면 관리자에게 문의해 주세요."
+              />
+            )
+          ) : tab === "desk" && queue ? (
             <DeskView queue={queue} date={date} canEdit={board?.canEdit ?? false} carryOver={carryOver} />
           ) : board ? (
             <SeatingChart board={stripContacts(board)} />

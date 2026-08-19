@@ -62,7 +62,11 @@ export function StopColumn({
   const addable = stops.filter((s) => !used.has(s.id));
 
   return (
-    <div className="flex min-h-0 flex-col gap-2 overflow-y-auto">
+    // ⚠️ `px-1 py-0.5` — 카드 테두리는 실제 border가 아니라 `--shadow-card`의 1px 링(팔레트 v4)이라
+    //    **박스 밖 1px**에 그려진다. 그런데 `overflow-y-auto`는 CSS상 가로도 함께 잘라내므로(한 축만
+    //    visible일 수 없다) 링의 좌·우가 통째로 깎여 "테두리가 짤려 보인다"(원장 2026-08-19 제보).
+    //    안쪽 여백을 조금 주면 링이 잘릴 자리가 생긴다. 컨테이너 안 요소는 다 같이 밀리므로 줄맞춤은 그대로.
+    <div className="flex min-h-0 flex-col gap-2 overflow-y-auto px-1 py-0.5">
       <div className="flex items-center justify-between gap-2 px-1">
         <h2 className="text-text text-[14px] font-bold">{runTitle(run)}</h2>
         {canWrite && (
@@ -71,6 +75,14 @@ export function StopColumn({
           </Button>
         )}
       </div>
+      {canWrite && (
+        // 요일 편집이 칩 안에 접혀 있어 처음 보면 못 찾는다(원장 2026-08-19 *"요일 어디서?"*) —
+        // 어디를 눌러야 하는지 한 줄로 적어 둔다.
+        <p className="text-text-faint px-1 text-[11.5px]">
+          학생을 끌어다 놓으면 <b className="font-bold">평일</b>로 들어갑니다 — 칩의 요일 글자를
+          누르면 요일을 바꿉니다.
+        </p>
+      )}
 
       {adding && canWrite && (
         <div className="bg-card flex max-h-56 flex-col gap-1 overflow-y-auto rounded-2xl p-2 shadow-[var(--shadow-card)]">
@@ -169,9 +181,12 @@ function StopCard({
   const already = useMemo(() => new Set(stop.riders.map((r) => r.studentId)), [stop.riders]);
   const candidates = useMemo(() => {
     const key = q.replace(/\s+/g, "").toLowerCase();
+    // 🔑 **검색해야 나온다** — 재원생 전원(실측 336명)을 늘 세워두면 찾는 데 방해만 된다
+    //    (오른쪽 학생 풀과 같은 규약, 원장 2026-08-19).
+    if (!key) return [];
     return students
       .filter((s) => !already.has(s.id))
-      .filter((s) => !key || s.searchKey.includes(key))
+      .filter((s) => s.searchKey.includes(key))
       .slice(0, 40); // 목록은 검색으로 좁힌다 — 상한은 '더 있음'을 아래에 표기
   }, [students, already, q]);
 
@@ -196,10 +211,22 @@ function StopCard({
             <EyIcon name="grip" className="mx-auto size-4" />
           </button>
         )}
-        <span className={`flex-1 truncate text-[13px] ${isCampus ? "text-text-dim font-medium" : "text-text font-bold"}`}>
+        <span className={`min-w-0 flex-1 truncate text-[13px] ${isCampus ? "text-text-dim font-medium" : "text-text font-bold"}`}>
           {isCampus ? RUN_STOP_KIND_LABEL[stop.kind] : stop.stopName}
           {stop.stopMemo && <span className="text-text-faint text-[11.5px]"> · {stop.stopMemo}</span>}
         </span>
+        {/* 배정이 0명이면 '+ 학생'을 **머리줄의 빈 자리**에 둔다 — 아래에 따로 줄을 만들면 카드마다
+            빈 줄이 하나씩 생겨 세로가 낭비된다(원장 2026-08-19 *"공간낭비 없도록"*). */}
+        {canWrite && !isCampus && stop.riders.length === 0 && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => setPicking((v) => !v)}
+            className="rounded-pill border-line text-text-dim hover:bg-muted min-h-8 shrink-0 border border-dashed px-2.5 text-[11.5px] font-bold"
+          >
+            + 학생
+          </button>
+        )}
         <input
           type="time"
           defaultValue={stop.atTime ?? ""}
@@ -208,9 +235,11 @@ function StopCard({
             if ((e.currentTarget.value || "") !== (stop.atTime ?? "")) onTime(e.currentTarget.value);
           }}
           aria-label="도착 시각"
-          className="border-line focus:border-primary num h-9 w-[104px] shrink-0 rounded-lg border px-1.5 text-base outline-none sm:h-8 sm:w-[92px] sm:text-[12px]"
+          // ⚠️ 폭은 짐작하지 말 것 — 한국어 로캘의 `type="time"`은 "오후 03:45" + 시계 아이콘이라
+          //    실측 폭이 16px 글자에서 127px, 12px 글자에서 105px다(전엔 104/92라 "오후 03:4"로 잘렸다).
+          className="border-line focus:border-primary num h-9 w-[132px] shrink-0 rounded-lg border px-1.5 text-base outline-none sm:h-8 sm:w-[110px] sm:text-[12px]"
         />
-        {canWrite && !isCampus && (
+        {canWrite && !isCampus ? (
           <button
             type="button"
             disabled={busy}
@@ -220,11 +249,18 @@ function StopCard({
           >
             <EyIcon name="trash" className="mx-auto size-3.5" />
           </button>
+        ) : (
+          // 학원 출발/도착 줄엔 삭제 버튼이 없다 — 자리를 비워 두면 그 줄만 시각이 오른쪽으로 튀어
+          // 시각 칸이 줄마다 어긋난다. 같은 크기의 빈 칸으로 열을 맞춘다(원장 2026-08-19 *"정렬 깔끔하게"*).
+          canWrite && <span aria-hidden className="size-9 shrink-0" />
         )}
       </div>
 
-      {!isCampus && (
-        <div className="mt-2 flex flex-wrap items-center gap-1">
+      {!isCampus && stop.riders.length > 0 && (
+        // 🔑 균일 폭 격자 — 칩이 내용 길이대로 늘어나면 요일·× 라벨이 칩마다 다른 x에 서서 눈이
+        //    매번 다시 찾는다(원장 2026-08-19: *"라벨이 어딜 가나 같은 위치였으면"*). 칸 폭을 고정하면
+        //    이름은 왼쪽, 요일·×는 오른쪽 같은 자리에 줄맞춰 선다.
+        <div className="mt-1.5 grid grid-cols-[repeat(auto-fill,minmax(9rem,1fr))] items-start gap-1">
           {stop.riders.map((r) => (
             <RiderChip key={r.id} rider={r} canWrite={canWrite} onError={onError} />
           ))}
@@ -233,15 +269,17 @@ function StopCard({
               type="button"
               disabled={busy}
               onClick={() => setPicking((v) => !v)}
-              className="rounded-pill border-line text-text-dim hover:bg-muted min-h-8 border border-dashed px-2.5 text-[11.5px] font-bold"
+              // ⚠️ 격자 칸을 꽉 채우지 않는다(`justify-self-start`) — 점선 테두리를 칩 폭만큼 늘리면
+              //    화면에 긴 파선이 여러 줄 생겨 "테두리가 깨져 보인다"(원장 2026-08-19 제보).
+              className="rounded-pill border-line text-text-dim hover:bg-muted min-h-8 justify-self-start border border-dashed px-2.5 text-[11.5px] font-bold"
             >
               + 학생
             </button>
           )}
-          {stop.riders.length === 0 && !canWrite && (
-            <span className="text-text-faint text-[11.5px]">배정된 학생이 없습니다</span>
-          )}
         </div>
+      )}
+      {!isCampus && stop.riders.length === 0 && !canWrite && (
+        <p className="text-text-faint mt-1.5 text-[11.5px]">배정된 학생이 없습니다</p>
       )}
 
       {picking && canWrite && !isCampus && (
@@ -270,7 +308,9 @@ function StopCard({
               </button>
             ))}
             {candidates.length === 0 && (
-              <span className="text-text-faint px-1 py-2 text-[12px]">찾는 학생이 없습니다</span>
+              <span className="text-text-faint px-1 py-2 text-[12px]">
+                {q.trim() ? "찾는 학생이 없습니다" : "이름이나 학교를 입력하세요"}
+              </span>
             )}
             {candidates.length === 40 && (
               <span className="text-text-faint px-1 py-1 text-[11px]">

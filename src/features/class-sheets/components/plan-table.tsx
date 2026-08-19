@@ -74,7 +74,7 @@ export function PlanTable({
                 <button
                   type="button"
                   className="border-line-strong text-foreground hover:text-primary hover:border-primary cursor-pointer rounded-full border px-2 py-0.5 text-[12px] font-bold"
-                  title={`같은 교시의 지난 수업일에서 ${term.label} 계획을 가져옵니다 — 이미 쓴 칸은 그대로 두고 빈 칸만 채웁니다(학생 기록은 복사하지 않습니다)`}
+                  title={`같은 교시의 지난 수업일에서 ${term.label} 계획을 가져옵니다 — 이미 쓴 칸은 그대로 두고 빈 칸만 채웁니다. JJ 교시는 학생별 듣기 레벨·누적 암기 단어수도 지난 기록에서 채웁니다(출결·태도는 복사하지 않습니다)`}
                   onClick={() => handlers.copySlot(date, slotStart, term.key)}
                 >
                   내용 복사 (지난 수업)

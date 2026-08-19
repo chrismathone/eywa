@@ -10,8 +10,15 @@ import { removeRider, updateRiderWeekdays } from "@/features/shuttle/server/acti
 
 /**
  * 배정 칩 — 학생 하나. 끌면 다른 정류장으로 옮겨지고, 학생 풀에 떨어뜨리면 배정이 풀린다.
- * 누르면 요일 편집이 펼쳐진다(makeedu가 칩마다 월~일 체크박스를 항상 펼쳐 두던 자리 —
- * 60명이 한 화면이면 체크박스만 420개라 접었다).
+ *
+ * 🔑 **요일은 이 칩에서 정한다**(원장 2026-08-19: *"드래그드랍할 때 요일 설정하는게 없는거 같은데
+ *    요일 어디서?"*). 끌어다 놓으면 일단 **평일**로 들어가고, 칩의 **요일 글자를 누르면** 월~일
+ *    토글이 펼쳐진다. 전에는 이름을 눌러야 열려서 아무도 못 찾았다 — 요일을 바꾸려는 사람의 눈은
+ *    요일 글자에 가 있다(점선 밑줄로 "누를 수 있음"을 표시).
+ *    makeedu처럼 체크박스를 늘 펼쳐 두지는 않는다(60명이면 체크박스만 420개).
+ *
+ * 🔑 **칸 안에서 이름·요일·×의 자리가 고정**된다(원장: *"라벨이 항상 같은 위치에 있으면 좋겠다"*) —
+ *    부모가 균일 폭 그리드라 요일과 ×가 모든 칩에서 같은 x에 선다. 그래서 폭을 꽉 채운다(`w-full`).
  *
  * ⚠️ 재원이 아닌 학생(퇴원·휴원)은 회색 + 상태 라벨로 표시하되 **자동으로 지우지 않는다**
  *    (휴원 뒤 복귀가 흔하다). 정리는 사람이 보고 뺀다.
@@ -37,6 +44,7 @@ export function RiderChip({
 
   const inactive = rider.studentStatus !== "enrolled";
   const statusKo = inactive ? studentStatusLabel(rider.studentStatus) : null;
+  const daysKo = compactWeekdays(rider.weekdays);
 
   function toggleDay(day: string) {
     const next = new Set(rider.weekdays as string[]);
@@ -70,9 +78,9 @@ export function RiderChip({
   }
 
   return (
-    <span className={`inline-flex flex-col ${isDragging ? "opacity-50" : ""}`}>
+    <span className={`flex w-full min-w-0 flex-col ${isDragging ? "opacity-50" : ""}`}>
       <span
-        className={`rounded-pill inline-flex min-h-8 items-center gap-1.5 border px-2 py-1 text-[12px] sm:min-h-0 sm:gap-1 sm:py-[3px] sm:text-[11.5px] ${
+        className={`rounded-pill flex min-h-8 w-full min-w-0 items-center gap-1.5 border px-2 py-1 text-[12px] sm:min-h-0 sm:gap-1 sm:py-[3px] sm:text-[11.5px] ${
           inactive
             ? "border-line bg-muted text-text-dim"
             : rider.ioKind === "in"
@@ -85,21 +93,33 @@ export function RiderChip({
           {...listeners}
           {...attributes}
           type="button"
-          onClick={() => canWrite && setOpen((v) => !v)}
-          className="cursor-grab touch-manipulation font-bold active:cursor-grabbing"
-          title={`${rider.studentName}${rider.schoolGrade ? ` ${rider.schoolGrade}` : ""} · ${compactWeekdays(rider.weekdays)}`}
+          className="min-w-0 cursor-grab touch-manipulation overflow-hidden text-ellipsis whitespace-nowrap font-bold active:cursor-grabbing"
+          title={`${rider.studentName}${rider.schoolGrade ? ` ${rider.schoolGrade}` : ""} · ${daysKo} (끌어서 다른 정류장으로)`}
         >
           {rider.studentName}
         </button>
-        <span className="opacity-75">{compactWeekdays(rider.weekdays)}</span>
-        {statusKo && <span className="text-danger font-bold">{statusKo}</span>}
+        {statusKo && <span className="text-danger shrink-0 font-bold">{statusKo}</span>}
+        {/* 요일 = 편집 손잡이. 오른쪽에 붙여 칩마다 같은 자리에 서게 한다. */}
+        {canWrite ? (
+          <button
+            type="button"
+            onClick={() => setOpen((v) => !v)}
+            aria-expanded={open}
+            title="요일 변경"
+            className="ml-auto shrink-0 cursor-pointer underline decoration-dotted underline-offset-2 opacity-75 hover:opacity-100"
+          >
+            {daysKo}
+          </button>
+        ) : (
+          <span className="ml-auto shrink-0 opacity-75">{daysKo}</span>
+        )}
         {canWrite && (
           <button
             type="button"
             disabled={busy}
             onClick={unassign}
             aria-label={`${rider.studentName} 배정 해제`}
-            className="hover:text-danger px-1 text-[15px] opacity-60 sm:px-0 sm:text-inherit"
+            className="hover:text-danger shrink-0 px-1 text-[15px] opacity-60 sm:px-0 sm:text-inherit"
           >
             ×
           </button>
@@ -107,7 +127,7 @@ export function RiderChip({
       </span>
 
       {open && canWrite && (
-        <span className="border-line bg-card mt-1 inline-flex gap-0.5 rounded-lg border p-1">
+        <span className="border-line bg-card mt-1 flex flex-wrap items-center gap-0.5 rounded-lg border p-1">
           {SHUTTLE_DAYS.map((d) => {
             const on = (rider.weekdays as string[]).includes(d);
             return (
@@ -115,6 +135,7 @@ export function RiderChip({
                 key={d}
                 type="button"
                 disabled={busy}
+                aria-pressed={on}
                 onClick={() => toggleDay(d)}
                 className={`size-9 rounded text-[13px] font-bold transition-colors sm:size-6 sm:text-[11px] ${
                   on ? "bg-primary text-primary-foreground" : "text-text-faint hover:bg-muted"
