@@ -5,6 +5,7 @@ import {
   INTAKE_MEMO_SUFFIX,
   attendanceStatusLabel,
   intakeMemo,
+  intakeTeacherLabel,
   buildAbsenceCells,
   cellKey,
   expandDateRange,
@@ -179,5 +180,24 @@ describe("attendanceStatusLabel — 라벨 한 벌(화면·액션 공유)", () =
   it("모르는 값도 한글 폴백", () => {
     expect(attendanceStatusLabel("weird")).toBe("기록 있음");
     expect(attendanceStatusLabel(null)).toBe("기록 있음");
+  });
+});
+
+describe("intakeTeacherLabel — 담당은 축이 정하고 여기선 말로만 바꾼다", () => {
+  it("교시 담당이 정해졌으면 그 사람", () => {
+    expect(intakeTeacherLabel({ source: "slot", teacherName: "김태건" })).toBe("김태건");
+  });
+  it("교시 담당이 없으면 담임으로 떨어진 이름", () => {
+    expect(intakeTeacherLabel({ source: "homeroom", teacherName: "이다교" })).toBe("이다교");
+  });
+  it("자리(LAB·JJ)는 사람이 아니라 방 표기 — 담임 이름으로 바꾸지 않는다", () => {
+    expect(intakeTeacherLabel({ source: "seat", teacherName: "이다교", seatLabel: "JJ" })).toBe("JJ");
+    expect(intakeTeacherLabel({ source: "seat", teacherName: "이다교", seatLabel: null })).toBe("자리 수업");
+  });
+  it("담당이 갈리면 한 명을 지어내지 않는다", () => {
+    expect(intakeTeacherLabel({ source: "ambiguous", teacherName: "이다교" })).toBe("담당 여럿");
+  });
+  it("아무도 없으면 null(빈 칸)", () => {
+    expect(intakeTeacherLabel({ source: "none", teacherName: null })).toBeNull();
   });
 });

@@ -27,6 +27,9 @@ const CONSUMERS = [
   join("src", "features", "attendance", "server", "queries.ts"),
   join("src", "features", "attendance", "live", "server", "load.ts"),
   join("src", "app", "(shell)", "attendance", "page.tsx"),
+  // 결석 통보 접수 미리보기(2026-08-19) — 칸마다 "누가 가르치나"를 적는 화면이라 같은 축을 거쳐야 한다.
+  // (담임을 직접 적었다가 교시마다 담당이 다른 영어 반에서 둘 다 담임 이름으로 표시된 회귀가 있었다.)
+  join("src", "features", "attendance", "intake", "server", "queries.ts"),
 ];
 
 describe("출결 강사 귀속 축 단일 소스", () => {

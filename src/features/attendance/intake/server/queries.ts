@@ -14,6 +14,16 @@ import { fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildHolidayMap } from "../../calendar";
+// 🔴 강사 귀속은 화면마다 고르지 않는다 — 축 단일 소스를 거친다(가드 teacher-axis-single-source).
+// ⚠️ **별칭 경로**로 적는다 — 축 단일 소스 가드가 이 문자열을 찾는다(상대경로면 스캔을 빠져나간다).
+import {
+  axisDowOf,
+  isSeatSlot,
+  normalizeAxisTime,
+  resolveTaughtBy,
+  slotLiveOn,
+  type AxisSlot,
+} from "@/features/attendance/teacher-axis";
 import { effectiveAttendanceRecords } from "../../effective-records";
 import {
   INTAKE_MAX_CELLS,
@@ -22,6 +32,7 @@ import {
   cellKey,
   expandDateRange,
   hhmm,
+  intakeTeacherLabel,
   isYmd,
   type IntakeCell,
   type IntakeEnrollment,
@@ -32,7 +43,11 @@ export type IntakeExisting = { status: string; note: string | null; slotStart: s
 
 export type IntakePreviewCell = IntakeCell & {
   key: string;
-  teacherName: string | null;
+  /**
+   * 그 칸을 **실제로 가르치는 사람**의 표기 — 사람 이름이 기본이고, 자리(LAB·JJ)면 방 표기,
+   * 담당이 갈리면 "담당 여럿"이다(판정은 teacher-axis, 문구는 intakeTeacherLabel).
+   */
+  teacherLabel: string | null;
   /** 이 칸에 이미 있는 유효 기록(없으면 null). 화면이 "이미 결석"·"출석으로 입력됨"을 구분한다. */
   existing: IntakeExisting | null;
 };
@@ -115,10 +130,12 @@ export async function loadIntakePreview(input: {
       start_time: string;
       valid_from: string | null;
       valid_to: string | null;
+      teacher_id: string | null;
+      slot_teacher_label: string | null;
     }>(classIds, (chunk, rangeFrom, rangeTo) =>
       supabase
         .from("class_schedules")
-        .select("class_id, day_of_week, start_time, valid_from, valid_to")
+        .select("class_id, day_of_week, start_time, valid_from, valid_to, teacher_id, slot_teacher_label")
         .in("class_id", chunk)
         .lte("valid_from", to)
         .or(`valid_to.is.null,valid_to.gte.${from}`)
@@ -150,7 +167,14 @@ export async function loadIntakePreview(input: {
   ]);
 
   const classById = new Map(classRows.map((c) => [c.id, c]));
-  const teacherIds = [...new Set(classRows.map((c) => c.teacher_id).filter((v): v is string => !!v))];
+  // ⚠️ **교시 담당까지** 이름을 받아야 한다 — 담임 id만 조회하면 교시 담당 이름이 비어 담임으로 보인다.
+  const teacherIds = [
+    ...new Set(
+      [...classRows.map((c) => c.teacher_id), ...slotRows.map((s) => s.teacher_id)].filter(
+        (v): v is string => !!v,
+      ),
+    ),
+  ];
   const teacherRows = await fetchInChunks<{ id: string; display_name: string }>(teacherIds, (chunk) =>
     supabase.from("users").select("id, display_name").in("id", chunk),
   );
@@ -174,6 +198,48 @@ export async function loadIntakePreview(input: {
     validFrom: s.valid_from,
     validTo: s.valid_to,
   }));
+  // 귀속 판정용 슬롯(반별) — 같은 행을 축 모듈의 모양으로 한 번 더 담는다(칸 만들기와 판정은 관심사가 다르다).
+  const axisByClass = new Map<string, AxisSlot[]>();
+  for (const s of slotRows) {
+    const list = axisByClass.get(s.class_id) ?? [];
+    list.push({
+      dayOfWeek: s.day_of_week,
+      startTime: s.start_time,
+      teacherId: s.teacher_id,
+      slotTeacherLabel: s.slot_teacher_label,
+      // `valid_from`은 DB에서 NOT NULL이지만, 혹시 비어도 "항상 유효"로 접는다(자료 없음을 '없음'으로 바꾸지 않는다).
+      validFrom: s.valid_from ?? "",
+      validTo: s.valid_to,
+    });
+    axisByClass.set(s.class_id, list);
+  }
+  /** 그 칸(반·날짜·교시)을 실제로 가르치는 사람의 표기 — 담임 직접 비교 금지(축이 정한다). */
+  const teacherLabelFor = (classId: string, date: string, slotStart: string | null): string | null => {
+    const axisSlots = axisByClass.get(classId) ?? [];
+    const axis = resolveTaughtBy({
+      homeroomTeacherId: classById.get(classId)?.teacher_id ?? null,
+      slots: axisSlots,
+      date,
+      slotStart,
+    });
+    // 자리 표기는 **그날 그 교시의 후보 안에서** 찾는다 — 반 전체에서 아무 자리 라벨이나 집으면
+    // 다른 요일·끝난 배치의 방 이름이 오늘 칸에 붙는다(class_schedules는 운영 이력을 함께 담는다, [[#88]]).
+    const seatLabel =
+      axis.source === "seat"
+        ? (axisSlots.find(
+            (s) =>
+              s.dayOfWeek === axisDowOf(date) &&
+              slotLiveOn(s, date) &&
+              (slotStart == null || normalizeAxisTime(s.startTime) === normalizeAxisTime(slotStart)) &&
+              isSeatSlot(s),
+          )?.slotTeacherLabel ?? null)
+        : null;
+    return intakeTeacherLabel({
+      source: axis.source,
+      teacherName: axis.teacherId ? (teacherName.get(axis.teacherId) ?? null) : null,
+      seatLabel,
+    });
+  };
 
   const holidays = new Set(Object.keys(buildHolidayMap(settings.operations.holidays)));
   const cells = buildAbsenceCells({ dates, enrollments, slots, holidays });
@@ -199,7 +265,7 @@ export async function loadIntakePreview(input: {
     cells: cells.map((c) => ({
       ...c,
       key: cellKey(c),
-      teacherName: teacherName.get(classById.get(c.classId)?.teacher_id ?? "") ?? null,
+      teacherLabel: teacherLabelFor(c.classId, c.date, c.saveSlot),
       // 교시 축 칸은 그 교시 행을 먼저 보고, 없으면 옛 "그날 전체" 행으로 폴백(0196a 이전 기록과 공존).
       existing: byKey.get(`${c.classId}|${c.date}|${c.saveSlot ?? ""}`) ?? byKey.get(`${c.classId}|${c.date}|`) ?? null,
     })),

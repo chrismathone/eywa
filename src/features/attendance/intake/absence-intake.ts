@@ -212,3 +212,32 @@ export const ATTENDANCE_STATUS_LABEL: Readonly<Record<string, string>> = {
 export function attendanceStatusLabel(status: string | null | undefined): string {
   return ATTENDANCE_STATUS_LABEL[String(status ?? "")] ?? "기록 있음";
 }
+
+/**
+ * 미리보기 칸에 적을 **담당 강사 표기** — 판정은 [`teacher-axis`](../teacher-axis.ts)가 하고
+ * 여기서는 그 결과를 사람이 읽을 말로만 바꾼다(순수 · Vitest).
+ *
+ * 🔴 담임(`classes.teacher_id`)을 그대로 적으면 **교시마다 담당이 다른 반에서 거짓말이 된다**
+ *    (원장 제보 2026-08-19: 수요일 16:20=이다교 / 17:20=김태건인데 접수 창이 둘 다 이다교로 표시).
+ *    영어는 교시마다 사람이 다른 게 기본이라 이 경로가 정상 케이스다.
+ * ⚠️ 자리(LAB·JJ)는 사람이 아니라 **방**이라 담임으로 떨어뜨리지 않는다 — 방 표기를 그대로 보인다.
+ * ⚠️ 담당이 갈리면 지어내지 않는다("담당 여럿") — 한 명을 임의로 고르면 그 사람 이름으로 남의 수업이 보인다.
+ */
+export function intakeTeacherLabel(input: {
+  source: "slot" | "homeroom" | "seat" | "ambiguous" | "none";
+  teacherName: string | null;
+  /** 자리 슬롯의 방 표기(LAB·JJ). 없으면 일반 문구로 접는다. */
+  seatLabel?: string | null;
+}): string | null {
+  switch (input.source) {
+    case "slot":
+    case "homeroom":
+      return input.teacherName?.trim() || null;
+    case "seat":
+      return input.seatLabel?.trim() || "자리 수업";
+    case "ambiguous":
+      return "담당 여럿";
+    default:
+      return null;
+  }
+}

@@ -322,7 +322,7 @@ export function AbsenceIntakeDialog({ today, onClose }: { today: string; onClose
                         {c.periodStart}
                         {c.slotCount > 1 ? ` 외 ${c.slotCount - 1}교시` : ""}
                       </span>
-                      {c.teacherName ? <span className="text-text-faint">{c.teacherName}</span> : null}
+                      {c.teacherLabel ? <span className="text-text-faint">{c.teacherLabel}</span> : null}
                       {c.existing ? (
                         <span
                           className={
