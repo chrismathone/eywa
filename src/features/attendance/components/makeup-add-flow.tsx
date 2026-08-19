@@ -9,12 +9,13 @@
  *  ② 결석분을 골랐으면 `linkMakeupToAbsence` — **메모는 결석이 난 반**(이월 보강이면 옛 반), **시수는
  *     오늘 보강한 반**. ①을 먼저 해야 ②가 그 칸을 찾아 갱신한다(없으면 ②가 '출석'으로 새로 열어 버린다).
  */
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { setAttendanceCell } from "../server/actions";
 import { noteMakeupAgainstAbsence } from "../server/makeup-note-action";
 import { fetchMakeupAbsences } from "../server/makeup-actions";
 import type { MakeupAbsenceOption } from "../makeup-options";
+import type { MakeupSlotOption } from "../makeup-slot";
 import { MakeupConfirmDialog, type MakeupConfirmChoice } from "./makeup-confirm-dialog";
 import {
   AttendanceMakeupAdder,
@@ -26,6 +27,7 @@ export function MakeupAddFlow({
   date,
   disabled,
   alreadyIn,
+  slotOptions,
   onDone,
 }: {
   classId: string;
@@ -34,11 +36,18 @@ export function MakeupAddFlow({
   disabled?: boolean;
   /** 이미 그 반 명단에 있는 학생 id — 중복 추가를 막고 이유를 알린다. */
   alreadyIn?: ReadonlySet<string>;
+  /**
+   * 그 반 그날의 교시 — **교시 축 화면(ECS)만** 넘긴다. 넘기면 확인창이 교시를 묻고 그 교시 칸에
+   * 저장한다. 안 넘기면 종전대로 "그날 전체"로 저장한다(원스크린·반별 출석부의 축).
+   */
+  slotOptions?: readonly MakeupSlotOption[];
   onDone?: () => void;
 }) {
   const [pending, setPending] = useState<MakeupPick | null>(null);
   const [absences, setAbsences] = useState<MakeupAbsenceOption[]>([]);
   const [loading, setLoading] = useState(false);
+  /** 결석 조회 응답 순서 가드. */
+  const seq = useRef(0);
 
   function pickStudent(s: MakeupPick) {
     if (alreadyIn?.has(s.id)) {
@@ -48,11 +57,22 @@ export function MakeupAddFlow({
     setPending(s);
     setAbsences([]);
     setLoading(true);
+    // 🔴 늦게 온 옛 조회가 최신 창을 덮지 않게 — 안 그러면 **남의 결석 이력**이 이 학생 것처럼 뜬다.
+    const mine = ++seq.current;
     // 창은 먼저 열고 목록만 도착하면 갈아 끼운다 — 조회를 기다리며 멈춰 있으면 "눌러도 반응 없다"가 된다.
     void fetchMakeupAbsences(s.id, date)
-      .then((list) => setAbsences(list))
-      .catch(() => setAbsences([]))
-      .finally(() => setLoading(false));
+      .then((list) => {
+        if (mine !== seq.current) return;
+        setAbsences(list);
+      })
+      .catch(() => {
+        if (mine !== seq.current) return;
+        setAbsences([]);
+      })
+      .finally(() => {
+        if (mine !== seq.current) return;
+        setLoading(false);
+      });
   }
 
   async function confirm(choice: MakeupConfirmChoice) {
@@ -66,6 +86,9 @@ export function MakeupAddFlow({
       status: "makeup",
       allowMakeup: true,
       ...(choice.addUnits !== 1 ? { units: String(choice.addUnits) } : {}),
+      // 교시를 골랐으면 **그 교시 칸**에 쓴다 — 안 넘기면 "그날 전체" 행이 되어 주간 시트가 그것을
+      // 첫 교시에 붙인다(영어는 하루 한 교시인 반이 없어 늘 어긋난다).
+      ...(choice.slotStart ? { slotStart: choice.slotStart } : {}),
     });
     if ("error" in cell) {
       toast.error(cell.error);
@@ -110,6 +133,7 @@ export function MakeupAddFlow({
           makeupDate={date}
           absenceOptions={absences}
           absenceLoading={loading}
+          slotOptions={slotOptions}
           onConfirm={(c) => void confirm(c)}
           onCancel={() => setPending(null)}
         />

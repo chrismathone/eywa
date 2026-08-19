@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState, useState } from "react";
+import { useActionState, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
 import {
   AlertCircle,
@@ -29,7 +29,13 @@ import type {
 import { slotBreakdown } from "@/features/attendance/cell-display";
 import { formatSessionUnits } from "@/features/attendance/session-units";
 import { submitAction } from "@/components/forms/submit-action";
-import { AttendanceMakeupAdder } from "./makeup-adder";
+import {
+  MakeupConfirmDialog,
+  type MakeupConfirmChoice,
+} from "@/features/attendance/components/makeup-confirm-dialog";
+import { fetchMakeupAbsences } from "@/features/attendance/server/makeup-actions";
+import type { MakeupAbsenceOption } from "@/features/attendance/makeup-options";
+import { AttendanceMakeupAdder, type MakeupPick } from "./makeup-adder";
 
 const STATUS_DEFS: {
   value: AttendanceStatus;
@@ -125,10 +131,65 @@ export function AttendanceInputForm({
     return init;
   });
 
+  /**
+   * 보강 추가는 **여기서도 확인창을 거친다**(원스크린·ECS와 같은 질문 — 원장 2026-08-19 *"항상 묻도록"*).
+   *
+   * 🔴 두 화면과 **저장 모델이 다르다**: 저기는 고르는 즉시 서버에 칸을 열고, 이 화면은 폼을 제출할 때
+   *    한 번에 쓴다. 그래서 여기서 즉시 저장을 부르면 아래 '취소'가 거짓말이 되고(이미 저장됨) 폼의
+   *    미저장 편집과 서버 상태가 갈린다. → 고른 결과는 **hidden으로 실어** `saveAttendance`가 저장
+   *    직후 같은 자리에서 잇는다(연결 액션은 세 화면이 공유하는 `noteMakeupAgainstAbsence`).
+   */
+  const [makeupPick, setMakeupPick] = useState<MakeupPick | null>(null);
+  const [absences, setAbsences] = useState<MakeupAbsenceOption[]>([]);
+  const [absencesLoading, setAbsencesLoading] = useState(false);
+  /** studentId → "결석반id|결석일" — 폼과 함께 보내는 결석분 연결(고른 사람만). */
+  const [makeupLinks, setMakeupLinks] = useState<Record<string, string>>({});
+  /** 결석 조회 응답 순서 가드 — 늦게 온 옛 조회가 최신 창을 덮지 않게. */
+  const absenceSeq = useRef(0);
+
+  function openMakeupConfirm(picked: MakeupPick) {
+    if (allRows.some((r) => r.studentId === picked.id)) return;
+    setMakeupPick(picked);
+    setAbsences([]);
+    setAbsencesLoading(true);
+    // 🔴 **어느 학생의 응답인지 확인하고 반영한다** — 취소하고 다른 학생을 열면 먼저 띄운 조회가 늦게
+    //    도착해 **남의 결석 이력**이 이 학생 것처럼 뜬다(옆 파일 makeup-adder가 같은 이유로 seq를 쓴다).
+    const mine = ++absenceSeq.current;
+    // 창은 먼저 열고 목록만 갈아 끼운다 — 조회를 기다리며 멈춰 있으면 "눌러도 반응 없다"가 된다.
+    void fetchMakeupAbsences(picked.id, date)
+      .then((list) => {
+        if (mine !== absenceSeq.current) return;
+        setAbsences(list);
+      })
+      .catch(() => {
+        if (mine !== absenceSeq.current) return;
+        setAbsences([]);
+      })
+      .finally(() => {
+        if (mine !== absenceSeq.current) return;
+        setAbsencesLoading(false);
+      });
+  }
+
+  function confirmMakeup(choice: MakeupConfirmChoice) {
+    const picked = makeupPick;
+    setMakeupPick(null);
+    if (!picked) return;
+    addMakeup(picked, choice);
+  }
+
   // 보강 학생 추가 — 기본 상태를 '보강'으로 찍어 둔다(그 학생은 온 게 확실하니 한 번 더 누르게 하지 않는다).
   // 이미 명단에 있으면(정규 수강생이거나 이미 추가함) 중복 행을 만들지 않는다.
-  function addMakeup(s: { id: string; name: string; label: string }) {
+  function addMakeup(s: MakeupPick, choice?: MakeupConfirmChoice) {
     if (allRows.some((r) => r.studentId === s.id)) return;
+    // 확인창에서 고른 시수 — 1이면 기본값이라 초안을 비워 둔다(폼 규약: ""=1).
+    const unitsDraft = choice && choice.addUnits !== 1 ? formatSessionUnits(choice.addUnits) : "";
+    if (choice?.absentDate) {
+      setMakeupLinks((prev) => ({
+        ...prev,
+        [s.id]: `${choice.absentClassId ?? classId}|${choice.absentDate}`,
+      }));
+    }
     setAdded((prev) => [
       ...prev,
       {
@@ -151,13 +212,27 @@ export function AttendanceInputForm({
     ]);
     setPending((p) => ({
       ...p,
-      [s.id]: { status: "makeup", note: "", homeworkRequired: false, homeworkDone: false, units: "", expanded: false },
+      [s.id]: {
+        status: "makeup",
+        note: "",
+        homeworkRequired: false,
+        homeworkDone: false,
+        units: unitsDraft,
+        expanded: !!unitsDraft,
+      },
     }));
   }
 
   // 저장 전 보강 행 취소 — 서버에 이미 기록이 있는 행(isMakeup이어도)은 이 목록에 없으니 안전하다.
   function removeAdded(studentId: string) {
     setAdded((prev) => prev.filter((r) => r.studentId !== studentId));
+    // 행을 접으면 연결도 함께 사라져야 한다 — 남으면 없는 학생의 결석분을 저장이 잇는다.
+    setMakeupLinks((prev) => {
+      if (!(studentId in prev)) return prev;
+      const next = { ...prev };
+      delete next[studentId];
+      return next;
+    });
   }
 
   function patchOne(studentId: string, patch: Partial<CellState>) {
@@ -251,7 +326,7 @@ export function AttendanceInputForm({
             전체 초기화
           </button>
           <span className="text-text-dim/40 text-xs">·</span>
-          <AttendanceMakeupAdder classId={classId} date={date} disabled={locked} onAdd={addMakeup} />
+          <AttendanceMakeupAdder classId={classId} date={date} disabled={locked} onAdd={openMakeupConfirm} />
         </div>
       </div>
 
@@ -335,6 +410,14 @@ export function AttendanceInputForm({
                   {/* 서버 에러 메시지용 학생 이름(시수 검증 실패 시 누구인지 표시) */}
                   <input type="hidden" name={`name:${r.studentId}`} value={r.studentName} />
                   <input type="hidden" name={`units:${r.studentId}`} value={cell.units} />
+                  {/* 결석분 연결 — 확인창에서 고른 경우만. 저장이 끝난 뒤 서버가 두 칸에 메모를 잇는다. */}
+                  {makeupLinks[r.studentId] ? (
+                    <input
+                      type="hidden"
+                      name={`makeupLink:${r.studentId}`}
+                      value={makeupLinks[r.studentId]}
+                    />
+                  ) : null}
                   <input
                     type="hidden"
                     name={`status:${r.studentId}`}
@@ -480,6 +563,20 @@ export function AttendanceInputForm({
         <SubmitButton />
       </div>
     </fieldset>
+      {/* 보강 확인창 — key로 학생이 바뀔 때 상태를 새로 짓는다(effect 초기화 금지, #25). */}
+      {makeupPick ? (
+        <MakeupConfirmDialog
+          key={makeupPick.id}
+          studentName={makeupPick.name}
+          // 이 화면은 그 반 한 칸을 여는 것이라 '합침' 선택지가 없다(합칠 정규 보고서를 모른다).
+          candidates={[]}
+          makeupDate={date}
+          absenceOptions={absences}
+          absenceLoading={absencesLoading}
+          onConfirm={confirmMakeup}
+          onCancel={() => setMakeupPick(null)}
+        />
+      ) : null}
     </form>
   );
 }

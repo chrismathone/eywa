@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import type { MergeCandidate } from "@/features/onescreen/makeup-merge-plan";
 import { absenceMemo, shortDate } from "@/features/onescreen/makeup-absence-link";
 import { absenceOptionLabel, type MakeupAbsenceOption } from "../makeup-options";
+import type { MakeupSlotOption } from "../makeup-slot";
 
 /**
  * 강사의 선택.
@@ -34,6 +35,11 @@ export type MakeupConfirmChoice = {
   absentDate?: string;
   /** 그 결석이 난 **반**(이월 보강이면 지금 반과 다르다). 미지정이면 시수 얹는 반과 같은 반. */
   absentClassId?: string;
+  /**
+   * 보강을 한 **교시**("HH:MM") — 교시 축 화면(ECS)에서만 온다. 없으면 "그날 전체"로 저장된다
+   * (원스크린·반별 출석부의 축).
+   */
+  slotStart?: string;
 };
 
 /**
@@ -60,6 +66,7 @@ export function MakeupConfirmDialog({
   makeupDate,
   absenceOptions,
   absenceLoading,
+  slotOptions,
   defaultUnits,
   onConfirm,
   onCancel,
@@ -74,6 +81,11 @@ export function MakeupConfirmDialog({
   /** 그 학생의 결석 기록(이전 반 포함). 비어 있으면 직접 입력만 남는다. */
   absenceOptions: readonly MakeupAbsenceOption[];
   absenceLoading?: boolean;
+  /**
+   * 그 반 그날의 교시들 — **교시 축 화면(ECS)만** 넘긴다. 둘 이상이면 고르기 전엔 확인을 막는다
+   * (영어는 하루 한 교시인 반이 없어서, 안 물으면 보강이 늘 첫 교시로 밀린다).
+   */
+  slotOptions?: readonly MakeupSlotOption[];
   /** 정규 수업이 없을 때의 시수 기본값(보통 1). */
   defaultUnits?: number;
   onConfirm: (choice: MakeupConfirmChoice) => void;
@@ -88,6 +100,10 @@ export function MakeupConfirmDialog({
   const [customDate, setCustomDate] = useState("");
   const [customNote, setCustomNote] = useState<string | null>(null);
   const [addUnitsRaw, setAddUnitsRaw] = useState("");
+  // 교시가 하나뿐이면 고를 것이 없다 — 그때만 자동 확정한다(둘 이상은 추측하지 않는다).
+  const [slotPick, setSlotPick] = useState<string | null>(
+    slotOptions && slotOptions.length === 1 ? (slotOptions[0]?.start ?? null) : null,
+  );
 
   const chosen = candidates.find((c) => c.name === pick) ?? null;
   const baseUnits = chosen?.attendanceUnits ?? defaultUnits ?? 1;
@@ -106,7 +122,9 @@ export function MakeupConfirmDialog({
   const asksAbsence = mode === "separate";
   /** '직접 입력'을 골라 놓고 날짜를 비운 상태 — 조용히 '추가 보강'이 되지 않게 막는다. */
   const customEmpty = asksAbsence && absencePick === PICK_CUSTOM && !customDate;
-  const blocked = (canMerge && !chosen) || addUnits === null || customEmpty;
+  /** 교시를 물어야 하는 화면인데 아직 안 골랐다 — 첫 교시로 조용히 밀어 넣지 않는다. */
+  const slotUnpicked = !!slotOptions && slotOptions.length > 0 && !slotPick;
+  const blocked = (canMerge && !chosen) || addUnits === null || customEmpty || slotUnpicked;
 
   // 🔴 **portal로 body에 붙인다** — ECS 오늘 보드는 카드가 `zoom` 래퍼(글씨 크게) 안이라, 그 안에서
   //    `position:fixed`를 쓰면 좌표가 배율만큼 곱해져 모달이 화면 밖으로 밀린다([[#98]] 사촌 함정).
@@ -184,6 +202,40 @@ export function MakeupConfirmDialog({
           </div>
         ) : null}
 
+        {/* ⓪ 어느 교시에 왔는가 — 교시 축 화면(ECS)만 묻는다. 영어는 하루 한 교시인 반이 없어서,
+            안 물으면 저장이 "그날 전체"가 되고 주간 시트가 그 칸을 **첫 교시**에 붙인다. */}
+        {slotOptions && slotOptions.length > 0 ? (
+          <div className="mt-3" role="radiogroup" aria-label="보강 교시 선택">
+            <p className="text-text-faint mb-1.5 text-[12px]">어느 교시에 왔나요?</p>
+            <div className="flex flex-wrap gap-1.5">
+              {slotOptions.map((o) => (
+                <button
+                  key={o.start}
+                  type="button"
+                  role="radio"
+                  aria-checked={slotPick === o.start}
+                  onClick={() => setSlotPick(o.start)}
+                  className={
+                    slotPick === o.start
+                      ? "border-primary bg-primary-soft text-primary rounded-lg border px-2.5 py-1.5 text-[12px] font-bold"
+                      : "border-line text-text-dim hover:bg-bg-soft rounded-lg border px-2.5 py-1.5 text-[12px] font-bold"
+                  }
+                >
+                  {o.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        {/* 교시를 물을 수 있는 화면인데 고를 교시가 하나도 없을 때 — 조용히 "그날 전체"로 넘어가지 않게 밝힌다.
+            (그 반 그날이 전부 자리 교시인 경우가 여기다.) */}
+        {slotOptions && slotOptions.length === 0 ? (
+          <p className="text-text-faint mt-3 text-[11px] leading-snug">
+            고를 교시가 없어 <b>그날 전체</b>로 기록됩니다.
+          </p>
+        ) : null}
+
         {/* ① 며칠자 결석분인가 — **목록에서 고른다**(반 이동 전 옛 반 결석 포함). */}
         {asksAbsence ? (
           <div className="mt-3">
@@ -211,7 +263,7 @@ export function MakeupConfirmDialog({
               {absenceLoading
                 ? "결석 기록을 불러오는 중…"
                 : absenceOptions.length === 0
-                  ? "최근 90일 결석 기록이 없습니다 — 추가 보강이면 그대로 두세요."
+                  ? "최근 1년 결석 기록이 없습니다 — 추가 보강이면 그대로 두세요."
                   : "반을 옮겼어도 이전 반 결석이 함께 보입니다(이월 보강)."}
             </p>
             {absencePick === PICK_CUSTOM ? (
@@ -272,8 +324,8 @@ export function MakeupConfirmDialog({
               : mode === "merge" && chosen
                 ? `${chosen.name} 보고서 1건에 합쳐 "(정규+보강)"으로 한 번만 발송합니다. 출석부 수업타임은 ${chosen.name} 행에 ${chosen.attendanceUnits ?? 1} + 보강 ${addUnits} = ${(chosen.attendanceUnits ?? 1) + addUnits}.`
                 : !absentDate
-                  ? `보강 보고서를 따로 만듭니다${canMerge ? " — 정규 1건 + 보강 1건, 모두 2건이 발송됩니다" : ""}. 결석분 연결은 없고(추가 보강), ${shortDate(makeupDate)} 보강 수업타임은 ${addUnits}.`
-                  : `보강 보고서를 따로 만듭니다${canMerge ? " — 정규 1건 + 보강 1건, 모두 2건이 발송됩니다" : ""}. 출석부는 ${shortDate(absentDate)}${selectedOption ? ` ${selectedOption.className}` : ""} 칸에 "${absenceMemo(makeupDate, absentDate)}" 메모만 붙고(결석 0은 그대로), ${shortDate(makeupDate)} 칸 보강 수업타임은 ${addUnits}.${beforehand ? " 아직 지나지 않은 날이라 그 칸에 출결 기록이 없으면 메모는 남지 않습니다." : ""}`}
+                  ? `${canMerge ? "보강 보고서를 따로 만듭니다 — 정규 1건 + 보강 1건, 모두 2건이 발송됩니다. " : "출석부에 보강으로 기록합니다. "}결석분 연결은 없고(추가 보강), ${shortDate(makeupDate)} 보강 수업타임은 ${addUnits}.`
+                  : `${canMerge ? "보강 보고서를 따로 만듭니다 — 정규 1건 + 보강 1건, 모두 2건이 발송됩니다. " : "출석부에 보강으로 기록합니다. "}출석부는 ${shortDate(absentDate)}${selectedOption ? ` ${selectedOption.className}` : ""} 칸에 "${absenceMemo(makeupDate, absentDate)}" 메모만 붙고(결석 0은 그대로), ${shortDate(makeupDate)} 칸 보강 수업타임은 ${addUnits}.${beforehand ? " 아직 지나지 않은 날이라 그 칸에 출결 기록이 없으면 메모는 남지 않습니다." : ""}`}
         </p>
         {mode === "merge" && chosen && (sentSubjects ?? []).includes(chosen.name) ? (
           <p className="text-amber mt-1.5 text-[12px] leading-relaxed">
@@ -297,6 +349,7 @@ export function MakeupConfirmDialog({
                 addUnits,
                 ...(mode === "separate" && absentDate ? { absentDate } : {}),
                 ...(mode === "separate" && absentClassId ? { absentClassId } : {}),
+                ...(slotPick ? { slotStart: slotPick } : {}),
               })
             }
           >

@@ -89,6 +89,12 @@ export function TodayClassSheet({
             date={day.date}
             existingIds={new Set(day.slots.flatMap((s) => s.roster.map((r) => r.studentId)))}
             canAdd={canEdit && (data.canMarkAttendanceByDate[day.date] ?? false)}
+            // 교시 이름은 **화면 카드 머리와 같은 값**을 쓴다 — 여기만 "16:20~17:20"이면
+            // 사용자는 "1교시" 카드 옆에서 다른 이름으로 질문을 받는다.
+            slots={day.slots.map((s) => ({
+              ...s,
+              periodLabel: data.periodLabelBySlot[`${day.date}|${s.slotStart}`] ?? null,
+            }))}
           />
           <DayBulk
             date={day.date}

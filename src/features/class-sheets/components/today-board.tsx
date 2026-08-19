@@ -355,6 +355,7 @@ function ClassCard({
                 date={date}
                 existingIds={new Set(card.students.map((s) => s.studentId))}
                 canAdd={card.canMarkAttendance}
+                slots={card.slots}
               />
               {/* 일괄 출석 — 빈 칸만이라 비파괴(확인 불필요). 라벨이 실제 대상 수를 밝힌다(bulk-label 규약).
                   ⚠️ 렌더 조건에 bulkBusy를 포함 — 낙관 갱신으로 pending이 즉시 0이 되므로 이게 없으면

@@ -15,6 +15,8 @@ import {
   withVia,
   userTaughtClassSet,
 } from "@/features/attendance/live/server/write-policy";
+import { noteMakeupAgainstAbsence } from "./makeup-note-action";
+import { fetchAbsenceCells, pickAbsenceNoteTarget } from "./absence-cell";
 import type { RecordedVia } from "@/features/attendance/live/recorded-via";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { accessLevelTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
@@ -175,6 +177,25 @@ export async function saveAttendance(
     });
   }
 
+  /**
+   * 보강 결석분 연결 — 확인창에서 고른 것만 `makeupLink:{studentId}` = "결석반id|결석일"로 실려 온다.
+   *
+   * 🔴 이 화면은 **폼 제출 한 번에** 저장하는 모델이라(원스크린·ECS는 고르는 즉시 저장) 연결도 여기서
+   *    함께 끝낸다 — 클라가 저장 뒤에 이어서 부르려 해도 이 액션은 `redirect`로 끝나 그 기회가 없다.
+   * ⚠️ **이 폼에 실린 학생만** 잇는다 — 폼 값은 클라가 보낸 것이라, 명단 밖 학생 id가 오면 그대로
+   *    쓰기 표면이 넓어진다(#77). 담당 반·결석 칸 존재 여부는 연결 액션이 다시 확인한다.
+   */
+  const rowStudentIds = new Set(rows.map((r) => r.studentId));
+  const makeupLinks: { studentId: string; absentClassId: string; absentDate: string }[] = [];
+  for (const [key, value] of formData.entries()) {
+    if (!key.startsWith("makeupLink:")) continue;
+    const studentId = key.slice("makeupLink:".length);
+    if (!rowStudentIds.has(studentId)) continue;
+    const [absentClassId, absentDate] = String(value).split("|");
+    if (!absentClassId || !absentDate || !/^\d{4}-\d{2}-\d{2}$/.test(absentDate)) continue;
+    makeupLinks.push({ studentId, absentClassId, absentDate });
+  }
+
   if (rows.length === 0) return { error: "저장할 출결 데이터가 없습니다" };
 
   // 수정 가능 기간 — 강사(scoped)는 세션일로부터 7일 이내만. 관리자 이상(full)은 제한 없음(원장 2026-07-21).
@@ -263,13 +284,43 @@ export async function saveAttendance(
     saved += inserts.length;
   }
 
+  /**
+   * 결석분 연결 — 출결 저장이 **끝난 뒤**에 잇는다(보강 칸이 있어야 그 칸에 메모가 붙는다).
+   * 🔴 실패해도 저장은 되돌리지 않는다 — 출결이 진짜 기록이고 메모는 그 위의 표시다. 대신 몇 건이
+   *    못 붙었는지 세어 화면에 밝힌다(조용히 넘기면 "연결한 줄 알았는데 아니었다"가 된다).
+   */
+  let unlinked = 0;
+  let linkError: string | null = null;
+  if (makeupLinks.length > 0) {
+    const linked = await Promise.all(
+      makeupLinks.map((l) =>
+        noteMakeupAgainstAbsence({
+          studentId: l.studentId,
+          makeupClassId: classId,
+          makeupDate: date,
+          absentClassId: l.absentClassId,
+          absentDate: l.absentDate,
+        }),
+      ),
+    );
+    // 🔴 **두 실패를 뭉치지 않는다** — "결석을 못 찾음"(대개 선보강)과 "권한·기간·DB 오류"는 사람이 할 일이
+    //    다르다. 하나로 합치면 권한 문제인데 강사가 결석을 찾으러 간다(이 기능이 고치려던 증상의 재현).
+    for (const r of linked) {
+      if ("error" in r) linkError = linkError ?? r.error;
+      else if (!r.absenceNoted) unlinked++;
+    }
+  }
+
   // G4: 전원 기록 완료 전이 감지 → 담당 강사 벨(백그라운드, 응답 안 막음 — 실패해도 저장 무사).
   after(() =>
     notifyIfClassAttendanceComplete({ tenantId: user.tenantId, classId, date, actorId: user.id }),
   );
   revalidatePath(`/attendance/${date}`);
   revalidatePath(`/attendance/${date}/${classId}`);
-  redirect(`/attendance/${date}?saved=${saved}`);
+  const linkQuery =
+    (unlinked > 0 ? `&unlinked=${unlinked}` : "") +
+    (linkError ? `&linkError=${encodeURIComponent(linkError)}` : "");
+  redirect(`/attendance/${date}?saved=${saved}${linkQuery}`);
 }
 
 export type CellResult =
@@ -671,10 +722,15 @@ export async function linkMakeupToAbsence(input: {
       .maybeSingle();
 
   // 두 칸은 서로 독립 조회 — 직렬 워터폴 금지(B4). 이월 보강이면 **반이 서로 다르다**.
-  const [{ data: absentCell }, { data: makeupCell }] = await Promise.all([
-    latestCell(absentDate, absentClassId),
+  // 🔴 결석 칸은 **상태로 좁혀** 받는다(absence-cell.ts 공유 규약) — 최신 1건을 그대로 쓰면 ① 그 1건이
+  //    출석이어도 "보강 예정" 메모가 붙고 ② 하루 여러 교시를 도는 반에서 결석 칸을 못 찾는다.
+  const [absentRes, { data: makeupCell }] = await Promise.all([
+    fetchAbsenceCells(supabase, { studentId, classId: absentClassId, date: absentDate }),
     latestCell(makeupDate, classId),
   ]);
+  // 🔴 조회 실패는 그대로 알린다(빈 목록으로 삼키면 "결석이 없다"는 거짓 결론이 나간다).
+  if (!absentRes.ok) return { error: absentRes.error };
+  const absentRows = absentRes.cells;
 
   const memoOnMakeup = makeupMemo(absentDate, makeupDate);
   // 이미 연결돼 있으면 시수를 또 올리지 않는다 — 메모도 그대로다(appendMemo가 멱등).
@@ -686,13 +742,15 @@ export async function linkMakeupToAbsence(input: {
   const nowIso = new Date().toISOString();
   const writes: PromiseLike<{ error: { message: string } | null }>[] = [];
 
-  // ① 결석한 날 — **메모만**. 기록이 없으면 아무것도 만들지 않는다.
-  if (absentCell?.id) {
+  // ① 결석한 날 — **메모만**, 결석/공결 칸 한 곳에만. 기록이 없으면 아무것도 만들지 않는다.
+  const memoOnAbsence = absenceMemo(makeupDate, absentDate);
+  const absentTarget = pickAbsenceNoteTarget(absentRows, memoOnAbsence);
+  if (absentTarget && !hasMemoLine(absentTarget.note, memoOnAbsence)) {
     writes.push(
       supabase
         .from("attendance_records")
-        .update({ note: appendMemo(absentCell.note, absenceMemo(makeupDate, absentDate)) })
-        .eq("id", absentCell.id),
+        .update({ note: appendMemo(absentTarget.note, memoOnAbsence) })
+        .eq("id", absentTarget.id),
     );
   }
 
@@ -737,7 +795,8 @@ export async function linkMakeupToAbsence(input: {
     );
   }
   revalidateAttendanceSurfaces();
-  return { ok: true, units, absenceNoted: !!absentCell?.id, alreadyLinked };
+  // 🔑 "찾았다"와 "이번에 붙였다"를 구분하지 않는다 — 이미 붙어 있던 경우도 연결된 것이 사실이다.
+  return { ok: true, units, absenceNoted: !!absentTarget, alreadyLinked };
 }
 
 /** 일괄로 찍을 수 있는 상태 — 인라인 pill과 같은 3종. 조퇴·공결·보강은 출석부 전용(축약 되쓰기 방지). */
