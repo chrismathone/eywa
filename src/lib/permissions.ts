@@ -88,6 +88,9 @@ export const TEACHER_MENU_KEYS = [
   "expense_requests", // 지출결의서 — 강사가 본인 지출을 작성·제출(사무실은 /billing 지출 면에서 결재)
   "approvals", // 전자결재 — 기본 none(파일럿 개인 예외 계정에만 보인다). 문서 스코프는 결재선·RLS.
   "calendar", // 캘린더 — 학원 공용 일정(강사 readonly 열람)
+  // 수업 평가 — 강사에겐 **자기 평가 전용**(본인 평가지의 본인 채점만, self-only.ts). 기본값 none이라
+  // 학원설정에서 열어야 보인다. 남의 평가지·평가자 점수는 조회 초크포인트에서 잘려 나간다.
+  "class_review",
   "documents", // 서식 저장소 — 강사는 readonly(빈 양식 다운로드 용도)
 ] as const satisfies readonly MenuKey[];
 

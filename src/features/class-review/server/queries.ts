@@ -14,6 +14,7 @@ import {
   type SheetTotals,
 } from "../checklist";
 import { normalizeClassReviewFilter, type ClassReviewFilter } from "../list-filter";
+import { isOwnReview, isSelfOnlyReviewer, redactForSelfOnly } from "../self-only";
 
 // 수업 평가(참관) 저장 = academy_documents 행(kind='form', form_type='class_review') 재사용 — 새 테이블·SQL 0.
 // staff_user_id = 평가 대상 강사(직원 연결이라 /documents 표면에선 자동 제외, #77 벽 공유), restricted=true.
@@ -157,6 +158,10 @@ async function requireRead() {
  * 그 외(향후 역할 개방 시 강사 등)는 평가자 이름이 '평가자 A/B/C'로 익명화된다.
  */
 export async function getReviewPrivileges(user: CurrentUser): Promise<{ seeNames: boolean; editTemplate: boolean }> {
+  // 강사 직급 = 자기 평가 전용(원장 2026-08-19) — 실명 열람·문항 편집은 개인 예외로 full을 받아도 없다.
+  // 애초에 남의 평가지가 안 내려가므로 익명화보다 앞선 차단이지만, 종합 보기·문항 편집 게이트가
+  // 이 값을 보므로 여기서도 끊는다(#77 — 표면마다 조건을 새로 쓰지 않는다).
+  if (isSelfOnlyReviewer(user.systemRole)) return { seeNames: false, editTemplate: false };
   if (user.systemRole === "master") return { seeNames: true, editTemplate: true };
   try {
     const settings = await getTenantSettings();
@@ -235,8 +240,12 @@ export async function listClassReviews(): Promise<{ rows: ReviewListRow[]; areas
     getChecklistAreas(user.tenantId),
   ]);
   if (error) throw new Error(`수업 평가 목록 조회 실패: ${error.message}`);
-  const rows = (data ?? []).map((r) => {
-    const doc = parseDoc(r);
+  // 강사 직급 = 본인 평가지만, 그것도 본인 채점 한 장만(조회 초크포인트에서 자른다 — 화면 조건 아님, #77).
+  const selfOnly = isSelfOnlyReviewer(user.systemRole);
+  const rows = (data ?? []).map(parseDoc)
+    .filter((doc) => !selfOnly || isOwnReview(doc, user.id))
+    .map((doc) => (selfOnly ? redactForSelfOnly(doc) : doc))
+    .map((doc) => {
     const rowAreas = doc.areas ?? areas; // 스냅샷 우선(세트 복수화) — 구버전 문서만 테넌트 기본 세트
     const sheets = Object.values(doc.submissions);
     const observers = observerColumns(doc);
@@ -268,6 +277,11 @@ export async function getClassReview(
   if (error) throw new Error(`수업 평가 조회 실패: ${error.message}`);
   if (!data) return null;
   const doc = parseDoc(data);
+  // 강사 직급은 **본인 평가지만** 존재한다 — 남의 건 id를 직접 쳐도 없는 것으로(강제 URL 차단, #77).
+  if (isSelfOnlyReviewer(user.systemRole)) {
+    if (!isOwnReview(doc, user.id)) return null;
+    return { doc: redactForSelfOnly(doc), areas: doc.areas ?? areas };
+  }
   // 반환 areas = 이 평가지의 유효 문항(스냅샷 우선) — 상세·채점이 그대로 쓴다.
   return { doc, areas: doc.areas ?? areas };
 }
