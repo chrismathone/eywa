@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Pill } from "@/components/atoms/pill";
+import { EyIcon } from "@/components/icons/eywa-icons";
 import { TONE_COLOR } from "@/lib/design/semantic-color";
 import { addDays, formatKoreanDate } from "@/lib/date-kst";
 import {
@@ -228,7 +229,13 @@ function RunPanel({
           ) : (
             <span className="text-green text-[11.5px] font-bold">완료</span>
           )}
-          <span className="text-text-faint text-[11.5px]">{open ? "▲" : "▼"}</span>
+          {/* ⚠️ 접기 표시를 ▲/▼ **문자**로 쓰지 말 것 — 아이콘 자리에 글리프를 세우는 건
+              가드 테스트(eywa-icon-mapping)가 막는다. 폰트·플랫폼마다 크기가 널뛴다. */}
+          <EyIcon
+            name={open ? "chevronUp" : "chevronDown"}
+            size={14}
+            className="text-text-faint"
+          />
         </span>
       </button>
 
