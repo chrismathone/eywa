@@ -64,7 +64,11 @@ export type RecapEvent = {
   status: RecapStatus;
   /** 그 반에서 이 상태였던 교시들("16:20"). 여러 교시면 한 건으로 접힌 것이다. */
   slots: string[];
-  teacherName: string;
+  /**
+   * 그 교시들의 담당(자리 반은 사람이 아니라 `LAB`·`JJ` 표기). **여럿일 수 있다** — 영어는 교시마다
+   * 담당이 바뀌는 편성이 흔해서, 첫 교시 담당만 남기면 데스크가 엉뚱한 강사에게 묻는다.
+   */
+  teacherNames: string[];
   /** 강사가 남긴 사유 메모 — 데스크가 전화 **전에** 봐야 하는 값. */
   note: string | null;
   /** 최근 14일 결석 횟수(2회 이상만 채운다). 결석 외 상태는 null. */
@@ -78,8 +82,8 @@ export type RecapUnmarkedClass = {
   classId: string;
   className: string;
   subject: string;
-  teacherName: string;
-  slotTeacherLabel: string | null;
+  /** 그 비어 있는 교시들의 담당(자리 반은 `LAB`·`JJ`). 여럿이면 전부 — 누구에게 말할지가 이 줄의 목적이다. */
+  teacherNames: string[];
   slots: string[];
   /** 그 반에서 통째로 비어 있는 학생 수(교시 중복 제거). */
   expected: number;
@@ -123,6 +127,19 @@ export type DayRecap = {
   /** 입력이 덜 된 강사 먼저. */
   teachers: RecapTeacherLine[];
 };
+
+/**
+ * 그 교시에 **말을 걸 대상**의 표기 — 자리 반(LAB·JJ)은 사람이 아니라 자리라 슬롯 라벨이 이긴다.
+ * (강사별 집계 축은 이것과 별개로 `teacherName`을 쓴다 — 자리를 사람 줄에 섞으면 시수가 어긋난다.)
+ */
+function handlerOf(slot: RecapSlotInput): string {
+  return slot.slotTeacherLabel ?? slot.teacherName;
+}
+
+/** 이미 있으면 넣지 않는다(순서 유지 = 교시 순서). */
+function pushUnique(list: string[], value: string): void {
+  if (!list.includes(value)) list.push(value);
+}
 
 function isRecapStatus(v: string | null): v is RecapStatus {
   return v != null && (RECAP_STATUSES as readonly string[]).includes(v);
@@ -177,15 +194,15 @@ export function buildDayRecap(input: {
           classId: slot.classId,
           className: slot.className,
           subject: slot.subject,
-          teacherName: slot.teacherName,
-          slotTeacherLabel: slot.slotTeacherLabel,
+          teacherNames: [],
           slots: [],
           expected: 0,
           studentIds: new Set<string>(),
         };
         unmarked.set(slot.classId, entry);
       }
-      if (!entry.slots.includes(slot.slotStart)) entry.slots.push(slot.slotStart);
+      pushUnique(entry.slots, slot.slotStart);
+      pushUnique(entry.teacherNames, handlerOf(slot));
       for (const s of slot.students) entry.studentIds.add(s.studentId);
       // 같은 반의 여러 교시가 다 비어도 강사에겐 "출석부 한 개"다(반 단위로 센다).
       if (!line.classes.has(slot.classId)) {
@@ -211,7 +228,8 @@ export function buildDayRecap(input: {
       const key = `${s.studentId}|${slot.classId}|${s.status}`;
       const hit = events.get(key);
       if (hit) {
-        if (!hit.slots.includes(slot.slotStart)) hit.slots.push(slot.slotStart);
+        pushUnique(hit.slots, slot.slotStart);
+        pushUnique(hit.teacherNames, handlerOf(slot));
         // 메모는 먼저 적힌 것을 유지하되, 비어 있으면 뒤 교시 메모로 채운다(사유가 한 교시에만 있다).
         if (!hit.note && s.note) hit.note = s.note;
         // 🔴 조치는 **접힌 교시 중 아무 곳에나** 남아 있을 수 있다 — 첫 교시로만 찾으면 데스크가
@@ -236,7 +254,7 @@ export function buildDayRecap(input: {
         subject: slot.subject,
         status: s.status,
         slots: [slot.slotStart],
-        teacherName: slot.teacherName,
+        teacherNames: [handlerOf(slot)],
         note: s.note,
         recentAbsences: s.status === "absent" ? recentAbsenceOf(s.studentId) : null,
         followup,
@@ -312,4 +330,9 @@ function compareAbsence(a: RecapEvent, b: RecapEvent): number {
 /** 교시 목록 표기 — "16:20" / "16:20·17:20". */
 export function slotsLabel(slots: readonly string[]): string {
   return slots.join("·");
+}
+
+/** 담당 표기 — 교시마다 사람이 다르면 전부("김강사·최강사"). 없으면 빈 문자열. */
+export function handlersLabel(names: readonly string[]): string {
+  return names.join("·");
 }

@@ -13,7 +13,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { generateJSON } from "@/lib/ai/generate";
 import { reportError, reportWarning } from "@/lib/observability/report-error";
 import { buildRecapPrompt, validateRecapBrief, type RecapBrief } from "../prompt";
-import type { DayRecap } from "../digest";
+import type { RangeRecap } from "../range";
 
 /** 응답은 짧다(헤드라인 + 항목 5개) — 상한일 뿐이라 크게 잡아도 실사용 토큰만 과금된다. */
 const MAX_TOKENS = 4000;
@@ -26,7 +26,7 @@ type LabelOf = (subjectKey: string) => string;
  */
 export async function runRecapGeneration(
   tenantId: string,
-  recap: DayRecap,
+  recap: RangeRecap,
   subjectLabel: LabelOf,
 ): Promise<void> {
   const admin = createAdminClient();
@@ -35,9 +35,10 @@ export async function runRecapGeneration(
       .from("attendance_day_recaps")
       .update({ ...patch, updated_at: new Date().toISOString() })
       .eq("tenant_id", tenantId)
-      .eq("recap_date", recap.date);
+      .eq("from_date", recap.from)
+      .eq("recap_date", recap.to);
     // 저장 실패는 화면에 '정리 중'으로 고착되므로 반드시 로그에 남긴다(#89: 조용한 실패 금지).
-    if (error) reportError(error, { scope: "attendance.recap.save", date: recap.date });
+    if (error) reportError(error, { scope: "attendance.recap.save", date: recap.to });
   };
 
   try {
@@ -52,7 +53,7 @@ export async function runRecapGeneration(
       // 환각 차단은 정상 동작이다 — 실패로 남기되 원인을 사람 말로 적는다.
       reportWarning(`출결 요약 AI 후검증 탈락: ${checked.reason}`, {
         scope: "attendance.recap.validate",
-        date: recap.date,
+        date: recap.to,
       });
       await finish({
         status: "failed",
@@ -70,7 +71,7 @@ export async function runRecapGeneration(
       generated_at: new Date().toISOString(),
     });
   } catch (e) {
-    reportError(e, { scope: "attendance.recap.generate", date: recap.date });
+    reportError(e, { scope: "attendance.recap.generate", date: recap.to });
     await finish({
       status: "failed",
       summary: null,

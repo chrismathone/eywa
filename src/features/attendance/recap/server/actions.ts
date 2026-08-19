@@ -17,15 +17,20 @@ import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { reportError } from "@/lib/observability/report-error";
 import { kstToday } from "@/lib/date-kst";
-import { getDayRecap } from "./queries";
+import { getRangeRecap } from "./queries";
+import { recapRangeDates } from "../range";
 import { runRecapGeneration } from "./ai";
 
 /** 생성이 이 시간을 넘겨 analyzing으로 굳어 있으면 다시 누를 수 있게 한다(고착 우회). */
 const STUCK_MS = 5 * 60 * 1000;
 
-export async function generateRecapSummary(date: string): Promise<{ ok?: boolean; error?: string }> {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return { error: "날짜 형식이 올바르지 않습니다" };
-  if (date > kstToday()) return { error: "미래 날짜는 요약할 수 없습니다" };
+export async function generateRecapSummary(
+  from: string,
+  to: string,
+): Promise<{ ok?: boolean; error?: string }> {
+  const ymd = /^\d{4}-\d{2}-\d{2}$/;
+  if (!ymd.test(from) || !ymd.test(to) || from > to) return { error: "날짜 형식이 올바르지 않습니다" };
+  if (to > kstToday()) return { error: "미래 날짜는 요약할 수 없습니다" };
 
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
@@ -34,9 +39,9 @@ export async function generateRecapSummary(date: string): Promise<{ ok?: boolean
     return { error: "출결 요약을 정리할 권한이 없습니다" };
   }
 
-  const recap = await getDayRecap(date);
+  const recap = await getRangeRecap(recapRangeDates(from, to));
   if (!recap) return { error: "출결 요약을 불러오지 못했습니다" };
-  if (recap.totals.slots === 0) return { error: "그날은 수업이 없어 정리할 내용이 없습니다" };
+  if (recap.totals.slots === 0) return { error: "그 기간엔 수업이 없어 정리할 내용이 없습니다" };
 
   const settings = await getTenantSettings();
   const subjectLabel = buildSubjectMaps(settings.operations.subjects).labelOf;
@@ -47,11 +52,12 @@ export async function generateRecapSummary(date: string): Promise<{ ok?: boolean
     .from("attendance_day_recaps")
     .select("id, status, updated_at")
     .eq("tenant_id", user.tenantId)
-    .eq("recap_date", date)
+    .eq("from_date", from)
+    .eq("recap_date", to)
     .maybeSingle();
   if (readError) {
     // 표가 아직 없을 수도 있다(마이그레이션 적용 전) — 원문은 로그로만, 화면엔 한글 안내.
-    reportError(readError, { scope: "attendance.recap.claim.read", date });
+    reportError(readError, { scope: "attendance.recap.claim.read", date: to });
     return { error: "요약 저장소를 확인하지 못했습니다. 잠시 후 다시 시도해 주세요." };
   }
 
@@ -66,7 +72,7 @@ export async function generateRecapSummary(date: string): Promise<{ ok?: boolean
     if (!stuck) claim = claim.neq("status", "analyzing");
     const { data: claimed, error: claimError } = await claim.select("id");
     if (claimError) {
-      reportError(claimError, { scope: "attendance.recap.claim.update", date });
+      reportError(claimError, { scope: "attendance.recap.claim.update", date: to });
       return { error: "정리를 시작하지 못했습니다. 잠시 후 다시 시도해 주세요." };
     }
     if (!claimed || claimed.length === 0) {
@@ -75,7 +81,8 @@ export async function generateRecapSummary(date: string): Promise<{ ok?: boolean
   } else {
     const { error: insertError } = await admin.from("attendance_day_recaps").insert({
       tenant_id: user.tenantId,
-      recap_date: date,
+      from_date: from,
+      recap_date: to,
       status: "analyzing",
       requested_by: user.id,
     });
@@ -84,7 +91,7 @@ export async function generateRecapSummary(date: string): Promise<{ ok?: boolean
       if ((insertError as { code?: string }).code === "23505") {
         return { error: "이미 정리가 진행 중입니다. 완료되면 화면이 자동으로 갱신됩니다." };
       }
-      reportError(insertError, { scope: "attendance.recap.claim.insert", date });
+      reportError(insertError, { scope: "attendance.recap.claim.insert", date: to });
       return { error: "정리를 시작하지 못했습니다. 잠시 후 다시 시도해 주세요." };
     }
   }

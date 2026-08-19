@@ -1,37 +1,31 @@
 "use client";
 
 /**
- * 어제 출결 요약(관리자용) — **결정론 집계만** 그린다. AI 정리 카드는 그 위에 얹히는 부가물이라
+ * 출결 요약 탭(관리자용) — **결정론 집계만** 그린다. AI 정리 카드는 그 위에 얹히는 부가물이라
  * 없거나 실패해도 이 화면은 온전하다(원장 2026-08-19: *"팩트만을 가지고"*).
  *
- * 화면 순서 = 관리자가 손댈 순서다: ① 오늘 처리할 것(조치 안 끝난 결석) ② 그 밖의 출결 사건
- * ③ 아예 안 열린 출석부(강사에게 요청) ④ 강사별 입력. 숫자만 크게 띄우고 명단을 접지 않는다 —
- * "결석 18건"만 보이고 누구인지 다음 화면에 있으면 결국 아무도 안 본다.
+ * 화면 순서 = 관리자가 손댈 순서다: ① 기간 종합 스탯 ② AI 정리(선택) ③ **날짜별 블록**
+ * (결석 → 지각·조퇴·보강 → 미입력 출석부) ④ 기간 전체에서 입력이 덜 된 강사.
+ * 숫자만 크게 띄우고 명단을 접지 않는다 — "결석 18건"만 보이고 누구인지 다음 화면에 있으면
+ * 결국 아무도 안 본다.
+ *
+ * 🔑 월요일은 금·토·일 사흘을 덮는다(원장 정정) — 합계는 위에 한 번, 내용은 **날짜별로 나눠서**.
  */
-import type { ReactNode } from "react";
 import { EmptyState } from "@/components/empty-state";
 import { BigStat } from "@/components/atoms/big-stat";
 import { CalendarDays } from "@/components/icons/eywa-icon-compat";
 import { EyIcon } from "@/components/icons/eywa-icons";
-import { useSubjectMaps } from "@/features/owner/operations-context";
-import { ATT_SOFT } from "@/features/attendance/status-color";
-import { OUTCOME_LABEL } from "@/features/attendance/live/queue";
-import {
-  RECAP_STATUS_LABEL,
-  slotsLabel,
-  type DayRecap,
-  type RecapEvent,
-} from "@/features/attendance/recap/digest";
+import { formatKoreanDate } from "@/lib/date-kst";
+import type { RangeRecap } from "@/features/attendance/recap/range";
 import { RecapAiCard, type RecapAiState } from "./recap-ai-card";
+import { RecapDayBlock } from "./recap-day";
 
 export function RecapView({
   recap,
-  date,
   isToday,
   ai,
 }: {
-  recap: DayRecap;
-  date: string;
+  recap: RangeRecap;
   /** 오늘을 요약하면 아직 끝나지 않은 하루다 — 숫자가 확정이 아님을 화면이 먼저 말한다. */
   isToday: boolean;
   ai: RecapAiState;
@@ -39,13 +33,26 @@ export function RecapView({
   const t = recap.totals;
   const absentTotal = t.absent + t.excused;
   const otherTotal = t.late + t.earlyLeave + t.makeup;
+  // 수업이 아예 없던 날은 블록을 만들지 않는다 — 일요일 빈 블록이 금·토 사이에 끼면 읽기만 어렵다.
+  // (보강·특강이 실제로 있었다면 slots>0이라 블록으로 뜬다. 있는데 안 보이는 일은 없다.)
+  const shown = recap.days.filter((d) => d.totals.slots > 0);
+  const skipped = recap.days.filter((d) => d.totals.slots === 0);
+  const behind = recap.teachers.filter((x) => x.cells > 0 && x.recorded < x.cells);
 
-  if (t.slots === 0) {
+  if (shown.length === 0) {
     return (
       <EmptyState
         icon={CalendarDays}
-        title="그날은 수업이 없습니다"
-        description="시간표에 열린 교시가 없어 요약할 출결이 없습니다."
+        title={
+          recap.days.length > 1
+            ? `${formatKoreanDate(recap.from)} ~ ${formatKoreanDate(recap.to)} — 수업이 없습니다`
+            : `${formatKoreanDate(recap.to)} — 수업이 없습니다`
+        }
+        description={
+          recap.days.find((d) => d.holiday)
+            ? "휴원일이라 확인할 출결이 없습니다."
+            : "시간표에 열린 교시가 없어 요약할 출결이 없습니다."
+        }
       />
     );
   }
@@ -57,6 +64,7 @@ export function RecapView({
           오늘은 아직 진행 중입니다 — 아래 숫자는 지금까지 입력된 것까지입니다.
         </p>
       ) : null}
+
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <BigStat
           label="결석·공결"
@@ -75,10 +83,12 @@ export function RecapView({
           icon={<EyIcon name="clock" size={16} />}
           sub={`지각 ${t.late} · 조퇴 ${t.earlyLeave} · 보강 ${t.makeup}`}
         />
+        {/* ⚠️ 여러 날을 덮으면 같은 반이 금·토 각각 한 번씩 세어진다 — 그래서 단위가 '반'이 아니라
+            '건'(그날 그 반의 출석부 하나)이다. 하루짜리에선 그대로 '반'. */}
         <BigStat
           label="출석부 미입력"
           value={t.unmarkedClasses}
-          unit="반"
+          unit={recap.days.length > 1 ? "건" : "반"}
           tone={t.unmarkedClasses > 0 ? "amber" : "green"}
           icon={<EyIcon name="clipboardList" size={16} />}
           sub={t.unmarkedClasses > 0 ? `학생 ${t.unmarkedStudents}명이 기록 없음` : "전 반 입력 완료"}
@@ -91,159 +101,52 @@ export function RecapView({
           unit={t.inputRate == null ? "기록 없음" : "%"}
           tone={t.inputRate != null && t.inputRate >= 90 ? "green" : "amber"}
           icon={<EyIcon name="percent" size={16} />}
-          sub={`${t.cells}칸 중 ${t.recorded}칸 · 반 ${t.classes}개 ${t.slots}교시`}
+          sub={`${t.cells}칸 중 ${t.recorded}칸 · ${t.slots}교시`}
         />
       </section>
 
-      <RecapAiCard date={date} state={ai} />
+      <RecapAiCard from={recap.from} to={recap.to} state={ai} />
 
-      <Section
-        title="결석·공결"
-        count={recap.absences.length}
-        tone="danger"
-        empty="어제 결석은 없었습니다."
-        hint="조치가 끝나지 않은 건이 위로 옵니다."
-      >
-        {recap.absences.map((e) => (
-          <EventRow key={`${e.studentId}@${e.classId}@${e.status}`} event={e} />
-        ))}
-      </Section>
-
-      <Section title="지각·조퇴·보강" count={recap.others.length} empty="지각·조퇴·보강 기록이 없습니다.">
-        {recap.others.map((e) => (
-          <EventRow key={`${e.studentId}@${e.classId}@${e.status}`} event={e} />
-        ))}
-      </Section>
-
-      <Section
-        title="출석부 미입력"
-        count={recap.unmarked.length}
-        empty="모든 반이 출결을 입력했습니다."
-        hint="반 이름을 누르면 그날 출석부가 열립니다."
-      >
-        {recap.unmarked.map((c) => (
-          <UnmarkedRow key={c.classId} row={c} date={date} />
-        ))}
-      </Section>
-
-      <TeacherLines recap={recap} />
-    </div>
-  );
-}
-
-function Section({
-  title,
-  count,
-  tone,
-  empty,
-  hint,
-  children,
-}: {
-  title: string;
-  count: number;
-  tone?: "danger";
-  empty: string;
-  hint?: string;
-  children: ReactNode;
-}) {
-  return (
-    <section className="space-y-2">
-      <h2 className="flex items-baseline gap-2">
-        <span className="text-sm font-bold">{title}</span>
-        <span className={`num text-sm ${tone === "danger" && count > 0 ? "text-danger" : "text-text-dim"}`}>
-          {count}
-        </span>
-        {hint && count > 0 ? <span className="text-text-faint text-[11px]">{hint}</span> : null}
-      </h2>
-      {count === 0 ? (
-        <p className="bg-card shadow-card text-text-faint rounded-2xl px-3 py-3 text-[13px]">{empty}</p>
-      ) : (
-        <ul className="bg-card shadow-card divide-line divide-y rounded-2xl">{children}</ul>
-      )}
-    </section>
-  );
-}
-
-function EventRow({ event }: { event: RecapEvent }) {
-  const subjects = useSubjectMaps();
-  return (
-    <li className="flex flex-wrap items-center gap-x-2 gap-y-1 px-3 py-2 text-sm">
-      <span className={`${ATT_SOFT[event.status]} shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold`}>
-        {RECAP_STATUS_LABEL[event.status]}
-      </span>
-      <span className="font-bold">{event.studentName}</span>
-      {event.schoolGrade ? <span className="text-text-faint text-[11px]">{event.schoolGrade}</span> : null}
-      <span className="text-text-dim text-xs">
-        {event.className}
-        <span className="text-text-faint"> · {subjects.labelOf(event.subject) || "과목 없음"}</span>
-      </span>
-      <span className="num text-text-dim text-xs">{slotsLabel(event.slots)}</span>
-      <span className="text-text-faint text-xs">{event.teacherName}</span>
-      {event.recentAbsences && event.recentAbsences >= 2 ? (
-        // 창은 '지금 기준' 14일이다(0220a) — 요약 날짜가 오래됐어도 이 값은 오늘 기준이라 라벨로 밝힌다.
-        <span className="bg-danger-soft text-danger num shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold">
-          최근 14일 {event.recentAbsences}회
-        </span>
+      {/* 빈 날은 블록 대신 한 줄 — "안 봤다"와 "볼 게 없었다"를 구분해 준다. */}
+      {skipped.length > 0 ? (
+        <p className="text-text-faint text-[12px]">
+          {skipped
+            .map((d) => `${formatKoreanDate(d.date)} ${d.holiday ? `휴원일(${d.holiday})` : "수업 없음"}`)
+            .join(" · ")}
+        </p>
       ) : null}
-      {event.note ? <span className="text-text-dim text-xs">“{event.note}”</span> : null}
-      <span className="ml-auto shrink-0 text-xs">
-        {event.settled ? (
-          <span className="text-text-faint">
-            {event.followup?.state === "dismissed"
-              ? "해당 없음"
-              : event.followup?.outcome
-                ? (OUTCOME_LABEL[event.followup.outcome] ?? "확인")
-                : "확인"}
-            {event.followup?.handledByName ? ` · ${event.followup.handledByName}` : ""}
-          </span>
-        ) : event.status === "absent" || event.status === "excused" ? (
-          <span className="text-amber-strong font-bold">조치 미완료</span>
-        ) : null}
-      </span>
-    </li>
-  );
-}
 
-function UnmarkedRow({ row, date }: { row: DayRecap["unmarked"][number]; date: string }) {
-  const subjects = useSubjectMaps();
-  return (
-    <li className="flex flex-wrap items-center gap-x-2 gap-y-1 px-3 py-2 text-sm">
-      <a href={`/attendance/${date}/${row.classId}`} className="hover:text-primary font-bold underline-offset-2 hover:underline">
-        {row.className}
-      </a>
-      <span className="text-text-faint text-xs">{subjects.labelOf(row.subject) || "과목 없음"}</span>
-      <span className="num text-text-dim text-xs">{slotsLabel(row.slots)}</span>
-      <span className="text-text-faint text-xs">{row.slotTeacherLabel ?? row.teacherName}</span>
-      <span className="num text-text-dim ml-auto shrink-0 text-xs">학생 {row.expected}명</span>
-    </li>
-  );
-}
-
-/** 강사별 입력 — **덜 찍은 사람만** 보인다. 다 찍은 사람 줄까지 세우면 조치할 줄이 묻힌다. */
-function TeacherLines({ recap }: { recap: DayRecap }) {
-  const behind = recap.teachers.filter((t) => t.cells > 0 && t.recorded < t.cells);
-  if (behind.length === 0) return null;
-  return (
-    <section className="space-y-2">
-      <h2 className="flex items-baseline gap-2">
-        <span className="text-sm font-bold">입력이 덜 된 강사</span>
-        <span className="num text-text-dim text-sm">{behind.length}</span>
-      </h2>
-      <ul className="bg-card shadow-card divide-line divide-y rounded-2xl">
-        {behind.map((t) => (
-          <li key={t.teacherName} className="flex items-center gap-x-2 px-3 py-2 text-sm">
-            <span className="font-bold">{t.teacherName}</span>
-            <span className="num text-text-dim ml-auto text-xs">
-              {t.cells}칸 중 {t.recorded}칸
-            </span>
-            {t.unmarkedClasses > 0 ? (
-              <span className="num text-amber-strong shrink-0 text-xs font-bold">
-                미입력 {t.unmarkedClasses}반
-              </span>
-            ) : null}
-          </li>
+      <div className="space-y-6">
+        {shown.map((day) => (
+          <RecapDayBlock key={day.date} day={day} single={shown.length === 1} />
         ))}
-      </ul>
-    </section>
+      </div>
+
+      {/* 강사는 날짜를 가로질러 합친다 — 사흘치를 날짜별로 흩으면 "누가 계속 안 찍나"가 안 보인다. */}
+      {behind.length > 0 ? (
+        <section className="space-y-2">
+          <h2 className="flex items-baseline gap-2">
+            <span className="text-sm font-bold">입력이 덜 된 강사</span>
+            <span className="num text-text-dim text-sm">{behind.length}</span>
+            {recap.days.length > 1 ? <span className="text-text-faint text-[11px]">기간 합계</span> : null}
+          </h2>
+          <ul className="bg-card shadow-card divide-line divide-y rounded-2xl">
+            {behind.map((line) => (
+              <li key={line.teacherName} className="flex items-center gap-x-2 px-3 py-2 text-sm">
+                <span className="font-bold">{line.teacherName}</span>
+                <span className="num text-text-dim ml-auto text-xs">
+                  {line.cells}칸 중 {line.recorded}칸
+                </span>
+                {line.unmarkedClasses > 0 ? (
+                  <span className="num text-amber-strong shrink-0 text-xs font-bold">
+                    미입력 {line.unmarkedClasses}반
+                  </span>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+    </div>
   );
 }

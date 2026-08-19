@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { buildDayRecap } from "./digest";
+import { buildRangeRecap } from "./range";
 import { buildRecapPrompt, recapFactLines, validateRecapBrief } from "./prompt";
 
-const recap = buildDayRecap({
+const day = buildDayRecap({
   date: "2026-08-18",
   slots: [
     {
@@ -28,6 +29,7 @@ const recap = buildDayRecap({
   ],
   recentAbsenceOf: (id) => (id === "s1" ? 3 : null),
 });
+const recap = buildRangeRecap([{ ...day, holiday: null }]);
 
 const labelOf = (k: string) => (k === "math" ? "수학" : k);
 
@@ -49,7 +51,8 @@ describe("buildRecapPrompt", () => {
     const prompt = buildRecapPrompt(recap, labelOf);
     expect(prompt).toContain("자료에 있는 숫자만");
     expect(prompt).toContain("headline");
-    expect(prompt).toContain("2026-08-18");
+    // 날짜는 한글 표기로 싣는다 — 모델이 "8월 18일 화요일"이라고 쓸 수 있어야 한다(raw ISO 아님).
+    expect(prompt).toContain("2026년 8월 18일 (화)");
   });
 });
 

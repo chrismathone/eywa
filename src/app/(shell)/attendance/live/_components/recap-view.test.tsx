@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import { OperationsProvider } from "@/features/owner/operations-context";
 import { buildDayRecap } from "@/features/attendance/recap/digest";
+import { buildRangeRecap } from "@/features/attendance/recap/range";
 import { RecapView } from "./recap-view";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }) }));
@@ -15,7 +16,7 @@ vi.mock("@/features/attendance/recap/server/actions", () => ({ generateRecapSumm
 
 afterEach(cleanup);
 
-const recap = buildDayRecap({
+const day = buildDayRecap({
   date: "2026-08-18",
   slots: [
     {
@@ -46,6 +47,31 @@ const recap = buildDayRecap({
   ],
   recentAbsenceOf: (id) => (id === "s1" ? 3 : null),
 });
+const recap = buildRangeRecap([{ ...day, holiday: null }]);
+
+/** 월요일 화면(금·토·일) — 금요일은 결석, 토요일은 휴원일, 일요일은 수업 없음. */
+const mondayRecap = buildRangeRecap([
+  { ...day, date: "2026-08-21", holiday: null },
+  {
+    ...buildDayRecap({ date: "2026-08-22", slots: [] }),
+    holiday: "광복절",
+  },
+  { ...buildDayRecap({ date: "2026-08-23", slots: [] }), holiday: null },
+]);
+
+function renderRange(range: typeof recap) {
+  return render(
+    <OperationsProvider
+      subjects={[
+        { key: "math", label: "수학", color: "blue", weekdayGrouping: "mon-thu", testMax: 5 },
+        { key: "english", label: "영어", color: "gold", weekdayGrouping: "mon-thu", testMax: 5 },
+      ]}
+      gradeLevels={["중2"]}
+    >
+      <RecapView recap={range} isToday={false} ai={null} />
+    </OperationsProvider>,
+  );
+}
 
 function renderRecap(isToday = false) {
   return render(
@@ -56,7 +82,7 @@ function renderRecap(isToday = false) {
       ]}
       gradeLevels={["중2"]}
     >
-      <RecapView recap={recap} date="2026-08-18" isToday={isToday} ai={null} />
+      <RecapView recap={recap} isToday={isToday} ai={null} />
     </OperationsProvider>,
   );
 }
@@ -79,5 +105,15 @@ describe("RecapView", () => {
   it("오늘을 요약하면 진행 중임을 먼저 말한다", () => {
     renderRecap(true);
     expect(screen.getByText(/오늘은 아직 진행 중입니다/)).toBeTruthy();
+  });
+
+  it("여러 날이면 날짜별 블록으로 나누고, 빈 날은 블록 대신 한 줄로 밝힌다", () => {
+    renderRange(mondayRecap);
+    // 수업이 있던 날만 블록 — 날짜 제목이 근거다.
+    expect(screen.getByRole("heading", { name: "2026년 8월 21일 (금)" })).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "2026년 8월 22일 (토)" })).toBeNull();
+    // 휴원일·수업 없는 날은 사라지지 않고 한 줄로 남는다("안 봤다"와 "볼 게 없었다"의 구분).
+    expect(screen.getByText(/2026년 8월 22일 \(토\) 휴원일\(광복절\)/)).toBeTruthy();
+    expect(screen.getByText(/2026년 8월 23일 \(일\) 수업 없음/)).toBeTruthy();
   });
 });

@@ -1,4 +1,4 @@
--- 0226a: 어제 출결 요약의 **AI 정리** 저장소 (2026-08-19, 원장: "어제 출결을 요약해서 정리하는 기능 · 관리자용
+-- 0226a: 출결 요약(어제/주말 종합)의 **AI 정리** 저장소 (2026-08-19, 원장: "어제 출결을 요약해서 정리하는 기능 · 관리자용
 -- · 팩트만을 가지고 · 필요하면 deepseek api 사용해서 정리할것").
 --
 -- ■ 이 표가 담는 것 / 안 담는 것
@@ -26,7 +26,8 @@
 create table if not exists attendance_day_recaps (
   id uuid primary key default gen_random_uuid(),
   tenant_id uuid not null references tenants(id) on delete cascade,
-  recap_date date not null,                  -- KST 기준 요약 대상 날짜(보통 어제) — UTC 날짜 사용 금지
+  recap_date date not null,                  -- 범위의 **마지막 날**(KST). 보통 어제 — UTC 날짜 사용 금지
+  from_date date not null,                   -- 범위의 첫 날. 하루짜리면 recap_date와 같다.
   status text not null default 'idle',       -- idle | analyzing | completed | failed
   error text,                                -- 한글 사유(후검증 탈락·생성 실패). UI에 그대로 노출된다.
   summary jsonb,                             -- {headline, points[]} — validateRecapBrief 통과분만
@@ -35,7 +36,11 @@ create table if not exists attendance_day_recaps (
   generated_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(), -- analyzing 5분 고착 판정 기준(재클릭 우회)
-  unique (tenant_id, recap_date)             -- 하루 한 행 = 클릭 경합의 유일한 방지선(23505로 안내)
+  -- 🔑 키가 **범위**인 이유: 월요일은 금~일 종합이라(원장 2026-08-19) 같은 토요일이 "토요일 하루"와
+  --    "금~일 종합" 두 요약에 동시에 들어간다. recap_date만 키로 잡으면 둘이 서로 덮어써서 화면이
+  --    엉뚱한 기간의 문장을 보여준다. 범위별 한 행 = 클릭 경합의 방지선이기도 하다(23505로 안내).
+  unique (tenant_id, from_date, recap_date),
+  constraint attendance_day_recaps_range_ck check (from_date <= recap_date)
 );
 
 create index if not exists attendance_day_recaps_tenant_date_idx

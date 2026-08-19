@@ -1,20 +1,23 @@
 "use client";
 
 /**
- * 어제 출결 요약의 **AI 정리** 카드 — 선택 기능(원장 2026-08-19 *"필요하면 deepseek api 사용해서 정리할것"*).
+ * 출결 요약의 **AI 정리** 카드 — 선택 기능(원장 2026-08-19 *"필요하면 deepseek api 사용해서 정리할것"*).
  *
  * 🔴 페이지를 여는 것만으로는 절대 생성하지 않는다(CLAUDE.md AI 정책) — 버튼을 누를 때만 호출하고,
  *    마지막 결과는 다시 누르기 전까지 그대로 남는다.
  * 🔴 이 카드가 비어 있어도 아래 집계는 온전하다 — **숫자·명단의 진실은 결정론 다이제스트**이고
  *    여기 문장은 그것을 읽는 순서로 다시 배열한 것뿐이다. 그래서 실패 문구도 "아래 집계를 쓰라"고 말한다.
- * 생성은 `after()` 백그라운드라 완료를 폴링으로 받는다(일일 브리핑 '다시 생성'과 같은 규약).
+ * 🔑 생성은 `after()` 백그라운드라 완료를 폴링으로 받는데, **한 행짜리 상태만 확인**하고 값이 바뀐
+ *    순간에만 화면을 다시 그린다(당일 출결 `LiveRefresher`와 같은 규약). 무조건 `router.refresh()`를
+ *    반복하면 그때마다 보드 전체(교시 100여 개 × 수강 수백 행)를 다시 적재한다 — 3분이면 36번이다.
  */
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Sparkles } from "@/components/icons/eywa-icon-compat";
 import { modelDisplayLabel } from "@/lib/ai/model-label";
 import { generateRecapSummary } from "@/features/attendance/recap/server/actions";
+import { getRecapStatus } from "@/features/attendance/recap/server/poll-actions";
 import type { RecapBrief } from "@/features/attendance/recap/prompt";
 
 export type RecapAiState = {
@@ -24,28 +27,48 @@ export type RecapAiState = {
   model: string | null;
 } | null;
 
-export function RecapAiCard({ date, state }: { date: string; state: RecapAiState }) {
+const POLL_MS = 5000;
+/** 3분(36틱) 상한 — 정상 생성보다 훨씬 길게 두되, 죽은 생성 때문에 하루 종일 두드리지 않는다. */
+const MAX_TICKS = 36;
+
+export function RecapAiCard({ from, to, state }: { from: string; to: string; state: RecapAiState }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const analyzing = state?.status === "analyzing";
   const modelLabel = modelDisplayLabel(state?.model);
+  const baselineRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!analyzing) return;
-    // 상한 3분(36틱) — 정상 생성보다 훨씬 길게 두되, after()가 죽어 analyzing으로 굳은 날
-    // 하루 종일 5초마다 RSC를 재실행하지 않는다(브리핑 워처와 같은 상한).
+    if (!analyzing) {
+      baselineRef.current = null;
+      return;
+    }
+    let stopped = false;
     let ticks = 0;
-    const timer = window.setInterval(() => {
+    const timer = window.setInterval(async () => {
       ticks += 1;
-      if (ticks > 36) {
+      if (stopped || ticks > MAX_TICKS) {
         window.clearInterval(timer);
         return;
       }
-      router.refresh();
-    }, 5000);
-    return () => window.clearInterval(timer);
-  }, [analyzing, router]);
+      if (document.visibilityState !== "visible") return;
+      const fingerprint = await getRecapStatus(from, to).catch(() => null);
+      if (stopped || fingerprint == null) return;
+      if (baselineRef.current == null) {
+        baselineRef.current = fingerprint;
+        return;
+      }
+      if (fingerprint !== baselineRef.current) {
+        baselineRef.current = fingerprint;
+        router.refresh();
+      }
+    }, POLL_MS);
+    return () => {
+      stopped = true;
+      window.clearInterval(timer);
+    };
+  }, [analyzing, from, to, router]);
 
   return (
     <section className="bg-card shadow-card rounded-2xl p-4">
@@ -54,9 +77,7 @@ export function RecapAiCard({ date, state }: { date: string; state: RecapAiState
           <Sparkles size={15} />
         </span>
         <h2 className="text-sm font-bold">AI 정리</h2>
-        {modelLabel && state?.brief ? (
-          <span className="text-text-faint text-[11px]">{modelLabel}</span>
-        ) : null}
+        {modelLabel && state?.brief ? <span className="text-text-faint text-[11px]">{modelLabel}</span> : null}
         <Button
           type="button"
           variant="outline"
@@ -68,7 +89,7 @@ export function RecapAiCard({ date, state }: { date: string; state: RecapAiState
           onClick={() => {
             setError(null);
             startTransition(async () => {
-              const result = await generateRecapSummary(date);
+              const result = await generateRecapSummary(from, to);
               if (result?.error) setError(result.error);
               router.refresh();
             });
