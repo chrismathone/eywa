@@ -1,6 +1,6 @@
 import { weekdayIndexOf } from "@/lib/date-kst";
 import { holidayFor, holidayShortName } from "@/features/calendar/holidays";
-import type { CalendarEvent, EventColor } from "@/features/calendar/types";
+import { eventDisplayColor, type CalendarEvent, type EventColor } from "@/features/calendar/types";
 
 /**
  * 월 그리드 — 일~토 7열(한국 달력 관행: 일=빨강·토=파랑), 앞뒤 달 날짜는 흐리게, 오늘은 primary 원 배지.
@@ -160,10 +160,10 @@ export function MonthGrid({
                         ev.stopPropagation(); // 칩 클릭이 칸(일정 등록) 클릭으로 번지지 않게
                         onEventClick(e);
                       }}
-                      className={`block w-full truncate rounded px-1 py-0.5 text-left text-[12px] leading-tight font-medium transition hover:opacity-80 ${CHIP_CLASS[e.color]} ${
+                      className={`block w-full truncate rounded px-1 py-0.5 text-left text-[12px] leading-tight font-medium transition hover:opacity-80 ${CHIP_CLASS[eventDisplayColor(e)]} ${
                         cell.inMonth ? "" : "opacity-50"
                       }`}
-                      title={e.title}
+                      title={e.tag ? `[${e.tag.name}] ${e.title}` : e.title}
                     >
                       {e.startTime ? <span className="num mr-0.5">{e.startTime}</span> : null}
                       {e.title}
