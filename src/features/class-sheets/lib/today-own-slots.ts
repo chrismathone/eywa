@@ -28,14 +28,17 @@
  *    규칙 ③으로 재면 **전부 남의 것**이 되어 화면이 통째로 비는데, 위임은 애초에 "오늘 이 반을 네가
  *    맡아라"는 배정이다 — 정확히 0173a가 막으려던 조용한 실패(위임받았는데 아무것도 안 뜬다)가 된다.
  * ⚠️ 이 화면은 "보이는 교시 = 세는 교시"([view-prefs.ts](../view-prefs.ts))를 **의도적으로 벗어나는 첫
- *    사례**다: 작성률(주간 시트 머리·랜딩·요약 카드의 `계획 N/M교시`)은 **반 전체가 목적**이라 서버 계산을 그대로 두고,
- *    대신 숨긴 교시를 각주로 밝힌다(`hiddenOwnSlotsNotice`). 분모를 여기서 바꾸지 말 것.
+ *    사례**다: 작성률(주간 시트 머리·랜딩·요약 카드의 `계획 N/M교시`)은 **반 전체가 목적**이라 서버 계산을
+ *    그대로 둔다. 분모를 여기서 바꾸지 말 것.
+ * ⚠️ 숨긴 교시를 **반마다 각주로 길게 적던 문장은 폐기**(원장 2026-08-19 *"이 멘트 필요없음"*) — 반 셋이면
+ *    같은 문장이 셋 쌓여 오히려 시트를 밀어냈다. 되돌릴 곳 안내는 화면 맨 위 한 줄(“전체 반에 대한 내용을
+ *    보려면 '주간 시트'에서 볼 수 있습니다.”)이 대신한다. 🔴 각주 문장을 되살리지 말 것.
  * ⚠️ 시수(유닛) 자동값은 손대지 않는다 — "보기 설정이 급여를 바꾸면 안 된다"(grid.ts `scheduledUnitsByDate`).
  */
 import { isSpecialSlotLabel } from "@/features/timetable/lib/teacher-label";
 import type { GridDay, GridSlot } from "./grid";
 
-/** 오늘 면에서 숨긴 남의 교시 하나 — 각주(건수·교시·담당)용. `teacherId`는 숨김 근거인 FK다. */
+/** 오늘 면에서 숨긴 남의 교시 하나 — 빈 하루의 사유 구분용. `teacherId`는 숨김 근거인 FK다. */
 export type HiddenOwnSlot = { slotStart: string; teacherId: string };
 
 export type SheetDaysSelection = {
@@ -43,7 +46,10 @@ export type SheetDaysSelection = {
   days: GridDay[];
   /** 오늘 면이 그릴 하루(내 교시만 남은 슬롯) — `variant:"full"`이면 null. */
   todayDay: GridDay | null;
-  /** 숨긴 남의 교시 — 비어 있지 않으면 **반드시 화면에 건수를 밝힌다**(침묵 금지). */
+  /**
+   * 숨긴 남의 교시 — **빈 하루의 사유를 가르는 데** 쓴다("담당 교시가 없다" ≠ "수업이 없다").
+   * ⚠️ 건수를 각주로 적던 문장은 폐기됐다(위 머리 주석) — 되살리지 말 것.
+   */
   hiddenOwn: HiddenOwnSlot[];
 };
 
@@ -132,29 +138,60 @@ export function slotsWithRecordsOn(
 }
 
 /**
- * 숨긴 교시 각주 문장 — **침묵 금지**(선례: 자리 제외 각주 `hiddenSpecial`·요약 카드의 안 그린 기록).
- * 없으면 null(아무것도 안 그린다).
- *
- * ⚠️ 담당 이름은 **FK(`teacherId`)로 찾은 표시 이름**(`data.teacherNames`)만 쓴다 — 슬롯 라벨은
- *    FK와 다른 사람을 가리킬 수 있어 각주에서까지 남의 이름을 부를 수 있다. 이름을 모르면 교시만 적는다.
+ * 시트 한 반분의 **선택 입력**(구조적 부분집합) — `ClassSheetWeekData`를 그대로 받지 않는 이유는
+ * 그 타입이 server-only 모듈 소유라 이 순수 모듈이 import할 수 없기 때문이다.
  */
-export function hiddenOwnSlotsNotice(
-  hidden: readonly HiddenOwnSlot[],
-  opts: {
-    /** 교시(HH:MM) → "N교시"(표시 전용 라벨, `data.periodLabelBySlot`). 없으면 시각을 그대로 적는다. */
-    periodLabelOf: (slotStart: string) => string | null;
-    teacherNameOf: (teacherId: string) => string | null;
-  },
-): string | null {
-  if (hidden.length === 0) return null;
-  const parts = hidden.map((h) => {
-    const period = opts.periodLabelOf(h.slotStart) ?? h.slotStart;
-    const name = opts.teacherNameOf(h.teacherId);
-    return name ? `${period} ${name}` : period;
+export type SheetSelectionData = {
+  grid: { days: readonly GridDay[] };
+  delegated: boolean;
+  /** 키만 쓴다 — `${studentId}|${date}|${HH:MM}`. */
+  attendanceByStudentDate: Readonly<Record<string, unknown>>;
+  /** 키만 쓴다 — 위와 같은 모양. */
+  marks: Readonly<Record<string, unknown>>;
+  /** 키만 쓴다 — 교시 메모는 `slot:${date}:${HH:MM}`. */
+  memos: Readonly<Record<string, unknown>>;
+};
+
+/**
+ * 시트 데이터 한 반분에서 곧바로 선택을 뽑는다 — **화면(SheetClient)과 서버(오늘 면 정렬)가 같은 함수**를
+ * 쓰게 하는 자리. 기록 보유 교시(판정 규칙 ④)를 만드는 키 조합이 두 곳에 흩어지면 "정렬은 숨긴 교시를
+ * 기준으로, 화면은 남긴 교시를 기준으로" 같은 조용한 어긋남이 생긴다(2026-08-19 반 순서 뒤집힘의 뿌리).
+ */
+export function selectSheetDaysFor(
+  data: SheetSelectionData,
+  opts: { variant: "full" | "today"; dayFilter: string | null; myTeacherId: string | null },
+): SheetDaysSelection {
+  return selectSheetDays({
+    variant: opts.variant,
+    days: data.grid.days,
+    dayFilter: opts.dayFilter,
+    myTeacherId: opts.myTeacherId,
+    delegatedClass: data.delegated,
+    slotsWithRecords: (date) =>
+      slotsWithRecordsOn(
+        date,
+        [...Object.keys(data.attendanceByStudentDate), ...Object.keys(data.marks)],
+        Object.keys(data.memos),
+      ),
   });
-  return (
-    `다른 선생님 담당 교시 ${hidden.length}개(${parts.join(" · ")})는 오늘 시트에서 숨겼습니다 — ` +
-    `기록은 지워지지 않았고 주간 시트에서 그대로 보입니다. ` +
-    `작성률(계획 N/M교시)은 반 전체가 기준이라 숨긴 교시까지 함께 셉니다.`
-  );
+}
+
+/**
+ * 오늘 면에서 이 반이 **실제로 그리는 첫 교시**(HH:MM) — 오늘 면 반 순서의 정렬 키.
+ * 그릴 교시가 하나도 없으면 null(호출부가 맨 뒤로 보낸다).
+ *
+ * 🔴 서버 카드의 `startsAt`을 쓰면 안 된다 — 그건 **남의 교시까지 포함한** 그 날 첫 시각이라, 15:00을
+ *    남이 맡고 내가 15:40만 맡은 반이 15:00짜리 반보다 위에 온다(원장 제보 2026-08-19: "시간대가
+ *    순서대로 배치가 안되어있다"). 보이는 시각으로 줄 세워야 화면이 그 날 일과 순서가 된다.
+ */
+export function firstVisibleTodaySlot(
+  data: SheetSelectionData,
+  opts: { date: string; myTeacherId: string | null },
+): string | null {
+  const sel = selectSheetDaysFor(data, {
+    variant: "today",
+    dayFilter: opts.date,
+    myTeacherId: opts.myTeacherId,
+  });
+  return sel.todayDay?.slots[0]?.slotStart ?? null;
 }

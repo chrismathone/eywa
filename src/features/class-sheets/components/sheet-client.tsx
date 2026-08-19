@@ -10,8 +10,10 @@ import { useEditPresence } from "@/features/presence/edit-presence";
 import type { ClassSheetWeekData } from "../server/queries";
 // 출결 저장은 ECS 전용 액션을 만들지 않고 **출석부·원스크린과 같은 것**을 쓴다 — 권한·담당 반·7일 창
 // 게이트를 화면마다 다시 짜면 한쪽만 느슨해진다(#77).
-// ⚠️ 대신 그 액션의 담당 반 판정이 ECS 접근 범위보다 **좁다**(부담임 제외) → 서버가 거절할 사람에겐
-//    queries.ts가 `canMarkAttendanceByDate`를 false로 내려 컨트롤을 미리 잠근다(거짓 어포던스 금지).
+// ⚠️ queries.ts가 그 액션과 **같은 축**(`userTaughtClassSet` = 담임 ∪ 위임 ∪ 교시 담당)으로
+//    `canMarkAttendanceByDate`를 미리 내려 컨트롤을 잠근다 — 서버가 거절할 사람에게만(거짓 어포던스 금지).
+//    🔴 2026-08-19까지는 이 미리-잠금이 액션보다 **좁아서**(부담임 제외) 반대로 "서버는 허락하는데 화면이
+//    막는" 거짓 잠금이었다. 두 축을 다시 갈라 놓지 말 것(write-gate-axis.test.ts).
 import { setAttendanceCell } from "@/features/attendance/server/actions";
 import { parseSessionUnits } from "@/features/attendance/session-units";
 import {
@@ -35,12 +37,10 @@ import type { RosterGroupKey } from "../lib/roster-order";
 import type { MarkTextField } from "../lib/roster-form";
 import { buildSaveKey, type PlanFieldPatch } from "../lib/save-keys";
 import { PLAN_PATCH_FIELDS, isMeaningfulPlanLine } from "../lib/plan-codec";
-// 오늘 면의 강사 축 필터(내 교시만) + 각주 문장 — 주간과 갈리는 유일한 지점이라 순수 모듈이 소유한다.
-import {
-  hiddenOwnSlotsNotice,
-  selectSheetDays,
-  slotsWithRecordsOn,
-} from "../lib/today-own-slots";
+// 오늘 면의 강사 축 필터(내 교시만) — 주간과 갈리는 유일한 지점이라 순수 모듈이 소유한다.
+// ⚠️ 오늘 면의 **반 순서**(ecs/page.tsx)도 같은 모듈의 `firstVisibleTodaySlot`을 쓴다 — 화면이 그리는
+//    교시와 줄 세우는 교시가 갈리면 순서가 다시 뒤집힌다(2026-08-19).
+import { selectSheetDaysFor } from "../lib/today-own-slots";
 import { useSheetDoc } from "./use-sheet-doc";
 import { useFlushOnUnmount, useSaveIndicator, useSheetSaveStore } from "./use-sheet-saves";
 import { EditingBadge } from "@/features/presence/editing-badge";
@@ -427,6 +427,37 @@ export function SheetClient({
             termMode,
           }).then((r) => {
             if (!r.ok) return toast.error(r.error);
+            // JJ 이어받기(듣기 레벨·누적 암기 단어수) — 계획 복사와 **따로** 반영한다. 두 칸의 원본은
+            // 계획 줄이 아니라 학생 기록이라, 계획이 하나도 안 채워진 경우에도 이 칸은 채워질 수 있다.
+            // 🔴 서버가 돌려준 값으로 **화면 상태를 직접 머지**해야 한다 — 마크는 클라 state(useState)라
+            //    refresh로는 안 바뀐다(강사는 "복사했는데 칸이 그대로"로 본다).
+            if (r.carried.length > 0) {
+              setMarks((prev) => {
+                const next = { ...prev };
+                for (const p of r.carried) {
+                  const markKey = `${p.studentId}|${planDate}|${slotStart}`;
+                  const had = next[markKey];
+                  next[markKey] = {
+                    // 이어받기는 두 칸만 건드린다 — 태도·특이사항·시험 점수는 있던 값 그대로.
+                    status: had?.status ?? null,
+                    progressNote: had?.progressNote ?? null,
+                    score: had?.score ?? null,
+                    listeningLevel: p.listeningLevel,
+                    memorizedWords: p.memorizedWords,
+                  };
+                }
+                return next;
+              });
+            }
+            if (r.carryError) toast.error(r.carryError);
+            if (r.carryPending) {
+              toast.info("듣기 레벨·누적 암기 단어수 칸은 아직 준비 중입니다(관리자에게 문의하세요)");
+            }
+            // 계획은 채울 게 없었지만 두 칸은 채워진 경우 — "복사할 게 없다"고만 말하면 거짓말이 된다.
+            if (r.copied === 0 && r.carrySummary) {
+              toast.success(`${r.carrySummary} 채움 — 지난 기록 값이라 바뀐 학생은 고쳐 주세요`);
+              return;
+            }
             if (r.copied === 0) {
               // 서버가 "왜 아무것도 안 했는지"를 돌려준다 — 조용히 성공한 척하면 사람이 버튼을 계속 누른다.
               // ⚠️ target_not_empty는 0209a 적용 전(옛 함수)에만 온다 — 그때도 raw 코드는 안 보여준다.
@@ -452,6 +483,7 @@ export function SheetClient({
             }
             toast.success(
               (r.sourceLabel ? `${r.sourceLabel} 수업에서 ${r.copied}줄 채움` : `${r.copied}줄 채움`) +
+                (r.carrySummary ? ` · ${r.carrySummary} 채움` : "") +
                 (r.truncated > 0 ? ` — ${r.truncated}줄은 20줄 상한이라 못 넣었습니다` : ""),
             );
           });
@@ -749,47 +781,16 @@ export function SheetClient({
   // ⚠️ 기록 판정은 **서버 스냅샷**(data.*)으로 한다. 로컬 state(marks·attendance)로 재면 숨긴 교시가
   //    타이핑 중에 나타났다 사라지고(칸이 없으니 애초에 못 쓴다), memo된 표가 매 입력마다 다시 그려진다.
   const selection = useMemo(
-    () =>
-      selectSheetDays({
-        variant,
-        days: data.grid.days,
-        dayFilter,
-        myTeacherId,
-        // 위임받아 대신 맡은 반은 거르지 않는다 — 교시 담당이 자리를 비운 강사라 전부 숨겨져
-        // "위임받았는데 화면이 비어 있다"가 된다(0173a가 막으려던 조용한 실패).
-        delegatedClass: data.delegated,
-        slotsWithRecords: (date) =>
-          slotsWithRecordsOn(
-            date,
-            [...Object.keys(data.attendanceByStudentDate), ...Object.keys(data.marks)],
-            Object.keys(data.memos),
-          ),
-      }),
-    [
-      variant,
-      data.grid.days,
-      dayFilter,
-      myTeacherId,
-      data.delegated,
-      data.attendanceByStudentDate,
-      data.marks,
-      data.memos,
-    ],
+    // 위임받아 대신 맡은 반은 거르지 않는다(delegated) — 교시 담당이 자리를 비운 강사라 전부 숨겨져
+    // "위임받았는데 화면이 비어 있다"가 된다(0173a가 막으려던 조용한 실패). 규칙은 순수 모듈 소유.
+    () => selectSheetDaysFor(data, { variant, dayFilter, myTeacherId }),
+    [variant, data, dayFilter, myTeacherId],
   );
   const visibleDays = selection.days;
   // today 변형이 그릴 하루 — initialDay가 확정돼 내려오므로 사실상 항상 있다(없으면 "수업 없음").
   const todayDay = selection.todayDay;
-  // 숨긴 남의 교시 각주 — **건수를 밝힌다**(침묵하면 "분명히 있었는데 안 보인다"가 재발한다).
-  // 이름은 FK(teacherId)로 찾은 표시 이름만 쓴다(슬롯 라벨은 다른 사람을 가리킬 수 있다).
-  const hiddenOwnNotice = useMemo(
-    () =>
-      hiddenOwnSlotsNotice(selection.hiddenOwn, {
-        periodLabelOf: (slot) =>
-          todayDay ? (data.periodLabelBySlot[`${todayDay.date}|${slot}`] ?? null) : null,
-        teacherNameOf: (id) => data.teacherNames[id] ?? null,
-      }),
-    [selection.hiddenOwn, todayDay, data.periodLabelBySlot, data.teacherNames],
-  );
+  // 남의 교시를 숨겼는가 — **빈 하루의 사유를 가르는 데만** 쓴다(각주 문장은 원장 지시로 폐기, 2026-08-19).
+  const hasHiddenOwn = selection.hiddenOwn.length > 0;
   // 저장 표시기 — full은 SheetToolbar가 자체 구독으로 그린다. today는 툴바가 없어 **여기서** 충돌·저장 중을
   // 그려야 한다(적대 리뷰 2026-08-11: 복구 배너로 살아난 패치가 다른 날짜 셀에서 충돌하면 today엔 그 충돌을
   // 보여줄 표면이 없었다 — 충돌은 조용히 사라지면 입력 유실이다).
@@ -923,19 +924,15 @@ export function SheetClient({
                   collapsedGroups={collapsedGroups}
                   onToggleGroup={toggleRosterGroup}
                 />
-                {/* 🔴 숨긴 남의 교시는 **건수를 밝힌다** — 조용히 빼면 "분명히 있었는데 안 보인다"가
-                    재발한다(자리 제외 각주·요약 카드의 안 그린 기록과 같은 규약). 되돌릴 곳(주간 시트)과
-                    작성률이 반 전체 기준이라는 사실까지 한 문장에 담는다(today-own-slots). */}
-                {hiddenOwnNotice ? (
-                  <p className="text-text-dim px-1 text-[12px]">{hiddenOwnNotice}</p>
-                ) : null}
+                {/* ⚠️ 숨긴 남의 교시 각주는 **폐기**(원장 2026-08-19 "이 멘트 필요없음") — 되돌릴 곳
+                    안내는 오늘 면 맨 위 한 줄이 대신한다(ecs/page.tsx). 여기 각주를 되살리지 말 것. */}
               </>
             ) : (
               <p className="bg-card shadow-card text-text-dim rounded-2xl px-4 py-6 text-sm">
                 {/* ⚠️ 원인을 뭉치지 않는다 — 반의 그 날 교시가 **전부 남의 것**이어서 빈 것과, 애초에
                     수업이 없는 것은 사람이 할 일이 다르다. "수업이 없습니다"로 뭉치면 거짓말이 된다. */}
-                {hiddenOwnNotice
-                  ? `이 날 이 반에 담당하시는 교시가 없습니다. ${hiddenOwnNotice}`
+                {hasHiddenOwn
+                  ? "이 날 이 반에 담당하시는 교시가 없습니다. 기록은 그대로 있고 주간 시트에서 보입니다."
                   : "이 날은 수업이 없습니다."}
               </p>
             )}
