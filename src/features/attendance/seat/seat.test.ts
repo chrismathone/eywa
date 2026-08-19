@@ -3,7 +3,8 @@ import {
   ambiguousClassIds,
   groupByStart,
   hhmm,
-  OPEN_SEAT_KEYS,
+  PAYROLL_SEAT_KEYS,
+  PIN_SEAT_KEYS,
   USABLE_SEAT_KEYS,
   parseAnySeatKey,
   parseUsableSeatKey,
@@ -34,11 +35,13 @@ describe("자리 키", () => {
     expect(seatKeyOf(null)).toBeNull();
   });
 
-  it("공개 PIN·자리 시수는 랩실만, 로그인 화면은 JJ실도 연다", () => {
+  it("공개 PIN은 랩실·JJ실 둘 다, 자리 시수는 랩실만", () => {
     expect(parseSeatKey("lab")).toBe("lab");
     expect(parseSeatKey("LAB")).toBe("lab");
-    expect(OPEN_SEAT_KEYS).toEqual(["lab"]);
-    expect(parseSeatKey("jj")).toBeNull();
+    expect(parseSeatKey("jj")).toBe("jj");
+    expect(PIN_SEAT_KEYS).toEqual(["lab", "jj"]);
+    // 🔴 문을 열었다고 돈 축이 따라 열리지 않는다(JJ 출결은 계속 담임 시수).
+    expect(PAYROLL_SEAT_KEYS).toEqual(["lab"]);
     expect(parseUsableSeatKey("jj")).toBe("jj");
     expect(USABLE_SEAT_KEYS).toEqual(["lab", "jj"]);
     expect(parseSeatKey(undefined)).toBeNull();
@@ -144,11 +147,13 @@ describe("강사 드롭다운에 태우는 자리 값", () => {
     expect(parseSeatFilterValue("seat:603")).toBeNull();
   });
 
-  it("이름 보이기(parseAnySeatKey)와 기록 가능(parseSeatKey)은 다른 문이다", () => {
-    // JJ실은 목록엔 있지만 아직 안 열었다 — 기존 484행의 시수 귀속이 바뀌기 때문.
+  it("이름 보이기(parseAnySeatKey)와 공개 PIN(parseSeatKey)은 다른 문이다", () => {
     expect(parseAnySeatKey("jj")).toBe("jj");
-    expect(parseSeatKey("jj")).toBeNull();
+    expect(parseSeatKey("jj")).toBe("jj");
     expect(parseAnySeatKey("lab")).toBe("lab");
     expect(parseSeatKey("lab")).toBe("lab");
+    // 자리가 아닌 값은 어느 문으로도 안 들어온다.
+    expect(parseAnySeatKey("603")).toBeNull();
+    expect(parseSeatKey("603")).toBeNull();
   });
 });

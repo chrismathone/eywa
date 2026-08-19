@@ -212,11 +212,16 @@ export const operationsSchema = z
     holidays: z.array(holidaySchema).max(200),
     shuttle: shuttleSchema,
     /**
-     * 자리 출석부 공개 PIN — 비로그인 태블릿(`/seat/lab`)에서 입력.
-     * lab만 1차 소비. 비우면 그 자리 공개 접속이 꺼진다(기본값 7099는 defaults).
+     * 자리 출석부 공개 PIN — 비로그인 태블릿(`/seat/lab`·`/seat/jj`)에서 입력.
+     * **비우면 그 자리 공개 접속이 꺼진다**(기본값은 defaults, 랩실·JJ실 모두 7099 — 원장 2026-08-19).
+     *
+     * ⚠️ `jj`는 `.optional()` — 이 칸이 없는 **옛 폼 번들**이 저장을 보내도 ① 운영 섹션 전체가 거부되지
+     *    않고 ② 키가 빠진 채 저장돼 resolve가 기본값으로 채우므로 **이미 열린 문이 조용히 닫히지 않는다**.
+     *    원장이 실제로 지우면 빈 문자열이 저장돼 그때는 닫힌다(그게 의도된 끄기 방법).
      */
     seatPins: z.object({
       lab: z.string().max(12),
+      jj: z.string().max(12).optional(),
     }),
   })
   .superRefine((v, ctx) => {

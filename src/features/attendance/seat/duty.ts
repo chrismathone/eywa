@@ -2,7 +2,7 @@
  * 직원 '자리 출석부 담당' — 순수 판정(IO 없음, Vitest).
  *
  * 토글은 랩실·JJ실을 각각 켠다. 착지는 **화면이 열린 자리**(USABLE_SEAT_KEYS).
- * 자리 시수(OPEN)와 별개라 JJ 담당도 로그인 착지가 305 출석부로 간다.
+ * 자리 시수(PAYROLL_SEAT_KEYS)와 별개라 JJ 담당도 로그인 착지가 305 출석부로 간다.
  */
 import { USABLE_SEAT_KEYS, type SeatKey } from "./seat";
 

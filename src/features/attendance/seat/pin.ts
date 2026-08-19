@@ -5,7 +5,7 @@
  * 실패 사유는 호출부가 화면에 흘리지 않는다 — 여기 반환값도 통과/거절만.
  */
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { OPEN_SEAT_KEYS, type SeatKey } from "./seat";
+import { PIN_SEAT_KEYS, type SeatKey } from "./seat";
 
 export const SEAT_PIN_COOKIE = "eywa_seat_pin";
 export const SEAT_PIN_TTL_MS = 12 * 60 * 60 * 1000;
@@ -64,7 +64,7 @@ export function verifySeatPin(
 
   const [tenantId, seatRaw, expStr] = body.split("|");
   if (!tenantId || !seatRaw || !expStr) return null;
-  if (!(OPEN_SEAT_KEYS as readonly string[]).includes(seatRaw)) return null;
+  if (!(PIN_SEAT_KEYS as readonly string[]).includes(seatRaw)) return null;
   const exp = Number(expStr);
   if (!Number.isFinite(exp) || exp <= nowMs) return null;
   return { tenantId, seat: seatRaw as SeatKey, exp };
@@ -91,8 +91,13 @@ export function recordPinFailure(window: PinAttemptWindow): PinAttemptWindow {
   return { count: window.count + 1, resetAt: window.resetAt };
 }
 
-/** 학원설정에 비밀번호가 비어 있으면 공개 접속을 끈다(기본값 7099는 defaults가 채움). */
-export function configuredLabPin(raw: string | null | undefined): string | null {
+/**
+ * 그 자리의 학원설정 비밀번호(`operations.seatPins[자리]`) — 비어 있으면 **그 자리 공개 접속을 끈다**.
+ *
+ * ⚠️ 자리 중립이다. 랩실·JJ실 모두 기본값 7099(defaults)이고, 원장이 학원설정에서
+ *    자리별로 바꾸거나 비워서 그 자리만 닫는다. 자리를 하드코딩하면 새 자리가 남의 비밀번호로 열린다.
+ */
+export function configuredSeatPin(raw: string | null | undefined): string | null {
   const v = normalizePin(raw);
   return v.length > 0 ? v : null;
 }

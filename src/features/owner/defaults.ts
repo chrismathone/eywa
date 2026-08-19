@@ -167,8 +167,10 @@ export const DEFAULT_SETTINGS: TenantSettings = {
     terms: [],
     holidays: [],
     shuttle: DEFAULT_SHUTTLE,
-    // 랩실 공개 출석부 PIN — /seat/lab 비로그인 접속. 원장이 학원설정에서 바꾼다.
-    seatPins: { lab: "7099" },
+    // 자리 공개 출석부 PIN — /seat/lab·/seat/jj 비로그인 접속. 원장이 학원설정에서 바꾼다.
+    // JJ실도 랩실과 같은 7099로 확정(원장 2026-08-19: 설정을 건드리지 않아도 배포 즉시 열려야 한다).
+    // ⚠️ 설정에서 **비우면** 그 자리 공개 접속이 꺼진다 — 기본값이 있는 것과 모순되지 않는다.
+    seatPins: { lab: "7099", jj: "7099" },
   },
   billing: {
     dueDay: 10,

@@ -16,7 +16,10 @@ function markKey(classId: string, studentId: string, slot: string): string {
 
 /**
  * 그 날·그 교시 JJ 칸(듣기·단어). deny-RLS라 **admin + tenantId**(#104).
- * 공개 PIN 경로에서는 부르지 말 것 — 로그인 JJ실 출석부 전용.
+ *
+ * 공개 PIN(`/seat/jj`) 화면도 부른다(2026-08-19) — 그 화면이 칸을 그리는데 저장값을 안 보여주면
+ * 담당자가 이미 적힌 값을 빈 칸으로 보고 다시 적는다. 범위는 **호출부가 넘긴 그 교시 명단**뿐이라
+ * 화이트리스트 밖으로 넓어지지 않는다(학생 이름·칸 값 외에 직원 신상은 여기서 안 읽는다).
  */
 export async function attachJjMarks(
   rosters: SeatClassRoster[],

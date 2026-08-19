@@ -26,8 +26,13 @@ function isMissingColumn(err: { code?: string; message?: string } | null, column
 /**
  * JJ실 전용 칸 한 개 저장. 출결 행은 건드리지 않고, 자리 시수도 안 박는다.
  *
- * 기록은 영어 시트 JJ 칸과 같은 `class_sheet_student_marks`. PIN·랩실에서는 거부.
+ * 기록은 영어 시트 JJ 칸과 같은 `class_sheet_student_marks`. 랩실(칸이 없는 자리)에서는 거부.
  * 🔴 듣기·단어를 동시에 적으면 둘 다 "새 행"으로 보이므로 **upsert**(select+insert는 unique 충돌).
+ *
+ * 🔵 **공개 PIN(비로그인)도 쓴다**(2026-08-19) — 로그인 없이 그 칸을 적는 게 `/seat/jj` 화면의 목적이다.
+ *    화면이 그리는 칸을 서버가 거절하면 "되는 것처럼 보이는데 저장이 안 되는 칸"이 남는다. 보호는 출결
+ *    쓰기와 **똑같이** 붙는다: 같은 PIN 쿠키(`gateSeatWrite`) · 오늘만 · 그날 그 교시 **명단 화이트리스트**.
+ *    작성자는 키오스크와 같은 정직함으로 `updated_by = null`(로그인 없이 찍었다는 사실을 지어내지 않는다).
  */
 export async function setSeatJjField(input: {
   seat: SeatKey;
@@ -46,12 +51,10 @@ export async function setSeatJjField(input: {
 
   const g = await gateSeatWrite(input.seat, input.date);
   if ("error" in g) return g;
-  if (g.via === "pin" || !g.userId) {
-    return { error: "듣기·단어는 로그인 출석부에서만 입력합니다" };
-  }
 
   const slot = hhmm(input.slotStart);
-  const roster = await rosterKeys(input.seat, input.date, slot, null);
+  // 공개 PIN 경로는 세션이 없어 RLS로 명단을 못 읽는다 → admin + 쿠키의 tenantId(출결 쓰기와 같은 규약).
+  const roster = await rosterKeys(input.seat, input.date, slot, g.via === "pin" ? g.tenantId : null);
   if (!roster) return { error: "그 시각에는 이 자리 수업이 없습니다" };
   if (!roster.keys.has(`${input.classId}|${input.studentId}`)) {
     return { error: "이 교시 명단에 없는 학생입니다" };
@@ -85,6 +88,7 @@ export async function setSeatJjField(input: {
       mark_date: input.date,
       slot_start: slot,
       [col]: value,
+      // 로그인 없이 적었으면 null — "누가 적었나"를 지어내지 않는다(키오스크·자리 출결과 같은 규약).
       updated_by: g.userId,
       updated_at: now,
     },
@@ -113,6 +117,7 @@ export async function setSeatJjField(input: {
   }
 
   revalidatePath("/attendance/seat");
+  revalidatePath("/seat");
   revalidatePath("/ecs");
   return { ok: true };
 }

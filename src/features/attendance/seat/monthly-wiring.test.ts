@@ -1,14 +1,14 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { OPEN_SEAT_KEYS, USABLE_SEAT_KEYS } from "./seat";
+import { PAYROLL_SEAT_KEYS, USABLE_SEAT_KEYS } from "./seat";
 
 const root = join(__dirname, "../../../..");
 const read = (...p: string[]) => readFileSync(join(root, ...p), "utf8");
 
 describe("자리 월간 배선", () => {
   /**
-   * 스위치가 **둘**이라는 게 이 화면의 핵심이다 — 화면(USABLE)과 돈(OPEN)은 다른 물건이고,
+   * 스위치가 **셋**이라는 게 이 화면의 핵심이다 — 화면(USABLE)·문(PIN)·돈(PAYROLL)은 다른 물건이고,
    * 월간이 돈 스위치로 화면을 가르면 허브의 'JJ실 월간' 버튼이 안내문으로 떨어진다(막다른 길).
    */
   it("화면 스위치는 하루와 같은 USABLE — 돈 스위치로 화면을 가르지 않는다", () => {
@@ -23,7 +23,7 @@ describe("자리 월간 배선", () => {
   });
 
   it("돈 스위치는 랩실만 — 자리 시수가 없는 자리는 별지 문구가 다르다", () => {
-    expect(OPEN_SEAT_KEYS).toEqual(["lab"]);
+    expect(PAYROLL_SEAT_KEYS).toEqual(["lab"]);
     expect(USABLE_SEAT_KEYS).toContain("jj");
     expect(read("src/app/(print)/attendance/seat/[seat]/month/print/page.tsx")).toMatch(
       /seatAppendixCaption\(isPayrollSeat\(seat\)\)/,
