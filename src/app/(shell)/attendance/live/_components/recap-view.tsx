@@ -158,8 +158,10 @@ export function RecapView({
  *
  * 🔑 목록은 새로 세지 않고 날짜 블록이 쓰는 `day.unmarked`·`day.partial`을 그 강사 것만 고른 것이라,
  *    줄에 적힌 `미입력 N반`·`빈 칸 N개`와 펼친 수가 **같은 값**이다(`teacher-unmarked.ts` + Vitest가 잠근다).
- * 🔴 통째 미입력(반 단위)과 빈 칸(칸 단위)은 **겹치지 않는다** — 한 출석부가 두 묶음에 동시에 뜨지 않게
- *    digest가 `hasAnyRecord`로 갈라 담는다. 여기서 다시 합치거나 빼지 말 것.
+ * 🔴 겹치지 않는 것은 **칸**이다(출석부가 아니다) — digest가 슬롯의 `hasAnyRecord`로 갈라 담으므로
+ *    같은 칸이 두 번 세어지는 일은 없지만, **한 반이 두 묶음에 동시에 뜰 수는 있다**(영어처럼 교시별로
+ *    기록이 남는 반에서 1교시는 통째로 비고 2교시는 몇 명만 빈 경우 — 교시가 서로 다르니 둘 다 사실이다).
+ *    반 이름이 겹쳐 보인다고 여기서 다시 합치거나 한쪽을 빼지 말 것.
  * ⚠️ 펼침은 화면 로컬 상태로 둔다 — 정렬·필터처럼 오래 남는 뷰 세팅이 아니라 한 번 보고 마는 동작이다.
  */
 function BehindTeacherRow({ line, recap }: { line: RecapTeacherLine; recap: RangeRecap }) {
