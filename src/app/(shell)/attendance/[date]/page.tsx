@@ -55,11 +55,11 @@ export default async function AttendanceByDatePage({
   searchParams,
 }: {
   params: Promise<{ date: string }>;
-  searchParams: Promise<{ saved?: string }>;
+  searchParams: Promise<{ saved?: string; unlinked?: string; linkError?: string }>;
 }) {
   await requireAccess("attendance");
   const { date } = await params;
-  const { saved } = await searchParams;
+  const { saved, unlinked, linkError } = await searchParams;
   const [records, processing, { operations }] = await Promise.all([
     getAttendanceForDate(date),
     getDailyProcessingStatus(date),
@@ -95,10 +95,26 @@ export default async function AttendanceByDatePage({
       />
 
       {saved ? (
-        <p className="border-primary/30 bg-primary/5 text-primary inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
-          <CheckCircle2 className="size-4" />
-          <span className="num">{saved}</span>건 저장됨
-        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="border-primary/30 bg-primary/5 text-primary inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
+            <CheckCircle2 className="size-4" />
+            <span className="num">{saved}</span>건 저장됨
+          </p>
+          {/* 결석분 연결 실패 — 저장은 됐고 **메모만** 못 붙었다는 사실을 그대로 알린다(조용히 넘기면
+              "연결한 줄 알았는데 아니었다"가 된다). 대개는 아직 결석 기록이 없는 선보강이다. */}
+          {unlinked ? (
+            <p className="border-amber/30 bg-amber/5 text-amber inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm break-keep">
+              보강 <span className="num">{unlinked}</span>건은 그날 결석 기록이 없어 메모를 남기지 않았습니다
+              (아직 결석 전이면 정상입니다)
+            </p>
+          ) : null}
+          {/* 🔴 권한·기간·오류는 **원문 그대로** 알린다 — "결석을 못 찾았다"로 뭉치면 강사가 엉뚱한 곳을 본다. */}
+          {linkError ? (
+            <p className="border-danger/30 bg-danger/5 text-danger inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm break-keep">
+              결석분 연결 실패 — {linkError}
+            </p>
+          ) : null}
+        </div>
       ) : null}
 
       {/* 처리 현황 — 오늘 어느 반이 출결 미입력인지 추적(예정 학생 vs 기록). ijw DailyAttendance 이식. */}

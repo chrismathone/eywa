@@ -11,7 +11,7 @@ import { getMakeupAbsenceOptions } from "./makeup-options";
 import type { MakeupAbsenceOption } from "../makeup-options";
 
 /**
- * 그 학생의 결석 후보(이전 반 포함, 최근 90일).
+ * 그 학생의 결석 후보(이전 반 포함, 최근 1년 — `getMakeupAbsenceOptions`의 WINDOW_DAYS).
  * ⚠️ 실패·권한 없음은 **빈 목록**으로 돌려준다 — 확인창은 그때 '직접 입력'으로 폴백한다(창이 막히면 안 된다).
  */
 export async function fetchMakeupAbsences(
