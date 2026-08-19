@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { setAttendanceCell } from "@/features/attendance/server/actions";
+import { fitSeatName, SEAT_CELL_NAME_LADDER } from "@/features/attendance/seat/name-fit";
 import { canDeskMark, seatHoverTitle, seatMarkOf, SEAT_MARK_TONE } from "../mark-state";
 import type { SeatingClass, SeatingStudent } from "../seating";
 
@@ -29,6 +30,12 @@ export function SeatingCell({
   const status = optimistic === undefined ? student.status : optimistic;
   const mark = seatMarkOf(status, klass.phase);
   const canMark = klass.ownedByMe || canDeskMark(status, klass.phase);
+  /**
+   * 칸은 3열 격자라 폭이 고정이다 — 접미사 붙은 이름(`김하늘A`)이 넘쳐 `김하...`로 잘렸다.
+   * 칸을 넓히지 않고 **그 이름만** 한 단계씩 줄인다(하한 11px). 하한에서도 넘치면 말줄임이
+   * 남지만, 전체 이름은 이 버튼의 마우스오버(`seatHoverTitle`)에 늘 들어 있다.
+   */
+  const fit = fitSeatName(student.studentName, SEAT_CELL_NAME_LADDER);
 
   function save(next: "present" | "late" | "absent") {
     setError(null);
@@ -76,7 +83,9 @@ export function SeatingCell({
           canMark ? "hover:ring-primary/40 cursor-pointer hover:ring-2" : "cursor-default"
         } disabled:opacity-60`}
       >
-        <span className="truncate text-[13px] leading-tight font-bold">{student.studentName}</span>
+        <span className={`truncate leading-tight font-bold ${fit.className}`}>
+          {student.studentName}
+        </span>
       </button>
       {open && canMark && (
         <div className="bg-card shadow-card absolute top-full left-0 z-30 mt-1 flex gap-0.5 rounded-lg p-1">

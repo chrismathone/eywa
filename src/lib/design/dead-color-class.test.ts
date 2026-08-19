@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -35,10 +35,10 @@ const NON_COLOR =
   /^(xs|sm|md|lg|xl|[2-9]xl|base|left|right|center|justify|start|end|top|bottom|solid|dashed|dotted|double|hidden|none|collapse|separate|balance|pretty|nowrap|wrap|ellipsis|clip|visible|auto|fixed|local|scroll|repeat|contain|cover|origin|opacity|box|color|gradient|linear|radial|conic|t|b|l|r|x|y|s|e|\d)/;
 
 function walk(dir: string, out: string[] = []): string[] {
-  for (const e of readdirSync(dir)) {
-    const p = join(dir, e);
-    if (statSync(p).isDirectory()) walk(p, out);
-    else if (/\.(tsx|ts)$/.test(e) && !/\.test\.tsx?$/.test(e)) out.push(p);
+  for (const e of readdirSync(dir, { withFileTypes: true })) {
+    const p = join(dir, e.name);
+    if (e.isDirectory()) walk(p, out);
+    else if (/\.(tsx|ts)$/.test(e.name) && !/\.test\.tsx?$/.test(e.name)) out.push(p);
   }
   return out;
 }

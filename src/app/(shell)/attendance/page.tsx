@@ -19,7 +19,8 @@ import { getDailyProcessingStatus, getMonthlyAttendanceMatrix, type AttendanceMa
 import { getTeacherMoney } from "@/features/attendance/server/teacher-money";
 import { buildHolidayMap } from "@/features/attendance/calendar";
 import { ATTENDANCE_EDIT_WINDOW_DAYS } from "@/features/attendance/edit-window";
-import { accessLevelTenant } from "@/lib/auth/perm-matrix";
+import { accessLevelTenant, canManageTenant } from "@/lib/auth/perm-matrix";
+import { AbsenceIntakeButton } from "./_components/absence-intake-button";
 import { effectiveTeacherId } from "@/lib/auth/view-mode";
 // 출결 강사 귀속 축 단일 소스 — 담임(classes.teacher_id)만 보면 교시 담당 강사가 자기 수업을 못 본다.
 import { classTeacherRole, type ClassTeacherRole } from "@/features/attendance/teacher-axis";
@@ -325,7 +326,12 @@ export default async function AttendancePage({
       // ⚠️ 강사 전체 보기는 여러 반을 **한 표**에 그리는데 세션은 과목별이라 반마다 기간이 다를 수 있다.
       //    첫 반의 날짜축으로 나머지를 그리면 엉뚱한 칸에 출결이 찍히므로 1단계는 달력월로 고정한다
       //    (화면 라벨에 그 사실을 적는다 — 조용히 다르게 보이면 안 된다).
-      ? await Promise.all(teacherClasses.map((c) => getMonthlyAttendanceMatrix(month, c.id, "month")))
+      // 🔴 네 번째 인자 = **이 표의 주인**. 넘기지 않으면 칸 숫자가 그날 모든 교시의 합이라, 한 교시만
+      //    가르친 강사의 출석부에 남의 교시까지 잡힌다(원장 제보 2026-08-18: 8/10 김근호가 이다교 선생님
+      //    출석부에 3 — 실제 이다교 몫은 1). 귀속 판정은 resolveTaughtBy 단일 소스가 한다.
+      ? await Promise.all(
+          teacherClasses.map((c) => getMonthlyAttendanceMatrix(month, c.id, "month", effectiveTeacher)),
+        )
       : [];
   /**
    * 금액 열은 **원장 전용**(급여 PII 규율) — 강사가 자기 학생들의 청구·납입을 보게 하지 않는다.
@@ -481,6 +487,10 @@ export default async function AttendancePage({
   const canOpenPayslip =
     mode === "teacher" && !!effectiveTeacher ? await canViewPayslipNow(user) : false;
 
+  // 결석 통보 접수(2026-08-19) — 남의 반 칸까지 한 번에 만드는 조작이라 **사무실(full)만**.
+  // ⚠️ 화면 조건은 게이트가 아니다(#77) — 서버 액션이 같은 판정을 다시 한다.
+  const canIntakeAbsence = await canManageTenant(user.systemRole, "attendance");
+
   // 시트 격자의 좌표·초기값 — 표보다 위(상단 스탯)까지 감싸야 해서 여기서 만든다.
   const gridSource = buildGridSource(groups, visibleDays, orderedRows);
 
@@ -511,14 +521,27 @@ export default async function AttendancePage({
               요청하세요.
             </p>
           ) : null,
+          // 🔴 같은 반이 반별 보기와 강사 전체 보기에서 **다른 숫자**를 낸다 — 그 사실을 화면이 먼저
+          //    말해야 한다(조용히 다르면 "출결이 사라졌다"로 읽힌다). 근거는 교시 귀속(resolveTaughtBy).
+          mode === "teacher" ? (
+            <p key="scope" className={noticeClass}>
+              칸 숫자는 <strong className="text-foreground">이 선생님이 맡은 교시</strong>만 셉니다. 같은 반이라도
+              다른 선생님 교시와 자리(JJ·랩)는 빗금으로만 표시되고 시수·출석률에는 들어가지 않습니다 — 반 전체
+              숫자는 <strong className="text-foreground">반별 보기</strong>에서 봅니다.
+            </p>
+          ) : null,
           // 기록이 하나도 없는 화면은 **왜 비어 있는지**를 말해야 한다 — 빈 표 + "—"만 두면 고장으로 읽힌다.
           // 파생도 안 도는 과목(현재 영어)이 여기 해당한다.
           statsCount.recorded === 0 && !groups.some((g) => g.matrix.derivedActive) ? (
             <p key="empty" className={noticeClass}>
               {/* ⚠️ 강사 전체 보기는 반이 여럿이라 "이 반"이 거짓말이 된다(적대검증) — 모드에 맞춰 주어를 바꾼다. */}
-              {mode === "teacher" ? "담당 반에" : "이 반은"} 아직{" "}
-              <strong className="text-foreground">출결 기록이 없습니다</strong>. 수업보고서로 자동 표시되는 과목이
-              아니라서, 셀을 직접 클릭해 찍은 값만 쌓입니다.
+              {/* ⚠️ 강사 전체 보기의 '없음'은 **선생님 몫 기준**이다 — 남의 교시·자리 기록은 빗금으로
+                  화면에 보이는데 여기서 그냥 "기록이 없다"고 하면 두 문장이 서로를 부정한다. */}
+              {mode === "teacher" ? "담당 반에 아직 " : "이 반은 아직 "}
+              <strong className="text-foreground">
+                {mode === "teacher" ? "선생님 몫으로 잡힌 출결 기록이 없습니다" : "출결 기록이 없습니다"}
+              </strong>
+              . 수업보고서로 자동 표시되는 과목이 아니라서, 셀을 직접 클릭해 찍은 값만 쌓입니다.
             </p>
           ) : null,
           // 파생 반(수학)은 표가 "누가 찍은 값인지"를 스스로 밝혀야 한다 — 셀 툴팁만으론 안 보인다.
@@ -561,6 +584,8 @@ export default async function AttendancePage({
       rows={gridSource.rows}
       cols={gridSource.cols}
       initial={gridSource.initial}
+      notMine={gridSource.notMine}
+      alsoWrites={gridSource.alsoWrites}
       slotCounts={gridSource.slotCounts}
       lockBefore={lockBefore}
       initialCollapsed={viewPrefs.collapsed}
@@ -723,10 +748,24 @@ export default async function AttendancePage({
 
         {/* 우측 — 살아있는 합계 + 안내 토글. **새 줄을 만들지 않고** 툴바의 남는 가로 여백을 쓴다. */}
         <div className="ml-auto flex items-center gap-3">
+          {/* 결석 통보 접수 — 데스크가 학부모 전화를 받는 자리(원장 2026-08-19). 당일 출결 화면에도 같은 버튼. */}
+          {canIntakeAbsence ? <AbsenceIntakeButton today={kstToday()} /> : null}
           {/* 급여명세서 — 이 화면의 '정산액'을 그대로 쓰는 문서라 **여기**가 진입점이다(수납관리 강사 정산
               면은 invoice_teacher_splits가 비어 있어 표 자체가 안 그려진다). 원장 + 강사 전체 보기일 때만. */}
           {canOpenPayslip && effectiveTeacher ? (
             <PayslipWindowButton teacherId={effectiveTeacher} period={month} subjectFiltered={!!effectiveSubject} />
+          ) : null}
+          {/* 🔴 이 한 줄은 **접히면 안 된다** — 강사 전체 보기는 칸 숫자를 그 선생님 교시로 좁혀 그리므로
+              (한 달 시수가 서너 배 줄어드는 강사가 여럿이다) 같은 반이 반별 보기와 다른 숫자를 낸다.
+              ⚠️ 주석에 실측 숫자를 박지 말 것 — 라이브 데이터라 며칠 만에 늙는다. 아래 '안내'는 `<details>`라
+              기본 화면에선 안 보인다(적대적 리뷰 2026-08-18). 사유 전문은 툴팁·안내가 잇는다. */}
+          {mode === "teacher" && groups.length > 0 ? (
+            <span
+              className="border-line text-text-dim rounded-full border px-2.5 py-0.5 text-xs"
+              title="칸 숫자는 이 선생님이 맡은 교시만 셉니다. 다른 선생님 교시와 자리(JJ·랩)는 빗금으로만 표시되고 시수·출석률에는 들어가지 않습니다 — 반 전체 숫자는 반별 보기에서 봅니다."
+            >
+              칸 = 이 선생님 교시
+            </span>
           ) : null}
           {groups.length > 0 ? <LiveStats totalStudents={totalStudents} fallback={statsCount} /> : null}
           {notices.length > 0 ? (

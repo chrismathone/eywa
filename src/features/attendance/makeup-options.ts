@@ -24,6 +24,13 @@ export type MakeupAbsenceOption = {
    *    보이지 않으면 "왜 내 결석이 목록에 없지"가 된다(멱등은 같은 날짜쌍만 막는다).
    */
   alreadyMadeUp?: boolean;
+  /**
+   * 그날 그 반의 결석 **교시**("HH:MM", 이른 순) — 하루에 여러 교시를 도는 반(JJ실·영어)에서 어느
+   * 수업의 결석인지 밝힌다. 교시 없이 하루 단위로 찍힌 결석은 비어 있다.
+   * 🔴 **교시 '이름'을 붙이지 않는다** — 시작시각이 같은 교시가 둘 있어(EiE 4교시 16:20~17:00 /
+   *    IJW 1교시 16:20~17:20) 이름으로 옮기면 조용히 다른 교시로 보인다([[#106]]). 시각이 사실이다.
+   */
+  slots?: string[];
 };
 
 /** 원본 출결 행(중복·정렬 전). */
@@ -33,6 +40,8 @@ export type AbsenceRow = {
   date: string;
   /** 그 결석 칸의 메모 — "N/N 보강 예정"이 있으면 이미 메운 결석이다. */
   note?: string | null;
+  /** 그 칸의 교시("HH:MM[:SS]") — 하루 단위로 찍힌 결석은 없다(null). */
+  slotStart?: string | null;
 };
 
 /**
@@ -48,29 +57,52 @@ export function buildAbsenceOptions(
   makeupDate: string,
   currentClassIds: ReadonlySet<string> = new Set(),
 ): MakeupAbsenceOption[] {
-  const seen = new Set<string>();
-  const out: MakeupAbsenceOption[] = [];
+  // 같은 (반,날짜)의 교시별 행을 **접으면서** 교시를 모은다 — 첫 행만 보고 버리면 "어느 수업의
+  // 결석인지"가 사라지고, 보강 메모가 뒤 행에만 있는 경우 '보강 완료' 표시도 놓친다.
+  const folded = new Map<string, { option: MakeupAbsenceOption; slots: Set<string>; madeUp: boolean }>();
   for (const r of rows) {
     const date = String(r.date).slice(0, 10);
     if (!r.classId || !date || date === makeupDate) continue;
     const key = `${r.classId}|${date}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push({
-      classId: r.classId,
-      // 반 이름이 비면 그렇게 적는다 — 빈 칸을 만들지 않는다(무엇을 고르는지 모르게 된다).
-      className: r.className?.trim() || "(반 이름 없음)",
-      date,
-      ...(currentClassIds.has(r.classId) ? {} : { pastClass: true }),
-      ...(MADE_UP_RE.test(r.note ?? "") ? { alreadyMadeUp: true } : {}),
+    const madeUp = MADE_UP_RE.test(r.note ?? "");
+    const slot = slotLabel(r.slotStart);
+    const hit = folded.get(key);
+    if (hit) {
+      if (slot) hit.slots.add(slot);
+      hit.madeUp = hit.madeUp || madeUp;
+      continue;
+    }
+    folded.set(key, {
+      option: {
+        classId: r.classId,
+        // 반 이름이 비면 그렇게 적는다 — 빈 칸을 만들지 않는다(무엇을 고르는지 모르게 된다).
+        className: r.className?.trim() || "(반 이름 없음)",
+        date,
+        ...(currentClassIds.has(r.classId) ? {} : { pastClass: true }),
+      },
+      slots: new Set(slot ? [slot] : []),
+      madeUp,
     });
   }
+  const out: MakeupAbsenceOption[] = [...folded.values()].map(({ option, slots, madeUp }) => ({
+    ...option,
+    ...(madeUp ? { alreadyMadeUp: true } : {}),
+    ...(slots.size > 0 ? { slots: [...slots].sort() } : {}),
+  }));
   return out.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : a.className.localeCompare(b.className, "ko")));
 }
 
-/** 화면 표기 — "8/12 (수학 초4 BS1J)" · 이전 반이면 꼬리표를 단다. */
+/** 저장된 교시 시각을 화면용 "HH:MM"으로 — 형식이 아니면 버린다(추측해서 만들지 않는다). */
+function slotLabel(raw: string | null | undefined): string | null {
+  const m = /^(\d{2}):(\d{2})/.exec(String(raw ?? "").trim());
+  return m ? `${m[1]}:${m[2]}` : null;
+}
+
+/** 화면 표기 — "8/12 수학 초4 BS1J 16:20" · 이전 반이면 꼬리표를 단다. */
 export function absenceOptionLabel(o: MakeupAbsenceOption): string {
   const [, m, d] = o.date.split("-");
   const tags = [o.pastClass ? "이전 반" : null, o.alreadyMadeUp ? "보강 완료" : null].filter(Boolean);
-  return `${Number(m)}/${Number(d)} ${o.className}${tags.length ? ` (${tags.join(" · ")})` : ""}`;
+  // 하루 여러 교시를 도는 반이면 어느 수업의 결석인지 시각으로 밝힌다(교시 이름은 안 쓴다 — 위 🔴).
+  const slots = o.slots?.length ? ` ${o.slots.join("·")}` : "";
+  return `${Number(m)}/${Number(d)} ${o.className}${slots}${tags.length ? ` (${tags.join(" · ")})` : ""}`;
 }

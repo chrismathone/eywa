@@ -4,10 +4,11 @@ import Link from "next/link";
 import { useState } from "react";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { Button } from "@/components/ui/button";
-import type { CalendarEvent } from "@/features/calendar/types";
+import type { CalendarEvent, CalendarTag } from "@/features/calendar/types";
 import { MonthGrid } from "./month-grid";
 import { EventDialog, type DialogState } from "./event-dialog";
 import { DayListDialog } from "./day-list-dialog";
+import { TagManager } from "./tag-manager";
 
 /**
  * 캘린더 클라 껍데기 — 월 내비(링크) + 그리드 + 일정 다이얼로그 상태.
@@ -21,6 +22,7 @@ export function CalendarClient({
   isCurrentMonth,
   today,
   events,
+  tags,
   canWrite,
 }: {
   month: string;
@@ -30,9 +32,12 @@ export function CalendarClient({
   isCurrentMonth: boolean;
   today: string;
   events: CalendarEvent[];
+  /** 태그 사전(0224a) — 다이얼로그 선택지 + 태그 관리 모달. 비면(마이그 전) 태그 UI가 접힌다. */
+  tags: CalendarTag[];
   canWrite: boolean;
 }) {
   const [dialog, setDialog] = useState<DialogState>(null);
+  const [tagManagerOpen, setTagManagerOpen] = useState(false);
   // "+N개 더"로 여는 하루 상세 — 그 날 일정 전건 목록(열람이라 권한 무관).
   const [moreDate, setMoreDate] = useState<string | null>(null);
 
@@ -70,10 +75,15 @@ export function CalendarClient({
           ) : null}
         </div>
         {canWrite ? (
-          <Button onClick={() => setDialog({ mode: "create", date: isCurrentMonth ? today : `${month}-01` })}>
-            <EyIcon name="plus" size={16} />
-            일정 등록
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={() => setTagManagerOpen(true)}>
+              태그 관리
+            </Button>
+            <Button onClick={() => setDialog({ mode: "create", date: isCurrentMonth ? today : `${month}-01` })}>
+              <EyIcon name="plus" size={16} />
+              일정 등록
+            </Button>
+          </div>
         ) : null}
       </div>
 
@@ -105,7 +115,8 @@ export function CalendarClient({
           onClose={() => setMoreDate(null)}
         />
       ) : null}
-      {dialog ? <EventDialog state={dialog} today={today} onClose={() => setDialog(null)} /> : null}
+      {tagManagerOpen ? <TagManager tags={tags} onClose={() => setTagManagerOpen(false)} /> : null}
+      {dialog ? <EventDialog state={dialog} today={today} tags={tags} onClose={() => setDialog(null)} /> : null}
     </div>
   );
 }

@@ -1,0 +1,155 @@
+import { headers } from "next/headers";
+import { PrintActions } from "@/app/(print)/enrollment/[id]/print/print-actions";
+import { requireAccess } from "@/lib/auth/require-access";
+import { kstToday, formatKoreanDate } from "@/lib/date-kst";
+import { getTenantSettings } from "@/features/owner/server/queries";
+import { getShuttleBoard } from "@/features/shuttle/server/queries";
+import { compactWeekdays, dayCodeOf, plannedRidesOn } from "@/features/shuttle/roster";
+import {
+  DIRECTION_LABEL,
+  RUN_STOP_KIND_LABEL,
+  SEASON_LABEL,
+  dayLabel,
+  isSeason,
+  runTitle,
+  type Season,
+} from "@/features/shuttle/types";
+
+export const metadata = { title: "셔틀 노선표 인쇄 — eywa" };
+
+const YMD = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * 기사용 노선표(A4) — 회차마다 [정류장 · 시각 · 승차/하차 명단].
+ *
+ * 두 가지 모드:
+ *  · `?d=YYYY-MM-DD` — **그날 실제로 타는 사람만**(요일 규칙 적용). 기사가 오늘 들고 나가는 종이.
+ *  · `?d=all` — 요일 무관 **전체 편성**(요일을 이름 옆에 표기). 편성 검토·게시용.
+ *
+ * ⚠️ 인쇄 버튼이 있는 모든 곳은 플로팅 창 + A4 규약(design-conventions) — `(print)` 라우트 그룹.
+ * ⚠️ 헤더에 비ASCII를 직접 넣지 않는다(B1) — 이 라우트는 HTML만 내려주므로 해당 없음.
+ */
+export default async function ShuttleRoutePrintPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ season?: string; d?: string; vehicle?: string }>;
+}) {
+  await requireAccess("shuttle");
+  const sp = await searchParams;
+  const season: Season = isSeason(sp.season) ? sp.season : "term";
+  const allDays = sp.d === "all";
+  const date = !allDays && sp.d && YMD.test(sp.d) ? sp.d : kstToday();
+
+  const embedded = (await headers()).get("x-embed") === "1";
+  const [board, settings] = await Promise.all([getShuttleBoard(season), getTenantSettings()]);
+
+  const vehicles = sp.vehicle
+    ? board.vehicles.filter((v) => v.id === sp.vehicle)
+    : board.vehicles;
+  const academy = settings.profile.name || "";
+
+  return (
+    <>
+      <div className="mx-auto max-w-[190mm] px-8 pt-6 print:hidden">
+        <PrintActions embedded={embedded} />
+      </div>
+
+      <div className="mx-auto max-w-[190mm] px-8 pb-10 print:px-0">
+        <header className="mb-4 border-b-2 border-black pb-2">
+          <h1 className="text-[18px] font-bold">
+            {academy && `${academy} `}셔틀 노선표
+          </h1>
+          <p className="mt-0.5 text-[12px]">
+            {SEASON_LABEL[season]} ·{" "}
+            {allDays ? "전체 편성(요일 표기)" : `${formatKoreanDate(date)} (${dayLabel(dayCodeOf(date))})`}
+          </p>
+        </header>
+
+        {vehicles.map((vehicle) => {
+          const runs = board.runs.filter((r) => r.vehicleId === vehicle.id);
+          if (runs.length === 0) return null;
+          return (
+            <section key={vehicle.id} className="mb-6 break-inside-avoid">
+              <h2 className="mb-1 text-[15px] font-bold">
+                {vehicle.name}
+                {vehicle.driverName && (
+                  <span className="ml-2 text-[12px] font-normal">
+                    기사 {vehicle.driverName}
+                    {vehicle.driverPhone && ` (${vehicle.driverPhone})`}
+                  </span>
+                )}
+              </h2>
+
+              {runs.map((run) => {
+                // 그날 모드면 요일 규칙을 적용해 실제 탑승자만 남긴다.
+                const planned = allDays ? null : plannedRidesOn(run, date);
+                const byStop = new Map<string, typeof run.stops[number]["riders"]>();
+                if (planned) {
+                  for (const p of planned) {
+                    const list = byStop.get(p.runStopId) ?? [];
+                    list.push(p.rider);
+                    byStop.set(p.runStopId, list);
+                  }
+                  // 그날 아무도 안 타는 회차는 종이에서 뺀다(기사가 볼 이유가 없다).
+                  if (planned.length === 0) return null;
+                }
+
+                return (
+                  <table
+                    key={run.id}
+                    className="mb-3 w-full break-inside-avoid border-collapse text-[11.5px]"
+                  >
+                    <caption className="mb-0.5 text-left text-[12.5px] font-bold">
+                      {runTitle(run)} · {DIRECTION_LABEL[run.direction]}
+                    </caption>
+                    <thead>
+                      <tr className="border-y border-black">
+                        <th className="w-10 py-1 text-center font-bold">순서</th>
+                        <th className="py-1 text-center font-bold">정류장</th>
+                        <th className="w-16 py-1 text-center font-bold">시각</th>
+                        <th className="py-1 text-center font-bold">명단</th>
+                        <th className="w-14 py-1 text-center font-bold">확인</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {run.stops.map((stop, i) => {
+                        const riders = planned ? (byStop.get(stop.id) ?? []) : stop.riders;
+                        const campus = stop.kind !== "stop";
+                        return (
+                          <tr key={stop.id} className="border-b border-neutral-300 align-top">
+                            <td className="py-1 text-center">{i + 1}</td>
+                            <td className="py-1">
+                              {campus ? RUN_STOP_KIND_LABEL[stop.kind] : stop.stopName}
+                              {stop.stopMemo && (
+                                <span className="text-[10.5px]"> · {stop.stopMemo}</span>
+                              )}
+                            </td>
+                            <td className="py-1 text-center">{stop.atTime ?? ""}</td>
+                            <td className="py-1">
+                              {riders
+                                .map(
+                                  (r) =>
+                                    `${r.studentName}${allDays ? `(${compactWeekdays(r.weekdays)})` : ""}`,
+                                )
+                                .join("  ")}
+                            </td>
+                            {/* 기사가 손으로 체크하는 칸 — 종이 노선표의 핵심(태웠는지 표시). */}
+                            <td className="py-1" />
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                );
+              })}
+            </section>
+          );
+        })}
+
+        {vehicles.length === 0 && (
+          <p className="py-10 text-center text-[13px]">인쇄할 차량이 없습니다.</p>
+        )}
+      </div>
+    </>
+  );
+}

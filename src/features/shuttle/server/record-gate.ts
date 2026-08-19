@@ -1,0 +1,58 @@
+import "server-only";
+import { cache } from "react";
+import { getCurrentUser } from "@/lib/auth/current-user";
+import { canWriteTenant } from "@/lib/auth/perm-matrix";
+import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { reportError } from "@/lib/observability/report-error";
+
+/**
+ * 등하원 **기록** 자격 — 편성 편집과 **다른 게이트**다.
+ *
+ * 🔴 왜 나눴나: 실측(2026-08-19) 셔틀 선생님은 **주영미 계정이고 역할이 `viewer`**다. 편성 권한
+ *    (`canWriteTenant("shuttle")` = 사무실 full)만 두면 정작 차에 타는 사람이 아무것도 못 찍는다 —
+ *    모바일 최적화한 화면을 쓸 수 없는 사람에게 준 꼴이 된다. 반대로 편성을 열어주면 viewer가
+ *    학생 등하원 동선을 바꿀 수 있게 된다.
+ *    → **편성 = 사무실 / 기록 = 현장**으로 축을 가른다.
+ *
+ * 🔑 "현장"의 판정은 새 명단을 만들지 않고 **이미 있는 셔틀 표식**을 쓴다 —
+ *    `users.attendance_alert_optin`은 이 프로젝트에서 이미 *"셔틀 선생님으로 체크된 사용자"*라는
+ *    뜻으로 쓰이고 있다(휴대폰 웹 푸시 대상, CLAUDE.md 알림 항목). 원장이 직원관리에서 켜고 끄는
+ *    토글이라 사람이 바뀌어도 코드를 안 고친다.
+ *
+ * 🔑 **super_admin은 자동 통과**한다(원장 2026-08-13: *"superadmin은 앞으로 뭘 안해도 그냥 넣고봐"*).
+ *    새 게이트에 명단만 두고 super_admin을 빼먹으면 총괄이 자기 시스템에서 잠긴다(payslip-gate 선례).
+ *
+ * ⚠️ 기록은 학생 레코드를 건드리지 않는다(셔틀 로그일 뿐) — 그래서 이 완화가 퇴원·출결 잠금과
+ *    충돌하지 않는다. 출결 결석은 여전히 출결 게이트가 따로 판정한다("신호만" 원칙).
+ * ⚠️ admin 클라이언트는 RLS를 우회하므로 **tenant_id 명시 필터**([[#104]]).
+ */
+export const canRecordBoarding = cache(async (): Promise<boolean> => {
+  const user = await getCurrentUser();
+  if (!user) return false;
+  // 사무실(편성 권한 보유)은 당연히 기록할 수 있다 — 대부분의 호출이 여기서 끝난다(왕복 0).
+  if (await canWriteTenant(user.systemRole, "shuttle")) return true;
+  if (await isShuttleStaff(user.id, user.tenantId)) return true;
+  return isCurrentUserSuperAdmin();
+});
+
+/** 직원관리에서 '셔틀' 체크가 켜진 계정인지. 실패는 **거부**(fail-closed) — 기록은 열지 못해도 손해가 없다. */
+async function isShuttleStaff(userId: string, tenantId: string): Promise<boolean> {
+  try {
+    const admin = createAdminClient();
+    const { data, error } = await admin
+      .from("users")
+      .select("attendance_alert_optin")
+      .eq("id", userId)
+      .eq("tenant_id", tenantId)
+      .maybeSingle();
+    if (error) {
+      reportError(error, { scope: "shuttle.recordGate" });
+      return false;
+    }
+    return data?.attendance_alert_optin === true;
+  } catch (e) {
+    reportError(e, { scope: "shuttle.recordGate" });
+    return false;
+  }
+}

@@ -58,6 +58,7 @@ export const MENU_KEYS = [
   "class_review",
   "approvals",
   "calendar",
+  "shuttle",
   "integrations",
   "sheet_sync",
   "help",
@@ -150,6 +151,10 @@ export const MENU_ACCESS: AccessMatrix = {
   // 캘린더(학원 공용 일정, 원장 2026-08-18 "일단 캘린더 탭으로 일정부터 관리") — 일정 등록·수정은
   // 사무실(full), 강사·상담·회계·뷰어는 열람(readonly). 학원 일정은 전 직원이 봐야 의미가 있다.
   calendar: { master: "full", admin: "full", manager: "full", teacher: "readonly", counselor: "readonly", accountant: "readonly", viewer: "readonly", student: "none" },
+  // 셔틀(노랑버스, 원장 2026-08-19 makeedu에서 이관) — 편성·등하원 기록은 사무실(full).
+  // 강사·상담·회계·뷰어는 **열람만**: 담임이 "우리 반 누가 셔틀 타나"를 봐야 결석 판단이 되는데,
+  // 편성을 만지면 그 학생의 등하원 동선이 조용히 바뀐다(학생 레코드 잠금과 같은 결, CLAUDE.md).
+  shuttle: { master: "full", admin: "full", manager: "full", teacher: "readonly", counselor: "readonly", accountant: "readonly", viewer: "readonly", student: "none" },
   // 전자결재(기안·결재함, 원장 지시 2026-08-14 — 첫 양식 = 휴가신청서) — **테스트 단계라 기본 전원 차단**.
   // 개방은 코드 명단([`access.ts`](../features/approvals/access.ts) = 이승엽·김예원)이 개인 예외로
   // 얹는다(class_review와 같은 결이되, 그쪽은 tenant_settings 데이터·이쪽은 코드 상수 — 이 PC에서
@@ -269,6 +274,7 @@ const PATH_SEGMENT_TO_MENU: Record<string, MenuKey> = {
   "class-review": "class_review",
   approvals: "approvals",
   calendar: "calendar",
+  shuttle: "shuttle",
   help: "help",
   admin: "admin",
   owner: "owner",

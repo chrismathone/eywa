@@ -77,6 +77,9 @@ export const AUDIT_ACTIONS = {
   calendar_event_create: "일정 등록",
   calendar_event_update: "일정 수정",
   calendar_event_delete: "일정 삭제",
+  calendar_tag_create: "캘린더 태그 추가",
+  calendar_tag_update: "캘린더 태그 수정",
+  calendar_tag_delete: "캘린더 태그 삭제",
   approval_submit: "전자결재 기안",
   approval_decide: "전자결재 처리",
   approval_withdraw: "전자결재 회수",
@@ -101,6 +104,23 @@ export const AUDIT_ACTIONS = {
   // 보강 빼기(2026-08-18) — 출결 보강 칸 + 저장된 보강 보고서를 지우는 경로. 기록을 없애는 동작이라
   // 누가 지웠는지가 특히 중요하다(원장 "다 삭제" 지시로 보고서 삭제까지 열렸다).
   makeup_remove: "보강 빼기(출결·보고서 삭제)",
+  // 셔틀(0225a, 원장 2026-08-19) — 편성은 학생 등하원 동선이라 "누가 언제 뺐는지"가 사고 시 유일한
+  // 역검수 근거다(정류장을 노선에서 빼면 배정 학생이 함께 사라진다). 등하원 기록도 남긴다.
+  shuttle_stop_create: "셔틀 정류장 추가",
+  shuttle_stop_update: "셔틀 정류장 수정",
+  shuttle_stop_archive: "셔틀 정류장 정리",
+  shuttle_vehicle_create: "셔틀 차량 추가",
+  shuttle_vehicle_update: "셔틀 차량 수정",
+  shuttle_run_create: "셔틀 회차 추가",
+  shuttle_run_update: "셔틀 회차 수정",
+  shuttle_run_delete: "셔틀 회차 삭제",
+  shuttle_run_stop_add: "셔틀 노선에 정류장 추가",
+  shuttle_run_stop_remove: "셔틀 노선에서 정류장 제거",
+  shuttle_rider_assign: "셔틀 학생 배정",
+  shuttle_rider_move: "셔틀 학생 정류장 이동",
+  shuttle_rider_remove: "셔틀 학생 배정 해제",
+  shuttle_boarding_record: "셔틀 등하원 기록",
+  shuttle_boarding_clear: "셔틀 등하원 기록 삭제",
   // '다른 강사 뷰'(열람 전용, 2026-08-19) — 누가 누구의 강사뷰를 열람했는지. 대상 강사에겐 안 보이는
   // 기능이라(원장 지시) 이 로그가 유일한 역검수 근거다.
   teacher_view_impersonate: "다른 강사 뷰 열람",

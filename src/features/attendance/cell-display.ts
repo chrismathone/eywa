@@ -190,7 +190,43 @@ export function slotBreakdown(slots: readonly SlotMark[]): string {
     .join(" · ");
 }
 
-export type CellDisplay = { text: string; className: string; style?: { background: string } };
+export type CellDisplay = {
+  text: string;
+  className: string;
+  style?: { background?: string; backgroundImage?: string };
+};
+
+/**
+ * **이 표가 세지 않는 교시**만 있는 칸의 빗금 — 값은 없지만 기록은 있다는 표시.
+ *
+ * 🔴 왜 빗금인가: 강사 전체 보기는 그 강사의 교시만 세므로(queries `scopeTeacherId`), 남의 교시·자리(JJ)만
+ *    있는 날은 값이 없다. 그런데 월간 출석부는 집계 화면이 아니라 **입력 격자**라, 그냥 빈칸으로 두면
+ *    사람이 거기 다시 찍어 숨어 있던 남의 기록을 덮는다(범위 Delete면 통째 삭제). 빗금 + 툴팁이
+ *    "여긴 기록이 있고, 다만 당신 몫이 아니다"를 말해 준다(#103과 같은 결 — 문을 잠그지는 않는다).
+ * ⚠️ `background`가 아니라 `backgroundImage`다 — 배경**색**(요일 민트·주말 회색)은 클래스가 계속 그린다.
+ */
+export const GHOST_HATCH =
+  "repeating-linear-gradient(45deg, var(--line-strong) 0 2px, transparent 2px 6px)";
+
+/**
+ * 빗금 칸(이 표의 몫이 아닌 칸)에서 입력을 막을 때의 **사유 한 문장** — 격자·행·팝오버가 같은 말을 쓴다.
+ * 문장을 두 벌 만들면 같은 칸이 화면마다 다른 이유를 대게 된다.
+ *
+ * ⚠️ **"선생님 교시가 없는 날"이라고 쓰지 말 것** — 그 강사가 그날 유효 슬롯을 **갖고 있는데** 아직
+ *    자기 교시만 안 찍힌 상태(부분 입력 중)도 여기로 온다(실측 2026-08-18 하루에 30칸). 그렇게 쓰면
+ *    시간표를 아는 강사가 "내 교시 있는데?"라고 신고하게 된다. 참인 것은 **"찍힌 기록이 남의 교시"** 뿐이다.
+ */
+export const NOT_MINE_MESSAGE =
+  "이 날 찍힌 기록이 다른 교시 것이라 이 화면에선 못 고칩니다 — 반별 보기에서 고치세요";
+
+/**
+ * 세지 않는 교시 툴팁 — "이 선생님 몫으로 세지 않는 교시 · 16:20 출석 1 · 18:20 출석 1".
+ * ⚠️ **사유를 단정하지 않는다** — 자리(JJ·랩)일 수도, 다른 선생님 교시일 수도, 교시를 안 남긴 옛
+ *    기록이라 담당을 못 가르는 경우일 수도 있다. 셋 다 참인 문장만 쓴다.
+ */
+export function ghostBreakdown(others: readonly SlotMark[]): string {
+  return `이 선생님 몫으로 세지 않는 교시 · ${slotBreakdown(others)}`;
+}
 
 /**
  * 셀 한 칸의 배경 = 그 날의 성격(원장 규칙 2026-07-21): **수업하는 요일 민트 · 수업 없는 평일 흰색 · 주말 회색**.
@@ -200,7 +236,14 @@ export type CellDisplay = { text: string; className: string; style?: { backgroun
 export function cellDisplay(
   status: AttendanceMark | null,
   units: number | null | undefined,
-  opts: { attendDay?: boolean; muted?: boolean; outside?: boolean; day?: DayRollup | null } = {},
+  opts: {
+    attendDay?: boolean;
+    muted?: boolean;
+    outside?: boolean;
+    day?: DayRollup | null;
+    /** 이 표가 세지 않는 교시만 있는 칸(자리·남의 교시) — 값은 없고 빗금만(GHOST_HATCH 주석). */
+    ghost?: boolean;
+  } = {},
 ): CellDisplay {
   // 하루에 교시가 둘 이상 찍힌 칸(0196a) — 숫자는 **합**, 색이 갈리면 교시 순서대로 줄무늬.
   // ⚠️ 대표 상태가 결석이어도 숫자는 0이 아니다(한 교시라도 들었으면 그 시수가 살아 있어야 한다).
@@ -215,8 +258,11 @@ export function cellDisplay(
   // 🔴 기록이 있으면 재원 기간 밖이라도 **값이 먼저**다 — 퇴원 뒤 보강 출석이 실제로 있고,
   //    그걸 회색으로 덮으면 급여에 잡히는 시수가 화면에서 사라진다(구 출석부도 값을 그렸다).
   if (status) return { text: markNumber(status, units), className: STATUS_TONE[status] };
-  if (opts.outside) return { text: "", className: `text-text-faint ${DAY_TONE.outside}` };
-  if (opts.muted) return { text: "·", className: `text-text-faint ${DAY_TONE.weekend}` };
-  if (opts.attendDay) return { text: "·", className: `text-text-faint ${DAY_TONE.classDay}` };
-  return { text: "·", className: "text-text-faint" };
+  // 값이 없는 칸 — 요일 성격만 그린다. 이 표가 세지 않는 교시가 남아 있으면 그 위에 빗금을 얹어
+  // "빈칸이 아니라 남의 몫"임을 드러낸다(배경색은 그대로 두고 backgroundImage만 겹친다).
+  const hatch = opts.ghost ? { style: { backgroundImage: GHOST_HATCH } } : {};
+  if (opts.outside) return { text: "", className: `text-text-faint ${DAY_TONE.outside}`, ...hatch };
+  if (opts.muted) return { text: "·", className: `text-text-faint ${DAY_TONE.weekend}`, ...hatch };
+  if (opts.attendDay) return { text: "·", className: `text-text-faint ${DAY_TONE.classDay}`, ...hatch };
+  return { text: "·", className: "text-text-faint", ...hatch };
 }

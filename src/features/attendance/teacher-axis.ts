@@ -170,6 +170,40 @@ export function classTeacherIdsInRange(input: {
   return [...out];
 }
 
+/**
+ * **강사 출석부(렌즈)가 이 교시를 그 강사 몫으로 세는가** — 월간 매트릭스의 값/유령 분기 단일 소스.
+ *
+ * @param scopeTeacherId 표의 주인. null이면 반별 보기 = 전부 그 반 몫(종전과 동일한 숫자).
+ * @param slotStart 교시별 기록이면 "HH:MM", 교시를 안 남긴 옛 기록·수기 입력이면 null.
+ *
+ * 🔴 **교시가 없는 기록(day-level)은 좁히지 않는다.** 그 행은 "그날"만 말하므로 담당이 둘 이상이면
+ *    귀속이 모호해져 **누구 화면에서도 사라진다**. 실제로 걸리는 게 거의 전부 수학이다 — 2026년 수학
+ *    출결 8,358건 중 **8,322건이 day-level**이라, 좁히는 순간 담임 칸이 슬롯 담당에게 통째로 넘어가고
+ *    (고등M 단체 BS4F: 담임 이성우 → 슬롯 유형숙 71건) 수업보고서 파생이 "수기 기록 없음"으로 보고
+ *    덮어써 **수기 출석이 결석으로 뒤집혔다**(적대적 리뷰 2026-08-18 실측 3칸). 월간 격자의 새 입력도
+ *    day-level이라 좁히면 찍자마자 화면에서 사라진다.
+ * ⚠️ 대신 담당을 모르는 그 행은 그 반을 보는 강사 화면에 **종전대로** 남는다(영어 31건/2026년) —
+ *    숨겨서 "기록이 없다"고 말하는 것보다 낫다.
+ */
+export function ownsAttendanceSlot(input: {
+  scopeTeacherId: string | null;
+  homeroomTeacherId: string | null;
+  slots: readonly AxisSlot[];
+  date: string;
+  slotStart: string | null;
+}): boolean {
+  if (!input.scopeTeacherId) return true;
+  if (!input.slotStart) return true;
+  return (
+    resolveTaughtBy({
+      homeroomTeacherId: input.homeroomTeacherId,
+      slots: input.slots,
+      date: input.date,
+      slotStart: input.slotStart,
+    }).teacherId === input.scopeTeacherId
+  );
+}
+
 /** 이 반에서 그 사람의 역할 — 반 머리행 표식용. `null` = 이 기간에 안 가르친다. */
 export type ClassTeacherRole = "homeroom" | "slot" | "both";
 

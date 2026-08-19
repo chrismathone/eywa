@@ -1,0 +1,285 @@
+"use client";
+
+import { useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { useDraggable, useDroppable } from "@dnd-kit/core";
+import { Button } from "@/components/ui/button";
+import { EyIcon } from "@/components/icons/eywa-icons";
+import { RUN_STOP_KIND_LABEL, runTitle, type ShuttleRun, type ShuttleStop } from "@/features/shuttle/types";
+import type { AssignableStudent } from "@/features/shuttle/server/students";
+import { addRunStop, removeRunStop, updateRunStopTime } from "@/features/shuttle/server/actions";
+import { RiderChip } from "./rider-chip";
+
+/**
+ * 가운데 열 — 고른 회차의 노선. 위에서 아래로 학원 출발 → 정류장들 → 학원 도착.
+ *
+ * 각 칸은 **드롭 대상**(학생·배정 칩이 여기 떨어진다)이면서 **드래그 손잡이**를 가진다(순서 변경).
+ * 📱 폰에서는 탭이 갈려 드래그로 학생을 데려올 수 없으므로 칸마다 **'+ 학생'** 버튼을 둔다 —
+ *    이게 좁은 화면의 기본 배정 수단이고, 드래그는 PC의 빠른 길이다.
+ * ⚠️ 시각 입력·삭제 버튼은 드래그 임계값(5px) 덕에 클릭이 살아 있다 — 손잡이를 따로 두는 이유가
+ *    이거다(칸 전체를 잡게 하면 입력을 못 누른다, [[#97]] 팬 영역의 클릭 유실과 같은 결).
+ */
+export function StopColumn({
+  run,
+  stops,
+  students,
+  canWrite,
+  pending,
+  onError,
+  onAssign,
+}: {
+  run: ShuttleRun | null;
+  stops: ShuttleStop[];
+  students: AssignableStudent[];
+  canWrite: boolean;
+  pending: boolean;
+  onError: (msg: string | null) => void;
+  onAssign: (runStopId: string, studentId: string) => void;
+}) {
+  const router = useRouter();
+  const [busy, startTransition] = useTransition();
+  const [adding, setAdding] = useState(false);
+
+  function submit(fd: FormData, action: (f: FormData) => Promise<{ error?: string; notice?: string } | undefined>) {
+    onError(null);
+    startTransition(async () => {
+      const res = await action(fd);
+      if (res?.error) onError(res.error);
+      else router.refresh();
+    });
+  }
+
+  if (!run) {
+    return (
+      <div className="border-line text-text-dim flex items-center justify-center rounded-2xl border border-dashed p-8 text-sm">
+        회차를 고르세요
+      </div>
+    );
+  }
+
+  // 이미 이 회차에 있는 정류장은 추가 목록에서 뺀다(넣어봐야 유니크 제약에 걸린다).
+  const used = new Set(run.stops.map((s) => s.stopId).filter(Boolean));
+  const addable = stops.filter((s) => !used.has(s.id));
+
+  return (
+    <div className="flex min-h-0 flex-col gap-2 overflow-y-auto">
+      <div className="flex items-center justify-between gap-2 px-1">
+        <h2 className="text-text text-[14px] font-bold">{runTitle(run)}</h2>
+        {canWrite && (
+          <Button size="sm" variant="outline" onClick={() => setAdding((v) => !v)}>
+            + 정류장
+          </Button>
+        )}
+      </div>
+
+      {adding && canWrite && (
+        <div className="bg-card flex max-h-56 flex-col gap-1 overflow-y-auto rounded-2xl p-2 shadow-[var(--shadow-card)]">
+          {addable.length === 0 ? (
+            <p className="text-text-faint px-1 py-2 text-[12px]">
+              추가할 정류장이 없습니다 — 헤더의 &lsquo;정류장 관리&rsquo;에서 먼저 만드세요.
+            </p>
+          ) : (
+            addable.map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                disabled={busy || pending}
+                onClick={() => {
+                  const fd = new FormData();
+                  fd.set("runId", run.id);
+                  fd.set("stopId", s.id);
+                  submit(fd, addRunStop);
+                  setAdding(false);
+                }}
+                className="hover:bg-muted min-h-10 rounded-lg px-2 py-1.5 text-left text-[13px]"
+              >
+                {s.name}
+                {s.memo && <span className="text-text-faint"> · {s.memo}</span>}
+              </button>
+            ))
+          )}
+        </div>
+      )}
+
+      {run.stops.map((stop) => (
+        <StopCard
+          key={stop.id}
+          stop={stop}
+          students={students}
+          canWrite={canWrite}
+          busy={busy || pending}
+          onTime={(v) => {
+            const fd = new FormData();
+            fd.set("id", stop.id);
+            fd.set("atTime", v);
+            submit(fd, updateRunStopTime);
+          }}
+          onRemove={() => {
+            const fd = new FormData();
+            fd.set("id", stop.id);
+            submit(fd, removeRunStop);
+          }}
+          onAssign={(studentId) => onAssign(stop.id, studentId)}
+          onError={onError}
+        />
+      ))}
+    </div>
+  );
+}
+
+function StopCard({
+  stop,
+  students,
+  canWrite,
+  busy,
+  onTime,
+  onRemove,
+  onAssign,
+  onError,
+}: {
+  stop: ShuttleRun["stops"][number];
+  students: AssignableStudent[];
+  canWrite: boolean;
+  busy: boolean;
+  onTime: (v: string) => void;
+  onRemove: () => void;
+  onAssign: (studentId: string) => void;
+  onError: (msg: string | null) => void;
+}) {
+  const [picking, setPicking] = useState(false);
+  const [q, setQ] = useState("");
+  const isCampus = stop.kind !== "stop";
+
+  const { setNodeRef, isOver } = useDroppable({
+    id: `stop:${stop.id}`,
+    data: { type: "stop", runStopId: stop.id },
+    disabled: isCampus, // 학원 출발/도착 칸엔 학생을 배정하지 않는다(서버도 거절)
+  });
+  const {
+    attributes,
+    listeners,
+    setNodeRef: setHandleRef,
+    isDragging,
+  } = useDraggable({
+    id: `stopRow:${stop.id}`,
+    data: { type: "stopRow", runStopId: stop.id, label: stop.stopName },
+    disabled: !canWrite,
+  });
+
+  const already = useMemo(() => new Set(stop.riders.map((r) => r.studentId)), [stop.riders]);
+  const candidates = useMemo(() => {
+    const key = q.replace(/\s+/g, "").toLowerCase();
+    return students
+      .filter((s) => !already.has(s.id))
+      .filter((s) => !key || s.searchKey.includes(key))
+      .slice(0, 40); // 목록은 검색으로 좁힌다 — 상한은 '더 있음'을 아래에 표기
+  }, [students, already, q]);
+
+  return (
+    <section
+      ref={setNodeRef}
+      className={`bg-card rounded-2xl p-2.5 shadow-[var(--shadow-card)] transition-colors ${
+        isOver ? "ring-primary ring-2" : ""
+      } ${isDragging ? "opacity-50" : ""} ${isCampus ? "bg-muted/40" : ""}`}
+    >
+      <div className="flex items-center gap-2">
+        {canWrite && (
+          <button
+            ref={setHandleRef}
+            {...listeners}
+            {...attributes}
+            type="button"
+            aria-label="순서 변경"
+            // touch-none: 손잡이 위에서는 브라우저 스크롤 제스처를 끄고 드래그로 넘긴다.
+            className="text-text-faint hover:text-text size-9 shrink-0 cursor-grab touch-none active:cursor-grabbing"
+          >
+            <EyIcon name="grip" className="mx-auto size-4" />
+          </button>
+        )}
+        <span className={`flex-1 truncate text-[13px] ${isCampus ? "text-text-dim font-medium" : "text-text font-bold"}`}>
+          {isCampus ? RUN_STOP_KIND_LABEL[stop.kind] : stop.stopName}
+          {stop.stopMemo && <span className="text-text-faint text-[11.5px]"> · {stop.stopMemo}</span>}
+        </span>
+        <input
+          type="time"
+          defaultValue={stop.atTime ?? ""}
+          disabled={!canWrite || busy}
+          onBlur={(e) => {
+            if ((e.currentTarget.value || "") !== (stop.atTime ?? "")) onTime(e.currentTarget.value);
+          }}
+          aria-label="도착 시각"
+          className="border-line focus:border-primary num h-9 w-[104px] shrink-0 rounded-lg border px-1.5 text-base outline-none sm:h-8 sm:w-[92px] sm:text-[12px]"
+        />
+        {canWrite && !isCampus && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={onRemove}
+            aria-label="이 정류장을 노선에서 빼기"
+            className="text-text-faint hover:text-danger size-9 shrink-0"
+          >
+            <EyIcon name="trash" className="mx-auto size-3.5" />
+          </button>
+        )}
+      </div>
+
+      {!isCampus && (
+        <div className="mt-2 flex flex-wrap items-center gap-1">
+          {stop.riders.map((r) => (
+            <RiderChip key={r.id} rider={r} canWrite={canWrite} onError={onError} />
+          ))}
+          {canWrite && (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => setPicking((v) => !v)}
+              className="rounded-pill border-line text-text-dim hover:bg-muted min-h-8 border border-dashed px-2.5 text-[11.5px] font-bold"
+            >
+              + 학생
+            </button>
+          )}
+          {stop.riders.length === 0 && !canWrite && (
+            <span className="text-text-faint text-[11.5px]">배정된 학생이 없습니다</span>
+          )}
+        </div>
+      )}
+
+      {picking && canWrite && !isCampus && (
+        <div className="border-line mt-2 flex flex-col gap-1 rounded-xl border p-2">
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="이름·학교 검색"
+            className="border-line focus:border-primary h-10 rounded-lg border px-2.5 text-base outline-none sm:h-8 sm:text-[12.5px]"
+          />
+          <div className="flex max-h-56 flex-col gap-0.5 overflow-y-auto">
+            {candidates.map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                disabled={busy}
+                onClick={() => {
+                  onAssign(s.id);
+                  setPicking(false);
+                  setQ("");
+                }}
+                className="hover:bg-muted flex min-h-10 items-baseline gap-1.5 rounded-lg px-2 text-left text-[13px]"
+              >
+                <span className="text-text font-medium">{s.name}</span>
+                {s.schoolGrade && <span className="text-text-faint text-[11px]">{s.schoolGrade}</span>}
+              </button>
+            ))}
+            {candidates.length === 0 && (
+              <span className="text-text-faint px-1 py-2 text-[12px]">찾는 학생이 없습니다</span>
+            )}
+            {candidates.length === 40 && (
+              <span className="text-text-faint px-1 py-1 text-[11px]">
+                40명까지만 표시됩니다 — 이름을 더 입력해 좁히세요
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
