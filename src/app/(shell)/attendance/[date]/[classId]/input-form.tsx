@@ -350,19 +350,25 @@ export function AttendanceInputForm({
             return (
               <li key={r.studentId} className="px-5 py-3">
                 <div className="flex flex-wrap items-center justify-between gap-3">
+                  {/* 🔑 이름·학년은 **열로 읽히게** 최소 너비를 준다 — 이름 길이가 제각각이면(동명이인
+                      접미사 한 글자에도) 학년이 행마다 다른 자리에서 시작해 표가 흔들린다. 자르지는
+                      않는다(이름은 잘리면 안 되는 값 [[#111]]) — 긴 이름은 그 행만 밀린다. */}
                   <div className="flex items-center gap-3">
-                    <Link
-                      href={`/students/${r.studentId}`}
-                      target="_blank"
-                      className="text-foreground text-sm font-medium hover:underline inline-flex items-center gap-1"
-                      title={`${r.studentName} 학생 상세로 이동 (새 탭)`}
-                    >
-                      {r.studentName}
-                      <ExternalLink className="text-text-dim size-2.5 opacity-0 group-hover:opacity-100 transition-opacity" />
-                    </Link>
-                    {r.studentGrade ? (
-                      <span className="text-text-dim text-xs">{r.studentGrade}</span>
-                    ) : null}
+                    {/* 너비는 **바깥 칸**이 갖는다 — 링크에 직접 주면 이름 옆 빈 자리를 눌러도
+                        학생 상세가 새 탭으로 열린다(누른 적 없는 곳이 눌리는 셈). */}
+                    <span className="min-w-[92px]">
+                      <Link
+                        href={`/students/${r.studentId}`}
+                        target="_blank"
+                        className="text-foreground text-sm font-medium hover:underline inline-flex items-center gap-1"
+                        title={`${r.studentName} 학생 상세로 이동 (새 탭)`}
+                      >
+                        {r.studentName}
+                        <ExternalLink className="text-text-dim size-2.5 opacity-0 group-hover:opacity-100 transition-opacity" />
+                      </Link>
+                    </span>
+                    {/* 학년이 없는 학생도 칸은 남긴다 — 안 그러면 그 행만 배지가 앞으로 당겨진다. */}
+                    <span className="text-text-dim min-w-[64px] text-xs">{r.studentGrade ?? ""}</span>
                     {/* 보강 = 이 반 수강생이 아님. 표식이 없으면 명단에 섞여 "이 반 학생"으로 오인된다. */}
                     {r.isMakeup ? (
                       <span

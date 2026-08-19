@@ -1,8 +1,9 @@
-import { requireAccess } from "@/lib/auth/require-access";
 import { kstToday } from "@/lib/date-kst";
 import { getBoardingsOn, getShuttleBoard } from "@/features/shuttle/server/queries";
 import { getAbsentStudentIdsOn } from "@/features/shuttle/server/attendance-link";
 import { canRecordBoarding } from "@/features/shuttle/server/record-gate";
+import { requireShuttleView } from "@/features/shuttle/server/access";
+import { loadShuttleTodayPrefs } from "@/features/shuttle/server/today-prefs";
 import { isSeason, type Season } from "@/features/shuttle/types";
 import { DayBoardClient } from "./_components/day-board-client";
 
@@ -22,17 +23,20 @@ export default async function ShuttleTodayPage({
 }: {
   searchParams: Promise<{ d?: string; season?: string }>;
 }) {
-  await requireAccess("shuttle");
+  // 열람 = 메뉴 권한 또는 '셔틀 담당' 토글(access.ts). 🔴 로그인 착지가 이 화면이라 토글 우회가
+  // 없으면 착지 → 거부 → 착지로 무한히 돈다. 기록 자격은 아래 canRecordBoarding이 따로 본다.
+  await requireShuttleView();
   const sp = await searchParams;
   const date = sp.d && YMD.test(sp.d) ? sp.d : kstToday();
   const season: Season = isSeason(sp.season) ? sp.season : "term";
 
-  // 넷 다 서로 독립 — 함께 받는다(B4). absentIds는 **신호 전용**(출결을 바꾸지 않는다).
-  const [board, { ready, logs }, canWrite, absentIds] = await Promise.all([
+  // 다섯 다 서로 독립 — 함께 받는다(B4). absentIds는 **신호 전용**(출결을 바꾸지 않는다).
+  const [board, { ready, logs }, canWrite, absentIds, prefs] = await Promise.all([
     getShuttleBoard(season),
     getBoardingsOn(date),
     canRecordBoarding(), // 🔴 편성 권한이 아니라 **기록** 권한(record-gate.ts) — 화면·액션이 같은 함수를 본다(#77)
     getAbsentStudentIdsOn(date),
+    loadShuttleTodayPrefs(), // 등하원 보기 = 계정 귀속(다른 기기에서도 같은 상태)
   ]);
 
   return (
@@ -51,6 +55,7 @@ export default async function ShuttleTodayPage({
           logs={logs}
           absentStudentIds={[...absentIds]}
           canWrite={canWrite}
+          initialDirection={prefs.direction}
         />
       )}
     </div>

@@ -153,7 +153,12 @@ function EventRow({ event }: { event: RecapEvent }) {
   );
 }
 
-function UnmarkedRow({ row, date }: { row: RecapUnmarkedClass; date: string }) {
+/**
+ * 미입력 출석부 한 줄 — 반 이름이 **그날 출석부 링크**다.
+ * 🔑 "입력이 덜 된 강사" 줄을 펼쳤을 때도 **이 컴포넌트 그대로** 쓴다(같은 정보·같은 링크 규약).
+ *    별도 표기를 만들면 두 자리가 조용히 갈린다.
+ */
+export function UnmarkedRow({ row, date }: { row: RecapUnmarkedClass; date: string }) {
   const subjects = useSubjectMaps();
   return (
     <li className="flex flex-wrap items-center gap-x-2 gap-y-1 px-3 py-2 text-sm">

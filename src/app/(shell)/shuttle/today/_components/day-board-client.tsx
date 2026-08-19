@@ -3,33 +3,56 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { FaceTabs } from "@/components/face-tabs";
 import { Pill } from "@/components/atoms/pill";
-import { EyIcon } from "@/components/icons/eywa-icons";
 import { TONE_COLOR } from "@/lib/design/semantic-color";
 import { addDays, formatKoreanDate } from "@/lib/date-kst";
 import {
   DIRECTION_LABEL,
   SEASONS,
   SEASON_LABEL,
-  runTimeRange,
-  runTitle,
   type Season,
   type ShuttleRun,
   type ShuttleVehicle,
 } from "@/features/shuttle/types";
+import { SHUTTLE_TODAY_PATH, shuttleFaces } from "@/features/shuttle/faces";
 import { mergePlanAndLog, plannedRidesOn, type RideRow } from "@/features/shuttle/roster";
+import { saveShuttleTodayPrefs } from "@/features/shuttle/server/today-prefs";
+import {
+  countProgress,
+  filterByDirection,
+  groupRunsByVehicle,
+  sumProgress,
+  type DirectionFilter,
+} from "@/features/shuttle/today-board";
 import type { BoardingLog } from "@/features/shuttle/server/queries";
-import { RideRowItem } from "./ride-row-item";
+import { RunPanel } from "./run-panel";
+import { VehicleHeader } from "./vehicle-header";
+
+/** 등하원 필터 칩 — 아침엔 등원만, 저녁엔 하원만 본다(폰에서 목록이 절반이 된다). */
+const DIR_FILTERS: { value: DirectionFilter; label: string }[] = [
+  { value: "all", label: "전체" },
+  { value: "in", label: DIRECTION_LABEL.in },
+  { value: "out", label: DIRECTION_LABEL.out },
+];
 
 /**
  * 오늘 등하원 — 회차마다 그날 예정 명단을 펼치고 한 줄씩 탑승/미탑승을 찍는다.
  *
- * 📱 **이 화면은 모바일이 1순위다**(원장 2026-08-19: *"셔틀 선생님은 모바일을 대부분 이용하시니까"*).
+ * 📱 **이 화면은 모바일이 1순위다**(원장 2026-08-19: *"셔틀 선생님은 모바일을 대부분 이용하시니까"*
+ *    → *"아주 필요한 기능만 잘 있도록 호차 구분 및 시간 정리 등하원 체크 용이하게"*).
  *    · 날짜·시즌 칩은 `.toolbar-rail`로 눕힌다(좁은 화면에서 4줄로 감기던 자리).
+ *    · **호차로 묶는다** — 차가 여럿이면 평평한 회차 목록에서 "지금 몇 호차를 보는지"가 사라져
+ *      남의 차 회차를 자기 차로 착각한다. 호차 머리는 스크롤 중에도 붙어 있다(sticky).
+ *    · **시각이 먼저다** — 기사는 회차 번호가 아니라 다음 출발 시각으로 움직인다(정렬도 시각 순).
+ *    · **등원/하원 칩**으로 반을 덜어낸다 — 아침엔 등원만 보면 된다.
  *    · 회차는 **접힌 채로 시작**하고 아직 안 찍은 회차만 펼친다 — 폰에서 7회차를 다 펼치면
  *      다 끝난 회차를 지나 스크롤해야 오늘 할 일이 나온다.
- *    · 진행 요약(찍은 수/전체)을 회차 머리에 둬서 **접힌 채로도 남은 일이 보인다**.
+ *    · 진행 요약(찍은 수/전체)을 호차·회차 머리에 둬서 **접힌 채로도 남은 일이 보인다**.
  *    PC는 2열 그리드 그대로 — 넓은 화면에선 한눈에 다 보이는 게 맞다.
+ *
+ * ⚠️ 묶음·정렬·집계는 순수 [`today-board.ts`](@/features/shuttle/today-board)가 한다(Vitest) —
+ *    이 파일은 그리기만. 새 집계를 여기서 손으로 세지 말 것.
  *
  * 🔴 아직 안 찍은 줄은 **회색 '미기록'**이지 미탑승이 아니다 — 안 찍은 걸 미탑승으로 읽으면
  *    아침 내내 전원이 미탑승으로 보이고 그게 출결 신호로 새어나간다(roster 주석).
@@ -42,6 +65,7 @@ export function DayBoardClient({
   logs,
   absentStudentIds,
   canWrite,
+  initialDirection,
 }: {
   date: string;
   season: Season;
@@ -51,14 +75,26 @@ export function DayBoardClient({
   /** 그날 출결이 결석·사유결석인 학생 — 🔴 표시만(셔틀 배정·기록을 바꾸지 않는다). */
   absentStudentIds: string[];
   canWrite: boolean;
+  /** 계정에 저장된 등하원 보기(`users.ui_prefs.shuttleToday`) — 저녁마다 다시 누르지 않게. */
+  initialDirection: DirectionFilter;
 }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   /** 사람이 직접 접거나 편 회차 — 여기 없으면 "미기록이 남았나"로 자동 판정한다. */
   const [manualOpen, setManualOpen] = useState<Record<string, boolean>>({});
+  /**
+   * 등하원 보기 — 화면은 즉시 바꾸고 **계정 저장은 뒤따른다**(반응속도 1순위).
+   * ⚠️ 주소에 안 싣는 이유는 서버 왕복(스켈레톤 깜빡임)을 피하기 위해서지만, 그렇다고 휘발시키면
+   *    저녁마다 하원을 다시 눌러야 한다 → 보기 설정은 **계정 귀속**이 규칙이다(`users.ui_prefs`).
+   */
+  const [dirFilter, setDirFilter] = useState<DirectionFilter>(initialDirection);
+  function pickDirection(next: DirectionFilter) {
+    setDirFilter(next);
+    // 저장 실패는 조용히 넘긴다 — 지금 화면은 이미 바뀌었고, 다음 방문에 옛 값으로 열릴 뿐이다.
+    void saveShuttleTodayPrefs({ direction: next });
+  }
 
   const absentSet = useMemo(() => new Set(absentStudentIds), [absentStudentIds]);
-  const vehicleName = useMemo(() => new Map(vehicles.map((v) => [v.id, v.name])), [vehicles]);
 
   /** 회차별 그날 줄 — 예정 × 기록. 기록은 회차 축으로 붙는다. */
   const byRun = useMemo(() => {
@@ -77,24 +113,28 @@ export function DayBoardClient({
       .filter(({ rows }) => rows.length > 0);
   }, [runs, logs, date]);
 
-  const totals = useMemo(() => {
-    let planned = 0;
-    let boarded = 0;
-    let missed = 0;
-    for (const { rows } of byRun) {
-      for (const r of rows) {
-        planned += 1;
-        if (r.status === "boarded" || r.status === "extra") boarded += 1;
-        else if (r.status === "missed") missed += 1;
-      }
-    }
-    return { planned, boarded, missed, unmarked: planned - boarded - missed };
+  /** 화면에 실제로 그릴 것 — 등하원 필터를 먹인 뒤 호차로 묶는다(정렬·집계는 순수 모듈). */
+  const groups = useMemo(
+    () => groupRunsByVehicle(filterByDirection(byRun, dirFilter), vehicles),
+    [byRun, dirFilter, vehicles],
+  );
+  /** 위 요약은 **보고 있는 것**의 합이다(필터를 걸면 같이 줄어야 "남은 일"이 맞는다). */
+  const totals = useMemo(() => sumProgress(groups), [groups]);
+  /** 필터 칩에 붙일 방향별 남은 수 — 누르기 전에 어느 쪽에 일이 남았는지 보인다. */
+  const remainByDir = useMemo(() => {
+    const of = (d: DirectionFilter) =>
+      countProgress(filterByDirection(byRun, d).flatMap((r) => r.rows)).unmarked;
+    return { all: of("all"), in: of("in"), out: of("out") };
   }, [byRun]);
 
   const href = (d: string, s: Season = season) => `/shuttle/today?d=${d}&season=${s}`;
 
   return (
     <div className="flex min-h-0 flex-col gap-3">
+      {/* 면 전환 — 📱 폰엔 사이드바(하부탭)가 없다. 이 화면엔 PageHeader가 없어(세로 아끼기)
+          여기가 "지금 어느 면인지"를 알려 주는 자리이기도 하다(faces.ts). */}
+      <FaceTabs faces={shuttleFaces(season)} active={SHUTTLE_TODAY_PATH} ariaLabel="셔틀 면 전환" />
+
       {/* 날짜·시즌 — 좁은 화면에선 가로 레일 한 줄(감기지 않는다). 탭 타겟은 44px 이상. */}
       <div className="toolbar-rail flex flex-wrap items-center gap-2">
         <Link
@@ -129,9 +169,38 @@ export function DayBoardClient({
         ))}
       </div>
 
+      {/* 등하원 + 요약을 **한 레일**로 — 폰에서 상단 크롬이 세 줄이 되면 첫 호차까지 스크롤이 필요하다
+          ("모바일 상단 크롬 = 한 줄" 규약 · 제보의 "아주 필요한 기능만"). 칩의 남은 수는 **필터와 무관한
+          전체 기준**이라 누르기 전에 어느 쪽에 일이 있는지 보인다. */}
       <div className="toolbar-rail flex flex-wrap items-center gap-2 text-[12.5px]">
+        <span className="flex items-center gap-1.5" role="radiogroup" aria-label="등하원 보기">
+          {DIR_FILTERS.map((f) => (
+            <button
+              key={f.value}
+              type="button"
+              role="radio"
+              aria-checked={dirFilter === f.value}
+              onClick={() => pickDirection(f.value)}
+              className={`rounded-pill flex h-11 items-center gap-1.5 px-3.5 text-[13px] font-bold whitespace-nowrap ${
+                dirFilter === f.value
+                  ? "bg-primary text-primary-foreground"
+                  : "border-line text-text-dim hover:bg-muted border"
+              }`}
+            >
+              {f.label}
+              {remainByDir[f.value] > 0 && (
+                <span className={`num text-[11.5px] ${dirFilter === f.value ? "" : "text-amber"}`}>
+                  {remainByDir[f.value]}
+                </span>
+              )}
+            </button>
+          ))}
+        </span>
         <span className="text-text-dim whitespace-nowrap">
-          예정 <span className="num text-text font-bold">{totals.planned}</span>명
+          {/* 🔴 필터를 걸면 이 숫자는 **보고 있는 것**의 합이다 — 무엇의 합인지 밝히지 않으면 옆 칩의
+              전체 기준 숫자와 어긋나 보인다. */}
+          {dirFilter !== "all" && `${DIRECTION_LABEL[dirFilter]} `}예정{" "}
+          <span className="num text-text font-bold">{totals.planned}</span>명
         </span>
         <Pill color={TONE_COLOR.positive}>탑승 {totals.boarded}</Pill>
         <Pill color={TONE_COLOR.critical}>미탑승 {totals.missed}</Pill>
@@ -147,113 +216,41 @@ export function DayBoardClient({
         </div>
       )}
 
-      {byRun.length === 0 && (
+      {groups.length === 0 && (
         <div className="border-line bg-card text-text-dim rounded-2xl border border-dashed p-8 text-center text-sm">
-          이 날짜에 타기로 되어 있는 학생이 없습니다.
+          {/* 🔴 "없다"의 뜻을 가른다 — 필터 때문에 빈 것을 그날 아무도 안 탄 것처럼 말하지 않는다. */}
+          {byRun.length === 0 || dirFilter === "all"
+            ? "이 날짜에 타기로 되어 있는 학생이 없습니다."
+            : `${DIRECTION_LABEL[dirFilter]}으로 타는 학생이 없습니다 — '전체'를 누르면 다 보입니다.`}
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
-        {byRun.map(({ run, rows }) => {
-          const unmarked = rows.filter((r) => r.status === null).length;
-          const open = manualOpen[run.id] ?? unmarked > 0;
-          return (
-            <RunPanel
-              key={run.id}
-              run={run}
-              vehicleLabel={vehicleName.get(run.vehicleId) ?? ""}
-              rows={rows}
-              unmarked={unmarked}
-              open={open}
-              onToggle={() => setManualOpen((m) => ({ ...m, [run.id]: !open }))}
-              absentSet={absentSet}
-              date={date}
-              canWrite={canWrite}
-              onError={setError}
-              onDone={() => router.refresh()}
-            />
-          );
-        })}
-      </div>
+      {groups.map((group) => (
+        <section key={group.vehicleId} className="flex flex-col gap-2">
+          <VehicleHeader group={group} dirFilter={dirFilter} />
+          <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+            {group.runs.map(({ run, rows }) => {
+              const progress = countProgress(rows);
+              const open = manualOpen[run.id] ?? progress.unmarked > 0;
+              return (
+                <RunPanel
+                  key={run.id}
+                  run={run}
+                  rows={rows}
+                  progress={progress}
+                  open={open}
+                  onToggle={() => setManualOpen((m) => ({ ...m, [run.id]: !open }))}
+                  absentSet={absentSet}
+                  date={date}
+                  canWrite={canWrite}
+                  onError={setError}
+                  onDone={() => router.refresh()}
+                />
+              );
+            })}
+          </div>
+        </section>
+      ))}
     </div>
-  );
-}
-
-function RunPanel({
-  run,
-  vehicleLabel,
-  rows,
-  unmarked,
-  open,
-  onToggle,
-  absentSet,
-  date,
-  canWrite,
-  onError,
-  onDone,
-}: {
-  run: ShuttleRun;
-  vehicleLabel: string;
-  rows: RideRow[];
-  unmarked: number;
-  open: boolean;
-  onToggle: () => void;
-  absentSet: Set<string>;
-  date: string;
-  canWrite: boolean;
-  onError: (msg: string | null) => void;
-  onDone: () => void;
-}) {
-  const range = runTimeRange(run.stops);
-  return (
-    <section className="bg-card flex flex-col rounded-2xl shadow-[var(--shadow-card)]">
-      {/* 회차 머리 = 접기 버튼. 접힌 채로도 "몇 명 중 몇 명 남았는지"가 보여야 한다. */}
-      <button
-        type="button"
-        onClick={onToggle}
-        aria-expanded={open}
-        className="flex min-h-12 flex-wrap items-center gap-x-2 gap-y-1 px-3 py-2.5 text-left"
-      >
-        <Pill color={TONE_COLOR[run.direction === "in" ? "info" : "special"]}>
-          {DIRECTION_LABEL[run.direction]}
-        </Pill>
-        <span className="text-text text-[13.5px] font-bold">
-          {vehicleLabel} {runTitle(run)}
-        </span>
-        {range && <span className="text-text-faint num text-[11.5px]">{range}</span>}
-        <span className="ml-auto flex items-center gap-1.5">
-          {unmarked > 0 ? (
-            <span className="text-amber text-[11.5px] font-bold">
-              <span className="num">{unmarked}</span>명 남음
-            </span>
-          ) : (
-            <span className="text-green text-[11.5px] font-bold">완료</span>
-          )}
-          {/* ⚠️ 접기 표시를 ▲/▼ **문자**로 쓰지 말 것 — 아이콘 자리에 글리프를 세우는 건
-              가드 테스트(eywa-icon-mapping)가 막는다. 폰트·플랫폼마다 크기가 널뛴다. */}
-          <EyIcon
-            name={open ? "chevronUp" : "chevronDown"}
-            size={14}
-            className="text-text-faint"
-          />
-        </span>
-      </button>
-
-      {open && (
-        <ul className="flex flex-col gap-1.5 px-2.5 pb-2.5">
-          {rows.map((row) => (
-            <RideRowItem
-              key={row.key}
-              row={row}
-              absentToday={absentSet.has(row.studentId)}
-              date={date}
-              canWrite={canWrite}
-              onError={onError}
-              onDone={onDone}
-            />
-          ))}
-        </ul>
-      )}
-    </section>
   );
 }

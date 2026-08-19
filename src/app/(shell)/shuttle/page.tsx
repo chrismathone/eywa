@@ -1,8 +1,8 @@
-import { requireAccess } from "@/lib/auth/require-access";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { getShuttleBoard } from "@/features/shuttle/server/queries";
 import { isSeason, type Season } from "@/features/shuttle/types";
 import { getAssignableStudents } from "@/features/shuttle/server/students";
+import { requireShuttleView } from "@/features/shuttle/server/access";
 import { ShuttleBoardClient } from "./_components/shuttle-board-client";
 
 export const metadata = { title: "셔틀 — eywa" };
@@ -19,7 +19,9 @@ export default async function ShuttlePage({
 }: {
   searchParams: Promise<{ season?: string; run?: string }>;
 }) {
-  const user = await requireAccess("shuttle");
+  // 열람 = 메뉴 권한 또는 '셔틀 담당' 토글(access.ts). 담당 토글은 **열람만** 연다 —
+  // 편성 수정은 아래 canWriteTenant 그대로 사무실뿐이다.
+  const user = await requireShuttleView();
   const sp = await searchParams;
   const season: Season = isSeason(sp.season) ? sp.season : "term";
 

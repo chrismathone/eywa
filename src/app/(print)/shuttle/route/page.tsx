@@ -1,6 +1,6 @@
 import { headers } from "next/headers";
 import { PrintActions } from "@/app/(print)/enrollment/[id]/print/print-actions";
-import { requireAccess } from "@/lib/auth/require-access";
+import { requireShuttleView } from "@/features/shuttle/server/access";
 import { kstToday, formatKoreanDate } from "@/lib/date-kst";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { getShuttleBoard } from "@/features/shuttle/server/queries";
@@ -20,6 +20,23 @@ export const metadata = { title: "셔틀 노선표 인쇄 — eywa" };
 const YMD = /^\d{4}-\d{2}-\d{2}$/;
 
 /**
+ * 노선표 표의 **단일 격자** — 회차 표가 여러 개라도 열 위치가 같아야 기사가 훑어 읽는다.
+ * ⚠️ 폭은 %로 준다(A4 인쇄와 화면 미리보기가 같은 비율로 접힌다). 여기 말고 다른 곳에서 열 폭을 주지 말 것.
+ * ⚠️ 합이 100%다 — 바꿀 땐 명단(가장 많이 넘치는 칸)에서 덜어내고 채운다.
+ */
+function Cols() {
+  return (
+    <colgroup>
+      <col className="w-[7%]" />
+      <col className="w-[29%]" />
+      <col className="w-[10%]" />
+      <col className="w-[44%]" />
+      <col className="w-[10%]" />
+    </colgroup>
+  );
+}
+
+/**
  * 기사용 노선표(A4) — 회차마다 [정류장 · 시각 · 승차/하차 명단].
  *
  * 두 가지 모드:
@@ -28,13 +45,19 @@ const YMD = /^\d{4}-\d{2}-\d{2}$/;
  *
  * ⚠️ 인쇄 버튼이 있는 모든 곳은 플로팅 창 + A4 규약(design-conventions) — `(print)` 라우트 그룹.
  * ⚠️ 헤더에 비ASCII를 직접 넣지 않는다(B1) — 이 라우트는 HTML만 내려주므로 해당 없음.
+ *
+ * 🔴 **회차마다 표가 따로라 열 너비를 고정하지 않으면 종이에서 열이 어긋난다**(원장 제보 2026-08-19
+ *    *"인쇄할때도 열정리 시켜줘 열 위치가 제각각"*). 자동 폭은 **그 표의 최장 내용**에서 열 너비를 뽑으므로,
+ *    명단이 긴 회차와 빈 회차의 '정류장·시각·명단' 위치가 서로 달라진다([[#97]]의 사촌).
+ *    → `table-fixed` + **공용 `<colgroup>`**(아래 `Cols`)으로 모든 표가 같은 격자를 쓴다.
  */
 export default async function ShuttleRoutePrintPage({
   searchParams,
 }: {
   searchParams: Promise<{ season?: string; d?: string; vehicle?: string }>;
 }) {
-  await requireAccess("shuttle");
+  // 열람 게이트는 화면과 같은 함수 — 노선표 인쇄는 셔틀 담당(0227a)도 필요하다(#77: 표면마다 다른 게이트 금지).
+  await requireShuttleView();
   const sp = await searchParams;
   const season: Season = isSeason(sp.season) ? sp.season : "term";
   const allDays = sp.d === "all";
@@ -97,18 +120,19 @@ export default async function ShuttleRoutePrintPage({
                 return (
                   <table
                     key={run.id}
-                    className="mb-3 w-full break-inside-avoid border-collapse text-[11.5px]"
+                    className="mb-3 w-full table-fixed break-inside-avoid border-collapse text-[11.5px]"
                   >
                     <caption className="mb-0.5 text-left text-[12.5px] font-bold">
                       {runTitle(run)} · {DIRECTION_LABEL[run.direction]}
                     </caption>
+                    <Cols />
                     <thead>
                       <tr className="border-y border-black">
-                        <th className="w-10 py-1 text-center font-bold">순서</th>
+                        <th className="py-1 text-center font-bold">순서</th>
                         <th className="py-1 text-center font-bold">정류장</th>
-                        <th className="w-16 py-1 text-center font-bold">시각</th>
+                        <th className="py-1 text-center font-bold">시각</th>
                         <th className="py-1 text-center font-bold">명단</th>
-                        <th className="w-14 py-1 text-center font-bold">확인</th>
+                        <th className="py-1 text-center font-bold">확인</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -118,13 +142,16 @@ export default async function ShuttleRoutePrintPage({
                         return (
                           <tr key={stop.id} className="border-b border-neutral-300 align-top">
                             <td className="py-1 text-center">{i + 1}</td>
+                            {/* 폭이 고정이라 긴 정류장명은 칸 안에서 접힌다 — 전역 `overflow-wrap: anywhere`
+                                (globals.css)가 그 일을 한다. ⚠️ `break-keep`을 붙이지 말 것: 그건 줄바꿈
+                                기회를 **없애는** 속성이라 넘침을 막아 주지 않는다(전역 keep-all과 중복이기도). */}
                             <td className="py-1">
                               {campus ? RUN_STOP_KIND_LABEL[stop.kind] : stop.stopName}
                               {stop.stopMemo && (
                                 <span className="text-[10.5px]"> · {stop.stopMemo}</span>
                               )}
                             </td>
-                            <td className="py-1 text-center">{stop.atTime ?? ""}</td>
+                            <td className="num py-1 text-center">{stop.atTime ?? ""}</td>
                             <td className="py-1">
                               {riders
                                 .map(

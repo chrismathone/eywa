@@ -15,8 +15,10 @@ import {
   type DragEndEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
+import { FaceTabs } from "@/components/face-tabs";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
+import { SHUTTLE_BOARD_PATH, shuttleFaces } from "@/features/shuttle/faces";
 import {
   SEASON_LABEL,
   SEASONS,
@@ -193,16 +195,24 @@ export function ShuttleBoardClient({
         description="차량·회차별 정류장 순서와 승하차 학생을 편성합니다."
         actions={
           <>
-            {/* 인쇄는 플로팅 창 + A4 규약 — `(print)` 라우트를 새 창으로 연다(design-conventions). */}
-            <Button variant="outline" onClick={() => window.open(`/shuttle/route?season=${season}`, "_blank")}>
-              오늘 노선표 인쇄
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => window.open(`/shuttle/route?season=${season}&d=all`, "_blank")}
-            >
-              전체 편성표 인쇄
-            </Button>
+            {/* 인쇄는 플로팅 창 + A4 규약 — `(print)` 라우트를 새 창으로 연다(design-conventions).
+                📱 **좁은 화면에선 감춘다**(원장 2026-08-19: *"모바일에서는 인쇄 버튼 필요 없을거같은데"*) —
+                폰에서 노선표를 뽑는 일이 없는데 헤더 한 줄을 통째로 먹고, 그만큼 오늘 할 일이 밀린다.
+                ⚠️ 순수 CSS로 감춘다(JS 조건 마운트는 첫 페인트에 번쩍였다 사라지는 CLS + hydration 불일치).
+                🔑 기준은 폭이 아니라 **포인터**(`pointer-coarse`)다 — 셔틀 창은 ROUTE_WINDOW_SIZE에 없어
+                   기본 480px로 열리므로, 폭 기준(`md:`)으로 감추면 **데스크톱 플로팅 창에서도** 인쇄가
+                   사라진다. 감추려는 건 좁은 화면이 아니라 **손으로 쓰는 기기**다. */}
+            <span className="flex items-center gap-2 pointer-coarse:hidden">
+              <Button variant="outline" onClick={() => window.open(`/shuttle/route?season=${season}`, "_blank")}>
+                오늘 노선표 인쇄
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => window.open(`/shuttle/route?season=${season}&d=all`, "_blank")}
+              >
+                전체 편성표 인쇄
+              </Button>
+            </span>
             {canWrite && (
               <Button variant="outline" onClick={() => setStopDialogOpen(true)}>
                 정류장 관리
@@ -211,6 +221,9 @@ export function ShuttleBoardClient({
           </>
         }
       />
+
+      {/* 면 전환 — 📱 폰엔 사이드바(하부탭)가 없어 '오늘 등하원'으로 갈 길이 여기뿐이다(faces.ts). */}
+      <FaceTabs faces={shuttleFaces(season)} active={SHUTTLE_BOARD_PATH} ariaLabel="셔틀 면 전환" />
 
       <div className="toolbar-rail flex flex-wrap items-center gap-2">
         {SEASONS.map((s) => (
