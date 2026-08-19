@@ -35,6 +35,12 @@ import type { RosterGroupKey } from "../lib/roster-order";
 import type { MarkTextField } from "../lib/roster-form";
 import { buildSaveKey, type PlanFieldPatch } from "../lib/save-keys";
 import { PLAN_PATCH_FIELDS, isMeaningfulPlanLine } from "../lib/plan-codec";
+// 오늘 면의 강사 축 필터(내 교시만) + 각주 문장 — 주간과 갈리는 유일한 지점이라 순수 모듈이 소유한다.
+import {
+  hiddenOwnSlotsNotice,
+  selectSheetDays,
+  slotsWithRecordsOn,
+} from "../lib/today-own-slots";
 import { useSheetDoc } from "./use-sheet-doc";
 import { useFlushOnUnmount, useSaveIndicator, useSheetSaveStore } from "./use-sheet-saves";
 import { EditingBadge } from "@/features/presence/editing-badge";
@@ -130,6 +136,7 @@ export function SheetClient({
   initialDay = null,
   initialPanelOpen = true,
   variant = "full",
+  myTeacherId = null,
 }: {
   data: ClassSheetWeekData;
   classOptions: { id: string; name: string }[];
@@ -149,6 +156,16 @@ export function SheetClient({
    * ·저장 경로는 full과 완전히 같다 — 이 스위치는 **껍데기(무엇을 그리나)**만 바꾼다.
    */
   variant?: "full" | "today";
+  /**
+   * 지금 보고 있는 사람의 **강사 id** — [`effectiveTeacherId()`](@/lib/auth/view-mode)의 값(겸직 강사뷰까지
+   * 커버하는 단일 소스. `systemRole === "teacher"` 직접 비교 금지).
+   *
+   * 🔴 쓰이는 곳은 **`variant:"today"` 하나**다: 오늘 시트는 내 교시만 그린다(원장 2026-08-19 *"오늘
+   *    시트에서는 본인 수업만 보이고, 주간 시트는 여전히 지금처럼"*). 주간 시트에는 넘겨도 아무 일이
+   *    없다(반 전체를 보는 자리라 거르지 않는다 — 판정은 today-own-slots 한 곳).
+   * ⚠️ null이면 아무것도 숨기지 않는다 — 스코프가 없는 사람(사무실)에게 "내 수업"이 없다.
+   */
+  myTeacherId?: string | null;
 }) {
   const router = useRouter();
   const { classId, weekMonday } = data;
@@ -726,11 +743,53 @@ export function SheetClient({
     [classId, store, weekMonday],
   );
 
-  const visibleDays = dayFilter
-    ? data.grid.days.filter((d) => d.date === dayFilter)
-    : data.grid.days;
+  // 요일 필터 + **오늘 면의 강사 축 필터**를 한 곳에서(today-own-slots) — 주간(full)은 종전 그대로다.
+  // 🔴 오늘 면의 소비처(폭 계산·보강 추가·DayBulk·계획 층·로스터 층)가 **같은 배열**을 봐야 위아래
+  //    격자가 맞으므로(today-columns 계약) 거르는 자리는 여기 하나뿐이다 — 층마다 따로 거르지 말 것.
+  // ⚠️ 기록 판정은 **서버 스냅샷**(data.*)으로 한다. 로컬 state(marks·attendance)로 재면 숨긴 교시가
+  //    타이핑 중에 나타났다 사라지고(칸이 없으니 애초에 못 쓴다), memo된 표가 매 입력마다 다시 그려진다.
+  const selection = useMemo(
+    () =>
+      selectSheetDays({
+        variant,
+        days: data.grid.days,
+        dayFilter,
+        myTeacherId,
+        // 위임받아 대신 맡은 반은 거르지 않는다 — 교시 담당이 자리를 비운 강사라 전부 숨겨져
+        // "위임받았는데 화면이 비어 있다"가 된다(0173a가 막으려던 조용한 실패).
+        delegatedClass: data.delegated,
+        slotsWithRecords: (date) =>
+          slotsWithRecordsOn(
+            date,
+            [...Object.keys(data.attendanceByStudentDate), ...Object.keys(data.marks)],
+            Object.keys(data.memos),
+          ),
+      }),
+    [
+      variant,
+      data.grid.days,
+      dayFilter,
+      myTeacherId,
+      data.delegated,
+      data.attendanceByStudentDate,
+      data.marks,
+      data.memos,
+    ],
+  );
+  const visibleDays = selection.days;
   // today 변형이 그릴 하루 — initialDay가 확정돼 내려오므로 사실상 항상 있다(없으면 "수업 없음").
-  const todayDay = variant === "today" ? (visibleDays[0] ?? null) : null;
+  const todayDay = selection.todayDay;
+  // 숨긴 남의 교시 각주 — **건수를 밝힌다**(침묵하면 "분명히 있었는데 안 보인다"가 재발한다).
+  // 이름은 FK(teacherId)로 찾은 표시 이름만 쓴다(슬롯 라벨은 다른 사람을 가리킬 수 있다).
+  const hiddenOwnNotice = useMemo(
+    () =>
+      hiddenOwnSlotsNotice(selection.hiddenOwn, {
+        periodLabelOf: (slot) =>
+          todayDay ? (data.periodLabelBySlot[`${todayDay.date}|${slot}`] ?? null) : null,
+        teacherNameOf: (id) => data.teacherNames[id] ?? null,
+      }),
+    [selection.hiddenOwn, todayDay, data.periodLabelBySlot, data.teacherNames],
+  );
   // 저장 표시기 — full은 SheetToolbar가 자체 구독으로 그린다. today는 툴바가 없어 **여기서** 충돌·저장 중을
   // 그려야 한다(적대 리뷰 2026-08-11: 복구 배너로 살아난 패치가 다른 날짜 셀에서 충돌하면 today엔 그 충돌을
   // 보여줄 표면이 없었다 — 충돌은 조용히 사라지면 입력 유실이다).
@@ -807,65 +866,80 @@ export function SheetClient({
         style={fontZoom === 1 ? undefined : { zoom: fontZoom }}
       >
         {variant === "today" ? (
-          todayDay && todayDay.slots.length > 0 ? (
-            <div className="min-w-0 space-y-2">
-              {/* 툴바가 없는 변형의 상태 표면 — 충돌·저장 중일 때만. 조용할 땐 아무것도 안 그린다
-                  (반마다 '저장됨'이 줄지어 서면 소음이다). 충돌한 셀이 다른 날짜(복구 패치)면 이
-                  화면엔 안 보이므로 주간 시트로 안내한다.
-                  ⚠️ '수정중' 배지는 **카드 안 머리**로 내려갔다(2026-08-18 제목 이동) — 여기 남기면
-                     제목 줄을 없앤 만큼을 이 줄이 도로 먹는다. */}
-              {(saveIndicator.conflicts > 0 || saveIndicator.pending > 0) ? (
-                <div className="flex flex-wrap items-center gap-2 px-1">
-                  {saveIndicator.conflicts > 0 ? (
-                    <span className="text-danger text-[12px] font-bold whitespace-nowrap">
-                      저장 충돌 {saveIndicator.conflicts}건 — 충돌한 셀에서 서버값/내 값을 고르세요(이 화면에 안
-                      보이면 주간 시트에서)
-                    </span>
-                  ) : (
-                    <span className="text-text-dim text-[12px] font-semibold whitespace-nowrap">저장 중…</span>
-                  )}
-                </div>
-              ) : null}
-              <TodayClassSheet
-                day={todayDay}
-                header={
-                  /* 반 이름 = 이 격자가 **어느 반인지** 말하는 유일한 자리라 또렷해야 한다(원장
-                     2026-08-11 "수업명을 더 선명하게"). 카드 바깥 제목 줄이 사라졌으므로 그 위계를
-                     여기로 그대로 옮긴다 — 이름 굵게, 링크는 한 단계 낮춰 이름이 먼저 읽히게.
-                     ⚠️ 이름이 길면 잘라 낸다(`min-w-0` + 말줄임) — 안 그러면 카드가 늘어나
-                     아래 표와 어긋난다. 전체 이름은 title 툴팁에 남는다. */
-                  <div className="flex min-w-0 items-baseline gap-x-2">
-                    <h2
-                      className="text-foreground min-w-0 truncate text-[17px] leading-tight font-extrabold tracking-tight"
-                      title={data.className}
-                    >
-                      {data.className}
-                    </h2>
-                    <Link
-                      href={`/ecs/${classId}?week=${weekMonday}`}
-                      className="text-primary shrink-0 text-[12.5px] font-medium underline-offset-2 hover:underline"
-                    >
-                      주간 시트 열기 →
-                    </Link>
-                    <EditingBadge scope={`ecs:${classId}:${weekMonday}`} />
-                  </div>
-                }
-                data={data}
-                linesBySlot={linesBySlot}
-                marks={marks}
-                attendance={attendance}
-                store={store}
-                handlers={handlers}
-                canEdit={canEdit}
-                collapsedGroups={collapsedGroups}
-                onToggleGroup={toggleRosterGroup}
-              />
-            </div>
-          ) : (
-            <p className="bg-card shadow-card text-text-dim rounded-2xl px-4 py-6 text-sm">
-              이 날은 수업이 없습니다.
-            </p>
-          )
+          // 🔴 상태 표면(충돌·저장 중)은 **하루가 비어 있어도** 그린다 — 복구 배너로 살아난 패치가
+          //    지금 안 보이는 칸(숨긴 교시·수업 없는 날)에서 충돌하면 보여 줄 자리가 사라진다
+          //    (충돌이 조용히 사라지면 입력 유실 — 2026-08-11 적대 리뷰가 잡았던 바로 그 구멍).
+          <div className="min-w-0 space-y-2">
+            {/* 툴바가 없는 변형의 상태 표면 — 충돌·저장 중일 때만. 조용할 땐 아무것도 안 그린다
+                (반마다 '저장됨'이 줄지어 서면 소음이다). 충돌한 셀이 다른 날짜(복구 패치)면 이
+                화면엔 안 보이므로 주간 시트로 안내한다.
+                ⚠️ '수정중' 배지는 **카드 안 머리**로 내려갔다(2026-08-18 제목 이동) — 여기 남기면
+                   제목 줄을 없앤 만큼을 이 줄이 도로 먹는다. */}
+            {(saveIndicator.conflicts > 0 || saveIndicator.pending > 0) ? (
+              <div className="flex flex-wrap items-center gap-2 px-1">
+                {saveIndicator.conflicts > 0 ? (
+                  <span className="text-danger text-[12px] font-bold whitespace-nowrap">
+                    저장 충돌 {saveIndicator.conflicts}건 — 충돌한 셀에서 서버값/내 값을 고르세요(이 화면에 안
+                    보이면 주간 시트에서)
+                  </span>
+                ) : (
+                  <span className="text-text-dim text-[12px] font-semibold whitespace-nowrap">저장 중…</span>
+                )}
+              </div>
+            ) : null}
+            {todayDay && todayDay.slots.length > 0 ? (
+              <>
+                <TodayClassSheet
+                  day={todayDay}
+                  header={
+                    /* 반 이름 = 이 격자가 **어느 반인지** 말하는 유일한 자리라 또렷해야 한다(원장
+                       2026-08-11 "수업명을 더 선명하게"). 카드 바깥 제목 줄이 사라졌으므로 그 위계를
+                       여기로 그대로 옮긴다 — 이름 굵게, 링크는 한 단계 낮춰 이름이 먼저 읽히게.
+                       ⚠️ 이름이 길면 잘라 낸다(`min-w-0` + 말줄임) — 안 그러면 카드가 늘어나
+                       아래 표와 어긋난다. 전체 이름은 title 툴팁에 남는다. */
+                    <div className="flex min-w-0 items-baseline gap-x-2">
+                      <h2
+                        className="text-foreground min-w-0 truncate text-[17px] leading-tight font-extrabold tracking-tight"
+                        title={data.className}
+                      >
+                        {data.className}
+                      </h2>
+                      <Link
+                        href={`/ecs/${classId}?week=${weekMonday}`}
+                        className="text-primary shrink-0 text-[12.5px] font-medium underline-offset-2 hover:underline"
+                      >
+                        주간 시트 열기 →
+                      </Link>
+                      <EditingBadge scope={`ecs:${classId}:${weekMonday}`} />
+                    </div>
+                  }
+                  data={data}
+                  linesBySlot={linesBySlot}
+                  marks={marks}
+                  attendance={attendance}
+                  store={store}
+                  handlers={handlers}
+                  canEdit={canEdit}
+                  collapsedGroups={collapsedGroups}
+                  onToggleGroup={toggleRosterGroup}
+                />
+                {/* 🔴 숨긴 남의 교시는 **건수를 밝힌다** — 조용히 빼면 "분명히 있었는데 안 보인다"가
+                    재발한다(자리 제외 각주·요약 카드의 안 그린 기록과 같은 규약). 되돌릴 곳(주간 시트)과
+                    작성률이 반 전체 기준이라는 사실까지 한 문장에 담는다(today-own-slots). */}
+                {hiddenOwnNotice ? (
+                  <p className="text-text-dim px-1 text-[12px]">{hiddenOwnNotice}</p>
+                ) : null}
+              </>
+            ) : (
+              <p className="bg-card shadow-card text-text-dim rounded-2xl px-4 py-6 text-sm">
+                {/* ⚠️ 원인을 뭉치지 않는다 — 반의 그 날 교시가 **전부 남의 것**이어서 빈 것과, 애초에
+                    수업이 없는 것은 사람이 할 일이 다르다. "수업이 없습니다"로 뭉치면 거짓말이 된다. */}
+                {hiddenOwnNotice
+                  ? `이 날 이 반에 담당하시는 교시가 없습니다. ${hiddenOwnNotice}`
+                  : "이 날은 수업이 없습니다."}
+              </p>
+            )}
+          </div>
         ) : (
           <>
             {panelOpen ? (

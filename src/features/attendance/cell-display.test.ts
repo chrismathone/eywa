@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
+import { COUNTABLE_STATUSES } from "./session-units";
 import {
   DAY_TONE,
+  GHOST_HATCH,
   cellDisplay,
+  ghostBreakdown,
   markNumber,
   rollupDay,
   slotBreakdown,
@@ -87,6 +90,18 @@ describe("rollupDay — 하루 여러 교시를 한 칸으로", () => {
   it("들은 교시가 하나도 없을 때만 대표가 결석", () => {
     expect(rollupDay([s("12:30", "absent"), s("14:10", "absent")])?.status).toBe("absent");
   });
+  it("🔴 시수 0 ⟺ 대표 상태가 결석 계열 — 합계 폴백(`u ?? 1`)이 오작동할 수 없는 근거다", () => {
+    // grid/totals.ts는 시수 키가 없으면 1로 본다. 그래서 "세는 상태인데 시수 0"인 칸이 생기면
+    // 합계가 조용히 1로 되살아난다(2026-08-18 적대리뷰가 잡은 회귀). consumedUnits가 세는 상태에
+    // 대해 항상 ≥1을 돌려주므로 그런 칸은 만들어질 수 없다 — 그 성질을 여기서 잠근다.
+    const statuses = ["present", "late", "early_leave", "makeup", "absent", "excused"] as const;
+    for (const st of statuses) {
+      const r = rollupDay([s("12:30", st), s("14:10", st)])!;
+      expect(r.units === 0, `${st}의 시수 0 여부`).toBe(!COUNTABLE_STATUSES.has(r.status));
+    }
+    // 이상값(0·NaN)을 넣어도 세는 상태면 0이 되지 않는다.
+    expect(rollupDay([s("12:30", "present", 0)])!.units).toBe(1);
+  });
   it("🔴 결석 교시가 있어도 들은 교시의 시수는 남는다(0이 아니다)", () => {
     expect(rollupDay([s("12:30", "present"), s("14:10", "absent")])?.units).toBe(1);
     // 전부 결석일 때만 0.
@@ -121,6 +136,31 @@ describe("cellDisplay — 교시 롤업 칸", () => {
   it("교시가 하나면 롤업을 넘겨도 종전과 같다", () => {
     const one = rollupDay([s("12:30", "absent")])!;
     expect(cellDisplay("absent", null, { day: one })).toEqual(cellDisplay("absent", null));
+  });
+});
+
+describe("cellDisplay — 이 표가 세지 않는 교시(빗금)", () => {
+  // 강사 전체 보기에서 남의 교시·자리(JJ)만 있는 날. 값은 없지만 **기록은 있다**.
+  it("🔴 빈칸이 아니라 빗금 — 그냥 비워 두면 사람이 그 위에 다시 찍어 남의 기록을 덮는다(#103)", () => {
+    const d = cellDisplay(null, null, { attendDay: true, ghost: true });
+    expect(d.style?.backgroundImage).toBe(GHOST_HATCH);
+    expect(d.className).toContain(DAY_TONE.classDay); // 요일 배경색은 그대로 살아 있다
+  });
+  it("🔴 값이 있으면 빗금을 안 그린다 — 칸의 주인은 값이다", () => {
+    expect(cellDisplay("present", null, { ghost: true }).style).toBeUndefined();
+  });
+  it("빗금은 backgroundImage — 배경'색'(주말 회색)을 덮지 않는다", () => {
+    const d = cellDisplay(null, null, { muted: true, ghost: true });
+    expect(d.style?.background).toBeUndefined();
+    expect(d.className).toContain(DAY_TONE.weekend);
+  });
+  it("ghost가 없으면 종전 그대로(스타일 없음)", () => {
+    expect(cellDisplay(null, null, { attendDay: true }).style).toBeUndefined();
+  });
+  it("툴팁은 무엇이 빠졌는지 한글로 펼친다 — raw 코드 금지", () => {
+    expect(ghostBreakdown([s("16:20:00", "present"), s("18:20:00", "present")])).toBe(
+      "이 선생님 몫으로 세지 않는 교시 · 16:20 출석 1 · 18:20 출석 1",
+    );
   });
 });
 
