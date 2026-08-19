@@ -5,7 +5,12 @@
 import { describe, expect, it } from "vitest";
 import { buildDayRecap, type RecapSlotInput } from "./digest";
 import { buildRangeRecap, type RecapDay } from "./range";
-import { countUnmarkedByTeacher, unmarkedByTeacher } from "./teacher-unmarked";
+import {
+  countPartialCellsByTeacher,
+  countUnmarkedByTeacher,
+  partialByTeacher,
+  unmarkedByTeacher,
+} from "./teacher-unmarked";
 
 function slot(over: Partial<RecapSlotInput> & Pick<RecapSlotInput, "classId">): RecapSlotInput {
   return {
@@ -118,6 +123,110 @@ describe("unmarkedByTeacher", () => {
     for (const d of range.days) {
       for (const line of d.teachers) {
         expect(countUnmarkedByTeacher([d], line.teacherName)).toBe(line.unmarkedClasses);
+      }
+    }
+  });
+});
+
+/** 출석부를 열어 놓고 남긴 빈 칸 — 반 단위 미입력이 표현하지 못하던 자리(원장 제보 2026-08-20). */
+function marked(over: Partial<RecapSlotInput> & Pick<RecapSlotInput, "classId">): RecapSlotInput {
+  return slot({ hasAnyRecord: true, ...over });
+}
+
+describe("partialByTeacher", () => {
+  it("빈 칸이 남은 반을 날짜별로 모은다(날짜 오름차순, 빈 날은 빠진다)", () => {
+    const days = [
+      day("2026-08-20", [
+        marked({
+          classId: "c2",
+          students: [{ studentId: "s1", studentName: "이학생", schoolGrade: null, status: null, note: null }],
+        }),
+      ]),
+      day("2026-08-19", [
+        marked({
+          classId: "c1",
+          students: [
+            { studentId: "s1", studentName: "이학생", schoolGrade: null, status: "present", note: null },
+            { studentId: "s2", studentName: "박학생", schoolGrade: null, status: null, note: null },
+          ],
+        }),
+        // 다 찍힌 반은 목록에 없다.
+        marked({
+          classId: "c9",
+          students: [{ studentId: "s3", studentName: "정학생", schoolGrade: null, status: "absent", note: null }],
+        }),
+      ]),
+    ];
+    const got = partialByTeacher(days, "김강사");
+    expect(got.map((d) => d.date)).toEqual(["2026-08-19", "2026-08-20"]);
+    expect(got[0].classes.map((c) => c.classId)).toEqual(["c1"]);
+    expect(got[0].classes[0].slots[0].students.map((s) => s.studentName)).toEqual(["박학생"]);
+  });
+
+  it("자리(LAB·JJ)의 빈 칸은 `담당 미지정` 줄로 간다 — 표시는 자리 그대로", () => {
+    const d = day("2026-08-19", [
+      marked({
+        classId: "lab",
+        className: "LT3",
+        teacherName: "담당 미지정",
+        slotTeacherLabel: "LAB",
+        students: [
+          { studentId: "a", studentName: "가학생", schoolGrade: null, status: "present", note: null },
+          { studentId: "b", studentName: "나학생", schoolGrade: null, status: null, note: null },
+        ],
+      }),
+    ]);
+    const got = partialByTeacher([d], "담당 미지정");
+    expect(got[0].classes[0].className).toBe("LT3");
+    expect(got[0].classes[0].teacherNames).toEqual(["LAB"]);
+    // 표시(LAB)로는 안 걸린다 — 축을 섞으면 "빈 칸 N개"인데 펼치면 0건이 된다.
+    expect(partialByTeacher([d], "LAB")).toEqual([]);
+  });
+
+  it("🔴 펼친 빈 칸 수 = 강사 줄의 빈 칸 N개 (하루·기간 모두)", () => {
+    const days = [
+      day("2026-08-19", [
+        // 같은 반인데 교시마다 담당이 갈린다(실측 브릿지 A 형태).
+        marked({
+          classId: "bridge",
+          className: "중등E_초등 브릿지 A",
+          slotStart: "14:20",
+          teacherName: "KRISTINE DRIVER",
+          slotTeacherLabel: "Kristine",
+          students: [
+            { studentId: "k1", studentName: "김준영", schoolGrade: null, status: null, note: null },
+            { studentId: "k2", studentName: "박창현", schoolGrade: null, status: "present", note: null },
+          ],
+        }),
+        marked({
+          classId: "bridge",
+          className: "중등E_초등 브릿지 A",
+          slotStart: "15:00",
+          teacherName: "추민아",
+          students: [{ studentId: "k3", studentName: "김윤호", schoolGrade: null, status: null, note: null }],
+        }),
+        // 통째 미입력은 빈 칸이 아니라 반 단위로 센다(겹쳐 세면 불변식이 깨진다).
+        slot({ classId: "empty", teacherName: "추민아" }),
+      ]),
+      day("2026-08-20", [
+        marked({
+          classId: "jj3l",
+          teacherName: "유형숙",
+          students: [{ studentId: "j1", studentName: "이주영A", schoolGrade: null, status: null, note: null }],
+        }),
+      ]),
+    ];
+    const range = buildRangeRecap(days);
+    for (const line of range.teachers) {
+      expect(countPartialCellsByTeacher(range.days, line.teacherName)).toBe(line.partialCells);
+    }
+    // 항등식만 도는 일이 없게 — 실제로 세고 있는지 못 박는다.
+    expect(range.teachers.find((t) => t.teacherName === "KRISTINE DRIVER")?.partialCells).toBe(1);
+    expect(range.teachers.find((t) => t.teacherName === "추민아")?.partialCells).toBe(1);
+    expect(range.teachers.find((t) => t.teacherName === "유형숙")?.partialCells).toBe(1);
+    for (const d of range.days) {
+      for (const line of d.teachers) {
+        expect(countPartialCellsByTeacher([d], line.teacherName)).toBe(line.partialCells);
       }
     }
   });
