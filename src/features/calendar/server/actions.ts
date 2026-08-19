@@ -135,6 +135,25 @@ export async function saveCalendarEvent(
     color,
   };
 
+  // 태그(0224a) — 폼에 tagId 필드가 **있을 때만** 반영(#95: 0224a 전 배포의 폼은 태그 목록이
+  // 비어 필드 자체를 안 그린다 → tag_id 키를 안 보내 옛 스키마에서도 저장이 산다).
+  let tagPatch: { tag_id: string | null } | null = null;
+  if (formData.has("tagId")) {
+    const tagId = String(formData.get("tagId") ?? "").trim();
+    if (tagId) {
+      const { data: tagRow, error: tagErr } = await admin
+        .from("calendar_tags")
+        .select("id")
+        .eq("id", tagId)
+        .eq("tenant_id", user.tenantId)
+        .maybeSingle();
+      if (tagErr || !tagRow) return { error: "태그를 찾을 수 없습니다 — 새로고침 후 다시 시도하세요" };
+      tagPatch = { tag_id: tagId };
+    } else {
+      tagPatch = { tag_id: null }; // "태그 없음"으로 해제
+    }
+  }
+
   // 반복(생성 전용 — 수정에선 무시: 회차 하나를 고치는 것뿐, 시리즈는 안 건드린다).
   const repeatRaw = String(formData.get("repeat") ?? "none");
   const repeat: RepeatKind = (REPEAT_KINDS as readonly string[]).includes(repeatRaw)
@@ -157,7 +176,7 @@ export async function saveCalendarEvent(
   if (id) {
     const { data, error } = await admin
       .from("calendar_events")
-      .update(row)
+      .update({ ...row, ...(tagPatch ?? {}) })
       .eq("id", id)
       .eq("tenant_id", user.tenantId)
       .select("id")
@@ -171,6 +190,7 @@ export async function saveCalendarEvent(
     const { error } = await admin.from("calendar_events").insert(
       starts.map((s) => ({
         ...row,
+        ...(tagPatch ?? {}),
         start_date: s,
         end_date: addDaysYmd(s, span - 1),
         series_id: seriesId,
@@ -194,6 +214,7 @@ export async function saveCalendarEvent(
     // 단발 — series_id 키를 아예 안 보낸다(0222a 적용 전 배포에서도 등록이 살아야, #95).
     const { error } = await admin.from("calendar_events").insert({
       ...row,
+      ...(tagPatch ?? {}),
       tenant_id: user.tenantId,
       created_by: user.id,
     });
@@ -278,4 +299,92 @@ export async function deleteCalendarEvent(
   });
   revalidatePath("/calendar");
   return { ok: true, notice: "일정을 삭제했습니다" };
+}
+
+// ── 태그 CRUD(0224a) — 태그는 테넌트 사전, 색은 태그에 한 번만(표시 규칙 = eventDisplayColor) ────
+const MAX_TAG_NAME = 30;
+
+/** 태그 등록·수정(id 있으면 수정) — 폼 필드: id?, name, color. */
+export async function saveCalendarTag(
+  _prev: CalendarActionState,
+  formData: FormData,
+): Promise<CalendarActionState> {
+  const gate = await requireCalendarWriter();
+  if ("error" in gate) return { error: gate.error };
+  const { user } = gate;
+
+  const id = String(formData.get("id") ?? "").trim() || null;
+  const name = String(formData.get("name") ?? "").trim();
+  if (!name) return { error: "태그 이름을 입력하세요" };
+  if (name.length > MAX_TAG_NAME) return { error: `태그 이름은 ${MAX_TAG_NAME}자까지입니다` };
+  const colorRaw = String(formData.get("color") ?? "primary");
+  const color = isEventColor(colorRaw) ? colorRaw : "primary";
+
+  const admin = createAdminClient();
+  let failure: { message: string } | null = null;
+  if (id) {
+    const { data, error } = await admin
+      .from("calendar_tags")
+      .update({ name, color })
+      .eq("id", id)
+      .eq("tenant_id", user.tenantId)
+      .select("id")
+      .maybeSingle();
+    if (!error && !data) return { error: "수정할 태그를 찾을 수 없습니다" };
+    failure = error;
+  } else {
+    const { error } = await admin
+      .from("calendar_tags")
+      .insert({ tenant_id: user.tenantId, name, color });
+    failure = error;
+  }
+  if (failure) {
+    if (/calendar_tags_name_unique|duplicate key/i.test(failure.message)) {
+      return { error: "같은 이름의 태그가 이미 있습니다" };
+    }
+    if (/does not exist|Could not find the table|PGRST205/i.test(failure.message)) {
+      return { error: "태그 표가 아직 준비되지 않았습니다(마이그레이션 0224a 적용 필요)" };
+    }
+    return { error: `태그 저장 실패 — ${failure.message}` };
+  }
+
+  await logAction({
+    action: id ? "calendar_tag_update" : "calendar_tag_create",
+    targetType: "calendar_tag",
+    targetLabel: `${name} (${color})`,
+  });
+  revalidatePath("/calendar");
+  return { ok: true, notice: id ? "태그를 수정했습니다" : "태그를 추가했습니다" };
+}
+
+/** 태그 삭제 — 일정은 남고 tag_id만 해제된다(FK on delete set null, 0224a). */
+export async function deleteCalendarTag(
+  _prev: CalendarActionState,
+  formData: FormData,
+): Promise<CalendarActionState> {
+  const gate = await requireCalendarWriter();
+  if ("error" in gate) return { error: gate.error };
+  const { user } = gate;
+
+  const id = String(formData.get("id") ?? "").trim();
+  if (!id) return { error: "삭제할 태그를 찾을 수 없습니다" };
+
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("calendar_tags")
+    .delete()
+    .eq("id", id)
+    .eq("tenant_id", user.tenantId)
+    .select("name")
+    .maybeSingle();
+  if (error) return { error: `태그 삭제 실패 — ${error.message}` };
+  if (!data) return { error: "삭제할 태그를 찾을 수 없습니다" };
+
+  await logAction({
+    action: "calendar_tag_delete",
+    targetType: "calendar_tag",
+    targetLabel: String(data.name),
+  });
+  revalidatePath("/calendar");
+  return { ok: true, notice: "태그를 삭제했습니다 — 일정은 남고 태그만 해제됩니다" };
 }

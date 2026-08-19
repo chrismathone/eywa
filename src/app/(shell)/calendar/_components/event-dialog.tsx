@@ -16,8 +16,10 @@ import {
 import {
   EVENT_COLORS,
   EVENT_COLOR_LABEL,
+  eventDisplayColor,
   eventTimeLabel,
   type CalendarEvent,
+  type CalendarTag,
   type EventColor,
 } from "@/features/calendar/types";
 
@@ -110,11 +112,14 @@ function SaveButton() {
 export function EventDialog({
   state,
   today,
+  tags,
   onClose,
 }: {
   state: DialogState;
   /** KST 오늘 — 읽기 전용 뷰의 D-day 계산(서버가 내려준 값·클라 시계 안 씀). */
   today: string;
+  /** 태그 사전(0224a) — 비면(마이그 전 배포) 태그 필드 자체를 안 그린다(#95 서버 계약). */
+  tags: CalendarTag[];
   onClose: () => void;
 }) {
   if (!state) return null;
@@ -141,7 +146,7 @@ export function EventDialog({
         {state.mode === "view" ? (
           <ViewBody event={state.event} today={today} onClose={onClose} />
         ) : (
-          <EditBody state={state} onClose={onClose} />
+          <EditBody state={state} tags={tags} onClose={onClose} />
         )}
       </div>
     </div>
@@ -203,7 +208,7 @@ function ViewBody({
     <div className="space-y-3">
       <div className="flex items-start justify-between gap-3">
         <h2 className="text-foreground flex min-w-0 items-center gap-2 text-[16px] font-bold break-keep">
-          <span className={`size-3 shrink-0 rounded-full ${DOT_SOLID[event.color]}`} aria-hidden />
+          <span className={`size-3 shrink-0 rounded-full ${DOT_SOLID[eventDisplayColor(event)]}`} aria-hidden />
           {event.title}
         </h2>
         <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${dday.cls}`}>
@@ -233,6 +238,15 @@ function ViewBody({
             {duration ? <span className="text-text-faint ml-1.5">({duration})</span> : null}
           </dd>
         </div>
+        {event.tag ? (
+          <div className="flex gap-2">
+            <dt className="text-text-dim w-[52px] shrink-0">태그</dt>
+            <dd className="text-foreground flex items-center gap-1.5">
+              <span className={`size-2.5 shrink-0 rounded-full ${DOT_SOLID[event.tag.color]}`} aria-hidden />
+              {event.tag.name}
+            </dd>
+          </div>
+        ) : null}
         {event.memo ? (
           <div className="flex gap-2">
             <dt className="text-text-dim w-[52px] shrink-0">메모</dt>
@@ -263,9 +277,11 @@ function ViewBody({
 
 function EditBody({
   state,
+  tags,
   onClose,
 }: {
   state: { mode: "create"; date: string } | { mode: "edit"; event: CalendarEvent };
+  tags: CalendarTag[];
   onClose: () => void;
 }) {
   const editing = state.mode === "edit" ? state.event : null;
@@ -285,6 +301,13 @@ function EditBody({
   }, [saveState, onClose]);
 
   const [color, setColor] = useState<EventColor>(editing?.color ?? "primary");
+  // 태그(0224a) — 표시색은 태그색 우선(eventDisplayColor 단일 규칙). 사전이 비면 필드를 안 그린다.
+  const [tagId, setTagId] = useState(editing?.tag?.id ?? "");
+  const selectedTag = tags.find((t) => t.id === tagId) ?? null;
+  const tagOptions: ComboOption[] = useMemo(
+    () => [{ value: "", label: "태그 없음" }, ...tags.map((t) => ({ value: t.id, label: t.name }))],
+    [tags],
+  );
   const [start, setStart] = useState(editing?.startDate ?? (state.mode === "create" ? state.date : ""));
   const [end, setEnd] = useState(editing?.endDate ?? (state.mode === "create" ? state.date : ""));
   // 시간 — "" = 종일. 구글식 자동 보정의 근거라 제어 상태로 둔다.
@@ -358,6 +381,7 @@ function EditBody({
     <form action={saveAction} className="space-y-4">
       {editing ? <input type="hidden" name="id" value={editing.id} /> : null}
       <input type="hidden" name="color" value={color} />
+      {tags.length > 0 ? <input type="hidden" name="tagId" value={tagId} /> : null}
       <input type="hidden" name="startTime" value={startTime} />
       <input type="hidden" name="endTime" value={endTime} />
       {!editing ? <input type="hidden" name="repeat" value={repeat} /> : null}
@@ -493,22 +517,43 @@ function EditBody({
 
         {/* 오른쪽 — 어떻게 보일지 */}
         <div className="space-y-3">
+          {tags.length > 0 ? (
+            <div>
+              <span className="micro mb-1 block">태그</span>
+              <SearchableSelect
+                options={tagOptions}
+                value={tagId}
+                onValueChange={setTagId}
+                placeholder="태그 없음"
+                searchPlaceholder="태그 검색"
+                ariaLabel="태그"
+              />
+            </div>
+          ) : null}
           <div>
             <span className="micro mb-1 block">색</span>
-            <div className="flex items-center gap-1.5">
-              {EVENT_COLORS.map((c) => (
-                <button
-                  key={c}
-                  type="button"
-                  onClick={() => setColor(c)}
-                  title={EVENT_COLOR_LABEL[c]}
-                  aria-label={`색 ${EVENT_COLOR_LABEL[c]}`}
-                  className={`size-6 rounded-full transition ${DOT_SOLID[c]} ${
-                    color === c ? "ring-primary/60 ring-2 ring-offset-2" : "opacity-60 hover:opacity-100"
-                  }`}
-                />
-              ))}
-            </div>
+            {selectedTag ? (
+              // 태그가 있으면 표시색 = 태그색(단일 규칙) — 팔레트를 숨겨 규칙을 화면에서도 정직하게.
+              <p className="text-text-dim flex items-center gap-1.5 text-[12px]">
+                <span className={`size-4 shrink-0 rounded-full ${DOT_SOLID[selectedTag.color]}`} aria-hidden />
+                색은 태그색을 따릅니다 ({EVENT_COLOR_LABEL[selectedTag.color]})
+              </p>
+            ) : (
+              <div className="flex items-center gap-1.5">
+                {EVENT_COLORS.map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => setColor(c)}
+                    title={EVENT_COLOR_LABEL[c]}
+                    aria-label={`색 ${EVENT_COLOR_LABEL[c]}`}
+                    className={`size-6 rounded-full transition ${DOT_SOLID[c]} ${
+                      color === c ? "ring-primary/60 ring-2 ring-offset-2" : "opacity-60 hover:opacity-100"
+                    }`}
+                  />
+                ))}
+              </div>
+            )}
           </div>
           <label className="block">
             <span className="micro mb-1 block">메모 (선택)</span>

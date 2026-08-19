@@ -21,6 +21,21 @@ export function isEventColor(v: string): v is EventColor {
   return (EVENT_COLORS as readonly string[]).includes(v);
 }
 
+/** 일정 태그(0224a) — 테넌트 사전. 색은 태그에 한 번만(일정마다 복제 안 함). */
+export type CalendarTag = {
+  id: string;
+  name: string;
+  color: EventColor;
+};
+
+/**
+ * 표시색 단일 규칙 — **태그가 있으면 태그색, 없으면 일정 자체 색**.
+ * 월 그리드·하루 상세·연간/목록/분석 뷰가 전부 이걸 지나야 색이 갈리지 않는다.
+ */
+export function eventDisplayColor(e: Pick<CalendarEvent, "color" | "tag">): EventColor {
+  return e.tag?.color ?? e.color;
+}
+
 export type CalendarEvent = {
   id: string;
   title: string;
@@ -42,6 +57,8 @@ export type CalendarEvent = {
    * 규칙은 저장하지 않는다(등록 시점 실체화) — 있는 건 "한 시리즈"라는 사실뿐.
    */
   seriesId: string | null;
+  /** 분류 태그(0224a) — null = 태그 없음(휴가 오버레이 포함). 표시색은 eventDisplayColor 경유. */
+  tag: CalendarTag | null;
 };
 
 /** 시간 표기 — "15:00" / "15:00~16:30" / 종일이면 null. 목록·칩이 공유. */
