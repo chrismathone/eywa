@@ -21,18 +21,24 @@ export function isEventColor(v: string): v is EventColor {
   return (EVENT_COLORS as readonly string[]).includes(v);
 }
 
+/**
+ * 저장·표시되는 색 값 — **프리셋 키 또는 사용자 지정 `#rrggbb`**(원장 2026-08-19 색상 선택기).
+ * 판별·정규화·렌더는 [`color.ts`](./color.ts) 단일 소스가 담당한다(여기는 타입만 — 순환 import 방지).
+ */
+export type CalendarColor = EventColor | (string & {});
+
 /** 일정 태그(0224a) — 테넌트 사전. 색은 태그에 한 번만(일정마다 복제 안 함). */
 export type CalendarTag = {
   id: string;
   name: string;
-  color: EventColor;
+  color: CalendarColor;
 };
 
 /**
  * 표시색 단일 규칙 — **태그가 있으면 태그색, 없으면 일정 자체 색**.
  * 월 그리드·하루 상세·연간/목록/분석 뷰가 전부 이걸 지나야 색이 갈리지 않는다.
  */
-export function eventDisplayColor(e: Pick<CalendarEvent, "color" | "tag">): EventColor {
+export function eventDisplayColor(e: Pick<CalendarEvent, "color" | "tag">): CalendarColor {
   return e.tag?.color ?? e.color;
 }
 
@@ -45,7 +51,7 @@ export type CalendarEvent = {
   /** HH:MM — 종일이면 null. */
   startTime: string | null;
   endTime: string | null;
-  color: EventColor;
+  color: CalendarColor;
   createdByName: string | null;
   /**
    * 일정의 출처 — "manual" = 수기 등록(편집 가능) · "leave" = 전자결재 승인 휴가 오버레이

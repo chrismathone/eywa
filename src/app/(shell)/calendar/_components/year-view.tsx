@@ -1,5 +1,5 @@
+import { chipProps } from "@/features/calendar/color";
 import { eventDisplayColor, type CalendarEvent } from "@/features/calendar/types";
-import { CHIP_CLASS } from "./month-grid";
 
 /**
  * 연간 뷰 — 12개월 카드 격자(0224a 다중 뷰). "행사 태그 연간보기": 태그 필터는 page가 URL로
@@ -43,19 +43,23 @@ export function YearView({ year, events }: { year: number; events: CalendarEvent
               <p className="text-text-faint py-2 text-center text-[12px]">일정 없음</p>
             ) : (
               <ul className="space-y-1">
-                {list.map((e) => (
-                  <li key={e.id} className="flex items-start gap-1.5">
-                    <span className="num text-text-dim w-[56px] shrink-0 pt-0.5 text-right text-[11px] whitespace-nowrap">
-                      {dayLabel(e, monthKey)}
-                    </span>
-                    <span
-                      className={`min-w-0 flex-1 truncate rounded px-1.5 py-0.5 text-[12px] leading-tight font-medium ${CHIP_CLASS[eventDisplayColor(e)]}`}
-                      title={e.title}
-                    >
-                      {e.title}
-                    </span>
-                  </li>
-                ))}
+                {list.map((e) => {
+                  const chip = chipProps(eventDisplayColor(e));
+                  return (
+                    <li key={e.id} className="flex items-start gap-1.5">
+                      <span className="num text-text-dim w-[56px] shrink-0 pt-0.5 text-right text-[11px] whitespace-nowrap">
+                        {dayLabel(e, monthKey)}
+                      </span>
+                      <span
+                        className={`min-w-0 flex-1 truncate rounded px-1.5 py-0.5 text-[12px] leading-tight font-medium ${chip.className}`}
+                        style={chip.style}
+                        title={e.title}
+                      >
+                        {e.title}
+                      </span>
+                    </li>
+                  );
+                })}
               </ul>
             )}
           </section>

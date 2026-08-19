@@ -1,6 +1,7 @@
 import { weekdayIndexOf } from "@/lib/date-kst";
 import { holidayFor, holidayShortName } from "@/features/calendar/holidays";
-import { eventDisplayColor, type CalendarEvent, type EventColor } from "@/features/calendar/types";
+import { chipProps } from "@/features/calendar/color";
+import { eventDisplayColor, type CalendarEvent } from "@/features/calendar/types";
 
 /**
  * 월 그리드 — 일~토 7열(한국 달력 관행: 일=빨강·토=파랑), 앞뒤 달 날짜는 흐리게, 오늘은 primary 원 배지.
@@ -11,16 +12,6 @@ import { eventDisplayColor, type CalendarEvent, type EventColor } from "@/featur
  * ⚠️ Tailwind 동적 클래스 조립 금지 — 색→클래스는 아래 Record 한 곳(purge에 잡히게 전부 정적 문자열).
  * ⚠️ 페이지 가로 스크롤 금지 — 그리드는 w-full, 칸은 min-w-0 + 칩 truncate.
  */
-
-export const CHIP_CLASS: Record<EventColor, string> = {
-  primary: "bg-primary-soft text-primary",
-  blue: "bg-blue-soft text-blue",
-  green: "bg-green-soft text-green",
-  amber: "bg-amber-soft text-amber",
-  purple: "bg-purple-soft text-purple",
-  rose: "bg-rose-soft text-rose",
-  neutral: "bg-bg-soft text-text-dim",
-};
 
 const WEEKDAYS = [
   { label: "일", cls: "text-danger" },
@@ -152,23 +143,28 @@ export function MonthGrid({
                   </span>
                 </p>
                 <div className="space-y-0.5">
-                  {shown.map((e) => (
-                    <button
-                      key={e.id}
-                      type="button"
-                      onClick={(ev) => {
-                        ev.stopPropagation(); // 칩 클릭이 칸(일정 등록) 클릭으로 번지지 않게
-                        onEventClick(e);
-                      }}
-                      className={`block w-full truncate rounded px-1 py-0.5 text-left text-[12px] leading-tight font-medium transition hover:opacity-80 ${CHIP_CLASS[eventDisplayColor(e)]} ${
-                        cell.inMonth ? "" : "opacity-50"
-                      }`}
-                      title={e.tag ? `[${e.tag.name}] ${e.title}` : e.title}
-                    >
-                      {e.startTime ? <span className="num mr-0.5">{e.startTime}</span> : null}
-                      {e.title}
-                    </button>
-                  ))}
+                  {shown.map((e) => {
+                    // 색은 단일 소스(color.ts) — 프리셋은 className, 사용자 지정 hex는 style로 온다.
+                    const chip = chipProps(eventDisplayColor(e));
+                    return (
+                      <button
+                        key={e.id}
+                        type="button"
+                        onClick={(ev) => {
+                          ev.stopPropagation(); // 칩 클릭이 칸(일정 등록) 클릭으로 번지지 않게
+                          onEventClick(e);
+                        }}
+                        className={`block w-full truncate rounded px-1 py-0.5 text-left text-[12px] leading-tight font-medium transition hover:opacity-80 ${chip.className} ${
+                          cell.inMonth ? "" : "opacity-50"
+                        }`}
+                        style={chip.style}
+                        title={e.tag ? `[${e.tag.name}] ${e.title}` : e.title}
+                      >
+                        {e.startTime ? <span className="num mr-0.5">{e.startTime}</span> : null}
+                        {e.title}
+                      </button>
+                    );
+                  })}
                   {more > 0 ? (
                     // 넘친 일정은 하루 상세에서 전건 — 칸 클릭(일정 등록)으로 번지지 않게 막는다.
                     <button

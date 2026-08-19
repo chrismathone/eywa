@@ -3,10 +3,16 @@ import { requireAccess } from "@/lib/auth/require-access";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { kstToday } from "@/lib/date-kst";
 import { EyIcon } from "@/components/icons/eywa-icons";
-import { getCalendarTags, getMonthEvents, getYearEvents } from "@/features/calendar/server/queries";
+import { dotProps } from "@/features/calendar/color";
+import {
+  getCalendarTags,
+  getMonthEvents,
+  getYearEvents,
+  getYearRangeEvents,
+} from "@/features/calendar/server/queries";
 import { CalendarClient } from "./_components/calendar-client";
 import { YearView } from "./_components/year-view";
-import { ListView, DOT_SOLID } from "./_components/list-view";
+import { ListView } from "./_components/list-view";
 import { StatsView } from "./_components/stats-view";
 
 export const metadata = { title: "캘린더 — eywa" };
@@ -18,6 +24,9 @@ export const metadata = { title: "캘린더 — eywa" };
  * 다중 뷰(0224a, 원장 2026-08-19 "여러가지 버전으로 볼 수 있게"): `?v=month(기본)|year|list|stats`
  * + `y=YYYY`(연간·목록·분석) + `tag=<태그id|none>`(필터). 전환·연도·필터 전부 URL(Link) —
  * 새로고침·딥링크·창 타이틀이 공짜고 서버 컴포넌트가 유지된다. `m=`은 월 보기 전용.
+ *
+ * ⚠️ **분석 뷰만 `y`를 한 해가 아니라 3개년 창의 가운데로 읽는다**(원장 2026-08-19 "전년도 후년도까지
+ *    한번에") — 조회도 그때만 3년치다. 다른 뷰는 지금대로 한 해만 읽는다(괜한 3배 조회 금지, B4/B7).
  *
  * 접근 = `calendar` 메뉴(사무실 full / 강사·상담·회계 readonly) — 열람은 전 직원(뷰 4종 모두),
  * 쓰기는 사무실. 쓰기 판정은 화면·액션이 같은 함수(canWriteTenant)를 쓴다([[#77]]).
@@ -56,10 +65,18 @@ export default async function CalendarPage({
   const yRaw = Number(sp.y);
   const year = Number.isInteger(yRaw) && yRaw >= 2000 && yRaw <= 2100 ? yRaw : thisYear;
 
+  // 분석 창 = 전년·해당연도·다음연도. 표시와 조회가 **같은 배열**을 쓰므로 경계 연도(2000·2100)에서도
+  // "화면엔 있는데 데이터는 없는 해"가 생기지 않는다.
+  const statsYears = [year - 1, year, year + 1].filter((y) => y >= 2000 && y <= 2100);
+
   // 태그 사전·일정·쓰기 판정은 서로 독립 — 함께 받는다(B4 직렬 워터폴 금지).
   const [tags, data, canWrite] = await Promise.all([
     getCalendarTags(),
-    view === "month" ? getMonthEvents(month) : getYearEvents(year),
+    view === "month"
+      ? getMonthEvents(month)
+      : view === "stats"
+        ? getYearRangeEvents(statsYears[0]!, statsYears[statsYears.length - 1]!)
+        : getYearEvents(year),
     canWriteTenant(user.systemRole, "calendar"),
   ]);
 
@@ -107,8 +124,22 @@ export default async function CalendarPage({
             <Link href={yearHref(year - 1)} className={navBtn} aria-label="이전 연도">
               <EyIcon name="chevronLeft" size={16} />
             </Link>
+            {/* 분석 뷰는 한 해가 아니라 3개년 창이라 라벨도 범위로 — 가운데 해만 굵게(◀▶가 미는 축). */}
             <span className="num text-foreground min-w-[64px] text-center text-[16px] font-bold tracking-tight">
-              {year}
+              {view === "stats" ? (
+                <>
+                  {statsYears.map((y, i) => (
+                    <span key={y}>
+                      {i > 0 ? <span className="text-text-faint mx-1 font-normal">·</span> : null}
+                      <span className={y === year ? "" : "text-text-dim text-[13px] font-medium"}>
+                        {y}
+                      </span>
+                    </span>
+                  ))}
+                </>
+              ) : (
+                year
+              )}
             </span>
             <Link href={yearHref(year + 1)} className={navBtn} aria-label="다음 연도">
               <EyIcon name="chevronRight" size={16} />
@@ -140,20 +171,28 @@ export default async function CalendarPage({
               >
                 전체
               </Link>
-              {tags.map((t) => (
-                <Link
-                  key={t.id}
-                  href={tagHref(t.id)}
-                  className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[12px] transition ${
-                    tagParam === t.id
-                      ? "border-primary bg-primary text-primary-foreground font-medium"
-                      : "border-line bg-card text-text-dim hover:border-primary/50 hover:text-foreground"
-                  }`}
-                >
-                  <span className={`size-2 shrink-0 rounded-full ${DOT_SOLID[t.color]}`} aria-hidden />
-                  {t.name}
-                </Link>
-              ))}
+              {tags.map((t) => {
+                // 색은 단일 소스(color.ts) — 프리셋은 클래스, 사용자 지정 hex는 inline style로 온다.
+                const dot = dotProps(t.color);
+                return (
+                  <Link
+                    key={t.id}
+                    href={tagHref(t.id)}
+                    className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[12px] transition ${
+                      tagParam === t.id
+                        ? "border-primary bg-primary text-primary-foreground font-medium"
+                        : "border-line bg-card text-text-dim hover:border-primary/50 hover:text-foreground"
+                    }`}
+                  >
+                    <span
+                      className={`size-2 shrink-0 rounded-full ${dot.className}`}
+                      style={dot.style}
+                      aria-hidden
+                    />
+                    {t.name}
+                  </Link>
+                );
+              })}
               <Link
                 href={tagHref("none")}
                 className={`rounded-full border px-2.5 py-0.5 text-[12px] transition ${
@@ -192,7 +231,7 @@ export default async function CalendarPage({
       ) : view === "list" ? (
         <ListView events={filtered} />
       ) : (
-        <StatsView year={year} events={data.events} tags={tags} tagFilter={tagParam} />
+        <StatsView years={statsYears} events={data.events} tags={tags} tagFilter={tagParam} />
       )}
     </div>
   );
