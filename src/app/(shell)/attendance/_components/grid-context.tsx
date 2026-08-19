@@ -255,6 +255,9 @@ export function GridProvider({
     (key: string, val: TypedValue | null) => {
       const p = parseCellKey(key);
       if (!p || isLocked(p.date)) return;
+      // 새 작업이 시작되면 **지난 실패는 걷는다** — 실패 토스트는 클릭해야 사라져서, 30초 전 경고가
+      // 남아 있으면 이번 작업의 정보 알림(사정거리)이 렌더되지 않고 타이머만 돌고 끝난다.
+      setError(null);
       // 남의 교시만 있는 칸 — 조용히 무시하면 "쳤는데 반응이 없다"가 되므로 사유를 띄운다.
       if (isNotMine(key)) {
         setError(NOT_MINE_MESSAGE);
@@ -287,6 +290,7 @@ export function GridProvider({
   /** 여러 칸에 같은 값 — 드래그 채우기·Ctrl+Enter·범위 Delete·범위 붙여넣기. */
   const writeMany = useCallback(
     (keys: Set<string>, val: TypedValue | null) => {
+      setError(null); // 위 writeOne과 같은 이유 — 지난 실패가 이번 안내를 삼키지 않게.
       const all = [...keys].map(parseCellKey).filter((p): p is NonNullable<typeof p> => !!p);
       const unlocked = all.filter((p) => !isLocked(p.date));
       // 🔴 남의 교시만 있는 칸은 범위 채우기·붙여넣기·**Delete에서도** 뺀다 — 안 빼면 화면에 값이
