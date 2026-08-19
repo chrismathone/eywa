@@ -1144,6 +1144,7 @@ export const MENU_ICON = {
   class_review: "clipboardCheck", // 수업 평가 체크리스트 — 점검 정체성(출석부와 공유, ecs 선례)
   approvals: "scrollText", // 전자결재 — 결재 문서(두루마리) 정체성
   calendar: "calendar", // 캘린더 — 학원 공용 일정
+  shuttle: "bus", // 셔틀(노랑버스) — 노선 편성·등하원 기록
   integrations: "sync",
   sheet_sync: "spreadsheet",
   help: "help",

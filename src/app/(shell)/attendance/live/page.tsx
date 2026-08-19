@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
@@ -13,6 +14,7 @@ import { SeatingChart } from "@/features/attendance/live/components/seating-char
 import { DeskView } from "./_components/desk-view";
 import { LiveDatePicker } from "./_components/live-date-picker";
 import { LiveRefresher } from "./_components/live-refresher";
+import { ShuttleMissedBanner } from "@/features/shuttle/components/shuttle-missed-banner";
 
 export const metadata = { title: "오늘 출결 — eywa" };
 
@@ -77,6 +79,19 @@ export default async function AttendanceLivePage({
         />
       ) : (
         <>
+          {/* 셔틀 신호(0225a) — 그날 셔틀 미탑승 학생을 출결 위에 띠로 보여준다.
+              🔴 신호일 뿐 결석을 만들지 않는다(원장 2026-08-19 "신호만"). 신호가 없으면 안 그려진다.
+              🔴 **데스크(full)에게만** — 이 띠는 학원 전체 학생 대상이라 scoped 강사에게 띄우면
+                 담당이 아닌 반 학생 이름까지 새로 보인다(바로 아래 '확인 필요' 큐를 full 전용으로
+                 둔 것과 같은 이유: 볼 수 있는 것과 할 수 있는 것을 맞춘다). 강사에게 필요해지면
+                 담당 반으로 좁힌 뒤에 열 것.
+              ⚠️ Suspense로 감싸 **첫 페인트를 막지 않는다**(B7) — 부가 정보가 좌석표를 기다리게 하면 안 된다. */}
+          {isDesk && (
+            <Suspense fallback={null}>
+              <ShuttleMissedBanner date={date} />
+            </Suspense>
+          )}
+
           {isDesk && (
             <nav className="border-line flex gap-1 border-b" aria-label="보기 전환">
               <TabLink active={tab === "seating"} href={`/attendance/live?date=${date}`} label="좌석표" />

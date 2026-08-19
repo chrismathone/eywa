@@ -59,6 +59,12 @@ export const SUBTABS_BY_MENU: Partial<Record<MenuKey, SubTab[]>> = {
     { label: "오늘 출결", href: "/attendance/live" },
     { label: "월별 출석부", href: "/attendance" },
   ],
+  // 셔틀 — 부모 href·기본 착지는 **노선 편성**(/shuttle). 매일 찍는 건 '오늘 등하원'이지만
+  // 편성이 셔틀의 본체라 출석부(월별 착지)와 같은 결로 둔다.
+  shuttle: [
+    { label: "노선 편성", href: "/shuttle" },
+    { label: "오늘 등하원", href: "/shuttle/today" },
+  ],
   // 직원 이력서 면은 2026-07-28 직원 목록에 통합(이름 클릭=이력서, 등록=이력서 작성) — 하위 메뉴 제거.
   // ⚠️ 면이 이거 하나뿐이라 **사이드바엔 안 나온다**(subTabsForMenu의 "면 하나 = 하부탭 아님" 규칙).
   //    면을 하나 더 만들면 그때 자동으로 다시 보인다.
@@ -133,6 +139,8 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: "/staff", label: "직원관리", icon: MENU_ICON.staff, menuKey: "staff" },
       { href: "/billing", label: "수납관리", icon: MENU_ICON.billing, menuKey: "billing" },
+      // 셔틀 — 노선 편성(행선지·승하차 배정)과 일별 등하원 기록. makeedu 노랑버스에서 이관(원장 2026-08-19).
+      { href: "/shuttle", label: "셔틀", icon: MENU_ICON.shuttle, menuKey: "shuttle" },
       // 교재 요청 = 강사 미니셸 '내 메뉴' 전용 진입(강사 스코프). 사이드바엔 숨김, 창/타이틀 해석용 유지.
       { href: "/textbook-requests", label: "교재 요청", icon: MENU_ICON.textbook_requests, menuKey: "textbook_requests", hidden: true },
       // 지출결의서(강사 제출) = 강사 '내 메뉴' 전용 진입. 사이드바엔 숨김(사무실은 /billing 지출 면), 창/타이틀 해석용 유지.

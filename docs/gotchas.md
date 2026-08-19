@@ -1429,3 +1429,26 @@ IJW 1교시(16:20) 칸에 가 있었다. 함께 제보된 두 번째 증상 — 
   조용히 깨진다**(08-14 커밋은 저장 바 규약을 몰랐고, 화면상 즉사가 아니라 아무 에러도 없다). 화해는 조건부
   CSS(`:has` 마커) 한 곳 — 화면마다 제각각 패치(음수 margin·`after:` 덮개)는 이미 실패한 시도다
   (sticky 클램프는 margin으로 못 옮기고, 덮개는 스크롤 오버플로를 늘려 맨아래 점프 유발 — form-action-bar.tsx 주석).
+
+## #111 **부분(partial) 유니크 인덱스는 `ON CONFLICT (컬럼들)`로 추론되지 않는다** — upsert가 전부 42P10 (2026-08-19)
+
+셔틀 등하원 표(0225a)에 "회차가 지워진 옛 기록은 유니크 밖으로 빼자"는 생각으로 부분 유니크 인덱스를
+걸었다: `unique (tenant_id, boarded_on, student_id, run_id, io_kind) where run_id is not null`.
+앱은 그 축으로 `upsert(onConflict: "tenant_id,boarded_on,student_id,run_id,io_kind")` 한다.
+
+- **증상**: 등하원 찍기가 **한 건도 안 된다** —
+  `42P10 there is no unique or exclusion constraint matching the ON CONFLICT specification`.
+  Postgres는 부분 유니크 인덱스를 추론하려면 문장에 **인덱스 술어와 같은 WHERE**가 있어야 하는데,
+  PostgREST(supabase-js `upsert`)는 `index_predicate`를 붙여주지 않는다.
+- **실증**(임시 테이블, 운영 표 무손상):
+  부분 인덱스 + `ON CONFLICT (a,b)` → ❌ 42P10 · 비부분 인덱스 + 같은 문장 → ✅ 통과.
+- **고침 = 술어를 뺀다.** 나눠 놓고 싶던 그 성질(NULL 행은 서로 충돌하지 않음)은 **일반 유니크
+  인덱스가 이미 준다** — NULL은 NULL과 같지 않아 각자 남는다(같은 실증에서 행 2개 유지 확인).
+  즉 `where col is not null`은 이 경우 **얻는 것 없이 upsert만 깨뜨리는 술어**였다.
+- ⚠️ **부분 인덱스 자체가 나쁜 게 아니다** — 앱이 그 축으로 upsert하지 **않을 때만** 쓸 것.
+  이 프로젝트의 `shuttle_stops (tenant_id, btrim(name)) where not archived`는 upsert 대상이 아니고
+  `on conflict do nothing`(타겟 없음)만 쓰므로 안전하다(타겟 없는 ON CONFLICT는 추론이 필요 없다).
+- 🔑 **판별 한 줄**: 새 유니크 인덱스에 `WHERE`를 붙이려 할 때, 그 컬럼 조합으로 **`upsert(onConflict)`를
+  쓸 계획이 있는지** 먼저 보라. 있으면 술어를 빼거나, 정말 필요하면 raw SQL RPC로 술어를 함께 보낸다.
+- ⚠️ 타입체크·lint·테스트가 전부 통과한다 — **실행해야만** 드러난다(표가 아직 없으면 실행도 못 한다).
+  마이그레이션을 손으로 적용하는 이 프로젝트에서는 특히 "적용 후 첫 클릭"에서 터진다.
