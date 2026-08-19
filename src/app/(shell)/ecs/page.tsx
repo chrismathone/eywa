@@ -11,6 +11,8 @@ import { TodayAttendanceStrip } from "@/features/attendance/live/components/toda
 import { SheetClient } from "@/features/class-sheets/components/sheet-client";
 import { EcsSeatDayFace } from "@/features/class-sheets/components/seat-day-face";
 import { effectiveTeacherId, effectiveTeacherScope } from "@/lib/auth/view-mode";
+// 오늘 면 반 순서 = **화면에 보이는 첫 교시**(SheetClient가 쓰는 것과 같은 순수 함수).
+import { firstVisibleTodaySlot } from "@/features/class-sheets/lib/today-own-slots";
 import { EcsLandingList } from "./_components/landing-list";
 import { EcsTeacherFilter } from "./_components/teacher-filter";
 import { EcsTrackFilter } from "./_components/track-filter";
@@ -58,7 +60,9 @@ export default async function EcsLandingPage({
   if (face === "today") {
     // 기본 = **시트 모드**(원장 2026-08-11 "원스크린 느낌으로 한곳에서 모두 수정") — 카드는 보조 요약.
     const mode: EcsTodayMode = modeParam === "cards" ? "cards" : "sheet";
-    const todayRes = await getEcsToday(date ?? null);
+    // 오늘 시트는 **본인 교시만** 그린다(원장 2026-08-19) — 판정 주체는 `effectiveTeacherId`
+    // (겸직 강사뷰까지 커버하는 단일 소스. 요청당 캐시라 위 스코프 조회와 왕복을 공유한다).
+    const [todayRes, myTeacherId] = await Promise.all([getEcsToday(date ?? null), effectiveTeacherId()]);
     let sheets: TodaySheet[] | null = null;
     if (mode === "sheet" && todayRes.ok && todayRes.cards.length > 0) {
       // 반별 주간 시트를 병렬로(B4) — 강사 스코프라 그 날 수업 반 몇 개뿐이다(사무실은 오늘 면 차단).
@@ -66,15 +70,25 @@ export default async function EcsLandingPage({
       const results = await Promise.all(
         todayRes.cards.map((c) => getClassSheetWeek(c.classId, todayRes.weekMonday)),
       );
-      sheets = results.map((res, i) => ({
-        classId: todayRes.cards[i]!.classId,
-        className: todayRes.cards[i]!.className,
-        res,
-      }));
+      sheets = results
+        .map((res, i) => ({
+          classId: todayRes.cards[i]!.classId,
+          className: todayRes.cards[i]!.className,
+          res,
+        }))
+        // 🔴 순서는 **화면에 보이는 첫 교시**로 다시 세운다(원장 2026-08-19 *"시간대가 순서대로 배치가
+        //    안되어있는것 같은데"*). 서버 카드 순서(`cards`)는 `startsAt` = **남의 교시까지 포함한** 그 날
+        //    첫 시각이라, 15:00을 남이 맡고 내가 15:40만 맡은 반이 15:00짜리 반보다 위에 왔다.
+        //    판정은 화면과 **같은 순수 함수**(firstVisibleTodaySlot)를 쓴다 — 두 벌이면 다시 갈린다.
+        // ⚠️ 요약 카드 모드(`cards`)는 반 전체를 그리므로 서버 순서 그대로가 맞다(여기서만 다시 센다).
+        .sort((a, b) => {
+          const key = (s: TodaySheet) =>
+            s.res.ok
+              ? (firstVisibleTodaySlot(s.res.data, { date: todayRes.date, myTeacherId }) ?? "99:99")
+              : "99:99"; // 조회 실패한 반은 맨 뒤(시각을 알 수 없다)
+          return key(a).localeCompare(key(b)) || a.className.localeCompare(b.className, "ko");
+        });
     }
-    // 오늘 시트는 **본인 교시만** 그린다(원장 2026-08-19) — 판정 주체는 `effectiveTeacherId`
-    // (겸직 강사뷰까지 커버하는 단일 소스. 요청당 캐시라 위 스코프 조회와 왕복을 공유한다).
-    const myTeacherId = await effectiveTeacherId();
     return (
       <EcsTodayFace
         res={todayRes}
@@ -199,6 +213,18 @@ function EcsTodayFace({
         <EcsTodayModeTabs mode={mode} date={res.date} />
         <EcsDayNav date={res.date} today={res.today} mode={mode} />
       </div>
+
+      {/* 오늘 시트는 **본인 담당 교시만** 그린다(2026-08-19) — 그래서 "그 교시가 왜 없지"가 생긴다.
+          종전엔 반마다 각주를 길게 달았는데 반이 셋이면 같은 문장이 셋 쌓였다 → 원장 지시로 각주를 빼고
+          (*"이 멘트 필요없음"*) **되돌릴 곳만 화면 맨 위 한 줄**로 알린다(*"적당히 크게"*).
+          ⚠️ 시트 모드에서만 — 요약 카드는 반 전체 교시를 그리므로 이 안내가 거짓이 된다.
+          ⚠️ 반이 0개면 그 빈 화면 문구가 이미 주간 시트를 가리킨다(같은 말을 두 번 하지 않는다). */}
+      {mode === "sheet" && res.cards.length > 0 ? (
+        <p className="text-text-dim px-1 text-[15px] leading-relaxed font-medium">
+          전체 반에 대한 내용을 보려면 <span className="text-foreground font-bold">‘주간 시트’</span>에서 볼 수
+          있습니다.
+        </p>
+      ) : null}
 
       {/* 오늘 출석 미입력 스트립(2026-08-14) — 영어가 이 기능의 최대 수요처다: 최근 28일 영어 반은
           수업이 열린 464 반×날짜 중 **425건(91.6%)이 출결 0행**이었다. 원스크린과 같은 컴포넌트라

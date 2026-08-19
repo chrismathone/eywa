@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { hiddenOwnSlotsNotice, selectSheetDays, slotsWithRecordsOn } from "./today-own-slots";
+import { firstVisibleTodaySlot, selectSheetDays, slotsWithRecordsOn } from "./today-own-slots";
 import type { GridDay, GridPlanLine, GridSlot } from "./grid";
 
 /**
@@ -232,36 +232,49 @@ describe("🔴 기록이 있는 교시는 숨기지 않는다 — 조용한 실�
   });
 });
 
-describe("각주 — 숨긴 건수를 침묵하지 않는다", () => {
-  it("없으면 null(아무것도 안 그린다)", () => {
-    expect(
-      hiddenOwnSlotsNotice([], { periodLabelOf: () => null, teacherNameOf: () => null }),
-    ).toBeNull();
+/**
+ * 오늘 면 **반 순서**의 정렬 키 — 원장 제보 2026-08-19 *"시간대가 순서대로 배치가 안되어있다"*.
+ * 서버 카드의 `startsAt`은 **남의 교시까지 포함한** 그 날 첫 시각이라, 15:00을 남이 맡고 내가 15:40만
+ * 맡은 반이 15:00짜리 반보다 위에 왔다. 정렬은 **화면에 보이는 첫 교시**로 해야 일과 순서가 된다.
+ */
+describe("정렬 키 — 보이는 첫 교시", () => {
+  const dataOf = (slots: GridSlot[]) => ({
+    grid: { days: [dayOf(slots)] },
+    delegated: false,
+    attendanceByStudentDate: {},
+    marks: {},
+    memos: {},
   });
 
-  it("건수 · 교시 라벨 · FK로 찾은 이름을 담고, 되돌릴 곳을 가리킨다", () => {
-    const text = hiddenOwnSlotsNotice(
-      [
-        { slotStart: "14:20", teacherId: OTHER },
-        { slotStart: "16:20", teacherId: OTHER },
-      ],
-      {
-        periodLabelOf: (s) => (s === "14:20" ? "1교시" : null),
-        teacherNameOf: () => "KRISTINE DRIVER",
-      },
-    );
-    expect(text).toContain("2개");
-    expect(text).toContain("1교시 KRISTINE DRIVER");
-    expect(text).toContain("16:20 KRISTINE DRIVER"); // 교시 라벨이 없으면 시각을 그대로
-    expect(text).toContain("주간 시트");
+  it("남의 교시가 더 이르면 그 시각이 아니라 **내 첫 교시**를 돌려준다", () => {
+    const data = dataOf([
+      slot({ slotStart: "15:00", teacherId: OTHER, teacherLabel: "육소희" }),
+      slot({ slotStart: "15:40", teacherId: ME, teacherLabel: "이다교" }),
+    ]);
+    expect(firstVisibleTodaySlot(data, { date: DATE, myTeacherId: ME })).toBe("15:40");
   });
 
-  it("이름을 모르면 교시만 적는다(라벨로 지어내지 않는다)", () => {
-    const text = hiddenOwnSlotsNotice([{ slotStart: "14:20", teacherId: OTHER }], {
-      periodLabelOf: () => "1교시",
-      teacherNameOf: () => null,
-    });
-    expect(text).toContain("(1교시)");
-    expect(text).not.toContain("undefined");
+  it("기록이 남은 남의 교시는 화면에 남으므로 정렬 키도 그 시각이다(화면과 같은 판정)", () => {
+    const data = {
+      ...dataOf([
+        slot({ slotStart: "15:00", teacherId: OTHER, teacherLabel: "육소희" }),
+        slot({ slotStart: "15:40", teacherId: ME, teacherLabel: "이다교" }),
+      ]),
+      attendanceByStudentDate: { [`stu-1|${DATE}|15:00`]: {} },
+    };
+    expect(firstVisibleTodaySlot(data, { date: DATE, myTeacherId: ME })).toBe("15:00");
+  });
+
+  it("스코프가 없으면(사무실) 아무것도 안 숨기므로 그 날 첫 교시", () => {
+    const data = dataOf([
+      slot({ slotStart: "15:00", teacherId: OTHER }),
+      slot({ slotStart: "15:40", teacherId: ME }),
+    ]);
+    expect(firstVisibleTodaySlot(data, { date: DATE, myTeacherId: null })).toBe("15:00");
+  });
+
+  it("그릴 교시가 하나도 없으면 null(호출부가 맨 뒤로 보낸다)", () => {
+    const data = dataOf([slot({ slotStart: "15:00", teacherId: OTHER })]);
+    expect(firstVisibleTodaySlot(data, { date: DATE, myTeacherId: ME })).toBeNull();
   });
 });

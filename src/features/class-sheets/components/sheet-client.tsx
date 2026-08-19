@@ -35,12 +35,10 @@ import type { RosterGroupKey } from "../lib/roster-order";
 import type { MarkTextField } from "../lib/roster-form";
 import { buildSaveKey, type PlanFieldPatch } from "../lib/save-keys";
 import { PLAN_PATCH_FIELDS, isMeaningfulPlanLine } from "../lib/plan-codec";
-// 오늘 면의 강사 축 필터(내 교시만) + 각주 문장 — 주간과 갈리는 유일한 지점이라 순수 모듈이 소유한다.
-import {
-  hiddenOwnSlotsNotice,
-  selectSheetDays,
-  slotsWithRecordsOn,
-} from "../lib/today-own-slots";
+// 오늘 면의 강사 축 필터(내 교시만) — 주간과 갈리는 유일한 지점이라 순수 모듈이 소유한다.
+// ⚠️ 오늘 면의 **반 순서**(ecs/page.tsx)도 같은 모듈의 `firstVisibleTodaySlot`을 쓴다 — 화면이 그리는
+//    교시와 줄 세우는 교시가 갈리면 순서가 다시 뒤집힌다(2026-08-19).
+import { selectSheetDaysFor } from "../lib/today-own-slots";
 import { useSheetDoc } from "./use-sheet-doc";
 import { useFlushOnUnmount, useSaveIndicator, useSheetSaveStore } from "./use-sheet-saves";
 import { EditingBadge } from "@/features/presence/editing-badge";
@@ -749,47 +747,16 @@ export function SheetClient({
   // ⚠️ 기록 판정은 **서버 스냅샷**(data.*)으로 한다. 로컬 state(marks·attendance)로 재면 숨긴 교시가
   //    타이핑 중에 나타났다 사라지고(칸이 없으니 애초에 못 쓴다), memo된 표가 매 입력마다 다시 그려진다.
   const selection = useMemo(
-    () =>
-      selectSheetDays({
-        variant,
-        days: data.grid.days,
-        dayFilter,
-        myTeacherId,
-        // 위임받아 대신 맡은 반은 거르지 않는다 — 교시 담당이 자리를 비운 강사라 전부 숨겨져
-        // "위임받았는데 화면이 비어 있다"가 된다(0173a가 막으려던 조용한 실패).
-        delegatedClass: data.delegated,
-        slotsWithRecords: (date) =>
-          slotsWithRecordsOn(
-            date,
-            [...Object.keys(data.attendanceByStudentDate), ...Object.keys(data.marks)],
-            Object.keys(data.memos),
-          ),
-      }),
-    [
-      variant,
-      data.grid.days,
-      dayFilter,
-      myTeacherId,
-      data.delegated,
-      data.attendanceByStudentDate,
-      data.marks,
-      data.memos,
-    ],
+    // 위임받아 대신 맡은 반은 거르지 않는다(delegated) — 교시 담당이 자리를 비운 강사라 전부 숨겨져
+    // "위임받았는데 화면이 비어 있다"가 된다(0173a가 막으려던 조용한 실패). 규칙은 순수 모듈 소유.
+    () => selectSheetDaysFor(data, { variant, dayFilter, myTeacherId }),
+    [variant, data, dayFilter, myTeacherId],
   );
   const visibleDays = selection.days;
   // today 변형이 그릴 하루 — initialDay가 확정돼 내려오므로 사실상 항상 있다(없으면 "수업 없음").
   const todayDay = selection.todayDay;
-  // 숨긴 남의 교시 각주 — **건수를 밝힌다**(침묵하면 "분명히 있었는데 안 보인다"가 재발한다).
-  // 이름은 FK(teacherId)로 찾은 표시 이름만 쓴다(슬롯 라벨은 다른 사람을 가리킬 수 있다).
-  const hiddenOwnNotice = useMemo(
-    () =>
-      hiddenOwnSlotsNotice(selection.hiddenOwn, {
-        periodLabelOf: (slot) =>
-          todayDay ? (data.periodLabelBySlot[`${todayDay.date}|${slot}`] ?? null) : null,
-        teacherNameOf: (id) => data.teacherNames[id] ?? null,
-      }),
-    [selection.hiddenOwn, todayDay, data.periodLabelBySlot, data.teacherNames],
-  );
+  // 남의 교시를 숨겼는가 — **빈 하루의 사유를 가르는 데만** 쓴다(각주 문장은 원장 지시로 폐기, 2026-08-19).
+  const hasHiddenOwn = selection.hiddenOwn.length > 0;
   // 저장 표시기 — full은 SheetToolbar가 자체 구독으로 그린다. today는 툴바가 없어 **여기서** 충돌·저장 중을
   // 그려야 한다(적대 리뷰 2026-08-11: 복구 배너로 살아난 패치가 다른 날짜 셀에서 충돌하면 today엔 그 충돌을
   // 보여줄 표면이 없었다 — 충돌은 조용히 사라지면 입력 유실이다).
@@ -923,19 +890,15 @@ export function SheetClient({
                   collapsedGroups={collapsedGroups}
                   onToggleGroup={toggleRosterGroup}
                 />
-                {/* 🔴 숨긴 남의 교시는 **건수를 밝힌다** — 조용히 빼면 "분명히 있었는데 안 보인다"가
-                    재발한다(자리 제외 각주·요약 카드의 안 그린 기록과 같은 규약). 되돌릴 곳(주간 시트)과
-                    작성률이 반 전체 기준이라는 사실까지 한 문장에 담는다(today-own-slots). */}
-                {hiddenOwnNotice ? (
-                  <p className="text-text-dim px-1 text-[12px]">{hiddenOwnNotice}</p>
-                ) : null}
+                {/* ⚠️ 숨긴 남의 교시 각주는 **폐기**(원장 2026-08-19 "이 멘트 필요없음") — 되돌릴 곳
+                    안내는 오늘 면 맨 위 한 줄이 대신한다(ecs/page.tsx). 여기 각주를 되살리지 말 것. */}
               </>
             ) : (
               <p className="bg-card shadow-card text-text-dim rounded-2xl px-4 py-6 text-sm">
                 {/* ⚠️ 원인을 뭉치지 않는다 — 반의 그 날 교시가 **전부 남의 것**이어서 빈 것과, 애초에
                     수업이 없는 것은 사람이 할 일이 다르다. "수업이 없습니다"로 뭉치면 거짓말이 된다. */}
-                {hiddenOwnNotice
-                  ? `이 날 이 반에 담당하시는 교시가 없습니다. ${hiddenOwnNotice}`
+                {hasHiddenOwn
+                  ? "이 날 이 반에 담당하시는 교시가 없습니다. 기록은 그대로 있고 주간 시트에서 보입니다."
                   : "이 날은 수업이 없습니다."}
               </p>
             )}
