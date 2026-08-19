@@ -38,6 +38,7 @@ export function OneScreenGrid({
   narrative,
   attPending,
   attReadOnly,
+  readonlyView = false,
   genKey,
   bulkGen,
   uploadingAttKey,
@@ -57,6 +58,8 @@ export function OneScreenGrid({
   narrative?: { activeClass: string | null; value: string; onSave: (text: string) => void };
   attPending: ReadonlySet<string>; // 출결 저장 중 (학생::반) — pill 잠금(2-2)
   attReadOnly?: boolean; // 출결 쓰기 권한 없음 — pill을 표시 전용으로
+  /** '다른 강사 뷰'(열람 전용) — 전 행 입력·발송 잠금(2026-08-19). */
+  readonlyView?: boolean;
   genKey?: string | null; // 자동작성 중인 행 키(studentId::과목)
   bulkGen?: boolean; // 전체 자동작성 진행중
   uploadingAttKey?: string | null; // 첨부 업로드 중인 행 키(studentId::과목) — 그 행 클립만 로딩 표시
@@ -207,7 +210,7 @@ export function OneScreenGrid({
         // (과목 분리 2026-07-29 이후 영어 강사 화면이 정상적으로 이전 회차 0건 = 이 상태에 항상 해당.)
         actions={hasPrev ? bulkActions : { ...bulkActions, onBulkImportPrev: undefined }}
         bulkGen={bulkGen}
-        locked={orderMode}
+        locked={orderMode || readonlyView} // 열람 전용 — 일괄 발송·저장·자동작성·가져오기 전부 잠금
         navHint={config.dailyEnabled || config.checkEnabled}
       >
         {orderMode ? (
@@ -411,6 +414,7 @@ export function OneScreenGrid({
                       attPending,
                       attReadOnly,
                       uploadingKey: uploadingAttKey,
+                      readonlyView,
                     }}
                     nav={{ row: i, studentRow: firstOfStudent ? meta.studentRow : undefined }}
                     orderControls={orderControls}
