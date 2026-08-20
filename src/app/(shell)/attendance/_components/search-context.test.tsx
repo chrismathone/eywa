@@ -285,12 +285,17 @@ describe("숫자가 거짓말하지 않는다", () => {
     expect(screen.getByText(/검색 중 · 1\/2명 표시/)).toBeTruthy();
   });
 
-  it("합계는 전체 기준 그대로 두되 **걸린 필터를 눈에 보이게** 적는다", () => {
+  it("걸린 필터를 눈에 보이게 적고, **숫자도 검색 기준**임을 밝힌다(2026-08-20 반전)", () => {
+    // ⚠️ 종전엔 "시수·출석률·금액은 전체 기준"이었다 — 원장 제보 *"학생 검색시 하단 숫자는 안바뀌네"*로
+    //    뒤집힌 문구다. 되돌리지 말 것(합계 줄이 실제로 검색을 따라간다).
     const { container, input } = renderSheet();
     expect(container.textContent).not.toContain("검색 중");
     type(input, "이도");
     expect(container.textContent).toContain("검색 중 · 1/3명 표시");
-    expect(container.textContent).toContain("시수·출석률·금액은 전체 기준");
+    expect(container.textContent).toContain("숫자도 검색 기준");
+    // 하단도 같은 말을 한다 — 툴바 칩만 보고 스크롤을 내리면 아무 표식이 없던 것이 제보의 절반이었다.
+    expect(container.textContent).toContain("검색 합계");
+    expect(container.textContent).toContain("검색 중 — 전체 아님");
   });
 });
 
