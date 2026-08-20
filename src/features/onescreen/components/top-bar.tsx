@@ -315,13 +315,15 @@ export function OneScreenTopBar({
         {/* 출결 모드(2026-08-20) — 강사 홈에서 출결만 빠르게 찍는 별도 화면으로.
             🔴 **여기가 폰의 유일한 입구다** — 모바일엔 사이드바가 없어 하부탭(SUBTABS_BY_MENU)에만 두면
                갈 길이 아예 없다(셔틀에서 겪은 그대로). 뷰 토글과 달리 라우트 이동이라 Link다.
+            🔴 **채운 버튼**이다 — 회색 외곽선이면 옆 글씨 크기·뷰 토글과 구분되지 않아 원장이 못 찾았다
+               (2026-08-20 *"어딨지?"*). 이 줄에서 유일하게 라우트를 옮기는 버튼이라 색이 그 사실을 말한다.
             ⚠️ 열람 전용('다른 강사 뷰')에선 숨긴다 — 그 화면은 저장이 전부 거절되므로 데려가 봐야
                누를 수 없는 버튼만 보여 준다(공지 탭을 숨기는 것과 같은 결). */}
         {readonlyView ? null : (
           <Link
             href="/attendance/quick"
             title="오늘 내 수업의 출결만 터치로 빠르게 입력합니다"
-            className="border-line text-text-dim hover:bg-bg-soft hover:text-foreground rounded-full border px-2.5 py-1 text-[11px] font-bold whitespace-nowrap"
+            className="bg-primary text-primary-foreground hover:opacity-90 rounded-full px-3 py-1 text-[11px] font-bold whitespace-nowrap"
           >
             출결 모드
           </Link>
