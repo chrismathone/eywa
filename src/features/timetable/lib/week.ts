@@ -68,22 +68,33 @@ export function weekBoundsOf(referenceDate: string): { start: string; end: strin
 }
 
 /**
- * "2026년 6월 4주차 (22일~28일)" — 달 경계면 "29일~7/5일". (ijw TimetableManager.tsx:2320-2335)
- * @param monday 그 주 월요일(YYYY-MM-DD)
+ * "2026년 6월 4주차" — 주차 **이름만**(날짜 범위 없이). 문장 안에 끼워 넣을 때 쓴다
+ * (예: 시간표 학생 검색 0건 안내 "…이 2026년 6월 4주차 수학 시간표에 없습니다").
+ * 네비 배지처럼 자리가 있는 곳은 범위까지 붙은 `weekLabel`을 그대로 쓸 것.
  */
-export function weekLabel(monday: string): string {
+export function weekTitle(monday: string): string {
   const m = parse(monday);
   const year = m.getUTCFullYear();
   const month = m.getUTCMonth() + 1;
   const firstDow = new Date(Date.UTC(year, m.getUTCMonth(), 1)).getUTCDay();
   const weekOfMonth = Math.ceil((m.getUTCDate() + firstDow) / 7);
+  return `${year}년 ${month}월 ${weekOfMonth}주차`;
+}
+
+/**
+ * "2026년 6월 4주차 (22일~28일)" — 달 경계면 "29일~7/5일". (ijw TimetableManager.tsx:2320-2335)
+ * @param monday 그 주 월요일(YYYY-MM-DD)
+ */
+export function weekLabel(monday: string): string {
+  const m = parse(monday);
+  const month = m.getUTCMonth() + 1;
   const sun = parse(shiftDays(monday, 6));
   const startDay = m.getUTCDate();
   const endDay = sun.getUTCDate();
   const endMonth = sun.getUTCMonth() + 1;
   const range =
     month === endMonth ? `${startDay}일~${endDay}일` : `${startDay}일~${endMonth}/${endDay}일`;
-  return `${year}년 ${month}월 ${weekOfMonth}주차 (${range})`;
+  return `${weekTitle(monday)} (${range})`;
 }
 
 /** 오늘 기준 그 주가 과거/현재/미래 중 무엇인지 — 네비 배지·편집 가능 판정용. */

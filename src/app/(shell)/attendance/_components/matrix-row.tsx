@@ -7,13 +7,9 @@ import { BADGE_BASE, BADGE_TONE, NOT_MINE_MESSAGE } from "@/features/attendance/
 import { lockedMessage } from "@/features/attendance/lock-message";
 import { countMarks } from "@/features/attendance/grid/totals";
 import { rowKey } from "@/features/attendance/grid/model";
+import { formatMoney } from "@/features/attendance/money-format";
 import { AttendanceCell } from "./attendance-cell";
 import { RowTotalCells } from "./live-totals";
-
-/** 금액 표시 — 0원과 '자료 없음'을 구분한다(청구서가 없는 달은 "—"). */
-export function formatMoney(n: number | null | undefined): string {
-  return n === null || n === undefined ? "—" : n.toLocaleString("ko-KR");
-}
 
 /**
  * 출석부 매트릭스의 학생 행 하나 — 반별 보기와 강사 전체 보기가 **같은 행 컴포넌트**를 쓴다.
