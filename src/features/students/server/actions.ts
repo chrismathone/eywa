@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 import {
   clearOnHoldForActiveEnrollments,
+  endEnrollmentById,
+  listOpenEnrollments,
   reopenEnrollmentsClosedByWithdrawal,
 } from "./enrollment-sync";
 import { getCurrentUser } from "@/lib/auth/current-user";
@@ -423,7 +425,10 @@ const WITHDRAWAL_REASONS: WithdrawalReason[] = [
   "other",
 ];
 
-export type ChangeStatusState = { error?: string } | undefined;
+// ⚠️ `ok`는 다이얼로그가 **성공을 감지**하는 유일한 신호다 — 종전엔 성공 시 undefined를 돌려
+// useActionState state가 초깃값 그대로였고, StatusDialog의 `if (state && !state.error)` 닫기 effect가
+// 영영 발화하지 않아 퇴원을 눌러도 모달이 그대로 남았다(뒤 화면만 조용히 갱신).
+export type ChangeStatusState = { error?: string; ok?: true } | undefined;
 
 /**
  * 학생 상태 전환 (퇴원/휴원/복구). 학생 상세에서 호출.
@@ -456,14 +461,22 @@ export async function changeStudentStatus(
   // 퇴원/휴원/복구는 전부 감사로그에 actor를 남긴다 — "누가 퇴원시켰는지 역검수 불가" 사고(2026-08-18) 재발 방지.
   // 🔴 로그는 students.update **성공 직후**에 남긴다 — 뒤의 enrollment 정합 단계가 실패해도 상태는 이미
   //    바뀌었으므로, 끝에서 몰아 남기면 "상태는 바뀌었는데 기록이 없는" 무기록 창이 생긴다(적대 리뷰 F6).
-  const writeStatusLog = () =>
+  const writeStatusLog = (closing?: { enrollmentIds: string[]; classIds: (string | null)[] }) =>
     logAction({
       action:
         target === "withdrawn" ? "student_withdraw" : target === "on_hold" ? "student_hold" : "student_restore",
       targetType: "student",
       metadata:
         target === "withdrawn"
-          ? { studentId: id, date, reason: reasonStr, memo }
+          ? {
+              studentId: id,
+              date,
+              reason: reasonStr,
+              memo,
+              // 🔴 "어느 수강을 닫았는지"를 남긴다(원장 2026-08-18 역검수) — 부분 종료(enrollment_end)와
+              //    전체 퇴원(student_withdraw)이 로그에서 구분되고, 전체 퇴원은 닫힌 반까지 보인다.
+              ...(closing ?? {}),
+            }
           : { studentId: id },
     });
 
@@ -483,6 +496,10 @@ export async function changeStudentStatus(
       },
     };
 
+    // 닫힐 수강을 **닫기 전에** 읽어 둔다 — 감사로그에 어느 반이 종료 대상이었는지 싣기 위해서다.
+    // (조회 실패는 퇴원을 막지 않는다: 기록이 조금 얇아질 뿐, 상태 전환이 더 중요하다.)
+    const { rows: closingRows } = await listOpenEnrollments(supabase, id);
+
     const { error: stuErr } = await supabase
       .from("students")
       .update({
@@ -492,7 +509,10 @@ export async function changeStudentStatus(
       })
       .eq("id", id);
     if (stuErr) return { error: stuErr.message };
-    await writeStatusLog();
+    await writeStatusLog({
+      enrollmentIds: closingRows.map((r) => r.id),
+      classIds: closingRows.map((r) => r.classId),
+    });
 
     // 활성 enrollment 종료 (미래 시작 수강은 end_date=start_date로 클램프 — daterange 에러 방지).
     const enrErr = await closeActiveEnrollmentsClamped(supabase, id, date, { withdrawal_reason: reasonStr });
@@ -548,7 +568,85 @@ export async function changeStudentStatus(
   revalidatePath(`/students/${id}`);
   revalidatePath("/students");
   revalidatePath("/withdrawals");
-  return undefined;
+  return { ok: true };
+}
+
+/**
+ * 퇴원 다이얼로그의 **부분 종료** — 고른 수강만 닫고 **학생은 재원으로 남긴다.**
+ *
+ * 원장 2026-08-20: *"한과목 퇴원인데 두과목 퇴원처리되서 말싸움"* — 종전엔 퇴원 다이얼로그가 활성 수강을
+ * 전부 닫는 길 하나뿐이었고, 정식 경로(단일 수강 종료)는 실데이터에서 5건만 쓰이고 있었다.
+ *
+ * 🔴 종료 자체는 단일 수강 종료와 **같은 원시함수**(endEnrollmentById)를 돈다 — 새 종료 로직을 또 짜면
+ *    한쪽만 고쳐진다(#77). 감사로그도 같은 키(`enrollment_end`)라 기존 뷰어·이름 검색이 그대로 먹는다.
+ * 🔴 학생 상태(students.status)는 **건드리지 않는다** — 퇴원이 아니므로 퇴원관리 목록
+ *    (getWithdrawnStudents는 status='withdrawn'만)에 뜨지 않는다. 과목을 통째로 끊었다면
+ *    퇴원관리 '수강종료'(getSubjectEndedStudents) 쪽에 잡힌다 — 그게 이 동작의 올바른 자리다.
+ */
+export async function endStudentEnrollments(
+  _prev: ChangeStatusState,
+  formData: FormData,
+): Promise<ChangeStatusState> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "로그인이 필요합니다" };
+  // 🔴 단일 수강 종료와 **같은 게이트** — 강사(scoped)는 학생 기록 열람 전용(원장 2026-08-18).
+  if (!(await canManageStudentRecords(user.systemRole))) return { error: STUDENT_MANAGE_DENIED };
+
+  const studentId = String(formData.get("studentId") ?? "").trim();
+  const date = String(formData.get("date") ?? "").trim();
+  const reasonStr = String(formData.get("reason") ?? "").trim();
+  const picked = new Set(
+    formData
+      .getAll("enrollmentIds")
+      .map((v) => String(v).trim())
+      .filter(Boolean),
+  );
+
+  if (!studentId) return { error: "학생 ID가 누락되었습니다" };
+  if (!date) return { error: "종료일을 입력해주세요" };
+  if (!WITHDRAWAL_REASONS.includes(reasonStr as WithdrawalReason)) {
+    return { error: "종료 사유를 선택해주세요" };
+  }
+  if (picked.size === 0) return { error: "종료할 수업을 1개 이상 선택해주세요" };
+
+  const supabase = await createClient();
+
+  // 🔴 고른 id를 그대로 믿지 않는다 — **이 학생의 활성 수강**과 교집합만 닫는다(남의 학생 행·이미 끝난
+  //    행이 낡은 화면에서 섞여 오는 것을 서버에서 잘라낸다. 화면 조건은 게이트가 아니다 — #77).
+  const { error: listErr, rows: open } = await listOpenEnrollments(supabase, studentId);
+  if (listErr) return { error: "수강 정보를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요." };
+  const targets = open.filter((r) => picked.has(r.id));
+  if (targets.length === 0) {
+    return { error: "종료할 수 있는 수강이 없습니다. 화면을 새로고침한 뒤 다시 시도해 주세요." };
+  }
+
+  for (const t of targets) {
+    const res = await endEnrollmentById(supabase, t.id, date, reasonStr);
+    if (res.error) {
+      // 앞의 몇 건은 이미 닫혔다 — 그 기록은 아래 루프 밖이 아니라 **건별로** 남겼으므로 유실되지 않는다.
+      return { error: "수강을 종료하지 못했습니다. 잠시 후 다시 시도해 주세요." };
+    }
+    // 수강을 바꾸는 모든 경로는 감사로그 필수(원장 2026-08-18). 단일 수강 종료와 같은 키·모양 +
+    // `partial`로 "전체 퇴원이 아니라 골라서 닫았다"를 구분한다.
+    await logAction({
+      action: "enrollment_end",
+      targetType: "student",
+      metadata: {
+        studentId,
+        classId: res.classId,
+        date: res.endDate,
+        reason: reasonStr,
+        source: "status_dialog",
+        partial: targets.length < open.length,
+      },
+    });
+  }
+
+  revalidatePath(`/students/${studentId}`);
+  revalidatePath("/students");
+  revalidatePath("/withdrawals");
+  revalidatePath("/timetable");
+  return { ok: true };
 }
 
 /** 단일 수강 종료 (전체 퇴원과 별개) */
@@ -571,29 +669,18 @@ export async function endSingleEnrollment(
   if (!enrollmentId) return { error: "수강 ID가 누락되었습니다" };
 
   const supabase = await createClient();
-  // 미래 시작(배정 예정) 수강을 date로 종료하면 daterange(start_date, date) lower>upper로 throw →
-  // end_date=max(start_date, date)로 클램프(미래 시작 건은 start_date로 종료=zero-length).
-  const { data: enr, error: selErr } = await supabase
-    .from("enrollments")
-    .select("start_date, class_id, student_id")
-    .eq("id", enrollmentId)
-    .maybeSingle();
-  if (selErr) return { error: selErr.message };
-  const endDate = enr && String(enr.start_date) > date ? String(enr.start_date) : date;
-  const { error } = await supabase
-    .from("enrollments")
-    .update({ end_date: endDate, withdrawal_reason: reason })
-    .eq("id", enrollmentId);
-
-  if (error) return { error: error.message };
+  // 종료 규약(미래 시작 클램프 + withdrawal_reason)은 공용 원시함수 한 곳에 있다 — 퇴원 다이얼로그의
+  // 부분 종료(endStudentEnrollments)도 같은 함수를 돈다(#77: 표면마다 다시 짜면 한쪽만 고쳐진다).
+  const res = await endEnrollmentById(supabase, enrollmentId, date, reason);
+  if (res.error) return { error: res.error };
 
   await logAction({
     action: "enrollment_end",
     targetType: "student",
     metadata: {
-      studentId: studentId || enr?.student_id || null,
-      classId: enr?.class_id ?? null,
-      date: endDate,
+      studentId: studentId || res.studentId || null,
+      classId: res.classId ?? null,
+      date: res.endDate,
       reason,
     },
   });
