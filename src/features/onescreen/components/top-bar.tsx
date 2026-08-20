@@ -1,4 +1,5 @@
 import { useRef, type ReactNode } from "react";
+import Link from "next/link";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { addDays } from "@/lib/date-kst";
 import {
@@ -311,6 +312,20 @@ export function OneScreenTopBar({
             );
           })}
         </div>
+        {/* 출결 모드(2026-08-20) — 강사 홈에서 출결만 빠르게 찍는 별도 화면으로.
+            🔴 **여기가 폰의 유일한 입구다** — 모바일엔 사이드바가 없어 하부탭(SUBTABS_BY_MENU)에만 두면
+               갈 길이 아예 없다(셔틀에서 겪은 그대로). 뷰 토글과 달리 라우트 이동이라 Link다.
+            ⚠️ 열람 전용('다른 강사 뷰')에선 숨긴다 — 그 화면은 저장이 전부 거절되므로 데려가 봐야
+               누를 수 없는 버튼만 보여 준다(공지 탭을 숨기는 것과 같은 결). */}
+        {readonlyView ? null : (
+          <Link
+            href="/attendance/quick"
+            title="오늘 내 수업의 출결만 터치로 빠르게 입력합니다"
+            className="border-line text-text-dim hover:bg-bg-soft hover:text-foreground rounded-full border px-2.5 py-1 text-[11px] font-bold whitespace-nowrap"
+          >
+            출결 모드
+          </Link>
+        )}
         {/* 카드 ↔ 표(스프레드시트) ↔ 오늘 발송 현황 ↔ 월간 발송(달력) ↔ 공지 뷰 전환 */}
         <div className="border-line flex items-center rounded-full border p-0.5">
           {/* 열람 전용은 공지 탭 제외 — 공지는 순수 작성 화면이라 열람에서 열 이유가 없다(진입 가드와 짝). */}
