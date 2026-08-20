@@ -12,14 +12,14 @@ const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!.trim(), process.en
   auth: { persistSession: false, autoRefreshToken: false },
 });
 
-type Row = { id: string; tenant_id: string; student_id: string; report_date: string; subject: string | null; progress: string | null };
+type Row = { id: string; tenant_id: string; student_id: string; report_date: string; subject: string | null; progress: string | null; teacher_name: string | null };
 
 const rows: Row[] = [];
 const PAGE = 1000;
 for (let f = 0; ; f += PAGE) {
   const { data, error } = await sb
     .from("lesson_reports")
-    .select("id, tenant_id, student_id, report_date, subject, progress")
+    .select("id, tenant_id, student_id, report_date, subject, progress, teacher_name")
     .or("subject.eq.math,subject.is.null")
     .order("report_date", { ascending: true })
     .order("created_at", { ascending: true })
@@ -46,6 +46,7 @@ for (const r of rows) {
     reportDate: r.report_date,
     subject: r.subject,
     progress: r.progress,
+    teacherName: r.teacher_name,
   });
   if (res.skipped) skip[res.skipped] = (skip[res.skipped] ?? 0) + 1;
   if (res.event) {

@@ -2,6 +2,7 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { kstToday } from "@/lib/date-kst";
 import { computeSpeedStats, percentileOf, predict, type ProgressEntry } from "../analytics";
+import { jumpSuppressionLabel } from "../same-teacher-jump";
 import { describePosition, TOTAL_LESSONS, type Track } from "../curriculum-position";
 
 const WINDOW_DAYS = 30;
@@ -33,6 +34,11 @@ export type ProgressAnomaly = {
   jumpSize: number | null; // 건너뛴 차시 수(overlap_error엔 없을 수 있음)
   resolvedAt: string | null; // 이상 없음 확인 시각(0151a). null=미확인
   resolvedByName: string | null; // 확인자 이름(계정 삭제 등으로 못 찾으면 null)
+  /**
+   * 시스템이 자동 확인한 사유의 **한글 라벨**(2026-08-20). null = 사람이 확인했거나 미확인.
+   * 지금은 "같은 선생님 진도 기준 자동 확인" 하나뿐 — raw 키(details.suppressed)는 화면에 안 낸다.
+   */
+  autoResolvedLabel: string | null;
 };
 
 export type StudentProgressAnalytics = {
@@ -57,20 +63,30 @@ export async function getStudentProgressAnalytics(studentId: string): Promise<St
   if (!stu) return { studentGrade: null, tracks: [], totalLessons: TOTAL_LESSONS, anomalies: [] };
   const studentGrade = (stu.grade as string | null) ?? null;
 
-  const [{ data: containers }, { data: entryRows }, { data: anomEvents }] = await Promise.all([
+  // 이상 이벤트는 **미확인·확인분을 따로** 가져온다(2026-08-20). 한 쿼리에 상한 하나로 담으면 자동 확인분
+  // (같은 선생님 규칙 억제)이 최근 자리를 채워 **아직 손 안 댄 경고가 목록 밖으로 밀려날** 수 있다 —
+  // 조치가 필요한 목록이 조용히 짧아지는 건 [[#105]]와 같은 결의 사고다. 둘 다 병렬이라 왕복은 그대로 1회분.
+  const anomalyQuery = () =>
+    supabase
+      .from("progress_events")
+      // details = 자동 확인(억제) 사유. resolved_by가 비어 있는 확인분이 "확인자 미상"으로 보이지 않게 한다.
+      .select(
+        "id, event_type, created_at, from_position, to_position, jump_size, resolved_at, resolved_by, details, resolver:resolved_by ( display_name )",
+      )
+      .eq("student_id", studentId)
+      .in("event_type", ["jump_error", "overlap_error"])
+      .order("created_at", { ascending: false });
+
+  const [{ data: containers }, { data: entryRows }, { data: openEvents }, { data: resolvedEvents }] = await Promise.all([
     supabase
       .from("progress_containers")
       .select("id, track, status, last_position, chapter_count, grade_scope")
       .eq("student_id", studentId),
     supabase.from("progress_entries").select("global_position, entry_date, container_id").eq("student_id", studentId),
-    supabase
-      .from("progress_events")
-      .select("id, event_type, created_at, from_position, to_position, jump_size, resolved_at, resolver:resolved_by ( display_name )")
-      .eq("student_id", studentId)
-      .in("event_type", ["jump_error", "overlap_error"])
-      .order("created_at", { ascending: false })
-      .limit(8), // 미확인 + 확인분을 함께 담아야 해서 5→8(이벤트는 실측 희소라 비용 무시 가능)
+    anomalyQuery().is("resolved_at", null).limit(20), // 조치가 필요한 쪽 — 넉넉히(이벤트는 실측 희소)
+    anomalyQuery().not("resolved_at", "is", null).limit(8), // 접어 두는 기록(사람 확인 + 자동 확인)
   ]);
+  const anomEvents = [...(openEvents ?? []), ...(resolvedEvents ?? [])];
 
   // 위치 번호(글로벌 차시 인덱스)는 화면에 그대로 내면 raw 코드다 — 커리큘럼 라벨("중3 · 3차시")로 변환.
   const describe = (pos: unknown) => {
@@ -78,7 +94,7 @@ export async function getStudentProgressAnalytics(studentId: string): Promise<St
     const d = describePosition(pos);
     return d ? { grade: d.grade, lesson: d.lesson } : null;
   };
-  const anomalies: ProgressAnomaly[] = (anomEvents ?? []).map((e) => {
+  const anomalies: ProgressAnomaly[] = anomEvents.map((e) => {
     // PostgREST 임베드는 관계에 따라 객체/배열로 오므로 둘 다 받는다(events.ts student 조인과 동일 처리).
     const resolver = (Array.isArray(e.resolver) ? e.resolver[0] : e.resolver) as { display_name?: string } | null;
     return {
@@ -90,6 +106,10 @@ export async function getStudentProgressAnalytics(studentId: string): Promise<St
       jumpSize: typeof e.jump_size === "number" ? e.jump_size : null,
       resolvedAt: (e.resolved_at as string | null) ?? null,
       resolvedByName: resolver?.display_name ?? null,
+      // 🔴 자동 확인 판정의 근거는 details가 아니라 **resolved_by가 비어 있음**이다 — 사람이 되돌렸다가
+      // 다시 '이상 없음'을 누르면 details의 억제 표식은 남아 있으므로, details만 보면 그 사람의 확인이
+      // "자동 확인"으로 뒤바뀐다.
+      autoResolvedLabel: e.resolved_at && !e.resolved_by ? jumpSuppressionLabel(e.details) : null,
     };
   });
 

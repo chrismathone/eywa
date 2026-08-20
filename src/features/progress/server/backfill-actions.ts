@@ -26,13 +26,19 @@ export async function backfillProgressContainers(opts?: { dryRun?: boolean }): P
 
   const supabase = await createClient();
   // 테넌트 math 보고서 date ASC(같은 날 created_at ASC) — RLS 스코프. 페이지네이션(기본 1000행 캡 회피).
-  const rows: { id: string; student_id: string; report_date: string; subject: string | null; progress: string | null }[] =
-    [];
+  const rows: {
+    id: string;
+    student_id: string;
+    report_date: string;
+    subject: string | null;
+    progress: string | null;
+    teacher_name: string | null; // 진도 점프 경고의 "같은 선생님" 축(2026-08-20)
+  }[] = [];
   const PAGE = 1000;
   for (let from = 0; ; from += PAGE) {
     const { data, error } = await supabase
       .from("lesson_reports")
-      .select("id, student_id, report_date, subject, progress")
+      .select("id, student_id, report_date, subject, progress, teacher_name")
       .or("subject.eq.math,subject.is.null") // math(네이티브) + null(legacy 임포트) — ingest가 positionOf로 실질 필터
       .order("report_date", { ascending: true })
       .order("created_at", { ascending: true })
@@ -54,6 +60,7 @@ export async function backfillProgressContainers(opts?: { dryRun?: boolean }): P
       reportDate: r.report_date,
       subject: r.subject,
       progress: r.progress,
+      teacherName: r.teacher_name,
     });
     if (res.skipped) skipped++;
     else ingested++;

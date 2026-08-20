@@ -5,47 +5,93 @@ import { ingestReport } from "./ingest";
 import { positionOf } from "../curriculum-position";
 
 // ── 최소 in-memory supabase 가짜(ingest가 쓰는 체인만) — 컨테이너 생명주기를 실제 DB처럼 시뮬레이트 ──
-type Store = { students: Record<string, { grade: string }>; progress_containers: any[]; progress_entries: any[]; progress_events: any[] };
+// 2026-08-20: 점프 경고의 "같은 선생님" 조회를 덮으려고 lesson_reports 저장소 + lte/neq + 임베드
+// + 다중 order를 추가했다. 임베드는 실 PostgREST와 같은 모양(`container.track` 점 표기 필터·inner 드롭)으로 흉내낸다.
+type Filter = { op: "eq" | "lte" | "neq"; col: string; val: unknown };
+type Store = {
+  students: Record<string, { grade: string }>;
+  lesson_reports: any[];
+  progress_containers: any[];
+  progress_entries: any[];
+  progress_events: any[];
+};
 
 function makeFake(students: Record<string, { grade: string }>) {
   let seq = 0;
-  const db: Store = { students: { ...students }, progress_containers: [], progress_entries: [], progress_events: [] };
-  const rowsFor = (table: string, filters: [string, unknown][]) => {
+  const db: Store = { students: { ...students }, lesson_reports: [], progress_containers: [], progress_entries: [], progress_events: [] };
+  // 점 표기(`container.track`)는 임베드 안을 본다 — 실 PostgREST와 같은 규약.
+  const valueAt = (row: any, col: string) => {
+    if (!col.includes(".")) return row[col];
+    const [alias, field] = col.split(".");
+    return row[alias!]?.[field!];
+  };
+  const matches = (row: any, f: Filter) => {
+    const v = valueAt(row, f.col);
+    if (f.op === "eq") return v === f.val;
+    if (f.op === "neq") return v != null && v !== f.val; // NULL <> x = NULL → PostgREST도 제외
+    return v != null && (v as any) <= (f.val as any);
+  };
+  // select 문자열에 임베드가 있으면 붙여 준다(progress_entries → container/report).
+  const hydrate = (table: string, cols: string, row: any) => {
+    if (table !== "progress_entries") return row;
+    const out = { ...row };
+    if (cols.includes("progress_containers")) out.container = db.progress_containers.find((c) => c.id === row.container_id) ?? null;
+    if (cols.includes("lesson_reports")) out.report = db.lesson_reports.find((r) => r.id === row.report_id) ?? null;
+    return out;
+  };
+  const rowsFor = (table: string, filters: Filter[], cols: string) => {
     if (table === "students") {
-      return filters.every((f) => f[0] === "id") ? [db.students[filters[0]![1] as string]].filter(Boolean).map((g) => ({ grade: g!.grade })) : [];
+      const idFilter = filters.find((f) => f.col === "id");
+      return idFilter && filters.every((f) => f.col === "id")
+        ? [db.students[idFilter.val as string]].filter(Boolean).map((g) => ({ grade: g!.grade }))
+        : [];
     }
-    let r = (db as any)[table] as any[];
-    for (const [col, val] of filters) r = r.filter((x) => x[col] === val);
+    let r = ((db as any)[table] as any[]).map((row) => hydrate(table, cols, row));
+    for (const f of filters) r = r.filter((x) => matches(x, f));
     return r;
   };
   function builder(table: string) {
-    const st: any = { table, op: null as string | null, payload: null, returning: false, filters: [] as [string, unknown][], order: null as any, limitN: null as number | null };
+    const st: any = { table, op: null as string | null, payload: null, returning: false, cols: "", filters: [] as Filter[], orders: [] as { col: string; asc: boolean }[], limitN: null as number | null };
     const exec = (mode: "maybeSingle" | "single" | "await") => {
       if (st.op === "insert") {
         const items = Array.isArray(st.payload) ? st.payload : [st.payload];
-        const ins = items.map((it: any) => ({ id: `id${++seq}`, ...it }));
+        // created_at은 정렬 타이브레이커라 삽입 순서대로 단조 증가시킨다(정렬 결정성).
+        const ins = items.map((it: any) => ({ id: `id${++seq}`, created_at: `t${String(seq).padStart(6, "0")}`, ...it }));
         (db as any)[table].push(...ins);
         return mode === "await" ? { data: null, error: null } : { data: ins[0], error: null };
       }
       if (st.op === "update") {
-        for (const x of rowsFor(table, st.filters)) Object.assign(x, st.payload);
+        // update는 원본 행을 고쳐야 하므로 임베드 사본(hydrate) 없이 다시 고른다.
+        let targets = (db as any)[table] as any[];
+        for (const f of st.filters) targets = targets.filter((x) => matches(x, f));
+        for (const x of targets) Object.assign(x, st.payload);
         return { data: null, error: null };
       }
-      let r = rowsFor(table, st.filters);
-      if (st.order) r = [...r].sort((a, b) => ((a[st.order.col] ?? 0) - (b[st.order.col] ?? 0)) * (st.order.asc ? 1 : -1));
+      let r = rowsFor(table, st.filters, st.cols);
+      for (const o of [...st.orders].reverse()) {
+        r = [...r].sort((a, b) => {
+          const av = valueAt(a, o.col) ?? "";
+          const bv = valueAt(b, o.col) ?? "";
+          const cmp = av < bv ? -1 : av > bv ? 1 : 0;
+          return cmp * (o.asc ? 1 : -1);
+        });
+      }
       if (st.limitN != null) r = r.slice(0, st.limitN);
       if (mode === "maybeSingle") return { data: r[0] ?? null, error: null };
       if (mode === "single") return { data: r[0] ?? null, error: r[0] ? null : { message: "no rows" } };
       return { data: r, error: null };
     };
     const b: any = {
-      select(_cols: string) {
+      select(cols: string) {
+        st.cols = cols ?? "";
         if (st.op === "insert") st.returning = true;
         else st.op = "select";
         return b;
       },
-      eq(col: string, val: unknown) { st.filters.push([col, val]); return b; },
-      order(col: string, opts?: { ascending?: boolean }) { st.order = { col, asc: opts?.ascending ?? true }; return b; },
+      eq(col: string, val: unknown) { st.filters.push({ op: "eq", col, val }); return b; },
+      lte(col: string, val: unknown) { st.filters.push({ op: "lte", col, val }); return b; },
+      neq(col: string, val: unknown) { st.filters.push({ op: "neq", col, val }); return b; },
+      order(col: string, opts?: { ascending?: boolean }) { st.orders.push({ col, asc: opts?.ascending ?? true }); return b; },
       limit(n: number) { st.limitN = n; return b; },
       insert(payload: unknown) { st.op = "insert"; st.payload = payload; return b; },
       upsert(payload: unknown, _opts?: unknown) { st.op = "insert"; st.payload = payload; return b; }, // 가짜는 unique 미강제 → insert처럼
@@ -61,14 +107,28 @@ function makeFake(students: Record<string, { grade: string }>) {
 
 const T = "t1";
 let rid = 0;
-const report = (studentId: string, progress: string, subject: string | null = "math") => ({
-  id: `r${++rid}`,
-  tenantId: T,
-  studentId: studentId,
-  reportDate: "2026-07-09",
-  subject,
-  progress,
-});
+/**
+ * 보고서 입력 1건 — 실제 저장 흐름처럼 `lesson_reports` 행도 함께 남긴다(점프 경고의 "같은 선생님" 조회가
+ * 그 행의 teacher_name을 읽는다). `db`를 안 주면 lesson_reports 없이 입력만 만든다(작성자 미상 = 옛 동작).
+ */
+const report = (
+  studentId: string,
+  progress: string,
+  subject: string | null = "math",
+  opts: { teacherName?: string | null; reportDate?: string; db?: Store } = {},
+) => {
+  const input = {
+    id: `r${++rid}`,
+    tenantId: T,
+    studentId: studentId,
+    reportDate: opts.reportDate ?? "2026-07-09",
+    subject,
+    progress,
+    teacherName: opts.teacherName ?? null,
+  };
+  opts.db?.lesson_reports.push({ id: input.id, teacher_name: input.teacherName });
+  return input;
+};
 
 // 커리큘럼 실제 차시(위치 관계 활용)
 const L_초3_1 = "수학 1-1-1 받아올림이 없는, 한 번 있는 (세 자리 수)+(세 자리 수)";
@@ -183,5 +243,98 @@ describe("ingestReport — 컨테이너 생명주기", () => {
     expect(r2.skipped).toBe("review"); // already-ingested 아님(엔트리 없음 → 재실행)
     expect(db.progress_entries).toHaveLength(1);
     expect(db.progress_containers[0].chapter_count).toBe(1);
+  });
+});
+/**
+ * 진도 점프 경고는 **같은 선생님 자기 줄** 안에서만 낸다(원장 2026-08-20).
+ * 억제 = 이벤트를 안 남기는 게 아니라 `resolved_at`을 채워 '자동 확인'으로 닫는 것 —
+ * 경고 표면 3곳(원스크린 배지·벨·진도 카드)이 전부 `resolved_at is null`을 보므로 조용해지고 기록은 남는다.
+ */
+describe("ingestReport — 점프 경고는 같은 선생님 줄에서만", () => {
+  const jumpEvent = (db: Store) => db.progress_events.find((e) => e.event_type === "jump_error");
+
+  it("유지: 같은 강사가 자기 줄에서 20 이상 건너뜀 → 미확인(resolved_at null) 경고로 남는다", async () => {
+    const { client, db } = makeFake({ s1: { grade: "중3" } });
+    await ingestReport(client, report("s1", L_초3_1, "math", { teacherName: "김윤하", db }));
+    const res = await ingestReport(client, report("s1", L_중1_소인수, "math", { teacherName: "김윤하", db }));
+    expect(res.event).toBe("jump_error");
+    const ev = jumpEvent(db);
+    expect(ev.resolved_at).toBeUndefined(); // 억제 아님 → 컬럼을 아예 안 보낸다
+    expect(ev.details).toBeNull();
+  });
+
+  it("억제: 직전 진도를 **다른 강사**가 썼고 이 강사의 직전이 없다 → 자동 확인 + 사유 기록", async () => {
+    const { client, db } = makeFake({ s1: { grade: "중3" } });
+    await ingestReport(client, report("s1", L_초3_1, "math", { teacherName: "김은정", db }));
+    const res = await ingestReport(client, report("s1", L_중1_소인수, "math", { teacherName: "김윤하", db }));
+    expect(res.event).toBe("jump_error"); // 판정 자체는 그대로(기록은 남는다)
+    const ev = jumpEvent(db);
+    expect(typeof ev.resolved_at).toBe("string");
+    expect(ev.resolved_by).toBeUndefined(); // 시스템 확인 = 확인자 없음
+    expect(ev.details).toEqual({ suppressed: "other_teacher", teacherName: "김윤하", sameTeacherLastPosition: null });
+  });
+
+  it("억제해도 컨테이너 개폐는 그대로 — 옛 컨테이너 errored + 새 컨테이너 active", async () => {
+    const { client, db } = makeFake({ s1: { grade: "중3" } });
+    await ingestReport(client, report("s1", L_초3_1, "math", { teacherName: "김은정", db }));
+    await ingestReport(client, report("s1", L_중1_소인수, "math", { teacherName: "김윤하", db }));
+    expect(db.progress_containers).toHaveLength(2);
+    expect(db.progress_containers[0].status).toBe("errored");
+    expect(db.progress_containers[0].error_reason).toBe("jump_error");
+    expect(db.progress_containers[1].status).toBe("active");
+    expect(db.progress_entries).toHaveLength(2);
+  });
+
+  it("작성자 미상(teacher_name 없음) → 비교 불가라 억제", async () => {
+    const { client, db } = makeFake({ s1: { grade: "중3" } });
+    await ingestReport(client, report("s1", L_초3_1, "math", { teacherName: "김윤하", db }));
+    const res = await ingestReport(client, report("s1", L_중1_소인수, "math", { teacherName: null, db }));
+    expect(res.event).toBe("jump_error");
+    expect(typeof jumpEvent(db).resolved_at).toBe("string");
+    expect(jumpEvent(db).details.teacherName).toBeNull();
+  });
+
+  it("이름의 공백·대소문자 차이는 같은 강사 — 경고가 유지된다", async () => {
+    const { client, db } = makeFake({ s1: { grade: "중3" } });
+    await ingestReport(client, report("s1", L_초3_1, "math", { teacherName: " 김 윤하 ", db }));
+    const res = await ingestReport(client, report("s1", L_중1_소인수, "math", { teacherName: "김  윤하", db }));
+    expect(res.event).toBe("jump_error");
+    expect(jumpEvent(db).resolved_at).toBeUndefined();
+  });
+
+  it("같은 강사라도 **이 보고서 날짜 뒤**에 쓴 진도와는 비교하지 않는다(재판정에서 결론이 뒤집히지 않게)", async () => {
+    const { client, db } = makeFake({ s1: { grade: "중3" } });
+    // 그 강사의 진도가 나중 날짜에만 있다 → 이 보고서 시점엔 비교 대상 없음 = 억제.
+    db.lesson_reports.push({ id: "rFuture", teacher_name: "김윤하" });
+    db.progress_containers.push({
+      id: "cFuture", tenant_id: T, student_id: "s1", track: "current", sequence_number: 9,
+      last_position: 400, chapter_count: 1, max_jump: 0, status: "archived",
+    });
+    db.progress_entries.push({
+      id: "eFuture", tenant_id: T, container_id: "cFuture", report_id: "rFuture", student_id: "s1",
+      entry_date: "2026-07-20", global_position: 1, created_at: "t000000",
+    });
+    await ingestReport(client, report("s1", L_초3_1, "math", { teacherName: "김은정", reportDate: "2026-07-09", db }));
+    await ingestReport(client, report("s1", L_중1_소인수, "math", { teacherName: "김윤하", reportDate: "2026-07-09", db }));
+    expect(typeof jumpEvent(db).resolved_at).toBe("string");
+  });
+
+  it("다른 track(선행)의 같은 강사 진도는 비교 대상이 아니다", async () => {
+    const { client, db } = makeFake({ s1: { grade: "중3" } });
+    // 선행 컨테이너에 같은 강사가 가까운 위치를 써 뒀지만, 현행 track 판정에는 쓰이지 않아야 한다.
+    db.lesson_reports.push({ id: "rAhead", teacher_name: "김윤하" });
+    db.progress_containers.push({
+      id: "cAhead", tenant_id: T, student_id: "s1", track: "ahead", sequence_number: 1,
+      last_position: 999, chapter_count: 1, max_jump: 0, status: "archived",
+    });
+    db.progress_entries.push({
+      id: "eAhead", tenant_id: T, container_id: "cAhead", report_id: "rAhead", student_id: "s1",
+      entry_date: "2026-07-08", global_position: positionOf(L_중1_소인수)!.position - 1, created_at: "t000000",
+    });
+    await ingestReport(client, report("s1", L_초3_1, "math", { teacherName: "김은정", db }));
+    await ingestReport(client, report("s1", L_중1_소인수, "math", { teacherName: "김윤하", db }));
+    // 선행 엔트리를 봤다면 차이가 1이라 억제였을 것이고, 안 봤어도 비교 대상이 없어 억제다 —
+    // 두 경우가 같은 결론이라 **비교값(sameTeacherLastPosition)** 으로 구분한다.
+    expect(jumpEvent(db).details.sameTeacherLastPosition).toBeNull();
   });
 });
