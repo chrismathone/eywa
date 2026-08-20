@@ -626,23 +626,35 @@ export async function deleteEnrollment(
   const studentId = enr.student_id as string;
   const classId = enr.class_id as string;
 
-  // 반 이름(스냅샷용) + 같은 (학생,반)의 다른 수강 유무 + 붙은 기록 수. 서로 독립이라 병렬(B4).
+  // 반 이름(스냅샷용) + 같은 (학생,반)의 다른 수강 + 붙은 기록 수. 서로 독립이라 병렬(B4).
+  // 🔴 형제 수강은 **개수만이 아니라 `salary_tier`까지** 읽는다 — 정산 매핑(collectTierRows)이 티어가
+  //    지정된 행에서만 만들어져서, 티어를 가진 유일한 행을 지우면 정산액이 조용히 줄어든다(deletable.ts 주석).
+  //    head 카운트로 되돌리면 그 구멍이 다시 열린다.
   const [klassRes, siblingRes, counts] = await Promise.all([
     supabase.from("classes").select("class_name, subject").eq("id", classId).maybeSingle(),
     supabase
       .from("enrollments")
-      .select("id", { count: "exact", head: true })
+      .select("id, salary_tier")
       .eq("student_id", studentId)
       .eq("class_id", classId)
-      .neq("id", enrollmentId),
+      .neq("id", enrollmentId)
+      .limit(200),
     countEnrollmentRecords(supabase, studentId, classId),
   ]);
 
   if (siblingRes.error) return { error: DELETE_PROBE_FAILED };
   if (!counts) return { error: DELETE_PROBE_FAILED };
 
-  const hadSibling = (siblingRes.count ?? 0) > 0;
-  const blocked = enrollmentDeleteBlockReason({ counts, hasSiblingEnrollment: hadSibling });
+  const siblings = siblingRes.data ?? [];
+  const hadSibling = siblings.length > 0;
+  const siblingHasTier = siblings.some((r) => !!r.salary_tier);
+  const thisRowHasTier = !!enr.salary_tier;
+  const blocked = enrollmentDeleteBlockReason({
+    counts,
+    hasSiblingEnrollment: hadSibling,
+    thisRowHasTier,
+    siblingHasTier,
+  });
   if (blocked) return { error: blocked };
 
   // 실제로 지워진 행을 확인한다 — RLS가 막으면 error 없이 0행이라 "성공"으로 위장한다([[#104]] 계열).
@@ -685,6 +697,9 @@ export async function deleteEnrollment(
       // 지울 때 붙어 있던 기록 수(0이 아니면 형제 수강이 있어 허용된 것) — 사후 역검수 재료.
       recordCounts: counts,
       hadSiblingEnrollment: hadSibling,
+      // 급여 단가(티어) 판정 근거 — 정산이 줄었다는 제보가 오면 여기부터 본다.
+      thisRowHasTier,
+      siblingHasTier,
     },
   });
 

@@ -55,6 +55,12 @@ describe("수업 이력 삭제 게이트", () => {
     expect(actions).toContain("makeup_class_id.eq.");
   });
 
+  it("🔴 형제 수강을 **개수만** 세지 않고 salary_tier까지 읽는다 — head 카운트로 되돌리면 정산이 조용히 줄어든다", () => {
+    expect(actions).toContain('.select("id, salary_tier")');
+    expect(actions).toContain("siblingHasTier");
+    expect(actions).toContain("thisRowHasTier");
+  });
+
   it("지운 행을 통째로 스냅샷해 감사로그에 남긴다(원장 지시 '대신 감사 로그에는 남겨')", () => {
     expect(actions).toContain('action: "enrollment_delete"');
     expect(actions).toContain("snapshot: {");
