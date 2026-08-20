@@ -13,12 +13,12 @@ import { DeleteReviewButton } from "../_components/delete-review-button";
 import {
   getClassReview,
   getReviewPrivileges,
+  getReviewViewer,
   myScoreSlot,
   observerColumns,
   observerLimitOf,
 } from "@/features/class-review/server/queries";
 import { averageTotals, computeTotals, itemCountOf, normalizeScore } from "@/features/class-review/checklist";
-import { isSelfOnlyReviewer } from "@/features/class-review/self-only";
 
 export const metadata = { title: "수업 평가 상세 — eywa" };
 
@@ -34,14 +34,16 @@ export const metadata = { title: "수업 평가 상세 — eywa" };
 export default async function ClassReviewDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const viewer = await requireAccess("class_review");
   const { id } = await params;
-  const selfOnly = isSelfOnlyReviewer(viewer.systemRole);
-  const [found, settings, priv, canWrite] = await Promise.all([
+  // 자기 평가 전용 판정·채점 슬롯 판정 주체 — '다른 강사 뷰'면 그 강사의 눈으로 본다(#77 단일 소스).
+  const [found, settings, priv, canWrite, rv] = await Promise.all([
     getClassReview(id),
     getTenantSettings(),
-    getReviewPrivileges(viewer),
+    getReviewPrivileges(),
     // 삭제 버튼 노출 조건 = 서버 액션(deleteClassReview)의 게이트와 **같은 함수** — 화면 조건은 게이트가 아니다(#77).
     canWriteTenant(viewer.systemRole, "class_review"),
+    getReviewViewer(),
   ]);
+  const selfOnly = rv.selfOnly;
   // 강사는 본인 평가지라도 삭제 불가(인사 기록) — 서버 액션과 같은 조건으로 버튼을 감춘다.
   const canDelete = canWrite && !selfOnly;
   if (!found) notFound();
@@ -77,7 +79,7 @@ export default async function ClassReviewDetailPage({ params }: { params: Promis
   );
 
   // 내 채점 자격(공용 헬퍼) — 있으면 헤더에 평가하기/수정하기 버튼(채점은 별도 페이지, 원장 지시 2026-08-04).
-  const mine = myScoreSlot(doc, viewer.id);
+  const mine = myScoreSlot(doc, rv.id);
 
   // 채점이 실제로 들어온 열 수 — 상단 '제출' 스탯과 삭제 확인 문구가 같은 수를 쓴다("몇 명 것이 사라지나").
   const submittedCount = cols.filter((c) => c.totals.answered > 0).length;

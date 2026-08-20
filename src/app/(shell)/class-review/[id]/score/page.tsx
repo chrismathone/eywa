@@ -3,7 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { ArrowLeft } from "@/components/icons/eywa-icon-compat";
 import { PageHeader } from "@/components/page-header";
 import { requireAccess } from "@/lib/auth/require-access";
-import { getClassReview, myScoreSlot } from "@/features/class-review/server/queries";
+import { getClassReview, getReviewViewer, myScoreSlot } from "@/features/class-review/server/queries";
 import { ScorePanel } from "../../_components/score-panel";
 
 export const metadata = { title: "수업 평가 채점 — eywa" };
@@ -13,13 +13,14 @@ export const metadata = { title: "수업 평가 채점 — eywa" };
  * 저장하면 상세로 복귀한다.
  */
 export default async function ClassReviewScorePage({ params }: { params: Promise<{ id: string }> }) {
-  const viewer = await requireAccess("class_review");
+  await requireAccess("class_review"); // 접근 게이트 — 뷰어 판정은 getReviewViewer가 단일 소스
   const { id } = await params;
   const found = await getClassReview(id);
   if (!found) notFound();
   const { doc, areas } = found;
 
-  const mine = myScoreSlot(doc, viewer.id);
+  // 채점 슬롯 판정도 같은 단일 소스 — '다른 강사 뷰'는 그 강사 화면 그대로 보이되 저장은 쓰기 캡이 막는다.
+  const mine = myScoreSlot(doc, (await getReviewViewer()).id);
   if (!mine) redirect(`/class-review/${id}`);
   const mySheet = doc.submissions[mine.slot] ?? null;
 

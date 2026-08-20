@@ -1,8 +1,11 @@
 import "server-only";
+import { cache } from "react";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { normalizeObserverLimit } from "../observer-count";
 import { getCurrentUser, type CurrentUser } from "@/lib/auth/current-user";
 import { canAccessTenant } from "@/lib/auth/perm-matrix";
+import { viewAsTeacher } from "@/lib/auth/view-as";
+import type { SystemRole } from "@/lib/permissions";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import {
   averageTotals,
@@ -154,19 +157,63 @@ async function requireRead() {
 }
 
 /**
- * 실명 열람·문항 편집 자격 — **원장(master) + class_review 개인 예외 인원**(원장 지시 2026-08-04).
- * 그 외(향후 역할 개방 시 강사 등)는 평가자 이름이 '평가자 A/B/C'로 익명화된다.
+ * 이 화면을 **누구의 눈으로** 보는가 — 목록·상세·자격·채점 판정의 단일 소스.
+ *
+ * 🔴 **'다른 강사 뷰'(열람 전용)면 대상 강사의 눈으로 본다**(원장 제보 2026-08-19:
+ *    *"다른 강사뷰 기능에서 보이는 게 실제 보이는 뷰 아님?"* — 그 뷰의 존재 이유가 "그 사람이 보는
+ *    화면 그대로"인데, 뷰어의 실 역할로 판정하니 관리자에겐 남의 점수·평가자 이름이 그대로 보였다).
+ *    쓰기는 이 판정과 무관하게 perm-matrix 쓰기 캡이 이미 막는다(열람 전용).
+ * ⚠️ 대상 역할을 모르면 **가장 좁게(강사)** 잡는다 — 모를 때 넓히면 그게 누수다.
+ * ⚠️ 겸직 본인 강사뷰(view=teacher, 대상 없음)는 여기 안 걸린다 — 뷰 토글로 관리자의 열람 범위가
+ *    바뀌면 "뷰 전환은 권한을 바꾸지 않는다"(결정 로그)가 깨진다.
  */
-export async function getReviewPrivileges(user: CurrentUser): Promise<{ seeNames: boolean; editTemplate: boolean }> {
-  // 강사 직급 = 자기 평가 전용(원장 2026-08-19) — 실명 열람·문항 편집은 개인 예외로 full을 받아도 없다.
-  // 애초에 남의 평가지가 안 내려가므로 익명화보다 앞선 차단이지만, 종합 보기·문항 편집 게이트가
-  // 이 값을 보므로 여기서도 끊는다(#77 — 표면마다 조건을 새로 쓰지 않는다).
-  if (isSelfOnlyReviewer(user.systemRole)) return { seeNames: false, editTemplate: false };
-  if (user.systemRole === "master") return { seeNames: true, editTemplate: true };
+export type ReviewViewer = {
+  /** 평가지 소유·채점 슬롯 판정에 쓸 id(= 보고 있는 사람) */
+  id: string;
+  role: SystemRole;
+  /** 자기 평가 전용 — 본인 평가지의 본인 채점 한 장만 */
+  selfOnly: boolean;
+  /** '다른 강사 뷰'(열람 전용)로 보는 중 */
+  viewAs: boolean;
+};
+
+export const getReviewViewer = cache(async (): Promise<ReviewViewer> => {
+  const user = await getCurrentUser();
+  // 비로그인은 requireRead가 먼저 막는다 — 여기 값은 안전한 최소치.
+  if (!user) return { id: "", role: "teacher", selfOnly: true, viewAs: false };
+  const target = await viewAsTeacher();
+  if (!target) {
+    return {
+      id: user.id,
+      role: user.systemRole,
+      selfOnly: isSelfOnlyReviewer(user.systemRole),
+      viewAs: false,
+    };
+  }
+  const { data } = await createAdminClient()
+    .from("users")
+    .select("system_role")
+    .eq("id", target.id)
+    .eq("tenant_id", user.tenantId) // admin은 RLS 우회 — tenant 명시([[#104]])
+    .maybeSingle();
+  const role = ((data?.system_role as SystemRole | undefined) ?? "teacher") as SystemRole;
+  return { id: target.id, role, selfOnly: isSelfOnlyReviewer(role), viewAs: true };
+});
+
+/**
+ * 실명 열람·문항 편집 자격 — **원장(master) + class_review 개인 예외 인원**(원장 지시 2026-08-04).
+ * 그 외(강사 등)는 평가자 이름이 '평가자 A/B/C'로 익명화된다.
+ * 판정 주체는 `getReviewViewer()` — '다른 강사 뷰'에선 **대상 강사의 자격**이 그대로 재현된다.
+ */
+export async function getReviewPrivileges(): Promise<{ seeNames: boolean; editTemplate: boolean }> {
+  const v = await getReviewViewer();
+  // 강사 직급 = 자기 평가 전용(원장 2026-08-19) — 개인 예외로 full을 받아도 실명·문항 편집은 없다.
+  if (v.selfOnly) return { seeNames: false, editTemplate: false };
+  if (v.role === "master") return { seeNames: true, editTemplate: true };
   try {
     const settings = await getTenantSettings();
     const mine = settings.permissions.userOverrides?.some(
-      (o) => o.userId === user.id && o.menu === "class_review" && o.access !== "none",
+      (o) => o.userId === v.id && o.menu === "class_review" && o.access !== "none",
     );
     return { seeNames: !!mine, editTemplate: !!mine };
   } catch {
@@ -241,9 +288,10 @@ export async function listClassReviews(): Promise<{ rows: ReviewListRow[]; areas
   ]);
   if (error) throw new Error(`수업 평가 목록 조회 실패: ${error.message}`);
   // 강사 직급 = 본인 평가지만, 그것도 본인 채점 한 장만(조회 초크포인트에서 자른다 — 화면 조건 아님, #77).
-  const selfOnly = isSelfOnlyReviewer(user.systemRole);
+  // 판정 주체는 getReviewViewer — '다른 강사 뷰'면 그 강사가 보는 목록이 그대로 재현된다.
+  const { id: viewerId, selfOnly } = await getReviewViewer();
   const rows = (data ?? []).map(parseDoc)
-    .filter((doc) => !selfOnly || isOwnReview(doc, user.id))
+    .filter((doc) => !selfOnly || isOwnReview(doc, viewerId))
     .map((doc) => (selfOnly ? redactForSelfOnly(doc) : doc))
     .map((doc) => {
     const rowAreas = doc.areas ?? areas; // 스냅샷 우선(세트 복수화) — 구버전 문서만 테넌트 기본 세트
@@ -278,8 +326,9 @@ export async function getClassReview(
   if (!data) return null;
   const doc = parseDoc(data);
   // 강사 직급은 **본인 평가지만** 존재한다 — 남의 건 id를 직접 쳐도 없는 것으로(강제 URL 차단, #77).
-  if (isSelfOnlyReviewer(user.systemRole)) {
-    if (!isOwnReview(doc, user.id)) return null;
+  const viewer = await getReviewViewer();
+  if (viewer.selfOnly) {
+    if (!isOwnReview(doc, viewer.id)) return null;
     return { doc: redactForSelfOnly(doc), areas: doc.areas ?? areas };
   }
   // 반환 areas = 이 평가지의 유효 문항(스냅샷 우선) — 상세·채점이 그대로 쓴다.

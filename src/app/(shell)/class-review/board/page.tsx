@@ -17,8 +17,8 @@ export const metadata = { title: "수업 평가 종합 — eywa" };
  * 열람 = 실명 열람 자격과 동일(원장 + class_review 개인 예외 인원 — "예외 인원도 보여야 함").
  */
 export default async function ClassReviewBoardPage() {
-  const viewer = await requireAccess("class_review");
-  const priv = await getReviewPrivileges(viewer);
+  await requireAccess("class_review"); // 접근 게이트 — 뷰어 판정은 getReviewViewer가 단일 소스
+  const priv = await getReviewPrivileges();
   if (!priv.seeNames) redirect("/class-review");
 
   const [{ rows, areas }, settings] = await Promise.all([listClassReviews(), getTenantSettings()]);
