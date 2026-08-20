@@ -1006,6 +1006,29 @@ html[data-stage="on"] main {
    * 📌 데스크톱과 **창(임베드)은 종전대로 감긴다** — 창은 사용자가 폭을 조절하고 마우스라
    *    가로 스크롤이 오히려 불편하다. 조건은 use-is-desktop.ts / compact-chrome 변형의 모바일 절과 동일.
    */
+  /*
+   * .toolbar-rail-row — 레일 **한 줄로는 너무 긴** 툴바를 모바일에서만 여러 줄 레일로 쪼갠다
+   * (원스크린 상단 바 2026-08-20: 컨트롤 9묶음이 한 레일이면 내용 폭이 ~1,830px라 자주 쓰는 뷰 탭이
+   *  화면 하나 너머로 밀린다. 감아서 7줄 301px이던 걸 2줄 레일 **92px**로).
+   *
+   * 🔑 **데스크톱·창은 `display: contents`라 이 래퍼가 아예 없는 것과 같다** — 자식이 부모 툴바의
+   *    직계 flex 아이템으로 **DOM 순서 그대로** 남아 종전 배치(ml-auto 우측 정렬 포함)가 그대로다.
+   *    줄 나눔은 아래 모바일 절에서만 생긴다.
+   * ⚠️ 그래서 **줄 래퍼는 데스크톱 순서대로 놓고**, 모바일에서 앞으로 당길 줄에만 `.rail-row-first`를
+   *    붙인다. 항목마다 `order-*`를 뿌려 순서를 뒤집지 말 것 — 데스크톱에서 **보이는 순서와 탭 이동
+   *    순서(DOM)가 갈려** 키보드 사용자가 화면을 튀어 다닌다(줄 하나를 통째로 옮기는 지금 방식은
+   *    어긋나는 지점이 딱 한 곳이고 그것도 모바일뿐이다).
+   * ⚠️ 레일 규칙(nowrap·overflow-x·shrink-0)은 `.toolbar-rail`이 담당한다 — **두 클래스를 함께** 쓸 것
+   *    (규칙을 복제하면 한쪽만 고쳐져 갈린다).
+   * ⚠️ 이 규칙은 Tailwind 유틸보다 **뒤에** 깔린다 → 같은 요소에 `flex`·`hidden` 같은 display 유틸을
+   *    걸면 조용히 무시된다(줄 래퍼엔 display 유틸을 쓰지 말 것).
+   */
+  .toolbar-rail-row {
+    display: contents;
+  }
+
+  /* ↓ 위 두 규약(.toolbar-rail · .toolbar-rail-row)의 **모바일 절** — 조건은 한 곳에만 적는다
+       (use-is-desktop.ts / compact-chrome 변형의 모바일 절과 동일해야 한다). */
   @media (max-width: 1023.98px), (pointer: coarse), (pointer: none) {
     .toolbar-rail {
       flex-wrap: nowrap;
@@ -1022,6 +1045,18 @@ html[data-stage="on"] main {
     /* 우측 정렬용 스페이서는 레일에서 무의미(오히려 폭을 늘린다) */
     .toolbar-rail > .rail-spacer {
       display: none;
+    }
+    /* 줄 래퍼가 여기서만 실제 박스가 된다 — 100%라 툴바의 wrap이 줄을 갈라준다.
+       ⚠️ min-width는 스크롤 컨테이너라 어차피 0으로 접히지만, 안 접히면 내용 너비만큼 부풀어
+          카드를 뚫으므로 규약을 눈에 보이게 못박는다. */
+    .toolbar-rail-row {
+      display: flex;
+      width: 100%;
+      min-width: 0;
+    }
+    /* 모바일에서만 이 줄을 맨 위로(데스크톱은 박스가 없어 order 자체가 무의미하다) */
+    .toolbar-rail-row.rail-row-first {
+      order: -1;
     }
   }
 }
