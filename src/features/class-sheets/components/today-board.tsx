@@ -17,11 +17,14 @@
  *    아니라 **서버가 강제**한다(`fillEmptyOnly` — 화면이 낡아도 남의 기록을 못 덮는다).
  * ⚠️ 지각·결석의 **사유·시수 편집은 여기에 없다** — 그건 출석부·주간 시트의 몫이다(ECS §E 규약 그대로).
  */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { setAttendanceBulk, setAttendanceCell } from "@/features/attendance/server/actions";
+import { subscribeAttendanceApplied } from "@/features/attendance/live/attendance-applied-bus";
+import { applyAppliedToBoardAtt } from "../lib/applied-attendance";
+import { createInflightKeys, type InflightKeys } from "../lib/inflight-keys";
 import { clearPresentAttendance, setMyEcsFontSize } from "../server/actions";
 import { ECS_FONT_SIZE_ZOOM, type EcsFontSize } from "../font-size";
 import type { BasicAttendance } from "../lib/mark-cycle";
@@ -65,6 +68,12 @@ type BoardState = {
   setAtt: React.Dispatch<React.SetStateAction<AttState>>;
   marks: MarkState;
   setMarks: React.Dispatch<React.SetStateAction<MarkState>>;
+  /**
+   * 저장 중인 출결 칸(`${classId}|${studentId}`) — 상단 출석 스트립 방송이 **내가 방금 누른 값**을
+   * 되돌리지 않게 하는 잠금(응답 역전 방지). state가 아닌 이유는 이 값이 화면을 그리지 않고
+   * **콜백이 읽기만** 하기 때문(리렌더를 늘릴 이유가 없다). Set이 아닌 이유는 inflight-keys.ts 주석.
+   */
+  attInflight: InflightKeys;
 };
 
 /**
@@ -107,7 +116,7 @@ function ClassCard({
   /** 지금 시각(KST HH:mm) — 오늘이 아니거나 아직 마운트 전이면 null(진행 중 표시 없음). */
   nowHm: string | null;
 }) {
-  const { att, setAtt, marks, setMarks } = state;
+  const { att, setAtt, marks, setMarks, attInflight } = state;
   const [open, setOpen] = useState(true);
   const [bulkBusy, setBulkBusy] = useState(false);
   // 학생 기록의 교시 축 = **화면에 그려진 교시 그대로**(안 그린 자리·만료 슬롯엔 저장할 자리가 없다).
@@ -131,6 +140,7 @@ function ClassCard({
   function save(studentId: string, status: BasicAttendance, note?: string | null) {
     const key = `${card.classId}|${studentId}`;
     const before = att[key];
+    attInflight.acquire(key); // 이 칸은 내 쓰기가 진실 — 스트립 방송이 덮지 못하게(위 attInflight 주석)
     setAtt((p) => ({ ...p, [key]: { status, note: note === undefined ? (before?.note ?? null) : note } }));
     void setAttendanceCell({
       classId: card.classId,
@@ -148,7 +158,8 @@ function ClassCard({
       .catch(() => {
         setAtt((p) => ({ ...p, [key]: before ?? { status: null, note: null } }));
         toast.error("출결 저장에 실패했습니다 — 네트워크 연결을 확인해 주세요");
-      });
+      })
+      .finally(() => attInflight.release(key));
   }
 
   /**
@@ -162,6 +173,7 @@ function ClassCard({
     const targets = pending.map((s) => s.studentId);
     if (targets.length === 0 || bulkBusy) return;
     setBulkBusy(true);
+    for (const id of targets) attInflight.acquire(`${card.classId}|${id}`);
     const before = new Map(targets.map((id) => [id, att[`${card.classId}|${id}`] ?? { status: null, note: null }]));
     const restore = (ids: string[]) =>
       setAtt((p) => {
@@ -201,7 +213,10 @@ function ClassCard({
         restore(targets);
         toast.error("일괄 출석 저장에 실패했습니다 — 네트워크 연결을 확인해 주세요");
       })
-      .finally(() => setBulkBusy(false));
+      .finally(() => {
+        for (const id of targets) attInflight.release(`${card.classId}|${id}`);
+        setBulkBusy(false);
+      });
   }
 
   /**
@@ -228,6 +243,7 @@ function ClassCard({
     const slots = [...new Set(card.students.find((s) => s.studentId === studentId)?.attendanceSlots ?? [])];
     const targets = slots.length > 0 ? slots : [null];
     const rollback = () => setAtt((p) => ({ ...p, [key]: before }));
+    attInflight.acquire(key); // 지우는 중에 도착한 방송이 방금 지운 칸을 되살리지 않게
     setAtt((p) => ({ ...p, [key]: { status: null, note: null } }));
     // 🔴 지우기는 0169a 한 경로만 — `setAttendanceCell({status:null})`은 그 칸의 **모든 정정 행**을
     //    지워 사유가 붙은 옛 행까지 앗아간다(시트에서 이미 되돌린 우회로다).
@@ -240,10 +256,12 @@ function ClassCard({
           return;
         }
       }
-    })().catch(() => {
-      rollback();
-      toast.error("출석 취소에 실패했습니다 — 네트워크 연결을 확인해 주세요");
-    });
+    })()
+      .catch(() => {
+        rollback();
+        toast.error("출석 취소에 실패했습니다 — 네트워크 연결을 확인해 주세요");
+      })
+      .finally(() => attInflight.release(key));
   }
 
   return (
@@ -456,6 +474,37 @@ export function TodayBoard({
 }) {
   const [att, setAtt] = useState<AttState>(() => initialAtt(cards));
   const [marks, setMarks] = useState<MarkState>(() => initialMarks(cards));
+  // 저장 중인 출결 칸 — 카드마다 흩어 두면 방송 구독(보드 1개)이 못 읽는다. 여기서 만들어 내려보낸다.
+  // ⚠️ render 중 ref 쓰기(lazy init)도, 버려질 수 있는 useMemo도 아니다 — 잠금은 **절대 리셋되면
+  //    안 되므로**(리셋 = 날아가는 저장이 열린 채로 남는다) 안정성이 보장된 useState 지연 초기값으로 만든다.
+  const [attInflight] = useState(createInflightKeys);
+
+  /**
+   * 상단 '오늘 출석 미입력' 스트립이 기록한 칸을 이 보드에 반영한다(원장 제보 2026-08-20 — 원스크린과
+   * **같은 원인**: 출결이 `useState(initialAtt)`라 마운트 1회만 복사되고, 스트립의 `router.refresh()`는
+   * 클라 state를 보존한다 → 새 카드 값이 무시된다. 이 파일이 이미 알고 있던 성질이다 — 위 JJ 이어받기
+   * 주석 *"refresh만으론 안 바뀐다"*).
+   * ⚠️ 날짜가 다르면 무시(지난 날짜를 보고 있으면 애초에 스트립이 안 뜨지만, 방송은 문서 전체에 간다).
+   * ⚠️ 교시(`detail.slot`)는 안 본다 — 이 카드는 **반×하루** 축이라 교시 칸이 없다.
+   * ⚠️ setState는 이벤트 콜백 안에서만(#25).
+   */
+  const cardClassIds = useMemo(() => new Set(cards.map((c) => c.classId)), [cards]);
+  useEffect(
+    () =>
+      subscribeAttendanceApplied((detail) => {
+        if (detail.date !== date) return;
+        setAtt((prev) =>
+          applyAppliedToBoardAtt(
+            prev,
+            detail.cells,
+            detail.status,
+            cardClassIds,
+            attInflight.snapshot(),
+          ),
+        );
+      }),
+    [date, cardClassIds, attInflight],
+  );
 
   // 글씨 크기 — 주간 시트와 같은 계약: 화면은 즉시, 계정 저장은 뒤따른다(sheet-client L210 참조).
   const [fontSize, setFontSize] = useState<EcsFontSize>(initialFontSize);
@@ -514,7 +563,7 @@ export function TodayBoard({
     },
   };
 
-  const state: BoardState = { att, setAtt, marks, setMarks };
+  const state: BoardState = { att, setAtt, marks, setMarks, attInflight };
   return (
     <div className="space-y-3">
       <TodaySummary stats={stats} fontSize={fontSize} onFontSize={changeFontSize} />

@@ -1,5 +1,33 @@
 # eywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-08-20 (5) — 상단 출석 스트립 → 아래 화면(원스크린·ECS) 즉시 반영(배선 수리)
+
+원장 제보: *"강사뷰에서 수업시작하고 상단에 출석화면 뜨잖아? 거기서 출석하게 되면 수업보고서에 출결과
+연동이 안되는것 같은데, 배선점검"* + *"ecs도 같은 문제면 같이 고쳐줘"*. 「전원 출석」은 `attendance_records`에
+**정상 기록**됐지만 같은 페이지 아래 화면은 그대로였다 — 출결 알약이 비고, '일괄 출석 N'이 안 줄고,
+발송 칸은 계속 "출결·진도·멘트 입력 필요"라고 말했다. **새로고침해야** 반영됐다.
+
+- **원인은 한 가지**: 세 화면(원스크린 로스터 · ECS 오늘 요약 카드 · ECS 주간 시트)이 전부 출결을
+  `useState(초기값)`으로 **마운트 1회만** 복사하는데, 스트립이 부르는 `router.refresh()`는 **클라 state를
+  보존**한다 → 새 서버 값이 무시된다(today-board는 이 성질을 이미 주석으로 알고 있었다).
+- **해법 = 같은 문서 방송**([attendance-applied-bus.ts](src/features/attendance/live/attendance-applied-bus.ts)):
+  스트립이 저장 성공 시 **서버가 실제로 기록한 칸**(`applied`)만 CustomEvent로 알리고, 세 화면이 구독해
+  그 칸만 반영한다. 🔴 **props 병합으로 고치지 않았다** — 원스크린은 타이핑 800ms 디바운스로 세션 저장
+  액션을 수시로 불러 낡은 RSC payload가 방금 찍은 알약을 되돌릴 수 있다(#102). 방송은 그 위험이 0이다.
+- 반영 규칙은 화면별 **순수 함수 + Vitest**([apply-applied-attendance.ts](src/features/onescreen/apply-applied-attendance.ts) ·
+  [applied-attendance.ts](src/features/class-sheets/lib/applied-attendance.ts)): 내 in-flight 칸은 건너뛰고
+  (응답 역전 방지), `status`만 채택하고 메모·시수는 **안 건드리며**, 바뀐 게 없으면 **같은 참조**를 돌려준다.
+- 🔴 **교시 축은 시트만 본다** — 방송 payload에 저장축(`slot`)을 실어, 주간 시트는 서버 키 규칙과 **글자
+  그대로 같게**(교시 있으면 그 교시, 없으면 그 날 첫 교시) 칸을 정한다. 원스크린·요약 카드는 반×하루 축이라
+  무시한다. 값의 `slot`엔 칸 키가 아니라 **저장축 그대로**를 넣는다(안 그러면 다음 편집이 행을 하나 더 만들어
+  시수가 두 번 잡힌다).
+- in-flight 잠금은 Set이 아니라 **카운터**다([inflight-keys.ts](src/features/class-sheets/lib/inflight-keys.ts)) —
+  ECS 알약은 재진입을 막지 않아 같은 칸 저장이 겹치는데, Set이면 먼저 끝난 저장이 잠금을 풀어 버린다.
+- 배지 축약 표(`present→출석`…)가 로스터·원스크린 두 벌이던 것을 [attendance-mark.ts](src/features/onescreen/attendance-mark.ts)
+  단일 소스로 합쳤다. ⚠️ 크로스 창(iframe)·다른 탭은 **범위 밖**(BroadcastChannel은 같은 문서엔 안 와서
+  정작 이 버그를 못 고친다). 배선 가드 `attendance-applied-wiring.test.ts` — 떼어내도 에러가 안 나는 종류다.
+- 마이그레이션 0. 검증: typecheck 0 · lint 0 · 관련 Vitest(onescreen·class-sheets·attendance) 2,016건 통과.
+
 ## 2026-08-20 (4) — 진도 점프 경고는 **같은 선생님 자기 줄** 안에서만
 
 원장 지시: *"진도 점프 이상이, 같은 선생님의 진도 체크에서 이상한 경우에만, 경고하도록 배선."*

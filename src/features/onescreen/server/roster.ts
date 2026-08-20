@@ -35,7 +35,8 @@ import {
   type OnescreenFontSize,
 } from "../font-size";
 import { getTextbookOrdersForStudents } from "@/features/billing/server/textbook-queries";
-import type { AttendanceMark, OneScreenStudent } from "../types";
+import type { OneScreenStudent } from "../types";
+import { attendanceMarkOf } from "../attendance-mark";
 
 /**
  * 선생님 원스크린 — 실데이터 로더(데모 스냅샷 대체).
@@ -1091,8 +1092,9 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
     const u = a.session_units == null ? null : Number(a.session_units);
     attByRow.set(k, { status: a.status, note: a.note ?? null, units: Number.isFinite(u) ? u : null });
   }
-  const toMark = (status: string | undefined): AttendanceMark =>
-    status === "late" ? "지각" : status === "absent" || status === "early_leave" ? "결석" : "출석";
+  // 배지 축약 표는 [attendance-mark.ts](../attendance-mark.ts) 단일 소스 — 클라(원스크린·스트립 반영)와
+  // 같은 표를 쓴다. 사본을 두면 한쪽만 고쳐져 새로고침 전후 배지가 달라진다.
+  const toMark = attendanceMarkOf;
 
   for (const os of byStudent.values()) {
     os.reportSent = sentToday.has(os.id);

@@ -15,6 +15,10 @@ import type { ClassSheetWeekData } from "../server/queries";
 //    🔴 2026-08-19까지는 이 미리-잠금이 액션보다 **좁아서**(부담임 제외) 반대로 "서버는 허락하는데 화면이
 //    막는" 거짓 잠금이었다. 두 축을 다시 갈라 놓지 말 것(write-gate-axis.test.ts).
 import { setAttendanceCell } from "@/features/attendance/server/actions";
+import { subscribeAttendanceApplied } from "@/features/attendance/live/attendance-applied-bus";
+import { applyAppliedToSheetAtt } from "../lib/applied-attendance";
+import { createInflightKeys } from "../lib/inflight-keys";
+import { normalizeSlotTime } from "../lib/week";
 import { parseSessionUnits } from "@/features/attendance/session-units";
 import {
   clearPresentAttendance,
@@ -250,9 +254,60 @@ export function SheetClient({
   useEffect(() => {
     attendanceRef.current = attendance;
   }, [attendance]);
+  /**
+   * 그 날의 **첫 교시**(HH:MM) — 옛 "그날 전체"(slot null) 기록이 붙는 칸. 서버가
+   * `attendanceByStudentDate` 키를 만들 때 쓰는 것과 **같은 규칙·같은 재료**(`data.grid.days`)여야
+   * 방송으로 반영한 알약이 새로고침 뒤와 같은 칸에 남는다(queries.ts `firstSlotByDate`).
+   */
+  const firstSlotByDate = useMemo(() => {
+    const out: Record<string, string> = {};
+    for (const day of data.grid.days) {
+      const first = day.slots[0]?.slotStart;
+      if (first) out[day.date] = normalizeSlotTime(first);
+    }
+    return out;
+  }, [data.grid.days]);
   // 출결은 계획 CAS 큐와 다른 공용 서버 액션을 쓰므로 별도 in-flight 집합으로 추적한다.
   // 바로 출석부로 이동하면 새 화면 조회가 저장보다 먼저 끝날 수 있어, 네비게이션은 이 집합도 drain한다.
   const attendanceSavesRef = useRef(new Set<Promise<void>>());
+  /**
+   * 저장 중인 출결 **칸 키**(`${studentId}|${date}|${cell}`) — 위 promise 집합과 목적이 다르다(저 쪽은
+   * "다 끝났나", 이쪽은 "어느 칸이 내 것인가"). 상단 출석 스트립 방송이 방금 내가 누른 값을 되돌리지
+   * 않게 하는 잠금이다(응답 역전 방지).
+   * ⚠️ Set이 아니라 **카운터** — 같은 칸에 저장이 겹치면 먼저 끝난 쪽이 잠금을 풀어 버린다(inflight-keys.ts).
+   *    잠금이 리셋되면 안 되므로 useState 지연 초기값(안정 보장)으로 만든다.
+   */
+  const [attendanceCellsInflight] = useState(createInflightKeys);
+  const trackAttendanceCell = useCallback(
+    (key: string, save: Promise<void>) => {
+      attendanceCellsInflight.acquire(key);
+      void save.finally(() => attendanceCellsInflight.release(key));
+    },
+    [attendanceCellsInflight],
+  );
+  /**
+   * 상단 '오늘 출석 미입력' 스트립이 기록한 칸을 이 시트에 반영한다(원장 제보 2026-08-20 — 원스크린·오늘
+   * 요약 카드와 **같은 원인**: 출결이 `useState(data.attendanceByStudentDate)`라 마운트 1회만 복사되고
+   * 스트립의 `router.refresh()`는 클라 state를 보존한다).
+   * ⚠️ **내 반만**(`classId`) — 스트립은 그 날 내 전 교시를 다루므로 다른 반의 칸이 섞여 온다.
+   * ⚠️ 칸(교시)은 순수 함수가 서버와 **같은 규칙**으로 정한다(`slot` 있으면 그 교시, 없으면 첫 교시).
+   * ⚠️ setState는 이벤트 콜백 안에서만(#25).
+   */
+  useEffect(
+    () =>
+      subscribeAttendanceApplied((detail) => {
+        setAttendance((prev) =>
+          applyAppliedToSheetAtt(
+            prev,
+            detail.cells,
+            { date: detail.date, status: detail.status, slot: detail.slot, classId },
+            firstSlotByDate,
+            attendanceCellsInflight.snapshot(),
+          ),
+        );
+      }),
+    [classId, firstSlotByDate, attendanceCellsInflight],
+  );
   const trackAttendanceSave = useCallback((save: Promise<void>) => {
     attendanceSavesRef.current.add(save);
     void save.finally(() => attendanceSavesRef.current.delete(save));
@@ -566,6 +621,7 @@ export function SheetClient({
           }
         });
         trackAttendanceSave(save);
+        trackAttendanceCell(key, save); // 이 칸은 내 쓰기가 진실 — 스트립 방송이 덮지 못하게
       },
       // 출결 '선택 안 함'(지우기) — **0169a `ecs_clear_present` 한 경로만** 쓴다.
       // 🔴 한때 "사유 없는 present는 `setAttendanceCell({status:null})`로 지우자"로 우회했다가 되돌렸다
@@ -598,6 +654,7 @@ export function SheetClient({
           }
         });
         trackAttendanceSave(save);
+        trackAttendanceCell(key, save); // 지우는 중에 도착한 방송이 방금 지운 칸을 되살리지 않게
       },
       removeMakeup: (studentId, date) => {
         if (!data.canMarkAttendanceByDate[date]) return;
@@ -625,6 +682,8 @@ export function SheetClient({
           router.refresh();
         });
         trackAttendanceSave(save);
+        // 그 학생·그 날의 **모든 칸**이 대상이라 키마다 잠근다(한 칸만 잠그면 나머지가 되살아난다).
+        for (const k of Object.keys(before)) trackAttendanceCell(k, save);
       },
       // 사유만 — 상태·시수는 안 보낸다(noteOnly). 잠긴 날짜(7일 초과)의 유일한 쓰기 경로라
       // `canMarkAttendanceByDate`를 보지 않는다 — 대신 서버가 권한·담당 반을 그대로 검사한다(#77).
@@ -651,6 +710,8 @@ export function SheetClient({
           }
         });
         trackAttendanceSave(save);
+        // 사유만 고치는 저장도 롤백이 **값 객체 통째**라 방송이 끼면 상태가 되돌아간다 — 같이 잠근다.
+        trackAttendanceCell(key, save);
       },
       saveMark: (studentId, date, slotStart, status, note, patch) => {
         const key = `${studentId}|${date}|${slotStart}`;
@@ -693,7 +754,15 @@ export function SheetClient({
       },
     }),
     // unitsByDate가 빠지면 주를 넘긴 뒤에도 **옛 주의 유닛**이 박힌다(시수=급여라 조용한 오기록).
-    [classId, data.canMarkAttendanceByDate, data.unitsByDate, router, store, trackAttendanceSave],
+    [
+      classId,
+      data.canMarkAttendanceByDate,
+      data.unitsByDate,
+      router,
+      store,
+      trackAttendanceSave,
+      trackAttendanceCell,
+    ],
   );
 
   const saveGoal = useCallback(
