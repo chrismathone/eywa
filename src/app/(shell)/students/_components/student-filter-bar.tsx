@@ -85,11 +85,17 @@ export function StudentFilterBar({
   teachers,
   subjectFilters,
   gradeFilters,
+  hideSubjectFilter = false,
+  hideTeacherFilter = false,
 }: {
   current: StudentFilterState;
   teachers: Teacher[];
   subjectFilters: { value: string; label: string }[];
   gradeFilters: { value: string; label: string }[];
+  /** 강사 스코프에서 고를 과목이 1개뿐이면 서버가 켠다 — 선택지 하나인 드롭다운은 잡음(원장 2026-08-20). */
+  hideSubjectFilter?: boolean;
+  /** 강사 스코프에서 고를 담임이 나 하나뿐일 때(값이 안 걸려 있을 때만) 서버가 켠다. */
+  hideTeacherFilter?: boolean;
 }) {
   const router = useRouter();
   const didInit = useRef(false);
@@ -105,11 +111,18 @@ export function StudentFilterBar({
       const raw = localStorage.getItem(STORAGE_KEY);
       if (!raw) return;
       const restored = deserialize(raw);
-      if (restored && !isDefault(restored)) router.replace(buildHref(restored, {}));
+      if (!restored) return;
+      // 과목 필터를 감춘 화면(강사 스코프)에선 옛 저장값이 선택지 밖일 수 있다 — 되돌릴 컨트롤이 없으니
+      // 복원 단계에서 "전체"로 정리한다(서버도 같은 규칙으로 무시하므로 URL만 어긋나는 것을 막는다).
+      if (hideSubjectFilter && !subjectFilters.some((f) => f.value === restored.subject)) {
+        restored.subject = "all";
+        localStorage.setItem(STORAGE_KEY, serialize(restored));
+      }
+      if (!isDefault(restored)) router.replace(buildHref(restored, {}));
     } catch {
       /* localStorage 불가 — 무시 */
     }
-  }, [current, router]);
+  }, [current, router, hideSubjectFilter, subjectFilters]);
 
   const go = (patch: Partial<StudentFilterState>) => {
     try {
@@ -132,15 +145,17 @@ export function StudentFilterBar({
             ariaLabel="상태 필터"
           />
         </FilterGroup>
-        <FilterGroup label="과목">
-          <SearchableSelect
-            className="w-32"
-            value={current.subject}
-            onValueChange={(v) => go({ subject: v })}
-            options={subjectFilters}
-            ariaLabel="과목 필터"
-          />
-        </FilterGroup>
+        {hideSubjectFilter ? null : (
+          <FilterGroup label="과목">
+            <SearchableSelect
+              className="w-32"
+              value={current.subject}
+              onValueChange={(v) => go({ subject: v })}
+              options={subjectFilters}
+              ariaLabel="과목 필터"
+            />
+          </FilterGroup>
+        )}
         <FilterGroup label="학년">
           <SearchableSelect
             className="w-24"
@@ -150,15 +165,17 @@ export function StudentFilterBar({
             ariaLabel="학년 필터"
           />
         </FilterGroup>
-        <FilterGroup label="담임">
-          <SearchableSelect
-            className="w-32"
-            value={current.teacher}
-            onValueChange={(v) => go({ teacher: v })}
-            options={[{ value: "all", label: "전체" }, ...teachers]}
-            ariaLabel="담임 필터"
-          />
-        </FilterGroup>
+        {hideTeacherFilter ? null : (
+          <FilterGroup label="담임">
+            <SearchableSelect
+              className="w-32"
+              value={current.teacher}
+              onValueChange={(v) => go({ teacher: v })}
+              options={[{ value: "all", label: "전체" }, ...teachers]}
+              ariaLabel="담임 필터"
+            />
+          </FilterGroup>
+        )}
 
         {/* 우측: 검색필드·정렬·미수강·검색 (ml-auto로 함께 우측, 좁아지면 한 단위로 줄바꿈) */}
         <div className="ml-auto flex flex-wrap items-center gap-x-3 gap-y-2.5">

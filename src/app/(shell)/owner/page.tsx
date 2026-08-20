@@ -17,6 +17,7 @@ import { ConsultationsSection } from "./_components/consultations-section";
 import { PermissionsSection } from "./_components/permissions-section";
 import { DataFace } from "./_components/data-face";
 import { DuplicatesFace } from "./_components/duplicates-face";
+import { SameNameFace } from "./_components/same-name-face";
 import { AuditFace } from "./_components/audit-face";
 import { SheetsFace } from "./_components/sheets-face";
 import { PopupsFace } from "./_components/popups-face";
@@ -137,6 +138,7 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
         <div className="space-y-10">
           <DataFace />
           <DuplicatesFace page={page} isEmbed={isEmbed} />
+          <SameNameFace />
         </div>
       ) : null}
       {tab === "audit" ? (

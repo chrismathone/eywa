@@ -123,3 +123,31 @@ describe("팔레트 대비 — 화이트 캔버스(v4)", () => {
     expect(shadow).toMatch(/^0 0 0 1px/);
   });
 });
+
+/**
+ * 검색 표식(--search-hit) — 시간표에서 검색에 걸린 학생 줄.
+ *
+ * 원장 2026-08-20: *"서치된 학생이 갈색으로 보이는데 영 눈에 안띄네"*. 종전 `bg-amber!`는 이름만
+ * amber이고 실제 값은 갈색(#995709)이라 **같은 셀의 신입 빨강 옆에서 묻혔다**. 그래서 "눈에 띄나"를
+ * 취향이 아니라 숫자로 잠근다 — 되돌리려면 여기 임계값이 아니라 왜 어두워야 하는지를 먼저 답할 것.
+ */
+describe("검색 표식 — 형광 채움", () => {
+  it("진한 글자가 형광 채움 위에서 7:1 이상", () => {
+    const r = contrast(rgbOf(token("foreground")), rgbOf(token("search-hit")));
+    expect(r, `--foreground on --search-hit = ${r.toFixed(2)}:1`).toBeGreaterThanOrEqual(7);
+  });
+
+  it("바로 옆 줄에 오는 색들과 한눈에 갈린다 — 신입 빨강·전입 네이비·퇴원 잉크", () => {
+    const hit = rgbOf(token("search-hit"));
+    for (const name of ["danger", "primary", "ink"]) {
+      const r = contrast(hit, rgbOf(token(name)));
+      expect(r, `--search-hit vs --${name} = ${r.toFixed(2)}:1`).toBeGreaterThanOrEqual(3);
+    }
+  });
+
+  it("상태색을 빌려 쓰지 않는다 — 표식은 상태가 아니라 '찾은 자리'다(축이 다르다)", () => {
+    for (const name of ["green", "amber", "danger", "blue", "purple", "primary"]) {
+      expect(token("search-hit"), `--search-hit이 --${name}과 같다`).not.toBe(token(name));
+    }
+  });
+});

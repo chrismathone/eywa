@@ -43,14 +43,30 @@ import {
 import { useTimetableEdit } from "./edit-context";
 
 /**
- * 검색에 걸린 학생 이름 표식 — 스크린샷의 "이름 반전".
+ * 검색에 걸린 학생 이름 표식 — **형광펜으로 그은 줄**(형광 노랑 채움 + 진한 글씨).
  *
- * 🔑 색은 **amber**다: 출석부 검색이 이미 amber를 쓴다(검색 칩·"검색 N명") — 같은 뜻이면 어느 화면에서든
- *    같은 색이라는 팔레트 v4 캐논 그대로다. 상태색이 아니라 **찾은 자리** 표식이라 의미색 표(semantic-color)의
- *    상태 tone과는 축이 다르다.
- * ⚠️ `!`(important)는 행에 붙는 `hover:bg-bg-soft` 때문에 남긴다 — 마우스를 얹으면 표식이 지워지면 안 된다.
+ * 원장 2026-08-20: *"서치된 학생이 갈색으로 보이는데 영 눈에 안띄네, 다른 색으로 해주고 1초정도 플리커
+ * 넣어주면 좋겠는데"* → *"눈에 띄게 형광 계열로 하고 플리커하면 될듯"*. 종전 `bg-amber!`는 **이름만
+ * amber이고 실제 값은 갈색**(#995709)이라, 같은 셀의 신입 빨강(bg-danger-soft) 줄 옆에서 묻혔다.
+ *
+ * 🔑 색·깜빡임의 실체는 [`globals.css`](src/app/globals.css)의 `.search-hit` 한 곳이다(토큰 `--search-hit`).
+ *    거기 규칙이 **레이어 밖(unlayered)** 이라 `!important` 없이도 행의 `hover:bg-bg-soft`를 이긴다 —
+ *    ① 마우스를 얹어도 표식이 안 지워지고 ② `!important`가 없어 **배경을 애니메이션으로 흔들 수 있다**
+ *    (important 선언은 CSS 애니메이션을 이겨 버려서, 종전 `bg-amber!`로는 깜빡임이 아예 불가능했다).
+ * 🔑 상태색이 아니라 **찾은 자리** 표식이라 의미색 표(semantic-color)의 상태 tone(green/amber/danger/…)을
+ *    빌려 쓰지 않고 전용 토큰을 둔다 — 상태색을 빌리면 그 줄이 "무슨 상태"로 읽힌다.
  */
-export const SEARCH_HIT_CLASS = "bg-amber! font-bold text-white!";
+export const SEARCH_HIT_CLASS = "search-hit font-bold";
+
+/**
+ * 깜빡임 **재발화** 장치 — 검색어가 바뀔 때마다 둘을 번갈아 붙인다.
+ *
+ * 🔴 CSS 애니메이션은 한 번 끝나면 다시 안 돈다. 검색어를 한 글자 더 쳐도 **이미 걸려 있던 줄은 DOM이
+ *    그대로**라(칸은 그대로 남고 클래스만 바뀐다) 아무 일도 일어나지 않는다 = 첫 검색만 깜빡인다.
+ *    클래스를 a↔b로 갈아 끼우면 animation-name이 바뀌어 브라우저가 **처음부터 다시 재생**한다.
+ *    두 클래스는 globals.css에서 이름만 다른 같은 키프레임을 가리킨다.
+ */
+const SEARCH_FLASH_CLASSES = ["search-hit-flash-a", "search-hit-flash-b"] as const;
 
 const NO_MATCH: ReadonlySet<string> = new Set<string>();
 
@@ -69,6 +85,11 @@ type Ctx = {
   scope: string;
   /** 편집 모드라 검색이 물러나 있나(입력칸이 스스로 숨는다). */
   suspended: boolean;
+  /**
+   * 걸린 줄에 붙일 클래스 — 표식 + **이번 검색어의 깜빡임 클래스**.
+   * 검색어가 바뀔 때마다 뒷부분이 a↔b로 바뀌어 애니메이션이 다시 발화한다(위 SEARCH_FLASH_CLASSES).
+   */
+  hitClass: string;
 };
 
 const SearchCtx = createContext<Ctx | null>(null);
@@ -99,7 +120,13 @@ export function TimetableSearchProvider({
   enabled?: boolean;
   children: ReactNode;
 }) {
-  const [query, setQuery] = useState("");
+  // 검색어와 **깜빡임 세대(flash)** 를 한 상태로 묶는다 — 세대는 검색어가 실제로 바뀐 그 순간에만
+  // 오른다. 렌더 중 setState도, 효과([[#25]] set-state-in-effect 금지)도 쓰지 않고 입력 이벤트
+  // 한 자리에서 함께 올리므로 "검색어는 바뀌었는데 깜빡임은 안 바뀐" 상태가 생기지 않는다.
+  const [{ query, flash }, setState] = useState({ query: "", flash: 0 });
+  const setQuery = useCallback((v: string) => {
+    setState((s) => (s.query === v ? s : { query: v, flash: s.flash + 1 }));
+  }, []);
   // 편집(드래그로 반 이동)에선 필터를 푼다 — 위 주석의 "드롭할 곳이 없는 편집 모드" 방지.
   const { editing } = useTimetableEdit();
   const active = enabled && isSearchActive(query) && !editing;
@@ -117,8 +144,9 @@ export function TimetableSearchProvider({
       matchedClasses: matched.size,
       scope,
       suspended: editing || !enabled,
+      hitClass: `${SEARCH_HIT_CLASS} ${SEARCH_FLASH_CLASSES[flash % SEARCH_FLASH_CLASSES.length]}`,
     }),
-    [query, active, matched, index.length, scope, editing, enabled],
+    [query, setQuery, active, matched, index.length, scope, editing, enabled, flash],
   );
   return <SearchCtx.Provider value={value}>{children}</SearchCtx.Provider>;
 }
@@ -177,11 +205,15 @@ export function SearchedCell({
  *    안 나왔다**(둘 다 important라 important로는 못 이긴다). 대체하면 그 다툼 자체가 없다.
  * ⚠️ 그 대가로 검색 중엔 신입 빨강·퇴원 회색이 그 줄에서 잠시 안 보인다 — 대신 섹션 라벨(대기·퇴원)과
  *    hover 카드가 그대로라 정보가 사라지진 않는다. 지금은 "누구를 찾았나"가 먼저다.
+ * 🔴 **대체는 이제 더 필수다**: 표식에서 `!important`를 걷어냈으므로(깜빡임을 위해) 덧붙이면 `!`가 붙은
+ *    tone(`bg-ink/80!`)이 **확실히 이긴다** — 예전엔 important끼리 순서 다툼이었지만 지금은 다툴 것도 없다.
+ * 🔑 표식 문자열은 공급자가 준다(`ctx.hitClass`) — 깜빡임 클래스가 검색어마다 달라야 해서 상수만으로는
+ *    부족하다. 세 뷰(기본·통합·강사)가 이 훅 하나를 쓰므로 색·깜빡임이 저절로 같이 간다.
  */
 export function useSearchTone(student: TimetableSearchStudent, tone: string): string {
   const ctx = useTimetableSearch();
   if (!ctx?.active) return tone;
-  return matchesStudentSearch(ctx.query, studentSearchFields(student)) ? SEARCH_HIT_CLASS : tone;
+  return matchesStudentSearch(ctx.query, studentSearchFields(student)) ? ctx.hitClass : tone;
 }
 
 /**

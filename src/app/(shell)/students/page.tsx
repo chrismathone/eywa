@@ -14,9 +14,17 @@ import {
   getStudentsPage,
   getEnrolledStatCounts,
   getTeacherOptions,
+  getScopedTeacherOptions,
   type StudentSort,
   type SearchField,
 } from "@/features/students/server/queries";
+import { effectiveTeacherScope } from "@/lib/auth/view-mode";
+import {
+  subjectAxisOf,
+  narrowSubjectFilters,
+  showSubjectFilter,
+  coerceSubjectFilter,
+} from "@/features/students/scope-axis";
 import { WindowLink } from "@/components/workspace/window-link";
 import { PageHeader } from "@/components/page-header";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
@@ -52,7 +60,13 @@ export default async function StudentsPage({
   const sp = await searchParams;
   // 상태 필터 디폴트 = 재원(운영에서 당장 중요한 건 재원생). "전체"는 명시적 status=all로만.
   const status = sp.status ?? "enrolled";
-  const subject = sp.subject ?? "all";
+  // 표시 축(원장 2026-08-20) — 강사 스코프면 **담당 과목**으로 축을 좁힌다(관리자·담당 반 0개는 null=종전 동일).
+  // ⚠️ 좁히는 건 축(게이지·배지·담당 강사·선택지)뿐. 누가 보이는지(getTeacherScope)는 안 건드린다.
+  const axis = subjectAxisOf(await effectiveTeacherScope());
+  // 🔴 과목 필터를 감춘 화면(담당 과목 1개)에선 걸려 있던 값을 "전체"로 되돌린다 — 저장된 필터
+  // (localStorage 복원·직접 URL)가 남아 있으면 되돌릴 컨트롤이 없는데 행이 조용히 빠진다
+  // (축 밖 과목이면 0명 · 축 안 과목이어도 on_hold=false 조건 때문에 **휴원 학생이 사라진다**).
+  const subject = coerceSubjectFilter(axis, sp.subject);
   const q = sp.q ?? "";
   // 고급 필터
   const grade = sp.grade ?? "all";
@@ -63,6 +77,13 @@ export default async function StudentsPage({
   const PAGE_SIZE = 50;
   const page = Math.max(1, Number(sp.page) || 1);
 
+  // 담임 필터 선택지 — 강사 스코프에선 **내 학생의 담당 과목 반 담당**만(고르면 결과가 0인 선택지 방지 +
+  // 아래 '담당 강사' 열에 실제로 나오는 이름과 일치). 관리자면 종전 학원 전체 목록.
+  // 두 갈래의 반환 타입이 달라(스코프본엔 systemRole이 없다) 여기서 공통 모양으로 좁혀 둔다.
+  const teacherOptionsPromise: Promise<{ id: string; displayName: string }[]> = axis
+    ? getScopedTeacherOptions().then((r) => r ?? [])
+    : getTeacherOptions();
+
   const [{ rows, total }, counts, teachers, settings] = await Promise.all([
     getStudentsPage(
       { status, subject, q, grade, teacherId, searchField: field, sort, excludeNoEnrollment },
@@ -70,18 +91,24 @@ export default async function StudentsPage({
       PAGE_SIZE,
     ),
     getEnrolledStatCounts(),
-    getTeacherOptions(),
+    teacherOptionsPromise,
     getTenantSettings(),
   ]);
   const { enrolled, bySubject } = counts;
   // 과목·학년 필터·라벨·색은 학원설정(operations) 단일 소스 — 미등록 값은 드롭다운에 안 뜸.
   const subjects = buildSubjectMaps(settings.operations.subjects);
+  // 강사 스코프면 과목 선택지도 담당 과목만. 고를 게 1개뿐이면 필터 자체를 감춘다(잡음).
+  const subjectFilters = narrowSubjectFilters(axis, subjects.filters);
+  const hideSubjectFilter = !showSubjectFilter(axis);
   const gradeFilters = [
     { value: "all", label: "전체" },
     ...settings.operations.gradeLevels.map((g) => ({ value: g, label: g })),
   ];
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const teacherOptions = teachers.map((t) => ({ value: t.id, label: t.displayName }));
+  // 담임 필터 — 스코프에서 고를 사람이 나 하나뿐이면 감춘다(전체/나 = 같은 결과).
+  // ⚠️ 이미 값이 걸려 있으면(옛 localStorage 복원 등) 남겨 둔다 — 감추면 "전체"로 되돌릴 길이 없다.
+  const hideTeacherFilter = axis !== null && teacherOptions.length <= 1 && teacherId === "all";
   // 검색폼·페이지·export가 보존해야 할 고급 파라미터(기본값이 아닌 것만)
   const advParams: Record<string, string> = {
     ...(grade !== "all" ? { grade } : {}),
@@ -121,7 +148,7 @@ export default async function StudentsPage({
       <PageHeader
         eyebrow="학생 관리"
         title="학생목록"
-        description={`재원 ${enrolled}명 · 학원설정 과목 기준`}
+        description={`재원 ${enrolled}명 · ${axis ? "담당 과목 기준" : "학원설정 과목 기준"}`}
         actions={
           <>
             {/* ⚠️ 동기화 배지도 이 행 안에 — 따로 두면 배지 하나가 한 줄을 통째로 먹는다(우측 텅 빔). */}
@@ -166,8 +193,10 @@ export default async function StudentsPage({
       <StudentFilterBar
         current={filterState}
         teachers={teacherOptions}
-        subjectFilters={subjects.filters}
+        subjectFilters={subjectFilters}
         gradeFilters={gradeFilters}
+        hideSubjectFilter={hideSubjectFilter}
+        hideTeacherFilter={hideTeacherFilter}
       />
 
       {/* 결과 카운트 — 액션은 PageHeader 우측으로 이동(문법 ①), 여기는 맥락 라인만 */}
