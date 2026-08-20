@@ -17,6 +17,7 @@ import { cellKey, classIdOfRow, parseCellKey } from "@/features/attendance/grid/
 import { GridStore, type CellState, type GridValue } from "@/features/attendance/grid/store";
 import { countCells, type Counted } from "@/features/attendance/grid/totals";
 import { NOT_MINE_MESSAGE } from "@/features/attendance/cell-display";
+import { lockedMessage } from "@/features/attendance/lock-message";
 import { COUNTABLE_STATUSES } from "@/features/attendance/session-units";
 import { appendChar, backspace, commitBuffer, copyValueOf, type TypedValue } from "@/features/attendance/grid/typing";
 import { useAttendanceSearch } from "./search-context";
@@ -216,6 +217,15 @@ export function GridProvider({
   );
 
   const isLocked = useCallback((date: string) => !!lockBefore && date < lockBefore, [lockBefore]);
+  /**
+   * 잠긴 칸이면 **사유 문장**, 아니면 null — 안내는 칸 툴팁(`matrix-row`)과 같은 한 문장을 쓴다.
+   * ⚠️ 잠김 판정과 문장 만들기를 **한 곳에서** 한다. 따로 두면 `lockBefore`가 null인 자리에 `!`를 쓰게 되고,
+   *    그건 "잠겼다 = lockBefore가 있다"는 사실을 타입이 아니라 사람 기억에 맡기는 것이다.
+   */
+  const lockNoteOf = useCallback(
+    (date: string) => (lockBefore && isLocked(date) ? lockedMessage(date, lockBefore) : null),
+    [isLocked, lockBefore],
+  );
   /** 이 칸이 이 표의 몫이 아닌가(빗금 칸) — 잠금과 사유가 달라 메시지도 따로 낸다. */
   const isNotMine = useCallback((key: string) => !!notMine?.[key], [notMine]);
 
@@ -272,10 +282,18 @@ export function GridProvider({
   const writeOne = useCallback(
     (key: string, val: TypedValue | null) => {
       const p = parseCellKey(key);
-      if (!p || isLocked(p.date)) return;
+      if (!p) return;
       // 새 작업이 시작되면 **지난 실패는 걷는다** — 실패 토스트는 클릭해야 사라져서, 30초 전 경고가
       // 남아 있으면 이번 작업의 정보 알림(사정거리)이 렌더되지 않고 타이머만 돌고 끝난다.
       setError(null);
+      // 🔴 잠긴 칸(7일 경과)도 **사유를 띄운다** — 예전엔 여기서 조용히 반환해, 붙여넣기·Delete·타이핑
+      //    확정이 안내 없이 원래 값으로 되돌아갔다("쳤는데 사라졌다"). 범위(writeMany)는 이미
+      //    "N칸은 수정 기간(7일)이 지나…"로 알리고 있었으므로, 단건만 침묵인 모순이었다(2026-08-20).
+      const lockNote = lockNoteOf(p.date);
+      if (lockNote) {
+        setError(lockNote);
+        return;
+      }
       // 남의 교시만 있는 칸 — 조용히 무시하면 "쳤는데 반응이 없다"가 되므로 사유를 띄운다.
       if (isNotMine(key)) {
         setError(NOT_MINE_MESSAGE);
@@ -302,7 +320,7 @@ export function GridProvider({
       // ⚠️ 이 문장은 **성공 알림**이다 — 실패 채널(빨강)에 실으면 잘 저장된 순간마다 경고가 뜬다.
       if (shared > 0) showNotice(`같은 날 다른 교시 기록 ${shared}건(다른 선생님·자리)도 함께 바뀝니다`);
     },
-    [store, isLocked, isNotMine, alsoWrites, pushCell, showNotice],
+    [store, lockNoteOf, isNotMine, alsoWrites, pushCell, showNotice],
   );
 
   /** 여러 칸에 같은 값 — 드래그 채우기·Ctrl+Enter·범위 Delete·범위 붙여넣기. */
@@ -471,10 +489,17 @@ export function GridProvider({
       }
       if ((e.key >= "0" && e.key <= "9") || e.key === "." || e.key === ",") {
         e.preventDefault();
-        // 빗금 칸은 버퍼를 열지도 않는다 — 열면 숫자가 보였다가 확정 단계에서 거절돼 "쳤는데 사라졌다"가 된다.
+        // 빗금 칸·잠긴 칸은 버퍼를 열지도 않는다 — 열면 숫자가 보였다가 확정 단계에서 거절돼
+        // "쳤는데 사라졌다"가 된다. 🔴 잠금(7일)엔 이 검사가 **빠져 있어 실제로 그랬다**(2026-08-20 수리).
         // 🔴 단, **범위가 잡혀 있으면 막지 않는다.** 앵커(활성 칸)만 보고 거절하면 함께 선택한 정상 칸까지
         //    통째로 못 친다 — 한 행을 왼쪽부터 끄는 흔한 조작에서 앵커가 빗금이기 쉽다(영어 빗금 887칸).
-        //    범위는 `writeMany`가 빗금만 걸러내고 "N칸은 선생님 교시가 없어 건너뛰었습니다"로 알린다.
+        //    범위는 `writeMany`가 잠금·빗금을 걸러내고 "N칸은 … 건너뛰었습니다"로 알린다.
+        // ⚠️ 잠금을 **먼저** 본다 — 칸 툴팁(matrix-row)의 우선순위와 같은 순서라야 호버와 안내가 같은 말을 한다.
+        const lockNote = sel.size <= 1 ? lockNoteOf(active.col) : null;
+        if (lockNote) {
+          setError(lockNote);
+          return;
+        }
         if (sel.size <= 1 && isNotMine(key)) {
           setError(NOT_MINE_MESSAGE);
           return;
@@ -532,7 +557,7 @@ export function GridProvider({
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [store, commit, writeMany, writeOne, pushCell, isNotMine]);
+  }, [store, commit, writeMany, writeOne, pushCell, isNotMine, lockNoteOf]);
 
   const ctx = useMemo<Ctx>(
     () => ({
