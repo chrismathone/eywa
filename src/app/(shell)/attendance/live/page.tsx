@@ -8,6 +8,7 @@ import { accessLevelTenant } from "@/lib/auth/perm-matrix";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { kstToday } from "@/lib/date-kst";
 import { getCarryOverAbsences, getDeskQueue, getLiveBoard } from "@/features/attendance/live/server/queries";
+import { loadLiveViewPrefs } from "@/features/attendance/live/server/prefs-actions";
 import { getRangeRecap, getSavedRecapBrief } from "@/features/attendance/recap/server/queries";
 import { recapDatesFor, recapRangeDates } from "@/features/attendance/recap/range";
 import { holidayNameOf } from "@/features/attendance/live/server/load";
@@ -56,7 +57,7 @@ export default async function AttendanceLivePage({
   const recapDates = tab === "recap" ? recapRangeDates(recapFrom, date) : [];
 
   const holiday = await holidayNameOf(date);
-  const [board, queue, carryOver, recap, recapAi] = await Promise.all([
+  const [board, queue, carryOver, recap, recapAi, prefs] = await Promise.all([
     holiday ? null : getLiveBoard(date),
     holiday || !isDesk ? null : getDeskQueue(date),
     holiday || !isDesk || tab !== "desk" ? null : getCarryOverAbsences(date),
@@ -66,6 +67,9 @@ export default async function AttendanceLivePage({
     tab !== "recap" ? null : getRangeRecap(recapDates),
     // 저장된 AI 정리(있으면). ⚠️ 표(0226a) 적용 전이면 null로 떨어지고 카드만 접힌다(#95).
     tab !== "recap" ? null : getSavedRecapBrief(recapDates[0] ?? date, date),
+    // 과목 필터(계정 귀속, 2026-08-20) — 세 탭이 같은 값을 초기값으로 받는다. 저장된 과목이 지금 학원설정에
+    // 없으면 화면이 '전체'로 되돌린다(`resolveSubjectFilter`) — 여기서는 모양만 읽는다.
+    loadLiveViewPrefs(),
   ]);
 
   const pending = queue ? queue.counts.students + queue.counts.classes : 0;
@@ -123,7 +127,12 @@ export default async function AttendanceLivePage({
 
           {tab === "recap" ? (
             recap ? (
-              <RecapView recap={recap} isToday={date === today} ai={recapAi} />
+              <RecapView
+                recap={recap}
+                isToday={date === today}
+                ai={recapAi}
+                initialSubject={prefs.subject}
+              />
             ) : (
               // 게이트가 탭과 같아 여기 오기 어렵지만, **빈 화면으로 끝내지는 않는다** — 아무것도
               // 안 그리면 "고장인지 없는 건지"를 구분할 수 없다.
@@ -134,9 +143,15 @@ export default async function AttendanceLivePage({
               />
             )
           ) : tab === "desk" && queue ? (
-            <DeskView queue={queue} date={date} canEdit={board?.canEdit ?? false} carryOver={carryOver} />
+            <DeskView
+              queue={queue}
+              date={date}
+              canEdit={board?.canEdit ?? false}
+              carryOver={carryOver}
+              initialSubject={prefs.subject}
+            />
           ) : board ? (
-            <SeatingChart board={stripContacts(board)} />
+            <SeatingChart board={stripContacts(board)} initialSubject={prefs.subject} />
           ) : null}
 
           {/* 화면이 열려 있는 동안만, 20초마다 서버 카운트를 확인해 바뀌었을 때만 다시 그린다(폴링 규약).

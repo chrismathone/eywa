@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildQueue,
   compareStudents,
+  isPlannedAbsenceRow,
   isSettled,
   orderQueueSubjects,
   suggestedStatus,
@@ -263,5 +264,62 @@ describe("teacherRequested — 강사의 '데스크 확인 요청' 표식(역방
       ],
     );
     expect(q.lanes.classes.map((c) => c.classId)).toEqual(["asked", "early"]);
+  });
+});
+
+/**
+ * 사전 통보 결석은 **같은 신호 안에서 뒤로** (원장 2026-08-20). 큐에서 빼지도, 배지에서 덜어내지도 않는다.
+ */
+describe("isPlannedAbsenceRow — 사전 통보 결석 뒤로", () => {
+  it("메모가 여행·휴가면 사전 통보다(판정은 absence-reason 단일 소스)", () => {
+    expect(isPlannedAbsenceRow(student({ studentId: "a", note: "가족여행" }))).toBe(true);
+    expect(isPlannedAbsenceRow(student({ studentId: "b", note: "휴가" }))).toBe(true);
+    expect(isPlannedAbsenceRow(student({ studentId: "c", note: null }))).toBe(false);
+    // 병결은 사전 통보가 아니다 — 전화가 필요할 수 있어 순서를 안 내린다.
+    expect(isPlannedAbsenceRow(student({ studentId: "d", note: "병원 진료" }))).toBe(false);
+  });
+
+  it("같은 신호·같은 교시면 사유가 없는 줄이 먼저", () => {
+    const planned = student({ studentId: "여행생", signal: "absent", note: "여행" });
+    const unknown = student({ studentId: "무단생", signal: "absent", note: null });
+    expect([planned, unknown].sort(compareStudents).map((s) => s.studentId)).toEqual([
+      "무단생",
+      "여행생",
+    ]);
+  });
+
+  it("🔴 강사가 지목한 건은 사전 통보여도 먼저 — 교실을 보고 누른 요청이 메모보다 세다", () => {
+    const requested = student({
+      studentId: "지목생",
+      signal: "absent",
+      note: "여행",
+      teacherRequested: true,
+    });
+    const plain = student({ studentId: "일반생", signal: "absent", note: null });
+    expect([plain, requested].sort(compareStudents).map((s) => s.studentId)).toEqual([
+      "지목생",
+      "일반생",
+    ]);
+  });
+
+  it("결석(사실)은 사전 통보 여부보다 먼저 — 신호 강도를 이기지 않는다", () => {
+    const plannedAbsent = student({ studentId: "결석여행", signal: "absent", note: "여행" });
+    const unmarked = student({ studentId: "미확인", signal: "unmarked", note: null });
+    expect([unmarked, plannedAbsent].sort(compareStudents).map((s) => s.studentId)).toEqual([
+      "결석여행",
+      "미확인",
+    ]);
+  });
+
+  it("🔴 큐에서 빼지 않는다 — 탭 배지(counts)가 그대로여야 한다([[#105]])", () => {
+    const q = buildQueue(
+      [
+        student({ studentId: "여행생", signal: "absent", note: "가족여행" }),
+        student({ studentId: "무단생", signal: "absent", note: null }),
+      ],
+      [],
+    );
+    expect(q.counts.students).toBe(2);
+    expect(q.lanes.students.map((s) => s.studentId)).toEqual(["무단생", "여행생"]);
   });
 });

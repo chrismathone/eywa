@@ -15,6 +15,12 @@
  *    접으면 뜻이 사라진다. 두 단위를 라벨로 구분한다(건 / 칸).
  */
 
+import {
+  classifyAbsenceReason,
+  isUrgentAbsence,
+  type AbsenceReasonKind,
+} from "@/features/attendance/absence-reason";
+
 /** 요약이 명단으로 뽑는 상태(출석은 명단이 아니라 수치로만 — 관리자가 볼 것은 예외다). */
 export const RECAP_STATUSES = ["absent", "excused", "late", "early_leave", "makeup"] as const;
 export type RecapStatus = (typeof RECAP_STATUSES)[number];
@@ -75,8 +81,28 @@ export type RecapEvent = {
   teacherNames: string[];
   /** 강사가 남긴 사유 메모 — 데스크가 전화 **전에** 봐야 하는 값. */
   note: string | null;
+  /**
+   * 그 메모에서 읽어낸 사유([`absence-reason.ts`](../absence-reason.ts)) — **표시용 분류일 뿐**이고
+   * 출결 상태·조치·시수·돈에 닿지 않는다. 메모가 없거나 모르는 말이면 `unknown`.
+   */
+  reasonKind: AbsenceReasonKind;
+  /**
+   * **지금 손대야 할 결석인가** = (결석·공결) && 미조치 && 사유를 모름.
+   *
+   * 원장 2026-08-20: *"가족여행, 휴가 같은 것은 긴급 알림이 필요없을 것 같은데"*. 실측 결석 메모 311건
+   * 중 272건이 여행·휴가·캠프라, 그 줄에도 앰버가 붙는 바람에 정작 연락 없이 안 온 결석이 묻혔다.
+   * 🔴 긴급이 아니어도 **목록에서 빼지 않는다**(아래로 내릴 뿐) — 숨기면 "그날 결석이 몇이었나"가 깨진다.
+   */
+  urgent: boolean;
   /** 최근 14일 결석 횟수(2회 이상만 채운다). 결석 외 상태는 null. */
   recentAbsences: number | null;
+  /**
+   * 그 14일 결석 중 **사유가 미리 통보된 것**(여행·휴가…)의 횟수.
+   * ⚠️ null = "보정할 것이 없다" — 사전 통보가 **0회**이거나, 보정 조회 자체가 없거나 실패한 경우가
+   *    전부 null로 온다(셋 다 화면에선 같은 결과라 굳이 가르지 않는다: 접미사 없음 + 톤 그대로).
+   * 🔑 숫자를 지우지 않고 톤만 내리는 근거다 — `최근 14일 4회 (사전 통보 2회)`처럼 둘 다 적는다.
+   */
+  recentPlanned: number | null;
   followup: RecapFollowup | null;
   /** 데스크가 매듭지었나(resolved·dismissed). open은 아직 남은 것이다. */
   settled: boolean;
@@ -167,8 +193,16 @@ export type DayRecap = {
     /** 출석부가 통째로 안 열린 반 수 · 그 안에 든 학생 수. */
     unmarkedClasses: number;
     unmarkedStudents: number;
-    /** 아직 조치가 안 끝난 결석·공결 건수 — 관리자가 오늘 손댈 것. */
+    /**
+     * 아직 조치가 안 끝난 결석·공결 건수 — 관리자가 오늘 손댈 것.
+     * ⚠️ **뜻을 바꾸지 않는다**(미조치 전체). 사유가 확인된 건도 여기 그대로 들어 있고,
+     *    아래 둘이 그 안을 갈라 보여준다: `absentPending === absentUrgent + absentNotified`.
+     */
     absentPending: number;
+    /** 그중 **긴급**(사유를 모르는 미조치) — 지금 전화해야 하는 건수. */
+    absentUrgent: number;
+    /** 그중 사유가 확인된 미조치(여행·휴가·병결·학교 일정) — 아래로 내려간 건수. */
+    absentNotified: number;
   };
   /** 결석·공결(미조치 먼저). */
   absences: RecapEvent[];
@@ -203,16 +237,19 @@ function isRecapStatus(v: string | null): v is RecapStatus {
  *
  * @param followupOf      (studentId, saveSlot) → 조치 기록. 없으면 null.
  * @param recentAbsenceOf 학생 → 최근 14일 결석 횟수(2회 이상만).
+ * @param recentPlannedOf 학생 → 그 14일 결석 중 사전 통보로 분류된 횟수(조회 없으면 null).
  */
 export function buildDayRecap(input: {
   date: string;
   slots: readonly RecapSlotInput[];
   followupOf?: (studentId: string, saveSlot: string | null) => RecapFollowup | null;
   recentAbsenceOf?: (studentId: string) => number | null;
+  recentPlannedOf?: (studentId: string) => number | null;
 }): DayRecap {
   const { date, slots } = input;
   const followupOf = input.followupOf ?? (() => null);
   const recentAbsenceOf = input.recentAbsenceOf ?? (() => null);
+  const recentPlannedOf = input.recentPlannedOf ?? (() => null);
 
   // (학생·반·상태) → 한 건. 교시는 모아 둔다.
   const events = new Map<string, RecapEvent>();
@@ -344,7 +381,12 @@ export function buildDayRecap(input: {
         slots: [slot.slotStart],
         teacherNames: [handlerOf(slot)],
         note: s.note,
+        // 🔑 여기 값은 **잠정**이다 — 접힌 뒤 교시에서 메모·조치가 채워질 수 있어(아래 fold 분기)
+        //    루프가 끝난 뒤 `all` 순회에서 한 번 더 확정한다. 두 곳에 규칙을 적지 않으려는 것이다.
+        reasonKind: "unknown",
+        urgent: false,
         recentAbsences: s.status === "absent" ? recentAbsenceOf(s.studentId) : null,
+        recentPlanned: s.status === "absent" ? recentPlannedOf(s.studentId) : null,
         followup,
         settled: followup ? followup.state === "resolved" || followup.state === "dismissed" : false,
       });
@@ -352,7 +394,14 @@ export function buildDayRecap(input: {
   }
 
   const all = [...events.values()];
-  for (const e of all) e.slots.sort();
+  for (const e of all) {
+    e.slots.sort();
+    // 🔴 사유·긴급은 **여기서 확정한다**. 접힌 건은 메모가 뒤 교시에서 채워지고 조치도 뒤 교시에 있을 수
+    //    있어서, 만들 때 계산해 두면 "사유는 여행인데 화면은 긴급"으로 굳는다.
+    e.reasonKind = classifyAbsenceReason(e.note);
+    e.urgent =
+      (e.status === "absent" || e.status === "excused") && isUrgentAbsence(e.reasonKind, e.settled);
+  }
   const absences = all.filter((e) => e.status === "absent" || e.status === "excused").sort(compareAbsence);
   const others = all
     .filter((e) => e.status !== "absent" && e.status !== "excused")
@@ -398,6 +447,9 @@ export function buildDayRecap(input: {
       unmarkedClasses: unmarkedList.length,
       unmarkedStudents: unmarkedList.reduce((n, c) => n + c.expected, 0),
       absentPending: absences.filter((e) => !e.settled).length,
+      absentUrgent: absences.filter((e) => e.urgent).length,
+      // 미조치인데 긴급이 아닌 것 = 사유가 확인된 것. 두 값의 합이 absentPending과 같다(불변식·Vitest).
+      absentNotified: absences.filter((e) => !e.settled && !e.urgent).length,
     },
     absences,
     others,
@@ -420,13 +472,38 @@ export function buildDayRecap(input: {
   };
 }
 
-/** 결석 정렬 — ① 아직 안 매듭진 것 ② 반복 결석이 많은 순 ③ 반·이름. */
+/**
+ * 결석 정렬 — ① **긴급**(사유 미상 미조치) ② 아직 안 매듭진 것 ③ 반복 결석이 많은 순 ④ 반·이름.
+ *
+ * 🔴 사전 통보 줄은 아래로 내려갈 뿐 **목록에서 빠지지 않는다** — 여행 결석을 감추면 "그날 결석이
+ *    몇이었나"가 화면에서 사라지고, 반복 결석 판단의 근거도 함께 없어진다.
+ */
 function compareAbsence(a: RecapEvent, b: RecapEvent): number {
+  const urgent = Number(b.urgent) - Number(a.urgent);
+  if (urgent !== 0) return urgent;
   const settled = Number(a.settled) - Number(b.settled);
   if (settled !== 0) return settled;
   const repeat = (b.recentAbsences ?? 0) - (a.recentAbsences ?? 0);
   if (repeat !== 0) return repeat;
   return a.className.localeCompare(b.className, "ko") || a.studentName.localeCompare(b.studentName, "ko");
+}
+
+/** 반복 결석으로 볼 문턱 — 이 미만은 화면에 적지 않는다(첫 결석에 "1회"를 붙이면 노이즈다). */
+export const REPEAT_ABSENCE_MIN = 2;
+
+/**
+ * 반복 결석 칩을 **붉게 세울 것인가** — 사전 통보를 뺀 나머지가 문턱 미만이면 톤만 내린다.
+ *
+ * 🔴 숫자를 지우지는 않는다(`최근 14일 4회 (사전 통보 2회)`) — 여행 두 번을 이유로 "결석 4회"를 감추면
+ *    다음 사람이 같은 판단을 다시 할 수 없다. 색만 물러난다.
+ * ⚠️ `recentPlanned`가 null이면(조회 실패·보정 없음) 종전대로 붉다 — 보정이 없다고 조용해지면 안 된다.
+ */
+export function isRepeatAbsenceDanger(
+  recentAbsences: number | null,
+  recentPlanned: number | null,
+): boolean {
+  if (recentAbsences == null || recentAbsences < REPEAT_ABSENCE_MIN) return false;
+  return recentAbsences - (recentPlanned ?? 0) >= REPEAT_ABSENCE_MIN;
 }
 
 /** 교시 목록 표기 — "16:20" / "16:20·17:20". */

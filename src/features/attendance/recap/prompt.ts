@@ -13,7 +13,14 @@
  */
 
 import { formatKoreanDate } from "@/lib/date-kst";
-import { handlersLabel, RECAP_STATUS_LABEL, slotsLabel, type RecapEvent } from "./digest";
+import { ABSENCE_REASON_LABEL } from "@/features/attendance/absence-reason";
+import {
+  handlersLabel,
+  RECAP_STATUS_LABEL,
+  REPEAT_ABSENCE_MIN,
+  slotsLabel,
+  type RecapEvent,
+} from "./digest";
 import type { RangeRecap, RecapDay } from "./range";
 
 /** 명단을 프롬프트에 실을 때의 상한 — 넘으면 "앞 N건"으로 **총계를 함께** 밝힌다(#89). */
@@ -35,9 +42,19 @@ function eventLine(e: RecapEvent, subjectLabel: LabelOf): string {
     RECAP_STATUS_LABEL[e.status],
     `담당 ${handlersLabel(e.teacherNames) || "미지정"}`,
   ];
-  if (e.recentAbsences && e.recentAbsences >= 2) bits.push(`최근 14일 결석 ${e.recentAbsences}회`);
+  if (e.recentAbsences && e.recentAbsences >= REPEAT_ABSENCE_MIN) {
+    // 사전 통보가 섞여 있으면 함께 적는다 — "4회"만 보면 반복 결석 위험으로 읽히지만 그중 둘이
+    // 여행이면 뜻이 다르다(화면의 칩과 같은 규약).
+    bits.push(
+      e.recentPlanned && e.recentPlanned > 0
+        ? `최근 14일 결석 ${e.recentAbsences}회(사전 통보 ${e.recentPlanned}회)`
+        : `최근 14일 결석 ${e.recentAbsences}회`,
+    );
+  }
   if (e.note) bits.push(`사유메모 "${e.note}"`);
-  bits.push(e.settled ? "데스크 조치 완료" : "조치 미완료");
+  // 사유 분류 — 미리 알려진 결석과 연락이 안 된 결석을 문장에서 갈라 쓰게 하는 근거(2026-08-20).
+  if (e.reasonKind !== "unknown") bits.push(`사유 분류 ${ABSENCE_REASON_LABEL[e.reasonKind]}`);
+  bits.push(e.settled ? "데스크 조치 완료" : e.urgent ? "조치 미완료(긴급)" : "조치 미완료(사유 확인됨)");
   return `- ${bits.join(" · ")}`;
 }
 
@@ -46,6 +63,17 @@ function capped<T>(list: readonly T[], label: string): { header: string; rows: r
     header: `${label} ${list.length}건${list.length > LIST_CAP ? ` 중 앞 ${LIST_CAP}건` : ""}`,
     rows: list.slice(0, LIST_CAP),
   };
+}
+
+/**
+ * 미조치 결석 한 줄 — **전체 · 긴급 · 사유 확인**을 함께 적는다.
+ * ⚠️ `absentPending`의 뜻은 종전 그대로(미조치 전체)다. 새 숫자를 프롬프트·화면에 넣을 땐 반드시 이
+ *    `recapFactLines` 경유여야 후검증 화이트리스트가 함께 따라온다([[#89]]).
+ */
+function pendingLine(t: RangeRecap["totals"]): string {
+  const head = `- 조치가 끝나지 않은 결석·공결 ${t.absentPending}건`;
+  if (t.absentPending === 0) return head;
+  return `${head} (연락이 안 된 긴급 ${t.absentUrgent}건 · 사유가 확인된 건 ${t.absentNotified}건)`;
 }
 
 function dayLines(day: RecapDay, subjectLabel: LabelOf): string[] {
@@ -100,7 +128,7 @@ export function recapFactLines(range: RangeRecap, subjectLabel: LabelOf = (k) =>
       `- 수업 ${t.slots}교시 · 출결 입력 ${t.cells}칸 중 ${t.recorded}칸${t.inputRate != null ? ` (${t.inputRate}%)` : ""}`,
       `- 출석 ${t.present}건 · 결석 ${t.absent}건 · 공결 ${t.excused}건 · 지각 ${t.late}건 · 조퇴 ${t.earlyLeave}건 · 보강 ${t.makeup}건`,
       `- 출석부가 통째로 비어 있는 반 ${t.unmarkedClasses}개 (학생 ${t.unmarkedStudents}명)`,
-      `- 조치가 끝나지 않은 결석·공결 ${t.absentPending}건`,
+      pendingLine(t),
       "(건 = 학생 1명이 한 반에서 그 상태였던 하루. 같은 학생이 이틀 빠지면 2건)",
     );
   }
@@ -110,7 +138,7 @@ export function recapFactLines(range: RangeRecap, subjectLabel: LabelOf = (k) =>
   if (!multi) {
     lines.push(
       `- 출석부가 통째로 비어 있는 반 ${t.unmarkedClasses}개 (학생 ${t.unmarkedStudents}명)`,
-      `- 조치가 끝나지 않은 결석·공결 ${t.absentPending}건`,
+      pendingLine(t),
     );
   }
 
@@ -141,6 +169,7 @@ export function buildRecapPrompt(range: RangeRecap, subjectLabel: LabelOf = (k) 
       ? "- 기간이 여러 날입니다. **어느 날 일인지 반드시 밝히고**(예: 금요일/토요일), 날짜를 뭉뚱그리지 말 것."
       : "- 하루치 자료입니다. 없는 날짜를 만들지 말 것.",
     "- 사실 나열로 끝내지 말고 **먼저 처리할 것**(조치 미완료 결석, 반복 결석, 미입력 출석부)을 앞에 둘 것.",
+    "- **여행·휴가·캠프처럼 미리 알려진 결석은 긴급으로 다루지 말고, 연락이 안 된 결석과 구분해 쓸 것.**",
     "- 원인·심경·학생 사정을 추측하지 말 것. 사유메모가 있으면 그 문구를 근거로만 쓸 것.",
     "- 특이사항이 없으면 그 사실을 그대로 쓸 것(없는 문제를 만들지 말 것).",
     `- 출력 형식: {"headline": "...", "points": ["...", "..."]}`,

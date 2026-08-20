@@ -13,6 +13,13 @@ vi.mock("@/features/attendance/live/server/actions", () => ({
   saveFollowup: vi.fn(),
   requestClassInput: vi.fn(),
 }));
+// 과목 필터는 계정에 저장한다 — 저장 왕복은 렌더 스모크의 관심사가 아니라 성공만 흉내 낸다.
+const saveSubject = vi.fn(async (_subject: string) => ({ ok: true }));
+vi.mock("@/features/attendance/live/server/prefs-actions", () => ({
+  saveLiveSubjectFilter: (v: string) => saveSubject(v),
+  loadLiveViewPrefs: vi.fn(),
+}));
+vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn(), info: vi.fn() } }));
 
 afterEach(cleanup);
 
@@ -111,5 +118,71 @@ describe("데스크 큐 학생 검색", () => {
     const { container, input } = renderDesk();
     type(input, "없는이름");
     expect(container.textContent).not.toContain("확인할 건이 없습니다");
+  });
+});
+
+/**
+ * 과목별 필터(원장 2026-08-20) — 이 화면은 이미 과목 섹션이라 **섹션 표시 여부**만 바뀐다.
+ * 🔴 탭 배지(확인 N건)는 전체 기준 그대로다 — 좁힌 사실은 칩이 크게 말한다.
+ */
+describe("데스크 큐 과목 필터", () => {
+  const MIXED: DeskQueue = {
+    lanes: {
+      classes: [],
+      students: [
+        student("수학생", { subject: "math", classId: "m1", className: "수학반" }),
+        student("영어생", { subject: "english", classId: "e1", className: "영어반" }),
+      ],
+    },
+    done: [],
+    counts: { classes: 0, students: 2, done: 0 },
+  };
+
+  function renderMixed(initialSubject = "all") {
+    return render(
+      <OperationsProvider
+        subjects={[
+          { key: "math", label: "수학", color: "blue", weekdayGrouping: "mon-thu", testMax: 5 },
+          { key: "english", label: "영어", color: "gold", weekdayGrouping: "mon-thu", testMax: 5 },
+        ]}
+        gradeLevels={["중2"]}
+      >
+        <DeskView queue={MIXED} date="2026-08-19" canEdit carryOver={null} initialSubject={initialSubject} />
+      </OperationsProvider>,
+    );
+  }
+
+  it("과목 칩을 누르면 그 과목 섹션만 남는다(선택지는 학원설정 단일 소스)", () => {
+    renderMixed();
+    expect(screen.getByText("수학생")).toBeTruthy();
+    expect(screen.getByText("영어생")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "영어" }));
+    expect(screen.queryByText("수학생")).toBeNull();
+    expect(screen.getByText("영어생")).toBeTruthy();
+  });
+
+  it("계정에 저장된 과목으로 열린다 — 뷰 세팅은 계정 귀속", () => {
+    renderMixed("math");
+    expect(screen.getByText("수학생")).toBeTruthy();
+    expect(screen.queryByText("영어생")).toBeNull();
+    expect(screen.getByRole("button", { name: "수학" }).getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("🔴 설정에서 사라진 과목이 저장돼 있으면 전체로 되돌린다 — 빈 화면은 '출결이 사라졌다'로 읽힌다", () => {
+    renderMixed("arts");
+    expect(screen.getByText("수학생")).toBeTruthy();
+    expect(screen.getByText("영어생")).toBeTruthy();
+  });
+
+  it("고르면 계정에 저장한다", () => {
+    renderMixed();
+    fireEvent.click(screen.getByRole("button", { name: "영어" }));
+    expect(saveSubject).toHaveBeenCalledWith("english");
+  });
+
+  it("좁힌 사실을 칩으로 밝힌다(탭 배지는 전체 기준)", () => {
+    const { container } = renderMixed("english");
+    expect(container.textContent).toContain("영어만 보는 중");
+    expect(container.textContent).toContain("탭의 확인 건수는 전체 기준");
   });
 });

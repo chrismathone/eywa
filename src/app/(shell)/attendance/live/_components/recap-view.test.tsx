@@ -13,6 +13,13 @@ import { RecapView } from "./recap-view";
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }) }));
 // 서버 액션은 버튼을 누를 때만 도는 자리 — 렌더 스모크에선 모듈만 있으면 된다.
 vi.mock("@/features/attendance/recap/server/actions", () => ({ generateRecapSummary: vi.fn() }));
+// 과목 필터는 계정에 저장한다 — 저장 왕복은 렌더 스모크의 관심사가 아니라 성공만 흉내 낸다.
+const saveSubject = vi.fn(async (_subject: string) => ({ ok: true }));
+vi.mock("@/features/attendance/live/server/prefs-actions", () => ({
+  saveLiveSubjectFilter: (v: string) => saveSubject(v),
+  loadLiveViewPrefs: vi.fn(),
+}));
+vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn(), info: vi.fn() } }));
 
 afterEach(cleanup);
 
@@ -91,7 +98,10 @@ describe("RecapView", () => {
   it("AI 정리가 없어도 집계·명단을 그대로 그린다", () => {
     renderRecap();
     expect(screen.getByText("이학생")).toBeTruthy();
-    expect(screen.getByText("조치 미완료")).toBeTruthy();
+    // 🔴 2026-08-20: 사유가 확인된 결석(메모 "감기" = 병결)은 앰버 '조치 미완료'가 아니라 사유 라벨로
+    //    물러난다 — 줄은 그대로 남고 색만 내려간다.
+    expect(screen.queryByText("조치 미완료")).toBeNull();
+    expect(screen.getByText("병결")).toBeTruthy();
     // 반복 결석 배지는 '지금 기준 14일'임을 라벨로 밝힌다.
     expect(screen.getByText("최근 14일 3회")).toBeTruthy();
     // 과목은 학원설정 라벨로(raw 키 노출 금지).
@@ -199,5 +209,103 @@ describe("RecapView", () => {
     // 휴원일·수업 없는 날은 사라지지 않고 한 줄로 남는다("안 봤다"와 "볼 게 없었다"의 구분).
     expect(screen.getByText(/2026년 8월 22일 \(토\) 휴원일\(광복절\)/)).toBeTruthy();
     expect(screen.getByText(/2026년 8월 23일 \(일\) 수업 없음/)).toBeTruthy();
+  });
+});
+
+/**
+ * 사전 통보 결석 = 긴급 제외(원장 2026-08-20) + 과목별 필터. 판정은 순수 모듈이 잠그고 여기서는
+ * **화면이 그 결과를 어떻게 그리는가**만 본다.
+ */
+describe("RecapView — 사전 통보 결석과 과목 필터", () => {
+  const provider = (node: React.ReactNode) =>
+    render(
+      <OperationsProvider
+        subjects={[
+          { key: "math", label: "수학", color: "blue", weekdayGrouping: "mon-thu", testMax: 5 },
+          { key: "english", label: "영어", color: "gold", weekdayGrouping: "mon-thu", testMax: 5 },
+        ]}
+        gradeLevels={["중2"]}
+      >
+        {node}
+      </OperationsProvider>,
+    );
+
+  const mixedDay = buildDayRecap({
+    date: "2026-08-19",
+    slots: [
+      {
+        classId: "m1",
+        className: "수학반",
+        subject: "math",
+        slotStart: "16:20",
+        saveSlot: null,
+        teacherName: "김강사",
+        slotTeacherLabel: null,
+        hasAnyRecord: true,
+        students: [
+          { studentId: "s1", studentName: "여행생", schoolGrade: "중2", status: "absent", note: "가족여행" },
+          { studentId: "s2", studentName: "무단생", schoolGrade: "중2", status: "absent", note: null },
+        ],
+      },
+      {
+        classId: "e1",
+        className: "영어반",
+        subject: "english",
+        slotStart: "17:20",
+        saveSlot: "17:20",
+        teacherName: "최강사",
+        slotTeacherLabel: null,
+        hasAnyRecord: true,
+        students: [
+          { studentId: "s3", studentName: "영어결석생", schoolGrade: "중2", status: "absent", note: null },
+        ],
+      },
+    ],
+    recentAbsenceOf: (id) => (id === "s1" ? 4 : null),
+    recentPlannedOf: (id) => (id === "s1" ? 3 : null),
+  });
+  const mixed = buildRangeRecap([{ ...mixedDay, holiday: null }]);
+
+  it("🔴 앰버 '조치 미완료'는 긴급(사유 미상)에만 붙고, 사전 통보는 회색 라벨로 물러난다", () => {
+    const { container } = provider(<RecapView recap={mixed} isToday={false} ai={null} />);
+    expect(screen.getByText("여행생")).toBeTruthy(); // 목록에서 빠지지 않는다
+    expect(screen.getByText("사전 통보")).toBeTruthy();
+    // 긴급 2건(무단생·영어결석생)만 앰버.
+    expect(screen.getAllByText("조치 미완료")).toHaveLength(2);
+    expect(container.textContent).toContain("사유가 확인된 건(여행·휴가·병결) 1건은 아래로");
+  });
+
+  it("긴급이 맨 위 — 반복 결석이 많아도 사유가 있으면 아래다", () => {
+    provider(<RecapView recap={mixed} isToday={false} ai={null} />);
+    const names = screen.getAllByText(/생$/).map((n) => n.textContent);
+    expect(names.indexOf("여행생")).toBeGreaterThan(names.indexOf("무단생"));
+  });
+
+  it("상단 스탯이 미조치를 긴급·사유 확인으로 갈라 적는다", () => {
+    const { container } = provider(<RecapView recap={mixed} isToday={false} ai={null} />);
+    expect(container.textContent).toContain("연락 필요 2건 · 사유 확인 1건");
+  });
+
+  it("반복 결석 숫자는 지우지 않고 사전 통보 횟수를 함께 적는다(톤만 내린다)", () => {
+    const { container } = provider(<RecapView recap={mixed} isToday={false} ai={null} />);
+    expect(container.textContent).toContain("최근 14일 4회 (사전 통보 3회)");
+  });
+
+  it("과목 칩을 누르면 그 과목 사건 줄만 남고, 감춘 건수를 적는다", () => {
+    const { container } = provider(
+      <RecapView recap={mixed} isToday={false} ai={null} initialSubject="english" />,
+    );
+    expect(screen.getByText("영어결석생")).toBeTruthy();
+    expect(screen.queryByText("무단생")).toBeNull();
+    expect(container.textContent).toContain("과목 필터로 2건 숨김");
+    // 🔴 상단 스탯은 전체 기준 그대로다.
+    expect(container.textContent).toContain("연락 필요 2건 · 사유 확인 1건");
+    expect(container.textContent).toContain("영어만 보는 중");
+  });
+
+  it("고르면 계정에 저장한다", () => {
+    provider(<RecapView recap={mixed} isToday={false} ai={null} />);
+    fireEvent.click(screen.getByRole("button", { name: "영어" }));
+    expect(saveSubject).toHaveBeenCalledWith("english");
   });
 });

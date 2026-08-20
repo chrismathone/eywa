@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildDayRecap, type RecapSlotInput } from "./digest";
+import { buildDayRecap, isRepeatAbsenceDanger, type RecapSlotInput } from "./digest";
 
 function slot(over: Partial<RecapSlotInput> = {}): RecapSlotInput {
   return {
@@ -314,5 +314,139 @@ describe("buildDayRecap", () => {
       ],
     });
     expect(recap.teachers[0]!.teacherName).toBe("덜찍음");
+  });
+});
+
+/**
+ * 사전 통보 결석을 긴급에서 내리는 규칙(원장 2026-08-20). 분류 자체는 `absence-reason.test.ts`가 잠그고
+ * 여기서는 **다이제스트가 그 결과를 어떻게 쓰는지**만 본다.
+ */
+describe("buildDayRecap — 사유 있는 결석은 긴급이 아니다", () => {
+  it("사유 메모가 있으면 urgent가 아니고, 없으면 urgent다", () => {
+    const recap = buildDayRecap({
+      date: "2026-08-19",
+      slots: [
+        slot({
+          students: [
+            student({ studentId: "s1", studentName: "여행생", status: "absent", note: "가족여행" }),
+            student({ studentId: "s2", studentName: "무단생", status: "absent", note: null }),
+            student({ studentId: "s3", studentName: "아픈생", status: "absent", note: "병원 진료" }),
+          ],
+        }),
+      ],
+    });
+    const by = new Map(recap.absences.map((e) => [e.studentName, e]));
+    expect(by.get("여행생")!.reasonKind).toBe("planned");
+    expect(by.get("여행생")!.urgent).toBe(false);
+    expect(by.get("아픈생")!.reasonKind).toBe("sick");
+    expect(by.get("아픈생")!.urgent).toBe(false);
+    expect(by.get("무단생")!.reasonKind).toBe("unknown");
+    expect(by.get("무단생")!.urgent).toBe(true);
+  });
+
+  it("🔴 불변식: absentPending = absentUrgent + absentNotified (뜻을 바꾸지 않는다)", () => {
+    const recap = buildDayRecap({
+      date: "2026-08-19",
+      slots: [
+        slot({
+          students: [
+            student({ studentId: "s1", status: "absent", note: "여행" }),
+            student({ studentId: "s2", status: "absent", note: null }),
+            student({ studentId: "s3", status: "absent", note: "휴가" }),
+          ],
+        }),
+      ],
+    });
+    expect(recap.totals.absentPending).toBe(3);
+    expect(recap.totals.absentUrgent).toBe(1);
+    expect(recap.totals.absentNotified).toBe(2);
+    expect(recap.totals.absentUrgent + recap.totals.absentNotified).toBe(recap.totals.absentPending);
+  });
+
+  it("조치가 끝난 건은 사유가 없어도 긴급이 아니다", () => {
+    const recap = buildDayRecap({
+      date: "2026-08-19",
+      slots: [slot({ students: [student({ status: "absent", note: null })] })],
+      followupOf: () => ({ state: "resolved", outcome: "coming", handledByName: "데스크" }),
+    });
+    expect(recap.absences[0]!.urgent).toBe(false);
+    expect(recap.totals.absentPending).toBe(0);
+    expect(recap.totals.absentUrgent).toBe(0);
+  });
+
+  it("🔴 접힌 뒤 교시에 사유 메모가 있어도 긴급이 풀린다(만들 때가 아니라 끝에서 확정)", () => {
+    // 영어는 교시마다 행이라 사유를 한 교시에만 적는 편이다. 첫 교시로만 판정하면 "메모는 여행인데
+    // 화면은 긴급"으로 굳는다.
+    const recap = buildDayRecap({
+      date: "2026-08-19",
+      slots: [
+        slot({ slotStart: "16:20", saveSlot: "16:20", students: [student({ status: "absent", note: null })] }),
+        slot({ slotStart: "17:20", saveSlot: "17:20", students: [student({ status: "absent", note: "가족여행" })] }),
+      ],
+    });
+    expect(recap.absences).toHaveLength(1);
+    expect(recap.absences[0]!.note).toBe("가족여행");
+    expect(recap.absences[0]!.urgent).toBe(false);
+    expect(recap.totals.absentUrgent).toBe(0);
+  });
+
+  it("긴급이 맨 위, 사전 통보는 아래 — 그래도 목록에서 빠지지 않는다", () => {
+    const recap = buildDayRecap({
+      date: "2026-08-19",
+      slots: [
+        slot({
+          students: [
+            // 반복 결석이 많아도 사유가 있으면 긴급보다 아래다(긴급이 첫 갈래).
+            student({ studentId: "s1", studentName: "여행생", status: "absent", note: "여행" }),
+            student({ studentId: "s2", studentName: "무단생", status: "absent", note: null }),
+          ],
+        }),
+      ],
+      recentAbsenceOf: (id) => (id === "s1" ? 9 : null),
+    });
+    expect(recap.absences.map((e) => e.studentName)).toEqual(["무단생", "여행생"]);
+    expect(recap.absences).toHaveLength(2);
+    expect(recap.totals.absent).toBe(2);
+  });
+
+  it("반복 결석 중 사전 통보 횟수를 함께 싣는다", () => {
+    const recap = buildDayRecap({
+      date: "2026-08-19",
+      slots: [slot({ students: [student({ status: "absent", note: null })] })],
+      recentAbsenceOf: () => 4,
+      recentPlannedOf: () => 2,
+    });
+    expect(recap.absences[0]!.recentAbsences).toBe(4);
+    expect(recap.absences[0]!.recentPlanned).toBe(2);
+  });
+
+  it("결석이 아닌 상태엔 반복 결석·사전 통보를 안 싣는다", () => {
+    const recap = buildDayRecap({
+      date: "2026-08-19",
+      slots: [slot({ students: [student({ status: "late", note: "여행" })] })],
+      recentAbsenceOf: () => 4,
+      recentPlannedOf: () => 2,
+    });
+    expect(recap.others[0]!.recentAbsences).toBeNull();
+    expect(recap.others[0]!.recentPlanned).toBeNull();
+    // 지각은 결석·공결이 아니라 urgent 축 자체가 없다.
+    expect(recap.others[0]!.urgent).toBe(false);
+  });
+});
+
+describe("isRepeatAbsenceDanger", () => {
+  it("사전 통보를 뺀 나머지가 2회 미만이면 붉게 세우지 않는다", () => {
+    expect(isRepeatAbsenceDanger(4, 3)).toBe(false);
+    expect(isRepeatAbsenceDanger(4, 2)).toBe(true);
+    expect(isRepeatAbsenceDanger(2, 1)).toBe(false);
+  });
+
+  it("보정이 없으면(null) 종전대로 붉다 — 조회 실패가 화면을 조용하게 만들면 안 된다", () => {
+    expect(isRepeatAbsenceDanger(3, null)).toBe(true);
+  });
+
+  it("문턱 미만이거나 값이 없으면 애초에 안 그린다", () => {
+    expect(isRepeatAbsenceDanger(1, null)).toBe(false);
+    expect(isRepeatAbsenceDanger(null, null)).toBe(false);
   });
 });
