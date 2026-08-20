@@ -43,7 +43,7 @@ export function DeskClassRow({ row, date, canEdit }: { row: QueueClass; date: st
         </p>
         {/* 강사가 먼저 손을 든 반 — 이 카드의 '요청'(강사에게 입력 요청)은 무의미하다(강사가 이미 안다). */}
         {row.teacherRequested && (
-          <p className="text-amber-strong text-xs font-semibold">강사가 데스크 확인을 요청했습니다</p>
+          <p className="text-amber text-xs font-semibold">강사가 데스크 확인을 요청했습니다</p>
         )}
         {error && <p className="text-danger text-xs">{error}</p>}
       </div>

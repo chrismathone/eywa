@@ -60,7 +60,12 @@ describe("죽은 색 클래스", () => {
         for (const m of scan.matchAll(/(?<![\w-])(bg|text|border)-([a-z][a-z0-9-]*)\b/g)) {
           const name = m[2]!;
           if (TOKENS.has(name)) continue;
-          if (BUILTIN.has(name) || BUILTIN.has(name.split("-")[0]!)) continue;
+          // 🔴 팔레트 이름 뒤에는 **숫자 단계만** 온다(`amber-500` ○ / `amber-strong` ✗).
+          //    예전엔 앞부분만 봐서 `text-amber-strong` 14곳이 몇 달간 **아무 색도 없이** 통과했다
+          //    (오늘 출결·어제 요약의 '조치 미완료'·'데스크 확인 요청'이 검정으로 떴다, 2026-08-20).
+          if (BUILTIN.has(name)) continue;
+          const head = name.split("-")[0]!;
+          if (BUILTIN.has(head) && /^\d{2,3}$/.test(name.slice(head.length + 1))) continue;
           if (NON_COLOR.test(name)) continue;
           bad.push(`${m[0]} — ${f.replace(ROOT, "").replace(/\\/g, "/")}:${i + 1}`);
         }

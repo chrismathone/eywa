@@ -94,7 +94,7 @@ export function DeskStudentRow({
         )}
         {row.teacherRequested && (
           <span
-            className="bg-amber/15 text-amber-strong rounded-full px-2 py-0.5 text-[11px] font-bold"
+            className="bg-amber/15 text-amber rounded-full px-2 py-0.5 text-[11px] font-bold"
             title="강사가 이 교시 미입력 학생의 등원 확인을 데스크에 요청했습니다"
           >
             강사 확인 요청

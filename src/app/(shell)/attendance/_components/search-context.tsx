@@ -183,7 +183,7 @@ export function useSearchActive(): boolean {
 export function ClassSearchCount({ rowKeys }: { rowKeys: readonly string[] }) {
   const { active, count } = useClassMatched(rowKeys);
   if (!active) return null;
-  return <span className="text-amber-strong num text-[11px] font-bold">검색 {count}명</span>;
+  return <span className="text-amber num text-[11px] font-bold">검색 {count}명</span>;
 }
 
 /**

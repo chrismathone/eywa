@@ -147,7 +147,7 @@ export function HubStudentSearch({
               </ul>
               {/* 🔴 잘랐으면 **밝힌다** — 상한을 숨기면 "그 학생은 없다"는 거짓말이 된다([[#89]]). */}
               {result.truncated ? (
-                <p className="text-amber-strong border-line mt-1 border-t px-2 pt-1.5 text-[11.5px]">
+                <p className="text-amber border-line mt-1 border-t px-2 pt-1.5 text-[11.5px]">
                   {hubTruncatedNote(result.limit)}
                 </p>
               ) : null}

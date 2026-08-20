@@ -143,7 +143,7 @@ export function DeskView({
       {carryOver && carryOver.count > 0 && (
         <a
           href={`/attendance/live?tab=desk&date=${carryOver.date}`}
-          className="text-amber-strong text-sm font-bold"
+          className="text-amber text-sm font-bold"
         >
           어제 남은 결석 {carryOver.count}건
         </a>

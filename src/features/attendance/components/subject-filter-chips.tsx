@@ -120,7 +120,7 @@ export function SubjectScopeChip({
   const label = subjects.labelOf(subject) || "과목";
   return (
     <span
-      className="bg-amber-soft text-amber-strong num shrink-0 rounded-full px-2.5 py-0.5 text-xs font-bold whitespace-nowrap"
+      className="bg-amber-soft text-amber num shrink-0 rounded-full px-2.5 py-0.5 text-xs font-bold whitespace-nowrap"
       title={
         totalsNote
           ? `과목 필터로 목록만 좁혔습니다 — ${totalsNote}입니다.`

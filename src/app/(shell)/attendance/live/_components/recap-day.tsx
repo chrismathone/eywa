@@ -203,7 +203,7 @@ function EventRow({ event }: { event: RecapEvent }) {
         ) : event.urgent ? (
           // 🔴 앰버는 **긴급만** 쓴다(원장 2026-08-20) — 여행·휴가 줄까지 세워 두면 연락이 안 된 결석이
           //    그 사이에 묻힌다. 실측 결석 메모 311건 중 272건이 사전 통보였다.
-          <span className="text-amber-strong font-bold">조치 미완료</span>
+          <span className="text-amber font-bold">조치 미완료</span>
         ) : (event.status === "absent" || event.status === "excused") &&
           event.reasonKind !== "unknown" ? (
           // 사유가 확인된 미조치 — 줄은 남기고 색만 물러난다(빼면 "그날 결석이 몇이었나"가 깨진다).
@@ -258,7 +258,7 @@ export function PartialRow({ row, date }: { row: RecapPartialClass; date: string
         </a>
         <span className="text-text-faint text-xs">{subjects.labelOf(row.subject) || "과목 없음"}</span>
         <span className="text-text-faint text-xs">{handlersLabel(row.teacherNames)}</span>
-        <span className="num text-amber-strong ml-auto shrink-0 text-xs font-bold">
+        <span className="num text-amber ml-auto shrink-0 text-xs font-bold">
           빈 칸 {row.cells}개
         </span>
       </div>
