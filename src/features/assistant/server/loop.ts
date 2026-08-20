@@ -20,6 +20,7 @@ import { kstToday } from "@/lib/date-kst";
 import { reportWarning } from "@/lib/observability/report-error";
 import type { AssistantTurn } from "../turns";
 import { hasSpecialTokenNoise, parseInlineToolCalls, stripMarkdownEmphasis } from "../solar-tokens";
+import { collectLinkCandidates, pickLinksForAnswer, type AssistantLink } from "../links";
 import {
   buildGrounding,
   findGroundingIssues,
@@ -78,7 +79,11 @@ const MAX_HISTORY_TURNS = 12; // 모델에 넘길 직전 대화 턴 수
 function buildSystemPrompt(todayKst: string): string {
   return [
     `당신은 학원 원장을 보좌하는 '매니저 팀' AI 비서입니다. 오늘은 ${todayKst}(한국 시간)입니다. 단순 조회 대행이 아니라, 데이터를 읽고 판단해 다음 행동까지 제안하는 실무 매니저처럼 답합니다. 학원 데이터는 반드시 제공된 툴로 조회해 그 결과에만 근거해 답합니다.`,
-    "- 한국어 존댓말, 간결하게(사실 3~5문장 + 제안 1~2문장). 마크다운·별표·헤더 없이 일반 문장으로.",
+    "- 한국어 존댓말, 간결하게(사실 3~5문장 + 제안 1~2문장). 기본은 일반 문장입니다.",
+    // 2026-08-20 전환: 패널이 안전 렌더러(표·목록·강조)를 쓰므로 "마크다운 금지"를 뒤집었다.
+    // 종전 지시는 렌더링과 어긋나 있었다 — 지시는 금지인데 모델은 표를 썼고 화면은 파이프를 그대로 쏟았다.
+    "- **여러 항목을 나열할 땐 마크다운을 씁니다**: 항목이 3개 이상이고 비교할 값이 있으면 파이프 표(머리행 + `| --- |` 구분행 필수), 단순 나열이면 `- ` 불릿, 강조는 `**굵게**`. 화면이 표·목록·강조를 제대로 그립니다.",
+    "- ⚠️ 표는 열 4개 이하·행 20개 이하로 유지하고(길면 상위 몇 건만 + 전체 건수를 문장으로), 표 앞뒤에 한 문장씩 요약·제안을 답니다. 제목 헤더(#)와 코드블록은 쓰지 마십시오.",
     "- 숫자·이름·날짜는 툴 결과 그대로. 조회로 확인 못 한 내용은 추정하지 말고 모른다고 답합니다.",
     "- **사실 나열에 그치지 말 것**: 조회된 데이터 **안에서** 눈에 띄는 패턴을 매니저 관점에서 짚고, 그래서 무엇을 하면 좋을지 **구체적 다음 행동**을 한두 문장 덧붙입니다. 데이터에 실제로 드러난 신호(특정일에 퇴원이 몰림, 대기 상담이 쌓임, 작성률이 목표에 못 미침, 미납액이 큼 등)는 적극적으로 짚어 조치를 제안하십시오 — 예) '주 후반 독려가 필요해 보입니다', '미납 안내 문자를 권합니다', '담당 강사에게 상담을 요청하십시오', '같은 날 다수 퇴원은 원인 확인이 필요합니다'. ⚠️ 이 예시 문구는 설명용일 뿐이니 그대로 베끼지 말고, **반드시 이번 조회 결과의 실제 수치·항목으로만** 말하십시오(예시의 숫자를 답변에 옮기지 마십시오).",
     "- ⚠️ **없는 것을 지어내기 절대 금지**(판단과 별개, 가장 중요): 툴 결과에 **없는 외부 비교(전월 대비·지난주 평균 등)·추세·원인·비율·정책을 만들어내지 마십시오.** 조회되지 않은 근거·이유를 덧붙이면 날조라 금지입니다. 비교가 필요하면 그 데이터를 툴로 먼저 조회하고, 없으면 이번 값 자체로만 판단합니다.",
@@ -88,6 +93,9 @@ function buildSystemPrompt(todayKst: string): string {
     "- 선생님·직원 관련 질문은 search_staff로 특정한 뒤 get_staff_summary를, 보고서 작성 현황은 get_report_writing_status를 씁니다.",
     "- 반(수업) 질문은 search_classes → get_class_detail, 회의록 질문은 search_meetings → get_meeting_summary 순서로 씁니다.",
     "- 신규생 등록상담은 search_enrollment_consultations, 퇴원은 recent_withdrawals를 씁니다(재원생 상담은 search_consultations).",
+    "- 시간표·요일별 배치는 get_timetable_day, 학원 일정·행사는 get_calendar_events를 씁니다.",
+    "- 보고서가 학부모에게 나갔는지(발송·실패)는 get_report_send_status, 내 결재 대기 문서는 get_my_approvals를 씁니다.",
+    "- 툴이 권한 없음을 돌려주면 그 안내를 그대로 전하고, 다른 툴로 우회해 답을 만들지 마십시오.",
     "- 영어 단어·코드·내부 키 이름을 답변에 노출하지 않습니다.",
     "- 주민번호·계좌·급여·연락처 등 민감 정보 질문에는 도울 수 없다고 답합니다.",
     // 비서는 generateJSON을 안 거치는 자체 툴 루프라 공통 사실 가드를 여기서 직접 잇는다(원장 2026-07-23).
@@ -99,26 +107,57 @@ export type AssistantLoopResult = {
   answer: string;
   model: string;
   toolCalls: number;
+  /** 답변에 붙일 바로가기 버튼 — **툴 결과에서 결정론적으로** 수집(모델이 URL을 못 만든다, links.ts). */
+  links: AssistantLink[];
+  /** 상한(8)을 넘어 버튼을 못 단 대상 수 — 화면이 "외 N건"으로 밝힌다(붙인 게 전부인 척 금지). */
+  omittedLinks: number;
 };
 
 function clip(text: string): string {
   return text.length > MAX_TOOL_RESULT_CHARS ? `${text.slice(0, MAX_TOOL_RESULT_CHARS)}…(잘림)` : text;
 }
 
-/** 툴 1건 실행 — 인자 zod 검증 실패·런타임 오류는 모델에게 한 줄 오류로(루프는 계속). */
-async function runTool(tools: RegisteredTool[], name: string, rawInput: unknown): Promise<string> {
+/**
+ * 툴 1건 실행 — 인자 zod 검증 실패·런타임 오류는 모델에게 한 줄 오류로(루프는 계속).
+ * `content`(모델에게 주는 것)는 컨텍스트 방어로 잘리지만, `raw`(잘리지 않은 원본)를 함께 돌려준다 —
+ * 링크 수집은 JSON.parse를 하는데 잘린 문자열은 파싱이 통째로 실패해 **그 툴의 버튼이 전부 사라진다**
+ * (수강생 많은 반 상세에서 실제로 6000자를 넘는다, 2026-08-20 적대 리뷰).
+ */
+async function runTool(
+  tools: RegisteredTool[],
+  name: string,
+  rawInput: unknown,
+): Promise<{ content: string; raw: string }> {
   const tool = tools.find((t) => t.name === name);
-  if (!tool) return `오류: 알 수 없는 툴 ${name}`;
+  if (!tool) {
+    const msg = `오류: 알 수 없는 툴 ${name}`;
+    return { content: msg, raw: msg };
+  }
   try {
     const args = tool.parse(rawInput);
     const result = await tool.run(args as never);
-    return clip(typeof result === "string" ? result : JSON.stringify(result));
+    const raw = typeof result === "string" ? result : JSON.stringify(result);
+    return { content: clip(raw), raw };
   } catch (e) {
-    return `오류: ${e instanceof Error ? e.message.slice(0, 300) : String(e).slice(0, 300)}`;
+    const msg = `오류: ${e instanceof Error ? e.message.slice(0, 300) : String(e).slice(0, 300)}`;
+    return { content: msg, raw: msg };
   }
 }
 
 type Usage = { input: number; output: number };
+
+/** 루프 결과 — 답변 + 툴 호출 수 + 결정론 수집한 바로가기 링크. */
+type LoopOutcome = { answer: string; toolCalls: number; links: AssistantLink[]; omittedLinks: number };
+
+/**
+ * 답변 + 툴 결과 → 바로가기 링크. **모델은 관여하지 않는다**(id 환각 = 남의 학생으로 가는 버튼).
+ * 툴 결과는 사용자 세션(RLS)으로 조회된 것뿐이라 링크도 자연히 그 사람의 권한 안이다(links.ts 주석).
+ */
+function buildLinks(answer: string, linkSources: string[]): { links: AssistantLink[]; omittedLinks: number } {
+  if (!answer || linkSources.length === 0) return { links: [], omittedLinks: 0 };
+  const { links, omitted } = pickLinksForAnswer(answer, collectLinkCandidates(linkSources));
+  return { links, omittedLinks: omitted };
+}
 
 /** grounding 이슈 → 모델에게 줄 교정 지시(무엇이 날조인지 구체적으로). */
 function buildGroundingCorrection(issues: GroundingIssue[]): string {
@@ -178,7 +217,7 @@ async function runOpenAiCompatLoop(
   question: string,
   history: AssistantTurn[],
   usage: Usage,
-): Promise<{ answer: string; toolCalls: number }> {
+): Promise<LoopOutcome> {
   const client = getUpstage("default");
   const tools = registeredTools();
   const toolDefs: OpenAI.Chat.Completions.ChatCompletionTool[] = tools.map((tool) => ({
@@ -195,7 +234,8 @@ async function runOpenAiCompatLoop(
     ...history.map((turn) => ({ role: turn.role, content: turn.content }) as const),
     { role: "user", content: question },
   ];
-  const toolResults: string[] = []; // grounding 대조용 팩트 원천
+  const toolResults: string[] = []; // grounding 대조용 팩트 원천(= 모델이 실제로 본 것)
+  const linkSources: string[] = []; // 링크 수집용 원본(잘리지 않은 JSON)
 
   let toolCalls = 0;
   for (let round = 0; round <= MAX_ROUNDS; round++) {
@@ -236,7 +276,7 @@ async function runOpenAiCompatLoop(
           usage.output += r.usage?.completion_tokens ?? 0;
           return stripMarkdownEmphasis((r.choices[0]?.message?.content ?? "").trim());
         });
-        return { answer: grounded, toolCalls };
+        return { answer: grounded, toolCalls, ...buildLinks(grounded, linkSources) };
       }
     } else {
       messages.push(msg);
@@ -250,8 +290,9 @@ async function runOpenAiCompatLoop(
       } catch {
         rawInput = { __parse_error: call.function.arguments };
       }
-      const content = await runTool(tools, call.function.name, rawInput);
+      const { content, raw } = await runTool(tools, call.function.name, rawInput);
       toolResults.push(content);
+      linkSources.push(raw);
       messages.push({ role: "tool", tool_call_id: call.id, content });
     }
   }
@@ -264,7 +305,7 @@ async function runAnthropicLoop(
   question: string,
   history: AssistantTurn[],
   usage: Usage,
-): Promise<{ answer: string; toolCalls: number }> {
+): Promise<LoopOutcome> {
   const client = getAnthropic("default");
   const tools = registeredTools();
   const toolDefs = tools.map((tool) => ({
@@ -278,7 +319,8 @@ async function runAnthropicLoop(
     ...history.map((turn) => ({ role: turn.role, content: turn.content })),
     { role: "user", content: question },
   ];
-  const toolResults: string[] = []; // grounding 대조용 팩트 원천
+  const toolResults: string[] = []; // grounding 대조용 팩트 원천(= 모델이 실제로 본 것)
+  const linkSources: string[] = []; // 링크 수집용 원본(잘리지 않은 JSON)
 
   let toolCalls = 0;
   for (let round = 0; round <= MAX_ROUNDS; round++) {
@@ -320,14 +362,15 @@ async function runAnthropicLoop(
           r.content.map((b) => (b.type === "text" ? b.text : "")).join("").trim(),
         );
       });
-      return { answer: grounded, toolCalls };
+      return { answer: grounded, toolCalls, ...buildLinks(grounded, linkSources) };
     }
     messages.push({ role: "assistant", content: res.content });
     const results = [] as { type: "tool_result"; tool_use_id: string; content: string }[];
     for (const use of toolUses) {
       toolCalls++;
-      const toolContent = await runTool(tools, use.name, use.input);
+      const { content: toolContent, raw } = await runTool(tools, use.name, use.input);
       toolResults.push(toolContent);
+      linkSources.push(raw);
       results.push({
         type: "tool_result",
         tool_use_id: use.id,

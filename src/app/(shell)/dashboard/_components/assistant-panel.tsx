@@ -1,9 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { Button } from "@/components/ui/button";
-import { askAssistant } from "@/features/assistant/server/actions";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { askAssistant, resetAssistantConversation } from "@/features/assistant/server/actions";
+import { AnswerBody } from "@/features/assistant/components/answer-body";
+import { answerHasTable, parseAnswerBlocks } from "@/features/assistant/rich-answer";
 import type { StoredTurn } from "@/features/assistant/turns";
 
 /** 빈 대화 상태의 제안 질문 칩 — 클릭하면 입력칸에 채워 바로 다듬어 보낼 수 있게. */
@@ -11,13 +14,17 @@ const EXAMPLE_QUESTIONS = [
   "이번 달 수납률은?",
   "그만둘 것 같은 학생 알려줘",
   "오늘 결석한 학생 있어?",
-  "이번 주 상담 예정 알려줘",
+  "오늘 시간표 알려줘",
 ];
 
 /**
  * 운영실 AI 비서 질문 패널 — "학원 매니저 팀" Phase 2(대화 채널).
  * 질문 1건 = 서버 액션 1회(명시적 트리거). 노출은 page.tsx의 canManageStaff 게이트 뒤.
  * 아바타/이니셜 배지 금지 규칙 — 역할은 텍스트 라벨로만 구분한다.
+ *
+ * 답변은 [AnswerBody](src/features/assistant/components/answer-body.tsx)가 표·목록·강조로 렌더하고
+ * (2026-08-20 — 종전 평문 렌더는 40행짜리 표를 파이프 그대로 쏟았다), 바로가기 버튼은 서버가 툴
+ * 결과에서 수집해 준 것만 그린다(모델이 만든 URL 없음).
  */
 export function AssistantPanel({
   initialConversationId,
@@ -30,8 +37,19 @@ export function AssistantPanel({
   const [turns, setTurns] = useState<StoredTurn[]>(initialTurns);
   const [input, setInput] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [omittedLinks, setOmittedLinks] = useState(0);
+  const [confirmReset, setConfirmReset] = useState(false);
   const [pending, startTransition] = useTransition();
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // 파싱은 답변 텍스트에만 의존 — 턴이 바뀔 때만 다시 한다(표 40행도 문자열 훑기 한 번).
+  const rendered = useMemo(
+    () =>
+      turns.map((turn) =>
+        turn.role === "assistant" ? parseAnswerBlocks(turn.content) : null,
+      ),
+    [turns],
+  );
 
   useEffect(() => {
     // 새 턴·생각 중 표시가 항상 보이게 아래로 — DOM 스크롤만(상태 변경 없음, #25 무관).
@@ -56,6 +74,24 @@ export function AssistantPanel({
       }
       if (result.conversationId) setConversationId(result.conversationId);
       setTurns(result.turns);
+      setOmittedLinks(result.omittedLinks);
+    });
+  };
+
+  const reset = () => {
+    setConfirmReset(false);
+    setError(null);
+    startTransition(async () => {
+      const result = await resetAssistantConversation();
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      // 서버에서 실제로 지운 뒤에 화면을 비운다 — 종전 '새 대화'는 클라 state만 비워서
+      // 새로고침하면 지난 대화가 그대로 돌아왔다(원장 제보 2026-08-20).
+      setConversationId(null);
+      setTurns([]);
+      setOmittedLinks(0);
     });
   };
 
@@ -87,32 +123,46 @@ export function AssistantPanel({
             variant="ghost"
             size="sm"
             disabled={pending}
-            onClick={() => {
-              setConversationId(null);
-              setTurns([]);
-              setError(null);
-            }}
+            onClick={() => setConfirmReset(true)}
           >
-            새 대화
+            대화 초기화
           </Button>
         ) : null}
       </header>
 
       {turns.length > 0 || pending ? (
-        <div ref={scrollRef} className="max-h-96 space-y-3 overflow-y-auto px-5 py-4 sm:px-6">
-          {turns.map((turn, index) => (
-            <div key={index} className={turn.role === "user" ? "flex justify-end" : "flex justify-start"}>
-              <div
-                className={
-                  turn.role === "user"
-                    ? "bg-primary text-primary-foreground max-w-[85%] rounded-2xl rounded-br-md px-4 py-2.5 text-[13.5px] leading-relaxed whitespace-pre-wrap"
-                    : "bg-bg-soft text-foreground max-w-[85%] rounded-2xl rounded-bl-md px-4 py-2.5 text-[13.5px] leading-relaxed whitespace-pre-wrap"
-                }
-              >
-                {turn.content}
+        <div
+          ref={scrollRef}
+          className="max-h-[clamp(24rem,60vh,44rem)] space-y-3 overflow-y-auto px-5 py-4 sm:px-6"
+        >
+          {turns.map((turn, index) => {
+            const blocks = rendered[index];
+            // 표가 든 답변은 말풍선을 넓게 편다 — 85% 폭에선 4열 표가 읽히지 않는다.
+            const wide = !!blocks && answerHasTable(blocks);
+            return (
+              <div key={index} className={turn.role === "user" ? "flex justify-end" : "flex justify-start"}>
+                <div
+                  className={
+                    turn.role === "user"
+                      ? "bg-primary text-primary-foreground max-w-[85%] rounded-2xl rounded-br-md px-4 py-2.5 text-[13.5px] leading-relaxed whitespace-pre-wrap"
+                      : `bg-bg-soft text-foreground ${wide ? "w-full" : "max-w-[85%]"} min-w-0 rounded-2xl rounded-bl-md px-4 py-2.5 text-[13.5px] leading-relaxed`
+                  }
+                >
+                  {blocks ? (
+                    <AnswerBody
+                      blocks={blocks}
+                      links={turn.links}
+                      // "외 N건"은 이번 응답에만 붙인다(저장 턴엔 남기지 않는다 — 지난 답변의
+                      // 잔여 수는 지금 화면에서 확인할 방법이 없다).
+                      omittedLinks={index === turns.length - 1 ? omittedLinks : 0}
+                    />
+                  ) : (
+                    turn.content
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
           {pending ? (
             <div className="flex justify-start">
               <div className="bg-bg-soft text-text-dim max-w-[85%] rounded-2xl rounded-bl-md px-4 py-2.5 text-[13.5px]">
@@ -161,6 +211,16 @@ export function AssistantPanel({
         </div>
         {error ? <p className="text-danger mt-1.5 text-[12px]">{error}</p> : null}
       </div>
+
+      <ConfirmDialog
+        open={confirmReset}
+        title="대화 초기화"
+        message="지금까지의 대화를 모두 지웁니다. 지운 대화는 되돌릴 수 없습니다."
+        confirmLabel="초기화"
+        danger
+        onConfirm={reset}
+        onCancel={() => setConfirmReset(false)}
+      />
     </section>
   );
 }

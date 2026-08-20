@@ -107,4 +107,9 @@ describe("stripUngroundedSentences", () => {
     const out = stripUngroundedSentences("전월 대비 늘었습니다.", g);
     expect(out).toBe("전월 대비 늘었습니다.");
   });
+  it("줄 구조를 보존한다 — 표가 한 문단으로 뭉개지지 않게(2026-08-20)", () => {
+    const table = ["| 이름 | 퇴원일 |", "| --- | --- |", "| 김민수 | 2026-07-13 |"].join("\n");
+    const out = stripUngroundedSentences(`${table}\n전월 대비 늘었습니다.`, g);
+    expect(out).toBe(table); // 표는 줄 그대로, 날조 문장만 탈락
+  });
 });

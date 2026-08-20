@@ -1,5 +1,44 @@
 # eywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-08-20 (3) — 운영실 대화형 비서: 표·목록 리치 렌더 · 바로가기 버튼 · 대화 초기화 · 권한 커버리지
+
+원장 지시 4건: *"바로가기 같은 버튼을 답변해줘도 좋을것 같네"* · *"이것도 html이나 멋진 비주얼로…
+마크다운으로 답변하는건가?"*(‘오늘 출결’이 `| 반 이름 | 과목 |` 파이프 원문으로 쏟아졌다) ·
+*"'대화 초기화' 버튼도 만들어주고"* · *"사용자의 권한 내에서 모든 답변이 가능하도록 배선 점검"*. 마이그레이션 0.
+
+- **렌더링 — 지시와 화면이 어긋나 있었다**: 시스템 프롬프트는 "마크다운 없이"인데 모델은 표를 썼고
+  패널은 `whitespace-pre-wrap` 평문이라 파이프가 그대로 보였다. **표·목록·강조를 허용하고 안전하게
+  렌더**하는 쪽으로 정리 — 순수 파서 [rich-answer.ts](src/features/assistant/rich-answer.ts)(GFM 파이프 표·불릿/번호·
+  `**강조**`·헤더 마커 제거, Vitest) + [answer-body.tsx](src/features/assistant/components/answer-body.tsx).
+  🔴 `dangerouslySetInnerHTML` 미사용(LLM 출력) — 파서는 문자열만 다루고 렌더러는 React 엘리먼트만 조립한다
+  (가드: `<script>`·`<img onerror>`가 텍스트로만 남는 테스트). 표는 자기 컨테이너 안에서 가로 스크롤 +
+  머리행 sticky(불투명 [[#74]]), **표가 있는 답변만 말풍선을 넓게** 펴고 대화 영역 높이는 `max-h-96`→`clamp(24rem,60vh,44rem)`.
+  `stripMarkdownEmphasis`는 없애지 않고 **대상만 좁혔다**(강조 보존·백틱/코드펜스만 제거, `__x__`→`**x**`).
+  특수 토큰 폐기 규약(`hasSpecialTokenNoise`)은 그대로.
+- **바로가기 버튼 — 링크는 모델이 아니라 툴 결과가 만든다**([links.ts](src/features/assistant/links.ts), 순수+Vitest):
+  🔴 모델에게 URL을 만들게 하지 않는다(id 환각 = 남의 학생으로 가는 버튼). 서버가 툴 결과 JSON에서
+  `studentId`·`classId`·`staffId`·`meetingId`+이름 쌍을 **결정론적으로** 수집하고, **답변 본문에 실제로 등장한
+  이름만** 버튼이 된다([[#86]]). 동명이인·짧은 이름은 통째 제외(어느 쪽인지 모르는 버튼은 없느니만 못하다),
+  상한 8개에 넘치면 "외 N건"으로 밝힌다. 창(iframe) 시스템이라 **WindowLink**로 연다.
+  저장은 `StoredTurn.links`(jsonb 확장, 마이그 0)이고 `parseStoredTurns`가 **항목별로 검증**한다(종류
+  화이트리스트·uuid·라벨 길이 — DB jsonb 불신). ⚠️ 링크 수집은 **잘리지 않은 툴 원본**에서 한다 —
+  6000자 clip으로 JSON이 깨지면 그 툴의 버튼이 통째로 사라진다(적대 리뷰).
+- **'대화 초기화'** — 종전 '새 대화'는 **클라 state만** 비워서 새로고침하면 지난 대화가 그대로 돌아왔다
+  (원장이 말한 "이전 대화가 계속 남아있다"). 신설 `resetAssistantConversation()`이 **자기 대화 전부**를
+  지운다(패널은 최신 1건을 여는데 한 건만 지우면 그 전 대화가 도로 올라온다) — `user_id`·`tenant_id`
+  명시 조건 + own-row RLS 이중, ConfirmDialog 확인 1회, `revalidatePath("/dashboard")`.
+- **권한 커버리지** — 툴 18종 → **22종**. 신설: `get_timetable_day`(요일별 배치·강사 필터) ·
+  `get_calendar_events`(월 일정) · `get_report_send_status`(ClassNote 발송·실패, 사유는 한글 요약만) ·
+  `get_my_approvals`(내 결재 대기·예정). 🔴 그리고 **반대 방향 구멍**을 막았다 — 툴에 **메뉴 게이트가
+  없었다**([tool-gate.ts](src/features/assistant/server/tool-gate.ts) `requireMenu`): 직원관리는 RLS가 아니라 **메뉴
+  권한**이 게이트(원장+개인 예외, 2026-08-01)라 그 화면을 못 여는 admin·manager가 비서로 "직원 목록"을
+  우회 조회할 수 있었다(#77 — retention만 2026-07-30에 막혀 있었다). 22종 전부 화면과 같은 메뉴 키를 통과하고,
+  구조 가드 `tool-menu-gate.test.ts`가 게이트 없는 새 툴을 잡는다(빠져도 권한 있는 계정에선 아무 차이가 없어 리뷰에 안 보인다).
+- ⚠️ 남긴 구멍(다음 후보): 성적/시험(검색+상세 2툴 필요) · 교재 요청 · 셔틀 탑승 · 출결 기간 요약(기존
+  쿼리로는 하루치뿐 — 새 쿼리 금지 규칙에 걸린다). 툴이 늘수록 프롬프트·라운드가 늘어 자주 묻는 것부터 넣었다.
+- 검증: typecheck 0(마케팅 `_img` 노이즈 제외) · lint 0 err · **test 5,719 통과**(신규 4파일 39건 + turns·solar·grounding 보강 6건, assistant 84) · build ✓.
+  ⚠️ 대화 초기화의 **삭제는 실행 검증 못 했다** — injaewon이 프로덕션 실데이터라 원장 대화를 지울 수 없다(코드·RLS 검토까지).
+
 ## 2026-08-20 (1) — 수업 평가: '다른 강사 뷰'도 그 강사의 눈으로(원장 제보 후속)
 
 원장: *"다른 강사뷰 기능에서 보이는 게 실제 보이는 뷰 아님?? 그러면 강사로 들어갔을 때 수업평가
