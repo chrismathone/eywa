@@ -51,7 +51,7 @@ export function StudentPool({
       }`}
     >
       <div className="flex items-baseline justify-between gap-2">
-        <h3 className="text-text text-[13.5px] font-bold">학생</h3>
+        <h3 className="text-foreground text-[13.5px] font-bold">학생</h3>
         <span className="text-text-faint text-[11.5px]">
           {searching ? (
             <>
@@ -139,7 +139,7 @@ function PoolItem({
       {/* 🔑 라벨 자리 고정 — 이름 길이에 따라 학교·학년이 들쭉날쭉하면 눈이 매번 다시 찾는다
           (원장 2026-08-19). 학교·학년은 오른쪽 정렬, '배정됨' 칸은 **비어 있어도 폭을 차지**해
           같은 x에 선다. */}
-      <span className="text-text min-w-0 overflow-hidden font-medium text-ellipsis whitespace-nowrap">
+      <span className="text-foreground min-w-0 overflow-hidden font-medium text-ellipsis whitespace-nowrap">
         {student.name}
       </span>
       <span className="text-text-faint ml-auto shrink-0 text-[11.5px]">{student.schoolGrade}</span>

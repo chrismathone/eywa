@@ -276,7 +276,7 @@ export function ShuttleBoardClient({
               SHUTTLE_ROW_TEXT,
               pane === p.key
                 ? "border-primary text-primary"
-                : "text-text-dim hover:text-text border-transparent",
+                : "text-text-dim hover:text-foreground border-transparent",
             )}
           >
             {p.label}
@@ -316,7 +316,7 @@ export function ShuttleBoardClient({
 
       <DragOverlay dropAnimation={null}>
         {dragLabel ? (
-          <span className="border-primary/40 bg-card text-text rounded-pill border px-2.5 py-1 text-[12.5px] font-bold shadow-lg">
+          <span className="border-primary/40 bg-card text-foreground rounded-pill border px-2.5 py-1 text-[12.5px] font-bold shadow-lg">
             {dragLabel}
           </span>
         ) : null}

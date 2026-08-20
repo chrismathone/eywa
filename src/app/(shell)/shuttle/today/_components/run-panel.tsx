@@ -54,7 +54,7 @@ export function RunPanel({
         aria-expanded={open}
         className={cn(SHUTTLE_ROW, "flex cursor-pointer flex-wrap items-center gap-x-2 gap-y-1 px-3 py-2.5 text-left")}
       >
-        {start && <span className="text-text num shrink-0 text-[16px] font-bold">{start}</span>}
+        {start && <span className="text-foreground num shrink-0 text-[16px] font-bold">{start}</span>}
         <Pill color={TONE_COLOR[run.direction === "in" ? "info" : "special"]}>
           {DIRECTION_LABEL[run.direction]}
         </Pill>

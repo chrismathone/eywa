@@ -93,7 +93,7 @@ export function StopMasterDialog({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
       <div className="bg-card flex max-h-[85vh] w-full max-w-2xl flex-col gap-3 rounded-2xl p-4 shadow-xl">
         <div className="flex items-baseline justify-between gap-2">
-          <h2 className="text-text text-[15px] font-bold">정류장 관리</h2>
+          <h2 className="text-foreground text-[15px] font-bold">정류장 관리</h2>
           <Button variant="ghost" className={SHUTTLE_ACTION} onClick={onClose}>
             닫기
           </Button>
@@ -168,7 +168,7 @@ export function StopMasterDialog({
             ) : (
               <li key={s.id} className="rounded-xl">
                 <div className="hover:bg-muted flex min-h-11 flex-wrap items-center gap-2 rounded-xl px-2 py-1.5">
-                  <span className="text-text min-w-0 flex-1 overflow-hidden text-[12.5px] font-medium text-ellipsis whitespace-nowrap">
+                  <span className="text-foreground min-w-0 flex-1 overflow-hidden text-[12.5px] font-medium text-ellipsis whitespace-nowrap">
                     {s.name}
                     {s.memo && <span className="text-text-faint font-normal"> · {s.memo}</span>}
                   </span>
@@ -229,7 +229,7 @@ export function StopMasterDialog({
                         key={u.key}
                         className="text-text-dim flex items-baseline gap-1.5 px-1 text-[11.5px]"
                       >
-                        <span className="text-text min-w-0 flex-1 overflow-hidden font-medium text-ellipsis whitespace-nowrap">
+                        <span className="text-foreground min-w-0 flex-1 overflow-hidden font-medium text-ellipsis whitespace-nowrap">
                           {u.vehicle} · {u.run}
                         </span>
                         <span className="num text-text-faint shrink-0">{u.time ?? "—"}</span>

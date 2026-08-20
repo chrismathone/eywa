@@ -78,7 +78,7 @@ export function StopColumn({
     //    안쪽 여백을 조금 주면 링이 잘릴 자리가 생긴다. 컨테이너 안 요소는 다 같이 밀리므로 줄맞춤은 그대로.
     <div className="flex min-h-0 flex-col gap-2 overflow-y-auto px-1 py-0.5">
       <div className="flex items-center justify-between gap-2 px-1">
-        <h2 className="text-text text-[15px] font-bold">{runTitle(run)}</h2>
+        <h2 className="text-foreground text-[15px] font-bold">{runTitle(run)}</h2>
         {canWrite && (
           <Button variant="outline" className={SHUTTLE_ACTION} onClick={() => setAdding((v) => !v)}>
             + 정류장
@@ -216,12 +216,12 @@ function StopCard({
             type="button"
             aria-label="순서 변경"
             // touch-none: 손잡이 위에서는 브라우저 스크롤 제스처를 끄고 드래그로 넘긴다.
-            className={cn(SHUTTLE_ICON_BTN, "text-text-faint hover:text-text cursor-grab touch-none active:cursor-grabbing")}
+            className={cn(SHUTTLE_ICON_BTN, "text-text-faint hover:text-foreground cursor-grab touch-none active:cursor-grabbing")}
           >
             <EyIcon name="grip" className="size-4" />
           </button>
         )}
-        <span className={`min-w-0 flex-1 truncate text-[13.5px] ${isCampus ? "text-text-dim font-medium" : "text-text font-bold"}`}>
+        <span className={`min-w-0 flex-1 truncate text-[13.5px] ${isCampus ? "text-text-dim font-medium" : "text-foreground font-bold"}`}>
           {isCampus ? RUN_STOP_KIND_LABEL[stop.kind] : stop.stopName}
           {stop.stopMemo && <span className="text-text-faint text-[11.5px]"> · {stop.stopMemo}</span>}
         </span>
@@ -317,7 +317,7 @@ function StopCard({
                 }}
                 className={cn("hover:bg-muted flex cursor-pointer items-center gap-1.5 rounded-lg px-2 text-left", SHUTTLE_ROW, SHUTTLE_ROW_TEXT)}
               >
-                <span className="text-text font-medium">{s.name}</span>
+                <span className="text-foreground font-medium">{s.name}</span>
                 {s.schoolGrade && <span className="text-text-faint text-[11.5px]">{s.schoolGrade}</span>}
               </button>
             ))}

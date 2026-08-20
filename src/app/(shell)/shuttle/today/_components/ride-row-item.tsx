@@ -130,7 +130,7 @@ export function RideRowItem({
         <span
           className={cn(
             "text-[14px] font-bold sm:text-[12.5px]",
-            skipped ? "text-text-dim line-through" : "text-text",
+            skipped ? "text-text-dim line-through" : "text-foreground",
           )}
         >
           {row.studentName || "(추가 탑승)"}
@@ -216,7 +216,7 @@ export function RideRowItem({
               disabled={busy}
               onClick={clear}
               title="기록을 지워 '미기록'으로 되돌립니다"
-              className={cn(SHUTTLE_ACTION, SHUTTLE_ROW_TEXT, "text-text-faint hover:text-text px-2")}
+              className={cn(SHUTTLE_ACTION, SHUTTLE_ROW_TEXT, "text-text-faint hover:text-foreground px-2")}
             >
               취소
             </Button>

@@ -181,7 +181,7 @@ export function DayBoardClient({
         >
           <EyIcon name="chevronLeft" size={16} />
         </Button>
-        <span className="text-text px-1 text-[14.5px] font-bold whitespace-nowrap">
+        <span className="text-foreground px-1 text-[14.5px] font-bold whitespace-nowrap">
           {formatKoreanDate(date)}
         </span>
         <Button
@@ -231,7 +231,7 @@ export function DayBoardClient({
           {/* 🔴 필터를 걸면 이 숫자는 **보고 있는 것**의 합이다 — 무엇의 합인지 밝히지 않으면 옆 칩의
               전체 기준 숫자와 어긋나 보인다. */}
           {dirFilter !== "all" && `${DIRECTION_LABEL[dirFilter]} `}예정{" "}
-          <span className="num text-text font-bold">{totals.planned}</span>명
+          <span className="num text-foreground font-bold">{totals.planned}</span>명
         </span>
         <Pill color={TONE_COLOR.positive}>탑승 {totals.boarded}</Pill>
         <Pill color={TONE_COLOR.critical}>미탑승 {totals.missed}</Pill>

@@ -74,7 +74,7 @@ export function RunColumn({
         return (
           <section key={v.id} className="bg-card rounded-2xl p-3 shadow-[var(--shadow-card)]">
             <div className="mb-2 flex items-baseline justify-between gap-2">
-              <h3 className="text-text text-[13.5px] font-bold">{v.name}</h3>
+              <h3 className="text-foreground text-[13.5px] font-bold">{v.name}</h3>
               {v.driverName && (
                 <span className="text-text-faint truncate text-[11.5px]">{v.driverName}</span>
               )}
@@ -99,7 +99,7 @@ export function RunColumn({
                         <Pill color={TONE_COLOR[r.direction === "in" ? "info" : "special"]}>
                           {DIRECTION_LABEL[r.direction]}
                         </Pill>
-                        <span className={`text-text truncate font-bold ${SHUTTLE_ROW_TEXT}`}>
+                        <span className={`text-foreground truncate font-bold ${SHUTTLE_ROW_TEXT}`}>
                           {runTitle(r)}
                         </span>
                       </span>

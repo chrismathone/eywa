@@ -211,7 +211,7 @@ export function RideExceptionDialog({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-3">
       <div className="bg-card flex max-h-[88vh] w-full max-w-xl flex-col gap-3 rounded-2xl p-3 shadow-xl sm:p-4">
         <div className="flex items-center justify-between gap-2">
-          <h2 className="text-text text-[15px] font-bold">
+          <h2 className="text-foreground text-[15px] font-bold">
             일회성 탑승 변경
             <span className="text-text-faint ml-1.5 text-[11.5px] font-normal">
               {formatKoreanDate(date)}
@@ -283,7 +283,7 @@ export function RideExceptionDialog({
                         SHUTTLE_ROW_TEXT,
                       )}
                     >
-                      <span className="text-text font-medium">{c.studentName}</span>
+                      <span className="text-foreground font-medium">{c.studentName}</span>
                       <Pill color={TONE_COLOR[c.ioKind === "in" ? "info" : "special"]}>
                         {DIRECTION_LABEL[c.ioKind]}
                       </Pill>
@@ -317,7 +317,7 @@ export function RideExceptionDialog({
                             SHUTTLE_ROW_TEXT,
                           )}
                         >
-                          <span className="text-text font-medium">{s.name}</span>
+                          <span className="text-foreground font-medium">{s.name}</span>
                           <span className="text-text-faint text-[11.5px]">{s.schoolGrade}</span>
                         </button>
                       </li>
@@ -330,7 +330,7 @@ export function RideExceptionDialog({
                   </ul>
                 ) : (
                   <div className="border-line flex flex-wrap items-center gap-2 rounded-xl border p-2">
-                    <span className="text-text text-[12.5px] font-bold">{addStudent.name}</span>
+                    <span className="text-foreground text-[12.5px] font-bold">{addStudent.name}</span>
                     <span className="text-text-faint text-[11.5px]">{addStudent.schoolGrade}</span>
                     <Button
                       variant="ghost"
@@ -397,7 +397,7 @@ export function RideExceptionDialog({
                 <Pill color={TONE_COLOR[e.kind === "add" ? "special" : "inert"]}>
                   {RIDE_EXCEPTION_LABEL[e.kind]}
                 </Pill>
-                <span className="text-text shrink-0 text-[12.5px] font-medium">{e.studentName}</span>
+                <span className="text-foreground shrink-0 text-[12.5px] font-medium">{e.studentName}</span>
                 <span className="text-text-faint min-w-0 flex-1 truncate text-[11.5px]">
                   {[DIRECTION_LABEL[e.ioKind], e.where, e.memo].filter(Boolean).join(" · ")}
                 </span>
