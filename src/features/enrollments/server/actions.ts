@@ -8,6 +8,7 @@ import { kstToday } from "@/lib/date-kst";
 import { notifyClassAssignment } from "@/features/notifications/server/notify";
 import { logAction } from "@/features/audit/server/log";
 import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllPaged } from "@/lib/supabase/batch";
 import { enrollmentAssignBlockReason } from "../eligibility";
 import { enrollmentDeleteBlockReason, type EnrollmentRecordCounts } from "../deletable";
@@ -474,19 +475,28 @@ const DELETE_PROBE_FAILED =
 /**
  * 그 (학생, 반) 조합에 붙은 기록 수를 센다 — 표 목록·판정 근거는 [`deletable.ts`](../deletable.ts) 주석 참조.
  * 전부 `count: "exact", head: true`(행을 안 받는다, B2). 하나라도 error면 null을 돌려 **삭제를 막는다.**
+ *
+ * 🔴 **세는 조회만 admin 클라이언트**(RLS 우회) + `tenant_id` 명시 필터로 한다. 이유:
+ *   · `class_sheet_student_marks`는 **RLS enabled에 정책이 0개**라 세션 클라이언트로는 누가 읽어도
+ *     **에러 없이 0행**이다([[#104]]) — 그대로 두면 영어 시트 기록이 있어도 가드가 "없다"고 거짓말한다.
+ *   · `invoices`·`invoice_*`는 역할 게이트(0158a·0165a)가 걸려 있어 **읽는 사람에 따라 0**이 될 수 있다.
+ *  가드는 **적게 세는 쪽이 곧 사고**(지우면 안 될 것을 지운다)라, 여기서만 RLS를 우회한다.
+ * ⚠️ 우회는 **세는 데까지**다 — 실제 삭제는 세션 클라이언트로 한다(권한은 RLS도 함께 지킨다).
+ * ⚠️ admin은 테넌트 격리가 없다 → 모든 조회에 `.eq("tenant_id", tenantId)` 필수.
  */
 async function countEnrollmentRecords(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  admin: ReturnType<typeof createAdminClient>,
+  tenantId: string,
   studentId: string,
   classId: string,
 ): Promise<EnrollmentRecordCounts | null> {
   const headCount = async (
     table: string,
     apply: (
-      q: ReturnType<Awaited<ReturnType<typeof createClient>>["from"]>,
+      q: ReturnType<ReturnType<typeof createAdminClient>["from"]>,
     ) => PromiseLike<{ count: number | null; error: { message: string } | null }>,
   ): Promise<number | null> => {
-    const { count, error } = await apply(supabase.from(table));
+    const { count, error } = await apply(admin.from(table));
     if (error) {
       console.error(`[enrollments] 삭제 전 기록 확인 실패(${table}):`, error.message);
       return null;
@@ -499,7 +509,13 @@ async function countEnrollmentRecords(
   const countBilling = async (): Promise<number | null> => {
     try {
       const invoices = await fetchAllPaged<{ id: string }>((from, to) =>
-        supabase.from("invoices").select("id").eq("student_id", studentId).range(from, to),
+        admin
+          .from("invoices")
+          .select("id")
+          .eq("tenant_id", tenantId)
+          .eq("student_id", studentId)
+          .order("id")
+          .range(from, to),
       );
       if (invoices.length === 0) return 0;
       const ids = invoices.map((r) => r.id);
@@ -508,9 +524,10 @@ async function countEnrollmentRecords(
       let total = 0;
       for (const table of ["invoice_session_terms", "invoice_teacher_splits"]) {
         for (const chunk of chunks) {
-          const { count, error } = await supabase
+          const { count, error } = await admin
             .from(table)
             .select("id", { count: "exact", head: true })
+            .eq("tenant_id", tenantId)
             .eq("class_id", classId)
             .in("invoice_id", chunk);
           if (error) {
@@ -532,6 +549,7 @@ async function countEnrollmentRecords(
       headCount("attendance_records", (q) =>
         q
           .select("id", { count: "exact", head: true })
+          .eq("tenant_id", tenantId)
           .eq("student_id", studentId)
           .eq("class_id", classId),
       ),
@@ -539,24 +557,28 @@ async function countEnrollmentRecords(
       headCount("lesson_reports", (q) =>
         q
           .select("id", { count: "exact", head: true })
+          .eq("tenant_id", tenantId)
           .eq("student_id", studentId)
           .or(`class_id.eq.${classId},makeup_class_id.eq.${classId}`),
       ),
       headCount("onescreen_daily_sessions", (q) =>
         q
           .select("id", { count: "exact", head: true })
+          .eq("tenant_id", tenantId)
           .eq("student_id", studentId)
           .eq("class_id", classId),
       ),
       headCount("class_sheet_student_marks", (q) =>
         q
           .select("id", { count: "exact", head: true })
+          .eq("tenant_id", tenantId)
           .eq("student_id", studentId)
           .eq("class_id", classId),
       ),
       headCount("attendance_followups", (q) =>
         q
           .select("id", { count: "exact", head: true })
+          .eq("tenant_id", tenantId)
           .eq("student_id", studentId)
           .eq("class_id", classId),
       ),
@@ -639,7 +661,7 @@ export async function deleteEnrollment(
       .eq("class_id", classId)
       .neq("id", enrollmentId)
       .limit(200),
-    countEnrollmentRecords(supabase, studentId, classId),
+    countEnrollmentRecords(createAdminClient(), user.tenantId, studentId, classId),
   ]);
 
   if (siblingRes.error) return { error: DELETE_PROBE_FAILED };

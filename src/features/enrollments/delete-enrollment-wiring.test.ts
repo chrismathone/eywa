@@ -55,6 +55,25 @@ describe("수업 이력 삭제 게이트", () => {
     expect(actions).toContain("makeup_class_id.eq.");
   });
 
+  it("🔴 세는 조회는 admin + tenant 필터 — 정책 0개 표(class_sheet_*)는 세션 클라로 늘 0행이다(#104)", () => {
+    expect(actions).toContain("countEnrollmentRecords(createAdminClient()");
+    // admin은 테넌트 격리가 없다 — 모든 세는 조회가 tenant_id로 좁혀야 한다.
+    const body = actions.slice(
+      actions.indexOf("async function countEnrollmentRecords"),
+      actions.indexOf("export async function deleteEnrollment"),
+    );
+    const selects = body.split('.select("id"').length - 1;
+    const tenantFilters = body.split('.eq("tenant_id", tenantId)').length - 1;
+    expect(selects).toBeGreaterThan(0);
+    expect(tenantFilters).toBeGreaterThanOrEqual(selects);
+  });
+
+  it("🔴 실제 삭제는 세션 클라이언트로 — RLS 우회는 '세는 데'까지다", () => {
+    const del = actions.slice(actions.indexOf("export async function deleteEnrollment"));
+    expect(del).toContain("await createClient()");
+    expect(del).not.toContain("createAdminClient().from(\"enrollments\").delete");
+  });
+
   it("🔴 형제 수강을 **개수만** 세지 않고 salary_tier까지 읽는다 — head 카운트로 되돌리면 정산이 조용히 줄어든다", () => {
     expect(actions).toContain('.select("id, salary_tier")');
     expect(actions).toContain("siblingHasTier");

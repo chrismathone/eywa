@@ -391,11 +391,24 @@ async function applyDiff(
   //    id(PK) 조회라 청크당 행 수 ≤ 청크 크기 → fetchInChunks로 충분(1000행 캡 무관, B3).
   let heldAdds = 0;
   if (diff.adds.length > 0) {
-    const statusRows = await fetchInChunks<{ id: string; status: string | null }>(
-      [...new Set(diff.adds.map((a) => a.studentId))],
-      (chunk) => supabase.from("students").select("id, status").in("id", chunk),
-    );
-    const statusById = new Map(statusRows.map((r) => [r.id, r.status]));
+    // ⚠️ fetchInChunks는 error를 삼키지 않고 **throw**한다(B3) — 여기서 새어 나가면 이미 적용된
+    //    이동·삭제를 남긴 채 서버 액션이 통째로 실패한다(다이얼로그는 결과를 못 받는다). 위 이동 RPC
+    //    실패와 **같은 모양**으로 중단한다: 적용된 만큼은 남고, 추가는 하지 않으며, 이유를 한글로 돌려준다.
+    let statusById: Map<string, string | null>;
+    try {
+      const statusRows = await fetchInChunks<{ id: string; status: string | null }>(
+        [...new Set(diff.adds.map((a) => a.studentId))],
+        (chunk) => supabase.from("students").select("id, status").in("id", chunk),
+      );
+      statusById = new Map(statusRows.map((r) => [r.id, r.status]));
+    } catch (e) {
+      console.error("[timetable-import] 학생 상태 조회 실패:", e);
+      return {
+        error:
+          "학생 상태를 확인하지 못해 '추가'를 중단했습니다(이동·삭제는 적용됨). 잠시 후 다시 시도해 주세요.",
+        snapshotId,
+      };
+    }
 
     for (const a of diff.adds) {
       const onHold = enrollmentOnHoldForStatus(statusById.get(a.studentId));
