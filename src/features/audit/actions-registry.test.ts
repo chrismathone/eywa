@@ -71,6 +71,36 @@ function usedActions(): Map<string, Set<string>> {
   return found;
 }
 
+/**
+ * 🔴 운영 스크립트는 서버 액션이 아니라 **PostgREST로 audit_logs에 직접 POST**한다 — 위 `logAction(` 스캔이
+ * 아예 못 본다. 그래서 `staff_create`가 라벨 없이 새어(2026-08-20 원장 화면에 영문 그대로) 있었다.
+ * audit_logs를 건드리는 스크립트 파일만 골라 `action: "…"` 리터럴을 같은 레지스트리에 물린다.
+ */
+function scriptFiles(dir: string, out: string[] = []): string[] {
+  if (!fs.existsSync(dir)) return out;
+  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (e.name === "node_modules" || e.name === "logs") continue;
+    const p = path.join(dir, e.name);
+    if (e.isDirectory()) scriptFiles(p, out);
+    else if (/\.(mjs|cjs|js|ts)$/.test(e.name)) out.push(p);
+  }
+  return out;
+}
+
+function scriptActions(): Map<string, Set<string>> {
+  const found = new Map<string, Set<string>>();
+  for (const file of scriptFiles(path.join(process.cwd(), "scripts"))) {
+    const src = fs.readFileSync(file, "utf8");
+    if (!src.includes("audit_logs")) continue;
+    for (const m of src.matchAll(/action:\s*"([a-z][a-z0-9_]*)"/g)) {
+      const rel = path.relative(process.cwd(), file).split(path.sep).join("/");
+      if (!found.has(m[1])) found.set(m[1], new Set());
+      found.get(m[1])!.add(rel);
+    }
+  }
+  return found;
+}
+
 describe("감사로그 액션 레지스트리", () => {
   it("스캔이 실제로 동작한다(호출부를 하나도 못 찾으면 통과는 무의미)", () => {
     const used = usedActions();
@@ -92,6 +122,20 @@ describe("감사로그 액션 레지스트리", () => {
     ).toEqual([]);
   });
 
+  it("🔴 scripts/가 audit_logs에 직접 POST하는 액션도 AUDIT_ACTIONS에 등록돼 있다", () => {
+    const scanned = scriptActions();
+    // 스캔이 실제로 동작하는지 먼저(0건이면 통과가 무의미 — 위 logAction 스캔과 같은 자기검증).
+    expect(scanned.size, "scripts/에서 audit_logs POST를 하나도 못 찾음 — 스캔 방식을 갱신할 것").toBeGreaterThan(0);
+    const registry = registryKeys();
+    const missing = [...scanned]
+      .filter(([key]) => !registry.has(key))
+      .map(([key, files]) => `${key}  ←  ${[...files].join(", ")}`);
+    expect(
+      missing,
+      `AUDIT_ACTIONS 미등록 액션(스크립트 경로) — 감사로그 '액션' 열에 영문 키가 그대로 노출된다:\n  ${missing.join("\n  ")}`,
+    ).toEqual([]);
+  });
+
   it("라벨은 비어 있지 않고 영문 키를 그대로 쓰지 않는다", () => {
     const src = fs.readFileSync(LOG_TS, "utf8");
     const body = src.slice(
@@ -102,5 +146,73 @@ describe("감사로그 액션 레지스트리", () => {
       .filter(([, key, label]) => label.trim() === "" || label === key || !/[가-힣]/.test(label))
       .map(([, key, label]) => `${key}: "${label}"`);
     expect(bad, `한글 라벨이 아닌 항목:\n  ${bad.join("\n  ")}`).toEqual([]);
+  });
+});
+
+/**
+ * '대상' 열 접두(target_type)도 같은 뿌리로 샜다 — 2026-08-17엔 attendance 등 5종, 2026-08-20엔
+ * calendar_event·calendar_tag가 라벨 없이 영문으로 떠 있었다(describe.test.ts의 수기 목록은 사람이
+ * 갱신해야 해서 늘 늦는다). 호출부를 **전수 스캔**해 AUDIT_TYPE_LABEL과 맞춘다.
+ */
+describe("감사로그 대상 유형 라벨", () => {
+  const DESCRIBE_TS = path.join(SRC, "features", "audit", "describe.ts");
+
+  function labelKeys(): Set<string> {
+    const src = fs.readFileSync(DESCRIBE_TS, "utf8");
+    const start = src.indexOf("export const AUDIT_TYPE_LABEL: Record<string, string> = {");
+    expect(start, "AUDIT_TYPE_LABEL 선언을 찾지 못함 — 스캔 방식을 갱신할 것").toBeGreaterThan(-1);
+    const body = src.slice(start, src.indexOf("};", start));
+    return new Set([...body.matchAll(/^\s{2}([a-z_]+):/gm)].map((m) => m[1]));
+  }
+
+  it("logAction·스크립트가 쓰는 모든 target_type이 한글 라벨을 가진다", () => {
+    const used = new Map<string, string>();
+    for (const file of tsFiles(SRC)) {
+      for (const m of fs.readFileSync(file, "utf8").matchAll(/targetType:\s*"([a-z_]+)"/g)) {
+        if (!used.has(m[1])) used.set(m[1], path.relative(process.cwd(), file).split(path.sep).join("/"));
+      }
+    }
+    for (const file of scriptFiles(path.join(process.cwd(), "scripts"))) {
+      const src = fs.readFileSync(file, "utf8");
+      if (!src.includes("audit_logs")) continue;
+      for (const m of src.matchAll(/target_type:\s*"([a-z_]+)"/g)) {
+        if (!used.has(m[1])) used.set(m[1], path.relative(process.cwd(), file).split(path.sep).join("/"));
+      }
+    }
+    expect(used.size, "target_type을 하나도 못 찾음 — 스캔 방식을 갱신할 것").toBeGreaterThan(10);
+    const labels = labelKeys();
+    const missing = [...used].filter(([t]) => !labels.has(t)).map(([t, f]) => `${t}  ←  ${f}`);
+    expect(
+      missing,
+      `AUDIT_TYPE_LABEL 미등록 대상 유형 — 감사로그 '대상' 열에 영문이 그대로 노출된다:\n  ${missing.join("\n  ")}`,
+    ).toEqual([]);
+  });
+});
+
+/**
+ * 한글화 함수를 만들어 두고 **뷰어가 안 쓰면** 화면은 그대로 영문이다(#77의 결). 네 열이 각각
+ * 자기 매핑을 통과하는지 소스로 잠근다 — 다음 사람이 열을 새로 짜도 여기서 걸린다.
+ */
+describe("감사로그 뷰어 배선", () => {
+  const FACE = path.join(SRC, "app", "(shell)", "owner", "_components", "audit-face.tsx");
+
+  it("실행자·액션·대상·상세 네 열이 전부 한글 매핑을 거친다", () => {
+    const src = fs.readFileSync(FACE, "utf8");
+    for (const fn of ["auditActorName(", "auditActionLabel(", "auditTargetLabel(", "auditDetail("]) {
+      expect(src, `${fn} 미배선 — 그 열은 DB 원문이 그대로 노출된다`).toContain(fn);
+    }
+  });
+
+  it("🔴 raw 원문(actorName·targetLabel)은 매핑을 거치거나 title 툴팁으로만 쓴다", () => {
+    // 원문 보존은 title 툴팁의 몫이라 title= 안은 제외하고 본다 — 나머지 자리에서 원문이 쓰이면
+    // 그건 곧 화면 렌더다(종전: {log.actorName ?? "—"} / {log.targetLabel ?? …}).
+    const stripped = fs.readFileSync(FACE, "utf8").replace(/title=\{[^{}]*\}/g, "");
+    const count = (re: RegExp) => [...stripped.matchAll(re)].length;
+    expect(count(/log\.actorName/g), "actorName이 auditActorName 밖에서 쓰인다").toBe(
+      count(/auditActorName\(log\.actorName\)/g),
+    );
+    expect(count(/log\.targetLabel/g), "targetLabel이 auditTargetLabel 밖에서 쓰인다").toBe(
+      count(/auditTargetLabel\(log\.targetType, log\.targetLabel,/g),
+    );
   });
 });
