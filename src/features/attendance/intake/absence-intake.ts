@@ -241,3 +241,61 @@ export function intakeTeacherLabel(input: {
       return null;
   }
 }
+
+/* ── 학생 검색 — "수업을 진짜로 듣고 있는" 학생만 (원장 2026-08-20) ─────────────────────────── */
+
+/** 검색어 상한 — 출석부 허브 검색과 같은 길이(긴 붙여넣기로 조회 URL을 부풀리지 않는다). */
+export const INTAKE_SEARCH_MAX_QUERY = 40;
+/**
+ * SQL에서 받아올 상한 — **수강 후필터에 쓸 여유분**이다.
+ * 🔴 화면 상한(20)만큼만 받아 후필터하면, 이름으로 20명이 걸리고 그게 전부 걸러지는 순간 목록이
+ *    통째로 빈다("검색이 고장났다"로 보인다). 넉넉히 받아 거른 뒤 20개로 자른다.
+ */
+export const INTAKE_SEARCH_SCAN = 60;
+/** 화면에 내려보내는 상한. 넘으면 "더 있다"를 밝힌다(개수로 거짓말하지 않는다). */
+export const INTAKE_SEARCH_LIMIT = 20;
+
+/**
+ * 대조에 쓰는 **정리된 검색어** — DB(`ilike`)와 화면 문구가 **같은 문자열**을 본다.
+ *
+ * 🔴 `%`·`_`·`\`는 와일드카드라 지운다(허브 검색과 같은 규약) — 친 글자가 조용히 "아무거나"가 되면
+ *    엉뚱한 학생이 상한을 채우고 정작 찾는 아이가 밀린다.
+ * ⚠️ 공백은 **지우지 않는다**(허브 검색과 다른 점) — 여기 대조 대상은 이름 컬럼 자체고, 이름에 공백이
+ *    있는 학생(영문 이름)이 실제로 있어 공백을 지우면 그 학생이 영영 안 걸린다.
+ */
+export function intakeSearchTerm(query: string): string {
+  return query.slice(0, INTAKE_SEARCH_MAX_QUERY).replace(/[%_\\]/g, "").trim();
+}
+
+/** 목록이 빈 이유. 문구는 아래 한 곳에서 만든다 — 화면이 지어내지 않는다. */
+export type IntakeSearchEmptyReason = "not_teaching" | "withdrawn" | "no_match" | "unknown";
+
+/** 이름 뒤 조사 '와/과' — 받침 유무로 고른다. 한글 음절이 아니면(영문 이름) '과'로 둔다. */
+function waGwa(word: string): string {
+  const last = word.trim().slice(-1);
+  const code = last.charCodeAt(0);
+  if (Number.isNaN(code) || code < 0xac00 || code > 0xd7a3) return "과";
+  return (code - 0xac00) % 28 === 0 ? "와" : "과";
+}
+
+/**
+ * 0건일 때 화면에 그대로 띄울 한 줄 — **왜 비었는지**를 사람 말로 밝힌다.
+ *
+ * 🔴 빈 목록만 두면 데스크는 이름을 잘못 쳤는지, 그 학생이 조건에 안 맞는지 알 수 없다(원장 지시의
+ *    핵심은 "예비가 뜨지 않게"이지 "말없이 사라지게"가 아니다).
+ * 🔴 **권한 이야기는 하지 않는다** — 이 창을 연 사람은 이미 접수 권한이 있다.
+ */
+export function intakeSearchEmptyMessage(term: string, reason: IntakeSearchEmptyReason): string {
+  const q = `‘${term}’${waGwa(term)}`;
+  switch (reason) {
+    case "not_teaching":
+      return `${q} 맞는 학생은 있지만 지금 듣고 있는 수업이 없습니다 — 재원 중이고 수업이 있는 학생만 나옵니다.`;
+    case "withdrawn":
+      return `${q} 맞는 학생은 퇴원 처리돼 있습니다 — 재원 중이고 수업이 있는 학생만 나옵니다.`;
+    case "no_match":
+      return `${q} 맞는 학생이 없습니다 — 이름을 다시 확인해 주세요.`;
+    default:
+      // 확인 조회가 실패한 경우 — 없는 사실을 지어내지 않고, 확실히 참인 것만 말한다.
+      return `지금 수업을 듣고 있는 학생 중에 ${q} 맞는 학생이 없습니다.`;
+  }
+}
