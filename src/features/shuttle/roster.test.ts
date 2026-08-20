@@ -6,6 +6,7 @@ import {
   missedSignals,
   plannedRidesOn,
   ridesOn,
+  type RideException,
 } from "./roster";
 import type { DayCode, ShuttleRun } from "./types";
 
@@ -191,5 +192,143 @@ describe("missedSignals — 출결 신호(신호만, 자동 쓰기 없음)", () 
     ]);
     expect(out[0]!.where).toBe("하원");
     expect(out[0]!.reason).toBe(null);
+  });
+});
+
+// ── 일회성 탑승 개입(0229a) ────────────────────────────────────────────────────────────
+// 🔴 원장 2026-08-20: *"오늘 연락이 와서 갑자기 탄다던지, 안타던지 하는 일회성 셔틀 개입도 필요함."*
+//    명단 = **요일 매칭 − skip + add**. 화면·인쇄·출결 신호가 같은 답을 봐야 하므로 여기서만 만든다.
+
+const exc = (over: Partial<RideException> & { kind: RideException["kind"] }): RideException => ({
+  id: `e-${over.studentId ?? "x"}-${over.kind}`,
+  studentId: "s1",
+  studentName: "학생",
+  schoolGrade: "",
+  studentStatus: "enrolled",
+  ioKind: "in",
+  runStopId: null,
+  memo: null,
+  ...over,
+});
+
+describe("plannedRidesOn — 일회성 예외 겹치기", () => {
+  const WED = "2026-08-19";
+
+  it("🔴 skip은 줄을 **지우지 않는다** — 회색으로 남길 수 있게 dayKind만 바뀐다", () => {
+    const rows = plannedRidesOn(run, WED, [exc({ kind: "skip", studentId: "s1" })]);
+    expect(rows.map((r) => r.rider.studentId)).toEqual(["s1", "s2"]); // 여전히 두 줄
+    expect(rows[0]!.dayKind).toBe("skipped");
+    expect(rows[1]!.dayKind).toBe("regular");
+  });
+
+  it("skip은 **그 방향만** 뺀다 — 등원만 빠지고 하원은 그대로", () => {
+    const rows = plannedRidesOn(run, WED, [exc({ kind: "skip", studentId: "s1", ioKind: "out" })]);
+    // s1의 배정은 승차(in)라 하차(out) skip에 걸리지 않는다.
+    expect(rows[0]!.dayKind).toBe("regular");
+  });
+
+  it("사유는 선택이라 없을 수 있고, 있으면 줄에 실려 온다", () => {
+    const rows = plannedRidesOn(run, WED, [
+      exc({ kind: "skip", studentId: "s1", memo: "오늘 엄마가 데리러 옴" }),
+    ]);
+    expect(rows[0]!.exceptionMemo).toBe("오늘 엄마가 데리러 옴");
+    expect(rows[0]!.exceptionId).toBe("e-s1-skip");
+  });
+
+  it("add는 그 정류장 자리에 오늘만 타는 줄을 만든다(이름은 예외가 들고 온다)", () => {
+    const rows = plannedRidesOn(run, WED, [
+      exc({ kind: "add", studentId: "s9", studentName: "김추가", runStopId: "rs2" }),
+    ]);
+    const added = rows.find((r) => r.rider.studentId === "s9")!;
+    expect(added.dayKind).toBe("added");
+    expect(added.rider.studentName).toBe("김추가");
+    expect(added.runStopId).toBe("rs2");
+    expect(added.stopName).toBe("빌리브루센트 앞");
+  });
+
+  it("🔴 add가 **이미 오늘 타는 사람**을 가리키면 줄을 두 번 만들지 않는다(시수·진행 2배 방지)", () => {
+    const rows = plannedRidesOn(run, WED, [
+      exc({ kind: "add", studentId: "s1", runStopId: "rs1" }),
+    ]);
+    expect(rows.filter((r) => r.rider.studentId === "s1")).toHaveLength(1);
+    expect(rows[0]!.dayKind).toBe("regular");
+  });
+
+  it("skip + add를 같이 걸면 옛 자리는 회색으로 남고 새 자리에 줄이 생긴다(정류장 하루 변경)", () => {
+    const rows = plannedRidesOn(run, WED, [
+      exc({ kind: "skip", studentId: "s1" }),
+      exc({ kind: "add", studentId: "s1", runStopId: "rs2" }),
+    ]);
+    const mine = rows.filter((r) => r.rider.studentId === "s1");
+    expect(mine.map((r) => [r.stopName, r.dayKind])).toEqual([
+      ["서대구 센트럴자이", "skipped"],
+      ["빌리브루센트 앞", "added"],
+    ]);
+  });
+
+  it("run_stop이 없는 add(=자리 미상)는 무시한다 — 어디서 탈지 모르면 기사가 못 태운다", () => {
+    const rows = plannedRidesOn(run, WED, [exc({ kind: "add", studentId: "s9" })]);
+    expect(rows.map((r) => r.rider.studentId)).toEqual(["s1", "s2"]);
+  });
+
+  it("예외를 안 넘기면 종전과 똑같다(0229a 미적용 배포에서도 화면이 산다)", () => {
+    expect(plannedRidesOn(run, WED)).toEqual(plannedRidesOn(run, WED, []));
+  });
+});
+
+describe("mergePlanAndLog — 예외 표식이 줄까지 실려 온다", () => {
+  it("dayKind·사유·예외 id가 RideRow에 그대로 남는다", () => {
+    const planned = plannedRidesOn(run, "2026-08-19", [
+      exc({ kind: "skip", studentId: "s1", memo: "오늘 안 감" }),
+    ]);
+    const rows = mergePlanAndLog(planned, []);
+    const s1 = rows.find((r) => r.studentId === "s1")!;
+    expect(s1.dayKind).toBe("skipped");
+    expect(s1.exceptionMemo).toBe("오늘 안 감");
+    expect(s1.exceptionId).toBe("e-s1-skip");
+  });
+
+  it("예정에 없던 기록(회차 축 leftover)은 예외로 생긴 줄이 아니다", () => {
+    const rows = mergePlanAndLog(
+      [],
+      [{ id: "l1", studentId: "sX", runId: "run1", ioKind: "in", status: "extra", memo: null }],
+    );
+    expect(rows[0]!.dayKind).toBe("regular");
+    expect(rows[0]!.exceptionId).toBeNull();
+  });
+});
+
+describe("mergePlanAndLog — 한 회차 안에서 skip + add(정류장 하루 변경)", () => {
+  const WED = "2026-08-19";
+  // s1은 평소 rs1(서대구 센트럴자이)에서 탄다. 오늘만 rs2(빌리브루센트 앞)에서 탄다고 연락이 왔다.
+  const planned = () =>
+    plannedRidesOn(run, WED, [
+      exc({ kind: "skip", studentId: "s1" }),
+      exc({ kind: "add", studentId: "s1", runStopId: "rs2" }),
+    ]);
+
+  it("🔴 화면 key가 겹치지 않는다 — 대조 키를 그대로 쓰면 두 줄이 같은 key라 뒤섞인다", () => {
+    const rows = mergePlanAndLog(planned(), []);
+    expect(new Set(rows.map((r) => r.key)).size).toBe(rows.length);
+  });
+
+  it("🔴 기록은 **오늘 타는 줄**이 가져간다 — 회색 줄이 채가면 정작 태운 자리가 '미기록'이 된다", () => {
+    const rows = mergePlanAndLog(planned(), [
+      { id: "log1", studentId: "s1", runId: "run1", ioKind: "in", status: "boarded", memo: null },
+    ]);
+    const added = rows.find((r) => r.dayKind === "added")!;
+    const skippedRow = rows.find((r) => r.dayKind === "skipped")!;
+    expect(added.status).toBe("boarded");
+    expect(added.logId).toBe("log1");
+    expect(skippedRow.status).toBeNull();
+  });
+
+  it("줄 순서는 정류장 순서 그대로다(두 번 훑어도 자리가 안 바뀐다)", () => {
+    const rows = mergePlanAndLog(planned(), []);
+    expect(rows.map((r) => r.stopName)).toEqual([
+      "서대구 센트럴자이", // rs1 (skip)
+      "빌리브루센트 앞", // rs2 정기 s2
+      "빌리브루센트 앞", // rs2 add s1
+    ]);
   });
 });

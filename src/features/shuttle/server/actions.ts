@@ -4,8 +4,16 @@ import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { kstToday } from "@/lib/date-kst";
 import { logAction } from "@/features/audit/server/log";
-import { isBoardingStatus, isDirection, isSeason, SHUTTLE_DAYS, type DayCode } from "../types";
+import {
+  isBoardingStatus,
+  isDirection,
+  isRideExceptionKind,
+  isSeason,
+  SHUTTLE_DAYS,
+  type DayCode,
+} from "../types";
 import { canRecordBoarding } from "./record-gate";
 
 /**
@@ -592,6 +600,130 @@ export async function recordBoarding(formData: FormData): Promise<ShuttleActionS
   if (error) return { error: friendly(error, "탑승 기록을 저장하지 못했습니다") };
 
   await logAction({ action: "shuttle_boarding_record", targetType: "shuttle", metadata: { boardedOn, studentId, runId, status } });
+  refresh();
+  return { ok: true };
+}
+
+// ── 일회성 탑승 개입 (원장 "오늘 연락이 와서 갑자기 탄다던지, 안타던지") ─────────────────
+
+/**
+ * 그날만의 **예정 변경**을 찍는다(0229a) — 오늘만 탐(`add`) / 오늘만 안 탐(`skip`).
+ *
+ * 🔴 **기록(`shuttle_boardings`)에 미리 찍지 않는 이유가 여기 있다** — 저 표는 "일어난 일"이라
+ *    아침에 미리 `missed`를 넣어 두면 실제로는 탄 아이가 안 탄 걸로 남고, 그 거짓이 출결 신호로
+ *    새어나간다. 예정은 예정의 자리에 둔다(0229a 머리 주석).
+ *
+ * 🔴 게이트는 **편성(`gate`)이 아니라 기록(`recordGate`)** — 이건 편성 수정이 아니라 **오늘의 운영**이고,
+ *    전화를 받는 데스크와 차에 타는 셔틀 선생님(실측 역할 `viewer`)이 그 자리에서 찍어야 한다.
+ * 🔴 **오늘 이전 날짜는 바꾸지 않는다** — 예외는 "앞으로 이렇게 하자"는 예정이라 지난 날짜에 새로
+ *    적을 이유가 없고, 지난 예외는 그날의 기록 일부라 덮어써도 안 된다. 화면도 같은 판정을 하지만
+ *    화면 조건은 게이트가 아니므로([[#77]]) 여기서 다시 막는다.
+ */
+export async function setRideException(formData: FormData): Promise<ShuttleActionState> {
+  const ctx = await recordGate();
+  if ("error" in ctx) return ctx;
+  const onDate = String(formData.get("onDate") ?? "");
+  const studentId = String(formData.get("studentId") ?? "");
+  const kind = String(formData.get("kind") ?? "");
+  const ioKind = String(formData.get("ioKind") ?? "");
+  const runStopId = String(formData.get("runStopId") ?? "") || null;
+  const memo = String(formData.get("memo") ?? "").trim() || null;
+
+  if (!YMD.test(onDate)) return { error: "날짜를 확인하세요" };
+  if (onDate < kstToday()) return { error: "지난 날짜는 바꿀 수 없습니다 — 오늘 이후만 조정합니다" };
+  if (!studentId) return { error: "학생을 고르세요" };
+  if (!isRideExceptionKind(kind)) return { error: "오늘만 탑승/오늘 안 탐 중에서 고르세요" };
+  if (!isDirection(ioKind)) return { error: "등원/하원 중에서 고르세요" };
+  if (kind === "add" && !runStopId) {
+    // 어디서 타는지 모르면 기사가 못 태운다 — 자리 없는 '추가'는 만들지 않는다.
+    return { error: "어디서 타는지(정류장)를 고르세요" };
+  }
+
+  const admin = createAdminClient();
+  // 🔴 클라가 보낸 id를 그대로 믿지 않는다. **학생까지 확인하는 이유**: `student_id`의 FK는
+  //    `students(id)`뿐이라 **다른 학원의 학생 uuid도 FK를 통과한다**(admin은 RLS 우회, [[#104]]).
+  //    화면엔 "(삭제된 학생)"으로 보여 티도 안 나므로 여기서 막는다.
+  // 서로 독립이라 함께 받는다(B4).
+  const [studentRes, stopRes] = await Promise.all([
+    admin.from("students").select("id").eq("id", studentId).eq("tenant_id", ctx.tenantId).maybeSingle(),
+    kind === "add"
+      ? admin
+          .from("shuttle_run_stops")
+          .select("id, kind")
+          .eq("id", runStopId)
+          .eq("tenant_id", ctx.tenantId)
+          .maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
+  ]);
+  if (studentRes.error || !studentRes.data) return { error: "학생을 찾지 못했습니다" };
+  if (kind === "add") {
+    const target = stopRes.data as { kind?: string } | null;
+    if (stopRes.error || !target) return { error: "정류장을 찾지 못했습니다" };
+    if (target.kind !== "stop") return { error: "학원 출발·도착 칸에는 학생을 세우지 않습니다" };
+  }
+
+  const { error } = await admin.from("shuttle_ride_exceptions").upsert(
+    {
+      tenant_id: ctx.tenantId,
+      on_date: onDate,
+      student_id: studentId,
+      kind,
+      io_kind: ioKind,
+      run_stop_id: kind === "add" ? runStopId : null,
+      memo,
+      created_by: ctx.userId,
+    },
+    // ⚠️ 0229a의 유니크가 **부분 인덱스가 아니라서** 이 추론이 된다([[#113]]) — 술어를 붙이면 42P10.
+    { onConflict: "tenant_id,on_date,student_id,kind,io_kind" },
+  );
+  if (error) return { error: friendly(error, "오늘 탑승 변경을 저장하지 못했습니다") };
+
+  await logAction({
+    action: "shuttle_ride_exception_set",
+    targetType: "shuttle",
+    metadata: { onDate, studentId, kind, ioKind, runStopId },
+  });
+  refresh();
+  return { ok: true };
+}
+
+/**
+ * 일회성 변경 되돌리기 — 예외를 지우면 그 줄은 **정기 배정 그대로**로 돌아간다.
+ * ⚠️ 여기서 지우는 건 예정뿐이다. 이미 찍힌 등하원 기록은 `clearBoarding`이 따로 지운다.
+ */
+export async function clearRideException(formData: FormData): Promise<ShuttleActionState> {
+  const ctx = await recordGate();
+  if ("error" in ctx) return ctx;
+  const id = String(formData.get("id") ?? "");
+  if (!id) return { error: "변경 내역을 찾지 못했습니다" };
+
+  const admin = createAdminClient();
+  // 지난 날짜의 예외는 그날의 기록 일부라 지우지 않는다(원장 브리프) — 날짜를 먼저 확인한다.
+  // ⚠️ admin은 RLS를 우회하므로 tenant 필터가 필수다([[#104]]).
+  const { data: target, error: readErr } = await admin
+    .from("shuttle_ride_exceptions")
+    .select("id, on_date")
+    .eq("id", id)
+    .eq("tenant_id", ctx.tenantId)
+    .maybeSingle();
+  if (readErr) return { error: "변경 내역을 읽지 못했습니다" };
+  if (!target) return { error: "변경 내역을 찾지 못했습니다" };
+  if (String(target.on_date).slice(0, 10) < kstToday()) {
+    return { error: "지난 날짜의 변경은 지울 수 없습니다 — 그날의 기록입니다" };
+  }
+
+  const { error } = await admin
+    .from("shuttle_ride_exceptions")
+    .delete()
+    .eq("id", id)
+    .eq("tenant_id", ctx.tenantId);
+  if (error) return { error: friendly(error, "오늘 탑승 변경을 되돌리지 못했습니다") };
+
+  await logAction({
+    action: "shuttle_ride_exception_clear",
+    targetType: "shuttle",
+    metadata: { exceptionId: id, onDate: String(target.on_date).slice(0, 10) },
+  });
   refresh();
   return { ok: true };
 }

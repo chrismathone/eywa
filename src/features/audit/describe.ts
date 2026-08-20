@@ -7,9 +7,11 @@ import { reasonDisplay } from "@/features/withdrawals/types";
 import {
   BOARDING_STATUS_LABEL,
   DIRECTION_LABEL,
+  RIDE_EXCEPTION_LABEL,
   SEASON_LABEL,
   isBoardingStatus,
   isDirection,
+  isRideExceptionKind,
   isSeason,
 } from "@/features/shuttle/types";
 import { compactWeekdays } from "@/features/shuttle/roster";
@@ -453,6 +455,22 @@ export function auditDetail(
       const days = Array.isArray(m.weekdays) ? compactWeekdays(m.weekdays.map(String)) : "";
       const parts = [isDirection(io) ? (io === "in" ? "승차" : "하차") : null, days || null].filter(Boolean);
       return parts.length ? parts.join(" · ") : null;
+    }
+    case "shuttle_ride_exception_set": {
+      // 🔴 kind·ioKind를 그대로 두면 화면에 `kind: skip`이 영문으로 뜬다(raw enum 노출 금지).
+      const kind = str(m.kind);
+      const io = str(m.ioKind);
+      const on = str(m.onDate);
+      const parts = [
+        on,
+        isDirection(io) ? DIRECTION_LABEL[io] : null,
+        isRideExceptionKind(kind) ? RIDE_EXCEPTION_LABEL[kind] : null,
+      ].filter(Boolean);
+      return parts.length ? parts.join(" · ") : null;
+    }
+    case "shuttle_ride_exception_clear": {
+      const on = str(m.onDate);
+      return on ? `${on} · 되돌림` : "되돌림";
     }
     case "shuttle_boarding_record": {
       const status = str(m.status);

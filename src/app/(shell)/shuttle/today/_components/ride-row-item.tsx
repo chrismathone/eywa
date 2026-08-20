@@ -14,7 +14,7 @@ import {
 } from "@/features/shuttle/control-size";
 import { BOARDING_STATUS_LABEL, type BoardingStatus } from "@/features/shuttle/types";
 import type { RideRow } from "@/features/shuttle/roster";
-import { clearBoarding, recordBoarding } from "@/features/shuttle/server/actions";
+import { clearBoarding, clearRideException, recordBoarding } from "@/features/shuttle/server/actions";
 
 /**
  * 한 줄 = 그날 한 학생의 한 회차. [탑승][미탑승] 두 버튼이 전부다(makeedu의 승차/하차/미탑승 3버튼은
@@ -35,6 +35,7 @@ export function RideRowItem({
   absentToday,
   date,
   canWrite,
+  canEditException,
   onError,
   onDone,
 }: {
@@ -43,6 +44,11 @@ export function RideRowItem({
   absentToday: boolean;
   date: string;
   canWrite: boolean;
+  /**
+   * 일회성 변경(0229a)을 이 화면에서 조정할 수 있나 — 0229a 적용 여부 × 오늘 이후 날짜.
+   * 🔴 지난 날짜는 읽기만 한다(그날의 기록이다). 화면 조건은 게이트가 아니라 서버가 다시 본다([[#77]]).
+   */
+  canEditException: boolean;
   onError: (msg: string | null) => void;
   onDone: () => void;
 }) {
@@ -73,6 +79,23 @@ export function RideRowItem({
     });
   }
 
+  /**
+   * 일회성 변경 되돌리기 — 정기 배정 그대로로 돌아간다(등하원 기록은 건드리지 않는다).
+   * ⚠️ **거는 쪽('오늘 안 탐')은 여기 없다** — 줄에 두면 바로 옆 '미탑승'과 섞여 찍힌다(다른 축).
+   *    거는 건 툴바의 '일회성 변경' 한 자리에서만 한다([`ride-exception-dialog`](./ride-exception-dialog)).
+   */
+  function undoException() {
+    if (!row.exceptionId) return;
+    onError(null);
+    const fd = new FormData();
+    fd.set("id", row.exceptionId);
+    startTransition(async () => {
+      const res = await clearRideException(fd);
+      if (res?.error) onError(res.error);
+      else onDone();
+    });
+  }
+
   function clear() {
     if (!row.logId) return;
     onError(null);
@@ -85,18 +108,44 @@ export function RideRowItem({
     });
   }
 
-  const tone = boarded
-    ? "border-green/40 bg-green-soft"
-    : row.status === "missed"
-      ? "border-danger/40 bg-danger-soft"
-      : "border-line";
+  const skipped = row.dayKind === "skipped";
+  // 🔴 오늘 안 타는 줄은 **회색**이다 — 지우지 않는 대신 "할 일이 아님"이 한눈에 보여야 한다
+  //    (tone 캐논의 inert = 지나간 것). 기록 색(초록·빨강)보다 이 판정이 앞선다.
+  const tone = skipped
+    ? "border-line bg-muted/50"
+    : boarded
+      ? "border-green/40 bg-green-soft"
+      : row.status === "missed"
+        ? "border-danger/40 bg-danger-soft"
+        : "border-line";
 
   return (
-    <li className={`flex flex-col gap-1.5 rounded-xl border p-2 sm:flex-row sm:items-center sm:gap-2 ${tone}`}>
+    <li
+      className={cn(
+        "flex flex-col gap-1.5 rounded-xl border p-2 sm:flex-row sm:items-center sm:gap-2",
+        tone,
+      )}
+    >
       <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-1.5 gap-y-0.5">
-        <span className="text-text text-[14px] font-bold sm:text-[12.5px]">
+        <span
+          className={cn(
+            "text-[14px] font-bold sm:text-[12.5px]",
+            skipped ? "text-text-dim line-through" : "text-text",
+          )}
+        >
           {row.studentName || "(추가 탑승)"}
         </span>
+        {/* 🔑 일회성 변경 표식 — tone 캐논에서 고른다: 오늘만 탑승 = special(예외·대체) ·
+            오늘 안 탐 = inert(지나간 것). 사유는 **선택**이라 없으면 배지만 뜬다. */}
+        {row.dayKind === "added" && <Pill color={TONE_COLOR.special}>오늘만 탑승</Pill>}
+        {skipped && (
+          <>
+            <Pill color={TONE_COLOR.inert}>오늘 안 탐</Pill>
+            {row.exceptionMemo && (
+              <span className="text-text-dim text-[11.5px]">{row.exceptionMemo}</span>
+            )}
+          </>
+        )}
         {absentToday && (
           // 배지는 수제로 그리지 않고 공용 `<Pill>` + tone 캐논(결석 = critical)에서 고른다 —
           // 화면 파일마다 배지를 깎으면 같은 뜻이 화면마다 다른 크기·색으로 갈린다(팔레트 v4).
@@ -112,7 +161,27 @@ export function RideRowItem({
         </span>
       </div>
 
-      {canWrite ? (
+      {/* 🔴 오늘 안 타는 줄엔 탑승/미탑승을 **띄우지 않는다** — '미탑승'(예정이었는데 안 탔다)과
+          '오늘 안 탐'(애초에 오늘은 안 탈 예정)은 다른 축인데 나란히 두면 반드시 섞여 찍힌다.
+          대신 되돌리는 문만 남긴다(오클릭에서 빠져나올 길을 잠그지 않는다, [[#103]]). */}
+      {skipped ? (
+        <span className="flex shrink-0 items-center gap-1.5">
+          <span className="text-text-faint text-[11.5px]">
+            {row.status ? `기록: ${BOARDING_STATUS_LABEL[row.status]}` : "오늘은 태우지 않습니다"}
+          </span>
+          {canWrite && canEditException && row.exceptionId && (
+            <Button
+              variant="outline"
+              disabled={busy}
+              onClick={undoException}
+              title="일회성 변경을 되돌려 평소대로 탑승 명단에 넣습니다"
+              className={cn(SHUTTLE_ACTION, SHUTTLE_ROW_TEXT, "px-2.5")}
+            >
+              되돌리기
+            </Button>
+          )}
+        </span>
+      ) : canWrite ? (
         <div className="flex shrink-0 items-center gap-1.5">
           {/* 🔑 탑승·미탑승은 **상태가 남는 토글**이라 알약 칩이다(라운드 캐논: 눌러서 상태가 남으면
               칩, 동작만 하면 버튼) — 그래서 공용 `<Button>`이 아니라 `SHUTTLE_CHIP`을 쓴다.

@@ -2,8 +2,11 @@
  * 셔틀 명단 계산 — **순수 함수**(IO 없음, Vitest). "그날 누가 타는가"는 화면·인쇄·출결 신호가
  * 모두 같은 답을 내야 하므로 여기 한 곳에서만 만든다.
  *
- * 🔑 정기 배정(shuttle_riders.weekdays)은 **요일 규칙**이고, 그날 실제 탑승(shuttle_boardings)은
- *    **기록**이다. 둘을 겹쳐 "예정 vs 실제"를 만드는 게 이 모듈의 일이다.
+ * 🔑 축이 **셋**이고 각각 다른 사실이다 — 섞으면 거짓이 남는다(0229a 머리 주석):
+ *    · 정기 배정(`shuttle_riders.weekdays`)      = 요일 규칙   ← 평소
+ *    · 일회성 예외(`shuttle_ride_exceptions`)    = 그날만의 덧셈·뺄셈(오늘만 탐/안 탐)
+ *    · 등하원 기록(`shuttle_boardings`)          = 실제로 일어난 일
+ *    명단 = **요일 매칭 − skip + add**, 그 위에 기록을 겹쳐 "예정 vs 실제"를 만드는 게 이 모듈의 일이다.
  */
 import { weekdayIndexOf } from "@/lib/date-kst";
 import {
@@ -12,6 +15,7 @@ import {
   type BoardingStatus,
   type DayCode,
   type Direction,
+  type RideExceptionKind,
   type ShuttleRun,
   type ShuttleRider,
 } from "./types";
@@ -39,10 +43,37 @@ export function compactWeekdays(days: readonly string[]): string {
   return ordered.map(dayLabel).join("");
 }
 
-/** 그 배정이 이 날짜에 해당하는가 — 요일 규칙만 본다(휴일·결석은 상위가 판단). */
+/** 그 배정이 이 날짜에 해당하는가 — 요일 규칙만 본다(휴일·결석·일회성 예외는 아래에서 겹친다). */
 export function ridesOn(rider: Pick<ShuttleRider, "weekdays">, ymd: string): boolean {
   return rider.weekdays.includes(dayCodeOf(ymd));
 }
+
+/**
+ * 그날 하루치 예외 한 건(0229a). 조회가 학생 표시 정보까지 붙여 넘긴다 —
+ * `add` 줄은 정기 배정이 없어 **이름의 출처가 여기뿐**이다.
+ */
+export type RideException = {
+  id: string;
+  studentId: string;
+  studentName: string;
+  schoolGrade: string;
+  /** 재원/퇴원 등 — 화면이 회색 처리에 쓴다. ⚠️ **지어내지 않는다**(조회가 아는 값을 그대로). */
+  studentStatus: string;
+  kind: RideExceptionKind;
+  ioKind: Direction;
+  /** `add`일 때만. 어디서 타는지 모르면 기사가 못 태운다. */
+  runStopId: string | null;
+  memo: string | null;
+};
+
+/** 그 줄이 오늘 어떤 상태인가 — 화면 표식·진행 카운트가 함께 읽는다. */
+export type RideDayKind =
+  /** 평소대로 요일 규칙에 걸린 줄. */
+  | "regular"
+  /** 오늘만 추가로 타는 줄(정기 배정에 없다). */
+  | "added"
+  /** 정기 배정엔 있지만 오늘은 안 타는 줄. 🔴 **지우지 않고 회색으로 남긴다**. */
+  | "skipped";
 
 /** 그날 그 회차에서 타기로 되어 있는 사람들(정류장 순서 → 이름 순). */
 export type PlannedRide = {
@@ -52,13 +83,47 @@ export type PlannedRide = {
   stopName: string;
   atTime: string | null;
   rider: ShuttleRider;
+  dayKind: RideDayKind;
+  /** 예외에 적힌 사유(있을 때만). 사유는 **선택**이라 대개 null이다. */
+  exceptionMemo: string | null;
+  /** 예외 되돌리기에 쓰는 id — 예외로 생긴/막힌 줄에만 있다. */
+  exceptionId: string | null;
 };
 
-export function plannedRidesOn(run: ShuttleRun, ymd: string): PlannedRide[] {
+/**
+ * 그날 명단 = **요일 매칭 − skip + add**.
+ *
+ * 🔴 **skip은 줄을 지우지 않는다** — 회색 표식으로 남긴다. 명단에서 통째로 사라지면 셔틀 선생님이
+ *    *"원래 타던 애가 왜 없지"* 를 확인할 길이 없다(연락을 못 받은 건지 오늘만 빠진 건지 구분 불가).
+ *    화면에서 덜어내는 건 **진행 카운트**뿐이다(`countProgress`).
+ * 🔑 skip + add가 **같이 올 수 있다**(0229a: "오늘은 저기 말고 여기서") — 옛 자리는 회색으로 남고
+ *    새 자리에 '오늘만 탑승' 줄이 생긴다. 둘 다 보여야 기사가 어디로 갈지 안다.
+ * ⚠️ `add`가 이미 요일 규칙에 걸려 있는 사람을 가리키면 **줄을 두 번 만들지 않는다**(같은 학생이
+ *    한 회차에 두 줄이면 시수·진행이 두 번 세어진다). 그 경우 예외는 조용히 무시된다.
+ */
+export function plannedRidesOn(
+  run: ShuttleRun,
+  ymd: string,
+  exceptions: readonly RideException[] = [],
+): PlannedRide[] {
+  const skipKey = (studentId: string, io: Direction) => `${studentId}|${io}`;
+  const skips = new Map<string, RideException>();
+  const addsByRunStop = new Map<string, RideException[]>();
+  for (const e of exceptions) {
+    if (e.kind === "skip") {
+      skips.set(skipKey(e.studentId, e.ioKind), e);
+    } else if (e.runStopId) {
+      const list = addsByRunStop.get(e.runStopId) ?? [];
+      list.push(e);
+      addsByRunStop.set(e.runStopId, list);
+    }
+  }
+
   const out: PlannedRide[] = [];
   for (const stop of [...run.stops].sort((a, b) => a.sortOrder - b.sortOrder)) {
-    for (const rider of stop.riders) {
-      if (!ridesOn(rider, ymd)) continue;
+    const regular = stop.riders.filter((r) => ridesOn(r, ymd));
+    for (const rider of regular) {
+      const hit = skips.get(skipKey(rider.studentId, rider.ioKind));
       out.push({
         runId: run.id,
         runNo: run.runNo,
@@ -66,6 +131,35 @@ export function plannedRidesOn(run: ShuttleRun, ymd: string): PlannedRide[] {
         stopName: stop.stopName,
         atTime: stop.atTime,
         rider,
+        dayKind: hit ? "skipped" : "regular",
+        exceptionMemo: hit?.memo ?? null,
+        exceptionId: hit?.id ?? null,
+      });
+    }
+    for (const add of addsByRunStop.get(stop.id) ?? []) {
+      // 이미 오늘 타기로 되어 있는 사람이면 예외는 없는 것으로 친다(중복 줄 금지).
+      if (regular.some((r) => r.studentId === add.studentId && r.ioKind === add.ioKind)) continue;
+      out.push({
+        runId: run.id,
+        runNo: run.runNo,
+        runStopId: stop.id,
+        stopName: stop.stopName,
+        atTime: stop.atTime,
+        // 정기 배정이 없는 사람이라 배정 행이 없다 — 화면이 쓰는 모양만 맞춰 세운다.
+        // ⚠️ `id`에 예외 id를 그대로 쓰지 않는다(배정 id로 오인해 삭제 액션에 넘기면 엉뚱한 걸 지운다).
+        rider: {
+          id: `exception:${add.id}`,
+          studentId: add.studentId,
+          studentName: add.studentName,
+          schoolGrade: add.schoolGrade,
+          ioKind: add.ioKind,
+          weekdays: [dayCodeOf(ymd)],
+          memo: null,
+          studentStatus: add.studentStatus,
+        },
+        dayKind: "added",
+        exceptionMemo: add.memo,
+        exceptionId: add.id,
       });
     }
   }
@@ -93,6 +187,10 @@ export type RideRow = {
   memo: string | null;
   /** 이미 찍힌 기록의 id — 지우기(clearBoarding)에 쓴다. */
   logId: string | null;
+  /** 오늘만의 예정 변경(0229a). 기록(`status`)과 **다른 축**이다. */
+  dayKind: RideDayKind;
+  exceptionMemo: string | null;
+  exceptionId: string | null;
 };
 
 /**
@@ -118,23 +216,42 @@ export function mergePlanAndLog(
     `${studentId}|${runId ?? ""}|${io}`;
   const byKey = new Map(logs.map((l) => [key(l.studentId, l.runId, l.ioKind), l]));
 
-  const rows: RideRow[] = planned.map((p) => {
+  const build = (p: PlannedRide, hit: BoardingLogLike | undefined): RideRow => ({
+    // 🔴 화면 key는 **대조 키와 달라야 한다** — 한 회차 안에서 skip + add를 같이 걸면(정류장을 그날만
+    //    바꾸는 흔한 경우) 같은 (학생·회차·방향)으로 **두 줄**이 생긴다. 대조 키를 그대로 쓰면 React
+    //    key가 겹쳐 줄이 뒤섞인다. 오늘만 타는 줄에만 예외 id를 덧붙여 가른다(그 줄은 날짜·학생·방향당
+    //    하나뿐이라 0229a 유니크가 충돌 불가를 보장한다).
+    key: p.dayKind === "added" ? `${key(p.rider.studentId, p.runId, p.rider.ioKind)}|+${p.exceptionId}` : key(p.rider.studentId, p.runId, p.rider.ioKind),
+    runId: p.runId,
+    runStopId: p.runStopId,
+    studentId: p.rider.studentId,
+    studentName: p.rider.studentName,
+    stopName: p.stopName,
+    atTime: p.atTime,
+    ioKind: p.rider.ioKind,
+    status: hit?.status ?? null,
+    memo: hit?.memo ?? null,
+    logId: hit?.id ?? null,
+    dayKind: p.dayKind,
+    exceptionMemo: p.exceptionMemo,
+    exceptionId: p.exceptionId,
+  });
+
+  // 🔴 **오늘 타는 줄이 기록을 먼저 가져간다.** 같은 (학생·회차·방향)에 skip 줄과 add 줄이 함께 있으면
+  //    기록은 하나뿐인데(0229a 유니크), 정류장 순서대로 집으면 **회색 줄이 기록을 채가고** 정작 태운
+  //    자리는 '미기록'으로 남는다. 그래서 두 번 훑는다: 먼저 오늘 타는 줄, 남은 것만 회색 줄로.
+  const rows: RideRow[] = new Array<RideRow>(planned.length);
+  const take = (p: PlannedRide) => {
     const k = key(p.rider.studentId, p.runId, p.rider.ioKind);
     const hit = byKey.get(k);
-    byKey.delete(k);
-    return {
-      key: k,
-      runId: p.runId,
-      runStopId: p.runStopId,
-      studentId: p.rider.studentId,
-      studentName: p.rider.studentName,
-      stopName: p.stopName,
-      atTime: p.atTime,
-      ioKind: p.rider.ioKind,
-      status: hit?.status ?? null,
-      memo: hit?.memo ?? null,
-      logId: hit?.id ?? null,
-    };
+    if (hit) byKey.delete(k);
+    return hit;
+  };
+  planned.forEach((p, i) => {
+    if (p.dayKind !== "skipped") rows[i] = build(p, take(p));
+  });
+  planned.forEach((p, i) => {
+    if (p.dayKind === "skipped") rows[i] = build(p, take(p));
   });
 
   // 예정에 없는데 기록이 있는 것 = 추가 탑승(그날만 태운 학생). 반드시 남긴다 — 안 그리면 실제로
@@ -153,6 +270,10 @@ export function mergePlanAndLog(
       status: leftover.status,
       memo: leftover.memo,
       logId: leftover.id,
+      // 예정에 없던 기록이라 오늘의 **예정 변경**과는 무관하다 — 예외로 생긴 줄이 아니다.
+      dayKind: "regular",
+      exceptionMemo: null,
+      exceptionId: null,
     });
   }
   return rows;

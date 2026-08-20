@@ -124,6 +124,8 @@ export const AUDIT_ACTIONS = {
   shuttle_rider_remove: "셔틀 학생 배정 해제",
   shuttle_boarding_record: "셔틀 등하원 기록",
   shuttle_boarding_clear: "셔틀 등하원 기록 삭제",
+  shuttle_ride_exception_set: "셔틀 일회성 탑승 변경",
+  shuttle_ride_exception_clear: "셔틀 일회성 탑승 변경 되돌림",
   // '다른 강사 뷰'(열람 전용, 2026-08-19) — 누가 누구의 강사뷰를 열람했는지. 대상 강사에겐 안 보이는
   // 기능이라(원장 지시) 이 로그가 유일한 역검수 근거다.
   teacher_view_impersonate: "다른 강사 뷰 열람",

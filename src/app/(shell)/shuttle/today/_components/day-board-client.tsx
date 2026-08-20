@@ -25,7 +25,11 @@ import {
   SHUTTLE_CHIP_ON,
 } from "@/features/shuttle/control-size";
 import { SHUTTLE_TODAY_PATH, shuttleFaces } from "@/features/shuttle/faces";
-import { mergePlanAndLog, plannedRidesOn } from "@/features/shuttle/roster";
+import {
+  mergePlanAndLog,
+  plannedRidesOn,
+  type RideException,
+} from "@/features/shuttle/roster";
 import { saveShuttleTodayPrefs } from "@/features/shuttle/server/today-prefs";
 import {
   countProgress,
@@ -35,6 +39,8 @@ import {
   type DirectionFilter,
 } from "@/features/shuttle/today-board";
 import type { BoardingLog } from "@/features/shuttle/server/queries";
+import type { AssignableStudent } from "@/features/shuttle/server/students";
+import { RideExceptionDialog } from "./ride-exception-dialog";
 import { RunPanel } from "./run-panel";
 import { VehicleHeader } from "./vehicle-header";
 
@@ -75,6 +81,10 @@ export function DayBoardClient({
   absentStudentIds,
   canWrite,
   initialDirection,
+  exceptions,
+  exceptionsReady,
+  students,
+  today,
 }: {
   date: string;
   season: Season;
@@ -86,11 +96,20 @@ export function DayBoardClient({
   canWrite: boolean;
   /** 계정에 저장된 등하원 보기(`users.ui_prefs.shuttleToday`) — 저녁마다 다시 누르지 않게. */
   initialDirection: DirectionFilter;
+  /** 그날만의 예정 변경(0229a) — 오늘만 탐 / 오늘만 안 탐. */
+  exceptions: RideException[];
+  /** 0229a 적용 여부. false면 **버튼 자체를 안 그린다**(없는 기능을 약속하지 않는다, [[#95]]). */
+  exceptionsReady: boolean;
+  /** '오늘만 탑승'에 세울 재원생 — 기록 권한이 없으면 빈 배열이다(페이지가 안 싣는다). */
+  students: AssignableStudent[];
+  /** KST 오늘 — 지난 날짜는 예외를 **읽기만** 한다(그날의 기록이다). */
+  today: string;
 }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   /** 사람이 직접 접거나 편 회차 — 여기 없으면 "미기록이 남았나"로 자동 판정한다. */
   const [manualOpen, setManualOpen] = useState<Record<string, boolean>>({});
+  const [exceptionOpen, setExceptionOpen] = useState(false);
   /**
    * 등하원 보기 — 화면은 즉시 바꾸고 **계정 저장은 뒤따른다**(반응속도 1순위).
    * ⚠️ 주소에 안 싣는 이유는 서버 왕복(스켈레톤 깜빡임)을 피하기 위해서지만, 그렇다고 휘발시키면
@@ -117,10 +136,10 @@ export function DayBoardClient({
     return runs
       .map((run) => ({
         run,
-        rows: mergePlanAndLog(plannedRidesOn(run, date), logsByRun.get(run.id) ?? []),
+        rows: mergePlanAndLog(plannedRidesOn(run, date, exceptions), logsByRun.get(run.id) ?? []),
       }))
       .filter(({ rows }) => rows.length > 0);
-  }, [runs, logs, date]);
+  }, [runs, logs, date, exceptions]);
 
   /** 화면에 실제로 그릴 것 — 등하원 필터를 먹인 뒤 호차로 묶는다(정렬·집계는 순수 모듈). */
   const groups = useMemo(
@@ -137,6 +156,12 @@ export function DayBoardClient({
   }, [byRun]);
 
   const href = (d: string, s: Season = season) => `/shuttle/today?d=${d}&season=${s}`;
+
+  /**
+   * 일회성 변경을 **이 화면에서 조정할 수 있나** — 0229a 적용 × 기록 권한 × 오늘 이후 날짜.
+   * 🔴 지난 날짜는 읽기만 한다(그날의 기록이라 지우지 않는다). 서버가 같은 판정을 다시 한다([[#77]]).
+   */
+  const canEditException = canWrite && exceptionsReady && date >= today;
 
   return (
     <div className="flex min-h-0 flex-col gap-3">
@@ -211,6 +236,22 @@ export function DayBoardClient({
         <Pill color={TONE_COLOR.positive}>탑승 {totals.boarded}</Pill>
         <Pill color={TONE_COLOR.critical}>미탑승 {totals.missed}</Pill>
         <Pill color={TONE_COLOR.inert}>미기록 {totals.unmarked}</Pill>
+        {/* 🔑 일회성 변경은 **한 자리에** 모은다 — 줄마다 '오늘 안 탐'을 붙이면 바로 옆 '미탑승'과
+            섞여 찍힌다(다른 축이다). 게다가 전화를 받은 데스크는 이름으로 찾지, 회차를 스크롤하지 않는다.
+            🔴 `exceptionsReady`(0229a 적용) 전에는 **버튼을 아예 안 그린다** — 없는 기능을 약속하면
+               눌렀을 때 한글 에러만 나온다([[#95]]). */}
+        {canWrite && exceptionsReady && (
+          <Button
+            variant="outline"
+            className={cn(SHUTTLE_ACTION, "ml-auto")}
+            onClick={() => setExceptionOpen(true)}
+          >
+            일회성 변경
+            {exceptions.length > 0 && (
+              <span className="num text-text-dim">{exceptions.length}</span>
+            )}
+          </Button>
+        )}
         {!canWrite && (
           <span className="text-text-faint whitespace-nowrap">열람 전용</span>
         )}
@@ -231,6 +272,26 @@ export function DayBoardClient({
         </div>
       )}
 
+      {exceptionOpen && (
+        <RideExceptionDialog
+          date={date}
+          today={today}
+          canEdit={canEditException}
+          // 🔴 정류장 선택지는 **회차 전부**에서 만든다 — 그날 명단(byRun)은 "타는 사람이 있는
+          //    회차"만 남긴 목록이라, 오늘 아무도 안 타는 회차엔 학생을 넣을 수 없게 된다.
+          allRuns={runs}
+          // 🔴 '오늘 안 탐' 후보는 등하원 필터를 **걸기 전** 명단이다 — '등원'만 보고 있다고 해서
+          //    하원 학생을 못 빼면 안 된다(필터는 보기일 뿐 할 수 있는 일을 줄이지 않는다).
+          runRows={byRun}
+          vehicles={vehicles}
+          students={students}
+          exceptions={exceptions}
+          onClose={() => setExceptionOpen(false)}
+          onError={setError}
+          onDone={() => router.refresh()}
+        />
+      )}
+
       {groups.map((group) => (
         <section key={group.vehicleId} className="flex flex-col gap-2">
           <VehicleHeader group={group} dirFilter={dirFilter} />
@@ -249,6 +310,7 @@ export function DayBoardClient({
                   absentSet={absentSet}
                   date={date}
                   canWrite={canWrite}
+                  canEditException={canEditException}
                   onError={setError}
                   onDone={() => router.refresh()}
                 />
