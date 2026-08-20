@@ -10,6 +10,7 @@ import {
   weekSundayOf,
   slotLiveOnDate,
   weekLabel,
+  weekTitle,
   weekRelation,
 } from "./week";
 
@@ -80,6 +81,10 @@ describe("weekLabel — 주차 라벨", () => {
   });
   it("달 경계 — 29일~7/5일", () => {
     expect(weekLabel("2026-06-29")).toBe("2026년 6월 5주차 (29일~7/5일)");
+  });
+  it("weekTitle — 문장에 끼울 이름만(범위 없이). weekLabel의 앞부분과 항상 같다", () => {
+    expect(weekTitle("2026-06-22")).toBe("2026년 6월 4주차");
+    expect(weekLabel("2026-06-29").startsWith(weekTitle("2026-06-29"))).toBe(true);
   });
 });
 

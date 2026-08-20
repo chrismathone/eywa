@@ -27,6 +27,7 @@ import { weekdayPartition, type WeekdayGrouping } from "@/features/timetable/lib
 import { DAY_LABEL } from "@/features/timetable/lib/split-attendance";
 import { ClassCell } from "./class-cell";
 import { HapbanCell } from "./hapban-cell";
+import { SearchedCell } from "./search-context";
 
 // 요일 라벨은 공용 단일 소스(split-attendance) — 파일마다 같은 맵을 다시 적지 않는다.
 
@@ -180,6 +181,10 @@ function SubSlotContent({
   const merged = mergeSlotsByClass(slots);
   const isHapban = merged.length >= 2;
   return (
+    // 학생 검색 — 걸린 반이 하나도 없는 칸은 **아예 안 그린다**(격자 축은 그대로).
+    // 🔑 판정 단위가 '칸'이 아니라 '칸이 담은 반들'이라 합반 칸은 **한 반만 걸려도 통째로** 남는다 —
+    //    그래야 그 아이가 합반 명단의 어디에 있는지가 읽힌다(원장 요구: 반 전체가 보여야 한다).
+    <SearchedCell classIds={merged.map((m) => m.classId ?? m.id)}>
     <div
       className={`flex min-h-0 flex-1 flex-col overflow-hidden ${
         isHapban ? "border-amber/50 bg-amber/5 gap-1 rounded-md border p-1" : ""
@@ -196,6 +201,7 @@ function SubSlotContent({
         <ClassCell slot={merged[0]!} roster="names" subSlot={subSlot} coveringDays={coveringDays} />
       )}
     </div>
+    </SearchedCell>
   );
 }
 
@@ -543,32 +549,39 @@ export function WeekdayGroupTables({
       {/* ijw식 가로 배치 — 평일 그룹(월목/화금/수) 한 판 + 주말 한 판을 우측에 나란히
           (주말은 시작시각이 달라 자체 교시열). 세로 스택 대신 가로로 공간 효율. */}
       <div className="flex items-start gap-3">
+        {/* 학생 검색 — 걸린 반이 한 반도 없는 **판**은 통째로 접는다. 칸만 지우면 교시 축만 남은 빈 표가
+            옆에 계속 서 있어(특히 주말 판) "왜 아무것도 없지"로 읽힌다. 한 반이라도 걸리면 그 판은
+            축까지 그대로 남는다 — 몇 교시 자리인지가 검색 결과의 절반이다. */}
         {weekdayGroups.length > 0 ? (
-          <GroupTable
-            slots={weekdaySlots}
-            subject={subject}
-            groups={weekdayGroups}
-            weekend={false}
-            rowHeight={weekdayRowH}
-            config={config}
-            dateOf={dateOf}
-            wideDays={weekdayWide}
-            collapseEmpty={collapseEmptyPeriods}
-          />
+          <SearchedCell classIds={weekdaySlots.map((s) => s.classId ?? s.id)}>
+            <GroupTable
+              slots={weekdaySlots}
+              subject={subject}
+              groups={weekdayGroups}
+              weekend={false}
+              rowHeight={weekdayRowH}
+              config={config}
+              dateOf={dateOf}
+              wideDays={weekdayWide}
+              collapseEmpty={collapseEmptyPeriods}
+            />
+          </SearchedCell>
         ) : null}
         {weekendGroups.length > 0 ? (
-          <GroupTable
-            slots={weekendSlots}
-            subject={subject}
-            groups={weekendGroups}
-            weekend
-            rowHeight={ROW_H}
-            stickyPeriod={false}
-            config={config}
-            dateOf={dateOf}
-            wideDays={weekendWide}
-            collapseEmpty={collapseEmptyPeriods}
-          />
+          <SearchedCell classIds={weekendSlots.map((s) => s.classId ?? s.id)}>
+            <GroupTable
+              slots={weekendSlots}
+              subject={subject}
+              groups={weekendGroups}
+              weekend
+              rowHeight={ROW_H}
+              stickyPeriod={false}
+              config={config}
+              dateOf={dateOf}
+              wideDays={weekendWide}
+              collapseEmpty={collapseEmptyPeriods}
+            />
+          </SearchedCell>
         ) : null}
       </div>
     </DragScrollArea>

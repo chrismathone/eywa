@@ -8,6 +8,7 @@ import {
 import type { PeriodsConfig } from "@/features/timetable/lib/periods";
 import type { TeacherNicknameMap } from "@/features/timetable/lib/teacher-label";
 import { RichCardGroupBoard } from "./rich-card-group";
+import { SearchedCell, VisibleClassCount } from "./search-context";
 
 /**
  * 통합뷰 = ijw EnglishClassTab "반=열 리치 그리드" 이식. 시작 교시별 섹션마다:
@@ -58,21 +59,24 @@ export function RichGridView({
     //    같은 정도의 숨 쉴 틈을 아래에도 둔다 — 여백 자체가 "여기가 끝"이라는 신호다.
     <div className="pb-8">
       <div className="text-text-faint mb-2 text-right text-[12px]">
-        읽기 전용 · {total}개 수업 · 편집은 기본뷰
+        {/* 검색 중이면 "보이는 수/전체" — 카드 한 장만 남은 화면이 "42개 수업"이라 말하면 거짓말이 된다. */}
+        읽기 전용 · <VisibleClassCount total={total} />개 수업 · 편집은 기본뷰
       </div>
       {/* 섹션 = 한 판(스프레드시트의 다음 시트처럼 이어 붙임). 카드 사이는 구분선만. */}
       <div className="bg-card shadow-card w-max max-w-full overflow-hidden rounded-2xl">
-        {groups.map((g, i) => (
+        {groups.map((g) => (
           // 라벨은 화면에서 뺐지만 aria-label로는 남긴다 — 보조기술엔 "몇 번째 줄"이 여전히 필요하다.
-          <section key={g.key} aria-label={g.label}>
-            {i > 0 ? <div aria-hidden className={SECTION_DIVIDER} /> : null}
-            <RichCardGroupBoard
-              group={g}
-              subjectSoftClass={subjectSoftClass}
-              teacherColors={teacherColors}
-              teacherNicknames={teacherNicknames}
-            />
-          </section>
+          // 학생 검색 — 걸린 반이 하나도 없는 줄은 통째로 안 그린다(라벨열만 남은 빈 줄 방지).
+          <SearchedCell key={g.key} classIds={g.cards.map((c) => c.classId)}>
+            <section aria-label={g.label} className={SECTION_DIVIDER}>
+              <RichCardGroupBoard
+                group={g}
+                subjectSoftClass={subjectSoftClass}
+                teacherColors={teacherColors}
+                teacherNicknames={teacherNicknames}
+              />
+            </section>
+          </SearchedCell>
         ))}
       </div>
     </div>
@@ -82,5 +86,9 @@ export function RichGridView({
 /**
  * 줄과 줄 사이 구분선 — 머리글이 사라진 자리를 대신해 **여기서 다른 줄이 시작한다**만 말한다.
  * 격자선(1px)·카드 경계(2px)보다 굵어야 줄 경계로 읽히므로 3px(원장 2026-08-13 "적당한 굵기의 구분선만").
+ *
+ * ⚠️ 별도 `<div>`가 아니라 **섹션 자신의 위 테두리**다(2026-08-20) — 학생 검색이 앞 줄들을 통째로
+ *    지우면 형제 div로 둔 선은 맨 위에 떠 있는 3px 막대로 남는다. `:not(:first-child)`는 **그려진**
+ *    첫 섹션을 보므로 어느 줄이 남든 선이 알아서 맞는다.
  */
-const SECTION_DIVIDER = "bg-ink/45 h-[3px]";
+const SECTION_DIVIDER = "[&:not(:first-child)]:border-t-[3px] border-ink/45";

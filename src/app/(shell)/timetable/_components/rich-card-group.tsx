@@ -16,6 +16,7 @@ import {
   type TeacherColorMap,
 } from "@/features/timetable/lib/class-grid";
 import { ClassInfoCard, HoverCard, StudentInfoCard } from "./hover-cards";
+import { useClassFilter, useSearchTone } from "./search-context";
 import { timetableStudentTone, useTimetableColorMode, withdrawnTone } from "./timetable-color";
 
 /**
@@ -140,12 +141,19 @@ export function RichCardGroupBoard({
   const holdH = sectionH(group.rosterRows.hold);
   const wdH = sectionH(group.rosterRows.withdrawn);
   const common: ColumnCommon = { group, subjectSoftClass, teacherColors, teacherNicknames, activeH, holdH, wdH, namesOnly };
+  // 학생 검색 — 걸린 반만 남긴다. 섹션 높이(rosterRows)는 그룹 전체 기준 그대로라 남은 카드의 행이
+  // 어긋나지 않는다.
+  // 🔴 **배치 편집(renderCard)에선 절대 안 거른다** — 끌어 옮기는 화면에서 반이 사라지면 배치가
+  //    깨진다. page가 그 모드에선 검색을 아예 안 열지만(enabled=false), 여기서도 못박아 둔다
+  //    (멀리 있는 플래그 하나에만 기대면 나중에 조용히 뒤집힌다).
+  const classVisible = useClassFilter();
+  const cards = renderCard ? group.cards : group.cards.filter((c) => classVisible(c.classId));
 
   return (
     <DragScrollArea barX className={`${GRID} border-t`}>
       <div className="flex w-max items-stretch">
         <LabelColumn group={group} activeH={activeH} holdH={holdH} wdH={wdH} namesOnly={namesOnly} />
-        {group.cards.map((c) =>
+        {cards.map((c) =>
           renderCard ? renderCard(c, common) : <ClassColumn key={c.classId} card={c} {...common} />,
         )}
         {trailing}
@@ -507,7 +515,9 @@ function RosterRow({ s }: { s: GridStudent }) {
   const colorMode = useTimetableColorMode();
   // 재원/대기는 기본뷰와 **같은 tone 헬퍼**(색 강도 모드 반영). 예전엔 여기서 pastel 색을 손으로 박아
   // 뷰 설정 '색 강도'를 바꿔도 통합뷰만 안 따라왔다. 퇴원은 통합뷰에만 있는 섹션이라 전용 tone 유지.
-  const tone = withdrawn ? withdrawnTone(colorMode) : timetableStudentTone(colorMode, s);
+  const baseTone = withdrawn ? withdrawnTone(colorMode) : timetableStudentTone(colorMode, s);
+  // 검색에 걸린 학생 표식 — 기본뷰 StudentRow와 같은 함수(같은 필드로 판정, 같은 클래스로 표시).
+  const tone = useSearchTone(s, baseTone);
   const meta = schoolGradeLabel(s.school, s.grade);
   // 기본뷰 StudentRow와 같은 조립 — 이름이 먼저, 메타는 `/`로 붙어 좁으면 메타부터 잘린다(생략부호 없이 clip).
   const inner = (

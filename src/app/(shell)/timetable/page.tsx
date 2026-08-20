@@ -45,7 +45,13 @@ import { EcsShortcut } from "./_components/ecs-shortcut";
 import { resolveIntegrationGroups } from "@/features/timetable/lib/integration-groups";
 import { normalizePresets } from "@/features/timetable/lib/group-presets";
 import { shouldSerializeView, subjectDefaultView, viewForSubjectSwitch } from "@/features/timetable/lib/view-default";
-import { getWeekReferenceDate, mondayOf, thisMonday, weekRelation } from "@/features/timetable/lib/week";
+import { getWeekReferenceDate, mondayOf, thisMonday, weekRelation, weekTitle } from "@/features/timetable/lib/week";
+import { buildTimetableSearchIndex, timetableSearchScope } from "@/features/timetable/lib/student-search";
+import {
+  TimetableSearchBox,
+  TimetableSearchEmptyNote,
+  TimetableSearchProvider,
+} from "./_components/search-context";
 import { kstMinutesOfDay, kstToday, weekdayIndexOf } from "@/lib/date-kst";
 import { RichGridView } from "./_components/rich-grid-view";
 import { IntegratedEditBoard } from "./_components/integrated-edit-board";
@@ -434,8 +440,26 @@ export default async function TimetablePage({
   const newCount = [...newIds].filter((id) => statusOf.get(id) === "active").length;
   const transferCount = [...transferIds].filter((id) => statusOf.get(id) === "active").length;
 
+  // 학생 검색(원장 2026-08-20 "학생 검색하면 해당 학생이 존재하는 수업만 노출") — **새 조회 없이**
+  // 위에서 이미 만든 `slots[].students[]`로 반 단위 색인만 만든다(그래서 강사 열람 범위도 안 넓어진다).
+  // 판정·강조·0건 문구는 전부 클라에서(서버 왕복 0) — [search-context.tsx](./_components/search-context.tsx).
+  // 🔴 **교실뷰는 제외**: 그 뷰의 슬롯(roomSlots)은 명단 대신 인원 수만 내려가 검색할 이름이 아예 없다.
+  //    통합뷰 '배치 편집'(gedit)도 표가 수업명만 남는 배치 화면이라 검색 대상이 아니다. 두 경우엔
+  //    공급자를 안 씌워 **입력칸 자체가 안 뜬다**("있는데 안 먹는 것"이 제일 나쁘다).
+  const searchEnabled = !isRooms && !(isIntegrated && groupEditing);
+  const searchIndex = searchEnabled ? buildTimetableSearchIndex(slots) : [];
+  // 0건일 때 "어디에 없는지" — 지금 보고 있는 범위 그대로(권한 이야기는 하지 않는다).
+  const searchScope = timetableSearchScope([
+    rel === "current" ? "이번 주" : weekTitle(week),
+    subjectMaps.labelOf(subject),
+    kind === "special" ? "특강" : null,
+  ]);
+
   return (
     <TimetableEditProvider effectiveDate={effectiveDate} today={today} canEdit={canEdit}>
+      {/* 학생 검색 — 툴바 입력칸과 세 뷰(기본·통합·강사)가 같은 값을 보게 감싼다. 편집 공급자 **안쪽**이라
+          검색이 편집 모드를 읽고 스스로 물러난다(search-context.tsx 주석). */}
+      <TimetableSearchProvider index={searchIndex} scope={searchScope} enabled={searchEnabled}>
       <div className="flex h-full min-h-0 flex-col gap-4 compact-chrome:gap-3">
       {/* 표시 선호('미사용 요일'·'빈 교시 접기'·'1시간 단위')를 **계정에** 기억(0146a) + 쿠키 폴백 —
           창은 깨끗한 URL로 열려 파라미터만으론 매번 초기화된다. 셋을 한 컴포넌트로 합친 이유(동시 쓰기
@@ -643,6 +667,12 @@ export default async function TimetablePage({
           })}
         </div>
 
+        {/* 학생 검색 — 이름을 치면 **그 학생이 든 수업(칸)만** 남는다(원장 2026-08-20).
+            서버 왕복 0(이미 내려온 명단으로 클라 판정)이라 글자마다 표가 다시 그려지지 않는다.
+            ⚠️ 새 줄을 만들지 않는다 — 툴바 레일(.toolbar-rail)의 한 항목으로 눕는다. 앞 구분선은
+            컴포넌트가 직접 그린다(숨을 때 선만 남지 않게). 교실뷰·배치 편집·편집 모드에선 스스로 물러난다. */}
+        <TimetableSearchBox />
+
         {/* 강사뷰 '미사용 요일'·기본뷰 '빈 교시 접기'·'색 강도'는 **뷰 설정 팝오버 안으로** 옮겼다
             (2026-07-24 원장 "시간표도 깔끔하게"). 셋 다 "무엇이 어떻게 보이나"라 학년 필터와 같은 성격이고,
             특히 색 3칩이 툴바를 상시 2줄로 밀어내던 주범이었다. href는 아래 TimetableViewSettings에 넘긴다. */}
@@ -805,6 +835,10 @@ export default async function TimetablePage({
         ) : null}
       </div>
 
+      {/* 검색 결과 0건 — 빈 격자만 남기면 "시간표가 고장났다"로 읽힌다. 왜 비었는지(어느 주·어느 과목에
+          없는지)를 한 줄로 말하고, 그 자리에서 지울 수 있게 한다. */}
+      <TimetableSearchEmptyNote />
+
       {isRooms && roomWindows ? (
         <RoomMapView
           slots={roomSlots}
@@ -911,6 +945,7 @@ export default async function TimetablePage({
         </TimetableDndArea>
       )}
       </div>
+      </TimetableSearchProvider>
     </TimetableEditProvider>
   );
 }
