@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import {
@@ -149,11 +151,15 @@ describe("시간표 학생 검색 — 칸 남기기", () => {
   });
 });
 
+/** 걸린 줄의 클래스에서 깜빡임(재발화) 클래스만. 없으면 null — "깜빡임이 아예 안 붙었다". */
+const flashOf = (name: string): string | null =>
+  screen.getByText(name).className.split(/\s+/).find((c) => c.startsWith("search-hit-flash-")) ?? null;
+
 describe("걸린 학생 이름 강조", () => {
   it("걸린 이름에만 표식이 붙는다(같은 칸의 다른 학생은 평소 서식)", () => {
     render(<Board />);
     type("이도윤");
-    expect(screen.getByText("이도윤B").className).toBe(SEARCH_HIT_CLASS);
+    expect(screen.getByText("이도윤B").className).toContain(SEARCH_HIT_CLASS);
     expect(screen.getByText("박서준").className).toBe("text-foreground");
   });
 
@@ -166,8 +172,118 @@ describe("걸린 학생 이름 강조", () => {
     render(<Board />);
     type("장윤진");
     // 퇴원 tone을 들고 있어도 걸린 줄은 표식만 남는다(두 배경이 같은 자리를 다투지 않는다).
-    expect(screen.getByText("장윤진").className).toBe(SEARCH_HIT_CLASS);
+    expect(screen.getByText("장윤진").className).toContain(SEARCH_HIT_CLASS);
+    expect(screen.getByText("장윤진").className).not.toContain("bg-ink");
     expect(SEARCH_HIT_CLASS).not.toContain("bg-ink");
+  });
+
+  it("표식 색은 형광 토큰(--search-hit)이다 — 갈색 amber로 되돌아가지 않는다", () => {
+    // 원장 2026-08-20: 신입 빨강 옆에서 갈색이 묻혔다. `bg-amber!`(#995709)로 되돌리지 말 것.
+    expect(SEARCH_HIT_CLASS).toContain("search-hit");
+    expect(SEARCH_HIT_CLASS).not.toContain("amber");
+    // 흰 글씨 금지 — 형광 채움 위에선 오히려 안 읽힌다(진한 글씨는 .search-hit이 정한다).
+    expect(SEARCH_HIT_CLASS).not.toContain("text-white");
+  });
+});
+
+describe("🔴 깜빡임은 검색어가 바뀔 때마다 다시 발화한다", () => {
+  it("걸린 줄에 깜빡임 클래스가 붙는다", () => {
+    render(<Board />);
+    type("이도윤");
+    expect(flashOf("이도윤B")).toBeTruthy();
+  });
+
+  it("검색어를 한 글자 더 쳐도 깜빡임 클래스가 **바뀐다** — 안 바뀌면 첫 검색만 깜빡인다", () => {
+    render(<Board />);
+    type("이도");
+    const first = flashOf("이도윤B");
+    type("이도윤");
+    const second = flashOf("이도윤B");
+    expect(first).toBeTruthy();
+    expect(second).toBeTruthy();
+    // 같은 DOM 요소가 남아 있으므로(칸이 계속 걸려 있다) 클래스 이름이 바뀌어야만 다시 재생된다.
+    expect(second).not.toBe(first);
+  });
+
+  it("글자 수가 그대로인 편집에서도 바뀐다 — 길이·해시로는 못 잡는다(한글 조합 'ㅇ'→'이'가 그렇다)", () => {
+    render(<Board />);
+    type("이도"); // 둘 다 같은 학생에 걸리는 같은 길이의 검색어
+    const first = flashOf("이도윤B");
+    type("도윤");
+    expect(flashOf("이도윤B")).not.toBe(first);
+  });
+
+  it("두 클래스가 번갈아 나온다 — 세대는 검색어가 실제로 바뀔 때만 오른다", () => {
+    render(<Board />);
+    type("이도윤");
+    const first = flashOf("이도윤B");
+    type("이도윤"); // 같은 값 재입력 = 변화 없음
+    expect(flashOf("이도윤B")).toBe(first);
+  });
+});
+
+/**
+ * 표식의 **실체는 CSS**(globals.css의 `.search-hit`)라 클래스 이름만 붙고 규칙이 없으면 **아무 색도 안
+ * 붙는데 아무도 안 죽는다** — `bg-*`/`text-*`가 아니라서 죽은 색 클래스 가드(src/lib/design)도 못 본다.
+ * 그래서 여기서 **화면이 실제로 붙이는 클래스 이름 그대로** CSS를 확인한다.
+ */
+const CSS = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
+
+/** 이 위치가 `@layer …{ }` 안인가 — 유틸을 이기려면 표식 규칙은 **레이어 밖**이어야 한다. */
+function insideLayer(css: string, at: number): boolean {
+  const stack: boolean[] = [];
+  for (let i = 0; i < at; i++) {
+    if (css[i] === "{") {
+      // 이 블록을 연 선택자(직전 `{`·`}`·`;` 이후)가 @layer인지.
+      const head = css.slice(Math.max(0, css.lastIndexOf("}", i - 1), css.lastIndexOf("{", i - 1), css.lastIndexOf(";", i - 1)), i);
+      stack.push(/@layer\b/.test(head));
+    } else if (css[i] === "}") stack.pop();
+  }
+  return stack.some(Boolean);
+}
+
+describe("표식 CSS(globals.css)", () => {
+  it("`.search-hit`이 레이어 밖에서 채움과 글자색을 둘 다 정한다", () => {
+    const at = CSS.search(/^\.search-hit\s*\{/m);
+    expect(at, "globals.css에 .search-hit 규칙이 없다 — 클래스만 붙고 색은 안 붙는다").toBeGreaterThan(-1);
+    const body = CSS.slice(at).match(/\{([^}]*)\}/)![1]!;
+    expect(body).toContain("background-color: var(--search-hit)");
+    // 반쪽(배경만)이면 퇴원 행의 흰 글자가 형광 위에 그대로 남는다.
+    expect(body).toMatch(/color:\s*var\(--foreground\)/);
+    // 🔴 레이어 안으로 옮기면 `hover:bg-bg-soft`에 져서 마우스만 얹어도 표식이 사라진다.
+    expect(insideLayer(CSS, at), ".search-hit이 @layer 안에 들어갔다").toBe(false);
+  });
+
+  it("화면이 붙이는 깜빡임 클래스가 실제로 정의돼 있고, 둘의 animation-name이 다르다", () => {
+    render(<Board />);
+    type("이도");
+    const a = flashOf("이도윤B")!;
+    type("도윤");
+    const b = flashOf("이도윤B")!;
+    expect(a).not.toBe(b);
+    const names = [a, b].map((cls) => {
+      const rule = CSS.match(new RegExp(`\\.${cls}\\s*\\{([^}]*)\\}`));
+      expect(rule, `globals.css에 .${cls} 규칙이 없다 — 깜빡임이 조용히 사라진다`).toBeTruthy();
+      const name = rule![1]!.match(/animation:\s*([\w-]+)/)?.[1];
+      expect(name, `.${cls}에 animation이 없다`).toBeTruthy();
+      // 한 번만 돌고 멈춘다 — infinite면 그 칸을 읽을 수가 없다.
+      expect(rule![1]).not.toContain("infinite");
+      return name;
+    });
+    // 🔴 이름이 같으면 클래스를 갈아 끼워도 애니메이션이 다시 시작하지 않는다(재발화의 핵심).
+    expect(names[0]).not.toBe(names[1]);
+  });
+
+  it("모션을 줄인 사용자에겐 애니메이션만 끄고 색 표식은 남긴다", () => {
+    // 파일에 reduced-motion 블록이 여럿이라(막대 성장 등) **깜빡임을 끄는 그 블록**만 집어 본다.
+    const at = CSS.indexOf(".search-hit-flash-a,");
+    expect(at, "reduced-motion에서 깜빡임을 끄는 규칙이 없다").toBeGreaterThan(-1);
+    const opener = CSS.lastIndexOf("@media (prefers-reduced-motion: reduce)", at);
+    expect(opener, "그 규칙이 reduced-motion 안에 있지 않다").toBeGreaterThan(-1);
+    const body = CSS.slice(CSS.indexOf("{", opener), CSS.indexOf("\n}", at) + 2);
+    expect(body).toContain("animation: none");
+    // 표식 색까지 끄면 모션을 끈 사람에겐 검색 결과가 통째로 안 보인다.
+    expect(body).not.toMatch(/background-color|color:/);
   });
 });
 

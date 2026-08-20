@@ -1,6 +1,7 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
+import { textbookOrderSettled } from "@/features/billing/textbook-progress";
 
 // 교재신청(textbook_orders) — 수납관리 창의 '교재' 책갈피 면. tenant 스코프는 RLS가 강제.
 export type TextbookOrderRow = {
@@ -125,7 +126,7 @@ export async function getTextbookOrdersPage(
   if (f === "reg") rows = rows.filter((r) => !r.registered);
   else if (f === "pay") rows = rows.filter((r) => !r.paid);
   else if (f === "order") rows = rows.filter((r) => !r.ordered);
-  else if (f === "done") rows = rows.filter((r) => r.registered && r.ordered && r.paid);
+  else if (f === "done") rows = rows.filter(textbookOrderSettled); // 완료 판정 = 단일 소스(2026-08-20)
   // 1순위: 찍힌 체크 개수 오름차순(0→1→2→3) — 손 안 댄 것(0개)이 맨 위, 완료(3개)가 맨 아래.
   // 2순위: 신청일 최신순(같은 개수 안에서, 날짜 없으면 뒤로).
   rows.sort((a, b) => {

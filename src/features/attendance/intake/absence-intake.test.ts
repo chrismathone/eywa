@@ -3,8 +3,13 @@ import {
   INTAKE_MAX_RANGE_DAYS,
   INTAKE_MAX_REASON,
   INTAKE_MEMO_SUFFIX,
+  INTAKE_SEARCH_LIMIT,
+  INTAKE_SEARCH_MAX_QUERY,
+  INTAKE_SEARCH_SCAN,
   attendanceStatusLabel,
   intakeMemo,
+  intakeSearchEmptyMessage,
+  intakeSearchTerm,
   intakeTeacherLabel,
   buildAbsenceCells,
   cellKey,
@@ -199,5 +204,57 @@ describe("intakeTeacherLabel — 담당은 축이 정하고 여기선 말로만 
   });
   it("아무도 없으면 null(빈 칸)", () => {
     expect(intakeTeacherLabel({ source: "none", teacherName: null })).toBeNull();
+  });
+});
+
+describe("intakeSearchTerm — DB(ilike)와 화면 문구가 같은 검색어를 본다", () => {
+  it("와일드카드(% _ \\)는 지운다 — 친 글자가 조용히 '아무거나'가 되면 안 된다", () => {
+    expect(intakeSearchTerm("이지%호")).toBe("이지호");
+    expect(intakeSearchTerm("이_지호")).toBe("이지호");
+    expect(intakeSearchTerm("이지호\\")).toBe("이지호");
+  });
+  it("공백은 지우지 않는다 — 이름에 공백이 있는 학생(영문 이름)이 영영 안 걸리면 안 된다", () => {
+    expect(intakeSearchTerm("  Florence Park  ")).toBe("Florence Park");
+  });
+  it("긴 붙여넣기는 상한에서 자른다", () => {
+    expect(intakeSearchTerm("가".repeat(60))).toHaveLength(INTAKE_SEARCH_MAX_QUERY);
+  });
+  it("실질 내용이 없으면 빈 문자열 — 조회 자체를 하지 않는다", () => {
+    expect(intakeSearchTerm("   ")).toBe("");
+    expect(intakeSearchTerm("%%")).toBe("");
+  });
+});
+
+describe("intakeSearchEmptyMessage — 0건이면 왜 비었는지 말한다", () => {
+  it("이름은 맞는데 수업이 없으면 그 사실을 밝힌다(조건도 함께)", () => {
+    const msg = intakeSearchEmptyMessage("이지호", "not_teaching");
+    expect(msg).toContain("‘이지호’와");
+    expect(msg).toContain("수업이 없습니다");
+    expect(msg).toContain("재원 중이고 수업이 있는 학생만");
+  });
+  it("받침 있는 이름은 '과'로 이어 붙인다", () => {
+    expect(intakeSearchEmptyMessage("이지훈", "no_match")).toContain("‘이지훈’과");
+  });
+  it("한글이 아닌 검색어도 문장이 깨지지 않는다", () => {
+    expect(intakeSearchEmptyMessage("Park", "no_match")).toContain("‘Park’과");
+  });
+  it("네 가지 이유를 서로 다른 말로 구분한다 — '없습니다' 하나로 뭉치지 않는다", () => {
+    const msgs = (["not_teaching", "withdrawn", "no_match", "unknown"] as const).map((r) =>
+      intakeSearchEmptyMessage("이지호", r),
+    );
+    expect(new Set(msgs).size).toBe(4);
+    expect(msgs[1]).toContain("퇴원");
+    expect(msgs[2]).toContain("이름을 다시 확인");
+  });
+  it("권한 이야기는 하지 않는다 — 이 창을 연 사람은 이미 접수 권한이 있다", () => {
+    for (const reason of ["not_teaching", "withdrawn", "no_match", "unknown"] as const) {
+      expect(intakeSearchEmptyMessage("이지호", reason)).not.toMatch(/권한/);
+    }
+  });
+});
+
+describe("검색 상한 — 후필터가 목록을 통째로 비우지 않게", () => {
+  it("SQL 상한은 화면 상한보다 넉넉하다", () => {
+    expect(INTAKE_SEARCH_SCAN).toBeGreaterThan(INTAKE_SEARCH_LIMIT);
   });
 });

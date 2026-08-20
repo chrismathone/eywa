@@ -24,11 +24,22 @@ import { after } from "next/server";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canManageTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
+import { fetchInChunks } from "@/lib/supabase/batch";
+import { kstToday } from "@/lib/date-kst";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { appendMemo, hasMemoLine } from "@/features/onescreen/makeup-absence-link";
 import { setAttendanceCell } from "../../server/actions";
 import { recordFollowup } from "../../live/server/actions";
-import { INTAKE_MAX_REASON, attendanceStatusLabel, intakeMemo } from "../absence-intake";
+import {
+  INTAKE_MAX_REASON,
+  INTAKE_SEARCH_LIMIT,
+  INTAKE_SEARCH_SCAN,
+  attendanceStatusLabel,
+  intakeMemo,
+  intakeSearchEmptyMessage,
+  intakeSearchTerm,
+  type IntakeSearchEmptyReason,
+} from "../absence-intake";
 import { loadIntakePreview, type IntakePreview } from "./queries";
 import { notifyTeachersOfIntake } from "./notify";
 
@@ -60,28 +71,117 @@ export type IntakeSaveResult =
     }
   | { error: string };
 
-/** 학생 검색 — 접수 다이얼로그 전용(전 학원). 게이트는 접수와 같은 사무실 권한이다(#77). */
-export async function searchIntakeStudents(
-  query: string,
-): Promise<{ id: string; name: string; label: string }[]> {
+/**
+ * 학생 검색 결과 — 목록이 비었을 때 **왜 비었는지**를 함께 돌려준다.
+ * 화면이 사유를 지어내지 않도록 문구는 서버(순수 모듈)가 만든다.
+ */
+export type IntakeStudentSearch = {
+  students: { id: string; name: string; label: string }[];
+  /** 목록이 비었을 때 그대로 띄울 한글 한 줄(결과가 있으면 null). */
+  note: string | null;
+  /** 조건에 맞는 학생이 더 있는데 잘랐다 — 화면이 "더 있다"를 밝힌다. */
+  truncated: boolean;
+};
+
+const EMPTY_SEARCH: IntakeStudentSearch = { students: [], note: null, truncated: false };
+
+/**
+ * 학생 검색 — 접수 다이얼로그 전용(전 학원). 게이트는 접수와 같은 사무실 권한이다(#77).
+ *
+ * 🔑 **지금 수업을 진짜로 듣고 있는 학생만** 나온다(원장 2026-08-20: *"예비도 출력되는데, 수업을
+ *    진짜로 듣고 있는 경우에만"*). 종전 필터는 `status<>'withdrawn'` 하나뿐이라 예비·상담완료·휴원이
+ *    전부 떴고, 실제로 예비 학생(수강 과목 —, 담당 —)이 목록에 올라왔다.
+ *    조건 = **재원(`enrolled`)** + **살아있는 수강 ≥ 1**(`on_hold=false` AND 종료일이 없거나 오늘 이후).
+ *    · 실측(2026-08-20 injaewon): 예비·상담완료·휴원 중 살아있는 수강을 가진 학생 **0명**
+ *      → 상태를 재원으로 좁혀도 잘못 빠지는 사람이 없다. 재원인데 수강 0인 학생은 5명인데,
+ *      이들을 고르면 다이얼로그가 "그 기간에 이 학생 수업이 없습니다"로 끝나는 **막다른 길**이다.
+ * 🔴 **미래 시작 수강도 포함**한다(`start_date` 상한 없음) — 다음 주에 시작하는 새 학생의 결석 통보가
+ *    오늘 올 수 있다. 종료일만 본다.
+ * 🔴 상태는 **SQL에서 먼저** 좁힌다. 상한을 채운 뒤 후필터하면 목록이 통째로 비는 함정이 있어
+ *    (INTAKE_SEARCH_SCAN 주석), 수강 후필터용 여유분을 받아 거른 뒤 자른다.
+ */
+export async function searchIntakeStudents(query: string): Promise<IntakeStudentSearch> {
   const user = await getCurrentUser();
-  if (!user) return [];
-  if (!(await canManageTenant(user.systemRole, "attendance"))) return [];
-  const q = query.trim();
-  if (!q) return [];
+  if (!user) return EMPTY_SEARCH;
+  if (!(await canManageTenant(user.systemRole, "attendance"))) return EMPTY_SEARCH;
+  const term = intakeSearchTerm(query);
+  if (!term) return EMPTY_SEARCH;
   const supabase = await createClient();
-  const { data } = await supabase
+  const pattern = `%${term}%`;
+
+  const { data, error } = await supabase
     .from("students")
     .select("id, name, grade, school")
-    .neq("status", "withdrawn")
-    .ilike("name", `%${q}%`)
+    .eq("status", "enrolled")
+    .ilike("name", pattern)
     .order("name", { ascending: true })
-    .limit(20);
-  return (data ?? []).map((s) => ({
+    .limit(INTAKE_SEARCH_SCAN);
+  // 조회 실패를 "없음"으로 접지 않는다 — 그러면 화면이 "그런 학생 없습니다"라고 거짓말한다([[#89]]).
+  if (error) {
+    return { students: [], note: "학생을 불러오지 못했습니다 — 잠시 후 다시 시도해 주세요", truncated: false };
+  }
+  const rows = data ?? [];
+
+  // 살아있는 수강이 **하나라도** 있는 학생 집합. 판정은 SQL이 하고(행을 JS로 세지 않는다, B2),
+  // id가 수십 개라 청크로 나눈다(B3 — 헬퍼는 error를 삼키지 않고 throw한다).
+  let liveIds: Set<string>;
+  try {
+    const live = await fetchInChunks<{ student_id: string }>(
+      rows.map((s) => s.id as string),
+      (chunk) =>
+        supabase
+          .from("enrollments")
+          .select("student_id")
+          .in("student_id", chunk)
+          .eq("on_hold", false)
+          .or(`end_date.is.null,end_date.gte.${kstToday()}`),
+    );
+    liveIds = new Set(live.map((e) => e.student_id));
+  } catch {
+    return { students: [], note: "수강 정보를 불러오지 못했습니다 — 잠시 후 다시 시도해 주세요", truncated: false };
+  }
+
+  const eligible = rows.filter((s) => liveIds.has(s.id as string));
+  const students = eligible.slice(0, INTAKE_SEARCH_LIMIT).map((s) => ({
     id: s.id as string,
     name: s.name as string,
     label: schoolGradeLabel((s.school as string | null) ?? null, (s.grade as string | null) ?? null),
   }));
+  if (students.length > 0) {
+    // 잘린 사실을 숨기지 않는다: 후필터로 넘친 경우 + SQL 상한에 닿아 더 볼 수 없었던 경우 둘 다.
+    const truncated = eligible.length > INTAKE_SEARCH_LIMIT || rows.length >= INTAKE_SEARCH_SCAN;
+    return { students, note: null, truncated };
+  }
+  return {
+    students: [],
+    note: intakeSearchEmptyMessage(term, await emptySearchReason(supabase, pattern, rows.length > 0)),
+    truncated: false,
+  };
+}
+
+/**
+ * 목록이 빈 이유 — **이름이 안 맞은 것**과 **조건에 안 맞은 것**을 갈라 준다.
+ * 세는 조회라 행을 받지 않는다(`count exact head`, B2). 실패하면 지어내지 않고 "unknown"으로 접는다.
+ */
+async function emptySearchReason(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  pattern: string,
+  hadEnrolledMatch: boolean,
+): Promise<IntakeSearchEmptyReason> {
+  // 재원 학생이 이름으로는 걸렸는데 전부 걸러졌다 = 수업이 없는 것(추가 조회 불필요).
+  if (hadEnrolledMatch) return "not_teaching";
+  const [others, all] = await Promise.all([
+    supabase
+      .from("students")
+      .select("*", { count: "exact", head: true })
+      .ilike("name", pattern)
+      .neq("status", "withdrawn"),
+    supabase.from("students").select("*", { count: "exact", head: true }).ilike("name", pattern),
+  ]);
+  if (others.error || all.error) return "unknown";
+  if ((others.count ?? 0) > 0) return "not_teaching"; // 예비·상담완료·휴원 — 수업을 듣고 있지 않다
+  if ((all.count ?? 0) > 0) return "withdrawn";
+  return "no_match";
 }
 
 /** 미리보기 — 저장 전에 "어느 반 몇 칸"을 보여준다. 조회지만 다이얼로그가 클라라 액션으로 노출한다. */

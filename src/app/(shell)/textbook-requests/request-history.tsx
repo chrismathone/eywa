@@ -17,6 +17,7 @@ import {
 } from "@/features/billing/server/textbook-actions";
 import type { TextbookOrderRow } from "@/features/billing/server/textbook-queries";
 import { ownsTextbookRequest } from "@/features/billing/textbook-ownership";
+import { textbookOrderSettled } from "@/features/billing/textbook-progress";
 
 // 교재요청 '요청 내역' — ijw TextbookRequestView history 구조 이식: 미완료/완료 필터 탭(건수 배지)
 // + 학생명·교재명 검색 + 메모리 페이지네이션(rows는 이미 서버에서 도착 — 강사 스코프 수백 행 수준).
@@ -60,10 +61,8 @@ function isUntouched(r: TextbookOrderRow): boolean {
   return !r.registered && !r.ordered && !r.paid;
 }
 
-/** ijw isFullyComplete — 등록·납부·주문 3개 전부 체크 = 완료(미완료/완료 탭 판정). */
-function isDone(r: TextbookOrderRow): boolean {
-  return r.registered && r.ordered && r.paid;
-}
+/** ijw isFullyComplete — 등록·납부·주문 3개 전부 체크 = 완료(미완료/완료 탭 판정). 판정은 단일 소스(2026-08-20). */
+const isDone = textbookOrderSettled;
 
 function RequestRow({
   row,
