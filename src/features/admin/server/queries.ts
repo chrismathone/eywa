@@ -1,8 +1,11 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
-import { fetchAllPaged } from "@/lib/supabase/batch";
+import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
 import { addDays, kstToday } from "@/lib/date-kst";
+import { getTenantSettings } from "@/features/owner/server/queries";
+import { buildSubjectMaps } from "@/features/owner/subjects";
 import { WITHDRAW_CANDIDATE_DAYS, selectWithdrawCandidates } from "../withdraw-candidates";
+import { groupSameNameStudents } from "../same-name";
 
 export type DuplicateGroup = {
   key: string;
@@ -97,6 +100,107 @@ export async function findDuplicateStudents(): Promise<DuplicateGroup[]> {
   }
 
   return Array.from(comps.values()).filter((g) => g.students.length >= 2);
+}
+
+/** '같은 이름' 섹션의 한 줄 — 데스크가 **같은 사람인지 다른 사람인지** 고를 근거를 나란히 싣는다. */
+export type SameNameStudentRow = {
+  id: string;
+  name: string;
+  grade: string | null;
+  school: string | null;
+  status: string;
+  parentPhone: string | null;
+  /** 지금 듣고 있는 반의 **과목 한글 라벨**(빈 배열 = 수업 없음). raw 키를 화면에 내보내지 않는다. */
+  subjects: string[];
+};
+
+export type SameNameStudentGroup = { key: string; name: string; students: SameNameStudentRow[] };
+
+/**
+ * **같은 이름을 쓰는 학생** — 데이터 정리 면의 별도 섹션(원장 2026-08-20).
+ *
+ * 🔴 중복 의심(통합)과 **다른 물건**이다. 판정·제외 규칙은 순수 모듈
+ *    [`groupSameNameStudents`](../same-name.ts)가 단일 소스이고(이미 통합 섹션에 잡힌 그룹은 뺀다),
+ *    여기서는 **근거 재료를 붙이는 일**만 한다. 이 섹션의 행동은 통합이 아니라 *"이름을 구분하라"*다.
+ * 🔴 **이름을 자동으로 바꾸지 않는다** — 개명은 사람이 학생 상세에서 한다(강사 소급 퇴원 사고 이후,
+ *    학생 기록을 자동으로 바꾸는 경로는 만들지 않는다는 결정).
+ */
+export async function findSameNameStudents(): Promise<SameNameStudentGroup[]> {
+  const supabase = await createClient();
+  // 퇴원생 제외 = 목록에 안 뜨는 사람은 헷갈릴 일도 없다(중복 의심 쿼리와 같은 결).
+  // 전건 무페이징 select는 1000행 silent 절단(B2) → fetchAllPaged(id 정렬 = 페이지 경계 안정).
+  const [rows, settings] = await Promise.all([
+    fetchAllPaged<{
+      id: string;
+      name: string;
+      grade: string | null;
+      school: string | null;
+      status: string;
+      parent_phone: string | null;
+    }>((from, to) =>
+      supabase
+        .from("students")
+        .select("id, name, grade, school, status, parent_phone")
+        .neq("status", "withdrawn")
+        .order("id")
+        .range(from, to),
+    ),
+    getTenantSettings(),
+  ]);
+
+  const groups = groupSameNameStudents(
+    rows.map((r) => ({
+      id: r.id,
+      name: r.name,
+      grade: r.grade,
+      school: r.school,
+      parentPhone: r.parent_phone,
+      status: r.status,
+    })),
+  );
+  if (groups.length === 0) return [];
+
+  // 근거(수강 과목)는 **그룹에 든 학생만** 조회한다 — 평소 0~1그룹이라 몇 명뿐이다.
+  const ids = groups.flatMap((g) => g.students.map((s) => s.id));
+  const today = kstToday();
+  const live = await fetchInChunks<{ student_id: string; class_id: string }>(ids, (chunk) =>
+    supabase
+      .from("enrollments")
+      .select("student_id, class_id")
+      .in("student_id", chunk)
+      .eq("on_hold", false)
+      .or(`end_date.is.null,end_date.gte.${today}`),
+  );
+  const classIds = [...new Set(live.map((e) => e.class_id))];
+  const classes = await fetchInChunks<{ id: string; subject: string | null }>(classIds, (chunk) =>
+    supabase.from("classes").select("id, subject").in("id", chunk),
+  );
+
+  // 과목 라벨은 **학원설정 단일 소스** — 코드에 과목 라벨을 박지 않는다.
+  const { labelOf } = buildSubjectMaps(settings.operations.subjects);
+  const subjectOfClass = new Map(classes.map((c) => [c.id, c.subject]));
+  const subjectsByStudent = new Map<string, Set<string>>();
+  for (const e of live) {
+    const subject = subjectOfClass.get(e.class_id);
+    if (!subject) continue; // 과목 미지정 반은 라벨이 없다 — 빈 값을 지어내지 않는다
+    const set = subjectsByStudent.get(e.student_id) ?? new Set<string>();
+    set.add(labelOf(subject));
+    subjectsByStudent.set(e.student_id, set);
+  }
+
+  return groups.map((g) => ({
+    key: g.key,
+    name: g.name,
+    students: g.students.map((s) => ({
+      id: s.id,
+      name: s.name,
+      grade: s.grade,
+      school: s.school,
+      status: s.status,
+      parentPhone: s.parentPhone,
+      subjects: [...(subjectsByStudent.get(s.id) ?? [])].sort((a, b) => a.localeCompare(b, "ko")),
+    })),
+  }));
 }
 
 export type OrphanReport = {

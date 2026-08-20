@@ -144,10 +144,17 @@ export function ClassFilterBar({
   current,
   teachers,
   subjectFilters,
+  hideTeacherFilter = false,
 }: {
   current: ClassFilterState;
   teachers: Teacher[];
   subjectFilters: { value: string; label: string }[];
+  /**
+   * 강사 스코프(내 수업)면 서버가 켠다 — `getClassesPage`가 teacher_id를 본인으로 **강제**하므로
+   * 남을 골라도 결과는 항상 0개다(원장 2026-08-20 "강사가 당연히 나일텐데 다른 강사 선택도 보임").
+   * 본인만 담은 드롭다운을 남기는 것도 같은 이유로 무의미해서 통째로 감춘다.
+   */
+  hideTeacherFilter?: boolean;
 }) {
   const router = useRouter();
   const didInit = useRef(false);
@@ -213,16 +220,18 @@ export function ClassFilterBar({
 
         {/* 우측: 강사·정렬·검색·뷰 (ml-auto로 함께 우측, 좁아지면 한 단위로 줄바꿈) */}
         <div className="ml-auto flex flex-wrap items-center gap-x-3 gap-y-2">
-          <div className="flex items-center gap-1.5">
-            <span className="micro mr-1">강사</span>
-            <SearchableSelect
-              className="w-36"
-              value={current.teacher}
-              onValueChange={(v) => go({ teacher: v })}
-              options={[{ value: "all", label: "전체" }, ...teacherOpts]}
-              ariaLabel="강사 필터"
-            />
-          </div>
+          {hideTeacherFilter ? null : (
+            <div className="flex items-center gap-1.5">
+              <span className="micro mr-1">강사</span>
+              <SearchableSelect
+                className="w-36"
+                value={current.teacher}
+                onValueChange={(v) => go({ teacher: v })}
+                options={[{ value: "all", label: "전체" }, ...teacherOpts]}
+                ariaLabel="강사 필터"
+              />
+            </div>
+          )}
 
           <div className="flex items-center gap-1.5">
             <span className="micro mr-1">정렬</span>
@@ -230,7 +239,13 @@ export function ClassFilterBar({
               className="w-28"
               value={current.sort}
               onValueChange={(v) => go({ sort: v as ClassSort })}
-              options={SORT_OPTIONS}
+              // '강사명순'도 같은 축이라 스코프에선 뺀다(전 행이 같은 담임 = 수업명순과 동일한 결과).
+              // ⚠️ 이미 그 값이 걸려 있으면 남긴다 — 지우면 드롭다운이 빈 값으로 굳는다.
+              options={
+                hideTeacherFilter && current.sort !== "teacher"
+                  ? SORT_OPTIONS.filter((o) => o.value !== "teacher")
+                  : SORT_OPTIONS
+              }
               ariaLabel="정렬 기준"
             />
           </div>

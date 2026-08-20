@@ -15,6 +15,13 @@ import {
   type PeriodsConfig,
 } from "@/features/timetable/lib/periods";
 import { goalAchieved } from "../grades-meta";
+import {
+  subjectAxisOf,
+  axisHasSubject,
+  narrowSubjects,
+  narrowTeacherNames,
+  type SubjectTeacher,
+} from "../scope-axis";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { isShareExpired } from "@/features/onescreen/share-expiry";
@@ -163,10 +170,24 @@ type StudentPageRecord = {
 
 export async function getStudentsList(
   options?: StudentListFilters,
+  /**
+   * `applyTeacherScope` = **화면(/students)과 같은 축**이어야 하는 소비처(엑셀 내보내기)만 켠다 — 강사면
+   * 담당 학생으로 좁히고 과목·담당 강사 축도 화면과 같게 줄인다.
+   * 🔴 기본값(끔)은 의도적이다: 반 상세 '학생 배정' 후보·발송 콘솔 학생 선택기는 학원 전체가 맞고,
+   *    거기서 좁히면 겸직 관리자가 강사뷰에서 남의 학생을 반에 못 넣는다(별개의 결정).
+   */
+  scopeOptions?: { applyTeacherScope?: boolean },
 ): Promise<StudentListRow[]> {
   const supabase = await createClient();
+  const teacherScope = scopeOptions?.applyTeacherScope ? await effectiveTeacherScope() : null;
+  if (teacherScope && teacherScope.studentIds.length === 0) return [];
+  const axis = subjectAxisOf(teacherScope);
+  // ⚠️ 스코프는 **받아온 뒤 JS로** 거른다 — id 수백을 `.in()`으로 URL에 실으면 414 + content-location
+  //    헤더 초과로 조용히 "0명"이 된다(임계 n≈398, 이 파일 enrollmentEmbed 주석의 🔴 2026-07-29 사고).
+  //    학생 전건은 어차피 아래 fetchAllPaged가 받고 있어 추가 왕복이 없다.
+  const scopeIds = teacherScope ? new Set(teacherScope.studentIds) : null;
   // 학생 전건을 .range()로 페이지네이션 — export·반 상세가 전 학생을 받으므로 1000행 절단 방지.
-  const data = await fetchAllPaged((from, to) => {
+  const all = await fetchAllPaged((from, to) => {
     let qb = supabase
       .from("students")
       .select(
@@ -184,6 +205,7 @@ export async function getStudentsList(
           : qb.order("grade", { ascending: true }).order("name", { ascending: true });
     return sorted.range(from, to);
   });
+  const data = scopeIds ? all.filter((r) => scopeIds.has(r.id)) : all;
   if (data.length === 0) return [];
 
   // 학생별 수강 과목 unique + 과목별 담당 강사(반의 teacher_id). id를 청크로 .in()(414 + error삼킴 방지).
@@ -192,7 +214,10 @@ export async function getStudentsList(
   const isWithdrawn = options?.status === "withdrawn";
   const studentIds = data.map((r) => r.id);
   const subjectsByStudent = new Map<string, Set<string>>();
-  const teachersByStudent = new Map<string, Map<string, string>>(); // student → teacher_id → 이름
+  const teachersByStudent = new Map<string, Map<string, string>>(); // student → teacher_id → 이름 (필터용)
+  // 표시용 (과목, 담당 강사) 짝 — 강사 스코프에서 '담당 강사' 열을 **담당 과목 반의 담당만**으로 좁히려면
+  // 이름만으론 부족하다(어느 과목 반의 담임인지 알아야 남의 과목 담임을 뺀다).
+  const teacherPairsByStudent = new Map<string, SubjectTeacher[]>();
   const enrolledSet = new Set<string>(); // 수강 중(end_date null, 휴원 포함) 반이 있는 학생
   {
     const ens = await fetchInChunks<{
@@ -226,6 +251,9 @@ export async function getStudentsList(
         const tm = teachersByStudent.get(e.student_id) ?? new Map<string, string>();
         tm.set(klass.teacher_id, t?.display_name ?? "");
         teachersByStudent.set(e.student_id, tm);
+        const pairs = teacherPairsByStudent.get(e.student_id) ?? [];
+        pairs.push({ subject: klass.subject ?? null, name: t?.display_name ?? "" });
+        teacherPairsByStudent.set(e.student_id, pairs);
       }
     }
   }
@@ -238,12 +266,10 @@ export async function getStudentsList(
         school: r.school,
         grade: r.grade,
         status: r.status,
-        teacherNames: [
-          ...new Set(Array.from(teachersByStudent.get(r.id)?.values() ?? []).filter(Boolean)),
-        ].sort(),
+        teacherNames: narrowTeacherNames(axis, teacherPairsByStudent.get(r.id) ?? []),
         enrolledAt: r.enrolled_at,
         parentPhone: r.parent_phone,
-        subjects: Array.from(subjectsByStudent.get(r.id) ?? []).sort(),
+        subjects: narrowSubjects(axis, Array.from(subjectsByStudent.get(r.id) ?? []).sort()),
         syncNew: r.sync_added_at != null,
         dupSuspect: r.dup_suspect === true,
       }) satisfies StudentListRow,
@@ -278,10 +304,14 @@ export async function getEnrolledStatCounts(): Promise<{
 }> {
   const supabase = await createClient();
   // 강사 스코프: Stat 카드도 본인 담당 학생 기준(페이지 목록과 일치). teacher 또는 겸직-강사뷰.
-  const teacherStudentIds = (await effectiveTeacherScope())?.studentIds ?? null;
+  const teacherScope = await effectiveTeacherScope();
+  const teacherStudentIds = teacherScope?.studentIds ?? null;
   if (teacherStudentIds && teacherStudentIds.length === 0)
     return { enrolled: 0, bySubject: {} };
   const scope = teacherStudentIds ? new Set(teacherStudentIds) : null;
+  // 표시 축(원장 2026-08-20): 게이지는 **담당 과목만** — 동시수강으로 들어온 남의 과목(수학 전담인데
+  // "영어 14명 36%")은 이 강사에게 오독을 만든다. 관리자·담당 반 0개는 축 없음(종전 동일).
+  const axis = subjectAxisOf(teacherScope);
 
   const enrolledCountQ = () => {
     const q = supabase
@@ -314,6 +344,7 @@ export async function getEnrolledStatCounts(): Promise<{
       | { subject?: string }
       | undefined;
     if (!klass?.subject) continue;
+    if (!axisHasSubject(axis, klass.subject)) continue;
     const set = bySubject.get(klass.subject) ?? new Set<string>();
     set.add(e.student_id);
     bySubject.set(klass.subject, set);
@@ -339,8 +370,11 @@ export async function getStudentsPage(
   const to = from + pageSize - 1;
 
   // 강사 스코프: teacher(또는 겸직-강사뷰)면 본인 담당 반 학생만(intra-tenant 누수 차단 + 사용성). fail-safe(쿼리가 자체 스코프).
-  const teacherStudentIds = (await effectiveTeacherScope())?.studentIds ?? null;
+  const teacherScope = await effectiveTeacherScope();
+  const teacherStudentIds = teacherScope?.studentIds ?? null;
   if (teacherStudentIds && teacherStudentIds.length === 0) return { rows: [], total: 0 };
+  // 표시 축(원장 2026-08-20) — 행(누가 보이는지)은 그대로 두고 그 위에 그리는 과목·담당 강사만 좁힌다.
+  const axis = subjectAxisOf(teacherScope);
 
   const isWithdrawn = options?.status === "withdrawn";
   // 담당 강사 필터 → 그 강사 반에 수강 중인 학생 id(getTeacherScope 재사용, primary_teacher_id 대체).
@@ -406,7 +440,8 @@ export async function getStudentsPage(
 
   const ids = pageData.map((r) => r.id);
   const subjectsByStudent = new Map<string, Set<string>>();
-  const teachersByStudent = new Map<string, Set<string>>(); // student → 담당 강사명 distinct
+  // (과목, 담당 강사) 짝 — 강사 스코프에서 남의 과목 담임을 빼려면 어느 과목 반의 담임인지가 필요하다.
+  const teacherPairsByStudent = new Map<string, SubjectTeacher[]>();
   if (ids.length > 0) {
     // 퇴원 목록의 과목·담당 열은 **이력 기준**(활성 수강이 없으니 활성 조건이면 전부 빈칸) — F4와 같은 축.
     let ensQ = supabase
@@ -430,9 +465,9 @@ export async function getStudentsPage(
           | { display_name?: string }
           | undefined;
         if (t?.display_name) {
-          const set = teachersByStudent.get(e.student_id) ?? new Set<string>();
-          set.add(t.display_name);
-          teachersByStudent.set(e.student_id, set);
+          const pairs = teacherPairsByStudent.get(e.student_id) ?? [];
+          pairs.push({ subject: klass.subject ?? null, name: t.display_name });
+          teacherPairsByStudent.set(e.student_id, pairs);
         }
       }
     }
@@ -445,10 +480,10 @@ export async function getStudentsPage(
       school: r.school,
       grade: r.grade,
       status: r.status,
-      teacherNames: Array.from(teachersByStudent.get(r.id) ?? []).sort(),
+      teacherNames: narrowTeacherNames(axis, teacherPairsByStudent.get(r.id) ?? []),
       enrolledAt: r.enrolled_at,
       parentPhone: r.parent_phone,
-      subjects: Array.from(subjectsByStudent.get(r.id) ?? []).sort(),
+      subjects: narrowSubjects(axis, Array.from(subjectsByStudent.get(r.id) ?? []).sort()),
       syncNew: r.sync_added_at != null,
       dupSuspect: r.dup_suspect === true,
     } satisfies StudentListRow;
@@ -518,6 +553,49 @@ export async function getTeacherOptions(): Promise<TeacherOption[]> {
     displayName: r.display_name,
     systemRole: r.system_role,
   }));
+}
+
+/**
+ * 학생목록 '담임' 필터의 선택지 — **강사 스코프일 때만** 학원 전체 강사 대신 축에 맞는 강사만 준다.
+ *
+ * 축(담당 과목)이 아닌 강사를 골라도 '담당 강사' 열엔 그 이름이 이제 안 나온다(narrowTeacherNames) →
+ * "왜 이 학생이 걸렸는지" 근거가 화면에 없는 필터가 된다. 그래서 선택지를 **내 학생이 다니는
+ * 담당 과목 반의 담당 강사**로 좁힌다(모든 선택지가 결과 ≥1이 되고, 열에 보이는 이름과 일치).
+ *
+ * 반환 null = 좁히지 않음(관리자·담당 반 0개) → 호출부가 종전 `getTeacherOptions()`를 쓴다.
+ * ⚠️ `systemRole`은 안 담는다 — 여긴 반 담당에서 역산한 목록이라 역할을 모른다(모르는 값을 지어내지 않는다).
+ */
+export async function getScopedTeacherOptions(): Promise<
+  { id: string; displayName: string }[] | null
+> {
+  const teacherScope = await effectiveTeacherScope();
+  const axis = subjectAxisOf(teacherScope);
+  if (!teacherScope || !axis) return null;
+  if (teacherScope.studentIds.length === 0) return [];
+  const supabase = await createClient();
+  // 내 학생의 활성 수강 → 반(과목·담당). id 수십~수백이라 청크 분할(B3, 414 + error 삼킴 방지).
+  const ens = await fetchInChunks<{
+    class: EnrollClass | EnrollClass[] | null;
+  }>(teacherScope.studentIds, (chunk) =>
+    supabase
+      .from("enrollments")
+      .select("class:class_id ( subject, teacher_id, teacher:teacher_id ( display_name ) )")
+      .is("end_date", null)
+      .in("student_id", chunk),
+  );
+  const byId = new Map<string, string>();
+  for (const e of ens) {
+    const klass = (Array.isArray(e.class) ? e.class[0] : e.class) as EnrollClass | undefined;
+    if (!klass?.teacher_id) continue;
+    if (!axisHasSubject(axis, klass.subject)) continue;
+    const t = (Array.isArray(klass.teacher) ? klass.teacher[0] : klass.teacher) as
+      | { display_name?: string }
+      | undefined;
+    if (t?.display_name) byId.set(klass.teacher_id, t.display_name);
+  }
+  return [...byId]
+    .map(([id, displayName]) => ({ id, displayName }))
+    .sort((a, b) => a.displayName.localeCompare(b.displayName, "ko"));
 }
 
 export async function getStudentById(id: string): Promise<StudentDetail | null> {
