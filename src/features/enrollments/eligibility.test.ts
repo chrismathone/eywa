@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   enrollmentAssignBlockReason,
+  enrollmentOnHoldForStatus,
   enrollmentPeriodsOverlap,
   isEnrollmentActiveOn,
   isEnrollmentEndedOn,
@@ -107,5 +108,17 @@ describe("enrollmentAssignBlockReason — 어떤 학생 상태에 반을 배정�
     expect(enrollmentAssignBlockReason(undefined)).toBeNull();
     expect(enrollmentAssignBlockReason("")).toBeNull();
     expect(enrollmentAssignBlockReason("graduated_2027")).toBeNull();
+  });
+});
+
+describe("enrollmentOnHoldForStatus — 새 수강이 휴원 표식을 달고 태어나는가", () => {
+  it("휴원 학생이면 true — 시트 가져오기·반 이동이 공유하는 규칙", () => {
+    expect(enrollmentOnHoldForStatus("on_hold")).toBe(true);
+  });
+
+  it("재원·그 외 상태는 false", () => {
+    for (const s of ["enrolled", "prospect", "consulted", "withdrawn", null, undefined, ""]) {
+      expect(enrollmentOnHoldForStatus(s)).toBe(false);
+    }
   });
 });

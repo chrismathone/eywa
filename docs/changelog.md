@@ -1,5 +1,22 @@
 # eywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-08-20 (18) — 휴원 구멍 셋째: **시간표 엑셀·시트 가져오기**도 휴원을 승계
+
+메인 세션 적대 리뷰가 잡은 잔여 구멍. (16)에서 `createEnrollment`(화면 배정)와 `move_enrollments_batch`
+(반 이동)를 막았는데, **시간표 엑셀·시트 가져오기**([applyDiff](src/features/timetable/server/import-actions.ts))가
+enrollments에 직접 insert하면서 학생 상태를 안 봤다 → 시트에 휴원 학생 이름이 있으면 `on_hold` 기본값
+false로 **활성 수강**이 새로 생긴다(앞의 둘과 똑같은 증상).
+
+- 🔴 **거절이 아니라 승계**로 골랐다 — 시트는 *"어느 반인가"*의 진실이지 *"휴원인가"*의 진실이 아니다.
+  휴원 학생 행은 `on_hold: true`로 들어간다(반 이동 RPC 0228a와 같은 결).
+- 🔴 **조용히 건너뛰지 않는다** — 대량 경로에서 행을 말없이 버리면 "왜 이 아이만 안 들어왔지"가 된다.
+  넣되 결과 요약과 `timetable_import_logs`에 **'휴원 상태로 추가 N'** 을 적는다.
+- 판정은 순수 함수 [`enrollmentOnHoldForStatus`](src/features/enrollments/eligibility.ts) 단일 소스
+  (Vitest 2) — 승계 경로 셋이 같은 규칙을 본다. 학생 상태는 `diff.adds`의 학생 id로 한 번에
+  조회(`fetchInChunks`, B3).
+- `eligibility.ts` 주석도 고쳤다: 종전엔 정식 경로가 "게이트에 안 걸린다"는 **사실만** 적고 왜 괜찮은지가
+  없었다 → 경로별 이유를 명시(등록상담 전환은 학생을 `enrolled`로 만든 뒤 배정하는 순서, 가져오기는 승계).
+
 ## 2026-08-20 (17) — 잘못 만든 **수업 이력 삭제**(원장·super_admin) — 단, 기록이 붙었으면 못 지운다
 
 원장 지시: *"이런 잘못된 수업 이력을 지우고 싶은데 마스터 및 원장에게 권한부여"* → *"지우는건 안되네

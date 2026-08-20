@@ -65,9 +65,14 @@ export function enrollmentAttendsOnDay(
  * 🔴 이 판정은 **서버(createEnrollment)가 진짜 게이트**다 — 화면은 같은 이유를 보여줄 뿐이다([[#77]]).
  * ⚠️ 모르는 상태 코드는 **허용**(fail-open) — 상태 enum이 늘었을 때 배정이 통째로 막히는 쪽이 더 나쁘다
  *    (권한 폴백 fail-open과 같은 결, [[#60]]).
- * ⚠️ 정식 등록 경로(등록상담 전환 `convertConsultationToStudent`·시간표 엑셀 가져오기)는
- *    `createEnrollment`를 거치지 않고 enrollments에 직접 insert하므로 이 게이트에 걸리지 않는다.
- *    (상담 전환은 학생을 `status:'enrolled'`로 만든 뒤 배정하는 순서라 어차피 통과한다.)
+ * ⚠️ 정식 등록 경로 둘은 `createEnrollment`를 거치지 않고 enrollments에 직접 insert하므로 이 게이트에
+ *    **걸리지 않는다.** 확인한 이유는 이렇다(둘 다 그대로 두는 게 옳다):
+ *    · **등록상담 전환**(`convertConsultationToStudent`) — 학생을 `status:'enrolled'`로 **만든 뒤** 배정하는
+ *      순서라 애초에 어긋날 수가 없다(게이트를 태워도 통과한다).
+ *    · **시간표 엑셀·시트 가져오기**(`applyDiff`) — 시트는 *"어느 반인가"*의 진실이지 *"휴원인가"*의
+ *      진실이 아니다. 그래서 **거절이 아니라 승계**한다: 휴원 학생 행은 `on_hold: true`로 넣는다
+ *      (반 이동 RPC 0228a와 같은 결). 🔴 대량 경로에서 **조용히 건너뛰지 않는다** — 안 들어가면
+ *      "왜 이 아이만 빠졌지"가 되고, 결과 요약에도 승계 건수를 적는다(enrollmentOnHoldForStatus).
  */
 export function enrollmentAssignBlockReason(status: string | null | undefined): string | null {
   switch (status) {
@@ -81,4 +86,15 @@ export function enrollmentAssignBlockReason(status: string | null | undefined): 
     default:
       return null;
   }
+}
+
+/**
+ * 학생 상태 → **새로 만드는 수강의 `on_hold` 초깃값.** 승계 경로(시간표 엑셀·시트 가져오기, 반 이동
+ * RPC 0228a)가 공유하는 규칙 — 학생이 휴원이면 그 수강도 휴원 표식을 달고 태어난다.
+ *
+ * 🔴 로스터(출석부·원스크린·좌석표)는 **수강의 on_hold**만 보고 학생 상태는 안 본다 — 이 값이 false로
+ *    새로 생기면 "학생목록엔 휴원인데 출석부엔 그대로"가 된다(2026-08-20에 막은 구멍 셋의 공통 원인).
+ */
+export function enrollmentOnHoldForStatus(status: string | null | undefined): boolean {
+  return status === "on_hold";
 }

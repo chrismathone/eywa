@@ -20,6 +20,7 @@ import {
   SHEET_SYNC_BUSY_MSG,
   type SheetSyncLease,
 } from "@/features/integrations/server/sheet-sync-lease";
+import { enrollmentOnHoldForStatus } from "@/features/enrollments/eligibility";
 import type {
   ClassRef,
   EnrollmentSnapshotRow,
@@ -220,6 +221,8 @@ export type ApplyState = {
   error?: string;
   staleHash?: string; // hash 불일치 시 서버 재계산 hash — 클라가 미리보기를 지우고 재미리보기 유도
   applied?: { moved: number; removed: number; added: number };
+  /** 추가분 중 **휴원 학생이라 휴원 표식을 달고 들어간** 건수 — 조용히 넘어가면 나중에 "왜 안 뜨지"가 된다. */
+  heldAdds?: number;
   failed?: number;
   snapshotId?: string;
 };
@@ -379,14 +382,33 @@ async function applyDiff(
   }
 
   // 4) 추가 — insert (GiST 충돌 시 실패 카운트)
-  for (const a of diff.adds) {
-    const { error } = await supabase.from("enrollments").insert({
-      tenant_id: user.tenantId,
-      student_id: a.studentId,
-      class_id: a.classId,
-      start_date: today,
-    });
-    if (error) failed += 1;
+  // 🔴 **휴원 표식 승계**(원장 2026-08-20 "휴원 해결"). 이 경로는 `createEnrollment`를 안 거쳐 학생 상태를
+  //    보지 않았고, 그래서 시트에 휴원 학생 이름이 있으면 `on_hold` 기본값 false로 **활성 수강**이 새로
+  //    생겼다(로스터는 수강의 on_hold만 보고 학생 상태는 안 본다 → 학생목록엔 휴원인데 출석부엔 그대로).
+  //    시트는 *"어느 반인가"*의 진실이지 *"휴원인가"*의 진실이 아니므로 **거절·스킵이 아니라 승계**한다
+  //    (반 이동 RPC 0228a와 같은 결). ⚠️ 조용히 건너뛰면 "왜 이 아이만 안 들어왔지"가 된다 — 넣되
+  //    승계 건수를 결과에 적는다. 판정은 enrollmentOnHoldForStatus 단일 소스.
+  //    id(PK) 조회라 청크당 행 수 ≤ 청크 크기 → fetchInChunks로 충분(1000행 캡 무관, B3).
+  let heldAdds = 0;
+  if (diff.adds.length > 0) {
+    const statusRows = await fetchInChunks<{ id: string; status: string | null }>(
+      [...new Set(diff.adds.map((a) => a.studentId))],
+      (chunk) => supabase.from("students").select("id, status").in("id", chunk),
+    );
+    const statusById = new Map(statusRows.map((r) => [r.id, r.status]));
+
+    for (const a of diff.adds) {
+      const onHold = enrollmentOnHoldForStatus(statusById.get(a.studentId));
+      const { error } = await supabase.from("enrollments").insert({
+        tenant_id: user.tenantId,
+        student_id: a.studentId,
+        class_id: a.classId,
+        start_date: today,
+        on_hold: onHold,
+      });
+      if (error) failed += 1;
+      else if (onHold) heldAdds += 1;
+    }
   }
 
   // 5) 이력 로그
@@ -398,6 +420,7 @@ async function applyDiff(
       moved: diff.moves.length,
       removed: diff.removes.length,
       added: diff.adds.length,
+      heldAdds,
       failed,
     },
     details: diff,
@@ -411,6 +434,7 @@ async function applyDiff(
       removed: diff.removes.length,
       added: diff.adds.length,
     },
+    heldAdds,
     failed,
     snapshotId,
   };
