@@ -11,6 +11,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { setAttendanceBulk } from "@/features/attendance/server/actions";
 import { requestDeskConfirm } from "@/features/attendance/live/server/actions";
+import { publishAttendanceApplied } from "@/features/attendance/live/attendance-applied-bus";
 
 export function StripSlot({
   date,
@@ -58,6 +59,19 @@ export function StripSlot({
             setDone(false);
             setError(res.error);
             return;
+          }
+          // 같은 문서 아래에 열려 있는 화면(원스크린 로스터·ECS 오늘 보드/주간 시트)에 방금 기록한 칸을
+          // 알린다 — 그 화면들은 출결을 **마운트 1회만** 클라 state로 복사하고 router.refresh()는 state를
+          // 보존하므로, 이 방송이 없으면 새로고침 전까지 알약·'일괄 출석 N'·발송 칸이 낡은 채로 남는다
+          // (원장 제보 2026-08-20). 서버가 **실제로 기록한 칸**만 실어 되돌림 위험이 없다.
+          if (res.applied.length > 0) {
+            publishAttendanceApplied({
+              date,
+              status: "present",
+              // 저장 축 그대로(영어=교시, 수학=null) — 시트가 이 값으로 칸을 정한다.
+              slot: saveSlot,
+              cells: res.applied.map((a) => ({ studentId: a.studentId, classId: a.classId })),
+            });
           }
           router.refresh();
         })

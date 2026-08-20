@@ -109,6 +109,9 @@ import { saveStudentOrder } from "../server/order-actions";
 import { useClassnoteStatusSync } from "./use-classnote-status-sync";
 import { mergeClassnoteStatuses, pendingSendStudentIds, type ClassnoteStatusRow } from "../classnote-status";
 import { linkMakeupToAbsence, setAttendanceBulk, setAttendanceCell } from "@/features/attendance/server/actions";
+import { subscribeAttendanceApplied } from "@/features/attendance/live/attendance-applied-bus";
+import { applyAppliedAttendance } from "../apply-applied-attendance";
+import { attendanceMarkOf } from "../attendance-mark";
 import { STATUS_TEXT } from "@/features/attendance/cell-display";
 import type { BasicAttendance } from "./attendance-pills";
 import { useEditPresence, useEditingOthers } from "@/features/presence/edit-presence";
@@ -380,11 +383,38 @@ export function OneScreenClient({
   // 자동저장(디바운스) — 최신 state를 타이머 콜백에서 읽기 위한 ref 미러 + 학생별 타이머.
   const studentsRef = useRef(students);
   const reportsRef = useRef(reports);
+  // 출결 in-flight 미러 — 상단 스트립 방송이 **내가 방금 누른 알약**을 되돌리지 않게(응답 역전 방지).
+  const attPendingRef = useRef(attPending);
   // ref 미러는 render 중이 아니라 effect에서 갱신(react-hooks/refs). 타이머는 800ms 뒤라 항상 최신 반영.
   useEffect(() => {
     studentsRef.current = students;
     reportsRef.current = reports;
+    attPendingRef.current = attPending;
   });
+  /**
+   * 상단 '오늘 출석 미입력' 스트립이 기록한 칸을 이 화면에 반영한다(원장 제보 2026-08-20 —
+   * *"상단에서 출석하면 수업보고서에 연동이 안되는것 같은데"*).
+   *
+   * 🔑 로스터는 마운트 1회만 복사되고 스트립의 `router.refresh()`는 클라 state를 보존한다 → 새 `initial`
+   *    prop이 무시된다. props 병합으로 고치면 디바운스 세션 저장이 되돌린 RSC payload가 방금 찍은 알약을
+   *    덮을 수 있어(#102), **서버가 실제로 기록한 칸만** 싣는 방송으로 좁힌다.
+   * ⚠️ 날짜가 다르면 무시한다 — 과거 날짜를 열어 둔 화면에 오늘 기록이 새면 안 된다.
+   * ⚠️ setState는 **이벤트 콜백 안에서만**(effect 본문 setState 금지, #25).
+   * ⚠️ 교시(`detail.slot`)는 안 본다 — 원스크린 출결 행은 (학생×반) 축이고, 새로고침 뒤 로스터도
+   *    그 칸의 **가장 최근 기록**을 집으므로 방금 쓴 값이 그대로 진실이다.
+   * ⚠️ `patch`가 아니라 `setStudents` — **queueSave를 부르지 않는다**(ClassNote 배지 반영과 같은 규약):
+   *    내 편집이 아니라 서버가 알려준 사실이고, 출결은 세션 행(onescreen_daily_sessions)에 안 들어간다.
+   */
+  useEffect(
+    () =>
+      subscribeAttendanceApplied((detail) => {
+        if (detail.date !== activeDate) return;
+        setStudents((prev) =>
+          applyAppliedAttendance(prev, detail.cells, detail.status, attPendingRef.current),
+        );
+      }),
+    [activeDate],
+  );
   const saveTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   useEffect(() => {
     const timers = saveTimers.current;
@@ -1259,8 +1289,8 @@ export function OneScreenClient({
     });
   }
   // ── 출결 인라인 입력(2-2) — 출석부와 같은 기록(setAttendanceCell 재사용). 행(반) 단위 raw 보존 ──
-  const markOf = (s: string): AttendanceMark =>
-    s === "late" ? "지각" : s === "absent" || s === "early_leave" ? "결석" : "출석";
+  // 배지 축약 표는 [attendance-mark.ts](../attendance-mark.ts) 단일 소스 — 로스터·스트립 반영과 같은 표를 쓴다.
+  const markOf = attendanceMarkOf;
   function applyAttendanceLocal(
     studentId: string,
     classId: string,
