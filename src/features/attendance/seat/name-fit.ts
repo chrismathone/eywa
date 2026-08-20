@@ -96,6 +96,20 @@ export const SEAT_CELL_NAME_LADDER: SeatNameLadder = {
   ],
 };
 
+/**
+ * '출결 모드'(`/attendance/quick`) 학생 칩 — 폰 3열 기준.
+ * 360px 화면 − 본문 좌우 24px − 카드 좌우 24px = 312px, 3열(간격 8px×2)이면 열 98.7px,
+ * 칸 좌우 여백 8px을 빼 **90px**. 터치 타겟(44px 높이)은 그대로 두고 글씨만 줄인다.
+ */
+export const QUICK_CHIP_NAME_LADDER: SeatNameLadder = {
+  widthPx: 90,
+  steps: [
+    { px: 15, className: "text-[15px]" },
+    { px: 14, className: "text-sm" },
+    { px: 13, className: "text-[13px]" },
+  ],
+};
+
 export type SeatNameFit = {
   /** 그 이름에 씌울 글씨 크기 클래스. */
   className: string;
