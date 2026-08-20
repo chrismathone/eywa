@@ -381,7 +381,7 @@ export function GridBodyRow({
           {showProgressBadge ? (
             <span
               className="bg-danger-soft text-danger shrink-0 rounded-pill px-1 py-px text-[9px] font-bold"
-              title="진도 기록에 점프·겹침이 감지됐습니다 — 학생 상세 > 진도 탭에서 확인하세요"
+              title="진도 기록에 점프·겹침이 감지됐습니다 — 점프는 같은 선생님이 쓴 직전 진도와 비교합니다(담당이 다른 진도는 경고하지 않습니다). 학생 상세 > 진도 탭에서 확인하세요"
             >
               진도 확인 필요
             </span>

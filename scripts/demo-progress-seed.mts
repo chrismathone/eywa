@@ -63,7 +63,7 @@ for (const d of demos) {
     if (!rep) continue;
     totalReports++;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const res = await ingestReport(sb as any, { id: rep.id, tenantId, studentId: stu.id, reportDate, subject: "math", progress });
+    const res = await ingestReport(sb as any, { id: rep.id, tenantId, studentId: stu.id, reportDate, subject: "math", progress, teacherName: "진도데모" });
     if (res.event) evt[res.event] = (evt[res.event] ?? 0) + 1;
   }
   const last = d.lessons[n - 1] ? positionOf(`수학 ${d.lessons[n - 1]}`) : null;
