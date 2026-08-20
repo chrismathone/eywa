@@ -9,13 +9,18 @@ import {
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { buildStudentsWorkbook } from "@/features/exports/students-excel";
+import { effectiveTeacherScope } from "@/lib/auth/view-mode";
+import { subjectAxisOf, coerceSubjectFilter } from "@/features/students/scope-axis";
 
 export async function GET(request: Request) {
   await requireAccess("students");
 
   const url = new URL(request.url);
   const status = url.searchParams.get("status") ?? undefined;
-  const subject = url.searchParams.get("subject") ?? undefined;
+  // 🔴 강사 스코프면 파일도 **화면과 같은 축**이어야 한다 — 안 그러면 "화면엔 없는 영어가 파일엔 있다".
+  //    과목 필터가 축 밖이면 화면(page.tsx)과 같은 규칙으로 "전체"로 되돌린다.
+  const axis = subjectAxisOf(await effectiveTeacherScope());
+  const subject = coerceSubjectFilter(axis, url.searchParams.get("subject") ?? undefined);
   const q = url.searchParams.get("q") ?? undefined;
   // 고급 필터 — 화면 필터와 동일하게 export에 반영(목록과 파일 불일치 방지).
   const grade = url.searchParams.get("grade") ?? undefined;
@@ -28,16 +33,22 @@ export async function GET(request: Request) {
   const excludeNoEnrollment = url.searchParams.get("noenr") === "1";
 
   const [students, settings] = await Promise.all([
-    getStudentsList({
-      status,
-      subject,
-      q,
-      grade,
-      teacherId,
-      sort,
-      searchField,
-      excludeNoEnrollment,
-    }),
+    getStudentsList(
+      {
+        status,
+        subject,
+        q,
+        grade,
+        teacherId,
+        sort,
+        searchField,
+        excludeNoEnrollment,
+      },
+      // 🔴 화면(/students)은 강사 스코프로 좁혀 보여주는데 이 라우트는 스코프를 아예 안 봤다 —
+      //    강사가 '엑셀 내보내기'를 누르면 **학원 전체 학생 + 학부모 연락처**가 파일로 떨어졌다
+      //    (2026-08-18 "강사 = 담당 학생만 열람" 결정의 남은 뒷문, #77). 목록과 같은 스코프로 맞춘다.
+      { applyTeacherScope: true },
+    ),
     getTenantSettings(),
   ]);
   const subjects = buildSubjectMaps(settings.operations.subjects);
