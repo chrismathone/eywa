@@ -9,6 +9,15 @@ import { betaZodTool } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { getStaffList, getStaffById, getStaffClasses, getStaffWorkSchedule } from "@/features/staff/server/queries";
 import { getWeeklyWritingRates } from "@/features/report-admin/server/queries";
 import { DAY_LABEL, STAFF_STATUS_LABEL, SYSTEM_ROLE_LABEL, subjectLabeler } from "./labels";
+import { requireMenu } from "./tool-gate";
+
+/**
+ * 🔴 직원관리(/staff)는 **원장 + 개인 예외** 체제(2026-08-01)라 RLS가 아니라 **메뉴 권한**이 게이트다 —
+ * 그 게이트가 비서에 없으면 admin·manager가 "직원 목록 알려줘"로 화면을 우회한다(#77, 2026-08-20 배선).
+ * 보고서 작성 현황은 강사 업무 현황이라 수업보고서(lesson_reports) 메뉴 축이다.
+ */
+const STAFF_GATE = () => requireMenu("staff", "직원 정보");
+const REPORT_GATE = () => requireMenu("lesson_reports", "수업보고서 현황");
 
 export const searchStaffTool = betaZodTool({
   name: "search_staff",
@@ -18,6 +27,8 @@ export const searchStaffTool = betaZodTool({
     query: z.string().optional().describe("직원 이름(부분 일치). 생략 시 전체"),
   }),
   run: async ({ query }) => {
+    const denied = await STAFF_GATE();
+    if (denied) return denied;
     const all = await getStaffList();
     const term = query?.trim() ?? "";
     // ⚠️ total은 slice 이전 매칭 전체 수 — slice 이후 length를 total로 쓰면 15명 초과 시 "총 15명" 오답.
@@ -47,6 +58,8 @@ export const staffSummaryTool = betaZodTool({
     "직원 1명의 종합 현황(역할·직급·담당 과목·재직 상태·입사일·근무 일정·담당 반 목록과 각 반 수강생 수/시간표)을 돌려준다. '○○ 선생님 현황은?', '○○쌤 무슨 반 맡고 있어?' 류 질문의 기본 툴. 급여·연락처·개인정보는 제공하지 않는다.",
   inputSchema: z.object({ staffId: z.string().uuid().describe("search_staff가 준 staffId") }),
   run: async ({ staffId }) => {
+    const denied = await STAFF_GATE();
+    if (denied) return denied;
     // 라벨러·상세·담당 반·근무 일정은 상호 독립 조회 — 전부 병렬(B4, labeler도 Promise.all 안으로).
     const [label, detail, classes, workSchedule] = await Promise.all([
       subjectLabeler(),
@@ -89,6 +102,8 @@ export const writingStatusTool = betaZodTool({
     teacherName: z.string().optional().describe("강사 이름(정확 일치 우선, 부분 일치 허용). 생략 시 전체"),
   }),
   run: async ({ teacherName }) => {
+    const denied = await REPORT_GATE();
+    if (denied) return denied;
     const [view, label] = await Promise.all([getWeeklyWritingRates(), subjectLabeler()]);
     if (!view) return JSON.stringify({ error: "작성 현황을 조회할 수 없습니다." });
     const term = teacherName?.trim() ?? "";

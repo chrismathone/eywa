@@ -11,6 +11,10 @@ import { kstToday } from "@/lib/date-kst";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { balancedTake } from "@/lib/collections/balanced-take";
 import { DAY_LABEL, subjectLabeler, subjectResolver, subjectLabelList } from "./labels";
+import { requireMenu } from "./tool-gate";
+
+/** 이 파일의 툴이 여는 화면 = 수업목록 — 그 메뉴를 못 보는 사람은 비서로도 못 본다(#77). */
+const GATE = () => requireMenu("classes", "수업(반) 정보");
 
 /** 한 번에 모델에게 넘길 반 개수 상한(툴 결과 토큰 방어). */
 const CLASS_CAP = 25;
@@ -33,6 +37,8 @@ export const searchClassesTool = betaZodTool({
       .describe("진행 상태 필터. 기본 active(진행 중)"),
   }),
   run: async ({ query, subject, active }) => {
+    const denied = await GATE();
+    if (denied) return denied;
     // 라벨러·과목 해석기·라벨 목록은 같은 설정 캐시를 쓰고 목록 조회와 독립 — 병렬(B4).
     const [label, resolve, subjectLabels] = await Promise.all([
       subjectLabeler(),
@@ -83,6 +89,8 @@ export const classDetailTool = betaZodTool({
     "반 1개의 상세(담당 강사·강의실·시간표 슬롯·수강생 명단)를 돌려준다. '○○반에 누가 있어?', '○○반 언제 수업해?' 류 질문에 사용.",
   inputSchema: z.object({ classId: z.string().uuid().describe("search_classes가 준 classId") }),
   run: async ({ classId }) => {
+    const denied = await GATE();
+    if (denied) return denied;
     // 라벨러·상세·수강생은 독립 조회 — 전부 병렬(B4).
     const [label, detail, students] = await Promise.all([
       subjectLabeler(),
