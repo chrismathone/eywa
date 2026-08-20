@@ -2,6 +2,8 @@
 
 import { useMemo, useState } from "react";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
+import { SHUTTLE_INPUT, SHUTTLE_ROW_TEXT } from "@/features/shuttle/control-size";
+import { cn } from "@/lib/utils";
 import type { AssignableStudent } from "@/features/shuttle/server/students";
 
 /**
@@ -67,7 +69,7 @@ export function StudentPool({
         value={q}
         onChange={(e) => setQ(e.target.value)}
         placeholder="이름·학교 검색"
-        className="border-line focus:border-primary h-11 rounded-lg border px-2.5 text-base outline-none sm:h-8 sm:text-[12.5px]"
+        className={SHUTTLE_INPUT}
       />
 
       {isOver && (
@@ -80,7 +82,7 @@ export function StudentPool({
         ))}
         {!searching && (
           // 목록이 비어 보이는 이유를 적어 둔다 — 빈 칸만 있으면 "학생이 안 나온다"로 읽힌다.
-          <li className="text-text-faint px-1 py-2 text-[12px] leading-relaxed">
+          <li className="text-text-faint px-1 py-2 text-[12.5px] leading-relaxed">
             이름이나 학교를 입력하면 여기에 나옵니다.
             {canWrite && (
               <>
@@ -91,12 +93,12 @@ export function StudentPool({
           </li>
         )}
         {searching && matches.length === 0 && (
-          <li className="text-text-faint px-1 py-2 text-[12px]">찾는 학생이 없습니다</li>
+          <li className="text-text-faint px-1 py-2 text-[12.5px]">찾는 학생이 없습니다</li>
         )}
         {matches.length > shown.length && (
           // ⚠️ 위의 건수(matches.length)는 **참값**을 유지한다 — 잘린 배열 길이를 건수로 쓰면
           //    학생이 늘어도 숫자가 상한에 붙어 안 변한다([[#89]]).
-          <li className="text-text-faint px-1 py-2 text-[11px]">
+          <li className="text-text-faint px-1 py-2 text-[11.5px]">
             <span className="num">{matches.length}</span>명 중{" "}
             <span className="num">{shown.length}</span>명만 표시 — 이름을 더 입력해 좁히세요
           </li>
@@ -126,9 +128,12 @@ function PoolItem({
       ref={setNodeRef}
       {...listeners}
       {...attributes}
-      className={`hover:bg-muted flex min-h-10 cursor-grab touch-manipulation items-baseline gap-1.5 rounded-lg px-2 py-1.5 text-[13px] active:cursor-grabbing sm:min-h-0 sm:py-1 sm:text-[12.5px] ${
-        isDragging ? "opacity-50" : ""
-      } ${assigned ? "opacity-55" : ""}`}
+      className={cn(
+        "hover:bg-muted flex min-h-11 cursor-grab touch-manipulation items-center gap-1.5 rounded-lg px-2 py-1.5 active:cursor-grabbing sm:min-h-0 sm:items-baseline sm:py-1",
+        SHUTTLE_ROW_TEXT,
+        isDragging && "opacity-50",
+        assigned && "opacity-55",
+      )}
       title={assigned ? "이 시즌에 이미 배정된 학생 (다른 회차에 또 태울 수 있습니다)" : undefined}
     >
       {/* 🔑 라벨 자리 고정 — 이름 길이에 따라 학교·학년이 들쭉날쭉하면 눈이 매번 다시 찾는다
@@ -137,8 +142,8 @@ function PoolItem({
       <span className="text-text min-w-0 overflow-hidden font-medium text-ellipsis whitespace-nowrap">
         {student.name}
       </span>
-      <span className="text-text-faint ml-auto shrink-0 text-[11px]">{student.schoolGrade}</span>
-      <span className="text-text-faint w-[2.6rem] shrink-0 text-right text-[10.5px]">
+      <span className="text-text-faint ml-auto shrink-0 text-[11.5px]">{student.schoolGrade}</span>
+      <span className="text-text-faint w-[2.9rem] shrink-0 text-right text-[11.5px]">
         {assigned ? "배정됨" : ""}
       </span>
     </li>

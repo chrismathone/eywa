@@ -27,7 +27,7 @@ export function VehicleHeader({
     <div className="bg-background/95 border-line sticky top-0 z-10 flex flex-wrap items-center gap-x-2 gap-y-1 border-b py-1.5 backdrop-blur">
       <h2 className="text-text text-[15px] font-bold">{group.vehicleName}</h2>
       {group.driverName && (
-        <span className="text-text-dim text-[12px]">
+        <span className="text-text-dim text-[11.5px]">
           기사 {group.driverName}
           {group.driverPhone && (
             <a href={`tel:${group.driverPhone}`} className="text-primary ml-1 font-bold underline">
@@ -36,7 +36,7 @@ export function VehicleHeader({
           )}
         </span>
       )}
-      <span className="ml-auto text-[12px] font-bold">
+      <span className="ml-auto text-[11.5px] font-bold">
         {progress.unmarked > 0 ? (
           <span className="text-amber">
             {scope}

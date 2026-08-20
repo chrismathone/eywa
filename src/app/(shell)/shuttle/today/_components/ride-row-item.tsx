@@ -1,6 +1,17 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { Pill } from "@/components/atoms/pill";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import { TONE_COLOR } from "@/lib/design/semantic-color";
+import {
+  SHUTTLE_ACTION,
+  SHUTTLE_CHIP,
+  SHUTTLE_CHIP_OFF,
+  SHUTTLE_INPUT,
+  SHUTTLE_ROW_TEXT,
+} from "@/features/shuttle/control-size";
 import { BOARDING_STATUS_LABEL, type BoardingStatus } from "@/features/shuttle/types";
 import type { RideRow } from "@/features/shuttle/roster";
 import { clearBoarding, recordBoarding } from "@/features/shuttle/server/actions";
@@ -10,9 +21,10 @@ import { clearBoarding, recordBoarding } from "@/features/shuttle/server/actions
  * 승·하차가 이미 배정에 정해져 있어 매일 다시 고를 이유가 없었다).
  *
  * 📱 **폰에서 달리는 차 안에서 누른다**(원장 2026-08-19) — 그래서:
- *    · 버튼 높이 44px(h-11), 좌우로 **꽉 차게** 나눠 오조작을 줄인다(desktop은 auto 폭).
+ *    · 크기는 [`control-size.ts`](@/features/shuttle/control-size) 한 곳에서 온다(폰 44px·입력 16px).
+ *      ⚠️ 여기서 `h-…`/`text-…`를 직접 적지 말 것 — 그렇게 갈려서 "정렬이 떨어진다"가 나왔다.
+ *    · 버튼은 좌우로 **꽉 차게** 나눠 오조작을 줄인다(desktop은 auto 폭).
  *    · 이름 줄과 버튼 줄을 **세로로 분리**(좁을 때) — 한 줄에 우겨넣으면 버튼이 손톱만 해진다.
- *    · 사유 입력은 `text-base`(16px) — iOS가 16px 미만 입력에 자동 확대를 건다.
  *
  * 🔴 **되돌릴 문을 잠그지 않는다**([[#103]]) — 이미 찍은 버튼을 다시 누르면 기록이 지워져
  *    '미기록'으로 돌아간다. 오클릭한 미탑승에서 빠져나올 길이 없으면 안 된다.
@@ -86,11 +98,10 @@ export function RideRowItem({
           {row.studentName || "(추가 탑승)"}
         </span>
         {absentToday && (
-          <span
-            className="rounded-pill bg-danger-soft text-danger px-1.5 py-[2px] text-[10.5px] font-bold"
-            title="오늘 출결이 결석입니다 — 셔틀 기록은 자동으로 찍히지 않습니다"
-          >
-            오늘 결석
+          // 배지는 수제로 그리지 않고 공용 `<Pill>` + tone 캐논(결석 = critical)에서 고른다 —
+          // 화면 파일마다 배지를 깎으면 같은 뜻이 화면마다 다른 크기·색으로 갈린다(팔레트 v4).
+          <span title="오늘 출결이 결석입니다 — 셔틀 기록은 자동으로 찍히지 않습니다">
+            <Pill color={TONE_COLOR.critical}>오늘 결석</Pill>
           </span>
         )}
         <span className="text-text-faint min-w-0 truncate text-[11.5px]">
@@ -103,16 +114,15 @@ export function RideRowItem({
 
       {canWrite ? (
         <div className="flex shrink-0 items-center gap-1.5">
+          {/* 🔑 탑승·미탑승은 **상태가 남는 토글**이라 알약 칩이다(라운드 캐논: 눌러서 상태가 남으면
+              칩, 동작만 하면 버튼) — 그래서 공용 `<Button>`이 아니라 `SHUTTLE_CHIP`을 쓴다.
+              색은 의미색 캐논: 탄 것 = positive(초록) · 못 탄 것 = critical(빨강). */}
           <button
             type="button"
             disabled={busy}
             onClick={() => mark("boarded")}
             aria-pressed={boarded}
-            className={`rounded-pill h-11 flex-1 px-4 text-[13px] font-bold transition-colors sm:h-8 sm:flex-none sm:text-[11.5px] ${
-              boarded
-                ? "bg-green text-white"
-                : "border-line text-text-dim hover:bg-muted border"
-            }`}
+            className={cn(SHUTTLE_CHIP, "flex-1 sm:flex-none", boarded ? "bg-green text-white" : SHUTTLE_CHIP_OFF)}
           >
             탑승
           </button>
@@ -121,24 +131,26 @@ export function RideRowItem({
             disabled={busy}
             onClick={() => mark("missed")}
             aria-pressed={row.status === "missed"}
-            className={`rounded-pill h-11 flex-1 px-4 text-[13px] font-bold transition-colors sm:h-8 sm:flex-none sm:text-[11.5px] ${
-              row.status === "missed"
-                ? "bg-danger text-white"
-                : "border-line text-text-dim hover:bg-muted border"
-            }`}
+            className={cn(
+              SHUTTLE_CHIP,
+              "flex-1 sm:flex-none",
+              row.status === "missed" ? "bg-danger text-white" : SHUTTLE_CHIP_OFF,
+            )}
           >
             미탑승
           </button>
           {row.status && row.logId && (
-            <button
-              type="button"
+            // '취소'는 상태가 안 남는 **동작**이라 공용 `<Button>`(ghost)이다. 다만 줄 안 인라인
+            // 액션이라 옆 칩과 같은 크기로 맞춘다(design-conventions의 "표/리스트 행 안" 예외).
+            <Button
+              variant="ghost"
               disabled={busy}
               onClick={clear}
               title="기록을 지워 '미기록'으로 되돌립니다"
-              className="text-text-faint hover:text-text h-11 shrink-0 px-2 text-[12px] sm:h-8"
+              className={cn(SHUTTLE_ACTION, SHUTTLE_ROW_TEXT, "text-text-faint hover:text-text px-2")}
             >
               취소
-            </button>
+            </Button>
           )}
         </div>
       ) : (
@@ -156,8 +168,7 @@ export function RideRowItem({
           }}
           maxLength={300}
           placeholder="미탑승 사유 (선택)"
-          // 16px 미만이면 iOS가 포커스 시 화면을 확대한다 — 좁은 화면에서만 text-base.
-          className="border-line focus:border-primary h-11 w-full rounded-lg border px-2.5 text-base outline-none sm:h-8 sm:w-44 sm:text-[11.5px]"
+          className={cn(SHUTTLE_INPUT, "w-full sm:w-44")}
         />
       )}
       {row.status === "missed" && !canWrite && row.memo && (

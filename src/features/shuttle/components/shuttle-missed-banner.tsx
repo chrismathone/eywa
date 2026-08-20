@@ -30,7 +30,7 @@ export async function ShuttleMissedBanner({ date }: { date: string }) {
       </div>
       <ul className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5">
         {rows.map((r) => (
-          <li key={r.studentId} className="text-text text-[12px]">
+          <li key={r.studentId} className="text-text text-[12.5px]">
             <span className="font-bold">{r.studentName}</span>
             <span className="text-text-dim"> · {r.where}</span>
             {r.reason && <span className="text-text-dim"> · {r.reason}</span>}

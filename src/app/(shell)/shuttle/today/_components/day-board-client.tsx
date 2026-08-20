@@ -5,8 +5,11 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FaceTabs } from "@/components/face-tabs";
 import { Pill } from "@/components/atoms/pill";
+import { EyIcon } from "@/components/icons/eywa-icons";
+import { Button } from "@/components/ui/button";
 import { TONE_COLOR } from "@/lib/design/semantic-color";
 import { addDays, formatKoreanDate } from "@/lib/date-kst";
+import { cn } from "@/lib/utils";
 import {
   DIRECTION_LABEL,
   SEASONS,
@@ -15,8 +18,14 @@ import {
   type ShuttleRun,
   type ShuttleVehicle,
 } from "@/features/shuttle/types";
+import {
+  SHUTTLE_ACTION,
+  SHUTTLE_CHIP,
+  SHUTTLE_CHIP_OFF,
+  SHUTTLE_CHIP_ON,
+} from "@/features/shuttle/control-size";
 import { SHUTTLE_TODAY_PATH, shuttleFaces } from "@/features/shuttle/faces";
-import { mergePlanAndLog, plannedRidesOn, type RideRow } from "@/features/shuttle/roster";
+import { mergePlanAndLog, plannedRidesOn } from "@/features/shuttle/roster";
 import { saveShuttleTodayPrefs } from "@/features/shuttle/server/today-prefs";
 import {
   countProgress,
@@ -135,34 +144,35 @@ export function DayBoardClient({
           여기가 "지금 어느 면인지"를 알려 주는 자리이기도 하다(faces.ts). */}
       <FaceTabs faces={shuttleFaces(season)} active={SHUTTLE_TODAY_PATH} ariaLabel="셔틀 면 전환" />
 
-      {/* 날짜·시즌 — 좁은 화면에선 가로 레일 한 줄(감기지 않는다). 탭 타겟은 44px 이상. */}
+      {/* 날짜·시즌 — 좁은 화면에선 가로 레일 한 줄(감기지 않는다). 크기는 전부 control-size 축.
+          ⚠️ 앞·뒤 이동은 ←/→ **글자**가 아니라 아이콘이다 — 글리프는 폰트·플랫폼마다 크기가 널뛰어
+             같은 줄의 버튼과 밑선이 어긋나고, 한글 자모로 오인되기도 한다([[#12]]·run-panel 주석). */}
       <div className="toolbar-rail flex flex-wrap items-center gap-2">
-        <Link
-          href={href(addDays(date, -1))}
+        <Button
+          variant="outline"
           aria-label="어제"
-          className="border-line hover:bg-muted flex h-11 items-center rounded-xl border px-3 text-[13px] font-bold"
+          className={SHUTTLE_ACTION}
+          render={<Link href={href(addDays(date, -1))} />}
         >
-          ←
-        </Link>
+          <EyIcon name="chevronLeft" size={16} />
+        </Button>
         <span className="text-text px-1 text-[14.5px] font-bold whitespace-nowrap">
           {formatKoreanDate(date)}
         </span>
-        <Link
-          href={href(addDays(date, 1))}
+        <Button
+          variant="outline"
           aria-label="내일"
-          className="border-line hover:bg-muted flex h-11 items-center rounded-xl border px-3 text-[13px] font-bold"
+          className={SHUTTLE_ACTION}
+          render={<Link href={href(addDays(date, 1))} />}
         >
-          →
-        </Link>
+          <EyIcon name="chevronRight" size={16} />
+        </Button>
         {SEASONS.map((s) => (
           <Link
             key={s}
             href={href(date, s)}
-            className={`rounded-pill flex h-11 items-center px-3.5 text-[13px] font-bold whitespace-nowrap ${
-              s === season
-                ? "bg-primary text-primary-foreground"
-                : "border-line text-text-dim hover:bg-muted border"
-            }`}
+            aria-current={s === season ? "page" : undefined}
+            className={cn(SHUTTLE_CHIP, s === season ? SHUTTLE_CHIP_ON : SHUTTLE_CHIP_OFF)}
           >
             {SEASON_LABEL[s]}
           </Link>
@@ -181,11 +191,7 @@ export function DayBoardClient({
               role="radio"
               aria-checked={dirFilter === f.value}
               onClick={() => pickDirection(f.value)}
-              className={`rounded-pill flex h-11 items-center gap-1.5 px-3.5 text-[13px] font-bold whitespace-nowrap ${
-                dirFilter === f.value
-                  ? "bg-primary text-primary-foreground"
-                  : "border-line text-text-dim hover:bg-muted border"
-              }`}
+              className={cn(SHUTTLE_CHIP, dirFilter === f.value ? SHUTTLE_CHIP_ON : SHUTTLE_CHIP_OFF)}
             >
               {f.label}
               {remainByDir[f.value] > 0 && (

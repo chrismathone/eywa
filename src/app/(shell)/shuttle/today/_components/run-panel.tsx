@@ -3,6 +3,8 @@
 import { Pill } from "@/components/atoms/pill";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { TONE_COLOR } from "@/lib/design/semantic-color";
+import { cn } from "@/lib/utils";
+import { SHUTTLE_ROW } from "@/features/shuttle/control-size";
 import { DIRECTION_LABEL, runTimeRange, runTitle, type ShuttleRun } from "@/features/shuttle/types";
 import type { RideRow } from "@/features/shuttle/roster";
 import { firstTime, type Progress } from "@/features/shuttle/today-board";
@@ -46,7 +48,7 @@ export function RunPanel({
         type="button"
         onClick={onToggle}
         aria-expanded={open}
-        className="flex min-h-12 flex-wrap items-center gap-x-2 gap-y-1 px-3 py-2.5 text-left"
+        className={cn(SHUTTLE_ROW, "flex cursor-pointer flex-wrap items-center gap-x-2 gap-y-1 px-3 py-2.5 text-left")}
       >
         {start && <span className="text-text num shrink-0 text-[16px] font-bold">{start}</span>}
         <Pill color={TONE_COLOR[run.direction === "in" ? "info" : "special"]}>
