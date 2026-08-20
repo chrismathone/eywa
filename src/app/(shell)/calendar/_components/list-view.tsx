@@ -1,20 +1,14 @@
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
-import { weekdayIndexOf } from "@/lib/date-kst";
 import { dotProps } from "@/features/calendar/color";
 import { eventDisplayColor, eventTimeLabel, type CalendarEvent } from "@/features/calendar/types";
+// 날짜 표기는 분석 화면과 **같은 함수**를 쓴다 — 같은 일정이 화면마다 다른 모양이면 안 된다.
+import { shortDate } from "./event-row";
 
 /**
  * 목록(표) 뷰 — 조건(연도·태그)에 맞는 일정을 표로 조사한다(0224a 다중 뷰).
  * 서버 컴포넌트: 데이터·필터는 page가 URL로 확정해 내려준다. 표 규약 = 열 제목 가운데 +
  * 열 구분선 `--line-faint`(doc-list 선례), 가로 넘침은 자체 스크롤(페이지 가로 스크롤 금지).
  */
-
-const DOW_KO = ["일", "월", "화", "수", "목", "금", "토"] as const;
-
-/** "2026-08-20" → "8/20 (목)" — 연도는 상단 컨트롤이 이미 말하고 있어 반복하지 않는다. */
-function shortDate(ymd: string): string {
-  return `${Number(ymd.slice(5, 7))}/${Number(ymd.slice(8, 10))} (${DOW_KO[weekdayIndexOf(ymd)]})`;
-}
 
 function spanDays(start: string, end: string): number {
   return Math.floor((Date.parse(`${end}T00:00:00Z`) - Date.parse(`${start}T00:00:00Z`)) / 86_400_000) + 1;

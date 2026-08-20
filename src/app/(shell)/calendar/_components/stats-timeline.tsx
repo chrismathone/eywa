@@ -1,6 +1,5 @@
-import { weekdayIndexOf } from "@/lib/date-kst";
-import { chipProps } from "@/features/calendar/color";
-import { eventTimeLabel, type CalendarEvent } from "@/features/calendar/types";
+import { EventRow } from "./event-row";
+import { type CalendarEvent } from "@/features/calendar/types";
 
 /**
  * 분석 뷰의 **일정 제목 연대기** — 원장 2026-08-19: *"갯수로 나오지말고 각각 그 제목들 쭈루룩 뜨게."*
@@ -8,47 +7,10 @@ import { eventTimeLabel, type CalendarEvent } from "@/features/calendar/types";
  *
  * 🔑 **일정이 없는 달도 한 줄로 남긴다** — 블록을 통째로 빼면 "그 달엔 없었다"와 "안 봤다"가
  *    구분되지 않는다(조사 도구라 이 차이가 결론을 바꾼다).
- * ⚠️ 제목은 자르지 않는다(truncate 금지) — 읽으려고 펼친 목록이라 어절 단위로 접어 전부 보인다.
+ * 줄 렌더는 [event-row.tsx](./event-row.tsx) 공용 — 숫자 칸 모달과 같은 모양이어야 한다.
  */
 
-const DOW_KO = ["일", "월", "화", "수", "목", "금", "토"] as const;
 const MONTHS = Array.from({ length: 12 }, (_, i) => i + 1);
-
-/** "2026-08-20" → "8/20 (목)" — 연도는 블록 제목이 이미 말한다. */
-function shortDate(ymd: string): string {
-  return `${Number(ymd.slice(5, 7))}/${Number(ymd.slice(8, 10))} (${DOW_KO[weekdayIndexOf(ymd)]})`;
-}
-
-function EventRow({ event }: { event: CalendarEvent }) {
-  const time = eventTimeLabel(event);
-  const chip = event.tag ? chipProps(event.tag.color) : null;
-  return (
-    <li className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1 py-1">
-      <span className="num text-text-dim w-[74px] shrink-0 text-[12px] whitespace-nowrap">
-        {shortDate(event.startDate)}
-      </span>
-      <span className="text-foreground min-w-0 flex-1 text-[13px] font-medium break-keep">
-        {event.title}
-      </span>
-      {event.endDate !== event.startDate ? (
-        <span className="num text-text-faint shrink-0 text-[11px] whitespace-nowrap">
-          ~{shortDate(event.endDate)}
-        </span>
-      ) : null}
-      {time ? (
-        <span className="num text-text-faint shrink-0 text-[11px] whitespace-nowrap">{time}</span>
-      ) : null}
-      {event.tag && chip ? (
-        <span
-          className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${chip.className}`}
-          style={chip.style}
-        >
-          {event.tag.name}
-        </span>
-      ) : null}
-    </li>
-  );
-}
 
 /** 한 해 블록 — 월별로 나눠 그린다. 빈 달은 "없음" 한 줄. */
 function YearBlock({ year, events }: { year: number; events: CalendarEvent[] }) {
