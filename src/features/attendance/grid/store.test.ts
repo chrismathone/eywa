@@ -51,6 +51,20 @@ describe("낙관적 덮개 vs 서버 갱신", () => {
   });
 });
 
+describe("활성 칸은 보이는 행에만", () => {
+  it("🔴 좌표에 없는 행은 잡지 않는다 — 안 보이는 칸에 키 입력이 저장된다", () => {
+    // 검색·반 접기로 R2가 화면에서 빠진 상태.
+    store.setSource([R1], [D1, D2], {});
+    store.select({ row: R2, col: D1 }, false);
+    expect(store.active).toBeNull();
+    store.select({ row: R1, col: D1 }, false);
+    expect(store.active).toEqual({ row: R1, col: D1 });
+    // 범위 확장도 마찬가지 — 안 보이는 행으로 사각형을 늘리지 않는다.
+    store.select({ row: R2, col: D2 }, true);
+    expect(store.focus).toBeNull();
+  });
+});
+
 describe("칸별 구독 — 바뀐 칸에게만 알린다", () => {
   it("🔴 활성 칸을 옮기면 관련된 칸만 다시 그린다(표 전체가 아니라)", () => {
     const hits: Record<string, number> = {};

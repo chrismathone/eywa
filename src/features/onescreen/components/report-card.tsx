@@ -13,10 +13,12 @@ import {
   isAttendanceUnchecked,
   isRowInputEditable,
   isReportEligible,
+  isReportOptoutRow,
   isRowActionable,
 } from "../grid";
 import { resolveRowFields } from "../row-fields";
 import { evaluateSendGate } from "../send-gate";
+import { REPORT_OPTOUT_NOTICE, REPORT_OPTOUT_SHORT } from "@/features/classes/report-optout";
 import { checkMentConsistency, MENT_WARNING_HINT, MENT_WARNING_LABEL } from "../ment-consistency";
 import { parentUnreadBadge, progressAnomalyBadge } from "../roster-signals";
 import {
@@ -196,6 +198,7 @@ export function ReportCard({
   // 발송 게이트 = 표뷰와 **같은 단일 소스**(send-gate.ts) — 카드만 다른 판정을 쓰면 한쪽에서만
   // "왜 안 눌리지"가 생긴다(#77). 멘트 미작성도 여기서 막는다(빈 멘트 절대 가드가 어차피 거절).
   const isAbsent = subject.attendanceRaw === "absent";
+  const optoutRow = isReportOptoutRow(subject); // '수업보고서 미발송' 반 — 보고서 쪽만 잠긴다(0174a)
   // 이 행의 입력을 잠그나 — 발송 완료 **또는 결석**(표 모드와 같은 단일 소스, grid.ts).
   // 2026-08-07 확대: 예전엔 왼쪽 기록 열이 `alreadySent`만 봐서, 결석을 눌러도 진도·태도가 그대로 열려 있었다.
   // 열람 전용(다른 강사 뷰)이면 무조건 잠금 — 3개 fieldset(입력 열·멘트 열·첨부)이 이 값 하나를 본다.
@@ -204,6 +207,7 @@ export function ReportCard({
     readonlyView, // 열람 전용 — 사유 라벨("열람 전용")까지 게이트가 만든다(표뷰와 동일)
     recallPending: isRecallInFlight(liveStatus ?? null),
     alreadySent,
+    reportOptout: optoutRow, // 미발송 반(0174a) — 표뷰와 같은 단일 소스
     isAbsent,
     hasProgress: isReportEligible(subject),
     hasDraft: !!rep.draft?.trim(),
@@ -283,6 +287,15 @@ export function ReportCard({
                   title="진도 기록에 점프·겹침이 감지됐습니다 — 학생 상세 > 진도 탭에서 확인하세요"
                 >
                   진도 확인 필요
+                </span>
+              ) : null}
+              {/* '수업보고서 미발송' 반 — 아래 입력이 왜 전부 잠겼는지 카드 머리에서 먼저 밝힌다(2026-08-19). */}
+              {optoutRow ? (
+                <span
+                  className="border-line text-text-dim rounded-pill border px-1.5 py-px text-[10px] font-bold"
+                  title={REPORT_OPTOUT_NOTICE}
+                >
+                  {REPORT_OPTOUT_SHORT}
                 </span>
               ) : null}
             </div>
@@ -523,9 +536,11 @@ export function ReportCard({
                   ? "이미 발송된 보고서 — 수정할 수 없습니다"
                   : isRowActionable(subject, "autowrite")
                   ? undefined
-                  : subject.attendanceRaw === "absent"
-                    ? "결석 학생 — 발송 제외 (기록 저장은 가능)"
-                    : "오늘 진도를 먼저 입력하세요"
+                  : optoutRow
+                    ? REPORT_OPTOUT_NOTICE
+                    : subject.attendanceRaw === "absent"
+                      ? "결석 학생 — 발송 제외 (기록 저장은 가능)"
+                      : "오늘 진도를 먼저 입력하세요"
               }
               onClick={() => onAutoWrite(subjectName)}
             >
@@ -673,7 +688,9 @@ export function ReportCard({
                 ? "이미 학부모에게 발송된 보고서 — 수정할 수 없습니다(고치려면 공유 링크 재발급)"
                 : isRowActionable(subject, "save")
                   ? "보고서를 기록에 저장합니다 — 아래 학부모 공유 링크를 복사해 카톡·문자로 보낼 수 있습니다"
-                  : "오늘 진도를 먼저 입력하세요"
+                  : optoutRow
+                    ? REPORT_OPTOUT_NOTICE // 진도 칸이 잠겨 있어 "진도를 먼저 입력하세요"는 거짓 안내다
+                    : "오늘 진도를 먼저 입력하세요"
             }
             onClick={() => onSend(subjectName, "save")}
           >
@@ -683,7 +700,13 @@ export function ReportCard({
             variant="ghost"
             size="sm"
             disabled={readonlyView || !isRowActionable(subject, "save")}
-            title={isRowActionable(subject, "save") ? "학부모 보고서 미리보기·인쇄" : "오늘 진도를 먼저 입력하세요"}
+            title={
+              isRowActionable(subject, "save")
+                ? "학부모 보고서 미리보기·인쇄"
+                : optoutRow
+                  ? REPORT_OPTOUT_NOTICE
+                  : "오늘 진도를 먼저 입력하세요"
+            }
             onClick={() => onSend(subjectName, "pdf")}
           >
             PDF

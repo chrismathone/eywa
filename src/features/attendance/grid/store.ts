@@ -262,7 +262,15 @@ export class GridStore {
     this.notify(dirty);
   }
 
+  /**
+   * 칸 고르기.
+   *
+   * 🔴 **좌표에 없는 행은 잡지 않는다** — `rows`는 "지금 화면에 그려진 행"이다(반 접기·학생 검색이
+   *    여기서 빠진다). 활성 칸이 안 보이는 행에 얹히면 키 입력이 **보이지 않는 칸에 저장된다**.
+   *    실제로 나는 경로: 값을 친 뒤 검색으로 그 행이 사라지고, Ctrl+Z가 그 칸으로 커서를 되돌린다.
+   */
   select(pos: CellPos, extend: boolean) {
+    if (!this.rows.includes(pos.row)) return;
     if (extend && this.active) this.commitUi({ focus: pos });
     else this.commitUi({ active: pos, focus: null, buffer: null });
   }

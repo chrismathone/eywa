@@ -1,28 +1,13 @@
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import { weekdayIndexOf } from "@/lib/date-kst";
-import {
-  eventDisplayColor,
-  eventTimeLabel,
-  type CalendarEvent,
-  type EventColor,
-} from "@/features/calendar/types";
+import { dotProps } from "@/features/calendar/color";
+import { eventDisplayColor, eventTimeLabel, type CalendarEvent } from "@/features/calendar/types";
 
 /**
  * 목록(표) 뷰 — 조건(연도·태그)에 맞는 일정을 표로 조사한다(0224a 다중 뷰).
  * 서버 컴포넌트: 데이터·필터는 page가 URL로 확정해 내려준다. 표 규약 = 열 제목 가운데 +
  * 열 구분선 `--line-faint`(doc-list 선례), 가로 넘침은 자체 스크롤(페이지 가로 스크롤 금지).
  */
-
-/** 태그 색 점 — 정적 Record(Tailwind 동적 조립 금지). 분석 뷰·페이지 태그 칩이 공유한다. */
-export const DOT_SOLID: Record<EventColor, string> = {
-  primary: "bg-primary",
-  blue: "bg-blue",
-  green: "bg-green",
-  amber: "bg-amber",
-  purple: "bg-purple",
-  rose: "bg-rose",
-  neutral: "bg-text-faint",
-};
 
 const DOW_KO = ["일", "월", "화", "수", "목", "금", "토"] as const;
 
@@ -61,6 +46,7 @@ export function ListView({ events }: { events: CalendarEvent[] }) {
           {events.map((e) => {
             const days = spanDays(e.startDate, e.endDate);
             const time = eventTimeLabel(e);
+            const dot = dotProps(eventDisplayColor(e));
             return (
               <tr key={e.id} className="hover:bg-bg-soft/30">
                 <td className="num px-3 py-2 text-xs whitespace-nowrap">
@@ -79,7 +65,8 @@ export function ListView({ events }: { events: CalendarEvent[] }) {
                   {e.tag ? (
                     <span className="inline-flex items-center gap-1.5">
                       <span
-                        className={`size-2 shrink-0 rounded-full ${DOT_SOLID[eventDisplayColor(e)]}`}
+                        className={`size-2 shrink-0 rounded-full ${dot.className}`}
+                        style={dot.style}
                         aria-hidden
                       />
                       {e.tag.name}

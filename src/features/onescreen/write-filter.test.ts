@@ -8,6 +8,19 @@ import {
   matchesWriteFilter,
 } from "./write-filter";
 
+describe("미발송 반 행(0174a) — 결석과 같은 이유로 '미작성' 판정에서 뺀다(2026-08-19)", () => {
+  it("보고서 입력이 잠긴 행이라 채울 수단이 없다 — 끝낼 수 없는 할 일로 남기지 않는다", () => {
+    expect(isWriteTargetRow({ reportOptout: true })).toBe(false);
+    expect(isWriteTargetRow({ reportOptout: false })).toBe(true);
+    expect(isWriteTargetRow({})).toBe(true);
+    // 미발송 반 행만 있는 학생은 '작성 완료'로 본다(미작성 목록에 남겨 봐야 할 수 있는 일이 없다).
+    expect(isStudentWritten([{ reportOptout: true }, { reportOptout: true }])).toBe(true);
+    // 같이 듣는 정규 반은 그대로 판정 대상이다.
+    expect(isStudentWritten([{ reportOptout: true }, { draft: "" }])).toBe(false);
+    expect(isStudentWritten([{ reportOptout: true }, { draft: "썼다" }])).toBe(true);
+  });
+});
+
 describe("isRowWritten", () => {
   it("초안이 있으면 작성됨", () => {
     expect(isRowWritten({ draft: "오늘 잘했습니다" })).toBe(true);

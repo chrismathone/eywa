@@ -63,6 +63,11 @@ export type TodayClass = {
   /** 위임 반일 때 원 담임 표시명(모르면 null). 내 반이면 null. */
   ownerName: string | null;
   /**
+   * '수업보고서 미발송' 반(0174a) — 칩에 표식을 달아 **출결만 찍는 반**임을 먼저 알린다.
+   * 반을 눌러 보고서 칸이 전부 잠긴 뒤에야 알게 되면 "왜 안 써지지"가 된다(2026-08-19).
+   */
+  reportOptout: boolean;
+  /**
    * **내 반인데 지금 남이 대신 맡고 있음** — 그 대체 강사 표시명(아니면 null).
    * 하루만 위임하고 나머지 날은 내가 하는 일이 흔해서, 위임 건 날에 내 화면이 침묵하면 같은 반 보고서를
    * 둘이 각자 쓰게 된다. 권한은 그대로 두고 칩에 표식만 단다(원 담임은 여전히 자기 반을 쓸 수 있다).
@@ -339,22 +344,28 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
 
   // 아래 로직은 전부 DB 컬럼 이름(class_name/is_special)을 쓰던 코드라 여기서 한 번만 맞춘다.
   // delegated/ownerName은 반 칩이 '내 반'과 위임 반을 시각적으로 가르는 데 쓴다(원장 지시 2026-08-03).
-  // 🔴 '수업보고서 미발송' 반(0174a)은 **여기서 통째로 뺀다** — 원장 지시: "자동으로 수업보고서 발송에서
-  //    반목록이 출력되지 않으므로 선생님이 헷갈릴 필요가 없는거지." 아래 todayIds·activeClasses·수강생·
-  //    반 칩·표 모드가 전부 이 배열의 파생이라, **이 한 줄로 전 표면이 따라온다**.
-  //    ⚠️ 필터를 아래 `noClassesToday` 판정 **뒤로** 옮기지 말 것 — 제외 반만 있는 날이 "수업 있음"으로
-  //       읽혀 빈 화면 대신 담당 반 전체 폴백이 살아난다(2026-07-22 이수진 회귀).
-  const allClasses = teachingClasses
-    .filter((c) => !c.reportOptout)
-    .map((c) => ({
-      id: c.id,
-      class_name: c.className,
-      subject: c.subject,
-      is_special: c.isSpecial,
-      delegated: c.delegated,
-      ownerName: c.ownerName,
-      delegatedAwayTo: c.delegatedAwayTo,
-    }));
+  // 🔴 '수업보고서 미발송' 반(0174a)은 **목록에서 빼지 않는다**(2026-08-19 원장: *"보고서는 안보내지만
+  //    이제부터라도 출결은 찍을것"*). 예전엔 여기서 `.filter((c) => !c.reportOptout)`로 통째로 뺐는데,
+  //    원스크린이 **출결 알약이 있는 유일한 강사 화면**이라 그 필터가 곧 "담임이 출결을 찍을 수단 0"이었다
+  //    (실측 2026-08-19: 미발송 3반 전부 출결 0행 · 수업은 실제로 돌고 있었다).
+  //    대신 **행에 플래그를 실어**(`reportOptout`) 보고서 칸만 잠근다 — 판정은 grid.ts 단일 소스.
+  //
+  //    ⚠️ **옛 경고("필터를 noClassesToday 뒤로 옮기지 말 것", 2026-07-22 이수진 회귀)는 그대로 유효하다.**
+  //       그 회귀는 "제외 반만 있는 날"이 수업 없음으로 읽혀 **담당 반 전체 폴백**이 살아나는 것이었다.
+  //       필터를 **없앤** 지금은 미발송 반이 `todayIds`에 정상으로 들어가 `noClassesToday=false`가 되고,
+  //       폴백 분기(`showAll`)는 애초에 타지 않는다 — 화면에는 **그날 수업이 있는 그 반만** 뜬다.
+  //       즉 "미발송 반만 있는 날"이 이제 수업 있음으로 읽히는데, **그게 맞다**(출결을 찍어야 하니까).
+  const allClasses = teachingClasses.map((c) => ({
+    id: c.id,
+    class_name: c.className,
+    subject: c.subject,
+    is_special: c.isSpecial,
+    // 보고서 쪽만 잠그는 근거 — 목록에서 빼는 데는 쓰지 않는다(위 주석).
+    report_optout: c.reportOptout,
+    delegated: c.delegated,
+    ownerName: c.ownerName,
+    delegatedAwayTo: c.delegatedAwayTo,
+  }));
   // 2) 오늘 요일에 수업 있는 반(없으면 전체 담당 반 폴백 — 주말/휴일에도 화면이 비지 않게)
   const allIds = allClasses.map((c) => c.id);
   // ⚠️ **그 날짜에 유효한 스케줄만**. 예전엔 valid_from/valid_to를 안 봐서 만료된 배치가 계속 "오늘 수업"으로
@@ -523,7 +534,9 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
       // classId = 이 과목 행의 반(출결 원장이 student+class+date라 행 단위 출결 입력(2단계)의 키).
       // subjectLabel = 순수 과목명 — name은 아래에서 반 이름이 덧붙을 수 있으므로 저장용 값은 이쪽을 쓴다.
       const label = subjects.labelOf(cls.subject);
-      os.subjects.push({ name: label, subjectLabel: label, subjectKey: cls.subject, classId: cls.id, className: cls.class_name, isSpecial: !!cls.is_special, prev: "", today: "", textbook: "", makeup: false, homeworkToday: "" });
+      // ⚠️ `reportOptout`은 **true일 때만** 싣는다 — 로스터 payload는 전 강사가 매일 받는 hot path라
+      //    모든 행에 false를 얹지 않는다(판정 `isReportOptoutRow`가 `=== true`라 없으면 = 정상 반).
+      os.subjects.push({ name: label, subjectLabel: label, subjectKey: cls.subject, classId: cls.id, className: cls.class_name, isSpecial: !!cls.is_special, ...(cls.report_optout ? { reportOptout: true } : {}), prev: "", today: "", textbook: "", makeup: false, homeworkToday: "" });
     }
   }
   // 5-b) 보강(수업외) 행 복원 — DB의 그날 보강 보고서가 원천. 카드가 있으면 행만 덧붙이고, 없으면 보강 카드로.
@@ -1314,6 +1327,7 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
       subject: subjects.labelOf(c.subject),
       startTime: startByClass.get(c.id) ?? null,
       studentCount: countByClass.get(c.id) ?? 0,
+      reportOptout: !!c.report_optout,
       delegated: c.delegated,
       ownerName: c.ownerName,
       delegatedAwayTo: c.delegatedAwayTo,

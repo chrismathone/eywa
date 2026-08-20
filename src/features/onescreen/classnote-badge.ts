@@ -51,6 +51,10 @@ export function classnoteBadge(status?: string | null): ClassnoteBadge | null {
     case "absent":
       // 서버 결석 게이트(#77) 반환 상태(세션 내 표시 전용 — DB엔 안 남음). 저장만 되고 발송 제외.
       return { label: "결석 — 발송 제외", short: "결석", cls: "text-text-dim" };
+    case "report_optout":
+      // '수업보고서 미발송' 반(0174a) 게이트 반환 상태(세션 내 표시 전용 — DB엔 안 남는다).
+      // 저장만 되고 발송 제외. 2026-08-19부터 이 반도 로스터에 있어서(출결 때문) 이 상태가 보인다.
+      return { label: "미발송 반 — 발송 제외", short: "미발송 반", cls: "text-text-dim" };
     case "no_attendance":
       // 서버 출결 미체크 게이트(2026-08-17) 반환 상태(세션 내 표시 전용). 저장만 되고 발송 제외.
       return { label: "출결 미체크 — 발송 제외", short: "출결없음", cls: "text-text-dim" };

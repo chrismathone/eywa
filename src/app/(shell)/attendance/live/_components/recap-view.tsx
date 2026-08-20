@@ -19,9 +19,9 @@ import { EyIcon } from "@/components/icons/eywa-icons";
 import { formatKoreanDate } from "@/lib/date-kst";
 import type { RangeRecap } from "@/features/attendance/recap/range";
 import type { RecapTeacherLine } from "@/features/attendance/recap/digest";
-import { unmarkedByTeacher } from "@/features/attendance/recap/teacher-unmarked";
+import { partialByTeacher, unmarkedByTeacher } from "@/features/attendance/recap/teacher-unmarked";
 import { RecapAiCard, type RecapAiState } from "./recap-ai-card";
-import { RecapDayBlock, UnmarkedRow } from "./recap-day";
+import { PartialRow, RecapDayBlock, UnmarkedRow } from "./recap-day";
 
 export function RecapView({
   recap,
@@ -129,11 +129,13 @@ export function RecapView({
       {behind.length > 0 ? (
         <section className="space-y-2">
           <h2 className="flex items-baseline gap-2">
-            <span className="text-sm font-bold">입력이 덜 된 강사</span>
+            <span className="text-sm font-bold">입력이 덜 된 강사·자리</span>
             <span className="num text-text-dim text-sm">{behind.length}</span>
             {recap.days.length > 1 ? <span className="text-text-faint text-[11px]">기간 합계</span> : null}
-            {behind.some((x) => x.unmarkedClasses > 0) ? (
-              <span className="text-text-faint text-[11px]">이름을 누르면 미입력 출석부가 열립니다.</span>
+            {behind.some((x) => x.unmarkedClasses > 0 || x.partialCells > 0) ? (
+              <span className="text-text-faint text-[11px]">
+                이름을 누르면 미입력 출석부·빈 칸 명단이 열립니다.
+              </span>
             ) : null}
           </h2>
           {/* 펼침 버튼이 행을 가득 채우므로 hover 배경이 모서리를 넘지 않게 목록이 자른다
@@ -150,11 +152,16 @@ export function RecapView({
 }
 
 /**
- * 입력이 덜 된 강사 한 줄 — 누르면 **그 강사의 미입력 출석부**가 날짜별로 펼쳐진다
- * (원장 제보 2026-08-19: *"누르면 리스트라도 볼 수 있어야 하는데 바로가기 같은것도 없네."*).
+ * 입력이 덜 된 강사 한 줄 — 누르면 **그 강사의 미입력 출석부와 빈 칸 명단**이 날짜별로 펼쳐진다
+ * (원장 제보 2026-08-19: *"누르면 리스트라도 볼 수 있어야 하는데 바로가기 같은것도 없네."*
+ * + 2026-08-20: *"유형숙과 추민아는 펼쳐보기가 안되서 누가 입력안되었는지 체크가 안돼."*).
  *
- * 🔑 목록은 새로 세지 않고 날짜 블록이 쓰는 `day.unmarked`를 그 강사 것만 고른 것이라, 줄에 적힌
- *    `미입력 N반`과 펼친 반 수가 **같은 값**이다(`teacher-unmarked.ts` + Vitest가 잠근다).
+ * 🔑 목록은 새로 세지 않고 날짜 블록이 쓰는 `day.unmarked`·`day.partial`을 그 강사 것만 고른 것이라,
+ *    줄에 적힌 `미입력 N반`·`빈 칸 N개`와 펼친 수가 **같은 값**이다(`teacher-unmarked.ts` + Vitest가 잠근다).
+ * 🔴 겹치지 않는 것은 **칸**이다(출석부가 아니다) — digest가 슬롯의 `hasAnyRecord`로 갈라 담으므로
+ *    같은 칸이 두 번 세어지는 일은 없지만, **한 반이 두 묶음에 동시에 뜰 수는 있다**(영어처럼 교시별로
+ *    기록이 남는 반에서 1교시는 통째로 비고 2교시는 몇 명만 빈 경우 — 교시가 서로 다르니 둘 다 사실이다).
+ *    반 이름이 겹쳐 보인다고 여기서 다시 합치거나 한쪽을 빼지 말 것.
  * ⚠️ 펼침은 화면 로컬 상태로 둔다 — 정렬·필터처럼 오래 남는 뷰 세팅이 아니라 한 번 보고 마는 동작이다.
  */
 function BehindTeacherRow({ line, recap }: { line: RecapTeacherLine; recap: RangeRecap }) {
@@ -162,9 +169,11 @@ function BehindTeacherRow({ line, recap }: { line: RecapTeacherLine; recap: Rang
   const uid = useId();
   const panelId = `${uid}-unmarked`;
   const groups = unmarkedByTeacher(recap.days, line.teacherName);
+  const partialGroups = partialByTeacher(recap.days, line.teacherName);
   const multiDay = recap.days.length > 1;
-  // 빈 출석부가 없는 강사(칸만 덜 찍힌 경우)는 펼칠 것이 없다 — 열어서 빈 칸을 보여주지 않는다.
-  const expandable = line.unmarkedClasses > 0;
+  // 통째 빈 출석부가 없어도 **칸이 덜 찍혔으면 펼친다** — 학생 한 명만 빠진 출석부가 실제로 흔하고,
+  // 예전엔 그 줄이 펼쳐지지 않아 누가 빠졌는지 확인할 길이 아예 없었다.
+  const expandable = line.unmarkedClasses > 0 || line.partialCells > 0;
 
   const head = (
     <>
@@ -187,6 +196,11 @@ function BehindTeacherRow({ line, recap }: { line: RecapTeacherLine; recap: Rang
           미입력 {line.unmarkedClasses}반
         </span>
       ) : null}
+      {line.partialCells > 0 ? (
+        <span className="num text-amber-strong shrink-0 text-xs font-bold">
+          빈 칸 {line.partialCells}개
+        </span>
+      ) : null}
     </>
   );
 
@@ -207,29 +221,58 @@ function BehindTeacherRow({ line, recap }: { line: RecapTeacherLine; recap: Rang
       )}
 
       {expandable && open ? (
-        <div id={panelId} className="border-line space-y-2 border-t px-3 pt-2 pb-3">
-          {groups.length === 0 ? (
+        <div id={panelId} className="border-line space-y-3 border-t px-3 pt-2 pb-3">
+          {groups.length === 0 && partialGroups.length === 0 ? (
             // 여기까지 오면 파생이 집계와 어긋난 것이다 — 숫자를 감추지 말고 그 사실을 말한다.
             <p className="text-text-faint text-xs break-keep">
               이 요약 범위({formatKoreanDate(recap.from)}
               {recap.from === recap.to ? "" : ` ~ ${formatKoreanDate(recap.to)}`})의 날짜별 목록에서는 빈
               출석부를 찾지 못했습니다 — 범위 밖 날짜일 수 있습니다.
             </p>
-          ) : (
-            groups.map((g) => (
-              <div key={g.date} className="space-y-1">
-                {/* 기간 합계 줄이라 날짜를 밝힌다 — "언제 안 찍었나"가 사라지면 물어볼 수가 없다. */}
-                {multiDay ? (
-                  <p className="text-text-faint text-[11px] font-medium">{formatKoreanDate(g.date)}</p>
-                ) : null}
-                <ul className="border-line divide-line divide-y rounded-xl border">
-                  {g.classes.map((c) => (
-                    <UnmarkedRow key={c.classId} row={c} date={g.date} />
-                  ))}
-                </ul>
-              </div>
-            ))
-          )}
+          ) : null}
+
+          {/* ① 통째로 안 열린 출석부(반 단위). 없으면 제목째 생략한다 — 빈 제목은 노이즈다. */}
+          {groups.length > 0 ? (
+            <div className="space-y-2">
+              {partialGroups.length > 0 ? (
+                <p className="text-text-dim text-[11px] font-bold">출석부 미입력</p>
+              ) : null}
+              {groups.map((g) => (
+                <div key={g.date} className="space-y-1">
+                  {/* 기간 합계 줄이라 날짜를 밝힌다 — "언제 안 찍었나"가 사라지면 물어볼 수가 없다. */}
+                  {multiDay ? (
+                    <p className="text-text-faint text-[11px] font-medium">{formatKoreanDate(g.date)}</p>
+                  ) : null}
+                  <ul className="border-line divide-line divide-y rounded-xl border">
+                    {g.classes.map((c) => (
+                      <UnmarkedRow key={c.classId} row={c} date={g.date} />
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          ) : null}
+
+          {/* ② 열긴 열었는데 남은 빈 칸(칸 단위) — 누가 빠졌는지가 여기서만 보인다. */}
+          {partialGroups.length > 0 ? (
+            <div className="space-y-2">
+              {groups.length > 0 ? (
+                <p className="text-text-dim text-[11px] font-bold">빈 칸이 남은 출석부</p>
+              ) : null}
+              {partialGroups.map((g) => (
+                <div key={g.date} className="space-y-1">
+                  {multiDay ? (
+                    <p className="text-text-faint text-[11px] font-medium">{formatKoreanDate(g.date)}</p>
+                  ) : null}
+                  <ul className="border-line divide-line divide-y rounded-xl border">
+                    {g.classes.map((c) => (
+                      <PartialRow key={`${c.classId}|${c.teacherLine}`} row={c} date={g.date} />
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          ) : null}
         </div>
       ) : null}
     </li>

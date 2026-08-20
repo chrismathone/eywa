@@ -27,6 +27,13 @@ export type TeacherTransition = {
   /** YYYY-MM-DD — 적용일. */
   date: string;
   teacherName: string | null;
+  /**
+   * 새 담임의 user id(`metadata.newTeacherId`). 모르면 null.
+   *
+   * 🔴 이름과 **다른 질문**에 쓰인다 — 아래 `buildHomeroomSinceIndex` 주석 참조. 같은 로그에서 나오지만
+   *    이름은 표시용(동명이인·개명에 흔들린다)이고 id는 판정용(사람을 확정한다)이다.
+   */
+  teacherId?: string | null;
 };
 
 /** 그 달 이 반 보고서를 쓴 사람(추정 근거). 같은 달에 여러 명이면 건수가 많은 쪽. */
@@ -117,4 +124,112 @@ export function historyWindowStart(today: string, months = TEACHER_HISTORY_MONTH
   const [y, m] = today.slice(0, 10).split("-").map(Number);
   const d = new Date(Date.UTC(y!, (m ?? 1) - 1 - months, 1));
   return d.toISOString().slice(0, 10);
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// "언제부터 이 사람이 이 반 담임인가"(id 기준) — 위 `resolveTeacherAsOf`와 **다른 질문**이다.
+// ──────────────────────────────────────────────────────────────────────────────
+
+/**
+ * 🔴 왜 위 함수로 답하지 않나(같은 모듈·같은 원자료를 쓰면서 함수를 나눈 이유):
+ *
+ *  · **묻는 것이 다르다.** 위는 "그 날짜의 담임이 **누구**였나"(표시용 이름)이고, 여기는 "이 **사람**이
+ *    언제부터 담임인가"(경계 날짜)다. 앞은 매 칸마다 이름을 뽑아야 하고, 뒤는 반·사람당 날짜 하나면 된다.
+ *  · **폴백이 달라야 한다.** 위는 근거가 없으면 **그 달 보고서 작성자**로 추정한다(`inferred`). 그 폴백을
+ *    여기 쓰면 안 된다 — 작성자는 담임이 아니고([[#93]] 사무실 대리 작성), "작성 기록이 8/3부터 있으니
+ *    8/3부터 담임"은 **없는 사실을 만들어 남의 출결을 남의 표에서 지우는** 결과가 된다. 여기의 유일한
+ *    근거는 감사로그이고, 없으면 **null**(= 지금처럼 전부 보여준다)이 정답이다.
+ *  · **이름이 아니라 id로 판정해야 한다.** 화면이 좁히는 대상은 로그인한 그 사람이지 같은 이름이 아니다.
+ *
+ * 규칙: 그 반 전이를 날짜순으로 놓고 **맨 끝의 연속 구간**이 이 사람이면 그 구간의 **첫 날**.
+ *   · 마지막 전이가 남이면 → null. DB의 현재 담임과 로그가 어긋난다는 뜻이라 지어내지 않는다
+ *     (호출부는 "DB상 현재 담임"일 때만 물어보므로, 이 경우는 로그가 불완전한 것이다).
+ *   · 같은 사람으로 연달아 찍힌 로그(재적용·중복)는 한 구간으로 접어 **더 이른 날**을 준다 —
+ *     경계를 늦게 잡을수록 남의 화면에서 기록이 더 많이 사라지므로, 애매하면 **덜 지우는 쪽**으로.
+ */
+export type HomeroomSinceIndex = {
+  /** `${classId}|${teacherId}` → 그 사람의 **현재 담임 구간 시작일**(YYYY-MM-DD). */
+  byClassTeacher: Map<string, string>;
+  /** 되살리기 창의 시작일 — 이보다 과거의 전이는 애초에 조회되지 않는다(호출부 안내용). */
+  since: string;
+};
+
+export function buildHomeroomSinceIndex(
+  transitions: readonly TeacherTransition[],
+  since: string,
+): HomeroomSinceIndex {
+  const byClass = new Map<string, TeacherTransition[]>();
+  for (const t of transitions) {
+    if (!t.classId || !t.teacherId) continue; // 반이나 사람을 모르면 경계를 못 만든다
+    const list = byClass.get(t.classId) ?? [];
+    list.push(t);
+    byClass.set(t.classId, list);
+  }
+  const byClassTeacher = new Map<string, string>();
+  for (const [classId, list] of byClass) {
+    // 같은 날 여러 건이면 입력 순서를 tie-break로 쓴다(조회가 created_at 오름차순으로 준다).
+    const sorted = [...list].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+    const last = sorted[sorted.length - 1]!;
+    let start = last.date;
+    for (let i = sorted.length - 2; i >= 0; i--) {
+      if (sorted[i]!.teacherId !== last.teacherId) break;
+      start = sorted[i]!.date;
+    }
+    byClassTeacher.set(`${classId}|${last.teacherId}`, start);
+  }
+  return { byClassTeacher, since };
+}
+
+/**
+ * 이 사람이 이 반 담임이 된 날. **근거가 없으면 null** — 호출부는 그때 아무것도 숨기지 않는다(안전벨트).
+ */
+export function homeroomSinceOf(
+  index: HomeroomSinceIndex,
+  classId: string,
+  teacherId: string | null | undefined,
+): string | null {
+  if (!teacherId) return null;
+  return index.byClassTeacher.get(`${classId}|${teacherId}`) ?? null;
+}
+
+/**
+ * 반 이름 → id (**이름이 유일할 때만**). 중복 이름은 아예 담지 않는다.
+ *
+ * 🔴 이게 필요한 이유: `class_handover_apply` 감사로그는 metadata에 **classId를 남기지 않는다**
+ *    (실측 2026-08-19: 최근 2개월 인계 로그 전건). 남는 단서는 `target_label`(그 시점 반 이름)뿐이라,
+ *    이름으로 잇지 않으면 인계 기록이 통째로 버려진다.
+ * ⚠️ 그래서 **잘못 붙이느니 비운다** — 이름이 둘 이상이면 후보를 못 고르므로 인덱스에서 뺀다.
+ *    (실측 2026-08-19: 반 152개 중 중복 이름 0개라 지금은 전부 이어진다.)
+ * ⚠️ 반 이름을 **바꾸면** 옛 로그의 label과 어긋나 그 전이는 조용히 사라진다 — 사실을 지어내는 것보다
+ *    낫다는 판단이고, 그때는 `homeroomSinceOf`가 null이라 화면이 종전처럼 전부 보여 준다.
+ */
+export function buildUniqueClassNameIndex(
+  rows: readonly { id: string; name: string | null }[],
+): Map<string, string> {
+  const seen = new Map<string, string | null>(); // name → id, 중복이면 null
+  for (const r of rows) {
+    const name = (r.name ?? "").trim();
+    if (!name) continue;
+    if (seen.has(name)) seen.set(name, null);
+    else seen.set(name, r.id);
+  }
+  const out = new Map<string, string>();
+  for (const [name, id] of seen) if (id) out.set(name, id);
+  return out;
+}
+
+/**
+ * 감사로그 한 건의 반 id — metadata가 있으면 그것, 없으면 **유일한** 반 이름으로 잇는다(위 주석).
+ */
+export function resolveTransitionClassId(input: {
+  metaClassId?: string | null;
+  targetLabel?: string | null;
+  classIdByUniqueName: ReadonlyMap<string, string>;
+}): string | null {
+  // ⚠️ 원자료가 jsonb라 타입 단언이 거짓일 수 있다 — `String()`으로 감싸 `.trim()`이 던지지 않게 한다.
+  const meta = String(input.metaClassId ?? "").trim();
+  if (meta) return meta;
+  const label = String(input.targetLabel ?? "").trim();
+  if (!label) return null;
+  return input.classIdByUniqueName.get(label) ?? null;
 }

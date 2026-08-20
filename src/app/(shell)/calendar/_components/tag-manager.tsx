@@ -7,12 +7,9 @@ import { Loader2 } from "@/components/icons/eywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { deleteCalendarTag, saveCalendarTag } from "@/features/calendar/server/actions";
-import {
-  EVENT_COLORS,
-  EVENT_COLOR_LABEL,
-  type CalendarTag,
-  type EventColor,
-} from "@/features/calendar/types";
+import { chipProps } from "@/features/calendar/color";
+import type { CalendarColor, CalendarTag } from "@/features/calendar/types";
+import { ColorPicker } from "./color-picker";
 
 /**
  * 태그 관리(0224a) — 태그 이름·색 편집과 추가·삭제. fixed 오버레이(EventDialog 패턴).
@@ -23,39 +20,16 @@ import {
 const inputClass =
   "border-line bg-card text-foreground placeholder:text-text-faint focus:border-primary w-full rounded-lg border px-3 py-1.5 text-sm outline-none transition";
 
-/** 색 점 — Tailwind 동적 클래스 금지(정적 Record, event-dialog와 동일 팔레트). */
-const DOT_SOLID: Record<EventColor, string> = {
-  primary: "bg-primary",
-  blue: "bg-blue",
-  green: "bg-green",
-  amber: "bg-amber",
-  purple: "bg-purple",
-  rose: "bg-rose",
-  neutral: "bg-text-faint",
-};
-
-function ColorPicker({
-  value,
-  onChange,
-}: {
-  value: EventColor;
-  onChange: (c: EventColor) => void;
-}) {
+/** 태그 미리보기 칩 — 저장하면 일정이 이렇게 보인다는 것을 그 자리에서 보여준다. */
+function TagPreview({ name, color }: { name: string; color: CalendarColor }) {
+  const chip = chipProps(color);
   return (
-    <div className="flex shrink-0 items-center gap-1">
-      {EVENT_COLORS.map((c) => (
-        <button
-          key={c}
-          type="button"
-          onClick={() => onChange(c)}
-          title={EVENT_COLOR_LABEL[c]}
-          aria-label={`색 ${EVENT_COLOR_LABEL[c]}`}
-          className={`size-4 rounded-full transition ${DOT_SOLID[c]} ${
-            value === c ? "ring-primary/60 ring-2 ring-offset-1" : "opacity-50 hover:opacity-100"
-          }`}
-        />
-      ))}
-    </div>
+    <span
+      className={`inline-block max-w-[160px] truncate rounded px-1.5 py-0.5 text-[12px] leading-tight font-medium ${chip.className}`}
+      style={chip.style}
+    >
+      {name.trim() || "일정 제목"}
+    </span>
   );
 }
 
@@ -63,7 +37,7 @@ function ColorPicker({
 function TagRow({ tag }: { tag: CalendarTag }) {
   const router = useRouter();
   const [name, setName] = useState(tag.name);
-  const [color, setColor] = useState<EventColor>(tag.color);
+  const [color, setColor] = useState<CalendarColor>(tag.color);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [pending, start] = useTransition();
   const dirty = name.trim() !== tag.name || color !== tag.color;
@@ -97,31 +71,42 @@ function TagRow({ tag }: { tag: CalendarTag }) {
   }
 
   return (
-    <li className="flex flex-wrap items-center gap-2 py-2.5">
-      <ColorPicker value={color} onChange={setColor} />
-      <input
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        maxLength={30}
-        className={`${inputClass} min-w-0 flex-1`}
-        aria-label="태그 이름"
-      />
-      <span className="flex shrink-0 items-center gap-1.5">
-        <Button type="button" variant="outline" size="sm" disabled={pending || !dirty || !name.trim()} onClick={save}>
-          {pending ? <Loader2 className="size-3.5 animate-spin" /> : null}
-          저장
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="text-danger"
-          disabled={pending}
-          onClick={() => setConfirmDelete(true)}
-        >
-          삭제
-        </Button>
-      </span>
+    <li className="space-y-1.5 py-2.5">
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          maxLength={30}
+          className={`${inputClass} min-w-0 flex-1`}
+          aria-label="태그 이름"
+        />
+        <TagPreview name={name} color={color} />
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <ColorPicker value={color} onChange={setColor} size="sm" label="태그 색" />
+        <span className="flex shrink-0 items-center gap-1.5">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={pending || !dirty || !name.trim()}
+            onClick={save}
+          >
+            {pending ? <Loader2 className="size-3.5 animate-spin" /> : null}
+            저장
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="text-danger"
+            disabled={pending}
+            onClick={() => setConfirmDelete(true)}
+          >
+            삭제
+          </Button>
+        </span>
+      </div>
       <ConfirmDialog
         open={confirmDelete}
         title="태그 삭제"
@@ -142,7 +127,7 @@ function TagRow({ tag }: { tag: CalendarTag }) {
 function NewTagRow() {
   const router = useRouter();
   const [name, setName] = useState("");
-  const [color, setColor] = useState<EventColor>("primary");
+  const [color, setColor] = useState<CalendarColor>("primary");
   const [pending, start] = useTransition();
 
   function add() {
@@ -162,20 +147,25 @@ function NewTagRow() {
   }
 
   return (
-    <div className="border-line mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-dashed px-3 py-2.5">
-      <ColorPicker value={color} onChange={setColor} />
-      <input
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        maxLength={30}
-        placeholder="새 태그 이름"
-        className={`${inputClass} min-w-0 flex-1`}
-        aria-label="새 태그 이름"
-      />
-      <Button type="button" size="sm" disabled={pending || !name.trim()} onClick={add}>
-        {pending ? <Loader2 className="size-3.5 animate-spin" /> : null}
-        추가
-      </Button>
+    <div className="border-line mt-3 space-y-2 rounded-lg border border-dashed px-3 py-2.5">
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          maxLength={30}
+          placeholder="새 태그 이름"
+          className={`${inputClass} min-w-0 flex-1`}
+          aria-label="새 태그 이름"
+        />
+        <TagPreview name={name} color={color} />
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <ColorPicker value={color} onChange={setColor} label="새 태그 색" />
+        <Button type="button" size="sm" disabled={pending || !name.trim()} onClick={add}>
+          {pending ? <Loader2 className="size-3.5 animate-spin" /> : null}
+          추가
+        </Button>
+      </div>
     </div>
   );
 }
@@ -195,8 +185,9 @@ export function TagManager({ tags, onClose }: { tags: CalendarTag[]; onClose: ()
         onClick={(e) => e.stopPropagation()}
       >
         <h2 className="text-foreground text-sm font-bold">태그 관리</h2>
-        <p className="text-text-dim mt-1 text-[12px]">
-          태그 색을 바꾸면 그 태그가 달린 일정 전부가 새 색으로 보입니다.
+        <p className="text-text-dim mt-1 text-[12px] break-keep">
+          태그 색을 바꾸면 그 태그가 달린 일정 전부가 새 색으로 보입니다. 색은 기본 7색 중에 고르거나,
+          무지개 동그라미를 눌러 <b className="text-foreground">직접 선택</b>할 수 있습니다.
         </p>
 
         {tags.length > 0 ? (

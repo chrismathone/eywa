@@ -9,6 +9,7 @@ import {
 import type { OneScreenView } from "../view";
 import type { WriteFilter } from "../write-filter";
 import type { TodayClass } from "../server/roster";
+import { REPORT_OPTOUT_NOTICE } from "@/features/classes/report-optout";
 
 /**
  * 원스크린 상단 바 — 날짜 + 반 필터 + 오늘 수업 + 마감 통계 + 카드/표 토글을 **한 줄(반응형)**로.
@@ -397,12 +398,20 @@ function ClassChip({
           ? `${c.ownerName ? `${c.ownerName} 선생님 반` : "다른 선생님 반"} — 이 기간에만 대신 맡은 위임 반입니다`
           : c.delegatedAwayTo
             ? `이 날짜에는 ${c.delegatedAwayTo} 선생님이 대신 맡습니다 — 직접 쓰실 수도 있지만 둘이 각자 쓰면 나중에 쓴 쪽이 남습니다`
-            : undefined
+            : c.reportOptout
+              ? REPORT_OPTOUT_NOTICE
+              : undefined
       }
       className={`${base} ${tone}`}
     >
       <span className={`font-mono text-[10px] font-bold ${timeTone}`}>{c.startTime ?? "—"}</span>
       <span className={on ? "" : c.delegated ? "" : "text-foreground"}>{c.name}</span>
+      {/* '수업보고서 미발송' 반 — 눌러서 보고서 칸이 잠긴 걸 보기 **전에** 알린다(2026-08-19). */}
+      {c.reportOptout ? (
+        <span className={on ? "text-primary-foreground/75" : "text-text-faint"} aria-hidden>
+          출결만
+        </span>
+      ) : null}
       {/* 내 반이 남에게 넘어간 날 — 반을 숨기지 않고 표식만 단다(권한은 그대로, 원 담임도 쓸 수 있다). */}
       {c.delegatedAwayTo ? (
         <span className={on ? "text-primary-foreground/75" : "text-amber"} aria-hidden>

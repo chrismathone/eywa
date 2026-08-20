@@ -4,7 +4,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { reportError } from "@/lib/observability/report-error";
 import { fetchAllPaged } from "@/lib/supabase/batch";
-import { isEventColor, type CalendarEvent, type CalendarTag } from "../types";
+import { normalizeCalendarColor } from "../color";
+import { type CalendarEvent, type CalendarTag } from "../types";
 
 /**
  * 캘린더 조회 — 월 단위(그 달과 **겹치는** 일정 전부) + 연 단위(연간/목록/분석 뷰, 0224a).
@@ -113,7 +114,9 @@ function mapManual(r: ManualEventRow): CalendarEvent {
     ? {
         id: String(r.tag.id),
         name: String(r.tag.name),
-        color: isEventColor(String(r.tag.color)) ? (String(r.tag.color) as CalendarTag["color"]) : "primary",
+        // 프리셋 키든 사용자 지정 hex든 색 단일 소스가 판정한다(color.ts) — 여기서 프리셋만 통과시키면
+        // 원장이 색상 선택기로 고른 hex가 조회 단계에서 네이비로 뭉개진다.
+        color: normalizeCalendarColor(r.tag.color),
       }
     : null;
   return {
@@ -125,7 +128,7 @@ function mapManual(r: ManualEventRow): CalendarEvent {
     // DB time은 "HH:MM:SS" — 표시는 분까지.
     startTime: r.start_time ? String(r.start_time).slice(0, 5) : null,
     endTime: r.end_time ? String(r.end_time).slice(0, 5) : null,
-    color: isEventColor(String(r.color)) ? (String(r.color) as CalendarEvent["color"]) : "primary",
+    color: normalizeCalendarColor(r.color),
     createdByName: r.creator?.display_name ?? null,
     source: "manual" as const,
     seriesId: r.series_id ? String(r.series_id) : null,
@@ -190,13 +193,31 @@ export async function getMonthEvents(month: string): Promise<CalendarMonth> {
   };
 }
 
+const YEAR_MIN = 2000;
+const YEAR_MAX = 2100;
+const validYear = (y: number) => Number.isInteger(y) && y >= YEAR_MIN && y <= YEAR_MAX;
+
 /**
- * 연 단위 조회(연간/목록/분석 뷰, 0224a) — **수기 일정만**. 휴가 오버레이는 일정 분석의 축이
+ * 다개년 조회(분석 뷰) — 원장 2026-08-19: *"분석인데 해당 년도만 있음. 전년도 후년도까지 한번에."*
+ * 연 단위 조회와 같은 규약(**수기 일정만** — 휴가 오버레이는 분석의 축이 아니다). 구간과 겹치는 전부.
+ * ⚠️ 범위 밖 연도는 빈 결과 — 호출부(page)가 창을 [2000, 2100]으로 잘라서 넘긴다.
+ */
+export async function getYearRangeEvents(
+  fromYear: number,
+  toYear: number,
+): Promise<CalendarMonth> {
+  if (!validYear(fromYear) || !validYear(toYear) || fromYear > toYear) {
+    return { ready: true, events: [] };
+  }
+  return fetchManualEvents(`${fromYear}-01-01`, `${toYear}-12-31`);
+}
+
+/**
+ * 연 단위 조회(연간/목록 뷰, 0224a) — **수기 일정만**. 휴가 오버레이는 일정 분석의 축이
  * 아니라 의도적으로 뺀다(월 그리드에서만 겹쳐 보인다). 그 해와 겹치는 일정 전부, 날짜순.
  */
 export async function getYearEvents(year: number): Promise<CalendarMonth> {
-  if (!Number.isInteger(year) || year < 2000 || year > 2100) return { ready: true, events: [] };
-  return fetchManualEvents(`${year}-01-01`, `${year}-12-31`);
+  return getYearRangeEvents(year, year);
 }
 
 /**
@@ -211,7 +232,7 @@ export async function getCalendarTags(): Promise<CalendarTag[]> {
     .map((t) => ({
       id: String(t.id),
       name: String(t.name),
-      color: isEventColor(String(t.color)) ? (String(t.color) as CalendarTag["color"]) : ("primary" as const),
+      color: normalizeCalendarColor(t.color),
     }))
     .sort((a, b) => a.name.localeCompare(b.name, "ko"));
 }

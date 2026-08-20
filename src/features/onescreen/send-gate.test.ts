@@ -19,6 +19,20 @@ describe("evaluateSendGate", () => {
     expect(g.label).toBeNull();
   });
 
+  // '수업보고서 미발송' 반(0174a, 2026-08-19) — 반은 출결 때문에 화면에 있고 발송만 없다.
+  it("미발송 반이면 사유가 단독으로 나온다 — '진도·멘트 입력 필요'를 덧붙이지 않는다", () => {
+    const g = gate({ reportOptout: true, hasProgress: false, hasDraft: false });
+    expect(g.canSend).toBe(false);
+    expect(g.reasons).toEqual(["report_optout"]);
+    expect(g.label).toBe("미발송 반 — 출결만");
+    expect(g.hint).toContain("출결만 기록합니다");
+  });
+
+  it("🔴 이미 발송된 건이 있으면 그 사실이 먼저다 — 미발송 반이어도 '발송됨'을 가리지 않는다", () => {
+    const g = gate({ reportOptout: true, alreadySent: true });
+    expect(g.reasons).toEqual(["sent"]);
+  });
+
   it("진도가 없으면 '진도 입력 필요'", () => {
     const g = gate({ hasProgress: false });
     expect(g.canSend).toBe(false);

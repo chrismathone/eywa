@@ -61,6 +61,49 @@ describe("출결 강사 귀속 축 단일 소스", () => {
     ).toBe(false);
   });
 
+  /**
+   * 담임 시작일 필터(2026-08-19)가 **표시 축 밖으로 새지 않는지**.
+   * 새는 방향이 셋이라 셋 다 잠근다: ① 교시 담당 반 ② 반별 보기 ③ 급여 별지(돈).
+   */
+  describe("담임 시작일 필터 — 적용 범위", () => {
+    const page = readFileSync(join(process.cwd(), "src", "app", "(shell)", "attendance", "page.tsx"), "utf8");
+
+    it("🔴 담임 폴백으로 잡힌 반에만 건다 — 교시 담당 반은 그 사람이 실제로 가르쳤다", () => {
+      expect(
+        /teacherRoles\.get\(c\.id\)\s*===\s*"homeroom"/.test(page),
+        "담임 시작일 필터가 역할을 안 보고 걸리고 있습니다 — 교시 담당(slot)·겸임(both) 반까지 가리면 " +
+          "2026-08-18에 넓힌 '교시 담당 강사도 자기 출석부를 본다'가 도로 깨집니다.",
+      ).toBe(true);
+    });
+
+    it("🔴 반별 보기·급여 별지에는 안 넘긴다 — 반 관점에선 그 기록이 맞고 돈 축은 담임 그대로다", () => {
+      // 반별 보기 호출(3인자)에 since가 붙지 않았는지.
+      expect(
+        /getMonthlyAttendanceMatrix\(month,\s*effectiveClassId,\s*viewPrefs\.periodMode\)/.test(page),
+        "반별 보기 호출에 담임 시작일이 붙었습니다 — 반의 책은 그 반 전체를 세는 게 맞습니다.",
+      ).toBe(true);
+      const payslip = readFileSync(
+        join(process.cwd(), "src", "app", "(print)", "payroll", "[teacherId]", "payslip", "page.tsx"),
+        "utf8",
+      );
+      expect(
+        /getMonthlyAttendanceMatrix\(period,\s*c\.id,\s*"month"\)/.test(payslip),
+        "급여 별지 호출에 강사 스코프·담임 시작일이 붙었습니다 — 돈 축은 담임 그대로가 확정입니다(골든마스터).",
+      ).toBe(true);
+    });
+
+    it("파생(수업보고서)도 같은 경계를 본다 — 수기만 빼면 파생이 그 칸을 되살린다", () => {
+      const queries = stripComments(
+        readFileSync(join(process.cwd(), "src", "features", "attendance", "server", "queries.ts"), "utf8"),
+      ).replace(/\s+/g, " ");
+      expect(
+        /!scopeSince \|\| d\.date >= scopeSince/.test(queries),
+        "파생 등원일이 담임 시작일을 안 봅니다 — JJ2A는 8/3~8/10에 전임이 쓴 보고서가 14건 있어 " +
+          "수기 기록을 빗금으로 빼도 그 칸이 '출석'으로 되살아납니다.",
+      ).toBe(true);
+    });
+  });
+
   it("돈(정산·명세서)은 담임 축을 그대로 쓴다 — 의도적 예외라 축 모듈을 안 거친다", () => {
     for (const rel of [
       join("src", "features", "attendance", "server", "teacher-money.ts"),

@@ -3,7 +3,8 @@
 import { weekdayIndexOf } from "@/lib/date-kst";
 import { Button } from "@/components/ui/button";
 import { eventDisplayColor, eventTimeLabel, type CalendarEvent } from "@/features/calendar/types";
-import { CHIP_CLASS, eventsOn } from "./month-grid";
+import { chipProps } from "@/features/calendar/color";
+import { eventsOn } from "./month-grid";
 
 /**
  * 하루 일정 전체 보기 — 월 그리드는 칸당 3건까지만 칩을 그리므로("+N개 더") 넘친 날은 여기서
@@ -62,12 +63,14 @@ export function DayListDialog({
           ) : (
             dayEvents.map((e) => {
               const time = eventTimeLabel(e);
+              const chip = chipProps(eventDisplayColor(e));
               return (
                 <button
                   key={e.id}
                   type="button"
                   onClick={() => onSelect(e)}
-                  className={`block w-full truncate rounded-lg px-2.5 py-1.5 text-left text-[13px] leading-tight font-medium transition hover:opacity-80 ${CHIP_CLASS[eventDisplayColor(e)]}`}
+                  className={`block w-full truncate rounded-lg px-2.5 py-1.5 text-left text-[13px] leading-tight font-medium transition hover:opacity-80 ${chip.className}`}
+                  style={chip.style}
                   title={e.tag ? `[${e.tag.name}] ${e.title}` : e.title}
                 >
                   {time ? (

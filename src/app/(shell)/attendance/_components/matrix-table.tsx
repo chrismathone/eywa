@@ -5,6 +5,7 @@ import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import { cellKey, rowKey } from "@/features/attendance/grid/model";
 import { countMarks, sumCounts, type Counted } from "@/features/attendance/grid/totals";
 import { ClassGroupBody, CollapseAllButton } from "./class-group";
+import { ClassSearchCount, SearchEmptyRow, SearchedRow } from "./search-context";
 import { LiveRecords, LiveUnits } from "./live-totals";
 import { MatrixRow, formatMoney } from "./matrix-row";
 
@@ -52,6 +53,12 @@ export type MatrixGroup = {
    * null이면 담임 반(종전과 같은 표기).
    */
   roleLabel?: string | null;
+  /**
+   * "8/10부터 담임" — 그 날짜 **이전 칸이 왜 값에서 빠졌는지** 밝힌다(2026-08-19).
+   * 담임은 반 단위 속성이라 시간 축이 없어 인계 전 기록까지 새 담임 표에 잡혔다. 이제 값에서 빼되
+   * 빗금으로 남기는데, 표식이 없으면 "왜 8월 초가 비었지"가 된다. null이면 종전과 같은 표기.
+   */
+  sinceLabel?: string | null;
 };
 
 /** 그룹(반)의 집계 — 시수는 급여 계산의 기본 단위라 그룹 헤더에 그대로 노출한다. */
@@ -282,44 +289,50 @@ export function MatrixTable({
               const s = g?.matrix.students.find((x) => x.id === r.studentId);
               if (!g || !s) return null;
               return (
-                <MatrixRow
-                  key={`${g.classId}:${s.id}`}
-                  student={s}
-                  classId={g.classId}
-                  matrix={g.matrix}
-                  days={days}
-                  holidays={holidays}
-                  money={money ? money.byStudent[s.id] ?? null : undefined}
-                  lockBefore={lockBefore}
-                  classLabel={g.className}
-                  tierMissing={tierMissingIds.has(s.id)}
-                  tierLabel={tierByStudent[s.id] ?? null}
-                />
+                // 검색에 안 걸린 행은 **안 그린다**(숨김 아님) — 격자 좌표와 같은 규약(search-context.tsx).
+                <SearchedRow key={`${g.classId}:${s.id}`} row={rowKey(g.classId, s.id)}>
+                  <MatrixRow
+                    student={s}
+                    classId={g.classId}
+                    matrix={g.matrix}
+                    days={days}
+                    holidays={holidays}
+                    money={money ? money.byStudent[s.id] ?? null : undefined}
+                    lockBefore={lockBefore}
+                    classLabel={g.className}
+                    tierMissing={tierMissingIds.has(s.id)}
+                    tierLabel={tierByStudent[s.id] ?? null}
+                  />
+                </SearchedRow>
               );
             })}
           </tbody>
         )}
         {!showGroups ? null : groups.map((g) => {
+          const groupRowKeys = g.matrix.students.map((s) => rowKey(g.classId, s.id));
           const rows = g.matrix.students.map((s) => (
-            <MatrixRow
-              key={`${g.classId}:${s.id}`}
-              student={s}
-              classId={g.classId}
-              matrix={g.matrix}
-              days={days}
-              holidays={holidays}
-              money={money ? money.byStudent[s.id] ?? null : undefined}
-              lockBefore={lockBefore}
-              classLabel={g.className}
-              tierMissing={tierMissingIds.has(s.id)}
-              tierLabel={tierByStudent[s.id] ?? null}
-            />
+            <SearchedRow key={`${g.classId}:${s.id}`} row={rowKey(g.classId, s.id)}>
+              <MatrixRow
+                student={s}
+                classId={g.classId}
+                matrix={g.matrix}
+                days={days}
+                holidays={holidays}
+                money={money ? money.byStudent[s.id] ?? null : undefined}
+                lockBefore={lockBefore}
+                classLabel={g.className}
+                tierMissing={tierMissingIds.has(s.id)}
+                tierLabel={tierByStudent[s.id] ?? null}
+              />
+            </SearchedRow>
           ));
           return (
             <ClassGroupBody
               key={g.classId}
               classId={g.classId}
               colSpan={colSpan}
+              // 검색에 걸린 학생이 하나도 없는 반은 **머리행까지 통째로** 안 그린다.
+              rowKeys={groupRowKeys}
               summary={
                 <>
                   <span className="text-foreground text-[12px] font-bold">{g.className}</span>
@@ -332,7 +345,17 @@ export function MatrixTable({
                       {g.roleLabel}
                     </span>
                   ) : null}
+                  {g.sinceLabel ? (
+                    <span
+                      className="border-line text-text-dim rounded-full border px-1.5 py-px text-[10px]"
+                      title="담임을 맡기 전(인수인계·담임 변경 기록 기준) 출결은 이전 담임 몫이라 이 표의 합계에서 뺐습니다 — 기록 자체는 남아 있고, 반별 보기에서 보입니다."
+                    >
+                      {g.sinceLabel}
+                    </span>
+                  ) : null}
                   <span className="text-text-dim text-[11px]">{g.matrix.students.length}명</span>
+                  {/* 검색 중이면 이 반에서 몇 명이 걸렸는지 — 머리행 인원(전체)만 두면 숫자가 거짓말한다. */}
+                  <ClassSearchCount rowKeys={groupRowKeys} />
                   <span className="text-text-dim num text-[11px]">
                     시수{" "}
                     <LiveUnits
@@ -347,6 +370,8 @@ export function MatrixTable({
             </ClassGroupBody>
           );
         })}
+        {/* 결과 0명 — 왜 비었는지 한 줄로(빈 표만 남기면 고장으로 읽힌다). */}
+        <SearchEmptyRow colSpan={colSpan} where="이 달 출석부" />
         <tfoot>
           {/* ⚠️ 합계는 **반이 여럿이면 항상** 그린다 — `showGroups`(반 머리행 여부)에 묶으면 가나다·학년·
               담임순으로 바꾸는 순간 시수 총합·정산 안내가 통째로 사라진다(적대 리뷰 2026-08-06). */}

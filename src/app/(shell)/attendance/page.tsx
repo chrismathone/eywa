@@ -24,6 +24,8 @@ import { AbsenceIntakeButton } from "./_components/absence-intake-button";
 import { effectiveTeacherId } from "@/lib/auth/view-mode";
 // 출결 강사 귀속 축 단일 소스 — 담임(classes.teacher_id)만 보면 교시 담당 강사가 자기 수업을 못 본다.
 import { classTeacherRole, type ClassTeacherRole } from "@/features/attendance/teacher-axis";
+import { getHomeroomSinceIndex } from "@/features/classes/server/teacher-as-of-queries";
+import { homeroomSinceOf } from "@/features/classes/teacher-as-of";
 import { loadAttendanceViewPrefs } from "@/features/attendance/server/prefs-actions";
 import { PeriodModeToggle } from "./_components/period-mode-toggle";
 import { countMarks, sumCounts } from "@/features/attendance/grid/totals";
@@ -34,6 +36,9 @@ import { HideRetiredToggle } from "./_components/hide-retired-toggle";
 import { AttendanceHub, type HubTeacher } from "./_components/attendance-hub";
 import { MatrixTable, buildGridSource, type MatrixGroup } from "./_components/matrix-table";
 import { GridProvider } from "./_components/grid-context";
+import { AttendanceSearchBox, AttendanceSearchProvider } from "./_components/search-context";
+import { rowKey } from "@/features/attendance/grid/model";
+import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { CollapseAllChip } from "./_components/class-group";
 import { LiveStats } from "./_components/live-totals";
 import { attHref, resolveViewMode, type ViewMode } from "./_components/att-href";
@@ -55,6 +60,12 @@ function shiftMonth(month: string, delta: number): string {
 function formatMonth(month: string): string {
   const [y, m] = month.split("-");
   return `${y}년 ${Number(m)}월`;
+}
+
+/** "2026-08-10" → "8/10" — 반 머리행 칩처럼 좁은 자리용(연도는 그 표가 이미 말한다). */
+function dayLabel(ymd: string): string {
+  const [, m, d] = ymd.split("-");
+  return `${Number(m)}/${Number(d)}`;
 }
 
 // 월 보기를 항상 31칸으로 — 그 달 실제 일수 뒤에 placeholder 빈 칸을 채운다(예: 28일 달은 29~31 빈 칸).
@@ -321,6 +332,25 @@ export default async function AttendancePage({
     ]),
   );
   const mode: ViewMode = requestedMode === "teacher" && teacherClasses.length > 0 ? "teacher" : "class";
+  /**
+   * **담임이 되기 전 기록**을 그 강사 표에서 뺀다(원장 제보 2026-08-19: *"김주현 선생님이 출결한것도
+   * 아닌데 보이는것도 같이 수정해야겠네."*). `classes.teacher_id`는 현재 담임이라 시간 축이 없어서,
+   * 인계(8/10·8/14) 이전에 **전임이 넣은** 기록까지 새 담임 출석부에 잡혔다.
+   *
+   * 🔴 **담임 폴백으로 잡힌 반만** 대상이다 — 교시 담당(`slot`)·겸임(`both`)은 그 사람이 실제로 그날
+   *    그 교시를 가르쳤으므로 가리면 안 된다(그게 이 화면이 2026-08-18에 넓어진 이유다).
+   * 🔴 근거(인수인계·담임 변경 감사로그)가 없으면 `null` → **아무것도 숨기지 않는다**(폴백이 안전벨트).
+   * ⚠️ 반별 보기·급여 별지에는 넘기지 않는다 — 반 관점에선 그 기록이 맞고, 돈 축은 담임 그대로다.
+   */
+  const homeroomSinceIdx = mode === "teacher" && effectiveTeacher ? await getHomeroomSinceIndex() : null;
+  const sinceByClass = new Map<string, string | null>(
+    teacherClasses.map((c) => [
+      c.id,
+      homeroomSinceIdx && teacherRoles.get(c.id) === "homeroom"
+        ? homeroomSinceOf(homeroomSinceIdx, c.id, effectiveTeacher)
+        : null,
+    ]),
+  );
   const teacherMatrices =
     mode === "teacher"
       // ⚠️ 강사 전체 보기는 여러 반을 **한 표**에 그리는데 세션은 과목별이라 반마다 기간이 다를 수 있다.
@@ -330,7 +360,9 @@ export default async function AttendancePage({
       //    가르친 강사의 출석부에 남의 교시까지 잡힌다(원장 제보 2026-08-18: 8/10 김근호가 이다교 선생님
       //    출석부에 3 — 실제 이다교 몫은 1). 귀속 판정은 resolveTaughtBy 단일 소스가 한다.
       ? await Promise.all(
-          teacherClasses.map((c) => getMonthlyAttendanceMatrix(month, c.id, "month", effectiveTeacher)),
+          teacherClasses.map((c) =>
+            getMonthlyAttendanceMatrix(month, c.id, "month", effectiveTeacher, sinceByClass.get(c.id) ?? null),
+          ),
         )
       : [];
   /**
@@ -381,6 +413,8 @@ export default async function AttendancePage({
           // ⚠️ 담임인 반엔 안 붙인다(`both` 포함) — 영어는 담임이 자기 반 교시도 맡는 게 보통이라
           //    거기까지 붙이면 거의 모든 반에 배지가 달려 정작 남의 반 표식이 안 보인다.
           roleLabel: teacherRoles.get(c.id) === "slot" ? "교시 담당" : null,
+          // 담임 시작일 — 그 이전 칸이 왜 값에서 빠졌는지 반 머리행에서 밝힌다(빗금만 있으면 "왜 비었지").
+          sinceLabel: sinceByClass.get(c.id) ? `${dayLabel(sinceByClass.get(c.id)!)}부터 담임` : null,
         }))
       : effectiveClassId && selectedClass
         ? [
@@ -494,6 +528,21 @@ export default async function AttendancePage({
   // 시트 격자의 좌표·초기값 — 표보다 위(상단 스탯)까지 감싸야 해서 여기서 만든다.
   const gridSource = buildGridSource(groups, visibleDays, orderedRows);
 
+  /**
+   * 학생 검색(원장 2026-08-19)이 볼 재료 — **화면에 이미 그려진 값만**(이름·학교·학년 + 붙여 쓴 압축 표기).
+   * 🔴 조회를 새로 붙이지 않는다: 강사는 담당 반만 보는데 검색이 학원 전체를 뒤지면 그 범위가 뚫린다([[#77]]).
+   */
+  const searchRows = groups.flatMap((g) =>
+    g.matrix.students.map((s) => ({
+      row: rowKey(g.classId, s.id),
+      studentId: s.id,
+      name: s.name,
+      school: s.school,
+      grade: s.grade,
+      schoolGrade: schoolGradeLabel(s.school, s.grade) || null,
+    })),
+  );
+
   // 수정 가능 기간 — 강사(scoped)는 KST 오늘 기준 7일 이내만. 관리자 이상(full)은 제한 없음(원장 2026-07-21).
   // ⚠️ 역할을 코드로 나열하지 않고 권한 매트릭스를 읽는다(#58) — 원장이 역할 권한을 조정하면 함께 따라간다.
   // ⚠️ 이건 화면 편의일 뿐 진짜 게이트는 서버 액션이다(#77).
@@ -580,6 +629,9 @@ export default async function AttendancePage({
     //
     // ⚠️ GridProvider가 **툴바까지** 감싼다 — 합계(LiveStats)가 툴바로 올라갔기 때문. 칸을 치면 출석률·결석·
     //    지각이 그 자리에서 따라 움직이려면 툴바가 격자 저장소를 구독해야 한다(DOM은 안 만드는 컨텍스트라 무비용).
+    // 🔴 검색 공급자가 **격자보다 바깥**이다 — 격자가 "안 걸린 행"을 좌표에서 빼야 키보드 이동·범위 선택이
+    // 안 보이는 칸으로 새지 않는다(search-context.tsx / grid-context.tsx `visibleRows`).
+    <AttendanceSearchProvider rows={searchRows}>
     <GridProvider
       rows={gridSource.rows}
       cols={gridSource.cols}
@@ -735,6 +787,11 @@ export default async function AttendancePage({
                   (아이콘만 있으면 있는 줄 모른다). 접힌 수까지 적어 "몇 개가 숨었는지"를 감추지 않는다. */}
               {showGroups ? <CollapseAllChip classIds={groups.map((g) => g.classId)} /> : null}
             </div>
+            <span className="bg-line h-4 w-px" aria-hidden />
+            {/* 학생 검색(원장 2026-08-19) — **클라 필터**라 서버 왕복 0, 친 즉시 표가 좁아진다.
+                안 걸린 행은 감추는 게 아니라 안 그린다(격자 좌표도 함께 좁아져 방향키가 새지 않는다).
+                검색어는 저장하지 않는다 — 다음 방문에 필터가 걸린 채 열리면 "출석부가 비었다"로 읽힌다. */}
+            <AttendanceSearchBox />
           </>
         ) : null}
 
@@ -845,5 +902,6 @@ export default async function AttendancePage({
       )}
       </div>
     </GridProvider>
+    </AttendanceSearchProvider>
   );
 }

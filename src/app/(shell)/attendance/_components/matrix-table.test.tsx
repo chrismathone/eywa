@@ -269,7 +269,7 @@ describe("세지 않는 교시(자리·남의 교시)", () => {
     );
     expect(cellOf(container).textContent).toContain("1");
     expect(unitsOf(container)).toContain("1");
-    expect(cellOf(container).getAttribute("title")).toContain("이 선생님 몫으로 세지 않는 교시");
+    expect(cellOf(container).getAttribute("title")).toContain("이 선생님 몫으로 세지 않는 기록");
   });
 
   it("🔴 자리(JJ)만 있는 날은 시수에 안 든다 — 예전엔 '값 없음'이 합계에서 1로 되살아났다", () => {
@@ -365,7 +365,7 @@ describe("세지 않는 교시(자리·남의 교시)", () => {
     fireEvent.keyDown(cell, { key: "1" });
     expect(container.querySelector("input")).toBeNull();
     expect(setAttendanceCell).not.toHaveBeenCalled();
-    expect(container.textContent).toContain("다른 교시 것이라");
+    expect(container.textContent).toContain("이 화면의 몫이 아니라");
   });
 
   it("섞인 칸에 값을 쓰는 건 막지 않는다 — 대신 사정거리를 알린다", async () => {

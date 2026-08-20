@@ -6,6 +6,7 @@
  *    클라 번들로 새어 빌드가 깨진다(gotcha #61). 그래서 모양은 여기, 조회는 저기로 갈라 둔다.
  */
 
+import type { SpecialSlotLabel } from "@/features/timetable/lib/teacher-label";
 import type { NowBand } from "./now-band";
 import type { LiveSignal, SlotPhase } from "./signals";
 
@@ -89,9 +90,18 @@ export type LiveBoardSlot = LiveSlot & {
 export type LiveBoard = {
   date: string;
   isToday: boolean;
-  /** 강사별 묶음 — "선생님별 출석부"의 축(원장 표현 그대로). */
+  /**
+   * 강사별 묶음 — "선생님별 출석부"의 축(원장 표현 그대로).
+   *
+   * 🔴 **자리(LAB·JJ)는 사람이 아니다** — 그 줄은 `teacherId`·`teacherPhone`이 null이고 `seatLabel`이
+   *    채워진다(방에는 전화할 수 없고, 자리 이름을 id 자리에 넣으면 로그인도 못 하는 "가짜 강사"가
+   *    알림 수신자·급여로 따라 붙는다). 사람이 아님을 판별할 땐 이름 문자열이 아니라 `seatLabel`을 볼 것.
+   *    묶는 규칙은 [teacher-group.ts](./teacher-group.ts) 단일 소스.
+   */
   teachers: {
     teacherId: string | null;
+    /** 자리 줄이면 `LAB`·`JJ`, 사람·담당 미지정이면 null. */
+    seatLabel: SpecialSlotLabel | null;
     teacherName: string;
     teacherPhone: string | null;
     slots: LiveBoardSlot[];

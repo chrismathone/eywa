@@ -5,7 +5,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logAction } from "@/features/audit/server/log";
-import { isEventColor } from "../types";
+import { normalizeCalendarColor } from "../color";
 
 /**
  * 캘린더 쓰기 — 일정 등록·수정·삭제. 게이트는 화면과 같은 `canWriteTenant("calendar")`(사무실 full,
@@ -121,7 +121,7 @@ export async function saveCalendarEvent(
   }
 
   const colorRaw = String(formData.get("color") ?? "primary");
-  const color = isEventColor(colorRaw) ? colorRaw : "primary";
+  const color = normalizeCalendarColor(colorRaw);
   const memo = String(formData.get("memo") ?? "").trim().slice(0, MAX_MEMO) || null;
 
   const admin = createAdminClient();
@@ -318,7 +318,7 @@ export async function saveCalendarTag(
   if (!name) return { error: "태그 이름을 입력하세요" };
   if (name.length > MAX_TAG_NAME) return { error: `태그 이름은 ${MAX_TAG_NAME}자까지입니다` };
   const colorRaw = String(formData.get("color") ?? "primary");
-  const color = isEventColor(colorRaw) ? colorRaw : "primary";
+  const color = normalizeCalendarColor(colorRaw);
 
   const admin = createAdminClient();
   let failure: { message: string } | null = null;

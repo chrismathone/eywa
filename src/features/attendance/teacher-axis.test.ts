@@ -331,6 +331,54 @@ describe("강사 전체 보기의 교시 귀속 — 원장 제보 2026-08-10 김
     expect(["16:20", "17:20", "18:20"].filter((t) => owns(JEONG, t))).toEqual(["16:20"]);
   });
 
+  /**
+   * 담임이 되기 **전** 칸 가리기(2026-08-19) — 원장 제보 *"김주현 선생님이 출결한것도 아닌데 보이는것"*.
+   * 실데이터가 전부 day-level(수학)이라, 교시 판정보다 **먼저** 보지 않으면 아무 효과가 없다.
+   */
+  it("🔴 담임 시작일 이전 칸은 그 사람 몫이 아니다 — day-level 기록에도 걸린다", () => {
+    const owns = (date: string, slotStart: string | null) =>
+      ownsAttendanceSlot({
+        scopeTeacherId: JEONG,
+        homeroomTeacherId: JEONG,
+        slots: monSlots,
+        date,
+        slotStart,
+        homeroomSince: "2026-08-10",
+      });
+    expect(owns("2026-08-03", null), "담임 이전 day-level").toBe(false);
+    expect(owns("2026-08-03", "16:20"), "담임 이전 교시").toBe(false);
+    expect(owns("2026-08-10", null), "담임 시작일 당일은 포함").toBe(true);
+    expect(owns("2026-08-17", null), "담임 이후").toBe(true);
+  });
+
+  it("🔴 근거가 없으면(null) 아무것도 가리지 않는다 — 폴백이 안전벨트", () => {
+    for (const since of [null, undefined]) {
+      expect(
+        ownsAttendanceSlot({
+          scopeTeacherId: JEONG,
+          homeroomTeacherId: JEONG,
+          slots: monSlots,
+          date: "2026-01-01",
+          slotStart: null,
+          homeroomSince: since,
+        }),
+      ).toBe(true);
+    }
+  });
+
+  it("반별 보기는 담임 시작일을 넘겨도 영향 없다 — 반 관점에선 그 기록이 맞다", () => {
+    expect(
+      ownsAttendanceSlot({
+        scopeTeacherId: null,
+        homeroomTeacherId: JEONG,
+        slots: monSlots,
+        date: "2026-08-03",
+        slotStart: null,
+        homeroomSince: "2026-08-10",
+      }),
+    ).toBe(true);
+  });
+
   it("반별 보기(scope 없음)는 전부 그 반 몫 — 종전과 같은 숫자", () => {
     for (const slotStart of ["16:20", "18:20", null]) {
       expect(

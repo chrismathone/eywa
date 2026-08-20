@@ -116,7 +116,9 @@ describe("RecapView", () => {
     expect(links[1].getAttribute("href")).toBe("/attendance/2026-08-18/c2");
   });
 
-  it("빈 출석부가 없는(칸만 덜 찍은) 강사 줄은 펼칠 것이 없어 버튼이 아니다", () => {
+  it("🔴 빈 출석부가 없어도(칸만 덜 찍힌 강사) 펼쳐서 빠진 학생 이름을 본다", () => {
+    // 원장 제보 2026-08-20: 유형숙(40칸 중 38칸)·추민아(51칸 중 50칸)가 **펼쳐지지 않아** 누가
+    // 안 찍혔는지 확인할 수단이 없었다(그때는 펼침 버튼 자체가 없었다).
     const partial = buildRangeRecap([
       {
         ...buildDayRecap({
@@ -142,8 +144,46 @@ describe("RecapView", () => {
       },
     ]);
     renderRange(partial);
-    expect(screen.getByText("한강사")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: /한강사/ })).toBeNull();
+    // 통째 미입력은 0반이라 그 배지는 없고, 빈 칸 수가 대신 적힌다.
+    expect(screen.queryByText(/미입력 \d+반/)).toBeNull();
+    expect(screen.getByText("빈 칸 1개")).toBeTruthy();
+    const toggle = screen.getByRole("button", { name: /한강사/ });
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    // 누가 빠졌는지 · 몇 교시인지가 이름으로 보인다.
+    expect(screen.getByText("나학생")).toBeTruthy();
+    expect(screen.getByText(/16:20/)).toBeTruthy();
+    // 빈 칸 줄의 링크도 같은 규약(그날 그 반 출석부).
+    expect(screen.getByRole("link", { name: "중3 C" }).getAttribute("href")).toBe("/attendance/2026-08-18/c3");
+  });
+
+  it("칸을 다 찍은 강사는 '입력이 덜 된 강사' 목록에 아예 안 뜬다", () => {
+    const done = buildRangeRecap([
+      {
+        ...buildDayRecap({
+          date: "2026-08-18",
+          slots: [
+            {
+              classId: "c4",
+              className: "중3 D",
+              subject: "math",
+              slotStart: "16:20",
+              saveSlot: null,
+              teacherName: "다찍음",
+              slotTeacherLabel: null,
+              hasAnyRecord: true,
+              students: [
+                { studentId: "s7", studentName: "가학생", schoolGrade: null, status: "present", note: null },
+              ],
+            },
+          ],
+        }),
+        holiday: null,
+      },
+    ]);
+    renderRange(done);
+    // 다 찍은 강사는 "입력이 덜 된 강사" 목록에 아예 안 들어간다.
+    expect(screen.queryByRole("button", { name: /다찍음/ })).toBeNull();
   });
 
   it("오늘을 요약하면 진행 중임을 먼저 말한다", () => {

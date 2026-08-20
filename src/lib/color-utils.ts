@@ -34,6 +34,71 @@ export function readableTextColor(bgHex: string): string {
   return lum > 0.6 ? "#1d1d1f" : "#ffffff";
 }
 
+/**
+ * WCAG 상대휘도(0~1) — **감마 보정을 거친** 값이다. 유효하지 않으면 null.
+ *
+ * 🔴 `readableTextColor`가 쓰는 0.299/0.587/0.114(체감 밝기)와 **다른 물건**이다. 그 공식으로
+ *    대비를 판정하면 초록·마젠타 계열이 실제보다 훨씬 밝게 계산돼 "통과했는데 안 읽히는" 색이 나온다
+ *    (2026-08-19 적대 리뷰 실측: 순수 초록이 기준을 통과했지만 실제 대비 2.5:1). 대비는 이쪽으로만 잰다.
+ */
+export function relativeLuminance(hex: string): number | null {
+  const rgb = hexToRgb(hex);
+  if (!rgb) return null;
+  const lin = (v: number) => {
+    const c = v / 255;
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * lin(rgb[0]) + 0.7152 * lin(rgb[1]) + 0.0722 * lin(rgb[2]);
+}
+
+/** 두 색의 WCAG 대비비(1~21). 하나라도 형식이 틀리면 null. */
+export function contrastRatio(a: string, b: string): number | null {
+  const la = relativeLuminance(a);
+  const lb = relativeLuminance(b);
+  if (la === null || lb === null) return null;
+  return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+}
+
+/** `hex`를 alpha만큼 `bgHex` 위에 얹었을 때의 **불투명 합성색**. 유효하지 않으면 빈 문자열. */
+export function compositeOver(hex: string, alpha: number, bgHex: string): string {
+  const fg = hexToRgb(hex);
+  const bg = hexToRgb(bgHex);
+  if (!fg || !bg) return "";
+  const a = Math.min(Math.max(alpha, 0), 1);
+  const to2 = (i: number) =>
+    Math.round(fg[i]! * a + bg[i]! * (1 - a))
+      .toString(16)
+      .padStart(2, "0");
+  return `#${to2(0)}${to2(1)}${to2(2)}`;
+}
+
+/**
+ * `hex`를 **검정 쪽으로 낮춰** `bgHex` 위에서 목표 대비를 확보한 글자색을 만든다(색상은 유지).
+ * 사용자가 색상환에서 밝은 색을 골라도 글자가 읽히게 하는 안전벨트 — 판정은 위 `contrastRatio`.
+ *
+ * 검정(k=0)은 옅은 배경에서 항상 목표를 넘으므로 반드시 수렴한다. 이미 충분하면 원본 그대로.
+ * 유효하지 않으면 빈 문자열(호출부가 폴백을 고를 수 있게).
+ */
+export function darkenHexForContrast(hex: string, bgHex: string, target: number): string {
+  const rgb = hexToRgb(hex);
+  if (!rgb || relativeLuminance(bgHex) === null) return "";
+  const scaled = (k: number) =>
+    `#${rgb
+      .map((v) => Math.round(v * k).toString(16).padStart(2, "0"))
+      .join("")}`;
+  if ((contrastRatio(scaled(1), bgHex) ?? 0) >= target) return hex.trim().toLowerCase();
+
+  // k를 이진 탐색 — 대비는 k에 대해 단조(어두울수록 옅은 배경과의 대비가 커진다).
+  let lo = 0;
+  let hi = 1;
+  for (let i = 0; i < 12; i += 1) {
+    const mid = (lo + hi) / 2;
+    if ((contrastRatio(scaled(mid), bgHex) ?? 0) >= target) lo = mid;
+    else hi = mid;
+  }
+  return scaled(lo);
+}
+
 /** hex + alpha → "rgba(r, g, b, a)". 유효하지 않으면 빈 문자열. */
 export function hexToRgba(hex: string, alpha: number): string {
   const rgb = hexToRgb(hex);

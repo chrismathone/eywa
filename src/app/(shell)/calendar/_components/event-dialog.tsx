@@ -13,15 +13,15 @@ import {
   saveCalendarEvent,
   type CalendarActionState,
 } from "@/features/calendar/server/actions";
+import { colorLabel, dotProps } from "@/features/calendar/color";
 import {
-  EVENT_COLORS,
-  EVENT_COLOR_LABEL,
   eventDisplayColor,
   eventTimeLabel,
+  type CalendarColor,
   type CalendarEvent,
   type CalendarTag,
-  type EventColor,
 } from "@/features/calendar/types";
+import { EventColorField, TagLegend } from "./event-color-fields";
 
 /**
  * 일정 다이얼로그 — 등록·수정 겸용 + 읽기 전용(권한 없는 열람자). fixed 오버레이(ConfirmDialog 선례).
@@ -42,17 +42,6 @@ export type DialogState =
 
 const inputClass =
   "border-line bg-card text-foreground placeholder:text-text-faint focus:border-primary w-full rounded-lg border px-3 py-1.5 text-sm outline-none transition";
-
-/** 색 점 — Tailwind 동적 클래스 금지(정적 Record). */
-const DOT_SOLID: Record<EventColor, string> = {
-  primary: "bg-primary",
-  blue: "bg-blue",
-  green: "bg-green",
-  amber: "bg-amber",
-  purple: "bg-purple",
-  rose: "bg-rose",
-  neutral: "bg-text-faint",
-};
 
 // ── 15분 간격 시간표(구글 캘린더 관행) ────────────────────────────────────────
 const TIME_SLOTS: string[] = Array.from({ length: 96 }, (_, i) => {
@@ -208,7 +197,11 @@ function ViewBody({
     <div className="space-y-3">
       <div className="flex items-start justify-between gap-3">
         <h2 className="text-foreground flex min-w-0 items-center gap-2 text-[16px] font-bold break-keep">
-          <span className={`size-3 shrink-0 rounded-full ${DOT_SOLID[eventDisplayColor(event)]}`} aria-hidden />
+          <span
+            className={`size-3 shrink-0 rounded-full ${dotProps(eventDisplayColor(event)).className}`}
+            style={dotProps(eventDisplayColor(event)).style}
+            aria-hidden
+          />
           {event.title}
         </h2>
         <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${dday.cls}`}>
@@ -242,7 +235,11 @@ function ViewBody({
           <div className="flex gap-2">
             <dt className="text-text-dim w-[52px] shrink-0">태그</dt>
             <dd className="text-foreground flex items-center gap-1.5">
-              <span className={`size-2.5 shrink-0 rounded-full ${DOT_SOLID[event.tag.color]}`} aria-hidden />
+              <span
+                className={`size-2.5 shrink-0 rounded-full ${dotProps(event.tag.color).className}`}
+                style={dotProps(event.tag.color).style}
+                aria-hidden
+              />
               {event.tag.name}
             </dd>
           </div>
@@ -300,12 +297,17 @@ function EditBody({
     }
   }, [saveState, onClose]);
 
-  const [color, setColor] = useState<EventColor>(editing?.color ?? "primary");
+  const [color, setColor] = useState<CalendarColor>(editing?.color ?? "primary");
   // 태그(0224a) — 표시색은 태그색 우선(eventDisplayColor 단일 규칙). 사전이 비면 필드를 안 그린다.
   const [tagId, setTagId] = useState(editing?.tag?.id ?? "");
   const selectedTag = tags.find((t) => t.id === tagId) ?? null;
+  // 드롭다운 항목에 **색 이름**을 함께 — 목록을 열었을 때 "이 태그가 무슨 색인지"가 글자로 보인다
+  // (원장 2026-08-19: 등록 화면에 색 설명이 부족하다).
   const tagOptions: ComboOption[] = useMemo(
-    () => [{ value: "", label: "태그 없음" }, ...tags.map((t) => ({ value: t.id, label: t.name }))],
+    () => [
+      { value: "", label: "태그 없음" },
+      ...tags.map((t) => ({ value: t.id, label: t.name, hint: colorLabel(t.color) })),
+    ],
     [tags],
   );
   const [start, setStart] = useState(editing?.startDate ?? (state.mode === "create" ? state.date : ""));
@@ -528,32 +530,15 @@ function EditBody({
                 searchPlaceholder="태그 검색"
                 ariaLabel="태그"
               />
+              {/* 색 범례 = 태그 목록. "무슨 색이 무슨 뜻인지"를 등록하는 그 자리에서 보여준다
+                  (원장 2026-08-19 "색상에 대한 설명이 부족함"). 누르면 그 태그로 바로 선택된다. */}
+              <TagLegend tags={tags} selectedId={tagId} onPick={setTagId} />
             </div>
           ) : null}
           <div>
             <span className="micro mb-1 block">색</span>
-            {selectedTag ? (
-              // 태그가 있으면 표시색 = 태그색(단일 규칙) — 팔레트를 숨겨 규칙을 화면에서도 정직하게.
-              <p className="text-text-dim flex items-center gap-1.5 text-[12px]">
-                <span className={`size-4 shrink-0 rounded-full ${DOT_SOLID[selectedTag.color]}`} aria-hidden />
-                색은 태그색을 따릅니다 ({EVENT_COLOR_LABEL[selectedTag.color]})
-              </p>
-            ) : (
-              <div className="flex items-center gap-1.5">
-                {EVENT_COLORS.map((c) => (
-                  <button
-                    key={c}
-                    type="button"
-                    onClick={() => setColor(c)}
-                    title={EVENT_COLOR_LABEL[c]}
-                    aria-label={`색 ${EVENT_COLOR_LABEL[c]}`}
-                    className={`size-6 rounded-full transition ${DOT_SOLID[c]} ${
-                      color === c ? "ring-primary/60 ring-2 ring-offset-2" : "opacity-60 hover:opacity-100"
-                    }`}
-                  />
-                ))}
-              </div>
-            )}
+            {/* 태그가 있으면 표시색 = 태그색(단일 규칙) — 규칙·선택기·미리보기는 색 필드가 담당. */}
+            <EventColorField selectedTag={selectedTag} color={color} onColorChange={setColor} />
           </div>
           <label className="block">
             <span className="micro mb-1 block">메모 (선택)</span>

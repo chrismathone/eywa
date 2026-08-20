@@ -156,8 +156,10 @@ export function CellPopover({
                     7일 잠금과 겹칠 때만 두 문장이 서로 다른 정보를 담는다. */}
                 {hasOtherRecords && locked === NOT_MINE_MESSAGE ? null : (
                   <p className="text-text-dim text-[11px] leading-tight">
+                    {/* ⚠️ 사유 문장은 NOT_MINE_MESSAGE 단일 소스 — 여기 사본을 두면 사유가 늘 때
+                        (2026-08-19 '담임 이전 기록') 한쪽만 고쳐져 같은 칸이 화면마다 다른 말을 한다. */}
                     {hasOtherRecords
-                      ? "이 날 기록은 다른 교시 것이라 여기서는 못 고칩니다 — 반별 보기에서 고치세요"
+                      ? NOT_MINE_MESSAGE
                       : "기록이 없는 날이라 메모만 남길 수는 없습니다 — 관리자에게 요청하세요"}
                   </p>
                 )}

@@ -177,7 +177,7 @@ export function AttendanceCell({
         role="gridcell"
         tabIndex={state.active || isFirst ? 0 : -1}
         aria-label={`${sessionDate} ${status ? STATUS_TEXT[status] : "미기록"}${day ? ` 외 ${day.count - 1}교시` : ""}${
-          otherSlots?.length ? ` · 세지 않는 교시 ${otherSlots.length}건` : ""
+          otherSlots?.length ? ` · 세지 않는 기록 ${otherSlots.length}건` : ""
         }`}
         title={title || undefined}
         // 색이 갈린 교시가 섞인 날만 — 인라인 배경이 클래스 배경을 이긴다(글자색은 클래스 그대로).

@@ -97,6 +97,22 @@ describe("buildRangeRecap", () => {
     expect(range.teachers[0]!.cells).toBe(2);
   });
 
+  it("빈 칸(부분 미입력)도 날짜를 가로질러 더해진다 — 목록은 days에 그대로 실린다", () => {
+    const partialDay = (date: string) =>
+      day(date, {
+        hasAnyRecord: true,
+        students: [
+          { studentId: "s1", studentName: "이학생", schoolGrade: null, status: "present", note: null },
+          { studentId: "s2", studentName: "박학생", schoolGrade: null, status: null, note: null },
+        ],
+      });
+    const range = buildRangeRecap([partialDay("2026-08-21"), partialDay("2026-08-22")]);
+    expect(range.teachers).toHaveLength(1);
+    expect(range.teachers[0]!.partialCells).toBe(2);
+    // 목록 자체는 날짜별로 남아 "언제 빠뜨렸나"가 사라지지 않는다.
+    expect(range.days.map((d) => d.partial.length)).toEqual([1, 1]);
+  });
+
   it("휴원일은 그 사실을 달고 남는다(빈 날과 구분)", () => {
     const range = buildRangeRecap([
       { ...day("2026-08-15", { students: [] }), holiday: "광복절" },
