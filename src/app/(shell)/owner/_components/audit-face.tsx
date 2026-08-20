@@ -5,7 +5,13 @@ import { Pagination } from "@/components/pagination";
 import { EmptyState } from "@/components/empty-state";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import { getAuditLogsPage, getAuditNameMap, AUDIT_ACTIONS, auditActionLabel } from "@/features/audit/server/log";
-import { auditDetail, auditTargetName, AUDIT_TYPE_LABEL } from "@/features/audit/describe";
+import {
+  auditActorName,
+  auditDetail,
+  auditTargetLabel,
+  auditTargetName,
+  AUDIT_TYPE_LABEL,
+} from "@/features/audit/describe";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 
@@ -189,23 +195,44 @@ export async function AuditFace({
                 </tr>
               </thead>
               <tbody className="divide-line divide-y">
-                {logs.map((log) => (
+                {logs.map((log) => {
+                  // 대상 = 유형(접두) + 라벨. 라벨은 설정 키·과목 키·uuid만 한글/생략으로 접고 나머지는 원문.
+                  const folded = auditTargetLabel(log.targetType, log.targetLabel, {
+                    subjectLabel: subjects.labelOf,
+                  });
+                  const targetLabel = folded ?? auditTargetName(log.metadata, nameOf);
+                  // 툴팁은 **접었을 때만** — 사람 이름에까지 같은 값을 붙이면 온 행이 툴팁 밭이 된다.
+                  const actorName = auditActorName(log.actorName);
+                  return (
                   <tr key={log.id} className="hover:bg-bg-soft/50">
                     <td className="text-text-dim num px-4 py-2.5 text-[11px]">{fmtTime(log.createdAt)}</td>
-                    <td className="text-text-dim px-4 py-2.5">{log.actorName ?? "—"}</td>
+                    {/* 실행자 — 운영 스크립트가 남긴 `system:*` 식별자는 한글로(원문은 툴팁) */}
+                    <td
+                      className="text-text-dim px-4 py-2.5"
+                      title={actorName !== log.actorName ? (log.actorName ?? undefined) : undefined}
+                    >
+                      {actorName ?? "—"}
+                    </td>
                     <td className="px-4 py-2.5">
                       <Pill color={ACTION_COLOR[log.action] ?? "neutral"} soft>
                         {auditActionLabel(log.action)}
                       </Pill>
                     </td>
-                    {/* 위계: 액션(Pill bold) > 대상 dim — 행에서 액션이 먼저 읽히게 */}
-                    <td className="text-text-dim px-4 py-2.5">
-                      {log.targetType ? (
-                        <span className="text-text-faint mr-1">
-                          {AUDIT_TYPE_LABEL[log.targetType] ?? log.targetType}
-                        </span>
-                      ) : null}
-                      {log.targetLabel ?? auditTargetName(log.metadata, nameOf) ?? "—"}
+                    {/* 위계: 액션(Pill bold) > 대상 dim — 행에서 액션이 먼저 읽히게.
+                        🔴 유형 접두와 이름은 **붙어 보이면 안 된다**(원장 제보: "직원이다교"로 읽혔다) —
+                        테두리 토큰으로 또렷이 분리(팔레트 v4 "구분은 테두리"). 접은 원문은 title 툴팁에. */}
+                    <td
+                      className="text-text-dim px-4 py-2.5"
+                      title={folded !== log.targetLabel ? (log.targetLabel ?? undefined) : undefined}
+                    >
+                      <span className="inline-flex items-center gap-1.5">
+                        {log.targetType ? (
+                          <span className="border-line text-text-faint rounded-full border px-1.5 py-px text-[10px]">
+                            {AUDIT_TYPE_LABEL[log.targetType] ?? log.targetType}
+                          </span>
+                        ) : null}
+                        <span>{targetLabel ?? "—"}</span>
+                      </span>
                     </td>
                     {/* 상세 = 한글 요약, 원문 JSON은 title 툴팁으로만(raw 노출 금지 규칙) */}
                     <td
@@ -217,7 +244,8 @@ export async function AuditFace({
                       </span>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </DragScrollArea>

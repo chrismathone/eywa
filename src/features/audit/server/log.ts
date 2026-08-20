@@ -2,7 +2,7 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { fetchInChunks } from "@/lib/supabase/batch";
-import { collectAuditNameIds } from "../describe";
+import { collectAuditNameIds, systemActorMatches, SYSTEM_ACTOR_PREFIX } from "../describe";
 
 // 운영 감사로그 액션 키 + 라벨 — logAction 호출부와 뷰어 필터가 공유.
 // ⚠️ 새 logAction 액션 키는 반드시 여기 등록(안 하면 뷰어에 영문 키 원문 노출) + describe.ts에 상세 한글화 추가.
@@ -22,6 +22,9 @@ export const AUDIT_ACTIONS = {
   class_review_delete: "수업 평가 삭제",
   class_review_template_save: "수업 평가 문항 편집",
   class_review_template_delete: "수업 평가 문항 세트 삭제",
+  // 운영 스크립트(scripts/staff-access/create-test-staff)가 직접 POST하는 액션 — 서버 액션이 아니라
+  // logAction 스캔에 안 잡혀 라벨 없이 영문 "staff_create"가 화면에 그대로 떠 있었다(2026-08-20).
+  staff_create: "직원 계정 생성",
   staff_intake_token_create: "직원 등록 QR 생성",
   staff_intake_token_toggle: "직원 등록 QR 열기·닫기",
   staff_intake_token_delete: "직원 등록 QR 삭제",
@@ -244,6 +247,11 @@ export async function getAuditLogsPage(
       .filter(([, label]) => normalizeSearch(label).includes(lcTerm))
       .map(([key]) => key);
     if (actionKeys.length > 0) ors.push(`action.in.(${actionKeys.join(",")})`);
+    // 실행자도 같은 규약 — 화면엔 "시스템 · 수업 평가 권한 부여"로 보이는데 DB엔 `system:grant-class-review`라
+    // 보이는 대로 검색하면 0건이 나온다(액션 라벨 → 키 역인덱스와 같은 결).
+    const sysActors = systemActorMatches(term);
+    if (sysActors.allSystem) ors.push(`actor_name.ilike.${SYSTEM_ACTOR_PREFIX}*`);
+    else for (const name of sysActors.names) ors.push(`actor_name.eq.${name}`);
     const studentIds = (stuRes.data ?? []).map((r) => r.id as string);
     if (studentIds.length > 0) {
       ors.push(`metadata->>studentId.in.(${studentIds.join(",")})`);

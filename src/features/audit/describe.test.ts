@@ -1,5 +1,13 @@
 import { describe, it, expect } from "vitest";
-import { auditDetail, auditTargetName, collectAuditNameIds, AUDIT_TYPE_LABEL } from "./describe";
+import {
+  auditActorName,
+  auditDetail,
+  auditTargetLabel,
+  auditTargetName,
+  collectAuditNameIds,
+  systemActorMatches,
+  AUDIT_TYPE_LABEL,
+} from "./describe";
 
 const SID = "11111111-2222-3333-4444-555555555555";
 const UID = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
@@ -109,10 +117,24 @@ describe("auditDetail — 액션별 한글 상세", () => {
     expect(auditDetail("class_update", { changed: ["강의실"] }, ctx())).toBe("변경: 강의실");
   });
 
-  it("미등록 액션 폴백: uuid는 이름 해석(실패 시 숨김), 나머지는 키: 값", () => {
-    expect(auditDetail("future_action", { foo: "bar", id: SID }, ctx())).toBe("foo: bar");
-    expect(auditDetail("future_action", { foo: "bar", id: SID }, ctx({ [SID]: "이윤건" }))).toBe("foo: bar · 이윤건");
+  it("🔴 미등록 액션 폴백은 영문 키·값을 내보내지 않는다(2026-08-20 정책 변경)", () => {
+    // 종전엔 `foo: bar`를 그대로 뱉었다 — 감사 화면 raw 코드 노출의 뿌리. 이제 모르는 키는 숨긴다
+    // (원문 JSON은 뷰어 title 툴팁이 항상 보존).
+    expect(auditDetail("future_action", { foo: "bar", id: SID }, ctx())).toBeNull();
+    expect(auditDetail("future_action", { foo: "bar", id: SID }, ctx({ [SID]: "이윤건" }))).toBe("이윤건");
     expect(auditDetail("future_action", null, ctx())).toBeNull();
+  });
+
+  it("폴백이라도 사람이 읽는 값(한글 문장·날짜·이메일·공통 키)은 살린다", () => {
+    // 무조건 버리는 게 아니다 — 뜻이 분명한 공통 키는 한글 라벨로, 한글 문장·날짜는 키 없이 값만.
+    expect(auditDetail("future_action", { note: "원장 지시로 임시 개방", slot: "observer" }, ctx())).toBe(
+      "원장 지시로 임시 개방",
+    );
+    expect(auditDetail("future_action", { date: "2026-08-19", enabled: true }, ctx())).toBe("날짜 2026-08-19");
+    expect(auditDetail("future_action", { whateverKey: "2026-08-19" }, ctx())).toBe("2026-08-19");
+    expect(auditDetail("future_action", { email: "a@x.com" }, ctx())).toBe("a@x.com");
+    expect(auditDetail("future_action", { className: "중등M 중2" }, ctx())).toBe("중등M 중2");
+    expect(auditDetail("future_action", { reason: "이사" }, ctx())).toBe("사유 이사");
   });
 });
 
@@ -242,7 +264,288 @@ describe("AUDIT_TYPE_LABEL", () => {
       "attendance", "lesson_report", "approval_document", "enrollment_consultations", "document",
       // 2026-08-19 셔틀(0225a) — targetType "shuttle".
       "shuttle",
+      // 2026-08-20 캘린더(0218a) — 일정 삭제 로그의 대상이 영문 "calendar_event"로 떠 있었다.
+      // ⚠️ 이 수기 목록은 늘 늦는다 — 전수 스캔 가드는 actions-registry.test.ts("대상 유형 라벨")에 있다.
+      "calendar_event",
+      "calendar_tag",
     ];
     for (const t of usedTypes) expect(AUDIT_TYPE_LABEL[t], t).toBeTruthy();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────────────
+// 2026-08-20 원장 지시("알기 쉽게 변경") — 감사 화면에 영문 키·enum·스크립트 식별자가 날것으로 떴다.
+// 아래 metadata는 **실 DB 표본**이다(추측 아님). 여기 없는 필드를 지어내지 말 것.
+// ─────────────────────────────────────────────────────────────────────────────────────
+const DOC = "12121212-3434-5656-7878-909090909090";
+const DOC2 = "21212121-4343-6565-8787-090909090909";
+const CID = "99999999-8888-7777-6666-555555555555";
+const names = { [SID]: "김승언", [UID]: "김강사", [CID]: "초등M 초4 BS1J" };
+
+describe("auditDetail — 2026-08-20 신규 case (실데이터 metadata 표본)", () => {
+  it("수업 평가: slot·observerMode·areas/items를 영문으로 내보내지 않는다", () => {
+    expect(auditDetail("class_review_submit", { slot: "observer", docId: DOC, answered: 25 }, ctx())).toBe(
+      "관찰자 채점 · 문항 25개 응답",
+    );
+    expect(auditDetail("class_review_submit", { slot: "self", docId: DOC, answered: 25 }, ctx())).toBe(
+      "본인 채점 · 문항 25개 응답",
+    );
+    expect(
+      auditDetail(
+        "class_review_create",
+        { date: "2026-08-19", assigned: 3, template: "EiE 수업평가", observerMode: "assigned", observerLimit: 3 },
+        ctx(),
+      ),
+    ).toBe("2026-08-19 · 평가자 지정 3명 · 문항 「EiE 수업평가」");
+    // 선착순 모드는 **정원**이 읽을 값이다(지정 인원이 아니라).
+    expect(
+      auditDetail(
+        "class_review_create",
+        { date: "2026-08-19", assigned: 0, template: "기본 문항", observerMode: "open", observerLimit: 3 },
+        ctx(),
+      ),
+    ).toBe("2026-08-19 · 선착순 3명 · 문항 「기본 문항」");
+    expect(auditDetail("class_review_template_save", { areas: 6, items: 31, created: false }, ctx())).toBe(
+      "문항 세트 수정 · 영역 6개 · 문항 31개",
+    );
+    expect(auditDetail("class_review_template_save", { areas: 6, items: 31, created: true }, ctx())).toBe(
+      "문항 세트 생성 · 영역 6개 · 문항 31개",
+    );
+    expect(auditDetail("class_review_delete", { docId: DOC }, ctx())).toBeNull();
+  });
+
+  it("전자결재: decision enum은 approvals/types 라벨로, 양식마다 다른 metadata를 견딘다", () => {
+    expect(
+      auditDetail("approval_decide", { step: 1, docId: DOC, proxy: false, decision: "final", deferred: 0 }, ctx()),
+    ).toBe("전결 · 1번째 결재란");
+    expect(
+      auditDetail("approval_decide", { step: 2, docId: DOC, proxy: true, decision: "approved", deferred: 1 }, ctx()),
+    ).toBe("승인 · 2번째 결재란 · 대결 · 앞 단계 1칸을 후결로 넘김");
+    expect(auditDetail("approval_decide", { docId: DOC, postApproval: true }, ctx())).toBe("후결 확인");
+    // 휴가 양식
+    expect(
+      auditDetail(
+        "approval_submit",
+        { days: 1, period: "2026-01-02 ~ 2027-01-01", granted: 100, remaining: 99 },
+        ctx(),
+      ),
+    ).toBe("1일 사용 · 연차 100일 중 잔여 99일 · 기간 2026-01-02 ~ 2027-01-01");
+    // 지출·수입결의서 — ⚠️ 없는 필드를 "없음"으로 지어내지 않는다
+    expect(auditDetail("approval_submit", { amount: 120000, spendDate: "2026-08-10", category: "운영비" }, ctx())).toBe(
+      "120,000원 · 지출일 2026-08-10 · 운영비",
+    );
+    expect(auditDetail("approval_submit", { amount: 50000, incomeDate: "2026-08-11", category: "교재 판매" }, ctx())).toBe(
+      "50,000원 · 수입일 2026-08-11 · 교재 판매",
+    );
+    // 품의서는 auditMetadata 자체가 없다 → 상세 없음(대상 열이 제목을 보여준다)
+    expect(auditDetail("approval_submit", null, ctx())).toBeNull();
+    expect(auditDetail("approval_withdraw", null, ctx())).toBeNull();
+  });
+
+  it("보강 빼기: 과목은 학원설정 라벨, 지워진 것만 적는다", () => {
+    expect(
+      auditDetail(
+        "makeup_remove",
+        {
+          date: "2026-08-18",
+          classId: CID,
+          subject: "math",
+          studentId: SID,
+          deletedReports: 0,
+          attendanceRemoved: true,
+          rolledBackProgress: 0,
+        },
+        ctx(names),
+      ),
+    ).toBe("초등M 초4 BS1J · 2026-08-18 · 수학 · 출결 보강 칸 삭제");
+    expect(
+      auditDetail(
+        "makeup_remove",
+        { date: "2026-08-18", classId: CID, subject: "english", studentId: SID, deletedReports: 2, attendanceRemoved: false, rolledBackProgress: 1 },
+        ctx(names),
+      ),
+    ).toBe("초등M 초4 BS1J · 2026-08-18 · 영어 · 수업보고서 2건 삭제 · 진도 1건 되돌림");
+  });
+
+  it("세션 기간·상담 병합: 대상 열이 못 보여주는 것만 덧붙인다", () => {
+    expect(auditDetail("operating_periods_save", { year: 2026, count: 12, classId: null, subjectKey: "english" }, ctx())).toBe(
+      "세션 12건",
+    );
+    expect(auditDetail("operating_periods_save", { year: 2026, count: 4, classId: CID, subjectKey: "math" }, ctx(names))).toBe(
+      "반 초등M 초4 BS1J · 세션 4건",
+    );
+    expect(
+      auditDetail(
+        "consultation_merge",
+        { winnerId: DOC, loserIds: [DOC2], discarded: [{ field: "연락처", values: ["010-0000-0000"] }], result: {} },
+        ctx(),
+      ),
+    ).toBe("상담 1건 병합 · 버린 값: 연락처");
+  });
+
+  it("직원 등록·QR: 역할은 한글, 이메일은 그대로(staff_email_change 선례)", () => {
+    expect(auditDetail("staff_intake_token_create", { role: "teacher" }, ctx())).toBe("기본 역할 강사");
+    expect(auditDetail("staff_intake_token_create", { action: "rotate" }, ctx())).toBe(
+      "새 링크 재발급(옛 링크 폐기)",
+    );
+    expect(auditDetail("staff_intake_token_toggle", { action: "close" }, ctx())).toBe("링크 닫기");
+    expect(
+      auditDetail(
+        "staff_create_from_resume",
+        { role: "teacher", email: "kim@x.com", userId: UID, resumeId: DOC, autoEmail: true },
+        ctx(),
+      ),
+    ).toBe("강사 · kim@x.com · 아이디 자동 생성");
+    expect(
+      auditDetail(
+        "staff_create_from_intake",
+        { role: "teacher", email: "a@x.com", userId: UID, resumeId: DOC, tokenName: "QA 테스트 QR" },
+        ctx(),
+      ),
+    ).toBe("강사 · a@x.com · QR 「QA 테스트 QR」");
+    // 스크립트가 남긴 행(AUDIT_ACTIONS 라벨도 함께 추가됐다)
+    expect(
+      auditDetail(
+        "staff_create",
+        { via: "script", email: "t@x.com", purpose: "계약서 PDF 테스트(원장 지시 2026-08-03)" },
+        ctx(),
+      ),
+    ).toBe("t@x.com · 계약서 PDF 테스트(원장 지시 2026-08-03)");
+    expect(auditDetail("staff_delete", { via: "script", docs: 3 }, ctx())).toBe("문서 3건 함께 삭제");
+    expect(auditDetail("staff_link_from_resume", { resumeId: DOC, userId: UID, filled: ["bankName", "phone"] }, ctx())).toBe(
+      "이력서에서 항목 2개 채움",
+    );
+    expect(auditDetail("staff_roster_import", { createdIds: [UID], sheetTab: "2026 직원명부" }, ctx())).toBe(
+      "시트 「2026 직원명부」",
+    );
+  });
+
+  it("owner_settings_update: 스크립트가 남긴 한글 note를 버리지 않는다", () => {
+    // 종전엔 section만 봐서 스크립트 행이 통째로 "설정 저장"으로 뭉갰다(원장 제보 줄의 마지막 사례).
+    const note = "수업 평가(class_review) 개방 — 원장직급(master) + 개인 이승엽·정유진(원장 지시 2026-08-13 테스트)";
+    expect(
+      auditDetail("owner_settings_update", { menu: "class_review", note, roles: ["master"], users: [], revoke: false }, ctx()),
+    ).toBe(note);
+    expect(
+      auditDetail("owner_settings_update", { via: "script:narrow-staff-menu", grants: ["설현", "이승엽", "김예원", "오은진", "엄소윤"] }, ctx()),
+    ).toBe("개인 예외 5명 (설현, 이승엽, 김예원 외)");
+    // section이 있으면 종전과 동일(회귀 방지)
+    expect(auditDetail("owner_settings_update", { section: "permissions" }, ctx())).toBe(
+      "「역할별 메뉴 권한」 설정 저장",
+    );
+  });
+});
+
+/**
+ * 🔴 다음 사람이 case를 빼먹어도 걸리게 — **실 DB 표본 전수**를 auditDetail에 통과시키고
+ * 결과에 `slot:`·`decision:` 같은 **영문 키 패턴**과 매핑 대상 **영문 enum 값**이 없음을 검사한다.
+ */
+describe("🔴 감사 상세에 영문이 새지 않는다(실표본 전수)", () => {
+  const KEY_LEAK = /[A-Za-z][A-Za-z0-9_]*:\s/;
+  const SAMPLES: Array<{ action: string; meta: Record<string, unknown> | null; banned?: string[] }> = [
+    { action: "class_review_submit", meta: { slot: "observer", docId: DOC, answered: 25 }, banned: ["observer", "answered"] },
+    { action: "class_review_submit", meta: { slot: "self", docId: DOC, answered: 25 }, banned: ["self", "answered"] },
+    {
+      action: "class_review_create",
+      meta: { date: "2026-08-19", assigned: 3, template: "EiE 수업평가", observerMode: "assigned", observerLimit: 3 },
+      banned: ["assigned", "observerMode", "observerLimit"],
+    },
+    { action: "class_review_template_save", meta: { areas: 6, items: 31, created: false }, banned: ["areas", "items", "created", "false"] },
+    { action: "class_review_delete", meta: { docId: DOC } },
+    { action: "class_review_template_delete", meta: { templateId: DOC } },
+    { action: "approval_decide", meta: { step: 1, docId: DOC, proxy: false, decision: "final", deferred: 0 }, banned: ["final", "decision", "proxy", "deferred", "step"] },
+    { action: "approval_decide", meta: { docId: DOC, postApproval: true }, banned: ["postApproval", "true"] },
+    { action: "approval_submit", meta: { days: 1, period: "2026-01-02 ~ 2027-01-01", granted: 100, remaining: 99 }, banned: ["days", "granted", "remaining", "period"] },
+    { action: "approval_submit", meta: { amount: 120000, spendDate: "2026-08-10", category: "운영비" }, banned: ["amount", "spendDate", "category"] },
+    { action: "approval_withdraw", meta: null },
+    { action: "approval_comment", meta: { docId: DOC } },
+    { action: "approval_comment_delete", meta: { commentId: DOC2, docId: DOC } },
+    {
+      action: "makeup_remove",
+      meta: { date: "2026-08-18", classId: CID, subject: "math", studentId: SID, deletedReports: 0, attendanceRemoved: true, rolledBackProgress: 0 },
+      banned: ["math", "subject", "attendanceRemoved", "deletedReports", "rolledBackProgress", "true"],
+    },
+    { action: "operating_periods_save", meta: { year: 2026, count: 12, classId: null, subjectKey: "english" }, banned: ["english", "subjectKey", "count", "year"] },
+    { action: "consultation_merge", meta: { winnerId: DOC, loserIds: [DOC2], discarded: [{ field: "연락처", values: ["x"] }], result: {} }, banned: ["winnerId", "loserIds", "discarded", "result"] },
+    { action: "staff_intake_token_create", meta: { role: "teacher" }, banned: ["teacher", "role"] },
+    { action: "staff_intake_token_create", meta: { action: "rotate" }, banned: ["rotate"] },
+    { action: "staff_intake_token_toggle", meta: { action: "close" }, banned: ["close"] },
+    { action: "staff_create", meta: { via: "script", email: "t@x.com", purpose: "계약서 PDF 테스트" }, banned: ["via", "purpose"] },
+    { action: "staff_create_from_resume", meta: { role: "teacher", email: "kim@x.com", userId: UID, resumeId: DOC, autoEmail: true }, banned: ["teacher", "autoEmail", "resumeId"] },
+    { action: "staff_create_from_intake", meta: { role: "teacher", email: "a@x.com", userId: UID, resumeId: DOC, tokenName: "QA 테스트 QR" }, banned: ["teacher", "tokenName", "resumeId"] },
+    { action: "staff_link_from_resume", meta: { resumeId: DOC, userId: UID, filled: ["bankName", "phone"] }, banned: ["bankName", "filled"] },
+    { action: "staff_roster_import", meta: { createdIds: [UID], sheetTab: "2026 직원명부" }, banned: ["sheetTab", "createdIds"] },
+    { action: "staff_roster_import_revert", meta: { revertedLog: "C:/eywa/scripts/logs/import-2026.json" }, banned: ["revertedLog", "json"] },
+    { action: "teacher_view_impersonate", meta: { targetUserId: UID }, banned: ["targetUserId"] },
+    { action: "resume_view_unlock", meta: { resumeId: DOC }, banned: ["resumeId"] },
+    { action: "shuttle_rider_remove", meta: { riderId: DOC }, banned: ["riderId"] },
+    { action: "shuttle_rider_move", meta: { riderId: DOC, toRunStopId: DOC2 }, banned: ["riderId", "toRunStopId"] },
+    { action: "shuttle_stop_archive", meta: { stopId: DOC }, banned: ["stopId"] },
+    { action: "shuttle_vehicle_create", meta: { vehicleId: DOC }, banned: ["vehicleId"] },
+    { action: "shuttle_run_delete", meta: { runId: DOC }, banned: ["runId"] },
+    { action: "shuttle_run_stop_add", meta: { runId: DOC, stopId: DOC2 }, banned: ["runId", "stopId"] },
+    { action: "shuttle_boarding_clear", meta: { boardingId: DOC }, banned: ["boardingId"] },
+    { action: "intake_token_create", meta: {} },
+    { action: "calendar_event_create", meta: {} },
+    { action: "calendar_event_update", meta: {} },
+    { action: "calendar_event_delete", meta: {} },
+    { action: "classroom_create", meta: {} },
+    { action: "classroom_archive", meta: {} },
+    { action: "notice_popup_create", meta: {} },
+    { action: "owner_settings_update", meta: { via: "script:narrow-staff-menu", grants: ["설현", "이승엽"] }, banned: ["via", "grants", "script:narrow-staff-menu"] },
+  ];
+
+  for (const s of SAMPLES) {
+    it(`${s.action} — 영문 키·enum 미노출`, () => {
+      const out = auditDetail(s.action, s.meta, ctx(names));
+      if (out === null) return; // 표기할 상세 없음 = 화면엔 "—" (영문 노출 아님)
+      expect(out, `영문 "키: 값"이 그대로 새어나옴 → ${out}`).not.toMatch(KEY_LEAK);
+      for (const bad of s.banned ?? []) {
+        expect(out, `영문 원문 "${bad}"이 그대로 새어나옴 → ${out}`).not.toContain(bad);
+      }
+    });
+  }
+});
+
+describe("auditTargetLabel — '대상' 열 한글화", () => {
+  const tctx = { subjectLabel: (key: string) => ({ math: "수학", english: "영어" })[key] ?? key };
+
+  it("tenant_settings의 설정 섹션 키·과목 키를 한글로(원장 제보 '학원 설정permissions')", () => {
+    expect(auditTargetLabel("tenant_settings", "permissions", tctx)).toBe("역할별 메뉴 권한");
+    expect(auditTargetLabel("tenant_settings", "english", tctx)).toBe("영어");
+    // 설정에서 지운 과목처럼 labelOf가 키를 되돌려주면 **원문 그대로**(지어내지 않는다)
+    expect(auditTargetLabel("tenant_settings", "subject_9", tctx)).toBe("subject_9");
+  });
+
+  it("🔴 사람·반·문서 이름은 건드리지 않는다(바꾸면 실제 이름이 사라진다)", () => {
+    expect(auditTargetLabel("user", "이다교", tctx)).toBe("이다교");
+    expect(auditTargetLabel("class", "초등M 초4 BS1J", tctx)).toBe("초등M 초4 BS1J");
+    expect(auditTargetLabel("tenant_settings", "학원 프로필·브랜드", tctx)).toBe("학원 프로필·브랜드");
+    expect(auditTargetLabel(null, null, tctx)).toBeNull();
+  });
+
+  it("이름을 못 구해 실려온 uuid는 접는다(approval_withdraw·classroom_delete 폴백)", () => {
+    expect(auditTargetLabel("approval_document", DOC, tctx)).toBeNull();
+    expect(auditTargetLabel("classroom", CID, tctx)).toBeNull();
+  });
+});
+
+describe("auditActorName — '실행자' 열의 스크립트 식별자", () => {
+  it("system:* 를 한글로, 사람 이름은 그대로", () => {
+    expect(auditActorName("system:grant-class-review")).toBe("시스템 · 수업 평가 권한 부여");
+    expect(auditActorName("system:narrow-staff-menu")).toBe("시스템 · 직원관리 권한 조정");
+    expect(auditActorName("박소선")).toBe("박소선");
+    expect(auditActorName(null)).toBeNull();
+  });
+
+  it("🔴 미등록 system:* 도 접두를 그대로 내보내지 않는다", () => {
+    expect(auditActorName("system:some-future-script")).toBe("시스템 스크립트");
+    expect(auditActorName("system:some-future-script")).not.toContain("system:");
+  });
+
+  it("보이는 한글로 검색이 된다(액션 라벨 역인덱스와 같은 규약)", () => {
+    expect(systemActorMatches("수업 평가 권한").names).toEqual(["system:grant-class-review"]);
+    expect(systemActorMatches("시스템").allSystem).toBe(true);
+    expect(systemActorMatches("김승언")).toEqual({ names: [], allSystem: false });
   });
 });
