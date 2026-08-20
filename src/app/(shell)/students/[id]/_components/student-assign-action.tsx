@@ -11,11 +11,22 @@ import {
 export function StudentAssignAction({
   student,
   classes,
+  blockedReason,
 }: {
   student: AssignDialogStudent;
   classes: AssignDialogClass[];
+  /**
+   * 이 학생 상태로는 배정할 수 없을 때의 **한글 이유**(휴원·퇴원·상담 단계).
+   * 🔴 버튼만 감추면 "왜 못 하는지"를 알 수 없다 — 이유와 할 일을 그 자리에 그대로 적는다.
+   *    ⚠️ 화면 조건은 게이트가 아니다: 진짜 거절은 서버 `createEnrollment`가 한다(#77, 둘 다 필요).
+   */
+  blockedReason?: string | null;
 }) {
   const [open, setOpen] = useState(false);
+
+  if (blockedReason) {
+    return <p className="text-amber max-w-xs text-right text-xs">{blockedReason}</p>;
+  }
 
   return (
     <>

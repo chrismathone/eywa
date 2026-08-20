@@ -9,6 +9,7 @@ import {
 } from "@/features/students/server/queries";
 import { getClassesList } from "@/features/classes/server/queries";
 import { getTenantSettings } from "@/features/owner/server/queries";
+import { enrollmentAssignBlockReason } from "@/features/enrollments/eligibility";
 import { buildSubjectMaps, type SubjectMaps } from "@/features/owner/subjects";
 import { settingsToPeriodsConfig } from "@/features/timetable/lib/periods";
 import type { AssignDialogClass } from "@/components/enrollment-assign-dialog";
@@ -74,6 +75,10 @@ export async function ClassesTab({
   const scheduled = rows.filter((r) => !hasEnded(r) && r.startDate > today);
   const past = rows.filter((r) => hasEnded(r));
 
+  // 🔴 휴원·퇴원·상담 단계 학생에겐 '반 배정' 대신 **이유**를 보여준다 — 서버(createEnrollment)가
+  //    같은 판정으로 거절하므로, 버튼만 감추면 "왜 못 하는지"를 알 수 없다(#77: 둘 다 필요).
+  const assignBlockedReason = enrollmentAssignBlockReason(student.status);
+
   const activeClassIds = new Set(current.map((r) => r.classId));
   // 반별 기존 수강 기간(지난 것 포함) — 배정 다이얼로그가 DB GiST(같은 학생·같은 반 기간 겹침)를
   // **저장 전에** 감지해 알려주는 재료. 없으면 "배정 예정"인 반을 골라도 저장 순간에야 거부됐다
@@ -120,6 +125,7 @@ export async function ClassesTab({
             <StudentAssignAction
               student={{ id: student.id, name: student.name, grade: student.grade }}
               classes={candidateClasses}
+              blockedReason={assignBlockedReason}
             />
           ) : undefined
         }

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  enrollmentAssignBlockReason,
   enrollmentPeriodsOverlap,
   isEnrollmentActiveOn,
   isEnrollmentEndedOn,
@@ -71,5 +72,40 @@ describe("enrollmentPeriodsOverlap — GiST 제약과 같은 반열림 판정", 
 
   it("완전히 떨어진 기간은 false", () => {
     expect(enrollmentPeriodsOverlap("2026-03-01", "2026-06-30", "2026-07-01", "2026-08-31")).toBe(false);
+  });
+});
+
+describe("enrollmentAssignBlockReason — 어떤 학생 상태에 반을 배정할 수 있나", () => {
+  it("재원 학생만 배정 가능", () => {
+    expect(enrollmentAssignBlockReason("enrolled")).toBeNull();
+  });
+
+  it("휴원 학생은 거절 — 이유와 **할 일**을 함께 말한다", () => {
+    const reason = enrollmentAssignBlockReason("on_hold");
+    expect(reason).toContain("휴원");
+    expect(reason).toContain("재원으로 되돌린 뒤");
+  });
+
+  it("퇴원 학생은 거절", () => {
+    expect(enrollmentAssignBlockReason("withdrawn")).toContain("퇴원");
+  });
+
+  it("상담 단계(예비·상담완료)는 거절 — 먼저 재원으로 전환해야 한다", () => {
+    expect(enrollmentAssignBlockReason("prospect")).toContain("재원");
+    expect(enrollmentAssignBlockReason("consulted")).toContain("재원");
+  });
+
+  it("이유 문구엔 raw enum(withdrawn·on_hold)이 새지 않는다", () => {
+    for (const s of ["on_hold", "withdrawn", "prospect", "consulted"]) {
+      const reason = enrollmentAssignBlockReason(s) ?? "";
+      expect(reason).not.toMatch(/on_hold|withdrawn|prospect|consulted|enrolled/);
+    }
+  });
+
+  it("모르는 상태·빈 값은 fail-open(배정 허용) — 상태 enum이 늘었다고 배정이 통째로 막히면 더 나쁘다", () => {
+    expect(enrollmentAssignBlockReason(null)).toBeNull();
+    expect(enrollmentAssignBlockReason(undefined)).toBeNull();
+    expect(enrollmentAssignBlockReason("")).toBeNull();
+    expect(enrollmentAssignBlockReason("graduated_2027")).toBeNull();
   });
 });

@@ -7,6 +7,7 @@ import { accessLevelTenant, canManageTenant } from "@/lib/auth/perm-matrix";
 import { kstToday } from "@/lib/date-kst";
 import { notifyClassAssignment } from "@/features/notifications/server/notify";
 import { logAction } from "@/features/audit/server/log";
+import { enrollmentAssignBlockReason } from "../eligibility";
 
 export type CreateEnrollmentState =
   | { error?: string; enrollmentId?: string }
@@ -149,8 +150,20 @@ export async function createEnrollment(
 
   // 반이 본 테넌트 것인지 검증(RLS로 스코프 — 타 테넌트 반 id면 null). enrollments RLS가 class_id의
   // 테넌트를 검증하지 않아 조작된 foreign class로 유령 수강이 생기는 것을 막는다(적대리뷰).
-  const { data: klass } = await supabase.from("classes").select("id").eq("id", classId).maybeSingle();
+  // 학생 상태도 함께 읽는다 — 서로 의존하지 않는 조회라 병렬(B4).
+  const [{ data: klass }, { data: stu }] = await Promise.all([
+    supabase.from("classes").select("id").eq("id", classId).maybeSingle(),
+    supabase.from("students").select("status").eq("id", studentId).maybeSingle(),
+  ]);
   if (!klass) return { error: "반을 찾을 수 없습니다" };
+  if (!stu) return { error: "학생을 찾을 수 없습니다" };
+
+  // 🔴 **재원 학생만 배정한다**(원장 2026-08-20 "휴원 해결"). 종전엔 학생 상태를 아예 안 봐서, 휴원
+  //    학생에게 반을 배정하면 새 수강의 on_hold가 기본값 false로 들어가 **학생은 휴원인데 그 수업만 활성**이
+  //    됐다(로스터는 전부 수강의 on_hold로 거르고 학생 상태는 안 본다 → 학생목록엔 휴원인 아이가
+  //    출석부엔 그대로 떴다). 화면(학생 상세 '수업' 탭)도 같은 이유를 보여주지만, **게이트는 여기다**(#77).
+  const blocked = enrollmentAssignBlockReason(stu.status as string | null);
+  if (blocked) return { error: blocked };
 
   // 수업의 운영 요일 — 선택값을 그 안으로 좁히고, "전 요일 선택"이면 []로 정규화(분리등원 아님).
   const attendanceDays = await normalizeAttendanceDays(supabase, classId, pickedDays);
