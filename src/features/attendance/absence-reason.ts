@@ -67,6 +67,7 @@ const SCHOOL_WORDS = [
  */
 const SICK_WORDS = [
   "병결",
+  "병가",
   "병원",
   "한의원",
   "진료",
