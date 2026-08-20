@@ -23,6 +23,10 @@ import { canAccess, type AccessMatrix, type MenuKey } from "@/lib/permissions";
  * teacher_onescreen(수업 마감)은 ROLE_LOCKED라 항상 표시.
  */
 const LINKS: { href: string; label: string; icon: EywaIconName; menu: MenuKey }[] = [
+  // 출결 모드(2026-08-20) — 내 반 오늘 출결만 터치 몇 번으로. 원장 지시: 원스크린 상단 바에만 두니
+  //   *"완전 안보인다"* → 강사의 주 진입로인 이 드롭다운에도 올린다(홈 바로 아래).
+  //   ⚠️ 권한 키는 출석부와 같은 `attendance` — 새 메뉴 키를 만들면 auth_menu_access DEFAULTS 누락으로 잠긴다.
+  { href: "/attendance/quick", label: "출결 모드", icon: MENU_ICON.attendance, menu: "attendance" },
   { href: "/onescreen", label: "수업 마감 (원스크린)", icon: MENU_ICON.teacher_onescreen, menu: "teacher_onescreen" },
   // English Class Sheet — 영어 반별 주간 수업계획서/출석부(scoped: 담당 반만. requireEcsClassAccess 게이트).
   { href: "/ecs", label: "영어 강사 시트", icon: MENU_ICON.ecs, menu: "ecs" },

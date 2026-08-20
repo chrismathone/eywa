@@ -146,7 +146,7 @@ export function StripSlot({
         </Link>
         {asked ? (
           <span className="text-text-faint text-center text-xs font-bold whitespace-nowrap">
-            데스크 요청함
+            데스크에 요청함
           </span>
         ) : (
           <button
@@ -156,7 +156,7 @@ export function StripSlot({
             title="미입력 학생의 등원 확인을 데스크에 요청합니다"
             className="border-line text-text-dim hover:bg-bg-soft rounded-lg border px-2.5 py-1 text-xs whitespace-nowrap disabled:opacity-60"
           >
-            데스크 확인
+            데스크에 확인 요청
           </button>
         )}
       </div>
