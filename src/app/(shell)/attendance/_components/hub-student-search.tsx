@@ -91,7 +91,13 @@ export function HubStudentSearch({
   return (
     // ⚠️ 라벨 칸('학생')을 두지 않는다 — 시트 검색과 같은 모양이고, 폰에서 툴바가 한 줄 더 감기는 것을
     //    막는다(placeholder·aria-label이 이미 무엇을 찾는지 말한다).
-    <div className="flex items-center gap-1.5">
+    // 🔴 `sm:relative` = 결과 패널의 **기준점**(넓은 화면만). 예전엔 툴바(relative)에 붙어 툴바 **왼쪽
+    //    끝**에 떴는데 입력칸은 툴바 오른쪽 끝이라 "친 자리와 답이 뜨는 자리가 화면 반대편"이었다
+    //    (원장 제보 2026-08-20).
+    // ⚠️ 좁은 화면에선 기준점을 **두지 않는다** — 그러면 패널이 툴바 기준으로 돌아가 종전처럼 툴바 왼쪽에
+    //    붙는다. 여기서도 입력칸에 붙이면 460px 패널이 입력칸 오른쪽 끝에서 왼쪽으로 뻗어 **화면 밖으로**
+    //    나간다(툴바가 감기면 입력칸이 줄 왼쪽에 설 수 있다).
+    <div className="flex items-center gap-1.5 sm:relative">
       <StudentSearchBox
         value={query}
         onChange={run}
@@ -99,8 +105,10 @@ export function HubStudentSearch({
         inputWidth="w-[116px]"
       />
       {open ? (
-        // 툴바가 `relative`라 이 패널은 툴바 왼쪽 아래에 붙는다(안내 패널과 같은 방식) — 툴바 줄 수 불변.
-        <div className="border-line bg-card absolute top-full left-4 z-40 mt-1 w-[min(460px,calc(100vw-3rem))] rounded-2xl border p-2 shadow-lg">
+        // 🔑 넓은 화면 = **입력칸 바로 아래**(위 `sm:relative`가 기준, `right-0`으로 칸 오른쪽 끝에 맞춤)
+        //    · 좁은 화면 = 종전대로 툴바 왼쪽(`left-4` = 툴바 px-4). 어느 쪽이든 툴바 줄 수는 그대로다.
+        // ⚠️ `sm:left-auto`를 빼면 두 값이 함께 걸려 패널이 좌우로 늘어난다(폭 지정이 무시된다).
+        <div className="border-line bg-card absolute top-full left-4 z-40 mt-1 w-[min(460px,calc(100vw-3rem))] rounded-2xl border p-2 shadow-lg sm:left-auto sm:right-0">
           {/* 🔴 결과가 없는 채로 다시 묻는 중이면 **"없습니다"라고 말하지 않는다** — 방금 친 말의 답이
               아직 안 왔을 뿐인데 못 찾았다고 하면 사람이 검색을 그만둔다. */}
           {loading && (!result || result.hits.length === 0) ? (
