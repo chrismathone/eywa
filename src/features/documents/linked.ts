@@ -4,6 +4,7 @@
 // "전체 문서"에는 섞지 않는다(대량 링크 행이 서식 목록을 도배하는 것 방지) — 전용 폴더에서만.
 // 새 연동 소스 추가 = 여기 등록 + server/linked-queries.ts에 조회 분기. ⚠️ server-only 금지 [[#61]].
 
+import { textbookOrderSettled } from "@/features/billing/textbook-progress";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 
 export const LINKED_SOURCES = [
@@ -38,8 +39,9 @@ const KRW = new Intl.NumberFormat("ko-KR");
 const won = (n: number) => `${KRW.format(n)}원`;
 
 // 교재 진행 라벨 — 하단 체크(등록·납부·주문) 기준. 3체크 전부면 완료, 아니면 첫 미완 단계 "대기".
+// ⚠️ 완료 판정은 textbookOrderSettled 단일 소스(사본을 두면 새 상태를 안 따라온다 — 2026-08-20).
 function textbookProgressLabel(o: { registered: boolean; paid: boolean; ordered: boolean }): string {
-  if (o.registered && o.paid && o.ordered) return "완료";
+  if (textbookOrderSettled(o)) return "완료";
   if (!o.registered) return "등록 대기";
   if (!o.paid) return "납부 대기";
   return "주문 대기";
