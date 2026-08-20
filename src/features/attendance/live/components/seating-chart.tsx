@@ -18,6 +18,12 @@ import { EmptyState } from "@/components/empty-state";
 import { CalendarDays } from "@/components/icons/eywa-icon-compat";
 import { SearchScopeChip, StudentSearchBox } from "@/features/attendance/components/student-search-box";
 import {
+  SubjectFilterChips,
+  SubjectScopeChip,
+  useSubjectFilter,
+} from "@/features/attendance/components/subject-filter-chips";
+import { matchesSubjectFilter } from "@/features/attendance/live/view-prefs";
+import {
   emptySearchMessage,
   isSearchActive,
   matchesStudentSearch,
@@ -46,13 +52,21 @@ const BAND_HINT: Record<NowBand, string> = {
   past: "이미 끝났습니다 — 미입력이 남은 반은 앰버로 표시하고 접지 않습니다.",
 };
 
-export function SeatingChart({ board }: { board: LiveBoard }) {
+export function SeatingChart({
+  board,
+  /** 계정에 저장된 과목 필터(2026-08-20) — 검색과 달리 **다음 방문에도 남는다**. */
+  initialSubject = "all",
+}: {
+  board: LiveBoard;
+  initialSubject?: string;
+}) {
   /**
    * 학생 검색(원장 2026-08-19) — **클라 필터**다(서버 왕복 0, URL·계정 저장 없음).
    * 화면을 떠나면 사라진다: 다음에 열었을 때 필터가 걸려 있으면 "오늘 수업이 하나뿐"으로 읽힌다.
    */
   const [query, setQuery] = useState("");
   const searching = isSearchActive(query);
+  const subject = useSubjectFilter(initialSubject);
   const slots = board.teachers.flatMap((t) => t.slots);
   const classes = foldSeating(slots);
   if (classes.length === 0) {
@@ -65,9 +79,19 @@ export function SeatingChart({ board }: { board: LiveBoard }) {
     );
   }
   // 🔴 요약은 **하루 전체**가 분모다. 화면을 시간으로 나눈다고 "입력 12/240"이 "1/8"로 줄면
-  //    그날 얼마나 남았는지를 아무도 못 본다(집계 분모 불변 규칙).
+  //    그날 얼마나 남았는지를 아무도 못 본다(집계 분모 불변 규칙). 과목 필터도 이 숫자를 안 건드린다.
   const sum = seatingSummary(classes);
-  const allGroups = splitByNowBand(classes);
+  /**
+   * 🔴 과목 필터도 좁히는 축은 검색과 같은 **반 카드**다 — 카드 안 명단은 절대 안 줄인다(아래 검색
+   *    주석의 "색이 거짓말한다"가 똑같이 적용된다).
+   * 🔴 **띠(지금·곧·지난)는 반드시 이 좁힌 집합에서 나눠야 한다.** 전체 기준으로 나눈 띠를 쓰면
+   *    "처음 열릴 띠"가 그 과목에 없는 띠로 잡혀 **모든 띠가 접힌 채** 열린다(빈 화면처럼 보인다).
+   */
+  const subjectClasses = classes.filter((c) => matchesSubjectFilter(subject.value, c.subject));
+  // 머리줄의 '지금 수업 중 N개 반'·'2시간 뒤 N개 반'은 위 미출결·입력과 **같은 자**여야 한다 =
+  // 하루 전체(학생 검색도 이 숫자를 안 건드린다). 좁힌 사실은 아래 범위 칩이 말한다.
+  const dayGroups = splitByNowBand(classes);
+  const allGroups = splitByNowBand(subjectClasses);
   /**
    * 🔴 화면에 띠로 그리는 건 **지금 · 곧 시작(2시간 내) · 지난** 셋뿐이다(원장 2026-08-18:
    *    *"지금 수업 및 다음 수업 정도만"*, *"그냥 예정 수업은 없애자"*). 그보다 뒤에 시작하는 반은
@@ -76,8 +100,8 @@ export function SeatingChart({ board }: { board: LiveBoard }) {
    *    (하루 전체 분모인 미출결·입력 합계는 위에서 이미 그대로 보여 준다.)
    */
   const groups = allGroups.filter((g) => g.band !== "later");
-  const nowCount = groups.find((g) => g.band === "now")?.items.length ?? 0;
-  const laterCount = allGroups.find((g) => g.band === "later")?.items.length ?? 0;
+  const nowCount = dayGroups.find((g) => g.band === "now")?.items.length ?? 0;
+  const laterCount = dayGroups.find((g) => g.band === "later")?.items.length ?? 0;
   // 처음 열릴 띠 = 지금 → (없으면) 예정 → (없으면) 지난. 밤늦게 열어도 빈 화면이 되지 않는다.
   const firstBand = groups[0]?.band;
   /**
@@ -99,9 +123,9 @@ export function SeatingChart({ board }: { board: LiveBoard }) {
    */
   const hit = (s: { studentName: string; schoolGrade: string | null }) =>
     matchesStudentSearch(query, [s.studentName, s.schoolGrade]);
-  const shownClasses = searching ? classes.filter((c) => c.students.some(hit)) : classes;
+  const shownClasses = searching ? subjectClasses.filter((c) => c.students.some(hit)) : subjectClasses;
   const matchIds = new Set(
-    searching ? classes.flatMap((c) => c.students.filter(hit).map((s) => s.studentId)) : [],
+    searching ? subjectClasses.flatMap((c) => c.students.filter(hit).map((s) => s.studentId)) : [],
   );
 
   return (
@@ -132,14 +156,23 @@ export function SeatingChart({ board }: { board: LiveBoard }) {
         {/* 학생 검색 — 이름을 치면 그 학생이 있는 반만 남는다. 위 합계(미출결·결석·입력)는 **하루 전체**
             기준 그대로라(집계 분모 불변 규칙) 걸린 필터를 칩으로 크게 밝힌다. */}
         <StudentSearchBox value={query} onChange={setQuery} inputWidth="w-[104px]" />
+        {/* 과목 필터 — 좁히는 축은 검색과 같은 **반 카드**다(계정 저장). 위 합계는 하루 전체 기준 그대로. */}
+        <SubjectFilterChips value={subject.value} onPick={subject.pick} pending={subject.pending} />
         {searching ? (
           <SearchScopeChip
             shown={shownClasses.length}
-            total={classes.length}
+            total={subjectClasses.length}
             unit="개 반"
             totalsNote="위 합계는 하루 전체 기준"
           />
         ) : null}
+        <SubjectScopeChip
+          subject={subject.value}
+          shown={subjectClasses.length}
+          total={classes.length}
+          unit="개 반"
+          totalsNote="위 합계는 하루 전체 기준"
+        />
         <ul className="ml-auto flex flex-wrap items-center gap-2">
           {LEGEND.map((k) => (
             <li
@@ -157,7 +190,8 @@ export function SeatingChart({ board }: { board: LiveBoard }) {
         shownClasses.length === 0 ? (
           <div className="bg-card shadow-card flex flex-wrap items-center gap-3 rounded-2xl px-4 py-4">
             <span className="text-foreground text-sm font-bold">
-              {emptySearchMessage(query, "이 날 수업")}
+              {/* 과목까지 좁혀 놓고 검색한 것이면 그 사실을 말한다 — "이 날 수업에 없다"는 거짓말이 된다. */}
+              {emptySearchMessage(query, subject.active ? "지금 고른 과목의 이 날 수업" : "이 날 수업")}
             </span>
             <button
               type="button"
@@ -171,7 +205,10 @@ export function SeatingChart({ board }: { board: LiveBoard }) {
           <FloorList classes={shownClasses} date={board.date} highlight={matchIds} />
         )
       ) : /* 지난 날짜엔 '지금'이 없다 — 놓친 날을 메우러 여는 자리라 띠로 나누지 않고 그대로 편다. */
-      board.isToday ? (
+      subjectClasses.length === 0 ? (
+        // 이 과목에 그날 수업 자체가 없을 때만 — 띠가 비는 건(전부 '2시간 뒤') 종전에도 정상 상태다.
+        <EmptySubjectNotice onReset={() => subject.pick("all")} />
+      ) : board.isToday ? (
         groups.map((group) => (
           <BandSection
             key={group.band}
@@ -182,8 +219,29 @@ export function SeatingChart({ board }: { board: LiveBoard }) {
           />
         ))
       ) : (
-        <FloorList classes={classes} date={board.date} />
+        <FloorList classes={subjectClasses} date={board.date} />
       )}
+    </div>
+  );
+}
+
+/**
+ * 고른 과목에 그날 수업이 없을 때 — **왜 비었는지**를 사람 말로 밝히고 되돌릴 버튼을 준다.
+ * (빈 화면만 두면 "출결이 사라졌다"로 읽힌다 — 학생 검색 0건 안내와 같은 규약.)
+ */
+function EmptySubjectNotice({ onReset }: { onReset: () => void }) {
+  return (
+    <div className="bg-card shadow-card flex flex-wrap items-center gap-3 rounded-2xl px-4 py-4">
+      <span className="text-foreground text-sm font-bold break-keep">
+        고른 과목에는 이 날 수업이 없습니다 — 과목을 ‘전체’로 되돌리면 다시 보입니다.
+      </span>
+      <button
+        type="button"
+        onClick={onReset}
+        className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft shrink-0 rounded-full border px-2.5 py-0.5 text-xs transition"
+      >
+        전체 보기
+      </button>
     </div>
   );
 }

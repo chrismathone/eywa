@@ -14,6 +14,9 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { accessLevelTenant } from "@/lib/auth/perm-matrix";
 import { reportError } from "@/lib/observability/report-error";
+import { fetchInChunks } from "@/lib/supabase/batch";
+import { addDays, kstToday } from "@/lib/date-kst";
+import { classifyAbsenceReason } from "@/features/attendance/absence-reason";
 import { getLiveBoard, loadFollowups } from "@/features/attendance/live/server/queries";
 import { holidayNameOf } from "@/features/attendance/live/server/load";
 import { buildDayRecap, type RecapFollowup, type RecapSlotInput } from "../digest";
@@ -39,51 +42,69 @@ export async function getRangeRecap(dates: readonly string[]): Promise<RangeReca
   // 반복 결석은 **범위와 무관하게 오늘 기준 14일**이라 한 번만 조회한다(날짜마다 부르면 같은 값을 N번).
   const repeats = await loadRepeatAbsences();
 
-  // 날짜끼리는 서로 독립이라 병렬(B4). 하루 안에서도 휴일·보드·조치가 독립이라 다시 병렬.
-  const days: RecapDay[] = await Promise.all(
-    wanted.map(async (date) => {
-      const [holiday, board, followups] = await Promise.all([
-        holidayNameOf(date),
-        getLiveBoard(date),
-        loadFollowups(date),
-      ]);
-      const slots: RecapSlotInput[] = board.teachers.flatMap((teacher) =>
-        teacher.slots.map((slot) => ({
-          classId: slot.classId,
-          className: slot.className,
-          subject: slot.subject,
-          slotStart: slot.slotStart,
-          saveSlot: slot.saveSlot,
-          teacherName: teacher.teacherName,
-          slotTeacherLabel: slot.slotTeacherLabel,
-          hasAnyRecord: slot.hasAnyRecord,
-          students: slot.students.map((s) => ({
-            studentId: s.studentId,
-            studentName: s.studentName,
-            schoolGrade: s.schoolGrade,
-            status: s.status,
-            // ⚠️ 연락처는 싣지 않는다 — 요약은 "무슨 일이 있었나"를 읽는 화면이고, 전화는 데스크 큐가 한다.
-            note: s.note,
-          })),
+  // 🔑 사전 통보 보정은 **날짜별 적재와 나란히** 돈다(B4) — 그 명단(위 RPC)에만 의존하지, 보드와는
+  //    서로 모른다. 앞에 줄 세우면 요약 탭 첫 페인트가 왕복 두 번만큼 늦어진다.
+  const [plannedRepeats, loaded] = await Promise.all([
+    // 그중 사전 통보(여행·휴가…)가 몇 번이었나 — 숫자를 지우지 않고 **톤만** 내리는 근거(2026-08-20).
+    loadPlannedRepeats([...repeats.keys()]),
+    // 날짜끼리는 서로 독립이라 병렬(B4). 하루 안에서도 휴일·보드·조치가 독립이라 다시 병렬.
+    Promise.all(
+      wanted.map(async (date) => {
+        const [holiday, board, followups] = await Promise.all([
+          holidayNameOf(date),
+          getLiveBoard(date),
+          loadFollowups(date),
+        ]);
+        return { date, holiday, board, followups };
+      }),
+    ),
+  ]);
+
+  const days: RecapDay[] = loaded.map(({ date, holiday, board, followups }) => {
+    const slots: RecapSlotInput[] = board.teachers.flatMap((teacher) =>
+      teacher.slots.map((slot) => ({
+        classId: slot.classId,
+        className: slot.className,
+        subject: slot.subject,
+        slotStart: slot.slotStart,
+        saveSlot: slot.saveSlot,
+        teacherName: teacher.teacherName,
+        slotTeacherLabel: slot.slotTeacherLabel,
+        hasAnyRecord: slot.hasAnyRecord,
+        students: slot.students.map((s) => ({
+          studentId: s.studentId,
+          studentName: s.studentName,
+          schoolGrade: s.schoolGrade,
+          status: s.status,
+          // ⚠️ 연락처는 싣지 않는다 — 요약은 "무슨 일이 있었나"를 읽는 화면이고, 전화는 데스크 큐가 한다.
+          note: s.note,
         })),
-      );
-      return {
-        ...buildDayRecap({
-          date,
-          slots,
-          followupOf: (studentId, saveSlot) => {
-            const hit =
-              followups.get(`${studentId}|${saveSlot ?? ""}`) ?? followups.get(`${studentId}|`) ?? null;
-            return hit
-              ? ({ state: hit.state, outcome: hit.outcome, handledByName: hit.handledByName } as RecapFollowup)
-              : null;
-          },
-          recentAbsenceOf: (studentId) => repeats.get(studentId) ?? null,
-        }),
-        holiday,
-      };
-    }),
-  );
+      })),
+    );
+    return {
+      ...buildDayRecap({
+        date,
+        slots,
+        followupOf: (studentId, saveSlot) => {
+          const hit =
+            followups.get(`${studentId}|${saveSlot ?? ""}`) ?? followups.get(`${studentId}|`) ?? null;
+          return hit
+            ? ({ state: hit.state, outcome: hit.outcome, handledByName: hit.handledByName } as RecapFollowup)
+            : null;
+        },
+        recentAbsenceOf: (studentId) => repeats.get(studentId) ?? null,
+        // 🔴 총계를 넘지 않게 자른다 — 두 값이 다른 쿼리에서 오므로(RPC vs 메모 조회) 정정 이력이
+        //    남은 칸에서 사전 통보가 총계보다 커질 수 있고, 그러면 화면이 음수를 말한다.
+        recentPlannedOf: (studentId) => {
+          const total = repeats.get(studentId);
+          const planned = plannedRepeats.get(studentId);
+          if (total == null || planned == null) return null;
+          return Math.min(planned, total);
+        },
+      }),
+      holiday,
+    };
+  });
 
   return buildRangeRecap(days);
 }
@@ -107,6 +128,70 @@ async function loadRepeatAbsences(): Promise<Map<string, number>> {
       Number(r.absences),
     ]),
   );
+}
+
+/**
+ * 반복 결석 명단의 **사전 통보 횟수**(학생 → 회수). 위 `loadRepeatAbsences`가 뽑은 학생만 대상이다.
+ *
+ * 🔑 **세는 단위가 RPC와 같아야 한다** — 0221a는 `(반, 날짜)` 하나를 1회로 세므로(영어는 하루가 2~3행)
+ *    여기서도 행을 세지 않고 `(반, 날짜)`로 접는다. 행을 세면 영어만 2.19배가 되어 "사전 통보 6회 /
+ *    결석 3회" 같은 말이 나온다.
+ * 🔑 창도 RPC와 같다 — 기준일은 **오늘 이하의 마지막 출결일**(0220a: 미리 찍은 미래 결석이 창을 밀지
+ *    않게)이고 거기서 13일 전까지다. `today - 13`으로 잡으면 일요일 아침에 창이 하루씩 어긋난다.
+ * ⚠️ **실패해도 요약을 죽이지 않는다** — 빈 Map을 돌려 보정 없이(종전 동작) 그린다. 단 조용히 넘기지는
+ *    않는다(#89: 폴백 있는 기능은 실패를 로그로 남겨야 보인다).
+ * ⚠️ 정정 이력이 남은 칸(같은 교시에 여러 행)은 옛 행의 메모도 함께 읽힌다 — 그래서 호출부가
+ *    `min(총계)`로 자른다. 톤만 바꾸는 값이라 이 정도 근사를 감수한다.
+ * ⚠️ B2/B3: 무페이징 전건 select 금지 — 대상 학생 id로 좁히고 `fetchInChunks`(414 + 1000행 절단 회피).
+ */
+async function loadPlannedRepeats(studentIds: readonly string[]): Promise<Map<string, number>> {
+  if (studentIds.length === 0) return new Map();
+  const supabase = await createClient();
+  try {
+    // 기준일 = 오늘 이하의 마지막 출결일. 행을 세는 게 아니라 한 줄만 집는다(B2).
+    const { data: anchorRow, error: anchorErr } = await supabase
+      .from("attendance_records")
+      .select("session_date")
+      .lte("session_date", kstToday())
+      .order("session_date", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (anchorErr) throw anchorErr;
+    const anchor = (anchorRow?.session_date as string | undefined) ?? null;
+    if (!anchor) return new Map();
+
+    const rows = await fetchInChunks<{
+      student_id: string;
+      class_id: string;
+      session_date: string;
+      note: string | null;
+    }>([...studentIds], (chunk) =>
+      supabase
+        .from("attendance_records")
+        .select("student_id, class_id, session_date, note")
+        .eq("status", "absent")
+        .gte("session_date", addDays(anchor, -13))
+        .lte("session_date", anchor)
+        .in("student_id", chunk),
+      // 🔴 청크당 행 수도 1000 미만이어야 한다(B2 silent 절단). 실측 26명 = 115행이라 여유가 크지만,
+      //    학생 수가 늘면 100명 청크가 한계에 닿을 수 있어 절반으로 잡는다(요청 하나 더는 병렬이라 공짜).
+      50,
+    );
+
+    // (학생·반·날짜) 하나가 1회 — 그 칸의 **어느 교시 메모에라도** 사유가 있으면 사전 통보로 본다
+    // (영어는 사유를 한 교시에만 적는 편이라 교시별로 따지면 대부분 놓친다).
+    const planned = new Map<string, Set<string>>();
+    for (const r of rows) {
+      if (classifyAbsenceReason(r.note) !== "planned") continue;
+      const set = planned.get(r.student_id) ?? new Set<string>();
+      set.add(`${r.class_id}|${r.session_date}`);
+      planned.set(r.student_id, set);
+    }
+    return new Map([...planned].map(([id, set]) => [id, set.size]));
+  } catch (e) {
+    reportError(e, { scope: "attendance.recap.plannedRepeats" });
+    return new Map();
+  }
 }
 
 export type SavedRecapBrief = {
