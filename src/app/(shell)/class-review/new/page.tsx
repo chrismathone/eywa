@@ -4,8 +4,7 @@ import { requireAccess } from "@/lib/auth/require-access";
 import { getStaffOptions } from "@/features/meetings/server/queries";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
-import { getChecklistTemplates } from "@/features/class-review/server/queries";
-import { isSelfOnlyReviewer } from "@/features/class-review/self-only";
+import { getChecklistTemplates, getReviewViewer } from "@/features/class-review/server/queries";
 import { NewReviewForm } from "../_components/new-review-form";
 
 export const metadata = { title: "새 평가 — eywa" };
@@ -17,7 +16,7 @@ export const metadata = { title: "새 평가 — eywa" };
  */
 export default async function NewClassReviewPage() {
   const viewer = await requireAccess("class_review");
-  if (isSelfOnlyReviewer(viewer.systemRole)) redirect("/class-review");
+  if ((await getReviewViewer()).selfOnly) redirect("/class-review");
   const [staff, settings, templates] = await Promise.all([
     getStaffOptions(),
     getTenantSettings(),

@@ -17,8 +17,9 @@ describe("자기 평가 전용 배선", () => {
   it("조회 초크포인트가 판정·가림을 지난다", () => {
     const queries = read("server/queries.ts");
     expect(queries).toContain('from "../self-only"');
-    // 목록·상세 둘 다 — 한쪽만 막으면 강제 URL로 남의 평가지가 열린다.
-    expect(queries.match(/isSelfOnlyReviewer\(/g)?.length ?? 0).toBeGreaterThanOrEqual(3);
+    // 목록·상세·자격 셋 다 같은 뷰어 판정을 지난다 — 한쪽만 막으면 강제 URL로 남의 평가지가 열린다.
+    expect(queries.match(/getReviewViewer\(\)/g)?.length ?? 0).toBeGreaterThanOrEqual(3);
+    expect(queries).toContain("isSelfOnlyReviewer");
     expect(queries).toContain("redactForSelfOnly");
     expect(queries).toContain("isOwnReview");
   });
@@ -28,6 +29,18 @@ describe("자기 평가 전용 배선", () => {
     expect(actions).toContain('from "../self-only"');
     // 화면을 안 거치는 POST가 진짜 벽 — 액션마다 한 번씩(생성·채점·삭제).
     expect(actions.match(/isSelfOnlyReviewer\(/g)?.length ?? 0).toBeGreaterThanOrEqual(3);
+  });
+
+  it("'다른 강사 뷰'는 대상 강사의 눈으로 본다 — 뷰어 판정이 한 곳에서만 난다", () => {
+    const queries = read("server/queries.ts");
+    // 원장 제보 2026-08-19: 뷰어의 실 역할로 판정하니 '다른 강사 뷰'에서 남의 점수·평가자 이름이 그대로 보였다.
+    expect(queries).toContain("getReviewViewer");
+    expect(queries).toContain("viewAsTeacher");
+    // 화면이 제 나름의 판정을 만들지 않게 — 페이지는 self-only.ts를 직접 부르지 않는다(#77).
+    for (const page of ["page.tsx", "[id]/page.tsx", "[id]/score/page.tsx", "new/page.tsx"]) {
+      const src = readFileSync(join(process.cwd(), "src/app/(shell)/class-review", page), "utf-8");
+      expect(src).not.toContain("isSelfOnlyReviewer");
+    }
   });
 
   it("판정 축은 실 역할(system_role) — 뷰 전환으로 권한이 흔들리지 않는다", () => {

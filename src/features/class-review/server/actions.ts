@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
+import { readonlyTeacherViewError } from "@/lib/auth/view-as";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { normalizeObserverLimit } from "../observer-count";
 import { humanizeDbError } from "@/lib/supabase/db-error";
@@ -38,6 +39,10 @@ export type ReviewActionState = { ok?: true; error?: string; notice?: string } |
 async function requireWrite() {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" as const };
+  // '다른 강사 뷰'(열람 전용)는 쓰기 캡에도 걸리지만 사유가 "권한 없음"으로 뭉뚱그려진다 —
+  // 그 화면은 남의 눈을 빌린 것뿐이라 정확한 문구로 돌려준다(원장 2026-08-19).
+  const readonly = await readonlyTeacherViewError();
+  if (readonly) return { error: readonly };
   if (!(await canWriteTenant(user.systemRole, "class_review"))) {
     return { error: "수업 평가를 작성할 권한이 없습니다" as const };
   }
@@ -315,7 +320,7 @@ export async function saveChecklistTemplate(
 ): Promise<ReviewActionState> {
   const gate = await requireWrite();
   if ("error" in gate) return { error: gate.error };
-  const priv = await getReviewPrivileges(gate.user);
+  const priv = await getReviewPrivileges();
   if (!priv.editTemplate) return { error: "문항 편집은 원장·지정 인원만 가능합니다" };
 
   const templateId = String(formData.get("templateId") ?? "").trim();
@@ -384,7 +389,7 @@ export async function deleteChecklistTemplate(
 ): Promise<ReviewActionState> {
   const gate = await requireWrite();
   if ("error" in gate) return { error: gate.error };
-  const priv = await getReviewPrivileges(gate.user);
+  const priv = await getReviewPrivileges();
   if (!priv.editTemplate) return { error: "문항 편집은 원장·지정 인원만 가능합니다" };
 
   const templateId = String(formData.get("templateId") ?? "").trim();

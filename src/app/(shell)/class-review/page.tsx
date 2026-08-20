@@ -7,12 +7,12 @@ import { buildSubjectMaps } from "@/features/owner/subjects";
 import {
   getMyClassReviewFilter,
   getReviewPrivileges,
+  getReviewViewer,
   listClassReviews,
   myScoreSlot,
   observerLimitOf,
 } from "@/features/class-review/server/queries";
 import { GRADE_CUTS, GRADE_FALLBACK } from "@/features/class-review/checklist";
-import { isSelfOnlyReviewer } from "@/features/class-review/self-only";
 import { ReviewTable } from "./_components/review-table";
 
 export const metadata = { title: "수업 평가 — eywa" };
@@ -28,13 +28,15 @@ export const metadata = { title: "수업 평가 — eywa" };
  */
 export default async function ClassReviewPage() {
   const viewer = await requireAccess("class_review");
-  const selfOnly = isSelfOnlyReviewer(viewer.systemRole);
-  const [{ rows }, settings, priv, myFilter] = await Promise.all([
+  // 자기 평가 전용 판정·평가지 소유 id는 서버 단일 소스에서('다른 강사 뷰'면 그 강사의 눈, #77).
+  const [{ rows }, settings, priv, myFilter, rv] = await Promise.all([
     listClassReviews(),
     getTenantSettings(),
-    getReviewPrivileges(viewer),
+    getReviewPrivileges(),
     getMyClassReviewFilter(viewer),
+    getReviewViewer(),
   ]);
+  const selfOnly = rv.selfOnly;
   const subjects = buildSubjectMaps(settings.operations.subjects);
   const cutsLabel =
     GRADE_CUTS.map((c) => `${c.grade}≥${c.min}`).join(" · ") + ` · 미만 ${GRADE_FALLBACK}`;
@@ -84,7 +86,7 @@ export default async function ClassReviewPage() {
         <ReviewTable
           initialFilter={myFilter}
           rows={rows.map((r) => {
-            const mine = myScoreSlot(r, viewer.id);
+            const mine = myScoreSlot(r, rv.id);
             return {
               id: r.id,
               date: r.header.date,

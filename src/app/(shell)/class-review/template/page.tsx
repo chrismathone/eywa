@@ -20,7 +20,7 @@ export default async function ClassReviewTemplatePage({
   searchParams: Promise<{ set?: string; new?: string }>;
 }) {
   const viewer = await requireAccess("class_review");
-  const priv = await getReviewPrivileges(viewer);
+  const priv = await getReviewPrivileges();
   if (!priv.editTemplate) redirect("/class-review");
 
   const { set, new: isNew } = await searchParams;
