@@ -249,6 +249,16 @@ export function auditDetail(
         reason ? `사유: ${reason}` : null,
       );
     }
+    // 잘못 만든 수업 이력 **삭제**(원장·super_admin) — 행이 사라지므로 이 로그가 유일한 흔적이다.
+    // metadata.snapshot에 삭제된 행 전체가 들어 있다(뷰어 title 툴팁의 원문 JSON으로 확인).
+    case "enrollment_delete": {
+      const cls = str(m.className) ?? ctx.nameOf(m.classId);
+      const snap = (m.snapshot ?? {}) as Meta;
+      const start = str(snap.startDate);
+      const end = str(snap.endDate);
+      const period = start ? (end ? `${start} ~ ${end}` : `${start}부터`) : null;
+      return join(ctx.nameOf(m.studentId), cls, period, "삭제됨(복구는 감사로그 원문 참조)");
+    }
     case "student_bulk_withdraw":
     case "student_bulk_delete": {
       const n = num(m.count);

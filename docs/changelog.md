@@ -1,5 +1,41 @@
 # eywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-08-20 (17) — 잘못 만든 **수업 이력 삭제**(원장·super_admin) — 단, 기록이 붙었으면 못 지운다
+
+원장 지시: *"이런 잘못된 수업 이력을 지우고 싶은데 마스터 및 원장에게 권한부여"* → *"지우는건 안되네
+이미 추가된 기록에 대해"* → *"대신 감사 로그에는 남겨"*. (스크린샷 = 학생 상세 '지난 수업'의
+`고등M 중2 PS3A · 2026-08-19 ~ 2026-08-19` — 시작=종료 zero-length, 사실상 배정 취소인 행. 같은 모양 58건.)
+마이그레이션 0 · DB 쓰기 0(실데이터로 시험하지 않았다).
+
+- 학생 상세 '수업' 탭 **세 구획 전부**(수강 중·배정 예정·지난 수업)의 행에 **삭제**. 확인 창이 반 이름·기간을
+  그대로 보여주고 *되돌릴 수 없음*을 말한다. ⚠️ 액션 열이 종전엔 '지난 수업'에서 아예 안 떴다 —
+  잘못 만든 이력은 대개 거기 있어서 열을 열었다(수강 종료·반 이동은 종전 조건 그대로).
+- 🔴 **권한 = 원장(owner 콘솔 full) + super_admin.** super_admin은
+  [`isCurrentUserSuperAdmin()`](src/lib/auth/super-admin.ts)로 **항상 통과**(원장 2026-08-13 결정).
+  화면도 같은 판정으로 감추지만 **서버 액션이 다시 판정한다**([[#77]]).
+- 🔴 **붙은 기록이 있으면 거절** — 무엇이 몇 건인지와 대안을 함께 말한다(*"출결 3건 · 수업보고서 1건이
+  남아 있어 지울 수 없습니다 — … 대신 '수강 종료'로 닫아 주세요"*). 판정은 순수 함수
+  [`enrollmentDeleteBlockReason`](src/features/enrollments/deletable.ts) 단일 소스(Vitest 9).
+  · **세는 표는 짐작이 아니라 전수 스캔**(schema.ts + supabase/migrations): `student_id`와 `class_id`를 둘 다
+    가진 표 = `attendance_records` · `lesson_reports`(+**보강 반** `makeup_class_id`, 0171a) ·
+    `onescreen_daily_sessions` · `class_sheet_student_marks` · `attendance_followups`. 청구 계열은 학생과 반이
+    **다른 표에 나뉘어** 있어(`invoices.student_id` × `invoice_session_terms`/`invoice_teacher_splits`의
+    `class_id`) invoice id를 거쳐 센다. 전부 `count:exact head:true`(B2) + `.in()`은 청크(B3).
+  · ⚠️ **기간 안 기록만 보면 놓친다**(zero-length 행은 하루뿐인데 보고서는 다음 날 쓰이기도 한다) →
+    **그 (학생, 반) 조합 전체**로 센다(날짜 필터 없음).
+  · 🔴 **같은 반 재등록(형제 수강)은 허용**한다 — 기록은 enrollment가 아니라 **(학생, 반)에 매여 있어**
+    (`enrollment_id` 컬럼을 가진 표가 **0개**), 다른 수강 행이 남으면 기록은 여전히 주인이 있고 시수·급여
+    집계도 안 변한다. 이걸 안 열면 "옛 수강의 기록" 때문에 어제 잘못 만든 행을 영영 못 지운다.
+  · 🔴 **확인 조회가 하나라도 실패하면 삭제를 중단**한다 — "못 셌으니 없나 보다"는 되돌릴 수 없다.
+- 🔴 **감사로그에 행을 통째로 스냅샷**(`enrollment_delete`) — 행이 사라지면 그게 유일한 흔적이라
+  **손으로 되살릴 수 있을 만큼** 담는다(start/end·attendance_days·on_hold·withdrawal_reason·전입 표식·
+  salary_tier·created_at + 반 이름·과목 + 지울 때의 기록 수). 뷰어 라벨·상세 문장도 함께 등록.
+- ⚠️ RLS를 **우회하지 않는다**(세션 클라이언트) + 테넌트 명시 확인 + `.delete().select("id")`로 **실제로
+  지워졌는지** 확인(RLS가 막으면 error 없이 0행이라 성공으로 위장한다).
+- 🔴 구조 가드([delete-enrollment-wiring.test.ts](src/features/enrollments/delete-enrollment-wiring.test.ts)) —
+  super_admin 통과 · 기록 검사가 삭제보다 앞 · 세는 표 전수 · 스냅샷 필드 · 감사 키 등록을 잠근다.
+  super_admin 줄을 지우면 깨지는 것까지 확인(변이 검증).
+
 ## 2026-08-20 (16) — 휴원의 앞뒤를 맞춘다: **재원 학생만 배정** + 반 이동이 휴원을 승계
 
 원장 지시: *"합리적이 될 수 있도록 휴원 해결해야겠어."* 휴원 처리는 `students.status='on_hold'` **＋ 열린

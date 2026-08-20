@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { requireAccess } from "@/lib/auth/require-access";
 import { accessLevelTenant, canAccessTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { canSeeStudentEnrollment } from "@/features/students/server/enrollment-gate";
+import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
 import { BackLink } from "@/components/back-link";
 import { DupSuspectTag } from "@/components/dup-suspect-tag";
 import { getStudentById, getStudentEnrollments } from "@/features/students/server/queries";
@@ -96,6 +97,10 @@ export default async function StudentDetailPage({
   const canEditDates = (await accessLevelTenant(user.systemRole, "owner")) === "full";
   // 분리등원 요일(스케줄) 더블클릭 편집 = 반 쓰기 권한(updateEnrollmentsAttendanceBatch와 동일 게이트).
   const canEditSchedule = await canWriteTenant(user.systemRole, "classes");
+  // 잘못 만든 **수업 이력 삭제** = 원장(owner 콘솔 full) + super_admin(원장 2026-08-20).
+  // 🔴 super_admin은 새 게이트를 항상 통과한다(원장 2026-08-13). 서버 `deleteEnrollment`가 같은 판정을
+  //    다시 하고 붙은 기록까지 검사한다 — 화면 조건은 게이트가 아니다(#77).
+  const canDeleteEnrollment = canEditDates || (await isCurrentUserSuperAdmin());
   // 입학 상담(등록상담) 상담탭 노출.
   // ① enrollment 접근권한(원장·상담사 등) → 카드 + '상세 보기' 링크 모두.
   // ② 권한 없어도 **강사가 본인 담당 학생**이면 카드는 노출(읽기) — 단 '상세 보기'(/enrollment/[id])는
@@ -169,7 +174,13 @@ export default async function StudentDetailPage({
         {tab === "overview" ? (
           <OverviewTab student={student} />
         ) : tab === "classes" ? (
-          <ClassesTab student={student} canEnd={canManageStudent} canEditDates={canEditDates} canEditSchedule={canEditSchedule} />
+          <ClassesTab
+            student={student}
+            canEnd={canManageStudent}
+            canEditDates={canEditDates}
+            canEditSchedule={canEditSchedule}
+            canDeleteEnrollment={canDeleteEnrollment}
+          />
         ) : tab === "grades" ? (
           <GradesTab studentId={student.id} />
         ) : tab === "progress" ? (

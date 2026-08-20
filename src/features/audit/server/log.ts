@@ -94,6 +94,7 @@ export const AUDIT_ACTIONS = {
   student_hold: "학생 휴원 처리",
   student_restore: "학생 재원 복구",
   enrollment_end: "수강 종료",
+  enrollment_delete: "수업 이력 삭제",
   student_bulk_withdraw: "학생 일괄 퇴원(데이터 정리)",
   student_bulk_delete: "학생 일괄 삭제(데이터 정리)",
   // 2차 확장(2026-08-18 원장 "모든 행동에 기록이 남도록 범인 찾기 가능하게") — 수강을 바꾸는 나머지 경로.

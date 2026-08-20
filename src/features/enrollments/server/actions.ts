@@ -7,7 +7,10 @@ import { accessLevelTenant, canManageTenant } from "@/lib/auth/perm-matrix";
 import { kstToday } from "@/lib/date-kst";
 import { notifyClassAssignment } from "@/features/notifications/server/notify";
 import { logAction } from "@/features/audit/server/log";
+import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
+import { fetchAllPaged } from "@/lib/supabase/batch";
 import { enrollmentAssignBlockReason } from "../eligibility";
+import { enrollmentDeleteBlockReason, type EnrollmentRecordCounts } from "../deletable";
 
 export type CreateEnrollmentState =
   | { error?: string; enrollmentId?: string }
@@ -457,5 +460,237 @@ export async function updateEnrollmentDates(
   revalidatePath("/timetable");
   revalidatePath(`/students/${current.student_id}`);
   revalidatePath(`/classes/${current.class_id}`);
+  return { ok: true };
+}
+
+// ─────────────────────── 잘못 만든 수업 이력 삭제(원장·super_admin) ───────────────────────
+
+export type DeleteEnrollmentState = { error?: string; ok?: true } | undefined;
+
+/** 삭제 확인 조회가 하나라도 실패하면 **막는다** — "못 셌으니 없나 보다"로 지우면 되돌릴 수 없다. */
+const DELETE_PROBE_FAILED =
+  "남은 기록을 확인하지 못해 삭제를 중단했습니다. 잠시 후 다시 시도해 주세요.";
+
+/**
+ * 그 (학생, 반) 조합에 붙은 기록 수를 센다 — 표 목록·판정 근거는 [`deletable.ts`](../deletable.ts) 주석 참조.
+ * 전부 `count: "exact", head: true`(행을 안 받는다, B2). 하나라도 error면 null을 돌려 **삭제를 막는다.**
+ */
+async function countEnrollmentRecords(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  studentId: string,
+  classId: string,
+): Promise<EnrollmentRecordCounts | null> {
+  const headCount = async (
+    table: string,
+    apply: (
+      q: ReturnType<Awaited<ReturnType<typeof createClient>>["from"]>,
+    ) => PromiseLike<{ count: number | null; error: { message: string } | null }>,
+  ): Promise<number | null> => {
+    const { count, error } = await apply(supabase.from(table));
+    if (error) {
+      console.error(`[enrollments] 삭제 전 기록 확인 실패(${table}):`, error.message);
+      return null;
+    }
+    return count ?? 0;
+  };
+
+  // 청구 계열은 학생과 반이 **다른 표에 나뉘어** 있다 — 그 학생의 invoice id를 먼저 모은 뒤 반 조건으로 센다.
+  // id 배열은 whitelist라 페이지네이션(B2) + `.in()`은 100개 청크(B3).
+  const countBilling = async (): Promise<number | null> => {
+    try {
+      const invoices = await fetchAllPaged<{ id: string }>((from, to) =>
+        supabase.from("invoices").select("id").eq("student_id", studentId).range(from, to),
+      );
+      if (invoices.length === 0) return 0;
+      const ids = invoices.map((r) => r.id);
+      const chunks: string[][] = [];
+      for (let i = 0; i < ids.length; i += 100) chunks.push(ids.slice(i, i + 100));
+      let total = 0;
+      for (const table of ["invoice_session_terms", "invoice_teacher_splits"]) {
+        for (const chunk of chunks) {
+          const { count, error } = await supabase
+            .from(table)
+            .select("id", { count: "exact", head: true })
+            .eq("class_id", classId)
+            .in("invoice_id", chunk);
+          if (error) {
+            console.error(`[enrollments] 삭제 전 청구 확인 실패(${table}):`, error.message);
+            return null;
+          }
+          total += count ?? 0;
+        }
+      }
+      return total;
+    } catch (e) {
+      console.error("[enrollments] 삭제 전 청구 확인 실패:", e);
+      return null;
+    }
+  };
+
+  const [attendance, lessonReports, onescreenSessions, sheetMarks, followups, billing] =
+    await Promise.all([
+      headCount("attendance_records", (q) =>
+        q
+          .select("id", { count: "exact", head: true })
+          .eq("student_id", studentId)
+          .eq("class_id", classId),
+      ),
+      // 수업보고서는 정규 반(class_id)과 **보강 반**(makeup_class_id, 0171a) 둘 다 이 반을 가리킬 수 있다.
+      headCount("lesson_reports", (q) =>
+        q
+          .select("id", { count: "exact", head: true })
+          .eq("student_id", studentId)
+          .or(`class_id.eq.${classId},makeup_class_id.eq.${classId}`),
+      ),
+      headCount("onescreen_daily_sessions", (q) =>
+        q
+          .select("id", { count: "exact", head: true })
+          .eq("student_id", studentId)
+          .eq("class_id", classId),
+      ),
+      headCount("class_sheet_student_marks", (q) =>
+        q
+          .select("id", { count: "exact", head: true })
+          .eq("student_id", studentId)
+          .eq("class_id", classId),
+      ),
+      headCount("attendance_followups", (q) =>
+        q
+          .select("id", { count: "exact", head: true })
+          .eq("student_id", studentId)
+          .eq("class_id", classId),
+      ),
+      countBilling(),
+    ]);
+
+  if (
+    attendance === null ||
+    lessonReports === null ||
+    onescreenSessions === null ||
+    sheetMarks === null ||
+    followups === null ||
+    billing === null
+  ) {
+    return null;
+  }
+  return { attendance, lessonReports, onescreenSessions, sheetMarks, followups, billing };
+}
+
+/**
+ * **잘못 만든 수업 이력(enrollments 행) 삭제** — 원장(owner 콘솔 full) + super_admin 전용.
+ *
+ * 원장 2026-08-20: *"이런 잘못된 수업 이력을 지우고 싶은데 마스터 및 원장에게 권한부여"* →
+ * *"지우는건 안되네 이미 추가된 기록에 대해"* → *"대신 감사 로그에는 남겨"*.
+ *
+ * 🔴 **붙은 기록이 있으면 거절**한다(무엇이 몇 건인지 + 대안까지 말한다) — 판정은 순수 함수
+ *    [`enrollmentDeleteBlockReason`](../deletable.ts) 단일 소스. 세는 표 목록과 "형제 수강" 규칙은
+ *    그 파일 주석에 있다(짐작이 아니라 schema.ts + migrations 전수 스캔 결과).
+ * 🔴 **감사로그에 행을 통째로 스냅샷**한다 — 행이 사라지면 그게 유일한 흔적이라, 나중에 손으로
+ *    복구할 수 있을 만큼 담는다.
+ * ⚠️ RLS를 우회하지 않는다(세션 클라이언트). 테넌트는 명시적으로 한 번 더 확인한다.
+ */
+export async function deleteEnrollment(
+  _prev: DeleteEnrollmentState,
+  formData: FormData,
+): Promise<DeleteEnrollmentState> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "로그인이 필요합니다" };
+
+  // 🔴 super_admin은 새로 만드는 어떤 게이트도 **항상 통과**한다(원장 2026-08-13 결정).
+  //    나머지는 owner(원장) 콘솔 권한 = full — 수강 날짜 정정(updateEnrollmentDates)과 같은 자물쇠다.
+  //    화면도 같은 판정으로 버튼을 감추지만 화면 조건은 게이트가 아니다(#77 — 여기가 진짜 게이트).
+  const allowed =
+    (await isCurrentUserSuperAdmin()) ||
+    (await accessLevelTenant(user.systemRole, "owner")) === "full";
+  if (!allowed) return { error: "수업 이력 삭제 권한이 없습니다 (원장 전용)" };
+
+  const enrollmentId = String(formData.get("enrollmentId") ?? "").trim();
+  if (!enrollmentId) return { error: "수강 ID가 누락되었습니다" };
+
+  const supabase = await createClient();
+
+  // 지울 행 전체를 먼저 읽는다 — 판정 재료 + 감사로그 스냅샷(행이 사라지면 이게 유일한 흔적).
+  const { data: enr, error: selErr } = await supabase
+    .from("enrollments")
+    .select(
+      `id, tenant_id, student_id, class_id, start_date, end_date, on_hold, withdrawal_reason,
+       attendance_days, is_transferred, is_transferred_in, salary_tier, created_at`,
+    )
+    .eq("id", enrollmentId)
+    .maybeSingle();
+  if (selErr) return { error: toKoreanDbError(selErr, "수강 정보를 불러오지 못했습니다") };
+  if (!enr) return { error: "수강 정보를 찾을 수 없습니다" };
+  // RLS가 이미 테넌트로 좁히지만, 파괴적 작업이라 명시적으로 한 번 더 본다.
+  if (enr.tenant_id !== user.tenantId) return { error: "수강 정보를 찾을 수 없습니다" };
+
+  const studentId = enr.student_id as string;
+  const classId = enr.class_id as string;
+
+  // 반 이름(스냅샷용) + 같은 (학생,반)의 다른 수강 유무 + 붙은 기록 수. 서로 독립이라 병렬(B4).
+  const [klassRes, siblingRes, counts] = await Promise.all([
+    supabase.from("classes").select("class_name, subject").eq("id", classId).maybeSingle(),
+    supabase
+      .from("enrollments")
+      .select("id", { count: "exact", head: true })
+      .eq("student_id", studentId)
+      .eq("class_id", classId)
+      .neq("id", enrollmentId),
+    countEnrollmentRecords(supabase, studentId, classId),
+  ]);
+
+  if (siblingRes.error) return { error: DELETE_PROBE_FAILED };
+  if (!counts) return { error: DELETE_PROBE_FAILED };
+
+  const hadSibling = (siblingRes.count ?? 0) > 0;
+  const blocked = enrollmentDeleteBlockReason({ counts, hasSiblingEnrollment: hadSibling });
+  if (blocked) return { error: blocked };
+
+  // 실제로 지워진 행을 확인한다 — RLS가 막으면 error 없이 0행이라 "성공"으로 위장한다([[#104]] 계열).
+  const { data: deleted, error: delErr } = await supabase
+    .from("enrollments")
+    .delete()
+    .eq("id", enrollmentId)
+    .select("id");
+  if (delErr) return { error: toKoreanDbError(delErr, "수업 이력을 삭제하지 못했습니다") };
+  if (!deleted || deleted.length === 0) {
+    return { error: "수업 이력을 삭제할 권한이 없거나 이미 삭제된 행입니다" };
+  }
+
+  // 🔴 원장 지시("대신 감사 로그에는 남겨") — 지운 행을 통째로. 손으로 되살릴 수 있을 만큼 담는다.
+  await logAction({
+    action: "enrollment_delete",
+    targetType: "student",
+    targetLabel: (klassRes.data?.class_name as string | null) ?? null,
+    metadata: {
+      studentId,
+      classId,
+      className: (klassRes.data?.class_name as string | null) ?? null,
+      subject: (klassRes.data?.subject as string | null) ?? null,
+      // 삭제된 행 스냅샷(복구용 원본 값).
+      snapshot: {
+        id: enr.id,
+        tenantId: enr.tenant_id,
+        studentId,
+        classId,
+        startDate: enr.start_date,
+        endDate: enr.end_date,
+        onHold: enr.on_hold,
+        withdrawalReason: enr.withdrawal_reason,
+        attendanceDays: enr.attendance_days,
+        isTransferred: enr.is_transferred,
+        isTransferredIn: enr.is_transferred_in,
+        salaryTier: enr.salary_tier,
+        createdAt: enr.created_at,
+      },
+      // 지울 때 붙어 있던 기록 수(0이 아니면 형제 수강이 있어 허용된 것) — 사후 역검수 재료.
+      recordCounts: counts,
+      hadSiblingEnrollment: hadSibling,
+    },
+  });
+
+  revalidatePath(`/students/${studentId}`);
+  revalidatePath("/students");
+  revalidatePath(`/classes/${classId}`);
+  revalidatePath("/timetable");
   return { ok: true };
 }

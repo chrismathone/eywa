@@ -15,6 +15,7 @@ import { settingsToPeriodsConfig } from "@/features/timetable/lib/periods";
 import type { AssignDialogClass } from "@/components/enrollment-assign-dialog";
 import { StudentAssignAction } from "../_components/student-assign-action";
 import { EndEnrollmentButton } from "../_components/end-enrollment-button";
+import { DeleteEnrollmentButton } from "../_components/delete-enrollment-button";
 import { MoveEnrollmentButton } from "../_components/move-enrollment-button";
 import { EditableDateCell } from "@/features/enrollments/components/editable-date-cell";
 import { EditableAttendanceCell } from "@/features/enrollments/components/editable-attendance-cell";
@@ -54,12 +55,18 @@ export async function ClassesTab({
   canEnd,
   canEditDates,
   canEditSchedule,
+  canDeleteEnrollment,
 }: {
   student: StudentDetail;
   canEnd: boolean;
   canEditDates: boolean;
   /** 분리등원 요일(스케줄 셀) 더블클릭 편집 노출 — canWriteTenant("classes"). */
   canEditSchedule: boolean;
+  /**
+   * 잘못 만든 수업 이력 **삭제**(원장·super_admin) 노출 — 서버 `deleteEnrollment` 게이트와 같은 모양(#77).
+   * ⚠️ '수강 종료'(canEnd)와 다른 축이다: 종료는 데스크 업무, 삭제는 원장 정정이다.
+   */
+  canDeleteEnrollment: boolean;
 }) {
   const [rows, allActiveClasses, settings] = await Promise.all([
     getStudentClassesDetail(student.id),
@@ -117,6 +124,7 @@ export async function ClassesTab({
         canEnd={canEnd}
         canEditDates={canEditDates}
         canEditSchedule={canEditSchedule}
+        canDeleteEnrollment={canDeleteEnrollment}
         moveTargets={candidateClasses}
         moveStudent={{ id: student.id, name: student.name, grade: student.grade }}
         action={
@@ -131,8 +139,8 @@ export async function ClassesTab({
         }
         note="실제 학생이 등원하는 요일만 표기됩니다"
       />
-      <Section title="배정 예정 수업" rows={scheduled} kind="scheduled" studentId={student.id} subjects={subjects} canEnd={canEnd} canEditDates={canEditDates} canEditSchedule={canEditSchedule} />
-      <Section title="지난 수업" rows={past} kind="past" studentId={student.id} subjects={subjects} canEnd={canEnd} canEditDates={canEditDates} canEditSchedule={canEditSchedule} />
+      <Section title="배정 예정 수업" rows={scheduled} kind="scheduled" studentId={student.id} subjects={subjects} canEnd={canEnd} canEditDates={canEditDates} canEditSchedule={canEditSchedule} canDeleteEnrollment={canDeleteEnrollment} />
+      <Section title="지난 수업" rows={past} kind="past" studentId={student.id} subjects={subjects} canEnd={canEnd} canEditDates={canEditDates} canEditSchedule={canEditSchedule} canDeleteEnrollment={canDeleteEnrollment} />
     </div>
   );
 }
@@ -146,6 +154,7 @@ function Section({
   canEnd,
   canEditDates,
   canEditSchedule,
+  canDeleteEnrollment,
   moveTargets,
   moveStudent,
   action,
@@ -159,6 +168,7 @@ function Section({
   canEnd: boolean;
   canEditDates: boolean;
   canEditSchedule: boolean;
+  canDeleteEnrollment: boolean;
   /** 반 이동 대상 후보(수강 중 섹션에서만) — 있으면 행에 '반 이동' 버튼. */
   moveTargets?: AssignDialogClass[];
   /** 반 이동 다이얼로그 헤더용 학생 정보. */
@@ -169,6 +179,9 @@ function Section({
   // 수강 종료/반 이동 컬럼: 쓰기 권한 + 비-지난 섹션에서만. 셀 버튼은 재원중(end_date==null)에만 —
   // 이미 종료일이 있는 행엔 버튼을 숨겨 "종료된 행 재클릭 시 팝업 반복" 버그를 막는다.
   const showEndCol = canEnd && kind !== "past";
+  // 🔴 삭제(원장 정정)는 **세 구획 전부**에 선다 — 잘못 만든 이력은 대개 '지난 수업'(시작=종료)에 있다.
+  //    그래서 액션 열은 '수강 종료'가 없는 구획에서도 열려야 한다.
+  const showActionCol = showEndCol || canDeleteEnrollment;
   return (
     <section className="bg-card border-border rounded-2xl border">
       <header className="border-border flex flex-wrap items-center justify-between gap-2 border-b px-5 py-3">
@@ -193,7 +206,7 @@ function Section({
                 <th className="px-4 py-2 text-left font-medium">스케줄</th>
                 <th className="px-4 py-2 text-left font-medium">시작</th>
                 <th className="px-4 py-2 text-left font-medium">종료</th>
-                {showEndCol ? <th className="px-2 py-2" /> : null}
+                {showActionCol ? <th className="px-2 py-2" /> : null}
               </tr>
             </thead>
             <tbody className="divide-border divide-y">
@@ -246,23 +259,32 @@ function Section({
                     )}
                     {r.onHold ? <span className="text-amber ml-1">(휴원)</span> : null}
                   </td>
-                  {showEndCol ? (
+                  {showActionCol ? (
                     <td className="px-2 py-2.5 text-right">
-                      {r.endDate == null ? (
-                        <div className="inline-flex items-center gap-1.5">
-                          {moveTargets && moveStudent ? (
-                            <MoveEnrollmentButton
-                              enrollmentId={r.enrollmentId}
-                              student={moveStudent}
-                              currentClassName={r.className}
-                              currentClassId={r.classId}
-                              currentSubject={r.subject}
-                              classes={moveTargets}
-                            />
-                          ) : null}
-                          <EndEnrollmentButton enrollmentId={r.enrollmentId} studentId={studentId} className={r.className} />
-                        </div>
-                      ) : null}
+                      <div className="inline-flex items-center gap-1.5">
+                        {showEndCol && r.endDate == null ? (
+                          <>
+                            {moveTargets && moveStudent ? (
+                              <MoveEnrollmentButton
+                                enrollmentId={r.enrollmentId}
+                                student={moveStudent}
+                                currentClassName={r.className}
+                                currentClassId={r.classId}
+                                currentSubject={r.subject}
+                                classes={moveTargets}
+                              />
+                            ) : null}
+                            <EndEnrollmentButton enrollmentId={r.enrollmentId} studentId={studentId} className={r.className} />
+                          </>
+                        ) : null}
+                        {canDeleteEnrollment ? (
+                          <DeleteEnrollmentButton
+                            enrollmentId={r.enrollmentId}
+                            className={r.className}
+                            periodLabel={r.endDate ? `${r.startDate} ~ ${r.endDate}` : `${r.startDate}부터`}
+                          />
+                        ) : null}
+                      </div>
                     </td>
                   ) : null}
                 </tr>
