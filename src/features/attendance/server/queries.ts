@@ -22,7 +22,7 @@ import {
 import { getPeriodWindow } from "@/features/periods/server/queries";
 import type { PeriodWindow } from "@/features/periods/resolve";
 // 출결의 강사 귀속 축 단일 소스(2026-08-18) — 담임만 보면 교시 담당 강사가 자기 수업을 못 본다.
-import { loadClassAxisRows } from "./teacher-axis-queries";
+import { loadVisibleClassAxisRows } from "./teacher-axis-queries";
 // 교시 귀속(누구 몫인가)은 같은 축 모듈이 단일 소스다 — 여기서 규칙을 다시 적지 말 것.
 import { classTeacherIdsInRange, ownsAttendanceSlot } from "@/features/attendance/teacher-axis";
 import type { PeriodMode } from "@/features/attendance/view-prefs";
@@ -678,11 +678,11 @@ export async function getMonthlyAttendanceMatrix(
   //    교시 담당 강사의 출석부가 통째로 빈다 — 좁히는 판정은 축 단일 소스(taughtBy)가 한다.
   // ⚠️ `month`는 URL에서 온다 — 형식이 어긋나면 이번 달로 떨어뜨린다(축 조회가 날짜를 필터에 보간한다).
   const axisRange = monthRange(/^\d{4}-\d{2}$/.test(month) ? month : kstMonth());
-  const allClassRows = await loadClassAxisRows(axisRange.from, axisRange.to);
 
   // 강사(또는 겸직 강사뷰)면 **자기가 가르치는 반**으로 좁힌다 — 담임 반 ∪ 그 달 교시 담당 반.
-  const classes = allClassRows
-    .filter((c) => !tId || c.taughtBy.includes(tId))
+  // 🔴 좁히는 판정은 `loadVisibleClassAxisRows` **한 곳**뿐이다(허브 학생 검색도 같은 함수를 쓴다) —
+  //    표면마다 따로 적으면 한쪽이 담임 축으로 되돌아가 교시 담당 강사의 반이 조용히 사라진다([[#77]]).
+  const classes = (await loadVisibleClassAxisRows(axisRange.from, axisRange.to))
     .map((c) => ({
       id: c.id,
       className: c.className,

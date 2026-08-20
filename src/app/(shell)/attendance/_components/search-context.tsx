@@ -7,10 +7,23 @@
  *    채우기가 행 배열(`GridProvider`의 rows)을 좌표로 쓰기 때문에, 숨기기만 하면 ↑↓·Tab·Shift 범위가
  *    **보이지 않는 칸으로 들어가고 그 칸이 저장된다**. 반 접기가 같은 이유로 행을 제거하는데
  *    (`class-group.tsx`·`grid-context.tsx`) 검색도 정확히 그 규약을 따른다.
- * 🔴 **검색어는 저장하지 않는다** — 화면을 떠나면 사라진다(`useState`뿐, ui_prefs·URL 아님).
+ * 🔴 **검색어는 저장하지 않는다** — 화면을 떠나면 사라진다(`useState`뿐, `ui_prefs`·localStorage 아님).
+ *    ⚠️ 2026-08-20에 **URL 씨앗**(`?q=`)이 생겼지만 그건 저장이 아니다: 허브에서 학생을 찾아 그 강사
+ *    출석부로 검색어를 들고 들어가기 위한 링크 파라미터일 뿐이고, 그냥 `/attendance`를 열면 비어 있다
+ *    ([att-search-seed.ts](./att-search-seed.ts)).
  * 🔴 **새로 열리는 데이터가 없다** — 서버가 이미 그린 행만 좁힌다(강사는 담당 반만 본다, [[#77]]).
  */
-import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+import { syncSearchSeedInUrl } from "./att-search-seed";
 import {
   emptySearchMessage,
   isSearchActive,
@@ -56,12 +69,41 @@ export function useAttendanceSearch(): Ctx | null {
 
 export function AttendanceSearchProvider({
   rows,
+  initialQuery = "",
   children,
 }: {
   rows: AttendanceSearchRow[];
+  /**
+   * URL 씨앗(`?q=`) — 허브에서 학생을 눌러 들어오면 그 학생 줄만 남은 채 열린다.
+   *
+   * 🔑 화면 값은 **씨앗을 덮어쓰는 override**로 들고 있다: 렌더 중 setState도, `key`로 통째 remount도
+   *    없이 "새 씨앗이 오면 그 값으로 되돌아간다"가 성립한다. remount였다면 격자 저장소(되돌리기·활성 칸)가
+   *    저장 뒤 `router.refresh()`마다 날아간다.
+   */
+  initialQuery?: string;
   children: ReactNode;
 }) {
-  const [query, setQuery] = useState("");
+  // override.seed가 지금 씨앗과 다르면 = 새 링크로 들어온 것 → 화면 값은 새 씨앗으로 돌아간다.
+  const [override, setOverride] = useState<{ seed: string; value: string } | null>(null);
+  const query = override && override.seed === initialQuery ? override.value : initialQuery;
+  // 주소창 반영은 **입력이 멎은 뒤**(비우기는 즉시) — 타이핑마다 replaceState를 쏘면 useSearchParams
+  // 구독자(툴바 드롭다운)가 글자마다 다시 그려진다.
+  const syncTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const setQuery = useCallback(
+    (next: string) => {
+      setOverride({ seed: initialQuery, value: next });
+      if (syncTimer.current) clearTimeout(syncTimer.current);
+      // 🔴 X(지우기)·Esc는 **즉시** URL에서 뗀다 — 남겨 두면 새로고침·강사 전환에 옛 검색어가 되살아난다.
+      if (!isSearchActive(next)) {
+        syncSearchSeedInUrl("");
+        return;
+      }
+      syncTimer.current = setTimeout(() => syncSearchSeedInUrl(next), 250);
+    },
+    [initialQuery],
+  );
+  // 화면을 떠난 뒤 늦게 터진 타이머가 **다른 페이지 주소**에 검색어를 적지 않게.
+  useEffect(() => () => { if (syncTimer.current) clearTimeout(syncTimer.current); }, []);
   const active = isSearchActive(query);
   const { matched, matchedStudents } = useMemo(() => {
     const out = new Set<string>();
@@ -76,9 +118,11 @@ export function AttendanceSearchProvider({
     return { matched: out, matchedStudents: people.size };
   }, [rows, query]);
   const totalStudents = useMemo(() => new Set(rows.map((r) => r.studentId)).size, [rows]);
+  // ⚠️ `setQuery`도 의존성이다 — 씨앗이 바뀌면 함수가 새로 만들어지는데, 옛 함수를 들고 있으면
+  //    옛 씨앗으로 override를 적어 방금 친 글자가 통째로 무시된다.
   const value = useMemo<Ctx>(
     () => ({ query, setQuery, active, matched, totalStudents, matchedStudents }),
-    [query, active, matched, totalStudents, matchedStudents],
+    [query, setQuery, active, matched, totalStudents, matchedStudents],
   );
   return <SearchCtx.Provider value={value}>{children}</SearchCtx.Provider>;
 }

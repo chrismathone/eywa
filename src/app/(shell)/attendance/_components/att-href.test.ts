@@ -56,4 +56,30 @@ describe("attHref", () => {
   it("🔴 범위(range) 파라미터는 폐기 — 어떤 링크에도 안 붙는다(항상 그달 전체)", () => {
     expect(attHref({ classId: "c1", month: "2026-07", mode: "teacher" })).not.toContain("range");
   });
+
+  describe("학생 검색 씨앗(q) — 허브에서 검색어를 들고 들어가기(2026-08-20)", () => {
+    it("q를 넘기면 링크에 실린다 — 열자마자 그 학생 줄만 남는다", () => {
+      const url = attHref({ classId: null, month: "2026-08", teacherId: "t1", mode: "teacher", q: "윤현소" });
+      expect(new URL(url, "http://x").searchParams.get("q")).toBe("윤현소");
+      // 강사 전체 보기라는 뜻은 그대로 — 씨앗이 mode를 밀어내지 않는다.
+      expect(url).toContain("mode=teacher");
+    });
+
+    it("🔴 안 넘기거나 공백뿐이면 아예 안 적는다(빈 q= 는 '검색 중'으로 오해된다)", () => {
+      expect(attHref({ classId: "c1", month: "2026-08" })).not.toContain("q=");
+      expect(attHref({ classId: "c1", month: "2026-08", q: "   " })).not.toContain("q=");
+      expect(attHref({ classId: "c1", month: "2026-08", q: null })).not.toContain("q=");
+    });
+
+    it("앞뒤 공백은 떼고 싣는다(주소창 씨앗 정리와 같은 규칙)", () => {
+      const url = attHref({ classId: "c1", month: "2026-08", q: "  윤현소  " });
+      expect(new URL(url, "http://x").searchParams.get("q")).toBe("윤현소");
+    });
+
+    it("기존 파라미터 순서·조합은 그대로(q는 맨 뒤)", () => {
+      expect(
+        attHref({ classId: "c1", month: "2026-07", teacherId: "t1", subjectId: "math", mode: "teacher", q: "윤" }),
+      ).toBe("/attendance?subject=math&teacher=t1&class=c1&month=2026-07&mode=teacher&q=%EC%9C%A4");
+    });
+  });
 });

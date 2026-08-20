@@ -92,16 +92,20 @@ const SEARCH_ROWS = [
   { row: rowKey(CB, S3), studentId: S3, name: "최유나", school: "대구중", grade: "중2", schoolGrade: "대구중2" },
 ];
 
-function renderSheet(showGroups = true) {
+function sheet(showGroups: boolean, initialQuery?: string) {
   const src = buildGridSource(GROUPS, DAYS, ORDERED);
-  const view = render(
-    <AttendanceSearchProvider rows={SEARCH_ROWS}>
+  return (
+    <AttendanceSearchProvider rows={SEARCH_ROWS} initialQuery={initialQuery}>
       <GridProvider rows={src.rows} cols={src.cols} initial={src.initial} lockBefore={null}>
         <AttendanceSearchBox />
         <MatrixTable groups={GROUPS} days={DAYS} holidays={{}} showGroups={showGroups} ordered={ORDERED} />
       </GridProvider>
-    </AttendanceSearchProvider>,
+    </AttendanceSearchProvider>
   );
+}
+
+function renderSheet(showGroups = true, initialQuery?: string) {
+  const view = render(sheet(showGroups, initialQuery));
   return { ...view, input: screen.getByLabelText("학생 검색") as HTMLInputElement };
 }
 
@@ -287,5 +291,98 @@ describe("숫자가 거짓말하지 않는다", () => {
     type(input, "이도");
     expect(container.textContent).toContain("검색 중 · 1/3명 표시");
     expect(container.textContent).toContain("시수·출석률·금액은 전체 기준");
+  });
+});
+
+/**
+ * URL 씨앗(`?q=`) — 허브에서 학생을 눌러 **검색어를 들고** 들어오는 동선(원장 2026-08-20).
+ * 🔴 저장이 아니라 씨앗이다: 화면 값과 주소창이 어긋나면 강사·과목을 바꿀 때 옛 검색어가 되살아난다.
+ */
+describe("URL 씨앗으로 들어오기", () => {
+  const at = (search: string) => window.history.replaceState(null, "", `/attendance${search}`);
+
+  it("씨앗이 있으면 **첫 화면부터** 그 학생 줄만 남는다(허브 결과 클릭)", () => {
+    at("?q=이도");
+    const { container } = renderSheet(true, "이도");
+    expect(screen.getByText("이도윤")).toBeTruthy();
+    expect(screen.queryByText("박서준")).toBeNull();
+    expect(screen.queryByText("나반")).toBeNull();
+    expect(container.textContent).toContain("검색 중 · 1/3명 표시");
+    expect((screen.getByLabelText("학생 검색") as HTMLInputElement).value).toBe("이도");
+    // 🔴 격자 좌표도 첫 렌더부터 좁아져 있어야 한다 — 안 그러면 방향키가 안 보이는 칸으로 들어간다.
+    expect(cellsOf(container, D1).map((el) => el.getAttribute("data-cell-key"))).toEqual([
+      `${rowKey(CA, S1)}|${D1}`,
+    ]);
+  });
+
+  it("한 학생이 여러 반이면 **반 그룹이 둘 다** 남는다(원장 스크린샷의 윤현소)", () => {
+    at("?q=대구중2");
+    renderSheet(true, "대구중2");
+    expect(screen.getByText("가반")).toBeTruthy();
+    expect(screen.getByText("나반")).toBeTruthy();
+    expect(screen.getByText("박서준")).toBeTruthy();
+    expect(screen.getByText("최유나")).toBeTruthy();
+    expect(screen.queryByText("이도윤")).toBeNull();
+  });
+
+  it("🔴 지우기(X)는 URL의 q도 **즉시** 뗀다 — 안 지우면 새로고침에 되살아난다", () => {
+    at("?month=2026-07&q=이도");
+    const { input } = renderSheet(true, "이도");
+    fireEvent.click(screen.getByLabelText("검색 지우기"));
+    expect(input.value).toBe("");
+    expect(window.location.search).toBe("?month=2026-07");
+    expect(screen.getByText("박서준")).toBeTruthy();
+  });
+
+  it("Esc도 같은 경로로 URL을 정리한다", () => {
+    at("?q=이도");
+    const { input } = renderSheet(true, "이도");
+    fireEvent.keyDown(input, { key: "Escape" });
+    expect(window.location.search).toBe("");
+  });
+
+  it("검색어를 바꾸면 주소창도 따라온다 — 강사·과목 드롭다운이 그 값을 그대로 들고 간다", () => {
+    vi.useFakeTimers();
+    try {
+      at("?month=2026-07&q=이도");
+      const { input } = renderSheet(true, "이도");
+      type(input, "최유");
+      // 디바운스 전에는 아직 옛 값(타이핑마다 replaceState를 쏘지 않는다).
+      expect(window.location.search).toBe("?month=2026-07&q=%EC%9D%B4%EB%8F%84");
+      vi.advanceTimersByTime(300);
+      expect(new URLSearchParams(window.location.search).get("q")).toBe("최유");
+      expect(new URLSearchParams(window.location.search).get("month")).toBe("2026-07");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("🔴 새 씨앗이 오면(다른 학생 링크) 화면 값이 그 씨앗으로 되돌아간다", () => {
+    at("?q=이도");
+    const { rerender, input } = renderSheet(true, "이도");
+    type(input, "최유");
+    expect(screen.getByText("최유나")).toBeTruthy();
+    // 같은 라우트 소프트 내비 — 공급자는 remount되지 않고 prop만 바뀐다.
+    rerender(sheet(true, "박서"));
+    expect(screen.getByText("박서준")).toBeTruthy();
+    expect(screen.queryByText("최유나")).toBeNull();
+    expect((screen.getByLabelText("학생 검색") as HTMLInputElement).value).toBe("박서");
+  });
+
+  it("🔴 씨앗이 그대로면 방금 친 값이 살아남는다 — 저장 뒤 router.refresh()에 검색이 풀리면 안 된다", () => {
+    at("?q=이도");
+    const { rerender, input } = renderSheet(true, "이도");
+    type(input, "최유");
+    rerender(sheet(true, "이도"));
+    expect((screen.getByLabelText("학생 검색") as HTMLInputElement).value).toBe("최유");
+    expect(screen.getByText("최유나")).toBeTruthy();
+  });
+
+  it("씨앗이 없으면 종전 그대로 빈 검색으로 열린다", () => {
+    at("");
+    const { input } = renderSheet();
+    expect(input.value).toBe("");
+    expect(screen.getByText("이도윤")).toBeTruthy();
+    expect(screen.getByText("최유나")).toBeTruthy();
   });
 });

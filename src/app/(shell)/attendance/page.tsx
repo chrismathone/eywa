@@ -37,6 +37,9 @@ import { AttendanceHub, type HubTeacher } from "./_components/attendance-hub";
 import { MatrixTable, buildGridSource, type MatrixGroup } from "./_components/matrix-table";
 import { GridProvider } from "./_components/grid-context";
 import { AttendanceSearchBox, AttendanceSearchProvider } from "./_components/search-context";
+import { HubStudentSearch } from "./_components/hub-student-search";
+import { readSearchSeed } from "./_components/att-search-seed";
+import { loadHubStudentSearch } from "@/features/attendance/server/hub-search-queries";
 import { rowKey } from "@/features/attendance/grid/model";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { CollapseAllChip } from "./_components/class-group";
@@ -172,6 +175,12 @@ export default async function AttendancePage({
     teacher?: string;
     subject?: string;
     mode?: string;
+    /**
+     * 학생 검색 **씨앗**(2026-08-20) — 허브에서 학생을 눌러 들어오면 그 학생 줄만 남은 채 열린다.
+     * ⚠️ 저장이 아니다(ui_prefs에 안 남는다). 화면에서 검색어를 바꾸면 주소창에서 따라 바뀌고,
+     *    비우면 떨어진다([att-search-seed.ts](./_components/att-search-seed.ts)).
+     */
+    q?: string;
   }>;
 }) {
   const user = await requireAccess("attendance");
@@ -181,7 +190,10 @@ export default async function AttendancePage({
     teacher: teacherParam,
     subject: subjectParam,
     mode: modeParam,
+    q: qParam,
   } = await searchParams;
+  // 씨앗은 한 곳에서 정리한다(앞뒤 공백·길이) — 화면·링크·주소창이 같은 문자열을 본다.
+  const searchSeed = readSearchSeed(qParam);
   // 강사 드롭다운에서 자리(랩실·JJ실)를 고르면 자리 화면으로 보낸다 — 같은 강사 축의 다른 갈래라
   // 메뉴를 새로 열지 않고 화면만 바꾼다(원장 2026-08-14 "따로 빼지말고").
   const seatPick = parseSeatFilterValue(teacherParam);
@@ -525,6 +537,15 @@ export default async function AttendancePage({
   // ⚠️ 화면 조건은 게이트가 아니다(#77) — 서버 액션이 같은 판정을 다시 한다.
   const canIntakeAbsence = await canManageTenant(user.systemRole, "attendance");
 
+  /**
+   * 허브(강사 미선택)로 열렸는데 **씨앗이 이미 있으면** 첫 렌더에 결과까지 준다 — 입력칸에 이름만
+   * 떠 있고 목록이 비어 있으면 "검색이 안 먹는다"로 읽힌다.
+   * ⚠️ 씨앗이 없으면 조회 자체를 하지 않는다(허브는 요약 화면 — 평소 진입 비용 0).
+   * ⚠️ 게이트·스코프 판정은 조회 본체가 한다(클라 액션과 **같은 함수**, #77).
+   */
+  const hubSearchSeeded =
+    groups.length === 0 && searchSeed ? await loadHubStudentSearch({ query: searchSeed, month }) : null;
+
   // 시트 격자의 좌표·초기값 — 표보다 위(상단 스탯)까지 감싸야 해서 여기서 만든다.
   const gridSource = buildGridSource(groups, visibleDays, orderedRows);
 
@@ -631,7 +652,7 @@ export default async function AttendancePage({
     //    지각이 그 자리에서 따라 움직이려면 툴바가 격자 저장소를 구독해야 한다(DOM은 안 만드는 컨텍스트라 무비용).
     // 🔴 검색 공급자가 **격자보다 바깥**이다 — 격자가 "안 걸린 행"을 좌표에서 빼야 키보드 이동·범위 선택이
     // 안 보이는 칸으로 새지 않는다(search-context.tsx / grid-context.tsx `visibleRows`).
-    <AttendanceSearchProvider rows={searchRows}>
+    <AttendanceSearchProvider rows={searchRows} initialQuery={searchSeed}>
     <GridProvider
       rows={gridSource.rows}
       cols={gridSource.cols}
@@ -793,7 +814,15 @@ export default async function AttendancePage({
                 검색어는 저장하지 않는다 — 다음 방문에 필터가 걸린 채 열리면 "출석부가 비었다"로 읽힌다. */}
             <AttendanceSearchBox />
           </>
-        ) : null}
+        ) : (
+          <>
+            <span className="bg-line h-4 w-px" aria-hidden />
+            {/* 진입 **전** 학생 검색(원장 2026-08-20) — 강사를 고르기 전에 "이 학생이 누구 반이지"를 푼다.
+                결과를 누르면 그 강사 출석부가 **검색어를 들고** 열린다. 시트 검색과 자리가 겹치지 않도록
+                같은 칸에 둔다(둘 중 하나만 뜬다 = URL 씨앗을 적는 주인도 하나). */}
+            <HubStudentSearch month={month} initialQuery={searchSeed} initialResult={hubSearchSeeded} />
+          </>
+        )}
 
         {/* 대상 표기 — PageHeader의 서브라인이 하던 몫(반 이름 / N개 반). 세로 줄 대신 툴바 한 칸으로. */}
         {selectedClassLabel ? (

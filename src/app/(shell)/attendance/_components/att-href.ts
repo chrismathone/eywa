@@ -46,6 +46,18 @@ export function attHref(p: {
   teacherId?: string | null;
   subjectId?: string | null;
   mode?: ViewMode;
+  /**
+   * **학생 검색 씨앗**(2026-08-20) — 이 링크로 열면 시트 검색이 그 말로 채워진 채 열린다
+   * (허브에서 학생을 찾아 그 학생 줄만 남은 출석부로 바로 들어가는 동선).
+   *
+   * 🔴 **저장이 아니라 씨앗이다** — `ui_prefs`에 남지 않고, 화면에서 검색어를 바꾸는 순간 URL에서
+   *    떨어진다(search-context.tsx). 그냥 `/attendance`를 열면 검색은 비어 있다.
+   * ⚠️ 빈 문자열·공백은 아예 안 적는다(빈 `q=`가 남으면 "검색 중"으로 오해된다).
+   * 🔴 **서버가 렌더해 두는 링크(월 이동·'반별/강사 전체' 토글)엔 씨앗을 싣지 말 것.** 그 href는 첫
+   *    렌더에 굳는데 화면의 검색어는 그 뒤에도 바뀌므로, 실으면 **옛 검색어로 되돌아간다**(검색이 풀리는
+   *    것보다 나쁘다). 검색어를 이어 가는 건 클릭 시점의 주소를 읽는 `FilterSelect`(과목·강사·반) 몫이다.
+   */
+  q?: string | null;
 }): string {
   const sp = new URLSearchParams();
   if (p.subjectId) sp.set("subject", p.subjectId);
@@ -55,5 +67,6 @@ export function attHref(p: {
   // 🔴 `class`도 **적어야** 한다. 강사의 기본 보기가 '전체'라, mode를 안 적으면 '반별' 링크가
   //    기본값에 먹혀 그대로 전체로 되돌아온다(= 반별로 갈 방법이 사라진다).
   if (p.mode) sp.set("mode", p.mode);
+  if (p.q?.trim()) sp.set("q", p.q.trim());
   return `/attendance?${sp.toString()}`;
 }
