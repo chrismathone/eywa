@@ -6,6 +6,7 @@ import { formatSchoolGrade } from "@/features/exports/math-timetable/student-for
 import { dayChangeLabel } from "@/features/timetable/lib/split-attendance";
 import { useTimetableEdit } from "./edit-context";
 import { HoverCard, StudentInfoCard } from "./hover-cards";
+import { useSearchTone } from "./search-context";
 
 /**
  * 시간표 셀 학생 행(단일 셀·합반 공용) — class-cell.tsx에서 추출(200줄 규칙).
@@ -170,6 +171,9 @@ export function StudentRow({
   /** 합반 인덱스 배지("1"/"1,2") — 통합 명단에서만. */
   badge?: string;
 }) {
+  // 학생 검색에 걸린 줄이면 표식(안 걸리면 tone 그대로 = 지금까지와 완전히 동일). 남은 칸 안에서
+  // **누구를 찾았는지**를 보여 준다 — 같은 반의 다른 학생은 그대로 보여야 "어느 반 몇 번째"가 읽힌다.
+  const rowTone = useSearchTone(student, tone);
   // ijw식: "이름/학교학년"을 한 줄로 — 생략(…) 없이 넘치면 잘림(clip). 이름 우선(좁아도 이름이 먼저 보이고 메타가 잘림).
   const inner = (
     <>
@@ -184,12 +188,12 @@ export function StudentRow({
       href={`/students/${student.studentId}`}
       title={name}
       ariaLabel={`${name} 학생 정보`}
-      className={`${rowCls} hover:bg-bg-soft ${tone}`}
+      className={`${rowCls} hover:bg-bg-soft ${rowTone}`}
     >
       {inner}
     </WindowLink>
   ) : (
-    <div className={`${rowCls} ${tone}`}>{inner}</div>
+    <div className={`${rowCls} ${rowTone}`}>{inner}</div>
   );
   return (
     <HoverCard
