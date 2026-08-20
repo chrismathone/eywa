@@ -11,6 +11,8 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
+import { SUBTABS_BY_MENU } from "@/lib/navigation";
+
 const read = (p: string) => readFileSync(join(process.cwd(), p), "utf8");
 const BOARD = "src/features/attendance/quick/components/quick-board.tsx";
 const PAGE = "src/app/(shell)/attendance/quick/page.tsx";
@@ -127,5 +129,23 @@ describe("입구 — 하부탭 하나만으로는 폰에서 갈 길이 없다", 
     expect(read("src/features/onescreen/components/top-bar.tsx")).toMatch(/"\/attendance\/quick"/);
     expect(read("src/app/(shell)/ecs/_components/today-nav.tsx")).toMatch(/"\/attendance\/quick"/);
     expect(read("src/app/(shell)/ecs/page.tsx")).toMatch(/EcsQuickAttendanceLink/);
+  });
+
+  it("🔴 강사 미니셸 '내 메뉴'에도 있다 — 폰 강사의 실제 입구", () => {
+    expect(read("src/components/teacher-menu.tsx")).toMatch(/"\/attendance\/quick"/);
+  });
+
+  // 원장 2026-08-20: *"강사뷰가 아닌데 왜 메뉴에 '출결 모드'가 있지..?"* — 사이드바는 관리자뷰에만
+  // 있는데 이 면은 자기 담당 반만 그린다. 담당 반 0인 사무실 계정엔 눌러도 빈 화면이라 줄만 늘었다.
+  it("🔴 사이드바 줄은 겸직에게만(teacherOnly) — 사무실이 매일 쓰는 두 면은 그대로 보인다", () => {
+    const faces = SUBTABS_BY_MENU.attendance ?? [];
+    expect(faces.find((s) => s.href === "/attendance/quick")?.teacherOnly).toBe(true);
+    expect(faces.find((s) => s.href === "/attendance/live")?.teacherOnly).toBeUndefined();
+    expect(faces.find((s) => s.href === "/attendance")?.teacherOnly).toBeUndefined();
+  });
+
+  it("🔴 사이드바가 그 플래그를 실제로 읽는다 — 플래그만 두면 write-only orphan", () => {
+    const flat = read("src/components/app-sidebar.tsx").replace(/\s+/g, "");
+    expect(flat).toContain("!s.teacherOnly||canTeacherView||isSubActive(");
   });
 });
