@@ -4,6 +4,7 @@ import { fetchInChunks } from "@/lib/supabase/batch";
 import { computeTierSettlement } from "@/features/payroll/tier-settlement";
 import { collectTierRows } from "@/features/payroll/server/tier-rows";
 import { parseGroupRates } from "@/features/payroll/salary-group";
+import type { ExcludedLineLike, SettlementLineLike } from "@/features/attendance/search-totals";
 
 /**
  * 출석부 '강사 전체 보기'의 금액 열 — **급여 계산 재료**(원장 전용).
@@ -45,6 +46,17 @@ export type TierSettlementInfo =
       excludedUnits: number;
       /** 학생별 티어 라벨(여럿이면 " · " join) — 학교·학년 열 아랫줄 표시용(라벨만, 금액 아님). */
       tierByStudent: Record<string, string>;
+      /**
+       * 산정된 행별 (학생·시수·금액) — **학생 검색이 걸렸을 때 같은 모수로 다시 접기 위한 재료**(2026-08-20).
+       *
+       * 🔴 금액은 서버가 이미 `floor1(단가×시수×0.911×비율)`로 확정한 값 **그대로**다. 화면은 고르고
+       *    더하기만 한다(`scopedSettlement`) — 산식·반올림 자리를 클라에서 다시 쓰지 않는다.
+       * 🔴 전체(모수 없음)로 접으면 위 `total`과 **연산 순서까지 같아** 1원도 안 갈린다.
+       * ⚠️ 단가·이름은 안 싣는다 — 이 화면이 필요한 건 "이 학생 몫이 얼마인가"뿐이다.
+       */
+      settlementLines: SettlementLineLike[];
+      /** 제외된 행 — "단가 미지정 N명 · N시수 제외" 경고를 검색 모수로 다시 세기 위한 재료. */
+      excludedLines: ExcludedLineLike[];
     }
   | {
       status: "hold";
@@ -203,6 +215,10 @@ async function computeTierSettlementInfo(
       missingPriceTiers: result.missingPriceTiers,
       excludedUnits: result.excludedUnits,
       tierByStudent,
+      // ⚠️ 행 순서를 **그대로** 넘긴다 — 정렬하거나 학생별로 미리 접으면 전체 합의 부동소수 결합순서가
+      //    달라져 `total`과 1원이 흔들릴 수 있다(search-totals.ts `scopedSettlement` 주석).
+      settlementLines: result.lines.map((l) => ({ studentId: l.studentId, units: l.units, amount: l.amount })),
+      excludedLines: result.excludedLines,
     };
   } catch {
     // 0199a 미적용(칼럼·표 없음 = PostgREST 400 → 헬퍼 throw) — 정산액만 접고 화면은 산다.

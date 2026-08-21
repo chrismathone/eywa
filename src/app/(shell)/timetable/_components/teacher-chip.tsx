@@ -8,6 +8,7 @@ import { formatSchoolGrade } from "@/features/exports/math-timetable/student-for
 import { readableTextColor } from "@/lib/color-utils";
 import type { ClassDetailQuick } from "./class-cell";
 import { ClassInfoCard, HoverCard } from "./hover-cards";
+import { useClassVisible, useSearchTone } from "./search-context";
 
 // 강사뷰(10분 격자) 전용 칩 — 기본은 시트처럼 **반명+방만**, 클릭하면 그 자리에서 재원 학생
 // 명단으로 전환(다시 클릭=복귀). 블록 높이는 고정(10분 축)이라 명단이 넘치면 블록 내부 스크롤.
@@ -24,11 +25,16 @@ function metaLabel(school: string | null | undefined, grade: string | null | und
 export function TeacherChip({ slot }: { slot: ClassDetailQuick }) {
   const [open, setOpen] = useState(false);
   const subjects = useSubjectMaps();
+  // 학생 검색 — 걸린 반의 칩만 남는다. ⚠️ 훅은 조건 없이 전부 부른 **뒤에** 내보낸다(훅 규칙).
+  //    강사뷰의 격자(10분 축·병합 셀)는 서버가 잡아 놓은 그대로 두고 **칩만** 사라진다 —
+  //    축까지 접으면 "몇 시 자리인지"가 무너져 검색 결과의 위치를 못 읽는다.
+  const visible = useClassVisible([slot.classId ?? slot.id]);
   const color = SUBJECT_SOFT[subjects.colorOf(slot.subject)];
   const headerStyle = slot.classBgColor
     ? { background: slot.classBgColor, color: slot.classTextColor ?? readableTextColor(slot.classBgColor) }
     : undefined;
   const active = slot.students.filter((s) => (s.status ?? "active") === "active");
+  if (!visible) return null;
 
   return (
     // 블록(병합 셀) 전체를 채운다 — 시트 병합 셀처럼 접힘 상태에선 색면이 블록을 꽉 채우고
@@ -83,36 +89,39 @@ export function TeacherChip({ slot }: { slot: ClassDetailQuick }) {
           {active.length === 0 ? (
             <div className="text-text-faint px-1.5 py-0.5">재원생 없음</div>
           ) : (
-            active.map((s, i) => {
-              const meta = metaLabel(s.school, s.grade);
-              const inner = (
-                <>
-                  {s.name}
-                  {/* 기본뷰 StudentRow와 동일한 톤(opacity-90) — 뷰마다 메타 진하기가 다르면 같은 학생이 달리 보인다. */}
-                  {meta ? <span className="opacity-90">/{meta}</span> : null}
-                </>
-              );
-              const rowCls =
-                "block overflow-hidden whitespace-nowrap text-clip px-1.5 py-[2px] leading-tight text-foreground";
-              return s.studentId ? (
-                <WindowLink
-                  key={s.enrollmentId ?? `s-${i}`}
-                  href={`/students/${s.studentId}`}
-                  title={s.name}
-                  ariaLabel={`${s.name} 학생 정보`}
-                  className={`${rowCls} hover:bg-bg-soft`}
-                >
-                  {inner}
-                </WindowLink>
-              ) : (
-                <div key={s.enrollmentId ?? `s-${i}`} className={rowCls}>
-                  {inner}
-                </div>
-              );
-            })
+            active.map((s, i) => <ChipStudentRow key={s.enrollmentId ?? `s-${i}`} student={s} />)
           )}
         </div>
       ) : null}
     </div>
+  );
+}
+
+/**
+ * 칩 안 학생 한 줄 — 검색에 걸리면 표식(기본뷰 StudentRow·통합뷰 RosterRow와 **같은 함수**).
+ * ⚠️ `.map` 안에서 훅을 부를 수 없어 컴포넌트로 뺀다.
+ */
+function ChipStudentRow({ student }: { student: ClassDetailQuick["students"][number] }) {
+  const tone = useSearchTone(student, "text-foreground");
+  const meta = metaLabel(student.school, student.grade);
+  const inner = (
+    <>
+      {student.name}
+      {/* 기본뷰 StudentRow와 동일한 톤(opacity-90) — 뷰마다 메타 진하기가 다르면 같은 학생이 달리 보인다. */}
+      {meta ? <span className="opacity-90">/{meta}</span> : null}
+    </>
+  );
+  const rowCls = `block overflow-hidden whitespace-nowrap text-clip px-1.5 py-[2px] leading-tight ${tone}`;
+  return student.studentId ? (
+    <WindowLink
+      href={`/students/${student.studentId}`}
+      title={student.name}
+      ariaLabel={`${student.name} 학생 정보`}
+      className={`${rowCls} hover:bg-bg-soft`}
+    >
+      {inner}
+    </WindowLink>
+  ) : (
+    <div className={rowCls}>{inner}</div>
   );
 }

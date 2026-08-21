@@ -37,16 +37,41 @@ export type VehicleGroup = {
   progress: Progress;
 };
 
-/** 줄 묶음의 진행을 센다. */
+/**
+ * 줄 묶음의 진행을 센다.
+ *
+ * 🔴 **오늘 안 타는 줄(`skipped`)은 세지 않는다**(0229a). 화면에는 회색으로 **남아 있지만**
+ *    "할 일"이 아니다 — 빼지 않으면 `남음 1명`이 영원히 안 줄어 회차가 끝나지 않고, 그 회차는
+ *    자동으로 계속 펼쳐진 채 남는다(RunPanel의 열림 판정이 `unmarked > 0`이다).
+ * ⚠️ 그래서 `planned`도 함께 줄어든다 — `planned = boarded + missed + unmarked` 불변식을 지키려면
+ *    한쪽만 빼면 안 된다. 세는 모수가 "오늘 실제로 태울 사람"이 되는 게 맞기도 하다.
+ * ⚠️ 이미 찍힌 기록이 있는데 뒤늦게 skip이 들어오면 그 줄의 상태는 화면에 그대로 보이되 카운트
+ *    밖으로 나간다(드문 경우 — 기록을 지우는 것보다 보이는 편이 안전하다).
+ */
 export function countProgress(rows: readonly RideRow[]): Progress {
+  let planned = 0;
   let boarded = 0;
   let missed = 0;
   for (const r of rows) {
+    if (r.dayKind === "skipped") continue;
+    planned += 1;
     // 'extra'(예정에 없던 탑승)도 탄 것이다 — 남은 일에서 빼야 "완료"가 맞는다.
     if (r.status === "boarded" || r.status === "extra") boarded += 1;
     else if (r.status === "missed") missed += 1;
   }
-  return { planned: rows.length, boarded, missed, unmarked: rows.length - boarded - missed };
+  return { planned, boarded, missed, unmarked: planned - boarded - missed };
+}
+
+/**
+ * 접힌 머리에 뭐라고 쓸지 — "남음 N명" / "완료" / "오늘 탑승 없음".
+ *
+ * 🔑 `none`이 따로 있는 이유: 그 회차 사람이 **전원 오늘만 안 탐**이면 `unmarked`가 0이라 그냥
+ *    세면 "완료"가 된다. 아무도 안 탔는데 다 한 것처럼 읽히면 안 된다.
+ */
+export type ProgressState = "remaining" | "done" | "none";
+export function progressState(p: Progress): ProgressState {
+  if (p.planned === 0) return "none";
+  return p.unmarked > 0 ? "remaining" : "done";
 }
 
 /** 여러 덩이의 진행을 합친다. */

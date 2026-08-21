@@ -68,10 +68,11 @@ export function StudentSearchBox({
 /**
  * **지금 걸린 필터를 눈에 보이게** 하는 칩 — 검색 중일 때만 뜬다.
  *
- * 🔴 이 화면들의 합계(시수·출석률·미출결·입력 N/M)는 **필터와 함께 좁아지지 않는다**: 급여에 쓰는
- *    숫자(시수·정산액)와 하루 분모(입력 N/M)는 서버가 전체 기준으로 낸 값이고, 그 일부만 세면
- *    "출석부가 반쪽인데 숫자는 맞아 보이는" 더 나쁜 거짓말이 된다. 그래서 **숫자를 줄이는 대신
- *    필터를 크게 말한다** — 몇 명이 보이고 있는지까지 적어 "왜 목록이 짧은지"를 감추지 않는다.
+ * 🔴 **합계가 필터를 따라가는지는 화면마다 다르다** — 그래서 `totalsNote`가 필수에 가깝다.
+ *    · 월별 출석부(2026-08-20~) = **따라간다**. 시수·청구·납입·정산액을 매치된 학생만으로 다시 세고,
+ *      전체 값은 `검색분 / 전체`로 나란히 세운다(좁혀 놓고 전체인 척하는 숫자를 만들지 않는다, [[#89]]).
+ *    · 오늘 출결·좌석표 = **안 따라간다**. 하루 분모(입력 N/M)는 그 반 전체가 모수라, 일부만 세면
+ *      미입력 반이 '입력 완료'로 칠해진다. 그쪽은 숫자를 줄이는 대신 필터를 크게 말한다.
  * ⚠️ 이 칩을 지우거나 접지 말 것(`<details>` 안에 넣는 것 포함) — 접히면 없는 것과 같다.
  */
 export function SearchScopeChip({
@@ -88,7 +89,7 @@ export function SearchScopeChip({
 }) {
   return (
     <span
-      className="bg-amber-soft text-amber-strong num shrink-0 rounded-full px-2.5 py-0.5 text-xs font-bold whitespace-nowrap"
+      className="bg-amber-soft text-amber num shrink-0 rounded-full px-2.5 py-0.5 text-xs font-bold whitespace-nowrap"
       title={
         totalsNote
           ? `검색으로 목록만 좁혔습니다 — ${totalsNote}입니다.`

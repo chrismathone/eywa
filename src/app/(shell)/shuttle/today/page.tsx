@@ -1,5 +1,10 @@
 import { kstToday } from "@/lib/date-kst";
-import { getBoardingsOn, getShuttleBoard } from "@/features/shuttle/server/queries";
+import {
+  getBoardingsOn,
+  getRideExceptionsOn,
+  getShuttleBoard,
+} from "@/features/shuttle/server/queries";
+import { getAssignableStudents } from "@/features/shuttle/server/students";
 import { getAbsentStudentIdsOn } from "@/features/shuttle/server/attendance-link";
 import { canRecordBoarding } from "@/features/shuttle/server/record-gate";
 import { requireShuttleView } from "@/features/shuttle/server/access";
@@ -30,13 +35,21 @@ export default async function ShuttleTodayPage({
   const date = sp.d && YMD.test(sp.d) ? sp.d : kstToday();
   const season: Season = isSeason(sp.season) ? sp.season : "term";
 
-  // 다섯 다 서로 독립 — 함께 받는다(B4). absentIds는 **신호 전용**(출결을 바꾸지 않는다).
-  const [board, { ready, logs }, canWrite, absentIds, prefs] = await Promise.all([
+  // 🔴 편성 권한이 아니라 **기록** 권한(record-gate.ts) — 화면·액션이 같은 함수를 본다([[#77]]).
+  // 🔑 이것만 먼저 받는 이유: '오늘만 탑승'에 세울 재원생 목록(수백 행)을 **찍을 수 있는 사람에게만**
+  //    싣기 위해서다. 열람 전용 계정엔 쓸 데가 없는데 폰에서 첫 페인트만 늦춘다.
+  //    비용은 거의 0이다 — 요청 캐시라 사무실 계정은 왕복 0(레이아웃이 이미 매트릭스를 받았다)이고,
+  //    셔틀 담당(viewer)만 토글 조회 1왕복이 든다.
+  const canWrite = await canRecordBoarding();
+
+  // 나머지는 서로 독립 — 함께 받는다(B4). absentIds는 **신호 전용**(출결을 바꾸지 않는다).
+  const [board, { ready, logs }, absentIds, prefs, exceptionsRes, students] = await Promise.all([
     getShuttleBoard(season),
     getBoardingsOn(date),
-    canRecordBoarding(), // 🔴 편성 권한이 아니라 **기록** 권한(record-gate.ts) — 화면·액션이 같은 함수를 본다(#77)
     getAbsentStudentIdsOn(date),
     loadShuttleTodayPrefs(), // 등하원 보기 = 계정 귀속(다른 기기에서도 같은 상태)
+    getRideExceptionsOn(date), // 일회성 개입(0229a) — 표가 없으면 ready:false로 조용히 접힌다([[#95]])
+    canWrite ? getAssignableStudents() : Promise.resolve([]),
   ]);
 
   return (
@@ -56,6 +69,12 @@ export default async function ShuttleTodayPage({
           absentStudentIds={[...absentIds]}
           canWrite={canWrite}
           initialDirection={prefs.direction}
+          exceptions={exceptionsRes.exceptions}
+          // 🔴 0229a 미적용이면 false — 화면이 "오늘만 탑승" 버튼을 **아예 안 그린다**.
+          //    없는 기능을 버튼으로 약속하면 눌렀을 때 한글 에러만 나온다(거짓 약속 금지).
+          exceptionsReady={exceptionsRes.ready}
+          students={students}
+          today={kstToday()}
         />
       )}
     </div>

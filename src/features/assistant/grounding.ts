@@ -149,11 +149,22 @@ export function findGroundingIssues(answer: string, g: Grounding): GroundingIssu
 
 // --- 복구: 근거 없는 문장 제거 ---------------------------------------------
 
-/** 답변을 문장 단위로 나눠, 근거 없는 이슈가 든 문장을 제거(최후 수단). 남는 게 너무 짧으면 원문 유지. */
+/**
+ * 답변을 문장 단위로 나눠, 근거 없는 이슈가 든 문장을 제거(최후 수단). 남는 게 너무 짧으면 원문 유지.
+ * ⚠️ **줄 구조는 보존한다**(2026-08-20) — 답변에 표·목록이 허용되면서 전부 한 줄로 이어 붙이면
+ *    표가 통째로 뭉개진다(파이프 행이 한 문단이 된다). 줄 안에서만 문장을 걸러내고 줄바꿈은 남긴다.
+ */
 export function stripUngroundedSentences(answer: string, g: Grounding): string {
   const sentences = answer.split(/(?<=[.。!?])\s+|\n+/).filter((s) => s.trim());
   if (sentences.length <= 1) return answer; // 통짜 한 문장은 쪼개 봤자 = 원문(재생성이 담당)
-  const kept = sentences.filter((s) => findGroundingIssues(s, g).length === 0);
-  const joined = kept.join(" ").trim();
+  const keptLines: string[] = [];
+  for (const line of answer.split(/\n/)) {
+    if (!line.trim()) continue;
+    const kept = line
+      .split(/(?<=[.。!?])\s+/)
+      .filter((s) => s.trim() && findGroundingIssues(s, g).length === 0);
+    if (kept.length > 0) keptLines.push(kept.join(" ").trim());
+  }
+  const joined = keptLines.join("\n").trim();
   return joined.length >= 10 ? joined : answer;
 }

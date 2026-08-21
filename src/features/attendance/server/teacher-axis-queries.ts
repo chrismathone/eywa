@@ -2,6 +2,7 @@ import "server-only";
 import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
+import { effectiveTeacherId } from "@/lib/auth/view-mode";
 import { classTeacherIdsInRange, slotOverlapsRange, type AxisSlot } from "../teacher-axis";
 
 /**
@@ -170,3 +171,20 @@ export const loadClassAxisRows = cache(async (from: string, to: string): Promise
     };
   });
 });
+
+/**
+ * **이 사용자가 출석부에서 볼 수 있는 반** — 강사(겸직 강사뷰·'다른 강사 뷰' 포함)는 자기가 가르치는
+ * 반만, 사무실은 전체.
+ *
+ * 🔴 출석부 표면이 늘 때마다 `effectiveTeacherId()` + `taughtBy.includes()`를 각자 적으면, 언젠가 한
+ *    곳이 담임(`classes.teacher_id`)으로만 좁혀 교시 담당 강사의 반을 통째로 잃거나(2026-08-18에
+ *    고친 그 버그) 반대로 남의 반을 흘린다. 판정은 **여기 한 줄**뿐이고
+ *    (`getMonthlyAttendanceMatrix`·허브 학생 검색이 같이 쓴다) 화면은 결과만 받는다([[#77]]).
+ * ⚠️ 좁히는 근거는 `taughtBy`(담임 ∪ 그 기간 교시 담당) — 자리(LAB·JJ)는 사람이 아니라 안 들어온다.
+ * ⚠️ 캐시는 `loadClassAxisRows` 쪽에 있다(사람별로 키를 쪼개지 않기 위해) — 여기선 필터만 한다.
+ */
+export async function loadVisibleClassAxisRows(from: string, to: string): Promise<ClassAxisRow[]> {
+  const tId = await effectiveTeacherId();
+  const rows = await loadClassAxisRows(from, to);
+  return tId ? rows.filter((c) => c.taughtBy.includes(tId)) : rows;
+}

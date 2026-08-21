@@ -12,9 +12,14 @@ import { getStudentConsultationsPage } from "@/features/consultations/server/que
 import { getRetentionRoster } from "@/features/retention/server/queries";
 import { summarizeRoster } from "@/features/retention/roster";
 import { kstToday } from "@/lib/date-kst";
-import { getCurrentUser } from "@/lib/auth/current-user";
-import { canAccessTenant } from "@/lib/auth/perm-matrix";
 import { CONSULTATION_CATEGORY_LABEL, INVOICE_STATUS_LABEL, RISK_LEVEL_LABEL, subjectLabeler } from "./labels";
+import { requireMenu } from "./tool-gate";
+
+/** 운영 툴은 화면이 제각각이라 게이트도 제각각 — 출석부·수납관리·학생상담·이탈 방어(#77). */
+const ATTENDANCE_GATE = () => requireMenu("attendance", "출결 현황");
+const BILLING_GATE = () => requireMenu("billing", "수납 정보");
+const CONSULTATIONS_GATE = () => requireMenu("consultations", "상담 기록");
+const RETENTION_GATE = () => requireMenu("retention", "이탈 위험 명단");
 
 const ATTENDANCE_STATUS_LABEL: Record<string, string> = {
   present: "출석",
@@ -37,6 +42,8 @@ export const attendanceDayTool = betaZodTool({
       .describe("YYYY-MM-DD. 미지정 시 오늘(KST)"),
   }),
   run: async ({ date }) => {
+    const denied = await ATTENDANCE_GATE();
+    if (denied) return denied;
     const target = date ?? kstToday();
     const label = await subjectLabeler();
     const [classes, records] = await Promise.all([
@@ -80,7 +87,11 @@ export const billingSummaryTool = betaZodTool({
       .optional()
       .describe("YYYY-MM. 미지정 시 이번 달"),
   }),
-  run: async ({ period }) => JSON.stringify(await getBillingSummary(period)),
+  run: async ({ period }) => {
+    const denied = await BILLING_GATE();
+    if (denied) return denied;
+    return JSON.stringify(await getBillingSummary(period));
+  },
 });
 
 export const topOutstandingTool = betaZodTool({
@@ -90,6 +101,8 @@ export const topOutstandingTool = betaZodTool({
     limit: z.number().int().min(1).max(20).optional().describe("최대 인원(기본 8)"),
   }),
   run: async ({ limit }) => {
+    const denied = await BILLING_GATE();
+    if (denied) return denied;
     const items = await getTopOutstanding(limit ?? 8);
     return JSON.stringify({
       students: items.map((i) => ({
@@ -110,6 +123,8 @@ export const searchConsultationsTool = betaZodTool({
     range: z.enum(["7d", "30d", "all"]).optional().describe("기간(기본 30d)"),
   }),
   run: async ({ query, range }) => {
+    const denied = await CONSULTATIONS_GATE();
+    if (denied) return denied;
     const label = await subjectLabeler();
     const { rows, total } = await getStudentConsultationsPage(
       { q: query, range: range ?? "30d" },
@@ -145,10 +160,9 @@ export const retentionRisksTool = betaZodTool({
   run: async ({ limit }) => {
     // ⚠️ 툴도 화면과 같은 게이트를 통과해야 한다 — /retention이 꺼진 테넌트에서 비서로만 명단이
     // 새어 나가던 구멍(2026-07-30 적대 리뷰). RLS는 이 테이블들을 역할로 막지 않으므로 여기서 막는다.
-    const user = await getCurrentUser();
-    if (!user || !(await canAccessTenant(user.systemRole, "retention"))) {
-      return JSON.stringify({ error: "이탈 위험 명단을 볼 권한이 없습니다." });
-    }
+    // 2026-08-20: 이 선례를 전 툴로 넓히면서 공용 헬퍼(tool-gate)로 통일했다.
+    const denied = await RETENTION_GATE();
+    if (denied) return denied;
     const roster = await getRetentionRoster();
     const stats = summarizeRoster(roster);
     return JSON.stringify({

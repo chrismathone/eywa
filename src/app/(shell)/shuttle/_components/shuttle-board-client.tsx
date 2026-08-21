@@ -18,6 +18,14 @@ import {
 import { FaceTabs } from "@/components/face-tabs";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import {
+  SHUTTLE_ACTION,
+  SHUTTLE_CHIP,
+  SHUTTLE_CHIP_OFF,
+  SHUTTLE_CHIP_ON,
+  SHUTTLE_ROW_TEXT,
+} from "@/features/shuttle/control-size";
 import { SHUTTLE_BOARD_PATH, shuttleFaces } from "@/features/shuttle/faces";
 import {
   SEASON_LABEL,
@@ -203,18 +211,23 @@ export function ShuttleBoardClient({
                    기본 480px로 열리므로, 폭 기준(`md:`)으로 감추면 **데스크톱 플로팅 창에서도** 인쇄가
                    사라진다. 감추려는 건 좁은 화면이 아니라 **손으로 쓰는 기기**다. */}
             <span className="flex items-center gap-2 pointer-coarse:hidden">
-              <Button variant="outline" onClick={() => window.open(`/shuttle/route?season=${season}`, "_blank")}>
+              <Button
+                variant="outline"
+                className={SHUTTLE_ACTION}
+                onClick={() => window.open(`/shuttle/route?season=${season}`, "_blank")}
+              >
                 오늘 노선표 인쇄
               </Button>
               <Button
                 variant="outline"
+                className={SHUTTLE_ACTION}
                 onClick={() => window.open(`/shuttle/route?season=${season}&d=all`, "_blank")}
               >
                 전체 편성표 인쇄
               </Button>
             </span>
             {canWrite && (
-              <Button variant="outline" onClick={() => setStopDialogOpen(true)}>
+              <Button variant="outline" className={SHUTTLE_ACTION} onClick={() => setStopDialogOpen(true)}>
                 정류장 관리
               </Button>
             )}
@@ -230,18 +243,15 @@ export function ShuttleBoardClient({
           <button
             key={s}
             type="button"
+            aria-pressed={s === season}
             onClick={() => router.push(`/shuttle?season=${s}`)}
-            className={`rounded-pill flex h-10 items-center px-3.5 text-[12.5px] font-bold whitespace-nowrap transition-colors ${
-              s === season
-                ? "bg-primary text-primary-foreground"
-                : "border-line text-text-dim hover:bg-muted border"
-            }`}
+            className={cn(SHUTTLE_CHIP, s === season ? SHUTTLE_CHIP_ON : SHUTTLE_CHIP_OFF)}
           >
             {SEASON_LABEL[s]}
           </button>
         ))}
         {!canWrite && (
-          <span className="text-text-faint text-[12px] whitespace-nowrap">
+          <span className="text-text-faint text-[12.5px] whitespace-nowrap">
             열람 전용 — 편성은 사무실에서 수정합니다
           </span>
         )}
@@ -261,11 +271,13 @@ export function ShuttleBoardClient({
             type="button"
             onClick={() => setPane(p.key)}
             aria-current={pane === p.key ? "page" : undefined}
-            className={`-mb-px min-h-11 border-b-2 px-3 text-[13px] font-bold ${
+            className={cn(
+              "-mb-px min-h-11 cursor-pointer border-b-2 px-3 font-bold",
+              SHUTTLE_ROW_TEXT,
               pane === p.key
                 ? "border-primary text-primary"
-                : "text-text-dim hover:text-text border-transparent"
-            }`}
+                : "text-text-dim hover:text-foreground border-transparent",
+            )}
           >
             {p.label}
           </button>
@@ -304,7 +316,7 @@ export function ShuttleBoardClient({
 
       <DragOverlay dropAnimation={null}>
         {dragLabel ? (
-          <span className="border-primary/40 bg-card text-text rounded-pill border px-2.5 py-1 text-[12px] font-bold shadow-lg">
+          <span className="border-primary/40 bg-card text-foreground rounded-pill border px-2.5 py-1 text-[12.5px] font-bold shadow-lg">
             {dragLabel}
           </span>
         ) : null}

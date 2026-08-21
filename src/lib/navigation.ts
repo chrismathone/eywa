@@ -41,7 +41,11 @@ export function navPresentation(item: Pick<NavItem, "presentation">): "desktop" 
 // `menuKey`가 있으면 그 하부탭은 **독립 메뉴**(별도 라우트·별도 창·별도 권한)다 — 부모 창에서 면만
 // 바꾸는 게 아니라 자기 창(자기 크기)으로 열리고, 사이드바가 그 키로 접근권한을 검사한다.
 // (없으면 기존처럼 부모 menuKey 창의 면 전환. `?tab=` 면들이 여기 해당.)
-export type SubTab = { label: string; href: string; menuKey?: MenuKey };
+//
+// `teacherOnly`는 **권한이 아니라 쓸모** 판정이다 — 담당 반을 전제로 만든 면(자기 반만 그리는 화면)은
+// 담당 반이 0인 사무실 계정에게 눌러도 빈 화면이라, 사이드바가 `canTeacherView`(겸직 판정)로 감춘다.
+// 라우트는 그대로 열려 있다(URL·강사 미니셸 '내 메뉴'는 불변) — 여기서 지우는 건 **사이드바 줄 하나**뿐.
+export type SubTab = { label: string; href: string; menuKey?: MenuKey; teacherOnly?: boolean };
 export const SUBTABS_BY_MENU: Partial<Record<MenuKey, SubTab[]>> = {
   billing: [
     { label: "수납", href: "/billing" },
@@ -57,6 +61,13 @@ export const SUBTABS_BY_MENU: Partial<Record<MenuKey, SubTab[]>> = {
   // 라우트가 `/attendance/*`라 menuKeyForPath(첫 세그먼트)가 그대로 attendance로 푼다.
   attendance: [
     { label: "오늘 출결", href: "/attendance/live" },
+    // 출결 모드(2026-08-20) — 강사 본인 반만·터치 몇 번으로 끝내는 모바일 1순위 면.
+    // ⚠️ **여기가 유일한 입구가 되면 안 된다** — 폰엔 사이드바가 없어 하부탭으로 갈 길이 아예 없다
+    //    (셔틀에서 겪은 그대로). 강사 홈(원스크린 상단 바·ECS 툴바)에 같은 링크가 함께 있어야 한다.
+    // 🔴 `teacherOnly` — 사이드바는 **관리자뷰에만** 있는데 이 면은 자기 담당 반만 그린다. 담당 반이
+    //    0인 사무실 계정(원장 포함)에겐 눌러도 빈 화면이라 줄만 늘었다(원장 지적 2026-08-20:
+    //    *"강사뷰가 아닌데 왜 메뉴에 '출결 모드'가 있지..?"*). 겸직(담당 반 있는 관리자)에겐 남는다.
+    { label: "출결 모드", href: "/attendance/quick", teacherOnly: true },
     { label: "월별 출석부", href: "/attendance" },
   ],
   // 셔틀 — 부모 href·기본 착지는 **노선 편성**(/shuttle). 매일 찍는 건 '오늘 등하원'이지만

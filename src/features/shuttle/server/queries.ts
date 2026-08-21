@@ -7,10 +7,12 @@ import { reportError } from "@/lib/observability/report-error";
 import {
   isBoardingStatus,
   isDirection,
+  isRideExceptionKind,
   isSeason,
   type BoardingStatus,
   type DayCode,
   type Direction,
+  type RideExceptionKind,
   type Season,
   type ShuttleRider,
   type ShuttleRun,
@@ -18,7 +20,7 @@ import {
   type ShuttleStop,
   type ShuttleVehicle,
 } from "../types";
-import { dayCodeOf, missedSignals, type ShuttleSignal } from "../roster";
+import { dayCodeOf, missedSignals, type RideException, type ShuttleSignal } from "../roster";
 
 /**
  * 셔틀 조회 — 읽기는 세션 클라이언트 + RLS(테넌트 전원, 0225a). 쓰기는 서버 액션(actions.ts).
@@ -315,6 +317,60 @@ export async function getBoardingsOn(ymd: string): Promise<{ ready: boolean; log
     });
   }
   return { ready: true, logs };
+}
+
+/**
+ * 그날의 **일회성 탑승 개입**(0229a) — 오늘만 탐 / 오늘만 안 탐.
+ *
+ * ⚠️ **0229a 적용 전에도 죽지 않는다**([[#95]]) — 표가 없으면 `ready:false` + 예외 0건으로 조용히
+ *    접히고 셔틀 화면은 종전대로 산다(정기 배정만 보인다). 화면은 `ready`로 "쓸 수 있는 기능인지"만
+ *    가른다 — 없는 기능을 버튼으로 약속하지 않기 위해서다.
+ * ⚠️ 학생 이름은 여기서 붙인다 — `add` 줄은 정기 배정이 없어 **이름의 출처가 이 조회뿐**이다.
+ *    (`fetchInChunks`로 나눈다: 하루 예외는 몇 건이지만 규약은 같다, B3.)
+ */
+export async function getRideExceptionsOn(
+  ymd: string,
+): Promise<{ ready: boolean; exceptions: RideException[] }> {
+  const user = await getCurrentUser();
+  if (!user) return { ready: false, exceptions: [] };
+  try {
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from("shuttle_ride_exceptions")
+      .select("id, student_id, kind, io_kind, run_stop_id, memo")
+      .eq("on_date", ymd)
+      .limit(500); // 하루 예외는 몇 건 규모 — 절단 방지 명시 상한(B2)
+
+    if (isMissingTable(error)) return { ready: false, exceptions: [] };
+    if (error) {
+      reportError(error, { scope: "shuttle.rideExceptions", ymd });
+      return { ready: false, exceptions: [] };
+    }
+
+    const rows = (data ?? []).filter((r) => isDirection(r.io_kind) && isRideExceptionKind(r.kind));
+    const students = await loadStudents([...new Set(rows.map((r) => r.student_id))]);
+    return {
+      ready: true,
+      exceptions: rows.map((r) => {
+        const s = students.get(r.student_id);
+        return {
+          id: r.id,
+          studentId: r.student_id,
+          studentName: s?.name ?? "(삭제된 학생)",
+          schoolGrade: s ? schoolGradeLabel(s.school, s.grade) : "",
+          studentStatus: s?.status ?? "unknown",
+          kind: r.kind as RideExceptionKind,
+          ioKind: r.io_kind as Direction,
+          runStopId: r.run_stop_id,
+          memo: r.memo,
+        };
+      }),
+    };
+  } catch (e) {
+    // fetchInChunks는 규약대로 throw한다([[#53]]) — 부가 축이라 화면을 죽이지 않고 접는다.
+    reportError(e, { scope: "shuttle.rideExceptions", ymd });
+    return { ready: false, exceptions: [] };
+  }
 }
 
 /**

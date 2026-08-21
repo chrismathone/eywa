@@ -47,6 +47,19 @@ export function isBoardingStatus(v: unknown): v is BoardingStatus {
   return v === "boarded" || v === "missed" || v === "extra";
 }
 
+/**
+ * 일회성 탑승 개입(0229a) — **그날만의 예정 변경**. 🔴 실제 탑승 기록(`BoardingStatus`)과 다른 축이다:
+ * 이건 "탈 예정인가"이고 저건 "탔는가"다. 섞으면 안 탔는데 탄 걸로 남는다(0229a 머리 주석).
+ */
+export type RideExceptionKind = "skip" | "add";
+export const RIDE_EXCEPTION_LABEL: Record<RideExceptionKind, string> = {
+  skip: "오늘 안 탐",
+  add: "오늘만 탑승",
+};
+export function isRideExceptionKind(v: unknown): v is RideExceptionKind {
+  return v === "skip" || v === "add";
+}
+
 export type ShuttleStop = {
   id: string;
   name: string;

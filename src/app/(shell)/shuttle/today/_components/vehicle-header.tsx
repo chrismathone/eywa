@@ -1,7 +1,7 @@
 "use client";
 
 import { DIRECTION_LABEL } from "@/features/shuttle/types";
-import type { DirectionFilter, VehicleGroup } from "@/features/shuttle/today-board";
+import { progressState, type DirectionFilter, type VehicleGroup } from "@/features/shuttle/today-board";
 
 /**
  * 호차 머리 — 폰에서 **스크롤 중에도 붙어 있다**(sticky). 차가 여럿일 때 "지금 몇 호차를 보는지"를
@@ -20,14 +20,15 @@ export function VehicleHeader({
   dirFilter: DirectionFilter;
 }) {
   const { progress } = group;
+  const state = progressState(progress);
   const scope = dirFilter === "all" ? "" : `${DIRECTION_LABEL[dirFilter]} `;
   return (
     // ⚠️ 토큰 이름은 `--background`다 — `bg-bg`는 **정의가 없어 아무 색도 안 칠해지고**, 화이트 캔버스라
     //    "정상처럼" 보인 채 sticky 뒤로 본문이 비친다(죽은 색 클래스, 팔레트 v4 주의).
     <div className="bg-background/95 border-line sticky top-0 z-10 flex flex-wrap items-center gap-x-2 gap-y-1 border-b py-1.5 backdrop-blur">
-      <h2 className="text-text text-[15px] font-bold">{group.vehicleName}</h2>
+      <h2 className="text-foreground text-[15px] font-bold">{group.vehicleName}</h2>
       {group.driverName && (
-        <span className="text-text-dim text-[12px]">
+        <span className="text-text-dim text-[11.5px]">
           기사 {group.driverName}
           {group.driverPhone && (
             <a href={`tel:${group.driverPhone}`} className="text-primary ml-1 font-bold underline">
@@ -36,14 +37,18 @@ export function VehicleHeader({
           )}
         </span>
       )}
-      <span className="ml-auto text-[12px] font-bold">
-        {progress.unmarked > 0 ? (
+      <span className="ml-auto text-[11.5px] font-bold">
+        {/* 🔴 전원이 '오늘 안 탐'이면 "완료"가 아니라 "오늘 탑승 없음"이다 — 회차 머리와 같은 판정
+            (`progressState`)을 쓴다. 두 머리가 다른 말을 하면 어느 쪽이 맞는지 알 수 없다. */}
+        {state === "remaining" ? (
           <span className="text-amber">
             {scope}
             <span className="num">{progress.unmarked}</span>명 남음
           </span>
-        ) : (
+        ) : state === "done" ? (
           <span className="text-green">{scope}완료</span>
+        ) : (
+          <span className="text-text-faint">{scope}오늘 탑승 없음</span>
         )}
         <span className="text-text-faint ml-1.5 font-normal">
           <span className="num">{progress.boarded + progress.missed}</span>/

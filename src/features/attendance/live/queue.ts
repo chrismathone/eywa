@@ -14,6 +14,7 @@
  *    "처리했는데 사라졌다/못 했는데 사라졌다"가 구분되지 않는다. `done` 배열로 따로 내려 화면이 결말을 보인다.
  */
 
+import { classifyAbsenceReason } from "@/features/attendance/absence-reason";
 import { SIGNAL_RANK, type LiveSignal, type SlotPhase } from "./signals";
 
 /** 큐 한 줄(학생) — 화면·정렬이 함께 쓰는 최소 형태. */
@@ -106,10 +107,26 @@ export function isSettled(f: FollowupBrief | null, currentSignal?: LiveSignal): 
 }
 
 /**
- * 학생 줄 정렬 — ① 아직 안 매듭진 것 ② 신호가 확실한 순(결석 > 미확인) ③ **교시가 이른 순**.
+ * 그 줄이 **미리 통보된 결석**인가 — 강사 메모가 여행·휴가·캠프 같은 사전 일정을 말하는 경우.
  *
- * ③이 시각 역순이 아닌 이유: 데스크가 먼저 손대야 하는 건 방금 생긴 건이 아니라 **가장 오래 방치된**
+ * 🔴 **큐에서 빼지 않는다**([[#105]]) — 데스크가 "그날 확인할 것"을 세는 목록이라, 사유가 있어도 줄은
+ *    남고 탭 배지도 그대로다. 바뀌는 건 **같은 신호 안에서의 순서**뿐이다.
+ * ⚠️ 판정은 [`absence-reason.ts`](../absence-reason.ts) 단일 소스 — 여기서 낱말을 다시 적지 말 것.
+ */
+export function isPlannedAbsenceRow(s: QueueStudent): boolean {
+  return classifyAbsenceReason(s.note) === "planned";
+}
+
+/**
+ * 학생 줄 정렬 — ① 아직 안 매듭진 것 ② 신호가 확실한 순(결석 > 미확인) ③ 강사 지목 ④ **사전 통보는
+ * 뒤로** ⑤ 교시가 이른 순.
+ *
+ * ⑤가 시각 역순이 아닌 이유: 데스크가 먼저 손대야 하는 건 방금 생긴 건이 아니라 **가장 오래 방치된**
  * 건이다. 하원 시간이 다가오는 아이부터 확인해야 셔틀·귀가가 어긋나지 않는다.
+ *
+ * ④는 원장 2026-08-20(*"가족여행, 휴가 같은 것은 긴급 알림이 필요없을 것 같은데"*) — 실측상 결석 메모
+ * 311건 중 272건이 여행·휴가라, 그 줄들이 목록 위를 채우면 연락이 안 된 결석이 그 사이에 묻힌다.
+ * 🔴 강사가 직접 지목한 건(③)은 사전 통보여도 먼저다 — 교실을 눈으로 보고 누른 요청이라 메모보다 세다.
  */
 export function compareStudents(a: QueueStudent, b: QueueStudent): number {
   const settled = Number(isSettled(a.followup, a.signal)) - Number(isSettled(b.followup, b.signal));
@@ -119,6 +136,8 @@ export function compareStudents(a: QueueStudent, b: QueueStudent): number {
   // 같은 신호 안에선 강사가 지목한 건 먼저 — 요청 벨을 받고 큐를 연 데스크가 그 건을 바로 찾아야 한다.
   const req = Number(b.teacherRequested ?? false) - Number(a.teacherRequested ?? false);
   if (req !== 0) return req;
+  const planned = Number(isPlannedAbsenceRow(a)) - Number(isPlannedAbsenceRow(b));
+  if (planned !== 0) return planned;
   if (a.slotStart !== b.slotStart) return a.slotStart < b.slotStart ? -1 : 1;
   return a.studentName.localeCompare(b.studentName, "ko");
 }

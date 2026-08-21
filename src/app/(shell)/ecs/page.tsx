@@ -16,7 +16,13 @@ import { firstVisibleTodaySlot } from "@/features/class-sheets/lib/today-own-slo
 import { EcsLandingList } from "./_components/landing-list";
 import { EcsTeacherFilter } from "./_components/teacher-filter";
 import { EcsTrackFilter } from "./_components/track-filter";
-import { EcsFaceTabs, EcsDayNav, EcsTodayModeTabs, type EcsTodayMode } from "./_components/today-nav";
+import {
+  EcsFaceTabs,
+  EcsDayNav,
+  EcsQuickAttendanceLink,
+  EcsTodayModeTabs,
+  type EcsTodayMode,
+} from "./_components/today-nav";
 import { ENGLISH_TRACK_FILTER_LABEL } from "@/features/classes/english-track";
 
 /** 오늘 면 시트 모드의 반 1개분 — 시트 조회가 실패해도 나머지 반은 그려야 하므로 결과를 통째로 나른다. */
@@ -212,6 +218,8 @@ function EcsTodayFace({
         <EcsFaceTabs face="today" showToday />
         <EcsTodayModeTabs mode={mode} date={res.date} />
         <EcsDayNav date={res.date} today={res.today} mode={mode} />
+        {/* 출결 모드 — 영어 전담 강사에게는 ECS가 홈이라 여기가 그 사람의 입구다(폰엔 사이드바가 없다). */}
+        <EcsQuickAttendanceLink />
       </div>
 
       {/* 오늘 시트는 **본인 담당 교시만** 그린다(2026-08-19) — 그래서 "그 교시가 왜 없지"가 생긴다.

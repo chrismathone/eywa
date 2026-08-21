@@ -108,6 +108,7 @@
   --color-amber: var(--amber);
   --color-amber-soft: var(--amber-soft);
   --color-marker: var(--marker);
+  --color-search-hit: var(--search-hit);
   --color-danger: var(--danger);
   --color-danger-soft: var(--danger-soft);
   --color-primary-soft: var(--primary-soft);
@@ -270,6 +271,17 @@
      같은 이유로 **여기저기 쓰지 말 것**(둘째 노란 덩어리가 생기는 순간 첫째가 안 보인다).
      글자는 --foreground(#1d1d1f) 고정 = 대비 17:1. 색을 조이거나 풀려면 이 한 줄만 고친다. */
   --marker: #fff200;
+  /* 검색에 걸린 자리(시간표 학생 검색) — 같은 형광펜 노랑이지만 **다른 축**이라 토큰을 따로 둔다.
+     원장 2026-08-20: *"서치된 학생이 갈색으로 보이는데 영 눈에 안띄네, 다른 색으로 해주고 1초정도
+     플리커"* → 종전 --amber(#995709)는 이름만 amber이고 실제로는 갈색이라, 같은 셀의 신입 빨강
+     (--danger) 옆에서 묻혔다. 형광 노랑은 빨강과 대비 4.77:1로 한눈에 갈린다.
+     🔑 --marker와 값이 같아도 **합치지 말 것**: marker는 "지금 보고 있는 반"을 칠하는 자리라
+        희소성이 값어치고 허용 목록(marker-trigger.test.ts) 세 곳에 묶여 있다. 검색 표식은 걸린 줄이
+        여럿일 수 있고 검색을 지우면 사라진다 — 한쪽 색을 조일 때 다른 쪽이 딸려가면 안 된다.
+     ⚠️ 의미색 캐논(semantic-color.ts)의 상태 tone이 **아니다** — 상태가 아니라 "찾은 자리"라
+        green/amber/danger/blue/purple을 빌려 쓰지 않는다(빌리면 그 줄이 어떤 상태로 읽힌다).
+     글자는 --foreground 고정 = 대비 14.4:1. 색을 조이거나 풀려면 이 한 줄만 고친다. */
+  --search-hit: #fff200;
   --danger: #bc3838;
   --danger-soft: rgba(211, 63, 63, 0.12);
 
@@ -990,6 +1002,92 @@ html[data-stage="on"] main {
   scrollbar-gutter: auto;
 }
 
+/* ───────────────────────────────────────────────
+ * 검색 표식(.search-hit) — 시간표 학생 검색에 걸린 이름 줄. **형광펜으로 그은 모양**.
+ * 원장 2026-08-20: *"서치된 학생이 갈색으로 보이는데 영 눈에 안띄네, 다른 색으로 해주고 1초정도
+ * 플리커 넣어주면 좋겠는데"* → *"눈에 띄게 형광 계열로 하고 플리커하면 될듯"*.
+ *
+ * 🔑 **레이어 밖(unlayered)에 두는 이유가 애니메이션이다.** 종전엔 `bg-amber! text-white!` 유틸이었는데,
+ *    `!important` 선언은 **CSS 애니메이션을 이긴다**(키프레임 안의 !important는 아예 무시된다) →
+ *    배경을 키프레임으로 흔들면 아무 일도 안 일어난다. 유틸(@layer utilities)보다 뒤에 오는 unlayered
+ *    규칙은 `!important` 없이도 `hover:bg-bg-soft`를 이기므로(레이어 없는 선언이 레이어를 이긴다)
+ *    ① 마우스를 얹어도 표식이 안 지워지고 ② 배경을 애니메이션으로 흔들 수 있다. 둘 다 필요하다.
+ * 🔑 글자는 --foreground(진한 잉크)다 — 형광색은 밝아서 흰 글자를 얹으면 오히려 안 읽힌다(대비 1.17:1).
+ * ⚠️ 이 표식은 평소 tone을 **대신한다**(덧붙이지 않는다, search-context.tsx 참조) — 그래서 여기서
+ *    배경·글자색을 다 정해야 한다. 반쪽만 주면 퇴원 행의 흰 글자가 형광 위에 그대로 남는다.
+ *
+ * ⚠️ 표식을 **`bg-search-hit` 유틸로 바꾸지 말 것** — 그건 `@layer utilities`라 hover에 지고, 이기게
+ *    하려고 `!`를 붙이는 순간 깜빡임이 통째로 죽는다(위 문단이 그 이야기다). 토큰은 다른 표면이 쓸 수
+ *    있게 `@theme inline`에 등록해 뒀지만, **이 줄의 표식만큼은 여기 규칙을 거친다.**
+ *
+ * ── 깜빡임 ──
+ * 1초 · 2번 · **끝나면 멈춘다**(무한 반복은 그 칸을 읽을 수가 없다). 초당 3회 이하 = 접근성 기준 안쪽이고,
+ * 걸린 줄이 수십 개면 동시에 깜빡이므로 여유를 두고 2번으로 잡았다.
+ * 🔴 이름이 다른 키프레임 두 벌(-1/-2)인 것은 **재발화 장치**다: 애니메이션은 한 번 끝나면 다시 안 돌고,
+ *    검색어를 한 글자 더 쳐도 이미 걸려 있던 줄은 DOM이 그대로라 다시 시작하지 않는다. 검색어가 바뀔
+ *    때마다 -a ↔ -b로 클래스를 갈아 끼우면 animation-name이 바뀌어 **처음부터 다시 재생**된다
+ *    (search-context.tsx의 flash epoch). 몸통이 같은 두 벌을 **함께 고칠 것**.
+ * ⚠️ 링은 `inset`이다 — 셀 명단이 `overflow-y-auto` 스크롤 컨테이너라 바깥 링은 잘려 안 보인다.
+ * ⚠️ 모션을 줄이도록 설정한 사용자에겐 **애니메이션만** 끄고 색 표식은 남긴다(표식까지 사라지면
+ *    검색 결과가 통째로 안 보인다).
+ * ─────────────────────────────────────────────── */
+.search-hit {
+  background-color: var(--search-hit);
+  color: var(--foreground);
+}
+
+@keyframes eywa-search-hit-flash-1 {
+  0%,
+  30%,
+  70% {
+    background-color: var(--search-hit);
+    box-shadow: inset 0 0 0 3px var(--foreground);
+  }
+  15%,
+  50% {
+    background-color: color-mix(in srgb, var(--search-hit) 22%, var(--card));
+    box-shadow: inset 0 0 0 0 transparent;
+  }
+  100% {
+    background-color: var(--search-hit);
+    box-shadow: inset 0 0 0 0 transparent;
+  }
+}
+
+/* 위 -1과 **몸통이 같아야 한다**(이름만 다른 재발화용 쌍). */
+@keyframes eywa-search-hit-flash-2 {
+  0%,
+  30%,
+  70% {
+    background-color: var(--search-hit);
+    box-shadow: inset 0 0 0 3px var(--foreground);
+  }
+  15%,
+  50% {
+    background-color: color-mix(in srgb, var(--search-hit) 22%, var(--card));
+    box-shadow: inset 0 0 0 0 transparent;
+  }
+  100% {
+    background-color: var(--search-hit);
+    box-shadow: inset 0 0 0 0 transparent;
+  }
+}
+
+.search-hit-flash-a {
+  animation: eywa-search-hit-flash-1 1s ease-out 1 both;
+}
+
+.search-hit-flash-b {
+  animation: eywa-search-hit-flash-2 1s ease-out 1 both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .search-hit-flash-a,
+  .search-hit-flash-b {
+    animation: none;
+  }
+}
+
 @layer utilities {
   /*
    * .toolbar-rail — 칩이 많은 툴바를 **모바일·터치에서만** 가로 한 줄 레일로.
@@ -1006,6 +1104,29 @@ html[data-stage="on"] main {
    * 📌 데스크톱과 **창(임베드)은 종전대로 감긴다** — 창은 사용자가 폭을 조절하고 마우스라
    *    가로 스크롤이 오히려 불편하다. 조건은 use-is-desktop.ts / compact-chrome 변형의 모바일 절과 동일.
    */
+  /*
+   * .toolbar-rail-row — 레일 **한 줄로는 너무 긴** 툴바를 모바일에서만 여러 줄 레일로 쪼갠다
+   * (원스크린 상단 바 2026-08-20: 컨트롤 9묶음이 한 레일이면 내용 폭이 ~1,830px라 자주 쓰는 뷰 탭이
+   *  화면 하나 너머로 밀린다. 감아서 7줄 301px이던 걸 2줄 레일 **92px**로).
+   *
+   * 🔑 **데스크톱·창은 `display: contents`라 이 래퍼가 아예 없는 것과 같다** — 자식이 부모 툴바의
+   *    직계 flex 아이템으로 **DOM 순서 그대로** 남아 종전 배치(ml-auto 우측 정렬 포함)가 그대로다.
+   *    줄 나눔은 아래 모바일 절에서만 생긴다.
+   * ⚠️ 그래서 **줄 래퍼는 데스크톱 순서대로 놓고**, 모바일에서 앞으로 당길 줄에만 `.rail-row-first`를
+   *    붙인다. 항목마다 `order-*`를 뿌려 순서를 뒤집지 말 것 — 데스크톱에서 **보이는 순서와 탭 이동
+   *    순서(DOM)가 갈려** 키보드 사용자가 화면을 튀어 다닌다(줄 하나를 통째로 옮기는 지금 방식은
+   *    어긋나는 지점이 딱 한 곳이고 그것도 모바일뿐이다).
+   * ⚠️ 레일 규칙(nowrap·overflow-x·shrink-0)은 `.toolbar-rail`이 담당한다 — **두 클래스를 함께** 쓸 것
+   *    (규칙을 복제하면 한쪽만 고쳐져 갈린다).
+   * ⚠️ 이 규칙은 Tailwind 유틸보다 **뒤에** 깔린다 → 같은 요소에 `flex`·`hidden` 같은 display 유틸을
+   *    걸면 조용히 무시된다(줄 래퍼엔 display 유틸을 쓰지 말 것).
+   */
+  .toolbar-rail-row {
+    display: contents;
+  }
+
+  /* ↓ 위 두 규약(.toolbar-rail · .toolbar-rail-row)의 **모바일 절** — 조건은 한 곳에만 적는다
+       (use-is-desktop.ts / compact-chrome 변형의 모바일 절과 동일해야 한다). */
   @media (max-width: 1023.98px), (pointer: coarse), (pointer: none) {
     .toolbar-rail {
       flex-wrap: nowrap;
@@ -1022,6 +1143,18 @@ html[data-stage="on"] main {
     /* 우측 정렬용 스페이서는 레일에서 무의미(오히려 폭을 늘린다) */
     .toolbar-rail > .rail-spacer {
       display: none;
+    }
+    /* 줄 래퍼가 여기서만 실제 박스가 된다 — 100%라 툴바의 wrap이 줄을 갈라준다.
+       ⚠️ min-width는 스크롤 컨테이너라 어차피 0으로 접히지만, 안 접히면 내용 너비만큼 부풀어
+          카드를 뚫으므로 규약을 눈에 보이게 못박는다. */
+    .toolbar-rail-row {
+      display: flex;
+      width: 100%;
+      min-width: 0;
+    }
+    /* 모바일에서만 이 줄을 맨 위로(데스크톱은 박스가 없어 order 자체가 무의미하다) */
+    .toolbar-rail-row.rail-row-first {
+      order: -1;
     }
   }
 }

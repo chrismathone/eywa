@@ -21,6 +21,7 @@ import {
   buildTeacherComparator,
 } from "@/features/timetable/lib/english-teacher-sheet";
 import { TeacherChip } from "./teacher-chip";
+import { SearchedCell } from "./search-context";
 
 // 시트 "강사별영어시간표(7월)" = 강사-major 그리드(강사가 세로 블록, 그 안에 월~토가 가로).
 // ⚠️ 축 = 시트와 동일한 **10분 단위 행**(2026-07-06 재작업 — 이전엔 교시 1행이라 40/60분 수업이
@@ -363,8 +364,10 @@ export function TeacherGridView({
                               // 수업 칩과 헷갈리지 않게 톤을 낮춘다(테두리 점선 + 흐린 글자).
                               if (s.blockKind) {
                                 return (
+                                  // 학생 검색 중엔 이 칸도 물러난다 — 반이 아니라 어떤 학생도 들어 있지
+                                  // 않으므로(빈 classIds), 남겨 두면 "찾은 수업"과 섞여 읽힌다.
+                                  <SearchedCell key={s.id} classIds={[]}>
                                   <div
-                                    key={s.id}
                                     title={s.blockKind === "supervise" ? `${s.className} 수업 감독` : s.className}
                                     // ⚠️ cursor-default 필수 — 바깥 DragScrollArea가 컨테이너에
                                     // cursor-grab(펼친 손)을 깔아서, 안 덮으면 **끌어서 옮길 수 있는 것처럼**
@@ -373,6 +376,7 @@ export function TeacherGridView({
                                   >
                                     {s.className}
                                   </div>
+                                  </SearchedCell>
                                 );
                               }
                               // 방 = 슬롯 방(slot_room_label)만 — classroomName은 반의 "기본" 강의실이라

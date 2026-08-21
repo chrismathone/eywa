@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { TextbookDialog } from "./textbook-dialog";
 import { usePrintWindow } from "@/components/workspace/print-window";
 import { deleteTextbookOrder, toggleTextbookCheck } from "@/features/billing/server/textbook-actions";
+import { ELAPSED_STRONG_DAYS, elapsedDays, shouldShowElapsed } from "@/features/billing/textbook-progress";
 import type { StudentOption, TextbookOrderRow } from "@/features/billing/server/textbook-queries";
 import type { CatalogOption } from "@/features/billing/server/catalog-queries";
 import type { AccountSetting } from "@/features/owner/settings-types";
@@ -30,15 +31,6 @@ function fmtFull(iso: string | null): string {
   if (!iso) return "";
   const d = new Date(iso);
   return d.toLocaleString("ko-KR", { timeZone: "Asia/Seoul", year: "numeric", month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" });
-}
-
-// 신청일 경과일수 — YYYY-MM-DD를 UTC로 파싱(TZ 무관 정수 일수). 7일↑ 라벨, 14일↑ 더 진하게(처리 지연 신호).
-function elapsedDays(requestDate: string | null, todayKst: string): number | null {
-  if (!requestDate) return null;
-  const [ry, rm, rd] = requestDate.split("-").map(Number);
-  const [ty, tm, td] = todayKst.split("-").map(Number);
-  if (!ry || !rm || !rd || !ty || !tm || !td) return null;
-  return Math.floor((Date.UTC(ty, tm - 1, td) - Date.UTC(ry, rm - 1, rd)) / 86_400_000);
 }
 
 export function TextbooksTable({
@@ -125,22 +117,25 @@ export function TextbooksTable({
           <tbody className="divide-line divide-y">
             {rows.map((r) => {
               const isBusy = busy === r.id;
+              // 경과 라벨 = **처리 지연 신호**라 아직 안 끝난 줄에만 붙는다(판정은 shouldShowElapsed 단일 소스).
+              // 예전엔 날짜만 봐서 등록·납부·주문이 다 끝난 줄에도 떴다(2026-08-20 원장 제보, 실측 485건 중 484건이 거짓).
               const elapsed = elapsedDays(r.requestDate, todayKst);
+              const elapsedLabel = shouldShowElapsed(r, elapsed) ? elapsed : null;
               return (
                 <tr key={r.id} className={`hover:bg-bg-soft/30 ${isBusy ? "opacity-50" : ""}`}>
                   <td className="px-4 py-2 text-xs">
                     <div className="flex flex-wrap items-center gap-1">
                       <span className="num text-text-dim">{r.requestDate ?? "—"}</span>
-                      {elapsed !== null && elapsed >= 7 ? (
+                      {elapsedLabel !== null ? (
                         <span
-                          title={`신청 후 ${elapsed}일 경과`}
+                          title={`신청 후 ${elapsedLabel}일 경과`}
                           className={`num inline-block rounded-sm border px-1 py-px text-[10px] font-medium whitespace-nowrap ${
-                            elapsed >= 14
+                            elapsedLabel >= ELAPSED_STRONG_DAYS
                               ? "bg-amber text-white border-amber"
                               : "bg-amber-soft text-amber border-amber/30"
                           }`}
                         >
-                          {elapsed}일 경과
+                          {elapsedLabel}일 경과
                         </span>
                       ) : null}
                     </div>

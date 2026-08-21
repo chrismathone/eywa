@@ -214,7 +214,9 @@ export async function saveLessonReport(
       },
       { onConflict: "tenant_id,student_id,report_date,unit_key" },
     )
-    .select("id, share_token")
+    // teacher_name은 진도 점프 경고의 "같은 선생님" 축(2026-08-20) — 넘길 값을 여기서 다시 조립하지 말고
+    // **저장된 그 값**을 되받는다(갱신 시 DB가 원 작성자를 보존하는 경로가 있어 화면 값과 갈릴 수 있다).
+    .select("id, share_token, teacher_name")
     .single();
   if (error || !data) return { ok: false, error: error?.message ?? "보고서 저장에 실패했습니다" };
 
@@ -228,6 +230,7 @@ export async function saveLessonReport(
       reportDate,
       subject: input.subject || null,
       progress: input.progress || null,
+      teacherName: data.teacher_name ?? null,
     });
   } catch {
     /* 진도 반영 실패는 보고서 저장을 막지 않음 */

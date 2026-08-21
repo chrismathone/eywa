@@ -380,6 +380,11 @@ export function TimetableImportDialog({
                 <p className="text-primary mt-3 text-[12px]">
                   적용 완료 — 이동 {result.applied?.moved} · 삭제 {result.applied?.removed} · 추가{" "}
                   {result.applied?.added}
+                  {/* 휴원 학생은 거절·스킵이 아니라 **휴원 표식을 달고** 들어간다 — 조용히 넘어가면
+                      "왜 이 아이는 출석부에 안 뜨지"가 된다(원장 2026-08-20 휴원 정합). */}
+                  {result.heldAdds ? (
+                    <span className="text-amber"> · 휴원 상태로 추가 {result.heldAdds}</span>
+                  ) : null}
                   {result.failed ? <span className="text-amber"> · 실패 {result.failed}</span> : null}
                 </p>
               )

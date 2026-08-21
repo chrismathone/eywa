@@ -70,6 +70,25 @@ export type TierSettlementLine = {
   amount: number;
 };
 
+/**
+ * 산정에서 **빠진** 1행 — 왜 빠졌는지와 누구 몫이었는지를 행 단위로 남긴다.
+ *
+ * 🔑 집계값(missingTierStudents·missingPriceTiers·excludedUnits)은 이 배열을 **다시 접어** 만들 수 있는
+ *    같은 사실이다. 화면이 부분집합(학생 검색)으로 좁힐 때 이름·시수를 다시 짝지으려면 행이 필요하다
+ *    — 이름 배열과 id 배열은 정렬·중복 제거를 거쳐 서로 짝이 아니라서 되짚을 수 없다.
+ * ⚠️ **금액에 영향을 주지 않는 순수 부가정보**다(total·grossTuition·lines는 그대로).
+ */
+export type TierSettlementExcluded = {
+  studentId: string;
+  studentName: string;
+  /** 이 행이 들고 있던 시수 — 제외 시수 합의 재료. */
+  units: number;
+  /** 티어 미지정 / 단가표에 없음 / 비율 미설정. */
+  reason: "no-tier" | "no-price" | "no-rate";
+  /** 티어 라벨(미지정이면 null). */
+  tierLabel: string | null;
+};
+
 export type TierSettlementResult = {
   /** 산정된 정산액(원, 정수 내림). 산정 가능한 행이 하나도 없으면 null. */
   total: number | null;
@@ -94,7 +113,14 @@ export type TierSettlementResult = {
   missingRateGroups: string[];
   /** 제외된 시수 합(미지정·단가없음·비율없음) — "얼마나 빠졌는지"를 화면이 말할 수 있게. */
   excludedUnits: number;
+  /** 제외된 행 내역 — 위 세 집계값의 원재료(부분집합 재집계용). 금액엔 영향 없음. */
+  excludedLines: TierSettlementExcluded[];
 };
+
+/** 제외 행의 공통 부분 — 사유·티어만 호출부가 채운다. */
+function excludedOf(row: TierRow): Pick<TierSettlementExcluded, "studentId" | "studentName" | "units"> {
+  return { studentId: row.studentId, studentName: row.studentName, units: row.units };
+}
 
 /**
  * 티어 정산 — 행별 floor1 후 합계 정수 내림.
@@ -111,6 +137,7 @@ export function computeTierSettlement(
   let excludedUnits = 0;
   let grossTuition = 0;
   const lines: TierSettlementLine[] = [];
+  const excludedLines: TierSettlementExcluded[] = [];
   const missingTierStudents = new Set<string>();
   const missingTierStudentIds = new Set<string>();
   const missingPriceTiers = new Set<string>();
@@ -122,12 +149,14 @@ export function computeTierSettlement(
       missingTierStudents.add(row.studentName);
       missingTierStudentIds.add(row.studentId);
       excludedUnits += row.units;
+      excludedLines.push({ ...excludedOf(row), reason: "no-tier", tierLabel: null });
       continue;
     }
     const price = unitPriceByTier.get(row.tierLabel);
     if (price === undefined || price <= 0) {
       missingPriceTiers.add(row.tierLabel);
       excludedUnits += row.units;
+      excludedLines.push({ ...excludedOf(row), reason: "no-price", tierLabel: row.tierLabel });
       continue;
     }
     const group = tierSalaryGroup(row.tierLabel);
@@ -137,6 +166,7 @@ export function computeTierSettlement(
     if (rate === null || rate === undefined) {
       missingRateGroups.add(group ?? row.tierLabel);
       excludedUnits += row.units;
+      excludedLines.push({ ...excludedOf(row), reason: "no-rate", tierLabel: row.tierLabel });
       continue;
     }
     const amount = floor1(price * row.units * NET_MULTIPLIER * (rate / 100));
@@ -169,5 +199,6 @@ export function computeTierSettlement(
     missingPriceTiers: [...missingPriceTiers].sort((a, b) => a.localeCompare(b, "ko")),
     missingRateGroups: [...missingRateGroups],
     excludedUnits,
+    excludedLines,
   };
 }

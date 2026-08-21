@@ -6,6 +6,7 @@ import { recordFollowup } from "@/features/attendance/live/server/actions";
 import { setAttendanceCell } from "@/features/attendance/server/actions";
 import { FOLLOWUP_OUTCOMES, suggestedStatus, type QueueStudent } from "@/features/attendance/live/queue";
 import { SIGNAL_HINT, SIGNAL_LABEL } from "@/features/attendance/live/signals";
+import { ABSENCE_REASON_LABEL, classifyAbsenceReason } from "@/features/attendance/absence-reason";
 import { DeskCall } from "./desk-call";
 
 export function DeskStudentRow({
@@ -26,6 +27,8 @@ export function DeskStudentRow({
   const suggestion = outcome ? suggestedStatus(outcome) : null;
   const [applyStatus, setApplyStatus] = useState(true);
   const absent = row.signal === "absent";
+  // 강사 메모에서 읽은 사유(여행·병결·학교 일정) — **표시일 뿐**이고 줄은 큐에 그대로 남는다([[#105]]).
+  const reason = classifyAbsenceReason(row.note);
 
   function submit(state: "resolved" | "dismissed") {
     setError(null);
@@ -81,9 +84,17 @@ export function DeskStudentRow({
         >
           {SIGNAL_LABEL[row.signal]}
         </span>
+        {reason !== "unknown" && (
+          <span
+            className="bg-bg-soft text-text-dim rounded-full px-2 py-0.5 text-[11px] font-bold"
+            title={`강사 메모에서 사유를 읽었습니다 — 아래 메모가 근거입니다. 목록에서 빠지지는 않고 같은 신호 안에서 뒤로 갑니다.`}
+          >
+            {ABSENCE_REASON_LABEL[reason]}
+          </span>
+        )}
         {row.teacherRequested && (
           <span
-            className="bg-amber/15 text-amber-strong rounded-full px-2 py-0.5 text-[11px] font-bold"
+            className="bg-amber/15 text-amber rounded-full px-2 py-0.5 text-[11px] font-bold"
             title="강사가 이 교시 미입력 학생의 등원 확인을 데스크에 요청했습니다"
           >
             강사 확인 요청

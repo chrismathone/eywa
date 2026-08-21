@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { ChevronDown } from "@/components/icons/eywa-icon-compat";
 import { Button } from "@/components/ui/button";
-import { StatusDialog } from "./status-dialog";
+import { StatusDialog, type OpenEnrollment } from "./status-dialog";
 
 type Target = "withdrawn" | "on_hold" | "enrolled";
 
@@ -19,10 +19,13 @@ export function StatusAction({
   studentId,
   studentName,
   currentStatus,
+  openEnrollments,
 }: {
   studentId: string;
   studentName: string;
   currentStatus: string;
+  /** 활성 수강 — 퇴원 다이얼로그가 "어느 수업을 종료할지" 고르게 하는 재료. */
+  openEnrollments: OpenEnrollment[];
 }) {
   const [open, setOpen] = useState(false);
   const [target, setTarget] = useState<Target>("withdrawn");
@@ -77,6 +80,7 @@ export function StatusAction({
           studentName={studentName}
           currentStatus={STATUS_LABEL[currentStatus] ?? currentStatus}
           initialTarget={target}
+          openEnrollments={openEnrollments}
           onClose={(changed) => {
             setOpen(false);
             if (changed) location.reload();

@@ -9,6 +9,7 @@ import { EmptyState } from "@/components/empty-state";
 import { MakeeduSyncBadge } from "@/components/makeedu-sync-badge";
 import { requireAccess } from "@/lib/auth/require-access";
 import { canManageTenant } from "@/lib/auth/perm-matrix";
+import { effectiveTeacherId } from "@/lib/auth/view-mode";
 import {
   getClassesPage,
   getClassesStats,
@@ -75,9 +76,14 @@ export default async function ClassesPage({
     sp.sort === "students" || sp.sort === "teacher" ? sp.sort : "name";
   const page = Math.max(1, Number(sp.page) || 1);
 
+  // 강사 스코프(내 수업)면 `getClassesPage`가 teacher_id를 **강제**해 전 행이 내 반이다 → 강사 필터·담임 열은
+  // 고를 수도 볼 것도 없다(원장 2026-08-20: "강사가 당연히 나일텐데 다른 강사 선택도 보임").
+  // ⚠️ 위임(delegation)은 진입 자격만 열 뿐 classIds를 넓히지 않으므로 남의 이름이 섞일 여지도 없다.
+  const scopedTeacherId = await effectiveTeacherId();
   const [{ rows: classes, total }, teachers, stats, settings] = await Promise.all([
     getClassesPage({ subject, teacherId, days, q, sort }, page, PAGE_SIZE),
-    getClassTeacherFilterOptions(), // 필터 전용 — 배정용과 다르다(admin·퇴직 담임도 포함)
+    // 스코프에선 조회 자체를 건너뛴다(고를 수 없는 목록이라 왕복 낭비).
+    scopedTeacherId ? [] : getClassTeacherFilterOptions(), // 필터 전용 — 배정용과 다르다(admin·퇴직 담임도 포함)
     getClassesStats(),
     getTenantSettings(),
   ]);
@@ -133,7 +139,12 @@ export default async function ClassesPage({
       </section>
 
       {/* 과목·요일·강사·정렬 드롭다운 + 검색/뷰 — 선택값 localStorage 영속(클라이언트) */}
-      <ClassFilterBar current={current} teachers={teachers} subjectFilters={subjects.filters} />
+      <ClassFilterBar
+        current={current}
+        teachers={teachers}
+        subjectFilters={subjects.filters}
+        hideTeacherFilter={scopedTeacherId !== null}
+      />
 
       {/* 결과 카운트 — 액션은 PageHeader 우측으로 이동(문법 ①), 여기는 맥락 라인만.
           컴팩트에선 위 필터 바에 바짝 붙여(-mt) 한 줄을 새로 만들지 않는다. */}
@@ -152,9 +163,9 @@ export default async function ClassesPage({
       ) : (
         <>
           {view === "table" ? (
-            <TableView classes={classes} subjects={subjects} />
+            <TableView classes={classes} subjects={subjects} showTeacher={!scopedTeacherId} />
           ) : (
-            <CardsView classes={classes} subjects={subjects} />
+            <CardsView classes={classes} subjects={subjects} showTeacher={!scopedTeacherId} />
           )}
           <Pagination page={page} totalPages={totalPages} hrefForPage={pageHref} />
         </>
@@ -197,7 +208,16 @@ function DayChips({ days, barClass }: { days: ClassDaySlot[]; barClass: string }
   );
 }
 
-function TableView({ classes, subjects }: { classes: ClassListRow[]; subjects: SubjectMaps }) {
+function TableView({
+  classes,
+  subjects,
+  showTeacher,
+}: {
+  classes: ClassListRow[];
+  subjects: SubjectMaps;
+  /** 강사 스코프에선 전 행이 같은 담임(=본인)이라 열을 통째로 감춘다 — 같은 이름 50줄은 정보가 아니다. */
+  showTeacher: boolean;
+}) {
   return (
     <div className="bg-card shadow-card overflow-auto rounded-2xl">
       <table className="w-full text-sm [&_td]:whitespace-nowrap">
@@ -205,7 +225,7 @@ function TableView({ classes, subjects }: { classes: ClassListRow[]; subjects: S
           <tr>
             <th className="micro px-4 py-3 text-left">과목</th>
             <th className="micro px-4 py-3 text-left">반 이름</th>
-            <th className="micro px-4 py-3 text-left">담임</th>
+            {showTeacher ? <th className="micro px-4 py-3 text-left">담임</th> : null}
             <th className="micro px-4 py-3 text-left">강의실</th>
             <th className="micro px-4 py-3 text-left">요일</th>
             <th className="micro px-4 py-3 text-right">학생</th>
@@ -231,15 +251,17 @@ function TableView({ classes, subjects }: { classes: ClassListRow[]; subjects: S
                   </WindowLink>
                   <EditingBadge scope={`class:${c.id}`} className="ml-1.5" />
                 </td>
-                <td className="px-4 py-2.5">
-                  <div className="flex items-center gap-2">
-                    {c.teacherName ? (
-                      <span className="text-text-dim text-[12px]">{c.teacherName}</span>
-                    ) : (
-                      <span className="text-text-faint text-xs">미정</span>
-                    )}
-                  </div>
-                </td>
+                {showTeacher ? (
+                  <td className="px-4 py-2.5">
+                    <div className="flex items-center gap-2">
+                      {c.teacherName ? (
+                        <span className="text-text-dim text-[12px]">{c.teacherName}</span>
+                      ) : (
+                        <span className="text-text-faint text-xs">미정</span>
+                      )}
+                    </div>
+                  </td>
+                ) : null}
                 <td className="text-text-dim px-4 py-2.5 text-[12px]">
                   {c.classroomName ?? "—"}
                 </td>
@@ -278,7 +300,16 @@ function TableView({ classes, subjects }: { classes: ClassListRow[]; subjects: S
   );
 }
 
-function CardsView({ classes, subjects }: { classes: ClassListRow[]; subjects: SubjectMaps }) {
+function CardsView({
+  classes,
+  subjects,
+  showTeacher,
+}: {
+  classes: ClassListRow[];
+  subjects: SubjectMaps;
+  /** 테이블 '담임' 열과 같은 이유 — 스코프에선 전 카드가 본인 이름이라 강의실만 남긴다. */
+  showTeacher: boolean;
+}) {
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {classes.map((c) => {
@@ -310,8 +341,9 @@ function CardsView({ classes, subjects }: { classes: ClassListRow[]; subjects: S
                   <EditingBadge scope={`class:${c.id}`} />
                 </h3>
                 <p className="text-text-dim mt-1 truncate text-[12.5px]">
-                  {c.teacherName ?? "담임 미정"}
-                  {c.classroomName ? ` · ${c.classroomName}` : ""}
+                  {showTeacher
+                    ? `${c.teacherName ?? "담임 미정"}${c.classroomName ? ` · ${c.classroomName}` : ""}`
+                    : (c.classroomName ?? "강의실 미정")}
                 </p>
               </div>
               <p className="shrink-0 text-right">

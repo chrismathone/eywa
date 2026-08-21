@@ -34,12 +34,19 @@ export function hasSpecialTokenNoise(text: string): boolean {
 }
 
 /**
- * 마크다운 강조 제거 — 패널은 plain text 렌더라 `**91.76%**`가 별표 그대로 보인다(2026-07-17 실측,
- * 프롬프트 지시로도 Solar가 간헐 방출). 강조 마커만 벗기고 본문·불릿(-)은 보존한다.
+ * 답변 마크다운 정규화(이름은 이력 추적을 위해 유지).
+ *
+ * 2026-07-17: 패널이 plain text 렌더라 `**91.76%**`가 별표 그대로 보여 **강조 마커까지 벗겼다.**
+ * 2026-08-20 **전환**: 패널이 안전 렌더러([rich-answer.ts](src/features/assistant/rich-answer.ts) +
+ * answer-body.tsx)로 바뀌어 표·목록·강조를 제대로 그린다 → **`**강조**`는 보존**하고(렌더러가
+ * <strong>으로 만든다) 렌더러가 다루지 않는 마커만 벗긴다: 인라인 코드 백틱·코드펜스 줄.
+ * `__x__`는 `**x**`로 통일(같은 뜻인데 두 표기가 섞이면 한쪽만 렌더된다).
+ * ⚠️ 특수 토큰 폐기 규약(hasSpecialTokenNoise)은 그대로 — 이건 마크다운이지 툴콜 토큰이 아니다.
  */
 export function stripMarkdownEmphasis(text: string): string {
   return text
-    .replace(/\*\*([^*]+)\*\*/g, "$1")
-    .replace(/__([^_]+)__/g, "$1")
-    .replace(/`([^`]+)`/g, "$1");
+    .replace(/^\s*```.*$/gm, "") // 코드펜스 줄 제거(내용은 남는다 — 표를 감싸 오는 경우가 있다)
+    .replace(/__([^_]+)__/g, "**$1**")
+    .replace(/`([^`]+)`/g, "$1")
+    .trim();
 }

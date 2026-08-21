@@ -4,6 +4,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { OperationsProvider } from "@/features/owner/operations-context";
 import type { LiveBoard, LiveBoardSlot } from "../types";
 import { SeatingChart } from "./seating-chart";
 
@@ -11,6 +12,13 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn(), push: 
 vi.mock("@/features/attendance/server/actions", () => ({
   setAttendanceCell: vi.fn(async () => ({ ok: true })),
 }));
+// 과목 필터는 계정에 저장한다 — 저장 왕복은 여기 관심사가 아니라 성공만 흉내 낸다.
+const saveSubject = vi.fn(async (_subject: string) => ({ ok: true }));
+vi.mock("@/features/attendance/live/server/prefs-actions", () => ({
+  saveLiveSubjectFilter: (v: string) => saveSubject(v),
+  loadLiveViewPrefs: vi.fn(),
+}));
+vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn(), info: vi.fn() } }));
 
 afterEach(cleanup);
 
@@ -144,5 +152,141 @@ describe("좌석표 학생 검색", () => {
     // 셋 다 같은 학교·학년이라 두 반 모두 남는다.
     expect(container.textContent).toContain("검색 중 · 2/2개 반 표시");
     expect(screen.getByText("최유나").closest("button")!.className).toContain("ring-primary ring-2");
+  });
+});
+
+/**
+ * 과목별 필터(원장 2026-08-20) — 좁히는 축은 학생 검색과 같은 **반 카드**다.
+ * 🔴 카드 안 명단은 여기서도 안 줄인다(줄이면 미출결이 남은 반이 '입력 완료'로 칠해진다).
+ */
+describe("좌석표 과목 필터", () => {
+  const MIXED: LiveBoard = {
+    ...BOARD,
+    teachers: [
+      {
+        ...BOARD.teachers[0]!,
+        slots: [
+          slot({ classId: "c1", className: "수학반", students: [student("이도윤"), student("박서준")] }),
+          slot({
+            classId: "c3",
+            className: "영어반",
+            subject: "english",
+            students: [student("최유나")],
+          }),
+        ],
+      },
+    ],
+  };
+
+  const renderMixed = (initialSubject = "all") =>
+    render(
+      <OperationsProvider
+        subjects={[
+          { key: "math", label: "수학", color: "blue", weekdayGrouping: "mon-thu", testMax: 5 },
+          { key: "english", label: "영어", color: "gold", weekdayGrouping: "mon-thu", testMax: 5 },
+        ]}
+        gradeLevels={["중2"]}
+      >
+        <SeatingChart board={MIXED} initialSubject={initialSubject} />
+      </OperationsProvider>,
+    );
+
+  it("칩을 누르면 그 과목 반 카드만 남는다", () => {
+    renderMixed();
+    expect(screen.getByText("영어반")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "수학" }));
+    expect(screen.getByText("수학반")).toBeTruthy();
+    expect(screen.queryByText("영어반")).toBeNull();
+  });
+
+  it("🔴 카드 안 명단은 안 줄인다 — 그 반 학생은 전부 그대로다", () => {
+    renderMixed("math");
+    expect(screen.getByText("이도윤")).toBeTruthy();
+    expect(screen.getByText("박서준")).toBeTruthy();
+  });
+
+  it("합계(미출결·입력)는 하루 전체 기준 그대로 두고 좁힌 사실을 칩으로 밝힌다", () => {
+    const { container } = renderMixed("math");
+    // 전체 3명이 미출결인데 수학만 보고 있어도 머리줄 숫자는 안 줄어든다.
+    expect(container.textContent).toContain("미출결");
+    expect(container.textContent).toContain("수학만 보는 중 · 1/2개 반 표시");
+    expect(container.textContent).toContain("위 합계는 하루 전체 기준");
+  });
+
+  it("고르면 계정에 저장한다(뷰 세팅은 계정 귀속)", () => {
+    renderMixed();
+    fireEvent.click(screen.getByRole("button", { name: "영어" }));
+    expect(saveSubject).toHaveBeenCalledWith("english");
+  });
+
+  it("🔴 띠는 좁힌 집합에서 나눈다 — 전체 기준으로 나누면 모든 띠가 접힌 채 열린다", () => {
+    // 수학은 '지금'에만, 영어는 '곧 시작'에만 있는 편성. 영어로 좁히면 '곧 시작' 띠가 **처음 열릴 띠**라
+    // 펼쳐져 있어야 한다(전체 기준으로 나누면 firstBand가 '지금'이라 아무 띠도 안 열린다).
+    const split: LiveBoard = {
+      ...BOARD,
+      teachers: [
+        {
+          ...BOARD.teachers[0]!,
+          slots: [
+            slot({ classId: "c1", className: "수학반", students: [student("이도윤")] }),
+            slot({
+              classId: "c3",
+              className: "영어반",
+              subject: "english",
+              slotStart: "18:20",
+              slotEnd: "19:20",
+              band: "upcoming",
+              phase: "before",
+              students: [student("최유나")],
+            }),
+          ],
+        },
+      ],
+    };
+    const { container } = render(
+      <OperationsProvider
+        subjects={[
+          { key: "math", label: "수학", color: "blue", weekdayGrouping: "mon-thu", testMax: 5 },
+          { key: "english", label: "영어", color: "gold", weekdayGrouping: "mon-thu", testMax: 5 },
+        ]}
+        gradeLevels={["중2"]}
+      >
+        <SeatingChart board={split} initialSubject="english" />
+      </OperationsProvider>,
+    );
+    // 🔑 `<details>`는 접혀 있어도 jsdom에선 자식이 남는다 — 그래서 **열림 속성**을 직접 본다
+    //    (getByText로는 이 회귀를 못 잡는다).
+    const bands = [...container.querySelectorAll("details")];
+    expect(bands).toHaveLength(1); // 수학 '지금' 띠는 아예 안 그려진다
+    expect(bands[0]!.textContent).toContain("곧 시작");
+    expect(bands[0]!.hasAttribute("open")).toBe(true);
+    expect(screen.getByText("영어반")).toBeTruthy();
+    expect(screen.queryByText("수학반")).toBeNull();
+  });
+
+  it("그 과목에 수업이 없으면 왜 비었는지 밝히고 되돌릴 버튼을 준다", () => {
+    const onlyMath: LiveBoard = {
+      ...MIXED,
+      teachers: [
+        {
+          ...MIXED.teachers[0]!,
+          slots: [slot({ classId: "c1", className: "수학반", students: [student("이도윤")] })],
+        },
+      ],
+    };
+    const { container } = render(
+      <OperationsProvider
+        subjects={[
+          { key: "math", label: "수학", color: "blue", weekdayGrouping: "mon-thu", testMax: 5 },
+          { key: "english", label: "영어", color: "gold", weekdayGrouping: "mon-thu", testMax: 5 },
+        ]}
+        gradeLevels={["중2"]}
+      >
+        <SeatingChart board={onlyMath} initialSubject="english" />
+      </OperationsProvider>,
+    );
+    expect(container.textContent).toContain("고른 과목에는 이 날 수업이 없습니다");
+    fireEvent.click(screen.getByText("전체 보기"));
+    expect(screen.getByText("수학반")).toBeTruthy();
   });
 });

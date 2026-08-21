@@ -7,10 +7,23 @@
  *    채우기가 행 배열(`GridProvider`의 rows)을 좌표로 쓰기 때문에, 숨기기만 하면 ↑↓·Tab·Shift 범위가
  *    **보이지 않는 칸으로 들어가고 그 칸이 저장된다**. 반 접기가 같은 이유로 행을 제거하는데
  *    (`class-group.tsx`·`grid-context.tsx`) 검색도 정확히 그 규약을 따른다.
- * 🔴 **검색어는 저장하지 않는다** — 화면을 떠나면 사라진다(`useState`뿐, ui_prefs·URL 아님).
+ * 🔴 **검색어는 저장하지 않는다** — 화면을 떠나면 사라진다(`useState`뿐, `ui_prefs`·localStorage 아님).
+ *    ⚠️ 2026-08-20에 **URL 씨앗**(`?q=`)이 생겼지만 그건 저장이 아니다: 허브에서 학생을 찾아 그 강사
+ *    출석부로 검색어를 들고 들어가기 위한 링크 파라미터일 뿐이고, 그냥 `/attendance`를 열면 비어 있다
+ *    ([att-search-seed.ts](./att-search-seed.ts)).
  * 🔴 **새로 열리는 데이터가 없다** — 서버가 이미 그린 행만 좁힌다(강사는 담당 반만 본다, [[#77]]).
  */
-import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+import { syncSearchSeedInUrl } from "./att-search-seed";
 import {
   emptySearchMessage,
   isSearchActive,
@@ -45,6 +58,12 @@ type Ctx = {
   totalStudents: number;
   /** 검색에 걸린 실인원. */
   matchedStudents: number;
+  /**
+   * 검색에 걸린 **학생 id** — 합계 줄이 청구·납입·정산액을 같은 모수로 다시 셀 때 쓴다(2026-08-20).
+   * 🔴 이름이 아니라 id다 — 동명이인이 한 명으로 접히면 남의 돈이 섞인다.
+   * ⚠️ `active`가 아니면 빈 집합이다(전체를 뜻하지 않는다) — 호출부가 `active`로 모수 null과 가른다.
+   */
+  matchedStudentIds: ReadonlySet<string>;
 };
 
 const SearchCtx = createContext<Ctx | null>(null);
@@ -56,29 +75,61 @@ export function useAttendanceSearch(): Ctx | null {
 
 export function AttendanceSearchProvider({
   rows,
+  initialQuery = "",
   children,
 }: {
   rows: AttendanceSearchRow[];
+  /**
+   * URL 씨앗(`?q=`) — 허브에서 학생을 눌러 들어오면 그 학생 줄만 남은 채 열린다.
+   *
+   * 🔑 화면 값은 **씨앗을 덮어쓰는 override**로 들고 있다: 렌더 중 setState도, `key`로 통째 remount도
+   *    없이 "새 씨앗이 오면 그 값으로 되돌아간다"가 성립한다. remount였다면 격자 저장소(되돌리기·활성 칸)가
+   *    저장 뒤 `router.refresh()`마다 날아간다.
+   */
+  initialQuery?: string;
   children: ReactNode;
 }) {
-  const [query, setQuery] = useState("");
+  // override.seed가 지금 씨앗과 다르면 = 새 링크로 들어온 것 → 화면 값은 새 씨앗으로 돌아간다.
+  const [override, setOverride] = useState<{ seed: string; value: string } | null>(null);
+  const query = override && override.seed === initialQuery ? override.value : initialQuery;
+  // 주소창 반영은 **입력이 멎은 뒤**(비우기는 즉시) — 타이핑마다 replaceState를 쏘면 useSearchParams
+  // 구독자(툴바 드롭다운)가 글자마다 다시 그려진다.
+  const syncTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const setQuery = useCallback(
+    (next: string) => {
+      setOverride({ seed: initialQuery, value: next });
+      if (syncTimer.current) clearTimeout(syncTimer.current);
+      // 🔴 X(지우기)·Esc는 **즉시** URL에서 뗀다 — 남겨 두면 새로고침·강사 전환에 옛 검색어가 되살아난다.
+      if (!isSearchActive(next)) {
+        syncSearchSeedInUrl("");
+        return;
+      }
+      syncTimer.current = setTimeout(() => syncSearchSeedInUrl(next), 250);
+    },
+    [initialQuery],
+  );
+  // 화면을 떠난 뒤 늦게 터진 타이머가 **다른 페이지 주소**에 검색어를 적지 않게.
+  useEffect(() => () => { if (syncTimer.current) clearTimeout(syncTimer.current); }, []);
   const active = isSearchActive(query);
-  const { matched, matchedStudents } = useMemo(() => {
+  const { matched, matchedStudentIds } = useMemo(() => {
     const out = new Set<string>();
     const people = new Set<string>();
-    if (!isSearchActive(query)) return { matched: out, matchedStudents: 0 };
+    if (!isSearchActive(query)) return { matched: out, matchedStudentIds: people };
     for (const r of rows) {
       if (matchesStudentSearch(query, [r.name, r.school, r.grade, r.schoolGrade])) {
         out.add(r.row);
         people.add(r.studentId);
       }
     }
-    return { matched: out, matchedStudents: people.size };
+    return { matched: out, matchedStudentIds: people };
   }, [rows, query]);
+  const matchedStudents = matchedStudentIds.size;
   const totalStudents = useMemo(() => new Set(rows.map((r) => r.studentId)).size, [rows]);
+  // ⚠️ `setQuery`도 의존성이다 — 씨앗이 바뀌면 함수가 새로 만들어지는데, 옛 함수를 들고 있으면
+  //    옛 씨앗으로 override를 적어 방금 친 글자가 통째로 무시된다.
   const value = useMemo<Ctx>(
-    () => ({ query, setQuery, active, matched, totalStudents, matchedStudents }),
-    [query, active, matched, totalStudents, matchedStudents],
+    () => ({ query, setQuery, active, matched, totalStudents, matchedStudents, matchedStudentIds }),
+    [query, setQuery, active, matched, totalStudents, matchedStudents, matchedStudentIds],
   );
   return <SearchCtx.Provider value={value}>{children}</SearchCtx.Provider>;
 }
@@ -91,10 +142,12 @@ export function AttendanceSearchBox() {
     <>
       <StudentSearchBox value={ctx.query} onChange={ctx.setQuery} />
       {ctx.active ? (
+        // ⚠️ 2026-08-20부터 이 화면의 집계는 **검색을 따라간다**(합계 줄·반 머리행·상단 스탯 전부) —
+        //    문구를 "전체 기준"으로 되돌리지 말 것. 전체 값은 사라지지 않고 `검색분 / 전체`로 함께 선다.
         <SearchScopeChip
           shown={ctx.matchedStudents}
           total={ctx.totalStudents}
-          totalsNote="시수·출석률·금액은 전체 기준"
+          totalsNote="숫자도 검색 기준"
         />
       ) : null}
     </>
@@ -134,12 +187,13 @@ export function useSearchActive(): boolean {
 
 /**
  * 반 머리행에 붙는 "검색 N명" — 인원(전체)과 나란히 서서 **머리행 숫자가 거짓말하지 않게** 한다.
- * (반 시수는 접기와 같은 이유로 전체 기준 그대로다 — 그 사실은 툴바 칩이 말한다.)
+ * ⚠️ 옆의 반 시수도 2026-08-20부터 같은 규약으로 `검색분 / 전체`가 된다(`LiveUnits`) — 한 머리행에서
+ *    인원만 검색 기준이고 시수는 전체이면 그게 제일 나쁘다.
  */
 export function ClassSearchCount({ rowKeys }: { rowKeys: readonly string[] }) {
   const { active, count } = useClassMatched(rowKeys);
   if (!active) return null;
-  return <span className="text-amber-strong num text-[11px] font-bold">검색 {count}명</span>;
+  return <span className="text-amber num text-[11px] font-bold">검색 {count}명</span>;
 }
 
 /**

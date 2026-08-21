@@ -197,8 +197,18 @@ export function AppSidebar({
 
   // 하부탭 권한 필터 — 독립 메뉴 하부탭(menuKey 有)은 자기 키로 검사한다. 부모만 통과하면 노출되던
   // 기존 구조에선 ecs=none인 역할(상담사·회계)에게 눌러도 튕기는 죽은 링크가 보인다(#77 거짓 약속).
+  // `teacherOnly` 면은 담당 반을 전제로 그리므로 겸직(canTeacherView)에게만 — 담당 반 0인 사무실
+  // 계정에겐 눌러도 빈 화면이라 같은 결의 죽은 링크다(권한 차단이 아니라 노이즈 제거, URL은 열려 있다).
+  // ⚠️ 단 **지금 그 면을 보고 있으면 남긴다** — 감추면 접두가 겹치는 형제(월별 출석부)가 대신 켜져
+  //    "어디인지 혼동"이 된다(원장 2026-07-31 지적과 같은 증상). 현재 위치는 항상 보여야 한다.
   const subTabsFor = (menuKey: MenuKey): SubTabItem[] =>
-    subTabsForMenu(menuKey).filter((s) => !s.menuKey || canAccess(systemRole, s.menuKey, permMatrix));
+    subTabsForMenu(menuKey).filter(
+      (s) =>
+        (!s.menuKey || canAccess(systemRole, s.menuKey, permMatrix)) &&
+        (!s.teacherOnly ||
+          canTeacherView ||
+          isSubActive(s.href, [s], pathname, currentTab, focusedHref)),
+    );
 
   return (
     <TooltipProvider delay={200}>

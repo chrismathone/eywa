@@ -3,7 +3,9 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { useDraggable } from "@dnd-kit/core";
+import { cn } from "@/lib/utils";
 import { studentStatusLabel } from "@/features/students/status-labels";
+import { SHUTTLE_DENSE_TEXT } from "@/features/shuttle/control-size";
 import { SHUTTLE_DAYS, dayLabel, type ShuttleRider } from "@/features/shuttle/types";
 import { compactWeekdays } from "@/features/shuttle/roster";
 import { removeRider, updateRiderWeekdays } from "@/features/shuttle/server/actions";
@@ -80,13 +82,18 @@ export function RiderChip({
   return (
     <span className={`flex w-full min-w-0 flex-col ${isDragging ? "opacity-50" : ""}`}>
       <span
-        className={`rounded-pill flex min-h-8 w-full min-w-0 items-center gap-1.5 border px-2 py-1 text-[12px] sm:min-h-0 sm:gap-1 sm:py-[3px] sm:text-[11.5px] ${
+        // 📱 폰은 44px(셔틀 탭 타겟 규칙) — 데스크톱은 격자 밀도 요소라 종전대로 촘촘하게
+        //    (control-size의 "의도된 예외 하나"). 글자도 같은 축(SHUTTLE_DENSE_TEXT)에서 온다.
+        className={cn(
+          "rounded-pill flex min-h-11 w-full min-w-0 items-center gap-1.5 border px-2 py-1 sm:min-h-0 sm:gap-1 sm:py-[3px]",
+          SHUTTLE_DENSE_TEXT,
+          
           inactive
             ? "border-line bg-muted text-text-dim"
             : rider.ioKind === "in"
               ? "border-blue/30 bg-blue-soft text-blue"
-              : "border-purple/30 bg-purple-soft text-purple"
-        }`}
+              : "border-purple/30 bg-purple-soft text-purple",
+        )}
       >
         <button
           ref={setNodeRef}
@@ -119,7 +126,9 @@ export function RiderChip({
             disabled={busy}
             onClick={unassign}
             aria-label={`${rider.studentName} 배정 해제`}
-            className="hover:text-danger shrink-0 px-1 text-[15px] opacity-60 sm:px-0 sm:text-inherit"
+            // 폰에서는 칩 높이(44px)를 그대로 받아 손가락이 닿는 칸이 된다 — 폭까지 44로 키우면
+            // 9rem 칸에서 이름이 사라지므로 세로만 채우고 좌우는 여백으로 넓힌다.
+            className="hover:text-danger h-11 shrink-0 cursor-pointer px-2 text-[15px] opacity-60 sm:h-auto sm:px-0 sm:text-inherit"
           >
             ×
           </button>
@@ -137,7 +146,7 @@ export function RiderChip({
                 disabled={busy}
                 aria-pressed={on}
                 onClick={() => toggleDay(d)}
-                className={`size-9 rounded text-[13px] font-bold transition-colors sm:size-6 sm:text-[11px] ${
+                className={`size-11 cursor-pointer rounded text-[13px] font-bold transition-colors sm:size-6 sm:text-[11.5px] ${
                   on ? "bg-primary text-primary-foreground" : "text-text-faint hover:bg-muted"
                 }`}
               >

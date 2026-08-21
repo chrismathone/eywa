@@ -4,20 +4,12 @@ import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { formatDows } from "@/features/attendance/calendar";
 import { BADGE_LABEL, badgeTitle, isEnrolledOn } from "@/features/attendance/enrollment-span";
 import { BADGE_BASE, BADGE_TONE, NOT_MINE_MESSAGE } from "@/features/attendance/cell-display";
+import { lockedMessage } from "@/features/attendance/lock-message";
 import { countMarks } from "@/features/attendance/grid/totals";
 import { rowKey } from "@/features/attendance/grid/model";
+import { formatMoney } from "@/features/attendance/money-format";
 import { AttendanceCell } from "./attendance-cell";
 import { RowTotalCells } from "./live-totals";
-
-/** 금액 표시 — 0원과 '자료 없음'을 구분한다(청구서가 없는 달은 "—"). */
-export function formatMoney(n: number | null | undefined): string {
-  return n === null || n === undefined ? "—" : n.toLocaleString("ko-KR");
-}
-
-/** 잠긴 칸 툴팁 — 서버 응답과 같은 취지의 한글 문장(raw 코드 노출 금지). */
-function lockedMessage(date: string, lockBefore: string): string {
-  return `${date} 출결은 수정 기간(7일)이 지나 고칠 수 없습니다 — ${lockBefore} 이후만 수정 가능, 그 전은 관리자에게 요청하세요`;
-}
 
 /**
  * 출석부 매트릭스의 학생 행 하나 — 반별 보기와 강사 전체 보기가 **같은 행 컴포넌트**를 쓴다.

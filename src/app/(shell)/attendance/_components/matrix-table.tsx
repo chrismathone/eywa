@@ -7,7 +7,8 @@ import { countMarks, sumCounts, type Counted } from "@/features/attendance/grid/
 import { ClassGroupBody, CollapseAllButton } from "./class-group";
 import { ClassSearchCount, SearchEmptyRow, SearchedRow } from "./search-context";
 import { LiveRecords, LiveUnits } from "./live-totals";
-import { MatrixRow, formatMoney } from "./matrix-row";
+import { MatrixRow } from "./matrix-row";
+import { MatrixTotalsSummary } from "./totals-row";
 
 /**
  * sticky 헤더의 선 — `border-collapse` 표에선 테두리 소유권이 **표**에 있어 sticky 셀만 남고 선은 밀려 사라진다(#71).
@@ -166,6 +167,17 @@ export function MatrixTable({
   const tierByStudent: Record<string, string> =
     money && money.tierSettlement.status !== "unwired" ? money.tierSettlement.tierByStudent : {};
   const totalCount = sumCounts(groups.map((g) => groupCount(g.matrix)));
+  /**
+   * 행 키 → 서버 집계 — 클라 합계의 폴백이자 **검색 모수로 다시 세는 재료**(2026-08-20).
+   * ⚠️ 격자(GridProvider)가 있으면 격자가 이긴다 — 이건 격자가 없을 때만 탄다(첫 렌더·테스트).
+   *    안 넘기면 검색 중 시수가 좁혀지지 않은 값으로 떨어진다(live-totals `serverCount` 주석).
+   */
+  const countByRow: Record<string, Counted> = {};
+  for (const g of groups) {
+    for (const s of g.matrix.students) {
+      countByRow[rowKey(g.classId, s.id)] = countMarks(g.matrix.marks[s.id] ?? {}, g.matrix.units[s.id] ?? {});
+    }
+  }
   // 표 최소 폭 = 고정 열 합 + 날짜 칸 최소치. 화면이 이보다 넓으면 남는 폭은 날짜 칸이 나눠 갖는다.
   const tableMinWidth =
     COL_W.name +
@@ -356,12 +368,11 @@ export function MatrixTable({
                   <span className="text-text-dim text-[11px]">{g.matrix.students.length}명</span>
                   {/* 검색 중이면 이 반에서 몇 명이 걸렸는지 — 머리행 인원(전체)만 두면 숫자가 거짓말한다. */}
                   <ClassSearchCount rowKeys={groupRowKeys} />
+                  {/* 검색 중이면 `시수 12 / 53`(검색분 / 전체) — 옆의 "검색 N명"과 같은 규약이다.
+                      한 머리행에서 인원만 검색 기준이고 시수는 전체이면 그게 제일 나쁘다. */}
                   <span className="text-text-dim num text-[11px]">
                     시수{" "}
-                    <LiveUnits
-                      rows={g.matrix.students.map((s) => rowKey(g.classId, s.id))}
-                      fallback={groupCount(g.matrix)}
-                    />
+                    <LiveUnits rows={groupRowKeys} countByRow={countByRow} fallback={groupCount(g.matrix)} />
                   </span>
                 </>
               }
@@ -378,84 +389,14 @@ export function MatrixTable({
           {groups.length > 1 ? (
             <tr className="bg-bg-soft">
               <td colSpan={colSpan} className="border-line border-t p-0">
-                <div className="sticky left-0 flex w-fit flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2">
-                  <span className="text-foreground text-[12px] font-bold">합계</span>
-                  <span className="text-text-dim text-[11px]">{groups.length}개 반</span>
-                  <span className="text-foreground num text-[12px] font-bold">
-                    시수 <LiveUnits fallback={totalCount} />
-                  </span>
-                  {money ? (
-                    <>
-                      {/* ⚠️ 합계는 **고유 학생 1회**만 더한다 — 한 학생이 여러 반에 나와도 청구서는 한 장이다. */}
-                      <span className="text-text-dim num text-[11px]">
-                        청구 {formatMoney(money.totals.billed)} · 납입 {formatMoney(money.totals.paid)}
-                        <span className="text-text-faint ml-1">({money.totals.students}명 기준)</span>
-                      </span>
-                      {moneyNote ? (
-                        <span
-                          className="text-amber text-[11px]"
-                          title="교시(시간표 슬롯) 담당으로 들어온 반입니다. 급여 배분은 아직 담임 축이라 이 반의 청구·정산액은 담임 선생님 쪽에 잡혀 있습니다."
-                        >
-                          {moneyNote}
-                        </span>
-                      ) : null}
-                      {money.totals.sharedStudents > 0 ? (
-                        <span
-                          className="text-amber text-[11px]"
-                          title="다른 과목·강사와 청구서를 함께 쓰는 학생입니다. 이 금액은 강사 몫이 아니라 학생 총액이라 그대로 급여 기준으로 쓰면 안 됩니다."
-                        >
-                          공유 {money.totals.sharedStudents}명 포함
-                        </span>
-                      ) : null}
-                      {/* 강사 몫(정산액) — 1순위는 티어 단가(0199a, 시트 산식 Σ floor1(단가×시수×0.911×비율)).
-                          티어 미배선이면 종전 안내(회차 확정/배분율)로 폴백. 없으면 0을 지어내지 않는다. */}
-                      {money.tierSettlement.status === "ready" ? (
-                        <span className="text-foreground num text-[12px] font-bold">
-                          정산액 {formatMoney(money.tierSettlement.total)}
-                          <span className="text-text-faint ml-1 text-[11px] font-normal">
-                            (시수 {money.tierSettlement.unitsTotal} · 단가×시수×0.911×비율)
-                          </span>
-                          {money.tierSettlement.missingTierStudents.length > 0 ? (
-                            <span
-                              className="text-amber ml-1 text-[11px] font-normal"
-                              title={`단가(수업 티어)가 지정되지 않아 정산액에서 빠진 학생입니다: ${money.tierSettlement.missingTierStudents.join(", ")}`}
-                            >
-                              단가 미지정 {money.tierSettlement.missingTierStudents.length}명 ·{" "}
-                              {money.tierSettlement.excludedUnits}시수 제외
-                            </span>
-                          ) : null}
-                          {money.tierSettlement.missingPriceTiers.length > 0 ? (
-                            <span
-                              className="text-amber ml-1 text-[11px] font-normal"
-                              title={`단가표(salary_tiers)에 없는 티어입니다: ${money.tierSettlement.missingPriceTiers.join(", ")}`}
-                            >
-                              단가표 미등록 티어 {money.tierSettlement.missingPriceTiers.length}건
-                            </span>
-                          ) : null}
-                        </span>
-                      ) : money.tierSettlement.status === "hold" ? (
-                        <span
-                          className="text-amber text-[11px]"
-                          title={
-                            money.tierSettlement.missingTierStudents.length > 0
-                              ? `단가 미지정: ${money.tierSettlement.missingTierStudents.join(", ")}`
-                              : undefined
-                          }
-                        >
-                          정산액 보류 — 단가·비율이 지정된 학생이 없습니다
-                        </span>
-                      ) : (
-                        <span className="text-text-faint text-[11px]">
-                          {money.splitRows === 0
-                            ? "정산액 — 회차 확정이 없어 반별 배분을 낼 수 없습니다(수납관리 > 회차)"
-                            : money.commissionRate === null
-                              ? "정산액 — 배분율 미설정(수납관리 > 강사 정산)"
-                              : `배분율 ${money.commissionRate}% · 정산액은 수납관리 > 강사 정산에서`}
-                        </span>
-                      )}
-                    </>
-                  ) : null}
-                </div>
+                {/* 검색이 걸리면 이 줄의 숫자가 **전부 검색 기준**이 된다(클라 — totals-row.tsx). */}
+                <MatrixTotalsSummary
+                  classCount={groups.length}
+                  fallback={totalCount}
+                  countByRow={countByRow}
+                  money={money}
+                  moneyNote={moneyNote}
+                />
               </td>
             </tr>
           ) : null}
@@ -465,7 +406,7 @@ export function MatrixTable({
               <div className="flex items-center gap-2 overflow-x-auto text-[11px] [&>*]:shrink-0 [&_*]:whitespace-nowrap">
                 {/* 조작법을 여기 한 줄로 — 시트처럼 쓰는 화면이라 "클릭해서 고르는 곳"으로 오해하면 느려진다. */}
                 <span className="text-text-faint text-[11px]">
-                  총 <LiveRecords fallback={totalCount} />회 기록 · 칸을 고르고{" "}
+                  총 <LiveRecords countByRow={countByRow} fallback={totalCount} />회 기록 · 칸을 고르고{" "}
                   <b className="text-text-dim">숫자</b>를 치세요(0=결석, 1·1.5·2=출석
                   시수) · 방향키·Tab·Enter 이동 · Shift로 범위 · Ctrl+C/V · Ctrl+Z · 우하단 손잡이를 끌면 채우기 ·
                   {/* ⚠️ 요소와 텍스트를 줄바꿈으로 나누면 사이 공백이 사라진다 — `{" "}`로 명시. */}

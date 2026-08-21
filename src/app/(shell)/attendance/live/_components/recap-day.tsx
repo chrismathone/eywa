@@ -11,16 +11,40 @@ import { ATT_SOFT } from "@/features/attendance/status-color";
 import { OUTCOME_LABEL } from "@/features/attendance/live/queue";
 import {
   handlersLabel,
+  isRepeatAbsenceDanger,
   RECAP_STATUS_LABEL,
+  REPEAT_ABSENCE_MIN,
   slotsLabel,
   type RecapEvent,
   type RecapPartialClass,
   type RecapUnmarkedClass,
 } from "@/features/attendance/recap/digest";
+import { ABSENCE_REASON_LABEL } from "@/features/attendance/absence-reason";
+import {
+  isSubjectFilterActive,
+  matchesSubjectFilter,
+  SUBJECT_FILTER_ALL,
+} from "@/features/attendance/live/view-prefs";
 import type { RecapDay } from "@/features/attendance/recap/range";
 
-export function RecapDayBlock({ day, single }: { day: RecapDay; single: boolean }) {
+export function RecapDayBlock({
+  day,
+  single,
+  /** 과목 필터(2026-08-20). 좁히는 축은 이 화면의 단위인 **사건 줄**이다. */
+  subject = SUBJECT_FILTER_ALL,
+}: {
+  day: RecapDay;
+  single: boolean;
+  subject?: string;
+}) {
   const t = day.totals;
+  const filtering = isSubjectFilterActive(subject);
+  // 🔴 머리줄 숫자(`t.*`)는 **하루 전체 기준 그대로**다 — 레인만 좁히고 분모는 안 건드린다.
+  const absences = day.absences.filter((e) => matchesSubjectFilter(subject, e.subject));
+  const others = day.others.filter((e) => matchesSubjectFilter(subject, e.subject));
+  const unmarked = day.unmarked.filter((c) => matchesSubjectFilter(subject, c.subject));
+  // 사유가 확인돼 아래로 내려간 건수 — 레인 힌트가 "왜 순서가 이런지"를 말한다.
+  const notified = absences.filter((e) => !e.settled && !e.urgent).length;
   return (
     <section className="space-y-3">
       {/* 하루짜리 요약에도 날짜를 적는다 — 페이지 제목은 "오늘 출결"이라 여기가 유일한 근거다. */}
@@ -40,36 +64,44 @@ export function RecapDayBlock({ day, single }: { day: RecapDay; single: boolean 
           하루짜리 요약에선 그대로 둔다(빈 화면이 고장으로 읽히면 안 된다). */}
       <Lane
         title="결석·공결"
-        count={day.absences.length}
+        count={absences.length}
+        hidden={day.absences.length - absences.length}
         tone="danger"
-        empty="결석 기록이 없습니다."
-        hint="조치가 끝나지 않은 건이 위로 옵니다."
+        empty={filtering ? "이 과목에는 결석 기록이 없습니다." : "결석 기록이 없습니다."}
+        // 사전 통보(여행·휴가·병결)는 **빠지는 게 아니라 아래로 간다** — 그 사실을 힌트가 말한다.
+        hint={
+          notified > 0
+            ? `조치가 끝나지 않은 건이 위로 옵니다 · 사유가 확인된 건(여행·휴가·병결) ${notified}건은 아래로`
+            : "조치가 끝나지 않은 건이 위로 옵니다."
+        }
         hideWhenEmpty={!single}
       >
-        {day.absences.map((e) => (
+        {absences.map((e) => (
           <EventRow key={`${e.studentId}@${e.classId}@${e.status}`} event={e} />
         ))}
       </Lane>
 
       <Lane
         title="지각·조퇴·보강"
-        count={day.others.length}
-        empty="지각·조퇴·보강 기록이 없습니다."
+        count={others.length}
+        hidden={day.others.length - others.length}
+        empty={filtering ? "이 과목에는 지각·조퇴·보강 기록이 없습니다." : "지각·조퇴·보강 기록이 없습니다."}
         hideWhenEmpty={!single}
       >
-        {day.others.map((e) => (
+        {others.map((e) => (
           <EventRow key={`${e.studentId}@${e.classId}@${e.status}`} event={e} />
         ))}
       </Lane>
 
       <Lane
         title="출석부 미입력"
-        count={day.unmarked.length}
-        empty="모든 반이 출결을 입력했습니다."
+        count={unmarked.length}
+        hidden={day.unmarked.length - unmarked.length}
+        empty={filtering ? "이 과목은 모든 반이 출결을 입력했습니다." : "모든 반이 출결을 입력했습니다."}
         hint="반 이름을 누르면 그날 출석부가 열립니다."
         hideWhenEmpty={!single}
       >
-        {day.unmarked.map((c) => (
+        {unmarked.map((c) => (
           <UnmarkedRow key={c.classId} row={c} date={day.date} />
         ))}
       </Lane>
@@ -80,6 +112,8 @@ export function RecapDayBlock({ day, single }: { day: RecapDay; single: boolean 
 function Lane({
   title,
   count,
+  /** 과목 필터로 안 그린 줄 수 — 0이 아니면 **감췄다는 사실을 적는다**(조용히 사라지면 안 된다). */
+  hidden = 0,
   tone,
   empty,
   hint,
@@ -88,20 +122,24 @@ function Lane({
 }: {
   title: string;
   count: number;
+  hidden?: number;
   tone?: "danger";
   empty: string;
   hint?: string;
   hideWhenEmpty?: boolean;
   children: ReactNode;
 }) {
-  if (count === 0 && hideWhenEmpty) return null;
+  if (count === 0 && hidden === 0 && hideWhenEmpty) return null;
   return (
     <section className="space-y-2">
-      <h3 className="flex items-baseline gap-2">
+      <h3 className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
         <span className="text-sm font-bold">{title}</span>
         <span className={`num text-sm ${tone === "danger" && count > 0 ? "text-danger" : "text-text-dim"}`}>
           {count}
         </span>
+        {hidden > 0 ? (
+          <span className="num text-text-faint text-[11px]">과목 필터로 {hidden}건 숨김</span>
+        ) : null}
         {hint && count > 0 ? <span className="text-text-faint text-[11px]">{hint}</span> : null}
       </h3>
       {count === 0 ? (
@@ -129,10 +167,26 @@ function EventRow({ event }: { event: RecapEvent }) {
       <span className="num text-text-dim text-xs">{slotsLabel(event.slots)}</span>
       {/* 담당이 교시마다 다르면 전부 적는다 — 첫 교시 담당만 두면 엉뚱한 강사에게 묻게 된다. */}
       <span className="text-text-faint text-xs">{handlersLabel(event.teacherNames)}</span>
-      {event.recentAbsences && event.recentAbsences >= 2 ? (
+      {event.recentAbsences && event.recentAbsences >= REPEAT_ABSENCE_MIN ? (
         // 창은 '지금 기준' 14일이다(0220a) — 요약 날짜가 오래됐어도 이 값은 오늘 기준이라 라벨로 밝힌다.
-        <span className="bg-danger-soft text-danger num shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold">
+        // 🔴 사전 통보를 뺀 나머지가 문턱 미만이면 **톤만** 내린다(숫자는 그대로 — 감추면 다음 사람이
+        //    같은 판단을 다시 할 수 없다).
+        <span
+          className={`num shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold ${
+            isRepeatAbsenceDanger(event.recentAbsences, event.recentPlanned)
+              ? "bg-danger-soft text-danger"
+              : "bg-bg-soft text-text-dim"
+          }`}
+          title={
+            event.recentPlanned && event.recentPlanned > 0
+              ? `최근 14일(오늘 기준) 결석 ${event.recentAbsences}회 중 ${event.recentPlanned}회는 미리 통보된 결석입니다`
+              : "최근 14일(오늘 기준) 결석 횟수입니다"
+          }
+        >
           최근 14일 {event.recentAbsences}회
+          {event.recentPlanned && event.recentPlanned > 0
+            ? ` (사전 통보 ${event.recentPlanned}회)`
+            : ""}
         </span>
       ) : null}
       {event.note ? <span className="text-text-dim text-xs">“{event.note}”</span> : null}
@@ -146,8 +200,14 @@ function EventRow({ event }: { event: RecapEvent }) {
                 : "확인"}
             {event.followup?.handledByName ? ` · ${event.followup.handledByName}` : ""}
           </span>
-        ) : event.status === "absent" || event.status === "excused" ? (
-          <span className="text-amber-strong font-bold">조치 미완료</span>
+        ) : event.urgent ? (
+          // 🔴 앰버는 **긴급만** 쓴다(원장 2026-08-20) — 여행·휴가 줄까지 세워 두면 연락이 안 된 결석이
+          //    그 사이에 묻힌다. 실측 결석 메모 311건 중 272건이 사전 통보였다.
+          <span className="text-amber font-bold">조치 미완료</span>
+        ) : (event.status === "absent" || event.status === "excused") &&
+          event.reasonKind !== "unknown" ? (
+          // 사유가 확인된 미조치 — 줄은 남기고 색만 물러난다(빼면 "그날 결석이 몇이었나"가 깨진다).
+          <span className="text-text-faint">{ABSENCE_REASON_LABEL[event.reasonKind]}</span>
         ) : null}
       </span>
     </li>
@@ -198,7 +258,7 @@ export function PartialRow({ row, date }: { row: RecapPartialClass; date: string
         </a>
         <span className="text-text-faint text-xs">{subjects.labelOf(row.subject) || "과목 없음"}</span>
         <span className="text-text-faint text-xs">{handlersLabel(row.teacherNames)}</span>
-        <span className="num text-amber-strong ml-auto shrink-0 text-xs font-bold">
+        <span className="num text-amber ml-auto shrink-0 text-xs font-bold">
           빈 칸 {row.cells}개
         </span>
       </div>

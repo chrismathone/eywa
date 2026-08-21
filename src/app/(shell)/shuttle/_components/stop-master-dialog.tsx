@@ -3,6 +3,8 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import { SHUTTLE_ACTION, SHUTTLE_INPUT } from "@/features/shuttle/control-size";
 import {
   DIRECTION_LABEL,
   runTitle,
@@ -91,8 +93,8 @@ export function StopMasterDialog({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
       <div className="bg-card flex max-h-[85vh] w-full max-w-2xl flex-col gap-3 rounded-2xl p-4 shadow-xl">
         <div className="flex items-baseline justify-between gap-2">
-          <h2 className="text-text text-[15px] font-bold">정류장 관리</h2>
-          <Button size="sm" variant="ghost" onClick={onClose}>
+          <h2 className="text-foreground text-[15px] font-bold">정류장 관리</h2>
+          <Button variant="ghost" className={SHUTTLE_ACTION} onClick={onClose}>
             닫기
           </Button>
         </div>
@@ -110,15 +112,15 @@ export function StopMasterDialog({
             required
             maxLength={80}
             placeholder="새 정류장 이름"
-            className="border-line focus:border-primary h-11 min-w-40 flex-1 rounded-lg border px-2.5 text-base outline-none sm:h-8 sm:text-[12.5px]"
+            className={cn(SHUTTLE_INPUT, "min-w-40 flex-1")}
           />
           <input
             name="memo"
             maxLength={300}
             placeholder="메모 (예: CU 건너편)"
-            className="border-line focus:border-primary h-11 min-w-32 flex-1 rounded-lg border px-2.5 text-base outline-none sm:h-8 sm:text-[12.5px]"
+            className={cn(SHUTTLE_INPUT, "min-w-32 flex-1")}
           />
-          <Button type="submit" size="sm" disabled={busy}>
+          <Button type="submit" className={SHUTTLE_ACTION} disabled={busy}>
             추가
           </Button>
         </form>
@@ -141,19 +143,24 @@ export function StopMasterDialog({
                     required
                     maxLength={80}
                     defaultValue={s.name}
-                    className="border-line focus:border-primary h-11 min-w-40 flex-1 rounded-lg border px-2.5 text-base outline-none sm:h-8 sm:text-[12.5px]"
+                    className={cn(SHUTTLE_INPUT, "min-w-40 flex-1")}
                   />
                   <input
                     name="memo"
                     maxLength={300}
                     defaultValue={s.memo ?? ""}
                     placeholder="메모"
-                    className="border-line focus:border-primary h-11 min-w-32 flex-1 rounded-lg border px-2.5 text-base outline-none sm:h-8 sm:text-[12.5px]"
+                    className={cn(SHUTTLE_INPUT, "min-w-32 flex-1")}
                   />
-                  <Button type="submit" size="sm" disabled={busy}>
+                  <Button type="submit" className={SHUTTLE_ACTION} disabled={busy}>
                     저장
                   </Button>
-                  <Button type="button" size="sm" variant="ghost" onClick={() => setEditing(null)}>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className={SHUTTLE_ACTION}
+                    onClick={() => setEditing(null)}
+                  >
                     취소
                   </Button>
                 </form>
@@ -161,12 +168,15 @@ export function StopMasterDialog({
             ) : (
               <li key={s.id} className="rounded-xl">
                 <div className="hover:bg-muted flex min-h-11 flex-wrap items-center gap-2 rounded-xl px-2 py-1.5">
-                  <span className="text-text min-w-0 flex-1 overflow-hidden text-[12.5px] font-medium text-ellipsis whitespace-nowrap">
+                  <span className="text-foreground min-w-0 flex-1 overflow-hidden text-[12.5px] font-medium text-ellipsis whitespace-nowrap">
                     {s.name}
                     {s.memo && <span className="text-text-faint font-normal"> · {s.memo}</span>}
                   </span>
-                  <button
-                    type="button"
+                  {/* 🔴 여기가 "정렬이 떨어진다"의 대표 자리였다 — 한 줄에 수제 버튼(11px·py-1)과
+                      `size="sm"` Button(h-7)이 섞여 셋의 밑선이 서로 달랐다. 셋 다 공용 `<Button>`
+                      + 같은 크기 상수로 맞춘다(design-conventions "한 액션 행은 공용 Button"). */}
+                  <Button
+                    variant="ghost"
                     onClick={() => setOpenStop((v) => (v === s.id ? null : s.id))}
                     aria-expanded={openStop === s.id}
                     disabled={count === 0}
@@ -175,20 +185,24 @@ export function StopMasterDialog({
                         ? `${seasonLabel}에는 이 정류장을 쓰는 노선이 없습니다`
                         : "이 정류장을 쓰는 노선 보기"
                     }
-                    className={`shrink-0 rounded-lg px-1.5 py-1 text-[11px] ${
+                    className={cn(
+                      SHUTTLE_ACTION,
+                      // ⚠️ 꺼진 상태를 `text-text-faint`로 두지 않는다 — 공용 Button이 disabled에
+                      //    `opacity-50`을 얹어 faint(5.7:1)가 절반으로 깎이면 사실상 안 보인다
+                      //    (팔레트 v4가 대비를 올린 취지와 반대). 한 단계 진한 dim에서 출발한다.
                       count === 0
-                        ? "text-text-faint"
-                        : "text-text-dim hover:bg-muted hover:text-primary underline decoration-dotted underline-offset-2"
-                    }`}
+                        ? "text-text-dim"
+                        : "text-text-dim hover:text-primary underline decoration-dotted underline-offset-2",
+                    )}
                   >
                     노선 <span className="num">{count}</span>곳
-                  </button>
-                  <Button size="sm" variant="ghost" onClick={() => setEditing(s.id)}>
+                  </Button>
+                  <Button variant="ghost" className={SHUTTLE_ACTION} onClick={() => setEditing(s.id)}>
                     수정
                   </Button>
                   <Button
-                    size="sm"
                     variant="ghost"
+                    className={SHUTTLE_ACTION}
                     disabled={busy || count > 0}
                     title={
                       count > 0
@@ -207,7 +221,7 @@ export function StopMasterDialog({
 
                 {openStop === s.id && (
                   <ul className="border-line bg-muted/40 mx-2 mb-1.5 flex flex-col gap-0.5 rounded-lg border p-1.5">
-                    <li className="text-text-faint px-1 pb-0.5 text-[10.5px]">
+                    <li className="text-text-faint px-1 pb-0.5 text-[11.5px]">
                       {seasonLabel} 기준
                     </li>
                     {uses.map((u) => (
@@ -215,7 +229,7 @@ export function StopMasterDialog({
                         key={u.key}
                         className="text-text-dim flex items-baseline gap-1.5 px-1 text-[11.5px]"
                       >
-                        <span className="text-text min-w-0 flex-1 overflow-hidden font-medium text-ellipsis whitespace-nowrap">
+                        <span className="text-foreground min-w-0 flex-1 overflow-hidden font-medium text-ellipsis whitespace-nowrap">
                           {u.vehicle} · {u.run}
                         </span>
                         <span className="num text-text-faint shrink-0">{u.time ?? "—"}</span>

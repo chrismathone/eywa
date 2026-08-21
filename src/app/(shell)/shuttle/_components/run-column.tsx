@@ -7,6 +7,12 @@ import { Button } from "@/components/ui/button";
 import { Pill } from "@/components/atoms/pill";
 import { TONE_COLOR } from "@/lib/design/semantic-color";
 import {
+  SHUTTLE_ACTION,
+  SHUTTLE_INPUT,
+  SHUTTLE_ROW,
+  SHUTTLE_ROW_TEXT,
+} from "@/features/shuttle/control-size";
+import {
   DIRECTION_LABEL,
   runTimeRange,
   runTitle,
@@ -68,7 +74,7 @@ export function RunColumn({
         return (
           <section key={v.id} className="bg-card rounded-2xl p-3 shadow-[var(--shadow-card)]">
             <div className="mb-2 flex items-baseline justify-between gap-2">
-              <h3 className="text-text text-[13.5px] font-bold">{v.name}</h3>
+              <h3 className="text-foreground text-[13.5px] font-bold">{v.name}</h3>
               {v.driverName && (
                 <span className="text-text-faint truncate text-[11.5px]">{v.driverName}</span>
               )}
@@ -84,7 +90,7 @@ export function RunColumn({
                     <Link
                       href={`/shuttle?season=${season}&run=${r.id}`}
                       onClick={onPick}
-                      className={`flex min-h-11 flex-col justify-center gap-0.5 rounded-xl px-2.5 py-2 transition-colors ${
+                      className={`${SHUTTLE_ROW} flex flex-col justify-center gap-0.5 rounded-xl px-2.5 py-2 transition-colors ${
                         active ? "bg-primary-soft" : "hover:bg-muted"
                       }`}
                     >
@@ -93,7 +99,7 @@ export function RunColumn({
                         <Pill color={TONE_COLOR[r.direction === "in" ? "info" : "special"]}>
                           {DIRECTION_LABEL[r.direction]}
                         </Pill>
-                        <span className="text-text truncate text-[12.5px] font-bold">
+                        <span className={`text-foreground truncate font-bold ${SHUTTLE_ROW_TEXT}`}>
                           {runTitle(r)}
                         </span>
                       </span>
@@ -116,8 +122,8 @@ export function RunColumn({
                 {(["in", "out"] as const).map((dir) => (
                   <Button
                     key={dir}
-                    size="sm"
                     variant="outline"
+                    className={SHUTTLE_ACTION}
                     disabled={pending}
                     onClick={() => {
                       const fd = new FormData();
@@ -150,31 +156,36 @@ export function RunColumn({
               required
               maxLength={40}
               placeholder="차량 이름 (예: 1호차)"
-              className="border-line focus:border-primary h-11 rounded-lg border px-2.5 text-base outline-none sm:h-9 sm:text-[13px]"
+              className={SHUTTLE_INPUT}
             />
             <input
               name="driverName"
               maxLength={40}
               placeholder="기사 이름 (선택)"
-              className="border-line focus:border-primary h-11 rounded-lg border px-2.5 text-base outline-none sm:h-9 sm:text-[13px]"
+              className={SHUTTLE_INPUT}
             />
             <input
               name="driverPhone"
               maxLength={20}
               placeholder="기사 연락처 (선택)"
-              className="border-line focus:border-primary h-11 rounded-lg border px-2.5 text-base outline-none sm:h-9 sm:text-[13px]"
+              className={SHUTTLE_INPUT}
             />
-            <div className="flex gap-1">
-              <Button type="submit" size="sm" disabled={pending}>
+            <div className="flex items-center gap-1">
+              <Button type="submit" className={SHUTTLE_ACTION} disabled={pending}>
                 추가
               </Button>
-              <Button type="button" size="sm" variant="ghost" onClick={() => setAddingVehicle(false)}>
+              <Button
+                type="button"
+                variant="ghost"
+                className={SHUTTLE_ACTION}
+                onClick={() => setAddingVehicle(false)}
+              >
                 취소
               </Button>
             </div>
           </form>
         ) : (
-          <Button variant="outline" size="sm" onClick={() => setAddingVehicle(true)}>
+          <Button variant="outline" className={SHUTTLE_ACTION} onClick={() => setAddingVehicle(true)}>
             + 차량 추가
           </Button>
         ))}

@@ -24,9 +24,16 @@ import {
   previewAbsenceIntake,
   recordAbsenceIntake,
   searchIntakeStudents,
+  type IntakeStudentSearch,
 } from "@/features/attendance/intake/server/actions";
 
 type Student = { id: string; name: string; label: string };
+
+/**
+ * 검색 결과 초기값 — 목록이 비었을 때의 안내(note)는 **서버가 만든 문장만** 쓴다(화면이 지어내지 않는다).
+ * ⚠️ "use server" 모듈에서는 상수를 못 내보내므로(async 함수만) 여기서 만든다.
+ */
+const EMPTY_SEARCH: IntakeStudentSearch = { students: [], note: null, truncated: false };
 
 /** 자주 오는 사유 — 타이핑을 줄이되 **문장은 그대로 메모가 되므로** 고칠 수 있게 둔다. */
 const QUICK_REASONS = ["가족여행", "병결(감기)", "개인 사정", "학교 행사", "병원 진료"];
@@ -39,7 +46,7 @@ function existingText(status: string): string {
 export function AbsenceIntakeDialog({ today, onClose }: { today: string; onClose: () => void }) {
   const router = useRouter();
   const [q, setQ] = useState("");
-  const [results, setResults] = useState<Student[]>([]);
+  const [results, setResults] = useState<IntakeStudentSearch>(EMPTY_SEARCH);
   const [student, setStudent] = useState<Student | null>(null);
   const [from, setFrom] = useState(today);
   const [to, setTo] = useState(today);
@@ -59,14 +66,25 @@ export function AbsenceIntakeDialog({ today, onClose }: { today: string; onClose
     setQ(term);
     if (timer.current) clearTimeout(timer.current);
     if (!term.trim()) {
-      setResults([]);
+      setResults(EMPTY_SEARCH);
       return;
     }
     const mine = ++searchSeq.current;
     timer.current = setTimeout(() => {
-      void searchIntakeStudents(term).then((r) => {
-        if (mine === searchSeq.current) setResults(r);
-      });
+      void searchIntakeStudents(term)
+        .then((r) => {
+          if (mine === searchSeq.current) setResults(r);
+        })
+        .catch(() => {
+          // 액션이 던지면(네트워크·배포 교체) 목록이 옛 상태로 남는다 — 사유를 보여준다.
+          if (mine === searchSeq.current) {
+            setResults({
+              students: [],
+              note: "학생을 찾는 중 오류가 났습니다 — 잠시 후 다시 시도해 주세요",
+              truncated: false,
+            });
+          }
+        });
     }, 250);
   }
 
@@ -92,7 +110,7 @@ export function AbsenceIntakeDialog({ today, onClose }: { today: string; onClose
 
   function pickStudent(s: Student) {
     setStudent(s);
-    setResults([]);
+    setResults(EMPTY_SEARCH);
     setQ("");
     loadPreview({ student: s, from, to });
   }
@@ -213,9 +231,9 @@ export function AbsenceIntakeDialog({ today, onClose }: { today: string; onClose
                 placeholder="학생 이름 검색"
                 className="border-line bg-bg-soft focus:border-primary mt-1 h-9 w-full rounded-lg border px-3 text-sm outline-none"
               />
-              {results.length > 0 ? (
+              {results.students.length > 0 ? (
                 <ul className="border-line mt-1 max-h-40 overflow-y-auto rounded-lg border">
-                  {results.map((s) => (
+                  {results.students.map((s) => (
                     <li key={s.id}>
                       <button
                         type="button"
@@ -227,7 +245,16 @@ export function AbsenceIntakeDialog({ today, onClose }: { today: string; onClose
                       </button>
                     </li>
                   ))}
+                  {results.truncated ? (
+                    // 자른 사실을 밝힌다 — 20명만 보여주고 "이게 전부"인 척하면 데스크가 없는 학생으로 오해한다.
+                    <li className="text-text-faint px-3 py-1.5 text-[11px]">
+                      맞는 학생이 더 있습니다 — 이름을 더 입력해 좁혀 주세요.
+                    </li>
+                  ) : null}
                 </ul>
+              ) : results.note ? (
+                // 왜 비었는지 한 줄(문구는 서버가 만든다) — 오타인지 조건인지 데스크가 구분해야 한다.
+                <p className="text-text-dim mt-1.5 text-xs leading-relaxed">{results.note}</p>
               ) : null}
             </>
           )}

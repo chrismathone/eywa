@@ -51,7 +51,7 @@ export async function TodayAttendanceStrip() {
   return (
     <section className="border-amber/40 bg-amber/5 space-y-2 rounded-2xl border p-3">
       <header className="flex flex-wrap items-center gap-x-2 gap-y-1">
-        <h2 className="text-amber-strong text-sm font-bold">오늘 출석 미입력</h2>
+        <h2 className="text-amber text-sm font-bold">오늘 출석 미입력</h2>
         <span className="num text-text-dim text-xs">
           {slots.length}개 교시 · {missing}명
         </span>

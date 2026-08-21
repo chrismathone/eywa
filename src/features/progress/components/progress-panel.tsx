@@ -55,9 +55,11 @@ function AnomalyLine({ a, muted }: { a: ProgressAnomaly; muted?: boolean }) {
       {a.jumpSize != null && a.jumpSize > 0 ? (
         <span className="text-text-faint"> ({a.jumpSize}차시 건너뜀)</span>
       ) : null}
+      {/* 확인 주체 — 사람이 누른 것(0151a)과 시스템 자동 확인(2026-08-20 같은 선생님 규칙)을 구분한다.
+          자동 확인분에 "확인자 미상"이라고 적으면 누가 껐는지 영영 알 수 없는 기록처럼 보인다. */}
       {muted && a.resolvedAt ? (
         <span className="ml-1.5">
-          — {a.resolvedByName ?? "확인자 미상"} · {fmtDetectedAt(a.resolvedAt)} 확인
+          — {a.autoResolvedLabel ?? `${a.resolvedByName ?? "확인자 미상"} 확인`} · {fmtDetectedAt(a.resolvedAt)}
         </span>
       ) : null}
     </span>
@@ -86,8 +88,10 @@ function AnomalyCard({ anomalies, canResolve }: { anomalies: readonly ProgressAn
         ))}
       </ul>
       <p className="text-text-faint mt-2 text-[11px] leading-snug break-keep">
-        아래 수업 진도 표에서 해당 날짜의 진도 입력이 맞는지 확인해 주세요. 선행을 시작했거나 교재를 건너뛴
-        경우라면 정상입니다 — <b>이상 없음</b>을 누르면 이 학생의 진도 경고(원스크린 배지 포함)가 꺼집니다.
+        진도 점프는 <b>같은 선생님이 쓴 직전 진도와 비교</b>합니다 — 담당이 다른 진도(부담임 등)와는
+        비교하지 않으므로 경고하지 않습니다. 아래 수업 진도 표에서 해당 날짜의 진도 입력이 맞는지 확인해
+        주세요. 선행을 시작했거나 교재를 건너뛴 경우라면 정상입니다 — <b>이상 없음</b>을 누르면 이 학생의
+        진도 경고(원스크린 배지 포함)가 꺼집니다.
       </p>
     </div>
   );
@@ -102,6 +106,7 @@ function ResolvedAnomalies({ anomalies, canResolve }: { anomalies: readonly Prog
     <details className="border-line bg-bg-soft/40 rounded-2xl border px-4 py-2.5">
       <summary className="text-text-dim cursor-pointer text-[12px]">
         이상 없음으로 확인한 기록 <b className="text-foreground">{anomalies.length}</b>건
+        <span className="text-text-faint ml-1.5">(사람이 확인한 것 + 같은 선생님 진도 기준 자동 확인)</span>
       </summary>
       <ul className="mt-2 space-y-1.5">
         {anomalies.map((a) => (

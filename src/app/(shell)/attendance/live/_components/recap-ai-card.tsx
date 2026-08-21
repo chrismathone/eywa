@@ -118,7 +118,7 @@ export function RecapAiCard({ from, to, state }: { from: string; to: string; sta
         )}
         {/* 후검증 탈락·생성 실패는 숨기지 않는다 — 다만 아래 집계는 멀쩡하다는 사실을 함께 말한다. */}
         {state?.status === "failed" && state.error ? (
-          <p className="text-amber-strong mt-2 text-[12px]">{state.error}</p>
+          <p className="text-amber mt-2 text-[12px]">{state.error}</p>
         ) : null}
         {error ? <p className="text-danger mt-2 text-[12px]">{error}</p> : null}
       </div>

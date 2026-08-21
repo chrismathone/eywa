@@ -1,7 +1,7 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { auditActionLabel } from "@/features/audit/server/log";
-import { auditDetail } from "@/features/audit/describe";
+import { auditActorName, auditDetail } from "@/features/audit/describe";
 import { fetchAllPaged } from "@/lib/supabase/batch";
 import { kstToday } from "@/lib/date-kst";
 import { historyWindowStart } from "../teacher-as-of";
@@ -137,7 +137,8 @@ export async function getClassHistory(classId: string): Promise<ClassHistoryEntr
     source: "audit" as const,
     title: auditActionLabel(l.action),
     detail: auditDetail(l.action, l.metadata ?? {}, ctx),
-    actor: l.actor_name,
+    // 실행자도 감사 화면과 같은 단일 소스 — `system:*` 스크립트 식별자를 그대로 내보내지 않는다.
+    actor: auditActorName(l.actor_name),
   }));
 
   // ③ 임시 위임 — 담임은 안 바뀐 기간이라 배치 이력과 따로 읽혀야 한다.

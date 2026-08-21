@@ -4,6 +4,7 @@ import {
   filterByDirection,
   firstTime,
   groupRunsByVehicle,
+  progressState,
   sumProgress,
   type RunRows,
 } from "./today-board";
@@ -43,7 +44,12 @@ const run = (
   })),
 });
 
-const row = (key: string, status: RideRow["status"], ioKind: Direction = "in"): RideRow => ({
+const row = (
+  key: string,
+  status: RideRow["status"],
+  ioKind: Direction = "in",
+  dayKind: RideRow["dayKind"] = "regular",
+): RideRow => ({
   key,
   runId: "r",
   runStopId: null,
@@ -55,6 +61,9 @@ const row = (key: string, status: RideRow["status"], ioKind: Direction = "in"): 
   status,
   memo: null,
   logId: status ? `log-${key}` : null,
+  dayKind,
+  exceptionMemo: null,
+  exceptionId: dayKind === "regular" ? null : `exc-${key}`,
 });
 
 describe("countProgress — 🔴 '미기록'은 미탑승이 아니다", () => {
@@ -212,5 +221,44 @@ describe("firstTime", () => {
 
   it("시각이 하나도 없으면 빈 문자열", () => {
     expect(firstTime(run("r", "v1", 1, [null, null]))).toBe("");
+  });
+});
+
+// ── 일회성 탑승 개입(0229a)이 진행 카운트에 미치는 영향 ─────────────────────────────────
+describe("countProgress — 🔴 '오늘 안 탐'은 할 일이 아니다", () => {
+  it("skip 줄은 planned에서도 빠진다 — 안 그러면 '남음 1명'이 영원히 안 줄어든다", () => {
+    const rows = [row("a", "boarded"), row("b", null, "in", "skipped")];
+    expect(countProgress(rows)).toEqual({ planned: 1, boarded: 1, missed: 0, unmarked: 0 });
+  });
+
+  it("불변식 planned = boarded + missed + unmarked 를 지킨다", () => {
+    const rows = [
+      row("a", "boarded"),
+      row("b", "missed"),
+      row("c", null),
+      row("d", null, "in", "skipped"),
+      row("e", "boarded", "in", "skipped"), // 뒤늦게 skip이 들어온 줄(드문 경우)
+    ];
+    const p = countProgress(rows);
+    expect(p.planned).toBe(p.boarded + p.missed + p.unmarked);
+    expect(p).toEqual({ planned: 3, boarded: 1, missed: 1, unmarked: 1 });
+  });
+
+  it("'오늘만 탑승'(added)은 평소 줄과 똑같이 센다 — 실제로 태워야 하는 사람이다", () => {
+    const rows = [row("a", null, "in", "added"), row("b", "boarded", "in", "added")];
+    expect(countProgress(rows)).toEqual({ planned: 2, boarded: 1, missed: 0, unmarked: 1 });
+  });
+});
+
+describe("progressState — 전원이 오늘 안 타면 '완료'가 아니다", () => {
+  it("아무도 안 태우는 회차는 none — 다 한 것처럼 읽히면 안 된다", () => {
+    expect(progressState(countProgress([row("a", null, "in", "skipped")]))).toBe("none");
+  });
+  it("남은 줄이 있으면 remaining, 다 찍었으면 done", () => {
+    expect(progressState(countProgress([row("a", null)]))).toBe("remaining");
+    expect(progressState(countProgress([row("a", "boarded")]))).toBe("done");
+  });
+  it("줄이 아예 없어도 none(빈 묶음)", () => {
+    expect(progressState(countProgress([]))).toBe("none");
   });
 });

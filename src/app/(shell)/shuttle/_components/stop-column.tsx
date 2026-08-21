@@ -5,6 +5,16 @@ import { useRouter } from "next/navigation";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { Button } from "@/components/ui/button";
 import { EyIcon } from "@/components/icons/eywa-icons";
+import { cn } from "@/lib/utils";
+import {
+  SHUTTLE_ACTION,
+  SHUTTLE_CHIP,
+  SHUTTLE_CHIP_ADD,
+  SHUTTLE_ICON_BTN,
+  SHUTTLE_INPUT,
+  SHUTTLE_ROW,
+  SHUTTLE_ROW_TEXT,
+} from "@/features/shuttle/control-size";
 import { RUN_STOP_KIND_LABEL, runTitle, type ShuttleRun, type ShuttleStop } from "@/features/shuttle/types";
 import type { AssignableStudent } from "@/features/shuttle/server/students";
 import { addRunStop, removeRunStop, updateRunStopTime } from "@/features/shuttle/server/actions";
@@ -68,9 +78,9 @@ export function StopColumn({
     //    안쪽 여백을 조금 주면 링이 잘릴 자리가 생긴다. 컨테이너 안 요소는 다 같이 밀리므로 줄맞춤은 그대로.
     <div className="flex min-h-0 flex-col gap-2 overflow-y-auto px-1 py-0.5">
       <div className="flex items-center justify-between gap-2 px-1">
-        <h2 className="text-text text-[14px] font-bold">{runTitle(run)}</h2>
+        <h2 className="text-foreground text-[15px] font-bold">{runTitle(run)}</h2>
         {canWrite && (
-          <Button size="sm" variant="outline" onClick={() => setAdding((v) => !v)}>
+          <Button variant="outline" className={SHUTTLE_ACTION} onClick={() => setAdding((v) => !v)}>
             + 정류장
           </Button>
         )}
@@ -87,7 +97,7 @@ export function StopColumn({
       {adding && canWrite && (
         <div className="bg-card flex max-h-56 flex-col gap-1 overflow-y-auto rounded-2xl p-2 shadow-[var(--shadow-card)]">
           {addable.length === 0 ? (
-            <p className="text-text-faint px-1 py-2 text-[12px]">
+            <p className="text-text-faint px-1 py-2 text-[12.5px]">
               추가할 정류장이 없습니다 — 헤더의 &lsquo;정류장 관리&rsquo;에서 먼저 만드세요.
             </p>
           ) : (
@@ -103,7 +113,7 @@ export function StopColumn({
                   submit(fd, addRunStop);
                   setAdding(false);
                 }}
-                className="hover:bg-muted min-h-10 rounded-lg px-2 py-1.5 text-left text-[13px]"
+                className={cn("hover:bg-muted cursor-pointer rounded-lg px-2 py-1.5 text-left", SHUTTLE_ROW, SHUTTLE_ROW_TEXT)}
               >
                 {s.name}
                 {s.memo && <span className="text-text-faint"> · {s.memo}</span>}
@@ -206,12 +216,12 @@ function StopCard({
             type="button"
             aria-label="순서 변경"
             // touch-none: 손잡이 위에서는 브라우저 스크롤 제스처를 끄고 드래그로 넘긴다.
-            className="text-text-faint hover:text-text size-9 shrink-0 cursor-grab touch-none active:cursor-grabbing"
+            className={cn(SHUTTLE_ICON_BTN, "text-text-faint hover:text-foreground cursor-grab touch-none active:cursor-grabbing")}
           >
-            <EyIcon name="grip" className="mx-auto size-4" />
+            <EyIcon name="grip" className="size-4" />
           </button>
         )}
-        <span className={`min-w-0 flex-1 truncate text-[13px] ${isCampus ? "text-text-dim font-medium" : "text-text font-bold"}`}>
+        <span className={`min-w-0 flex-1 truncate text-[13.5px] ${isCampus ? "text-text-dim font-medium" : "text-foreground font-bold"}`}>
           {isCampus ? RUN_STOP_KIND_LABEL[stop.kind] : stop.stopName}
           {stop.stopMemo && <span className="text-text-faint text-[11.5px]"> · {stop.stopMemo}</span>}
         </span>
@@ -222,7 +232,7 @@ function StopCard({
             type="button"
             disabled={busy}
             onClick={() => setPicking((v) => !v)}
-            className="rounded-pill border-line text-text-dim hover:bg-muted min-h-8 shrink-0 border border-dashed px-2.5 text-[11.5px] font-bold"
+            className={cn(SHUTTLE_CHIP, SHUTTLE_CHIP_ADD)}
           >
             + 학생
           </button>
@@ -237,7 +247,9 @@ function StopCard({
           aria-label="도착 시각"
           // ⚠️ 폭은 짐작하지 말 것 — 한국어 로캘의 `type="time"`은 "오후 03:45" + 시계 아이콘이라
           //    실측 폭이 16px 글자에서 127px, 12px 글자에서 105px다(전엔 104/92라 "오후 03:4"로 잘렸다).
-          className="border-line focus:border-primary num h-9 w-[132px] shrink-0 rounded-lg border px-1.5 text-base outline-none sm:h-8 sm:w-[110px] sm:text-[12px]"
+          //    데스크톱 글자가 12→12.5px로 올라갔으니(control-size 한 벌) 폭도 105×12.5/12 ≈ 109px 위로
+          //    올려 둔다 — 110px 그대로 두면 딱 경계라 로캘·폰트가 조금만 달라도 다시 잘린다.
+          className={cn(SHUTTLE_INPUT, "num w-[132px] shrink-0 px-1.5 sm:w-[118px]")}
         />
         {canWrite && !isCampus ? (
           <button
@@ -245,14 +257,16 @@ function StopCard({
             disabled={busy}
             onClick={onRemove}
             aria-label="이 정류장을 노선에서 빼기"
-            className="text-text-faint hover:text-danger size-9 shrink-0"
+            className={cn(SHUTTLE_ICON_BTN, "text-text-faint hover:text-danger cursor-pointer")}
           >
-            <EyIcon name="trash" className="mx-auto size-3.5" />
+            <EyIcon name="trash" className="size-3.5" />
           </button>
         ) : (
           // 학원 출발/도착 줄엔 삭제 버튼이 없다 — 자리를 비워 두면 그 줄만 시각이 오른쪽으로 튀어
           // 시각 칸이 줄마다 어긋난다. 같은 크기의 빈 칸으로 열을 맞춘다(원장 2026-08-19 *"정렬 깔끔하게"*).
-          canWrite && <span aria-hidden className="size-9 shrink-0" />
+          // ⚠️ 빈 칸은 **손잡이·삭제와 같은 상수**여야 한다 — 여기만 크기를 손으로 적으면 다음에
+          //    아이콘 크기를 고칠 때 이 줄만 뒤처져 시각 칸이 다시 어긋난다.
+          canWrite && <span aria-hidden className={SHUTTLE_ICON_BTN} />
         )}
       </div>
 
@@ -271,7 +285,7 @@ function StopCard({
               onClick={() => setPicking((v) => !v)}
               // ⚠️ 격자 칸을 꽉 채우지 않는다(`justify-self-start`) — 점선 테두리를 칩 폭만큼 늘리면
               //    화면에 긴 파선이 여러 줄 생겨 "테두리가 깨져 보인다"(원장 2026-08-19 제보).
-              className="rounded-pill border-line text-text-dim hover:bg-muted min-h-8 justify-self-start border border-dashed px-2.5 text-[11.5px] font-bold"
+              className={cn(SHUTTLE_CHIP, SHUTTLE_CHIP_ADD, "justify-self-start")}
             >
               + 학생
             </button>
@@ -288,7 +302,7 @@ function StopCard({
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="이름·학교 검색"
-            className="border-line focus:border-primary h-10 rounded-lg border px-2.5 text-base outline-none sm:h-8 sm:text-[12.5px]"
+            className={SHUTTLE_INPUT}
           />
           <div className="flex max-h-56 flex-col gap-0.5 overflow-y-auto">
             {candidates.map((s) => (
@@ -301,19 +315,19 @@ function StopCard({
                   setPicking(false);
                   setQ("");
                 }}
-                className="hover:bg-muted flex min-h-10 items-baseline gap-1.5 rounded-lg px-2 text-left text-[13px]"
+                className={cn("hover:bg-muted flex cursor-pointer items-center gap-1.5 rounded-lg px-2 text-left", SHUTTLE_ROW, SHUTTLE_ROW_TEXT)}
               >
-                <span className="text-text font-medium">{s.name}</span>
-                {s.schoolGrade && <span className="text-text-faint text-[11px]">{s.schoolGrade}</span>}
+                <span className="text-foreground font-medium">{s.name}</span>
+                {s.schoolGrade && <span className="text-text-faint text-[11.5px]">{s.schoolGrade}</span>}
               </button>
             ))}
             {candidates.length === 0 && (
-              <span className="text-text-faint px-1 py-2 text-[12px]">
+              <span className="text-text-faint px-1 py-2 text-[12.5px]">
                 {q.trim() ? "찾는 학생이 없습니다" : "이름이나 학교를 입력하세요"}
               </span>
             )}
             {candidates.length === 40 && (
-              <span className="text-text-faint px-1 py-1 text-[11px]">
+              <span className="text-text-faint px-1 py-1 text-[11.5px]">
                 40명까지만 표시됩니다 — 이름을 더 입력해 좁히세요
               </span>
             )}

@@ -75,6 +75,10 @@ const ZERO: DayRecap["totals"] = {
   unmarkedClasses: 0,
   unmarkedStudents: 0,
   absentPending: 0,
+  // ⚠️ 합계 루프가 `ZERO`의 키를 돌며 더한다 — totals에 필드를 추가하면 **여기에도 반드시** 넣을 것
+  //    (빠뜨리면 범위 합계에서 그 값만 undefined가 되고 화면은 NaN을 그린다).
+  absentUrgent: 0,
+  absentNotified: 0,
 };
 
 /**

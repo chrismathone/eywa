@@ -5,9 +5,10 @@ import { Button } from "@/components/ui/button";
 import { requireAccess } from "@/lib/auth/require-access";
 import { accessLevelTenant, canAccessTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { canSeeStudentEnrollment } from "@/features/students/server/enrollment-gate";
+import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
 import { BackLink } from "@/components/back-link";
 import { DupSuspectTag } from "@/components/dup-suspect-tag";
-import { getStudentById } from "@/features/students/server/queries";
+import { getStudentById, getStudentEnrollments } from "@/features/students/server/queries";
 import { studentStatusMeta } from "@/features/students/status-labels";
 import { Pill } from "@/components/atoms/pill";
 import { DupSuspectNotice } from "./_components/dup-suspect-notice";
@@ -75,12 +76,31 @@ export default async function StudentDetailPage({
   // 🔴 강사(scoped)는 열람 전용 — 원장 지시 2026-08-18("강사들은 퇴원처리 막아, 수정도, AI 케어도. 읽기만").
   // 서버 게이트는 students/server/actions.ts canManageStudentRecords가 같은 판정(#77 — UI 숨김만으론 부족).
   const canManageStudent = (await accessLevelTenant(user.systemRole, "students")) === "full";
+  // 퇴원 다이얼로그가 "어느 수업을 종료할지" 고르게 하려면 활성 수강 목록이 필요하다(원장 2026-08-20:
+  // 한 과목만 그만두는데 두 과목이 함께 종료돼 말싸움). **권한이 있을 때만** 조회한다 — 강사·뷰어에겐
+  // 이 다이얼로그 자체가 없다. canManageStudent에 의존하므로 병렬화 대상이 아니다(B4는 독립 await 규칙).
+  // ⚠️ 필터(end_date == null)는 서버가 실제로 닫는 기준(closeActiveEnrollmentsClamped)과 **같아야** 한다 —
+  //    갈리면 화면이 보여준 목록과 실제로 닫히는 행이 어긋난다.
+  const openEnrollments = canManageStudent
+    ? (await getStudentEnrollments(student.id))
+        .filter((e) => e.endDate == null)
+        .map((e) => ({
+          id: e.id,
+          className: e.className,
+          subject: e.subject,
+          teacherName: e.teacherName,
+        }))
+    : [];
   // 학생 영구 삭제 = 관리 도구(admin) 쓰기 권한(기본 master) — 파괴적이라 조임. 잘못 추가 정정용.
   const canDeleteStudent = await canWriteTenant(user.systemRole, "admin");
   // 시작/종료일 더블클릭 수정 = owner(원장) 콘솔 권한 이상만(관리자 정정).
   const canEditDates = (await accessLevelTenant(user.systemRole, "owner")) === "full";
   // 분리등원 요일(스케줄) 더블클릭 편집 = 반 쓰기 권한(updateEnrollmentsAttendanceBatch와 동일 게이트).
   const canEditSchedule = await canWriteTenant(user.systemRole, "classes");
+  // 잘못 만든 **수업 이력 삭제** = 원장(owner 콘솔 full) + super_admin(원장 2026-08-20).
+  // 🔴 super_admin은 새 게이트를 항상 통과한다(원장 2026-08-13). 서버 `deleteEnrollment`가 같은 판정을
+  //    다시 하고 붙은 기록까지 검사한다 — 화면 조건은 게이트가 아니다(#77).
+  const canDeleteEnrollment = canEditDates || (await isCurrentUserSuperAdmin());
   // 입학 상담(등록상담) 상담탭 노출.
   // ① enrollment 접근권한(원장·상담사 등) → 카드 + '상세 보기' 링크 모두.
   // ② 권한 없어도 **강사가 본인 담당 학생**이면 카드는 노출(읽기) — 단 '상세 보기'(/enrollment/[id])는
@@ -127,6 +147,7 @@ export default async function StudentDetailPage({
                 studentId={student.id}
                 studentName={student.name}
                 currentStatus={student.status}
+                openEnrollments={openEnrollments}
               />
             ) : null}
             {/* ⚠️ "수정" 단독 금지 — 상담 탭을 열면 상담 카드마다 '수정'(그 상담 기록)이 함께 보인다.
@@ -153,7 +174,13 @@ export default async function StudentDetailPage({
         {tab === "overview" ? (
           <OverviewTab student={student} />
         ) : tab === "classes" ? (
-          <ClassesTab student={student} canEnd={canManageStudent} canEditDates={canEditDates} canEditSchedule={canEditSchedule} />
+          <ClassesTab
+            student={student}
+            canEnd={canManageStudent}
+            canEditDates={canEditDates}
+            canEditSchedule={canEditSchedule}
+            canDeleteEnrollment={canDeleteEnrollment}
+          />
         ) : tab === "grades" ? (
           <GradesTab studentId={student.id} />
         ) : tab === "progress" ? (

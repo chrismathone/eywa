@@ -122,7 +122,8 @@ async function upsertAdminReport(
       // 생성열 unit_key = coalesce(class_id::text, subject) — 0134a. 강사 경로와 같은 타깃.
       { onConflict: "tenant_id,student_id,report_date,unit_key" },
     )
-    .select("id, share_token")
+    // teacher_name = 진도 점프 경고의 "같은 선생님" 축(2026-08-20) — 저장된 값을 그대로 되받아 넘긴다.
+    .select("id, share_token, teacher_name")
     .single();
   if (error || !data) return { ok: false, error: error?.message ?? "보고서 저장에 실패했습니다" };
 
@@ -135,6 +136,7 @@ async function upsertAdminReport(
       reportDate,
       subject: input.subject || null,
       progress: input.progress || null,
+      teacherName: data.teacher_name ?? null,
     });
   } catch {
     /* 진도 반영 실패는 저장을 막지 않음 */
@@ -505,12 +507,14 @@ export async function sendBulkAdminReports(input: BulkAdminReportInput): Promise
     source: "admin",
     ...(mentReady ? { ment_source: parseMentSource(input.mentSource) ?? null } : {}),
   }));
-  const authored: { id: string; student_id: string; subject: string | null }[] = [];
+  // teacher_name까지 되받는다 — 진도 점프 경고의 "같은 선생님" 축(2026-08-20). 대량은 반 담당강사가
+  // 행마다 달라 입력값을 다시 짝지으면 어긋나기 쉽다 → 저장된 값을 그대로 쓴다.
+  const authored: { id: string; student_id: string; subject: string | null; teacher_name: string | null }[] = [];
   for (let i = 0; i < rowsToAuthor.length; i += 100) {
     const { data, error } = await supabase
       .from("lesson_reports")
       .upsert(rowsToAuthor.slice(i, i + 100), { onConflict: "tenant_id,student_id,report_date,unit_key" })
-      .select("id, student_id, subject");
+      .select("id, student_id, subject, teacher_name");
     if (error) return { ok: false, error: humanizeDbError(error.message, "조회") };
     authored.push(...((data ?? []) as typeof authored));
   }
@@ -555,6 +559,7 @@ export async function sendBulkAdminReports(input: BulkAdminReportInput): Promise
   // ── 7. 진도 컨테이너 반영(수학·진도 있을 때만, 비치명적). 10건씩 동시. ──
   const queuedIdSet = new Set(queueIds);
   const subjectById = new Map(authored.map((r) => [r.id, r.subject]));
+  const teacherById = new Map(authored.map((r) => [r.id, r.teacher_name]));
   const queuedRows = authored.filter((r) => queuedIdSet.has(r.id));
   for (let i = 0; i < queuedRows.length; i += 10) {
     await Promise.all(
@@ -566,6 +571,7 @@ export async function sendBulkAdminReports(input: BulkAdminReportInput): Promise
           reportDate,
           subject: subjectById.get(r.id) ?? null,
           progress: input.progress?.trim() || null,
+          teacherName: teacherById.get(r.id) ?? null,
         }).catch(() => {}),
       ),
     );

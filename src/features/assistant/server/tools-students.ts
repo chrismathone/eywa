@@ -14,6 +14,10 @@ import {
 } from "@/features/students/server/queries";
 import { studentStatusLabel } from "@/features/students/status-labels";
 import { INVOICE_STATUS_LABEL, subjectLabeler } from "./labels";
+import { requireMenu } from "./tool-gate";
+
+/** 이 파일의 툴이 여는 화면 = 학생목록 — 그 메뉴를 못 보는 사람은 비서로도 못 본다(#77). */
+const GATE = () => requireMenu("students", "학생 정보");
 
 const TIMELINE_KIND_LABEL: Record<string, string> = {
   enrollment_start: "수강 시작",
@@ -38,6 +42,8 @@ export const searchStudentsTool = betaZodTool({
       .describe("상태 필터. 기본 all(전체). enrolled=재원"),
   }),
   run: async ({ query, status }) => {
+    const denied = await GATE();
+    if (denied) return denied;
     const label = await subjectLabeler();
     const { rows, total } = await getStudentsPage({ q: query, status: status ?? "all" }, 1, 10);
     return JSON.stringify({
@@ -62,6 +68,8 @@ export const studentSummaryTool = betaZodTool({
     "학생 1명의 종합 현황(상태·담당 강사·수강 반·최근 30일 출결 통계·수납 상태)을 돌려준다. '○○ 요즘 어때?' 류 질문의 기본 툴.",
   inputSchema: z.object({ studentId: z.string().uuid().describe("search_students가 준 studentId") }),
   run: async ({ studentId }) => {
+    const denied = await GATE();
+    if (denied) return denied;
     const label = await subjectLabeler();
     const summary = await getStudentSummary(studentId);
     if (!summary) return JSON.stringify({ error: "해당 학생을 찾을 수 없습니다." });
@@ -89,6 +97,8 @@ export const studentTimelineTool = betaZodTool({
     limit: z.number().int().min(1).max(50).optional().describe("최대 이벤트 수(기본 20)"),
   }),
   run: async ({ studentId, limit }) => {
+    const denied = await GATE();
+    if (denied) return denied;
     const events = await getStudentTimeline(studentId);
     return JSON.stringify({
       totalEvents: events.length,
@@ -110,6 +120,8 @@ export const studentLessonReportsTool = betaZodTool({
     limit: z.number().int().min(1).max(20).optional().describe("최대 건수(기본 8)"),
   }),
   run: async ({ studentId, limit }) => {
+    const denied = await GATE();
+    if (denied) return denied;
     // 🔴 과목을 함께 넘긴다(2026-07-29 적대검증) — 없으면 모델이 **수학 진도를 그 학생의 전체 진도**로
     //    서술한다(현재 저장된 보고서는 사실상 전부 수학). 라벨은 학원설정 단일 소스 —
     //    raw 키("math")를 넘기면 모델이 그대로 사용자에게 흘릴 수 있다(UI raw 코드 노출 금지 규칙).

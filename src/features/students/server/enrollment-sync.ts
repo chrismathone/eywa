@@ -47,3 +47,72 @@ export async function clearOnHoldForActiveEnrollments(
     .is("end_date", null);
   return error?.message ?? null;
 }
+
+/**
+ * 수강 **한 건** 종료 — 수업 탭 '수강 종료'(endSingleEnrollment)와 퇴원 다이얼로그의 **부분 종료**가
+ * 공유하는 원시함수.
+ *
+ * 🔴 새 종료 로직을 또 짜지 말 것(#77) — 표면마다 따로 구현하면 한쪽만 고쳐진다. 종료 규약(클램프·
+ * withdrawal_reason)이 여기 한 곳에 있어야 두 경로가 같은 행을 남긴다.
+ *
+ * ⚠️ 미래 시작(배정 예정) 수강을 date로 종료하면 daterange(start_date, date)가 lower>upper라 throw
+ * ("range lower bound must be less than or equal to range upper bound") → end_date=max(start_date, date)로
+ * 클램프(미래 시작 건은 start_date로 종료 = zero-length = 사실상 배정 취소).
+ * students의 closeActiveEnrollmentsClamped·classes의 closeClassEnrollments와 동일 원리.
+ */
+export async function endEnrollmentById(
+  supabase: Supabase,
+  enrollmentId: string,
+  date: string,
+  reason: string,
+): Promise<{
+  error: string | null;
+  /** 실제 저장된 종료일(클램프 반영) — 감사로그에 그대로 싣는다. */
+  endDate?: string;
+  classId?: string | null;
+  studentId?: string | null;
+}> {
+  const { data: enr, error: selErr } = await supabase
+    .from("enrollments")
+    .select("start_date, class_id, student_id")
+    .eq("id", enrollmentId)
+    .maybeSingle();
+  if (selErr) return { error: selErr.message };
+
+  const endDate = enr && String(enr.start_date) > date ? String(enr.start_date) : date;
+  const { error } = await supabase
+    .from("enrollments")
+    .update({ end_date: endDate, withdrawal_reason: reason })
+    .eq("id", enrollmentId);
+  if (error) return { error: error.message };
+
+  return {
+    error: null,
+    endDate,
+    classId: (enr?.class_id as string | null) ?? null,
+    studentId: (enr?.student_id as string | null) ?? null,
+  };
+}
+
+/**
+ * 학생의 **활성(end_date null) 수강** 목록 — 퇴원/부분 종료가 "무엇을 닫을지" 정하고 감사로그에 남기는 재료.
+ * 판정 기준을 closeActiveEnrollmentsClamped(`end_date is null`)와 **같게** 유지할 것 —
+ * 갈리면 화면이 보여준 목록과 실제로 닫히는 행이 어긋난다.
+ */
+export async function listOpenEnrollments(
+  supabase: Supabase,
+  studentId: string,
+): Promise<{ error: string | null; rows: { id: string; classId: string | null }[] }> {
+  // 한 학생의 열린 수강이라 수십 행 미만이지만, 결과를 whitelist로 쓰므로 명시 상한을 둔다(B2 취지).
+  const { data, error } = await supabase
+    .from("enrollments")
+    .select("id, class_id")
+    .eq("student_id", studentId)
+    .is("end_date", null)
+    .limit(200);
+  if (error) return { error: error.message, rows: [] };
+  return {
+    error: null,
+    rows: (data ?? []).map((r) => ({ id: r.id as string, classId: (r.class_id as string | null) ?? null })),
+  };
+}

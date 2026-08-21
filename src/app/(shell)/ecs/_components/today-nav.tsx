@@ -51,6 +51,26 @@ export function EcsTodayModeTabs({ mode, date }: { mode: EcsTodayMode; date: str
   );
 }
 
+/**
+ * 출결 모드로 가는 링크(2026-08-20) — 영어 전담 강사의 홈은 ECS라 여기가 그 사람의 입구다.
+ *
+ * 🔴 **폰엔 사이드바가 없다** — 하부탭(SUBTABS_BY_MENU)에만 두면 영어 강사는 출결 모드로 갈 길이
+ *    아예 없다(셔틀 '오늘 등하원'에서 겪은 그대로). 원스크린 상단 바에 있는 것과 **같은 링크**다.
+ * ⚠️ 면 전환 칩(보기/모드/날짜)과 달리 **다른 라우트**라 알약 대신 테두리 버튼으로 구분한다 —
+ *    같은 모양이면 "ECS의 네 번째 면"으로 읽힌다.
+ */
+export function EcsQuickAttendanceLink() {
+  return (
+    <Link
+      href="/attendance/quick"
+      title="오늘 내 수업의 출결만 터치로 빠르게 입력합니다"
+      className="border-line text-text-dim hover:bg-bg-soft hover:text-foreground shrink-0 rounded-lg border px-2.5 py-1 text-xs font-bold whitespace-nowrap"
+    >
+      출결 모드
+    </Link>
+  );
+}
+
 export type EcsFace = "today" | "week" | "room";
 
 export function EcsFaceTabs({ face, showToday = true }: { face: EcsFace; showToday?: boolean }) {

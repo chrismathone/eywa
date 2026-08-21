@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { appendTurns, parseStoredTurns } from "./turns";
 
+const LINK_ID = "11111111-1111-4111-8111-111111111111";
+
 describe("parseStoredTurns", () => {
   it("정상 턴만 통과, 형식 밖 항목은 조용히 스킵(대화를 깨지 않음)", () => {
     const parsed = parseStoredTurns([
@@ -27,6 +29,46 @@ describe("parseStoredTurns", () => {
   it("at이 없으면 빈 문자열로 정규화", () => {
     expect(parseStoredTurns([{ role: "user", content: "q" }])).toEqual([{ role: "user", content: "q", at: "" }]);
   });
+
+  it("assistant 턴의 links는 항목별 검증을 통과한 것만(DB jsonb 불신)", () => {
+    const parsed = parseStoredTurns([
+      {
+        role: "assistant",
+        content: "답",
+        at: "",
+        links: [
+          { kind: "student", id: LINK_ID, label: "김민수" },
+          { kind: "payroll", id: LINK_ID, label: "급여" }, // 허용 밖 종류
+          { kind: "class", id: "not-a-uuid", label: "가짜" },
+        ],
+      },
+    ]);
+    expect(parsed).toEqual([
+      {
+        role: "assistant",
+        content: "답",
+        at: "",
+        links: [{ kind: "student", id: LINK_ID, label: "김민수" }],
+      },
+    ]);
+  });
+
+  it("links가 없거나 전부 어긋나면 키 자체를 안 만든다(기존 행 하위호환)", () => {
+    expect(parseStoredTurns([{ role: "assistant", content: "옛 답변", at: "" }])).toEqual([
+      { role: "assistant", content: "옛 답변", at: "" },
+    ]);
+    expect(parseStoredTurns([{ role: "assistant", content: "답", at: "", links: "깨진 값" }])).toEqual([
+      { role: "assistant", content: "답", at: "" },
+    ]);
+  });
+
+  it("user 턴에 links가 들어 있어도 무시(버튼은 답변에만)", () => {
+    expect(
+      parseStoredTurns([
+        { role: "user", content: "질문", at: "", links: [{ kind: "student", id: LINK_ID, label: "김민수" }] },
+      ]),
+    ).toEqual([{ role: "user", content: "질문", at: "" }]);
+  });
 });
 
 describe("appendTurns", () => {
@@ -48,5 +90,13 @@ describe("appendTurns", () => {
     expect(next).toHaveLength(60);
     expect(next[0].content).toBe("t2"); // 앞 2턴 탈락
     expect(next[59]).toEqual({ role: "assistant", content: "새 답", at: "now" });
+  });
+
+  it("링크는 assistant 턴에만 붙고, 없으면 키를 만들지 않는다", () => {
+    const links = [{ kind: "student" as const, id: LINK_ID, label: "김민수" }];
+    const next = appendTurns([], "김민수 어때?", "결석이 잦습니다.", "now", 60, links);
+    expect(next[0]).toEqual({ role: "user", content: "김민수 어때?", at: "now" });
+    expect(next[1]).toEqual({ role: "assistant", content: "결석이 잦습니다.", at: "now", links });
+    expect(appendTurns([], "q", "a", "now")[1]).toEqual({ role: "assistant", content: "a", at: "now" });
   });
 });

@@ -20,6 +20,12 @@ import { formatKoreanDate } from "@/lib/date-kst";
 import type { RangeRecap } from "@/features/attendance/recap/range";
 import type { RecapTeacherLine } from "@/features/attendance/recap/digest";
 import { partialByTeacher, unmarkedByTeacher } from "@/features/attendance/recap/teacher-unmarked";
+import {
+  SubjectFilterChips,
+  SubjectScopeChip,
+  useSubjectFilter,
+} from "@/features/attendance/components/subject-filter-chips";
+import { matchesSubjectFilter } from "@/features/attendance/live/view-prefs";
 import { RecapAiCard, type RecapAiState } from "./recap-ai-card";
 import { PartialRow, RecapDayBlock, UnmarkedRow } from "./recap-day";
 
@@ -27,13 +33,20 @@ export function RecapView({
   recap,
   isToday,
   ai,
+  /** 계정에 저장된 과목 필터(2026-08-20) — 좁히는 축은 **사건 줄**이고 합계·AI 정리는 전체 기준이다. */
+  initialSubject = "all",
 }: {
   recap: RangeRecap;
   /** 오늘을 요약하면 아직 끝나지 않은 하루다 — 숫자가 확정이 아님을 화면이 먼저 말한다. */
   isToday: boolean;
   ai: RecapAiState;
+  initialSubject?: string;
 }) {
   const t = recap.totals;
+  const subject = useSubjectFilter(initialSubject);
+  // 범위 전체에서 이 과목에 걸리는 사건 줄 수 — 범위 칩이 "몇/몇을 보고 있는지" 적는 근거.
+  const eventRows = recap.days.flatMap((d) => [...d.absences, ...d.others]);
+  const shownEventRows = eventRows.filter((e) => matchesSubjectFilter(subject.value, e.subject));
   const absentTotal = t.absent + t.excused;
   const otherTotal = t.late + t.earlyLeave + t.makeup;
   // 수업이 아예 없던 날은 블록을 만들지 않는다 — 일요일 빈 블록이 금·토 사이에 끼면 읽기만 어렵다.
@@ -63,20 +76,29 @@ export function RecapView({
   return (
     <div className="space-y-5">
       {isToday ? (
-        <p className="bg-amber-soft text-amber-strong rounded-2xl px-3 py-2 text-[13px] font-medium">
+        <p className="bg-amber-soft text-amber rounded-2xl px-3 py-2 text-[13px] font-medium">
           오늘은 아직 진행 중입니다 — 아래 숫자는 지금까지 입력된 것까지입니다.
         </p>
       ) : null}
 
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {/* 🔴 미조치를 **긴급 / 사유 확인**으로 갈라 적는다(원장 2026-08-20) — 여행·휴가가 대부분이라
+            "미조치 18건"만 보면 매일 빨간불이고, 그러면 아무도 안 본다. `absentPending`(전체)의 뜻은
+            그대로 두고 그 안을 나눈다. */}
         <BigStat
           label="결석·공결"
           value={absentTotal}
           unit="건"
-          tone={t.absentPending > 0 ? "danger" : "green"}
+          tone={t.absentUrgent > 0 ? "danger" : t.absentPending > 0 ? "amber" : "green"}
           icon={<EyIcon name="userX" size={16} />}
           valueClass={absentTotal > 0 ? "text-danger" : undefined}
-          sub={t.absentPending > 0 ? `조치 미완료 ${t.absentPending}건` : "모두 확인 완료"}
+          sub={
+            t.absentUrgent > 0
+              ? `연락 필요 ${t.absentUrgent}건 · 사유 확인 ${t.absentNotified}건`
+              : t.absentPending > 0
+                ? `미조치 ${t.absentPending}건 모두 사유가 확인됨`
+                : "모두 확인 완료"
+          }
         />
         <BigStat
           label="지각·조퇴·보강"
@@ -108,6 +130,18 @@ export function RecapView({
         />
       </section>
 
+      {/* 과목 필터 — 아래 **날짜별 사건 줄**만 좁힌다. 위 스탯·AI 정리는 범위 전체 기준 그대로다. */}
+      <div className="toolbar-rail flex flex-wrap items-center gap-2">
+        <SubjectFilterChips value={subject.value} onPick={subject.pick} pending={subject.pending} />
+        <SubjectScopeChip
+          subject={subject.value}
+          shown={shownEventRows.length}
+          total={eventRows.length}
+          unit="건"
+          totalsNote="위 스탯과 AI 정리는 전체 기준"
+        />
+      </div>
+
       <RecapAiCard from={recap.from} to={recap.to} state={ai} />
 
       {/* 빈 날은 블록 대신 한 줄 — "안 봤다"와 "볼 게 없었다"를 구분해 준다. */}
@@ -121,7 +155,12 @@ export function RecapView({
 
       <div className="space-y-6">
         {shown.map((day) => (
-          <RecapDayBlock key={day.date} day={day} single={shown.length === 1} />
+          <RecapDayBlock
+            key={day.date}
+            day={day}
+            single={shown.length === 1}
+            subject={subject.value}
+          />
         ))}
       </div>
 
@@ -136,6 +175,11 @@ export function RecapView({
               <span className="text-text-faint text-[11px]">
                 이름을 누르면 미입력 출석부·빈 칸 명단이 열립니다.
               </span>
+            ) : null}
+            {/* 🔴 강사 줄은 **과목 축이 없다**(한 사람이 여러 과목을 찍는다) — 조용히 안 좁히면
+                "필터를 걸었는데 왜 다 보이지"가 되므로 그 사실을 적는다. */}
+            {subject.active ? (
+              <span className="text-text-faint text-[11px]">과목 필터와 무관하게 전체를 셉니다.</span>
             ) : null}
           </h2>
           {/* 펼침 버튼이 행을 가득 채우므로 hover 배경이 모서리를 넘지 않게 목록이 자른다
@@ -192,12 +236,12 @@ function BehindTeacherRow({ line, recap }: { line: RecapTeacherLine; recap: Rang
         {line.cells}칸 중 {line.recorded}칸
       </span>
       {line.unmarkedClasses > 0 ? (
-        <span className="num text-amber-strong shrink-0 text-xs font-bold">
+        <span className="num text-amber shrink-0 text-xs font-bold">
           미입력 {line.unmarkedClasses}반
         </span>
       ) : null}
       {line.partialCells > 0 ? (
-        <span className="num text-amber-strong shrink-0 text-xs font-bold">
+        <span className="num text-amber shrink-0 text-xs font-bold">
           빈 칸 {line.partialCells}개
         </span>
       ) : null}

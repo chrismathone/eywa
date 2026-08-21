@@ -2,14 +2,17 @@
 // UI 규칙: raw JSON·uuid·영문 enum을 셀에 그대로 노출하지 말 것 — 한글 요약을 보여주고 원문은 title 툴팁으로만.
 import { ROLE_LABEL } from "@/lib/auth/role-hierarchy";
 import { SECTION_LABELS } from "@/features/owner/settings-types";
+import { STEP_DECISION_LABEL, STEP_DECISIONS, type StepDecision } from "@/features/approvals/types";
 import { STUDENT_STATUS_LABEL } from "@/features/students/status-labels";
 import { reasonDisplay } from "@/features/withdrawals/types";
 import {
   BOARDING_STATUS_LABEL,
   DIRECTION_LABEL,
+  RIDE_EXCEPTION_LABEL,
   SEASON_LABEL,
   isBoardingStatus,
   isDirection,
+  isRideExceptionKind,
   isSeason,
 } from "@/features/shuttle/types";
 import { compactWeekdays } from "@/features/shuttle/roster";
@@ -41,6 +44,9 @@ export const AUDIT_TYPE_LABEL: Record<string, string> = {
   document: "문서",
   // 셔틀(0225a) — 없으면 감사로그 '대상' 열에 영문 "shuttle"이 그대로 뜬다(2026-08-17 원장 제보와 같은 증상).
   shuttle: "셔틀",
+  // 캘린더(0218a) — 위와 같은 누락. 일정 삭제 로그의 대상이 영문 "calendar_event"로 떠 있었다.
+  calendar_event: "일정",
+  calendar_tag: "캘린더 태그",
 };
 
 // 시험유형은 운영 enum이 아니라 코드 고정(CLAUDE.md) — exams 화면과 동일 라벨.
@@ -67,6 +73,72 @@ const join = (...parts: Array<string | null>): string | null => {
   return out.length ? out.join(" · ") : null;
 };
 
+const HANGUL_RE = /[가-힣]/;
+const YMD_RE = /^\d{4}-\d{2}-\d{2}$/;
+const arr = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
+
+/**
+ * 미등록 액션 폴백에서 **뜻이 분명한** 공통 키만 한글로 옮긴다. 값이 ""면 라벨 없이 값만.
+ * ⚠️ 여기 없는 영문 키는 **숨긴다** — 뜻도 모르는 키를 `slot: observer`처럼 그대로 내보내는 것이
+ *    곧 raw 코드 노출이다(CLAUDE.md 반복 지적). 원문 JSON은 뷰어 title 툴팁이 항상 보존한다.
+ */
+const FALLBACK_KEY_LABEL: Record<string, string> = {
+  note: "",
+  memo: "",
+  email: "",
+  name: "",
+  title: "",
+  reason: "사유",
+  date: "날짜",
+  from: "이전",
+  to: "이후",
+};
+
+/**
+ * 운영 스크립트가 남긴 실행자 식별자(`system:grant-class-review`) → 한글.
+ * 실측 8종(2026-08-20) + 저장소에 남아 있는 스크립트 전수. 미등록 `system:*`도 접두를 그대로
+ * 내보내지 않고 "시스템 스크립트"로 접는다(새 스크립트가 생겨도 영문이 안 샌다).
+ */
+export const SYSTEM_ACTOR_PREFIX = "system:";
+const SYSTEM_ACTOR_LABEL: Record<string, string> = {
+  "grant-class-review": "수업 평가 권한 부여",
+  "grant-seat-attendance": "자리 출석부 권한 부여",
+  "narrow-staff-menu": "직원관리 권한 조정",
+  "create-test-staff": "테스트 직원 생성",
+  "delete-test-staff": "테스트 직원 삭제",
+  "register-kimjuhyun": "직원 등록",
+  "qa-temp-account": "QA 임시 계정",
+  "debug-contract-upload": "계약서 업로드 점검",
+  "reset-staff-password": "직원 비밀번호 재설정",
+};
+const SYSTEM_ACTOR_FALLBACK = "시스템 스크립트";
+
+/** 감사로그 '실행자' 열 표시 — 사람 이름은 그대로, 스크립트 식별자만 한글로. */
+export function auditActorName(actorName: string | null): string | null {
+  const s = str(actorName);
+  if (!s) return null;
+  if (!s.startsWith(SYSTEM_ACTOR_PREFIX)) return s;
+  const label = SYSTEM_ACTOR_LABEL[s.slice(SYSTEM_ACTOR_PREFIX.length).trim()];
+  return label ? `시스템 · ${label}` : SYSTEM_ACTOR_FALLBACK;
+}
+
+/**
+ * 화면에 보이는 한글 실행자명으로 검색이 되게 — 검색어 → 실제 `actor_name` 원문.
+ * (액션 라벨을 키로 되돌리는 기존 검색 규약과 같은 결. 안 하면 "시스템 · 수업 평가 권한 부여"를
+ *  그대로 복사해 검색했을 때 0건이 나온다.)
+ * `allSystem`이면 접두 매치(`system:*`)로 미등록 스크립트까지 함께 찾는다.
+ */
+export function systemActorMatches(term: string): { names: string[]; allSystem: boolean } {
+  const t = term.trim().toLowerCase();
+  // 한 글자는 안 본다 — "스" 한 글자가 "시스템"에 걸려 스크립트 행 전부를 결과에 얹으면 검색이 무뎌진다.
+  if (t.length < 2) return { names: [], allSystem: false };
+  if (SYSTEM_ACTOR_FALLBACK.includes(t) || "시스템".includes(t)) return { names: [], allSystem: true };
+  const names = Object.entries(SYSTEM_ACTOR_LABEL)
+    .filter(([, label]) => label.toLowerCase().includes(t))
+    .map(([key]) => `${SYSTEM_ACTOR_PREFIX}${key}`);
+  return { names, allSystem: false };
+}
+
 /** 페이지 행들의 metadata에서 이름 해석이 필요한 학생/직원/반 uuid 수집(일괄 조회용). */
 export function collectAuditNameIds(rows: Array<{ metadata: Meta | null }>): {
   studentIds: string[];
@@ -91,6 +163,31 @@ export function collectAuditNameIds(rows: Array<{ metadata: Meta | null }>): {
   return { studentIds: [...students], userIds: [...users], classIds: [...classes] };
 }
 
+/**
+ * '대상' 열 라벨 한글화 — 원문이 **설정 섹션 키**(`permissions`)·**과목 키**(`english`)·**uuid**일 때만
+ * 손댄다. 그 외(사람·반·문서 이름)는 **원문 그대로** — 건드리면 실제 이름이 사라진다.
+ * null이면 뷰어가 metadata 이름 보충(`auditTargetName`) → "—" 순으로 떨어진다.
+ *
+ * 배경(2026-08-20 원장 제보): `tenant_settings|permissions`·`tenant_settings|english` 행이 화면에서
+ * "학원 설정permissions"·"학원 설정english"로 붙어 보였다. uuid 폴백(approval_withdraw·classroom_delete가
+ * 이름을 못 구하면 id를 그대로 싣는다)도 같은 raw 노출이라 함께 접는다 — 원문은 뷰어 title 툴팁에 남긴다.
+ */
+export function auditTargetLabel(
+  targetType: string | null,
+  targetLabel: string | null,
+  ctx: { subjectLabel: (key: string) => string },
+): string | null {
+  const label = str(targetLabel);
+  if (!label) return null;
+  if (UUID_RE.test(label)) return null;
+  if (targetType !== "tenant_settings") return label;
+  const section = (SECTION_LABELS as Record<string, string>)[label];
+  if (section) return section;
+  // 과목 키 — labelOf는 **미등록 키를 그대로 되돌려주므로** 결과가 같으면 원문으로 둔다(지어내지 않는다).
+  const subject = ctx.subjectLabel(label);
+  return subject === label ? label : subject;
+}
+
 /** targetLabel이 빈 행(퇴원 사유·인수인계 취소 등)의 '대상' 열을 metadata의 학생/직원/반 이름으로 보충. */
 export function auditTargetName(metadata: Meta | null, nameOf: AuditNameOf): string | null {
   if (!metadata) return null;
@@ -113,7 +210,19 @@ export function auditDetail(
     case "owner_settings_update": {
       const s = str(m.section);
       const label = s ? ((SECTION_LABELS as Record<string, string>)[s] ?? s) : null;
-      return label ? `「${label}」 설정 저장` : "설정 저장";
+      if (label) return `「${label}」 설정 저장`;
+      // 권한 스크립트가 남긴 행에는 section이 없고 **한글 note가 통째로** 들어 있다(누가 어떤 메뉴를
+      // 누구에게 열었는지가 여기에만 있다). 종전엔 이걸 버려서 화면엔 "설정 저장"만 떴다.
+      const note = str(m.note);
+      if (note) return note;
+      // note 없이 명단만 남긴 스크립트(narrow-staff-menu) — 이름이면 몇 명 + 앞 3명, uuid면 인원만.
+      const grants = arr(m.grants).map(str).filter((v): v is string => !!v);
+      if (grants.length) {
+        const named = grants.filter((g) => !UUID_RE.test(g));
+        const sample = named.length ? ` (${named.slice(0, 3).join(", ")}${named.length > 3 ? " 외" : ""})` : "";
+        return `개인 예외 ${grants.length}명${sample}`;
+      }
+      return "설정 저장";
     }
     case "owner_subject_absorb": {
       const moved = num(m.moved);
@@ -130,7 +239,9 @@ export function auditDetail(
     }
     case "staff_delete": {
       const r = roleKo(m.role);
-      return r ? `삭제 당시 역할: ${r}` : null;
+      // 스크립트 삭제 행은 role 대신 함께 지운 문서 수를 남긴다 — 데이터가 사라진 사실이라 꼭 보인다.
+      const docs = num(m.docs);
+      return join(r ? `삭제 당시 역할: ${r}` : null, docs ? `문서 ${docs}건 함께 삭제` : null);
     }
     case "staff_teacher_view_access": {
       // '강사뷰 접근'(다른 강사 뷰 열람) 토글 — 대상은 targetLabel(직원 이름)이 이미 보여준다.
@@ -248,6 +359,16 @@ export function auditDetail(
         str(m.date) ? `종료일 ${str(m.date)}` : null,
         reason ? `사유: ${reason}` : null,
       );
+    }
+    // 잘못 만든 수업 이력 **삭제**(원장·super_admin) — 행이 사라지므로 이 로그가 유일한 흔적이다.
+    // metadata.snapshot에 삭제된 행 전체가 들어 있다(뷰어 title 툴팁의 원문 JSON으로 확인).
+    case "enrollment_delete": {
+      const cls = str(m.className) ?? ctx.nameOf(m.classId);
+      const snap = (m.snapshot ?? {}) as Meta;
+      const start = str(snap.startDate);
+      const end = str(snap.endDate);
+      const period = start ? (end ? `${start} ~ ${end}` : `${start}부터`) : null;
+      return join(ctx.nameOf(m.studentId), cls, period, "삭제됨(복구는 감사로그 원문 참조)");
     }
     case "student_bulk_withdraw":
     case "student_bulk_delete": {
@@ -444,24 +565,235 @@ export function auditDetail(
       const parts = [isDirection(io) ? (io === "in" ? "승차" : "하차") : null, days || null].filter(Boolean);
       return parts.length ? parts.join(" · ") : null;
     }
+    case "shuttle_ride_exception_set": {
+      // 🔴 kind·ioKind를 그대로 두면 화면에 `kind: skip`이 영문으로 뜬다(raw enum 노출 금지).
+      const kind = str(m.kind);
+      const io = str(m.ioKind);
+      const on = str(m.onDate);
+      const parts = [
+        on,
+        isDirection(io) ? DIRECTION_LABEL[io] : null,
+        isRideExceptionKind(kind) ? RIDE_EXCEPTION_LABEL[kind] : null,
+      ].filter(Boolean);
+      return parts.length ? parts.join(" · ") : null;
+    }
+    case "shuttle_ride_exception_clear": {
+      const on = str(m.onDate);
+      return on ? `${on} · 되돌림` : "되돌림";
+    }
     case "shuttle_boarding_record": {
       const status = str(m.status);
       const on = str(m.boardedOn);
       const parts = [on, isBoardingStatus(status) ? BOARDING_STATUS_LABEL[status] : null].filter(Boolean);
       return parts.length ? parts.join(" · ") : null;
     }
+    // ── 수업 평가(class_review) ──────────────────────────────────────────────────────
+    // 🔴 case가 없으면 폴백이 `slot: observer` · `observerMode: assigned`를 **영문 그대로** 내보낸다
+    //    (원장 제보 2026-08-20). 라벨은 화면(new-review-form·[id]/page)이 쓰는 말과 같게 맞춘다.
+    case "class_review_submit": {
+      const slot = str(m.slot);
+      const answered = num(m.answered);
+      return join(
+        slot === "self" ? "본인 채점" : slot === "observer" ? "관찰자 채점" : null,
+        answered === null ? null : `문항 ${answered}개 응답`,
+      );
+    }
+    case "class_review_create": {
+      // observerMode = assigned(평가자 지정) / open(선착순) — 화면 문구와 동일. 지정이면 지정 인원,
+      // 선착순이면 마감 정원이 읽을 값이다(같은 숫자를 두 뜻으로 쓰는 폼이라 갈라 적는다).
+      const open = str(m.observerMode) === "open";
+      const limit = num(m.observerLimit);
+      const assigned = num(m.assigned);
+      const template = str(m.template);
+      return join(
+        str(m.date),
+        open
+          ? limit === null
+            ? "선착순"
+            : `선착순 ${limit}명`
+          : assigned === null
+            ? "평가자 지정"
+            : `평가자 지정 ${assigned}명`,
+        template ? `문항 「${template}」` : null,
+      );
+    }
+    case "class_review_template_save": {
+      const areas = num(m.areas);
+      const items = num(m.items);
+      return join(
+        // 셋으로 가른다 — created가 아예 없는 행에 "수정"이라 단정하면 없는 사실을 만드는 셈이다.
+        m.created === true ? "문항 세트 생성" : m.created === false ? "문항 세트 수정" : null,
+        areas === null ? null : `영역 ${areas}개`,
+        items === null ? null : `문항 ${items}개`,
+      );
+    }
+    case "class_review_delete":
+    case "class_review_template_delete":
+      return null; // metadata = 문서 uuid뿐(문서 이름은 되찾을 수 없다 — 지어내지 않는다)
+
+    // ── 전자결재(0212a~0216a) ────────────────────────────────────────────────────────
+    case "approval_submit": {
+      // ⚠️ **양식마다 metadata가 다르다** — 휴가는 일수·연차, 지출·수입은 금액·분류, 품의는 아예 없다.
+      //    없는 필드를 "없음"으로 지어내지 말고 그 조각만 빼고 그린다.
+      const days = num(m.days);
+      if (days !== null) {
+        const granted = num(m.granted);
+        const remaining = num(m.remaining);
+        return join(
+          `${days}일 사용`,
+          granted !== null && remaining !== null ? `연차 ${granted}일 중 잔여 ${remaining}일` : null,
+          str(m.period) ? `기간 ${str(m.period)}` : null,
+        );
+      }
+      const amount = won(m.amount);
+      if (amount) {
+        const spend = str(m.spendDate);
+        const income = str(m.incomeDate);
+        return join(
+          amount,
+          spend ? `지출일 ${spend}` : income ? `수입일 ${income}` : null,
+          str(m.category), // 분류 어휘의 주인은 /billing(EXPENSE_CATEGORIES) — 이미 한글이다
+        );
+      }
+      return null; // 품의서 등 상세 없는 양식 — 대상 열이 문서 제목을 보여준다
+    }
+    case "approval_decide": {
+      // 후결 확인(부재자가 나중에 확인)만 metadata 모양이 다르다.
+      if (m.postApproval === true) return "후결 확인";
+      const d = str(m.decision);
+      // 결재란 판단 라벨의 단일 소스 = approvals/types(승인·반려·전결·후결…). 여기서 복사하지 않는다.
+      // ⚠️ `d in LABEL`로 보면 프로토타입 키("toString")까지 통과한다 — enum 목록으로 좁힌다.
+      const decided =
+        d && (STEP_DECISIONS as readonly string[]).includes(d) ? STEP_DECISION_LABEL[d as StepDecision] : null;
+      const step = num(m.step);
+      const deferred = num(m.deferred);
+      return join(
+        decided,
+        step === null ? null : `${step}번째 결재란`,
+        m.proxy === true ? "대결" : null,
+        deferred ? `앞 단계 ${deferred}칸을 후결로 넘김` : null,
+      );
+    }
+    case "approval_withdraw":
+    case "approval_comment":
+    case "approval_comment_delete":
+      return null; // metadata = 문서 uuid뿐(대상 열이 문서 제목을 보여준다)
+
+    // ── 보강 빼기 ────────────────────────────────────────────────────────────────────
+    case "makeup_remove": {
+      // 대상 열이 이미 학생 이름을 보여주므로 여기선 **어디서 무엇이 지워졌는지**를 적는다.
+      const subject = str(m.subject);
+      const reports = num(m.deletedReports);
+      const progress = num(m.rolledBackProgress);
+      return join(
+        ctx.nameOf(m.classId),
+        str(m.date),
+        subject ? ctx.subjectLabel(subject) : null, // 과목은 학원설정 단일 소스(하드코딩 금지)
+        m.attendanceRemoved === true ? "출결 보강 칸 삭제" : null,
+        reports ? `수업보고서 ${reports}건 삭제` : null,
+        progress ? `진도 ${progress}건 되돌림` : null,
+      );
+    }
+    case "operating_periods_save": {
+      // 대상 열이 "2026년 영어 세션 12건"을 이미 보여준다 — 여기선 반 단위 저장인지만 덧붙인다.
+      const count = num(m.count);
+      const cls = ctx.nameOf(m.classId);
+      return join(cls ? `반 ${cls}` : null, count === null ? null : `세션 ${count}건`);
+    }
+    case "consultation_merge": {
+      // 🔴 "무엇을 버렸나"가 되돌릴 유일한 근거다(merge-actions 주석) — 항목 이름은 이미 한글.
+      const losers = arr(m.loserIds).length;
+      const fields = arr(m.discarded)
+        .map((d) => (d && typeof d === "object" ? str((d as Meta).field) : null))
+        .filter((v): v is string => !!v);
+      return join(
+        losers ? `상담 ${losers}건 병합` : null,
+        fields.length ? `버린 값: ${fields.join(", ")}` : null,
+      );
+    }
+
+    // ── 직원 등록·QR ─────────────────────────────────────────────────────────────────
+    case "staff_intake_token_create":
+    case "staff_intake_token_toggle": {
+      // 두 갈래가 한 액션 키를 쓴다 — 새 QR 생성은 {role}, 재발급·열기·닫기는 {action}.
+      const r = roleKo(m.role);
+      if (r) return `기본 역할 ${r}`;
+      const a = str(m.action);
+      if (a === "rotate") return "새 링크 재발급(옛 링크 폐기)";
+      if (a === "close") return "링크 닫기";
+      if (a === "reopen") return "링크 다시 열기";
+      return null;
+    }
+    case "staff_create":
+    case "staff_create_from_resume":
+    case "staff_create_from_intake": {
+      // 이메일(로그인 아이디)은 그대로 보여준다 — staff_email_change 선례. **역할은 반드시 한글로.**
+      const removed = arr(m.removedDuplicates).length;
+      return join(
+        roleKo(m.role),
+        str(m.email),
+        m.autoEmail === true ? "아이디 자동 생성" : null,
+        str(m.tokenName) ? `QR 「${str(m.tokenName)}」` : null,
+        str(m.purpose),
+        removed ? `중복 이력서 ${removed}건 삭제` : null,
+      );
+    }
+    case "staff_link_from_resume": {
+      // filled = 이력서에서 채운 필드 키 배열(영문) — 개수만(staff_contract_pdf_extract와 같은 규약).
+      const filled = arr(m.filled).length;
+      return filled ? `이력서에서 항목 ${filled}개 채움` : null;
+    }
+    case "staff_roster_import": {
+      const tab = str(m.sheetTab);
+      return tab ? `시트 「${tab}」` : null; // 2·3차 배치는 시트 탭이 없다 — 대상 열이 건수를 보여준다
+    }
+    case "staff_roster_import_revert":
+      return null; // metadata = 되돌린 로그 파일 경로뿐(화면에 낼 값이 아니다)
+    case "teacher_view_impersonate":
+    case "resume_view_unlock":
+      return null; // 대상 열이 이미 강사·이력서 이름을 보여준다(uuid만 남기면 노이즈)
+
+    // ── 셔틀 — metadata가 uuid뿐이라 지금은 빈 상세다. 새 키가 붙어도 영문이 새지 않게 못박는다. ──
+    case "shuttle_stop_archive":
+    case "shuttle_vehicle_create":
+    case "shuttle_vehicle_update":
+    case "shuttle_run_delete":
+    case "shuttle_run_stop_add":
+    case "shuttle_rider_move":
+    case "shuttle_rider_remove":
+    case "shuttle_boarding_clear":
+      return null;
+
     default: {
-      // 미등록 액션 폴백 — uuid는 이름으로 해석(실패 시 숨김), 나머지는 키: 값.
+      /**
+       * 미등록 액션 폴백 — **정책 변경 2026-08-20(원장 "알기 쉽게 변경")**.
+       * 종전엔 metadata를 `키: 값` **영문 그대로** 나열해(`slot: observer`·`decision: final`)
+       * 감사 화면이 raw 코드 노출 금지 규칙을 정면으로 어겼다. 이제:
+       *   ① uuid → 이름 해석(실패 시 숨김)
+       *   ② 뜻이 분명한 공통 키(FALLBACK_KEY_LABEL)만 한글 라벨로
+       *   ③ 라벨이 없어도 **사람이 쓴 한글 문장·날짜**는 키 없이 값만(그 자체로 읽힌다)
+       *   ④ 그 외 영문 키·enum·불리언·숫자는 **숨긴다**
+       * ④가 정보 손실인 건 맞다. 다만 뜻을 모르는 키의 영문 값은 원장에게 읽히지 않고, 원문 JSON은
+       * 뷰어가 title 툴팁으로 **항상** 보존한다 — "읽히지 않는 영문"보다 "빈 칸 + 툴팁"이 낫다는 판단.
+       * 자주 뜨는 액션이 생기면 위에 case를 추가하는 게 정답이지 폴백을 늘리는 게 아니다.
+       */
       const parts: string[] = [];
       for (const [k, v] of Object.entries(m)) {
         if (v === null || v === undefined || v === "" || typeof v === "object") continue;
-        const s = String(v);
+        const s = String(v).trim();
+        if (!s) continue;
         if (UUID_RE.test(s)) {
           const n = ctx.nameOf(s);
           if (n) parts.push(n);
           continue;
         }
-        parts.push(`${k}: ${s.length > 40 ? s.slice(0, 40) + "…" : s}`);
+        const clipped = s.length > 60 ? `${s.slice(0, 60)}…` : s;
+        const label = FALLBACK_KEY_LABEL[k];
+        if (label !== undefined) {
+          parts.push(label ? `${label} ${clipped}` : clipped);
+          continue;
+        }
+        if (HANGUL_RE.test(s) || YMD_RE.test(s)) parts.push(clipped);
       }
       return parts.length ? parts.join(" · ") : null;
     }

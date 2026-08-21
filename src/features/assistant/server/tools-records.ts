@@ -13,6 +13,12 @@ import { getMeetings, getMeetingById } from "@/features/meetings/server/queries"
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { kstMonth, kstToday } from "@/lib/date-kst";
 import { subjectLabeler } from "./labels";
+import { requireMenu } from "./tool-gate";
+
+/** 기록 툴은 각자 다른 화면이라 게이트도 각자다 — 등록상담·퇴원관리·회의록(#77). */
+const ENROLLMENT_GATE = () => requireMenu("enrollment", "등록상담 기록");
+const WITHDRAWALS_GATE = () => requireMenu("withdrawals", "퇴원 기록");
+const MEETINGS_GATE = () => requireMenu("meetings", "회의록");
 
 /** timestamptz(UTC ISO) → KST 날짜(YYYY-MM-DD). UTC slice(0,10)는 KST 오전 건을 전날로 민다. */
 function kstDate(iso: string | null | undefined): string | null {
@@ -60,6 +66,8 @@ export const enrollmentConsultationsTool = betaZodTool({
       .describe("진행 상태 필터(대기/예약/상담완료/AI완료/등록/거절/노쇼)"),
   }),
   run: async ({ query, month, outcome }) => {
+    const denied = await ENROLLMENT_GATE();
+    if (denied) return denied;
     const rows = await getEnrollmentConsultations({ q: query, month, outcome });
     return JSON.stringify({
       total: rows.length,
@@ -92,6 +100,8 @@ export const recentWithdrawalsTool = betaZodTool({
     limit: z.number().int().min(1).max(30).optional().describe("최대 건수(기본 15)"),
   }),
   run: async ({ month, limit }) => {
+    const denied = await WITHDRAWALS_GATE();
+    if (denied) return denied;
     const label = await subjectLabeler();
     const all = await getWithdrawnStudents();
     const filtered = month ? all.filter((w) => w.withdrawnAt?.startsWith(month)) : all;
@@ -127,6 +137,8 @@ export const searchMeetingsTool = betaZodTool({
       .describe("YYYY-MM(회의월 필터). 사용자가 기간을 명시했을 때만"),
   }),
   run: async ({ query, month }) => {
+    const denied = await MEETINGS_GATE();
+    if (denied) return denied;
     const all = await getMeetings();
     const term = query?.trim() ?? "";
     const rows = all
@@ -158,6 +170,8 @@ export const meetingSummaryTool = betaZodTool({
     "회의 1건의 AI 분석 보고서(요약·안건 논의·결정 사항·액션 아이템·발언 요약·우려 사항·다음 단계)를 돌려준다. '지난 회의에서 뭐 결정했어?' 류 질문에 사용. 전사 원문은 제공하지 않는다.",
   inputSchema: z.object({ meetingId: z.string().uuid().describe("search_meetings가 준 meetingId") }),
   run: async ({ meetingId }) => {
+    const denied = await MEETINGS_GATE();
+    if (denied) return denied;
     const m = await getMeetingById(meetingId);
     if (!m) return JSON.stringify({ error: "해당 회의를 찾을 수 없습니다." });
     return JSON.stringify({
