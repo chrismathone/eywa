@@ -20,6 +20,7 @@ export const AUDIT_ACTIONS = {
   class_review_create: "수업 평가 참관 생성",
   class_review_submit: "수업 평가 채점 제출",
   class_review_delete: "수업 평가 삭제",
+  class_review_observer_replace: "수업 평가 평가자 변경",
   class_review_template_save: "수업 평가 문항 편집",
   class_review_template_delete: "수업 평가 문항 세트 삭제",
   // 운영 스크립트(scripts/staff-access/create-test-staff)가 직접 POST하는 액션 — 서버 액션이 아니라

@@ -17,6 +17,7 @@ import {
   type ClassReviewFilter,
 } from "../list-filter";
 import { isSelfOnlyReviewer } from "../self-only";
+import { planObserverReplacement } from "../observer-replace";
 import {
   CLASS_REVIEW_FORM_TYPE,
   CLASS_REVIEW_TEMPLATE_FORM_TYPE,
@@ -280,6 +281,82 @@ export async function setMyClassReviewFilter(
     .eq("tenant_id", user.tenantId);
   if (error) return { ok: false, error: error.message };
   return { ok: true };
+}
+
+/**
+ * 지정(assigned) 모드 평가자 교체 — **아직 채점하지 않은** 평가자만 다른 직원으로 바꾼다
+ * (원장 지시 2026-08-21: *"평가자 중에서 평가 아직 안했으면 평가자 사람 변경 가능하게"*).
+ *
+ * 🔴 이미 채점을 마친 평가자는 못 바꾼다 — 바꾸면 그 사람이 매긴 점수가 사라진다(불가역).
+ * 🔴 선착순(open) 모드는 애초에 평가자를 지정하지 않으므로 교체 대상이 없다(먼저 채점한 N명이 평가자).
+ * ⚠️ 강사 직급 불가 — 평가자 구성은 인사 결정이라 사무실 몫(자기 평가 전용, #77).
+ * ⚠️ 한 문서에 여러 채점이 담긴 read-modify-write라 동시 편집 창이 이론상 있다(테스트 단계 감수,
+ *    submitClassReviewScores와 같은 트레이드오프) — 그래서 바로 직전에 "미채점"을 재확인한다.
+ */
+export async function replaceReviewObserver(
+  _prev: ReviewActionState,
+  formData: FormData,
+): Promise<ReviewActionState> {
+  const gate = await requireWrite();
+  if ("error" in gate) return { error: gate.error };
+  if (isSelfOnlyReviewer(gate.user.systemRole)) {
+    return { error: "평가자 변경은 사무실에서 합니다" };
+  }
+
+  const docId = String(formData.get("docId") ?? "").trim();
+  const oldId = String(formData.get("oldObserverId") ?? "").trim();
+  const newId = String(formData.get("newObserverId") ?? "").trim();
+  if (!docId || !oldId || !newId) return { error: "평가자 정보를 찾을 수 없습니다" };
+  if (oldId === newId) return { error: "같은 사람으로는 바꿀 수 없습니다" };
+
+  const admin = createAdminClient();
+  const { data: row, error: readErr } = await admin
+    .from("academy_documents")
+    .select("id, form_data")
+    .eq("tenant_id", gate.user.tenantId)
+    .eq("form_type", CLASS_REVIEW_FORM_TYPE)
+    .eq("id", docId)
+    .maybeSingle();
+  if (readErr) return { error: humanizeDbError(readErr.message, "확인") };
+  if (!row) return { error: "평가 건을 찾을 수 없습니다" };
+
+  const doc = (row.form_data ?? {}) as ReviewDoc;
+  const target = (Array.isArray(doc.evaluators) ? doc.evaluators : []).find(
+    (e) => e.id === oldId && e.kind === "observer",
+  );
+
+  // 새 평가자 검증 — 같은 테넌트·재직 중(대상 강사·중복 참여는 순수 판정이 거른다).
+  const { data: u } = await admin
+    .from("users")
+    .select("id, display_name, tenant_id, status")
+    .eq("id", newId)
+    .maybeSingle();
+  if (!u || u.tenant_id !== gate.user.tenantId) return { error: "직원을 찾을 수 없습니다" };
+  if (u.status === "inactive") return { error: "재직 중인 직원만 평가자로 지정할 수 있습니다" };
+
+  // 교체 가부·결과는 순수 함수가 결정(open·미발견·이미채점·대상강사·중복 전부 여기서, read-modify-write 최종 확인).
+  const plan = planObserverReplacement(doc, oldId, { id: u.id, name: u.display_name });
+  if ("error" in plan) return { error: plan.error };
+
+  const { error } = await admin
+    .from("academy_documents")
+    .update({
+      form_data: { ...doc, evaluators: plan.evaluators, submissions: plan.submissions },
+      updated_at: new Date().toISOString(),
+    })
+    .eq("tenant_id", gate.user.tenantId)
+    .eq("id", docId);
+  if (error) return { error: humanizeDbError(error.message, "저장") };
+
+  await logAction({
+    action: "class_review_observer_replace",
+    targetType: "user",
+    targetLabel: doc.header?.teacherName ?? null,
+    metadata: { docId, from: target?.name ?? oldId, to: u.display_name },
+  });
+  revalidatePath(`/class-review/${docId}`);
+  revalidatePath("/class-review");
+  return { ok: true, notice: `평가자를 ${u.display_name} 님으로 변경했습니다` };
 }
 
 /** 참관 건 삭제 — 잘못 만든 건 정리(초안: 쓰기 권한자 누구나). */

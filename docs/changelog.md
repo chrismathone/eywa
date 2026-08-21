@@ -1,5 +1,18 @@
 # eywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-08-21 (1) — 수업 평가: 미채점 평가자 교체
+
+원장: *"평가자 중에서 평가 아직 안했으면 평가자 사람 변경 가능하게."*
+
+- 지정(assigned) 모드 상세 화면에 **평가자 관리** 카드(사무실·비-강사만) — 각 평가자의 채점 상태
+  (채점 완료/미채점)와 **미채점 평가자만 '변경'** 버튼(모달에서 다른 직원 선택 → 교체).
+- 🔴 이미 채점한 평가자는 잠근다(바꾸면 그 점수가 사라짐, 불가역). 🔴 선착순(open)은 지정 평가자가
+  없어 대상 없음. ⚠️ 강사 직급 불가(평가자 구성은 인사 결정). 게이트는 서버 액션
+  [`replaceReviewObserver`](src/features/class-review/server/actions.ts)가 화면과 같은 조건으로 재검증(#77).
+- 판정 로직은 순수 함수 [`planObserverReplacement`](src/features/class-review/observer-replace.ts)로 분리
+  (open·미발견·이미채점·대상강사·중복 전부 여기서 · read-modify-write 최종 확인은 fresh read 위에서) +
+  Vitest. 후보 풀은 활성 직원(대상 강사·현재 평가자 제외). 감사 `class_review_observer_replace`.
+
 ## 2026-08-21 (1) — 감사로그 한글화: **영문 키·enum·스크립트 식별자 전면 제거**
 
 원장 제보(2026-08-20): 감사로그가 `slot: observer · answered: 25` · `decision: final` ·

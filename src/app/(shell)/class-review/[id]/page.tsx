@@ -10,6 +10,8 @@ import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { Button } from "@/components/ui/button";
 import { DeleteReviewButton } from "../_components/delete-review-button";
+import { ObserverManager } from "../_components/observer-manager";
+import { getStaffOptions } from "@/features/meetings/server/queries";
 import {
   getClassReview,
   getReviewPrivileges,
@@ -50,6 +52,11 @@ export default async function ClassReviewDetailPage({ params }: { params: Promis
   const { doc, areas } = found;
   const subjects = buildSubjectMaps(settings.operations.subjects);
   const openMode = doc.header.observerMode === "open";
+
+  // 평가자 관리(지정 모드 · 사무실 · 비-강사) — 미채점 평가자를 교체(원장 2026-08-21).
+  // 후보 명단은 이 조건일 때만 조회한다(불필요한 라운드트립·강사 화면 누수 방지).
+  const canManageObservers = canWrite && !selfOnly && !openMode;
+  const staffOptions = canManageObservers ? await getStaffOptions() : [];
 
   // 열 = 관찰자들(지정 순서 또는 선착순 제출 순서) + 본인. 익명화 시 관찰자 이름 → 평가자 A/B/C.
   const anon = (i: number) => `평가자 ${String.fromCharCode(65 + i)}`;
@@ -292,6 +299,20 @@ export default async function ClassReviewDetailPage({ params }: { params: Promis
           </tfoot>
         </table>
       </div>
+
+      {/* 평가자 관리(지정 모드) — 미채점 평가자 교체. 서버 액션이 같은 조건·미채점 여부를 재검증한다(#77). */}
+      {canManageObservers ? (
+        <ObserverManager
+          docId={doc.id}
+          teacherId={doc.header.teacherId}
+          observers={observerColumns(doc).map((c) => ({
+            id: c.slot,
+            name: c.name,
+            submitted: !!doc.submissions[c.slot]?.scores?.some((v) => v > 0),
+          }))}
+          staff={staffOptions.map((s) => ({ value: s.id, label: s.name }))}
+        />
+      ) : null}
 
       {/* 평가자 코멘트 — 이름 익명화 규칙 동일, 인용 스타일(구조로 구분) */}
       {cols.some((c) => c.sheet?.comment) ? (
