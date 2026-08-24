@@ -45,6 +45,37 @@ export function resolveRoomName(args: {
   return pickName(args.slotClassroomName) ?? pickName(args.slotRoomLabel) ?? pickName(args.classClassroomName);
 }
 
+/**
+ * 라벨을 **등록된 강의실 이름**으로 맞춘다 — 맨숫자 라벨(`302`)이 층 묶음에서 떨어져 나가는 것 방어.
+ *
+ * 🔴 왜 필요한가(2026-08-25 실사고): 영어 시트가 넣는 `slot_room_label`은 `302`처럼 **건물명이 없는
+ *    호수**다. 평소엔 슬롯의 강의실 FK(`본원302`)가 먼저라 안 보이지만, 반 수정 저장 한 번이 그 FK를
+ *    비우면(폼의 교시별 강의실 칸이 빈 채 제출) 라벨이 그대로 화면에 나온다. 그러면 `roomGroupOf`가
+ *    건물을 못 읽어 **`본원 3층`이 아니라 별도 `3층`(건물=호수)** 으로 갈라진다 — 같은 3층인데 묶음이
+ *    둘이 되고, 카드 제목도 `본원302`가 아니라 `302`가 된다(실측: 08-24 브릿지 C 월 17:20).
+ *
+ * ⚠️ **애매하면 손대지 않는다**(fail-soft). `602`는 `바른602`·`본원602` 둘에 걸리므로 그대로 둔다 —
+ *    임의로 하나를 고르면 없는 건물에 방을 옮겨 놓는 셈이라, 갈라진 묶음보다 나쁘다.
+ * ⚠️ 접미사 앞이 숫자면(가상의 `본원1302`) 후보에서 뺀다 — 호수의 일부를 라벨로 오인하지 않게.
+ */
+export function canonicalRoomName(
+  name: string | null | undefined,
+  knownNames: readonly string[],
+): string | null {
+  const label = pickName(name);
+  if (!label) return null;
+  // 건물명이 붙은 이름(본원302)·이미 등록된 이름은 그대로. 맨숫자/영문 접미사만 후보로 본다.
+  if (!/^[0-9A-Za-z]+$/.test(label)) return label;
+  const matches = knownNames.filter((n) => {
+    if (n === label) return true;
+    if (!n.endsWith(label)) return false;
+    const head = n.slice(0, n.length - label.length);
+    return head.length > 0 && !/\d$/.test(head);
+  });
+  if (matches.includes(label)) return label; // 등록된 이름 그 자체
+  return matches.length === 1 ? matches[0]! : label;
+}
+
 /** 좌석표용 층 — roomGroupOf + 호수-only + 미지정. */
 export function seatingFloorOf(roomName: string | null | undefined): RoomGroup {
   const name = pickName(roomName);

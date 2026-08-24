@@ -20,7 +20,7 @@ import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { weekdayIndexOf } from "@/lib/date-kst";
 import { classifySignal, hhmm, resolveSlotStatus } from "../signals";
 import { saveSlotFor } from "../slot-axis";
-import { resolveRoomName } from "../seating-floors";
+import { canonicalRoomName, resolveRoomName } from "../seating-floors";
 import { specialSlotLabel } from "@/features/timetable/lib/teacher-label";
 // 출결 강사 귀속 축 단일 소스(자리는 담임 폴백 금지 · 담당 없으면 담임) — 월간 출석부와 같은 규칙.
 import { taughtByForSlot } from "@/features/attendance/teacher-axis";
@@ -236,13 +236,6 @@ export async function loadLiveSlots(date: string, classIds?: readonly string[]):
 
   // 5) 학생 메타 + 강의실 이름 — 서로 독립이라 병렬(B4).
   const studentIds = [...new Set([...expectedByClass.values()].flatMap((s) => [...s]))];
-  const roomIds = [
-    ...new Set(
-      [...slots.map((s) => s.classroom_id), ...classRows.map((c) => c.classroom_id)].filter(
-        (id): id is string => !!id,
-      ),
-    ),
-  ];
   const [students, rooms] = await Promise.all([
     fetchInChunks<{
       id: string;
@@ -257,12 +250,17 @@ export async function loadLiveSlots(date: string, classIds?: readonly string[]):
         .select("id, name, school, grade, parent_phone, student_phone")
         .in("id", chunk),
     ),
-    fetchInChunks<{ id: string; name: string }>(roomIds, (chunk) =>
-      supabase.from("classrooms").select("id, name").in("id", chunk),
+    // 🔴 **테넌트 강의실 전건**(id 스코프 아님, 실측 23행). 이름 표를 다 들고 있어야 시트가 넣은
+    //    맨숫자 라벨(`302`)을 등록된 이름(`본원302`)으로 맞출 수 있다(canonicalRoomName) — id로만
+    //    좁히면 FK가 빈 슬롯엔 맞출 근거가 없다. 보관(archived_at)된 방도 포함해야 옛 배치가 읽힌다.
+    //    ⚠️ 전건이라 무페이징 select 금지(B2) — 이름 표는 whitelist로 쓰인다.
+    fetchAllPaged<{ id: string; name: string }>((from, to) =>
+      supabase.from("classrooms").select("id, name").order("id").range(from, to),
     ),
   ]);
   const studentById = new Map(students.map((s) => [s.id, s]));
   const roomNameById = new Map(rooms.map((r) => [r.id, r.name]));
+  const roomNames = rooms.map((r) => r.name);
 
   // 6) 슬롯 × 학생 조립.
   const out: LiveSlot[] = [];
@@ -326,12 +324,18 @@ export async function loadLiveSlots(date: string, classIds?: readonly string[]):
       }).teacherId,
       slotTeacherLabel: slot.slot_teacher_label,
       teacherName: null, // 이름은 호출부가 채운다(사용자 조회를 화면당 1회로 모으기 위해)
+      // 🔴 라벨 폴백은 **등록된 강의실 이름으로 맞춘 뒤** 내보낸다 — `302`가 그대로 나가면 층 묶음이
+      //    `본원 3층`에서 갈라지고(`roomGroupOf`가 건물을 못 읽는다), 같은 방인데 이름이 둘이라
+      //    `spanAdjacentEnd`의 "방이 바뀌면 끊는다"도 연강을 잘못 끊는다.
       roomName:
-        resolveRoomName({
-          slotClassroomName: slot.classroom_id ? (roomNameById.get(slot.classroom_id) ?? null) : null,
-          slotRoomLabel: slot.slot_room_label,
-          classClassroomName: klass.classroom_id ? (roomNameById.get(klass.classroom_id) ?? null) : null,
-        }) ?? (special === "LAB" ? "랩실" : special === "JJ" ? "JJ실" : null),
+        canonicalRoomName(
+          resolveRoomName({
+            slotClassroomName: slot.classroom_id ? (roomNameById.get(slot.classroom_id) ?? null) : null,
+            slotRoomLabel: slot.slot_room_label,
+            classClassroomName: klass.classroom_id ? (roomNameById.get(klass.classroom_id) ?? null) : null,
+          }),
+          roomNames,
+        ) ?? (special === "LAB" ? "랩실" : special === "JJ" ? "JJ실" : null),
       students: rows,
       hasAnyRecord,
       recordedCount: rows.filter((r) => r.status != null).length,
