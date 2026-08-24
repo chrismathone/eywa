@@ -26,6 +26,16 @@ export type LiveStudent = {
   /** 그 기록의 recorded_at — 같은 날 여러 교시가 있으면 최신 우선. */
   recordedAt?: string | null;
   /**
+   * 그 기록을 **누가 눌렀나**(`attendance_records.recorded_by`).
+   *
+   * 🔴 **귀속 축이 아니다** — 실측상 영어 출결 1,146행 중 1,138행이 대신 찍은 한 사람이다.
+   *    시수·급여·가시성은 `teacher-axis.ts`가 정한다. 이 값은 좌석표가 "담임 아닌 사람이 찍었으면
+   *    그 이름을 함께 보인다"(원장 2026-08-21)에만 쓴다.
+   */
+  recordedBy?: string | null;
+  /** 위 id의 사람 이름 — 조회를 화면당 1회로 모으려고 보드 조립부(`queries.ts`)가 채운다. */
+  recordedByName?: string | null;
+  /**
    * 강사가 남긴 사유 메모. 🔴 데스크가 전화 **전에** 봐야 하는 값이다 — "감기로 결석"이라고 이미 적혀
    * 있는데 집에 또 전화하면 학부모는 학원이 소통이 안 된다고 느낀다. 보강 연결(`linkMakeupToAbsence`)도
    * 이 메모에 흔적을 남기므로, 보강 갈 아이를 결석으로 오인해 전화하는 것도 여기서 걸린다.
