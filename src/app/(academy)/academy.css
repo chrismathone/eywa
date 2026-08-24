@@ -132,23 +132,71 @@
   background: var(--ac-ink);
 }
 
-/* 🔴 원본보다 크게 늘리지 않는다.
-   1920px 화면에 1800px 영상을 꽉 채우려 늘리면 화면 픽셀의 일부를 없는 데서 만들어낸다
-   (1440px 영상을 1920으로 늘렸을 때 실측: 화면픽셀당 원본 0.56px = 44%가 가짜).
-   원본 폭에서 멈추면 1:1이 되고, 남는 양옆은 어두운 바탕으로 흘려보낸다.
-   ⚠️ 1800px 이하 화면(노트북·태블릿·폰)에는 제한이 걸리지 않아 그대로 꽉 찬다. */
+/* 🔴🔴 원본보다 크게 늘리지 않는다 — 단 "크게"는 CSS 픽셀이 아니라 **물리 픽셀** 기준이다.
+   1차 배포에서 이 계산을 CSS px로만 했다가 실패했다: Windows 배율 150%·Retina 200% 화면에서는
+   같은 CSS px 상자가 물리적으로 1.5~2배 더 많은 픽셀에 그려지므로, "CSS 1:1"이어도 실제로는
+   1.5~2배 확대되어 이전과 똑같이 흐려졌다(Playwright 테스트 환경의 DPR=1에서만 문제가 안 보였다).
+   영상 원본 가로는 2160px(크롭 그대로, 다운스케일 안 함) — 이게 우리가 가진 픽셀의 전부다.
+   물리 픽셀이 이걸 못 넘도록 배율 구간마다 CSS 상한을 낮춘다: 2160 ÷ DPR.
+   ⚠️ 노트북·태블릿·폰(가로 2160px 미만)은 애초에 제한에 안 걸려 화면을 꽉 채운다.
+   ⚠️ DPR이 높은 큰 화면(Retina 4K 등)에서는 영상이 화면 폭의 절반 정도로 좁아질 수 있다 —
+      흐리게 키우기보다 작더라도 선명하게가 이 페이지의 판단이다. 더 넓게 채우려면 원본을
+      더 넓게(예: 3840px 크롭) 다시 찍어야 한다 — 촬영 해상도가 진짜 상한이라 CSS로는 못 늘린다. */
 .ac-gate {
   position: absolute;
   top: 0;
   bottom: 0;
   left: 50%;
   transform: translateX(-50%);
-  width: min(100%, 1800px);
+  width: min(100%, 2160px); /* DPR 1(대부분의 노트북 100% 배율) */
   overflow: hidden;
   -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 3.5%, #000 96.5%, transparent 100%);
   mask-image: linear-gradient(90deg, transparent 0, #000 3.5%, #000 96.5%, transparent 100%);
 }
-@media (max-width: 1800px) {
+/* min-resolution의 dppx는 devicePixelRatio와 동일 단위 — 뒤에 오는 규칙이 이겨야 하므로
+   느슨한 배율부터 촘촘한 배율 순으로 나열한다(하나의 화면에서 여러 조건이 동시에 참일 수 있다). */
+@media (min-resolution: 1.25dppx) {
+  .ac-gate {
+    width: min(100%, 1728px); /* 2160 ÷ 1.25 — Windows 125% 배율 */
+  }
+}
+@media (min-resolution: 1.5dppx) {
+  .ac-gate {
+    width: min(100%, 1440px); /* 2160 ÷ 1.5 — Windows 150% 배율 */
+  }
+}
+@media (min-resolution: 2dppx) {
+  .ac-gate {
+    width: min(100%, 1080px); /* 2160 ÷ 2 — Retina·Windows 200% 배율 */
+  }
+}
+/* 게이트가 뷰포트를 이미 꽉 채운 상태(= 여백이 없는 상태)일 때만 마스크를 뗀다.
+   ⚠️ 단순히 "viewport <= 1080px"로만 걸면 두 방향으로 틀린다:
+   ① DPR 1인 가장 흔한 데스크톱(1080~2160px, 100% 배율)은 실제로 여백이 없는데
+      마스크가 안 빠져 영상 가장자리가 괜히 어둡게 가려진다.
+   ② DPR 1.5 화면의 1440~1728px 구간처럼 실제로 여백이 있는 폭에서, 더 낮은 배율용
+      규칙이 걸려 마스크가 빠져야 하는데도 안 빠진다.
+   그래서 배율 구간마다 그 구간의 실제 상한(2160÷DPR)과 맞춰 min/max-resolution으로
+   정확히 나눈다 — 위 width 계산과 동일한 숫자를 쓰되, 이번엔 구간을 겹치지 않게 가둔다. */
+@media (max-width: 2160px) and (max-resolution: 1.24dppx) {
+  .ac-gate {
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
+}
+@media (min-resolution: 1.25dppx) and (max-resolution: 1.49dppx) and (max-width: 1728px) {
+  .ac-gate {
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
+}
+@media (min-resolution: 1.5dppx) and (max-resolution: 1.99dppx) and (max-width: 1440px) {
+  .ac-gate {
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
+}
+@media (min-resolution: 2dppx) and (max-width: 1080px) {
   .ac-gate {
     -webkit-mask-image: none;
     mask-image: none;
