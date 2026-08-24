@@ -47,8 +47,28 @@ export function SeatingCell({
    * 한쪽만 되돌아가(옛 상태 + 방금 시각) 화면이 거짓말을 한다.
    */
   const [optimistic, setOptimistic] = useState<Optimistic | null>(null);
+  /**
+   * **서버가 따라잡으면 낙관값을 버린다** — `student.recordedAt`이 바뀐 순간이 곧 `router.refresh()`가
+   * 도착한 순간이다. 이걸 안 하면 낙관값이 영영 남아 ① 그 칸의 시각이 세션 내내 **클라 시계값**으로
+   * 굳고 ② 남이 뒤이어 고쳐도 이 화면만 옛 값을 붙들며 ③ 입력자 이름이 계속 숨겨진다.
+   *
+   * 🔴 **`useTransition`의 `isPending`에 기대면 안 된다**: `startTransition`에 넘긴 콜백이 동기 함수라
+   *    (promise를 반환하지도, await 하지도 않는다) 트랜지션 스코프가 그 자리에서 끝난다 — 저장이 오가는
+   *    동안 `busy`는 이미 false다. 같은 사실이 [quick-board](../../quick/components/quick-board.tsx)에도
+   *    적혀 있다(*"있지도 않은 transition에 기대지 않는다"*).
+   * 🔑 effect가 아니라 **렌더 중 조정**이다(React 공식 "props가 바뀔 때 state 맞추기"). 이 리포는
+   *    effect 안 setState를 금지한다([[#25]]).
+   * ⚠️ 낙관값이 없을 때도 추적값을 갱신한다 — 안 그러면 남이 고친 뒤 내가 처음 누르는 순간
+   *    "props가 옛 추적값과 다르다"가 되어 방금 누른 값이 **그 자리에서** 지워진다.
+   */
+  const serverAt = student.recordedAt ?? null;
+  const [seenServerAt, setSeenServerAt] = useState<string | null>(serverAt);
+  if (serverAt !== seenServerAt) {
+    setSeenServerAt(serverAt);
+    if (optimistic) setOptimistic(null);
+  }
   const status = optimistic ? optimistic.status : student.status;
-  const recordedAt = optimistic ? optimistic.at : (student.recordedAt ?? null);
+  const recordedAt = optimistic ? optimistic.at : serverAt;
   const mark = seatMarkOf(status, klass.phase);
   /**
    * 이름 아래에 붙일 체크 시각(원장 2026-08-21). 기록이 없으면 null = **아래 줄을 안 그린다**
@@ -65,22 +85,20 @@ export function SeatingCell({
   /**
    * 담임(카드에 이름이 적힌 사람)이 아닌 사람이 찍었을 때만 그 이름.
    *
-   * 🔑 **저장이 오가는 동안만** 비운다 — 내 이름을 지어내면 화면이 "저장됐다"고 단정하는 셈이고,
-   *    옛 이름을 그대로 두면 방금 바뀐 시각 옆에 **이전에 찍은 사람** 이름이 붙어 거짓말이 된다.
-   * 🔴 낙관값은 성공해도 안 지워지므로(옛 코드부터 그렇다) 여기서 `optimistic`만 보면 새로고침으로
-   *    진짜 입력자가 와도 **그 세션 내내 이름이 안 뜬다**. 전송이 끝나면(`busy` 해제 = 새 데이터 도착)
-   *    서버 값을 그대로 믿는다.
+   * 🔑 **낙관값이 떠 있는 동안만** 비운다 — 내 이름을 지어내면 화면이 "저장됐다"고 단정하는 셈이고,
+   *    옛 이름을 그대로 두면 방금 바뀐 시각 옆에 **이전에 찍은 사람** 이름이 붙어 거짓말이 된다
+   *    (데스크가 찍어 둔 칸을 담임이 다시 찍는 흔한 경우에 바로 재현된다).
+   * 🔑 낙관값은 위 렌더-타임 조정이 서버 도착과 함께 버리므로, 그 뒤엔 진짜 입력자가 곧바로 뜬다.
    */
-  const recorder =
-    optimistic && busy
-      ? null
-      : seatRecorderName({
-          recordedBy: student.recordedBy,
-          recordedByName: student.recordedByName,
-          classTeacherId: klass.teacherId,
-          // 자리(LAB·JJ)는 표기하지 않는다 — 담당이 방이라 대신 찍은 한 사람 이름이 전 칸에 반복된다.
-          seatLabel: klass.seatLabel,
-        });
+  const recorder = optimistic
+    ? null
+    : seatRecorderName({
+        recordedBy: student.recordedBy,
+        recordedByName: student.recordedByName,
+        classTeacherId: klass.teacherId,
+        // 자리(LAB·JJ)는 표기하지 않는다 — 담당이 방이라 대신 찍은 한 사람 이름이 전 칸에 반복된다.
+        seatLabel: klass.seatLabel,
+      });
   const canMark = klass.ownedByMe || canDeskMark(status, klass.phase);
   /**
    * 칸은 3열 격자라 폭이 고정이다 — 접미사 붙은 이름(`김하늘A`)이 넘쳐 `김하...`로 잘렸다.
