@@ -100,13 +100,18 @@ export async function updateSession(request: NextRequest) {
   // /seat/* (랩실 공개 출석부) — 비로그인 통과. 실제 보안은 PIN httpOnly 쿠키.
   // ⚠️ "/seat"·"/seat/…"만. "/attendance/seat"(로그인 셸)은 여기 걸리면 안 된다.
   const isSeatPublic = pathname === "/seat" || pathname.startsWith("/seat/");
+  // /academy/* (학원 공개 랜딩 — 관객은 학부모)도 비로그인 통과. 읽기 전용 홍보면이라
+  // 보호할 데이터가 없다(학원명만 getPublicBranding으로 읽는다).
+  // ⚠️ "/academy"·"/academy/…"만 — 정확/슬래시 매칭으로 다른 경로가 딸려오지 않게 한다.
+  const isAcademyPublic = pathname === "/academy" || pathname.startsWith("/academy/");
   if (
     PUBLIC_PATHS.has(pathname) ||
     isKioskPublic ||
     isIntakePublic ||
     isReportPublic ||
     isStaffIntakePublic ||
-    isSeatPublic
+    isSeatPublic ||
+    isAcademyPublic
   ) {
     return response;
   }
