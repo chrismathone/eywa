@@ -12,13 +12,16 @@
  * 🔴 조회는 서버에 있고(반 스코프 판정 포함) 여기서 권한을 판정하지 않는다([[#77]]).
  * ⚠️ 결과 패널은 **툴바(relative)에 붙는 absolute**다 — 새 줄을 만들지 않는다(툴바 한 줄 규약).
  */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { StudentSearchBox } from "@/features/attendance/components/student-search-box";
 import { isSearchActive } from "@/features/attendance/student-search";
+import { useSubjectMaps } from "@/features/owner/operations-context";
 import {
   HUB_SEARCH_LIMIT,
+  groupHitsBySubject,
   hubEmptyMessage,
+  hubSubjectHeading,
   hubTruncatedNote,
   type HubSearchResult,
 } from "@/features/attendance/hub-search";
@@ -87,6 +90,16 @@ export function HubStudentSearch({
     [month],
   );
 
+  // 🔴 과목 라벨·순서는 **학원설정이 단일 소스**다([[운영 enum 하드코딩 절대 금지]]).
+  //    `(shell)/layout`이 OperationsProvider로 감싸므로 창(iframe) 안에서도 부모 prop 배선 없이 읽힌다.
+  const subjects = useSubjectMaps();
+  const subjectOrder = useMemo(() => subjects.options.map((o) => o.value), [subjects]);
+  // 설정에 없는 과목 키는 `groupHitsBySubject`가 **맨 뒤**로 보낸다(사라지지 않는다).
+  const groups = useMemo(
+    () => (result ? groupHitsBySubject(result.hits, subjectOrder) : []),
+    [result, subjectOrder],
+  );
+
   const open = isSearchActive(query);
   return (
     // ⚠️ 라벨 칸('학생')을 두지 않는다 — 시트 검색과 같은 모양이고, 폰에서 툴바가 한 줄 더 감기는 것을
@@ -124,33 +137,71 @@ export function HubStudentSearch({
               {/* 검색어를 바꾸는 동안엔 **옛 결과**가 잠깐 남는다 — 그 사실을 한 줄로 밝힌다
                   (아무 표시가 없으면 지금 목록이 방금 친 말의 답인 줄로 읽힌다). */}
               {loading ? <p className="text-text-faint px-2 pb-1 text-[11.5px]">찾는 중…</p> : null}
-              <ul className="max-h-[min(46vh,360px)] space-y-0.5 overflow-y-auto px-1">
-                {result.hits.map((h) => (
-                  <li key={`${h.classId}:${h.studentId}`}>
-                    <Link
-                      href={attHref({
-                        // 강사가 정해지면 그 강사 **전체 출석부**(허브 카드와 같은 목적지),
-                        // 담임이 없는 반(자리 등)은 그 반만 연다.
-                        classId: h.linkTeacherId ? null : h.classId,
-                        month,
-                        teacherId: h.linkTeacherId,
-                        mode: h.linkTeacherId ? "teacher" : "class",
-                        // 🔑 씨앗은 **친 말이 아니라 그 학생 이름** — 학교로 찾았든 한 글자만 쳤든
-                        //    도착한 표에는 그 학생 줄만 남아야 "검색한 채로 진입"이 성립한다.
-                        q: h.studentName,
-                      })}
-                      className="hover:bg-bg-soft flex items-baseline gap-2 rounded-lg px-2 py-1.5"
+              {/* 🔑 **과목 그룹**(원장 2026-08-24 *"이런식으로 구분되게 · 과목 라벨을 붙이라는 소리임"*).
+                  스크롤은 **바깥 한 곳**에만 둔다 — 그룹마다 스크롤을 주면 짧은 그룹이 각자 잘린다.
+                  🔴 머리글 라벨은 학원설정이 단일 소스(`labelOf`) — 화면 파일에 과목 맵을 만들지 말 것. */}
+              {/* 🔑 **열 맞춤 격자**(원장 2026-08-24 *"열너비 맞춤해서 흐트러지지 않게 · 지금 담임선생님
+                     이름이 정렬 안되어있음"*). 종전엔 줄마다 flex라 반 이름 길이에 따라 담임 이름이
+                     제각각 자리에 섰다 — 다섯 칸(이름·학교/학년·반·담임·요일)을 **한 격자**로 묶는다.
+                  🔴 격자를 **패널 전체에 하나만** 둔다(그룹마다 두면 수학·영어 열 폭이 서로 어긋난다).
+                     그래서 머리글·구분선도 이 격자의 `col-span-full` 칸이다.
+                  🔴 줄어드는 칸은 **반 이름 하나**(`minmax(0,1fr)`) — 나머지는 `auto`라 내용만큼 서고,
+                     특히 요일은 절대 잘리지 않는다(이번 요청의 본체).
+                  ⚠️ 스크롤은 바깥 한 곳에만 — 그룹마다 주면 짧은 그룹이 각자 잘린다. */}
+              <ul className="grid max-h-[min(46vh,360px)] grid-cols-[auto_auto_minmax(0,1fr)_auto_auto] items-baseline gap-x-2 gap-y-0.5 overflow-y-auto px-1">
+                {groups.map((g, gi) => (
+                  <Fragment key={g.subject || "(미분류)"}>
+                    {/* 그룹이 하나뿐이어도 머리글은 그린다 — 글자를 치는 동안 줄이 튀지 않고,
+                        지금 보는 게 무슨 과목인지 말해 준다.
+                        구분선은 **그룹 사이에만** — 마지막 그룹 아래에 선이 남으면 잘린 목록처럼 읽힌다. */}
+                    <li
+                      className={`text-text-faint col-span-full px-2 pb-0.5 text-[11px] font-bold ${
+                        gi > 0 ? "border-line mt-1.5 border-t pt-1.5" : ""
+                      }`}
                     >
-                      <span className="text-foreground shrink-0 text-[13px] font-bold">{h.studentName}</span>
-                      {h.schoolGrade ? (
-                        <span className="text-text-faint shrink-0 text-[11.5px]">{h.schoolGrade}</span>
-                      ) : null}
-                      <span className="text-text-dim min-w-0 flex-1 truncate text-[12px]">
-                        {h.className}
-                        {h.teacherName ? ` · ${h.teacherName}` : ""}
-                      </span>
-                    </Link>
-                  </li>
+                      {hubSubjectHeading(g.subject, subjects.labelOf)}
+                    </li>
+                    {g.hits.map((h) => (
+                      <li key={`${h.classId}:${h.studentId}`} className="col-span-full grid grid-cols-subgrid">
+                        <Link
+                          href={attHref({
+                            // 강사가 정해지면 그 강사 **전체 출석부**(허브 카드와 같은 목적지),
+                            // 담임이 없는 반(자리 등)은 그 반만 연다.
+                            classId: h.linkTeacherId ? null : h.classId,
+                            month,
+                            teacherId: h.linkTeacherId,
+                            mode: h.linkTeacherId ? "teacher" : "class",
+                            // 🔑 씨앗은 **친 말이 아니라 그 학생 이름** — 학교로 찾았든 한 글자만 쳤든
+                            //    도착한 표에는 그 학생 줄만 남아야 "검색한 채로 진입"이 성립한다.
+                            q: h.studentName,
+                          })}
+                          className="hover:bg-bg-soft col-span-full grid grid-cols-subgrid items-baseline gap-x-2 rounded-lg px-2 py-1.5"
+                        >
+                          <span className="text-foreground text-[13px] font-bold">{h.studentName}</span>
+                          {/* 🔴 값이 없어도 칸은 **비워서 그린다** — 안 그리면 그 줄만 열이 하나 밀린다. */}
+                          <span className="text-text-faint text-[11.5px]">{h.schoolGrade}</span>
+                          <span className="text-text-dim min-w-0 truncate text-[12px]" title={h.className}>
+                            {h.className}
+                          </span>
+                          <span className="text-text-dim text-[12px]">{h.teacherName ?? ""}</span>
+                          {/* 🔑 **등원 요일**(원장 2026-08-24) — 한 학생이 여러 반이면 줄이 이름·학교·담임
+                              까지 똑같아 보여 어느 줄이 어느 요일 반인지 구분이 안 됐다. 반 운영 요일이
+                              아니라 **그 학생이 그 반에 오는 요일**이고(분리등원), 시트가 이름 아래
+                              그리는 값과 같다.
+                              🔴 빈 문자열이면 **글자를 안 그린다** — 그 달 유효 슬롯이 0인 활성 반이
+                                 실제로 있어서, `—` 같은 자리표시를 두면 "요일이 없는 반"이 아니라
+                                 고장으로 읽힌다(칸 자체는 열 맞춤 때문에 남긴다). */}
+                          <span
+                            // `pl-2` = 담임 이름과 붙어 한 덩어리로 읽히지 않게(열 간격만으론 좁다).
+                            className="text-text-dim pl-2 text-right text-[11.5px] font-medium"
+                            title={h.attendLabel ? `등원 ${h.attendLabel}` : undefined}
+                          >
+                            {h.attendLabel}
+                          </span>
+                        </Link>
+                      </li>
+                    ))}
+                  </Fragment>
                 ))}
               </ul>
               {/* 🔴 잘랐으면 **밝힌다** — 상한을 숨기면 "그 학생은 없다"는 거짓말이 된다([[#89]]). */}
