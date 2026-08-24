@@ -35,6 +35,12 @@ export type SeatingClass = {
   subject: string;
   teacherName: string | null;
   /**
+   * 카드에 이름이 적힌 그 사람의 id — 이미 **귀속 축**(`teacher-axis`)을 거친 값이다(슬롯 담당 →
+   * 없으면 담임, 자리는 null). 칸이 "담임 아닌 사람이 찍었나"를 판정하는 기준(원장 2026-08-21).
+   * ⚠️ `classes.teacher_id`를 여기서 다시 읽지 말 것 — 축이 갈린다(teacher-axis 단일 소스).
+   */
+  teacherId: string | null;
+  /**
    * **대표 교시**가 열리는 강의실 — 층 묶음 근거([`seating-floors.ts`](./seating-floors.ts)).
    * 대표 교시 = 지금 열린 교시(없으면 다음, 그것도 없으면 마지막) — [`anchorSlotIndex`](./seating-anchor.ts).
    */
@@ -72,6 +78,13 @@ type DayHit = {
   status: string | null;
   note: string | null;
   recordedAt: string | null;
+  /**
+   * 입력자 — 시각과 **같은 행**에서 와야 한다(다른 교시의 입력자를 붙이면 거짓말이 된다).
+   * 🔴 id와 이름이 **짝으로** 다녀야 한다: id만 빠지면 "담임이 찍었나" 판정이 늘 거짓이 되어
+   *    담임 본인이 찍은 칸에도 이름이 붙는다(원장 제보 2026-08-24 *"담임이 정유진인데 왜 (정유진)이?"*).
+   */
+  recordedBy: string | null;
+  recordedByName: string | null;
   recordSlot: string | null;
 };
 
@@ -119,6 +132,8 @@ export function foldSeating(slots: readonly LiveBoardSlot[]): SeatingClass[] {
               status: s?.status ?? null,
               note: s?.note ?? null,
               recordedAt: s?.recordedAt ?? null,
+              recordedBy: s?.recordedBy ?? null,
+              recordedByName: s?.recordedByName ?? null,
               recordSlot: s?.recordSlot ?? null,
             };
           }),
@@ -130,6 +145,12 @@ export function foldSeating(slots: readonly LiveBoardSlot[]): SeatingClass[] {
           note: hit?.note ?? base.note,
           recordSlot: hit?.recordSlot ?? null,
           recordedAt: hit?.recordedAt ?? null,
+          // 🔴 base(어느 한 교시의 값)가 아니라 **고른 행(hit)**의 것으로 확정한다 — 안 그러면
+          //    다른 교시의 입력자 이름이 이 칸의 시각 옆에 붙는다.
+          //    🔴 id도 **반드시 같이** — base엔 기록 없는 교시의 null이 들어 있어, id만 흘리면
+          //       담임 판정이 무너져 담임이 찍은 칸에도 이름이 붙는다.
+          recordedBy: hit?.recordedBy ?? null,
+          recordedByName: hit?.recordedByName ?? null,
           mark: seatMarkOf(status, anchor.phase),
           // 🔴 **저장 축은 하루 첫 교시 그대로**(`first`). 대표 교시로 바꾸면 같은 (학생·반·날)에
           //    교시가 다른 행이 둘 생기고, 그 표는 시수(session_units) → 급여에 닿는다(slot-axis.ts).
@@ -144,6 +165,7 @@ export function foldSeating(slots: readonly LiveBoardSlot[]): SeatingClass[] {
       subject: first.subject,
       // 담당도 대표 교시 것 — 605호 카드에 랩실 자리 표기(LAB)가 강사 이름인 양 적히면 안 된다.
       teacherName: anchor.teacherName ?? anchor.slotTeacherLabel,
+      teacherId: anchor.teacherId,
       // 대표 교시의 방이 우선. 그 교시에 방이 비어 있으면 뒤 교시 → 앞 교시 순으로 아는 이름을 쓴다.
       roomName:
         fromAnchor.find((s) => s.roomName)?.roomName ?? ordered.find((s) => s.roomName)?.roomName ?? null,
@@ -234,6 +256,8 @@ function mergeAdjacentPair(a: LiveBoardSlot, b: LiveBoardSlot): LiveBoardSlot {
             status: s?.status ?? null,
             note: s?.note ?? null,
             recordedAt: s?.recordedAt ?? null,
+            recordedBy: s?.recordedBy ?? null,
+            recordedByName: s?.recordedByName ?? null,
             recordSlot: s?.recordSlot ?? null,
           };
         }),
@@ -245,6 +269,8 @@ function mergeAdjacentPair(a: LiveBoardSlot, b: LiveBoardSlot): LiveBoardSlot {
         note: hit?.note ?? base.note,
         recordSlot: hit?.recordSlot ?? null,
         recordedAt: hit?.recordedAt ?? null,
+        recordedBy: hit?.recordedBy ?? null,
+        recordedByName: hit?.recordedByName ?? null,
         signal: base.signal,
       };
     })

@@ -149,11 +149,14 @@ export async function loadLiveSlots(date: string, classIds?: readonly string[]):
       slot_start: string | null;
       status: string;
       recorded_at: string;
+      recorded_by: string | null;
       note: string | null;
     }>(slotClassIds, (chunk, from, to) =>
       supabase
         .from("attendance_records")
-        .select("id, class_id, student_id, session_date, slot_start, status, recorded_at, note")
+        // `recorded_by` = **누가 눌렀나**(귀속이 아니라 입력자다 — 축은 teacher-axis가 따로 정한다).
+        // 좌석표가 "담임 아닌 사람이 찍었으면 그 이름을 붙인다"에 쓴다(원장 2026-08-21).
+        .select("id, class_id, student_id, session_date, slot_start, status, recorded_at, recorded_by, note")
         .eq("session_date", date)
         .in("class_id", chunk)
         .order("id", { ascending: true })
@@ -202,15 +205,23 @@ export async function loadLiveSlots(date: string, classIds?: readonly string[]):
   const effective = effectiveAttendanceRecords(recordRows).filter((r) =>
     expectedInClass(r.class_id, r.student_id),
   );
-  const bySlot = new Map<string, { status: string; note: string | null; recordedAt: string; slot: string | null }>();
-  const byDay = new Map<string, { status: string; note: string | null; recordedAt: string; slot: string | null }>();
+  type RecordHit = {
+    status: string;
+    note: string | null;
+    recordedAt: string;
+    recordedBy: string | null;
+    slot: string | null;
+  };
+  const bySlot = new Map<string, RecordHit>();
+  const byDay = new Map<string, RecordHit>();
   const slotHasRecord = new Set<string>(); // `${classId}|${slot}`
   const dayHasRecord = new Set<string>(); // classId
   for (const r of effective) {
-    const hit = {
+    const hit: RecordHit = {
       status: r.status,
       note: r.note,
       recordedAt: r.recorded_at,
+      recordedBy: r.recorded_by,
       slot: r.slot_start ? hhmm(r.slot_start) : null,
     };
     if (r.slot_start) {
@@ -289,6 +300,9 @@ export async function loadLiveSlots(date: string, classIds?: readonly string[]):
         note: hit?.note ?? null,
         recordSlot: hit?.slot ?? null,
         recordedAt: hit?.recordedAt ?? null,
+        // 이름은 호출부가 채운다(teacherName과 같은 이유 — 사용자 조회를 화면당 1회로 모은다).
+        recordedBy: hit?.recordedBy ?? null,
+        recordedByName: null,
         signal: classifySignal(status, hasAnyRecord),
       });
     }
