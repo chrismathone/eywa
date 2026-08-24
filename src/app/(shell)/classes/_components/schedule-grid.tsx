@@ -72,6 +72,8 @@ export function ScheduleGrid({
   classroomOptions,
   bgColor,
   allowSeats,
+  outsideCount = 0,
+  onJumpToOutside,
 }: {
   weekdayPeriods: Period[];
   weekendPeriods: Period[];
@@ -87,6 +89,15 @@ export function ScheduleGrid({
    * 계정이 없다 — 고르면 담당은 비고 표시 라벨만 그 자리가 된다(teacher-label.ts).
    */
   allowSeats?: boolean;
+  /**
+   * 교시표에 **없는** 시작시각으로 살아 있는 슬롯 수(= 아래 '시각 직접 입력' 행 수).
+   * 🔴 이 격자는 교시표에 있는 시각만 칸으로 만든다 — 그래서 `rows.length`(선택 교시 수)만
+   *    보면 "다 고쳤다"로 읽히는데 실제 슬롯은 더 많을 수 있다(원장 2026-08-24
+   *    *"토요일로 수정했는데도 일요일에 여전히 반이 남아있네"* — 격자에 없던 요일이 두 달 버텼다).
+   */
+  outsideCount?: number;
+  /** 배지를 눌렀을 때 아래 '시각 직접 입력'으로 데려간다(없으면 배지는 눌리지 않는 표시만). */
+  onJumpToOutside?: () => void;
 }) {
   const weekdayById = useMemo(() => new Map(weekdayPeriods.map((p) => [p.id, p])), [weekdayPeriods]);
   const weekendById = useMemo(() => new Map(weekendPeriods.map((p) => [p.id, p])), [weekendPeriods]);
@@ -309,9 +320,25 @@ export function ScheduleGrid({
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-muted-foreground text-xs">
-          <span className="text-foreground font-bold">{rows.length}</span>개 교시 선택 · 칸을 눌러 수업 교시를 지정
-        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="text-muted-foreground text-xs">
+            <span className="text-foreground font-bold">{rows.length}</span>개 교시 선택 · 칸을 눌러 수업 교시를 지정
+          </p>
+          {/* 🔴 격자가 표현 못 하는 슬롯을 **눈에 띄게** 알린다 — 격자만 보고 "다 지웠다"고 읽히면
+              엉뚱한 요일에 반이 남는다(그 행은 아래 '시각 직접 입력'에만 있고, 그래서 저장 때 보존된다). */}
+          {outsideCount > 0 ? (
+            <button
+              type="button"
+              onClick={onJumpToOutside}
+              disabled={!onJumpToOutside}
+              title="이 격자에 칸이 없는 시각입니다 — 아래 '시각 직접 입력'에서 고치거나 지웁니다"
+              className="bg-amber-soft text-amber inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-bold disabled:cursor-default"
+            >
+              교시표 밖 시각 {outsideCount}개
+              {onJumpToOutside ? <span className="font-medium">· 아래에서 확인</span> : null}
+            </button>
+          ) : null}
+        </div>
         {rows.length > 0 ? (
           <button
             type="button"

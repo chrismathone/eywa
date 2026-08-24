@@ -100,3 +100,113 @@ describe("혼합 반 주말 블록 얹기(순번 기반)", () => {
     for (const o of satOrders) expect(o).toBeGreaterThanOrEqual(19 * 60 + 20);
   });
 });
+
+/**
+ * 🔴 **주말 슬롯의 순번은 그 카드 전체에서 한 번만 매긴다**(2026-08-24 원장 제보:
+ * *"위쪽은 15:00~16:00, 2번째껀 14:00~15:00. 1시에서 4시인데 13:00~14:00도 없고 순서도 이상한데?"*).
+ *
+ * 예전엔 주말 슬롯을 **어느 교시표에서 행을 찾았는지**로 두 바구니(평일표에 있음 / 주말표에서 찾음)에
+ * 나눠 **각각 0부터** 순번을 매겼다. 한 반의 주말 블록이 두 표에 걸치면 두 순번이 0에서 겹쳐 같은
+ * `cells["<order>:sat"]` 키를 덮어써 **한 칸이 증발하고 순서가 뒤집혔다**.
+ *
+ * 실데이터: `고등E_고2 심화`(토 13:00·14:00·15:00) — 영어 평일 교시표에 15:00~16:00이 **실재**해서
+ * 15:00만 평일표 바구니로 빠졌다. 같은 화면의 `고등E_고3 정규`(토 10·11·12시)는 평일표에 하나도 없어
+ * 한 바구니라 멀쩡했다 — 그래서 **두 반이 갈렸다**.
+ */
+describe("주말 순번은 한 벌 — 교시표가 갈려도 칸이 안 겹친다", () => {
+  /** 평일 야간 3교시(IJW 4·5·6)는 고정. 주말 시각만 바꿔 세 사례를 재현한다. */
+  const evening = [
+    slot("wed", "19:20", "20:10"),
+    slot("wed", "20:20", "21:10"),
+    slot("wed", "21:10", "22:00"),
+  ];
+  /** 토요일 셀을 **행 순서대로** 세운 실제 시각(GridCell.time = 툴팁의 진실원본). */
+  const satTimesByRow = (slots: GridSlot[], config: ReturnType<typeof configOf>) => {
+    const card = buildRichCardGroups(slots, config).flatMap((g) => g.cards)[0]!;
+    return Object.entries(card.cells)
+      .filter(([k]) => k.endsWith(":sat"))
+      .sort((a, b) => Number(a[0].split(":")[0]) - Number(b[0].split(":")[0]))
+      .map(([, c]) => c.time);
+  };
+
+  it("🔴 두 표에 걸친 주말 블록도 세 칸이 다 살아 있고 시각 순서대로 앉는다(13→14→15)", () => {
+    // 토 13:00·14:00은 주말표에만, 15:00~16:00은 **평일표에도** 있다(DENSER) = 실사고 조건.
+    const sat = [slot("sat", "13:00", "14:00"), slot("sat", "14:00", "15:00"), slot("sat", "15:00", "16:00")];
+    expect(satTimesByRow([...evening, ...sat], configOf(DENSER))).toEqual([
+      "13:00~14:00",
+      "14:00~15:00",
+      "15:00~16:00",
+    ]);
+  });
+
+  it("슬롯이 어떤 순서로 와도 같은 결과 — 덮어쓰기가 입력 순서에 좌우되지 않는다", () => {
+    const shuffled = [
+      slot("sat", "15:00", "16:00"),
+      slot("wed", "20:20", "21:10"),
+      slot("sat", "13:00", "14:00"),
+      slot("wed", "21:10", "22:00"),
+      slot("sat", "14:00", "15:00"),
+      slot("wed", "19:20", "20:10"),
+    ];
+    expect(satTimesByRow(shuffled, configOf(DENSER))).toEqual([
+      "13:00~14:00",
+      "14:00~15:00",
+      "15:00~16:00",
+    ]);
+  });
+
+  it("정상이던 '고3 정규형'(토 10·11·12시, 평일표에 없음)은 종전 그대로", () => {
+    const sat = [slot("sat", "10:00", "11:00"), slot("sat", "11:00", "12:00"), slot("sat", "12:00", "13:00")];
+    expect(satTimesByRow([...evening, ...sat], configOf(DENSER))).toEqual([
+      "10:00~11:00",
+      "11:00~12:00",
+      "12:00~13:00",
+    ]);
+  });
+
+  it("전부 평일표에 있던 '영어 고등 3반'(토 14:20·15:00·15:40)도 종전 그대로 — 한 반 3행", () => {
+    const card = buildRichCardGroups(SLOTS, configOf(BASE)).flatMap((g) => g.cards)[0]!;
+    const rows = [...new Set(Object.keys(card.cells).map((k) => Number(k.split(":")[0])))];
+    expect(rows).toHaveLength(3);
+    expect(satTimesByRow(SLOTS, configOf(BASE))).toEqual(["14:20~15:00", "15:00~15:40", "15:40~16:20"]);
+  });
+
+  it("두 표에 걸쳐도 행 수는 그 반의 교시 수 그대로(3행) — 주말 때문에 행이 안 늘어난다", () => {
+    const sat = [slot("sat", "13:00", "14:00"), slot("sat", "14:00", "15:00"), slot("sat", "15:00", "16:00")];
+    const card = buildRichCardGroups([...evening, ...sat], configOf(DENSER)).flatMap((g) => g.cards)[0]!;
+    const rows = [...new Set(Object.keys(card.cells).map((k) => Number(k.split(":")[0])))];
+    expect(rows).toHaveLength(3);
+    // 전부 평일 야간 행(19:20~) 위에 얹혔다 — 이른 시각 행에 남으면 카드가 두 덩어리로 갈린다.
+    for (const o of rows) expect(o).toBeGreaterThanOrEqual(19 * 60 + 20);
+  });
+
+  it("주말 전용 반은 이 변경과 무관 — 자기 1교시부터 그대로 당겨진다(weekendSelfShift 불변)", () => {
+    const weekendOnly = [
+      slot("sat", "13:00", "14:00"),
+      slot("sat", "14:00", "15:00"),
+      slot("sat", "15:00", "16:00"),
+    ];
+    const g = buildRichCardGroups(weekendOnly, configOf(DENSER)).find((x) => x.label === "주말")!;
+    // 주말 교시표 1·2·3교시(09·10·11시) 자리로 당겨지고, 실제 시각은 셀이 들고 간다.
+    expect(g.periodRows).toHaveLength(3);
+    expect(satTimesByRow(weekendOnly, configOf(DENSER))).toEqual([
+      "13:00~14:00",
+      "14:00~15:00",
+      "15:00~16:00",
+    ]);
+  });
+
+  it("같은 시각이 토·일에 다 있어도 서로 안 덮는다(셀 키는 요일까지 포함)", () => {
+    const both = [
+      ...evening,
+      slot("sat", "13:00", "14:00"),
+      slot("sat", "15:00", "16:00"),
+      slot("sun", "13:00", "14:00"),
+      slot("sun", "15:00", "16:00"),
+    ];
+    const card = buildRichCardGroups(both, configOf(DENSER)).flatMap((g) => g.cards)[0]!;
+    expect(Object.keys(card.cells).filter((k) => k.endsWith(":sat"))).toHaveLength(2);
+    expect(Object.keys(card.cells).filter((k) => k.endsWith(":sun"))).toHaveLength(2);
+    expect(satTimesByRow(both, configOf(DENSER))).toEqual(["13:00~14:00", "15:00~16:00"]);
+  });
+});

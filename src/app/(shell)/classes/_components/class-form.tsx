@@ -28,7 +28,7 @@ import { ClassSpecialFields } from "./class-special-fields";
 import { ClassReportFields } from "./class-report-fields";
 import { ClassEnglishTrackField } from "./class-english-track-field";
 import { DEFAULT_ENGLISH_TRACK, normalizeEnglishTrack, type EnglishTrack } from "@/features/classes/english-track";
-import { CustomTimeSlots } from "./custom-time-slots";
+import { CUSTOM_SLOTS_ANCHOR_ID, CustomTimeSlots } from "./custom-time-slots";
 import { OverlapNotice } from "./overlap-notice";
 
 // 설정(operations.subjects) 미전달 경로용 폴백 = DEFAULT_SETTINGS.subjects와 동일 키/순서로 유지
@@ -164,6 +164,12 @@ export function ClassForm({
     custom: Schedule[];
   } | null>(null);
   const split = restoredSplit ?? initialSplit;
+  /**
+   * '시각 직접 입력' 행 수 — 클릭그리드 옆 "교시표 밖 시각 N개" 경고 배지가 쓴다.
+   * 🔴 두 컴포넌트의 **상태를 합치지 않는다** — 행 값은 CustomTimeSlots가 그대로 들고, 여기는 개수만 받는다.
+   *    (그리드는 `schedule_*`, 자유행은 `custom_*` hidden 네임스페이스라 저장 경로는 서로 무관하다.)
+   */
+  const [customCount, setCustomCount] = useState(split.custom.length);
 
   // 로컬 초안 자동저장 — 스케줄(그리드 hidden input schedule_*_${i})·과목·담임·색까지 onRestore로 rehydrate.
   const draft = useFormDraft({
@@ -204,7 +210,10 @@ export function ClassForm({
         }
         return out;
       };
-      setRestoredSplit({ grid: readNs("schedule_"), custom: readNs("custom_") });
+      const restoredCustom = readNs("custom_");
+      setRestoredSplit({ grid: readNs("schedule_"), custom: restoredCustom });
+      // 자유행이 remount되며 내부 상태가 초기화되므로 배지가 쓰는 개수도 함께 맞춘다.
+      setCustomCount(restoredCustom.length);
       setGridKey((k) => k + 1);
     },
     // periodProvided·periodKeepValidTo는 값이 항상 "1"인 마커라 "사용자가 뭔가 입력했다"는 신호가
@@ -403,11 +412,21 @@ export function ClassForm({
           classroomOptions={classroomOptions.map((c) => ({ id: c.id, name: c.name }))}
           bgColor={bgColor || null}
           allowSeats={subject === "english"}
+          outsideCount={customCount}
+          onJumpToOutside={() =>
+            document
+              .getElementById(CUSTOM_SLOTS_ANCHOR_ID)
+              ?.scrollIntoView({ behavior: "smooth", block: "center" })
+          }
         />
 
         {/* 교시표에 없는 시각(방학 오전 특강·불규칙 배치) — 클릭그리드가 표현 못 하는 슬롯의 유일한
             입력·보존 경로. 여기 없으면 그런 슬롯은 저장 한 번에 조용히 삭제된다. */}
-        <CustomTimeSlots key={`custom-${gridKey}`} initial={split.custom} />
+        <CustomTimeSlots
+          key={`custom-${gridKey}`}
+          initial={split.custom}
+          onCountChange={setCustomCount}
+        />
       </section>
 
       {/* 겹침 상세 — 저장 성공 뒤에만 뜬다(차단 아님). '확인'을 눌러야 상세로 이동한다. */}
