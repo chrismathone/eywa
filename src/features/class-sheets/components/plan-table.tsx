@@ -4,7 +4,9 @@
 // 셀 텍스트는 CAS 자동저장(plan-row). ⚠️ <col/>과 같은 줄에 주석 금지(하이드레이션, onescreen 선례).
 import type { SkillAreaSetting } from "@/features/owner/settings-types";
 import type { PlanLineDTO } from "../server/actions";
-import type { SheetHandlers } from "./sheet-client";
+// 핸들러는 **계획 줄 기계**의 좁은 타입만 받는다 — 시트 쪽 넓은 핸들러는 이걸 포함하므로 그대로 넘어가고,
+// 자리 출석부 JJ 열처럼 출결·마크가 없는 호스트도 같은 표를 쓸 수 있다(표를 두 벌로 만들지 않는 이유).
+import type { PlanHandlers } from "./use-plan-handlers";
 import type { SheetSaveStore } from "./use-sheet-saves";
 import { PlanRow } from "./plan-row";
 
@@ -29,7 +31,7 @@ export function PlanTable({
   lines: PlanLineDTO[];
   skillAreas: SkillAreaSetting[];
   store: SheetSaveStore;
-  handlers: SheetHandlers;
+  handlers: PlanHandlers;
   canEdit: boolean;
   /**
    * '내신' 구획을 그릴지 — EiE 반은 **초등 수업이라 내신이 없다**(원장 2026-08-06 "EiE 수업의 경우

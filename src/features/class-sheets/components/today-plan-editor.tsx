@@ -24,6 +24,7 @@ import { useEditPresence, useEditingOthers } from "@/features/presence/edit-pres
 import { dedupeEditors } from "@/features/presence/presence-state";
 import { flushSheetPatches } from "../server/actions";
 import { buildSaveKey } from "../lib/save-keys";
+import { ecsPresenceScope } from "../lib/presence-scope";
 import type { PlanPatchField } from "../lib/plan-codec";
 import { TodayCopySlot } from "./today-copy-slot";
 import { useSheetDoc } from "./use-sheet-doc";
@@ -184,7 +185,7 @@ export function TodayPlanEditor({
   }, [slots, store]);
 
   // ③ presence — 주간 시트와 **같은 scope**라 두 화면이 서로를 본다(팀티칭은 정상이라 중립 톤).
-  const scope = `ecs:${classId}:${weekMonday}`;
+  const scope = ecsPresenceScope(classId, weekMonday);
   useEditPresence(scope, canEdit);
   const others = dedupeEditors(useEditingOthers(scope));
 

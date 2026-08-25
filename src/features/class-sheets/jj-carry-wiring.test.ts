@@ -77,10 +77,13 @@ describe("JJ 이어받기 배선", () => {
     expect(code(actions)).not.toContain("if (carry.error) return { ok: false");
   });
 
-  it("두 호출부가 응답을 화면 상태에 머지한다(refresh만으론 안 바뀐다)", () => {
-    const weekly = code(read("features/class-sheets/components/sheet-client.tsx"));
+  it("호출부가 응답을 화면 상태에 머지한다(refresh만으론 안 바뀐다)", () => {
+    // 계획 줄 기계(주간·오늘 시트 + 자리 출석부 JJ 열이 함께 쓴다)가 서버 응답을 호스트로 넘긴다.
+    const machine = code(read("features/class-sheets/components/use-plan-handlers.ts"));
+    expect(machine).toContain("r.carried");
+    expect(machine).toContain("onCarried?.(planDate, slotStart, r.carried)");
     // 주간 시트: 이어받은 값을 마크 상태에 직접 머지
-    expect(weekly).toContain("r.carried");
+    const weekly = code(read("features/class-sheets/components/sheet-client.tsx"));
     expect(weekly).toContain("listeningLevel: p.listeningLevel");
     expect(weekly).toContain("memorizedWords: p.memorizedWords");
     // 오늘 보드: 버튼 → 보드로 콜백
@@ -89,6 +92,10 @@ describe("JJ 이어받기 배선", () => {
     const board = code(read("features/class-sheets/components/today-board.tsx"));
     expect(board).toContain("onCarried={(slotStart, patches)");
     expect(board).toContain("saveMark(");
+    // 자리 출석부(JJ): 블록 → 보드 오버레이. 오버레이는 두 칸만 담는 그릇이라 태도·특이사항에 닿지 않는다.
+    const seatSaves = code(read("app/(shell)/attendance/seat/[seat]/_components/seat-board-saves.ts"));
+    expect(seatSaves).toContain("applyCarried");
+    expect(seatSaves).toContain("for (const field of JJ_MARK_FIELDS) cur[field] = p[field];");
   });
 
   it("머지가 태도·특이사항·시험 점수를 건드리지 않는다(있던 값 그대로)", () => {

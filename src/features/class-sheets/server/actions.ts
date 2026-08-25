@@ -27,6 +27,7 @@ import {
 } from "../view-prefs";
 import { normalizeEnglishTrackFilter, type EnglishTrackFilter } from "@/features/classes/english-track";
 import { normalizePlanText } from "../lib/plan-codec";
+import { planLineFromRow } from "../lib/plan-line";
 import { validatePatchBatch, type PatchResult } from "../lib/save-keys";
 import { dowKeyOf, HHMM_RE, normalizePeriodStart, YMD_RE } from "../lib/week";
 import { requireEcsClassAccess } from "./access";
@@ -51,21 +52,8 @@ export type PlanLineDTO = {
   updatedAt: string;
 };
 
-function toLineDTO(row: Record<string, unknown>): PlanLineDTO {
-  return {
-    id: row.id as string,
-    planDate: row.plan_date as string,
-    slotStart: (row.slot_start as string).slice(0, 5),
-    termMode: row.term_mode as "regular" | "exam",
-    skillArea: row.skill_area as string,
-    lineNo: Number(row.line_no),
-    textbook: (row.textbook as string | null) ?? null,
-    pageRange: (row.page_range as string | null) ?? null,
-    progress: (row.progress as string | null) ?? null,
-    homework: (row.homework as string | null) ?? null,
-    updatedAt: row.updated_at as string,
-  };
-}
+// 로우 → DTO 매핑은 순수 모듈이 단일 소스(자리 출석부 JJ 계획 조회가 같은 함수를 쓴다).
+const toLineDTO = planLineFromRow;
 
 // ── 필드 CAS 배치 저장 ────────────────────────────────────────────────────────
 
