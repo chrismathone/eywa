@@ -134,7 +134,7 @@ const MENUS: { id: MenuKey; label: string; href: string; description: string }[]
     id: "staff",
     label: "직원관리",
     href: "/staff",
-    description: "직원 등록과 역할(원장·관리자·강사 등), 담당 반·학생, 급여·휴가 관리.",
+    description: "직원 등록과 역할(원장·관리자·강사 등), 담당 반·학생, 이력서·계정 관리.",
   },
   {
     id: "billing",

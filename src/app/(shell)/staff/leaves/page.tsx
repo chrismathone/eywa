@@ -36,7 +36,7 @@ export default async function StaffLeavesPage() {
           image="leaves"
           icon={CalendarClock}
           title="등록된 휴가가 없습니다"
-          description="강사 상세에서 휴가를 신청할 수 있습니다."
+          description="휴가 신청·결재는 전자결재로 옮겼습니다. 이 화면은 옛 기록 조회용입니다."
         />
       ) : (
         <LeavesAdminClient leaves={leaves} canManage={canManage} />
