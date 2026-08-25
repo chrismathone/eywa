@@ -8,6 +8,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sanitizeWorkSchedule } from "@/features/staff/work-schedule";
+import { EMAIL_RE } from "@/features/staff/email";
 import { logAction } from "@/features/audit/server/log";
 
 export type AccountActionState =
@@ -106,26 +107,39 @@ export async function resetStaffPassword(
   return { ok: true, tempPassword: issued };
 }
 
-/** 이메일 변경 — public.users 먼저, auth.users 나중(+실패 시 롤백)으로 불일치를 막는다. */
-export async function changeStaffEmail(
-  _prev: AccountActionState,
-  formData: FormData,
-): Promise<AccountActionState> {
+/**
+ * 직원 이메일 변경의 **단일 구현** — public.users 먼저, auth.users 나중(+실패 시 롤백)으로 불일치를 막는다.
+ *
+ * 창구가 둘이다(2026-08-25): '계정 관리 → 이메일 변경' 다이얼로그와 **이력서 인적사항 E-mail**.
+ * 🔴 그래서 게이트를 호출부에 맡기지 않고 **여기서 전부 다시 건다** — 이력서는 직원관리 쓰기만 있으면
+ * 편집할 수 있어서, 그대로 이으면 매니저가 이력서로 원장 로그인 이메일을 갈아끼울 수 있다(#77).
+ * 로그인 아이디가 바뀌는 행위라 자격은 비밀번호 재설정과 같은 선(자신 권한 이하)으로 잡는다.
+ *
+ * ⚠️ **로그인 계정(auth)이 없는 직원**(임포트분 #31)은 실패가 아니라 정상 경로다 — public.users만 바꾸고
+ * 끝낸다. 예전엔 여기서 거절해서, `@imported.local` 임시 주소를 실제 주소로 고칠 창구가 아예 없었다.
+ *
+ * @returns changed=false는 "같은 주소라 할 일이 없었음"(성공).
+ */
+export async function applyStaffEmailChange(
+  targetId: string,
+  nextEmail: string,
+  via: "account-card" | "resume" = "account-card",
+): Promise<{ ok: true; changed: boolean } | { error: string }> {
   const actor = await getCurrentUser();
   if (!actor) return { error: "로그인이 필요합니다" };
 
-  const id = String(formData.get("id") ?? "").trim();
+  const id = String(targetId ?? "").trim();
   // 이메일은 대소문자 무시(RFC) — 정규화해 케이스만 바꾼 우회 중복을 막는다.
-  const email = String(formData.get("email") ?? "").trim().toLowerCase();
+  const email = String(nextEmail ?? "").trim().toLowerCase();
   if (!id) return { error: "직원 ID가 누락되었습니다" };
-  if (!/^\S+@\S+\.\S+$/.test(email)) return { error: "이메일 형식이 올바르지 않습니다" };
+  if (!EMAIL_RE.test(email)) return { error: "이메일 형식이 올바르지 않습니다" };
 
   const target = await loadTarget(id, actor);
   if ("error" in target) return target;
   if (!canManageStaffMember(actor.systemRole, target.role)) {
     return { error: "이 직원의 이메일을 변경할 권한이 없습니다" };
   }
-  if (target.email.toLowerCase() === email) return { ok: true }; // 변동 없음
+  if (target.email.toLowerCase() === email) return { ok: true, changed: false }; // 변동 없음
 
   const admin = createAdminClient();
   // 같은 테넌트 내 중복 사전 확인(친절한 메시지 — 최종 방어선은 unique index).
@@ -150,15 +164,13 @@ export async function changeStaffEmail(
   }
 
   // 2) auth.users — 실패하면 public.users를 원래 이메일로 롤백해 불일치를 방지.
+  //    단 **계정 자체가 없는 것**은 롤백 사유가 아니다(바꿀 로그인이 애초에 없다 = public이 곧 진실).
   const { error: authErr } = await admin.auth.admin.updateUserById(id, {
     email,
     email_confirm: true,
   });
-  if (authErr) {
+  if (authErr && !isMissingAuthUser(authErr)) {
     await admin.from("users").update({ email: target.email }).eq("id", id);
-    if (isMissingAuthUser(authErr)) {
-      return { error: "이 직원은 로그인 계정이 없어 이메일을 변경할 수 없습니다. 먼저 로그인 계정을 만들어 주세요." };
-    }
     return { error: `로그인 계정 이메일 변경 실패 — ${authErr.message}` };
   }
 
@@ -167,12 +179,32 @@ export async function changeStaffEmail(
     action: "staff_email_change",
     targetType: "staff",
     targetLabel: target.displayName ?? email,
-    metadata: { from: target.email, to: email },
+    // 어느 창구로 바뀌었는지까지 남긴다 — 이력서 저장의 **부수효과**로 로그인 아이디가 바뀌는 경로가
+    // 생겼으므로("계정 관리에서 아무도 안 바꿨는데?") 역검수하려면 문을 구분할 수 있어야 한다.
+    // ⚠️ 클라가 직접 부를 수 있는 서버 액션이라 인자를 그대로 믿지 않고 두 값으로 정규화한다.
+    metadata: {
+      from: target.email,
+      to: email,
+      via: via === "resume" ? "resume" : "account-card",
+      noAuthAccount: Boolean(authErr),
+    },
   });
 
   revalidatePath(`/staff/${id}`);
   revalidatePath("/staff");
-  return { ok: true };
+  return { ok: true, changed: true };
+}
+
+/** 계정 관리 → 이메일 변경 다이얼로그. 판정·저장은 전부 applyStaffEmailChange(단일 구현)에 있다. */
+export async function changeStaffEmail(
+  _prev: AccountActionState,
+  formData: FormData,
+): Promise<AccountActionState> {
+  const result = await applyStaffEmailChange(
+    String(formData.get("id") ?? ""),
+    String(formData.get("email") ?? ""),
+  );
+  return "error" in result ? { error: result.error } : { ok: true };
 }
 
 /**

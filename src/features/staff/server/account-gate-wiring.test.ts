@@ -19,6 +19,7 @@ const read = (...parts: string[]) => readFileSync(join(process.cwd(), ...parts),
 
 const ACCOUNT_ACTIONS = join("src", "features", "staff", "server", "account-actions.ts");
 const STAFF_ACTIONS = join("src", "features", "staff", "server", "actions.ts");
+const RESUME_ACTIONS = join("src", "features", "staff", "server", "resume-actions.ts");
 const STAFF_DETAIL_PAGE = join("src", "app", "(shell)", "staff", "[id]", "page.tsx");
 
 /** `export async function NAME(` 부터 다음 top-level export 직전까지 = 그 액션의 본문. */
@@ -34,7 +35,20 @@ describe("직원 계정 액션 게이트 배선", () => {
   const src = read(ACCOUNT_ACTIONS);
 
   // 목록이 소스와 어긋나면(새 액션 추가) 실패 — "빠뜨림"을 잡는 게 이 테스트의 존재 이유.
-  const EXPECTED = ["resetStaffPassword", "changeStaffEmail", "deleteStaff", "updateWorkSchedule"];
+  const EXPECTED = [
+    "resetStaffPassword",
+    "changeStaffEmail",
+    "applyStaffEmailChange",
+    "deleteStaff",
+    "updateWorkSchedule",
+  ];
+
+  /**
+   * 게이트를 **위임**하는 액션 — 얇은 껍데기는 허용하되, 위임 대상이 두 게이트를 지고 있는지까지 본다.
+   * (2026-08-25: 이력서 E-mail 저장도 같은 코어를 타야 해서 changeStaffEmail이 껍데기가 됐다.)
+   * ⚠️ "본문에 게이트가 없으면 실패"를 그냥 풀지 말 것 — 푸는 순간 이 테스트가 아무것도 안 잡는다.
+   */
+  const DELEGATES: Record<string, string> = { changeStaffEmail: "applyStaffEmailChange" };
 
   it("account-actions.ts의 내보낸 액션 목록이 이 테스트와 일치한다", () => {
     const found = [...src.matchAll(/^export async function (\w+)\(/gm)].map((m) => m[1]);
@@ -46,11 +60,25 @@ describe("직원 계정 액션 게이트 배선", () => {
 
   for (const name of EXPECTED) {
     it(`${name}은 담당 게이트(loadTarget→canWriteTenant)와 대상 게이트(canManageStaffMember)를 둘 다 통과시킨다`, () => {
-      const body = bodyOf(src, name);
-      expect(body, `${name}에 담당 게이트가 없다(loadTarget 경유 필수)`).toContain("loadTarget(");
-      expect(body, `${name}에 대상 게이트가 없다`).toContain("canManageStaffMember(");
+      const delegate = DELEGATES[name];
+      if (delegate) {
+        // 껍데기는 **위임 사실**이 본문에 보여야 하고, 실제 게이트는 위임 대상에서 확인한다.
+        expect(bodyOf(src, name), `${name}이 ${delegate}에 위임하지 않는다`).toContain(`${delegate}(`);
+      }
+      const body = bodyOf(src, delegate ?? name);
+      expect(body, `${delegate ?? name}에 담당 게이트가 없다(loadTarget 경유 필수)`).toContain("loadTarget(");
+      expect(body, `${delegate ?? name}에 대상 게이트가 없다`).toContain("canManageStaffMember(");
     });
   }
+
+  it("🔴 이력서 저장은 로그인 이메일을 직접 쓰지 않고 계정 액션 코어를 탄다", () => {
+    // 이력서 E-mail이 로그인 아이디를 바꾼다(2026-08-25). users를 직접 update하면 ① 미러 트리거(0075a)가
+    // auth 값으로 되덮고 ② 권한 계층(자신 권한 이하)·중복검사·감사로그가 통째로 빠진다 —
+    // 매니저가 이력서로 원장 로그인을 갈아끼우는 경로가 열린다(#77).
+    const resume = read(RESUME_ACTIONS);
+    expect(resume, "이력서 저장이 applyStaffEmailChange를 타지 않는다").toContain("applyStaffEmailChange(");
+    expect(resume, "이력서 동기 payload에 email을 직접 실었다").not.toMatch(/sync\.email\s*=/);
+  });
 
   it("loadTarget이 직원관리 메뉴 쓰기 권한을 건다(개인 예외 반영 경로)", () => {
     // 위 액션들이 전부 loadTarget에 담당 판정을 위임하므로, 그 안에 실제로 게이트가 있어야 의미가 있다.

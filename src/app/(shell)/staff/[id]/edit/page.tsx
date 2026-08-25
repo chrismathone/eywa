@@ -6,15 +6,13 @@ import { requireAccess } from "@/lib/auth/require-access";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { BackLink } from "@/components/back-link";
 import { getCurrentUser } from "@/lib/auth/current-user";
-import { getStaffById, hasStaffEverSignedIn } from "@/features/staff/server/queries";
-import { getTenantSettings } from "@/features/owner/server/queries";
-import { canEditLoginEmail } from "@/features/staff/email";
+import { getStaffById } from "@/features/staff/server/queries";
 import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
 import { isFullShellRole } from "@/lib/auth/view-as";
 import { StaffForm } from "../../_components/staff-form";
 import { PAYROLL_ENABLED } from "@/features/payroll/config";
 
-export const metadata = { title: "직원 정보 수정 — eywa" };
+export const metadata = { title: "근무 설정 — eywa" };
 
 export default async function EditStaffPage({
   params,
@@ -28,16 +26,11 @@ export default async function EditStaffPage({
   }
 
   const { id } = await params;
-  const [staff, { operations }, everSignedIn] = await Promise.all([
-    getStaffById(id),
-    getTenantSettings(),
-    hasStaffEverSignedIn(id),
-  ]);
+  const staff = await getStaffById(id);
   if (!staff) notFound();
-  // canEditEmail: 임포트 산물 이메일 + **아직 로그인 전인 초대 계정**(오타 교정 통로)만 편집 허용.
-  // 한 번이라도 로그인한 계정의 이메일은 잠금(그 사람의 실제 로그인 수단 = 조용한 탈취 통로 방지).
-  // auth 계정 보유 시 서버 액션이 auth.users 이메일을 직접 변경(미러 트리거가 public 동기, 0075a).
-  const canEditEmail = canEditLoginEmail(staff.email, everSignedIn);
+  // 이메일 칸은 근무 설정에 없다 — 로그인 이메일 창구는 **이력서 인적사항 E-mail**과 **계정 관리** 둘이고
+  // 둘 다 applyStaffEmailChange(단일 구현)를 탄다. 옛 판정(canEditLoginEmail + auth 왕복)이 사라져
+  // 이 창이 한 번 덜 왕복한다.
   // '강사뷰 접근' 토글(0224a) — master(+super_admin)에게만 노출(서버 액션이 같은 자격으로 이중 게이트).
   // 강사·학생 역할에겐 소비처가 없어(풀셸 전용) 숨긴다 — 서버도 같은 조건으로 거절(이중 게이트).
   const canGrantTeacherView =
@@ -50,12 +43,12 @@ export default async function EditStaffPage({
 
       <header className="border-border flex flex-wrap items-end justify-between gap-3 border-b pb-5">
         <div className="space-y-1">
-          {/* 들어온 버튼('직원 정보 수정')과 같은 말로 — 열고 나서 "여기가 거기 맞나" 하지 않게. */}
-          <p className="eyebrow">직원 정보 수정</p>
+          {/* 들어온 버튼('근무 설정')과 같은 말로 — 열고 나서 "여기가 거기 맞나" 하지 않게. */}
+          <p className="eyebrow">근무 설정</p>
           <h1 className="font-bold tracking-tight text-foreground text-2xl">{staff.displayName}</h1>
           {/* 무엇이 여기 있고 무엇이 없는지 적는다 — 없는 걸 찾다가 되돌아 나가는 게 가장 큰 낭비다. */}
           <p className="text-muted-foreground text-sm">
-            이름·연락처·직급·담당 과목·시간표 색 등 (이메일·비밀번호·역할 변경과 이력서는 직원 상세에서)
+            담당 과목·강의실·시간표 색·알림 수신·담당 토글·메모 (인적사항·계약은 이력서, 계정은 직원 상세에서)
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -82,8 +75,6 @@ export default async function EditStaffPage({
         mode="edit"
         scope={`staff:${id}`}
         assignableRoleOptions={[]}
-        jobTitleOptions={operations.jobTitles}
-        canEditEmail={canEditEmail}
         canGrantTeacherView={canGrantTeacherView}
         initialValue={{
           id: staff.id,

@@ -69,7 +69,6 @@ export function StaffForm({
   assignableRoleOptions,
   jobTitleOptions = [],
   scope,
-  canEditEmail = false,
   canGrantTeacherView = false,
 }: {
   mode: Mode;
@@ -78,8 +77,6 @@ export function StaffForm({
   jobTitleOptions?: string[];
   /** 동시 편집 가드 스코프(예: `staff:123`). 수정 모드에서만 — 다른 창 저장 시 경고. */
   scope?: string;
-  /** 수정 모드에서 이메일 편집 허용 — 임포트 산물 이메일(형식불량·@imported.local)만(서버가 이중 검증). */
-  canEditEmail?: boolean;
   /** '강사뷰 접근' 토글 노출 — master(+super_admin)만. 서버 액션도 같은 자격일 때만 컬럼을 저장(이중 게이트). */
   canGrantTeacherView?: boolean;
 }) {
@@ -168,6 +165,31 @@ export function StaffForm({
 
   const errors = state?.fieldErrors ?? {};
 
+  // 이름 칸은 두 모드가 자리만 다르고 내용은 같다 — JSX를 복사하면 한쪽만 고쳐지므로 변수 하나로 둔다.
+  // 근무 설정에선 라벨이 **표시 이름**이다: 이력서 '성명'과 별개 값이고(이력서 저장은 display_name을
+  // 동기하지 않는다) 개명 경로가 여기뿐이라, 같은 말로 두면 어느 쪽을 고쳐야 하는지 알 수 없다.
+  const nameField = (
+    <Field
+      label={mode === "edit" ? "표시 이름 *" : "이름 *"}
+      htmlFor="displayName"
+      error={errors.displayName}
+    >
+      <input
+        id="displayName"
+        name="displayName"
+        defaultValue={v.displayName}
+        required
+        placeholder="예: 박지훈"
+        className={inputClass}
+      />
+      {mode === "edit" ? (
+        <p className="text-muted-foreground mt-1 text-xs">
+          화면·목록·시간표에 나오는 이름입니다. 이력서의 &lsquo;성명&rsquo;과는 별개로 저장됩니다.
+        </p>
+      ) : null}
+    </Field>
+  );
+
   return (
     <form action={formAction} ref={formRef} className="space-y-5">
       <DraftBanner savedAt={draft.draftSavedAt} onRestore={draft.restore} onDiscard={draft.discard} />
@@ -175,102 +197,121 @@ export function StaffForm({
         <input type="hidden" name="id" value={initialValue.id} />
       ) : null}
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <Field label="이름 *" htmlFor="displayName" error={errors.displayName}>
-          <input
-            id="displayName"
-            name="displayName"
-            defaultValue={v.displayName}
-            required
-            placeholder="예: 박지훈"
-            className={inputClass}
-          />
-        </Field>
-        <Field label="이메일 *" htmlFor="email" error={errors.email}>
-          <input
-            id="email"
-            name="email"
-            type="email"
-            defaultValue={v.email}
-            required
-            placeholder="staff@example.com"
-            className={inputClass}
-            readOnly={mode === "edit" && !canEditEmail}
-          />
-          {mode === "edit" ? (
-            <p className="text-muted-foreground mt-1 text-xs">
-              {canEditEmail
-                ? "아직 로그인 전이거나 임포트 과정에서 잘못 저장된 이메일 — 올바른 주소로 수정할 수 있습니다"
-                : "이미 로그인한 계정의 이메일은 여기서 변경할 수 없습니다"}
-            </p>
-          ) : null}
-        </Field>
-      </div>
-
-      {mode === "create" ? (
-        <Field label="임시 비밀번호 *" htmlFor="password" error={errors.password}>
-          <input
-            id="password"
-            name="password"
-            type="text"
-            required
-            minLength={8}
-            placeholder="8자 이상, 직원에게 직접 안내"
-            className={inputClass}
-          />
-        </Field>
+      {/* 겹치는 칸을 뺐으면 **어디로 갔는지** 적는다 — 없는 걸 찾다가 되돌아 나가는 게 가장 큰 낭비다
+          (원장 지시 2026-08-25: 겹치는 건 이력서에서 받고, 이력서에 없는 것만 여기 남긴다). */}
+      {mode === "edit" ? (
+        <p className="border-line bg-surface-soft text-text-dim rounded-2xl border p-4 text-xs leading-relaxed">
+          <b className="text-foreground">여기는 담당·알림·표시 설정만 바꿉니다.</b> 연락처·직급·입사일·근무부서·
+          근무형태는 <b>이력서</b>에서, 이메일·비밀번호·역할·삭제는 직원 상세의 <b>계정 관리</b>에서 바꿉니다.
+        </p>
       ) : null}
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        {mode === "create" ? (
-          <Field label="시스템 권한" htmlFor="systemRole">
-            <select
-              id="systemRole"
-              name="systemRole"
-              defaultValue={v.systemRole}
-              className={inputClass}
-            >
-              {assignableRoleOptions.map((r) => (
-                <option key={r} value={r}>
-                  {ROLE_LABEL[r]}
-                </option>
-              ))}
-            </select>
-            <p className="text-muted-foreground mt-1 text-xs">본인보다 약한 역할만 부여 가능</p>
-          </Field>
-        ) : null}
-        {/* "(닉네임)" — 영어 강사는 이 값(예: Charlie T)을 수업에서 닉네임으로 쓴다(라벨만, 데이터 바인딩 불변). */}
-        <Field label="직급 (닉네임)" htmlFor="jobTitle">
-          <input
-            id="jobTitle"
-            name="jobTitle"
-            ref={jobTitleRef}
-            defaultValue={v.jobTitle ?? ""}
-            placeholder="직접 입력하거나 아래에서 선택"
-            className={inputClass}
-          />
-          {/* 학원 설정(operations.jobTitles)의 직급을 빠른 선택 칩으로 — 항상 노출(현재 값과 무관).
-              datalist(▼)는 크롬이 입력값으로 제안을 필터링해 "부장" 같은 설정 밖 값이 차 있으면 빈
-              드롭다운처럼 보였다(#오해). 칩은 항상 보이고, 클릭하면 채워지며, 직접 입력도 그대로. */}
-          {jobTitleOptions.length > 0 ? (
-            <div className="mt-1.5 flex flex-wrap gap-1.5">
-              {jobTitleOptions.map((t) => (
-                <button
-                  key={t}
-                  type="button"
-                  onClick={() => pickJobTitle(t)}
-                  className="border-line text-text-dim hover:border-primary hover:text-primary rounded border px-2 py-0.5 text-xs transition"
-                >
-                  {t}
-                </button>
-              ))}
-            </div>
-          ) : null}
-        </Field>
+      {/* 생성 폼은 계정을 만드는 자리라 이메일·비밀번호·역할이 그대로 있다(근무 설정에만 없다). */}
+      {mode === "create" ? (
+        <>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {nameField}
+            <Field label="이메일 *" htmlFor="email" error={errors.email}>
+              <input
+                id="email"
+                name="email"
+                type="email"
+                defaultValue={v.email}
+                required
+                placeholder="staff@example.com"
+                className={inputClass}
+              />
+            </Field>
+          </div>
 
-        {/* 영어 닉네임 — `users.english_name`. 컬럼·소비처는 있었는데 입력칸이 없어 임포트가 채운 값을
-            화면에서 못 고치던 것을 배선(2026-07-22). 조건부 렌더는 하지 않는다: 숨기면 폼 제출에서
-            빠져 비영어 직원 저장 시 값이 지워진다(#83류 footgun). */}
+          <Field label="임시 비밀번호 *" htmlFor="password" error={errors.password}>
+            <input
+              id="password"
+              name="password"
+              type="text"
+              required
+              minLength={8}
+              placeholder="8자 이상, 직원에게 직접 안내"
+              className={inputClass}
+            />
+          </Field>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Field label="시스템 권한" htmlFor="systemRole">
+              <select
+                id="systemRole"
+                name="systemRole"
+                defaultValue={v.systemRole}
+                className={inputClass}
+              >
+                {assignableRoleOptions.map((r) => (
+                  <option key={r} value={r}>
+                    {ROLE_LABEL[r]}
+                  </option>
+                ))}
+              </select>
+              <p className="text-muted-foreground mt-1 text-xs">본인보다 약한 역할만 부여 가능</p>
+            </Field>
+            {/* "(닉네임)" — 영어 강사는 이 값(예: Charlie T)을 수업에서 닉네임으로 쓴다(라벨만, 데이터 바인딩 불변). */}
+            <Field label="직급 (닉네임)" htmlFor="jobTitle">
+              <input
+                id="jobTitle"
+                name="jobTitle"
+                ref={jobTitleRef}
+                defaultValue={v.jobTitle ?? ""}
+                placeholder="직접 입력하거나 아래에서 선택"
+                className={inputClass}
+              />
+              {/* 학원 설정(operations.jobTitles)의 직급을 빠른 선택 칩으로 — 항상 노출(현재 값과 무관).
+                  datalist(▼)는 크롬이 입력값으로 제안을 필터링해 "부장" 같은 설정 밖 값이 차 있으면 빈
+                  드롭다운처럼 보였다(#오해). 칩은 항상 보이고, 클릭하면 채워지며, 직접 입력도 그대로. */}
+              {jobTitleOptions.length > 0 ? (
+                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                  {jobTitleOptions.map((t) => (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() => pickJobTitle(t)}
+                      className="border-line text-text-dim hover:border-primary hover:text-primary rounded border px-2 py-0.5 text-xs transition"
+                    >
+                      {t}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </Field>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Field label="연락처" htmlFor="phone">
+              <input
+                id="phone"
+                name="phone"
+                type="tel"
+                defaultValue={v.phone ?? ""}
+                placeholder="예: 010-1234-5678"
+                className={`${inputClass} num`}
+              />
+            </Field>
+            <Field label="채용일" htmlFor="hireDate">
+              <input
+                id="hireDate"
+                name="hireDate"
+                type="date"
+                defaultValue={v.hireDate ?? ""}
+                className={inputClass}
+              />
+            </Field>
+          </div>
+        </>
+      ) : (
+        nameField
+      )}
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        {/* 영어 닉네임 — `users.english_name`. 이력서 '영문 이름'(personal.nameEn)과 **다른 값**이다:
+            이쪽은 영어 시간표 시트가 `Jane 중1 정규A` 라벨로 강사를 찾는 매칭 키라 근무 설정에 남는다.
+            ⚠️ 조건부 렌더 금지 — 숨기면 폼 제출에서 빠지는데 저장은 무조건 이 컬럼을 쓴다(#83류 footgun). */}
         <Field label="영어 닉네임" htmlFor="englishName">
           <input
             id="englishName"
@@ -282,29 +323,6 @@ export function StaffForm({
           <p className="text-muted-foreground mt-1 text-xs">
             비우면 이름을 그대로 씁니다. 채우면 영어 시간표·반 배정에서 이 닉네임으로 매칭됩니다.
           </p>
-        </Field>
-      </div>
-
-      <Field label="연락처" htmlFor="phone">
-        <input
-          id="phone"
-          name="phone"
-          type="tel"
-          defaultValue={v.phone ?? ""}
-          placeholder="예: 010-1234-5678"
-          className={`${inputClass} num`}
-        />
-      </Field>
-
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <Field label="채용일" htmlFor="hireDate">
-          <input
-            id="hireDate"
-            name="hireDate"
-            type="date"
-            defaultValue={v.hireDate ?? ""}
-            className={inputClass}
-          />
         </Field>
         <Field label="기본 강의실" htmlFor="defaultClassroom">
           <input

@@ -223,7 +223,7 @@ export async function updateStaff(
   const actor = await getCurrentUser();
   if (!actor) return { error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(actor.systemRole, "staff"))) {
-    return { error: "직원 정보 수정 권한이 없습니다" };
+    return { error: "직원 근무 설정 변경 권한이 없습니다" };
   }
 
   const id = String(formData.get("id") ?? "").trim();
@@ -243,7 +243,11 @@ export async function updateStaff(
   if (target.tenant_id !== actor.tenantId) {
     return { error: "다른 지점의 계정은 변경할 수 없습니다" };
   }
+  // 🔴 '근무 설정' 폼엔 이메일 칸이 **없다**(이력서·계정 관리가 단일 소스, 2026-08-25) — 칸이 없으면
+  //    input.email이 ""라 그대로 비교하면 **항상 "변경됨"**이 되어 빈 이메일로 로그인 계정을 날린다.
+  //    없는 칸은 "안 바뀐 것"이 아니라 **"제출 대상이 아닌 것"**이라 formData 존재 여부로 먼저 가른다.
   const emailChanged =
+    formData.has("email") &&
     input.email.toLowerCase() !== String(target.email ?? "").toLowerCase();
 
   const fieldErrors = validateBase(input) ?? {};
@@ -291,12 +295,16 @@ export async function updateStaff(
   const supabase = await createClient();
   // 🔴 저장할 값은 **한 번만** 만든다 — 폴백이 같은 payload를 복사해 두면 나중에 칸이 늘 때 한쪽만
   //    고쳐져 "가끔 그 칸만 저장이 안 되는" 침묵 버그가 된다. 폴백은 자리 토글만 빼고 이걸 재사용한다.
+  // 🔴 **폼에 없는 칸은 저장에서도 뺀다**(스프레드 조건부). 연락처·직급·채용일은 이력서가 단일 소스라
+  //    '근무 설정' 폼에서 빠졌는데(2026-08-25), 없는 칸을 그대로 실으면 readBaseForm이 만든 null이
+  //    **이력서에서 동기해 둔 값을 통째로 지운다**(칸을 지운 화면이 데이터를 지우는 조용한 사고).
+  //    존재 여부로 가르므로 나중에 칸을 되살리면 코드 변경 없이 다시 저장된다(생성 폼은 지금도 전부 보냄).
   const staffPatch = {
     display_name: input.displayName,
     ...(emailChanged ? { email: input.email } : {}),
-    phone: input.phone,
-    hire_date: input.hireDate,
-    job_title: input.jobTitle,
+    ...(formData.has("phone") ? { phone: input.phone } : {}),
+    ...(formData.has("hireDate") ? { hire_date: input.hireDate } : {}),
+    ...(formData.has("jobTitle") ? { job_title: input.jobTitle } : {}),
     english_name: input.englishName,
     subjects: input.subjects,
     default_classroom: input.defaultClassroom,

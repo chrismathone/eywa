@@ -37,7 +37,7 @@ export default async function StaffPayrollPage({
 
   return (
     <div className="space-y-6">
-      <BackLink href={`/staff/${id}/edit`} label="강사 정보로" />
+      <BackLink href={`/staff/${id}`} label="직원 상세로" />
 
       <header className="border-border border-b pb-5">
         <p className="eyebrow">강사 급여 정산</p>
