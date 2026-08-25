@@ -1,10 +1,13 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ChevronDown, ChevronUp, LayoutPanelTop } from "@/components/icons/eywa-icon-compat";
+import { toast } from "sonner";
+import { ChevronDown, ChevronUp, LayoutPanelTop, X } from "@/components/icons/eywa-icon-compat";
 import { NAV_GROUPS } from "@/lib/navigation";
 import { EyIcon, type EywaIconName } from "@/components/icons/eywa-icons";
+import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import { useWindowStore, instanceLabel } from "./window-store";
+import { useCloseWindow } from "./use-close-window";
 import { usePrefs } from "./use-prefs";
 
 // 라우트 창 칩 아이콘 — 레일과 동일한 Eywa 아이콘. 학생 요약창은 user.
@@ -14,7 +17,7 @@ for (const g of NAV_GROUPS) for (const it of g.items) ICON_BY_MENU[it.menuKey] =
 /**
  * 하단 **왼쪽** 독/스위처 — **자동 숨김(맥 독식)**. 평소엔 하단 가장자리에 작은 핸들로 숨어 본문
  * (페이지네이션·버튼)을 안 가리고, 마우스를 핸들/하단으로 가져가면 독이 떠오른다.
- * 칩 클릭=focus/복원, 가운데클릭=닫기.
+ * 칩 클릭=focus/복원, 칩 안 ✕(및 가운데클릭)=닫기.
  * ⚠️ 창이 **1개만 열려 있으면**(최소화 아님) 전환할 대상이 없어 독 자체를 숨긴다(중복·겹침 제거).
  * ⚠️ 반대로 **최소화한 창이 있으면 자동 숨김을 끄고 고정 노출**한다 — 독이 그 창을 되살릴 유일한
  *    경로라서, 숨으면 창이 갇힌다(2026-07-31).
@@ -26,23 +29,51 @@ export function WindowSwitcher() {
   const order = useWindowStore((s) => s.order);
   const focusedId = useWindowStore((s) => s.focusedId);
   const restore = useWindowStore((s) => s.restore);
-  const close = useWindowStore((s) => s.close);
+  // 닫기는 창 자체 X와 **같은 경로**(useCloseWindow: 스토어 close + 라우트 창이면 배경 refresh).
+  const closeWindow = useCloseWindow();
+  // 닫기 가드 두 축 — 창 안에서 벌어지는 일이라 독은 스토어에 적재된 값으로만 안다.
+  const dirty = useWindowStore((s) => s.dirty); // 미저장 폼(useUnsavedGuard → postMessage)
+  const busy = useWindowStore((s) => s.busy); // 녹음 등 끊기면 유실(use-recording-lock → BroadcastChannel)
   const enterSpotlight = useWindowStore((s) => s.enterSpotlight);
   const collapsed = usePrefs((s) => s.dockCollapsed);
   const setCollapsed = usePrefs((s) => s.setDockCollapsed);
 
+  /**
+   * 독에서의 닫기 요청(칩 ✕ · 가운데클릭) — **창 자체 ✕와 같은 가드를 지난다.**
+   * 예전엔 스토어 `close`를 직접 불러 ① 미저장 확인 ② 녹음 잠금 ③ 배경 새로고침을 통째로 건너뛰었다
+   * (가운데클릭이라 아무도 몰라 안 터졌을 뿐이다). ✕를 눈에 보이게 다는 순간 이게 정식 경로가 된다.
+   *
+   * 미저장·잠금 창은 **닫지 않고 복원+포커스**한다 — 확인 UI(저장 안 함/계속 작성)는 그 창 위에 있고,
+   * 독엔 그 문맥이 없다. 여기서 확인을 흉내 내면 같은 판단이 두 벌이 된다.
+   */
+  function requestCloseFromDock(id: string, label: string) {
+    if (busy[id]) {
+      restore(id);
+      toast.warning(`${label} — 녹음 중이라 닫을 수 없습니다. 창에서 녹음을 정지한 뒤 닫아 주세요`);
+      return;
+    }
+    if (dirty[id]) {
+      restore(id);
+      toast.info(`${label} — 저장하지 않은 내용이 있어 창을 열었습니다. 창 오른쪽 위 닫기 버튼으로 닫아 주세요`);
+      return;
+    }
+    closeWindow(id);
+  }
+
   const [revealed, setRevealed] = useState(false);
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const activeChipRef = useRef<HTMLDivElement>(null);
   useEffect(() => () => { if (hideTimer.current) clearTimeout(hideTimer.current); }, []);
   const clearHide = () => { if (hideTimer.current) clearTimeout(hideTimer.current); };
   const reveal = () => { clearHide(); setRevealed(true); }; // 독 진입 — 숨김 취소
   const scheduleHide = () => { clearHide(); hideTimer.current = setTimeout(() => setRevealed(false), 280); };
 
-  const list = order.map((id) => windows[id]).filter(Boolean);
-  if (list.length === 0) return null;
+  // 표시 순서 = **최근 본 순**(맨 앞 = 지금 보는 창). 원장 지시 2026-08-25 *"항상 보고 있는 창을 가장
+  // 앞으로. 최근 본 순서대로 정렬되면 좋을듯"* — 폭 상한이 생기면서 포커스 칩이 끝에 있으면 잘려
+  // 안 보였다. `order`는 z-스택(back→front)이라 **표시만 뒤집는다**(filter가 만든 새 배열이라 스토어
+  // 불변). ⚠️ 순서를 새 상태로 따로 들지 말 것 — 선택이 순서를 흔든다([[#49]]).
+  const list = order.map((id) => windows[id]).filter(Boolean).reverse();
   const openCount = list.filter((w) => !w.minimized).length;
-  // 창 1개만 열려 있으면(=지금 보는 그 창) 전환 대상이 없음 → 독 숨김. (최소화 1개면 복원 위해 유지.)
-  if (list.length === 1 && openCount === 1) return null;
   // ⚠️ **최소화한 창이 하나라도 있으면 독을 고정 노출**(자동 숨김 해제, 원장 제보 2026-07-31:
   // "최소화하면 하단에서 확인이 안 된다"). 최소화는 창을 화면에서 통째로 지우는데, 되살릴 유일한
   // 경로인 독까지 1.5px 핸들로 숨어 있으면 **화면 어디에도 그 창의 흔적이 없다**(사이드바 점은
@@ -52,6 +83,25 @@ export function WindowSwitcher() {
   // 접기(사용자 선택)가 최우선 — 접었으면 최소화 창이 있어도, 호버해도 칩을 펼치지 않는다.
   // 대신 아래 '펼치기' 버튼이 **항상 보이고 최소화 개수를 표시**하므로 창이 갇히지 않는다(1클릭 복귀).
   const showDock = !collapsed && (revealed || minimizedCount > 0);
+
+  // 폭 상한 때문에 **포커스 칩이 잘려 안 보이는** 경우만 그만큼 가로 스크롤한다. 포커스 칩은 맨 앞이라
+  // 보통은 이미 보이지만, 오른쪽으로 끌어 둔 상태에서 다른 창을 고르면 그 칩이 앞으로 옮겨가 시야 밖이 된다.
+  // ⚠️ `scrollIntoView`는 조상(페이지)까지 움직여 쓰지 않는다. 스크롤 컨테이너는 DragScrollArea 안쪽
+  //    div(칩 행의 부모) — 구조가 바뀌면 넘침 검사에 걸려 조용히 아무 것도 안 한다(안전 실패).
+  // ⚠️ 훅이라 **early return보다 먼저** 와야 한다(그래서 목록 파생값도 위로 끌어올렸다).
+  useEffect(() => {
+    const chip = activeChipRef.current;
+    const scroller = chip?.parentElement?.parentElement;
+    if (!chip || !scroller || scroller.scrollWidth <= scroller.clientWidth + 1) return;
+    const c = chip.getBoundingClientRect();
+    const s = scroller.getBoundingClientRect();
+    if (c.left < s.left) scroller.scrollLeft -= s.left - c.left + 8;
+    else if (c.right > s.right) scroller.scrollLeft += c.right - s.right + 8;
+  }, [focusedId, showDock, list.length]);
+
+  if (list.length === 0) return null;
+  // 창 1개만 열려 있으면(=지금 보는 그 창) 전환 대상이 없음 → 독 숨김. (최소화 1개면 복원 위해 유지.)
+  if (list.length === 1 && openCount === 1) return null;
 
   return (
     // 하단 왼쪽 hot-zone — 핸들(숨김 표시)과 독을 **한 컨테이너**로 묶는다(호버 핸들러는 이 컨테이너에만).
@@ -88,38 +138,75 @@ export function WindowSwitcher() {
                 <LayoutPanelTop size={15} strokeWidth={1.8} />
               </button>
             ) : null}
-            {list.map((w) => {
-              const active = w.id === focusedId && !w.minimized;
-              const iconName =
-                w.kind === "route"
-                  ? (ICON_BY_MENU[w.params.id] ?? ICON_BY_MENU[w.params.id.split("/")[0]])
-                  : null;
-              const label = instanceLabel(w.id, w.params.title);
-              return (
-                <button
-                  key={w.id}
-                  type="button"
-                  onClick={() => restore(w.id)}
-                  onAuxClick={(e) => {
-                    e.preventDefault();
-                    close(w.id);
-                  }}
-                  title={`${label}${w.minimized ? " (최소화됨 — 눌러서 다시 열기)" : ""}`}
-                  // 최소화 칩은 **점선 테두리**로 구분한다(opacity만으론 "꺼진 글씨"로 보여 누를 수 있는
-                  // 줄 모른다). 테두리 두께 차로 칩 높이가 들쭉날쭉해지지 않게 기본은 투명 테두리.
-                  className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-[12px] transition ${
-                    active ? "bg-primary text-primary-foreground" : "text-text-dim hover:bg-bg-soft"
-                  } ${w.minimized ? "border-dashed border-line-strong/60 opacity-75" : "border-transparent"}`}
-                >
-                  {iconName ? (
-                    <EyIcon name={iconName} size={13} strokeWidth={1.8} />
-                  ) : (
-                    <EyIcon name="user" size={12} />
-                  )}
-                  <span className="max-w-[120px] truncate">{label}</span>
-                </button>
-              );
-            })}
+            {/* 칩 목록 = **폭 상한 + 잡고 끌기 가로 스크롤**(원장 지시 2026-08-25 "목록이 많아지면 너무
+                가로가 길어보이니까 적당한 목록 보여주고 드래그 스크롤"). 창은 최대 6개까지 열려 한 줄이
+                600px를 넘던 것을 ~3.5칩으로 자른다 — 넘치면 DragScrollArea가 가장자리 페이드로 "더 있음"을
+                표시하고 마우스로 끌어 넘긴다(전역 규약, 5px 임계값이라 탭=전환/끌기=스크롤이 안 섞인다).
+                ⚠️ 스포트라이트·접기 버튼은 **밖에** 둔다(스크롤되어 사라지면 손잡이를 잃는다).
+                ⚠️ 막대 스크롤바는 **감춘다**(원장 지시 "스크롤은 안보여도 된다. 대신 페이드인아웃으로
+                   스크롤 가능하다를 표현") — 칩 높이가 28px라 막대가 내용만큼 자리를 먹었다. */}
+            <DragScrollArea className="max-w-[360px] rounded-full" hideBar fadeTone="surface">
+              <div className="flex items-center gap-1.5">
+                {list.map((w) => {
+                  const active = w.id === focusedId && !w.minimized;
+                  const iconName =
+                    w.kind === "route"
+                      ? (ICON_BY_MENU[w.params.id] ?? ICON_BY_MENU[w.params.id.split("/")[0]])
+                      : null;
+                  const label = instanceLabel(w.id, w.params.title);
+                  return (
+                    // ⚠️ 칩은 **버튼이 아니라 감싸개**다 — 안에 ✕ 버튼이 들어가므로(버튼 안 버튼 금지).
+                    // 배경·테두리(활성/최소화 표시)는 감싸개가 지고, 안의 두 버튼은 투명하게 겹쳐 둔다.
+                    // 최소화 칩은 **점선 테두리**로 구분한다(opacity만으론 "꺼진 글씨"로 보여 누를 수 있는
+                    // 줄 모른다). 테두리 두께 차로 칩 높이가 들쭉날쭉해지지 않게 기본은 투명 테두리.
+                    <div
+                      key={w.id}
+                      ref={active ? activeChipRef : undefined}
+                      // 가운데클릭 닫기는 **칩 전체**에 둔다(종전 동작 유지) — 라벨 버튼에만 두면 ✕ 위 20px에선
+                      // 안 먹어 브라우저 자동스크롤만 뜬다. 경로는 ✕와 같은 requestCloseFromDock.
+                      onAuxClick={(e) => {
+                        if (e.button !== 1) return;
+                        e.preventDefault();
+                        requestCloseFromDock(w.id, label);
+                      }}
+                      className={`flex shrink-0 items-center rounded-full border text-[12px] transition ${
+                        active ? "bg-primary text-primary-foreground" : "text-text-dim hover:bg-bg-soft"
+                      } ${w.minimized ? "border-dashed border-line-strong/60 opacity-75" : "border-transparent"}`}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => restore(w.id)}
+                        aria-label={`${label} 열기`}
+                        title={`${label}${w.minimized ? " (최소화됨 — 눌러서 다시 열기)" : ""}`}
+                        className="flex min-w-0 items-center gap-1.5 rounded-full py-1 pr-1 pl-3 transition"
+                      >
+                        {iconName ? (
+                          <EyIcon name={iconName} size={13} strokeWidth={1.8} />
+                        ) : (
+                          <EyIcon name="user" size={12} />
+                        )}
+                        <span className="max-w-[120px] truncate">{label}</span>
+                      </button>
+                      {/* 닫기 — 칩 **오른쪽 끝**의 작은 형제 버튼(라벨을 밀지 않게 폭 최소, 독은 가로로 좁다).
+                          칩 전체를 먹으면 전환(칩 클릭)이 안 되므로 일부러 20px만 차지한다. */}
+                      <button
+                        type="button"
+                        onClick={() => requestCloseFromDock(w.id, label)}
+                        aria-label={`${label} 닫기`}
+                        title="닫기"
+                        className={`mr-1 flex size-5 shrink-0 items-center justify-center rounded-full transition ${
+                          active
+                            ? "text-primary-foreground/75 hover:text-primary-foreground hover:bg-white/20"
+                            : "text-text-faint hover:bg-danger-soft hover:text-danger"
+                        }`}
+                      >
+                        <X size={12} strokeWidth={2} />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </DragScrollArea>
             {/* 접기 — 이 독을 아예 내려둔다(영속). 자동 노출(최소화 창)·호버 노출 모두 멈춘다.
                 버튼 하나 넓이가 아까워 보이지만, "지금 이 화면에서 방해된다"를 사용자가 즉시 해결할
                 유일한 손잡이다(자리 이동만으론 모든 화면을 만족시킬 수 없어 07-30·08-04 두 번 옮겼다). */}

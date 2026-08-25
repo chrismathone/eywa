@@ -1,10 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import { Minus, Square, Copy, CopyPlus, X, ArrowLeft, RotateCw, ChevronDown } from "@/components/icons/eywa-icon-compat";
 import { useWindowStore, instanceLabel, type Win } from "./window-store";
-import { subscribeWindowBusy } from "@/lib/realtime/window-busy";
+import { useCloseWindow } from "./use-close-window";
 import { usePointerDrag } from "./use-pointer-drag";
 import { usePointerResize } from "./use-pointer-resize";
 import { WindowContent } from "./window-content";
@@ -39,7 +38,7 @@ export function FloatingWindow({
   const outerRef = useRef<HTMLDivElement>(null);
   const drag = usePointerDrag(win.id, outerRef);
   const resize = usePointerResize(win.id, outerRef);
-  const close = useWindowStore((s) => s.close);
+  const closeWindow = useCloseWindow();
   const minimize = useWindowStore((s) => s.minimize);
   const toggleMax = useWindowStore((s) => s.toggleMax);
   const focus = useWindowStore((s) => s.focus);
@@ -50,15 +49,11 @@ export function FloatingWindow({
   // 라이브 제목/뒤로가능(RouteWindow가 iframe 관찰로 갱신). 라우트 창은 현재 서브뷰 제목을 표시하고,
   // 드릴인했으면(canBack) 크롬 뒤로(←) 버튼을 띄운다 — 인페이지 "← …로" 백을 대체(Idea A).
   const live = useWindowStore((s) => s.live[win.id]);
-  const router = useRouter();
 
   // 녹음 등 "끊기면 유실" 작업이 이 창 안에서 진행 중이면 잠금 — 닫기(X)·배경보내기·Esc를 막아
-  // 우발적 종료로 녹음을 날리지 않게 한다(use-recording-lock이 창 본문 iframe에서 신호 발행).
-  const [locked, setLocked] = useState(false);
-  useEffect(
-    () => subscribeWindowBusy((m) => { if (m.winId === win.id) setLocked(m.active); }),
-    [win.id],
-  );
+  // 우발적 종료로 녹음을 날리지 않게 한다(use-recording-lock이 창 본문 iframe에서 신호 발행 →
+  // workspace-canvas가 store.busy에 적재). 하단 독의 ✕도 **같은 값**을 본다(닫기 게이트 단일 소스).
+  const locked = useWindowStore((s) => s.busy[win.id] ?? false);
 
   // 미저장 변경(dirty) — 창 안 폼이 작성 중이면 닫기(X)·Esc 시 "정말 닫을까요?" 확인.
   // useUnsavedGuard(iframe)가 부모로 postMessage → workspace-canvas가 iframe→win.id 매칭 후 store에 세팅.
@@ -95,12 +90,9 @@ export function FloatingWindow({
     }, 150);
   }
 
-  // 창을 닫을 때 부모(배경) 라우트를 새로고침 — 창(iframe)에서 한 저장/삭제가 별도 문서인 배경
-  // 목록에 즉시 반영되게 한다(예: 직원 이름 수정 후 닫으면 배경 카드도 바로 갱신).
-  function closeAndRefresh() {
-    close(win.id);
-    if (win.kind === "route") router.refresh();
-  }
+  // 닫기 = useCloseWindow 단일 경로(스토어 close + 라우트 창이면 배경 router.refresh()) — 창에서 한
+  // 저장/삭제가 별도 문서인 배경 목록에 즉시 반영되게 한다(예: 직원 이름 수정 후 닫으면 배경 카드도 갱신).
+  const closeAndRefresh = () => closeWindow(win.id);
 
   // 닫기 요청(X·Esc) — 미저장 변경이 있으면 즉시 닫지 않고 확인부터. 잠금(녹음) 중이면 애초에 막힘.
   function requestClose() {
