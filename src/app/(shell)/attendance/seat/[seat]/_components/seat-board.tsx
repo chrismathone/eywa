@@ -5,6 +5,8 @@ import Link from "next/link";
 import { seatHasJjFields } from "@/features/attendance/seat/jj-fields";
 import type { SeatClassRoster } from "@/features/attendance/seat/server/queries";
 import type { SeatKey } from "@/features/attendance/seat/seat";
+import { ECS_PLAN_API } from "@/features/class-sheets/components/plan-api";
+import { seatPlanApi } from "@/features/attendance/seat/seat-plan-api";
 import { useSeatBoardSaves } from "./seat-board-saves";
 import { SeatJjTable } from "./seat-jj-table";
 import type { SeatClassPlan } from "@/features/attendance/seat/server/jj-plan";
@@ -14,16 +16,22 @@ type PeriodChip = { start: string; ends: string[]; classIds: string[] };
 
 /**
  * 진도(수업계획)를 함께 그릴 때만 내려오는 재료 — **없으면 진도 구획이 아예 안 생긴다**.
- * 🔴 공개 PIN 화면(`/seat/jj`)은 이 prop을 안 넘긴다: 로그인 없이 반의 수업계획까지 열 이유가 없고,
- *    ECS 게이트(권한·담당 반)를 통과시킬 세션도 없다. 랩실도 대상이 아니다(JJ 전용).
+ * 🔴 어느 반이 여기 실리는지는 **서버**가 정한다(로그인 = ECS 게이트 / 비로그인 PIN = 그날 그 교시
+ *    명단 화이트리스트). 랩실은 어느 쪽이든 대상이 아니다(JJ 전용).
  */
 type SeatPlans = {
   /** 반 id → 그 교시 계획. 키가 없는 반 = 그 사람이 계획을 볼 권한이 없는 반(서버가 정한다). */
   plans: Record<string, SeatClassPlan>;
   tenantId: string;
+  /** 저널 문서 키의 사용자 축. 공개 PIN 화면은 계정이 없어 자리 키가 온다. */
   userId: string;
   /** 저널·presence 문서 키의 주차(월요일) — 영어 시트와 같은 값. */
   weekMonday: string;
+  /**
+   * 🔵 비로그인 공개 PIN 화면인가 — 저장이 나갈 **문**만 가른다(밑바닥은 같은 함수).
+   * 문이 어긋나면 저장이 거절될 뿐 새는 쪽으로는 못 간다(ECS 문은 로그인을, PIN 문은 쿠키를 요구한다).
+   */
+  viaPin?: boolean;
 };
 
 /**
@@ -55,12 +63,16 @@ export function SeatBoard({
   const { pending, error, statusOf, mergeFields, save, fill, saveField, flushFields, applyCarried } =
     useSeatBoardSaves(seat, date, activeStart);
   const showJj = seatHasJjFields(seat);
+  // 문 선택은 여기 한 줄 — 참조 고정(계획 블록이 `memo`라 매 렌더 새 객체면 표가 통째로 다시 그려진다).
+  const viaPin = plans?.viaPin ?? false;
+  const planApi = useMemo(() => (viaPin ? seatPlanApi(seat) : ECS_PLAN_API), [viaPin, seat]);
   // ⚠️ 참조 고정 — 계획 블록이 `memo`라, 매 렌더 새 객체를 만들면 학생 칸을 칠 때마다 계획 표가 다시 그려진다.
   const planContext = useMemo(
     () =>
       plans
         ? {
             plans: plans.plans,
+            api: planApi,
             tenantId: plans.tenantId,
             userId: plans.userId,
             weekMonday: plans.weekMonday,
@@ -70,7 +82,7 @@ export function SeatBoard({
             flushFields,
           }
         : undefined,
-    [plans, date, activeStart, applyCarried, flushFields],
+    [plans, planApi, date, activeStart, applyCarried, flushFields],
   );
   const view = mergeFields(rosters);
   const all = view.flatMap((r) => r.students.map((s) => statusOf(r.classId, s)));

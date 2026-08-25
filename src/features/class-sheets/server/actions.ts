@@ -7,7 +7,6 @@ import { revalidatePath } from "next/cache";
 // (슬롯 advisory xact 락·재번호 원자성). 출석은 체크(ecs_mark_present_if_absent) + 취소(ecs_clear_present,
 // 0169a — plain present만) 두 경로뿐. 결석·지각·시수 편집은 여전히 /attendance 전용(§E 완화판).
 import { createAdminClient } from "@/lib/supabase/admin";
-import { fetchInChunks } from "@/lib/supabase/batch";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { kstToday } from "@/lib/date-kst";
 import { mondayOf, shiftDays } from "@/features/timetable/lib/week";
@@ -26,17 +25,23 @@ import {
   normalizeCollapsedRosterGroups,
 } from "../view-prefs";
 import { normalizeEnglishTrackFilter, type EnglishTrackFilter } from "@/features/classes/english-track";
-import { normalizePlanText } from "../lib/plan-codec";
-import { planLineFromRow } from "../lib/plan-line";
-import { validatePatchBatch, type PatchResult } from "../lib/save-keys";
+import { normalizePlanText, SKILL_AREA_SLUG_RE } from "../lib/plan-codec";
 import { dowKeyOf, HHMM_RE, normalizePeriodStart, YMD_RE } from "../lib/week";
 import { requireEcsClassAccess } from "./access";
-import { carrySelfStudyMarks } from "./carry-marks";
-import { carrySummary, type CarryPatch } from "../lib/carry-marks";
+// 계획 줄 쓰기의 밑바닥 — 공개 자리 PIN 경로도 **같은 함수**를 부른다(문만 다르고 규칙은 한 벌).
+import {
+  applyPlanPatches,
+  copyPlanSlotFromPrevious,
+  insertPlanLine,
+  relocatePlanLine,
+  removePlanLine,
+  type PlanCopyResult,
+  type PlanLinesResult,
+  type PlanPatchesResult,
+  type PlanWriteGrant,
+} from "./plan-write";
 
 type ActionError = { ok: false; error: string };
-
-const SLUG_RE = /^[a-z0-9_]{1,24}$/;
 
 export type PlanLineDTO = {
   id: string;
@@ -52,107 +57,25 @@ export type PlanLineDTO = {
   updatedAt: string;
 };
 
-// 로우 → DTO 매핑은 순수 모듈이 단일 소스(자리 출석부 JJ 계획 조회가 같은 함수를 쓴다).
-const toLineDTO = planLineFromRow;
+// ── 계획 줄 쓰기 = **문(게이트)만** 여기, 밑바닥은 plan-write.ts ─────────────────
+//
+// 🔑 실제 구현(줄 번호·시기·CAS 기대값·복사 후 canonical)은 [`plan-write.ts`](./plan-write.ts) 한 벌이다.
+//    아래 액션들은 `requireEcsClassAccess(write)`를 지나 `PlanWriteGrant`로 바꿔 넘기는 껍데기일 뿐.
+//    같은 표에 들어오는 **다른 문**(비로그인 자리 PIN 화면 `/seat/jj` — 게이트는 PIN 쿠키 + 그날 그 교시
+//    명단)도 자기 게이트를 지난 뒤 **같은 밑바닥**을 부른다. 규칙이 두 벌이 되면 같은 표를 서로 다르게 쓴다.
 
-// ── 필드 CAS 배치 저장 ────────────────────────────────────────────────────────
+function planGrantOf(access: { tenantId: string; classId: string; user: { id: string } }): PlanWriteGrant {
+  return { tenantId: access.tenantId, classId: access.classId, actorId: access.user.id };
+}
 
-/**
- * 계획 행 필드 patch 배치 — 필드 단위 CAS(`<field> is not distinct from expected`일 때만 갱신).
- * · 배치에 **다른 반 행이 섞이면 전체 거부**(mixed-class 금지) — lineId 소속을 서버에서 조회해 검증.
- * · 0행 갱신 시: 행 없음=gone / 서버값==newValue=already_applied(응답 유실 재전송) / 그 외=conflict+서버값.
- * · 값은 normalizePlanText(trim, ""→NULL) codec을 서버에서도 강제(클라와 동일 정의).
- */
+/** 계획 행 필드 patch 배치(필드 단위 CAS) — 구현·규약은 `applyPlanPatches`. */
 export async function flushSheetPatches(
   classId: string,
   rawPatches: unknown,
-): Promise<{ ok: true; results: PatchResult[] } | ActionError> {
+): Promise<PlanPatchesResult> {
   const gate = await requireEcsClassAccess(classId, { write: true });
   if (!gate.ok) return { ok: false, error: gate.error };
-  const parsed = validatePatchBatch(rawPatches);
-  if (!parsed.ok) return { ok: false, error: parsed.error };
-  const patches = parsed.patches;
-  const { tenantId, user } = gate.access;
-  const admin = createAdminClient();
-
-  // 배치의 모든 행이 게이트한 반 소속인지 — 하나라도 아니면 전체 거부(§A). 대량 .in은 청크(B3).
-  const lineIds = [...new Set(patches.map((p) => p.lineId))];
-  let ownRows: { id: string; class_id: string }[];
-  try {
-    ownRows = await fetchInChunks<{ id: string; class_id: string }>(lineIds, (chunk) =>
-      admin.from("class_sheet_plan_lines").select("id, class_id").eq("tenant_id", tenantId).in("id", chunk),
-    );
-  } catch (e) {
-    return { ok: false, error: `저장 준비에 실패했습니다: ${e instanceof Error ? e.message : String(e)}` };
-  }
-  const foundIds = new Set(ownRows.map((r) => r.id));
-  if (ownRows.some((r) => r.class_id !== classId)) {
-    return { ok: false, error: "다른 반의 행이 섞여 있어 저장을 거부했습니다" };
-  }
-
-  const results: PatchResult[] = [];
-  for (const p of patches) {
-    if (!foundIds.has(p.lineId)) {
-      results.push({ saveKey: p.saveKey, status: "gone", clientRev: p.clientRev });
-      continue;
-    }
-    const expected = normalizePlanText(p.expectedValue);
-    const newValue = normalizePlanText(p.newValue);
-    if (p.field === "skill_area" && (newValue === null || !SLUG_RE.test(newValue))) {
-      results.push({ saveKey: p.saveKey, status: "error", clientRev: p.clientRev, error: "영역 값이 올바르지 않습니다" });
-      continue;
-    }
-    let update = admin
-      .from("class_sheet_plan_lines")
-      .update({ [p.field]: newValue, updated_by: user.id })
-      .eq("tenant_id", tenantId)
-      .eq("class_id", classId)
-      .eq("id", p.lineId);
-    update = expected === null ? update.is(p.field, null) : update.eq(p.field, expected);
-    const { data: updated, error: upErr } = await update.select("id");
-    if (upErr) {
-      results.push({ saveKey: p.saveKey, status: "error", clientRev: p.clientRev, error: upErr.message });
-      continue;
-    }
-    if ((updated ?? []).length > 0) {
-      results.push({ saveKey: p.saveKey, status: "applied", clientRev: p.clientRev });
-      continue;
-    }
-    // 0행 — 현재값 조회로 3분기
-    const { data: cur } = await admin
-      .from("class_sheet_plan_lines")
-      .select(p.field)
-      .eq("tenant_id", tenantId)
-      .eq("class_id", classId)
-      .eq("id", p.lineId)
-      .maybeSingle();
-    if (!cur) {
-      results.push({ saveKey: p.saveKey, status: "gone", clientRev: p.clientRev });
-      continue;
-    }
-    const serverValue = normalizePlanText((cur as Record<string, string | null>)[p.field]);
-    if (serverValue === newValue) {
-      results.push({ saveKey: p.saveKey, status: "already_applied", clientRev: p.clientRev });
-    } else {
-      results.push({ saveKey: p.saveKey, status: "conflict", clientRev: p.clientRev, serverValue });
-    }
-  }
-  return { ok: true, results };
-}
-
-// ── 구조 변경(RPC 위임) ──────────────────────────────────────────────────────
-
-async function rpcSlotLines(
-  rpc: string,
-  args: Record<string, unknown>,
-): Promise<{ ok: true; lines: PlanLineDTO[] } | ActionError> {
-  const admin = createAdminClient();
-  const { data, error } = await admin.rpc(rpc, args);
-  if (error) {
-    if (error.message.includes("ECS_MAX_LINES")) return { ok: false, error: "한 교시에 담을 수 있는 줄 수(20)를 넘었습니다" };
-    return { ok: false, error: `저장에 실패했습니다: ${error.message}` };
-  }
-  return { ok: true, lines: ((data ?? []) as Record<string, unknown>[]).map(toLineDTO) };
+  return applyPlanPatches(planGrantOf(gate.access), rawPatches);
 }
 
 export async function createPlanLine(input: {
@@ -161,43 +84,10 @@ export async function createPlanLine(input: {
   slotStart: string;
   termMode: "regular" | "exam";
   skillArea: string;
-}): Promise<{ ok: true; lines: PlanLineDTO[] } | ActionError> {
+}): Promise<PlanLinesResult> {
   const gate = await requireEcsClassAccess(input.classId, { write: true });
   if (!gate.ok) return { ok: false, error: gate.error };
-  if (!YMD_RE.test(input.planDate) || !HHMM_RE.test(input.slotStart)) {
-    return { ok: false, error: "잘못된 요청입니다(날짜/시각)" };
-  }
-  if (input.termMode !== "regular" && input.termMode !== "exam") {
-    return { ok: false, error: "잘못된 요청입니다(시기)" };
-  }
-  if (!SLUG_RE.test(input.skillArea)) return { ok: false, error: "잘못된 요청입니다(영역)" };
-  return rpcSlotLines("ecs_create_plan_line", {
-    p_tenant: gate.access.tenantId,
-    p_actor: gate.access.user.id,
-    p_class: input.classId,
-    p_plan_date: input.planDate,
-    p_slot_start: input.slotStart,
-    p_term_mode: input.termMode,
-    p_skill_area: input.skillArea,
-  });
-}
-
-/** 이동 대상 행이 게이트한 반 소속인지 확인(§A — 실제 행의 class를 서버에서 조회 후 그 class로 게이트). */
-async function assertLineInClass(
-  tenantId: string,
-  classId: string,
-  lineId: string,
-): Promise<{ ok: true } | { ok: false; code: "gone" | "foreign"; error: string }> {
-  const admin = createAdminClient();
-  const { data } = await admin
-    .from("class_sheet_plan_lines")
-    .select("id, class_id")
-    .eq("tenant_id", tenantId)
-    .eq("id", lineId)
-    .maybeSingle();
-  if (!data) return { ok: false, code: "gone", error: "행을 찾을 수 없습니다(다른 사용자가 삭제했을 수 있음)" };
-  if (data.class_id !== classId) return { ok: false, code: "foreign", error: "다른 반의 행입니다" };
-  return { ok: true };
+  return insertPlanLine(planGrantOf(gate.access), input);
 }
 
 export async function movePlanLine(input: {
@@ -205,39 +95,19 @@ export async function movePlanLine(input: {
   lineId: string;
   termMode: "regular" | "exam";
   lineNo: number;
-}): Promise<{ ok: true; lines: PlanLineDTO[] } | ActionError> {
+}): Promise<PlanLinesResult> {
   const gate = await requireEcsClassAccess(input.classId, { write: true });
   if (!gate.ok) return { ok: false, error: gate.error };
-  if (input.termMode !== "regular" && input.termMode !== "exam") {
-    return { ok: false, error: "잘못된 요청입니다(시기)" };
-  }
-  const own = await assertLineInClass(gate.access.tenantId, input.classId, input.lineId);
-  if (!own.ok) return own;
-  return rpcSlotLines("ecs_move_plan_line", {
-    p_tenant: gate.access.tenantId,
-    p_actor: gate.access.user.id,
-    p_line_id: input.lineId,
-    p_term_mode: input.termMode,
-    p_line_no: Math.max(1, Math.min(20, Math.round(input.lineNo))),
-  });
+  return relocatePlanLine(planGrantOf(gate.access), input);
 }
 
 export async function deletePlanLine(input: {
   classId: string;
   lineId: string;
-}): Promise<{ ok: true; lines: PlanLineDTO[] } | ActionError> {
+}): Promise<PlanLinesResult> {
   const gate = await requireEcsClassAccess(input.classId, { write: true });
   if (!gate.ok) return { ok: false, error: gate.error };
-  const own = await assertLineInClass(gate.access.tenantId, input.classId, input.lineId);
-  if (!own.ok) {
-    // 이미 삭제된 행(gone)이면 멱등 성공으로 취급(클라 재조회 유도) — 다른 반(foreign)만 하드 거부
-    if (own.code === "foreign") return { ok: false, error: own.error };
-    return { ok: true, lines: [] };
-  }
-  return rpcSlotLines("ecs_delete_plan_line", {
-    p_tenant: gate.access.tenantId,
-    p_line_id: input.lineId,
-  });
+  return removePlanLine(planGrantOf(gate.access), input);
 }
 
 export async function copyWeekFromPrevious(input: {
@@ -288,89 +158,10 @@ export async function copySlotFromPrevious(input: {
   planDate: string;
   slotStart: string;
   termMode: "regular" | "exam";
-}): Promise<
-  | {
-      ok: true;
-      copied: number;
-      /** 원본 날짜 "MM-DD"(같은 교시라 시각은 대상과 동일 — 라벨에 안 싣는다) */
-      sourceLabel: string | null;
-      /** 20줄 상한에 걸려 못 넣은 원본 줄 수(0209a 이전 함수는 안 돌려줘 0) */
-      truncated: number;
-      reason: string | null;
-      lines: PlanLineDTO[];
-      /**
-       * JJ 폼 이어받기(직원 요청 2026-08-19) — 학생별로 채운 듣기 레벨·누적 암기 단어수.
-       * 🔴 호출부는 이걸 **화면 상태에 머지**해야 한다: 마크는 클라 state(useState(data.marks))라
-       *    router.refresh()만으론 안 바뀐다.
-       */
-      carried: CarryPatch[];
-      /** 이어받기 요약 문구("듣기 레벨 4명 · 누적 암기 단어수 2명") — 빈 문자열이면 채운 게 없다. */
-      carrySummary: string;
-      /** 0206a 미적용이라 두 칸을 못 채웠다(계획 복사는 그대로 성공). */
-      carryPending: boolean;
-      /** 이어받기만 실패한 사유(한글) — 계획 복사는 성공이므로 에러로 만들지 않는다. */
-      carryError: string | null;
-    }
-  | ActionError
-> {
+}): Promise<PlanCopyResult> {
   const gate = await requireEcsClassAccess(input.classId, { write: true });
   if (!gate.ok) return { ok: false, error: gate.error };
-  if (!YMD_RE.test(input.planDate) || !HHMM_RE.test(input.slotStart)) {
-    return { ok: false, error: "잘못된 요청입니다(날짜/시각)" };
-  }
-  if (input.termMode !== "regular" && input.termMode !== "exam") {
-    return { ok: false, error: "잘못된 요청입니다(시기)" };
-  }
-  const admin = createAdminClient();
-  const { data, error } = await admin.rpc("ecs_copy_slot", {
-    p_tenant: gate.access.tenantId,
-    p_actor: gate.access.user.id,
-    p_class: input.classId,
-    p_plan_date: input.planDate,
-    p_slot_start: input.slotStart,
-    p_term_mode: input.termMode,
-  });
-  if (error) {
-    // 스키마 미적용(배포가 SQL보다 앞선 구간) — raw 원문 대신 사람이 읽을 수 있는 안내로.
-    if (/could not find|does not exist|schema cache/i.test(error.message)) {
-      return { ok: false, error: "이 기능은 아직 준비 중입니다(DB 반영 대기)" };
-    }
-    return { ok: false, error: `내용 복사에 실패했습니다: ${error.message}` };
-  }
-  const r = (data ?? {}) as {
-    copied?: number;
-    truncated?: number;
-    reason?: string;
-    sourceDate?: string;
-    sourceSlot?: string;
-    lines?: Record<string, unknown>[];
-  };
-  // JJ 폼 이어받기 — 같은 버튼이 학생별 듣기 레벨·누적 암기 단어수까지 채운다(직원 요청 2026-08-19).
-  // ⚠️ 계획 복사가 아무것도 못 했어도 **따로** 돈다 — 두 칸의 원본은 계획 줄이 아니라 학생 기록이라
-  //    "지난 계획이 없다"가 "지난 레벨이 없다"를 뜻하지 않는다. JJ 교시가 아니면 그 안에서 곧장 접힌다.
-  const carry = await carrySelfStudyMarks({
-    admin,
-    tenantId: gate.access.tenantId,
-    classId: input.classId,
-    actorId: gate.access.user.id,
-    planDate: input.planDate,
-    slotStart: input.slotStart,
-  });
-
-  return {
-    ok: true,
-    copied: r.copied ?? 0,
-    // 같은 교시에서만 가져오므로 시각은 대상과 늘 같다 — 라벨엔 **날짜만**(붙이면 "08-11 19:20 교시"가
-    // 되어 마치 다른 시각에서 온 것처럼 읽힌다). ⚠️ 0209a 적용 전 함수는 다른 시각을 돌려줄 수 있다.
-    sourceLabel: r.sourceDate ? r.sourceDate.slice(5) : null,
-    truncated: r.truncated ?? 0,
-    reason: r.reason ?? null,
-    lines: (r.lines ?? []).map(toLineDTO),
-    carried: carry.patches,
-    carrySummary: carrySummary(carry.patches),
-    carryPending: carry.pending,
-    carryError: carry.error,
-  };
+  return copyPlanSlotFromPrevious(planGrantOf(gate.access), input);
 }
 
 // ── 목표·마크·메모 (명시적 LWW — 계획 v2.2 §C) ───────────────────────────────
@@ -389,7 +180,7 @@ export async function upsertGoal(input: {
   if (input.scope !== "month" && input.scope !== "week") return { ok: false, error: "잘못된 요청입니다(기간)" };
   if (input.role !== "homeroom" && input.role !== "assistant") return { ok: false, error: "잘못된 요청입니다(역할)" };
   if (!YMD_RE.test(input.periodStart)) return { ok: false, error: "잘못된 요청입니다(기간 시작일)" };
-  if (!SLUG_RE.test(input.skillArea)) return { ok: false, error: "잘못된 요청입니다(영역)" };
+  if (!SKILL_AREA_SLUG_RE.test(input.skillArea)) return { ok: false, error: "잘못된 요청입니다(영역)" };
   const periodStart = normalizePeriodStart(input.scope, input.periodStart);
   const textbook = normalizePlanText(input.textbook);
   const targetProgress = normalizePlanText(input.targetProgress);

@@ -45,6 +45,7 @@ import { PLAN_PATCH_FIELDS, isMeaningfulPlanLine } from "../lib/plan-codec";
 import { selectSheetDaysFor } from "../lib/today-own-slots";
 // 계획 줄 기계(셀 CAS·줄 추가/삭제/시기 이동·내용 복사)는 **공용 훅 한 벌**이다 — 자리 출석부 JJ 열도
 // 같은 훅을 쓴다(두 벌이 되면 같은 표를 다른 규칙으로 쓰게 된다). 저장 경로는 그 안이 끝.
+import { ECS_PLAN_API } from "./plan-api";
 import { seedPlanLines, usePlanHandlers, type PlanHandlers } from "./use-plan-handlers";
 import { useSheetDoc } from "./use-sheet-doc";
 import { useFlushOnUnmount, useSaveIndicator, useSheetSaveStore } from "./use-sheet-saves";
@@ -437,6 +438,8 @@ export function SheetClient({
   );
   const planHandlers = usePlanHandlers({
     classId,
+    // 로그인 시트는 언제나 ECS 게이트 — 공개 자리 PIN 문(seatPlanApi)은 그 화면만 쓴다.
+    api: ECS_PLAN_API,
     store,
     onSlotLines: applySlotLines,
     onCarried: applyCarried,
