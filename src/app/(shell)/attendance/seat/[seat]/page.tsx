@@ -20,6 +20,8 @@ import {
 } from "@/features/attendance/seat/seat";
 import { seatHasJjFields } from "@/features/attendance/seat/jj-fields";
 import { attachJjMarks } from "@/features/attendance/seat/server/jj-marks";
+import { loadSeatJjPlans } from "@/features/attendance/seat/server/jj-plan";
+import { mondayOf } from "@/features/timetable/lib/week";
 import { SeatBoard } from "./_components/seat-board";
 
 export const metadata: Metadata = { title: "랩실·JJ실 출석부 — eywa" };
@@ -83,6 +85,23 @@ export default async function SeatAttendancePage({
   // 지난 날짜 쓰기는 사무실만 — 자리 전용 권한(아르바이트)은 오늘만. 서버 액션이 같은 판정을 다시 한다(#77).
   const canEditPast = await canWriteTenant(user.systemRole, "attendance");
   const readOnly = date !== today && !canEditPast;
+
+  // 명단(듣기·단어)과 계획(진도)은 서로 독립이라 병렬(B4).
+  // 🔴 계획은 **자리 권한이 아니라 영어 시트 권한**이 연다 — 아르바이트·viewer에겐 반마다 빈 값이 온다.
+  const [rosters, plans] = await Promise.all([
+    period && seatHasJjFields(seat)
+      ? attachJjMarks(day.rosterByPeriod[period.start] ?? [], user.tenantId, date, period.start)
+      : Promise.resolve(period ? (day.rosterByPeriod[period.start] ?? []) : []),
+    period
+      ? loadSeatJjPlans(
+          seat,
+          period.slots.map((sl) => sl.classId),
+          user.tenantId,
+          date,
+          period.start,
+        )
+      : Promise.resolve({}),
+  ]);
 
   const href = (q: { date?: string; start?: string }) => {
     const sp = new URLSearchParams();
@@ -171,13 +190,21 @@ export default async function SeatAttendancePage({
             classIds: p.slots.map((s) => s.classId),
           }))}
           activeStart={period.start}
-          rosters={
-            seatHasJjFields(seat)
-              ? await attachJjMarks(day.rosterByPeriod[period.start] ?? [], user.tenantId, date, period.start)
-              : (day.rosterByPeriod[period.start] ?? [])
-          }
+          rosters={rosters}
           readOnly={readOnly}
           hrefFor={`/attendance/seat/${seat}?date=${date}&start=`}
+          // 진도 구획은 계획을 볼 수 있는 반이 하나라도 있을 때만 — 없으면 prop 자체를 안 넘긴다.
+          plans={
+            Object.keys(plans).length > 0
+              ? {
+                  plans,
+                  tenantId: user.tenantId,
+                  userId: user.id,
+                  // 저널·presence 문서 키 — 영어 시트와 **같은 주차**여야 두 화면이 서로를 본다.
+                  weekMonday: mondayOf(date),
+                }
+              : undefined
+          }
         />
       )}
     </div>

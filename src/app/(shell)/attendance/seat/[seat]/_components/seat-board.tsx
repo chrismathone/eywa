@@ -1,14 +1,30 @@
 "use client";
 
+import { useMemo } from "react";
 import Link from "next/link";
 import { seatHasJjFields } from "@/features/attendance/seat/jj-fields";
 import type { SeatClassRoster } from "@/features/attendance/seat/server/queries";
 import type { SeatKey } from "@/features/attendance/seat/seat";
 import { useSeatBoardSaves } from "./seat-board-saves";
 import { SeatJjTable } from "./seat-jj-table";
+import type { SeatClassPlan } from "@/features/attendance/seat/server/jj-plan";
 import { SeatLabGrid } from "./seat-lab-grid";
 
 type PeriodChip = { start: string; ends: string[]; classIds: string[] };
+
+/**
+ * 진도(수업계획)를 함께 그릴 때만 내려오는 재료 — **없으면 진도 구획이 아예 안 생긴다**.
+ * 🔴 공개 PIN 화면(`/seat/jj`)은 이 prop을 안 넘긴다: 로그인 없이 반의 수업계획까지 열 이유가 없고,
+ *    ECS 게이트(권한·담당 반)를 통과시킬 세션도 없다. 랩실도 대상이 아니다(JJ 전용).
+ */
+type SeatPlans = {
+  /** 반 id → 그 교시 계획. 키가 없는 반 = 그 사람이 계획을 볼 권한이 없는 반(서버가 정한다). */
+  plans: Record<string, SeatClassPlan>;
+  tenantId: string;
+  userId: string;
+  /** 저널·presence 문서 키의 주차(월요일) — 영어 시트와 같은 값. */
+  weekMonday: string;
+};
 
 /**
  * 자리 출석부 본문 — 교시 하나의 명단(반 그룹)을 그리고 그 자리에서 출결을 찍는다.
@@ -25,6 +41,7 @@ export function SeatBoard({
   rosters,
   readOnly,
   hrefFor,
+  plans,
 }: {
   seat: SeatKey;
   date: string;
@@ -33,13 +50,28 @@ export function SeatBoard({
   rosters: SeatClassRoster[];
   readOnly: boolean;
   hrefFor: string;
+  plans?: SeatPlans;
 }) {
-  const { pending, error, statusOf, mergeFields, save, fill, saveField } = useSeatBoardSaves(
-    seat,
-    date,
-    activeStart,
-  );
+  const { pending, error, statusOf, mergeFields, save, fill, saveField, flushFields, applyCarried } =
+    useSeatBoardSaves(seat, date, activeStart);
   const showJj = seatHasJjFields(seat);
+  // ⚠️ 참조 고정 — 계획 블록이 `memo`라, 매 렌더 새 객체를 만들면 학생 칸을 칠 때마다 계획 표가 다시 그려진다.
+  const planContext = useMemo(
+    () =>
+      plans
+        ? {
+            plans: plans.plans,
+            tenantId: plans.tenantId,
+            userId: plans.userId,
+            weekMonday: plans.weekMonday,
+            date,
+            slotStart: activeStart,
+            onCarried: applyCarried,
+            flushFields,
+          }
+        : undefined,
+    [plans, date, activeStart, applyCarried, flushFields],
+  );
   const view = mergeFields(rosters);
   const all = view.flatMap((r) => r.students.map((s) => statusOf(r.classId, s)));
   const total = all.length;
@@ -127,6 +159,7 @@ export function SeatBoard({
         {showJj ? (
           <SeatJjTable
             rosters={view}
+            plan={planContext}
             statusOf={statusOf}
             onSave={save}
             onSaveField={saveField}

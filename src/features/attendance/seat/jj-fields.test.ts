@@ -36,9 +36,11 @@ describe("JJ실 전용 칸", () => {
 
 describe("JJ실 반 = 열", () => {
   it("반 수만큼 열을 만들고 빈 칸을 만들지 않는다", () => {
-    expect(jjClassColumns(1)).toBe("repeat(1, minmax(240px, 1fr))");
-    expect(jjClassColumns(2)).toBe("repeat(2, minmax(240px, 1fr))");
-    expect(jjClassColumns(3)).toBe("repeat(3, minmax(240px, 1fr))");
-    expect(jjClassColumns(0)).toBe("repeat(1, minmax(240px, 1fr))");
+    expect(jjClassColumns(1)).toBe("repeat(1, minmax(min(100%, 240px), 1fr))");
+    expect(jjClassColumns(2)).toBe("repeat(2, minmax(min(100%, 240px), 1fr))");
+    expect(jjClassColumns(3)).toBe("repeat(3, minmax(min(100%, 240px), 1fr))");
+    expect(jjClassColumns(0)).toBe("repeat(1, minmax(min(100%, 240px), 1fr))");
+    // 🔑 min(100%) — 폰에서 열이 화면보다 넓어지면 출결을 찍는 데도 가로로 끌어야 한다.
+    expect(jjClassColumns(2, 440)).toBe("repeat(2, minmax(min(100%, 440px), 1fr))");
   });
 });

@@ -22,11 +22,7 @@ import { normalizeSlotTime } from "../lib/week";
 import { parseSessionUnits } from "@/features/attendance/session-units";
 import {
   clearPresentAttendance,
-  deletePlanLine as deletePlanLineAction,
-  copySlotFromPrevious,
-  createPlanLine as createPlanLineAction,
   flushSheetPatches,
-  movePlanLine as movePlanLineAction,
   saveMemo,
   setMyEcsCollapsedRosterGroups,
   setMyEcsFontSize,
@@ -37,7 +33,9 @@ import {
   type PlanLineDTO,
 } from "../server/actions";
 import { ECS_FONT_SIZE_ZOOM, type EcsFontSize } from "../font-size";
+import type { CarryPatch } from "../lib/carry-marks";
 import type { RosterGroupKey } from "../lib/roster-order";
+import { ecsPresenceScope } from "../lib/presence-scope";
 import type { MarkTextField } from "../lib/roster-form";
 import { buildSaveKey, type PlanFieldPatch } from "../lib/save-keys";
 import { PLAN_PATCH_FIELDS, isMeaningfulPlanLine } from "../lib/plan-codec";
@@ -45,6 +43,9 @@ import { PLAN_PATCH_FIELDS, isMeaningfulPlanLine } from "../lib/plan-codec";
 // ⚠️ 오늘 면의 **반 순서**(ecs/page.tsx)도 같은 모듈의 `firstVisibleTodaySlot`을 쓴다 — 화면이 그리는
 //    교시와 줄 세우는 교시가 갈리면 순서가 다시 뒤집힌다(2026-08-19).
 import { selectSheetDaysFor } from "../lib/today-own-slots";
+// 계획 줄 기계(셀 CAS·줄 추가/삭제/시기 이동·내용 복사)는 **공용 훅 한 벌**이다 — 자리 출석부 JJ 열도
+// 같은 훅을 쓴다(두 벌이 되면 같은 표를 다른 규칙으로 쓰게 된다). 저장 경로는 그 안이 끝.
+import { seedPlanLines, usePlanHandlers, type PlanHandlers } from "./use-plan-handlers";
 import { useSheetDoc } from "./use-sheet-doc";
 import { useFlushOnUnmount, useSaveIndicator, useSheetSaveStore } from "./use-sheet-saves";
 import { EditingBadge } from "@/features/presence/editing-badge";
@@ -55,31 +56,11 @@ import { CopyPrevWeek } from "./copy-prev-week";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import { TodayClassSheet } from "./today-class-sheet";
 
-export type SheetHandlers = {
-  editCell: (
-    lineId: string,
-    field: (typeof PLAN_PATCH_FIELDS)[number],
-    value: string,
-  ) => void;
-  resolveConflict: (saveKey: string, choice: "server" | "mine") => void;
-  addLine: (
-    planDate: string,
-    slotStart: string,
-    termMode: "regular" | "exam",
-    skillArea: string,
-  ) => void;
-  copySlot: (
-    planDate: string,
-    slotStart: string,
-    termMode: "regular" | "exam",
-  ) => void;
-  removeLine: (lineId: string, planDate: string, slotStart: string) => void;
-  moveLineTerm: (
-    lineId: string,
-    planDate: string,
-    slotStart: string,
-    termMode: "regular" | "exam",
-  ) => void;
+/**
+ * 시트 핸들러 = **계획 줄 기계**([PlanHandlers](./use-plan-handlers.ts)) + 출결·마크.
+ * ⚠️ 계획 쪽 시그니처를 여기에 다시 적지 말 것 — 자리 출석부 JJ 열이 같은 타입을 쓴다(한 벌).
+ */
+export type SheetHandlers = PlanHandlers & {
   /**
    * 출결 저장(출석/지각/결석) — 원스크린·출석부와 **같은 서버 액션**(`setAttendanceCell`)을 쓴다.
    * 🔴 결석이 찍히면 시수·급여에 닿는다. 그래서 게이트를 ECS가 따로 만들지 않고 그 액션을 그대로 통과시킨다
@@ -194,7 +175,7 @@ export function SheetClient({
   }, [store]);
 
   // presence — 팀티칭 동시편집은 정상(중립 톤). 충돌 방지는 CAS가 담당.
-  useEditPresence(`ecs:${classId}:${weekMonday}`, canEdit);
+  useEditPresence(ecsPresenceScope(classId, weekMonday), canEdit);
 
   // ── 계획 행 구조 state(슬롯별) — RPC 응답의 canonical 행으로 동기화 ────────
   const initialLines = useMemo(() => {
@@ -220,17 +201,9 @@ export function SheetClient({
   }, [data.grid]);
   const [linesBySlot, setLinesBySlot] = useState(initialLines);
 
-  // CAS 셀 canonical 시드(텍스트 필드 + skill_area)
+  // CAS 셀 canonical 시드(텍스트 필드 + skill_area) — 시드 규약도 계획 훅과 **같은 함수**를 쓴다.
   useEffect(() => {
-    for (const lines of Object.values(initialLines)) {
-      for (const l of lines) {
-        store.seed(l.id, "textbook", l.textbook);
-        store.seed(l.id, "page_range", l.pageRange);
-        store.seed(l.id, "progress", l.progress);
-        store.seed(l.id, "homework", l.homework);
-        store.seed(l.id, "skill_area", l.skillArea);
-      }
-    }
+    for (const lines of Object.values(initialLines)) seedPlanLines(store, lines);
   }, [initialLines, store]);
 
   // ── 마크·출석 공유 상태 ────────────────────────────────────────────────────
@@ -433,137 +406,46 @@ export function SheetClient({
     toast.info(`미저장 입력 ${muts.length}건을 복구해 다시 저장합니다`);
   }, [doc, store]);
 
+  // ── 계획 줄(수업계획) — 공용 훅 한 벌 ─────────────────────────────────────
+  // 🔴 여기서 액션을 다시 부르지 않는다: 셀 CAS·줄 추가/삭제/시기 이동·내용 복사는 전부
+  //    [`usePlanHandlers`](./use-plan-handlers.ts)가 소유하고, 자리 출석부 JJ 열도 **같은 훅**을 쓴다.
+  const applySlotLines = useCallback((planDate: string, slotStart: string, lines: PlanLineDTO[]) => {
+    setLinesBySlot((prev) => ({ ...prev, [`${planDate}|${slotStart}`]: lines }));
+  }, []);
+  // JJ 이어받기 반영 — 🔴 서버가 돌려준 값으로 **화면 상태를 직접 머지**해야 한다: 마크는 클라
+  // state(useState)라 refresh로는 안 바뀐다(강사는 "복사했는데 칸이 그대로"로 본다).
+  const applyCarried = useCallback(
+    (planDate: string, slotStart: string, carried: CarryPatch[]) => {
+      setMarks((prev) => {
+        const next = { ...prev };
+        for (const p of carried) {
+          const markKey = `${p.studentId}|${planDate}|${slotStart}`;
+          const had = next[markKey];
+          next[markKey] = {
+            // 이어받기는 두 칸만 건드린다 — 태도·특이사항·시험 점수는 있던 값 그대로.
+            status: had?.status ?? null,
+            progressNote: had?.progressNote ?? null,
+            score: had?.score ?? null,
+            listeningLevel: p.listeningLevel,
+            memorizedWords: p.memorizedWords,
+          };
+        }
+        return next;
+      });
+    },
+    [],
+  );
+  const planHandlers = usePlanHandlers({
+    classId,
+    store,
+    onSlotLines: applySlotLines,
+    onCarried: applyCarried,
+  });
+
   // ── 핸들러(객체 ref 고정 — memoized row의 안정 콜백) ──────────────────────
   const handlers: SheetHandlers = useMemo(
     () => ({
-      editCell: (lineId, field, value) => store.edit(lineId, field, value),
-      resolveConflict: (saveKey, choice) =>
-        store.resolveConflict(saveKey, choice),
-      addLine: (planDate, slotStart, termMode, skillArea) => {
-        void createPlanLineAction({
-          classId,
-          planDate,
-          slotStart,
-          termMode,
-          skillArea,
-        }).then((r) => {
-          if (!r.ok) return toast.error(r.error);
-          setLinesBySlot((prev) => ({
-            ...prev,
-            [`${planDate}|${slotStart}`]: r.lines,
-          }));
-          for (const l of r.lines) {
-            store.seed(l.id, "textbook", l.textbook);
-            store.seed(l.id, "page_range", l.pageRange);
-            store.seed(l.id, "progress", l.progress);
-            store.seed(l.id, "homework", l.homework);
-            store.seed(l.id, "skill_area", l.skillArea);
-          }
-        });
-      },
-      // 내용 복사(같은 교시의 지난 수업 → 빈 칸만) — 서버가 canonical 행을 돌려주므로 addLine과 **같은
-      // 방식**으로 state를 갈아끼우고 CAS 시드도 다시 심는다. 🔴 시드는 새 줄뿐 아니라 **채워진 기존 줄**
-      // 에도 필요하다(0209a는 행을 지우고 새로 넣는 게 아니라 같은 id의 빈 칸을 UPDATE한다 — 안 심으면
-      // 그 칸을 처음 고칠 때 expectedValue가 어긋나 충돌로 뜬다).
-      copySlot: (planDate, slotStart, termMode) => {
-        // ⚠️ **반영 전 flush 필수** — 복사가 대상 행을 갱신하므로, 아직 확정 안 된 셀 입력(디바운스 800ms)이
-        //    큐에 남아 있으면 서버 값과 순서가 뒤집혀 방금 친 글자가 되돌아간다('시트 가져오기'와 같은 계약).
-        void store.flush().then((flushed) => {
-          if (!flushed.ok) {
-            const go = window.confirm(
-              "아직 저장이 확정되지 않은 입력(또는 충돌)이 있습니다. 그래도 지난 수업 내용을 복사할까요? (입력을 잃을 수 있습니다)",
-            );
-            if (!go) return;
-          }
-          void copySlotFromPrevious({
-            classId,
-            planDate,
-            slotStart,
-            termMode,
-          }).then((r) => {
-            if (!r.ok) return toast.error(r.error);
-            // JJ 이어받기(듣기 레벨·누적 암기 단어수) — 계획 복사와 **따로** 반영한다. 두 칸의 원본은
-            // 계획 줄이 아니라 학생 기록이라, 계획이 하나도 안 채워진 경우에도 이 칸은 채워질 수 있다.
-            // 🔴 서버가 돌려준 값으로 **화면 상태를 직접 머지**해야 한다 — 마크는 클라 state(useState)라
-            //    refresh로는 안 바뀐다(강사는 "복사했는데 칸이 그대로"로 본다).
-            if (r.carried.length > 0) {
-              setMarks((prev) => {
-                const next = { ...prev };
-                for (const p of r.carried) {
-                  const markKey = `${p.studentId}|${planDate}|${slotStart}`;
-                  const had = next[markKey];
-                  next[markKey] = {
-                    // 이어받기는 두 칸만 건드린다 — 태도·특이사항·시험 점수는 있던 값 그대로.
-                    status: had?.status ?? null,
-                    progressNote: had?.progressNote ?? null,
-                    score: had?.score ?? null,
-                    listeningLevel: p.listeningLevel,
-                    memorizedWords: p.memorizedWords,
-                  };
-                }
-                return next;
-              });
-            }
-            if (r.carryError) toast.error(r.carryError);
-            if (r.carryPending) {
-              toast.info("듣기 레벨·누적 암기 단어수 칸은 아직 준비 중입니다(관리자에게 문의하세요)");
-            }
-            // 계획은 채울 게 없었지만 두 칸은 채워진 경우 — "복사할 게 없다"고만 말하면 거짓말이 된다.
-            if (r.copied === 0 && r.carrySummary) {
-              toast.success(`${r.carrySummary} 채움 — 지난 기록 값이라 바뀐 학생은 고쳐 주세요`);
-              return;
-            }
-            if (r.copied === 0) {
-              // 서버가 "왜 아무것도 안 했는지"를 돌려준다 — 조용히 성공한 척하면 사람이 버튼을 계속 누른다.
-              // ⚠️ target_not_empty는 0209a 적용 전(옛 함수)에만 온다 — 그때도 raw 코드는 안 보여준다.
-              toast.info(
-                r.reason === "target_already_filled"
-                  ? "빈 칸이 없어 채울 게 없습니다(이미 쓴 칸은 덮어쓰지 않습니다)"
-                  : r.reason === "target_not_empty"
-                    ? "이미 계획이 있는 교시라 복사하지 않았습니다(덮어쓰기 없음)"
-                    : "복사할 지난 수업이 없습니다(최근 8주 안에 같은 교시·같은 시기 계획이 없습니다)",
-              );
-              return;
-            }
-            setLinesBySlot((prev) => ({
-              ...prev,
-              [`${planDate}|${slotStart}`]: r.lines,
-            }));
-            for (const l of r.lines) {
-              store.seed(l.id, "textbook", l.textbook);
-              store.seed(l.id, "page_range", l.pageRange);
-              store.seed(l.id, "progress", l.progress);
-              store.seed(l.id, "homework", l.homework);
-              store.seed(l.id, "skill_area", l.skillArea);
-            }
-            toast.success(
-              (r.sourceLabel ? `${r.sourceLabel} 수업에서 ${r.copied}줄 채움` : `${r.copied}줄 채움`) +
-                (r.carrySummary ? ` · ${r.carrySummary} 채움` : "") +
-                (r.truncated > 0 ? ` — ${r.truncated}줄은 20줄 상한이라 못 넣었습니다` : ""),
-            );
-          });
-        });
-      },
-      removeLine: (lineId, planDate, slotStart) => {
-        void deletePlanLineAction({ classId, lineId }).then((r) => {
-          if (!r.ok) return toast.error(r.error);
-          setLinesBySlot((prev) => ({
-            ...prev,
-            [`${planDate}|${slotStart}`]: r.lines,
-          }));
-        });
-      },
-      moveLineTerm: (lineId, planDate, slotStart, termMode) => {
-        void movePlanLineAction({ classId, lineId, termMode, lineNo: 99 }).then(
-          (r) => {
-            if (!r.ok) return toast.error(r.error);
-            setLinesBySlot((prev) => ({
-              ...prev,
-              [`${planDate}|${slotStart}`]: r.lines,
-            }));
-          },
-        );
-      },
+      ...planHandlers,
       // 출결(출석/지각/결석) — 출석부·원스크린과 **같은 액션**을 호출한다(게이트를 여기서 다시 짜지 않는다).
       // 낙관 반영 후 실패하면 직전 값으로 되돌린다 — 화면엔 남고 서버엔 없는 상태를 만들지 않기 위해
       // (툴바가 "저장됨"이라 말하는 동안 기록을 잃는 사고, 2026-07-29 적대검증).
@@ -758,6 +640,7 @@ export function SheetClient({
       classId,
       data.canMarkAttendanceByDate,
       data.unitsByDate,
+      planHandlers,
       router,
       store,
       trackAttendanceSave,
@@ -980,7 +863,7 @@ export function SheetClient({
                       >
                         주간 시트 열기 →
                       </Link>
-                      <EditingBadge scope={`ecs:${classId}:${weekMonday}`} />
+                      <EditingBadge scope={ecsPresenceScope(classId, weekMonday)} />
                     </div>
                   }
                   data={data}
