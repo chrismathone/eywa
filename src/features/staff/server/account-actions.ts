@@ -195,6 +195,105 @@ export async function applyStaffEmailChange(
   return { ok: true, changed: true };
 }
 
+/**
+ * 직원 **표시 이름 변경**의 단일 구현 — 입력 창구는 **이력서 성명** 하나다(원장 2026-08-25).
+ *
+ * 🔴 이름은 라벨이 아니라 **과거 기록의 조인 키**다. 그래서 바꿀 때 옛 이름을 키로 쓰던 행을 함께 옮긴다:
+ *   · `textbook_orders.teacher_name` = **소유자**(사무실이 대신 낸 요청은 created_by가 사무실이라
+ *     이름이 유일한 연결이다 — 안 옮기면 그 강사가 자기 요청을 잃는다, `ownsTextbookRequest`).
+ *   · `lesson_reports.teacher_name` = 0172a 이전 행의 **귀속 폴백**(teacher_id가 빈 행만).
+ * ⚠️ **`invoice_teacher_splits.teacher_name`은 건드리지 않는다** — 그건 "그때 그 이름"을 남기려고
+ *    일부러 뜬 **스냅샷**이고(돈 계열·골든마스터), 옮기면 지난 정산서의 사실이 바뀐다.
+ * ⚠️ 동명이인이 있으면 백필을 **통째로 건너뛴다**(이름만으론 남의 행과 구분이 안 된다 — 조용히 남의
+ *    기록을 옮기느니 안 옮기고 알리는 쪽). 호출부가 `ambiguous`를 받아 경고한다.
+ *
+ * 미러 트리거(0075a)는 `display_name = coalesce(기존, 새것)`이라 auth를 건드릴 필요가 없다(이메일과 다름).
+ */
+export async function applyStaffNameChange(
+  targetId: string,
+  nextName: string,
+  via: "account-card" | "resume" = "resume",
+): Promise<
+  | { ok: true; changed: boolean; ambiguous?: boolean; moved?: number; backfillError?: string | null }
+  | { error: string }
+> {
+  const actor = await getCurrentUser();
+  if (!actor) return { error: "로그인이 필요합니다" };
+
+  const id = String(targetId ?? "").trim();
+  const name = String(nextName ?? "").trim();
+  if (!id) return { error: "직원 ID가 누락되었습니다" };
+  if (!name) return { error: "이름은 비울 수 없습니다" };
+
+  const target = await loadTarget(id, actor);
+  if ("error" in target) return target;
+  // 개명은 그 사람의 앱 정체성을 바꾼다 — 이메일·비밀번호와 같은 보호선(자신 권한 이하)으로 잡는다.
+  if (!canManageStaffMember(actor.systemRole, target.role)) {
+    return { error: "이 직원의 이름을 변경할 권한이 없습니다" };
+  }
+  const prevName = (target.displayName ?? "").trim();
+  if (prevName === name) return { ok: true, changed: false };
+
+  const admin = createAdminClient();
+  // 옛 이름을 쓰는 **다른** 직원이 있으면 이름 기반 백필은 남의 행까지 옮긴다 → 백필만 포기.
+  const { count: sameName } = await admin
+    .from("users")
+    .select("id", { count: "exact", head: true })
+    .eq("tenant_id", actor.tenantId)
+    .eq("display_name", prevName)
+    .neq("id", id);
+  const ambiguous = (sameName ?? 0) > 0;
+
+  const { error: dbErr } = await admin
+    .from("users")
+    .update({ display_name: name })
+    .eq("id", id)
+    .eq("tenant_id", actor.tenantId);
+  if (dbErr) return { error: dbErr.message };
+
+  // 옛 이름을 키로 쓰던 행 이전(모호하지 않고, 옛 이름이 있을 때만).
+  // ⚠️ 여기서 에러를 삼키면 "이름은 바뀌었는데 연결은 안 옮겨진" 상태가 조용히 남는다([[#53]]) —
+  //    실패를 호출부까지 올려 사람이 알게 한다(이름 변경 자체는 이미 성공했으므로 되돌리지 않는다).
+  let moved = 0;
+  let backfillError: string | null = null;
+  if (prevName && !ambiguous) {
+    // 교재요청 소유자 — 사무실이 대신 낸 요청은 이름이 유일한 연결이라 반드시 따라가야 한다.
+    const books = await admin
+      .from("textbook_orders")
+      .update({ teacher_name: name }, { count: "exact" })
+      .eq("tenant_id", actor.tenantId)
+      .eq("teacher_name", prevName);
+    // 옛 보고서 귀속 폴백 — 소유 1차 키(created_by, 0172a)가 **없는 행만**. 있는 행은 이름과 무관하게
+    // 이미 계정으로 이어져 있어 건드릴 이유가 없다. 🔴 이 표엔 teacher_id 컬럼이 없다(created_by가 그 자리).
+    const reports = await admin
+      .from("lesson_reports")
+      .update({ teacher_name: name }, { count: "exact" })
+      .eq("tenant_id", actor.tenantId)
+      .eq("teacher_name", prevName)
+      .is("created_by", null);
+    moved = (books.count ?? 0) + (reports.count ?? 0);
+    backfillError = books.error?.message ?? reports.error?.message ?? null;
+  }
+
+  await logAction({
+    action: "staff_name_change",
+    targetType: "staff",
+    targetLabel: name,
+    metadata: {
+      from: prevName || null,
+      to: name,
+      via: via === "account-card" ? "account-card" : "resume",
+      movedRows: moved,
+      ambiguous,
+      ...(backfillError ? { backfillError } : {}),
+    },
+  });
+
+  revalidatePath(`/staff/${id}`);
+  revalidatePath("/staff");
+  return { ok: true, changed: true, ambiguous, moved, backfillError };
+}
+
 /** 계정 관리 → 이메일 변경 다이얼로그. 판정·저장은 전부 applyStaffEmailChange(단일 구현)에 있다. */
 export async function changeStaffEmail(
   _prev: AccountActionState,

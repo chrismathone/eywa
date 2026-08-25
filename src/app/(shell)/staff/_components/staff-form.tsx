@@ -165,31 +165,6 @@ export function StaffForm({
 
   const errors = state?.fieldErrors ?? {};
 
-  // 이름 칸은 두 모드가 자리만 다르고 내용은 같다 — JSX를 복사하면 한쪽만 고쳐지므로 변수 하나로 둔다.
-  // 근무 설정에선 라벨이 **표시 이름**이다: 이력서 '성명'과 별개 값이고(이력서 저장은 display_name을
-  // 동기하지 않는다) 개명 경로가 여기뿐이라, 같은 말로 두면 어느 쪽을 고쳐야 하는지 알 수 없다.
-  const nameField = (
-    <Field
-      label={mode === "edit" ? "표시 이름 *" : "이름 *"}
-      htmlFor="displayName"
-      error={errors.displayName}
-    >
-      <input
-        id="displayName"
-        name="displayName"
-        defaultValue={v.displayName}
-        required
-        placeholder="예: 박지훈"
-        className={inputClass}
-      />
-      {mode === "edit" ? (
-        <p className="text-muted-foreground mt-1 text-xs">
-          화면·목록·시간표에 나오는 이름입니다. 이력서의 &lsquo;성명&rsquo;과는 별개로 저장됩니다.
-        </p>
-      ) : null}
-    </Field>
-  );
-
   return (
     <form action={formAction} ref={formRef} className="space-y-5">
       <DraftBanner savedAt={draft.draftSavedAt} onRestore={draft.restore} onDiscard={draft.discard} />
@@ -201,8 +176,9 @@ export function StaffForm({
           (원장 지시 2026-08-25: 겹치는 건 이력서에서 받고, 이력서에 없는 것만 여기 남긴다). */}
       {mode === "edit" ? (
         <p className="border-line bg-surface-soft text-text-dim rounded-2xl border p-4 text-xs leading-relaxed">
-          <b className="text-foreground">여기는 담당·알림·표시 설정만 바꿉니다.</b> 연락처·직급·입사일·근무부서·
-          근무형태는 <b>이력서</b>에서, 이메일·비밀번호·역할·삭제는 직원 상세의 <b>계정 관리</b>에서 바꿉니다.
+          <b className="text-foreground">여기는 담당·알림·표시 설정만 바꿉니다.</b> 이름·연락처·직급·입사일·
+          근무부서·근무형태·이메일은 <b>이력서</b>에서, 비밀번호·역할·삭제는 직원 상세의 <b>계정 관리</b>에서
+          바꿉니다.
         </p>
       ) : null}
 
@@ -210,7 +186,16 @@ export function StaffForm({
       {mode === "create" ? (
         <>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            {nameField}
+            <Field label="이름 *" htmlFor="displayName" error={errors.displayName}>
+              <input
+                id="displayName"
+                name="displayName"
+                defaultValue={v.displayName}
+                required
+                placeholder="예: 박지훈"
+                className={inputClass}
+              />
+            </Field>
             <Field label="이메일 *" htmlFor="email" error={errors.email}>
               <input
                 id="email"
@@ -304,9 +289,7 @@ export function StaffForm({
             </Field>
           </div>
         </>
-      ) : (
-        nameField
-      )}
+      ) : null}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         {/* 영어 닉네임 — `users.english_name`. 이력서 '영문 이름'(personal.nameEn)과 **다른 값**이다:

@@ -236,7 +236,7 @@ export async function updateStaff(
   const admin = createAdminClient();
   const { data: target, error: targetErr } = await admin
     .from("users")
-    .select("tenant_id, email, system_role")
+    .select("tenant_id, email, system_role, display_name")
     .eq("id", id)
     .single();
   if (targetErr || !target) return { error: "대상 직원을 찾을 수 없습니다" };
@@ -252,6 +252,8 @@ export async function updateStaff(
 
   const fieldErrors = validateBase(input) ?? {};
   if (!emailChanged) delete fieldErrors.email;
+  // 이름 칸도 근무 설정엔 없다(이력서 성명이 단일 소스) — 없는 칸을 '필수 누락'으로 막으면 저장이 통째로 거부된다.
+  if (!formData.has("displayName")) delete fieldErrors.displayName;
   if (Object.keys(fieldErrors).length > 0) return { fieldErrors };
 
   const { data: authData } = emailChanged
@@ -300,7 +302,7 @@ export async function updateStaff(
   //    **이력서에서 동기해 둔 값을 통째로 지운다**(칸을 지운 화면이 데이터를 지우는 조용한 사고).
   //    존재 여부로 가르므로 나중에 칸을 되살리면 코드 변경 없이 다시 저장된다(생성 폼은 지금도 전부 보냄).
   const staffPatch = {
-    display_name: input.displayName,
+    ...(formData.has("displayName") ? { display_name: input.displayName } : {}),
     ...(emailChanged ? { email: input.email } : {}),
     ...(formData.has("phone") ? { phone: input.phone } : {}),
     ...(formData.has("hireDate") ? { hire_date: input.hireDate } : {}),
@@ -369,8 +371,9 @@ export async function updateStaff(
     // '강사뷰 접근' 부여·회수 — 다른 강사 화면을 여는 권한이라 누가 언제 바꿨는지 남긴다.
     await logAction({
       action: "staff_teacher_view_access",
+      // 이름은 폼에서 빠졌다(이력서가 단일 소스) — 폼 값을 쓰면 라벨이 빈 문자열이 된다. DB 값이 진실.
+      targetLabel: (target.display_name as string | null) ?? null,
       targetType: "user",
-      targetLabel: input.displayName,
       metadata: { targetUserId: id, enabled: input.teacherViewAccess },
     });
   }

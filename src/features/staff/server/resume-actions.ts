@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import type { SystemRole } from "@/lib/permissions";
 import { getCurrentUser, type CurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
-import { applyStaffEmailChange } from "./account-actions";
+import { applyStaffEmailChange, applyStaffNameChange } from "./account-actions";
 import { ROLE_HIERARCHY } from "@/lib/auth/role-hierarchy";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -306,6 +306,8 @@ export async function saveStaffResume(
   // 저장 자체는 성공했는데 부수효과(로그인 이메일 동기)만 실패할 수 있다 — 토스트로만 알린다.
   let emailWarning: string | null = null;
   let emailNotice: string | null = null;
+  let nameWarning: string | null = null;
+  let nameNotice: string | null = null;
 
   if (id) {
     // 🔴 **바뀐 것만** 로그인에 반영하려고 저장 전 값을 먼저 읽는다(아래 이메일 동기).
@@ -318,11 +320,10 @@ export async function saveStaffResume(
       .eq("id", id)
       .eq("form_type", RESUME_FORM_TYPE)
       .maybeSingle();
-    const prevEmail = String(
-      ((before?.form_data as { personal?: { email?: string } } | null)?.personal?.email ?? ""),
-    )
-      .trim()
-      .toLowerCase();
+    const beforePersonal = (before?.form_data as { personal?: { email?: string; name?: string } } | null)
+      ?.personal;
+    const prevEmail = String(beforePersonal?.email ?? "").trim().toLowerCase();
+    const prevName = String(beforePersonal?.name ?? "").trim();
 
     const { data: updated, error } = await supabase
       .from("academy_documents")
@@ -367,12 +368,30 @@ export async function saveStaffResume(
       //    /me의 '이메일 변경' 카드가 담당이고, 여기서 매번 "권한 없음" 경고를 띄우면 소음이 된다.
       const nextEmail = data.personal.email.trim();
       const emailEdited = Boolean(nextEmail) && nextEmail.toLowerCase() !== prevEmail;
-      if (emailEdited && (await canWriteTenant(gate.user.systemRole, "staff"))) {
+      // 성명도 같은 규약 — 표시 이름(users.display_name)의 입력 창구는 이력서 하나다(원장 2026-08-25).
+      const nextName = data.personal.name.trim();
+      const nameEdited = Boolean(nextName) && nextName !== prevName;
+      const officeWrite = await canWriteTenant(gate.user.systemRole, "staff");
+      if (emailEdited && officeWrite) {
         const applied = await applyStaffEmailChange(linkedId, nextEmail, "resume");
         if ("error" in applied) {
           emailWarning = `이력서는 저장했지만 로그인 이메일은 바꾸지 못했습니다 — ${applied.error}`;
         } else if (applied.changed) {
           emailNotice = `로그인 이메일을 ${nextEmail.toLowerCase()}(으)로 함께 변경했습니다`;
+        }
+      }
+      if (nameEdited && officeWrite) {
+        const applied = await applyStaffNameChange(linkedId, nextName, "resume");
+        if ("error" in applied) {
+          nameWarning = `이력서는 저장했지만 표시 이름은 바꾸지 못했습니다 — ${applied.error}`;
+        } else if (applied.changed) {
+          // 개명은 과거 기록과의 연결을 함께 옮긴다 — 몇 건을 옮겼는지(또는 못 옮겼는지) 반드시 알린다.
+          nameNotice = applied.ambiguous
+            ? `표시 이름을 '${nextName}'(으)로 바꿨습니다 — 같은 이름의 다른 직원이 있어 과거 교재요청·보고서 연결은 옮기지 않았습니다(수동 확인 필요)`
+            : `표시 이름을 '${nextName}'(으)로 바꿨습니다${applied.moved ? ` (과거 기록 ${applied.moved}건 연결 이전)` : ""}`;
+          if (applied.backfillError) {
+            nameWarning = `이름은 바꿨지만 과거 기록 연결 이전에 실패했습니다 — ${applied.backfillError}`;
+          }
         }
       }
       revalidatePath(`/staff/${linkedId}`);
@@ -383,8 +402,13 @@ export async function saveStaffResume(
       id,
       nonce: Date.now(),
       redirectTo: `/staff/resumes/${id}`,
-      ...(emailWarning ? { warning: emailWarning } : {}),
-      ...(emailNotice ? { notice: emailNotice } : {}),
+      // 경고·안내는 각각 한 줄뿐이라 이메일·이름 둘 다 생기면 합쳐 보낸다(하나가 조용히 사라지지 않게).
+      ...(emailWarning || nameWarning
+        ? { warning: [emailWarning, nameWarning].filter(Boolean).join(" · ") }
+        : {}),
+      ...(emailNotice || nameNotice
+        ? { notice: [emailNotice, nameNotice].filter(Boolean).join(" · ") }
+        : {}),
     };
   }
 

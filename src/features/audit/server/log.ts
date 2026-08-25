@@ -12,6 +12,7 @@ export const AUDIT_ACTIONS = {
   staff_delete: "직원 삭제",
   staff_password_reset: "직원 비밀번호 재설정",
   staff_email_change: "직원 이메일 변경",
+  staff_name_change: "직원 이름 변경",
   staff_contract_extend: "근로계약 기입",
   staff_contract_update: "근로계약 수정",
   staff_contract_delete: "근로계약 삭제",

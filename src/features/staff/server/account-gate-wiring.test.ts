@@ -39,6 +39,7 @@ describe("직원 계정 액션 게이트 배선", () => {
     "resetStaffPassword",
     "changeStaffEmail",
     "applyStaffEmailChange",
+    "applyStaffNameChange",
     "deleteStaff",
     "updateWorkSchedule",
   ];
@@ -78,6 +79,10 @@ describe("직원 계정 액션 게이트 배선", () => {
     const resume = read(RESUME_ACTIONS);
     expect(resume, "이력서 저장이 applyStaffEmailChange를 타지 않는다").toContain("applyStaffEmailChange(");
     expect(resume, "이력서 동기 payload에 email을 직접 실었다").not.toMatch(/sync\.email\s*=/);
+    // 성명도 같다(2026-08-25) — 이름은 과거 기록의 조인 키라, 직접 쓰면 교재요청 소유·옛 보고서 귀속이
+    // 조용히 끊긴다(applyStaffNameChange가 그 행들을 함께 옮긴다).
+    expect(resume, "이력서 저장이 applyStaffNameChange를 타지 않는다").toContain("applyStaffNameChange(");
+    expect(resume, "이력서 동기 payload에 display_name을 직접 실었다").not.toMatch(/sync\.display_name\s*=/);
   });
 
   it("loadTarget이 직원관리 메뉴 쓰기 권한을 건다(개인 예외 반영 경로)", () => {

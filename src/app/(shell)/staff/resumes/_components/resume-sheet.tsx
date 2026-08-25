@@ -212,7 +212,7 @@ export function ResumeSheet({
   submitAction,
   publicToken,
   onSaved,
-  emailChangesLogin = false,
+  syncsToAccount = false,
 }: {
   data: StaffResumeData;
   id?: string;
@@ -238,11 +238,11 @@ export function ResumeSheet({
   /** 저장 성공 시 부모에게 알림(공개 모드의 완료 화면 전환) — 있으면 자체 이동을 하지 않는다. */
   onSaved?: (state: NonNullable<ResumeActionState>) => void;
   /**
-   * 이 이력서의 E-mail이 곧 **로그인 아이디**인가 — 계정에 연결된 이력서를 사무실이 고칠 때만 true
-   * (2026-08-25 원장 지시로 이력서 E-mail 변경이 로그인 이메일까지 바꾼다).
+   * 이 이력서의 **성명·E-mail이 계정에 그대로 반영되는가** — 계정에 연결된 이력서를 사무실이 고칠 때만 true
+   * (2026-08-25 원장 지시: 겹치는 칸은 이력서가 단일 소스 → 성명=표시 이름, E-mail=로그인 아이디).
    * ⚠️ 본인 이력서(/me)·공개 등록은 false다 — 거기선 서버가 동기를 시도하지 않으므로, 띄우면 거짓말이 된다.
    */
-  emailChangesLogin?: boolean;
+  syncsToAccount?: boolean;
 }) {
   const isPublic = !!publicToken;
   const [editing, setEditing] = useState(startEditing);
@@ -533,7 +533,16 @@ export function ResumeSheet({
         <tbody>
           <tr>
             <th className={`${head} w-28`}>성명</th>
-            <td className={cell}>{field("p_name", p.name, { ph: "성명" })}</td>
+            <td className={cell}>
+              {field("p_name", p.name, { ph: "성명" })}
+              {/* 개명은 라벨 교체가 아니다 — 옛 이름을 키로 쓰던 과거 기록(교재요청 소유·옛 보고서 귀속)까지
+                  서버가 함께 옮긴다. 저장하고 나서 알면 늦으므로 칸 옆에 적는다. */}
+              {editing && syncsToAccount ? (
+                <p className="text-text-faint mt-1 text-[11px] leading-snug print:hidden">
+                  바꾸면 <b className="text-text-dim">앱 표시 이름</b>도 함께 바뀝니다
+                </p>
+              ) : null}
+            </td>
             <th className={`${head} w-28`}>영문</th>
             <td className={cell}>{field("p_nameEn", p.nameEn, { ph: "영문 이름" })}</td>
             {/* 증명사진 2장 — 직원 얼굴 구별용. 한 칸에서 ‹ › 슬라이드로 넘긴다(원장 지시 2026-07-28). */}
@@ -646,7 +655,7 @@ export function ResumeSheet({
               {field("p_email", p.email, { ph: "email@example.com", type: "email" })}
               {/* 손대면 그 사람이 다음부터 **다른 아이디로** 로그인해야 한다 — 저장하고 나서 알면 늦다.
                   종이 서식엔 없는 화면 전용 안내라 인쇄에서 뺀다. */}
-              {editing && emailChangesLogin ? (
+              {editing && syncsToAccount ? (
                 <p className="text-text-faint mt-1 text-[11px] leading-snug print:hidden">
                   이 주소를 바꾸면 <b className="text-text-dim">로그인 아이디도 함께</b> 바뀝니다
                 </p>
