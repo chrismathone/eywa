@@ -17,6 +17,23 @@ export function kstToday(d: Date = new Date()): string {
   }).format(d);
 }
 
+/**
+ * 타임스탬프(ISO 문자열·Date) → **KST 날짜**(YYYY-MM-DD). 파싱 불가·빈값은 null
+ * (없는 날짜를 지어내지 않는다 — 감사로그 metadata의 날짜가 이 함수를 탄다).
+ * 🔴 `iso.slice(0, 10)`을 쓰지 말 것 — 그건 **UTC 날짜**라 00:00~08:59 KST에 하루 전으로 적힌다
+ *    (아침 회의·심야 상담이 화면과 하루 어긋난다). 화면이 KST로 보여주는 값과 같아야 한다.
+ */
+export function kstDateOf(value: unknown): string | null {
+  const d =
+    value instanceof Date
+      ? value
+      : typeof value === "string" && value.trim()
+        ? new Date(value)
+        : null;
+  if (!d || Number.isNaN(d.getTime())) return null;
+  return kstToday(d);
+}
+
 /** KST 기준 이번 달 1일(YYYY-MM-01). */
 export function kstMonthStart(d: Date = new Date()): string {
   return `${kstToday(d).slice(0, 7)}-01`;

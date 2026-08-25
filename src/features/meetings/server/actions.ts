@@ -17,6 +17,9 @@ import {
   resolveAudioReadUrl,
   verifyUploadedObject,
 } from "@/lib/storage/media-storage";
+import { logAction } from "@/features/audit/server/log";
+import { kstDateOf } from "@/lib/date-kst";
+import { EDITABLE_REPORT_KEYS } from "../report-sections";
 import { analyzeMeeting, buildMeetingAnalysisInput } from "./ai";
 
 /**
@@ -42,8 +45,22 @@ export async function updateMeetingTitle(
   if (!title) return { error: "제목을 입력해주세요" };
 
   const supabase = await createClient();
+  // 감사로그에 "어디서 어디로"를 남기려면 이전 제목이 필요하다(class_update 선례 — 항목 이름만 남기면
+  // 이력으로 쓸 수가 없다). 드문 액션이라 왕복 한 번은 감수.
+  const { data: before } = await supabase
+    .from("meeting_minutes")
+    .select("title")
+    .eq("id", id)
+    .maybeSingle();
   const { error } = await supabase.from("meeting_minutes").update({ title }).eq("id", id);
   if (error) return { error: error.message };
+
+  await logAction({
+    action: "meeting_title_update",
+    targetType: "meeting",
+    targetLabel: title,
+    metadata: { meetingId: id, from: before?.title ?? null },
+  });
 
   revalidatePath(`/meetings/${id}`);
   revalidatePath("/meetings");
@@ -82,17 +99,6 @@ export type UpdateReportSectionState =
   | { error?: string; ok?: true; editedBy?: string; editedAt?: string }
   | undefined;
 
-// 인라인 수정 가능한 8섹션(meetingType 제외) — staff가 인쇄/공유 전 AI 오류를 교정.
-const EDITABLE_REPORT_KEYS = new Set([
-  "summary",
-  "agendaDiscussion",
-  "decisions",
-  "actionItems",
-  "speakerSummary",
-  "concerns",
-  "nextSteps",
-]);
-
 /** 회의 AI 보고서 섹션 본문 인라인 수정 — 해당 섹션만 ai_report jsonb에 머지 + 마지막 수정자·시각 기록. */
 export async function updateMeetingReportSection(
   _prev: UpdateReportSectionState,
@@ -112,7 +118,7 @@ export async function updateMeetingReportSection(
   // 현재 ai_report를 읽어 해당 섹션만 머지(다른 섹션 보존).
   const { data: row } = await supabase
     .from("meeting_minutes")
-    .select("ai_report")
+    .select("ai_report, title")
     .eq("id", id)
     .single();
   if (!row) return { error: "회의록을 찾을 수 없습니다" };
@@ -130,6 +136,15 @@ export async function updateMeetingReportSection(
     })
     .eq("id", id);
   if (error) return { error: error.message };
+
+  // 한 번 저장 = 섹션 하나(명시 '저장' 버튼 — 자동저장이 아니다. 자동저장은 IDB 로컬 초안만 건드린다)라
+  // 로그가 범람하지 않는다. 메모장(updateMeetingNotepad)과 갈리는 지점이다.
+  await logAction({
+    action: "meeting_report_edit",
+    targetType: "meeting",
+    targetLabel: (row.title as string | null) ?? null,
+    metadata: { meetingId: id, section: key, chars: content.trim().length },
+  });
 
   revalidatePath(`/meetings/${id}`);
   revalidatePath("/meetings");
@@ -170,14 +185,28 @@ export async function updateMeetingSpeakers(
   }
 
   const supabase = await createClient();
-  const { error } = await supabase
+  // .select()로 제목을 함께 받는다 — 감사로그 '대상' 칸에 넣을 사람이 읽는 값(왕복 증가 0).
+  const { data: row, error } = await supabase
     .from("meeting_minutes")
     .update({
       ai_speaker_roles: Object.keys(roles).length ? roles : null,
       speaker_staff: Object.keys(staff).length ? staff : null,
     })
-    .eq("id", id);
+    .eq("id", id)
+    .select("title")
+    .maybeSingle();
   if (error) return { error: error.message };
+
+  await logAction({
+    action: "meeting_speakers_update",
+    targetType: "meeting",
+    targetLabel: (row?.title as string | null) ?? null,
+    metadata: {
+      meetingId: id,
+      speakers: Object.keys(roles).length,
+      linked: Object.keys(staff).length,
+    },
+  });
 
   revalidatePath(`/meetings/${id}`);
   return { ok: true };
@@ -258,6 +287,22 @@ export async function startMeetingFromAudio(
     return { error: `회의록 생성 실패: ${insertErr?.message ?? "unknown"}` };
   }
 
+  // 원장이 찾던 그것 — "누가 녹음을 올렸나". 전사 제출(4단계) **앞**에 남긴다: 제출이 실패해도 행과
+  // 오디오는 남아 목록에 보이므로, 그때만 이력이 비는 것이 더 나쁜 거짓이다.
+  await logAction({
+    action: "meeting_create_audio",
+    targetType: "meeting",
+    targetLabel: title,
+    metadata: {
+      meetingId: meeting.id as string,
+      sizeBytes: verifiedSize,
+      attendees: attendees.length,
+      // 🔴 KST 날짜 — `slice(0, 10)`은 UTC라 아침 회의가 하루 전으로 적힌다(kstDateOf 주석).
+      heldAt: kstDateOf(heldAt),
+      notepadChars: notepad.trim().length,
+    },
+  });
+
   // 4) Submit to AssemblyAI with webhook callback.
   const webhookUrl = getAssemblyaiWebhookUrl();
 
@@ -334,6 +379,19 @@ export async function createTextMeeting(
     .single();
   if (error || !meeting) return { error: `회의록 생성 실패: ${error?.message ?? "unknown"}` };
 
+  await logAction({
+    action: "meeting_create_text",
+    targetType: "meeting",
+    targetLabel: title,
+    metadata: {
+      meetingId: meeting.id as string,
+      // 메모 본문은 안 담는다 — 감사로그는 요약이지 사본이 아니다(분량만).
+      notepadChars: content.trim().length,
+      attendees: attendees.length,
+      heldAt: kstDateOf(heldAt),
+    },
+  });
+
   revalidatePath("/meetings");
   return { id: meeting.id as string };
 }
@@ -355,21 +413,44 @@ export async function deleteMeeting(
 
   const supabase = await createClient();
   // RLS가 테넌트 스코프를 보장 — 같은 테넌트 회의록만 조회/삭제된다.
+  // 지우면 되찾을 수 없는 것들(제목·회의일·녹음 길이·전사 분량·모델)을 삭제 **전**에 읽어 감사로그에
+  // 보존한다 — 삭제된 행은 uuid로 이름을 되찾을 수 없다(student_delete의 studentName 선례).
   const { data: m } = await supabase
     .from("meeting_minutes")
-    .select("id, audio_path")
+    .select(
+      "id, title, held_at, audio_path, audio_duration_sec, transcription, ai_generated_at, ai_model_version",
+    )
     .eq("id", id)
     .single();
   if (!m) return { error: "회의록을 찾을 수 없습니다" };
 
   // 1) Storage 음성파일 제거(있으면). 레거시(옛 ijw) 경로는 공유라 미삭제.
-  if (m.audio_path && isTenantAudioPath(m.audio_path, user.tenantId)) {
-    await removeObject(m.audio_path, { bucket: "meeting-recordings" }).catch(() => {});
+  const ownAudio = !!m.audio_path && isTenantAudioPath(m.audio_path as string, user.tenantId);
+  if (ownAudio) {
+    await removeObject(m.audio_path as string, { bucket: "meeting-recordings" }).catch(() => {});
   }
 
   // 2) row 삭제 (RLS 스코프).
   const { error } = await supabase.from("meeting_minutes").delete().eq("id", id);
   if (error) return { error: error.message };
+
+  // 이 로그가 유일한 흔적이다 — 녹음·전사·AI 분석이 통째로 사라진다.
+  await logAction({
+    action: "meeting_delete",
+    targetType: "meeting",
+    targetLabel: (m.title as string | null) ?? null,
+    metadata: {
+      meetingId: id,
+      heldAt: kstDateOf(m.held_at),
+      hadAudio: !!m.audio_path,
+      audioRemoved: ownAudio,
+      audioDurationSec: m.audio_duration_sec ?? null,
+      // 전사 본문은 절대 안 담는다 — 길이만(감사로그는 요약이지 사본이 아니다).
+      transcriptChars: String(m.transcription ?? "").length,
+      hadReport: !!m.ai_generated_at,
+      model: (m.ai_model_version as string | null) ?? null,
+    },
+  });
 
   revalidatePath("/meetings");
   if (redirectTo) redirect(redirectTo);
@@ -396,7 +477,7 @@ export async function retryMeetingProcessing(
   const supabase = await createClient();
   const { data: m } = await supabase
     .from("meeting_minutes")
-    .select("id, audio_path, processing_status")
+    .select("id, title, audio_path, processing_status, transcription")
     .eq("id", id)
     .single();
   if (!m) return { error: "회의록을 찾을 수 없습니다" };
@@ -436,6 +517,19 @@ export async function retryMeetingProcessing(
     const msg = e instanceof Error ? e.message : String(e);
     return { error: `재제출 실패: ${msg}` };
   }
+
+  // 외부 전사 API를 다시 태우는 일(비용)이라 누가 눌렀는지가 실제로 필요하다. 직전 상태도 함께 —
+  // 이미 완료된 건을 다시 돌린 것이 곧 낭비 사례다.
+  await logAction({
+    action: "meeting_retry_transcribe",
+    targetType: "meeting",
+    targetLabel: (m.title as string | null) ?? null,
+    metadata: {
+      meetingId: id,
+      fromStatus: (m.processing_status as string | null) ?? null,
+      transcriptChars: String(m.transcription ?? "").length,
+    },
+  });
 
   revalidatePath(`/meetings/${id}`);
   revalidatePath("/meetings");
@@ -488,6 +582,15 @@ export async function regenerateMeetingAnalysis(
     .update({ processing_status: "analyzing", processing_error: null })
     .eq("id", id);
   revalidatePath(`/meetings/${id}`);
+
+  // 재분석도 유료 AI 호출이라 누가 눌렀는지를 남긴다. 모델명은 이 시점에 아직 모른다(after 백그라운드가
+  // 끝나야 정해진다) — 모르는 값을 지어내지 않고 입력 분량만 적는다.
+  await logAction({
+    action: "meeting_regenerate_analysis",
+    targetType: "meeting",
+    targetLabel: (m.title as string | null) ?? null,
+    metadata: { meetingId: id, transcriptChars: transcription.length, notepadChars: notepad.length },
+  });
 
   // 분석은 백그라운드(after)로 — 응답을 즉시 반환해 진행 UI가 바로 뜨고, 완료/실패 시 watcher가 자동 새로고침.
   // 갱신 필드는 웹훅의 회의 완료 저장과 동일(상태/UI 일관).

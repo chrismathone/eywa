@@ -6,6 +6,7 @@ import { useStateDraft } from "@/components/forms/use-state-draft";
 import { DraftBanner } from "@/components/forms/draft-banner";
 import type { MeetingReportSection } from "@/features/meetings/server/queries";
 import { updateMeetingReportSection } from "@/features/meetings/server/actions";
+import { MEETING_REPORT_SECTION_LABEL } from "@/features/meetings/report-sections";
 import { RichText } from "@/components/rich-text";
 import { useEditPresence } from "@/features/presence/edit-presence";
 import { modelDisplayLabel } from "@/lib/ai/model-label";
@@ -19,14 +20,16 @@ import { EyIcon, type EywaIconName } from "@/components/icons/eywa-icons";
 
 type SectionKey = Exclude<keyof MeetingReportSection, "meetingType">;
 
+// 라벨(말)은 여기서 정하지 않는다 — 감사로그 상세도 같은 어휘를 써야 해서 단일 소스는
+// [report-sections.ts](src/features/meetings/report-sections.ts)다. 여기는 그 라벨에 아이콘·불릿 여부만 붙인다.
 const SECTIONS: { key: SectionKey; label: string; icon: EywaIconName; list?: boolean }[] = [
-  { key: "summary", label: "요약", icon: "report" },
-  { key: "agendaDiscussion", label: "안건별 논의", icon: "note", list: true },
-  { key: "decisions", label: "결정 사항", icon: "clipboardCheck", list: true },
-  { key: "actionItems", label: "액션 아이템", icon: "target", list: true },
-  { key: "speakerSummary", label: "참석자별 발언", icon: "users", list: true },
-  { key: "concerns", label: "우려 / 위험 요소", icon: "alert", list: true },
-  { key: "nextSteps", label: "다음 단계", icon: "arrowRight", list: true },
+  { key: "summary", label: MEETING_REPORT_SECTION_LABEL.summary, icon: "report" },
+  { key: "agendaDiscussion", label: MEETING_REPORT_SECTION_LABEL.agendaDiscussion, icon: "note", list: true },
+  { key: "decisions", label: MEETING_REPORT_SECTION_LABEL.decisions, icon: "clipboardCheck", list: true },
+  { key: "actionItems", label: MEETING_REPORT_SECTION_LABEL.actionItems, icon: "target", list: true },
+  { key: "speakerSummary", label: MEETING_REPORT_SECTION_LABEL.speakerSummary, icon: "users", list: true },
+  { key: "concerns", label: MEETING_REPORT_SECTION_LABEL.concerns, icon: "alert", list: true },
+  { key: "nextSteps", label: MEETING_REPORT_SECTION_LABEL.nextSteps, icon: "arrowRight", list: true },
 ];
 
 function fmtEdited(iso: string): string {
