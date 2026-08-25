@@ -71,7 +71,8 @@ export async function carrySelfStudyMarks(args: {
   admin: Admin;
   tenantId: string;
   classId: string;
-  actorId: string;
+  /** 채운 칸에 남길 작성자. 🔵 공개 PIN 경로는 null — 로그인 없이 적은 것을 이름 붙이지 않는다. */
+  actorId: string | null;
   /** 대상 날짜(YYYY-MM-DD) */
   planDate: string;
   /** 대상 교시(HH:MM) */

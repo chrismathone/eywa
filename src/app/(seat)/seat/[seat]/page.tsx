@@ -4,6 +4,7 @@ import { EmptyState } from "@/components/empty-state";
 import { brandLabels, getPublicBranding } from "@/features/owner/server/public-branding";
 import { getPublicSeatDay } from "@/features/attendance/seat/server/queries";
 import { attachJjMarks } from "@/features/attendance/seat/server/jj-marks";
+import { loadPublicSeatJjPlans } from "@/features/attendance/seat/server/jj-plan-public";
 import { seatHasJjFields } from "@/features/attendance/seat/jj-fields";
 import { readSeatPinSession, resolvePinSigningSecret } from "@/features/attendance/seat/server/pin-session";
 import {
@@ -12,6 +13,7 @@ import {
   SEAT_NAME,
   SEAT_ROOM,
 } from "@/features/attendance/seat/seat";
+import { mondayOf } from "@/features/timetable/lib/week";
 import { kstToday } from "@/lib/date-kst";
 import { SeatBoard } from "@/app/(shell)/attendance/seat/[seat]/_components/seat-board";
 import { SeatPinForm } from "./pin-form";
@@ -76,6 +78,19 @@ export default async function PublicSeatPage({
   const idx = startParam ? day.periods.findIndex((p) => p.start === startParam) : fallbackIdx;
   const period = day.periods[idx >= 0 ? idx : fallbackIdx] ?? null;
 
+  // 명단(듣기·단어)과 계획(진도)은 서로 독립이라 병렬(B4).
+  // 🔴 계획 재료는 **그날 그 자리 그 교시 명단**에 있는 반만 온다 — 로그인 화면이 ECS 게이트로 고르는
+  //    자리에서, 여기는 PIN 쿠키 + 오늘 + 명단 화이트리스트가 고른다(서버가 정하고 저장 때 다시 본다).
+  const [rosters, plans] = await Promise.all([
+    period && seatHasJjFields(seat)
+      ? // JJ실은 듣기·단어 칸이 붙는다 — 이미 적힌 값을 안 보여주면 담당자가 빈 칸으로 보고 다시 적는다.
+        attachJjMarks(day.rosterByPeriod[period.start] ?? [], session.tenantId, date, period.start)
+      : Promise.resolve(period ? (day.rosterByPeriod[period.start] ?? []) : []),
+    period
+      ? loadPublicSeatJjPlans(seat, session.tenantId, date, period.start)
+      : Promise.resolve({}),
+  ]);
+
   return (
     <div className="mx-auto flex min-h-screen max-w-5xl flex-col gap-3 px-3 py-4 sm:px-5">
       <header className="shrink-0">
@@ -98,14 +113,24 @@ export default async function PublicSeatPage({
             classIds: p.slots.map((s) => s.classId),
           }))}
           activeStart={period.start}
-          // JJ실은 듣기·단어 칸이 붙는다 — 이미 적힌 값을 안 보여주면 담당자가 빈 칸으로 보고 다시 적는다.
-          rosters={
-            seatHasJjFields(seat)
-              ? await attachJjMarks(day.rosterByPeriod[period.start] ?? [], session.tenantId, date, period.start)
-              : (day.rosterByPeriod[period.start] ?? [])
-          }
+          rosters={rosters}
           readOnly={false}
           hrefFor={`/seat/${seat}?start=`}
+          // 진도 구획은 명단에 오른 반 중 계획이 있는 반이 하나라도 있을 때만 — 없으면 prop 자체를 안 넘긴다.
+          plans={
+            Object.keys(plans).length > 0
+              ? {
+                  plans,
+                  tenantId: session.tenantId,
+                  // 계정이 없다 — 저널(IndexedDB) 문서 키의 사용자 축은 자리 키로 둔다(남의 이름을 쓰지 않는다).
+                  userId: `seat:${seat}`,
+                  // 저널 문서 키의 주차 — 영어 시트와 **같은 월요일** 규약.
+                  weekMonday: mondayOf(date),
+                  // 🔵 저장은 자리 PIN 문으로 나간다(ECS 게이트는 세션이 없어 전건 거절된다).
+                  viaPin: true,
+                }
+              : undefined
+          }
         />
       )}
     </div>

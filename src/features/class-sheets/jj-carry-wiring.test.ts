@@ -27,7 +27,9 @@ const code = (src: string) =>
 
 describe("JJ 이어받기 배선", () => {
   const server = read("features/class-sheets/server/carry-marks.ts");
-  const actions = read("features/class-sheets/server/actions.ts");
+  // '내용 복사'의 구현은 2026-08-25에 액션에서 **밑바닥**으로 옮겼다(공개 자리 PIN 문이 같은 함수를
+  // 쓰기 위해서다). 게이트만 액션에 남았으므로 이어받기 배선은 여기서 본다.
+  const copyImpl = read("features/class-sheets/server/plan-write.ts");
 
   it("🔴 쓰기 payload에 status·progress_note를 넣지 않는다(넣으면 태도·특이사항이 지워진다)", () => {
     // ⚠️ **upsert 호출 안만** 본다 — 파일 끝까지 자르면 아래 명단 코드의 `status:`(출결 매핑)가 걸려
@@ -68,13 +70,13 @@ describe("JJ 이어받기 배선", () => {
 
   it("덮어쓰기 판정은 순수 모듈이 한다(액션이 자기 규칙을 따로 만들지 않게)", () => {
     expect(code(server)).toContain("planCarryMarks(");
-    expect(code(actions)).toContain("carrySelfStudyMarks(");
+    expect(code(copyImpl)).toContain("carrySelfStudyMarks(");
   });
 
   it("이어받기 실패가 계획 복사를 죽이지 않는다(사유만 돌려준다)", () => {
-    expect(code(actions)).toContain("carryError: carry.error");
-    // 액션은 carry 결과로 ok:false를 만들지 않는다 — 계획 복사는 이미 성공했다.
-    expect(code(actions)).not.toContain("if (carry.error) return { ok: false");
+    expect(code(copyImpl)).toContain("carryError: carry.error");
+    // 복사 경로는 carry 결과로 ok:false를 만들지 않는다 — 계획 복사는 이미 성공했다.
+    expect(code(copyImpl)).not.toContain("if (carry.error) return { ok: false");
   });
 
   it("호출부가 응답을 화면 상태에 머지한다(refresh만으론 안 바뀐다)", () => {

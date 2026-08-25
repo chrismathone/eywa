@@ -10,10 +10,12 @@
  * 시트와 한 벌로 묶이는 계약 넷(하나라도 빠지면 "비슷하게 생긴 남"이 된다):
  *  ① **저널**(`useSheetDoc` → IndexedDB) — 창이 갑자기 닫혀도 입력이 남고 다음에 복구 후보로 뜬다.
  *     문서 키는 시트와 **같은 (테넌트, 사용자, 반, 주차)** 라 어느 화면에서 잃었든 다른 쪽에서 되살린다.
- *  ② **CAS 저장**(`useSheetSaveStore` → `flushSheetPatches`) — 남이 먼저 고쳤으면 **덮지 않고** 그 칸만
+ *  ② **CAS 저장**(`useSheetSaveStore` → `api.flushPatches`) — 남이 먼저 고쳤으면 **덮지 않고** 그 칸만
  *     멈춰 "서버값/내 값"을 묻는다.
  *  ③ **presence** — scope는 시트와 **같은 `ecs:{classId}:{week}`**. 🔴 새 scope를 만들면 두 화면이 서로를
  *     못 봐서, 강사가 시트에서 열어 둔 반을 이 화면에서 모르고 덮는다.
+ *     ⚠️ 비로그인 공개 화면(`/seat/jj`)에는 presence Provider가 없어 배지가 안 뜬다(읽기도 track도 안 한다) —
+ *     덮어쓰기 방지는 거기서도 CAS가 그대로 한다.
  *  ④ **복사 후 CAS 재시드** — `ecs_copy_slot`은 기존 행의 빈 칸을 UPDATE하므로 서버가 돌려준 canonical
  *     행으로 다시 심어야 한다(안 심으면 방금 채워진 칸을 처음 고칠 때 충돌로 뜬다). `usePlanHandlers`가 한다.
  *
@@ -27,7 +29,8 @@ import { useEditPresence } from "@/features/presence/edit-presence";
 import { EditingBadge } from "@/features/presence/editing-badge";
 import type { CarryPatch } from "../lib/carry-marks";
 import { ecsPresenceScope } from "../lib/presence-scope";
-import { flushSheetPatches, type PlanLineDTO } from "../server/actions";
+import type { PlanLineDTO } from "../server/actions";
+import type { PlanWriteApi } from "./plan-api";
 import { PlanTable } from "./plan-table";
 import { seedPlanLines, usePlanHandlers } from "./use-plan-handlers";
 import { useSheetDoc } from "./use-sheet-doc";
@@ -40,6 +43,7 @@ import { useFlushOnUnmount, useSaveIndicator, useSheetSaveStore } from "./use-sh
  */
 export const SlotPlanBlock = memo(function SlotPlanBlock({
   classId,
+  api,
   tenantId,
   userId,
   weekMonday,
@@ -53,7 +57,14 @@ export const SlotPlanBlock = memo(function SlotPlanBlock({
   flushHost,
 }: {
   classId: string;
+  /**
+   * 저장이 나갈 **문**([plan-api](./plan-api.ts)) — 로그인은 `ECS_PLAN_API`, 비로그인 공개 자리 화면은
+   * `seatPlanApi(seat)`. 밑바닥(CAS·RPC)은 어느 쪽이든 같은 함수다.
+   * ⚠️ 안정 참조로 넘길 것(이 컴포넌트는 `memo`다).
+   */
+  api: PlanWriteApi;
   tenantId: string;
+  /** 저널(IndexedDB) 문서 키의 사용자 축. 공개 PIN 화면은 계정이 없어 자리 키를 쓴다. */
   userId: string;
   /** 저널·presence 문서 키의 주차(월요일) — 시트와 **같은 값**이어야 서로를 본다. */
   weekMonday: string;
@@ -71,9 +82,12 @@ export const SlotPlanBlock = memo(function SlotPlanBlock({
 }) {
   // ① 저널 — 시트와 같은 문서 키(반+주차).
   const doc = useSheetDoc({ tenantId, userId, classId, week: weekMonday });
+  // ⚠️ 저장 큐는 이 함수를 **마운트 때 한 번** 잡는다(useSheetSaveStore는 lazy init) — 그래서 여기 실린
+  //    날짜·교시도 마운트 시점 값이다. 호출부가 날짜·교시가 바뀔 때 `key`로 재마운트시키는 계약(위 ⚠️)이
+  //    깨지면 공개 PIN 문에서 **옛 교시로 게이트를 통과시키려다 거절**된다(조용히 딴 데 쓰이지는 않는다).
   const send = useCallback(
-    (patches: Parameters<typeof flushSheetPatches>[1]) => flushSheetPatches(classId, patches),
-    [classId],
+    (patches: unknown) => api.flushPatches({ classId, planDate, slotStart }, patches),
+    [api, classId, planDate, slotStart],
   );
   // ② CAS 저장 큐(디바운스 + 충돌 감지).
   const store = useSheetSaveStore(send, doc.journal, canEdit);
@@ -105,6 +119,7 @@ export const SlotPlanBlock = memo(function SlotPlanBlock({
   );
   const handlers = usePlanHandlers({
     classId,
+    api,
     store,
     onSlotLines: applySlotLines,
     onCarried: applyCarried,
