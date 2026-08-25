@@ -499,23 +499,30 @@ export function buildRichClassCards(slots: GridSlot[], config: PeriodsConfig): R
       const uniq = [...new Set(orders)].sort((a, b) => a - b);
       return new Map(uniq.map((o, i) => [o, i]));
     };
-    const weekendRank = rankByOrder(
-      scanned.filter((x) => x.weekend && !x.shiftable).map((x) => x.row.order),
-    );
-    const weekendOnWeekendRank = rankByOrder(
-      scanned.filter((x) => x.weekend && x.shiftable).map((x) => x.row.order),
-    );
+    /**
+     * 🔴 **순번은 그 카드의 주말 슬롯 전체에서 한 번만 매긴다** — 어느 교시표에서 행을 찾았는지와 무관하게
+     * (2026-08-24, 원장 제보 *"13:00~14:00도 없고 순서도 이상한데?"*).
+     *
+     * 예전엔 `shiftable`(주말표에서 찾음) / `!shiftable`(평일표에 그 시각이 그대로 있음) 두 바구니에
+     * **각각 0부터** 순번을 매겼다. 그러면 한 반의 주말 블록이 두 표에 걸치는 순간 **두 순번이 0에서 겹쳐**
+     * 같은 `cells["<order>:sat"]` 키에 두 번 쓰이고 나중 것이 앞엣것을 덮는다.
+     * 실측(고등E_고2 심화, 토 13:00·14:00·15:00 + 영어 평일표에 15:00~16:00 실재):
+     *   13:00(주말표)→순번0 / 14:00(주말표)→순번1 / 15:00(평일표)→순번0  ⇒ 13:00 칸이 증발하고 15→14 순.
+     * 같은 화면의 고등E_고3 정규(토 10·11·12시)는 평일표에 하나도 없어 한 바구니라 멀쩡했다.
+     *
+     * 합칠 수 있는 근거: `row.order`는 교시 번호가 아니라 **자정 기준 분**이라(`periodIndexByOrder`·
+     * `shiftedWeekendRow` 주석) 평일표에서 온 값과 주말표에서 온 값이 **서로 비교 가능**하다.
+     * ⚠️ 앵커(`wdStartIdx`·`wkOnWeekendIdx`)는 **여전히 따로** 잰다 — 그건 다른 버그(2026-08-14 주석)를
+     *    막는 장치라 같이 합치면 안 된다. 합치는 건 순번 하나뿐이다.
+     */
+    const weekendRank = rankByOrder(scanned.filter((x) => x.weekend).map((x) => x.row.order));
     /** 주말 행 → 평일 표의 (평일 시작 + 순번)번째 행. 못 옮기면 원래 행(정보 유실 금지). */
     const liftToWeekday = (row: GridPeriodRow, rank: number | undefined) =>
       wdStartIdx !== Infinity && rank !== undefined ? (weekdayRows[wdStartIdx + rank] ?? row) : row;
 
-    for (const { s, day, row, weekend: isW, shiftable } of scanned) {
+    for (const { s, day, row, weekend: isW } of scanned) {
       // 혼합 반의 주말 슬롯은 **평일 교시 행으로** 옮기고(어느 표에서 왔든), 주말 전용 반은 자기 1교시로 당긴다.
-      const eff = !isW
-        ? row
-        : shiftable
-          ? liftToWeekday(row, weekendOnWeekendRank.get(row.order))
-          : liftToWeekday(row, weekendRank.get(row.order));
+      const eff = !isW ? row : liftToWeekday(row, weekendRank.get(row.order));
       const effWeekend =
         isW && weekendSelfShift !== 0
           ? shiftedWeekendRow(eff, weekendIdx, weekendRows, weekendSelfShift)

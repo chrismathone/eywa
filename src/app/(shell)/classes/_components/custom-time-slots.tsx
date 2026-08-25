@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { DAY_LABEL_KO, DAY_ORDER } from "@/features/classes/overlap";
 import { seatSelectValue, specialSlotLabel } from "@/features/timetable/lib/teacher-label";
@@ -21,6 +21,9 @@ const inputClass =
 /** 추가 상한 — 서버 파서 상한(80)보다 낮게 둬야 "추가는 됐는데 저장되면 사라지는" 행이 안 생긴다. */
 const MAX_ROWS = 40;
 
+/** 클릭그리드의 "교시표 밖 시각 N개" 배지가 눌렸을 때 스크롤해 올 자리(폼이 길어 화면 밖에 있다). */
+export const CUSTOM_SLOTS_ANCHOR_ID = "class-custom-time-slots";
+
 /**
  * 자유 시각 수업 행 — **교시표에 없는 시각**의 유일한 입력·보존 경로.
  *
@@ -35,14 +38,43 @@ const MAX_ROWS = 40;
  *    수에 따라 번호가 밀리면 서로의 hidden을 덮어쓴다). 서버 `parseSchedules`가 두 네임스페이스를 합친다.
  * ⚠️ 교시별 부담임·강의실 오버라이드는 UI 없이 hidden으로 **그대로 통과**시킨다(기존 값 보존).
  */
-export function CustomTimeSlots({ initial }: { initial: CustomSlot[] }) {
+export function CustomTimeSlots({
+  initial,
+  onCountChange,
+}: {
+  initial: CustomSlot[];
+  /**
+   * 행 수가 바뀔 때만 부모에 알린다 — 클릭그리드 쪽 "교시표 밖 시각 N개" 배지가 이 수를 쓴다.
+   * ⚠️ **상태를 부모로 올리지 않는다**(행 값은 여기 그대로) — 개수만 흘려보낸다. 부르는 자리는 **핸들러**뿐이다
+   *    (effect도, `setRows` 업데이터 안도 아니다 — 둘 다 렌더 중 남의 setState가 된다, [[#25]] 계열).
+   *    초기값은 부모가 `initial.length`로 안다.
+   */
+  onCountChange?: (count: number) => void;
+}) {
   const [rows, setRows] = useState<CustomSlot[]>(initial);
+  /**
+   * 행 수 미러 — 부모 통지 계산에만 쓴다.
+   * 🔴 `setRows` **업데이터 안에서 부모 setState를 부르면 안 된다**(업데이터는 렌더 중에 돌아
+   *    "Cannot update a component while rendering a different component" = setState-in-render, [[#25]] 사촌).
+   *    그렇다고 핸들러에서 `rows.length`를 쓰면 한 틱에 두 번 눌렸을 때(배치) 옛 값이라 개수가 어긋난다.
+   *    ref는 렌더와 무관해 아무 데서나 갱신해도 안전하고, 배치돼도 정확하다.
+   */
+  const countRef = useRef(initial.length);
+  const notifyCount = (n: number) => {
+    countRef.current = n;
+    onCountChange?.(n);
+  };
 
   const update = (i: number, patch: Partial<CustomSlot>) =>
     setRows((prev) => prev.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
-  const remove = (i: number) => setRows((prev) => prev.filter((_, idx) => idx !== i));
-  const add = () =>
+  const remove = (i: number) => {
+    setRows((prev) => prev.filter((_, idx) => idx !== i));
+    notifyCount(Math.max(0, countRef.current - 1));
+  };
+  const add = () => {
+    if (countRef.current >= MAX_ROWS) return;
     setRows((prev) =>
+      // 상한은 ref와 실제 배열 **양쪽**에서 막는다(둘이 어긋나도 서버 파서 상한을 넘지 않게).
       prev.length >= MAX_ROWS
         ? prev
         : [
@@ -50,9 +82,14 @@ export function CustomTimeSlots({ initial }: { initial: CustomSlot[] }) {
             { dayOfWeek: "mon", startTime: "09:00", endTime: "12:00", teacherId: null, classroomId: null },
           ],
     );
+    notifyCount(Math.min(MAX_ROWS, countRef.current + 1));
+  };
 
   return (
-    <div className="border-border space-y-2 rounded-md border border-dashed p-3">
+    <div
+      id={CUSTOM_SLOTS_ANCHOR_ID}
+      className="border-border scroll-mt-4 space-y-2 rounded-md border border-dashed p-3"
+    >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-foreground text-xs font-medium">시각 직접 입력 (교시표에 없는 시간)</p>
         <button
