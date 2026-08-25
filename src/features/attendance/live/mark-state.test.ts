@@ -228,6 +228,29 @@ describe("seatHoverTitle", () => {
     ).toBe("김철수 · 경명여중1 · 결석\n감기로 결석");
   });
 
+  it("체크 시각을 함께 적는다 — 칸엔 연도가 없으니 여기서 마감한다", () => {
+    expect(
+      seatHoverTitle({ studentName: "김철수", mark: "present", checkedAt: "2026-08-21 15:08" }),
+    ).toBe("김철수 · 출석 · 2026-08-21 15:08 체크");
+  });
+
+  it("담임 아닌 사람이 찍었으면 누가 찍었는지도", () => {
+    expect(
+      seatHoverTitle({
+        studentName: "김철수",
+        mark: "absent",
+        checkedAt: "2026-08-21 15:08",
+        recordedByName: "박소선",
+      }),
+    ).toBe("김철수 · 결석 · 2026-08-21 15:08 박소선 체크");
+  });
+
+  it("미출결 칸엔 시각을 안 붙인다(입력자 이름만 있어도)", () => {
+    expect(seatHoverTitle({ studentName: "김철수", mark: "unmarked", recordedByName: "박소선" })).toBe(
+      "김철수 · 미출결",
+    );
+  });
+
   it("출석·사유 없는 결석은 한 줄", () => {
     expect(seatHoverTitle({ studentName: "이영희", mark: "present", note: "감기로 결석" })).toBe(
       "이영희 · 출석",

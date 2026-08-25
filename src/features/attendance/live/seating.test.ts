@@ -412,15 +412,22 @@ describe("foldSeating 대표 교시 — 하루에 방을 옮기는 반 (2026-08-
 describe("pickClassDayHit", () => {
   it("여러 행이면 recorded_at 최신", () => {
     const hit = pickClassDayHit([
-      { status: "absent", note: null, recordedAt: "2026-08-14T07:00:00Z", recordSlot: "16:20" },
-      { status: "present", note: null, recordedAt: "2026-08-14T08:00:00Z", recordSlot: "18:20" },
+      { status: "absent", note: null, recordedAt: "2026-08-14T07:00:00Z", recordedBy: "u-1", recordedByName: "박소선", recordSlot: "16:20" },
+      { status: "present", note: null, recordedAt: "2026-08-14T08:00:00Z", recordedBy: "u-2", recordedByName: "김예원", recordSlot: "18:20" },
     ]);
     expect(hit?.status).toBe("present");
     expect(hit?.recordSlot).toBe("18:20");
+    // 입력자도 **고른 그 행**의 것이어야 한다 — 다른 교시 입력자가 이 칸 시각 옆에 붙으면 거짓말이다.
+    expect(hit?.recordedByName).toBe("김예원");
+    expect(hit?.recordedBy).toBe("u-2"); // id도 짝으로 — 없으면 담임 판정이 무너진다
   });
 
   it("기록 없는 칸은 고르지 않는다", () => {
-    expect(pickClassDayHit([{ status: null, note: null, recordedAt: null, recordSlot: null }])).toBeNull();
+    expect(
+      pickClassDayHit([
+        { status: null, note: null, recordedAt: null, recordedBy: null, recordedByName: null, recordSlot: null },
+      ]),
+    ).toBeNull();
   });
 });
 

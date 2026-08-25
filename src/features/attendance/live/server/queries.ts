@@ -129,8 +129,18 @@ export const getLiveBoard = cache(async (date: string = kstToday(), selfOnly = f
   const isToday = date === kstToday();
   // 한 보드 안에서 시각이 흔들리면 같은 순간의 두 교시가 다른 기준으로 갈린다 — 한 번만 읽어 공유한다.
   const nowMin = kstMinutesOfDay();
+  /**
+   * 이름이 필요한 사람 = 슬롯 담당 + **출결 입력자**(좌석표가 "담임 아닌 사람이 찍었으면" 이름을 붙인다).
+   * 🔑 둘을 **한 번에** 모아 조회한다 — 입력자 조회를 따로 붙이면 화면당 사용자 왕복이 하나 더 는다(B4).
+   *    입력자는 대개 담당과 겹쳐서 실제 늘어나는 id는 몇 개뿐이다.
+   */
   const teacherIds = [...new Set(slots.map((s) => s.teacherId).filter((v): v is string => !!v))];
-  const nameById = await loadTeacherNames(teacherIds);
+  const recorderIds = [
+    ...new Set(
+      slots.flatMap((s) => s.students.map((st) => st.recordedBy)).filter((v): v is string => !!v),
+    ),
+  ];
+  const nameById = await loadTeacherNames([...new Set([...teacherIds, ...recorderIds])]);
 
   // 묶는 축은 `teacher-group.ts` 단일 소스 — 사람은 계정, 자리(LAB·JJ)는 **방마다 한 줄**이다
   // (원장 2026-08-20: *"담당미지정으로 나오게하지말고, lAB이면 lAB, JJ면 JJ"*). 어제 출결 요약도
@@ -141,6 +151,12 @@ export const getLiveBoard = cache(async (date: string = kstToday(), selfOnly = f
     const key = identityKey(identity);
     const withPhase: LiveBoardSlot = {
       ...slot,
+      // 입력자 이름 — 모르는 id(퇴사자 등)는 null로 두고 화면이 그냥 시각만 그린다(raw uuid 노출 금지).
+      students: slot.students.map((st) =>
+        st.recordedBy
+          ? { ...st, recordedByName: nameById.get(st.recordedBy)?.name || null }
+          : st,
+      ),
       teacherName: slot.teacherId ? (nameById.get(slot.teacherId)?.name ?? null) : null,
       phase: phaseOf(slot, isToday, nowMin),
       band: bandOf(slot, isToday, nowMin),

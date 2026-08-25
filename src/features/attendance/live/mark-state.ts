@@ -38,16 +38,43 @@ export const SEAT_MARK_TONE: Record<SeatMark, string> = {
   waiting: "border-line bg-card text-text-dim border",
 };
 
+/**
+ * 알약 **밖**에 적는 글자 색(좌석표 칸의 체크 시각 줄) — 카드 바탕 위에서 읽히는 상태 잉크.
+ *
+ * 원장(2026-08-21): *"글자는 검정이 아니어야되고 가독성이 좋은 색상으로. 출결 색상에 따라 글자 색상도
+ * 바뀌거나…"* → 배경이 없는 자리라 `SEAT_MARK_TONE`(배경+잉크)을 그대로 쓸 수 없다. **잉크만** 뽑되
+ * 같은 색 계열을 유지해 시각 줄만 훑어도 무슨 표시인지 읽히게 한다.
+ * ⚠️ 화면 파일에 이 맵을 복사하지 말 것 — 상태 색은 이 모듈이 단일 소스다(팔레트 v4 캐논).
+ */
+export const SEAT_MARK_INK: Record<SeatMark, string> = {
+  present: "text-att-present-ink",
+  absent: "text-att-absent-ink",
+  late: "text-att-late-ink",
+  // 기록이 없는 칸엔 시각 줄 자체가 안 그려진다 — 맵을 닫아 두기 위한 값.
+  unmarked: "text-text-dim",
+  waiting: "text-text-dim",
+};
+
 /** 마우스오버 — 결석이면 사유 메모를 둘째 줄에. */
 export function seatHoverTitle(input: {
   studentName: string;
   schoolGrade?: string | null;
   mark: SeatMark;
   note?: string | null;
+  /**
+   * 체크 시각 **전체 일시**(`attendanceCheckMark(...).full` = `2026-08-21 15:08`).
+   * 칸에는 연도가 안 들어가니 여기서 마감한다 — 없으면(미출결) 아무것도 안 붙인다.
+   */
+  checkedAt?: string | null;
+  /** 담임 아닌 입력자 이름(`seatRecorderName`) — 좁은 칸에서 잘렸어도 여기선 온전히 읽힌다. */
+  recordedByName?: string | null;
 }): string {
   const bits = [input.studentName];
   if (input.schoolGrade) bits.push(input.schoolGrade);
   bits.push(SEAT_MARK_LABEL[input.mark]);
+  if (input.checkedAt) {
+    bits.push(input.recordedByName ? `${input.checkedAt} ${input.recordedByName} 체크` : `${input.checkedAt} 체크`);
+  }
   const head = bits.join(" · ");
   const note = input.note?.trim();
   if (input.mark === "absent" && note) return `${head}\n${note}`;

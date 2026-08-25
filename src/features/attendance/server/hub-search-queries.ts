@@ -20,12 +20,14 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { canAccessTenant } from "@/lib/auth/perm-matrix";
 import { effectiveTeacherId } from "@/lib/auth/view-mode";
 import { createClient } from "@/lib/supabase/server";
-import { fetchInChunks } from "@/lib/supabase/batch";
-import { kstMonth, monthRange } from "@/lib/date-kst";
+import { fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
+import { kstMonth, kstToday, monthRange } from "@/lib/date-kst";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
+import { dowsFromKeys } from "../calendar";
 import {
   HUB_SEARCH_LIMIT,
   buildHubHits,
+  hubEnrollmentAsOf,
   hubSearchPattern,
   type HubSearchEnrollment,
   type HubSearchResult,
@@ -35,6 +37,8 @@ import { loadVisibleClassAxisRows } from "./teacher-axis-queries";
 type Row = {
   class_id: string;
   student_id: string;
+  /** 분리등원 — 비면 반 운영 요일 전부(등원요일 라벨의 절반). */
+  attendance_days: string[] | null;
   student:
     | { id?: string; name?: string; school?: string | null; grade?: string | null }
     | { id?: string; name?: string; school?: string | null; grade?: string | null }[]
@@ -47,7 +51,7 @@ function emptyResult(where: string, error?: string): HubSearchResult {
 
 export async function loadHubStudentSearch(input: {
   query: string;
-  /** 화면이 보고 있는 달(YYYY-MM) — 그 달 출석부에 실제로 뜨는 학생만 찾는다. */
+  /** 화면이 보고 있는 달(YYYY-MM) — 그 달에 **수강 중인** 학생만 찾는다(지난 수업 제외). */
   month: string;
 }): Promise<HubSearchResult> {
   const month = /^\d{4}-\d{2}$/.test(input.month) ? input.month : kstMonth();
@@ -59,12 +63,17 @@ export async function loadHubStudentSearch(input: {
   if (!(await canAccessTenant(user.systemRole, "attendance"))) return emptyResult(`${monthLabel} 출석부`);
 
   const viewerTeacherId = await effectiveTeacherId();
-  const where = viewerTeacherId ? `${monthLabel} 담당 반` : `${monthLabel} 출석부`;
+  // 🔑 0건 문구가 말할 **찾은 범위** — '수강 중'으로 좁혔다는 사실을 문구가 밝힌다(보이지 않는 필터 금지).
+  const where = viewerTeacherId
+    ? `${monthLabel} 수강 중인 담당 반`
+    : `${monthLabel} 수강 중인 반`;
 
   const pattern = hubSearchPattern(input.query);
   if (!pattern) return emptyResult(where);
 
   const range = monthRange(month);
+  // 수강이 '지금' 열려 있는지 잴 하루 — 보고 있는 달 안으로 접은 오늘(규칙은 순수 함수 한 곳).
+  const asOf = hubEnrollmentAsOf(kstToday(), range.from, range.to);
   let classes;
   try {
     classes = await loadVisibleClassAxisRows(range.from, range.to);
@@ -82,13 +91,17 @@ export async function loadHubStudentSearch(input: {
         .from("enrollments")
         // ⚠️ `student:student_id!inner` — 임베드 컬럼으로 거르려면 inner join이어야 하고, FK는 컬럼으로
         //    명시한다([[#94]] — 힌트 없는 임베드는 남이 FK를 하나 더한 날 화면째 죽는다).
-        .select("class_id, student_id, student:student_id!inner ( id, name, school, grade )")
+        .select("class_id, student_id, attendance_days, student:student_id!inner ( id, name, school, grade )")
         .in("class_id", chunk)
-        // 시트가 학생을 싣는 조건과 같다(그 달과 겹치는 수강 · 휴원 제외) — 결과를 눌렀는데
-        // 그 학생이 표에 없으면 검색이 거짓말이 된다.
+        // 🔴 **현재 수강 중인 반만**(원장 2026-08-24 *"지나간 수업은 검색할 필요 없음"*).
+        //    종전엔 "그 달과 겹치는 수강"이라 8/4에 끝난 반도 8월과 겹쳐 통과했고, 최하림 검색이
+        //    5줄(그중 2줄이 지난 수업)로 떴다. 이제 기준일 하루로 재서 학생 상세의 '수강 중인 수업'과
+        //    같은 뜻이 된다(배정 예정·지난 수업은 빠진다).
+        // ⚠️ 트레이드오프: 그 달 시트에는 있는데 검색에는 안 뜨는 줄이 생긴다(그 달 안에 끝난 수강).
+        //    지난 달을 열었을 땐 기준일이 그 달로 접히므로(`hubEnrollmentAsOf`) 그때 다니던 반은 그대로 뜬다.
         .eq("on_hold", false)
-        .lte("start_date", range.to)
-        .or(`end_date.is.null,end_date.gte.${range.from}`)
+        .lte("start_date", asOf)
+        .or(`end_date.is.null,end_date.gte.${asOf}`)
         .ilike("student.name", pattern)
         // 청크마다 같은 순서를 받도록 unique 정렬(정렬 자체는 아래 순수 함수가 다시 한다).
         .order("id", { ascending: true })
@@ -109,7 +122,48 @@ export async function loadHubStudentSearch(input: {
       studentName: s.name,
       school: s.school ?? null,
       grade: s.grade ?? null,
+      attendanceDays: r.attendance_days ?? null,
     });
+  }
+
+  // 매치된 반의 **그 달 살아있는 수업요일** — 등원요일 라벨의 나머지 절반.
+  //
+  // ⚠️ 여기서만 왕복이 하나 는다. 반이 정해진 **뒤**라 위 조회와 못 묶는다(진짜 의존이라 B4 위반 아님)
+  //    — 대신 **매치가 0건이면 아예 안 부른다**(검색어가 없으면 애초에 여기까지 못 온다).
+  // 🔴 `loadSlotAxisByClass`를 재사용하지 않는다 — 그건 `teacher_id IS NOT NULL`만 읽어서
+  //    자리(LAB·JJ) 슬롯이 통째로 빠진다(그 반 학생의 요일이 조용히 사라진다).
+  // 🔴 유효구간 필터는 매트릭스와 **같다** — 빼면 끝난 배치의 요일이 섞인다([[#88]]:
+  //    `class_schedules`는 운영 이력을 함께 담는다).
+  // 🔴 `.in()`은 청크(B3) + 페이징(B2) — 반 하나가 교시를 여럿 갖는다(영어는 10교시)라
+  //    청크 하나가 1000행을 넘을 수 있고, 그러면 요일이 **조용히** 절단된다([[#54]]).
+  const matchedClassIds = [...new Set(enrollments.map((e) => e.classId))];
+  const classDows = new Map<string, number[]>();
+  if (matchedClassIds.length > 0) {
+    try {
+      const slots = await fetchAllPagedInChunks<{ class_id: string; day_of_week: string }>(
+        matchedClassIds,
+        (chunk, from, to) =>
+          supabase
+            .from("class_schedules")
+            .select("class_id, day_of_week, id")
+            .in("class_id", chunk)
+            .lte("valid_from", range.to)
+            .or(`valid_to.is.null,valid_to.gte.${range.from}`)
+            // OFFSET 페이지가 흔들리지 않게 unique tie-break(헬퍼 규약).
+            .order("id", { ascending: true })
+            .range(from, to),
+      );
+      const keysByClass = new Map<string, string[]>();
+      for (const s of slots) {
+        const list = keysByClass.get(s.class_id) ?? [];
+        list.push(s.day_of_week);
+        keysByClass.set(s.class_id, list);
+      }
+      // 요일 판정은 시트와 **같은 단일 소스**(dowsFromKeys) — 모르는 키는 여기서 버려진다.
+      for (const [id, keys] of keysByClass) classDows.set(id, dowsFromKeys(keys));
+    } catch {
+      // 🔴 요일만 비게 두고 **검색 결과 자체는 살린다** — 이름으로 반을 찾는 것이 본업이다.
+    }
   }
 
   const { hits, truncated } = buildHubHits({
@@ -118,10 +172,13 @@ export async function loadHubStudentSearch(input: {
     classes: classes.map((c) => ({
       id: c.id,
       className: c.className,
+      // 과목 그룹 머리글의 재료 — `ClassAxisRow`에 이미 실려 있다(조회 추가 0).
+      subject: c.subject,
       teacherId: c.teacherId,
       teacherName: c.teacherName,
     })),
     schoolGradeOf: (school, grade) => schoolGradeLabel(school, grade),
+    classDows,
     viewerTeacherId,
     limit: HUB_SEARCH_LIMIT,
     // 🔴 **거른 뒤가 아니라 받아온 원본**으로 판정한다 — 필터가 줄인 길이로 보면 "더 있는데 없다"가 된다.
