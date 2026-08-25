@@ -19,7 +19,7 @@ import { BasicInfoTab } from "./_tabs/basic-info-tab";
 import { MonthlyScheduleTab } from "./_tabs/monthly-schedule-tab";
 import { ClassesTab } from "./_tabs/classes-tab";
 import { ActivityLogTab } from "./_tabs/activity-log-tab";
-import { PAYROLL_ENABLED } from "@/features/payroll/config";
+import { PAYROLL_ENABLED, STAFF_LEAVES_ENABLED } from "@/features/payroll/config";
 
 export const metadata = { title: "직원 상세 — eywa" };
 
@@ -130,14 +130,16 @@ export default async function StaffDetailPage({
                     급여
                   </Button>
                 ) : null}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  render={<WindowLink href={`/staff/${staff.id}/leaves`} title="휴가 관리" />}
-                >
-                  <CalendarDays className="size-3.5" />
-                  휴가
-                </Button>
+                {STAFF_LEAVES_ENABLED ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    render={<WindowLink href={`/staff/${staff.id}/leaves`} title="휴가 관리" />}
+                  >
+                    <CalendarDays className="size-3.5" />
+                    휴가
+                  </Button>
+                ) : null}
               </>
             ) : null}
           </div>

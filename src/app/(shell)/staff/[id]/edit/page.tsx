@@ -10,7 +10,7 @@ import { getStaffById } from "@/features/staff/server/queries";
 import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
 import { isFullShellRole } from "@/lib/auth/view-as";
 import { StaffForm } from "../../_components/staff-form";
-import { PAYROLL_ENABLED } from "@/features/payroll/config";
+import { PAYROLL_ENABLED, STAFF_LEAVES_ENABLED } from "@/features/payroll/config";
 
 export const metadata = { title: "근무 설정 — eywa" };
 
@@ -63,11 +63,15 @@ export default async function EditStaffPage({
               예전엔 급여와 한 조건에 묶여 teacher|master만 보였고, 그 결과 반을 맡은 부원장(admin)·
               행정 직원의 휴가를 아예 열 수 없었다. ⚠️ 이 버튼은 게이트가 아니다 — 실제 권한은
               /staff/[id]/leaves가 requireAccess("staff") + canManageStaff·canWriteTenant로 잡는다
-              (버튼을 숨겨도 URL로 열렸다 = 숨김은 잠금이 아니다, gotcha #77). */}
-          <Button variant="outline" render={<WindowLink href={`/staff/${staff.id}/leaves`} title="휴가 관리" />}>
-            <CalendarDays className="size-4" />
-            휴가 관리
-          </Button>
+              (버튼을 숨겨도 URL로 열렸다 = 숨김은 잠금이 아니다, gotcha #77).
+              🔴 2026-08-25 원장 지시로 STAFF_LEAVES_ENABLED=false → 숨김(휴가는 전자결재에서 관리).
+              되살릴 땐 위 "전 직원" 규칙을 그대로 유지할 것 — 역할로 가리던 옛 조건으로 되돌리지 말 것. */}
+          {STAFF_LEAVES_ENABLED ? (
+            <Button variant="outline" render={<WindowLink href={`/staff/${staff.id}/leaves`} title="휴가 관리" />}>
+              <CalendarDays className="size-4" />
+              휴가 관리
+            </Button>
+          ) : null}
         </div>
       </header>
 

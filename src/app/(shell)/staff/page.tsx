@@ -22,7 +22,7 @@ import { StaffTableScaleBox, StaffTableScaleControl } from "./_components/table-
 import { StaffColumnPicker } from "./_components/staff-column-picker";
 import { StaffQrSection } from "./_components/staff-qr-section";
 import { StaffTable } from "./_components/staff-table";
-import { PAYROLL_ENABLED } from "@/features/payroll/config";
+import { PAYROLL_ENABLED, STAFF_LEAVES_ENABLED } from "@/features/payroll/config";
 
 export const metadata = { title: "직원관리 — eywa" };
 
@@ -410,7 +410,7 @@ export default async function StaffPage({
               월별 급여
             </Button>
           ) : null}
-          {canManage ? (
+          {STAFF_LEAVES_ENABLED && canManage ? (
             <Button variant="outline" render={<WindowLink href="/staff/leaves" title="휴가 관리" />}>
               <CalendarClock className="size-4" />
               휴가 관리
