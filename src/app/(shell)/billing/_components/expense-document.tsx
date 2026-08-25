@@ -6,8 +6,21 @@ import { ExpensePrintBar } from "./expense-print-bar";
 // 지출결의서 — ijw-calander 양식 충실 이식(상단 결재란 / 기본정보 / 항목표 / 합계 / 정산정보).
 // 읽기 전용 문서 뷰. 제목 클릭 시 창(또는 임베드 드릴인)으로 표시. 단일 읽기 흐름이라 중앙 정렬 폭 제한.
 
-const cell = "border-foreground/70 border px-3 py-2";
-const headCell = `${cell} bg-bg-soft text-center font-bold whitespace-nowrap`;
+// 값 칸(cell)과 라벨 칸(headCell)은 여백이 다르다 — 표가 `table-fixed` + 퍼센트 폭이라
+// 라벨 칸이 좁아(7~17%) `px-3`(좌우 24px)을 그대로 쓰면 `사업자 / 작성자`·`총액(VAT포함)` 같은
+// 라벨이 내용 폭을 넘겨 **칸 밖으로 흘렀다**(원장 제보 2026-08-25 — 문서 폭 ~650px 이하에서
+// `총액(VAT포함)`은 표 오른쪽 테두리 밖까지 나갔다).
+// ⚠️ 라벨은 자르지 않는다(`truncate`/`overflow-hidden` 금지) — 종이 서식이라 잘린 라벨은 넘치는 것보다 나쁘다.
+//    대신 여백을 줄이고(px-1.5) 넘치면 한글 어절 단위로 접는다(`break-keep`, 음절 쪼개짐 방지).
+// ⚠️ 값 칸의 `px-3`은 그대로 — 좁히면 값이 답답해진다.
+const cellBase = "border-foreground/70 border py-2";
+const cell = `${cellBase} px-3`;
+const headCell = `${cellBase} bg-bg-soft px-1.5 text-center font-bold break-keep`;
+// 결재란은 폭이 자동인 별도 표라(퍼센트 폭 아님) 라벨이 접힐 일이 없다 — 옛 headCell 문자열을 **그대로** 뗀 것이다.
+// 🔴 한 글자도 바꾸지 말 것: 호출부가 `px-5 py-0.5`·`px-2`로 덮어쓰는데, 충돌하는 Tailwind 유틸의 승자는
+//    클래스 문자열 순서가 아니라 **생성된 CSS 순서**라 값을 빼면 승자가 조용히 뒤바뀐다
+//    (실측: `py-2`를 뺐더니 `py-0.5`가 이겨 도장칸 머리 행이 34px→22px로 납작해졌다).
+const stampCell = "border-foreground/70 border px-3 py-2 bg-bg-soft text-center font-bold whitespace-nowrap";
 
 export function ExpenseDocument({ expense }: { expense: ExpenseRow }) {
   // 라인아이템이 없으면 지출 자체를 단일 행으로 표시(빈 표 방지).
@@ -56,12 +69,12 @@ export function ExpenseDocument({ expense }: { expense: ExpenseRow }) {
           <table className="border-foreground/70 border-2 text-xs">
             <tbody>
               <tr>
-                <td className={`${headCell} text-purple px-2`} rowSpan={2}>
+                <td className={`${stampCell} text-purple px-2`} rowSpan={2}>
                   결<br />재
                 </td>
-                <td className={`${headCell} px-5 py-0.5`}>담당자</td>
-                <td className={`${headCell} px-5 py-0.5`}>원장</td>
-                <td className={`${headCell} px-5 py-0.5`}>대표</td>
+                <td className={`${stampCell} px-5 py-0.5`}>담당자</td>
+                <td className={`${stampCell} px-5 py-0.5`}>원장</td>
+                <td className={`${stampCell} px-5 py-0.5`}>대표</td>
               </tr>
               <tr>
                 <td className="border-foreground/70 border px-5 py-4 text-center whitespace-nowrap">
@@ -81,10 +94,12 @@ export function ExpenseDocument({ expense }: { expense: ExpenseRow }) {
         {/* 기본 정보 */}
         <table className="border-foreground/70 mb-4 w-full table-fixed border-2 text-xs">
           <colgroup>
-            <col className="w-[15%]" />
-            <col className="w-[35%]" />
-            <col className="w-[15%]" />
-            <col className="w-[35%]" />
+            {/* 라벨 칸 17% — `사업자 / 작성자`(가장 긴 라벨)가 한 줄에 들어가는 최소치.
+                기본정보·정산정보 두 표가 같은 비율이라 세로 구분선이 이어진다. 합 100%. */}
+            <col className="w-[17%]" />
+            <col className="w-[33%]" />
+            <col className="w-[17%]" />
+            <col className="w-[33%]" />
           </colgroup>
           <tbody>
             <tr>
@@ -109,13 +124,16 @@ export function ExpenseDocument({ expense }: { expense: ExpenseRow }) {
         {/* 항목 */}
         <table className="border-foreground/70 mb-4 w-full table-fixed border-2 text-xs">
           <colgroup>
-            <col className="w-[6%]" />
+            {/* 마지막 열 14%→16% — `총액(VAT포함)`이 한 줄에 들어가야 한다(가장 긴 머리글).
+                No. 6%→7% — 좁은 창(문서 폭 ~500~650px)에서 `No`/`.`로 쪼개지지 않게.
+                늘린 3%는 거래처(2)·사용내역(1)에서 — 둘 다 값이 접히는 칸이고, 사용내역은 여전히 가장 넓다. 합 100%. */}
+            <col className="w-[7%]" />
             <col className="w-[15%]" />
-            <col className="w-[16%]" />
-            <col className="w-[27%]" />
+            <col className="w-[14%]" />
+            <col className="w-[26%]" />
             <col className="w-[8%]" />
             <col className="w-[14%]" />
-            <col className="w-[14%]" />
+            <col className="w-[16%]" />
           </colgroup>
           <thead>
             <tr>
@@ -161,10 +179,12 @@ export function ExpenseDocument({ expense }: { expense: ExpenseRow }) {
         {/* 정산 정보 */}
         <table className="border-foreground/70 w-full table-fixed border-2 text-xs">
           <colgroup>
-            <col className="w-[15%]" />
-            <col className="w-[35%]" />
-            <col className="w-[15%]" />
-            <col className="w-[35%]" />
+            {/* 라벨 칸 17% — `사업자 / 작성자`(가장 긴 라벨)가 한 줄에 들어가는 최소치.
+                기본정보·정산정보 두 표가 같은 비율이라 세로 구분선이 이어진다. 합 100%. */}
+            <col className="w-[17%]" />
+            <col className="w-[33%]" />
+            <col className="w-[17%]" />
+            <col className="w-[33%]" />
           </colgroup>
           <tbody>
             <tr>
