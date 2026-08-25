@@ -3,6 +3,7 @@
 import { useCallback } from "react";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { SlotPlanBlock } from "@/features/class-sheets/components/slot-plan-block";
+import type { PlanWriteApi } from "@/features/class-sheets/components/plan-api";
 import type { CarryPatch } from "@/features/class-sheets/lib/carry-marks";
 import type { SeatClassPlan } from "@/features/attendance/seat/server/jj-plan";
 import {
@@ -22,13 +23,17 @@ const INPUT =
 
 /**
  * 진도(수업계획) 구획을 그리는 데 필요한 것 한 묶음 — **없으면 구획 자체가 안 생긴다**.
- * 🔴 공개 PIN 화면(`/seat/jj`)과 ECS 권한이 없는 계정에는 이 prop이 아예 안 내려온다
- *    (권한 판정은 서버 `loadSeatJjPlans`가 반마다 `requireEcsClassAccess`로 한다 — 화면 조건은 게이트가 아니다).
+ * 🔴 화면 조건은 게이트가 아니다(#77) — 어느 반이 여기 실리는지는 **서버**가 정하고(로그인은
+ *    `loadSeatJjPlans`의 `requireEcsClassAccess`, 비로그인 PIN은 `loadPublicSeatJjPlans`의 명단
+ *    화이트리스트), 저장할 때 그 게이트를 **다시** 통과한다.
  */
 export type SeatPlanContext = {
   /** 반 id → 그 교시 계획. **키가 없는 반은 계획을 볼 권한이 없는 반**이다. */
   plans: Record<string, SeatClassPlan>;
+  /** 저장이 나갈 문 — 로그인 `ECS_PLAN_API` / 공개 PIN `seatPlanApi(seat)`. 안정 참조. */
+  api: PlanWriteApi;
   tenantId: string;
+  /** 저널 문서 키의 사용자 축. 공개 PIN 화면은 계정이 없어 자리 키를 쓴다. */
   userId: string;
   /** 저널·presence 문서 키의 주차(월요일) — 영어 시트와 같은 값이어야 두 화면이 서로를 본다. */
   weekMonday: string;
@@ -129,6 +134,7 @@ function SeatJjClass({
       {plan && slotPlan ? (
         <SlotPlanBlock
           classId={r.classId}
+          api={plan.api}
           tenantId={plan.tenantId}
           userId={plan.userId}
           weekMonday={plan.weekMonday}

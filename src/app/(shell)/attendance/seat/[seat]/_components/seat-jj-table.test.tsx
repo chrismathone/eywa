@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { SeatClassRoster } from "@/features/attendance/seat/server/queries";
 import type { SeatClassPlan } from "@/features/attendance/seat/server/jj-plan";
+import { ECS_PLAN_API } from "@/features/class-sheets/components/plan-api";
 import { SeatJjTable, type SeatPlanContext } from "./seat-jj-table";
 
 // 계획 블록이 서버 액션을 import한다 — 렌더 테스트라 호출은 안 하지만 모듈은 실려야 한다.
@@ -121,6 +122,8 @@ const plan: SeatClassPlan = {
 
 const planContext = (plans: Record<string, SeatClassPlan>): SeatPlanContext => ({
   plans,
+  // 로그인 화면의 문 — 공개 PIN 화면은 seatPlanApi(seat)를 넘긴다(밑바닥은 같은 함수).
+  api: ECS_PLAN_API,
   tenantId: "t1",
   userId: "u1",
   weekMonday: "2026-08-24",

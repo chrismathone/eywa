@@ -57,33 +57,13 @@ export async function loadSeatJjPlans(
   const allowed = gates.filter((g): g is NonNullable<typeof g> => g !== null);
   if (allowed.length === 0) return {};
 
-  let rows: Record<string, unknown>[];
-  try {
-    const admin = createAdminClient();
-    rows = await fetchInChunks<Record<string, unknown>>(
-      allowed.map((g) => g.classId),
-      (chunk) =>
-        admin
-          .from("class_sheet_plan_lines")
-          .select("*")
-          .eq("tenant_id", tenantId)
-          .eq("plan_date", date)
-          .in("class_id", chunk)
-          .order("term_mode")
-          .order("line_no"),
-    );
-  } catch (e) {
-    reportError(e, { scope: "attendance.seat.jj-plan", tenantId, date, slot });
-    return {};
-  }
-
-  const linesByClass = new Map<string, PlanLineDTO[]>();
-  for (const row of rows) {
-    // 교시는 JS에서 거른다 — DB는 time("HH:MM:SS")이라 문자열 eq가 표기 차이에 걸린다.
-    if (hhmm(row.slot_start as string) !== slot) continue;
-    const classId = row.class_id as string;
-    (linesByClass.get(classId) ?? linesByClass.set(classId, []).get(classId)!).push(planLineFromRow(row));
-  }
+  const linesByClass = await fetchSeatSlotPlanLines(
+    tenantId,
+    allowed.map((g) => g.classId),
+    date,
+    slot,
+  );
+  if (!linesByClass) return {};
 
   const out: Record<string, SeatClassPlan> = {};
   for (const { classId, access } of allowed) {
@@ -96,4 +76,49 @@ export async function loadSeatJjPlans(
     };
   }
   return out;
+}
+
+/**
+ * 그 날·그 교시의 계획 줄을 반별로 읽어 온다 — **게이트는 호출부가 이미 통과시킨 뒤**다.
+ *
+ * 🔑 문이 둘(로그인 ECS 게이트 / 공개 자리 PIN 명단)이라 조회를 두 벌로 적지 않는다. 두 벌이면 한쪽만
+ *    교시 표기(`hhmm`)나 정렬을 고쳤을 때 같은 반이 화면마다 다른 줄을 보여준다.
+ * 🔴 `class_sheet_*`는 RLS 정책이 0개라 세션 클라이언트로는 **에러 없이 0행**([[#104]]) →
+ *    admin + `tenant_id` 명시 필터.
+ * ⚠️ 실패는 **null**(예외 아님) — 조회가 깨져도 출결 화면은 살아야 한다([[#95]]).
+ */
+export async function fetchSeatSlotPlanLines(
+  tenantId: string,
+  classIds: readonly string[],
+  date: string,
+  slotStart: string,
+): Promise<Map<string, PlanLineDTO[]> | null> {
+  const slot = hhmm(slotStart);
+  const unique = [...new Set(classIds)];
+  if (unique.length === 0) return new Map();
+  let rows: Record<string, unknown>[];
+  try {
+    const admin = createAdminClient();
+    rows = await fetchInChunks<Record<string, unknown>>(unique, (chunk) =>
+      admin
+        .from("class_sheet_plan_lines")
+        .select("*")
+        .eq("tenant_id", tenantId)
+        .eq("plan_date", date)
+        .in("class_id", chunk)
+        .order("term_mode")
+        .order("line_no"),
+    );
+  } catch (e) {
+    reportError(e, { scope: "attendance.seat.jj-plan", tenantId, date, slot });
+    return null;
+  }
+  const byClass = new Map<string, PlanLineDTO[]>();
+  for (const row of rows) {
+    // 교시는 JS에서 거른다 — DB는 time("HH:MM:SS")이라 문자열 eq가 표기 차이에 걸린다.
+    if (hhmm(row.slot_start as string) !== slot) continue;
+    const classId = row.class_id as string;
+    (byClass.get(classId) ?? byClass.set(classId, []).get(classId)!).push(planLineFromRow(row));
+  }
+  return byClass;
 }

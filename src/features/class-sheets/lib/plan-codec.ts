@@ -2,6 +2,14 @@
 // ⚠️ isMeaningfulPlanLine은 0157a SQL `ecs_is_meaningful_line`과 **동일 정의**여야 한다(복사 skip 판정이
 //    앱·RPC 양쪽에서 같은 답을 내야 함). 한쪽만 고치지 말 것 — Vitest가 픽스처 동치를 잠근다.
 
+/**
+ * 계획 행 '구분'(skill_area) 슬러그 — 학원설정 `subjects[].skillAreas[].key`와 같은 모양이고
+ * DB check 제약(`skill_area ~ '^[a-z0-9_]{1,24}$'`, 0157a)의 앱쪽 거울이다.
+ * 🔴 쓰기 경로가 둘(로그인 ECS·공개 PIN)이라 **여기 한 곳**에서만 정의한다 — 한쪽만 느슨해지면
+ *    그쪽으로 제약 밖 값이 들어와 DB가 거절하는 저장이 생긴다.
+ */
+export const SKILL_AREA_SLUG_RE = /^[a-z0-9_]{1,24}$/;
+
 /** 계획 행에서 patch(CAS)로 편집 가능한 컬럼 — 런타임 allowlist(그 외 필드는 액션이 즉시 거부). */
 export const PLAN_PATCH_FIELDS = [
   "skill_area",

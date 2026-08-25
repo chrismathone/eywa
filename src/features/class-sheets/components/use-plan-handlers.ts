@@ -8,8 +8,11 @@
  *    지금 쓰는 곳 = 주간/오늘 시트([sheet-client](./sheet-client.tsx))와
  *    자리 출석부 JJ 열([slot-plan-block](./slot-plan-block.tsx)).
  *
- * 🔴 **저장 경로는 여기서 끝이다** — 새 서버 액션·RPC를 만들지 말 것. 셀 = `flushSheetPatches`(CAS),
- *    구조 = `ecs_*` RPC, 복사 = `ecs_copy_slot`. 게이트는 전부 `requireEcsClassAccess`(#77).
+ * 🔴 **저장 경로는 여기서 끝이다** — 새 서버 액션·RPC를 만들지 말 것. 셀 = CAS 배치,
+ *    구조 = `ecs_*` RPC, 복사 = `ecs_copy_slot`.
+ * 🔑 **문(게이트)만 갈린다** — 어느 액션으로 나갈지는 호출부가 넘긴 [`api`](./plan-api.ts)가 정한다:
+ *    로그인은 `ECS_PLAN_API`(→ `requireEcsClassAccess`), 비로그인 공개 자리 화면(`/seat/jj`)은
+ *    `seatPlanApi(seat)`(→ 자리 PIN 쿠키 + 오늘 + 그 교시 명단). 두 문 뒤의 밑바닥은 같은 함수다(#77).
  *
  * ⚠️ 원스크린 오늘 보드의 [today-plan-editor](./today-plan-editor.tsx)는 **줄 구조를 안 바꾸는** 좁은 폼이라
  *    이 훅을 쓰지 않고 저장 큐(CAS)와 복사 버튼만 공유한다 — 구조 변경을 그쪽에 붙일 땐 이 훅으로 올릴 것.
@@ -24,13 +27,8 @@ import { useMemo } from "react";
 import { toast } from "sonner";
 import type { CarryPatch } from "../lib/carry-marks";
 import type { PlanPatchField } from "../lib/plan-codec";
-import {
-  copySlotFromPrevious,
-  createPlanLine as createPlanLineAction,
-  deletePlanLine as deletePlanLineAction,
-  movePlanLine as movePlanLineAction,
-  type PlanLineDTO,
-} from "../server/actions";
+import type { PlanLineDTO } from "../server/actions";
+import type { PlanWriteApi } from "./plan-api";
 import type { SheetSaveStore } from "./use-sheet-saves";
 
 /** 계획 표(PlanTable/PlanRow)가 쓰는 핸들러 — 시트의 넓은 핸들러(SheetHandlers)는 이걸 포함한다. */
@@ -72,12 +70,15 @@ export function seedPlanLines(store: SheetSaveStore, lines: readonly PlanLineDTO
 
 export function usePlanHandlers({
   classId,
+  api,
   store,
   onSlotLines,
   onCarried,
   flushHost,
 }: {
   classId: string;
+  /** 저장이 나갈 문 — 로그인 `ECS_PLAN_API` / 공개 자리 PIN `seatPlanApi(seat)`. 안정 참조로 넘길 것. */
+  api: PlanWriteApi;
   store: SheetSaveStore;
   onSlotLines: (planDate: string, slotStart: string, lines: PlanLineDTO[]) => void;
   onCarried?: (planDate: string, slotStart: string, patches: CarryPatch[]) => void;
@@ -94,13 +95,7 @@ export function usePlanHandlers({
       editCell: (lineId, field, value) => store.edit(lineId, field, value),
       resolveConflict: (saveKey, choice) => store.resolveConflict(saveKey, choice),
       addLine: (planDate, slotStart, termMode, skillArea) => {
-        void createPlanLineAction({
-          classId,
-          planDate,
-          slotStart,
-          termMode,
-          skillArea,
-        }).then((r) => {
+        void api.createLine({ classId, planDate, slotStart }, { termMode, skillArea }).then((r) => {
           if (!r.ok) return toast.error(r.error);
           onSlotLines(planDate, slotStart, r.lines);
           seedPlanLines(store, r.lines);
@@ -118,12 +113,7 @@ export function usePlanHandlers({
             );
             if (!go) return;
           }
-          void copySlotFromPrevious({
-            classId,
-            planDate,
-            slotStart,
-            termMode,
-          }).then((r) => {
+          void api.copySlot({ classId, planDate, slotStart }, { termMode }).then((r) => {
             if (!r.ok) return toast.error(r.error);
             // JJ 이어받기(듣기 레벨·누적 암기 단어수) — 계획 복사와 **따로** 반영한다. 두 칸의 원본은
             // 계획 줄이 아니라 학생 기록이라, 계획이 하나도 안 채워진 경우에도 이 칸은 채워질 수 있다.
@@ -160,18 +150,18 @@ export function usePlanHandlers({
         });
       },
       removeLine: (lineId, planDate, slotStart) => {
-        void deletePlanLineAction({ classId, lineId }).then((r) => {
+        void api.deleteLine({ classId, planDate, slotStart }, { lineId }).then((r) => {
           if (!r.ok) return toast.error(r.error);
           onSlotLines(planDate, slotStart, r.lines);
         });
       },
       moveLineTerm: (lineId, planDate, slotStart, termMode) => {
-        void movePlanLineAction({ classId, lineId, termMode, lineNo: 99 }).then((r) => {
+        void api.moveLine({ classId, planDate, slotStart }, { lineId, termMode, lineNo: 99 }).then((r) => {
           if (!r.ok) return toast.error(r.error);
           onSlotLines(planDate, slotStart, r.lines);
         });
       },
     }),
-    [classId, store, onSlotLines, onCarried, flushHost],
+    [api, classId, store, onSlotLines, onCarried, flushHost],
   );
 }
