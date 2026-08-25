@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { foldSeating } from "./seating";
-import { groupSeatingFloors, resolveRoomName, seatingFloorOf } from "./seating-floors";
+import {
+  canonicalRoomName,
+  groupSeatingFloors,
+  resolveRoomName,
+  seatingFloorOf,
+} from "./seating-floors";
 import type { LiveBoardSlot } from "./types";
 
 const slot = (over: Partial<LiveBoardSlot> & { key: string; slotStart: string }): LiveBoardSlot => ({
@@ -51,6 +56,55 @@ describe("resolveRoomName", () => {
     expect(resolveRoomName({ slotRoomLabel: "본원SKY", classClassroomName: "본원201" })).toBe("본원SKY");
     expect(resolveRoomName({ classClassroomName: "본원201" })).toBe("본원201");
     expect(resolveRoomName({})).toBeNull();
+  });
+});
+
+describe("canonicalRoomName", () => {
+  // 실측 명단(injaewon) — 같은 호수가 두 건물에 있는 602가 애매성 사례다.
+  const ROOMS = [
+    "고수801",
+    "바른602",
+    "본원201",
+    "본원301",
+    "본원302",
+    "본원305",
+    "본원602",
+    "본원SKY",
+  ];
+
+  it("맨숫자 라벨을 등록된 강의실 이름으로 맞춘다 — 302 → 본원302", () => {
+    expect(canonicalRoomName("302", ROOMS)).toBe("본원302");
+    expect(canonicalRoomName("SKY", ROOMS)).toBe("본원SKY");
+  });
+
+  it("애매하면 손대지 않는다 — 602는 바른·본원 둘에 걸린다", () => {
+    expect(canonicalRoomName("602", ROOMS)).toBe("602");
+  });
+
+  it("건물명이 이미 붙었거나 등록된 이름이면 그대로", () => {
+    expect(canonicalRoomName("본원302", ROOMS)).toBe("본원302");
+    expect(canonicalRoomName("랩실", ROOMS)).toBe("랩실");
+    expect(canonicalRoomName("LAB실", ROOMS)).toBe("LAB실");
+  });
+
+  it("모르는 호수·빈 값은 그대로 — 없는 방을 지어내지 않는다", () => {
+    expect(canonicalRoomName("999", ROOMS)).toBe("999");
+    expect(canonicalRoomName("  ", ROOMS)).toBeNull();
+    expect(canonicalRoomName(null, ROOMS)).toBeNull();
+    expect(canonicalRoomName("302", [])).toBe("302");
+  });
+
+  it("접미사 앞이 숫자면 후보가 아니다 — 호수의 일부를 라벨로 오인하지 않게", () => {
+    expect(canonicalRoomName("302", ["본원1302"])).toBe("302");
+  });
+
+  it("맞춘 뒤엔 본원 3층으로 묶인다 — 이 함수가 존재하는 이유", () => {
+    expect(seatingFloorOf("302")).toMatchObject({ building: "호수", label: "3층" });
+    expect(seatingFloorOf(canonicalRoomName("302", ROOMS))).toMatchObject({
+      building: "본원",
+      floor: 3,
+      label: "본원 3층",
+    });
   });
 });
 
