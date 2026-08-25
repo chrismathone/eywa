@@ -135,6 +135,27 @@ export const AUDIT_ACTIONS = {
   // 기능이라(원장 지시) 이 로그가 유일한 역검수 근거다.
   teacher_view_impersonate: "다른 강사 뷰 열람",
   staff_teacher_view_access: "강사뷰 접근 토글 변경",
+  // 회의록(2026-08-25 원장 제보 "감사로그에 녹음 관련 이력이 하나도 없다") — 빠뜨린 게 아니라
+  // **처음부터 배선이 없던 영역**이었다(액션 9개 중 logAction 0). 🔴 특히 meeting_delete는 녹음·전사·
+  // AI 분석이 통째로 사라지는데 누가 지웠는지 역추적할 방법이 0이었다(학생 퇴원 사고와 같은 모양).
+  // 전사·재분석 재실행은 외부 API를 다시 태우는 일(비용)이라 반드시 남긴다.
+  // ⚠️ 메모장 저장(updateMeetingNotepad)은 **일부러 안 남긴다** — 글 쓰는 중 반복해서 눌리는 칸이라
+  //    남기면 감사로그가 그 한 사람 타이핑으로 뒤덮여 정작 삭제 같은 줄이 묻힌다.
+  meeting_create_audio: "회의 녹음 업로드",
+  meeting_create_text: "회의록 작성(메모)",
+  meeting_delete: "회의록 삭제",
+  meeting_retry_transcribe: "회의 전사 다시 실행",
+  meeting_regenerate_analysis: "회의 AI 분석 다시 생성",
+  meeting_title_update: "회의록 제목 수정",
+  meeting_speakers_update: "회의 화자·직원 연결",
+  meeting_report_edit: "회의 AI 리포트 수정",
+  // 학생상담(같은 배선 누락, 액션 5개 중 0) — 위 consultation_merge(등록상담 병합)와 다른 화면이라
+  // student_ 접두로 갈라 둔다. AI 케어 분석은 유료 호출이라 회의 재분석과 같은 결로 남긴다.
+  student_consultation_create: "학생상담 기록 작성",
+  student_consultation_update: "학생상담 기록 수정",
+  student_consultation_delete: "학생상담 기록 삭제",
+  student_consultation_follow_up: "학생상담 후속조치 처리",
+  student_care_analysis: "AI 케어 분석 실행",
 } as const;
 export type AuditActionKey = keyof typeof AUDIT_ACTIONS;
 

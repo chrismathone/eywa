@@ -7,6 +7,8 @@ import { generateJSON } from "@/lib/ai/generate";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant, accessLevelTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
+import { logAction } from "@/features/audit/server/log";
+import { kstDateOf } from "@/lib/date-kst";
 
 type CareFocus = {
   priority: "high" | "medium" | "low";
@@ -153,6 +155,21 @@ export async function runStudentCareAnalysis(
 
   if (error) return { error: error.message };
 
+  // 유료 AI 호출이라 누가 돌렸는지를 남긴다(비용). 🔴 분석 **본문**(summary·recommendation)은 안 담는다 —
+  // 감사로그는 요약이지 사본이 아니고, 학생 서술이 이력 표에 복제되면 안 된다.
+  await logAction({
+    action: "student_care_analysis",
+    targetType: "student",
+    targetLabel: student.name ?? null,
+    // focus는 AI 산출이라 배열이 아닐 수 있다 — 문자열이면 `.length`가 **글자 수**가 돼
+    // 거짓 건수가 된다. 배열일 때만 세고 아니면 null(모르는 값을 지어내지 않는다).
+    metadata: {
+      studentId,
+      model: modelId,
+      focus: Array.isArray(analysis.focus) ? analysis.focus.length : null,
+    },
+  });
+
   revalidatePath(`/students/${studentId}`);
   revalidatePath("/consultations");
   return undefined;
@@ -228,6 +245,23 @@ export async function createStudentConsultation(
 
   if (error || !data) return { error: error?.message ?? "상담 저장 실패" };
 
+  // 🔴 요약·후속조치 **본문은 담지 않는다**(상담 내용 금지) — 분류·대상·후속조치 유무까지만.
+  // 대상 열의 학생 이름은 metadata.studentId를 뷰어가 일괄 해석한다(auditTargetName).
+  await logAction({
+    action: "student_consultation_create",
+    targetType: "student_consultation",
+    metadata: {
+      consultationId: data.id as string,
+      studentId: input.studentId,
+      // 저장되는 값과 같은 식으로 KST 날짜를 뽑는다 — 감사로그가 상담 목록 화면과 같은 날을 말해야 한다.
+      consultedAt: kstDateOf(input.consultedAt),
+      category: input.category,
+      audience: input.audience,
+      hasFollowUp: !!input.followUpAction,
+      followUpDate: input.followUpDate,
+    },
+  });
+
   revalidatePath("/consultations");
   revalidatePath(`/students/${input.studentId}`);
   // redirect 대신 결과 반환 — 클라가 성공 확정(nonce) 후 초안 삭제·이동(B-2).
@@ -269,6 +303,20 @@ export async function updateStudentConsultation(
 
   if (error) return { error: error.message };
 
+  await logAction({
+    action: "student_consultation_update",
+    targetType: "student_consultation",
+    metadata: {
+      consultationId: id,
+      studentId: input.studentId,
+      consultedAt: kstDateOf(input.consultedAt),
+      category: input.category,
+      audience: input.audience,
+      hasFollowUp: !!input.followUpAction,
+      followUpDate: input.followUpDate,
+    },
+  });
+
   revalidatePath("/consultations");
   revalidatePath(`/students/${input.studentId}`);
   // redirect 대신 결과 반환 — 클라가 성공 확정(nonce) 후 초안 삭제·이동(B-2).
@@ -291,11 +339,21 @@ export async function toggleConsultationFollowUp(
   if (!id) return { error: "상담 ID가 누락되었습니다" };
 
   const supabase = await createClient();
-  const { error } = await supabase
+  // .select()로 학생 id를 함께 받는다 — 감사로그 '대상' 칸에 학생 이름이 뜨게(왕복 증가 0).
+  // maybeSingle: 없는 id면 종전처럼 조용히 통과(0행 = 에러 아님) — 동작을 바꾸지 않는다.
+  const { data: row, error } = await supabase
     .from("student_consultations")
     .update({ follow_up_done: done })
-    .eq("id", id);
+    .eq("id", id)
+    .select("student_id")
+    .maybeSingle();
   if (error) return { error: error.message };
+
+  await logAction({
+    action: "student_consultation_follow_up",
+    targetType: "student_consultation",
+    metadata: { consultationId: id, studentId: (row?.student_id as string | null) ?? null, done },
+  });
 
   revalidatePath("/consultations");
   return undefined;
@@ -317,8 +375,29 @@ export async function deleteStudentConsultation(
   if (!id) return { error: "상담 ID가 누락되었습니다" };
 
   const supabase = await createClient();
+  // 지우면 되찾을 수 없는 맥락(누구의·언제·어떤 분류 상담이었나)을 삭제 **전**에 읽어 둔다.
+  // 🔴 요약 본문은 읽지도 담지도 않는다(상담 내용 금지).
+  const { data: before } = await supabase
+    .from("student_consultations")
+    .select("student_id, consulted_at, category, audience, follow_up_action, follow_up_done")
+    .eq("id", id)
+    .maybeSingle();
   const { error } = await supabase.from("student_consultations").delete().eq("id", id);
   if (error) return { error: error.message };
+
+  await logAction({
+    action: "student_consultation_delete",
+    targetType: "student_consultation",
+    metadata: {
+      consultationId: id,
+      // ⚠️ formData의 studentId는 없으면 **빈 문자열**이다 — `?? `로는 안 걸러진다(`|| null`).
+      studentId: (before?.student_id as string | null) ?? (studentId || null),
+      consultedAt: kstDateOf(before?.consulted_at),
+      category: (before?.category as string | null) ?? null,
+      audience: (before?.audience as string | null) ?? null,
+      hasFollowUp: !!before?.follow_up_action,
+    },
+  });
 
   revalidatePath("/consultations");
   if (studentId) revalidatePath(`/students/${studentId}`);

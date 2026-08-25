@@ -9,6 +9,7 @@ import {
   addDays,
   inclusiveDateWindowStart,
   formatKoreanDate,
+  kstDateOf,
 } from "./date-kst";
 
 describe("date-kst — KST(Asia/Seoul) 기준 오늘/이번 달", () => {
@@ -91,5 +92,25 @@ describe("weekdayIndexOf / addDays / formatKoreanDate — UTC 결정적 날짜 �
   it("formatKoreanDate: 한글 표시", () => {
     expect(formatKoreanDate("2026-07-14")).toBe("2026년 7월 14일 (화)");
     expect(formatKoreanDate("2026-07-13")).toBe("2026년 7월 13일 (월)");
+  });
+});
+
+describe("kstDateOf — 타임스탬프를 KST 날짜로(UTC slice 금지)", () => {
+  it("🔴 UTC 날짜와 갈리는 구간(00:00~08:59 KST)에서 하루 전으로 적히지 않는다", () => {
+    // 2026-08-26 01:00 KST = 2026-08-25T16:00Z — slice(0,10)이면 8/25(하루 전)로 적힌다.
+    expect(kstDateOf("2026-08-25T16:00:00.000Z")).toBe("2026-08-26");
+    expect("2026-08-25T16:00:00.000Z".slice(0, 10)).toBe("2026-08-25"); // 옛 방식이 틀렸음을 못박음
+  });
+  it("같은 날인 구간은 그대로", () => {
+    expect(kstDateOf("2026-08-25T08:05:00.000Z")).toBe("2026-08-25");
+    expect(kstDateOf(new Date("2026-08-25T23:59:59.000Z"))).toBe("2026-08-26");
+  });
+  it("빈값·형식오류는 null(없는 날짜를 지어내지 않는다)", () => {
+    expect(kstDateOf(null)).toBeNull();
+    expect(kstDateOf("")).toBeNull();
+    expect(kstDateOf("   ")).toBeNull();
+    expect(kstDateOf("garbage")).toBeNull();
+    expect(kstDateOf(new Date(NaN))).toBeNull();
+    expect(kstDateOf(12345)).toBeNull();
   });
 });

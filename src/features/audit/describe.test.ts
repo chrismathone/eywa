@@ -268,6 +268,9 @@ describe("AUDIT_TYPE_LABEL", () => {
       // ⚠️ 이 수기 목록은 늘 늦는다 — 전수 스캔 가드는 actions-registry.test.ts("대상 유형 라벨")에 있다.
       "calendar_event",
       "calendar_tag",
+      // 2026-08-25 회의록·학생상담 — 이 두 영역은 애초에 logAction이 0이라 target_type도 없었다.
+      "meeting",
+      "student_consultation",
     ];
     for (const t of usedTypes) expect(AUDIT_TYPE_LABEL[t], t).toBeTruthy();
   });
@@ -420,6 +423,129 @@ describe("auditDetail — 2026-08-20 신규 case (실데이터 metadata 표본)"
     );
   });
 
+  it("회의록: 제목은 대상 열이 보여주므로 상세엔 되찾을 수 없는 것만", () => {
+    // 녹음 업로드 — 원장이 감사로그에서 찾던 그 줄.
+    expect(
+      auditDetail(
+        "meeting_create_audio",
+        { meetingId: DOC, sizeBytes: 12_582_912, attendees: 5, heldAt: "2026-08-25", notepadChars: 320 },
+        ctx(),
+      ),
+    ).toBe("회의일 2026-08-25 · 녹음 12.0MB · 참석 5명 · 메모 320자");
+    expect(
+      auditDetail(
+        "meeting_create_text",
+        { meetingId: DOC, notepadChars: 1240, attendees: 3, heldAt: "2026-08-25" },
+        ctx(),
+      ),
+    ).toBe("회의일 2026-08-25 · 메모 1,240자 · 참석 3명");
+    // 삭제 — 무엇이 사라졌는지가 이 로그의 존재 이유(본문은 없다, 분량·모델만).
+    expect(
+      auditDetail(
+        "meeting_delete",
+        {
+          meetingId: DOC,
+          heldAt: "2026-08-20",
+          hadAudio: true,
+          audioRemoved: true,
+          audioDurationSec: 750,
+          transcriptChars: 4880,
+          hadReport: true,
+          model: "deepseek-v4-pro-2026-07-16",
+        },
+        ctx(),
+      ),
+    ).toBe(
+      "회의일 2026-08-20 · 녹음 파일 함께 삭제 (12분 30초) · 전사 4,880자 · AI 분석 있었음 · DeepSeek v4-pro · 삭제됨(복구 불가)",
+    );
+    // 옛 ijw 공유 경로는 파일을 안 지운다 — 그 사실이 로그에도 갈리게.
+    expect(
+      auditDetail(
+        "meeting_delete",
+        { meetingId: DOC, heldAt: "2026-05-02", hadAudio: true, audioRemoved: false, transcriptChars: 0, hadReport: false },
+        ctx(),
+      ),
+    ).toBe("회의일 2026-05-02 · 녹음 파일은 보존 · 삭제됨(복구 불가)");
+  });
+
+  it("회의록 재실행: 직전 상태를 한글로 — 완료된 건 재전사가 곧 낭비 사례", () => {
+    expect(
+      auditDetail("meeting_retry_transcribe", { meetingId: DOC, fromStatus: "failed", transcriptChars: 0 }, ctx()),
+    ).toBe("직전 상태: 실패 · 원본 녹음을 외부 전사에 재제출");
+    expect(
+      auditDetail("meeting_retry_transcribe", { meetingId: DOC, fromStatus: "completed", transcriptChars: 4880 }, ctx()),
+    ).toBe("직전 상태: 완료 · 원본 녹음을 외부 전사에 재제출 · 기존 전사 4,880자 있음");
+    expect(
+      auditDetail("meeting_regenerate_analysis", { meetingId: DOC, transcriptChars: 4880, notepadChars: 0 }, ctx()),
+    ).toBe("전사 4,880자");
+  });
+
+  it("회의록 수정: 이전 제목·화자 연결·섹션 라벨", () => {
+    expect(auditDetail("meeting_title_update", { meetingId: DOC, from: "8월 정기회의" }, ctx())).toBe(
+      "이전 제목 「8월 정기회의」",
+    );
+    // 이전 제목을 못 구했으면(행이 그 사이 사라짐) 지어내지 않는다 — 새 제목은 대상 열에 있다.
+    expect(auditDetail("meeting_title_update", { meetingId: DOC, from: null }, ctx())).toBeNull();
+    expect(auditDetail("meeting_speakers_update", { meetingId: DOC, speakers: 3, linked: 2 }, ctx())).toBe(
+      "화자 3명 표시명 지정 · 직원 연결 2명",
+    );
+    expect(auditDetail("meeting_speakers_update", { meetingId: DOC, speakers: 0, linked: 0 }, ctx())).toBe(
+      "화자 표시·직원 연결 모두 해제",
+    );
+    expect(
+      auditDetail("meeting_report_edit", { meetingId: DOC, section: "actionItems", chars: 412 }, ctx()),
+    ).toBe("「액션 아이템」 섹션 · 수정 후 412자");
+    // 미등록 섹션 키는 표기 생략(영문 원문을 흘리지 않는다)
+    expect(auditDetail("meeting_report_edit", { meetingId: DOC, section: "future", chars: 10 }, ctx())).toBe(
+      "수정 후 10자",
+    );
+  });
+
+  it("학생상담: 분류·대상·후속조치만 — 요약 본문은 metadata에 애초에 없다", () => {
+    const meta = {
+      consultationId: DOC,
+      studentId: SID,
+      consultedAt: "2026-08-25",
+      category: "academic",
+      audience: "parent",
+      hasFollowUp: true,
+      followUpDate: "2026-09-01",
+    };
+    expect(auditDetail("student_consultation_create", meta, ctx(names))).toBe(
+      "상담일 2026-08-25 · 학습 · 대상 학부모 · 후속조치 2026-09-01까지",
+    );
+    expect(auditDetail("student_consultation_update", meta, ctx(names))).toBe(
+      "상담일 2026-08-25 · 학습 · 대상 학부모 · 후속조치 2026-09-01까지",
+    );
+    expect(
+      auditDetail(
+        "student_consultation_delete",
+        { consultationId: DOC, studentId: SID, consultedAt: "2026-08-11", category: "emotional", audience: "both", hasFollowUp: false },
+        ctx(names),
+      ),
+    ).toBe("상담일 2026-08-11 · 정서 · 대상 학부모+학생 · 삭제됨(복구 불가)");
+    expect(auditDetail("student_consultation_follow_up", { consultationId: DOC, studentId: SID, done: true }, ctx())).toBe(
+      "완료로 표시",
+    );
+    expect(auditDetail("student_consultation_follow_up", { consultationId: DOC, studentId: SID, done: false }, ctx())).toBe(
+      "완료 해제",
+    );
+    // 미등록 분류·대상은 **표기 생략**(영문 원문 노출 금지)
+    expect(
+      auditDetail("student_consultation_create", { consultationId: DOC, studentId: SID, category: "future", audience: "future" }, ctx()),
+    ).toBeNull();
+  });
+
+  it("AI 케어 분석: 모델은 친화 라벨, 원시 id는 안 나온다", () => {
+    expect(auditDetail("student_care_analysis", { studentId: SID, model: "claude-sonnet-5", focus: 3 }, ctx(names))).toBe(
+      "케어 포인트 3건 · Claude Sonnet 5",
+    );
+    // 알 수 없는 모델은 미표시(raw 코드 노출 금지 — modelDisplayLabel 규약)
+    expect(auditDetail("student_care_analysis", { studentId: SID, model: "some-future-llm", focus: 2 }, ctx())).toBe(
+      "케어 포인트 2건",
+    );
+  });
+
   it("owner_settings_update: 스크립트가 남긴 한글 note를 버리지 않는다", () => {
     // 종전엔 section만 봐서 스크립트 행이 통째로 "설정 저장"으로 뭉갰다(원장 제보 줄의 마지막 사례).
     const note = "수업 평가(class_review) 개방 — 원장직급(master) + 개인 이승엽·정유진(원장 지시 2026-08-13 테스트)";
@@ -493,6 +619,21 @@ describe("🔴 감사 상세에 영문이 새지 않는다(실표본 전수)", (
     { action: "classroom_archive", meta: {} },
     { action: "notice_popup_create", meta: {} },
     { action: "owner_settings_update", meta: { via: "script:narrow-staff-menu", grants: ["설현", "이승엽"] }, banned: ["via", "grants", "script:narrow-staff-menu"] },
+    // 회의록·학생상담(2026-08-25 신규 배선) — 호출부가 실제로 넘기는 모양 그대로.
+    { action: "meeting_create_audio", meta: { meetingId: DOC, sizeBytes: 12_582_912, attendees: 5, heldAt: "2026-08-25", notepadChars: 0 }, banned: ["sizeBytes", "attendees", "heldAt", "meetingId", "notepadChars"] },
+    { action: "meeting_create_text", meta: { meetingId: DOC, notepadChars: 1240, attendees: 3, heldAt: "2026-08-25" }, banned: ["notepadChars", "attendees", "heldAt"] },
+    { action: "meeting_delete", meta: { meetingId: DOC, heldAt: "2026-08-20", hadAudio: true, audioRemoved: true, audioDurationSec: 750, transcriptChars: 4880, hadReport: true, model: "deepseek-v4-pro-2026-07-16" }, banned: ["hadAudio", "audioRemoved", "audioDurationSec", "transcriptChars", "hadReport", "deepseek-v4-pro-2026-07-16", "true"] },
+    { action: "meeting_retry_transcribe", meta: { meetingId: DOC, fromStatus: "failed", transcriptChars: 0 }, banned: ["fromStatus", "failed", "transcriptChars"] },
+    { action: "meeting_retry_transcribe", meta: { meetingId: DOC, fromStatus: "completed", transcriptChars: 4880 }, banned: ["fromStatus", "completed"] },
+    { action: "meeting_regenerate_analysis", meta: { meetingId: DOC, transcriptChars: 4880, notepadChars: 120 }, banned: ["transcriptChars", "notepadChars", "meetingId"] },
+    { action: "meeting_title_update", meta: { meetingId: DOC, from: "8월 정기회의" }, banned: ["meetingId", "from"] },
+    { action: "meeting_speakers_update", meta: { meetingId: DOC, speakers: 3, linked: 2 }, banned: ["speakers", "linked", "meetingId"] },
+    { action: "meeting_report_edit", meta: { meetingId: DOC, section: "actionItems", chars: 412 }, banned: ["section", "actionItems", "chars"] },
+    { action: "student_consultation_create", meta: { consultationId: DOC, studentId: SID, consultedAt: "2026-08-25", category: "academic", audience: "parent", hasFollowUp: true, followUpDate: "2026-09-01" }, banned: ["academic", "parent", "category", "audience", "hasFollowUp", "followUpDate", "consultedAt", "true"] },
+    { action: "student_consultation_update", meta: { consultationId: DOC, studentId: SID, consultedAt: "2026-08-25", category: "social", audience: "student", hasFollowUp: false, followUpDate: null }, banned: ["social", "student", "category", "audience", "hasFollowUp", "consultedAt", "false"] },
+    { action: "student_consultation_delete", meta: { consultationId: DOC, studentId: SID, consultedAt: "2026-08-11", category: "emotional", audience: "both", hasFollowUp: false }, banned: ["emotional", "both", "consultedAt", "category", "audience", "hasFollowUp"] },
+    { action: "student_consultation_follow_up", meta: { consultationId: DOC, studentId: SID, done: true }, banned: ["done", "true", "consultationId", "studentId"] },
+    { action: "student_care_analysis", meta: { studentId: SID, model: "claude-sonnet-5", focus: 3 }, banned: ["claude-sonnet-5", "model", "focus", "studentId"] },
   ];
 
   for (const s of SAMPLES) {
@@ -503,6 +644,36 @@ describe("🔴 감사 상세에 영문이 새지 않는다(실표본 전수)", (
       for (const bad of s.banned ?? []) {
         expect(out, `영문 원문 "${bad}"이 그대로 새어나옴 → ${out}`).not.toContain(bad);
       }
+    });
+  }
+});
+
+/**
+ * 🔴 **빈 상세도 실패다** — 2026-08-21 폴백 정책 반전 이후 case 누락은 영문 노출이 아니라
+ * **빈 칸**으로 나타난다(위 SAMPLES 루프는 null을 "표기할 상세 없음"으로 통과시킨다).
+ * 회의록·학생상담은 전부 metadata에 실제 값을 싣는 액션이라, 실호출 표본에서 null이면 배선 실수다.
+ */
+describe("🔴 회의록·학생상담 상세는 빈 칸이 아니다(실호출 표본)", () => {
+  const LIVE: Array<{ action: string; meta: Record<string, unknown> }> = [
+    { action: "meeting_create_audio", meta: { meetingId: DOC, sizeBytes: 8_400_000, attendees: 4, heldAt: "2026-08-25", notepadChars: 0 } },
+    { action: "meeting_create_text", meta: { meetingId: DOC, notepadChars: 640, attendees: 0, heldAt: "2026-08-25" } },
+    { action: "meeting_delete", meta: { meetingId: DOC, heldAt: "2026-08-20", hadAudio: false, audioRemoved: false, audioDurationSec: null, transcriptChars: 0, hadReport: false, model: null } },
+    { action: "meeting_retry_transcribe", meta: { meetingId: DOC, fromStatus: "failed", transcriptChars: 0 } },
+    { action: "meeting_regenerate_analysis", meta: { meetingId: DOC, transcriptChars: 0, notepadChars: 640 } },
+    { action: "meeting_title_update", meta: { meetingId: DOC, from: "8월 정기회의" } },
+    { action: "meeting_speakers_update", meta: { meetingId: DOC, speakers: 0, linked: 0 } },
+    { action: "meeting_report_edit", meta: { meetingId: DOC, section: "summary", chars: 0 } },
+    { action: "student_consultation_create", meta: { consultationId: DOC, studentId: SID, consultedAt: "2026-08-25", category: "general", audience: "parent", hasFollowUp: false, followUpDate: null } },
+    { action: "student_consultation_update", meta: { consultationId: DOC, studentId: SID, consultedAt: null, category: "career", audience: "both", hasFollowUp: true, followUpDate: null } },
+    { action: "student_consultation_delete", meta: { consultationId: DOC, studentId: SID, consultedAt: "2026-08-11", category: null, audience: null, hasFollowUp: false } },
+    { action: "student_consultation_follow_up", meta: { consultationId: DOC, studentId: SID, done: false } },
+    { action: "student_care_analysis", meta: { studentId: SID, model: "deepseek-v4-pro", focus: 0 } },
+  ];
+  for (const s of LIVE) {
+    it(`${s.action} — 상세가 비어 있지 않다`, () => {
+      const out = auditDetail(s.action, s.meta, ctx(names));
+      expect(out, `${s.action}: 상세가 빈 칸(case 누락 의심)`).toBeTruthy();
+      expect(out).toMatch(/[가-힣]/);
     });
   }
 });

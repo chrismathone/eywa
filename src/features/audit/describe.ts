@@ -16,6 +16,12 @@ import {
   isSeason,
 } from "@/features/shuttle/types";
 import { compactWeekdays } from "@/features/shuttle/roster";
+import {
+  CONSULTATION_AUDIENCE_LABEL,
+  CONSULTATION_CATEGORY_LABEL,
+} from "@/features/consultations/labels";
+import { meetingReportSectionLabel } from "@/features/meetings/report-sections";
+import { modelDisplayLabel } from "@/lib/ai/model-label";
 
 /** 대상 유형(target_type) → 한글 — 감사로그 '대상' 열 접두. 미등록 유형은 원문 폴백. */
 export const AUDIT_TYPE_LABEL: Record<string, string> = {
@@ -47,10 +53,24 @@ export const AUDIT_TYPE_LABEL: Record<string, string> = {
   // 캘린더(0218a) — 위와 같은 누락. 일정 삭제 로그의 대상이 영문 "calendar_event"로 떠 있었다.
   calendar_event: "일정",
   calendar_tag: "캘린더 태그",
+  // 회의록·학생상담(2026-08-25) — 없으면 '대상' 칸에 영문 "meeting"·"student_consultation"이 그대로 뜬다.
+  meeting: "회의록",
+  student_consultation: "학생 상담",
 };
 
 // 시험유형은 운영 enum이 아니라 코드 고정(CLAUDE.md) — exams 화면과 동일 라벨.
 const EXAM_TYPE_LABEL: Record<string, string> = { weekly: "주간", mock: "모의", school: "학교" };
+
+// 회의 처리 파이프라인 상태(코드 고정 enum, meeting_processing_status) — 라벨은 회의록 목록 화면과 같은 말.
+// 🔴 없으면 재전사 로그 상세에 `failed`·`completed`가 영문 그대로 샌다.
+const MEETING_STATUS_LABEL: Record<string, string> = {
+  idle: "대기",
+  uploaded: "업로드됨",
+  transcribing: "전사 중",
+  analyzing: "분석 중",
+  completed: "완료",
+  failed: "실패",
+};
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -76,6 +96,41 @@ const join = (...parts: Array<string | null>): string | null => {
 const HANGUL_RE = /[가-힣]/;
 const YMD_RE = /^\d{4}-\d{2}-\d{2}$/;
 const arr = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
+
+/** 바이트 → 사람이 읽는 크기. 0·비수는 null(없는 걸 "0B"로 적으면 노이즈). */
+const fileSize = (v: unknown): string | null => {
+  const n = num(v);
+  if (n === null || n <= 0) return null;
+  if (n < 1024 * 1024) return `${Math.max(1, Math.round(n / 1024)).toLocaleString("ko-KR")}KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)}MB`;
+};
+
+/** 초 → "12분 30초"(1분 미만은 초만). 녹음 길이. */
+const durationKo = (v: unknown): string | null => {
+  const n = num(v);
+  if (n === null || n <= 0) return null;
+  const min = Math.floor(n / 60);
+  const sec = Math.round(n % 60);
+  if (min === 0) return `${sec}초`;
+  return sec > 0 ? `${min}분 ${sec}초` : `${min}분`;
+};
+
+/** 글자 수 — 0이면 null(전사·메모가 아예 없던 건을 "0자"로 적지 않는다). */
+const charsKo = (v: unknown, label: string): string | null => {
+  const n = num(v);
+  return n === null || n <= 0 ? null : `${label} ${n.toLocaleString("ko-KR")}자`;
+};
+
+/** 학생상담 분류·대상 — 🔴 미등록 키는 **null**(영문 원문을 흘리지 않는다). */
+const consultCategoryKo = (v: unknown): string | null => {
+  const s = str(v);
+  return s ? (CONSULTATION_CATEGORY_LABEL[s] ?? null) : null;
+};
+const consultAudienceKo = (v: unknown): string | null => {
+  const s = str(v);
+  const label = s ? CONSULTATION_AUDIENCE_LABEL[s] : null;
+  return label ? `대상 ${label}` : null;
+};
 
 /**
  * 미등록 액션 폴백에서 **뜻이 분명한** 공통 키만 한글로 옮긴다. 값이 ""면 라벨 없이 값만.
@@ -752,6 +807,116 @@ export function auditDetail(
     case "teacher_view_impersonate":
     case "resume_view_unlock":
       return null; // 대상 열이 이미 강사·이력서 이름을 보여준다(uuid만 남기면 노이즈)
+
+    // ── 회의록(2026-08-25) ───────────────────────────────────────────────────────────
+    // 🔴 case가 없으면 상세 칸이 **빈 채로** 뜬다 — 2026-08-21에 폴백 정책을 뒤집어 모르는 metadata
+    //    키는 아예 숨기기 때문이다(옛날처럼 영문이 뜨지도 않는다). 제목은 '대상' 열이 보여주므로
+    //    여기선 되찾을 수 없는 것(회의일·분량·모델·상태)만 적는다.
+    case "meeting_create_audio": {
+      return join(
+        str(m.heldAt) ? `회의일 ${str(m.heldAt)}` : null,
+        fileSize(m.sizeBytes) ? `녹음 ${fileSize(m.sizeBytes)}` : null,
+        num(m.attendees) ? `참석 ${num(m.attendees)}명` : null,
+        charsKo(m.notepadChars, "메모"),
+      );
+    }
+    case "meeting_create_text": {
+      return join(
+        str(m.heldAt) ? `회의일 ${str(m.heldAt)}` : null,
+        charsKo(m.notepadChars, "메모"),
+        num(m.attendees) ? `참석 ${num(m.attendees)}명` : null,
+      );
+    }
+    case "meeting_delete": {
+      // 무엇이 사라졌는지가 이 로그의 존재 이유다. 전사·분석 **본문은 없다**(분량·모델만) —
+      // 그래서 "복구는 원문 참조"라고 적지 않는다(enrollment_delete와 달리 스냅샷이 없다).
+      const dur = durationKo(m.audioDurationSec);
+      const model = modelDisplayLabel(str(m.model));
+      const audio =
+        m.hadAudio === true
+          ? m.audioRemoved === true
+            ? `녹음 파일 함께 삭제${dur ? ` (${dur})` : ""}`
+            : `녹음 파일은 보존${dur ? ` (${dur})` : ""}`
+          : null;
+      return join(
+        str(m.heldAt) ? `회의일 ${str(m.heldAt)}` : null,
+        audio,
+        charsKo(m.transcriptChars, "전사"),
+        m.hadReport === true ? `AI 분석 있었음${model ? ` · ${model}` : ""}` : null,
+        "삭제됨(복구 불가)",
+      );
+    }
+    case "meeting_retry_transcribe": {
+      const from = str(m.fromStatus);
+      const kept = charsKo(m.transcriptChars, "기존 전사");
+      return join(
+        from && MEETING_STATUS_LABEL[from] ? `직전 상태: ${MEETING_STATUS_LABEL[from]}` : null,
+        "원본 녹음을 외부 전사에 재제출",
+        kept ? `${kept} 있음` : null,
+      );
+    }
+    case "meeting_regenerate_analysis": {
+      // 액션 라벨이 이미 "회의 AI 분석 다시 생성"이다 — 여기자 무엇을 넣어 돌렸는지(입력 분량)만.
+      return join(charsKo(m.transcriptChars, "전사"), charsKo(m.notepadChars, "메모"));
+    }
+    case "meeting_title_update": {
+      // 새 제목은 '대상' 열이 보여준다 — 여기엔 이전 제목(이력으로 쓰려면 반드시 필요한 쪽).
+      const from = str(m.from);
+      return from ? `이전 제목 「${from}」` : null;
+    }
+    case "meeting_speakers_update": {
+      const speakers = num(m.speakers) ?? 0;
+      const linked = num(m.linked) ?? 0;
+      if (speakers === 0 && linked === 0) return "화자 표시·직원 연결 모두 해제";
+      return join(
+        speakers ? `화자 ${speakers}명 표시명 지정` : null,
+        linked ? `직원 연결 ${linked}명` : null,
+      );
+    }
+    case "meeting_report_edit": {
+      // 🔴 섹션 키는 영문(`summary`)이라 반드시 한글 라벨로 — 미등록 키는 표기 생략(지어내지 않는다).
+      const section = meetingReportSectionLabel(str(m.section));
+      return join(section ? `「${section}」 섹션` : null, charsKo(m.chars, "수정 후"));
+    }
+
+    // ── 학생상담(2026-08-25) ─────────────────────────────────────────────────────────
+    // 🔴 학생 이름은 '대상' 열이 metadata.studentId로 보여주므로 여기서 되풀이하지 않는다.
+    //    요약·후속조치 **본문은 애초에 metadata에 없다**(상담 내용 금지) — 새로 끌어오지 말 것.
+    case "student_consultation_create":
+    case "student_consultation_update": {
+      const follow =
+        m.hasFollowUp === true
+          ? str(m.followUpDate)
+            ? `후속조치 ${str(m.followUpDate)}까지`
+            : "후속조치 있음"
+          : null;
+      return join(
+        str(m.consultedAt) ? `상담일 ${str(m.consultedAt)}` : null,
+        consultCategoryKo(m.category),
+        consultAudienceKo(m.audience),
+        follow,
+      );
+    }
+    case "student_consultation_delete": {
+      return join(
+        str(m.consultedAt) ? `상담일 ${str(m.consultedAt)}` : null,
+        consultCategoryKo(m.category),
+        consultAudienceKo(m.audience),
+        m.hasFollowUp === true ? "후속조치가 있던 기록" : null,
+        "삭제됨(복구 불가)",
+      );
+    }
+    case "student_consultation_follow_up": {
+      return m.done === true ? "완료로 표시" : m.done === false ? "완료 해제" : null;
+    }
+    case "student_care_analysis": {
+      // 대상 열이 학생 이름을 보여준다 — 여기선 무엇이 얼마나 나왔는지 + 어떤 모델이었는지.
+      const focus = num(m.focus);
+      return join(
+        focus === null ? null : `케어 포인트 ${focus}건`,
+        modelDisplayLabel(str(m.model)),
+      );
+    }
 
     // ── 셔틀 — metadata가 uuid뿐이라 지금은 빈 상세다. 새 키가 붙어도 영문이 새지 않게 못박는다. ──
     case "shuttle_stop_archive":
