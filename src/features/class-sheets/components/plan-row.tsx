@@ -11,7 +11,7 @@ import { buildSaveKey } from "../lib/save-keys";
 import type { PlanPatchField } from "../lib/plan-codec";
 import type { PlanLineDTO } from "../server/actions";
 import { SHEET_BOX_FRAME, SHEET_INPUT } from "../ui-box";
-import type { SheetHandlers } from "./sheet-client";
+import type { PlanHandlers } from "./use-plan-handlers";
 import { useCellState, type SheetSaveStore } from "./use-sheet-saves";
 
 function CasInput({
@@ -27,7 +27,7 @@ function CasInput({
   field: PlanPatchField;
   fallback: string | null;
   store: SheetSaveStore;
-  handlers: SheetHandlers;
+  handlers: PlanHandlers;
   canEdit: boolean;
   ariaLabel: string;
 }) {
@@ -85,7 +85,7 @@ export const PlanRow = memo(function PlanRow({
   slotStart: string;
   skillAreas: SkillAreaSetting[];
   store: SheetSaveStore;
-  handlers: SheetHandlers;
+  handlers: PlanHandlers;
   canEdit: boolean;
 }) {
   const areaKey = buildSaveKey(line.id, "skill_area");

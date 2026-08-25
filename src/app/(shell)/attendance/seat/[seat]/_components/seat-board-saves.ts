@@ -4,7 +4,8 @@ import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { fillSeatSlot, setSeatCell, type SeatStatus } from "@/features/attendance/seat/server/actions";
 import { setSeatJjField } from "@/features/attendance/seat/server/mark-actions";
-import { seatOverlayKey, type JjMarkField } from "@/features/attendance/seat/jj-fields";
+import { seatOverlayKey, JJ_MARK_FIELDS, type JjMarkField } from "@/features/attendance/seat/jj-fields";
+import type { CarryPatch } from "@/features/class-sheets/lib/carry-marks";
 import type { SeatClassRoster } from "@/features/attendance/seat/server/queries";
 import type { SeatKey } from "@/features/attendance/seat/seat";
 
@@ -27,12 +28,18 @@ export function useSeatBoardSaves(seat: SeatKey, date: string, activeStart: stri
   const runs = useRef(new Map<string, () => Promise<void>>());
   const beforeField = useRef(new Map<string, string | null | undefined>());
 
+  /**
+   * 대기 중인 칸 저장을 즉시 실행 — 언마운트·일괄 출석·진도 '내용 복사' 전에 부른다.
+   * ⚠️ `allSettled` — 한 칸이 던지면(네트워크 단절 등) 이 프라미스가 거절되고, `void flushFields()`
+   *    자리에선 **처리 안 된 거부**로, `await` 자리(일괄 출석·복사)에선 **그 동작이 통째로 취소**된다.
+   *    한 칸의 실패가 나머지를 막지 않게 한다(칸별 실패는 각 run이 이미 에러 배너로 알린다).
+   */
   const flushFields = useCallback(() => {
     for (const id of timers.current.values()) clearTimeout(id);
     timers.current.clear();
     const pendingRuns = [...runs.current.values()];
     runs.current.clear();
-    return Promise.all(pendingRuns.map((fn) => fn()));
+    return Promise.allSettled(pendingRuns.map((fn) => fn()));
   }, []);
 
   useEffect(() => {
@@ -146,5 +153,31 @@ export function useSeatBoardSaves(seat: SeatKey, date: string, activeStart: stri
     [activeStart, date, keyOf, seat],
   );
 
-  return { pending, error, statusOf, mergeFields, save, fill, saveField };
+  /**
+   * 진도 '내용 복사 (지난 수업)'가 채운 듣기 레벨·누적 암기 단어수를 **화면에 바로** 반영한다.
+   *
+   * 🔴 `router.refresh()`로는 안 바뀐다 — 이 칸들은 서버 props 위에 얹힌 클라 오버레이라,
+   *    안 머지하면 담당자는 "복사했는데 칸이 그대로"로 본다(영어 시트·오늘 보드와 같은 처방).
+   * ⚠️ 패치는 **채운 칸 + 이미 있던 칸을 함께** 담는다(CarryPatch 계약) — 두 칸을 통째로 얹어도
+   *    쓰던 값이 지워지지 않는다.
+   * ⚠️ 저장은 서버가 이미 했다(같은 `class_sheet_student_marks` 행) — 여기서 다시 쓰지 않는다.
+   */
+  const applyCarried = useCallback(
+    (classId: string, patches: CarryPatch[]) => {
+      if (patches.length === 0) return;
+      setFields((m) => {
+        const next = { ...m };
+        for (const p of patches) {
+          const key = keyOf(classId, p.studentId);
+          const cur = { ...next[key] };
+          for (const field of JJ_MARK_FIELDS) cur[field] = p[field];
+          next[key] = cur;
+        }
+        return next;
+      });
+    },
+    [keyOf],
+  );
+
+  return { pending, error, statusOf, mergeFields, save, fill, saveField, flushFields, applyCarried };
 }

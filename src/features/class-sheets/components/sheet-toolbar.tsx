@@ -5,6 +5,7 @@
 import { ChevronLeft, ChevronRight, ClipboardCheck } from "@/components/icons/eywa-icon-compat";
 import { addWeeks, thisMonday } from "@/features/timetable/lib/week";
 import { EditingBadge } from "@/features/presence/editing-badge";
+import { ecsPresenceScope } from "../lib/presence-scope";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { WindowLink } from "@/components/workspace/window-link";
 import { MARKER_TRIGGER, MARKER_WIDTH } from "@/components/ui/marker-trigger";
@@ -240,7 +241,7 @@ export function SheetToolbar({
             </button>
           ))}
         </span>
-        <EditingBadge scope={`ecs:${data.classId}:${data.weekMonday}`} />
+        <EditingBadge scope={ecsPresenceScope(data.classId, data.weekMonday)} />
         {conflicts > 0 ? (
           <span className="text-danger text-[12px] font-bold whitespace-nowrap">충돌 {conflicts}건 — 셀에서 선택</span>
         ) : pending > 0 ? (
