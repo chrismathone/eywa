@@ -106,6 +106,10 @@ export function WorkspaceCanvas({ owner }: { owner: string }) {
     const unsub = subscribeWindowBusy((m) => {
       if (m.active) busy.add(m.winId);
       else busy.delete(m.winId);
+      // 잠금은 store에도 옮겨 담는다 — 창 자체 X(FloatingWindow)와 하단 독의 ✕(WindowSwitcher)가
+      // 같은 값을 보게 하는 단일 소스(구독을 화면마다 따로 두면 마운트 시점이 늦은 쪽은 진행 중인
+      // 녹음을 모른 채 창을 닫아버린다 — 독은 스포트라이트 진입/해제로 실제로 재마운트된다).
+      useWindowStore.getState().setWindowBusy(m.winId, m.active);
       const need = busy.size > 0;
       if (need && !installed) {
         window.addEventListener("beforeunload", guard);

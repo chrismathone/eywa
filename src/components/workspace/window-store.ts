@@ -182,6 +182,11 @@ type State = {
   // 창별 미저장 변경 여부(런타임, 미영속) — 창 본문 iframe의 폼이 useUnsavedGuard로 부모에 postMessage하면
   // workspace-canvas가 iframe→win.id 매칭 후 세팅. FloatingWindow가 닫기(X)·Esc에서 확인을 띄우는 데 쓴다.
   dirty: Record<string, boolean>;
+  // 창별 "끊기면 유실" 잠금(런타임, 미영속) — 녹음 등이 그 창 안에서 진행 중. 창 본문이 BroadcastChannel로
+  // 쏘면(use-recording-lock) workspace-canvas가 여기에 옮겨 담는다. **닫기 게이트의 단일 소스** —
+  // 창 자체 X(FloatingWindow)와 하단 독 칩의 ✕(WindowSwitcher)가 같은 값을 본다(구독을 화면마다
+  // 따로 두면 늦게 마운트된 화면이 진행 중인 잠금을 못 받아 그쪽으로만 닫혀 버린다).
+  busy: Record<string, boolean>;
   // BL3 warm 풀(런타임, 미영속) — 닫혔지만 iframe을 hidden으로 살려둔 라우트 창 id들(LRU, 끝=최근).
   // windows엔 minimized:true로 남아 마운트 유지되고 order에선 빠져 모든 창 UI에서 사라진다(닫힌 것처럼).
   // 같은 메뉴 재오픈 시 재렌더 없이 즉시 표시. 상한 CACHE_MAX 초과분은 close()가 실제 파괴.
@@ -246,6 +251,8 @@ type Actions = {
   reloadWindow: (id: string) => void;
   /** 창 본문 폼의 미저장 변경 여부 세팅(workspace-canvas가 iframe postMessage 수신 시 호출). */
   setWindowDirty: (id: string, dirty: boolean) => void;
+  /** 창의 "끊기면 유실" 잠금 세팅(workspace-canvas가 window-busy 신호 수신 시 호출). */
+  setWindowBusy: (id: string, busy: boolean) => void;
   applyDragLayout: (id: string, template: LayoutTemplate, slot: number) => void;
   /** anchor(뷰포트 좌표)를 주면 그 커서 위치에서 창이 뜬다(없으면 cascade). 링크 클릭이 전달. */
   open: (kind: WindowKind, params: WindowParams, anchor?: { x: number; y: number }) => void;
@@ -293,6 +300,7 @@ export const useWindowStore = create<State & Actions>()(
       nav: {},
       reloadNonce: {},
       dirty: {},
+      busy: {},
       cached: [],
 
       setStage: ({ left, top, width, height }) =>
@@ -378,6 +386,14 @@ export const useWindowStore = create<State & Actions>()(
           if (dirty) next[id] = true;
           else delete next[id];
           return { dirty: next };
+        }),
+      setWindowBusy: (id, busy) =>
+        set((s) => {
+          if ((s.busy[id] ?? false) === busy) return s; // 변화 없으면 리렌더 없음
+          const next = { ...s.busy };
+          if (busy) next[id] = true;
+          else delete next[id];
+          return { busy: next };
         }),
       // 스냅 레이아웃 바 드롭: 지정 슬롯=드래그 창, 나머지 슬롯=다른 열린 창(order순), 초과=최소화.
       applyDragLayout: (id, template, slot) =>
@@ -555,6 +571,10 @@ export const useWindowStore = create<State & Actions>()(
             const nav = { ...s.nav };
             const dirty = { ...s.dirty };
             delete dirty[id];
+            // ⚠️ 잠금 표식도 함께 버린다 — 닫힌 창의 busy가 남으면 **같은 id로 다시 열었을 때** 영문 모르게
+            //    닫기가 막힌다(신호를 쏘던 iframe은 이미 없어 해제 신호도 안 온다).
+            const busy = { ...s.busy };
+            delete busy[id];
             // 상한 초과 → 가장 오래된 warm 창 실제 파괴(메모리 가드).
             while (cached.length > CACHE_MAX) {
               const victim = cached[0]!;
@@ -563,8 +583,9 @@ export const useWindowStore = create<State & Actions>()(
               delete live[victim];
               delete nav[victim];
               delete dirty[victim];
+              delete busy[victim];
             }
-            return { windows, order, cached, live, nav, dirty, focusedId, spotlightRaised: raised, spotlight, snapAssist: null };
+            return { windows, order, cached, live, nav, dirty, busy, focusedId, spotlightRaised: raised, spotlight, snapAssist: null };
           }
           // 비캐시 대상 = 기존대로 완전 파괴.
           const windows = { ...s.windows };
@@ -575,7 +596,9 @@ export const useWindowStore = create<State & Actions>()(
           delete nav[id];
           const dirty = { ...s.dirty };
           delete dirty[id];
-          return { windows, order, live, nav, dirty, focusedId, spotlightRaised: raised, spotlight, snapAssist: null };
+          const busy = { ...s.busy };
+          delete busy[id];
+          return { windows, order, live, nav, dirty, busy, focusedId, spotlightRaised: raised, spotlight, snapAssist: null };
         }),
 
       focus: (id) =>

@@ -24,6 +24,8 @@ export function DragScrollArea({
   momentum = true,
   barX = false,
   scrollY = false,
+  hideBar = false,
+  fadeTone = "ink",
 }: {
   children: ReactNode;
   className?: string;
@@ -39,6 +41,19 @@ export function DragScrollArea({
    * 영영 안 보인다**. barX와 달리 가로 스크롤바 트랙을 미리 잡지 않는다(#87: overflow-x:scroll = 가짜 스크롤바).
    */
   scrollY?: boolean;
+  /**
+   * 스크롤바 막대를 감춘다(휠·드래그·키보드 스크롤은 그대로) — **가장자리 페이드가 "더 있음"을
+   * 대신 말해 주는 좁은 영역 전용**(전역 `.scrollbar-hide` 규약과 같은 조건). 하단 독 칩 레일처럼
+   * 높이가 30px 남짓이라 막대가 내용만큼 자리를 먹는 곳에 쓴다. 일반 표엔 쓰지 말 것(막대가 기본).
+   * ⚠️ barX(항상 또렷한 막대)와 정반대라 함께 켜지 않는다.
+   */
+  hideBar?: boolean;
+  /**
+   * 가장자리 페이드의 색. 기본 `ink`(옅은 먹색 그림자 — 표·보드처럼 배경이 여러 겹인 곳).
+   * `surface`는 **카드색으로 녹인다** — 내용이 그 면(알약·카드) 속으로 사라지는 레일 표현이라
+   * 하단 독 칩처럼 배경이 한 겹이고 스크롤바를 감춘 곳에 쓴다(페이드가 유일한 "더 있음" 신호).
+   */
+  fadeTone?: "ink" | "surface";
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [edges, setEdges] = useState({ left: false, right: false, top: false, bottom: false });
@@ -212,7 +227,7 @@ export function DragScrollArea({
             : scrollY
               ? "overflow-auto overscroll-x-contain"
               : "overflow-x-auto overflow-y-hidden overscroll-x-contain"
-        } ${grabbable ? "cursor-grab" : ""}`}
+        } ${hideBar && !barX ? "scrollbar-hide" : ""} ${grabbable ? "cursor-grab" : ""}`}
       >
         {children}
       </div>
@@ -220,15 +235,15 @@ export function DragScrollArea({
         <>
           <span
             aria-hidden
-            className={`pointer-events-none absolute inset-y-0 left-0 w-6 bg-gradient-to-r from-foreground/12 to-transparent transition-opacity duration-200 ${
-              edges.left ? "opacity-100" : "opacity-0"
-            }`}
+            className={`pointer-events-none absolute inset-y-0 left-0 w-6 bg-gradient-to-r to-transparent transition-opacity duration-200 ${
+              fadeTone === "surface" ? "from-card via-card/70" : "from-foreground/12"
+            } ${edges.left ? "opacity-100" : "opacity-0"}`}
           />
           <span
             aria-hidden
-            className={`pointer-events-none absolute inset-y-0 right-0 w-6 bg-gradient-to-l from-foreground/12 to-transparent transition-opacity duration-200 ${
-              edges.right ? "opacity-100" : "opacity-0"
-            }`}
+            className={`pointer-events-none absolute inset-y-0 right-0 w-6 bg-gradient-to-l to-transparent transition-opacity duration-200 ${
+              fadeTone === "surface" ? "from-card via-card/70" : "from-foreground/12"
+            } ${edges.right ? "opacity-100" : "opacity-0"}`}
           />
           <span
             aria-hidden
