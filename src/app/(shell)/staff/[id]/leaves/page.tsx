@@ -23,10 +23,9 @@ export default async function StaffLeavesPage({
 
   return (
     <div className="space-y-6">
-      <BackLink
-        href={canManage ? `/staff/${id}/edit` : `/staff/${id}`}
-        label={canManage ? "강사 정보로" : "강사 상세로"}
-      />
+      {/* 되돌아갈 곳은 상세다 — /edit은 이제 '근무 설정'(담당·알림 토글)이라 휴가에서 돌아가 볼 화면이
+          아니고, 권한별로 목적지가 갈리면 같은 버튼이 사람마다 다른 데로 간다. */}
+      <BackLink href={`/staff/${id}`} label="직원 상세로" />
 
       <header className="border-border border-b pb-5">
         <p className="eyebrow">강사 휴가 관리</p>

@@ -106,7 +106,8 @@ export async function BasicInfoTab({
   const d = resume?.data ?? null;
   const p = d?.personal;
   const c = d?.contract;
-  // 겹치는 항목은 이력서 값 우선, 비어 있으면 계정(users) 값으로 폴백.
+  // 연락처·직급·입사일·근무부서·근무형태는 **이력서가 단일 소스**다(원장 지시 2026-08-25 — 근무 설정
+  // 폼에서 이 칸들을 뺐다). users 값은 이력서가 아직 없는 직원(임포트분)을 위한 폴백으로만 남는다.
   const phone = p?.phone || staff.phone || "";
   const jobTitle = c?.jobTitle || staff.jobTitle || "";
   const department = c?.division || staff.department || "";
@@ -136,7 +137,7 @@ export async function BasicInfoTab({
       }
     >
       <Pencil className="size-3.5" />
-      {/* ⚠️ "수정" 단독 금지 — 페이지 헤더의 '직원 정보 수정'과 나란히 보인다(원장 지적 2026-08-07).
+      {/* ⚠️ "수정" 단독 금지 — 페이지 헤더의 '근무 설정'과 나란히 보인다(원장 지적 2026-08-07).
           이 버튼은 인적사항 칸만이 아니라 **이력서 전체**(계약·학력·경력 포함)를 연다. */}
       {resume ? "이력서 수정" : "이력서 작성"}
     </Button>
@@ -149,7 +150,10 @@ export async function BasicInfoTab({
         <div className="flex flex-col-reverse items-start gap-5 sm:flex-row">
           <div className="grid min-w-0 flex-1 grid-cols-2 gap-x-5 gap-y-4 lg:grid-cols-3">
             <Field label="성명" value={<span className="font-bold">{p?.name || staff.displayName}</span>} />
-            <Field label="영문 이름" value={p?.nameEn || staff.englishName} />
+            {/* 이력서 '영문 이름'과 계정 '영어 닉네임'(users.english_name)은 **다른 값**이다 —
+                폴백으로 이어 붙이면 시간표 매칭용 닉네임이 이력서 서식 칸에 앉아, 어느 쪽을 고쳐야
+                하는지 알 수 없게 된다(닉네임은 아래 계약사항 카드에 제 칸이 있다, 2026-08-25). */}
+            <Field label="영문 이름" value={p?.nameEn} />
             <Field label="연락처" value={phone ? <span className="num">{phone}</span> : null} />
             <Field label="이메일" value={email ? <span className="num">{email}</span> : null} />
             {resumeAccess ? (

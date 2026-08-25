@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import type { SystemRole } from "@/lib/permissions";
 import { getCurrentUser, type CurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
+import { applyStaffEmailChange } from "./account-actions";
 import { ROLE_HIERARCHY } from "@/lib/auth/role-hierarchy";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -302,8 +303,27 @@ export async function saveStaffResume(
   }
 
   const supabase = await createClient();
+  // 저장 자체는 성공했는데 부수효과(로그인 이메일 동기)만 실패할 수 있다 — 토스트로만 알린다.
+  let emailWarning: string | null = null;
+  let emailNotice: string | null = null;
 
   if (id) {
+    // 🔴 **바뀐 것만** 로그인에 반영하려고 저장 전 값을 먼저 읽는다(아래 이메일 동기).
+    //    계정 이메일과 비교하면 안 된다 — 이력서 E-mail이 원래 개인 주소인 직원이 흔한데, 그러면
+    //    남이 이력서를 한 번 저장하는 것만으로 그 사람 로그인 아이디가 개인 주소로 갈아끼워진다
+    //    (다음 로그인부터 못 들어온다). 지시는 "이력서 email을 **변경하면**"이지 "다르면"이 아니다.
+    const { data: before } = await supabase
+      .from("academy_documents")
+      .select("form_data")
+      .eq("id", id)
+      .eq("form_type", RESUME_FORM_TYPE)
+      .maybeSingle();
+    const prevEmail = String(
+      ((before?.form_data as { personal?: { email?: string } } | null)?.personal?.email ?? ""),
+    )
+      .trim()
+      .toLowerCase();
+
     const { data: updated, error } = await supabase
       .from("academy_documents")
       .update({
@@ -339,10 +359,33 @@ export async function saveStaffResume(
       if (Object.keys(sync).length > 0) {
         await createAdminClient().from("users").update(sync).eq("id", linkedId).eq("tenant_id", gate.user.tenantId);
       }
+      // 로그인 이메일도 이력서를 따라간다(원장 지시 2026-08-25 — "이력서 email 변경하면 로그인 이메일도").
+      // 🔴 위 sync처럼 users를 직접 update하지 **않는다**: 로그인 아이디는 public.users만 바꾸면 미러
+      //    트리거(0075a)가 auth 값으로 되덮고, 권한 계층 검사(자신 권한 이하)도 빠진다. 계정 관리와
+      //    **같은 구현**을 태워 auth·감사로그·중복검사·롤백을 그대로 통과시킨다.
+      // ⚠️ 직원관리 쓰기가 없는 사람(/me 본인 이력서 편집)은 시도조차 안 한다 — 본인 로그인 이메일은
+      //    /me의 '이메일 변경' 카드가 담당이고, 여기서 매번 "권한 없음" 경고를 띄우면 소음이 된다.
+      const nextEmail = data.personal.email.trim();
+      const emailEdited = Boolean(nextEmail) && nextEmail.toLowerCase() !== prevEmail;
+      if (emailEdited && (await canWriteTenant(gate.user.systemRole, "staff"))) {
+        const applied = await applyStaffEmailChange(linkedId, nextEmail, "resume");
+        if ("error" in applied) {
+          emailWarning = `이력서는 저장했지만 로그인 이메일은 바꾸지 못했습니다 — ${applied.error}`;
+        } else if (applied.changed) {
+          emailNotice = `로그인 이메일을 ${nextEmail.toLowerCase()}(으)로 함께 변경했습니다`;
+        }
+      }
       revalidatePath(`/staff/${linkedId}`);
     }
     revalidateResume(id);
-    return { ok: true, id, nonce: Date.now(), redirectTo: `/staff/resumes/${id}` };
+    return {
+      ok: true,
+      id,
+      nonce: Date.now(),
+      redirectTo: `/staff/resumes/${id}`,
+      ...(emailWarning ? { warning: emailWarning } : {}),
+      ...(emailNotice ? { notice: emailNotice } : {}),
+    };
   }
 
   // 기존 직원 연결 모드(?staff= 프리필) — 넘겨온 id가 **우리 테넌트 직원**인지 서버가 재검증(변조 차단, RLS 스코프).
