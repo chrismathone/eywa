@@ -429,7 +429,13 @@ async function editNotice(page, notice) {
         patched.push({ ...rep, note: `수정 실패(${pt.status})` });
       }
     }
-    out.push({ board: r.board, reports: patched });
+    // 🔴 **원본 항목을 그대로 이어받는다**(`...r`) — 예전엔 `{board, reports}`만 새로 만들어 게시 결과의
+    //    `ok`가 사라졌다. 화면의 실패 집계가 `ok` 없는 항목을 실패로 세는 바람에, 7명에게 정상 게시된
+    //    공지를 수정하자 "발송 완료 · 실패 7 · 사유 없음"이 됐다(2026-08-25 실사고 — 발송자가 안 갔다고
+    //    알고 재발송하면 학부모 알림장에 같은 글이 2개 남고 되돌릴 수 없다).
+    //    ⚠️ 이 스프레드를 `revokeNotice`에 따라 하지 말 것 — 회수는 `reports`를 `revoked`로 **갈아끼우는**
+    //       것이라 원본을 이어받으면 `reports`가 남아 회수 취소선(flattenNoticeReportLinks)이 죽는다.
+    out.push({ ...r, reports: patched });
   }
   return { out, edited, failed, missing };
 }

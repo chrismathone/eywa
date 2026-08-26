@@ -13,6 +13,7 @@ import { useSubjectMaps } from "@/features/owner/operations-context";
 import { listClassNotices, sendClassNotice, type NoticeClassOption, type NoticeRow } from "@/features/report-admin/server/notice-actions";
 import { NoticeAttachmentPicker } from "@/features/onescreen/components/notice-attachment-picker";
 import { humanizeClassnoteError } from "@/features/report-admin/classnote-error";
+import { noticeFailures } from "@/features/report-admin/notice-failures";
 import type { NoticeAttachment } from "@/features/onescreen/notice-attachments";
 
 // 공지 상태 한글 라벨(raw 코드 UI 노출 금지) — 워커 처리 상태와 동기.
@@ -22,6 +23,14 @@ const STATUS_LABEL: Record<string, { label: string; cls: string }> = {
   success: { label: "발송 완료", cls: "text-green" },
   partial: { label: "일부 실패", cls: "text-amber" },
   failed: { label: "발송 실패", cls: "text-danger" },
+  // 🔴 회수·수정 상태가 빠져 있어 회수한 공지 7건이 전부 **"기타"**로 떨어져 있었다(무슨 일이 있었는지
+  //    화면이 말해주지 않는다). 워커가 쓰는 상태값 전부를 한글로 덮는다 — raw 코드 UI 노출 금지 규약.
+  revoke_requested: { label: "회수 대기", cls: "text-text-dim" },
+  revoking: { label: "회수 중", cls: "text-text-dim" },
+  revoked: { label: "회수됨", cls: "text-text-dim" },
+  revoke_partial: { label: "회수 일부 실패", cls: "text-danger" },
+  edit_requested: { label: "수정 대기", cls: "text-text-dim" },
+  editing: { label: "수정 중", cls: "text-text-dim" },
 };
 
 function fmtKst(iso: string): string {
@@ -305,7 +314,9 @@ export function NoticeFace({
               <tbody>
                 {rows.map((r) => {
                   const st = STATUS_LABEL[r.status] ?? { label: "기타", cls: "text-text-dim" };
-                  const failNotes = (r.results ?? []).filter((x) => !x.ok);
+                  // 🔴 `!x.ok`로 세지 말 것 — 수정·회수한 공지는 `ok` 키 자체가 없어 전건 실패로 뒤집힌다
+                  //    (08-25 "발송 완료 · 실패 7 · 사유 없음"). 판정은 0144a 트리거와 같은 단일 규약.
+                  const failNotes = noticeFailures(r.results);
                   return (
                     <tr key={r.id} className="border-line border-b last:border-b-0">
                       <td className="text-text-dim px-3 py-2 whitespace-nowrap">{fmtKst(r.createdAt)}</td>
@@ -353,6 +364,14 @@ export function NoticeFace({
                               .join("\n")}
                           >
                             실패 {failNotes.length}
+                          </span>
+                        ) : r.error ? (
+                          // 🔴 타깃별 실패가 없어도 **공지 단위 오류**는 있을 수 있다(회수 실패 N건 등).
+                          //    실패 집계를 `ok` 있는 것만으로 좁힌 뒤엔 이걸 안 보여주면 조용히 사라진다.
+                          // ⚠️ 여기 그대로 나가므로 워커가 쓰는 `error`는 **한글 요약**을 유지할 것
+                          //    (현재 "회수 실패 N건"·"수정 실패 N건" — raw 기술 원문 UI 노출 금지 규약).
+                          <span className="text-text-faint ml-1.5 text-[11px]" title={r.error}>
+                            {r.error}
                           </span>
                         ) : null}
                       </td>

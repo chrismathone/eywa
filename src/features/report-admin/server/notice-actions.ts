@@ -243,8 +243,12 @@ export type NoticeRow = {
   body: string;
   targetCount: number;
   status: string;
-  /** 실패 표시용 — board는 보드명이라 화면에선 학생 이름(studentName)으로 보여준다. */
-  results: { board: string; studentName: string; ok: boolean; note?: string }[] | null;
+  /**
+   * 실패 표시용 — board는 보드명이라 화면에선 학생 이름(studentName)으로 보여준다.
+   * ⚠️ `ok`는 **선택**이다 — 게시 결과에만 있고 수정·회수 결과엔 없다(모양 3종은 `notice-failures.ts` 참조).
+   *    실패 집계는 반드시 `noticeFailures()`로 — `!x.ok`는 수정·회수를 전건 실패로 뒤집는다.
+   */
+  results: { board: string; studentName: string; ok?: boolean; note?: string }[] | null;
   /** 게시된 글 주소 + 학생 이름 — '#1 #2'로는 누구 글인지 알 수 없어 이름으로 되붙인다. */
   reportLinks: NoticeReportLink[];
   error: string | null;
@@ -275,7 +279,7 @@ export async function listClassNotices(): Promise<{ ok: boolean; rows?: NoticeRo
             nameByBoard.set(t.board, t.studentName);
         }
       }
-      const results = (r.results as Array<{ board: string; ok: boolean; note?: string }> | null) ?? null;
+      const results = (r.results as Array<{ board: string; ok?: boolean; note?: string }> | null) ?? null;
       return {
         id: r.id as string,
         body: r.body as string,
