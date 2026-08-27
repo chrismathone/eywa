@@ -1,5 +1,22 @@
 # eywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-08-27 — ECS 수업계획 '구분'에 **Shouting** 추가 (기본 7영역)
+
+원장 지시: *"여기 speaking 밑에 샤우팅 추가 영어로"* + *"마찬가지로 여기 평시 추가에도 샤우팅이 있어야함"*
+(계획 패널 · 평시/내신 계획 줄의 '구분' 드롭다운 둘 다).
+
+- **한 곳만 고쳤다**: [`DEFAULT_ENGLISH_SKILL_AREAS`](../src/features/owner/skill-areas.ts)에
+  `{ key: "shouting", label: "Shouting", color: "primary" }`를 Speaking 아래로 추가.
+  계획 패널(담임/부담임 × 월간/주간 목표)·계획 줄 '구분' 셀렉트·학원설정 영역 편집기가 전부
+  `resolveSkillAreas` 단일 소스를 읽으므로 **소비처 수정 0**.
+- **실측 확인**: injaewon `tenant_settings`의 english `skillAreas`는 **null**(= 기본 프리필 경로) →
+  코드 기본값이 그대로 화면에 뜬다. 설정을 직접 편집한 학원이면 그쪽 값이 여전히 이긴다(단일 소스 불변).
+- 색은 `ROTATION` 7번째와 같은 `primary`(네이비) — 기존 6색(파랑·보라·초록·앰버·로즈·골드)과 안 겹친다.
+- **마이그레이션 0**: `skill_area`는 `^[a-z0-9_]{1,24}$` 자유 텍스트 컬럼이라 `shouting`이 그대로 저장된다.
+  기존 계획 행·목표 행은 불변(새 영역은 빈 줄로 보이고, 입력하면 그때 행이 생긴다).
+- 문구 갱신: 학원설정 과목 탭의 "기본 6영역(Vocab~Speaking)" 안내·되돌리기 버튼 → **7영역(Vocab~Shouting)**.
+- 검증: typecheck 0(마케팅 `_img/*.webp` 미추적 노이즈 제외)·lint 0·vitest 433(skill-areas 12 · class-sheets/design 395 · jj-plan-public 외).
+
 ## 2026-08-25 (2) — 🔴 공지 "발송 완료 · 실패 7": 제자리 수정이 성공 표식을 지우던 것
 
 원장 제보: *"사유가 없음으로 나오는데 발송 실패 확인해봐"* → *"근데 실제로는 발송했어"* → *"크리티컬 오류.
