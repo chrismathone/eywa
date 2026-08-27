@@ -76,7 +76,7 @@ vi.mock("./queries", () => ({
 
 vi.mock("@/features/owner/server/queries", () => ({
   getTenantSettingsByTenantId: async () => ({
-    // skillAreas 미설정 english = 기본 7영역 프리필(resolveSkillAreas 단일 소스).
+    // skillAreas 미설정 english = 기본 6영역 프리필(resolveSkillAreas 단일 소스).
     operations: { subjects: [{ key: "english", label: "영어" }, { key: "math", label: "수학" }] },
   }),
 }));

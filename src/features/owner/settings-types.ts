@@ -89,13 +89,13 @@ export type IntegrationGroupPresetSetting = z.infer<typeof integrationGroupPrese
 
 // ECS(English Class Sheet) 수업계획 '구분' 영역 — 저장은 영문 slug(key), 라벨은 설정(라벨을 바꿔도
 // 저장된 계획 행의 key는 불변 = orphan 방지, subjects[].key와 동일 원칙). english는 미설정 시
-// resolveSkillAreas(skill-areas.ts)가 기본 7영역(Vocab~Shouting)을 프리필한다.
+// resolveSkillAreas(skill-areas.ts)가 기본 6영역(Vocab~Speaking)을 프리필한다.
 export const skillAreaSchema = z.object({
   key: z.string().min(1).max(24).regex(/^[a-z0-9_]+$/, "영문 소문자·숫자·_"),
   label: z.string().min(1).max(24),
   // 영역 색 — 계획 화면에서 "아 보카네" 하고 한눈에 갈리게(원장 지시 2026-07-31). 과목 색과 같은 팔레트.
   // optional인 이유: 이미 저장된 설정(색 없음)도 그대로 통과해야 하고, 미설정은 skillAreaColorOf가
-  // 기본 7영역 색 → 순번 회전으로 채운다(색 없는 화면이 되지 않게).
+  // 기본 6영역 색 → 순번 회전으로 채운다(색 없는 화면이 되지 않게).
   color: z.enum(SUBJECT_COLORS).optional(),
 });
 export type SkillAreaSetting = z.infer<typeof skillAreaSchema>;
@@ -141,7 +141,7 @@ export const subjectSchema = z.object({
   integrationOthersTitle: z.string().max(30).optional(),
   // 저장해 둔 그룹 배치들(보관함). 현재 적용 배치(integrationGroups)와 별개 — 불러오기로 복사해 쓴다.
   integrationGroupPresets: z.array(integrationGroupPresetSchema).max(MAX_GROUP_PRESETS).optional(),
-  // ECS 수업계획 '구분' 영역 목록(과목별). 미설정 = english만 기본 7영역 프리필(resolveSkillAreas),
+  // ECS 수업계획 '구분' 영역 목록(과목별). 미설정 = english만 기본 6영역 프리필(resolveSkillAreas),
   // 그 외 과목은 빈 목록(= ECS 진입 대상 아님). (.optional() — 예외 필드 관례, weekdayPeriods와 동일.)
   skillAreas: z.array(skillAreaSchema).max(20).optional(),
 });

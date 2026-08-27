@@ -39,6 +39,7 @@ export const SheetGrid = memo(function SheetGrid({
   canEdit,
   collapsedGroups,
   onToggleGroup,
+  shouting,
 }: {
   days: GridDay[];
   data: ClassSheetWeekData;
@@ -54,6 +55,8 @@ export const SheetGrid = memo(function SheetGrid({
   /** 로스터 섹션 접힘 — 카드가 아니라 시트가 소유한다(나란한 카드의 줄맞춤 유지). */
   collapsedGroups: readonly RosterGroupKey[];
   onToggleGroup: (key: RosterGroupKey) => void;
+  /** `${date}|${HH:MM}` → Shouting 체크(EiE 전용). 저장 반영이 즉시 보이도록 시트가 들고 있는 live 맵. */
+  shouting: Record<string, boolean>;
 }) {
   const rows = useMemo(() => buildGridRows(days), [days]);
   const columns = `repeat(${days.length}, ${COL_W}px)`;
@@ -184,6 +187,8 @@ export const SheetGrid = memo(function SheetGrid({
                   canEdit={canEdit}
                   collapsedGroups={collapsedGroups}
                   onToggleGroup={onToggleGroup}
+                  shouting={!!shouting[`${days[ci]!.date}|${slot.slotStart}`]}
+                  {...(data.isEie ? { onShouting: handlers.toggleShouting } : {})}
                 />
               </div>
             ) : null,

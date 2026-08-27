@@ -1,6 +1,6 @@
 "use client";
 
-// 좌측 계획 패널 — 담임/부담임 × 월간/주간 목표(구분 영역 × [교재명, 목표 진도]) + 패널 메모.
+// 좌측 계획 패널 — 담임/부담임 × 월간/주간 목표(6영역 × [교재명, 목표 진도]) + 패널 메모.
 // 시트 원본의 "담임 월간계획/주간계획·부담임 월간계획/주간계획" 4구획을 아코디언으로 이식. LWW 자동저장.
 import { EyIcon } from "@/components/icons/eywa-icons";
 import type { SkillAreaSetting } from "@/features/owner/settings-types";

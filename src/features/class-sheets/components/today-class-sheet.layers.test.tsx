@@ -91,6 +91,7 @@ function renderDay(day: GridDay) {
       handlers={{} as SheetHandlers}
       canEdit
       collapsedGroups={[]}
+      shouting={{}}
       onToggleGroup={vi.fn()}
     />,
   );

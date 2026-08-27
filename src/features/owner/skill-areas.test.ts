@@ -7,7 +7,7 @@ import {
 } from "./skill-areas";
 
 describe("resolveSkillAreas (ECS 구분 영역 해석)", () => {
-  it("english 미설정 = 기본 7영역 프리필", () => {
+  it("english 미설정 = 기본 6영역 프리필", () => {
     const areas = resolveSkillAreas({ key: "english" });
     expect(areas.map((a) => a.key)).toEqual([
       "vocab",
@@ -16,15 +16,14 @@ describe("resolveSkillAreas (ECS 구분 영역 해석)", () => {
       "grammar",
       "writing",
       "speaking",
-      "shouting",
     ]);
   });
 
-  it("english 빈 배열도 기본 7영역 프리필(미설정과 동일 취급)", () => {
-    expect(resolveSkillAreas({ key: "english", skillAreas: [] })).toHaveLength(7);
+  it("english 빈 배열도 기본 6영역 프리필(미설정과 동일 취급)", () => {
+    expect(resolveSkillAreas({ key: "english", skillAreas: [] })).toHaveLength(6);
   });
 
-  it("설정값이 있으면 그 값이 이긴다(기본 7영역 무시)", () => {
+  it("설정값이 있으면 그 값이 이긴다(기본 6영역 무시)", () => {
     const areas = resolveSkillAreas({
       key: "english",
       skillAreas: [{ key: "phonics", label: "파닉스" }],
@@ -46,7 +45,7 @@ describe("resolveSkillAreas (ECS 구분 영역 해석)", () => {
   it("기본 배열 원본은 변형되지 않는다(복사 반환)", () => {
     const a = resolveSkillAreas({ key: "english" });
     a.push({ key: "x", label: "X" });
-    expect(DEFAULT_ENGLISH_SKILL_AREAS).toHaveLength(7);
+    expect(DEFAULT_ENGLISH_SKILL_AREAS).toHaveLength(6);
   });
 });
 
@@ -63,7 +62,7 @@ describe("skillAreaLabelOf (삭제된 slug 표시 유지)", () => {
 describe("skillAreaColorOf (영역 고유색 — '아 보카네' 한눈 구분)", () => {
   const defaults = [...DEFAULT_ENGLISH_SKILL_AREAS];
 
-  it("기본 7영역은 서로 다른 색", () => {
+  it("기본 6영역은 서로 다른 색", () => {
     const colors = defaults.map((a) => skillAreaColorOf(defaults, a.key));
     expect(new Set(colors).size).toBe(defaults.length);
   });

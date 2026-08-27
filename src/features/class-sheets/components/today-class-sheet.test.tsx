@@ -61,6 +61,7 @@ function renderSheet(header: React.ReactNode) {
       handlers={{} as SheetHandlers}
       canEdit
       collapsedGroups={[]}
+      shouting={{}}
       onToggleGroup={vi.fn()}
     />,
   );

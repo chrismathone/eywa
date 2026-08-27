@@ -125,7 +125,7 @@ export function SubjectsSection({
                     {s.skillAreas?.length ? (
                       <span className={badgeCls}>수업계획 영역 {s.skillAreas.length}</span>
                     ) : s.key === "english" ? (
-                      <span className={badgeCls}>수업계획 기본 7영역</span>
+                      <span className={badgeCls}>수업계획 기본 6영역</span>
                     ) : null}
                   </span>
                 </summary>
@@ -155,7 +155,7 @@ export function SubjectsSection({
                   </div>
 
                   {/* 수업계획(ECS) '구분' 영역 — English Class Sheet 계획 행의 영역 선택지. 저장은 영문 ID(불변),
-                      라벨만 편집. english는 미설정 시 기본 7영역(Vocab~Shouting) 자동 사용(resolveSkillAreas). */}
+                      라벨만 편집. english는 미설정 시 기본 6영역(Vocab~Speaking) 자동 사용(resolveSkillAreas). */}
                   <div className="space-y-2">
                     <h4 className="text-foreground text-[12px] font-bold">수업계획(영어 강사 시트) 영역</h4>
                     {s.skillAreas?.length ? (
@@ -174,7 +174,7 @@ export function SubjectsSection({
                           }
                         >
                           {s.key === "english"
-                            ? "기본 7영역(Vocab~Shouting)으로 되돌리기"
+                            ? "기본 6영역(Vocab~Speaking)으로 되돌리기"
                             : "영역 전체 해제 (수업계획 대상 제외)"}
                         </button>
                         <p className="text-text-faint text-[11px]">
@@ -186,7 +186,7 @@ export function SubjectsSection({
                       <>
                         <p className="text-text-dim text-[12px]">
                           {s.key === "english"
-                            ? "기본 7영역(Vocab · Listening · Reading · Grammar · Writing · Speaking · Shouting)을 사용 중입니다."
+                            ? "기본 6영역(Vocab · Listening · Reading · Grammar · Writing · Speaking)을 사용 중입니다."
                             : "이 과목은 수업계획(ECS) 대상이 아닙니다."}
                         </p>
                         <button
@@ -505,7 +505,7 @@ function AbsorbDialog({
 
 /**
  * 수업계획(ECS) 영역 목록 편집기 — 라벨만 편집, 내부 ID(key)는 자동 확정·불변(subjects[].key와 동일 원칙:
- * ID가 바뀌면 저장된 계획 행 연결이 끊긴다). 새 행은 라벨 blur 시 1회 확정 — 기본 7영역 라벨이면 표준
+ * ID가 바뀌면 저장된 계획 행 연결이 끊긴다). 새 행은 라벨 blur 시 1회 확정 — 기본 6영역 라벨이면 표준
  * ID(vocab 등), 아니면 area_N 폴백. 중복 라벨은 빨간 경고(저장은 superRefine가 이중 방어).
  */
 const KNOWN_AREA_KEYS = new Map(

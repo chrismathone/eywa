@@ -428,6 +428,68 @@ export async function saveMemo(input: {
 }
 
 /**
+ * 교시 체크 'Shouting' 저장(0230a) — **EiE 반 전용**.
+ *
+ * 원장 지시(2026-08-27): *"EiE는 샤우팅 체크박스로 변경 · 각 반이 샤우팅 했는지 체크"*,
+ * *"인재원 영어는 샤우팅 그냥 삭제"*. 그래서 서버도 **EiE가 아니면 거절**한다 — 화면 조건은 게이트가
+ * 아니고([[#77]]), 인재원 영어 반에 체크가 쌓이면 나중에 집계가 거짓이 된다.
+ *
+ * 저장은 체크(true)일 때만 행을 만들고 **해제하면 행을 지운다**(메모와 같은 규약) — "없음 = 안 함"이라
+ * false 행을 남길 이유가 없다.
+ * ⚠️ 0230a 적용 전에는 표가 없어 실패한다 — 그 사실을 **한글로 말한다**(조용한 무저장 금지).
+ */
+export async function setSlotShouting(input: {
+  classId: string;
+  date: string;
+  slotStart: string;
+  value: boolean;
+}): Promise<{ ok: true } | ActionError> {
+  const gate = await requireEcsClassAccess(input.classId, { write: true });
+  if (!gate.ok) return { ok: false, error: gate.error };
+  if (gate.access.englishTrack !== "eie") {
+    return { ok: false, error: "Shouting 체크는 EiE 반에서만 사용합니다" };
+  }
+  if (!YMD_RE.test(input.date) || !HHMM_RE.test(input.slotStart)) {
+    return { ok: false, error: "잘못된 요청입니다(날짜·교시)" };
+  }
+
+  const admin = createAdminClient();
+  const { tenantId, user } = gate.access;
+  // 표가 아직 없을 때(마이그레이션 0230a 미적용) PostgREST 원문을 그대로 띄우지 않는다 — 화면에 영문
+  // 기술 원문을 내보내지 않는 규칙. 원인을 한글로 말하고 무엇을 해야 하는지 알린다.
+  const saveError = (e: { code?: string; message: string }) =>
+    e.code === "42P01" || e.code === "PGRST205"
+      ? "Shouting 체크 기능이 아직 준비되지 않았습니다(DB 갱신 필요) — 관리자에게 알려주세요"
+      : `저장에 실패했습니다: ${e.message}`;
+  if (!input.value) {
+    const { error } = await admin
+      .from("class_sheet_slot_flags")
+      .delete()
+      .eq("tenant_id", tenantId)
+      .eq("class_id", input.classId)
+      .eq("flag_date", input.date)
+      .eq("slot_start", input.slotStart);
+    if (error) return { ok: false, error: saveError(error) };
+    return { ok: true };
+  }
+  const { error } = await admin.from("class_sheet_slot_flags").upsert(
+    {
+      tenant_id: tenantId,
+      class_id: input.classId,
+      flag_date: input.date,
+      slot_start: input.slotStart,
+      shouting: true,
+      updated_by: user.id,
+      updated_at: new Date().toISOString(),
+    },
+    // ⚠️ 유니크가 **부분 인덱스가 아니라서** 이 추론이 성립한다([[#113]]).
+    { onConflict: "tenant_id,class_id,flag_date,slot_start" },
+  );
+  if (error) return { ok: false, error: saveError(error) };
+  return { ok: true };
+}
+
+/**
  * (학생,반,날짜) 실수강 검증 — **쓰기 전 공용 게이트**(§F "기록 행은 읽기 전용").
  * 화면은 `entry.eligible`로 컨트롤을 감추지만 서버 액션은 공개 엔드포인트라 화면 조건은 게이트가 아니다(#77).
  * 마크 저장과 **출석 생성이 같은 판정**을 쓴다 — 한쪽만 검사하면 되돌리기 어려운 쪽(출석 행)이 뚫린다.

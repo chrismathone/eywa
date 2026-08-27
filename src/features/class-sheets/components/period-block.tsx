@@ -25,6 +25,8 @@ export const PeriodBlock = memo(function PeriodBlock({
   canEdit,
   collapsedGroups,
   onToggleGroup,
+  shouting = false,
+  onShouting,
   hideRoster = false,
   flat = false,
 }: {
@@ -43,6 +45,16 @@ export const PeriodBlock = memo(function PeriodBlock({
   /** 접어 둔 로스터 섹션 — **시트 전체 공유**(카드마다 따로면 나란한 카드의 줄맞춤이 어긋난다). */
   collapsedGroups: readonly RosterGroupKey[];
   onToggleGroup: (key: RosterGroupKey) => void;
+  /**
+   * 이 교시에 **Shouting을 했는가**(0230a) — 체크박스 상태. EiE 반에서만 그린다.
+   * (원장 2026-08-27: 인재원 영어는 샤우팅을 아예 쓰지 않고, EiE는 수업계획 '구분'이 아니라 이 체크로 남긴다.)
+   */
+  shouting?: boolean;
+  /**
+   * 체크 토글. **없으면 체크 자체를 안 그린다**(= EiE가 아닌 반).
+   * ⚠️ 인자를 (날짜, 교시, 값)으로 받는 이유: 부모가 카드마다 인라인 람다를 만들면 `memo`가 매번 깨진다.
+   */
+  onShouting?: (date: string, slotStart: string, next: boolean) => void;
   /**
    * 로스터 생략 — 오늘 면(today-class-sheet)이 명단을 **통합 표 한 번**으로 그리므로 교시 카드는
    * 머리(교시·시각·일괄 입력)+계획만 낸다(원장 2026-08-11 "목록은 왜 여러 번?"). 주간 시트는 기본값.
@@ -115,6 +127,25 @@ export const PeriodBlock = memo(function PeriodBlock({
           >
             시간 변경됨
           </span>
+        ) : null}
+        {/* Shouting 체크 — **EiE 반만**(부모가 onShouting을 줄 때만 그린다). 머리 줄 오른쪽 끝, 구분선 위
+            (원장 2026-08-27 "우상단에 우측정렬해서 구분선 위쪽에"). 라벨까지 눌리게 label로 감싼다. */}
+        {onShouting ? (
+          <label
+            className={`ml-auto flex shrink-0 items-center gap-1 text-[12px] font-bold whitespace-nowrap ${
+              canEdit && slot.scheduled ? "cursor-pointer" : "cursor-default opacity-60"
+            }`}
+            title="이 교시에 Shouting을 했으면 체크하세요"
+          >
+            <input
+              type="checkbox"
+              className="size-3.5 shrink-0 accent-primary"
+              checked={shouting}
+              disabled={!canEdit || !slot.scheduled}
+              onChange={(e) => onShouting(date, slot.slotStart, e.target.checked)}
+            />
+            <span className={shouting ? "text-primary" : "text-text-dim"}>Shouting</span>
+          </label>
         ) : null}
       </header>
 

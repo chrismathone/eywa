@@ -41,6 +41,7 @@ export function TodayClassSheet({
   canEdit,
   collapsedGroups,
   onToggleGroup,
+  shouting,
 }: {
   day: GridDay;
   /**
@@ -62,6 +63,8 @@ export function TodayClassSheet({
   canEdit: boolean;
   collapsedGroups: readonly RosterGroupKey[];
   onToggleGroup: (key: RosterGroupKey) => void;
+  /** `${date}|${HH:MM}` → Shouting 체크(EiE 전용) — 주간 시트와 같은 live 맵. */
+  shouting: Record<string, boolean>;
 }) {
   const hasRoster = day.slots.some((s) => s.roster.length > 0);
   return (
@@ -158,6 +161,8 @@ export function TodayClassSheet({
                 canEdit={canEdit}
                 collapsedGroups={collapsedGroups}
                 onToggleGroup={onToggleGroup}
+                shouting={!!shouting[`${day.date}|${slot.slotStart}`]}
+                {...(data.isEie ? { onShouting: handlers.toggleShouting } : {})}
                 hideRoster
                 flat
               />

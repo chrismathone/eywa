@@ -13,6 +13,7 @@ import { resolvePeriodLabel, tableToEntries } from "../lib/period-label";
 import { isWeekendDow } from "../lib/grid-rows";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { resolveSkillAreas } from "@/features/owner/skill-areas";
+import { shoutingMapOf } from "../shouting";
 import type { SkillAreaSetting } from "@/features/owner/settings-types";
 import { effectiveAttendanceRecords } from "@/features/attendance/effective-records";
 // 출결 쓰기의 담당 반 축 — **출결 서버 액션과 같은 함수**(담임 ∪ 위임 ∪ 교시 담당, write-gate-axis).
@@ -148,6 +149,12 @@ export type ClassSheetWeekData = {
    */
   isEie: boolean;
   /**
+   * `${date}|${HH:MM}` → true — 그 교시에 **Shouting을 했다**고 체크한 표시(0230a).
+   * ⚠️ **EiE 반에서만** 화면에 뜬다(원장 2026-08-27 "인재원 영어는 샤우팅 그냥 삭제").
+   * ⚠️ 0230a 적용 전에는 항상 빈 객체다 — 마이그레이션보다 앱이 먼저 배포돼도 시트가 안 죽게([[#95]]).
+   */
+  shoutingSlots: Record<string, boolean>;
+  /**
    * 임시 위임(0173a)으로 지금 **대신 맡은 반**의 시트인가 — 내 담당 반이면 false.
    * 툴바가 이 값으로 앰버 배지를 단다. 창(embed)에선 상단 PageHeader가 숨겨져서, 열고 난 뒤 "남의 반을
    * 고치는 중"임을 알 수 있는 자리가 툴바뿐이다.
@@ -187,6 +194,7 @@ export async function getClassSheetWeek(
     settings,
     labelMap,
     myPrefsRes,
+    shoutingRes,
   ] = await Promise.all([
     admin
       .from("class_schedules")
@@ -262,6 +270,16 @@ export async function getClassSheetWeek(
     getTeacherLabelMap({ supabase: admin, tenantId }),
     // 내 글씨 크기(계정 귀속) — 서버 확정값이라 첫 렌더부터 정확하다(localStorage 초기값 = 하이드레이션 크래시 #75).
     admin.from("users").select("ui_prefs").eq("id", access.user.id).eq("tenant_id", tenantId).maybeSingle(),
+    // 교시 체크(Shouting, 0230a). ⚠️ **에러를 일부러 삼킨다**(아래 에러 게이트 목록에도 안 넣는다) —
+    // 마이그레이션보다 앱이 먼저 배포되면 표가 없어 400이 나는데, 그때 시트 전체가 안 열리면 안 된다([[#95]]).
+    // 표가 생긴 뒤엔 정상 조회된다. 체크가 잠깐 안 보이는 것과 반 시트가 통째로 죽는 것은 급이 다르다.
+    admin
+      .from("class_sheet_slot_flags")
+      .select("flag_date, slot_start, shouting")
+      .eq("tenant_id", tenantId)
+      .eq("class_id", classId)
+      .gte("flag_date", weekMonday)
+      .lte("flag_date", weekSunday),
   ]);
 
   for (const r of [schedulesRes, enrollmentsRes, planLinesRes, weekGoalsRes, monthGoalsRes, marksRes, attendanceRes, memosRes]) {
@@ -600,6 +618,8 @@ export async function getClassSheetWeek(
       showSelfStudy,
       collapsedRosterGroups: readEcsCollapsedRosterGroups(myPrefsRes.data?.ui_prefs),
       isEie: access.englishTrack === "eie",
+      // 0230a 미적용(또는 조회 실패)이면 빈 맵 — 체크가 안 보일 뿐 시트는 그대로 열린다([[#95]]).
+      shoutingSlots: shoutingMapOf(shoutingRes.data ?? []),
       // 위임 배지 — 게이트와 **같은 소스**(cache라 추가 왕복 0). 담임이 나면 위임이 아니다.
       delegated: delegatedIds.includes(classId) && access.teacherId !== access.user.id,
     },

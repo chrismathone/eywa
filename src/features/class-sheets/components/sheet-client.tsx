@@ -24,6 +24,7 @@ import {
   clearPresentAttendance,
   flushSheetPatches,
   saveMemo,
+  setSlotShouting,
   setMyEcsCollapsedRosterGroups,
   setMyEcsFontSize,
   setMyEcsShowSelfStudy,
@@ -99,6 +100,11 @@ export type SheetHandlers = PlanHandlers & {
     slotStart: string,
     note: string | null,
   ) => void;
+  /**
+   * 교시 체크 'Shouting'(0230a) — **EiE 반만** 화면에 그린다(원장 2026-08-27).
+   * 낙관 반영 후 실패하면 되돌리고 이유를 띄운다(체크가 화면엔 남고 서버엔 없는 상태 금지).
+   */
+  toggleShouting: (date: string, slotStart: string, next: boolean) => void;
   saveMark: (
     studentId: string,
     date: string,
@@ -212,6 +218,8 @@ export function SheetClient({
   const [attendance, setAttendance] = useState(data.attendanceByStudentDate);
   const [goals, setGoals] = useState(data.goals);
   const [memos, setMemos] = useState(data.memos);
+  // Shouting 체크(0230a) — 서버 스냅샷으로 시작하고, 토글은 낙관 반영 + 실패 시 되돌린다.
+  const [shouting, setShouting] = useState(data.shoutingSlots);
   // LWW 저장이 디바운스 발화 시점의 **최신** 로컬 값을 읽도록 ref 미러(render 중 ref 접근 금지 — effect 갱신)
   const goalsRef = useRef(goals);
   useEffect(() => {
@@ -598,6 +606,18 @@ export function SheetClient({
         // 사유만 고치는 저장도 롤백이 **값 객체 통째**라 방송이 끼면 상태가 되돌아간다 — 같이 잠근다.
         trackAttendanceCell(key, save);
       },
+      toggleShouting: (date, slotStart, next) => {
+        const key = `${date}|${normalizeSlotTime(slotStart)}`;
+        setShouting((prev) => ({ ...prev, [key]: next }));
+        store.scheduleLww(`shout:${key}`, async () => {
+          const r = await setSlotShouting({ classId, date, slotStart, value: next });
+          if (!r.ok) {
+            // 되돌린다 — "체크했는데 서버엔 없음"은 다음 사람이 못 알아챈다(마크·출결과 같은 처방).
+            setShouting((prev) => ({ ...prev, [key]: !next }));
+            toast.error(r.error);
+          }
+        });
+      },
       saveMark: (studentId, date, slotStart, status, note, patch) => {
         const key = `${studentId}|${date}|${slotStart}`;
         // 실패 시 되돌릴 직전 값 — 낙관 반영만 하고 롤백이 없으면 화면엔 남고 서버엔 없는 상태가 되어
@@ -878,6 +898,7 @@ export function SheetClient({
                   canEdit={canEdit}
                   collapsedGroups={collapsedGroups}
                   onToggleGroup={toggleRosterGroup}
+                  shouting={shouting}
                 />
                 {/* ⚠️ 숨긴 남의 교시 각주는 **폐기**(원장 2026-08-19 "이 멘트 필요없음") — 되돌릴 곳
                     안내는 오늘 면 맨 위 한 줄이 대신한다(ecs/page.tsx). 여기 각주를 되살리지 말 것. */}
@@ -919,6 +940,7 @@ export function SheetClient({
                 canEdit={canEdit}
                 collapsedGroups={collapsedGroups}
                 onToggleGroup={toggleRosterGroup}
+                shouting={shouting}
               />
             </DragScrollArea>
           </>
